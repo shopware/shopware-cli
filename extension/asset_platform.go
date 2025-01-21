@@ -86,6 +86,10 @@ func BuildAssetsForExtensions(ctx context.Context, sources []asset.Source, asset
 				return err
 			}
 
+			if err := esbuild.DumpViteConfig(options); err != nil {
+				return err
+			}
+
 			logging.FromContext(ctx).Infof("Building administration assets for %s using ESBuild", name)
 		}
 

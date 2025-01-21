@@ -18,3 +18,10 @@ func ToKebabCase(str string) string {
 
 	return strings.TrimPrefix(converted, "-")
 }
+
+// @see https://github.com/symfony/symfony/blob/7.2/src/Symfony/Bundle/FrameworkBundle/Command/AssetsInstallCommand.php#L128
+func toBundleFolderName(name string) string {
+	assetDir := strings.ToLower(name)
+	assetDir = strings.TrimSuffix(assetDir, "bundle")
+	return assetDir
+}

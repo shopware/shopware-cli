@@ -16,3 +16,11 @@ func TestKebabCase(t *testing.T) {
 	assert.Equal(t, "wwbla-bar-foo", ToKebabCase("wwblaBarFoo"))
 	assert.Equal(t, "with-underscore", ToKebabCase("with_underscore"))
 }
+
+func TestBundleFolderName(t *testing.T) {
+	assert.Equal(t, "myplugin", toBundleFolderName("MyPluginBundle"))
+	assert.Equal(t, "anotherplugin", toBundleFolderName("AnotherPluginBundle"))
+	assert.Equal(t, "simpleplugin", toBundleFolderName("SimplePlugin"))
+	assert.Equal(t, "plugin", toBundleFolderName("PluginBundle"))
+	assert.Equal(t, "plugin", toBundleFolderName("Plugin"))
+}
