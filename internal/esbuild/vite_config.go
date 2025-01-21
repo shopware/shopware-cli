@@ -97,7 +97,9 @@ func DumpViteConfig(options AssetCompileOptions) error {
 
 	if _, err := os.Stat(viteDir); os.IsNotExist(err) {
 		if err := os.MkdirAll(viteDir, 0o755); err != nil {
-			if err := os.MkdirAll(viteDir, 0o755); err != nil { return fmt.Errorf("failed to create Vite directory: %w", err) }
+			if err := os.MkdirAll(viteDir, 0o755); err != nil {
+				return fmt.Errorf("failed to create Vite directory: %w", err)
+			}
 		}
 	}
 
