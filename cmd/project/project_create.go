@@ -18,8 +18,8 @@ import (
 	"github.com/manifoldco/promptui"
 	"github.com/spf13/cobra"
 
-	"github.com/FriendsOfShopware/shopware-cli/logging"
-	"github.com/FriendsOfShopware/shopware-cli/version"
+	"github.com/shopware/shopware-cli/logging"
+	"github.com/shopware/shopware-cli/version"
 )
 
 var projectCreateCmd = &cobra.Command{

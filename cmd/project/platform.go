@@ -3,13 +3,14 @@ package project
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/FriendsOfShopware/shopware-cli/extension"
-	"github.com/FriendsOfShopware/shopware-cli/shop"
-	"github.com/spf13/cobra"
 	"os"
 	"path"
 	"path/filepath"
 	"strings"
+
+	"github.com/shopware/shopware-cli/extension"
+	"github.com/shopware/shopware-cli/shop"
+	"github.com/spf13/cobra"
 )
 
 func findClosestShopwareProject() (string, error) {
@@ -52,7 +53,6 @@ func findClosestShopwareProject() (string, error) {
 
 func filterAndWritePluginJson(cmd *cobra.Command, projectRoot string, shopCfg *shop.Config) error {
 	sources, err := extension.DumpAndLoadAssetSourcesOfProject(cmd.Context(), projectRoot, shopCfg)
-
 	if err != nil {
 		return err
 	}

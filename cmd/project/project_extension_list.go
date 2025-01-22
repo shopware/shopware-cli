@@ -9,7 +9,7 @@ import (
 	"github.com/olekukonko/tablewriter"
 	"github.com/spf13/cobra"
 
-	"github.com/FriendsOfShopware/shopware-cli/shop"
+	"github.com/shopware/shopware-cli/shop"
 )
 
 var projectExtensionListCmd = &cobra.Command{

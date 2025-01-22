@@ -7,7 +7,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/FriendsOfShopware/shopware-cli/extension"
+	"github.com/shopware/shopware-cli/extension"
 )
 
 var extensionAssetBundleCmd = &cobra.Command{

@@ -1,4 +1,4 @@
-module github.com/FriendsOfShopware/shopware-cli
+module github.com/shopware/shopware-cli
 
 go 1.23
 

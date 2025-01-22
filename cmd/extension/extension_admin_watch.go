@@ -4,7 +4,6 @@ import (
 	_ "embed"
 	"encoding/json"
 	"fmt"
-	"github.com/FriendsOfShopware/shopware-cli/shop"
 	"io"
 	"net/http"
 	"net/url"
@@ -13,16 +12,18 @@ import (
 	"strings"
 	"time"
 
-	"github.com/FriendsOfShopware/shopware-cli/internal/asset"
+	"github.com/shopware/shopware-cli/shop"
+
+	"github.com/shopware/shopware-cli/internal/asset"
 
 	"github.com/NYTimes/gziphandler"
 	"github.com/evanw/esbuild/pkg/api"
 	"github.com/spf13/cobra"
 	"github.com/vulcand/oxy/v2/forward"
 
-	"github.com/FriendsOfShopware/shopware-cli/extension"
-	"github.com/FriendsOfShopware/shopware-cli/internal/esbuild"
-	"github.com/FriendsOfShopware/shopware-cli/logging"
+	"github.com/shopware/shopware-cli/extension"
+	"github.com/shopware/shopware-cli/internal/esbuild"
+	"github.com/shopware/shopware-cli/logging"
 )
 
 const schemeHostSeparator = "://"

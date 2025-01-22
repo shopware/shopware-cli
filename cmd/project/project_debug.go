@@ -2,13 +2,14 @@ package project
 
 import (
 	"fmt"
-	"github.com/FriendsOfShopware/shopware-cli/extension"
-	"github.com/FriendsOfShopware/shopware-cli/logging"
-	"github.com/FriendsOfShopware/shopware-cli/shop"
-	"github.com/olekukonko/tablewriter"
-	"github.com/spf13/cobra"
 	"os"
 	"path/filepath"
+
+	"github.com/olekukonko/tablewriter"
+	"github.com/shopware/shopware-cli/extension"
+	"github.com/shopware/shopware-cli/logging"
+	"github.com/shopware/shopware-cli/shop"
+	"github.com/spf13/cobra"
 )
 
 var projectDebug = &cobra.Command{

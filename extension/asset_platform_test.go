@@ -8,8 +8,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	"github.com/FriendsOfShopware/shopware-cli/internal/asset"
-	"github.com/FriendsOfShopware/shopware-cli/logging"
+	"github.com/shopware/shopware-cli/internal/asset"
+	"github.com/shopware/shopware-cli/logging"
 )
 
 func getTestContext() context.Context {

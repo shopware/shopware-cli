@@ -9,8 +9,8 @@ import (
 	"path/filepath"
 	"runtime"
 
-	"github.com/FriendsOfShopware/shopware-cli/internal/system"
-	"github.com/FriendsOfShopware/shopware-cli/logging"
+	"github.com/shopware/shopware-cli/internal/system"
+	"github.com/shopware/shopware-cli/logging"
 )
 
 const dartSassVersion = "1.69.7"

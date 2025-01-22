@@ -6,7 +6,7 @@ import (
 	"os"
 	"path"
 
-	"github.com/FriendsOfShopware/shopware-cli/version"
+	"github.com/shopware/shopware-cli/version"
 )
 
 var (

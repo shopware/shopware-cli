@@ -6,8 +6,8 @@ import (
 
 	adminSdk "github.com/friendsofshopware/go-shopware-admin-api-sdk"
 
-	"github.com/FriendsOfShopware/shopware-cli/logging"
-	"github.com/FriendsOfShopware/shopware-cli/shop"
+	"github.com/shopware/shopware-cli/logging"
+	"github.com/shopware/shopware-cli/shop"
 )
 
 type ThemeSync struct{}

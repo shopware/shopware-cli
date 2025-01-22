@@ -5,7 +5,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/FriendsOfShopware/shopware-cli/internal/changelog"
+	"github.com/shopware/shopware-cli/internal/changelog"
 
 	"gopkg.in/yaml.v3"
 )
@@ -124,7 +124,6 @@ func readExtensionConfig(dir string) (*Config, error) {
 	}
 
 	err = yaml.Unmarshal(fileHandle, &config)
-
 	if err != nil {
 		return nil, fmt.Errorf(errorFormat, err)
 	}

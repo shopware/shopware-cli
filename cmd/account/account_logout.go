@@ -5,8 +5,8 @@ import (
 
 	"github.com/spf13/cobra"
 
-	accountApi "github.com/FriendsOfShopware/shopware-cli/account-api"
-	"github.com/FriendsOfShopware/shopware-cli/logging"
+	accountApi "github.com/shopware/shopware-cli/account-api"
+	"github.com/shopware/shopware-cli/logging"
 )
 
 var logoutCmd = &cobra.Command{

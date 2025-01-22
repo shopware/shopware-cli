@@ -4,7 +4,7 @@ import (
 	"os"
 	"testing"
 
-	"github.com/FriendsOfShopware/shopware-cli/internal/git"
+	"github.com/shopware/shopware-cli/internal/git"
 	"github.com/stretchr/testify/assert"
 )
 

@@ -16,10 +16,10 @@ import (
 	cp "github.com/otiai10/copy"
 	"github.com/spf13/cobra"
 
-	"github.com/FriendsOfShopware/shopware-cli/extension"
-	"github.com/FriendsOfShopware/shopware-cli/logging"
-	"github.com/FriendsOfShopware/shopware-cli/shop"
-	"github.com/FriendsOfShopware/shopware-cli/version"
+	"github.com/shopware/shopware-cli/extension"
+	"github.com/shopware/shopware-cli/logging"
+	"github.com/shopware/shopware-cli/shop"
+	"github.com/shopware/shopware-cli/version"
 )
 
 var projectExtensionUploadCmd = &cobra.Command{
@@ -71,7 +71,6 @@ var projectExtensionUploadCmd = &cobra.Command{
 			}
 
 			ext, err = extension.GetExtensionByFolder(ext.GetPath())
-
 			if err != nil {
 				return err
 			}
@@ -108,7 +107,6 @@ var projectExtensionUploadCmd = &cobra.Command{
 			}
 
 			ext, err = extension.GetExtensionByFolder(extDir)
-
 			if err != nil {
 				return err
 			}
@@ -163,7 +161,6 @@ var projectExtensionUploadCmd = &cobra.Command{
 				return fmt.Errorf("cannot upload extension: %w", err)
 			} else if uploadResponse.StatusCode != 204 {
 				str, err := io.ReadAll(uploadResponse.Body)
-
 				if err != nil {
 					return fmt.Errorf("cannot upload extension update: %w", err)
 				}
@@ -172,7 +169,6 @@ var projectExtensionUploadCmd = &cobra.Command{
 			}
 
 			extensions, _, err = client.ExtensionManager.ListAvailableExtensions(adminCtx)
-
 			if err != nil {
 				return err
 			}
@@ -181,7 +177,6 @@ var projectExtensionUploadCmd = &cobra.Command{
 				return fmt.Errorf("cannot upload extension update: %w", err)
 			} else if uploadResponse.StatusCode != 204 {
 				str, err := io.ReadAll(uploadResponse.Body)
-
 				if err != nil {
 					return fmt.Errorf("cannot upload extension update: %w", err)
 				}
@@ -337,7 +332,6 @@ func increaseExtensionVersion(ctx context.Context, ext extension.Extension) erro
 	composerJson["version"] = ver.String()
 
 	composerJsonContent, err = json.Marshal(composerJson)
-
 	if err != nil {
 		return err
 	}

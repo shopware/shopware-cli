@@ -5,8 +5,8 @@ import (
 	"path"
 	"path/filepath"
 
-	"github.com/FriendsOfShopware/shopware-cli/internal/asset"
-	"github.com/FriendsOfShopware/shopware-cli/logging"
+	"github.com/shopware/shopware-cli/internal/asset"
+	"github.com/shopware/shopware-cli/logging"
 )
 
 func ConvertExtensionsToSources(ctx context.Context, extensions []Extension) []asset.Source {

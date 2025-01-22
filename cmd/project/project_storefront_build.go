@@ -3,11 +3,11 @@ package project
 import (
 	"path/filepath"
 
-	"github.com/FriendsOfShopware/shopware-cli/internal/phpexec"
-	"github.com/FriendsOfShopware/shopware-cli/shop"
+	"github.com/shopware/shopware-cli/internal/phpexec"
+	"github.com/shopware/shopware-cli/shop"
 
-	"github.com/FriendsOfShopware/shopware-cli/extension"
-	"github.com/FriendsOfShopware/shopware-cli/logging"
+	"github.com/shopware/shopware-cli/extension"
+	"github.com/shopware/shopware-cli/logging"
 	"github.com/spf13/cobra"
 )
 
@@ -40,7 +40,6 @@ var projectStorefrontBuildCmd = &cobra.Command{
 		}
 
 		sources, err := extension.DumpAndLoadAssetSourcesOfProject(cmd.Context(), projectRoot, shopCfg)
-
 		if err != nil {
 			return err
 		}

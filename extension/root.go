@@ -9,7 +9,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/FriendsOfShopware/shopware-cli/version"
+	"github.com/shopware/shopware-cli/version"
 )
 
 const (
@@ -66,7 +66,6 @@ func GetExtensionByZip(filePath string) (Extension, error) {
 	}
 
 	err = Unzip(file, dir)
-
 	if err != nil {
 		return nil, err
 	}

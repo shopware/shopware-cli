@@ -7,8 +7,8 @@ import (
 	"github.com/manifoldco/promptui"
 	"github.com/spf13/cobra"
 
-	accountApi "github.com/FriendsOfShopware/shopware-cli/account-api"
-	"github.com/FriendsOfShopware/shopware-cli/logging"
+	accountApi "github.com/shopware/shopware-cli/account-api"
+	"github.com/shopware/shopware-cli/logging"
 )
 
 var loginCmd = &cobra.Command{
@@ -46,7 +46,6 @@ var loginCmd = &cobra.Command{
 
 		if companyId := services.Conf.GetAccountCompanyId(); companyId > 0 {
 			err = changeAPIMembership(cmd.Context(), client, companyId)
-
 			if err != nil {
 				return fmt.Errorf("cannot change company member ship: %w", err)
 			}

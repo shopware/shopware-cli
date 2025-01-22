@@ -8,8 +8,8 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/FriendsOfShopware/shopware-cli/internal/curl"
-	"github.com/FriendsOfShopware/shopware-cli/shop"
+	"github.com/shopware/shopware-cli/internal/curl"
+	"github.com/shopware/shopware-cli/shop"
 )
 
 var skipDefaultHeaders bool

@@ -13,9 +13,9 @@ import (
 	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v3"
 
-	account_api "github.com/FriendsOfShopware/shopware-cli/account-api"
-	"github.com/FriendsOfShopware/shopware-cli/extension"
-	"github.com/FriendsOfShopware/shopware-cli/logging"
+	account_api "github.com/shopware/shopware-cli/account-api"
+	"github.com/shopware/shopware-cli/extension"
+	"github.com/shopware/shopware-cli/logging"
 )
 
 var accountCompanyProducerExtensionInfoPullCmd = &cobra.Command{
@@ -65,7 +65,6 @@ var accountCompanyProducerExtensionInfoPullCmd = &cobra.Command{
 
 		if _, err := os.Stat(resourcesFolder); os.IsNotExist(err) {
 			err = os.MkdirAll(resourcesFolder, os.ModePerm)
-
 			if err != nil {
 				return fmt.Errorf("cannot create file: %w", err)
 			}
@@ -224,7 +223,6 @@ var accountCompanyProducerExtensionInfoPullCmd = &cobra.Command{
 
 		extCfgFile := fmt.Sprintf("%s/%s", zipExt.GetPath(), newCfg.FileName)
 		err = os.WriteFile(extCfgFile, content, os.ModePerm)
-
 		if err != nil {
 			return fmt.Errorf("cannot save file: %w", err)
 		}

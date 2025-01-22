@@ -8,8 +8,8 @@ import (
 	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v3"
 
-	"github.com/FriendsOfShopware/shopware-cli/logging"
-	"github.com/FriendsOfShopware/shopware-cli/shop"
+	"github.com/shopware/shopware-cli/logging"
+	"github.com/shopware/shopware-cli/shop"
 )
 
 var projectConfigInitCmd = &cobra.Command{
@@ -26,7 +26,6 @@ var projectConfigInitCmd = &cobra.Command{
 		}
 
 		config.URL, err = urlPrompt.Run()
-
 		if err != nil {
 			return err
 		}

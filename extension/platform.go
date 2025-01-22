@@ -11,9 +11,9 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/FriendsOfShopware/shopware-cli/internal/phplint"
-	"github.com/FriendsOfShopware/shopware-cli/logging"
-	"github.com/FriendsOfShopware/shopware-cli/version"
+	"github.com/shopware/shopware-cli/internal/phplint"
+	"github.com/shopware/shopware-cli/logging"
+	"github.com/shopware/shopware-cli/version"
 )
 
 var ErrPlatformInvalidType = errors.New("invalid composer type")
@@ -47,7 +47,6 @@ func newPlatformPlugin(path string) (*PlatformPlugin, error) {
 
 	var composerJson platformComposerJson
 	err = json.Unmarshal(jsonFile, &composerJson)
-
 	if err != nil {
 		return nil, fmt.Errorf("newPlatformPlugin: %v", err)
 	}
@@ -297,7 +296,6 @@ func GetPhpVersion(ctx context.Context, constraint *version.Constraints) (string
 	var shopwareToPHPVersion map[string]string
 
 	err = json.NewDecoder(resp.Body).Decode(&shopwareToPHPVersion)
-
 	if err != nil {
 		return "", err
 	}

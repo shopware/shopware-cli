@@ -93,7 +93,7 @@ Parameters:
 * `--output` - Output file (default: `dump.sql`)
 * `--clean` - Ignores content of following tables: `cart`, `customer_recovery`, `dead_message`, `enqueue`, `increment`, `elasticsearch_index_task`, `log_entry`, `message_queue_stats`, `notification`, `payment_token`, `refresh_token`, `version`, `version_commit`, `version_commit_data`, `webhook_event_log`
 * `--skip-lock-tables` - Skips locking of tables
-* `--anonymize` - Additionally to the configurated `dump.rewrite`, this parameter will anonymize known user data tables. [See](https://github.com/FriendsOfShopware/shopware-cli/blob/main/cmd/project/project_dump.go#L73) for the list
+* `--anonymize` - Additionally to the configurated `dump.rewrite`, this parameter will anonymize known user data tables. [See](https://github.com/shopware/shopware-cli/blob/main/cmd/project/project_dump.go#L73) for the list
 * `--gzip` - Create a gzip compressed file
 * `--zstd` - Create a zstd compressed file
 

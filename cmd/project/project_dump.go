@@ -5,33 +5,35 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"github.com/FriendsOfShopware/shopware-cli/extension"
-	"github.com/doutorfinancas/go-mad/core"
-	"github.com/doutorfinancas/go-mad/database"
-	"github.com/doutorfinancas/go-mad/generator"
-	"github.com/go-sql-driver/mysql"
-	"github.com/klauspost/compress/zstd"
-	"github.com/spf13/cobra"
-	"go.uber.org/zap"
 	"io"
 	"net/url"
 	"os"
 	"strings"
 	"time"
 
-	"github.com/FriendsOfShopware/shopware-cli/logging"
-	"github.com/FriendsOfShopware/shopware-cli/shop"
+	"github.com/doutorfinancas/go-mad/core"
+	"github.com/doutorfinancas/go-mad/database"
+	"github.com/doutorfinancas/go-mad/generator"
+	"github.com/go-sql-driver/mysql"
+	"github.com/klauspost/compress/zstd"
+	"github.com/shopware/shopware-cli/extension"
+	"github.com/spf13/cobra"
+	"go.uber.org/zap"
+
+	"github.com/shopware/shopware-cli/logging"
+	"github.com/shopware/shopware-cli/shop"
 )
 
-const CompressionGzip = "gzip"
-const CompressionZstd = "zstd"
+const (
+	CompressionGzip = "gzip"
+	CompressionZstd = "zstd"
+)
 
 var projectDatabaseDumpCmd = &cobra.Command{
 	Use:   "dump",
 	Short: "Dumps the Shopware database",
 	RunE: func(cmd *cobra.Command, _ []string) error {
 		mysqlConfig, err := assembleConnectionURI(cmd)
-
 		if err != nil {
 			return err
 		}
@@ -199,7 +201,6 @@ var projectDatabaseDumpCmd = &cobra.Command{
 
 		if compression == CompressionZstd {
 			w, err = zstd.NewWriter(w, zstd.WithEncoderLevel(zstd.SpeedBestCompression))
-
 			if err != nil {
 				return err
 			}
@@ -288,7 +289,6 @@ func loadDatabaseURLIntoConnection(ctx context.Context, projectRoot string, cfg 
 	logging.FromContext(ctx).Info("Using DATABASE_URL env as default connection string. options can override specific parts (--username=foo)")
 
 	parsedUri, err := url.Parse(databaseUrl)
-
 	if err != nil {
 		return fmt.Errorf("could not parse DATABASE_URL: %w", err)
 	}

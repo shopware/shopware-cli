@@ -5,9 +5,9 @@ import (
 	"os/exec"
 	"path"
 
-	"github.com/FriendsOfShopware/shopware-cli/extension"
-	"github.com/FriendsOfShopware/shopware-cli/internal/phpexec"
-	"github.com/FriendsOfShopware/shopware-cli/shop"
+	"github.com/shopware/shopware-cli/extension"
+	"github.com/shopware/shopware-cli/internal/phpexec"
+	"github.com/shopware/shopware-cli/shop"
 	"github.com/spf13/cobra"
 )
 

@@ -8,8 +8,8 @@ import (
 	"os"
 	"path"
 
-	"github.com/FriendsOfShopware/shopware-cli/internal/system"
-	"github.com/FriendsOfShopware/shopware-cli/logging"
+	"github.com/shopware/shopware-cli/internal/system"
+	"github.com/shopware/shopware-cli/logging"
 )
 
 func findPHPWasmFile(ctx context.Context, phpVersion string) ([]byte, error) {

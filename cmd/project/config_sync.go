@@ -6,7 +6,7 @@ import (
 
 	adminSdk "github.com/friendsofshopware/go-shopware-admin-api-sdk"
 
-	"github.com/FriendsOfShopware/shopware-cli/shop"
+	"github.com/shopware/shopware-cli/shop"
 )
 
 func readSystemConfig(ctx adminSdk.ApiContext, client *adminSdk.Client, salesChannelId *string) (*adminSdk.SystemConfigCollection, error) {

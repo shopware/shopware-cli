@@ -8,7 +8,7 @@ import (
 	"io"
 	"net/http"
 
-	"github.com/FriendsOfShopware/shopware-cli/logging"
+	"github.com/shopware/shopware-cli/logging"
 )
 
 const ApiUrl = "https://api.shopware.com"

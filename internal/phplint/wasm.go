@@ -5,7 +5,7 @@ import (
 	"os"
 	"path"
 
-	"github.com/FriendsOfShopware/shopware-cli/internal/system"
+	"github.com/shopware/shopware-cli/internal/system"
 	"github.com/tetratelabs/wazero"
 	"github.com/tetratelabs/wazero/imports/wasi_snapshot_preview1"
 )

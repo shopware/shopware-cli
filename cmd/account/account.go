@@ -3,8 +3,8 @@ package account
 import (
 	"github.com/spf13/cobra"
 
-	account_api "github.com/FriendsOfShopware/shopware-cli/account-api"
-	"github.com/FriendsOfShopware/shopware-cli/internal/config"
+	account_api "github.com/shopware/shopware-cli/account-api"
+	"github.com/shopware/shopware-cli/internal/config"
 )
 
 var accountRootCmd = &cobra.Command{

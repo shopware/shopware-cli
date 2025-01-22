@@ -8,7 +8,7 @@ import (
 	"path"
 	"path/filepath"
 
-	"github.com/FriendsOfShopware/shopware-cli/version"
+	"github.com/shopware/shopware-cli/version"
 )
 
 type App struct {
@@ -39,7 +39,6 @@ func newApp(path string) (*App, error) {
 
 	var manifest Manifest
 	err = xml.Unmarshal(appFile, &manifest)
-
 	if err != nil {
 		return nil, fmt.Errorf("newApp: %v", err)
 	}

@@ -7,7 +7,7 @@ import (
 	"os"
 	"path"
 
-	"github.com/FriendsOfShopware/shopware-cli/version"
+	"github.com/shopware/shopware-cli/version"
 )
 
 type ShopwareBundle struct {
@@ -29,7 +29,6 @@ func newShopwareBundle(path string) (*ShopwareBundle, error) {
 
 	var composerJson shopwareBundleComposerJson
 	err = json.Unmarshal(jsonFile, &composerJson)
-
 	if err != nil {
 		return nil, fmt.Errorf("newShopwareBundle: %v", err)
 	}

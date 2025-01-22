@@ -15,7 +15,7 @@ import (
 	"runtime"
 	"strings"
 
-	"github.com/FriendsOfShopware/shopware-cli/logging"
+	"github.com/shopware/shopware-cli/logging"
 )
 
 func downloadDartSass(ctx context.Context, cacheDir string) error {

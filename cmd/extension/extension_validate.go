@@ -8,8 +8,8 @@ import (
 	"github.com/olekukonko/tablewriter"
 	"github.com/spf13/cobra"
 
-	"github.com/FriendsOfShopware/shopware-cli/extension"
-	"github.com/FriendsOfShopware/shopware-cli/logging"
+	"github.com/shopware/shopware-cli/extension"
+	"github.com/shopware/shopware-cli/logging"
 )
 
 var extensionValidateCmd = &cobra.Command{

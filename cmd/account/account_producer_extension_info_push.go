@@ -13,9 +13,9 @@ import (
 
 	"github.com/spf13/cobra"
 
-	accountApi "github.com/FriendsOfShopware/shopware-cli/account-api"
-	"github.com/FriendsOfShopware/shopware-cli/extension"
-	"github.com/FriendsOfShopware/shopware-cli/logging"
+	accountApi "github.com/shopware/shopware-cli/account-api"
+	"github.com/shopware/shopware-cli/extension"
+	"github.com/shopware/shopware-cli/logging"
 )
 
 var accountCompanyProducerExtensionInfoPushCmd = &cobra.Command{
@@ -126,7 +126,6 @@ var accountCompanyProducerExtensionInfoPushCmd = &cobra.Command{
 						apiImage.Details[1].Preview = configImage.Preview.English
 
 						err = p.UpdateExtensionImage(cmd.Context(), storeExt.Id, apiImage)
-
 						if err != nil {
 							return fmt.Errorf("cannot update image information of extension: %w", err)
 						}
@@ -140,7 +139,6 @@ var accountCompanyProducerExtensionInfoPushCmd = &cobra.Command{
 		}
 
 		err = p.UpdateExtension(cmd.Context(), storeExt)
-
 		if err != nil {
 			return err
 		}
@@ -260,7 +258,6 @@ func updateStoreInfo(ext *accountApi.Extension, zipExt extension.Extension, cfg 
 		storeDescription := getTranslation(language, cfg.Store.Description)
 		if storeDescription != nil {
 			info.Description, err = parseInlineablePath(*storeDescription, zipExt.GetPath())
-
 			if err != nil {
 				return err
 			}
@@ -269,7 +266,6 @@ func updateStoreInfo(ext *accountApi.Extension, zipExt extension.Extension, cfg 
 		storeManual := getTranslation(language, cfg.Store.InstallationManual)
 		if storeManual != nil {
 			info.InstallationManual, err = parseInlineablePath(*storeManual, zipExt.GetPath())
-
 			if err != nil {
 				return err
 			}
@@ -313,7 +309,6 @@ func parseInlineablePath(path, extensionDir string) (string, error) {
 
 	var buf bytes.Buffer
 	err = md.Convert(content, &buf)
-
 	if err != nil {
 		return "", fmt.Errorf("cannot convert file at path %s from markdown to html with error: %v", filePath, err)
 	}
@@ -330,7 +325,6 @@ func uploadImagesByDirectory(ctx context.Context, extensionId int, directory str
 	}
 
 	images, err := os.ReadDir(directory)
-
 	// When folder does not exists, skip
 	if err != nil {
 		return nil //nolint:nilerr
@@ -348,7 +342,6 @@ func uploadImagesByDirectory(ctx context.Context, extensionId int, directory str
 		fileName = strings.TrimSuffix(fileName, filepath.Ext(fileName))
 
 		apiImage, err := p.AddExtensionImage(ctx, extensionId, path.Join(directory, image.Name()))
-
 		if err != nil {
 			return fmt.Errorf("cannot upload image %s to extension: %w", image.Name(), err)
 		}
@@ -361,7 +354,6 @@ func uploadImagesByDirectory(ctx context.Context, extensionId int, directory str
 		}
 
 		priority, err := strconv.Atoi(matches[1])
-
 		if err != nil {
 			logging.FromContext(ctx).Warnf("Unexpected error: \"%s\", skipping", err)
 			continue

@@ -1,7 +1,7 @@
 FROM ghcr.io/shyim/wolfi-php/base:latest
 ARG PHP_VERSION=8.2
 
-LABEL org.opencontainers.image.source=https://github.com/FriendsOfShopware/shopware-cli
+LABEL org.opencontainers.image.source=https://github.com/shopware/shopware-cli
 COPY --from=composer/composer:2-bin /composer /usr/bin/composer
 
 RUN <<EOF

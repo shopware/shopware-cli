@@ -1,15 +1,18 @@
 package project
 
 import (
-	"github.com/FriendsOfShopware/shopware-cli/extension"
-	"github.com/FriendsOfShopware/shopware-cli/internal/phpexec"
-	"github.com/FriendsOfShopware/shopware-cli/shop"
-	"github.com/spf13/cobra"
 	"slices"
+
+	"github.com/shopware/shopware-cli/extension"
+	"github.com/shopware/shopware-cli/internal/phpexec"
+	"github.com/shopware/shopware-cli/shop"
+	"github.com/spf13/cobra"
 )
 
-var pluginCommands = []string{"plugin:install", "plugin:uninstall", "plugin:update", "plugin:activate", "plugin:deactivate"}
-var appCommands = []string{"app:install", "app:update", "app:activate", "app:deactivate"}
+var (
+	pluginCommands = []string{"plugin:install", "plugin:uninstall", "plugin:update", "plugin:activate", "plugin:deactivate"}
+	appCommands    = []string{"app:install", "app:update", "app:activate", "app:deactivate"}
+)
 
 var projectConsoleCmd = &cobra.Command{
 	Use:                "console",
@@ -23,7 +26,6 @@ var projectConsoleCmd = &cobra.Command{
 		}
 
 		parsedCommands, err := shop.GetConsoleCompletion(cmd.Context(), projectRoot)
-
 		if err != nil {
 			return nil, cobra.ShellCompDirectiveDefault
 		}
@@ -47,7 +49,6 @@ var projectConsoleCmd = &cobra.Command{
 				for _, extension := range extensions {
 					if (extension.GetType() == "plugin" && isPluginCommand) || (extension.GetType() == "app" && isAppCommand) {
 						name, err := extension.GetName()
-
 						if err != nil {
 							continue
 						}

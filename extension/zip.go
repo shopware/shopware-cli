@@ -16,10 +16,10 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/FriendsOfShopware/shopware-cli/internal/changelog"
+	"github.com/shopware/shopware-cli/internal/changelog"
 
-	"github.com/FriendsOfShopware/shopware-cli/logging"
-	"github.com/FriendsOfShopware/shopware-cli/version"
+	"github.com/shopware/shopware-cli/logging"
+	"github.com/shopware/shopware-cli/version"
 )
 
 var (

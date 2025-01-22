@@ -1,7 +1,7 @@
 package project
 
 import (
-	"github.com/FriendsOfShopware/shopware-cli/shop"
+	"github.com/shopware/shopware-cli/shop"
 	"github.com/spf13/cobra"
 )
 

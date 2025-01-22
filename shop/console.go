@@ -4,9 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/FriendsOfShopware/shopware-cli/internal/phpexec"
 	"os"
 	"path"
+
+	"github.com/shopware/shopware-cli/internal/phpexec"
 )
 
 type ConsoleResponse struct {
@@ -43,7 +44,6 @@ func GetConsoleCompletion(ctx context.Context, projectRoot string) (*ConsoleResp
 		var resp ConsoleResponse
 
 		bytes, err := os.ReadFile(cachePath)
-
 		if err != nil {
 			return nil, err
 		}
@@ -59,7 +59,6 @@ func GetConsoleCompletion(ctx context.Context, projectRoot string) (*ConsoleResp
 	consoleCommand.Dir = projectRoot
 
 	commandJson, err := consoleCommand.Output()
-
 	if err != nil {
 		return nil, err
 	}

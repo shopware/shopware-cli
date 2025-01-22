@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://github.com/FriendsOfShopware/shopware-cli/shop/config",
+  "$id": "https://github.com/shopware/shopware-cli/shop/config",
   "$ref": "#/$defs/Config",
   "$defs": {
     "Config": {

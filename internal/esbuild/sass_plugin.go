@@ -9,7 +9,7 @@ import (
 	"github.com/bep/godartsass/v2"
 	"github.com/evanw/esbuild/pkg/api"
 
-	"github.com/FriendsOfShopware/shopware-cli/logging"
+	"github.com/shopware/shopware-cli/logging"
 )
 
 func newScssPlugin(ctx context.Context) api.Plugin {

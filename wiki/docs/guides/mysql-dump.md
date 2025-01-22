@@ -17,7 +17,7 @@ It's possible to use `--skip-lock-tables` to skip the lock tables command. This 
 
 The `--anonymize` flag will anonymize known user data tables. The following tables are anonymized:
 
-[See here for the complete list](https://github.com/FriendsOfShopware/shopware-cli/blob/main/cmd/project/project_dump.go#L74)
+[See here for the complete list](https://github.com/shopware/shopware-cli/blob/main/cmd/project/project_dump.go#L74)
 
 It's possible to customize the anonymization process by using the `dump.rewrite` configuration in the `shopware-cli.yml` file.
 

@@ -4,18 +4,19 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/FriendsOfShopware/shopware-cli/internal/phpexec"
 	"os"
 	"path"
 	"path/filepath"
 	"regexp"
 	"strings"
 
-	"github.com/FriendsOfShopware/shopware-cli/shop"
+	"github.com/shopware/shopware-cli/internal/phpexec"
 
-	"github.com/FriendsOfShopware/shopware-cli/internal/asset"
-	"github.com/FriendsOfShopware/shopware-cli/logging"
-	"github.com/FriendsOfShopware/shopware-cli/version"
+	"github.com/shopware/shopware-cli/shop"
+
+	"github.com/shopware/shopware-cli/internal/asset"
+	"github.com/shopware/shopware-cli/logging"
+	"github.com/shopware/shopware-cli/version"
 )
 
 func GetShopwareProjectConstraint(project string) (*version.Constraints, error) {
@@ -168,7 +169,6 @@ func DumpAndLoadAssetSourcesOfProject(ctx context.Context, project string, shopC
 	var pluginsJson map[string]ExtensionAssetConfigEntry
 
 	pluginJsonBytes, err := os.ReadFile(path.Join(project, "var", "plugins.json"))
-
 	if err != nil {
 		return nil, fmt.Errorf("could not read plugins.json: %w", err)
 	}
