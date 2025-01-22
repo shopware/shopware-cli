@@ -242,7 +242,7 @@ func PrepareFolderForZipping(ctx context.Context, path string, ext Extension, ex
 	}
 
 	// Add replacements
-	composer, err = addComposerReplacements(ctx, composer, minVersion)
+	composer, err = addComposerReplacements(composer, minVersion)
 	if err != nil {
 		return fmt.Errorf("add composer replacements: %w", err)
 	}
@@ -351,7 +351,7 @@ func filterRequires(composer map[string]interface{}, extCfg *Config) map[string]
 	return composer
 }
 
-func addComposerReplacements(ctx context.Context, composer map[string]interface{}, minVersion string) (map[string]interface{}, error) {
+func addComposerReplacements(composer map[string]interface{}, minVersion string) (map[string]interface{}, error) {
 	if _, ok := composer["replace"]; !ok {
 		composer["replace"] = make(map[string]interface{})
 	}
@@ -365,26 +365,26 @@ func addComposerReplacements(ctx context.Context, composer map[string]interface{
 
 	components := []string{"core", "administration", "storefront", "administration"}
 
+	composerInfo, err := getComposerInfoFS()
+	if err != nil {
+		return nil, fmt.Errorf("get composer info fs: %w", err)
+	}
+
 	for _, component := range components {
 		packageName := fmt.Sprintf("shopware/%s", component)
 
 		if _, ok := require.(map[string]interface{})[packageName]; ok {
-			req, err := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("https://swagger.docs.fos.gg/composer/%s/%s.json", minVersion, component), http.NoBody)
+			composerFile, err := composerInfo.Open(fmt.Sprintf("%s/%s.json", minVersion, component))
 			if err != nil {
-				return nil, fmt.Errorf("create component request: %w", err)
+				return nil, fmt.Errorf("open composer file: %w", err)
 			}
 
-			resp, err := http.DefaultClient.Do(req)
-			if err != nil {
-				return nil, fmt.Errorf("get packte version %s: %w", component, err)
-			}
+			defer composerFile.Close()
 
-			composerPartByte, err := io.ReadAll(resp.Body)
+			composerPartByte, err := io.ReadAll(composerFile)
 			if err != nil {
 				return nil, fmt.Errorf("read component version body: %w", err)
 			}
-
-			_ = resp.Body.Close()
 
 			var composerPart map[string]string
 			err = json.Unmarshal(composerPartByte, &composerPart)
@@ -505,7 +505,6 @@ func PrepareExtensionForRelease(ctx context.Context, sourceRoot, extensionRoot s
 	manifestPath := filepath.Join(extensionRoot, "manifest.xml")
 
 	bytes, err := os.ReadFile(manifestPath)
-
 	if err != nil {
 		return err
 	}
@@ -521,7 +520,6 @@ func PrepareExtensionForRelease(ctx context.Context, sourceRoot, extensionRoot s
 	}
 
 	newManifest, err := xml.MarshalIndent(manifest, "", "  ")
-
 	if err != nil {
 		return fmt.Errorf("cannot marshal manifest failed: %w", err)
 	}
