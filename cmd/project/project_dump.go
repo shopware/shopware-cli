@@ -43,6 +43,7 @@ var projectDatabaseDumpCmd = &cobra.Command{
 		skipLockTables, _ := cmd.Flags().GetBool("skip-lock-tables")
 		anonymize, _ := cmd.Flags().GetBool("anonymize")
 		compression, _ := cmd.Flags().GetString("compression")
+		quick, _ := cmd.Flags().GetBool("quick")
 
 		db, err := sql.Open("mysql", mysqlConfig.FormatDSN())
 		if err != nil {
@@ -61,11 +62,15 @@ var projectDatabaseDumpCmd = &cobra.Command{
 			opt = append(opt, database.OptionValue("skip-lock-tables", "1"))
 		}
 
+		if quick {
+			opt = append(opt, database.OptionValue("quick", "1"))
+		}
+
 		logger, _ := zap.NewProduction()
 		dumper, err := database.NewMySQLDumper(db, logger, service, opt...)
 		if err != nil {
 			return err
-		}
+			}
 
 		pConf := core.Rules{Ignore: []string{}, NoData: []string{}, Where: map[string]string{}, Rewrite: map[string]core.Rewrite{}}
 
@@ -333,4 +338,5 @@ func init() {
 	projectDatabaseDumpCmd.Flags().Bool("anonymize", false, "Anonymize customer data")
 	projectDatabaseDumpCmd.Flags().String("compression", "", "Compress the dump (gzip, zstd)")
 	projectDatabaseDumpCmd.Flags().Bool("zstd", false, "Zstd the whole dump")
+	projectDatabaseDumpCmd.Flags().Bool("quick", false, "Use quick option for mysqldump")
 }
