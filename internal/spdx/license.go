@@ -17,7 +17,7 @@ var spdxExceptions []byte
 //go:embed spdx-licenses.json
 var spdxLicenses []byte
 
-// SpdxLicenses struct
+// SpdxLicenses struct.
 type SpdxLicenses struct {
 	licenses             map[string][]interface{}
 	licensesExpression   string
@@ -32,7 +32,7 @@ const (
 	stateException        // after encountering "WITH", expecting a license exception
 )
 
-// NewSpdxLicenses creates a new SpdxLicenses instance
+// NewSpdxLicenses creates a new SpdxLicenses instance.
 func NewSpdxLicenses() (*SpdxLicenses, error) {
 	s := &SpdxLicenses{
 		licenses:   make(map[string][]interface{}),
@@ -74,7 +74,7 @@ func (s *SpdxLicenses) Validate(license interface{}) (bool, error) {
 	}
 }
 
-// loadLicenses loads licenses from the JSON file
+// loadLicenses loads licenses from the JSON file.
 func (s *SpdxLicenses) loadLicenses() error {
 	if len(s.licenses) > 0 {
 		return nil
@@ -92,7 +92,7 @@ func (s *SpdxLicenses) loadLicenses() error {
 	return nil
 }
 
-// loadExceptions loads license exceptions from the JSON file
+// loadExceptions loads license exceptions from the JSON file.
 func (s *SpdxLicenses) loadExceptions() error {
 	if len(s.exceptions) > 0 {
 		return nil
@@ -109,7 +109,7 @@ func (s *SpdxLicenses) loadExceptions() error {
 	return nil
 }
 
-// getLicensesExpression returns the compiled regex for licenses
+// getLicensesExpression returns the compiled regex for licenses.
 func (s *SpdxLicenses) getLicensesExpression() string {
 	if s.licensesExpression == "" {
 		licenses := make([]string, 0, len(s.licenses))
@@ -122,7 +122,7 @@ func (s *SpdxLicenses) getLicensesExpression() string {
 	return s.licensesExpression
 }
 
-// getExceptionsExpression returns the compiled regex for exceptions
+// getExceptionsExpression returns the compiled regex for exceptions.
 func (s *SpdxLicenses) getExceptionsExpression() string {
 	if s.exceptionsExpression == "" {
 		exceptions := make([]string, 0, len(s.exceptions))
@@ -135,7 +135,7 @@ func (s *SpdxLicenses) getExceptionsExpression() string {
 	return s.exceptionsExpression
 }
 
-// isValidLicenseString validates a license string against the SPDX grammar
+// isValidLicenseString validates a license string against the SPDX grammar.
 func (s *SpdxLicenses) isValidLicenseString(license string) (bool, error) {
 	if _, ok := s.licenses[strings.ToLower(license)]; ok {
 		return true, nil
@@ -162,10 +162,7 @@ func (s *SpdxLicenses) isValidLicenseString(license string) (bool, error) {
 		return true, nil
 	}
 
-	tokens, err := tokenize(license)
-	if err != nil {
-		return false, fmt.Errorf("failed to tokenize: %w", err)
-	}
+	tokens := tokenize(license)
 	if len(tokens) == 0 {
 		return false, fmt.Errorf("empty license string")
 	}
@@ -177,7 +174,8 @@ func (s *SpdxLicenses) isValidLicenseString(license string) (bool, error) {
 
 	// Process tokens.
 	for _, tok := range tokens {
-		switch tok {
+		lowerTok := strings.ToLower(tok)
+		switch lowerTok {
 		case "(":
 			// A left parenthesis is allowed only if a new term is expected.
 			if state != stateTerm {
@@ -196,38 +194,36 @@ func (s *SpdxLicenses) isValidLicenseString(license string) (bool, error) {
 			// Pop the matching "(".
 			parenStack = parenStack[:len(parenStack)-1]
 			state = stateAfterTerm
+		case "and", "or":
+			// "AND" or "OR" is allowed only after a completed term.
+			if state != stateAfterTerm {
+				return false, fmt.Errorf("operator %q unexpected", tok)
+			}
+			// After an operator, expect a new term.
+			state = stateTerm
+		case "with":
+			// "WITH" is allowed only immediately after a valid license factor.
+			if state != stateAfterTerm {
+				return false, fmt.Errorf("WITH keyword unexpected")
+			}
+			state = stateException
 		default:
-			// Handle special keywords (AND, OR, WITH) case-insensitively.
-			if strings.EqualFold(tok, "AND") || strings.EqualFold(tok, "OR") {
-				// "AND" or "OR" is allowed only after a completed term.
-				if state != stateAfterTerm {
-					return false, fmt.Errorf("operator %q unexpected", tok)
+			// For any other token, its meaning depends on the state.
+			//nolint:gocritic
+			if state == stateTerm {
+				// Expect a license factor.
+				if !isLicenseFactor(licenseRefRe, licenseIDRe, tok) {
+					return false, fmt.Errorf("invalid license factor: %q", tok)
 				}
-				// After an operator, expect a new term.
-				state = stateTerm
-			} else if strings.EqualFold(tok, "WITH") {
-				// "WITH" is allowed only immediately after a valid license factor.
-				if state != stateAfterTerm {
-					return false, fmt.Errorf("WITH keyword unexpected")
+				state = stateAfterTerm
+			} else if state == stateException {
+				// After "WITH", expect a license exception.
+				if !licenseExceptionRe.MatchString(tok) {
+					return false, fmt.Errorf("invalid license exception: %q", tok)
 				}
-				state = stateException
-			} else {
-				// For any other token, its meaning depends on the state.
-				if state == stateTerm {
-					// Expect a license factor.
-					if !isLicenseFactor(licenseRefRe, licenseIDRe, tok) {
-						return false, fmt.Errorf("invalid license factor: %q", tok)
-					}
-					state = stateAfterTerm
-				} else if state == stateException {
-					// After "WITH", expect a license exception.
-					if !licenseExceptionRe.MatchString(tok) {
-						return false, fmt.Errorf("invalid license exception: %q", tok)
-					}
-					state = stateAfterTerm
-				} else if state == stateAfterTerm {
-					return false, fmt.Errorf("unexpected token: %q", tok)
-				}
+				state = stateAfterTerm
+			} else if state == stateAfterTerm {
+				return false, fmt.Errorf("unexpected token: %q", tok)
 			}
 		}
 	}
@@ -256,7 +252,7 @@ func isLicenseFactor(licenseRefRe *regexp.Regexp, licenseIDRe *regexp.Regexp, t 
 	return licenseIDRe.MatchString(id)
 }
 
-func tokenize(input string) ([]string, error) {
+func tokenize(input string) []string {
 	var tokens []string
 	i := 0
 	for i < len(input) {
@@ -287,5 +283,5 @@ func tokenize(input string) ([]string, error) {
 		tokens = append(tokens, token)
 		i = j
 	}
-	return tokens, nil
+	return tokens
 }
