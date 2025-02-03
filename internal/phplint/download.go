@@ -17,7 +17,6 @@ func findPHPWasmFile(ctx context.Context, phpVersion string) ([]byte, error) {
 	expectedPathLocation := path.Join(system.GetShopwareCliCacheDir(), "wasm", "php", expectedFile)
 
 	if _, err := os.Stat(expectedPathLocation); err == nil {
-		logging.FromContext(ctx).Infof("Using existing PHP %s wasm build from %s", phpVersion, expectedPathLocation)
 		return os.ReadFile(expectedPathLocation)
 	}
 
