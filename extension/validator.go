@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/shopware/shopware-cli/internal/spdx"
 	"golang.org/x/net/context"
 )
 
@@ -76,7 +77,7 @@ func runDefaultValidate(context *ValidationContext) {
 	}
 
 	notAllowedErrorFormat := "file %s is not allowed in the zip file"
-	_ = filepath.Walk(context.Extension.GetPath(), func(path string, info fs.FileInfo, err error) error {
+	_ = filepath.Walk(context.Extension.GetPath(), func(path string, info fs.FileInfo, _ error) error {
 		name := filepath.Base(path)
 
 		if name == ".." {
@@ -98,6 +99,26 @@ func runDefaultValidate(context *ValidationContext) {
 		for _, ext := range defaultNotAllowedExtensions {
 			if strings.HasSuffix(name, ext) {
 				context.AddError(fmt.Sprintf(notAllowedErrorFormat, path))
+			}
+		}
+
+		license, err := context.Extension.GetLicense()
+
+		if err != nil {
+			context.AddError(fmt.Sprintf("Could not read the license of the extension: %s", err.Error()))
+		} else if strings.TrimSpace(strings.ToLower(license)) != "proprietary" {
+			spdx, err := spdx.NewSpdxLicenses()
+
+			if err != nil {
+				context.AddWarning(fmt.Sprintf("Could not load the SPDX license list: %s", err.Error()))
+			} else {
+				bl, err := spdx.Validate(license)
+
+				if err != nil {
+					context.AddError(fmt.Sprintf("Could not validate the license: %s", err.Error()))
+				} else if !bl {
+					context.AddError(fmt.Sprintf("The license %s is not a valid SPDX license", license))
+				}
 			}
 		}
 
