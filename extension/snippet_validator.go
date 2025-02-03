@@ -240,7 +240,7 @@ func compareSnippets(mainFile []byte, file string, context *ValidationContext, e
 		}
 
 		if diff.Type == jsondiff.OperationAdd {
-			context.AddWarning(fmt.Sprintf("Snippet file: %s, missing key \"%s\" in this snippet file, but defined in the main language", normalizedPath, diff.Path))
+			context.AddWarning(fmt.Sprintf("Snippet file: %s, missing key \"%s\" in this snippet file, but defined in the main language (\"%s\")", normalizedPath, diff.Path, mainFile))
 			continue
 		}
 
