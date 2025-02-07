@@ -39,7 +39,7 @@ var extensionValidateCmd = &cobra.Command{
 			return fmt.Errorf("cannot open extension: %w", err)
 		}
 
-		context := extension.RunValidation(cmd.Context(), ext)
+		context := extension.RunValidation(cmd.Context(), ext, ignoreAppSecret)
 
 		if context.HasErrors() || context.HasWarnings() {
 			table := tablewriter.NewWriter(os.Stdout)
@@ -67,6 +67,9 @@ var extensionValidateCmd = &cobra.Command{
 	},
 }
 
+var ignoreAppSecret bool
+
 func init() {
 	extensionRootCmd.AddCommand(extensionValidateCmd)
+	extensionValidateCmd.Flags().BoolVar(&ignoreAppSecret, "ignore-app-secret", false, "Ignore app secret in manifest.xml")
 }

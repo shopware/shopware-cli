@@ -168,7 +168,7 @@ func (a App) Validate(_ context.Context, ctx *ValidationContext) {
 		ctx.AddError("The element meta:license was not found in the manifest.xml")
 	}
 
-	if a.manifest.Setup != nil && a.manifest.Setup.Secret != "" {
-		ctx.AddError("The xml element setup:secret is only for local development, please remove it. You can find your generated app secret on your extension detail page in the master data section. For more information see https://docs.shopware.com/en/shopware-platform-dev-en/app-system-guide/setup#authorisation")
+	if a.manifest.Setup != nil && a.manifest.Setup.Secret != "" && ctx.IgnoreAppSecret == false {
+		ctx.AddWarning("The xml element setup:secret is only for local development, please remove it. You can find your generated app secret on your extension detail page in the master data section. For more information see https://docs.shopware.com/en/shopware-platform-dev-en/app-system-guide/setup#authorisation")
 	}
 }

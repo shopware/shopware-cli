@@ -11,13 +11,14 @@ import (
 )
 
 type ValidationContext struct {
-	Extension Extension
-	errors    []string
-	warnings  []string
+	Extension       Extension
+	IgnoreAppSecret bool
+	errors          []string
+	warnings        []string
 }
 
-func newValidationContext(ext Extension) *ValidationContext {
-	return &ValidationContext{Extension: ext}
+func newValidationContext(ext Extension, ignoreAppSecret bool) *ValidationContext {
+	return &ValidationContext{Extension: ext, IgnoreAppSecret: ignoreAppSecret}
 }
 
 func (c *ValidationContext) AddError(message string) {
@@ -44,8 +45,8 @@ func (c *ValidationContext) Warnings() []string {
 	return c.warnings
 }
 
-func RunValidation(ctx context.Context, ext Extension) *ValidationContext {
-	context := newValidationContext(ext)
+func RunValidation(ctx context.Context, ext Extension, ignoreAppSecret bool) *ValidationContext {
+	context := newValidationContext(ext, ignoreAppSecret)
 
 	runDefaultValidate(context)
 	ext.Validate(ctx, context)
