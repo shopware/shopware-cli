@@ -61,7 +61,6 @@ func validateStorefrontSnippetsByPath(extensionRoot, rootDir string, context *Va
 
 		return nil
 	})
-
 	if err != nil {
 		return err
 	}
@@ -81,7 +80,7 @@ func validateStorefrontSnippetsByPath(extensionRoot, rootDir string, context *Va
 		}
 
 		if len(mainFile) == 0 {
-			context.AddWarning(fmt.Sprintf("No en-GB.json file found in %s, using %s", snippetFolder, files[0]))
+			context.AddWarning("snippet.validator", fmt.Sprintf("No en-GB.json file found in %s, using %s", snippetFolder, files[0]))
 			mainFile = files[0]
 		}
 
@@ -91,7 +90,7 @@ func validateStorefrontSnippetsByPath(extensionRoot, rootDir string, context *Va
 		}
 
 		if !json.Valid(mainFileContent) {
-			context.AddError(fmt.Sprintf("File '%s' contains invalid JSON", mainFile))
+			context.AddError("snippet.validator", fmt.Sprintf("File '%s' contains invalid JSON", mainFile))
 
 			continue
 		}
@@ -162,7 +161,6 @@ func validateAdministrationByPath(extensionRoot, rootDir string, context *Valida
 
 		return nil
 	})
-
 	if err != nil {
 		return err
 	}
@@ -182,7 +180,7 @@ func validateAdministrationByPath(extensionRoot, rootDir string, context *Valida
 		}
 
 		if len(mainFile) == 0 {
-			context.AddWarning(fmt.Sprintf("No en-GB.json file found in %s, using %s", folder, files[0]))
+			context.AddWarning("snippet.validator", fmt.Sprintf("No en-GB.json file found in %s, using %s", folder, files[0]))
 			mainFile = files[0]
 		}
 
@@ -192,7 +190,7 @@ func validateAdministrationByPath(extensionRoot, rootDir string, context *Valida
 		}
 
 		if !json.Valid(mainFileContent) {
-			context.AddError(fmt.Sprintf("File '%s' contains invalid JSON", mainFile))
+			context.AddError("snippet.validator", fmt.Sprintf("File '%s' contains invalid JSON", mainFile))
 
 			continue
 		}
@@ -213,20 +211,20 @@ func validateAdministrationByPath(extensionRoot, rootDir string, context *Valida
 func compareSnippets(mainFile []byte, file string, context *ValidationContext, extensionRoot string) {
 	checkFile, err := os.ReadFile(file)
 	if err != nil {
-		context.AddError(fmt.Sprintf("Cannot read file '%s', due '%s'", file, err))
+		context.AddError("snippet.validator", fmt.Sprintf("Cannot read file '%s', due '%s'", file, err))
 
 		return
 	}
 
 	if !json.Valid(checkFile) {
-		context.AddError(fmt.Sprintf("File '%s' contains invalid JSON", file))
+		context.AddError("snippet.validator", fmt.Sprintf("File '%s' contains invalid JSON", file))
 
 		return
 	}
 
 	compare, err := jsondiff.CompareJSON(mainFile, checkFile)
 	if err != nil {
-		context.AddError(fmt.Sprintf("Cannot compare file '%s', due '%s'", file, err))
+		context.AddError("snippet.validator", fmt.Sprintf("Cannot compare file '%s', due '%s'", file, err))
 
 		return
 	}
@@ -235,17 +233,17 @@ func compareSnippets(mainFile []byte, file string, context *ValidationContext, e
 		normalizedPath := strings.ReplaceAll(file, extensionRoot+"/", "")
 
 		if diff.Type == jsondiff.OperationReplace && reflect.TypeOf(diff.OldValue) != reflect.TypeOf(diff.Value) {
-			context.AddWarning(fmt.Sprintf("Snippet file: %s, key: %s, has the type %s, but in the main language it is %s", normalizedPath, diff.Path, reflect.TypeOf(diff.OldValue), reflect.TypeOf(diff.Value)))
+			context.AddWarning("snippet.validator", fmt.Sprintf("Snippet file: %s, key: %s, has the type %s, but in the main language it is %s", normalizedPath, diff.Path, reflect.TypeOf(diff.OldValue), reflect.TypeOf(diff.Value)))
 			continue
 		}
 
 		if diff.Type == jsondiff.OperationAdd {
-			context.AddWarning(fmt.Sprintf("Snippet file: %s, missing key \"%s\" in this snippet file, but defined in the main language (\"%s\")", normalizedPath, diff.Path, mainFile))
+			context.AddWarning("snippet.validator", fmt.Sprintf("Snippet file: %s, missing key \"%s\" in this snippet file, but defined in the main language (\"%s\")", normalizedPath, diff.Path, mainFile))
 			continue
 		}
 
 		if diff.Type == jsondiff.OperationRemove {
-			context.AddWarning(fmt.Sprintf("Snippet file: %s, key %s is missing, but defined in the main language file", normalizedPath, diff.Path))
+			context.AddWarning("snippet.validator", fmt.Sprintf("Snippet file: %s, key %s is missing, but defined in the main language file", normalizedPath, diff.Path))
 			continue
 		}
 	}

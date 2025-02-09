@@ -74,8 +74,8 @@ func TestSnippetValidateStorefrontByPathTestDifferent(t *testing.T) {
 	assert.NoError(t, validateStorefrontSnippetsByPath(tmpDir, tmpDir, context))
 	assert.Len(t, context.errors, 0)
 	assert.Len(t, context.warnings, 2)
-	assert.Contains(t, context.warnings[0], "key /a is missing, but defined in the main language file")
-	assert.Contains(t, context.warnings[1], "missing key \"/b\" in this snippet file, but defined in the main language")
+	assert.Contains(t, context.warnings[0].Message, "key /a is missing, but defined in the main language file")
+	assert.Contains(t, context.warnings[1].Message, "missing key \"/b\" in this snippet file, but defined in the main language")
 }
 
 func TestSnippetValidateFindsInvalidJsonInMainFile(t *testing.T) {
@@ -93,7 +93,7 @@ func TestSnippetValidateFindsInvalidJsonInMainFile(t *testing.T) {
 	assert.NoError(t, validateStorefrontSnippetsByPath(tmpDir, tmpDir, context))
 	assert.Len(t, context.errors, 1)
 	assert.Len(t, context.warnings, 0)
-	assert.Contains(t, context.errors[0], "contains invalid JSON")
+	assert.Contains(t, context.errors[0].Message, "contains invalid JSON")
 }
 
 func TestSnippetValidateFindsInvalidJsonInGermanFile(t *testing.T) {
@@ -111,5 +111,5 @@ func TestSnippetValidateFindsInvalidJsonInGermanFile(t *testing.T) {
 	assert.NoError(t, validateStorefrontSnippetsByPath(tmpDir, tmpDir, context))
 	assert.Len(t, context.errors, 1)
 	assert.Len(t, context.warnings, 0)
-	assert.Contains(t, context.errors[0], "contains invalid JSON")
+	assert.Contains(t, context.errors[0].Message, "contains invalid JSON")
 }

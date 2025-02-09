@@ -171,38 +171,38 @@ func (p PlatformPlugin) GetMetaData() *extensionMetadata {
 
 func (p PlatformPlugin) Validate(c context.Context, ctx *ValidationContext) {
 	if p.composer.Name == "" {
-		ctx.AddError("Key `name` is required")
+		ctx.AddError("metadata.name", "Key `name` is required")
 	}
 
 	if p.composer.Type == "" {
-		ctx.AddError("Key `type` is required")
+		ctx.AddError("metadata.type", "Key `type` is required")
 	} else if p.composer.Type != ComposerTypePlugin {
-		ctx.AddError("The composer type must be shopware-platform-plugin")
+		ctx.AddError("metadata.type", "The composer type must be shopware-platform-plugin")
 	}
 
 	if p.composer.Description == "" {
-		ctx.AddError("Key `description` is required")
+		ctx.AddError("metadata.description", "Key `description` is required")
 	}
 
 	if p.composer.License == "" {
-		ctx.AddError("Key `license` is required")
+		ctx.AddError("metadata.license", "Key `license` is required")
 	}
 
 	if p.composer.Version == "" {
-		ctx.AddError("Key `version` is required")
+		ctx.AddError("metadata.version", "Key `version` is required")
 	}
 
 	if len(p.composer.Authors) == 0 {
-		ctx.AddError("Key `authors` is required")
+		ctx.AddError("metadata.author", "Key `authors` is required")
 	}
 
 	if len(p.composer.Require) == 0 {
-		ctx.AddError("Key `require` is required")
+		ctx.AddError("metadata.require", "Key `require` is required")
 	} else {
 		_, exists := p.composer.Require["shopware/core"]
 
 		if !exists {
-			ctx.AddError("You need to require \"shopware/core\" package")
+			ctx.AddError("metadata.require", "You need to require \"shopware/core\" package")
 		}
 	}
 
@@ -215,24 +215,24 @@ func (p PlatformPlugin) Validate(c context.Context, ctx *ValidationContext) {
 		_, hasSupportLink := p.composer.Extra.SupportLink[key]
 
 		if !hasLabel {
-			ctx.AddError(fmt.Sprintf("extra.label for language %s is required", key))
+			ctx.AddError("metadata.label", fmt.Sprintf("extra.label for language %s is required", key))
 		}
 
 		if !hasDescription {
-			ctx.AddError(fmt.Sprintf("extra.description for language %s is required", key))
+			ctx.AddError("metadata.description", fmt.Sprintf("extra.description for language %s is required", key))
 		}
 
 		if !hasManufacturer {
-			ctx.AddError(fmt.Sprintf("extra.manufacturerLink for language %s is required", key))
+			ctx.AddError("metadata.manufacturer", fmt.Sprintf("extra.manufacturerLink for language %s is required", key))
 		}
 
 		if !hasSupportLink {
-			ctx.AddError(fmt.Sprintf("extra.supportLink for language %s is required", key))
+			ctx.AddError("metadata.support", fmt.Sprintf("extra.supportLink for language %s is required", key))
 		}
 	}
 
 	if len(p.composer.Autoload.Psr0) == 0 && len(p.composer.Autoload.Psr4) == 0 {
-		ctx.AddError("At least one of the properties psr-0 or psr-4 are required in the composer.json")
+		ctx.AddError("metadata.autoload", "At least one of the properties psr-0 or psr-4 are required in the composer.json")
 	}
 
 	pluginIcon := p.composer.Extra.PluginIcon
@@ -243,7 +243,7 @@ func (p PlatformPlugin) Validate(c context.Context, ctx *ValidationContext) {
 
 	// check if the plugin icon exists
 	if _, err := os.Stat(filepath.Join(p.GetPath(), pluginIcon)); os.IsNotExist(err) {
-		ctx.AddError(fmt.Sprintf("The plugin icon %s does not exist", pluginIcon))
+		ctx.AddError("metadata.icon", fmt.Sprintf("The plugin icon %s does not exist", pluginIcon))
 	}
 
 	validateTheme(ctx)
@@ -253,13 +253,13 @@ func (p PlatformPlugin) Validate(c context.Context, ctx *ValidationContext) {
 func validatePHPFiles(c context.Context, ctx *ValidationContext) {
 	constraint, err := ctx.Extension.GetShopwareVersionConstraint()
 	if err != nil {
-		ctx.AddError(fmt.Sprintf("Could not parse shopware version constraint: %s", err.Error()))
+		ctx.AddError("php.linter", fmt.Sprintf("Could not parse shopware version constraint: %s", err.Error()))
 		return
 	}
 
 	phpVersion, err := GetPhpVersion(c, constraint)
 	if err != nil {
-		ctx.AddWarning(fmt.Sprintf("Could not find min php version for plugin: %s", err.Error()))
+		ctx.AddWarning("php.linter", fmt.Sprintf("Could not find min php version for plugin: %s", err.Error()))
 		return
 	}
 
@@ -270,12 +270,12 @@ func validatePHPFiles(c context.Context, ctx *ValidationContext) {
 
 	phpErrors, err := phplint.LintFolder(c, phpVersion, ctx.Extension.GetRootDir())
 	if err != nil {
-		ctx.AddWarning(fmt.Sprintf("Could not lint php files: %s", err.Error()))
+		ctx.AddWarning("php.linter", fmt.Sprintf("Could not lint php files: %s", err.Error()))
 		return
 	}
 
 	for _, error := range phpErrors {
-		ctx.AddError(fmt.Sprintf("%s: %s", error.File, error.Message))
+		ctx.AddError("php.linter", fmt.Sprintf("%s: %s", error.File, error.Message))
 	}
 }
 

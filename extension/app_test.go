@@ -133,7 +133,7 @@ func TestIconNotExists(t *testing.T) {
 	app.Validate(getTestContext(), ctx)
 
 	assert.Equal(t, 1, len(ctx.errors))
-	assert.Equal(t, "Cannot find app icon at Resources/config/plugin.png", ctx.errors[0])
+	assert.Equal(t, "Cannot find app icon at Resources/config/plugin.png", ctx.errors[0].Message)
 }
 
 func TestAppNoLicense(t *testing.T) {
@@ -151,7 +151,7 @@ func TestAppNoLicense(t *testing.T) {
 	app.Validate(getTestContext(), ctx)
 
 	assert.Equal(t, 1, len(ctx.errors))
-	assert.Equal(t, "The element meta:license was not found in the manifest.xml", ctx.errors[0])
+	assert.Equal(t, "The element meta:license was not found in the manifest.xml", ctx.errors[0].Message)
 }
 
 func TestAppNoCopyright(t *testing.T) {
@@ -169,7 +169,7 @@ func TestAppNoCopyright(t *testing.T) {
 	app.Validate(getTestContext(), ctx)
 
 	assert.Equal(t, 1, len(ctx.errors))
-	assert.Equal(t, "The element meta:copyright was not found in the manifest.xml", ctx.errors[0])
+	assert.Equal(t, "The element meta:copyright was not found in the manifest.xml", ctx.errors[0].Message)
 }
 
 func TestAppNoAuthor(t *testing.T) {
@@ -187,7 +187,7 @@ func TestAppNoAuthor(t *testing.T) {
 	app.Validate(getTestContext(), ctx)
 
 	assert.Equal(t, 1, len(ctx.errors))
-	assert.Equal(t, "The element meta:author was not found in the manifest.xml", ctx.errors[0])
+	assert.Equal(t, "The element meta:author was not found in the manifest.xml", ctx.errors[0].Message)
 }
 
 func TestAppHasSecret(t *testing.T) {
@@ -205,7 +205,7 @@ func TestAppHasSecret(t *testing.T) {
 	app.Validate(getTestContext(), ctx)
 
 	assert.Equal(t, 1, len(ctx.errors))
-	assert.Equal(t, "The xml element setup:secret is only for local development, please remove it. You can find your generated app secret on your extension detail page in the master data section. For more information see https://docs.shopware.com/en/shopware-platform-dev-en/app-system-guide/setup#authorisation", ctx.errors[0])
+	assert.Equal(t, "The xml element setup:secret is only for local development, please remove it. You can find your generated app secret on your extension detail page in the master data section. For more information see https://docs.shopware.com/en/shopware-platform-dev-en/app-system-guide/setup#authorisation", ctx.errors[0].Message)
 }
 
 func TestIconExistsDefaultsPath(t *testing.T) {
@@ -295,7 +295,7 @@ func TestAppWithPHPFiles(t *testing.T) {
 	app.Validate(getTestContext(), ctx)
 
 	assert.Equal(t, 1, len(ctx.errors))
-	assert.Contains(t, ctx.errors[0], "Found unexpected PHP file")
+	assert.Contains(t, ctx.errors[0].Message, "Found unexpected PHP file")
 }
 
 func TestAppWithTwigFiles(t *testing.T) {
@@ -321,5 +321,5 @@ func TestAppWithTwigFiles(t *testing.T) {
 	app.Validate(getTestContext(), ctx)
 
 	assert.Equal(t, 1, len(ctx.errors))
-	assert.Contains(t, ctx.errors[0], "Twig files should be at")
+	assert.Contains(t, ctx.errors[0].Message, "Twig files should be at")
 }

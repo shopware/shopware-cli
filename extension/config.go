@@ -93,11 +93,16 @@ type ConfigStoreImagePreview struct {
 	English bool `yaml:"en"`
 }
 
+type ConfigValidation struct {
+	Ignore []string `yaml:"ignore,omitempty"`
+}
+
 type Config struct {
-	FileName  string
-	Store     ConfigStore      `yaml:"store"`
-	Build     ConfigBuild      `yaml:"build"`
-	Changelog changelog.Config `yaml:"changelog"`
+	FileName   string
+	Store      ConfigStore      `yaml:"store"`
+	Build      ConfigBuild      `yaml:"build"`
+	Changelog  changelog.Config `yaml:"changelog"`
+	Validation ConfigValidation `yaml:"validation"`
 }
 
 func readExtensionConfig(dir string) (*Config, error) {

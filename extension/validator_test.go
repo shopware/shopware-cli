@@ -49,7 +49,7 @@ func TestLicenseValidationNoLicense(t *testing.T) {
 	runDefaultValidate(ctx)
 
 	assert.True(t, ctx.HasErrors())
-	assert.Equal(t, ctx.errors[0], "Could not validate the license: empty license string")
+	assert.Equal(t, "Could not validate the license: empty license string", ctx.errors[0].Message)
 }
 
 func TestLicenseValidationInvalidLicense(t *testing.T) {
@@ -61,7 +61,7 @@ func TestLicenseValidationInvalidLicense(t *testing.T) {
 	runDefaultValidate(ctx)
 
 	assert.True(t, ctx.HasErrors())
-	assert.Equal(t, ctx.errors[0], "Could not validate the license: invalid license factor: \"FUUUU\"")
+	assert.Equal(t, "Could not validate the license: invalid license factor: \"FUUUU\"", ctx.errors[0].Message)
 }
 
 func TestLicenseValidate(t *testing.T) {
@@ -71,5 +71,17 @@ func TestLicenseValidate(t *testing.T) {
 
 	runDefaultValidate(ctx)
 
+	assert.False(t, ctx.HasErrors())
+}
+
+func TestIgnores(t *testing.T) {
+	app := getAppForValidation()
+
+	ctx := newValidationContext(app)
+
+	ctx.AddError("metadata.name", "Key `name` is required")
+	assert.True(t, ctx.HasErrors())
+
+	ctx.ApplyIgnores([]string{"metadata.name"})
 	assert.False(t, ctx.HasErrors())
 }

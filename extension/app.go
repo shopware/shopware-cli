@@ -139,36 +139,36 @@ func (a App) Validate(_ context.Context, ctx *ValidationContext) {
 	}
 
 	if _, err := os.Stat(filepath.Join(a.GetPath(), appIcon)); os.IsNotExist(err) {
-		ctx.AddError(fmt.Sprintf("Cannot find app icon at %s", appIcon))
+		ctx.AddError("metadata.icon", fmt.Sprintf("Cannot find app icon at %s", appIcon))
 	}
 
 	allowedTwigLocations := []string{path.Join(a.GetRootDir(), "Resources", "views"), path.Join(a.GetRootDir(), "Resources", "scripts")}
 
 	_ = filepath.Walk(a.GetRootDir(), func(path string, info os.FileInfo, err error) error {
 		if filepath.Ext(path) == ".php" {
-			ctx.AddError(fmt.Sprintf("Found unexpected PHP file %s, PHP files are not allowed in Apps", path))
+			ctx.AddError("zip.disallowed_php_file", fmt.Sprintf("Found unexpected PHP file %s, PHP files are not allowed in Apps", path))
 		}
 
 		if filepath.Ext(path) == ".twig" && (!strings.HasPrefix(path, allowedTwigLocations[0]) && !strings.HasPrefix(path, allowedTwigLocations[1])) {
-			ctx.AddError(fmt.Sprintf("Found unexpected Twig file %s. Twig files should be at Resources/views or Resources/scripts", path))
+			ctx.AddError("zip.disallowed_twig_file", fmt.Sprintf("Found unexpected Twig file %s. Twig files should be at Resources/views or Resources/scripts", path))
 		}
 
 		return nil
 	})
 
 	if a.manifest.Meta.Author == "" {
-		ctx.AddError("The element meta:author was not found in the manifest.xml")
+		ctx.AddError("metadata.author", "The element meta:author was not found in the manifest.xml")
 	}
 
 	if a.manifest.Meta.Copyright == "" {
-		ctx.AddError("The element meta:copyright was not found in the manifest.xml")
+		ctx.AddError("metadata.copyright", "The element meta:copyright was not found in the manifest.xml")
 	}
 
 	if a.manifest.Meta.License == "" {
-		ctx.AddError("The element meta:license was not found in the manifest.xml")
+		ctx.AddError("metadata.license", "The element meta:license was not found in the manifest.xml")
 	}
 
 	if a.manifest.Setup != nil && a.manifest.Setup.Secret != "" {
-		ctx.AddError("The xml element setup:secret is only for local development, please remove it. You can find your generated app secret on your extension detail page in the master data section. For more information see https://docs.shopware.com/en/shopware-platform-dev-en/app-system-guide/setup#authorisation")
+		ctx.AddError("metadata.setup", "The xml element setup:secret is only for local development, please remove it. You can find your generated app secret on your extension detail page in the master data section. For more information see https://docs.shopware.com/en/shopware-platform-dev-en/app-system-guide/setup#authorisation")
 	}
 }

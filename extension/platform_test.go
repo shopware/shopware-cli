@@ -58,7 +58,7 @@ func TestPluginIconNotExists(t *testing.T) {
 	plugin.Validate(getTestContext(), ctx)
 
 	assert.Equal(t, 1, len(ctx.errors))
-	assert.Equal(t, "The plugin icon src/Resources/config/plugin.png does not exist", ctx.errors[0])
+	assert.Equal(t, "The plugin icon src/Resources/config/plugin.png does not exist", ctx.errors[0].Message)
 }
 
 func TestPluginIconExists(t *testing.T) {
