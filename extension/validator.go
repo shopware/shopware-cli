@@ -10,7 +10,6 @@ import (
 	"golang.org/x/net/context"
 )
 
-// Added struct for messages
 type ValidationMessage struct {
 	Identifier string
 	Message    string
