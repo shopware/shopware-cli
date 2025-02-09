@@ -17,6 +17,9 @@
 				},
 				"changelog": {
 					"$ref": "#/definitions/Changelog"
+				},
+				"validation": {
+					"$ref": "#/definitions/Validation"
 				}
 			}
 		},
@@ -48,6 +51,20 @@
 				"variables": {
 					"type": "object",
 					"description": "Allows to write RegEx groups into variables which can be used in the template."
+				}
+			}
+		},
+		"Validation": {
+			"type": "object",
+			"title": "validation",
+			"additionalProperties": false,
+			"properties": {
+				"ignore": {
+					"type": "array",
+					"description": "Skip validations",
+					"items": {
+						"type": "string"
+					}
 				}
 			}
 		},
