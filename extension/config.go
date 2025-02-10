@@ -162,3 +162,17 @@ func validateExtensionConfig(config *Config) error {
 
 	return nil
 }
+
+func (c *Config) Dump(dir string) error {
+	filePath := filepath.Join(dir, c.FileName)
+	file, err := os.Create(filePath)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+
+	encoder := yaml.NewEncoder(file)
+	defer encoder.Close()
+
+	return encoder.Encode(c)
+}
