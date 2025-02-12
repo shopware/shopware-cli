@@ -151,9 +151,8 @@ var extensionZipCmd = &cobra.Command{
 			}
 		}
 
-		// Adjust the ExtensionConfig to set validation.ignore to meta.setup when --overwrite-app-backend-secret is passed
 		if cmd.Flags().Changed("overwrite-app-backend-secret") {
-			extCfg.Validation.Ignore = append(extCfg.Validation.Ignore, "meta.setup")
+			extCfg.Validation.Ignore = append(extCfg.Validation.Ignore, "metadata.setup")
 			if err := extCfg.Dump(extDir); err != nil {
 				return fmt.Errorf("dump extension config: %w", err)
 			}
