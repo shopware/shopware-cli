@@ -34,7 +34,7 @@ linters:
     - forbidigo
     - errname
     - nilnil
-    - tenv
+    - usetesting
     - bidichk
     - containedctx
     - decorder
