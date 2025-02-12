@@ -17,6 +17,8 @@ import (
 
 	"github.com/shopware/shopware-cli/internal/asset"
 
+	htmlprinter "github.com/shyim/go-htmlprinter"
+
 	"github.com/NYTimes/gziphandler"
 	"github.com/evanw/esbuild/pkg/api"
 	"github.com/spf13/cobra"
@@ -186,12 +188,12 @@ var extensionAdminWatchCmd = &cobra.Command{
 
 				bodyStr := string(body)
 
-				bodyStr = hostRegExp.ReplaceAllString(bodyStr, "host: '"+browserUrl.Host+"',")
-				bodyStr = portRegExp.ReplaceAllString(bodyStr, "port: "+browserPort+",")
-				bodyStr = schemeRegExp.ReplaceAllString(bodyStr, "scheme: '"+browserUrl.Scheme+"',")
-				bodyStr = schemeAndHttpHostRegExp.ReplaceAllString(bodyStr, "schemeAndHttpHost: '"+browserUrl.Scheme+schemeHostSeparator+browserUrl.Host+"',")
-				bodyStr = uriRegExp.ReplaceAllString(bodyStr, "uri: '"+browserUrl.Scheme+schemeHostSeparator+browserUrl.Host+targetShopUrl.Path+"/admin',")
-				bodyStr = assetPathRegExp.ReplaceAllString(bodyStr, "assetPath: '"+browserUrl.Scheme+schemeHostSeparator+browserUrl.Host+targetShopUrl.Path+"'")
+				// bodyStr = hostRegExp.ReplaceAllString(bodyStr, "host: '"+browserUrl.Host+"',")
+				// bodyStr = portRegExp.ReplaceAllString(bodyStr, "port: "+browserPort+",")
+				// bodyStr = schemeRegExp.ReplaceAllString(bodyStr, "scheme: '"+browserUrl.Scheme+"',")
+				// bodyStr = schemeAndHttpHostRegExp.ReplaceAllString(bodyStr, "schemeAndHttpHost: '"+browserUrl.Scheme+schemeHostSeparator+browserUrl.Host+"',")
+				// bodyStr = uriRegExp.ReplaceAllString(bodyStr, "uri: '"+browserUrl.Scheme+schemeHostSeparator+browserUrl.Host+targetShopUrl.Path+"/admin',")
+				// bodyStr = assetPathRegExp.ReplaceAllString(bodyStr, "assetPath: '"+browserUrl.Scheme+schemeHostSeparator+browserUrl.Host+targetShopUrl.Path+"'")
 
 				parsed, err := html.Parse(strings.NewReader(bodyStr))
 				if err != nil {
@@ -205,6 +207,10 @@ var extensionAdminWatchCmd = &cobra.Command{
 					if n.Type == html.ElementNode && (n.Data == "script" || n.Data == "link" || n.Data == "meta") {
 						for i, attr := range n.Attr {
 							if attr.Key == "src" || attr.Key == "href" || attr.Key == "content" {
+								if !strings.HasPrefix(attr.Val, "http") {
+									continue
+								}
+
 								parsedUrl, err := url.Parse(attr.Val)
 								if err != nil {
 									logging.FromContext(cmd.Context()).Infof("cannot parse url: %s, err: %s", attr.Val, err.Error())
@@ -232,7 +238,7 @@ var extensionAdminWatchCmd = &cobra.Command{
 
 				w.Header().Set("content-type", "text/html")
 
-				if err := html.Render(w, parsed); err != nil {
+				if err := htmlprinter.Render(w, parsed); err != nil {
 					logging.FromContext(cmd.Context()).Errorf("could not render html %v", err)
 					w.WriteHeader(http.StatusInternalServerError)
 					return
