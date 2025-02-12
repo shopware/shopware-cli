@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/shopware/shopware-cli/shop"
+	"golang.org/x/net/html"
 
 	"github.com/shopware/shopware-cli/internal/asset"
 
@@ -35,7 +36,6 @@ var (
 	schemeAndHttpHostRegExp = regexp.MustCompile(`(?m)schemeAndHttpHost:\s.*,`)
 	uriRegExp               = regexp.MustCompile(`(?m)uri:\s.*,`)
 	assetPathRegExp         = regexp.MustCompile(`(?m)assetPath:\s.*`)
-	assetRegExp             = regexp.MustCompile(`(?m)(src|href|content)="(https?.*\/bundles.*)"`)
 
 	extensionAssetRegExp   = regexp.MustCompile(`(?m)/bundles/([a-z0-9-]+)/static/(.*)$`)
 	extensionEsbuildRegExp = regexp.MustCompile(`(?m)/.shopware-cli/([a-z0-9-]+)/(.*)$`)
@@ -193,40 +193,49 @@ var extensionAdminWatchCmd = &cobra.Command{
 				bodyStr = uriRegExp.ReplaceAllString(bodyStr, "uri: '"+browserUrl.Scheme+schemeHostSeparator+browserUrl.Host+targetShopUrl.Path+"/admin',")
 				bodyStr = assetPathRegExp.ReplaceAllString(bodyStr, "assetPath: '"+browserUrl.Scheme+schemeHostSeparator+browserUrl.Host+targetShopUrl.Path+"'")
 
-				bodyStr = assetRegExp.ReplaceAllStringFunc(bodyStr, func(s string) string {
-					firstPart := ""
+				parsed, err := html.Parse(strings.NewReader(bodyStr))
+				if err != nil {
+					logging.FromContext(cmd.Context()).Errorf("could not parse html %v", err)
+					w.WriteHeader(http.StatusInternalServerError)
+					return
+				}
 
-					if strings.HasPrefix(s, "href=\"") {
-						firstPart = "href=\""
-					} else if strings.HasPrefix(s, "content=\"") {
-						firstPart = "content=\""
-					} else if strings.HasPrefix(s, "src=\"") {
-						firstPart = "src=\""
+				var f func(*html.Node)
+				f = func(n *html.Node) {
+					if n.Type == html.ElementNode && (n.Data == "script" || n.Data == "link" || n.Data == "meta") {
+						for i, attr := range n.Attr {
+							if attr.Key == "src" || attr.Key == "href" || attr.Key == "content" {
+								parsedUrl, err := url.Parse(attr.Val)
+								if err != nil {
+									logging.FromContext(cmd.Context()).Infof("cannot parse url: %s, err: %s", attr.Val, err.Error())
+									continue
+								}
+
+								if parsedUrl.Host == targetShopUrl.Host {
+									parsedUrl.Host = browserUrl.Host
+									parsedUrl.Scheme = browserUrl.Scheme
+								}
+
+								n.Attr[i].Val = parsedUrl.String()
+
+								break
+							}
+						}
 					}
 
-					org := s
-					s = strings.TrimPrefix(s, firstPart)
-					s = strings.TrimSuffix(s, "\"")
-
-					parsedUrl, err := url.Parse(s)
-					if err != nil {
-						logging.FromContext(cmd.Context()).Infof("cannot parse url: %s, err: %s", s, err.Error())
-						return org
+					for c := n.FirstChild; c != nil; c = c.NextSibling {
+						f(c)
 					}
+				}
 
-					if parsedUrl.Host != targetShopUrl.Host {
-						return org
-					}
-
-					parsedUrl.Host = browserUrl.Host
-					parsedUrl.Scheme = browserUrl.Scheme
-
-					return firstPart + parsedUrl.String() + "\""
-				})
+				f(parsed)
 
 				w.Header().Set("content-type", "text/html")
-				if _, err := w.Write([]byte(bodyStr)); err != nil {
-					logging.FromContext(cmd.Context()).Error(err)
+
+				if err := html.Render(w, parsed); err != nil {
+					logging.FromContext(cmd.Context()).Errorf("could not render html %v", err)
+					w.WriteHeader(http.StatusInternalServerError)
+					return
 				}
 				logging.FromContext(cmd.Context()).Debugf("Served modified admin")
 				return
@@ -326,7 +335,7 @@ var extensionAdminWatchCmd = &cobra.Command{
 
 			if len(esbuildMatch) > 0 {
 				if ext, ok := esbuildInstances[esbuildMatch[1]]; ok {
-					req.URL = &url.URL{Scheme: "http", Host: fmt.Sprintf("%s:%d", ext.watchServer.Host, ext.watchServer.Port), Path: "/" + esbuildMatch[2]}
+					req.URL = &url.URL{Scheme: "http", Host: fmt.Sprintf("%s:%d", ext.watchServer.Hosts[0], ext.watchServer.Port), Path: "/" + esbuildMatch[2]}
 					req.Host = req.URL.Host
 					req.RequestURI = req.URL.Path
 
@@ -363,18 +372,12 @@ func init() {
 }
 
 type adminBundlesInfo struct {
-	Version         string `json:"version"`
-	VersionRevision string `json:"versionRevision"`
-	AdminWorker     struct {
-		EnableAdminWorker bool     `json:"enableAdminWorker"`
-		Transports        []string `json:"transports"`
-	} `json:"adminWorker"`
-	Bundles  map[string]adminBundlesInfoAsset `json:"bundles"`
-	Settings struct {
-		EnableUrlFeature  bool `json:"enableUrlFeature"`
-		AppUrlReachable   bool `json:"appUrlReachable"`
-		AppsRequireAppUrl bool `json:"appsRequireAppUrl"`
-	} `json:"settings"`
+	Version         string                           `json:"version"`
+	VersionRevision string                           `json:"versionRevision"`
+	AdminWorker     interface{}                      `json:"adminWorker"`
+	Bundles         map[string]adminBundlesInfoAsset `json:"bundles"`
+	Settings        interface{}                      `json:"settings"`
+	InAppPurchases  interface{}                      `json:"inAppPurchases"`
 }
 
 type adminBundlesInfoAsset struct {
@@ -382,6 +385,13 @@ type adminBundlesInfoAsset struct {
 	Js         []string `json:"js"`
 	LiveReload bool     `json:"liveReload"`
 	Name       string   `json:"name"`
+	// fields below are not used, but we need to decode/encode them
+	Type          string      `json:"type"`
+	BaseURL       interface{} `json:"baseUrl,omitempty"`
+	Active        interface{} `json:"active"`
+	IntegrationID interface{} `json:"integrationId"`
+	Version       interface{} `json:"version"`
+	Permissions   interface{} `json:"permissions"`
 }
 
 type adminWatchExtension struct {

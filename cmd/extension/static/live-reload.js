@@ -1,4 +1,9 @@
-const bundles = Shopware.State.get('context').app.config.bundles;
+let bundles;
+if (Shopware.State !== undefined && Shopware.State.get('context') !== undefined) {
+    bundles = Shopware.State.get('context').app.config.bundles;
+} else {
+    bundles = Shopware.Store.get('context').app.config.bundles;
+}
 
 for (const bundleName of Object.keys(bundles)) {
     const bundle = bundles[bundleName];
