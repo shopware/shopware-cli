@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/shopware/shopware-cli/logging"
 	"golang.org/x/oauth2"
 )
 
@@ -52,7 +53,7 @@ func InteractiveLogin(ctx context.Context) (*oauth2.Token, error) {
 			}
 			if r.Form.Has("error") {
 				e, d := r.Form.Get("error"), r.Form.Get("error_description")
-				serverErr <- fmt.Errorf("upsteam error: %s: %s", e, d)
+				serverErr <- fmt.Errorf("upstream error: %s: %s", e, d)
 				return
 			}
 			code := r.Form.Get("code")
@@ -82,8 +83,7 @@ func InteractiveLogin(ctx context.Context) (*oauth2.Token, error) {
 		oauth2.SetAuthURLParam("prompt", "login consent"),
 	)
 
-	fmt.Println("Please open the following URL in your browser:")
-	fmt.Println(u)
+	logging.FromContext(ctx).Infof("Please open the following URL in your browser: %s", u)
 
 	select {
 	case err := <-serverErr:

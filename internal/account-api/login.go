@@ -17,7 +17,7 @@ const ApiUrl = "https://api.shopware.com"
 func NewApi(ctx context.Context, token *oauth2.Token) (*Client, error) {
 	errorFormat := "login: %v"
 
-	client, err := createApiFromTokenCache(ctx)
+	client, _ := createApiFromTokenCache(ctx)
 
 	if client == nil {
 		client = &Client{}
@@ -35,15 +35,6 @@ func NewApi(ctx context.Context, token *oauth2.Token) (*Client, error) {
 
 		client.Token = newToken
 	}
-
-	userInfo, err := fetchUserInfo(ctx, client.Token)
-	if err != nil {
-		return nil, fmt.Errorf(errorFormat, err)
-	}
-
-	j, _ := json.Marshal(userInfo)
-
-	fmt.Println(string(j))
 
 	memberships, err := fetchMemberships(ctx, client.Token)
 	if err != nil {

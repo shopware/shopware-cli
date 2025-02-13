@@ -18,21 +18,15 @@ func TestParseEnvConfig(t *testing.T) {
 		email, password string
 		companyId       int
 	}{
-		email:     "test@test.com",
-		password:  "test123",
 		companyId: 456,
 	}
 
-	t.Setenv("SHOPWARE_CLI_ACCOUNT_EMAIL", testData.email)
-	t.Setenv("SHOPWARE_CLI_ACCOUNT_PASSWORD", testData.password)
 	t.Setenv("SHOPWARE_CLI_ACCOUNT_COMPANY", strconv.Itoa(testData.companyId))
 
 	assert.NoError(t, InitConfig(""))
 	assert.True(t, state.loadedFromEnv)
 
 	confService := Config{}
-	assert.Equal(t, testData.email, confService.GetAccountEmail())
-	assert.Equal(t, testData.password, confService.GetAccountPassword())
 	assert.Equal(t, testData.companyId, confService.GetAccountCompanyId())
 }
 
@@ -43,8 +37,6 @@ func TestParseFileConfig(t *testing.T) {
 		email, password string
 		companyId       int
 	}{
-		email:     "test@test.com",
-		password:  "test123",
 		companyId: 456,
 	}
 
@@ -56,8 +48,6 @@ func TestParseFileConfig(t *testing.T) {
 	assert.False(t, state.loadedFromEnv)
 
 	confService := Config{}
-	assert.Equal(t, testData.email, confService.GetAccountEmail())
-	assert.Equal(t, testData.password, confService.GetAccountPassword())
 	assert.Equal(t, testData.companyId, confService.GetAccountCompanyId())
 	assert.Equal(t, testConfig, state.cfgPath)
 }
@@ -69,8 +59,6 @@ func TestSaveConfig(t *testing.T) {
 		email, password string
 		companyId       int
 	}{
-		email:     "test@new.com",
-		password:  "test",
 		companyId: 111,
 	}
 
@@ -87,10 +75,6 @@ func TestSaveConfig(t *testing.T) {
 
 	configService := Config{}
 
-	assert.NoError(t, configService.SetAccountEmail(testData.email))
-
-	assert.NoError(t, configService.SetAccountPassword(testData.password))
-
 	assert.NoError(t, configService.SetAccountCompanyId(testData.companyId))
 
 	assert.True(t, state.modified)
@@ -105,8 +89,6 @@ func TestSaveConfig(t *testing.T) {
 	var newConf configData
 	assert.NoError(t, yaml.Unmarshal(newConfData, &newConf))
 
-	assert.Equal(t, testData.email, newConf.Account.Email)
-	assert.Equal(t, testData.password, newConf.Account.Password)
 	assert.Equal(t, testData.companyId, newConf.Account.Company)
 }
 
@@ -122,16 +104,12 @@ func TestDontWriteEnvConfig(t *testing.T) {
 		companyId: 456,
 	}
 
-	t.Setenv("SHOPWARE_CLI_ACCOUNT_EMAIL", testData.email)
-	t.Setenv("SHOPWARE_CLI_ACCOUNT_PASSWORD", testData.password)
 	t.Setenv("SHOPWARE_CLI_ACCOUNT_COMPANY", strconv.Itoa(testData.companyId))
 
 	assert.NoError(t, InitConfig(""))
 	assert.True(t, state.loadedFromEnv)
 
 	confService := Config{}
-	assert.Error(t, confService.SetAccountEmail("test@foo.com"))
-	assert.Error(t, confService.SetAccountPassword("S3CR3TF4RT3St"))
 	assert.Error(t, confService.SetAccountCompanyId(111))
 }
 
