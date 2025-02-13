@@ -2,73 +2,117 @@ package account
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"fmt"
+	"net"
+	"net/http"
+	"strings"
 
 	"github.com/manifoldco/promptui"
 	"github.com/spf13/cobra"
+	"golang.org/x/oauth2"
 
 	accountApi "github.com/shopware/shopware-cli/internal/account-api"
 	"github.com/shopware/shopware-cli/logging"
 )
+
+func generateRandomState() string {
+	b := make([]byte, 16)
+	_, err := rand.Read(b)
+	if err != nil {
+		panic(err)
+	}
+	return hex.EncodeToString(b)
+}
 
 var loginCmd = &cobra.Command{
 	Use:   "login",
 	Short: "Login into your Shopware Account",
 	Long:  "",
 	RunE: func(cmd *cobra.Command, _ []string) error {
-		email := services.Conf.GetAccountEmail()
-		password := services.Conf.GetAccountPassword()
-		newCredentials := false
-
-		if len(email) == 0 || len(password) == 0 {
-			var err error
-			email, password, err = askUserForEmailAndPassword()
-			if err != nil {
-				return err
-			}
-
-			newCredentials = true
-
-			if err := services.Conf.SetAccountEmail(email); err != nil {
-				return err
-			}
-			if err := services.Conf.SetAccountPassword(password); err != nil {
-				return err
-			}
-		} else {
-			logging.FromContext(cmd.Context()).Infof("Using existing credentials. Use account:logout to logout")
+		client := &oauth2.Config{
+			ClientID: "fd3c9ce4-259e-4f6a-9ab0-7d8bab4de907",
+			Endpoint: oauth2.Endpoint{
+				AuthURL:   "https://laughing-wiles-0b5m1rau2n.projects.oryapis.com/oauth2/auth",
+				TokenURL:  "https://laughing-wiles-0b5m1rau2n.projects.oryapis.com/oauth2/token",
+				AuthStyle: oauth2.AuthStyleInParams,
+			},
 		}
 
-		client, err := accountApi.NewApi(cmd.Context(), accountApi.LoginRequest{Email: email, Password: password})
-		if err != nil {
-			return fmt.Errorf("login failed with error: %w", err)
-		}
-
-		if companyId := services.Conf.GetAccountCompanyId(); companyId > 0 {
-			err = changeAPIMembership(cmd.Context(), client, companyId)
-			if err != nil {
-				return fmt.Errorf("cannot change company member ship: %w", err)
-			}
-		}
-
-		if newCredentials {
-			err := services.Conf.Save()
-			if err != nil {
-				return fmt.Errorf("cannot save config: %w", err)
-			}
-		}
-
-		profile, err := client.GetMyProfile(cmd.Context())
-		if err != nil {
-			return err
-		}
-
-		logging.FromContext(cmd.Context()).Infof(
-			"Hey %s %s. You are now authenticated on company %s and can use all account commands",
-			profile.PersonalData.FirstName,
-			profile.PersonalData.LastName,
-			client.GetActiveMembership().Company.Name,
+		var (
+			state        = generateRandomState()
+			pkceVerifier = oauth2.GenerateVerifier()
+			serverErr    = make(chan error)
+			serverToken  = make(chan *oauth2.Token)
 		)
+
+		l, err := net.Listen("tcp", "localhost:61472")
+		if err != nil {
+			return fmt.Errorf("failed to allocate port for OAuth2 callback handler, try again later: %w", err)
+		}
+		client.RedirectURL = strings.ReplaceAll(fmt.Sprintf("http://%s/callback", l.Addr().String()), "127.0.0.1", "localhost")
+		fmt.Printf("Redirect URL: %s\n", client.RedirectURL)
+
+		srv := http.Server{
+			Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				// for retries the user has to start from the beginning
+				defer close(serverErr)
+				defer close(serverToken)
+
+				ctx := r.Context()
+				if err := r.ParseForm(); err != nil {
+					serverErr <- fmt.Errorf("failed to parse form: %w", err)
+					return
+				}
+				if s := r.Form.Get("state"); s != state {
+					serverErr <- fmt.Errorf("state mismatch: expected %q, got %q", state, s)
+					return
+				}
+				if r.Form.Has("error") {
+					e, d := r.Form.Get("error"), r.Form.Get("error_description")
+					serverErr <- fmt.Errorf("upsteam error: %s: %s", e, d)
+					return
+				}
+				code := r.Form.Get("code")
+				if code == "" {
+					serverErr <- fmt.Errorf("missing code")
+					return
+				}
+				t, err := client.Exchange(
+					ctx,
+					code,
+					oauth2.VerifierOption(pkceVerifier),
+				)
+				if err != nil {
+					serverErr <- fmt.Errorf("failed OAuth2 token exchange: %w", err)
+					return
+				}
+				serverToken <- t
+			}),
+		}
+		go func() { _ = srv.Serve(l) }()
+		defer srv.Close()
+
+		u := client.AuthCodeURL(state,
+			oauth2.S256ChallengeOption(pkceVerifier),
+			oauth2.SetAuthURLParam("scope", "offline_access openid"),
+			oauth2.SetAuthURLParam("response_type", "code"),
+			oauth2.SetAuthURLParam("prompt", "login consent"),
+		)
+
+		fmt.Println("Please open the following URL in your browser:")
+		fmt.Println(u)
+
+		select {
+		case err := <-serverErr:
+			return fmt.Errorf("failed to handle OAuth2 callback: %w", err)
+		case t := <-serverToken:
+			fmt.Println("Successfully authenticated")
+			fmt.Println("Access Token:", t.AccessToken)
+			fmt.Println("Refresh Token:", t.RefreshToken)
+			fmt.Println("Expiry:", t.Expiry)
+		}
 
 		return nil
 	},
