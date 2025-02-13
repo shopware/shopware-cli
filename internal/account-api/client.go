@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/shopware/shopware-cli/logging"
+	"golang.org/x/oauth2"
 )
 
 var httpUserAgent = "shopware-cli/0.0.0"
@@ -20,9 +21,11 @@ func SetUserAgent(userAgent string) {
 }
 
 type Client struct {
-	Token            token        `json:"token"`
-	ActiveMembership Membership   `json:"active_membership"`
-	Memberships      []Membership `json:"memberships"`
+	Token            *oauth2.Token `json:"token"`
+	ActiveMembership Membership    `json:"active_membership"`
+	Memberships      []Membership  `json:"memberships"`
+	UserID           int           `json:"user_id"`
+	ComapnyID        int           `json:"company_id"`
 }
 
 func (c *Client) NewAuthenticatedRequest(ctx context.Context, method, path string, body io.Reader) (*http.Request, error) {
@@ -34,7 +37,7 @@ func (c *Client) NewAuthenticatedRequest(ctx context.Context, method, path strin
 
 	r.Header.Set("content-type", "application/json")
 	r.Header.Set("accept", "application/json")
-	r.Header.Set("x-shopware-token", c.Token.Token)
+	c.Token.SetAuthHeader(r)
 	r.Header.Set("user-agent", httpUserAgent)
 
 	return r, nil
@@ -64,14 +67,6 @@ func (*Client) doRequest(request *http.Request) ([]byte, error) {
 	return data, nil
 }
 
-func (c *Client) GetActiveCompanyID() int {
-	return c.Token.UserID
-}
-
-func (c *Client) GetUserID() int {
-	return c.Token.UserAccountID
-}
-
 func (c *Client) GetActiveMembership() Membership {
 	return c.ActiveMembership
 }
@@ -81,21 +76,14 @@ func (c *Client) GetMemberships() []Membership {
 }
 
 func (c *Client) isTokenValid() bool {
-	loc, err := time.LoadLocation(c.Token.Expire.Timezone)
-	if err != nil {
+	if c.Token == nil {
 		return false
 	}
 
-	expire, err := time.ParseInLocation("2006-01-02 15:04:05.000000", c.Token.Expire.Date, loc)
-	if err != nil {
-		return false
-	}
-
-	// When it will be expire in the next minute. Respond with false
-	return expire.UTC().Sub(time.Now().UTC()).Seconds() > 60
+	return time.Until(c.Token.Expiry) > 60
 }
 
-const CacheFileName = "shopware-api-client-token.json"
+const CacheFileName = "shopware-api-oauth2-token.json"
 
 func getApiTokenCacheFilePath() (string, error) {
 	cacheDir, err := os.UserCacheDir()

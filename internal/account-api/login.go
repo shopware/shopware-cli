@@ -9,84 +9,57 @@ import (
 	"net/http"
 
 	"github.com/shopware/shopware-cli/logging"
+	"golang.org/x/oauth2"
 )
 
 const ApiUrl = "https://api.shopware.com"
 
-type AccountConfig interface {
-	GetAccountEmail() string
-	GetAccountPassword() string
-}
-
-func NewApi(ctx context.Context, config AccountConfig) (*Client, error) {
+func NewApi(ctx context.Context, token *oauth2.Token) (*Client, error) {
 	errorFormat := "login: %v"
 
-	request := LoginRequest{
-		Email:    config.GetAccountEmail(),
-		Password: config.GetAccountPassword(),
-	}
 	client, err := createApiFromTokenCache(ctx)
 
-	if err == nil {
-		return client, nil
+	if client == nil {
+		client = &Client{}
 	}
 
-	s, err := json.Marshal(request)
-	if err != nil {
-		return nil, fmt.Errorf(errorFormat, err)
+	if token != nil {
+		client.Token = token
 	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, ApiUrl+"/accesstokens", bytes.NewBuffer(s))
-	if err != nil {
-		return nil, fmt.Errorf("create access token request: %w", err)
-	}
-
-	req.Header.Set("Content-Type", "application/json")
-
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf(errorFormat, err)
-	}
-
-	defer func() {
-		if err := resp.Body.Close(); err != nil {
-			logging.FromContext(ctx).Errorf("Cannot close response body: %v", err)
+	if !client.isTokenValid() {
+		newToken, err := InteractiveLogin(ctx)
+		if err != nil {
+			return nil, fmt.Errorf(errorFormat, err)
 		}
-	}()
 
-	data, err := io.ReadAll(resp.Body)
+		client.Token = newToken
+	}
+
+	userInfo, err := fetchUserInfo(ctx, client.Token)
 	if err != nil {
 		return nil, fmt.Errorf(errorFormat, err)
 	}
 
-	if resp.StatusCode != 200 {
-		logging.FromContext(ctx).Debugf("Login failed with response: %s", string(data))
-		return nil, fmt.Errorf("login failed. Check your credentials")
-	}
+	j, _ := json.Marshal(userInfo)
 
-	var token token
-	if err := json.Unmarshal(data, &token); err != nil {
-		return nil, fmt.Errorf(errorFormat, err)
-	}
+	fmt.Println(string(j))
 
-	memberships, err := fetchMemberships(ctx, token)
+	memberships, err := fetchMemberships(ctx, client.Token)
 	if err != nil {
 		return nil, err
 	}
 
 	var activeMemberShip Membership
 
-	for _, membership := range memberships {
-		if membership.Company.Id == token.UserID {
-			activeMemberShip = membership
-		}
-	}
+	// for _, membership := range memberships {
+	// 	if membership.Company.Id == token.UserID {
+	// 		activeMemberShip = membership
+	// 	}
+	// }
 
-	client = &Client{
-		Token:            token,
-		Memberships:      memberships,
-		ActiveMembership: activeMemberShip,
-	}
+	client.Memberships = memberships
+	client.ActiveMembership = activeMemberShip
 
 	if err := saveApiTokenToTokenCache(client); err != nil {
 		logging.FromContext(ctx).Errorf(fmt.Sprintf("Cannot token cache: %v", err))
@@ -95,9 +68,9 @@ func NewApi(ctx context.Context, config AccountConfig) (*Client, error) {
 	return client, nil
 }
 
-func fetchMemberships(ctx context.Context, token token) ([]Membership, error) {
-	r, err := http.NewRequestWithContext(ctx, "GET", fmt.Sprintf("%s/account/%d/memberships", ApiUrl, token.UserAccountID), http.NoBody)
-	r.Header.Set("x-shopware-token", token.Token)
+func fetchMemberships(ctx context.Context, token *oauth2.Token) ([]Membership, error) {
+	r, err := http.NewRequestWithContext(ctx, "GET", fmt.Sprintf("%s/account/%d/memberships", ApiUrl, 0), http.NoBody)
+	token.SetAuthHeader(r)
 
 	if err != nil {
 		return nil, err
@@ -125,33 +98,6 @@ func fetchMemberships(ctx context.Context, token token) ([]Membership, error) {
 	}
 
 	return companies, nil
-}
-
-type token struct {
-	Token         string      `json:"token"`
-	Expire        tokenExpire `json:"expire"`
-	UserAccountID int         `json:"userAccountId"`
-	UserID        int         `json:"userId"`
-	LegacyLogin   bool        `json:"legacyLogin"`
-}
-
-type tokenExpire struct {
-	Date         string `json:"date"`
-	TimezoneType int    `json:"timezone_type"`
-	Timezone     string `json:"timezone"`
-}
-
-type LoginRequest struct {
-	Email    string `json:"shopwareId"`
-	Password string `json:"password"`
-}
-
-func (l LoginRequest) GetAccountEmail() string {
-	return l.Email
-}
-
-func (l LoginRequest) GetAccountPassword() string {
-	return l.Password
 }
 
 type Membership struct {
@@ -220,7 +166,7 @@ func (c *Client) ChangeActiveMembership(ctx context.Context, selected Membership
 		return fmt.Errorf("ChangeActiveMembership: %v", err)
 	}
 
-	r, err := c.NewAuthenticatedRequest(ctx, "POST", fmt.Sprintf("%s/account/%d/memberships/change", ApiUrl, c.GetUserID()), bytes.NewBuffer(s))
+	r, err := c.NewAuthenticatedRequest(ctx, "POST", fmt.Sprintf("%s/account/%d/memberships/change", ApiUrl, c.UserID), bytes.NewBuffer(s))
 	if err != nil {
 		return err
 	}
@@ -239,7 +185,7 @@ func (c *Client) ChangeActiveMembership(ctx context.Context, selected Membership
 
 	if resp.StatusCode == 200 {
 		c.ActiveMembership = selected
-		c.Token.UserID = selected.Company.Id
+		c.UserID = selected.Company.Id
 
 		if err := saveApiTokenToTokenCache(c); err != nil {
 			return err
