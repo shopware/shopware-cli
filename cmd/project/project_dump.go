@@ -6,6 +6,7 @@ import (
 	"database/sql"
 	"fmt"
 	"io"
+	"net"
 	"net/url"
 	"os"
 	"strings"
@@ -312,8 +313,8 @@ func loadDatabaseURLIntoConnection(ctx context.Context, projectRoot string, cfg 
 	if parsedUri.Host != "" {
 		cfg.Addr = parsedUri.Host
 
-		if parsedUri.Port() != "" {
-			cfg.Addr = fmt.Sprintf("%s:%s", parsedUri.Host, parsedUri.Port())
+		if parsedUri.Port() == "" {
+			cfg.Addr = net.JoinHostPort(parsedUri.Host, "3306")
 		}
 	}
 
