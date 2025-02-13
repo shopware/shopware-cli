@@ -14,10 +14,9 @@ func TestInvalidGitRepository(t *testing.T) {
 	repo := "invalid"
 	ctx := context.Background()
 
-	_, err := getPreviousTag(ctx, repo)
-	if err == nil {
-		t.Errorf("expected error, got nil")
-	}
+	tag, err := getPreviousTag(ctx, repo)
+	assert.Error(t, err)
+	assert.Empty(t, tag)
 }
 
 func TestNoTags(t *testing.T) {
