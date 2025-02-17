@@ -78,7 +78,7 @@ func InteractiveLogin(ctx context.Context) (*oauth2.Token, error) {
 
 	u := client.AuthCodeURL(state,
 		oauth2.S256ChallengeOption(pkceVerifier),
-		oauth2.SetAuthURLParam("scope", "offline_access openid"),
+		oauth2.SetAuthURLParam("scope", "offline_access profile email"),
 		oauth2.SetAuthURLParam("response_type", "code"),
 		oauth2.SetAuthURLParam("prompt", "login consent"),
 	)
