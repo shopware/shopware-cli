@@ -22,7 +22,7 @@ func (e ProducerEndpoint) GetId() int {
 }
 
 func (c *Client) Producer(ctx context.Context) (*ProducerEndpoint, error) {
-	r, err := c.NewAuthenticatedRequest(ctx, "GET", fmt.Sprintf("%s/companies/%d/allocations", ApiUrl, c.GetActiveCompanyID()), nil)
+	r, err := c.NewAuthenticatedRequest(ctx, "GET", fmt.Sprintf("%s/companies/%d/allocations", ApiUrl, c.ComapnyID), nil)
 	if err != nil {
 		return nil, err
 	}
@@ -54,7 +54,7 @@ type companyAllocation struct {
 }
 
 func (e ProducerEndpoint) Profile(ctx context.Context) (*Producer, error) {
-	r, err := e.c.NewAuthenticatedRequest(ctx, "GET", fmt.Sprintf("%s/producers?companyId=%d", ApiUrl, e.c.GetActiveCompanyID()), nil)
+	r, err := e.c.NewAuthenticatedRequest(ctx, "GET", fmt.Sprintf("%s/producers?companyId=%d", ApiUrl, e.c.ComapnyID), nil)
 	if err != nil {
 		return nil, err
 	}
@@ -363,7 +363,6 @@ func (e ProducerEndpoint) GetSoftwareVersions(ctx context.Context, generation st
 	var versions SoftwareVersionList
 
 	err = json.Unmarshal(body, &versions)
-
 	if err != nil {
 		return nil, fmt.Errorf(errorFormat, err)
 	}
@@ -483,7 +482,6 @@ func (e ProducerEndpoint) GetExtensionGeneralInfo(ctx context.Context) (*Extensi
 	var info *ExtensionGeneralInformation
 
 	err = json.Unmarshal(body, &info)
-
 	if err != nil {
 		return nil, fmt.Errorf("shopware_versions: %v", err)
 	}
