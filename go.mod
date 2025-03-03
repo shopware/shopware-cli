@@ -7,12 +7,12 @@ replace github.com/doutorfinancas/go-mad v0.0.0-20240205120830-463c1e9760f0 => g
 require (
 	dario.cat/mergo v1.0.1
 	github.com/NYTimes/gziphandler v1.1.1
-	github.com/bep/godartsass/v2 v2.3.2
+	github.com/bep/godartsass/v2 v2.4.0
 	github.com/caarlos0/env/v9 v9.0.0
 	github.com/doutorfinancas/go-mad v0.0.0-20240205120830-463c1e9760f0
 	github.com/evanw/esbuild v0.25.0
 	github.com/friendsofshopware/go-shopware-admin-api-sdk v0.0.0-20231210091330-92f38f1ae77c
-	github.com/go-sql-driver/mysql v1.8.1
+	github.com/go-sql-driver/mysql v1.9.0
 	github.com/google/uuid v1.6.0
 	github.com/gorilla/schema v1.4.1
 	github.com/invopop/jsonschema v0.13.0
@@ -24,7 +24,7 @@ require (
 	github.com/shyim/go-version v0.0.0-20240530110323-4b7091cee42c
 	github.com/spf13/cobra v1.9.1
 	github.com/stretchr/testify v1.10.0
-	github.com/tetratelabs/wazero v1.8.2
+	github.com/tetratelabs/wazero v1.9.0
 	github.com/vulcand/oxy/v2 v2.0.2
 	github.com/wI2L/jsondiff v0.6.1
 	github.com/wk8/go-ordered-map/v2 v2.1.8
@@ -46,7 +46,7 @@ require (
 	github.com/gorilla/css v1.0.1 // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
 	github.com/jaswdr/faker v1.19.1 // indirect
-	github.com/klauspost/compress v1.17.11
+	github.com/klauspost/compress v1.18.0
 	github.com/mailru/easyjson v0.7.7 // indirect
 	github.com/mattn/go-runewidth v0.0.16 // indirect
 	github.com/otiai10/mint v1.6.3 // indirect
