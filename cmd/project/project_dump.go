@@ -258,7 +258,7 @@ func assembleConnectionURI(cmd *cobra.Command) (*mysql.Config, error) {
 	db, _ := cmd.Flags().GetString("database")
 
 	if host != "" {
-		if port == "" {
+		if port != "" {
 			cfg.Addr = fmt.Sprintf("%s:%s", host, port)
 		} else {
 			cfg.Addr = host
