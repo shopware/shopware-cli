@@ -2,9 +2,8 @@ package phpexec
 
 import (
 	"context"
-	"os/exec"
 	"testing"
-
+	"os/exec"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -35,7 +34,7 @@ func TestSymfonyDetection(t *testing.T) {
 		},
 	}
 
-	ctx := context.Background()
+	ctx := t.Context()
 
 	for _, tc := range testCases {
 		tc := tc
