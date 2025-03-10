@@ -2,8 +2,9 @@ package phpexec
 
 import (
 	"context"
-	"testing"
 	"os/exec"
+	"testing"
+
 	"github.com/stretchr/testify/assert"
 )
 
