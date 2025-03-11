@@ -39,7 +39,12 @@ type AssetBuildConfig struct {
 	SkipExtensionsWithBuildFiles bool
 	NPMForceInstall              bool
 	ContributeProject            bool
-	ForceExtensionBuild          []string
+	ForceExtensionBuild          []ExtensionBuildConfig
+}
+
+// ExtensionBuildConfig defines configuration for forcing extension builds
+type ExtensionBuildConfig struct {
+	Name string
 }
 
 func BuildAssetsForExtensions(ctx context.Context, sources []asset.Source, assetConfig AssetBuildConfig) error { // nolint:gocyclo
@@ -462,7 +467,13 @@ func BuildAssetConfigFromExtensions(ctx context.Context, sources []asset.Source,
 			expectedStorefrontCompiledFile := path.Join(source.Path, "Resources", "app", "storefront", "dist", "storefront", "js", esbuild.ToKebabCase(source.Name), esbuild.ToKebabCase(source.Name)+".js")
 
 			// Check if extension is in the ForceExtensionBuild list
-			forceExtensionBuild := slices.Contains(assetCfg.ForceExtensionBuild, source.Name)
+			forceExtensionBuild := false
+			for _, ext := range assetCfg.ForceExtensionBuild {
+				if ext.Name == source.Name {
+					forceExtensionBuild = true
+					break
+				}
+			}
 
 			if _, err := os.Stat(expectedAdminCompiledFile); err == nil && !forceExtensionBuild {
 				// clear out the entrypoint, so the admin does not build it

@@ -107,7 +107,7 @@ var projectCI = &cobra.Command{
 			Browserslist:                 shopCfg.Build.Browserslist,
 			SkipExtensionsWithBuildFiles: true,
 			DisableStorefrontBuild:       shopCfg.Build.DisableStorefrontBuild,
-			ForceExtensionBuild:          shopCfg.Build.ForceExtensionBuild,
+			ForceExtensionBuild:          convertForceExtensionBuild(shopCfg.Build.ForceExtensionBuild),
 		}
 
 		if err := extension.BuildAssetsForExtensions(cmd.Context(), sources, assetCfg); err != nil {
@@ -487,4 +487,14 @@ func cleanupJavaScriptSourceMaps(folder string) error {
 
 		return os.WriteFile(expectedJsFile, []byte(overwrittenContent), os.ModePerm)
 	})
+}
+
+func convertForceExtensionBuild(configExtensions []shop.ConfigBuildExtension) []extension.ExtensionBuildConfig {
+	extensionConfigs := make([]extension.ExtensionBuildConfig, len(configExtensions))
+	for i, ext := range configExtensions {
+		extensionConfigs[i] = extension.ExtensionBuildConfig{
+			Name: ext.Name,
+		}
+	}
+	return extensionConfigs
 }

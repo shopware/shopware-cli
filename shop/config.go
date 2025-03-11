@@ -47,7 +47,13 @@ type ConfigBuild struct {
 	// When enabled, the storefront build will be skipped
 	DisableStorefrontBuild bool `yaml:"disable_storefront_build,omitempty"`
 	// Extensions to force build for, even if they have compiled files
-	ForceExtensionBuild []string `yaml:"force_extension_build,omitempty"`
+	ForceExtensionBuild []ConfigBuildExtension `yaml:"force_extension_build,omitempty"`
+}
+
+// ConfigBuildExtension defines the configuration for forcing extension builds
+type ConfigBuildExtension struct {
+	// Name of the extension
+	Name string `yaml:"name" jsonschema:"required"`
 }
 
 type ConfigAdminApi struct {
