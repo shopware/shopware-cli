@@ -46,6 +46,8 @@ type ConfigBuild struct {
 	ExcludeExtensions []string `yaml:"exclude_extensions,omitempty"`
 	// When enabled, the storefront build will be skipped
 	DisableStorefrontBuild bool `yaml:"disable_storefront_build,omitempty"`
+	// Extensions to force build for, even if they have compiled files
+	ForceExtensionBuild []string `yaml:"force_extension_build,omitempty"`
 }
 
 type ConfigAdminApi struct {

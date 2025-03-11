@@ -39,6 +39,7 @@ type AssetBuildConfig struct {
 	SkipExtensionsWithBuildFiles bool
 	NPMForceInstall              bool
 	ContributeProject            bool
+	ForceExtensionBuild          []string
 }
 
 func BuildAssetsForExtensions(ctx context.Context, sources []asset.Source, assetConfig AssetBuildConfig) error { // nolint:gocyclo
@@ -460,7 +461,10 @@ func BuildAssetConfigFromExtensions(ctx context.Context, sources []asset.Source,
 			expectedAdminCompiledFile := path.Join(source.Path, "Resources", "public", "administration", "js", esbuild.ToKebabCase(source.Name)+".js")
 			expectedStorefrontCompiledFile := path.Join(source.Path, "Resources", "app", "storefront", "dist", "storefront", "js", esbuild.ToKebabCase(source.Name), esbuild.ToKebabCase(source.Name)+".js")
 
-			if _, err := os.Stat(expectedAdminCompiledFile); err == nil {
+			// Check if extension is in the ForceExtensionBuild list
+			forceExtensionBuild := slices.Contains(assetCfg.ForceExtensionBuild, source.Name)
+
+			if _, err := os.Stat(expectedAdminCompiledFile); err == nil && !forceExtensionBuild {
 				// clear out the entrypoint, so the admin does not build it
 				sourceConfig.Administration.EntryFilePath = nil
 				sourceConfig.Administration.Webpack = nil
@@ -468,7 +472,7 @@ func BuildAssetConfigFromExtensions(ctx context.Context, sources []asset.Source,
 				logging.FromContext(ctx).Infof("Skipping building administration assets for \"%s\" as compiled files are present", source.Name)
 			}
 
-			if _, err := os.Stat(expectedStorefrontCompiledFile); err == nil {
+			if _, err := os.Stat(expectedStorefrontCompiledFile); err == nil && !forceExtensionBuild {
 				// clear out the entrypoint, so the storefront does not build it
 				sourceConfig.Storefront.EntryFilePath = nil
 				sourceConfig.Storefront.Webpack = nil
