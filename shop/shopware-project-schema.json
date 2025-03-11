@@ -99,10 +99,31 @@
         "disable_storefront_build": {
           "type": "boolean",
           "description": "When enabled, the storefront build will be skipped"
+        },
+        "force_extension_build": {
+          "items": {
+            "$ref": "#/$defs/ConfigBuildExtension"
+          },
+          "type": "array",
+          "description": "Extensions to force build for, even if they have compiled files"
         }
       },
       "additionalProperties": false,
       "type": "object"
+    },
+    "ConfigBuildExtension": {
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Name of the extension"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "required": [
+        "name"
+      ],
+      "description": "ConfigBuildExtension defines the configuration for forcing extension builds."
     },
     "ConfigDeployment": {
       "properties": {
