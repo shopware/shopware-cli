@@ -50,7 +50,7 @@ type ConfigBuild struct {
 	ForceExtensionBuild []ConfigBuildExtension `yaml:"force_extension_build,omitempty"`
 }
 
-// ConfigBuildExtension defines the configuration for forcing extension builds
+// ConfigBuildExtension defines the configuration for forcing extension builds.
 type ConfigBuildExtension struct {
 	// Name of the extension
 	Name string `yaml:"name" jsonschema:"required"`

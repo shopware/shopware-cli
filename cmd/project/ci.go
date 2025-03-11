@@ -489,12 +489,10 @@ func cleanupJavaScriptSourceMaps(folder string) error {
 	})
 }
 
-func convertForceExtensionBuild(configExtensions []shop.ConfigBuildExtension) []extension.ExtensionBuildConfig {
-	extensionConfigs := make([]extension.ExtensionBuildConfig, len(configExtensions))
+func convertForceExtensionBuild(configExtensions []shop.ConfigBuildExtension) []string {
+	extensionConfigs := make([]string, len(configExtensions))
 	for i, ext := range configExtensions {
-		extensionConfigs[i] = extension.ExtensionBuildConfig{
-			Name: ext.Name,
-		}
+		extensionConfigs[i] = ext.Name
 	}
 	return extensionConfigs
 }
