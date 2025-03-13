@@ -63,7 +63,7 @@
       },
       "additionalProperties": false,
       "type": "object",
-      "description": "Configuration for zipping"
+      "description": "Configuration for zipping."
     },
     "ConfigBuildZipAssets": {
       "properties": {
@@ -316,6 +316,14 @@
         "automatic_bugfix_version_compatibility": {
           "type": "boolean",
           "description": "Specifies whether the extension should automatically be set compatible with Shopware bugfix versions."
+        },
+        "meta_title": {
+          "$ref": "#/$defs/ConfigTranslated[string]",
+          "description": "Specifies the meta title of the extension in store."
+        },
+        "meta_description": {
+          "$ref": "#/$defs/ConfigTranslated[string]",
+          "description": "Specifies the meta description of the extension in store."
         },
         "description": {
           "$ref": "#/$defs/ConfigTranslated[string]",
