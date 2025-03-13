@@ -141,7 +141,7 @@ func runDefaultValidate(vc *ValidationContext) {
 	})
 
 	metaData := vc.Extension.GetMetaData()
-	if len(metaData.Label.German) == 0 {
+	if len([]rune(metaData.Label.German)) == 0 {
 		vc.AddError("metadata.label", "label is not translated in german")
 	}
 
@@ -149,7 +149,7 @@ func runDefaultValidate(vc *ValidationContext) {
 		vc.AddError("metadata.label", "label is not translated in english")
 	}
 
-	if len(metaData.Description.German) == 0 {
+	if len([]rune(metaData.Description.German)) == 0 {
 		vc.AddError("metadata.description", "description is not translated in german")
 	}
 
@@ -157,7 +157,7 @@ func runDefaultValidate(vc *ValidationContext) {
 		vc.AddError("metadata.description", "description is not translated in english")
 	}
 
-	if len(metaData.Description.German) < 150 || len(metaData.Description.German) > 185 {
+	if len([]rune(metaData.Description.German)) < 150 || len([]rune(metaData.Description.German)) > 185 {
 		vc.AddError("metadata.description", fmt.Sprintf("the german description with length of %d should have a length from 150 up to 185 characters.", len(metaData.Description.German)))
 	}
 
