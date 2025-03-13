@@ -269,6 +269,8 @@ type Extension struct {
 		ShortDescription   string       `json:"shortDescription"`
 		Highlights         string       `json:"highlights"`
 		Features           string       `json:"features"`
+		MetaTitle          string       `json:"metaTitle"`
+		MetaDescription    string       `json:"metaDescription"`
 		Tags               []StoreTag   `json:"tags"`
 		Videos             []StoreVideo `json:"videos"`
 		Faqs               []StoreFaq   `json:"faqs"`
@@ -363,7 +365,6 @@ func (e ProducerEndpoint) GetSoftwareVersions(ctx context.Context, generation st
 	var versions SoftwareVersionList
 
 	err = json.Unmarshal(body, &versions)
-
 	if err != nil {
 		return nil, fmt.Errorf(errorFormat, err)
 	}
@@ -483,7 +484,6 @@ func (e ProducerEndpoint) GetExtensionGeneralInfo(ctx context.Context) (*Extensi
 	var info *ExtensionGeneralInformation
 
 	err = json.Unmarshal(body, &info)
-
 	if err != nil {
 		return nil, fmt.Errorf("shopware_versions: %v", err)
 	}

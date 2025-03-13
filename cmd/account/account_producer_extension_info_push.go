@@ -270,6 +270,16 @@ func updateStoreInfo(ext *accountApi.Extension, zipExt extension.Extension, cfg 
 				return err
 			}
 		}
+
+		storeMetaTitle := getTranslation(language, cfg.Store.MetaTitle)
+		if storeMetaTitle != nil {
+			info.MetaTitle = *storeMetaTitle
+		}
+
+		storeMetaDescription := getTranslation(language, cfg.Store.MetaDescription)
+		if storeMetaDescription != nil {
+			info.MetaDescription = *storeMetaDescription
+		}
 	}
 
 	return nil

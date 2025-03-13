@@ -93,6 +93,10 @@ type ConfigStore struct {
 	Icon *string `yaml:"icon"`
 	// Specifies whether the extension should automatically be set compatible with Shopware bugfix versions.
 	AutomaticBugfixVersionCompatibility *bool `yaml:"automatic_bugfix_version_compatibility"`
+	// Specifies the meta title of the extension in store.
+	MetaTitle ConfigTranslated[string] `yaml:"meta_title" jsonschema:"maxLength=50"`
+	// Specifies the meta description of the extension in store.
+	MetaDescription ConfigTranslated[string] `yaml:"meta_description" jsonschema:"maxLength=185"`
 	// Specifies the description of the extension in store.
 	Description ConfigTranslated[string] `yaml:"description"`
 	// Installation manual of the extension in store.
