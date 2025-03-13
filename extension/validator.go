@@ -158,7 +158,7 @@ func runDefaultValidate(vc *ValidationContext) {
 	}
 
 	if len([]rune(metaData.Description.German)) < 150 || len([]rune(metaData.Description.German)) > 185 {
-		vc.AddError("metadata.description", fmt.Sprintf("the german description with length of %d should have a length from 150 up to 185 characters.", len(metaData.Description.German)))
+		vc.AddError("metadata.description", fmt.Sprintf("the german description with length of %d should have a length from 150 up to 185 characters.", len([]rune(metaData.Description.German))))
 	}
 
 	if len(metaData.Description.English) < 150 || len(metaData.Description.English) > 185 {
