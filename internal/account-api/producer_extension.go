@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"image"
 	"io"
 	"mime/multipart"
 	"os"
@@ -163,23 +164,34 @@ func (e ProducerEndpoint) UpdateExtensionBinaryFile(ctx context.Context, extensi
 	return err
 }
 
-func (e ProducerEndpoint) UpdateExtensionIcon(ctx context.Context, extensionId int, iconFile string) error {
+func (e ProducerEndpoint) UpdateExtensionIcon(ctx context.Context, extensionId int, iconFilePath string) error {
 	errorFormat := "UpdateExtensionIcon: %v"
 
 	var b bytes.Buffer
 	w := multipart.NewWriter(&b)
 
-	fileWritter, err := w.CreateFormFile("file", filepath.Base(iconFile))
+	fileWritter, err := w.CreateFormFile("file", filepath.Base(iconFilePath))
 	if err != nil {
 		return fmt.Errorf(errorFormat, err)
 	}
 
-	zipFile, err := os.Open(iconFile)
+	iconFile, err := os.Open(iconFilePath)
 	if err != nil {
 		return fmt.Errorf(errorFormat, err)
 	}
 
-	if _, err = io.Copy(fileWritter, zipFile); err != nil {
+	imageConfig, _, err := image.DecodeConfig(iconFile)
+	if err != nil {
+		return fmt.Errorf(errorFormat, err)
+	}
+
+	if imageConfig.Width != 256 || imageConfig.Height != 256 {
+		return fmt.Errorf(errorFormat, "extension icon must be 256x256")
+	}
+
+	iconFile.Seek(0, io.SeekStart)
+
+	if _, err = io.Copy(fileWritter, iconFile); err != nil {
 		return fmt.Errorf(errorFormat, err)
 	}
 
