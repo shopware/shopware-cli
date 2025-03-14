@@ -189,7 +189,9 @@ func (e ProducerEndpoint) UpdateExtensionIcon(ctx context.Context, extensionId i
 		return fmt.Errorf(errorFormat, "extension icon must be 256x256")
 	}
 
-	iconFile.Seek(0, io.SeekStart)
+	if _, err = iconFile.Seek(0, io.SeekStart); err != nil {
+		return fmt.Errorf(errorFormat, err)
+	}
 
 	if _, err = io.Copy(fileWritter, iconFile); err != nil {
 		return fmt.Errorf(errorFormat, err)
