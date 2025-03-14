@@ -572,7 +572,37 @@ func setupShopwareInTemp(ctx context.Context, minVersion string) (string, error)
 
 	logging.FromContext(ctx).Infof("Cloning shopware with branch: %s into %s", branch, dir)
 
-	gitCheckoutCmd := exec.Command("git", "clone", "https://github.com/shopware/shopware.git", "--depth=1", "-b", branch, dir)
+	gitCloneCmd := exec.Command("git", "clone", "--filter=blob:none", "--no-checkout", "--depth=1", "--sparse", "https://github.com/shopware/shopware.git", "-b", branch, dir)
+	gitCloneCmd.Stdout = os.Stdout
+	gitCloneCmd.Stderr = os.Stderr
+	err = gitCloneCmd.Run()
+	if err != nil {
+		return "", err
+	}
+
+	gitSparseAddCmd := exec.Command("git", "sparse-checkout", "set",
+		"--no-cone",
+		"/src/Administration/Resources/app/administration/*",
+		"!/src/Administration/Resources/app/administration/test/*",
+		"!/src/Administration/Resources/app/administration/build/nuxt-component-library/*",
+		"!/src/Administration/Resources/app/administration/**/*.spec.js",
+		"!/src/Administration/Resources/app/administration/**/*.spec.ts",
+		"/src/Storefront/Resources/app/storefront/",
+		"!/src/Storefront/Resources/app/storefront/test",
+		"!/src/Storefront/Resources/app/storefront/dist",
+		"!/src/Storefront/Resources/app/storefront/static",
+		"/src/Core/composer.json",
+	)
+	gitSparseAddCmd.Dir = dir
+	gitSparseAddCmd.Stdout = os.Stdout
+	gitSparseAddCmd.Stderr = os.Stderr
+	err = gitSparseAddCmd.Run()
+	if err != nil {
+		return "", err
+	}
+
+	gitCheckoutCmd := exec.Command("git", "checkout")
+	gitCheckoutCmd.Dir = dir
 	gitCheckoutCmd.Stdout = os.Stdout
 	gitCheckoutCmd.Stderr = os.Stderr
 	err = gitCheckoutCmd.Run()
