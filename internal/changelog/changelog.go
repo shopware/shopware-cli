@@ -24,8 +24,6 @@ type Config struct {
 	Template string `yaml:"template,omitempty"`
 	// Specifies the variables to use for the changelog.
 	Variables map[string]string `yaml:"variables,omitempty"`
-	// Specifies whether the AI should be enabled.
-	AiEnabled bool `yaml:"ai_enabled,omitempty"`
 	// Specifies the URL of the VCS repository.
 	VCSURL string `yaml:"-"`
 }

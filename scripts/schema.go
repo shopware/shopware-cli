@@ -10,6 +10,7 @@ import (
 
 	"github.com/invopop/jsonschema"
 	"github.com/shopware/shopware-cli/extension"
+	"github.com/shopware/shopware-cli/internal/changelog"
 	"github.com/shopware/shopware-cli/shop"
 )
 
@@ -65,7 +66,32 @@ func generateExtensionSchema() error {
 		return err
 	}
 
+	if err := r.AddGoComments("github.com/shopware/shopware-cli", "./internal/changelog"); err != nil {
+		return err
+	}
+
+	// Generate the main schema
 	schema := r.Reflect(&extension.Config{})
+
+	// Fix the changelog reference in the schema - it's incorrectly mapping to Config
+	if definitions, ok := schema.Definitions["Config"]; ok {
+		// Find and fix the changelog property
+		pair := definitions.Properties.Oldest()
+		for pair != nil {
+			if pair.Key == "changelog" {
+				pair.Value.Ref = "#/$defs/ChangelogConfig"
+				break
+			}
+			pair = pair.Next()
+		}
+	}
+
+	// Generate the changelog config schema separately and add it to the definitions
+	changelogSchema := r.Reflect(&changelog.Config{})
+	if schema.Definitions == nil {
+		schema.Definitions = make(map[string]*jsonschema.Schema)
+	}
+	schema.Definitions["ChangelogConfig"] = changelogSchema
 
 	bytes, err := json.MarshalIndent(schema, "", "  ")
 	if err != nil {
