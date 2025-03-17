@@ -17,6 +17,12 @@ import (
 )
 
 func findClosestShopwareProject() (string, error) {
+	projectRoot := os.Getenv("PROJECT_ROOT")
+
+	if projectRoot != "" {
+		return projectRoot, nil
+	}
+
 	currentDir, err := os.Getwd()
 	if err != nil {
 		return "", err
