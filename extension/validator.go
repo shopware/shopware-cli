@@ -49,12 +49,36 @@ func (c *ValidationContext) Warnings() []ValidationMessage {
 	return c.warnings
 }
 
-func (c *ValidationContext) ApplyIgnores(ignores []string) {
+func (c *ValidationContext) ApplyIgnores(ignores []ConfigValidationIgnoreItem) {
 	for _, ignore := range ignores {
 		for i := 0; i < len(c.errors); i++ {
-			if c.errors[i].Identifier == ignore {
+			if c.errors[i].Identifier == ignore.Identifier && ignore.Message == "" {
 				c.errors = append(c.errors[:i], c.errors[i+1:]...)
 				i--
+				continue
+			}
+
+			if c.errors[i].Identifier == ignore.Identifier && ignore.Message != "" && strings.Contains(c.errors[i].Message, ignore.Message) {
+				c.errors = append(c.errors[:i], c.errors[i+1:]...)
+				i--
+				continue
+			}
+		}
+	}
+
+	// Apply the same logic to warnings
+	for _, ignore := range ignores {
+		for i := 0; i < len(c.warnings); i++ {
+			if c.warnings[i].Identifier == ignore.Identifier && ignore.Message == "" {
+				c.warnings = append(c.warnings[:i], c.warnings[i+1:]...)
+				i--
+				continue
+			}
+
+			if c.warnings[i].Identifier == ignore.Identifier && ignore.Message != "" && strings.Contains(c.warnings[i].Message, ignore.Message) {
+				c.warnings = append(c.warnings[:i], c.warnings[i+1:]...)
+				i--
+				continue
 			}
 		}
 	}
@@ -67,7 +91,7 @@ func RunValidation(ctx context.Context, ext Extension) *ValidationContext {
 	ext.Validate(ctx, vc)
 	validateAdministrationSnippets(vc)
 	validateStorefrontSnippets(vc)
-	vc.ApplyIgnores(ext.GetExtensionConfig().Validation.Ignore.Identifiers())
+	vc.ApplyIgnores(ext.GetExtensionConfig().Validation.Ignore)
 
 	return vc
 }

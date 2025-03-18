@@ -173,6 +173,8 @@ type ConfigValidationIgnoreItem struct {
 	Identifier string `yaml:"identifier"`
 	// Optional to ignore only a specific path.
 	Path string `yaml:"path,omitempty"`
+	// Optional to ignore only a specific message.
+	Message string `yaml:"message,omitempty"`
 }
 
 func (c *ConfigValidationIgnoreItem) UnmarshalYAML(value *yaml.Node) error {
@@ -184,6 +186,7 @@ func (c *ConfigValidationIgnoreItem) UnmarshalYAML(value *yaml.Node) error {
 	type objectFormat struct {
 		Identifier string `yaml:"identifier"`
 		Path       string `yaml:"path,omitempty"`
+		Message    string `yaml:"message,omitempty"`
 	}
 	var obj objectFormat
 	if err := value.Decode(&obj); err != nil {
@@ -192,6 +195,7 @@ func (c *ConfigValidationIgnoreItem) UnmarshalYAML(value *yaml.Node) error {
 
 	c.Identifier = obj.Identifier
 	c.Path = obj.Path
+	c.Message = obj.Message
 
 	return nil
 }

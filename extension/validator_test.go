@@ -82,6 +82,22 @@ func TestIgnores(t *testing.T) {
 	ctx.AddError("metadata.name", "Key `name` is required")
 	assert.True(t, ctx.HasErrors())
 
-	ctx.ApplyIgnores([]string{"metadata.name"})
+	ctx.ApplyIgnores([]ConfigValidationIgnoreItem{
+		{Identifier: "metadata.name"},
+	})
+	assert.False(t, ctx.HasErrors())
+}
+
+func TestIgnoresWithMessage(t *testing.T) {
+	app := getAppForValidation()
+
+	ctx := newValidationContext(app)
+
+	ctx.AddError("metadata.name", "Key `name` is required")
+	assert.True(t, ctx.HasErrors())
+
+	ctx.ApplyIgnores([]ConfigValidationIgnoreItem{
+		{Identifier: "metadata.name", Message: "Key `name` is required"},
+	})
 	assert.False(t, ctx.HasErrors())
 }
