@@ -61,6 +61,11 @@ var (
 		"Thumbs.db",
 		"__MACOSX",
 		".gitignore",
+		"stylelint.config.js",
+		".stylelintrc.js",
+		".stylelintrc",
+		"eslint.config.js",
+		".eslintrc.js",
 	}
 
 	defaultNotAllowedExtensions = []string{
