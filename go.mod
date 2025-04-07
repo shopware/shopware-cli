@@ -15,7 +15,7 @@ require (
 	github.com/doutorfinancas/go-mad v0.0.0-20240205120830-463c1e9760f0
 	github.com/evanw/esbuild v0.25.2
 	github.com/friendsofshopware/go-shopware-admin-api-sdk v0.0.0-20231210091330-92f38f1ae77c
-	github.com/go-sql-driver/mysql v1.9.1
+	github.com/go-sql-driver/mysql v1.9.2
 	github.com/google/uuid v1.6.0
 	github.com/gorilla/schema v1.4.1
 	github.com/invopop/jsonschema v0.13.0
@@ -32,7 +32,7 @@ require (
 	github.com/wk8/go-ordered-map/v2 v2.1.8
 	github.com/yuin/goldmark v1.7.8
 	go.uber.org/zap v1.27.0
-	golang.org/x/text v0.23.0
+	golang.org/x/text v0.24.0
 	gopkg.in/yaml.v3 v3.0.1
 )
 
@@ -84,7 +84,7 @@ require (
 	go.uber.org/multierr v1.11.0 // indirect
 	golang.org/x/net v0.38.0
 	golang.org/x/oauth2 v0.24.0 // indirect
-	golang.org/x/sync v0.12.0 // indirect
+	golang.org/x/sync v0.13.0 // indirect
 	golang.org/x/sys v0.31.0 // indirect
 	google.golang.org/protobuf v1.35.2 // indirect
 )
