@@ -48,6 +48,31 @@ type ComposerJsonRepository struct {
 
 type ComposerJsonRepositories []ComposerJsonRepository
 
+func (e *ComposerJsonRepositories) UnmarshalJSON(data []byte) error {
+	var asMap map[string]ComposerJsonRepository
+
+	if err := json.Unmarshal(data, &asMap); err == nil {
+		*e = ComposerJsonRepositories{}
+
+		for _, v := range asMap {
+			*e = append(*e, v)
+		}
+
+		return nil
+	}
+
+	var asArray []ComposerJsonRepository
+	err := json.Unmarshal(data, &asArray)
+
+	if err != nil {
+		return err
+	}
+
+	*e = asArray
+
+	return nil
+}
+
 func (r *ComposerJsonRepositories) HasRepository(url string) bool {
 	for _, repository := range *r {
 		if repository.URL == url {
