@@ -60,6 +60,11 @@ func TestCreateBundle(t *testing.T) {
 		"type": "shopware-bundle",
 		"extra": {
 			"shopware-bundle-name": "TestBundle"
+		},
+		"autoload": {
+			"psr-4": {
+				"TestBundle\\": "src/"
+			}
 		}
 	}
 	`)
