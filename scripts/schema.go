@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/invopop/jsonschema"
+
 	"github.com/shopware/shopware-cli/extension"
 	"github.com/shopware/shopware-cli/internal/changelog"
 	"github.com/shopware/shopware-cli/shop"
@@ -91,7 +92,7 @@ func generateExtensionSchema() error {
 	if schema.Definitions == nil {
 		schema.Definitions = make(map[string]*jsonschema.Schema)
 	}
-	schema.Definitions["ChangelogConfig"] = changelogSchema
+	schema.Definitions["ChangelogConfig"] = changelogSchema.Definitions["Config"]
 
 	bytes, err := json.MarshalIndent(schema, "", "  ")
 	if err != nil {

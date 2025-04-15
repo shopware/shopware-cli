@@ -11,13 +11,14 @@ import (
 	"strings"
 
 	"dario.cat/mergo"
+	"github.com/spf13/cobra"
+	"golang.org/x/text/language"
+
 	"github.com/shopware/shopware-cli/extension"
 	"github.com/shopware/shopware-cli/internal/packagist"
 	"github.com/shopware/shopware-cli/internal/phpexec"
 	"github.com/shopware/shopware-cli/logging"
 	"github.com/shopware/shopware-cli/shop"
-	"github.com/spf13/cobra"
-	"golang.org/x/text/language"
 )
 
 // cleanupPaths are paths that are not nesscarry for the production build.
@@ -57,7 +58,7 @@ var projectCI = &cobra.Command{
 		}
 
 		// Remove annoying cache invalidation errors while asset install
-		os.Setenv("SHOPWARE_SKIP_ASSET_INSTALL_CACHE_INVALIDATION", "1")
+		_ = os.Setenv("SHOPWARE_SKIP_ASSET_INSTALL_CACHE_INVALIDATION", "1")
 
 		shopCfg, err := shop.ReadConfig(projectConfigPath, true)
 		if err != nil {

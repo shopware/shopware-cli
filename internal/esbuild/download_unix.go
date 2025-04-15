@@ -42,7 +42,11 @@ func downloadDartSass(ctx context.Context, cacheDir string) error {
 		return fmt.Errorf("cannot download dart-sass: %w", err)
 	}
 
-	defer tarFile.Body.Close()
+	defer func() {
+		if err := tarFile.Body.Close(); err != nil {
+			logging.FromContext(ctx).Errorf("Cannot close tar file body: %v", err)
+		}
+	}()
 
 	if tarFile.StatusCode != 200 {
 		return fmt.Errorf("cannot download dart-sass: %s with http code %s", tarFile.Request.URL, tarFile.Status)

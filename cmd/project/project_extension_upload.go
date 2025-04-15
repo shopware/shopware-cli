@@ -14,12 +14,12 @@ import (
 
 	adminSdk "github.com/friendsofshopware/go-shopware-admin-api-sdk"
 	cp "github.com/otiai10/copy"
+	"github.com/shyim/go-version"
 	"github.com/spf13/cobra"
 
 	"github.com/shopware/shopware-cli/extension"
 	"github.com/shopware/shopware-cli/logging"
 	"github.com/shopware/shopware-cli/shop"
-	"github.com/shyim/go-version"
 )
 
 var projectExtensionUploadCmd = &cobra.Command{

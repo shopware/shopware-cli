@@ -3,9 +3,8 @@ package extension
 import (
 	"testing"
 
-	"github.com/stretchr/testify/assert"
-
 	"github.com/shyim/go-version"
+	"github.com/stretchr/testify/assert"
 )
 
 func TestDetermineMinVersion(t *testing.T) {

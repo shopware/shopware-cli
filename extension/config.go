@@ -2,14 +2,15 @@ package extension
 
 import (
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 
 	"github.com/invopop/jsonschema"
-	"github.com/shopware/shopware-cli/internal/changelog"
 	orderedmap "github.com/wk8/go-ordered-map/v2"
-
 	"gopkg.in/yaml.v3"
+
+	"github.com/shopware/shopware-cli/internal/changelog"
 )
 
 type ConfigBuild struct {
@@ -302,10 +303,18 @@ func (c *Config) Dump(dir string) error {
 	if err != nil {
 		return err
 	}
-	defer file.Close()
+	defer func() {
+		if err := file.Close(); err != nil {
+			log.Printf("failed to close file: %v", err)
+		}
+	}()
 
 	encoder := yaml.NewEncoder(file)
-	defer encoder.Close()
+	defer func() {
+		if err := encoder.Close(); err != nil {
+			log.Printf("failed to close encoder: %v", err)
+		}
+	}()
 
 	return encoder.Encode(c)
 }

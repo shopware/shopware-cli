@@ -12,7 +12,6 @@ import (
 	"path/filepath"
 
 	"github.com/microcosm-cc/bluemonday"
-
 	"github.com/shyim/go-version"
 )
 

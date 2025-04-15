@@ -10,6 +10,8 @@ import (
 
 	"github.com/tetratelabs/wazero"
 	"github.com/tetratelabs/wazero/sys"
+
+	"github.com/shopware/shopware-cli/logging"
 )
 
 type LintError struct {
@@ -30,7 +32,11 @@ func LintFolder(ctx context.Context, phpVersion, folder string) (LintErrors, err
 		return nil, err
 	}
 
-	defer wasmRuntime.Close(ctx)
+	defer func() {
+		if err := wasmRuntime.Close(ctx); err != nil {
+			logging.FromContext(ctx).Errorf("Cannot close wasm runtime: %v", err)
+		}
+	}()
 
 	wasmCompiled, err := wasmRuntime.CompileModule(ctx, wasmFile)
 	if err != nil {
@@ -82,10 +88,14 @@ func LintFolder(ctx context.Context, phpVersion, folder string) (LintErrors, err
 				}
 
 				if wasmModule != nil {
-					wasmModule.Close(ctx)
+					if err := wasmModule.Close(ctx); err != nil {
+						logging.FromContext(ctx).Errorf("Cannot close wasm module: %v", err)
+					}
 				}
 			} else {
-				wasmModule.Close(ctx)
+				if err := wasmModule.Close(ctx); err != nil {
+					logging.FromContext(ctx).Errorf("Cannot close wasm module: %v", err)
+				}
 				errorsChain <- nil
 			}
 		}(file)

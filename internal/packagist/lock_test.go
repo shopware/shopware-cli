@@ -32,7 +32,6 @@ func TestReadComposerLock(t *testing.T) {
 		assert.Len(t, lock.Packages, 1)
 		assert.Equal(t, "symfony/console", lock.Packages[0].Name)
 		assert.Equal(t, "v6.3.0", lock.Packages[0].Version)
-		assert.Equal(t, "library", lock.Packages[0].PackageType)
 	})
 
 	t.Run("non-existent file", func(t *testing.T) {

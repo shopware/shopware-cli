@@ -11,10 +11,11 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/shyim/go-version"
+
 	"github.com/shopware/shopware-cli/internal/asset"
 	"github.com/shopware/shopware-cli/internal/esbuild"
 	"github.com/shopware/shopware-cli/logging"
-	"github.com/shyim/go-version"
 )
 
 const (
@@ -576,7 +577,7 @@ func setupShopwareInTemp(ctx context.Context, minVersion string) (string, error)
 		return "", err
 	}
 
-	branch := "v" + minVersion
+	branch := "v" + strings.ToLower(minVersion)
 
 	if minVersion == DevVersionNumber || minVersion == "6.7.0.0" {
 		branch = "trunk"

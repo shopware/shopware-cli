@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+
+	"github.com/shopware/shopware-cli/logging"
 )
 
 type PackageResponse struct {
@@ -39,7 +41,11 @@ func GetPackages(ctx context.Context, token string) (*PackageResponse, error) {
 		return nil, err
 	}
 
-	defer resp.Body.Close()
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			logging.FromContext(ctx).Errorf("Cannot close response body: %v", err)
+		}
+	}()
 
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("failed to get packages: %s", resp.Status)

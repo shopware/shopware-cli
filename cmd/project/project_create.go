@@ -16,10 +16,10 @@ import (
 	"text/template"
 
 	"github.com/charmbracelet/huh"
+	"github.com/shyim/go-version"
 	"github.com/spf13/cobra"
 
 	"github.com/shopware/shopware-cli/logging"
-	"github.com/shyim/go-version"
 )
 
 var projectCreateCmd = &cobra.Command{
@@ -65,9 +65,9 @@ var projectCreateCmd = &cobra.Command{
 			result = args[1]
 		} else {
 			options := make([]huh.Option[string], 0)
-			for i, v := range filteredVersions {
+			for _, v := range filteredVersions {
 				versionStr := v.String()
-				options[i] = huh.NewOption(versionStr, versionStr)
+				options = append(options, huh.NewOption(versionStr, versionStr))
 			}
 
 			// Add "latest" option
@@ -77,6 +77,7 @@ var projectCreateCmd = &cobra.Command{
 			form := huh.NewForm(
 				huh.NewGroup(
 					huh.NewSelect[string]().
+						Height(10).
 						Title("Select Version").
 						Options(options...).
 						Value(&result),
@@ -123,6 +124,10 @@ var projectCreateCmd = &cobra.Command{
 		}
 
 		if err := os.WriteFile(fmt.Sprintf("%s/.env", projectFolder), []byte(""), os.ModePerm); err != nil {
+			return err
+		}
+
+		if err := os.WriteFile(fmt.Sprintf("%s/.env.local", projectFolder), []byte(""), os.ModePerm); err != nil {
 			return err
 		}
 

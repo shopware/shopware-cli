@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
+	"log"
 	"net/http"
 	"os"
 	"os/exec"
@@ -16,10 +17,10 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/shopware/shopware-cli/internal/changelog"
-
-	"github.com/shopware/shopware-cli/logging"
 	"github.com/shyim/go-version"
+
+	"github.com/shopware/shopware-cli/internal/changelog"
+	"github.com/shopware/shopware-cli/logging"
 )
 
 var (
@@ -387,7 +388,11 @@ func addComposerReplacements(composer map[string]interface{}, minVersion string)
 				return nil, fmt.Errorf("open composer file: %w", err)
 			}
 
-			defer composerFile.Close()
+			defer func() {
+				if err := composerFile.Close(); err != nil {
+					log.Printf("failed to close composer file: %v", err)
+				}
+			}()
 
 			composerPartByte, err := io.ReadAll(composerFile)
 			if err != nil {

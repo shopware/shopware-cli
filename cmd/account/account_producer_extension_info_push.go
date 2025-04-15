@@ -282,9 +282,10 @@ func updateStoreInfo(ext *accountApi.Extension, zipExt extension.Extension, cfg 
 }
 
 func getTranslation[T extension.Translatable](language string, config extension.ConfigTranslated[T]) *T {
-	if language == "de" {
+	switch language {
+	case "de":
 		return config.German
-	} else if language == "en" {
+	case "en":
 		return config.English
 	}
 

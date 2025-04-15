@@ -25,7 +25,7 @@ func TestSymfonyDetection(t *testing.T) {
 			Name:        "Console",
 			Func:        ConsoleCommand,
 			Args:        []string{"php", "bin/console"},
-			SymfonyArgs: []string{"/test/symfony", "console"},
+			SymfonyArgs: []string{"/test/symfony", "php", "bin/console"},
 		},
 		{
 			Name:        "PHP",

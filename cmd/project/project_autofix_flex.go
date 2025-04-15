@@ -6,9 +6,10 @@ import (
 	"path"
 
 	"github.com/charmbracelet/huh"
+	"github.com/spf13/cobra"
+
 	"github.com/shopware/shopware-cli/internal/color"
 	"github.com/shopware/shopware-cli/internal/flexmigrator"
-	"github.com/spf13/cobra"
 )
 
 var projectAutofixFlexCmd = &cobra.Command{

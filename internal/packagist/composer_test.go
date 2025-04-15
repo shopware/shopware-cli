@@ -182,3 +182,65 @@ func TestReadComposerJson(t *testing.T) {
 		assert.Nil(t, composer)
 	})
 }
+
+func TestReadComposerJsonDifferentRepositoryWritings(t *testing.T) {
+	t.Run("repository list", func(t *testing.T) {
+		tempDir := t.TempDir()
+		composerFile := filepath.Join(tempDir, "composer.json")
+
+		var content = `
+{
+	"repositories": [
+		{
+			"type": "vcs",
+			"url": "https://github.com/shopware/platform"
+		},
+		{
+			"type": "path",
+			"url": "custom/plugins"
+		}
+	]
+}
+`
+		err := os.WriteFile(composerFile, []byte(content), 0o644)
+		assert.NoError(t, err)
+
+		composer, err := ReadComposerJson(composerFile)
+		assert.NoError(t, err)
+		assert.Equal(t, composerFile, composer.path)
+		assert.Equal(t, "vcs", composer.Repositories[0].Type)
+		assert.Equal(t, "https://github.com/shopware/platform", composer.Repositories[0].URL)
+		assert.Equal(t, "path", composer.Repositories[1].Type)
+		assert.Equal(t, "custom/plugins", composer.Repositories[1].URL)
+	})
+
+	t.Run("repository map", func(t *testing.T) {
+		tempDir := t.TempDir()
+		composerFile := filepath.Join(tempDir, "composer.json")
+
+		var content = `
+{
+	"repositories": {
+		"remote": {
+			"type": "vcs",
+			"url": "https://github.com/shopware/platform"
+		},
+		"local": {
+			"type": "path",
+			"url": "custom/plugins"
+		}
+	}
+}
+`
+		err := os.WriteFile(composerFile, []byte(content), 0o644)
+		assert.NoError(t, err)
+
+		composer, err := ReadComposerJson(composerFile)
+		assert.NoError(t, err)
+		assert.Equal(t, composerFile, composer.path)
+		assert.Equal(t, "vcs", composer.Repositories[0].Type)
+		assert.Equal(t, "https://github.com/shopware/platform", composer.Repositories[0].URL)
+		assert.Equal(t, "path", composer.Repositories[1].Type)
+		assert.Equal(t, "custom/plugins", composer.Repositories[1].URL)
+	})
+}

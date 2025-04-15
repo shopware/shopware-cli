@@ -6,10 +6,11 @@ import (
 	"path/filepath"
 
 	"github.com/olekukonko/tablewriter"
+	"github.com/spf13/cobra"
+
 	"github.com/shopware/shopware-cli/extension"
 	"github.com/shopware/shopware-cli/logging"
 	"github.com/shopware/shopware-cli/shop"
-	"github.com/spf13/cobra"
 )
 
 var projectDebug = &cobra.Command{

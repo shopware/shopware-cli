@@ -3,12 +3,12 @@ package project
 import (
 	"path/filepath"
 
-	"github.com/shopware/shopware-cli/internal/phpexec"
-	"github.com/shopware/shopware-cli/shop"
+	"github.com/spf13/cobra"
 
 	"github.com/shopware/shopware-cli/extension"
+	"github.com/shopware/shopware-cli/internal/phpexec"
 	"github.com/shopware/shopware-cli/logging"
-	"github.com/spf13/cobra"
+	"github.com/shopware/shopware-cli/shop"
 )
 
 var projectAdminBuildCmd = &cobra.Command{
@@ -35,7 +35,7 @@ var projectAdminBuildCmd = &cobra.Command{
 
 		logging.FromContext(cmd.Context()).Infof("Looking for extensions to build assets in project")
 
-		if err := runTransparentCommand(commandWithRoot(phpexec.ConsoleCommand(cmd.Context(), "feature:dump"), projectRoot)); err != nil {
+		if err := runTransparentCommand(commandWithRoot(phpexec.ConsoleCommand(phpexec.AllowBinCI(cmd.Context()), "feature:dump"), projectRoot)); err != nil {
 			return err
 		}
 

@@ -1,10 +1,11 @@
 package extension
 
 import (
-	"github.com/stretchr/testify/assert"
 	"os"
 	"path"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
 func TestCanIUseUpdate(t *testing.T) {

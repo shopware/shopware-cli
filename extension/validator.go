@@ -6,8 +6,9 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/shopware/shopware-cli/internal/spdx"
 	"golang.org/x/net/context"
+
+	"github.com/shopware/shopware-cli/internal/spdx"
 )
 
 type ValidationMessage struct {

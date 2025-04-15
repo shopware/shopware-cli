@@ -6,14 +6,12 @@ import (
 	"path"
 	"strings"
 
-	"github.com/invopop/jsonschema"
-	orderedmap "github.com/wk8/go-ordered-map/v2"
-
 	"dario.cat/mergo"
-
 	"github.com/doutorfinancas/go-mad/core"
 	adminSdk "github.com/friendsofshopware/go-shopware-admin-api-sdk"
 	"github.com/google/uuid"
+	"github.com/invopop/jsonschema"
+	orderedmap "github.com/wk8/go-ordered-map/v2"
 	"gopkg.in/yaml.v3"
 )
 

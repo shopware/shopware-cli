@@ -4,36 +4,29 @@
   "$ref": "#/$defs/Config",
   "$defs": {
     "ChangelogConfig": {
-      "$schema": "https://json-schema.org/draft/2020-12/schema",
-      "$id": "https://github.com/shopware/shopware-cli/internal/changelog/config",
-      "$ref": "#/$defs/Config",
-      "$defs": {
-        "Config": {
-          "properties": {
-            "enabled": {
-              "type": "boolean",
-              "description": "Specifies whether the changelog should be generated."
-            },
-            "pattern": {
-              "type": "string",
-              "description": "Specifies the pattern to match the commits."
-            },
-            "template": {
-              "type": "string",
-              "description": "Specifies the template to use for the changelog."
-            },
-            "variables": {
-              "additionalProperties": {
-                "type": "string"
-              },
-              "type": "object",
-              "description": "Specifies the variables to use for the changelog."
-            }
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "description": "Specifies whether the changelog should be generated."
+        },
+        "pattern": {
+          "type": "string",
+          "description": "Specifies the pattern to match the commits."
+        },
+        "template": {
+          "type": "string",
+          "description": "Specifies the template to use for the changelog."
+        },
+        "variables": {
+          "additionalProperties": {
+            "type": "string"
           },
-          "additionalProperties": false,
-          "type": "object"
+          "type": "object",
+          "description": "Specifies the variables to use for the changelog."
         }
-      }
+      },
+      "additionalProperties": false,
+      "type": "object"
     },
     "Config": {
       "properties": {

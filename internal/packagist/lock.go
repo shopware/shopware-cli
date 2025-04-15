@@ -6,12 +6,23 @@ import (
 	"os"
 )
 
+type ComposerLockPackage struct {
+	Name    string `json:"name"`
+	Version string `json:"version"`
+}
+
 type ComposerLock struct {
-	Packages []struct {
-		Name        string `json:"name"`
-		Version     string `json:"version"`
-		PackageType string `json:"type"`
-	} `json:"packages"`
+	Packages []ComposerLockPackage `json:"packages"`
+}
+
+func (c *ComposerLock) GetPackage(name string) *ComposerLockPackage {
+	for _, pkg := range c.Packages {
+		if pkg.Name == name {
+			return &pkg
+		}
+	}
+
+	return nil
 }
 
 func ReadComposerLock(pathToFile string) (*ComposerLock, error) {

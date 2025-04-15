@@ -12,12 +12,11 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/shopware/shopware-cli/internal/phpexec"
-	"github.com/shopware/shopware-cli/shop"
-
 	"github.com/spf13/cobra"
 
+	"github.com/shopware/shopware-cli/internal/phpexec"
 	"github.com/shopware/shopware-cli/logging"
+	"github.com/shopware/shopware-cli/shop"
 )
 
 var projectWorkerCmd = &cobra.Command{

@@ -2,10 +2,11 @@ package shop
 
 import (
 	"encoding/json"
-	"github.com/stretchr/testify/assert"
 	"os"
 	"path"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
 func TestDetectNothingFound(t *testing.T) {

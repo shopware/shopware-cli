@@ -17,10 +17,10 @@ import (
 	"github.com/doutorfinancas/go-mad/generator"
 	"github.com/go-sql-driver/mysql"
 	"github.com/klauspost/compress/zstd"
-	"github.com/shopware/shopware-cli/extension"
 	"github.com/spf13/cobra"
 	"go.uber.org/zap"
 
+	"github.com/shopware/shopware-cli/extension"
 	"github.com/shopware/shopware-cli/logging"
 	"github.com/shopware/shopware-cli/shop"
 )

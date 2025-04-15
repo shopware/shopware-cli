@@ -5,9 +5,10 @@ import (
 	"os"
 	"path"
 
-	"github.com/shopware/shopware-cli/internal/system"
 	"github.com/tetratelabs/wazero"
 	"github.com/tetratelabs/wazero/imports/wasi_snapshot_preview1"
+
+	"github.com/shopware/shopware-cli/internal/system"
 )
 
 func getWazeroRuntime(ctx context.Context) (wazero.Runtime, error) {
