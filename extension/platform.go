@@ -29,9 +29,29 @@ func (p PlatformPlugin) GetRootDir() string {
 	return path.Join(p.path, "src")
 }
 
+func (p PlatformPlugin) GetSourceDirs() []string {
+	var result []string
+
+	for _, val := range p.Composer.Autoload.Psr4 {
+		result = append(result, path.Join(p.path, val))
+	}
+
+	return result
+}
+
 // GetResourcesDir returns the resources directory of the plugin.
 func (p PlatformPlugin) GetResourcesDir() string {
 	return path.Join(p.GetRootDir(), "Resources")
+}
+
+func (p PlatformPlugin) GetResourcesDirs() []string {
+	var result []string
+
+	for _, val := range p.GetSourceDirs() {
+		result = append(result, path.Join(val, "Resources"))
+	}
+
+	return result
 }
 
 func newPlatformPlugin(path string) (*PlatformPlugin, error) {
@@ -272,14 +292,17 @@ func validatePHPFiles(c context.Context, ctx *ValidationContext) {
 		logging.FromContext(c).Infof("PHP 7.2 is not supported for PHP linting, using 7.3 now")
 	}
 
-	phpErrors, err := phplint.LintFolder(c, phpVersion, ctx.Extension.GetRootDir())
-	if err != nil {
-		ctx.AddWarning("php.linter", fmt.Sprintf("Could not lint php files: %s", err.Error()))
-		return
-	}
+	for _, val := range ctx.Extension.GetSourceDirs() {
+		phpErrors, err := phplint.LintFolder(c, phpVersion, val)
 
-	for _, error := range phpErrors {
-		ctx.AddError("php.linter", fmt.Sprintf("%s: %s", error.File, error.Message))
+		if err != nil {
+			ctx.AddWarning("php.linter", fmt.Sprintf("Could not lint php files: %s", err.Error()))
+			continue
+		}
+
+		for _, error := range phpErrors {
+			ctx.AddError("php.linter", fmt.Sprintf("%s: %s", error.File, error.Message))
+		}
 	}
 }
 

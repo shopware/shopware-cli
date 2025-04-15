@@ -14,8 +14,13 @@ import (
 
 func validateStorefrontSnippets(context *ValidationContext) {
 	rootDir := context.Extension.GetRootDir()
-	if err := validateStorefrontSnippetsByPath(rootDir, rootDir, context); err != nil {
-		return
+
+	for _, val := range context.Extension.GetResourcesDirs() {
+		storefrontFolder := path.Join(val, "snippet")
+
+		if err := validateStorefrontSnippetsByPath(storefrontFolder, rootDir, context); err != nil {
+			return
+		}
 	}
 
 	for _, extraBundle := range context.Extension.GetExtensionConfig().Build.ExtraBundles {
@@ -27,15 +32,15 @@ func validateStorefrontSnippets(context *ValidationContext) {
 			bundlePath = path.Join(bundlePath, extraBundle.Name)
 		}
 
-		if err := validateStorefrontSnippetsByPath(bundlePath, rootDir, context); err != nil {
+		storefrontFolder := path.Join(bundlePath, "Resources", "snippet")
+
+		if err := validateStorefrontSnippetsByPath(storefrontFolder, rootDir, context); err != nil {
 			return
 		}
 	}
 }
 
-func validateStorefrontSnippetsByPath(extensionRoot, rootDir string, context *ValidationContext) error {
-	snippetFolder := path.Join(extensionRoot, "Resources", "snippet")
-
+func validateStorefrontSnippetsByPath(snippetFolder, rootDir string, context *ValidationContext) error {
 	if _, err := os.Stat(snippetFolder); err != nil {
 		return nil //nolint:nilerr
 	}
@@ -110,8 +115,13 @@ func validateStorefrontSnippetsByPath(extensionRoot, rootDir string, context *Va
 
 func validateAdministrationSnippets(context *ValidationContext) {
 	rootDir := context.Extension.GetRootDir()
-	if err := validateAdministrationByPath(rootDir, rootDir, context); err != nil {
-		return
+
+	for _, val := range context.Extension.GetResourcesDirs() {
+		adminFolder := path.Join(val, "app", "administration")
+
+		if err := validateAdministrationByPath(adminFolder, rootDir, context); err != nil {
+			return
+		}
 	}
 
 	for _, extraBundle := range context.Extension.GetExtensionConfig().Build.ExtraBundles {
@@ -123,15 +133,15 @@ func validateAdministrationSnippets(context *ValidationContext) {
 			bundlePath = path.Join(bundlePath, extraBundle.Name)
 		}
 
-		if err := validateAdministrationByPath(bundlePath, rootDir, context); err != nil {
+		adminFolder := path.Join(bundlePath, "Resources", "app", "administration")
+
+		if err := validateAdministrationByPath(adminFolder, rootDir, context); err != nil {
 			return
 		}
 	}
 }
 
-func validateAdministrationByPath(extensionRoot, rootDir string, context *ValidationContext) error {
-	adminFolder := path.Join(extensionRoot, "Resources", "app", "administration")
-
+func validateAdministrationByPath(adminFolder, rootDir string, context *ValidationContext) error {
 	if _, err := os.Stat(adminFolder); err != nil {
 		return nil //nolint:nilerr
 	}

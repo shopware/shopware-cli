@@ -55,14 +55,19 @@ func newShopwareBundle(path string) (*ShopwareBundle, error) {
 	return &extension, nil
 }
 
+type composerAutoload struct {
+	Psr4 map[string]string `json:"psr-4"`
+}
+
 type shopwareBundleComposerJson struct {
-	Name    string                          `json:"name"`
-	Type    string                          `json:"type"`
-	License string                          `json:"license"`
-	Version string                          `json:"version"`
-	Require map[string]string               `json:"require"`
-	Extra   shopwareBundleComposerJsonExtra `json:"extra"`
-	Suggest map[string]string               `json:"suggest"`
+	Name     string                          `json:"name"`
+	Type     string                          `json:"type"`
+	License  string                          `json:"license"`
+	Version  string                          `json:"version"`
+	Require  map[string]string               `json:"require"`
+	Extra    shopwareBundleComposerJsonExtra `json:"extra"`
+	Suggest  map[string]string               `json:"suggest"`
+	Autoload composerAutoload                `json:"autoload"`
 }
 
 type shopwareBundleComposerJsonExtra struct {
@@ -78,9 +83,29 @@ func (p ShopwareBundle) GetRootDir() string {
 	return path.Join(p.path, "src")
 }
 
+func (p ShopwareBundle) GetSourceDirs() []string {
+	var result []string
+
+	for _, val := range p.Composer.Autoload.Psr4 {
+		result = append(result, path.Join(p.path, val))
+	}
+
+	return result
+}
+
 // GetResourcesDir returns the resources directory of the shopware bundle.
 func (p ShopwareBundle) GetResourcesDir() string {
 	return path.Join(p.GetRootDir(), "Resources")
+}
+
+func (p ShopwareBundle) GetResourcesDirs() []string {
+	var result []string
+
+	for _, val := range p.GetSourceDirs() {
+		result = append(result, path.Join(val, "Resources"))
+	}
+
+	return result
 }
 
 func (p ShopwareBundle) GetName() (string, error) {

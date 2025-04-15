@@ -22,8 +22,16 @@ func (a App) GetRootDir() string {
 	return a.path
 }
 
+func (a App) GetSourceDirs() []string {
+	return []string{a.path}
+}
+
 func (a App) GetResourcesDir() string {
 	return path.Join(a.path, "Resources")
+}
+
+func (a App) GetResourcesDirs() []string {
+	return []string{path.Join(a.path, "Resources")}
 }
 
 func (a App) GetComposerName() (string, error) {

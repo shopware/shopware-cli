@@ -100,10 +100,13 @@ type extensionMetadata struct {
 type Extension interface {
 	GetName() (string, error)
 	GetComposerName() (string, error)
+	// Deprecated: use the list variation instead
 	GetResourcesDir() string
+	GetResourcesDirs() []string
 
 	// GetRootDir Returns the root folder where the code is located plugin -> src, app ->
 	GetRootDir() string
+	GetSourceDirs() []string
 	GetVersion() (*version.Version, error)
 	GetLicense() (string, error)
 	GetShopwareVersionConstraint() (*version.Constraints, error)
