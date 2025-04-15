@@ -188,7 +188,7 @@ func TestReadComposerJsonDifferentRepositoryWritings(t *testing.T) {
 		tempDir := t.TempDir()
 		composerFile := filepath.Join(tempDir, "composer.json")
 
-		var content = `
+		content := `
 {
 	"repositories": [
 		{
@@ -208,17 +208,19 @@ func TestReadComposerJsonDifferentRepositoryWritings(t *testing.T) {
 		composer, err := ReadComposerJson(composerFile)
 		assert.NoError(t, err)
 		assert.Equal(t, composerFile, composer.path)
-		assert.Equal(t, "vcs", composer.Repositories[0].Type)
-		assert.Equal(t, "https://github.com/shopware/platform", composer.Repositories[0].URL)
-		assert.Equal(t, "path", composer.Repositories[1].Type)
-		assert.Equal(t, "custom/plugins", composer.Repositories[1].URL)
+
+		expectedRepos := []ComposerJsonRepository{
+			{Type: "vcs", URL: "https://github.com/shopware/platform"},
+			{Type: "path", URL: "custom/plugins"},
+		}
+		assert.ElementsMatch(t, expectedRepos, composer.Repositories)
 	})
 
 	t.Run("repository map", func(t *testing.T) {
 		tempDir := t.TempDir()
 		composerFile := filepath.Join(tempDir, "composer.json")
 
-		var content = `
+		content := `
 {
 	"repositories": {
 		"remote": {
@@ -238,9 +240,11 @@ func TestReadComposerJsonDifferentRepositoryWritings(t *testing.T) {
 		composer, err := ReadComposerJson(composerFile)
 		assert.NoError(t, err)
 		assert.Equal(t, composerFile, composer.path)
-		assert.Equal(t, "vcs", composer.Repositories[0].Type)
-		assert.Equal(t, "https://github.com/shopware/platform", composer.Repositories[0].URL)
-		assert.Equal(t, "path", composer.Repositories[1].Type)
-		assert.Equal(t, "custom/plugins", composer.Repositories[1].URL)
+
+		expectedRepos := []ComposerJsonRepository{
+			{Type: "vcs", URL: "https://github.com/shopware/platform"},
+			{Type: "path", URL: "custom/plugins"},
+		}
+		assert.ElementsMatch(t, expectedRepos, composer.Repositories)
 	})
 }
