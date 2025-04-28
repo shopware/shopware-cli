@@ -18,7 +18,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@c6295a65d1254861815972266d5933fd6e532bdf # ratchet:step-security/harden-runner@v2.11.1
+        uses: step-security/harden-runner@0634a2670c59f64b4a01f0f96f84700a4088b9f0 # ratchet:step-security/harden-runner@v2.12.0
         with:
           egress-policy: audit
 
@@ -35,16 +35,16 @@ jobs:
           check-latest: true
 
       - name: Install Nix
-        uses: DeterminateSystems/nix-installer-action@ce0da527df91a7fa0b6f54ead8997eb14e9fdaa5 # ratchet:DeterminateSystems/nix-installer-action@main
+        uses: DeterminateSystems/nix-installer-action@7b2eab0f0210922c27b0a3d76c5d768d8962bf30 # ratchet:DeterminateSystems/nix-installer-action@main
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@b5ca514318bd6ebac0fb2aedd5d36ec1b5c232a2 # ratchet:docker/setup-buildx-action@v3
 
       - name: Install Cosign
-        uses: sigstore/cosign-installer@d7d6bc7722e3daa8354c50bcb52f4837da5e9b6a # ratchet:sigstore/cosign-installer@v3
+        uses: sigstore/cosign-installer@3454372f43399081ed03b604cb2d021dabca52bb # ratchet:sigstore/cosign-installer@v3
 
       - name: Install Syft
-        uses: anchore/sbom-action/download-syft@f325610c9f50a54015d37c8d16cb3b0e2c8f4de0 # ratchet:anchore/sbom-action/download-syft@v0.18.0
+        uses: anchore/sbom-action/download-syft@9f7302141466aa6482940f15371237e9d9f4c34a # ratchet:anchore/sbom-action/download-syft@v0.19.0
 
       - name: Gather Frosh Homebrew Token
         uses: octo-sts/action@6177b4481c00308b3839969c3eca88c96a91775f # ratchet:octo-sts/action@v1.0.0
