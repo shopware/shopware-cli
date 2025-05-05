@@ -41,7 +41,7 @@ jobs:
           registry-url: "https://registry.npmjs.org"
 
       - name: Install Nix
-        uses: DeterminateSystems/nix-installer-action@7b2eab0f0210922c27b0a3d76c5d768d8962bf30 # ratchet:DeterminateSystems/nix-installer-action@main
+        uses: DeterminateSystems/nix-installer-action@7b9fe29d91f67b47e423cea399a44b8a20c9b324 # ratchet:DeterminateSystems/nix-installer-action@main
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@b5ca514318bd6ebac0fb2aedd5d36ec1b5c232a2 # ratchet:docker/setup-buildx-action@v3
