@@ -28,7 +28,7 @@ jobs:
           fetch-depth: 0
 
       - name: Set up Go
-        uses: actions/setup-go@0aaccfd150d50ccaeb58ebd88d36e91967a5f35b # ratchet:actions/setup-go@v5
+        uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # ratchet:actions/setup-go@v5
         with:
           go-version: '1.24'
           cache: true
@@ -41,7 +41,7 @@ jobs:
           registry-url: "https://registry.npmjs.org"
 
       - name: Install Nix
-        uses: DeterminateSystems/nix-installer-action@7b9fe29d91f67b47e423cea399a44b8a20c9b324 # ratchet:DeterminateSystems/nix-installer-action@main
+        uses: DeterminateSystems/nix-installer-action@affd83b25172be45c9401b6e56a2e27ac6662e06 # ratchet:DeterminateSystems/nix-installer-action@main
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@b5ca514318bd6ebac0fb2aedd5d36ec1b5c232a2 # ratchet:docker/setup-buildx-action@v3
