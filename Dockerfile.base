@@ -9,7 +9,7 @@ RUN <<EOF
 
     apk add --no-cache \
         git \
-        nodejs-20 \
+        nodejs-22 \
         npm \
         bun-bin \
         gettext \
