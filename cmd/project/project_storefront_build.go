@@ -14,6 +14,7 @@ import (
 var projectStorefrontBuildCmd = &cobra.Command{
 	Use:   "storefront-build [path]",
 	Short: "Builds the Storefront",
+	Long:  "Builds the Storefront. Use --only-custom-static-extensions to only build extensions from custom/static-plugins directory.",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		var projectRoot string
 		var err error
@@ -78,4 +79,6 @@ func init() {
 	projectStorefrontBuildCmd.PersistentFlags().Bool("force-install-dependencies", false, "Force install NPM dependencies")
 	projectStorefrontBuildCmd.PersistentFlags().String("only-extensions", "", "Only watch the given extensions (comma separated)")
 	projectStorefrontBuildCmd.PersistentFlags().String("skip-extensions", "", "Skips the given extensions (comma separated)")
+	projectStorefrontBuildCmd.PersistentFlags().Bool("only-custom-static-extensions", false, "Only build extensions from custom/static-plugins directory")
+	projectStorefrontBuildCmd.Flags().BoolP("verbose", "v", false, "Enable verbose output")
 }

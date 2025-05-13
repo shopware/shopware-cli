@@ -78,4 +78,6 @@ func init() {
 	projectAdminBuildCmd.PersistentFlags().Bool("force-install-dependencies", false, "Force install NPM dependencies")
 	projectAdminBuildCmd.PersistentFlags().String("only-extensions", "", "Only watch the given extensions (comma separated)")
 	projectAdminBuildCmd.PersistentFlags().String("skip-extensions", "", "Skips the given extensions (comma separated)")
+	projectAdminBuildCmd.PersistentFlags().Bool("only-custom-static-extensions", false, "Only build extensions from custom/static-plugins directory")
+	projectAdminBuildCmd.Flags().BoolP("verbose", "v", false, "Enable verbose output")
 }
