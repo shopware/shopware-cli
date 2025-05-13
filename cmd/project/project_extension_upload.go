@@ -273,7 +273,7 @@ func increaseExtensionVersion(ctx context.Context, ext extension.Extension) erro
 						return err
 					}
 
-					ver.Increase()
+					ver.IncreasePatch()
 
 					if err = encoder.EncodeElement(ver.String(), v); err != nil {
 						return err
@@ -327,7 +327,7 @@ func increaseExtensionVersion(ctx context.Context, ext extension.Extension) erro
 		return err
 	}
 
-	ver.Increase()
+	ver.IncreasePatch()
 
 	composerJson["version"] = ver.String()
 

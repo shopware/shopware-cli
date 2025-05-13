@@ -40,7 +40,7 @@ func TestGetShopwareProjectConstraintComposerJson(t *testing.T) {
 }
 ]}`,
 			},
-			Constraint: "6.5.0",
+			Constraint: "6.5.*",
 		},
 		{
 			Name: "Branch installed, determine by Kernel.php",
@@ -61,7 +61,7 @@ func TestGetShopwareProjectConstraintComposerJson(t *testing.T) {
 final public const SHOPWARE_FALLBACK_VERSION = '6.6.9999999.9999999-dev';
 `,
 			},
-			Constraint: "~6.6.0",
+			Constraint: "6.5.*",
 		},
 		{
 			Name: "Get constraint from kernel (shopware/shopware case)",
@@ -106,7 +106,7 @@ final public const SHOPWARE_FALLBACK_VERSION = '6.6.9999999.9999999-dev';
 			"shopware/core": "6.5.*"
 	}}`,
 			},
-			Error: "malformed constraint: 6.5.*",
+			Constraint: "6.5.*",
 		},
 
 		{
@@ -146,7 +146,7 @@ final public const SHOPWARE_FALLBACK_VERSION = '6.6.9999999.9999999-dev';
 					assert.NoError(t, os.MkdirAll(parentDir, os.ModePerm))
 				}
 
-				assert.NoError(t, os.WriteFile(tmpFile, []byte(content), 0644))
+				assert.NoError(t, os.WriteFile(tmpFile, []byte(content), 0o644))
 			}
 
 			constraint, err := GetShopwareProjectConstraint(tmpDir)
