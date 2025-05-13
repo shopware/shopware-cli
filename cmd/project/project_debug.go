@@ -48,10 +48,10 @@ var projectDebug = &cobra.Command{
 		table.Header([]string{"Name", "Path"})
 
 		for _, source := range sources {
-			table.Append([]string{source.Name, source.Path})
+			_ = table.Append([]string{source.Name, source.Path})
 		}
 
-		table.Render()
+		_ = table.Render()
 
 		return nil
 	},

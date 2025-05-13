@@ -49,7 +49,7 @@ var accountCompanyProducerExtensionListCmd = &cobra.Command{
 				compatible = "Yes"
 			}
 
-			table.Append([]string{
+			_ = table.Append([]string{
 				strconv.FormatInt(int64(extension.Id), 10),
 				extension.Name,
 				extension.Generation.Description,
@@ -58,7 +58,7 @@ var accountCompanyProducerExtensionListCmd = &cobra.Command{
 			})
 		}
 
-		table.Render()
+		_ = table.Render()
 
 		return nil
 	},

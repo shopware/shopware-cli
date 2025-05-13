@@ -55,14 +55,14 @@ var extensionValidateCmd = &cobra.Command{
 			table.Header([]string{"Type", "Identifier", "Message"})
 
 			for _, msg := range context.Errors() {
-				table.Append([]string{"Error", msg.Identifier, msg.Message})
+				_ = table.Append([]string{"Error", msg.Identifier, msg.Message})
 			}
 
 			for _, msg := range context.Warnings() {
-				table.Append([]string{"Warning", msg.Identifier, msg.Message})
+				_ = table.Append([]string{"Warning", msg.Identifier, msg.Message})
 			}
 
-			table.Render()
+			_ = table.Render()
 		}
 
 		if context.HasErrors() {

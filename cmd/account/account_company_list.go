@@ -19,7 +19,7 @@ var accountCompanyListCmd = &cobra.Command{
 		table.Header([]string{"ID", "Name", "Customer ID", "Roles"})
 
 		for _, membership := range services.AccountClient.GetMemberships() {
-			table.Append([]string{
+			_ = table.Append([]string{
 				strconv.FormatInt(int64(membership.Company.Id), 10),
 				membership.Company.Name,
 				membership.Company.CustomerNumber,
@@ -27,7 +27,7 @@ var accountCompanyListCmd = &cobra.Command{
 			})
 		}
 
-		table.Render()
+		_ = table.Render()
 	},
 }
 

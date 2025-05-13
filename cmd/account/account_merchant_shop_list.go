@@ -22,14 +22,14 @@ var accountCompanyMerchantShopListCmd = &cobra.Command{
 		}
 
 		for _, shop := range shops {
-			table.Append([]string{
+			_ = table.Append([]string{
 				strconv.FormatInt(int64(shop.Id), 10),
 				shop.Domain,
 				shop.Environment.Name,
 			})
 		}
 
-		table.Render()
+		_ = table.Render()
 
 		return nil
 	},
