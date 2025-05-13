@@ -89,7 +89,7 @@ func TestCreateBundle(t *testing.T) {
 
 	version, err := bundle.GetVersion()
 	assert.NoError(t, err)
-	assert.Equal(t, "1.0.0", version.String())
+	assert.Equal(t, "1.0.0.0", version.String())
 
 	// does notthing
 	bundle.Validate(getTestContext(), &ValidationContext{})

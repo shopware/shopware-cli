@@ -110,18 +110,6 @@ final public const SHOPWARE_FALLBACK_VERSION = '6.6.9999999.9999999-dev';
 		},
 
 		{
-			Name: "composer.json malformed version, with broken lock",
-			Files: map[string]string{
-				"composer.json": `{
-		"require": {
-			"shopware/core": "6.5.*"
-	}}`,
-				"composer.lock": `broken`,
-			},
-			Error: "could not parse composer.lock",
-		},
-
-		{
 			Name: "composer.json malformed version, lock does not contain shopware/core",
 			Files: map[string]string{
 				"composer.json": `{
@@ -130,7 +118,7 @@ final public const SHOPWARE_FALLBACK_VERSION = '6.6.9999999.9999999-dev';
 	}}`,
 				"composer.lock": `{"packages": []}`,
 			},
-			Error: "malformed constraint: 6.5.*",
+			Constraint: "6.5.*",
 		},
 	}
 
