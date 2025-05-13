@@ -16,7 +16,7 @@ var accountCompanyListCmd = &cobra.Command{
 	Long:    ``,
 	Run: func(_ *cobra.Command, _ []string) {
 		table := tablewriter.NewWriter(os.Stdout)
-		table.SetHeader([]string{"ID", "Name", "Customer ID", "Roles"})
+		table.Header([]string{"ID", "Name", "Customer ID", "Roles"})
 
 		for _, membership := range services.AccountClient.GetMemberships() {
 			table.Append([]string{

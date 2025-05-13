@@ -59,8 +59,7 @@ var projectExtensionOutdatedCmd = &cobra.Command{
 		}
 
 		table := tablewriter.NewWriter(os.Stdout)
-		table.SetColWidth(100)
-		table.SetHeader([]string{"Name", "Current Version", "Latest Version", "Update Source"})
+		table.Header([]string{"Name", "Current Version", "Latest Version", "Update Source"})
 
 		for _, extension := range extensions {
 			table.Append([]string{extension.Name, extension.Version, extension.LatestVersion, extension.UpdateSource})

@@ -52,8 +52,7 @@ var extensionValidateCmd = &cobra.Command{
 
 		if context.HasErrors() || context.HasWarnings() {
 			table := tablewriter.NewWriter(os.Stdout)
-			table.SetHeader([]string{"Type", "Identifier", "Message"})
-			table.SetAutoWrapText(false)
+			table.Header([]string{"Type", "Identifier", "Message"})
 
 			for _, msg := range context.Errors() {
 				table.Append([]string{"Error", msg.Identifier, msg.Message})

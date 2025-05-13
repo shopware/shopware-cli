@@ -36,7 +36,7 @@ var accountCompanyProducerExtensionListCmd = &cobra.Command{
 		}
 
 		table := tablewriter.NewWriter(os.Stdout)
-		table.SetHeader([]string{"ID", "Name", "Type", "Compatible with latest version", "Status"})
+		table.Header([]string{"ID", "Name", "Type", "Compatible with latest version", "Status"})
 
 		for _, extension := range extensions {
 			if extension.Status.Name == "deleted" {

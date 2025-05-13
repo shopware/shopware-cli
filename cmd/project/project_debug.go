@@ -45,8 +45,7 @@ var projectDebug = &cobra.Command{
 
 		fmt.Println("Following extensions/bundles has been detected")
 		table := tablewriter.NewWriter(os.Stdout)
-		table.SetColWidth(100)
-		table.SetHeader([]string{"Name", "Path"})
+		table.Header([]string{"Name", "Path"})
 
 		for _, source := range sources {
 			table.Append([]string{source.Name, source.Path})
