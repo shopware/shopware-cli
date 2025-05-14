@@ -113,7 +113,6 @@ func filterAndGetSources(cmd *cobra.Command, projectRoot string, shopCfg *shop.C
 	onlyExtensions, _ := cmd.PersistentFlags().GetString("only-extensions")
 	skipExtensions, _ := cmd.PersistentFlags().GetString("skip-extensions")
 	onlyCustomStatic, _ := cmd.PersistentFlags().GetBool("only-custom-static-extensions")
-	verbose, _ := cmd.Flags().GetBool("verbose")
 
 	if onlyExtensions != "" && skipExtensions != "" {
 		return nil, fmt.Errorf("only-extensions and skip-extensions cannot be used together")
@@ -121,53 +120,45 @@ func filterAndGetSources(cmd *cobra.Command, projectRoot string, shopCfg *shop.C
 
 	if onlyCustomStatic {
 		logging.FromContext(cmd.Context()).Infof("Only including extensions from custom/static-plugins directory")
-		if verbose {
-			logging.FromContext(cmd.Context()).Infof("Found %d total extensions before filtering", len(sources))
-			for _, s := range sources {
-				logging.FromContext(cmd.Context()).Infof("Extension: %s, Path: %s", s.Name, s.Path)
-			}
+		logging.FromContext(cmd.Context()).Debugf("Found %d total extensions before filtering", len(sources))
+		for _, s := range sources {
+			logging.FromContext(cmd.Context()).Debugf("Extension: %s, Path: %s", s.Name, s.Path)
 		}
 
 		sources = slices.DeleteFunc(sources, func(s asset.Source) bool {
 			// First try to resolve any symlinks
 			resolvedPath, err := filepath.EvalSymlinks(s.Path)
 			if err != nil {
-				if verbose {
-					logging.FromContext(cmd.Context()).Errorf("Failed to resolve symlink for %s: %v", s.Path, err)
-				}
+				logging.FromContext(cmd.Context()).Errorf("Failed to resolve symlink for %s: %v", s.Path, err)
 				return true
 			}
 
 			absPath, err := filepath.Abs(resolvedPath)
 			if err != nil {
-				if verbose {
-					logging.FromContext(cmd.Context()).Errorf("Failed to get absolute path for %s: %v", resolvedPath, err)
-				}
+				logging.FromContext(cmd.Context()).Errorf("Failed to get absolute path for %s: %v", resolvedPath, err)
 				return true
 			}
 
-			if verbose {
-				logging.FromContext(cmd.Context()).Infof("Extension %s: Original path: %s, Resolved absolute path: %s", s.Name, s.Path, absPath)
-			}
+			logging.FromContext(cmd.Context()).Debugf("Extension %s: Original path: %s, Resolved absolute path: %s", s.Name, s.Path, absPath)
 
-			isCustomStatic := strings.Contains(absPath, string(filepath.Separator)+"custom"+string(filepath.Separator)+"static-plugins"+string(filepath.Separator)) ||
-				strings.HasSuffix(absPath, string(filepath.Separator)+"custom"+string(filepath.Separator)+"static-plugins")
-			if verbose && !isCustomStatic {
-				logging.FromContext(cmd.Context()).Infof("Excluding %s as it's not in custom/static-plugins", s.Name)
+			customStaticDir := filepath.Join("custom", "static-plugins")
+
+			isCustomStatic := strings.Contains(absPath, customStaticDir) || strings.HasSuffix(absPath, customStaticDir)
+
+			if !isCustomStatic {
+				logging.FromContext(cmd.Context()).Debugf("Excluding %s as it's not in custom/static-plugins", s.Name)
 			}
 			return !isCustomStatic
 		})
 
-		if verbose {
-			logging.FromContext(cmd.Context()).Infof("Found %d custom/static extensions after filtering", len(sources))
-			for _, s := range sources {
-				logging.FromContext(cmd.Context()).Infof("Included extension: %s, Path: %s", s.Name, s.Path)
-			}
-		} else {
-			logging.FromContext(cmd.Context()).Infof("Included extensions:")
-			for _, s := range sources {
-				logging.FromContext(cmd.Context()).Infof("  - %s", s.Name)
-			}
+		logging.FromContext(cmd.Context()).Debugf("Found %d custom/static extensions after filtering", len(sources))
+		for _, s := range sources {
+			logging.FromContext(cmd.Context()).Debugf("Included extension: %s, Path: %s", s.Name, s.Path)
+		}
+
+		logging.FromContext(cmd.Context()).Debugf("Included extensions:")
+		for _, s := range sources {
+			logging.FromContext(cmd.Context()).Debugf("  - %s", s.Name)
 		}
 	}
 

@@ -3,6 +3,7 @@ package cmd
 import (
 	"context"
 	"os"
+	"slices"
 
 	"github.com/spf13/cobra"
 
@@ -27,13 +28,7 @@ var rootCmd = &cobra.Command{
 }
 
 func Execute(ctx context.Context) {
-	verbose := false
-
-	if err := rootCmd.ParseFlags(os.Args); err == nil {
-		verbose, _ = rootCmd.PersistentFlags().GetBool("verbose")
-	}
-
-	ctx = logging.WithLogger(ctx, logging.NewLogger(verbose))
+	ctx = logging.WithLogger(ctx, logging.NewLogger(slices.Contains(os.Args, "--verbose")))
 	accountApi.SetUserAgent("shopware-cli/" + version)
 
 	if err := rootCmd.ExecuteContext(ctx); err != nil {
