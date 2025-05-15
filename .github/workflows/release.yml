@@ -41,7 +41,7 @@ jobs:
           registry-url: "https://registry.npmjs.org"
 
       - name: Install Nix
-        uses: DeterminateSystems/nix-installer-action@affd83b25172be45c9401b6e56a2e27ac6662e06 # ratchet:DeterminateSystems/nix-installer-action@main
+        uses: DeterminateSystems/nix-installer-action@780ad73c034fe05a894ab1de77fa8691ad69228d # ratchet:DeterminateSystems/nix-installer-action@main
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@b5ca514318bd6ebac0fb2aedd5d36ec1b5c232a2 # ratchet:docker/setup-buildx-action@v3
@@ -50,7 +50,7 @@ jobs:
         uses: sigstore/cosign-installer@3454372f43399081ed03b604cb2d021dabca52bb # ratchet:sigstore/cosign-installer@v3
 
       - name: Install Syft
-        uses: anchore/sbom-action/download-syft@9f7302141466aa6482940f15371237e9d9f4c34a # ratchet:anchore/sbom-action/download-syft@v0.19.0
+        uses: anchore/sbom-action/download-syft@e11c554f704a0b820cbf8c51673f6945e0731532 # ratchet:anchore/sbom-action/download-syft@v0.20.0
 
       - name: Gather Frosh Homebrew Token
         uses: octo-sts/action@6177b4481c00308b3839969c3eca88c96a91775f # ratchet:octo-sts/action@v1.0.0
