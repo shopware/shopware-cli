@@ -30,7 +30,7 @@ require (
 	github.com/vulcand/oxy/v2 v2.0.3
 	github.com/wI2L/jsondiff v0.7.0
 	github.com/wk8/go-ordered-map/v2 v2.1.8
-	github.com/yuin/goldmark v1.7.11
+	github.com/yuin/goldmark v1.7.12
 	go.uber.org/zap v1.27.0
 	golang.org/x/text v0.25.0
 	google.golang.org/api v0.233.0
