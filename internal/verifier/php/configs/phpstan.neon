@@ -25,4 +25,7 @@ parameters:
         -
             function: 'dump()'
             message: 'do not use dump() in production code'
+        -
+            function: 'session_write_close()'
+            message: 'use save method of the SessionInterface instead of session_write_close(). E.g. $request->getSession()->save()'
             
