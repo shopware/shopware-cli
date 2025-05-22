@@ -2,6 +2,7 @@ package admintwiglinter
 
 import (
 	"encoding/json"
+	"fmt"
 	"strings"
 
 	"github.com/shyim/go-version"
@@ -76,6 +77,9 @@ func (s SelectFieldFixer) Fix(nodes []html.Node) error {
 			// Process children for slot conversion.
 			var labelText string
 			var optionObjects []map[string]interface{}
+			var expressionOptions = make(map[string]string)
+			var expressionObjectPrefix = "abc541d6050-b044-4de0-9edd-cad83c4f3365-"
+			var expressionObjectKey = 0
 
 			for _, child := range node.Children {
 				if elem, ok := child.(*html.ElementNode); ok {
@@ -100,7 +104,13 @@ func (s SelectFieldFixer) Fix(nodes []html.Node) error {
 						// Get option value from attributes.
 						for _, a := range elem.Attributes {
 							if attr, ok := a.(html.Attribute); ok {
-								if attr.Key == "value" {
+								switch attr.Key {
+								case ":value", "v-model:value":
+									expressionKey := fmt.Sprintf("%s:%d", expressionObjectPrefix, expressionObjectKey)
+									expressionOptions[expressionKey] = attr.Value
+									opt["value"] = expressionKey
+									expressionObjectKey++
+								case "value":
 									opt["value"] = attr.Value
 								}
 							}
@@ -110,7 +120,17 @@ func (s SelectFieldFixer) Fix(nodes []html.Node) error {
 						for _, inner := range elem.Children {
 							sb.WriteString(strings.TrimSpace(inner.Dump(0)))
 						}
-						opt["label"] = sb.String()
+
+						label := sb.String()
+
+						if strings.HasPrefix(label, "{{") && strings.HasSuffix(label, "}}") {
+							expressionKey := fmt.Sprintf("%s:%d", expressionObjectPrefix, expressionObjectKey)
+							expressionOptions[expressionKey] = strings.TrimSpace(strings.TrimPrefix(strings.TrimSuffix(label, "}}"), "{{"))
+							label = expressionKey
+							expressionObjectKey++
+						}
+
+						opt["label"] = label
 						optionObjects = append(optionObjects, opt)
 						goto SkipChild
 					}
@@ -133,9 +153,15 @@ func (s SelectFieldFixer) Fix(nodes []html.Node) error {
 				// Serialize optionObjects slice to JSON-like string.
 				bytes, err := json.Marshal(optionObjects)
 				if err == nil {
+					json := string(bytes)
+
+					for replacementKey, expression := range expressionOptions {
+						json = strings.ReplaceAll(json, "\""+replacementKey+"\"", fmt.Sprintf("(%s)", expression))
+					}
+
 					node.Attributes = append(node.Attributes, html.Attribute{
 						Key:   ":options",
-						Value: string(bytes),
+						Value: json,
 					})
 				}
 			}
