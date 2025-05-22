@@ -1,0 +1,3 @@
+<mt-select :options="[{\"label\":$tc('admin'),\"value\":\"admin\"}]"></mt-select>
+-----
+<mt-select :options="[{\"label\":$tc('admin'),\"value\":\"admin\"}]"></mt-select>

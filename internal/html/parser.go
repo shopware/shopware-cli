@@ -25,7 +25,7 @@ func (a Attribute) Dump(indent int) string {
 	if a.Value == "" {
 		return builder.String() + a.Key
 	}
-	return builder.String() + a.Key + "=\"" + a.Value + "\""
+	return builder.String() + a.Key + "=\"" + strings.ReplaceAll(a.Value, "\"", "\\\"") + "\""
 }
 
 // Node is the interface for nodes in our AST.
@@ -1016,13 +1016,21 @@ func (p *Parser) parseAttrValue() string {
 		start := p.pos
 		// Continue until we find a closing quote or reach the end
 		for p.pos < p.length && p.current() != '"' {
+			// skip when escaped
+			if p.current() == '\\' && (p.pos+1) < p.length {
+				p.pos++
+			}
+
 			p.pos++
 		}
+
 		val := p.input[start:p.pos]
+
 		if p.pos < p.length && p.current() == '"' {
 			p.pos++ // skip closing "
 		}
-		return val
+
+		return strings.ReplaceAll(val, "\\\"", "\"")
 	}
 	// Allow unquoted values.
 	start := p.pos
