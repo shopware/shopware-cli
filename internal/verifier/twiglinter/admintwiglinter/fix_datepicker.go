@@ -46,7 +46,7 @@ func (d DatepickerFixer) Fix(nodes []html.Node) error {
 				// Check if the attribute is an html.Attribute
 				if attr, ok := attrNode.(html.Attribute); ok {
 					switch attr.Key {
-					case ":value":
+					case ColonValueAttr:
 						attr.Key = ":model-value"
 						newAttrs = append(newAttrs, attr)
 					case VModelValueAttr:

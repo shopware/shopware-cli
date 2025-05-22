@@ -50,9 +50,9 @@ func (s SelectFieldFixer) Fix(nodes []html.Node) error {
 				// Check if the attribute is an html.Attribute
 				if attr, ok := attrNode.(html.Attribute); ok {
 					switch attr.Key {
-					case ":value":
+					case ColonValueAttr:
 						newAttrs = append(newAttrs, html.Attribute{Key: ":model-value", Value: attr.Value})
-					case "v-model:value":
+					case VModelValueAttr:
 						newAttrs = append(newAttrs, html.Attribute{Key: "v-model", Value: attr.Value})
 					case ":aside":
 						// Remove aside prop.
@@ -105,7 +105,7 @@ func (s SelectFieldFixer) Fix(nodes []html.Node) error {
 						for _, a := range elem.Attributes {
 							if attr, ok := a.(html.Attribute); ok {
 								switch attr.Key {
-								case ":value", "v-model:value":
+								case ColonValueAttr, VModelValueAttr:
 									expressionKey := fmt.Sprintf("%s:%d", expressionObjectPrefix, expressionObjectKey)
 									expressionOptions[expressionKey] = attr.Value
 									opt["value"] = expressionKey
