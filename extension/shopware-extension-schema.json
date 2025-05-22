@@ -84,6 +84,9 @@
         "pack": {
           "$ref": "#/$defs/ConfigBuildZipPack",
           "description": "Configuration for packing"
+        },
+        "checksum": {
+          "$ref": "#/$defs/ConfigBuildZipChecksum"
         }
       },
       "additionalProperties": false,
@@ -125,6 +128,19 @@
         "npm_strict": {
           "type": "boolean",
           "description": "When enabled, npm will install only production dependencies"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object"
+    },
+    "ConfigBuildZipChecksum": {
+      "properties": {
+        "ignore": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array",
+          "description": "Following files will be excluded from the checksum calculation"
         }
       },
       "additionalProperties": false,

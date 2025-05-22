@@ -198,6 +198,11 @@ var extensionZipCmd = &cobra.Command{
 			return fmt.Errorf("before hooks pack: %w", err)
 		}
 
+		// Generate checksums.json file before creating the zip
+		if err := extension.GenerateChecksumJSON(extDir, ext); err != nil {
+			return fmt.Errorf("generate checksum.json: %w", err)
+		}
+
 		if err := extension.CreateZip(tempDir, fileName); err != nil {
 			return fmt.Errorf("create zip file: %w", err)
 		}

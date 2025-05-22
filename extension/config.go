@@ -30,6 +30,14 @@ type ConfigBuildZip struct {
 	Assets ConfigBuildZipAssets `yaml:"assets,omitempty"`
 	// Configuration for packing
 	Pack ConfigBuildZipPack `yaml:"pack,omitempty"`
+
+	Checksum ConfigBuildZipChecksum `yaml:"checksum,omitempty"`
+}
+
+// Configuration for checksum calculation.
+type ConfigBuildZipChecksum struct {
+	// Following files will be excluded from the checksum calculation
+	Ignore []string `yaml:"ignore,omitempty"`
 }
 
 type ConfigBuildZipComposer struct {
