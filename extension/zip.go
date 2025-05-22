@@ -15,6 +15,7 @@ import (
 	"os/exec"
 	"path"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 
@@ -159,19 +160,21 @@ func ChecksumFile(filePath string) (string, error) {
 	return hex.EncodeToString(slicedHashBytes), nil
 }
 
+type ChecksumJSON struct {
+	Algorithm        string            `json:"algorithm"`
+	Hashes           map[string]string `json:"hashes"`
+	ExtensionVersion string            `json:"extensionVersion"`
+}
+
 // GenerateChecksumJSON creates a checksum.json file in the given folder
 func GenerateChecksumJSON(baseFolder string, ext Extension) error {
-	type ChecksumJSON struct {
-		Algorithm        string            `json:"algorithm"`
-		Hashes           map[string]string `json:"hashes"`
-		ExtensionVersion string            `json:"extensionVersion"`
-	}
-
 	// Get extension version
 	version, err := ext.GetVersion()
 	if err != nil {
 		return fmt.Errorf("get extension version: %w", err)
 	}
+
+	ignores := ext.GetExtensionConfig().Build.Zip.Checksum.Ignore
 
 	checksumData := ChecksumJSON{
 		Algorithm:        "xxh128",
@@ -198,6 +201,10 @@ func GenerateChecksumJSON(baseFolder string, ext Extension) error {
 		relPath, err := filepath.Rel(baseFolder, path)
 		if err != nil {
 			return fmt.Errorf("get relative path: %w", err)
+		}
+
+		if slices.Contains(ignores, relPath) {
+			return nil
 		}
 
 		// Skip checksum.json itself if it exists

@@ -2,6 +2,7 @@ package extension
 
 import (
 	"context"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"testing"
@@ -103,6 +104,7 @@ func TestGenerateChecksumJSON(t *testing.T) {
 	mockExt := &mockExtension{
 		name:    "TestExt",
 		version: version.Must(version.NewVersion("1.0.0")),
+		config:  &Config{},
 	}
 
 	// Generate checksum.json
@@ -132,10 +134,62 @@ func TestGenerateChecksumJSON(t *testing.T) {
 	assert.NotContains(t, string(content), "module.js", "node_modules files should be excluded")
 }
 
+func TestGenerateChecksumJSONIgnores(t *testing.T) {
+	// Create a temporary test directory with mock extension structure
+	tempDir := t.TempDir()
+	extensionDir := filepath.Join(tempDir, "TestExt")
+	srcDir := filepath.Join(extensionDir, "src")
+	resourcesDir := filepath.Join(srcDir, "Resources")
+
+	// Create directories
+	require.NoError(t, os.MkdirAll(resourcesDir, 0755), "Failed to create test directories")
+
+	// Create test files
+	testFiles := map[string]string{
+		filepath.Join(extensionDir, "composer.json"): `{"name": "test/test-ext", "version": "1.0.0"}`,
+		filepath.Join(resourcesDir, "test.txt"):      "test content",
+	}
+
+	for path, content := range testFiles {
+		err := os.WriteFile(path, []byte(content), 0644)
+		require.NoError(t, err, "Failed to create test file: "+path)
+	}
+
+	mockExt := &mockExtension{
+		name:    "TestExt",
+		version: version.Must(version.NewVersion("1.0.0")),
+		config:  &Config{},
+	}
+
+	mockExt.config.Build.Zip.Checksum.Ignore = []string{
+		"src/Resources/test.txt",
+	}
+
+	err := GenerateChecksumJSON(extensionDir, mockExt)
+	require.NoError(t, err, "GenerateChecksumJSON should not return an error")
+
+	// Verify checksum.json was created
+	checksumPath := filepath.Join(extensionDir, "checksum.json")
+	assert.FileExists(t, checksumPath, "checksum.json should exist")
+
+	// Read and parse the checksum.json
+	content, err := os.ReadFile(checksumPath)
+	require.NoError(t, err, "Failed to read checksum.json")
+
+	var checksum ChecksumJSON
+	err = json.Unmarshal(content, &checksum)
+	require.NoError(t, err, "Failed to unmarshal checksum.json")
+
+	// Verify that the checksum.json contains the expected files
+	assert.Contains(t, checksum.Hashes, "composer.json", "composer.json should be in the checksum list")
+	assert.NotContains(t, checksum.Hashes, "src/Resources/test.txt", "src/Resources/test.txt should be in the checksum list")
+}
+
 // Mock implementation of Extension interface for testing
 type mockExtension struct {
 	name    string
 	version *version.Version
+	config  *Config
 }
 
 func (m *mockExtension) GetName() (string, error) {
@@ -209,7 +263,7 @@ func (m *mockExtension) GetMetaData() *extensionMetadata {
 }
 
 func (m *mockExtension) GetExtensionConfig() *Config {
-	return &Config{}
+	return m.config
 }
 
 func (m *mockExtension) Validate(ctx context.Context, validationContext *ValidationContext) {
