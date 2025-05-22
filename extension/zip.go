@@ -162,7 +162,6 @@ func ChecksumFile(filePath string) (string, error) {
 // GenerateChecksumJSON creates a checksum.json file in the given folder
 func GenerateChecksumJSON(baseFolder string, ext Extension) error {
 	type ChecksumJSON struct {
-		Extensions       []string          `json:"extensions"`
 		Algorithm        string            `json:"algorithm"`
 		Hashes           map[string]string `json:"hashes"`
 		ExtensionVersion string            `json:"extensionVersion"`
@@ -175,7 +174,6 @@ func GenerateChecksumJSON(baseFolder string, ext Extension) error {
 	}
 
 	checksumData := ChecksumJSON{
-		Extensions:       []string{},
 		Algorithm:        "xxh128",
 		Hashes:           make(map[string]string),
 		ExtensionVersion: version.String(),
@@ -232,7 +230,7 @@ func GenerateChecksumJSON(baseFolder string, ext Extension) error {
 	}
 
 	// Write checksum.json file
-	checksumJSON, err := json.MarshalIndent(checksumData, "", "  ")
+	checksumJSON, err := json.Marshal(checksumData)
 	if err != nil {
 		return fmt.Errorf("marshal checksum data: %w", err)
 	}

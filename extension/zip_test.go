@@ -119,8 +119,8 @@ func TestGenerateChecksumJSON(t *testing.T) {
 
 	// Verify basic content structure
 	// We're not checking specific hash values as they might change with xxh128 implementation
-	assert.Contains(t, string(content), `"algorithm": "xxh128"`, "Algorithm should be xxh128")
-	assert.Contains(t, string(content), `"extensionVersion": "1.0.0"`, "Extension version should be 1.0.0")
+	assert.Contains(t, string(content), `"algorithm":"xxh128"`, "Algorithm should be xxh128")
+	assert.Contains(t, string(content), `"extensionVersion":"1.0.0"`, "Extension version should be 1.0.0")
 
 	// Verify files are included
 	assert.Contains(t, string(content), `"composer.json"`, "composer.json should be in the checksum list")
