@@ -36,7 +36,7 @@ func TestSelectFieldFixer(t *testing.T) {
     <option value="2">Option 2</option>
 </sw-select-field>`,
 			after: `<mt-select
-    :options="[{\"label\":\"Option 1\",\"value\":\"1\"},{\"label\":\"Option 2\",\"value\":\"2\"}]"
+    :options="[{&quot;label&quot;:&quot;Option 1&quot;,&quot;value&quot;:&quot;1&quot;},{&quot;label&quot;:&quot;Option 2&quot;,&quot;value&quot;:&quot;2&quot;}]"
 ></mt-select>`,
 		},
 		{
