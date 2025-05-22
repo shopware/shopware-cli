@@ -49,6 +49,7 @@ var (
 		"phpunit.xml.dist",
 		"psalm.xml",
 		"rector.php",
+		"src/Resources/app/administration/.tmp",
 		"src/Resources/app/administration/node_modules",
 		"src/Resources/app/node_modules",
 		"src/Resources/app/storefront/node_modules",
