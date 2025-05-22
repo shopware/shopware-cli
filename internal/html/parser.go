@@ -6,21 +6,26 @@ import (
 	"unicode"
 )
 
-var fromTextToEntities = map[string]string{
-	"&":  "&amp;",
-	"\"": "&quot;",
-	"+":  "&#43;",
-	"<":  "&lt;",
-	">":  "&gt;",
+type AttributeEntityEncodingFromTo struct {
+	From string
+	To   string
 }
-var fromEntitiesToText = map[string]string{
-	"&#34;":  "\"",
-	"&quot;": "\"",
-	"&#39;":  "\\",
-	"&#43;":  "+",
-	"&lt;":   "<",
-	"&gt;":   ">",
-	"&amp;":  "&",
+
+var fromTextToEntities = []AttributeEntityEncodingFromTo{
+	{From: "&", To: "&amp;"},
+	{From: "\"", To: "&quot;"},
+	{From: "+", To: "&#43;"},
+	{From: "<", To: "&lt;"},
+	{From: ">", To: "&gt;"},
+}
+var fromEntitiesToText = []AttributeEntityEncodingFromTo{
+	{From: "&#34;", To: "\""},
+	{From: "&quot;", To: "\""},
+	{From: "&#39;", To: "\\"},
+	{From: "&#43;", To: "+"},
+	{From: "&lt;", To: "<"},
+	{From: "&gt;", To: ">"},
+	{From: "&amp;", To: "&"},
 }
 
 const htmlCommentStart = "<!--"
@@ -45,8 +50,8 @@ func (a Attribute) Dump(indent int) string {
 
 	val := a.Value
 
-	for decoded, encoded := range fromTextToEntities {
-		val = strings.ReplaceAll(val, decoded, encoded)
+	for _, encoding := range fromTextToEntities {
+		val = strings.ReplaceAll(val, encoding.From, encoding.To)
 	}
 
 	return builder.String() + a.Key + "=\"" + val + "\""
@@ -1049,8 +1054,8 @@ func (p *Parser) parseAttrValue() string {
 			p.pos++ // skip closing "
 		}
 
-		for encoded, decoded := range fromEntitiesToText {
-			val = strings.ReplaceAll(val, encoded, decoded)
+		for _, encoding := range fromEntitiesToText {
+			val = strings.ReplaceAll(val, encoding.From, encoding.To)
 		}
 
 		return val
@@ -1064,8 +1069,8 @@ func (p *Parser) parseAttrValue() string {
 
 	val := p.input[start:p.pos]
 
-	for encoded, decoded := range fromEntitiesToText {
-		val = strings.ReplaceAll(val, encoded, decoded)
+	for _, encoding := range fromEntitiesToText {
+		val = strings.ReplaceAll(val, encoding.From, encoding.To)
 	}
 
 	return val
