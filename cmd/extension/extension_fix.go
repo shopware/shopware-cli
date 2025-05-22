@@ -22,9 +22,9 @@ var extensionFixCmd = &cobra.Command{
 	},
 	RunE: func(cmd *cobra.Command, args []string) error {
 		allowNonGit, _ := cmd.Flags().GetBool("allow-non-git")
-		gitPath := filepath.Join(args[0], ".git")
+
 		if !allowNonGit {
-			if stat, err := os.Stat(gitPath); err != nil || !stat.IsDir() {
+			if stat, err := os.Stat(filepath.Join(args[0], ".git")); err != nil || !stat.IsDir() {
 				return fmt.Errorf("provided folder is not a git repository. Use --allow-non-git flag to run anyway")
 			}
 		}
