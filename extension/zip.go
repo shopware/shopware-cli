@@ -3,6 +3,7 @@ package extension
 import (
 	"archive/zip"
 	"context"
+	"encoding/hex"
 	"encoding/json"
 	"encoding/xml"
 	"fmt"
@@ -18,6 +19,7 @@ import (
 	"strings"
 
 	"github.com/shyim/go-version"
+	"github.com/zeebo/xxh3"
 
 	"github.com/shopware/shopware-cli/internal/changelog"
 	"github.com/shopware/shopware-cli/logging"
@@ -125,6 +127,119 @@ func Unzip(r *zip.Reader, dest string) error {
 		if err := os.Chtimes(fpath, f.Modified, f.Modified); err != nil {
 			return fmt.Errorf(errorFormat, err)
 		}
+	}
+
+	return nil
+}
+
+// ChecksumFile generates a XXH128 checksum for a given file
+func ChecksumFile(filePath string) (string, error) {
+	file, err := os.Open(filePath)
+	if err != nil {
+		return "", fmt.Errorf("open file for checksum: %w", err)
+	}
+	defer func() {
+		_ = file.Close()
+	}()
+
+	// Read the file content
+	data, err := io.ReadAll(file)
+	if err != nil {
+		return "", fmt.Errorf("read file for checksum: %w", err)
+	}
+
+	// Calculate XXH128 hash
+	hash := xxh3.Hash128(data)
+
+	// Convert the [16]byte to []byte for hex encoding
+	hashBytes := hash.Bytes()
+	slicedHashBytes := hashBytes[:]
+
+	// Convert to hex string
+	return hex.EncodeToString(slicedHashBytes), nil
+}
+
+// GenerateChecksumJSON creates a checksum.json file in the given folder
+func GenerateChecksumJSON(baseFolder string, ext Extension) error {
+	type ChecksumJSON struct {
+		Extensions       []string          `json:"extensions"`
+		Algorithm        string            `json:"algorithm"`
+		Hashes           map[string]string `json:"hashes"`
+		ExtensionVersion string            `json:"extensionVersion"`
+	}
+
+	// Get extension version
+	version, err := ext.GetVersion()
+	if err != nil {
+		return fmt.Errorf("get extension version: %w", err)
+	}
+
+	checksumData := ChecksumJSON{
+		Extensions:       []string{},
+		Algorithm:        "xxh128",
+		Hashes:           make(map[string]string),
+		ExtensionVersion: version.String(),
+	}
+
+	// Walk through all files in the folder and calculate checksums
+	err = filepath.Walk(baseFolder, func(path string, info fs.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+
+		// Skip directories and hidden files
+		if info.IsDir() {
+			// Skip vendor and node_modules directories
+			if info.Name() == "vendor" || info.Name() == "node_modules" {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+
+		// Get relative path for the file
+		relPath, err := filepath.Rel(baseFolder, path)
+		if err != nil {
+			return fmt.Errorf("get relative path: %w", err)
+		}
+
+		// Skip checksum.json itself if it exists
+		if relPath == "checksum.json" {
+			return nil
+		}
+
+		// Skip vendor and node_modules files
+		if strings.Contains(relPath, "vendor/") || strings.Contains(relPath, "node_modules/") {
+			return nil
+		}
+
+		// Calculate checksum
+		checksum, err := ChecksumFile(path)
+		if err != nil {
+			return err
+		}
+
+		// Normalize path separators to forward slashes for consistent output
+		relPath = filepath.ToSlash(relPath)
+
+		// Add to hashes map
+		checksumData.Hashes[relPath] = checksum
+
+		return nil
+	})
+
+	if err != nil {
+		return fmt.Errorf("walking directory for checksums: %w", err)
+	}
+
+	// Write checksum.json file
+	checksumJSON, err := json.MarshalIndent(checksumData, "", "  ")
+	if err != nil {
+		return fmt.Errorf("marshal checksum data: %w", err)
+	}
+
+	checksumPath := filepath.Join(baseFolder, "checksum.json")
+	if err := os.WriteFile(checksumPath, checksumJSON, 0644); err != nil {
+		return fmt.Errorf("write checksum file: %w", err)
 	}
 
 	return nil
