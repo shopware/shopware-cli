@@ -27,6 +27,7 @@ type Config struct {
 	Sync             *ConfigSync       `yaml:"sync,omitempty"`
 	ConfigDeployment *ConfigDeployment `yaml:"deployment,omitempty"`
 	Validation       *ConfigValidation `yaml:"validation,omitempty"`
+	ImageProxy       *ConfigImageProxy `yaml:"image_proxy,omitempty"`
 	foundConfig      bool
 }
 
@@ -267,6 +268,11 @@ type ConfigValidationIgnoreItem struct {
 type ConfigValidationIgnoreExtension struct {
 	// The name of the extension to ignore.
 	Name string `yaml:"name"`
+}
+
+type ConfigImageProxy struct {
+	// The URL of the upstream server to proxy requests to when files are not found locally
+	URL string `yaml:"url,omitempty"`
 }
 
 func ReadConfig(fileName string, allowFallback bool) (*Config, error) {
