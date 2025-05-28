@@ -309,12 +309,10 @@ func ReadConfig(fileName string, allowFallback bool) (*Config, error) {
 				return nil, fmt.Errorf("error while reading included config: %s", err.Error())
 			}
 
-			err = mergo.Merge(additionalConfig, config, mergo.WithOverride, mergo.WithSliceDeepCopy)
+			err = mergo.Merge(config, additionalConfig, mergo.WithOverride, mergo.WithSliceDeepCopy)
 			if err != nil {
 				return nil, fmt.Errorf("error while merging included config: %s", err.Error())
 			}
-
-			config = additionalConfig
 		}
 	}
 
