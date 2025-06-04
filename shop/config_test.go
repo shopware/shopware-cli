@@ -10,7 +10,6 @@ import (
 
 func TestConfigMerging(t *testing.T) {
 	tmpDir := t.TempDir()
-	defer os.RemoveAll(tmpDir)
 
 	t.Chdir(tmpDir)
 
@@ -48,4 +47,6 @@ sync:
 	assert.NotNil(t, config.Sync.Config)
 	assert.Len(t, config.Sync.Config, 1)
 	assert.Equal(t, "xyz.nuonic.dev", config.Sync.Config[0].Settings["core.store.licenseHost"])
+
+	assert.NoError(t, os.RemoveAll(tmpDir))
 }
