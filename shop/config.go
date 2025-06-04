@@ -27,6 +27,7 @@ type Config struct {
 	Sync             *ConfigSync       `yaml:"sync,omitempty"`
 	ConfigDeployment *ConfigDeployment `yaml:"deployment,omitempty"`
 	Validation       *ConfigValidation `yaml:"validation,omitempty"`
+	ImageProxy       *ConfigImageProxy `yaml:"image_proxy,omitempty"`
 	foundConfig      bool
 }
 
@@ -269,6 +270,11 @@ type ConfigValidationIgnoreExtension struct {
 	Name string `yaml:"name"`
 }
 
+type ConfigImageProxy struct {
+	// The URL of the upstream server to proxy requests to when files are not found locally
+	URL string `yaml:"url,omitempty"`
+}
+
 func ReadConfig(fileName string, allowFallback bool) (*Config, error) {
 	config := &Config{foundConfig: false}
 
@@ -303,12 +309,10 @@ func ReadConfig(fileName string, allowFallback bool) (*Config, error) {
 				return nil, fmt.Errorf("error while reading included config: %s", err.Error())
 			}
 
-			err = mergo.Merge(additionalConfig, config, mergo.WithOverride, mergo.WithSliceDeepCopy)
+			err = mergo.Merge(config, additionalConfig, mergo.WithOverride, mergo.WithSliceDeepCopy)
 			if err != nil {
 				return nil, fmt.Errorf("error while merging included config: %s", err.Error())
 			}
-
-			config = additionalConfig
 		}
 	}
 

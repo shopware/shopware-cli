@@ -30,10 +30,6 @@ func DoCheckReport(result *Check, reportingFormat string) error {
 		return doJUnitReport(result)
 	}
 
-	if result.HasErrors() {
-		os.Exit(1)
-	}
-
 	return nil
 }
 
@@ -72,6 +68,10 @@ func doSummaryReport(result *Check) error {
 	//nolint:forbidigo
 	fmt.Printf("\n✖ %d problems (%d errors, %d warnings)\n", totalProblems, errorCount, warningCount)
 
+	if result.HasErrors() {
+		os.Exit(1)
+	}
+
 	return nil
 }
 
@@ -83,6 +83,10 @@ func doJSONReport(result *Check) error {
 
 	if _, err := os.Stdout.Write(j); err != nil {
 		return fmt.Errorf("failed to write JSON output: %w", err)
+	}
+
+	if result.HasErrors() {
+		os.Exit(1)
 	}
 
 	return nil
@@ -105,6 +109,10 @@ func doGitHubReport(result *Check) error {
 			//nolint:forbidigo
 			fmt.Printf("::%s file=%s,line=%d::%s\n", res.Severity, res.Path, res.Line, res.Message)
 		}
+	}
+
+	if result.HasErrors() {
+		os.Exit(1)
 	}
 
 	return nil
@@ -196,12 +204,20 @@ func doJUnitReport(result *Check) error {
 		return fmt.Errorf("failed to write JUnit XML: %w", err)
 	}
 
+	if result.HasErrors() {
+		os.Exit(1)
+	}
+
 	return nil
 }
 
 func doMarkdownReport(result *Check) error {
 	if _, err := os.Stdout.Write([]byte(convertResultsToMarkdown(result.Results))); err != nil {
 		return fmt.Errorf("failed to write markdown output: %w", err)
+	}
+
+	if result.HasErrors() {
+		os.Exit(1)
 	}
 
 	return nil

@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path"
+	"regexp"
 	"strings"
 )
 
@@ -101,6 +102,10 @@ func (p PhpStan) Check(ctx context.Context, check *Check, config ToolConfig) err
 
 		for fileName, file := range phpstanResult.Files {
 			for _, message := range file.Messages {
+				if strings.HasSuffix(message.Identifier, "deprecated") && p.isUselessDeprecation(message.Message) {
+					continue
+				}
+
 				check.AddResult(CheckResult{
 					Path:       strings.TrimPrefix(strings.TrimPrefix(fileName, "/private"), config.RootDir+"/"),
 					Line:       message.Line,
@@ -121,6 +126,26 @@ func (p PhpStan) Fix(ctx context.Context, config ToolConfig) error {
 
 func (p PhpStan) Format(ctx context.Context, config ToolConfig, dryRun bool) error {
 	return nil
+}
+
+var tagPartRegex = regexp.MustCompile(`tag:v[0-9]+.[0-9]+.[0-9]+`)
+var parameterRemovedRegex = regexp.MustCompile("Parameter.*will be removed")
+
+func (p PhpStan) isUselessDeprecation(message string) bool {
+	if !tagPartRegex.MatchString(message) {
+		return true
+	}
+
+	if parameterRemovedRegex.MatchString(message) {
+		return true
+	}
+
+	if strings.Contains(message, "reason:return-type-change") ||
+		strings.Contains(message, "reason:new-optional-parameter") {
+		return true
+	}
+
+	return false
 }
 
 func init() {

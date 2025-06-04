@@ -1,0 +1,5 @@
+<div v-if="foo && bla"></div>
+<div v-if="foo > 0"></div>
+-----
+<div v-if="foo && bla"></div>
+<div v-if="foo > 0"></div>

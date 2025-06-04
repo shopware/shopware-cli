@@ -6,6 +6,20 @@ import (
 	"unicode"
 )
 
+type AttributeEntityEncodingFromTo struct {
+	From string
+	To   string
+}
+
+var fromTextToEntities = []AttributeEntityEncodingFromTo{
+	{From: "\"", To: "&quot;"},
+}
+var fromEntitiesToText = []AttributeEntityEncodingFromTo{
+	{From: "&#34;", To: "\""},
+	{From: "&quot;", To: "\""},
+	{From: "&#39;", To: "\\"},
+}
+
 const htmlCommentStart = "<!--"
 
 // Attribute represents an HTML attribute with key and value.
@@ -25,7 +39,14 @@ func (a Attribute) Dump(indent int) string {
 	if a.Value == "" {
 		return builder.String() + a.Key
 	}
-	return builder.String() + a.Key + "=\"" + a.Value + "\""
+
+	val := a.Value
+
+	for _, encoding := range fromTextToEntities {
+		val = strings.ReplaceAll(val, encoding.From, encoding.To)
+	}
+
+	return builder.String() + a.Key + "=\"" + val + "\""
 }
 
 // Node is the interface for nodes in our AST.
@@ -1018,10 +1039,17 @@ func (p *Parser) parseAttrValue() string {
 		for p.pos < p.length && p.current() != '"' {
 			p.pos++
 		}
+
 		val := p.input[start:p.pos]
+
 		if p.pos < p.length && p.current() == '"' {
 			p.pos++ // skip closing "
 		}
+
+		for _, encoding := range fromEntitiesToText {
+			val = strings.ReplaceAll(val, encoding.From, encoding.To)
+		}
+
 		return val
 	}
 	// Allow unquoted values.
@@ -1030,7 +1058,14 @@ func (p *Parser) parseAttrValue() string {
 		p.current() != ' ' && p.current() != '>' && p.current() != '\n' && p.current() != '\r' {
 		p.pos++
 	}
-	return p.input[start:p.pos]
+
+	val := p.input[start:p.pos]
+
+	for _, encoding := range fromEntitiesToText {
+		val = strings.ReplaceAll(val, encoding.From, encoding.To)
+	}
+
+	return val
 }
 
 func (p *Parser) parseTwigDirective() (Node, error) {

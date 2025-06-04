@@ -39,10 +39,10 @@ func SetupTools(ctx context.Context, currentVersion string) error {
 		return fmt.Errorf("php version must be at least 8.2.0 to use this. Update your PHP version or use the shopware-cli docker image")
 	}
 
-	if ok, err := system.IsNodeVersionAtLeast("22.0.0"); err != nil {
+	if ok, err := system.IsNodeVersionAtLeast("20.0.0"); err != nil {
 		return fmt.Errorf("failed to check installed Node.js version: %w", err)
 	} else if !ok {
-		return fmt.Errorf("node.js version must be at least 22.0.0 to use this. Update your Node.js version or use the shopware-cli docker image")
+		return fmt.Errorf("node.js version must be at least 20.0.0 to use this. Update your Node.js version or use the shopware-cli docker image")
 	}
 
 	logging.FromContext(ctx).Debugf("Using tool directory: %s", toolsDir)

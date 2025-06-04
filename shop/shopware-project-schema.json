@@ -32,6 +32,9 @@
         },
         "validation": {
           "$ref": "#/$defs/ConfigValidation"
+        },
+        "image_proxy": {
+          "$ref": "#/$defs/ConfigImageProxy"
         }
       },
       "additionalProperties": false,
@@ -266,6 +269,16 @@
           },
           "type": "object",
           "description": "Add an where condition to that table, schema is table name as key, and where statement as value"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object"
+    },
+    "ConfigImageProxy": {
+      "properties": {
+        "url": {
+          "type": "string",
+          "description": "The URL of the upstream server to proxy requests to when files are not found locally"
         }
       },
       "additionalProperties": false,

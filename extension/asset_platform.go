@@ -122,7 +122,7 @@ func BuildAssetsForExtensions(ctx context.Context, sources []asset.Source, asset
 				}
 			}
 
-			envList := []string{fmt.Sprintf("PROJECT_ROOT=%s", shopwareRoot)}
+			envList := []string{fmt.Sprintf("PROJECT_ROOT=%s", shopwareRoot), fmt.Sprintf("ADMIN_ROOT=%s", PlatformPath(shopwareRoot, "Administration", ""))}
 
 			if !assetConfig.ContributeProject {
 				envList = append(envList, "SHOPWARE_ADMIN_BUILD_ONLY_EXTENSIONS=1", "SHOPWARE_ADMIN_SKIP_SOURCEMAP_GENERATION=1")
@@ -402,7 +402,7 @@ func InstallNPMDependencies(path string, packageJsonData NpmPackage, additionalP
 	installCmd.Env = append(installCmd.Env, "PUPPETEER_SKIP_DOWNLOAD=1", "NPM_CONFIG_ENGINE_STRICT=false", "NPM_CONFIG_FUND=false", "NPM_CONFIG_AUDIT=false", "NPM_CONFIG_UPDATE_NOTIFIER=false")
 
 	if err := installCmd.Run(); err != nil {
-		return err
+		return fmt.Errorf("installing dependencies for %s failed with error: %w", path, err)
 	}
 
 	return nil
