@@ -49,6 +49,7 @@ var (
 		"grumphp.yml",
 		"phpstan.neon",
 		"phpstan.neon.dist",
+		"phpstan-baseline.neon",
 		"phpunit.xml.dist",
 		"psalm.xml",
 		"rector.php",
