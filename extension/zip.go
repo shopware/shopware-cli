@@ -164,6 +164,7 @@ func ChecksumFile(filePath string) (string, error) {
 type ChecksumJSON struct {
 	Algorithm        string            `json:"algorithm"`
 	Hashes           map[string]string `json:"hashes"`
+	Version          string            `json:"version"`
 	ExtensionVersion string            `json:"extensionVersion"`
 }
 
@@ -180,6 +181,7 @@ func GenerateChecksumJSON(baseFolder string, ext Extension) error {
 	checksumData := ChecksumJSON{
 		Algorithm:        "xxh128",
 		Hashes:           make(map[string]string),
+		Version:          "1.0.0",
 		ExtensionVersion: version.String(),
 	}
 
@@ -195,6 +197,11 @@ func GenerateChecksumJSON(baseFolder string, ext Extension) error {
 			if info.Name() == "vendor" || info.Name() == "node_modules" {
 				return filepath.SkipDir
 			}
+			return nil
+		}
+
+		if strings.Contains(path, "Resources/public/administration") {
+			// Skip files in Resources/public/administration
 			return nil
 		}
 
