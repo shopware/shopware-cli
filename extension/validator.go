@@ -102,7 +102,8 @@ func runDefaultValidate(vc *ValidationContext) {
 	name, nameErr := vc.Extension.GetName()
 	_, shopwareVersionErr := vc.Extension.GetShopwareVersionConstraint()
 
-	if versionErr != nil {
+	// Skip version validation for ShopwareBundle
+	if versionErr != nil && vc.Extension.GetType() != TypeShopwareBundle {
 		vc.AddError("metadata.version", versionErr.Error())
 	}
 
@@ -174,19 +175,22 @@ func runDefaultValidate(vc *ValidationContext) {
 		vc.AddError("metadata.label", "label is not translated in english")
 	}
 
-	if len([]rune(metaData.Description.German)) == 0 {
-		vc.AddError("metadata.description", "description is not translated in german")
-	}
+	// Skip description validation for ShopwareBundle
+	if vc.Extension.GetType() != TypeShopwareBundle {
+		if len([]rune(metaData.Description.German)) == 0 {
+			vc.AddError("metadata.description", "description is not translated in german")
+		}
 
-	if len(metaData.Description.English) == 0 {
-		vc.AddError("metadata.description", "description is not translated in english")
-	}
+		if len(metaData.Description.English) == 0 {
+			vc.AddError("metadata.description", "description is not translated in english")
+		}
 
-	if len([]rune(metaData.Description.German)) < 150 || len([]rune(metaData.Description.German)) > 185 {
-		vc.AddError("metadata.description", fmt.Sprintf("the german description with length of %d should have a length from 150 up to 185 characters.", len([]rune(metaData.Description.German))))
-	}
+		if len([]rune(metaData.Description.German)) < 150 || len([]rune(metaData.Description.German)) > 185 {
+			vc.AddError("metadata.description", fmt.Sprintf("the german description with length of %d should have a length from 150 up to 185 characters.", len([]rune(metaData.Description.German))))
+		}
 
-	if len(metaData.Description.English) < 150 || len(metaData.Description.English) > 185 {
-		vc.AddError("metadata.description", fmt.Sprintf("the english description with length of %d should have a length from 150 up to 185 characters.", len(metaData.Description.English)))
+		if len(metaData.Description.English) < 150 || len(metaData.Description.English) > 185 {
+			vc.AddError("metadata.description", fmt.Sprintf("the english description with length of %d should have a length from 150 up to 185 characters.", len(metaData.Description.English)))
+		}
 	}
 }
