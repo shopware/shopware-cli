@@ -108,7 +108,7 @@ func TestGenerateChecksumJSON(t *testing.T) {
 	}
 
 	// Generate checksum.json
-	err := GenerateChecksumJSON(extensionDir, mockExt)
+	err := GenerateChecksumJSON(t.Context(), extensionDir, mockExt)
 	require.NoError(t, err, "GenerateChecksumJSON should not return an error")
 
 	// Verify checksum.json was created
@@ -165,7 +165,7 @@ func TestGenerateChecksumJSONIgnores(t *testing.T) {
 		"src/Resources/test.txt",
 	}
 
-	err := GenerateChecksumJSON(extensionDir, mockExt)
+	err := GenerateChecksumJSON(t.Context(), extensionDir, mockExt)
 	require.NoError(t, err, "GenerateChecksumJSON should not return an error")
 
 	// Verify checksum.json was created

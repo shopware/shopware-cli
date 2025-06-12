@@ -170,11 +170,12 @@ type ChecksumJSON struct {
 }
 
 // GenerateChecksumJSON creates a checksum.json file in the given folder
-func GenerateChecksumJSON(baseFolder string, ext Extension) error {
-	// Get extension version
+func GenerateChecksumJSON(ctx context.Context, baseFolder string, ext Extension) error {
 	version, err := ext.GetVersion()
 	if err != nil {
-		return fmt.Errorf("get extension version: %w", err)
+		logging.FromContext(ctx).Info("Could not determine extension version skipping checksum.json generation: ", err)
+
+		return nil
 	}
 
 	ignores := ext.GetExtensionConfig().Build.Zip.Checksum.Ignore

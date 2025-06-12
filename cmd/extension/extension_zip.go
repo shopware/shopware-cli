@@ -199,7 +199,7 @@ var extensionZipCmd = &cobra.Command{
 		}
 
 		// Generate checksums.json file before creating the zip
-		if err := extension.GenerateChecksumJSON(extDir, ext); err != nil {
+		if err := extension.GenerateChecksumJSON(cmd.Context(), extDir, ext); err != nil {
 			return fmt.Errorf("generate checksum.json: %w", err)
 		}
 
