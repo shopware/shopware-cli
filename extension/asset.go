@@ -2,6 +2,7 @@ package extension
 
 import (
 	"context"
+	"os"
 	"path"
 	"path/filepath"
 
@@ -38,9 +39,16 @@ func ConvertExtensionsToSources(ctx context.Context, extensions []Extension) []a
 					bundleName = filepath.Base(bundle.Path)
 				}
 
+				bundlePath := path.Join(ext.GetRootDir(), bundle.Path)
+
+				if _, err := os.Stat(bundlePath); os.IsNotExist(err) {
+					logging.FromContext(ctx).Errorf("Skipping extra bundle %s as its folder %s does not exist", bundleName, bundlePath)
+					continue
+				}
+
 				sources = append(sources, asset.Source{
 					Name:                        bundleName,
-					Path:                        path.Join(ext.GetRootDir(), bundle.Path),
+					Path:                        bundlePath,
 					AdminEsbuildCompatible:      ext.GetExtensionConfig().Build.Zip.Assets.EnableESBuildForAdmin,
 					StorefrontEsbuildCompatible: ext.GetExtensionConfig().Build.Zip.Assets.EnableESBuildForStorefront,
 					DisableSass:                 ext.GetExtensionConfig().Build.Zip.Assets.DisableSass,
