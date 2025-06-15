@@ -59,6 +59,13 @@ func (t TextFieldFixer) Fix(nodes []html.Node) error {
 					case UpdateValueAttr:
 						attr.Key = UpdateModelValueAttr
 						newAttrs = append(newAttrs, attr)
+					// shorten false-default attributes
+					case ":copyable", ":copyableTooltip", ":copyable-tooltip", ":disabled", ":required", ":isInherited", ":is-inherited", ":disableInheritanceToggle", ":disable-inheritance-toggle":
+						if strings.ToLower(attr.Value) == "true" {
+							attr.Key = strings.TrimPrefix(attr.Key, ":")
+							attr.Value = ""
+						}
+						newAttrs = append(newAttrs, attr)
 					default:
 						newAttrs = append(newAttrs, attr)
 					}
