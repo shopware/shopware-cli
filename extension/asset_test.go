@@ -68,16 +68,11 @@ func TestConvertExtraBundlesOfConfig(t *testing.T) {
 
 	assetSource := ConvertExtensionsToSources(getTestContext(), []Extension{app})
 
-	assert.Len(t, assetSource, 2)
+	assert.Len(t, assetSource, 1)
 	sourceOne := assetSource[0]
 
 	assert.Equal(t, "TestApp", sourceOne.Name)
 	assert.Equal(t, app.path, sourceOne.Path)
-
-	sourceExtra := assetSource[1]
-
-	assert.Equal(t, "Fooo", sourceExtra.Name)
-	assert.Equal(t, path.Join(app.path, "src", "Fooo"), sourceExtra.Path)
 }
 
 func TestConvertExtraBundlesOfConfigWithOverride(t *testing.T) {
@@ -102,14 +97,9 @@ func TestConvertExtraBundlesOfConfigWithOverride(t *testing.T) {
 
 	assetSource := ConvertExtensionsToSources(getTestContext(), []Extension{app})
 
-	assert.Len(t, assetSource, 2)
+	assert.Len(t, assetSource, 1)
 	sourceOne := assetSource[0]
 
 	assert.Equal(t, "TestApp", sourceOne.Name)
 	assert.Equal(t, app.path, sourceOne.Path)
-
-	sourceExtra := assetSource[1]
-
-	assert.Equal(t, "Bla", sourceExtra.Name)
-	assert.Equal(t, path.Join(app.path, "src", "Fooo"), sourceExtra.Path)
 }
