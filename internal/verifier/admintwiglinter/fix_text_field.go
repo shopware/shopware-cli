@@ -46,7 +46,7 @@ func (t TextFieldFixer) Fix(nodes []html.Node) error {
 					case ValueAttr:
 						attr.Key = ModelValueAttr
 						newAttrs = append(newAttrs, attr)
-					case VModelValueAttr:
+					case ColonValueAttr, VModelValueAttr:
 						attr.Key = VModelAttr
 						newAttrs = append(newAttrs, attr)
 					case SizeAttr:
