@@ -62,6 +62,51 @@ func findClosestShopwareProject() (string, error) {
 	return "", fmt.Errorf("cannot find Shopware project in current directory")
 }
 
+func isShopwareProject(projectRoot string) bool {
+	files := []string{
+		fmt.Sprintf("%s/composer.json", projectRoot),
+		fmt.Sprintf("%s/composer.lock", projectRoot),
+	}
+
+	for _, file := range files {
+		if _, err := os.Stat(file); err == nil {
+			content, err := os.ReadFile(file)
+			if err != nil {
+				continue
+			}
+			contentString := string(content)
+
+			if strings.Contains(contentString, "shopware/core") {
+				if _, err := os.Stat(fmt.Sprintf("%s/bin/console", projectRoot)); err == nil {
+					return true
+				}
+			}
+		}
+	}
+
+	return false
+}
+
+func findProjectRoot(configPath string) (string, error) {
+	// Check if we have a custom config path that's not the default
+	defaultConfigName := shop.DefaultConfigFileName()
+
+	// If configPath is provided and is not just the default filename (relative path),
+	// try to derive project root from the config path
+	if configPath != "" && configPath != defaultConfigName && filepath.IsAbs(configPath) {
+		// Get the directory containing the config file
+		configDir := filepath.Dir(configPath)
+
+		// Check if this directory is a Shopware project
+		if isShopwareProject(configDir) {
+			return configDir, nil
+		}
+	}
+
+	// Fall back to the existing behavior
+	return findClosestShopwareProject()
+}
+
 func filterAndWritePluginJson(cmd *cobra.Command, projectRoot string, shopCfg *shop.Config) error {
 	sources, err := extension.DumpAndLoadAssetSourcesOfProject(cmd.Context(), projectRoot, shopCfg)
 	if err != nil {

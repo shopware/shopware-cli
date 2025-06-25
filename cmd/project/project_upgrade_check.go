@@ -21,7 +21,7 @@ var projectUpgradeCheckCmd = &cobra.Command{
 	Use:   "upgrade-check",
 	Short: "Check that installed extensions are compatible with a future Shopware version",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		project, err := findClosestShopwareProject()
+		project, err := findProjectRoot(projectConfigPath)
 		if err != nil {
 			return err
 		}
