@@ -79,7 +79,7 @@ var accountCompanyMerchantShopComposerCmd = &cobra.Command{
 				return err
 			}
 
-			composerAuth, err := packagist.ReadComposerAuth("auth.json", true)
+			composerAuth, err := packagist.ReadComposerAuth("auth.json")
 			if err != nil {
 				return err
 			}

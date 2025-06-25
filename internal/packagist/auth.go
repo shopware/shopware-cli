@@ -2,6 +2,7 @@ package packagist
 
 import (
 	"encoding/json"
+	"maps"
 	"os"
 )
 
@@ -20,12 +21,19 @@ type ComposerAuth struct {
 }
 
 func (a *ComposerAuth) Save() error {
-	content, err := json.MarshalIndent(a, "", "  ")
+	content, err := a.Json(true)
 	if err != nil {
 		return err
 	}
 
 	return os.WriteFile(a.path, content, os.ModePerm)
+}
+
+func (a *ComposerAuth) Json(formatted bool) ([]byte, error) {
+	if !formatted {
+		return json.Marshal(a)
+	}
+	return json.MarshalIndent(a, "", "  ")
 }
 
 func fillAuthStruct(auth *ComposerAuth) *ComposerAuth {
@@ -49,19 +57,37 @@ func fillAuthStruct(auth *ComposerAuth) *ComposerAuth {
 		auth.BitbucketOauth = map[string]map[string]string{}
 	}
 
+	composerToken := os.Getenv("SHOPWARE_PACKAGES_TOKEN")
+	composerAuth := os.Getenv("COMPOSER_AUTH")
+
+	if composerToken != "" {
+		auth.BearerAuth["packages.shopware.com"] = composerToken
+	}
+
+	if composerAuth != "" {
+		var envAuth ComposerAuth
+		if err := json.Unmarshal([]byte(composerAuth), &envAuth); err != nil {
+			return auth
+		}
+
+		maps.Copy(auth.HTTPBasicAuth, envAuth.HTTPBasicAuth)
+		maps.Copy(auth.BearerAuth, envAuth.BearerAuth)
+		maps.Copy(auth.GitlabAuth, envAuth.GitlabAuth)
+		maps.Copy(auth.GithubOAuth, envAuth.GithubOAuth)
+		maps.Copy(auth.BitbucketOauth, envAuth.BitbucketOauth)
+	}
+
 	return auth
 }
 
-func ReadComposerAuth(authFile string, fallback bool) (*ComposerAuth, error) {
+func ReadComposerAuth(authFile string) (*ComposerAuth, error) {
 	content, err := os.ReadFile(authFile)
 	if err != nil {
-		if fallback {
+		if os.IsNotExist(err) {
 			auth := fillAuthStruct(&ComposerAuth{})
 			auth.path = authFile
-
 			return auth, nil
 		}
-
 		return nil, err
 	}
 

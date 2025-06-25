@@ -118,7 +118,7 @@ var projectAutofixComposerCmd = &cobra.Command{
 			})
 		}
 
-		auth, err := packagist.ReadComposerAuth(path.Join(project, "auth.json"), true)
+		auth, err := packagist.ReadComposerAuth(path.Join(project, "auth.json"))
 		if err != nil {
 			return err
 		}

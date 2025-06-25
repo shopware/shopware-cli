@@ -74,7 +74,7 @@ var projectCI = &cobra.Command{
 			composerFlags = append(composerFlags, "--no-dev")
 		}
 
-		token, err := prepareComposerAuth(cmd.Context())
+		token, err := prepareComposerAuth(cmd.Context(), args[0])
 		if err != nil {
 			return err
 		}
@@ -252,31 +252,13 @@ func createEmptySnippetFolder(root string) error {
 	return nil
 }
 
-func prepareComposerAuth(ctx context.Context) (string, error) {
-	composerToken := os.Getenv("SHOPWARE_PACKAGES_TOKEN")
-	composerAuth := os.Getenv("COMPOSER_AUTH")
+func prepareComposerAuth(ctx context.Context, root string) (string, error) {
+	auth, err := packagist.ReadComposerAuth(path.Join(root, "auth.json"))
 
-	if composerToken == "" {
-		return composerAuth, nil
+	if err != nil {
+		logging.FromContext(ctx).Warnf("Failed to read composer auth from env: %v", err)
+		return "", err
 	}
-
-	logging.FromContext(ctx).Infof("Setting up composer auth for packages.shopware.com")
-
-	var auth packagist.ComposerAuth
-
-	if composerAuth == "" {
-		auth = packagist.ComposerAuth{}
-	} else {
-		if err := json.Unmarshal([]byte(composerAuth), &auth); err != nil {
-			return "", err
-		}
-	}
-
-	if auth.BearerAuth == nil {
-		auth.BearerAuth = make(map[string]string)
-	}
-
-	auth.BearerAuth["packages.shopware.com"] = composerToken
 
 	data, err := json.Marshal(auth)
 	if err != nil {

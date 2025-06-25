@@ -6,12 +6,24 @@ import (
 	"os"
 	"os/exec"
 	"path"
+
+	"github.com/shopware/shopware-cli/internal/packagist"
 )
 
 func installComposerDeps(rootDir string, checkAgainst string) error {
 	suggets := getComposerSuggets(rootDir)
 
 	if _, err := os.Stat(path.Join(rootDir, "vendor")); os.IsNotExist(err) {
+		composerAuth, err := packagist.ReadComposerAuth(path.Join(rootDir, "auth.json"))
+		if err != nil {
+			return fmt.Errorf("failed to read composer auth file: %w", err)
+		}
+
+		encoded, err := composerAuth.Json(false)
+		if err != nil {
+			return fmt.Errorf("failed to encode composer auth: %w", err)
+		}
+
 		if len(suggets) > 0 {
 			additionalParams := []string{"require", "--prefer-dist", "--no-interaction", "--no-progress", "--no-plugins", "--no-scripts", "--ignore-platform-reqs"}
 			for _, suggest := range suggets {
@@ -19,6 +31,7 @@ func installComposerDeps(rootDir string, checkAgainst string) error {
 			}
 
 			composerInstall := exec.Command("composer", additionalParams...)
+			composerInstall.Env = append(os.Environ(), fmt.Sprintf("COMPOSER_AUTH=%s", encoded))
 			composerInstall.Dir = rootDir
 
 			log, err := composerInstall.CombinedOutput()
@@ -37,6 +50,7 @@ func installComposerDeps(rootDir string, checkAgainst string) error {
 		}
 
 		composerInstall := exec.Command("composer", additionalParams...)
+		composerInstall.Env = append(os.Environ(), fmt.Sprintf("COMPOSER_AUTH=%s", encoded))
 		composerInstall.Dir = rootDir
 
 		log, err := composerInstall.CombinedOutput()
