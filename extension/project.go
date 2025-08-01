@@ -175,14 +175,14 @@ func DumpAndLoadAssetSourcesOfProject(ctx context.Context, project string, shopC
 
 	var sources []asset.Source
 
-	for name, entry := range pluginsJson {
-		if entry.Administration.EntryFilePath != nil || entry.Storefront.EntryFilePath != nil {
+	for name := range pluginsJson {
+		if pluginsJson[name].Administration.EntryFilePath != nil || pluginsJson[name].Storefront.EntryFilePath != nil {
 			source := asset.Source{
 				Name: name,
-				Path: entry.BasePath,
+				Path: pluginsJson[name].BasePath,
 			}
 
-			if extensionCfg, err := readExtensionConfig(path.Join(project, entry.BasePath)); err == nil {
+			if extensionCfg, err := readExtensionConfig(path.Join(project, pluginsJson[name].BasePath)); err == nil {
 				source.AdminEsbuildCompatible = extensionCfg.Build.Zip.Assets.EnableESBuildForAdmin
 				source.StorefrontEsbuildCompatible = extensionCfg.Build.Zip.Assets.EnableESBuildForStorefront
 				source.NpmStrict = extensionCfg.Build.Zip.Assets.NpmStrict
