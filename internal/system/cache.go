@@ -5,6 +5,7 @@ import (
 	"path"
 )
 
+// GetShopwareCliCacheDir returns the base cache directory for shopware-c
 func GetShopwareCliCacheDir() string {
 	cacheDir, _ := os.UserCacheDir()
 

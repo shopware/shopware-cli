@@ -126,8 +126,8 @@ func TestGenerateConfigDoesNotAddExtensionWithoutName(t *testing.T) {
 func TestOnlyFilterOnAssetConfig(t *testing.T) {
 	cfg := make(ExtensionAssetConfig)
 
-	cfg["FroshTools"] = ExtensionAssetConfigEntry{}
-	cfg["FroshTest"] = ExtensionAssetConfigEntry{}
+	cfg["FroshTools"] = &ExtensionAssetConfigEntry{}
+	cfg["FroshTest"] = &ExtensionAssetConfigEntry{}
 
 	filtered := cfg.Only([]string{"FroshTools"})
 
@@ -138,8 +138,8 @@ func TestOnlyFilterOnAssetConfig(t *testing.T) {
 func TestSkipFilterOnAssetConfig(t *testing.T) {
 	cfg := make(ExtensionAssetConfig)
 
-	cfg["FroshTools"] = ExtensionAssetConfigEntry{}
-	cfg["FroshTest"] = ExtensionAssetConfigEntry{}
+	cfg["FroshTools"] = &ExtensionAssetConfigEntry{}
+	cfg["FroshTest"] = &ExtensionAssetConfigEntry{}
 
 	filtered := cfg.Not([]string{"FroshTools"})
 
