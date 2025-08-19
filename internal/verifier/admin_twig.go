@@ -44,13 +44,13 @@ func (a AdminTwigLinter) Check(ctx context.Context, check *Check, config ToolCon
 				return err
 			}
 
-			parsed, err := html.NewParser(string(file))
+			parsed, err := html.NewAdminParser(string(file))
 			if err != nil {
 				return fmt.Errorf("failed to parse %s: %w", path, err)
 			}
 
 			for _, fixer := range fixers {
-				for _, message := range fixer.Check(parsed) {
+				for _, message := range fixer.Check(parsed.Nodes) {
 					check.AddResult(validation.CheckResult{
 						Message:    message.Message,
 						Path:       strings.TrimPrefix(strings.TrimPrefix(path, "/private"), config.RootDir+"/"),
@@ -93,13 +93,13 @@ func (a AdminTwigLinter) Fix(ctx context.Context, config ToolConfig) error {
 				return err
 			}
 
-			parsed, err := html.NewParser(string(file))
+			parsed, err := html.NewAdminParser(string(file))
 			if err != nil {
 				return err
 			}
 
 			for _, fixer := range fixers {
-				if err := fixer.Fix(parsed); err != nil {
+				if err := fixer.Fix(parsed.Nodes); err != nil {
 					return err
 				}
 			}
@@ -134,7 +134,7 @@ func (a AdminTwigLinter) Format(ctx context.Context, config ToolConfig, dryRun b
 				return err
 			}
 
-			parsed, err := html.NewParser(string(file))
+			parsed, err := html.NewAdminParser(string(file))
 			if err != nil {
 				return fmt.Errorf("failed to parse %s: %w", path, err)
 			}

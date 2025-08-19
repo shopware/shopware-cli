@@ -52,7 +52,7 @@ func (s StorefrontTwigLinter) Check(ctx context.Context, check *Check, config To
 
 			relPath := strings.TrimPrefix(strings.TrimPrefix(path, "/private"), config.RootDir+"/")
 
-			parsed, err := html.NewParser(string(file))
+			parsed, err := html.NewStorefrontParser(string(file))
 			if err != nil {
 				check.AddResult(validation.CheckResult{
 					Path:       relPath,
@@ -66,7 +66,7 @@ func (s StorefrontTwigLinter) Check(ctx context.Context, check *Check, config To
 			}
 
 			for _, fixer := range fixers {
-				for _, message := range fixer.Check(parsed) {
+				for _, message := range fixer.Check(parsed.Nodes) {
 					check.AddResult(validation.CheckResult{
 						Path:       relPath,
 						Message:    message.Message,
