@@ -63,27 +63,48 @@ func TestFormatting(t *testing.T) {
 			}
 
 			stringData := string(data)
-			stringParts := strings.SplitN(stringData, "-----", 2)
-			stringParts[0] = strings.TrimRight(stringParts[0], "\n")
-			stringParts[1] = strings.TrimLeft(stringParts[1], "\n")
+			stringParts := strings.SplitN(stringData, "-----", 3)
 
-			if len(stringParts) != 2 {
+			if len(stringParts) < 2 {
 				t.Fatalf("file %s does not contain expected delimiter", name)
 			}
 
-			parsed, err := NewParser(stringParts[0])
+			stringParts[0] = strings.Trim(stringParts[0], "\n")
+			stringParts[1] = strings.Trim(stringParts[1], "\n")
+
+			parsed, err := NewAdminParser(stringParts[0])
 			if err != nil {
 				t.Fatal(err)
 			}
 
 			assert.Equal(t, stringParts[1], parsed.Dump(0))
 
-			parsed, err = NewParser(parsed.Dump(0))
+			parsed, err = NewAdminParser(parsed.Dump(0))
 			if err != nil {
 				t.Fatal(err)
 			}
 
 			assert.Equal(t, stringParts[1], parsed.Dump(0))
+
+			if len(stringParts) < 3 {
+				return
+			}
+
+			stringParts[2] = strings.Trim(stringParts[2], "\n")
+
+			parsed, err = NewStorefrontParser(stringParts[0])
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			assert.Equal(t, stringParts[2], parsed.Dump(0))
+
+			parsed, err = NewStorefrontParser(parsed.Dump(0))
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			assert.Equal(t, stringParts[2], parsed.Dump(0))
 		})
 	}
 }

@@ -1,0 +1,41 @@
+{% block container %}
+    <sw-container>
+        {% block button %}
+        <sw-button>Click me</sw-button>
+        {% endblock %}
+
+        {% block text %}
+        <span>
+            Lorem ipsum
+        </span>
+        {% endblock %}
+    </sw-container>
+{% endblock %}
+-----
+{% block container %}
+<sw-container>
+    {% block button %}
+    <sw-button>Click me</sw-button>
+    {% endblock %}
+
+    {% block text %}
+    <span>
+        Lorem ipsum
+    </span>
+    {% endblock %}
+</sw-container>
+{% endblock %}
+-----
+{% block container %}
+    <sw-container>
+        {% block button %}
+            <sw-button>Click me</sw-button>
+        {% endblock %}
+
+        {% block text %}
+            <span>
+                Lorem ipsum
+            </span>
+        {% endblock %}
+    </sw-container>
+{% endblock %}
