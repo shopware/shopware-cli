@@ -23,7 +23,7 @@ var (
 
 var extensionZipCmd = &cobra.Command{
 	Use:   "zip [path] [branch]",
-	Short: "Zip a Extension",
+	Short: "Zip an extension",
 	Args:  cobra.MinimumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		extPath, err := filepath.Abs(args[0])
