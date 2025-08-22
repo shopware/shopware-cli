@@ -123,6 +123,9 @@
           },
           "type": "array",
           "description": "Keep following node_modules in the final build"
+        },
+        "mjml": {
+          "$ref": "#/$defs/ConfigBuildMJML"
         }
       },
       "additionalProperties": false,
@@ -141,6 +144,36 @@
         "name"
       ],
       "description": "ConfigBuildExtension defines the configuration for forcing extension builds."
+    },
+    "ConfigBuildMJML": {
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "description": "Whether to enable MJML compilation"
+        },
+        "search_paths": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array",
+          "description": "Directories to search for MJML files"
+        },
+        "use_webservice": {
+          "type": "boolean",
+          "description": "Use webservice for compilation instead of local npm mjml"
+        },
+        "webservice_url": {
+          "type": "string",
+          "description": "Webservice URL for MJML compilation (e.g., https://mjml.shyim.de or https://user:key@api.mjml.io/v1/render)"
+        },
+        "webservice_api_key": {
+          "type": "string",
+          "description": "Webservice API key for authentication (optional, for services that require Bearer token auth)"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "description": "ConfigBuildMJML defines the configuration for MJML email template compilation."
     },
     "ConfigDeployment": {
       "properties": {

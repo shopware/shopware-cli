@@ -62,12 +62,28 @@ type ConfigBuild struct {
 	ForceAdminBuild bool `yaml:"force_admin_build,omitempty"`
 	// Keep following node_modules in the final build
 	KeepNodeModules []string `yaml:"keep_node_modules,omitempty"`
+	// MJML email template compilation configuration
+	MJML *ConfigBuildMJML `yaml:"mjml,omitempty"`
 }
 
 // ConfigBuildExtension defines the configuration for forcing extension builds.
 type ConfigBuildExtension struct {
 	// Name of the extension
 	Name string `yaml:"name" jsonschema:"required"`
+}
+
+// ConfigBuildMJML defines the configuration for MJML email template compilation.
+type ConfigBuildMJML struct {
+	// Whether to enable MJML compilation
+	Enabled bool `yaml:"enabled,omitempty"`
+	// Directories to search for MJML files
+	SearchPaths []string `yaml:"search_paths,omitempty"`
+	// Use webservice for compilation instead of local npm mjml
+	UseWebService bool `yaml:"use_webservice,omitempty"`
+	// Webservice URL for MJML compilation (e.g., https://mjml.shyim.de or https://user:key@api.mjml.io/v1/render)
+	WebServiceURL string `yaml:"webservice_url,omitempty"`
+	// Webservice API key for authentication (optional, for services that require Bearer token auth)
+	WebServiceAPIKey string `yaml:"webservice_api_key,omitempty"`
 }
 
 type ConfigAdminApi struct {
