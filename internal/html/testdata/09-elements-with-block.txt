@@ -1,5 +1,9 @@
 {% block foo %}<sw-button>Click me</sw-button>{% endblock %}
 -----
 {% block foo %}
+<sw-button>Click me</sw-button>
+{% endblock %}
+-----
+{% block foo %}
     <sw-button>Click me</sw-button>
 {% endblock %}

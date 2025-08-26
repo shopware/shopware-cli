@@ -44,7 +44,7 @@ func (a AdminTwigLinter) Check(ctx context.Context, check *Check, config ToolCon
 				return err
 			}
 
-			parsed, err := html.NewParser(string(file))
+			parsed, err := html.NewAdminParser(string(file))
 			if err != nil {
 				return fmt.Errorf("failed to parse %s: %w", path, err)
 			}
@@ -93,7 +93,7 @@ func (a AdminTwigLinter) Fix(ctx context.Context, config ToolConfig) error {
 				return err
 			}
 
-			parsed, err := html.NewParser(string(file))
+			parsed, err := html.NewAdminParser(string(file))
 			if err != nil {
 				return err
 			}
@@ -134,7 +134,7 @@ func (a AdminTwigLinter) Format(ctx context.Context, config ToolConfig, dryRun b
 				return err
 			}
 
-			parsed, err := html.NewParser(string(file))
+			parsed, err := html.NewAdminParser(string(file))
 			if err != nil {
 				return fmt.Errorf("failed to parse %s: %w", path, err)
 			}
