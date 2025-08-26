@@ -511,16 +511,16 @@
         },
         {
             "name": "frosh/shopware-rector",
-            "version": "0.5.6",
+            "version": "0.5.7",
             "source": {
                 "type": "git",
                 "url": "https://github.com/FriendsOfShopware/shopware-rector.git",
-                "reference": "4f25cb8edb00816ea05d05ee3e8ee12b0213406d"
+                "reference": "2e279aeb46cdfaacfa1c70ce47c14be9e2a2e281"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/FriendsOfShopware/shopware-rector/zipball/4f25cb8edb00816ea05d05ee3e8ee12b0213406d",
-                "reference": "4f25cb8edb00816ea05d05ee3e8ee12b0213406d",
+                "url": "https://api.github.com/repos/FriendsOfShopware/shopware-rector/zipball/2e279aeb46cdfaacfa1c70ce47c14be9e2a2e281",
+                "reference": "2e279aeb46cdfaacfa1c70ce47c14be9e2a2e281",
                 "shasum": ""
             },
             "require": {
@@ -555,9 +555,9 @@
             "description": "Shopware specific Rector",
             "support": {
                 "issues": "https://github.com/FriendsOfShopware/shopware-rector/issues",
-                "source": "https://github.com/FriendsOfShopware/shopware-rector/tree/0.5.6"
+                "source": "https://github.com/FriendsOfShopware/shopware-rector/tree/0.5.7"
             },
-            "time": "2025-06-30T10:50:22+00:00"
+            "time": "2025-08-20T10:13:50+00:00"
         },
         {
             "name": "phpstan/extension-installer",
