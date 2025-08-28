@@ -1,6 +1,7 @@
 package validation
 
 import (
+	"crypto/md5"
 	"encoding/json"
 	"encoding/xml"
 	"fmt"
@@ -12,6 +13,10 @@ import (
 func DetectDefaultReporter() string {
 	if os.Getenv("GITHUB_ACTIONS") == "true" {
 		return "github"
+	}
+
+	if os.Getenv("GITLAB_CI") == "true" {
+		return "gitlab"
 	}
 
 	return "summary"
@@ -29,6 +34,10 @@ func DoCheckReport(result Check, reportingFormat string) error {
 		}
 	case "github":
 		if err := doGitHubReport(result); err != nil {
+			return err
+		}
+	case "gitlab":
+		if err := doGitLabReport(result); err != nil {
 			return err
 		}
 	case "markdown":
@@ -155,6 +164,77 @@ func doGitHubReport(result Check) error {
 	}
 
 	return nil
+}
+
+type GitLabCodeQualityIssue struct {
+	Description string                    `json:"description"`
+	CheckName   string                    `json:"check_name"`
+	Fingerprint string                    `json:"fingerprint"`
+	Severity    string                    `json:"severity"`
+	Location    GitLabCodeQualityLocation `json:"location"`
+}
+
+type GitLabCodeQualityLocation struct {
+	Path  string                 `json:"path"`
+	Lines GitLabCodeQualityLines `json:"lines"`
+}
+
+type GitLabCodeQualityLines struct {
+	Begin int `json:"begin"`
+}
+
+func doGitLabReport(result Check) error {
+	var issues []GitLabCodeQualityIssue
+
+	// Sort results for deterministic output
+	results := result.GetResults()
+	sort.Slice(results, func(i, j int) bool {
+		// Sort by path first, then by line number, then by identifier, then by message
+		if results[i].Path != results[j].Path {
+			return results[i].Path < results[j].Path
+		}
+		if results[i].Line != results[j].Line {
+			return results[i].Line < results[j].Line
+		}
+		if results[i].Identifier != results[j].Identifier {
+			return results[i].Identifier < results[j].Identifier
+		}
+		return results[i].Message < results[j].Message
+	})
+
+	for _, r := range results {
+		// Convert severity to GitLab format
+		severity := "minor"
+		switch r.Severity {
+		case SeverityError:
+			severity = "major"
+		case SeverityWarning:
+			severity = "minor"
+		}
+
+		// Create fingerprint (unique identifier for the issue)
+		fingerprintData := fmt.Sprintf("%s:%d:%s:%s", r.Path, r.Line, r.Identifier, r.Message)
+		fingerprint := fmt.Sprintf("%x", md5.Sum([]byte(fingerprintData)))
+
+		issue := GitLabCodeQualityIssue{
+			Description: r.Message,
+			CheckName:   r.Identifier,
+			Fingerprint: fingerprint,
+			Severity:    severity,
+			Location: GitLabCodeQualityLocation{
+				Path: r.Path,
+				Lines: GitLabCodeQualityLines{
+					Begin: r.Line,
+				},
+			},
+		}
+
+		issues = append(issues, issue)
+	}
+
+	encoder := json.NewEncoder(os.Stdout)
+	encoder.SetIndent("", "  ")
+	return encoder.Encode(issues)
 }
 
 func doMarkdownReport(result Check) error {

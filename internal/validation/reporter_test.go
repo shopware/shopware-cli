@@ -2,6 +2,7 @@ package validation
 
 import (
 	"bytes"
+	"encoding/json"
 	"io"
 	"os"
 	"strings"
@@ -151,6 +152,105 @@ func TestErrorExistsSummary(t *testing.T) {
 	check := &testCheck{Results: testResults}
 
 	assert.Error(t, DoCheckReport(check, "summary"))
+}
+
+func TestGitLabReport(t *testing.T) {
+	testResults := []CheckResult{
+		{
+			Path:       "src/index.js",
+			Line:       42,
+			Identifier: "no-unused-vars",
+			Message:    "'unused' is assigned a value but never used.",
+			Severity:   SeverityWarning,
+		},
+		{
+			Path:       "src/utils.js",
+			Line:       15,
+			Identifier: "syntax-error",
+			Message:    "Missing semicolon",
+			Severity:   SeverityError,
+		},
+	}
+
+	check := &testCheck{Results: testResults}
+
+	output := captureOutput(func() {
+		err := doGitLabReport(check)
+		assert.NoError(t, err)
+	})
+
+	// Parse the JSON output
+	var issues []GitLabCodeQualityIssue
+	err := json.Unmarshal([]byte(output), &issues)
+	assert.NoError(t, err)
+	assert.Len(t, issues, 2)
+
+	// Check first issue (should be sorted by path then line)
+	issue1 := issues[0]
+	assert.Equal(t, "'unused' is assigned a value but never used.", issue1.Description)
+	assert.Equal(t, "no-unused-vars", issue1.CheckName)
+	assert.Equal(t, "minor", issue1.Severity) // Warning maps to minor
+	assert.Equal(t, "src/index.js", issue1.Location.Path)
+	assert.Equal(t, 42, issue1.Location.Lines.Begin)
+	assert.NotEmpty(t, issue1.Fingerprint) // Should have fingerprint
+
+	// Check second issue
+	issue2 := issues[1]
+	assert.Equal(t, "Missing semicolon", issue2.Description)
+	assert.Equal(t, "syntax-error", issue2.CheckName)
+	assert.Equal(t, "major", issue2.Severity) // Error maps to major
+	assert.Equal(t, "src/utils.js", issue2.Location.Path)
+	assert.Equal(t, 15, issue2.Location.Lines.Begin)
+	assert.NotEmpty(t, issue2.Fingerprint)
+
+	// Ensure fingerprints are different
+	assert.NotEqual(t, issue1.Fingerprint, issue2.Fingerprint)
+}
+
+func TestGitLabReportIsDeterministic(t *testing.T) {
+	testResults := []CheckResult{
+		{
+			Path:       "z_file.go",
+			Line:       5,
+			Identifier: "test.rule2",
+			Message:    "Second message",
+			Severity:   SeverityError,
+		},
+		{
+			Path:       "a_file.go",
+			Line:       10,
+			Identifier: "test.rule1",
+			Message:    "First message",
+			Severity:   SeverityWarning,
+		},
+	}
+
+	check := &testCheck{Results: testResults}
+
+	// Test GitLab report multiple times to ensure deterministic output
+	var previousOutput string
+	for i := range 5 {
+		output := captureOutput(func() {
+			_ = doGitLabReport(check)
+		})
+
+		if i > 0 {
+			assert.Equal(t, previousOutput, output, "GitLab report output should be deterministic")
+		}
+		previousOutput = output
+
+		// Parse and verify the issues are sorted correctly
+		var issues []GitLabCodeQualityIssue
+		err := json.Unmarshal([]byte(output), &issues)
+		assert.NoError(t, err)
+		assert.Len(t, issues, 2)
+
+		// Check sorting: should be sorted by path first, then by line
+		assert.Equal(t, "a_file.go", issues[0].Location.Path)
+		assert.Equal(t, 10, issues[0].Location.Lines.Begin)
+		assert.Equal(t, "z_file.go", issues[1].Location.Path)
+		assert.Equal(t, 5, issues[1].Location.Lines.Begin)
+	}
 }
 
 // testCheck is a simple implementation of Check interface for testing
