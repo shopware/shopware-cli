@@ -96,6 +96,36 @@ func BuildAssetsForExtensions(ctx context.Context, sources []asset.Source, asset
 		nonCompatibleExtensions := cfgs.FilterByAdminAndEsBuild(false)
 
 		if len(nonCompatibleExtensions) != 0 {
+			if projectRequiresBuild(shopwareRoot) {
+				// add the storefront itself as plugin into json
+				var basePath string
+				if shopwareRoot == "" {
+					basePath = "src/Storefront/"
+				} else {
+					basePath = strings.TrimLeft(
+						strings.Replace(PlatformPath(shopwareRoot, "Storefront", ""), shopwareRoot, "", 1),
+						"/",
+					) + "/"
+				}
+
+				storefrontEntryPath := "Resources/app/storefront/src/main.js"
+				adminEntryPath := "Resources/app/administration/src/main.js"
+				nonCompatibleExtensions["Storefront"] = &ExtensionAssetConfigEntry{
+					BasePath:      basePath,
+					Views:         []string{"Resources/views"},
+					TechnicalName: "storefront",
+					Storefront: ExtensionAssetConfigStorefront{
+						Path:          "Resources/app/storefront/src",
+						EntryFilePath: &storefrontEntryPath,
+						StyleFiles:    []string{},
+					},
+					Administration: ExtensionAssetConfigAdmin{
+						Path:          "Resources/app/administration/src",
+						EntryFilePath: &adminEntryPath,
+					},
+				}
+			}
+
 			if err := prepareShopwareForAsset(shopwareRoot, nonCompatibleExtensions); err != nil {
 				return err
 			}
