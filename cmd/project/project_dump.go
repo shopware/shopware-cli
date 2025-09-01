@@ -214,6 +214,12 @@ var projectDatabaseDumpCmd = &cobra.Command{
 			return err
 		}
 
+		if compression == CompressionZstd {
+			if err = w.(*zstd.Encoder).Close(); err != nil {
+				return err
+			}
+		}
+
 		if compression == CompressionGzip {
 			if err = w.(*gzip.Writer).Close(); err != nil {
 				return err
