@@ -25,7 +25,7 @@ require (
 	github.com/microcosm-cc/bluemonday v1.0.27
 	github.com/otiai10/copy v1.14.1
 	github.com/shyim/go-version v0.0.0-20250828113848-97ec77491b32
-	github.com/spf13/cobra v1.9.1
+	github.com/spf13/cobra v1.10.1
 	github.com/stretchr/testify v1.11.1
 	github.com/tetratelabs/wazero v1.9.0
 	github.com/tonistiigi/go-actions-cache v0.0.0-20250626083717-378c5ed1ddd9
@@ -73,7 +73,6 @@ require (
 	github.com/googleapis/enterprise-certificate-proxy v0.3.6 // indirect
 	github.com/googleapis/gax-go/v2 v2.15.0 // indirect
 	github.com/jaswdr/faker v1.19.1 // indirect
-	github.com/jaswdr/faker/v2 v2.8.0 // indirect
 	github.com/klauspost/cpuid/v2 v2.3.0 // indirect
 	github.com/lucasb-eyer/go-colorful v1.2.0 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect
