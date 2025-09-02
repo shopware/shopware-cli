@@ -53,21 +53,21 @@ jobs:
         uses: anchore/sbom-action/download-syft@da167eac915b4e86f08b264dbdbc867b61be6f0c # ratchet:anchore/sbom-action/download-syft@v0.20.5
 
       - name: Gather Frosh Homebrew Token
-        uses: octo-sts/action@6177b4481c00308b3839969c3eca88c96a91775f # ratchet:octo-sts/action@v1.0.0
+        uses: octo-sts/action@e480437973a6f6ac2e9caa40ecabedc870d76395 # ratchet:octo-sts/action@v1.0.1
         id: sts-homebrew
         with:
           scope: FriendsOfShopware/homebrew-tap
           identity: release
 
       - name: Gather Homebrew Token
-        uses: octo-sts/action@6177b4481c00308b3839969c3eca88c96a91775f # ratchet:octo-sts/action@v1.0.0
+        uses: octo-sts/action@e480437973a6f6ac2e9caa40ecabedc870d76395 # ratchet:octo-sts/action@v1.0.1
         id: sts-shopware
         with:
           scope: shopware/homebrew-tap
           identity: swcli
 
       - name: Gather NUR Token
-        uses: octo-sts/action@6177b4481c00308b3839969c3eca88c96a91775f # ratchet:octo-sts/action@v1.0.0
+        uses: octo-sts/action@e480437973a6f6ac2e9caa40ecabedc870d76395 # ratchet:octo-sts/action@v1.0.1
         id: sts-nur
         with:
           scope: FriendsOfShopware/nur-packages
