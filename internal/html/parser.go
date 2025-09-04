@@ -56,17 +56,34 @@ type Node interface {
 
 type NodeList []Node
 
+// ConfiguredNodeList wraps a NodeList with its associated IndentConfig
+type ConfiguredNodeList struct {
+	Nodes  NodeList
+	Config IndentConfig
+}
+
+// Dump renders the nodes using the stored configuration
+func (cnl ConfiguredNodeList) Dump(indent int) string {
+	oldConfig := indentConfig
+	SetIndentConfig(cnl.Config)
+	defer SetIndentConfig(oldConfig)
+
+	return cnl.Nodes.Dump(indent)
+}
+
 // IndentConfig holds configuration for indentation in HTML output.
 type IndentConfig struct {
-	SpaceIndent bool
-	IndentSize  int
+	SpaceIndent             bool
+	IndentSize              int
+	TwigBlockIndentChildren bool
 }
 
 // DefaultIndentConfig creates a default indentation config with spaces.
 func DefaultIndentConfig() IndentConfig {
 	return IndentConfig{
-		SpaceIndent: true,
-		IndentSize:  4,
+		SpaceIndent:             true,
+		IndentSize:              4,
+		TwigBlockIndentChildren: true,
 	}
 }
 
@@ -125,6 +142,10 @@ func (nodeList NodeList) Dump(indent int) string {
 func isTemplateElement(node Node) bool {
 	if elem, ok := node.(*ElementNode); ok {
 		return elem.Tag == "template"
+	}
+	// Also consider twig blocks as template elements for spacing purposes
+	if _, ok := node.(*TwigBlockNode); ok {
+		return true
 	}
 	return false
 }
@@ -301,6 +322,28 @@ func (e *ElementNode) Dump(indent int) string {
 				}
 			}
 
+			// Special case: if we have a single RawNode child with structured content,
+			// treat it as complex content that needs proper indentation
+			if allSimpleNodes && len(e.Children) == 1 {
+				if rawChild, ok := e.Children[0].(*RawNode); ok {
+					if strings.Contains(rawChild.Text, "\n") {
+						// Check if the content has meaningful indentation structure
+						lines := strings.Split(rawChild.Text, "\n")
+						hasIndentedContent := false
+						for _, line := range lines {
+							trimmed := strings.TrimLeft(line, " \t")
+							if trimmed != "" && len(line) > len(trimmed) {
+								hasIndentedContent = true
+								break
+							}
+						}
+						if hasIndentedContent {
+							allSimpleNodes = false
+						}
+					}
+				}
+			}
+
 			// Check if we have multiple short template expressions
 			if multipleTemplateExpressions > 1 && !hasLongTemplateExpression {
 				// Check if they're short enough to stay on one line
@@ -372,6 +415,40 @@ func (e *ElementNode) Dump(indent int) string {
 
 					if elementChild, ok := child.(*ElementNode); ok {
 						builder.WriteString(elementChild.Dump(indent + 1))
+					} else if twigBlockChild, ok := child.(*TwigBlockNode); ok {
+						builder.WriteString(twigBlockChild.Dump(indent + 1))
+					} else if rawChild, ok := child.(*RawNode); ok {
+						// Special handling for RawNode with newlines
+						if strings.Contains(rawChild.Text, "\n") {
+							// Re-indent multi-line raw content
+							lines := strings.Split(rawChild.Text, "\n")
+							var contentLines []string
+
+							// Extract non-empty content lines
+							for _, line := range lines {
+								trimmed := strings.TrimLeft(line, " \t")
+								if trimmed != "" {
+									contentLines = append(contentLines, trimmed)
+								}
+							}
+
+							// Output content lines with proper indentation
+							for idx, trimmed := range contentLines {
+								for j := 0; j < indent+1; j++ {
+									builder.WriteString(indentStr)
+								}
+								builder.WriteString(trimmed)
+								if idx < len(contentLines)-1 {
+									builder.WriteString("\n")
+								}
+							}
+						} else {
+							// Single line content, use original logic
+							for j := 0; j < indent+1; j++ {
+								builder.WriteString(indentStr)
+							}
+							builder.WriteString(strings.TrimSpace(child.Dump(indent + 1)))
+						}
 					} else {
 						for j := 0; j < indent+1; j++ {
 							builder.WriteString(indentStr)
@@ -425,11 +502,16 @@ func (t *TwigBlockNode) Dump(indent int) string {
 
 	if len(nonEmptyChildren) > 0 {
 		builder.WriteString("\n")
+		childIndent := indent
+		if indentConfig.TwigBlockIndentChildren {
+			childIndent = indent + 1
+		}
+
 		for i, child := range nonEmptyChildren {
 			if elementChild, ok := child.(*ElementNode); ok {
-				builder.WriteString(elementChild.Dump(indent + 1))
+				builder.WriteString(elementChild.Dump(childIndent))
 			} else {
-				builder.WriteString(child.Dump(indent + 1))
+				builder.WriteString(child.Dump(childIndent))
 			}
 
 			_, isComment := child.(*CommentNode)
@@ -989,6 +1071,54 @@ func (p *Parser) parseElementChildren(tag string) (NodeList, error) {
 			continue
 		}
 
+		// Parse twig blocks and directives
+		if p.peek(2) == "{%" {
+			if p.pos > rawStart {
+				text := p.input[rawStart:p.pos]
+				if text != "" {
+					children = append(children, &RawNode{
+						Text: text,
+						Line: p.getLineAt(rawStart),
+					})
+				}
+			}
+
+			// Try parsing as a twig directive first
+			directive, err := p.parseTwigDirective()
+			if err != nil {
+				return children, err
+			}
+			if directive != nil {
+				children = append(children, directive)
+				rawStart = p.pos
+				continue
+			}
+
+			// Try parsing as a twig block
+			block, err := p.parseTwigBlock()
+			if err != nil {
+				return children, err
+			}
+			if block != nil {
+				children = append(children, block)
+				rawStart = p.pos
+				continue
+			}
+
+			// Try parsing as a twig if
+			ifNode, err := p.parseTwigIf()
+			if err != nil {
+				return children, err
+			}
+			if ifNode != nil {
+				children = append(children, ifNode)
+				rawStart = p.pos
+				continue
+			}
+
+			// If none of the above worked, treat as raw text and continue
+		}
+
 		// Check for a closing tag.
 		if p.current() == '<' && p.peek(2) == "</" {
 			savedPos := p.pos
@@ -1499,4 +1629,50 @@ func TraverseNode(n NodeList, f func(*ElementNode)) {
 			continue
 		}
 	}
+}
+
+// NewParserWithConfig creates a new parser with a specific indentation configuration.
+func NewParserWithConfig(input string, config IndentConfig) (NodeList, error) {
+	oldConfig := indentConfig
+	SetIndentConfig(config)
+	defer SetIndentConfig(oldConfig) // Restore original config
+
+	nodes, err := NewParser(input)
+	if err != nil {
+		return NodeList{}, err
+	}
+
+	return nodes, nil
+}
+
+// NewAdminParser creates a parser configured for admin twig files (no indentation for twig block children).
+func NewAdminParser(input string) (ConfiguredNodeList, error) {
+	config := DefaultIndentConfig()
+	config.TwigBlockIndentChildren = false
+
+	nodes, err := NewParserWithConfig(input, config)
+	if err != nil {
+		return ConfiguredNodeList{}, err
+	}
+
+	return ConfiguredNodeList{
+		Nodes:  nodes,
+		Config: config,
+	}, nil
+}
+
+// NewStorefrontParser creates a parser configured for storefront twig files (indents twig block children).
+func NewStorefrontParser(input string) (ConfiguredNodeList, error) {
+	config := DefaultIndentConfig()
+	config.TwigBlockIndentChildren = true
+
+	nodes, err := NewParserWithConfig(input, config)
+	if err != nil {
+		return ConfiguredNodeList{}, err
+	}
+
+	return ConfiguredNodeList{
+		Nodes:  nodes,
+		Config: config,
+	}, nil
 }
