@@ -191,34 +191,14 @@ var projectCI = &cobra.Command{
 
 		warumupSection.End(cmd.Context())
 
-		// Compile MJML templates based on configuration
-		if shouldCompileMJML(shopCfg) {
+		if shopCfg.Build.IsMjmlEnabled() {
 			mjmlSection := ci.Default.Section(cmd.Context(), "Compiling MJML templates")
 
-			// Create compiler with appropriate configuration
-			var mjmlCompiler mjml.Compiler
-			if shopCfg.Build.MJML != nil && shopCfg.Build.MJML.UseWebService {
-				mjmlConfig := mjml.Config{
-					Mode:             mjml.CompilerModeWebService,
-					WebServiceURL:    shopCfg.Build.MJML.WebServiceURL,
-					WebServiceAPIKey: shopCfg.Build.MJML.WebServiceAPIKey,
-				}
-				mjmlCompiler = mjml.NewCompilerWithConfig(mjmlConfig)
-			} else {
-				mjmlCompiler = mjml.NewCompiler()
-			}
-
-			// Get search paths from configuration or use defaults
-			searchPaths := getMJMLSearchPaths(shopCfg, args[0])
-
-			// Process each search path
-			for _, searchPath := range searchPaths {
-				// Check if the directory exists
+			for _, searchPath := range shopCfg.Build.MJML.GetPaths(args[0]) {
 				if _, err := os.Stat(searchPath); !os.IsNotExist(err) {
 					logging.FromContext(cmd.Context()).Infof("Processing MJML files in: %s", searchPath)
-					if err := mjmlCompiler.ProcessDirectory(cmd.Context(), searchPath, false); err != nil {
+					if err := mjml.ProcessDirectory(cmd.Context(), searchPath); err != nil {
 						logging.FromContext(cmd.Context()).Warnf("MJML compilation had issues in %s: %v", searchPath, err)
-						// Don't fail the build on MJML compilation errors
 					}
 				} else {
 					logging.FromContext(cmd.Context()).Debugf("MJML search path does not exist: %s", searchPath)
@@ -309,34 +289,6 @@ func prepareComposerAuth(ctx context.Context, root string) (string, error) {
 func init() {
 	projectRootCmd.AddCommand(projectCI)
 	projectCI.PersistentFlags().Bool("with-dev-dependencies", false, "Install dev dependencies")
-}
-
-// shouldCompileMJML determines if MJML compilation should run
-func shouldCompileMJML(shopCfg *shop.Config) bool {
-	return shopCfg.Build.MJML != nil && shopCfg.Build.MJML.Enabled
-}
-
-// getMJMLSearchPaths returns the paths to search for MJML files
-func getMJMLSearchPaths(shopCfg *shop.Config, projectRoot string) []string {
-	// Use configured paths if available
-	if shopCfg.Build.MJML != nil && len(shopCfg.Build.MJML.SearchPaths) > 0 {
-		// Convert relative paths to absolute paths
-		absolutePaths := make([]string, len(shopCfg.Build.MJML.SearchPaths))
-		for i, path := range shopCfg.Build.MJML.SearchPaths {
-			if filepath.IsAbs(path) {
-				absolutePaths[i] = path
-			} else {
-				absolutePaths[i] = filepath.Join(projectRoot, path)
-			}
-		}
-		return absolutePaths
-	}
-
-	// Default search paths
-	return []string{
-		filepath.Join(projectRoot, "custom", "plugins"),
-		filepath.Join(projectRoot, "custom", "static-plugins"),
-	}
 }
 
 func commandWithRoot(cmd *exec.Cmd, root string) *exec.Cmd {

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path"
+	"path/filepath"
 	"strings"
 
 	"dario.cat/mergo"
@@ -66,6 +67,14 @@ type ConfigBuild struct {
 	MJML *ConfigBuildMJML `yaml:"mjml,omitempty"`
 }
 
+func (c ConfigBuild) IsMjmlEnabled() bool {
+	if c.MJML == nil {
+		return false
+	}
+
+	return c.MJML.Enabled
+}
+
 // ConfigBuildExtension defines the configuration for forcing extension builds.
 type ConfigBuildExtension struct {
 	// Name of the extension
@@ -78,12 +87,26 @@ type ConfigBuildMJML struct {
 	Enabled bool `yaml:"enabled,omitempty"`
 	// Directories to search for MJML files
 	SearchPaths []string `yaml:"search_paths,omitempty"`
-	// Use webservice for compilation instead of local npm mjml
-	UseWebService bool `yaml:"use_webservice,omitempty"`
-	// Webservice URL for MJML compilation (e.g., https://mjml.shyim.de or https://user:key@api.mjml.io/v1/render)
-	WebServiceURL string `yaml:"webservice_url,omitempty"`
-	// Webservice API key for authentication (optional, for services that require Bearer token auth)
-	WebServiceAPIKey string `yaml:"webservice_api_key,omitempty"`
+}
+
+func (c ConfigBuildMJML) GetPaths(projectRoot string) []string {
+	if len(c.SearchPaths) > 0 {
+		absolutePaths := make([]string, len(c.SearchPaths))
+		for i, path := range c.SearchPaths {
+			if filepath.IsAbs(path) {
+				absolutePaths[i] = path
+			} else {
+				absolutePaths[i] = filepath.Join(projectRoot, path)
+			}
+		}
+
+		return absolutePaths
+	}
+
+	return []string{
+		filepath.Join(projectRoot, "custom", "plugins"),
+		filepath.Join(projectRoot, "custom", "static-plugins"),
+	}
 }
 
 type ConfigAdminApi struct {
