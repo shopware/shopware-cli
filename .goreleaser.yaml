@@ -214,57 +214,22 @@ nfpms:
       - deb
       - rpm
 
-brews:
-  - repository:
-      owner: FriendsOfShopware
-      name: homebrew-tap
-      token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
-    commit_author:
-      name: Frosh Automation
-      email: ci@fos.gg
-    goarm: "7"
-    homepage: https://friendsofshopware.com
-    description: Shopware CLI helps Shopware developers manage extensions
-    license: MIT
-    directory: Formula
-    test: |
-      system "#{bin}/shopware-cli --version"
-    dependencies:
-    - name: node-sass
-    - name: git
-      type: optional
-    - name: node
-      type: optional
-    install: |-
-      bin.install "shopware-cli"
-      bash_completion.install "completions/shopware-cli.bash" => "_shopware-cli"
-      zsh_completion.install "completions/shopware-cli.zsh" => "_shopware-cli"
-      fish_completion.install "completions/shopware-cli.fish"
-  - repository:
+homebrew_casks:
+  - name: shopware-cli
+    repository:
       owner: shopware
       name: homebrew-tap
       token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN_SHOPWARE }}"
     commit_author:
       name: Frosh Automation
       email: ci@fos.gg
-    goarm: "7"
     homepage: https://shopware.com
     description: Shopware CLI helps Shopware developers manage extensions
     license: MIT
-    directory: Formula
-    test: |
-      system "#{bin}/shopware-cli --version"
-    dependencies:
-    - name: node-sass
-    - name: git
-      type: optional
-    - name: node
-      type: optional
-    install: |-
-      bin.install "shopware-cli"
-      bash_completion.install "completions/shopware-cli.bash" => "_shopware-cli"
-      zsh_completion.install "completions/shopware-cli.zsh" => "_shopware-cli"
-      fish_completion.install "completions/shopware-cli.fish"
+    completions:
+      bash: completions/shopware-cli.bash
+      zsh: completions/shopware-cli.zsh
+      fish: completions/shopware-cli.fish
 
 npms:
   - name: "@shopware-ag/shopware-cli"
