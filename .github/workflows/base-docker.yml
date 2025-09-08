@@ -10,6 +10,9 @@ on:
       - 'Dockerfile.base'
       - 'internal/verifier/js/**'
       - 'internal/verifier/php/**'
+permissions:
+  contents: read
+  id-token: write
 
 jobs:
   build:
