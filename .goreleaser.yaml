@@ -42,7 +42,7 @@ dockers_v2:
       - "shopware/shopware-cli"
       - "ghcr.io/shopware/shopware-cli"
     tags:
-      - "{{ .Tag }}-php-8.4"
+      - "{{ .Version }}-php-8.4"
       - "latest-php-8.4"
     build_args:
       PHP_VERSION: "8.4"
@@ -54,9 +54,9 @@ dockers_v2:
       - "shopware/shopware-cli"
       - "ghcr.io/shopware/shopware-cli"
     tags:
-      - "{{ .Tag }}-php-8.3"
+      - "{{ .Version }}-php-8.3"
       - "latest-php-8.3"
-      - "{{ .Tag }}"
+      - "{{ .Version }}"
       - "latest"
     build_args:
       PHP_VERSION: "8.3"
@@ -68,7 +68,7 @@ dockers_v2:
       - "shopware/shopware-cli"
       - "ghcr.io/shopware/shopware-cli"
     tags:
-      - "{{ .Tag }}-php-8.2"
+      - "{{ .Version }}-php-8.2"
       - "latest-php-8.2"
     build_args:
       PHP_VERSION: "8.2"
@@ -80,7 +80,7 @@ dockers_v2:
       - "shopware/shopware-cli"
       - "ghcr.io/shopware/shopware-cli"
     tags:
-      - "{{ .Tag }}-php-8.1"
+      - "{{ .Version }}-php-8.1"
       - "latest-php-8.1"
     build_args:
       PHP_VERSION: "8.1"
@@ -93,7 +93,7 @@ dockers_v2:
       - "ghcr.io/shopware/shopware-cli"
     dockerfile: Dockerfile.bin
     tags:
-      - "bin-{{ .Tag }}"
+      - "bin-{{ .Version }}"
       - "bin"
     platforms:
       - "linux/amd64"
