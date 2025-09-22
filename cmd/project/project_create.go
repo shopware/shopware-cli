@@ -175,7 +175,7 @@ var projectCreateCmd = &cobra.Command{
 			dockerArgs := []string{"run", "--rm",
 				"-v", fmt.Sprintf("%s:/app", absProjectFolder),
 				"-w", "/app",
-				"ghcr.io/shopwarelabs/devcontainer/base-slim:8.3",
+				"ghcr.io/shopware/docker-dev:php8.3-node22-caddy",
 				"composer", "install", "--no-interaction"}
 
 			cmdInstall = exec.CommandContext(cmd.Context(), "docker", dockerArgs...)
