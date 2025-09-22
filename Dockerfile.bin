@@ -1,4 +1,6 @@
 FROM scratch
-COPY shopware-cli /
+ARG TARGETPLATFORM
+
+COPY $TARGETPLATFORM/shopware-cli /
 ENTRYPOINT ["/shopware-cli"]
 CMD ["--help"]
