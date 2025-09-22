@@ -1,0 +1,23 @@
+{% block container %}
+    <sw-container>
+        {% block text %}
+        {{ nestedExpression }}
+        {% endblock %}
+    </sw-container>
+{% endblock %}
+-----
+{% block container %}
+<sw-container>
+    {% block text %}
+    {{ nestedExpression }}
+    {% endblock %}
+</sw-container>
+{% endblock %}
+-----
+{% block container %}
+    <sw-container>
+        {% block text %}
+            {{ nestedExpression }}
+        {% endblock %}
+    </sw-container>
+{% endblock %}
