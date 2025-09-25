@@ -12,6 +12,7 @@ import (
 var ignoredPaths = `
 package-lock.json
 Resources/public/**
+Resources/app/storefront/dist/**
 dist/**
 Resources/store/**
 `
