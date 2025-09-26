@@ -510,6 +510,12 @@ func (t *TwigBlockNode) Dump(indent int) string {
 		for i, child := range nonEmptyChildren {
 			if elementChild, ok := child.(*ElementNode); ok {
 				builder.WriteString(elementChild.Dump(childIndent))
+			} else if tplChild, ok := child.(*TemplateExpressionNode); ok {
+				// Template expressions need proper indentation when they're direct children of twig blocks
+				for j := 0; j < childIndent; j++ {
+					builder.WriteString(indentStr)
+				}
+				builder.WriteString(tplChild.Dump(childIndent))
 			} else {
 				builder.WriteString(child.Dump(childIndent))
 			}
