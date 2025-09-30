@@ -25,7 +25,7 @@ jobs:
           check-latest: true
 
       - name: Setup PHP
-        uses: shivammathur/setup-php@ec406be512d7077f68eed36e63f4d91bc006edc4 # ratchet:shivammathur/setup-php@v2
+        uses: shivammathur/setup-php@bf6b4fbd49ca58e4608c9c89fba0b8d90bd2a39f # ratchet:shivammathur/setup-php@v2
         with:
           php-version: '8.2'
 
