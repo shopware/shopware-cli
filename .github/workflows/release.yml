@@ -52,13 +52,6 @@ jobs:
       - name: Install Syft
         uses: anchore/sbom-action/download-syft@da167eac915b4e86f08b264dbdbc867b61be6f0c # ratchet:anchore/sbom-action/download-syft@v0.20.5
 
-      - name: Gather Frosh Homebrew Token
-        uses: octo-sts/action@e480437973a6f6ac2e9caa40ecabedc870d76395 # ratchet:octo-sts/action@v1.0.1
-        id: sts-homebrew
-        with:
-          scope: FriendsOfShopware/homebrew-tap
-          identity: release
-
       - name: Gather Homebrew Token
         uses: octo-sts/action@e480437973a6f6ac2e9caa40ecabedc870d76395 # ratchet:octo-sts/action@v1.0.1
         id: sts-shopware
@@ -72,6 +65,9 @@ jobs:
         with:
           scope: FriendsOfShopware/nur-packages
           identity: release
+
+      - name: Update npm
+        run: npm install -g npm@latest
 
       - name: Login into Docker Hub
         run: echo "${{ secrets.DOCKER_HUB_PASSWORD }}" | docker login -u ${{ secrets.DOCKER_HUB_USERNAME }} --password-stdin
@@ -87,11 +83,9 @@ jobs:
           args: release --clean
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          HOMEBREW_TAP_GITHUB_TOKEN: ${{ steps.sts-homebrew.outputs.token }}
           HOMEBREW_TAP_GITHUB_TOKEN_SHOPWARE: ${{ steps.sts-shopware.outputs.token }}
           NUR_GITHUB_TOKEN: ${{ steps.sts-nur.outputs.token }}
           AUR_KEY: ${{ secrets.AUR_KEY }}
-          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
           GORELEASER_KEY: ${{ secrets.GORELEASER_KEY }}
           # Code Signing
