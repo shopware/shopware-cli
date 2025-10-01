@@ -35,6 +35,10 @@
         },
         "image_proxy": {
           "$ref": "#/$defs/ConfigImageProxy"
+        },
+        "disable_composer_scripts": {
+          "type": "boolean",
+          "description": "When enabled, composer scripts will be disabled during CI builds"
         }
       },
       "additionalProperties": false,

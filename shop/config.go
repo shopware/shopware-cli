@@ -29,7 +29,9 @@ type Config struct {
 	ConfigDeployment *ConfigDeployment `yaml:"deployment,omitempty"`
 	Validation       *ConfigValidation `yaml:"validation,omitempty"`
 	ImageProxy       *ConfigImageProxy `yaml:"image_proxy,omitempty"`
-	foundConfig      bool
+	// When enabled, composer scripts will be disabled during CI builds
+	DisableComposerScripts bool `yaml:"disable_composer_scripts,omitempty"`
+	foundConfig            bool
 }
 
 func (c *Config) IsAdminAPIConfigured() bool {
