@@ -65,6 +65,8 @@ type ConfigBuild struct {
 	KeepNodeModules []string `yaml:"keep_node_modules,omitempty"`
 	// MJML email template compilation configuration
 	MJML *ConfigBuildMJML `yaml:"mjml,omitempty"`
+	// When enabled, the composer install will skip scripts execution
+	NoScripts bool `yaml:"no_scripts,omitempty"`
 }
 
 func (c ConfigBuild) IsMjmlEnabled() bool {

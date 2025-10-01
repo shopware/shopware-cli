@@ -75,6 +75,10 @@ var projectCI = &cobra.Command{
 			composerFlags = append(composerFlags, "--no-dev")
 		}
 
+		if shopCfg.Build.NoScripts {
+			composerFlags = append(composerFlags, "--no-scripts")
+		}
+
 		token, err := prepareComposerAuth(cmd.Context(), args[0])
 		if err != nil {
 			return err

@@ -50,3 +50,49 @@ sync:
 
 	assert.NoError(t, os.RemoveAll(tmpDir))
 }
+
+func TestConfigNoScripts(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	t.Chdir(tmpDir)
+
+	configWithNoScripts := []byte(`
+url: https://example.com
+build:
+  no_scripts: true
+`)
+
+	configPath := filepath.Join(tmpDir, "test.yml")
+	assert.NoError(t, os.WriteFile(configPath, configWithNoScripts, 0644))
+
+	config, err := ReadConfig(configPath, false)
+	assert.NoError(t, err)
+
+	assert.NotNil(t, config.Build)
+	assert.True(t, config.Build.NoScripts)
+
+	assert.NoError(t, os.RemoveAll(tmpDir))
+}
+
+func TestConfigNoScriptsDefault(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	t.Chdir(tmpDir)
+
+	configWithoutNoScripts := []byte(`
+url: https://example.com
+build:
+  disable_asset_copy: false
+`)
+
+	configPath := filepath.Join(tmpDir, "test.yml")
+	assert.NoError(t, os.WriteFile(configPath, configWithoutNoScripts, 0644))
+
+	config, err := ReadConfig(configPath, false)
+	assert.NoError(t, err)
+
+	assert.NotNil(t, config.Build)
+	assert.False(t, config.Build.NoScripts)
+
+	assert.NoError(t, os.RemoveAll(tmpDir))
+}
