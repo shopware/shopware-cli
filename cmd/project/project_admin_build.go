@@ -57,6 +57,7 @@ var projectAdminBuildCmd = &cobra.Command{
 			ShopwareRoot:           projectRoot,
 			ShopwareVersion:        shopwareConstraint,
 			NPMForceInstall:        forceInstall,
+			ForceAdminBuild:        shopCfg.Build.ForceAdminBuild,
 		}
 
 		if err := extension.BuildAssetsForExtensions(cmd.Context(), sources, assetCfg); err != nil {
