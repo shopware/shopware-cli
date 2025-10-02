@@ -39,6 +39,10 @@
         "disable_composer_scripts": {
           "type": "boolean",
           "description": "When enabled, composer scripts will be disabled during CI builds"
+        },
+        "skip_composer_install": {
+          "type": "boolean",
+          "description": "When enabled, composer install will be skipped during CI builds"
         }
       },
       "additionalProperties": false,

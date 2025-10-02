@@ -31,7 +31,9 @@ type Config struct {
 	ImageProxy       *ConfigImageProxy `yaml:"image_proxy,omitempty"`
 	// When enabled, composer scripts will be disabled during CI builds
 	DisableComposerScripts bool `yaml:"disable_composer_scripts,omitempty"`
-	foundConfig            bool
+	// When enabled, composer install will be skipped during CI builds
+	SkipComposerInstall bool `yaml:"skip_composer_install,omitempty"`
+	foundConfig         bool
 }
 
 func (c *Config) IsAdminAPIConfigured() bool {
