@@ -69,37 +69,41 @@ var projectCI = &cobra.Command{
 
 		cleanupPaths = append(cleanupPaths, shopCfg.Build.CleanupPaths...)
 
-		composerFlags := []string{"install", "--no-interaction", "--no-progress", "--optimize-autoloader", "--classmap-authoritative"}
+		if !shopCfg.DisableComposerInstall {
+			composerFlags := []string{"install", "--no-interaction", "--no-progress", "--optimize-autoloader", "--classmap-authoritative"}
 
-		if withDev, _ := cmd.Flags().GetBool("with-dev-dependencies"); !withDev {
-			composerFlags = append(composerFlags, "--no-dev")
+			if withDev, _ := cmd.Flags().GetBool("with-dev-dependencies"); !withDev {
+				composerFlags = append(composerFlags, "--no-dev")
+			}
+
+			if shopCfg.DisableComposerScripts {
+				composerFlags = append(composerFlags, "--no-scripts")
+			}
+
+			token, err := prepareComposerAuth(cmd.Context(), args[0])
+			if err != nil {
+				return err
+			}
+
+			composerInstallSection := ci.Default.Section(cmd.Context(), "Composer Installation")
+
+			composer := phpexec.ComposerCommand(cmd.Context(), composerFlags...)
+			composer.Dir = args[0]
+			composer.Stdin = os.Stdin
+			composer.Stdout = os.Stdout
+			composer.Stderr = os.Stderr
+			composer.Env = append(os.Environ(),
+				"COMPOSER_AUTH="+token,
+			)
+
+			if err := composer.Run(); err != nil {
+				return err
+			}
+
+			composerInstallSection.End(cmd.Context())
+		} else {
+			logging.FromContext(cmd.Context()).Infof("Skipping composer install")
 		}
-
-		if shopCfg.DisableComposerScripts {
-			composerFlags = append(composerFlags, "--no-scripts")
-		}
-
-		token, err := prepareComposerAuth(cmd.Context(), args[0])
-		if err != nil {
-			return err
-		}
-
-		composerInstallSection := ci.Default.Section(cmd.Context(), "Composer Installation")
-
-		composer := phpexec.ComposerCommand(cmd.Context(), composerFlags...)
-		composer.Dir = args[0]
-		composer.Stdin = os.Stdin
-		composer.Stdout = os.Stdout
-		composer.Stderr = os.Stderr
-		composer.Env = append(os.Environ(),
-			"COMPOSER_AUTH="+token,
-		)
-
-		if err := composer.Run(); err != nil {
-			return err
-		}
-
-		composerInstallSection.End(cmd.Context())
 
 		lookingForExtensionsSection := ci.Default.Section(cmd.Context(), "Looking for extensions")
 

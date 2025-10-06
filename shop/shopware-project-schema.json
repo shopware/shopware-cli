@@ -39,6 +39,10 @@
         "disable_composer_scripts": {
           "type": "boolean",
           "description": "When enabled, composer scripts will be disabled during CI builds"
+        },
+        "disable_composer_install": {
+          "type": "boolean",
+          "description": "When enabled, composer install will be skipped during CI builds"
         }
       },
       "additionalProperties": false,
@@ -129,7 +133,8 @@
           "description": "Keep following node_modules in the final build"
         },
         "mjml": {
-          "$ref": "#/$defs/ConfigBuildMJML"
+          "$ref": "#/$defs/ConfigBuildMJML",
+          "description": "MJML email template compilation configuration"
         }
       },
       "additionalProperties": false,
@@ -161,18 +166,6 @@
           },
           "type": "array",
           "description": "Directories to search for MJML files"
-        },
-        "use_webservice": {
-          "type": "boolean",
-          "description": "Use webservice for compilation instead of local npm mjml"
-        },
-        "webservice_url": {
-          "type": "string",
-          "description": "Webservice URL for MJML compilation (e.g., https://mjml.shyim.de or https://user:key@api.mjml.io/v1/render)"
-        },
-        "webservice_api_key": {
-          "type": "string",
-          "description": "Webservice API key for authentication (optional, for services that require Bearer token auth)"
         }
       },
       "additionalProperties": false,
