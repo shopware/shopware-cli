@@ -69,7 +69,7 @@ var projectCI = &cobra.Command{
 
 		cleanupPaths = append(cleanupPaths, shopCfg.Build.CleanupPaths...)
 
-		if !shopCfg.SkipComposerInstall {
+		if !shopCfg.DisableComposerInstall {
 			composerFlags := []string{"install", "--no-interaction", "--no-progress", "--optimize-autoloader", "--classmap-authoritative"}
 
 			if withDev, _ := cmd.Flags().GetBool("with-dev-dependencies"); !withDev {
@@ -102,7 +102,7 @@ var projectCI = &cobra.Command{
 
 			composerInstallSection.End(cmd.Context())
 		} else {
-			logging.FromContext(cmd.Context()).Infof("Skipping composer install (skip_composer_install is enabled)")
+			logging.FromContext(cmd.Context()).Infof("Skipping composer install (DisableComposerInstall is enabled)")
 		}
 
 		lookingForExtensionsSection := ci.Default.Section(cmd.Context(), "Looking for extensions")

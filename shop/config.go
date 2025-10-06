@@ -32,8 +32,8 @@ type Config struct {
 	// When enabled, composer scripts will be disabled during CI builds
 	DisableComposerScripts bool `yaml:"disable_composer_scripts,omitempty"`
 	// When enabled, composer install will be skipped during CI builds
-	SkipComposerInstall bool `yaml:"skip_composer_install,omitempty"`
-	foundConfig         bool
+	DisableComposerInstall bool `yaml:"DisableComposerInstall,omitempty"`
+	foundConfig            bool
 }
 
 func (c *Config) IsAdminAPIConfigured() bool {
