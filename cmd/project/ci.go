@@ -102,7 +102,7 @@ var projectCI = &cobra.Command{
 
 			composerInstallSection.End(cmd.Context())
 		} else {
-			logging.FromContext(cmd.Context()).Infof("Skipping composer install (DisableComposerInstall is enabled)")
+			logging.FromContext(cmd.Context()).Infof("Skipping composer install")
 		}
 
 		lookingForExtensionsSection := ci.Default.Section(cmd.Context(), "Looking for extensions")

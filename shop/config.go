@@ -32,7 +32,7 @@ type Config struct {
 	// When enabled, composer scripts will be disabled during CI builds
 	DisableComposerScripts bool `yaml:"disable_composer_scripts,omitempty"`
 	// When enabled, composer install will be skipped during CI builds
-	DisableComposerInstall bool `yaml:"DisableComposerInstall,omitempty"`
+	DisableComposerInstall bool `yaml:"disable_composer_install,omitempty"`
 	foundConfig            bool
 }
 
