@@ -80,19 +80,13 @@ func validateStorefrontSnippetsByPath(snippetFolder, rootDir string, check valid
 			continue
 		}
 
-		var mainFile string
-
-		for _, file := range files {
-			if strings.HasSuffix(filepath.Base(file), "en-GB.json") {
-				mainFile = file
-			}
-		}
+		mainFile := findMainSnippetFile(files)
 
 		if len(mainFile) == 0 {
 			check.AddResult(validation.CheckResult{
 				Path:       snippetFolder,
 				Identifier: "snippet.validator",
-				Message:    fmt.Sprintf("No en-GB.json file found in %s, using %s", snippetFolder, files[0]),
+				Message:    fmt.Sprintf("No en.json or en-GB.json file found in %s, using %s", snippetFolder, files[0]),
 				Severity:   validation.SeverityWarning,
 			})
 			mainFile = files[0]
@@ -195,18 +189,12 @@ func validateAdministrationByPath(adminFolder, rootDir string, check validation.
 			continue
 		}
 
-		var mainFile string
-
-		for _, file := range files {
-			if strings.HasSuffix(filepath.Base(file), "en-GB.json") {
-				mainFile = file
-			}
-		}
+		mainFile := findMainSnippetFile(files)
 
 		if len(mainFile) == 0 {
 			check.AddResult(validation.CheckResult{
 				Identifier: "snippet.validator",
-				Message:    fmt.Sprintf("No en-GB.json file found in %s, using %s", strings.ReplaceAll(folder, rootDir+"/", ""), strings.ReplaceAll(files[0], rootDir+"/", "")),
+				Message:    fmt.Sprintf("No en.json or en-GB.json file found in %s, using %s", strings.ReplaceAll(folder, rootDir+"/", ""), strings.ReplaceAll(files[0], rootDir+"/", "")),
 				Severity:   validation.SeverityWarning,
 			})
 			mainFile = files[0]
@@ -311,4 +299,20 @@ func compareSnippets(mainFile []byte, mainFilePath, file string, check validatio
 			continue
 		}
 	}
+}
+
+// Search for the country-agnostic language file en.json
+// If it isn't found search for the en-GB.json
+func findMainSnippetFile(files []string) string {
+	for _, file := range files {
+		if strings.HasSuffix(filepath.Base(file), "en.json") {
+			return file
+		}
+	}
+	for _, file := range files {
+		if strings.HasSuffix(filepath.Base(file), "en-GB.json") {
+			return file
+		}
+	}
+	return ""
 }
