@@ -45,7 +45,7 @@ var projectConsoleCmd = &cobra.Command{
 			isPluginCommand := slices.Contains(pluginCommands, input[0])
 
 			if isAppCommand || isPluginCommand {
-				extensions := extension.FindExtensionsFromProject(cmd.Context(), projectRoot)
+				extensions := extension.FindExtensionsFromProject(cmd.Context(), projectRoot, false)
 
 				for _, extension := range extensions {
 					if (extension.GetType() == "plugin" && isPluginCommand) || (extension.GetType() == "app" && isAppCommand) {

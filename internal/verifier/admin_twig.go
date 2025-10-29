@@ -44,16 +44,26 @@ func (a AdminTwigLinter) Check(ctx context.Context, check *Check, config ToolCon
 				return err
 			}
 
+			relPath := strings.TrimPrefix(strings.TrimPrefix(path, "/private"), config.RootDir+"/")
+
 			parsed, err := html.NewAdminParser(string(file))
 			if err != nil {
-				return fmt.Errorf("failed to parse %s: %w", path, err)
+				check.AddResult(validation.CheckResult{
+					Path:       relPath,
+					Message:    fmt.Sprintf("Failed to parse %s: %v. Create a GitHub issue with the file content.", path, err),
+					Severity:   validation.SeverityWarning,
+					Identifier: "could-not-parse-twig",
+					Line:       0,
+				})
+
+				return nil
 			}
 
 			for _, fixer := range fixers {
 				for _, message := range fixer.Check(parsed.Nodes) {
 					check.AddResult(validation.CheckResult{
 						Message:    message.Message,
-						Path:       strings.TrimPrefix(strings.TrimPrefix(path, "/private"), config.RootDir+"/"),
+						Path:       relPath,
 						Line:       0,
 						Severity:   message.Severity,
 						Identifier: fmt.Sprintf("admintwiglinter/%s", message.Identifier),

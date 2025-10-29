@@ -26,6 +26,7 @@ var projectValidateCmd = &cobra.Command{
 		exclude, _ := cmd.Flags().GetString("exclude")
 		tmpDir, err := os.MkdirTemp(os.TempDir(), "analyse-project-*")
 		noCopy, _ := cmd.Flags().GetBool("no-copy")
+		localOnly, _ := cmd.Flags().GetBool("local-only")
 		if err != nil {
 			return fmt.Errorf("cannot create temporary directory: %w", err)
 		}
@@ -64,7 +65,7 @@ var projectValidateCmd = &cobra.Command{
 			tmpDir = projectPath
 		}
 
-		toolCfg, err := verifier.GetConfigFromProject(tmpDir)
+		toolCfg, err := verifier.GetConfigFromProject(tmpDir, localOnly)
 		if err != nil {
 			return err
 		}
@@ -108,4 +109,5 @@ func init() {
 	projectValidateCmd.PersistentFlags().String("only", "", "Run only specific tools by name (comma-separated, e.g. phpstan,eslint)")
 	projectValidateCmd.PersistentFlags().String("exclude", "", "Exclude specific tools by name (comma-separated, e.g. phpstan,eslint)")
 	projectValidateCmd.PersistentFlags().Bool("no-copy", false, "Do not copy project files to temporary directory")
+	projectValidateCmd.PersistentFlags().Bool("local-only", false, "Only read plugins in custom/* folders")
 }

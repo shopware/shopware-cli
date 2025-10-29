@@ -98,7 +98,7 @@ func getProjectConstraintFromKernel(project string) (*version.Constraints, error
 
 // FindAssetSourcesOfProject This finds all assets without invoking any PHP function and thinks all plugins / apps are active. Optional for CI usage.
 func FindAssetSourcesOfProject(ctx context.Context, project string, shopCfg *shop.Config) []asset.Source {
-	extensions := FindExtensionsFromProject(ctx, project)
+	extensions := FindExtensionsFromProject(ctx, project, false)
 	sources := ConvertExtensionsToSources(ctx, extensions)
 
 	composerJson, err := os.ReadFile(path.Join(project, "composer.json"))
@@ -195,18 +195,38 @@ func DumpAndLoadAssetSourcesOfProject(ctx context.Context, project string, shopC
 	return sources, nil
 }
 
-func FindExtensionsFromProject(ctx context.Context, project string) []Extension {
+func FindExtensionsFromProject(ctx context.Context, project string, onlyLocal bool) []Extension {
 	extensions := make(map[string]Extension)
 
-	for _, ext := range addExtensionsByComposer(project) {
+	if onlyLocal != true {
+		for _, ext := range addExtensionsByComposer(project) {
+			name, err := ext.GetName()
+			if err != nil {
+				continue
+			}
+
+			version, _ := ext.GetVersion()
+
+			logging.FromContext(ctx).Infof("Found extension using Composer: %s (%s)", name, version)
+
+			extensions[name] = ext
+		}
+	}
+
+	for _, ext := range addExtensionsByWildcard(path.Join(project, "custom", "static-plugins")) {
 		name, err := ext.GetName()
 		if err != nil {
 			continue
 		}
 
+		// Skip if extension is already added by composer
+		if _, ok := extensions[name]; ok {
+			continue
+		}
+
 		version, _ := ext.GetVersion()
 
-		logging.FromContext(ctx).Infof("Found extension using Composer: %s (%s)", name, version)
+		logging.FromContext(ctx).Infof("Found extension in custom/plugins: %s (%s)", name, version)
 
 		extensions[name] = ext
 	}
