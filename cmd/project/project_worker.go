@@ -91,7 +91,7 @@ var projectWorkerCmd = &cobra.Command{
 			go func(ctx context.Context, index int) {
 				defer wg.Done()
 
-				for {
+				for ctx.Err() == nil {
 					if err = workerRatelimit.Wait(ctx); err != nil {
 						logging.FromContext(ctx).Error(err)
 						continue
