@@ -83,13 +83,13 @@ func getShopwareConstraint(root string) (*version.Constraints, error) {
 	return &cst, nil
 }
 
-func GetConfigFromProject(root string) (*ToolConfig, error) {
+func GetConfigFromProject(root string, onlyLocal bool) (*ToolConfig, error) {
 	constraint, err := getShopwareConstraint(root)
 	if err != nil {
 		return nil, err
 	}
 
-	extensions := extension.FindExtensionsFromProject(logging.DisableLogger(context.Background()), root)
+	extensions := extension.FindExtensionsFromProject(logging.DisableLogger(context.Background()), root, onlyLocal)
 
 	sourceDirectories := []string{}
 	adminDirectories := []string{}

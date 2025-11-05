@@ -57,7 +57,7 @@ var projectAutofixComposerCmd = &cobra.Command{
 			return err
 		}
 
-		extensions := extension.FindExtensionsFromProject(logging.DisableLogger(cmd.Context()), project)
+		extensions := extension.FindExtensionsFromProject(logging.DisableLogger(cmd.Context()), project, false)
 
 		composerInstall := []string{}
 		deleteDirectories := []string{}

@@ -179,7 +179,7 @@ func getLocalExtensions() (*version.Version, map[string]string, error) {
 		return nil, nil, err
 	}
 
-	extensions := extension.FindExtensionsFromProject(logging.DisableLogger(context.TODO()), project)
+	extensions := extension.FindExtensionsFromProject(logging.DisableLogger(context.TODO()), project, false)
 
 	var extensionNames = make(map[string]string, 0)
 
