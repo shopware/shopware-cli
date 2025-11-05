@@ -198,7 +198,7 @@ func DumpAndLoadAssetSourcesOfProject(ctx context.Context, project string, shopC
 func FindExtensionsFromProject(ctx context.Context, project string, onlyLocal bool) []Extension {
 	extensions := make(map[string]Extension)
 
-	if onlyLocal != true {
+	if !onlyLocal {
 		for _, ext := range addExtensionsByComposer(project) {
 			name, err := ext.GetName()
 			if err != nil {
