@@ -43,7 +43,7 @@ jobs:
           path: 'plugin'
 
       - name: Create Shopware
-        run: shopware-cli project create shopware 6.5.7.3
+        run: shopware-cli project create shopware 6.5.7.3 --no-audit
 
       - name: Build asset of Plugin
         run: shopware-cli extension zip plugin

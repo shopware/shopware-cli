@@ -50,6 +50,7 @@ var projectCreateCmd = &cobra.Command{
 
 		useDocker, _ := cmd.PersistentFlags().GetBool("docker")
 		withoutElasticsearch, _ := cmd.PersistentFlags().GetBool("without-elasticsearch")
+		noAudit, _ := cmd.PersistentFlags().GetBool("no-audit")
 
 		if _, err := os.Stat(projectFolder); err == nil {
 			return fmt.Errorf("the folder %s exists already", projectFolder)
@@ -128,7 +129,7 @@ var projectCreateCmd = &cobra.Command{
 
 		logging.FromContext(cmd.Context()).Infof("Setting up Shopware %s", chooseVersion)
 
-		composerJson, err := generateComposerJson(cmd.Context(), chooseVersion, strings.Contains(chooseVersion, "rc"), useDocker, withoutElasticsearch)
+		composerJson, err := generateComposerJson(cmd.Context(), chooseVersion, strings.Contains(chooseVersion, "rc"), useDocker, withoutElasticsearch, noAudit)
 		if err != nil {
 			return err
 		}
@@ -234,6 +235,7 @@ func init() {
 	projectRootCmd.AddCommand(projectCreateCmd)
 	projectCreateCmd.PersistentFlags().Bool("docker", false, "Use Docker to run Composer instead of local installation")
 	projectCreateCmd.PersistentFlags().Bool("without-elasticsearch", false, "Remove Elasticsearch from the installation")
+	projectCreateCmd.PersistentFlags().Bool("no-audit", false, "Disable composer audit blocking insecure packages")
 }
 
 func fetchAvailableShopwareVersions(ctx context.Context) ([]string, error) {
@@ -267,7 +269,7 @@ func fetchAvailableShopwareVersions(ctx context.Context) ([]string, error) {
 	return releases, nil
 }
 
-func generateComposerJson(ctx context.Context, version string, rc bool, useDocker bool, withoutElasticsearch bool) (string, error) {
+func generateComposerJson(ctx context.Context, version string, rc bool, useDocker bool, withoutElasticsearch bool, noAudit bool) (string, error) {
 	tplContent, err := template.New("composer.json").Parse(`{
     "name": "shopware/production",
     "license": "MIT",
@@ -323,7 +325,12 @@ func generateComposerJson(ctx context.Context, version string, rc bool, useDocke
             "symfony/runtime": true
         },
         "optimize-autoloader": true,
-        "sort-packages": true
+        "sort-packages": true,
+        {{if .NoAudit}}
+        "audit": {
+            "block-insecure": false
+        }
+        {{end}}
     },
     "scripts": {
         "auto-scripts": [
@@ -373,6 +380,7 @@ func generateComposerJson(ctx context.Context, version string, rc bool, useDocke
 		"RC":                rc,
 		"UseDocker":         useDocker,
 		"UseElasticsearch":  !withoutElasticsearch,
+		"NoAudit":           noAudit,
 	})
 	if err != nil {
 		return "", err
