@@ -67,7 +67,7 @@ jobs:
           identity: release
 
       - name: Update npm
-        run: npm install -g npm@latest
+        run: sudo npm install -g npm@latest
 
       - name: Login into Docker Hub
         run: echo "${{ secrets.DOCKER_HUB_PASSWORD }}" | docker login -u ${{ secrets.DOCKER_HUB_USERNAME }} --password-stdin
