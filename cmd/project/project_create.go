@@ -17,6 +17,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/shopware/shopware-cli/internal/packagist"
+	"github.com/shopware/shopware-cli/internal/system"
 	"github.com/shopware/shopware-cli/logging"
 )
 
@@ -51,7 +52,14 @@ var projectCreateCmd = &cobra.Command{
 		noAudit, _ := cmd.PersistentFlags().GetBool("no-audit")
 
 		if _, err := os.Stat(projectFolder); err == nil {
-			return fmt.Errorf("the folder %s exists already", projectFolder)
+			empty, err := system.IsDirEmpty(projectFolder)
+			if err != nil {
+				return err
+			}
+
+			if !empty {
+				return fmt.Errorf("the folder %s exists already and is not empty", projectFolder)
+			}
 		}
 
 		logging.FromContext(cmd.Context()).Infof("Using Symfony Flex to create a new Shopware 6 project")
@@ -121,7 +129,7 @@ var projectCreateCmd = &cobra.Command{
 			return fmt.Errorf("cannot find version %s", result)
 		}
 
-		if err := os.Mkdir(projectFolder, os.ModePerm); err != nil {
+		if err := os.MkdirAll(projectFolder, os.ModePerm); err != nil {
 			return err
 		}
 
