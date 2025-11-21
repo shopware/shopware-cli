@@ -1,14 +1,13 @@
 package extension
 
 import (
+	"context"
 	"fmt"
 	"image"
 	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
-
-	"golang.org/x/net/context"
 
 	"github.com/shopware/shopware-cli/internal/spdx"
 	"github.com/shopware/shopware-cli/internal/validation"
