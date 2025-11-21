@@ -77,3 +77,21 @@ func TestCopyFiles(t *testing.T) {
 	_, err = os.Stat(dstDirenvDir)
 	assert.True(t, os.IsNotExist(err), ".direnv directory was not excluded")
 }
+
+func TestIsDirEmpty(t *testing.T) {
+	// Test empty directory
+	tmpDir := t.TempDir()
+	empty, err := IsDirEmpty(tmpDir)
+	assert.NoError(t, err)
+	assert.True(t, empty)
+
+	// Test non-empty directory
+	f, err := os.Create(filepath.Join(tmpDir, "test"))
+	assert.NoError(t, err)
+	err = f.Close()
+	assert.NoError(t, err)
+
+	empty, err = IsDirEmpty(tmpDir)
+	assert.NoError(t, err)
+	assert.False(t, empty)
+}

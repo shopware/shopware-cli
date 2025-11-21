@@ -101,3 +101,19 @@ func copyFile(src, dst string) error {
 
 	return os.Chmod(dst, sourceInfo.Mode())
 }
+
+func IsDirEmpty(name string) (bool, error) {
+	f, err := os.Open(name)
+	if err != nil {
+		return false, err
+	}
+	defer func() {
+		_ = f.Close()
+	}()
+
+	_, err = f.Readdirnames(1)
+	if err == io.EOF {
+		return true, nil
+	}
+	return false, err
+}
