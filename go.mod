@@ -34,7 +34,7 @@ require (
 	github.com/wk8/go-ordered-map/v2 v2.1.8
 	github.com/yuin/goldmark v1.7.13
 	github.com/zeebo/xxh3 v1.0.2
-	go.uber.org/zap v1.27.0
+	go.uber.org/zap v1.27.1
 	golang.org/x/image v0.33.0
 	golang.org/x/text v0.31.0
 	golang.org/x/time v0.14.0
