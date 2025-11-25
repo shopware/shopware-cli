@@ -8,7 +8,6 @@ import (
 	"strings"
 
 	"dario.cat/mergo"
-	"github.com/doutorfinancas/go-mad/core"
 	adminSdk "github.com/friendsofshopware/go-shopware-admin-api-sdk"
 	"github.com/google/uuid"
 	"github.com/invopop/jsonschema"
@@ -128,13 +127,107 @@ type ConfigAdminApi struct {
 
 type ConfigDump struct {
 	// Allows to rewrite single columns, perfect for GDPR compliance
-	Rewrite map[string]core.Rewrite `yaml:"rewrite,omitempty"`
+	Rewrite map[string]map[string]string `yaml:"rewrite,omitempty"`
 	// Only export the schema of these tables
 	NoData []string `yaml:"nodata,omitempty"`
 	// Ignore these tables from export
 	Ignore []string `yaml:"ignore,omitempty"`
 	// Add an where condition to that table, schema is table name as key, and where statement as value
 	Where map[string]string `yaml:"where,omitempty"`
+}
+
+// EnableClean adds default tables that should be excluded from data dump in clean mode
+func (c *ConfigDump) EnableClean() {
+	cleanTables := []string{
+		"cart",
+		"customer_recovery",
+		"dead_message",
+		"enqueue",
+		"messenger_messages",
+		"import_export_log",
+		"increment",
+		"elasticsearch_index_task",
+		"log_entry",
+		"message_queue_stats",
+		"notification",
+		"payment_token",
+		"refresh_token",
+		"version",
+		"version_commit",
+		"version_commit_data",
+		"webhook_event_log",
+	}
+	c.NoData = append(c.NoData, cleanTables...)
+}
+
+// EnableAnonymization adds default column rewrites for anonymizing customer data
+func (c *ConfigDump) EnableAnonymization() {
+	if c.Rewrite == nil {
+		c.Rewrite = make(map[string]map[string]string)
+	}
+
+	anonymizationRewrites := map[string]map[string]string{
+		"customer": {
+			"first_name":     "faker.Person.FirstName()",
+			"last_name":      "faker.Person.LastName()",
+			"company":        "faker.Person.Name()",
+			"title":          "faker.Person.Name()",
+			"email":          "faker.Internet.Email()",
+			"remote_address": "faker.Internet.Ipv4()",
+		},
+		"customer_address": {
+			"first_name":   "faker.Person.FirstName()",
+			"last_name":    "faker.Person.LastName()",
+			"company":      "faker.Person.Name()",
+			"title":        "faker.Person.Name()",
+			"street":       "faker.Address.StreetAddress()",
+			"zipcode":      "faker.Address.PostCode()",
+			"city":         "faker.Address.City()",
+			"phone_number": "faker.Phone.Number()",
+		},
+		"log_entry": {
+			"provider": "",
+		},
+		"newsletter_recipient": {
+			"email":      "faker.Internet.Email()",
+			"first_name": "faker.Person.FirstName()",
+			"last_name":  "faker.Person.LastName()",
+			"city":       "faker.Address.City()",
+		},
+		"order_address": {
+			"first_name":   "faker.Person.FirstName()",
+			"last_name":    "faker.Person.LastName()",
+			"company":      "faker.Person.Name()",
+			"title":        "faker.Person.Name()",
+			"street":       "faker.Address.StreetAddress()",
+			"zipcode":      "faker.Address.PostCode()",
+			"city":         "faker.Address.City()",
+			"phone_number": "faker.Phone.Number()",
+		},
+		"order_customer": {
+			"first_name":     "faker.Person.FirstName()",
+			"last_name":      "faker.Person.LastName()",
+			"company":        "faker.Person.Name()",
+			"title":          "faker.Person.Name()",
+			"email":          "faker.Internet.Email()",
+			"remote_address": "faker.Internet.Ipv4()",
+		},
+		"product_review": {
+			"email": "faker.Internet.Email()",
+		},
+	}
+
+	// Merge with existing rewrites
+	for table, columns := range anonymizationRewrites {
+		if _, exists := c.Rewrite[table]; !exists {
+			c.Rewrite[table] = columns
+		} else {
+			// Merge column rewrites for existing table
+			for column, rewrite := range columns {
+				c.Rewrite[table][column] = rewrite
+			}
+		}
+	}
 }
 
 type ConfigSync struct {
