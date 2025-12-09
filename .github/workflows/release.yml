@@ -18,12 +18,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@95d9a5deda9de15063e7595e9719c11c38c90ae2 # ratchet:step-security/harden-runner@v2.13.2
+        uses: step-security/harden-runner@df199fb7be9f65074067a9eb93f12bb4c5547cf2 # ratchet:step-security/harden-runner@v2.13.3
         with:
           egress-policy: audit
 
       - name: Checkout
-        uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # ratchet:actions/checkout@v4
+        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # ratchet:actions/checkout@v4
         with:
           fetch-depth: 0
 
@@ -53,14 +53,14 @@ jobs:
         uses: anchore/sbom-action/download-syft@fbfd9c6c189226748411491745178e0c2017392d # ratchet:anchore/sbom-action/download-syft@v0.20.10
 
       - name: Gather Homebrew Token
-        uses: octo-sts/action@d6c70ad3b9ac85df6da6b9749014d7283987cfec # ratchet:octo-sts/action@v1.0.3
+        uses: octo-sts/action@f603d3be9d8dd9871a265776e625a27b00effe05 # ratchet:octo-sts/action@v1.1.1
         id: sts-shopware
         with:
           scope: shopware/homebrew-tap
           identity: swcli
 
       - name: Gather NUR Token
-        uses: octo-sts/action@d6c70ad3b9ac85df6da6b9749014d7283987cfec # ratchet:octo-sts/action@v1.0.3
+        uses: octo-sts/action@f603d3be9d8dd9871a265776e625a27b00effe05 # ratchet:octo-sts/action@v1.1.1
         id: sts-nur
         with:
           scope: FriendsOfShopware/nur-packages
