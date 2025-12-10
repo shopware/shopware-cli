@@ -257,20 +257,21 @@ var projectCI = &cobra.Command{
 }
 
 func createEmptySnippetFolder(root string) error {
-	if _, err := os.Stat(path.Join(root, "Resources/app/administration/src/app/snippet")); os.IsNotExist(err) {
-		if err := os.MkdirAll(path.Join(root, "Resources/app/administration/src/app/snippet"), os.ModePerm); err != nil {
-			return err
-		}
+	dirs := []string{
+		"Resources/app/administration/src/app/snippet",
+		"Resources/app/administration/src/module/dummy/snippet",
+		"Resources/app/administration/src/app/component/dummy/dummy/snippet",
 	}
 
-	if _, err := os.Stat(path.Join(root, "Resources/app/administration/src/module/dummy/snippet")); os.IsNotExist(err) {
-		if err := os.MkdirAll(path.Join(root, "Resources/app/administration/src/module/dummy/snippet"), os.ModePerm); err != nil {
+	for _, dir := range dirs {
+		fullPath := path.Join(root, dir)
+
+		if err := os.MkdirAll(fullPath, os.ModePerm); err != nil {
 			return err
 		}
-	}
 
-	if _, err := os.Stat(path.Join(root, "Resources/app/administration/src/app/component/dummy/dummy/snippet")); os.IsNotExist(err) {
-		if err := os.MkdirAll(path.Join(root, "Resources/app/administration/src/app/component/dummy/dummy/snippet"), os.ModePerm); err != nil {
+		gitkeepPath := path.Join(fullPath, ".gitkeep")
+		if err := os.WriteFile(gitkeepPath, []byte{}, 0644); err != nil {
 			return err
 		}
 	}
