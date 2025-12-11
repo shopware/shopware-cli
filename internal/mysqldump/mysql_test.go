@@ -513,8 +513,9 @@ func Test_mySQL_ignoresTable(t *testing.T) {
 		t.Error(err)
 	}
 
-	if b.String() != "SET FOREIGN_KEY_CHECKS = 1;\n" {
-		t.Error("No tables should be dumped")
+	expected := "SET NAMES utf8mb4;\nSET FOREIGN_KEY_CHECKS = 0;\n\nSET FOREIGN_KEY_CHECKS = 1;\n"
+	if b.String() != expected {
+		t.Errorf("No tables should be dumped, expected:\n%s\ngot:\n%s", expected, b.String())
 	}
 }
 
@@ -751,4 +752,19 @@ func Test_mySQL_dumpsViewsIgnoresDefiners(t *testing.T) {
 	if !strings.Contains(b.String(), "VIEW `user_view`") {
 		t.Error("View not dumped")
 	}
+}
+
+func Test_mySQL_parallelDefaultValue(t *testing.T) {
+	db, _ := getDB(t)
+	dumper := getInternalMySQLInstance(db)
+
+	assert.Equal(t, 0, dumper.Parallel, "Parallel should be disabled by default")
+}
+
+func Test_mySQL_parallelCanBeEnabled(t *testing.T) {
+	db, _ := getDB(t)
+	dumper := getInternalMySQLInstance(db)
+	dumper.Parallel = 4
+
+	assert.Equal(t, 4, dumper.Parallel, "Parallel should be configurable")
 }

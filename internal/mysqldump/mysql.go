@@ -9,6 +9,7 @@ import (
 	"io"
 	"regexp"
 	"strings"
+	"sync"
 
 	"github.com/shopware/shopware-cli/logging"
 )
@@ -27,10 +28,13 @@ type Dumper struct {
 	// LockTables controls whether to lock tables during dump (default: true)
 	LockTables bool
 	// Quick enables quick mode for mysqldump (default: false)
-	Quick               bool
+	Quick bool
+	// Parallel controls how many tables to dump concurrently (default: 0 = disabled)
+	Parallel            int
 	openTx              *sql.Tx
 	mapBins             map[string][]string
 	mapExclusionColumns map[string][]string
+	mapMu               sync.RWMutex
 }
 
 const (
@@ -49,6 +53,7 @@ func NewMySQLDumper(db *sql.DB) *Dumper {
 		mapExclusionColumns: make(map[string][]string),
 		LockTables:          true,
 		Quick:               false,
+		Parallel:            0,
 	}
 }
 
@@ -56,7 +61,6 @@ func NewMySQLDumper(db *sql.DB) *Dumper {
 // returns error in the event something gos wrong in the middle of the dump process
 func (d *Dumper) Dump(ctx context.Context, w io.Writer) error {
 	var dump string
-	var tmp string
 	dump = "SET NAMES utf8mb4;\n"
 	dump += "SET FOREIGN_KEY_CHECKS = 0;\n"
 
@@ -73,31 +77,17 @@ func (d *Dumper) Dump(ctx context.Context, w io.Writer) error {
 		d.filterMap[strings.ToLower(table)] = IgnoreMapPlacement
 	}
 
-	for _, table := range tables {
-		if d.filterMap[strings.ToLower(table)] == IgnoreMapPlacement {
-			continue
-		}
+	if _, err = fmt.Fprintln(w, dump); err != nil {
+		return err
+	}
 
-		skipData := d.filterMap[strings.ToLower(table)] == NoDataMapPlacement
-		tmp, err = d.getCreateTableStatement(table)
-		if err != nil {
+	if d.Parallel > 0 {
+		if err := d.dumpTablesParallel(ctx, w, tables); err != nil {
 			return err
 		}
-
-		tmp = d.excludeGeneratedColumns(table, tmp)
-
-		d.parseBinaryRelations(table, tmp)
-
-		dump += tmp
-		if !skipData {
-			dump, err = d.dumpData(ctx, w, dump, table)
-			if err != nil {
-				return err
-			}
-		}
-
-		if _, err = fmt.Fprintln(w, dump); err != nil {
-			logging.FromContext(ctx).Error(err.Error())
+	} else {
+		if err := d.dumpTablesSequential(ctx, w, tables); err != nil {
+			return err
 		}
 	}
 
@@ -114,9 +104,195 @@ func (d *Dumper) Dump(ctx context.Context, w io.Writer) error {
 	return err
 }
 
+func (d *Dumper) dumpTablesSequential(ctx context.Context, w io.Writer, tables []string) error {
+	for _, table := range tables {
+		if d.filterMap[strings.ToLower(table)] == IgnoreMapPlacement {
+			continue
+		}
+
+		skipData := d.filterMap[strings.ToLower(table)] == NoDataMapPlacement
+		tmp, err := d.getCreateTableStatement(table)
+		if err != nil {
+			return err
+		}
+
+		tmp = d.excludeGeneratedColumns(table, tmp)
+		d.parseBinaryRelations(table, tmp)
+
+		if _, err = fmt.Fprintln(w, tmp); err != nil {
+			return err
+		}
+
+		if !skipData {
+			if err = d.dumpTableDataDirect(ctx, w, table); err != nil {
+				return err
+			}
+		}
+	}
+
+	return nil
+}
+
+func (d *Dumper) dumpTablesParallel(ctx context.Context, w io.Writer, tables []string) error {
+	type tableResult struct {
+		table string
+		data  string
+		err   error
+		index int
+	}
+
+	tablesToDump := make([]string, 0, len(tables))
+	for _, table := range tables {
+		if d.filterMap[strings.ToLower(table)] != IgnoreMapPlacement {
+			tablesToDump = append(tablesToDump, table)
+		}
+	}
+
+	results := make([]tableResult, len(tablesToDump))
+	semaphore := make(chan struct{}, d.Parallel)
+	var wg sync.WaitGroup
+	var mu sync.Mutex
+
+	for i, table := range tablesToDump {
+		wg.Add(1)
+		go func(table string, index int) {
+			defer wg.Done()
+			semaphore <- struct{}{}
+			defer func() { <-semaphore }()
+
+			var result tableResult
+			result.table = table
+			result.index = index
+
+			skipData := d.filterMap[strings.ToLower(table)] == NoDataMapPlacement
+			tmp, err := d.getCreateTableStatement(table)
+			if err != nil {
+				result.err = err
+				mu.Lock()
+				results[index] = result
+				mu.Unlock()
+				return
+			}
+
+			tmp = d.excludeGeneratedColumns(table, tmp)
+			d.parseBinaryRelations(table, tmp)
+
+			var sb strings.Builder
+			sb.WriteString(tmp)
+
+			if !skipData {
+				if err := d.dumpTableDataToWriter(ctx, &sb, table); err != nil {
+					result.err = err
+					mu.Lock()
+					results[index] = result
+					mu.Unlock()
+					return
+				}
+			}
+
+			result.data = sb.String()
+			mu.Lock()
+			results[index] = result
+			mu.Unlock()
+		}(table, i)
+	}
+
+	wg.Wait()
+
+	for _, result := range results {
+		if result.err != nil {
+			return result.err
+		}
+		if _, err := w.Write([]byte(result.data)); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func (d *Dumper) dumpTableDataDirect(ctx context.Context, w io.Writer, table string) error {
+	var cnt uint64
+	var tmp string
+	var err error
+
+	if d.LockTables {
+		_, err = d.mysqlFlushTable(table)
+		if err != nil {
+			return err
+		}
+	}
+
+	tmp, cnt, err = d.getTableHeader(table)
+	if err != nil {
+		return err
+	}
+
+	if _, err = fmt.Fprint(w, tmp); err != nil {
+		return err
+	}
+
+	if cnt > 0 {
+		lockStmt := d.getLockTableWriteStatement(table)
+		if _, err = fmt.Fprint(w, lockStmt); err != nil {
+			return err
+		}
+
+		if dErr := d.dumpTableData(ctx, w, table); dErr != nil {
+			return dErr
+		}
+
+		unlockStmt := d.getUnlockTablesStatement()
+		if _, err = fmt.Fprint(w, unlockStmt); err != nil {
+			return err
+		}
+	}
+
+	if d.LockTables {
+		if _, dErr := d.mysqlUnlockTables(); dErr != nil {
+			return dErr
+		}
+	}
+
+	return nil
+}
+
+func (d *Dumper) dumpTableDataToWriter(ctx context.Context, w io.Writer, table string) error {
+	var cnt uint64
+	var tmp string
+	var err error
+
+	tmp, cnt, err = d.getTableHeader(table)
+	if err != nil {
+		return err
+	}
+
+	if _, err = fmt.Fprint(w, tmp); err != nil {
+		return err
+	}
+
+	if cnt > 0 {
+		lockStmt := d.getLockTableWriteStatement(table)
+		if _, err = fmt.Fprint(w, lockStmt); err != nil {
+			return err
+		}
+
+		if dErr := d.dumpTableData(ctx, w, table); dErr != nil {
+			return dErr
+		}
+
+		unlockStmt := d.getUnlockTablesStatement()
+		if _, err = fmt.Fprint(w, unlockStmt); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
 func (d *Dumper) parseBinaryRelations(table, createTable string) {
 	// no cache, if it is requested, replace existing entry
-	d.mapBins[table] = make([]string, 0)
+	binaryCols := make([]string, 0)
 
 	scanner := bufio.NewScanner(strings.NewReader(createTable))
 	for scanner.Scan() {
@@ -125,16 +301,20 @@ func (d *Dumper) parseBinaryRelations(table, createTable string) {
 			columnName := r.FindAllStringSubmatch(scanner.Text(), -1)
 
 			if len(columnName) > 0 && len(columnName[0]) > 0 {
-				d.mapBins[table] = append(d.mapBins[table], columnName[0][1])
+				binaryCols = append(binaryCols, columnName[0][1])
 			}
 		}
 	}
+
+	d.mapMu.Lock()
+	d.mapBins[table] = binaryCols
+	d.mapMu.Unlock()
 }
 
 func (d *Dumper) excludeGeneratedColumns(table, createTable string) string {
 	// Track generated columns for exclusion during data dump
 	// but always preserve them in the CREATE TABLE statement
-	d.mapExclusionColumns[table] = make([]string, 0)
+	excludedCols := make([]string, 0)
 
 	scanner := bufio.NewScanner(strings.NewReader(createTable))
 	for scanner.Scan() {
@@ -143,17 +323,24 @@ func (d *Dumper) excludeGeneratedColumns(table, createTable string) string {
 			columnName := r.FindAllStringSubmatch(scanner.Text(), -1)
 
 			if len(columnName) > 0 && len(columnName[0]) > 0 {
-				d.mapExclusionColumns[table] = append(d.mapExclusionColumns[table], columnName[0][1])
+				excludedCols = append(excludedCols, columnName[0][1])
 			}
 		}
 	}
+
+	d.mapMu.Lock()
+	d.mapExclusionColumns[table] = excludedCols
+	d.mapMu.Unlock()
 
 	return createTable
 }
 
 func (d *Dumper) isColumnBinary(table, columnName string) bool {
 	columnName = strings.Trim(columnName, "`")
-	if val, ok := d.mapBins[table]; ok {
+	d.mapMu.RLock()
+	val, ok := d.mapBins[table]
+	d.mapMu.RUnlock()
+	if ok {
 		for _, b := range val {
 			if b == columnName {
 				return true
@@ -165,7 +352,10 @@ func (d *Dumper) isColumnBinary(table, columnName string) bool {
 }
 
 func (d *Dumper) isColumnExcluded(table, columnName string) bool {
-	if val, ok := d.mapExclusionColumns[table]; ok {
+	d.mapMu.RLock()
+	val, ok := d.mapExclusionColumns[table]
+	d.mapMu.RUnlock()
+	if ok {
 		for _, b := range val {
 			if b == columnName {
 				return true
@@ -175,49 +365,6 @@ func (d *Dumper) isColumnExcluded(table, columnName string) bool {
 
 	return false
 }
-
-func (d *Dumper) dumpData(ctx context.Context, w io.Writer, dump, table string) (string, error) {
-	var cnt uint64
-	var tmp string
-	var err error
-	if d.LockTables {
-		_, err = d.mysqlFlushTable(table)
-		if err != nil {
-			return "", err
-		}
-	}
-
-	tmp, cnt, err = d.getTableHeader(table)
-	if err != nil {
-		return "", err
-	}
-	dump += tmp
-	if cnt > 0 {
-		dump += d.getLockTableWriteStatement(table)
-
-		// before the data dump, we need to flush everything to file
-		if _, err = fmt.Fprintln(w, dump); err != nil {
-			return "", err
-		}
-		// and after flush we need to clear the variable
-		dump = ""
-
-		if dErr := d.dumpTableData(ctx, w, table); dErr != nil {
-			return "", dErr
-		}
-
-		dump += d.getUnlockTablesStatement()
-	}
-
-	if d.LockTables {
-		if _, dErr := d.mysqlUnlockTables(); err != nil {
-			return "", dErr
-		}
-	}
-
-	return dump, nil
-}
-
 
 func (d *Dumper) getTables(ctx context.Context) ([]string, error) {
 	tables := make([]string, 0)
@@ -591,6 +738,8 @@ func (d *Dumper) dumpViews(ctx context.Context, w io.Writer) error {
 	if err != nil {
 		return err
 	}
+
+	fmt.Println(views)
 
 	for _, view := range views {
 		ddl, err := d.getView(view)

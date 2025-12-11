@@ -42,6 +42,7 @@ var projectDatabaseDumpCmd = &cobra.Command{
 		anonymize, _ := cmd.Flags().GetBool("anonymize")
 		compression, _ := cmd.Flags().GetString("compression")
 		quick, _ := cmd.Flags().GetBool("quick")
+		parallel, _ := cmd.Flags().GetInt("parallel")
 
 		db, err := sql.Open("mysql", mysqlConfig.FormatDSN())
 		if err != nil {
@@ -51,6 +52,7 @@ var projectDatabaseDumpCmd = &cobra.Command{
 		dumper := mysqldump.NewMySQLDumper(db)
 		dumper.LockTables = !skipLockTables
 		dumper.Quick = quick
+		dumper.Parallel = parallel
 
 		var projectCfg *shop.Config
 		if projectCfg, err = shop.ReadConfig(projectConfigPath, true); err != nil {
@@ -236,4 +238,5 @@ func init() {
 	projectDatabaseDumpCmd.Flags().String("compression", "", "Compress the dump (gzip, zstd)")
 	projectDatabaseDumpCmd.Flags().Bool("zstd", false, "Zstd the whole dump")
 	projectDatabaseDumpCmd.Flags().Bool("quick", false, "Use quick option for mysqldump")
+	projectDatabaseDumpCmd.Flags().Int("parallel", 0, "Number of tables to dump concurrently (0 = disabled)")
 }
