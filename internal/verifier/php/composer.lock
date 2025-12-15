@@ -402,16 +402,16 @@
         },
         {
             "name": "friendsofphp/php-cs-fixer",
-            "version": "v3.91.3",
+            "version": "v3.92.0",
             "source": {
                 "type": "git",
                 "url": "https://github.com/PHP-CS-Fixer/PHP-CS-Fixer.git",
-                "reference": "9f10aa6390cea91da175ea608880e942d7c0226e"
+                "reference": "5646c2cd99b7cb4b658ff681fe27069ba86c7280"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/PHP-CS-Fixer/PHP-CS-Fixer/zipball/9f10aa6390cea91da175ea608880e942d7c0226e",
-                "reference": "9f10aa6390cea91da175ea608880e942d7c0226e",
+                "url": "https://api.github.com/repos/PHP-CS-Fixer/PHP-CS-Fixer/zipball/5646c2cd99b7cb4b658ff681fe27069ba86c7280",
+                "reference": "5646c2cd99b7cb4b658ff681fe27069ba86c7280",
                 "shasum": ""
             },
             "require": {
@@ -493,7 +493,7 @@
             ],
             "support": {
                 "issues": "https://github.com/PHP-CS-Fixer/PHP-CS-Fixer/issues",
-                "source": "https://github.com/PHP-CS-Fixer/PHP-CS-Fixer/tree/v3.91.3"
+                "source": "https://github.com/PHP-CS-Fixer/PHP-CS-Fixer/tree/v3.92.0"
             },
             "funding": [
                 {
@@ -501,25 +501,26 @@
                     "type": "github"
                 }
             ],
-            "time": "2025-12-05T19:45:37+00:00"
+            "time": "2025-12-12T10:29:19+00:00"
         },
         {
             "name": "frosh/shopware-rector",
-            "version": "0.5.7",
+            "version": "0.5.8",
             "source": {
                 "type": "git",
                 "url": "https://github.com/FriendsOfShopware/shopware-rector.git",
-                "reference": "2e279aeb46cdfaacfa1c70ce47c14be9e2a2e281"
+                "reference": "69d083d2350034d01039d1e55d3639d8d6675c13"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/FriendsOfShopware/shopware-rector/zipball/2e279aeb46cdfaacfa1c70ce47c14be9e2a2e281",
-                "reference": "2e279aeb46cdfaacfa1c70ce47c14be9e2a2e281",
+                "url": "https://api.github.com/repos/FriendsOfShopware/shopware-rector/zipball/69d083d2350034d01039d1e55d3639d8d6675c13",
+                "reference": "69d083d2350034d01039d1e55d3639d8d6675c13",
                 "shasum": ""
             },
             "require": {
                 "php": "^8.1",
-                "rector/rector": "~2.0"
+                "rector/rector": "~2.0",
+                "webmozart/assert": "^1.11"
             },
             "conflict": {
                 "rector/rector": "<2.0"
@@ -549,9 +550,9 @@
             "description": "Shopware specific Rector",
             "support": {
                 "issues": "https://github.com/FriendsOfShopware/shopware-rector/issues",
-                "source": "https://github.com/FriendsOfShopware/shopware-rector/tree/0.5.7"
+                "source": "https://github.com/FriendsOfShopware/shopware-rector/tree/0.5.8"
             },
-            "time": "2025-08-20T10:13:50+00:00"
+            "time": "2025-12-09T13:23:58+00:00"
         },
         {
             "name": "phpstan/extension-installer",
@@ -1453,21 +1454,21 @@
         },
         {
             "name": "rector/rector",
-            "version": "2.2.11",
+            "version": "2.2.14",
             "source": {
                 "type": "git",
                 "url": "https://github.com/rectorphp/rector.git",
-                "reference": "7bd21a40b0332b93d4bfee284093d7400696902d"
+                "reference": "6d56bb0e94d4df4f57a78610550ac76ab403657d"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/rectorphp/rector/zipball/7bd21a40b0332b93d4bfee284093d7400696902d",
-                "reference": "7bd21a40b0332b93d4bfee284093d7400696902d",
+                "url": "https://api.github.com/repos/rectorphp/rector/zipball/6d56bb0e94d4df4f57a78610550ac76ab403657d",
+                "reference": "6d56bb0e94d4df4f57a78610550ac76ab403657d",
                 "shasum": ""
             },
             "require": {
                 "php": "^7.4|^8.0",
-                "phpstan/phpstan": "^2.1.32"
+                "phpstan/phpstan": "^2.1.33"
             },
             "conflict": {
                 "rector/rector-doctrine": "*",
@@ -1501,7 +1502,7 @@
             ],
             "support": {
                 "issues": "https://github.com/rectorphp/rector/issues",
-                "source": "https://github.com/rectorphp/rector/tree/2.2.11"
+                "source": "https://github.com/rectorphp/rector/tree/2.2.14"
             },
             "funding": [
                 {
@@ -1509,7 +1510,7 @@
                     "type": "github"
                 }
             ],
-            "time": "2025-12-02T11:23:46+00:00"
+            "time": "2025-12-09T10:57:55+00:00"
         },
         {
             "name": "sebastian/diff",
@@ -2617,6 +2618,64 @@
                 }
             ],
             "time": "2025-11-27T13:27:24+00:00"
+        },
+        {
+            "name": "webmozart/assert",
+            "version": "1.12.1",
+            "source": {
+                "type": "git",
+                "url": "https://github.com/webmozarts/assert.git",
+                "reference": "9be6926d8b485f55b9229203f962b51ed377ba68"
+            },
+            "dist": {
+                "type": "zip",
+                "url": "https://api.github.com/repos/webmozarts/assert/zipball/9be6926d8b485f55b9229203f962b51ed377ba68",
+                "reference": "9be6926d8b485f55b9229203f962b51ed377ba68",
+                "shasum": ""
+            },
+            "require": {
+                "ext-ctype": "*",
+                "ext-date": "*",
+                "ext-filter": "*",
+                "php": "^7.2 || ^8.0"
+            },
+            "suggest": {
+                "ext-intl": "",
+                "ext-simplexml": "",
+                "ext-spl": ""
+            },
+            "type": "library",
+            "extra": {
+                "branch-alias": {
+                    "dev-master": "1.10-dev"
+                }
+            },
+            "autoload": {
+                "psr-4": {
+                    "Webmozart\\Assert\\": "src/"
+                }
+            },
+            "notification-url": "https://packagist.org/downloads/",
+            "license": [
+                "MIT"
+            ],
+            "authors": [
+                {
+                    "name": "Bernhard Schussek",
+                    "email": "bschussek@gmail.com"
+                }
+            ],
+            "description": "Assertions to validate method input/output with nice error messages.",
+            "keywords": [
+                "assert",
+                "check",
+                "validate"
+            ],
+            "support": {
+                "issues": "https://github.com/webmozarts/assert/issues",
+                "source": "https://github.com/webmozarts/assert/tree/1.12.1"
+            },
+            "time": "2025-10-29T15:56:20+00:00"
         }
     ],
     "packages-dev": [],
