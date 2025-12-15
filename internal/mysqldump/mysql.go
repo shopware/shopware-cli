@@ -599,7 +599,7 @@ func (d *Dumper) getColumnsForSelect(ctx context.Context, table string, consider
 
 		replacement, ok := d.SelectMap[strings.ToLower(table)][strings.ToLower(column)]
 		if ok && considerRewriteMap {
-			if strings.HasPrefix(replacement, "faker") || strings.HasPrefix(replacement, "{{- faker") {
+			if strings.Contains(replacement, "faker.") {
 				replacement = fmt.Sprintf("'%s'", replacement)
 			}
 

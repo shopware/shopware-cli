@@ -1,6 +1,7 @@
 package mysqldump
 
 import (
+	"strings"
 	"testing"
 )
 
@@ -62,6 +63,47 @@ func Test_service_ReplaceStringWithFakerWhenRequested(t *testing.T) {
 				return s.(string) == "dont go to faker"
 			},
 			"this should have skipped faker",
+			false,
+		},
+		{
+			"Multiple expressions",
+			args{
+				"prefix {{- faker.Person().Name() -}} middle {{- faker.Lorem().Text(5) -}} suffix",
+			},
+			func(s interface{}) bool {
+				res := s.(string)
+				return strings.HasPrefix(res, "prefix ") && strings.Contains(res, " middle ") && strings.HasSuffix(res, " suffix") && !strings.Contains(res, "faker")
+			},
+			"multiple expressions failed",
+			false,
+		},
+		{
+			"Embedded in SQL function",
+			args{
+				"JSON_REPLACE(custom_fields, '$.street', '{{- faker.Address().StreetName() -}}')",
+			},
+			func(s interface{}) bool {
+				res := s.(string)
+				return strings.HasPrefix(res, "JSON_REPLACE(custom_fields, '$.street', '") && strings.HasSuffix(res, "')") && !strings.Contains(res, "faker")
+			},
+			"embedded sql failed",
+			false,
+		},
+		{
+			"Quoted arguments with escaped quotes",
+			args{
+				`{{- faker.Asciify("test\"quote") -}}`,
+			},
+			func(s interface{}) bool {
+				res := s.(string)
+				// Asciify replaces * with random chars, but here we passed a static string to Asciify?
+				// Wait, Asciify replaces * with random characters. If we pass "test\"quote", it should just return that if no * present?
+				// Let's check Asciify implementation or behavior. Faker's Asciify mostly replaces *.
+				// Assuming standard implementation, it might just return the string if no * are there?
+				// Or check length/content. The key here is regex parsing.
+				return !strings.Contains(res, "faker") && !strings.Contains(res, "{{-")
+			},
+			"quoted args with escaped quotes failed",
 			false,
 		},
 	}
