@@ -1,9 +1,18 @@
 {
-    "go.formatTool": "gofmt",
-    "go.useLanguageServer": true,
-    "gopls": {
-        "formatting.gofumpt": true
+    "go.lintTool": "golangci-lint",
+    "go.lintFlags": [
+        "--path-mode=abs",
+        "--fast-only"
+    ],
+    "go.formatTool": "custom",
+    "go.alternateTools": {
+        "customFormatter": "golangci-lint"
     },
+    "go.formatFlags": [
+        "fmt",
+        "--stdin"
+    ],
+    "go.useLanguageServer": true,
     "go.diagnostic.vulncheck": "Imports",
     "go.inlayHints.functionTypeParameters": true,
     "go.inlayHints.assignVariableTypes": true,
@@ -12,11 +21,14 @@
     "files.exclude": {
         ".devenv": true,
         ".direnv": true,
-        ".idea": true
+        ".idea": true,
+    },
+    "php.problems.exclude": {
+        "internal/phplint/testdata/invalid.php": true
     },
     "go.toolsManagement.autoUpdate": false,
     "go.toolsManagement.checkForUpdates": "off",
     "yaml.schemas": {
         "https://raw.githubusercontent.com/shopware/shopware-cli/main/extension/shopware-extension-schema.json": "file:///workspaces/shopware-cli/.shopware-extension.yml"
-    }
+    },
 }

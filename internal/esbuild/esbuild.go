@@ -93,6 +93,7 @@ func getEsbuildOptions(ctx context.Context, options AssetCompileOptions) (*api.B
 		".png":  api.LoaderFile,
 		".jpg":  api.LoaderFile,
 		".jpeg": api.LoaderFile,
+		".svg":  api.LoaderFile,
 		".ts":   api.LoaderTS,
 	}
 

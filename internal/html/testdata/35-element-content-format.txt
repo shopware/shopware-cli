@@ -1,0 +1,5 @@
+<sw-tabs-item :route="{ name: 'iwvs.import.export.index.color' }">{{ $tc('iwvs-import-export.page.colorTab') }}</sw-tabs-item>
+-----
+<sw-tabs-item :route="{ name: 'iwvs.import.export.index.color' }">
+    {{ $tc('iwvs-import-export.page.colorTab') }}
+</sw-tabs-item>

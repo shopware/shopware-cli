@@ -12,12 +12,12 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/shopware/shopware-cli/internal/phpexec"
-	"github.com/shopware/shopware-cli/shop"
-
 	"github.com/spf13/cobra"
+	"golang.org/x/time/rate"
 
+	"github.com/shopware/shopware-cli/internal/phpexec"
 	"github.com/shopware/shopware-cli/logging"
+	"github.com/shopware/shopware-cli/shop"
 )
 
 var projectWorkerCmd = &cobra.Command{
@@ -83,6 +83,7 @@ var projectWorkerCmd = &cobra.Command{
 		}
 
 		baseName := fmt.Sprintf("shopware-cli-%d", os.Getpid())
+		workerRatelimit := rate.NewLimiter(rate.Every(10*time.Second), workerAmount)
 
 		var wg sync.WaitGroup
 		for a := 0; a < workerAmount; a++ {
@@ -90,7 +91,12 @@ var projectWorkerCmd = &cobra.Command{
 			go func(ctx context.Context, index int) {
 				defer wg.Done()
 
-				for {
+				for ctx.Err() == nil {
+					if err = workerRatelimit.Wait(ctx); err != nil {
+						logging.FromContext(ctx).Error(err)
+						continue
+					}
+
 					cmd := phpexec.ConsoleCommand(cancelCtx, consumeArgs...)
 					cmd.Dir = projectRoot
 					cmd.Stdout = os.Stdout

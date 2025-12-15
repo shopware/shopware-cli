@@ -1,0 +1,7 @@
+<element {% if bla %}foo="yes"{% endif %}/>
+-----
+<element
+    {% if bla %}
+        foo="yes"
+    {% endif %}
+/>

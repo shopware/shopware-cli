@@ -119,6 +119,10 @@ var accountCompanyProducerExtensionInfoPullCmd = &cobra.Command{
 		englishDescription := ""
 		germanInstallationManual := ""
 		englishInstallationManual := ""
+		germanMetaTitle := ""
+		englishMetaTitle := ""
+		germanMetaDescription := ""
+		englishMetaDescription := ""
 
 		for _, info := range storeExt.Infos {
 			language := info.Locale.Name[0:2]
@@ -126,6 +130,8 @@ var accountCompanyProducerExtensionInfoPullCmd = &cobra.Command{
 			if language == "de" {
 				germanDescription = "file:src/Resources/store/description.de.html"
 				germanInstallationManual = "file:src/Resources/store/installation_manual.de.html"
+				germanMetaTitle = info.MetaTitle
+				germanMetaDescription = info.MetaDescription
 
 				if err := os.WriteFile(path.Join(zipExt.GetPath(), germanDescription[5:]), []byte(info.Description), os.ModePerm); err != nil {
 					return fmt.Errorf("cannot write file: %w", err)
@@ -151,11 +157,13 @@ var accountCompanyProducerExtensionInfoPullCmd = &cobra.Command{
 				}
 
 				for _, element := range info.Faqs {
-					faqDE = append(faqDE, extension.ConfigStoreFaq{Question: element.Question, Answer: element.Answer})
+					faqDE = append(faqDE, extension.ConfigStoreFaq{Question: element.Question, Answer: element.Answer, Position: element.Position})
 				}
 			} else {
 				englishDescription = "file:src/Resources/store/description.en.html"
 				englishInstallationManual = "file:src/Resources/store/installation_manual.en.html"
+				englishMetaTitle = info.MetaTitle
+				englishMetaDescription = info.MetaDescription
 
 				if err := os.WriteFile(path.Join(zipExt.GetPath(), englishDescription[5:]), []byte(info.Description), os.ModePerm); err != nil {
 					return fmt.Errorf("cannot write file: %w", err)
@@ -182,7 +190,7 @@ var accountCompanyProducerExtensionInfoPullCmd = &cobra.Command{
 				}
 
 				for _, element := range info.Faqs {
-					faqEN = append(faqEN, extension.ConfigStoreFaq{Question: element.Question, Answer: element.Answer})
+					faqEN = append(faqEN, extension.ConfigStoreFaq{Question: element.Question, Answer: element.Answer, Position: element.Position})
 				}
 			}
 		}
@@ -209,6 +217,8 @@ var accountCompanyProducerExtensionInfoPullCmd = &cobra.Command{
 		newCfg.Store.Highlights = extension.ConfigTranslated[[]string]{German: &highlightsDE, English: &highlightsEN}
 		newCfg.Store.Features = extension.ConfigTranslated[[]string]{German: &featuresDE, English: &featuresEN}
 		newCfg.Store.Faq = extension.ConfigTranslated[[]extension.ConfigStoreFaq]{German: &faqDE, English: &faqEN}
+		newCfg.Store.MetaTitle = extension.ConfigTranslated[string]{German: &germanMetaTitle, English: &englishMetaTitle}
+		newCfg.Store.MetaDescription = extension.ConfigTranslated[string]{German: &germanMetaDescription, English: &englishMetaDescription}
 		newCfg.Store.Images = nil
 
 		if len(storeImages) > 0 {

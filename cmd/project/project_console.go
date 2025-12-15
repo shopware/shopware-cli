@@ -3,10 +3,11 @@ package project
 import (
 	"slices"
 
+	"github.com/spf13/cobra"
+
 	"github.com/shopware/shopware-cli/extension"
 	"github.com/shopware/shopware-cli/internal/phpexec"
 	"github.com/shopware/shopware-cli/shop"
-	"github.com/spf13/cobra"
 )
 
 var (
@@ -44,7 +45,7 @@ var projectConsoleCmd = &cobra.Command{
 			isPluginCommand := slices.Contains(pluginCommands, input[0])
 
 			if isAppCommand || isPluginCommand {
-				extensions := extension.FindExtensionsFromProject(cmd.Context(), projectRoot)
+				extensions := extension.FindExtensionsFromProject(cmd.Context(), projectRoot, false)
 
 				for _, extension := range extensions {
 					if (extension.GetType() == "plugin" && isPluginCommand) || (extension.GetType() == "app" && isAppCommand) {

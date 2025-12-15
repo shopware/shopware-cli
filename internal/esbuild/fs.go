@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
+	"log"
 	"os"
 	"path/filepath"
 )
@@ -15,7 +16,7 @@ func copyStaticFiles(currentPath string, targetPath string) error {
 	}
 
 	// Create target directory if it doesn't exist
-	if err := os.MkdirAll(targetPath, 0755); err != nil {
+	if err := os.MkdirAll(targetPath, os.ModePerm); err != nil {
 		return fmt.Errorf("failed to create target directory: %w", err)
 	}
 
@@ -36,7 +37,7 @@ func copyStaticFiles(currentPath string, targetPath string) error {
 
 		// If it's a directory, create it in target
 		if info.IsDir() {
-			return os.MkdirAll(targetFilePath, 0755)
+			return os.MkdirAll(targetFilePath, os.ModePerm)
 		}
 
 		// Copy the file
@@ -50,14 +51,22 @@ func copyFile(src, dst string) error {
 	if err != nil {
 		return fmt.Errorf("failed to open source file: %w", err)
 	}
-	defer sourceFile.Close()
+	defer func() {
+		if err := sourceFile.Close(); err != nil {
+			log.Printf("Cannot close source file: %v", err)
+		}
+	}()
 
 	// Create target file
 	targetFile, err := os.Create(dst)
 	if err != nil {
 		return fmt.Errorf("failed to create target file: %w", err)
 	}
-	defer targetFile.Close()
+	defer func() {
+		if err := targetFile.Close(); err != nil {
+			log.Printf("Cannot close target file: %v", err)
+		}
+	}()
 
 	// Copy the contents
 	if _, err := io.Copy(targetFile, sourceFile); err != nil {

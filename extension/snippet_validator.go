@@ -10,15 +10,24 @@ import (
 	"strings"
 
 	"github.com/wI2L/jsondiff"
+
+	"github.com/shopware/shopware-cli/internal/validation"
 )
 
-func validateStorefrontSnippets(context *ValidationContext) {
-	rootDir := context.Extension.GetRootDir()
-	if err := validateStorefrontSnippetsByPath(rootDir, rootDir, context); err != nil {
-		return
+const jsonFileExtension = ".json"
+
+func validateStorefrontSnippets(ext Extension, check validation.Check) {
+	rootDir := ext.GetRootDir()
+
+	for _, val := range ext.GetResourcesDirs() {
+		storefrontFolder := path.Join(val, "snippet")
+
+		if err := validateStorefrontSnippetsByPath(storefrontFolder, rootDir, check); err != nil {
+			return
+		}
 	}
 
-	for _, extraBundle := range context.Extension.GetExtensionConfig().Build.ExtraBundles {
+	for _, extraBundle := range ext.GetExtensionConfig().Build.ExtraBundles {
 		bundlePath := rootDir
 
 		if extraBundle.Path != "" {
@@ -27,15 +36,15 @@ func validateStorefrontSnippets(context *ValidationContext) {
 			bundlePath = path.Join(bundlePath, extraBundle.Name)
 		}
 
-		if err := validateStorefrontSnippetsByPath(bundlePath, rootDir, context); err != nil {
+		storefrontFolder := path.Join(bundlePath, "Resources", "snippet")
+
+		if err := validateStorefrontSnippetsByPath(storefrontFolder, rootDir, check); err != nil {
 			return
 		}
 	}
 }
 
-func validateStorefrontSnippetsByPath(extensionRoot, rootDir string, context *ValidationContext) error {
-	snippetFolder := path.Join(extensionRoot, "Resources", "snippet")
-
+func validateStorefrontSnippetsByPath(snippetFolder, rootDir string, check validation.Check) error {
 	if _, err := os.Stat(snippetFolder); err != nil {
 		return nil //nolint:nilerr
 	}
@@ -47,7 +56,7 @@ func validateStorefrontSnippetsByPath(extensionRoot, rootDir string, context *Va
 			return nil
 		}
 
-		if filepath.Ext(path) != ".json" {
+		if filepath.Ext(path) != jsonFileExtension {
 			return nil
 		}
 
@@ -71,16 +80,15 @@ func validateStorefrontSnippetsByPath(extensionRoot, rootDir string, context *Va
 			continue
 		}
 
-		var mainFile string
-
-		for _, file := range files {
-			if strings.HasSuffix(filepath.Base(file), "en-GB.json") {
-				mainFile = file
-			}
-		}
+		mainFile := findMainSnippetFile(files)
 
 		if len(mainFile) == 0 {
-			context.AddWarning("snippet.validator", fmt.Sprintf("No en-GB.json file found in %s, using %s", snippetFolder, files[0]))
+			check.AddResult(validation.CheckResult{
+				Path:       snippetFolder,
+				Identifier: "snippet.validator",
+				Message:    fmt.Sprintf("No en.json or en-GB.json file found in %s, using %s", snippetFolder, files[0]),
+				Severity:   validation.SeverityWarning,
+			})
 			mainFile = files[0]
 		}
 
@@ -90,7 +98,12 @@ func validateStorefrontSnippetsByPath(extensionRoot, rootDir string, context *Va
 		}
 
 		if !json.Valid(mainFileContent) {
-			context.AddError("snippet.validator", fmt.Sprintf("File '%s' contains invalid JSON", mainFile))
+			check.AddResult(validation.CheckResult{
+				Path:       mainFile,
+				Identifier: "snippet.validator",
+				Message:    fmt.Sprintf("File '%s' contains invalid JSON", mainFile),
+				Severity:   validation.SeverityError,
+			})
 
 			continue
 		}
@@ -101,20 +114,25 @@ func validateStorefrontSnippetsByPath(extensionRoot, rootDir string, context *Va
 				continue
 			}
 
-			compareSnippets(mainFileContent, file, context, rootDir)
+			compareSnippets(mainFileContent, mainFile, file, check, rootDir)
 		}
 	}
 
 	return nil
 }
 
-func validateAdministrationSnippets(context *ValidationContext) {
-	rootDir := context.Extension.GetRootDir()
-	if err := validateAdministrationByPath(rootDir, rootDir, context); err != nil {
-		return
+func validateAdministrationSnippets(ext Extension, check validation.Check) {
+	rootDir := ext.GetRootDir()
+
+	for _, val := range ext.GetResourcesDirs() {
+		adminFolder := path.Join(val, "app", "administration")
+
+		if err := validateAdministrationByPath(adminFolder, rootDir, check); err != nil {
+			return
+		}
 	}
 
-	for _, extraBundle := range context.Extension.GetExtensionConfig().Build.ExtraBundles {
+	for _, extraBundle := range ext.GetExtensionConfig().Build.ExtraBundles {
 		bundlePath := rootDir
 
 		if extraBundle.Path != "" {
@@ -123,15 +141,15 @@ func validateAdministrationSnippets(context *ValidationContext) {
 			bundlePath = path.Join(bundlePath, extraBundle.Name)
 		}
 
-		if err := validateAdministrationByPath(bundlePath, rootDir, context); err != nil {
+		adminFolder := path.Join(bundlePath, "Resources", "app", "administration")
+
+		if err := validateAdministrationByPath(adminFolder, rootDir, check); err != nil {
 			return
 		}
 	}
 }
 
-func validateAdministrationByPath(extensionRoot, rootDir string, context *ValidationContext) error {
-	adminFolder := path.Join(extensionRoot, "Resources", "app", "administration")
-
+func validateAdministrationByPath(adminFolder, rootDir string, check validation.Check) error {
 	if _, err := os.Stat(adminFolder); err != nil {
 		return nil //nolint:nilerr
 	}
@@ -143,7 +161,7 @@ func validateAdministrationByPath(extensionRoot, rootDir string, context *Valida
 			return nil
 		}
 
-		if filepath.Ext(path) != ".json" {
+		if filepath.Ext(path) != jsonFileExtension {
 			return nil
 		}
 
@@ -171,16 +189,14 @@ func validateAdministrationByPath(extensionRoot, rootDir string, context *Valida
 			continue
 		}
 
-		var mainFile string
-
-		for _, file := range files {
-			if strings.HasSuffix(filepath.Base(file), "en-GB.json") {
-				mainFile = file
-			}
-		}
+		mainFile := findMainSnippetFile(files)
 
 		if len(mainFile) == 0 {
-			context.AddWarning("snippet.validator", fmt.Sprintf("No en-GB.json file found in %s, using %s", folder, files[0]))
+			check.AddResult(validation.CheckResult{
+				Identifier: "snippet.validator",
+				Message:    fmt.Sprintf("No en.json or en-GB.json file found in %s, using %s", strings.ReplaceAll(folder, rootDir+"/", ""), strings.ReplaceAll(files[0], rootDir+"/", "")),
+				Severity:   validation.SeverityWarning,
+			})
 			mainFile = files[0]
 		}
 
@@ -190,7 +206,11 @@ func validateAdministrationByPath(extensionRoot, rootDir string, context *Valida
 		}
 
 		if !json.Valid(mainFileContent) {
-			context.AddError("snippet.validator", fmt.Sprintf("File '%s' contains invalid JSON", mainFile))
+			check.AddResult(validation.CheckResult{
+				Identifier: "snippet.validator",
+				Message:    fmt.Sprintf("File '%s' contains invalid JSON", mainFile),
+				Severity:   validation.SeverityError,
+			})
 
 			continue
 		}
@@ -201,50 +221,98 @@ func validateAdministrationByPath(extensionRoot, rootDir string, context *Valida
 				continue
 			}
 
-			compareSnippets(mainFileContent, file, context, rootDir)
+			compareSnippets(mainFileContent, mainFile, file, check, rootDir)
 		}
 	}
 
 	return nil
 }
 
-func compareSnippets(mainFile []byte, file string, context *ValidationContext, extensionRoot string) {
+func compareSnippets(mainFile []byte, mainFilePath, file string, check validation.Check, extensionRoot string) {
 	checkFile, err := os.ReadFile(file)
 	if err != nil {
-		context.AddError("snippet.validator", fmt.Sprintf("Cannot read file '%s', due '%s'", file, err))
+		check.AddResult(validation.CheckResult{
+			Path:       file,
+			Identifier: "snippet.validator",
+			Message:    fmt.Sprintf("Cannot read file '%s', due '%s'", file, err),
+			Severity:   validation.SeverityError,
+		})
 
 		return
 	}
 
 	if !json.Valid(checkFile) {
-		context.AddError("snippet.validator", fmt.Sprintf("File '%s' contains invalid JSON", file))
+		check.AddResult(validation.CheckResult{
+			Path:       file,
+			Identifier: "snippet.validator",
+			Message:    fmt.Sprintf("File '%s' contains invalid JSON", file),
+			Severity:   validation.SeverityError,
+		})
 
 		return
 	}
 
 	compare, err := jsondiff.CompareJSON(mainFile, checkFile)
 	if err != nil {
-		context.AddError("snippet.validator", fmt.Sprintf("Cannot compare file '%s', due '%s'", file, err))
+		check.AddResult(validation.CheckResult{
+			Path:       file,
+			Identifier: "snippet.validator",
+			Message:    fmt.Sprintf("Cannot compare file '%s', due '%s'", file, err),
+			Severity:   validation.SeverityError,
+		})
 
 		return
 	}
+
+	normalizedMainFilePath := strings.ReplaceAll(mainFilePath, extensionRoot+"/", "")
 
 	for _, diff := range compare {
 		normalizedPath := strings.ReplaceAll(file, extensionRoot+"/", "")
 
 		if diff.Type == jsondiff.OperationReplace && reflect.TypeOf(diff.OldValue) != reflect.TypeOf(diff.Value) {
-			context.AddWarning("snippet.validator", fmt.Sprintf("Snippet file: %s, key: %s, has the type %s, but in the main language it is %s", normalizedPath, diff.Path, reflect.TypeOf(diff.OldValue), reflect.TypeOf(diff.Value)))
+			check.AddResult(validation.CheckResult{
+				Path:       normalizedPath,
+				Identifier: "snippet.validator",
+				Message:    fmt.Sprintf("Snippet file: %s, key: %s, has the type %s, but in the main language it is %s", normalizedPath, diff.Path, reflect.TypeOf(diff.OldValue), reflect.TypeOf(diff.Value)),
+				Severity:   validation.SeverityWarning,
+			})
 			continue
 		}
 
 		if diff.Type == jsondiff.OperationAdd {
-			context.AddWarning("snippet.validator", fmt.Sprintf("Snippet file: %s, missing key \"%s\" in this snippet file, but defined in the main language (\"%s\")", normalizedPath, diff.Path, mainFile))
+			check.AddResult(validation.CheckResult{
+				Path:       normalizedPath,
+				Identifier: "snippet.validator",
+				Message:    fmt.Sprintf("Snippet file: %s, missing key \"%s\" in this snippet file, but defined in the main language (%s)", normalizedPath, diff.Path, normalizedMainFilePath),
+				Severity:   validation.SeverityWarning,
+			})
 			continue
 		}
 
 		if diff.Type == jsondiff.OperationRemove {
-			context.AddWarning("snippet.validator", fmt.Sprintf("Snippet file: %s, key %s is missing, but defined in the main language file", normalizedPath, diff.Path))
+			check.AddResult(validation.CheckResult{
+				Path:       normalizedPath,
+				Identifier: "snippet.validator",
+				Message:    fmt.Sprintf("Snippet file: %s, key %s is missing, but defined in the main language file", normalizedPath, diff.Path),
+				Severity:   validation.SeverityWarning,
+			})
 			continue
 		}
 	}
+}
+
+// Search for the country-agnostic language file en.json
+// If it isn't found search for the en-GB.json
+func findMainSnippetFile(files []string) string {
+	for _, file := range files {
+		if strings.HasSuffix(filepath.Base(file), "en.json") {
+			return file
+		}
+	}
+	for _, file := range files {
+		if strings.HasSuffix(filepath.Base(file), "en-GB.json") {
+			return file
+		}
+	}
+	return ""
 }

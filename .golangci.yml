@@ -1,28 +1,22 @@
+version: "2"
+
 linters:
-  # please, do not use `enable-all`: it's deprecated and will be removed soon.
-  # inverted configuration with `enable-all` and `disable` is not scalable during updates of golangci-lint
-  disable-all: true
   enable:
     - bodyclose
     - exhaustive
     - goconst
-    - gofmt
     - goprintffuncname
-    #    - gosec
-    - gosimple
     - govet
     - ineffassign
     - misspell
     - nakedret
     - noctx
     - staticcheck
-    - typecheck
     - unconvert
     - unparam
     - unused
     - whitespace
     - asciicheck
-    - godot
     - gocyclo
     - gocritic
     - errcheck
@@ -45,23 +39,28 @@ linters:
     - ginkgolinter
     - gocheckcompilerdirectives
     - goconst
-    - godot
     - godox
     - nilnil
+  exclusions:
+    rules:
+      - path: cmd\/*
+        linters:
+          - forbidigo
+      - path: internal\/ci\/*
+        linters:
+          - forbidigo
+      - path: internal\/validation\/*
+        linters:
+          - forbidigo
 
-linters-settings:
-  golint:
-    min-confidence: 0
-  gci:
-    sections:
-      - Standard
-      - Default
-      - "Prefix(github.com/shopware/shopware-cli)"
-
-issues:
-  exclude-dirs:
-    - version
-  exclude-rules:
-    - path: cmd\/*
-      linters:
-        - forbidigo
+formatters:
+  enable:
+    - gofmt
+    - gci
+  settings:
+    gci:
+      sections:
+        - Standard
+        - Default
+        - "Prefix(github.com/shopware/shopware-cli)"
+  

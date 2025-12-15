@@ -4,6 +4,8 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+
+	"github.com/shopware/shopware-cli/internal/validation"
 )
 
 func getAppForValidation() App {
@@ -44,44 +46,64 @@ func TestLicenseValidationNoLicense(t *testing.T) {
 	app := getAppForValidation()
 	app.manifest.Meta.License = ""
 
-	ctx := newValidationContext(app)
+	check := &testCheck{}
 
-	runDefaultValidate(ctx)
+	runDefaultValidate(app, check)
 
-	assert.True(t, ctx.HasErrors())
-	assert.Equal(t, "Could not validate the license: empty license string", ctx.errors[0].Message)
+	assert.True(t, len(check.Results) > 0)
+	assert.Equal(t, "Could not validate the license: empty license string", check.Results[0].Message)
 }
 
 func TestLicenseValidationInvalidLicense(t *testing.T) {
 	app := getAppForValidation()
 	app.manifest.Meta.License = "FUUUU"
 
-	ctx := newValidationContext(app)
+	check := &testCheck{}
 
-	runDefaultValidate(ctx)
+	runDefaultValidate(app, check)
 
-	assert.True(t, ctx.HasErrors())
-	assert.Equal(t, "Could not validate the license: invalid license factor: \"FUUUU\"", ctx.errors[0].Message)
+	assert.True(t, len(check.Results) > 0)
+	assert.Equal(t, "Could not validate the license: invalid license factor: \"FUUUU\"", check.Results[0].Message)
 }
 
 func TestLicenseValidate(t *testing.T) {
 	app := getAppForValidation()
 
-	ctx := newValidationContext(app)
+	check := &testCheck{}
 
-	runDefaultValidate(ctx)
+	runDefaultValidate(app, check)
 
-	assert.False(t, ctx.HasErrors())
+	assert.False(t, len(check.Results) > 0)
 }
 
 func TestIgnores(t *testing.T) {
-	app := getAppForValidation()
+	check := &testCheck{}
 
-	ctx := newValidationContext(app)
+	check.AddResult(validation.CheckResult{
+		Identifier: "metadata.name",
+		Message:    "Key `name` is required",
+		Severity:   validation.SeverityError,
+	})
+	assert.True(t, len(check.Results) > 0)
 
-	ctx.AddError("metadata.name", "Key `name` is required")
-	assert.True(t, ctx.HasErrors())
+	check.RemoveByIdentifier([]validation.ToolConfigIgnore{
+		{Identifier: "metadata.name"},
+	})
+	assert.False(t, len(check.Results) > 0)
+}
 
-	ctx.ApplyIgnores([]string{"metadata.name"})
-	assert.False(t, ctx.HasErrors())
+func TestIgnoresWithMessage(t *testing.T) {
+	check := &testCheck{}
+
+	check.AddResult(validation.CheckResult{
+		Identifier: "metadata.name",
+		Message:    "Key `name` is required",
+		Severity:   validation.SeverityError,
+	})
+	assert.True(t, len(check.Results) > 0)
+
+	check.RemoveByIdentifier([]validation.ToolConfigIgnore{
+		{Identifier: "metadata.name", Message: "Key `name` is required"},
+	})
+	assert.False(t, len(check.Results) > 0)
 }

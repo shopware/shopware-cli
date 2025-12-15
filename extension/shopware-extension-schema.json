@@ -1,548 +1,563 @@
 {
-	"$schema": "https://json-schema.org/draft/2020-12/schema",
-	"title": "shopware-cli",
-	"$ref": "#/definitions/Config",
-	"description": "shopware cli extension configuration definition file",
-	"definitions": {
-		"Config": {
-			"type": "object",
-			"title": ".shopware-extension.yml",
-			"additionalProperties": false,
-			"properties": {
-				"build": {
-					"$ref": "#/definitions/Build"
-				},
-				"store": {
-					"$ref": "#/definitions/Store"
-				},
-				"changelog": {
-					"$ref": "#/definitions/Changelog"
-				},
-				"validation": {
-					"$ref": "#/definitions/Validation"
-				}
-			}
-		},
-		"Changelog": {
-			"type": "object",
-			"title": "changelog",
-			"additionalProperties": false,
-			"properties": {
-				"enabled": {
-					"type": "boolean",
-					"default": false,
-					"description": "Enables the changelog generation."
-				},
-				"pattern": {
-					"type": "string",
-					"default": "",
-					"description": "Limit with RegEx which commits should be considered for the changelog generation."
-				},
-				"template": {
-					"type": "string",
-					"default": "",
-					"description": "Allows to override the Go template which renders the Changelog."
-				},
-				"variables": {
-					"type": "object",
-					"description": "Allows to write RegEx groups into variables which can be used in the template."
-				}
-			}
-		},
-		"Validation": {
-			"type": "object",
-			"title": "validation",
-			"additionalProperties": false,
-			"properties": {
-				"ignore": {
-					"type": "array",
-					"description": "Skip validations",
-					"items": {
-						"type": "string"
-					}
-				}
-			}
-		},
-		"Build": {
-			"type": "object",
-			"title": "build",
-			"additionalProperties": false,
-			"properties": {
-				"shopwareVersionConstraint": {
-					"type": "string",
-					"description": "Overrides the shopware version constraint in the composer.json/manifest.xml file."
-				},
-				"extraBundles": {
-					"type": "array",
-					"items": {
-						"type": "object",
-						"additionalProperties": false,
-						"required": ["path"],
-						"properties": {
-							"name": {
-								"type": "string"
-							},
-							"path": {
-								"type": "string"
-							}
-						}
-					}
-				},
-				"zip": {
-					"type": "object",
-					"additionalProperties": false,
-					"properties": {
-						"composer": {
-							"type": "object",
-							"additionalProperties": false,
-							"properties": {
-								"enabled": {
-									"type": "boolean",
-									"default": true
-								},
-								"before_hooks": {
-									"type": "array",
-									"items": {
-										"type": "string"
-									}
-								},
-								"after_hooks": {
-									"type": "array",
-									"items": {
-										"type": "string"
-									}
-								},
-								"excluded_packages": {
-									"type": "array",
-									"items": {
-										"type": "string"
-									}
-								}
-							}
-						},
-						"assets": {
-							"type": "object",
-							"additionalProperties": false,
-							"properties": {
-								"enabled": {
-									"type": "boolean",
-									"default": true
-								},
-								"before_hooks": {
-									"type": "array",
-									"items": {
-										"type": "string"
-									}
-								},
-								"after_hooks": {
-									"type": "array",
-									"items": {
-										"type": "string"
-									}
-								},
-								"enable_es_build_for_admin": {
-									"type": "boolean",
-									"default": false
-								},
-								"enable_es_build_for_storefront": {
-									"type": "boolean",
-									"default": false
-								},
-								"es_build_disable_sass": {
-									"type": "boolean",
-									"default": false
-								},
-								"npm_strict": {
-									"type": "boolean",
-									"default": false,
-									"description": "Uses production flag on NPM"
-								}
-							}
-						},
-						"pack": {
-							"type": "object",
-							"additionalProperties": false,
-							"properties": {
-								"before_hooks": {
-									"type": "array",
-									"items": {
-										"type": "string"
-									}
-								},
-								"excludes": {
-									"type": "object",
-									"additionalProperties": false,
-									"minProperties": 1,
-									"properties": {
-										"paths": {
-											"type": "array",
-											"items": {
-												"type": "string"
-											}
-										}
-									}
-								}
-							}
-						}
-					}
-				}
-			}
-		},
-		"Store": {
-			"type": "object",
-			"title": "store",
-			"additionalProperties": false,
-			"properties": {
-				"icon": {
-					"type": "string",
-					"description": "Specifies the Path to the icon (128x128 px) for store."
-				},
-				"availabilities": {
-					"type": "array",
-					"description": "Specifies the visibility in stores.",
-					"uniqueItems": true,
-					"items": {
-						"type": "string",
-						"enum": [
-							"German",
-							"International"
-						]
-					}
-				},
-				"localizations": {
-					"type": "array",
-					"description": "Specifies the languages the extension is translated.",
-					"uniqueItems": true,
-					"items": {
-						"type": "string",
-						"enum": [
-							"de_DE",
-							"en_GB",
-							"bs_BA",
-							"bg_BG",
-							"cs_CZ",
-							"da_DK",
-							"de_CH",
-							"el_GR",
-							"en_US",
-							"es_ES",
-							"fi_FI",
-							"fr_FR",
-							"hi_IN",
-							"hr_HR",
-							"hu_HU",
-							"hy",
-							"id_ID",
-							"it_IT",
-							"ko_KR",
-							"lv_LV",
-							"nb_NO",
-							"nl_NL",
-							"nn_NO",
-							"pl_PL",
-							"pt_PT",
-							"ro_RO",
-							"ru_RU",
-							"sk_SK",
-							"sl_SI",
-							"sr_RS",
-							"sv_SE",
-							"tr",
-							"tr_TR",
-							"uk_UA",
-							"vi_VN"
-						]
-					}
-				},
-				"categories": {
-					"type": "array",
-					"description": "Specifies the categories in which the extension can be found.",
-					"uniqueItems": true,
-					"maxItems": 1,
-					"items": {
-						"type": "string",
-						"enum": [
-							"Administration",
-							"SEOOptimierung",
-							"Bonitaetsprüfung",
-							"Rechtssicherheit",
-							"Auswertung",
-							"KommentarFeedback",
-							"Tracking",
-							"Integration",
-							"PreissuchmaschinenPortale",
-							"Warenwirtschaft",
-							"Versand",
-							"Bezahlung",
-							"StorefrontDetailanpassungen",
-							"Sprache",
-							"Suche",
-							"HeaderFooter",
-							"Detailseite",
-							"MenueKategorien",
-							"Bestellprozess",
-							"KundenkontoPersonalisierung",
-							"Sonderfunktionen",
-							"Themes",
-							"Branche",
-							"Home+Furnishings",
-							"FashionBekleidung",
-							"GartenNatur",
-							"KosmetikGesundheit",
-							"EssenTrinken",
-							"KinderPartyGeschenke",
-							"SportLifestyleReisen",
-							"TechnikIT",
-							"IndustrieGroßhandel",
-							"MigrationTools",
-							"Einkaufswelten",
-							"ConversionOptimierung",
-							"Extensions",
-							"MarketingTools",
-							"B2BExtensions",
-							"Blog",
-							"emailMarketing",
-							"promotionsAndVoucher",
-							"loyalityAndRewards",
-							"recommendations",
-							"otherMarketingCommercials",
-							"socialCommerce",
-							"middlewareAndConnectors",
-							"pim",
-							"dam",
-							"cms",
-							"crm",
-							"personalization"
-						]
-					}
-				},
-				"default_locale": {
-					"type": "string",
-					"enum": [
-						"en_GB",
-						"de_DE"
-					]
-				},
-				"type": {
-					"type": "string",
-					"description": "Specifies the type of this extension.",
-					"enum": [
-						"extension",
-						"theme"
-					]
-				},
-				"automatic_bugfix_version_compatibility": {
-					"type": "boolean",
-					"description": "Specifies whether the extension should automatically be set compatible with Shopware bugfix versions."
-				},
-				"videos": {
-					"type": "object",
-					"description": "Specifies the links of YouTube-Videos to show or describe the extension.",
-					"additionalProperties": false,
-					"minProperties": 1,
-					"properties": {
-						"de": {
-							"type": "array",
-							"maxItems": 2,
-							"items": {
-								"type": "string"
-							}
-						},
-						"en": {
-							"type": "array",
-							"maxItems": 2,
-							"items": {
-								"type": "string"
-							}
-						}
-					}
-				},
-				"tags": {
-					"type": "object",
-					"description": "Specifies the tags of the extension.",
-					"additionalProperties": false,
-					"minProperties": 1,
-					"properties": {
-						"de": {
-							"type": "array",
-							"items": {
-								"type": "string"
-							},
-							"maxItems": 5
-						},
-						"en": {
-							"type": "array",
-							"items": {
-								"type": "string"
-							},
-							"maxItems": 5
-						}
-					}
-				},
-				"highlights": {
-					"type": "object",
-					"description": "Specifies the highlights of the extension.",
-					"additionalProperties": false,
-					"minProperties": 1,
-					"properties": {
-						"de": {
-							"type": "array",
-							"items": {
-								"type": "string"
-							},
-							"maxItems": 5
-						},
-						"en": {
-							"type": "array",
-							"items": {
-								"type": "string"
-							},
-							"maxItems": 5
-						}
-					}
-				},
-				"features": {
-					"type": "object",
-					"description": "Specifies the features of the extension.",
-					"additionalProperties": false,
-					"minProperties": 1,
-					"properties": {
-						"de": {
-							"type": "array",
-							"items": {
-								"type": "string"
-							},
-							"maxItems": 15
-						},
-						"en": {
-							"type": "array",
-							"items": {
-								"type": "string"
-							},
-							"maxItems": 15
-						}
-					}
-				},
-				"faq": {
-					"type": "object",
-					"description": "Specifies Frequently Asked Questions for the extension.",
-					"additionalProperties": false,
-					"minProperties": 1,
-					"properties": {
-						"de": {
-							"type": "array",
-							"items": {
-								"$ref": "#/definitions/StoreInfoFaqQuestion"
-							}
-						},
-						"en": {
-							"type": "array",
-							"items": {
-								"$ref": "#/definitions/StoreInfoFaqQuestion"
-							}
-						}
-					}
-				},
-				"description": {
-					"type": "object",
-					"description": "Specifies the description of the extension in store.",
-					"additionalProperties": false,
-					"minProperties": 1,
-					"properties": {
-						"de": {
-							"type": "string",
-							"description": "Use string or set path to a file with prefix `file:` containing the description, f.e. `file:src/store/manual_de.md`"
-						},
-						"en": {
-							"type": "string",
-							"description": "Use string or set path to a file with prefix `file:` containing the description, f.e. `file:src/store/manual_en.md`"
-						}
-					}
-				},
-				"installation_manual": {
-					"type": "object",
-					"description": "Installation manual of the extension in store.",
-					"additionalProperties": false,
-					"properties": {
-						"de": {
-							"type": "string",
-							"description": "Use string or set path to a file with prefix `file:` containing the description, f.e. `file:src/store/manual_de.md`"
-						},
-						"en": {
-							"type": "string",
-							"description": "Use string or set path to a file with prefix `file:` containing the description, f.e. `file:src/store/manual_en.md`"
-						}
-					}
-				},
-				"image_directory": {
-					"type": "string",
-					"description": "Specifies the directory where the images are located."
-				},
-				"images": {
-					"type": "array",
-					"description": "Specifies images for the extension in the store.",
-					"minItems": 1,
-					"items": {
-						"type": "object",
-						"required": ["file", "priority"],
-						"additionalProperties": false,
-						"properties": {
-							"file": {
-								"type": "string",
-								"description": "File path to image relative from root of the extension"
-							},
-							"activate": {
-								"type": "object",
-								"description": "Specifies whether the image is active in the language.",
-								"additionalProperties": false,
-								"properties": {
-									"en": {
-										"type": "boolean"
-									},
-									"de": {
-										"type": "boolean"
-									}
-								}
-							},
-							"preview": {
-								"type": "object",
-								"description": "Specifies whether the image is a preview in the language.",
-								"additionalProperties": false,
-								"properties": {
-									"en": {
-										"type": "boolean"
-									},
-									"de": {
-										"type": "boolean"
-									}
-								}
-							},
-							"priority": {
-								"description": "Specifies the order of the image ascending the given priority.",
-								"type": "integer",
-								"minimum": 0
-							}
-						}
-					}
-				}
-			}
-		},
-		"StoreInfoFaqQuestion": {
-			"type": "object",
-			"title": "StoreInfoFaqQuestion",
-			"additionalProperties": false,
-			"required": [
-				"question",
-				"answer"
-			],
-			"properties": {
-				"question": {
-					"type": "string"
-				},
-				"answer": {
-					"type": "string"
-				}
-			}
-		}
-	}
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/shopware/shopware-cli/extension/config",
+  "$ref": "#/$defs/Config",
+  "$defs": {
+    "ChangelogConfig": {
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "description": "Specifies whether the changelog should be generated."
+        },
+        "pattern": {
+          "type": "string",
+          "description": "Specifies the pattern to match the commits."
+        },
+        "template": {
+          "type": "string",
+          "description": "Specifies the template to use for the changelog."
+        },
+        "variables": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "type": "object",
+          "description": "Specifies the variables to use for the changelog."
+        }
+      },
+      "additionalProperties": false,
+      "type": "object"
+    },
+    "Config": {
+      "properties": {
+        "store": {
+          "$ref": "#/$defs/ConfigStore",
+          "description": "Store is the store configuration of the extension."
+        },
+        "build": {
+          "$ref": "#/$defs/ConfigBuild",
+          "description": "Build is the build configuration of the extension."
+        },
+        "changelog": {
+          "$ref": "#/$defs/ChangelogConfig",
+          "description": "Changelog is the changelog configuration of the extension."
+        },
+        "validation": {
+          "$ref": "#/$defs/ConfigValidation",
+          "description": "Validation is the validation configuration of the extension."
+        }
+      },
+      "additionalProperties": false,
+      "type": "object"
+    },
+    "ConfigBuild": {
+      "properties": {
+        "extraBundles": {
+          "items": {
+            "$ref": "#/$defs/ConfigExtraBundle"
+          },
+          "type": "array",
+          "description": "ExtraBundles can be used to declare additional bundles to be considered for building"
+        },
+        "shopwareVersionConstraint": {
+          "type": "string",
+          "description": "Override the shopware version constraint for building, can be used to specify the version of the shopware to use for building"
+        },
+        "zip": {
+          "$ref": "#/$defs/ConfigBuildZip",
+          "description": "Configuration for zipping"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object"
+    },
+    "ConfigBuildZip": {
+      "properties": {
+        "composer": {
+          "$ref": "#/$defs/ConfigBuildZipComposer",
+          "description": "Configuration for composer"
+        },
+        "assets": {
+          "$ref": "#/$defs/ConfigBuildZipAssets",
+          "description": "Configuration for assets"
+        },
+        "pack": {
+          "$ref": "#/$defs/ConfigBuildZipPack",
+          "description": "Configuration for packing"
+        },
+        "checksum": {
+          "$ref": "#/$defs/ConfigBuildZipChecksum"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "description": "Configuration for zipping."
+    },
+    "ConfigBuildZipAssets": {
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "description": "When enabled, the shopware-cli build the assets"
+        },
+        "before_hooks": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array",
+          "description": "Commands to run before the assets build"
+        },
+        "after_hooks": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array",
+          "description": "Commands to run after the assets build"
+        },
+        "enable_es_build_for_admin": {
+          "type": "boolean",
+          "description": "When enabled, builtin esbuild will be used for the admin assets"
+        },
+        "enable_es_build_for_storefront": {
+          "type": "boolean",
+          "description": "When enabled, builtin esbuild will be used for the storefront assets"
+        },
+        "disable_sass": {
+          "type": "boolean",
+          "description": "When disabled, builtin sass support will be disabled"
+        },
+        "npm_strict": {
+          "type": "boolean",
+          "description": "When enabled, npm will install only production dependencies"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object"
+    },
+    "ConfigBuildZipChecksum": {
+      "properties": {
+        "ignore": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array",
+          "description": "Following files will be excluded from the checksum calculation"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "description": "Configuration for checksum calculation."
+    },
+    "ConfigBuildZipComposer": {
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "description": "When enabled, a vendor folder will be created in the zip build"
+        },
+        "before_hooks": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array",
+          "description": "Commands to run before the composer install"
+        },
+        "after_hooks": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array",
+          "description": "Commands to run after the composer install"
+        },
+        "excluded_packages": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array",
+          "description": "Composer packages to be excluded from the zip build"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object"
+    },
+    "ConfigBuildZipPack": {
+      "properties": {
+        "excludes": {
+          "$ref": "#/$defs/ConfigBuildZipPackExcludes",
+          "description": "Excludes can be used to exclude files from the zip build"
+        },
+        "before_hooks": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array",
+          "description": "Commands to run before the pack"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object"
+    },
+    "ConfigBuildZipPackExcludes": {
+      "properties": {
+        "paths": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array",
+          "description": "Paths to exclude from the zip build"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object"
+    },
+    "ConfigExtraBundle": {
+      "properties": {
+        "path": {
+          "type": "string",
+          "description": "Path to the bundle, relative from the extension root (src folder)"
+        },
+        "name": {
+          "type": "string",
+          "description": "Name of the bundle, if empty the folder name of path will be used"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object"
+    },
+    "ConfigStore": {
+      "properties": {
+        "availabilities": {
+          "items": {
+            "type": "string",
+            "enum": [
+              "German",
+              "International"
+            ]
+          },
+          "type": "array",
+          "description": "Specifies the visibility in stores."
+        },
+        "default_locale": {
+          "type": "string",
+          "enum": [
+            "de_DE",
+            "en_GB"
+          ],
+          "description": "Specifies the default locale."
+        },
+        "localizations": {
+          "items": {
+            "type": "string",
+            "enum": [
+              "de_DE",
+              "en_GB",
+              "bs_BA",
+              "bg_BG",
+              "cs_CZ",
+              "da_DK",
+              "de_CH",
+              "el_GR",
+              "en_US",
+              "es_ES",
+              "fi_FI",
+              "fr_FR",
+              "hi_IN",
+              "hr_HR",
+              "hu_HU",
+              "hy",
+              "id_ID",
+              "it_IT",
+              "ko_KR",
+              "lv_LV",
+              "ms_MY",
+              "nl_NL",
+              "pl_PL",
+              "pt_BR",
+              "pt_PT",
+              "ro_RO",
+              "ru_RU",
+              "sk_SK",
+              "sl_SI",
+              "sr_RS",
+              "sv_SE",
+              "th_TH",
+              "tr_TR",
+              "uk_UA",
+              "vi_VN",
+              "zh_CN",
+              "zh_TW"
+            ]
+          },
+          "type": "array",
+          "description": "Specifies the languages the extension is translated."
+        },
+        "categories": {
+          "items": {
+            "type": "string",
+            "enum": [
+              "Administration",
+              "SEOOptimierung",
+              "Bonitaetsprüfung",
+              "Rechtssicherheit",
+              "Auswertung",
+              "KommentarFeedback",
+              "Tracking",
+              "Integration",
+              "PreissuchmaschinenPortale",
+              "Warenwirtschaft",
+              "Versand",
+              "Bezahlung",
+              "StorefrontDetailanpassungen",
+              "Sprache",
+              "Suche",
+              "HeaderFooter",
+              "Detailseite",
+              "MenueKategorien",
+              "Bestellprozess",
+              "KundenkontoPersonalisierung",
+              "Sonderfunktionen",
+              "Themes",
+              "Branche",
+              "Home+Furnishings",
+              "FashionBekleidung",
+              "GartenNatur",
+              "KosmetikGesundheit",
+              "EssenTrinken",
+              "KinderPartyGeschenke",
+              "SportLifestyleReisen",
+              "Bauhaus",
+              "Elektronik",
+              "Geraete",
+              "Heimkueche",
+              "Hobby",
+              "Kueche",
+              "Lebensmittel",
+              "Medizin",
+              "Mode",
+              "Musik",
+              "Spiel",
+              "Technik",
+              "Umweltschutz",
+              "Wohnen",
+              "Zubehoer"
+            ]
+          },
+          "type": "array",
+          "description": "Specifies the categories."
+        },
+        "type": {
+          "type": "string",
+          "enum": [
+            "extension",
+            "theme"
+          ],
+          "description": "Specifies the type of the extension."
+        },
+        "icon": {
+          "type": "string",
+          "description": "Specifies the Path to the icon (256x256 px) for store."
+        },
+        "automatic_bugfix_version_compatibility": {
+          "type": "boolean",
+          "description": "Specifies whether the extension should automatically be set compatible with Shopware bugfix versions."
+        },
+        "meta_title": {
+          "$ref": "#/$defs/ConfigTranslated[string]",
+          "description": "Specifies the meta title of the extension in store."
+        },
+        "meta_description": {
+          "$ref": "#/$defs/ConfigTranslated[string]",
+          "description": "Specifies the meta description of the extension in store."
+        },
+        "description": {
+          "$ref": "#/$defs/ConfigTranslated[string]",
+          "description": "Specifies the description of the extension in store."
+        },
+        "installation_manual": {
+          "$ref": "#/$defs/ConfigTranslated[string]",
+          "description": "Installation manual of the extension in store."
+        },
+        "tags": {
+          "$ref": "#/$defs/ConfigTranslated[[]string]",
+          "description": "Specifies the tags of the extension."
+        },
+        "videos": {
+          "$ref": "#/$defs/ConfigTranslated[[]string]",
+          "description": "Specifies the links of YouTube-Videos to show or describe the extension."
+        },
+        "highlights": {
+          "$ref": "#/$defs/ConfigTranslated[[]string]",
+          "description": "Specifies the highlights of the extension."
+        },
+        "features": {
+          "$ref": "#/$defs/ConfigTranslated[[]string]",
+          "description": "Specifies the features of the extension."
+        },
+        "faq": {
+          "$ref": "#/$defs/ConfigTranslated[ConfigStoreFaq]",
+          "description": "Specifies Frequently Asked Questions for the extension."
+        },
+        "images": {
+          "items": {
+            "$ref": "#/$defs/ConfigStoreImage"
+          },
+          "type": "array",
+          "description": "Specifies images for the extension in the store."
+        },
+        "image_directory": {
+          "type": "string",
+          "description": "Specifies the directory where the images are located."
+        }
+      },
+      "additionalProperties": false,
+      "type": "object"
+    },
+    "ConfigStoreFaq": {
+      "properties": {
+        "question": {
+          "type": "string"
+        },
+        "answer": {
+          "type": "string"
+        },
+        "position": {
+          "type": "integer"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object"
+    },
+    "ConfigStoreImage": {
+      "properties": {
+        "file": {
+          "type": "string",
+          "description": "File path to image relative from root of the extension"
+        },
+        "activate": {
+          "$ref": "#/$defs/ConfigStoreImageActivate",
+          "description": "Specifies whether the image is active in the language."
+        },
+        "preview": {
+          "$ref": "#/$defs/ConfigStoreImagePreview",
+          "description": "Specifies whether the image is a preview in the language."
+        },
+        "priority": {
+          "type": "integer",
+          "description": "Specifies the order of the image ascending the given priority."
+        }
+      },
+      "additionalProperties": false,
+      "type": "object"
+    },
+    "ConfigStoreImageActivate": {
+      "properties": {
+        "de": {
+          "type": "boolean"
+        },
+        "en": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object"
+    },
+    "ConfigStoreImagePreview": {
+      "properties": {
+        "de": {
+          "type": "boolean"
+        },
+        "en": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object"
+    },
+    "ConfigTranslated[ConfigStoreFaq]": {
+      "properties": {
+        "de": {
+          "items": {
+            "$ref": "#/$defs/ConfigStoreFaq"
+          },
+          "type": "array"
+        },
+        "en": {
+          "items": {
+            "$ref": "#/$defs/ConfigStoreFaq"
+          },
+          "type": "array"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object"
+    },
+    "ConfigTranslated[[]string]": {
+      "properties": {
+        "de": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "en": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object"
+    },
+    "ConfigTranslated[string]": {
+      "properties": {
+        "de": {
+          "type": "string"
+        },
+        "en": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object"
+    },
+    "ConfigValidation": {
+      "properties": {
+        "ignore": {
+          "$ref": "#/$defs/ConfigValidationList",
+          "description": "Ignore items from the validation."
+        },
+        "store_compliance": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "description": "ConfigValidation is used to configure the extension validation."
+    },
+    "ConfigValidationList": {
+      "items": {
+        "$ref": "#/$defs/ToolConfigIgnore"
+      },
+      "type": "array"
+    },
+    "ToolConfigIgnore": {
+      "oneOf": [
+        {
+          "properties": {
+            "identifier": {
+              "type": "string",
+              "description": "The identifier of the item to ignore."
+            },
+            "path": {
+              "type": "string",
+              "description": "The path of the item to ignore."
+            }
+          },
+          "type": "object"
+        },
+        {
+          "type": "string"
+        }
+      ]
+    }
+  }
 }

@@ -29,6 +29,20 @@
         },
         "deployment": {
           "$ref": "#/$defs/ConfigDeployment"
+        },
+        "validation": {
+          "$ref": "#/$defs/ConfigValidation"
+        },
+        "image_proxy": {
+          "$ref": "#/$defs/ConfigImageProxy"
+        },
+        "disable_composer_scripts": {
+          "type": "boolean",
+          "description": "When enabled, composer scripts will be disabled during CI builds"
+        },
+        "disable_composer_install": {
+          "type": "boolean",
+          "description": "When enabled, composer install will be skipped during CI builds"
         }
       },
       "additionalProperties": false,
@@ -99,10 +113,64 @@
         "disable_storefront_build": {
           "type": "boolean",
           "description": "When enabled, the storefront build will be skipped"
+        },
+        "force_extension_build": {
+          "items": {
+            "$ref": "#/$defs/ConfigBuildExtension"
+          },
+          "type": "array",
+          "description": "Extensions to force build for, even if they have compiled files"
+        },
+        "force_admin_build": {
+          "type": "boolean",
+          "description": "When enabled, the shopware admin will be built"
+        },
+        "keep_node_modules": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array",
+          "description": "Keep following node_modules in the final build"
+        },
+        "mjml": {
+          "$ref": "#/$defs/ConfigBuildMJML",
+          "description": "MJML email template compilation configuration"
         }
       },
       "additionalProperties": false,
       "type": "object"
+    },
+    "ConfigBuildExtension": {
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Name of the extension"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "required": [
+        "name"
+      ],
+      "description": "ConfigBuildExtension defines the configuration for forcing extension builds."
+    },
+    "ConfigBuildMJML": {
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "description": "Whether to enable MJML compilation"
+        },
+        "search_paths": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array",
+          "description": "Directories to search for MJML files"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "description": "ConfigBuildMJML defines the configuration for MJML email template compilation."
     },
     "ConfigDeployment": {
       "properties": {
@@ -161,6 +229,18 @@
             },
             "overrides": {
               "$ref": "#/$defs/ConfigDeploymentOverrides"
+            },
+            "force_updates": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "force-update": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
             }
           },
           "additionalProperties": false,
@@ -247,6 +327,16 @@
       "additionalProperties": false,
       "type": "object"
     },
+    "ConfigImageProxy": {
+      "properties": {
+        "url": {
+          "type": "string",
+          "description": "The URL of the upstream server to proxy requests to when files are not found locally"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object"
+    },
     "ConfigSync": {
       "properties": {
         "enabled": {
@@ -302,6 +392,55 @@
       },
       "additionalProperties": false,
       "type": "object"
+    },
+    "ConfigValidation": {
+      "properties": {
+        "ignore": {
+          "items": {
+            "$ref": "#/$defs/ConfigValidationIgnoreItem"
+          },
+          "type": "array",
+          "description": "Ignore items from the validation."
+        },
+        "ignore_extensions": {
+          "items": {
+            "$ref": "#/$defs/ConfigValidationIgnoreExtension"
+          },
+          "type": "array"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "description": "ConfigValidation is used to configure the project validation."
+    },
+    "ConfigValidationIgnoreExtension": {
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "The name of the extension to ignore."
+        }
+      },
+      "additionalProperties": false,
+      "type": "object"
+    },
+    "ConfigValidationIgnoreItem": {
+      "properties": {
+        "identifier": {
+          "type": "string",
+          "description": "The identifier of the item to ignore."
+        },
+        "path": {
+          "type": "string",
+          "description": "The path of the item to ignore."
+        },
+        "message": {
+          "type": "string",
+          "description": "The message of the item to ignore."
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "description": "ConfigValidationIgnoreItem is used to ignore items from the validation."
     },
     "EntitySync": {
       "properties": {

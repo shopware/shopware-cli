@@ -1,0 +1,11 @@
+{% if foo %}
+<sw-button/>
+{% else %}
+<mt-button/>
+{% endif %}
+-----
+{% if foo %}
+    <sw-button/>
+{% else %}
+    <mt-button/>
+{% endif %}

@@ -10,13 +10,13 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/shopware/shopware-cli/internal/phpexec"
-
-	"github.com/shopware/shopware-cli/shop"
+	"github.com/shyim/go-version"
 
 	"github.com/shopware/shopware-cli/internal/asset"
+	"github.com/shopware/shopware-cli/internal/packagist"
+	"github.com/shopware/shopware-cli/internal/phpexec"
 	"github.com/shopware/shopware-cli/logging"
-	"github.com/shopware/shopware-cli/version"
+	"github.com/shopware/shopware-cli/shop"
 )
 
 func GetShopwareProjectConstraint(project string) (*version.Constraints, error) {
@@ -45,17 +45,13 @@ func GetShopwareProjectConstraint(project string) (*version.Constraints, error) 
 	c, err := version.NewConstraint(constraint)
 	if err != nil {
 		if strings.Contains(err.Error(), "malformed constraint") {
-			var lock composerLock
-
-			lockFile, readErr := os.ReadFile(path.Join(project, "composer.lock"))
-
-			if readErr != nil {
-				// popup real error
+			if _, statErr := os.Stat(path.Join(project, "composer.lock")); os.IsNotExist(statErr) {
 				return nil, err
 			}
 
-			if err := json.Unmarshal(lockFile, &lock); err != nil {
-				return nil, fmt.Errorf("could not parse composer.lock: %w", err)
+			lock, err := packagist.ReadComposerLock(path.Join(project, "composer.lock"))
+			if err != nil {
+				return nil, err
 			}
 
 			for _, pkg := range lock.Packages {
@@ -102,7 +98,7 @@ func getProjectConstraintFromKernel(project string) (*version.Constraints, error
 
 // FindAssetSourcesOfProject This finds all assets without invoking any PHP function and thinks all plugins / apps are active. Optional for CI usage.
 func FindAssetSourcesOfProject(ctx context.Context, project string, shopCfg *shop.Config) []asset.Source {
-	extensions := FindExtensionsFromProject(ctx, project)
+	extensions := FindExtensionsFromProject(ctx, project, false)
 	sources := ConvertExtensionsToSources(ctx, extensions)
 
 	composerJson, err := os.ReadFile(path.Join(project, "composer.json"))
@@ -179,14 +175,14 @@ func DumpAndLoadAssetSourcesOfProject(ctx context.Context, project string, shopC
 
 	var sources []asset.Source
 
-	for name, entry := range pluginsJson {
-		if entry.Administration.EntryFilePath != nil || entry.Storefront.EntryFilePath != nil {
+	for name := range pluginsJson {
+		if pluginsJson[name].Administration.EntryFilePath != nil || pluginsJson[name].Storefront.EntryFilePath != nil {
 			source := asset.Source{
 				Name: name,
-				Path: entry.BasePath,
+				Path: pluginsJson[name].BasePath,
 			}
 
-			if extensionCfg, err := readExtensionConfig(path.Join(project, entry.BasePath)); err == nil {
+			if extensionCfg, err := readExtensionConfig(path.Join(project, pluginsJson[name].BasePath)); err == nil {
 				source.AdminEsbuildCompatible = extensionCfg.Build.Zip.Assets.EnableESBuildForAdmin
 				source.StorefrontEsbuildCompatible = extensionCfg.Build.Zip.Assets.EnableESBuildForStorefront
 				source.NpmStrict = extensionCfg.Build.Zip.Assets.NpmStrict
@@ -199,18 +195,38 @@ func DumpAndLoadAssetSourcesOfProject(ctx context.Context, project string, shopC
 	return sources, nil
 }
 
-func FindExtensionsFromProject(ctx context.Context, project string) []Extension {
+func FindExtensionsFromProject(ctx context.Context, project string, onlyLocal bool) []Extension {
 	extensions := make(map[string]Extension)
 
-	for _, ext := range addExtensionsByComposer(project) {
+	if !onlyLocal {
+		for _, ext := range addExtensionsByComposer(project) {
+			name, err := ext.GetName()
+			if err != nil {
+				continue
+			}
+
+			version, _ := ext.GetVersion()
+
+			logging.FromContext(ctx).Infof("Found extension using Composer: %s (%s)", name, version)
+
+			extensions[name] = ext
+		}
+	}
+
+	for _, ext := range addExtensionsByWildcard(path.Join(project, "custom", "static-plugins")) {
 		name, err := ext.GetName()
 		if err != nil {
 			continue
 		}
 
+		// Skip if extension is already added by composer
+		if _, ok := extensions[name]; ok {
+			continue
+		}
+
 		version, _ := ext.GetVersion()
 
-		logging.FromContext(ctx).Infof("Found extension using Composer: %s (%s)", name, version)
+		logging.FromContext(ctx).Infof("Found extension in custom/plugins: %s (%s)", name, version)
 
 		extensions[name] = ext
 	}
@@ -277,11 +293,11 @@ func addExtensionsByComposer(project string) []Extension {
 			// The extension in the vendor folder has maybe not filled the version in this composer.json. Let's overwrite it with the version from composer.lock
 			switch pkg.PackageType {
 			case ComposerTypePlugin:
-				ext.(*PlatformPlugin).composer.Version = pkg.Version
+				ext.(*PlatformPlugin).Composer.Version = pkg.Version
 			case ComposerTypeApp:
 				ext.(*App).manifest.Meta.Version = pkg.Version
 			case ComposerTypeBundle:
-				ext.(*ShopwareBundle).composer.Version = pkg.Version
+				ext.(*ShopwareBundle).Composer.Version = pkg.Version
 			}
 
 			list = append(list, ext)

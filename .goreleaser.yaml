@@ -1,3 +1,4 @@
+# yaml-language-server: $schema=https://goreleaser.com/static/schema-pro.json
 version: 2
 before:
   hooks:
@@ -14,15 +15,10 @@ builds:
       - -trimpath
     goos:
       - linux
-      - windows
       - darwin
     ignore:
       - goos: linux
         goarch: '386'
-      - goos: windows
-        goarch: '386'
-      - goos: windows
-        goarch: 'arm64'
 
 archives:
   - name_template: >-
@@ -31,9 +27,6 @@ archives:
       {{- if eq .Arch "amd64" }}x86_64
       {{- else if eq .Arch "386" }}i386
       {{- else }}{{ .Arch }}{{ end }}
-    format_overrides:
-      - goos: windows
-        format: zip
     files:
       - LICENSE
       - completions/*
@@ -43,149 +36,68 @@ release:
     owner: shopware
     name: shopware-cli
 
-dockers:
-  # AMD64
-  - use: buildx
-    goos: linux
-    goarch: amd64
-    image_templates:
-      - "shopware/shopware-cli:{{ .Tag }}-php-8.4-amd64"
-    build_flag_templates:
-      - "--build-arg=PHP_VERSION=8.4"
-      - "--platform=linux/amd64"
-  - use: buildx
-    goos: linux
-    goarch: amd64
-    image_templates:
-      - "shopware/shopware-cli:{{ .Tag }}-php-8.3-amd64"
-    build_flag_templates:
-      - "--build-arg=PHP_VERSION=8.3"
-      - "--platform=linux/amd64"
-  - use: buildx
-    goos: linux
-    goarch: amd64
-    image_templates:
-      - "shopware/shopware-cli:{{ .Tag }}-php-8.2-amd64"
-    build_flag_templates:
-      - "--build-arg=PHP_VERSION=8.2"
-      - "--platform=linux/amd64"
-  - use: buildx
-    goos: linux
-    goarch: amd64
-    image_templates:
-      - "shopware/shopware-cli:{{ .Tag }}-php-8.1-amd64"
-    build_flag_templates:
-      - "--build-arg=PHP_VERSION=8.1"
-      - "--platform=linux/amd64"
-
-  # ARM64
-  - use: buildx
-    goos: linux
-    goarch: arm64
-    image_templates:
-      - "shopware/shopware-cli:{{ .Tag }}-php-8.4-arm64"
-    build_flag_templates:
-      - "--build-arg=PHP_VERSION=8.4"
-      - "--platform=linux/arm64"
-  - use: buildx
-    goos: linux
-    goarch: arm64
-    image_templates:
-      - "shopware/shopware-cli:{{ .Tag }}-php-8.3-arm64"
-    build_flag_templates:
-      - "--build-arg=PHP_VERSION=8.3"
-      - "--platform=linux/arm64"
-  - use: buildx
-    goos: linux
-    goarch: arm64
-    image_templates:
-      - "shopware/shopware-cli:{{ .Tag }}-php-8.2-arm64"
-    build_flag_templates:
-      - "--build-arg=PHP_VERSION=8.2"
-      - "--platform=linux/arm64"
-  - use: buildx
-    goos: linux
-    goarch: arm64
-    image_templates:
-      - "shopware/shopware-cli:{{ .Tag }}-php-8.1-arm64"
-    build_flag_templates:
-      - "--build-arg=PHP_VERSION=8.1"
-      - "--platform=linux/arm64"
-
-  - use: buildx
-    goos: linux
-    goarch: amd64
+dockers_v2:
+  - id: php-84
+    images:
+      - "shopware/shopware-cli"
+      - "ghcr.io/shopware/shopware-cli"
+    tags:
+      - "{{ .Version }}-php-8.4"
+      - "latest-php-8.4"
+    build_args:
+      PHP_VERSION: "8.4"
+    platforms:
+      - "linux/amd64"
+      - "linux/arm64"
+  - id: php-83
+    images:
+      - "shopware/shopware-cli"
+      - "ghcr.io/shopware/shopware-cli"
+    tags:
+      - "{{ .Version }}-php-8.3"
+      - "latest-php-8.3"
+      - "{{ .Version }}"
+      - "latest"
+    build_args:
+      PHP_VERSION: "8.3"
+    platforms:
+      - "linux/amd64"
+      - "linux/arm64"
+  - id: php-82
+    images:
+      - "shopware/shopware-cli"
+      - "ghcr.io/shopware/shopware-cli"
+    tags:
+      - "{{ .Version }}-php-8.2"
+      - "latest-php-8.2"
+    build_args:
+      PHP_VERSION: "8.2"
+    platforms:
+      - "linux/amd64"
+      - "linux/arm64"
+  - id: php-81
+    images:
+      - "shopware/shopware-cli"
+      - "ghcr.io/shopware/shopware-cli"
+    tags:
+      - "{{ .Version }}-php-8.1"
+      - "latest-php-8.1"
+    build_args:
+      PHP_VERSION: "8.1"
+    platforms:
+      - "linux/amd64"
+      - "linux/arm64"
+  - id: bin
+    images:
+      - "shopware/shopware-cli"
+      - "ghcr.io/shopware/shopware-cli"
     dockerfile: Dockerfile.bin
-    image_templates:
-      - "shopware/shopware-cli:bin-{{ .Tag }}-amd64"
-    build_flag_templates:
-      - "--platform=linux/amd64"
-
-  - use: buildx
-    goos: linux
-    goarch: arm64
-    dockerfile: Dockerfile.bin
-    image_templates:
-      - "shopware/shopware-cli:bin-{{ .Tag }}-arm64"
-    build_flag_templates:
-      - "--platform=linux/arm64"
-
-docker_manifests:
-  # Shopware Docker Hub
-  - name_template: shopware/shopware-cli:latest
-    image_templates:
-      - "shopware/shopware-cli:{{ .Tag }}-php-8.3-amd64"
-      - "shopware/shopware-cli:{{ .Tag }}-php-8.3-arm64"
-
-  - name_template: shopware/shopware-cli:latest-php-8.4
-    image_templates:
-      - "shopware/shopware-cli:{{ .Tag }}-php-8.4-amd64"
-      - "shopware/shopware-cli:{{ .Tag }}-php-8.4-arm64"
-
-  - name_template: shopware/shopware-cli:latest-php-8.3
-    image_templates:
-      - "shopware/shopware-cli:{{ .Tag }}-php-8.3-amd64"
-      - "shopware/shopware-cli:{{ .Tag }}-php-8.3-arm64"
-
-  - name_template: shopware/shopware-cli:latest-php-8.2
-    image_templates:
-      - "shopware/shopware-cli:{{ .Tag }}-php-8.2-amd64"
-      - "shopware/shopware-cli:{{ .Tag }}-php-8.2-arm64"
-
-  - name_template: shopware/shopware-cli:latest-php-8.1
-    image_templates:
-      - "shopware/shopware-cli:{{ .Tag }}-php-8.1-amd64"
-      - "shopware/shopware-cli:{{ .Tag }}-php-8.1-arm64"
-
-  - name_template: shopware/shopware-cli:{{ .Tag }}
-    image_templates:
-      - "shopware/shopware-cli:{{ .Tag }}-php-8.3-amd64"
-      - "shopware/shopware-cli:{{ .Tag }}-php-8.3-arm64"
-
-  - name_template: shopware/shopware-cli:{{ .Tag }}-php-8.3
-    image_templates:
-      - "shopware/shopware-cli:{{ .Tag }}-php-8.3-amd64"
-      - "shopware/shopware-cli:{{ .Tag }}-php-8.3-arm64"
-
-  - name_template: shopware/shopware-cli:{{ .Tag }}-php-8.2
-    image_templates:
-      - "shopware/shopware-cli:{{ .Tag }}-php-8.2-amd64"
-      - "shopware/shopware-cli:{{ .Tag }}-php-8.2-arm64"
-
-  - name_template: shopware/shopware-cli:{{ .Tag }}-php-8.1
-    image_templates:
-      - "shopware/shopware-cli:{{ .Tag }}-php-8.1-amd64"
-      - "shopware/shopware-cli:{{ .Tag }}-php-8.1-arm64"
-
-  - name_template: shopware/shopware-cli:bin-{{ .Tag }}
-    image_templates:
-      - "shopware/shopware-cli:bin-{{ .Tag }}-amd64"
-      - "shopware/shopware-cli:bin-{{ .Tag }}-arm64"
-
-  - name_template: shopware/shopware-cli:bin
-    image_templates:
-      - "shopware/shopware-cli:bin-{{ .Tag }}-amd64"
-      - "shopware/shopware-cli:bin-{{ .Tag }}-arm64"
+    tags:
+      - "bin-{{ .Version }}"
+      - "bin"
+    platforms:
+      - "linux/amd64"
+      - "linux/arm64"
 
 sboms:
   - artifacts: archive
@@ -194,14 +106,13 @@ sboms:
 
 signs:
   - cmd: cosign
-    certificate: "${artifact}.pem"
+    signature: "${artifact}.sigstore.json"
     env:
       - COSIGN_EXPERIMENTAL=1
     artifacts: checksum
     args:
     - "sign-blob"
-    - "--output-certificate=${certificate}"
-    - "--output-signature=${signature}"
+    - "--bundle=${signature}"
     - '${artifact}'
     - "--yes"
 
@@ -225,6 +136,15 @@ changelog:
       - '^docs:'
       - '^test:'
       - '^Merge pull request:'
+  groups:
+    - title: 🚀 Features
+      regexp: '^.*?feat(\([[:word:]]+\))??!?:.+$'
+      order: 0
+    - title: "🐛 Bug Fixes"
+      regexp: '^.*?bug(\([[:word:]]+\))??!?:.+$'
+      order: 1
+    - title: 🧰 Maintenance
+      order: 999
 
 aurs:
   - homepage: https://developer.shopware.com/
@@ -293,54 +213,43 @@ nfpms:
       - deb
       - rpm
 
-brews:
-  - repository:
-      owner: FriendsOfShopware
-      name: homebrew-tap
-      token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
-    commit_author:
-      name: Frosh Automation
-      email: ci@fos.gg
-    goarm: "7"
-    homepage: https://friendsofshopware.com
-    description: Shopware CLI helps Shopware developers manage extensions
-    license: MIT
-    directory: Formula
-    test: |
-      system "#{bin}/shopware-cli --version"
-    dependencies:
-    - name: node-sass
-    - name: git
-      type: optional
-    - name: node
-      type: optional
-    install: |-
-      bin.install "shopware-cli"
-      bash_completion.install "completions/shopware-cli.bash" => "_shopware-cli"
-      zsh_completion.install "completions/shopware-cli.zsh" => "_shopware-cli"
-      fish_completion.install "completions/shopware-cli.fish"
-  - repository:
+homebrew_casks:
+  - name: shopware-cli
+    repository:
       owner: shopware
       name: homebrew-tap
       token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN_SHOPWARE }}"
     commit_author:
       name: Frosh Automation
       email: ci@fos.gg
-    goarm: "7"
     homepage: https://shopware.com
     description: Shopware CLI helps Shopware developers manage extensions
     license: MIT
-    directory: Formula
-    test: |
-      system "#{bin}/shopware-cli --version"
-    dependencies:
-    - name: node-sass
-    - name: git
-      type: optional
-    - name: node
-      type: optional
-    install: |-
-      bin.install "shopware-cli"
-      bash_completion.install "completions/shopware-cli.bash" => "_shopware-cli"
-      zsh_completion.install "completions/shopware-cli.zsh" => "_shopware-cli"
-      fish_completion.install "completions/shopware-cli.fish"
+    completions:
+      bash: completions/shopware-cli.bash
+      zsh: completions/shopware-cli.zsh
+      fish: completions/shopware-cli.fish
+
+npms:
+  - name: "@shopware-ag/shopware-cli"
+    description: "Shopware CLI helps Shopware developers manage extensions"
+    license: MIT
+    homepage: https://developer.shopware.com/docs/products/cli/
+    keywords:
+      - cli
+      - shopware
+    repository: https://github.com/shopware/shopware-cli
+    bugs: https://github.com/shopware/shopware-cli/issues
+    access: public
+
+notarize:
+  macos:
+    - enabled: '{{ isEnvSet "APPLE_CODE_SIGNING_KEY" }}'
+      sign:
+        certificate: "{{.Env.APPLE_CODE_SIGNING_KEY}}"
+        password: "{{.Env.APPLE_CODE_SIGNING_KEY_PASSWORD}}"
+        entitlements: "./entitlements.xml"
+      notarize:
+        issuer_id: "{{.Env.APPLE_APP_STORE_CONNECT_ISSUER}}"
+        key_id: "{{.Env.APPLE_APP_STORE_CONNECT_KEY_ID}}"
+        key: "{{.Env.APPLE_APP_STORE_CONNECT_KEY}}"

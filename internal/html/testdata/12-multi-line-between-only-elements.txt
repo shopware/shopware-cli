@@ -1,0 +1,15 @@
+<template>
+
+
+<foo>
+	<bar/>
+</foo>
+
+
+</template>
+-----
+<template>
+    <foo>
+        <bar/>
+    </foo>
+</template>

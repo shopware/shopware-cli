@@ -1,0 +1,17 @@
+{% block a %}
+{% block b %}
+{% parent() %}
+{% endblock %}
+{% endblock %}
+-----
+{% block a %}
+{% block b %}
+{% parent() %}
+{% endblock %}
+{% endblock %}
+-----
+{% block a %}
+    {% block b %}
+        {% parent() %}
+    {% endblock %}
+{% endblock %}

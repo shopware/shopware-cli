@@ -20,3 +20,25 @@ updates:
       all:
         patterns:
           - '*'  
+
+  - package-ecosystem: "composer"
+    directory: "/internal/verifier/php"
+    schedule:
+      interval: "weekly"
+    commit-message:
+      prefix: 'fix(deps): '
+    groups:
+      all:
+        patterns:
+          - '*'
+
+  - package-ecosystem: "npm"
+    directory: "/internal/verifier/js"
+    schedule:
+      interval: "weekly"
+    commit-message:
+      prefix: 'fix(deps): '
+    groups:
+      all:
+        patterns:
+          - '*' 

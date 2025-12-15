@@ -3,8 +3,9 @@ package changelog
 import (
 	"testing"
 
-	"github.com/shopware/shopware-cli/internal/git"
 	"github.com/stretchr/testify/assert"
+
+	"github.com/shopware/shopware-cli/internal/git"
 )
 
 func TestGenerateWithoutConfig(t *testing.T) {

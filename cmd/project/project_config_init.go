@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/manifoldco/promptui"
+	"github.com/charmbracelet/huh"
 	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v3"
 
@@ -20,22 +20,21 @@ var projectConfigInitCmd = &cobra.Command{
 		var content []byte
 		var err error
 
-		urlPrompt := promptui.Prompt{
-			Label:    "Shop-URL example: http://localhost",
-			Validate: emptyValidator,
-		}
+		// Create URL input form
+		urlForm := huh.NewForm(
+			huh.NewGroup(
+				huh.NewInput().
+					Title("Shop-URL example: http://localhost").
+					Validate(emptyValidator).
+					Value(&config.URL),
+			),
+		)
 
-		config.URL, err = urlPrompt.Run()
-		if err != nil {
+		if err := urlForm.Run(); err != nil {
 			return err
 		}
 
 		if err = askApi(config); err != nil {
-			return err
-		}
-
-		if err != nil {
-			logging.FromContext(cmd.Context()).Fatalf("Prompt failed %v\n", err)
 			return err
 		}
 
@@ -54,76 +53,95 @@ var projectConfigInitCmd = &cobra.Command{
 }
 
 func askApi(config *shop.Config) error {
-	adminApi := promptui.Prompt{
-		Label:     "Configure admin-api access",
-		IsConfirm: true,
+	var configureApi bool
+	var authType string
+
+	// Ask if user wants to configure API access
+	confirmForm := huh.NewForm(
+		huh.NewGroup(
+			huh.NewConfirm().
+				Title("Configure admin-api access").
+				Value(&configureApi),
+		),
+	)
+
+	if err := confirmForm.Run(); err != nil {
+		return err
 	}
 
-	var result string
-	_, err := adminApi.Run()
-	if err != nil {
-		return nil //nolint:nilerr
+	if !configureApi {
+		return nil
 	}
 
-	apiAuthType := promptui.Select{
-		Label: "Auth type",
-		Items: []string{"user-password", "integration"},
-	}
+	// Choose auth type
+	authTypeForm := huh.NewForm(
+		huh.NewGroup(
+			huh.NewSelect[string]().
+				Title("Auth type").
+				Options(
+					huh.NewOption("user-password", "user-password"),
+					huh.NewOption("integration", "integration"),
+				).
+				Value(&authType),
+		),
+	)
 
-	if _, result, err = apiAuthType.Run(); err != nil {
+	if err := authTypeForm.Run(); err != nil {
 		return err
 	}
 
 	apiConfig := shop.ConfigAdminApi{}
 	config.AdminApi = &apiConfig
 
-	if result == "integration" {
-		clientIdPrompt := promptui.Prompt{
-			Label:    "Client-ID",
-			Validate: emptyValidator,
-		}
+	if authType == "integration" {
+		var clientId, clientSecret string
 
-		clientSecretPrompt := promptui.Prompt{
-			Label:    "Client-Secret",
-			Validate: emptyValidator,
-		}
+		// Integration auth form
+		integrationForm := huh.NewForm(
+			huh.NewGroup(
+				huh.NewInput().
+					Title("Client-ID").
+					Validate(emptyValidator).
+					Value(&clientId),
+				huh.NewInput().
+					Title("Client-Secret").
+					Validate(emptyValidator).
+					Value(&clientSecret),
+			),
+		)
 
-		if id, err := clientIdPrompt.Run(); err != nil {
+		if err := integrationForm.Run(); err != nil {
 			return err
-		} else {
-			apiConfig.ClientId = id
 		}
 
-		if secret, err := clientSecretPrompt.Run(); err != nil {
-			return err
-		} else {
-			apiConfig.ClientSecret = secret
-		}
+		apiConfig.ClientId = clientId
+		apiConfig.ClientSecret = clientSecret
 
 		return nil
 	}
 
-	adminUserPrompt := promptui.Prompt{
-		Label:    "Admin User",
-		Validate: emptyValidator,
-	}
+	var username, password string
 
-	adminPasswordPrompt := promptui.Prompt{
-		Label:    "Admin Password",
-		Validate: emptyValidator,
-	}
+	// User-password auth form
+	userPasswordForm := huh.NewForm(
+		huh.NewGroup(
+			huh.NewInput().
+				Title("Admin User").
+				Validate(emptyValidator).
+				Value(&username),
+			huh.NewInput().
+				Title("Admin Password").
+				Validate(emptyValidator).
+				Value(&password),
+		),
+	)
 
-	if user, err := adminUserPrompt.Run(); err != nil {
+	if err := userPasswordForm.Run(); err != nil {
 		return err
-	} else {
-		apiConfig.Username = user
 	}
 
-	if password, err := adminPasswordPrompt.Run(); err != nil {
-		return err
-	} else {
-		apiConfig.Password = password
-	}
+	apiConfig.Username = username
+	apiConfig.Password = password
 
 	return nil
 }

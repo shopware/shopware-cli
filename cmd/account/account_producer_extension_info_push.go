@@ -161,12 +161,8 @@ func updateStoreInfo(ext *accountApi.Extension, zipExt extension.Extension, cfg 
 	if cfg.Store.Localizations != nil {
 		newLocales := make([]accountApi.Locale, 0)
 
-		for _, locale := range info.Locales {
-			for _, configLocale := range *cfg.Store.Localizations {
-				if locale.Name == configLocale {
-					newLocales = append(newLocales, locale)
-				}
-			}
+		for _, configLocale := range *cfg.Store.Localizations {
+			newLocales = append(newLocales, accountApi.Locale{Name: configLocale})
 		}
 
 		ext.Localizations = newLocales
@@ -247,7 +243,7 @@ func updateStoreInfo(ext *accountApi.Extension, zipExt extension.Extension, cfg 
 		if storeFaqs != nil {
 			var newFaq []accountApi.StoreFaq
 			for _, faq := range *storeFaqs {
-				newFaq = append(newFaq, accountApi.StoreFaq{Question: faq.Question, Answer: faq.Answer})
+				newFaq = append(newFaq, accountApi.StoreFaq{Question: faq.Question, Answer: faq.Answer, Position: faq.Position})
 			}
 
 			info.Faqs = newFaq
@@ -270,15 +266,26 @@ func updateStoreInfo(ext *accountApi.Extension, zipExt extension.Extension, cfg 
 				return err
 			}
 		}
+
+		storeMetaTitle := getTranslation(language, cfg.Store.MetaTitle)
+		if storeMetaTitle != nil {
+			info.MetaTitle = *storeMetaTitle
+		}
+
+		storeMetaDescription := getTranslation(language, cfg.Store.MetaDescription)
+		if storeMetaDescription != nil {
+			info.MetaDescription = *storeMetaDescription
+		}
 	}
 
 	return nil
 }
 
 func getTranslation[T extension.Translatable](language string, config extension.ConfigTranslated[T]) *T {
-	if language == "de" {
+	switch language {
+	case "de":
 		return config.German
-	} else if language == "en" {
+	case "en":
 		return config.English
 	}
 

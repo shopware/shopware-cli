@@ -1,10 +1,11 @@
 package extension
 
 import (
-	"github.com/stretchr/testify/assert"
 	"os"
-	"path"
+	"path/filepath"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
 func TestValidPackageJsonBun(t *testing.T) {
@@ -16,7 +17,7 @@ func TestValidPackageJsonBun(t *testing.T) {
 		}
 	}`
 
-	if err := os.WriteFile(path.Join(tmpDir, "package.json"), []byte(packageJson), 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(tmpDir, "package.json"), []byte(packageJson), 0644); err != nil {
 		t.Fatal(err)
 	}
 
@@ -39,7 +40,7 @@ func TestValidPackageJsonWithDevBun(t *testing.T) {
 		}
 	}`
 
-	if err := os.WriteFile(path.Join(tmpDir, "package.json"), []byte(packageJson), 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(tmpDir, "package.json"), []byte(packageJson), 0644); err != nil {
 		t.Fatal(err)
 	}
 
@@ -62,7 +63,7 @@ func TestInvalidPackageJsonBun(t *testing.T) {
 		}
 	}`
 
-	if err := os.WriteFile(path.Join(tmpDir, "package.json"), []byte(packageJson), 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(tmpDir, "package.json"), []byte(packageJson), 0644); err != nil {
 		t.Fatal(err)
 	}
 

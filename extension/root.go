@@ -9,7 +9,9 @@ import (
 	"os"
 	"strings"
 
-	"github.com/shopware/shopware-cli/version"
+	"github.com/shyim/go-version"
+
+	"github.com/shopware/shopware-cli/internal/validation"
 )
 
 const (
@@ -99,10 +101,16 @@ type extensionMetadata struct {
 
 type Extension interface {
 	GetName() (string, error)
+	GetComposerName() (string, error)
+	// Deprecated: use the list variation instead
 	GetResourcesDir() string
+	GetResourcesDirs() []string
+
+	GetIconPath() string
 
 	// GetRootDir Returns the root folder where the code is located plugin -> src, app ->
 	GetRootDir() string
+	GetSourceDirs() []string
 	GetVersion() (*version.Version, error)
 	GetLicense() (string, error)
 	GetShopwareVersionConstraint() (*version.Constraints, error)
@@ -111,5 +119,5 @@ type Extension interface {
 	GetChangelog() (*ExtensionChangelog, error)
 	GetMetaData() *extensionMetadata
 	GetExtensionConfig() *Config
-	Validate(context.Context, *ValidationContext)
+	Validate(context.Context, validation.Check)
 }

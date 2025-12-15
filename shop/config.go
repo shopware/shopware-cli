@@ -4,17 +4,17 @@ import (
 	"fmt"
 	"os"
 	"path"
+	"path/filepath"
 	"strings"
 
-	"github.com/invopop/jsonschema"
-	orderedmap "github.com/wk8/go-ordered-map/v2"
-
 	"dario.cat/mergo"
-
-	"github.com/doutorfinancas/go-mad/core"
 	adminSdk "github.com/friendsofshopware/go-shopware-admin-api-sdk"
 	"github.com/google/uuid"
+	"github.com/invopop/jsonschema"
+	orderedmap "github.com/wk8/go-ordered-map/v2"
 	"gopkg.in/yaml.v3"
+
+	"github.com/shopware/shopware-cli/internal/system"
 )
 
 type Config struct {
@@ -26,7 +26,21 @@ type Config struct {
 	ConfigDump       *ConfigDump       `yaml:"dump,omitempty"`
 	Sync             *ConfigSync       `yaml:"sync,omitempty"`
 	ConfigDeployment *ConfigDeployment `yaml:"deployment,omitempty"`
-	foundConfig      bool
+	Validation       *ConfigValidation `yaml:"validation,omitempty"`
+	ImageProxy       *ConfigImageProxy `yaml:"image_proxy,omitempty"`
+	// When enabled, composer scripts will be disabled during CI builds
+	DisableComposerScripts bool `yaml:"disable_composer_scripts,omitempty"`
+	// When enabled, composer install will be skipped during CI builds
+	DisableComposerInstall bool `yaml:"disable_composer_install,omitempty"`
+	foundConfig            bool
+}
+
+func (c *Config) IsAdminAPIConfigured() bool {
+	if c.AdminApi == nil {
+		return false
+	}
+
+	return (c.AdminApi.ClientId != "" && c.AdminApi.ClientSecret != "") || (c.AdminApi.Username != "" && c.AdminApi.Password != "")
 }
 
 type ConfigBuild struct {
@@ -46,6 +60,56 @@ type ConfigBuild struct {
 	ExcludeExtensions []string `yaml:"exclude_extensions,omitempty"`
 	// When enabled, the storefront build will be skipped
 	DisableStorefrontBuild bool `yaml:"disable_storefront_build,omitempty"`
+	// Extensions to force build for, even if they have compiled files
+	ForceExtensionBuild []ConfigBuildExtension `yaml:"force_extension_build,omitempty"`
+	// When enabled, the shopware admin will be built
+	ForceAdminBuild bool `yaml:"force_admin_build,omitempty"`
+	// Keep following node_modules in the final build
+	KeepNodeModules []string `yaml:"keep_node_modules,omitempty"`
+	// MJML email template compilation configuration
+	MJML *ConfigBuildMJML `yaml:"mjml,omitempty"`
+}
+
+func (c ConfigBuild) IsMjmlEnabled() bool {
+	if c.MJML == nil {
+		return false
+	}
+
+	return c.MJML.Enabled
+}
+
+// ConfigBuildExtension defines the configuration for forcing extension builds.
+type ConfigBuildExtension struct {
+	// Name of the extension
+	Name string `yaml:"name" jsonschema:"required"`
+}
+
+// ConfigBuildMJML defines the configuration for MJML email template compilation.
+type ConfigBuildMJML struct {
+	// Whether to enable MJML compilation
+	Enabled bool `yaml:"enabled,omitempty"`
+	// Directories to search for MJML files
+	SearchPaths []string `yaml:"search_paths,omitempty"`
+}
+
+func (c ConfigBuildMJML) GetPaths(projectRoot string) []string {
+	if len(c.SearchPaths) > 0 {
+		absolutePaths := make([]string, len(c.SearchPaths))
+		for i, path := range c.SearchPaths {
+			if filepath.IsAbs(path) {
+				absolutePaths[i] = path
+			} else {
+				absolutePaths[i] = filepath.Join(projectRoot, path)
+			}
+		}
+
+		return absolutePaths
+	}
+
+	return []string{
+		filepath.Join(projectRoot, "custom", "plugins"),
+		filepath.Join(projectRoot, "custom", "static-plugins"),
+	}
 }
 
 type ConfigAdminApi struct {
@@ -63,13 +127,107 @@ type ConfigAdminApi struct {
 
 type ConfigDump struct {
 	// Allows to rewrite single columns, perfect for GDPR compliance
-	Rewrite map[string]core.Rewrite `yaml:"rewrite,omitempty"`
+	Rewrite map[string]map[string]string `yaml:"rewrite,omitempty"`
 	// Only export the schema of these tables
 	NoData []string `yaml:"nodata,omitempty"`
 	// Ignore these tables from export
 	Ignore []string `yaml:"ignore,omitempty"`
 	// Add an where condition to that table, schema is table name as key, and where statement as value
 	Where map[string]string `yaml:"where,omitempty"`
+}
+
+// EnableClean adds default tables that should be excluded from data dump in clean mode
+func (c *ConfigDump) EnableClean() {
+	cleanTables := []string{
+		"cart",
+		"customer_recovery",
+		"dead_message",
+		"enqueue",
+		"messenger_messages",
+		"import_export_log",
+		"increment",
+		"elasticsearch_index_task",
+		"log_entry",
+		"message_queue_stats",
+		"notification",
+		"payment_token",
+		"refresh_token",
+		"version",
+		"version_commit",
+		"version_commit_data",
+		"webhook_event_log",
+	}
+	c.NoData = append(c.NoData, cleanTables...)
+}
+
+// EnableAnonymization adds default column rewrites for anonymizing customer data
+func (c *ConfigDump) EnableAnonymization() {
+	if c.Rewrite == nil {
+		c.Rewrite = make(map[string]map[string]string)
+	}
+
+	anonymizationRewrites := map[string]map[string]string{
+		"customer": {
+			"first_name":     "faker.Person.FirstName()",
+			"last_name":      "faker.Person.LastName()",
+			"company":        "faker.Person.Name()",
+			"title":          "faker.Person.Name()",
+			"email":          "faker.Internet.Email()",
+			"remote_address": "faker.Internet.Ipv4()",
+		},
+		"customer_address": {
+			"first_name":   "faker.Person.FirstName()",
+			"last_name":    "faker.Person.LastName()",
+			"company":      "faker.Person.Name()",
+			"title":        "faker.Person.Name()",
+			"street":       "faker.Address.StreetAddress()",
+			"zipcode":      "faker.Address.PostCode()",
+			"city":         "faker.Address.City()",
+			"phone_number": "faker.Phone.Number()",
+		},
+		"log_entry": {
+			"provider": "",
+		},
+		"newsletter_recipient": {
+			"email":      "faker.Internet.Email()",
+			"first_name": "faker.Person.FirstName()",
+			"last_name":  "faker.Person.LastName()",
+			"city":       "faker.Address.City()",
+		},
+		"order_address": {
+			"first_name":   "faker.Person.FirstName()",
+			"last_name":    "faker.Person.LastName()",
+			"company":      "faker.Person.Name()",
+			"title":        "faker.Person.Name()",
+			"street":       "faker.Address.StreetAddress()",
+			"zipcode":      "faker.Address.PostCode()",
+			"city":         "faker.Address.City()",
+			"phone_number": "faker.Phone.Number()",
+		},
+		"order_customer": {
+			"first_name":     "faker.Person.FirstName()",
+			"last_name":      "faker.Person.LastName()",
+			"company":        "faker.Person.Name()",
+			"title":          "faker.Person.Name()",
+			"email":          "faker.Internet.Email()",
+			"remote_address": "faker.Internet.Ipv4()",
+		},
+		"product_review": {
+			"email": "faker.Internet.Email()",
+		},
+	}
+
+	// Merge with existing rewrites
+	for table, columns := range anonymizationRewrites {
+		if _, exists := c.Rewrite[table]; !exists {
+			c.Rewrite[table] = columns
+		} else {
+			// Merge column rewrites for existing table
+			for column, rewrite := range columns {
+				c.Rewrite[table][column] = rewrite
+			}
+		}
+	}
 }
 
 type ConfigSync struct {
@@ -112,6 +270,11 @@ type ConfigDeployment struct {
 		Exclude []string `yaml:"exclude"`
 
 		Overrides ConfigDeploymentOverrides `yaml:"overrides"`
+
+		// DEPRECATED, On these extensions, it will be always called plugin:update
+		ForceUpdatesDeprecated []string `yaml:"force_updates,omitempty" jsonschema:"deprecated=true"`
+		// On these extensions, it will be always called plugin:update
+		ForceUpdate []string `yaml:"force-update,omitempty"`
 	} `yaml:"extension-management"`
 
 	OneTimeTasks []struct {
@@ -237,6 +400,34 @@ type MailTemplateTranslation struct {
 	CustomFields interface{} `yaml:"custom_fields"`
 }
 
+// ConfigValidation is used to configure the project validation.
+type ConfigValidation struct {
+	// Ignore items from the validation.
+	Ignore []ConfigValidationIgnoreItem `yaml:"ignore,omitempty"`
+
+	IgnoreExtensions []ConfigValidationIgnoreExtension `yaml:"ignore_extensions,omitempty"`
+}
+
+// ConfigValidationIgnoreItem is used to ignore items from the validation.
+type ConfigValidationIgnoreItem struct {
+	// The identifier of the item to ignore.
+	Identifier string `yaml:"identifier"`
+	// The path of the item to ignore.
+	Path string `yaml:"path,omitempty"`
+	// The message of the item to ignore.
+	Message string `yaml:"message,omitempty"`
+}
+
+type ConfigValidationIgnoreExtension struct {
+	// The name of the extension to ignore.
+	Name string `yaml:"name"`
+}
+
+type ConfigImageProxy struct {
+	// The URL of the upstream server to proxy requests to when files are not found locally
+	URL string `yaml:"url,omitempty"`
+}
+
 func ReadConfig(fileName string, allowFallback bool) (*Config, error) {
 	config := &Config{foundConfig: false}
 
@@ -261,7 +452,7 @@ func ReadConfig(fileName string, allowFallback bool) (*Config, error) {
 
 	config.foundConfig = true
 
-	substitutedConfig := os.ExpandEnv(string(fileHandle))
+	substitutedConfig := system.ExpandEnv(string(fileHandle))
 	err = yaml.Unmarshal([]byte(substitutedConfig), &config)
 
 	if len(config.AdditionalConfigs) > 0 {
@@ -271,12 +462,10 @@ func ReadConfig(fileName string, allowFallback bool) (*Config, error) {
 				return nil, fmt.Errorf("error while reading included config: %s", err.Error())
 			}
 
-			err = mergo.Merge(additionalConfig, config, mergo.WithOverride, mergo.WithSliceDeepCopy)
+			err = mergo.Merge(config, additionalConfig, mergo.WithOverride, mergo.WithSliceDeepCopy)
 			if err != nil {
 				return nil, fmt.Errorf("error while merging included config: %s", err.Error())
 			}
-
-			config = additionalConfig
 		}
 	}
 

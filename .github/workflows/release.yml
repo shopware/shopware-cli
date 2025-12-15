@@ -10,66 +10,90 @@ permissions:
   id-token: write
   packages: write
 
+env:
+  GOTOOLCHAIN: local
+
 jobs:
   release:
     runs-on: ubuntu-latest
     steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@20cf305ff2072d973412fa9b1e3a4f227bda3c76 # ratchet:step-security/harden-runner@v2.14.0
+        with:
+          egress-policy: audit
+
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # ratchet:actions/checkout@v4
         with:
           fetch-depth: 0
 
       - name: Set up Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@4dc6199c7b1a012772edbd06daecab0f50c9053c # ratchet:actions/setup-go@v5
         with:
-          go-version: '1.23'
+          go-version: '1.24'
           cache: true
           check-latest: true
 
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          registry-url: "https://registry.npmjs.org"
+
       - name: Install Nix
-        uses: DeterminateSystems/nix-installer-action@main
+        uses: DeterminateSystems/nix-installer-action@c5a866b6ab867e88becbed4467b93592bce69f8a # ratchet:DeterminateSystems/nix-installer-action@main
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@e468171a9de216ec08956ac3ada2f0791b6bd435 # ratchet:docker/setup-buildx-action@v3
 
       - name: Install Cosign
-        uses: sigstore/cosign-installer@v3
+        uses: sigstore/cosign-installer@faadad0cce49287aee09b3a48701e75088a2c6ad # ratchet:sigstore/cosign-installer@v3
 
       - name: Install Syft
-        uses: anchore/sbom-action/download-syft@v0.18.0
+        uses: anchore/sbom-action/download-syft@43a17d6e7add2b5535efe4dcae9952337c479a93 # ratchet:anchore/sbom-action/download-syft@v0.20.11
 
-      - uses: octo-sts/action@v1.0.0
-        id: sts-homebrew
-        with:
-          scope: FriendsOfShopware/homebrew-tap
-          identity: release
-
-      - uses: octo-sts/action@v1.0.0
+      - name: Gather Homebrew Token
+        uses: octo-sts/action@f603d3be9d8dd9871a265776e625a27b00effe05 # ratchet:octo-sts/action@v1.1.1
         id: sts-shopware
         with:
           scope: shopware/homebrew-tap
           identity: swcli
 
-      - uses: octo-sts/action@v1.0.0
+      - name: Gather NUR Token
+        uses: octo-sts/action@f603d3be9d8dd9871a265776e625a27b00effe05 # ratchet:octo-sts/action@v1.1.1
         id: sts-nur
         with:
           scope: FriendsOfShopware/nur-packages
           identity: release
 
+      - name: Update npm
+        run: sudo npm install -g npm@latest
+
       - name: Login into Docker Hub
         run: echo "${{ secrets.DOCKER_HUB_PASSWORD }}" | docker login -u ${{ secrets.DOCKER_HUB_USERNAME }} --password-stdin
 
+      - name: Login into Github Docker Registery
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+
       - name: Run GoReleaser
-        uses: goreleaser/goreleaser-action@v6
+        uses: goreleaser/goreleaser-action@e435ccd777264be153ace6237001ef4d979d3a7a # ratchet:goreleaser/goreleaser-action@v6
         with:
+          distribution: goreleaser-pro
           version: '~> v2'
           args: release --clean
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          HOMEBREW_TAP_GITHUB_TOKEN: ${{ steps.sts-homebrew.outputs.token }}
           HOMEBREW_TAP_GITHUB_TOKEN_SHOPWARE: ${{ steps.sts-shopware.outputs.token }}
           NUR_GITHUB_TOKEN: ${{ steps.sts-nur.outputs.token }}
           AUR_KEY: ${{ secrets.AUR_KEY }}
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          GORELEASER_KEY: ${{ secrets.GORELEASER_KEY }}
+          # Code Signing
+          APPLE_CODE_SIGNING_KEY: ${{ secrets.APPLE_CODE_SIGNING_KEY }}
+          APPLE_CODE_SIGNING_KEY_PASSWORD: ${{ secrets.APPLE_CODE_SIGNING_KEY_PASSWORD }}
+          APPLE_APP_STORE_CONNECT_ISSUER: ${{ secrets.APPLE_APP_STORE_CONNECT_ISSUER }}
+          APPLE_APP_STORE_CONNECT_KEY_ID: ${{ secrets.APPLE_APP_STORE_CONNECT_KEY_ID }}
+          APPLE_APP_STORE_CONNECT_KEY: ${{ secrets.APPLE_APP_STORE_CONNECT_KEY }}
 
       - name: Install Cloudsmith CLI
         run: pip install --upgrade cloudsmith-cli

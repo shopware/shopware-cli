@@ -80,7 +80,7 @@ var projectAdminApiCmd = &cobra.Command{
 
 		cmd := curl.InitCurlCommand(commandConfig...)
 
-		return cmd.Run()
+		return cmd.Run(cobraCmd.Context())
 	},
 }
 

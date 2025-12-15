@@ -4,34 +4,57 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"path/filepath"
+
+	"github.com/shopware/shopware-cli/internal/validation"
 )
 
-func validateTheme(ctx *ValidationContext) {
-	themeJSONPath := fmt.Sprintf("%s/src/Resources/theme.json", ctx.Extension.GetPath())
+func validateTheme(ext Extension, check validation.Check) {
+	themeJSONPath := filepath.Join(ext.GetRootDir(), "Resources/theme.json")
 
 	if _, err := os.Stat(themeJSONPath); !os.IsNotExist(err) {
 		content, err := os.ReadFile(themeJSONPath)
 		if err != nil {
-			ctx.AddError("theme.validator", "Invalid theme.json")
+			check.AddResult(validation.CheckResult{
+				Path:       "Resources/theme.json",
+				Identifier: "theme.validator",
+				Message:    "Invalid theme.json",
+				Severity:   validation.SeverityError,
+			})
 			return
 		}
 
 		var theme themeJSON
 		err = json.Unmarshal(content, &theme)
 		if err != nil {
-			ctx.AddError("theme.validator", "Cannot decode theme.json")
+			check.AddResult(validation.CheckResult{
+				Path:       "Resources/theme.json",
+				Identifier: "theme.validator",
+				Message:    "Cannot decode theme.json",
+				Severity:   validation.SeverityError,
+			})
 			return
 		}
 
 		if len(theme.PreviewMedia) == 0 {
-			ctx.AddError("theme.validator", "Required field \"previewMedia\" missing in theme.json")
+			check.AddResult(validation.CheckResult{
+				Path:       "Resources/theme.json",
+				Identifier: "theme.validator",
+				Message:    "Required field \"previewMedia\" missing in theme.json",
+				Severity:   validation.SeverityError,
+			})
 			return
 		}
 
-		expectedMediaPath := fmt.Sprintf("%s/src/Resources/%s", ctx.Extension.GetPath(), theme.PreviewMedia)
+		expectedMediaPath := fmt.Sprintf("%s/src/Resources/%s", ext.GetPath(), theme.PreviewMedia)
 
 		if _, err := os.Stat(expectedMediaPath); os.IsNotExist(err) {
-			ctx.AddError("theme.validator", fmt.Sprintf("Theme preview image file is expected to be placed at %s, but not found there.", expectedMediaPath))
+			check.AddResult(validation.CheckResult{
+				Path:       "Resources/theme.json",
+				Identifier: "theme.validator",
+				Message:    fmt.Sprintf("Theme preview image file is expected to be placed at %s, but not found there.", expectedMediaPath),
+				Severity:   validation.SeverityError,
+			})
 		}
 	}
 }

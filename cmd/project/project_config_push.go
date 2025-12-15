@@ -3,8 +3,8 @@ package project
 import (
 	"encoding/json"
 
+	"github.com/charmbracelet/huh"
 	adminSdk "github.com/friendsofshopware/go-shopware-admin-api-sdk"
-	"github.com/manifoldco/promptui"
 	"github.com/spf13/cobra"
 
 	"github.com/shopware/shopware-cli/logging"
@@ -13,8 +13,10 @@ import (
 
 var projectConfigPushCmd = &cobra.Command{
 	Use:   "push",
-	Short: "Synchronizes your local config to the external shop",
+	Short: "[Deprecated] Synchronizes your local config to the external shop",
 	RunE: func(cmd *cobra.Command, _ []string) error {
+		logging.FromContext(cmd.Context()).Warnf("This command is deprecated and will be removed in the future. Please use Fixture Bundle instead https://developer.shopware.com/docs/resources/tooling/fixture-bundle/")
+
 		logFormat := "Payload: %s"
 
 		var cfg *shop.Config
@@ -99,13 +101,22 @@ var projectConfigPushCmd = &cobra.Command{
 		}
 
 		if !autoApprove {
-			p := promptui.Prompt{
-				Label:     "You want to apply these changes to your Shop?",
-				IsConfirm: true,
+			var confirm bool
+
+			confirmForm := huh.NewForm(
+				huh.NewGroup(
+					huh.NewConfirm().
+						Title("You want to apply these changes to your Shop?").
+						Value(&confirm),
+				),
+			)
+
+			if err := confirmForm.Run(); err != nil {
+				return err
 			}
 
-			if _, err := p.Run(); err != nil {
-				return err
+			if !confirm {
+				return nil
 			}
 		}
 

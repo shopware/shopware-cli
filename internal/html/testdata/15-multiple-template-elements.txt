@@ -1,0 +1,9 @@
+<template><div>Template 1</div></template><template><div>Template 2</div></template>
+-----
+<template>
+    <div>Template 1</div>
+</template>
+
+<template>
+    <div>Template 2</div>
+</template>

@@ -5,15 +5,17 @@ import (
 	"os/exec"
 	"strings"
 
+	"github.com/spf13/cobra"
+
 	"github.com/shopware/shopware-cli/extension"
 	"github.com/shopware/shopware-cli/internal/phpexec"
 	"github.com/shopware/shopware-cli/shop"
-	"github.com/spf13/cobra"
 )
 
 var projectStorefrontWatchCmd = &cobra.Command{
-	Use:   "storefront-watch [path]",
-	Short: "Starts the Shopware Storefront Watcher",
+	Use:     "storefront-watch [path]",
+	Short:   "Starts the Shopware Storefront Watcher",
+	Aliases: []string{"watch-storefront"},
 	RunE: func(cmd *cobra.Command, args []string) error {
 		var projectRoot string
 		var err error
@@ -64,7 +66,7 @@ var projectStorefrontWatchCmd = &cobra.Command{
 		}
 
 		if _, err := os.Stat(extension.PlatformPath(projectRoot, "Storefront", "Resources/app/storefront/node_modules/webpack-dev-server")); os.IsNotExist(err) {
-			if err := extension.InstallNPMDependencies(extension.PlatformPath(projectRoot, "Storefront", "Resources/app/storefront"), extension.NpmPackage{Dependencies: map[string]string{"not-empty": "not-empty"}}); err != nil {
+			if err := extension.InstallNPMDependencies(cmd.Context(), extension.PlatformPath(projectRoot, "Storefront", "Resources/app/storefront"), extension.NpmPackage{Dependencies: map[string]string{"not-empty": "not-empty"}}); err != nil {
 				return err
 			}
 		}
@@ -88,4 +90,5 @@ func init() {
 	projectRootCmd.AddCommand(projectStorefrontWatchCmd)
 	projectStorefrontWatchCmd.PersistentFlags().String("only-extensions", "", "Only watch the given extensions (comma separated)")
 	projectStorefrontWatchCmd.PersistentFlags().String("skip-extensions", "", "Skips the given extensions (comma separated)")
+	projectStorefrontWatchCmd.PersistentFlags().Bool("only-custom-static-extensions", false, "Only build extensions from custom/static-plugins directory")
 }

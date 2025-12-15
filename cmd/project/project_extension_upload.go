@@ -14,12 +14,12 @@ import (
 
 	adminSdk "github.com/friendsofshopware/go-shopware-admin-api-sdk"
 	cp "github.com/otiai10/copy"
+	"github.com/shyim/go-version"
 	"github.com/spf13/cobra"
 
 	"github.com/shopware/shopware-cli/extension"
 	"github.com/shopware/shopware-cli/logging"
 	"github.com/shopware/shopware-cli/shop"
-	"github.com/shopware/shopware-cli/version"
 )
 
 var projectExtensionUploadCmd = &cobra.Command{
@@ -117,7 +117,7 @@ var projectExtensionUploadCmd = &cobra.Command{
 			}
 		}
 
-		if cfg, err = shop.ReadConfig(projectConfigPath, false); err != nil {
+		if cfg, err = shop.ReadConfig(projectConfigPath, true); err != nil {
 			return err
 		}
 
@@ -185,7 +185,7 @@ var projectExtensionUploadCmd = &cobra.Command{
 			}
 		}
 
-		logging.FromContext(cmd.Context()).Infof("Uploaded extension %s with version %s", name, version)
+		logging.FromContext(cmd.Context()).Infof("Uploaded extension %s with version %s", name, version.String())
 
 		if _, err := client.ExtensionManager.Refresh(adminCtx); err != nil {
 			return fmt.Errorf("cannot refresh extension list: %w", err)
@@ -273,7 +273,7 @@ func increaseExtensionVersion(ctx context.Context, ext extension.Extension) erro
 						return err
 					}
 
-					ver.Increase()
+					ver.IncreasePatch()
 
 					if err = encoder.EncodeElement(ver.String(), v); err != nil {
 						return err
@@ -327,7 +327,7 @@ func increaseExtensionVersion(ctx context.Context, ext extension.Extension) erro
 		return err
 	}
 
-	ver.Increase()
+	ver.IncreasePatch()
 
 	composerJson["version"] = ver.String()
 

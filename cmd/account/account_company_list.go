@@ -5,8 +5,9 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/olekukonko/tablewriter"
 	"github.com/spf13/cobra"
+
+	"github.com/shopware/shopware-cli/internal/table"
 )
 
 var accountCompanyListCmd = &cobra.Command{
@@ -15,11 +16,11 @@ var accountCompanyListCmd = &cobra.Command{
 	Aliases: []string{"ls"},
 	Long:    ``,
 	Run: func(_ *cobra.Command, _ []string) {
-		table := tablewriter.NewWriter(os.Stdout)
-		table.SetHeader([]string{"ID", "Name", "Customer ID", "Roles"})
+		table := table.NewWriter(os.Stdout)
+		table.Header([]string{"ID", "Name", "Customer ID", "Roles"})
 
 		for _, membership := range services.AccountClient.GetMemberships() {
-			table.Append([]string{
+			_ = table.Append([]string{
 				strconv.FormatInt(int64(membership.Company.Id), 10),
 				membership.Company.Name,
 				membership.Company.CustomerNumber,
@@ -27,7 +28,7 @@ var accountCompanyListCmd = &cobra.Command{
 			})
 		}
 
-		table.Render()
+		_ = table.Render()
 	},
 }
 

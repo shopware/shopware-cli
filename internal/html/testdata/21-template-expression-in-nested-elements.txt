@@ -1,0 +1,5 @@
+<div><span>{{ nestedExpression }}</span></div>
+-----
+<div>
+    <span>{{ nestedExpression }}</span>
+</div>

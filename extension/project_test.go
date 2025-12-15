@@ -1,10 +1,11 @@
 package extension
 
 import (
-	"github.com/stretchr/testify/assert"
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
 func TestGetShopwareProjectConstraintComposerJson(t *testing.T) {
@@ -39,7 +40,7 @@ func TestGetShopwareProjectConstraintComposerJson(t *testing.T) {
 }
 ]}`,
 			},
-			Constraint: "6.5.0",
+			Constraint: "6.5.*",
 		},
 		{
 			Name: "Branch installed, determine by Kernel.php",
@@ -60,7 +61,7 @@ func TestGetShopwareProjectConstraintComposerJson(t *testing.T) {
 final public const SHOPWARE_FALLBACK_VERSION = '6.6.9999999.9999999-dev';
 `,
 			},
-			Constraint: "~6.6.0",
+			Constraint: "6.5.*",
 		},
 		{
 			Name: "Get constraint from kernel (shopware/shopware case)",
@@ -105,19 +106,7 @@ final public const SHOPWARE_FALLBACK_VERSION = '6.6.9999999.9999999-dev';
 			"shopware/core": "6.5.*"
 	}}`,
 			},
-			Error: "malformed constraint: 6.5.*",
-		},
-
-		{
-			Name: "composer.json malformed version, with broken lock",
-			Files: map[string]string{
-				"composer.json": `{
-		"require": {
-			"shopware/core": "6.5.*"
-	}}`,
-				"composer.lock": `broken`,
-			},
-			Error: "could not parse composer.lock",
+			Constraint: "6.5.*",
 		},
 
 		{
@@ -129,7 +118,7 @@ final public const SHOPWARE_FALLBACK_VERSION = '6.6.9999999.9999999-dev';
 	}}`,
 				"composer.lock": `{"packages": []}`,
 			},
-			Error: "malformed constraint: 6.5.*",
+			Constraint: "6.5.*",
 		},
 	}
 
@@ -138,14 +127,14 @@ final public const SHOPWARE_FALLBACK_VERSION = '6.6.9999999.9999999-dev';
 			tmpDir := t.TempDir()
 
 			for file, content := range tc.Files {
-				tmpFile := tmpDir + "/" + file
+				tmpFile := filepath.Join(tmpDir, file)
 				parentDir := filepath.Dir(tmpFile)
 
 				if _, err := os.Stat(parentDir); os.IsNotExist(err) {
 					assert.NoError(t, os.MkdirAll(parentDir, os.ModePerm))
 				}
 
-				assert.NoError(t, os.WriteFile(tmpFile, []byte(content), 0644))
+				assert.NoError(t, os.WriteFile(tmpFile, []byte(content), 0o644))
 			}
 
 			constraint, err := GetShopwareProjectConstraint(tmpDir)

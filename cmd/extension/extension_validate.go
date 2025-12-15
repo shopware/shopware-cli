@@ -5,18 +5,42 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/olekukonko/tablewriter"
 	"github.com/spf13/cobra"
+	"golang.org/x/sync/errgroup"
 
 	"github.com/shopware/shopware-cli/extension"
+	"github.com/shopware/shopware-cli/internal/system"
+	"github.com/shopware/shopware-cli/internal/validation"
+	"github.com/shopware/shopware-cli/internal/verifier"
 	"github.com/shopware/shopware-cli/logging"
 )
 
 var extensionValidateCmd = &cobra.Command{
 	Use:   "validate [path]",
-	Short: "Validate a Extension",
+	Short: "Validate an extension",
 	Args:  cobra.MinimumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
+		isFull, _ := cmd.Flags().GetBool("full")
+		storeCompliance, _ := cmd.Flags().GetBool("store-compliance")
+		reportingFormat, _ := cmd.Flags().GetString("reporter")
+		checkAgainst, _ := cmd.Flags().GetString("check-against")
+		tmpDir, err := os.MkdirTemp(os.TempDir(), "analyse-extension-*")
+		only, _ := cmd.Flags().GetString("only")
+		exclude, _ := cmd.Flags().GetString("exclude")
+
+		// If the user does not want to run full validation, only run shopware-cli
+		if !isFull {
+			only = "sw-cli"
+		}
+
+		if reportingFormat == "" {
+			reportingFormat = validation.DetectDefaultReporter()
+		}
+
+		if err != nil {
+			return fmt.Errorf("cannot create temporary directory: %w", err)
+		}
+
 		path, err := filepath.Abs(args[0])
 		if err != nil {
 			return fmt.Errorf("cannot find path: %w", err)
@@ -26,47 +50,109 @@ var extensionValidateCmd = &cobra.Command{
 		if err != nil {
 			return fmt.Errorf("cannot find path: %w", err)
 		}
-
-		var ext extension.Extension
+		var toolCfg *verifier.ToolConfig
 
 		if stat.IsDir() {
-			ext, err = extension.GetExtensionByFolder(path)
+			if isFull {
+				if err := system.CopyFiles(args[0], tmpDir); err != nil {
+					return err
+				}
+
+				defer func() {
+					if err := os.RemoveAll(tmpDir); err != nil {
+						logging.FromContext(cmd.Context()).Error("Failed to remove temporary directory:", err)
+					}
+				}()
+			} else {
+				tmpDir = args[0]
+			}
+
+			ext, err := extension.GetExtensionByFolder(tmpDir)
+			if err != nil {
+				return err
+			}
+
+			toolCfg, err = verifier.ConvertExtensionToToolConfig(ext)
+			if err != nil {
+				return err
+			}
+
+			toolCfg.InputWasDirectory = true
 		} else {
-			ext, err = extension.GetExtensionByZip(path)
+			ext, err := extension.GetExtensionByZip(args[0])
+			if err != nil {
+				return err
+			}
+
+			toolCfg, err = verifier.ConvertExtensionToToolConfig(ext)
+			if err != nil {
+				return err
+			}
 		}
 
+		if storeCompliance || os.Getenv("SHOPWARE_CLI_STORE_COMPLIANCE") == "1" {
+			toolCfg.Extension.GetExtensionConfig().Validation.StoreCompliance = true
+			// The user is not allowed to provide a custom ignore list when store compliance is enabled
+			toolCfg.Extension.GetExtensionConfig().Validation.Ignore = extension.ConfigValidationList{}
+		}
+
+		toolCfg.CheckAgainst = checkAgainst
+		result := verifier.NewCheck()
+
+		var gr errgroup.Group
+
+		tools := verifier.GetTools()
+
+		tools, err = tools.Only(only)
 		if err != nil {
-			return fmt.Errorf("cannot open extension: %w", err)
+			return err
 		}
 
-		context := extension.RunValidation(cmd.Context(), ext)
-
-		if context.HasErrors() || context.HasWarnings() {
-			table := tablewriter.NewWriter(os.Stdout)
-			table.SetHeader([]string{"Type", "Identifier", "Message"})
-			table.SetAutoWrapText(false)
-
-			for _, msg := range context.Errors() {
-				table.Append([]string{"Error", msg.Identifier, msg.Message})
-			}
-
-			for _, msg := range context.Warnings() {
-				table.Append([]string{"Warning", msg.Identifier, msg.Message})
-			}
-
-			table.Render()
+		tools, err = tools.Exclude(exclude)
+		if err != nil {
+			return err
 		}
 
-		if context.HasErrors() {
-			return fmt.Errorf("validation failed")
+		for _, tool := range tools {
+			tool := tool
+			gr.Go(func() error {
+				return tool.Check(cmd.Context(), result, *toolCfg)
+			})
 		}
 
-		logging.FromContext(cmd.Context()).Infof("Validation has been successful")
+		if err := gr.Wait(); err != nil {
+			return err
+		}
 
-		return nil
+		return validation.DoCheckReport(result.RemoveByIdentifier(toolCfg.ValidationIgnores), reportingFormat)
 	},
 }
 
 func init() {
 	extensionRootCmd.AddCommand(extensionValidateCmd)
+	extensionValidateCmd.PersistentFlags().Bool("full", false, "Run full validation including PHPStan, ESLint and Stylelint")
+	extensionValidateCmd.PersistentFlags().Bool("store-compliance", false, "Runs specific store compliance checks")
+	extensionValidateCmd.PersistentFlags().String("reporter", "", "Reporting format (summary, json, github, junit, markdown)")
+	extensionValidateCmd.PersistentFlags().String("check-against", "highest", "Check against Shopware Version (highest, lowest)")
+	extensionValidateCmd.PersistentFlags().String("only", "", "Run only specific tools by name (comma-separated, e.g. phpstan,eslint)")
+	extensionValidateCmd.PersistentFlags().String("exclude", "", "Exclude specific tools by name (comma-separated, e.g. phpstan,eslint)")
+	extensionValidateCmd.PreRunE = func(cmd *cobra.Command, args []string) error {
+		reporter, _ := cmd.Flags().GetString("reporter")
+		if reporter != "summary" && reporter != "json" && reporter != "github" && reporter != "junit" && reporter != "markdown" && reporter != "" {
+			return fmt.Errorf("invalid reporter format: %s. Must be either 'summary', 'json', 'github', 'junit' or 'markdown'", reporter)
+		}
+
+		mode, _ := cmd.Flags().GetString("check-against")
+		if mode != "highest" && mode != "lowest" {
+			return fmt.Errorf("invalid mode: %s. Must be either 'highest' or 'lowest'", mode)
+		}
+
+		// Dont setup tools if we dont run full validation
+		full, _ := cmd.Flags().GetBool("full")
+		if !full {
+			return nil
+		}
+
+		return verifier.SetupTools(cmd.Context(), cmd.Root().Version)
+	}
 }

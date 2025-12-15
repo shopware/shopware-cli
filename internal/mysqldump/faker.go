@@ -1,0 +1,212 @@
+package mysqldump
+
+import (
+	"errors"
+	"fmt"
+	"reflect"
+	"regexp"
+	"strconv"
+	"strings"
+
+	"github.com/jaswdr/faker/v2"
+)
+
+var fakerInstance = faker.New()
+
+const (
+	fakerShortLen = 2
+	contactInfo   = "ContactInfo"
+)
+
+// replaceStringWithFakerWhenRequested replaces inline faker expressions in the input string with their evaluated values.
+//
+// The function scans the input string for expressions of the form `{{- faker.Method(args) -}}`
+// (e.g., `{{- faker.Name() -}}`), and replaces each such expression with the result of calling
+// the corresponding faker method. Multiple expressions in the input string are all replaced.
+//
+// If an expression cannot be evaluated (e.g., due to an error in the method name or arguments),
+// the original expression is left unchanged in the output.
+//
+// Parameters:
+//   - request: the input string potentially containing one or more inline faker expressions.
+//
+// Returns:
+//   - The input string with all valid faker expressions replaced by their evaluated values.
+//     Expressions that fail to evaluate are left unchanged.
+func replaceStringWithFakerWhenRequested(request string) string {
+	if !strings.Contains(request, "faker.") {
+		return request
+	}
+
+	// This regex matches {{- faker.Method("arg1").ChainedMethod() -}}
+	// It handles quoted strings within arguments and chained calls both with and without parens.
+	r := regexp.MustCompile(`\{\{\-\s*faker(?:\.[a-zA-Z0-9]+(?:\((?:(?:"(?:[^"\\]|\\.)*"|[^"()])*)\))?)+\s*\-\}\}`)
+
+	return r.ReplaceAllStringFunc(request, func(match string) string {
+		// Remove {{- -}} and whitespace safely
+		trimmed := strings.TrimSpace(strings.TrimSuffix(strings.TrimPrefix(match, "{{-"), "-}}"))
+		val, err := evaluateFakerExpression(trimmed)
+		if err != nil {
+			return match
+		}
+
+		return val
+	})
+}
+
+// evaluateFakerExpression evaluates a single faker expression (without the {{- -}} delimiters).
+// It returns the result of the faker function or an error if evaluation fails.
+// This function is intended to be called by replaceStringWithFakerWhenRequested,
+// which handles the full inline syntax (including delimiters) and error recovery.
+func evaluateFakerExpression(request string) (string, error) {
+	if len(request) < 5 || request[0:5] != "faker" {
+		return request, nil
+	}
+
+	a := strings.Split(request, ".")
+	if len(a) < 2 {
+		return request,
+			errors.New("requires more arguments to get a faker func")
+	}
+
+	var res []reflect.Value
+	var err error
+
+	method := strings.Split(a[1], "(")[0]
+	if method == contactInfo {
+		return request, errors.New("method ContactInfo is not supported")
+	}
+
+	if len(a) == fakerShortLen {
+		argsString := strings.Split(a[1], "(")
+
+		if len(argsString) < 2 {
+			return request,
+				errors.New("requires more arguments to get a faker func")
+		}
+
+		args, dErr := getMethodArguments(
+			&fakerInstance,
+			argsString[0],
+			strings.ReplaceAll(argsString[1], ")", ""),
+		)
+
+		if dErr != nil {
+			return "", dErr
+		}
+
+		if res, dErr = callMethod(&fakerInstance, method, args); dErr != nil {
+			return "", dErr
+		}
+
+		return stringify(res[0]), nil
+	}
+
+	if res, err = callMethod(&fakerInstance, method, nil); err != nil {
+		return "", err
+	}
+
+	argsString := strings.Split(a[2], "(")
+
+	if len(argsString) < 2 {
+		return request,
+			errors.New("requires more arguments to get a faker func")
+	}
+
+	obj := reflect.Indirect(res[0]).Interface()
+
+	args, err := getMethodArguments(
+		obj,
+		argsString[0],
+		strings.ReplaceAll(argsString[1], ")", ""),
+	)
+	if err != nil {
+		return "", err
+	}
+	// faker as a max depth of 2, here should be last
+	// @todo this analysis should be dynamic
+	if res, err = callMethod(obj, argsString[0], args); err != nil {
+		return "", err
+	}
+
+	return stringify(res[0]), nil
+}
+
+func getMethodArguments(
+	entry interface{},
+	name string,
+	argsString string,
+) ([]reflect.Value, error) {
+	_, exists := reflect.TypeOf(entry).MethodByName(name)
+
+	if !exists {
+		return nil,
+			errors.New("could not find faker func")
+	}
+
+	method := reflect.ValueOf(entry).
+		MethodByName(name)
+
+	in := make([]reflect.Value, method.Type().NumIn())
+
+	// we need to skip if we have an empty string, else it fails the lower validation
+	// and function goes kaboom
+	if argsString == "" {
+		return in, nil
+	}
+
+	args := strings.Split(argsString, ",")
+
+	if len(args) != method.Type().NumIn() {
+		return nil, fmt.Errorf(
+			"number of arguments to call %s is %d and we got %d",
+			name,
+			method.Type().NumIn(),
+			len(args),
+		)
+	}
+
+	for i := 0; i < method.Type().NumIn(); i++ {
+		t := method.Type().In(i)
+		in[i] = reflect.ValueOf(convert(t, clearString(args[i]))).Convert(t)
+	}
+
+	return in, nil
+}
+
+func callMethod(
+	entry interface{},
+	name string,
+	objects []reflect.Value,
+) ([]reflect.Value, error) {
+	_, exists := reflect.TypeOf(entry).MethodByName(name)
+
+	if !exists {
+		return nil,
+			errors.New("could not find faker func")
+	}
+
+	return reflect.ValueOf(entry).
+		MethodByName(name).
+		Call(objects), nil
+}
+
+func clearString(str string) string {
+	s := strings.ReplaceAll(str, "\"", "")
+	return strings.ReplaceAll(s, " ", "")
+}
+
+func stringify(v interface{}) string {
+	return fmt.Sprintf("%v", v)
+}
+
+func convert(t reflect.Type, s string) interface{} {
+	// nolint
+	switch t.Kind() {
+	case reflect.Int, reflect.Int64:
+		v, _ := strconv.Atoi(s)
+		return v
+	default:
+		return s
+	}
+}

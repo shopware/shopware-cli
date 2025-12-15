@@ -1,0 +1,33 @@
+{
+	"name": "eslint",
+	"version": "1.0.0",
+	"main": "index.js",
+	"type": "module",
+	"keywords": [],
+	"author": "",
+	"license": "ISC",
+	"description": "",
+	"devDependencies": {
+		"@eslint/js": "^9.21.0",
+		"@shopware-ag/admin-eslint-rules": "^1.0.2",
+		"@shopware-ag/admin-stylelint-rules": "^1.0.2",
+		"@shopware-ag/storefront-eslint-rules": "^1.0.2",
+		"eslint": "^9.30.1",
+		"eslint-config-prettier": "^10.0.1",
+		"eslint-plugin-inclusive-language": "^2.2.1",
+		"eslint-plugin-vue": "^10.0.0",
+		"eslint-plugin-vuejs-accessibility": "^2.4.1",
+		"globals": "^16.0.0",
+		"prettier": "3.7.4",
+		"stylelint": "^16.14.1",
+		"stylelint-config-recommended-scss": "^16.0.0",
+		"stylelint-config-standard": "^39.0.0",
+		"stylelint-scss": "^6.11.1",
+		"typescript-eslint": "^8.24.1",
+		"vitest": "^4.0.6",
+		"vue-eslint-parser": "^10.1.1"
+	},
+	"scripts": {
+		"test": "vitest"
+	}
+}

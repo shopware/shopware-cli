@@ -1,7 +1,6 @@
 package phplint
 
 import (
-	"context"
 	"os"
 	"testing"
 
@@ -16,7 +15,7 @@ func TestLintTestData(t *testing.T) {
 	supportedPHPVersions := []string{"7.3", "7.4", "8.1", "8.2", "8.3"}
 
 	for _, version := range supportedPHPVersions {
-		errors, err := LintFolder(context.Background(), version, "testdata")
+		errors, err := LintFolder(t.Context(), version, "testdata")
 
 		assert.NoError(t, err)
 

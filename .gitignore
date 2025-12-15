@@ -16,6 +16,8 @@ dist/
 /project
 dump.sql*
 
+/testdata
+
 # Devenv
 .devenv*
 devenv.local.nix

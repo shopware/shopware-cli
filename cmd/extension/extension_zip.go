@@ -1,6 +1,7 @@
 package extension
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"os/exec"
@@ -11,6 +12,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/shopware/shopware-cli/extension"
+	"github.com/shopware/shopware-cli/internal/validation"
 	"github.com/shopware/shopware-cli/logging"
 )
 
@@ -21,7 +23,7 @@ var (
 
 var extensionZipCmd = &cobra.Command{
 	Use:   "zip [path] [branch]",
-	Short: "Zip a Extension",
+	Short: "Zip an extension",
 	Args:  cobra.MinimumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		extPath, err := filepath.Abs(args[0])
@@ -94,7 +96,7 @@ var extensionZipCmd = &cobra.Command{
 		} else {
 			gitCommit, _ := cmd.Flags().GetString("git-commit")
 
-			tag, err = extension.GitCopyFolder(extPath, extDir, gitCommit)
+			tag, err = extension.GitCopyFolder(cmd.Context(), extPath, extDir, gitCommit)
 			if err != nil {
 				return fmt.Errorf("copy via git: %w", err)
 			}
@@ -108,7 +110,7 @@ var extensionZipCmd = &cobra.Command{
 		}
 
 		if extCfg.Build.Zip.Composer.Enabled {
-			if err := executeHooks(ext, extCfg.Build.Zip.Composer.BeforeHooks, extDir); err != nil {
+			if err := executeHooks(cmd.Context(), ext, extCfg.Build.Zip.Composer.BeforeHooks, extDir); err != nil {
 				return fmt.Errorf("before hooks composer: %w", err)
 			}
 
@@ -116,19 +118,18 @@ var extensionZipCmd = &cobra.Command{
 				return fmt.Errorf("prepare package: %w", err)
 			}
 
-			if err := executeHooks(ext, extCfg.Build.Zip.Composer.AfterHooks, extDir); err != nil {
+			if err := executeHooks(cmd.Context(), ext, extCfg.Build.Zip.Composer.AfterHooks, extDir); err != nil {
 				return fmt.Errorf("after hooks composer: %w", err)
 			}
 		}
+		var tempExt extension.Extension
+		if tempExt, err = extension.GetExtensionByFolder(extDir); err != nil {
+			return err
+		}
 
 		if extCfg.Build.Zip.Assets.Enabled {
-			if err := executeHooks(ext, extCfg.Build.Zip.Assets.BeforeHooks, extDir); err != nil {
+			if err := executeHooks(cmd.Context(), ext, extCfg.Build.Zip.Assets.BeforeHooks, extDir); err != nil {
 				return fmt.Errorf("before hooks assets: %w", err)
-			}
-
-			var tempExt extension.Extension
-			if tempExt, err = extension.GetExtensionByFolder(extDir); err != nil {
-				return err
 			}
 
 			shopwareConstraint, err := tempExt.GetShopwareVersionConstraint()
@@ -146,13 +147,13 @@ var extensionZipCmd = &cobra.Command{
 				return fmt.Errorf("building assets: %w", err)
 			}
 
-			if err := executeHooks(ext, extCfg.Build.Zip.Assets.AfterHooks, extDir); err != nil {
+			if err := executeHooks(cmd.Context(), ext, extCfg.Build.Zip.Assets.AfterHooks, extDir); err != nil {
 				return fmt.Errorf("after hooks assets: %w", err)
 			}
 		}
 
 		if cmd.Flags().Changed("overwrite-app-backend-secret") {
-			extCfg.Validation.Ignore = append(extCfg.Validation.Ignore, "metadata.setup")
+			extCfg.Validation.Ignore = append(extCfg.Validation.Ignore, validation.ToolConfigIgnore{Identifier: "metadata.setup"})
 			if err := extCfg.Dump(extDir); err != nil {
 				return fmt.Errorf("dump extension config: %w", err)
 			}
@@ -169,6 +170,10 @@ var extensionZipCmd = &cobra.Command{
 			}
 		}
 
+		if err := extension.ResizeExtensionIcon(cmd.Context(), tempExt); err != nil {
+			return fmt.Errorf("resize extension icon: %w", err)
+		}
+
 		if err := extension.BuildModifier(ext, extDir, extension.BuildModifierConfig{
 			AppBackendUrl:    getStringOnStringError(cmd.Flags().GetString("overwrite-app-backend-url")),
 			AppBackendSecret: getStringOnStringError(cmd.Flags().GetString("overwrite-app-backend-secret")),
@@ -177,9 +182,13 @@ var extensionZipCmd = &cobra.Command{
 			return fmt.Errorf("build modifier: %w", err)
 		}
 
-		fileName := fmt.Sprintf("%s-%s.zip", name, tag)
-		if len(tag) == 0 {
-			fileName = fmt.Sprintf("%s.zip", name)
+		fileName, _ := cmd.Flags().GetString("filename")
+
+		if len(fileName) == 0 {
+			fileName = fmt.Sprintf("%s-%s.zip", name, tag)
+			if len(tag) == 0 {
+				fileName = fmt.Sprintf("%s.zip", name)
+			}
 		}
 
 		outputDir, _ := cmd.Flags().GetString("output-directory")
@@ -194,8 +203,13 @@ var extensionZipCmd = &cobra.Command{
 			fileName = path.Join(outputDir, fileName)
 		}
 
-		if err := executeHooks(ext, extCfg.Build.Zip.Pack.BeforeHooks, extDir); err != nil {
+		if err := executeHooks(cmd.Context(), ext, extCfg.Build.Zip.Pack.BeforeHooks, extDir); err != nil {
 			return fmt.Errorf("before hooks pack: %w", err)
+		}
+
+		// Generate checksums.json file before creating the zip
+		if err := extension.GenerateChecksumJSON(cmd.Context(), extDir, ext); err != nil {
+			return fmt.Errorf("generate checksum.json: %w", err)
 		}
 
 		if err := extension.CreateZip(tempDir, fileName); err != nil {
@@ -217,20 +231,21 @@ func init() {
 	extensionZipCmd.Flags().String("overwrite-version", "", "Change the extension version to this value")
 	extensionZipCmd.Flags().String("output-directory", "", "Output directory for the zip file")
 	extensionZipCmd.Flags().String("git-commit", "", "Commit Hash / Tag to use")
+	extensionZipCmd.Flags().String("filename", "", "Name of the zip file, if not set it will be generated from the extension name and tag")
 }
 
 func getStringOnStringError(val string, _ error) string {
 	return val
 }
 
-func executeHooks(ext extension.Extension, hooks []string, extDir string) error {
+func executeHooks(ctx context.Context, ext extension.Extension, hooks []string, extDir string) error {
 	env := []string{
 		fmt.Sprintf("EXTENSION_DIR=%s", extDir),
 		fmt.Sprintf("ORIGINAL_EXTENSION_DIR=%s", ext.GetPath()),
 	}
 
 	for _, hook := range hooks {
-		hookCmd := exec.Command("sh", "-c", hook)
+		hookCmd := exec.CommandContext(ctx, "sh", "-c", hook)
 		hookCmd.Stdout = os.Stdout
 		hookCmd.Stderr = os.Stderr
 		hookCmd.Dir = extDir

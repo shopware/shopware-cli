@@ -5,11 +5,12 @@ import (
 	"encoding/xml"
 	"fmt"
 	"os"
-	"path"
 	"path/filepath"
 	"strings"
 
-	"github.com/shopware/shopware-cli/version"
+	"github.com/shyim/go-version"
+
+	"github.com/shopware/shopware-cli/internal/validation"
 )
 
 type App struct {
@@ -22,8 +23,20 @@ func (a App) GetRootDir() string {
 	return a.path
 }
 
+func (a App) GetSourceDirs() []string {
+	return []string{a.path}
+}
+
 func (a App) GetResourcesDir() string {
-	return path.Join(a.path, "Resources")
+	return filepath.Join(a.path, "Resources")
+}
+
+func (a App) GetResourcesDirs() []string {
+	return []string{filepath.Join(a.path, "Resources")}
+}
+
+func (a App) GetComposerName() (string, error) {
+	return "", fmt.Errorf("app does not have a composer name")
 }
 
 func newApp(path string) (*App, error) {
@@ -113,6 +126,16 @@ func (a App) GetChangelog() (*ExtensionChangelog, error) {
 	return parseExtensionMarkdownChangelog(a)
 }
 
+func (a App) GetIconPath() string {
+	iconPath := a.manifest.Meta.Icon
+
+	if iconPath == "" {
+		iconPath = "Resources/config/plugin.png"
+	}
+
+	return filepath.Join(a.GetRootDir(), iconPath)
+}
+
 func (a App) GetMetaData() *extensionMetadata {
 	german := []string{"de-DE", "de"}
 	english := []string{"en-GB", "en-US", "en", ""}
@@ -129,46 +152,68 @@ func (a App) GetMetaData() *extensionMetadata {
 	}
 }
 
-func (a App) Validate(_ context.Context, ctx *ValidationContext) {
-	validateTheme(ctx)
+func (a App) Validate(_ context.Context, check validation.Check) {
+	validateTheme(a, check)
 
-	appIcon := a.manifest.Meta.Icon
+	validateExtensionIcon(a, check)
 
-	if appIcon == "" {
-		appIcon = "Resources/config/plugin.png"
-	}
-
-	if _, err := os.Stat(filepath.Join(a.GetPath(), appIcon)); os.IsNotExist(err) {
-		ctx.AddError("metadata.icon", fmt.Sprintf("Cannot find app icon at %s", appIcon))
-	}
-
-	allowedTwigLocations := []string{path.Join(a.GetRootDir(), "Resources", "views"), path.Join(a.GetRootDir(), "Resources", "scripts")}
+	allowedTwigLocations := []string{filepath.Join(a.GetRootDir(), "Resources", "views"), filepath.Join(a.GetRootDir(), "Resources", "scripts")}
 
 	_ = filepath.Walk(a.GetRootDir(), func(path string, info os.FileInfo, err error) error {
 		if filepath.Ext(path) == ".php" {
-			ctx.AddError("zip.disallowed_php_file", fmt.Sprintf("Found unexpected PHP file %s, PHP files are not allowed in Apps", path))
+			check.AddResult(validation.CheckResult{
+				Path:       path,
+				Identifier: "zip.disallowed_php_file",
+				Message:    fmt.Sprintf("Found unexpected PHP file %s, PHP files are not allowed in Apps", path),
+				Severity:   validation.SeverityError,
+			})
 		}
 
 		if filepath.Ext(path) == ".twig" && (!strings.HasPrefix(path, allowedTwigLocations[0]) && !strings.HasPrefix(path, allowedTwigLocations[1])) {
-			ctx.AddError("zip.disallowed_twig_file", fmt.Sprintf("Found unexpected Twig file %s. Twig files should be at Resources/views or Resources/scripts", path))
+			check.AddResult(validation.CheckResult{
+				Path:       path,
+				Identifier: "zip.disallowed_twig_file",
+				Message:    fmt.Sprintf("Found unexpected Twig file %s. Twig files should be at Resources/views or Resources/scripts", path),
+				Severity:   validation.SeverityError,
+			})
 		}
 
 		return nil
 	})
 
 	if a.manifest.Meta.Author == "" {
-		ctx.AddError("metadata.author", "The element meta:author was not found in the manifest.xml")
+		check.AddResult(validation.CheckResult{
+			Path:       "manifest.xml",
+			Identifier: "metadata.author",
+			Message:    "The element meta:author was not found in the manifest.xml",
+			Severity:   validation.SeverityError,
+		})
 	}
 
 	if a.manifest.Meta.Copyright == "" {
-		ctx.AddError("metadata.copyright", "The element meta:copyright was not found in the manifest.xml")
+		check.AddResult(validation.CheckResult{
+			Path:       "manifest.xml",
+			Identifier: "metadata.copyright",
+			Message:    "The element meta:copyright was not found in the manifest.xml",
+			Severity:   validation.SeverityError,
+		})
 	}
 
 	if a.manifest.Meta.License == "" {
-		ctx.AddError("metadata.license", "The element meta:license was not found in the manifest.xml")
+		check.AddResult(validation.CheckResult{
+			Path:       "manifest.xml",
+			Identifier: "metadata.license",
+			Message:    "The element meta:license was not found in the manifest.xml",
+			Severity:   validation.SeverityError,
+		})
 	}
 
 	if a.manifest.Setup != nil && a.manifest.Setup.Secret != "" {
-		ctx.AddError("metadata.setup", "The xml element setup:secret is only for local development, please remove it. You can find your generated app secret on your extension detail page in the master data section. For more information see https://docs.shopware.com/en/shopware-platform-dev-en/app-system-guide/setup#authorisation")
+		check.AddResult(validation.CheckResult{
+			Path:       "manifest.xml",
+			Identifier: "metadata.setup",
+			Message:    "The xml element setup:secret is only for local development, please remove it. You can find your generated app secret on your extension detail page in the master data section. For more information see https://docs.shopware.com/en/shopware-platform-dev-en/app-system-guide/setup#authorisation",
+			Severity:   validation.SeverityError,
+		})
 	}
 }

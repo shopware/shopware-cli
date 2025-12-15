@@ -5,10 +5,10 @@ import (
 	"os"
 	"strconv"
 
-	"github.com/olekukonko/tablewriter"
 	"github.com/spf13/cobra"
 
 	account_api "github.com/shopware/shopware-cli/internal/account-api"
+	"github.com/shopware/shopware-cli/internal/table"
 )
 
 var accountCompanyProducerExtensionListCmd = &cobra.Command{
@@ -35,8 +35,8 @@ var accountCompanyProducerExtensionListCmd = &cobra.Command{
 			return err
 		}
 
-		table := tablewriter.NewWriter(os.Stdout)
-		table.SetHeader([]string{"ID", "Name", "Type", "Compatible with latest version", "Status"})
+		table := table.NewWriter(os.Stdout)
+		table.Header([]string{"ID", "Name", "Type", "Compatible with latest version", "Status"})
 
 		for _, extension := range extensions {
 			if extension.Status.Name == "deleted" {
@@ -49,7 +49,7 @@ var accountCompanyProducerExtensionListCmd = &cobra.Command{
 				compatible = "Yes"
 			}
 
-			table.Append([]string{
+			_ = table.Append([]string{
 				strconv.FormatInt(int64(extension.Id), 10),
 				extension.Name,
 				extension.Generation.Description,
@@ -58,7 +58,7 @@ var accountCompanyProducerExtensionListCmd = &cobra.Command{
 			})
 		}
 
-		table.Render()
+		_ = table.Render()
 
 		return nil
 	},

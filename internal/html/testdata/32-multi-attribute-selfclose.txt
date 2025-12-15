@@ -1,0 +1,10 @@
+<div>
+    <foo name="bla" foo="test"/>
+</div>
+-----
+<div>
+    <foo
+        name="bla"
+        foo="test"
+    />
+</div>

@@ -2,9 +2,10 @@ package extension
 
 import (
 	"encoding/xml"
-	"github.com/stretchr/testify/assert"
 	"os"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
 func TestManifestRead(t *testing.T) {

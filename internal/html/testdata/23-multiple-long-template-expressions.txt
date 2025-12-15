@@ -1,0 +1,6 @@
+<div>{{ item.mainPseudovariant.product.translated.name }}{{ item.mainPseudovariant.product.translated.description }}</div>
+-----
+<div>
+    {{ item.mainPseudovariant.product.translated.name }}
+    {{ item.mainPseudovariant.product.translated.description }}
+</div>

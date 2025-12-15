@@ -9,7 +9,7 @@ import (
 	"github.com/shopware/shopware-cli/shop"
 )
 
-func readSystemConfig(ctx adminSdk.ApiContext, client *adminSdk.Client, salesChannelId *string) (*adminSdk.SystemConfigCollection, error) {
+func readSystemConfig(ctx adminSdk.ApiContext, client *adminSdk.Client, salesChannelId *string) (*adminSdk.EntityCollection[adminSdk.SystemConfig], error) {
 	c := adminSdk.Criteria{}
 	c.Includes = map[string][]string{"system_config": {"id", "configurationKey", "configurationValue"}}
 

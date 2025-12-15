@@ -2,7 +2,7 @@ package config
 
 import (
 	"os"
-	"path"
+	"path/filepath"
 	"strconv"
 	"sync"
 	"testing"
@@ -42,7 +42,7 @@ func TestParseFileConfig(t *testing.T) {
 
 	cwd, err := os.Getwd()
 	assert.NoError(t, err)
-	testConfig := path.Join(cwd, "testdata/.shopware-cli.yml")
+	testConfig := filepath.Join(cwd, "testdata/.shopware-cli.yml")
 
 	assert.NoError(t, InitConfig(testConfig))
 	assert.False(t, state.loadedFromEnv)
@@ -64,7 +64,7 @@ func TestSaveConfig(t *testing.T) {
 
 	cwd, err := os.Getwd()
 	assert.NoError(t, err)
-	testConfig := path.Join(cwd, "testdata/write-test.yml")
+	testConfig := filepath.Join(cwd, "testdata/write-test.yml")
 	configBackup, err := os.ReadFile(testConfig)
 	assert.NoError(t, err)
 	defer func() {

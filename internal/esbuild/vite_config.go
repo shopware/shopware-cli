@@ -101,6 +101,16 @@ func DumpViteConfig(options AssetCompileOptions) error {
 		}
 	}
 
+	// Instead of throwing an error, just skip overwriting if the config exists
+	manifestPath := path.Join(viteDir, "manifest.json")
+	entrypointsPath := path.Join(viteDir, "entrypoints.json")
+	if _, err := os.Stat(manifestPath); err == nil {
+		return nil
+	}
+	if _, err := os.Stat(entrypointsPath); err == nil {
+		return nil
+	}
+
 	if err := dumpViteManifest(options, viteDir); err != nil {
 		return err
 	}

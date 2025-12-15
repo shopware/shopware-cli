@@ -11,12 +11,16 @@ import (
 	"strings"
 
 	"dario.cat/mergo"
+	"github.com/spf13/cobra"
+	"golang.org/x/text/language"
+
 	"github.com/shopware/shopware-cli/extension"
+	"github.com/shopware/shopware-cli/internal/ci"
+	"github.com/shopware/shopware-cli/internal/mjml"
+	"github.com/shopware/shopware-cli/internal/packagist"
 	"github.com/shopware/shopware-cli/internal/phpexec"
 	"github.com/shopware/shopware-cli/logging"
 	"github.com/shopware/shopware-cli/shop"
-	"github.com/spf13/cobra"
-	"golang.org/x/text/language"
 )
 
 // cleanupPaths are paths that are not nesscarry for the production build.
@@ -56,7 +60,7 @@ var projectCI = &cobra.Command{
 		}
 
 		// Remove annoying cache invalidation errors while asset install
-		os.Setenv("SHOPWARE_SKIP_ASSET_INSTALL_CACHE_INVALIDATION", "1")
+		_ = os.Setenv("SHOPWARE_SKIP_ASSET_INSTALL_CACHE_INVALIDATION", "1")
 
 		shopCfg, err := shop.ReadConfig(projectConfigPath, true)
 		if err != nil {
@@ -65,33 +69,43 @@ var projectCI = &cobra.Command{
 
 		cleanupPaths = append(cleanupPaths, shopCfg.Build.CleanupPaths...)
 
-		logging.FromContext(cmd.Context()).Infof("Installing dependencies using Composer")
+		if !shopCfg.DisableComposerInstall {
+			composerFlags := []string{"install", "--no-interaction", "--no-progress", "--optimize-autoloader", "--classmap-authoritative"}
 
-		composerFlags := []string{"install", "--no-interaction", "--no-progress", "--optimize-autoloader", "--classmap-authoritative"}
+			if withDev, _ := cmd.Flags().GetBool("with-dev-dependencies"); !withDev {
+				composerFlags = append(composerFlags, "--no-dev")
+			}
 
-		if withDev, _ := cmd.Flags().GetBool("with-dev-dependencies"); !withDev {
-			composerFlags = append(composerFlags, "--no-dev")
+			if shopCfg.DisableComposerScripts {
+				composerFlags = append(composerFlags, "--no-scripts")
+			}
+
+			token, err := prepareComposerAuth(cmd.Context(), args[0])
+			if err != nil {
+				return err
+			}
+
+			composerInstallSection := ci.Default.Section(cmd.Context(), "Composer Installation")
+
+			composer := phpexec.ComposerCommand(cmd.Context(), composerFlags...)
+			composer.Dir = args[0]
+			composer.Stdin = os.Stdin
+			composer.Stdout = os.Stdout
+			composer.Stderr = os.Stderr
+			composer.Env = append(os.Environ(),
+				"COMPOSER_AUTH="+token,
+			)
+
+			if err := composer.Run(); err != nil {
+				return err
+			}
+
+			composerInstallSection.End(cmd.Context())
+		} else {
+			logging.FromContext(cmd.Context()).Infof("Skipping composer install")
 		}
 
-		token, err := prepareComposerAuth(cmd.Context())
-		if err != nil {
-			return err
-		}
-
-		composer := phpexec.ComposerCommand(cmd.Context(), composerFlags...)
-		composer.Dir = args[0]
-		composer.Stdin = os.Stdin
-		composer.Stdout = os.Stdout
-		composer.Stderr = os.Stderr
-		composer.Env = append(os.Environ(),
-			"COMPOSER_AUTH="+token,
-		)
-
-		if err := composer.Run(); err != nil {
-			return err
-		}
-
-		logging.FromContext(cmd.Context()).Infof("Looking for extensions to build assets in project")
+		lookingForExtensionsSection := ci.Default.Section(cmd.Context(), "Looking for extensions")
 
 		sources := extension.FindAssetSourcesOfProject(cmd.Context(), args[0], shopCfg)
 
@@ -100,6 +114,8 @@ var projectCI = &cobra.Command{
 			return err
 		}
 
+		lookingForExtensionsSection.End(cmd.Context())
+
 		assetCfg := extension.AssetBuildConfig{
 			CleanupNodeModules:           true,
 			ShopwareRoot:                 args[0],
@@ -107,13 +123,16 @@ var projectCI = &cobra.Command{
 			Browserslist:                 shopCfg.Build.Browserslist,
 			SkipExtensionsWithBuildFiles: true,
 			DisableStorefrontBuild:       shopCfg.Build.DisableStorefrontBuild,
+			ForceExtensionBuild:          convertForceExtensionBuild(shopCfg.Build.ForceExtensionBuild),
+			ForceAdminBuild:              shopCfg.Build.ForceAdminBuild,
+			KeepNodeModules:              shopCfg.Build.KeepNodeModules,
 		}
 
 		if err := extension.BuildAssetsForExtensions(cmd.Context(), sources, assetCfg); err != nil {
 			return err
 		}
 
-		logging.FromContext(cmd.Context()).Infof("Optimizing Administration sources")
+		optimizeSection := ci.Default.Section(cmd.Context(), "Optimizing Administration Assets")
 		if err := cleanupAdministrationFiles(cmd.Context(), path.Join(args[0], "vendor", "shopware", "administration")); err != nil {
 			return err
 		}
@@ -154,7 +173,9 @@ var projectCI = &cobra.Command{
 			return err
 		}
 
-		logging.FromContext(cmd.Context()).Infof("Warmup container cache")
+		optimizeSection.End(cmd.Context())
+
+		warumupSection := ci.Default.Section(cmd.Context(), "Warming up container cache")
 
 		if err := runTransparentCommand(phpexec.PHPCommand(cmd.Context(), path.Join(args[0], "bin", "ci"), "--version")); err != nil { //nolint: gosec
 			return fmt.Errorf("failed to warmup container cache (php bin/ci --version): %w", err)
@@ -176,8 +197,27 @@ var projectCI = &cobra.Command{
 			}
 		}
 
+		warumupSection.End(cmd.Context())
+
+		if shopCfg.Build.IsMjmlEnabled() {
+			mjmlSection := ci.Default.Section(cmd.Context(), "Compiling MJML templates")
+
+			for _, searchPath := range shopCfg.Build.MJML.GetPaths(args[0]) {
+				if _, err := os.Stat(searchPath); !os.IsNotExist(err) {
+					logging.FromContext(cmd.Context()).Infof("Processing MJML files in: %s", searchPath)
+					if err := mjml.ProcessDirectory(cmd.Context(), searchPath); err != nil {
+						logging.FromContext(cmd.Context()).Warnf("MJML compilation had issues in %s: %v", searchPath, err)
+					}
+				} else {
+					logging.FromContext(cmd.Context()).Debugf("MJML search path does not exist: %s", searchPath)
+				}
+			}
+
+			mjmlSection.End(cmd.Context())
+		}
+
 		if shopCfg.Build.RemoveExtensionAssets {
-			logging.FromContext(cmd.Context()).Infof("Deleting assets of extensions")
+			deleteAssetsSection := ci.Default.Section(cmd.Context(), "Deleting assets of extensions")
 
 			for _, source := range sources {
 				if _, err := os.Stat(path.Join(source.Path, "Resources", "public", "administration", "css")); err == nil {
@@ -208,6 +248,8 @@ var projectCI = &cobra.Command{
 			if err := os.WriteFile(path.Join(args[0], "vendor", "shopware", "administration", "Resources", ".administration-css"), []byte{}, os.ModePerm); err != nil {
 				return err
 			}
+
+			deleteAssetsSection.End(cmd.Context())
 		}
 
 		return nil
@@ -215,20 +257,21 @@ var projectCI = &cobra.Command{
 }
 
 func createEmptySnippetFolder(root string) error {
-	if _, err := os.Stat(path.Join(root, "Resources/app/administration/src/app/snippet")); os.IsNotExist(err) {
-		if err := os.MkdirAll(path.Join(root, "Resources/app/administration/src/app/snippet"), os.ModePerm); err != nil {
-			return err
-		}
+	dirs := []string{
+		"Resources/app/administration/src/app/snippet",
+		"Resources/app/administration/src/module/dummy/snippet",
+		"Resources/app/administration/src/app/component/dummy/dummy/snippet",
 	}
 
-	if _, err := os.Stat(path.Join(root, "Resources/app/administration/src/module/dummy/snippet")); os.IsNotExist(err) {
-		if err := os.MkdirAll(path.Join(root, "Resources/app/administration/src/module/dummy/snippet"), os.ModePerm); err != nil {
+	for _, dir := range dirs {
+		fullPath := path.Join(root, dir)
+
+		if err := os.MkdirAll(fullPath, os.ModePerm); err != nil {
 			return err
 		}
-	}
 
-	if _, err := os.Stat(path.Join(root, "Resources/app/administration/src/app/component/dummy/dummy/snippet")); os.IsNotExist(err) {
-		if err := os.MkdirAll(path.Join(root, "Resources/app/administration/src/app/component/dummy/dummy/snippet"), os.ModePerm); err != nil {
+		gitkeepPath := path.Join(fullPath, ".gitkeep")
+		if err := os.WriteFile(gitkeepPath, []byte{}, 0644); err != nil {
 			return err
 		}
 	}
@@ -236,39 +279,13 @@ func createEmptySnippetFolder(root string) error {
 	return nil
 }
 
-type ComposerAuth struct {
-	HTTPBasicAuth  *interface{}      `json:"http-basic,omitempty"`
-	BearerAuth     map[string]string `json:"bearer,omitempty"`
-	GitlabAuth     *interface{}      `json:"gitlab-token,omitempty"`
-	GithubOAuth    *interface{}      `json:"github-oauth,omitempty"`
-	BitbucketOauth *interface{}      `json:"bitbucket-oauth,omitempty"`
-}
+func prepareComposerAuth(ctx context.Context, root string) (string, error) {
+	auth, err := packagist.ReadComposerAuth(path.Join(root, "auth.json"))
 
-func prepareComposerAuth(ctx context.Context) (string, error) {
-	composerToken := os.Getenv("SHOPWARE_PACKAGES_TOKEN")
-	composerAuth := os.Getenv("COMPOSER_AUTH")
-
-	if composerToken == "" {
-		return composerAuth, nil
+	if err != nil {
+		logging.FromContext(ctx).Warnf("Failed to read composer auth from env: %v", err)
+		return "", err
 	}
-
-	logging.FromContext(ctx).Infof("Setting up composer auth for packages.shopware.com")
-
-	var auth ComposerAuth
-
-	if composerAuth == "" {
-		auth = ComposerAuth{}
-	} else {
-		if err := json.Unmarshal([]byte(composerAuth), &auth); err != nil {
-			return "", err
-		}
-	}
-
-	if auth.BearerAuth == nil {
-		auth.BearerAuth = make(map[string]string)
-	}
-
-	auth.BearerAuth["packages.shopware.com"] = composerToken
 
 	data, err := json.Marshal(auth)
 	if err != nil {
@@ -486,4 +503,12 @@ func cleanupJavaScriptSourceMaps(folder string) error {
 
 		return os.WriteFile(expectedJsFile, []byte(overwrittenContent), os.ModePerm)
 	})
+}
+
+func convertForceExtensionBuild(configExtensions []shop.ConfigBuildExtension) []string {
+	extensionConfigs := make([]string, len(configExtensions))
+	for i, ext := range configExtensions {
+		extensionConfigs[i] = ext.Name
+	}
+	return extensionConfigs
 }

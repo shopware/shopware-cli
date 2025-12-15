@@ -4,12 +4,13 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"github.com/klauspost/compress/zip"
 	"io"
 	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/klauspost/compress/zip"
 )
 
 func downloadDartSass(ctx context.Context, cacheDir string) error {

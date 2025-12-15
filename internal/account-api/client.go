@@ -75,6 +75,10 @@ func (c *Client) GetMemberships() []Membership {
 	return c.Memberships
 }
 
+func (c *Client) GetActiveCompanyID() int {
+	return c.ActiveMembership.Company.Id
+}
+
 func (c *Client) isTokenValid() bool {
 	if c.Token == nil {
 		return false
@@ -91,7 +95,8 @@ func getApiTokenCacheFilePath() (string, error) {
 		return "", err
 	}
 
-	return fmt.Sprintf("%s/%s", cacheDir, CacheFileName), nil
+	shopwareCacheDir := filepath.Join(cacheDir, "shopware-cli")
+	return filepath.Join(shopwareCacheDir, CacheFileName), nil
 }
 
 func createApiFromTokenCache(ctx context.Context) (*Client, error) {

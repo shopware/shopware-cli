@@ -1,0 +1,5 @@
+<p>{{ $tc('swag-customized-products.detail.tabGeneral.cardExclusion.emptyTitle', (searchTerm.length <= 0) ? 1 : 0) }}</p>
+-----
+<p>
+    {{ $tc('swag-customized-products.detail.tabGeneral.cardExclusion.emptyTitle', (searchTerm.length <= 0) ? 1 : 0) }}
+</p>

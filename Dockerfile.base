@@ -9,9 +9,9 @@ RUN <<EOF
 
     apk add --no-cache \
         git \
-        nodejs-20 \
+        nodejs-22 \
         npm \
-        bun-bin \
+        bun \
         gettext \
         openssh-client \
         openssh-keyscan \
@@ -58,6 +58,18 @@ RUN <<EOF
 
     echo 'memory_limit=512M' > /etc/php/conf.d/docker.ini
 EOF
+
+COPY internal/verifier/js /opt/verifier/js
+COPY internal/verifier/php /opt/verifier/php
+
+RUN <<EOF
+    set -euxo pipefail
+
+    npm install --prefix /opt/verifier/js
+    composer install --no-dev --working-dir /opt/verifier/php
+EOF
+
+ENV SHOPWARE_CLI_TOOLS_DIR=/opt/verifier
 
 COPY scripts/entrypoint.sh /usr/local/bin/entrypoint.sh
 

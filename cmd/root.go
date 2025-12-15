@@ -3,6 +3,7 @@ package cmd
 import (
 	"context"
 	"os"
+	"slices"
 
 	"github.com/spf13/cobra"
 
@@ -11,6 +12,7 @@ import (
 	"github.com/shopware/shopware-cli/cmd/project"
 	accountApi "github.com/shopware/shopware-cli/internal/account-api"
 	"github.com/shopware/shopware-cli/internal/config"
+	"github.com/shopware/shopware-cli/internal/system"
 	"github.com/shopware/shopware-cli/logging"
 )
 
@@ -27,13 +29,7 @@ var rootCmd = &cobra.Command{
 }
 
 func Execute(ctx context.Context) {
-	verbose := false
-
-	if err := rootCmd.ParseFlags(os.Args); err == nil {
-		verbose, _ = rootCmd.PersistentFlags().GetBool("verbose")
-	}
-
-	ctx = logging.WithLogger(ctx, logging.NewLogger(verbose))
+	ctx = logging.WithLogger(ctx, logging.NewLogger(slices.Contains(os.Args, "--verbose")))
 	accountApi.SetUserAgent("shopware-cli/" + version)
 
 	if err := rootCmd.ExecuteContext(ctx); err != nil {
@@ -46,6 +42,10 @@ func init() {
 
 	cobra.OnInitialize(func() {
 		_ = config.InitConfig(cfgFile)
+	})
+
+	cobra.OnFinalize(func() {
+		_ = system.CloseCaches()
 	})
 
 	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is $HOME/.shopware-cli.yaml)")

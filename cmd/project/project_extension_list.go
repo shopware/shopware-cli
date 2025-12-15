@@ -6,9 +6,9 @@ import (
 	"os"
 
 	adminSdk "github.com/friendsofshopware/go-shopware-admin-api-sdk"
-	"github.com/olekukonko/tablewriter"
 	"github.com/spf13/cobra"
 
+	"github.com/shopware/shopware-cli/internal/table"
 	"github.com/shopware/shopware-cli/shop"
 )
 
@@ -22,7 +22,7 @@ var projectExtensionListCmd = &cobra.Command{
 
 		outputAsJson, _ := cmd.PersistentFlags().GetBool("json")
 
-		if cfg, err = shop.ReadConfig(projectConfigPath, false); err != nil {
+		if cfg, err = shop.ReadConfig(projectConfigPath, true); err != nil {
 			return err
 		}
 
@@ -51,15 +51,14 @@ var projectExtensionListCmd = &cobra.Command{
 			return nil
 		}
 
-		table := tablewriter.NewWriter(os.Stdout)
-		table.SetColWidth(100)
-		table.SetHeader([]string{"Name", "Version", "Status"})
+		table := table.NewWriter(os.Stdout)
+		table.Header([]string{"Name", "Version", "Status"})
 
 		for _, extension := range extensions {
-			table.Append([]string{extension.Name, extension.Version, extension.Status()})
+			_ = table.Append([]string{extension.Name, extension.Version, extension.Status()})
 		}
 
-		table.Render()
+		_ = table.Render()
 
 		return nil
 	},

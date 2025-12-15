@@ -209,20 +209,20 @@ func (s *SpdxLicenses) isValidLicenseString(license string) (bool, error) {
 			state = stateException
 		default:
 			// For any other token, its meaning depends on the state.
-			//nolint:gocritic
-			if state == stateTerm {
+			switch state {
+			case stateTerm:
 				// Expect a license factor.
 				if !isLicenseFactor(licenseRefRe, licenseIDRe, tok) {
 					return false, fmt.Errorf("invalid license factor: %q", tok)
 				}
 				state = stateAfterTerm
-			} else if state == stateException {
+			case stateException:
 				// After "WITH", expect a license exception.
 				if !licenseExceptionRe.MatchString(tok) {
 					return false, fmt.Errorf("invalid license exception: %q", tok)
 				}
 				state = stateAfterTerm
-			} else if state == stateAfterTerm {
+			default:
 				return false, fmt.Errorf("unexpected token: %q", tok)
 			}
 		}

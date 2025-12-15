@@ -3,13 +3,14 @@ package extension
 import (
 	"archive/zip"
 	"bytes"
+	"context"
 	"fmt"
 	"os/exec"
 	"strings"
 )
 
-func gitTagOrBranchOfFolder(source string) (string, error) {
-	tagCmd := exec.Command("git", "-C", source, "tag", "--sort=-creatordate")
+func gitTagOrBranchOfFolder(ctx context.Context, source string) (string, error) {
+	tagCmd := exec.CommandContext(ctx, "git", "-C", source, "tag", "--sort=-creatordate")
 
 	stdout, err := tagCmd.Output()
 	if err != nil {
@@ -22,7 +23,7 @@ func gitTagOrBranchOfFolder(source string) (string, error) {
 		return versions[0], nil
 	}
 
-	branchCmd := exec.Command("git", "-C", source, "rev-parse", "--abbrev-ref", "HEAD")
+	branchCmd := exec.CommandContext(ctx, "git", "-C", source, "rev-parse", "--abbrev-ref", "HEAD")
 
 	stdout, err = branchCmd.Output()
 
@@ -33,17 +34,17 @@ func gitTagOrBranchOfFolder(source string) (string, error) {
 	return strings.Trim(strings.TrimLeft(string(stdout), "* "), "\n"), nil
 }
 
-func GitCopyFolder(source, target, commitHash string) (string, error) {
+func GitCopyFolder(ctx context.Context, source, target, commitHash string) (string, error) {
 	var err error
 	if commitHash == "" {
-		commitHash, err = gitTagOrBranchOfFolder(source)
+		commitHash, err = gitTagOrBranchOfFolder(ctx, source)
 
 		if err != nil {
 			return "", fmt.Errorf("GitCopyFolder: cannot find checkout tag or branch: %v", err)
 		}
 	}
 
-	archiveCmd := exec.Command("git", "-C", source, "archive", commitHash, "--format=zip")
+	archiveCmd := exec.CommandContext(ctx, "git", "-C", source, "archive", commitHash, "--format=zip")
 
 	stdout, err := archiveCmd.Output()
 	if err != nil {

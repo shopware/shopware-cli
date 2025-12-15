@@ -1,0 +1,5 @@
+<sw-button link="{ name: 'sw.product.detail.pseudovariants', params: { productId: product.id } }"/>
+-----
+<sw-button
+    link="{ name: 'sw.product.detail.pseudovariants', params: { productId: product.id } }"
+/>

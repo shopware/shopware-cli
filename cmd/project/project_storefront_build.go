@@ -3,17 +3,18 @@ package project
 import (
 	"path/filepath"
 
-	"github.com/shopware/shopware-cli/internal/phpexec"
-	"github.com/shopware/shopware-cli/shop"
+	"github.com/spf13/cobra"
 
 	"github.com/shopware/shopware-cli/extension"
+	"github.com/shopware/shopware-cli/internal/phpexec"
 	"github.com/shopware/shopware-cli/logging"
-	"github.com/spf13/cobra"
+	"github.com/shopware/shopware-cli/shop"
 )
 
 var projectStorefrontBuildCmd = &cobra.Command{
-	Use:   "storefront-build [path]",
-	Short: "Builds the Storefront",
+	Use:     "storefront-build [path]",
+	Short:   "Builds the Storefront",
+	Aliases: []string{"build-storefront"},
 	RunE: func(cmd *cobra.Command, args []string) error {
 		var projectRoot string
 		var err error
@@ -35,11 +36,11 @@ var projectStorefrontBuildCmd = &cobra.Command{
 
 		logging.FromContext(cmd.Context()).Infof("Looking for extensions to build assets in project")
 
-		if err := runTransparentCommand(commandWithRoot(phpexec.ConsoleCommand(cmd.Context(), "feature:dump"), projectRoot)); err != nil {
+		if err := runTransparentCommand(commandWithRoot(phpexec.ConsoleCommand(phpexec.AllowBinCI(cmd.Context()), "feature:dump"), projectRoot)); err != nil {
 			return err
 		}
 
-		sources, err := extension.DumpAndLoadAssetSourcesOfProject(cmd.Context(), projectRoot, shopCfg)
+		sources, err := filterAndGetSources(cmd, projectRoot, shopCfg)
 		if err != nil {
 			return err
 		}
@@ -56,7 +57,6 @@ var projectStorefrontBuildCmd = &cobra.Command{
 			ShopwareRoot:      projectRoot,
 			ShopwareVersion:   shopwareConstraint,
 			NPMForceInstall:   forceInstall,
-			ContributeProject: extension.IsContributeProject(projectRoot),
 		}
 
 		if err := extension.BuildAssetsForExtensions(cmd.Context(), sources, assetCfg); err != nil {
@@ -68,7 +68,7 @@ var projectStorefrontBuildCmd = &cobra.Command{
 			return nil
 		}
 
-		return runTransparentCommand(commandWithRoot(phpexec.ConsoleCommand(cmd.Context(), "theme:compile"), projectRoot))
+		return runTransparentCommand(commandWithRoot(phpexec.ConsoleCommand(phpexec.AllowBinCI(cmd.Context()), "theme:compile"), projectRoot))
 	},
 }
 
@@ -76,4 +76,7 @@ func init() {
 	projectRootCmd.AddCommand(projectStorefrontBuildCmd)
 	projectStorefrontBuildCmd.PersistentFlags().Bool("skip-theme-compile", false, "Skip theme compilation")
 	projectStorefrontBuildCmd.PersistentFlags().Bool("force-install-dependencies", false, "Force install NPM dependencies")
+	projectStorefrontBuildCmd.PersistentFlags().String("only-extensions", "", "Only watch the given extensions (comma separated)")
+	projectStorefrontBuildCmd.PersistentFlags().String("skip-extensions", "", "Skips the given extensions (comma separated)")
+	projectStorefrontBuildCmd.PersistentFlags().Bool("only-custom-static-extensions", false, "Only build extensions from custom/static-plugins directory")
 }

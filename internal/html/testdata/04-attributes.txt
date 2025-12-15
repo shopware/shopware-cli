@@ -1,0 +1,6 @@
+<sw-button variant="primary" foo="bla">Click me</sw-button>
+-----
+<sw-button
+    variant="primary"
+    foo="bla"
+>Click me</sw-button>

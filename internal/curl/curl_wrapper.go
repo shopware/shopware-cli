@@ -1,6 +1,7 @@
 package curl
 
 import (
+	"context"
 	"fmt"
 	"net/url"
 	"os"
@@ -101,10 +102,10 @@ func (c *Command) getCmdOptions() []string {
 }
 
 // Run runs the CurlCommand with stdin, stdout, and stderr piped through to the parent process.
-func (c *Command) Run() error {
+func (c *Command) Run(ctx context.Context) error {
 	// The user wants to execute code with custom parameters
 	/* #nosec G204 */
-	cmd := exec.Command("curl", c.getCmdOptions()...)
+	cmd := exec.CommandContext(ctx, "curl", c.getCmdOptions()...)
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr

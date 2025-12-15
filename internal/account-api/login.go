@@ -72,7 +72,11 @@ func fetchMemberships(ctx context.Context, token *oauth2.Token) ([]Membership, e
 		return nil, err
 	}
 
-	defer resp.Body.Close()
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			logging.FromContext(ctx).Errorf("Cannot close response body: %v", err)
+		}
+	}()
 
 	data, err := io.ReadAll(resp.Body)
 	if err != nil {

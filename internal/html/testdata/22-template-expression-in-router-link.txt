@@ -1,0 +1,5 @@
+<router-link>{{ item.mainPseudovariant.product.translated.name }}</router-link>
+-----
+<router-link>
+    {{ item.mainPseudovariant.product.translated.name }}
+</router-link>

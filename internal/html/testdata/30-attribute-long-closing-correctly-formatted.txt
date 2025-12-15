@@ -1,0 +1,13 @@
+<div>
+    <div class="frosh-tools-tab-state-machines__state-machines-card-image-wrapper">
+    <p>Hello World</p>
+    </div>
+</div>
+-----
+<div>
+    <div
+        class="frosh-tools-tab-state-machines__state-machines-card-image-wrapper"
+    >
+        <p>Hello World</p>
+    </div>
+</div>

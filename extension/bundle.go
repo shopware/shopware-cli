@@ -7,12 +7,14 @@ import (
 	"os"
 	"path"
 
-	"github.com/shopware/shopware-cli/version"
+	"github.com/shyim/go-version"
+
+	"github.com/shopware/shopware-cli/internal/validation"
 )
 
 type ShopwareBundle struct {
 	path     string
-	composer shopwareBundleComposerJson
+	Composer shopwareBundleComposerJson
 	config   *Config
 }
 
@@ -47,7 +49,7 @@ func newShopwareBundle(path string) (*ShopwareBundle, error) {
 	}
 
 	extension := ShopwareBundle{
-		composer: composerJson,
+		Composer: composerJson,
 		path:     path,
 		config:   cfg,
 	}
@@ -55,17 +57,27 @@ func newShopwareBundle(path string) (*ShopwareBundle, error) {
 	return &extension, nil
 }
 
+type composerAutoload struct {
+	Psr4 map[string]string `json:"psr-4"`
+}
+
 type shopwareBundleComposerJson struct {
-	Name    string                          `json:"name"`
-	Type    string                          `json:"type"`
-	License string                          `json:"license"`
-	Version string                          `json:"version"`
-	Require map[string]string               `json:"require"`
-	Extra   shopwareBundleComposerJsonExtra `json:"extra"`
+	Name     string                          `json:"name"`
+	Type     string                          `json:"type"`
+	License  string                          `json:"license"`
+	Version  string                          `json:"version"`
+	Require  map[string]string               `json:"require"`
+	Extra    shopwareBundleComposerJsonExtra `json:"extra"`
+	Suggest  map[string]string               `json:"suggest"`
+	Autoload composerAutoload                `json:"autoload"`
 }
 
 type shopwareBundleComposerJsonExtra struct {
 	BundleName string `json:"shopware-bundle-name"`
+}
+
+func (p ShopwareBundle) GetComposerName() (string, error) {
+	return p.Composer.Name, nil
 }
 
 // GetRootDir returns the src directory of the bundle.
@@ -73,13 +85,33 @@ func (p ShopwareBundle) GetRootDir() string {
 	return path.Join(p.path, "src")
 }
 
+func (p ShopwareBundle) GetSourceDirs() []string {
+	var result []string
+
+	for _, val := range p.Composer.Autoload.Psr4 {
+		result = append(result, path.Join(p.path, val))
+	}
+
+	return result
+}
+
 // GetResourcesDir returns the resources directory of the shopware bundle.
 func (p ShopwareBundle) GetResourcesDir() string {
 	return path.Join(p.GetRootDir(), "Resources")
 }
 
+func (p ShopwareBundle) GetResourcesDirs() []string {
+	var result []string
+
+	for _, val := range p.GetSourceDirs() {
+		result = append(result, path.Join(val, "Resources"))
+	}
+
+	return result
+}
+
 func (p ShopwareBundle) GetName() (string, error) {
-	return p.composer.Extra.BundleName, nil
+	return p.Composer.Extra.BundleName, nil
 }
 
 func (p ShopwareBundle) GetExtensionConfig() *Config {
@@ -96,7 +128,7 @@ func (p ShopwareBundle) GetShopwareVersionConstraint() (*version.Constraints, er
 		return &constraint, nil
 	}
 
-	shopwareConstraintString, ok := p.composer.Require["shopware/core"]
+	shopwareConstraintString, ok := p.Composer.Require["shopware/core"]
 
 	if !ok {
 		return nil, fmt.Errorf("require.shopware/core is required")
@@ -115,7 +147,7 @@ func (ShopwareBundle) GetType() string {
 }
 
 func (p ShopwareBundle) GetVersion() (*version.Version, error) {
-	return version.NewVersion(p.composer.Version)
+	return version.NewVersion(p.Composer.Version)
 }
 
 func (p ShopwareBundle) GetChangelog() (*ExtensionChangelog, error) {
@@ -123,11 +155,15 @@ func (p ShopwareBundle) GetChangelog() (*ExtensionChangelog, error) {
 }
 
 func (p ShopwareBundle) GetLicense() (string, error) {
-	return p.composer.License, nil
+	return p.Composer.License, nil
 }
 
 func (p ShopwareBundle) GetPath() string {
 	return p.path
+}
+
+func (p ShopwareBundle) GetIconPath() string {
+	return ""
 }
 
 func (p ShopwareBundle) GetMetaData() *extensionMetadata {
@@ -143,5 +179,6 @@ func (p ShopwareBundle) GetMetaData() *extensionMetadata {
 	}
 }
 
-func (p ShopwareBundle) Validate(c context.Context, ctx *ValidationContext) {
+func (p ShopwareBundle) Validate(c context.Context, check validation.Check) {
+	// ShopwareBundle validation is currently empty but signature updated to match interface
 }

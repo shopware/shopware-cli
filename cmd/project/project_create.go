@@ -1,7 +1,6 @@
 package project
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -9,17 +8,17 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
-	"path"
-	"regexp"
+	"path/filepath"
 	"sort"
 	"strings"
-	"text/template"
 
-	"github.com/manifoldco/promptui"
+	"github.com/charmbracelet/huh"
+	"github.com/shyim/go-version"
 	"github.com/spf13/cobra"
 
+	"github.com/shopware/shopware-cli/internal/packagist"
+	"github.com/shopware/shopware-cli/internal/system"
 	"github.com/shopware/shopware-cli/logging"
-	"github.com/shopware/shopware-cli/version"
 )
 
 var projectCreateCmd = &cobra.Command{
@@ -32,11 +31,13 @@ var projectCreateCmd = &cobra.Command{
 			if err != nil {
 				return []string{}, cobra.ShellCompDirectiveNoFileComp
 			}
-			versions := make([]string, len(filteredVersions))
+			versions := make([]string, 0)
 
 			for i, v := range filteredVersions {
 				versions[i] = v.String()
 			}
+
+			versions = append(versions, "latest")
 
 			return versions, cobra.ShellCompDirectiveNoFileComp
 		}
@@ -46,8 +47,19 @@ var projectCreateCmd = &cobra.Command{
 	RunE: func(cmd *cobra.Command, args []string) error {
 		projectFolder := args[0]
 
+		useDocker, _ := cmd.PersistentFlags().GetBool("docker")
+		withoutElasticsearch, _ := cmd.PersistentFlags().GetBool("without-elasticsearch")
+		noAudit, _ := cmd.PersistentFlags().GetBool("no-audit")
+
 		if _, err := os.Stat(projectFolder); err == nil {
-			return fmt.Errorf("the folder %s exists already", projectFolder)
+			empty, err := system.IsDirEmpty(projectFolder)
+			if err != nil {
+				return err
+			}
+
+			if !empty {
+				return fmt.Errorf("the folder %s exists already and is not empty", projectFolder)
+			}
 		}
 
 		logging.FromContext(cmd.Context()).Infof("Using Symfony Flex to create a new Shopware 6 project")
@@ -62,12 +74,27 @@ var projectCreateCmd = &cobra.Command{
 		if len(args) == 2 {
 			result = args[1]
 		} else {
-			prompt := promptui.Select{
-				Label: "Select Version",
-				Items: filteredVersions,
+			options := make([]huh.Option[string], 0)
+			for _, v := range filteredVersions {
+				versionStr := v.String()
+				options = append(options, huh.NewOption(versionStr, versionStr))
 			}
 
-			if _, result, err = prompt.Run(); err != nil {
+			// Add "latest" option
+			options = append(options, huh.NewOption("latest", "latest"))
+
+			// Create and run the select form
+			form := huh.NewForm(
+				huh.NewGroup(
+					huh.NewSelect[string]().
+						Height(10).
+						Title("Select Version").
+						Options(options...).
+						Value(&result),
+				),
+			)
+
+			if err := form.Run(); err != nil {
 				return err
 			}
 		}
@@ -75,7 +102,18 @@ var projectCreateCmd = &cobra.Command{
 		chooseVersion := ""
 
 		if result == "latest" {
-			chooseVersion = filteredVersions[0].String()
+			// pick the most recent stable (non-RC) version
+			for _, v := range filteredVersions {
+				vs := v.String()
+				if !strings.Contains(strings.ToLower(vs), "rc") {
+					chooseVersion = vs
+					break
+				}
+			}
+			// if no stable found, fall back to top entry
+			if chooseVersion == "" && len(filteredVersions) > 0 {
+				chooseVersion = filteredVersions[0].String()
+			}
 		} else if strings.HasPrefix(result, "dev-") {
 			chooseVersion = result
 		} else {
@@ -91,63 +129,89 @@ var projectCreateCmd = &cobra.Command{
 			return fmt.Errorf("cannot find version %s", result)
 		}
 
-		if err := os.Mkdir(projectFolder, os.ModePerm); err != nil {
+		if err := os.MkdirAll(projectFolder, os.ModePerm); err != nil {
 			return err
 		}
 
 		logging.FromContext(cmd.Context()).Infof("Setting up Shopware %s", chooseVersion)
 
-		composerJson, err := generateComposerJson(cmd.Context(), chooseVersion, strings.Contains(chooseVersion, "rc"))
+		composerJson, err := packagist.GenerateComposerJson(cmd.Context(), chooseVersion, strings.Contains(chooseVersion, "rc"), useDocker, withoutElasticsearch, noAudit)
 		if err != nil {
 			return err
 		}
 
-		if err := os.WriteFile(fmt.Sprintf("%s/composer.json", projectFolder), []byte(composerJson), os.ModePerm); err != nil {
+		if err := os.WriteFile(filepath.Join(projectFolder, "composer.json"), []byte(composerJson), os.ModePerm); err != nil {
 			return err
 		}
 
-		if err := os.WriteFile(fmt.Sprintf("%s/.env", projectFolder), []byte(""), os.ModePerm); err != nil {
+		if err := os.WriteFile(filepath.Join(projectFolder, ".env"), []byte(""), os.ModePerm); err != nil {
 			return err
 		}
 
-		if err := os.WriteFile(fmt.Sprintf("%s/.gitignore", projectFolder), []byte("/.idea\n/vendor"), os.ModePerm); err != nil {
+		if err := os.WriteFile(filepath.Join(projectFolder, ".env.local"), []byte(""), os.ModePerm); err != nil {
 			return err
 		}
 
-		if err := os.MkdirAll(fmt.Sprintf("%s/custom/plugins", projectFolder), os.ModePerm); err != nil {
+		if err := os.WriteFile(filepath.Join(projectFolder, ".gitignore"), []byte("/.idea\n/vendor"), os.ModePerm); err != nil {
 			return err
 		}
 
-		if err := os.MkdirAll(fmt.Sprintf("%s/custom/static-plugins", projectFolder), os.ModePerm); err != nil {
+		if err := os.MkdirAll(filepath.Join(projectFolder, "custom", "plugins"), os.ModePerm); err != nil {
 			return err
 		}
 
-		if err := os.WriteFile(path.Join(projectFolder, "php.ini"), []byte("memory_limit=512M"), os.ModePerm); err != nil {
+		if err := os.MkdirAll(filepath.Join(projectFolder, "custom", "static-plugins"), os.ModePerm); err != nil {
+			return err
+		}
+
+		if err := os.WriteFile(filepath.Join(projectFolder, "php.ini"), []byte("memory_limit=512M"), os.ModePerm); err != nil {
 			return err
 		}
 
 		logging.FromContext(cmd.Context()).Infof("Installing dependencies")
 
-		composerBinary, err := exec.LookPath("composer")
-		if err != nil {
-			return err
-		}
-
 		var cmdInstall *exec.Cmd
-		phpBinary := os.Getenv("PHP_BINARY")
 
-		if phpBinary != "" {
-			cmdInstall = exec.Command(phpBinary, composerBinary, "install")
+		if useDocker {
+			// Use Docker to run composer
+			absProjectFolder, err := filepath.Abs(projectFolder)
+			if err != nil {
+				return err
+			}
+
+			dockerArgs := []string{"run", "--rm",
+				"-v", fmt.Sprintf("%s:/app", absProjectFolder),
+				"-w", "/app",
+				"ghcr.io/shopware/docker-dev:php8.3-node22-caddy",
+				"composer", "install", "--no-interaction"}
+
+			cmdInstall = exec.CommandContext(cmd.Context(), "docker", dockerArgs...)
+			cmdInstall.Stdout = os.Stdout
+			cmdInstall.Stderr = os.Stderr
+
+			return cmdInstall.Run()
 		} else {
-			cmdInstall = exec.Command("composer", "install")
+			// Use local composer
+			composerBinary, err := exec.LookPath("composer")
+			if err != nil {
+				return err
+			}
+
+			phpBinary := os.Getenv("PHP_BINARY")
+
+			if phpBinary != "" {
+				cmdInstall = exec.CommandContext(cmd.Context(), phpBinary, composerBinary, "install")
+			} else {
+				cmdInstall = exec.CommandContext(cmd.Context(), "composer", "install")
+			}
+
+			cmdInstall.Dir = projectFolder
+			cmdInstall.Stdin = os.Stdin
+			cmdInstall.Stdout = os.Stdout
+			cmdInstall.Stderr = os.Stderr
+
+			return cmdInstall.Run()
 		}
-
-		cmdInstall.Dir = projectFolder
-		cmdInstall.Stdin = os.Stdin
-		cmdInstall.Stdout = os.Stdout
-		cmdInstall.Stderr = os.Stderr
-
-		return cmdInstall.Run()
 	},
 }
 
@@ -175,6 +239,9 @@ func getFilteredInstallVersions(ctx context.Context) ([]*version.Version, error)
 
 func init() {
 	projectRootCmd.AddCommand(projectCreateCmd)
+	projectCreateCmd.PersistentFlags().Bool("docker", false, "Use Docker to run Composer instead of local installation")
+	projectCreateCmd.PersistentFlags().Bool("without-elasticsearch", false, "Remove Elasticsearch from the installation")
+	projectCreateCmd.PersistentFlags().Bool("no-audit", false, "Disable composer audit blocking insecure packages")
 }
 
 func fetchAvailableShopwareVersions(ctx context.Context) ([]string, error) {
@@ -206,145 +273,4 @@ func fetchAvailableShopwareVersions(ctx context.Context) ([]string, error) {
 	}
 
 	return releases, nil
-}
-
-func generateComposerJson(ctx context.Context, version string, rc bool) (string, error) {
-	tplContent, err := template.New("composer.json").Parse(`{
-    "name": "shopware/production",
-    "license": "MIT",
-    "type": "project",
-    "require": {
-        "composer-runtime-api": "^2.0",
-        "shopware/administration": "{{ .DependingVersions }}",
-        "shopware/core": "{{ .Version }}",
-        "shopware/elasticsearch": "{{ .DependingVersions }}",
-        "shopware/storefront": "{{ .DependingVersions }}",
-        "symfony/flex": "~2"
-    },
-    "repositories": [
-        {
-            "type": "path",
-            "url": "custom/plugins/*",
-            "options": {
-                "symlink": true
-            }
-        },
-        {
-            "type": "path",
-            "url": "custom/plugins/*/packages/*",
-            "options": {
-                "symlink": true
-            }
-        },
-        {
-            "type": "path",
-            "url": "custom/static-plugins/*",
-            "options": {
-                "symlink": true
-            }
-        }
-    ],
-	{{if .RC}}
-    "minimum-stability": "RC",
-	{{end}}
-    "prefer-stable": true,
-    "config": {
-        "allow-plugins": {
-            "symfony/flex": true,
-            "symfony/runtime": true
-        },
-        "optimize-autoloader": true,
-        "sort-packages": true
-    },
-    "scripts": {
-        "auto-scripts": [
-        ],
-        "post-install-cmd": [
-            "@auto-scripts"
-        ],
-        "post-update-cmd": [
-            "@auto-scripts"
-        ]
-    },
-    "extra": {
-        "symfony": {
-            "allow-contrib": true,
-            "endpoint": [
-                "https://raw.githubusercontent.com/shopware/recipes/flex/main/index.json",
-                "flex://defaults"
-            ]
-        }
-    }
-}`)
-	if err != nil {
-		return "", err
-	}
-
-	buf := new(bytes.Buffer)
-
-	dependingVersions := "*"
-
-	if strings.HasPrefix(version, "dev-") {
-		fallbackVersion, err := getLatestFallbackVersion(ctx, strings.TrimPrefix(version, "dev-"))
-		if err != nil {
-			return "", err
-		}
-
-		if strings.HasPrefix(version, "dev-6") {
-			version = strings.TrimPrefix(version, "dev-") + "-dev"
-		}
-
-		version = fmt.Sprintf("%s as %s.9999999-dev", version, fallbackVersion)
-		dependingVersions = version
-	}
-
-	err = tplContent.Execute(buf, map[string]interface{}{
-		"Version":           version,
-		"DependingVersions": dependingVersions,
-		"RC":                rc,
-	})
-	if err != nil {
-		return "", err
-	}
-
-	return buf.String(), nil
-}
-
-var kernelFallbackRegExp = regexp.MustCompile(`(?m)SHOPWARE_FALLBACK_VERSION\s*=\s*'?"?(\d+\.\d+)`)
-
-func getLatestFallbackVersion(ctx context.Context, branch string) (string, error) {
-	r, err := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("https://raw.githubusercontent.com/shopware/core/refs/heads/%s/Kernel.php", branch), http.NoBody)
-	if err != nil {
-		return "", err
-	}
-
-	r.Header.Set("User-Agent", "shopware-cli")
-
-	resp, err := http.DefaultClient.Do(r)
-	if err != nil {
-		return "", err
-	}
-
-	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("could not fetch kernel.php from branch %s", branch)
-	}
-
-	defer func() {
-		if err := resp.Body.Close(); err != nil {
-			logging.FromContext(context.Background()).Errorf("getLatestFallbackVersion: %v", err)
-		}
-	}()
-
-	content, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return "", err
-	}
-
-	matches := kernelFallbackRegExp.FindSubmatch(content)
-
-	if len(matches) < 2 {
-		return "", fmt.Errorf("could not determine shopware version")
-	}
-
-	return string(matches[1]), nil
 }

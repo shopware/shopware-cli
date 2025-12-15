@@ -1,7 +1,6 @@
 package phplint
 
 import (
-	"context"
 	"os"
 	"testing"
 
@@ -13,6 +12,6 @@ func TestDownloadPHPFile(t *testing.T) {
 		t.Skip("Downloading does not work in Nix build")
 	}
 
-	_, err := findPHPWasmFile(context.Background(), "7.4")
+	_, err := findPHPWasmFile(t.Context(), "7.4")
 	assert.NoError(t, err)
 }

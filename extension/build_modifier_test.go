@@ -2,10 +2,11 @@ package extension
 
 import (
 	"encoding/xml"
-	"github.com/stretchr/testify/assert"
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
 const exampleManifest = `<?xml version="1.0" encoding="UTF-8"?>

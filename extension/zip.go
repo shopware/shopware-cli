@@ -3,42 +3,44 @@ package extension
 import (
 	"archive/zip"
 	"context"
+	"encoding/hex"
 	"encoding/json"
 	"encoding/xml"
 	"fmt"
 	"io"
 	"io/fs"
+	"log"
 	"net/http"
 	"os"
 	"os/exec"
 	"path"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 
-	"github.com/shopware/shopware-cli/internal/changelog"
+	"github.com/shyim/go-version"
+	"github.com/zeebo/xxh3"
 
+	"github.com/shopware/shopware-cli/internal/changelog"
 	"github.com/shopware/shopware-cli/logging"
-	"github.com/shopware/shopware-cli/version"
 )
 
 var (
+	// These paths will only be removed relative to the top level of the plugin
 	defaultNotAllowedPaths = []string{
 		".editorconfig",
 		".git",
 		".github",
-		".gitignore",
 		".gitlab-ci.yml",
 		".gitpod.Dockerfile",
 		".gitpod.yml",
 		".php-cs-fixer.cache",
+		".php-cs-fixer.dist.php",
 		".php_cs.cache",
 		".php_cs.dist",
-		".php-cs-fixer.dist.php",
 		".sw-zip-blacklist",
 		".travis.yml",
-		"phpstan.neon",
-		"phpstan.neon.dist",
 		"ISSUE_TEMPLATE.md",
 		"Makefile",
 		"Resources/store",
@@ -46,9 +48,16 @@ var (
 		"bitbucket-pipelines.yml",
 		"build.sh",
 		"grumphp.yml",
+		"phpstan.neon",
+		"phpstan.neon.dist",
+		"phpstan-baseline.neon",
+		"phpunit.sh",
 		"phpunit.xml.dist",
+		"phpunitx.xml",
 		"psalm.xml",
 		"rector.php",
+		"shell.nix",
+		"src/Resources/app/administration/.tmp",
 		"src/Resources/app/administration/node_modules",
 		"src/Resources/app/node_modules",
 		"src/Resources/app/storefront/node_modules",
@@ -57,18 +66,29 @@ var (
 		"var",
 	}
 
+	// These files will be removed in all subdirectories
 	defaultNotAllowedFiles = []string{
 		".DS_Store",
 		"Thumbs.db",
 		"__MACOSX",
+		".gitignore",
+		".gitkeep",
+		".prettierrc",
+		"stylelint.config.js",
+		".stylelintrc.js",
+		".stylelintrc",
+		"eslint.config.js",
+		".eslintrc.js",
+		".zipignore",
 	}
 
 	defaultNotAllowedExtensions = []string{
-		".zip",
-		".tar",
 		".gz",
 		".phar",
 		".rar",
+		".tar",
+		".tar.gz",
+		".zip",
 	}
 )
 
@@ -119,6 +139,131 @@ func Unzip(r *zip.Reader, dest string) error {
 		if err := os.Chtimes(fpath, f.Modified, f.Modified); err != nil {
 			return fmt.Errorf(errorFormat, err)
 		}
+	}
+
+	return nil
+}
+
+// ChecksumFile generates a XXH128 checksum for a given file
+func ChecksumFile(filePath string) (string, error) {
+	file, err := os.Open(filePath)
+	if err != nil {
+		return "", fmt.Errorf("open file for checksum: %w", err)
+	}
+	defer func() {
+		_ = file.Close()
+	}()
+
+	// Read the file content
+	data, err := io.ReadAll(file)
+	if err != nil {
+		return "", fmt.Errorf("read file for checksum: %w", err)
+	}
+
+	// Calculate XXH128 hash
+	hash := xxh3.Hash128(data)
+
+	// Convert the [16]byte to []byte for hex encoding
+	hashBytes := hash.Bytes()
+	slicedHashBytes := hashBytes[:]
+
+	// Convert to hex string
+	return hex.EncodeToString(slicedHashBytes), nil
+}
+
+type ChecksumJSON struct {
+	Algorithm        string            `json:"algorithm"`
+	Hashes           map[string]string `json:"hashes"`
+	Version          string            `json:"version"`
+	ExtensionVersion string            `json:"extensionVersion"`
+}
+
+// GenerateChecksumJSON creates a checksum.json file in the given folder
+func GenerateChecksumJSON(ctx context.Context, baseFolder string, ext Extension) error {
+	version, err := ext.GetVersion()
+	if err != nil {
+		logging.FromContext(ctx).Info("Could not determine extension version skipping checksum.json generation: ", err)
+
+		return nil
+	}
+
+	ignores := ext.GetExtensionConfig().Build.Zip.Checksum.Ignore
+
+	checksumData := ChecksumJSON{
+		Algorithm:        "xxh128",
+		Hashes:           make(map[string]string),
+		Version:          "1.0.0",
+		ExtensionVersion: version.String(),
+	}
+
+	// Walk through all files in the folder and calculate checksums
+	err = filepath.Walk(baseFolder, func(path string, info fs.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+
+		// Skip directories and hidden files
+		if info.IsDir() {
+			// Skip vendor and node_modules directories
+			if info.Name() == "vendor" || info.Name() == "node_modules" {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+
+		if strings.Contains(path, "Resources/public/administration") {
+			// Skip files in Resources/public/administration
+			return nil
+		}
+
+		// Get relative path for the file
+		relPath, err := filepath.Rel(baseFolder, path)
+		if err != nil {
+			return fmt.Errorf("get relative path: %w", err)
+		}
+
+		if slices.Contains(ignores, relPath) {
+			return nil
+		}
+
+		// Skip checksum.json itself if it exists
+		if relPath == "checksum.json" {
+			return nil
+		}
+
+		// Skip vendor and node_modules files
+		if strings.Contains(relPath, "vendor/") || strings.Contains(relPath, "node_modules/") {
+			return nil
+		}
+
+		// Calculate checksum
+		checksum, err := ChecksumFile(path)
+		if err != nil {
+			return err
+		}
+
+		// Normalize path separators to forward slashes for consistent output
+		relPath = filepath.ToSlash(relPath)
+
+		// Add to hashes map
+		checksumData.Hashes[relPath] = checksum
+
+		return nil
+	})
+
+	if err != nil {
+		return fmt.Errorf("walking directory for checksums: %w", err)
+	}
+
+	// Write checksum.json file
+	checksumJSON, err := json.Marshal(checksumData)
+	if err != nil {
+		return fmt.Errorf("marshal checksum data: %w", err)
+	}
+
+	checksumPath := filepath.Join(baseFolder, "checksum.json")
+	if err := os.WriteFile(checksumPath, checksumJSON, 0644); err != nil {
+		return fmt.Errorf("write checksum file: %w", err)
 	}
 
 	return nil
@@ -240,7 +385,6 @@ func PrepareFolderForZipping(ctx context.Context, path string, ext Extension, ex
 	shopware65Constraint, _ := version.NewConstraint(">=6.5.0")
 
 	if shopware65Constraint.Check(version.Must(version.NewVersion(minVersion))) {
-		logging.FromContext(ctx).Info("Shopware 6.5 detected, disabling composer replacements")
 		return nil
 	}
 
@@ -277,7 +421,7 @@ func PrepareFolderForZipping(ctx context.Context, path string, ext Extension, ex
 	}
 
 	// Execute composer in this directory
-	composerInstallCmd := exec.Command("composer", "install", "-d", path, "--no-dev", "-n", "-o")
+	composerInstallCmd := exec.CommandContext(ctx, "composer", "install", "-d", path, "--no-dev", "-n", "-o")
 	composerInstallCmd.Stdout = os.Stdout
 	composerInstallCmd.Stderr = os.Stderr
 	err = composerInstallCmd.Run()
@@ -382,7 +526,11 @@ func addComposerReplacements(composer map[string]interface{}, minVersion string)
 				return nil, fmt.Errorf("open composer file: %w", err)
 			}
 
-			defer composerFile.Close()
+			defer func() {
+				if err := composerFile.Close(); err != nil {
+					log.Printf("failed to close composer file: %v", err)
+				}
+			}()
 
 			composerPartByte, err := io.ReadAll(composerFile)
 			if err != nil {
@@ -410,15 +558,25 @@ func addComposerReplacements(composer map[string]interface{}, minVersion string)
 	return composer, nil
 }
 
-func lookupForMinMatchingVersion(ctx context.Context, versionConstraint *version.Constraints) (string, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "https://shopware.github.io/shopware-cli/versions.json", http.NoBody)
+type packagistResponse struct {
+	Packages struct {
+		Core []struct {
+			Version string `json:"version_normalized"`
+		} `json:"shopware/core"`
+	} `json:"packages"`
+}
+
+func GetShopwareVersions(ctx context.Context) ([]string, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "https://repo.packagist.org/p2/shopware/core.json", http.NoBody)
 	if err != nil {
-		return "", fmt.Errorf("create composer version request: %w", err)
+		return nil, fmt.Errorf("create composer version request: %w", err)
 	}
+
+	req.Header.Set("User-Agent", "Shopware CLI")
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		return "", fmt.Errorf("fetch composer versions: %w", err)
+		return nil, fmt.Errorf("fetch composer versions: %w", err)
 	}
 	defer func() {
 		if err := resp.Body.Close(); err != nil {
@@ -426,15 +584,29 @@ func lookupForMinMatchingVersion(ctx context.Context, versionConstraint *version
 		}
 	}()
 
-	versionString, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return "", fmt.Errorf("read version body: %w", err)
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("fetch composer versions: %s", resp.Status)
 	}
 
+	var pckResponse packagistResponse
+
 	var versions []string
-	err = json.Unmarshal(versionString, &versions)
+
+	if err := json.NewDecoder(resp.Body).Decode(&pckResponse); err != nil {
+		return nil, fmt.Errorf("decode composer versions: %w", err)
+	}
+
+	for _, v := range pckResponse.Packages.Core {
+		versions = append(versions, v.Version)
+	}
+
+	return versions, nil
+}
+
+func lookupForMinMatchingVersion(ctx context.Context, versionConstraint *version.Constraints) (string, error) {
+	versions, err := GetShopwareVersions(ctx)
 	if err != nil {
-		return "", fmt.Errorf("unmarshal composer versions: %w", err)
+		return "", fmt.Errorf("get shopware versions: %w", err)
 	}
 
 	return getMinMatchingVersion(versionConstraint, versions), nil
@@ -489,12 +661,14 @@ func PrepareExtensionForRelease(ctx context.Context, sourceRoot, extensionRoot s
 
 		logging.FromContext(ctx).Infof("Generated changelog for version %s", v.String())
 
-		content, err := changelog.GenerateChangelog(ctx, sourceRoot, ext.GetExtensionConfig().Changelog)
+		content, err := changelog.GenerateChangelog(ctx, v.String(), sourceRoot, ext.GetExtensionConfig().Changelog)
 		if err != nil {
 			return err
 		}
 
 		changelogFile := fmt.Sprintf("# %s\n%s", v.String(), content)
+
+		logging.FromContext(ctx).Debugf("Changelog:\n%s", changelogFile)
 
 		if err := os.WriteFile(path.Join(extensionRoot, "CHANGELOG_en-GB.md"), []byte(changelogFile), os.ModePerm); err != nil {
 			return err

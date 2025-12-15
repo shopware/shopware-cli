@@ -196,7 +196,7 @@ func getDuplicateMailTemplateTypes(data []adminSdk.MailTemplate) map[string]bool
 	return duplicates
 }
 
-func fetchAllMailTemplates(ctx adminSdk.ApiContext, client *adminSdk.Client) (*adminSdk.MailTemplateCollection, error) {
+func fetchAllMailTemplates(ctx adminSdk.ApiContext, client *adminSdk.Client) (*adminSdk.EntityCollection[adminSdk.MailTemplate], error) {
 	criteria := adminSdk.Criteria{}
 	criteria.Includes = map[string][]string{
 		"mail_template":             {"id", "mailTemplateType", "translations"},

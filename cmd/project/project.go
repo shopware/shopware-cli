@@ -1,8 +1,9 @@
 package project
 
 import (
-	"github.com/shopware/shopware-cli/shop"
 	"github.com/spf13/cobra"
+
+	"github.com/shopware/shopware-cli/shop"
 )
 
 var projectConfigPath string

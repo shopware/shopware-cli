@@ -108,7 +108,7 @@ func (SystemConfigSync) Pull(ctx adminSdk.ApiContext, client *adminSdk.Client, c
 	salesChannelList = append(salesChannelList, salesChannelResponse.Data...)
 
 	for _, sc := range salesChannelList {
-		var sysConfigs *adminSdk.SystemConfigCollection
+		var sysConfigs *adminSdk.EntityCollection[adminSdk.SystemConfig]
 		var err error
 
 		cfg := shop.ConfigSyncConfig{

@@ -1,0 +1,7 @@
+{% if foo %}
+<sw-button/>
+{% endif %}
+-----
+{% if foo %}
+    <sw-button/>
+{% endif %}

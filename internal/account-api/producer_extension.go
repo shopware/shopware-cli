@@ -5,14 +5,20 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"image"
+	_ "image/gif"
+	_ "image/jpeg"
+	"image/png"
 	"io"
 	"mime/multipart"
 	"os"
 	"path/filepath"
 
 	"github.com/microcosm-cc/bluemonday"
+	"github.com/shyim/go-version"
+	"golang.org/x/image/draw"
 
-	"github.com/shopware/shopware-cli/version"
+	"github.com/shopware/shopware-cli/logging"
 )
 
 type SoftwareVersionList []SoftwareVersion
@@ -163,23 +169,48 @@ func (e ProducerEndpoint) UpdateExtensionBinaryFile(ctx context.Context, extensi
 	return err
 }
 
-func (e ProducerEndpoint) UpdateExtensionIcon(ctx context.Context, extensionId int, iconFile string) error {
+func (e ProducerEndpoint) UpdateExtensionIcon(ctx context.Context, extensionId int, iconFilePath string) error {
 	errorFormat := "UpdateExtensionIcon: %v"
 
 	var b bytes.Buffer
 	w := multipart.NewWriter(&b)
 
-	fileWritter, err := w.CreateFormFile("file", filepath.Base(iconFile))
+	fileWriter, err := w.CreateFormFile("file", filepath.Base(iconFilePath))
 	if err != nil {
 		return fmt.Errorf(errorFormat, err)
 	}
 
-	zipFile, err := os.Open(iconFile)
+	iconFile, err := os.Open(iconFilePath)
 	if err != nil {
 		return fmt.Errorf(errorFormat, err)
 	}
 
-	if _, err = io.Copy(fileWritter, zipFile); err != nil {
+	img, _, err := image.Decode(iconFile)
+	if err != nil {
+		return fmt.Errorf(errorFormat, err)
+	}
+
+	if img.Bounds().Dx() != 256 || img.Bounds().Dy() != 256 {
+		logging.FromContext(ctx).Infof("Resizing store icon image from %dx%d to 256x256", img.Bounds().Dx(), img.Bounds().Dy())
+		dst := image.NewRGBA(image.Rect(0, 0, 256, 256))
+
+		draw.CatmullRom.Scale(dst, dst.Bounds(), img, img.Bounds(), draw.Over, nil)
+
+		if err := png.Encode(fileWriter, dst); err != nil {
+			return fmt.Errorf(errorFormat, err)
+		}
+	} else {
+		logging.FromContext(ctx).Debugf("Store icon image is already 256x256, copying original file")
+		// If already 256x256, just copy the original file
+		if _, err = iconFile.Seek(0, io.SeekStart); err != nil {
+			return fmt.Errorf(errorFormat, err)
+		}
+		if _, err = io.Copy(fileWriter, iconFile); err != nil {
+			return fmt.Errorf(errorFormat, err)
+		}
+	}
+
+	if err := iconFile.Close(); err != nil {
 		return fmt.Errorf(errorFormat, err)
 	}
 

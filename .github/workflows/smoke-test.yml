@@ -9,52 +9,60 @@ jobs:
   run:
     runs-on: ubuntu-latest
     steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@20cf305ff2072d973412fa9b1e3a4f227bda3c76
+        with:
+          egress-policy: audit
+
       - name: Checkout Repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # ratchet:actions/checkout@v4
 
       - name: Set up Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@4dc6199c7b1a012772edbd06daecab0f50c9053c # ratchet:actions/setup-go@v5
         with:
-          go-version: '1.23'
+          go-version: '1.24'
           cache: true
           check-latest: true
 
       - name: Setup PHP
-        uses: shivammathur/setup-php@v2
+        uses: shivammathur/setup-php@44454db4f0199b8b9685a5d763dc37cbf79108e1 # ratchet:shivammathur/setup-php@v2
         with:
           php-version: '8.2'
 
       - name: Compile shopware-cli
         run: go build
 
+      - name: Move to usr/bin
+        run: mv shopware-cli /usr/local/bin/
+
       - name: Checkout Plugin
-        uses: actions/checkout@v4
+        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # ratchet:actions/checkout@v4
         with:
           repository: 'FriendsOfShopware/FroshTools'
           ref: '75e2013752fd4db7535e4b72b3e3e8d57e531002'
           path: 'plugin'
 
       - name: Create Shopware
-        run: ./shopware-cli project create shopware 6.5.7.3
+        run: shopware-cli project create shopware 6.5.7.3 --no-audit
 
       - name: Build asset of Plugin
-        run: ./shopware-cli extension zip plugin
+        run: shopware-cli extension zip plugin
 
       - name: Build asset of Plugin without Git
-        run: ./shopware-cli extension zip plugin --disable-git --release
+        run: shopware-cli extension zip plugin --disable-git --release
 
       - name: Validate Plugin
-        run: ./shopware-cli extension validate FroshTools.zip
+        run: shopware-cli extension validate FroshTools.zip
 
       - name: Get Changelog
-        run: ./shopware-cli extension get-changelog FroshTools.zip
+        run: shopware-cli extension get-changelog FroshTools.zip
 
       - name: Build asset against custom PROJECT_ROOT
         env:
           SHOPWARE_PROJECT_ROOT: ${{ github.workspace }}/shopware
         run: |
           mv plugin/.shopware-extension.yml plugin/.shopware-extension-disable.yml
-          ./shopware-cli extension build plugin
+          shopware-cli extension build plugin
           mv plugin/.shopware-extension-disable.yml plugin/.shopware-extension.yml
 
       - name: Install a Storefront Plugin
@@ -64,4 +72,6 @@ jobs:
           rm -rf vendor
 
       - name: Setup the project
-        run: ./shopware-cli project ci shopware
+        uses: shopwareLabs/build-project-action@main
+        with:
+          path: shopware

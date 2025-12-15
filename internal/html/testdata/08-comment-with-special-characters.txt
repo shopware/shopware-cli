@@ -1,0 +1,3 @@
+<div><!-- special chars: & < > " ' --></div>
+-----
+<div><!-- special chars: & < > " ' --></div>

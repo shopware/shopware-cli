@@ -109,8 +109,10 @@ type Producer struct {
 		Name        string `json:"name"`
 		Description string `json:"description"`
 	} `json:"supportedLanguages"`
-	IconURL           string      `json:"iconUrl"`
-	CancelledContract interface{} `json:"cancelledContract"`
+	IconURL                   string      `json:"iconUrl"`
+	CancelledContract         interface{} `json:"cancelledContract"`
+	HasSupportInfoActivated   bool        `json:"hasSupportInfoActivated"`
+	IsPremiumExtensionPartner bool        `json:"isPremiumExtensionPartner"`
 }
 
 type ListExtensionCriteria struct {
@@ -195,8 +197,34 @@ type Extension struct {
 		Id       int    `json:"id"`
 		Prefix   string `json:"prefix"`
 		Contract struct {
-			Id   int    `json:"id"`
-			Path string `json:"path"`
+			Id                                int     `json:"id"`
+			BaseProvisionInPercent            float64 `json:"baseProvisionInPercent"`
+			InAppProvisionForAppsInPercent    float64 `json:"inAppProvisionForAppsInPercent"`
+			InAppProvisionForPluginsInPercent float64 `json:"inAppProvisionForPluginsInPercent"`
+			ApplicationDate                   int     `json:"applicationDate"`
+			ConfirmationDate                  int     `json:"confirmationDate"`
+			SdkLicense                        bool    `json:"sdkLicense"`
+			ShopwareApproved                  bool    `json:"shopwareApproved"`
+			ProducerApproved                  bool    `json:"producerApproved"`
+			SignedDocument                    struct {
+				Id   int `json:"id"`
+				Type struct {
+					Id          int    `json:"id"`
+					Name        string `json:"name"`
+					Description string `json:"description"`
+				} `json:"type"`
+				Version string `json:"version"`
+				Texts   []struct {
+					Id           int    `json:"id"`
+					Locale       Locale `json:"locale"`
+					Text         string `json:"text"`
+					ChangeNotice string `json:"changeNotice"`
+				} `json:"texts"`
+				CreationDate     string `json:"creationDate"`
+				LastChangeDate   string `json:"lastChangeDate"`
+				IsCurrentVersion bool   `json:"isCurrentVersion"`
+			} `json:"signedDocument"`
+			FirstSignatureDate string `json:"firstSignatureDate"`
 		} `json:"contract"`
 		Name    string `json:"name"`
 		Details []struct {
@@ -205,14 +233,15 @@ type Extension struct {
 				Id   int    `json:"id"`
 				Name string `json:"name"`
 			} `json:"locale"`
-			Description string `json:"description"`
+			Description string      `json:"description"`
+			WebsiteGtc  string      `json:"websiteGtc"`
+			SupportInfo interface{} `json:"supportInfo"`
 		} `json:"details"`
 		Website              string `json:"website"`
 		Fixed                bool   `json:"fixed"`
 		HasCancelledContract bool   `json:"hasCancelledContract"`
 		IconPath             string `json:"iconPath"`
 		IconIsSet            bool   `json:"iconIsSet"`
-		ShopwareID           string `json:"shopwareId"`
 		UserId               int    `json:"userId"`
 		CompanyId            int    `json:"companyId"`
 		CompanyName          string `json:"companyName"`
@@ -223,8 +252,10 @@ type Extension struct {
 			Id   int    `json:"id"`
 			Name string `json:"name"`
 		} `json:"supportedLanguages"`
-		IconURL           string      `json:"iconUrl"`
-		CancelledContract interface{} `json:"cancelledContract"`
+		HasSupportInfoActivated   bool        `json:"hasSupportInfoActivated"`
+		IconURL                   string      `json:"iconUrl"`
+		CancelledContract         interface{} `json:"cancelledContract"`
+		IsPremiumExtensionPartner bool        `json:"isPremiumExtensionPartner"`
 	} `json:"producer"`
 	Type struct {
 		Id          int    `json:"id"`
@@ -269,58 +300,71 @@ type Extension struct {
 		ShortDescription   string       `json:"shortDescription"`
 		Highlights         string       `json:"highlights"`
 		Features           string       `json:"features"`
+		MetaTitle          string       `json:"metaTitle"`
+		MetaDescription    string       `json:"metaDescription"`
 		Tags               []StoreTag   `json:"tags"`
 		Videos             []StoreVideo `json:"videos"`
 		Faqs               []StoreFaq   `json:"faqs"`
+		SupportInfo        interface{}  `json:"supportInfo"`
 	} `json:"infos"`
-	PriceModels                         []interface{}      `json:"priceModels"`
-	Variants                            []interface{}      `json:"variants"`
-	StoreAvailabilities                 []StoreAvailablity `json:"storeAvailabilities"`
-	Categories                          []StoreCategory    `json:"categories"`
-	Category                            *StoreCategory     `json:"selectedFutureCategory"`
-	Addons                              []interface{}      `json:"addons"`
-	LastChange                          string             `json:"lastChange"`
-	CreationDate                        string             `json:"creationDate"`
-	Support                             bool               `json:"support"`
-	SupportOnlyCommercial               bool               `json:"supportOnlyCommercial"`
-	IconPath                            string             `json:"iconPath"`
-	IconIsSet                           bool               `json:"iconIsSet"`
-	ExamplePageUrl                      string             `json:"examplePageUrl"`
-	Demos                               []interface{}      `json:"demos"`
-	Localizations                       []Locale           `json:"localizations"`
-	LatestBinary                        interface{}        `json:"latestBinary"`
-	MigrationSupport                    bool               `json:"migrationSupport"`
-	AutomaticBugfixVersionCompatibility bool               `json:"automaticBugfixVersionCompatibility"`
-	HiddenInStore                       bool               `json:"hiddenInStore"`
-	Certification                       interface{}        `json:"certification"`
-	ProductType                         *StoreProductType  `json:"productType"`
+	PriceModels         []interface{}      `json:"priceModels"`
+	Variants            []interface{}      `json:"variants"`
+	StoreAvailabilities []StoreAvailablity `json:"storeAvailabilities"`
+	Categories          []StoreCategory    `json:"categories"`
+	Category            *StoreCategory     `json:"selectedFutureCategory"`
+	Addons              []struct {
+		Id             int    `json:"id"`
+		Name           string `json:"name"`
+		Description    string `json:"description"`
+		AddedProvision int    `json:"addedProvision"`
+		Public         bool   `json:"public"`
+	} `json:"addons"`
+	LastChange                          string            `json:"lastChange"`
+	CreationDate                        string            `json:"creationDate"`
+	Support                             bool              `json:"support"`
+	SupportOnlyCommercial               bool              `json:"supportOnlyCommercial"`
+	IconPath                            string            `json:"iconPath"`
+	IconIsSet                           bool              `json:"iconIsSet"`
+	ExamplePageUrl                      string            `json:"examplePageUrl"`
+	Demos                               []interface{}     `json:"demos"`
+	Localizations                       []Locale          `json:"localizations"`
+	LatestBinary                        interface{}       `json:"latestBinary"`
+	MigrationSupport                    bool              `json:"migrationSupport"`
+	AutomaticBugfixVersionCompatibility bool              `json:"automaticBugfixVersionCompatibility"`
+	HiddenInStore                       bool              `json:"hiddenInStore"`
+	Certification                       interface{}       `json:"certification"`
+	ProductType                         *StoreProductType `json:"productType"`
 	Status                              struct {
 		Name string `json:"name"`
 	} `json:"status"`
-	MinimumMarketingSoftwareVersion       interface{} `json:"minimumMarketingSoftwareVersion"`
-	IsSubscriptionEnabled                 bool        `json:"isSubscriptionEnabled"`
-	ReleaseDate                           interface{} `json:"releaseDate"`
-	PlannedReleaseDate                    interface{} `json:"plannedReleaseDate"`
-	LastBusinessModelChangeDate           interface{} `json:"lastBusinessModelChangeDate"`
-	IsSW5Compatible                       bool        `json:"isSW5Compatible"`
-	Subprocessors                         interface{} `json:"subprocessors"`
-	PluginTestingInstanceDisabled         bool        `json:"pluginTestingInstanceDisabled"`
-	IconURL                               string      `json:"iconUrl"`
-	Pictures                              string      `json:"pictures"`
-	HasPictures                           bool        `json:"hasPictures"`
-	Comments                              string      `json:"comments"`
-	Reviews                               string      `json:"reviews"`
-	IsPremiumPlugin                       bool        `json:"isPremiumPlugin"`
-	IsAdvancedFeature                     bool        `json:"isAdvancedFeature"`
-	IsEnterpriseAccelerator               bool        `json:"isEnterpriseAccelerator"`
-	IsSW6EnterpriseFeature                bool        `json:"isSW6EnterpriseFeature"`
-	IsSW6ProfessionalEditionFeature       bool        `json:"isSW6ProfessionalEditionFeature"`
-	Binaries                              interface{} `json:"binaries"`
-	Predecessor                           interface{} `json:"predecessor"`
-	Successor                             interface{} `json:"successor"`
-	IsCompatibleWithLatestShopwareVersion bool        `json:"isCompatibleWithLatestShopwareVersion"`
-	PluginPreview                         interface{} `json:"pluginPreview"`
-	IsNoLongerAvailableForDownload        bool        `json:"isNoLongerAvailableForDownload"`
+	MinimumMarketingSoftwareVersion       interface{}   `json:"minimumMarketingSoftwareVersion"`
+	IsSubscriptionEnabled                 bool          `json:"isSubscriptionEnabled"`
+	ReleaseDate                           interface{}   `json:"releaseDate"`
+	PlannedReleaseDate                    interface{}   `json:"plannedReleaseDate"`
+	LastBusinessModelChangeDate           string        `json:"lastBusinessModelChangeDate"`
+	IsSW5Compatible                       bool          `json:"isSW5Compatible"`
+	Subprocessors                         interface{}   `json:"subprocessors"`
+	PluginTestingInstanceDisabled         bool          `json:"pluginTestingInstanceDisabled"`
+	IconURL                               string        `json:"iconUrl"`
+	Pictures                              string        `json:"pictures"`
+	HasPictures                           bool          `json:"hasPictures"`
+	Comments                              string        `json:"comments"`
+	Reviews                               string        `json:"reviews"`
+	IsPremiumPlugin                       bool          `json:"isPremiumPlugin"`
+	IsAdvancedFeature                     bool          `json:"isAdvancedFeature"`
+	IsEnterpriseAccelerator               bool          `json:"isEnterpriseAccelerator"`
+	IsSW6EnterpriseFeature                bool          `json:"isSW6EnterpriseFeature"`
+	IsSW6ProfessionalEditionFeature       bool          `json:"isSW6ProfessionalEditionFeature"`
+	Binaries                              interface{}   `json:"binaries"`
+	Predecessor                           interface{}   `json:"predecessor"`
+	Successor                             interface{}   `json:"successor"`
+	IsCompatibleWithLatestShopwareVersion bool          `json:"isCompatibleWithLatestShopwareVersion"`
+	PluginPreview                         interface{}   `json:"pluginPreview"`
+	IsNoLongerAvailableForDownload        bool          `json:"isNoLongerAvailableForDownload"`
+	AddonsLog                             []interface{} `json:"addonsLog"`
+	HasPurchasableInAppFeatures           bool          `json:"hasPurchasableInAppFeatures"`
+	ActiveShowcase                        bool          `json:"activeShowcase"`
+	CancellationOffers                    []interface{} `json:"cancellationOffers"`
 }
 
 type CreateExtensionRequest struct {
@@ -375,9 +419,9 @@ type SoftwareVersion struct {
 	Name        string      `json:"name"`
 	Parent      interface{} `json:"parent"`
 	Selectable  bool        `json:"selectable"`
-	Major       *string     `json:"major"`
-	ReleaseDate *string     `json:"releaseDate"`
-	Public      bool        `json:"public"`
+	Major       string      `json:"major"`
+	ReleaseDate string      `json:"releaseDate"`
+	Status      string      `json:"status"`
 }
 
 type Locale struct {
@@ -422,6 +466,7 @@ type StoreProductType struct {
 type StoreFaq struct {
 	Question string `json:"question"`
 	Answer   string `json:"answer"`
+	Position int    `json:"position"`
 }
 
 type ExtensionGeneralInformation struct {

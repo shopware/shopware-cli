@@ -60,6 +60,11 @@ func TestCreateBundle(t *testing.T) {
 		"type": "shopware-bundle",
 		"extra": {
 			"shopware-bundle-name": "TestBundle"
+		},
+		"autoload": {
+			"psr-4": {
+				"TestBundle\\": "src/"
+			}
 		}
 	}
 	`)
@@ -75,6 +80,7 @@ func TestCreateBundle(t *testing.T) {
 	assert.Equal(t, path.Join(dir, "src"), bundle.GetRootDir())
 	assert.Equal(t, dir, bundle.GetPath())
 	assert.Equal(t, path.Join(dir, "src", "Resources"), bundle.GetResourcesDir())
+	assert.Equal(t, path.Join(dir, "src", "Resources"), bundle.GetResourcesDirs()[0])
 	assert.Equal(t, TypeShopwareBundle, bundle.GetType())
 
 	_, err = bundle.GetChangelog()
@@ -85,8 +91,8 @@ func TestCreateBundle(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, "1.0.0", version.String())
 
-	// does notthing
-	bundle.Validate(getTestContext(), &ValidationContext{})
+	// does nothing
+	bundle.Validate(getTestContext(), &testCheck{})
 
 	assert.Equal(t, "FALLBACK", bundle.GetMetaData().Description.German)
 }

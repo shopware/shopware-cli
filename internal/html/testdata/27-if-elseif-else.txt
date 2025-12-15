@@ -1,0 +1,19 @@
+{% if foo %}
+<sw-button/>
+{% elseif bla %}
+<sw-card/>
+{% elseif yea %}
+<sw-card/>
+{% else %}
+<mt-button/>
+{% endif %}
+-----
+{% if foo %}
+    <sw-button/>
+{% elseif bla %}
+    <sw-card/>
+{% elseif yea %}
+    <sw-card/>
+{% else %}
+    <mt-button/>
+{% endif %}

@@ -12,21 +12,18 @@ import (
 	"strings"
 	"time"
 
-	"github.com/shopware/shopware-cli/shop"
-	"golang.org/x/net/html"
-
-	"github.com/shopware/shopware-cli/internal/asset"
-
-	htmlprinter "github.com/shyim/go-htmlprinter"
-
 	"github.com/NYTimes/gziphandler"
 	"github.com/evanw/esbuild/pkg/api"
+	htmlprinter "github.com/shyim/go-htmlprinter"
 	"github.com/spf13/cobra"
 	"github.com/vulcand/oxy/v2/forward"
+	"golang.org/x/net/html"
 
 	"github.com/shopware/shopware-cli/extension"
+	"github.com/shopware/shopware-cli/internal/asset"
 	"github.com/shopware/shopware-cli/internal/esbuild"
 	"github.com/shopware/shopware-cli/logging"
+	"github.com/shopware/shopware-cli/shop"
 )
 
 const schemeHostSeparator = "://"
@@ -193,7 +190,7 @@ var extensionAdminWatchCmd = &cobra.Command{
 				bodyStr = schemeRegExp.ReplaceAllString(bodyStr, "scheme: '"+browserUrl.Scheme+"',")
 				bodyStr = schemeAndHttpHostRegExp.ReplaceAllString(bodyStr, "schemeAndHttpHost: '"+browserUrl.Scheme+schemeHostSeparator+browserUrl.Host+"',")
 				bodyStr = uriRegExp.ReplaceAllString(bodyStr, "uri: '"+browserUrl.Scheme+schemeHostSeparator+browserUrl.Host+targetShopUrl.Path+"/admin',")
-				bodyStr = assetPathRegExp.ReplaceAllString(bodyStr, "assetPath: '"+browserUrl.Scheme+schemeHostSeparator+browserUrl.Host+targetShopUrl.Path+"'")
+				bodyStr = assetPathRegExp.ReplaceAllString(bodyStr, "assetPath: '"+browserUrl.Scheme+schemeHostSeparator+browserUrl.Host+targetShopUrl.Path+"',")
 
 				parsed, err := html.Parse(strings.NewReader(bodyStr))
 				if err != nil {

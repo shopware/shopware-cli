@@ -2,10 +2,11 @@ package shop
 
 import (
 	"encoding/json"
-	"github.com/stretchr/testify/assert"
 	"os"
-	"path"
+	"path/filepath"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
 func TestDetectNothingFound(t *testing.T) {
@@ -17,7 +18,7 @@ func TestDetectNothingFound(t *testing.T) {
 func TestDetectPlatformTrunk(t *testing.T) {
 	tmpDir := t.TempDir()
 
-	composerJson := path.Join(tmpDir, "composer.json")
+	composerJson := filepath.Join(tmpDir, "composer.json")
 
 	jsonStruct := composerJsonStruct{
 		Name: "shopware/platform",
@@ -36,7 +37,7 @@ func TestDetectPlatformTrunk(t *testing.T) {
 func TestDetectComposerJsonNotPlatform(t *testing.T) {
 	tmpDir := t.TempDir()
 
-	composerJson := path.Join(tmpDir, "composer.json")
+	composerJson := filepath.Join(tmpDir, "composer.json")
 
 	jsonStruct := composerJsonStruct{
 		Name: "my-project",
@@ -55,7 +56,7 @@ func TestDetectComposerJsonNotPlatform(t *testing.T) {
 func TestComposerLockMatching(t *testing.T) {
 	tmpDir := t.TempDir()
 
-	composerLock := path.Join(tmpDir, "composer.lock")
+	composerLock := filepath.Join(tmpDir, "composer.lock")
 
 	jsonStruct := composerLockStruct{
 		Packages: []struct {
@@ -82,7 +83,7 @@ func TestComposerLockMatching(t *testing.T) {
 func TestComposerLockNotMatching(t *testing.T) {
 	tmpDir := t.TempDir()
 
-	composerLock := path.Join(tmpDir, "composer.lock")
+	composerLock := filepath.Join(tmpDir, "composer.lock")
 
 	jsonStruct := composerLockStruct{
 		Packages: []struct {
@@ -109,7 +110,7 @@ func TestComposerLockNotMatching(t *testing.T) {
 func TestComposerLockNoDependency(t *testing.T) {
 	tmpDir := t.TempDir()
 
-	composerLock := path.Join(tmpDir, "composer.lock")
+	composerLock := filepath.Join(tmpDir, "composer.lock")
 
 	jsonStruct := composerLockStruct{
 		Packages: []struct {
