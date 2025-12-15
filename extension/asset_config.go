@@ -44,7 +44,6 @@ type AssetBuildConfig struct {
 	ForceExtensionBuild          []string
 	ForceAdminBuild              bool
 	KeepNodeModules              []string
-	UseNpmCi                     bool
 }
 
 type ExtensionAssetConfig map[string]*ExtensionAssetConfigEntry

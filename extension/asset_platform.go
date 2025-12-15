@@ -54,7 +54,7 @@ func BuildAssetsForExtensions(ctx context.Context, sources []asset.Source, asset
 
 	nodeInstallSection := ci.Default.Section(ctx, "Installing node_modules for extensions")
 
-	paths, err := InstallNodeModulesOfConfigs(ctx, cfgs, assetConfig.NPMForceInstall, assetConfig.UseNpmCi)
+	paths, err := InstallNodeModulesOfConfigs(ctx, cfgs, assetConfig.NPMForceInstall)
 	if err != nil {
 		return err
 	}
@@ -144,7 +144,7 @@ func BuildAssetsForExtensions(ctx context.Context, sources []asset.Source, asset
 					additionalNpmParameters = []string{"--production"}
 				}
 
-				if err := InstallNPMDependencies(ctx, administrationRoot, npmPackage, assetConfig.UseNpmCi, additionalNpmParameters...); err != nil {
+				if err := InstallNPMDependencies(ctx, administrationRoot, npmPackage, additionalNpmParameters...); err != nil {
 					return err
 				}
 			}
@@ -253,7 +253,7 @@ func BuildAssetsForExtensions(ctx context.Context, sources []asset.Source, asset
 					additionalNpmParameters = append(additionalNpmParameters, "--production")
 				}
 
-				if err := InstallNPMDependencies(ctx, storefrontRoot, npmPackage, assetConfig.UseNpmCi, additionalNpmParameters...); err != nil {
+				if err := InstallNPMDependencies(ctx, storefrontRoot, npmPackage, additionalNpmParameters...); err != nil {
 					return err
 				}
 
