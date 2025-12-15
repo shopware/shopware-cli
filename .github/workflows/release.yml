@@ -18,7 +18,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@df199fb7be9f65074067a9eb93f12bb4c5547cf2 # ratchet:step-security/harden-runner@v2.13.3
+        uses: step-security/harden-runner@20cf305ff2072d973412fa9b1e3a4f227bda3c76 # ratchet:step-security/harden-runner@v2.14.0
         with:
           egress-policy: audit
 
@@ -50,7 +50,7 @@ jobs:
         uses: sigstore/cosign-installer@faadad0cce49287aee09b3a48701e75088a2c6ad # ratchet:sigstore/cosign-installer@v3
 
       - name: Install Syft
-        uses: anchore/sbom-action/download-syft@fbfd9c6c189226748411491745178e0c2017392d # ratchet:anchore/sbom-action/download-syft@v0.20.10
+        uses: anchore/sbom-action/download-syft@43a17d6e7add2b5535efe4dcae9952337c479a93 # ratchet:anchore/sbom-action/download-syft@v0.20.11
 
       - name: Gather Homebrew Token
         uses: octo-sts/action@f603d3be9d8dd9871a265776e625a27b00effe05 # ratchet:octo-sts/action@v1.1.1
