@@ -12,15 +12,12 @@ import (
 	"strings"
 	"time"
 
-	"github.com/doutorfinancas/go-mad/core"
-	"github.com/doutorfinancas/go-mad/database"
-	"github.com/doutorfinancas/go-mad/generator"
 	"github.com/go-sql-driver/mysql"
 	"github.com/klauspost/compress/zstd"
 	"github.com/spf13/cobra"
-	"go.uber.org/zap"
 
 	"github.com/shopware/shopware-cli/extension"
+	"github.com/shopware/shopware-cli/internal/mysqldump"
 	"github.com/shopware/shopware-cli/logging"
 	"github.com/shopware/shopware-cli/shop"
 )
@@ -45,138 +42,39 @@ var projectDatabaseDumpCmd = &cobra.Command{
 		anonymize, _ := cmd.Flags().GetBool("anonymize")
 		compression, _ := cmd.Flags().GetString("compression")
 		quick, _ := cmd.Flags().GetBool("quick")
+		parallel, _ := cmd.Flags().GetInt("parallel")
 
 		db, err := sql.Open("mysql", mysqlConfig.FormatDSN())
 		if err != nil {
 			return err
 		}
 
-		service := generator.NewService()
-		var opt []database.Option
-		opt = append(opt, database.OptionValue("hex-encode", "1"))
-		opt = append(opt, database.OptionValue("set-charset", "utf8mb4"))
-		opt = append(opt, database.OptionValue("dump-trigger", ""))
-		opt = append(opt, database.OptionValue("skip-definer", ""))
-		opt = append(opt, database.OptionValue("trigger-delimiter", "//"))
-
-		if skipLockTables {
-			opt = append(opt, database.OptionValue("skip-lock-tables", "1"))
-		}
-
-		if quick {
-			opt = append(opt, database.OptionValue("quick", "1"))
-		}
-
-		logger, _ := zap.NewProduction()
-		dumper, err := database.NewMySQLDumper(db, logger, service, opt...)
-		if err != nil {
-			return err
-		}
-
-		pConf := core.Rules{Ignore: []string{}, NoData: []string{}, Where: map[string]string{}, Rewrite: map[string]core.Rewrite{}}
-
-		if clean {
-			pConf.NoData = append(pConf.NoData,
-				"cart",
-				"customer_recovery",
-				"dead_message",
-				"enqueue",
-				"messenger_messages",
-				"import_export_log",
-				"increment",
-				"elasticsearch_index_task",
-				"log_entry",
-				"message_queue_stats",
-				"notification",
-				"payment_token",
-				"refresh_token",
-				"version",
-				"version_commit",
-				"version_commit_data",
-				"webhook_event_log",
-			)
-		}
-
-		if anonymize {
-			pConf.Rewrite = map[string]core.Rewrite{
-				"customer": map[string]string{
-					"first_name":     "faker.Person.FirstName()",
-					"last_name":      "faker.Person.LastName()",
-					"company":        "faker.Person.Name()",
-					"title":          "faker.Person.Name()",
-					"email":          "faker.Internet.Email()",
-					"remote_address": "faker.Internet.Ipv4()",
-				},
-				"customer_address": map[string]string{
-					"first_name":   "faker.Person.FirstName()",
-					"last_name":    "faker.Person.LastName()",
-					"company":      "faker.Person.Name()",
-					"title":        "faker.Person.Name()",
-					"street":       "faker.Address.StreetAddress()",
-					"zipcode":      "faker.Address.PostCode()",
-					"city":         "faker.Address.City()",
-					"phone_number": "faker.Phone.Number()",
-				},
-				"log_entry": map[string]string{
-					"provider": "",
-				},
-				"newsletter_recipient": map[string]string{
-					"email":      "faker.Internet.Email()",
-					"first_name": "faker.Person.FirstName()",
-					"last_name":  "faker.Person.LastName()",
-					"city":       "faker.Address.City()",
-				},
-				"order_address": map[string]string{
-					"first_name":   "faker.Person.FirstName()",
-					"last_name":    "faker.Person.LastName()",
-					"company":      "faker.Person.Name()",
-					"title":        "faker.Person.Name()",
-					"street":       "faker.Address.StreetAddress()",
-					"zipcode":      "faker.Address.PostCode()",
-					"city":         "faker.Address.City()",
-					"phone_number": "faker.Phone.Number()",
-				},
-				"order_customer": map[string]string{
-					"first_name":     "faker.Person.FirstName()",
-					"last_name":      "faker.Person.LastName()",
-					"company":        "faker.Person.Name()",
-					"title":          "faker.Person.Name()",
-					"email":          "faker.Internet.Email()",
-					"remote_address": "faker.Internet.Ipv4()",
-				},
-				"product_review": map[string]string{
-					"email": "faker.Internet.Email()",
-				},
-			}
-		}
+		dumper := mysqldump.NewMySQLDumper(db)
+		dumper.LockTables = !skipLockTables
+		dumper.Quick = quick
+		dumper.Parallel = parallel
 
 		var projectCfg *shop.Config
 		if projectCfg, err = shop.ReadConfig(projectConfigPath, true); err != nil {
 			return err
 		}
 
-		if projectCfg != nil && projectCfg.ConfigDump != nil {
-			pConf.NoData = append(pConf.NoData, projectCfg.ConfigDump.NoData...)
-			pConf.Ignore = append(pConf.Ignore, projectCfg.ConfigDump.Ignore...)
-			for table, rewrites := range projectCfg.ConfigDump.Rewrite {
-				_, ok := pConf.Rewrite[table]
-
-				if !ok {
-					pConf.Rewrite[table] = rewrites
-				} else {
-					for k, v := range rewrites {
-						pConf.Rewrite[table][k] = v
-					}
-				}
-			}
-			pConf.Where = projectCfg.ConfigDump.Where
+		if projectCfg.ConfigDump == nil {
+			projectCfg.ConfigDump = &shop.ConfigDump{}
 		}
 
-		dumper.SetSelectMap(pConf.RewriteToMap())
-		dumper.SetWhereMap(pConf.Where)
-		if dErr := dumper.SetFilterMap(pConf.NoData, pConf.Ignore); dErr != nil {
-			return dErr
+		if clean {
+			projectCfg.ConfigDump.EnableClean()
 		}
+
+		if anonymize {
+			projectCfg.ConfigDump.EnableAnonymization()
+		}
+
+		dumper.SelectMap = projectCfg.ConfigDump.Rewrite
+		dumper.WhereMap = projectCfg.ConfigDump.Where
+		dumper.NoData = projectCfg.ConfigDump.NoData
+		dumper.Ignore = projectCfg.ConfigDump.Ignore
 
 		var w io.Writer
 		if output == "-" {
@@ -206,7 +104,7 @@ var projectDatabaseDumpCmd = &cobra.Command{
 			}
 		}
 
-		if err = dumper.Dump(w); err != nil {
+		if err = dumper.Dump(cmd.Context(), w); err != nil {
 			if strings.Contains(err.Error(), "the RELOAD or FLUSH_TABLES privilege") {
 				return fmt.Errorf("%s, you maybe want to disable locking with --skip-lock-tables", err.Error())
 			}
@@ -340,4 +238,5 @@ func init() {
 	projectDatabaseDumpCmd.Flags().String("compression", "", "Compress the dump (gzip, zstd)")
 	projectDatabaseDumpCmd.Flags().Bool("zstd", false, "Zstd the whole dump")
 	projectDatabaseDumpCmd.Flags().Bool("quick", false, "Use quick option for mysqldump")
+	projectDatabaseDumpCmd.Flags().Int("parallel", 0, "Number of tables to dump concurrently (0 = disabled)")
 }
