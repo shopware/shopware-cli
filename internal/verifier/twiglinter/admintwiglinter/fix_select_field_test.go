@@ -51,6 +51,20 @@ func TestSelectFieldFixer(t *testing.T) {
 			before:      `<sw-select-field @update:value="onUpdateValue"/>`,
 			after:       `<mt-select @update:model-value="onUpdateValue"/>`,
 		},
+		{
+			description: "convert options with expressions",
+			before: `<sw-select-field>
+	<option v-model:value="'admin'">
+		{{ $tc('heptacom-admin-open-auth-client.pages.edit.fields.clientTypeAdmin') }}
+	</option>
+	<option :value="'storefront'">
+		{{ $tc('heptacom-admin-open-auth-client.pages.edit.fields.clientTypeStorefront') }}
+	</option>
+</sw-select-field>`,
+			after: `<mt-select
+    :options="[{&quot;label&quot;:($tc('heptacom-admin-open-auth-client.pages.edit.fields.clientTypeAdmin')),&quot;value&quot;:('admin')},{&quot;label&quot;:($tc('heptacom-admin-open-auth-client.pages.edit.fields.clientTypeStorefront')),&quot;value&quot;:('storefront')}]"
+></mt-select>`,
+		},
 	}
 
 	for _, c := range cases {

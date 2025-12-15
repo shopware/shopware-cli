@@ -48,7 +48,7 @@ func (e EmailFieldFixer) Fix(nodes []html.Node) error {
 					case ValueAttr:
 						attr.Key = "model-value"
 						newAttrs = append(newAttrs, attr)
-					case "v-model:value":
+					case VModelValueAttr:
 						attr.Key = "v-model"
 						newAttrs = append(newAttrs, attr)
 					case SizeAttr:
