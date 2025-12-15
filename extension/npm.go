@@ -174,7 +174,6 @@ func InstallNPMDependencies(ctx context.Context, path string, packageJsonData Np
 		return nil
 	}
 
-	// Use npm ci if package-lock.json exists, otherwise use npm install
 	npmCommand := "install"
 	if _, err := os.Stat(filepath.Join(path, "package-lock.json")); err == nil {
 		npmCommand = "ci"
