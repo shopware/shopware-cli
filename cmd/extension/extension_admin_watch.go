@@ -76,7 +76,7 @@ var extensionAdminWatchCmd = &cobra.Command{
 			return fmt.Errorf("found nothing to compile")
 		}
 
-		if _, err := extension.InstallNodeModulesOfConfigs(cmd.Context(), cfgs, false); err != nil {
+		if _, err := extension.InstallNodeModulesOfConfigs(cmd.Context(), cfgs, false, false); err != nil {
 			return err
 		}
 
