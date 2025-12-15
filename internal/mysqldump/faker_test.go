@@ -1,6 +1,7 @@
 package mysqldump
 
 import (
+	"strings"
 	"testing"
 )
 
@@ -23,7 +24,7 @@ func Test_service_ReplaceStringWithFakerWhenRequested(t *testing.T) {
 		{
 			"Get a name string",
 			args{
-				"faker.Person().Name()",
+				"{{- faker.Person().Name() -}}",
 			},
 			func(s interface{}) bool {
 				return len(s.(string)) > 2
@@ -34,7 +35,7 @@ func Test_service_ReplaceStringWithFakerWhenRequested(t *testing.T) {
 		{
 			"Get random text with len 10",
 			args{
-				"faker.Lorem().Text(100)",
+				"{{- faker.Lorem().Text(100) -}}",
 			},
 			func(s interface{}) bool {
 				return len(s.(string)) > 10
@@ -45,7 +46,7 @@ func Test_service_ReplaceStringWithFakerWhenRequested(t *testing.T) {
 		{
 			"asciify something",
 			args{
-				"faker.Asciify(\"************\")",
+				"{{- faker.Asciify(\"************\") -}}",
 			},
 			func(s interface{}) bool {
 				return len(s.(string)) > 9
@@ -64,16 +65,53 @@ func Test_service_ReplaceStringWithFakerWhenRequested(t *testing.T) {
 			"this should have skipped faker",
 			false,
 		},
+		{
+			"Multiple expressions",
+			args{
+				"prefix {{- faker.Person().Name() -}} middle {{- faker.Lorem().Text(5) -}} suffix",
+			},
+			func(s interface{}) bool {
+				res := s.(string)
+				return strings.HasPrefix(res, "prefix ") && strings.Contains(res, " middle ") && strings.HasSuffix(res, " suffix") && !strings.Contains(res, "faker")
+			},
+			"multiple expressions failed",
+			false,
+		},
+		{
+			"Embedded in SQL function",
+			args{
+				"JSON_REPLACE(custom_fields, '$.street', '{{- faker.Address().StreetName() -}}')",
+			},
+			func(s interface{}) bool {
+				res := s.(string)
+				return strings.HasPrefix(res, "JSON_REPLACE(custom_fields, '$.street', '") && strings.HasSuffix(res, "')") && !strings.Contains(res, "faker")
+			},
+			"embedded sql failed",
+			false,
+		},
+		{
+			"Quoted arguments with escaped quotes",
+			args{
+				`{{- faker.Asciify("test\"quote") -}}`,
+			},
+			func(s interface{}) bool {
+				res := s.(string)
+				// Asciify replaces * with random chars, but here we passed a static string to Asciify?
+				// Wait, Asciify replaces * with random characters. If we pass "test\"quote", it should just return that if no * present?
+				// Let's check Asciify implementation or behavior. Faker's Asciify mostly replaces *.
+				// Assuming standard implementation, it might just return the string if no * are there?
+				// Or check length/content. The key here is regex parsing.
+				return !strings.Contains(res, "faker") && !strings.Contains(res, "{{-")
+			},
+			"quoted args with escaped quotes failed",
+			false,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(
 			tt.name, func(t *testing.T) {
 				t.Parallel()
-				got, err := replaceStringWithFakerWhenRequested(tt.args.request)
-				if (err != nil) != tt.wantErr {
-					t.Errorf("ReplaceStringWithFakerWhenRequested() error = %v, wantErr %v", err, tt.wantErr)
-					return
-				}
+				got := replaceStringWithFakerWhenRequested(tt.args.request)
 				if !tt.want(got) {
 					t.Errorf("ReplaceStringWithFakerWhenRequested() got = %v, %s", got, tt.errMsg)
 				}
@@ -200,7 +238,7 @@ func Test_service_FakerError(t *testing.T) {
 		t.Run(
 			tt.name, func(t *testing.T) {
 				t.Parallel()
-				got, err := replaceStringWithFakerWhenRequested(tt.args.request)
+				got, err := evaluateFakerExpression(tt.args.request)
 				if (err != nil) != tt.wantErr {
 					t.Errorf("ReplaceStringWithFakerWhenRequested() error = %v, wantErr %v", err, tt.wantErr)
 					return

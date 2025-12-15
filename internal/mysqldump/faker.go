@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
+	"regexp"
 	"strconv"
 	"strings"
 
@@ -17,7 +18,47 @@ const (
 	contactInfo   = "ContactInfo"
 )
 
-func replaceStringWithFakerWhenRequested(request string) (string, error) {
+// replaceStringWithFakerWhenRequested replaces inline faker expressions in the input string with their evaluated values.
+//
+// The function scans the input string for expressions of the form `{{- faker.Method(args) -}}`
+// (e.g., `{{- faker.Name() -}}`), and replaces each such expression with the result of calling
+// the corresponding faker method. Multiple expressions in the input string are all replaced.
+//
+// If an expression cannot be evaluated (e.g., due to an error in the method name or arguments),
+// the original expression is left unchanged in the output.
+//
+// Parameters:
+//   - request: the input string potentially containing one or more inline faker expressions.
+//
+// Returns:
+//   - The input string with all valid faker expressions replaced by their evaluated values.
+//     Expressions that fail to evaluate are left unchanged.
+func replaceStringWithFakerWhenRequested(request string) string {
+	if !strings.Contains(request, "faker.") {
+		return request
+	}
+
+	// This regex matches {{- faker.Method("arg1").ChainedMethod() -}}
+	// It handles quoted strings within arguments and chained calls both with and without parens.
+	r := regexp.MustCompile(`\{\{\-\s*faker(?:\.[a-zA-Z0-9]+(?:\((?:(?:"(?:[^"\\]|\\.)*"|[^"()])*)\))?)+\s*\-\}\}`)
+
+	return r.ReplaceAllStringFunc(request, func(match string) string {
+		// Remove {{- -}} and whitespace safely
+		trimmed := strings.TrimSpace(strings.TrimSuffix(strings.TrimPrefix(match, "{{-"), "-}}"))
+		val, err := evaluateFakerExpression(trimmed)
+		if err != nil {
+			return match
+		}
+
+		return val
+	})
+}
+
+// evaluateFakerExpression evaluates a single faker expression (without the {{- -}} delimiters).
+// It returns the result of the faker function or an error if evaluation fails.
+// This function is intended to be called by replaceStringWithFakerWhenRequested,
+// which handles the full inline syntax (including delimiters) and error recovery.
+func evaluateFakerExpression(request string) (string, error) {
 	if len(request) < 5 || request[0:5] != "faker" {
 		return request, nil
 	}
