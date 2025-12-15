@@ -31,7 +31,6 @@ type Dumper struct {
 	Quick bool
 	// Parallel controls how many tables to dump concurrently (default: 0 = disabled)
 	Parallel            int
-	openTx              *sql.Tx
 	mapBins             map[string][]string
 	mapExclusionColumns map[string][]string
 	mapMu               sync.RWMutex
@@ -111,7 +110,7 @@ func (d *Dumper) dumpTablesSequential(ctx context.Context, w io.Writer, tables [
 		}
 
 		skipData := d.filterMap[strings.ToLower(table)] == NoDataMapPlacement
-		tmp, err := d.getCreateTableStatement(table)
+		tmp, err := d.getCreateTableStatement(ctx, table)
 		if err != nil {
 			return err
 		}
@@ -165,7 +164,7 @@ func (d *Dumper) dumpTablesParallel(ctx context.Context, w io.Writer, tables []s
 			result.index = index
 
 			skipData := d.filterMap[strings.ToLower(table)] == NoDataMapPlacement
-			tmp, err := d.getCreateTableStatement(table)
+			tmp, err := d.getCreateTableStatement(ctx, table)
 			if err != nil {
 				result.err = err
 				mu.Lock()
@@ -217,13 +216,13 @@ func (d *Dumper) dumpTableDataDirect(ctx context.Context, w io.Writer, table str
 	var err error
 
 	if d.LockTables {
-		_, err = d.mysqlFlushTable(table)
+		_, err = d.mysqlFlushTable(ctx, table)
 		if err != nil {
 			return err
 		}
 	}
 
-	tmp, cnt, err = d.getTableHeader(table)
+	tmp, cnt, err = d.getTableHeader(ctx, table)
 	if err != nil {
 		return err
 	}
@@ -249,7 +248,7 @@ func (d *Dumper) dumpTableDataDirect(ctx context.Context, w io.Writer, table str
 	}
 
 	if d.LockTables {
-		if _, dErr := d.mysqlUnlockTables(); dErr != nil {
+		if _, dErr := d.mysqlUnlockTables(ctx); dErr != nil {
 			return dErr
 		}
 	}
@@ -262,7 +261,7 @@ func (d *Dumper) dumpTableDataToWriter(ctx context.Context, w io.Writer, table s
 	var tmp string
 	var err error
 
-	tmp, cnt, err = d.getTableHeader(table)
+	tmp, cnt, err = d.getTableHeader(ctx, table)
 	if err != nil {
 		return err
 	}
@@ -369,7 +368,7 @@ func (d *Dumper) isColumnExcluded(table, columnName string) bool {
 func (d *Dumper) getTables(ctx context.Context) ([]string, error) {
 	tables := make([]string, 0)
 
-	rows, err := d.db.Query("SHOW FULL TABLES")
+	rows, err := d.db.QueryContext(ctx, "SHOW FULL TABLES")
 	if a := d.evaluateErrors(err, rows); a != nil {
 		return tables, a
 	}
@@ -399,7 +398,7 @@ func (d *Dumper) getTables(ctx context.Context) ([]string, error) {
 func (d *Dumper) getViews(ctx context.Context) ([]string, error) {
 	views := make([]string, 0)
 
-	rows, err := d.db.Query("SHOW FULL TABLES")
+	rows, err := d.db.QueryContext(ctx, "SHOW FULL TABLES")
 	if a := d.evaluateErrors(err, rows); a != nil {
 		return views, a
 	}
@@ -469,13 +468,17 @@ func (d *Dumper) dumpTableData(ctx context.Context, w io.Writer, table string) e
 
 		data = append(data, fmt.Sprintf("( %s )", strings.Join(vals, ", ")))
 		if len(data) >= numRows {
-			fmt.Fprintf(w, "%s\n%s;\n", query, strings.Join(data, ",\n"))
+			if _, err := fmt.Fprintf(w, "%s\n%s;\n", query, strings.Join(data, ",\n")); err != nil {
+				return err
+			}
 			data = make([]string, 0)
 		}
 	}
 
 	if len(data) > 0 {
-		fmt.Fprintf(w, "%s\n%s;\n", query, strings.Join(data, ",\n"))
+		if _, err := fmt.Fprintf(w, "%s\n%s;\n", query, strings.Join(data, ",\n")); err != nil {
+			return err
+		}
 	}
 
 	return nil
@@ -517,16 +520,16 @@ func (d *Dumper) generateInsertStatement(cols []string, table string) string {
 	return s[:len(s)-2] + ") VALUES"
 }
 
-func (d *Dumper) getTableHeader(table string) (str string, count uint64, err error) {
+func (d *Dumper) getTableHeader(ctx context.Context, table string) (str string, count uint64, err error) {
 	str = fmt.Sprintf("\n--\n-- Data for table `%s`", table)
-	count, err = d.rowCount(table)
+	count, err = d.rowCount(ctx, table)
 
 	if err != nil {
 		return "", 0, err
 	}
 
 	str += fmt.Sprintf(" -- %d rows\n--\n\n", count)
-	return
+	return str, count, nil
 }
 
 func (d *Dumper) evaluateErrors(base error, rows *sql.Rows) error {
@@ -544,13 +547,13 @@ func (d *Dumper) evaluateErrors(base error, rows *sql.Rows) error {
 func (d *Dumper) selectAllDataFor(ctx context.Context, table string) (rows *sql.Rows, columns []string, err error) {
 	var selectQuery string
 	if columns, selectQuery, err = d.getSelectQueryFor(ctx, table); err != nil {
-		return
+		return nil, nil, err
 	}
-	if rows, err = d.db.Query(selectQuery); err != nil {
-		return
+	if rows, err = d.db.QueryContext(ctx, selectQuery); err != nil {
+		return nil, nil, err
 	}
 
-	return
+	return rows, columns, nil
 }
 
 func (d *Dumper) getSelectQueryFor(ctx context.Context, table string) (cols []string, query string, err error) {
@@ -587,7 +590,7 @@ func (d *Dumper) getColumnsForSelect(ctx context.Context, table string, consider
 	}(rows)
 	var tmp []string
 	if tmp, err = rows.Columns(); err != nil {
-		return
+		return nil, err
 	}
 
 	for _, column := range tmp {
@@ -610,22 +613,22 @@ func (d *Dumper) getColumnsForSelect(ctx context.Context, table string, consider
 	return columns, nil
 }
 
-func (d *Dumper) rowCount(table string) (count uint64, err error) {
+func (d *Dumper) rowCount(ctx context.Context, table string) (count uint64, err error) {
 	query := fmt.Sprintf("SELECT COUNT(*) FROM `%s`", table)
 	if where, ok := d.WhereMap[strings.ToLower(table)]; ok {
 		query = fmt.Sprintf("%s WHERE %s", query, where)
 	}
-	row := d.useTransactionOrDBQueryRow(query)
+	row := d.useTransactionOrDBQueryRow(ctx, query)
 	if err = row.Scan(&count); err != nil {
-		return
+		return 0, err
 	}
-	return
+	return count, nil
 }
 
-func (d *Dumper) getCreateTableStatement(table string) (string, error) {
+func (d *Dumper) getCreateTableStatement(ctx context.Context, table string) (string, error) {
 	s := fmt.Sprintf("\n--\n-- Structure for table `%s`\n--\n\n", table)
 	s += fmt.Sprintf("DROP TABLE IF EXISTS `%s`;\n", table)
-	row := d.useTransactionOrDBQueryRow(fmt.Sprintf("SHOW CREATE TABLE `%s`", table))
+	row := d.useTransactionOrDBQueryRow(ctx, fmt.Sprintf("SHOW CREATE TABLE `%s`", table))
 	var tname, ddl string
 	if err := row.Scan(&tname, &ddl); err != nil {
 		return "", err
@@ -634,33 +637,21 @@ func (d *Dumper) getCreateTableStatement(table string) (string, error) {
 	return s, nil
 }
 
-func (d *Dumper) mysqlFlushTable(table string) (sql.Result, error) {
-	return d.useTransactionOrDBExec(fmt.Sprintf("FLUSH TABLES `%s` WITH READ LOCK", table))
+func (d *Dumper) mysqlFlushTable(ctx context.Context, table string) (sql.Result, error) {
+	return d.useTransactionOrDBExec(ctx, fmt.Sprintf("FLUSH TABLES `%s` WITH READ LOCK", table))
 }
 
 // Release the global read locks
-func (d *Dumper) mysqlUnlockTables() (sql.Result, error) {
-	return d.useTransactionOrDBExec("UNLOCK TABLES")
+func (d *Dumper) mysqlUnlockTables(ctx context.Context) (sql.Result, error) {
+	return d.useTransactionOrDBExec(ctx, "UNLOCK TABLES")
 }
 
-func (d *Dumper) useTransactionOrDBQueryRow(query string) *sql.Row {
-	return d.db.QueryRow(query)
+func (d *Dumper) useTransactionOrDBQueryRow(ctx context.Context, query string) *sql.Row {
+	return d.db.QueryRowContext(ctx, query)
 }
 
-func (d *Dumper) useTransactionOrDBExec(query string) (sql.Result, error) {
-	return d.db.Exec(query)
-}
-
-func (d *Dumper) getTransaction() *sql.Tx {
-	if d.openTx == nil {
-		var err error
-		d.openTx, err = d.db.Begin()
-		if err != nil {
-			panic("could not start a transaction")
-		}
-	}
-
-	return d.openTx
+func (d *Dumper) useTransactionOrDBExec(ctx context.Context, query string) (sql.Result, error) {
+	return d.db.ExecContext(ctx, query)
 }
 
 func (d *Dumper) dumpTriggers(ctx context.Context, w io.Writer) error {
@@ -670,22 +661,28 @@ func (d *Dumper) dumpTriggers(ctx context.Context, w io.Writer) error {
 	}
 
 	for _, trigger := range triggers {
-		ddl, err := d.getTrigger(trigger)
+		ddl, err := d.getTrigger(ctx, trigger)
 
 		if err != nil {
 			return err
 		}
 
-		fmt.Fprintf(w, "\n--\n-- Trigger `%s`\n--\n\n", trigger)
+		if _, err := fmt.Fprintf(w, "\n--\n-- Trigger `%s`\n--\n\n", trigger); err != nil {
+			return err
+		}
 
 		// Always use // as delimiter for triggers
-		fmt.Fprintf(w, "DELIMITER //\n")
+		if _, err := fmt.Fprintf(w, "DELIMITER //\n"); err != nil {
+			return err
+		}
 
 		if _, err := w.Write([]byte(ddl)); err != nil {
 			return err
 		}
 
-		fmt.Fprintf(w, "//\nDELIMITER ;\n")
+		if _, err := fmt.Fprintf(w, "//\nDELIMITER ;\n"); err != nil {
+			return err
+		}
 	}
 
 	return nil
@@ -694,7 +691,7 @@ func (d *Dumper) dumpTriggers(ctx context.Context, w io.Writer) error {
 func (d *Dumper) getTriggers(ctx context.Context) ([]string, error) {
 	triggers := make([]string, 0)
 
-	rows, err := d.db.Query("SHOW TRIGGERS")
+	rows, err := d.db.QueryContext(ctx, "SHOW TRIGGERS")
 	if a := d.evaluateErrors(err, rows); a != nil {
 		return triggers, a
 	}
@@ -719,10 +716,10 @@ func (d *Dumper) getTriggers(ctx context.Context) ([]string, error) {
 	return triggers, nil
 }
 
-func (d *Dumper) getTrigger(triggerName string) (string, error) {
+func (d *Dumper) getTrigger(ctx context.Context, triggerName string) (string, error) {
 	var ddl, unknown string
 
-	row := d.useTransactionOrDBQueryRow(fmt.Sprintf("SHOW CREATE TRIGGER `%s`", triggerName))
+	row := d.useTransactionOrDBQueryRow(ctx, fmt.Sprintf("SHOW CREATE TRIGGER `%s`", triggerName))
 	if err := row.Scan(&unknown, &unknown, &ddl, &unknown, &unknown, &unknown, &unknown); err != nil {
 		return "", err
 	}
@@ -739,17 +736,19 @@ func (d *Dumper) dumpViews(ctx context.Context, w io.Writer) error {
 		return err
 	}
 
-	fmt.Println(views)
-
 	for _, view := range views {
-		ddl, err := d.getView(view)
+		ddl, err := d.getView(ctx, view)
 
 		if err != nil {
 			return err
 		}
 
-		fmt.Fprintf(w, "\n--\n-- Structure for view `%s`\n--\n\n", view)
-		fmt.Fprintf(w, "DROP VIEW IF EXISTS `%s`;\n", view)
+		if _, err := fmt.Fprintf(w, "\n--\n-- Structure for view `%s`\n--\n\n", view); err != nil {
+			return err
+		}
+		if _, err := fmt.Fprintf(w, "DROP VIEW IF EXISTS `%s`;\n", view); err != nil {
+			return err
+		}
 
 		if _, err := w.Write([]byte(ddl)); err != nil {
 			return err
@@ -759,10 +758,10 @@ func (d *Dumper) dumpViews(ctx context.Context, w io.Writer) error {
 	return nil
 }
 
-func (d *Dumper) getView(viewName string) (string, error) {
+func (d *Dumper) getView(ctx context.Context, viewName string) (string, error) {
 	var ddl, unknown string
 
-	row := d.useTransactionOrDBQueryRow(fmt.Sprintf("SHOW CREATE VIEW `%s`", viewName))
+	row := d.useTransactionOrDBQueryRow(ctx, fmt.Sprintf("SHOW CREATE VIEW `%s`", viewName))
 	if err := row.Scan(&unknown, &ddl, &unknown, &unknown); err != nil {
 		return "", err
 	}

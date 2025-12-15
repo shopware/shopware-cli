@@ -68,6 +68,7 @@ func Test_service_ReplaceStringWithFakerWhenRequested(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(
 			tt.name, func(t *testing.T) {
+				t.Parallel()
 				got, err := replaceStringWithFakerWhenRequested(tt.args.request)
 				if (err != nil) != tt.wantErr {
 					t.Errorf("ReplaceStringWithFakerWhenRequested() error = %v, wantErr %v", err, tt.wantErr)
@@ -198,6 +199,7 @@ func Test_service_FakerError(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(
 			tt.name, func(t *testing.T) {
+				t.Parallel()
 				got, err := replaceStringWithFakerWhenRequested(tt.args.request)
 				if (err != nil) != tt.wantErr {
 					t.Errorf("ReplaceStringWithFakerWhenRequested() error = %v, wantErr %v", err, tt.wantErr)

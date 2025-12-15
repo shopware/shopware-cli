@@ -13,6 +13,7 @@ import (
 )
 
 func getDB(t *testing.T) (*sql.DB, sqlmock.Sqlmock) {
+	t.Helper()
 	db, mock, err := sqlmock.New()
 	assert.Nil(t, err)
 	return db, mock
@@ -26,7 +27,7 @@ func TestMySQLFlushTable(t *testing.T) {
 	db, mock := getDB(t)
 	dumper := getInternalMySQLInstance(db)
 	mock.ExpectExec("FLUSH TABLES `table`").WillReturnResult(sqlmock.NewResult(0, 1))
-	_, err := dumper.mysqlFlushTable("table")
+	_, err := dumper.mysqlFlushTable(t.Context(), "table")
 	assert.Nil(t, err)
 }
 
@@ -34,7 +35,7 @@ func TestMySQLUnlockTables(t *testing.T) {
 	db, mock := getDB(t)
 	dumper := getInternalMySQLInstance(db)
 	mock.ExpectExec("UNLOCK TABLES").WillReturnResult(sqlmock.NewResult(0, 1))
-	_, err := dumper.mysqlUnlockTables()
+	_, err := dumper.mysqlUnlockTables(t.Context())
 	assert.Nil(t, err)
 }
 
@@ -84,7 +85,7 @@ func TestMySQLDumpCreateTable(t *testing.T) {
 		sqlmock.NewRows([]string{"Table", "Create Table"}).
 			AddRow("table", ddl),
 	)
-	str, err := dumper.getCreateTableStatement("table")
+	str, err := dumper.getCreateTableStatement(t.Context(), "table")
 
 	assert.Nil(t, err)
 	assert.Contains(t, str, "DROP TABLE IF EXISTS `table`")
@@ -98,7 +99,7 @@ func TestMySQLDumpCreateTableHandlingErrorWhenScanningRows(t *testing.T) {
 		sqlmock.NewRows([]string{"Table", "Create Table"}).AddRow("table", nil),
 	)
 
-	_, err := dumper.getCreateTableStatement("table")
+	_, err := dumper.getCreateTableStatement(t.Context(), "table")
 	assert.NotNil(t, err)
 }
 
@@ -166,7 +167,7 @@ func TestMySQLGetRowCount(t *testing.T) {
 	mock.ExpectQuery("SELECT COUNT\\(\\*\\) FROM `table` WHERE c1 > 0").WillReturnRows(
 		sqlmock.NewRows([]string{"COUNT(*)"}).AddRow(1234),
 	)
-	count, err := dumper.rowCount("table")
+	count, err := dumper.rowCount(t.Context(), "table")
 	assert.Nil(t, err)
 	assert.Equal(t, uint64(1234), count)
 }
@@ -178,7 +179,7 @@ func TestMySQLGetRowCountHandlingError(t *testing.T) {
 	mock.ExpectQuery("SELECT COUNT\\(\\*\\) FROM `table` WHERE c1 > 0").WillReturnRows(
 		sqlmock.NewRows([]string{"COUNT(*)"}).AddRow(nil),
 	)
-	count, err := dumper.rowCount("table")
+	count, err := dumper.rowCount(t.Context(), "table")
 	assert.NotNil(t, err)
 	assert.Equal(t, uint64(0), count)
 }
@@ -189,7 +190,7 @@ func TestMySQLDumpTableHeader(t *testing.T) {
 	mock.ExpectQuery("SELECT COUNT\\(\\*\\) FROM `table`").WillReturnRows(
 		sqlmock.NewRows([]string{"COUNT(*)"}).AddRow(1234),
 	)
-	str, count, err := dumper.getTableHeader("table")
+	str, count, err := dumper.getTableHeader(t.Context(), "table")
 	assert.Equal(t, uint64(1234), count)
 	assert.Nil(t, err)
 	assert.Contains(t, str, "Data for table `table`")
@@ -202,7 +203,7 @@ func TestMySQLDumpTableHeaderHandlingError(t *testing.T) {
 	mock.ExpectQuery("SELECT COUNT\\(\\*\\) FROM `table`").WillReturnRows(
 		sqlmock.NewRows([]string{"COUNT(*)"}).AddRow(nil),
 	)
-	_, count, err := dumper.getTableHeader("table")
+	_, count, err := dumper.getTableHeader(t.Context(), "table")
 	assert.Equal(t, uint64(0), count)
 	assert.NotNil(t, err)
 }
@@ -649,7 +650,7 @@ func TestMySQLDumpView(t *testing.T) {
 		sqlmock.NewRows([]string{"View", "Create View", "character_set_client", "collation_connection"}).
 			AddRow("user_view", ddl, "utf8mb4", "utf8mb4_general_ci"),
 	)
-	str, err := dumper.getView("user_view")
+	str, err := dumper.getView(t.Context(), "user_view")
 
 	assert.Nil(t, err)
 	assert.Contains(t, str, "CREATE ALGORITHM=UNDEFINED")
@@ -664,7 +665,7 @@ func TestMySQLDumpViewHandlingErrorWhenScanningRows(t *testing.T) {
 		sqlmock.NewRows([]string{"View", "Create View", "character_set_client", "collation_connection"}).AddRow("user_view", nil, nil, nil),
 	)
 
-	_, err := dumper.getView("user_view")
+	_, err := dumper.getView(t.Context(), "user_view")
 	assert.NotNil(t, err)
 }
 

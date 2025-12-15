@@ -47,7 +47,7 @@ func replaceStringWithFakerWhenRequested(request string) (string, error) {
 		args, dErr := getMethodArguments(
 			&fakerInstance,
 			argsString[0],
-			strings.Replace(argsString[1], ")", "", -1),
+			strings.ReplaceAll(argsString[1], ")", ""),
 		)
 
 		if dErr != nil {
@@ -77,7 +77,7 @@ func replaceStringWithFakerWhenRequested(request string) (string, error) {
 	args, err := getMethodArguments(
 		obj,
 		argsString[0],
-		strings.Replace(argsString[1], ")", "", -1),
+		strings.ReplaceAll(argsString[1], ")", ""),
 	)
 	if err != nil {
 		return "", err
@@ -151,8 +151,8 @@ func callMethod(
 }
 
 func clearString(str string) string {
-	s := strings.Replace(str, "\"", "", -1)
-	return strings.Replace(s, " ", "", -1)
+	s := strings.ReplaceAll(str, "\"", "")
+	return strings.ReplaceAll(s, " ", "")
 }
 
 func stringify(v interface{}) string {
