@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
+	"regexp"
 	"strconv"
 	"strings"
 
@@ -17,7 +18,26 @@ const (
 	contactInfo   = "ContactInfo"
 )
 
-func replaceStringWithFakerWhenRequested(request string) (string, error) {
+func replaceStringWithFakerWhenRequested(request string) string {
+	if !strings.Contains(request, "faker.") {
+		return request
+	}
+
+	r := regexp.MustCompile(`\{\{\-\s*faker(\.[a-zA-Z0-9]+)+\(.*?\)+\s*\-\}\}`)
+
+	return r.ReplaceAllStringFunc(request, func(match string) string {
+		// Remove {{- -}} and whitespace
+		trimmed := strings.TrimSpace(match[3 : len(match)-3])
+		val, err := evaluateFakerExpression(trimmed)
+		if err != nil {
+			return match
+		}
+
+		return val
+	})
+}
+
+func evaluateFakerExpression(request string) (string, error) {
 	if len(request) < 5 || request[0:5] != "faker" {
 		return request, nil
 	}

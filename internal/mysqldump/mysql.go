@@ -39,7 +39,6 @@ type Dumper struct {
 const (
 	IgnoreMapPlacement = "ignore"
 	NoDataMapPlacement = "nodata"
-	FakerUsageCheck    = "faker"
 )
 
 var skipDefinerRegExp = regexp.MustCompile(`(?m)DEFINER=[^ ]* `)
@@ -500,8 +499,8 @@ func (d *Dumper) getProperEscapedValue(col *sql.RawBytes, table, columnName stri
 		} else {
 			val = string(*col)
 
-			if len(val) >= 5 && val[0:5] == FakerUsageCheck {
-				val, _ = replaceStringWithFakerWhenRequested(val)
+			if strings.Contains(val, "faker.") {
+				val = replaceStringWithFakerWhenRequested(val)
 			}
 
 			val = fmt.Sprintf("'%s'", escape(val))
@@ -600,7 +599,7 @@ func (d *Dumper) getColumnsForSelect(ctx context.Context, table string, consider
 
 		replacement, ok := d.SelectMap[strings.ToLower(table)][strings.ToLower(column)]
 		if ok && considerRewriteMap {
-			if len(replacement) >= 5 && replacement[0:5] == FakerUsageCheck {
+			if strings.HasPrefix(replacement, "faker") || strings.HasPrefix(replacement, "{{- faker") {
 				replacement = fmt.Sprintf("'%s'", replacement)
 			}
 

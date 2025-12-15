@@ -23,7 +23,7 @@ func Test_service_ReplaceStringWithFakerWhenRequested(t *testing.T) {
 		{
 			"Get a name string",
 			args{
-				"faker.Person().Name()",
+				"{{- faker.Person().Name() -}}",
 			},
 			func(s interface{}) bool {
 				return len(s.(string)) > 2
@@ -34,7 +34,7 @@ func Test_service_ReplaceStringWithFakerWhenRequested(t *testing.T) {
 		{
 			"Get random text with len 10",
 			args{
-				"faker.Lorem().Text(100)",
+				"{{- faker.Lorem().Text(100) -}}",
 			},
 			func(s interface{}) bool {
 				return len(s.(string)) > 10
@@ -45,7 +45,7 @@ func Test_service_ReplaceStringWithFakerWhenRequested(t *testing.T) {
 		{
 			"asciify something",
 			args{
-				"faker.Asciify(\"************\")",
+				"{{- faker.Asciify(\"************\") -}}",
 			},
 			func(s interface{}) bool {
 				return len(s.(string)) > 9
@@ -69,11 +69,7 @@ func Test_service_ReplaceStringWithFakerWhenRequested(t *testing.T) {
 		t.Run(
 			tt.name, func(t *testing.T) {
 				t.Parallel()
-				got, err := replaceStringWithFakerWhenRequested(tt.args.request)
-				if (err != nil) != tt.wantErr {
-					t.Errorf("ReplaceStringWithFakerWhenRequested() error = %v, wantErr %v", err, tt.wantErr)
-					return
-				}
+				got := replaceStringWithFakerWhenRequested(tt.args.request)
 				if !tt.want(got) {
 					t.Errorf("ReplaceStringWithFakerWhenRequested() got = %v, %s", got, tt.errMsg)
 				}
@@ -200,7 +196,7 @@ func Test_service_FakerError(t *testing.T) {
 		t.Run(
 			tt.name, func(t *testing.T) {
 				t.Parallel()
-				got, err := replaceStringWithFakerWhenRequested(tt.args.request)
+				got, err := evaluateFakerExpression(tt.args.request)
 				if (err != nil) != tt.wantErr {
 					t.Errorf("ReplaceStringWithFakerWhenRequested() error = %v, wantErr %v", err, tt.wantErr)
 					return
