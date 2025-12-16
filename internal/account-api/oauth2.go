@@ -9,8 +9,9 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/shopware/shopware-cli/logging"
 	"golang.org/x/oauth2"
+
+	"github.com/shopware/shopware-cli/logging"
 )
 
 func InteractiveLogin(ctx context.Context) (*oauth2.Token, error) {
@@ -78,9 +79,8 @@ func InteractiveLogin(ctx context.Context) (*oauth2.Token, error) {
 
 	u := client.AuthCodeURL(state,
 		oauth2.S256ChallengeOption(pkceVerifier),
-		oauth2.SetAuthURLParam("scope", "offline_access profile email"),
+		oauth2.SetAuthURLParam("scope", OIDCScopes),
 		oauth2.SetAuthURLParam("response_type", "code"),
-		oauth2.SetAuthURLParam("prompt", "login consent"),
 	)
 
 	logging.FromContext(ctx).Infof("Please open the following URL in your browser: %s", u)

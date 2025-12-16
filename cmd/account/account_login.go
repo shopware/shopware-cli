@@ -5,10 +5,10 @@ import (
 	"fmt"
 
 	"github.com/charmbracelet/huh"
-	"github.com/shopware/shopware-cli/logging"
 	"github.com/spf13/cobra"
 
 	accountApi "github.com/shopware/shopware-cli/internal/account-api"
+	"github.com/shopware/shopware-cli/logging"
 )
 
 var loginCmd = &cobra.Command{

@@ -8,11 +8,10 @@ import (
 	"io"
 	"net/http"
 
-	"github.com/shopware/shopware-cli/logging"
 	"golang.org/x/oauth2"
-)
 
-const ApiUrl = "https://api.shopware.com"
+	"github.com/shopware/shopware-cli/logging"
+)
 
 func NewApi(ctx context.Context, token *oauth2.Token) (*Client, error) {
 	errorFormat := "login: %v"
@@ -63,13 +62,16 @@ func fetchMemberships(ctx context.Context, token *oauth2.Token) ([]Membership, e
 	r, err := http.NewRequestWithContext(ctx, "GET", fmt.Sprintf("%s/account/%d/memberships", ApiUrl, 0), http.NoBody)
 	token.SetAuthHeader(r)
 
+	fmt.Println(r.URL)
+	fmt.Println(r.Header.Get("Authorization"))
+
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("fetchMemberships: %v", err)
 	}
 
 	resp, err := http.DefaultClient.Do(r)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("fetchMemberships: %v", err)
 	}
 
 	defer func() {
@@ -84,7 +86,7 @@ func fetchMemberships(ctx context.Context, token *oauth2.Token) ([]Membership, e
 	}
 
 	if resp.StatusCode != 200 {
-		return nil, fmt.Errorf(string(data)+" but got status code %d", resp.StatusCode)
+		return nil, fmt.Errorf("fetchMemberships: %s but got status code %d", string(data), resp.StatusCode)
 	}
 
 	var companies []Membership

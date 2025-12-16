@@ -10,8 +10,9 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/shopware/shopware-cli/logging"
 	"golang.org/x/oauth2"
+
+	"github.com/shopware/shopware-cli/logging"
 )
 
 var httpUserAgent = "shopware-cli/0.0.0"

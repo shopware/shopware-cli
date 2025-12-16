@@ -1,6 +1,9 @@
 package account_api
 
 const (
-	OIDCEndpoint = "https://laughing-wiles-0b5m1rau2n.projects.oryapis.com"
-	OIDCClientID = "737445e8-80e0-4263-a067-4da24a7e2174"
+	OIDCEndpoint = "https://auth-api.shopware.in"
+	OIDCClientID = "def413d7-4c4e-439f-8b51-74c352436b2f"
+	OIDCScopes   = "openid offline_access email profile extension_management_read_write"
+
+	ApiUrl = "https://next-api.shopware.com"
 )
