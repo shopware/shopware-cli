@@ -265,6 +265,51 @@ func TestMySQLDumpTableData(t *testing.T) {
 	}
 }
 
+func TestMySQLDumpTableData_InsertIntoLimit(t *testing.T) {
+	db, mock := getDB(t)
+	buffer := bytes.NewBuffer(make([]byte, 0))
+
+	dumper := getInternalMySQLInstance(db)
+	dumper.InsertIntoLimit = 2
+
+	r := []struct {
+		ID    int
+		Value string
+	}{
+		{1, "Lettuce"},
+		{2, "Cabbage"},
+		{3, "Cucumber"},
+		{4, "Potatoes"},
+		{5, "Carrot"},
+		{6, "Leek"},
+	}
+
+	mock.ExpectQuery("SELECT \\* FROM `vegetable_list` LIMIT 1").WillReturnRows(
+		sqlmock.NewRows([]string{"id", "vegetable"}).
+			AddRow(1, "Lettuce"),
+	)
+
+	mock.ExpectQuery("SELECT \\* FROM `vegetable_list` LIMIT 1").WillReturnRows(
+		sqlmock.NewRows([]string{"id", "vegetable"}).
+			AddRow(1, "Lettuce"),
+	)
+
+	rows := sqlmock.NewRows([]string{"id", "vegetable_list"})
+	for _, row := range r {
+		rows.AddRow(row.ID, row.Value)
+	}
+	mock.ExpectQuery("SELECT `id`, `vegetable` FROM `vegetable_list`").
+		WillReturnRows(rows)
+
+	assert.Nil(t, dumper.dumpTableData(t.Context(), buffer, "vegetable_list"))
+
+	assert.Equal(t, strings.Count(buffer.String(), "INSERT INTO `vegetable_list` (`id`, `vegetable`) VALUES"), 3)
+
+	for _, row := range r {
+		assert.Contains(t, buffer.String(), fmt.Sprintf("'%s'", row.Value))
+	}
+}
+
 func TestMySQLDumpTableDataHandlingErrorFromSelectAllDataFor(t *testing.T) {
 	db, mock := getDB(t)
 	buffer := bytes.NewBuffer(make([]byte, 0))
