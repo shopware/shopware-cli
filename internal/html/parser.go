@@ -890,21 +890,27 @@ func (p *Parser) parseNodes(stopTag string) (NodeList, error) {
 		}
 
 		if p.current() == '<' && p.peek(2) != htmlCommentStart {
-			if p.pos > rawStart {
-				text := p.input[rawStart:p.pos]
-				if strings.TrimSpace(text) != "" {
-					nodes = append(nodes, &RawNode{
-						Text: text,
-						Line: p.getLineAt(rawStart),
-					})
-				}
-			}
+			savedPos := p.pos
 			element, err := p.parseElement()
 			if err != nil {
 				return nodes, err
 			}
-			nodes = append(nodes, element)
-			rawStart = p.pos
+
+			if element != nil {
+				if savedPos > rawStart {
+					text := p.input[rawStart:savedPos]
+					if strings.TrimSpace(text) != "" {
+						nodes = append(nodes, &RawNode{
+							Text: text,
+							Line: p.getLineAt(rawStart),
+						})
+					}
+				}
+				nodes = append(nodes, element)
+				rawStart = p.pos
+			} else {
+				p.pos++
+			}
 		} else {
 			p.pos++
 		}
@@ -939,12 +945,18 @@ func (p *Parser) parseElement() (Node, error) {
 		//nolint: nilnil
 		return nil, nil
 	}
+
+	if startPos > 0 && p.input[startPos-1] == '<' {
+		return nil, nil
+	}
+
 	p.pos++ // skip '<'
 	p.skipWhitespace()
 
 	tagName := p.parseTagName()
 	if tagName == "" {
-		return nil, fmt.Errorf("empty tag name at pos %d", p.pos)
+		p.pos = startPos
+		return nil, nil
 	}
 
 	node := &ElementNode{
@@ -1157,25 +1169,42 @@ func (p *Parser) parseElementChildren(tag string) (NodeList, error) {
 		}
 
 		if p.current() == '<' && p.peek(2) != htmlCommentStart {
-			if p.pos > rawStart {
-				text := p.input[rawStart:p.pos]
-				if text != "" {
-					children = append(children, &RawNode{
-						Text: text,
-						Line: p.getLineAt(rawStart),
-					})
-				}
-			}
+			savedPos := p.pos
 			child, err := p.parseElement()
 			if err != nil {
 				return children, err
 			}
-			children = append(children, child)
-			rawStart = p.pos
+
+			if child != nil {
+				if savedPos > rawStart {
+					text := p.input[rawStart:savedPos]
+					if text != "" {
+						children = append(children, &RawNode{
+							Text: text,
+							Line: p.getLineAt(rawStart),
+						})
+					}
+				}
+				children = append(children, child)
+				rawStart = p.pos
+			} else {
+				p.pos++
+			}
 		} else {
 			p.pos++
 		}
 	}
+
+	if rawStart < p.pos {
+		text := p.input[rawStart:p.pos]
+		if text != "" {
+			children = append(children, &RawNode{
+				Text: text,
+				Line: p.getLineAt(rawStart),
+			})
+		}
+	}
+
 	return children, nil
 }
 
