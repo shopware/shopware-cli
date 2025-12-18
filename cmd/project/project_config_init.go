@@ -8,6 +8,7 @@ import (
 	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v3"
 
+	"github.com/shopware/shopware-cli/internal/system"
 	"github.com/shopware/shopware-cli/logging"
 	"github.com/shopware/shopware-cli/shop"
 )
@@ -16,6 +17,10 @@ var projectConfigInitCmd = &cobra.Command{
 	Use:   "init",
 	Short: "Creates a new project config in current dir",
 	RunE: func(cmd *cobra.Command, _ []string) error {
+		if !system.IsInteractionEnabled(cmd.Context()) {
+			return fmt.Errorf("this command requires interaction, but interaction is disabled")
+		}
+
 		config := &shop.Config{}
 		var content []byte
 		var err error

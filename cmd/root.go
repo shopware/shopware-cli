@@ -30,6 +30,7 @@ var rootCmd = &cobra.Command{
 
 func Execute(ctx context.Context) {
 	ctx = logging.WithLogger(ctx, logging.NewLogger(slices.Contains(os.Args, "--verbose")))
+	ctx = system.WithInteraction(ctx, !slices.Contains(os.Args, "--no-interaction") && !slices.Contains(os.Args, "-n"))
 	accountApi.SetUserAgent("shopware-cli/" + version)
 
 	if err := rootCmd.ExecuteContext(ctx); err != nil {
@@ -50,6 +51,7 @@ func init() {
 
 	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is $HOME/.shopware-cli.yaml)")
 	rootCmd.PersistentFlags().Bool("verbose", false, "show debug output")
+	rootCmd.PersistentFlags().BoolP("no-interaction", "n", false, "do not ask any interactive questions")
 
 	project.Register(rootCmd)
 	extension.Register(rootCmd)

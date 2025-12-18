@@ -13,6 +13,7 @@ import (
 
 	"github.com/shopware/shopware-cli/extension"
 	"github.com/shopware/shopware-cli/internal/packagist"
+	"github.com/shopware/shopware-cli/internal/system"
 	"github.com/shopware/shopware-cli/logging"
 )
 
@@ -31,6 +32,10 @@ var projectAutofixComposerCmd = &cobra.Command{
 		}
 
 		var token string
+
+		if !system.IsInteractionEnabled(cmd.Context()) {
+			return fmt.Errorf("this command requires interaction to enter the Shopware Packagist Token, but interaction is disabled")
+		}
 
 		if err := huh.NewInput().
 			Title("Please enter the Shopware Packagist Token").

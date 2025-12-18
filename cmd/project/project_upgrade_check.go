@@ -16,6 +16,7 @@ import (
 	"github.com/shopware/shopware-cli/extension"
 	account_api "github.com/shopware/shopware-cli/internal/account-api"
 	"github.com/shopware/shopware-cli/internal/packagist"
+	"github.com/shopware/shopware-cli/internal/system"
 	"github.com/shopware/shopware-cli/logging"
 	"github.com/shopware/shopware-cli/shop"
 )
@@ -93,16 +94,21 @@ var projectUpgradeCheckCmd = &cobra.Command{
 
 		var selectedVersion string
 
-		prompt := huh.NewSelect[string]().
-			Height(10).
-			Title("Select a Shopware version to check compatibility").
-			Options(
-				huh.NewOptions(possibleVersions...)...,
-			).
-			Value(&selectedVersion)
+		if !system.IsInteractionEnabled(cmd.Context()) {
+			selectedVersion = possibleVersions[0]
+			logging.FromContext(cmd.Context()).Infof("Auto selected version %s", selectedVersion)
+		} else {
+			prompt := huh.NewSelect[string]().
+				Height(10).
+				Title("Select a Shopware version to check compatibility").
+				Options(
+					huh.NewOptions(possibleVersions...)...,
+				).
+				Value(&selectedVersion)
 
-		if err := prompt.Run(); err != nil {
-			return err
+			if err := prompt.Run(); err != nil {
+				return err
+			}
 		}
 
 		if selectedVersion == "" {

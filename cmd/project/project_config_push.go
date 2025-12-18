@@ -2,11 +2,13 @@ package project
 
 import (
 	"encoding/json"
+	"fmt"
 
 	"github.com/charmbracelet/huh"
 	adminSdk "github.com/friendsofshopware/go-shopware-admin-api-sdk"
 	"github.com/spf13/cobra"
 
+	"github.com/shopware/shopware-cli/internal/system"
 	"github.com/shopware/shopware-cli/logging"
 	"github.com/shopware/shopware-cli/shop"
 )
@@ -101,6 +103,10 @@ var projectConfigPushCmd = &cobra.Command{
 		}
 
 		if !autoApprove {
+			if !system.IsInteractionEnabled(cmd.Context()) {
+				return fmt.Errorf("confirmation required but interaction is disabled. Use --auto-approve to skip confirmation")
+			}
+
 			var confirm bool
 
 			confirmForm := huh.NewForm(
