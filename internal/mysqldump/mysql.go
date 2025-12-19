@@ -30,6 +30,7 @@ type Dumper struct {
 	// Quick enables quick mode for mysqldump (default: false)
 	Quick bool
 	// InsertIntoLimit controls how many rows are included in each INSERT statement (default: 100).
+	// When Quick is true, this setting is ignored and the batch size is forced to 1.
 	InsertIntoLimit int
 	// Parallel controls how many tables to dump concurrently (default: 0 = disabled)
 	Parallel            int

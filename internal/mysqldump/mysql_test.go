@@ -294,7 +294,7 @@ func TestMySQLDumpTableData_InsertIntoLimit(t *testing.T) {
 			AddRow(1, "Lettuce"),
 	)
 
-	rows := sqlmock.NewRows([]string{"id", "vegetable_list"})
+	rows := sqlmock.NewRows([]string{"id", "vegetable"})
 	for _, row := range r {
 		rows.AddRow(row.ID, row.Value)
 	}
