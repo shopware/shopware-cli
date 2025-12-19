@@ -151,7 +151,7 @@ func BuildAssetsForExtensions(ctx context.Context, sources []asset.Source, asset
 
 			envList := []string{fmt.Sprintf("PROJECT_ROOT=%s", shopwareRoot), fmt.Sprintf("ADMIN_ROOT=%s", PlatformPath(shopwareRoot, "Administration", ""))}
 
-			if !projectRequiresBuild(shopwareRoot) || !assetConfig.ForceAdminBuild {
+			if !projectRequiresBuild(shopwareRoot) && !assetConfig.ForceAdminBuild {
 				logging.FromContext(ctx).Debugf("Building only administration assets for plugins")
 				envList = append(envList, "SHOPWARE_ADMIN_BUILD_ONLY_EXTENSIONS=1", "SHOPWARE_ADMIN_SKIP_SOURCEMAP_GENERATION=1")
 			} else {

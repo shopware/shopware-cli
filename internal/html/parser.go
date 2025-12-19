@@ -890,21 +890,27 @@ func (p *Parser) parseNodes(stopTag string) (NodeList, error) {
 		}
 
 		if p.current() == '<' && p.peek(2) != htmlCommentStart {
-			if p.pos > rawStart {
-				text := p.input[rawStart:p.pos]
-				if strings.TrimSpace(text) != "" {
-					nodes = append(nodes, &RawNode{
-						Text: text,
-						Line: p.getLineAt(rawStart),
-					})
-				}
-			}
+			savedPos := p.pos
 			element, err := p.parseElement()
 			if err != nil {
 				return nodes, err
 			}
-			nodes = append(nodes, element)
-			rawStart = p.pos
+
+			if element != nil {
+				if savedPos > rawStart {
+					text := p.input[rawStart:savedPos]
+					if strings.TrimSpace(text) != "" {
+						nodes = append(nodes, &RawNode{
+							Text: text,
+							Line: p.getLineAt(rawStart),
+						})
+					}
+				}
+				nodes = append(nodes, element)
+				rawStart = p.pos
+			} else {
+				p.pos++
+			}
 		} else {
 			p.pos++
 		}
@@ -939,12 +945,20 @@ func (p *Parser) parseElement() (Node, error) {
 		//nolint: nilnil
 		return nil, nil
 	}
+
+	if startPos > 0 && p.input[startPos-1] == '<' {
+		//nolint: nilnil
+		return nil, nil
+	}
+
 	p.pos++ // skip '<'
 	p.skipWhitespace()
 
 	tagName := p.parseTagName()
 	if tagName == "" {
-		return nil, fmt.Errorf("empty tag name at pos %d", p.pos)
+		p.pos = startPos
+		//nolint: nilnil
+		return nil, nil
 	}
 
 	node := &ElementNode{
@@ -1037,15 +1051,7 @@ func (p *Parser) parseElementChildren(tag string) (NodeList, error) {
 
 	for p.pos < p.length {
 		if p.peek(4) == htmlCommentStart {
-			if p.pos > rawStart {
-				text := p.input[rawStart:p.pos]
-				if text != "" {
-					children = append(children, &RawNode{
-						Text: text,
-						Line: p.getLineAt(rawStart),
-					})
-				}
-			}
+			children = p.flushRawText(children, rawStart, p.pos)
 			comment, err := p.parseComment()
 			if err != nil {
 				return children, err
@@ -1057,15 +1063,7 @@ func (p *Parser) parseElementChildren(tag string) (NodeList, error) {
 
 		// Parse template expressions {{ ... }}
 		if p.peek(2) == "{{" {
-			if p.pos > rawStart {
-				text := p.input[rawStart:p.pos]
-				if text != "" {
-					children = append(children, &RawNode{
-						Text: text,
-						Line: p.getLineAt(rawStart),
-					})
-				}
-			}
+			children = p.flushRawText(children, rawStart, p.pos)
 
 			expression, err := p.parseTemplateExpression()
 			if err != nil {
@@ -1079,50 +1077,17 @@ func (p *Parser) parseElementChildren(tag string) (NodeList, error) {
 
 		// Parse twig blocks and directives
 		if p.peek(2) == "{%" {
-			if p.pos > rawStart {
-				text := p.input[rawStart:p.pos]
-				if text != "" {
-					children = append(children, &RawNode{
-						Text: text,
-						Line: p.getLineAt(rawStart),
-					})
-				}
-			}
-
-			// Try parsing as a twig directive first
-			directive, err := p.parseTwigDirective()
+			startPos := p.pos
+			twigNode, err := p.parseTwigNodesInElement()
 			if err != nil {
 				return children, err
 			}
-			if directive != nil {
-				children = append(children, directive)
+			if twigNode != nil {
+				children = p.flushRawText(children, rawStart, startPos)
+				children = append(children, twigNode)
 				rawStart = p.pos
 				continue
 			}
-
-			// Try parsing as a twig block
-			block, err := p.parseTwigBlock()
-			if err != nil {
-				return children, err
-			}
-			if block != nil {
-				children = append(children, block)
-				rawStart = p.pos
-				continue
-			}
-
-			// Try parsing as a twig if
-			ifNode, err := p.parseTwigIf()
-			if err != nil {
-				return children, err
-			}
-			if ifNode != nil {
-				children = append(children, ifNode)
-				rawStart = p.pos
-				continue
-			}
-
-			// If none of the above worked, treat as raw text and continue
 		}
 
 		// Check for a closing tag.
@@ -1140,15 +1105,7 @@ func (p *Parser) parseElementChildren(tag string) (NodeList, error) {
 			}
 			if closingTag == tag {
 				// Add any raw text before the closing tag.
-				if rawStart < savedPos {
-					text := p.input[rawStart:savedPos]
-					if text != "" {
-						children = append(children, &RawNode{
-							Text: text,
-							Line: p.getLineAt(rawStart),
-						})
-					}
-				}
+				children = p.flushRawText(children, rawStart, savedPos)
 				return children, nil
 			} else {
 				// Not the matching closing tag; reset and continue.
@@ -1157,25 +1114,26 @@ func (p *Parser) parseElementChildren(tag string) (NodeList, error) {
 		}
 
 		if p.current() == '<' && p.peek(2) != htmlCommentStart {
-			if p.pos > rawStart {
-				text := p.input[rawStart:p.pos]
-				if text != "" {
-					children = append(children, &RawNode{
-						Text: text,
-						Line: p.getLineAt(rawStart),
-					})
-				}
-			}
+			savedPos := p.pos
 			child, err := p.parseElement()
 			if err != nil {
 				return children, err
 			}
-			children = append(children, child)
-			rawStart = p.pos
+
+			if child != nil {
+				children = p.flushRawText(children, rawStart, savedPos)
+				children = append(children, child)
+				rawStart = p.pos
+			} else {
+				p.pos++
+			}
 		} else {
 			p.pos++
 		}
 	}
+
+	children = p.flushRawText(children, rawStart, p.pos)
+
 	return children, nil
 }
 

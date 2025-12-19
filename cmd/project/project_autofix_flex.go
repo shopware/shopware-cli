@@ -10,6 +10,7 @@ import (
 
 	"github.com/shopware/shopware-cli/internal/color"
 	"github.com/shopware/shopware-cli/internal/flexmigrator"
+	"github.com/shopware/shopware-cli/internal/system"
 )
 
 var projectAutofixFlexCmd = &cobra.Command{
@@ -21,13 +22,16 @@ var projectAutofixFlexCmd = &cobra.Command{
 			return err
 		}
 
-		var confirmed bool
-		if err := huh.NewConfirm().
-			Title("Are you sure you want to autofix this project to Symfony Flex?").
-			Description("This will modify your composer.json and .env files. Make sure to commit your changes before running this command.").
-			Value(&confirmed).
-			Run(); err != nil {
-			return err
+		confirmed := !system.IsInteractionEnabled(cmd.Context())
+
+		if !confirmed {
+			if err := huh.NewConfirm().
+				Title("Are you sure you want to autofix this project to Symfony Flex?").
+				Description("This will modify your composer.json and .env files. Make sure to commit your changes before running this command.").
+				Value(&confirmed).
+				Run(); err != nil {
+				return err
+			}
 		}
 
 		if !confirmed {

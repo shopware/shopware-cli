@@ -73,6 +73,8 @@ var projectCreateCmd = &cobra.Command{
 
 		if len(args) == 2 {
 			result = args[1]
+		} else if !system.IsInteractionEnabled(cmd.Context()) {
+			result = "latest"
 		} else {
 			options := make([]huh.Option[string], 0)
 			for _, v := range filteredVersions {
@@ -200,9 +202,9 @@ var projectCreateCmd = &cobra.Command{
 			phpBinary := os.Getenv("PHP_BINARY")
 
 			if phpBinary != "" {
-				cmdInstall = exec.CommandContext(cmd.Context(), phpBinary, composerBinary, "install")
+				cmdInstall = exec.CommandContext(cmd.Context(), phpBinary, composerBinary, "install", "--no-interaction")
 			} else {
-				cmdInstall = exec.CommandContext(cmd.Context(), "composer", "install")
+				cmdInstall = exec.CommandContext(cmd.Context(), "composer", "install", "--no-interaction")
 			}
 
 			cmdInstall.Dir = projectFolder

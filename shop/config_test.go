@@ -28,10 +28,6 @@ dump:
 url: https://xyz.nuonic.dev
 include:
   - base.yml
-sync:
-  config:
-    - settings:
-        core.store.licenseHost: xyz.nuonic.dev
 `)
 
 	baseFilePath := filepath.Join(tmpDir, "base.yml")
@@ -43,10 +39,7 @@ sync:
 	config, err := ReadConfig(stagingFilePath, false)
 	assert.NoError(t, err)
 
-	assert.NotNil(t, config.Sync)
-	assert.NotNil(t, config.Sync.Config)
-	assert.Len(t, config.Sync.Config, 1)
-	assert.Equal(t, "xyz.nuonic.dev", config.Sync.Config[0].Settings["core.store.licenseHost"])
+	assert.NotNil(t, config.ConfigDump.Where)
 
 	assert.NoError(t, os.RemoveAll(tmpDir))
 }

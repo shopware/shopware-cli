@@ -7,7 +7,6 @@ import (
 	"os"
 	"os/exec"
 	"path"
-	"path/filepath"
 	"runtime"
 	"sync"
 
@@ -174,12 +173,7 @@ func InstallNPMDependencies(ctx context.Context, path string, packageJsonData Np
 		return nil
 	}
 
-	npmCommand := "install"
-	if _, err := os.Stat(filepath.Join(path, "package-lock.json")); err == nil {
-		npmCommand = "ci"
-	}
-
-	installCmd := exec.CommandContext(ctx, "npm", npmCommand, "--no-audit", "--no-fund", "--prefer-offline", "--loglevel=error")
+	installCmd := exec.CommandContext(ctx, "npm", "install", "--no-audit", "--no-fund", "--prefer-offline", "--loglevel=error")
 	installCmd.Args = append(installCmd.Args, additionalParams...)
 	installCmd.Dir = path
 	installCmd.Env = os.Environ()
@@ -187,7 +181,7 @@ func InstallNPMDependencies(ctx context.Context, path string, packageJsonData Np
 
 	combinedOutput, err := installCmd.CombinedOutput()
 	if err != nil {
-		logging.FromContext(context.Background()).Errorf("npm %s failed in %s: %s", npmCommand, path, string(combinedOutput))
+		logging.FromContext(context.Background()).Errorf("npm install failed in %s: %s", path, string(combinedOutput))
 		return fmt.Errorf("installing dependencies for %s failed with error: %w", path, err)
 	}
 
