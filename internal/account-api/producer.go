@@ -13,16 +13,12 @@ import (
 )
 
 type ProducerEndpoint struct {
-	c          *Client
-	producerId int
-}
-
-func (e ProducerEndpoint) GetId() int {
-	return e.producerId
+	c           *Client
+	producerIds []int
 }
 
 func (c *Client) Producer(ctx context.Context) (*ProducerEndpoint, error) {
-	r, err := c.NewAuthenticatedRequest(ctx, "GET", fmt.Sprintf("%s/companies/%d/allocations", ApiUrl, c.ComapnyID), nil)
+	r, err := c.NewAuthenticatedRequest(ctx, "GET", fmt.Sprintf("%s/integrations/shopwarecli/producers", ApiUrl), nil)
 	if err != nil {
 		return nil, err
 	}
@@ -32,48 +28,21 @@ func (c *Client) Producer(ctx context.Context) (*ProducerEndpoint, error) {
 		return nil, err
 	}
 
-	var allocation companyAllocation
-	if err := json.Unmarshal(body, &allocation); err != nil {
+	var producers []Producer
+	if err := json.Unmarshal(body, &producers); err != nil {
 		return nil, fmt.Errorf("producer.profile: %v", err)
 	}
 
-	if !allocation.IsProducer {
-		return nil, fmt.Errorf("this company is not unlocked as producer")
+	if len(producers) == 0 {
+		return nil, fmt.Errorf("producer.profile: no producer found for current user")
 	}
 
-	return &ProducerEndpoint{producerId: allocation.ProducerID, c: c}, nil
-}
-
-type companyAllocation struct {
-	HasShops          bool `json:"hasShops"`
-	HasCommercialShop bool `json:"hasCommercialShop"`
-	IsEducationMember bool `json:"isEducationMember"`
-	IsPartner         bool `json:"isPartner"`
-	IsProducer        bool `json:"isProducer"`
-	ProducerID        int  `json:"producerId"`
-}
-
-func (e ProducerEndpoint) Profile(ctx context.Context) (*Producer, error) {
-	r, err := e.c.NewAuthenticatedRequest(ctx, "GET", fmt.Sprintf("%s/producers?companyId=%d", ApiUrl, e.c.ComapnyID), nil)
-	if err != nil {
-		return nil, err
+	var producerIds []int
+	for _, p := range producers {
+		producerIds = append(producerIds, p.Id)
 	}
 
-	body, err := e.c.doRequest(r)
-	if err != nil {
-		return nil, err
-	}
-
-	var producers []Producer
-	if err := json.Unmarshal(body, &producers); err != nil {
-		return nil, fmt.Errorf("my_profile: %v", err)
-	}
-
-	for _, profile := range producers {
-		return &profile, nil
-	}
-
-	return nil, fmt.Errorf("cannot find a profile")
+	return &ProducerEndpoint{producerIds: producerIds, c: c}, nil
 }
 
 type Producer struct {
@@ -124,9 +93,23 @@ type ListExtensionCriteria struct {
 }
 
 func (e ProducerEndpoint) Extensions(ctx context.Context, criteria *ListExtensionCriteria) ([]Extension, error) {
+	var allExtensions []Extension
+
+	for _, producerId := range e.producerIds {
+		extensions, err := e.singleExtensionsByProducer(ctx, criteria, producerId)
+		if err != nil {
+			return nil, err
+		}
+		allExtensions = append(allExtensions, extensions...)
+	}
+
+	return allExtensions, nil
+}
+
+func (e ProducerEndpoint) singleExtensionsByProducer(ctx context.Context, criteria *ListExtensionCriteria, producerId int) ([]Extension, error) {
 	encoder := schema.NewEncoder()
 	form := url.Values{}
-	form.Set("producerId", strconv.FormatInt(int64(e.GetId()), 10))
+	form.Set("producerId", strconv.FormatInt(int64(producerId), 10))
 	err := encoder.Encode(criteria, form)
 	if err != nil {
 		return nil, fmt.Errorf("list_extensions: %v", err)

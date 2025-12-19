@@ -72,6 +72,9 @@ func InteractiveLogin(ctx context.Context) (*oauth2.Token, error) {
 				return
 			}
 			serverToken <- t
+
+			w.Header().Set("Content-Type", "text/html; charset=utf-8")
+			_, _ = w.Write([]byte(`<html><body><h1>Login successful</h1><p>You can close this window now.</p></body></html>`))
 		}),
 	}
 	go func() { _ = srv.Serve(l) }()
