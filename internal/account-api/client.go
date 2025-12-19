@@ -10,6 +10,8 @@ import (
 	"path/filepath"
 	"time"
 
+	"golang.org/x/oauth2"
+
 	"github.com/shopware/shopware-cli/logging"
 )
 
@@ -20,9 +22,7 @@ func SetUserAgent(userAgent string) {
 }
 
 type Client struct {
-	Token            token        `json:"token"`
-	ActiveMembership Membership   `json:"active_membership"`
-	Memberships      []Membership `json:"memberships"`
+	Token *oauth2.Token `json:"token"`
 }
 
 func (c *Client) NewAuthenticatedRequest(ctx context.Context, method, path string, body io.Reader) (*http.Request, error) {
@@ -34,7 +34,7 @@ func (c *Client) NewAuthenticatedRequest(ctx context.Context, method, path strin
 
 	r.Header.Set("content-type", "application/json")
 	r.Header.Set("accept", "application/json")
-	r.Header.Set("x-shopware-token", c.Token.Token)
+	c.Token.SetAuthHeader(r)
 	r.Header.Set("user-agent", httpUserAgent)
 
 	return r, nil
@@ -64,38 +64,15 @@ func (*Client) doRequest(request *http.Request) ([]byte, error) {
 	return data, nil
 }
 
-func (c *Client) GetActiveCompanyID() int {
-	return c.Token.UserID
-}
-
-func (c *Client) GetUserID() int {
-	return c.Token.UserAccountID
-}
-
-func (c *Client) GetActiveMembership() Membership {
-	return c.ActiveMembership
-}
-
-func (c *Client) GetMemberships() []Membership {
-	return c.Memberships
-}
-
 func (c *Client) isTokenValid() bool {
-	loc, err := time.LoadLocation(c.Token.Expire.Timezone)
-	if err != nil {
+	if c.Token == nil {
 		return false
 	}
 
-	expire, err := time.ParseInLocation("2006-01-02 15:04:05.000000", c.Token.Expire.Date, loc)
-	if err != nil {
-		return false
-	}
-
-	// When it will be expire in the next minute. Respond with false
-	return expire.UTC().Sub(time.Now().UTC()).Seconds() > 60
+	return time.Until(c.Token.Expiry) > 60
 }
 
-const CacheFileName = "shopware-api-client-token.json"
+const CacheFileName = "shopware-api-oauth2-token.json"
 
 func getApiTokenCacheFilePath() (string, error) {
 	cacheDir, err := os.UserCacheDir()
@@ -129,7 +106,6 @@ func createApiFromTokenCache(ctx context.Context) (*Client, error) {
 	}
 
 	logging.FromContext(ctx).Debugf("Using token cache from %s", tokenFilePath)
-	logging.FromContext(ctx).Debugf("Impersonating currently as %s (%d)", client.ActiveMembership.Company.Name, client.ActiveMembership.Company.Id)
 
 	if !client.isTokenValid() {
 		return nil, fmt.Errorf("token is expired")
