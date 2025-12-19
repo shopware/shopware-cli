@@ -29,6 +29,10 @@ type Dumper struct {
 	LockTables bool
 	// Quick enables quick mode for mysqldump (default: false)
 	Quick bool
+	// InsertIntoLimit controls how many rows are included in each INSERT statement (default: 100).
+	// When set to a positive value, it takes priority over Quick mode.
+	// When not set (0 or negative) and Quick is true, the batch size is 1.
+	InsertIntoLimit int
 	// Parallel controls how many tables to dump concurrently (default: 0 = disabled)
 	Parallel            int
 	mapBins             map[string][]string
@@ -39,6 +43,7 @@ type Dumper struct {
 const (
 	IgnoreMapPlacement = "ignore"
 	NoDataMapPlacement = "nodata"
+	defaultInsertLimit = 100
 )
 
 var skipDefinerRegExp = regexp.MustCompile(`(?m)DEFINER=[^ ]* `)
@@ -51,6 +56,7 @@ func NewMySQLDumper(db *sql.DB) *Dumper {
 		mapExclusionColumns: make(map[string][]string),
 		LockTables:          true,
 		Quick:               false,
+		InsertIntoLimit:     0,
 		Parallel:            0,
 	}
 }
@@ -443,9 +449,13 @@ func (d *Dumper) dumpTableData(ctx context.Context, w io.Writer, table string) e
 		}
 	}(rows)
 
-	numRows := 100
-	if d.Quick {
-		numRows = 1
+	numRows := d.InsertIntoLimit
+	if numRows <= 0 {
+		if d.Quick {
+			numRows = 1
+		} else {
+			numRows = defaultInsertLimit
+		}
 	}
 
 	values := make([]*sql.RawBytes, len(columns))

@@ -43,6 +43,7 @@ var projectDatabaseDumpCmd = &cobra.Command{
 		compression, _ := cmd.Flags().GetString("compression")
 		quick, _ := cmd.Flags().GetBool("quick")
 		parallel, _ := cmd.Flags().GetInt("parallel")
+		insertIntoLimit, _ := cmd.Flags().GetInt("insert-into-limit")
 
 		db, err := sql.Open("mysql", mysqlConfig.FormatDSN())
 		if err != nil {
@@ -53,6 +54,7 @@ var projectDatabaseDumpCmd = &cobra.Command{
 		dumper.LockTables = !skipLockTables
 		dumper.Quick = quick
 		dumper.Parallel = parallel
+		dumper.InsertIntoLimit = insertIntoLimit
 
 		var projectCfg *shop.Config
 		if projectCfg, err = shop.ReadConfig(projectConfigPath, true); err != nil {
@@ -239,4 +241,5 @@ func init() {
 	projectDatabaseDumpCmd.Flags().Bool("zstd", false, "Zstd the whole dump")
 	projectDatabaseDumpCmd.Flags().Bool("quick", false, "Use quick option for mysqldump")
 	projectDatabaseDumpCmd.Flags().Int("parallel", 0, "Number of tables to dump concurrently (0 = disabled)")
+	projectDatabaseDumpCmd.Flags().Int("insert-into-limit", 0, "Limit the number of rows per INSERT statement (0 = auto, takes priority over --quick when set)")
 }
