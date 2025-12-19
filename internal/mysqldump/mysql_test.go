@@ -310,6 +310,140 @@ func TestMySQLDumpTableData_InsertIntoLimit(t *testing.T) {
 	}
 }
 
+func TestMySQLDumpTableData_InsertIntoLimitZeroFallback(t *testing.T) {
+	db, mock := getDB(t)
+	buffer := bytes.NewBuffer(make([]byte, 0))
+
+	dumper := getInternalMySQLInstance(db)
+	dumper.InsertIntoLimit = 0 // Should fall back to default (100)
+
+	r := []struct {
+		ID    int
+		Value string
+	}{
+		{1, "Lettuce"},
+		{2, "Cabbage"},
+		{3, "Cucumber"},
+	}
+
+	mock.ExpectQuery("SELECT \\* FROM `vegetable_list` LIMIT 1").WillReturnRows(
+		sqlmock.NewRows([]string{"id", "vegetable"}).
+			AddRow(1, "Lettuce"),
+	)
+
+	mock.ExpectQuery("SELECT \\* FROM `vegetable_list` LIMIT 1").WillReturnRows(
+		sqlmock.NewRows([]string{"id", "vegetable"}).
+			AddRow(1, "Lettuce"),
+	)
+
+	rows := sqlmock.NewRows([]string{"id", "vegetable"})
+	for _, row := range r {
+		rows.AddRow(row.ID, row.Value)
+	}
+	mock.ExpectQuery("SELECT `id`, `vegetable` FROM `vegetable_list`").
+		WillReturnRows(rows)
+
+	assert.Nil(t, dumper.dumpTableData(t.Context(), buffer, "vegetable_list"))
+
+	// With default limit of 100, all 3 rows should be in a single INSERT
+	assert.Equal(t, 1, strings.Count(buffer.String(), "INSERT INTO `vegetable_list` (`id`, `vegetable`) VALUES"))
+
+	for _, row := range r {
+		assert.Contains(t, buffer.String(), fmt.Sprintf("'%s'", row.Value))
+	}
+}
+
+func TestMySQLDumpTableData_QuickModeWithInsertIntoLimit(t *testing.T) {
+	db, mock := getDB(t)
+	buffer := bytes.NewBuffer(make([]byte, 0))
+
+	dumper := getInternalMySQLInstance(db)
+	dumper.Quick = true
+	dumper.InsertIntoLimit = 3 // InsertIntoLimit should take priority over Quick
+
+	r := []struct {
+		ID    int
+		Value string
+	}{
+		{1, "Lettuce"},
+		{2, "Cabbage"},
+		{3, "Cucumber"},
+		{4, "Potatoes"},
+		{5, "Carrot"},
+		{6, "Leek"},
+	}
+
+	mock.ExpectQuery("SELECT \\* FROM `vegetable_list` LIMIT 1").WillReturnRows(
+		sqlmock.NewRows([]string{"id", "vegetable"}).
+			AddRow(1, "Lettuce"),
+	)
+
+	mock.ExpectQuery("SELECT \\* FROM `vegetable_list` LIMIT 1").WillReturnRows(
+		sqlmock.NewRows([]string{"id", "vegetable"}).
+			AddRow(1, "Lettuce"),
+	)
+
+	rows := sqlmock.NewRows([]string{"id", "vegetable"})
+	for _, row := range r {
+		rows.AddRow(row.ID, row.Value)
+	}
+	mock.ExpectQuery("SELECT `id`, `vegetable` FROM `vegetable_list`").
+		WillReturnRows(rows)
+
+	assert.Nil(t, dumper.dumpTableData(t.Context(), buffer, "vegetable_list"))
+
+	// InsertIntoLimit=3 should take priority over Quick mode, so 6 rows / 3 = 2 INSERT statements
+	assert.Equal(t, 2, strings.Count(buffer.String(), "INSERT INTO `vegetable_list` (`id`, `vegetable`) VALUES"))
+
+	for _, row := range r {
+		assert.Contains(t, buffer.String(), fmt.Sprintf("'%s'", row.Value))
+	}
+}
+
+func TestMySQLDumpTableData_QuickModeWithoutInsertIntoLimit(t *testing.T) {
+	db, mock := getDB(t)
+	buffer := bytes.NewBuffer(make([]byte, 0))
+
+	dumper := getInternalMySQLInstance(db)
+	dumper.Quick = true
+	dumper.InsertIntoLimit = 0 // Not set, Quick mode should apply (1 row per INSERT)
+
+	r := []struct {
+		ID    int
+		Value string
+	}{
+		{1, "Lettuce"},
+		{2, "Cabbage"},
+		{3, "Cucumber"},
+	}
+
+	mock.ExpectQuery("SELECT \\* FROM `vegetable_list` LIMIT 1").WillReturnRows(
+		sqlmock.NewRows([]string{"id", "vegetable"}).
+			AddRow(1, "Lettuce"),
+	)
+
+	mock.ExpectQuery("SELECT \\* FROM `vegetable_list` LIMIT 1").WillReturnRows(
+		sqlmock.NewRows([]string{"id", "vegetable"}).
+			AddRow(1, "Lettuce"),
+	)
+
+	rows := sqlmock.NewRows([]string{"id", "vegetable"})
+	for _, row := range r {
+		rows.AddRow(row.ID, row.Value)
+	}
+	mock.ExpectQuery("SELECT `id`, `vegetable` FROM `vegetable_list`").
+		WillReturnRows(rows)
+
+	assert.Nil(t, dumper.dumpTableData(t.Context(), buffer, "vegetable_list"))
+
+	// Quick mode with no InsertIntoLimit should produce 1 INSERT per row
+	assert.Equal(t, 3, strings.Count(buffer.String(), "INSERT INTO `vegetable_list` (`id`, `vegetable`) VALUES"))
+
+	for _, row := range r {
+		assert.Contains(t, buffer.String(), fmt.Sprintf("'%s'", row.Value))
+	}
+}
+
 func TestMySQLDumpTableDataHandlingErrorFromSelectAllDataFor(t *testing.T) {
 	db, mock := getDB(t)
 	buffer := bytes.NewBuffer(make([]byte, 0))
