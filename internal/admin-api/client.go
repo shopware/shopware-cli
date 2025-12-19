@@ -133,7 +133,7 @@ func (c *Client) Do(ctx context.Context, req *http.Request, v interface{}) (*htt
 
 func (c *Client) NewRawRequest(context ApiContext, method, urlStr string, body io.Reader) (*http.Request, error) {
 	if strings.HasSuffix(c.url, "/") {
-		return nil, fmt.Errorf("BaseURL must not have a trailing slash, but %q does not", c.url)
+		return nil, fmt.Errorf("BaseURL must not have a trailing slash, but %q does", c.url)
 	}
 
 	req, err := http.NewRequestWithContext(context.Context, method, c.url+urlStr, body)
