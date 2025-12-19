@@ -8,6 +8,7 @@ import (
 	"github.com/spf13/cobra"
 
 	accountApi "github.com/shopware/shopware-cli/internal/account-api"
+	"github.com/shopware/shopware-cli/internal/system"
 	"github.com/shopware/shopware-cli/logging"
 )
 
@@ -21,6 +22,10 @@ var loginCmd = &cobra.Command{
 		newCredentials := false
 
 		if len(email) == 0 || len(password) == 0 {
+			if !system.IsInteractionEnabled(cmd.Context()) {
+				return fmt.Errorf("credentials missing and interaction is disabled")
+			}
+
 			var err error
 			email, password, err = askUserForEmailAndPassword()
 			if err != nil {
