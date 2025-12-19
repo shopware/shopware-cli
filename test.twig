@@ -1,0 +1,68 @@
+@startuml
+scale 2000 width
+
+hide empty description
+top to bottom direction
+
+skinparam defaultTextAlignment center
+skinparam linetype polyline
+skinparam nodesep 40
+skinparam padding 5
+skinparam ranksep 40
+skinparam SameClassWidth true
+skinparam Shadowing false
+skinparam BackgroundColor #FFF
+skinparam defaultBackgroundColor #FFF
+skinparam defaultFontName Helvetica
+skinparam defaultFontColor #52667a
+skinparam defaultFontSize 11
+skinParam defaultFontStyle plain
+skinparam sequenceMessageAlign center
+skinparam state {
+  AttributeFontColor blue
+  AttributeFontSize 10
+  AttributeFontStyle plain
+  BackgroundColor #f9fafb
+  BackgroundColor<<Success>> #e7f9e9
+  BackgroundColor<<Error>> #fbe5ea
+  BackgroundColor<<Info>> #e3f3ff
+  BackgroundColor<<Warning>> #189eff
+  BorderColor #d1d9e0
+  BorderColor<<Success>> #c3f1c8
+  BorderColor<<Error>> #f5bfc9
+  BorderColor<<Info>> #bae2ff
+  BorderColor<<Warning>> #bae2ff
+  FontColor #52667a
+  FontColor<<Succes>> #37d046
+  FontColor<<Error>> #de294c
+  FontColor<<Info>> #189eff
+  FontColor<<Warning>> #FFF
+  'EndColor Red
+  FontName Helvetica
+  FontSize 10
+  'FontStyle bold
+  'StartColor MediumBlue
+}
+
+title {{ title }}
+
+{{ '[*] -[#52667a]->' }} {{ initialState.getId() }}
+
+{% for state in states %}
+state "{{ state.getName() }}" as {{ state.getId() }}{% if state.getTechnicalName() in ['completed','paid','shipped'] %}<<Success>>{% endif %}{% if state.getTechnicalName() not in ['open', 'cancelled', 'in_progress', 'completed','paid','shipped'] %}<<Warning>>{% endif %}{% if state.getTechnicalName() in ['cancelled','failed'] %}<<Error>>{% endif %}{% if state.getTechnicalName() == 'in_progress' %}<<Info>>{% endif %} : {{  state.getTechnicalName() }}
+{% set temp %}{% apply spaceless %}
+{% for transition in transitions %}
+    {% if transition.getFromStateId() == state.getId() and transition.getActionName() != 'reopen' %}yes{% else %}{% endif %}
+{% endfor %}{% endapply %}
+{% endset %}
+{% if temp|trim is empty %}
+{{ state.getId() }} {{ '-[#52667a]-> [*] : final' }}
+{% endif %}
+{% endfor %}
+ 
+
+{% for transition in transitions %}
+    {{ transition.getFromStateId() }} {{ '-[#52667a]->' }} {{ transition.getToStateId() }} : {{ transition.getActionName() }}
+{% endfor %}
+
+@enduml
