@@ -12,12 +12,12 @@ import (
 	"path/filepath"
 	"strings"
 
-	adminSdk "github.com/friendsofshopware/go-shopware-admin-api-sdk"
 	cp "github.com/otiai10/copy"
 	"github.com/shyim/go-version"
 	"github.com/spf13/cobra"
 
 	"github.com/shopware/shopware-cli/extension"
+	adminSdk "github.com/shopware/shopware-cli/internal/admin-api"
 	"github.com/shopware/shopware-cli/logging"
 	"github.com/shopware/shopware-cli/shop"
 )
