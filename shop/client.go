@@ -7,7 +7,7 @@ import (
 	"net/http"
 	"os"
 
-	adminSdk "github.com/friendsofshopware/go-shopware-admin-api-sdk"
+	adminSdk "github.com/shopware/shopware-cli/internal/admin-api"
 )
 
 func newShopCredentials(config *Config) (adminSdk.OAuthCredentials, error) {

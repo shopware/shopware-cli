@@ -3,9 +3,9 @@ package project
 import (
 	"fmt"
 
-	adminSdk "github.com/friendsofshopware/go-shopware-admin-api-sdk"
 	"github.com/spf13/cobra"
 
+	adminSdk "github.com/shopware/shopware-cli/internal/admin-api"
 	"github.com/shopware/shopware-cli/logging"
 	"github.com/shopware/shopware-cli/shop"
 )

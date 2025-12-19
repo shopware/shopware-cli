@@ -5,11 +5,8 @@ import (
 	"os"
 	"path"
 	"path/filepath"
-	"strings"
 
 	"dario.cat/mergo"
-	adminSdk "github.com/friendsofshopware/go-shopware-admin-api-sdk"
-	"github.com/google/uuid"
 	"github.com/invopop/jsonschema"
 	orderedmap "github.com/wk8/go-ordered-map/v2"
 	"gopkg.in/yaml.v3"
@@ -24,7 +21,6 @@ type Config struct {
 	Build            *ConfigBuild      `yaml:"build,omitempty"`
 	AdminApi         *ConfigAdminApi   `yaml:"admin_api,omitempty"`
 	ConfigDump       *ConfigDump       `yaml:"dump,omitempty"`
-	Sync             *ConfigSync       `yaml:"sync,omitempty"`
 	ConfigDeployment *ConfigDeployment `yaml:"deployment,omitempty"`
 	Validation       *ConfigValidation `yaml:"validation,omitempty"`
 	ImageProxy       *ConfigImageProxy `yaml:"image_proxy,omitempty"`
@@ -230,14 +226,6 @@ func (c *ConfigDump) EnableAnonymization() {
 	}
 }
 
-type ConfigSync struct {
-	Enabled      *[]string          `yaml:"enabled,omitempty" jsonschema:"enum=system_config,enum=mail_template,enum=theme,enum=entity"`
-	Config       []ConfigSyncConfig `yaml:"config,omitempty"`
-	Theme        []ThemeConfig      `yaml:"theme,omitempty"`
-	MailTemplate []MailTemplate     `yaml:"mail_template,omitempty"`
-	Entity       []EntitySync       `yaml:"entity,omitempty"`
-}
-
 type ConfigDeployment struct {
 	Hooks struct {
 		// The pre hook will be executed before the deployment
@@ -308,96 +296,6 @@ func (c ConfigDeploymentOverrides) JSONSchema() *jsonschema.Schema {
 			Required:   []string{"state"},
 		},
 	}
-}
-
-type ConfigSyncConfig struct {
-	// Sales Channel ID to apply
-	SalesChannel *string `yaml:"sales_channel,omitempty"`
-	// Configurations of that Sales Channel
-	Settings map[string]interface{} `yaml:"settings"`
-}
-
-type ThemeConfig struct {
-	Name     string                               `yaml:"name"`
-	Settings map[string]adminSdk.ThemeConfigValue `yaml:"settings"`
-}
-
-type MailTemplate struct {
-	Id           string                    `yaml:"id"`
-	Translations []MailTemplateTranslation `yaml:"translations"`
-}
-
-type EntitySync struct {
-	Entity  string                 `yaml:"entity"`
-	Exists  *[]EntitySyncFilter    `yaml:"exists,omitempty"`
-	Payload map[string]interface{} `yaml:"payload"`
-}
-
-type EntitySyncFilter struct {
-	// The type of filter
-	Type string `yaml:"type" jsonschema:"required,enum=equals,enum=multi,enum=contains,enum=prefix,enum=suffix,enum=not,enum=range,enum=until,enum=equalsAll,enum=equalsAny"`
-	// The field to filter on
-	Field string `yaml:"field" jsonschema:"required"`
-	// The actual filter value
-	Value interface{} `yaml:"value"`
-	// The operator to use for multiple filters
-	Operator *string `yaml:"operator,omitempty" jsonschema:"enum=AND,enum=OR,enum=XOR"`
-	// The filters to apply, when type set to multi
-	Queries *[]EntitySyncFilter `yaml:"queries,omitempty"`
-}
-
-func (s EntitySyncFilter) JSONSchema() *jsonschema.Schema {
-	properties := orderedmap.New[string, *jsonschema.Schema]()
-
-	properties.Set("type", &jsonschema.Schema{
-		Type: "string",
-		Enum: []interface{}{"equals", "multi", "contains", "prefix", "suffix", "not", "range", "until", "equalsAll", "equalsAny"},
-	})
-
-	properties.Set("field", &jsonschema.Schema{
-		Type:        "string",
-		Description: "The field to filter on",
-	})
-
-	properties.Set("value", &jsonschema.Schema{
-		Description: "The actual filter value",
-	})
-
-	properties.Set("operator", &jsonschema.Schema{
-		Type: "string",
-		Enum: []interface{}{"AND", "OR", "XOR"},
-	})
-
-	ifProperties := orderedmap.New[string, *jsonschema.Schema]()
-	ifProperties.Set("type", &jsonschema.Schema{
-		Const: "multi",
-	})
-
-	return &jsonschema.Schema{
-		Type:       "object",
-		Title:      "Entity Sync Filter",
-		Properties: properties,
-		Required:   []string{"type", "field"},
-		AllOf: []*jsonschema.Schema{
-			{
-				If: &jsonschema.Schema{
-					Properties: ifProperties,
-					Then: &jsonschema.Schema{
-						Required: []string{"type", "queries"},
-					},
-				},
-			},
-		},
-	}
-}
-
-type MailTemplateTranslation struct {
-	Language     string      `yaml:"language"`
-	SenderName   string      `yaml:"sender_name"`
-	Subject      string      `yaml:"subject"`
-	HTML         string      `yaml:"html"`
-	Plain        string      `yaml:"plain"`
-	CustomFields interface{} `yaml:"custom_fields"`
 }
 
 // ConfigValidation is used to configure the project validation.
@@ -476,20 +374,9 @@ func ReadConfig(fileName string, allowFallback bool) (*Config, error) {
 	return fillEmptyConfig(config), nil
 }
 
-const (
-	SyncOptionEntity       = "entity"
-	SyncOptionMailTemplate = "mail_template"
-	SyncOptionSystemConfig = "system_config"
-	SyncOptionTheme        = "theme"
-)
-
 func fillEmptyConfig(c *Config) *Config {
 	if c.Build == nil {
 		c.Build = &ConfigBuild{}
-	}
-
-	if c.Sync == nil {
-		c.Sync = &ConfigSync{}
 	}
 
 	return c
@@ -497,10 +384,6 @@ func fillEmptyConfig(c *Config) *Config {
 
 func (c Config) IsFallback() bool {
 	return !c.foundConfig
-}
-
-func NewUuid() string {
-	return strings.ReplaceAll(uuid.New().String(), "-", "")
 }
 
 func DefaultConfigFileName() string {
