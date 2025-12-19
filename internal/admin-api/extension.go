@@ -71,7 +71,7 @@ func (e ExtensionManagerService) ActivateExtension(ctx ApiContext, extType, name
 }
 
 func (e ExtensionManagerService) DeactivateExtension(ctx ApiContext, extType, name string) (*http.Response, error) {
-	return e.lifecycleUpdate("ActivateExtension", ctx, fmt.Sprintf("/api/_action/extension/deactivate/%s/%s", extType, name), http.MethodPut)
+	return e.lifecycleUpdate("DeactivateExtension", ctx, fmt.Sprintf("/api/_action/extension/deactivate/%s/%s", extType, name), http.MethodPut)
 }
 
 func (e ExtensionManagerService) RemoveExtension(ctx ApiContext, extType, name string) (*http.Response, error) {
