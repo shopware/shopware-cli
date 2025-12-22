@@ -13,8 +13,8 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/shopware/shopware-cli/extension"
 	accountApi "github.com/shopware/shopware-cli/internal/account-api"
+	"github.com/shopware/shopware-cli/internal/extension"
 	"github.com/shopware/shopware-cli/logging"
 )
 

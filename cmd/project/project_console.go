@@ -5,9 +5,9 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/shopware/shopware-cli/extension"
+	"github.com/shopware/shopware-cli/internal/extension"
 	"github.com/shopware/shopware-cli/internal/phpexec"
-	"github.com/shopware/shopware-cli/shop"
+	"github.com/shopware/shopware-cli/internal/shop"
 )
 
 var (

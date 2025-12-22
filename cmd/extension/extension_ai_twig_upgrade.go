@@ -12,7 +12,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/shopware/shopware-cli/extension"
+	"github.com/shopware/shopware-cli/internal/extension"
 	"github.com/shopware/shopware-cli/internal/llm"
 	"github.com/shopware/shopware-cli/internal/twigparser"
 	"github.com/shopware/shopware-cli/internal/verifier"

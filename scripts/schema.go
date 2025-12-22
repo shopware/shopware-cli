@@ -10,9 +10,9 @@ import (
 
 	"github.com/invopop/jsonschema"
 
-	"github.com/shopware/shopware-cli/extension"
 	"github.com/shopware/shopware-cli/internal/changelog"
-	"github.com/shopware/shopware-cli/shop"
+	"github.com/shopware/shopware-cli/internal/extension"
+	"github.com/shopware/shopware-cli/internal/shop"
 )
 
 var genericTypeRegex = regexp.MustCompile(`^(.+?)\[(.+)]$`)

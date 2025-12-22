@@ -12,10 +12,10 @@ import (
 
 	"github.com/shyim/go-version"
 
-	"github.com/shopware/shopware-cli/extension"
+	"github.com/shopware/shopware-cli/internal/extension"
+	"github.com/shopware/shopware-cli/internal/shop"
 	"github.com/shopware/shopware-cli/internal/validation"
 	"github.com/shopware/shopware-cli/logging"
-	"github.com/shopware/shopware-cli/shop"
 )
 
 func IsProject(root string) bool {

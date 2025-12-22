@@ -19,11 +19,11 @@ import (
 	"github.com/vulcand/oxy/v2/forward"
 	"golang.org/x/net/html"
 
-	"github.com/shopware/shopware-cli/extension"
 	"github.com/shopware/shopware-cli/internal/asset"
 	"github.com/shopware/shopware-cli/internal/esbuild"
+	"github.com/shopware/shopware-cli/internal/extension"
+	"github.com/shopware/shopware-cli/internal/shop"
 	"github.com/shopware/shopware-cli/logging"
-	"github.com/shopware/shopware-cli/shop"
 )
 
 const schemeHostSeparator = "://"

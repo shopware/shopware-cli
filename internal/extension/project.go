@@ -15,8 +15,8 @@ import (
 	"github.com/shopware/shopware-cli/internal/asset"
 	"github.com/shopware/shopware-cli/internal/packagist"
 	"github.com/shopware/shopware-cli/internal/phpexec"
+	"github.com/shopware/shopware-cli/internal/shop"
 	"github.com/shopware/shopware-cli/logging"
-	"github.com/shopware/shopware-cli/shop"
 )
 
 func GetShopwareProjectConstraint(project string) (*version.Constraints, error) {

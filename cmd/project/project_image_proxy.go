@@ -15,8 +15,8 @@ import (
 	"github.com/NYTimes/gziphandler"
 	"github.com/spf13/cobra"
 
+	"github.com/shopware/shopware-cli/internal/shop"
 	"github.com/shopware/shopware-cli/logging"
-	"github.com/shopware/shopware-cli/shop"
 )
 
 var (

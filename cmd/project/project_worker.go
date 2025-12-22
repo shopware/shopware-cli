@@ -16,8 +16,8 @@ import (
 	"golang.org/x/time/rate"
 
 	"github.com/shopware/shopware-cli/internal/phpexec"
+	"github.com/shopware/shopware-cli/internal/shop"
 	"github.com/shopware/shopware-cli/logging"
-	"github.com/shopware/shopware-cli/shop"
 )
 
 var projectWorkerCmd = &cobra.Command{

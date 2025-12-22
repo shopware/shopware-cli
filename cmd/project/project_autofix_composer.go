@@ -11,7 +11,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/spf13/cobra"
 
-	"github.com/shopware/shopware-cli/extension"
+	"github.com/shopware/shopware-cli/internal/extension"
 	"github.com/shopware/shopware-cli/internal/packagist"
 	"github.com/shopware/shopware-cli/internal/system"
 	"github.com/shopware/shopware-cli/logging"
