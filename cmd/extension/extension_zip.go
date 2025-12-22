@@ -11,7 +11,7 @@ import (
 	cp "github.com/otiai10/copy"
 	"github.com/spf13/cobra"
 
-	"github.com/shopware/shopware-cli/extension"
+	"github.com/shopware/shopware-cli/internal/extension"
 	"github.com/shopware/shopware-cli/internal/validation"
 	"github.com/shopware/shopware-cli/logging"
 )

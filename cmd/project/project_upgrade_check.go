@@ -12,13 +12,13 @@ import (
 	"github.com/shyim/go-version"
 	"github.com/spf13/cobra"
 
-	"github.com/shopware/shopware-cli/extension"
 	account_api "github.com/shopware/shopware-cli/internal/account-api"
 	adminSdk "github.com/shopware/shopware-cli/internal/admin-api"
+	"github.com/shopware/shopware-cli/internal/extension"
 	"github.com/shopware/shopware-cli/internal/packagist"
+	"github.com/shopware/shopware-cli/internal/shop"
 	"github.com/shopware/shopware-cli/internal/system"
 	"github.com/shopware/shopware-cli/logging"
-	"github.com/shopware/shopware-cli/shop"
 )
 
 var projectUpgradeCheckCmd = &cobra.Command{
