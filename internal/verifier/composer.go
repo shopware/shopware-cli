@@ -7,8 +7,10 @@ import (
 	"os"
 	"os/exec"
 	"path"
+	"time"
 
 	"github.com/shopware/shopware-cli/internal/packagist"
+	"github.com/shopware/shopware-cli/logging"
 )
 
 func installComposerDeps(ctx context.Context, rootDir string, checkAgainst string) error {
@@ -54,6 +56,8 @@ func installComposerDeps(ctx context.Context, rootDir string, checkAgainst strin
 		composerInstall.Env = append(os.Environ(), fmt.Sprintf("COMPOSER_AUTH=%s", encoded))
 		composerInstall.Dir = rootDir
 
+		beforeStart := time.Now()
+
 		log, err := composerInstall.CombinedOutput()
 		if err != nil {
 			if _, writeErr := os.Stderr.Write(log); writeErr != nil {
@@ -61,6 +65,8 @@ func installComposerDeps(ctx context.Context, rootDir string, checkAgainst strin
 			}
 			return err
 		}
+
+		logging.FromContext(ctx).Debugf("Composer dependencies installed in %s", time.Since(beforeStart).String())
 	}
 
 	return nil

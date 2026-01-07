@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/spf13/cobra"
 	"golang.org/x/sync/errgroup"
@@ -27,6 +28,7 @@ var extensionValidateCmd = &cobra.Command{
 		tmpDir, err := os.MkdirTemp(os.TempDir(), "analyse-extension-*")
 		only, _ := cmd.Flags().GetString("only")
 		exclude, _ := cmd.Flags().GetString("exclude")
+		noCopy, _ := cmd.Flags().GetBool("no-copy")
 
 		// If the user does not want to run full validation, only run shopware-cli
 		if !isFull {
@@ -53,17 +55,25 @@ var extensionValidateCmd = &cobra.Command{
 		var toolCfg *verifier.ToolConfig
 
 		if stat.IsDir() {
-			if isFull {
+			if noCopy {
+				tmpDir = path
+				logging.FromContext(cmd.Context()).Debugf("Skipping copying extension files to temporary directory due to --no-copy flag")
+			} else if isFull {
+				beforeCopyTime := time.Now()
 				if err := system.CopyFiles(args[0], tmpDir); err != nil {
 					return err
 				}
 
+				logging.FromContext(cmd.Context()).Debugf("Copied extension files to temporary directory in %s", time.Since(beforeCopyTime).String())
+
 				defer func() {
+					beforeDeleteTime := time.Now()
 					if err := os.RemoveAll(tmpDir); err != nil {
 						logging.FromContext(cmd.Context()).Error("Failed to remove temporary directory:", err)
 					}
+					logging.FromContext(cmd.Context()).Debugf("Removed temporary directory in %s", time.Since(beforeDeleteTime).String())
 				}()
-			} else {
+			} else if !isFull {
 				tmpDir = args[0]
 			}
 
@@ -136,6 +146,7 @@ func init() {
 	extensionValidateCmd.PersistentFlags().String("check-against", "highest", "Check against Shopware Version (highest, lowest)")
 	extensionValidateCmd.PersistentFlags().String("only", "", "Run only specific tools by name (comma-separated, e.g. phpstan,eslint)")
 	extensionValidateCmd.PersistentFlags().String("exclude", "", "Exclude specific tools by name (comma-separated, e.g. phpstan,eslint)")
+	extensionValidateCmd.PersistentFlags().Bool("no-copy", false, "Do not copy extension files to temporary directory")
 	extensionValidateCmd.PreRunE = func(cmd *cobra.Command, args []string) error {
 		reporter, _ := cmd.Flags().GetString("reporter")
 		if reporter != "summary" && reporter != "json" && reporter != "github" && reporter != "junit" && reporter != "markdown" && reporter != "" {
