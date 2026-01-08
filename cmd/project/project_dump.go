@@ -73,6 +73,8 @@ var projectDatabaseDumpCmd = &cobra.Command{
 			projectCfg.ConfigDump.EnableAnonymization()
 		}
 
+		projectCfg.ConfigDump.NormalizeFakerExpressions()
+
 		dumper.SelectMap = projectCfg.ConfigDump.Rewrite
 		dumper.WhereMap = projectCfg.ConfigDump.Where
 		dumper.NoData = projectCfg.ConfigDump.NoData

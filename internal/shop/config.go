@@ -5,6 +5,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"strings"
 
 	"dario.cat/mergo"
 	"github.com/invopop/jsonschema"
@@ -221,6 +222,23 @@ func (c *ConfigDump) EnableAnonymization() {
 			// Merge column rewrites for existing table
 			for column, rewrite := range columns {
 				c.Rewrite[table][column] = rewrite
+			}
+		}
+	}
+}
+
+// NormalizeFakerExpressions wraps bare faker expressions with {{- -}} delimiters
+// so they can be properly evaluated by the mysqldump faker processor.
+func (c *ConfigDump) NormalizeFakerExpressions() {
+	if c.Rewrite == nil {
+		return
+	}
+
+	for table, columns := range c.Rewrite {
+		for column, value := range columns {
+			trimmed := strings.TrimSpace(value)
+			if strings.HasPrefix(trimmed, "faker.") && !strings.Contains(value, "{{-") {
+				c.Rewrite[table][column] = "{{- " + trimmed + " -}}"
 			}
 		}
 	}

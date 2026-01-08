@@ -216,6 +216,95 @@ func TestConfigDump_EnableAnonymization(t *testing.T) {
 	})
 }
 
+func TestConfigDump_NormalizeFakerExpressions(t *testing.T) {
+	t.Run("wraps bare faker expressions with delimiters", func(t *testing.T) {
+		config := &ConfigDump{
+			Rewrite: map[string]map[string]string{
+				"customer": {
+					"email":      "faker.Internet.Email()",
+					"first_name": "faker.Person.FirstName()",
+				},
+			},
+		}
+
+		config.NormalizeFakerExpressions()
+
+		assert.Equal(t, "{{- faker.Internet.Email() -}}", config.Rewrite["customer"]["email"])
+		assert.Equal(t, "{{- faker.Person.FirstName() -}}", config.Rewrite["customer"]["first_name"])
+	})
+
+	t.Run("handles whitespace in faker expressions", func(t *testing.T) {
+		config := &ConfigDump{
+			Rewrite: map[string]map[string]string{
+				"customer": {
+					"email": "  faker.Internet.Email()  ",
+				},
+			},
+		}
+
+		config.NormalizeFakerExpressions()
+
+		assert.Equal(t, "{{- faker.Internet.Email() -}}", config.Rewrite["customer"]["email"])
+	})
+
+	t.Run("does not modify already-delimited expressions", func(t *testing.T) {
+		config := &ConfigDump{
+			Rewrite: map[string]map[string]string{
+				"customer": {
+					"email": "{{- faker.Internet.Email() -}}",
+				},
+			},
+		}
+
+		config.NormalizeFakerExpressions()
+
+		assert.Equal(t, "{{- faker.Internet.Email() -}}", config.Rewrite["customer"]["email"])
+	})
+
+	t.Run("does not modify non-faker values", func(t *testing.T) {
+		config := &ConfigDump{
+			Rewrite: map[string]map[string]string{
+				"customer": {
+					"email":  "'anonymous@example.com'",
+					"status": "NOW()",
+				},
+			},
+		}
+
+		config.NormalizeFakerExpressions()
+
+		assert.Equal(t, "'anonymous@example.com'", config.Rewrite["customer"]["email"])
+		assert.Equal(t, "NOW()", config.Rewrite["customer"]["status"])
+	})
+
+	t.Run("handles nil rewrite map", func(t *testing.T) {
+		config := &ConfigDump{}
+
+		// Should not panic
+		config.NormalizeFakerExpressions()
+
+		assert.Nil(t, config.Rewrite)
+	})
+
+	t.Run("handles multiple tables", func(t *testing.T) {
+		config := &ConfigDump{
+			Rewrite: map[string]map[string]string{
+				"customer": {
+					"email": "faker.Internet.Email()",
+				},
+				"order_customer": {
+					"first_name": "faker.Person.FirstName()",
+				},
+			},
+		}
+
+		config.NormalizeFakerExpressions()
+
+		assert.Equal(t, "{{- faker.Internet.Email() -}}", config.Rewrite["customer"]["email"])
+		assert.Equal(t, "{{- faker.Person.FirstName() -}}", config.Rewrite["order_customer"]["first_name"])
+	})
+}
+
 func TestConfigDump_EnableClean(t *testing.T) {
 	t.Run("empty config", func(t *testing.T) {
 		config := &ConfigDump{}
