@@ -13,21 +13,60 @@ import (
 	"github.com/shopware/shopware-cli/logging"
 )
 
-func GenerateComposerJson(ctx context.Context, version string, rc bool, useDocker bool, withoutElasticsearch bool, noAudit bool) (string, error) {
+const (
+	DeploymentNone         = "none"
+	DeploymentDeployer     = "deployer"
+	DeploymentPlatformSH   = "platformsh"
+	DeploymentShopwarePaaS = "shopware-paas"
+)
+
+type ComposerJsonOptions struct {
+	Version          string
+	DependingVersion string
+	RC               bool
+	UseDocker        bool
+	UseMinio         bool
+	UseElasticsearch bool
+	NoAudit          bool
+	DeploymentMethod string
+}
+
+func (o ComposerJsonOptions) IsShopwarePaaS() bool {
+	return o.DeploymentMethod == DeploymentShopwarePaaS
+}
+
+func (o ComposerJsonOptions) IsPlatformSH() bool {
+	return o.DeploymentMethod == DeploymentPlatformSH
+}
+
+func (o ComposerJsonOptions) IsDeployer() bool {
+	return o.DeploymentMethod == DeploymentDeployer
+}
+
+func GenerateComposerJson(ctx context.Context, opts ComposerJsonOptions) (string, error) {
 	tplContent, err := template.New("composer.json").Parse(`{
     "name": "shopware/production",
     "license": "MIT",
     "type": "project",
     "require": {
         "composer-runtime-api": "^2.0",
-        "shopware/administration": "{{ .DependingVersions }}",
+        "shopware/administration": "{{ .DependingVersion }}",
         "shopware/core": "{{ .Version }}",
 		{{if .UseElasticsearch}}
-        "shopware/elasticsearch": "{{ .DependingVersions }}",
+        "shopware/elasticsearch": "{{ .DependingVersion }}",
 		{{end}}
-        "shopware/storefront": "{{ .DependingVersions }}",
+        "shopware/storefront": "{{ .DependingVersion }}",
 		{{if .UseDocker}}
 		"shopware/docker-dev": "*",
+		{{end}}
+		{{if .IsDeployer}}
+		"deployer/deployer": "*",
+		{{end}}
+		{{if .IsPlatformSH}}
+		"shopware/paas-meta": "*",
+		{{end}}
+		{{if .IsShopwarePaaS}}
+		"shopware/k8s-meta": "*",
 		{{end}}
         "symfony/flex": "~2"
     },
@@ -72,8 +111,11 @@ func GenerateComposerJson(ctx context.Context, version string, rc bool, useDocke
         "sort-packages": true{{if .NoAudit}},
         "audit": {
             "block-insecure": false
-        }
-        {{end}}
+        }{{end}}{{if .IsShopwarePaaS}},
+        "platform": {
+            "ext-grpc": "1.44.0",
+            "ext-opentelemetry": "3.21.0"
+        }{{end}}
     },
     "scripts": {
         "auto-scripts": [
@@ -101,30 +143,23 @@ func GenerateComposerJson(ctx context.Context, version string, rc bool, useDocke
 
 	buf := new(bytes.Buffer)
 
-	dependingVersions := "*"
+	opts.DependingVersion = "*"
 
-	if strings.HasPrefix(version, "dev-") {
-		fallbackVersion, err := getLatestFallbackVersion(ctx, strings.TrimPrefix(version, "dev-"))
+	if strings.HasPrefix(opts.Version, "dev-") {
+		fallbackVersion, err := getLatestFallbackVersion(ctx, strings.TrimPrefix(opts.Version, "dev-"))
 		if err != nil {
 			return "", err
 		}
 
-		if strings.HasPrefix(version, "dev-6") {
-			version = strings.TrimPrefix(version, "dev-") + "-dev"
+		if strings.HasPrefix(opts.Version, "dev-6") {
+			opts.Version = strings.TrimPrefix(opts.Version, "dev-") + "-dev"
 		}
 
-		version = fmt.Sprintf("%s as %s.9999999-dev", version, fallbackVersion)
-		dependingVersions = version
+		opts.Version = fmt.Sprintf("%s as %s.9999999-dev", opts.Version, fallbackVersion)
+		opts.DependingVersion = opts.Version
 	}
 
-	err = tplContent.Execute(buf, map[string]interface{}{
-		"Version":           version,
-		"DependingVersions": dependingVersions,
-		"RC":                rc,
-		"UseDocker":         useDocker,
-		"UseElasticsearch":  !withoutElasticsearch,
-		"NoAudit":           noAudit,
-	})
+	err = tplContent.Execute(buf, opts)
 	if err != nil {
 		return "", err
 	}
