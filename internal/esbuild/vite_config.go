@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path"
+	"path/filepath"
 )
 
 type ViteManifestFile struct {
@@ -57,11 +58,12 @@ type ViteEntrypoints struct {
 
 func dumpViteEntrypoint(options AssetCompileOptions, viteDir string) error {
 	bundleFolderName := toBundleFolderName(options.Name)
+	kebabName := ToKebabCase(options.Name)
 
 	e := ViteEntrypoints{
 		Base: fmt.Sprintf("/bundles/%s/administration/", bundleFolderName),
 		EntryPoints: map[string]ViteEntrypoint{
-			ToKebabCase(options.Name): {
+			kebabName: {
 				Css: []string{
 					fmt.Sprintf("/bundles/%s/administration/%s", bundleFolderName, options.OutputCSSFile),
 				},
@@ -82,6 +84,15 @@ func dumpViteEntrypoint(options AssetCompileOptions, viteDir string) error {
 			4,
 		},
 		ViteServer: nil,
+	}
+
+	cssFile := filepath.Join(options.Path, options.OutputDir, options.OutputCSSFile)
+
+	// If no CSS file was generated, remove it from the entrypoint
+	if _, err := os.Stat(cssFile); os.IsNotExist(err) {
+		entrypoint := e.EntryPoints[kebabName]
+		entrypoint.Css = []string{}
+		e.EntryPoints[kebabName] = entrypoint
 	}
 
 	j, err := json.MarshalIndent(e, "", "  ")

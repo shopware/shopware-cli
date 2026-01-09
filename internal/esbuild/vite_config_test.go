@@ -65,8 +65,15 @@ func TestDumpViteEntrypoint(t *testing.T) {
 		OutputDir:     "dist",
 	}
 
+	// Create the CSS file so it's included in the entrypoint
+	cssDir := filepath.Join(tempDir, "dist")
+	err := os.MkdirAll(cssDir, 0755)
+	assert.NoError(t, err)
+	err = os.WriteFile(filepath.Join(cssDir, "styles.css"), []byte(""), 0644)
+	assert.NoError(t, err)
+
 	// Call dumpViteEntrypoint
-	err := dumpViteEntrypoint(options, tempDir)
+	err = dumpViteEntrypoint(options, tempDir)
 	assert.NoError(t, err)
 
 	// Verify that entrypoints.json is created
@@ -88,6 +95,62 @@ func TestDumpViteEntrypoint(t *testing.T) {
 		EntryPoints: map[string]ViteEntrypoint{
 			"test-name": {
 				Css:     []string{"/bundles/testname/administration/styles.css"},
+				Dynamic: []string{},
+				Js:      []string{"/bundles/testname/administration/main.js"},
+				Legacy:  false,
+				Preload: []string{},
+			},
+		},
+		Legacy:   false,
+		Metadata: map[string]interface{}{},
+		Version: []interface{}{
+			"7.0.4",
+			float64(7),
+			float64(0),
+			float64(4),
+		},
+		ViteServer: nil,
+	}
+
+	assert.Equal(t, expectedEntrypoints, entrypoints)
+}
+
+func TestDumpViteEntrypointNoCssFile(t *testing.T) {
+	// Create a temporary directory
+	tempDir := t.TempDir()
+
+	// Define sample AssetCompileOptions
+	options := AssetCompileOptions{
+		OutputJSFile:  "main.js",
+		OutputCSSFile: "styles.css",
+		Name:          "TestName",
+		Path:          tempDir,
+		OutputDir:     "dist",
+	}
+
+	// Call dumpViteEntrypoint without creating a CSS file
+	err := dumpViteEntrypoint(options, tempDir)
+	assert.NoError(t, err)
+
+	// Verify that entrypoints.json is created
+	entrypointsPath := filepath.Join(tempDir, "entrypoints.json")
+	_, err = os.Stat(entrypointsPath)
+	assert.NoError(t, err)
+
+	// Read and unmarshal the content of entrypoints.json
+	content, err := os.ReadFile(entrypointsPath)
+	assert.NoError(t, err)
+
+	var entrypoints ViteEntrypoints
+	err = json.Unmarshal(content, &entrypoints)
+	assert.NoError(t, err)
+
+	// Assert that CSS is empty when no CSS file exists
+	expectedEntrypoints := ViteEntrypoints{
+		Base: "/bundles/testname/administration/",
+		EntryPoints: map[string]ViteEntrypoint{
+			"test-name": {
+				Css:     []string{},
 				Dynamic: []string{},
 				Js:      []string{"/bundles/testname/administration/main.js"},
 				Legacy:  false,
