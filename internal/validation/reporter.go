@@ -184,7 +184,7 @@ type GitLabCodeQualityLines struct {
 }
 
 func doGitLabReport(result Check) error {
-	var issues []GitLabCodeQualityIssue
+	issues := make([]GitLabCodeQualityIssue, 0)
 
 	// Sort results for deterministic output
 	results := result.GetResults()

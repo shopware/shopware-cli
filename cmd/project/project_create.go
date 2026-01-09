@@ -1,7 +1,9 @@
 package project
 
 import (
+	"bytes"
 	"context"
+	_ "embed"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -11,45 +13,256 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"text/template"
 
 	"github.com/charmbracelet/huh"
 	"github.com/shyim/go-version"
 	"github.com/spf13/cobra"
 
+	"github.com/shopware/shopware-cli/internal/git"
 	"github.com/shopware/shopware-cli/internal/packagist"
 	"github.com/shopware/shopware-cli/internal/system"
 	"github.com/shopware/shopware-cli/logging"
 )
 
+//go:embed static/deploy.php
+var deployerTemplate string
+
+//go:embed static/github-ci.yml
+var githubCITemplate string
+
+//go:embed static/github-deploy.yml
+var githubDeployTemplate string
+
+//go:embed static/gitlab-ci.yml.tmpl
+var gitlabCITemplate string
+
+const versionLatest = "latest"
+
 var projectCreateCmd = &cobra.Command{
 	Use:   "create [name] [version]",
 	Short: "Create a new Shopware 6 project",
-	Args:  cobra.MinimumNArgs(1),
-	ValidArgsFunction: func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+	Args:  cobra.MaximumNArgs(2),
+	ValidArgsFunction: func(cmd *cobra.Command, args []string, _ string) ([]string, cobra.ShellCompDirective) {
+		if len(args) == 0 {
+			return []string{}, cobra.ShellCompDirectiveFilterDirs
+		}
+
 		if len(args) == 1 {
 			filteredVersions, err := getFilteredInstallVersions(cmd.Context())
 			if err != nil {
 				return []string{}, cobra.ShellCompDirectiveNoFileComp
 			}
-			versions := make([]string, 0)
-
-			for i, v := range filteredVersions {
-				versions[i] = v.String()
+			versions := make([]string, 0, len(filteredVersions)+1)
+			versions = append(versions, versionLatest)
+			for _, v := range filteredVersions {
+				versions = append(versions, v.String())
 			}
-
-			versions = append(versions, "latest")
-
 			return versions, cobra.ShellCompDirectiveNoFileComp
 		}
 
-		return []string{}, cobra.ShellCompDirectiveFilterDirs
+		return []string{}, cobra.ShellCompDirectiveNoFileComp
 	},
 	RunE: func(cmd *cobra.Command, args []string) error {
-		projectFolder := args[0]
-
 		useDocker, _ := cmd.PersistentFlags().GetBool("docker")
+		withElasticsearch, _ := cmd.PersistentFlags().GetBool("with-elasticsearch")
 		withoutElasticsearch, _ := cmd.PersistentFlags().GetBool("without-elasticsearch")
 		noAudit, _ := cmd.PersistentFlags().GetBool("no-audit")
+		initGit, _ := cmd.PersistentFlags().GetBool("git")
+		versionFlag, _ := cmd.PersistentFlags().GetString("version")
+		deploymentMethod, _ := cmd.PersistentFlags().GetString("deployment")
+		ciSystem, _ := cmd.PersistentFlags().GetString("ci")
+
+		if cmd.PersistentFlags().Changed("without-elasticsearch") {
+			logging.FromContext(cmd.Context()).Warnf("Flag --without-elasticsearch is deprecated, use --with-elasticsearch instead")
+			withElasticsearch = !withoutElasticsearch
+		}
+
+		interactive := system.IsInteractionEnabled(cmd.Context())
+
+		const (
+			optionDocker        = "docker"
+			optionGit           = "git"
+			optionElasticsearch = "elasticsearch"
+
+			ciNone   = "none"
+			ciGitHub = "github"
+			ciGitLab = "gitlab"
+		)
+
+		filteredVersions, err := getFilteredInstallVersions(cmd.Context())
+		if err != nil {
+			return err
+		}
+
+		versionOptions := make([]huh.Option[string], 0, len(filteredVersions)+1)
+		versionOptions = append(versionOptions, huh.NewOption(versionLatest, versionLatest))
+		for _, v := range filteredVersions {
+			versionStr := v.String()
+			versionOptions = append(versionOptions, huh.NewOption(versionStr, versionStr))
+		}
+
+		deploymentOptions := []huh.Option[string]{
+			huh.NewOption("None", packagist.DeploymentNone),
+			huh.NewOption("DeployerPHP", packagist.DeploymentDeployer),
+			huh.NewOption("PaaS powered by Platform.sh", packagist.DeploymentPlatformSH),
+			huh.NewOption("PaaS powered by Shopware", packagist.DeploymentShopwarePaaS),
+		}
+
+		ciOptions := []huh.Option[string]{
+			huh.NewOption("None", ciNone),
+			huh.NewOption("GitHub Actions", ciGitHub),
+			huh.NewOption("GitLab CI", ciGitLab),
+		}
+
+		var projectFolder string
+		selectedVersion := versionFlag
+		selectedDeployment := deploymentMethod
+		selectedCI := ciSystem
+		var selectedOptions []string
+
+		if len(args) > 0 {
+			projectFolder = args[0]
+		}
+
+		if len(args) > 1 && selectedVersion == "" {
+			selectedVersion = args[1]
+		}
+
+		if !interactive {
+			if projectFolder == "" {
+				return fmt.Errorf("project name is required in non-interactive mode")
+			}
+			if selectedVersion == "" {
+				selectedVersion = versionLatest
+			}
+			if selectedDeployment == "" {
+				selectedDeployment = packagist.DeploymentNone
+			}
+			if selectedCI == "" {
+				selectedCI = ciNone
+			}
+		} else {
+			var formFields []huh.Field
+
+			if projectFolder == "" {
+				formFields = append(formFields,
+					huh.NewInput().
+						Title("Project Name").
+						Description("The name of the project directory to create").
+						Placeholder("my-shopware-project").
+						Value(&projectFolder).
+						Validate(func(s string) error {
+							if s == "" {
+								return fmt.Errorf("project name is required")
+							}
+							return nil
+						}),
+				)
+			}
+
+			if selectedVersion == "" {
+				selectedVersion = versionLatest
+				formFields = append(formFields,
+					huh.NewSelect[string]().
+						Title("Shopware Version").
+						Description("Select the Shopware version to install").
+						Options(versionOptions...).
+						Height(10).
+						Value(&selectedVersion),
+				)
+			}
+
+			if selectedDeployment == "" {
+				selectedDeployment = packagist.DeploymentNone
+				formFields = append(formFields,
+					huh.NewSelect[string]().
+						Title("Deployment Method").
+						Description("Select how you want to deploy your project").
+						Options(deploymentOptions...).
+						Value(&selectedDeployment),
+				)
+			}
+
+			if selectedCI == "" {
+				selectedCI = ciNone
+				formFields = append(formFields,
+					huh.NewSelect[string]().
+						Title("CI/CD System").
+						Description("Select your CI/CD platform for automated testing and deployment").
+						Options(ciOptions...).
+						Value(&selectedCI),
+				)
+			}
+
+			var optionalOptions []huh.Option[string]
+			if !cmd.PersistentFlags().Changed("git") {
+				optionalOptions = append(optionalOptions, huh.NewOption("Initialize Git Repository", optionGit))
+			}
+			if !cmd.PersistentFlags().Changed("docker") {
+				optionalOptions = append(optionalOptions, huh.NewOption("Local Docker Setup", optionDocker))
+			}
+			if !cmd.PersistentFlags().Changed("with-elasticsearch") {
+				optionalOptions = append(optionalOptions, huh.NewOption("Setup Elasticsearch/OpenSearch support", optionElasticsearch))
+			}
+
+			if len(optionalOptions) > 0 {
+				formFields = append(formFields,
+					huh.NewMultiSelect[string]().
+						Title("Optional").
+						Description("Select additional features to enable").
+						Options(optionalOptions...).
+						Value(&selectedOptions),
+				)
+			}
+
+			if len(formFields) > 0 {
+				form := huh.NewForm(huh.NewGroup(formFields...))
+				if err := form.Run(); err != nil {
+					return err
+				}
+			}
+
+			for _, opt := range selectedOptions {
+				switch opt {
+				case optionDocker:
+					useDocker = true
+				case optionGit:
+					initGit = true
+				case optionElasticsearch:
+					withElasticsearch = true
+				}
+			}
+		}
+
+		if !useDocker {
+			phpOk, err := system.IsPHPVersionAtLeast(cmd.Context(), "8.2")
+			if err != nil {
+				return fmt.Errorf("PHP 8.2 or higher is required: %w", err)
+			}
+			if !phpOk {
+				return fmt.Errorf("PHP 8.2 or higher is required for Shopware 6")
+			}
+		}
+
+		validDeployments := map[string]bool{
+			packagist.DeploymentNone:         true,
+			packagist.DeploymentDeployer:     true,
+			packagist.DeploymentPlatformSH:   true,
+			packagist.DeploymentShopwarePaaS: true,
+		}
+		if !validDeployments[selectedDeployment] {
+			return fmt.Errorf("invalid deployment method: %s. Valid options: none, deployer, platformsh, shopware-paas", selectedDeployment)
+		}
+
+		validCISystems := map[string]bool{
+			ciNone:   true,
+			ciGitHub: true,
+			ciGitLab: true,
+		}
+		if !validCISystems[selectedCI] {
+			return fmt.Errorf("invalid CI system: %s. Valid options: none, github, gitlab", selectedCI)
+		}
 
 		if _, err := os.Stat(projectFolder); err == nil {
 			empty, err := system.IsDirEmpty(projectFolder)
@@ -64,71 +277,9 @@ var projectCreateCmd = &cobra.Command{
 
 		logging.FromContext(cmd.Context()).Infof("Using Symfony Flex to create a new Shopware 6 project")
 
-		filteredVersions, err := getFilteredInstallVersions(cmd.Context())
-		if err != nil {
-			return err
-		}
-
-		var result string
-
-		if len(args) == 2 {
-			result = args[1]
-		} else if !system.IsInteractionEnabled(cmd.Context()) {
-			result = "latest"
-		} else {
-			options := make([]huh.Option[string], 0)
-			for _, v := range filteredVersions {
-				versionStr := v.String()
-				options = append(options, huh.NewOption(versionStr, versionStr))
-			}
-
-			// Add "latest" option
-			options = append(options, huh.NewOption("latest", "latest"))
-
-			// Create and run the select form
-			form := huh.NewForm(
-				huh.NewGroup(
-					huh.NewSelect[string]().
-						Height(10).
-						Title("Select Version").
-						Options(options...).
-						Value(&result),
-				),
-			)
-
-			if err := form.Run(); err != nil {
-				return err
-			}
-		}
-
-		chooseVersion := ""
-
-		if result == "latest" {
-			// pick the most recent stable (non-RC) version
-			for _, v := range filteredVersions {
-				vs := v.String()
-				if !strings.Contains(strings.ToLower(vs), "rc") {
-					chooseVersion = vs
-					break
-				}
-			}
-			// if no stable found, fall back to top entry
-			if chooseVersion == "" && len(filteredVersions) > 0 {
-				chooseVersion = filteredVersions[0].String()
-			}
-		} else if strings.HasPrefix(result, "dev-") {
-			chooseVersion = result
-		} else {
-			for _, release := range filteredVersions {
-				if release.String() == result {
-					chooseVersion = release.String()
-					break
-				}
-			}
-		}
-
+		chooseVersion := resolveVersion(selectedVersion, filteredVersions)
 		if chooseVersion == "" {
-			return fmt.Errorf("cannot find version %s", result)
+			return fmt.Errorf("cannot find version %s", selectedVersion)
 		}
 
 		if err := os.MkdirAll(projectFolder, os.ModePerm); err != nil {
@@ -137,7 +288,14 @@ var projectCreateCmd = &cobra.Command{
 
 		logging.FromContext(cmd.Context()).Infof("Setting up Shopware %s", chooseVersion)
 
-		composerJson, err := packagist.GenerateComposerJson(cmd.Context(), chooseVersion, strings.Contains(chooseVersion, "rc"), useDocker, withoutElasticsearch, noAudit)
+		composerJson, err := packagist.GenerateComposerJson(cmd.Context(), packagist.ComposerJsonOptions{
+			Version:          chooseVersion,
+			RC:               strings.Contains(chooseVersion, "rc"),
+			UseDocker:        useDocker,
+			UseElasticsearch: withElasticsearch,
+			NoAudit:          noAudit,
+			DeploymentMethod: selectedDeployment,
+		})
 		if err != nil {
 			return err
 		}
@@ -166,55 +324,167 @@ var projectCreateCmd = &cobra.Command{
 			return err
 		}
 
-		if err := os.WriteFile(filepath.Join(projectFolder, "php.ini"), []byte("memory_limit=512M"), os.ModePerm); err != nil {
+		if !useDocker && system.IsSymfonyCliInstalled() {
+			if err := os.WriteFile(filepath.Join(projectFolder, "php.ini"), []byte("memory_limit=512M"), os.ModePerm); err != nil {
+				return err
+			}
+		}
+
+		if err := setupDeployment(projectFolder, selectedDeployment); err != nil {
+			return err
+		}
+
+		if err := setupCI(projectFolder, selectedCI, selectedDeployment); err != nil {
 			return err
 		}
 
 		logging.FromContext(cmd.Context()).Infof("Installing dependencies")
 
-		var cmdInstall *exec.Cmd
-
-		if useDocker {
-			// Use Docker to run composer
-			absProjectFolder, err := filepath.Abs(projectFolder)
-			if err != nil {
-				return err
-			}
-
-			dockerArgs := []string{"run", "--rm",
-				"-v", fmt.Sprintf("%s:/app", absProjectFolder),
-				"-w", "/app",
-				"ghcr.io/shopware/docker-dev:php8.3-node22-caddy",
-				"composer", "install", "--no-interaction"}
-
-			cmdInstall = exec.CommandContext(cmd.Context(), "docker", dockerArgs...)
-			cmdInstall.Stdout = os.Stdout
-			cmdInstall.Stderr = os.Stderr
-
-			return cmdInstall.Run()
-		} else {
-			// Use local composer
-			composerBinary, err := exec.LookPath("composer")
-			if err != nil {
-				return err
-			}
-
-			phpBinary := os.Getenv("PHP_BINARY")
-
-			if phpBinary != "" {
-				cmdInstall = exec.CommandContext(cmd.Context(), phpBinary, composerBinary, "install", "--no-interaction")
-			} else {
-				cmdInstall = exec.CommandContext(cmd.Context(), "composer", "install", "--no-interaction")
-			}
-
-			cmdInstall.Dir = projectFolder
-			cmdInstall.Stdin = os.Stdin
-			cmdInstall.Stdout = os.Stdout
-			cmdInstall.Stderr = os.Stderr
-
-			return cmdInstall.Run()
+		if err := runComposerInstall(cmd.Context(), projectFolder, useDocker); err != nil {
+			return err
 		}
+
+		if initGit {
+			logging.FromContext(cmd.Context()).Infof("Initializing Git repository")
+			if err := git.Init(cmd.Context(), projectFolder); err != nil {
+				return fmt.Errorf("failed to initialize git repository: %w", err)
+			}
+		}
+
+		logging.FromContext(cmd.Context()).Infof("Project created successfully in %s", projectFolder)
+
+		return nil
 	},
+}
+
+func resolveVersion(selectedVersion string, filteredVersions []*version.Version) string {
+	if selectedVersion == versionLatest {
+		// pick the most recent stable (non-RC) version
+		for _, v := range filteredVersions {
+			vs := v.String()
+			if !strings.Contains(strings.ToLower(vs), "rc") {
+				return vs
+			}
+		}
+		// if no stable found, fall back to top entry
+		if len(filteredVersions) > 0 {
+			return filteredVersions[0].String()
+		}
+		return ""
+	}
+
+	if strings.HasPrefix(selectedVersion, "dev-") {
+		return selectedVersion
+	}
+
+	for _, release := range filteredVersions {
+		if release.String() == selectedVersion {
+			return release.String()
+		}
+	}
+
+	return ""
+}
+
+func setupDeployment(projectFolder, deploymentMethod string) error {
+	switch deploymentMethod {
+	case packagist.DeploymentDeployer:
+		if err := os.WriteFile(filepath.Join(projectFolder, "deploy.php"), []byte(deployerTemplate), os.ModePerm); err != nil {
+			return err
+		}
+
+	case packagist.DeploymentShopwarePaaS:
+		shopwarePaasApp := `app:
+  php:
+    version: "8.4"
+services:
+  mysql:
+    version: "8.0"
+`
+
+		if err := os.WriteFile(filepath.Join(projectFolder, "application.yaml"), []byte(shopwarePaasApp), os.ModePerm); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func setupCI(projectFolder, ciSystem, deploymentMethod string) error {
+	switch ciSystem {
+	case "github":
+		if err := os.MkdirAll(filepath.Join(projectFolder, ".github", "workflows"), os.ModePerm); err != nil {
+			return err
+		}
+		if err := os.WriteFile(filepath.Join(projectFolder, ".github", "workflows", "ci.yml"), []byte(githubCITemplate), os.ModePerm); err != nil {
+			return err
+		}
+		if deploymentMethod == packagist.DeploymentDeployer {
+			if err := os.WriteFile(filepath.Join(projectFolder, ".github", "workflows", "deploy.yml"), []byte(githubDeployTemplate), os.ModePerm); err != nil {
+				return err
+			}
+		}
+
+	case "gitlab":
+		tmpl, err := template.New("gitlab-ci").Parse(gitlabCITemplate)
+		if err != nil {
+			return err
+		}
+
+		var buf bytes.Buffer
+		if err := tmpl.Execute(&buf, struct{ Deployer bool }{Deployer: deploymentMethod == packagist.DeploymentDeployer}); err != nil {
+			return err
+		}
+
+		if err := os.WriteFile(filepath.Join(projectFolder, ".gitlab-ci.yml"), buf.Bytes(), os.ModePerm); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func runComposerInstall(ctx context.Context, projectFolder string, useDocker bool) error {
+	var cmdInstall *exec.Cmd
+
+	if useDocker {
+		absProjectFolder, err := filepath.Abs(projectFolder)
+		if err != nil {
+			return err
+		}
+
+		dockerArgs := []string{"run", "--rm",
+			"-v", fmt.Sprintf("%s:/app", absProjectFolder),
+			"-w", "/app",
+			"ghcr.io/shopware/docker-dev:php8.3-node22-caddy",
+			"composer", "install", "--no-interaction"}
+
+		cmdInstall = exec.CommandContext(ctx, "docker", dockerArgs...)
+		cmdInstall.Stdout = os.Stdout
+		cmdInstall.Stderr = os.Stderr
+
+		return cmdInstall.Run()
+	}
+
+	composerBinary, err := exec.LookPath("composer")
+	if err != nil {
+		return err
+	}
+
+	phpBinary := os.Getenv("PHP_BINARY")
+
+	if phpBinary != "" {
+		cmdInstall = exec.CommandContext(ctx, phpBinary, composerBinary, "install", "--no-interaction")
+	} else {
+		cmdInstall = exec.CommandContext(ctx, "composer", "install", "--no-interaction")
+	}
+
+	cmdInstall.Dir = projectFolder
+	cmdInstall.Stdin = os.Stdin
+	cmdInstall.Stdout = os.Stdout
+	cmdInstall.Stderr = os.Stderr
+
+	return cmdInstall.Run()
 }
 
 func getFilteredInstallVersions(ctx context.Context) ([]*version.Version, error) {
@@ -242,8 +512,13 @@ func getFilteredInstallVersions(ctx context.Context) ([]*version.Version, error)
 func init() {
 	projectRootCmd.AddCommand(projectCreateCmd)
 	projectCreateCmd.PersistentFlags().Bool("docker", false, "Use Docker to run Composer instead of local installation")
-	projectCreateCmd.PersistentFlags().Bool("without-elasticsearch", false, "Remove Elasticsearch from the installation")
+	projectCreateCmd.PersistentFlags().Bool("with-elasticsearch", false, "Include Elasticsearch/OpenSearch support")
+	projectCreateCmd.PersistentFlags().Bool("without-elasticsearch", false, "Remove Elasticsearch from the installation (deprecated: use --with-elasticsearch)")
 	projectCreateCmd.PersistentFlags().Bool("no-audit", false, "Disable composer audit blocking insecure packages")
+	projectCreateCmd.PersistentFlags().Bool("git", false, "Initialize a Git repository")
+	projectCreateCmd.PersistentFlags().String("version", "", "Shopware version to install (e.g., 6.6.0.0, latest)")
+	projectCreateCmd.PersistentFlags().String("deployment", "", "Deployment method: none, deployer, platformsh, shopware-paas")
+	projectCreateCmd.PersistentFlags().String("ci", "", "CI/CD system: none, github, gitlab")
 }
 
 func fetchAvailableShopwareVersions(ctx context.Context) ([]string, error) {
