@@ -16,6 +16,7 @@ import (
 	"github.com/shopware/shopware-cli/internal/asset"
 	"github.com/shopware/shopware-cli/internal/ci"
 	"github.com/shopware/shopware-cli/internal/esbuild"
+	"github.com/shopware/shopware-cli/internal/npm"
 	"github.com/shopware/shopware-cli/logging"
 )
 
@@ -132,19 +133,19 @@ func BuildAssetsForExtensions(ctx context.Context, sources []asset.Source, asset
 
 			administrationRoot := PlatformPath(shopwareRoot, "Administration", "Resources/app/administration")
 
-			if assetConfig.NPMForceInstall || !nodeModulesExists(administrationRoot) {
+			if assetConfig.NPMForceInstall || !npm.NodeModulesExists(administrationRoot) {
 				var additionalNpmParameters []string
 
-				npmPackage, err := getNpmPackage(administrationRoot)
+				npmPackage, err := npm.ReadPackage(administrationRoot)
 				if err != nil {
 					return err
 				}
 
-				if doesPackageJsonContainsPackageInDev(npmPackage, "puppeteer") {
+				if npmPackage.HasDevDependency("puppeteer") {
 					additionalNpmParameters = []string{"--production"}
 				}
 
-				if err := InstallNPMDependencies(ctx, administrationRoot, npmPackage, additionalNpmParameters...); err != nil {
+				if err := npm.InstallDependencies(ctx, administrationRoot, npmPackage, additionalNpmParameters...); err != nil {
 					return err
 				}
 			}
@@ -158,7 +159,7 @@ func BuildAssetsForExtensions(ctx context.Context, sources []asset.Source, asset
 				logging.FromContext(ctx).Debugf("Building also the administration itself")
 			}
 
-			err = npmRunBuild(
+			err = npm.RunScript(
 				ctx,
 				administrationRoot,
 				"build",
@@ -237,27 +238,27 @@ func BuildAssetsForExtensions(ctx context.Context, sources []asset.Source, asset
 
 			storefrontRoot := PlatformPath(shopwareRoot, "Storefront", "Resources/app/storefront")
 
-			if assetConfig.NPMForceInstall || !nodeModulesExists(storefrontRoot) {
-				if err := patchPackageLockToRemoveCanIUsePackage(path.Join(storefrontRoot, "package-lock.json")); err != nil {
+			if assetConfig.NPMForceInstall || !npm.NodeModulesExists(storefrontRoot) {
+				if err := npm.PatchPackageLockToRemoveCanIUse(path.Join(storefrontRoot, "package-lock.json")); err != nil {
 					return err
 				}
 
 				additionalNpmParameters := []string{"caniuse-lite"}
 
-				npmPackage, err := getNpmPackage(storefrontRoot)
+				npmPackage, err := npm.ReadPackage(storefrontRoot)
 				if err != nil {
 					return err
 				}
 
-				if doesPackageJsonContainsPackageInDev(npmPackage, "puppeteer") {
+				if npmPackage.HasDevDependency("puppeteer") {
 					additionalNpmParameters = append(additionalNpmParameters, "--production")
 				}
 
-				if err := InstallNPMDependencies(ctx, storefrontRoot, npmPackage, additionalNpmParameters...); err != nil {
+				if err := npm.InstallDependencies(ctx, storefrontRoot, npmPackage, additionalNpmParameters...); err != nil {
 					return err
 				}
 
-				// As we call npm install caniuse-lite, we need to run the postinstal script manually.
+				// As we call npm install caniuse-lite, we need to run the postinstall script manually.
 				if npmPackage.HasScript("postinstall") {
 					npmRunPostInstall := exec.CommandContext(ctx, "npm", "run", "postinstall")
 					npmRunPostInstall.Dir = storefrontRoot
