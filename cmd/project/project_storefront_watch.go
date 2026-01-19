@@ -67,7 +67,7 @@ var projectStorefrontWatchCmd = &cobra.Command{
 		}
 
 		if _, err := os.Stat(extension.PlatformPath(projectRoot, "Storefront", "Resources/app/storefront/node_modules/webpack-dev-server")); os.IsNotExist(err) {
-			if err := npm.InstallDependencies(cmd.Context(), extension.PlatformPath(projectRoot, "Storefront", "Resources/app/storefront"), npm.Package{Dependencies: map[string]string{"not-empty": "not-empty"}}); err != nil {
+			if err := npm.InstallDependencies(cmd.Context(), extension.PlatformPath(projectRoot, "Storefront", "Resources/app/storefront"), npm.NonEmptyPackage); err != nil {
 				return err
 			}
 		}

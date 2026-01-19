@@ -49,7 +49,7 @@ var projectAdminWatchCmd = &cobra.Command{
 		}
 
 		if _, err := os.Stat(extension.PlatformPath(projectRoot, "Administration", "Resources/app/administration/node_modules/webpack-dev-server")); os.IsNotExist(err) {
-			if err := npm.InstallDependencies(cmd.Context(), extension.PlatformPath(projectRoot, "Administration", "Resources/app/administration"), npm.Package{Dependencies: map[string]string{"not-empty": "not-empty"}}); err != nil {
+			if err := npm.InstallDependencies(cmd.Context(), extension.PlatformPath(projectRoot, "Administration", "Resources/app/administration"), npm.NonEmptyPackage); err != nil {
 				return err
 			}
 		}

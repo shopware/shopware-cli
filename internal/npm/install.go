@@ -11,7 +11,7 @@ import (
 
 // InstallDependencies runs npm install in the given directory.
 // Additional parameters can be passed to customize the install behavior.
-func InstallDependencies(ctx context.Context, dir string, pkg Package, additionalParams ...string) error {
+func InstallDependencies(ctx context.Context, dir string, pkg *Package, additionalParams ...string) error {
 	isProductionMode := false
 
 	for _, param := range additionalParams {
@@ -20,7 +20,7 @@ func InstallDependencies(ctx context.Context, dir string, pkg Package, additiona
 		}
 	}
 
-	if isProductionMode && len(pkg.Dependencies) == 0 {
+	if isProductionMode && pkg != nil && len(pkg.Dependencies) == 0 {
 		return nil
 	}
 

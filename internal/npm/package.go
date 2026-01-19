@@ -26,18 +26,22 @@ func (p Package) HasDevDependency(name string) bool {
 }
 
 // ReadPackage reads and parses a package.json file from the given directory.
-func ReadPackage(dir string) (Package, error) {
+func ReadPackage(dir string) (*Package, error) {
 	packageJsonFile, err := os.ReadFile(filepath.Join(dir, "package.json"))
 	if err != nil {
-		return Package{}, err
+		return nil, err
 	}
 
 	var pkg Package
 	if err := json.Unmarshal(packageJsonFile, &pkg); err != nil {
-		return Package{}, err
+		return nil, err
 	}
-	return pkg, nil
+	return &pkg, nil
 }
+
+// NonEmptyPackage returns a Package with a dummy dependency.
+// This is useful when you need to run npm install but don't have a package.json to read.
+var NonEmptyPackage = &Package{Dependencies: map[string]string{"not-empty": "not-empty"}}
 
 // NodeModulesExists checks if a node_modules directory exists in the given root.
 func NodeModulesExists(root string) bool {
