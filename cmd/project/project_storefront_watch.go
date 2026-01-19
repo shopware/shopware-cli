@@ -8,6 +8,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/shopware/shopware-cli/internal/extension"
+	"github.com/shopware/shopware-cli/internal/npm"
 	"github.com/shopware/shopware-cli/internal/phpexec"
 	"github.com/shopware/shopware-cli/internal/shop"
 )
@@ -66,7 +67,7 @@ var projectStorefrontWatchCmd = &cobra.Command{
 		}
 
 		if _, err := os.Stat(extension.PlatformPath(projectRoot, "Storefront", "Resources/app/storefront/node_modules/webpack-dev-server")); os.IsNotExist(err) {
-			if err := extension.InstallNPMDependencies(cmd.Context(), extension.PlatformPath(projectRoot, "Storefront", "Resources/app/storefront"), extension.NpmPackage{Dependencies: map[string]string{"not-empty": "not-empty"}}); err != nil {
+			if err := npm.InstallDependencies(cmd.Context(), extension.PlatformPath(projectRoot, "Storefront", "Resources/app/storefront"), npm.NonEmptyPackage); err != nil {
 				return err
 			}
 		}

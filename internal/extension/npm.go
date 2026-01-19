@@ -2,24 +2,14 @@ package extension
 
 import (
 	"context"
-	"encoding/json"
-	"fmt"
 	"os"
-	"os/exec"
 	"path"
 	"runtime"
 	"sync"
 
+	"github.com/shopware/shopware-cli/internal/npm"
 	"github.com/shopware/shopware-cli/logging"
 )
-
-func nodeModulesExists(root string) bool {
-	if _, err := os.Stat(path.Join(root, "node_modules")); err == nil {
-		return true
-	}
-
-	return false
-}
 
 type npmInstallJob struct {
 	npmPath             string
@@ -49,7 +39,7 @@ func InstallNodeModulesOfConfigs(ctx context.Context, cfgs ExtensionAssetConfig,
 		for _, possibleNodePath := range entry.getPossibleNodePaths() {
 			npmPath := path.Dir(possibleNodePath)
 
-			if !force && nodeModulesExists(npmPath) {
+			if !force && npm.NodeModulesExists(npmPath) {
 				continue
 			}
 
@@ -83,7 +73,7 @@ func InstallNodeModulesOfConfigs(ctx context.Context, cfgs ExtensionAssetConfig,
 
 	// Start workers
 	var wg sync.WaitGroup
-	for i := 0; i < numWorkers; i++ {
+	for range numWorkers {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
@@ -121,14 +111,14 @@ func InstallNodeModulesOfConfigs(ctx context.Context, cfgs ExtensionAssetConfig,
 }
 
 func processNpmInstallJob(ctx context.Context, job npmInstallJob) npmInstallResult {
-	npmPackage, err := getNpmPackage(job.npmPath)
+	npmPackage, err := npm.ReadPackage(job.npmPath)
 	if err != nil {
 		return npmInstallResult{err: err}
 	}
 
 	logging.FromContext(ctx).Infof("Installing npm dependencies in %s %s\n", job.npmPath, job.additionalText)
 
-	if err := InstallNPMDependencies(ctx, job.npmPath, npmPackage, job.additionalNpmParams...); err != nil {
+	if err := npm.InstallDependencies(ctx, job.npmPath, npmPackage, job.additionalNpmParams...); err != nil {
 		return npmInstallResult{err: err}
 	}
 
@@ -144,67 +134,4 @@ func deletePaths(ctx context.Context, nodeModulesPaths ...string) {
 			return
 		}
 	}
-}
-
-func npmRunBuild(ctx context.Context, path string, buildCmd string, buildEnvVariables []string) error {
-	npmBuildCmd := exec.CommandContext(ctx, "npm", "--prefix", path, "run", buildCmd) //nolint:gosec
-	npmBuildCmd.Env = os.Environ()
-	npmBuildCmd.Env = append(npmBuildCmd.Env, buildEnvVariables...)
-	npmBuildCmd.Stdout = os.Stdout
-	npmBuildCmd.Stderr = os.Stderr
-
-	if err := npmBuildCmd.Run(); err != nil {
-		return err
-	}
-
-	return nil
-}
-
-func InstallNPMDependencies(ctx context.Context, path string, packageJsonData NpmPackage, additionalParams ...string) error {
-	isProductionMode := false
-
-	for _, param := range additionalParams {
-		if param == "--production" {
-			isProductionMode = true
-		}
-	}
-
-	if isProductionMode && len(packageJsonData.Dependencies) == 0 {
-		return nil
-	}
-
-	installCmd := exec.CommandContext(ctx, "npm", "install", "--no-audit", "--no-fund", "--prefer-offline", "--loglevel=error")
-	installCmd.Args = append(installCmd.Args, additionalParams...)
-	installCmd.Dir = path
-	installCmd.Env = os.Environ()
-	installCmd.Env = append(installCmd.Env, "PUPPETEER_SKIP_DOWNLOAD=1", "NPM_CONFIG_ENGINE_STRICT=false", "NPM_CONFIG_FUND=false", "NPM_CONFIG_AUDIT=false", "NPM_CONFIG_UPDATE_NOTIFIER=false")
-
-	combinedOutput, err := installCmd.CombinedOutput()
-	if err != nil {
-		logging.FromContext(context.Background()).Errorf("npm install failed in %s: %s", path, string(combinedOutput))
-		return fmt.Errorf("installing dependencies for %s failed with error: %w", path, err)
-	}
-
-	return nil
-}
-
-func getNpmPackage(root string) (NpmPackage, error) {
-	packageJsonFile, err := os.ReadFile(path.Join(root, "package.json"))
-	if err != nil {
-		return NpmPackage{}, err
-	}
-
-	var packageJsonData NpmPackage
-	if err := json.Unmarshal(packageJsonFile, &packageJsonData); err != nil {
-		return NpmPackage{}, err
-	}
-	return packageJsonData, nil
-}
-
-func doesPackageJsonContainsPackageInDev(packageJsonData NpmPackage, packageName string) bool {
-	if _, ok := packageJsonData.DevDependencies[packageName]; ok {
-		return true
-	}
-
-	return false
 }

@@ -1,4 +1,4 @@
-package extension
+package npm
 
 import (
 	"os"
@@ -8,7 +8,7 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestCanIUseUpdate(t *testing.T) {
+func TestPatchPackageLockToRemoveCanIUse(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	packageLock := `{
@@ -53,11 +53,10 @@ func TestCanIUseUpdate(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	assert.NoError(t, patchPackageLockToRemoveCanIUsePackage(packageLockJson))
+	assert.NoError(t, PatchPackageLockToRemoveCanIUse(packageLockJson))
 
 	updatedPackageLock, err := os.ReadFile(packageLockJson)
 
 	assert.NoError(t, err)
-
 	assert.NotContains(t, string(updatedPackageLock), "node_modules/caniuse-lite")
 }
