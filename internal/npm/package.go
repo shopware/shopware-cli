@@ -3,7 +3,7 @@ package npm
 import (
 	"encoding/json"
 	"os"
-	"path"
+	"path/filepath"
 )
 
 // Package represents a parsed package.json file.
@@ -27,7 +27,7 @@ func (p Package) HasDevDependency(name string) bool {
 
 // ReadPackage reads and parses a package.json file from the given directory.
 func ReadPackage(dir string) (Package, error) {
-	packageJsonFile, err := os.ReadFile(path.Join(dir, "package.json"))
+	packageJsonFile, err := os.ReadFile(filepath.Join(dir, "package.json"))
 	if err != nil {
 		return Package{}, err
 	}
@@ -41,7 +41,7 @@ func ReadPackage(dir string) (Package, error) {
 
 // NodeModulesExists checks if a node_modules directory exists in the given root.
 func NodeModulesExists(root string) bool {
-	if _, err := os.Stat(path.Join(root, "node_modules")); err == nil {
+	if _, err := os.Stat(filepath.Join(root, "node_modules")); err == nil {
 		return true
 	}
 	return false
