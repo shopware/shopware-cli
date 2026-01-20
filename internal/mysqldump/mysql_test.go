@@ -23,6 +23,33 @@ func getInternalMySQLInstance(db *sql.DB) *Dumper {
 	return NewMySQLDumper(db)
 }
 
+func mockPrefetchSchemas(mock sqlmock.Sqlmock) {
+	mock.ExpectQuery("SELECT.*FROM INFORMATION_SCHEMA.TABLES.*TABLE_TYPE = 'BASE TABLE'").
+		WillReturnRows(sqlmock.NewRows([]string{"TABLE_NAME", "ENGINE", "TABLE_COLLATION", "TABLE_COMMENT", "ROW_FORMAT", "AUTO_INCREMENT"}))
+
+	mock.ExpectQuery("SELECT.*FROM INFORMATION_SCHEMA.COLUMNS.*WHERE TABLE_SCHEMA = DATABASE()").
+		WillReturnRows(sqlmock.NewRows([]string{
+			"TABLE_NAME", "COLUMN_NAME", "COLUMN_TYPE", "CHARACTER_SET_NAME", "IS_NULLABLE", "COLUMN_DEFAULT",
+			"EXTRA", "COLLATION_NAME", "COLUMN_COMMENT", "GENERATION_EXPRESSION",
+		}))
+
+	mock.ExpectQuery("SELECT.*FROM INFORMATION_SCHEMA.STATISTICS.*WHERE TABLE_SCHEMA = DATABASE()").
+		WillReturnRows(sqlmock.NewRows([]string{
+			"TABLE_NAME", "INDEX_NAME", "COLUMN_NAME", "NON_UNIQUE", "INDEX_TYPE", "SUB_PART", "COLLATION", "INDEX_COMMENT", "SEQ_IN_INDEX",
+		}))
+
+	mock.ExpectQuery("SELECT.*FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE.*").
+		WillReturnRows(sqlmock.NewRows([]string{
+			"TABLE_NAME", "CONSTRAINT_NAME", "COLUMN_NAME", "REFERENCED_TABLE_NAME",
+			"REFERENCED_COLUMN_NAME", "UPDATE_RULE", "DELETE_RULE", "ORDINAL_POSITION",
+		}))
+
+	mock.ExpectQuery("SELECT.*FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS.*CHECK_CONSTRAINTS.*").
+		WillReturnRows(sqlmock.NewRows([]string{
+			"TABLE_NAME", "CONSTRAINT_NAME", "CHECK_CLAUSE",
+		}))
+}
+
 func TestMySQLFlushTable(t *testing.T) {
 	db, mock := getDB(t)
 	dumper := getInternalMySQLInstance(db)
@@ -74,32 +101,65 @@ func TestMySQLGetTablesHandlingErrorWhenScanningRow(t *testing.T) {
 }
 
 func TestMySQLDumpCreateTable(t *testing.T) {
-	var ddl = "CREATE TABLE `table` (" +
-		"`id` bigint(20) NOT NULL AUTO_INCREMENT, " +
-		"`name` varchar(255) NOT NULL, " +
-		"PRIMARY KEY (`id`), KEY `idx_name` (`name`) " +
-		") ENGINE=InnoDB AUTO_INCREMENT=1 DEFAULT CHARSET=utf8"
 	db, mock := getDB(t)
 	dumper := getInternalMySQLInstance(db)
-	mock.ExpectQuery("SHOW CREATE TABLE `table`").WillReturnRows(
-		sqlmock.NewRows([]string{"Table", "Create Table"}).
-			AddRow("table", ddl),
-	)
-	str, err := dumper.getCreateTableStatement(t.Context(), "table")
+
+	// Mock batch prefetch queries
+	mock.ExpectQuery("SELECT.*FROM INFORMATION_SCHEMA.TABLES.*TABLE_TYPE = 'BASE TABLE'").
+		WillReturnRows(sqlmock.NewRows([]string{"TABLE_NAME", "ENGINE", "TABLE_COLLATION", "TABLE_COMMENT", "ROW_FORMAT", "AUTO_INCREMENT"}).
+			AddRow("table", "InnoDB", "utf8mb4_unicode_ci", "", "Dynamic", nil))
+
+	mock.ExpectQuery("SELECT.*FROM INFORMATION_SCHEMA.COLUMNS.*WHERE TABLE_SCHEMA = DATABASE()").
+		WillReturnRows(sqlmock.NewRows([]string{
+			"TABLE_NAME", "COLUMN_NAME", "COLUMN_TYPE", "CHARACTER_SET_NAME", "IS_NULLABLE", "COLUMN_DEFAULT",
+			"EXTRA", "COLLATION_NAME", "COLUMN_COMMENT", "GENERATION_EXPRESSION",
+		}).
+			AddRow("table", "id", "bigint(20)", nil, "NO", nil, "AUTO_INCREMENT", nil, "", nil).
+			AddRow("table", "name", "varchar(255)", "utf8mb4", "NO", nil, "", "utf8mb4_unicode_ci", "", nil))
+
+	mock.ExpectQuery("SELECT.*FROM INFORMATION_SCHEMA.STATISTICS.*WHERE TABLE_SCHEMA = DATABASE()").
+		WillReturnRows(sqlmock.NewRows([]string{
+			"TABLE_NAME", "INDEX_NAME", "COLUMN_NAME", "NON_UNIQUE", "INDEX_TYPE", "SUB_PART", "COLLATION", "INDEX_COMMENT", "SEQ_IN_INDEX",
+		}).
+			AddRow("table", "PRIMARY", "id", 0, "BTREE", nil, "A", "", 1).
+			AddRow("table", "idx_name", "name", 1, "BTREE", nil, "A", "", 1))
+
+	mock.ExpectQuery("SELECT.*FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE.*").
+		WillReturnRows(sqlmock.NewRows([]string{
+			"TABLE_NAME", "CONSTRAINT_NAME", "COLUMN_NAME", "REFERENCED_TABLE_NAME",
+			"REFERENCED_COLUMN_NAME", "UPDATE_RULE", "DELETE_RULE", "ORDINAL_POSITION",
+		}))
+
+	mock.ExpectQuery("SELECT.*FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS.*CHECK_CONSTRAINTS.*").
+		WillReturnRows(sqlmock.NewRows([]string{
+			"TABLE_NAME", "CONSTRAINT_NAME", "CHECK_CLAUSE",
+		}))
+
+	// Prefetch schemas first
+	err := dumper.prefetchAllSchemas(t.Context(), []string{"table"})
+	assert.Nil(t, err)
+
+	str, err := dumper.getCreateTableStatement("table")
 
 	assert.Nil(t, err)
 	assert.Contains(t, str, "DROP TABLE IF EXISTS `table`")
-	assert.Contains(t, str, ddl)
+	assert.Contains(t, str, "CREATE TABLE `table`")
+	assert.Contains(t, str, "`id` bigint(20) NOT NULL AUTO_INCREMENT")
+	assert.Contains(t, str, "`name` varchar(255) NOT NULL")
+	assert.Contains(t, str, "PRIMARY KEY (`id`)")
+	assert.Contains(t, str, "KEY `idx_name` (`name`)")
+	assert.Contains(t, str, "ENGINE=InnoDB")
 }
 
 func TestMySQLDumpCreateTableHandlingErrorWhenScanningRows(t *testing.T) {
 	db, mock := getDB(t)
 	dumper := getInternalMySQLInstance(db)
-	mock.ExpectQuery("SHOW CREATE TABLE `table`").WillReturnRows(
-		sqlmock.NewRows([]string{"Table", "Create Table"}).AddRow("table", nil),
-	)
 
-	_, err := dumper.getCreateTableStatement(t.Context(), "table")
+	// Return an error from the first batch query (table metadata)
+	mock.ExpectQuery("SELECT.*FROM INFORMATION_SCHEMA.TABLES.*TABLE_TYPE = 'BASE TABLE'").
+		WillReturnError(errors.New("table not found"))
+
+	err := dumper.prefetchAllSchemas(t.Context(), []string{"table"})
 	assert.NotNil(t, err)
 }
 
@@ -671,6 +731,9 @@ func Test_mySQL_ignoresTable(t *testing.T) {
 			AddRow("OLD_table", "BASE TABLE"),
 	)
 
+	// Mock batch prefetch queries (table is ignored, so no schemas to prefetch)
+	mockPrefetchSchemas(mock)
+
 	// Expect SHOW FULL TABLES query for views
 	mock.ExpectQuery("SHOW FULL TABLES").WillReturnRows(
 		sqlmock.NewRows([]string{"Tables_in_database", "Table_type"}),
@@ -705,6 +768,9 @@ func Test_mySQL_dumpsTriggers(t *testing.T) {
 	mock.ExpectQuery("SHOW FULL TABLES").WillReturnRows(
 		sqlmock.NewRows([]string{"Tables_in_database", "Table_type"}),
 	)
+
+	// Mock batch prefetch queries (no tables)
+	mockPrefetchSchemas(mock)
 
 	// Expect SHOW FULL TABLES query for views
 	mock.ExpectQuery("SHOW FULL TABLES").WillReturnRows(
@@ -754,6 +820,9 @@ func Test_mySQL_dumpsTriggersIgnoresDefiners(t *testing.T) {
 	mock.ExpectQuery("SHOW FULL TABLES").WillReturnRows(
 		sqlmock.NewRows([]string{"Tables_in_database", "Table_type"}),
 	)
+
+	// Mock batch prefetch queries (no tables)
+	mockPrefetchSchemas(mock)
 
 	mock.ExpectQuery("SHOW FULL TABLES").WillReturnRows(
 		sqlmock.NewRows([]string{"Tables_in_database", "Table_type"}),
@@ -855,6 +924,9 @@ func Test_mySQL_dumpsViews(t *testing.T) {
 		sqlmock.NewRows([]string{"Tables_in_database", "Table_type"}),
 	)
 
+	// Mock batch prefetch queries (no tables)
+	mockPrefetchSchemas(mock)
+
 	mock.ExpectQuery("SHOW FULL TABLES").WillReturnRows(
 		sqlmock.NewRows([]string{"Tables_in_database", "Table_type"}).
 			AddRow("user_view", "VIEW"),
@@ -899,6 +971,9 @@ func Test_mySQL_dumpsViewsIgnoresDefiners(t *testing.T) {
 	mock.ExpectQuery("SHOW FULL TABLES").WillReturnRows(
 		sqlmock.NewRows([]string{"Tables_in_database", "Table_type"}),
 	)
+
+	// Mock batch prefetch queries (no tables)
+	mockPrefetchSchemas(mock)
 
 	mock.ExpectQuery("SHOW FULL TABLES").WillReturnRows(
 		sqlmock.NewRows([]string{"Tables_in_database", "Table_type"}).

@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"regexp"
+	"slices"
 	"strings"
 	"sync"
 
@@ -38,6 +39,8 @@ type Dumper struct {
 	mapBins             map[string][]string
 	mapExclusionColumns map[string][]string
 	mapMu               sync.RWMutex
+	// schemaCache stores prefetched table schemas
+	schemaCache map[string]*TableSchema
 }
 
 const (
@@ -81,6 +84,17 @@ func (d *Dumper) Dump(ctx context.Context, w io.Writer) error {
 		d.filterMap[strings.ToLower(table)] = IgnoreMapPlacement
 	}
 
+	tablesToDump := make([]string, 0, len(tables))
+	for _, table := range tables {
+		if d.filterMap[strings.ToLower(table)] != IgnoreMapPlacement {
+			tablesToDump = append(tablesToDump, table)
+		}
+	}
+
+	if err := d.prefetchAllSchemas(ctx, tablesToDump); err != nil {
+		return err
+	}
+
 	if _, err = fmt.Fprintln(w, dump); err != nil {
 		return err
 	}
@@ -115,15 +129,12 @@ func (d *Dumper) dumpTablesSequential(ctx context.Context, w io.Writer, tables [
 		}
 
 		skipData := d.filterMap[strings.ToLower(table)] == NoDataMapPlacement
-		tmp, err := d.getCreateTableStatement(ctx, table)
+		createStmt, err := d.getCreateTableStatement(table)
 		if err != nil {
 			return err
 		}
 
-		tmp = d.excludeGeneratedColumns(table, tmp)
-		d.parseBinaryRelations(table, tmp)
-
-		if _, err = fmt.Fprintln(w, tmp); err != nil {
+		if _, err = fmt.Fprintln(w, createStmt); err != nil {
 			return err
 		}
 
@@ -169,7 +180,7 @@ func (d *Dumper) dumpTablesParallel(ctx context.Context, w io.Writer, tables []s
 			result.index = index
 
 			skipData := d.filterMap[strings.ToLower(table)] == NoDataMapPlacement
-			tmp, err := d.getCreateTableStatement(ctx, table)
+			createStmt, err := d.getCreateTableStatement(table)
 			if err != nil {
 				result.err = err
 				mu.Lock()
@@ -178,11 +189,8 @@ func (d *Dumper) dumpTablesParallel(ctx context.Context, w io.Writer, tables []s
 				return
 			}
 
-			tmp = d.excludeGeneratedColumns(table, tmp)
-			d.parseBinaryRelations(table, tmp)
-
 			var sb strings.Builder
-			sb.WriteString(tmp)
+			sb.WriteString(createStmt)
 
 			if !skipData {
 				if err := d.dumpTableDataToWriter(ctx, &sb, table); err != nil {
@@ -345,11 +353,7 @@ func (d *Dumper) isColumnBinary(table, columnName string) bool {
 	val, ok := d.mapBins[table]
 	d.mapMu.RUnlock()
 	if ok {
-		for _, b := range val {
-			if b == columnName {
-				return true
-			}
-		}
+		return slices.Contains(val, columnName)
 	}
 
 	return false
@@ -360,11 +364,7 @@ func (d *Dumper) isColumnExcluded(table, columnName string) bool {
 	val, ok := d.mapExclusionColumns[table]
 	d.mapMu.RUnlock()
 	if ok {
-		for _, b := range val {
-			if b == columnName {
-				return true
-			}
-		}
+		return slices.Contains(val, columnName)
 	}
 
 	return false
@@ -634,15 +634,22 @@ func (d *Dumper) rowCount(ctx context.Context, table string) (count uint64, err 
 	return count, nil
 }
 
-func (d *Dumper) getCreateTableStatement(ctx context.Context, table string) (string, error) {
+func (d *Dumper) getCreateTableStatement(table string) (string, error) {
 	s := fmt.Sprintf("\n--\n-- Structure for table `%s`\n--\n\n", table)
 	s += fmt.Sprintf("DROP TABLE IF EXISTS `%s`;\n", table)
-	row := d.useTransactionOrDBQueryRow(ctx, fmt.Sprintf("SHOW CREATE TABLE `%s`", table))
-	var tname, ddl string
-	if err := row.Scan(&tname, &ddl); err != nil {
-		return "", err
+
+	schema, err := d.fetchTableSchema(table)
+	if err != nil {
+		return "", fmt.Errorf("fetch table schema: %w", err)
 	}
-	s += fmt.Sprintf("%s;\n", ddl)
+
+	// Populate binary and generated column maps for data export
+	d.mapMu.Lock()
+	d.mapBins[table] = schema.GetBinaryColumns()
+	d.mapExclusionColumns[table] = schema.GetGeneratedColumns()
+	d.mapMu.Unlock()
+
+	s += schema.BuildCreateTableSQL() + ";\n"
 	return s, nil
 }
 
