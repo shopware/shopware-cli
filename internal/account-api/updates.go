@@ -30,7 +30,7 @@ type UpdateCheckExtensionCompatibilityStatus struct {
 }
 
 func GetFutureExtensionUpdates(ctx context.Context, currentVersion string, futureVersion string, extensions []UpdateCheckExtension) ([]UpdateCheckExtensionCompatibility, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, "https://api.shopware.com/swplatform/autoupdate", nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, ApiUrl+"/swplatform/autoupdate", nil)
 	if err != nil {
 		return nil, err
 	}

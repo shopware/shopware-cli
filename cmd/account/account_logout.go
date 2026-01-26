@@ -20,8 +20,6 @@ var logoutCmd = &cobra.Command{
 		}
 
 		_ = services.Conf.SetAccountCompanyId(0)
-		_ = services.Conf.SetAccountEmail("")
-		_ = services.Conf.SetAccountPassword("")
 
 		if err := services.Conf.Save(); err != nil {
 			return fmt.Errorf("cannot write config: %w", err)
