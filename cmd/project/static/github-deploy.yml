@@ -8,22 +8,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout
-        uses: actions/checkout@v6
-
-      - name: Setup PHP
-        uses: shivammathur/setup-php@v2
-        with:
-          php-version: '8.4'
-
-      - name: Install Shopware CLI
-        uses: shopware/shopware-cli-action@v3
-
-      - name: Build
-        run: shopware-cli project ci .
-
       - name: Deploy
-        uses: deployphp/action@v1
+        uses: shopware/github-actions/project-deployer@main
         with:
-          dep: deploy
-          private-key: ${{ secrets.SSH_PRIVATE_KEY }}
+          sshPrivateKey: ${{ secrets.SSH_PRIVATE_KEY }}

@@ -11,22 +11,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout
-        uses: actions/checkout@v6
-
-      - name: Setup PHP
-        uses: shivammathur/setup-php@v2
+      - name: Project Validate
+        uses: shopware/github-actions/project-validate@main
         with:
-          php-version: '8.4'
-
-      - name: Install Shopware CLI
-        uses: shopware/shopware-cli-action@v3
-
-      - name: Install dependencies
-        uses: ramsey/composer-install@v3
-
-      - name: Validate Project
-        run: shopware-cli project validate .
-
-      - name: Check Code Style
-        run: shopware-cli project format --dry-run .
+          phpVersion: '8.4'

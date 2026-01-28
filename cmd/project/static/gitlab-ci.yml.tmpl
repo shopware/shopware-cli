@@ -4,53 +4,12 @@ stages:
   - deploy
 {{- end }}
 
-variables:
-  COMPOSER_HOME: ${CI_PROJECT_DIR}/.composer
+include:
+  - component: gitlab.com/shopware/ci-components/project-validate@main
+    inputs:
+      php_version: "8.4"
 {{- if .Deployer }}
-  GIT_STRATEGY: clone
-{{- end }}
-
-cache:
-  paths:
-    - .composer/
-
-validate:
-  stage: check
-  image:
-    name: ghcr.io/shopware/shopware-cli:latest-php-8.4
-    entrypoint: ["/bin/sh", "-c"]
-  before_script:
-    - composer install
-  script:
-    - shopware-cli project validate . > validate.json
-    - shopware-cli project format --dry-run .
-  artifacts:
-    reports:
-      codequality: validate.json
-{{- if .Deployer }}
-
-.configureSSHAgent: &configureSSHAgent |-
-  eval $(ssh-agent -s)
-  echo "$SSH_PRIVATE_KEY" | tr -d '\r' | ssh-add -
-  mkdir -p ~/.ssh
-  if ! printf '%s\n' "$DEPLOYMENT_SERVER" | grep -Eq '^[a-zA-Z0-9.-]+$'; then
-    echo "Invalid DEPLOYMENT_SERVER value: $DEPLOYMENT_SERVER" >&2
-    exit 1
-  fi
-  ssh-keyscan -H -- "$DEPLOYMENT_SERVER" >> ~/.ssh/known_hosts
-  chmod 700 ~/.ssh
-
-deploy:
-  stage: deploy
-  image:
-    name: ghcr.io/shopware/shopware-cli:latest-php-8.4
-    entrypoint: ["/bin/sh", "-c"]
-  before_script:
-    - *configureSSHAgent
-  script:
-    - shopware-cli project ci .
-    - vendor/bin/dep deploy
-  only:
-    - main
-  when: manual
+  - component: gitlab.com/shopware/ci-components/project-deploy@main
+    inputs:
+      php_version: "8.4"
 {{- end }}
