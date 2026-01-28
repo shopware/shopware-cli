@@ -195,3 +195,8 @@ func unshallowRepository(ctx context.Context, repo string) error {
 
 	return err
 }
+
+func Init(ctx context.Context, repo string) error {
+	_, err := runGit(ctx, repo, "init")
+	return err
+}
