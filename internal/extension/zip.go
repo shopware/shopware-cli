@@ -313,11 +313,11 @@ func AddZipFiles(w *zip.Writer, basePath, baseInZip string) error {
 }
 
 func CleanupExtensionFolder(path string, additionalPaths []string) error {
-	defaultNotAllowedPaths = append(defaultNotAllowedPaths, additionalPaths...)
+	notAllowedPaths := append(slices.Clone(defaultNotAllowedPaths), additionalPaths...)
 
-	for _, folder := range defaultNotAllowedPaths {
-		if _, err := os.Stat(path + folder); !os.IsNotExist(err) {
-			err := os.RemoveAll(path + folder)
+	for _, folder := range notAllowedPaths {
+		if _, err := os.Stat(filepath.Join(path, folder)); !os.IsNotExist(err) {
+			err := os.RemoveAll(filepath.Join(path, folder))
 			if err != nil {
 				return err
 			}

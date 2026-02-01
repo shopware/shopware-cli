@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
-	"path"
+	"path/filepath"
 	"strings"
 
 	"github.com/shyim/go-version"
@@ -27,14 +27,14 @@ type PlatformPlugin struct {
 
 // GetRootDir returns the src directory of the plugin.
 func (p PlatformPlugin) GetRootDir() string {
-	return path.Join(p.path, "src")
+	return filepath.Join(p.path, "src")
 }
 
 func (p PlatformPlugin) GetSourceDirs() []string {
 	var result []string
 
 	for _, val := range p.Composer.Autoload.Psr4 {
-		result = append(result, path.Join(p.path, val))
+		result = append(result, filepath.Join(p.path, val))
 	}
 
 	return result
@@ -42,14 +42,14 @@ func (p PlatformPlugin) GetSourceDirs() []string {
 
 // GetResourcesDir returns the resources directory of the plugin.
 func (p PlatformPlugin) GetResourcesDir() string {
-	return path.Join(p.GetRootDir(), "Resources")
+	return filepath.Join(p.GetRootDir(), "Resources")
 }
 
 func (p PlatformPlugin) GetResourcesDirs() []string {
 	var result []string
 
 	for _, val := range p.GetSourceDirs() {
-		result = append(result, path.Join(val, "Resources"))
+		result = append(result, filepath.Join(val, "Resources"))
 	}
 
 	return result
@@ -201,7 +201,7 @@ func (p PlatformPlugin) GetIconPath() string {
 		pluginIcon = "src/Resources/config/plugin.png"
 	}
 
-	return path.Join(p.path, pluginIcon)
+	return filepath.Join(p.path, pluginIcon)
 }
 
 func (p PlatformPlugin) Validate(c context.Context, check validation.Check) {
@@ -403,7 +403,7 @@ func validatePHPFiles(c context.Context, ext Extension, check validation.Check) 
 }
 
 func GetPhpVersion(ctx context.Context, constraint *version.Constraints) (string, error) {
-	r, _ := http.NewRequestWithContext(context.Background(), http.MethodGet, "https://raw.githubusercontent.com/FriendsOfShopware/shopware-static-data/main/data/php-version.json", http.NoBody)
+	r, _ := http.NewRequestWithContext(ctx, http.MethodGet, "https://raw.githubusercontent.com/FriendsOfShopware/shopware-static-data/main/data/php-version.json", http.NoBody)
 
 	resp, err := http.DefaultClient.Do(r)
 	if err != nil {
