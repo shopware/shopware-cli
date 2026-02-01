@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"path"
+	"path/filepath"
 
 	"github.com/shyim/go-version"
 
@@ -82,14 +82,14 @@ func (p ShopwareBundle) GetComposerName() (string, error) {
 
 // GetRootDir returns the src directory of the bundle.
 func (p ShopwareBundle) GetRootDir() string {
-	return path.Join(p.path, "src")
+	return filepath.Join(p.path, "src")
 }
 
 func (p ShopwareBundle) GetSourceDirs() []string {
 	var result []string
 
 	for _, val := range p.Composer.Autoload.Psr4 {
-		result = append(result, path.Join(p.path, val))
+		result = append(result, filepath.Join(p.path, val))
 	}
 
 	return result
@@ -97,14 +97,14 @@ func (p ShopwareBundle) GetSourceDirs() []string {
 
 // GetResourcesDir returns the resources directory of the shopware bundle.
 func (p ShopwareBundle) GetResourcesDir() string {
-	return path.Join(p.GetRootDir(), "Resources")
+	return filepath.Join(p.GetRootDir(), "Resources")
 }
 
 func (p ShopwareBundle) GetResourcesDirs() []string {
 	var result []string
 
 	for _, val := range p.GetSourceDirs() {
-		result = append(result, path.Join(val, "Resources"))
+		result = append(result, filepath.Join(val, "Resources"))
 	}
 
 	return result

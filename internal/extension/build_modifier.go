@@ -72,7 +72,7 @@ func BuildModifier(ext Extension, extensionRoot string, config BuildModifierConf
 		}
 
 		if err := os.WriteFile(path.Join(extensionRoot, "composer.json"), newComposerJson, os.ModePerm); err != nil {
-			return fmt.Errorf("could not write manifest.xml: %w", err)
+			return fmt.Errorf("could not write composer.json: %w", err)
 		}
 	}
 
