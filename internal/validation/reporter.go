@@ -105,6 +105,10 @@ func doSummaryReport(result Check) error {
 			}
 			//nolint:forbidigo
 			fmt.Printf("  %d  %-7s  %s  %s\n", r.Line, r.Severity, r.Message, r.Identifier)
+			if r.Tip != "" {
+				//nolint:forbidigo
+				fmt.Printf("             Tip: %s\n", r.Tip)
+			}
 		}
 	}
 
@@ -159,6 +163,11 @@ func doGitHubReport(result Check) error {
 
 		message := strings.ReplaceAll(r.Message, "\n", "%0A")
 		message = strings.ReplaceAll(message, "\r", "%0D")
+		if r.Tip != "" {
+			tip := strings.ReplaceAll(r.Tip, "\n", "%0A")
+			tip = strings.ReplaceAll(tip, "\r", "%0D")
+			message = message + "%0A%0ATip: " + tip
+		}
 
 		fmt.Printf("::%s file=%s%s,title=%s::%s\n", level, file, line, r.Identifier, message)
 	}
@@ -216,8 +225,13 @@ func doGitLabReport(result Check) error {
 		fingerprintData := fmt.Sprintf("%s:%d:%s:%s", r.Path, r.Line, r.Identifier, r.Message)
 		fingerprint := fmt.Sprintf("%x", md5.Sum([]byte(fingerprintData)))
 
+		description := r.Message
+		if r.Tip != "" {
+			description = description + "\n\nTip: " + r.Tip
+		}
+
 		issue := GitLabCodeQualityIssue{
-			Description: r.Message,
+			Description: description,
 			CheckName:   r.Identifier,
 			Fingerprint: fingerprint,
 			Severity:    severity,
@@ -294,6 +308,9 @@ func doMarkdownReport(result Check) error {
 			}
 
 			fmt.Printf("- **%s** %s%s: %s (`%s`)\n", severity, r.Path, location, r.Message, r.Identifier)
+			if r.Tip != "" {
+				fmt.Printf("  - *Tip: %s*\n", r.Tip)
+			}
 		}
 		fmt.Println()
 	}
@@ -360,18 +377,23 @@ func doJUnitReport(result Check) error {
 			ClassName: r.Path,
 		}
 
+		content := r.Message
+		if r.Tip != "" {
+			content = content + "\n\nTip: " + r.Tip
+		}
+
 		if r.Severity == SeverityError {
 			testCase.Error = &JUnitTestError{
 				Message: r.Message,
 				Type:    r.Identifier,
-				Content: r.Message,
+				Content: content,
 			}
 			errors++
 		} else {
 			testCase.Failure = &JUnitTestFailure{
 				Message: r.Message,
 				Type:    r.Identifier,
-				Content: r.Message,
+				Content: content,
 			}
 			failures++
 		}
