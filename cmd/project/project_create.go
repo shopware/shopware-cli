@@ -19,6 +19,7 @@ import (
 	"github.com/shyim/go-version"
 	"github.com/spf13/cobra"
 
+	"github.com/shopware/shopware-cli/internal/color"
 	"github.com/shopware/shopware-cli/internal/git"
 	"github.com/shopware/shopware-cli/internal/packagist"
 	"github.com/shopware/shopware-cli/internal/system"
@@ -106,12 +107,12 @@ var projectCreateCmd = &cobra.Command{
 			huh.NewOption("None", packagist.DeploymentNone),
 			huh.NewOption("DeployerPHP", packagist.DeploymentDeployer),
 			huh.NewOption("PaaS powered by Platform.sh", packagist.DeploymentPlatformSH),
-			huh.NewOption("PaaS powered by Shopware", packagist.DeploymentShopwarePaaS),
+			huh.NewOption(color.RecommendedText.Render("PaaS powered by Shopware (Recommended)"), packagist.DeploymentShopwarePaaS),
 		}
 
 		ciOptions := []huh.Option[string]{
 			huh.NewOption("None", ciNone),
-			huh.NewOption("GitHub Actions", ciGitHub),
+			huh.NewOption(color.RecommendedText.Render("GitHub Actions (Recommended)"), ciGitHub),
 			huh.NewOption("GitLab CI", ciGitLab),
 		}
 
@@ -155,6 +156,15 @@ var projectCreateCmd = &cobra.Command{
 						Validate(func(s string) error {
 							if s == "" {
 								return fmt.Errorf("project name is required")
+							}
+							if info, err := os.Stat(s); err == nil && info.IsDir() {
+								empty, err := system.IsDirEmpty(s)
+								if err != nil {
+									return err
+								}
+								if !empty {
+									return fmt.Errorf("folder already exists and is not empty")
+								}
 							}
 							return nil
 						}),
@@ -200,7 +210,7 @@ var projectCreateCmd = &cobra.Command{
 				optionalOptions = append(optionalOptions, huh.NewOption("Initialize Git Repository", optionGit))
 			}
 			if !cmd.PersistentFlags().Changed("docker") {
-				optionalOptions = append(optionalOptions, huh.NewOption("Local Docker Setup", optionDocker))
+				optionalOptions = append(optionalOptions, huh.NewOption(color.RecommendedText.Render("Local Docker Setup (Recommended)"), optionDocker))
 			}
 			if !cmd.PersistentFlags().Changed("with-elasticsearch") {
 				optionalOptions = append(optionalOptions, huh.NewOption("Setup Elasticsearch/OpenSearch support", optionElasticsearch))
