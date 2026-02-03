@@ -49,68 +49,81 @@ validation:
 	assert.Equal(t, "bar", ext.Validation.Ignore[1].Path)
 }
 
-func TestConfigExtraBundle_ResolvePath(t *testing.T) {
-	t.Run("uses Path when set", func(t *testing.T) {
-		bundle := ConfigExtraBundle{
-			Path: "custom/path/to/bundle",
-			Name: "MyBundle",
-		}
+func TestConfigExtraBundleResolvePath(t *testing.T) {
+	tests := []struct {
+		name     string
+		bundle   ConfigExtraBundle
+		rootDir  string
+		expected string
+	}{
+		{
+			name:     "both path and name set - uses path",
+			bundle:   ConfigExtraBundle{Path: "custom/path", Name: "MyBundle"},
+			rootDir:  "/root",
+			expected: filepath.Join("/root", "custom/path"),
+		},
+		{
+			name:     "only path set",
+			bundle:   ConfigExtraBundle{Path: "src/Bundle"},
+			rootDir:  "/root",
+			expected: filepath.Join("/root", "src/Bundle"),
+		},
+		{
+			name:     "only name set - falls back to name",
+			bundle:   ConfigExtraBundle{Name: "MyBundle"},
+			rootDir:  "/root",
+			expected: filepath.Join("/root", "MyBundle"),
+		},
+		{
+			name:     "both empty - returns root dir",
+			bundle:   ConfigExtraBundle{},
+			rootDir:  "/root",
+			expected: "/root",
+		},
+	}
 
-		result := bundle.ResolvePath("/root")
-		assert.Equal(t, filepath.Join("/root", "custom/path/to/bundle"), result)
-	})
-
-	t.Run("uses Name when Path is empty", func(t *testing.T) {
-		bundle := ConfigExtraBundle{
-			Path: "",
-			Name: "MyBundle",
-		}
-
-		result := bundle.ResolvePath("/root")
-		assert.Equal(t, filepath.Join("/root", "MyBundle"), result)
-	})
-
-	t.Run("prefers Path over Name", func(t *testing.T) {
-		bundle := ConfigExtraBundle{
-			Path: "src/Bundle",
-			Name: "DifferentName",
-		}
-
-		result := bundle.ResolvePath("/project")
-		assert.Equal(t, filepath.Join("/project", "src/Bundle"), result)
-	})
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := tt.bundle.ResolvePath(tt.rootDir)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
 }
 
-func TestConfigExtraBundle_ResolveName(t *testing.T) {
-	t.Run("uses Name when set", func(t *testing.T) {
-		bundle := ConfigExtraBundle{
-			Path: "some/path/to/bundle",
-			Name: "MyBundle",
-		}
+func TestConfigExtraBundleResolveName(t *testing.T) {
+	tests := []struct {
+		name     string
+		bundle   ConfigExtraBundle
+		expected string
+	}{
+		{
+			name:     "both path and name set - uses name",
+			bundle:   ConfigExtraBundle{Path: "custom/path/SomeBundle", Name: "MyBundle"},
+			expected: "MyBundle",
+		},
+		{
+			name:     "only name set",
+			bundle:   ConfigExtraBundle{Name: "MyBundle"},
+			expected: "MyBundle",
+		},
+		{
+			name:     "only path set - uses base of path",
+			bundle:   ConfigExtraBundle{Path: "src/MyBundle"},
+			expected: "MyBundle",
+		},
+		{
+			name:     "both empty - returns empty string",
+			bundle:   ConfigExtraBundle{},
+			expected: ".",
+		},
+	}
 
-		result := bundle.ResolveName()
-		assert.Equal(t, "MyBundle", result)
-	})
-
-	t.Run("uses base of Path when Name is empty", func(t *testing.T) {
-		bundle := ConfigExtraBundle{
-			Path: "src/Bundles/CustomBundle",
-			Name: "",
-		}
-
-		result := bundle.ResolveName()
-		assert.Equal(t, "CustomBundle", result)
-	})
-
-	t.Run("handles simple path", func(t *testing.T) {
-		bundle := ConfigExtraBundle{
-			Path: "MyBundle",
-			Name: "",
-		}
-
-		result := bundle.ResolveName()
-		assert.Equal(t, "MyBundle", result)
-	})
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := tt.bundle.ResolveName()
+			assert.Equal(t, tt.expected, result)
+		})
+	}
 }
 
 func TestConfigValidationList_Identifiers(t *testing.T) {
