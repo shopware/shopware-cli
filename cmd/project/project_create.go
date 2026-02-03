@@ -97,23 +97,23 @@ var projectCreateCmd = &cobra.Command{
 		}
 
 		versionOptions := make([]huh.Option[string], 0, len(filteredVersions)+1)
-		versionOptions = append(versionOptions, huh.NewOption(versionLatest, versionLatest))
+		versionOptions = append(versionOptions, huh.NewOption(color.NeutralText.Render(versionLatest), versionLatest))
 		for _, v := range filteredVersions {
 			versionStr := v.String()
-			versionOptions = append(versionOptions, huh.NewOption(versionStr, versionStr))
+			versionOptions = append(versionOptions, huh.NewOption(color.NeutralText.Render(versionStr), versionStr))
 		}
 
 		deploymentOptions := []huh.Option[string]{
-			huh.NewOption("None", packagist.DeploymentNone),
-			huh.NewOption("DeployerPHP", packagist.DeploymentDeployer),
-			huh.NewOption("PaaS powered by Platform.sh", packagist.DeploymentPlatformSH),
+			huh.NewOption(color.NeutralText.Render("None"), packagist.DeploymentNone),
+			huh.NewOption(color.SecondaryText.Render("DeployerPHP"), packagist.DeploymentDeployer),
+			huh.NewOption(color.SecondaryText.Render("PaaS powered by Platform.sh"), packagist.DeploymentPlatformSH),
 			huh.NewOption(color.RecommendedText.Render("PaaS powered by Shopware (Recommended)"), packagist.DeploymentShopwarePaaS),
 		}
 
 		ciOptions := []huh.Option[string]{
-			huh.NewOption("None", ciNone),
+			huh.NewOption(color.NeutralText.Render("None"), ciNone),
 			huh.NewOption(color.RecommendedText.Render("GitHub Actions (Recommended)"), ciGitHub),
-			huh.NewOption("GitLab CI", ciGitLab),
+			huh.NewOption(color.NeutralText.Render("GitLab CI"), ciGitLab),
 		}
 
 		var projectFolder string
@@ -207,13 +207,13 @@ var projectCreateCmd = &cobra.Command{
 
 			var optionalOptions []huh.Option[string]
 			if !cmd.PersistentFlags().Changed("git") {
-				optionalOptions = append(optionalOptions, huh.NewOption("Initialize Git Repository", optionGit))
+				optionalOptions = append(optionalOptions, huh.NewOption(color.RecommendedText.Render("Initialize Git Repository (Recommended)"), optionGit))
 			}
 			if !cmd.PersistentFlags().Changed("docker") {
 				optionalOptions = append(optionalOptions, huh.NewOption(color.RecommendedText.Render("Local Docker Setup (Recommended)"), optionDocker))
 			}
 			if !cmd.PersistentFlags().Changed("with-elasticsearch") {
-				optionalOptions = append(optionalOptions, huh.NewOption("Setup Elasticsearch/OpenSearch support", optionElasticsearch))
+				optionalOptions = append(optionalOptions, huh.NewOption(color.NeutralText.Render("Setup Elasticsearch/OpenSearch support"), optionElasticsearch))
 			}
 
 			if len(optionalOptions) > 0 {
