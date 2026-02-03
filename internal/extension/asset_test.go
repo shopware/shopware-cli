@@ -7,6 +7,8 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+const testEntryPath = "main.js"
+
 func TestConvertPlugin(t *testing.T) {
 	plugin := PlatformPlugin{
 		path:   t.TempDir(),
@@ -116,7 +118,7 @@ func TestExtensionAssetConfig_Has(t *testing.T) {
 }
 
 func TestExtensionAssetConfig_RequiresShopwareRepository(t *testing.T) {
-	entryPath := "main.js"
+	entryPath := testEntryPath
 
 	t.Run("returns false for empty config", func(t *testing.T) {
 		config := ExtensionAssetConfig{}
@@ -157,7 +159,7 @@ func TestExtensionAssetConfig_RequiresShopwareRepository(t *testing.T) {
 }
 
 func TestExtensionAssetConfig_FilterByAdmin(t *testing.T) {
-	entryPath := "main.js"
+	entryPath := testEntryPath
 
 	config := ExtensionAssetConfig{
 		"WithAdmin": &ExtensionAssetConfigEntry{
@@ -181,7 +183,7 @@ func TestExtensionAssetConfig_FilterByAdmin(t *testing.T) {
 }
 
 func TestExtensionAssetConfig_FilterByAdminAndEsBuild(t *testing.T) {
-	entryPath := "main.js"
+	entryPath := testEntryPath
 
 	config := ExtensionAssetConfig{
 		"EsBuildEnabled": &ExtensionAssetConfigEntry{
@@ -208,7 +210,7 @@ func TestExtensionAssetConfig_FilterByAdminAndEsBuild(t *testing.T) {
 }
 
 func TestExtensionAssetConfig_FilterByStorefrontAndEsBuild(t *testing.T) {
-	entryPath := "main.js"
+	entryPath := testEntryPath
 
 	config := ExtensionAssetConfig{
 		"EsBuildEnabled": &ExtensionAssetConfigEntry{
@@ -265,7 +267,7 @@ func TestExtensionAssetConfig_Not(t *testing.T) {
 }
 
 func TestExtensionAssetConfigEntry_RequiresBuild(t *testing.T) {
-	entryPath := "main.js"
+	entryPath := testEntryPath
 
 	t.Run("returns false when no entries", func(t *testing.T) {
 		entry := &ExtensionAssetConfigEntry{}
