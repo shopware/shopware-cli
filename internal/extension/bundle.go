@@ -119,27 +119,7 @@ func (p ShopwareBundle) GetExtensionConfig() *Config {
 }
 
 func (p ShopwareBundle) GetShopwareVersionConstraint() (*version.Constraints, error) {
-	if p.config != nil && p.config.Build.ShopwareVersionConstraint != "" {
-		constraint, err := version.NewConstraint(p.config.Build.ShopwareVersionConstraint)
-		if err != nil {
-			return nil, err
-		}
-
-		return &constraint, nil
-	}
-
-	shopwareConstraintString, ok := p.Composer.Require["shopware/core"]
-
-	if !ok {
-		return nil, fmt.Errorf("require.shopware/core is required")
-	}
-
-	shopwareConstraint, err := version.NewConstraint(shopwareConstraintString)
-	if err != nil {
-		return nil, err
-	}
-
-	return &shopwareConstraint, err
+	return getShopwareVersionConstraintFromComposer(p.config, p.Composer.Require)
 }
 
 func (ShopwareBundle) GetType() string {

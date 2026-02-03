@@ -86,6 +86,22 @@ type ConfigExtraBundle struct {
 	Name string `yaml:"name"`
 }
 
+// ResolvePath returns the resolved path for the extra bundle relative to the given root directory.
+func (b ConfigExtraBundle) ResolvePath(rootDir string) string {
+	if b.Path != "" {
+		return filepath.Join(rootDir, b.Path)
+	}
+	return filepath.Join(rootDir, b.Name)
+}
+
+// ResolveName returns the bundle name, defaulting to the base of the path if not explicitly set.
+func (b ConfigExtraBundle) ResolveName() string {
+	if b.Name != "" {
+		return b.Name
+	}
+	return filepath.Base(b.Path)
+}
+
 type ConfigStore struct {
 	// Specifies the visibility in stores.
 	Availabilities *[]string `yaml:"availabilities" jsonschema:"enum=German,enum=International"`

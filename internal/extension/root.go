@@ -11,6 +11,7 @@ import (
 
 	"github.com/shyim/go-version"
 
+	"github.com/shopware/shopware-cli/internal/archiver"
 	"github.com/shopware/shopware-cli/internal/validation"
 )
 
@@ -67,7 +68,7 @@ func GetExtensionByZip(filePath string) (Extension, error) {
 		return nil, err
 	}
 
-	err = Unzip(file, dir)
+	err = archiver.Unzip(file, dir)
 	if err != nil {
 		return nil, err
 	}
@@ -120,4 +121,29 @@ type Extension interface {
 	GetMetaData() *extensionMetadata
 	GetExtensionConfig() *Config
 	Validate(context.Context, validation.Check)
+}
+
+// getShopwareVersionConstraintFromComposer is a shared helper for composer-based extensions
+// (PlatformPlugin and ShopwareBundle) to extract the Shopware version constraint.
+func getShopwareVersionConstraintFromComposer(config *Config, composerRequire map[string]string) (*version.Constraints, error) {
+	if config != nil && config.Build.ShopwareVersionConstraint != "" {
+		constraint, err := version.NewConstraint(config.Build.ShopwareVersionConstraint)
+		if err != nil {
+			return nil, err
+		}
+
+		return &constraint, nil
+	}
+
+	shopwareConstraintString, ok := composerRequire["shopware/core"]
+	if !ok {
+		return nil, fmt.Errorf("require.shopware/core is required")
+	}
+
+	shopwareConstraint, err := version.NewConstraint(shopwareConstraintString)
+	if err != nil {
+		return nil, err
+	}
+
+	return &shopwareConstraint, nil
 }
