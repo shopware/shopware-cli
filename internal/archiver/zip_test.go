@@ -31,7 +31,9 @@ func TestCreateZip(t *testing.T) {
 		// Verify zip content
 		zipReader, err := zip.OpenReader(zipPath)
 		require.NoError(t, err)
-		defer zipReader.Close()
+		t.Cleanup(func() {
+			assert.NoError(t, zipReader.Close())
+		})
 
 		fileNames := make([]string, 0)
 		for _, f := range zipReader.File {
