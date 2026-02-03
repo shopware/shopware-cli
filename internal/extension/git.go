@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"os/exec"
 	"strings"
+
+	"github.com/shopware/shopware-cli/internal/archiver"
 )
 
 func gitTagOrBranchOfFolder(ctx context.Context, source string) (string, error) {
@@ -56,7 +58,7 @@ func GitCopyFolder(ctx context.Context, source, target, commitHash string) (stri
 		return "", fmt.Errorf("GitCopyFolder: cannot open the zip file produced by git archive: %v", err)
 	}
 
-	err = Unzip(zipReader, target)
+	err = archiver.Unzip(zipReader, target)
 	if err != nil {
 		return "", fmt.Errorf("GitCopyFolder: cannot unzip the zip archive: %v", err)
 	}

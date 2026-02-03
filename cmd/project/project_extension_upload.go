@@ -17,6 +17,7 @@ import (
 	"github.com/spf13/cobra"
 
 	adminSdk "github.com/shopware/shopware-cli/internal/admin-api"
+	"github.com/shopware/shopware-cli/internal/archiver"
 	"github.com/shopware/shopware-cli/internal/extension"
 	"github.com/shopware/shopware-cli/internal/shop"
 	"github.com/shopware/shopware-cli/logging"
@@ -138,7 +139,7 @@ var projectExtensionUploadCmd = &cobra.Command{
 
 		var buf bytes.Buffer
 		w := zip.NewWriter(&buf)
-		if err := extension.AddZipFiles(w, ext.GetPath()+"/", name+"/"); err != nil {
+		if err := archiver.AddZipFiles(w, ext.GetPath()+"/", name+"/"); err != nil {
 			return fmt.Errorf("uploading extension: %w", err)
 		}
 
