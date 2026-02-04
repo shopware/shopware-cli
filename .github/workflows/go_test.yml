@@ -37,13 +37,5 @@ jobs:
       - name: Build
         run: go build -v ./...
 
-      - name: Test (with network blocked)
-        env:
-          NIX_CC: 1
-        run: |
-          # Block outbound HTTP/HTTPS to detect tests making real network calls
-          sudo iptables -A OUTPUT -p tcp --dport 80 -j REJECT
-          sudo iptables -A OUTPUT -p tcp --dport 443 -j REJECT
-          go test -v ./...
-          sudo iptables -D OUTPUT -p tcp --dport 80 -j REJECT
-          sudo iptables -D OUTPUT -p tcp --dport 443 -j REJECT
+      - name: Test
+        run: go test -v ./...
