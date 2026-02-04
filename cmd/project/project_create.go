@@ -68,6 +68,7 @@ var projectCreateCmd = &cobra.Command{
 		useDocker, _ := cmd.PersistentFlags().GetBool("docker")
 		withElasticsearch, _ := cmd.PersistentFlags().GetBool("with-elasticsearch")
 		withoutElasticsearch, _ := cmd.PersistentFlags().GetBool("without-elasticsearch")
+		withAMQP, _ := cmd.PersistentFlags().GetBool("with-amqp")
 		noAudit, _ := cmd.PersistentFlags().GetBool("no-audit")
 		initGit, _ := cmd.PersistentFlags().GetBool("git")
 		versionFlag, _ := cmd.PersistentFlags().GetString("version")
@@ -85,6 +86,7 @@ var projectCreateCmd = &cobra.Command{
 			optionDocker        = "docker"
 			optionGit           = "git"
 			optionElasticsearch = "elasticsearch"
+			optionAMQP          = "amqp"
 
 			ciNone   = "none"
 			ciGitHub = "github"
@@ -215,6 +217,9 @@ var projectCreateCmd = &cobra.Command{
 			if !cmd.PersistentFlags().Changed("docker") {
 				optionalOptions = append(optionalOptions, huh.NewOption(color.RecommendedText.Render("Local Docker Setup (Recommended)"), optionDocker).Selected(true))
 			}
+			if !cmd.PersistentFlags().Changed("with-amqp") {
+				optionalOptions = append(optionalOptions, huh.NewOption(color.RecommendedText.Render("AMQP Queue Support (Recommended)"), optionAMQP).Selected(true))
+			}
 			if !cmd.PersistentFlags().Changed("with-elasticsearch") {
 				optionalOptions = append(optionalOptions, huh.NewOption(color.NeutralText.Render("Setup Elasticsearch/OpenSearch support"), optionElasticsearch))
 			}
@@ -244,6 +249,8 @@ var projectCreateCmd = &cobra.Command{
 					initGit = true
 				case optionElasticsearch:
 					withElasticsearch = true
+				case optionAMQP:
+					withAMQP = true
 				}
 			}
 		}
@@ -306,6 +313,7 @@ var projectCreateCmd = &cobra.Command{
 			RC:               strings.Contains(chooseVersion, "rc"),
 			UseDocker:        useDocker,
 			UseElasticsearch: withElasticsearch,
+			UseAMQP:          withAMQP,
 			NoAudit:          noAudit,
 			DeploymentMethod: selectedDeployment,
 		})
@@ -466,7 +474,7 @@ func runComposerInstall(ctx context.Context, projectFolder string, useDocker boo
 			return err
 		}
 
-		dockerArgs := []string{"run", "--rm",
+		dockerArgs := []string{"run", "--rm", "--pull=always",
 			"-v", fmt.Sprintf("%s:/app", absProjectFolder),
 			"-w", "/app",
 			"ghcr.io/shopware/docker-dev:php8.3-node22-caddy",
@@ -527,6 +535,7 @@ func init() {
 	projectCreateCmd.PersistentFlags().Bool("docker", false, "Use Docker to run Composer instead of local installation")
 	projectCreateCmd.PersistentFlags().Bool("with-elasticsearch", false, "Include Elasticsearch/OpenSearch support")
 	projectCreateCmd.PersistentFlags().Bool("without-elasticsearch", false, "Remove Elasticsearch from the installation (deprecated: use --with-elasticsearch)")
+	projectCreateCmd.PersistentFlags().Bool("with-amqp", false, "Include AMQP queue support (symfony/amqp-messenger)")
 	projectCreateCmd.PersistentFlags().Bool("no-audit", false, "Disable composer audit blocking insecure packages")
 	projectCreateCmd.PersistentFlags().Bool("git", false, "Initialize a Git repository")
 	projectCreateCmd.PersistentFlags().String("version", "", "Shopware version to install (e.g., 6.6.0.0, latest)")

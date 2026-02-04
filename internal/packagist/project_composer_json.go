@@ -25,6 +25,7 @@ type ComposerJsonOptions struct {
 	RC               bool
 	UseDocker        bool
 	UseElasticsearch bool
+	UseAMQP          bool
 	NoAudit          bool
 	DeploymentMethod string
 }
@@ -66,6 +67,9 @@ func GenerateComposerJson(ctx context.Context, opts ComposerJsonOptions) (string
 		require.set("shopware/elasticsearch", opts.DependingVersion)
 	}
 	require.set("shopware/storefront", opts.DependingVersion)
+	if opts.UseAMQP {
+		require.set("symfony/amqp-messenger", "*")
+	}
 	if opts.UseDocker {
 		require.set("shopware/docker-dev", "*")
 	}

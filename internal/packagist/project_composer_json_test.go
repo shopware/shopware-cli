@@ -1,7 +1,6 @@
 package packagist
 
 import (
-	"context"
 	"encoding/json"
 	"testing"
 
@@ -9,9 +8,11 @@ import (
 )
 
 func TestGenerateComposerJson(t *testing.T) {
-	ctx := context.Background()
+	t.Parallel()
 
 	t.Run("without audit", func(t *testing.T) {
+		t.Parallel()
+		ctx := t.Context()
 		jsonStr, err := GenerateComposerJson(ctx, ComposerJsonOptions{Version: "6.4.18.0"})
 		assert.NoError(t, err)
 		assert.Contains(t, jsonStr, `"sort-packages": true`)
@@ -23,6 +24,8 @@ func TestGenerateComposerJson(t *testing.T) {
 	})
 
 	t.Run("with audit disabled", func(t *testing.T) {
+		t.Parallel()
+		ctx := t.Context()
 		jsonStr, err := GenerateComposerJson(ctx, ComposerJsonOptions{Version: "6.4.18.0", NoAudit: true})
 		assert.NoError(t, err)
 		assert.Contains(t, jsonStr, `"sort-packages": true`)
@@ -34,6 +37,8 @@ func TestGenerateComposerJson(t *testing.T) {
 	})
 
 	t.Run("with elasticsearch", func(t *testing.T) {
+		t.Parallel()
+		ctx := t.Context()
 		jsonStr, err := GenerateComposerJson(ctx, ComposerJsonOptions{Version: "6.4.18.0", UseElasticsearch: true})
 		assert.NoError(t, err)
 		assert.Contains(t, jsonStr, `"shopware/elasticsearch"`)
@@ -44,6 +49,8 @@ func TestGenerateComposerJson(t *testing.T) {
 	})
 
 	t.Run("without elasticsearch", func(t *testing.T) {
+		t.Parallel()
+		ctx := t.Context()
 		jsonStr, err := GenerateComposerJson(ctx, ComposerJsonOptions{Version: "6.4.18.0", UseElasticsearch: false})
 		assert.NoError(t, err)
 		assert.NotContains(t, jsonStr, `"shopware/elasticsearch"`)
@@ -54,6 +61,8 @@ func TestGenerateComposerJson(t *testing.T) {
 	})
 
 	t.Run("with shopware paas deployment", func(t *testing.T) {
+		t.Parallel()
+		ctx := t.Context()
 		jsonStr, err := GenerateComposerJson(ctx, ComposerJsonOptions{Version: "6.4.18.0", DeploymentMethod: DeploymentShopwarePaaS})
 		assert.NoError(t, err)
 		assert.Contains(t, jsonStr, `"shopware/k8s-meta": "*"`)
@@ -68,6 +77,8 @@ func TestGenerateComposerJson(t *testing.T) {
 	})
 
 	t.Run("with platformsh deployment", func(t *testing.T) {
+		t.Parallel()
+		ctx := t.Context()
 		jsonStr, err := GenerateComposerJson(ctx, ComposerJsonOptions{Version: "6.4.18.0", DeploymentMethod: DeploymentPlatformSH})
 		assert.NoError(t, err)
 		assert.Contains(t, jsonStr, `"shopware/paas-meta": "*"`)
@@ -81,6 +92,8 @@ func TestGenerateComposerJson(t *testing.T) {
 	})
 
 	t.Run("with deployer deployment", func(t *testing.T) {
+		t.Parallel()
+		ctx := t.Context()
 		jsonStr, err := GenerateComposerJson(ctx, ComposerJsonOptions{Version: "6.4.18.0", DeploymentMethod: DeploymentDeployer})
 		assert.NoError(t, err)
 		assert.Contains(t, jsonStr, `"deployer/deployer": "*"`)
@@ -88,6 +101,30 @@ func TestGenerateComposerJson(t *testing.T) {
 		assert.NotContains(t, jsonStr, `"shopware/k8s-meta"`)
 		assert.NotContains(t, jsonStr, `"ext-grpc"`)
 		assert.NotContains(t, jsonStr, `"ext-opentelemetry"`)
+
+		var data map[string]interface{}
+		err = json.Unmarshal([]byte(jsonStr), &data)
+		assert.NoError(t, err, "Generated JSON should be valid")
+	})
+
+	t.Run("with amqp", func(t *testing.T) {
+		t.Parallel()
+		ctx := t.Context()
+		jsonStr, err := GenerateComposerJson(ctx, ComposerJsonOptions{Version: "6.4.18.0", UseAMQP: true})
+		assert.NoError(t, err)
+		assert.Contains(t, jsonStr, `"symfony/amqp-messenger": "*"`)
+
+		var data map[string]interface{}
+		err = json.Unmarshal([]byte(jsonStr), &data)
+		assert.NoError(t, err, "Generated JSON should be valid")
+	})
+
+	t.Run("without amqp", func(t *testing.T) {
+		t.Parallel()
+		ctx := t.Context()
+		jsonStr, err := GenerateComposerJson(ctx, ComposerJsonOptions{Version: "6.4.18.0", UseAMQP: false})
+		assert.NoError(t, err)
+		assert.NotContains(t, jsonStr, `"symfony/amqp-messenger"`)
 
 		var data map[string]interface{}
 		err = json.Unmarshal([]byte(jsonStr), &data)
