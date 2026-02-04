@@ -31,6 +31,9 @@ jobs:
           check-latest: true
           cache: true
 
+      - name: Download modules
+        run: go mod download
+
       - name: Build
         run: go build -v ./...
 

@@ -9,6 +9,7 @@ import (
 )
 
 func TestButtonFixer(t *testing.T) {
+	t.Parallel()
 	cases := []struct {
 		description string
 		before      string

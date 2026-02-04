@@ -8,13 +8,16 @@ import (
 )
 
 func TestInitCurlCommand(t *testing.T) {
+	t.Parallel()
 	t.Run("empty command", func(t *testing.T) {
+		t.Parallel()
 		cmd := InitCurlCommand()
 		assert.Empty(t, cmd.options)
 		assert.Empty(t, cmd.args)
 	})
 
 	t.Run("with method", func(t *testing.T) {
+		t.Parallel()
 		cmd := InitCurlCommand(Method("POST"))
 		assert.Len(t, cmd.options, 1)
 		assert.Equal(t, "-X", cmd.options[0].flag)
@@ -22,6 +25,7 @@ func TestInitCurlCommand(t *testing.T) {
 	})
 
 	t.Run("with bearer token", func(t *testing.T) {
+		t.Parallel()
 		cmd := InitCurlCommand(BearerToken("test-token"))
 		assert.Len(t, cmd.options, 1)
 		assert.Equal(t, "--header", cmd.options[0].flag)
@@ -29,12 +33,14 @@ func TestInitCurlCommand(t *testing.T) {
 	})
 
 	t.Run("with custom args", func(t *testing.T) {
+		t.Parallel()
 		cmd := InitCurlCommand(Args([]string{"-v"}))
 		assert.Empty(t, cmd.options)
 		assert.Equal(t, []string{"-v"}, cmd.args)
 	})
 
 	t.Run("with URL", func(t *testing.T) {
+		t.Parallel()
 		u, _ := url.Parse("https://example.com")
 		cmd := InitCurlCommand(Url(u))
 		assert.Empty(t, cmd.options)
@@ -42,6 +48,7 @@ func TestInitCurlCommand(t *testing.T) {
 	})
 
 	t.Run("with header", func(t *testing.T) {
+		t.Parallel()
 		cmd := InitCurlCommand(Header("Content-Type", "application/json"))
 		assert.Len(t, cmd.options, 1)
 		assert.Equal(t, "--header", cmd.options[0].flag)
@@ -49,6 +56,7 @@ func TestInitCurlCommand(t *testing.T) {
 	})
 
 	t.Run("with multiple options", func(t *testing.T) {
+		t.Parallel()
 		u, _ := url.Parse("https://example.com")
 		cmd := InitCurlCommand(
 			Method("POST"),
@@ -72,12 +80,15 @@ func TestInitCurlCommand(t *testing.T) {
 }
 
 func TestCommand_getCmdOptions(t *testing.T) {
+	t.Parallel()
 	t.Run("empty command", func(t *testing.T) {
+		t.Parallel()
 		cmd := &Command{}
 		assert.Empty(t, cmd.getCmdOptions())
 	})
 
 	t.Run("with options and args", func(t *testing.T) {
+		t.Parallel()
 		cmd := &Command{
 			options: []curlOption{
 				{flag: "-X", value: "POST"},
@@ -96,12 +107,14 @@ func TestCommand_getCmdOptions(t *testing.T) {
 }
 
 func TestArgs_WithExistingArgs(t *testing.T) {
+	t.Parallel()
 	cmd := &Command{args: []string{"existing"}}
 	Args([]string{"new"})(cmd)
 	assert.Equal(t, []string{"existing", "new"}, cmd.args)
 }
 
 func TestUrl_WithExistingArgs(t *testing.T) {
+	t.Parallel()
 	cmd := &Command{args: []string{"existing"}}
 	u, _ := url.Parse("https://example.com")
 	Url(u)(cmd)

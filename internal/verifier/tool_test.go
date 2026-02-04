@@ -23,6 +23,7 @@ func toolNames(list ToolList) []string {
 }
 
 func TestExclude_EmptyString_NoChange(t *testing.T) {
+	t.Parallel()
 	base := ToolList{testTool{"phpstan"}, testTool{"eslint"}, testTool{"sw-cli"}}
 	res, err := base.Exclude("")
 	assert.NoError(t, err)
@@ -30,6 +31,7 @@ func TestExclude_EmptyString_NoChange(t *testing.T) {
 }
 
 func TestExclude_SingleTool(t *testing.T) {
+	t.Parallel()
 	base := ToolList{testTool{"phpstan"}, testTool{"eslint"}, testTool{"sw-cli"}}
 	res, err := base.Exclude("eslint")
 	assert.NoError(t, err)
@@ -37,6 +39,7 @@ func TestExclude_SingleTool(t *testing.T) {
 }
 
 func TestExclude_MultipleTools(t *testing.T) {
+	t.Parallel()
 	base := ToolList{testTool{"phpstan"}, testTool{"eslint"}, testTool{"sw-cli"}, testTool{"stylelint"}}
 	res, err := base.Exclude("eslint, stylelint")
 	assert.NoError(t, err)
@@ -44,6 +47,7 @@ func TestExclude_MultipleTools(t *testing.T) {
 }
 
 func TestExclude_AllTools_ReturnsEmpty(t *testing.T) {
+	t.Parallel()
 	base := ToolList{testTool{"phpstan"}, testTool{"eslint"}}
 	res, err := base.Exclude("phpstan,eslint")
 	assert.NoError(t, err)
@@ -51,6 +55,7 @@ func TestExclude_AllTools_ReturnsEmpty(t *testing.T) {
 }
 
 func TestExclude_UnknownTool_Error(t *testing.T) {
+	t.Parallel()
 	base := ToolList{testTool{"phpstan"}, testTool{"eslint"}}
 	res, err := base.Exclude("rector")
 	assert.Error(t, err)
@@ -58,6 +63,7 @@ func TestExclude_UnknownTool_Error(t *testing.T) {
 }
 
 func TestExclude_TrimsAndIgnoresDuplicates(t *testing.T) {
+	t.Parallel()
 	base := ToolList{testTool{"phpstan"}, testTool{"eslint"}, testTool{"sw-cli"}}
 	res, err := base.Exclude(" eslint , eslint ,  \teslint\t ")
 	assert.NoError(t, err)

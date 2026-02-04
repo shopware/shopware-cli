@@ -9,6 +9,7 @@ import (
 )
 
 func TestCopyFiles(t *testing.T) {
+	t.Parallel()
 	// Create a temporary directory for testing
 	tempDir := t.TempDir()
 	defer func() {
@@ -79,6 +80,7 @@ func TestCopyFiles(t *testing.T) {
 }
 
 func TestIsDirEmpty(t *testing.T) {
+	t.Parallel()
 	// Test empty directory
 	tmpDir := t.TempDir()
 	empty, err := IsDirEmpty(tmpDir)

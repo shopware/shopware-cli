@@ -10,7 +10,9 @@ import (
 )
 
 func TestMigrateEnv(t *testing.T) {
+	t.Parallel()
 	t.Run("successful migration with only .env", func(t *testing.T) {
+		t.Parallel()
 		// Create a temporary directory for the test
 		tempDir := t.TempDir()
 
@@ -35,6 +37,7 @@ func TestMigrateEnv(t *testing.T) {
 	})
 
 	t.Run("no migration needed when .env.local exists", func(t *testing.T) {
+		t.Parallel()
 		// Create a temporary directory for the test
 		tempDir := t.TempDir()
 
@@ -62,6 +65,7 @@ func TestMigrateEnv(t *testing.T) {
 	})
 
 	t.Run("no migration needed when no files exist", func(t *testing.T) {
+		t.Parallel()
 		// Create a temporary directory for the test
 		tempDir := t.TempDir()
 
@@ -77,6 +81,7 @@ func TestMigrateEnv(t *testing.T) {
 	})
 
 	t.Run("no migration needed when only .env.local exists", func(t *testing.T) {
+		t.Parallel()
 		// Create a temporary directory for the test
 		tempDir := t.TempDir()
 

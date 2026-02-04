@@ -7,11 +7,13 @@ import (
 )
 
 func TestNewSpdxLicenses(t *testing.T) {
+	t.Parallel()
 	_, err := NewSpdxLicenses()
 	assert.NoError(t, err)
 }
 
 func TestSpdxLicenses_Validate(t *testing.T) {
+	t.Parallel()
 	s, _ := NewSpdxLicenses()
 
 	tests := []struct {
@@ -26,6 +28,7 @@ func TestSpdxLicenses_Validate(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.identifier, func(t *testing.T) {
+			t.Parallel()
 			bl, err := s.Validate(tt.identifier)
 
 			assert.NoError(t, err)

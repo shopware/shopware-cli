@@ -9,12 +9,14 @@ import (
 )
 
 func TestNewCheck(t *testing.T) {
+	t.Parallel()
 	check := NewCheck()
 	assert.NotNil(t, check)
 	assert.Empty(t, check.Results)
 }
 
 func TestAddResult(t *testing.T) {
+	t.Parallel()
 	check := NewCheck()
 	result := validation.CheckResult{
 		Path:       "test.go",
@@ -30,6 +32,7 @@ func TestAddResult(t *testing.T) {
 }
 
 func TestHasErrors(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name     string
 		results  []validation.CheckResult
@@ -61,6 +64,7 @@ func TestHasErrors(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			check := NewCheck()
 			for _, result := range tt.results {
 				check.AddResult(result)
@@ -71,6 +75,7 @@ func TestHasErrors(t *testing.T) {
 }
 
 func TestRemoveByIdentifier(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name            string
 		initialResults  []validation.CheckResult
@@ -162,6 +167,7 @@ func TestRemoveByIdentifier(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			check := NewCheck()
 			for _, result := range tt.initialResults {
 				check.AddResult(result)
@@ -174,6 +180,7 @@ func TestRemoveByIdentifier(t *testing.T) {
 }
 
 func TestRemoveByMessage(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name            string
 		initialResults  []validation.CheckResult
@@ -248,6 +255,7 @@ func TestRemoveByMessage(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			check := NewCheck()
 			for _, result := range tt.initialResults {
 				check.AddResult(result)

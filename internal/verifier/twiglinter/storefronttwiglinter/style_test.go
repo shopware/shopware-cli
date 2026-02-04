@@ -9,6 +9,7 @@ import (
 )
 
 func TestStyleDetection(t *testing.T) {
+	t.Parallel()
 	cases := []struct {
 		name     string
 		content  string
@@ -43,6 +44,7 @@ func TestStyleDetection(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			checks, err := twiglinter.RunCheckerOnString(StyleFixer{}, tc.content)
 			assert.NoError(t, err)
 			if tc.expected {

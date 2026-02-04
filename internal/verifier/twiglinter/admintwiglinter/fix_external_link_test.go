@@ -9,6 +9,7 @@ import (
 )
 
 func TestExternalLinkFixer(t *testing.T) {
+	t.Parallel()
 	cases := []struct {
 		description string
 		before      string

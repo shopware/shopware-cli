@@ -10,6 +10,7 @@ import (
 )
 
 func TestInvalidGitRepository(t *testing.T) {
+	t.Parallel()
 	repo := "invalid"
 	ctx := t.Context()
 
@@ -19,6 +20,7 @@ func TestInvalidGitRepository(t *testing.T) {
 }
 
 func TestNoTags(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	prepareRepository(t, tmpDir)
 	_ = os.WriteFile(filepath.Join(tmpDir, "a"), []byte(""), os.ModePerm)
@@ -39,6 +41,7 @@ func TestNoTags(t *testing.T) {
 }
 
 func TestWithOneTagAndCommit(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 	prepareRepository(t, tmpDir)
 	_ = os.WriteFile(filepath.Join(tmpDir, "a"), []byte(""), os.ModePerm)

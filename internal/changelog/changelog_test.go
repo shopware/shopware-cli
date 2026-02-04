@@ -9,6 +9,7 @@ import (
 )
 
 func TestGenerateWithoutConfig(t *testing.T) {
+	t.Parallel()
 	commits := []git.GitCommit{
 		{
 			Message: "feat: add new feature",
@@ -27,6 +28,7 @@ func TestGenerateWithoutConfig(t *testing.T) {
 }
 
 func TestTicketParsing(t *testing.T) {
+	t.Parallel()
 	commits := []git.GitCommit{
 		{
 			Message: "NEXT-1234 - Fooo",
@@ -48,6 +50,7 @@ func TestTicketParsing(t *testing.T) {
 }
 
 func TestIncludeFilters(t *testing.T) {
+	t.Parallel()
 	commits := []git.GitCommit{
 		{
 			Message: "NEXT-1234 - Fooo",

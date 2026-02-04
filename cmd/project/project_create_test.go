@@ -12,6 +12,7 @@ import (
 )
 
 func TestResolveVersion(t *testing.T) {
+	t.Parallel()
 	versions := []*version.Version{
 		version.Must(version.NewVersion("6.6.1.0-rc1")),
 		version.Must(version.NewVersion("6.6.0.0")),
@@ -20,11 +21,13 @@ func TestResolveVersion(t *testing.T) {
 	}
 
 	t.Run("latest selects most recent stable version", func(t *testing.T) {
+		t.Parallel()
 		result := resolveVersion(versionLatest, versions)
 		assert.Equal(t, "6.6.0.0", result)
 	})
 
 	t.Run("latest falls back to RC if no stable", func(t *testing.T) {
+		t.Parallel()
 		rcOnly := []*version.Version{
 			version.Must(version.NewVersion("6.7.0.0-rc2")),
 			version.Must(version.NewVersion("6.7.0.0-rc1")),
@@ -34,33 +37,40 @@ func TestResolveVersion(t *testing.T) {
 	})
 
 	t.Run("latest returns empty for empty list", func(t *testing.T) {
+		t.Parallel()
 		result := resolveVersion(versionLatest, []*version.Version{})
 		assert.Equal(t, "", result)
 	})
 
 	t.Run("exact version match", func(t *testing.T) {
+		t.Parallel()
 		result := resolveVersion("6.5.8.0", versions)
 		assert.Equal(t, "6.5.8.0", result)
 	})
 
 	t.Run("version not found returns empty", func(t *testing.T) {
+		t.Parallel()
 		result := resolveVersion("6.4.0.0", versions)
 		assert.Equal(t, "", result)
 	})
 
 	t.Run("dev version passes through", func(t *testing.T) {
+		t.Parallel()
 		result := resolveVersion("dev-trunk", versions)
 		assert.Equal(t, "dev-trunk", result)
 	})
 
 	t.Run("dev version with branch name", func(t *testing.T) {
+		t.Parallel()
 		result := resolveVersion("dev-6.6", versions)
 		assert.Equal(t, "dev-6.6", result)
 	})
 }
 
 func TestSetupDeployment(t *testing.T) {
+	t.Parallel()
 	t.Run("none creates no files", func(t *testing.T) {
+		t.Parallel()
 		tmpDir := t.TempDir()
 
 		err := setupDeployment(tmpDir, packagist.DeploymentNone)
@@ -72,6 +82,7 @@ func TestSetupDeployment(t *testing.T) {
 	})
 
 	t.Run("deployer creates deploy.php", func(t *testing.T) {
+		t.Parallel()
 		tmpDir := t.TempDir()
 
 		err := setupDeployment(tmpDir, packagist.DeploymentDeployer)
@@ -84,6 +95,7 @@ func TestSetupDeployment(t *testing.T) {
 	})
 
 	t.Run("shopware-paas creates application.yaml", func(t *testing.T) {
+		t.Parallel()
 		tmpDir := t.TempDir()
 
 		err := setupDeployment(tmpDir, packagist.DeploymentShopwarePaaS)
@@ -97,6 +109,7 @@ func TestSetupDeployment(t *testing.T) {
 	})
 
 	t.Run("platformsh creates no files", func(t *testing.T) {
+		t.Parallel()
 		tmpDir := t.TempDir()
 
 		err := setupDeployment(tmpDir, packagist.DeploymentPlatformSH)
@@ -109,7 +122,9 @@ func TestSetupDeployment(t *testing.T) {
 }
 
 func TestSetupCI(t *testing.T) {
+	t.Parallel()
 	t.Run("none creates no files", func(t *testing.T) {
+		t.Parallel()
 		tmpDir := t.TempDir()
 
 		err := setupCI(tmpDir, "none", packagist.DeploymentNone)
@@ -121,6 +136,7 @@ func TestSetupCI(t *testing.T) {
 	})
 
 	t.Run("github creates workflow directory and ci.yml", func(t *testing.T) {
+		t.Parallel()
 		tmpDir := t.TempDir()
 
 		err := setupCI(tmpDir, "github", packagist.DeploymentNone)
@@ -132,6 +148,7 @@ func TestSetupCI(t *testing.T) {
 	})
 
 	t.Run("github with deployer creates deploy.yml", func(t *testing.T) {
+		t.Parallel()
 		tmpDir := t.TempDir()
 
 		err := setupCI(tmpDir, "github", packagist.DeploymentDeployer)
@@ -142,6 +159,7 @@ func TestSetupCI(t *testing.T) {
 	})
 
 	t.Run("gitlab creates .gitlab-ci.yml", func(t *testing.T) {
+		t.Parallel()
 		tmpDir := t.TempDir()
 
 		err := setupCI(tmpDir, "gitlab", packagist.DeploymentNone)
@@ -151,6 +169,7 @@ func TestSetupCI(t *testing.T) {
 	})
 
 	t.Run("gitlab with deployer includes deploy config", func(t *testing.T) {
+		t.Parallel()
 		tmpDir := t.TempDir()
 
 		err := setupCI(tmpDir, "gitlab", packagist.DeploymentDeployer)
@@ -163,6 +182,7 @@ func TestSetupCI(t *testing.T) {
 }
 
 func TestValidDeploymentMethods(t *testing.T) {
+	t.Parallel()
 	validDeployments := map[string]bool{
 		packagist.DeploymentNone:         true,
 		packagist.DeploymentDeployer:     true,
@@ -171,6 +191,7 @@ func TestValidDeploymentMethods(t *testing.T) {
 	}
 
 	t.Run("all deployment constants are valid", func(t *testing.T) {
+		t.Parallel()
 		assert.True(t, validDeployments[packagist.DeploymentNone])
 		assert.True(t, validDeployments[packagist.DeploymentDeployer])
 		assert.True(t, validDeployments[packagist.DeploymentPlatformSH])
@@ -178,12 +199,14 @@ func TestValidDeploymentMethods(t *testing.T) {
 	})
 
 	t.Run("invalid deployment is rejected", func(t *testing.T) {
+		t.Parallel()
 		assert.False(t, validDeployments["invalid"])
 		assert.False(t, validDeployments[""])
 	})
 }
 
 func TestValidCISystems(t *testing.T) {
+	t.Parallel()
 	validCISystems := map[string]bool{
 		"none":   true,
 		"github": true,
@@ -191,12 +214,14 @@ func TestValidCISystems(t *testing.T) {
 	}
 
 	t.Run("all CI constants are valid", func(t *testing.T) {
+		t.Parallel()
 		assert.True(t, validCISystems["none"])
 		assert.True(t, validCISystems["github"])
 		assert.True(t, validCISystems["gitlab"])
 	})
 
 	t.Run("invalid CI system is rejected", func(t *testing.T) {
+		t.Parallel()
 		assert.False(t, validCISystems["jenkins"])
 		assert.False(t, validCISystems[""])
 	})
