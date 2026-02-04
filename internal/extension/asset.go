@@ -3,8 +3,6 @@ package extension
 import (
 	"context"
 	"os"
-	"path"
-	"path/filepath"
 
 	"github.com/shopware/shopware-cli/internal/asset"
 	"github.com/shopware/shopware-cli/logging"
@@ -33,13 +31,8 @@ func ConvertExtensionsToSources(ctx context.Context, extensions []Extension) []a
 
 		if extConfig != nil {
 			for _, bundle := range extConfig.Build.ExtraBundles {
-				bundleName := bundle.Name
-
-				if bundleName == "" {
-					bundleName = filepath.Base(bundle.Path)
-				}
-
-				bundlePath := path.Join(ext.GetRootDir(), bundle.Path)
+				bundleName := bundle.ResolveName()
+				bundlePath := bundle.ResolvePath(ext.GetRootDir())
 
 				if _, err := os.Stat(bundlePath); os.IsNotExist(err) {
 					logging.FromContext(ctx).Errorf("Skipping extra bundle %s as its folder %s does not exist", bundleName, bundlePath)

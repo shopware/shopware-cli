@@ -11,6 +11,7 @@ import (
 	cp "github.com/otiai10/copy"
 	"github.com/spf13/cobra"
 
+	"github.com/shopware/shopware-cli/internal/archiver"
 	"github.com/shopware/shopware-cli/internal/extension"
 	"github.com/shopware/shopware-cli/internal/validation"
 	"github.com/shopware/shopware-cli/logging"
@@ -212,7 +213,7 @@ var extensionZipCmd = &cobra.Command{
 			return fmt.Errorf("generate checksum.json: %w", err)
 		}
 
-		if err := extension.CreateZip(tempDir, fileName); err != nil {
+		if err := archiver.CreateZip(tempDir, fileName); err != nil {
 			return fmt.Errorf("create zip file: %w", err)
 		}
 

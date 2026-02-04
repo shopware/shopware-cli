@@ -18,14 +18,7 @@ func validateAssets(ext Extension, check validation.Check) {
 	}
 
 	for _, extraBundle := range ext.GetExtensionConfig().Build.ExtraBundles {
-		bundlePath := ext.GetRootDir()
-
-		if extraBundle.Path != "" {
-			bundlePath = fmt.Sprintf("%s/%s", bundlePath, extraBundle.Path)
-		} else {
-			bundlePath = fmt.Sprintf("%s/%s", bundlePath, extraBundle.Name)
-		}
-
+		bundlePath := extraBundle.ResolvePath(ext.GetRootDir())
 		validateAssetByResourceDir(check, filepath.Join(bundlePath, "Resources"))
 	}
 }

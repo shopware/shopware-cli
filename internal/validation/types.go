@@ -19,6 +19,9 @@ type CheckResult struct {
 	Severity string `json:"severity"`
 
 	Identifier string `json:"identifier"`
+
+	// Tip provides additional context or suggestions to fix the issue
+	Tip string `json:"tip,omitempty"`
 }
 
 // ToolConfigIgnore represents a configuration item to ignore during validation

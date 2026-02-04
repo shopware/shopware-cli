@@ -280,6 +280,166 @@ func (c *testCheck) RemoveByIdentifier(ignores []ToolConfigIgnore) Check {
 	return c
 }
 
+func TestSummaryReportWithTip(t *testing.T) {
+	testResults := []CheckResult{
+		{
+			Path:       "src/Service.php",
+			Line:       10,
+			Identifier: "phpstan/missingType",
+			Message:    "Method has no return type",
+			Severity:   SeverityError,
+			Tip:        "Add a return type declaration",
+		},
+		{
+			Path:       "src/Service.php",
+			Line:       20,
+			Identifier: "phpstan/other",
+			Message:    "Some other error",
+			Severity:   SeverityError,
+		},
+	}
+
+	check := &testCheck{Results: testResults}
+
+	output := captureOutput(func() {
+		_ = doSummaryReport(check)
+	})
+
+	assert.Contains(t, output, "Method has no return type")
+	assert.Contains(t, output, "Tip: Add a return type declaration")
+	assert.Contains(t, output, "Some other error")
+}
+
+func TestGitHubReportWithTip(t *testing.T) {
+	testResults := []CheckResult{
+		{
+			Path:       "src/Service.php",
+			Line:       10,
+			Identifier: "phpstan/missingType",
+			Message:    "Method has no return type",
+			Severity:   SeverityError,
+			Tip:        "Add a return type declaration",
+		},
+	}
+
+	check := &testCheck{Results: testResults}
+
+	output := captureOutput(func() {
+		_ = doGitHubReport(check)
+	})
+
+	assert.Contains(t, output, "Method has no return type")
+	assert.Contains(t, output, "%0A%0ATip: Add a return type declaration")
+}
+
+func TestGitLabReportWithTip(t *testing.T) {
+	testResults := []CheckResult{
+		{
+			Path:       "src/Service.php",
+			Line:       10,
+			Identifier: "phpstan/missingType",
+			Message:    "Method has no return type",
+			Severity:   SeverityError,
+			Tip:        "Add a return type declaration",
+		},
+	}
+
+	check := &testCheck{Results: testResults}
+
+	output := captureOutput(func() {
+		err := doGitLabReport(check)
+		assert.NoError(t, err)
+	})
+
+	var issues []GitLabCodeQualityIssue
+	err := json.Unmarshal([]byte(output), &issues)
+	assert.NoError(t, err)
+	assert.Len(t, issues, 1)
+	assert.Contains(t, issues[0].Description, "Method has no return type")
+	assert.Contains(t, issues[0].Description, "Tip: Add a return type declaration")
+}
+
+func TestMarkdownReportWithTip(t *testing.T) {
+	testResults := []CheckResult{
+		{
+			Path:       "src/Service.php",
+			Line:       10,
+			Identifier: "phpstan/missingType",
+			Message:    "Method has no return type",
+			Severity:   SeverityError,
+			Tip:        "Add a return type declaration",
+		},
+	}
+
+	check := &testCheck{Results: testResults}
+
+	output := captureOutput(func() {
+		_ = doMarkdownReport(check)
+	})
+
+	assert.Contains(t, output, "Method has no return type")
+	assert.Contains(t, output, "*Tip: Add a return type declaration*")
+}
+
+func TestJSONReportWithTip(t *testing.T) {
+	testResults := []CheckResult{
+		{
+			Path:       "src/Service.php",
+			Line:       10,
+			Identifier: "phpstan/missingType",
+			Message:    "Method has no return type",
+			Severity:   SeverityError,
+			Tip:        "Add a return type declaration",
+		},
+	}
+
+	check := &testCheck{Results: testResults}
+
+	output := captureOutput(func() {
+		err := doJSONReport(check)
+		assert.NoError(t, err)
+	})
+
+	var result map[string][]CheckResult
+	err := json.Unmarshal([]byte(output), &result)
+	assert.NoError(t, err)
+	assert.Len(t, result["results"], 1)
+	assert.Equal(t, "Add a return type declaration", result["results"][0].Tip)
+}
+
+func TestJUnitReportWithTip(t *testing.T) {
+	testResults := []CheckResult{
+		{
+			Path:       "src/Service.php",
+			Line:       10,
+			Identifier: "phpstan/missingType",
+			Message:    "Method has no return type",
+			Severity:   SeverityError,
+			Tip:        "Add a return type declaration",
+		},
+		{
+			Path:       "src/Other.php",
+			Line:       5,
+			Identifier: "phpstan/warning",
+			Message:    "Some warning",
+			Severity:   SeverityWarning,
+			Tip:        "Consider fixing this",
+		},
+	}
+
+	check := &testCheck{Results: testResults}
+
+	output := captureOutput(func() {
+		err := doJUnitReport(check)
+		assert.NoError(t, err)
+	})
+
+	assert.Contains(t, output, "Method has no return type")
+	assert.Contains(t, output, "Tip: Add a return type declaration")
+	assert.Contains(t, output, "Some warning")
+	assert.Contains(t, output, "Tip: Consider fixing this")
+}
+
 // captureOutput captures stdout during function execution
 func captureOutput(fn func()) string {
 	oldStdout := os.Stdout

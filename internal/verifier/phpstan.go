@@ -32,6 +32,7 @@ type PhpStanOutput struct {
 			Line       int    `json:"line"`
 			Ignorable  bool   `json:"ignorable"`
 			Identifier string `json:"identifier"`
+			Tip        string `json:"tip"`
 		} `json:"messages"`
 	} `json:"files"`
 	Errors []string `json:"errors"`
@@ -118,6 +119,7 @@ func (p PhpStan) Check(ctx context.Context, check *Check, config ToolConfig) err
 					Message:    message.Message,
 					Severity:   validation.SeverityError,
 					Identifier: fmt.Sprintf("phpstan/%s", message.Identifier),
+					Tip:        message.Tip,
 				})
 			}
 		}
