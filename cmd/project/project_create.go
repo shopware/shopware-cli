@@ -104,15 +104,15 @@ var projectCreateCmd = &cobra.Command{
 		}
 
 		deploymentOptions := []huh.Option[string]{
+			huh.NewOption(color.RecommendedText.Render("PaaS powered by Shopware (Recommended)"), packagist.DeploymentShopwarePaaS),
 			huh.NewOption(color.NeutralText.Render("None"), packagist.DeploymentNone),
 			huh.NewOption(color.SecondaryText.Render("DeployerPHP"), packagist.DeploymentDeployer),
 			huh.NewOption(color.SecondaryText.Render("PaaS powered by Platform.sh"), packagist.DeploymentPlatformSH),
-			huh.NewOption(color.RecommendedText.Render("PaaS powered by Shopware (Recommended)"), packagist.DeploymentShopwarePaaS),
 		}
 
 		ciOptions := []huh.Option[string]{
-			huh.NewOption(color.NeutralText.Render("None"), ciNone),
 			huh.NewOption(color.RecommendedText.Render("GitHub Actions (Recommended)"), ciGitHub),
+			huh.NewOption(color.NeutralText.Render("None"), ciNone),
 			huh.NewOption(color.NeutralText.Render("GitLab CI"), ciGitLab),
 		}
 
@@ -142,6 +142,9 @@ var projectCreateCmd = &cobra.Command{
 			}
 			if selectedCI == "" {
 				selectedCI = ciNone
+			}
+			if !cmd.PersistentFlags().Changed("with-elasticsearch") {
+				withElasticsearch = true
 			}
 		} else {
 			var formFields []huh.Field
@@ -207,10 +210,10 @@ var projectCreateCmd = &cobra.Command{
 
 			var optionalOptions []huh.Option[string]
 			if !cmd.PersistentFlags().Changed("git") {
-				optionalOptions = append(optionalOptions, huh.NewOption(color.RecommendedText.Render("Initialize Git Repository (Recommended)"), optionGit))
+				optionalOptions = append(optionalOptions, huh.NewOption(color.RecommendedText.Render("Initialize Git Repository (Recommended)"), optionGit).Selected(true))
 			}
 			if !cmd.PersistentFlags().Changed("docker") {
-				optionalOptions = append(optionalOptions, huh.NewOption(color.RecommendedText.Render("Local Docker Setup (Recommended)"), optionDocker))
+				optionalOptions = append(optionalOptions, huh.NewOption(color.RecommendedText.Render("Local Docker Setup (Recommended)"), optionDocker).Selected(true))
 			}
 			if !cmd.PersistentFlags().Changed("with-elasticsearch") {
 				optionalOptions = append(optionalOptions, huh.NewOption(color.NeutralText.Render("Setup Elasticsearch/OpenSearch support"), optionElasticsearch))
