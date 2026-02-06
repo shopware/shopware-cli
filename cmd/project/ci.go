@@ -199,6 +199,13 @@ var projectCI = &cobra.Command{
 
 		warumupSection.End(cmd.Context())
 
+		if _, err := os.Stat(path.Join(args[0], "var", "cache")); err == nil {
+			logging.FromContext(cmd.Context()).Infof("Removing var/cache")
+			if err := os.RemoveAll(path.Join(args[0], "var", "cache")); err != nil {
+				return err
+			}
+		}
+
 		if shopCfg.Build.IsMjmlEnabled() {
 			mjmlSection := ci.Default.Section(cmd.Context(), "Compiling MJML templates")
 
