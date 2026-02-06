@@ -8,6 +8,7 @@ import (
 )
 
 func TestBlockParsing(t *testing.T) {
+	t.Parallel()
 	template := `{% block content %}
 {% block page_account_address_form_create_personal %}
             {{ parent() }}
@@ -28,6 +29,7 @@ func TestBlockParsing(t *testing.T) {
 }
 
 func TestTraversing(t *testing.T) {
+	t.Parallel()
 	template := `{% block content %}
 {{ parent() }}
 {% endblock %}`
@@ -52,6 +54,7 @@ func TestTraversing(t *testing.T) {
 }
 
 func TestSwExtendsParsing(t *testing.T) {
+	t.Parallel()
 	testcases := []struct {
 		template string
 		path     string
@@ -87,6 +90,7 @@ func TestSwExtendsParsing(t *testing.T) {
 }
 
 func TestPrintNodeParsing(t *testing.T) {
+	t.Parallel()
 	template := `{{ a_variable }}`
 	nodes, err := ParseTemplate(template)
 	assert.NoError(t, err)
@@ -104,6 +108,7 @@ func TestPrintNodeParsing(t *testing.T) {
 }
 
 func TestDeprecatedNodeParsing(t *testing.T) {
+	t.Parallel()
 	template := `{% deprecated 'The "base.html.twig" template is deprecated, use "layout.html.twig" instead.' %}`
 	nodes, err := ParseTemplate(template)
 	assert.NoError(t, err)
@@ -122,6 +127,7 @@ func TestDeprecatedNodeParsing(t *testing.T) {
 }
 
 func TestSetNodeParsing(t *testing.T) {
+	t.Parallel()
 	// Inline set assignment.
 	inlineTemplate := `{% set name = 'Fabien' %}`
 	nodes, err := ParseTemplate(inlineTemplate)
@@ -162,6 +168,7 @@ func TestSetNodeParsing(t *testing.T) {
 }
 
 func TestAutoescapeNodeParsing(t *testing.T) {
+	t.Parallel()
 	template := `{% autoescape %}
     Everything will be automatically escaped.
     {% endautoescape %}`

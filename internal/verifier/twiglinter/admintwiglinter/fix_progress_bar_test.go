@@ -9,6 +9,7 @@ import (
 )
 
 func TestProgressBarFixer(t *testing.T) {
+	t.Parallel()
 	cases := []struct {
 		description string
 		before      string

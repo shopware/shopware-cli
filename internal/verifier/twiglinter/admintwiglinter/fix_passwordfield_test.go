@@ -9,6 +9,7 @@ import (
 )
 
 func TestPasswordFieldFixer(t *testing.T) {
+	t.Parallel()
 	cases := []struct {
 		description string
 		before      string

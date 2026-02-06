@@ -16,6 +16,7 @@ import (
 )
 
 func TestDiskCache(t *testing.T) {
+	t.Parallel()
 	// Create temporary directory for testing
 	tmpDir := t.TempDir()
 
@@ -69,6 +70,7 @@ func TestDiskCache(t *testing.T) {
 }
 
 func TestDiskCacheFilePath(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 
 	cache := NewDiskCache(tmpDir)
@@ -103,6 +105,7 @@ func TestDiskCacheFilePath(t *testing.T) {
 }
 
 func TestCacheFactory(t *testing.T) {
+	t.Parallel()
 	factory := NewCacheFactory()
 
 	// Test default cache creation
@@ -148,6 +151,7 @@ func TestIsGitHubActions(t *testing.T) {
 }
 
 func TestCacheInterfaceCompliance(t *testing.T) {
+	t.Parallel()
 	// Test that both implementations satisfy the Cache interface
 	tmpDir := t.TempDir()
 
@@ -179,6 +183,7 @@ func TestCacheInterfaceCompliance(t *testing.T) {
 }
 
 func TestDiskCacheFolderOperations(t *testing.T) {
+	t.Parallel()
 	// Create temporary directories for testing
 	tmpDir := t.TempDir()
 	sourceDir := t.TempDir()
@@ -244,6 +249,7 @@ func TestDiskCacheFolderOperations(t *testing.T) {
 }
 
 func TestDiskCacheStoreFolderCreatesParentDirectory(t *testing.T) {
+	t.Parallel()
 	// Create temporary directory for testing
 	tmpDir := t.TempDir()
 
@@ -279,6 +285,7 @@ func TestDiskCacheStoreFolderCreatesParentDirectory(t *testing.T) {
 }
 
 func TestGitHubActionsCacheSymlinksAndPermissions(t *testing.T) {
+	t.Parallel()
 	// This test would only work in GitHub Actions, but we can test the tar creation logic
 	sourceDir := t.TempDir()
 

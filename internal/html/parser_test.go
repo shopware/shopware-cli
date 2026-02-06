@@ -10,6 +10,7 @@ import (
 )
 
 func TestFormattingOfHTML(t *testing.T) {
+	t.Parallel()
 	swBlock := &ElementNode{
 		Tag: "sw-button",
 		Attributes: NodeList{
@@ -110,6 +111,7 @@ func TestFormatting(t *testing.T) {
 }
 
 func TestChangeElement(t *testing.T) {
+	t.Parallel()
 	node, err := NewParser(`<sw-select @update:value="onUpdateValue"/>`)
 	assert.NoError(t, err)
 	TraverseNode(node, func(n *ElementNode) {
@@ -131,6 +133,7 @@ func TestChangeElement(t *testing.T) {
 }
 
 func TestBlockParsing(t *testing.T) {
+	t.Parallel()
 	input := `{% block name %}{% endblock %}`
 
 	node, err := NewParser(input)
