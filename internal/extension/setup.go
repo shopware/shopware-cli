@@ -17,7 +17,7 @@ func setupShopwareInTemp(ctx context.Context, minVersion string) (string, error)
 
 	branch := "v" + strings.ToLower(minVersion)
 
-	if minVersion == DevVersionNumber || minVersion == "6.7.0.0" {
+	if minVersion == DevVersionNumber {
 		branch = "trunk"
 	}
 
