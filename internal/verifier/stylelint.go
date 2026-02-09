@@ -61,6 +61,7 @@ func (s StyleLint) Check(ctx context.Context, check *Check, config ToolConfig) e
 				"--formatter=json",
 				"--config", path.Join(config.ToolDirectory, "js", "configs", fmt.Sprintf("stylelint.config.%s.mjs", path.Base(p))),
 				"--ignore-pattern", "dist/**",
+				"--ignore-pattern", ".tmp/**",
 				"--ignore-pattern", "vendor/**",
 				fmt.Sprintf("%s/**/*.scss", p),
 			)
@@ -127,6 +128,7 @@ func (s StyleLint) Fix(ctx context.Context, config ToolConfig) error {
 			stylelint := exec.CommandContext(ctx, "node", path.Join(config.ToolDirectory, "js", "node_modules", ".bin", "stylelint"),
 				"--config", path.Join(config.ToolDirectory, "js", "configs", fmt.Sprintf("stylelint.config.%s.mjs", path.Base(p))),
 				"--ignore-pattern", "dist/**",
+				"--ignore-pattern", ".tmp/**",
 				"--ignore-pattern", "vendor/**",
 				"**/*.scss",
 				"--fix",
