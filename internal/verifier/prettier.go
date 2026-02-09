@@ -14,6 +14,7 @@ package-lock.json
 Resources/public/**
 Resources/app/storefront/dist/**
 dist/**
+Resources/app/administration/.tmp/**
 Resources/store/**
 `
 
