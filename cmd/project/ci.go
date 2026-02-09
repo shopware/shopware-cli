@@ -69,6 +69,12 @@ var projectCI = &cobra.Command{
 
 		cleanupPaths = append(cleanupPaths, shopCfg.Build.CleanupPaths...)
 
+		if shopCfg.Build.Hooks != nil && len(shopCfg.Build.Hooks.Pre) > 0 {
+			if err := executeCIHooks(cmd.Context(), "Running pre hooks", shopCfg.Build.Hooks.Pre, args[0]); err != nil {
+				return err
+			}
+		}
+
 		if !shopCfg.DisableComposerInstall {
 			composerFlags := []string{"install", "--no-interaction", "--no-progress", "--optimize-autoloader", "--classmap-authoritative"}
 
@@ -83,6 +89,12 @@ var projectCI = &cobra.Command{
 			token, err := prepareComposerAuth(cmd.Context(), args[0])
 			if err != nil {
 				return err
+			}
+
+			if shopCfg.Build.Hooks != nil && len(shopCfg.Build.Hooks.PreComposer) > 0 {
+				if err := executeCIHooks(cmd.Context(), "Running pre-composer hooks", shopCfg.Build.Hooks.PreComposer, args[0]); err != nil {
+					return err
+				}
 			}
 
 			composerInstallSection := ci.Default.Section(cmd.Context(), "Composer Installation")
@@ -101,6 +113,12 @@ var projectCI = &cobra.Command{
 			}
 
 			composerInstallSection.End(cmd.Context())
+
+			if shopCfg.Build.Hooks != nil && len(shopCfg.Build.Hooks.PostComposer) > 0 {
+				if err := executeCIHooks(cmd.Context(), "Running post-composer hooks", shopCfg.Build.Hooks.PostComposer, args[0]); err != nil {
+					return err
+				}
+			}
 		} else {
 			logging.FromContext(cmd.Context()).Infof("Skipping composer install")
 		}
@@ -128,8 +146,20 @@ var projectCI = &cobra.Command{
 			KeepNodeModules:              shopCfg.Build.KeepNodeModules,
 		}
 
+		if shopCfg.Build.Hooks != nil && len(shopCfg.Build.Hooks.PreAssets) > 0 {
+			if err := executeCIHooks(cmd.Context(), "Running pre-assets hooks", shopCfg.Build.Hooks.PreAssets, args[0]); err != nil {
+				return err
+			}
+		}
+
 		if err := extension.BuildAssetsForExtensions(cmd.Context(), sources, assetCfg); err != nil {
 			return err
+		}
+
+		if shopCfg.Build.Hooks != nil && len(shopCfg.Build.Hooks.PostAssets) > 0 {
+			if err := executeCIHooks(cmd.Context(), "Running post-assets hooks", shopCfg.Build.Hooks.PostAssets, args[0]); err != nil {
+				return err
+			}
 		}
 
 		optimizeSection := ci.Default.Section(cmd.Context(), "Optimizing Administration Assets")
@@ -257,6 +287,12 @@ var projectCI = &cobra.Command{
 			}
 
 			deleteAssetsSection.End(cmd.Context())
+		}
+
+		if shopCfg.Build.Hooks != nil && len(shopCfg.Build.Hooks.Post) > 0 {
+			if err := executeCIHooks(cmd.Context(), "Running post hooks", shopCfg.Build.Hooks.Post, args[0]); err != nil {
+				return err
+			}
 		}
 
 		return nil
@@ -518,4 +554,25 @@ func convertForceExtensionBuild(configExtensions []shop.ConfigBuildExtension) []
 		extensionConfigs[i] = ext.Name
 	}
 	return extensionConfigs
+}
+
+func executeCIHooks(ctx context.Context, sectionName string, hooks []string, root string) error {
+	section := ci.Default.Section(ctx, sectionName)
+
+	for _, hook := range hooks {
+		logging.FromContext(ctx).Infof("Running hook: %s", hook)
+		hookCmd := exec.CommandContext(ctx, "sh", "-c", hook)
+		hookCmd.Stdout = os.Stdout
+		hookCmd.Stderr = os.Stderr
+		hookCmd.Dir = root
+		hookCmd.Env = append(os.Environ(), fmt.Sprintf("PROJECT_ROOT=%s", root))
+
+		if err := hookCmd.Run(); err != nil {
+			return fmt.Errorf("hook failed (%s): %w", hook, err)
+		}
+	}
+
+	section.End(ctx)
+
+	return nil
 }

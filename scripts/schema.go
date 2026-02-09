@@ -40,7 +40,7 @@ func generateProjectSchema() error {
 	r.FieldNameTag = "yaml"
 	r.RequiredFromJSONSchemaTags = true
 
-	if err := r.AddGoComments("github.com/shopware/shopware-cli", "./shop"); err != nil {
+	if err := r.AddGoComments("github.com/shopware/shopware-cli", "./internal/shop"); err != nil {
 		return err
 	}
 
@@ -63,7 +63,7 @@ func generateExtensionSchema() error {
 	r.FieldNameTag = "yaml"
 	r.RequiredFromJSONSchemaTags = true
 
-	if err := r.AddGoComments("github.com/shopware/shopware-cli", "./extension"); err != nil {
+	if err := r.AddGoComments("github.com/shopware/shopware-cli", "./internal/extension"); err != nil {
 		return err
 	}
 
