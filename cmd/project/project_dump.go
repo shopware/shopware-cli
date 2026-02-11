@@ -57,7 +57,7 @@ var projectDatabaseDumpCmd = &cobra.Command{
 		dumper.InsertIntoLimit = insertIntoLimit
 
 		var projectCfg *shop.Config
-		if projectCfg, err = shop.ReadConfig(projectConfigPath, true); err != nil {
+		if projectCfg, err = shop.ReadConfig(cmd.Context(), projectConfigPath, true); err != nil {
 			return err
 		}
 

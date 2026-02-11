@@ -97,7 +97,7 @@ func GetConfigFromProject(root string, onlyLocal bool) (*ToolConfig, error) {
 
 	vendorPath := path.Join(root, "vendor")
 
-	shopCfg, err := shop.ReadConfig(path.Join(root, ".shopware-project.yml"), true)
+	shopCfg, err := shop.ReadConfig(logging.DisableLogger(context.Background()), path.Join(root, ".shopware-project.yml"), true)
 	if err != nil {
 		return nil, err
 	}

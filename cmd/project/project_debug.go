@@ -24,7 +24,7 @@ var projectDebug = &cobra.Command{
 			return err
 		}
 
-		shopCfg, err := shop.ReadConfig(projectConfigPath, true)
+		shopCfg, err := shop.ReadConfig(cmd.Context(), projectConfigPath, true)
 		if err != nil {
 			return err
 		}

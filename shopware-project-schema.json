@@ -15,6 +15,11 @@
           "type": "string",
           "description": "The URL of the Shopware instance"
         },
+        "compatibility_date": {
+          "type": "string",
+          "format": "date",
+          "description": "Controls date-based compatibility behavior, formatted as YYYY-MM-DD."
+        },
         "build": {
           "$ref": "#/$defs/ConfigBuild"
         },

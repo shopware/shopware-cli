@@ -22,7 +22,7 @@ var projectExtensionOutdatedCmd = &cobra.Command{
 
 		outputAsJson, _ := cmd.PersistentFlags().GetBool("json")
 
-		if cfg, err = shop.ReadConfig(projectConfigPath, true); err != nil {
+		if cfg, err = shop.ReadConfig(cmd.Context(), projectConfigPath, true); err != nil {
 			return err
 		}
 

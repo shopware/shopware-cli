@@ -55,7 +55,7 @@ func (p PlatformPlugin) GetResourcesDirs() []string {
 	return result
 }
 
-func newPlatformPlugin(path string) (*PlatformPlugin, error) {
+func newPlatformPlugin(ctx context.Context, path string) (*PlatformPlugin, error) {
 	composerJsonFile := fmt.Sprintf("%s/composer.json", path)
 	if _, err := os.Stat(composerJsonFile); err != nil {
 		return nil, err
@@ -75,7 +75,7 @@ func newPlatformPlugin(path string) (*PlatformPlugin, error) {
 		return nil, ErrPlatformInvalidType
 	}
 
-	cfg, err := readExtensionConfig(path)
+	cfg, err := readExtensionConfig(ctx, path)
 	if err != nil {
 		return nil, fmt.Errorf("newPlatformPlugin: %v", err)
 	}

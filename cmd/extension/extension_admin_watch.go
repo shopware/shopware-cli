@@ -56,9 +56,9 @@ var extensionAdminWatchCmd = &cobra.Command{
 		var sources []asset.Source
 
 		for _, extensionPath := range args[:len(args)-1] {
-			ext, err := extension.GetExtensionByFolder(extensionPath)
+			ext, err := extension.GetExtensionByFolder(cmd.Context(), extensionPath)
 			if err != nil {
-				shopCfg, err := shop.ReadConfig(path.Join(extensionPath, shop.DefaultConfigFileName()), true)
+				shopCfg, err := shop.ReadConfig(cmd.Context(), path.Join(extensionPath, shop.DefaultConfigFileName()), true)
 				if err != nil {
 					return err
 				}
