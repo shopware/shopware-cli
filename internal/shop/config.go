@@ -65,6 +65,24 @@ type ConfigBuild struct {
 	KeepNodeModules []string `yaml:"keep_node_modules,omitempty"`
 	// MJML email template compilation configuration
 	MJML *ConfigBuildMJML `yaml:"mjml,omitempty"`
+	// Hooks to run at specific points during CI builds
+	Hooks *ConfigBuildHooks `yaml:"hooks,omitempty"`
+}
+
+// ConfigBuildHooks defines hooks to run at specific points during CI builds.
+type ConfigBuildHooks struct {
+	// Commands to run before anything runs
+	Pre []string `yaml:"pre,omitempty"`
+	// Commands to run after everything completes
+	Post []string `yaml:"post,omitempty"`
+	// Commands to run before composer install
+	PreComposer []string `yaml:"pre-composer,omitempty"`
+	// Commands to run after composer install
+	PostComposer []string `yaml:"post-composer,omitempty"`
+	// Commands to run before asset build
+	PreAssets []string `yaml:"pre-assets,omitempty"`
+	// Commands to run after asset build
+	PostAssets []string `yaml:"post-assets,omitempty"`
 }
 
 func (c ConfigBuild) IsMjmlEnabled() bool {
