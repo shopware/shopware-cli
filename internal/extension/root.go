@@ -52,7 +52,7 @@ func GetExtensionByFolder(ctx context.Context, path string) (Extension, error) {
 	return ext, err
 }
 
-func GetExtensionByZip(filePath string) (Extension, error) {
+func GetExtensionByZip(ctx context.Context, filePath string) (Extension, error) {
 	dir, err := os.MkdirTemp("", "extension")
 	if err != nil {
 		return nil, err
@@ -80,7 +80,7 @@ func GetExtensionByZip(filePath string) (Extension, error) {
 	}
 
 	extName := strings.Split(fileName, "/")[0]
-	return GetExtensionByFolder(context.Background(), fmt.Sprintf("%s/%s", dir, extName))
+	return GetExtensionByFolder(ctx, fmt.Sprintf("%s/%s", dir, extName))
 }
 
 type extensionTranslated struct {

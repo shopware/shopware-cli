@@ -38,7 +38,7 @@ var accountCompanyProducerExtensionInfoPushCmd = &cobra.Command{
 		if stat.IsDir() {
 			zipExt, err = extension.GetExtensionByFolder(cmd.Context(), absolutePath)
 		} else {
-			zipExt, err = extension.GetExtensionByZip(absolutePath)
+			zipExt, err = extension.GetExtensionByZip(cmd.Context(), absolutePath)
 		}
 
 		if err != nil {

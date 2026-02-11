@@ -224,7 +224,6 @@ func readExtensionConfig(ctx context.Context, dir string) (*Config, error) {
 	config.Build.Zip.Assets.Enabled = true
 	config.Build.Zip.Composer.Enabled = true
 	config.FileName = ".shopware-extension.yml"
-	config.CompatibilityDate = compatibility.DefaultDate()
 
 	configLocation := ""
 
@@ -233,6 +232,7 @@ func readExtensionConfig(ctx context.Context, dir string) (*Config, error) {
 	} else if _, err := os.Stat(filepath.Join(dir, ".shopware-extension.yaml")); err == nil {
 		configLocation = filepath.Join(dir, ".shopware-extension.yaml")
 	} else {
+		config.CompatibilityDate = compatibility.DefaultDate()
 		return config, nil
 	}
 

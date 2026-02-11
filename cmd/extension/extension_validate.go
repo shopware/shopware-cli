@@ -89,7 +89,7 @@ var extensionValidateCmd = &cobra.Command{
 
 			toolCfg.InputWasDirectory = true
 		} else {
-			ext, err := extension.GetExtensionByZip(args[0])
+			ext, err := extension.GetExtensionByZip(cmd.Context(), args[0])
 			if err != nil {
 				return err
 			}
