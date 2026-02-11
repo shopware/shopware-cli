@@ -18,7 +18,7 @@ var projectExtensionUpdateCmd = &cobra.Command{
 		var cfg *shop.Config
 		var err error
 
-		if cfg, err = shop.ReadConfig(projectConfigPath, true); err != nil {
+		if cfg, err = shop.ReadConfig(cmd.Context(), projectConfigPath, true); err != nil {
 			return err
 		}
 

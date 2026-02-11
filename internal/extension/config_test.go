@@ -1,12 +1,15 @@
 package extension
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/shopware/shopware-cli/internal/compatibility"
 )
 
 func TestConfigValidationStringListDecode(t *testing.T) {
@@ -21,7 +24,7 @@ validation:
 
 	assert.NoError(t, os.WriteFile(filepath.Join(tmpDir, ".shopware-extension.yaml"), []byte(cfg), 0o644))
 
-	ext, err := readExtensionConfig(tmpDir)
+	ext, err := readExtensionConfig(context.Background(), tmpDir)
 	assert.NoError(t, err)
 	assert.Equal(t, 2, len(ext.Validation.Ignore))
 	assert.Equal(t, "metadata.setup", ext.Validation.Ignore[0].Identifier)
@@ -41,7 +44,7 @@ validation:
 
 	assert.NoError(t, os.WriteFile(filepath.Join(tmpDir, ".shopware-extension.yaml"), []byte(cfg), 0o644))
 
-	ext, err := readExtensionConfig(tmpDir)
+	ext, err := readExtensionConfig(context.Background(), tmpDir)
 	assert.NoError(t, err)
 	assert.Equal(t, 2, len(ext.Validation.Ignore))
 	assert.Equal(t, "metadata.setup", ext.Validation.Ignore[0].Identifier)
@@ -187,11 +190,13 @@ func TestReadExtensionConfig(t *testing.T) {
 	t.Run("returns default config when no file exists", func(t *testing.T) {
 		tmpDir := t.TempDir()
 
-		config, err := readExtensionConfig(tmpDir)
+		config, err := readExtensionConfig(context.Background(), tmpDir)
 		require.NoError(t, err)
 		assert.NotNil(t, config)
 		assert.True(t, config.Build.Zip.Assets.Enabled)
 		assert.True(t, config.Build.Zip.Composer.Enabled)
+		assert.Equal(t, compatibility.DefaultDate(), config.CompatibilityDate)
+		assert.NoError(t, compatibility.ValidateDate(config.CompatibilityDate))
 		assert.Equal(t, ".shopware-extension.yml", config.FileName)
 	})
 
@@ -199,6 +204,7 @@ func TestReadExtensionConfig(t *testing.T) {
 		tmpDir := t.TempDir()
 
 		configContent := `
+compatibility_date: "2026-02-11"
 store:
   default_locale: en_GB
 build:
@@ -206,9 +212,10 @@ build:
 `
 		require.NoError(t, os.WriteFile(filepath.Join(tmpDir, ".shopware-extension.yml"), []byte(configContent), 0644))
 
-		config, err := readExtensionConfig(tmpDir)
+		config, err := readExtensionConfig(context.Background(), tmpDir)
 		require.NoError(t, err)
 		assert.Equal(t, "~6.5.0", config.Build.ShopwareVersionConstraint)
+		assert.Equal(t, "2026-02-11", config.CompatibilityDate)
 		assert.Equal(t, ".shopware-extension.yml", config.FileName)
 	})
 
@@ -226,7 +233,7 @@ build:
 		require.NoError(t, os.WriteFile(filepath.Join(tmpDir, ".shopware-extension.yml"), []byte(ymlContent), 0644))
 		require.NoError(t, os.WriteFile(filepath.Join(tmpDir, ".shopware-extension.yaml"), []byte(yamlContent), 0644))
 
-		config, err := readExtensionConfig(tmpDir)
+		config, err := readExtensionConfig(context.Background(), tmpDir)
 		require.NoError(t, err)
 		assert.Equal(t, "from-yml", config.Build.ShopwareVersionConstraint)
 	})
@@ -240,9 +247,45 @@ store:
 `
 		require.NoError(t, os.WriteFile(filepath.Join(tmpDir, ".shopware-extension.yml"), []byte(invalidContent), 0644))
 
-		_, err := readExtensionConfig(tmpDir)
+		_, err := readExtensionConfig(context.Background(), tmpDir)
 		assert.Error(t, err)
 	})
+
+	t.Run("returns error for invalid compatibility date", func(t *testing.T) {
+		tmpDir := t.TempDir()
+
+		content := `
+compatibility_date: "11-02-2026"
+`
+		require.NoError(t, os.WriteFile(filepath.Join(tmpDir, ".shopware-extension.yml"), []byte(content), 0o644))
+
+		_, err := readExtensionConfig(context.Background(), tmpDir)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "invalid compatibility_date")
+	})
+}
+
+func TestConfigCompatibilityDateHelpers(t *testing.T) {
+	cfg := &Config{CompatibilityDate: "2026-02-11"}
+	assert.True(t, cfg.HasCompatibilityDate())
+
+	ok, err := cfg.IsCompatibilityDateAtLeast("2026-02-01")
+	assert.NoError(t, err)
+	assert.True(t, ok)
+
+	ok, err = cfg.IsCompatibilityDateAtLeast("2026-03-01")
+	assert.NoError(t, err)
+	assert.False(t, ok)
+
+	_, err = cfg.IsCompatibilityDateAtLeast("invalid")
+	assert.Error(t, err)
+
+	emptyCfg := &Config{}
+	assert.False(t, emptyCfg.HasCompatibilityDate())
+
+	ok, err = emptyCfg.IsCompatibilityDateAtLeast("2000-01-01")
+	assert.NoError(t, err)
+	assert.True(t, ok)
 }
 
 func TestValidateExtensionConfig(t *testing.T) {

@@ -29,7 +29,7 @@ var extensionChangelogCmd = &cobra.Command{
 		var ext extension.Extension
 
 		if stat.IsDir() {
-			ext, err = extension.GetExtensionByFolder(path)
+			ext, err = extension.GetExtensionByFolder(cmd.Context(), path)
 		} else {
 			ext, err = extension.GetExtensionByZip(path)
 		}

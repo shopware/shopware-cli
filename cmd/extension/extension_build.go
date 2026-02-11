@@ -26,7 +26,7 @@ var extensionAssetBundleCmd = &cobra.Command{
 				return fmt.Errorf("cannot open file: %w", err)
 			}
 
-			ext, err := extension.GetExtensionByFolder(path)
+			ext, err := extension.GetExtensionByFolder(cmd.Context(), path)
 			if err != nil {
 				return fmt.Errorf("cannot open extension: %w", err)
 			}

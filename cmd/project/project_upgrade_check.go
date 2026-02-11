@@ -30,7 +30,7 @@ var projectUpgradeCheckCmd = &cobra.Command{
 		var shopwareVersion *version.Version
 		var extensions map[string]string
 
-		if cfg, err = shop.ReadConfig(projectConfigPath, true); err != nil {
+		if cfg, err = shop.ReadConfig(cmd.Context(), projectConfigPath, true); err != nil {
 			return err
 		}
 

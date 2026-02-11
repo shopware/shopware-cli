@@ -77,7 +77,7 @@ var extensionValidateCmd = &cobra.Command{
 				tmpDir = args[0]
 			}
 
-			ext, err := extension.GetExtensionByFolder(tmpDir)
+			ext, err := extension.GetExtensionByFolder(cmd.Context(), tmpDir)
 			if err != nil {
 				return err
 			}

@@ -19,7 +19,7 @@ var extensionPrepareCmd = &cobra.Command{
 			return fmt.Errorf("path not found: %w", err)
 		}
 
-		ext, err := extension.GetExtensionByFolder(path)
+		ext, err := extension.GetExtensionByFolder(cmd.Context(), path)
 		if err != nil {
 			return fmt.Errorf("detect extension type: %w", err)
 		}

@@ -1,6 +1,7 @@
 package extension
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"testing"
@@ -27,7 +28,7 @@ func TestGetExtensionByFolder_DetectsApp(t *testing.T) {
 </manifest>`
 	require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "manifest.xml"), []byte(manifestContent), 0644))
 
-	ext, err := GetExtensionByFolder(tmpDir)
+	ext, err := GetExtensionByFolder(context.Background(), tmpDir)
 	require.NoError(t, err)
 	assert.Equal(t, TypePlatformApp, ext.GetType())
 
@@ -77,7 +78,7 @@ func TestGetExtensionByFolder_DetectsPlatformPlugin(t *testing.T) {
 }`
 	require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "composer.json"), []byte(composerContent), 0644))
 
-	ext, err := GetExtensionByFolder(tmpDir)
+	ext, err := GetExtensionByFolder(context.Background(), tmpDir)
 	require.NoError(t, err)
 	assert.Equal(t, TypePlatformPlugin, ext.GetType())
 
@@ -109,7 +110,7 @@ func TestGetExtensionByFolder_DetectsShopwareBundle(t *testing.T) {
 }`
 	require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "composer.json"), []byte(composerContent), 0644))
 
-	ext, err := GetExtensionByFolder(tmpDir)
+	ext, err := GetExtensionByFolder(context.Background(), tmpDir)
 	require.NoError(t, err)
 	assert.Equal(t, TypeShopwareBundle, ext.GetType())
 
@@ -124,7 +125,7 @@ func TestGetExtensionByFolder_RejectsShopware5Plugin(t *testing.T) {
 	// Create plugin.xml for a Shopware 5 plugin
 	require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "plugin.xml"), []byte("<plugin></plugin>"), 0644))
 
-	_, err := GetExtensionByFolder(tmpDir)
+	_, err := GetExtensionByFolder(context.Background(), tmpDir)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "shopware 5 is not supported")
 }
@@ -133,7 +134,7 @@ func TestGetExtensionByFolder_RejectsUnknownType(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	// Empty directory - no manifest.xml, no composer.json
-	_, err := GetExtensionByFolder(tmpDir)
+	_, err := GetExtensionByFolder(context.Background(), tmpDir)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "unknown extension type")
 }
@@ -163,7 +164,7 @@ func TestGetExtensionByFolder_PrefersManifestOverComposer(t *testing.T) {
 }`
 	require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "composer.json"), []byte(composerContent), 0644))
 
-	ext, err := GetExtensionByFolder(tmpDir)
+	ext, err := GetExtensionByFolder(context.Background(), tmpDir)
 	require.NoError(t, err)
 	// Should detect as App since manifest.xml is checked first
 	assert.Equal(t, TypePlatformApp, ext.GetType())

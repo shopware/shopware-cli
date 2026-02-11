@@ -18,7 +18,7 @@ type ShopwareBundle struct {
 	config   *Config
 }
 
-func newShopwareBundle(path string) (*ShopwareBundle, error) {
+func newShopwareBundle(ctx context.Context, path string) (*ShopwareBundle, error) {
 	composerJsonFile := fmt.Sprintf("%s/composer.json", path)
 	if _, err := os.Stat(composerJsonFile); err != nil {
 		return nil, err
@@ -43,7 +43,7 @@ func newShopwareBundle(path string) (*ShopwareBundle, error) {
 		return nil, fmt.Errorf("composer.json does not contain shopware-bundle-name in extra")
 	}
 
-	cfg, err := readExtensionConfig(path)
+	cfg, err := readExtensionConfig(ctx, path)
 	if err != nil {
 		return nil, fmt.Errorf("newShopwareBundle: %v", err)
 	}

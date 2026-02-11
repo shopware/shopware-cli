@@ -25,13 +25,13 @@ const (
 	ComposerTypeBundle = "shopware-bundle"
 )
 
-func GetExtensionByFolder(path string) (Extension, error) {
+func GetExtensionByFolder(ctx context.Context, path string) (Extension, error) {
 	if _, err := os.Stat(fmt.Sprintf("%s/plugin.xml", path)); err == nil {
 		return nil, fmt.Errorf("shopware 5 is not supported. Please use https://github.com/FriendsOfShopware/FroshPluginUploader instead")
 	}
 
 	if _, err := os.Stat(fmt.Sprintf("%s/manifest.xml", path)); err == nil {
-		return newApp(path)
+		return newApp(ctx, path)
 	}
 
 	if _, err := os.Stat(fmt.Sprintf("%s/composer.json", path)); err != nil {
@@ -40,10 +40,10 @@ func GetExtensionByFolder(path string) (Extension, error) {
 
 	var ext Extension
 
-	ext, err := newPlatformPlugin(path)
+	ext, err := newPlatformPlugin(ctx, path)
 	if err != nil {
 		if errors.Is(err, ErrPlatformInvalidType) {
-			ext, err = newShopwareBundle(path)
+			ext, err = newShopwareBundle(ctx, path)
 		} else {
 			return nil, err
 		}
@@ -80,7 +80,7 @@ func GetExtensionByZip(filePath string) (Extension, error) {
 	}
 
 	extName := strings.Split(fileName, "/")[0]
-	return GetExtensionByFolder(fmt.Sprintf("%s/%s", dir, extName))
+	return GetExtensionByFolder(context.Background(), fmt.Sprintf("%s/%s", dir, extName))
 }
 
 type extensionTranslated struct {

@@ -1,6 +1,7 @@
 package extension
 
 import (
+	"context"
 	"os"
 	"path"
 	"testing"
@@ -11,7 +12,7 @@ import (
 func TestCreateBundleEmptyFolder(t *testing.T) {
 	dir := t.TempDir()
 
-	bundle, err := newShopwareBundle(dir)
+	bundle, err := newShopwareBundle(context.Background(), dir)
 	assert.Error(t, err)
 	assert.Nil(t, bundle)
 }
@@ -27,7 +28,7 @@ func TestCreateBundleInvalidComposerType(t *testing.T) {
 	`)
 	_ = os.WriteFile(path.Join(dir, "composer.json"), composer, 0o644)
 
-	bundle, err := newShopwareBundle(dir)
+	bundle, err := newShopwareBundle(context.Background(), dir)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "composer.json type is not shopware-bundle")
 	assert.Nil(t, bundle)
@@ -44,7 +45,7 @@ func TestCreateBundleMissingName(t *testing.T) {
 	`)
 	_ = os.WriteFile(path.Join(dir, "composer.json"), composer, 0o644)
 
-	bundle, err := newShopwareBundle(dir)
+	bundle, err := newShopwareBundle(context.Background(), dir)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "composer.json does not contain shopware-bundle-name")
 	assert.Nil(t, bundle)
@@ -70,7 +71,7 @@ func TestCreateBundle(t *testing.T) {
 	`)
 	_ = os.WriteFile(path.Join(dir, "composer.json"), composer, 0o644)
 
-	bundle, err := newShopwareBundle(dir)
+	bundle, err := newShopwareBundle(context.Background(), dir)
 	assert.NoError(t, err)
 
 	name, err := bundle.GetName()

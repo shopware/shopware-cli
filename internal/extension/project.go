@@ -123,7 +123,7 @@ func FindAssetSourcesOfProject(ctx context.Context, project string, shopCfg *sho
 
 		logging.FromContext(ctx).Infof("Found bundle in project: %s (path: %s)", name, bundlePath)
 
-		bundleConfig, err := readExtensionConfig(bundlePath)
+		bundleConfig, err := readExtensionConfig(ctx, bundlePath)
 		if err != nil {
 			logging.FromContext(ctx).Errorf("Cannot read bundle config: %s", err.Error())
 			continue
@@ -182,7 +182,7 @@ func DumpAndLoadAssetSourcesOfProject(ctx context.Context, project string, shopC
 				Path: pluginsJson[name].BasePath,
 			}
 
-			if extensionCfg, err := readExtensionConfig(path.Join(project, pluginsJson[name].BasePath)); err == nil {
+			if extensionCfg, err := readExtensionConfig(ctx, path.Join(project, pluginsJson[name].BasePath)); err == nil {
 				source.AdminEsbuildCompatible = extensionCfg.Build.Zip.Assets.EnableESBuildForAdmin
 				source.StorefrontEsbuildCompatible = extensionCfg.Build.Zip.Assets.EnableESBuildForStorefront
 				source.NpmStrict = extensionCfg.Build.Zip.Assets.NpmStrict
@@ -199,7 +199,7 @@ func FindExtensionsFromProject(ctx context.Context, project string, onlyLocal bo
 	extensions := make(map[string]Extension)
 
 	if !onlyLocal {
-		for _, ext := range addExtensionsByComposer(project) {
+		for _, ext := range addExtensionsByComposer(ctx, project) {
 			name, err := ext.GetName()
 			if err != nil {
 				continue
@@ -213,7 +213,7 @@ func FindExtensionsFromProject(ctx context.Context, project string, onlyLocal bo
 		}
 	}
 
-	for _, ext := range addExtensionsByWildcard(path.Join(project, "custom", "static-plugins")) {
+	for _, ext := range addExtensionsByWildcard(ctx, path.Join(project, "custom", "static-plugins")) {
 		name, err := ext.GetName()
 		if err != nil {
 			continue
@@ -231,7 +231,7 @@ func FindExtensionsFromProject(ctx context.Context, project string, onlyLocal bo
 		extensions[name] = ext
 	}
 
-	for _, ext := range addExtensionsByWildcard(path.Join(project, "custom", "plugins")) {
+	for _, ext := range addExtensionsByWildcard(ctx, path.Join(project, "custom", "plugins")) {
 		name, err := ext.GetName()
 		if err != nil {
 			continue
@@ -249,7 +249,7 @@ func FindExtensionsFromProject(ctx context.Context, project string, onlyLocal bo
 		extensions[name] = ext
 	}
 
-	for _, ext := range addExtensionsByWildcard(path.Join(project, "custom", "apps")) {
+	for _, ext := range addExtensionsByWildcard(ctx, path.Join(project, "custom", "apps")) {
 		name, err := ext.GetName()
 		if err != nil {
 			continue
@@ -270,7 +270,7 @@ func FindExtensionsFromProject(ctx context.Context, project string, onlyLocal bo
 	return extensionsSlice
 }
 
-func addExtensionsByComposer(project string) []Extension {
+func addExtensionsByComposer(ctx context.Context, project string) []Extension {
 	var list []Extension
 
 	lock, err := os.ReadFile(path.Join(project, "composer.lock"))
@@ -285,7 +285,7 @@ func addExtensionsByComposer(project string) []Extension {
 
 	for _, pkg := range composer.Packages {
 		if pkg.PackageType == ComposerTypePlugin || pkg.PackageType == ComposerTypeBundle || pkg.PackageType == ComposerTypeApp {
-			ext, err := GetExtensionByFolder(path.Join(project, "vendor", pkg.Name))
+			ext, err := GetExtensionByFolder(ctx, path.Join(project, "vendor", pkg.Name))
 			if err != nil {
 				continue
 			}
@@ -307,7 +307,7 @@ func addExtensionsByComposer(project string) []Extension {
 	return list
 }
 
-func addExtensionsByWildcard(extensionDir string) []Extension {
+func addExtensionsByWildcard(ctx context.Context, extensionDir string) []Extension {
 	var list []Extension
 
 	extensions, err := os.ReadDir(extensionDir)
@@ -334,7 +334,7 @@ func addExtensionsByWildcard(extensionDir string) []Extension {
 		}
 
 		if isDir {
-			ext, err := GetExtensionByFolder(evaluatedPath)
+			ext, err := GetExtensionByFolder(ctx, evaluatedPath)
 			if err != nil {
 				continue
 			}

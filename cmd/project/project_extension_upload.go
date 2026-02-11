@@ -51,7 +51,7 @@ var projectExtensionUploadCmd = &cobra.Command{
 		isFolder := true
 
 		if stat.IsDir() {
-			ext, err = extension.GetExtensionByFolder(path)
+			ext, err = extension.GetExtensionByFolder(cmd.Context(), path)
 		} else {
 			ext, err = extension.GetExtensionByZip(path)
 			isFolder = false
@@ -71,7 +71,7 @@ var projectExtensionUploadCmd = &cobra.Command{
 				return err
 			}
 
-			ext, err = extension.GetExtensionByFolder(ext.GetPath())
+			ext, err = extension.GetExtensionByFolder(cmd.Context(), ext.GetPath())
 			if err != nil {
 				return err
 			}
@@ -107,7 +107,7 @@ var projectExtensionUploadCmd = &cobra.Command{
 				return fmt.Errorf("copy files: %w", err)
 			}
 
-			ext, err = extension.GetExtensionByFolder(extDir)
+			ext, err = extension.GetExtensionByFolder(cmd.Context(), extDir)
 			if err != nil {
 				return err
 			}
@@ -118,7 +118,7 @@ var projectExtensionUploadCmd = &cobra.Command{
 			}
 		}
 
-		if cfg, err = shop.ReadConfig(projectConfigPath, true); err != nil {
+		if cfg, err = shop.ReadConfig(cmd.Context(), projectConfigPath, true); err != nil {
 			return err
 		}
 
