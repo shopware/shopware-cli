@@ -37,7 +37,7 @@ var extensionZipCmd = &cobra.Command{
 			branch = args[1]
 		}
 
-		ext, err := extension.GetExtensionByFolder(extPath)
+		ext, err := extension.GetExtensionByFolder(cmd.Context(), extPath)
 		if err != nil {
 			return fmt.Errorf("detect extension type: %w", err)
 		}
@@ -124,7 +124,7 @@ var extensionZipCmd = &cobra.Command{
 			}
 		}
 		var tempExt extension.Extension
-		if tempExt, err = extension.GetExtensionByFolder(extDir); err != nil {
+		if tempExt, err = extension.GetExtensionByFolder(cmd.Context(), extDir); err != nil {
 			return err
 		}
 

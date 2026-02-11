@@ -1,7 +1,6 @@
 package mjml
 
 import (
-	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -65,7 +64,7 @@ func newMockExec(t *testing.T, scriptContent string) {
 }
 
 func TestCompile(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 
 	t.Run("successful compilation", func(t *testing.T) {
 		script := `#!/bin/sh
@@ -150,7 +149,7 @@ exit 0`
 }
 
 func TestProcessDirectory(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 
 	t.Run("successful processing", func(t *testing.T) {
 		script := `#!/bin/sh

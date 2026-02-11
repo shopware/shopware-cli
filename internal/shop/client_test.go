@@ -1,7 +1,6 @@
 package shop
 
 import (
-	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -120,7 +119,7 @@ func Test_NewShopClient(t *testing.T) {
 	t.Setenv("SHOPWARE_CLI_API_CLIENT_SECRET", "secret")
 
 	cfg := &Config{}
-	client, err := NewShopClient(context.Background(), cfg)
+	client, err := NewShopClient(t.Context(), cfg)
 	assert.NoError(t, err)
 	assert.NotNil(t, client)
 }
@@ -135,7 +134,7 @@ func Test_NewShopClient_configUrl(t *testing.T) {
 	t.Setenv("SHOPWARE_CLI_API_CLIENT_SECRET", "secret")
 
 	cfg := &Config{URL: server.URL}
-	client, err := NewShopClient(context.Background(), cfg)
+	client, err := NewShopClient(t.Context(), cfg)
 	assert.NoError(t, err)
 	assert.NotNil(t, client)
 	// Ideally, we'd check the client's configured URL here, but the SDK doesn't expose it easily.
@@ -151,7 +150,7 @@ func Test_NewShopClient_skipSSLCheck_env(t *testing.T) {
 	t.Setenv("SHOPWARE_CLI_API_DISABLE_SSL_CHECK", "true")
 
 	cfg := &Config{}
-	client, err := NewShopClient(context.Background(), cfg)
+	client, err := NewShopClient(t.Context(), cfg)
 	assert.NoError(t, err)
 	assert.NotNil(t, client)
 	// We cannot easily assert the TLS config here without reflection or modifying the original code.
@@ -172,7 +171,7 @@ func Test_NewShopClient_skipSSLCheck_config(t *testing.T) {
 			DisableSSLCheck: true,
 		},
 	}
-	client, err := NewShopClient(context.Background(), cfg)
+	client, err := NewShopClient(t.Context(), cfg)
 	assert.NoError(t, err)
 	assert.NotNil(t, client)
 	// We cannot easily assert the TLS config here without reflection or modifying the original code.
@@ -186,7 +185,7 @@ func Test_NewShopClient_NoURL(t *testing.T) {
 
 	// Config with empty URL
 	cfg := &Config{URL: ""}
-	_, err := NewShopClient(context.Background(), cfg)
+	_, err := NewShopClient(t.Context(), cfg)
 	// The current implementation doesn't check for empty URL
 	// The error would come from the SDK later when it tries to make a request
 	assert.Error(t, err)
@@ -205,6 +204,6 @@ func Test_NewShopClient_CredentialsError(t *testing.T) {
 
 	// Config without credentials
 	cfg := &Config{}
-	_, err := NewShopClient(context.Background(), cfg)
+	_, err := NewShopClient(t.Context(), cfg)
 	assert.Error(t, err)
 }

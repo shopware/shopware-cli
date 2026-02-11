@@ -26,7 +26,7 @@ var extensionFormat = &cobra.Command{
 			return fmt.Errorf("cannot find path: %w", err)
 		}
 
-		ext, err := extension.GetExtensionByFolder(path)
+		ext, err := extension.GetExtensionByFolder(cmd.Context(), path)
 		if err != nil {
 			return err
 		}

@@ -28,7 +28,7 @@ var accountCompanyProducerExtensionInfoPullCmd = &cobra.Command{
 			return fmt.Errorf("cannot open file: %w", err)
 		}
 
-		zipExt, err := extension.GetExtensionByFolder(absolutePath)
+		zipExt, err := extension.GetExtensionByFolder(cmd.Context(), absolutePath)
 		if err != nil {
 			return fmt.Errorf("cannot open extension: %w", err)
 		}

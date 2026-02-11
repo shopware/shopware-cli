@@ -30,6 +30,11 @@
     },
     "Config": {
       "properties": {
+        "compatibility_date": {
+          "type": "string",
+          "format": "date",
+          "description": "Controls date-based compatibility behavior, formatted as YYYY-MM-DD."
+        },
         "store": {
           "$ref": "#/$defs/ConfigStore",
           "description": "Store is the store configuration of the extension."

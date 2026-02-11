@@ -39,7 +39,7 @@ func (a App) GetComposerName() (string, error) {
 	return "", fmt.Errorf("app does not have a composer name")
 }
 
-func newApp(path string) (*App, error) {
+func newApp(ctx context.Context, path string) (*App, error) {
 	appFileName := fmt.Sprintf("%s/manifest.xml", path)
 
 	if _, err := os.Stat(appFileName); err != nil {
@@ -57,7 +57,7 @@ func newApp(path string) (*App, error) {
 		return nil, fmt.Errorf("newApp: %v", err)
 	}
 
-	cfg, err := readExtensionConfig(path)
+	cfg, err := readExtensionConfig(ctx, path)
 	if err != nil {
 		return nil, fmt.Errorf("newApp: %v", err)
 	}

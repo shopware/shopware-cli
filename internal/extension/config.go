@@ -1,6 +1,7 @@
 package extension
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"os"
@@ -9,7 +10,9 @@ import (
 	"gopkg.in/yaml.v3"
 
 	"github.com/shopware/shopware-cli/internal/changelog"
+	"github.com/shopware/shopware-cli/internal/compatibility"
 	"github.com/shopware/shopware-cli/internal/validation"
+	"github.com/shopware/shopware-cli/logging"
 )
 
 type ConfigBuild struct {
@@ -196,6 +199,8 @@ func (c *ConfigValidationList) Identifiers() []string {
 
 type Config struct {
 	FileName string `yaml:"-" jsonschema:"-"`
+	// Controls date-based compatibility behavior, formatted as YYYY-MM-DD.
+	CompatibilityDate string `yaml:"compatibility_date,omitempty" jsonschema:"format=date"`
 	// Store is the store configuration of the extension.
 	Store ConfigStore `yaml:"store,omitempty"`
 	// Build is the build configuration of the extension.
@@ -206,7 +211,15 @@ type Config struct {
 	Validation ConfigValidation `yaml:"validation,omitempty"`
 }
 
-func readExtensionConfig(dir string) (*Config, error) {
+func (c *Config) HasCompatibilityDate() bool {
+	return c.CompatibilityDate != ""
+}
+
+func (c *Config) IsCompatibilityDateAtLeast(requiredDate string) (bool, error) {
+	return compatibility.IsAtLeast(c.CompatibilityDate, requiredDate)
+}
+
+func readExtensionConfig(ctx context.Context, dir string) (*Config, error) {
 	config := &Config{}
 	config.Build.Zip.Assets.Enabled = true
 	config.Build.Zip.Composer.Enabled = true
@@ -219,6 +232,7 @@ func readExtensionConfig(dir string) (*Config, error) {
 	} else if _, err := os.Stat(filepath.Join(dir, ".shopware-extension.yaml")); err == nil {
 		configLocation = filepath.Join(dir, ".shopware-extension.yaml")
 	} else {
+		config.CompatibilityDate = compatibility.DefaultDate()
 		return config, nil
 	}
 
@@ -234,6 +248,11 @@ func readExtensionConfig(dir string) (*Config, error) {
 		return nil, fmt.Errorf(errorFormat, err)
 	}
 
+	if config.CompatibilityDate == "" {
+		logging.FromContext(ctx).Warnf("Config %s is missing compatibility_date, defaulting to %s", configLocation, compatibility.DefaultDate())
+		config.CompatibilityDate = compatibility.DefaultDate()
+	}
+
 	config.FileName = filepath.Base(configLocation)
 
 	err = validateExtensionConfig(config)
@@ -245,6 +264,10 @@ func readExtensionConfig(dir string) (*Config, error) {
 }
 
 func validateExtensionConfig(config *Config) error {
+	if err := compatibility.ValidateDate(config.CompatibilityDate); err != nil {
+		return err
+	}
+
 	if config.Store.Tags.English != nil && len(*config.Store.Tags.English) > 5 {
 		return fmt.Errorf("store.info.tags.en can contain maximal 5 items")
 	}

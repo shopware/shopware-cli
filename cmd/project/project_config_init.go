@@ -8,6 +8,7 @@ import (
 	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v3"
 
+	"github.com/shopware/shopware-cli/internal/compatibility"
 	"github.com/shopware/shopware-cli/internal/shop"
 	"github.com/shopware/shopware-cli/internal/system"
 	"github.com/shopware/shopware-cli/logging"
@@ -21,7 +22,9 @@ var projectConfigInitCmd = &cobra.Command{
 			return fmt.Errorf("this command requires interaction, but interaction is disabled")
 		}
 
-		config := &shop.Config{}
+		config := &shop.Config{
+			CompatibilityDate: compatibility.DefaultDate(),
+		}
 
 		if err := askProjectConfig(config); err != nil {
 			return err

@@ -21,7 +21,7 @@ var projectAdminApiCmd = &cobra.Command{
 		var cfg *shop.Config
 		var err error
 
-		if cfg, err = shop.ReadConfig(projectConfigPath, false); err != nil {
+		if cfg, err = shop.ReadConfig(cobraCmd.Context(), projectConfigPath, false); err != nil {
 			return err
 		}
 

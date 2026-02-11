@@ -4,7 +4,6 @@ import (
 	"archive/tar"
 	"bytes"
 	"compress/gzip"
-	"context"
 	"io"
 	"os"
 	"path/filepath"
@@ -20,7 +19,7 @@ func TestDiskCache(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	cache := NewDiskCache(tmpDir)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	// Test Set and Get
 	testKey := "test-key"
@@ -82,7 +81,7 @@ func TestDiskCacheFilePath(t *testing.T) {
 	assert.True(t, len(filepath.Base(filePath)) > 0)
 
 	// Test setting and getting with complex key
-	ctx := context.Background()
+	ctx := t.Context()
 	testData := "test data"
 
 	err := cache.Set(ctx, testKey, strings.NewReader(testData))
@@ -153,7 +152,7 @@ func TestCacheInterfaceCompliance(t *testing.T) {
 
 	// Test disk cache
 	var diskCache Cache = NewDiskCache(tmpDir)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	// Test basic operations
 	testKey := "interface-test"
@@ -195,7 +194,7 @@ func TestDiskCacheFolderOperations(t *testing.T) {
 	require.NoError(t, err)
 
 	cache := NewDiskCache(tmpDir)
-	ctx := context.Background()
+	ctx := t.Context()
 	cacheKey := "test-folder"
 
 	// Test StoreFolderCache
@@ -254,7 +253,7 @@ func TestDiskCacheStoreFolderCreatesParentDirectory(t *testing.T) {
 
 	// Create a cache instance with a nested path to ensure parent directories need to be created
 	cache := NewDiskCache(tmpDir)
-	ctx := context.Background()
+	ctx := t.Context()
 	cacheKey := "test-folder-with-long-key-that-creates-nested-structure"
 
 	// Store the folder cache - this should create the necessary parent directory structure

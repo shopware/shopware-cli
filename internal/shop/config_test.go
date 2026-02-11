@@ -6,6 +6,8 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+
+	"github.com/shopware/shopware-cli/internal/compatibility"
 )
 
 func TestConfigMerging(t *testing.T) {
@@ -36,12 +38,60 @@ include:
 	assert.NoError(t, os.WriteFile(baseFilePath, baseConfig, 0644))
 	assert.NoError(t, os.WriteFile(stagingFilePath, stagingConfig, 0644))
 
-	config, err := ReadConfig(stagingFilePath, false)
+	config, err := ReadConfig(t.Context(), stagingFilePath, false)
 	assert.NoError(t, err)
 
 	assert.NotNil(t, config.ConfigDump.Where)
 
 	assert.NoError(t, os.RemoveAll(tmpDir))
+}
+
+func TestReadConfigCompatibilityDateValidation(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, ".shopware-project.yml")
+	content := []byte(`
+url: https://example.com
+compatibility_date: 2026-13-11
+`)
+
+	assert.NoError(t, os.WriteFile(configPath, content, 0o644))
+
+	_, err := ReadConfig(t.Context(), configPath, false)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "invalid compatibility_date")
+}
+
+func TestConfigCompatibilityDateHelpers(t *testing.T) {
+	cfg := &Config{CompatibilityDate: "2026-02-11"}
+	assert.True(t, cfg.HasCompatibilityDate())
+
+	ok, err := cfg.IsCompatibilityDateAtLeast("2026-02-01")
+	assert.NoError(t, err)
+	assert.True(t, ok)
+
+	ok, err = cfg.IsCompatibilityDateAtLeast("2026-03-01")
+	assert.NoError(t, err)
+	assert.False(t, ok)
+
+	_, err = cfg.IsCompatibilityDateAtLeast("invalid")
+	assert.Error(t, err)
+
+	emptyCfg := &Config{}
+	assert.False(t, emptyCfg.HasCompatibilityDate())
+
+	ok, err = emptyCfg.IsCompatibilityDateAtLeast("2026-01-01")
+	assert.NoError(t, err)
+	assert.True(t, ok)
+}
+
+func TestReadConfigFallbackSetsCompatibilityDate(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, ".shopware-project.yml")
+
+	cfg, err := ReadConfig(t.Context(), configPath, true)
+	assert.NoError(t, err)
+	assert.Equal(t, compatibility.DefaultDate(), cfg.CompatibilityDate)
+	assert.NoError(t, compatibility.ValidateDate(cfg.CompatibilityDate))
 }
 
 func TestConfigDump_EnableAnonymization(t *testing.T) {

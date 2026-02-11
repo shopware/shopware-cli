@@ -31,7 +31,7 @@ var accountCompanyProducerExtensionUploadCmd = &cobra.Command{
 			return err
 		}
 
-		zipExt, err := extension.GetExtensionByZip(path)
+		zipExt, err := extension.GetExtensionByZip(cmd.Context(), path)
 		if err != nil {
 			logging.FromContext(cmd.Context()).Debugf("Failed to read extension from zip: %v", err)
 			return err

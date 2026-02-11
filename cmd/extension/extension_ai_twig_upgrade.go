@@ -33,7 +33,7 @@ var extensionAiTwigUpgradeCmd = &cobra.Command{
 	Short: "Upgrade Twig templates using AI",
 	Args:  cobra.ExactArgs(3),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		ext, err := extension.GetExtensionByFolder(args[0])
+		ext, err := extension.GetExtensionByFolder(cmd.Context(), args[0])
 		if err != nil {
 			return err
 		}

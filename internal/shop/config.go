@@ -1,6 +1,7 @@
 package shop
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path"
@@ -12,19 +13,23 @@ import (
 	orderedmap "github.com/wk8/go-ordered-map/v2"
 	"gopkg.in/yaml.v3"
 
+	"github.com/shopware/shopware-cli/internal/compatibility"
 	"github.com/shopware/shopware-cli/internal/system"
+	"github.com/shopware/shopware-cli/logging"
 )
 
 type Config struct {
 	AdditionalConfigs []string `yaml:"include,omitempty"`
 	// The URL of the Shopware instance
-	URL              string            `yaml:"url"`
-	Build            *ConfigBuild      `yaml:"build,omitempty"`
-	AdminApi         *ConfigAdminApi   `yaml:"admin_api,omitempty"`
-	ConfigDump       *ConfigDump       `yaml:"dump,omitempty"`
-	ConfigDeployment *ConfigDeployment `yaml:"deployment,omitempty"`
-	Validation       *ConfigValidation `yaml:"validation,omitempty"`
-	ImageProxy       *ConfigImageProxy `yaml:"image_proxy,omitempty"`
+	URL string `yaml:"url"`
+	// Controls date-based compatibility behavior, formatted as YYYY-MM-DD.
+	CompatibilityDate string            `yaml:"compatibility_date,omitempty" jsonschema:"format=date"`
+	Build             *ConfigBuild      `yaml:"build,omitempty"`
+	AdminApi          *ConfigAdminApi   `yaml:"admin_api,omitempty"`
+	ConfigDump        *ConfigDump       `yaml:"dump,omitempty"`
+	ConfigDeployment  *ConfigDeployment `yaml:"deployment,omitempty"`
+	Validation        *ConfigValidation `yaml:"validation,omitempty"`
+	ImageProxy        *ConfigImageProxy `yaml:"image_proxy,omitempty"`
 	// When enabled, composer scripts will be disabled during CI builds
 	DisableComposerScripts bool `yaml:"disable_composer_scripts,omitempty"`
 	// When enabled, composer install will be skipped during CI builds
@@ -38,6 +43,14 @@ func (c *Config) IsAdminAPIConfigured() bool {
 	}
 
 	return (c.AdminApi.ClientId != "" && c.AdminApi.ClientSecret != "") || (c.AdminApi.Username != "" && c.AdminApi.Password != "")
+}
+
+func (c *Config) HasCompatibilityDate() bool {
+	return c.CompatibilityDate != ""
+}
+
+func (c *Config) IsCompatibilityDateAtLeast(requiredDate string) (bool, error) {
+	return compatibility.IsAtLeast(c.CompatibilityDate, requiredDate)
 }
 
 type ConfigBuild struct {
@@ -362,7 +375,7 @@ type ConfigImageProxy struct {
 	URL string `yaml:"url,omitempty"`
 }
 
-func ReadConfig(fileName string, allowFallback bool) (*Config, error) {
+func ReadConfig(ctx context.Context, fileName string, allowFallback bool) (*Config, error) {
 	config := &Config{foundConfig: false}
 
 	_, err := os.Stat(fileName)
@@ -391,7 +404,7 @@ func ReadConfig(fileName string, allowFallback bool) (*Config, error) {
 
 	if len(config.AdditionalConfigs) > 0 {
 		for _, additionalConfigFile := range config.AdditionalConfigs {
-			additionalConfig, err := ReadConfig(additionalConfigFile, allowFallback)
+			additionalConfig, err := ReadConfig(ctx, additionalConfigFile, allowFallback)
 			if err != nil {
 				return nil, fmt.Errorf("error while reading included config: %s", err.Error())
 			}
@@ -407,10 +420,22 @@ func ReadConfig(fileName string, allowFallback bool) (*Config, error) {
 		return nil, fmt.Errorf("ReadConfig(%s): %v", fileName, err)
 	}
 
+	if config.foundConfig && config.CompatibilityDate == "" {
+		logging.FromContext(ctx).Warnf("Config %s is missing compatibility_date, defaulting to %s", fileName, compatibility.DefaultDate())
+	}
+
+	if err := compatibility.ValidateDate(config.CompatibilityDate); err != nil {
+		return nil, fmt.Errorf("ReadConfig(%s): %v", fileName, err)
+	}
+
 	return fillEmptyConfig(config), nil
 }
 
 func fillEmptyConfig(c *Config) *Config {
+	if c.CompatibilityDate == "" {
+		c.CompatibilityDate = compatibility.DefaultDate()
+	}
+
 	if c.Build == nil {
 		c.Build = &ConfigBuild{}
 	}
