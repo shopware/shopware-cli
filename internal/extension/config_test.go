@@ -1,7 +1,6 @@
 package extension
 
 import (
-	"context"
 	"os"
 	"path/filepath"
 	"testing"
@@ -24,7 +23,7 @@ validation:
 
 	assert.NoError(t, os.WriteFile(filepath.Join(tmpDir, ".shopware-extension.yaml"), []byte(cfg), 0o644))
 
-	ext, err := readExtensionConfig(context.Background(), tmpDir)
+	ext, err := readExtensionConfig(t.Context(), tmpDir)
 	assert.NoError(t, err)
 	assert.Equal(t, 2, len(ext.Validation.Ignore))
 	assert.Equal(t, "metadata.setup", ext.Validation.Ignore[0].Identifier)
@@ -44,7 +43,7 @@ validation:
 
 	assert.NoError(t, os.WriteFile(filepath.Join(tmpDir, ".shopware-extension.yaml"), []byte(cfg), 0o644))
 
-	ext, err := readExtensionConfig(context.Background(), tmpDir)
+	ext, err := readExtensionConfig(t.Context(), tmpDir)
 	assert.NoError(t, err)
 	assert.Equal(t, 2, len(ext.Validation.Ignore))
 	assert.Equal(t, "metadata.setup", ext.Validation.Ignore[0].Identifier)
@@ -190,7 +189,7 @@ func TestReadExtensionConfig(t *testing.T) {
 	t.Run("returns default config when no file exists", func(t *testing.T) {
 		tmpDir := t.TempDir()
 
-		config, err := readExtensionConfig(context.Background(), tmpDir)
+		config, err := readExtensionConfig(t.Context(), tmpDir)
 		require.NoError(t, err)
 		assert.NotNil(t, config)
 		assert.True(t, config.Build.Zip.Assets.Enabled)
@@ -212,7 +211,7 @@ build:
 `
 		require.NoError(t, os.WriteFile(filepath.Join(tmpDir, ".shopware-extension.yml"), []byte(configContent), 0644))
 
-		config, err := readExtensionConfig(context.Background(), tmpDir)
+		config, err := readExtensionConfig(t.Context(), tmpDir)
 		require.NoError(t, err)
 		assert.Equal(t, "~6.5.0", config.Build.ShopwareVersionConstraint)
 		assert.Equal(t, "2026-02-11", config.CompatibilityDate)
@@ -233,7 +232,7 @@ build:
 		require.NoError(t, os.WriteFile(filepath.Join(tmpDir, ".shopware-extension.yml"), []byte(ymlContent), 0644))
 		require.NoError(t, os.WriteFile(filepath.Join(tmpDir, ".shopware-extension.yaml"), []byte(yamlContent), 0644))
 
-		config, err := readExtensionConfig(context.Background(), tmpDir)
+		config, err := readExtensionConfig(t.Context(), tmpDir)
 		require.NoError(t, err)
 		assert.Equal(t, "from-yml", config.Build.ShopwareVersionConstraint)
 	})
@@ -247,7 +246,7 @@ store:
 `
 		require.NoError(t, os.WriteFile(filepath.Join(tmpDir, ".shopware-extension.yml"), []byte(invalidContent), 0644))
 
-		_, err := readExtensionConfig(context.Background(), tmpDir)
+		_, err := readExtensionConfig(t.Context(), tmpDir)
 		assert.Error(t, err)
 	})
 
@@ -259,7 +258,7 @@ compatibility_date: "11-02-2026"
 `
 		require.NoError(t, os.WriteFile(filepath.Join(tmpDir, ".shopware-extension.yml"), []byte(content), 0o644))
 
-		_, err := readExtensionConfig(context.Background(), tmpDir)
+		_, err := readExtensionConfig(t.Context(), tmpDir)
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "invalid compatibility_date")
 	})

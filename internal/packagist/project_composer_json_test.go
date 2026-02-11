@@ -1,7 +1,6 @@
 package packagist
 
 import (
-	"context"
 	"encoding/json"
 	"testing"
 
@@ -9,7 +8,7 @@ import (
 )
 
 func TestGenerateComposerJson(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 
 	t.Run("without audit", func(t *testing.T) {
 		jsonStr, err := GenerateComposerJson(ctx, "6.4.18.0", false, false, false, false)

@@ -1,7 +1,6 @@
 package shop
 
 import (
-	"context"
 	"os"
 	"path/filepath"
 	"testing"
@@ -39,7 +38,7 @@ include:
 	assert.NoError(t, os.WriteFile(baseFilePath, baseConfig, 0644))
 	assert.NoError(t, os.WriteFile(stagingFilePath, stagingConfig, 0644))
 
-	config, err := ReadConfig(context.Background(), stagingFilePath, false)
+	config, err := ReadConfig(t.Context(), stagingFilePath, false)
 	assert.NoError(t, err)
 
 	assert.NotNil(t, config.ConfigDump.Where)
@@ -57,7 +56,7 @@ compatibility_date: 2026-13-11
 
 	assert.NoError(t, os.WriteFile(configPath, content, 0o644))
 
-	_, err := ReadConfig(context.Background(), configPath, false)
+	_, err := ReadConfig(t.Context(), configPath, false)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "invalid compatibility_date")
 }
@@ -89,7 +88,7 @@ func TestReadConfigFallbackSetsCompatibilityDate(t *testing.T) {
 	tmpDir := t.TempDir()
 	configPath := filepath.Join(tmpDir, ".shopware-project.yml")
 
-	cfg, err := ReadConfig(context.Background(), configPath, true)
+	cfg, err := ReadConfig(t.Context(), configPath, true)
 	assert.NoError(t, err)
 	assert.Equal(t, compatibility.DefaultDate(), cfg.CompatibilityDate)
 	assert.NoError(t, compatibility.ValidateDate(cfg.CompatibilityDate))
