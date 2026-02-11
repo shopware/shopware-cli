@@ -284,6 +284,12 @@ var projectCreateCmd = &cobra.Command{
 			return fmt.Errorf("invalid CI system: %s. Valid options: none, github, gitlab", selectedCI)
 		}
 
+		if !useDocker {
+			if _, err := exec.LookPath("composer"); err != nil {
+				return fmt.Errorf("composer is not installed. Please install Composer (https://getcomposer.org/) or use the --docker flag")
+			}
+		}
+
 		if _, err := os.Stat(projectFolder); err == nil {
 			empty, err := system.IsDirEmpty(projectFolder)
 			if err != nil {
