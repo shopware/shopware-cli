@@ -6,7 +6,6 @@ import (
 	"strconv"
 	"sync"
 
-	"github.com/caarlos0/env/v9"
 	"gopkg.in/yaml.v3"
 )
 
@@ -26,22 +25,8 @@ type configState struct {
 
 type configData struct {
 	Account struct {
-		Email    string `env:"SHOPWARE_CLI_ACCOUNT_EMAIL" yaml:"email"`
-		Password string `env:"SHOPWARE_CLI_ACCOUNT_PASSWORD" yaml:"password"`
-		Company  int    `env:"SHOPWARE_CLI_ACCOUNT_COMPANY" yaml:"company"`
+		Company int `yaml:"company"`
 	} `yaml:"account"`
-}
-
-type ExtensionConfig struct {
-	Name             string
-	Namespace        string
-	ComposerPackage  string
-	ShopwareVersion  string
-	Description      string
-	License          string
-	Label            string
-	ManufacturerLink string
-	SupportLink      string
 }
 
 type Config struct{}
@@ -56,8 +41,6 @@ func init() {
 
 func defaultConfig() *configData {
 	config := &configData{}
-	config.Account.Email = ""
-	config.Account.Password = ""
 	config.Account.Company = 0
 	return config
 }
@@ -66,6 +49,20 @@ func InitConfig(configPath string) error {
 	state.mu.Lock()
 	defer state.mu.Unlock()
 	if state.isReady {
+		return nil
+	}
+
+	companyId := os.Getenv("SHOPWARE_CLI_ACCOUNT_COMPANY")
+
+	if len(companyId) > 0 {
+		state.loadedFromEnv = true
+		companyIdInt, err := strconv.Atoi(companyId)
+		if err != nil {
+			return err
+		}
+		state.inner.Account.Company = companyIdInt
+		state.isReady = true
+
 		return nil
 	}
 
@@ -80,17 +77,6 @@ func InitConfig(configPath string) error {
 		state.cfgPath = fmt.Sprintf("%s/.shopware-cli.yml", configDir)
 	}
 
-	err := env.Parse(state.inner)
-	if err != nil {
-		return err
-	}
-	if len(state.inner.Account.Email) > 0 {
-		state.loadedFromEnv = true
-
-		state.isReady = true
-
-		return nil
-	}
 	if _, err := os.Stat(state.cfgPath); os.IsNotExist(err) {
 		if err := createNewConfig(state.cfgPath); err != nil {
 			return err
@@ -103,7 +89,6 @@ func InitConfig(configPath string) error {
 	}
 
 	err = yaml.Unmarshal(content, &state.inner)
-
 	if err != nil {
 		return err
 	}
@@ -147,44 +132,10 @@ func createNewConfig(path string) error {
 	return f.Close()
 }
 
-func (Config) GetAccountEmail() string {
-	state.mu.RLock()
-	defer state.mu.RUnlock()
-	return state.inner.Account.Email
-}
-
-func (Config) GetAccountPassword() string {
-	state.mu.RLock()
-	defer state.mu.RUnlock()
-	return state.inner.Account.Password
-}
-
 func (Config) GetAccountCompanyId() int {
 	state.mu.RLock()
 	defer state.mu.RUnlock()
 	return state.inner.Account.Company
-}
-
-func (Config) SetAccountEmail(email string) error {
-	state.mu.Lock()
-	defer state.mu.Unlock()
-	if state.loadedFromEnv {
-		return fmt.Errorf(environmentConfigErrorFormat, "account.email", email)
-	}
-	state.modified = true
-	state.inner.Account.Email = email
-	return nil
-}
-
-func (Config) SetAccountPassword(password string) error {
-	state.mu.Lock()
-	defer state.mu.Unlock()
-	if state.loadedFromEnv {
-		return fmt.Errorf(environmentConfigErrorFormat, "account.password", "***")
-	}
-	state.modified = true
-	state.inner.Account.Password = password
-	return nil
 }
 
 func (Config) SetAccountCompanyId(id int) error {
