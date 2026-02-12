@@ -474,7 +474,7 @@ func setupCI(projectFolder, ciSystem, deploymentMethod string) error {
 func runComposerInstall(ctx context.Context, projectFolder string, useDocker bool) error {
 	var cmdInstall *exec.Cmd
 
-	if useDocker {
+	if useDocker && !system.IsInsideContainer() {
 		absProjectFolder, err := filepath.Abs(projectFolder)
 		if err != nil {
 			return err
