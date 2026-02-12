@@ -12,7 +12,9 @@ import (
 )
 
 func TestCleanup(t *testing.T) {
+	t.Parallel()
 	t.Run("remove existing files", func(t *testing.T) {
+		t.Parallel()
 		// Create a temporary directory for the test
 		tempDir := t.TempDir()
 
@@ -52,6 +54,7 @@ func TestCleanup(t *testing.T) {
 	})
 
 	t.Run("remove existing directories", func(t *testing.T) {
+		t.Parallel()
 		// Create a temporary directory for the test
 		tempDir := t.TempDir()
 
@@ -95,6 +98,7 @@ func TestCleanup(t *testing.T) {
 	})
 
 	t.Run("remove files by MD5", func(t *testing.T) {
+		t.Parallel()
 		// Create a temporary directory for the test
 		tempDir := t.TempDir()
 
@@ -152,6 +156,7 @@ func TestCleanup(t *testing.T) {
 	})
 
 	t.Run("handle non-existent files and directories", func(t *testing.T) {
+		t.Parallel()
 		// Create a temporary directory for the test
 		tempDir := t.TempDir()
 
@@ -161,6 +166,7 @@ func TestCleanup(t *testing.T) {
 	})
 
 	t.Run("handle files with non-matching MD5", func(t *testing.T) {
+		t.Parallel()
 		// Create a temporary directory for the test
 		tempDir := t.TempDir()
 

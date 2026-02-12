@@ -1,12 +1,29 @@
 package extension
 
 import (
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 )
+
+func setupMockPHPVersionServer(t *testing.T) {
+	t.Helper()
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"6.4.0.0": "7.4", "6.5.0.0": "8.1", "6.6.0.0": "8.2"}`))
+	}))
+	t.Cleanup(server.Close)
+
+	original := phpVersionURL
+	phpVersionURL = server.URL
+	t.Cleanup(func() {
+		phpVersionURL = original
+	})
+}
 
 func getTestPlugin(tempDir string) PlatformPlugin {
 	return PlatformPlugin{
@@ -55,6 +72,7 @@ func getTestPlugin(tempDir string) PlatformPlugin {
 }
 
 func TestPluginIconNotExists(t *testing.T) {
+	setupMockPHPVersionServer(t)
 	dir := t.TempDir()
 
 	plugin := getTestPlugin(dir)
@@ -68,6 +86,7 @@ func TestPluginIconNotExists(t *testing.T) {
 }
 
 func TestPluginIconExists(t *testing.T) {
+	setupMockPHPVersionServer(t)
 	dir := t.TempDir()
 
 	plugin := getTestPlugin(dir)
@@ -83,6 +102,7 @@ func TestPluginIconExists(t *testing.T) {
 }
 
 func TestPluginIconDifferntPathExists(t *testing.T) {
+	setupMockPHPVersionServer(t)
 	dir := t.TempDir()
 
 	plugin := getTestPlugin(dir)
@@ -98,6 +118,7 @@ func TestPluginIconDifferntPathExists(t *testing.T) {
 }
 
 func TestPluginIconIsTooBig(t *testing.T) {
+	setupMockPHPVersionServer(t)
 	dir := t.TempDir()
 
 	plugin := getTestPlugin(dir)
@@ -114,6 +135,7 @@ func TestPluginIconIsTooBig(t *testing.T) {
 }
 
 func TestPluginGermanDescriptionMissing(t *testing.T) {
+	setupMockPHPVersionServer(t)
 	dir := t.TempDir()
 
 	plugin := getTestPlugin(dir)
@@ -132,6 +154,7 @@ func TestPluginGermanDescriptionMissing(t *testing.T) {
 }
 
 func TestPluginGermanDescriptionMissingOnlyEnglishMarket(t *testing.T) {
+	setupMockPHPVersionServer(t)
 	dir := t.TempDir()
 
 	plugin := getTestPlugin(dir)

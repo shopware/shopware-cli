@@ -13,7 +13,9 @@ import (
 )
 
 func TestMigrateComposerJson(t *testing.T) {
+	t.Parallel()
 	t.Run("successful migration", func(t *testing.T) {
+		t.Parallel()
 		// Create a temporary directory for the test
 		tempDir := t.TempDir()
 
@@ -106,12 +108,14 @@ func TestMigrateComposerJson(t *testing.T) {
 	})
 
 	t.Run("non-existent composer.json", func(t *testing.T) {
+		t.Parallel()
 		tempDir := t.TempDir()
 		err := MigrateComposerJson(tempDir)
 		assert.Error(t, err)
 	})
 
 	t.Run("invalid composer.json", func(t *testing.T) {
+		t.Parallel()
 		tempDir := t.TempDir()
 		composerFile := filepath.Join(tempDir, "composer.json")
 		err := os.WriteFile(composerFile, []byte("invalid json"), 0o644)

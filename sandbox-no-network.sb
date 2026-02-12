@@ -1,0 +1,5 @@
+(version 1)
+(allow default)
+(allow network*)
+(deny network-outbound (remote tcp "*:80"))
+(deny network-outbound (remote tcp "*:443"))

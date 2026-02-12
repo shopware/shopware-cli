@@ -9,6 +9,7 @@ import (
 )
 
 func TestLoaderFixer(t *testing.T) {
+	t.Parallel()
 	cases := []struct {
 		before string
 		after  string
