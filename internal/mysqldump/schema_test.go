@@ -211,6 +211,37 @@ func TestTableSchema_BuildCreateTableSQL_GeneratedColumn(t *testing.T) {
 	assert.Contains(t, sql, "GENERATED ALWAYS AS (CONCAT(first_name, ' ', last_name)) VIRTUAL")
 }
 
+func TestTableSchema_BuildCreateTableSQL_GeneratedColumn_WithEscapedQuotes(t *testing.T) {
+	// This test covers issue #846: generation expressions from INFORMATION_SCHEMA.COLUMNS
+	// contain escaped quotes that need to be unescaped
+	schema := &TableSchema{
+		Name:      "b2b_components_pending_order",
+		Engine:    "InnoDB",
+		Charset:   "utf8mb4",
+		Collation: "utf8mb4_unicode_ci",
+		Columns: []ColumnSchema{
+			{Name: "id", Type: "int", Nullable: false, Extra: "AUTO_INCREMENT"},
+			{Name: "price", Type: "json", Nullable: false},
+			{
+				Name:     "tax_status",
+				Type:     "varchar(255)",
+				Nullable: true,
+				// This simulates what MySQL's INFORMATION_SCHEMA.COLUMNS returns with escaped quotes
+				GenerationExpr: sql.NullString{String: "json_unquote(json_extract(`price`,_utf8mb4\\'$.taxStatus\\'))", Valid: true},
+				IsVirtual:      true,
+			},
+		},
+		PrimaryKey: []string{"id"},
+	}
+
+	sql := schema.BuildCreateTableSQL()
+
+	// The output should have unescaped quotes
+	assert.Contains(t, sql, "GENERATED ALWAYS AS (json_unquote(json_extract(`price`,_utf8mb4'$.taxStatus'))) VIRTUAL")
+	// Ensure the broken version with backslash-escaped quotes is NOT in the output
+	assert.NotContains(t, sql, "\\'")
+}
+
 func TestTableSchema_BuildCreateTableSQL_ColumnCollation(t *testing.T) {
 	schema := &TableSchema{
 		Name:      "test",
