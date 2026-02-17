@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"io"
+	"os"
 	"regexp"
 	"slices"
 	"strings"
@@ -99,7 +100,7 @@ func (d *Dumper) Dump(ctx context.Context, w io.Writer) error {
 		return err
 	}
 
-	if d.Parallel > 0 {
+	if d.Parallel > 1 {
 		if err := d.dumpTablesParallel(ctx, w, tables); err != nil {
 			return err
 		}
@@ -150,10 +151,10 @@ func (d *Dumper) dumpTablesSequential(ctx context.Context, w io.Writer, tables [
 
 func (d *Dumper) dumpTablesParallel(ctx context.Context, w io.Writer, tables []string) error {
 	type tableResult struct {
+		done  chan struct{}
 		table string
-		data  string
+		file  *os.File
 		err   error
-		index int
 	}
 
 	tablesToDump := make([]string, 0, len(tables))
@@ -163,59 +164,71 @@ func (d *Dumper) dumpTablesParallel(ctx context.Context, w io.Writer, tables []s
 		}
 	}
 
-	results := make([]tableResult, len(tablesToDump))
-	semaphore := make(chan struct{}, d.Parallel)
-	var wg sync.WaitGroup
-	var mu sync.Mutex
+	results := make([]*tableResult, len(tablesToDump))
+	for i := range results {
+		file, err := os.CreateTemp("", "shopware-cli-dump-*.sql")
+		if err != nil {
+			return err
+		}
+		results[i] = &tableResult{
+			done:  make(chan struct{}),
+			table: tablesToDump[i],
+			file:  file,
+		}
+	}
+	defer func() {
+		for _, result := range results {
+			_ = result.file.Close()
+			_ = os.Remove(result.file.Name())
+		}
+	}()
 
-	for i, table := range tablesToDump {
-		wg.Add(1)
-		go func(table string, index int) {
-			defer wg.Done()
+	go func() {
+		semaphore := make(chan struct{}, d.Parallel)
+
+		for _, result := range results {
 			semaphore <- struct{}{}
-			defer func() { <-semaphore }()
 
-			var result tableResult
-			result.table = table
-			result.index = index
+			go func() {
+				defer close(result.done)
+				defer func() { <-semaphore }()
 
-			skipData := d.filterMap[strings.ToLower(table)] == NoDataMapPlacement
-			createStmt, err := d.getCreateTableStatement(table)
-			if err != nil {
-				result.err = err
-				mu.Lock()
-				results[index] = result
-				mu.Unlock()
-				return
-			}
+				table := result.table
 
-			var sb strings.Builder
-			sb.WriteString(createStmt)
-
-			if !skipData {
-				if err := d.dumpTableDataToWriter(ctx, &sb, table); err != nil {
+				skipData := d.filterMap[strings.ToLower(table)] == NoDataMapPlacement
+				createStmt, err := d.getCreateTableStatement(table)
+				if err != nil {
 					result.err = err
-					mu.Lock()
-					results[index] = result
-					mu.Unlock()
 					return
 				}
-			}
 
-			result.data = sb.String()
-			mu.Lock()
-			results[index] = result
-			mu.Unlock()
-		}(table, i)
-	}
+				if _, err := io.WriteString(result.file, createStmt); err != nil {
+					result.err = err
+					return
+				}
 
-	wg.Wait()
+				if !skipData {
+					if err := d.dumpTableDataToWriter(ctx, result.file, table); err != nil {
+						result.err = err
+						return
+					}
+				}
+			}()
+		}
+	}()
 
 	for _, result := range results {
+		<-result.done
 		if result.err != nil {
 			return result.err
 		}
-		if _, err := w.Write([]byte(result.data)); err != nil {
+		if _, err := result.file.Seek(0, io.SeekStart); err != nil {
+			return err
+		}
+		if _, err := io.Copy(w, result.file); err != nil {
+			return err
+		}
+		if err := result.file.Close(); err != nil {
 			return err
 		}
 	}
