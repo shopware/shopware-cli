@@ -145,6 +145,7 @@ func GenerateComposerJson(ctx context.Context, opts ComposerJsonOptions) (string
 	composer.set("scripts", scripts)
 	symfony := newOrderedMap()
 	symfony.set("allow-contrib", true)
+	symfony.set("docker", opts.UseDocker)
 	symfony.set("endpoint", []string{
 		"https://raw.githubusercontent.com/shopware/recipes/flex/main/index.json",
 		"flex://defaults",
