@@ -7,12 +7,11 @@ import (
 	"encoding/hex"
 	"fmt"
 	"io"
+	"os"
 	"regexp"
 	"slices"
 	"strings"
 	"sync"
-
-	"crawshaw.io/iox"
 
 	"github.com/shopware/shopware-cli/logging"
 )
@@ -154,7 +153,7 @@ func (d *Dumper) dumpTablesParallel(ctx context.Context, w io.Writer, tables []s
 	type tableResult struct {
 		done  chan struct{}
 		table string
-		file  *iox.BufferFile
+		file  *os.File
 		err   error
 	}
 
@@ -165,19 +164,22 @@ func (d *Dumper) dumpTablesParallel(ctx context.Context, w io.Writer, tables []s
 		}
 	}
 
-	filer := iox.NewFiler(0)
-
 	results := make([]*tableResult, len(tablesToDump))
 	for i := range results {
+		file, err := os.CreateTemp("", "shopware-cli-dump-*.sql")
+		if err != nil {
+			return err
+		}
 		results[i] = &tableResult{
 			done:  make(chan struct{}),
 			table: tablesToDump[i],
-			file:  filer.BufferFile(0),
+			file:  file,
 		}
 	}
 	defer func() {
 		for _, result := range results {
 			_ = result.file.Close()
+			_ = os.Remove(result.file.Name())
 		}
 	}()
 

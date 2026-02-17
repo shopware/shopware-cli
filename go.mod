@@ -3,7 +3,6 @@ module github.com/shopware/shopware-cli
 go 1.24.0
 
 require (
-	crawshaw.io/iox v0.0.0-20181124134642-c51c3df30797
 	dario.cat/mergo v1.0.2
 	github.com/DATA-DOG/go-sqlmock v1.5.2
 	github.com/NYTimes/gziphandler v1.1.1
