@@ -18,6 +18,7 @@ import (
 var possiblePHPStanConfigs = []string{
 	"phpstan.neon",
 	"phpstan.neon.dist",
+	"phpstan.dist.neon",
 }
 
 type PhpStanOutput struct {
