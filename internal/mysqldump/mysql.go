@@ -2,7 +2,6 @@ package mysqldump
 
 import (
 	"bufio"
-	"bytes"
 	"context"
 	"database/sql"
 	"encoding/hex"
@@ -12,6 +11,8 @@ import (
 	"slices"
 	"strings"
 	"sync"
+
+	"crawshaw.io/iox"
 
 	"github.com/shopware/shopware-cli/logging"
 )
@@ -153,7 +154,7 @@ func (d *Dumper) dumpTablesParallel(ctx context.Context, w io.Writer, tables []s
 	type tableResult struct {
 		done  chan struct{}
 		table string
-		data  []byte
+		file  *iox.BufferFile
 		err   error
 	}
 
@@ -164,19 +165,27 @@ func (d *Dumper) dumpTablesParallel(ctx context.Context, w io.Writer, tables []s
 		}
 	}
 
-	results := make([]tableResult, len(tablesToDump))
+	filer := iox.NewFiler(0)
+
+	results := make([]*tableResult, len(tablesToDump))
 	for i := range results {
-		results[i] = tableResult{
+		results[i] = &tableResult{
 			done:  make(chan struct{}),
 			table: tablesToDump[i],
+			file:  filer.BufferFile(0),
 		}
 	}
+	defer func() {
+		for _, result := range results {
+			_ = result.file.Close()
+		}
+	}()
 
 	go func() {
 		semaphore := make(chan struct{}, d.Parallel)
 
-		for i := range results {
-			go func(result *tableResult) {
+		for _, result := range results {
+			go func() {
 				defer close(result.done)
 
 				semaphore <- struct{}{}
@@ -191,18 +200,18 @@ func (d *Dumper) dumpTablesParallel(ctx context.Context, w io.Writer, tables []s
 					return
 				}
 
-				var buf bytes.Buffer
-				buf.WriteString(createStmt)
+				if _, err := io.WriteString(result.file, createStmt); err != nil {
+					result.err = err
+					return
+				}
 
 				if !skipData {
-					if err := d.dumpTableDataToWriter(ctx, &buf, table); err != nil {
+					if err := d.dumpTableDataToWriter(ctx, result.file, table); err != nil {
 						result.err = err
 						return
 					}
 				}
-
-				result.data = buf.Bytes()
-			}(&results[i])
+			}()
 		}
 	}()
 
@@ -211,11 +220,15 @@ func (d *Dumper) dumpTablesParallel(ctx context.Context, w io.Writer, tables []s
 		if result.err != nil {
 			return result.err
 		}
-		if _, err := w.Write(result.data); err != nil {
+		if _, err := result.file.Seek(0, io.SeekStart); err != nil {
 			return err
 		}
-		result.data = nil
-		result.err = nil
+		if _, err := io.Copy(w, result.file); err != nil {
+			return err
+		}
+		if err := result.file.Close(); err != nil {
+			return err
+		}
 	}
 
 	return nil
