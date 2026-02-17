@@ -19,7 +19,6 @@ import (
 	"github.com/shyim/go-version"
 	"github.com/spf13/cobra"
 
-	"github.com/shopware/shopware-cli/internal/color"
 	"github.com/shopware/shopware-cli/internal/git"
 	"github.com/shopware/shopware-cli/internal/packagist"
 	"github.com/shopware/shopware-cli/internal/system"
@@ -99,23 +98,23 @@ var projectCreateCmd = &cobra.Command{
 		}
 
 		versionOptions := make([]huh.Option[string], 0, len(filteredVersions)+1)
-		versionOptions = append(versionOptions, huh.NewOption(color.NeutralText.Render(versionLatest), versionLatest))
+		versionOptions = append(versionOptions, huh.NewOption(versionLatest, versionLatest))
 		for _, v := range filteredVersions {
 			versionStr := v.String()
-			versionOptions = append(versionOptions, huh.NewOption(color.NeutralText.Render(versionStr), versionStr))
+			versionOptions = append(versionOptions, huh.NewOption(versionStr, versionStr))
 		}
 
 		deploymentOptions := []huh.Option[string]{
-			huh.NewOption(color.RecommendedText.Render("PaaS powered by Shopware (Recommended)"), packagist.DeploymentShopwarePaaS),
-			huh.NewOption(color.NeutralText.Render("None"), packagist.DeploymentNone),
-			huh.NewOption(color.SecondaryText.Render("DeployerPHP"), packagist.DeploymentDeployer),
-			huh.NewOption(color.SecondaryText.Render("PaaS powered by Platform.sh"), packagist.DeploymentPlatformSH),
+			huh.NewOption("None", packagist.DeploymentNone),
+			huh.NewOption("PaaS powered by Shopware", packagist.DeploymentShopwarePaaS),
+			huh.NewOption("DeployerPHP", packagist.DeploymentDeployer),
+			huh.NewOption("PaaS powered by Platform.sh", packagist.DeploymentPlatformSH),
 		}
 
 		ciOptions := []huh.Option[string]{
-			huh.NewOption(color.RecommendedText.Render("GitHub Actions (Recommended)"), ciGitHub),
-			huh.NewOption(color.NeutralText.Render("None"), ciNone),
-			huh.NewOption(color.NeutralText.Render("GitLab CI"), ciGitLab),
+			huh.NewOption("None", ciNone),
+			huh.NewOption("GitHub Actions", ciGitHub),
+			huh.NewOption("GitLab CI", ciGitLab),
 		}
 
 		var projectFolder string
@@ -212,16 +211,16 @@ var projectCreateCmd = &cobra.Command{
 
 			var optionalOptions []huh.Option[string]
 			if !cmd.PersistentFlags().Changed("git") {
-				optionalOptions = append(optionalOptions, huh.NewOption(color.RecommendedText.Render("Initialize Git Repository (Recommended)"), optionGit).Selected(true))
+				optionalOptions = append(optionalOptions, huh.NewOption("Initialize Git Repository", optionGit).Selected(true))
 			}
 			if !cmd.PersistentFlags().Changed("docker") {
-				optionalOptions = append(optionalOptions, huh.NewOption(color.RecommendedText.Render("Local Docker Setup (Recommended)"), optionDocker).Selected(true))
+				optionalOptions = append(optionalOptions, huh.NewOption("Local Docker Setup", optionDocker).Selected(true))
 			}
 			if !cmd.PersistentFlags().Changed("with-amqp") {
-				optionalOptions = append(optionalOptions, huh.NewOption(color.RecommendedText.Render("AMQP Queue Support (Recommended)"), optionAMQP).Selected(true))
+				optionalOptions = append(optionalOptions, huh.NewOption("AMQP Queue Support", optionAMQP).Selected(true))
 			}
 			if !cmd.PersistentFlags().Changed("with-elasticsearch") {
-				optionalOptions = append(optionalOptions, huh.NewOption(color.NeutralText.Render("Setup Elasticsearch/OpenSearch support"), optionElasticsearch))
+				optionalOptions = append(optionalOptions, huh.NewOption("Setup Elasticsearch/OpenSearch support", optionElasticsearch))
 			}
 
 			if len(optionalOptions) > 0 {
