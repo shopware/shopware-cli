@@ -185,10 +185,10 @@ func (d *Dumper) dumpTablesParallel(ctx context.Context, w io.Writer, tables []s
 		semaphore := make(chan struct{}, d.Parallel)
 
 		for _, result := range results {
+			semaphore <- struct{}{}
+
 			go func() {
 				defer close(result.done)
-
-				semaphore <- struct{}{}
 				defer func() { <-semaphore }()
 
 				table := result.table
