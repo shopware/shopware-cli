@@ -9,6 +9,7 @@ import (
 )
 
 func TestLinkDetection(t *testing.T) {
+	t.Parallel()
 	cases := []struct {
 		name          string
 		content       string
@@ -58,6 +59,7 @@ func TestLinkDetection(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			checks, err := twiglinter.RunCheckerOnString(LinkCheck{}, tc.content)
 			assert.NoError(t, err)
 			assert.Len(t, checks, tc.expectedCount)

@@ -1,0 +1,14 @@
+name: Deployment
+
+on:
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Deploy
+        uses: shopware/github-actions/project-deployer@main
+        with:
+          sshPrivateKey: ${{ secrets.SSH_PRIVATE_KEY }}

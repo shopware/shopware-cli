@@ -7,6 +7,7 @@ import (
 )
 
 func TestKebabCase(t *testing.T) {
+	t.Parallel()
 	assert.Equal(t, "foo-bar", ToKebabCase("FooBar"))
 	assert.Equal(t, "f-o-o-bar-baz", ToKebabCase("FOOBarBaz"))
 	assert.Equal(t, "frosh-tools", ToKebabCase("FroshTools"))
@@ -18,6 +19,7 @@ func TestKebabCase(t *testing.T) {
 }
 
 func TestBundleFolderName(t *testing.T) {
+	t.Parallel()
 	assert.Equal(t, "myplugin", toBundleFolderName("MyPluginBundle"))
 	assert.Equal(t, "anotherplugin", toBundleFolderName("AnotherPluginBundle"))
 	assert.Equal(t, "simpleplugin", toBundleFolderName("SimplePlugin"))

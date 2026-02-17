@@ -382,8 +382,11 @@ func validatePHPFiles(c context.Context, ext Extension, check validation.Check) 
 	}
 }
 
+// phpVersionURL can be overridden in tests to use a mock server
+var phpVersionURL = "https://raw.githubusercontent.com/FriendsOfShopware/shopware-static-data/main/data/php-version.json"
+
 func GetPhpVersion(ctx context.Context, constraint *version.Constraints) (string, error) {
-	r, _ := http.NewRequestWithContext(ctx, http.MethodGet, "https://raw.githubusercontent.com/FriendsOfShopware/shopware-static-data/main/data/php-version.json", http.NoBody)
+	r, _ := http.NewRequestWithContext(ctx, http.MethodGet, phpVersionURL, http.NoBody)
 
 	resp, err := http.DefaultClient.Do(r)
 	if err != nil {

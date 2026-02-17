@@ -9,6 +9,7 @@ import (
 )
 
 func TestPopover(t *testing.T) {
+	t.Parallel()
 	cases := []struct {
 		description string
 		before      string

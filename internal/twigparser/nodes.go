@@ -51,7 +51,7 @@ type BlockNode struct {
 
 func (b *BlockNode) String(indent string) string {
 	var sb strings.Builder
-	sb.WriteString(fmt.Sprintf("%sBlockNode(Name: %s)\n", indent, b.Name))
+	fmt.Fprintf(&sb, "%sBlockNode(Name: %s)\n", indent, b.Name)
 	for _, child := range b.Children {
 		sb.WriteString(child.String(indent + "  "))
 		sb.WriteString("\n")

@@ -9,6 +9,7 @@ import (
 )
 
 func TestImageAltDetection(t *testing.T) {
+	t.Parallel()
 	cases := []struct {
 		name          string
 		content       string
@@ -97,6 +98,7 @@ func TestImageAltDetection(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			checks, err := twiglinter.RunCheckerOnString(ImageAltCheck{}, tc.content)
 			assert.NoError(t, err)
 			assert.Len(t, checks, tc.expectedCount, "Expected %d validation errors but got %d", tc.expectedCount, len(checks))
@@ -105,6 +107,7 @@ func TestImageAltDetection(t *testing.T) {
 }
 
 func TestImageAltCheckIdentifiers(t *testing.T) {
+	t.Parallel()
 	// Test that correct identifiers are used for different types of errors
 	missingAltChecks, err := twiglinter.RunCheckerOnString(ImageAltCheck{}, `<img src="test.jpg">`)
 	assert.NoError(t, err)
