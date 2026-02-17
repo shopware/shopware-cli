@@ -4,6 +4,16 @@ import (
 	"bytes"
 )
 
+var unescapeMap = map[byte]byte{
+	'0':  0,
+	'n':  '\n',
+	'r':  '\r',
+	'\\': '\\',
+	'\'': '\'',
+	'"':  '"',
+	'Z':  '\032',
+}
+
 func escape(str string) string {
 	var esc string
 	var buf bytes.Buffer
@@ -32,5 +42,20 @@ func escape(str string) string {
 		last = i + 1
 	}
 	_, _ = buf.WriteString(str[last:])
+	return buf.String()
+}
+
+func unescape(str string) string {
+	var buf bytes.Buffer
+	for i := 0; i < len(str); i++ {
+		if str[i] == '\\' && i+1 < len(str) {
+			if unescaped, ok := unescapeMap[str[i+1]]; ok {
+				buf.WriteByte(unescaped)
+				i++
+				continue
+			}
+		}
+		buf.WriteByte(str[i])
+	}
 	return buf.String()
 }

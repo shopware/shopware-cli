@@ -212,7 +212,8 @@ func (col *ColumnSchema) writeCharsetAndCollation(b *strings.Builder, tableColla
 func (col *ColumnSchema) writeGeneratedOrDefault(b *strings.Builder) {
 	if col.GenerationExpr.Valid && col.GenerationExpr.String != "" {
 		b.WriteString(" GENERATED ALWAYS AS (")
-		b.WriteString(col.GenerationExpr.String)
+		// INFORMATION_SCHEMA can return escaped quotes in generation expressions.
+		b.WriteString(unescape(col.GenerationExpr.String))
 		b.WriteString(")")
 		if col.IsVirtual {
 			b.WriteString(" VIRTUAL")
