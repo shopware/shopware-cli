@@ -2,6 +2,7 @@ package mysqldump
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"database/sql"
 	"encoding/hex"
@@ -99,7 +100,7 @@ func (d *Dumper) Dump(ctx context.Context, w io.Writer) error {
 		return err
 	}
 
-	if d.Parallel > 0 {
+	if d.Parallel > 1 {
 		if err := d.dumpTablesParallel(ctx, w, tables); err != nil {
 			return err
 		}
@@ -150,10 +151,10 @@ func (d *Dumper) dumpTablesSequential(ctx context.Context, w io.Writer, tables [
 
 func (d *Dumper) dumpTablesParallel(ctx context.Context, w io.Writer, tables []string) error {
 	type tableResult struct {
+		done  chan struct{}
 		table string
-		data  string
+		data  []byte
 		err   error
-		index int
 	}
 
 	tablesToDump := make([]string, 0, len(tables))
@@ -164,60 +165,57 @@ func (d *Dumper) dumpTablesParallel(ctx context.Context, w io.Writer, tables []s
 	}
 
 	results := make([]tableResult, len(tablesToDump))
-	semaphore := make(chan struct{}, d.Parallel)
-	var wg sync.WaitGroup
-	var mu sync.Mutex
-
-	for i, table := range tablesToDump {
-		wg.Add(1)
-		go func(table string, index int) {
-			defer wg.Done()
-			semaphore <- struct{}{}
-			defer func() { <-semaphore }()
-
-			var result tableResult
-			result.table = table
-			result.index = index
-
-			skipData := d.filterMap[strings.ToLower(table)] == NoDataMapPlacement
-			createStmt, err := d.getCreateTableStatement(table)
-			if err != nil {
-				result.err = err
-				mu.Lock()
-				results[index] = result
-				mu.Unlock()
-				return
-			}
-
-			var sb strings.Builder
-			sb.WriteString(createStmt)
-
-			if !skipData {
-				if err := d.dumpTableDataToWriter(ctx, &sb, table); err != nil {
-					result.err = err
-					mu.Lock()
-					results[index] = result
-					mu.Unlock()
-					return
-				}
-			}
-
-			result.data = sb.String()
-			mu.Lock()
-			results[index] = result
-			mu.Unlock()
-		}(table, i)
+	for i := range results {
+		results[i] = tableResult{
+			done:  make(chan struct{}),
+			table: tablesToDump[i],
+		}
 	}
 
-	wg.Wait()
+	go func() {
+		semaphore := make(chan struct{}, d.Parallel)
+
+		for i := range results {
+			go func(result *tableResult) {
+				defer close(result.done)
+
+				semaphore <- struct{}{}
+				defer func() { <-semaphore }()
+
+				table := result.table
+
+				skipData := d.filterMap[strings.ToLower(table)] == NoDataMapPlacement
+				createStmt, err := d.getCreateTableStatement(table)
+				if err != nil {
+					result.err = err
+					return
+				}
+
+				var buf bytes.Buffer
+				buf.WriteString(createStmt)
+
+				if !skipData {
+					if err := d.dumpTableDataToWriter(ctx, &buf, table); err != nil {
+						result.err = err
+						return
+					}
+				}
+
+				result.data = buf.Bytes()
+			}(&results[i])
+		}
+	}()
 
 	for _, result := range results {
+		<-result.done
 		if result.err != nil {
 			return result.err
 		}
-		if _, err := w.Write([]byte(result.data)); err != nil {
+		if _, err := w.Write(result.data); err != nil {
 			return err
 		}
+		result.data = nil
+		result.err = nil
 	}
 
 	return nil
