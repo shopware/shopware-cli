@@ -815,6 +815,11 @@ func (d *Dumper) fetchAllCheckConstraints(ctx context.Context) error {
 			continue
 		}
 
+		// The INFORMATION_SCHEMA.CHECK_CONSTRAINTS.CHECK_CLAUSE column contains escaped strings which we must unescape.
+		//
+		// For example a check like (('A' = 'A')) is stored as (_utf8mb4\'A\' = _utf8mb4\'A\') in CHECK_CLAUSE.
+		expr = unescape(expr)
+
 		if seenExpr[tableName] == nil {
 			seenExpr[tableName] = make(map[string]bool)
 		}

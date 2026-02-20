@@ -369,7 +369,8 @@ func TestFetchTableSchema(t *testing.T) {
 	mock.ExpectQuery("SELECT.*FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS.*CHECK_CONSTRAINTS.*").
 		WillReturnRows(sqlmock.NewRows([]string{
 			"TABLE_NAME", "CONSTRAINT_NAME", "CHECK_CLAUSE",
-		}))
+		}).
+			AddRow("test_table", "test_table.check.with_string_literal", "`name` LIKE _utf8mb4\\'A%\\'"))
 
 	err := dumper.prefetchAllSchemas(t.Context(), []string{"test_table"})
 	require.NoError(t, err)
@@ -385,6 +386,9 @@ func TestFetchTableSchema(t *testing.T) {
 	assert.Len(t, schema.Columns, 3)
 	assert.Equal(t, []string{"id"}, schema.PrimaryKey)
 	assert.Equal(t, "utf8mb4_unicode_ci", schema.Columns[1].Collation.String)
+	assert.Equal(t, 1, len(schema.CheckConstraints))
+	assert.Equal(t, "test_table.check.with_string_literal", schema.CheckConstraints[0].Name)
+	assert.Equal(t, "`name` LIKE _utf8mb4'A%'", schema.CheckConstraints[0].Expression)
 }
 
 func TestGetCreateTableStatement_Integration(t *testing.T) {
