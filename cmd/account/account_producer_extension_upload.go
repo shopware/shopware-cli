@@ -53,7 +53,7 @@ var accountCompanyProducerExtensionUploadCmd = &cobra.Command{
 
 		logging.FromContext(cmd.Context()).Debugf("Found extension with ID: %d", ext.Id)
 
-		binaries, err := p.GetExtensionBinaries(cmd.Context(), ext.Id)
+		binaries, err := p.GetExtensionBinaries(cmd.Context(), ext.Producer.Id, ext.Id)
 		if err != nil {
 			logging.FromContext(cmd.Context()).Debugf("Failed to get extension binaries for extension ID %d: %v", ext.Id, err)
 			return err
@@ -110,7 +110,7 @@ var accountCompanyProducerExtensionUploadCmd = &cobra.Command{
 				},
 			}
 
-			foundBinary, err = p.CreateExtensionBinary(cmd.Context(), ext.Id, create)
+			foundBinary, err = p.CreateExtensionBinary(cmd.Context(), ext.Producer.Id, ext.Id, create)
 			if err != nil {
 				logging.FromContext(cmd.Context()).Debugf("Failed to create extension binary: %v", err)
 				return fmt.Errorf("create extension binary: %w", err)
@@ -134,7 +134,7 @@ var accountCompanyProducerExtensionUploadCmd = &cobra.Command{
 
 		logging.FromContext(cmd.Context()).Debugf("Updating extension binary info for extension ID %d, binary ID %d", ext.Id, foundBinary.Id)
 
-		err = p.UpdateExtensionBinaryInfo(cmd.Context(), ext.Id, update)
+		err = p.UpdateExtensionBinaryInfo(cmd.Context(), ext.Producer.Id, ext.Id, update)
 		if err != nil {
 			logging.FromContext(cmd.Context()).Debugf("Failed to update extension binary info: %v", err)
 			return err
@@ -143,7 +143,7 @@ var accountCompanyProducerExtensionUploadCmd = &cobra.Command{
 		logging.FromContext(cmd.Context()).Infof("Updated changelog. Uploading now the zip to remote")
 		logging.FromContext(cmd.Context()).Debugf("Uploading zip file from path: %s", path)
 
-		err = p.UpdateExtensionBinaryFile(cmd.Context(), ext.Id, foundBinary.Id, path)
+		err = p.UpdateExtensionBinaryFile(cmd.Context(), ext.Producer.Id, ext.Id, foundBinary.Id, path)
 		if err != nil {
 			logging.FromContext(cmd.Context()).Debugf("UpdateExtensionBinaryFile returned error: %v", err)
 			if strings.Contains(err.Error(), "BinariesException-40") {
