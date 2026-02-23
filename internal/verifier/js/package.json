@@ -10,7 +10,7 @@
 	"devDependencies": {
 		"@eslint/js": "^10.0.1",
 		"@shopware-ag/admin-eslint-rules": "^2.0.0",
-		"@shopware-ag/admin-stylelint-rules": "^1.0.2",
+		"@shopware-ag/admin-stylelint-rules": "^2.0.0",
 		"@shopware-ag/storefront-eslint-rules": "^2.0.0",
 		"eslint": "^10.0.0",
 		"eslint-config-prettier": "^10.0.1",
