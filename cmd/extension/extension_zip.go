@@ -7,6 +7,7 @@ import (
 	"os/exec"
 	"path"
 	"path/filepath"
+	"strings"
 
 	cp "github.com/otiai10/copy"
 	"github.com/spf13/cobra"
@@ -177,7 +178,7 @@ var extensionZipCmd = &cobra.Command{
 
 		version := getStringOnStringError(cmd.Flags().GetString("overwrite-version"))
 		if version == "" && cmd.Flags().Changed("use-git-tag-as-version") {
-			version = tag
+			version = strings.TrimPrefix(tag, "v")
 		}
 
 		if err := extension.BuildModifier(ext, extDir, extension.BuildModifierConfig{
