@@ -5,11 +5,12 @@ import (
 	"fmt"
 	"os"
 
+	"charm.land/lipgloss/v2"
+	liplogtable "charm.land/lipgloss/v2/table"
 	"github.com/spf13/cobra"
 
 	adminSdk "github.com/shopware/shopware-cli/internal/admin-api"
 	"github.com/shopware/shopware-cli/internal/shop"
-	"github.com/shopware/shopware-cli/internal/table"
 )
 
 var projectExtensionListCmd = &cobra.Command{
@@ -51,14 +52,15 @@ var projectExtensionListCmd = &cobra.Command{
 			return nil
 		}
 
-		table := table.NewWriter(os.Stdout)
-		table.Header([]string{"Name", "Version", "Status"})
+		t := liplogtable.New().
+			Border(lipgloss.NormalBorder()).
+			Headers("Name", "Version", "Status")
 
 		for _, extension := range extensions {
-			_ = table.Append([]string{extension.Name, extension.Version, extension.Status()})
+			t.Row(extension.Name, extension.Version, extension.Status())
 		}
 
-		_ = table.Render()
+		fmt.Fprintln(os.Stdout, t.Render())
 
 		return nil
 	},
