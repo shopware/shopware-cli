@@ -427,7 +427,7 @@ func setupDeployment(projectFolder, deploymentMethod string) error {
 	case packagist.DeploymentShopwarePaaS:
 		shopwarePaasApp := `app:
   php:
-    version: "8.5"
+    version: "8.4"
 services:
   mysql:
     version: "8.0"
