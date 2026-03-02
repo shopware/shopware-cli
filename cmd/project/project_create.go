@@ -15,7 +15,7 @@ import (
 	"strings"
 	"text/template"
 
-	"github.com/charmbracelet/huh"
+	"charm.land/huh/v2"
 	"github.com/shyim/go-version"
 	"github.com/spf13/cobra"
 

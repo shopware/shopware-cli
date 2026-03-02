@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/lipgloss/v2"
 )
 
 // Writer is a wrapper around Charm's table that provides a similar interface to tablewriter.
