@@ -37,6 +37,18 @@ release:
     name: shopware-cli
 
 dockers_v2:
+  - id: php-85
+    images:
+      - "shopware/shopware-cli"
+      - "ghcr.io/shopware/shopware-cli"
+    tags:
+      - "{{ .Version }}-php-8.5"
+      - "latest-php-8.5"
+    build_args:
+      PHP_VERSION: "8.5"
+    platforms:
+      - "linux/amd64"
+      - "linux/arm64"
   - id: php-84
     images:
       - "shopware/shopware-cli"
@@ -72,18 +84,6 @@ dockers_v2:
       - "latest-php-8.2"
     build_args:
       PHP_VERSION: "8.2"
-    platforms:
-      - "linux/amd64"
-      - "linux/arm64"
-  - id: php-81
-    images:
-      - "shopware/shopware-cli"
-      - "ghcr.io/shopware/shopware-cli"
-    tags:
-      - "{{ .Version }}-php-8.1"
-      - "latest-php-8.1"
-    build_args:
-      PHP_VERSION: "8.1"
     platforms:
       - "linux/amd64"
       - "linux/arm64"
