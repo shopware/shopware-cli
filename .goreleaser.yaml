@@ -162,6 +162,7 @@ aurs:
       - "git"
     package: |-
       install -Dm755 "./shopware-cli" "${pkgdir}/usr/bin/shopware-cli"
+      ln -sf "shopware-cli" "${pkgdir}/usr/bin/swx"
 
       # license
       install -Dm644 "./LICENSE" "${pkgdir}/usr/share/licenses/shopware-cli/LICENSE"
@@ -185,6 +186,7 @@ nix:
       name: "Shopware Bot"
       email: github@shopware.com
     post_install: |
+      ln -sf "$out/bin/shopware-cli" "$out/bin/swx"
       installShellCompletion --cmd shopware-cli \
       --bash <($out/bin/shopware-cli completion bash) \
       --zsh <($out/bin/shopware-cli completion zsh) \
@@ -202,6 +204,9 @@ nfpms:
     description: A cli which contains handy helpful commands for daily Shopware tasks
     license: MIT
     contents:
+      - src: /usr/bin/shopware-cli
+        dst: /usr/bin/swx
+        type: symlink
       - src: ./completions/shopware-cli.bash
         dst: /etc/bash_completion.d/shopware-cli
       - src: ./completions/shopware-cli.fish
@@ -225,6 +230,12 @@ homebrew_casks:
     homepage: https://shopware.com
     description: Shopware CLI helps Shopware developers manage extensions
     license: MIT
+    hooks:
+      post:
+        install: |
+          system_command "/bin/ln", args: ["-sf", "#{HOMEBREW_PREFIX}/bin/shopware-cli", "#{HOMEBREW_PREFIX}/bin/swx"]
+        uninstall: |
+          system_command "/bin/rm", args: ["-f", "#{HOMEBREW_PREFIX}/bin/swx"]
     completions:
       bash: completions/shopware-cli.bash
       zsh: completions/shopware-cli.zsh
