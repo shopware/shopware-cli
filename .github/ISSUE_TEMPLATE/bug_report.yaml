@@ -1,0 +1,72 @@
+name: Bug report 🐛
+description: Errors or flaws in the CLI leading to incorrect or unexpected behavior.
+type: Bug
+
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to fill out this bug report!
+
+  - type: input
+    id: shopware-version
+    attributes:
+      label: Shopware Version
+      description: Please specify your Shopware version (e.g. 6.4.20.0). If you're using Shopware Cloud, simply type "cloud".
+    validations:
+      required: true
+
+  - type: input
+    id: shopware-cli-version
+    attributes:
+      label: Shopware CLI Version
+      description: Output of `shopware-cli --version`
+    validations:
+      required: true
+
+  - type: input
+    id: php-version
+    attributes:
+      label: PHP Version
+      description: Output of `php -v`
+    validations:
+      required: true
+
+  - type: input
+    id: os
+    attributes:
+      label: Operating System
+      description: e.g. macOS 14.3, Ubuntu 22.04, Windows 11
+    validations:
+      required: true
+
+  - type: textarea
+    id: command
+    attributes:
+      label: CLI Command
+      description: Please paste the exact CLI command you executed.
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual-behaviour
+    attributes:
+      label: Actual behaviour
+      description: Please describe the issue.
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected-behaviour
+    attributes:
+      label: Expected behaviour
+      description: What did you expect to happen?
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant log/output
+      description: Please paste the full error message or stack trace.
+      render: shell
