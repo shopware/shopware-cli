@@ -5,8 +5,8 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/charmbracelet/lipgloss"
-	liplogtable "github.com/charmbracelet/lipgloss/table"
+	"charm.land/lipgloss/v2"
+	liplogtable "charm.land/lipgloss/v2/table"
 	"github.com/spf13/cobra"
 
 	"github.com/shopware/shopware-cli/internal/color"
