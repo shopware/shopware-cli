@@ -1,23 +1,26 @@
 package color
 
-import "github.com/charmbracelet/lipgloss"
+import (
+	"charm.land/lipgloss/v2"
+	"charm.land/lipgloss/v2/compat"
+)
 
-var GreenText = lipgloss.NewStyle().Foreground(lipgloss.AdaptiveColor{
-	Light: "#047857",
-	Dark:  "#04B575",
+var GreenText = lipgloss.NewStyle().Foreground(compat.AdaptiveColor{
+	Light: lipgloss.Color("#047857"),
+	Dark:  lipgloss.Color("#04B575"),
 })
 
-var RecommendedText = lipgloss.NewStyle().Foreground(lipgloss.AdaptiveColor{
-	Light: "#047857",
-	Dark:  "#04B575",
+var RecommendedText = lipgloss.NewStyle().Foreground(compat.AdaptiveColor{
+	Light: lipgloss.Color("#047857"),
+	Dark:  lipgloss.Color("#04B575"),
 }).Bold(true)
 
-var SecondaryText = lipgloss.NewStyle().Foreground(lipgloss.AdaptiveColor{
-	Light: "#B8860B",
-	Dark:  "#FFD700",
+var SecondaryText = lipgloss.NewStyle().Foreground(compat.AdaptiveColor{
+	Light: lipgloss.Color("#B8860B"),
+	Dark:  lipgloss.Color("#FFD700"),
 }).Bold(true)
 
-var NeutralText = lipgloss.NewStyle().Foreground(lipgloss.AdaptiveColor{
-	Light: "#1F2937",
-	Dark:  "#FFFFFF",
+var NeutralText = lipgloss.NewStyle().Foreground(compat.AdaptiveColor{
+	Light: lipgloss.Color("#1F2937"),
+	Dark:  lipgloss.Color("#FFFFFF"),
 })

@@ -1,13 +1,13 @@
 package account
 
 import (
-	"os"
+	"fmt"
 	"strconv"
 	"strings"
 
+	"charm.land/lipgloss/v2"
+	liplogtable "charm.land/lipgloss/v2/table"
 	"github.com/spf13/cobra"
-
-	"github.com/shopware/shopware-cli/internal/table"
 )
 
 var accountCompanyListCmd = &cobra.Command{
@@ -16,19 +16,20 @@ var accountCompanyListCmd = &cobra.Command{
 	Aliases: []string{"ls"},
 	Long:    ``,
 	Run: func(_ *cobra.Command, _ []string) {
-		table := table.NewWriter(os.Stdout)
-		table.Header([]string{"ID", "Name", "Customer ID", "Roles"})
+		t := liplogtable.New().
+			Border(lipgloss.NormalBorder()).
+			Headers("ID", "Name", "Customer ID", "Roles")
 
 		for _, membership := range services.AccountClient.GetMemberships() {
-			_ = table.Append([]string{
+			t.Row(
 				strconv.FormatInt(int64(membership.Company.Id), 10),
 				membership.Company.Name,
 				membership.Company.CustomerNumber,
 				strings.Join(membership.GetRoles(), ", "),
-			})
+			)
 		}
 
-		_ = table.Render()
+		fmt.Println(t.Render())
 	},
 }
 

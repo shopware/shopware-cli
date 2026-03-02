@@ -1,0 +1,73 @@
+name: Epic
+description: A request of substantial size or complexity.
+type: Epic
+
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to share your idea!
+        Please check the existing issues to ensure this has not already been suggested.
+
+  - type: textarea
+    id: problem-statement
+    attributes:
+      label: Problem statement
+      description: Please provide a clear and concise description of the problem.
+    validations:
+      required: true
+
+  - type: textarea
+    id: impact
+    attributes:
+      label: Business / user impact
+      description: Why should we solve this problem? What is the impact if we do not?
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposed-solution
+    attributes:
+      label: Proposed solution
+      description: If you have ideas for how we can solve the problem, please describe them here.
+    validations:
+      required: false
+
+  - type: textarea
+    id: beneficiaries
+    attributes:
+      label: Who benefits?
+      description: Who are we solving this problem for—developers, merchants, partners, etc.?
+    validations:
+      required: false
+
+  - type: textarea
+    id: out-of-scope
+    attributes:
+      label: Out of scope
+      description: Clarify what is explicitly not part of this Epic.
+    validations:
+      required: false
+
+  - type: textarea
+    id: acceptance-criteria
+    attributes:
+      label: Acceptance criteria
+      description: |
+        Define at least one measurable indicator (metric, condition, observable behavior)
+        that would help validate successful completion of this Epic.
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: readiness
+    attributes:
+      label: Readiness checklist
+      description: Please confirm the following considerations.
+      options:
+        - label: Acceptance criteria are clearly defined.
+        - label: Backward compatibility impact addressed.
+        - label: Developer docs written.
+        - label: Tests added or adjusted accordingly.
+    validations:
+      required: false

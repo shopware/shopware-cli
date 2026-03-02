@@ -2,13 +2,13 @@ package account
 
 import (
 	"fmt"
-	"os"
 	"strconv"
 
+	"charm.land/lipgloss/v2"
+	liplogtable "charm.land/lipgloss/v2/table"
 	"github.com/spf13/cobra"
 
 	account_api "github.com/shopware/shopware-cli/internal/account-api"
-	"github.com/shopware/shopware-cli/internal/table"
 )
 
 var accountCompanyProducerExtensionListCmd = &cobra.Command{
@@ -35,8 +35,9 @@ var accountCompanyProducerExtensionListCmd = &cobra.Command{
 			return err
 		}
 
-		table := table.NewWriter(os.Stdout)
-		table.Header([]string{"ID", "Name", "Type", "Compatible with latest version", "Status"})
+		t := liplogtable.New().
+			Border(lipgloss.NormalBorder()).
+			Headers("ID", "Name", "Type", "Compatible with latest version", "Status")
 
 		for _, extension := range extensions {
 			if extension.Status.Name == "deleted" {
@@ -44,21 +45,20 @@ var accountCompanyProducerExtensionListCmd = &cobra.Command{
 			}
 
 			compatible := "No"
-
 			if extension.IsCompatibleWithLatestShopwareVersion {
 				compatible = "Yes"
 			}
 
-			_ = table.Append([]string{
+			t.Row(
 				strconv.FormatInt(int64(extension.Id), 10),
 				extension.Name,
 				extension.Generation.Description,
 				compatible,
 				extension.Status.Name,
-			})
+			)
 		}
 
-		_ = table.Render()
+		fmt.Println(t.Render())
 
 		return nil
 	},

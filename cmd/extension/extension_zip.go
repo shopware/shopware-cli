@@ -7,6 +7,7 @@ import (
 	"os/exec"
 	"path"
 	"path/filepath"
+	"strings"
 
 	cp "github.com/otiai10/copy"
 	"github.com/spf13/cobra"
@@ -175,10 +176,15 @@ var extensionZipCmd = &cobra.Command{
 			return fmt.Errorf("resize extension icon: %w", err)
 		}
 
+		version := getStringOnStringError(cmd.Flags().GetString("overwrite-version"))
+		if version == "" && cmd.Flags().Changed("use-git-tag-as-version") {
+			version = strings.TrimPrefix(tag, "v")
+		}
+
 		if err := extension.BuildModifier(ext, extDir, extension.BuildModifierConfig{
 			AppBackendUrl:    getStringOnStringError(cmd.Flags().GetString("overwrite-app-backend-url")),
 			AppBackendSecret: getStringOnStringError(cmd.Flags().GetString("overwrite-app-backend-secret")),
-			Version:          getStringOnStringError(cmd.Flags().GetString("overwrite-version")),
+			Version:          version,
 		}); err != nil {
 			return fmt.Errorf("build modifier: %w", err)
 		}
@@ -230,6 +236,9 @@ func init() {
 	extensionZipCmd.Flags().String("overwrite-app-backend-url", "", "Change all URLs in manifest.xml to this URL")
 	extensionZipCmd.Flags().String("overwrite-app-backend-secret", "", "Change the secret to this value")
 	extensionZipCmd.Flags().String("overwrite-version", "", "Change the extension version to this value")
+	extensionZipCmd.Flags().Bool("use-git-tag-as-version", false, "Use the detected git tag as the extension version")
+	extensionZipCmd.MarkFlagsMutuallyExclusive("use-git-tag-as-version", "disable-git")
+	extensionZipCmd.MarkFlagsMutuallyExclusive("use-git-tag-as-version", "overwrite-version")
 	extensionZipCmd.Flags().String("output-directory", "", "Output directory for the zip file")
 	extensionZipCmd.Flags().String("git-commit", "", "Commit Hash / Tag to use")
 	extensionZipCmd.Flags().String("filename", "", "Name of the zip file, if not set it will be generated from the extension name and tag")
