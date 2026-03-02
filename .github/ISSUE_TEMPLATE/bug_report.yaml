@@ -20,7 +20,7 @@ body:
     id: shopware-cli-version
     attributes:
       label: Shopware CLI Version
-      description: Output of `shopware --version`
+      description: Output of `shopware-cli --version`
     validations:
       required: true
 
