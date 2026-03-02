@@ -72,9 +72,14 @@ func mapAliasArgs(argv []string) []string {
 	}
 
 	// When invoked via the `swx` symlink, forward everything to `project console`.
-	aliasedArgs := make([]string, 0, len(args)+2)
+	aliasedArgs := make([]string, 0, len(args)+3)
 	aliasedArgs = append(aliasedArgs, "project", "console")
-	aliasedArgs = append(aliasedArgs, args...)
+
+	if len(args) == 0 {
+		aliasedArgs = append(aliasedArgs, "list")
+	} else {
+		aliasedArgs = append(aliasedArgs, args...)
+	}
 
 	return aliasedArgs
 }

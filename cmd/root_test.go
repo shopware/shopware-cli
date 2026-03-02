@@ -29,7 +29,7 @@ func TestMapAliasArgs_SwxAliasWithoutArgs(t *testing.T) {
 	t.Parallel()
 	args := mapAliasArgs([]string{"/usr/local/bin/swx"})
 
-	assert.Equal(t, []string{"project", "console"}, args)
+	assert.Equal(t, []string{"project", "console", "list"}, args)
 }
 
 func TestMapAliasArgs_SwxExeAlias(t *testing.T) {
@@ -69,14 +69,14 @@ func TestMapAliasArgs_SwxInternalCompletionNoDesc(t *testing.T) {
 
 func TestMapAliasArgs_SwxHelp(t *testing.T) {
 	t.Parallel()
-	assert.Equal(t, []string{"--help"}, mapAliasArgs([]string{"/usr/local/bin/swx", "--help"}))
-	assert.Equal(t, []string{"-h"}, mapAliasArgs([]string{"/usr/local/bin/swx", "-h"}))
+	assert.Equal(t, []string{"project", "console", "--help"}, mapAliasArgs([]string{"/usr/local/bin/swx", "--help"}))
+	assert.Equal(t, []string{"project", "console", "-h"}, mapAliasArgs([]string{"/usr/local/bin/swx", "-h"}))
 }
 
 func TestMapAliasArgs_SwxVersion(t *testing.T) {
 	t.Parallel()
-	assert.Equal(t, []string{"--version"}, mapAliasArgs([]string{"/usr/local/bin/swx", "--version"}))
-	assert.Equal(t, []string{"-v"}, mapAliasArgs([]string{"/usr/local/bin/swx", "-v"}))
+	assert.Equal(t, []string{"project", "console", "--version"}, mapAliasArgs([]string{"/usr/local/bin/swx", "--version"}))
+	assert.Equal(t, []string{"project", "console", "-v"}, mapAliasArgs([]string{"/usr/local/bin/swx", "-v"}))
 }
 
 func TestCommandNameFromArgs(t *testing.T) {
