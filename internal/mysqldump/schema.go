@@ -425,6 +425,15 @@ func formatDefault(value string, colType string) string {
 		return value
 	}
 
+	// MariaDB (and some MySQL versions) return COLUMN_DEFAULT as a SQL expression
+	// with backslash-escaped quotes (e.g. \\'foo\\' for string default 'foo').
+	// After unescaping, if the value is already a single-quoted SQL string literal,
+	// use it directly to avoid double-escaping.
+	unescaped := unescape(value)
+	if len(unescaped) >= 2 && unescaped[0] == '\'' && unescaped[len(unescaped)-1] == '\'' {
+		return unescaped
+	}
+
 	if isExpression(value) {
 		if isSpecialDefault(value) {
 			return value
