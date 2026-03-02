@@ -14,4 +14,4 @@ jobs:
       - name: Project Validate
         uses: shopware/github-actions/project-validate@main
         with:
-          phpVersion: '8.5'
+          phpVersion: '8.4'
