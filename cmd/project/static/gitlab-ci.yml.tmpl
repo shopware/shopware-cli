@@ -7,9 +7,9 @@ stages:
 include:
   - component: gitlab.com/shopware/ci-components/project-validate@main
     inputs:
-      php_version: "8.4"
+      php_version: "8.5"
 {{- if .Deployer }}
   - component: gitlab.com/shopware/ci-components/project-deploy@main
     inputs:
-      php_version: "8.4"
+      php_version: "8.5"
 {{- end }}
