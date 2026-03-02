@@ -514,6 +514,10 @@ func TestFormatDefault(t *testing.T) {
 		{"hex literal lowercase", "x'0fa91ce3e96a4bc2be4bd9ce752c3425'", "binary(16)", "x'0fa91ce3e96a4bc2be4bd9ce752c3425'"},
 		{"hex literal uppercase", "X'0FA91CE3'", "binary(16)", "X'0FA91CE3'"},
 		{"hex literal 0x format", "0x0fa91ce3e96a4bc2be4bd9ce752c3425", "binary(16)", "0x0fa91ce3e96a4bc2be4bd9ce752c3425"},
+		// MariaDB returns COLUMN_DEFAULT as a backslash-escaped SQL string literal.
+		// These must not be double-quoted/escaped.
+		{"mariadb escaped string default", "\\'product\\'", "varchar(255)", "'product'"},
+		{"mariadb escaped binary string default", "\\'somevalue\\'", "binary(16)", "'somevalue'"},
 	}
 
 	for _, tt := range tests {
