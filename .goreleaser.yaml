@@ -87,18 +87,6 @@ dockers_v2:
     platforms:
       - "linux/amd64"
       - "linux/arm64"
-  - id: php-81
-    images:
-      - "shopware/shopware-cli"
-      - "ghcr.io/shopware/shopware-cli"
-    tags:
-      - "{{ .Version }}-php-8.1"
-      - "latest-php-8.1"
-    build_args:
-      PHP_VERSION: "8.1"
-    platforms:
-      - "linux/amd64"
-      - "linux/arm64"
   - id: bin
     images:
       - "shopware/shopware-cli"
