@@ -2,7 +2,6 @@ package account
 
 import (
 	"fmt"
-	"os"
 	"strconv"
 	"strings"
 
@@ -30,7 +29,7 @@ var accountCompanyListCmd = &cobra.Command{
 			)
 		}
 
-		fmt.Fprintln(os.Stdout, t.Render())
+		fmt.Println(t.Render())
 	},
 }
 

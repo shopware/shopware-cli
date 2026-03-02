@@ -2,7 +2,6 @@ package account
 
 import (
 	"fmt"
-	"os"
 	"strconv"
 
 	"charm.land/lipgloss/v2"
@@ -59,7 +58,7 @@ var accountCompanyProducerExtensionListCmd = &cobra.Command{
 			)
 		}
 
-		fmt.Fprintln(os.Stdout, t.Render())
+		fmt.Println(t.Render())
 
 		return nil
 	},

@@ -3,7 +3,6 @@ package project
 import (
 	"encoding/json"
 	"fmt"
-	"os"
 
 	"charm.land/lipgloss/v2"
 	liplogtable "charm.land/lipgloss/v2/table"
@@ -67,7 +66,7 @@ var projectExtensionOutdatedCmd = &cobra.Command{
 			t.Row(extension.Name, extension.Version, extension.LatestVersion, extension.UpdateSource)
 		}
 
-		fmt.Fprintln(os.Stdout, t.Render())
+		fmt.Println(t.Render())
 
 		return fmt.Errorf("there are %d outdated extensions", len(extensions))
 	},
