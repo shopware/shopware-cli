@@ -18,7 +18,7 @@ func TestTrackSendsUDPPayload(t *testing.T) {
 
 	conn, err := net.ListenUDP("udp", udpAddr)
 	assert.NoError(t, err)
-	defer conn.Close()
+	defer func() { _ = conn.Close() }()
 
 	originalAddr := addr
 	addr = conn.LocalAddr().String()
@@ -79,9 +79,9 @@ func TestResolveIDFromBitbucket(t *testing.T) {
 
 func TestResolveIDPersistsLocally(t *testing.T) {
 	tmpDir := t.TempDir()
-	t.Setenv("XDG_CONFIG_HOME", tmpDir)     // Linux
-	t.Setenv("AppData", tmpDir)              // Windows
-	t.Setenv("HOME", tmpDir)                 // macOS fallback
+	t.Setenv("XDG_CONFIG_HOME", tmpDir) // Linux
+	t.Setenv("AppData", tmpDir)         // Windows
+	t.Setenv("HOME", tmpDir)            // macOS fallback
 
 	// Ensure config dir exists (OS normally provides this)
 	configDir, err := os.UserConfigDir()
