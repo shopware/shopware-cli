@@ -6,7 +6,6 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/shopware/shopware-cli/internal/extension"
-	"github.com/shopware/shopware-cli/internal/phpexec"
 	"github.com/shopware/shopware-cli/internal/shop"
 )
 
@@ -26,7 +25,12 @@ var projectConsoleCmd = &cobra.Command{
 			return nil, cobra.ShellCompDirectiveDefault
 		}
 
-		parsedCommands, err := shop.GetConsoleCompletion(cmd.Context(), projectRoot)
+		exec, err := resolveExecutor(cmd)
+		if err != nil {
+			return nil, cobra.ShellCompDirectiveDefault
+		}
+
+		parsedCommands, err := shop.GetConsoleCompletion(cmd.Context(), projectRoot, exec.ConsoleCommand)
 		if err != nil {
 			return nil, cobra.ShellCompDirectiveDefault
 		}
@@ -79,7 +83,12 @@ var projectConsoleCmd = &cobra.Command{
 			return err
 		}
 
-		consoleCmd := phpexec.ConsoleCommand(cmd.Context(), args...)
+		exec, err := resolveExecutor(cmd)
+		if err != nil {
+			return err
+		}
+
+		consoleCmd := exec.ConsoleCommand(cmd.Context(), args...)
 		consoleCmd.Dir = projectRoot
 		consoleCmd.Stdin = cmd.InOrStdin()
 		consoleCmd.Stdout = cmd.OutOrStdout()

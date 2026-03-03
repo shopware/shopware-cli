@@ -18,6 +18,16 @@ import (
 	"github.com/shopware/shopware-cli/logging"
 )
 
+// EnvironmentConfig represents a single named environment.
+type EnvironmentConfig struct {
+	// Type of environment: local or docker
+	Type string `yaml:"type" jsonschema:"enum=local,enum=docker"`
+	// URL of the Shopware instance for this environment
+	URL string `yaml:"url,omitempty"`
+	// Admin API credentials for this environment
+	AdminApi *ConfigAdminApi `yaml:"admin_api,omitempty"`
+}
+
 type Config struct {
 	AdditionalConfigs []string `yaml:"include,omitempty"`
 	// The URL of the Shopware instance
@@ -30,11 +40,36 @@ type Config struct {
 	ConfigDeployment  *ConfigDeployment `yaml:"deployment,omitempty"`
 	Validation        *ConfigValidation `yaml:"validation,omitempty"`
 	ImageProxy        *ConfigImageProxy `yaml:"image_proxy,omitempty"`
+	// Named environments for multi-environment management
+	Environments map[string]*EnvironmentConfig `yaml:"environments,omitempty"`
 	// When enabled, composer scripts will be disabled during CI builds
 	DisableComposerScripts bool `yaml:"disable_composer_scripts,omitempty"`
 	// When enabled, composer install will be skipped during CI builds
 	DisableComposerInstall bool `yaml:"disable_composer_install,omitempty"`
 	foundConfig            bool
+}
+
+// ResolveEnvironment returns the environment config for the given name.
+// If name is empty, it returns the "local" environment if configured,
+// otherwise synthesizes one from top-level config fields for backward compatibility.
+func (c *Config) ResolveEnvironment(name string) (*EnvironmentConfig, error) {
+	if name != "" {
+		env, ok := c.Environments[name]
+		if !ok {
+			return nil, fmt.Errorf("environment %q not found in config", name)
+		}
+		return env, nil
+	}
+
+	if env, ok := c.Environments["local"]; ok {
+		return env, nil
+	}
+
+	return &EnvironmentConfig{
+		Type:     "local",
+		URL:      c.URL,
+		AdminApi: c.AdminApi,
+	}, nil
 }
 
 func (c *Config) IsAdminAPIConfigured() bool {

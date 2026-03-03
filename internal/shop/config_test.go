@@ -94,6 +94,114 @@ func TestReadConfigFallbackSetsCompatibilityDate(t *testing.T) {
 	assert.NoError(t, compatibility.ValidateDate(cfg.CompatibilityDate))
 }
 
+func TestResolveEnvironment(t *testing.T) {
+	t.Run("returns named environment", func(t *testing.T) {
+		cfg := &Config{
+			Environments: map[string]*EnvironmentConfig{
+				"staging": {Type: "docker", URL: "https://staging.example.com"},
+			},
+		}
+
+		env, err := cfg.ResolveEnvironment("staging")
+		assert.NoError(t, err)
+		assert.Equal(t, "docker", env.Type)
+		assert.Equal(t, "https://staging.example.com", env.URL)
+	})
+
+	t.Run("error on missing named environment", func(t *testing.T) {
+		cfg := &Config{
+			Environments: map[string]*EnvironmentConfig{
+				"staging": {Type: "docker"},
+			},
+		}
+
+		_, err := cfg.ResolveEnvironment("production")
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), `environment "production" not found`)
+	})
+
+	t.Run("returns local environment when no name given", func(t *testing.T) {
+		cfg := &Config{
+			Environments: map[string]*EnvironmentConfig{
+				"local":   {Type: "docker", URL: "http://localhost:8000"},
+				"staging": {Type: "docker", URL: "https://staging.example.com"},
+			},
+		}
+
+		env, err := cfg.ResolveEnvironment("")
+		assert.NoError(t, err)
+		assert.Equal(t, "docker", env.Type)
+		assert.Equal(t, "http://localhost:8000", env.URL)
+	})
+
+	t.Run("synthesizes from top-level when no environments configured", func(t *testing.T) {
+		cfg := &Config{
+			URL: "https://myshop.com",
+			AdminApi: &ConfigAdminApi{
+				Username: "admin",
+				Password: "shopware",
+			},
+		}
+
+		env, err := cfg.ResolveEnvironment("")
+		assert.NoError(t, err)
+		assert.Equal(t, "local", env.Type)
+		assert.Equal(t, "https://myshop.com", env.URL)
+		assert.Equal(t, "admin", env.AdminApi.Username)
+	})
+
+	t.Run("synthesizes with nil admin api", func(t *testing.T) {
+		cfg := &Config{}
+
+		env, err := cfg.ResolveEnvironment("")
+		assert.NoError(t, err)
+		assert.Equal(t, "local", env.Type)
+		assert.Nil(t, env.AdminApi)
+	})
+
+	t.Run("error on named environment with nil map", func(t *testing.T) {
+		cfg := &Config{}
+
+		_, err := cfg.ResolveEnvironment("staging")
+		assert.Error(t, err)
+	})
+}
+
+func TestReadConfigWithEnvironments(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, ".shopware-project.yml")
+
+	content := []byte(`
+url: https://example.com
+compatibility_date: "2026-01-01"
+environments:
+  local:
+    type: docker
+    url: http://localhost:8000
+    admin_api:
+      username: admin
+      password: shopware
+  staging:
+    type: docker
+    url: https://staging.example.com
+`)
+
+	assert.NoError(t, os.WriteFile(configPath, content, 0o644))
+
+	config, err := ReadConfig(t.Context(), configPath, false)
+	assert.NoError(t, err)
+	assert.Len(t, config.Environments, 2)
+
+	local := config.Environments["local"]
+	assert.Equal(t, "docker", local.Type)
+	assert.Equal(t, "http://localhost:8000", local.URL)
+	assert.Equal(t, "admin", local.AdminApi.Username)
+
+	staging := config.Environments["staging"]
+	assert.Equal(t, "docker", staging.Type)
+	assert.Equal(t, "https://staging.example.com", staging.URL)
+}
+
 func TestConfigDump_EnableAnonymization(t *testing.T) {
 	t.Run("empty config", func(t *testing.T) {
 		config := &ConfigDump{}

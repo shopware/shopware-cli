@@ -5,8 +5,8 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/shopware/shopware-cli/internal/executor"
 	"github.com/shopware/shopware-cli/internal/extension"
-	"github.com/shopware/shopware-cli/internal/phpexec"
 	"github.com/shopware/shopware-cli/internal/shop"
 	"github.com/shopware/shopware-cli/logging"
 )
@@ -34,9 +34,14 @@ var projectStorefrontBuildCmd = &cobra.Command{
 			return err
 		}
 
+		cmdExecutor, err := resolveExecutor(cmd)
+		if err != nil {
+			return err
+		}
+
 		logging.FromContext(cmd.Context()).Infof("Looking for extensions to build assets in project")
 
-		if err := runTransparentCommand(commandWithRoot(phpexec.ConsoleCommand(phpexec.AllowBinCI(cmd.Context()), "feature:dump"), projectRoot)); err != nil {
+		if err := runTransparentCommand(commandWithRoot(cmdExecutor.ConsoleCommand(executor.AllowBinCI(cmd.Context()), "feature:dump"), projectRoot)); err != nil {
 			return err
 		}
 
@@ -68,7 +73,7 @@ var projectStorefrontBuildCmd = &cobra.Command{
 			return nil
 		}
 
-		return runTransparentCommand(commandWithRoot(phpexec.ConsoleCommand(phpexec.AllowBinCI(cmd.Context()), "theme:compile"), projectRoot))
+		return runTransparentCommand(commandWithRoot(cmdExecutor.ConsoleCommand(executor.AllowBinCI(cmd.Context()), "theme:compile"), projectRoot))
 	},
 }
 
