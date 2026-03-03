@@ -88,6 +88,10 @@ func (c *Config) IsCompatibilityDateAtLeast(requiredDate string) (bool, error) {
 	return compatibility.IsAtLeast(c.CompatibilityDate, requiredDate)
 }
 
+func (c *Config) IsCompatibilityDateBefore(requiredDate string) bool {
+	return compatibility.IsBefore(c.CompatibilityDate, requiredDate)
+}
+
 type ConfigBuild struct {
 	// When enabled, the assets will not be copied to the public folder
 	DisableAssetCopy bool `yaml:"disable_asset_copy,omitempty"`

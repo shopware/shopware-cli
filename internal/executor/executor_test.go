@@ -13,7 +13,7 @@ func TestNewLocalExecutor(t *testing.T) {
 
 	cfg := &shop.EnvironmentConfig{Type: "local"}
 
-	exec, err := New(cfg)
+	exec, err := New(cfg, &shop.Config{})
 	assert.NoError(t, err)
 	assert.Equal(t, "local", exec.Type())
 }
@@ -23,7 +23,7 @@ func TestNewLocalExecutorEmptyType(t *testing.T) {
 
 	cfg := &shop.EnvironmentConfig{Type: ""}
 
-	exec, err := New(cfg)
+	exec, err := New(cfg, &shop.Config{})
 	assert.NoError(t, err)
 	assert.Equal(t, "local", exec.Type())
 }
@@ -31,7 +31,7 @@ func TestNewLocalExecutorEmptyType(t *testing.T) {
 func TestNewDockerExecutor(t *testing.T) {
 	cfg := &shop.EnvironmentConfig{Type: "docker"}
 
-	exec, err := New(cfg)
+	exec, err := New(cfg, &shop.Config{})
 	assert.NoError(t, err)
 	assert.Equal(t, "docker", exec.Type())
 }
@@ -39,7 +39,7 @@ func TestNewDockerExecutor(t *testing.T) {
 func TestNewUnsupportedType(t *testing.T) {
 	cfg := &shop.EnvironmentConfig{Type: "unknown"}
 
-	_, err := New(cfg)
+	_, err := New(cfg, &shop.Config{})
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "unsupported environment type: unknown")
 }

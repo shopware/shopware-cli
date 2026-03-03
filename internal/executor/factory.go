@@ -9,13 +9,16 @@ import (
 	"github.com/shopware/shopware-cli/internal/shop"
 )
 
-// New creates an Executor for the given environment configuration.
+// New creates an Executor for the given environment and shop configuration.
 // For "local" type, it auto-detects Symfony CLI and uses it if available.
-func New(cfg *shop.EnvironmentConfig) (Executor, error) {
+func New(cfg *shop.EnvironmentConfig, shopCfg *shop.Config) (Executor, error) {
 	switch cfg.Type {
 	case "local", "":
-		if path := pathToSymfonyCLI(); path != "" && symfonyCliAllowed() {
-			return &SymfonyCLIExecutor{BinaryPath: path}, nil
+		// After DevMode, the user requires to explicitly need to opt-in for Symfony CLI. Before that, we auto-detect it and use it if available.
+		if shopCfg.IsCompatibilityDateBefore(shop.CompatibilityDevMode) {
+			if path := pathToSymfonyCLI(); path != "" && symfonyCliAllowed() {
+				return &SymfonyCLIExecutor{BinaryPath: path}, nil
+			}
 		}
 		return &LocalExecutor{}, nil
 	case "symfony-cli":

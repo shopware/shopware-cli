@@ -20,5 +20,5 @@ func resolveExecutor(cmd *cobra.Command) (executor.Executor, error) {
 		return nil, err
 	}
 
-	return executor.New(envCfg)
+	return executor.New(envCfg, cfg)
 }
