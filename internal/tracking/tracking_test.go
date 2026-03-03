@@ -7,12 +7,24 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 )
 
+// resetInit resets the lazy initialization so each test starts fresh.
+func resetInit(t *testing.T) {
+	t.Helper()
+	once = sync.Once{}
+	id = ""
+	addr = ""
+}
+
 func TestTrackSendsUDPPayload(t *testing.T) {
+	resetInit(t)
+	clearCIEnvVars(t)
+
 	udpAddr, err := net.ResolveUDPAddr("udp", "127.0.0.1:0")
 	assert.NoError(t, err)
 
@@ -20,9 +32,9 @@ func TestTrackSendsUDPPayload(t *testing.T) {
 	assert.NoError(t, err)
 	defer func() { _ = conn.Close() }()
 
-	originalAddr := addr
+	// Force initialization, then override addr to point at our test server.
+	ensureInitialized()
 	addr = conn.LocalAddr().String()
-	defer func() { addr = originalAddr }()
 
 	Track(t.Context(), "test_event", map[string]string{"key": "value"})
 
@@ -41,6 +53,7 @@ func TestTrackSendsUDPPayload(t *testing.T) {
 }
 
 func TestTrackRespectsDoNotTrack(t *testing.T) {
+	resetInit(t)
 	t.Setenv("DO_NOT_TRACK", "1")
 
 	// Should return without sending anything

@@ -9,6 +9,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"sync"
 	"time"
 
 	"github.com/shopware/shopware-cli/logging"
@@ -31,16 +32,19 @@ type event struct {
 var (
 	id   string
 	addr string
+	once sync.Once
 )
 
-func init() {
-	domain := os.Getenv("SHOPWARE_TRACKING_DOMAIN")
-	if domain == "" {
-		domain = defaultTrackingDomain
-	}
-	addr = net.JoinHostPort(domain, defaultTrackingPort)
+func ensureInitialized() {
+	once.Do(func() {
+		domain := os.Getenv("SHOPWARE_TRACKING_DOMAIN")
+		if domain == "" {
+			domain = defaultTrackingDomain
+		}
+		addr = net.JoinHostPort(domain, defaultTrackingPort)
 
-	id = resolveID()
+		id = resolveID()
+	})
 }
 
 // resolveID returns a stable user ID. On CI systems it derives a deterministic
@@ -94,6 +98,8 @@ func Track(ctx context.Context, eventName string, tags map[string]string) {
 	if _, ok := os.LookupEnv("DO_NOT_TRACK"); ok {
 		return
 	}
+
+	ensureInitialized()
 
 	if tags == nil {
 		tags = make(map[string]string)
