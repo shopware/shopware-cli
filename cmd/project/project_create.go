@@ -126,8 +126,8 @@ var projectCreateCmd = &cobra.Command{
 		deploymentOptions := []huh.Option[string]{
 			huh.NewOption("None", packagist.DeploymentNone),
 			huh.NewOption("PaaS powered by Shopware", packagist.DeploymentShopwarePaaS),
-			huh.NewOption("DeployerPHP", packagist.DeploymentDeployer),
 			huh.NewOption("PaaS powered by Platform.sh", packagist.DeploymentPlatformSH),
+			huh.NewOption("Deployer (SSH based zero-downtime)", packagist.DeploymentDeployer),
 		}
 
 		ciOptions := []huh.Option[string]{
@@ -283,6 +283,7 @@ var projectCreateCmd = &cobra.Command{
 						Title("Optional").
 						Description("Select additional features to enable").
 						Options(optionalOptions...).
+						Height(10).
 						Value(&selectedOptions),
 				).WithHideFunc(func() bool { return !showAdvanced }))
 			}
