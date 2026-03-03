@@ -47,7 +47,17 @@ func TestTrackRespectsDoNotTrack(t *testing.T) {
 	Track(t.Context(), "should_not_send", nil)
 }
 
+// clearCIEnvVars unsets all CI environment variables that resolveID checks,
+// so tests run correctly even when executed on CI (e.g. GitHub Actions).
+func clearCIEnvVars(t *testing.T) {
+	t.Helper()
+	t.Setenv("GITHUB_REPOSITORY", "")
+	t.Setenv("CI_PROJECT_URL", "")
+	t.Setenv("BITBUCKET_REPO_FULL_NAME", "")
+}
+
 func TestResolveIDFromGitHub(t *testing.T) {
+	clearCIEnvVars(t)
 	t.Setenv("GITHUB_REPOSITORY", "shopware/shopware")
 
 	result := resolveID()
@@ -58,6 +68,7 @@ func TestResolveIDFromGitHub(t *testing.T) {
 }
 
 func TestResolveIDFromGitLab(t *testing.T) {
+	clearCIEnvVars(t)
 	t.Setenv("CI_PROJECT_URL", "https://gitlab.example.com/group/repo")
 
 	result := resolveID()
@@ -68,6 +79,7 @@ func TestResolveIDFromGitLab(t *testing.T) {
 }
 
 func TestResolveIDFromBitbucket(t *testing.T) {
+	clearCIEnvVars(t)
 	t.Setenv("BITBUCKET_REPO_FULL_NAME", "workspace/repo")
 
 	result := resolveID()
@@ -78,6 +90,7 @@ func TestResolveIDFromBitbucket(t *testing.T) {
 }
 
 func TestResolveIDPersistsLocally(t *testing.T) {
+	clearCIEnvVars(t)
 	tmpDir := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", tmpDir) // Linux
 	t.Setenv("AppData", tmpDir)         // Windows
@@ -104,6 +117,7 @@ func TestResolveIDPersistsLocally(t *testing.T) {
 }
 
 func TestResolveIDCIPrioritizedOverLocal(t *testing.T) {
+	clearCIEnvVars(t)
 	tmpDir := t.TempDir()
 	t.Setenv("HOME", tmpDir)
 
