@@ -16,12 +16,15 @@ import (
 	"text/template"
 
 	"charm.land/huh/v2"
+	"charm.land/lipgloss/v2"
 	"github.com/shyim/go-version"
 	"github.com/spf13/cobra"
 
+	"github.com/shopware/shopware-cli/internal/color"
 	"github.com/shopware/shopware-cli/internal/git"
 	"github.com/shopware/shopware-cli/internal/packagist"
 	"github.com/shopware/shopware-cli/internal/system"
+	"github.com/shopware/shopware-cli/internal/tracking"
 	"github.com/shopware/shopware-cli/logging"
 )
 
@@ -97,18 +100,34 @@ var projectCreateCmd = &cobra.Command{
 			return err
 		}
 
-		versionOptions := make([]huh.Option[string], 0, len(filteredVersions)+1)
-		versionOptions = append(versionOptions, huh.NewOption(versionLatest, versionLatest))
+		type minorGroup struct {
+			label    string
+			versions []string
+		}
+		var minorGroups []minorGroup
+		minorIndex := map[string]int{}
 		for _, v := range filteredVersions {
-			versionStr := v.String()
-			versionOptions = append(versionOptions, huh.NewOption(versionStr, versionStr))
+			segments := v.Segments()
+			key := fmt.Sprintf("%d.%d", segments[0], segments[1])
+			if idx, ok := minorIndex[key]; ok {
+				minorGroups[idx].versions = append(minorGroups[idx].versions, v.String())
+			} else {
+				minorIndex[key] = len(minorGroups)
+				minorGroups = append(minorGroups, minorGroup{label: key, versions: []string{v.String()}})
+			}
+		}
+
+		minorOptions := make([]huh.Option[string], 0, len(minorGroups)+1)
+		minorOptions = append(minorOptions, huh.NewOption(versionLatest, versionLatest))
+		for _, g := range minorGroups {
+			minorOptions = append(minorOptions, huh.NewOption(g.label, g.label))
 		}
 
 		deploymentOptions := []huh.Option[string]{
 			huh.NewOption("None", packagist.DeploymentNone),
 			huh.NewOption("PaaS powered by Shopware", packagist.DeploymentShopwarePaaS),
-			huh.NewOption("DeployerPHP", packagist.DeploymentDeployer),
 			huh.NewOption("PaaS powered by Platform.sh", packagist.DeploymentPlatformSH),
+			huh.NewOption("Deployer (SSH based zero-downtime)", packagist.DeploymentDeployer),
 		}
 
 		ciOptions := []huh.Option[string]{
@@ -148,10 +167,10 @@ var projectCreateCmd = &cobra.Command{
 				withElasticsearch = true
 			}
 		} else {
-			var formFields []huh.Field
+			var formGroups []*huh.Group
 
 			if projectFolder == "" {
-				formFields = append(formFields,
+				formGroups = append(formGroups, huh.NewGroup(
 					huh.NewInput().
 						Title("Project Name").
 						Description("The name of the project directory to create").
@@ -172,41 +191,76 @@ var projectCreateCmd = &cobra.Command{
 							}
 							return nil
 						}),
-				)
+				))
 			}
 
 			if selectedVersion == "" {
-				selectedVersion = versionLatest
-				formFields = append(formFields,
+				selectedMinor := versionLatest
+				formGroups = append(formGroups, huh.NewGroup(
 					huh.NewSelect[string]().
 						Title("Shopware Version").
-						Description("Select the Shopware version to install").
-						Options(versionOptions...).
+						Description("Select the major version to install").
+						Options(minorOptions...).
+						Value(&selectedMinor),
+				))
+
+				formGroups = append(formGroups, huh.NewGroup(
+					huh.NewSelect[string]().
+						Title("Patch Version").
+						Description("Select the specific patch version").
 						Height(10).
+						OptionsFunc(func() []huh.Option[string] {
+							if idx, ok := minorIndex[selectedMinor]; ok {
+								opts := make([]huh.Option[string], 0, len(minorGroups[idx].versions))
+								for _, v := range minorGroups[idx].versions {
+									opts = append(opts, huh.NewOption(v, v))
+								}
+								return opts
+							}
+							return []huh.Option[string]{huh.NewOption(versionLatest, versionLatest)}
+						}, &selectedMinor).
 						Value(&selectedVersion),
-				)
+				).WithHideFunc(func() bool {
+					return selectedMinor == versionLatest
+				}))
+			}
+
+			needsAdvanced := selectedDeployment == "" || selectedCI == "" ||
+				!cmd.PersistentFlags().Changed("git") ||
+				!cmd.PersistentFlags().Changed("docker") ||
+				!cmd.PersistentFlags().Changed("with-amqp") ||
+				!cmd.PersistentFlags().Changed("with-elasticsearch")
+
+			var showAdvanced bool
+			if needsAdvanced {
+				formGroups = append(formGroups, huh.NewGroup(
+					huh.NewConfirm().
+						Title("Advanced Settings").
+						Description("Configure deployment, CI/CD, and optional features").
+						Value(&showAdvanced),
+				))
 			}
 
 			if selectedDeployment == "" {
 				selectedDeployment = packagist.DeploymentNone
-				formFields = append(formFields,
+				formGroups = append(formGroups, huh.NewGroup(
 					huh.NewSelect[string]().
 						Title("Deployment Method").
 						Description("Select how you want to deploy your project").
 						Options(deploymentOptions...).
 						Value(&selectedDeployment),
-				)
+				).WithHideFunc(func() bool { return !showAdvanced }))
 			}
 
 			if selectedCI == "" {
 				selectedCI = ciNone
-				formFields = append(formFields,
+				formGroups = append(formGroups, huh.NewGroup(
 					huh.NewSelect[string]().
 						Title("CI/CD System").
 						Description("Select your CI/CD platform for automated testing and deployment").
 						Options(ciOptions...).
 						Value(&selectedCI),
-				)
+				).WithHideFunc(func() bool { return !showAdvanced }))
 			}
 
 			var optionalOptions []huh.Option[string]
@@ -224,32 +278,49 @@ var projectCreateCmd = &cobra.Command{
 			}
 
 			if len(optionalOptions) > 0 {
-				formFields = append(formFields,
+				formGroups = append(formGroups, huh.NewGroup(
 					huh.NewMultiSelect[string]().
 						Title("Optional").
 						Description("Select additional features to enable").
 						Options(optionalOptions...).
+						Height(10).
 						Value(&selectedOptions),
-				)
+				).WithHideFunc(func() bool { return !showAdvanced }))
 			}
 
-			if len(formFields) > 0 {
-				form := huh.NewForm(huh.NewGroup(formFields...))
+			if len(formGroups) > 0 {
+				form := huh.NewForm(formGroups...)
 				if err := form.Run(); err != nil {
 					return err
 				}
 			}
 
-			for _, opt := range selectedOptions {
-				switch opt {
-				case optionDocker:
-					useDocker = true
-				case optionGit:
+			if selectedVersion == "" {
+				selectedVersion = versionLatest
+			}
+
+			if !showAdvanced {
+				if !cmd.PersistentFlags().Changed("git") {
 					initGit = true
-				case optionElasticsearch:
-					withElasticsearch = true
-				case optionAMQP:
+				}
+				if !cmd.PersistentFlags().Changed("docker") {
+					useDocker = true
+				}
+				if !cmd.PersistentFlags().Changed("with-amqp") {
 					withAMQP = true
+				}
+			} else {
+				for _, opt := range selectedOptions {
+					switch opt {
+					case optionDocker:
+						useDocker = true
+					case optionGit:
+						initGit = true
+					case optionElasticsearch:
+						withElasticsearch = true
+					case optionAMQP:
+						withAMQP = true
+					}
 				}
 			}
 		}
@@ -300,7 +371,12 @@ var projectCreateCmd = &cobra.Command{
 			}
 		}
 
-		logging.FromContext(cmd.Context()).Infof("Using Symfony Flex to create a new Shopware 6 project")
+		go tracking.Track(cmd.Context(), "project.create", map[string]string{
+			"version":    selectedVersion,
+			"deployment": selectedDeployment,
+			"ci":         selectedCI,
+			"docker":     fmt.Sprintf("%v", useDocker),
+		})
 
 		chooseVersion := resolveVersion(selectedVersion, filteredVersions)
 		if chooseVersion == "" {
@@ -383,6 +459,19 @@ var projectCreateCmd = &cobra.Command{
 		}
 
 		logging.FromContext(cmd.Context()).Infof("Project created successfully in %s", projectFolder)
+
+		if useDocker {
+			cmdStyle := lipgloss.NewStyle().Bold(true)
+			sectionStyle := lipgloss.NewStyle().Bold(true).Underline(true)
+
+			fmt.Println()
+			fmt.Println(sectionStyle.Render("Next steps"))
+			fmt.Println()
+			fmt.Printf("  %s  %s\n", color.GreenText.Render("Start containers:"), cmdStyle.Render(fmt.Sprintf("cd %s && make up", projectFolder)))
+			fmt.Printf("  %s  %s\n", color.GreenText.Render("Setup Shopware:"), cmdStyle.Render("make setup"))
+			fmt.Printf("  %s  %s\n", color.GreenText.Render("Stop containers:"), cmdStyle.Render("make down"))
+			fmt.Println()
+		}
 
 		return nil
 	},
@@ -484,11 +573,24 @@ func runComposerInstall(ctx context.Context, projectFolder string, useDocker boo
 			return err
 		}
 
-		dockerArgs := []string{"run", "--rm", "--pull=always",
+		dockerArgs := []string{"run",
+			"--rm",
+			"--pull=always",
 			"-v", fmt.Sprintf("%s:/app", absProjectFolder),
-			"-w", "/app",
+			"-w", "/app"}
+
+		if system.IsDockerMountable() {
+			homeDir, err := os.UserHomeDir()
+			if err == nil {
+				composerDir := filepath.Join(homeDir, ".composer")
+				_ = os.MkdirAll(composerDir, 0o755)
+				dockerArgs = append(dockerArgs, "-v", fmt.Sprintf("%s:/tmp/composer/", composerDir))
+			}
+		}
+
+		dockerArgs = append(dockerArgs,
 			"ghcr.io/shopware/docker-dev:php8.3-node22-caddy",
-			"composer", "install", "--no-interaction"}
+			"composer", "install", "--no-interaction")
 
 		cmdInstall = exec.CommandContext(ctx, "docker", dockerArgs...)
 		cmdInstall.Stdout = os.Stdout

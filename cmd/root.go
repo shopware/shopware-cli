@@ -3,7 +3,9 @@ package cmd
 import (
 	"context"
 	"os"
+	"os/signal"
 	"slices"
+	"syscall"
 
 	"github.com/mattn/go-isatty"
 	"github.com/spf13/cobra"
@@ -30,6 +32,9 @@ var rootCmd = &cobra.Command{
 }
 
 func Execute(ctx context.Context) {
+	ctx, stop := signal.NotifyContext(ctx, syscall.SIGINT, syscall.SIGTERM)
+	defer stop()
+
 	ctx = logging.WithLogger(ctx, logging.NewLogger(slices.Contains(os.Args, "--verbose")))
 	ctx = system.WithInteraction(ctx, !slices.Contains(os.Args, "--no-interaction") && !slices.Contains(os.Args, "-n") && isatty.IsTerminal(os.Stdin.Fd()))
 	accountApi.SetUserAgent("shopware-cli/" + version)
