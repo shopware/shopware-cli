@@ -152,11 +152,31 @@ func GetConfigFromProject(root string, onlyLocal bool) (*ToolConfig, error) {
 		return nil, err
 	}
 
+	seenBundlePaths := make(map[string]bool)
 	for bundlePath := range rootComposerJsonData.Extra.Bundles {
 		sourceDirectories = append(sourceDirectories, path.Join(root, bundlePath))
 
 		expectedAdminPath := path.Join(root, bundlePath, "Resources", "app", "administration")
 		expectedStorefrontPath := path.Join(root, bundlePath, "Resources", "app", "storefront")
+
+		if _, err := os.Stat(expectedAdminPath); err == nil {
+			adminDirectories = append(adminDirectories, expectedAdminPath)
+		}
+
+		if _, err := os.Stat(expectedStorefrontPath); err == nil {
+			storefrontDirectories = append(storefrontDirectories, expectedStorefrontPath)
+		}
+		seenBundlePaths[bundlePath] = true
+	}
+
+	for _, bundle := range shopCfg.Build.Bundles {
+		if seenBundlePaths[bundle.Path] {
+			continue
+		}
+		sourceDirectories = append(sourceDirectories, path.Join(root, bundle.Path))
+
+		expectedAdminPath := path.Join(root, bundle.Path, "Resources", "app", "administration")
+		expectedStorefrontPath := path.Join(root, bundle.Path, "Resources", "app", "storefront")
 
 		if _, err := os.Stat(expectedAdminPath); err == nil {
 			adminDirectories = append(adminDirectories, expectedAdminPath)

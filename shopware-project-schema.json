@@ -141,6 +141,13 @@
         "hooks": {
           "$ref": "#/$defs/ConfigBuildHooks",
           "description": "Hooks to run at specific points during CI builds"
+        },
+        "bundles": {
+          "items": {
+            "$ref": "#/$defs/ConfigProjectBundle"
+          },
+          "type": "array",
+          "description": "Shopware bundles to include in builds (alternative to composer.json extra.shopware-bundles)"
         }
       },
       "additionalProperties": false,
@@ -394,6 +401,24 @@
       },
       "additionalProperties": false,
       "type": "object"
+    },
+    "ConfigProjectBundle": {
+      "properties": {
+        "path": {
+          "type": "string",
+          "description": "Relative path from project root to the bundle directory"
+        },
+        "name": {
+          "type": "string",
+          "description": "Optional override for the bundle name; defaults to the directory basename"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "required": [
+        "path"
+      ],
+      "description": "ConfigProjectBundle defines a project-level Shopware bundle."
     },
     "ConfigValidation": {
       "properties": {

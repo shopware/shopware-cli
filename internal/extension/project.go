@@ -114,6 +114,7 @@ func FindAssetSourcesOfProject(ctx context.Context, project string, shopCfg *sho
 		return sources
 	}
 
+	seenPaths := make(map[string]bool)
 	for bundlePath, bundle := range composer.Extra.Bundles {
 		name := bundle.Name
 
@@ -132,6 +133,29 @@ func FindAssetSourcesOfProject(ctx context.Context, project string, shopCfg *sho
 		sources = append(sources, asset.Source{
 			Name:                        name,
 			Path:                        path.Join(project, bundlePath),
+			AdminEsbuildCompatible:      bundleConfig.Build.Zip.Assets.EnableESBuildForAdmin,
+			StorefrontEsbuildCompatible: bundleConfig.Build.Zip.Assets.EnableESBuildForStorefront,
+		})
+		seenPaths[bundlePath] = true
+	}
+
+	for _, bundle := range shopCfg.Build.Bundles {
+		if seenPaths[bundle.Path] {
+			continue
+		}
+		name := bundle.Name
+		if name == "" {
+			name = filepath.Base(bundle.Path)
+		}
+		logging.FromContext(ctx).Infof("Found bundle in project config: %s (path: %s)", name, bundle.Path)
+		bundleConfig, err := readExtensionConfig(ctx, bundle.Path)
+		if err != nil {
+			logging.FromContext(ctx).Errorf("Cannot read bundle config: %s", err.Error())
+			continue
+		}
+		sources = append(sources, asset.Source{
+			Name:                        name,
+			Path:                        path.Join(project, bundle.Path),
 			AdminEsbuildCompatible:      bundleConfig.Build.Zip.Assets.EnableESBuildForAdmin,
 			StorefrontEsbuildCompatible: bundleConfig.Build.Zip.Assets.EnableESBuildForStorefront,
 		})
