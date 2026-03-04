@@ -114,6 +114,8 @@ func FindAssetSourcesOfProject(ctx context.Context, project string, shopCfg *sho
 		return sources
 	}
 
+	// Deprecated: Loading bundles from composer.json extra.shopware-bundles is deprecated.
+	// Use the build.bundles section in .shopware-project.yml instead.
 	seenPaths := make(map[string]bool)
 	for bundlePath, bundle := range composer.Extra.Bundles {
 		name := bundle.Name
@@ -122,6 +124,7 @@ func FindAssetSourcesOfProject(ctx context.Context, project string, shopCfg *sho
 			name = filepath.Base(bundlePath)
 		}
 
+		logging.FromContext(ctx).Warnf("Deprecation: Bundle %q is configured via composer.json extra.shopware-bundles. Please move it to the build.bundles section in .shopware-project.yml instead.", bundlePath)
 		logging.FromContext(ctx).Infof("Found bundle in project: %s (path: %s)", name, bundlePath)
 
 		bundleConfig, err := readExtensionConfig(ctx, bundlePath)
