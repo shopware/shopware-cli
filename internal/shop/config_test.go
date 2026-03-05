@@ -266,6 +266,28 @@ func TestConfigDump_EnableAnonymization(t *testing.T) {
 	})
 }
 
+func TestReadConfigBundles(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, ".shopware-project.yml")
+	content := []byte(`
+compatibility_date: "2024-01-01"
+build:
+  bundles:
+    - path: src/MyBundle
+    - path: src/OtherBundle
+      name: CustomName
+`)
+	assert.NoError(t, os.WriteFile(configPath, content, 0o644))
+
+	cfg, err := ReadConfig(t.Context(), configPath, false)
+	assert.NoError(t, err)
+	assert.Len(t, cfg.Build.Bundles, 2)
+	assert.Equal(t, "src/MyBundle", cfg.Build.Bundles[0].Path)
+	assert.Equal(t, "", cfg.Build.Bundles[0].Name)
+	assert.Equal(t, "src/OtherBundle", cfg.Build.Bundles[1].Path)
+	assert.Equal(t, "CustomName", cfg.Build.Bundles[1].Name)
+}
+
 func TestConfigDump_NormalizeFakerExpressions(t *testing.T) {
 	t.Run("wraps bare faker expressions with delimiters", func(t *testing.T) {
 		config := &ConfigDump{
