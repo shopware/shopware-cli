@@ -38,6 +38,13 @@
         "image_proxy": {
           "$ref": "#/$defs/ConfigImageProxy"
         },
+        "environments": {
+          "additionalProperties": {
+            "$ref": "#/$defs/EnvironmentConfig"
+          },
+          "type": "object",
+          "description": "Named environments for multi-environment management"
+        },
         "disable_composer_scripts": {
           "type": "boolean",
           "description": "When enabled, composer scripts will be disabled during CI builds"
@@ -468,6 +475,29 @@
       "additionalProperties": false,
       "type": "object",
       "description": "ConfigValidationIgnoreItem is used to ignore items from the validation."
+    },
+    "EnvironmentConfig": {
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": [
+            "local",
+            "docker"
+          ],
+          "description": "Type of environment: local or docker"
+        },
+        "url": {
+          "type": "string",
+          "description": "URL of the Shopware instance for this environment"
+        },
+        "admin_api": {
+          "$ref": "#/$defs/ConfigAdminApi",
+          "description": "Admin API credentials for this environment"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "description": "EnvironmentConfig represents a single named environment."
     }
   }
 }

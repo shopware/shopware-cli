@@ -43,6 +43,13 @@ func IsAtLeast(compatibilityDate, requiredDate string) (bool, error) {
 	return !currentDate.Before(minDate), nil
 }
 
+// IsBefore checks whether compatibilityDate is strictly before requiredDate.
+// An empty compatibilityDate falls back to the default compatibility date.
+func IsBefore(compatibilityDate, requiredDate string) bool {
+	ok, _ := IsAtLeast(compatibilityDate, requiredDate)
+	return !ok
+}
+
 func parseDate(value string) (time.Time, error) {
 	return time.Parse(dateLayout, value)
 }

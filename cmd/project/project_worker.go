@@ -15,7 +15,6 @@ import (
 	"github.com/spf13/cobra"
 	"golang.org/x/time/rate"
 
-	"github.com/shopware/shopware-cli/internal/phpexec"
 	"github.com/shopware/shopware-cli/internal/shop"
 	"github.com/shopware/shopware-cli/logging"
 )
@@ -36,6 +35,11 @@ var projectWorkerCmd = &cobra.Command{
 		messagesLimit, _ := cobraCmd.Flags().GetUint("limit")
 
 		if projectRoot, err = findClosestShopwareProject(); err != nil {
+			return err
+		}
+
+		cmdExecutor, err := resolveExecutor(cobraCmd)
+		if err != nil {
 			return err
 		}
 
@@ -97,7 +101,7 @@ var projectWorkerCmd = &cobra.Command{
 						continue
 					}
 
-					cmd := phpexec.ConsoleCommand(cancelCtx, consumeArgs...)
+					cmd := cmdExecutor.ConsoleCommand(cancelCtx, consumeArgs...)
 					cmd.Dir = projectRoot
 					cmd.Stdout = os.Stdout
 					cmd.Stderr = os.Stderr

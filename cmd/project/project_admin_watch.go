@@ -9,7 +9,6 @@ import (
 
 	"github.com/shopware/shopware-cli/internal/extension"
 	"github.com/shopware/shopware-cli/internal/npm"
-	"github.com/shopware/shopware-cli/internal/phpexec"
 	"github.com/shopware/shopware-cli/internal/shop"
 )
 
@@ -36,11 +35,16 @@ var projectAdminWatchCmd = &cobra.Command{
 			return err
 		}
 
+		cmdExecutor, err := resolveExecutor(cmd)
+		if err != nil {
+			return err
+		}
+
 		if err := filterAndWritePluginJson(cmd, projectRoot, shopCfg); err != nil {
 			return err
 		}
 
-		if err := runTransparentCommand(commandWithRoot(phpexec.ConsoleCommand(cmd.Context(), "feature:dump"), projectRoot)); err != nil {
+		if err := runTransparentCommand(commandWithRoot(cmdExecutor.ConsoleCommand(cmd.Context(), "feature:dump"), projectRoot)); err != nil {
 			return err
 		}
 
@@ -68,7 +72,7 @@ var projectAdminWatchCmd = &cobra.Command{
 				}
 			}
 
-			if err := runTransparentCommand(commandWithRoot(phpexec.ConsoleCommand(cmd.Context(), "framework:schema", "-s", "entity-schema", path.Join(mockDirectory, "entity-schema.json")), projectRoot)); err != nil {
+			if err := runTransparentCommand(commandWithRoot(cmdExecutor.ConsoleCommand(cmd.Context(), "framework:schema", "-s", "entity-schema", path.Join(mockDirectory, "entity-schema.json")), projectRoot)); err != nil {
 				return err
 			}
 

@@ -9,7 +9,6 @@ import (
 
 	"github.com/shopware/shopware-cli/internal/extension"
 	"github.com/shopware/shopware-cli/internal/npm"
-	"github.com/shopware/shopware-cli/internal/phpexec"
 	"github.com/shopware/shopware-cli/internal/shop"
 )
 
@@ -36,11 +35,16 @@ var projectStorefrontWatchCmd = &cobra.Command{
 			return err
 		}
 
+		cmdExecutor, err := resolveExecutor(cmd)
+		if err != nil {
+			return err
+		}
+
 		if err := filterAndWritePluginJson(cmd, projectRoot, shopCfg); err != nil {
 			return err
 		}
 
-		if err := runTransparentCommand(commandWithRoot(phpexec.ConsoleCommand(cmd.Context(), "feature:dump"), projectRoot)); err != nil {
+		if err := runTransparentCommand(commandWithRoot(cmdExecutor.ConsoleCommand(cmd.Context(), "feature:dump"), projectRoot)); err != nil {
 			return err
 		}
 
@@ -50,11 +54,11 @@ var projectStorefrontWatchCmd = &cobra.Command{
 			activeOnly = "-v"
 		}
 
-		if err := runTransparentCommand(commandWithRoot(phpexec.ConsoleCommand(cmd.Context(), "theme:compile", activeOnly), projectRoot)); err != nil {
+		if err := runTransparentCommand(commandWithRoot(cmdExecutor.ConsoleCommand(cmd.Context(), "theme:compile", activeOnly), projectRoot)); err != nil {
 			return err
 		}
 
-		if err := runTransparentCommand(commandWithRoot(phpexec.ConsoleCommand(cmd.Context(), "theme:dump"), projectRoot)); err != nil {
+		if err := runTransparentCommand(commandWithRoot(cmdExecutor.ConsoleCommand(cmd.Context(), "theme:dump"), projectRoot)); err != nil {
 			return err
 		}
 

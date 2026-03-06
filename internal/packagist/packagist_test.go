@@ -207,6 +207,157 @@ func TestGetPackages(t *testing.T) {
 	})
 }
 
+func TestGetPackageVersions(t *testing.T) {
+	originalClient := http.DefaultClient
+	defer func() {
+		http.DefaultClient = originalClient
+	}()
+
+	t.Run("successful request with composer unminify", func(t *testing.T) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			assert.Equal(t, "/p2/shopware/shopware.json", r.URL.Path)
+			assert.Equal(t, "Shopware CLI", r.Header.Get("User-Agent"))
+
+			response := map[string]any{
+				"minified": "composer/2.0",
+				"packages": map[string]any{
+					"shopware/shopware": []map[string]any{
+						{
+							"name":               "shopware/shopware",
+							"version":            "v1.0.0",
+							"version_normalized": "1.0.0.0",
+							"description":        "Base description",
+							"replace": map[string]string{
+								"shopware/core": "*",
+							},
+						},
+						{
+							"version":            "v1.0.1",
+							"version_normalized": "1.0.1.0",
+						},
+						{
+							"version":            "v1.0.2",
+							"version_normalized": "1.0.2.0",
+							"description":        "__unset",
+							"replace":            "__unset",
+						},
+					},
+				},
+			}
+
+			w.Header().Set("Content-Type", "application/json")
+			err := json.NewEncoder(w).Encode(response)
+			require.NoError(t, err)
+		}))
+		defer server.Close()
+
+		http.DefaultClient = &http.Client{
+			Transport: &mockTransport{
+				server: server,
+			},
+		}
+
+		versions, err := GetPackageVersions(t.Context())
+
+		require.NoError(t, err)
+		require.Len(t, versions, 3)
+		assert.Equal(t, "shopware/shopware", versions[0].Name)
+		assert.Equal(t, "Base description", versions[1].Description)
+		assert.Equal(t, map[string]string{"shopware/core": "*"}, versions[1].Replace)
+		assert.Empty(t, versions[2].Description)
+		assert.Nil(t, versions[2].Replace)
+	})
+
+	t.Run("successful request without minified payload", func(t *testing.T) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			response := map[string]any{
+				"packages": map[string]any{
+					"shopware/shopware": []map[string]any{
+						{
+							"name":               "shopware/shopware",
+							"version":            "v2.0.0",
+							"version_normalized": "2.0.0.0",
+						},
+					},
+				},
+			}
+
+			w.Header().Set("Content-Type", "application/json")
+			err := json.NewEncoder(w).Encode(response)
+			require.NoError(t, err)
+		}))
+		defer server.Close()
+
+		http.DefaultClient = &http.Client{
+			Transport: &mockTransport{
+				server: server,
+			},
+		}
+
+		versions, err := GetPackageVersions(t.Context())
+
+		require.NoError(t, err)
+		require.Len(t, versions, 1)
+		assert.Equal(t, "2.0.0.0", versions[0].VersionNormalized)
+	})
+
+	t.Run("package missing", func(t *testing.T) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			response := map[string]any{
+				"packages": map[string]any{
+					"shopware/core": []map[string]any{},
+				},
+			}
+
+			w.Header().Set("Content-Type", "application/json")
+			err := json.NewEncoder(w).Encode(response)
+			require.NoError(t, err)
+		}))
+		defer server.Close()
+
+		http.DefaultClient = &http.Client{
+			Transport: &mockTransport{
+				server: server,
+			},
+		}
+
+		versions, err := GetPackageVersions(t.Context())
+
+		assert.Error(t, err)
+		assert.Nil(t, versions)
+		assert.Contains(t, err.Error(), "package shopware/shopware not found")
+	})
+
+	t.Run("server error", func(t *testing.T) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusInternalServerError)
+		}))
+		defer server.Close()
+
+		http.DefaultClient = &http.Client{
+			Transport: &mockTransport{
+				server: server,
+			},
+		}
+
+		versions, err := GetPackageVersions(t.Context())
+
+		assert.Error(t, err)
+		assert.Nil(t, versions)
+		assert.Contains(t, err.Error(), "fetch package versions")
+	})
+
+	t.Run("context canceled", func(t *testing.T) {
+		ctx, cancel := context.WithCancel(t.Context())
+		cancel()
+
+		versions, err := GetPackageVersions(ctx)
+
+		assert.Error(t, err)
+		assert.Nil(t, versions)
+	})
+}
+
 // mockTransport is a custom RoundTripper that redirects all requests to a test server.
 type mockTransport struct {
 	server *httptest.Server

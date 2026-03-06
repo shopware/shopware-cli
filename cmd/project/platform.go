@@ -12,8 +12,8 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/shopware/shopware-cli/internal/asset"
+	"github.com/shopware/shopware-cli/internal/executor"
 	"github.com/shopware/shopware-cli/internal/extension"
-	"github.com/shopware/shopware-cli/internal/phpexec"
 	"github.com/shopware/shopware-cli/internal/shop"
 	"github.com/shopware/shopware-cli/logging"
 )
@@ -89,7 +89,12 @@ func filterAndWritePluginJson(cmd *cobra.Command, projectRoot string, shopCfg *s
 }
 
 func filterAndGetSources(cmd *cobra.Command, projectRoot string, shopCfg *shop.Config) ([]asset.Source, error) {
-	sources, err := extension.DumpAndLoadAssetSourcesOfProject(phpexec.AllowBinCI(cmd.Context()), projectRoot, shopCfg)
+	cmdExecutor, err := resolveExecutor(cmd)
+	if err != nil {
+		return nil, err
+	}
+
+	sources, err := extension.DumpAndLoadAssetSourcesOfProject(executor.AllowBinCI(cmd.Context()), projectRoot, shopCfg, cmdExecutor.ConsoleCommand)
 	if err != nil {
 		return nil, err
 	}

@@ -18,6 +18,16 @@ import (
 	"github.com/shopware/shopware-cli/logging"
 )
 
+// EnvironmentConfig represents a single named environment.
+type EnvironmentConfig struct {
+	// Type of environment: local or docker
+	Type string `yaml:"type" jsonschema:"enum=local,enum=docker"`
+	// URL of the Shopware instance for this environment
+	URL string `yaml:"url,omitempty"`
+	// Admin API credentials for this environment
+	AdminApi *ConfigAdminApi `yaml:"admin_api,omitempty"`
+}
+
 type Config struct {
 	AdditionalConfigs []string `yaml:"include,omitempty"`
 	// The URL of the Shopware instance
@@ -30,11 +40,36 @@ type Config struct {
 	ConfigDeployment  *ConfigDeployment `yaml:"deployment,omitempty"`
 	Validation        *ConfigValidation `yaml:"validation,omitempty"`
 	ImageProxy        *ConfigImageProxy `yaml:"image_proxy,omitempty"`
+	// Named environments for multi-environment management
+	Environments map[string]*EnvironmentConfig `yaml:"environments,omitempty"`
 	// When enabled, composer scripts will be disabled during CI builds
 	DisableComposerScripts bool `yaml:"disable_composer_scripts,omitempty"`
 	// When enabled, composer install will be skipped during CI builds
 	DisableComposerInstall bool `yaml:"disable_composer_install,omitempty"`
 	foundConfig            bool
+}
+
+// ResolveEnvironment returns the environment config for the given name.
+// If name is empty, it returns the "local" environment if configured,
+// otherwise synthesizes one from top-level config fields for backward compatibility.
+func (c *Config) ResolveEnvironment(name string) (*EnvironmentConfig, error) {
+	if name != "" {
+		env, ok := c.Environments[name]
+		if !ok {
+			return nil, fmt.Errorf("environment %q not found in config", name)
+		}
+		return env, nil
+	}
+
+	if env, ok := c.Environments["local"]; ok {
+		return env, nil
+	}
+
+	return &EnvironmentConfig{
+		Type:     "local",
+		URL:      c.URL,
+		AdminApi: c.AdminApi,
+	}, nil
 }
 
 func (c *Config) IsAdminAPIConfigured() bool {
@@ -51,6 +86,10 @@ func (c *Config) HasCompatibilityDate() bool {
 
 func (c *Config) IsCompatibilityDateAtLeast(requiredDate string) (bool, error) {
 	return compatibility.IsAtLeast(c.CompatibilityDate, requiredDate)
+}
+
+func (c *Config) IsCompatibilityDateBefore(requiredDate string) bool {
+	return compatibility.IsBefore(c.CompatibilityDate, requiredDate)
 }
 
 type ConfigBuild struct {
@@ -383,6 +422,39 @@ type ConfigValidationIgnoreExtension struct {
 type ConfigImageProxy struct {
 	// The URL of the upstream server to proxy requests to when files are not found locally
 	URL string `yaml:"url,omitempty"`
+}
+
+// NewConfig creates a new Config with the current compatibility date and a local environment.
+func NewConfig() *Config {
+	return &Config{
+		CompatibilityDate: compatibility.TodayDate(),
+		Environments: map[string]*EnvironmentConfig{
+			"local": {
+				Type: "local",
+				URL:  "http://127.0.0.1:8000",
+				AdminApi: &ConfigAdminApi{
+					Username: "admin",
+					Password: "shopware",
+				},
+			},
+		},
+	}
+}
+
+// WriteConfig marshals the config to YAML and writes it to dir/.shopware-project.yaml.
+func WriteConfig(cfg *Config, dir string) error {
+	data, err := yaml.Marshal(cfg)
+	if err != nil {
+		return fmt.Errorf("failed to marshal shop configuration: %w", err)
+	}
+
+	filePath := filepath.Join(dir, ".shopware-project.yml")
+
+	if err := os.WriteFile(filePath, data, os.ModePerm); err != nil {
+		return fmt.Errorf("failed to write shop configuration to %s: %w", filePath, err)
+	}
+
+	return nil
 }
 
 func ReadConfig(ctx context.Context, fileName string, allowFallback bool) (*Config, error) {

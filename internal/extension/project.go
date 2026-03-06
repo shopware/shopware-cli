@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"os/exec"
 	"path"
 	"path/filepath"
 	"regexp"
@@ -14,7 +15,6 @@ import (
 
 	"github.com/shopware/shopware-cli/internal/asset"
 	"github.com/shopware/shopware-cli/internal/packagist"
-	"github.com/shopware/shopware-cli/internal/phpexec"
 	"github.com/shopware/shopware-cli/internal/shop"
 	"github.com/shopware/shopware-cli/logging"
 )
@@ -178,8 +178,11 @@ func FindAssetSourcesOfProject(ctx context.Context, project string, shopCfg *sho
 	return sources
 }
 
-func DumpAndLoadAssetSourcesOfProject(ctx context.Context, project string, shopCfg *shop.Config) ([]asset.Source, error) {
-	dumpExec := phpexec.ConsoleCommand(ctx, "bundle:dump")
+// ConsoleCommandFunc is a function that creates a console command.
+type ConsoleCommandFunc func(ctx context.Context, args ...string) *exec.Cmd
+
+func DumpAndLoadAssetSourcesOfProject(ctx context.Context, project string, shopCfg *shop.Config, consoleCommand ConsoleCommandFunc) ([]asset.Source, error) {
+	dumpExec := consoleCommand(ctx, "bundle:dump")
 	dumpExec.Dir = project
 	dumpExec.Stdin = os.Stdin
 	dumpExec.Stdout = os.Stdout
