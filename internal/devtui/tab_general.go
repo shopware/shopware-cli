@@ -1,6 +1,7 @@
 package devtui
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"os/exec"
@@ -81,8 +82,7 @@ func (m GeneralModel) Init() tea.Cmd {
 type browserOpenedMsg struct{}
 
 func (m GeneralModel) Update(msg tea.Msg) (GeneralModel, tea.Cmd) {
-	switch msg := msg.(type) {
-	case servicesLoadedMsg:
+	if msg, ok := msg.(servicesLoadedMsg); ok {
 		m.loading = false
 		m.services = msg.services
 		m.err = msg.err
@@ -92,7 +92,7 @@ func (m GeneralModel) Update(msg tea.Msg) (GeneralModel, tea.Cmd) {
 
 func openInBrowser(url string) tea.Cmd {
 	return func() tea.Msg {
-		_ = exec.Command("open", url).Start()
+		_ = exec.CommandContext(context.Background(), "open", url).Start()
 		return browserOpenedMsg{}
 	}
 }
@@ -112,11 +112,12 @@ func (m GeneralModel) View() string {
 
 	b.WriteString("\n")
 
-	if m.loading {
+	switch {
+	case m.loading:
 		b.WriteString(helpStyle.Render("Discovering services...") + "\n")
-	} else if m.err != nil {
+	case m.err != nil:
 		b.WriteString(errorStyle.Render("Service discovery failed: "+m.err.Error()) + "\n")
-	} else if len(m.services) > 0 {
+	case len(m.services) > 0:
 		for _, s := range m.services {
 			b.WriteString(labelStyle.Render(s.Name) + valueStyle.Render(s.URL) + "\n")
 			if s.Username != "" {
@@ -147,7 +148,8 @@ type dockerComposePSOutput struct {
 
 func discoverServices(projectRoot string) tea.Cmd {
 	return func() tea.Msg {
-		cmd := exec.Command("docker", "compose", "ps", "--format", "json")
+		ctx := context.Background()
+		cmd := exec.CommandContext(ctx, "docker", "compose", "ps", "--format", "json")
 		cmd.Dir = projectRoot
 		output, err := cmd.Output()
 		if err != nil {

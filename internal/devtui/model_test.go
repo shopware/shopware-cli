@@ -18,7 +18,7 @@ type mockExecutor struct {
 func (m *mockExecutor) ConsoleCommand(_ context.Context, _ ...string) *exec.Cmd  { return nil }
 func (m *mockExecutor) ComposerCommand(_ context.Context, _ ...string) *exec.Cmd { return nil }
 func (m *mockExecutor) PHPCommand(_ context.Context, _ ...string) *exec.Cmd      { return nil }
-func (m *mockExecutor) Type() string                                              { return m.execType }
+func (m *mockExecutor) Type() string                                             { return m.execType }
 
 func TestNew(t *testing.T) {
 	cfg := &shop.Config{
@@ -69,7 +69,6 @@ func TestNew_EnvAdminApiOverride(t *testing.T) {
 	assert.Equal(t, "env-admin", m.general.username)
 	assert.Equal(t, "env-pass", m.general.password)
 	assert.Equal(t, "http://docker-host:8000", m.general.shopURL)
-	assert.True(t, m.extensions.configured)
 }
 
 func TestNew_LocalMode(t *testing.T) {
@@ -101,11 +100,6 @@ func TestTabSwitching(t *testing.T) {
 	result, _ := m.Update(tea.KeyPressMsg(tea.Key{Code: '2', Text: "2"}))
 	model := result.(Model)
 	assert.Equal(t, tabLogs, model.activeTab)
-
-	// Switch to tab 3
-	result, _ = model.Update(tea.KeyPressMsg(tea.Key{Code: '3', Text: "3"}))
-	model = result.(Model)
-	assert.Equal(t, tabExtensions, model.activeTab)
 
 	// Switch to tab 1
 	result, _ = model.Update(tea.KeyPressMsg(tea.Key{Code: '1', Text: "1"}))

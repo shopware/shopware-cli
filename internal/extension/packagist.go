@@ -2,56 +2,24 @@ package extension
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
-	"net/http"
 	"sort"
 
 	"github.com/shyim/go-version"
 
-	"github.com/shopware/shopware-cli/logging"
+	"github.com/shopware/shopware-cli/internal/packagist"
 )
 
-type packagistResponse struct {
-	Packages struct {
-		Core []struct {
-			Version string `json:"version_normalized"`
-		} `json:"shopware/core"`
-	} `json:"packages"`
-}
-
 func GetShopwareVersions(ctx context.Context) ([]string, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "https://repo.packagist.org/p2/shopware/core.json", http.NoBody)
+	packageVersions, err := packagist.GetPackageVersions(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("create composer version request: %w", err)
+		return nil, fmt.Errorf("get package versions: %w", err)
 	}
 
-	req.Header.Set("User-Agent", "Shopware CLI")
+	versions := make([]string, 0, len(packageVersions))
 
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("fetch composer versions: %w", err)
-	}
-	defer func() {
-		if err := resp.Body.Close(); err != nil {
-			logging.FromContext(ctx).Errorf("lookupForMinMatchingVersion: %v", err)
-		}
-	}()
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("fetch composer versions: %s", resp.Status)
-	}
-
-	var pckResponse packagistResponse
-
-	var versions []string
-
-	if err := json.NewDecoder(resp.Body).Decode(&pckResponse); err != nil {
-		return nil, fmt.Errorf("decode composer versions: %w", err)
-	}
-
-	for _, v := range pckResponse.Packages.Core {
-		versions = append(versions, v.Version)
+	for _, packageVersion := range packageVersions {
+		versions = append(versions, packageVersion.VersionNormalized)
 	}
 
 	return versions, nil

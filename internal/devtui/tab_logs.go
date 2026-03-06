@@ -8,8 +8,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	tea "charm.land/bubbletea/v2"
 	"charm.land/bubbles/v2/viewport"
+	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 )
 
@@ -86,17 +86,17 @@ func (m LogsModel) Update(msg tea.Msg) (LogsModel, tea.Cmd) {
 
 	case tea.KeyPressMsg:
 		switch msg.String() {
-		case "up", "k":
+		case keyUp, keyK:
 			if m.cursor > 0 {
 				m.cursor--
 			}
 			return m, nil
-		case "down", "j":
+		case keyDown, keyJ:
 			if m.cursor < len(m.sources)-1 {
 				m.cursor++
 			}
 			return m, nil
-		case "enter":
+		case keyEnter:
 			if m.cursor != m.active && m.cursor < len(m.sources) {
 				m.stopStreaming()
 				m.active = m.cursor
@@ -107,7 +107,7 @@ func (m LogsModel) Update(msg tea.Msg) (LogsModel, tea.Cmd) {
 				return m, m.startCurrentSource()
 			}
 			return m, nil
-		case "f":
+		case keyF:
 			m.follow = !m.follow
 			if m.follow {
 				m.viewport.GotoBottom()
@@ -318,7 +318,8 @@ func (m *LogsModel) discoverSources() tea.Cmd {
 }
 
 func discoverContainers(projectRoot string) []logSource {
-	cmd := exec.Command("docker", "compose", "ps", "--format", "{{.Service}}")
+	ctx := context.Background()
+	cmd := exec.CommandContext(ctx, "docker", "compose", "ps", "--format", "{{.Service}}")
 	cmd.Dir = projectRoot
 	output, err := cmd.Output()
 	if err != nil {

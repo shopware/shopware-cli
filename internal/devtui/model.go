@@ -7,8 +7,8 @@ import (
 	"os/exec"
 	"strings"
 
-	tea "charm.land/bubbletea/v2"
 	"charm.land/bubbles/v2/textinput"
+	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 
 	"github.com/shopware/shopware-cli/internal/executor"
@@ -20,10 +20,30 @@ type activeTab int
 const (
 	tabGeneral activeTab = iota
 	tabLogs
-	tabExtensions
 )
 
-var tabNames = []string{"General", "Logs", "Extensions"}
+var tabNames = []string{"General", "Logs"}
+
+// Key constants for repeated key strings
+const (
+	keyCtrlC    = "ctrl+c"
+	keyDown     = "down"
+	keyEnter    = "enter"
+	keyUp       = "up"
+	keyTab      = "tab"
+	keyShiftTab = "shift+tab"
+	keyQ        = "q"
+	keyY        = "y"
+	keyYUpper   = "Y"
+	keyN        = "n"
+	keyNUpper   = "N"
+	keyF        = "f"
+	keyA        = "a"
+	keyJ        = "j"
+	keyK        = "k"
+	key1        = "1"
+	key2        = "2"
+)
 
 type overlay int
 
@@ -73,12 +93,12 @@ var (
 
 // installWizard holds state for the Shopware install prompt.
 type installWizard struct {
-	step      installStep
-	cursor    int
-	language  string
-	currency  string
-	username  textinput.Model
-	password  textinput.Model
+	step     installStep
+	cursor   int
+	language string
+	currency string
+	username textinput.Model
+	password textinput.Model
 }
 
 // Options configures the TUI dashboard.
@@ -94,7 +114,6 @@ type Model struct {
 	activeTab     activeTab
 	general       GeneralModel
 	logs          LogsModel
-	extensions    ExtensionsModel
 	width         int
 	height        int
 	dockerMode    bool
@@ -129,17 +148,10 @@ func New(opts Options) Model {
 		effectiveAdminApi = opts.EnvConfig.AdminApi
 	}
 
-	// Build a config copy with the resolved values for the shop client
-	effectiveConfig := *opts.Config
-	if effectiveAdminApi != nil {
-		effectiveConfig.AdminApi = effectiveAdminApi
-	}
-
 	shopURL := opts.Config.URL
 	if opts.EnvConfig.URL != "" {
 		shopURL = opts.EnvConfig.URL
 	}
-	effectiveConfig.URL = shopURL
 
 	var username, password string
 	if effectiveAdminApi != nil {
@@ -153,7 +165,6 @@ func New(opts Options) Model {
 		activeTab:   tabGeneral,
 		general:     NewGeneralModel(opts.Executor.Type(), shopURL, username, password, opts.ProjectRoot),
 		logs:        NewLogsModel(opts.ProjectRoot, isDocker),
-		extensions:  NewExtensionsModel(&effectiveConfig, opts.Executor, opts.ProjectRoot),
 		dockerMode:  isDocker,
 		projectRoot: opts.ProjectRoot,
 		executor:    opts.Executor,
@@ -173,7 +184,6 @@ func (m *Model) startDashboard() tea.Cmd {
 	return tea.Batch(
 		m.general.Init(),
 		m.logs.StartStreaming(),
-		m.extensions.Init(),
 	)
 }
 
@@ -182,11 +192,28 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
-		contentHeight := m.height - 4
-		m.logs.SetSize(m.width, contentHeight)
-		m.extensions.SetSize(m.width, contentHeight)
+		m.logs.SetSize(m.width, m.height-4)
 		return m, nil
 
+	case dockerAlreadyRunningMsg, dockerNeedStartMsg, dockerOutputLineMsg,
+		dockerOutputDoneMsg, dockerStartedMsg, dockerStoppedMsg,
+		shopwareInstalledMsg, shopwareNotInstalledMsg, shopwareInstallDoneMsg:
+		return m.updateLifecycle(msg)
+
+	case tea.KeyPressMsg:
+		return m.updateKeyPress(msg)
+	}
+
+	if m.overlay != overlayNone {
+		return m, nil
+	}
+
+	return m.updateChildren(msg)
+}
+
+// updateLifecycle handles docker and shopware lifecycle messages.
+func (m Model) updateLifecycle(msg tea.Msg) (tea.Model, tea.Cmd) {
+	switch msg := msg.(type) {
 	case dockerAlreadyRunningMsg:
 		m.overlay = overlayNone
 		return m, m.checkShopwareInstalled()
@@ -267,71 +294,70 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case dockerStoppedMsg:
 		return m, tea.Quit
-
-	case tea.KeyPressMsg:
-		if m.overlay == overlayInstallPrompt {
-			return m.updateInstallPrompt(msg)
-		}
-
-		if m.overlay == overlayStopConfirm {
-			switch msg.String() {
-			case "y", "Y":
-				m.overlay = overlayStopping
-				m.overlayLines = nil
-				return m, m.stopContainers()
-			case "n", "N":
-				return m, tea.Quit
-			}
-			return m, nil
-		}
-
-		// Other overlays only allow quit
-		if m.overlay != overlayNone {
-			if msg.String() == "q" || msg.String() == "ctrl+c" {
-				return m, tea.Quit
-			}
-			return m, nil
-		}
-
-		switch msg.String() {
-		case "ctrl+c", "q":
-			m.logs.StopStreaming()
-			if m.dockerMode {
-				m.overlay = overlayStopConfirm
-				m.overlayLines = nil
-				return m, nil
-			}
-			return m, tea.Quit
-		case "1":
-			m.activeTab = tabGeneral
-			return m, nil
-		case "2":
-			m.activeTab = tabLogs
-			return m, nil
-		case "3":
-			m.activeTab = tabExtensions
-			return m, nil
-		case "tab":
-			m.activeTab = (m.activeTab + 1) % 3
-			return m, nil
-		case "shift+tab":
-			m.activeTab = (m.activeTab + 2) % 3
-			return m, nil
-		case "f":
-			if m.activeTab == tabGeneral {
-				return m, openInBrowser(m.general.shopURL)
-			}
-		case "a":
-			if m.activeTab == tabGeneral {
-				return m, openInBrowser(m.general.adminURL)
-			}
-		}
 	}
 
-	if m.overlay != overlayNone {
+	return m, nil
+}
+
+// updateKeyPress handles all key press events, including overlay-specific keys.
+func (m Model) updateKeyPress(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+	if m.overlay == overlayInstallPrompt {
+		return m.updateInstallPrompt(msg)
+	}
+
+	if m.overlay == overlayStopConfirm {
+		switch msg.String() {
+		case keyY, keyYUpper:
+			m.overlay = overlayStopping
+			m.overlayLines = nil
+			return m, m.stopContainers()
+		case keyN, keyNUpper:
+			return m, tea.Quit
+		}
 		return m, nil
 	}
 
+	// Other overlays only allow quit
+	if m.overlay != overlayNone {
+		if msg.String() == keyQ || msg.String() == keyCtrlC {
+			return m, tea.Quit
+		}
+		return m, nil
+	}
+
+	switch msg.String() {
+	case keyCtrlC, keyQ:
+		m.logs.StopStreaming()
+		if m.dockerMode {
+			m.overlay = overlayStopConfirm
+			m.overlayLines = nil
+			return m, nil
+		}
+		return m, tea.Quit
+	case key1:
+		m.activeTab = tabGeneral
+		return m, nil
+	case key2:
+		m.activeTab = tabLogs
+		return m, nil
+	case keyTab, keyShiftTab:
+		m.activeTab = (m.activeTab + 1) % 2
+		return m, nil
+	case keyF:
+		if m.activeTab == tabGeneral {
+			return m, openInBrowser(m.general.shopURL)
+		}
+	case keyA:
+		if m.activeTab == tabGeneral {
+			return m, openInBrowser(m.general.adminURL)
+		}
+	}
+
+	return m.updateChildren(msg)
+}
+
+// updateChildren propagates messages to child models.
+func (m Model) updateChildren(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmds []tea.Cmd
 
 	newGeneral, cmd := m.general.Update(msg)
@@ -346,44 +372,38 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		cmds = append(cmds, cmd)
 	}
 
-	newExt, cmd := m.extensions.Update(msg)
-	m.extensions = newExt
-	if cmd != nil {
-		cmds = append(cmds, cmd)
-	}
-
 	return m, tea.Batch(cmds...)
 }
 
 // updateInstallPrompt handles key input for the install wizard steps.
 func (m Model) updateInstallPrompt(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
-	case "q", "ctrl+c":
+	case keyQ, keyCtrlC:
 		return m, tea.Quit
 	}
 
 	switch m.install.step {
 	case installStepAsk:
 		switch msg.String() {
-		case "y", "Y":
+		case keyY, keyYUpper:
 			m.install.step = installStepLanguage
 			m.install.cursor = 0
-		case "n", "N":
+		case keyN, keyNUpper:
 			m.overlay = overlayNone
 			return m, m.startDashboard()
 		}
 
 	case installStepLanguage:
 		switch msg.String() {
-		case "up", "k":
+		case keyUp, keyK:
 			if m.install.cursor > 0 {
 				m.install.cursor--
 			}
-		case "down", "j":
+		case keyDown, keyJ:
 			if m.install.cursor < len(installLanguages)-1 {
 				m.install.cursor++
 			}
-		case "enter":
+		case keyEnter:
 			m.install.language = installLanguages[m.install.cursor].id
 			m.install.step = installStepCurrency
 			m.install.cursor = 0
@@ -391,15 +411,15 @@ func (m Model) updateInstallPrompt(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 
 	case installStepCurrency:
 		switch msg.String() {
-		case "up", "k":
+		case keyUp, keyK:
 			if m.install.cursor > 0 {
 				m.install.cursor--
 			}
-		case "down", "j":
+		case keyDown, keyJ:
 			if m.install.cursor < len(installCurrencies)-1 {
 				m.install.cursor++
 			}
-		case "enter":
+		case keyEnter:
 			m.install.currency = installCurrencies[m.install.cursor]
 			m.install.step = installStepUsername
 			m.install.username.SetValue("admin")
@@ -409,7 +429,7 @@ func (m Model) updateInstallPrompt(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 
 	case installStepUsername:
 		switch msg.String() {
-		case "enter":
+		case keyEnter:
 			m.install.step = installStepPassword
 			m.install.username.Blur()
 			m.install.password.SetValue("shopware")
@@ -423,7 +443,7 @@ func (m Model) updateInstallPrompt(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 
 	case installStepPassword:
 		switch msg.String() {
-		case "enter":
+		case keyEnter:
 			m.install.password.Blur()
 			m.overlay = overlayInstalling
 			m.overlayLines = nil
@@ -452,8 +472,6 @@ func (m Model) View() tea.View {
 			b.WriteString(m.general.View())
 		case tabLogs:
 			b.WriteString(m.logs.View())
-		case tabExtensions:
-			b.WriteString(m.extensions.View())
 		}
 	}
 
@@ -465,6 +483,8 @@ func (m Model) View() tea.View {
 func (m Model) renderOverlay() string {
 	var title string
 	switch m.overlay {
+	case overlayNone:
+		title = ""
 	case overlayStarting:
 		title = "Starting Docker containers..."
 	case overlayStopConfirm:
@@ -481,15 +501,18 @@ func (m Model) renderOverlay() string {
 	content.WriteString(statusStyle.Render(title))
 	content.WriteString("\n\n")
 
-	if m.overlay == overlayStopConfirm {
-		content.WriteString("Do you want to stop the Docker containers?\n\n")
-		content.WriteString(helpStyle.Render("y: stop containers | n: quit without stopping"))
-	} else if m.overlay == overlayInstallPrompt {
-		m.renderInstallPrompt(&content)
-	} else {
+	switch m.overlay {
+	case overlayNone:
+		// No overlay content needed
+	case overlayStarting, overlayStopping, overlayInstalling:
 		for _, line := range m.overlayLines {
 			content.WriteString(line + "\n")
 		}
+	case overlayStopConfirm:
+		content.WriteString("Do you want to stop the Docker containers?\n\n")
+		content.WriteString(helpStyle.Render("y: stop containers | n: quit without stopping"))
+	case overlayInstallPrompt:
+		m.renderInstallPrompt(&content)
 	}
 
 	modal := overlayStyle.Render(content.String())
@@ -520,7 +543,7 @@ func (m Model) renderInstallPrompt(b *strings.Builder) {
 		b.WriteString(helpStyle.Render("↑/↓: select | enter: confirm | q: quit"))
 
 	case installStepCurrency:
-		b.WriteString(fmt.Sprintf("Language: %s\n\n", valueStyle.Render(m.install.language)))
+		fmt.Fprintf(b, "Language: %s\n\n", valueStyle.Render(m.install.language))
 		b.WriteString("Select default currency:\n\n")
 		for i, curr := range installCurrencies {
 			cursor := "  "
@@ -533,17 +556,17 @@ func (m Model) renderInstallPrompt(b *strings.Builder) {
 		b.WriteString(helpStyle.Render("↑/↓: select | enter: confirm | q: quit"))
 
 	case installStepUsername:
-		b.WriteString(fmt.Sprintf("Language: %s\n", valueStyle.Render(m.install.language)))
-		b.WriteString(fmt.Sprintf("Currency: %s\n\n", valueStyle.Render(m.install.currency)))
+		fmt.Fprintf(b, "Language: %s\n", valueStyle.Render(m.install.language))
+		fmt.Fprintf(b, "Currency: %s\n\n", valueStyle.Render(m.install.currency))
 		b.WriteString("Admin username:\n\n")
 		b.WriteString(m.install.username.View())
 		b.WriteString("\n\n")
 		b.WriteString(helpStyle.Render("enter: confirm | q: quit"))
 
 	case installStepPassword:
-		b.WriteString(fmt.Sprintf("Language: %s\n", valueStyle.Render(m.install.language)))
-		b.WriteString(fmt.Sprintf("Currency: %s\n", valueStyle.Render(m.install.currency)))
-		b.WriteString(fmt.Sprintf("Username: %s\n\n", valueStyle.Render(m.install.username.Value())))
+		fmt.Fprintf(b, "Language: %s\n", valueStyle.Render(m.install.language))
+		fmt.Fprintf(b, "Currency: %s\n", valueStyle.Render(m.install.currency))
+		fmt.Fprintf(b, "Username: %s\n\n", valueStyle.Render(m.install.username.Value()))
 		b.WriteString("Admin password:\n\n")
 		b.WriteString(m.install.password.View())
 		b.WriteString("\n\n")
@@ -567,7 +590,8 @@ func (m Model) renderTabBar() string {
 // checkContainersRunning checks if any containers are already running.
 func checkContainersRunning(projectRoot string) tea.Cmd {
 	return func() tea.Msg {
-		check := exec.Command("docker", "compose", "ps", "--status=running", "-q")
+		ctx := context.Background()
+		check := exec.CommandContext(ctx, "docker", "compose", "ps", "--status=running", "-q")
 		check.Dir = projectRoot
 		output, err := check.Output()
 		if err == nil && len(strings.TrimSpace(string(output))) > 0 {
@@ -614,8 +638,8 @@ func (m *Model) runShopwareInstall() tea.Cmd {
 
 	doneCmd := func() tea.Msg {
 		ctx := executor.WithEnv(context.Background(), map[string]string{
-			"INSTALL_LOCALE":       language,
-			"INSTALL_CURRENCY":     currency,
+			"INSTALL_LOCALE":         language,
+			"INSTALL_CURRENCY":       currency,
 			"INSTALL_ADMIN_USERNAME": username,
 			"INSTALL_ADMIN_PASSWORD": password,
 		})
@@ -664,7 +688,7 @@ func (m *Model) readNextDockerOutput() tea.Cmd {
 
 // runDockerCommandWithArgs runs a docker compose command, streaming stderr lines
 // through a channel for display, and returns a result message when done.
-func runDockerCommandWithArgs(projectRoot string, args []string, resultFn func(error) tea.Msg) (outChan <-chan string, outputCmd tea.Cmd, doneCmd tea.Cmd) {
+func runDockerCommandWithArgs(ctx context.Context, projectRoot string, args []string, resultFn func(error) tea.Msg) (outChan <-chan string, outputCmd tea.Cmd, doneCmd tea.Cmd) {
 	lineChan := make(chan string, 50)
 
 	outputCmd = func() tea.Msg {
@@ -676,7 +700,7 @@ func runDockerCommandWithArgs(projectRoot string, args []string, resultFn func(e
 	}
 
 	doneCmd = func() tea.Msg {
-		cmd := exec.Command("docker", args...)
+		cmd := exec.CommandContext(ctx, "docker", args...)
 		cmd.Dir = projectRoot
 
 		pipe, err := cmd.StderrPipe()
@@ -707,6 +731,7 @@ func runDockerCommandWithArgs(projectRoot string, args []string, resultFn func(e
 // startContainers runs docker compose up -d, streaming output.
 func (m *Model) startContainers() tea.Cmd {
 	ch, outputCmd, doneCmd := runDockerCommandWithArgs(
+		context.Background(),
 		m.projectRoot,
 		[]string{"compose", "up", "-d"},
 		func(err error) tea.Msg { return dockerStartedMsg{err: err} },
@@ -718,6 +743,7 @@ func (m *Model) startContainers() tea.Cmd {
 // stopContainers runs docker compose down, streaming output.
 func (m *Model) stopContainers() tea.Cmd {
 	ch, outputCmd, doneCmd := runDockerCommandWithArgs(
+		context.Background(),
 		m.projectRoot,
 		[]string{"compose", "down"},
 		func(err error) tea.Msg { return dockerStoppedMsg{err: err} },
