@@ -683,13 +683,13 @@ func (m *Model) runShopwareInstall() tea.Cmd {
 	password := m.install.password.Value()
 
 	doneCmd := func() tea.Msg {
-		ctx := executor.WithEnv(context.Background(), map[string]string{
+		withEnv := e.WithEnv(map[string]string{
 			"INSTALL_LOCALE":         language,
 			"INSTALL_CURRENCY":       currency,
 			"INSTALL_ADMIN_USERNAME": username,
 			"INSTALL_ADMIN_PASSWORD": password,
 		})
-		cmd := e.PHPCommand(ctx, "vendor/bin/shopware-deployment-helper", "run")
+		cmd := withEnv.PHPCommand(context.Background(), "vendor/bin/shopware-deployment-helper", "run")
 		cmd.Dir = projectRoot
 
 		pipe, err := cmd.StdoutPipe()

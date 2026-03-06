@@ -137,12 +137,12 @@ func TestConsoleCommandNameWithAllowBinCI(t *testing.T) {
 
 func TestLocalExecutorWithEnv(t *testing.T) {
 	exec := &LocalExecutor{}
-	ctx := WithEnv(t.Context(), map[string]string{
+	withEnv := exec.WithEnv(map[string]string{
 		"INSTALL_LOCALE":   "de-DE",
 		"INSTALL_CURRENCY": "EUR",
 	})
 
-	cmd := exec.PHPCommand(ctx, "vendor/bin/shopware-deployment-helper", "run")
+	cmd := withEnv.PHPCommand(t.Context(), "vendor/bin/shopware-deployment-helper", "run")
 	assert.Contains(t, cmd.Env, "INSTALL_LOCALE=de-DE")
 	assert.Contains(t, cmd.Env, "INSTALL_CURRENCY=EUR")
 }
@@ -156,21 +156,21 @@ func TestLocalExecutorWithoutEnv(t *testing.T) {
 
 func TestDockerExecutorWithEnv(t *testing.T) {
 	exec := &DockerExecutor{}
-	ctx := WithEnv(t.Context(), map[string]string{
+	withEnv := exec.WithEnv(map[string]string{
 		"INSTALL_LOCALE": "en-GB",
 	})
 
-	cmd := exec.PHPCommand(ctx, "vendor/bin/shopware-deployment-helper", "run")
+	cmd := withEnv.PHPCommand(t.Context(), "vendor/bin/shopware-deployment-helper", "run")
 	assert.Contains(t, cmd.Args, "-e")
 	assert.Contains(t, cmd.Args, "INSTALL_LOCALE=en-GB")
 }
 
 func TestSymfonyCLIExecutorWithEnv(t *testing.T) {
 	exec := &SymfonyCLIExecutor{BinaryPath: "/usr/local/bin/symfony"}
-	ctx := WithEnv(t.Context(), map[string]string{
+	withEnv := exec.WithEnv(map[string]string{
 		"INSTALL_LOCALE": "de-DE",
 	})
 
-	cmd := exec.PHPCommand(ctx, "-v")
+	cmd := withEnv.PHPCommand(t.Context(), "-v")
 	assert.Contains(t, cmd.Env, "INSTALL_LOCALE=de-DE")
 }

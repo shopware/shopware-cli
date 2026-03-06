@@ -20,21 +20,10 @@ type Executor interface {
 
 	// Type returns the executor type name (e.g. "local", "docker").
 	Type() string
-}
 
-type envVarsKey struct{}
-
-// WithEnv attaches extra environment variables to the context.
-// Executor implementations will apply these to the created commands.
-// For Docker, they are injected as -e flags; for local/symfony, they are set on cmd.Env.
-func WithEnv(ctx context.Context, env map[string]string) context.Context {
-	return context.WithValue(ctx, envVarsKey{}, env)
-}
-
-// getEnvVars extracts extra environment variables from the context.
-func getEnvVars(ctx context.Context) map[string]string {
-	env, _ := ctx.Value(envVarsKey{}).(map[string]string)
-	return env
+	// WithEnv returns a copy of the executor with extra environment variables set on all commands.
+	// For Docker, they are injected as -e flags; for local/symfony, they are set on cmd.Env.
+	WithEnv(env map[string]string) Executor
 }
 
 type allowBinCIKey struct{}

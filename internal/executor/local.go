@@ -8,25 +8,27 @@ import (
 )
 
 // LocalExecutor runs commands using the local PHP installation directly.
-type LocalExecutor struct{}
+type LocalExecutor struct {
+	env map[string]string
+}
 
 func (l *LocalExecutor) ConsoleCommand(ctx context.Context, args ...string) *exec.Cmd {
 	cmdArgs := []string{consoleCommandName(ctx)}
 	cmdArgs = append(cmdArgs, args...)
 	cmd := exec.CommandContext(ctx, "php", cmdArgs...)
-	applyLocalEnv(ctx, cmd)
+	applyLocalEnv(l.env, cmd)
 	return cmd
 }
 
 func (l *LocalExecutor) ComposerCommand(ctx context.Context, args ...string) *exec.Cmd {
 	cmd := exec.CommandContext(ctx, "composer", args...)
-	applyLocalEnv(ctx, cmd)
+	applyLocalEnv(l.env, cmd)
 	return cmd
 }
 
 func (l *LocalExecutor) PHPCommand(ctx context.Context, args ...string) *exec.Cmd {
 	cmd := exec.CommandContext(ctx, "php", args...)
-	applyLocalEnv(ctx, cmd)
+	applyLocalEnv(l.env, cmd)
 	return cmd
 }
 
@@ -34,9 +36,12 @@ func (l *LocalExecutor) Type() string {
 	return "local"
 }
 
-// applyLocalEnv sets extra environment variables from the context on a local command.
-func applyLocalEnv(ctx context.Context, cmd *exec.Cmd) {
-	env := getEnvVars(ctx)
+func (l *LocalExecutor) WithEnv(env map[string]string) Executor {
+	return &LocalExecutor{env: env}
+}
+
+// applyLocalEnv sets extra environment variables on a local command.
+func applyLocalEnv(env map[string]string, cmd *exec.Cmd) {
 	if len(env) == 0 {
 		return
 	}
