@@ -165,7 +165,7 @@ func (m LogsModel) renderSidebar() string {
 
 		style := sidebarItemStyle
 		switch {
-		case i == m.cursor && i == m.active:
+		case i == m.cursor && m.cursor == m.active:
 			style = activeSelectedSidebarItemStyle
 		case i == m.cursor:
 			style = selectedSidebarItemStyle

@@ -43,6 +43,8 @@ const (
 	keyK        = "k"
 	key1        = "1"
 	key2        = "2"
+
+	defaultUsername = "admin"
 )
 
 type overlay int
@@ -254,7 +256,7 @@ func (m Model) updateLifecycle(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.overlayLines = nil
 
 		usernameInput := textinput.New()
-		usernameInput.Placeholder = "admin"
+		usernameInput.Placeholder = defaultUsername
 		usernameInput.Prompt = "Username: "
 		usernameInput.CharLimit = 50
 
@@ -423,7 +425,7 @@ func (m Model) updateInstallPrompt(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		case keyEnter:
 			m.install.currency = installCurrencies[m.install.cursor]
 			m.install.step = installStepUsername
-			m.install.username.SetValue("admin")
+			m.install.username.SetValue(defaultUsername)
 			m.install.username.Focus()
 			return m, textinput.Blink
 		}

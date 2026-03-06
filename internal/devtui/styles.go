@@ -165,11 +165,6 @@ var (
 			Padding(0, 1).
 			Bold(true)
 
-	statusStyle = lipgloss.NewStyle().
-			Foreground(warningColor).
-			Background(surfaceColor).
-			Bold(true)
-
 	sidebarStyle = lipgloss.NewStyle().
 			Background(panelColor).
 			Border(lipgloss.RoundedBorder()).
@@ -258,9 +253,8 @@ func renderFooter(parts ...string) string {
 	}
 
 	separator := surfaceMutedTextStyle.Render("  |  ")
-	return surfaceMutedTextStyle.Copy().
-		Padding(1, 0, 0).
-		Render(strings.Join(filtered, separator))
+	style := surfaceMutedTextStyle.Padding(1, 0, 0)
+	return style.Render(strings.Join(filtered, separator))
 }
 
 func renderKVRow(label, value string, valueRenderer lipgloss.Style) string {
