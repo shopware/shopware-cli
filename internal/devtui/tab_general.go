@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 )
 
 type GeneralModel struct {
@@ -20,6 +21,8 @@ type GeneralModel struct {
 	projectRoot string
 	loading     bool
 	err         error
+	width       int
+	height      int
 }
 
 type discoveredService struct {
@@ -79,6 +82,11 @@ func (m GeneralModel) Init() tea.Cmd {
 	return discoverServices(m.projectRoot)
 }
 
+func (m *GeneralModel) SetSize(width, height int) {
+	m.width = width
+	m.height = height
+}
+
 type browserOpenedMsg struct{}
 
 func (m GeneralModel) Update(msg tea.Msg) (GeneralModel, tea.Cmd) {
@@ -98,39 +106,95 @@ func openInBrowser(url string) tea.Cmd {
 }
 
 func (m GeneralModel) View() string {
-	var b strings.Builder
-
-	b.WriteString("\n")
-	b.WriteString(labelStyle.Render("Environment") + valueStyle.Render(m.envType) + "\n")
-	b.WriteString(labelStyle.Render("Shop URL") + valueStyle.Render(m.shopURL) + "\n")
-	b.WriteString(labelStyle.Render("Admin URL") + valueStyle.Render(m.adminURL) + "\n")
-
-	if m.username != "" {
-		b.WriteString(labelStyle.Render("Admin User") + valueStyle.Render(m.username) + "\n")
-		b.WriteString(labelStyle.Render("Admin Password") + valueStyle.Render(m.password) + "\n")
+	overviewRows := []string{
+		renderKVRow("Environment", m.envType, activeBadgeStyle),
+		renderKVRow("Shop URL", m.shopURL, urlStyle),
+		renderKVRow("Admin URL", m.adminURL, urlStyle),
 	}
 
-	b.WriteString("\n")
+	credentialsRows := []string{
+		renderKVRow("Username", m.username, valueStyle),
+		renderKVRow("Password", m.password, secretStyle),
+	}
 
-	switch {
-	case m.loading:
-		b.WriteString(helpStyle.Render("Discovering services...") + "\n")
-	case m.err != nil:
-		b.WriteString(errorStyle.Render("Service discovery failed: "+m.err.Error()) + "\n")
-	case len(m.services) > 0:
-		for _, s := range m.services {
-			b.WriteString(labelStyle.Render(s.Name) + valueStyle.Render(s.URL) + "\n")
-			if s.Username != "" {
-				b.WriteString(labelStyle.Render("  Username") + valueStyle.Render(s.Username) + "\n")
-				b.WriteString(labelStyle.Render("  Password") + valueStyle.Render(s.Password) + "\n")
-			}
+	if m.username == "" && m.password == "" {
+		credentialsRows = []string{
+			helpStyle.Render("Admin credentials will appear here once Shopware is installed."),
 		}
 	}
 
-	b.WriteString("\n")
-	b.WriteString(helpStyle.Render("f: open shop | a: open admin"))
+	overviewSection := renderSection("Shop", strings.Join(overviewRows, "\n"))
+	credentialsSection := renderSection("Admin Access", strings.Join(credentialsRows, "\n"))
+	servicesSection := renderSection("Services", m.renderServices())
 
-	return b.String()
+	columnStyle := lipgloss.NewStyle().Background(surfaceColor)
+
+	var content string
+	if m.width >= 110 {
+		columnWidth := clampMin((m.width-7)/2, 36)
+		topRow := lipgloss.JoinHorizontal(
+			lipgloss.Top,
+			columnStyle.Width(columnWidth).Render(overviewSection),
+			columnStyle.Width(columnWidth).Render(credentialsSection),
+		)
+		content = lipgloss.JoinVertical(lipgloss.Left, topRow, servicesSection)
+	} else {
+		content = lipgloss.JoinVertical(
+			lipgloss.Left,
+			overviewSection,
+			credentialsSection,
+			servicesSection,
+		)
+	}
+
+	var footerHints []string
+	if m.shopURL != "" {
+		footerHints = append(footerHints, renderKeyHint("f", "Open shop"))
+	}
+	if m.adminURL != "" && m.adminURL != "admin" {
+		footerHints = append(footerHints, renderKeyHint("a", "Open admin"))
+	}
+
+	return lipgloss.JoinVertical(
+		lipgloss.Left,
+		"",
+		content,
+		renderFooter(footerHints...),
+	)
+}
+
+func (m GeneralModel) renderServices() string {
+	switch {
+	case m.loading:
+		return lipgloss.JoinVertical(
+			lipgloss.Left,
+			activeBadgeStyle.Render("SCANNING"),
+			helpStyle.Render("Looking for published local services."),
+		)
+	case m.err != nil:
+		return lipgloss.JoinVertical(
+			lipgloss.Left,
+			errorBadgeStyle.Render("DISCOVERY FAILED"),
+			errorStyle.Render(m.err.Error()),
+		)
+	case len(m.services) == 0:
+		return helpStyle.Render("No auxiliary services detected.")
+	}
+
+	blocks := make([]string, 0, len(m.services))
+	for _, service := range m.services {
+		rows := []string{
+			renderKVRow(service.Name, service.URL, urlStyle),
+		}
+		if service.Username != "" {
+			rows = append(rows, renderSubKVRow("Username", service.Username, valueStyle))
+			rows = append(rows, renderSubKVRow("Password", service.Password, secretStyle))
+		}
+
+		blocks = append(blocks, strings.Join(rows, "\n"))
+	}
+
+	return strings.Join(blocks, "\n\n")
 }
 
 // dockerComposePSOutput represents a single container from `docker compose ps --format json`.

@@ -3,6 +3,7 @@ package devtui
 import (
 	"bufio"
 	"context"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -127,57 +128,98 @@ func (m LogsModel) Update(msg tea.Msg) (LogsModel, tea.Cmd) {
 }
 
 func (m LogsModel) View() string {
-	sidebar := m.renderSidebar()
+	body := lipgloss.JoinHorizontal(lipgloss.Top, m.renderSidebar(), m.renderContent())
 
-	var content strings.Builder
-	content.WriteString(m.viewport.View())
-	content.WriteString("\n")
-
-	followIndicator := "off"
+	followState := "off"
 	if m.follow {
-		followIndicator = "on"
+		followState = "on"
 	}
-	content.WriteString(helpStyle.Render("f: toggle follow (" + followIndicator + ") | ↑/↓: select source | enter: switch | pgup/pgdn: scroll"))
 
-	return lipgloss.JoinHorizontal(lipgloss.Top, sidebar, content.String())
+	return lipgloss.JoinVertical(
+		lipgloss.Left,
+		body,
+		renderFooter(
+			renderKeyHint("f", fmt.Sprintf("Follow %s", followState)),
+			renderKeyHint("↑/↓", "Move cursor"),
+			renderKeyHint("enter", "Open source"),
+			renderKeyHint("pgup", "Scroll"),
+		),
+	)
 }
 
 func (m LogsModel) renderSidebar() string {
-	sidebarStyle := lipgloss.NewStyle().
-		Width(sidebarWidth).
-		BorderRight(true).
-		BorderStyle(lipgloss.NormalBorder()).
-		PaddingRight(1)
-
 	var b strings.Builder
+	b.WriteString(sectionTitleStyle.Render("Sources"))
+	b.WriteString("\n\n")
 
 	for i, src := range m.sources {
-		prefix := "  "
-		if i == m.cursor {
-			prefix = "> "
-		}
-
-		name := src.name
+		item := src.name
 		if i == m.active {
-			name = statusStyle.Render(name)
+			item = lipgloss.JoinHorizontal(
+				lipgloss.Center,
+				item,
+				" ",
+				activeBadgeStyle.Render("LIVE"),
+			)
 		}
 
-		b.WriteString(prefix + name + "\n")
+		style := sidebarItemStyle
+		switch {
+		case i == m.cursor && i == m.active:
+			style = activeSelectedSidebarItemStyle
+		case i == m.cursor:
+			style = selectedSidebarItemStyle
+		case i == m.active:
+			style = activeSidebarItemStyle
+		}
+
+		b.WriteString(style.Width(sidebarWidth - 4).Render(item))
+		b.WriteString("\n")
 	}
 
-	return sidebarStyle.Height(m.height - 4).Render(b.String())
+	if len(m.sources) == 0 {
+		b.WriteString(helpStyle.Render("No log sources found yet."))
+	}
+
+	return sidebarStyle.
+		Width(sidebarWidth).
+		Height(clampMin(m.height-3, 8)).
+		Render(b.String())
+}
+
+func (m LogsModel) renderContent() string {
+	sourceName := "No source selected"
+	if m.active >= 0 && m.active < len(m.sources) {
+		sourceName = m.sources[m.active].name
+	}
+
+	followBadge := warningBadgeStyle.Render("FOLLOW OFF")
+	if m.follow {
+		followBadge = activeBadgeStyle.Render("FOLLOW ON")
+	}
+
+	header := lipgloss.JoinHorizontal(
+		lipgloss.Center,
+		panelHeaderStyle.Render(sourceName),
+		" ",
+		followBadge,
+	)
+
+	return contentPanelStyle.Render(
+		lipgloss.JoinVertical(
+			lipgloss.Left,
+			header,
+			panelTextStyle.Render(m.viewport.View()),
+		),
+	)
 }
 
 func (m *LogsModel) SetSize(width, height int) {
 	m.width = width
 	m.height = height
-	// Subtract sidebar width + border
-	viewportWidth := width - sidebarWidth - 2
-	if viewportWidth < 10 {
-		viewportWidth = 10
-	}
+	viewportWidth := clampMin(width-sidebarWidth-8, 20)
 	m.viewport.SetWidth(viewportWidth)
-	m.viewport.SetHeight(height - 2)
+	m.viewport.SetHeight(clampMin(height-7, 8))
 }
 
 // StartStreaming discovers sources and starts streaming the first one.

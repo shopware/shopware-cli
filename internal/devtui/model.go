@@ -192,6 +192,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
+		m.general.SetSize(m.width, m.height-4)
 		m.logs.SetSize(m.width, m.height-4)
 		return m, nil
 
@@ -465,7 +466,7 @@ func (m Model) View() tea.View {
 		b.WriteString(m.renderOverlay())
 	} else {
 		b.WriteString(m.renderTabBar())
-		b.WriteString("\n")
+		b.WriteString("\n\n")
 
 		switch m.activeTab {
 		case tabGeneral:
@@ -475,7 +476,19 @@ func (m Model) View() tea.View {
 		}
 	}
 
-	v := tea.NewView(b.String())
+	content := appStyle.Render(b.String())
+	if m.width > 0 && m.height > 0 {
+		content = lipgloss.Place(
+			m.width,
+			m.height,
+			lipgloss.Left,
+			lipgloss.Top,
+			content,
+			lipgloss.WithWhitespaceStyle(surfaceTextStyle),
+		)
+	}
+
+	v := tea.NewView(content)
 	v.AltScreen = true
 	return v
 }
@@ -498,19 +511,25 @@ func (m Model) renderOverlay() string {
 	}
 
 	var content strings.Builder
-	content.WriteString(statusStyle.Render(title))
+	content.WriteString(panelHeaderStyle.Render(title))
 	content.WriteString("\n\n")
 
 	switch m.overlay {
 	case overlayNone:
-		// No overlay content needed
+	// No overlay content needed
 	case overlayStarting, overlayStopping, overlayInstalling:
 		for _, line := range m.overlayLines {
-			content.WriteString(line + "\n")
+			content.WriteString(panelTextStyle.Render(line) + "\n")
+		}
+		if len(m.overlayLines) == 0 {
+			content.WriteString(helpStyle.Render("Waiting for command output..."))
 		}
 	case overlayStopConfirm:
 		content.WriteString("Do you want to stop the Docker containers?\n\n")
-		content.WriteString(helpStyle.Render("y: stop containers | n: quit without stopping"))
+		content.WriteString(renderFooter(
+			renderKeyHint("y", "Stop containers"),
+			renderKeyHint("n", "Quit without stopping"),
+		))
 	case overlayInstallPrompt:
 		m.renderInstallPrompt(&content)
 	}
@@ -518,7 +537,14 @@ func (m Model) renderOverlay() string {
 	modal := overlayStyle.Render(content.String())
 
 	if m.width > 0 && m.height > 0 {
-		modal = lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, modal)
+		modal = lipgloss.Place(
+			m.width,
+			m.height,
+			lipgloss.Center,
+			lipgloss.Center,
+			modal,
+			lipgloss.WithWhitespaceStyle(surfaceTextStyle),
+		)
 	}
 
 	return modal
@@ -528,32 +554,44 @@ func (m Model) renderInstallPrompt(b *strings.Builder) {
 	switch m.install.step {
 	case installStepAsk:
 		b.WriteString("Would you like to install Shopware now?\n\n")
-		b.WriteString(helpStyle.Render("y: install | n: skip | q: quit"))
+		b.WriteString(renderFooter(
+			renderKeyHint("y", "Install now"),
+			renderKeyHint("n", "Skip for now"),
+			renderKeyHint("q", "Quit"),
+		))
 
 	case installStepLanguage:
 		b.WriteString("Select default language:\n\n")
 		for i, lang := range installLanguages {
-			cursor := "  "
+			style := sidebarItemStyle
 			if i == m.install.cursor {
-				cursor = "> "
+				style = selectedSidebarItemStyle
 			}
-			b.WriteString(cursor + lang.label + "\n")
+			b.WriteString(style.Render(lang.label) + "\n")
 		}
 		b.WriteString("\n")
-		b.WriteString(helpStyle.Render("↑/↓: select | enter: confirm | q: quit"))
+		b.WriteString(renderFooter(
+			renderKeyHint("↑/↓", "Select"),
+			renderKeyHint("enter", "Confirm"),
+			renderKeyHint("q", "Quit"),
+		))
 
 	case installStepCurrency:
 		fmt.Fprintf(b, "Language: %s\n\n", valueStyle.Render(m.install.language))
 		b.WriteString("Select default currency:\n\n")
 		for i, curr := range installCurrencies {
-			cursor := "  "
+			style := sidebarItemStyle
 			if i == m.install.cursor {
-				cursor = "> "
+				style = selectedSidebarItemStyle
 			}
-			b.WriteString(cursor + curr + "\n")
+			b.WriteString(style.Render(curr) + "\n")
 		}
 		b.WriteString("\n")
-		b.WriteString(helpStyle.Render("↑/↓: select | enter: confirm | q: quit"))
+		b.WriteString(renderFooter(
+			renderKeyHint("↑/↓", "Select"),
+			renderKeyHint("enter", "Confirm"),
+			renderKeyHint("q", "Quit"),
+		))
 
 	case installStepUsername:
 		fmt.Fprintf(b, "Language: %s\n", valueStyle.Render(m.install.language))
@@ -561,7 +599,10 @@ func (m Model) renderInstallPrompt(b *strings.Builder) {
 		b.WriteString("Admin username:\n\n")
 		b.WriteString(m.install.username.View())
 		b.WriteString("\n\n")
-		b.WriteString(helpStyle.Render("enter: confirm | q: quit"))
+		b.WriteString(renderFooter(
+			renderKeyHint("enter", "Continue"),
+			renderKeyHint("q", "Quit"),
+		))
 
 	case installStepPassword:
 		fmt.Fprintf(b, "Language: %s\n", valueStyle.Render(m.install.language))
@@ -570,7 +611,10 @@ func (m Model) renderInstallPrompt(b *strings.Builder) {
 		b.WriteString("Admin password:\n\n")
 		b.WriteString(m.install.password.View())
 		b.WriteString("\n\n")
-		b.WriteString(helpStyle.Render("enter: confirm | q: quit"))
+		b.WriteString(renderFooter(
+			renderKeyHint("enter", "Install"),
+			renderKeyHint("q", "Quit"),
+		))
 	}
 }
 
