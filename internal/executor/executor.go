@@ -22,6 +22,21 @@ type Executor interface {
 	Type() string
 }
 
+type envVarsKey struct{}
+
+// WithEnv attaches extra environment variables to the context.
+// Executor implementations will apply these to the created commands.
+// For Docker, they are injected as -e flags; for local/symfony, they are set on cmd.Env.
+func WithEnv(ctx context.Context, env map[string]string) context.Context {
+	return context.WithValue(ctx, envVarsKey{}, env)
+}
+
+// getEnvVars extracts extra environment variables from the context.
+func getEnvVars(ctx context.Context) map[string]string {
+	env, _ := ctx.Value(envVarsKey{}).(map[string]string)
+	return env
+}
+
 type allowBinCIKey struct{}
 
 // AllowBinCI marks a context so that ConsoleCommand may use bin/ci instead of bin/console in CI environments.

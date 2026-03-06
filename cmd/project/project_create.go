@@ -23,6 +23,7 @@ import (
 	"github.com/shopware/shopware-cli/internal/color"
 	"github.com/shopware/shopware-cli/internal/git"
 	"github.com/shopware/shopware-cli/internal/packagist"
+	"github.com/shopware/shopware-cli/internal/shop"
 	"github.com/shopware/shopware-cli/internal/system"
 	"github.com/shopware/shopware-cli/internal/tracking"
 	"github.com/shopware/shopware-cli/logging"
@@ -460,6 +461,15 @@ var projectCreateCmd = &cobra.Command{
 
 		logging.FromContext(cmd.Context()).Infof("Project created successfully in %s", projectFolder)
 
+		shopCfg := shop.NewConfig()
+		if useDocker {
+			shopCfg.Environments["local"].Type = "docker"
+		}
+
+		if err := shop.WriteConfig(shopCfg, projectFolder); err != nil {
+			return err
+		}
+
 		if useDocker {
 			cmdStyle := lipgloss.NewStyle().Bold(true)
 			sectionStyle := lipgloss.NewStyle().Bold(true).Underline(true)
@@ -467,9 +477,7 @@ var projectCreateCmd = &cobra.Command{
 			fmt.Println()
 			fmt.Println(sectionStyle.Render("Next steps"))
 			fmt.Println()
-			fmt.Printf("  %s  %s\n", color.GreenText.Render("Start containers:"), cmdStyle.Render(fmt.Sprintf("cd %s && make up", projectFolder)))
-			fmt.Printf("  %s  %s\n", color.GreenText.Render("Setup Shopware:"), cmdStyle.Render("make setup"))
-			fmt.Printf("  %s  %s\n", color.GreenText.Render("Stop containers:"), cmdStyle.Render("make down"))
+			fmt.Printf("  %s  %s\n", color.GreenText.Render("Start developing:"), cmdStyle.Render(fmt.Sprintf("cd %s && shopware-cli project dev", projectFolder)))
 			fmt.Println()
 		}
 

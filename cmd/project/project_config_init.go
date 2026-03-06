@@ -2,11 +2,9 @@ package project
 
 import (
 	"fmt"
-	"os"
 
 	"charm.land/huh/v2"
 	"github.com/spf13/cobra"
-	"gopkg.in/yaml.v3"
 
 	"github.com/shopware/shopware-cli/internal/compatibility"
 	"github.com/shopware/shopware-cli/internal/shop"
@@ -30,12 +28,7 @@ var projectConfigInitCmd = &cobra.Command{
 			return err
 		}
 
-		content, err := yaml.Marshal(config)
-		if err != nil {
-			return err
-		}
-
-		if err := os.WriteFile(".shopware-project.yml", content, os.ModePerm); err != nil {
+		if err := shop.WriteConfig(config, "."); err != nil {
 			return err
 		}
 

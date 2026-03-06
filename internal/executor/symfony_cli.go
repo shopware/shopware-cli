@@ -14,19 +14,25 @@ type SymfonyCLIExecutor struct {
 func (s *SymfonyCLIExecutor) ConsoleCommand(ctx context.Context, args ...string) *exec.Cmd {
 	cmdArgs := []string{"php", consoleCommandName(ctx)}
 	cmdArgs = append(cmdArgs, args...)
-	return exec.CommandContext(ctx, s.BinaryPath, cmdArgs...)
+	cmd := exec.CommandContext(ctx, s.BinaryPath, cmdArgs...)
+	applyLocalEnv(ctx, cmd)
+	return cmd
 }
 
 func (s *SymfonyCLIExecutor) ComposerCommand(ctx context.Context, args ...string) *exec.Cmd {
 	cmdArgs := []string{"composer"}
 	cmdArgs = append(cmdArgs, args...)
-	return exec.CommandContext(ctx, s.BinaryPath, cmdArgs...)
+	cmd := exec.CommandContext(ctx, s.BinaryPath, cmdArgs...)
+	applyLocalEnv(ctx, cmd)
+	return cmd
 }
 
 func (s *SymfonyCLIExecutor) PHPCommand(ctx context.Context, args ...string) *exec.Cmd {
 	cmdArgs := []string{"php"}
 	cmdArgs = append(cmdArgs, args...)
-	return exec.CommandContext(ctx, s.BinaryPath, cmdArgs...)
+	cmd := exec.CommandContext(ctx, s.BinaryPath, cmdArgs...)
+	applyLocalEnv(ctx, cmd)
+	return cmd
 }
 
 func (s *SymfonyCLIExecutor) Type() string {

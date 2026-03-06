@@ -23,8 +23,9 @@ func (p *PackageResponse) HasPackage(name string) bool {
 }
 
 type PackageVersion struct {
-	Version string            `json:"version"`
-	Replace map[string]string `json:"replace"`
+	Version     string            `json:"version"`
+	Description string            `json:"description"`
+	Replace     map[string]string `json:"replace"`
 }
 
 func GetPackages(ctx context.Context, token string) (*PackageResponse, error) {

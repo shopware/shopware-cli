@@ -414,6 +414,39 @@ type ConfigImageProxy struct {
 	URL string `yaml:"url,omitempty"`
 }
 
+// NewConfig creates a new Config with the current compatibility date and a local environment.
+func NewConfig() *Config {
+	return &Config{
+		CompatibilityDate: compatibility.TodayDate(),
+		Environments: map[string]*EnvironmentConfig{
+			"local": {
+				Type: "local",
+				URL:  "http://127.0.0.1:8000",
+				AdminApi: &ConfigAdminApi{
+					Username: "admin",
+					Password: "shopware",
+				},
+			},
+		},
+	}
+}
+
+// WriteConfig marshals the config to YAML and writes it to dir/.shopware-project.yaml.
+func WriteConfig(cfg *Config, dir string) error {
+	data, err := yaml.Marshal(cfg)
+	if err != nil {
+		return fmt.Errorf("failed to marshal shop configuration: %w", err)
+	}
+
+	filePath := filepath.Join(dir, ".shopware-project.yml")
+
+	if err := os.WriteFile(filePath, data, os.ModePerm); err != nil {
+		return fmt.Errorf("failed to write shop configuration to %s: %w", filePath, err)
+	}
+
+	return nil
+}
+
 func ReadConfig(ctx context.Context, fileName string, allowFallback bool) (*Config, error) {
 	config := &Config{foundConfig: false}
 

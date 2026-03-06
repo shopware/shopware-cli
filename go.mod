@@ -3,6 +3,8 @@ module github.com/shopware/shopware-cli
 go 1.25.0
 
 require (
+	charm.land/bubbles/v2 v2.0.0
+	charm.land/bubbletea/v2 v2.0.0
 	charm.land/huh/v2 v2.0.0-20260226141913-a8934362ea3b
 	charm.land/lipgloss/v2 v2.0.0
 	dario.cat/mergo v1.0.2
@@ -38,8 +40,6 @@ require (
 )
 
 require (
-	charm.land/bubbles/v2 v2.0.0 // indirect
-	charm.land/bubbletea/v2 v2.0.0 // indirect
 	github.com/Azure/azure-sdk-for-go/sdk/azcore v1.21.0 // indirect
 	github.com/Azure/azure-sdk-for-go/sdk/internal v1.11.2 // indirect
 	github.com/Azure/azure-sdk-for-go/sdk/storage/azblob v1.6.4 // indirect
