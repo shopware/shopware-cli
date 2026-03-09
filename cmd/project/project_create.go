@@ -481,7 +481,7 @@ var projectCreateCmd = &cobra.Command{
 			fmt.Printf("  %s  %s\n", color.GreenText.Render("Setup Shopware:"), cmdStyle.Render("make setup"))
 			fmt.Printf("  %s  %s\n", color.GreenText.Render("Stop containers:"), cmdStyle.Render("make down"))
 			fmt.Println()
-			fmt.Println(sectionStyle.Render("Access your shop"))
+			fmt.Println(sectionStyle.Render("Access your shop (after make setup)"))
 			fmt.Println()
 			fmt.Printf("  %s  %s\n", color.GreenText.Render("Storefront:"), cmdStyle.Render("http://127.0.0.1:8000"))
 			fmt.Printf("  %s  %s\n", color.GreenText.Render("Admin:"), cmdStyle.Render("http://127.0.0.1:8000/admin"))
@@ -634,15 +634,26 @@ func runComposerInstall(ctx context.Context, projectFolder string, useDocker boo
 		return cmdInstall.Run()
 	}
 
+	var stdErr bytes.Buffer
+	cmdInstall.Stderr = &stdErr
+
 	var runErr error
 
-	if err := spinner.New().Title("Installing dependencies").Action(func() {
+	if err := spinner.New().Context(ctx).Title("Installing dependencies").Action(func() {
 		runErr = cmdInstall.Run()
 	}).Run(); err != nil {
 		return err
 	}
 
-	return runErr
+	if runErr != nil {
+		if stdErr.Len() > 0 {
+			fmt.Fprint(os.Stderr, stdErr.String())
+		}
+
+		return runErr
+	}
+
+	return nil
 }
 
 func getFilteredInstallVersions(ctx context.Context) ([]*version.Version, error) {
