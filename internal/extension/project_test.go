@@ -2,10 +2,13 @@ package extension
 
 import (
 	"os"
+	"path"
 	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+
+	"github.com/shopware/shopware-cli/internal/shop"
 )
 
 func TestGetShopwareProjectConstraintComposerJson(t *testing.T) {
@@ -150,4 +153,92 @@ final public const SHOPWARE_FALLBACK_VERSION = '6.6.9999999.9999999-dev';
 			assert.Equal(t, tc.Constraint, constraint.String())
 		})
 	}
+}
+
+func TestFindAssetSourcesOfProjectYAMLBundles(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Minimal composer.json without extra bundles
+	assert.NoError(t, os.WriteFile(filepath.Join(tmpDir, "composer.json"), []byte(`{"require": {"shopware/core": "~6.6.0"}}`), 0o644))
+
+	// Create the bundle directory
+	assert.NoError(t, os.MkdirAll(filepath.Join(tmpDir, "src", "MyBundle"), os.ModePerm))
+
+	shopCfg := &shop.Config{
+		Build: &shop.ConfigBuild{
+			Bundles: []shop.ConfigProjectBundle{
+				{Path: "src/MyBundle"},
+			},
+		},
+	}
+
+	sources := FindAssetSourcesOfProject(t.Context(), tmpDir, shopCfg)
+
+	names := make([]string, 0, len(sources))
+	for _, s := range sources {
+		names = append(names, s.Name)
+	}
+
+	assert.Contains(t, names, "MyBundle")
+
+	for _, s := range sources {
+		if s.Name == "MyBundle" {
+			assert.Equal(t, path.Join(tmpDir, "src", "MyBundle"), s.Path)
+		}
+	}
+}
+
+func TestFindAssetSourcesOfProjectYAMLBundleNameOverride(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	assert.NoError(t, os.WriteFile(filepath.Join(tmpDir, "composer.json"), []byte(`{"require": {"shopware/core": "~6.6.0"}}`), 0o644))
+	assert.NoError(t, os.MkdirAll(filepath.Join(tmpDir, "src", "MyBundle"), os.ModePerm))
+
+	shopCfg := &shop.Config{
+		Build: &shop.ConfigBuild{
+			Bundles: []shop.ConfigProjectBundle{
+				{Path: "src/MyBundle", Name: "CustomBundleName"},
+			},
+		},
+	}
+
+	sources := FindAssetSourcesOfProject(t.Context(), tmpDir, shopCfg)
+
+	names := make([]string, 0, len(sources))
+	for _, s := range sources {
+		names = append(names, s.Name)
+	}
+
+	assert.Contains(t, names, "CustomBundleName")
+	assert.NotContains(t, names, "MyBundle")
+}
+
+func TestFindAssetSourcesOfProjectYAMLBundleDeduplication(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// composer.json declares the same bundle path
+	assert.NoError(t, os.WriteFile(filepath.Join(tmpDir, "composer.json"), []byte(`{
+		"require": {"shopware/core": "~6.6.0"},
+		"extra": {"shopware-bundles": {"src/MyBundle": {"name": "MyBundle"}}}
+	}`), 0o644))
+	assert.NoError(t, os.MkdirAll(filepath.Join(tmpDir, "src", "MyBundle"), os.ModePerm))
+
+	shopCfg := &shop.Config{
+		Build: &shop.ConfigBuild{
+			Bundles: []shop.ConfigProjectBundle{
+				{Path: "src/MyBundle"},
+			},
+		},
+	}
+
+	sources := FindAssetSourcesOfProject(t.Context(), tmpDir, shopCfg)
+
+	count := 0
+	for _, s := range sources {
+		if s.Name == "MyBundle" {
+			count++
+		}
+	}
+
+	assert.Equal(t, 1, count, "bundle declared in both composer.json and YAML config should only appear once")
 }

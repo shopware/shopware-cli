@@ -119,6 +119,16 @@ type ConfigBuild struct {
 	MJML *ConfigBuildMJML `yaml:"mjml,omitempty"`
 	// Hooks to run at specific points during CI builds
 	Hooks *ConfigBuildHooks `yaml:"hooks,omitempty"`
+	// Shopware bundles to include in builds (alternative to composer.json extra.shopware-bundles)
+	Bundles []ConfigProjectBundle `yaml:"bundles,omitempty"`
+}
+
+// ConfigProjectBundle defines a project-level Shopware bundle.
+type ConfigProjectBundle struct {
+	// Relative path from project root to the bundle directory
+	Path string `yaml:"path" jsonschema:"required"`
+	// Optional override for the bundle name; defaults to the directory basename
+	Name string `yaml:"name,omitempty"`
 }
 
 // ConfigBuildHooks defines hooks to run at specific points during CI builds.
