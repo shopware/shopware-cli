@@ -147,7 +147,9 @@ func (e ProducerEndpoint) UpdateExtensionBinaryFile(ctx context.Context, produce
 	if err != nil {
 		return fmt.Errorf(errorFormat, err)
 	}
-	defer zipFile.Close()
+	defer func() {
+		_ = zipFile.Close()
+	}()
 
 	if _, err = io.Copy(fileWritter, zipFile); err != nil {
 		return fmt.Errorf(errorFormat, err)
