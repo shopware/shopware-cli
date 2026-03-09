@@ -3,7 +3,6 @@ package config
 import (
 	"fmt"
 	"os"
-	"strconv"
 	"sync"
 
 	"github.com/caarlos0/env/v9"
@@ -28,20 +27,7 @@ type configData struct {
 	Account struct {
 		Email    string `env:"SHOPWARE_CLI_ACCOUNT_EMAIL" yaml:"email"`
 		Password string `env:"SHOPWARE_CLI_ACCOUNT_PASSWORD" yaml:"password"`
-		Company  int    `env:"SHOPWARE_CLI_ACCOUNT_COMPANY" yaml:"company"`
 	} `yaml:"account"`
-}
-
-type ExtensionConfig struct {
-	Name             string
-	Namespace        string
-	ComposerPackage  string
-	ShopwareVersion  string
-	Description      string
-	License          string
-	Label            string
-	ManufacturerLink string
-	SupportLink      string
 }
 
 type Config struct{}
@@ -58,7 +44,6 @@ func defaultConfig() *configData {
 	config := &configData{}
 	config.Account.Email = ""
 	config.Account.Password = ""
-	config.Account.Company = 0
 	return config
 }
 
@@ -159,12 +144,6 @@ func (Config) GetAccountPassword() string {
 	return state.inner.Account.Password
 }
 
-func (Config) GetAccountCompanyId() int {
-	state.mu.RLock()
-	defer state.mu.RUnlock()
-	return state.inner.Account.Company
-}
-
 func (Config) SetAccountEmail(email string) error {
 	state.mu.Lock()
 	defer state.mu.Unlock()
@@ -184,17 +163,6 @@ func (Config) SetAccountPassword(password string) error {
 	}
 	state.modified = true
 	state.inner.Account.Password = password
-	return nil
-}
-
-func (Config) SetAccountCompanyId(id int) error {
-	state.mu.Lock()
-	defer state.mu.Unlock()
-	if state.loadedFromEnv {
-		return fmt.Errorf(environmentConfigErrorFormat, "account.company", strconv.Itoa(id))
-	}
-	state.modified = true
-	state.inner.Account.Company = id
 	return nil
 }
 

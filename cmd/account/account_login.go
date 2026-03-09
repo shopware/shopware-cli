@@ -1,7 +1,6 @@
 package account
 
 import (
-	"context"
 	"fmt"
 
 	"charm.land/huh/v2"
@@ -44,16 +43,9 @@ var loginCmd = &cobra.Command{
 			logging.FromContext(cmd.Context()).Infof("Using existing credentials. Use account:logout to logout")
 		}
 
-		client, err := accountApi.NewApi(cmd.Context(), accountApi.LoginRequest{Email: email, Password: password})
+		_, err := accountApi.NewApi(cmd.Context(), accountApi.LoginRequest{Email: email, Password: password})
 		if err != nil {
 			return fmt.Errorf("login failed with error: %w", err)
-		}
-
-		if companyId := services.Conf.GetAccountCompanyId(); companyId > 0 {
-			err = changeAPIMembership(cmd.Context(), client, companyId)
-			if err != nil {
-				return fmt.Errorf("cannot change company member ship: %w", err)
-			}
 		}
 
 		if newCredentials {
@@ -63,17 +55,7 @@ var loginCmd = &cobra.Command{
 			}
 		}
 
-		profile, err := client.GetMyProfile(cmd.Context())
-		if err != nil {
-			return err
-		}
-
-		logging.FromContext(cmd.Context()).Infof(
-			"Hey %s %s. You are now authenticated on company %s and can use all account commands",
-			profile.PersonalData.FirstName,
-			profile.PersonalData.LastName,
-			client.GetActiveMembership().Company.Name,
-		)
+		logging.FromContext(cmd.Context()).Infof("Login successful. You can now use all account commands")
 
 		return nil
 	},
@@ -113,20 +95,4 @@ func emptyValidator(s string) error {
 	}
 
 	return nil
-}
-
-func changeAPIMembership(ctx context.Context, client *accountApi.Client, companyID int) error {
-	if companyID == 0 || client.GetActiveCompanyID() == companyID {
-		logging.FromContext(ctx).Debugf("Client is on correct membership skip")
-		return nil
-	}
-
-	for _, membership := range client.GetMemberships() {
-		if membership.Company.Id == companyID {
-			logging.FromContext(ctx).Debugf("Changing member ship from %s (%d) to %s (%d)", client.ActiveMembership.Company.Name, client.ActiveMembership.Company.Id, membership.Company.Name, membership.Company.Id)
-			return client.ChangeActiveMembership(ctx, membership)
-		}
-	}
-
-	return fmt.Errorf("could not find configured company with id %d", companyID)
 }
