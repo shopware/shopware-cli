@@ -23,6 +23,10 @@ var projectDevCmd = &cobra.Command{
 			return err
 		}
 
+		if cfg.IsCompatibilityDateBefore(shop.CompatibilityDevMode) {
+			return shop.ErrDevModeNotSupported
+		}
+
 		envCfg, err := cfg.ResolveEnvironment(environmentName)
 		if err != nil {
 			return err
