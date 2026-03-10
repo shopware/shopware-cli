@@ -23,7 +23,6 @@ type ComposerJsonOptions struct {
 	Version          string
 	DependingVersion string
 	RC               bool
-	UseDocker        bool
 	UseElasticsearch bool
 	UseAMQP          bool
 	NoAudit          bool
@@ -70,9 +69,6 @@ func GenerateComposerJson(ctx context.Context, opts ComposerJsonOptions) (string
 	require.set("shopware/storefront", opts.DependingVersion)
 	if opts.UseAMQP {
 		require.set("symfony/amqp-messenger", "*")
-	}
-	if opts.UseDocker {
-		require.set("shopware/docker-dev", "*")
 	}
 	if opts.IsDeployer() {
 		require.set("deployer/deployer", "*")
@@ -146,7 +142,7 @@ func GenerateComposerJson(ctx context.Context, opts ComposerJsonOptions) (string
 	composer.set("scripts", scripts)
 	symfony := newOrderedMap()
 	symfony.set("allow-contrib", true)
-	symfony.set("docker", opts.UseDocker)
+	symfony.set("docker", false)
 	symfony.set("endpoint", []string{
 		"https://raw.githubusercontent.com/shopware/recipes/flex/main/index.json",
 		"flex://defaults",

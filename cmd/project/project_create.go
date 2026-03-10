@@ -22,6 +22,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/shopware/shopware-cli/internal/color"
+	dockerpkg "github.com/shopware/shopware-cli/internal/docker"
 	"github.com/shopware/shopware-cli/internal/git"
 	"github.com/shopware/shopware-cli/internal/packagist"
 	"github.com/shopware/shopware-cli/internal/shop"
@@ -399,7 +400,6 @@ var projectCreateCmd = &cobra.Command{
 		composerJson, err := packagist.GenerateComposerJson(cmd.Context(), packagist.ComposerJsonOptions{
 			Version:          chooseVersion,
 			RC:               strings.Contains(chooseVersion, "rc"),
-			UseDocker:        useDocker,
 			UseElasticsearch: withElasticsearch,
 			UseAMQP:          withAMQP,
 			NoAudit:          noAudit,
@@ -460,6 +460,12 @@ var projectCreateCmd = &cobra.Command{
 
 		if err := runComposerInstall(cmd.Context(), projectFolder, useDocker, showSpinner); err != nil {
 			return err
+		}
+
+		if useDocker {
+			if err := dockerpkg.WriteComposeFile(projectFolder); err != nil {
+				return err
+			}
 		}
 
 		if initGit {

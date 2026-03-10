@@ -5,6 +5,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/shopware/shopware-cli/internal/devtui"
+	dockerpkg "github.com/shopware/shopware-cli/internal/docker"
 	"github.com/shopware/shopware-cli/internal/executor"
 	"github.com/shopware/shopware-cli/internal/shop"
 )
@@ -35,6 +36,12 @@ var projectDevCmd = &cobra.Command{
 		exec, err := executor.New(envCfg, cfg)
 		if err != nil {
 			return err
+		}
+
+		if exec.Type() == "docker" {
+			if err := dockerpkg.WriteComposeFile(projectRoot); err != nil {
+				return err
+			}
 		}
 
 		m := devtui.New(devtui.Options{
