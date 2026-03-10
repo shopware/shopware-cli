@@ -5,6 +5,7 @@ import (
 
 	"charm.land/lipgloss/v2"
 	"charm.land/lipgloss/v2/compat"
+	"github.com/charmbracelet/x/ansi"
 )
 
 const generalLabelWidth = 16
@@ -216,12 +217,24 @@ var (
 )
 
 func renderSection(title, body string) string {
+	return renderSectionWidth(title, body, 0)
+}
+
+func renderSectionWidth(title, body string, width int) string {
 	contentWidth := lipgloss.Width(body)
 	if titleWidth := lipgloss.Width(title); titleWidth > contentWidth {
 		contentWidth = titleWidth
 	}
 	if contentWidth == 0 {
 		contentWidth = 1
+	}
+	// If a fixed width is given, subtract sectionStyle's horizontal framing
+	// (border + padding) so the inner content fills the target width.
+	if width > 0 {
+		inner := width - sectionStyle.GetHorizontalFrameSize()
+		if inner > contentWidth {
+			contentWidth = inner
+		}
 	}
 
 	header := sectionTitleStyle.Width(contentWidth).Render(title)
@@ -232,11 +245,7 @@ func renderSection(title, body string) string {
 }
 
 func renderKeyHint(key, action string) string {
-	return lipgloss.JoinHorizontal(
-		lipgloss.Center,
-		keyStyle.Render(strings.ToUpper(key)),
-		surfaceMutedTextStyle.Render(" "+action),
-	)
+	return keyStyle.Render(strings.ToUpper(key)) + surfaceMutedTextStyle.Render(" "+action)
 }
 
 func renderFooter(parts ...string) string {
@@ -289,4 +298,17 @@ func clampMin(value, minimum int) int {
 	}
 
 	return value
+}
+
+// padLines pads each line of a rendered string to the given width using the
+// provided style so that whitespace has the correct background color.
+func padLines(s string, width int, style lipgloss.Style) string {
+	lines := strings.Split(s, "\n")
+	for i, line := range lines {
+		w := ansi.StringWidth(line)
+		if w < width {
+			lines[i] = line + style.Render(strings.Repeat(" ", width-w))
+		}
+	}
+	return strings.Join(lines, "\n")
 }

@@ -123,22 +123,37 @@ func (m GeneralModel) View() string {
 		}
 	}
 
-	overviewSection := renderSection("Shop", strings.Join(overviewRows, "\n"))
-	credentialsSection := renderSection("Admin Access", strings.Join(credentialsRows, "\n"))
-	servicesSection := renderSection("Services", m.renderServices())
-
-	columnStyle := lipgloss.NewStyle().Background(surfaceColor)
+	contentWidth := max(m.width-2, 0)
 
 	var content string
 	if m.width >= 110 {
-		columnWidth := clampMin((m.width-7)/2, 36)
-		topRow := lipgloss.JoinHorizontal(
-			lipgloss.Top,
-			columnStyle.Width(columnWidth).Render(overviewSection),
-			columnStyle.Width(columnWidth).Render(credentialsSection),
-		)
-		content = lipgloss.JoinVertical(lipgloss.Left, topRow, servicesSection)
+		columnWidth := contentWidth / 2
+		overviewSection := renderSectionWidth("Shop", strings.Join(overviewRows, "\n"), columnWidth)
+		credentialsSection := renderSectionWidth("Admin Access", strings.Join(credentialsRows, "\n"), columnWidth)
+		servicesSection := renderSection("Services", m.renderServices())
+
+		leftCol := padLines(overviewSection, columnWidth, surfaceTextStyle)
+		rightCol := padLines(credentialsSection, columnWidth, surfaceTextStyle)
+		leftLines := strings.Split(leftCol, "\n")
+		rightLines := strings.Split(rightCol, "\n")
+		rowHeight := max(len(leftLines), len(rightLines))
+		emptyLine := surfaceTextStyle.Render(strings.Repeat(" ", columnWidth))
+		for len(leftLines) < rowHeight {
+			leftLines = append(leftLines, emptyLine)
+		}
+		for len(rightLines) < rowHeight {
+			rightLines = append(rightLines, emptyLine)
+		}
+		var topRowLines []string
+		for i := range rowHeight {
+			topRowLines = append(topRowLines, leftLines[i]+rightLines[i])
+		}
+		topRow := strings.Join(topRowLines, "\n")
+		content = topRow + "\n" + padLines(servicesSection, contentWidth, surfaceTextStyle)
 	} else {
+		overviewSection := renderSection("Shop", strings.Join(overviewRows, "\n"))
+		credentialsSection := renderSection("Admin Access", strings.Join(credentialsRows, "\n"))
+		servicesSection := renderSection("Services", m.renderServices())
 		content = lipgloss.JoinVertical(
 			lipgloss.Left,
 			overviewSection,
@@ -146,6 +161,8 @@ func (m GeneralModel) View() string {
 			servicesSection,
 		)
 	}
+
+	content = padLines(content, contentWidth, surfaceTextStyle)
 
 	var footerHints []string
 	if m.shopURL != "" {
@@ -155,22 +172,21 @@ func (m GeneralModel) View() string {
 		footerHints = append(footerHints, renderKeyHint("a", "Open admin"))
 	}
 
-	footer := renderFooter(footerHints...)
+	footer := padLines(renderFooter(footerHints...), contentWidth, surfaceTextStyle)
 
-	body := lipgloss.JoinVertical(
-		lipgloss.Left,
-		"",
-		content,
-	)
+	body := "\n" + content
 
-	// Pin footer to bottom by filling remaining height with whitespace
+	// Pin footer to bottom by filling remaining height with styled whitespace
 	bodyHeight := lipgloss.Height(body)
 	footerHeight := lipgloss.Height(footer)
 	if gap := m.height - bodyHeight - footerHeight; gap > 0 {
-		body += strings.Repeat("\n", gap)
+		emptyLine := surfaceTextStyle.Render(strings.Repeat(" ", contentWidth))
+		for range gap {
+			body += "\n" + emptyLine
+		}
 	}
 
-	return body + footer
+	return body + "\n" + footer
 }
 
 func (m GeneralModel) renderServices() string {

@@ -135,16 +135,14 @@ func (m LogsModel) View() string {
 		followState = "on"
 	}
 
-	return lipgloss.JoinVertical(
-		lipgloss.Left,
-		body,
-		renderFooter(
-			renderKeyHint("f", fmt.Sprintf("Follow %s", followState)),
-			renderKeyHint("↑/↓", "Move cursor"),
-			renderKeyHint("enter", "Open source"),
-			renderKeyHint("pgup", "Scroll"),
-		),
+	footer := renderFooter(
+		renderKeyHint("f", fmt.Sprintf("Follow %s", followState)),
+		renderKeyHint("↑/↓", "Move cursor"),
+		renderKeyHint("enter", "Open source"),
+		renderKeyHint("pgup", "Scroll"),
 	)
+
+	return body + "\n" + footer
 }
 
 func (m LogsModel) renderSidebar() string {
@@ -198,17 +196,19 @@ func (m LogsModel) renderContent() string {
 		followBadge = activeBadgeStyle.Render("FOLLOW ON")
 	}
 
-	header := lipgloss.JoinHorizontal(
-		lipgloss.Center,
-		panelHeaderStyle.Render(sourceName),
-		" ",
-		followBadge,
-	)
+	headerText := lipgloss.NewStyle().
+		Background(panelColor).
+		Foreground(textColor).
+		Bold(true).
+		Render(sourceName)
+
+	header := headerText + panelTextStyle.Render(" ") + followBadge
 
 	return contentPanelStyle.Render(
 		lipgloss.JoinVertical(
 			lipgloss.Left,
 			header,
+			"",
 			panelTextStyle.Render(m.viewport.View()),
 		),
 	)
