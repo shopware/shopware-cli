@@ -24,7 +24,8 @@ func GenerateComposeFile(lock *packagist.ComposerLock) ([]byte, error) {
 	}
 
 	header := "# This file is managed by shopware-cli. Do not edit manually.\n" +
-		"# Create a compose.override.yaml to customize services.\n\n"
+		"# Create a compose.override.yaml to customize services.\n" +
+		"# See https://docs.docker.com/compose/how-tos/multiple-compose-files/merge/\n\n"
 
 	return append([]byte(header), out...), nil
 }
