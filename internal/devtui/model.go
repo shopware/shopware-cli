@@ -24,7 +24,6 @@ const (
 
 var tabNames = []string{"General", "Logs"}
 
-// Key constants for repeated key strings
 const (
 	keyCtrlC    = "ctrl+c"
 	keyDown     = "down"
@@ -58,7 +57,6 @@ const (
 	overlayInstalling
 )
 
-// installStep tracks which question the install wizard is on.
 type installStep int
 
 const (
@@ -93,7 +91,6 @@ var (
 	installCurrencies = []string{"EUR", "USD", "GBP", "PLN", "CHF", "SEK", "DKK", "NOK", "CZK"}
 )
 
-// installWizard holds state for the Shopware install prompt.
 type installWizard struct {
 	step     installStep
 	cursor   int
@@ -103,7 +100,6 @@ type installWizard struct {
 	password textinput.Model
 }
 
-// Options configures the TUI dashboard.
 type Options struct {
 	ProjectRoot string
 	Config      *shop.Config
@@ -111,7 +107,6 @@ type Options struct {
 	Executor    executor.Executor
 }
 
-// Model is the top-level Bubble Tea model for the dev dashboard.
 type Model struct {
 	activeTab     activeTab
 	general       GeneralModel
@@ -129,7 +124,6 @@ type Model struct {
 	envConfig     *shop.EnvironmentConfig
 }
 
-// docker lifecycle messages
 type dockerAlreadyRunningMsg struct{}
 type dockerNeedStartMsg struct{}
 type dockerStartedMsg struct{ err error }
@@ -137,14 +131,11 @@ type dockerStoppedMsg struct{ err error }
 type dockerOutputLineMsg string
 type dockerOutputDoneMsg struct{}
 
-// shopware install check messages
 type shopwareInstalledMsg struct{}
 type shopwareNotInstalledMsg struct{}
 type shopwareInstallDoneMsg struct{ err error }
 
-// New creates a new TUI model from the given options.
 func New(opts Options) Model {
-	// Resolve effective admin API: environment overrides top-level config
 	effectiveAdminApi := opts.Config.AdminApi
 	if opts.EnvConfig.AdminApi != nil {
 		effectiveAdminApi = opts.EnvConfig.AdminApi
@@ -214,7 +205,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m.updateChildren(msg)
 }
 
-// updateLifecycle handles docker and shopware lifecycle messages.
 func (m Model) updateLifecycle(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case dockerAlreadyRunningMsg:
@@ -275,7 +265,6 @@ func (m Model) updateLifecycle(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 
-		// Update config with admin credentials
 		username := m.install.username.Value()
 		password := m.install.password.Value()
 
@@ -286,7 +275,6 @@ func (m Model) updateLifecycle(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.envConfig.AdminApi = adminApi
 		_ = shop.WriteConfig(m.config, m.projectRoot)
 
-		// Update general tab display
 		m.general.username = username
 		m.general.password = password
 
@@ -302,7 +290,6 @@ func (m Model) updateLifecycle(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-// updateKeyPress handles all key press events, including overlay-specific keys.
 func (m Model) updateKeyPress(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	if m.overlay == overlayInstallPrompt {
 		return m.updateInstallPrompt(msg)
@@ -320,7 +307,6 @@ func (m Model) updateKeyPress(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
-	// Other overlays only allow quit
 	if m.overlay != overlayNone {
 		if msg.String() == keyQ || msg.String() == keyCtrlC {
 			return m, tea.Quit
@@ -359,7 +345,6 @@ func (m Model) updateKeyPress(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	return m.updateChildren(msg)
 }
 
-// updateChildren propagates messages to child models.
 func (m Model) updateChildren(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmds []tea.Cmd
 
@@ -378,7 +363,6 @@ func (m Model) updateChildren(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, tea.Batch(cmds...)
 }
 
-// updateInstallPrompt handles key input for the install wizard steps.
 func (m Model) updateInstallPrompt(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
 	case keyQ, keyCtrlC:
@@ -640,7 +624,6 @@ func (m Model) renderTabBar() string {
 	return lipgloss.JoinHorizontal(lipgloss.Top, tabs...)
 }
 
-// checkContainersRunning checks if any containers are already running.
 func checkContainersRunning(projectRoot string) tea.Cmd {
 	return func() tea.Msg {
 		ctx := context.Background()
@@ -654,7 +637,6 @@ func checkContainersRunning(projectRoot string) tea.Cmd {
 	}
 }
 
-// checkShopwareInstalled runs bin/console system:is-installed to check if Shopware is set up.
 func (m *Model) checkShopwareInstalled() tea.Cmd {
 	exec := m.executor
 	projectRoot := m.projectRoot
@@ -668,7 +650,6 @@ func (m *Model) checkShopwareInstalled() tea.Cmd {
 	}
 }
 
-// runShopwareInstall runs vendor/bin/shopware-deployment-helper run with INSTALL_LOCALE and INSTALL_CURRENCY env vars.
 func (m *Model) runShopwareInstall() tea.Cmd {
 	e := m.executor
 	projectRoot := m.projectRoot
@@ -724,7 +705,6 @@ func (m *Model) runShopwareInstall() tea.Cmd {
 	return tea.Batch(outputCmd, doneCmd)
 }
 
-// readNextDockerOutput reads the next line from the docker output channel.
 func (m *Model) readNextDockerOutput() tea.Cmd {
 	ch := m.dockerOutChan
 	if ch == nil {
@@ -781,7 +761,6 @@ func runDockerCommandWithArgs(ctx context.Context, projectRoot string, args []st
 	return lineChan, outputCmd, doneCmd
 }
 
-// startContainers runs docker compose up -d, streaming output.
 func (m *Model) startContainers() tea.Cmd {
 	ch, outputCmd, doneCmd := runDockerCommandWithArgs(
 		context.Background(),
@@ -793,7 +772,6 @@ func (m *Model) startContainers() tea.Cmd {
 	return tea.Batch(outputCmd, doneCmd)
 }
 
-// stopContainers runs docker compose down, streaming output.
 func (m *Model) stopContainers() tea.Cmd {
 	ch, outputCmd, doneCmd := runDockerCommandWithArgs(
 		context.Background(),

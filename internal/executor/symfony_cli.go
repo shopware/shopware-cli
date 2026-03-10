@@ -7,7 +7,6 @@ import (
 
 // SymfonyCLIExecutor runs commands through the Symfony CLI binary.
 type SymfonyCLIExecutor struct {
-	// Path to the symfony binary.
 	BinaryPath string
 	env        map[string]string
 }

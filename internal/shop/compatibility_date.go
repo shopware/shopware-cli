@@ -3,7 +3,6 @@ package shop
 import "fmt"
 
 const (
-	// DevMode breaks
 	CompatibilityDevMode = "2026-03-01"
 )
 

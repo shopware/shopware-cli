@@ -9,20 +9,10 @@ import (
 
 // Executor abstracts command execution across different environment types.
 type Executor interface {
-	// ConsoleCommand returns an exec.Cmd for running bin/console.
 	ConsoleCommand(ctx context.Context, args ...string) *exec.Cmd
-
-	// ComposerCommand returns an exec.Cmd for running composer.
 	ComposerCommand(ctx context.Context, args ...string) *exec.Cmd
-
-	// PHPCommand returns an exec.Cmd for running php.
 	PHPCommand(ctx context.Context, args ...string) *exec.Cmd
-
-	// Type returns the executor type name (e.g. "local", "docker").
 	Type() string
-
-	// WithEnv returns a copy of the executor with extra environment variables set on all commands.
-	// For Docker, they are injected as -e flags; for local/symfony, they are set on cmd.Env.
 	WithEnv(env map[string]string) Executor
 }
 

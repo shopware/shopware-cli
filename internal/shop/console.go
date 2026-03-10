@@ -36,8 +36,7 @@ func (c ConsoleResponse) GetCommandOptions(name string) []string {
 	return nil
 }
 
-// ConsoleCommandFunc is a function that creates a console command.
-// This avoids a circular dependency between shop and executor packages.
+// ConsoleCommandFunc avoids a circular dependency between shop and executor packages.
 type ConsoleCommandFunc func(ctx context.Context, args ...string) *exec.Cmd
 
 func GetConsoleCompletion(ctx context.Context, projectRoot string, consoleCommand ConsoleCommandFunc) (*ConsoleResponse, error) {

@@ -178,7 +178,6 @@ func FindAssetSourcesOfProject(ctx context.Context, project string, shopCfg *sho
 	return sources
 }
 
-// ConsoleCommandFunc is a function that creates a console command.
 type ConsoleCommandFunc func(ctx context.Context, args ...string) *exec.Cmd
 
 func DumpAndLoadAssetSourcesOfProject(ctx context.Context, project string, shopCfg *shop.Config, consoleCommand ConsoleCommandFunc) ([]asset.Source, error) {

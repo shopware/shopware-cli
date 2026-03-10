@@ -18,13 +18,9 @@ import (
 	"github.com/shopware/shopware-cli/logging"
 )
 
-// EnvironmentConfig represents a single named environment.
 type EnvironmentConfig struct {
-	// Type of environment: local or docker
-	Type string `yaml:"type" jsonschema:"enum=local,enum=docker"`
-	// URL of the Shopware instance for this environment
-	URL string `yaml:"url,omitempty"`
-	// Admin API credentials for this environment
+	Type     string          `yaml:"type" jsonschema:"enum=local,enum=docker"`
+	URL      string          `yaml:"url,omitempty"`
 	AdminApi *ConfigAdminApi `yaml:"admin_api,omitempty"`
 }
 
@@ -49,7 +45,6 @@ type Config struct {
 	foundConfig            bool
 }
 
-// ResolveEnvironment returns the environment config for the given name.
 func (c *Config) ResolveEnvironment(name string) (*EnvironmentConfig, error) {
 	if name != "" {
 		env, ok := c.Environments[name]
@@ -422,7 +417,6 @@ type ConfigImageProxy struct {
 	URL string `yaml:"url,omitempty"`
 }
 
-// NewConfig creates a new Config with the current compatibility date and a local environment.
 func NewConfig() *Config {
 	return &Config{
 		CompatibilityDate: compatibility.TodayDate(),
@@ -439,7 +433,6 @@ func NewConfig() *Config {
 	}
 }
 
-// WriteConfig marshals the config to YAML and writes it to dir/.shopware-project.yaml.
 func WriteConfig(cfg *Config, dir string) error {
 	data, err := yaml.Marshal(cfg)
 	if err != nil {

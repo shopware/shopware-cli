@@ -10,8 +10,6 @@ import (
 	"github.com/shopware/shopware-cli/internal/packagist"
 )
 
-// GenerateComposeFile generates compose.yaml content
-// based on the packages present in the given ComposerLock.
 func GenerateComposeFile(lock *packagist.ComposerLock) ([]byte, error) {
 	hasAMQP := lock.GetPackage("symfony/amqp-messenger") != nil
 	hasElasticsearch := lock.GetPackage("shopware/elasticsearch") != nil
@@ -30,7 +28,6 @@ func GenerateComposeFile(lock *packagist.ComposerLock) ([]byte, error) {
 	return append([]byte(header), out...), nil
 }
 
-// WriteComposeFile reads the composer.lock in projectFolder and writes compose.yaml.
 func WriteComposeFile(projectFolder string) error {
 	lock, err := packagist.ReadComposerLock(filepath.Join(projectFolder, "composer.lock"))
 	if err != nil {

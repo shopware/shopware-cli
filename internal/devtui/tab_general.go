@@ -37,7 +37,6 @@ type servicesLoadedMsg struct {
 	err      error
 }
 
-// knownService defines a well-known Docker compose service with its primary UI port and default credentials.
 type knownService struct {
 	Name       string
 	TargetPort int
@@ -45,8 +44,6 @@ type knownService struct {
 	Password   string
 }
 
-// knownServices maps compose service names to their known configuration.
-// The key is the compose service name (e.g. "database", "mailer", "lavinmq").
 var knownServices = map[string]knownService{
 	"adminer":  {Name: "Adminer", TargetPort: 8080, Username: "root", Password: "root"},
 	"mailer":   {Name: "Mailpit", TargetPort: 8025},
@@ -54,7 +51,6 @@ var knownServices = map[string]knownService{
 	"rabbitmq": {Name: "Queue (RabbitMQ)", TargetPort: 15672, Username: "guest", Password: "guest"},
 }
 
-// ignoredServices are compose services whose ports should not be listed.
 var ignoredServices = map[string]bool{
 	"web":      true,
 	"database": true,

@@ -14,7 +14,6 @@ import (
 	"charm.land/lipgloss/v2"
 )
 
-// logSource represents a selectable log source (docker container or file).
 type logSource struct {
 	name      string
 	container string // non-empty for docker containers
@@ -222,7 +221,6 @@ func (m *LogsModel) SetSize(width, height int) {
 	m.viewport.SetHeight(clampMin(height-7, 8))
 }
 
-// StartStreaming discovers sources and starts streaming the first one.
 func (m *LogsModel) StartStreaming() tea.Cmd {
 	return m.discoverSources()
 }
