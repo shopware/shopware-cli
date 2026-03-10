@@ -155,12 +155,22 @@ func (m GeneralModel) View() string {
 		footerHints = append(footerHints, renderKeyHint("a", "Open admin"))
 	}
 
-	return lipgloss.JoinVertical(
+	footer := renderFooter(footerHints...)
+
+	body := lipgloss.JoinVertical(
 		lipgloss.Left,
 		"",
 		content,
-		renderFooter(footerHints...),
 	)
+
+	// Pin footer to bottom by filling remaining height with whitespace
+	bodyHeight := lipgloss.Height(body)
+	footerHeight := lipgloss.Height(footer)
+	if gap := m.height - bodyHeight - footerHeight; gap > 0 {
+		body += strings.Repeat("\n", gap)
+	}
+
+	return body + footer
 }
 
 func (m GeneralModel) renderServices() string {

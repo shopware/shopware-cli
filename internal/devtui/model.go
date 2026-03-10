@@ -536,7 +536,14 @@ func (m Model) renderOverlay() string {
 		m.renderInstallPrompt(&content)
 	}
 
-	modal := overlayStyle.Render(content.String())
+	style := overlayStyle
+	if m.overlay == overlayStarting || m.overlay == overlayStopping || m.overlay == overlayInstalling {
+		if m.width > 0 && m.height > 0 {
+			style = style.Width(m.width * 80 / 100).Height(m.height * 80 / 100)
+		}
+	}
+
+	modal := style.Render(content.String())
 
 	if m.width > 0 && m.height > 0 {
 		modal = lipgloss.Place(
