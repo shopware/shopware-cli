@@ -10,22 +10,22 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@58077d3c7e43986b6b15fba718e8ea69e387dfcc
+        uses: step-security/harden-runner@58077d3c7e43986b6b15fba718e8ea69e387dfcc # ratchet:step-security/harden-runner@v2.15.1
         with:
           egress-policy: audit
 
       - name: Checkout Repository
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # ratchet:actions/checkout@v4
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # ratchet:actions/checkout@v6
 
       - name: Set up Go
-        uses: actions/setup-go@4b73464bb391d4059bd26b0524d20df3927bd417 # ratchet:actions/setup-go@v5
+        uses: actions/setup-go@4b73464bb391d4059bd26b0524d20df3927bd417 # ratchet:actions/setup-go@v6
         with:
           go-version: '1.25'
           cache: true
           check-latest: true
 
       - name: Setup PHP
-        uses: shivammathur/setup-php@44454db4f0199b8b9685a5d763dc37cbf79108e1 # ratchet:shivammathur/setup-php@v2
+        uses: shivammathur/setup-php@44454db4f0199b8b9685a5d763dc37cbf79108e1 # ratchet:shivammathur/setup-php@2.36.0
         with:
           php-version: '8.2'
 
@@ -36,7 +36,7 @@ jobs:
         run: mv shopware-cli /usr/local/bin/
 
       - name: Checkout Plugin
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # ratchet:actions/checkout@v4
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # ratchet:actions/checkout@v6
         with:
           repository: 'FriendsOfShopware/FroshTools'
           ref: '75e2013752fd4db7535e4b72b3e3e8d57e531002'
@@ -72,6 +72,6 @@ jobs:
           rm -rf vendor
 
       - name: Setup the project
-        uses: shopwareLabs/build-project-action@main
+        uses: shopwareLabs/build-project-action@88233d3fdb6b4b6ad7085c45210085c51b727d82 # ratchet:shopwareLabs/build-project-action@main
         with:
           path: shopware
