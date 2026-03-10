@@ -30,6 +30,7 @@ jobs:
     permissions:
       contents: read
       id-token: write
+      packages: write
     with:
       output: image
       push: ${{ github.event_name != 'pull_request' }}
