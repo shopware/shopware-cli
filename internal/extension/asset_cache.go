@@ -7,17 +7,17 @@ import (
 	"os"
 	"path"
 	"slices"
-	"strings"
 
+	"github.com/cespare/xxhash/v2"
 	"golang.org/x/sync/errgroup"
 
 	"github.com/shopware/shopware-cli/internal/system"
 	"github.com/shopware/shopware-cli/logging"
 )
 
-// sanitizeCacheKeySuffix converts a path like "Resources/public/custom" into a safe cache key suffix like "resources-public-custom".
-func sanitizeCacheKeySuffix(p string) string {
-	return strings.ToLower(strings.ReplaceAll(strings.ReplaceAll(p, "/", "-"), "\\", "-"))
+// hashCacheKeySuffix returns a short, collision-resistant hash suffix for a cache path.
+func hashCacheKeySuffix(p string) string {
+	return fmt.Sprintf("%x", xxhash.Sum64String(p))
 }
 
 var experimentalCachingEnabled bool
@@ -75,47 +75,43 @@ func restoreAssetCache(ctx context.Context, source *ExtensionAssetConfigEntry, a
 
 	if source.Administration.EntryFilePath != nil {
 		if err := system.GetDefaultCache().RestoreFolderCache(ctx, cacheKey+"-administration", source.GetOutputAdminPath()); err != nil {
-			if errors.Is(err, system.ErrCacheNotFound) {
-				return nil
+			if !errors.Is(err, system.ErrCacheNotFound) {
+				return err
 			}
+		} else {
+			logging.FromContext(ctx).Infof("Restored administration assets for %s from cache", source.TechnicalName)
 
-			return err
+			source.Administration.EntryFilePath = nil
+			source.Administration.Webpack = nil
 		}
-
-		logging.FromContext(ctx).Infof("Restored administration assets for %s from cache", source.TechnicalName)
-
-		source.Administration.EntryFilePath = nil
-		source.Administration.Webpack = nil
 	}
 
 	if source.Storefront.EntryFilePath != nil {
 		if err := system.GetDefaultCache().RestoreFolderCache(ctx, cacheKey+"-storefront", source.GetOutputStorefrontPath()); err != nil {
-			if errors.Is(err, system.ErrCacheNotFound) {
-				return nil
+			if !errors.Is(err, system.ErrCacheNotFound) {
+				return err
 			}
+		} else {
+			logging.FromContext(ctx).Infof("Restored storefront assets for %s from cache", source.TechnicalName)
 
-			return err
+			source.Storefront.EntryFilePath = nil
+			source.Storefront.Webpack = nil
 		}
-
-		logging.FromContext(ctx).Infof("Restored storefront assets for %s from cache", source.TechnicalName)
-
-		source.Storefront.EntryFilePath = nil
-		source.Storefront.Webpack = nil
 	}
 
 	for _, cachePath := range source.AdditionalCaches {
 		outputPath := path.Join(source.BasePath, cachePath.Path)
-		suffix := sanitizeCacheKeySuffix(cachePath.Path)
+		suffix := hashCacheKeySuffix(cachePath.Path)
 
 		if err := system.GetDefaultCache().RestoreFolderCache(ctx, cacheKey+"-"+suffix, outputPath); err != nil {
-			if errors.Is(err, system.ErrCacheNotFound) {
-				continue
+			if !errors.Is(err, system.ErrCacheNotFound) {
+				return err
 			}
 
-			return err
+			continue
 		}
 
-		logging.FromContext(ctx).Infof("Restored custom cache path %s for %s from cache", cachePath.Path, source.TechnicalName)
+		logging.FromContext(ctx).Infof("Restored additional cache path %s for %s from cache", cachePath.Path, source.TechnicalName)
 	}
 
 	return nil
@@ -146,7 +142,7 @@ func storeAssetCache(ctx context.Context, source *ExtensionAssetConfigEntry, ass
 
 	for _, cachePath := range source.AdditionalCaches {
 		outputPath := path.Join(source.BasePath, cachePath.Path)
-		suffix := sanitizeCacheKeySuffix(cachePath.Path)
+		suffix := hashCacheKeySuffix(cachePath.Path)
 
 		if err := system.GetDefaultCache().StoreFolderCache(ctx, cacheKey+"-"+suffix, outputPath); err != nil {
 			return err

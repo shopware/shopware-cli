@@ -347,8 +347,12 @@ func (e *ExtensionAssetConfigEntry) collectFilesFromDir(dir string, files *[]str
 			return err
 		}
 
-		// Skip directories and node_modules
-		if info.IsDir() || strings.Contains(path, "node_modules") {
+		// Skip node_modules directories entirely
+		if info.IsDir() && info.Name() == "node_modules" {
+			return filepath.SkipDir
+		}
+
+		if info.IsDir() {
 			return nil
 		}
 

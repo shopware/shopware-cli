@@ -6,6 +6,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"gopkg.in/yaml.v3"
 
@@ -295,9 +296,37 @@ func validateExtensionConfig(config *Config) error {
 	}
 
 	for i, cache := range config.Build.Zip.Assets.AdditionalCaches {
+		if cache.Path == "" {
+			return fmt.Errorf("build.zip.assets.additional_caches[%d].path is required", i)
+		}
+
+		if err := validateRelativePath(cache.Path); err != nil {
+			return fmt.Errorf("build.zip.assets.additional_caches[%d].path: %w", i, err)
+		}
+
 		if len(cache.SourcePaths) == 0 {
 			return fmt.Errorf("build.zip.assets.additional_caches[%d].source_paths is required", i)
 		}
+
+		for j, sp := range cache.SourcePaths {
+			if err := validateRelativePath(sp); err != nil {
+				return fmt.Errorf("build.zip.assets.additional_caches[%d].source_paths[%d]: %w", i, j, err)
+			}
+		}
+	}
+
+	return nil
+}
+
+// validateRelativePath ensures a path is relative and does not escape the root directory.
+func validateRelativePath(p string) error {
+	if filepath.IsAbs(p) {
+		return fmt.Errorf("path must be relative, got %q", p)
+	}
+
+	cleaned := filepath.Clean(p)
+	if cleaned == ".." || strings.HasPrefix(cleaned, ".."+string(filepath.Separator)) {
+		return fmt.Errorf("path must not escape the extension root, got %q", p)
 	}
 
 	return nil
