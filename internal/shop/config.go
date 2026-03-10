@@ -378,7 +378,7 @@ func (c ConfigDeploymentOverrides) JSONSchema() *jsonschema.Schema {
 
 	properties.Set("state", &jsonschema.Schema{
 		Type: "string",
-		Enum: []interface{}{"inactive", "remove", "ignore"},
+		Enum: []interface{}{"inactive", "remove", "ignore", "installed"},
 	})
 
 	properties.Set("keepUserData", &jsonschema.Schema{
