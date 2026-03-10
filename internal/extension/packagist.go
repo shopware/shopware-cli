@@ -11,7 +11,7 @@ import (
 )
 
 func GetShopwareVersions(ctx context.Context) ([]string, error) {
-	packageVersions, err := packagist.GetPackageVersions(ctx)
+	packageVersions, err := packagist.GetShopwarePackageVersions(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("get package versions: %w", err)
 	}

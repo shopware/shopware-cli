@@ -114,7 +114,7 @@ func TestGetPackages(t *testing.T) {
 		}
 
 		// Call the function
-		packages, err := GetPackages(t.Context(), "test-token")
+		packages, err := GetAvailablePackagesFromShopwareStore(t.Context(), "test-token")
 
 		// Assertions
 		assert.NoError(t, err)
@@ -138,7 +138,7 @@ func TestGetPackages(t *testing.T) {
 		}
 
 		// Call the function
-		packages, err := GetPackages(t.Context(), "invalid-token")
+		packages, err := GetAvailablePackagesFromShopwareStore(t.Context(), "invalid-token")
 
 		// Assertions
 		assert.Error(t, err)
@@ -163,7 +163,7 @@ func TestGetPackages(t *testing.T) {
 		}
 
 		// Call the function
-		packages, err := GetPackages(t.Context(), "test-token")
+		packages, err := GetAvailablePackagesFromShopwareStore(t.Context(), "test-token")
 
 		// Assertions
 		assert.Error(t, err)
@@ -185,7 +185,7 @@ func TestGetPackages(t *testing.T) {
 		}
 
 		// Call the function
-		packages, err := GetPackages(t.Context(), "test-token")
+		packages, err := GetAvailablePackagesFromShopwareStore(t.Context(), "test-token")
 
 		// Assertions
 		assert.Error(t, err)
@@ -199,7 +199,7 @@ func TestGetPackages(t *testing.T) {
 		cancel() // Cancel the context immediately
 
 		// Call the function with canceled context
-		packages, err := GetPackages(ctx, "test-token")
+		packages, err := GetAvailablePackagesFromShopwareStore(ctx, "test-token")
 
 		// Assertions
 		assert.Error(t, err)
@@ -215,15 +215,15 @@ func TestGetPackageVersions(t *testing.T) {
 
 	t.Run("successful request with composer unminify", func(t *testing.T) {
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			assert.Equal(t, "/p2/shopware/shopware.json", r.URL.Path)
+			assert.Equal(t, "/p2/shopware/core.json", r.URL.Path)
 			assert.Equal(t, "Shopware CLI", r.Header.Get("User-Agent"))
 
 			response := map[string]any{
 				"minified": "composer/2.0",
 				"packages": map[string]any{
-					"shopware/shopware": []map[string]any{
+					"shopware/core": []map[string]any{
 						{
-							"name":               "shopware/shopware",
+							"name":               "shopware/core",
 							"version":            "v1.0.0",
 							"version_normalized": "1.0.0.0",
 							"description":        "Base description",
@@ -257,11 +257,11 @@ func TestGetPackageVersions(t *testing.T) {
 			},
 		}
 
-		versions, err := GetPackageVersions(t.Context())
+		versions, err := GetShopwarePackageVersions(t.Context())
 
 		require.NoError(t, err)
 		require.Len(t, versions, 3)
-		assert.Equal(t, "shopware/shopware", versions[0].Name)
+		assert.Equal(t, "shopware/core", versions[0].Name)
 		assert.Equal(t, "Base description", versions[1].Description)
 		assert.Equal(t, map[string]string{"shopware/core": "*"}, versions[1].Replace)
 		assert.Empty(t, versions[2].Description)
@@ -272,9 +272,9 @@ func TestGetPackageVersions(t *testing.T) {
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			response := map[string]any{
 				"packages": map[string]any{
-					"shopware/shopware": []map[string]any{
+					"shopware/core": []map[string]any{
 						{
-							"name":               "shopware/shopware",
+							"name":               "shopware/core",
 							"version":            "v2.0.0",
 							"version_normalized": "2.0.0.0",
 						},
@@ -294,7 +294,7 @@ func TestGetPackageVersions(t *testing.T) {
 			},
 		}
 
-		versions, err := GetPackageVersions(t.Context())
+		versions, err := GetShopwarePackageVersions(t.Context())
 
 		require.NoError(t, err)
 		require.Len(t, versions, 1)
@@ -305,7 +305,7 @@ func TestGetPackageVersions(t *testing.T) {
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			response := map[string]any{
 				"packages": map[string]any{
-					"shopware/core": []map[string]any{},
+					"some/other-package": []map[string]any{},
 				},
 			}
 
@@ -321,11 +321,11 @@ func TestGetPackageVersions(t *testing.T) {
 			},
 		}
 
-		versions, err := GetPackageVersions(t.Context())
+		versions, err := GetShopwarePackageVersions(t.Context())
 
 		assert.Error(t, err)
 		assert.Nil(t, versions)
-		assert.Contains(t, err.Error(), "package shopware/shopware not found")
+		assert.Contains(t, err.Error(), "package shopware/core not found")
 	})
 
 	t.Run("server error", func(t *testing.T) {
@@ -340,7 +340,7 @@ func TestGetPackageVersions(t *testing.T) {
 			},
 		}
 
-		versions, err := GetPackageVersions(t.Context())
+		versions, err := GetShopwarePackageVersions(t.Context())
 
 		assert.Error(t, err)
 		assert.Nil(t, versions)
@@ -351,7 +351,7 @@ func TestGetPackageVersions(t *testing.T) {
 		ctx, cancel := context.WithCancel(t.Context())
 		cancel()
 
-		versions, err := GetPackageVersions(ctx)
+		versions, err := GetShopwarePackageVersions(ctx)
 
 		assert.Error(t, err)
 		assert.Nil(t, versions)

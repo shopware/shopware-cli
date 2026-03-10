@@ -4,10 +4,7 @@ import (
 	"bytes"
 	"context"
 	_ "embed"
-	"encoding/json"
 	"fmt"
-	"io"
-	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -671,7 +668,7 @@ func runComposerInstall(ctx context.Context, projectFolder string, useDocker boo
 }
 
 func getFilteredInstallVersions(ctx context.Context) ([]*version.Version, error) {
-	releases, err := fetchAvailableShopwareVersions(ctx)
+	releases, err := packagist.GetShopwarePackageVersions(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -680,7 +677,14 @@ func getFilteredInstallVersions(ctx context.Context) ([]*version.Version, error)
 	constraint, _ := version.NewConstraint(">=6.4.18.0")
 
 	for _, release := range releases {
-		parsed := version.Must(version.NewVersion(release))
+		if strings.HasPrefix(release.Version, "dev-") {
+			continue
+		}
+
+		parsed, err := version.NewVersion(release.Version)
+		if err != nil {
+			continue
+		}
 
 		if constraint.Check(parsed) {
 			filteredVersions = append(filteredVersions, parsed)
@@ -688,6 +692,10 @@ func getFilteredInstallVersions(ctx context.Context) ([]*version.Version, error)
 	}
 
 	sort.Sort(sort.Reverse(version.Collection(filteredVersions)))
+
+	for i, v := range filteredVersions {
+		filteredVersions[i], _ = version.NewVersion(strings.TrimPrefix(v.String(), "v"))
+	}
 
 	return filteredVersions, nil
 }
@@ -705,33 +713,3 @@ func init() {
 	projectCreateCmd.PersistentFlags().String("ci", "", "CI/CD system: none, github, gitlab")
 }
 
-func fetchAvailableShopwareVersions(ctx context.Context) ([]string, error) {
-	r, err := http.NewRequestWithContext(ctx, http.MethodGet, "https://releases.shopware.com/changelog/index.json", http.NoBody)
-	if err != nil {
-		return nil, err
-	}
-
-	resp, err := http.DefaultClient.Do(r)
-	if err != nil {
-		return nil, err
-	}
-
-	defer func() {
-		if err := resp.Body.Close(); err != nil {
-			logging.FromContext(ctx).Errorf("fetchAvailableShopwareVersions: %v", err)
-		}
-	}()
-
-	content, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, err
-	}
-
-	var releases []string
-
-	if err := json.Unmarshal(content, &releases); err != nil {
-		return nil, err
-	}
-
-	return releases, nil
-}

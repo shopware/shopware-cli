@@ -54,7 +54,7 @@ var projectAutofixComposerCmd = &cobra.Command{
 			_ = spinner.New().Context(ctx).Title("Fetching packages").Run()
 		}()
 
-		packagistResponse, err := packagist.GetPackages(cmd.Context(), token)
+		packagistResponse, err := packagist.GetAvailablePackagesFromShopwareStore(cmd.Context(), token)
 
 		cancel()
 

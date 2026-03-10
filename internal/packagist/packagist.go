@@ -43,7 +43,7 @@ type composerPackageVersionsResponse struct {
 	Packages map[string][]map[string]json.RawMessage `json:"packages"`
 }
 
-func GetPackages(ctx context.Context, token string) (*PackageResponse, error) {
+func GetAvailablePackagesFromShopwareStore(ctx context.Context, token string) (*PackageResponse, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "https://packages.shopware.com/packages.json", nil)
 	if err != nil {
 		return nil, err
@@ -75,8 +75,8 @@ func GetPackages(ctx context.Context, token string) (*PackageResponse, error) {
 	return &packages, nil
 }
 
-func GetPackageVersions(ctx context.Context) ([]ComposerPackageVersion, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "https://repo.packagist.org/p2/shopware/shopware.json", http.NoBody)
+func GetShopwarePackageVersions(ctx context.Context) ([]ComposerPackageVersion, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "https://repo.packagist.org/p2/shopware/core.json", http.NoBody)
 	if err != nil {
 		return nil, fmt.Errorf("create package versions request: %w", err)
 	}
@@ -104,9 +104,9 @@ func GetPackageVersions(ctx context.Context) ([]ComposerPackageVersion, error) {
 		return nil, fmt.Errorf("decode package versions: %w", err)
 	}
 
-	rawVersions, ok := packageResponse.Packages["shopware/shopware"]
+	rawVersions, ok := packageResponse.Packages["shopware/core"]
 	if !ok {
-		return nil, fmt.Errorf("decode package versions: package shopware/shopware not found")
+		return nil, fmt.Errorf("decode package versions: package shopware/core not found")
 	}
 
 	if packageResponse.Minified != "" {
