@@ -68,6 +68,16 @@ type ConfigBuildZipAssets struct {
 	DisableSass bool `yaml:"disable_sass"`
 	// When enabled, npm will install only production dependencies
 	NpmStrict bool `yaml:"npm_strict"`
+	// Additional paths to include in asset caching
+	AdditionalCaches []ConfigBuildZipAssetsAdditionalCache `yaml:"additional_caches,omitempty"`
+}
+
+// ConfigBuildZipAssetsAdditionalCache defines a custom path to be included in asset caching.
+type ConfigBuildZipAssetsAdditionalCache struct {
+	// The output path to cache, relative to extension root
+	Path string `yaml:"path"`
+	// Source paths to hash for the cache key, relative to extension root
+	SourcePaths []string `yaml:"source_paths"`
 }
 
 type ConfigBuildZipPackExcludes struct {
@@ -282,6 +292,12 @@ func validateExtensionConfig(config *Config) error {
 
 	if config.Store.Videos.German != nil && len(*config.Store.Videos.German) > 2 {
 		return fmt.Errorf("store.info.videos.de can contain maximal 2 items")
+	}
+
+	for i, cache := range config.Build.Zip.Assets.AdditionalCaches {
+		if len(cache.SourcePaths) == 0 {
+			return fmt.Errorf("build.zip.assets.additional_caches[%d].source_paths is required", i)
+		}
 	}
 
 	return nil

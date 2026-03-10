@@ -5,13 +5,20 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path"
 	"slices"
+	"strings"
 
 	"golang.org/x/sync/errgroup"
 
 	"github.com/shopware/shopware-cli/internal/system"
 	"github.com/shopware/shopware-cli/logging"
 )
+
+// sanitizeCacheKeySuffix converts a path like "Resources/public/custom" into a safe cache key suffix like "resources-public-custom".
+func sanitizeCacheKeySuffix(p string) string {
+	return strings.ToLower(strings.ReplaceAll(strings.ReplaceAll(p, "/", "-"), "\\", "-"))
+}
 
 var experimentalCachingEnabled bool
 
@@ -27,7 +34,7 @@ func restoreAssetCaches(ctx context.Context, sources ExtensionAssetConfig, asset
 	var errgrp errgroup.Group
 
 	for name, source := range sources {
-		if source.RequiresBuild() && !slices.Contains(assetCfg.ForceExtensionBuild, name) {
+		if (source.RequiresBuild() || len(source.AdditionalCaches) > 0) && !slices.Contains(assetCfg.ForceExtensionBuild, name) {
 			errgrp.Go(func() error {
 				return restoreAssetCache(ctx, source, assetCfg)
 			})
@@ -45,7 +52,7 @@ func storeAssetCaches(ctx context.Context, sources ExtensionAssetConfig, assetCf
 	var errgrp errgroup.Group
 
 	for name, source := range sources {
-		if source.RequiresBuild() && !slices.Contains(assetCfg.ForceExtensionBuild, name) {
+		if (source.RequiresBuild() || len(source.AdditionalCaches) > 0) && !slices.Contains(assetCfg.ForceExtensionBuild, name) {
 			errgrp.Go(func() error {
 				return storeAssetCache(ctx, source, assetCfg)
 			})
@@ -96,6 +103,21 @@ func restoreAssetCache(ctx context.Context, source *ExtensionAssetConfigEntry, a
 		source.Storefront.Webpack = nil
 	}
 
+	for _, cachePath := range source.AdditionalCaches {
+		outputPath := path.Join(source.BasePath, cachePath.Path)
+		suffix := sanitizeCacheKeySuffix(cachePath.Path)
+
+		if err := system.GetDefaultCache().RestoreFolderCache(ctx, cacheKey+"-"+suffix, outputPath); err != nil {
+			if errors.Is(err, system.ErrCacheNotFound) {
+				continue
+			}
+
+			return err
+		}
+
+		logging.FromContext(ctx).Infof("Restored custom cache path %s for %s from cache", cachePath.Path, source.TechnicalName)
+	}
+
 	return nil
 }
 
@@ -118,6 +140,15 @@ func storeAssetCache(ctx context.Context, source *ExtensionAssetConfigEntry, ass
 
 	if source.Storefront.EntryFilePath != nil {
 		if err := system.GetDefaultCache().StoreFolderCache(ctx, cacheKey+"-storefront", source.GetOutputStorefrontPath()); err != nil {
+			return err
+		}
+	}
+
+	for _, cachePath := range source.AdditionalCaches {
+		outputPath := path.Join(source.BasePath, cachePath.Path)
+		suffix := sanitizeCacheKeySuffix(cachePath.Path)
+
+		if err := system.GetDefaultCache().StoreFolderCache(ctx, cacheKey+"-"+suffix, outputPath); err != nil {
 			return err
 		}
 	}

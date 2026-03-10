@@ -158,6 +158,7 @@ type ExtensionAssetConfigEntry struct {
 	EnableESBuildForStorefront bool
 	DisableSass                bool
 	NpmStrict                  bool
+	AdditionalCaches           []ConfigBuildZipAssetsAdditionalCache
 
 	// internal cache
 	cachedPossibleNodePaths []string
@@ -319,6 +320,16 @@ func (e *ExtensionAssetConfigEntry) collectFilesForHashing() ([]string, error) {
 		}
 	}
 
+	// Collect files from additional cache source paths
+	for _, cachePath := range e.AdditionalCaches {
+		for _, sourcePath := range cachePath.SourcePaths {
+			absSourcePath := path.Join(e.BasePath, sourcePath)
+			if err := e.collectFilesFromDir(absSourcePath, &files); err != nil {
+				return nil, fmt.Errorf("failed to collect custom cache source files from %s: %w", sourcePath, err)
+			}
+		}
+	}
+
 	// Add package.json files
 	files = append(files, e.getPossibleNodePaths()...)
 
@@ -436,6 +447,7 @@ func BuildAssetConfigFromExtensions(ctx context.Context, sources []asset.Source,
 		sourceConfig.EnableESBuildForStorefront = source.StorefrontEsbuildCompatible
 		sourceConfig.DisableSass = source.DisableSass
 		sourceConfig.NpmStrict = source.NpmStrict
+		sourceConfig.AdditionalCaches = convertSourceAdditionalCaches(source.AdditionalCaches)
 
 		if assetCfg.SkipExtensionsWithBuildFiles {
 			expectedAdminCompiledFile := path.Join(source.Path, "Resources", "public", "administration", "js", esbuild.ToKebabCase(source.Name)+".js")
@@ -541,4 +553,20 @@ func createConfigFromPath(entryPointName string, extensionRoot string) *Extensio
 		},
 	}
 	return &cfg
+}
+
+func convertSourceAdditionalCaches(paths []asset.AdditionalCache) []ConfigBuildZipAssetsAdditionalCache {
+	if len(paths) == 0 {
+		return nil
+	}
+
+	result := make([]ConfigBuildZipAssetsAdditionalCache, len(paths))
+	for i, cp := range paths {
+		result[i] = ConfigBuildZipAssetsAdditionalCache{
+			Path:        cp.Path,
+			SourcePaths: cp.SourcePaths,
+		}
+	}
+
+	return result
 }

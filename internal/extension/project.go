@@ -138,6 +138,7 @@ func FindAssetSourcesOfProject(ctx context.Context, project string, shopCfg *sho
 			Path:                        path.Join(project, bundlePath),
 			AdminEsbuildCompatible:      bundleConfig.Build.Zip.Assets.EnableESBuildForAdmin,
 			StorefrontEsbuildCompatible: bundleConfig.Build.Zip.Assets.EnableESBuildForStorefront,
+			AdditionalCaches:            convertAdditionalCaches(bundleConfig.Build.Zip.Assets.AdditionalCaches),
 		})
 		seenPaths[bundlePath] = true
 	}
@@ -161,6 +162,7 @@ func FindAssetSourcesOfProject(ctx context.Context, project string, shopCfg *sho
 			Path:                        path.Join(project, bundle.Path),
 			AdminEsbuildCompatible:      bundleConfig.Build.Zip.Assets.EnableESBuildForAdmin,
 			StorefrontEsbuildCompatible: bundleConfig.Build.Zip.Assets.EnableESBuildForStorefront,
+			AdditionalCaches:            convertAdditionalCaches(bundleConfig.Build.Zip.Assets.AdditionalCaches),
 		})
 	}
 
@@ -213,6 +215,7 @@ func DumpAndLoadAssetSourcesOfProject(ctx context.Context, project string, shopC
 				source.AdminEsbuildCompatible = extensionCfg.Build.Zip.Assets.EnableESBuildForAdmin
 				source.StorefrontEsbuildCompatible = extensionCfg.Build.Zip.Assets.EnableESBuildForStorefront
 				source.NpmStrict = extensionCfg.Build.Zip.Assets.NpmStrict
+				source.AdditionalCaches = convertAdditionalCaches(extensionCfg.Build.Zip.Assets.AdditionalCaches)
 			}
 
 			sources = append(sources, source)
