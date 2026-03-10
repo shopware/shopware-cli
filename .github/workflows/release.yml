@@ -35,7 +35,7 @@ jobs:
           check-latest: true
 
       - name: Setup Node
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # ratchet:actions/setup-node@v6
         with:
           node-version: 22
           registry-url: "https://registry.npmjs.org"

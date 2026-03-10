@@ -72,6 +72,6 @@ jobs:
           rm -rf vendor
 
       - name: Setup the project
-        uses: shopwareLabs/build-project-action@main
+        uses: shopwareLabs/build-project-action@88233d3fdb6b4b6ad7085c45210085c51b727d82 # ratchet:shopwareLabs/build-project-action@main
         with:
           path: shopware
