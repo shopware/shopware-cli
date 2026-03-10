@@ -7,8 +7,7 @@ import (
 	"github.com/shopware/shopware-cli/internal/shop"
 )
 
-// resolveExecutor reads the project config, resolves the target environment,
-// and returns the appropriate Executor.
+// resolveExecutor returns the Executor for the current environment.
 func resolveExecutor(cmd *cobra.Command) (executor.Executor, error) {
 	cfg, err := shop.ReadConfig(cmd.Context(), projectConfigPath, true)
 	if err != nil {

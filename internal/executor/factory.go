@@ -10,11 +10,9 @@ import (
 )
 
 // New creates an Executor for the given environment and shop configuration.
-// For "local" type, it auto-detects Symfony CLI and uses it if available.
 func New(cfg *shop.EnvironmentConfig, shopCfg *shop.Config) (Executor, error) {
 	switch cfg.Type {
 	case "local", "":
-		// After DevMode, the user requires to explicitly need to opt-in for Symfony CLI. Before that, we auto-detect it and use it if available.
 		if shopCfg.IsCompatibilityDateBefore(shop.CompatibilityDevMode) {
 			if path := pathToSymfonyCLI(); path != "" && symfonyCliAllowed() {
 				return &SymfonyCLIExecutor{BinaryPath: path}, nil

@@ -50,8 +50,6 @@ type Config struct {
 }
 
 // ResolveEnvironment returns the environment config for the given name.
-// If name is empty, it returns the "local" environment if configured,
-// otherwise synthesizes one from top-level config fields for backward compatibility.
 func (c *Config) ResolveEnvironment(name string) (*EnvironmentConfig, error) {
 	if name != "" {
 		env, ok := c.Environments[name]
