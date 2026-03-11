@@ -40,6 +40,9 @@ var githubDeployTemplate string
 //go:embed static/gitlab-ci.yml.tmpl
 var gitlabCITemplate string
 
+//go:embed static/shopware-paas-application.yaml
+var shopwarePaasAppTemplate string
+
 const versionLatest = "latest"
 
 var projectCreateCmd = &cobra.Command{
@@ -69,7 +72,6 @@ var projectCreateCmd = &cobra.Command{
 	RunE: func(cmd *cobra.Command, args []string) error {
 		useDocker, _ := cmd.PersistentFlags().GetBool("docker")
 		withElasticsearch, _ := cmd.PersistentFlags().GetBool("with-elasticsearch")
-		withoutElasticsearch, _ := cmd.PersistentFlags().GetBool("without-elasticsearch")
 		withAMQP, _ := cmd.PersistentFlags().GetBool("with-amqp")
 		noAudit, _ := cmd.PersistentFlags().GetBool("no-audit")
 		initGit, _ := cmd.PersistentFlags().GetBool("git")
@@ -78,7 +80,7 @@ var projectCreateCmd = &cobra.Command{
 		ciSystem, _ := cmd.PersistentFlags().GetString("ci")
 
 		if cmd.PersistentFlags().Changed("without-elasticsearch") {
-			logging.FromContext(cmd.Context()).Warnf("Flag --without-elasticsearch is deprecated, use --with-elasticsearch instead")
+			withoutElasticsearch, _ := cmd.PersistentFlags().GetBool("without-elasticsearch")
 			withElasticsearch = !withoutElasticsearch
 		}
 
@@ -541,15 +543,7 @@ func setupDeployment(projectFolder, deploymentMethod string) error {
 		}
 
 	case packagist.DeploymentShopwarePaaS:
-		shopwarePaasApp := `app:
-  php:
-    version: "8.4"
-services:
-  mysql:
-    version: "8.0"
-`
-
-		if err := os.WriteFile(filepath.Join(projectFolder, "application.yaml"), []byte(shopwarePaasApp), os.ModePerm); err != nil {
+		if err := os.WriteFile(filepath.Join(projectFolder, "application.yaml"), []byte(shopwarePaasAppTemplate), os.ModePerm); err != nil {
 			return err
 		}
 	}
@@ -704,7 +698,8 @@ func init() {
 	projectRootCmd.AddCommand(projectCreateCmd)
 	projectCreateCmd.PersistentFlags().Bool("docker", false, "Use Docker to run Composer instead of local installation")
 	projectCreateCmd.PersistentFlags().Bool("with-elasticsearch", false, "Include Elasticsearch/OpenSearch support")
-	projectCreateCmd.PersistentFlags().Bool("without-elasticsearch", false, "Remove Elasticsearch from the installation (deprecated: use --with-elasticsearch)")
+	projectCreateCmd.PersistentFlags().Bool("without-elasticsearch", false, "Remove Elasticsearch from the installation")
+	_ = projectCreateCmd.PersistentFlags().MarkDeprecated("without-elasticsearch", "use --with-elasticsearch instead")
 	projectCreateCmd.PersistentFlags().Bool("with-amqp", false, "Include AMQP queue support (symfony/amqp-messenger)")
 	projectCreateCmd.PersistentFlags().Bool("no-audit", false, "Disable composer audit blocking insecure packages")
 	projectCreateCmd.PersistentFlags().Bool("git", false, "Initialize a Git repository")
