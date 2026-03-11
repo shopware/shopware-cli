@@ -340,7 +340,8 @@
             "enum": [
               "inactive",
               "remove",
-              "ignore"
+              "ignore",
+              "installed"
             ]
           },
           "keepUserData": {

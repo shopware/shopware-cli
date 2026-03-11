@@ -16,6 +16,7 @@ import (
 	"text/template"
 
 	"charm.land/huh/v2"
+	"charm.land/huh/v2/spinner"
 	"charm.land/lipgloss/v2"
 	"github.com/shyim/go-version"
 	"github.com/spf13/cobra"
@@ -127,7 +128,7 @@ var projectCreateCmd = &cobra.Command{
 			huh.NewOption("None", packagist.DeploymentNone),
 			huh.NewOption("PaaS powered by Shopware", packagist.DeploymentShopwarePaaS),
 			huh.NewOption("PaaS powered by Platform.sh", packagist.DeploymentPlatformSH),
-			huh.NewOption("Deployer (SSH based zero-downtime)", packagist.DeploymentDeployer),
+			huh.NewOption("Deployer (SSH-based)", packagist.DeploymentDeployer),
 		}
 
 		ciOptions := []huh.Option[string]{
@@ -264,17 +265,17 @@ var projectCreateCmd = &cobra.Command{
 			}
 
 			var optionalOptions []huh.Option[string]
-			if !cmd.PersistentFlags().Changed("git") {
-				optionalOptions = append(optionalOptions, huh.NewOption("Initialize Git Repository", optionGit).Selected(true))
-			}
 			if !cmd.PersistentFlags().Changed("docker") {
-				optionalOptions = append(optionalOptions, huh.NewOption("Local Docker Setup", optionDocker).Selected(true))
+				optionalOptions = append(optionalOptions, huh.NewOption("Install Shopware with local Docker setup", optionDocker).Selected(true))
+			}
+			if !cmd.PersistentFlags().Changed("git") {
+				optionalOptions = append(optionalOptions, huh.NewOption("Initialize Git repository", optionGit).Selected(true))
 			}
 			if !cmd.PersistentFlags().Changed("with-amqp") {
-				optionalOptions = append(optionalOptions, huh.NewOption("AMQP Queue Support", optionAMQP).Selected(true))
+				optionalOptions = append(optionalOptions, huh.NewOption("AMQP queue support (for background jobs and messaging)", optionAMQP).Selected(true))
 			}
 			if !cmd.PersistentFlags().Changed("with-elasticsearch") {
-				optionalOptions = append(optionalOptions, huh.NewOption("Setup Elasticsearch/OpenSearch support", optionElasticsearch))
+				optionalOptions = append(optionalOptions, huh.NewOption("Set up OpenSearch (for large catalogs and advanced search)", optionElasticsearch))
 			}
 
 			if len(optionalOptions) > 0 {
@@ -415,7 +416,13 @@ var projectCreateCmd = &cobra.Command{
 			return err
 		}
 
-		if err := os.WriteFile(filepath.Join(projectFolder, ".env.local"), []byte(""), os.ModePerm); err != nil {
+		envLocalContent := ""
+
+		if useDocker {
+			envLocalContent += "APP_ENV=dev\n"
+		}
+
+		if err := os.WriteFile(filepath.Join(projectFolder, ".env.local"), []byte(envLocalContent), os.ModePerm); err != nil {
 			return err
 		}
 
@@ -447,7 +454,10 @@ var projectCreateCmd = &cobra.Command{
 
 		logging.FromContext(cmd.Context()).Infof("Installing dependencies")
 
-		if err := runComposerInstall(cmd.Context(), projectFolder, useDocker); err != nil {
+		isVerbose, _ := cmd.Flags().GetBool("verbose")
+		showSpinner := system.IsInteractionEnabled(cmd.Context()) && !isVerbose
+
+		if err := runComposerInstall(cmd.Context(), projectFolder, useDocker, showSpinner); err != nil {
 			return err
 		}
 
@@ -470,6 +480,12 @@ var projectCreateCmd = &cobra.Command{
 			fmt.Printf("  %s  %s\n", color.GreenText.Render("Start containers:"), cmdStyle.Render(fmt.Sprintf("cd %s && make up", projectFolder)))
 			fmt.Printf("  %s  %s\n", color.GreenText.Render("Setup Shopware:"), cmdStyle.Render("make setup"))
 			fmt.Printf("  %s  %s\n", color.GreenText.Render("Stop containers:"), cmdStyle.Render("make down"))
+			fmt.Println()
+			fmt.Println(sectionStyle.Render("Access your shop (after make setup)"))
+			fmt.Println()
+			fmt.Printf("  %s  %s\n", color.GreenText.Render("Storefront:"), cmdStyle.Render("http://127.0.0.1:8000"))
+			fmt.Printf("  %s  %s\n", color.GreenText.Render("Admin:"), cmdStyle.Render("http://127.0.0.1:8000/admin"))
+			fmt.Printf("  %s  %s / %s\n", color.GreenText.Render("Credentials:"), cmdStyle.Render("admin"), cmdStyle.Render("shopware"))
 			fmt.Println()
 		}
 
@@ -564,7 +580,7 @@ func setupCI(projectFolder, ciSystem, deploymentMethod string) error {
 	return nil
 }
 
-func runComposerInstall(ctx context.Context, projectFolder string, useDocker bool) error {
+func runComposerInstall(ctx context.Context, projectFolder string, useDocker bool, showSpinner bool) error {
 	var cmdInstall *exec.Cmd
 
 	if useDocker && !system.IsInsideContainer() {
@@ -593,31 +609,51 @@ func runComposerInstall(ctx context.Context, projectFolder string, useDocker boo
 			"composer", "install", "--no-interaction")
 
 		cmdInstall = exec.CommandContext(ctx, "docker", dockerArgs...)
+	} else {
+		composerBinary, err := exec.LookPath("composer")
+		if err != nil {
+			return err
+		}
+
+		phpBinary := os.Getenv("PHP_BINARY")
+
+		if phpBinary != "" {
+			cmdInstall = exec.CommandContext(ctx, phpBinary, composerBinary, "install", "--no-interaction")
+		} else {
+			cmdInstall = exec.CommandContext(ctx, "composer", "install", "--no-interaction")
+		}
+
+		cmdInstall.Dir = projectFolder
+	}
+
+	if !showSpinner {
+		cmdInstall.Stdin = os.Stdin
 		cmdInstall.Stdout = os.Stdout
 		cmdInstall.Stderr = os.Stderr
 
 		return cmdInstall.Run()
 	}
 
-	composerBinary, err := exec.LookPath("composer")
-	if err != nil {
+	var stdErr bytes.Buffer
+	cmdInstall.Stderr = &stdErr
+
+	var runErr error
+
+	if err := spinner.New().Context(ctx).Title("Installing dependencies").Action(func() {
+		runErr = cmdInstall.Run()
+	}).Run(); err != nil {
 		return err
 	}
 
-	phpBinary := os.Getenv("PHP_BINARY")
+	if runErr != nil {
+		if stdErr.Len() > 0 {
+			fmt.Fprint(os.Stderr, stdErr.String())
+		}
 
-	if phpBinary != "" {
-		cmdInstall = exec.CommandContext(ctx, phpBinary, composerBinary, "install", "--no-interaction")
-	} else {
-		cmdInstall = exec.CommandContext(ctx, "composer", "install", "--no-interaction")
+		return runErr
 	}
 
-	cmdInstall.Dir = projectFolder
-	cmdInstall.Stdin = os.Stdin
-	cmdInstall.Stdout = os.Stdout
-	cmdInstall.Stderr = os.Stderr
-
-	return cmdInstall.Run()
+	return nil
 }
 
 func getFilteredInstallVersions(ctx context.Context) ([]*version.Version, error) {
