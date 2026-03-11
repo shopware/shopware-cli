@@ -3,7 +3,7 @@ module github.com/shopware/shopware-cli
 go 1.25.8
 
 require (
-	charm.land/huh/v2 v2.0.1
+	charm.land/huh/v2 v2.0.3
 	charm.land/lipgloss/v2 v2.0.1
 	dario.cat/mergo v1.0.2
 	github.com/DATA-DOG/go-sqlmock v1.5.2

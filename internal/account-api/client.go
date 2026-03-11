@@ -20,9 +20,7 @@ func SetUserAgent(userAgent string) {
 }
 
 type Client struct {
-	Token            token        `json:"token"`
-	ActiveMembership Membership   `json:"active_membership"`
-	Memberships      []Membership `json:"memberships"`
+	Token token `json:"token"`
 }
 
 func (c *Client) NewAuthenticatedRequest(ctx context.Context, method, path string, body io.Reader) (*http.Request, error) {
@@ -62,22 +60,6 @@ func (*Client) doRequest(request *http.Request) ([]byte, error) {
 	}
 
 	return data, nil
-}
-
-func (c *Client) GetActiveCompanyID() int {
-	return c.Token.UserID
-}
-
-func (c *Client) GetUserID() int {
-	return c.Token.UserAccountID
-}
-
-func (c *Client) GetActiveMembership() Membership {
-	return c.ActiveMembership
-}
-
-func (c *Client) GetMemberships() []Membership {
-	return c.Memberships
 }
 
 func (c *Client) isTokenValid() bool {
@@ -129,7 +111,6 @@ func createApiFromTokenCache(ctx context.Context) (*Client, error) {
 	}
 
 	logging.FromContext(ctx).Debugf("Using token cache from %s", tokenFilePath)
-	logging.FromContext(ctx).Debugf("Impersonating currently as %s (%d)", client.ActiveMembership.Company.Name, client.ActiveMembership.Company.Id)
 
 	if !client.isTokenValid() {
 		return nil, fmt.Errorf("token is expired")
