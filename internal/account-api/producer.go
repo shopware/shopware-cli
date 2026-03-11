@@ -13,8 +13,8 @@ import (
 )
 
 type ProducerEndpoint struct {
-	c           *Client
-	producerIds []int
+	c         *Client
+	producers []Producer
 }
 
 func (c *Client) Producer(ctx context.Context) (*ProducerEndpoint, error) {
@@ -37,12 +37,7 @@ func (c *Client) Producer(ctx context.Context) (*ProducerEndpoint, error) {
 		return nil, fmt.Errorf("producer.profile: no producer found for current user")
 	}
 
-	var producerIds []int
-	for _, p := range producers {
-		producerIds = append(producerIds, p.Id)
-	}
-
-	return &ProducerEndpoint{producerIds: producerIds, c: c}, nil
+	return &ProducerEndpoint{producers: producers, c: c}, nil
 }
 
 type Producer struct {
@@ -93,23 +88,36 @@ type ListExtensionCriteria struct {
 }
 
 func (e ProducerEndpoint) Extensions(ctx context.Context, criteria *ListExtensionCriteria) ([]Extension, error) {
-	var allExtensions []Extension
+	type result struct {
+		extensions []Extension
+		err        error
+	}
 
-	for _, producerId := range e.producerIds {
-		extensions, err := e.singleExtensionsByProducer(ctx, criteria, producerId)
-		if err != nil {
-			return nil, err
+	results := make([]chan result, len(e.producers))
+	for i, producer := range e.producers {
+		results[i] = make(chan result, 1)
+		go func(ch chan result, p Producer) {
+			exts, err := e.singleExtensionsByProducer(ctx, criteria, p)
+			ch <- result{extensions: exts, err: err}
+		}(results[i], producer)
+	}
+
+	var allExtensions []Extension
+	for _, ch := range results {
+		r := <-ch
+		if r.err != nil {
+			return nil, r.err
 		}
-		allExtensions = append(allExtensions, extensions...)
+		allExtensions = append(allExtensions, r.extensions...)
 	}
 
 	return allExtensions, nil
 }
 
-func (e ProducerEndpoint) singleExtensionsByProducer(ctx context.Context, criteria *ListExtensionCriteria, producerId int) ([]Extension, error) {
+func (e ProducerEndpoint) singleExtensionsByProducer(ctx context.Context, criteria *ListExtensionCriteria, producer Producer) ([]Extension, error) {
 	encoder := schema.NewEncoder()
 	form := url.Values{}
-	form.Set("producerId", strconv.FormatInt(int64(producerId), 10))
+	form.Set("producerId", strconv.FormatInt(int64(producer.Id), 10))
 	err := encoder.Encode(criteria, form)
 	if err != nil {
 		return nil, fmt.Errorf("list_extensions: %v", err)
@@ -128,6 +136,11 @@ func (e ProducerEndpoint) singleExtensionsByProducer(ctx context.Context, criter
 	var extensions []Extension
 	if err := json.Unmarshal(body, &extensions); err != nil {
 		return nil, fmt.Errorf("list_extensions: %v", err)
+	}
+
+	for i := range extensions {
+		extensions[i].Producer.Id = producer.Id
+		extensions[i].Producer.Name = producer.Name
 	}
 
 	return extensions, nil

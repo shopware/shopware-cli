@@ -61,6 +61,14 @@ func NewApi(ctx context.Context, config AccountConfig) (*Client, error) {
 
 	if resp.StatusCode != 200 {
 		logging.FromContext(ctx).Debugf("Login failed with response: %s", string(data))
+
+		var apiErr struct {
+			Detail string `json:"detail"`
+		}
+		if err := json.Unmarshal(data, &apiErr); err == nil && apiErr.Detail != "" {
+			return nil, fmt.Errorf("login failed: %s", apiErr.Detail)
+		}
+
 		return nil, fmt.Errorf("login failed. Check your credentials")
 	}
 

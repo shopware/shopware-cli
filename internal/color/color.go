@@ -20,7 +20,21 @@ var SecondaryText = lipgloss.NewStyle().Foreground(compat.AdaptiveColor{
 	Dark:  lipgloss.Color("#FFD700"),
 }).Bold(true)
 
+var RedText = lipgloss.NewStyle().Foreground(compat.AdaptiveColor{
+	Light: lipgloss.Color("#DC2626"),
+	Dark:  lipgloss.Color("#EF4444"),
+})
+
+var YellowText = lipgloss.NewStyle().Foreground(compat.AdaptiveColor{
+	Light: lipgloss.Color("#B8860B"),
+	Dark:  lipgloss.Color("#FFD700"),
+})
+
 var NeutralText = lipgloss.NewStyle().Foreground(compat.AdaptiveColor{
 	Light: lipgloss.Color("#1F2937"),
 	Dark:  lipgloss.Color("#FFFFFF"),
 })
+
+var BoldText = lipgloss.NewStyle().Bold(true)
+
+var DimText = lipgloss.NewStyle().Faint(true)
