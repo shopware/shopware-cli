@@ -53,8 +53,8 @@ func TestGetContentHash_AssetConfigChangeInvalidatesHash(t *testing.T) {
 		return &ExtensionAssetConfigEntry{
 			BasePath: tmpDir + "/",
 			Administration: ExtensionAssetConfigAdmin{
-				Path:           "Resources/app/administration/src",
-				EntryFilePath:  &entryFile,
+				Path:          "Resources/app/administration/src",
+				EntryFilePath: &entryFile,
 			},
 		}
 	}

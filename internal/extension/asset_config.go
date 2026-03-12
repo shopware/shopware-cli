@@ -33,6 +33,7 @@ const (
 )
 
 type AssetBuildConfig struct {
+	EnableAssetCaching           bool
 	CleanupNodeModules           bool
 	DisableAdminBuild            bool
 	DisableStorefrontBuild       bool

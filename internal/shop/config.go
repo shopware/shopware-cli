@@ -78,6 +78,8 @@ type ConfigBuild struct {
 	KeepNodeModules []string `yaml:"keep_node_modules,omitempty"`
 	// MJML email template compilation configuration
 	MJML *ConfigBuildMJML `yaml:"mjml,omitempty"`
+	// When enabled, built assets are cached and restored on subsequent builds when sources haven't changed
+	AssetCaching bool `yaml:"asset_caching,omitempty"`
 	// Hooks to run at specific points during CI builds
 	Hooks *ConfigBuildHooks `yaml:"hooks,omitempty"`
 	// Shopware bundles to include in builds (alternative to composer.json extra.shopware-bundles)

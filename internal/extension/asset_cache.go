@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"os"
 	"path"
 	"slices"
 
@@ -19,14 +18,8 @@ func hashCacheKeySuffix(p string) string {
 	return fmt.Sprintf("%x", xxhash.Sum64String(p))
 }
 
-var experimentalCachingEnabled bool
-
-func init() {
-	experimentalCachingEnabled = os.Getenv("SHOPWARE_CLI_EXPERIMENTAL_ASSET_CACHING") == "1"
-}
-
 func restoreAssetCaches(ctx context.Context, sources ExtensionAssetConfig, assetCfg AssetBuildConfig) error {
-	if !experimentalCachingEnabled {
+	if !assetCfg.EnableAssetCaching {
 		return nil
 	}
 
@@ -44,7 +37,7 @@ func restoreAssetCaches(ctx context.Context, sources ExtensionAssetConfig, asset
 }
 
 func storeAssetCaches(ctx context.Context, sources ExtensionAssetConfig, assetCfg AssetBuildConfig) error {
-	if !experimentalCachingEnabled {
+	if !assetCfg.EnableAssetCaching {
 		return nil
 	}
 
