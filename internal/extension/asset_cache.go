@@ -145,7 +145,7 @@ func storeAssetCache(ctx context.Context, source *ExtensionAssetConfigEntry, ass
 		suffix := hashCacheKeySuffix(cachePath.Path)
 
 		if err := system.GetDefaultCache().StoreFolderCache(ctx, cacheKey+"-"+suffix, outputPath); err != nil {
-			return err
+			return fmt.Errorf("additional_caches path %q for extension %s: %w", cachePath.Path, source.TechnicalName, err)
 		}
 	}
 
