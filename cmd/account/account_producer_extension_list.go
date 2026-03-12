@@ -10,7 +10,7 @@ import (
 	"github.com/spf13/cobra"
 
 	account_api "github.com/shopware/shopware-cli/internal/account-api"
-	"github.com/shopware/shopware-cli/internal/color"
+	"github.com/shopware/shopware-cli/internal/tui"
 )
 
 var accountCompanyProducerExtensionListCmd = &cobra.Command{
@@ -61,27 +61,27 @@ var accountCompanyProducerExtensionListCmd = &cobra.Command{
 
 			if extension.Producer.Id != lastProducerId {
 				lastProducerId = extension.Producer.Id
-				t.Row(color.BoldText.Render(extension.Producer.Name), "", "", "")
+				t.Row(tui.BoldText.Render(extension.Producer.Name), "", "", "")
 			}
 
-			compatible := color.RedText.Render("No")
+			compatible := tui.RedText.Render("No")
 			if extension.IsCompatibleWithLatestShopwareVersion {
-				compatible = color.GreenText.Render("Yes")
+				compatible = tui.GreenText.Render("Yes")
 			}
 
 			var status string
 			switch extension.Status.Name {
 			case "instore", "approved":
-				status = color.GreenText.Render(extension.Status.Name)
+				status = tui.GreenText.Render(extension.Status.Name)
 			case "incomplete", "waitingforapproval":
-				status = color.YellowText.Render(extension.Status.Name)
+				status = tui.YellowText.Render(extension.Status.Name)
 			default:
-				status = color.DimText.Render(extension.Status.Name)
+				status = tui.DimText.Render(extension.Status.Name)
 			}
 
 			t.Row(
 				"  "+extension.Name,
-				color.DimText.Render(extension.Generation.Description),
+				tui.DimText.Render(extension.Generation.Description),
 				compatible,
 				status,
 			)

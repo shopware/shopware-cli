@@ -52,6 +52,9 @@ linters:
       - path: internal\/validation\/*
         linters:
           - forbidigo
+      - path: internal\/tui\/*
+        linters:
+          - forbidigo
 
 formatters:
   enable:

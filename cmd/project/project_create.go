@@ -21,11 +21,11 @@ import (
 	"github.com/shyim/go-version"
 	"github.com/spf13/cobra"
 
-	"github.com/shopware/shopware-cli/internal/color"
 	"github.com/shopware/shopware-cli/internal/git"
 	"github.com/shopware/shopware-cli/internal/packagist"
 	"github.com/shopware/shopware-cli/internal/system"
 	"github.com/shopware/shopware-cli/internal/tracking"
+	"github.com/shopware/shopware-cli/internal/tui"
 	"github.com/shopware/shopware-cli/logging"
 )
 
@@ -68,6 +68,12 @@ var projectCreateCmd = &cobra.Command{
 		return []string{}, cobra.ShellCompDirectiveNoFileComp
 	},
 	RunE: func(cmd *cobra.Command, args []string) error {
+		interactive := system.IsInteractionEnabled(cmd.Context())
+
+		if interactive {
+			tui.PrintBanner()
+		}
+
 		useDocker, _ := cmd.PersistentFlags().GetBool("docker")
 		withElasticsearch, _ := cmd.PersistentFlags().GetBool("with-elasticsearch")
 		withoutElasticsearch, _ := cmd.PersistentFlags().GetBool("without-elasticsearch")
@@ -82,8 +88,6 @@ var projectCreateCmd = &cobra.Command{
 			logging.FromContext(cmd.Context()).Warnf("Flag --without-elasticsearch is deprecated, use --with-elasticsearch instead")
 			withElasticsearch = !withoutElasticsearch
 		}
-
-		interactive := system.IsInteractionEnabled(cmd.Context())
 
 		const (
 			optionDocker        = "docker"
@@ -290,7 +294,14 @@ var projectCreateCmd = &cobra.Command{
 			}
 
 			if len(formGroups) > 0 {
-				form := huh.NewForm(formGroups...)
+				theme := huh.ThemeFunc(func(isDark bool) *huh.Styles {
+					s := huh.ThemeCharm(isDark)
+					s.Focused.Title = s.Focused.Title.Foreground(tui.BlueColor)
+					s.Blurred.Title = s.Blurred.Title.Foreground(tui.BlueColor)
+					return s
+				})
+
+				form := huh.NewForm(formGroups...).WithTheme(theme)
 				if err := form.Run(); err != nil {
 					return err
 				}
@@ -477,15 +488,15 @@ var projectCreateCmd = &cobra.Command{
 			fmt.Println()
 			fmt.Println(sectionStyle.Render("Next steps"))
 			fmt.Println()
-			fmt.Printf("  %s  %s\n", color.GreenText.Render("Start containers:"), cmdStyle.Render(fmt.Sprintf("cd %s && make up", projectFolder)))
-			fmt.Printf("  %s  %s\n", color.GreenText.Render("Setup Shopware:"), cmdStyle.Render("make setup"))
-			fmt.Printf("  %s  %s\n", color.GreenText.Render("Stop containers:"), cmdStyle.Render("make down"))
+			fmt.Printf("  %s  %s\n", tui.GreenText.Render("Start containers:"), cmdStyle.Render(fmt.Sprintf("cd %s && make up", projectFolder)))
+			fmt.Printf("  %s  %s\n", tui.GreenText.Render("Setup Shopware:"), cmdStyle.Render("make setup"))
+			fmt.Printf("  %s  %s\n", tui.GreenText.Render("Stop containers:"), cmdStyle.Render("make down"))
 			fmt.Println()
 			fmt.Println(sectionStyle.Render("Access your shop (after make setup)"))
 			fmt.Println()
-			fmt.Printf("  %s  %s\n", color.GreenText.Render("Storefront:"), cmdStyle.Render("http://127.0.0.1:8000"))
-			fmt.Printf("  %s  %s\n", color.GreenText.Render("Admin:"), cmdStyle.Render("http://127.0.0.1:8000/admin"))
-			fmt.Printf("  %s  %s / %s\n", color.GreenText.Render("Credentials:"), cmdStyle.Render("admin"), cmdStyle.Render("shopware"))
+			fmt.Printf("  %s  %s\n", tui.GreenText.Render("Storefront:"), cmdStyle.Render("http://127.0.0.1:8000"))
+			fmt.Printf("  %s  %s\n", tui.GreenText.Render("Admin:"), cmdStyle.Render("http://127.0.0.1:8000/admin"))
+			fmt.Printf("  %s  %s / %s\n", tui.GreenText.Render("Credentials:"), cmdStyle.Render("admin"), cmdStyle.Render("shopware"))
 			fmt.Println()
 		}
 
