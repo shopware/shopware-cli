@@ -98,10 +98,11 @@ func collectTaggedPaths(node *yaml.Node, currentPath string, resetPaths, overrid
 			valNode := node.Content[i+1]
 			childPath := joinPath(currentPath, keyNode.Value)
 
-			if valNode.Tag == "!reset" {
+			switch valNode.Tag {
+			case "!reset":
 				resetPaths[childPath] = true
 				valNode.Tag = ""
-			} else if valNode.Tag == "!override" {
+			case "!override":
 				overridePaths[childPath] = true
 				valNode.Tag = ""
 			}
@@ -109,10 +110,11 @@ func collectTaggedPaths(node *yaml.Node, currentPath string, resetPaths, overrid
 			collectTaggedPaths(valNode, childPath, resetPaths, overridePaths)
 		}
 	case yaml.SequenceNode:
-		if node.Tag == "!reset" {
+		switch node.Tag {
+		case "!reset":
 			resetPaths[currentPath] = true
 			node.Tag = ""
-		} else if node.Tag == "!override" {
+		case "!override":
 			overridePaths[currentPath] = true
 			node.Tag = ""
 		}
@@ -120,6 +122,8 @@ func collectTaggedPaths(node *yaml.Node, currentPath string, resetPaths, overrid
 		for i, child := range node.Content {
 			collectTaggedPaths(child, fmt.Sprintf("%s[%d]", currentPath, i), resetPaths, overridePaths)
 		}
+	case yaml.ScalarNode, yaml.AliasNode:
+		// No tag processing needed for scalar and alias nodes
 	}
 }
 
