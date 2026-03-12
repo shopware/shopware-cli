@@ -407,6 +407,9 @@ func ReadConfig(ctx context.Context, fileName string, allowFallback bool) (*Conf
 	// Check for a local override file (e.g., .shopware-project.local.yml)
 	localFile := localConfigFileName(fileName)
 	_, localErr := os.Stat(localFile)
+	if localErr != nil && !os.IsNotExist(localErr) {
+		logging.FromContext(ctx).Warnf("unable to access local config override %s: %v", localFile, localErr)
+	}
 	hasLocalFile := localErr == nil
 
 	if hasLocalFile {
@@ -432,7 +435,7 @@ func ReadConfig(ctx context.Context, fileName string, allowFallback bool) (*Conf
 	} else {
 		fileHandle, err := os.ReadFile(fileName)
 		if err != nil {
-			return nil, fmt.Errorf("ReadConfig (%s): %v", fileName, err)
+			return nil, fmt.Errorf("ReadConfig(%s): %v", fileName, err)
 		}
 
 		substitutedConfig := system.ExpandEnv(string(fileHandle))
