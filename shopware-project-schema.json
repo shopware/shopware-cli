@@ -138,6 +138,10 @@
           "$ref": "#/$defs/ConfigBuildMJML",
           "description": "MJML email template compilation configuration"
         },
+        "asset_caching": {
+          "type": "boolean",
+          "description": "When enabled, built assets are cached locally and restored on subsequent builds when sources haven't changed"
+        },
         "hooks": {
           "$ref": "#/$defs/ConfigBuildHooks",
           "description": "Hooks to run at specific points during CI builds"

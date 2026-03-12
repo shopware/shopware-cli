@@ -133,6 +133,30 @@
         "npm_strict": {
           "type": "boolean",
           "description": "When enabled, npm will install only production dependencies"
+        },
+        "additional_caches": {
+          "items": {
+            "$ref": "#/$defs/ConfigBuildZipAssetsAdditionalCache"
+          },
+          "type": "array",
+          "description": "Additional paths to include in asset caching"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object"
+    },
+    "ConfigBuildZipAssetsAdditionalCache": {
+      "properties": {
+        "path": {
+          "type": "string",
+          "description": "The output path to cache, relative to extension root"
+        },
+        "source_paths": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array",
+          "description": "Source paths to hash for the cache key, relative to extension root"
         }
       },
       "additionalProperties": false,
