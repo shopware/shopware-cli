@@ -404,7 +404,6 @@ func ReadConfig(ctx context.Context, fileName string, allowFallback bool) (*Conf
 		return nil, err
 	}
 
-	// Check for a local override file (e.g., .shopware-project.local.yml)
 	localFile := localConfigFileName(fileName)
 	_, localErr := os.Stat(localFile)
 	if localErr != nil && !os.IsNotExist(localErr) {
@@ -413,7 +412,6 @@ func ReadConfig(ctx context.Context, fileName string, allowFallback bool) (*Conf
 	hasLocalFile := localErr == nil
 
 	if hasLocalFile {
-		// Use map-based merging to support !reset and !override tags
 		baseMap, err := readConfigAsMap(fileName)
 		if err != nil {
 			return nil, fmt.Errorf("ReadConfig(%s): %v", fileName, err)
