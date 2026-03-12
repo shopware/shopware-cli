@@ -68,6 +68,10 @@ var projectCreateCmd = &cobra.Command{
 		return []string{}, cobra.ShellCompDirectiveNoFileComp
 	},
 	RunE: func(cmd *cobra.Command, args []string) error {
+		if system.IsInteractionEnabled(cmd.Context()) {
+			printBanner()
+		}
+
 		useDocker, _ := cmd.PersistentFlags().GetBool("docker")
 		withElasticsearch, _ := cmd.PersistentFlags().GetBool("with-elasticsearch")
 		withoutElasticsearch, _ := cmd.PersistentFlags().GetBool("without-elasticsearch")
@@ -290,7 +294,14 @@ var projectCreateCmd = &cobra.Command{
 			}
 
 			if len(formGroups) > 0 {
-				form := huh.NewForm(formGroups...)
+				theme := huh.ThemeFunc(func(isDark bool) *huh.Styles {
+					s := huh.ThemeCharm(isDark)
+					s.Focused.Title = s.Focused.Title.Foreground(lipgloss.Color("#189EFF"))
+					s.Blurred.Title = s.Blurred.Title.Foreground(lipgloss.Color("#189EFF"))
+					return s
+				})
+
+				form := huh.NewForm(formGroups...).WithTheme(theme)
 				if err := form.Run(); err != nil {
 					return err
 				}
@@ -491,6 +502,32 @@ var projectCreateCmd = &cobra.Command{
 
 		return nil
 	},
+}
+
+func printBanner() {
+	banner := `
+                @@@@@@@@@@
+           @@@@@@@@@@@@@@@@@@
+         @@@@@@@@@@@@@@@@@@@@@@@
+       @@@@@@@@@@@@@@@
+      @@@@@@@@@@
+     @@@@@@@@@        @@@@@@@
+    @@@@@@@@@@      @@@@@@@@@@@@
+    @@@@@@@@@@       @@@@@@@@@@@@@
+    @@@@@@@@@@@        @@@@@@@@@@
+     @@@@@@@@@@@@          @@@@@
+      @@@@@@@@@@@@@@
+        @@@@@@@@@@@@@@@@@@
+          @@@@@@@@@@@@@@@@@@@@
+           @@@@@@@@@@@@@@@@@@@
+              @@@@@@@@@@@@@`
+
+	blue := lipgloss.NewStyle().Foreground(lipgloss.Color("#189EFF"))
+	welcome := lipgloss.NewStyle().Foreground(lipgloss.Color("#189EFF")).Bold(true)
+	fmt.Println(blue.Render(banner))
+	fmt.Println()
+	fmt.Println(welcome.Render("  Welcome to Shopware!"))
+	fmt.Println()
 }
 
 func resolveVersion(selectedVersion string, filteredVersions []*version.Version) string {
