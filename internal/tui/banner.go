@@ -3,8 +3,7 @@ package tui
 import "fmt"
 
 func PrintBanner() {
-	banner := `
-                @@@@@@@@@@
+	banner := `                @@@@@@@@@@
            @@@@@@@@@@@@@@@@@@
          @@@@@@@@@@@@@@@@@@@@@@@
        @@@@@@@@@@@@@@@

@@ -68,7 +68,9 @@ var projectCreateCmd = &cobra.Command{
 		return []string{}, cobra.ShellCompDirectiveNoFileComp
 	},
 	RunE: func(cmd *cobra.Command, args []string) error {
-		if system.IsInteractionEnabled(cmd.Context()) {
+		interactive := system.IsInteractionEnabled(cmd.Context())
+
+		if interactive {
 			tui.PrintBanner()
 		}
 
@@ -86,8 +88,6 @@ var projectCreateCmd = &cobra.Command{
 			logging.FromContext(cmd.Context()).Warnf("Flag --without-elasticsearch is deprecated, use --with-elasticsearch instead")
 			withElasticsearch = !withoutElasticsearch
 		}
-
-		interactive := system.IsInteractionEnabled(cmd.Context())
 
 		const (
 			optionDocker        = "docker"
