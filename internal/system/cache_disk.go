@@ -88,7 +88,6 @@ func (c *DiskCache) GetFilePath(ctx context.Context, key string) (string, error)
 
 // StoreFolderCache stores an entire folder structure in the cache
 func (c *DiskCache) StoreFolderCache(ctx context.Context, key string, folderPath string) error {
-	// Return error if the source folder does not exist
 	if _, err := os.Stat(folderPath); os.IsNotExist(err) {
 		return fmt.Errorf("source folder %q does not exist", folderPath)
 	}

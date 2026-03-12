@@ -15,7 +15,6 @@ import (
 	"github.com/shopware/shopware-cli/logging"
 )
 
-// hashCacheKeySuffix returns a short, collision-resistant hash suffix for a cache path.
 func hashCacheKeySuffix(p string) string {
 	return fmt.Sprintf("%x", xxhash.Sum64String(p))
 }

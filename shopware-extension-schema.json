@@ -160,8 +160,7 @@
         }
       },
       "additionalProperties": false,
-      "type": "object",
-      "description": "ConfigBuildZipAssetsAdditionalCache defines a custom path to be included in asset caching."
+      "type": "object"
     },
     "ConfigBuildZipChecksum": {
       "properties": {

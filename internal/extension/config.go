@@ -73,7 +73,6 @@ type ConfigBuildZipAssets struct {
 	AdditionalCaches []ConfigBuildZipAssetsAdditionalCache `yaml:"additional_caches,omitempty"`
 }
 
-// ConfigBuildZipAssetsAdditionalCache defines a custom path to be included in asset caching.
 type ConfigBuildZipAssetsAdditionalCache struct {
 	// The output path to cache, relative to extension root
 	Path string `yaml:"path"`
@@ -318,7 +317,6 @@ func validateExtensionConfig(config *Config) error {
 	return nil
 }
 
-// validateRelativePath ensures a path is relative and does not escape the root directory.
 func validateRelativePath(p string) error {
 	if filepath.IsAbs(p) {
 		return fmt.Errorf("path must be relative, got %q", p)

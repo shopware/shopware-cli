@@ -281,6 +281,21 @@ func (e *ExtensionAssetConfigEntry) GetContentHash() (string, error) {
 		}
 	}
 
+	// Include asset build config in hash so any config change invalidates the cache
+	if _, err := fmt.Fprintf(hasher, "%v%v%v%v", e.EnableESBuildForAdmin, e.EnableESBuildForStorefront, e.DisableSass, e.NpmStrict); err != nil {
+		return "", err
+	}
+	for _, cache := range e.AdditionalCaches {
+		if _, err := fmt.Fprintf(hasher, "%s", cache.Path); err != nil {
+			return "", err
+		}
+		for _, sp := range cache.SourcePaths {
+			if _, err := fmt.Fprintf(hasher, "%s", sp); err != nil {
+				return "", err
+			}
+		}
+	}
+
 	e.sumOfFiles = fmt.Sprintf("%x", hasher.Sum64())
 	return e.sumOfFiles, nil
 }
