@@ -21,11 +21,11 @@ import (
 	"github.com/shyim/go-version"
 	"github.com/spf13/cobra"
 
-	"github.com/shopware/shopware-cli/internal/color"
 	"github.com/shopware/shopware-cli/internal/git"
 	"github.com/shopware/shopware-cli/internal/packagist"
 	"github.com/shopware/shopware-cli/internal/system"
 	"github.com/shopware/shopware-cli/internal/tracking"
+	"github.com/shopware/shopware-cli/internal/tui"
 	"github.com/shopware/shopware-cli/logging"
 )
 
@@ -69,7 +69,7 @@ var projectCreateCmd = &cobra.Command{
 	},
 	RunE: func(cmd *cobra.Command, args []string) error {
 		if system.IsInteractionEnabled(cmd.Context()) {
-			printBanner()
+			tui.PrintBanner()
 		}
 
 		useDocker, _ := cmd.PersistentFlags().GetBool("docker")
@@ -296,8 +296,8 @@ var projectCreateCmd = &cobra.Command{
 			if len(formGroups) > 0 {
 				theme := huh.ThemeFunc(func(isDark bool) *huh.Styles {
 					s := huh.ThemeCharm(isDark)
-					s.Focused.Title = s.Focused.Title.Foreground(lipgloss.Color("#189EFF"))
-					s.Blurred.Title = s.Blurred.Title.Foreground(lipgloss.Color("#189EFF"))
+					s.Focused.Title = s.Focused.Title.Foreground(tui.BlueColor)
+					s.Blurred.Title = s.Blurred.Title.Foreground(tui.BlueColor)
 					return s
 				})
 
@@ -488,46 +488,20 @@ var projectCreateCmd = &cobra.Command{
 			fmt.Println()
 			fmt.Println(sectionStyle.Render("Next steps"))
 			fmt.Println()
-			fmt.Printf("  %s  %s\n", color.GreenText.Render("Start containers:"), cmdStyle.Render(fmt.Sprintf("cd %s && make up", projectFolder)))
-			fmt.Printf("  %s  %s\n", color.GreenText.Render("Setup Shopware:"), cmdStyle.Render("make setup"))
-			fmt.Printf("  %s  %s\n", color.GreenText.Render("Stop containers:"), cmdStyle.Render("make down"))
+			fmt.Printf("  %s  %s\n", tui.GreenText.Render("Start containers:"), cmdStyle.Render(fmt.Sprintf("cd %s && make up", projectFolder)))
+			fmt.Printf("  %s  %s\n", tui.GreenText.Render("Setup Shopware:"), cmdStyle.Render("make setup"))
+			fmt.Printf("  %s  %s\n", tui.GreenText.Render("Stop containers:"), cmdStyle.Render("make down"))
 			fmt.Println()
 			fmt.Println(sectionStyle.Render("Access your shop (after make setup)"))
 			fmt.Println()
-			fmt.Printf("  %s  %s\n", color.GreenText.Render("Storefront:"), cmdStyle.Render("http://127.0.0.1:8000"))
-			fmt.Printf("  %s  %s\n", color.GreenText.Render("Admin:"), cmdStyle.Render("http://127.0.0.1:8000/admin"))
-			fmt.Printf("  %s  %s / %s\n", color.GreenText.Render("Credentials:"), cmdStyle.Render("admin"), cmdStyle.Render("shopware"))
+			fmt.Printf("  %s  %s\n", tui.GreenText.Render("Storefront:"), cmdStyle.Render("http://127.0.0.1:8000"))
+			fmt.Printf("  %s  %s\n", tui.GreenText.Render("Admin:"), cmdStyle.Render("http://127.0.0.1:8000/admin"))
+			fmt.Printf("  %s  %s / %s\n", tui.GreenText.Render("Credentials:"), cmdStyle.Render("admin"), cmdStyle.Render("shopware"))
 			fmt.Println()
 		}
 
 		return nil
 	},
-}
-
-func printBanner() {
-	banner := `
-                @@@@@@@@@@
-           @@@@@@@@@@@@@@@@@@
-         @@@@@@@@@@@@@@@@@@@@@@@
-       @@@@@@@@@@@@@@@
-      @@@@@@@@@@
-     @@@@@@@@@        @@@@@@@
-    @@@@@@@@@@      @@@@@@@@@@@@
-    @@@@@@@@@@       @@@@@@@@@@@@@
-    @@@@@@@@@@@        @@@@@@@@@@
-     @@@@@@@@@@@@          @@@@@
-      @@@@@@@@@@@@@@
-        @@@@@@@@@@@@@@@@@@
-          @@@@@@@@@@@@@@@@@@@@
-           @@@@@@@@@@@@@@@@@@@
-              @@@@@@@@@@@@@`
-
-	blue := lipgloss.NewStyle().Foreground(lipgloss.Color("#189EFF"))
-	welcome := lipgloss.NewStyle().Foreground(lipgloss.Color("#189EFF")).Bold(true)
-	fmt.Println(blue.Render(banner))
-	fmt.Println()
-	fmt.Println(welcome.Render("  Welcome to Shopware!"))
-	fmt.Println()
 }
 
 func resolveVersion(selectedVersion string, filteredVersions []*version.Version) string {

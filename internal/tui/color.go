@@ -1,4 +1,4 @@
-package color
+package tui
 
 import (
 	"charm.land/lipgloss/v2"
@@ -34,6 +34,13 @@ var NeutralText = lipgloss.NewStyle().Foreground(compat.AdaptiveColor{
 	Light: lipgloss.Color("#1F2937"),
 	Dark:  lipgloss.Color("#FFFFFF"),
 })
+
+var BlueColor = compat.AdaptiveColor{
+	Light: lipgloss.Color("#0063B8"),
+	Dark:  lipgloss.Color("#189EFF"),
+}
+
+var BlueText = lipgloss.NewStyle().Foreground(BlueColor)
 
 var BoldText = lipgloss.NewStyle().Bold(true)
 
