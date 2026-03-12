@@ -218,8 +218,9 @@ func (m Model) updateLifecycle(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case dockerOutputLineMsg:
 		m.overlayLines = append(m.overlayLines, string(msg))
-		if len(m.overlayLines) > 10 {
-			m.overlayLines = m.overlayLines[len(m.overlayLines)-10:]
+		maxLines := m.overlayMaxLines()
+		if len(m.overlayLines) > maxLines {
+			m.overlayLines = m.overlayLines[len(m.overlayLines)-maxLines:]
 		}
 		return m, m.readNextDockerOutput()
 
@@ -523,7 +524,7 @@ func (m Model) renderOverlay() string {
 	style := overlayStyle
 	if m.overlay == overlayStarting || m.overlay == overlayStopping || m.overlay == overlayInstalling {
 		if m.width > 0 && m.height > 0 {
-			style = style.Width(m.width * 80 / 100).Height(m.height * 80 / 100)
+			style = style.Width(m.width - 2).Height(m.height - 2)
 		}
 	}
 
@@ -541,6 +542,20 @@ func (m Model) renderOverlay() string {
 	}
 
 	return modal
+}
+
+// overlayMaxLines returns the maximum number of log lines that fit in the overlay.
+func (m Model) overlayMaxLines() int {
+	if m.height <= 0 {
+		return 10
+	}
+	// Account for border (2), padding (2), title (1), blank line after title (1)
+	const overhead = 6
+	maxLines := m.height - 2 - overhead
+	if maxLines < 10 {
+		return 10
+	}
+	return maxLines
 }
 
 func (m Model) renderInstallPrompt(b *strings.Builder) {
