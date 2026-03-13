@@ -76,7 +76,7 @@ func (*Client) doRequest(request *http.Request) ([]byte, error) {
 
 func (c *Client) isTokenValid() bool {
 	if c.Token != nil {
-		return time.Until(c.Token.Expiry) > 60
+		return time.Until(c.Token.Expiry) > time.Minute
 	}
 
 	if c.LegacyToken != nil {

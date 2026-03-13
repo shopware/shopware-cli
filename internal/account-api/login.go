@@ -12,8 +12,6 @@ import (
 	"github.com/shopware/shopware-cli/logging"
 )
 
-const legacyApiUrl = "https://api.shopware.com"
-
 func NewApi(ctx context.Context) (*Client, error) {
 	client, _ := createApiFromTokenCache(ctx)
 
@@ -50,7 +48,7 @@ func loginWithCredentials(ctx context.Context, email, password string) (*Client,
 		return nil, fmt.Errorf("login: %v", err)
 	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, legacyApiUrl+"/accesstokens", bytes.NewBuffer(s))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, getApiUrl()+"/accesstokens", bytes.NewBuffer(s))
 	if err != nil {
 		return nil, fmt.Errorf("login: %w", err)
 	}
