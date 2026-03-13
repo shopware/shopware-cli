@@ -55,6 +55,9 @@ linters:
       - path: internal\/tui\/*
         linters:
           - forbidigo
+      - path: internal\/account-api\/*
+        linters:
+          - forbidigo
 
 formatters:
   enable:

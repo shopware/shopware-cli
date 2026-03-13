@@ -10,6 +10,9 @@ import (
 	"path/filepath"
 	"time"
 
+	"golang.org/x/oauth2"
+
+	"github.com/shopware/shopware-cli/internal/system"
 	"github.com/shopware/shopware-cli/logging"
 )
 
@@ -20,11 +23,11 @@ func SetUserAgent(userAgent string) {
 }
 
 type Client struct {
-	Token token `json:"token"`
+	Token       *oauth2.Token `json:"token,omitempty"`
+	LegacyToken *legacyToken  `json:"legacyToken,omitempty"`
 }
 
 func (c *Client) NewAuthenticatedRequest(ctx context.Context, method, path string, body io.Reader) (*http.Request, error) {
-	logging.FromContext(ctx).Debugf("%s: %s", method, path)
 	r, err := http.NewRequestWithContext(ctx, method, path, body)
 	if err != nil {
 		return nil, err
@@ -32,17 +35,26 @@ func (c *Client) NewAuthenticatedRequest(ctx context.Context, method, path strin
 
 	r.Header.Set("content-type", "application/json")
 	r.Header.Set("accept", "application/json")
-	r.Header.Set("x-shopware-token", c.Token.Token)
+
+	if c.Token != nil {
+		c.Token.SetAuthHeader(r)
+	} else if c.LegacyToken != nil {
+		r.Header.Set("x-shopware-token", c.LegacyToken.Token)
+	}
+
 	r.Header.Set("user-agent", httpUserAgent)
 
 	return r, nil
 }
 
 func (*Client) doRequest(request *http.Request) ([]byte, error) {
+	start := time.Now()
 	resp, err := http.DefaultClient.Do(request)
 	if err != nil {
 		return nil, err
 	}
+
+	logging.FromContext(request.Context()).Debugf("%s: %s, took: %s", request.Method, request.URL.String(), time.Since(start))
 
 	data, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -63,37 +75,40 @@ func (*Client) doRequest(request *http.Request) ([]byte, error) {
 }
 
 func (c *Client) isTokenValid() bool {
-	loc, err := time.LoadLocation(c.Token.Expire.Timezone)
-	if err != nil {
-		return false
+	if c.Token != nil {
+		return time.Until(c.Token.Expiry) > time.Minute
 	}
 
-	expire, err := time.ParseInLocation("2006-01-02 15:04:05.000000", c.Token.Expire.Date, loc)
-	if err != nil {
-		return false
+	if c.LegacyToken != nil {
+		loc, err := time.LoadLocation(c.LegacyToken.Expire.Timezone)
+		if err != nil {
+			return false
+		}
+
+		expire, err := time.ParseInLocation("2006-01-02 15:04:05.000000", c.LegacyToken.Expire.Date, loc)
+		if err != nil {
+			return false
+		}
+
+		return expire.UTC().Sub(time.Now().UTC()).Seconds() > 60
 	}
 
-	// When it will be expire in the next minute. Respond with false
-	return expire.UTC().Sub(time.Now().UTC()).Seconds() > 60
+	return false
 }
 
-const CacheFileName = "shopware-api-client-token.json"
-
-func getApiTokenCacheFilePath() (string, error) {
-	cacheDir, err := os.UserCacheDir()
-	if err != nil {
-		return "", err
+func getCacheFileName() string {
+	if isStaging() {
+		return "shopware-api-token-staging.json"
 	}
+	return "shopware-api-token.json"
+}
 
-	shopwareCacheDir := filepath.Join(cacheDir, "shopware-cli")
-	return filepath.Join(shopwareCacheDir, CacheFileName), nil
+func getApiTokenCacheFilePath() string {
+	return filepath.Join(system.GetShopwareCliCacheDir(), getCacheFileName())
 }
 
 func createApiFromTokenCache(ctx context.Context) (*Client, error) {
-	tokenFilePath, err := getApiTokenCacheFilePath()
-	if err != nil {
-		return nil, err
-	}
+	tokenFilePath := getApiTokenCacheFilePath()
 
 	if _, err := os.Stat(tokenFilePath); os.IsNotExist(err) {
 		return nil, err
@@ -120,10 +135,7 @@ func createApiFromTokenCache(ctx context.Context) (*Client, error) {
 }
 
 func saveApiTokenToTokenCache(client *Client) error {
-	tokenFilePath, err := getApiTokenCacheFilePath()
-	if err != nil {
-		return err
-	}
+	tokenFilePath := getApiTokenCacheFilePath()
 
 	content, err := json.Marshal(client)
 	if err != nil {
@@ -147,10 +159,7 @@ func saveApiTokenToTokenCache(client *Client) error {
 }
 
 func InvalidateTokenCache() error {
-	tokenFilePath, err := getApiTokenCacheFilePath()
-	if err != nil {
-		return err
-	}
+	tokenFilePath := getApiTokenCacheFilePath()
 
 	if _, err := os.Stat(tokenFilePath); os.IsNotExist(err) {
 		return nil
