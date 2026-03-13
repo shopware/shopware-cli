@@ -35,7 +35,8 @@ func InteractiveLogin(ctx context.Context) (*oauth2.Token, error) {
 		serverToken  = make(chan *oauth2.Token)
 	)
 
-	l, err := net.Listen("tcp", "localhost:61472")
+	lc := net.ListenConfig{}
+	l, err := lc.Listen(ctx, "tcp", "localhost:61472")
 	if err != nil {
 		return nil, fmt.Errorf("failed to allocate port for OAuth2 callback handler, try again later: %w", err)
 	}
@@ -82,7 +83,7 @@ func InteractiveLogin(ctx context.Context) (*oauth2.Token, error) {
 		}),
 	}
 	go func() { _ = srv.Serve(l) }()
-	defer srv.Close()
+	defer func() { _ = srv.Close() }()
 
 	u := client.AuthCodeURL(state,
 		oauth2.S256ChallengeOption(pkceVerifier),
@@ -106,7 +107,7 @@ func InteractiveLogin(ctx context.Context) (*oauth2.Token, error) {
 			return nil, ctx.Err()
 		case <-enterPressed:
 			enterPressed = nil // prevent re-triggering
-			if err := system.OpenURL(u); err != nil {
+			if err := system.OpenURL(ctx, u); err != nil {
 				logging.FromContext(ctx).Infof("Could not open browser automatically. Please open the URL above manually.")
 			}
 			fmt.Println(tui.DimText.Render("  Waiting for login to complete..."))
