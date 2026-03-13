@@ -404,15 +404,45 @@ func ReadConfig(ctx context.Context, fileName string, allowFallback bool) (*Conf
 		return nil, err
 	}
 
-	fileHandle, err := os.ReadFile(fileName)
-	if err != nil {
-		return nil, fmt.Errorf("ReadConfig (%s): %v", fileName, err)
+	localFile := localConfigFileName(fileName)
+	_, localErr := os.Stat(localFile)
+	if localErr != nil && !os.IsNotExist(localErr) {
+		logging.FromContext(ctx).Warnf("unable to access local config override %s: %v", localFile, localErr)
+	}
+	hasLocalFile := localErr == nil
+
+	if hasLocalFile {
+		baseMap, err := readConfigAsMap(fileName)
+		if err != nil {
+			return nil, fmt.Errorf("ReadConfig(%s): %v", fileName, err)
+		}
+
+		mergedMap, err := mergeLocalConfig(baseMap, localFile)
+		if err != nil {
+			return nil, fmt.Errorf("ReadConfig(%s): %v", fileName, err)
+		}
+
+		mergedYAML, err := marshalMap(mergedMap)
+		if err != nil {
+			return nil, fmt.Errorf("ReadConfig(%s): %v", fileName, err)
+		}
+
+		if err := yaml.Unmarshal(mergedYAML, &config); err != nil {
+			return nil, fmt.Errorf("ReadConfig(%s): %v", fileName, err)
+		}
+	} else {
+		fileHandle, err := os.ReadFile(fileName)
+		if err != nil {
+			return nil, fmt.Errorf("ReadConfig(%s): %v", fileName, err)
+		}
+
+		substitutedConfig := system.ExpandEnv(string(fileHandle))
+		if err := yaml.Unmarshal([]byte(substitutedConfig), &config); err != nil {
+			return nil, fmt.Errorf("ReadConfig(%s): %v", fileName, err)
+		}
 	}
 
 	config.foundConfig = true
-
-	substitutedConfig := system.ExpandEnv(string(fileHandle))
-	err = yaml.Unmarshal([]byte(substitutedConfig), &config)
 
 	if len(config.AdditionalConfigs) > 0 {
 		for _, additionalConfigFile := range config.AdditionalConfigs {
@@ -426,10 +456,6 @@ func ReadConfig(ctx context.Context, fileName string, allowFallback bool) (*Conf
 				return nil, fmt.Errorf("error while merging included config: %s", err.Error())
 			}
 		}
-	}
-
-	if err != nil {
-		return nil, fmt.Errorf("ReadConfig(%s): %v", fileName, err)
 	}
 
 	if config.foundConfig && config.CompatibilityDate == "" {
