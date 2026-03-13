@@ -7,45 +7,59 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 
 	"github.com/shopware/shopware-cli/logging"
 )
 
-const ApiUrl = "https://api.shopware.com"
+const legacyApiUrl = "https://api.shopware.com"
 
-type AccountConfig interface {
-	GetAccountEmail() string
-	GetAccountPassword() string
-}
+func NewApi(ctx context.Context) (*Client, error) {
+	client, _ := createApiFromTokenCache(ctx)
 
-func NewApi(ctx context.Context, config AccountConfig) (*Client, error) {
-	errorFormat := "login: %v"
-
-	request := LoginRequest{
-		Email:    config.GetAccountEmail(),
-		Password: config.GetAccountPassword(),
-	}
-	client, err := createApiFromTokenCache(ctx)
-
-	if err == nil {
+	if client != nil && client.isTokenValid() {
 		return client, nil
 	}
 
-	s, err := json.Marshal(request)
-	if err != nil {
-		return nil, fmt.Errorf(errorFormat, err)
+	// Try legacy username/password auth from environment variables
+	email := os.Getenv("SHOPWARE_CLI_ACCOUNT_EMAIL")
+	password := os.Getenv("SHOPWARE_CLI_ACCOUNT_PASSWORD")
+
+	if email != "" && password != "" {
+		return loginWithCredentials(ctx, email, password)
 	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, ApiUrl+"/accesstokens", bytes.NewBuffer(s))
+	// Fall back to interactive OAuth2 login
+	token, err := InteractiveLogin(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("create access token request: %w", err)
+		return nil, fmt.Errorf("login: %v", err)
+	}
+
+	client = &Client{Token: token}
+
+	if err := saveApiTokenToTokenCache(client); err != nil {
+		logging.FromContext(ctx).Errorf(fmt.Sprintf("Cannot save token cache: %v", err))
+	}
+
+	return client, nil
+}
+
+func loginWithCredentials(ctx context.Context, email, password string) (*Client, error) {
+	s, err := json.Marshal(loginRequest{Email: email, Password: password})
+	if err != nil {
+		return nil, fmt.Errorf("login: %v", err)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, legacyApiUrl+"/accesstokens", bytes.NewBuffer(s))
+	if err != nil {
+		return nil, fmt.Errorf("login: %w", err)
 	}
 
 	req.Header.Set("Content-Type", "application/json")
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf(errorFormat, err)
+		return nil, fmt.Errorf("login: %v", err)
 	}
 
 	defer func() {
@@ -56,7 +70,7 @@ func NewApi(ctx context.Context, config AccountConfig) (*Client, error) {
 
 	data, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return nil, fmt.Errorf(errorFormat, err)
+		return nil, fmt.Errorf("login: %v", err)
 	}
 
 	if resp.StatusCode != 200 {
@@ -72,28 +86,26 @@ func NewApi(ctx context.Context, config AccountConfig) (*Client, error) {
 		return nil, fmt.Errorf("login failed. Check your credentials")
 	}
 
-	var token token
-	if err := json.Unmarshal(data, &token); err != nil {
-		return nil, fmt.Errorf(errorFormat, err)
+	var tokenResp legacyToken
+	if err := json.Unmarshal(data, &tokenResp); err != nil {
+		return nil, fmt.Errorf("login: %v", err)
 	}
 
-	client = &Client{
-		Token: token,
+	client := &Client{
+		LegacyToken: &tokenResp,
 	}
 
 	if err := saveApiTokenToTokenCache(client); err != nil {
-		logging.FromContext(ctx).Errorf(fmt.Sprintf("Cannot token cache: %v", err))
+		logging.FromContext(ctx).Errorf(fmt.Sprintf("Cannot save token cache: %v", err))
 	}
 
 	return client, nil
 }
 
-type token struct {
-	Token         string      `json:"token"`
-	Expire        tokenExpire `json:"expire"`
-	UserAccountID int         `json:"userAccountId"`
-	UserID        int         `json:"userId"`
-	LegacyLogin   bool        `json:"legacyLogin"`
+type legacyToken struct {
+	Token       string      `json:"token"`
+	Expire      tokenExpire `json:"expire"`
+	LegacyLogin bool        `json:"legacyLogin"`
 }
 
 type tokenExpire struct {
@@ -102,15 +114,7 @@ type tokenExpire struct {
 	Timezone     string `json:"timezone"`
 }
 
-type LoginRequest struct {
+type loginRequest struct {
 	Email    string `json:"shopwareId"`
 	Password string `json:"password"`
-}
-
-func (l LoginRequest) GetAccountEmail() string {
-	return l.Email
-}
-
-func (l LoginRequest) GetAccountPassword() string {
-	return l.Password
 }

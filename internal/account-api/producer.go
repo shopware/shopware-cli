@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/http"
 	"net/url"
 	"strconv"
 	"strings"
@@ -18,7 +19,7 @@ type ProducerEndpoint struct {
 }
 
 func (c *Client) Producer(ctx context.Context) (*ProducerEndpoint, error) {
-	r, err := c.NewAuthenticatedRequest(ctx, "GET", fmt.Sprintf("%s/integrations/shopwarecli/producers", ApiUrl), nil)
+	r, err := c.NewAuthenticatedRequest(ctx, http.MethodGet, fmt.Sprintf("%s/integrations/shopwarecli/producers", getApiUrl()), nil)
 	if err != nil {
 		return nil, err
 	}
@@ -123,7 +124,7 @@ func (e ProducerEndpoint) singleExtensionsByProducer(ctx context.Context, criter
 		return nil, fmt.Errorf("list_extensions: %v", err)
 	}
 
-	r, err := e.c.NewAuthenticatedRequest(ctx, "GET", fmt.Sprintf("%s/plugins?%s", ApiUrl, form.Encode()), nil)
+	r, err := e.c.NewAuthenticatedRequest(ctx, http.MethodGet, fmt.Sprintf("%s/plugins?%s", getApiUrl(), form.Encode()), nil)
 	if err != nil {
 		return nil, err
 	}
@@ -169,7 +170,7 @@ func (e ProducerEndpoint) GetExtensionById(ctx context.Context, id int) (*Extens
 	errorFormat := "GetExtensionById: %v"
 
 	// Create it
-	r, err := e.c.NewAuthenticatedRequest(ctx, "GET", fmt.Sprintf("%s/plugins/%d", ApiUrl, id), nil)
+	r, err := e.c.NewAuthenticatedRequest(ctx, http.MethodGet, fmt.Sprintf("%s/plugins/%d", getApiUrl(), id), nil)
 	if err != nil {
 		return nil, fmt.Errorf(errorFormat, err)
 	}
@@ -378,7 +379,7 @@ func (e ProducerEndpoint) UpdateExtension(ctx context.Context, extension *Extens
 	}
 
 	// Patch the name
-	r, err := e.c.NewAuthenticatedRequest(ctx, "PUT", fmt.Sprintf("%s/plugins/%d", ApiUrl, extension.Id), bytes.NewBuffer(requestBody))
+	r, err := e.c.NewAuthenticatedRequest(ctx, http.MethodPut, fmt.Sprintf("%s/plugins/%d", getApiUrl(), extension.Id), bytes.NewBuffer(requestBody))
 	if err != nil {
 		return err
 	}
@@ -390,7 +391,7 @@ func (e ProducerEndpoint) UpdateExtension(ctx context.Context, extension *Extens
 
 func (e ProducerEndpoint) GetSoftwareVersions(ctx context.Context, generation string) (*SoftwareVersionList, error) {
 	errorFormat := "shopware_versions: %v"
-	r, err := e.c.NewAuthenticatedRequest(ctx, "GET", fmt.Sprintf("%s/pluginstatics/softwareVersions?filter=[{\"property\":\"pluginGeneration\",\"value\":\"%s\"},{\"property\":\"includeNonPublic\",\"value\":\"1\"}]", ApiUrl, generation), nil)
+	r, err := e.c.NewAuthenticatedRequest(ctx, http.MethodGet, fmt.Sprintf("%s/pluginstatics/softwareVersions?filter=[{\"property\":\"pluginGeneration\",\"value\":\"%s\"},{\"property\":\"includeNonPublic\",\"value\":\"1\"}]", getApiUrl(), generation), nil)
 	if err != nil {
 		return nil, fmt.Errorf(errorFormat, err)
 	}
@@ -510,7 +511,7 @@ type ExtensionGeneralInformation struct {
 }
 
 func (e ProducerEndpoint) GetExtensionGeneralInfo(ctx context.Context) (*ExtensionGeneralInformation, error) {
-	r, err := e.c.NewAuthenticatedRequest(ctx, "GET", fmt.Sprintf("%s/pluginstatics/all", ApiUrl), nil)
+	r, err := e.c.NewAuthenticatedRequest(ctx, http.MethodGet, fmt.Sprintf("%s/pluginstatics/all", getApiUrl()), nil)
 	if err != nil {
 		return nil, fmt.Errorf("GetExtensionGeneralInfo: %v", err)
 	}
