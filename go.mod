@@ -5,13 +5,12 @@ go 1.25.8
 require (
 	charm.land/bubbles/v2 v2.0.0
 	charm.land/bubbletea/v2 v2.0.2
-	charm.land/huh/v2 v2.0.1
+	charm.land/huh/v2 v2.0.3
 	charm.land/lipgloss/v2 v2.0.1
 	dario.cat/mergo v1.0.2
 	github.com/DATA-DOG/go-sqlmock v1.5.2
 	github.com/NYTimes/gziphandler v1.1.1
 	github.com/bep/godartsass/v2 v2.5.0
-	github.com/caarlos0/env/v9 v9.0.0
 	github.com/cespare/xxhash/v2 v2.3.0
 	github.com/charmbracelet/x/ansi v0.11.6
 	github.com/evanw/esbuild v0.27.3

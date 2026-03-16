@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/http"
 	"net/url"
 	"strconv"
 	"strings"
@@ -13,16 +14,12 @@ import (
 )
 
 type ProducerEndpoint struct {
-	c          *Client
-	producerId int
-}
-
-func (e ProducerEndpoint) GetId() int {
-	return e.producerId
+	c         *Client
+	producers []Producer
 }
 
 func (c *Client) Producer(ctx context.Context) (*ProducerEndpoint, error) {
-	r, err := c.NewAuthenticatedRequest(ctx, "GET", fmt.Sprintf("%s/companies/%d/allocations", ApiUrl, c.GetActiveCompanyID()), nil)
+	r, err := c.NewAuthenticatedRequest(ctx, http.MethodGet, fmt.Sprintf("%s/integrations/shopwarecli/producers", getApiUrl()), nil)
 	if err != nil {
 		return nil, err
 	}
@@ -32,48 +29,16 @@ func (c *Client) Producer(ctx context.Context) (*ProducerEndpoint, error) {
 		return nil, err
 	}
 
-	var allocation companyAllocation
-	if err := json.Unmarshal(body, &allocation); err != nil {
+	var producers []Producer
+	if err := json.Unmarshal(body, &producers); err != nil {
 		return nil, fmt.Errorf("producer.profile: %v", err)
 	}
 
-	if !allocation.IsProducer {
-		return nil, fmt.Errorf("this company is not unlocked as producer")
+	if len(producers) == 0 {
+		return nil, fmt.Errorf("producer.profile: no producer found for current user")
 	}
 
-	return &ProducerEndpoint{producerId: allocation.ProducerID, c: c}, nil
-}
-
-type companyAllocation struct {
-	HasShops          bool `json:"hasShops"`
-	HasCommercialShop bool `json:"hasCommercialShop"`
-	IsEducationMember bool `json:"isEducationMember"`
-	IsPartner         bool `json:"isPartner"`
-	IsProducer        bool `json:"isProducer"`
-	ProducerID        int  `json:"producerId"`
-}
-
-func (e ProducerEndpoint) Profile(ctx context.Context) (*Producer, error) {
-	r, err := e.c.NewAuthenticatedRequest(ctx, "GET", fmt.Sprintf("%s/producers?companyId=%d", ApiUrl, e.c.GetActiveCompanyID()), nil)
-	if err != nil {
-		return nil, err
-	}
-
-	body, err := e.c.doRequest(r)
-	if err != nil {
-		return nil, err
-	}
-
-	var producers []Producer
-	if err := json.Unmarshal(body, &producers); err != nil {
-		return nil, fmt.Errorf("my_profile: %v", err)
-	}
-
-	for _, profile := range producers {
-		return &profile, nil
-	}
-
-	return nil, fmt.Errorf("cannot find a profile")
+	return &ProducerEndpoint{producers: producers, c: c}, nil
 }
 
 type Producer struct {
@@ -124,15 +89,42 @@ type ListExtensionCriteria struct {
 }
 
 func (e ProducerEndpoint) Extensions(ctx context.Context, criteria *ListExtensionCriteria) ([]Extension, error) {
+	type result struct {
+		extensions []Extension
+		err        error
+	}
+
+	results := make([]chan result, len(e.producers))
+	for i, producer := range e.producers {
+		results[i] = make(chan result, 1)
+		go func(ch chan result, p Producer) {
+			exts, err := e.singleExtensionsByProducer(ctx, criteria, p)
+			ch <- result{extensions: exts, err: err}
+		}(results[i], producer)
+	}
+
+	var allExtensions []Extension
+	for _, ch := range results {
+		r := <-ch
+		if r.err != nil {
+			return nil, r.err
+		}
+		allExtensions = append(allExtensions, r.extensions...)
+	}
+
+	return allExtensions, nil
+}
+
+func (e ProducerEndpoint) singleExtensionsByProducer(ctx context.Context, criteria *ListExtensionCriteria, producer Producer) ([]Extension, error) {
 	encoder := schema.NewEncoder()
 	form := url.Values{}
-	form.Set("producerId", strconv.FormatInt(int64(e.GetId()), 10))
+	form.Set("producerId", strconv.FormatInt(int64(producer.Id), 10))
 	err := encoder.Encode(criteria, form)
 	if err != nil {
 		return nil, fmt.Errorf("list_extensions: %v", err)
 	}
 
-	r, err := e.c.NewAuthenticatedRequest(ctx, "GET", fmt.Sprintf("%s/plugins?%s", ApiUrl, form.Encode()), nil)
+	r, err := e.c.NewAuthenticatedRequest(ctx, http.MethodGet, fmt.Sprintf("%s/plugins?%s", getApiUrl(), form.Encode()), nil)
 	if err != nil {
 		return nil, err
 	}
@@ -145,6 +137,11 @@ func (e ProducerEndpoint) Extensions(ctx context.Context, criteria *ListExtensio
 	var extensions []Extension
 	if err := json.Unmarshal(body, &extensions); err != nil {
 		return nil, fmt.Errorf("list_extensions: %v", err)
+	}
+
+	for i := range extensions {
+		extensions[i].Producer.Id = producer.Id
+		extensions[i].Producer.Name = producer.Name
 	}
 
 	return extensions, nil
@@ -173,7 +170,7 @@ func (e ProducerEndpoint) GetExtensionById(ctx context.Context, id int) (*Extens
 	errorFormat := "GetExtensionById: %v"
 
 	// Create it
-	r, err := e.c.NewAuthenticatedRequest(ctx, "GET", fmt.Sprintf("%s/plugins/%d", ApiUrl, id), nil)
+	r, err := e.c.NewAuthenticatedRequest(ctx, http.MethodGet, fmt.Sprintf("%s/plugins/%d", getApiUrl(), id), nil)
 	if err != nil {
 		return nil, fmt.Errorf(errorFormat, err)
 	}
@@ -382,7 +379,7 @@ func (e ProducerEndpoint) UpdateExtension(ctx context.Context, extension *Extens
 	}
 
 	// Patch the name
-	r, err := e.c.NewAuthenticatedRequest(ctx, "PUT", fmt.Sprintf("%s/plugins/%d", ApiUrl, extension.Id), bytes.NewBuffer(requestBody))
+	r, err := e.c.NewAuthenticatedRequest(ctx, http.MethodPut, fmt.Sprintf("%s/plugins/%d", getApiUrl(), extension.Id), bytes.NewBuffer(requestBody))
 	if err != nil {
 		return err
 	}
@@ -394,7 +391,7 @@ func (e ProducerEndpoint) UpdateExtension(ctx context.Context, extension *Extens
 
 func (e ProducerEndpoint) GetSoftwareVersions(ctx context.Context, generation string) (*SoftwareVersionList, error) {
 	errorFormat := "shopware_versions: %v"
-	r, err := e.c.NewAuthenticatedRequest(ctx, "GET", fmt.Sprintf("%s/pluginstatics/softwareVersions?filter=[{\"property\":\"pluginGeneration\",\"value\":\"%s\"},{\"property\":\"includeNonPublic\",\"value\":\"1\"}]", ApiUrl, generation), nil)
+	r, err := e.c.NewAuthenticatedRequest(ctx, http.MethodGet, fmt.Sprintf("%s/pluginstatics/softwareVersions?filter=[{\"property\":\"pluginGeneration\",\"value\":\"%s\"},{\"property\":\"includeNonPublic\",\"value\":\"1\"}]", getApiUrl(), generation), nil)
 	if err != nil {
 		return nil, fmt.Errorf(errorFormat, err)
 	}
@@ -514,7 +511,7 @@ type ExtensionGeneralInformation struct {
 }
 
 func (e ProducerEndpoint) GetExtensionGeneralInfo(ctx context.Context) (*ExtensionGeneralInformation, error) {
-	r, err := e.c.NewAuthenticatedRequest(ctx, "GET", fmt.Sprintf("%s/pluginstatics/all", ApiUrl), nil)
+	r, err := e.c.NewAuthenticatedRequest(ctx, http.MethodGet, fmt.Sprintf("%s/pluginstatics/all", getApiUrl()), nil)
 	if err != nil {
 		return nil, fmt.Errorf("GetExtensionGeneralInfo: %v", err)
 	}

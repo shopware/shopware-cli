@@ -6,6 +6,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"gopkg.in/yaml.v3"
 
@@ -68,6 +69,15 @@ type ConfigBuildZipAssets struct {
 	DisableSass bool `yaml:"disable_sass"`
 	// When enabled, npm will install only production dependencies
 	NpmStrict bool `yaml:"npm_strict"`
+	// Additional paths to include in asset caching
+	AdditionalCaches []ConfigBuildZipAssetsAdditionalCache `yaml:"additional_caches,omitempty"`
+}
+
+type ConfigBuildZipAssetsAdditionalCache struct {
+	// The output path to cache, relative to extension root
+	Path string `yaml:"path"`
+	// Source paths to hash for the cache key, relative to extension root
+	SourcePaths []string `yaml:"source_paths"`
 }
 
 type ConfigBuildZipPackExcludes struct {
@@ -286,6 +296,39 @@ func validateExtensionConfig(config *Config) error {
 
 	if config.Store.Videos.German != nil && len(*config.Store.Videos.German) > 2 {
 		return fmt.Errorf("store.info.videos.de can contain maximal 2 items")
+	}
+
+	for i, cache := range config.Build.Zip.Assets.AdditionalCaches {
+		if cache.Path == "" {
+			return fmt.Errorf("build.zip.assets.additional_caches[%d].path is required", i)
+		}
+
+		if err := validateRelativePath(cache.Path); err != nil {
+			return fmt.Errorf("build.zip.assets.additional_caches[%d].path: %w", i, err)
+		}
+
+		if len(cache.SourcePaths) == 0 {
+			return fmt.Errorf("build.zip.assets.additional_caches[%d].source_paths is required", i)
+		}
+
+		for j, sp := range cache.SourcePaths {
+			if err := validateRelativePath(sp); err != nil {
+				return fmt.Errorf("build.zip.assets.additional_caches[%d].source_paths[%d]: %w", i, j, err)
+			}
+		}
+	}
+
+	return nil
+}
+
+func validateRelativePath(p string) error {
+	if filepath.IsAbs(p) {
+		return fmt.Errorf("path must be relative, got %q", p)
+	}
+
+	cleaned := filepath.Clean(p)
+	if cleaned == ".." || strings.HasPrefix(cleaned, ".."+string(filepath.Separator)) {
+		return fmt.Errorf("path must not escape the extension root, got %q", p)
 	}
 
 	return nil

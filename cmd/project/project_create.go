@@ -18,13 +18,13 @@ import (
 	"github.com/shyim/go-version"
 	"github.com/spf13/cobra"
 
-	"github.com/shopware/shopware-cli/internal/color"
 	dockerpkg "github.com/shopware/shopware-cli/internal/docker"
 	"github.com/shopware/shopware-cli/internal/git"
 	"github.com/shopware/shopware-cli/internal/packagist"
 	"github.com/shopware/shopware-cli/internal/shop"
 	"github.com/shopware/shopware-cli/internal/system"
 	"github.com/shopware/shopware-cli/internal/tracking"
+	"github.com/shopware/shopware-cli/internal/tui"
 	"github.com/shopware/shopware-cli/logging"
 )
 
@@ -70,6 +70,12 @@ var projectCreateCmd = &cobra.Command{
 		return []string{}, cobra.ShellCompDirectiveNoFileComp
 	},
 	RunE: func(cmd *cobra.Command, args []string) error {
+		interactive := system.IsInteractionEnabled(cmd.Context())
+
+		if interactive {
+			tui.PrintBanner()
+		}
+
 		useDocker, _ := cmd.PersistentFlags().GetBool("docker")
 		withElasticsearch, _ := cmd.PersistentFlags().GetBool("with-elasticsearch")
 		withAMQP, _ := cmd.PersistentFlags().GetBool("with-amqp")
@@ -84,14 +90,9 @@ var projectCreateCmd = &cobra.Command{
 			withElasticsearch = !withoutElasticsearch
 		}
 
-		interactive := system.IsInteractionEnabled(cmd.Context())
+		elasticsearchExplicit := cmd.PersistentFlags().Changed("with-elasticsearch") || cmd.PersistentFlags().Changed("without-elasticsearch")
 
 		const (
-			optionDocker        = "docker"
-			optionGit           = "git"
-			optionElasticsearch = "elasticsearch"
-			optionAMQP          = "amqp"
-
 			ciNone   = "none"
 			ciGitHub = "github"
 			ciGitLab = "gitlab"
@@ -142,7 +143,6 @@ var projectCreateCmd = &cobra.Command{
 		selectedVersion := versionFlag
 		selectedDeployment := deploymentMethod
 		selectedCI := ciSystem
-		var selectedOptions []string
 
 		if len(args) > 0 {
 			projectFolder = args[0]
@@ -165,164 +165,229 @@ var projectCreateCmd = &cobra.Command{
 			if selectedCI == "" {
 				selectedCI = ciNone
 			}
-			if !cmd.PersistentFlags().Changed("with-elasticsearch") {
+			if !elasticsearchExplicit {
 				withElasticsearch = true
 			}
 		} else {
-			var formGroups []*huh.Group
-
-			if projectFolder == "" {
-				formGroups = append(formGroups, huh.NewGroup(
-					huh.NewInput().
-						Title("Project Name").
-						Description("The name of the project directory to create").
-						Placeholder("my-shopware-project").
-						Value(&projectFolder).
-						Validate(func(s string) error {
-							if s == "" {
-								return fmt.Errorf("project name is required")
-							}
-							if info, err := os.Stat(s); err == nil && info.IsDir() {
-								empty, err := system.IsDirEmpty(s)
-								if err != nil {
-									return err
-								}
-								if !empty {
-									return fmt.Errorf("folder already exists and is not empty")
-								}
-							}
-							return nil
-						}),
-				))
-			}
-
-			if selectedVersion == "" {
-				selectedMinor := versionLatest
-				formGroups = append(formGroups, huh.NewGroup(
-					huh.NewSelect[string]().
-						Title("Shopware Version").
-						Description("Select the major version to install").
-						Options(minorOptions...).
-						Value(&selectedMinor),
-				))
-
-				formGroups = append(formGroups, huh.NewGroup(
-					huh.NewSelect[string]().
-						Title("Patch Version").
-						Description("Select the specific patch version").
-						Height(10).
-						OptionsFunc(func() []huh.Option[string] {
-							if idx, ok := minorIndex[selectedMinor]; ok {
-								opts := make([]huh.Option[string], 0, len(minorGroups[idx].versions))
-								for _, v := range minorGroups[idx].versions {
-									opts = append(opts, huh.NewOption(v, v))
-								}
-								return opts
-							}
-							return []huh.Option[string]{huh.NewOption(versionLatest, versionLatest)}
-						}, &selectedMinor).
-						Value(&selectedVersion),
-				).WithHideFunc(func() bool {
-					return selectedMinor == versionLatest
-				}))
-			}
-
 			needsAdvanced := selectedDeployment == "" || selectedCI == "" ||
 				!cmd.PersistentFlags().Changed("git") ||
 				!cmd.PersistentFlags().Changed("docker") ||
 				!cmd.PersistentFlags().Changed("with-amqp") ||
-				!cmd.PersistentFlags().Changed("with-elasticsearch")
+				!elasticsearchExplicit
 
-			var showAdvanced bool
-			if needsAdvanced {
-				formGroups = append(formGroups, huh.NewGroup(
-					huh.NewConfirm().
-						Title("Advanced Settings").
-						Description("Configure deployment, CI/CD, and optional features").
-						Value(&showAdvanced),
-				))
-			}
+			needsProjectFolder := projectFolder == ""
+			needsVersion := selectedVersion == ""
+			needsDeployment := selectedDeployment == ""
+			needsCI := selectedCI == ""
 
-			if selectedDeployment == "" {
-				selectedDeployment = packagist.DeploymentNone
-				formGroups = append(formGroups, huh.NewGroup(
-					huh.NewSelect[string]().
-						Title("Deployment Method").
-						Description("Select how you want to deploy your project").
-						Options(deploymentOptions...).
-						Value(&selectedDeployment),
-				).WithHideFunc(func() bool { return !showAdvanced }))
-			}
+			selectDocker := tui.Yes
+			selectGit := tui.Yes
+			selectElasticsearch := tui.No
+			selectAMQP := tui.Yes
+			selectedMinor := versionLatest
 
-			if selectedCI == "" {
-				selectedCI = ciNone
-				formGroups = append(formGroups, huh.NewGroup(
-					huh.NewSelect[string]().
-						Title("CI/CD System").
-						Description("Select your CI/CD platform for automated testing and deployment").
-						Options(ciOptions...).
-						Value(&selectedCI),
-				).WithHideFunc(func() bool { return !showAdvanced }))
-			}
+			theme := huh.ThemeFunc(func(isDark bool) *huh.Styles {
+				s := huh.ThemeCharm(isDark)
+				s.Focused.Title = s.Focused.Title.Foreground(tui.BlueColor)
+				s.Blurred.Title = s.Blurred.Title.Foreground(tui.BlueColor)
+				return s
+			})
 
-			var optionalOptions []huh.Option[string]
-			if !cmd.PersistentFlags().Changed("docker") {
-				optionalOptions = append(optionalOptions, huh.NewOption("Install Shopware with local Docker setup", optionDocker).Selected(true))
-			}
-			if !cmd.PersistentFlags().Changed("git") {
-				optionalOptions = append(optionalOptions, huh.NewOption("Initialize Git repository", optionGit).Selected(true))
-			}
-			if !cmd.PersistentFlags().Changed("with-amqp") {
-				optionalOptions = append(optionalOptions, huh.NewOption("AMQP queue support (for background jobs and messaging)", optionAMQP).Selected(true))
-			}
-			if !cmd.PersistentFlags().Changed("with-elasticsearch") {
-				optionalOptions = append(optionalOptions, huh.NewOption("Set up OpenSearch (for large catalogs and advanced search)", optionElasticsearch))
-			}
-
-			if len(optionalOptions) > 0 {
-				formGroups = append(formGroups, huh.NewGroup(
-					huh.NewMultiSelect[string]().
-						Title("Optional").
-						Description("Select additional features to enable").
-						Options(optionalOptions...).
-						Height(10).
-						Value(&selectedOptions),
-				).WithHideFunc(func() bool { return !showAdvanced }))
-			}
-
-			if len(formGroups) > 0 {
-				form := huh.NewForm(formGroups...)
-				if err := form.Run(); err != nil {
-					return err
+			onOff := func(v bool) string {
+				if v {
+					return tui.GreenText.Render("Yes")
 				}
+				return tui.RedText.Render("No")
 			}
 
-			if selectedVersion == "" {
-				selectedVersion = versionLatest
-			}
+			sectionStyle := lipgloss.NewStyle().Bold(true).Underline(true)
+			labelStyle := lipgloss.NewStyle().Width(20)
 
-			if !showAdvanced {
-				if !cmd.PersistentFlags().Changed("git") {
-					initGit = true
+			for {
+				var formGroups []*huh.Group
+
+				if needsProjectFolder {
+					formGroups = append(formGroups, huh.NewGroup(
+						huh.NewInput().
+							Title("Project Name").
+							Description("The name of the project directory to create").
+							Placeholder("my-shopware-project").
+							Value(&projectFolder).
+							Validate(func(s string) error {
+								if s == "" {
+									return fmt.Errorf("project name is required")
+								}
+								if info, err := os.Stat(s); err == nil && info.IsDir() {
+									empty, err := system.IsDirEmpty(s)
+									if err != nil {
+										return err
+									}
+									if !empty {
+										return fmt.Errorf("folder already exists and is not empty")
+									}
+								}
+								return nil
+							}),
+					))
 				}
+
+				if needsVersion {
+					formGroups = append(formGroups, huh.NewGroup(
+						huh.NewSelect[string]().
+							Title("Shopware Version").
+							Description("Select the major version to install").
+							Options(minorOptions...).
+							Value(&selectedMinor),
+					))
+
+					formGroups = append(formGroups, huh.NewGroup(
+						huh.NewSelect[string]().
+							Title("Patch Version").
+							Description("Select the specific patch version").
+							Height(10).
+							OptionsFunc(func() []huh.Option[string] {
+								if idx, ok := minorIndex[selectedMinor]; ok {
+									opts := make([]huh.Option[string], 0, len(minorGroups[idx].versions))
+									for _, v := range minorGroups[idx].versions {
+										opts = append(opts, huh.NewOption(v, v))
+									}
+									return opts
+								}
+								return []huh.Option[string]{huh.NewOption(versionLatest, versionLatest)}
+							}, &selectedMinor).
+							Value(&selectedVersion),
+					).WithHideFunc(func() bool {
+						return selectedMinor == versionLatest
+					}))
+				}
+
+				selectAdvanced := tui.No
+				if needsAdvanced {
+					formGroups = append(formGroups, huh.NewGroup(
+						tui.NewYesNo().
+							Title("Advanced Settings").
+							Description("Configure deployment, CI/CD, and optional features").
+							Value(&selectAdvanced),
+					))
+				}
+
+				if needsDeployment {
+					selectedDeployment = packagist.DeploymentNone
+					formGroups = append(formGroups, huh.NewGroup(
+						huh.NewSelect[string]().
+							Title("Deployment Method").
+							Description("Select how you want to deploy your project").
+							Options(deploymentOptions...).
+							Value(&selectedDeployment),
+					).WithHideFunc(func() bool { return selectAdvanced != tui.Yes }))
+				}
+
+				if needsCI {
+					selectedCI = ciNone
+					formGroups = append(formGroups, huh.NewGroup(
+						huh.NewSelect[string]().
+							Title("CI/CD System").
+							Description("Select your CI/CD platform for automated testing and deployment").
+							Options(ciOptions...).
+							Value(&selectedCI),
+					).WithHideFunc(func() bool { return selectAdvanced != tui.Yes }))
+				}
+
 				if !cmd.PersistentFlags().Changed("docker") {
-					useDocker = true
+					formGroups = append(formGroups, huh.NewGroup(
+						tui.NewYesNo().
+							Title("Docker").
+							Description("Use Docker to run Shopware locally").
+							Value(&selectDocker),
+					).WithHideFunc(func() bool { return selectAdvanced != tui.Yes }))
+				}
+
+				if !cmd.PersistentFlags().Changed("git") {
+					formGroups = append(formGroups, huh.NewGroup(
+						tui.NewYesNo().
+							Title("Git Repository").
+							Description("Initialize a Git repository for version control").
+							Value(&selectGit),
+					).WithHideFunc(func() bool { return selectAdvanced != tui.Yes }))
+				}
+
+				if !elasticsearchExplicit {
+					formGroups = append(formGroups, huh.NewGroup(
+						tui.NewYesNo().
+							Title("OpenSearch").
+							Description("Set up OpenSearch for large catalogs and advanced search").
+							Value(&selectElasticsearch),
+					).WithHideFunc(func() bool { return selectAdvanced != tui.Yes }))
+				}
+
+				if !cmd.PersistentFlags().Changed("with-amqp") {
+					formGroups = append(formGroups, huh.NewGroup(
+						tui.NewYesNo().
+							Title("AMQP").
+							Description("Enable AMQP queue support for background jobs and messaging").
+							Value(&selectAMQP),
+					).WithHideFunc(func() bool { return selectAdvanced != tui.Yes }))
+				}
+
+				if len(formGroups) > 0 {
+					form := huh.NewForm(formGroups...).WithTheme(theme)
+					if err := form.Run(); err != nil {
+						return err
+					}
+				}
+
+				if selectedVersion == "" {
+					selectedVersion = versionLatest
+				}
+
+				if !cmd.PersistentFlags().Changed("docker") {
+					useDocker = selectDocker == tui.Yes
+				}
+				if !cmd.PersistentFlags().Changed("git") {
+					initGit = selectGit == tui.Yes
+				}
+				if !elasticsearchExplicit {
+					withElasticsearch = selectElasticsearch == tui.Yes
 				}
 				if !cmd.PersistentFlags().Changed("with-amqp") {
-					withAMQP = true
+					withAMQP = selectAMQP == tui.Yes
 				}
-			} else {
-				for _, opt := range selectedOptions {
-					switch opt {
-					case optionDocker:
-						useDocker = true
-					case optionGit:
-						initGit = true
-					case optionElasticsearch:
-						withElasticsearch = true
-					case optionAMQP:
-						withAMQP = true
-					}
+
+				fmt.Println()
+				fmt.Println(sectionStyle.Render("Summary"))
+				fmt.Println()
+				fmt.Printf("  %s %s\n", labelStyle.Render("Project name:"), projectFolder)
+				fmt.Printf("  %s %s\n", labelStyle.Render("Version:"), selectedVersion)
+				fmt.Printf("  %s %s\n", labelStyle.Render("Deployment:"), selectedDeployment)
+				fmt.Printf("  %s %s\n", labelStyle.Render("CI/CD:"), selectedCI)
+				fmt.Printf("  %s %s\n", labelStyle.Render("Docker:"), onOff(useDocker))
+				fmt.Printf("  %s %s\n", labelStyle.Render("Git:"), onOff(initGit))
+				fmt.Printf("  %s %s\n", labelStyle.Render("OpenSearch:"), onOff(withElasticsearch))
+				fmt.Printf("  %s %s\n", labelStyle.Render("AMQP:"), onOff(withAMQP))
+				fmt.Println()
+
+				selectConfirm := "proceed"
+				confirmForm := huh.NewForm(huh.NewGroup(
+					huh.NewSelect[string]().
+						Title("What would you like to do?").
+						Options(
+							huh.NewOption("Proceed", "proceed"),
+							huh.NewOption("Restart form", "restart"),
+							huh.NewOption("Cancel", "cancel"),
+						).
+						Value(&selectConfirm),
+				)).WithTheme(theme)
+
+				if err := confirmForm.Run(); err != nil {
+					return err
+				}
+
+				if selectConfirm == "proceed" {
+					break
+				}
+
+				if selectConfirm == "cancel" {
+					return fmt.Errorf("project creation cancelled")
 				}
 			}
 		}
@@ -492,13 +557,13 @@ var projectCreateCmd = &cobra.Command{
 			fmt.Println()
 			fmt.Println(sectionStyle.Render("Next steps"))
 			fmt.Println()
-			fmt.Printf("  %s  %s\n", color.GreenText.Render("Start developing:"), cmdStyle.Render(fmt.Sprintf("cd %s && shopware-cli project dev", projectFolder)))
+			fmt.Printf("  %s  %s\n", tui.GreenText.Render("Start developing:"), cmdStyle.Render(fmt.Sprintf("cd %s && shopware-cli project dev", projectFolder)))
 			fmt.Println()
 			fmt.Println(sectionStyle.Render("Access your shop (after make setup)"))
 			fmt.Println()
-			fmt.Printf("  %s  %s\n", color.GreenText.Render("Storefront:"), cmdStyle.Render("http://127.0.0.1:8000"))
-			fmt.Printf("  %s  %s\n", color.GreenText.Render("Admin:"), cmdStyle.Render("http://127.0.0.1:8000/admin"))
-			fmt.Printf("  %s  %s / %s\n", color.GreenText.Render("Credentials:"), cmdStyle.Render("admin"), cmdStyle.Render("shopware"))
+			fmt.Printf("  %s  %s\n", tui.GreenText.Render("Storefront:"), cmdStyle.Render("http://127.0.0.1:8000"))
+			fmt.Printf("  %s  %s\n", tui.GreenText.Render("Admin:"), cmdStyle.Render("http://127.0.0.1:8000/admin"))
+			fmt.Printf("  %s  %s / %s\n", tui.GreenText.Render("Credentials:"), cmdStyle.Render("admin"), cmdStyle.Render("shopware"))
 			fmt.Println()
 		}
 

@@ -146,6 +146,7 @@ var projectCI = &cobra.Command{
 		lookingForExtensionsSection.End(cmd.Context())
 
 		assetCfg := extension.AssetBuildConfig{
+			EnableAssetCaching:           shopCfg.Build.AssetCaching,
 			CleanupNodeModules:           true,
 			ShopwareRoot:                 args[0],
 			ShopwareVersion:              shopwareConstraint,

@@ -368,4 +368,123 @@ func TestValidateExtensionConfig(t *testing.T) {
 		err := validateExtensionConfig(config)
 		assert.NoError(t, err)
 	})
+
+	t.Run("passes with valid additional_caches", func(t *testing.T) {
+		config := &Config{
+			Build: ConfigBuild{
+				Zip: ConfigBuildZip{
+					Assets: ConfigBuildZipAssets{
+						AdditionalCaches: []ConfigBuildZipAssetsAdditionalCache{
+							{
+								Path:        "Resources/public/custom",
+								SourcePaths: []string{"Resources/app/custom/src"},
+							},
+						},
+					},
+				},
+			},
+		}
+		err := validateExtensionConfig(config)
+		assert.NoError(t, err)
+	})
+
+	t.Run("fails when additional_caches path is empty", func(t *testing.T) {
+		config := &Config{
+			Build: ConfigBuild{
+				Zip: ConfigBuildZip{
+					Assets: ConfigBuildZipAssets{
+						AdditionalCaches: []ConfigBuildZipAssetsAdditionalCache{
+							{
+								Path:        "",
+								SourcePaths: []string{"src"},
+							},
+						},
+					},
+				},
+			},
+		}
+		err := validateExtensionConfig(config)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "path is required")
+	})
+
+	t.Run("fails when additional_caches source_paths is empty", func(t *testing.T) {
+		config := &Config{
+			Build: ConfigBuild{
+				Zip: ConfigBuildZip{
+					Assets: ConfigBuildZipAssets{
+						AdditionalCaches: []ConfigBuildZipAssetsAdditionalCache{
+							{
+								Path:        "Resources/public/custom",
+								SourcePaths: []string{},
+							},
+						},
+					},
+				},
+			},
+		}
+		err := validateExtensionConfig(config)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "source_paths is required")
+	})
+
+	t.Run("fails when additional_caches path is absolute", func(t *testing.T) {
+		config := &Config{
+			Build: ConfigBuild{
+				Zip: ConfigBuildZip{
+					Assets: ConfigBuildZipAssets{
+						AdditionalCaches: []ConfigBuildZipAssetsAdditionalCache{
+							{
+								Path:        "/etc/passwd",
+								SourcePaths: []string{"src"},
+							},
+						},
+					},
+				},
+			},
+		}
+		err := validateExtensionConfig(config)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "must be relative")
+	})
+
+	t.Run("fails when additional_caches path escapes root", func(t *testing.T) {
+		config := &Config{
+			Build: ConfigBuild{
+				Zip: ConfigBuildZip{
+					Assets: ConfigBuildZipAssets{
+						AdditionalCaches: []ConfigBuildZipAssetsAdditionalCache{
+							{
+								Path:        "../../etc/passwd",
+								SourcePaths: []string{"src"},
+							},
+						},
+					},
+				},
+			},
+		}
+		err := validateExtensionConfig(config)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "must not escape")
+	})
+
+	t.Run("fails when additional_caches source_path escapes root", func(t *testing.T) {
+		config := &Config{
+			Build: ConfigBuild{
+				Zip: ConfigBuildZip{
+					Assets: ConfigBuildZipAssets{
+						AdditionalCaches: []ConfigBuildZipAssetsAdditionalCache{
+							{
+								Path:        "Resources/public/custom",
+								SourcePaths: []string{"../../../secrets"},
+							},
+						},
+					},
+				},
+			},
+		}
+		err := validateExtensionConfig(config)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "must not escape")
+	})
 }

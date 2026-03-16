@@ -9,16 +9,16 @@ import (
 	liplogtable "charm.land/lipgloss/v2/table"
 	"github.com/spf13/cobra"
 
-	"github.com/shopware/shopware-cli/internal/color"
 	"github.com/shopware/shopware-cli/internal/extension"
 	"github.com/shopware/shopware-cli/internal/shop"
+	"github.com/shopware/shopware-cli/internal/tui"
 	"github.com/shopware/shopware-cli/logging"
 )
 
 var (
 	doctorSectionStyle = lipgloss.NewStyle().Bold(true).Underline(true)
-	doctorCheckOK      = color.GreenText.Render("✓")
-	doctorCheckWarn    = color.SecondaryText.Render("⚠")
+	doctorCheckOK      = tui.GreenText.Render("✓")
+	doctorCheckWarn    = tui.SecondaryText.Render("⚠")
 )
 
 var projectDoctor = &cobra.Command{
@@ -49,9 +49,9 @@ var projectDoctor = &cobra.Command{
 		}
 
 		if shopCfg.IsFallback() {
-			fmt.Printf("%s Project config: %s\n", doctorCheckWarn, color.SecondaryText.Render("not found, using fallback"))
+			fmt.Printf("%s Project config: %s\n", doctorCheckWarn, tui.SecondaryText.Render("not found, using fallback"))
 		} else {
-			fmt.Printf("%s Project config: %s\n", doctorCheckOK, color.GreenText.Render(shop.DefaultConfigFileName()))
+			fmt.Printf("%s Project config: %s\n", doctorCheckOK, tui.GreenText.Render(shop.DefaultConfigFileName()))
 		}
 
 		shopwareConstraint, err := extension.GetShopwareProjectConstraint(projectDir)
@@ -59,7 +59,7 @@ var projectDoctor = &cobra.Command{
 			return err
 		}
 
-		fmt.Printf("%s Shopware version: %s\n", doctorCheckOK, color.GreenText.Render(shopwareConstraint.String()))
+		fmt.Printf("%s Shopware version: %s\n", doctorCheckOK, tui.GreenText.Render(shopwareConstraint.String()))
 
 		fmt.Println()
 		fmt.Println(doctorSectionStyle.Render("Detected Extensions & Bundles"))
