@@ -89,6 +89,8 @@ var projectCreateCmd = &cobra.Command{
 			withElasticsearch = !withoutElasticsearch
 		}
 
+		elasticsearchExplicit := cmd.PersistentFlags().Changed("with-elasticsearch") || cmd.PersistentFlags().Changed("without-elasticsearch")
+
 		const (
 			ciNone   = "none"
 			ciGitHub = "github"
@@ -162,7 +164,7 @@ var projectCreateCmd = &cobra.Command{
 			if selectedCI == "" {
 				selectedCI = ciNone
 			}
-			if !cmd.PersistentFlags().Changed("with-elasticsearch") {
+			if !elasticsearchExplicit {
 				withElasticsearch = true
 			}
 		} else {
@@ -170,7 +172,7 @@ var projectCreateCmd = &cobra.Command{
 				!cmd.PersistentFlags().Changed("git") ||
 				!cmd.PersistentFlags().Changed("docker") ||
 				!cmd.PersistentFlags().Changed("with-amqp") ||
-				!cmd.PersistentFlags().Changed("with-elasticsearch")
+				!elasticsearchExplicit
 
 			needsProjectFolder := projectFolder == ""
 			needsVersion := selectedVersion == ""
@@ -308,7 +310,7 @@ var projectCreateCmd = &cobra.Command{
 					).WithHideFunc(func() bool { return selectAdvanced != tui.Yes }))
 				}
 
-				if !cmd.PersistentFlags().Changed("with-elasticsearch") {
+				if !elasticsearchExplicit {
 					formGroups = append(formGroups, huh.NewGroup(
 						tui.NewYesNo().
 							Title("OpenSearch").
@@ -343,7 +345,7 @@ var projectCreateCmd = &cobra.Command{
 				if !cmd.PersistentFlags().Changed("git") {
 					initGit = selectGit == tui.Yes
 				}
-				if !cmd.PersistentFlags().Changed("with-elasticsearch") {
+				if !elasticsearchExplicit {
 					withElasticsearch = selectElasticsearch == tui.Yes
 				}
 				if !cmd.PersistentFlags().Changed("with-amqp") {
