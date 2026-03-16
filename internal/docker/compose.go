@@ -8,13 +8,57 @@ import (
 	"gopkg.in/yaml.v3"
 
 	"github.com/shopware/shopware-cli/internal/packagist"
+	"github.com/shopware/shopware-cli/internal/shop"
 )
 
-func GenerateComposeFile(lock *packagist.ComposerLock) ([]byte, error) {
+// ComposeOptions holds configuration for generating the compose file.
+type ComposeOptions struct {
+	PHPVersion           string
+	NodeVersion          string
+	PHPProfiler          string
+	BlackfireServerID    string
+	BlackfireServerToken string
+	TidewaysAPIKey       string
+}
+
+func (o *ComposeOptions) phpVersion() string {
+	if o != nil && o.PHPVersion != "" {
+		return o.PHPVersion
+	}
+	return "8.3"
+}
+
+func (o *ComposeOptions) nodeVersion() string {
+	if o != nil && o.NodeVersion != "" {
+		return o.NodeVersion
+	}
+	return "22"
+}
+
+// ComposeOptionsFromConfig creates ComposeOptions from a shop.Config.
+func ComposeOptionsFromConfig(cfg *shop.Config) *ComposeOptions {
+	if cfg == nil || cfg.Docker == nil {
+		return nil
+	}
+	opts := &ComposeOptions{}
+	if cfg.Docker.PHP != nil {
+		opts.PHPVersion = cfg.Docker.PHP.Version
+		opts.PHPProfiler = cfg.Docker.PHP.Profiler
+		opts.BlackfireServerID = cfg.Docker.PHP.BlackfireServerID
+		opts.BlackfireServerToken = cfg.Docker.PHP.BlackfireServerToken
+		opts.TidewaysAPIKey = cfg.Docker.PHP.TidewaysAPIKey
+	}
+	if cfg.Docker.Node != nil {
+		opts.NodeVersion = cfg.Docker.Node.Version
+	}
+	return opts
+}
+
+func GenerateComposeFile(lock *packagist.ComposerLock, opts *ComposeOptions) ([]byte, error) {
 	hasAMQP := lock.GetPackage("symfony/amqp-messenger") != nil
 	hasElasticsearch := lock.GetPackage("shopware/elasticsearch") != nil
 
-	doc := buildCompose(hasAMQP, hasElasticsearch)
+	doc := buildCompose(hasAMQP, hasElasticsearch, opts)
 
 	out, err := yaml.Marshal(&doc)
 	if err != nil {
@@ -28,13 +72,13 @@ func GenerateComposeFile(lock *packagist.ComposerLock) ([]byte, error) {
 	return append([]byte(header), out...), nil
 }
 
-func WriteComposeFile(projectFolder string) error {
+func WriteComposeFile(projectFolder string, opts *ComposeOptions) error {
 	lock, err := packagist.ReadComposerLock(filepath.Join(projectFolder, "composer.lock"))
 	if err != nil {
 		return fmt.Errorf("failed to read composer.lock: %w", err)
 	}
 
-	composeBytes, err := GenerateComposeFile(lock)
+	composeBytes, err := GenerateComposeFile(lock, opts)
 	if err != nil {
 		return fmt.Errorf("failed to generate compose.yaml: %w", err)
 	}
@@ -42,7 +86,7 @@ func WriteComposeFile(projectFolder string) error {
 	return os.WriteFile(filepath.Join(projectFolder, "compose.yaml"), composeBytes, os.ModePerm)
 }
 
-func buildCompose(hasAMQP, hasElasticsearch bool) yaml.Node {
+func buildCompose(hasAMQP, hasElasticsearch bool, opts *ComposeOptions) yaml.Node {
 	webEnv := newMappingNode()
 	addKeyValue(webEnv, "HOST", "0.0.0.0")
 	addKeyValue(webEnv, "DATABASE_URL", "mysql://root:root@database/shopware")
@@ -66,8 +110,21 @@ func buildCompose(hasAMQP, hasElasticsearch bool) yaml.Node {
 	addKeyValue(dbCondition, "condition", "service_healthy")
 	addKeyValueNode(webDependsOn, "database", dbCondition)
 
+	if opts != nil && opts.PHPProfiler != "" {
+		addKeyValue(webEnv, "PHP_PROFILER", opts.PHPProfiler)
+		switch opts.PHPProfiler {
+		case "xdebug":
+			addKeyValue(webEnv, "XDEBUG_MODE", "debug")
+			addKeyValue(webEnv, "XDEBUG_CONFIG", "client_host=host.docker.internal")
+		case "tideways":
+			if opts.TidewaysAPIKey != "" {
+				addKeyValue(webEnv, "TIDEWAYS_APIKEY", opts.TidewaysAPIKey)
+			}
+		}
+	}
+
 	web := newMappingNode()
-	addKeyValue(web, "image", "ghcr.io/shopware/docker-dev:php8.3-node22-caddy")
+	addKeyValue(web, "image", fmt.Sprintf("ghcr.io/shopware/docker-dev:php%s-node%s-caddy", opts.phpVersion(), opts.nodeVersion()))
 	addKeyValueNode(web, "ports", newSequenceNode(
 		"8000:8000", "8080:8080", "9999:9999", "9998:9998", "5173:5173", "5773:5773",
 	))
@@ -162,6 +219,23 @@ func buildCompose(hasAMQP, hasElasticsearch bool) yaml.Node {
 		addKeyValueNode(opensearch, "volumes", newSequenceNode("opensearch-data:/usr/share/opensearch/data"))
 		addKeyValueNode(services, "opensearch", opensearch)
 		addKeyValueNode(volumes, "opensearch-data", newNullNode())
+	}
+
+	if opts != nil && opts.PHPProfiler == "blackfire" && opts.BlackfireServerID != "" && opts.BlackfireServerToken != "" {
+		bfEnv := newMappingNode()
+		addKeyValue(bfEnv, "BLACKFIRE_SERVER_ID", opts.BlackfireServerID)
+		addKeyValue(bfEnv, "BLACKFIRE_SERVER_TOKEN", opts.BlackfireServerToken)
+
+		blackfire := newMappingNode()
+		addKeyValue(blackfire, "image", "blackfire/blackfire:2")
+		addKeyValueNode(blackfire, "environment", bfEnv)
+		addKeyValueNode(services, "blackfire", blackfire)
+	}
+
+	if opts != nil && opts.PHPProfiler == "tideways" && opts.TidewaysAPIKey != "" {
+		tideways := newMappingNode()
+		addKeyValue(tideways, "image", "ghcr.io/tideways/daemon")
+		addKeyValueNode(services, "tideways-daemon", tideways)
 	}
 
 	root := newMappingNode()

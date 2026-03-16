@@ -462,7 +462,7 @@ var projectCreateCmd = &cobra.Command{
 		}
 
 		if useDocker {
-			if err := dockerpkg.WriteComposeFile(projectFolder); err != nil {
+			if err := dockerpkg.WriteComposeFile(projectFolder, nil); err != nil {
 				return err
 			}
 		}

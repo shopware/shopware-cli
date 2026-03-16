@@ -36,6 +36,8 @@ type Config struct {
 	ConfigDeployment  *ConfigDeployment `yaml:"deployment,omitempty"`
 	Validation        *ConfigValidation `yaml:"validation,omitempty"`
 	ImageProxy        *ConfigImageProxy `yaml:"image_proxy,omitempty"`
+	// Docker dev environment configuration
+	Docker *ConfigDocker `yaml:"docker,omitempty"`
 	// Named environments for multi-environment management
 	Environments map[string]*EnvironmentConfig `yaml:"environments,omitempty"`
 	// When enabled, composer scripts will be disabled during CI builds
@@ -410,6 +412,93 @@ type ConfigValidationIgnoreItem struct {
 type ConfigValidationIgnoreExtension struct {
 	// The name of the extension to ignore.
 	Name string `yaml:"name"`
+}
+
+type ConfigDocker struct {
+	// PHP configuration for the Docker dev image
+	PHP *ConfigDockerPHP `yaml:"php,omitempty"`
+	// Node.js configuration for the Docker dev image
+	Node *ConfigDockerNode `yaml:"node,omitempty"`
+}
+
+type ConfigDockerPHP struct {
+	// PHP version (e.g. "8.3", "8.2"). Defaults to "8.3".
+	Version string `yaml:"version,omitempty"`
+	// Profiler to enable. Possible values: xdebug, blackfire, tideways, pcov, spx.
+	Profiler string `yaml:"profiler,omitempty" jsonschema:"enum=xdebug,enum=blackfire,enum=tideways,enum=pcov,enum=spx"`
+	// Blackfire server ID from your Blackfire account. Required when profiler is "blackfire".
+	BlackfireServerID string `yaml:"blackfire_server_id,omitempty"`
+	// Blackfire server token from your Blackfire account. Required when profiler is "blackfire".
+	BlackfireServerToken string `yaml:"blackfire_server_token,omitempty"`
+	// Tideways API key from your Tideways account. Required when profiler is "tideways".
+	TidewaysAPIKey string `yaml:"tideways_api_key,omitempty"`
+}
+
+func (ConfigDockerPHP) JSONSchema() *jsonschema.Schema {
+	properties := orderedmap.New[string, *jsonschema.Schema]()
+
+	properties.Set("version", &jsonschema.Schema{
+		Type:        "string",
+		Description: "PHP version (e.g. \"8.3\", \"8.2\"). Defaults to \"8.3\".",
+	})
+
+	properties.Set("profiler", &jsonschema.Schema{
+		Type:        "string",
+		Enum:        []any{"xdebug", "blackfire", "tideways", "pcov", "spx"},
+		Description: "Profiler to enable. Possible values: xdebug, blackfire, tideways, pcov, spx.",
+	})
+
+	properties.Set("blackfire_server_id", &jsonschema.Schema{
+		Type:        "string",
+		Description: "Blackfire server ID from your Blackfire account. Required when profiler is \"blackfire\".",
+	})
+
+	properties.Set("blackfire_server_token", &jsonschema.Schema{
+		Type:        "string",
+		Description: "Blackfire server token from your Blackfire account. Required when profiler is \"blackfire\".",
+	})
+
+	properties.Set("tideways_api_key", &jsonschema.Schema{
+		Type:        "string",
+		Description: "Tideways API key from your Tideways account. Required when profiler is \"tideways\".",
+	})
+
+	profilerConst := func(value string) *orderedmap.OrderedMap[string, *jsonschema.Schema] {
+		m := orderedmap.New[string, *jsonschema.Schema]()
+		m.Set("profiler", &jsonschema.Schema{Const: value})
+		return m
+	}
+
+	return &jsonschema.Schema{
+		Type:                 "object",
+		Properties:           properties,
+		AdditionalProperties: jsonschema.FalseSchema,
+		AllOf: []*jsonschema.Schema{
+			{
+				If: &jsonschema.Schema{
+					Properties: profilerConst("blackfire"),
+					Required:   []string{"profiler"},
+				},
+				Then: &jsonschema.Schema{
+					Required: []string{"blackfire_server_id", "blackfire_server_token"},
+				},
+			},
+			{
+				If: &jsonschema.Schema{
+					Properties: profilerConst("tideways"),
+					Required:   []string{"profiler"},
+				},
+				Then: &jsonschema.Schema{
+					Required: []string{"tideways_api_key"},
+				},
+			},
+		},
+	}
+}
+
+type ConfigDockerNode struct {
+	// Node.js version (e.g. "22", "24"). Defaults to "22".
+	Version string `yaml:"version,omitempty" jsonschema:"enum=22,enum=24"`
 }
 
 type ConfigImageProxy struct {

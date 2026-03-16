@@ -39,7 +39,7 @@ var projectDevCmd = &cobra.Command{
 		}
 
 		if exec.Type() == "docker" {
-			if err := dockerpkg.WriteComposeFile(projectRoot); err != nil {
+			if err := dockerpkg.WriteComposeFile(projectRoot, dockerpkg.ComposeOptionsFromConfig(cfg)); err != nil {
 				return err
 			}
 		}
