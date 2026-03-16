@@ -90,11 +90,6 @@ var projectCreateCmd = &cobra.Command{
 		}
 
 		const (
-			optionDocker        = "docker"
-			optionGit           = "git"
-			optionElasticsearch = "elasticsearch"
-			optionAMQP          = "amqp"
-
 			ciNone   = "none"
 			ciGitHub = "github"
 			ciGitLab = "gitlab"
@@ -145,7 +140,6 @@ var projectCreateCmd = &cobra.Command{
 		selectedVersion := versionFlag
 		selectedDeployment := deploymentMethod
 		selectedCI := ciSystem
-		var selectedOptions []string
 
 		if len(args) > 0 {
 			projectFolder = args[0]
@@ -236,13 +230,13 @@ var projectCreateCmd = &cobra.Command{
 				!cmd.PersistentFlags().Changed("with-amqp") ||
 				!cmd.PersistentFlags().Changed("with-elasticsearch")
 
-			var showAdvanced bool
+			selectAdvanced := "no"
 			if needsAdvanced {
 				formGroups = append(formGroups, huh.NewGroup(
-					huh.NewConfirm().
+					tui.NewYesNo().
 						Title("Advanced Settings").
 						Description("Configure deployment, CI/CD, and optional features").
-						Value(&showAdvanced),
+						Value(&selectAdvanced),
 				))
 			}
 
@@ -254,7 +248,7 @@ var projectCreateCmd = &cobra.Command{
 						Description("Select how you want to deploy your project").
 						Options(deploymentOptions...).
 						Value(&selectedDeployment),
-				).WithHideFunc(func() bool { return !showAdvanced }))
+				).WithHideFunc(func() bool { return selectAdvanced != "yes" }))
 			}
 
 			if selectedCI == "" {
@@ -265,32 +259,47 @@ var projectCreateCmd = &cobra.Command{
 						Description("Select your CI/CD platform for automated testing and deployment").
 						Options(ciOptions...).
 						Value(&selectedCI),
-				).WithHideFunc(func() bool { return !showAdvanced }))
+				).WithHideFunc(func() bool { return selectAdvanced != "yes" }))
 			}
 
-			var optionalOptions []huh.Option[string]
+			selectDocker := "yes"
 			if !cmd.PersistentFlags().Changed("docker") {
-				optionalOptions = append(optionalOptions, huh.NewOption("Install Shopware with local Docker setup", optionDocker).Selected(true))
-			}
-			if !cmd.PersistentFlags().Changed("git") {
-				optionalOptions = append(optionalOptions, huh.NewOption("Initialize Git repository", optionGit).Selected(true))
-			}
-			if !cmd.PersistentFlags().Changed("with-amqp") {
-				optionalOptions = append(optionalOptions, huh.NewOption("AMQP queue support (for background jobs and messaging)", optionAMQP).Selected(true))
-			}
-			if !cmd.PersistentFlags().Changed("with-elasticsearch") {
-				optionalOptions = append(optionalOptions, huh.NewOption("Set up OpenSearch (for large catalogs and advanced search)", optionElasticsearch))
+				formGroups = append(formGroups, huh.NewGroup(
+					tui.NewYesNo().
+						Title("Docker").
+						Description("Use Docker to run Shopware locally").
+						Value(&selectDocker),
+				).WithHideFunc(func() bool { return selectAdvanced != "yes" }))
 			}
 
-			if len(optionalOptions) > 0 {
+			selectGit := "yes"
+			if !cmd.PersistentFlags().Changed("git") {
 				formGroups = append(formGroups, huh.NewGroup(
-					huh.NewMultiSelect[string]().
-						Title("Optional").
-						Description("Select additional features to enable").
-						Options(optionalOptions...).
-						Height(10).
-						Value(&selectedOptions),
-				).WithHideFunc(func() bool { return !showAdvanced }))
+					tui.NewYesNo().
+						Title("Git Repository").
+						Description("Initialize a Git repository for version control").
+						Value(&selectGit),
+				).WithHideFunc(func() bool { return selectAdvanced != "yes" }))
+			}
+
+			selectElasticsearch := "no"
+			if !cmd.PersistentFlags().Changed("with-elasticsearch") {
+				formGroups = append(formGroups, huh.NewGroup(
+					tui.NewYesNo().
+						Title("OpenSearch").
+						Description("Set up OpenSearch for large catalogs and advanced search").
+						Value(&selectElasticsearch),
+				).WithHideFunc(func() bool { return selectAdvanced != "yes" }))
+			}
+
+			selectAMQP := "yes"
+			if !cmd.PersistentFlags().Changed("with-amqp") {
+				formGroups = append(formGroups, huh.NewGroup(
+					tui.NewYesNo().
+						Title("AMQP").
+						Description("Enable AMQP queue support for background jobs and messaging").
+						Value(&selectAMQP),
+				).WithHideFunc(func() bool { return selectAdvanced != "yes" }))
 			}
 
 			if len(formGroups) > 0 {
@@ -311,29 +320,17 @@ var projectCreateCmd = &cobra.Command{
 				selectedVersion = versionLatest
 			}
 
-			if !showAdvanced {
-				if !cmd.PersistentFlags().Changed("git") {
-					initGit = true
-				}
-				if !cmd.PersistentFlags().Changed("docker") {
-					useDocker = true
-				}
-				if !cmd.PersistentFlags().Changed("with-amqp") {
-					withAMQP = true
-				}
-			} else {
-				for _, opt := range selectedOptions {
-					switch opt {
-					case optionDocker:
-						useDocker = true
-					case optionGit:
-						initGit = true
-					case optionElasticsearch:
-						withElasticsearch = true
-					case optionAMQP:
-						withAMQP = true
-					}
-				}
+			if !cmd.PersistentFlags().Changed("docker") {
+				useDocker = selectDocker == "yes"
+			}
+			if !cmd.PersistentFlags().Changed("git") {
+				initGit = selectGit == "yes"
+			}
+			if !cmd.PersistentFlags().Changed("with-elasticsearch") {
+				withElasticsearch = selectElasticsearch == "yes"
+			}
+			if !cmd.PersistentFlags().Changed("with-amqp") {
+				withAMQP = selectAMQP == "yes"
 			}
 		}
 
