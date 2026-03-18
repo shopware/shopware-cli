@@ -4,17 +4,20 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"sync/atomic"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 )
 
 func TestNewApiUsesClientCredentialsFromEnv(t *testing.T) {
-	tokenRequested := false
+	t.Parallel()
+
+	var tokenRequested atomic.Bool
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/oauth2/token" {
-			tokenRequested = true
+			tokenRequested.Store(true)
 
 			assert.Equal(t, "client_credentials", r.FormValue("grant_type"))
 
@@ -48,7 +51,7 @@ func TestNewApiUsesClientCredentialsFromEnv(t *testing.T) {
 	client, err := NewApi(t.Context())
 	assert.NoError(t, err)
 	assert.NotNil(t, client)
-	assert.True(t, tokenRequested, "expected token endpoint to be called")
+	assert.True(t, tokenRequested.Load(), "expected token endpoint to be called")
 	assert.NotNil(t, client.Token)
 	assert.Equal(t, "test-token", client.Token.AccessToken)
 }
