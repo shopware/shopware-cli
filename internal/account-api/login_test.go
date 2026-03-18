@@ -47,7 +47,6 @@ func TestNewApiUsesClientCredentialsFromEnv(t *testing.T) {
 }
 
 func TestNewApiFailsWithIncompleteClientCredentials(t *testing.T) {
-
 	t.Setenv("SHOPWARE_CLI_CACHE_DIR", t.TempDir())
 	t.Setenv("SHOPWARE_CLI_ACCOUNT_CLIENT_ID", "test-client-id")
 
