@@ -25,7 +25,7 @@ var projectConsoleCmd = &cobra.Command{
 			return nil, cobra.ShellCompDirectiveDefault
 		}
 
-		exec, err := resolveExecutor(cmd)
+		exec, err := resolveExecutor(cmd, projectRoot)
 		if err != nil {
 			return nil, cobra.ShellCompDirectiveDefault
 		}
@@ -83,13 +83,12 @@ var projectConsoleCmd = &cobra.Command{
 			return err
 		}
 
-		exec, err := resolveExecutor(cmd)
+		exec, err := resolveExecutor(cmd, projectRoot)
 		if err != nil {
 			return err
 		}
 
 		consoleCmd := exec.ConsoleCommand(cmd.Context(), args...)
-		consoleCmd.Dir = projectRoot
 		consoleCmd.Stdin = cmd.InOrStdin()
 		consoleCmd.Stdout = cmd.OutOrStdout()
 		consoleCmd.Stderr = cmd.ErrOrStderr()

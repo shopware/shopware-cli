@@ -9,14 +9,19 @@ import (
 	"github.com/joho/godotenv"
 )
 
-func PlatformPath(projectRoot, component, path string) string {
+func PlatformPath(projectRoot, component, subPath string) string {
+	return filepath.Join(projectRoot, PlatformRelPath(projectRoot, component, subPath))
+}
+
+// PlatformRelPath returns the platform component path relative to the project root.
+func PlatformRelPath(projectRoot, component, subPath string) string {
 	if _, err := os.Stat(filepath.Join(projectRoot, "src", "Core", "composer.json")); err == nil {
-		return filepath.Join(projectRoot, "src", component, path)
+		return filepath.Join("src", component, subPath)
 	} else if _, err := os.Stat(filepath.Join(projectRoot, "vendor", "shopware", "platform")); err == nil {
-		return filepath.Join(projectRoot, "vendor", "shopware", "platform", "src", component, path)
+		return filepath.Join("vendor", "shopware", "platform", "src", component, subPath)
 	}
 
-	return filepath.Join(projectRoot, "vendor", "shopware", strings.ToLower(component), path)
+	return filepath.Join("vendor", "shopware", strings.ToLower(component), subPath)
 }
 
 // projectRequiresBuild checks if the project is a contribution project aka shopware/shopware.

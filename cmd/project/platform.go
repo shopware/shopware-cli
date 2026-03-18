@@ -64,7 +64,7 @@ func findClosestShopwareProject() (string, error) {
 	return "", fmt.Errorf("cannot find Shopware project in current directory")
 }
 
-func filterAndWritePluginJson(cmd *cobra.Command, projectRoot string, shopCfg *shop.Config) error {
+func filterAndWritePluginJson(cmd *cobra.Command, projectRoot string, shopCfg *shop.Config, cmdExecutor executor.Executor) error {
 	sources, err := filterAndGetSources(cmd, projectRoot, shopCfg)
 	if err != nil {
 		return err
@@ -75,6 +75,16 @@ func filterAndWritePluginJson(cmd *cobra.Command, projectRoot string, shopCfg *s
 	if _, err := extension.InstallNodeModulesOfConfigs(cmd.Context(), cfgs, false); err != nil {
 		return err
 	}
+
+	// Normalize paths for the execution environment (e.g. Docker container).
+	for _, cfg := range cfgs {
+		cfg.BasePath = cmdExecutor.NormalizePath(cfg.BasePath)
+		for i, v := range cfg.Views {
+			cfg.Views[i] = cmdExecutor.NormalizePath(v)
+		}
+	}
+
+	fmt.Println(cfgs)
 
 	pluginJson, err := json.MarshalIndent(cfgs, "", "  ")
 	if err != nil {
@@ -89,7 +99,7 @@ func filterAndWritePluginJson(cmd *cobra.Command, projectRoot string, shopCfg *s
 }
 
 func filterAndGetSources(cmd *cobra.Command, projectRoot string, shopCfg *shop.Config) ([]asset.Source, error) {
-	cmdExecutor, err := resolveExecutor(cmd)
+	cmdExecutor, err := resolveExecutor(cmd, projectRoot)
 	if err != nil {
 		return nil, err
 	}

@@ -34,14 +34,14 @@ var projectStorefrontBuildCmd = &cobra.Command{
 			return err
 		}
 
-		cmdExecutor, err := resolveExecutor(cmd)
+		cmdExecutor, err := resolveExecutor(cmd, projectRoot)
 		if err != nil {
 			return err
 		}
 
 		logging.FromContext(cmd.Context()).Infof("Looking for extensions to build assets in project")
 
-		if err := runTransparentCommand(commandWithRoot(cmdExecutor.ConsoleCommand(executor.AllowBinCI(cmd.Context()), "feature:dump"), projectRoot)); err != nil {
+		if err := runTransparentCommand(cmdExecutor.ConsoleCommand(executor.AllowBinCI(cmd.Context()), "feature:dump")); err != nil {
 			return err
 		}
 
@@ -62,6 +62,7 @@ var projectStorefrontBuildCmd = &cobra.Command{
 			ShopwareRoot:      projectRoot,
 			ShopwareVersion:   shopwareConstraint,
 			NPMForceInstall:   forceInstall,
+			Executor:          cmdExecutor,
 		}
 
 		if err := extension.BuildAssetsForExtensions(cmd.Context(), sources, assetCfg); err != nil {
@@ -73,7 +74,7 @@ var projectStorefrontBuildCmd = &cobra.Command{
 			return nil
 		}
 
-		return runTransparentCommand(commandWithRoot(cmdExecutor.ConsoleCommand(executor.AllowBinCI(cmd.Context()), "theme:compile"), projectRoot))
+		return runTransparentCommand(cmdExecutor.ConsoleCommand(executor.AllowBinCI(cmd.Context()), "theme:compile"))
 	},
 }
 

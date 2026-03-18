@@ -2,7 +2,6 @@ package project
 
 import (
 	"os"
-	"os/exec"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -35,16 +34,16 @@ var projectStorefrontWatchCmd = &cobra.Command{
 			return err
 		}
 
-		cmdExecutor, err := resolveExecutor(cmd)
+		cmdExecutor, err := resolveExecutor(cmd, projectRoot)
 		if err != nil {
 			return err
 		}
 
-		if err := filterAndWritePluginJson(cmd, projectRoot, shopCfg); err != nil {
+		if err := filterAndWritePluginJson(cmd, projectRoot, shopCfg, cmdExecutor); err != nil {
 			return err
 		}
 
-		if err := runTransparentCommand(commandWithRoot(cmdExecutor.ConsoleCommand(cmd.Context(), "feature:dump"), projectRoot)); err != nil {
+		if err := runTransparentCommand(cmdExecutor.ConsoleCommand(cmd.Context(), "feature:dump")); err != nil {
 			return err
 		}
 
@@ -54,11 +53,11 @@ var projectStorefrontWatchCmd = &cobra.Command{
 			activeOnly = "-v"
 		}
 
-		if err := runTransparentCommand(commandWithRoot(cmdExecutor.ConsoleCommand(cmd.Context(), "theme:compile", activeOnly), projectRoot)); err != nil {
+		if err := runTransparentCommand(cmdExecutor.ConsoleCommand(cmd.Context(), "theme:compile", activeOnly)); err != nil {
 			return err
 		}
 
-		if err := runTransparentCommand(commandWithRoot(cmdExecutor.ConsoleCommand(cmd.Context(), "theme:dump"), projectRoot)); err != nil {
+		if err := runTransparentCommand(cmdExecutor.ConsoleCommand(cmd.Context(), "theme:dump")); err != nil {
 			return err
 		}
 
@@ -70,13 +69,16 @@ var projectStorefrontWatchCmd = &cobra.Command{
 			return err
 		}
 
+		storefrontRelPath := extension.PlatformRelPath(projectRoot, "Storefront", "Resources/app/storefront")
+		storefrontExecutor := cmdExecutor.WithRelDir(storefrontRelPath)
+
 		if _, err := os.Stat(extension.PlatformPath(projectRoot, "Storefront", "Resources/app/storefront/node_modules/webpack-dev-server")); os.IsNotExist(err) {
-			if err := npm.InstallDependencies(cmd.Context(), extension.PlatformPath(projectRoot, "Storefront", "Resources/app/storefront"), npm.NonEmptyPackage); err != nil {
+			if err := npm.InstallDependencies(cmd.Context(), storefrontExecutor, npm.NonEmptyPackage); err != nil {
 				return err
 			}
 		}
 
-		return runTransparentCommand(commandWithRoot(exec.CommandContext(cmd.Context(), "npm", "run-script", "hot-proxy"), extension.PlatformPath(projectRoot, "Storefront", "Resources/app/storefront")))
+		return runTransparentCommand(storefrontExecutor.NPMCommand(cmd.Context(), "run-script", "hot-proxy"))
 	},
 }
 

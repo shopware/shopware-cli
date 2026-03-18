@@ -33,7 +33,7 @@ var projectDevCmd = &cobra.Command{
 			return err
 		}
 
-		exec, err := executor.New(envCfg, cfg)
+		exec, err := executor.New(projectRoot, envCfg, cfg)
 		if err != nil {
 			return err
 		}

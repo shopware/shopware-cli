@@ -61,7 +61,7 @@ var projectCI = &cobra.Command{
 		// Remove annoying cache invalidation errors while asset install
 		_ = os.Setenv("SHOPWARE_SKIP_ASSET_INSTALL_CACHE_INVALIDATION", "1")
 
-		cmdExecutor, err := resolveExecutor(cmd)
+		cmdExecutor, err := resolveExecutor(cmd, args[0])
 		if err != nil {
 			return err
 		}
@@ -104,7 +104,6 @@ var projectCI = &cobra.Command{
 			composerInstallSection := ci.Default.Section(cmd.Context(), "Composer Installation")
 
 			composer := cmdExecutor.ComposerCommand(cmd.Context(), composerFlags...)
-			composer.Dir = args[0]
 			composer.Stdin = os.Stdin
 			composer.Stdout = os.Stdout
 			composer.Stderr = os.Stderr
@@ -156,6 +155,7 @@ var projectCI = &cobra.Command{
 			ForceExtensionBuild:          convertForceExtensionBuild(shopCfg.Build.ForceExtensionBuild),
 			ForceAdminBuild:              shopCfg.Build.ForceAdminBuild,
 			KeepNodeModules:              shopCfg.Build.KeepNodeModules,
+			Executor:                     cmdExecutor,
 		}
 
 		if shopCfg.Build.Hooks != nil && len(shopCfg.Build.Hooks.PreAssets) > 0 {
@@ -346,12 +346,6 @@ func prepareComposerAuth(ctx context.Context, root string) (string, error) {
 func init() {
 	projectRootCmd.AddCommand(projectCI)
 	projectCI.PersistentFlags().Bool("with-dev-dependencies", false, "Install dev dependencies")
-}
-
-func commandWithRoot(cmd *exec.Cmd, root string) *exec.Cmd {
-	cmd.Dir = root
-
-	return cmd
 }
 
 func runTransparentCommand(cmd *exec.Cmd) error {

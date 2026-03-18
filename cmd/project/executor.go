@@ -8,7 +8,7 @@ import (
 )
 
 // resolveExecutor returns the Executor for the current environment.
-func resolveExecutor(cmd *cobra.Command) (executor.Executor, error) {
+func resolveExecutor(cmd *cobra.Command, projectRoot string) (executor.Executor, error) {
 	cfg, err := shop.ReadConfig(cmd.Context(), projectConfigPath, true)
 	if err != nil {
 		return nil, err
@@ -19,5 +19,5 @@ func resolveExecutor(cmd *cobra.Command) (executor.Executor, error) {
 		return nil, err
 	}
 
-	return executor.New(envCfg, cfg)
+	return executor.New(projectRoot, envCfg, cfg)
 }

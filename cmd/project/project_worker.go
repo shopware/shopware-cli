@@ -38,7 +38,7 @@ var projectWorkerCmd = &cobra.Command{
 			return err
 		}
 
-		cmdExecutor, err := resolveExecutor(cobraCmd)
+		cmdExecutor, err := resolveExecutor(cobraCmd, projectRoot)
 		if err != nil {
 			return err
 		}
@@ -102,7 +102,6 @@ var projectWorkerCmd = &cobra.Command{
 					}
 
 					cmd := cmdExecutor.ConsoleCommand(cancelCtx, consumeArgs...)
-					cmd.Dir = projectRoot
 					cmd.Stdout = os.Stdout
 					cmd.Stderr = os.Stderr
 					cmd.Env = append(os.Environ(), fmt.Sprintf("MESSENGER_CONSUMER_NAME=%s-%d", baseName, index))

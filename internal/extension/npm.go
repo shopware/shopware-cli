@@ -7,6 +7,7 @@ import (
 	"runtime"
 	"sync"
 
+	"github.com/shopware/shopware-cli/internal/executor"
 	"github.com/shopware/shopware-cli/internal/npm"
 	"github.com/shopware/shopware-cli/logging"
 )
@@ -118,7 +119,7 @@ func processNpmInstallJob(ctx context.Context, job npmInstallJob) npmInstallResu
 
 	logging.FromContext(ctx).Infof("Installing npm dependencies in %s %s\n", job.npmPath, job.additionalText)
 
-	if err := npm.InstallDependencies(ctx, job.npmPath, npmPackage, job.additionalNpmParams...); err != nil {
+	if err := npm.InstallDependencies(ctx, executor.NewLocal(job.npmPath), npmPackage, job.additionalNpmParams...); err != nil {
 		return npmInstallResult{err: err}
 	}
 
