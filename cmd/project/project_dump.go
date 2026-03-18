@@ -16,7 +16,7 @@ import (
 	"github.com/klauspost/compress/zstd"
 	"github.com/spf13/cobra"
 
-	"github.com/shopware/shopware-cli/internal/extension"
+	"github.com/shopware/shopware-cli/internal/envfile"
 	"github.com/shopware/shopware-cli/internal/mysqldump"
 	"github.com/shopware/shopware-cli/internal/shop"
 	"github.com/shopware/shopware-cli/logging"
@@ -184,7 +184,7 @@ func assembleConnectionURI(cmd *cobra.Command) (*mysql.Config, error) {
 }
 
 func loadDatabaseURLIntoConnection(ctx context.Context, projectRoot string, cfg *mysql.Config) error {
-	if err := extension.LoadSymfonyEnvFile(projectRoot); err != nil {
+	if err := envfile.LoadSymfonyEnvFile(projectRoot); err != nil {
 		return err
 	}
 
