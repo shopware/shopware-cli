@@ -4,11 +4,17 @@ import "os"
 
 const OIDCScopes = "openid offline_access email profile extension_management_read_write"
 
+// ClientCredentialsScopes excludes openid as it is not allowed for client credentials grant.
+const ClientCredentialsScopes = "extension_management_read_write"
+
 func isStaging() bool {
 	return os.Getenv("SHOPWARE_CLI_ACCOUNT_STAGING") != ""
 }
 
 func getOIDCEndpoint() string {
+	if v := os.Getenv("SHOPWARE_CLI_OIDC_ENDPOINT"); v != "" {
+		return v
+	}
 	if isStaging() {
 		return "https://auth-api.shopware.in"
 	}
