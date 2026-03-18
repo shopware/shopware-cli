@@ -11,8 +11,6 @@ import (
 )
 
 func TestNewApiUsesClientCredentialsFromEnv(t *testing.T) {
-	t.Parallel()
-
 	var tokenRequested atomic.Bool
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -20,16 +18,8 @@ func TestNewApiUsesClientCredentialsFromEnv(t *testing.T) {
 			tokenRequested.Store(true)
 
 			assert.Equal(t, "client_credentials", r.FormValue("grant_type"))
-
-			// client credentials may be sent via Basic auth header or form values
-			user, pass, hasBasicAuth := r.BasicAuth()
-			if hasBasicAuth {
-				assert.Equal(t, "test-client-id", user)
-				assert.Equal(t, "test-client-secret", pass)
-			} else {
-				assert.Equal(t, "test-client-id", r.FormValue("client_id"))
-				assert.Equal(t, "test-client-secret", r.FormValue("client_secret"))
-			}
+			assert.Equal(t, "test-client-id", r.FormValue("client_id"))
+			assert.Equal(t, "test-client-secret", r.FormValue("client_secret"))
 
 			w.Header().Set("Content-Type", "application/json")
 			_ = json.NewEncoder(w).Encode(map[string]any{
@@ -54,4 +44,13 @@ func TestNewApiUsesClientCredentialsFromEnv(t *testing.T) {
 	assert.True(t, tokenRequested.Load(), "expected token endpoint to be called")
 	assert.NotNil(t, client.Token)
 	assert.Equal(t, "test-token", client.Token.AccessToken)
+}
+
+func TestNewApiFailsWithIncompleteClientCredentials(t *testing.T) {
+
+	t.Setenv("SHOPWARE_CLI_CACHE_DIR", t.TempDir())
+	t.Setenv("SHOPWARE_CLI_ACCOUNT_CLIENT_ID", "test-client-id")
+
+	_, err := NewApi(t.Context())
+	assert.ErrorContains(t, err, "both SHOPWARE_CLI_ACCOUNT_CLIENT_ID and SHOPWARE_CLI_ACCOUNT_CLIENT_SECRET must be set")
 }

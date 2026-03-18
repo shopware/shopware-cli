@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 
+	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/clientcredentials"
 
 	"github.com/shopware/shopware-cli/logging"
@@ -25,7 +26,10 @@ func NewApi(ctx context.Context) (*Client, error) {
 	clientID := os.Getenv("SHOPWARE_CLI_ACCOUNT_CLIENT_ID")
 	clientSecret := os.Getenv("SHOPWARE_CLI_ACCOUNT_CLIENT_SECRET")
 
-	if clientID != "" && clientSecret != "" {
+	if clientID != "" || clientSecret != "" {
+		if clientID == "" || clientSecret == "" {
+			return nil, fmt.Errorf("both SHOPWARE_CLI_ACCOUNT_CLIENT_ID and SHOPWARE_CLI_ACCOUNT_CLIENT_SECRET must be set")
+		}
 		return loginWithClientCredentials(ctx, clientID, clientSecret)
 	}
 
@@ -58,6 +62,7 @@ func loginWithClientCredentials(ctx context.Context, clientID, clientSecret stri
 		ClientSecret: clientSecret,
 		TokenURL:     fmt.Sprintf("%s/oauth2/token", getOIDCEndpoint()),
 		Scopes:       []string{ClientCredentialsScopes},
+		AuthStyle:    oauth2.AuthStyleInParams,
 	}
 
 	token, err := conf.Token(ctx)
