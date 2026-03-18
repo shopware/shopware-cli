@@ -15,13 +15,17 @@ func main() {
 		os.Exit(1)
 	}
 
-	cwd, err := os.Getwd()
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "error getting working directory: %v\n", err)
-		os.Exit(1)
+	envDir := os.Getenv("PROJECT_ROOT")
+	if envDir == "" {
+		var err error
+		envDir, err = os.Getwd()
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "error getting working directory: %v\n", err)
+			os.Exit(1)
+		}
 	}
 
-	if err := envfile.LoadSymfonyEnvFile(cwd); err != nil {
+	if err := envfile.LoadSymfonyEnvFile(envDir); err != nil {
 		fmt.Fprintf(os.Stderr, "error loading env files: %v\n", err)
 		os.Exit(1)
 	}
