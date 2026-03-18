@@ -45,7 +45,7 @@ jobs:
         id: meta
         uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051 # ratchet:docker/metadata-action@v5
         with:
-          images: ghcr.io/shopware/env-bridge
+          images: ghcr.io/shopware/shopware-cli/env-bridge
           tags: |
             type=raw,value=latest,enable={{is_default_branch}}
             type=sha
