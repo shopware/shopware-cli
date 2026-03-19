@@ -537,13 +537,13 @@ var projectCreateCmd = &cobra.Command{
 			sectionStyle := lipgloss.NewStyle().Bold(true).Underline(true)
 
 			fmt.Println()
-			fmt.Println(tui.GreenText.Render("✔ Setup complete"))
+			fmt.Println(tui.GreenText.Render("✔ Setup complete in " + projectFolder))
 
 			if useDocker {
 				fmt.Println()
 				fmt.Println(sectionStyle.Render("Next steps"))
 				fmt.Println()
-				fmt.Printf("  %s  %s\n", tui.GreenText.Render("Start containers:"), cmdStyle.Render(fmt.Sprintf("cd %s && make up", projectFolder)))
+				fmt.Printf("  %s  %s\n", tui.GreenText.Render("Start containers:"), cmdStyle.Render(fmt.Sprintf("cd %q && make up", projectFolder)))
 				fmt.Printf("  %s  %s\n", tui.GreenText.Render("Set up Shopware:"), cmdStyle.Render("make setup"))
 				fmt.Printf("  %s  %s\n", tui.GreenText.Render("Stop containers:"), cmdStyle.Render("make down"))
 				fmt.Println()
