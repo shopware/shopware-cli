@@ -170,7 +170,6 @@ var projectCreateCmd = &cobra.Command{
 		} else {
 			needsAdvanced := selectedDeployment == "" || selectedCI == "" ||
 				!cmd.PersistentFlags().Changed("git") ||
-				!cmd.PersistentFlags().Changed("docker") ||
 				!cmd.PersistentFlags().Changed("with-amqp") ||
 				!elasticsearchExplicit
 
@@ -260,11 +259,20 @@ var projectCreateCmd = &cobra.Command{
 					}))
 				}
 
+				if !cmd.PersistentFlags().Changed("docker") {
+					formGroups = append(formGroups, huh.NewGroup(
+						tui.NewYesNo().
+							Title("Docker").
+							Description("Use Docker to run Shopware locally").
+							Value(&selectDocker),
+					))
+				}
+
 				selectAdvanced := tui.No
 				if needsAdvanced {
 					formGroups = append(formGroups, huh.NewGroup(
 						tui.NewYesNo().
-							Title("Advanced Settings").
+							Title("Do you want to further customize the project creation?").
 							Description("Configure deployment, CI/CD, and optional features").
 							Value(&selectAdvanced),
 					))
@@ -289,15 +297,6 @@ var projectCreateCmd = &cobra.Command{
 							Description("Select your CI/CD platform for automated testing and deployment").
 							Options(ciOptions...).
 							Value(&selectedCI),
-					).WithHideFunc(func() bool { return selectAdvanced != tui.Yes }))
-				}
-
-				if !cmd.PersistentFlags().Changed("docker") {
-					formGroups = append(formGroups, huh.NewGroup(
-						tui.NewYesNo().
-							Title("Docker").
-							Description("Use Docker to run Shopware locally").
-							Value(&selectDocker),
 					).WithHideFunc(func() bool { return selectAdvanced != tui.Yes }))
 				}
 
@@ -513,7 +512,7 @@ var projectCreateCmd = &cobra.Command{
 			return err
 		}
 
-		if err := setupCI(projectFolder, selectedCI, selectedDeployment); err != nil {
+		if err := setupCI(cmd.Context(), projectFolder, selectedCI, selectedDeployment); err != nil {
 			return err
 		}
 
@@ -533,25 +532,31 @@ var projectCreateCmd = &cobra.Command{
 			}
 		}
 
-		logging.FromContext(cmd.Context()).Infof("Project created successfully in %s", projectFolder)
-
-		if useDocker {
+		if interactive {
 			cmdStyle := lipgloss.NewStyle().Bold(true)
 			sectionStyle := lipgloss.NewStyle().Bold(true).Underline(true)
 
 			fmt.Println()
-			fmt.Println(sectionStyle.Render("Next steps"))
+			fmt.Println(tui.GreenText.Render("✔ Setup complete"))
+
+			if useDocker {
+				fmt.Println()
+				fmt.Println(sectionStyle.Render("Next steps"))
+				fmt.Println()
+				fmt.Printf("  %s  %s\n", tui.GreenText.Render("Start containers:"), cmdStyle.Render(fmt.Sprintf("cd %s && make up", projectFolder)))
+				fmt.Printf("  %s  %s\n", tui.GreenText.Render("Set up Shopware:"), cmdStyle.Render("make setup"))
+				fmt.Printf("  %s  %s\n", tui.GreenText.Render("Stop containers:"), cmdStyle.Render("make down"))
+				fmt.Println()
+				fmt.Println(sectionStyle.Render("Access your shop (after make setup)"))
+				fmt.Println()
+				fmt.Printf("  %s  %s\n", tui.GreenText.Render("Storefront:"), cmdStyle.Render("http://127.0.0.1:8000"))
+				fmt.Printf("  %s  %s\n", tui.GreenText.Render("Admin:"), cmdStyle.Render("http://127.0.0.1:8000/admin"))
+				fmt.Printf("  %s  %s\n", tui.GreenText.Render("Credentials:"), cmdStyle.Render("admin")+" / "+cmdStyle.Render("shopware"))
+			}
+
 			fmt.Println()
-			fmt.Printf("  %s  %s\n", tui.GreenText.Render("Start containers:"), cmdStyle.Render(fmt.Sprintf("cd %s && make up", projectFolder)))
-			fmt.Printf("  %s  %s\n", tui.GreenText.Render("Setup Shopware:"), cmdStyle.Render("make setup"))
-			fmt.Printf("  %s  %s\n", tui.GreenText.Render("Stop containers:"), cmdStyle.Render("make down"))
-			fmt.Println()
-			fmt.Println(sectionStyle.Render("Access your shop (after make setup)"))
-			fmt.Println()
-			fmt.Printf("  %s  %s\n", tui.GreenText.Render("Storefront:"), cmdStyle.Render("http://127.0.0.1:8000"))
-			fmt.Printf("  %s  %s\n", tui.GreenText.Render("Admin:"), cmdStyle.Render("http://127.0.0.1:8000/admin"))
-			fmt.Printf("  %s  %s / %s\n", tui.GreenText.Render("Credentials:"), cmdStyle.Render("admin"), cmdStyle.Render("shopware"))
-			fmt.Println()
+		} else {
+			logging.FromContext(cmd.Context()).Infof("Project created successfully in %s", projectFolder)
 		}
 
 		return nil
@@ -611,19 +616,23 @@ services:
 	return nil
 }
 
-func setupCI(projectFolder, ciSystem, deploymentMethod string) error {
+func setupCI(ctx context.Context, projectFolder, ciSystem, deploymentMethod string) error {
 	switch ciSystem {
 	case "github":
 		if err := os.MkdirAll(filepath.Join(projectFolder, ".github", "workflows"), os.ModePerm); err != nil {
 			return err
 		}
-		if err := os.WriteFile(filepath.Join(projectFolder, ".github", "workflows", "ci.yml"), []byte(githubCITemplate), os.ModePerm); err != nil {
+		ciPath := filepath.Join(".github", "workflows", "ci.yml")
+		if err := os.WriteFile(filepath.Join(projectFolder, ciPath), []byte(githubCITemplate), os.ModePerm); err != nil {
 			return err
 		}
+		logging.FromContext(ctx).Infof("Created CI template %s", ciPath)
 		if deploymentMethod == packagist.DeploymentDeployer {
-			if err := os.WriteFile(filepath.Join(projectFolder, ".github", "workflows", "deploy.yml"), []byte(githubDeployTemplate), os.ModePerm); err != nil {
+			deployPath := filepath.Join(".github", "workflows", "deploy.yml")
+			if err := os.WriteFile(filepath.Join(projectFolder, deployPath), []byte(githubDeployTemplate), os.ModePerm); err != nil {
 				return err
 			}
+			logging.FromContext(ctx).Infof("Created CI template %s", deployPath)
 		}
 
 	case "gitlab":
@@ -637,9 +646,11 @@ func setupCI(projectFolder, ciSystem, deploymentMethod string) error {
 			return err
 		}
 
-		if err := os.WriteFile(filepath.Join(projectFolder, ".gitlab-ci.yml"), buf.Bytes(), os.ModePerm); err != nil {
+		ciPath := ".gitlab-ci.yml"
+		if err := os.WriteFile(filepath.Join(projectFolder, ciPath), buf.Bytes(), os.ModePerm); err != nil {
 			return err
 		}
+		logging.FromContext(ctx).Infof("Created CI template %s", ciPath)
 	}
 
 	return nil
