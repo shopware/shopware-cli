@@ -58,6 +58,7 @@ const (
 	overlayStopping
 	overlayInstallPrompt
 	overlayInstalling
+	overlayCommandPalette
 )
 
 type installStep int
@@ -148,6 +149,7 @@ type Model struct {
 	stopConfirmYes bool
 	dockerSpinner  spinner.Model
 	dockerShowLogs bool
+	palette        commandPalette
 	config         *shop.Config
 	envConfig      *shop.EnvironmentConfig
 }
@@ -364,6 +366,10 @@ func (m Model) updateLifecycle(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m Model) updateKeyPress(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+	if m.overlay == overlayCommandPalette {
+		return m.updateCommandPalette(msg)
+	}
+
 	if m.overlay == overlayInstallPrompt {
 		return m.updateInstallPrompt(msg)
 	}
@@ -420,6 +426,10 @@ func (m Model) updateKeyPress(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	}
 
 	switch msg.String() {
+	case "ctrl+p":
+		m.overlay = overlayCommandPalette
+		m.palette = newCommandPalette()
+		return m, textinput.Blink
 	case keyCtrlC, keyQ:
 		m.logs.StopStreaming()
 		if m.dockerMode {
@@ -438,17 +448,65 @@ func (m Model) updateKeyPress(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	case keyTab, keyShiftTab:
 		m.activeTab = (m.activeTab + 1) % 2
 		return m, nil
-	case keyF:
-		if m.activeTab == tabGeneral {
-			return m, openInBrowser(m.general.shopURL)
-		}
-	case keyA:
-		if m.activeTab == tabGeneral {
-			return m, openInBrowser(m.general.adminURL)
-		}
 	}
 
 	return m.updateChildren(msg)
+}
+
+func (m Model) updateCommandPalette(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "esc", "ctrl+p":
+		m.overlay = overlayNone
+		return m, nil
+	case keyUp, keyK:
+		m.palette.moveUp()
+		return m, nil
+	case keyDown, keyJ:
+		m.palette.moveDown()
+		return m, nil
+	case keyEnter:
+		id := m.palette.selectedID()
+		m.overlay = overlayNone
+		return m.executeCommand(id)
+	}
+
+	var cmd tea.Cmd
+	m.palette.filter, cmd = m.palette.filter.Update(msg)
+	m.palette.applyFilter()
+	return m, cmd
+}
+
+func (m Model) executeCommand(id string) (tea.Model, tea.Cmd) {
+	switch id {
+	case "open-shop":
+		return m, openInBrowser(m.general.shopURL)
+	case "open-admin":
+		return m, openInBrowser(m.general.adminURL)
+	case "cache-clear":
+		return m, m.runCacheClear()
+	case "tab-logs":
+		m.activeTab = tabLogs
+	case "tab-general":
+		m.activeTab = tabGeneral
+	case "quit":
+		m.logs.StopStreaming()
+		if m.dockerMode {
+			m.overlay = overlayStopConfirm
+			m.stopConfirmYes = true
+			return m, nil
+		}
+		return m, tea.Quit
+	}
+	return m, nil
+}
+
+func (m *Model) runCacheClear() tea.Cmd {
+	e := m.executor
+	return func() tea.Msg {
+		cmd := e.ConsoleCommand(context.Background(), "cache:clear")
+		_ = cmd.Run()
+		return nil
+	}
 }
 
 func (m Model) updateChildren(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -578,10 +636,13 @@ func (m Model) View() tea.View {
 	v := tea.NewView("")
 	v.AltScreen = true
 
-	if m.overlay != overlayNone {
-		v.Content = m.renderOverlay()
-	} else {
+	switch m.overlay {
+	case overlayNone:
 		v.Content = m.renderDashboard()
+	case overlayCommandPalette:
+		v.Content = m.palette.view(m.width, m.height)
+	case overlayStarting, overlayStopConfirm, overlayStopping, overlayInstallPrompt, overlayInstalling:
+		v.Content = m.renderOverlay()
 	}
 
 	return v
@@ -638,8 +699,7 @@ func (m Model) renderDashboardFooter() string {
 	}
 
 	return tui.ShortcutBar(
-		tui.Shortcut{Key: "f", Label: "Open shop"},
-		tui.Shortcut{Key: "a", Label: "Open admin"},
+		tui.Shortcut{Key: "ctrl+p", Label: "Commands"},
 		tui.Shortcut{Key: "tab", Label: "Next tab"},
 		tui.Shortcut{Key: "ctrl+c", Label: "Exit"},
 	)
@@ -722,8 +782,7 @@ func (m Model) renderOverlay() string {
 		}
 		content.WriteString(tui.RenderPhaseCard(strings.TrimRight(card.String(), "\n")))
 		footerHint = tui.ShortcutBadge("l", "Toggle logs")
-	case overlayNone:
-	default:
+	case overlayNone, overlayCommandPalette:
 	}
 
 	return renderPhaseLayout(content.String(), m.width, m.height, footerHint)
