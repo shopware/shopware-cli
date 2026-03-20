@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path"
+	"path/filepath"
 	"runtime"
 	"sync"
 
@@ -14,6 +15,7 @@ import (
 
 type npmInstallJob struct {
 	npmPath             string
+	relDir              string
 	additionalNpmParams []string
 	additionalText      string
 }
@@ -23,7 +25,7 @@ type npmInstallResult struct {
 	err             error
 }
 
-func InstallNodeModulesOfConfigs(ctx context.Context, cfgs ExtensionAssetConfig, force bool) ([]string, error) {
+func InstallNodeModulesOfConfigs(ctx context.Context, cfgs ExtensionAssetConfig, assetConfig AssetBuildConfig) ([]string, error) {
 	// Collect all npm install jobs
 	jobs := make([]npmInstallJob, 0)
 
@@ -40,7 +42,7 @@ func InstallNodeModulesOfConfigs(ctx context.Context, cfgs ExtensionAssetConfig,
 		for _, possibleNodePath := range entry.getPossibleNodePaths() {
 			npmPath := path.Dir(possibleNodePath)
 
-			if !force && npm.NodeModulesExists(npmPath) {
+			if !assetConfig.NPMForceInstall && npm.NodeModulesExists(npmPath) {
 				continue
 			}
 
@@ -55,8 +57,14 @@ func InstallNodeModulesOfConfigs(ctx context.Context, cfgs ExtensionAssetConfig,
 				continue
 			}
 
+			var relDir string
+			if assetConfig.ShopwareRoot != "" {
+				relDir, _ = filepath.Rel(assetConfig.ShopwareRoot, npmPath)
+			}
+
 			jobs = append(jobs, npmInstallJob{
 				npmPath:             npmPath,
+				relDir:              relDir,
 				additionalNpmParams: additionalNpmParameters,
 				additionalText:      additionalText,
 			})
@@ -79,7 +87,7 @@ func InstallNodeModulesOfConfigs(ctx context.Context, cfgs ExtensionAssetConfig,
 		go func() {
 			defer wg.Done()
 			for job := range jobChan {
-				result := processNpmInstallJob(ctx, job)
+				result := processNpmInstallJob(ctx, assetConfig, job)
 				resultChan <- result
 			}
 		}()
@@ -111,7 +119,7 @@ func InstallNodeModulesOfConfigs(ctx context.Context, cfgs ExtensionAssetConfig,
 	return paths, nil
 }
 
-func processNpmInstallJob(ctx context.Context, job npmInstallJob) npmInstallResult {
+func processNpmInstallJob(ctx context.Context, assetConfig AssetBuildConfig, job npmInstallJob) npmInstallResult {
 	npmPackage, err := npm.ReadPackage(job.npmPath)
 	if err != nil {
 		return npmInstallResult{err: err}
@@ -119,7 +127,14 @@ func processNpmInstallJob(ctx context.Context, job npmInstallJob) npmInstallResu
 
 	logging.FromContext(ctx).Infof("Installing npm dependencies in %s %s\n", job.npmPath, job.additionalText)
 
-	if err := npm.InstallDependencies(ctx, executor.NewLocal(job.npmPath), npmPackage, job.additionalNpmParams...); err != nil {
+	var exec executor.Executor
+	if job.relDir != "" {
+		exec = assetConfig.ExecutorWithRelDir(job.relDir)
+	} else {
+		exec = executor.NewLocal(job.npmPath)
+	}
+
+	if err := npm.InstallDependencies(ctx, exec, npmPackage, job.additionalNpmParams...); err != nil {
 		return npmInstallResult{err: err}
 	}
 

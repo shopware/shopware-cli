@@ -70,9 +70,14 @@ func filterAndWritePluginJson(cmd *cobra.Command, projectRoot string, shopCfg *s
 		return err
 	}
 
-	cfgs := extension.BuildAssetConfigFromExtensions(cmd.Context(), sources, extension.AssetBuildConfig{})
+	assetConfig := extension.AssetBuildConfig{
+		ShopwareRoot: projectRoot,
+		Executor:     cmdExecutor,
+	}
 
-	if _, err := extension.InstallNodeModulesOfConfigs(cmd.Context(), cfgs, false); err != nil {
+	cfgs := extension.BuildAssetConfigFromExtensions(cmd.Context(), sources, assetConfig)
+
+	if _, err := extension.InstallNodeModulesOfConfigs(cmd.Context(), cfgs, assetConfig); err != nil {
 		return err
 	}
 

@@ -19,7 +19,7 @@ type DockerExecutor struct {
 
 func (d *DockerExecutor) ConsoleCommand(ctx context.Context, args ...string) *exec.Cmd {
 	dockerArgs := d.baseArgs()
-	dockerArgs = append(dockerArgs, "php", consoleCommandName(ctx))
+	dockerArgs = append(dockerArgs, "env-bridge", "php", consoleCommandName(ctx))
 	dockerArgs = append(dockerArgs, args...)
 
 	cmd := exec.CommandContext(ctx, "docker", dockerArgs...)
@@ -41,7 +41,7 @@ func (d *DockerExecutor) ComposerCommand(ctx context.Context, args ...string) *e
 
 func (d *DockerExecutor) PHPCommand(ctx context.Context, args ...string) *exec.Cmd {
 	dockerArgs := d.baseArgs()
-	dockerArgs = append(dockerArgs, "php")
+	dockerArgs = append(dockerArgs, "env-bridge", "php")
 	dockerArgs = append(dockerArgs, args...)
 
 	cmd := exec.CommandContext(ctx, "docker", dockerArgs...)
@@ -52,7 +52,7 @@ func (d *DockerExecutor) PHPCommand(ctx context.Context, args ...string) *exec.C
 
 func (d *DockerExecutor) NPMCommand(ctx context.Context, args ...string) *exec.Cmd {
 	dockerArgs := d.baseArgs()
-	dockerArgs = append(dockerArgs, "npm")
+	dockerArgs = append(dockerArgs, "env-bridge", "npm")
 	dockerArgs = append(dockerArgs, args...)
 
 	cmd := exec.CommandContext(ctx, "docker", dockerArgs...)

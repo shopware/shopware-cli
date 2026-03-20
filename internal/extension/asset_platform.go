@@ -54,7 +54,7 @@ func BuildAssetsForExtensions(ctx context.Context, sources []asset.Source, asset
 
 	nodeInstallSection := ci.Default.Section(ctx, "Installing node_modules for extensions")
 
-	paths, err := InstallNodeModulesOfConfigs(ctx, cfgs, assetConfig.NPMForceInstall)
+	paths, err := InstallNodeModulesOfConfigs(ctx, cfgs, assetConfig)
 	if err != nil {
 		return err
 	}

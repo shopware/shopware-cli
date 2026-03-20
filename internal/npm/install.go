@@ -27,11 +27,11 @@ func InstallDependencies(ctx context.Context, exec executor.Executor, pkg *Packa
 	args = append(args, additionalParams...)
 
 	withEnv := exec.WithEnv(map[string]string{
-		"PUPPETEER_SKIP_DOWNLOAD":      "1",
-		"NPM_CONFIG_ENGINE_STRICT":     "false",
-		"NPM_CONFIG_FUND":              "false",
-		"NPM_CONFIG_AUDIT":             "false",
-		"NPM_CONFIG_UPDATE_NOTIFIER":   "false",
+		"PUPPETEER_SKIP_DOWNLOAD":    "1",
+		"NPM_CONFIG_ENGINE_STRICT":   "false",
+		"NPM_CONFIG_FUND":            "false",
+		"NPM_CONFIG_AUDIT":           "false",
+		"NPM_CONFIG_UPDATE_NOTIFIER": "false",
 	})
 
 	installCmd := withEnv.NPMCommand(ctx, args...)
