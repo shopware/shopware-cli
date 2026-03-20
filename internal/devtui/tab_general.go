@@ -8,7 +8,8 @@ import (
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
-	"charm.land/lipgloss/v2"
+
+	"github.com/shopware/shopware-cli/internal/tui"
 )
 
 type GeneralModel struct {
@@ -101,122 +102,58 @@ func openInBrowser(url string) tea.Cmd {
 	}
 }
 
-func (m GeneralModel) View() string {
-	overviewRows := []string{
-		renderKVRow("Environment", m.envType, activeBadgeStyle),
-		renderKVRow("Shop URL", m.shopURL, urlStyle),
-		renderKVRow("Admin URL", m.adminURL, urlStyle),
-	}
+func (m GeneralModel) View(width, height int) string {
+	var s strings.Builder
 
-	credentialsRows := []string{
-		renderKVRow("Username", m.username, valueStyle),
-		renderKVRow("Password", m.password, secretStyle),
-	}
+	divider := tui.SectionDivider(width - 8)
 
+	s.WriteString(tui.TitleStyle.Render("Shop"))
+	s.WriteString("\n")
+	s.WriteString(tui.KVRow("Environment", activeBadgeStyle.Render(m.envType)))
+	s.WriteString(tui.KVRow("Shop URL", urlStyle.Render(m.shopURL)))
+	s.WriteString(tui.KVRow("Admin URL", urlStyle.Render(m.adminURL)))
+
+	s.WriteString(divider)
+
+	s.WriteString(tui.TitleStyle.Render("Admin Access"))
+	s.WriteString("\n")
 	if m.username == "" && m.password == "" {
-		credentialsRows = []string{
-			helpStyle.Render("Admin credentials will appear here once Shopware is installed."),
-		}
-	}
-
-	contentWidth := max(m.width-2, 0)
-
-	var content string
-	if m.width >= 110 {
-		columnWidth := contentWidth / 2
-		overviewSection := renderSectionWidth("Shop", strings.Join(overviewRows, "\n"), columnWidth)
-		credentialsSection := renderSectionWidth("Admin Access", strings.Join(credentialsRows, "\n"), columnWidth)
-		servicesSection := renderSection("Services", m.renderServices())
-
-		leftCol := padLines(overviewSection, columnWidth, surfaceTextStyle)
-		rightCol := padLines(credentialsSection, columnWidth, surfaceTextStyle)
-		leftLines := strings.Split(leftCol, "\n")
-		rightLines := strings.Split(rightCol, "\n")
-		rowHeight := max(len(leftLines), len(rightLines))
-		emptyLine := surfaceTextStyle.Render(strings.Repeat(" ", columnWidth))
-		for len(leftLines) < rowHeight {
-			leftLines = append(leftLines, emptyLine)
-		}
-		for len(rightLines) < rowHeight {
-			rightLines = append(rightLines, emptyLine)
-		}
-		var topRowLines []string
-		for i := range rowHeight {
-			topRowLines = append(topRowLines, leftLines[i]+rightLines[i])
-		}
-		topRow := strings.Join(topRowLines, "\n")
-		content = topRow + "\n" + padLines(servicesSection, contentWidth, surfaceTextStyle)
+		s.WriteString("  " + helpStyle.Render("Credentials will appear here once Shopware is installed.") + "\n")
 	} else {
-		overviewSection := renderSection("Shop", strings.Join(overviewRows, "\n"))
-		credentialsSection := renderSection("Admin Access", strings.Join(credentialsRows, "\n"))
-		servicesSection := renderSection("Services", m.renderServices())
-		content = lipgloss.JoinVertical(
-			lipgloss.Left,
-			overviewSection,
-			credentialsSection,
-			servicesSection,
-		)
+		s.WriteString(tui.KVRow("Username", valueStyle.Render(m.username)))
+		s.WriteString(tui.KVRow("Password", secretStyle.Render(m.password)))
 	}
 
-	content = padLines(content, contentWidth, surfaceTextStyle)
+	s.WriteString(divider)
 
-	var footerHints []string
-	if m.shopURL != "" {
-		footerHints = append(footerHints, renderKeyHint("f", "Open shop"))
-	}
-	if m.adminURL != "" && m.adminURL != "admin" {
-		footerHints = append(footerHints, renderKeyHint("a", "Open admin"))
-	}
+	s.WriteString(tui.TitleStyle.Render("Services"))
+	s.WriteString("\n")
+	s.WriteString(m.renderServices())
 
-	footer := padLines(renderFooter(footerHints...), contentWidth, surfaceTextStyle)
-
-	body := "\n" + content
-
-	// Pin footer to bottom by filling remaining height with styled whitespace
-	bodyHeight := lipgloss.Height(body)
-	footerHeight := lipgloss.Height(footer)
-	if gap := m.height - bodyHeight - footerHeight; gap > 0 {
-		emptyLine := surfaceTextStyle.Render(strings.Repeat(" ", contentWidth))
-		for range gap {
-			body += "\n" + emptyLine
-		}
-	}
-
-	return body + "\n" + footer
+	return s.String()
 }
 
 func (m GeneralModel) renderServices() string {
 	switch {
 	case m.loading:
-		return lipgloss.JoinVertical(
-			lipgloss.Left,
-			activeBadgeStyle.Render("SCANNING"),
-			helpStyle.Render("Looking for published local services."),
-		)
+		return "  " + tui.StatusBadge("scanning", tui.BrandColor) + "\n" +
+			"  " + helpStyle.Render("Looking for published local services.") + "\n"
 	case m.err != nil:
-		return lipgloss.JoinVertical(
-			lipgloss.Left,
-			errorBadgeStyle.Render("DISCOVERY FAILED"),
-			errorStyle.Render(m.err.Error()),
-		)
+		return "  " + tui.StatusBadge("failed", tui.ErrorColor) + "\n" +
+			"  " + errorStyle.Render(m.err.Error()) + "\n"
 	case len(m.services) == 0:
-		return helpStyle.Render("No auxiliary services detected.")
+		return "  " + helpStyle.Render("No auxiliary services detected.") + "\n"
 	}
 
-	blocks := make([]string, 0, len(m.services))
+	var s strings.Builder
 	for _, service := range m.services {
-		rows := []string{
-			renderKVRow(service.Name, service.URL, urlStyle),
-		}
+		s.WriteString(tui.KVRow(service.Name, urlStyle.Render(service.URL)))
 		if service.Username != "" {
-			rows = append(rows, renderSubKVRow("Username", service.Username, valueStyle))
-			rows = append(rows, renderSubKVRow("Password", service.Password, secretStyle))
+			s.WriteString(tui.KVRow("  Username", valueStyle.Render(service.Username)))
+			s.WriteString(tui.KVRow("  Password", secretStyle.Render(service.Password)))
 		}
-
-		blocks = append(blocks, strings.Join(rows, "\n"))
 	}
-
-	return strings.Join(blocks, "\n\n")
+	return s.String()
 }
 
 // dockerComposePSOutput represents a single container from `docker compose ps --format json`.

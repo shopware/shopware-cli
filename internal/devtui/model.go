@@ -7,12 +7,15 @@ import (
 	"os/exec"
 	"strings"
 
+	"charm.land/bubbles/v2/progress"
+	"charm.land/bubbles/v2/spinner"
 	"charm.land/bubbles/v2/textinput"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 
 	"github.com/shopware/shopware-cli/internal/executor"
 	"github.com/shopware/shopware-cli/internal/shop"
+	"github.com/shopware/shopware-cli/internal/tui"
 )
 
 type activeTab int
@@ -92,12 +95,13 @@ var (
 )
 
 type installWizard struct {
-	step     installStep
-	cursor   int
-	language string
-	currency string
-	username textinput.Model
-	password textinput.Model
+	step       installStep
+	cursor     int
+	confirmYes bool
+	language   string
+	currency   string
+	username   textinput.Model
+	password   textinput.Model
 }
 
 type Options struct {
@@ -107,21 +111,45 @@ type Options struct {
 	Executor    executor.Executor
 }
 
+type installProgress struct {
+	currentStep int
+	done        bool
+	showLogs    bool
+	spinner     spinner.Model
+	progress    progress.Model
+}
+
+var installStepPatterns = []struct {
+	pattern string
+	label   string
+}{
+	{"system:install", "Installing Shopware"},
+	{"user:create", "Creating admin account"},
+	{"messenger:setup-transports", "Setting up message transports"},
+	{"sales-channel:create:storefront", "Creating storefront"},
+	{"theme:change", "Compiling theme"},
+	{"plugin:refresh", "Refreshing plugins"},
+}
+
 type Model struct {
-	activeTab     activeTab
-	general       GeneralModel
-	logs          LogsModel
-	width         int
-	height        int
-	dockerMode    bool
-	overlay       overlay
-	overlayLines  []string
-	projectRoot   string
-	executor      executor.Executor
-	dockerOutChan <-chan string
-	install       installWizard
-	config        *shop.Config
-	envConfig     *shop.EnvironmentConfig
+	activeTab      activeTab
+	general        GeneralModel
+	logs           LogsModel
+	width          int
+	height         int
+	dockerMode     bool
+	overlay        overlay
+	overlayLines   []string
+	projectRoot    string
+	executor       executor.Executor
+	dockerOutChan  <-chan string
+	install        installWizard
+	installProg    installProgress
+	stopConfirmYes bool
+	dockerSpinner  spinner.Model
+	dockerShowLogs bool
+	config         *shop.Config
+	envConfig      *shop.EnvironmentConfig
 }
 
 type dockerAlreadyRunningMsg struct{}
@@ -198,6 +226,29 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.updateKeyPress(msg)
 	}
 
+	if m.overlay == overlayInstalling {
+		switch msg := msg.(type) {
+		case spinner.TickMsg:
+			var cmd tea.Cmd
+			m.installProg.spinner, cmd = m.installProg.spinner.Update(msg)
+			return m, cmd
+		case progress.FrameMsg:
+			var cmd tea.Cmd
+			m.installProg.progress, cmd = m.installProg.progress.Update(msg)
+			return m, cmd
+		}
+		return m, nil
+	}
+
+	if m.overlay == overlayStarting || m.overlay == overlayStopping {
+		if msg, ok := msg.(spinner.TickMsg); ok {
+			var cmd tea.Cmd
+			m.dockerSpinner, cmd = m.dockerSpinner.Update(msg)
+			return m, cmd
+		}
+		return m, nil
+	}
+
 	if m.overlay != overlayNone {
 		return m, nil
 	}
@@ -214,13 +265,31 @@ func (m Model) updateLifecycle(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case dockerNeedStartMsg:
 		m.overlay = overlayStarting
 		m.overlayLines = nil
-		return m, m.startContainers()
+		m.dockerShowLogs = false
+		m.dockerSpinner = spinner.New(
+			spinner.WithSpinner(spinner.Dot),
+			spinner.WithStyle(lipgloss.NewStyle().Foreground(tui.BrandColor)),
+		)
+		return m, tea.Batch(m.dockerSpinner.Tick, m.startContainers())
 
 	case dockerOutputLineMsg:
 		m.overlayLines = append(m.overlayLines, string(msg))
 		maxLines := m.overlayMaxLines()
 		if len(m.overlayLines) > maxLines {
 			m.overlayLines = m.overlayLines[len(m.overlayLines)-maxLines:]
+		}
+		if m.overlay == overlayInstalling {
+			line := string(msg)
+			if strings.HasPrefix(line, "Start: ") {
+				for i, sp := range installStepPatterns {
+					if strings.Contains(line, sp.pattern) && i >= m.installProg.currentStep {
+						m.installProg.currentStep = i
+						pct := float64(i) / float64(len(installStepPatterns))
+						cmd := m.installProg.progress.SetPercent(pct)
+						return m, tea.Batch(cmd, m.readNextDockerOutput())
+					}
+				}
+			}
 		}
 		return m, m.readNextDockerOutput()
 
@@ -256,15 +325,18 @@ func (m Model) updateLifecycle(msg tea.Msg) (tea.Model, tea.Cmd) {
 		passwordInput.Prompt = "Password: "
 		passwordInput.CharLimit = 50
 
-		m.install = installWizard{step: installStepAsk, username: usernameInput, password: passwordInput}
+		m.install = installWizard{step: installStepAsk, confirmYes: true, username: usernameInput, password: passwordInput}
 		return m, nil
 
 	case shopwareInstallDoneMsg:
 		if msg.err != nil {
+			m.installProg.showLogs = true
 			m.overlayLines = append(m.overlayLines, "", errorStyle.Render("Installation failed: "+msg.err.Error()))
 			m.overlayLines = append(m.overlayLines, "", helpStyle.Render("Press q to exit"))
 			return m, nil
 		}
+		m.installProg.done = true
+		m.installProg.currentStep = len(installStepPatterns)
 
 		username := m.install.username.Value()
 		password := m.install.password.Value()
@@ -298,11 +370,43 @@ func (m Model) updateKeyPress(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 
 	if m.overlay == overlayStopConfirm {
 		switch msg.String() {
-		case keyY, keyYUpper:
-			m.overlay = overlayStopping
-			m.overlayLines = nil
-			return m, m.stopContainers()
-		case keyN, keyNUpper:
+		case "left", "h":
+			m.stopConfirmYes = true
+		case "right", "l":
+			m.stopConfirmYes = false
+		case keyTab:
+			m.stopConfirmYes = !m.stopConfirmYes
+		case keyEnter:
+			if m.stopConfirmYes {
+				m.overlay = overlayStopping
+				m.overlayLines = nil
+				m.dockerShowLogs = false
+				m.dockerSpinner = spinner.New(
+					spinner.WithSpinner(spinner.Dot),
+					spinner.WithStyle(lipgloss.NewStyle().Foreground(tui.BrandColor)),
+				)
+				return m, tea.Batch(m.dockerSpinner.Tick, m.stopContainers())
+			}
+			return m, tea.Quit
+		}
+		return m, nil
+	}
+
+	if m.overlay == overlayStarting || m.overlay == overlayStopping {
+		switch msg.String() {
+		case "l":
+			m.dockerShowLogs = !m.dockerShowLogs
+		case keyQ, keyCtrlC:
+			return m, tea.Quit
+		}
+		return m, nil
+	}
+
+	if m.overlay == overlayInstalling {
+		switch msg.String() {
+		case "l":
+			m.installProg.showLogs = !m.installProg.showLogs
+		case keyQ, keyCtrlC:
 			return m, tea.Quit
 		}
 		return m, nil
@@ -321,6 +425,7 @@ func (m Model) updateKeyPress(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		if m.dockerMode {
 			m.overlay = overlayStopConfirm
 			m.overlayLines = nil
+			m.stopConfirmYes = true
 			return m, nil
 		}
 		return m, tea.Quit
@@ -373,12 +478,20 @@ func (m Model) updateInstallPrompt(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	switch m.install.step {
 	case installStepAsk:
 		switch msg.String() {
-		case keyY, keyYUpper:
-			m.install.step = installStepLanguage
-			m.install.cursor = 0
-		case keyN, keyNUpper:
-			m.overlay = overlayNone
-			return m, m.startDashboard()
+		case "left", "h":
+			m.install.confirmYes = true
+		case "right", "l":
+			m.install.confirmYes = false
+		case keyTab:
+			m.install.confirmYes = !m.install.confirmYes
+		case keyEnter:
+			if m.install.confirmYes {
+				m.install.step = installStepLanguage
+				m.install.cursor = 0
+			} else {
+				m.overlay = overlayNone
+				return m, m.startDashboard()
+			}
 		}
 
 	case installStepLanguage:
@@ -435,7 +548,18 @@ func (m Model) updateInstallPrompt(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			m.install.password.Blur()
 			m.overlay = overlayInstalling
 			m.overlayLines = nil
-			return m, m.runShopwareInstall()
+			m.installProg = installProgress{
+				spinner: spinner.New(
+					spinner.WithSpinner(spinner.Dot),
+					spinner.WithStyle(lipgloss.NewStyle().Foreground(tui.BrandColor)),
+				),
+				progress: progress.New(
+					progress.WithColors(tui.BrandColor),
+					progress.WithWidth(tui.PhaseCardWidth-15),
+					progress.WithoutPercentage(),
+				),
+			}
+			return m, tea.Batch(m.installProg.spinner.Tick, m.runShopwareInstall())
 		default:
 			var cmd tea.Cmd
 			m.install.password, cmd = m.install.password.Update(msg)
@@ -447,101 +571,246 @@ func (m Model) updateInstallPrompt(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 }
 
 func (m Model) View() tea.View {
-	var b strings.Builder
+	if m.width == 0 || m.height == 0 {
+		return tea.NewView("")
+	}
+
+	v := tea.NewView("")
+	v.AltScreen = true
 
 	if m.overlay != overlayNone {
-		b.WriteString(m.renderOverlay())
+		v.Content = m.renderOverlay()
 	} else {
-		b.WriteString(m.renderTabBar())
-		b.WriteString("\n\n")
-
-		switch m.activeTab {
-		case tabGeneral:
-			b.WriteString(m.general.View())
-		case tabLogs:
-			b.WriteString(m.logs.View())
-		}
+		v.Content = m.renderDashboard()
 	}
 
-	content := appStyle.Render(b.String())
-	if m.width > 0 && m.height > 0 {
-		content = lipgloss.Place(
-			m.width,
-			m.height,
-			lipgloss.Left,
-			lipgloss.Top,
-			content,
-			lipgloss.WithWhitespaceStyle(surfaceTextStyle),
-		)
-	}
-
-	v := tea.NewView(content)
-	v.AltScreen = true
 	return v
 }
 
+func (m Model) renderDashboard() string {
+	tabHeader := buildTabHeader(int(m.activeTab), m.width)
+	footer := m.renderDashboardFooter()
+
+	footerHeight := lipgloss.Height(footer)
+	boxHeight := m.height - 3 - footerHeight
+
+	padV := 1
+	padH := 3
+	if m.activeTab == tabLogs {
+		padV = 0
+		padH = 1
+	}
+
+	contentH := boxHeight - padV*2 - 1
+	contentW := m.width - padH*2 - 2
+
+	var content string
+	switch m.activeTab {
+	case tabGeneral:
+		content = m.general.View(m.width, boxHeight)
+	case tabLogs:
+		m.logs.SetSize(contentW, contentH)
+		content = m.logs.View()
+	}
+
+	contentBox := lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderTop(false).
+		BorderForeground(tui.BorderColor).
+		Padding(padV, padH).
+		Width(m.width).
+		Height(boxHeight)
+
+	return tabHeader + "\n" + contentBox.Render(content) + "\n" + footer
+}
+
+func (m Model) renderDashboardFooter() string {
+	if m.activeTab == tabLogs {
+		followState := "Follow"
+		shortcuts := []tui.Shortcut{
+			{Key: "↑/↓", Label: "Move cursor"},
+			{Key: "enter", Label: "Open source"},
+			{Key: "f", Label: followState},
+			{Key: "tab", Label: "Next tab"},
+			{Key: "ctrl+c", Label: "Exit"},
+		}
+		return tui.ShortcutBar(shortcuts...)
+	}
+
+	return tui.ShortcutBar(
+		tui.Shortcut{Key: "f", Label: "Open shop"},
+		tui.Shortcut{Key: "a", Label: "Open admin"},
+		tui.Shortcut{Key: "tab", Label: "Next tab"},
+		tui.Shortcut{Key: "ctrl+c", Label: "Exit"},
+	)
+}
+
 func (m Model) renderOverlay() string {
-	var title string
-	switch m.overlay {
-	case overlayNone:
-		title = ""
-	case overlayStarting:
-		title = "Starting Docker containers..."
-	case overlayStopConfirm:
-		title = "Stop Docker containers?"
-	case overlayStopping:
-		title = "Stopping Docker containers..."
-	case overlayInstallPrompt:
-		title = "Shopware is not installed"
-	case overlayInstalling:
-		title = "Installing Shopware..."
-	}
-
 	var content strings.Builder
-	content.WriteString(panelHeaderStyle.Render(title))
-	content.WriteString("\n\n")
+	var footerHint string
 
 	switch m.overlay {
-	case overlayNone:
-	// No overlay content needed
-	case overlayStarting, overlayStopping, overlayInstalling:
-		for _, line := range m.overlayLines {
-			content.WriteString(panelTextStyle.Render(line) + "\n")
+	case overlayStarting:
+		footerHint = tui.ShortcutBadge("l", "Toggle logs")
+		if m.dockerShowLogs {
+			return m.renderDockerLogs("Starting Docker containers...", footerHint)
 		}
-		if len(m.overlayLines) == 0 {
-			content.WriteString(helpStyle.Render("Waiting for command output..."))
-		}
+		cardContent := fmt.Sprintf("%s Starting Docker containers...", m.dockerSpinner.View())
+		content.WriteString(tui.RenderPhaseCard(cardContent))
 	case overlayStopConfirm:
-		content.WriteString("Do you want to stop the Docker containers?\n\n")
-		content.WriteString(renderFooter(
-			renderKeyHint("y", "Stop containers"),
-			renderKeyHint("n", "Quit without stopping"),
-		))
-	case overlayInstallPrompt:
-		m.renderInstallPrompt(&content)
-	}
-
-	style := overlayStyle
-	if m.overlay == overlayStarting || m.overlay == overlayStopping || m.overlay == overlayInstalling {
-		if m.width > 0 && m.height > 0 {
-			style = style.Width(m.width - 2).Height(m.height - 2)
+		var card strings.Builder
+		warnStyle := lipgloss.NewStyle().Bold(true).Foreground(tui.ErrorColor)
+		card.WriteString(warnStyle.Render("Stop Docker containers?"))
+		card.WriteString("\n")
+		card.WriteString(tui.DimStyle.Render("Do you want to stop the running Docker containers?\nThey can be restarted with shopware-cli project dev."))
+		card.WriteString("\n\n")
+		activeBtn := lipgloss.NewStyle().
+			Foreground(tui.TextColor).
+			Background(tui.BrandColor).
+			Padding(0, 2)
+		inactiveBtn := lipgloss.NewStyle().
+			Foreground(tui.MutedColor).
+			Background(tui.SubtleBgColor).
+			Padding(0, 2)
+		var yes, no string
+		if m.stopConfirmYes {
+			yes = activeBtn.Render("Yes, stop")
+			no = inactiveBtn.Render("No, quit")
+		} else {
+			yes = inactiveBtn.Render("Yes, stop")
+			no = activeBtn.Render("No, quit")
 		}
-	}
-
-	modal := style.Render(content.String())
-
-	if m.width > 0 && m.height > 0 {
-		modal = lipgloss.Place(
-			m.width,
-			m.height,
-			lipgloss.Center,
-			lipgloss.Center,
-			modal,
-			lipgloss.WithWhitespaceStyle(surfaceTextStyle),
+		card.WriteString(yes + "  " + no)
+		content.WriteString(tui.RenderPhaseCard(card.String()))
+		footerHint = tui.ShortcutBar(
+			tui.Shortcut{Key: "←/→", Label: "Select"},
+			tui.Shortcut{Key: "enter", Label: "Confirm"},
 		)
+	case overlayStopping:
+		footerHint = tui.ShortcutBadge("l", "Toggle logs")
+		if m.dockerShowLogs {
+			return m.renderDockerLogs("Stopping Docker containers...", footerHint)
+		}
+		cardContent := fmt.Sprintf("%s Stopping Docker containers...", m.dockerSpinner.View())
+		content.WriteString(tui.RenderPhaseCard(cardContent))
+	case overlayInstallPrompt:
+		var card strings.Builder
+		m.renderInstallPrompt(&card)
+		content.WriteString(tui.RenderPhaseCard(card.String()))
+		footerHint = m.installFooterHint()
+	case overlayInstalling:
+		if m.installProg.showLogs {
+			footerHint = tui.ShortcutBadge("l", "Toggle logs")
+			return m.renderDockerLogs("Installing Shopware...", footerHint)
+		}
+		var card strings.Builder
+		total := len(installStepPatterns)
+		pctText := fmt.Sprintf(" %d%%", int(float64(m.installProg.currentStep)/float64(total)*100))
+		card.WriteString(m.installProg.progress.View() + tui.DimStyle.Render(pctText) + "\n\n")
+
+		for i, sp := range installStepPatterns {
+			switch {
+			case i < m.installProg.currentStep:
+				card.WriteString(tui.StepDone(sp.label))
+			case i == m.installProg.currentStep && !m.installProg.done:
+				card.WriteString(tui.StepActive(m.installProg.spinner.View(), sp.label))
+			case i == m.installProg.currentStep && m.installProg.done:
+				card.WriteString(tui.StepDone(sp.label))
+			default:
+				card.WriteString(tui.StepPending(tui.DimStyle.Render(sp.label)))
+			}
+		}
+		content.WriteString(tui.RenderPhaseCard(strings.TrimRight(card.String(), "\n")))
+		footerHint = tui.ShortcutBadge("l", "Toggle logs")
+	case overlayNone:
+	default:
 	}
 
-	return modal
+	return renderPhaseLayout(content.String(), m.width, m.height, footerHint)
+}
+
+// renderPhaseLayout renders a full-screen phase view: branding line at top,
+// content centered in a bordered box, shortcut footer at bottom.
+func renderPhaseLayout(content string, width, height int, footerHint string) string {
+	branding := tui.BrandingLine()
+	fill := width - tui.BrandingLineWidth()
+	if fill < 0 {
+		fill = 0
+	}
+	header := strings.Repeat(" ", fill) + branding
+
+	exit := tui.ShortcutBadge("ctrl+c", "Exit")
+	var footer string
+	if footerHint != "" {
+		sep := lipgloss.NewStyle().Foreground(tui.BorderColor).Render("  │  ")
+		footer = footerHint + sep + exit
+	} else {
+		footer = exit
+	}
+
+	headerHeight := lipgloss.Height(header)
+	footerHeight := lipgloss.Height(footer)
+	boxHeight := height - headerHeight - footerHeight
+
+	contentBox := lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(tui.BorderColor).
+		Padding(1, 3).
+		Width(width).
+		Height(boxHeight).
+		AlignVertical(lipgloss.Center).
+		AlignHorizontal(lipgloss.Center)
+
+	contentWidth := lipgloss.Width(content)
+	normalized := lipgloss.NewStyle().Width(contentWidth).Render(content)
+
+	return header + "\n" + contentBox.Render(normalized) + "\n" + footer
+}
+
+// renderDockerLogs renders a full-screen log view without the mascot card.
+func (m Model) renderDockerLogs(title, footerHint string) string {
+	branding := tui.BrandingLine()
+	fill := m.width - tui.BrandingLineWidth()
+	if fill < 0 {
+		fill = 0
+	}
+	header := strings.Repeat(" ", fill) + branding
+
+	sep := lipgloss.NewStyle().Foreground(tui.BorderColor).Render("  │  ")
+	footer := footerHint + sep + tui.ShortcutBadge("ctrl+c", "Exit")
+
+	headerHeight := lipgloss.Height(header)
+	footerHeight := lipgloss.Height(footer)
+	boxHeight := m.height - headerHeight - footerHeight
+	// border (2) + padding (2) + title (1) + blank (1) = 6 lines overhead
+	visibleLines := boxHeight - 6
+	if visibleLines < 1 {
+		visibleLines = 1
+	}
+
+	var body strings.Builder
+	body.WriteString(panelHeaderStyle.Render(title))
+	body.WriteString("\n\n")
+
+	start := 0
+	if len(m.overlayLines) > visibleLines {
+		start = len(m.overlayLines) - visibleLines
+	}
+	for _, line := range m.overlayLines[start:] {
+		body.WriteString(line + "\n")
+	}
+	if len(m.overlayLines) == 0 {
+		body.WriteString(helpStyle.Render("Waiting for command output..."))
+	}
+
+	contentBox := lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(tui.BorderColor).
+		Padding(1, 3).
+		Width(m.width).
+		Height(boxHeight)
+
+	return header + "\n" + contentBox.Render(body.String()) + "\n" + footer
 }
 
 // overlayMaxLines returns the maximum number of log lines that fit in the overlay.
@@ -561,82 +830,89 @@ func (m Model) overlayMaxLines() int {
 func (m Model) renderInstallPrompt(b *strings.Builder) {
 	switch m.install.step {
 	case installStepAsk:
-		b.WriteString("Would you like to install Shopware now?\n\n")
-		b.WriteString(renderFooter(
-			renderKeyHint("y", "Install now"),
-			renderKeyHint("n", "Skip for now"),
-			renderKeyHint("q", "Quit"),
-		))
+		warnStyle := lipgloss.NewStyle().Bold(true).Foreground(tui.ErrorColor)
+		b.WriteString(warnStyle.Render("Shopware is not installed"))
+		b.WriteString("\n")
+		b.WriteString(tui.DimStyle.Render("This project has not been set up yet. The installation\nwill create the database, run migrations and configure\nyour local development environment."))
+		b.WriteString("\n\n")
+		activeBtn := lipgloss.NewStyle().
+			Foreground(tui.TextColor).
+			Background(tui.BrandColor).
+			Padding(0, 2)
+		inactiveBtn := lipgloss.NewStyle().
+			Foreground(tui.MutedColor).
+			Background(tui.SubtleBgColor).
+			Padding(0, 2)
+		var yes, no string
+		if m.install.confirmYes {
+			yes = activeBtn.Render("Yes, install now")
+			no = inactiveBtn.Render("No, skip")
+		} else {
+			yes = inactiveBtn.Render("Yes, install now")
+			no = activeBtn.Render("No, skip")
+		}
+		b.WriteString(yes + "  " + no)
 
 	case installStepLanguage:
-		b.WriteString("Select default language:\n\n")
+		b.WriteString(tui.TextBadge("Step 1/4"))
+		b.WriteString("\n\n")
+		opts := make([]tui.SelectOption, len(installLanguages))
 		for i, lang := range installLanguages {
-			style := sidebarItemStyle
-			if i == m.install.cursor {
-				style = selectedSidebarItemStyle
-			}
-			b.WriteString(style.Render(lang.label) + "\n")
+			opts[i] = tui.SelectOption{Label: lang.label, Detail: lang.id}
 		}
-		b.WriteString("\n")
-		b.WriteString(renderFooter(
-			renderKeyHint("↑/↓", "Select"),
-			renderKeyHint("enter", "Confirm"),
-			renderKeyHint("q", "Quit"),
-		))
+		b.WriteString(tui.RenderSelectList("Default Language", "Select the primary language for your storefront", opts, m.install.cursor))
 
 	case installStepCurrency:
-		fmt.Fprintf(b, "Language: %s\n\n", valueStyle.Render(m.install.language))
-		b.WriteString("Select default currency:\n\n")
+		b.WriteString(tui.TextBadge("Step 2/4"))
+		b.WriteString("\n\n")
+		opts := make([]tui.SelectOption, len(installCurrencies))
 		for i, curr := range installCurrencies {
-			style := sidebarItemStyle
-			if i == m.install.cursor {
-				style = selectedSidebarItemStyle
-			}
-			b.WriteString(style.Render(curr) + "\n")
+			opts[i] = tui.SelectOption{Label: curr}
 		}
-		b.WriteString("\n")
-		b.WriteString(renderFooter(
-			renderKeyHint("↑/↓", "Select"),
-			renderKeyHint("enter", "Confirm"),
-			renderKeyHint("q", "Quit"),
-		))
+		b.WriteString(tui.RenderSelectList("Default Currency", "Select the default currency for pricing", opts, m.install.cursor))
 
 	case installStepUsername:
-		fmt.Fprintf(b, "Language: %s\n", valueStyle.Render(m.install.language))
-		fmt.Fprintf(b, "Currency: %s\n\n", valueStyle.Render(m.install.currency))
-		b.WriteString("Admin username:\n\n")
-		b.WriteString(m.install.username.View())
+		b.WriteString(tui.TextBadge("Step 3/4"))
 		b.WriteString("\n\n")
-		b.WriteString(renderFooter(
-			renderKeyHint("enter", "Continue"),
-			renderKeyHint("q", "Quit"),
-		))
+		b.WriteString(tui.TitleStyle.Render("Admin Username"))
+		b.WriteString("\n")
+		b.WriteString(tui.DimStyle.Render("Enter the username for the admin account"))
+		b.WriteString("\n\n")
+		b.WriteString(m.install.username.View())
 
 	case installStepPassword:
-		fmt.Fprintf(b, "Language: %s\n", valueStyle.Render(m.install.language))
-		fmt.Fprintf(b, "Currency: %s\n", valueStyle.Render(m.install.currency))
-		fmt.Fprintf(b, "Username: %s\n\n", valueStyle.Render(m.install.username.Value()))
-		b.WriteString("Admin password:\n\n")
-		b.WriteString(m.install.password.View())
+		b.WriteString(tui.TextBadge("Step 4/4"))
 		b.WriteString("\n\n")
-		b.WriteString(renderFooter(
-			renderKeyHint("enter", "Install"),
-			renderKeyHint("q", "Quit"),
-		))
+		b.WriteString(tui.TitleStyle.Render("Admin Password"))
+		b.WriteString("\n")
+		b.WriteString(tui.DimStyle.Render("Enter the password for the admin account"))
+		b.WriteString("\n\n")
+		b.WriteString(m.install.password.View())
 	}
 }
 
-func (m Model) renderTabBar() string {
-	var tabs []string
-	for i, name := range tabNames {
-		label := fmt.Sprintf(" %d: %s ", i+1, name)
-		if activeTab(i) == m.activeTab {
-			tabs = append(tabs, activeTabStyle.Render(label))
-		} else {
-			tabs = append(tabs, inactiveTabStyle.Render(label))
-		}
+func (m Model) installFooterHint() string {
+	switch m.install.step {
+	case installStepAsk:
+		return tui.ShortcutBar(
+			tui.Shortcut{Key: "←/→", Label: "Select"},
+			tui.Shortcut{Key: "enter", Label: "Confirm"},
+		)
+	case installStepLanguage, installStepCurrency:
+		return tui.ShortcutBar(
+			tui.Shortcut{Key: "↑/↓", Label: "Select"},
+			tui.Shortcut{Key: "enter", Label: "Confirm"},
+		)
+	case installStepUsername:
+		return tui.ShortcutBar(
+			tui.Shortcut{Key: "enter", Label: "Continue"},
+		)
+	case installStepPassword:
+		return tui.ShortcutBar(
+			tui.Shortcut{Key: "enter", Label: "Install"},
+		)
 	}
-	return lipgloss.JoinHorizontal(lipgloss.Top, tabs...)
+	return ""
 }
 
 func checkContainersRunning(projectRoot string) tea.Cmd {

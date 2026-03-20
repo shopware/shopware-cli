@@ -3,7 +3,6 @@ package devtui
 import (
 	"bufio"
 	"context"
-	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -12,6 +11,8 @@ import (
 	"charm.land/bubbles/v2/viewport"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
+
+	"github.com/shopware/shopware-cli/internal/tui"
 )
 
 type logSource struct {
@@ -127,26 +128,12 @@ func (m LogsModel) Update(msg tea.Msg) (LogsModel, tea.Cmd) {
 }
 
 func (m LogsModel) View() string {
-	body := lipgloss.JoinHorizontal(lipgloss.Top, m.renderSidebar(), m.renderContent())
-
-	followState := "off"
-	if m.follow {
-		followState = "on"
-	}
-
-	footer := renderFooter(
-		renderKeyHint("f", fmt.Sprintf("Follow %s", followState)),
-		renderKeyHint("↑/↓", "Move cursor"),
-		renderKeyHint("enter", "Open source"),
-		renderKeyHint("pgup", "Scroll"),
-	)
-
-	return body + "\n" + footer
+	return lipgloss.JoinHorizontal(lipgloss.Top, m.renderSidebar(), m.renderContent())
 }
 
 func (m LogsModel) renderSidebar() string {
 	var b strings.Builder
-	b.WriteString(sectionTitleStyle.Render("Sources"))
+	b.WriteString(tui.TitleStyle.Render("Sources"))
 	b.WriteString("\n\n")
 
 	for i, src := range m.sources {
@@ -180,7 +167,7 @@ func (m LogsModel) renderSidebar() string {
 
 	return sidebarStyle.
 		Width(sidebarWidth).
-		Height(clampMin(m.height-3, 8)).
+		Height(max(m.height-3, 8)).
 		Render(b.String())
 }
 
@@ -196,19 +183,18 @@ func (m LogsModel) renderContent() string {
 	}
 
 	headerText := lipgloss.NewStyle().
-		Background(panelColor).
-		Foreground(textColor).
+		Foreground(tui.TextColor).
 		Bold(true).
 		Render(sourceName)
 
-	header := headerText + panelTextStyle.Render(" ") + followBadge
+	header := headerText + " " + followBadge
 
 	return contentPanelStyle.Render(
 		lipgloss.JoinVertical(
 			lipgloss.Left,
 			header,
 			"",
-			panelTextStyle.Render(m.viewport.View()),
+			m.viewport.View(),
 		),
 	)
 }
@@ -216,9 +202,9 @@ func (m LogsModel) renderContent() string {
 func (m *LogsModel) SetSize(width, height int) {
 	m.width = width
 	m.height = height
-	viewportWidth := clampMin(width-sidebarWidth-8, 20)
+	viewportWidth := max(width-sidebarWidth-8, 20)
 	m.viewport.SetWidth(viewportWidth)
-	m.viewport.SetHeight(clampMin(height-7, 8))
+	m.viewport.SetHeight(max(height-7, 8))
 }
 
 func (m *LogsModel) StartStreaming() tea.Cmd {

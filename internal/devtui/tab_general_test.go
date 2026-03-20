@@ -84,7 +84,7 @@ func TestViewShowsCredentials(t *testing.T) {
 		{Name: "Adminer", URL: "http://127.0.0.1:9080", Username: "root", Password: "root"},
 	}
 
-	view := m.View()
+	view := m.View(120, 40)
 	assert.Contains(t, view, "Adminer")
 	assert.Contains(t, view, "http://127.0.0.1:9080")
 	assert.Contains(t, view, "root")
