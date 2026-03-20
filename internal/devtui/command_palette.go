@@ -109,34 +109,17 @@ func (cp commandPalette) view(width, height int) string {
 
 	for i, idx := range cp.filtered {
 		cmd := paletteCommands[idx]
-		label := cmd.Label
-		shortcut := ""
-		if cmd.Shortcut != "" {
-			shortcut = cmd.Shortcut
+		rowStyle, scStyle := normalStyle, shortcutStyle
+		if i == cp.cursor {
+			rowStyle, scStyle = selectedStyle, selectedShortcutStyle
 		}
 
-		if i == cp.cursor {
-			if shortcut != "" {
-				sc := selectedShortcutStyle.Render(shortcut)
-				gap := innerWidth - lipgloss.Width(label) - lipgloss.Width(shortcut)
-				if gap < 1 {
-					gap = 1
-				}
-				b.WriteString(selectedStyle.Render(label + strings.Repeat(" ", gap) + sc))
-			} else {
-				b.WriteString(selectedStyle.Render(label))
-			}
+		if cmd.Shortcut != "" {
+			sc := scStyle.Render(cmd.Shortcut)
+			gap := max(innerWidth-lipgloss.Width(cmd.Label)-lipgloss.Width(cmd.Shortcut), 1)
+			b.WriteString(rowStyle.Render(cmd.Label + strings.Repeat(" ", gap) + sc))
 		} else {
-			if shortcut != "" {
-				sc := shortcutStyle.Render(shortcut)
-				gap := innerWidth - lipgloss.Width(label) - lipgloss.Width(shortcut)
-				if gap < 1 {
-					gap = 1
-				}
-				b.WriteString(normalStyle.Render(label + strings.Repeat(" ", gap) + sc))
-			} else {
-				b.WriteString(normalStyle.Render(label))
-			}
+			b.WriteString(rowStyle.Render(cmd.Label))
 		}
 		b.WriteString("\n")
 	}

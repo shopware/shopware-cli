@@ -241,56 +241,36 @@ func (m *LogsModel) streamContainer(container string) tea.Cmd {
 	ctx, cancel := context.WithCancel(context.Background())
 	m.cancel = cancel
 
-	ch := make(chan string, 100)
-	m.logChan = ch
+	cmd := exec.CommandContext(ctx, "docker", "compose", "logs", "-f", "--tail=100", container)
+	cmd.Dir = m.projectRoot
 
-	go func() {
-		defer close(ch)
-
-		cmd := exec.CommandContext(ctx, "docker", "compose", "logs", "-f", "--tail=100", container)
-		cmd.Dir = m.projectRoot
-
-		stdout, err := cmd.StdoutPipe()
-		if err != nil {
-			return
-		}
-		cmd.Stderr = cmd.Stdout
-
-		if err := cmd.Start(); err != nil {
-			return
-		}
-
-		scanner := bufio.NewScanner(stdout)
-		scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
-		for scanner.Scan() {
-			select {
-			case <-ctx.Done():
-				return
-			case ch <- scanner.Text():
-			}
-		}
-
-		_ = cmd.Wait()
-	}()
-
-	return m.waitForNextLine()
+	return m.streamCommand(ctx, cmd, true)
 }
 
 func (m *LogsModel) streamFile(filePath string) tea.Cmd {
 	ctx, cancel := context.WithCancel(context.Background())
 	m.cancel = cancel
 
+	cmd := exec.CommandContext(ctx, "tail", "-n", "100", "-f", filePath)
+
+	return m.streamCommand(ctx, cmd, false)
+}
+
+// streamCommand runs cmd in a goroutine, scanning its stdout into a channel.
+// If mergeStderr is true, stderr is merged into stdout.
+func (m *LogsModel) streamCommand(ctx context.Context, cmd *exec.Cmd, mergeStderr bool) tea.Cmd {
 	ch := make(chan string, 100)
 	m.logChan = ch
 
 	go func() {
 		defer close(ch)
 
-		cmd := exec.CommandContext(ctx, "tail", "-n", "100", "-f", filePath)
-
 		stdout, err := cmd.StdoutPipe()
 		if err != nil {
 			return
+		}
+		if mergeStderr {
+			cmd.Stderr = cmd.Stdout
 		}
 
 		if err := cmd.Start(); err != nil {

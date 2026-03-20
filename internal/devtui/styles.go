@@ -69,7 +69,31 @@ var (
 				Foreground(tui.TextColor).
 				Bold(true).
 				Padding(0, 0, 1)
+
+	activeBtnStyle = lipgloss.NewStyle().
+			Foreground(tui.TextColor).
+			Background(tui.BrandColor).
+			Padding(0, 2)
+
+	inactiveBtnStyle = lipgloss.NewStyle().
+				Foreground(tui.MutedColor).
+				Background(tui.SubtleBgColor).
+				Padding(0, 2)
 )
+
+// renderConfirmButtons renders a yes/no button pair where the active button
+// is highlighted with the brand color.
+func renderConfirmButtons(yesLabel, noLabel string, yesActive bool) string {
+	var yes, no string
+	if yesActive {
+		yes = activeBtnStyle.Render(yesLabel)
+		no = inactiveBtnStyle.Render(noLabel)
+	} else {
+		yes = inactiveBtnStyle.Render(yesLabel)
+		no = activeBtnStyle.Render(noLabel)
+	}
+	return yes + "  " + no
+}
 
 // buildTabHeader renders the tui-example-style tab header with numbered tabs
 // and a right-aligned branding line. The active tab's bottom border is open
