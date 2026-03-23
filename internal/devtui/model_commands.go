@@ -88,11 +88,8 @@ func (m *Model) readNextDockerOutput() tea.Cmd {
 	return readFromChan(ch)
 }
 
-// streamBufferSize is the channel buffer size used for streaming command output.
 const streamBufferSize = 50
 
-// readFromChan returns a tea.Cmd that reads one line from ch and produces
-// a dockerOutputLineMsg, or dockerOutputDoneMsg when the channel is closed.
 func readFromChan(ch <-chan string) tea.Cmd {
 	return func() tea.Msg {
 		line, ok := <-ch
@@ -103,10 +100,6 @@ func readFromChan(ch <-chan string) tea.Cmd {
 	}
 }
 
-// streamCmdOutput starts cmd, scans its output line by line into ch, then
-// closes ch. If useStdout is true it pipes stdout (merging stderr into it);
-// otherwise it pipes stderr (merging stdout into it).
-// Returns the error from cmd.Wait.
 func streamCmdOutput(cmd *exec.Cmd, ch chan<- string, useStdout bool) error {
 	var pipe io.Reader
 	var err error
@@ -140,8 +133,6 @@ func streamCmdOutput(cmd *exec.Cmd, ch chan<- string, useStdout bool) error {
 	return cmd.Wait()
 }
 
-// runDockerCommandWithArgs runs a docker compose command, streaming stderr lines
-// through a channel for display, and returns a result message when done.
 func runDockerCommandWithArgs(ctx context.Context, projectRoot string, args []string, resultFn func(error) tea.Msg) (outChan <-chan string, outputCmd tea.Cmd, doneCmd tea.Cmd) {
 	lineChan := make(chan string, streamBufferSize)
 

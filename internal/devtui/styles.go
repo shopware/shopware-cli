@@ -81,8 +81,6 @@ var (
 				Padding(0, 2)
 )
 
-// renderConfirmButtons renders a yes/no button pair where the active button
-// is highlighted with the brand color.
 func renderConfirmButtons(yesLabel, noLabel string, yesActive bool) string {
 	var yes, no string
 	if yesActive {

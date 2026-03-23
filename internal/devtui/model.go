@@ -34,6 +34,9 @@ const (
 	key2        = "2"
 
 	defaultUsername = "admin"
+
+	watcherAdmin      = "Admin Watcher"
+	watcherStorefront = "Storefront Watcher"
 )
 
 type overlay int
@@ -46,6 +49,7 @@ const (
 	overlayInstallPrompt
 	overlayInstalling
 	overlayCommandPalette
+	overlayTask
 )
 
 type installStep int
@@ -139,6 +143,9 @@ type Model struct {
 	palette        commandPalette
 	config         *shop.Config
 	envConfig      *shop.EnvironmentConfig
+	taskTitle      string
+	taskDone       bool
+	taskErr        error
 }
 
 type dockerAlreadyRunningMsg struct{}
@@ -151,6 +158,8 @@ type dockerOutputDoneMsg struct{}
 type shopwareInstalledMsg struct{}
 type shopwareNotInstalledMsg struct{}
 type shopwareInstallDoneMsg struct{ err error }
+
+type taskDoneMsg struct{ err error }
 
 func New(opts Options) Model {
 	effectiveAdminApi := opts.Config.AdminApi
@@ -173,7 +182,7 @@ func New(opts Options) Model {
 
 	return Model{
 		activeTab:   tabGeneral,
-		general:     NewGeneralModel(opts.Executor.Type(), shopURL, username, password, opts.ProjectRoot),
+		general:     NewGeneralModel(opts.Executor.Type(), shopURL, username, password, opts.ProjectRoot, opts.Executor),
 		logs:        NewLogsModel(opts.ProjectRoot, isDocker),
 		dockerMode:  isDocker,
 		projectRoot: opts.ProjectRoot,
@@ -188,6 +197,10 @@ func (m Model) Init() tea.Cmd {
 		return checkContainersRunning(m.projectRoot)
 	}
 	return m.checkShopwareInstalled()
+}
+
+func (m *Model) shutdown() {
+	m.logs.StopStreaming()
 }
 
 func (m *Model) startDashboard() tea.Cmd {
@@ -210,6 +223,49 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		dockerOutputDoneMsg, dockerStartedMsg, dockerStoppedMsg,
 		shopwareInstalledMsg, shopwareNotInstalledMsg, shopwareInstallDoneMsg:
 		return m.updateLifecycle(msg)
+
+	case taskDoneMsg:
+		m.taskDone = true
+		m.taskErr = msg.err
+		if msg.err != nil {
+			m.overlayLines = append(m.overlayLines, "", errorStyle.Render("Failed: "+msg.err.Error()))
+		} else {
+			m.overlayLines = append(m.overlayLines, "", helpStyle.Render("Done. Press any key to close."))
+		}
+		return m, nil
+
+	case watcherStartedMsg:
+		switch msg.name {
+		case watcherAdmin:
+			m.general.adminWatchStarting = false
+			m.general.adminWatchRunning = true
+		case watcherStorefront:
+			m.general.sfWatchStarting = false
+			m.general.sfWatchRunning = true
+		}
+		m.activeTab = tabLogs
+		return m, m.logs.AddProcessSource(msg.name, msg.cmd, msg.cancel)
+
+	case watcherStoppedMsg:
+		switch msg.name {
+		case watcherAdmin:
+			m.general.adminWatchStarting = false
+			m.general.adminWatchRunning = false
+		case watcherStorefront:
+			m.general.sfWatchStarting = false
+			m.general.sfWatchRunning = false
+		}
+		return m, nil
+
+	case logDoneMsg:
+		name := m.logs.ActiveProcessSourceName()
+		switch name {
+		case watcherAdmin:
+			m.general.adminWatchRunning = false
+		case watcherStorefront:
+			m.general.sfWatchRunning = false
+		}
+		return m.updateChildren(msg)
 
 	case tea.KeyPressMsg:
 		return m.updateKeyPress(msg)

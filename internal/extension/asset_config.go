@@ -59,6 +59,13 @@ func (c AssetBuildConfig) ExecutorWithRelDir(relDir string) executor.Executor {
 	return executor.NewLocal(filepath.Join(c.ShopwareRoot, relDir))
 }
 
+func (c AssetBuildConfig) NormalizePath(hostPath string) string {
+	if c.Executor != nil {
+		return c.Executor.NormalizePath(hostPath)
+	}
+	return hostPath
+}
+
 type ExtensionAssetConfig map[string]*ExtensionAssetConfigEntry
 
 func (c ExtensionAssetConfig) Has(name string) bool {

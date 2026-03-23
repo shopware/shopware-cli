@@ -57,7 +57,7 @@ func (l *LocalExecutor) Type() string {
 }
 
 func (l *LocalExecutor) WithEnv(env map[string]string) Executor {
-	return &LocalExecutor{env: env, projectRoot: l.projectRoot, relDir: l.relDir}
+	return &LocalExecutor{env: mergeEnv(l.env, env), projectRoot: l.projectRoot, relDir: l.relDir}
 }
 
 func (l *LocalExecutor) WithRelDir(relDir string) Executor {

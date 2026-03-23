@@ -268,6 +268,36 @@ func TestWithEnvPreservesRelDir(t *testing.T) {
 	assert.Contains(t, cmd.Env, "FOO=bar")
 }
 
+func TestWithEnvMerges(t *testing.T) {
+	exec := &LocalExecutor{projectRoot: "/project"}
+	withA := exec.WithEnv(map[string]string{"A": "1"})
+	withAB := withA.WithEnv(map[string]string{"B": "2"})
+
+	cmd := withAB.PHPCommand(t.Context(), "-v")
+	assert.Contains(t, cmd.Env, "A=1")
+	assert.Contains(t, cmd.Env, "B=2")
+}
+
+func TestWithEnvOverrides(t *testing.T) {
+	exec := &LocalExecutor{projectRoot: "/project"}
+	withA := exec.WithEnv(map[string]string{"A": "1"})
+	withA2 := withA.WithEnv(map[string]string{"A": "2"})
+
+	cmd := withA2.PHPCommand(t.Context(), "-v")
+	assert.Contains(t, cmd.Env, "A=2")
+	assert.NotContains(t, cmd.Env, "A=1")
+}
+
+func TestDockerWithEnvMerges(t *testing.T) {
+	exec := &DockerExecutor{projectRoot: "/project"}
+	withA := exec.WithEnv(map[string]string{"A": "1"})
+	withAB := withA.WithEnv(map[string]string{"B": "2"})
+
+	cmd := withAB.PHPCommand(t.Context(), "-v")
+	assert.Contains(t, cmd.Args, "A=1")
+	assert.Contains(t, cmd.Args, "B=2")
+}
+
 func TestNewLocal(t *testing.T) {
 	exec := NewLocal("/my/project")
 

@@ -7,7 +7,7 @@ import (
 )
 
 func TestNewGeneralModel(t *testing.T) {
-	m := NewGeneralModel("docker", "http://localhost:8000", "admin", "shopware", "/tmp/project")
+	m := NewGeneralModel("docker", "http://localhost:8000", "admin", "shopware", "/tmp/project", nil)
 
 	assert.Equal(t, "docker", m.envType)
 	assert.Equal(t, "http://localhost:8000", m.shopURL)
@@ -19,19 +19,19 @@ func TestNewGeneralModel(t *testing.T) {
 }
 
 func TestNewGeneralModel_AdminURLTrailingSlash(t *testing.T) {
-	m := NewGeneralModel("local", "http://localhost:8000/", "", "", "/tmp/project")
+	m := NewGeneralModel("local", "http://localhost:8000/", "", "", "/tmp/project", nil)
 
 	assert.Equal(t, "http://localhost:8000/admin", m.adminURL)
 }
 
 func TestNewGeneralModel_EmptyURL(t *testing.T) {
-	m := NewGeneralModel("local", "", "", "", "/tmp/project")
+	m := NewGeneralModel("local", "", "", "", "/tmp/project", nil)
 
 	assert.Equal(t, "admin", m.adminURL)
 }
 
 func TestServicesLoadedMsg(t *testing.T) {
-	m := NewGeneralModel("docker", "http://localhost:8000", "", "", "/tmp/project")
+	m := NewGeneralModel("docker", "http://localhost:8000", "", "", "/tmp/project", nil)
 
 	services := []discoveredService{
 		{Name: "Adminer", URL: "http://127.0.0.1:9080", Username: "root", Password: "root"},
@@ -49,7 +49,7 @@ func TestServicesLoadedMsg(t *testing.T) {
 }
 
 func TestServicesLoadedMsg_WithError(t *testing.T) {
-	m := NewGeneralModel("docker", "http://localhost:8000", "", "", "/tmp/project")
+	m := NewGeneralModel("docker", "http://localhost:8000", "", "", "/tmp/project", nil)
 
 	updated, _ := m.Update(servicesLoadedMsg{err: assert.AnError})
 	assert.False(t, updated.loading)
@@ -78,7 +78,7 @@ func TestKnownServices(t *testing.T) {
 }
 
 func TestViewShowsCredentials(t *testing.T) {
-	m := NewGeneralModel("docker", "http://localhost:8000", "", "", "/tmp/project")
+	m := NewGeneralModel("docker", "http://localhost:8000", "", "", "/tmp/project", nil)
 	m.loading = false
 	m.services = []discoveredService{
 		{Name: "Adminer", URL: "http://127.0.0.1:9080", Username: "root", Password: "root"},

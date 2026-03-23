@@ -1,14 +1,10 @@
 package project
 
 import (
-	"os"
-	"strings"
-
 	"github.com/spf13/cobra"
 
 	"github.com/shopware/shopware-cli/internal/envfile"
 	"github.com/shopware/shopware-cli/internal/extension"
-	"github.com/shopware/shopware-cli/internal/npm"
 	"github.com/shopware/shopware-cli/internal/shop"
 )
 
@@ -44,54 +40,13 @@ var projectStorefrontWatchCmd = &cobra.Command{
 			return err
 		}
 
-		if err := runTransparentCommand(cmdExecutor.ConsoleCommand(cmd.Context(), "feature:dump")); err != nil {
+		watchCmd, err := extension.PrepareStorefrontWatcher(cmd.Context(), projectRoot, cmdExecutor)
+		if err != nil {
 			return err
 		}
 
-		activeOnly := "--active-only"
-
-		if !themeCompileSupportsActiveOnly(projectRoot) {
-			activeOnly = "-v"
-		}
-
-		if err := runTransparentCommand(cmdExecutor.ConsoleCommand(cmd.Context(), "theme:compile", activeOnly)); err != nil {
-			return err
-		}
-
-		if err := runTransparentCommand(cmdExecutor.ConsoleCommand(cmd.Context(), "theme:dump")); err != nil {
-			return err
-		}
-
-		if err := os.Setenv("PROJECT_ROOT", projectRoot); err != nil {
-			return err
-		}
-
-		if err := os.Setenv("STOREFRONT_ROOT", extension.PlatformPath(projectRoot, "Storefront", "")); err != nil {
-			return err
-		}
-
-		storefrontRelPath := extension.PlatformRelPath(projectRoot, "Storefront", "Resources/app/storefront")
-		storefrontExecutor := cmdExecutor.WithRelDir(storefrontRelPath)
-
-		if _, err := os.Stat(extension.PlatformPath(projectRoot, "Storefront", "Resources/app/storefront/node_modules/webpack-dev-server")); os.IsNotExist(err) {
-			if err := npm.InstallDependencies(cmd.Context(), storefrontExecutor, npm.NonEmptyPackage); err != nil {
-				return err
-			}
-		}
-
-		return runTransparentCommand(storefrontExecutor.NPMCommand(cmd.Context(), "run-script", "hot-proxy"))
+		return runTransparentCommand(watchCmd)
 	},
-}
-
-func themeCompileSupportsActiveOnly(projectRoot string) bool {
-	themeFile := extension.PlatformPath(projectRoot, "Storefront", "Theme/Command/ThemeCompileCommand.php")
-
-	bytes, err := os.ReadFile(themeFile)
-	if err != nil {
-		return false
-	}
-
-	return strings.Contains(string(bytes), "active-only")
 }
 
 func init() {

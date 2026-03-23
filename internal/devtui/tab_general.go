@@ -9,21 +9,28 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
+	"github.com/shopware/shopware-cli/internal/executor"
+	"github.com/shopware/shopware-cli/internal/extension"
 	"github.com/shopware/shopware-cli/internal/tui"
 )
 
 type GeneralModel struct {
-	envType     string
-	shopURL     string
-	adminURL    string
-	username    string
-	password    string
-	services    []discoveredService
-	projectRoot string
-	loading     bool
-	err         error
-	width       int
-	height      int
+	envType            string
+	shopURL            string
+	adminURL           string
+	username           string
+	password           string
+	services           []discoveredService
+	projectRoot        string
+	executor           executor.Executor
+	loading            bool
+	err                error
+	width              int
+	height             int
+	adminWatchRunning  bool
+	adminWatchStarting bool
+	sfWatchRunning     bool
+	sfWatchStarting    bool
 }
 
 type discoveredService struct {
@@ -36,6 +43,15 @@ type discoveredService struct {
 type servicesLoadedMsg struct {
 	services []discoveredService
 	err      error
+}
+
+type watcherStartedMsg struct {
+	name   string
+	cmd    *exec.Cmd
+	cancel context.CancelFunc
+}
+type watcherStoppedMsg struct {
+	name string
 }
 
 type knownService struct {
@@ -57,7 +73,7 @@ var ignoredServices = map[string]bool{
 	"database": true,
 }
 
-func NewGeneralModel(envType, shopURL, username, password, projectRoot string) GeneralModel {
+func NewGeneralModel(envType, shopURL, username, password, projectRoot string, exec executor.Executor) GeneralModel {
 	adminURL := shopURL
 	if adminURL != "" && !strings.HasSuffix(adminURL, "/") {
 		adminURL += "/"
@@ -71,6 +87,7 @@ func NewGeneralModel(envType, shopURL, username, password, projectRoot string) G
 		username:    username,
 		password:    password,
 		projectRoot: projectRoot,
+		executor:    exec,
 		loading:     true,
 	}
 }
@@ -126,11 +143,67 @@ func (m GeneralModel) View(width, height int) string {
 
 	s.WriteString(divider)
 
+	s.WriteString(tui.TitleStyle.Render("Watchers"))
+	s.WriteString("\n")
+	s.WriteString(m.renderWatcherStatus("Admin", m.adminWatchRunning, m.adminWatchStarting, "http://127.0.0.1:5173"))
+	s.WriteString(m.renderWatcherStatus("Storefront", m.sfWatchRunning, m.sfWatchStarting, ""))
+
+	s.WriteString(divider)
+
 	s.WriteString(tui.TitleStyle.Render("Services"))
 	s.WriteString("\n")
 	s.WriteString(m.renderServices())
 
 	return s.String()
+}
+
+func (m *GeneralModel) startAdminWatch() tea.Cmd {
+	e := m.executor
+	projectRoot := m.projectRoot
+
+	return func() tea.Msg {
+		ctx, cancel := context.WithCancel(context.Background())
+
+		watchCmd, err := extension.PrepareAdminWatcher(ctx, projectRoot, e)
+		if err != nil {
+			cancel()
+			return watcherStoppedMsg{name: watcherAdmin}
+		}
+
+		return watcherStartedMsg{name: watcherAdmin, cmd: watchCmd, cancel: cancel}
+	}
+}
+
+func (m *GeneralModel) startStorefrontWatch() tea.Cmd {
+	e := m.executor
+	projectRoot := m.projectRoot
+
+	return func() tea.Msg {
+		ctx, cancel := context.WithCancel(context.Background())
+
+		watchCmd, err := extension.PrepareStorefrontWatcher(ctx, projectRoot, e)
+		if err != nil {
+			cancel()
+			return watcherStoppedMsg{name: watcherStorefront}
+		}
+
+		return watcherStartedMsg{name: watcherStorefront, cmd: watchCmd, cancel: cancel}
+	}
+}
+
+func (m GeneralModel) renderWatcherStatus(label string, running, starting bool, url string) string {
+	switch {
+	case running:
+		row := tui.KVRow(label, activeBadgeStyle.Render("RUNNING"))
+		if url != "" {
+			row += tui.KVRow("  URL", urlStyle.Render(url))
+		}
+		return row
+	case starting:
+		return tui.KVRow(label, tui.StatusBadge("starting", tui.BrandColor))
+	default:
+		return tui.KVRow(label, helpStyle.Render("stopped"))
+	}
 }
 
 func (m GeneralModel) renderServices() string {

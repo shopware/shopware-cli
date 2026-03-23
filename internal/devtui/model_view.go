@@ -25,6 +25,8 @@ func (m Model) View() tea.View {
 		v.Content = m.palette.view(m.width, m.height)
 	case overlayStarting, overlayStopConfirm, overlayStopping, overlayInstallPrompt, overlayInstalling:
 		v.Content = m.renderOverlay()
+	case overlayTask:
+		v.Content = m.renderDockerLogs(m.taskTitle, "")
 	}
 
 	return v
@@ -148,15 +150,12 @@ func (m Model) renderOverlay() string {
 		}
 		content.WriteString(tui.RenderPhaseCard(strings.TrimRight(card.String(), "\n")))
 		footerHint = tui.ShortcutBadge("l", "Toggle logs")
-	case overlayNone, overlayCommandPalette:
+	case overlayNone, overlayCommandPalette, overlayTask:
 	}
 
 	return renderPhaseLayout(content.String(), m.width, m.height, footerHint)
 }
 
-// phaseHeaderFooter builds the branding header and shortcut footer used by
-// full-screen phase views, returning the rendered strings and the remaining
-// box height.
 func phaseHeaderFooter(width, height int, footerHint string) (header, footer string, boxHeight int) {
 	branding := tui.BrandingLine()
 	fill := width - tui.BrandingLineWidth()
@@ -177,8 +176,6 @@ func phaseHeaderFooter(width, height int, footerHint string) (header, footer str
 	return header, footer, boxHeight
 }
 
-// renderPhaseLayout renders a full-screen phase view: branding line at top,
-// content centered in a bordered box, shortcut footer at bottom.
 func renderPhaseLayout(content string, width, height int, footerHint string) string {
 	header, footer, boxHeight := phaseHeaderFooter(width, height, footerHint)
 
@@ -197,7 +194,6 @@ func renderPhaseLayout(content string, width, height int, footerHint string) str
 	return header + "\n" + contentBox.Render(normalized) + "\n" + footer
 }
 
-// renderDockerLogs renders a full-screen log view without the mascot card.
 func (m Model) renderDockerLogs(title, footerHint string) string {
 	header, footer, boxHeight := phaseHeaderFooter(m.width, m.height, footerHint)
 
@@ -232,7 +228,6 @@ func (m Model) renderDockerLogs(title, footerHint string) string {
 	return header + "\n" + contentBox.Render(body.String()) + "\n" + footer
 }
 
-// overlayMaxLines returns the maximum number of log lines that fit in the overlay.
 func (m Model) overlayMaxLines() int {
 	if m.height <= 0 {
 		return 10

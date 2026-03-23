@@ -126,7 +126,7 @@ func BuildAssetsForExtensions(ctx context.Context, sources []asset.Source, asset
 				}
 			}
 
-			if err := prepareShopwareForAsset(shopwareRoot, nonCompatibleExtensions); err != nil {
+			if err := prepareShopwareForAsset(shopwareRoot, nonCompatibleExtensions, assetConfig); err != nil {
 				return err
 			}
 
@@ -151,8 +151,8 @@ func BuildAssetsForExtensions(ctx context.Context, sources []asset.Source, asset
 			}
 
 			envMap := map[string]string{
-				"PROJECT_ROOT": shopwareRoot,
-				"ADMIN_ROOT":   PlatformPath(shopwareRoot, "Administration", ""),
+				"PROJECT_ROOT": assetConfig.NormalizePath(shopwareRoot),
+				"ADMIN_ROOT":   assetConfig.NormalizePath(PlatformPath(shopwareRoot, "Administration", "")),
 			}
 
 			if !projectRequiresBuild(shopwareRoot) && !assetConfig.ForceAdminBuild {
@@ -235,7 +235,7 @@ func BuildAssetsForExtensions(ctx context.Context, sources []asset.Source, asset
 				},
 			}
 
-			if err := prepareShopwareForAsset(shopwareRoot, nonCompatibleExtensions); err != nil {
+			if err := prepareShopwareForAsset(shopwareRoot, nonCompatibleExtensions, assetConfig); err != nil {
 				return err
 			}
 
@@ -286,8 +286,8 @@ func BuildAssetsForExtensions(ctx context.Context, sources []asset.Source, asset
 
 			sfEnvMap := map[string]string{
 				"NODE_ENV":        "production",
-				"PROJECT_ROOT":    shopwareRoot,
-				"STOREFRONT_ROOT": storefrontRoot,
+				"PROJECT_ROOT":    assetConfig.NormalizePath(shopwareRoot),
+				"STOREFRONT_ROOT": assetConfig.NormalizePath(storefrontRoot),
 			}
 
 			if assetConfig.Browserslist != "" {
@@ -322,7 +322,7 @@ func BuildAssetsForExtensions(ctx context.Context, sources []asset.Source, asset
 	return nil
 }
 
-func prepareShopwareForAsset(shopwareRoot string, cfgs ExtensionAssetConfig) error {
+func prepareShopwareForAsset(shopwareRoot string, cfgs ExtensionAssetConfig, assetConfig AssetBuildConfig) error {
 	varFolder := fmt.Sprintf("%s/var", shopwareRoot)
 	if _, err := os.Stat(varFolder); os.IsNotExist(err) {
 		err := os.Mkdir(varFolder, os.ModePerm)
@@ -331,13 +331,28 @@ func prepareShopwareForAsset(shopwareRoot string, cfgs ExtensionAssetConfig) err
 		}
 	}
 
-	pluginJson, err := json.Marshal(cfgs)
+	normalized := make(map[string]*ExtensionAssetConfigEntry, len(cfgs))
+	for name, cfg := range cfgs {
+		entry := new(ExtensionAssetConfigEntry)
+		*entry = ExtensionAssetConfigEntry{
+			BasePath:       assetConfig.NormalizePath(cfg.BasePath),
+			TechnicalName:  cfg.TechnicalName,
+			Administration: cfg.Administration,
+			Storefront:     cfg.Storefront,
+		}
+		entry.Views = make([]string, len(cfg.Views))
+		for i, v := range cfg.Views {
+			entry.Views[i] = assetConfig.NormalizePath(v)
+		}
+		normalized[name] = entry
+	}
+
+	pluginJson, err := json.Marshal(normalized)
 	if err != nil {
 		return fmt.Errorf("prepareShopwareForAsset: %w", err)
 	}
 
-	err = os.WriteFile(fmt.Sprintf("%s/var/plugins.json", shopwareRoot), pluginJson, os.ModePerm)
-	if err != nil {
+	if err = os.WriteFile(fmt.Sprintf("%s/var/plugins.json", shopwareRoot), pluginJson, os.ModePerm); err != nil {
 		return fmt.Errorf("prepareShopwareForAsset: %w", err)
 	}
 

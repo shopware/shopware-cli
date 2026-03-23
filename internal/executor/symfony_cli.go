@@ -60,7 +60,7 @@ func (s *SymfonyCLIExecutor) Type() string {
 }
 
 func (s *SymfonyCLIExecutor) WithEnv(env map[string]string) Executor {
-	return &SymfonyCLIExecutor{BinaryPath: s.BinaryPath, env: env, projectRoot: s.projectRoot, relDir: s.relDir}
+	return &SymfonyCLIExecutor{BinaryPath: s.BinaryPath, env: mergeEnv(s.env, env), projectRoot: s.projectRoot, relDir: s.relDir}
 }
 
 func (s *SymfonyCLIExecutor) WithRelDir(relDir string) Executor {

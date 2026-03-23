@@ -2,6 +2,8 @@ package devtui
 
 import (
 	"context"
+	"os"
+	"os/exec"
 	"strings"
 
 	"charm.land/bubbles/v2/textinput"
@@ -132,6 +134,7 @@ func (m Model) updateKeyPress(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		case keyTab:
 			m.stopConfirmYes = !m.stopConfirmYes
 		case keyEnter:
+			m.shutdown()
 			if m.stopConfirmYes {
 				m.overlay = overlayStopping
 				m.overlayLines = nil
@@ -164,6 +167,20 @@ func (m Model) updateKeyPress(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
+	if m.overlay == overlayTask {
+		if m.taskDone {
+			m.overlay = overlayNone
+			m.overlayLines = nil
+			m.taskDone = false
+			m.taskErr = nil
+			return m, nil
+		}
+		if msg.String() == keyQ || msg.String() == keyCtrlC {
+			return m, tea.Quit
+		}
+		return m, nil
+	}
+
 	if m.overlay != overlayNone {
 		if msg.String() == keyQ || msg.String() == keyCtrlC {
 			return m, tea.Quit
@@ -177,13 +194,13 @@ func (m Model) updateKeyPress(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.palette = newCommandPalette()
 		return m, textinput.Blink
 	case keyCtrlC, keyQ:
-		m.logs.StopStreaming()
 		if m.dockerMode {
 			m.overlay = overlayStopConfirm
 			m.overlayLines = nil
 			m.stopConfirmYes = true
 			return m, nil
 		}
+		m.shutdown()
 		return m, tea.Quit
 	case key1:
 		m.activeTab = tabGeneral
@@ -230,20 +247,116 @@ func (m Model) executeCommand(id string) (tea.Model, tea.Cmd) {
 		return m, openInBrowser(m.general.adminURL)
 	case "cache-clear":
 		return m, m.runCacheClear()
+	case "admin-build":
+		return m, m.runAdminBuild()
+	case "sf-build":
+		return m, m.runStorefrontBuild()
+	case "admin-watch-start":
+		if !m.general.adminWatchRunning && !m.general.adminWatchStarting {
+			m.general.adminWatchStarting = true
+			return m, m.general.startAdminWatch()
+		}
+	case "admin-watch-stop":
+		if m.general.adminWatchRunning {
+			m.general.adminWatchRunning = false
+			return m, m.stopWatcher("npm run dev", watcherAdmin)
+		}
+	case "sf-watch-start":
+		if !m.general.sfWatchRunning && !m.general.sfWatchStarting {
+			m.general.sfWatchStarting = true
+			return m, m.general.startStorefrontWatch()
+		}
+	case "sf-watch-stop":
+		if m.general.sfWatchRunning {
+			m.general.sfWatchRunning = false
+			return m, m.stopWatcher("npm run-script hot-proxy", watcherStorefront)
+		}
 	case "tab-logs":
 		m.activeTab = tabLogs
 	case "tab-general":
 		m.activeTab = tabGeneral
 	case "quit":
-		m.logs.StopStreaming()
 		if m.dockerMode {
 			m.overlay = overlayStopConfirm
 			m.stopConfirmYes = true
 			return m, nil
 		}
+		m.shutdown()
 		return m, tea.Quit
 	}
 	return m, nil
+}
+
+func (m *Model) stopWatcher(processPattern, name string) tea.Cmd {
+	projectRoot := m.projectRoot
+	dockerMode := m.dockerMode
+
+	// Cancel the watcher's context first, then pkill as fallback for docker.
+	m.logs.StopStreaming()
+
+	return func() tea.Msg {
+		if dockerMode {
+			cmd := exec.CommandContext(context.Background(),
+				"docker", "compose", "exec", "-T", "web",
+				"pkill", "-INT", "-f", processPattern,
+			)
+			cmd.Dir = projectRoot
+			_ = cmd.Run()
+		}
+
+		return watcherStoppedMsg{name: name}
+	}
+}
+
+func (m *Model) runTask(title string, taskFn func() (*exec.Cmd, error)) tea.Cmd {
+	m.overlay = overlayTask
+	m.taskTitle = title
+	m.taskDone = false
+	m.taskErr = nil
+	m.overlayLines = nil
+
+	ch := make(chan string, streamBufferSize)
+	m.dockerOutChan = ch
+
+	doneCmd := func() tea.Msg {
+		cmd, err := taskFn()
+		if err != nil {
+			close(ch)
+			return taskDoneMsg{err: err}
+		}
+
+		err = streamCmdOutput(cmd, ch, true)
+		return taskDoneMsg{err: err}
+	}
+
+	return tea.Batch(readFromChan(ch), doneCmd)
+}
+
+func (m *Model) runAdminBuild() tea.Cmd {
+	return m.runSelfCommand("Building Administration...", "project", "admin-build")
+}
+
+func (m *Model) runStorefrontBuild() tea.Cmd {
+	return m.runSelfCommand("Building Storefront...", "project", "storefront-build")
+}
+
+func (m *Model) runSelfCommand(title string, args ...string) tea.Cmd {
+	projectRoot := m.projectRoot
+	dockerMode := m.dockerMode
+
+	return m.runTask(title, func() (*exec.Cmd, error) {
+		selfBin, err := os.Executable()
+		if err != nil {
+			return nil, err
+		}
+
+		cmd := exec.CommandContext(context.Background(), selfBin, append(args, projectRoot)...)
+		if dockerMode {
+			cmd.Dir = projectRoot
+		}
+
+		return cmd, nil
+	})
 }
 
 func (m *Model) runCacheClear() tea.Cmd {

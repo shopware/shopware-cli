@@ -71,3 +71,14 @@ func applyDir(dir string, cmd *exec.Cmd) {
 func logCmd(ctx context.Context, cmd *exec.Cmd) {
 	logging.FromContext(ctx).Debugf("exec: %s (dir: %s)", strings.Join(cmd.Args, " "), cmd.Dir)
 }
+
+func mergeEnv(base, extra map[string]string) map[string]string {
+	merged := make(map[string]string, len(base)+len(extra))
+	for k, v := range base {
+		merged[k] = v
+	}
+	for k, v := range extra {
+		merged[k] = v
+	}
+	return merged
+}

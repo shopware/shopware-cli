@@ -17,8 +17,11 @@ import (
 
 type logSource struct {
 	name      string
-	container string // non-empty for docker containers
-	filePath  string // non-empty for log files
+	container string             // non-empty for docker containers
+	filePath  string             // non-empty for log files
+	cmd       *exec.Cmd          // non-nil for process sources
+	cmdCancel context.CancelFunc // cancel func for process sources
+	dead      bool               // true after a process source has exited
 }
 
 type LogsModel struct {
@@ -78,6 +81,9 @@ func (m LogsModel) Update(msg tea.Msg) (LogsModel, tea.Cmd) {
 	case logDoneMsg:
 		m.lines = append(m.lines, helpStyle.Render("--- log stream ended ---"))
 		m.viewport.SetContent(strings.Join(m.lines, "\n"))
+		if m.active >= 0 && m.active < len(m.sources) && m.sources[m.active].cmd != nil {
+			m.sources[m.active].dead = true
+		}
 		return m, nil
 
 	case logErrMsg:
@@ -211,8 +217,46 @@ func (m *LogsModel) StartStreaming() tea.Cmd {
 	return m.discoverSources()
 }
 
+func (m *LogsModel) AddProcessSource(name string, cmd *exec.Cmd, cancel context.CancelFunc) tea.Cmd {
+	m.stopStreaming()
+
+	src := logSource{name: name, cmd: cmd, cmdCancel: cancel}
+
+	idx := -1
+	for i, s := range m.sources {
+		if s.name == name {
+			m.sources[i] = src
+			idx = i
+			break
+		}
+	}
+	if idx == -1 {
+		m.sources = append(m.sources, src)
+		idx = len(m.sources) - 1
+	}
+
+	m.active = idx
+	m.cursor = idx
+	m.lines = nil
+	m.follow = true
+	m.viewport.SetContent("")
+	m.viewport.GotoTop()
+
+	return m.streamProcess(src)
+}
+
 func (m *LogsModel) StopStreaming() {
 	m.stopStreaming()
+}
+
+func (m *LogsModel) ActiveProcessSourceName() string {
+	if m.active >= 0 && m.active < len(m.sources) {
+		src := m.sources[m.active]
+		if src.cmd != nil {
+			return src.name
+		}
+	}
+	return ""
 }
 
 func (m *LogsModel) stopStreaming() {
@@ -230,11 +274,50 @@ func (m *LogsModel) startCurrentSource() tea.Cmd {
 
 	src := m.sources[m.active]
 
+	if src.cmd != nil {
+		if src.dead {
+			return nil
+		}
+		return m.streamProcess(src)
+	}
+
 	if src.container != "" {
 		return m.streamContainer(src.container)
 	}
 
 	return m.streamFile(src.filePath)
+}
+
+func (m *LogsModel) streamProcess(src logSource) tea.Cmd {
+	cmd := src.cmd
+	m.cancel = src.cmdCancel
+
+	ch := make(chan string, 100)
+	m.logChan = ch
+
+	stdout, err := cmd.StdoutPipe()
+	if err != nil {
+		close(ch)
+		return m.waitForNextLine()
+	}
+	cmd.Stderr = cmd.Stdout
+
+	if err := cmd.Start(); err != nil {
+		close(ch)
+		return m.waitForNextLine()
+	}
+
+	go func() {
+		defer close(ch)
+		scanner := bufio.NewScanner(stdout)
+		scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
+		for scanner.Scan() {
+			ch <- scanner.Text()
+		}
+		_ = cmd.Wait()
+	}()
+
+	return m.waitForNextLine()
 }
 
 func (m *LogsModel) streamContainer(container string) tea.Cmd {

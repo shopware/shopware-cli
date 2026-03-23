@@ -3,11 +3,9 @@ package executor
 import (
 	"context"
 	"fmt"
-	"os"
 	"os/exec"
 	"path/filepath"
-
-	"github.com/mattn/go-isatty"
+	"syscall"
 )
 
 // DockerExecutor runs commands via docker compose exec against the "web" service.
@@ -24,6 +22,7 @@ func (d *DockerExecutor) ConsoleCommand(ctx context.Context, args ...string) *ex
 
 	cmd := exec.CommandContext(ctx, "docker", dockerArgs...)
 	applyDir(d.projectRoot, cmd)
+	cancelWithSIGINT(cmd)
 	logCmd(ctx, cmd)
 	return cmd
 }
@@ -35,6 +34,7 @@ func (d *DockerExecutor) ComposerCommand(ctx context.Context, args ...string) *e
 
 	cmd := exec.CommandContext(ctx, "docker", dockerArgs...)
 	applyDir(d.projectRoot, cmd)
+	cancelWithSIGINT(cmd)
 	logCmd(ctx, cmd)
 	return cmd
 }
@@ -46,6 +46,7 @@ func (d *DockerExecutor) PHPCommand(ctx context.Context, args ...string) *exec.C
 
 	cmd := exec.CommandContext(ctx, "docker", dockerArgs...)
 	applyDir(d.projectRoot, cmd)
+	cancelWithSIGINT(cmd)
 	logCmd(ctx, cmd)
 	return cmd
 }
@@ -57,6 +58,7 @@ func (d *DockerExecutor) NPMCommand(ctx context.Context, args ...string) *exec.C
 
 	cmd := exec.CommandContext(ctx, "docker", dockerArgs...)
 	applyDir(d.projectRoot, cmd)
+	cancelWithSIGINT(cmd)
 	logCmd(ctx, cmd)
 	return cmd
 }
@@ -79,7 +81,7 @@ func (d *DockerExecutor) Type() string {
 }
 
 func (d *DockerExecutor) WithEnv(env map[string]string) Executor {
-	return &DockerExecutor{env: env, projectRoot: d.projectRoot, relDir: d.relDir}
+	return &DockerExecutor{env: mergeEnv(d.env, env), projectRoot: d.projectRoot, relDir: d.relDir}
 }
 
 func (d *DockerExecutor) WithRelDir(relDir string) Executor {
@@ -95,18 +97,23 @@ func (d *DockerExecutor) containerWorkdir() string {
 	return filepath.Join("/var/www/html", d.relDir)
 }
 
+func cancelWithSIGINT(cmd *exec.Cmd) {
+	cmd.Cancel = func() error {
+		if cmd.Process == nil {
+			return nil
+		}
+		return cmd.Process.Signal(syscall.SIGINT)
+	}
+}
+
 func (d *DockerExecutor) baseArgs() []string {
 	args := []string{"compose", "exec"}
 
-	if !isatty.IsTerminal(os.Stdin.Fd()) {
-		args = append(args, "-T")
-	}
+	args = append(args, "-T")
 
 	for k, v := range d.env {
 		args = append(args, "-e", fmt.Sprintf("%s=%s", k, v))
 	}
-
-	args = append(args, "-e", fmt.Sprintf("PROJECT_ROOT=%s", "/var/www/html"))
 
 	args = append(args, "--workdir", d.containerWorkdir())
 
