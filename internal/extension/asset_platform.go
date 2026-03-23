@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"os/exec"
 	"path"
 	"path/filepath"
 	"slices"
@@ -55,7 +54,7 @@ func BuildAssetsForExtensions(ctx context.Context, sources []asset.Source, asset
 
 	nodeInstallSection := ci.Default.Section(ctx, "Installing node_modules for extensions")
 
-	paths, err := InstallNodeModulesOfConfigs(ctx, cfgs, assetConfig.NPMForceInstall)
+	paths, err := InstallNodeModulesOfConfigs(ctx, cfgs, assetConfig)
 	if err != nil {
 		return err
 	}
@@ -132,6 +131,7 @@ func BuildAssetsForExtensions(ctx context.Context, sources []asset.Source, asset
 			}
 
 			administrationRoot := PlatformPath(shopwareRoot, "Administration", "Resources/app/administration")
+			adminRelPath := PlatformRelPath(shopwareRoot, "Administration", "Resources/app/administration")
 
 			if assetConfig.NPMForceInstall || !npm.NodeModulesExists(administrationRoot) {
 				var additionalNpmParameters []string
@@ -145,26 +145,29 @@ func BuildAssetsForExtensions(ctx context.Context, sources []asset.Source, asset
 					additionalNpmParameters = []string{"--production"}
 				}
 
-				if err := npm.InstallDependencies(ctx, administrationRoot, npmPackage, additionalNpmParameters...); err != nil {
+				if err := npm.InstallDependencies(ctx, assetConfig.ExecutorWithRelDir(adminRelPath), npmPackage, additionalNpmParameters...); err != nil {
 					return err
 				}
 			}
 
-			envList := []string{fmt.Sprintf("PROJECT_ROOT=%s", shopwareRoot), fmt.Sprintf("ADMIN_ROOT=%s", PlatformPath(shopwareRoot, "Administration", ""))}
+			envMap := map[string]string{
+				"PROJECT_ROOT": shopwareRoot,
+				"ADMIN_ROOT":   PlatformPath(shopwareRoot, "Administration", ""),
+			}
 
 			if !projectRequiresBuild(shopwareRoot) && !assetConfig.ForceAdminBuild {
 				logging.FromContext(ctx).Debugf("Building only administration assets for plugins")
-				envList = append(envList, "SHOPWARE_ADMIN_BUILD_ONLY_EXTENSIONS=1", "SHOPWARE_ADMIN_SKIP_SOURCEMAP_GENERATION=1")
+				envMap["SHOPWARE_ADMIN_BUILD_ONLY_EXTENSIONS"] = "1"
+				envMap["SHOPWARE_ADMIN_SKIP_SOURCEMAP_GENERATION"] = "1"
 			} else {
 				logging.FromContext(ctx).Debugf("Building also the administration itself")
 			}
 
-			err = npm.RunScript(
-				ctx,
-				administrationRoot,
-				"build",
-				envList,
-			)
+			adminExec := assetConfig.ExecutorWithRelDir(adminRelPath).WithEnv(envMap)
+			npmBuild := adminExec.NPMCommand(ctx, "run", "build")
+			npmBuild.Stdout = os.Stdout
+			npmBuild.Stderr = os.Stderr
+			err = npmBuild.Run()
 
 			if assetConfig.CleanupNodeModules {
 				defer deletePaths(ctx, path.Join(administrationRoot, "node_modules"), path.Join(administrationRoot, "twigVuePlugin"))
@@ -237,6 +240,8 @@ func BuildAssetsForExtensions(ctx context.Context, sources []asset.Source, asset
 			}
 
 			storefrontRoot := PlatformPath(shopwareRoot, "Storefront", "Resources/app/storefront")
+			storefrontRelPath := PlatformRelPath(shopwareRoot, "Storefront", "Resources/app/storefront")
+			sfExec := assetConfig.ExecutorWithRelDir(storefrontRelPath)
 
 			if assetConfig.NPMForceInstall || !npm.NodeModulesExists(storefrontRoot) {
 				if err := npm.PatchPackageLockToRemoveCanIUse(path.Join(storefrontRoot, "package-lock.json")); err != nil {
@@ -254,14 +259,13 @@ func BuildAssetsForExtensions(ctx context.Context, sources []asset.Source, asset
 					additionalNpmParameters = append(additionalNpmParameters, "--production")
 				}
 
-				if err := npm.InstallDependencies(ctx, storefrontRoot, npmPackage, additionalNpmParameters...); err != nil {
+				if err := npm.InstallDependencies(ctx, sfExec, npmPackage, additionalNpmParameters...); err != nil {
 					return err
 				}
 
 				// As we call npm install caniuse-lite, we need to run the postinstall script manually.
 				if npmPackage.HasScript("postinstall") {
-					npmRunPostInstall := exec.CommandContext(ctx, "npm", "run", "postinstall")
-					npmRunPostInstall.Dir = storefrontRoot
+					npmRunPostInstall := sfExec.NPMCommand(ctx, "run", "postinstall")
 					npmRunPostInstall.Stdout = os.Stdout
 					npmRunPostInstall.Stderr = os.Stderr
 
@@ -271,8 +275,7 @@ func BuildAssetsForExtensions(ctx context.Context, sources []asset.Source, asset
 				}
 
 				if _, err := os.Stat(path.Join(storefrontRoot, "vendor/bootstrap")); os.IsNotExist(err) {
-					npmVendor := exec.CommandContext(ctx, "node", path.Join(storefrontRoot, "copy-to-vendor.js"))
-					npmVendor.Dir = storefrontRoot
+					npmVendor := sfExec.NPMCommand(ctx, "exec", "--", "node", "copy-to-vendor.js")
 					npmVendor.Stdout = os.Stdout
 					npmVendor.Stderr = os.Stderr
 					if err := npmVendor.Run(); err != nil {
@@ -281,20 +284,18 @@ func BuildAssetsForExtensions(ctx context.Context, sources []asset.Source, asset
 				}
 			}
 
-			envList := []string{
-				"NODE_ENV=production",
-				fmt.Sprintf("PROJECT_ROOT=%s", shopwareRoot),
-				fmt.Sprintf("STOREFRONT_ROOT=%s", storefrontRoot),
+			sfEnvMap := map[string]string{
+				"NODE_ENV":        "production",
+				"PROJECT_ROOT":    shopwareRoot,
+				"STOREFRONT_ROOT": storefrontRoot,
 			}
 
 			if assetConfig.Browserslist != "" {
-				envList = append(envList, fmt.Sprintf("BROWSERSLIST=%s", assetConfig.Browserslist))
+				sfEnvMap["BROWSERSLIST"] = assetConfig.Browserslist
 			}
 
-			nodeWebpackCmd := exec.CommandContext(ctx, "node", "node_modules/.bin/webpack", "--config", "webpack.config.js")
-			nodeWebpackCmd.Dir = storefrontRoot
-			nodeWebpackCmd.Env = os.Environ()
-			nodeWebpackCmd.Env = append(nodeWebpackCmd.Env, envList...)
+			webpackExec := sfExec.WithEnv(sfEnvMap)
+			nodeWebpackCmd := webpackExec.NPMCommand(ctx, "exec", "--", "webpack", "--config", "webpack.config.js")
 			nodeWebpackCmd.Stdout = os.Stdout
 			nodeWebpackCmd.Stderr = os.Stderr
 

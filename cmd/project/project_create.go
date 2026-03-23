@@ -4,10 +4,7 @@ import (
 	"bytes"
 	"context"
 	_ "embed"
-	"encoding/json"
 	"fmt"
-	"io"
-	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -21,8 +18,10 @@ import (
 	"github.com/shyim/go-version"
 	"github.com/spf13/cobra"
 
+	dockerpkg "github.com/shopware/shopware-cli/internal/docker"
 	"github.com/shopware/shopware-cli/internal/git"
 	"github.com/shopware/shopware-cli/internal/packagist"
+	"github.com/shopware/shopware-cli/internal/shop"
 	"github.com/shopware/shopware-cli/internal/system"
 	"github.com/shopware/shopware-cli/internal/tracking"
 	"github.com/shopware/shopware-cli/internal/tui"
@@ -40,6 +39,9 @@ var githubDeployTemplate string
 
 //go:embed static/gitlab-ci.yml.tmpl
 var gitlabCITemplate string
+
+//go:embed static/shopware-paas-application.yaml
+var shopwarePaasAppTemplate string
 
 const versionLatest = "latest"
 
@@ -76,7 +78,6 @@ var projectCreateCmd = &cobra.Command{
 
 		useDocker, _ := cmd.PersistentFlags().GetBool("docker")
 		withElasticsearch, _ := cmd.PersistentFlags().GetBool("with-elasticsearch")
-		withoutElasticsearch, _ := cmd.PersistentFlags().GetBool("without-elasticsearch")
 		withAMQP, _ := cmd.PersistentFlags().GetBool("with-amqp")
 		noAudit, _ := cmd.PersistentFlags().GetBool("no-audit")
 		initGit, _ := cmd.PersistentFlags().GetBool("git")
@@ -85,7 +86,7 @@ var projectCreateCmd = &cobra.Command{
 		ciSystem, _ := cmd.PersistentFlags().GetString("ci")
 
 		if cmd.PersistentFlags().Changed("without-elasticsearch") {
-			logging.FromContext(cmd.Context()).Warnf("Flag --without-elasticsearch is deprecated, use --with-elasticsearch instead")
+			withoutElasticsearch, _ := cmd.PersistentFlags().GetBool("without-elasticsearch")
 			withElasticsearch = !withoutElasticsearch
 		}
 
@@ -462,7 +463,6 @@ var projectCreateCmd = &cobra.Command{
 		composerJson, err := packagist.GenerateComposerJson(cmd.Context(), packagist.ComposerJsonOptions{
 			Version:          chooseVersion,
 			RC:               strings.Contains(chooseVersion, "rc"),
-			UseDocker:        useDocker,
 			UseElasticsearch: withElasticsearch,
 			UseAMQP:          withAMQP,
 			NoAudit:          noAudit,
@@ -525,11 +525,26 @@ var projectCreateCmd = &cobra.Command{
 			return err
 		}
 
+		if useDocker {
+			if err := dockerpkg.WriteComposeFile(projectFolder, nil); err != nil {
+				return err
+			}
+		}
+
 		if initGit {
 			logging.FromContext(cmd.Context()).Infof("Initializing Git repository")
 			if err := git.Init(cmd.Context(), projectFolder); err != nil {
 				return fmt.Errorf("failed to initialize git repository: %w", err)
 			}
+		}
+
+		shopCfg := shop.NewConfig()
+		if useDocker {
+			shopCfg.Environments["local"].Type = "docker"
+		}
+
+		if err := shop.WriteConfig(shopCfg, projectFolder); err != nil {
+			return err
 		}
 
 		if interactive {
@@ -543,9 +558,7 @@ var projectCreateCmd = &cobra.Command{
 				fmt.Println()
 				fmt.Println(sectionStyle.Render("Next steps"))
 				fmt.Println()
-				fmt.Printf("  %s  %s\n", tui.GreenText.Render("Start containers:"), cmdStyle.Render(fmt.Sprintf("cd %q && make up", projectFolder)))
-				fmt.Printf("  %s  %s\n", tui.GreenText.Render("Set up Shopware:"), cmdStyle.Render("make setup"))
-				fmt.Printf("  %s  %s\n", tui.GreenText.Render("Stop containers:"), cmdStyle.Render("make down"))
+				fmt.Printf("  %s  %s\n", tui.GreenText.Render("Start developing:"), cmdStyle.Render(fmt.Sprintf("cd %s && shopware-cli project dev", projectFolder)))
 				fmt.Println()
 				fmt.Println(sectionStyle.Render("Access your shop (after make setup)"))
 				fmt.Println()
@@ -600,15 +613,7 @@ func setupDeployment(projectFolder, deploymentMethod string) error {
 		}
 
 	case packagist.DeploymentShopwarePaaS:
-		shopwarePaasApp := `app:
-  php:
-    version: "8.4"
-services:
-  mysql:
-    version: "8.0"
-`
-
-		if err := os.WriteFile(filepath.Join(projectFolder, "application.yaml"), []byte(shopwarePaasApp), os.ModePerm); err != nil {
+		if err := os.WriteFile(filepath.Join(projectFolder, "application.yaml"), []byte(shopwarePaasAppTemplate), os.ModePerm); err != nil {
 			return err
 		}
 	}
@@ -733,7 +738,7 @@ func runComposerInstall(ctx context.Context, projectFolder string, useDocker boo
 }
 
 func getFilteredInstallVersions(ctx context.Context) ([]*version.Version, error) {
-	releases, err := fetchAvailableShopwareVersions(ctx)
+	releases, err := packagist.GetShopwarePackageVersions(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -742,7 +747,14 @@ func getFilteredInstallVersions(ctx context.Context) ([]*version.Version, error)
 	constraint, _ := version.NewConstraint(">=6.4.18.0")
 
 	for _, release := range releases {
-		parsed := version.Must(version.NewVersion(release))
+		if strings.HasPrefix(release.Version, "dev-") {
+			continue
+		}
+
+		parsed, err := version.NewVersion(release.Version)
+		if err != nil {
+			continue
+		}
 
 		if constraint.Check(parsed) {
 			filteredVersions = append(filteredVersions, parsed)
@@ -751,6 +763,10 @@ func getFilteredInstallVersions(ctx context.Context) ([]*version.Version, error)
 
 	sort.Sort(sort.Reverse(version.Collection(filteredVersions)))
 
+	for i, v := range filteredVersions {
+		filteredVersions[i], _ = version.NewVersion(strings.TrimPrefix(v.String(), "v"))
+	}
+
 	return filteredVersions, nil
 }
 
@@ -758,42 +774,12 @@ func init() {
 	projectRootCmd.AddCommand(projectCreateCmd)
 	projectCreateCmd.PersistentFlags().Bool("docker", false, "Use Docker to run Composer instead of local installation")
 	projectCreateCmd.PersistentFlags().Bool("with-elasticsearch", false, "Include Elasticsearch/OpenSearch support")
-	projectCreateCmd.PersistentFlags().Bool("without-elasticsearch", false, "Remove Elasticsearch from the installation (deprecated: use --with-elasticsearch)")
+	projectCreateCmd.PersistentFlags().Bool("without-elasticsearch", false, "Remove Elasticsearch from the installation")
+	_ = projectCreateCmd.PersistentFlags().MarkDeprecated("without-elasticsearch", "use --with-elasticsearch instead")
 	projectCreateCmd.PersistentFlags().Bool("with-amqp", false, "Include AMQP queue support (symfony/amqp-messenger)")
 	projectCreateCmd.PersistentFlags().Bool("no-audit", false, "Disable composer audit blocking insecure packages")
 	projectCreateCmd.PersistentFlags().Bool("git", false, "Initialize a Git repository")
 	projectCreateCmd.PersistentFlags().String("version", "", "Shopware version to install (e.g., 6.6.0.0, latest)")
 	projectCreateCmd.PersistentFlags().String("deployment", "", "Deployment method: none, deployer, platformsh, shopware-paas")
 	projectCreateCmd.PersistentFlags().String("ci", "", "CI/CD system: none, github, gitlab")
-}
-
-func fetchAvailableShopwareVersions(ctx context.Context) ([]string, error) {
-	r, err := http.NewRequestWithContext(ctx, http.MethodGet, "https://releases.shopware.com/changelog/index.json", http.NoBody)
-	if err != nil {
-		return nil, err
-	}
-
-	resp, err := http.DefaultClient.Do(r)
-	if err != nil {
-		return nil, err
-	}
-
-	defer func() {
-		if err := resp.Body.Close(); err != nil {
-			logging.FromContext(ctx).Errorf("fetchAvailableShopwareVersions: %v", err)
-		}
-	}()
-
-	content, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, err
-	}
-
-	var releases []string
-
-	if err := json.Unmarshal(content, &releases); err != nil {
-		return nil, err
-	}
-
-	return releases, nil
 }

@@ -18,6 +18,12 @@ import (
 	"github.com/shopware/shopware-cli/logging"
 )
 
+type EnvironmentConfig struct {
+	Type     string          `yaml:"type" jsonschema:"enum=local,enum=docker"`
+	URL      string          `yaml:"url,omitempty"`
+	AdminApi *ConfigAdminApi `yaml:"admin_api,omitempty"`
+}
+
 type Config struct {
 	AdditionalConfigs []string `yaml:"include,omitempty"`
 	// The URL of the Shopware instance
@@ -30,11 +36,35 @@ type Config struct {
 	ConfigDeployment  *ConfigDeployment `yaml:"deployment,omitempty"`
 	Validation        *ConfigValidation `yaml:"validation,omitempty"`
 	ImageProxy        *ConfigImageProxy `yaml:"image_proxy,omitempty"`
+	// Docker dev environment configuration
+	Docker *ConfigDocker `yaml:"docker,omitempty"`
+	// Named environments for multi-environment management
+	Environments map[string]*EnvironmentConfig `yaml:"environments,omitempty"`
 	// When enabled, composer scripts will be disabled during CI builds
 	DisableComposerScripts bool `yaml:"disable_composer_scripts,omitempty"`
 	// When enabled, composer install will be skipped during CI builds
 	DisableComposerInstall bool `yaml:"disable_composer_install,omitempty"`
 	foundConfig            bool
+}
+
+func (c *Config) ResolveEnvironment(name string) (*EnvironmentConfig, error) {
+	if name != "" {
+		env, ok := c.Environments[name]
+		if !ok {
+			return nil, fmt.Errorf("environment %q not found in config", name)
+		}
+		return env, nil
+	}
+
+	if env, ok := c.Environments["local"]; ok {
+		return env, nil
+	}
+
+	return &EnvironmentConfig{
+		Type:     "local",
+		URL:      c.URL,
+		AdminApi: c.AdminApi,
+	}, nil
 }
 
 func (c *Config) IsAdminAPIConfigured() bool {
@@ -51,6 +81,10 @@ func (c *Config) HasCompatibilityDate() bool {
 
 func (c *Config) IsCompatibilityDateAtLeast(requiredDate string) (bool, error) {
 	return compatibility.IsAtLeast(c.CompatibilityDate, requiredDate)
+}
+
+func (c *Config) IsCompatibilityDateBefore(requiredDate string) bool {
+	return compatibility.IsBefore(c.CompatibilityDate, requiredDate)
 }
 
 type ConfigBuild struct {
@@ -382,9 +416,127 @@ type ConfigValidationIgnoreExtension struct {
 	Name string `yaml:"name"`
 }
 
+type ConfigDocker struct {
+	// PHP configuration for the Docker dev image
+	PHP *ConfigDockerPHP `yaml:"php,omitempty"`
+	// Node.js configuration for the Docker dev image
+	Node *ConfigDockerNode `yaml:"node,omitempty"`
+}
+
+type ConfigDockerPHP struct {
+	// PHP version (e.g. "8.3", "8.2"). Defaults to "8.3".
+	Version string `yaml:"version,omitempty"`
+	// Profiler to enable. Possible values: xdebug, blackfire, tideways, pcov, spx.
+	Profiler string `yaml:"profiler,omitempty" jsonschema:"enum=xdebug,enum=blackfire,enum=tideways,enum=pcov,enum=spx"`
+	// Blackfire server ID from your Blackfire account. Required when profiler is "blackfire".
+	BlackfireServerID string `yaml:"blackfire_server_id,omitempty"`
+	// Blackfire server token from your Blackfire account. Required when profiler is "blackfire".
+	BlackfireServerToken string `yaml:"blackfire_server_token,omitempty"`
+	// Tideways API key from your Tideways account. Required when profiler is "tideways".
+	TidewaysAPIKey string `yaml:"tideways_api_key,omitempty"`
+}
+
+func (ConfigDockerPHP) JSONSchema() *jsonschema.Schema {
+	properties := orderedmap.New[string, *jsonschema.Schema]()
+
+	properties.Set("version", &jsonschema.Schema{
+		Type:        "string",
+		Description: "PHP version (e.g. \"8.3\", \"8.2\"). Defaults to \"8.3\".",
+	})
+
+	properties.Set("profiler", &jsonschema.Schema{
+		Type:        "string",
+		Enum:        []any{"xdebug", "blackfire", "tideways", "pcov", "spx"},
+		Description: "Profiler to enable. Possible values: xdebug, blackfire, tideways, pcov, spx.",
+	})
+
+	properties.Set("blackfire_server_id", &jsonschema.Schema{
+		Type:        "string",
+		Description: "Blackfire server ID from your Blackfire account. Required when profiler is \"blackfire\".",
+	})
+
+	properties.Set("blackfire_server_token", &jsonschema.Schema{
+		Type:        "string",
+		Description: "Blackfire server token from your Blackfire account. Required when profiler is \"blackfire\".",
+	})
+
+	properties.Set("tideways_api_key", &jsonschema.Schema{
+		Type:        "string",
+		Description: "Tideways API key from your Tideways account. Required when profiler is \"tideways\".",
+	})
+
+	profilerConst := func(value string) *orderedmap.OrderedMap[string, *jsonschema.Schema] {
+		m := orderedmap.New[string, *jsonschema.Schema]()
+		m.Set("profiler", &jsonschema.Schema{Const: value})
+		return m
+	}
+
+	return &jsonschema.Schema{
+		Type:                 "object",
+		Properties:           properties,
+		AdditionalProperties: jsonschema.FalseSchema,
+		AllOf: []*jsonschema.Schema{
+			{
+				If: &jsonschema.Schema{
+					Properties: profilerConst("blackfire"),
+					Required:   []string{"profiler"},
+				},
+				Then: &jsonschema.Schema{
+					Required: []string{"blackfire_server_id", "blackfire_server_token"},
+				},
+			},
+			{
+				If: &jsonschema.Schema{
+					Properties: profilerConst("tideways"),
+					Required:   []string{"profiler"},
+				},
+				Then: &jsonschema.Schema{
+					Required: []string{"tideways_api_key"},
+				},
+			},
+		},
+	}
+}
+
+type ConfigDockerNode struct {
+	// Node.js version (e.g. "22", "24"). Defaults to "22".
+	Version string `yaml:"version,omitempty" jsonschema:"enum=22,enum=24"`
+}
+
 type ConfigImageProxy struct {
 	// The URL of the upstream server to proxy requests to when files are not found locally
 	URL string `yaml:"url,omitempty"`
+}
+
+func NewConfig() *Config {
+	return &Config{
+		CompatibilityDate: compatibility.TodayDate(),
+		Environments: map[string]*EnvironmentConfig{
+			"local": {
+				Type: "local",
+				URL:  "http://127.0.0.1:8000",
+				AdminApi: &ConfigAdminApi{
+					Username: "admin",
+					Password: "shopware",
+				},
+			},
+		},
+	}
+}
+
+func WriteConfig(cfg *Config, dir string) error {
+	data, err := yaml.Marshal(cfg)
+	if err != nil {
+		return fmt.Errorf("failed to marshal shop configuration: %w", err)
+	}
+
+	filePath := filepath.Join(dir, ".shopware-project.yml")
+
+	if err := os.WriteFile(filePath, data, os.ModePerm); err != nil {
+		return fmt.Errorf("failed to write shop configuration to %s: %w", filePath, err)
+	}
+
+	return nil
 }
 
 func ReadConfig(ctx context.Context, fileName string, allowFallback bool) (*Config, error) {

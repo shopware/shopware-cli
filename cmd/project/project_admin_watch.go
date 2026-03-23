@@ -2,15 +2,13 @@ package project
 
 import (
 	"os"
-	"os/exec"
-	"path"
+	"path/filepath"
 
 	"github.com/spf13/cobra"
 
 	"github.com/shopware/shopware-cli/internal/envfile"
 	"github.com/shopware/shopware-cli/internal/extension"
 	"github.com/shopware/shopware-cli/internal/npm"
-	"github.com/shopware/shopware-cli/internal/phpexec"
 	"github.com/shopware/shopware-cli/internal/shop"
 )
 
@@ -37,11 +35,16 @@ var projectAdminWatchCmd = &cobra.Command{
 			return err
 		}
 
-		if err := filterAndWritePluginJson(cmd, projectRoot, shopCfg); err != nil {
+		cmdExecutor, err := resolveExecutor(cmd, projectRoot)
+		if err != nil {
 			return err
 		}
 
-		if err := runTransparentCommand(commandWithRoot(phpexec.ConsoleCommand(cmd.Context(), "feature:dump"), projectRoot)); err != nil {
+		if err := filterAndWritePluginJson(cmd, projectRoot, shopCfg, cmdExecutor); err != nil {
+			return err
+		}
+
+		if err := runTransparentCommand(cmdExecutor.ConsoleCommand(cmd.Context(), "feature:dump")); err != nil {
 			return err
 		}
 
@@ -49,13 +52,14 @@ var projectAdminWatchCmd = &cobra.Command{
 			return err
 		}
 
+		adminRelPath := extension.PlatformRelPath(projectRoot, "Administration", "Resources/app/administration")
+		adminExecutor := cmdExecutor.WithRelDir(adminRelPath)
+
 		if _, err := os.Stat(extension.PlatformPath(projectRoot, "Administration", "Resources/app/administration/node_modules/webpack-dev-server")); os.IsNotExist(err) {
-			if err := npm.InstallDependencies(cmd.Context(), extension.PlatformPath(projectRoot, "Administration", "Resources/app/administration"), npm.NonEmptyPackage); err != nil {
+			if err := npm.InstallDependencies(cmd.Context(), adminExecutor, npm.NonEmptyPackage); err != nil {
 				return err
 			}
 		}
-
-		adminRoot := extension.PlatformPath(projectRoot, "Administration", "Resources/app/administration")
 
 		if err := os.Setenv("ADMIN_ROOT", extension.PlatformPath(projectRoot, "Administration", "")); err != nil {
 			return err
@@ -69,16 +73,22 @@ var projectAdminWatchCmd = &cobra.Command{
 				}
 			}
 
-			if err := runTransparentCommand(commandWithRoot(phpexec.ConsoleCommand(cmd.Context(), "framework:schema", "-s", "entity-schema", path.Join(mockDirectory, "entity-schema.json")), projectRoot)); err != nil {
+			relMockDir, err := filepath.Rel(projectRoot, mockDirectory)
+
+			if err != nil {
 				return err
 			}
 
-			if err := runTransparentCommand(commandWithRoot(exec.CommandContext(cmd.Context(), "npm", "run", "convert-entity-schema"), adminRoot)); err != nil {
+			if err := runTransparentCommand(cmdExecutor.ConsoleCommand(cmd.Context(), "framework:schema", "-s", "entity-schema", filepath.Join(relMockDir, "entity-schema.json"))); err != nil {
+				return err
+			}
+
+			if err := runTransparentCommand(adminExecutor.NPMCommand(cmd.Context(), "run", "convert-entity-schema")); err != nil {
 				return err
 			}
 		}
 
-		return runTransparentCommand(commandWithRoot(exec.CommandContext(cmd.Context(), "npm", "run", "dev"), adminRoot))
+		return runTransparentCommand(adminExecutor.NPMCommand(cmd.Context(), "run", "dev"))
 	},
 }
 
