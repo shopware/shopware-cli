@@ -38,6 +38,7 @@ func NewApi(ctx context.Context) (*Client, error) {
 	password := os.Getenv("SHOPWARE_CLI_ACCOUNT_PASSWORD")
 
 	if email != "" && password != "" {
+		logging.FromContext(ctx).Warnf("authentification with username/password is deprecated and will be removed August 2026. Please switch to OAuth2 client credentials, see https://developer.shopware.com/docs/products/cli/shopware-account-commands/authentication.html")
 		return loginWithCredentials(ctx, email, password)
 	}
 
