@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 	"text/template"
@@ -182,6 +183,17 @@ var projectCreateCmd = &cobra.Command{
 			selectGit := tui.Yes
 			selectElasticsearch := tui.No
 			selectAMQP := tui.Yes
+
+			if !system.IsGitInstalled() {
+				selectGit = tui.No
+			}
+
+			if !useDocker {
+				extensions, err := system.GetAvailablePHPExtensions(cmd.Context())
+				if err == nil && !slices.Contains(extensions, "amqp") {
+					selectAMQP = tui.No
+				}
+			}
 			selectedMinor := versionLatest
 
 			theme := huh.ThemeFunc(func(isDark bool) *huh.Styles {
