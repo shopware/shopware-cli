@@ -123,11 +123,17 @@ var accountCompanyProducerExtensionInfoPullCmd = &cobra.Command{
 		englishMetaTitle := ""
 		germanMetaDescription := ""
 		englishMetaDescription := ""
+		germanLabel := ""
+		englishLabel := ""
+		germanShortDescription := ""
+		englishShortDescription := ""
 
 		for _, info := range storeExt.Infos {
 			language := info.Locale.Name[0:2]
 
 			if language == "de" {
+				germanLabel = info.Name
+				germanShortDescription = info.ShortDescription
 				germanDescription = "file:src/Resources/store/description.de.html"
 				germanInstallationManual = "file:src/Resources/store/installation_manual.de.html"
 				germanMetaTitle = info.MetaTitle
@@ -160,6 +166,8 @@ var accountCompanyProducerExtensionInfoPullCmd = &cobra.Command{
 					faqDE = append(faqDE, extension.ConfigStoreFaq{Question: element.Question, Answer: element.Answer, Position: element.Position})
 				}
 			} else {
+				englishLabel = info.Name
+				englishShortDescription = info.ShortDescription
 				englishDescription = "file:src/Resources/store/description.en.html"
 				englishInstallationManual = "file:src/Resources/store/installation_manual.en.html"
 				englishMetaTitle = info.MetaTitle
@@ -192,6 +200,22 @@ var accountCompanyProducerExtensionInfoPullCmd = &cobra.Command{
 				for _, element := range info.Faqs {
 					faqEN = append(faqEN, extension.ConfigStoreFaq{Question: element.Question, Answer: element.Answer, Position: element.Position})
 				}
+			}
+		}
+
+		if germanLabel != "" || englishLabel != "" || germanShortDescription != "" || englishShortDescription != "" {
+			err = zipExt.UpdateMetaData(&extension.ExtensionMetadata{
+				Label: extension.ExtensionTranslated{
+					German:  germanLabel,
+					English: englishLabel,
+				},
+				Description: extension.ExtensionTranslated{
+					German:  germanShortDescription,
+					English: englishShortDescription,
+				},
+			})
+			if err != nil {
+				return fmt.Errorf("cannot update extension metadata: %w", err)
 			}
 		}
 

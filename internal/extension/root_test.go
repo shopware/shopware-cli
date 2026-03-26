@@ -169,6 +169,109 @@ func TestGetExtensionByFolder_PrefersManifestOverComposer(t *testing.T) {
 	assert.Equal(t, TypePlatformApp, ext.GetType())
 }
 
+func TestUpdateMetaData_PlatformPlugin(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	composerContent := `{
+  "name": "test/test-plugin",
+  "type": "shopware-platform-plugin",
+  "version": "1.0.0",
+  "license": "MIT",
+  "description": "Test plugin",
+  "authors": [{"name": "Test"}],
+  "require": {
+    "shopware/core": "~6.5.0"
+  },
+  "autoload": {
+    "psr-4": {
+      "Test\\TestPlugin\\": "src/"
+    }
+  },
+  "extra": {
+    "shopware-plugin-class": "Test\\TestPlugin\\TestPlugin",
+    "label": {
+      "de-DE": "Altes Label DE",
+      "en-GB": "Old Label EN"
+    },
+    "description": {
+      "de-DE": "Alte Beschreibung",
+      "en-GB": "Old description"
+    }
+  }
+}`
+	require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "composer.json"), []byte(composerContent), 0644))
+
+	ext, err := GetExtensionByFolder(t.Context(), tmpDir)
+	require.NoError(t, err)
+
+	err = ext.UpdateMetaData(&ExtensionMetadata{
+		Label: ExtensionTranslated{
+			German:  "Neues Label DE",
+			English: "New Label EN",
+		},
+		Description: ExtensionTranslated{
+			German:  "Neue Beschreibung",
+			English: "New description",
+		},
+	})
+	require.NoError(t, err)
+
+	// Re-read the extension to verify the changes were persisted
+	ext2, err := GetExtensionByFolder(t.Context(), tmpDir)
+	require.NoError(t, err)
+
+	meta := ext2.GetMetaData()
+	assert.Equal(t, "Neues Label DE", meta.Label.German)
+	assert.Equal(t, "New Label EN", meta.Label.English)
+	assert.Equal(t, "Neue Beschreibung", meta.Description.German)
+	assert.Equal(t, "New description", meta.Description.English)
+}
+
+func TestUpdateMetaData_App(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	manifestContent := `<?xml version="1.0" encoding="UTF-8"?>
+<manifest xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="https://raw.githubusercontent.com/shopware/shopware/trunk/src/Core/Framework/App/Manifest/Schema/manifest-2.0.xsd">
+    <meta>
+        <name>TestApp</name>
+        <label>Old Label EN</label>
+        <label lang="de-DE">Altes Label DE</label>
+        <description>Old description</description>
+        <description lang="de-DE">Alte Beschreibung</description>
+        <author>Test Author</author>
+        <copyright>(c) Test</copyright>
+        <version>1.0.0</version>
+        <license>MIT</license>
+    </meta>
+</manifest>`
+	require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "manifest.xml"), []byte(manifestContent), 0644))
+
+	ext, err := GetExtensionByFolder(t.Context(), tmpDir)
+	require.NoError(t, err)
+
+	err = ext.UpdateMetaData(&ExtensionMetadata{
+		Label: ExtensionTranslated{
+			German:  "Neues Label DE",
+			English: "New Label EN",
+		},
+		Description: ExtensionTranslated{
+			German:  "Neue Beschreibung",
+			English: "New description",
+		},
+	})
+	require.NoError(t, err)
+
+	// Re-read the extension to verify the changes were persisted
+	ext2, err := GetExtensionByFolder(t.Context(), tmpDir)
+	require.NoError(t, err)
+
+	meta := ext2.GetMetaData()
+	assert.Equal(t, "Neues Label DE", meta.Label.German)
+	assert.Equal(t, "New Label EN", meta.Label.English)
+	assert.Equal(t, "Neue Beschreibung", meta.Description.German)
+	assert.Equal(t, "New description", meta.Description.English)
+}
+
 func TestGetShopwareVersionConstraintFromComposer(t *testing.T) {
 	t.Run("uses config constraint when set", func(t *testing.T) {
 		config := &Config{

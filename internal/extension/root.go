@@ -83,7 +83,7 @@ func GetExtensionByZip(ctx context.Context, filePath string) (Extension, error) 
 	return GetExtensionByFolder(ctx, fmt.Sprintf("%s/%s", dir, extName))
 }
 
-type extensionTranslated struct {
+type ExtensionTranslated struct {
 	German  string `json:"german"`
 	English string `json:"english"`
 }
@@ -94,10 +94,10 @@ type ExtensionChangelog struct {
 	Changelogs map[string]string
 }
 
-type extensionMetadata struct {
+type ExtensionMetadata struct {
 	Name        string
-	Label       extensionTranslated
-	Description extensionTranslated
+	Label       ExtensionTranslated
+	Description ExtensionTranslated
 }
 
 type Extension interface {
@@ -118,7 +118,8 @@ type Extension interface {
 	GetType() string
 	GetPath() string
 	GetChangelog() (*ExtensionChangelog, error)
-	GetMetaData() *extensionMetadata
+	GetMetaData() *ExtensionMetadata
+	UpdateMetaData(*ExtensionMetadata) error
 	GetExtensionConfig() *Config
 	Validate(context.Context, validation.Check)
 }
