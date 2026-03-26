@@ -136,20 +136,82 @@ func (a App) GetIconPath() string {
 	return filepath.Join(a.GetRootDir(), iconPath)
 }
 
-func (a App) GetMetaData() *extensionMetadata {
+func (a App) GetMetaData() *ExtensionMetadata {
 	german := []string{"de-DE", "de"}
 	english := []string{"en-GB", "en-US", "en", ""}
 
-	return &extensionMetadata{
-		Label: extensionTranslated{
+	return &ExtensionMetadata{
+		Label: ExtensionTranslated{
 			German:  a.manifest.Meta.Label.GetValueByLanguage(german),
 			English: a.manifest.Meta.Label.GetValueByLanguage(english),
 		},
-		Description: extensionTranslated{
+		Description: ExtensionTranslated{
 			German:  a.manifest.Meta.Description.GetValueByLanguage(german),
 			English: a.manifest.Meta.Description.GetValueByLanguage(english),
 		},
 	}
+}
+
+func (a App) UpdateMetaData(metadata *ExtensionMetadata) error {
+	manifestFile := fmt.Sprintf("%s/manifest.xml", a.path)
+
+	manifestBytes, err := os.ReadFile(manifestFile)
+	if err != nil {
+		return fmt.Errorf("could not read manifest.xml: %w", err)
+	}
+
+	var manifest Manifest
+	if err := xml.Unmarshal(manifestBytes, &manifest); err != nil {
+		return fmt.Errorf("could not parse manifest.xml: %w", err)
+	}
+
+	manifest.Meta.Label = updateTranslatableString(manifest.Meta.Label, metadata.Label)
+	manifest.Meta.Description = updateTranslatableString(manifest.Meta.Description, metadata.Description)
+
+	newXml, err := xml.MarshalIndent(manifest, "", "  ")
+	if err != nil {
+		return fmt.Errorf("could not marshal manifest.xml: %w", err)
+	}
+
+	newXml = append([]byte(xml.Header), newXml...)
+
+	if err := os.WriteFile(manifestFile, newXml, os.ModePerm); err != nil {
+		return fmt.Errorf("could not write manifest.xml: %w", err)
+	}
+
+	return nil
+}
+
+func updateTranslatableString(existing TranslatableString, translated ExtensionTranslated) TranslatableString {
+	langMap := map[string]string{
+		"de-DE": translated.German,
+		"en-GB": translated.English,
+	}
+
+	for i, entry := range existing {
+		if val, ok := langMap[entry.Lang]; ok && val != "" {
+			existing[i].Value = val
+			delete(langMap, entry.Lang)
+		}
+		// default language entry (no lang attr) maps to en-GB
+		if entry.Lang == "" {
+			if val, ok := langMap["en-GB"]; ok && val != "" {
+				existing[i].Value = val
+				delete(langMap, "en-GB")
+			}
+		}
+	}
+
+	for lang, val := range langMap {
+		if val != "" {
+			existing = append(existing, struct {
+				Value string `xml:",chardata"`
+				Lang  string `xml:"lang,attr,omitempty"`
+			}{Value: val, Lang: lang})
+		}
+	}
+
+	return existing
 }
 
 func (a App) Validate(_ context.Context, check validation.Check) {

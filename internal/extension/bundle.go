@@ -146,17 +146,21 @@ func (p ShopwareBundle) GetIconPath() string {
 	return ""
 }
 
-func (p ShopwareBundle) GetMetaData() *extensionMetadata {
-	return &extensionMetadata{
-		Label: extensionTranslated{
+func (p ShopwareBundle) GetMetaData() *ExtensionMetadata {
+	return &ExtensionMetadata{
+		Label: ExtensionTranslated{
 			German:  "FALLBACK",
 			English: "FALLBACK",
 		},
-		Description: extensionTranslated{
+		Description: ExtensionTranslated{
 			German:  "FALLBACK",
 			English: "FALLBACK",
 		},
 	}
+}
+
+func (p ShopwareBundle) UpdateMetaData(_ *ExtensionMetadata) error {
+	return nil
 }
 
 func (p ShopwareBundle) Validate(c context.Context, check validation.Check) {
