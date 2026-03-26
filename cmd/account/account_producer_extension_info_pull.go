@@ -203,18 +203,20 @@ var accountCompanyProducerExtensionInfoPullCmd = &cobra.Command{
 			}
 		}
 
-		err = zipExt.UpdateMetaData(&extension.ExtensionMetadata{
-			Label: extension.ExtensionTranslated{
-				German:  germanLabel,
-				English: englishLabel,
-			},
-			Description: extension.ExtensionTranslated{
-				German:  germanShortDescription,
-				English: englishShortDescription,
-			},
-		})
-		if err != nil {
-			return fmt.Errorf("cannot update extension metadata: %w", err)
+		if germanLabel != "" || englishLabel != "" || germanShortDescription != "" || englishShortDescription != "" {
+			err = zipExt.UpdateMetaData(&extension.ExtensionMetadata{
+				Label: extension.ExtensionTranslated{
+					German:  germanLabel,
+					English: englishLabel,
+				},
+				Description: extension.ExtensionTranslated{
+					German:  germanShortDescription,
+					English: englishShortDescription,
+				},
+			})
+			if err != nil {
+				return fmt.Errorf("cannot update extension metadata: %w", err)
+			}
 		}
 
 		extType := "extension"

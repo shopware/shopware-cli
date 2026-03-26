@@ -183,31 +183,34 @@ func (a App) UpdateMetaData(metadata *ExtensionMetadata) error {
 }
 
 func updateTranslatableString(existing TranslatableString, translated ExtensionTranslated) TranslatableString {
-	langMap := map[string]string{
-		"de-DE": translated.German,
-		"en-GB": translated.English,
+	translations := []struct {
+		lang  string
+		value string
+	}{
+		{"en-GB", translated.English},
+		{"de-DE", translated.German},
 	}
 
+	matched := make(map[string]bool)
+
 	for i, entry := range existing {
-		if val, ok := langMap[entry.Lang]; ok && val != "" {
-			existing[i].Value = val
-			delete(langMap, entry.Lang)
-		}
-		// default language entry (no lang attr) maps to en-GB
-		if entry.Lang == "" {
-			if val, ok := langMap["en-GB"]; ok && val != "" {
-				existing[i].Value = val
-				delete(langMap, "en-GB")
+		for _, t := range translations {
+			if t.value == "" {
+				continue
+			}
+			if entry.Lang == t.lang || (entry.Lang == "" && t.lang == "en-GB") {
+				existing[i].Value = t.value
+				matched[t.lang] = true
 			}
 		}
 	}
 
-	for lang, val := range langMap {
-		if val != "" {
+	for _, t := range translations {
+		if t.value != "" && !matched[t.lang] {
 			existing = append(existing, struct {
 				Value string `xml:",chardata"`
 				Lang  string `xml:"lang,attr,omitempty"`
-			}{Value: val, Lang: lang})
+			}{Value: t.value, Lang: t.lang})
 		}
 	}
 

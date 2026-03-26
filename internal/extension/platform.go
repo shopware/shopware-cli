@@ -193,29 +193,41 @@ func (p PlatformPlugin) UpdateMetaData(metadata *ExtensionMetadata) error {
 		composerJsonStruct["extra"] = extra
 	}
 
-	label, ok := extra["label"].(map[string]interface{})
-	if !ok {
-		label = make(map[string]interface{})
-	}
-	if metadata.Label.German != "" {
-		label["de-DE"] = metadata.Label.German
-	}
-	if metadata.Label.English != "" {
-		label["en-GB"] = metadata.Label.English
-	}
-	extra["label"] = label
+	changed := false
 
-	description, ok := extra["description"].(map[string]interface{})
-	if !ok {
-		description = make(map[string]interface{})
+	if metadata.Label.German != "" || metadata.Label.English != "" {
+		label, ok := extra["label"].(map[string]interface{})
+		if !ok {
+			label = make(map[string]interface{})
+		}
+		if metadata.Label.German != "" {
+			label["de-DE"] = metadata.Label.German
+		}
+		if metadata.Label.English != "" {
+			label["en-GB"] = metadata.Label.English
+		}
+		extra["label"] = label
+		changed = true
 	}
-	if metadata.Description.German != "" {
-		description["de-DE"] = metadata.Description.German
+
+	if metadata.Description.German != "" || metadata.Description.English != "" {
+		description, ok := extra["description"].(map[string]interface{})
+		if !ok {
+			description = make(map[string]interface{})
+		}
+		if metadata.Description.German != "" {
+			description["de-DE"] = metadata.Description.German
+		}
+		if metadata.Description.English != "" {
+			description["en-GB"] = metadata.Description.English
+		}
+		extra["description"] = description
+		changed = true
 	}
-	if metadata.Description.English != "" {
-		description["en-GB"] = metadata.Description.English
+
+	if !changed {
+		return nil
 	}
-	extra["description"] = description
 
 	newComposerJson, err := json.MarshalIndent(composerJsonStruct, "", "  ")
 	if err != nil {
