@@ -1,16 +1,10 @@
 package project
 
 import (
-	"os"
-	"os/exec"
-	"strings"
-
 	"github.com/spf13/cobra"
 
 	"github.com/shopware/shopware-cli/internal/envfile"
 	"github.com/shopware/shopware-cli/internal/extension"
-	"github.com/shopware/shopware-cli/internal/npm"
-	"github.com/shopware/shopware-cli/internal/phpexec"
 	"github.com/shopware/shopware-cli/internal/shop"
 )
 
@@ -37,55 +31,22 @@ var projectStorefrontWatchCmd = &cobra.Command{
 			return err
 		}
 
-		if err := filterAndWritePluginJson(cmd, projectRoot, shopCfg); err != nil {
+		cmdExecutor, err := resolveExecutor(cmd, projectRoot)
+		if err != nil {
 			return err
 		}
 
-		if err := runTransparentCommand(commandWithRoot(phpexec.ConsoleCommand(cmd.Context(), "feature:dump"), projectRoot)); err != nil {
+		if err := filterAndWritePluginJson(cmd, projectRoot, shopCfg, cmdExecutor); err != nil {
 			return err
 		}
 
-		activeOnly := "--active-only"
-
-		if !themeCompileSupportsActiveOnly(projectRoot) {
-			activeOnly = "-v"
-		}
-
-		if err := runTransparentCommand(commandWithRoot(phpexec.ConsoleCommand(cmd.Context(), "theme:compile", activeOnly), projectRoot)); err != nil {
+		watchCmd, err := extension.PrepareStorefrontWatcher(cmd.Context(), projectRoot, cmdExecutor)
+		if err != nil {
 			return err
 		}
 
-		if err := runTransparentCommand(commandWithRoot(phpexec.ConsoleCommand(cmd.Context(), "theme:dump"), projectRoot)); err != nil {
-			return err
-		}
-
-		if err := os.Setenv("PROJECT_ROOT", projectRoot); err != nil {
-			return err
-		}
-
-		if err := os.Setenv("STOREFRONT_ROOT", extension.PlatformPath(projectRoot, "Storefront", "")); err != nil {
-			return err
-		}
-
-		if _, err := os.Stat(extension.PlatformPath(projectRoot, "Storefront", "Resources/app/storefront/node_modules/webpack-dev-server")); os.IsNotExist(err) {
-			if err := npm.InstallDependencies(cmd.Context(), extension.PlatformPath(projectRoot, "Storefront", "Resources/app/storefront"), npm.NonEmptyPackage); err != nil {
-				return err
-			}
-		}
-
-		return runTransparentCommand(commandWithRoot(exec.CommandContext(cmd.Context(), "npm", "run-script", "hot-proxy"), extension.PlatformPath(projectRoot, "Storefront", "Resources/app/storefront")))
+		return runTransparentCommand(watchCmd)
 	},
-}
-
-func themeCompileSupportsActiveOnly(projectRoot string) bool {
-	themeFile := extension.PlatformPath(projectRoot, "Storefront", "Theme/Command/ThemeCompileCommand.php")
-
-	bytes, err := os.ReadFile(themeFile)
-	if err != nil {
-		return false
-	}
-
-	return strings.Contains(string(bytes), "active-only")
 }
 
 func init() {

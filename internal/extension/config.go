@@ -229,6 +229,10 @@ func (c *Config) IsCompatibilityDateAtLeast(requiredDate string) (bool, error) {
 	return compatibility.IsAtLeast(c.CompatibilityDate, requiredDate)
 }
 
+func (c *Config) IsCompatibilityDateBefore(requiredDate string) bool {
+	return compatibility.IsBefore(c.CompatibilityDate, requiredDate)
+}
+
 func readExtensionConfig(ctx context.Context, dir string) (*Config, error) {
 	config := &Config{}
 	config.Build.Zip.Assets.Enabled = true

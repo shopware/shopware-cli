@@ -17,6 +17,7 @@ import (
 
 	"github.com/shopware/shopware-cli/internal/asset"
 	"github.com/shopware/shopware-cli/internal/esbuild"
+	"github.com/shopware/shopware-cli/internal/executor"
 	"github.com/shopware/shopware-cli/logging"
 )
 
@@ -45,6 +46,24 @@ type AssetBuildConfig struct {
 	ForceExtensionBuild          []string
 	ForceAdminBuild              bool
 	KeepNodeModules              []string
+	Executor                     executor.Executor
+}
+
+// ExecutorWithRelDir returns the configured executor with the given relative dir,
+// or a local executor if none is configured.
+func (c AssetBuildConfig) ExecutorWithRelDir(relDir string) executor.Executor {
+	if c.Executor != nil {
+		return c.Executor.WithRelDir(relDir)
+	}
+
+	return executor.NewLocal(filepath.Join(c.ShopwareRoot, relDir))
+}
+
+func (c AssetBuildConfig) NormalizePath(hostPath string) string {
+	if c.Executor != nil {
+		return c.Executor.NormalizePath(hostPath)
+	}
+	return hostPath
 }
 
 type ExtensionAssetConfig map[string]*ExtensionAssetConfigEntry

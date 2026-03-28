@@ -18,7 +18,6 @@ import (
 	"github.com/shopware/shopware-cli/internal/extension"
 	"github.com/shopware/shopware-cli/internal/mjml"
 	"github.com/shopware/shopware-cli/internal/packagist"
-	"github.com/shopware/shopware-cli/internal/phpexec"
 	"github.com/shopware/shopware-cli/internal/shop"
 	"github.com/shopware/shopware-cli/logging"
 )
@@ -62,6 +61,11 @@ var projectCI = &cobra.Command{
 		// Remove annoying cache invalidation errors while asset install
 		_ = os.Setenv("SHOPWARE_SKIP_ASSET_INSTALL_CACHE_INVALIDATION", "1")
 
+		cmdExecutor, err := resolveExecutor(cmd, args[0])
+		if err != nil {
+			return err
+		}
+
 		shopCfg, err := shop.ReadConfig(cmd.Context(), projectConfigPath, true)
 		if err != nil {
 			return err
@@ -99,8 +103,7 @@ var projectCI = &cobra.Command{
 
 			composerInstallSection := ci.Default.Section(cmd.Context(), "Composer Installation")
 
-			composer := phpexec.ComposerCommand(cmd.Context(), composerFlags...)
-			composer.Dir = args[0]
+			composer := cmdExecutor.ComposerCommand(cmd.Context(), composerFlags...)
 			composer.Stdin = os.Stdin
 			composer.Stdout = os.Stdout
 			composer.Stderr = os.Stderr
@@ -152,6 +155,7 @@ var projectCI = &cobra.Command{
 			ForceExtensionBuild:          convertForceExtensionBuild(shopCfg.Build.ForceExtensionBuild),
 			ForceAdminBuild:              shopCfg.Build.ForceAdminBuild,
 			KeepNodeModules:              shopCfg.Build.KeepNodeModules,
+			Executor:                     cmdExecutor,
 		}
 
 		if shopCfg.Build.Hooks != nil && len(shopCfg.Build.Hooks.PreAssets) > 0 {
@@ -215,7 +219,7 @@ var projectCI = &cobra.Command{
 
 		warumupSection := ci.Default.Section(cmd.Context(), "Warming up container cache")
 
-		if err := runTransparentCommand(phpexec.PHPCommand(cmd.Context(), path.Join(args[0], "bin", "ci"), "--version")); err != nil { //nolint: gosec
+		if err := runTransparentCommand(cmdExecutor.PHPCommand(cmd.Context(), path.Join(args[0], "bin", "ci"), "--version")); err != nil { //nolint: gosec
 			return fmt.Errorf("failed to warmup container cache (php bin/ci --version): %w", err)
 		}
 
@@ -230,7 +234,7 @@ var projectCI = &cobra.Command{
 				}
 			}
 
-			if err := runTransparentCommand(phpexec.PHPCommand(cmd.Context(), path.Join(args[0], "bin", "ci"), "asset:install")); err != nil { //nolint: gosec
+			if err := runTransparentCommand(cmdExecutor.PHPCommand(cmd.Context(), path.Join(args[0], "bin", "ci"), "asset:install")); err != nil { //nolint: gosec
 				return fmt.Errorf("failed to install assets (php bin/ci asset:install): %w", err)
 			}
 		}
@@ -342,12 +346,6 @@ func prepareComposerAuth(ctx context.Context, root string) (string, error) {
 func init() {
 	projectRootCmd.AddCommand(projectCI)
 	projectCI.PersistentFlags().Bool("with-dev-dependencies", false, "Install dev dependencies")
-}
-
-func commandWithRoot(cmd *exec.Cmd, root string) *exec.Cmd {
-	cmd.Dir = root
-
-	return cmd
 }
 
 func runTransparentCommand(cmd *exec.Cmd) error {

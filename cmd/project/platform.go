@@ -12,8 +12,8 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/shopware/shopware-cli/internal/asset"
+	"github.com/shopware/shopware-cli/internal/executor"
 	"github.com/shopware/shopware-cli/internal/extension"
-	"github.com/shopware/shopware-cli/internal/phpexec"
 	"github.com/shopware/shopware-cli/internal/shop"
 	"github.com/shopware/shopware-cli/logging"
 )
@@ -64,17 +64,32 @@ func findClosestShopwareProject() (string, error) {
 	return "", fmt.Errorf("cannot find Shopware project in current directory")
 }
 
-func filterAndWritePluginJson(cmd *cobra.Command, projectRoot string, shopCfg *shop.Config) error {
+func filterAndWritePluginJson(cmd *cobra.Command, projectRoot string, shopCfg *shop.Config, cmdExecutor executor.Executor) error {
 	sources, err := filterAndGetSources(cmd, projectRoot, shopCfg)
 	if err != nil {
 		return err
 	}
 
-	cfgs := extension.BuildAssetConfigFromExtensions(cmd.Context(), sources, extension.AssetBuildConfig{})
+	assetConfig := extension.AssetBuildConfig{
+		ShopwareRoot: projectRoot,
+		Executor:     cmdExecutor,
+	}
 
-	if _, err := extension.InstallNodeModulesOfConfigs(cmd.Context(), cfgs, false); err != nil {
+	cfgs := extension.BuildAssetConfigFromExtensions(cmd.Context(), sources, assetConfig)
+
+	if _, err := extension.InstallNodeModulesOfConfigs(cmd.Context(), cfgs, assetConfig); err != nil {
 		return err
 	}
+
+	// Normalize paths for the execution environment (e.g. Docker container).
+	for _, cfg := range cfgs {
+		cfg.BasePath = cmdExecutor.NormalizePath(cfg.BasePath)
+		for i, v := range cfg.Views {
+			cfg.Views[i] = cmdExecutor.NormalizePath(v)
+		}
+	}
+
+	fmt.Println(cfgs)
 
 	pluginJson, err := json.MarshalIndent(cfgs, "", "  ")
 	if err != nil {
@@ -89,7 +104,12 @@ func filterAndWritePluginJson(cmd *cobra.Command, projectRoot string, shopCfg *s
 }
 
 func filterAndGetSources(cmd *cobra.Command, projectRoot string, shopCfg *shop.Config) ([]asset.Source, error) {
-	sources, err := extension.DumpAndLoadAssetSourcesOfProject(phpexec.AllowBinCI(cmd.Context()), projectRoot, shopCfg)
+	cmdExecutor, err := resolveExecutor(cmd, projectRoot)
+	if err != nil {
+		return nil, err
+	}
+
+	sources, err := extension.DumpAndLoadAssetSourcesOfProject(executor.AllowBinCI(cmd.Context()), projectRoot, shopCfg, cmdExecutor.ConsoleCommand)
 	if err != nil {
 		return nil, err
 	}

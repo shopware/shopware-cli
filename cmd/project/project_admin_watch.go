@@ -1,16 +1,10 @@
 package project
 
 import (
-	"os"
-	"os/exec"
-	"path"
-
 	"github.com/spf13/cobra"
 
 	"github.com/shopware/shopware-cli/internal/envfile"
 	"github.com/shopware/shopware-cli/internal/extension"
-	"github.com/shopware/shopware-cli/internal/npm"
-	"github.com/shopware/shopware-cli/internal/phpexec"
 	"github.com/shopware/shopware-cli/internal/shop"
 )
 
@@ -37,48 +31,21 @@ var projectAdminWatchCmd = &cobra.Command{
 			return err
 		}
 
-		if err := filterAndWritePluginJson(cmd, projectRoot, shopCfg); err != nil {
+		cmdExecutor, err := resolveExecutor(cmd, projectRoot)
+		if err != nil {
 			return err
 		}
 
-		if err := runTransparentCommand(commandWithRoot(phpexec.ConsoleCommand(cmd.Context(), "feature:dump"), projectRoot)); err != nil {
+		if err := filterAndWritePluginJson(cmd, projectRoot, shopCfg, cmdExecutor); err != nil {
 			return err
 		}
 
-		if err := os.Setenv("PROJECT_ROOT", projectRoot); err != nil {
+		watchCmd, err := extension.PrepareAdminWatcher(cmd.Context(), projectRoot, cmdExecutor)
+		if err != nil {
 			return err
 		}
 
-		if _, err := os.Stat(extension.PlatformPath(projectRoot, "Administration", "Resources/app/administration/node_modules/webpack-dev-server")); os.IsNotExist(err) {
-			if err := npm.InstallDependencies(cmd.Context(), extension.PlatformPath(projectRoot, "Administration", "Resources/app/administration"), npm.NonEmptyPackage); err != nil {
-				return err
-			}
-		}
-
-		adminRoot := extension.PlatformPath(projectRoot, "Administration", "Resources/app/administration")
-
-		if err := os.Setenv("ADMIN_ROOT", extension.PlatformPath(projectRoot, "Administration", "")); err != nil {
-			return err
-		}
-
-		if _, err := os.Stat(extension.PlatformPath(projectRoot, "Administration", "Resources/app/administration/scripts/entitySchemaConverter/entity-schema-converter.ts")); err == nil {
-			mockDirectory := extension.PlatformPath(projectRoot, "Administration", "Resources/app/administration/test/_mocks_")
-			if _, err := os.Stat(mockDirectory); os.IsNotExist(err) {
-				if err := os.MkdirAll(mockDirectory, os.ModePerm); err != nil {
-					return err
-				}
-			}
-
-			if err := runTransparentCommand(commandWithRoot(phpexec.ConsoleCommand(cmd.Context(), "framework:schema", "-s", "entity-schema", path.Join(mockDirectory, "entity-schema.json")), projectRoot)); err != nil {
-				return err
-			}
-
-			if err := runTransparentCommand(commandWithRoot(exec.CommandContext(cmd.Context(), "npm", "run", "convert-entity-schema"), adminRoot)); err != nil {
-				return err
-			}
-		}
-
-		return runTransparentCommand(commandWithRoot(exec.CommandContext(cmd.Context(), "npm", "run", "dev"), adminRoot))
+		return runTransparentCommand(watchCmd)
 	},
 }
 

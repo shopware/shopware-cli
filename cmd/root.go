@@ -15,6 +15,7 @@ import (
 	"github.com/shopware/shopware-cli/cmd/project"
 	accountApi "github.com/shopware/shopware-cli/internal/account-api"
 	"github.com/shopware/shopware-cli/internal/system"
+	"github.com/shopware/shopware-cli/internal/tui"
 	"github.com/shopware/shopware-cli/logging"
 )
 
@@ -33,6 +34,7 @@ func Execute(ctx context.Context) {
 
 	ctx = logging.WithLogger(ctx, logging.NewLogger(slices.Contains(os.Args, "--verbose")))
 	ctx = system.WithInteraction(ctx, !slices.Contains(os.Args, "--no-interaction") && !slices.Contains(os.Args, "-n") && isatty.IsTerminal(os.Stdin.Fd()))
+	tui.AppVersion = version
 	accountApi.SetUserAgent("shopware-cli/" + version)
 
 	if err := rootCmd.ExecuteContext(ctx); err != nil {
