@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"syscall"
 )
 
@@ -81,6 +82,16 @@ func (d *DockerExecutor) Type() string {
 }
 
 func (d *DockerExecutor) WithEnv(env map[string]string) Executor {
+	projectRootEnv := []string{"PROJECT_ROOT", "ADMIN_ROOT", "STOREFRONT_ROOT"}
+
+	for _, k := range projectRootEnv {
+		if _, ok := env[k]; ok {
+			if strings.HasPrefix(env[k], d.projectRoot) {
+				env[k] = d.NormalizePath(env[k])
+			}
+		}
+	}
+
 	return &DockerExecutor{env: mergeEnv(d.env, env), projectRoot: d.projectRoot, relDir: d.relDir}
 }
 

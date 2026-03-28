@@ -288,6 +288,56 @@ func TestWithEnvOverrides(t *testing.T) {
 	assert.NotContains(t, cmd.Env, "A=1")
 }
 
+func TestDockerWithEnvNormalizesProjectRoot(t *testing.T) {
+	exec := &DockerExecutor{projectRoot: "/host/project"}
+	withEnv := exec.WithEnv(map[string]string{
+		"PROJECT_ROOT": "/host/project",
+	})
+
+	cmd := withEnv.PHPCommand(t.Context(), "-v")
+	assert.Contains(t, cmd.Args, "PROJECT_ROOT=/var/www/html")
+}
+
+func TestDockerWithEnvNormalizesAdminRoot(t *testing.T) {
+	exec := &DockerExecutor{projectRoot: "/host/project"}
+	withEnv := exec.WithEnv(map[string]string{
+		"ADMIN_ROOT": "/host/project/vendor/shopware/administration/Resources/app/administration",
+	})
+
+	cmd := withEnv.PHPCommand(t.Context(), "-v")
+	assert.Contains(t, cmd.Args, "ADMIN_ROOT=/var/www/html/vendor/shopware/administration/Resources/app/administration")
+}
+
+func TestDockerWithEnvNormalizesStorefrontRoot(t *testing.T) {
+	exec := &DockerExecutor{projectRoot: "/host/project"}
+	withEnv := exec.WithEnv(map[string]string{
+		"STOREFRONT_ROOT": "/host/project/vendor/shopware/storefront/Resources/app/storefront",
+	})
+
+	cmd := withEnv.PHPCommand(t.Context(), "-v")
+	assert.Contains(t, cmd.Args, "STOREFRONT_ROOT=/var/www/html/vendor/shopware/storefront/Resources/app/storefront")
+}
+
+func TestDockerWithEnvDoesNotNormalizeUnrelatedEnv(t *testing.T) {
+	exec := &DockerExecutor{projectRoot: "/host/project"}
+	withEnv := exec.WithEnv(map[string]string{
+		"SOME_PATH": "/host/project/something",
+	})
+
+	cmd := withEnv.PHPCommand(t.Context(), "-v")
+	assert.Contains(t, cmd.Args, "SOME_PATH=/host/project/something")
+}
+
+func TestDockerWithEnvDoesNotNormalizeNonMatchingPrefix(t *testing.T) {
+	exec := &DockerExecutor{projectRoot: "/host/project"}
+	withEnv := exec.WithEnv(map[string]string{
+		"PROJECT_ROOT": "/other/path",
+	})
+
+	cmd := withEnv.PHPCommand(t.Context(), "-v")
+	assert.Contains(t, cmd.Args, "PROJECT_ROOT=/other/path")
+}
+
 func TestDockerWithEnvMerges(t *testing.T) {
 	exec := &DockerExecutor{projectRoot: "/project"}
 	withA := exec.WithEnv(map[string]string{"A": "1"})
