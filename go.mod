@@ -27,10 +27,10 @@ require (
 	github.com/vulcand/oxy/v2 v2.0.3
 	github.com/wI2L/jsondiff v0.7.0
 	github.com/wk8/go-ordered-map/v2 v2.1.8
-	github.com/yuin/goldmark v1.7.17
+	github.com/yuin/goldmark v1.8.2
 	github.com/zeebo/xxh3 v1.1.0
 	go.uber.org/zap v1.27.1
-	golang.org/x/image v0.37.0
+	golang.org/x/image v0.38.0
 	golang.org/x/text v0.35.0
 	golang.org/x/time v0.15.0
 	gopkg.in/yaml.v3 v3.0.1
