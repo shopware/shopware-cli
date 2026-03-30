@@ -605,11 +605,11 @@
         },
         {
             "name": "phpstan/phpstan",
-            "version": "2.1.42",
+            "version": "2.1.45",
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/phpstan/phpstan/zipball/1279e1ce86ba768f0780c9d889852b4e02ff40d0",
-                "reference": "1279e1ce86ba768f0780c9d889852b4e02ff40d0",
+                "url": "https://api.github.com/repos/phpstan/phpstan/zipball/f8cdfd9421b7edb7686a2d150a234870464eac70",
+                "reference": "f8cdfd9421b7edb7686a2d150a234870464eac70",
                 "shasum": ""
             },
             "require": {
@@ -654,7 +654,7 @@
                     "type": "github"
                 }
             ],
-            "time": "2026-03-17T14:58:32+00:00"
+            "time": "2026-03-30T13:22:02+00:00"
         },
         {
             "name": "phpstan/phpstan-deprecation-rules",
@@ -1637,16 +1637,16 @@
         },
         {
             "name": "spaze/phpstan-disallowed-calls",
-            "version": "v4.9.0",
+            "version": "v4.9.1",
             "source": {
                 "type": "git",
                 "url": "https://github.com/spaze/phpstan-disallowed-calls.git",
-                "reference": "e80372a55bdad13d22a62fdf2116a67a5438c34b"
+                "reference": "382dd9b251b82f8ca81538b89200e69dfce44489"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/spaze/phpstan-disallowed-calls/zipball/e80372a55bdad13d22a62fdf2116a67a5438c34b",
-                "reference": "e80372a55bdad13d22a62fdf2116a67a5438c34b",
+                "url": "https://api.github.com/repos/spaze/phpstan-disallowed-calls/zipball/382dd9b251b82f8ca81538b89200e69dfce44489",
+                "reference": "382dd9b251b82f8ca81538b89200e69dfce44489",
                 "shasum": ""
             },
             "require": {
@@ -1686,13 +1686,13 @@
                     "homepage": "https://www.michalspacek.cz"
                 }
             ],
-            "description": "PHPStan rules to detect disallowed method & function calls, constant, namespace, attribute & superglobal usages, with powerful rules to re-allow a call or a usage in places where it should be allowed.",
+            "description": "PHPStan rules to detect disallowed method & function calls, constant, namespace, attribute, property & superglobal usages, with powerful rules to re-allow a call or a usage in places where it should be allowed.",
             "keywords": [
                 "static analysis"
             ],
             "support": {
                 "issues": "https://github.com/spaze/phpstan-disallowed-calls/issues",
-                "source": "https://github.com/spaze/phpstan-disallowed-calls/tree/v4.9.0"
+                "source": "https://github.com/spaze/phpstan-disallowed-calls/tree/v4.9.1"
             },
             "funding": [
                 {
@@ -1700,7 +1700,7 @@
                     "type": "github"
                 }
             ],
-            "time": "2026-03-13T22:27:50+00:00"
+            "time": "2026-03-26T20:37:24+00:00"
         },
         {
             "name": "symfony/console",
