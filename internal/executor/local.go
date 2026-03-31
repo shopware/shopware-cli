@@ -14,38 +14,38 @@ type LocalExecutor struct {
 	relDir      string
 }
 
-func (l *LocalExecutor) ConsoleCommand(ctx context.Context, args ...string) *exec.Cmd {
+func (l *LocalExecutor) ConsoleCommand(ctx context.Context, args ...string) *Process {
 	cmdArgs := []string{consoleCommandName(ctx)}
 	cmdArgs = append(cmdArgs, args...)
 	cmd := exec.CommandContext(ctx, "php", cmdArgs...)
 	applyLocalEnv(l.projectRoot, l.env, cmd)
 	applyDir(resolveDir(l.projectRoot, l.relDir), cmd)
 	logCmd(ctx, cmd)
-	return cmd
+	return newProcess(cmd)
 }
 
-func (l *LocalExecutor) ComposerCommand(ctx context.Context, args ...string) *exec.Cmd {
+func (l *LocalExecutor) ComposerCommand(ctx context.Context, args ...string) *Process {
 	cmd := exec.CommandContext(ctx, "composer", args...)
 	applyLocalEnv(l.projectRoot, l.env, cmd)
 	applyDir(resolveDir(l.projectRoot, l.relDir), cmd)
 	logCmd(ctx, cmd)
-	return cmd
+	return newProcess(cmd)
 }
 
-func (l *LocalExecutor) PHPCommand(ctx context.Context, args ...string) *exec.Cmd {
+func (l *LocalExecutor) PHPCommand(ctx context.Context, args ...string) *Process {
 	cmd := exec.CommandContext(ctx, "php", args...)
 	applyLocalEnv(l.projectRoot, l.env, cmd)
 	applyDir(resolveDir(l.projectRoot, l.relDir), cmd)
 	logCmd(ctx, cmd)
-	return cmd
+	return newProcess(cmd)
 }
 
-func (l *LocalExecutor) NPMCommand(ctx context.Context, args ...string) *exec.Cmd {
+func (l *LocalExecutor) NPMCommand(ctx context.Context, args ...string) *Process {
 	cmd := exec.CommandContext(ctx, "npm", args...)
 	applyLocalEnv(l.projectRoot, l.env, cmd)
 	applyDir(resolveDir(l.projectRoot, l.relDir), cmd)
 	logCmd(ctx, cmd)
-	return cmd
+	return newProcess(cmd)
 }
 
 func (l *LocalExecutor) NormalizePath(hostPath string) string {

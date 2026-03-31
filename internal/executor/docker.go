@@ -16,52 +16,48 @@ type DockerExecutor struct {
 	relDir      string
 }
 
-func (d *DockerExecutor) ConsoleCommand(ctx context.Context, args ...string) *exec.Cmd {
+func (d *DockerExecutor) ConsoleCommand(ctx context.Context, args ...string) *Process {
 	dockerArgs := d.baseArgs()
 	dockerArgs = append(dockerArgs, "env-bridge", "php", consoleCommandName(ctx))
 	dockerArgs = append(dockerArgs, args...)
 
 	cmd := exec.CommandContext(ctx, "docker", dockerArgs...)
 	applyDir(d.projectRoot, cmd)
-	cancelWithSIGINT(cmd)
 	logCmd(ctx, cmd)
-	return cmd
+	return d.newProcess(cmd, append([]string{"php", consoleCommandName(ctx)}, args...))
 }
 
-func (d *DockerExecutor) ComposerCommand(ctx context.Context, args ...string) *exec.Cmd {
+func (d *DockerExecutor) ComposerCommand(ctx context.Context, args ...string) *Process {
 	dockerArgs := d.baseArgs()
 	dockerArgs = append(dockerArgs, "composer")
 	dockerArgs = append(dockerArgs, args...)
 
 	cmd := exec.CommandContext(ctx, "docker", dockerArgs...)
 	applyDir(d.projectRoot, cmd)
-	cancelWithSIGINT(cmd)
 	logCmd(ctx, cmd)
-	return cmd
+	return d.newProcess(cmd, append([]string{"composer"}, args...))
 }
 
-func (d *DockerExecutor) PHPCommand(ctx context.Context, args ...string) *exec.Cmd {
+func (d *DockerExecutor) PHPCommand(ctx context.Context, args ...string) *Process {
 	dockerArgs := d.baseArgs()
 	dockerArgs = append(dockerArgs, "env-bridge", "php")
 	dockerArgs = append(dockerArgs, args...)
 
 	cmd := exec.CommandContext(ctx, "docker", dockerArgs...)
 	applyDir(d.projectRoot, cmd)
-	cancelWithSIGINT(cmd)
 	logCmd(ctx, cmd)
-	return cmd
+	return d.newProcess(cmd, append([]string{"php"}, args...))
 }
 
-func (d *DockerExecutor) NPMCommand(ctx context.Context, args ...string) *exec.Cmd {
+func (d *DockerExecutor) NPMCommand(ctx context.Context, args ...string) *Process {
 	dockerArgs := d.baseArgs()
 	dockerArgs = append(dockerArgs, "env-bridge", "npm")
 	dockerArgs = append(dockerArgs, args...)
 
 	cmd := exec.CommandContext(ctx, "docker", dockerArgs...)
 	applyDir(d.projectRoot, cmd)
-	cancelWithSIGINT(cmd)
 	logCmd(ctx, cmd)
-	return cmd
+	return d.newProcess(cmd, append([]string{"npm"}, args...))
 }
 
 func (d *DockerExecutor) NormalizePath(hostPath string) string {
@@ -108,12 +104,31 @@ func (d *DockerExecutor) containerWorkdir() string {
 	return filepath.Join("/var/www/html", d.relDir)
 }
 
-func cancelWithSIGINT(cmd *exec.Cmd) {
-	cmd.Cancel = func() error {
-		if cmd.Process == nil {
+// newProcess wraps the command in a Process with a Docker-aware stop function.
+// The innerArgs are the command args as seen inside the container (used as the
+// pkill pattern for cleanup).
+func (d *DockerExecutor) newProcess(cmd *exec.Cmd, innerArgs []string) *Process {
+	projectRoot := d.projectRoot
+	pattern := strings.Join(innerArgs, " ")
+
+	return &Process{
+		Cmd: cmd,
+		stop: func(ctx context.Context) error {
+			// First, kill the process inside the container via pkill.
+			killCmd := exec.CommandContext(ctx, "docker", "compose", "exec", "-T", "web",
+				"pkill", "-INT", "-f", pattern,
+			)
+			killCmd.Dir = projectRoot
+			_ = killCmd.Run()
+
+			// Also signal the host-side "docker compose exec" process so it
+			// exits promptly instead of lingering after its child dies.
+			if cmd.Process != nil {
+				_ = cmd.Process.Signal(syscall.SIGINT)
+			}
+
 			return nil
-		}
-		return cmd.Process.Signal(syscall.SIGINT)
+		},
 	}
 }
 

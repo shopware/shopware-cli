@@ -101,30 +101,30 @@ var projectWorkerCmd = &cobra.Command{
 						continue
 					}
 
-					cmd := cmdExecutor.ConsoleCommand(cancelCtx, consumeArgs...)
-					cmd.Stdout = os.Stdout
-					cmd.Stderr = os.Stderr
-					cmd.Env = append(os.Environ(), fmt.Sprintf("MESSENGER_CONSUMER_NAME=%s-%d", baseName, index))
-					cmd.WaitDelay = time.Second
-					cmd.Cancel = func() error {
+					p := cmdExecutor.ConsoleCommand(cancelCtx, consumeArgs...)
+					p.Cmd.Stdout = os.Stdout
+					p.Cmd.Stderr = os.Stderr
+					p.Cmd.Env = append(os.Environ(), fmt.Sprintf("MESSENGER_CONSUMER_NAME=%s-%d", baseName, index))
+					p.Cmd.WaitDelay = time.Second
+					p.Cmd.Cancel = func() error {
 						if gracefulStopLimit > 0 {
-							if err := cmd.Process.Signal(syscall.SIGTERM); err != nil {
+							if err := p.Cmd.Process.Signal(syscall.SIGTERM); err != nil {
 								return err
 							}
 
 							now := time.Now()
 
 							for time.Since(now) < time.Second*time.Duration(gracefulStopLimit) {
-								if isProcessStopped(cmd.Process) {
+								if isProcessStopped(p.Cmd.Process) {
 									return os.ErrProcessDone
 								}
 								time.Sleep(time.Millisecond * 250)
 							}
 						}
-						return cmd.Process.Kill()
+						return p.Cmd.Process.Kill()
 					}
 
-					if err := cmd.Run(); err != nil {
+					if err := p.Cmd.Run(); err != nil {
 						if errors.Is(err, context.Canceled) {
 							break
 						}

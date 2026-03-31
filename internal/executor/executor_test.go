@@ -47,88 +47,88 @@ func TestNewUnsupportedType(t *testing.T) {
 func TestLocalExecutorConsoleCommand(t *testing.T) {
 	exec := &LocalExecutor{projectRoot: "/project"}
 
-	cmd := exec.ConsoleCommand(t.Context(), "cache:clear")
-	assert.Equal(t, []string{"php", "bin/console", "cache:clear"}, cmd.Args)
-	assert.Equal(t, "/project", cmd.Dir)
+	p := exec.ConsoleCommand(t.Context(), "cache:clear")
+	assert.Equal(t, []string{"php", "bin/console", "cache:clear"}, p.Cmd.Args)
+	assert.Equal(t, "/project", p.Cmd.Dir)
 }
 
 func TestLocalExecutorComposerCommand(t *testing.T) {
 	exec := &LocalExecutor{projectRoot: "/project"}
 
-	cmd := exec.ComposerCommand(t.Context(), "install")
-	assert.Equal(t, []string{"composer", "install"}, cmd.Args)
-	assert.Equal(t, "/project", cmd.Dir)
+	p := exec.ComposerCommand(t.Context(), "install")
+	assert.Equal(t, []string{"composer", "install"}, p.Cmd.Args)
+	assert.Equal(t, "/project", p.Cmd.Dir)
 }
 
 func TestLocalExecutorPHPCommand(t *testing.T) {
 	exec := &LocalExecutor{projectRoot: "/project"}
 
-	cmd := exec.PHPCommand(t.Context(), "-v")
-	assert.Equal(t, []string{"php", "-v"}, cmd.Args)
-	assert.Equal(t, "/project", cmd.Dir)
+	p := exec.PHPCommand(t.Context(), "-v")
+	assert.Equal(t, []string{"php", "-v"}, p.Cmd.Args)
+	assert.Equal(t, "/project", p.Cmd.Dir)
 }
 
 func TestSymfonyCLIExecutorConsoleCommand(t *testing.T) {
 	exec := &SymfonyCLIExecutor{BinaryPath: "/usr/local/bin/symfony", projectRoot: "/project"}
 
-	cmd := exec.ConsoleCommand(t.Context(), "cache:clear")
-	assert.Equal(t, []string{"/usr/local/bin/symfony", "php", "bin/console", "cache:clear"}, cmd.Args)
-	assert.Equal(t, "/project", cmd.Dir)
+	p := exec.ConsoleCommand(t.Context(), "cache:clear")
+	assert.Equal(t, []string{"/usr/local/bin/symfony", "php", "bin/console", "cache:clear"}, p.Cmd.Args)
+	assert.Equal(t, "/project", p.Cmd.Dir)
 }
 
 func TestSymfonyCLIExecutorComposerCommand(t *testing.T) {
 	exec := &SymfonyCLIExecutor{BinaryPath: "/usr/local/bin/symfony", projectRoot: "/project"}
 
-	cmd := exec.ComposerCommand(t.Context(), "install")
-	assert.Equal(t, []string{"/usr/local/bin/symfony", "composer", "install"}, cmd.Args)
+	p := exec.ComposerCommand(t.Context(), "install")
+	assert.Equal(t, []string{"/usr/local/bin/symfony", "composer", "install"}, p.Cmd.Args)
 }
 
 func TestSymfonyCLIExecutorPHPCommand(t *testing.T) {
 	exec := &SymfonyCLIExecutor{BinaryPath: "/usr/local/bin/symfony", projectRoot: "/project"}
 
-	cmd := exec.PHPCommand(t.Context(), "-v")
-	assert.Equal(t, []string{"/usr/local/bin/symfony", "php", "-v"}, cmd.Args)
+	p := exec.PHPCommand(t.Context(), "-v")
+	assert.Equal(t, []string{"/usr/local/bin/symfony", "php", "-v"}, p.Cmd.Args)
 }
 
 func TestDockerExecutorConsoleCommand(t *testing.T) {
 	exec := &DockerExecutor{projectRoot: "/project"}
 
-	cmd := exec.ConsoleCommand(t.Context(), "cache:clear")
-	assert.Contains(t, cmd.Path, "docker")
-	assert.Contains(t, cmd.Args, "compose")
-	assert.Contains(t, cmd.Args, "exec")
-	assert.Contains(t, cmd.Args, "web")
-	assert.Contains(t, cmd.Args, "php")
-	assert.Contains(t, cmd.Args, "bin/console")
-	assert.Contains(t, cmd.Args, "cache:clear")
-	assert.Equal(t, "/project", cmd.Dir)
-	assert.Contains(t, cmd.Args, "--workdir")
-	assert.Contains(t, cmd.Args, "/var/www/html")
+	p := exec.ConsoleCommand(t.Context(), "cache:clear")
+	assert.Contains(t, p.Cmd.Path, "docker")
+	assert.Contains(t, p.Cmd.Args, "compose")
+	assert.Contains(t, p.Cmd.Args, "exec")
+	assert.Contains(t, p.Cmd.Args, "web")
+	assert.Contains(t, p.Cmd.Args, "php")
+	assert.Contains(t, p.Cmd.Args, "bin/console")
+	assert.Contains(t, p.Cmd.Args, "cache:clear")
+	assert.Equal(t, "/project", p.Cmd.Dir)
+	assert.Contains(t, p.Cmd.Args, "--workdir")
+	assert.Contains(t, p.Cmd.Args, "/var/www/html")
 }
 
 func TestDockerExecutorComposerCommand(t *testing.T) {
 	exec := &DockerExecutor{projectRoot: "/project"}
 
-	cmd := exec.ComposerCommand(t.Context(), "install", "--no-interaction")
-	assert.Contains(t, cmd.Path, "docker")
-	assert.Contains(t, cmd.Args, "compose")
-	assert.Contains(t, cmd.Args, "exec")
-	assert.Contains(t, cmd.Args, "web")
-	assert.Contains(t, cmd.Args, "composer")
-	assert.Contains(t, cmd.Args, "install")
-	assert.Contains(t, cmd.Args, "--no-interaction")
+	p := exec.ComposerCommand(t.Context(), "install", "--no-interaction")
+	assert.Contains(t, p.Cmd.Path, "docker")
+	assert.Contains(t, p.Cmd.Args, "compose")
+	assert.Contains(t, p.Cmd.Args, "exec")
+	assert.Contains(t, p.Cmd.Args, "web")
+	assert.Contains(t, p.Cmd.Args, "composer")
+	assert.Contains(t, p.Cmd.Args, "install")
+	assert.Contains(t, p.Cmd.Args, "--no-interaction")
 }
 
 func TestDockerExecutorPHPCommand(t *testing.T) {
 	exec := &DockerExecutor{projectRoot: "/project"}
 
-	cmd := exec.PHPCommand(t.Context(), "-v")
-	assert.Contains(t, cmd.Path, "docker")
-	assert.Contains(t, cmd.Args, "compose")
-	assert.Contains(t, cmd.Args, "exec")
-	assert.Contains(t, cmd.Args, "web")
-	assert.Contains(t, cmd.Args, "php")
-	assert.Contains(t, cmd.Args, "-v")
+	p := exec.PHPCommand(t.Context(), "-v")
+	assert.Contains(t, p.Cmd.Path, "docker")
+	assert.Contains(t, p.Cmd.Args, "compose")
+	assert.Contains(t, p.Cmd.Args, "exec")
+	assert.Contains(t, p.Cmd.Args, "web")
+	assert.Contains(t, p.Cmd.Args, "php")
+	assert.Contains(t, p.Cmd.Args, "-v")
 }
 
 func TestConsoleCommandNameDefault(t *testing.T) {
@@ -149,17 +149,17 @@ func TestLocalExecutorWithEnv(t *testing.T) {
 		"INSTALL_CURRENCY": "EUR",
 	})
 
-	cmd := withEnv.PHPCommand(t.Context(), "vendor/bin/shopware-deployment-helper", "run")
-	assert.Contains(t, cmd.Env, "INSTALL_LOCALE=de-DE")
-	assert.Contains(t, cmd.Env, "INSTALL_CURRENCY=EUR")
+	p := withEnv.PHPCommand(t.Context(), "vendor/bin/shopware-deployment-helper", "run")
+	assert.Contains(t, p.Cmd.Env, "INSTALL_LOCALE=de-DE")
+	assert.Contains(t, p.Cmd.Env, "INSTALL_CURRENCY=EUR")
 }
 
 func TestLocalExecutorWithoutEnv(t *testing.T) {
 	exec := &LocalExecutor{projectRoot: "/project"}
 
-	cmd := exec.PHPCommand(t.Context(), "-v")
-	assert.NotNil(t, cmd.Env)
-	assert.Contains(t, cmd.Env, "PROJECT_ROOT=/project")
+	p := exec.PHPCommand(t.Context(), "-v")
+	assert.NotNil(t, p.Cmd.Env)
+	assert.Contains(t, p.Cmd.Env, "PROJECT_ROOT=/project")
 }
 
 func TestDockerExecutorWithEnv(t *testing.T) {
@@ -168,9 +168,9 @@ func TestDockerExecutorWithEnv(t *testing.T) {
 		"INSTALL_LOCALE": "en-GB",
 	})
 
-	cmd := withEnv.PHPCommand(t.Context(), "vendor/bin/shopware-deployment-helper", "run")
-	assert.Contains(t, cmd.Args, "-e")
-	assert.Contains(t, cmd.Args, "INSTALL_LOCALE=en-GB")
+	p := withEnv.PHPCommand(t.Context(), "vendor/bin/shopware-deployment-helper", "run")
+	assert.Contains(t, p.Cmd.Args, "-e")
+	assert.Contains(t, p.Cmd.Args, "INSTALL_LOCALE=en-GB")
 }
 
 func TestSymfonyCLIExecutorWithEnv(t *testing.T) {
@@ -179,73 +179,73 @@ func TestSymfonyCLIExecutorWithEnv(t *testing.T) {
 		"INSTALL_LOCALE": "de-DE",
 	})
 
-	cmd := withEnv.PHPCommand(t.Context(), "-v")
-	assert.Contains(t, cmd.Env, "INSTALL_LOCALE=de-DE")
+	p := withEnv.PHPCommand(t.Context(), "-v")
+	assert.Contains(t, p.Cmd.Env, "INSTALL_LOCALE=de-DE")
 }
 
 func TestLocalExecutorNPMCommand(t *testing.T) {
 	exec := &LocalExecutor{projectRoot: "/project"}
 
-	cmd := exec.NPMCommand(t.Context(), "run", "dev")
-	assert.Equal(t, []string{"npm", "run", "dev"}, cmd.Args)
-	assert.Equal(t, "/project", cmd.Dir)
+	p := exec.NPMCommand(t.Context(), "run", "dev")
+	assert.Equal(t, []string{"npm", "run", "dev"}, p.Cmd.Args)
+	assert.Equal(t, "/project", p.Cmd.Dir)
 }
 
 func TestDockerExecutorNPMCommand(t *testing.T) {
 	exec := &DockerExecutor{projectRoot: "/project"}
 
-	cmd := exec.NPMCommand(t.Context(), "run", "dev")
-	assert.Contains(t, cmd.Args, "compose")
-	assert.Contains(t, cmd.Args, "exec")
-	assert.Contains(t, cmd.Args, "web")
-	assert.Contains(t, cmd.Args, "npm")
-	assert.Contains(t, cmd.Args, "run")
-	assert.Contains(t, cmd.Args, "dev")
+	p := exec.NPMCommand(t.Context(), "run", "dev")
+	assert.Contains(t, p.Cmd.Args, "compose")
+	assert.Contains(t, p.Cmd.Args, "exec")
+	assert.Contains(t, p.Cmd.Args, "web")
+	assert.Contains(t, p.Cmd.Args, "npm")
+	assert.Contains(t, p.Cmd.Args, "run")
+	assert.Contains(t, p.Cmd.Args, "dev")
 }
 
 func TestSymfonyCLIExecutorNPMCommand(t *testing.T) {
 	exec := &SymfonyCLIExecutor{BinaryPath: "/usr/local/bin/symfony", projectRoot: "/project"}
 
-	cmd := exec.NPMCommand(t.Context(), "run", "dev")
-	assert.Equal(t, []string{"npm", "run", "dev"}, cmd.Args)
+	p := exec.NPMCommand(t.Context(), "run", "dev")
+	assert.Equal(t, []string{"npm", "run", "dev"}, p.Cmd.Args)
 }
 
 func TestLocalExecutorWithRelDir(t *testing.T) {
 	exec := &LocalExecutor{projectRoot: "/project"}
 	withDir := exec.WithRelDir("vendor/shopware/administration/Resources/app/administration")
 
-	cmd := withDir.ConsoleCommand(t.Context(), "cache:clear")
-	assert.Equal(t, "/project/vendor/shopware/administration/Resources/app/administration", cmd.Dir)
+	p := withDir.ConsoleCommand(t.Context(), "cache:clear")
+	assert.Equal(t, "/project/vendor/shopware/administration/Resources/app/administration", p.Cmd.Dir)
 
-	cmd = withDir.NPMCommand(t.Context(), "run", "dev")
-	assert.Equal(t, "/project/vendor/shopware/administration/Resources/app/administration", cmd.Dir)
+	p = withDir.NPMCommand(t.Context(), "run", "dev")
+	assert.Equal(t, "/project/vendor/shopware/administration/Resources/app/administration", p.Cmd.Dir)
 }
 
 func TestDockerExecutorWithRelDir(t *testing.T) {
 	exec := &DockerExecutor{projectRoot: "/project"}
 
-	cmd := exec.ConsoleCommand(t.Context(), "cache:clear")
-	assert.Equal(t, "/project", cmd.Dir)
-	assert.Contains(t, cmd.Args, "--workdir")
-	assert.Contains(t, cmd.Args, "/var/www/html")
+	p := exec.ConsoleCommand(t.Context(), "cache:clear")
+	assert.Equal(t, "/project", p.Cmd.Dir)
+	assert.Contains(t, p.Cmd.Args, "--workdir")
+	assert.Contains(t, p.Cmd.Args, "/var/www/html")
 
 	withDir := exec.WithRelDir("vendor/shopware/administration/Resources/app/administration")
 
-	cmd = withDir.NPMCommand(t.Context(), "run", "dev")
-	assert.Equal(t, "/project", cmd.Dir)
-	assert.Contains(t, cmd.Args, "--workdir")
-	assert.Contains(t, cmd.Args, "/var/www/html/vendor/shopware/administration/Resources/app/administration")
+	p = withDir.NPMCommand(t.Context(), "run", "dev")
+	assert.Equal(t, "/project", p.Cmd.Dir)
+	assert.Contains(t, p.Cmd.Args, "--workdir")
+	assert.Contains(t, p.Cmd.Args, "/var/www/html/vendor/shopware/administration/Resources/app/administration")
 }
 
 func TestSymfonyCLIExecutorWithRelDir(t *testing.T) {
 	exec := &SymfonyCLIExecutor{BinaryPath: "/usr/local/bin/symfony", projectRoot: "/project"}
 	withDir := exec.WithRelDir("vendor/shopware/administration/Resources/app/administration")
 
-	cmd := withDir.ConsoleCommand(t.Context(), "cache:clear")
-	assert.Equal(t, "/project/vendor/shopware/administration/Resources/app/administration", cmd.Dir)
+	p := withDir.ConsoleCommand(t.Context(), "cache:clear")
+	assert.Equal(t, "/project/vendor/shopware/administration/Resources/app/administration", p.Cmd.Dir)
 
-	cmd = withDir.NPMCommand(t.Context(), "run", "dev")
-	assert.Equal(t, "/project/vendor/shopware/administration/Resources/app/administration", cmd.Dir)
+	p = withDir.NPMCommand(t.Context(), "run", "dev")
+	assert.Equal(t, "/project/vendor/shopware/administration/Resources/app/administration", p.Cmd.Dir)
 }
 
 func TestWithRelDirPreservesEnv(t *testing.T) {
@@ -253,9 +253,9 @@ func TestWithRelDirPreservesEnv(t *testing.T) {
 	withEnv := exec.WithEnv(map[string]string{"FOO": "bar"})
 	withDirAndEnv := withEnv.WithRelDir("subdir")
 
-	cmd := withDirAndEnv.PHPCommand(t.Context(), "-v")
-	assert.Equal(t, "/project/subdir", cmd.Dir)
-	assert.Contains(t, cmd.Env, "FOO=bar")
+	p := withDirAndEnv.PHPCommand(t.Context(), "-v")
+	assert.Equal(t, "/project/subdir", p.Cmd.Dir)
+	assert.Contains(t, p.Cmd.Env, "FOO=bar")
 }
 
 func TestWithEnvPreservesRelDir(t *testing.T) {
@@ -263,9 +263,9 @@ func TestWithEnvPreservesRelDir(t *testing.T) {
 	withDir := exec.WithRelDir("subdir")
 	withDirAndEnv := withDir.WithEnv(map[string]string{"FOO": "bar"})
 
-	cmd := withDirAndEnv.PHPCommand(t.Context(), "-v")
-	assert.Equal(t, "/project/subdir", cmd.Dir)
-	assert.Contains(t, cmd.Env, "FOO=bar")
+	p := withDirAndEnv.PHPCommand(t.Context(), "-v")
+	assert.Equal(t, "/project/subdir", p.Cmd.Dir)
+	assert.Contains(t, p.Cmd.Env, "FOO=bar")
 }
 
 func TestWithEnvMerges(t *testing.T) {
@@ -273,9 +273,9 @@ func TestWithEnvMerges(t *testing.T) {
 	withA := exec.WithEnv(map[string]string{"A": "1"})
 	withAB := withA.WithEnv(map[string]string{"B": "2"})
 
-	cmd := withAB.PHPCommand(t.Context(), "-v")
-	assert.Contains(t, cmd.Env, "A=1")
-	assert.Contains(t, cmd.Env, "B=2")
+	p := withAB.PHPCommand(t.Context(), "-v")
+	assert.Contains(t, p.Cmd.Env, "A=1")
+	assert.Contains(t, p.Cmd.Env, "B=2")
 }
 
 func TestWithEnvOverrides(t *testing.T) {
@@ -283,9 +283,9 @@ func TestWithEnvOverrides(t *testing.T) {
 	withA := exec.WithEnv(map[string]string{"A": "1"})
 	withA2 := withA.WithEnv(map[string]string{"A": "2"})
 
-	cmd := withA2.PHPCommand(t.Context(), "-v")
-	assert.Contains(t, cmd.Env, "A=2")
-	assert.NotContains(t, cmd.Env, "A=1")
+	p := withA2.PHPCommand(t.Context(), "-v")
+	assert.Contains(t, p.Cmd.Env, "A=2")
+	assert.NotContains(t, p.Cmd.Env, "A=1")
 }
 
 func TestDockerWithEnvNormalizesProjectRoot(t *testing.T) {
@@ -294,8 +294,8 @@ func TestDockerWithEnvNormalizesProjectRoot(t *testing.T) {
 		"PROJECT_ROOT": "/host/project",
 	})
 
-	cmd := withEnv.PHPCommand(t.Context(), "-v")
-	assert.Contains(t, cmd.Args, "PROJECT_ROOT=/var/www/html")
+	p := withEnv.PHPCommand(t.Context(), "-v")
+	assert.Contains(t, p.Cmd.Args, "PROJECT_ROOT=/var/www/html")
 }
 
 func TestDockerWithEnvNormalizesAdminRoot(t *testing.T) {
@@ -304,8 +304,8 @@ func TestDockerWithEnvNormalizesAdminRoot(t *testing.T) {
 		"ADMIN_ROOT": "/host/project/vendor/shopware/administration/Resources/app/administration",
 	})
 
-	cmd := withEnv.PHPCommand(t.Context(), "-v")
-	assert.Contains(t, cmd.Args, "ADMIN_ROOT=/var/www/html/vendor/shopware/administration/Resources/app/administration")
+	p := withEnv.PHPCommand(t.Context(), "-v")
+	assert.Contains(t, p.Cmd.Args, "ADMIN_ROOT=/var/www/html/vendor/shopware/administration/Resources/app/administration")
 }
 
 func TestDockerWithEnvNormalizesStorefrontRoot(t *testing.T) {
@@ -314,8 +314,8 @@ func TestDockerWithEnvNormalizesStorefrontRoot(t *testing.T) {
 		"STOREFRONT_ROOT": "/host/project/vendor/shopware/storefront/Resources/app/storefront",
 	})
 
-	cmd := withEnv.PHPCommand(t.Context(), "-v")
-	assert.Contains(t, cmd.Args, "STOREFRONT_ROOT=/var/www/html/vendor/shopware/storefront/Resources/app/storefront")
+	p := withEnv.PHPCommand(t.Context(), "-v")
+	assert.Contains(t, p.Cmd.Args, "STOREFRONT_ROOT=/var/www/html/vendor/shopware/storefront/Resources/app/storefront")
 }
 
 func TestDockerWithEnvDoesNotNormalizeUnrelatedEnv(t *testing.T) {
@@ -324,8 +324,8 @@ func TestDockerWithEnvDoesNotNormalizeUnrelatedEnv(t *testing.T) {
 		"SOME_PATH": "/host/project/something",
 	})
 
-	cmd := withEnv.PHPCommand(t.Context(), "-v")
-	assert.Contains(t, cmd.Args, "SOME_PATH=/host/project/something")
+	p := withEnv.PHPCommand(t.Context(), "-v")
+	assert.Contains(t, p.Cmd.Args, "SOME_PATH=/host/project/something")
 }
 
 func TestDockerWithEnvDoesNotNormalizeNonMatchingPrefix(t *testing.T) {
@@ -334,8 +334,8 @@ func TestDockerWithEnvDoesNotNormalizeNonMatchingPrefix(t *testing.T) {
 		"PROJECT_ROOT": "/other/path",
 	})
 
-	cmd := withEnv.PHPCommand(t.Context(), "-v")
-	assert.Contains(t, cmd.Args, "PROJECT_ROOT=/other/path")
+	p := withEnv.PHPCommand(t.Context(), "-v")
+	assert.Contains(t, p.Cmd.Args, "PROJECT_ROOT=/other/path")
 }
 
 func TestDockerWithEnvMerges(t *testing.T) {
@@ -343,17 +343,17 @@ func TestDockerWithEnvMerges(t *testing.T) {
 	withA := exec.WithEnv(map[string]string{"A": "1"})
 	withAB := withA.WithEnv(map[string]string{"B": "2"})
 
-	cmd := withAB.PHPCommand(t.Context(), "-v")
-	assert.Contains(t, cmd.Args, "A=1")
-	assert.Contains(t, cmd.Args, "B=2")
+	p := withAB.PHPCommand(t.Context(), "-v")
+	assert.Contains(t, p.Cmd.Args, "A=1")
+	assert.Contains(t, p.Cmd.Args, "B=2")
 }
 
 func TestNewLocal(t *testing.T) {
 	exec := NewLocal("/my/project")
 
-	cmd := exec.NPMCommand(t.Context(), "install")
-	assert.Equal(t, "/my/project", cmd.Dir)
-	assert.Equal(t, []string{"npm", "install"}, cmd.Args)
+	p := exec.NPMCommand(t.Context(), "install")
+	assert.Equal(t, "/my/project", p.Cmd.Dir)
+	assert.Equal(t, []string{"npm", "install"}, p.Cmd.Args)
 }
 
 func TestLocalNormalizePath(t *testing.T) {

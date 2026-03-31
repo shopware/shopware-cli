@@ -46,9 +46,8 @@ type servicesLoadedMsg struct {
 }
 
 type watcherStartedMsg struct {
-	name   string
-	cmd    *exec.Cmd
-	cancel context.CancelFunc
+	name    string
+	process *executor.Process
 }
 type watcherStoppedMsg struct {
 	name string
@@ -146,7 +145,7 @@ func (m GeneralModel) View(width, height int) string {
 	s.WriteString(tui.TitleStyle.Render("Watchers"))
 	s.WriteString("\n")
 	s.WriteString(m.renderWatcherStatus("Admin", m.adminWatchRunning, m.adminWatchStarting, "http://127.0.0.1:5173"))
-	s.WriteString(m.renderWatcherStatus("Storefront", m.sfWatchRunning, m.sfWatchStarting, ""))
+	s.WriteString(m.renderWatcherStatus("Storefront", m.sfWatchRunning, m.sfWatchStarting, "http://127.0.0.1:9998"))
 
 	s.WriteString(divider)
 
@@ -162,15 +161,12 @@ func (m *GeneralModel) startAdminWatch() tea.Cmd {
 	projectRoot := m.projectRoot
 
 	return func() tea.Msg {
-		ctx, cancel := context.WithCancel(context.Background())
-
-		watchCmd, err := extension.PrepareAdminWatcher(ctx, projectRoot, e)
+		watchProcess, err := extension.PrepareAdminWatcher(context.Background(), projectRoot, e)
 		if err != nil {
-			cancel()
 			return watcherStoppedMsg{name: watcherAdmin}
 		}
 
-		return watcherStartedMsg{name: watcherAdmin, cmd: watchCmd, cancel: cancel}
+		return watcherStartedMsg{name: watcherAdmin, process: watchProcess}
 	}
 }
 
@@ -179,15 +175,12 @@ func (m *GeneralModel) startStorefrontWatch() tea.Cmd {
 	projectRoot := m.projectRoot
 
 	return func() tea.Msg {
-		ctx, cancel := context.WithCancel(context.Background())
-
-		watchCmd, err := extension.PrepareStorefrontWatcher(ctx, projectRoot, e)
+		watchProcess, err := extension.PrepareStorefrontWatcher(context.Background(), projectRoot, e)
 		if err != nil {
-			cancel()
 			return watcherStoppedMsg{name: watcherStorefront}
 		}
 
-		return watcherStartedMsg{name: watcherStorefront, cmd: watchCmd, cancel: cancel}
+		return watcherStartedMsg{name: watcherStorefront, process: watchProcess}
 	}
 }
 

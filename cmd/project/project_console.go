@@ -1,6 +1,8 @@
 package project
 
 import (
+	"context"
+	"os/exec"
 	"slices"
 
 	"github.com/spf13/cobra"
@@ -25,12 +27,14 @@ var projectConsoleCmd = &cobra.Command{
 			return nil, cobra.ShellCompDirectiveDefault
 		}
 
-		exec, err := resolveExecutor(cmd, projectRoot)
+		cmdExecutor, err := resolveExecutor(cmd, projectRoot)
 		if err != nil {
 			return nil, cobra.ShellCompDirectiveDefault
 		}
 
-		parsedCommands, err := shop.GetConsoleCompletion(cmd.Context(), projectRoot, exec.ConsoleCommand)
+		parsedCommands, err := shop.GetConsoleCompletion(cmd.Context(), projectRoot, func(ctx context.Context, args ...string) *exec.Cmd {
+			return cmdExecutor.ConsoleCommand(ctx, args...).Cmd
+		})
 		if err != nil {
 			return nil, cobra.ShellCompDirectiveDefault
 		}
@@ -83,17 +87,17 @@ var projectConsoleCmd = &cobra.Command{
 			return err
 		}
 
-		exec, err := resolveExecutor(cmd, projectRoot)
+		cmdExecutor, err := resolveExecutor(cmd, projectRoot)
 		if err != nil {
 			return err
 		}
 
-		consoleCmd := exec.ConsoleCommand(cmd.Context(), args...)
-		consoleCmd.Stdin = cmd.InOrStdin()
-		consoleCmd.Stdout = cmd.OutOrStdout()
-		consoleCmd.Stderr = cmd.ErrOrStderr()
+		p := cmdExecutor.ConsoleCommand(cmd.Context(), args...)
+		p.Cmd.Stdin = cmd.InOrStdin()
+		p.Cmd.Stdout = cmd.OutOrStdout()
+		p.Cmd.Stderr = cmd.ErrOrStderr()
 
-		return consoleCmd.Run()
+		return p.Run()
 	},
 }
 

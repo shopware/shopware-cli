@@ -3,7 +3,6 @@ package extension
 import (
 	"context"
 	"os"
-	"os/exec"
 	"path/filepath"
 
 	"github.com/shopware/shopware-cli/internal/executor"
@@ -12,8 +11,8 @@ import (
 
 // PrepareAdminWatcher performs all setup steps needed before running the admin
 // watcher (feature dump, node_modules, env vars, entity schema) and returns
-// the *exec.Cmd for "npm run dev" ready to be started.
-func PrepareAdminWatcher(ctx context.Context, projectRoot string, cmdExecutor executor.Executor) (*exec.Cmd, error) {
+// the Process for "npm run dev" ready to be started.
+func PrepareAdminWatcher(ctx context.Context, projectRoot string, cmdExecutor executor.Executor) (*executor.Process, error) {
 	if err := cmdExecutor.ConsoleCommand(ctx, "feature:dump").Run(); err != nil {
 		return nil, err
 	}

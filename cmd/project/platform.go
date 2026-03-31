@@ -1,9 +1,11 @@
 package project
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
+	"os/exec"
 	"path"
 	"path/filepath"
 	"slices"
@@ -109,7 +111,9 @@ func filterAndGetSources(cmd *cobra.Command, projectRoot string, shopCfg *shop.C
 		return nil, err
 	}
 
-	sources, err := extension.DumpAndLoadAssetSourcesOfProject(executor.AllowBinCI(cmd.Context()), projectRoot, shopCfg, cmdExecutor.ConsoleCommand)
+	sources, err := extension.DumpAndLoadAssetSourcesOfProject(executor.AllowBinCI(cmd.Context()), projectRoot, shopCfg, func(ctx context.Context, args ...string) *exec.Cmd {
+		return cmdExecutor.ConsoleCommand(ctx, args...).Cmd
+	})
 	if err != nil {
 		return nil, err
 	}

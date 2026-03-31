@@ -3,7 +3,6 @@ package extension
 import (
 	"context"
 	"os"
-	"os/exec"
 	"strings"
 
 	"github.com/shopware/shopware-cli/internal/executor"
@@ -12,9 +11,9 @@ import (
 
 // PrepareStorefrontWatcher performs all setup steps needed before running the
 // storefront watcher (feature dump, theme compile, theme dump, node_modules,
-// env vars) and returns the *exec.Cmd for "npm run-script hot-proxy" ready
+// env vars) and returns the Process for "npm run-script hot-proxy" ready
 // to be started.
-func PrepareStorefrontWatcher(ctx context.Context, projectRoot string, cmdExecutor executor.Executor) (*exec.Cmd, error) {
+func PrepareStorefrontWatcher(ctx context.Context, projectRoot string, cmdExecutor executor.Executor) (*executor.Process, error) {
 	if err := cmdExecutor.ConsoleCommand(ctx, "feature:dump").Run(); err != nil {
 		return nil, err
 	}

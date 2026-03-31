@@ -13,10 +13,10 @@ import (
 
 // Executor abstracts command execution across different environment types.
 type Executor interface {
-	ConsoleCommand(ctx context.Context, args ...string) *exec.Cmd
-	ComposerCommand(ctx context.Context, args ...string) *exec.Cmd
-	PHPCommand(ctx context.Context, args ...string) *exec.Cmd
-	NPMCommand(ctx context.Context, args ...string) *exec.Cmd
+	ConsoleCommand(ctx context.Context, args ...string) *Process
+	ComposerCommand(ctx context.Context, args ...string) *Process
+	PHPCommand(ctx context.Context, args ...string) *Process
+	NPMCommand(ctx context.Context, args ...string) *Process
 	// NormalizePath converts a host-absolute path to the path seen by the execution
 	// environment. For local executors the path is returned unchanged; for Docker it
 	// is translated to the container mount (e.g. /var/www/html/...).

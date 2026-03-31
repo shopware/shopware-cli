@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"strings"
+	"time"
 
 	"charm.land/bubbles/v2/textinput"
 	tea "charm.land/bubbletea/v2"
@@ -259,7 +260,7 @@ func (m Model) executeCommand(id string) (tea.Model, tea.Cmd) {
 	case "admin-watch-stop":
 		if m.general.adminWatchRunning {
 			m.general.adminWatchRunning = false
-			return m, m.stopWatcher("npm run dev", watcherAdmin)
+			return m, m.stopWatcher(watcherAdmin)
 		}
 	case "sf-watch-start":
 		if !m.general.sfWatchRunning && !m.general.sfWatchStarting {
@@ -269,7 +270,7 @@ func (m Model) executeCommand(id string) (tea.Model, tea.Cmd) {
 	case "sf-watch-stop":
 		if m.general.sfWatchRunning {
 			m.general.sfWatchRunning = false
-			return m, m.stopWatcher("npm run-script hot-proxy", watcherStorefront)
+			return m, m.stopWatcher(watcherStorefront)
 		}
 	case "tab-logs":
 		m.activeTab = tabLogs
@@ -287,21 +288,19 @@ func (m Model) executeCommand(id string) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-func (m *Model) stopWatcher(processPattern, name string) tea.Cmd {
-	projectRoot := m.projectRoot
-	dockerMode := m.dockerMode
-
-	// Cancel the watcher's context first, then pkill as fallback for docker.
+func (m *Model) stopWatcher(name string) tea.Cmd {
+	// Stop log streaming first.
 	m.logs.StopStreaming()
 
+	// Get and remove the tracked process.
+	p := m.watchers[name]
+	delete(m.watchers, name)
+
 	return func() tea.Msg {
-		if dockerMode {
-			cmd := exec.CommandContext(context.Background(),
-				"docker", "compose", "exec", "-T", "web",
-				"pkill", "-INT", "-f", processPattern,
-			)
-			cmd.Dir = projectRoot
-			_ = cmd.Run()
+		if p != nil {
+			stopCtx, stopCancel := context.WithTimeout(context.Background(), 3*time.Second)
+			defer stopCancel()
+			_ = p.Stop(stopCtx)
 		}
 
 		return watcherStoppedMsg{name: name}

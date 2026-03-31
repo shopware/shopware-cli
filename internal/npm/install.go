@@ -34,9 +34,9 @@ func InstallDependencies(ctx context.Context, exec executor.Executor, pkg *Packa
 		"NPM_CONFIG_UPDATE_NOTIFIER": "false",
 	})
 
-	installCmd := withEnv.NPMCommand(ctx, args...)
+	installProcess := withEnv.NPMCommand(ctx, args...)
 
-	combinedOutput, err := installCmd.CombinedOutput()
+	combinedOutput, err := installProcess.CombinedOutput()
 	if err != nil {
 		logging.FromContext(context.Background()).Errorf("npm install failed: %s", string(combinedOutput))
 		return fmt.Errorf("installing dependencies failed with error: %w", err)

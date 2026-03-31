@@ -12,31 +12,32 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 
+	"github.com/shopware/shopware-cli/internal/executor"
 	"github.com/shopware/shopware-cli/internal/tui"
 )
 
 type logSource struct {
 	name      string
-	container string             // non-empty for docker containers
-	filePath  string             // non-empty for log files
-	cmd       *exec.Cmd          // non-nil for process sources
-	cmdCancel context.CancelFunc // cancel func for process sources
-	dead      bool               // true after a process source has exited
+	container string            // non-empty for docker containers
+	filePath  string            // non-empty for log files
+	process   *executor.Process // non-nil for process sources
+	dead      bool              // true after a process source has exited
 }
 
 type LogsModel struct {
-	viewport    viewport.Model
-	sources     []logSource
-	cursor      int
-	active      int // index of currently streaming source
-	lines       []string
-	follow      bool
-	cancel      context.CancelFunc
-	logChan     <-chan string
-	projectRoot string
-	dockerMode  bool
-	width       int
-	height      int
+	viewport      viewport.Model
+	sources       []logSource
+	cursor        int
+	active        int // index of currently streaming source
+	lines         []string
+	follow        bool
+	cancel        context.CancelFunc // cancel func for container/file log streams
+	activeProcess *executor.Process  // active process source (for Stop on cleanup)
+	logChan       <-chan string
+	projectRoot   string
+	dockerMode    bool
+	width         int
+	height        int
 }
 
 type logLineMsg string
@@ -81,7 +82,7 @@ func (m LogsModel) Update(msg tea.Msg) (LogsModel, tea.Cmd) {
 	case logDoneMsg:
 		m.lines = append(m.lines, helpStyle.Render("--- log stream ended ---"))
 		m.viewport.SetContent(strings.Join(m.lines, "\n"))
-		if m.active >= 0 && m.active < len(m.sources) && m.sources[m.active].cmd != nil {
+		if m.active >= 0 && m.active < len(m.sources) && m.sources[m.active].process != nil {
 			m.sources[m.active].dead = true
 		}
 		return m, nil
@@ -217,10 +218,10 @@ func (m *LogsModel) StartStreaming() tea.Cmd {
 	return m.discoverSources()
 }
 
-func (m *LogsModel) AddProcessSource(name string, cmd *exec.Cmd, cancel context.CancelFunc) tea.Cmd {
+func (m *LogsModel) AddProcessSource(name string, process *executor.Process) tea.Cmd {
 	m.stopStreaming()
 
-	src := logSource{name: name, cmd: cmd, cmdCancel: cancel}
+	src := logSource{name: name, process: process}
 
 	idx := -1
 	for i, s := range m.sources {
@@ -252,7 +253,7 @@ func (m *LogsModel) StopStreaming() {
 func (m *LogsModel) ActiveProcessSourceName() string {
 	if m.active >= 0 && m.active < len(m.sources) {
 		src := m.sources[m.active]
-		if src.cmd != nil {
+		if src.process != nil {
 			return src.name
 		}
 	}
@@ -264,6 +265,10 @@ func (m *LogsModel) stopStreaming() {
 		m.cancel()
 		m.cancel = nil
 	}
+	// Clear the active process reference. The actual process cleanup
+	// is handled by the caller (stopWatcher or shutdown) which calls
+	// Process.Stop() asynchronously to avoid blocking the UI.
+	m.activeProcess = nil
 	m.logChan = nil
 }
 
@@ -274,7 +279,7 @@ func (m *LogsModel) startCurrentSource() tea.Cmd {
 
 	src := m.sources[m.active]
 
-	if src.cmd != nil {
+	if src.process != nil {
 		if src.dead {
 			return nil
 		}
@@ -289,8 +294,9 @@ func (m *LogsModel) startCurrentSource() tea.Cmd {
 }
 
 func (m *LogsModel) streamProcess(src logSource) tea.Cmd {
-	cmd := src.cmd
-	m.cancel = src.cmdCancel
+	p := src.process
+	cmd := p.Cmd
+	m.activeProcess = p
 
 	ch := make(chan string, 100)
 	m.logChan = ch

@@ -1,6 +1,9 @@
 package project
 
 import (
+	"context"
+	"time"
+
 	"github.com/spf13/cobra"
 
 	"github.com/shopware/shopware-cli/internal/envfile"
@@ -40,12 +43,18 @@ var projectAdminWatchCmd = &cobra.Command{
 			return err
 		}
 
-		watchCmd, err := extension.PrepareAdminWatcher(cmd.Context(), projectRoot, cmdExecutor)
+		watchProcess, err := extension.PrepareAdminWatcher(cmd.Context(), projectRoot, cmdExecutor)
 		if err != nil {
 			return err
 		}
 
-		return runTransparentCommand(watchCmd)
+		runErr := runTransparentCommand(watchProcess)
+
+		stopCtx, stopCancel := context.WithTimeout(context.Background(), 3*time.Second)
+		defer stopCancel()
+		_ = watchProcess.Stop(stopCtx)
+
+		return runErr
 	},
 }
 

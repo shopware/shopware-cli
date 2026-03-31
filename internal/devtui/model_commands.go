@@ -46,8 +46,7 @@ func checkContainersRunning(projectRoot string) tea.Cmd {
 func (m *Model) checkShopwareInstalled() tea.Cmd {
 	exec := m.executor
 	return func() tea.Msg {
-		cmd := exec.ConsoleCommand(context.Background(), "system:is-installed")
-		if err := cmd.Run(); err != nil {
+		if err := exec.ConsoleCommand(context.Background(), "system:is-installed").Run(); err != nil {
 			return shopwareNotInstalledMsg{}
 		}
 		return shopwareInstalledMsg{}
@@ -71,9 +70,9 @@ func (m *Model) runShopwareInstall() tea.Cmd {
 			"INSTALL_ADMIN_USERNAME": username,
 			"INSTALL_ADMIN_PASSWORD": password,
 		})
-		cmd := withEnv.PHPCommand(context.Background(), "vendor/bin/shopware-deployment-helper", "run")
+		p := withEnv.PHPCommand(context.Background(), "vendor/bin/shopware-deployment-helper", "run")
 
-		err := streamCmdOutput(cmd, ch, true)
+		err := streamCmdOutput(p.Cmd, ch, true)
 		return shopwareInstallDoneMsg{err: err}
 	}
 

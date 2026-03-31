@@ -1,6 +1,9 @@
 package devtui
 
 import (
+	"context"
+	"time"
+
 	"charm.land/bubbles/v2/progress"
 	"charm.land/bubbles/v2/spinner"
 	"charm.land/bubbles/v2/textinput"
@@ -146,6 +149,7 @@ type Model struct {
 	taskTitle      string
 	taskDone       bool
 	taskErr        error
+	watchers       map[string]*executor.Process // running watcher processes keyed by name
 }
 
 type dockerAlreadyRunningMsg struct{}
@@ -189,6 +193,7 @@ func New(opts Options) Model {
 		executor:    opts.Executor,
 		config:      opts.Config,
 		envConfig:   opts.EnvConfig,
+		watchers:    make(map[string]*executor.Process),
 	}
 }
 
@@ -201,6 +206,14 @@ func (m Model) Init() tea.Cmd {
 
 func (m *Model) shutdown() {
 	m.logs.StopStreaming()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	for name, p := range m.watchers {
+		_ = p.Stop(ctx)
+		delete(m.watchers, name)
+	}
 }
 
 func (m *Model) startDashboard() tea.Cmd {
@@ -243,8 +256,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.general.sfWatchStarting = false
 			m.general.sfWatchRunning = true
 		}
+		m.watchers[msg.name] = msg.process
 		m.activeTab = tabLogs
-		return m, m.logs.AddProcessSource(msg.name, msg.cmd, msg.cancel)
+		return m, m.logs.AddProcessSource(msg.name, msg.process)
 
 	case watcherStoppedMsg:
 		switch msg.name {
@@ -255,6 +269,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.general.sfWatchStarting = false
 			m.general.sfWatchRunning = false
 		}
+		delete(m.watchers, msg.name)
 		return m, nil
 
 	case logDoneMsg:
@@ -265,6 +280,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case watcherStorefront:
 			m.general.sfWatchRunning = false
 		}
+		delete(m.watchers, name)
 		return m.updateChildren(msg)
 
 	case tea.KeyPressMsg:

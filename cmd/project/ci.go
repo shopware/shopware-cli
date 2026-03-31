@@ -15,6 +15,7 @@ import (
 	"golang.org/x/text/language"
 
 	"github.com/shopware/shopware-cli/internal/ci"
+	"github.com/shopware/shopware-cli/internal/executor"
 	"github.com/shopware/shopware-cli/internal/extension"
 	"github.com/shopware/shopware-cli/internal/mjml"
 	"github.com/shopware/shopware-cli/internal/packagist"
@@ -104,10 +105,10 @@ var projectCI = &cobra.Command{
 			composerInstallSection := ci.Default.Section(cmd.Context(), "Composer Installation")
 
 			composer := cmdExecutor.ComposerCommand(cmd.Context(), composerFlags...)
-			composer.Stdin = os.Stdin
-			composer.Stdout = os.Stdout
-			composer.Stderr = os.Stderr
-			composer.Env = append(os.Environ(),
+			composer.Cmd.Stdin = os.Stdin
+			composer.Cmd.Stdout = os.Stdout
+			composer.Cmd.Stderr = os.Stderr
+			composer.Cmd.Env = append(os.Environ(),
 				"COMPOSER_AUTH="+token,
 			)
 
@@ -348,13 +349,13 @@ func init() {
 	projectCI.PersistentFlags().Bool("with-dev-dependencies", false, "Install dev dependencies")
 }
 
-func runTransparentCommand(cmd *exec.Cmd) error {
-	cmd.Stdin = os.Stdin
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	cmd.Env = append(os.Environ(), "APP_SECRET=b59a3a283700fde2162c0d4f2bcf2588c3e841ef1976cf042d8500c3f3152ec513f77453797387dc004ff399cce0d3663e4fec770e6f11aa4ccd2846854c3a9f", "LOCK_DSN=flock")
+func runTransparentCommand(p *executor.Process) error {
+	p.Cmd.Stdin = os.Stdin
+	p.Cmd.Stdout = os.Stdout
+	p.Cmd.Stderr = os.Stderr
+	p.Cmd.Env = append(os.Environ(), "APP_SECRET=b59a3a283700fde2162c0d4f2bcf2588c3e841ef1976cf042d8500c3f3152ec513f77453797387dc004ff399cce0d3663e4fec770e6f11aa4ccd2846854c3a9f", "LOCK_DSN=flock")
 
-	return cmd.Run()
+	return p.Run()
 }
 
 func cleanupTcpdf(folder string, ctx context.Context) error {

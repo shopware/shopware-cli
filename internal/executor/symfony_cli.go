@@ -13,42 +13,42 @@ type SymfonyCLIExecutor struct {
 	relDir      string
 }
 
-func (s *SymfonyCLIExecutor) ConsoleCommand(ctx context.Context, args ...string) *exec.Cmd {
+func (s *SymfonyCLIExecutor) ConsoleCommand(ctx context.Context, args ...string) *Process {
 	cmdArgs := []string{"php", consoleCommandName(ctx)}
 	cmdArgs = append(cmdArgs, args...)
 	cmd := exec.CommandContext(ctx, s.BinaryPath, cmdArgs...)
 	applyLocalEnv(s.projectRoot, s.env, cmd)
 	applyDir(resolveDir(s.projectRoot, s.relDir), cmd)
 	logCmd(ctx, cmd)
-	return cmd
+	return newProcess(cmd)
 }
 
-func (s *SymfonyCLIExecutor) ComposerCommand(ctx context.Context, args ...string) *exec.Cmd {
+func (s *SymfonyCLIExecutor) ComposerCommand(ctx context.Context, args ...string) *Process {
 	cmdArgs := []string{"composer"}
 	cmdArgs = append(cmdArgs, args...)
 	cmd := exec.CommandContext(ctx, s.BinaryPath, cmdArgs...)
 	applyLocalEnv(s.projectRoot, s.env, cmd)
 	applyDir(resolveDir(s.projectRoot, s.relDir), cmd)
 	logCmd(ctx, cmd)
-	return cmd
+	return newProcess(cmd)
 }
 
-func (s *SymfonyCLIExecutor) PHPCommand(ctx context.Context, args ...string) *exec.Cmd {
+func (s *SymfonyCLIExecutor) PHPCommand(ctx context.Context, args ...string) *Process {
 	cmdArgs := []string{"php"}
 	cmdArgs = append(cmdArgs, args...)
 	cmd := exec.CommandContext(ctx, s.BinaryPath, cmdArgs...)
 	applyLocalEnv(s.projectRoot, s.env, cmd)
 	applyDir(resolveDir(s.projectRoot, s.relDir), cmd)
 	logCmd(ctx, cmd)
-	return cmd
+	return newProcess(cmd)
 }
 
-func (s *SymfonyCLIExecutor) NPMCommand(ctx context.Context, args ...string) *exec.Cmd {
+func (s *SymfonyCLIExecutor) NPMCommand(ctx context.Context, args ...string) *Process {
 	cmd := exec.CommandContext(ctx, "npm", args...)
 	applyLocalEnv(s.projectRoot, s.env, cmd)
 	applyDir(resolveDir(s.projectRoot, s.relDir), cmd)
 	logCmd(ctx, cmd)
-	return cmd
+	return newProcess(cmd)
 }
 
 func (s *SymfonyCLIExecutor) NormalizePath(hostPath string) string {

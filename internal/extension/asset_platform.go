@@ -165,8 +165,8 @@ func BuildAssetsForExtensions(ctx context.Context, sources []asset.Source, asset
 
 			adminExec := assetConfig.ExecutorWithRelDir(adminRelPath).WithEnv(envMap)
 			npmBuild := adminExec.NPMCommand(ctx, "run", "build")
-			npmBuild.Stdout = os.Stdout
-			npmBuild.Stderr = os.Stderr
+			npmBuild.Cmd.Stdout = os.Stdout
+			npmBuild.Cmd.Stderr = os.Stderr
 			err = npmBuild.Run()
 
 			if assetConfig.CleanupNodeModules {
@@ -266,8 +266,8 @@ func BuildAssetsForExtensions(ctx context.Context, sources []asset.Source, asset
 				// As we call npm install caniuse-lite, we need to run the postinstall script manually.
 				if npmPackage.HasScript("postinstall") {
 					npmRunPostInstall := sfExec.NPMCommand(ctx, "run", "postinstall")
-					npmRunPostInstall.Stdout = os.Stdout
-					npmRunPostInstall.Stderr = os.Stderr
+					npmRunPostInstall.Cmd.Stdout = os.Stdout
+					npmRunPostInstall.Cmd.Stderr = os.Stderr
 
 					if err := npmRunPostInstall.Run(); err != nil {
 						return err
@@ -276,8 +276,8 @@ func BuildAssetsForExtensions(ctx context.Context, sources []asset.Source, asset
 
 				if _, err := os.Stat(path.Join(storefrontRoot, "vendor/bootstrap")); os.IsNotExist(err) {
 					npmVendor := sfExec.NPMCommand(ctx, "exec", "--", "node", "copy-to-vendor.js")
-					npmVendor.Stdout = os.Stdout
-					npmVendor.Stderr = os.Stderr
+					npmVendor.Cmd.Stdout = os.Stdout
+					npmVendor.Cmd.Stderr = os.Stderr
 					if err := npmVendor.Run(); err != nil {
 						return err
 					}
@@ -296,8 +296,8 @@ func BuildAssetsForExtensions(ctx context.Context, sources []asset.Source, asset
 
 			webpackExec := sfExec.WithEnv(sfEnvMap)
 			nodeWebpackCmd := webpackExec.NPMCommand(ctx, "exec", "--", "webpack", "--config", "webpack.config.js")
-			nodeWebpackCmd.Stdout = os.Stdout
-			nodeWebpackCmd.Stderr = os.Stderr
+			nodeWebpackCmd.Cmd.Stdout = os.Stdout
+			nodeWebpackCmd.Cmd.Stderr = os.Stderr
 
 			if err := nodeWebpackCmd.Run(); err != nil {
 				return err
