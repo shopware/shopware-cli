@@ -84,7 +84,11 @@ func (m *mockExtension) GetChangelog() (*ExtensionChangelog, error) {
 	return &ExtensionChangelog{}, nil
 }
 
-func (m *mockExtension) GetMetaData() *extensionMetadata {
+func (m *mockExtension) GetMetaData() *ExtensionMetadata {
+	return nil
+}
+
+func (m *mockExtension) UpdateMetaData(_ *ExtensionMetadata) error {
 	return nil
 }
 
