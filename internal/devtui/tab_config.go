@@ -25,10 +25,15 @@ const (
 	fieldCount // sentinel – number of fields
 )
 
+const (
+	profilerBlackfire = "blackfire"
+	profilerTideways  = "tideways"
+)
+
 var (
 	phpVersions  = []string{"8.2", "8.3", "8.4"}
 	nodeVersions = []string{"22", "24"}
-	profilers    = []string{"", "xdebug", "blackfire", "tideways", "pcov", "spx"}
+	profilers    = []string{"", "xdebug", profilerBlackfire, profilerTideways, "pcov", "spx"}
 )
 
 // ConfigModel holds the state for the Environment Config tab.
@@ -129,7 +134,7 @@ func (m ConfigModel) HandleKey(msg tea.KeyPressMsg) (ConfigModel, tea.Cmd) {
 			return m, nil
 		default:
 			var cmd tea.Cmd
-			switch m.cursor {
+			switch m.cursor { //nolint:exhaustive
 			case fieldBlackfireServerID:
 				m.blackfireServerID, cmd = m.blackfireServerID.Update(msg)
 			case fieldBlackfireServerToken:
@@ -149,9 +154,9 @@ func (m ConfigModel) HandleKey(msg tea.KeyPressMsg) (ConfigModel, tea.Cmd) {
 		m.moveCursorDown()
 	case keyEnter, " ":
 		return m.activateField()
-	case "left", "h":
+	case keyLeft, "h":
 		m.cyclePrev()
-	case "right", "l":
+	case keyRight, "l":
 		m.cycleNext()
 	}
 
@@ -186,12 +191,13 @@ func (m ConfigModel) isFieldVisible(f configField) bool {
 	profilerName := profilers[m.profiler]
 	switch f {
 	case fieldBlackfireServerID, fieldBlackfireServerToken:
-		return profilerName == "blackfire"
+		return profilerName == profilerBlackfire
 	case fieldTidewaysAPIKey:
-		return profilerName == "tideways"
-	default:
+		return profilerName == profilerTideways
+	case fieldPHPVersion, fieldProfiler, fieldNodeVersion, fieldSave, fieldCount:
 		return true
 	}
+	return true
 }
 
 func (m *ConfigModel) activateField() (ConfigModel, tea.Cmd) {
@@ -221,8 +227,8 @@ func (m *ConfigModel) activateField() (ConfigModel, tea.Cmd) {
 		m.editing = true
 		m.tidewaysAPIKey.Focus()
 		return *m, textinput.Blink
-	case fieldSave:
-		// Save is handled by the parent model.
+	case fieldSave, fieldCount:
+		// Save is handled by the parent model; fieldCount is a sentinel.
 		return *m, nil
 	}
 	return *m, nil
@@ -230,7 +236,7 @@ func (m *ConfigModel) activateField() (ConfigModel, tea.Cmd) {
 
 func (m *ConfigModel) cyclePrev() {
 	m.saved = false
-	switch m.cursor {
+	switch m.cursor { //nolint:exhaustive
 	case fieldPHPVersion:
 		m.phpVersion = (m.phpVersion - 1 + len(phpVersions)) % len(phpVersions)
 		m.modified = true
@@ -245,7 +251,7 @@ func (m *ConfigModel) cyclePrev() {
 
 func (m *ConfigModel) cycleNext() {
 	m.saved = false
-	switch m.cursor {
+	switch m.cursor { //nolint:exhaustive
 	case fieldPHPVersion:
 		m.phpVersion = (m.phpVersion + 1) % len(phpVersions)
 		m.modified = true
@@ -294,10 +300,10 @@ func (m ConfigModel) LocalConfig() *shop.Config {
 	php := &shop.ConfigDockerPHP{}
 
 	switch profilers[m.profiler] {
-	case "blackfire":
+	case profilerBlackfire:
 		php.BlackfireServerID = m.blackfireServerID.Value()
 		php.BlackfireServerToken = m.blackfireServerToken.Value()
-	case "tideways":
+	case profilerTideways:
 		php.TidewaysAPIKey = m.tidewaysAPIKey.Value()
 	default:
 		return nil // no credentials to persist
@@ -326,11 +332,11 @@ func (m ConfigModel) View(width, height int) string {
 
 	// Profiler-specific credential fields.
 	profilerName := profilers[m.profiler]
-	if profilerName == "blackfire" {
+	if profilerName == profilerBlackfire {
 		s.WriteString(m.renderInput(fieldBlackfireServerID, "Server ID", m.blackfireServerID, selectedArrow, normalIndent))
 		s.WriteString(m.renderInput(fieldBlackfireServerToken, "Server Token", m.blackfireServerToken, selectedArrow, normalIndent))
 	}
-	if profilerName == "tideways" {
+	if profilerName == profilerTideways {
 		s.WriteString(m.renderInput(fieldTidewaysAPIKey, "API Key", m.tidewaysAPIKey, selectedArrow, normalIndent))
 	}
 

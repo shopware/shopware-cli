@@ -37,6 +37,8 @@ const (
 	key1        = "1"
 	key2        = "2"
 	key3        = "3"
+	keyLeft     = "left"
+	keyRight    = "right"
 
 	defaultUsername = "admin"
 

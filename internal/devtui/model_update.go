@@ -128,9 +128,9 @@ func (m Model) updateKeyPress(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 
 	if m.overlay == overlayStopConfirm {
 		switch msg.String() {
-		case "left", "h":
+		case keyLeft, "h":
 			m.stopConfirmYes = true
-		case "right", "l":
+		case keyRight, "l":
 			m.stopConfirmYes = false
 		case keyTab:
 			m.stopConfirmYes = !m.stopConfirmYes
@@ -409,9 +409,9 @@ func (m Model) updateInstallPrompt(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	switch m.install.step {
 	case installStepAsk:
 		switch msg.String() {
-		case "left", "h":
+		case keyLeft, "h":
 			m.install.confirmYes = true
-		case "right", "l":
+		case keyRight, "l":
 			m.install.confirmYes = false
 		case keyTab:
 			m.install.confirmYes = !m.install.confirmYes
