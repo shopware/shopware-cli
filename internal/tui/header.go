@@ -41,32 +41,3 @@ func BrandingLineWidth() int {
 		lipgloss.Width("GitHub")
 }
 
-// RenderHeader renders the full CLI header box containing the logo, branding
-// line, description, and documentation/bug-report links.
-func RenderHeader() string {
-	arrow := lipgloss.NewStyle().Foreground(BrandColor).Render("●")
-	title := lipgloss.NewStyle().Bold(true).Foreground(TextColor).Render(appTitle)
-	version := DimStyle.Render(AppVersion)
-	titleLine := arrow + " " + title + " " + version
-
-	desc := DimStyle.Render("Manage your Shopware projects, extensions, and local development environments.")
-
-	help := DimStyle.Render("Need help? Visit the ")
-	lnkStyle := lipgloss.NewStyle().Foreground(LinkColor).Underline(true)
-	link := StyledLink(docsURL, "Shopware Documentation", lnkStyle)
-	dot := DimStyle.Render(".")
-
-	bugText := DimStyle.Render("Found a bug? Create an issue on ")
-	bugLink := StyledLink(githubURL, "GitHub", lnkStyle)
-	bugDot := DimStyle.Render(".")
-
-	content := titleLine + "\n" + desc + "\n" + help + link + dot + "\n" + bugText + bugLink + bugDot
-
-	w := TerminalWidth()
-	return lipgloss.NewStyle().
-		Border(lipgloss.RoundedBorder()).
-		BorderForeground(BorderColor).
-		Padding(1, 6).
-		Width(w).
-		Render(content)
-}

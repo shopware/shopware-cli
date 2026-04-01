@@ -2,9 +2,25 @@ package tui
 
 import "fmt"
 
-// PrintBanner prints the Shopware CLI header box to stdout.
 func PrintBanner() {
+	banner := `                @@@@@@@@@@
+           @@@@@@@@@@@@@@@@@@
+         @@@@@@@@@@@@@@@@@@@@@@@
+       @@@@@@@@@@@@@@@
+      @@@@@@@@@@
+     @@@@@@@@@        @@@@@@@
+    @@@@@@@@@@      @@@@@@@@@@@@
+    @@@@@@@@@@       @@@@@@@@@@@@@
+    @@@@@@@@@@@        @@@@@@@@@@
+     @@@@@@@@@@@@          @@@@@
+      @@@@@@@@@@@@@@
+        @@@@@@@@@@@@@@@@@@
+          @@@@@@@@@@@@@@@@@@@@
+           @@@@@@@@@@@@@@@@@@@
+              @@@@@@@@@@@@@`
+
+	fmt.Println(BlueText.Render(banner))
 	fmt.Println()
-	fmt.Println(RenderHeader())
+	fmt.Println(BlueText.Bold(true).Render("  Welcome to Shopware!"))
 	fmt.Println()
 }
