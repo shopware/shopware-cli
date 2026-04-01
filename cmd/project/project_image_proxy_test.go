@@ -35,6 +35,13 @@ func TestImageProxySVG(t *testing.T) {
 		cacheDir := t.TempDir()
 
 		proxy := httputil.NewSingleHostReverseProxy(upstreamURL)
+
+		defaultDirector := proxy.Director
+		proxy.Director = func(req *http.Request) {
+			defaultDirector(req)
+			req.Header.Del("Accept-Encoding")
+		}
+
 		proxy.ModifyResponse = func(res *http.Response) error {
 			if res.StatusCode != http.StatusOK {
 				return nil
@@ -42,21 +49,22 @@ func TestImageProxySVG(t *testing.T) {
 
 			cleanPath := filepath.Clean(res.Request.URL.Path)
 			contentType := res.Header.Get("Content-Type")
+			cachePath := filepath.Join(cacheDir, strings.ReplaceAll(cleanPath, "/", "_"))
+			cacheMetaPath := cachePath + ".meta"
 
-			body, err := io.ReadAll(res.Body)
-			if err != nil {
-				return err
-			}
-			_ = res.Body.Close()
-			res.Body = io.NopCloser(bytes.NewReader(body))
-
-			if len(body) > 0 {
-				cachePath := filepath.Join(cacheDir, strings.ReplaceAll(cleanPath, "/", "_"))
-				cacheMetaPath := cachePath + ".meta"
-				_ = os.WriteFile(cachePath, body, 0644)
-				if contentType != "" {
-					_ = os.WriteFile(cacheMetaPath, []byte(contentType), 0644)
-				}
+			var buf bytes.Buffer
+			res.Body = &cacheReadCloser{
+				ReadCloser: res.Body,
+				tee:        io.TeeReader(res.Body, &buf),
+				onClose: func() {
+					if buf.Len() == 0 {
+						return
+					}
+					_ = os.WriteFile(cachePath, buf.Bytes(), 0644)
+					if contentType != "" {
+						_ = os.WriteFile(cacheMetaPath, []byte(contentType), 0644)
+					}
+				},
 			}
 
 			return nil
