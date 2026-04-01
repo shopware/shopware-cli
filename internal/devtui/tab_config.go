@@ -355,19 +355,18 @@ func (m ConfigModel) View(width, height int) string {
 	} else {
 		s.WriteString(normalIndent)
 	}
-	if m.saved {
+	switch {
+	case m.saved:
 		s.WriteString(activeBadgeStyle.Render("Saved"))
 		s.WriteString("  ")
 		s.WriteString(helpStyle.Render("Restart Docker to apply changes."))
-	} else if m.modified {
-		if m.cursor == fieldSave {
-			s.WriteString(activeBtnStyle.Render("Save & Regenerate"))
-		} else {
-			s.WriteString(warningBadgeStyle.Render("unsaved changes"))
-			s.WriteString("  ")
-			s.WriteString(helpStyle.Render("Navigate to Save & Regenerate"))
-		}
-	} else {
+	case m.modified && m.cursor == fieldSave:
+		s.WriteString(activeBtnStyle.Render("Save & Regenerate"))
+	case m.modified:
+		s.WriteString(warningBadgeStyle.Render("unsaved changes"))
+		s.WriteString("  ")
+		s.WriteString(helpStyle.Render("Navigate to Save & Regenerate"))
+	default:
 		s.WriteString(helpStyle.Render("No changes"))
 	}
 	s.WriteString("\n")

@@ -192,11 +192,13 @@ func (m Model) updateKeyPress(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	// When the config tab is actively editing a text input, route all keys
 	// to it so typed characters are not intercepted by global shortcuts.
 	if m.activeTab == tabConfig && m.configTab.editing {
-		newConfig, cmd := m.configTab.HandleKey(msg)
-		m.configTab = newConfig
-		return m, cmd
+		return m.updateConfigTab(msg)
 	}
 
+	return m.updateDashboardKeys(msg)
+}
+
+func (m Model) updateDashboardKeys(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
 	case "ctrl+p":
 		m.overlay = overlayCommandPalette
@@ -229,23 +231,28 @@ func (m Model) updateKeyPress(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	}
 
 	if m.activeTab == tabConfig {
-		newConfig, cmd := m.configTab.HandleKey(msg)
-		m.configTab = newConfig
-		// Handle save action.
-		if m.configTab.cursor == fieldSave && msg.String() == keyEnter && m.configTab.modified {
-			m.configTab.ApplyToConfig(m.config)
-			_ = shop.WriteConfig(m.config, m.projectRoot)
-			// Write credentials to .shopware-project.local.yml so they stay
-			// out of version control.
-			if localCfg := m.configTab.LocalConfig(); localCfg != nil {
-				_ = shop.WriteLocalConfig(localCfg, m.projectRoot)
-			}
-			return m, func() tea.Msg { return configSavedMsg{} }
-		}
-		return m, cmd
+		return m.updateConfigTab(msg)
 	}
 
 	return m.updateChildren(msg)
+}
+
+func (m Model) updateConfigTab(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+	newConfig, cmd := m.configTab.HandleKey(msg)
+	m.configTab = newConfig
+
+	if m.configTab.cursor == fieldSave && msg.String() == keyEnter && m.configTab.modified {
+		m.configTab.ApplyToConfig(m.config)
+		_ = shop.WriteConfig(m.config, m.projectRoot)
+		// Write credentials to .shopware-project.local.yml so they stay
+		// out of version control.
+		if localCfg := m.configTab.LocalConfig(); localCfg != nil {
+			_ = shop.WriteLocalConfig(localCfg, m.projectRoot)
+		}
+		return m, func() tea.Msg { return configSavedMsg{} }
+	}
+
+	return m, cmd
 }
 
 func (m Model) updateCommandPalette(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
