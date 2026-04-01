@@ -265,7 +265,8 @@ func (m *ConfigModel) blurAll() {
 	m.tidewaysAPIKey.Blur()
 }
 
-// ApplyToConfig writes the current form values into the given Config.
+// ApplyToConfig writes the non-sensitive form values into the given Config.
+// Credentials are excluded — use LocalConfig to obtain them separately.
 func (m ConfigModel) ApplyToConfig(cfg *shop.Config) {
 	if cfg.Docker == nil {
 		cfg.Docker = &shop.ConfigDocker{}
@@ -281,17 +282,32 @@ func (m ConfigModel) ApplyToConfig(cfg *shop.Config) {
 	cfg.Docker.Node.Version = nodeVersions[m.nodeVersion]
 	cfg.Docker.PHP.Profiler = profilers[m.profiler]
 
-	// Only persist credentials for the active profiler.
+	// Credentials are stored in the local config file, not here.
 	cfg.Docker.PHP.BlackfireServerID = ""
 	cfg.Docker.PHP.BlackfireServerToken = ""
 	cfg.Docker.PHP.TidewaysAPIKey = ""
+}
+
+// LocalConfig returns a partial Config containing only the sensitive
+// credential fields for the active profiler. This is written to
+// .shopware-project.local.yml so secrets stay out of version control.
+func (m ConfigModel) LocalConfig() *shop.Config {
+	php := &shop.ConfigDockerPHP{}
 
 	switch profilers[m.profiler] {
 	case "blackfire":
-		cfg.Docker.PHP.BlackfireServerID = m.blackfireServerID.Value()
-		cfg.Docker.PHP.BlackfireServerToken = m.blackfireServerToken.Value()
+		php.BlackfireServerID = m.blackfireServerID.Value()
+		php.BlackfireServerToken = m.blackfireServerToken.Value()
 	case "tideways":
-		cfg.Docker.PHP.TidewaysAPIKey = m.tidewaysAPIKey.Value()
+		php.TidewaysAPIKey = m.tidewaysAPIKey.Value()
+	default:
+		return nil // no credentials to persist
+	}
+
+	return &shop.Config{
+		Docker: &shop.ConfigDocker{
+			PHP: php,
+		},
 	}
 }
 

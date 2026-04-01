@@ -56,7 +56,7 @@ func TestConfigModel_ApplyToConfig(t *testing.T) {
 	assert.Empty(t, cfg.Docker.PHP.BlackfireServerID)
 }
 
-func TestConfigModel_ApplyToConfig_Blackfire(t *testing.T) {
+func TestConfigModel_ApplyToConfig_BlackfireCredentialsExcluded(t *testing.T) {
 	cfg := &shop.Config{}
 	m := NewConfigModel(nil)
 	m.profiler = 2 // blackfire
@@ -66,22 +66,42 @@ func TestConfigModel_ApplyToConfig_Blackfire(t *testing.T) {
 	m.ApplyToConfig(cfg)
 
 	assert.Equal(t, "blackfire", cfg.Docker.PHP.Profiler)
-	assert.Equal(t, "srv-id", cfg.Docker.PHP.BlackfireServerID)
-	assert.Equal(t, "srv-token", cfg.Docker.PHP.BlackfireServerToken)
-	assert.Empty(t, cfg.Docker.PHP.TidewaysAPIKey)
+	// Credentials should NOT be in the main config.
+	assert.Empty(t, cfg.Docker.PHP.BlackfireServerID)
+	assert.Empty(t, cfg.Docker.PHP.BlackfireServerToken)
 }
 
-func TestConfigModel_ApplyToConfig_Tideways(t *testing.T) {
-	cfg := &shop.Config{}
+func TestConfigModel_LocalConfig_Blackfire(t *testing.T) {
+	m := NewConfigModel(nil)
+	m.profiler = 2 // blackfire
+	m.blackfireServerID.SetValue("srv-id")
+	m.blackfireServerToken.SetValue("srv-token")
+
+	localCfg := m.LocalConfig()
+	assert.NotNil(t, localCfg)
+	assert.Equal(t, "srv-id", localCfg.Docker.PHP.BlackfireServerID)
+	assert.Equal(t, "srv-token", localCfg.Docker.PHP.BlackfireServerToken)
+}
+
+func TestConfigModel_LocalConfig_Tideways(t *testing.T) {
 	m := NewConfigModel(nil)
 	m.profiler = 3 // tideways
 	m.tidewaysAPIKey.SetValue("tw-key")
 
-	m.ApplyToConfig(cfg)
+	localCfg := m.LocalConfig()
+	assert.NotNil(t, localCfg)
+	assert.Equal(t, "tw-key", localCfg.Docker.PHP.TidewaysAPIKey)
+	assert.Empty(t, localCfg.Docker.PHP.BlackfireServerID)
+}
 
-	assert.Equal(t, "tideways", cfg.Docker.PHP.Profiler)
-	assert.Equal(t, "tw-key", cfg.Docker.PHP.TidewaysAPIKey)
-	assert.Empty(t, cfg.Docker.PHP.BlackfireServerID)
+func TestConfigModel_LocalConfig_NoCredentials(t *testing.T) {
+	m := NewConfigModel(nil)
+	m.profiler = 0 // none
+
+	assert.Nil(t, m.LocalConfig())
+
+	m.profiler = 1 // xdebug
+	assert.Nil(t, m.LocalConfig())
 }
 
 func TestConfigModel_FieldVisibility(t *testing.T) {

@@ -235,6 +235,11 @@ func (m Model) updateKeyPress(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		if m.configTab.cursor == fieldSave && msg.String() == keyEnter && m.configTab.modified {
 			m.configTab.ApplyToConfig(m.config)
 			_ = shop.WriteConfig(m.config, m.projectRoot)
+			// Write credentials to .shopware-project.local.yml so they stay
+			// out of version control.
+			if localCfg := m.configTab.LocalConfig(); localCfg != nil {
+				_ = shop.WriteLocalConfig(localCfg, m.projectRoot)
+			}
 			return m, func() tea.Msg { return configSavedMsg{} }
 		}
 		return m, cmd
