@@ -182,7 +182,7 @@ func New(opts Options) Model {
 		password = effectiveAdminApi.Password
 	}
 
-	isDocker := opts.Executor.Type() == "docker"
+	isDocker := opts.Executor.Type() == executor.TypeDocker
 
 	return Model{
 		activeTab:   tabGeneral,

@@ -20,7 +20,7 @@ type GeneralModel struct {
 	adminURL           string
 	username           string
 	password           string
-	services           []discoveredService
+	services           []DiscoveredService
 	projectRoot        string
 	executor           executor.Executor
 	loading            bool
@@ -33,7 +33,8 @@ type GeneralModel struct {
 	sfWatchStarting    bool
 }
 
-type discoveredService struct {
+// DiscoveredService represents an auxiliary service discovered via docker compose.
+type DiscoveredService struct {
 	Name     string
 	URL      string
 	Username string
@@ -41,7 +42,7 @@ type discoveredService struct {
 }
 
 type servicesLoadedMsg struct {
-	services []discoveredService
+	services []DiscoveredService
 	err      error
 }
 
@@ -235,74 +236,80 @@ type dockerComposePSOutput struct {
 	} `json:"Publishers"`
 }
 
-func discoverServices(projectRoot string) tea.Cmd {
-	return func() tea.Msg {
-		ctx := context.Background()
-		cmd := exec.CommandContext(ctx, "docker", "compose", "ps", "--format", "json")
-		cmd.Dir = projectRoot
-		output, err := cmd.Output()
-		if err != nil {
-			return servicesLoadedMsg{err: fmt.Errorf("docker compose ps: %w", err)}
+// DiscoverServices queries docker compose for running containers and returns
+// auxiliary services (Adminer, Mailpit, etc.) with their published URLs.
+func DiscoverServices(ctx context.Context, projectRoot string) ([]DiscoveredService, error) {
+	cmd := exec.CommandContext(ctx, "docker", "compose", "ps", "--format", "json")
+	cmd.Dir = projectRoot
+	output, err := cmd.Output()
+	if err != nil {
+		return nil, fmt.Errorf("docker compose ps: %w", err)
+	}
+
+	var services []DiscoveredService
+
+	// Collect all containers with their published ports
+	type containerInfo struct {
+		service    string
+		publishers map[int]int // targetPort -> publishedPort
+	}
+	var containers []containerInfo
+
+	for _, line := range strings.Split(strings.TrimSpace(string(output)), "\n") {
+		if line == "" {
+			continue
 		}
 
-		var services []discoveredService
-
-		// Collect all containers with their published ports
-		type containerInfo struct {
-			service    string
-			publishers map[int]int // targetPort -> publishedPort
+		var container dockerComposePSOutput
+		if err := json.Unmarshal([]byte(line), &container); err != nil {
+			continue
 		}
-		var containers []containerInfo
 
-		for _, line := range strings.Split(strings.TrimSpace(string(output)), "\n") {
-			if line == "" {
-				continue
-			}
-
-			var container dockerComposePSOutput
-			if err := json.Unmarshal([]byte(line), &container); err != nil {
-				continue
-			}
-
-			ports := make(map[int]int)
-			for _, pub := range container.Publishers {
-				if pub.PublishedPort != 0 {
-					ports[pub.TargetPort] = pub.PublishedPort
-				}
-			}
-
-			if len(ports) > 0 {
-				containers = append(containers, containerInfo{
-					service:    container.Service,
-					publishers: ports,
-				})
+		ports := make(map[int]int)
+		for _, pub := range container.Publishers {
+			if pub.PublishedPort != 0 {
+				ports[pub.TargetPort] = pub.PublishedPort
 			}
 		}
 
-		// Match containers against known services or skip ignored ones
-		for _, c := range containers {
-			if ignoredServices[c.service] {
-				continue
-			}
-
-			known, ok := knownServices[c.service]
-			if !ok {
-				continue
-			}
-
-			publishedPort, hasPort := c.publishers[known.TargetPort]
-			if !hasPort {
-				continue
-			}
-
-			services = append(services, discoveredService{
-				Name:     known.Name,
-				URL:      fmt.Sprintf("http://127.0.0.1:%d", publishedPort),
-				Username: known.Username,
-				Password: known.Password,
+		if len(ports) > 0 {
+			containers = append(containers, containerInfo{
+				service:    container.Service,
+				publishers: ports,
 			})
 		}
+	}
 
-		return servicesLoadedMsg{services: services}
+	// Match containers against known services or skip ignored ones
+	for _, c := range containers {
+		if ignoredServices[c.service] {
+			continue
+		}
+
+		known, ok := knownServices[c.service]
+		if !ok {
+			continue
+		}
+
+		publishedPort, hasPort := c.publishers[known.TargetPort]
+		if !hasPort {
+			continue
+		}
+
+		services = append(services, DiscoveredService{
+			Name:     known.Name,
+			URL:      fmt.Sprintf("http://127.0.0.1:%d", publishedPort),
+			Username: known.Username,
+			Password: known.Password,
+		})
+	}
+
+	return services, nil
+}
+
+func discoverServices(projectRoot string) tea.Cmd {
+	return func() tea.Msg {
+		services, err := DiscoverServices(context.Background(), projectRoot)
+		return servicesLoadedMsg{services: services, err: err}
 	}
 }

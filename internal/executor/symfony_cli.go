@@ -56,7 +56,7 @@ func (s *SymfonyCLIExecutor) NormalizePath(hostPath string) string {
 }
 
 func (s *SymfonyCLIExecutor) Type() string {
-	return "symfony-cli"
+	return TypeSymfonyCLI
 }
 
 func (s *SymfonyCLIExecutor) WithEnv(env map[string]string) Executor {
@@ -65,4 +65,12 @@ func (s *SymfonyCLIExecutor) WithEnv(env map[string]string) Executor {
 
 func (s *SymfonyCLIExecutor) WithRelDir(relDir string) Executor {
 	return &SymfonyCLIExecutor{BinaryPath: s.BinaryPath, env: s.env, projectRoot: s.projectRoot, relDir: relDir}
+}
+
+func (s *SymfonyCLIExecutor) StartEnvironment(_ context.Context) error {
+	return ErrNotSupported
+}
+
+func (s *SymfonyCLIExecutor) StopEnvironment(_ context.Context) error {
+	return ErrNotSupported
 }
