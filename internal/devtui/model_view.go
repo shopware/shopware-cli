@@ -56,6 +56,8 @@ func (m Model) renderDashboard() string {
 	case tabLogs:
 		m.logs.SetSize(contentW, contentH)
 		content = m.logs.View()
+	case tabConfig:
+		content = m.configTab.View(m.width, boxHeight)
 	}
 
 	contentBox := lipgloss.NewStyle().
@@ -76,6 +78,17 @@ func (m Model) renderDashboardFooter() string {
 			{Key: "↑/↓", Label: "Move cursor"},
 			{Key: "enter", Label: "Open source"},
 			{Key: "f", Label: followState},
+			{Key: "tab", Label: "Next tab"},
+			{Key: "ctrl+c", Label: "Exit"},
+		}
+		return tui.ShortcutBar(shortcuts...)
+	}
+
+	if m.activeTab == tabConfig {
+		shortcuts := []tui.Shortcut{
+			{Key: "↑/↓", Label: "Navigate"},
+			{Key: "←/→", Label: "Change value"},
+			{Key: "enter", Label: "Edit/Save"},
 			{Key: "tab", Label: "Next tab"},
 			{Key: "ctrl+c", Label: "Exit"},
 		}

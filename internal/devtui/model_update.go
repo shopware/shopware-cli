@@ -189,6 +189,14 @@ func (m Model) updateKeyPress(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
+	// When the config tab is actively editing a text input, route all keys
+	// to it so typed characters are not intercepted by global shortcuts.
+	if m.activeTab == tabConfig && m.configTab.editing {
+		newConfig, cmd := m.configTab.HandleKey(msg)
+		m.configTab = newConfig
+		return m, cmd
+	}
+
 	switch msg.String() {
 	case "ctrl+p":
 		m.overlay = overlayCommandPalette
@@ -209,9 +217,27 @@ func (m Model) updateKeyPress(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	case key2:
 		m.activeTab = tabLogs
 		return m, nil
-	case keyTab, keyShiftTab:
-		m.activeTab = (m.activeTab + 1) % 2
+	case key3:
+		m.activeTab = tabConfig
 		return m, nil
+	case keyTab:
+		m.activeTab = (m.activeTab + 1) % activeTab(len(tabNames))
+		return m, nil
+	case keyShiftTab:
+		m.activeTab = (m.activeTab - 1 + activeTab(len(tabNames))) % activeTab(len(tabNames))
+		return m, nil
+	}
+
+	if m.activeTab == tabConfig {
+		newConfig, cmd := m.configTab.HandleKey(msg)
+		m.configTab = newConfig
+		// Handle save action.
+		if m.configTab.cursor == fieldSave && msg.String() == keyEnter && m.configTab.modified {
+			m.configTab.ApplyToConfig(m.config)
+			_ = shop.WriteConfig(m.config, m.projectRoot)
+			return m, func() tea.Msg { return configSavedMsg{} }
+		}
+		return m, cmd
 	}
 
 	return m.updateChildren(msg)
@@ -276,6 +302,8 @@ func (m Model) executeCommand(id string) (tea.Model, tea.Cmd) {
 		m.activeTab = tabLogs
 	case "tab-general":
 		m.activeTab = tabGeneral
+	case "tab-config":
+		m.activeTab = tabConfig
 	case "quit":
 		if m.dockerMode {
 			m.overlay = overlayStopConfirm
