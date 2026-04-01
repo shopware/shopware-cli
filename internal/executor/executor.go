@@ -2,6 +2,7 @@ package executor
 
 import (
 	"context"
+	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -9,6 +10,16 @@ import (
 	"sync"
 
 	"github.com/shopware/shopware-cli/logging"
+)
+
+// ErrNotSupported is returned when the executor does not support a managed environment.
+var ErrNotSupported = errors.New("operation not supported by this executor")
+
+// Executor type constants returned by Executor.Type().
+const (
+	TypeDocker     = "docker"
+	TypeLocal      = "local"
+	TypeSymfonyCLI = "symfony-cli"
 )
 
 // Executor abstracts command execution across different environment types.
@@ -24,6 +35,12 @@ type Executor interface {
 	Type() string
 	WithEnv(env map[string]string) Executor
 	WithRelDir(relDir string) Executor
+	// StartEnvironment starts the backing environment (e.g. docker compose up -d).
+	// Returns ErrNotSupported for executors that have no managed environment.
+	StartEnvironment(ctx context.Context) error
+	// StopEnvironment stops the backing environment (e.g. docker compose down).
+	// Returns ErrNotSupported for executors that have no managed environment.
+	StopEnvironment(ctx context.Context) error
 }
 
 type allowBinCIKey struct{}

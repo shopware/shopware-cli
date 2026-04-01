@@ -74,7 +74,7 @@ func (d *DockerExecutor) NormalizePath(hostPath string) string {
 }
 
 func (d *DockerExecutor) Type() string {
-	return "docker"
+	return TypeDocker
 }
 
 func (d *DockerExecutor) WithEnv(env map[string]string) Executor {
@@ -130,6 +130,30 @@ func (d *DockerExecutor) newProcess(cmd *exec.Cmd, innerArgs []string) *Process 
 			return nil
 		},
 	}
+}
+
+func (d *DockerExecutor) StartEnvironment(ctx context.Context) error {
+	cmd := exec.CommandContext(ctx, "docker", "compose", "up", "-d")
+	cmd.Dir = d.projectRoot
+
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("%w\n%s", err, output)
+	}
+
+	return nil
+}
+
+func (d *DockerExecutor) StopEnvironment(ctx context.Context) error {
+	cmd := exec.CommandContext(ctx, "docker", "compose", "down")
+	cmd.Dir = d.projectRoot
+
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("%w\n%s", err, output)
+	}
+
+	return nil
 }
 
 func (d *DockerExecutor) baseArgs() []string {

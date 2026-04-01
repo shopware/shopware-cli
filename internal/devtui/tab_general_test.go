@@ -33,7 +33,7 @@ func TestNewGeneralModel_EmptyURL(t *testing.T) {
 func TestServicesLoadedMsg(t *testing.T) {
 	m := NewGeneralModel("docker", "http://localhost:8000", "", "", "/tmp/project", nil)
 
-	services := []discoveredService{
+	services := []DiscoveredService{
 		{Name: "Adminer", URL: "http://127.0.0.1:9080", Username: "root", Password: "root"},
 		{Name: "Shopware", URL: "http://localhost:8000"},
 	}
@@ -80,7 +80,7 @@ func TestKnownServices(t *testing.T) {
 func TestViewShowsCredentials(t *testing.T) {
 	m := NewGeneralModel("docker", "http://localhost:8000", "", "", "/tmp/project", nil)
 	m.loading = false
-	m.services = []discoveredService{
+	m.services = []DiscoveredService{
 		{Name: "Adminer", URL: "http://127.0.0.1:9080", Username: "root", Password: "root"},
 	}
 

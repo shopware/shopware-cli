@@ -53,7 +53,7 @@ func (l *LocalExecutor) NormalizePath(hostPath string) string {
 }
 
 func (l *LocalExecutor) Type() string {
-	return "local"
+	return TypeLocal
 }
 
 func (l *LocalExecutor) WithEnv(env map[string]string) Executor {
@@ -62,6 +62,14 @@ func (l *LocalExecutor) WithEnv(env map[string]string) Executor {
 
 func (l *LocalExecutor) WithRelDir(relDir string) Executor {
 	return &LocalExecutor{env: l.env, projectRoot: l.projectRoot, relDir: relDir}
+}
+
+func (l *LocalExecutor) StartEnvironment(_ context.Context) error {
+	return ErrNotSupported
+}
+
+func (l *LocalExecutor) StopEnvironment(_ context.Context) error {
+	return ErrNotSupported
 }
 
 // applyLocalEnv sets PROJECT_ROOT and extra environment variables on a local command.
