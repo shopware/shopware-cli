@@ -47,7 +47,7 @@ func TestImageProxySVG(t *testing.T) {
 			if err != nil {
 				return err
 			}
-			res.Body.Close()
+			_ = res.Body.Close()
 			res.Body = io.NopCloser(bytes.NewReader(body))
 
 			if len(body) > 0 {
@@ -90,7 +90,7 @@ func TestImageProxySVG(t *testing.T) {
 	t.Run("svg with gzip accept", func(t *testing.T) {
 		upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Content-Type", "image/svg+xml")
-			w.Write([]byte(svgContent))
+			_, _ = w.Write([]byte(svgContent))
 		}))
 		defer upstream.Close()
 
@@ -99,12 +99,12 @@ func TestImageProxySVG(t *testing.T) {
 		defer server.Close()
 
 		client := &http.Client{Transport: &http.Transport{DisableCompression: true}}
-		req, _ := http.NewRequest("GET", server.URL+"/test.svg", nil)
+		req, _ := http.NewRequestWithContext(t.Context(), "GET", server.URL+"/test.svg", nil)
 		req.Header.Set("Accept-Encoding", "gzip")
 		resp, err := client.Do(req)
 		assert.NoError(t, err)
 		body, _ := io.ReadAll(resp.Body)
-		resp.Body.Close()
+		_ = resp.Body.Close()
 
 		assert.Equal(t, http.StatusOK, resp.StatusCode)
 		assert.True(t, len(body) > 0, "body should not be empty")
@@ -119,7 +119,7 @@ func TestImageProxySVG(t *testing.T) {
 	t.Run("svg without gzip accept", func(t *testing.T) {
 		upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Content-Type", "image/svg+xml")
-			w.Write([]byte(svgContent))
+			_, _ = w.Write([]byte(svgContent))
 		}))
 		defer upstream.Close()
 
@@ -128,11 +128,11 @@ func TestImageProxySVG(t *testing.T) {
 		defer server.Close()
 
 		client := &http.Client{Transport: &http.Transport{DisableCompression: true}}
-		req, _ := http.NewRequest("GET", server.URL+"/test.svg", nil)
+		req, _ := http.NewRequestWithContext(t.Context(), "GET", server.URL+"/test.svg", nil)
 		resp, err := client.Do(req)
 		assert.NoError(t, err)
 		body, _ := io.ReadAll(resp.Body)
-		resp.Body.Close()
+		_ = resp.Body.Close()
 
 		assert.Equal(t, http.StatusOK, resp.StatusCode)
 		assert.Equal(t, svgContent, string(body))
@@ -141,7 +141,7 @@ func TestImageProxySVG(t *testing.T) {
 	t.Run("svg default go client", func(t *testing.T) {
 		upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Content-Type", "image/svg+xml")
-			w.Write([]byte(svgContent))
+			_, _ = w.Write([]byte(svgContent))
 		}))
 		defer upstream.Close()
 
@@ -149,10 +149,11 @@ func TestImageProxySVG(t *testing.T) {
 		server := httptest.NewServer(makeProxyStack(t, upstreamURL))
 		defer server.Close()
 
-		resp, err := http.Get(server.URL + "/test.svg")
+		req, _ := http.NewRequestWithContext(t.Context(), "GET", server.URL+"/test.svg", nil)
+		resp, err := http.DefaultClient.Do(req)
 		assert.NoError(t, err)
 		body, _ := io.ReadAll(resp.Body)
-		resp.Body.Close()
+		_ = resp.Body.Close()
 
 		assert.Equal(t, http.StatusOK, resp.StatusCode)
 		assert.Equal(t, svgContent, string(body))
@@ -163,7 +164,7 @@ func TestImageProxySVG(t *testing.T) {
 		upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			requestCount++
 			w.Header().Set("Content-Type", "image/svg+xml")
-			w.Write([]byte(svgContent))
+			_, _ = w.Write([]byte(svgContent))
 		}))
 		defer upstream.Close()
 
@@ -174,20 +175,20 @@ func TestImageProxySVG(t *testing.T) {
 		client := &http.Client{Transport: &http.Transport{DisableCompression: true}}
 
 		// First request: cache miss
-		req, _ := http.NewRequest("GET", server.URL+"/test.svg", nil)
+		req, _ := http.NewRequestWithContext(t.Context(), "GET", server.URL+"/test.svg", nil)
 		resp, err := client.Do(req)
 		assert.NoError(t, err)
 		body, _ := io.ReadAll(resp.Body)
-		resp.Body.Close()
+		_ = resp.Body.Close()
 		assert.Equal(t, svgContent, string(body))
 		assert.Equal(t, 1, requestCount)
 
 		// Second request: cache hit
-		req2, _ := http.NewRequest("GET", server.URL+"/test.svg", nil)
+		req2, _ := http.NewRequestWithContext(t.Context(), "GET", server.URL+"/test.svg", nil)
 		resp2, err := client.Do(req2)
 		assert.NoError(t, err)
 		body2, _ := io.ReadAll(resp2.Body)
-		resp2.Body.Close()
+		_ = resp2.Body.Close()
 		assert.Equal(t, svgContent, string(body2))
 		assert.Equal(t, "HIT", resp2.Header.Get("X-Cache"))
 		assert.Equal(t, 1, requestCount) // upstream was not hit again
@@ -197,7 +198,7 @@ func TestImageProxySVG(t *testing.T) {
 		pngData := bytes.Repeat([]byte{0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A}, 250)
 		upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Content-Type", "image/png")
-			w.Write(pngData)
+			_, _ = w.Write(pngData)
 		}))
 		defer upstream.Close()
 
@@ -206,12 +207,12 @@ func TestImageProxySVG(t *testing.T) {
 		defer server.Close()
 
 		client := &http.Client{Transport: &http.Transport{DisableCompression: true}}
-		req, _ := http.NewRequest("GET", server.URL+"/test.png", nil)
+		req, _ := http.NewRequestWithContext(t.Context(), "GET", server.URL+"/test.png", nil)
 		req.Header.Set("Accept-Encoding", "gzip")
 		resp, err := client.Do(req)
 		assert.NoError(t, err)
 		body, _ := io.ReadAll(resp.Body)
-		resp.Body.Close()
+		_ = resp.Body.Close()
 
 		assert.Equal(t, http.StatusOK, resp.StatusCode)
 		// PNG should NOT be gzip compressed since we removed it from content types
@@ -225,7 +226,7 @@ func TestImageProxySVG(t *testing.T) {
 			// Write in chunks without Content-Length
 			parts := strings.SplitAfter(svgContent, "/>")
 			for _, part := range parts {
-				w.Write([]byte(part))
+				_, _ = w.Write([]byte(part))
 				if f, ok := w.(http.Flusher); ok {
 					f.Flush()
 				}
@@ -238,12 +239,12 @@ func TestImageProxySVG(t *testing.T) {
 		defer server.Close()
 
 		client := &http.Client{Transport: &http.Transport{DisableCompression: true}}
-		req, _ := http.NewRequest("GET", server.URL+"/test.svg", nil)
+		req, _ := http.NewRequestWithContext(t.Context(), "GET", server.URL+"/test.svg", nil)
 		req.Header.Set("Accept-Encoding", "gzip")
 		resp, err := client.Do(req)
 		assert.NoError(t, err)
 		body, _ := io.ReadAll(resp.Body)
-		resp.Body.Close()
+		_ = resp.Body.Close()
 
 		assert.Equal(t, http.StatusOK, resp.StatusCode)
 		assert.True(t, len(body) > 0, "body should not be empty")
@@ -262,7 +263,7 @@ func TestImageProxySVG(t *testing.T) {
 		smallSVG := `<svg xmlns="http://www.w3.org/2000/svg"><rect width="10" height="10"/></svg>`
 		upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Content-Type", "image/svg+xml")
-			w.Write([]byte(smallSVG))
+			_, _ = w.Write([]byte(smallSVG))
 		}))
 		defer upstream.Close()
 
@@ -271,12 +272,12 @@ func TestImageProxySVG(t *testing.T) {
 		defer server.Close()
 
 		client := &http.Client{Transport: &http.Transport{DisableCompression: true}}
-		req, _ := http.NewRequest("GET", server.URL+"/small.svg", nil)
+		req, _ := http.NewRequestWithContext(t.Context(), "GET", server.URL+"/small.svg", nil)
 		req.Header.Set("Accept-Encoding", "gzip")
 		resp, err := client.Do(req)
 		assert.NoError(t, err)
 		body, _ := io.ReadAll(resp.Body)
-		resp.Body.Close()
+		_ = resp.Body.Close()
 
 		assert.Equal(t, http.StatusOK, resp.StatusCode)
 		// Small SVGs should not be compressed (below minSize)
@@ -286,7 +287,7 @@ func TestImageProxySVG(t *testing.T) {
 	t.Run("browser-like request with brotli accept", func(t *testing.T) {
 		upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Content-Type", "image/svg+xml")
-			w.Write([]byte(svgContent))
+			_, _ = w.Write([]byte(svgContent))
 		}))
 		defer upstream.Close()
 
@@ -295,13 +296,13 @@ func TestImageProxySVG(t *testing.T) {
 		defer server.Close()
 
 		client := &http.Client{Transport: &http.Transport{DisableCompression: true}}
-		req, _ := http.NewRequest("GET", server.URL+"/test.svg", nil)
+		req, _ := http.NewRequestWithContext(t.Context(), "GET", server.URL+"/test.svg", nil)
 		req.Header.Set("Accept-Encoding", "gzip, deflate, br, zstd")
 		req.Header.Set("Accept", "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8")
 		resp, err := client.Do(req)
 		assert.NoError(t, err)
 		body, _ := io.ReadAll(resp.Body)
-		resp.Body.Close()
+		_ = resp.Body.Close()
 
 		assert.Equal(t, http.StatusOK, resp.StatusCode)
 		assert.True(t, len(body) > 0)

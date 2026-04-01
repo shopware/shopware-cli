@@ -103,7 +103,7 @@ If a file is not found locally, it proxies the request to the upstream server.`,
 			if err != nil {
 				return err
 			}
-			res.Body.Close()
+			_ = res.Body.Close()
 			res.Body = io.NopCloser(bytes.NewReader(body))
 
 			if len(body) > 0 {
