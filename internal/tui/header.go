@@ -40,4 +40,3 @@ func BrandingLineWidth() int {
 		lipgloss.Width(" · ") +
 		lipgloss.Width("GitHub")
 }
-
