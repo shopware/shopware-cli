@@ -98,8 +98,9 @@ func (cp commandPalette) view(width, height int) string {
 	b.WriteString("\n\n")
 
 	selectedStyle := lipgloss.NewStyle().
-		Foreground(tui.TextColor).
-		Background(tui.BrandColor).
+		Foreground(tui.BrandColor).
+		Background(tui.SelectedBgColor).
+		Bold(true).
 		Width(innerWidth)
 
 	normalStyle := lipgloss.NewStyle().
@@ -110,8 +111,8 @@ func (cp commandPalette) view(width, height int) string {
 		Foreground(tui.MutedColor)
 
 	selectedShortcutStyle := lipgloss.NewStyle().
-		Foreground(tui.TextColor).
-		Background(tui.BrandColor)
+		Foreground(tui.MutedColor).
+		Background(tui.SelectedBgColor)
 
 	for i, idx := range cp.filtered {
 		cmd := paletteCommands[idx]
