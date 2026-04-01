@@ -1,7 +1,6 @@
 package devtui
 
 import (
-	"fmt"
 	"strings"
 
 	"charm.land/bubbles/v2/textinput"
@@ -378,6 +377,8 @@ func (m ConfigModel) profilerLabel() string {
 	return p
 }
 
+var configKeyStyle = lipgloss.NewStyle().Width(22).Foreground(tui.TextColor)
+
 func (m ConfigModel) renderSelect(field configField, label, value, selectedArrow, normalIndent string) string {
 	prefix := normalIndent
 	if m.cursor == field {
@@ -394,7 +395,7 @@ func (m ConfigModel) renderSelect(field configField, label, value, selectedArrow
 		arrows = helpStyle.Render(" ◂ ▸")
 	}
 
-	return fmt.Sprintf("%s%-20s%s%s\n", prefix, tui.LabelStyle.Render(label), valStyle.Render(value), arrows)
+	return prefix + configKeyStyle.Render(label) + valStyle.Render(value) + arrows + "\n"
 }
 
 func (m ConfigModel) renderInput(field configField, label string, input textinput.Model, selectedArrow, normalIndent string) string {
@@ -404,7 +405,7 @@ func (m ConfigModel) renderInput(field configField, label string, input textinpu
 	}
 
 	if m.cursor == field && m.editing {
-		return fmt.Sprintf("%s%-20s%s\n", prefix, tui.LabelStyle.Render(label), input.View())
+		return prefix + configKeyStyle.Render(label) + input.View() + "\n"
 	}
 
 	val := input.Value()
@@ -419,5 +420,5 @@ func (m ConfigModel) renderInput(field configField, label string, input textinpu
 		hint = helpStyle.Render(" enter to edit")
 	}
 
-	return fmt.Sprintf("%s%-20s%s%s\n", prefix, tui.LabelStyle.Render(label), val, hint)
+	return prefix + configKeyStyle.Render(label) + val + hint + "\n"
 }
