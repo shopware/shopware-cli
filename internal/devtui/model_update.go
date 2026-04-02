@@ -128,9 +128,9 @@ func (m Model) updateKeyPress(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 
 	if m.overlay == overlayStopConfirm {
 		switch msg.String() {
-		case "left", "h":
+		case keyLeft, "h":
 			m.stopConfirmYes = true
-		case "right", "l":
+		case keyRight, "l":
 			m.stopConfirmYes = false
 		case keyTab:
 			m.stopConfirmYes = !m.stopConfirmYes
@@ -189,6 +189,16 @@ func (m Model) updateKeyPress(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
+	// When the config tab is actively editing a text input, route all keys
+	// to it so typed characters are not intercepted by global shortcuts.
+	if m.activeTab == tabConfig && m.configTab.editing {
+		return m.updateConfigTab(msg)
+	}
+
+	return m.updateDashboardKeys(msg)
+}
+
+func (m Model) updateDashboardKeys(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
 	case "ctrl+p":
 		m.overlay = overlayCommandPalette
@@ -209,12 +219,40 @@ func (m Model) updateKeyPress(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	case key2:
 		m.activeTab = tabLogs
 		return m, nil
-	case keyTab, keyShiftTab:
-		m.activeTab = (m.activeTab + 1) % 2
+	case key3:
+		m.activeTab = tabConfig
+		return m, nil
+	case keyTab:
+		m.activeTab = (m.activeTab + 1) % activeTab(len(tabNames))
+		return m, nil
+	case keyShiftTab:
+		m.activeTab = (m.activeTab - 1 + activeTab(len(tabNames))) % activeTab(len(tabNames))
 		return m, nil
 	}
 
+	if m.activeTab == tabConfig {
+		return m.updateConfigTab(msg)
+	}
+
 	return m.updateChildren(msg)
+}
+
+func (m Model) updateConfigTab(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+	newConfig, cmd := m.configTab.HandleKey(msg)
+	m.configTab = newConfig
+
+	if m.configTab.cursor == fieldSave && msg.String() == keyEnter && m.configTab.modified {
+		m.configTab.ApplyToConfig(m.config)
+		_ = shop.WriteConfig(m.config, m.projectRoot)
+		// Write credentials to .shopware-project.local.yml so they stay
+		// out of version control.
+		if localCfg := m.configTab.LocalConfig(); localCfg != nil {
+			_ = shop.WriteLocalConfig(localCfg, m.projectRoot)
+		}
+		return m, func() tea.Msg { return configSavedMsg{} }
+	}
+
+	return m, cmd
 }
 
 func (m Model) updateCommandPalette(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
@@ -276,6 +314,8 @@ func (m Model) executeCommand(id string) (tea.Model, tea.Cmd) {
 		m.activeTab = tabLogs
 	case "tab-general":
 		m.activeTab = tabGeneral
+	case "tab-config":
+		m.activeTab = tabConfig
 	case "quit":
 		if m.dockerMode {
 			m.overlay = overlayStopConfirm
@@ -376,9 +416,9 @@ func (m Model) updateInstallPrompt(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	switch m.install.step {
 	case installStepAsk:
 		switch msg.String() {
-		case "left", "h":
+		case keyLeft, "h":
 			m.install.confirmYes = true
-		case "right", "l":
+		case keyRight, "l":
 			m.install.confirmYes = false
 		case keyTab:
 			m.install.confirmYes = !m.install.confirmYes

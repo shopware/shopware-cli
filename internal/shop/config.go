@@ -539,6 +539,24 @@ func WriteConfig(cfg *Config, dir string) error {
 	return nil
 }
 
+// WriteLocalConfig writes a partial configuration to .shopware-project.local.yml.
+// This file is deep-merged on top of the main config at read time and is intended
+// for credentials and other values that should not be committed to version control.
+func WriteLocalConfig(cfg *Config, dir string) error {
+	data, err := yaml.Marshal(cfg)
+	if err != nil {
+		return fmt.Errorf("failed to marshal local shop configuration: %w", err)
+	}
+
+	filePath := filepath.Join(dir, ".shopware-project.local.yml")
+
+	if err := os.WriteFile(filePath, data, os.ModePerm); err != nil {
+		return fmt.Errorf("failed to write local shop configuration to %s: %w", filePath, err)
+	}
+
+	return nil
+}
+
 func ReadConfig(ctx context.Context, fileName string, allowFallback bool) (*Config, error) {
 	config := &Config{foundConfig: false}
 

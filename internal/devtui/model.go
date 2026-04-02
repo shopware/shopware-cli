@@ -18,9 +18,10 @@ type activeTab int
 const (
 	tabGeneral activeTab = iota
 	tabLogs
+	tabConfig
 )
 
-var tabNames = []string{"General", "Logs"}
+var tabNames = []string{"General", "Logs", "Config"}
 
 const (
 	keyCtrlC    = "ctrl+c"
@@ -35,6 +36,9 @@ const (
 	keyK        = "k"
 	key1        = "1"
 	key2        = "2"
+	key3        = "3"
+	keyLeft     = "left"
+	keyRight    = "right"
 
 	defaultUsername = "admin"
 
@@ -130,6 +134,7 @@ type Model struct {
 	activeTab      activeTab
 	general        GeneralModel
 	logs           LogsModel
+	configTab      ConfigModel
 	width          int
 	height         int
 	dockerMode     bool
@@ -188,6 +193,7 @@ func New(opts Options) Model {
 		activeTab:   tabGeneral,
 		general:     NewGeneralModel(opts.Executor.Type(), shopURL, username, password, opts.ProjectRoot, opts.Executor),
 		logs:        NewLogsModel(opts.ProjectRoot, isDocker),
+		configTab:   NewConfigModel(opts.Config),
 		dockerMode:  isDocker,
 		projectRoot: opts.ProjectRoot,
 		executor:    opts.Executor,
@@ -230,6 +236,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.height = msg.Height
 		m.general.SetSize(m.width, m.height-4)
 		m.logs.SetSize(m.width, m.height-4)
+		m.configTab.SetSize(m.width, m.height-4)
 		return m, nil
 
 	case dockerAlreadyRunningMsg, dockerNeedStartMsg, dockerOutputLineMsg,
@@ -328,6 +335,12 @@ func (m Model) updateChildren(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	newLogs, cmd := m.logs.Update(msg)
 	m.logs = newLogs
+	if cmd != nil {
+		cmds = append(cmds, cmd)
+	}
+
+	newConfig, cmd := m.configTab.Update(msg)
+	m.configTab = newConfig
 	if cmd != nil {
 		cmds = append(cmds, cmd)
 	}
