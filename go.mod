@@ -10,7 +10,7 @@ require (
 	github.com/NYTimes/gziphandler v1.1.1
 	github.com/bep/godartsass/v2 v2.5.0
 	github.com/cespare/xxhash/v2 v2.3.0
-	github.com/evanw/esbuild v0.27.4
+	github.com/evanw/esbuild v0.28.0
 	github.com/go-sql-driver/mysql v1.9.3
 	github.com/gorilla/schema v1.4.1
 	github.com/invopop/jsonschema v0.13.0
@@ -25,7 +25,7 @@ require (
 	github.com/tetratelabs/wazero v1.11.0
 	github.com/tonistiigi/go-actions-cache v0.0.0-20260120203934-54bc28c26fd2
 	github.com/vulcand/oxy/v2 v2.0.3
-	github.com/wI2L/jsondiff v0.7.0
+	github.com/wI2L/jsondiff v0.7.1
 	github.com/wk8/go-ordered-map/v2 v2.1.8
 	github.com/yuin/goldmark v1.8.2
 	github.com/zeebo/xxh3 v1.1.0
