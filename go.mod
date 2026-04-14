@@ -16,7 +16,7 @@ require (
 	github.com/invopop/jsonschema v0.13.0
 	github.com/jaswdr/faker/v2 v2.9.1
 	github.com/joho/godotenv v1.5.1
-	github.com/mattn/go-isatty v0.0.20
+	github.com/mattn/go-isatty v0.0.21
 	github.com/microcosm-cc/bluemonday v1.0.27
 	github.com/otiai10/copy v1.14.1
 	github.com/shyim/go-version v0.0.0-20250828113848-97ec77491b32
@@ -30,8 +30,8 @@ require (
 	github.com/yuin/goldmark v1.8.2
 	github.com/zeebo/xxh3 v1.1.0
 	go.uber.org/zap v1.27.1
-	golang.org/x/image v0.38.0
-	golang.org/x/text v0.35.0
+	golang.org/x/image v0.39.0
+	golang.org/x/text v0.36.0
 	golang.org/x/time v0.15.0
 	gopkg.in/yaml.v3 v3.0.1
 )
@@ -87,9 +87,9 @@ require (
 	github.com/tidwall/pretty v1.2.1 // indirect
 	github.com/tidwall/sjson v1.2.5 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
-	golang.org/x/net v0.52.0
+	golang.org/x/net v0.53.0
 	golang.org/x/oauth2 v0.36.0
 	golang.org/x/sync v0.20.0
-	golang.org/x/sys v0.42.0 // indirect
+	golang.org/x/sys v0.43.0 // indirect
 	google.golang.org/protobuf v1.36.11 // indirect
 )
