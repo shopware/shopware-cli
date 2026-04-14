@@ -18,7 +18,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@fe104658747b27e96e4f7e80cd0a94068e53901d # ratchet:step-security/harden-runner@v2.16.1
+        uses: step-security/harden-runner@f808768d1510423e83855289c910610ca9b43176 # ratchet:step-security/harden-runner@v2.17.0
         with:
           egress-policy: audit
 
@@ -41,7 +41,7 @@ jobs:
           registry-url: "https://registry.npmjs.org"
 
       - name: Install Nix
-        uses: DeterminateSystems/nix-installer-action@430608d219b9321ec0c98eb6c37245a39aa6756e # ratchet:DeterminateSystems/nix-installer-action@main
+        uses: DeterminateSystems/nix-installer-action@b66b36319cc6fde4ea85edd583b088c65d6b8710 # ratchet:DeterminateSystems/nix-installer-action@main
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd # ratchet:docker/setup-buildx-action@v4.0.0
