@@ -191,12 +191,19 @@ func DumpAndLoadAssetSourcesOfProject(ctx context.Context, project string, shopC
 		return nil, fmt.Errorf("could not bundle features: %w", err)
 	}
 
-	var pluginsJson map[string]ExtensionAssetConfigEntry
+	return loadAssetSourcesFromPluginsJSON(ctx, project)
+}
 
+// loadAssetSourcesFromPluginsJSON reads var/plugins.json (written by bundle:dump) and converts it
+// into asset sources. It is separated from DumpAndLoadAssetSourcesOfProject so it can be tested
+// without a live PHP environment.
+func loadAssetSourcesFromPluginsJSON(ctx context.Context, project string) ([]asset.Source, error) {
 	pluginJsonBytes, err := os.ReadFile(path.Join(project, "var", "plugins.json"))
 	if err != nil {
 		return nil, fmt.Errorf("could not read plugins.json: %w", err)
 	}
+
+	var pluginsJson map[string]ExtensionAssetConfigEntry
 
 	if err := json.Unmarshal(pluginJsonBytes, &pluginsJson); err != nil {
 		return nil, fmt.Errorf("could not parse plugins.json: %w", err)

@@ -132,7 +132,11 @@ var projectCI = &cobra.Command{
 
 		lookingForExtensionsSection := ci.Default.Section(cmd.Context(), "Looking for extensions")
 
-		sources := extension.FindAssetSourcesOfProject(cmd.Context(), args[0], shopCfg)
+		sources, err := extension.DumpAndLoadAssetSourcesOfProject(cmd.Context(), args[0], shopCfg)
+		if err != nil {
+			logging.FromContext(cmd.Context()).Warnf("bundle:dump failed, falling back to static extension discovery (sub-bundles may be missed): %s", err.Error())
+			sources = extension.FindAssetSourcesOfProject(cmd.Context(), args[0], shopCfg)
+		}
 
 		shopwareConstraint, err := extension.GetShopwareProjectConstraint(args[0])
 		if err != nil {

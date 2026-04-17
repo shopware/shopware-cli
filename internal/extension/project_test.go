@@ -1,6 +1,7 @@
 package extension
 
 import (
+	"encoding/json"
 	"os"
 	"path"
 	"path/filepath"
@@ -211,6 +212,81 @@ func TestFindAssetSourcesOfProjectYAMLBundleNameOverride(t *testing.T) {
 
 	assert.Contains(t, names, "CustomBundleName")
 	assert.NotContains(t, names, "MyBundle")
+}
+
+func writePluginsJSON(t *testing.T, dir string, entries map[string]ExtensionAssetConfigEntry) {
+	t.Helper()
+	assert.NoError(t, os.MkdirAll(filepath.Join(dir, "var"), os.ModePerm))
+	data, err := json.Marshal(entries)
+	assert.NoError(t, err)
+	assert.NoError(t, os.WriteFile(filepath.Join(dir, "var", "plugins.json"), data, 0o644))
+}
+
+func entryFilePath(p string) *string { return &p }
+
+/**
+ * TestLoadAssetSourcesFromPluginsJSON_SubBundle verifies that a sub-bundle registered in the
+ * Shopware kernel (and therefore written to var/plugins.json by bundle:dump) is included in the
+ * returned sources.
+ */
+func TestLoadAssetSourcesFromPluginsJSON_SubBundle(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	adminEntry := entryFilePath("src/Resources/app/administration/src/main.js")
+	writePluginsJSON(t, tmpDir, map[string]ExtensionAssetConfigEntry{
+		"MyPlugin": {
+			BasePath: "custom/plugins/MyPlugin/",
+			Administration: ExtensionAssetConfigAdmin{
+				EntryFilePath: adminEntry,
+			},
+		},
+		"MyPluginSubBundle": {
+			BasePath: "custom/plugins/MyPlugin/src/SubBundle/",
+			Administration: ExtensionAssetConfigAdmin{
+				EntryFilePath: adminEntry,
+			},
+		},
+	})
+
+	sources, err := loadAssetSourcesFromPluginsJSON(t.Context(), tmpDir)
+	assert.NoError(t, err)
+
+	names := make([]string, 0, len(sources))
+	for _, s := range sources {
+		names = append(names, s.Name)
+	}
+
+	assert.ElementsMatch(t, []string{"MyPlugin", "MyPluginSubBundle"}, names)
+}
+
+// TestLoadAssetSourcesFromPluginsJSON_SkipsEntriesWithoutEntryFile verifies that bundles that have
+// no admin or storefront entry file are not included (they have no JS to build).
+func TestLoadAssetSourcesFromPluginsJSON_SkipsEntriesWithoutEntryFile(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	adminEntry := entryFilePath("src/Resources/app/administration/src/main.js")
+	writePluginsJSON(t, tmpDir, map[string]ExtensionAssetConfigEntry{
+		"WithJS": {
+			BasePath: "custom/plugins/WithJS/",
+			Administration: ExtensionAssetConfigAdmin{
+				EntryFilePath: adminEntry,
+			},
+		},
+		"NoJS": {
+			BasePath: "custom/plugins/NoJS/",
+		},
+	})
+
+	sources, err := loadAssetSourcesFromPluginsJSON(t.Context(), tmpDir)
+	assert.NoError(t, err)
+
+	names := make([]string, 0, len(sources))
+	for _, s := range sources {
+		names = append(names, s.Name)
+	}
+
+	assert.Contains(t, names, "WithJS")
+	assert.NotContains(t, names, "NoJS")
 }
 
 func TestFindAssetSourcesOfProjectYAMLBundleDeduplication(t *testing.T) {
