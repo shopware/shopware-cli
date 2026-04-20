@@ -4,7 +4,7 @@ go 1.25.8
 
 require (
 	charm.land/huh/v2 v2.0.3
-	charm.land/lipgloss/v2 v2.0.2
+	charm.land/lipgloss/v2 v2.0.3
 	dario.cat/mergo v1.0.2
 	github.com/DATA-DOG/go-sqlmock v1.5.2
 	github.com/NYTimes/gziphandler v1.1.1
@@ -24,7 +24,7 @@ require (
 	github.com/stretchr/testify v1.11.1
 	github.com/tetratelabs/wazero v1.11.0
 	github.com/tonistiigi/go-actions-cache v0.0.0-20260120203934-54bc28c26fd2
-	github.com/vulcand/oxy/v2 v2.0.3
+	github.com/vulcand/oxy/v2 v2.0.4
 	github.com/wI2L/jsondiff v0.7.1
 	github.com/wk8/go-ordered-map/v2 v2.1.8
 	github.com/yuin/goldmark v1.8.2
@@ -44,9 +44,9 @@ require (
 	github.com/Azure/azure-sdk-for-go/sdk/storage/azblob v1.6.4 // indirect
 	github.com/atotto/clipboard v0.1.4 // indirect
 	github.com/catppuccin/go v0.3.0 // indirect
-	github.com/charmbracelet/colorprofile v0.4.2 // indirect
+	github.com/charmbracelet/colorprofile v0.4.3 // indirect
 	github.com/charmbracelet/ultraviolet v0.0.0-20260205113103-524a6607adb8 // indirect
-	github.com/charmbracelet/x/ansi v0.11.6 // indirect
+	github.com/charmbracelet/x/ansi v0.11.7 // indirect
 	github.com/charmbracelet/x/exp/ordered v0.1.0 // indirect
 	github.com/charmbracelet/x/exp/strings v0.1.0 // indirect
 	github.com/charmbracelet/x/term v0.2.2 // indirect
@@ -58,7 +58,7 @@ require (
 	github.com/dustin/go-humanize v1.0.1 // indirect
 	github.com/golang-jwt/jwt/v5 v5.3.1 // indirect
 	github.com/klauspost/cpuid/v2 v2.3.0 // indirect
-	github.com/lucasb-eyer/go-colorful v1.3.0 // indirect
+	github.com/lucasb-eyer/go-colorful v1.4.0 // indirect
 	github.com/mitchellh/hashstructure/v2 v2.0.2 // indirect
 	github.com/muesli/cancelreader v0.2.2 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
@@ -76,7 +76,7 @@ require (
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
 	github.com/klauspost/compress v1.18.5
 	github.com/mailru/easyjson v0.9.1 // indirect
-	github.com/mattn/go-runewidth v0.0.20 // indirect
+	github.com/mattn/go-runewidth v0.0.23 // indirect
 	github.com/otiai10/mint v1.6.3 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/rivo/uniseg v0.4.7 // indirect
