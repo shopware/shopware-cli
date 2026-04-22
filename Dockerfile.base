@@ -2,7 +2,8 @@ FROM ghcr.io/shyim/wolfi-php/base:latest
 ARG PHP_VERSION=8.3
 
 LABEL org.opencontainers.image.source=https://github.com/shopware/shopware-cli
-COPY --from=composer/composer:2-bin /composer /usr/bin/composer
+# Updated to include Composer 2.9.6+ with fixes for CVE-2026-40261 and CVE-2026-40176
+COPY --from=composer/composer:2.9-bin /composer /usr/bin/composer
 
 RUN <<EOF
     set -euxo pipefail
