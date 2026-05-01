@@ -26,7 +26,7 @@ require (
 	github.com/tonistiigi/go-actions-cache v0.0.0-20260120203934-54bc28c26fd2
 	github.com/vulcand/oxy/v2 v2.1.0
 	github.com/wI2L/jsondiff v0.7.1
-	github.com/wk8/go-ordered-map/v2 v2.1.8
+	github.com/pb33f/ordered-map/v2 v2.3.1
 	github.com/yuin/goldmark v1.8.2
 	github.com/zeebo/xxh3 v1.1.0
 	go.uber.org/zap v1.27.1
@@ -61,7 +61,6 @@ require (
 	github.com/lucasb-eyer/go-colorful v1.4.0 // indirect
 	github.com/mitchellh/hashstructure/v2 v2.0.2 // indirect
 	github.com/muesli/cancelreader v0.2.2 // indirect
-	github.com/pb33f/ordered-map/v2 v2.3.1 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/rogpeppe/go-internal v1.14.1 // indirect
 	github.com/xo/terminfo v0.0.0-20220910002029-abceb7e1c41e // indirect
