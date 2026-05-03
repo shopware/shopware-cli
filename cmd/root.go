@@ -54,16 +54,16 @@ func init() {
 	extension.Register(rootCmd)
 	account.Register(rootCmd, func(commandName string) (*account.ServiceContainer, error) {
 		if commandName == "login" || commandName == "logout" {
-			return &account.ServiceContainer{
-				AccountClient: nil,
-			}, nil
+			return &account.ServiceContainer{AccountClient: nil}, nil
 		}
+
 		client, err := accountApi.NewApi(rootCmd.Context())
 		if err != nil {
 			return nil, err
 		}
-		return &account.ServiceContainer{
-			AccountClient: client,
-		}, nil
+
+		return &account.ServiceContainer{AccountClient: client}, nil
 	})
+
+	applyCommandShortcuts(rootCmd)
 }
