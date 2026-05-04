@@ -21,6 +21,7 @@ func TestImageProxySVG(t *testing.T) {
 	svgContent := `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">` + strings.Repeat(`<circle cx="50" cy="50" r="40" fill="red"/>`, 100) + `</svg>`
 
 	gzipWrapper, _ := gziphandler.GzipHandlerWithOpts(
+		gziphandler.MinSize(gziphandler.DefaultMinSize),
 		gziphandler.ContentTypes([]string{
 			"text/html", "text/css", "text/javascript",
 			"application/javascript", "application/json",

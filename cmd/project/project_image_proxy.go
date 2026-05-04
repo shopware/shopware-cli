@@ -279,6 +279,7 @@ If a file is not found locally, it proxies the request to the upstream server.`,
 		// Binary image formats (JPEG, PNG, GIF, WebP) are excluded because
 		// they are already compressed and gzip provides no benefit.
 		gzipWrapper, _ := gziphandler.GzipHandlerWithOpts(
+			gziphandler.MinSize(gziphandler.DefaultMinSize),
 			gziphandler.ContentTypes([]string{
 				"text/html",
 				"text/css",
