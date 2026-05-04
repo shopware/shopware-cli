@@ -168,7 +168,7 @@ func (a App) UpdateMetaData(metadata *ExtensionMetadata) error {
 	manifest.Meta.Label = updateTranslatableString(manifest.Meta.Label, metadata.Label)
 	manifest.Meta.Description = updateTranslatableString(manifest.Meta.Description, metadata.Description)
 
-	newXml, err := xml.MarshalIndent(manifest, "", "  ")
+	newXml, err := xml.MarshalIndent(&manifest, "", "  ")
 	if err != nil {
 		return fmt.Errorf("could not marshal manifest.xml: %w", err)
 	}

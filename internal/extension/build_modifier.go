@@ -39,7 +39,7 @@ func BuildModifier(ext Extension, extensionRoot string, config BuildModifierConf
 			}
 		}
 
-		newXml, err := xml.MarshalIndent(manifest, "", "  ")
+		newXml, err := xml.MarshalIndent(&manifest, "", "  ")
 
 		if err != nil {
 			return fmt.Errorf("could not marshal manifest.xml: %w", err)

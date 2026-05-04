@@ -231,7 +231,7 @@ func PrepareExtensionForRelease(ctx context.Context, sourceRoot, extensionRoot s
 		manifest.Setup.Secret = ""
 	}
 
-	newManifest, err := xml.MarshalIndent(manifest, "", "  ")
+	newManifest, err := xml.MarshalIndent(&manifest, "", "  ")
 	if err != nil {
 		return fmt.Errorf("cannot marshal manifest failed: %w", err)
 	}

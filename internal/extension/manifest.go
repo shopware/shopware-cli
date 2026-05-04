@@ -2,24 +2,210 @@ package extension
 
 import (
 	"encoding/xml"
+	"fmt"
+	"io"
+	"reflect"
+	"strings"
 )
 
 type Manifest struct {
-	XMLName         xml.Name         `xml:"manifest"`
-	Meta            Meta             `xml:"meta"`
-	Setup           *Setup           `xml:"setup,omitempty"`
-	Admin           *Admin           `xml:"admin,omitempty"`
-	Storefront      *Storefront      `xml:"storefront,omitempty"`
-	Permissions     *Permissions     `xml:"permissions,omitempty"`
-	AllowedHosts    *AllowedHosts    `xml:"allowed-hosts,omitempty"`
-	CustomFields    *CustomFields    `xml:"custom-fields,omitempty"`
-	Webhooks        *Webhooks        `xml:"webhooks,omitempty"`
-	Cookies         *Cookies         `xml:"cookies,omitempty"`
-	Payments        *Payments        `xml:"payments,omitempty"`
-	ShippingMethods *ShippingMethods `xml:"shipping-methods,omitempty"`
-	RuleConditions  *RuleConditions  `xml:"rule-conditions,omitempty"`
-	Tax             *Tax             `xml:"tax,omitempty"`
-	Gateways        *Gateways        `xml:"gateways,omitempty"`
+	XMLName              xml.Name      `xml:"manifest"`
+	Meta                 Meta          `xml:"meta"`
+	Setup                *Setup        `xml:"setup,omitempty"`
+	Admin                *Admin        `xml:"admin,omitempty"`
+	Permissions          *Permissions  `xml:"permissions,omitempty"`
+	Webhooks             *Webhooks     `xml:"webhooks,omitempty"`
+	Payments             *Payments     `xml:"payments,omitempty"`
+	Tax                  *Tax          `xml:"tax,omitempty"`
+	Gateways             *Gateways     `xml:"gateways,omitempty"`
+	Requirements         *Requirements `xml:"requirements,omitempty"`
+	ValidatesPermissions *bool         `xml:"validates-permissions,attr,omitempty"`
+	RemainingXML         []xml.Token   `xml:"-"`
+}
+
+func (m *Manifest) UnmarshalXML(d *xml.Decoder, start xml.StartElement) error {
+	m.XMLName = start.Name
+	for _, attr := range start.Attr {
+		if attr.Name.Local == "validates-permissions" {
+			v := attr.Value == "true"
+			m.ValidatesPermissions = &v
+		}
+	}
+
+	for {
+		tok, err := d.Token()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return err
+		}
+
+		switch t := tok.(type) {
+		case xml.StartElement:
+			if err := m.decodeChildElement(d, &t); err != nil {
+				return err
+			}
+		case xml.EndElement:
+			return nil
+		default:
+			if !isWhitespaceToken(tok) {
+				m.RemainingXML = append(m.RemainingXML, cloneToken(t))
+			}
+		}
+	}
+
+	return nil
+}
+
+func (m *Manifest) decodeChildElement(d *xml.Decoder, t *xml.StartElement) error {
+	switch t.Name.Local {
+	case "meta":
+		return d.DecodeElement(&m.Meta, t)
+	case "setup":
+		m.Setup = &Setup{}
+		return d.DecodeElement(m.Setup, t)
+	case "admin":
+		m.Admin = &Admin{}
+		return d.DecodeElement(m.Admin, t)
+	case "permissions":
+		m.Permissions = &Permissions{}
+		return d.DecodeElement(m.Permissions, t)
+	case "webhooks":
+		m.Webhooks = &Webhooks{}
+		return d.DecodeElement(m.Webhooks, t)
+	case "payments":
+		m.Payments = &Payments{}
+		return d.DecodeElement(m.Payments, t)
+	case "tax":
+		m.Tax = &Tax{}
+		return d.DecodeElement(m.Tax, t)
+	case "gateways":
+		m.Gateways = &Gateways{}
+		return d.DecodeElement(m.Gateways, t)
+	case "requirements":
+		m.Requirements = &Requirements{}
+		return d.DecodeElement(m.Requirements, t)
+	default:
+		m.RemainingXML = append(m.RemainingXML, *t)
+		inner, err := readElementTokens(d)
+		if err != nil {
+			return err
+		}
+		m.RemainingXML = append(m.RemainingXML, inner...)
+		return nil
+	}
+}
+
+func (m *Manifest) MarshalXML(e *xml.Encoder, start xml.StartElement) error {
+	start.Name = xml.Name{Local: "manifest"}
+	if m.ValidatesPermissions != nil {
+		start.Attr = append(start.Attr, xml.Attr{
+			Name:  xml.Name{Local: "validates-permissions"},
+			Value: fmt.Sprintf("%t", *m.ValidatesPermissions),
+		})
+	}
+	if err := e.EncodeToken(start); err != nil {
+		return err
+	}
+
+	writeField := func(name string, v any) error {
+		if isZero(v) {
+			return nil
+		}
+		innerStart := xml.StartElement{Name: xml.Name{Local: name}}
+		return e.EncodeElement(v, innerStart)
+	}
+
+	if err := writeField("meta", m.Meta); err != nil {
+		return err
+	}
+	if err := writeField("setup", m.Setup); err != nil {
+		return err
+	}
+	if err := writeField("admin", m.Admin); err != nil {
+		return err
+	}
+	if err := writeField("permissions", m.Permissions); err != nil {
+		return err
+	}
+	if err := writeField("webhooks", m.Webhooks); err != nil {
+		return err
+	}
+	if err := writeField("payments", m.Payments); err != nil {
+		return err
+	}
+	if err := writeField("tax", m.Tax); err != nil {
+		return err
+	}
+	if err := writeField("gateways", m.Gateways); err != nil {
+		return err
+	}
+	if err := writeField("requirements", m.Requirements); err != nil {
+		return err
+	}
+
+	for _, tok := range m.RemainingXML {
+		if err := e.EncodeToken(tok); err != nil {
+			return err
+		}
+	}
+
+	return e.EncodeToken(xml.EndElement{Name: xml.Name{Local: "manifest"}})
+}
+
+func readElementTokens(d *xml.Decoder) ([]xml.Token, error) {
+	depth := 1
+	var tokens []xml.Token
+	for depth > 0 {
+		tok, err := d.Token()
+		if err != nil {
+			return nil, err
+		}
+		tokens = append(tokens, cloneToken(tok))
+		switch tok.(type) {
+		case xml.StartElement:
+			depth++
+		case xml.EndElement:
+			depth--
+		}
+	}
+	return tokens, nil
+}
+
+func cloneToken(tok xml.Token) xml.Token {
+	switch t := tok.(type) {
+	case xml.CharData:
+		cp := make([]byte, len(t))
+		copy(cp, t)
+		return xml.CharData(cp)
+	case xml.Comment:
+		cp := make([]byte, len(t))
+		copy(cp, t)
+		return xml.Comment(cp)
+	case xml.ProcInst:
+		return xml.ProcInst{Target: t.Target, Inst: append([]byte(nil), t.Inst...)}
+	default:
+		return tok
+	}
+}
+
+func isWhitespaceToken(tok xml.Token) bool {
+	if cd, ok := tok.(xml.CharData); ok {
+		return len(strings.TrimSpace(string(cd))) == 0
+	}
+	return false
+}
+
+func isZero(v any) bool {
+	if v == nil {
+		return true
+	}
+	rv := reflect.ValueOf(v)
+	if rv.Kind() == reflect.Pointer {
+		return rv.IsNil()
+	}
+	return reflect.DeepEqual(v, reflect.Zero(rv.Type()).Interface())
 }
 
 type Meta struct {
@@ -57,6 +243,7 @@ type Permissions struct {
 	Create     []string `xml:"create,omitempty"`
 	Update     []string `xml:"update,omitempty"`
 	Delete     []string `xml:"delete,omitempty"`
+	Crud       []string `xml:"crud,omitempty"`
 	Permission []string `xml:"permission,omitempty"`
 }
 
@@ -94,7 +281,9 @@ type Tax struct {
 }
 
 type Gateways struct {
-	Checkout string `xml:"checkout,omitempty"`
+	Checkout       string `xml:"checkout,omitempty"`
+	Context        string `xml:"context,omitempty"`
+	InAppPurchases string `xml:"inAppPurchases,omitempty"`
 }
 
 type TranslatableString []struct {
@@ -155,6 +344,7 @@ type EntityList struct {
 	Promotion           *struct{} `xml:"promotion,omitempty"`
 	ProductStream       *struct{} `xml:"product_stream,omitempty"`
 	PropertyGroup       *struct{} `xml:"property_group,omitempty"`
+	PropertyGroupOption *struct{} `xml:"property_group_option,omitempty"`
 	ProductReview       *struct{} `xml:"product_review,omitempty"`
 	EventAction         *struct{} `xml:"event_action,omitempty"`
 	Country             *struct{} `xml:"country,omitempty"`
@@ -169,6 +359,8 @@ type EntityList struct {
 	Salutation          *struct{} `xml:"salutation,omitempty"`
 	ShippingMethod      *struct{} `xml:"shipping_method,omitempty"`
 	Tax                 *struct{} `xml:"tax,omitempty"`
+	Unit                *struct{} `xml:"unit,omitempty"`
+	NewsletterRecipient *struct{} `xml:"newsletter_recipient,omitempty"`
 }
 
 type CustomFieldList struct {
@@ -368,4 +560,8 @@ type TaxProvider struct {
 	Name       string `xml:"name"`
 	Priority   int    `xml:"priority"`
 	ProcessURL string `xml:"process-url"`
+}
+
+type Requirements struct {
+	InnerXML string `xml:",innerxml"`
 }
