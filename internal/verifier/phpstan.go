@@ -13,6 +13,8 @@ import (
 	"strings"
 
 	"github.com/shopware/shopware-cli/internal/validation"
+	"github.com/shopware/shopware-cli/logging"
+	"go.uber.org/zap"
 )
 
 var possiblePHPStanConfigs = []string{
@@ -71,6 +73,10 @@ func (p PhpStan) Check(ctx context.Context, check *Check, config ToolConfig) err
 
 		if !p.configExists(config.RootDir) {
 			phpstanArguments = append(phpstanArguments, "--configuration", path.Join(config.ToolDirectory, "php", "configs", "phpstan.neon"))
+		}
+
+		if logging.FromContext(ctx).Desugar().Core().Enabled(zap.DebugLevel) {
+			phpstanArguments = append(phpstanArguments, "-v")
 		}
 
 		phpstan := exec.CommandContext(ctx, "php", phpstanArguments...)
