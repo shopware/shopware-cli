@@ -31,7 +31,9 @@ func Execute(ctx context.Context) {
 	ctx, stop := signal.NotifyContext(ctx, syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
-	ctx = logging.WithLogger(ctx, logging.NewLogger(slices.Contains(os.Args, "--verbose")))
+	verbose := slices.Contains(os.Args, "--verbose")
+	ctx = logging.WithLogger(ctx, logging.NewLogger(verbose))
+	ctx = logging.WithVerbose(ctx, verbose)
 	ctx = system.WithInteraction(ctx, !slices.Contains(os.Args, "--no-interaction") && !slices.Contains(os.Args, "-n") && isatty.IsTerminal(os.Stdin.Fd()))
 	accountApi.SetUserAgent("shopware-cli/" + version)
 
