@@ -11,6 +11,7 @@ import (
 	"github.com/shyim/go-version"
 
 	"github.com/shopware/shopware-cli/internal/validation"
+	"github.com/shopware/shopware-cli/internal/xmlpath"
 )
 
 type App struct {
@@ -160,15 +161,20 @@ func (a App) UpdateMetaData(metadata *ExtensionMetadata) error {
 		return fmt.Errorf("could not read manifest.xml: %w", err)
 	}
 
-	var manifest Manifest
-	if err := xml.Unmarshal(manifestBytes, &manifest); err != nil {
+	manifest, err := xmlpath.Parse(manifestBytes)
+	if err != nil {
 		return fmt.Errorf("could not parse manifest.xml: %w", err)
 	}
 
-	manifest.Meta.Label = updateTranslatableString(manifest.Meta.Label, metadata.Label)
-	manifest.Meta.Description = updateTranslatableString(manifest.Meta.Description, metadata.Description)
+	meta := manifest.Root().Find("meta")
+	if meta == nil {
+		return fmt.Errorf("could not update manifest.xml: meta element not found")
+	}
 
-	newXml, err := xml.MarshalIndent(&manifest, "", "  ")
+	updateTranslatableXMLElement(meta, "label", metadata.Label)
+	updateTranslatableXMLElement(meta, "description", metadata.Description)
+
+	newXml, err := manifest.MarshalIndent("", "  ")
 	if err != nil {
 		return fmt.Errorf("could not marshal manifest.xml: %w", err)
 	}
@@ -182,7 +188,21 @@ func (a App) UpdateMetaData(metadata *ExtensionMetadata) error {
 	return nil
 }
 
-func updateTranslatableString(existing TranslatableString, translated ExtensionTranslated) TranslatableString {
+var metaElementOrder = []string{
+	"name",
+	"label",
+	"description",
+	"author",
+	"copyright",
+	"version",
+	"icon",
+	"license",
+	"compatibility",
+	"privacy",
+	"privacyPolicyExtensions",
+}
+
+func updateTranslatableXMLElement(parent *xmlpath.Element, name string, translated ExtensionTranslated) {
 	translations := []struct {
 		lang  string
 		value string
@@ -192,29 +212,27 @@ func updateTranslatableString(existing TranslatableString, translated ExtensionT
 	}
 
 	matched := make(map[string]bool)
-
-	for i, entry := range existing {
-		for _, t := range translations {
-			if t.value == "" {
+	for _, entry := range parent.FindAll(name) {
+		lang, _ := entry.Attr("lang")
+		for _, translation := range translations {
+			if translation.value == "" {
 				continue
 			}
-			if entry.Lang == t.lang || (entry.Lang == "" && t.lang == "en-GB") {
-				existing[i].Value = t.value
-				matched[t.lang] = true
+			if lang == translation.lang || (lang == "" && translation.lang == "en-GB") {
+				entry.SetText(translation.value)
+				matched[translation.lang] = true
 			}
 		}
 	}
 
-	for _, t := range translations {
-		if t.value != "" && !matched[t.lang] {
-			existing = append(existing, struct {
-				Value string `xml:",chardata"`
-				Lang  string `xml:"lang,attr,omitempty"`
-			}{Value: t.value, Lang: t.lang})
+	for _, translation := range translations {
+		if translation.value == "" || matched[translation.lang] {
+			continue
 		}
+		entry := parent.AppendChildInOrder(name, metaElementOrder)
+		entry.SetText(translation.value)
+		entry.SetAttr("lang", translation.lang)
 	}
-
-	return existing
 }
 
 func (a App) Validate(_ context.Context, check validation.Check) {
