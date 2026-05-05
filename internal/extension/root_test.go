@@ -236,6 +236,7 @@ func TestUpdateMetaData_App(t *testing.T) {
         <name>TestApp</name>
         <label>Old Label EN</label>
         <label lang="de-DE">Altes Label DE</label>
+        <future-label-metadata>keep</future-label-metadata>
         <description>Old description</description>
         <description lang="de-DE">Alte Beschreibung</description>
         <author>Test Author</author>
@@ -270,6 +271,14 @@ func TestUpdateMetaData_App(t *testing.T) {
 	assert.Equal(t, "New Label EN", meta.Label.English)
 	assert.Equal(t, "Neue Beschreibung", meta.Description.German)
 	assert.Equal(t, "New description", meta.Description.English)
+
+	manifestBytes, err := os.ReadFile(filepath.Join(tmpDir, "manifest.xml"))
+	require.NoError(t, err)
+	manifest := string(manifestBytes)
+	assert.Contains(t, manifest, "<future-label-metadata>keep</future-label-metadata>")
+	assert.Contains(t, manifest, `xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"`)
+	assert.Contains(t, manifest, `xsi:noNamespaceSchemaLocation="https://raw.githubusercontent.com/shopware/shopware/trunk/src/Core/Framework/App/Manifest/Schema/manifest-2.0.xsd"`)
+	assert.NotContains(t, manifest, "_xmlns")
 }
 
 func TestGetShopwareVersionConstraintFromComposer(t *testing.T) {
