@@ -149,6 +149,7 @@ var projectCI = &cobra.Command{
 			Browserslist:                 shopCfg.Build.Browserslist,
 			SkipExtensionsWithBuildFiles: true,
 			DisableStorefrontBuild:       shopCfg.Build.DisableStorefrontBuild,
+			SkipStorefrontAssetsInstall:  true,
 			ForceExtensionBuild:          convertForceExtensionBuild(shopCfg.Build.ForceExtensionBuild),
 			ForceAdminBuild:              shopCfg.Build.ForceAdminBuild,
 			KeepNodeModules:              shopCfg.Build.KeepNodeModules,
