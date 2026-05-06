@@ -56,8 +56,6 @@ func Parse(data []byte) (*Document, error) {
 			}
 			doc.root = element
 			doc.nodes = append(doc.nodes, elementNode(element))
-		case xml.EndElement:
-			return nil, fmt.Errorf("unexpected end element %q", t.Name.Local)
 		default:
 			if cloned, ok := cloneToken(t); ok {
 				doc.nodes = append(doc.nodes, tokenNode(cloned))
@@ -116,7 +114,7 @@ func (d *Document) MarshalIndent(prefix, indent string) ([]byte, error) {
 		}
 	}
 
-	if err := encoder.Flush(); err != nil {
+	if err := encoder.Close(); err != nil {
 		return nil, err
 	}
 
