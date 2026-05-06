@@ -4,7 +4,6 @@ linters:
   enable:
     - bodyclose
     - exhaustive
-    - goconst
     - goprintffuncname
     - govet
     - ineffassign
@@ -38,7 +37,6 @@ linters:
     - errname
     - ginkgolinter
     - gocheckcompilerdirectives
-    - goconst
     - godox
     - nilnil
   exclusions:
