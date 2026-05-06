@@ -1658,16 +1658,16 @@
         },
         {
             "name": "shopwarelabs/phpstan-shopware",
-            "version": "0.1.14",
+            "version": "0.2.0",
             "source": {
                 "type": "git",
                 "url": "https://github.com/shopwareLabs/phpstan-shopware.git",
-                "reference": "53d14dfed005083c09a4f0cbb7d1df706f8c29cc"
+                "reference": "c0310e9797cf5ce63fb55d53acc427f12c972c4f"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/shopwareLabs/phpstan-shopware/zipball/53d14dfed005083c09a4f0cbb7d1df706f8c29cc",
-                "reference": "53d14dfed005083c09a4f0cbb7d1df706f8c29cc",
+                "url": "https://api.github.com/repos/shopwareLabs/phpstan-shopware/zipball/c0310e9797cf5ce63fb55d53acc427f12c972c4f",
+                "reference": "c0310e9797cf5ce63fb55d53acc427f12c972c4f",
                 "shasum": ""
             },
             "require": {
@@ -1701,9 +1701,9 @@
             "description": "PhpStan Rules for Shopware",
             "support": {
                 "issues": "https://github.com/shopwareLabs/phpstan-shopware/issues",
-                "source": "https://github.com/shopwareLabs/phpstan-shopware/tree/0.1.14"
+                "source": "https://github.com/shopwareLabs/phpstan-shopware/tree/0.2.0"
             },
-            "time": "2026-02-02T04:58:21+00:00"
+            "time": "2026-05-06T09:59:12+00:00"
         },
         {
             "name": "spaze/phpstan-disallowed-calls",
@@ -2309,7 +2309,7 @@
         },
         {
             "name": "symfony/polyfill-php84",
-            "version": "v1.36.0",
+            "version": "v1.37.0",
             "source": {
                 "type": "git",
                 "url": "https://github.com/symfony/polyfill-php84.git",
@@ -2365,7 +2365,7 @@
                 "shim"
             ],
             "support": {
-                "source": "https://github.com/symfony/polyfill-php84/tree/v1.36.0"
+                "source": "https://github.com/symfony/polyfill-php84/tree/v1.37.0"
             },
             "funding": [
                 {
