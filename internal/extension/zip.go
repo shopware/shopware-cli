@@ -3,7 +3,6 @@ package extension
 import (
 	"context"
 	"encoding/json"
-	"encoding/xml"
 	"fmt"
 	"io"
 	"log"
@@ -15,6 +14,7 @@ import (
 	"github.com/shyim/go-version"
 
 	"github.com/shopware/shopware-cli/internal/changelog"
+	"github.com/shopware/shopware-cli/internal/xmlpath"
 	"github.com/shopware/shopware-cli/logging"
 )
 
@@ -221,17 +221,14 @@ func PrepareExtensionForRelease(ctx context.Context, sourceRoot, extensionRoot s
 		return err
 	}
 
-	var manifest Manifest
-
-	if err := xml.Unmarshal(bytes, &manifest); err != nil {
+	manifest, err := xmlpath.Parse(bytes)
+	if err != nil {
 		return fmt.Errorf("unmarshal manifest failed: %w", err)
 	}
 
-	if manifest.Setup != nil {
-		manifest.Setup.Secret = ""
-	}
+	manifest.Root().RemoveAll("setup/secret")
 
-	newManifest, err := xml.MarshalIndent(manifest, "", "  ")
+	newManifest, err := manifest.MarshalIndent("", "  ")
 	if err != nil {
 		return fmt.Errorf("cannot marshal manifest failed: %w", err)
 	}
