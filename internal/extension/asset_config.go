@@ -37,7 +37,6 @@ type AssetBuildConfig struct {
 	CleanupNodeModules           bool
 	DisableAdminBuild            bool
 	DisableStorefrontBuild       bool
-	SkipStorefrontAssetsInstall  bool
 	ShopwareRoot                 string
 	ShopwareVersion              *version.Constraints
 	Browserslist                 string

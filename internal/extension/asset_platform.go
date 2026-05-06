@@ -17,7 +17,6 @@ import (
 	"github.com/shopware/shopware-cli/internal/ci"
 	"github.com/shopware/shopware-cli/internal/esbuild"
 	"github.com/shopware/shopware-cli/internal/npm"
-	"github.com/shopware/shopware-cli/internal/phpexec"
 	"github.com/shopware/shopware-cli/logging"
 )
 
@@ -304,18 +303,6 @@ func BuildAssetsForExtensions(ctx context.Context, sources []asset.Source, asset
 				nodeWebpackCmd.Stderr = os.Stderr
 
 				if err := nodeWebpackCmd.Run(); err != nil {
-					return err
-				}
-			}
-
-			if !assetConfig.SkipStorefrontAssetsInstall {
-				installAssets := phpexec.ConsoleCommand(phpexec.AllowBinCI(ctx), "assets:install")
-				installAssets.Dir = shopwareRoot
-				installAssets.Stdin = os.Stdin
-				installAssets.Stdout = os.Stdout
-				installAssets.Stderr = os.Stderr
-
-				if err := installAssets.Run(); err != nil {
 					return err
 				}
 			}
