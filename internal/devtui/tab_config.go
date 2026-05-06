@@ -28,6 +28,8 @@ const (
 const (
 	profilerBlackfire = "blackfire"
 	profilerTideways  = "tideways"
+
+	defaultPHPVersionIndex = 1
 )
 
 var (
@@ -59,11 +61,13 @@ type ConfigModel struct {
 type configSavedMsg struct{}
 
 func NewConfigModel(cfg *shop.Config) ConfigModel {
-	m := ConfigModel{}
+	m := ConfigModel{
+		phpVersion: defaultPHPVersionIndex,
+	}
 
 	if cfg != nil && cfg.Docker != nil {
 		if cfg.Docker.PHP != nil {
-			m.phpVersion = indexOf(phpVersions, cfg.Docker.PHP.Version, 1) // default 8.3
+			m.phpVersion = indexOf(phpVersions, cfg.Docker.PHP.Version, defaultPHPVersionIndex) // default 8.3
 			m.profiler = indexOf(profilers, cfg.Docker.PHP.Profiler, 0)
 			m.blackfireServerID = newConfigInput("Server ID", cfg.Docker.PHP.BlackfireServerID)
 			m.blackfireServerToken = newConfigInput("Server Token", cfg.Docker.PHP.BlackfireServerToken)
