@@ -81,6 +81,18 @@ var (
 				Padding(0, 2)
 )
 
+func renderShowPasswordCheckbox(checked, focused bool) string {
+	box := "[ ]"
+	if checked {
+		box = "[x]"
+	}
+	style := lipgloss.NewStyle().Foreground(tui.MutedColor)
+	if focused {
+		style = lipgloss.NewStyle().Foreground(tui.BrandColor).Bold(true)
+	}
+	return style.Render(box + " Show password")
+}
+
 func renderConfirmButtons(yesLabel, noLabel string, yesActive bool) string {
 	var yes, no string
 	if yesActive {

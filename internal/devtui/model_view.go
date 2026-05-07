@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 
+	"charm.land/bubbles/v2/textinput"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 
@@ -296,9 +297,11 @@ func (m Model) renderInstallPrompt(b *strings.Builder) {
 		b.WriteString("\n\n")
 		b.WriteString(tui.TitleStyle.Render("Admin Password"))
 		b.WriteString("\n")
-		b.WriteString(tui.DimStyle.Render("Enter the password for the admin account"))
+		b.WriteString(tui.DimStyle.Render("Enter the password for the admin account (default: shopware)"))
 		b.WriteString("\n\n")
 		b.WriteString(m.install.password.View())
+		b.WriteString("\n\n")
+		b.WriteString(renderShowPasswordCheckbox(m.install.password.EchoMode == textinput.EchoNormal, m.install.checkboxFocused))
 	}
 }
 
@@ -319,7 +322,14 @@ func (m Model) installFooterHint() string {
 			tui.Shortcut{Key: "enter", Label: "Continue"},
 		)
 	case installStepPassword:
+		if m.install.checkboxFocused {
+			return tui.ShortcutBar(
+				tui.Shortcut{Key: "↑", Label: "Back"},
+				tui.Shortcut{Key: "enter", Label: "Toggle"},
+			)
+		}
 		return tui.ShortcutBar(
+			tui.Shortcut{Key: "↓/tab", Label: "Show password"},
 			tui.Shortcut{Key: "enter", Label: "Install"},
 		)
 	}
