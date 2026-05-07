@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os/exec"
+	"runtime"
 	"strings"
 
 	"charm.land/lipgloss/v2"
@@ -14,6 +15,34 @@ import (
 type MissingDependency struct {
 	Name   string
 	Reason string
+}
+
+type Incompatibility struct {
+	Title       string
+	Description string
+}
+
+// CheckIncompatibilities returns soft-warning issues with the chosen setup
+// (e.g. macOS Docker without libkrun, or a project folder on a Windows-mounted
+// path under WSL) that don't block project creation but degrade performance.
+func CheckIncompatibilities(useDocker bool, projectFolder string) []Incompatibility {
+	var incompatibilities []Incompatibility
+
+	if useDocker && runtime.GOOS == "darwin" && !IsDockerUsingLibkrun() {
+		incompatibilities = append(incompatibilities, Incompatibility{
+			Title:       "Using Docker on macOS without libkrun (Docker VMM) may cause severe performance issues with file watching",
+			Description: "Consider enabling libkrun in Docker Desktop settings for improved host mount performance",
+		})
+	}
+
+	if IsWSL() && IsWSLWindowsMount(projectFolder) {
+		incompatibilities = append(incompatibilities, Incompatibility{
+			Title:       "Creating a project in a Windows-mounted directory (/mnt/c, etc.) under WSL is known to cause severe performance issues",
+			Description: "Consider creating the project in the native Linux filesystem instead (e.g., ~/projects/)",
+		})
+	}
+
+	return incompatibilities
 }
 
 // CheckProjectDependencies returns the dependencies required to set up a
