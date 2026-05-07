@@ -402,25 +402,7 @@ var projectCreateCmd = &cobra.Command{
 			}
 		}
 
-		var missingDeps []missingDependency
-		if useDocker {
-			if _, err := exec.LookPath("docker"); err != nil {
-				missingDeps = append(missingDeps, missingDependency{name: "Docker", reason: "not installed"})
-			}
-		} else {
-			phpOk, err := system.IsPHPVersionAtLeast(cmd.Context(), "8.2")
-			switch {
-			case err != nil:
-				missingDeps = append(missingDeps, missingDependency{name: "PHP 8.2+", reason: "not installed"})
-			case !phpOk:
-				installed, _ := system.GetInstalledPHPVersion(cmd.Context())
-				missingDeps = append(missingDeps, missingDependency{name: "PHP 8.2+", reason: fmt.Sprintf("found PHP %s", strings.TrimSpace(installed))})
-			}
-
-			if _, err := exec.LookPath("composer"); err != nil {
-				missingDeps = append(missingDeps, missingDependency{name: "Composer", reason: "not installed"})
-			}
-		}
+		missingDeps := system.CheckProjectDependencies(cmd.Context(), useDocker)
 
 		validDeployments := map[string]bool{
 			packagist.DeploymentNone:         true,
@@ -442,7 +424,7 @@ var projectCreateCmd = &cobra.Command{
 		}
 
 		if len(missingDeps) > 0 {
-			fmt.Fprintln(os.Stderr, renderMissingDependencies(useDocker, missingDeps))
+			fmt.Fprintln(os.Stderr, system.RenderMissingDependencies(useDocker, missingDeps))
 			return fmt.Errorf("missing required dependencies")
 		}
 
@@ -604,51 +586,6 @@ var projectCreateCmd = &cobra.Command{
 
 		return nil
 	},
-}
-
-type missingDependency struct {
-	name   string
-	reason string
-}
-
-func renderMissingDependencies(useDocker bool, missing []missingDependency) string {
-	var b strings.Builder
-
-	b.WriteString(tui.RedText.Bold(true).Render("Missing Dependencies"))
-	b.WriteString("\n\n")
-	b.WriteString("The following requirement")
-	if len(missing) == 1 {
-		b.WriteString(" is")
-	} else {
-		b.WriteString("s are")
-	}
-	b.WriteString(" not met:\n\n")
-
-	cross := tui.RedText.Render("✗")
-	for _, m := range missing {
-		fmt.Fprintf(&b, "  %s %s %s\n", cross, tui.BoldText.Render(m.name), tui.DimText.Render("("+m.reason+")"))
-	}
-
-	b.WriteString("\n")
-	b.WriteString(tui.BoldText.Render("To create a Shopware project, install one of:"))
-	b.WriteString("\n\n")
-
-	arrow := tui.GreenText.Render("→")
-	b.WriteString("  " + arrow + " " + tui.RecommendedText.Render("Docker") + " " + tui.DimText.Render("(recommended)") + "\n")
-	b.WriteString("    " + tui.BlueText.Render("https://docs.docker.com/get-docker/") + "\n")
-	if !useDocker {
-		b.WriteString("    Then re-run with " + tui.BoldText.Render("--docker") + "\n")
-	}
-	b.WriteString("\n")
-	b.WriteString("  " + arrow + " " + tui.BoldText.Render("PHP 8.2+ and Composer") + "\n")
-	b.WriteString("    PHP:      " + tui.BlueText.Render("https://www.php.net/manual/en/install.php") + "\n")
-	b.WriteString("    Composer: " + tui.BlueText.Render("https://getcomposer.org/") + "\n")
-
-	return lipgloss.NewStyle().
-		Border(lipgloss.RoundedBorder()).
-		BorderForeground(tui.BlueColor).
-		Padding(1, 2).
-		Render(strings.TrimRight(b.String(), "\n"))
 }
 
 func resolveVersion(selectedVersion string, filteredVersions []*version.Version) string {
