@@ -33,7 +33,7 @@ const (
 )
 
 var (
-	phpVersions  = []string{"8.2", "8.3", "8.4"}
+	phpVersions  = []string{"8.2", "8.3", "8.4", "8.5"}
 	nodeVersions = []string{"22", "24"}
 	profilers    = []string{"", "xdebug", profilerBlackfire, profilerTideways, "pcov", "spx"}
 )
