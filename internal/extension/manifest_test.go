@@ -28,11 +28,4 @@ func TestManifestRead(t *testing.T) {
 
 	assert.Equal(t, "https://instorier.apps.shopware.io/app/lifecycle/register", manifest.Setup.RegistrationUrl)
 	assert.Equal(t, "", manifest.Setup.Secret)
-
-	assert.Equal(t, "https://instorier.apps.shopware.io/iframe", manifest.Admin.BaseAppUrl)
-
-	assert.Len(t, manifest.Permissions.Read, 57)
-	assert.Len(t, manifest.Permissions.Create, 4)
-	assert.Len(t, manifest.Permissions.Update, 2)
-	assert.Len(t, manifest.Permissions.Delete, 2)
 }

@@ -243,17 +243,17 @@ func BuildAssetsForExtensions(ctx context.Context, sources []asset.Source, asset
 			storefrontRelPath := PlatformRelPath(shopwareRoot, "Storefront", "Resources/app/storefront")
 			sfExec := assetConfig.ExecutorWithRelDir(storefrontRelPath)
 
+			npmPackage, err := npm.ReadPackage(storefrontRoot)
+			if err != nil {
+				return err
+			}
+
 			if assetConfig.NPMForceInstall || !npm.NodeModulesExists(storefrontRoot) {
 				if err := npm.PatchPackageLockToRemoveCanIUse(path.Join(storefrontRoot, "package-lock.json")); err != nil {
 					return err
 				}
 
 				additionalNpmParameters := []string{"caniuse-lite"}
-
-				npmPackage, err := npm.ReadPackage(storefrontRoot)
-				if err != nil {
-					return err
-				}
 
 				if npmPackage.HasDevDependency("puppeteer") {
 					additionalNpmParameters = append(additionalNpmParameters, "--production")
@@ -294,21 +294,27 @@ func BuildAssetsForExtensions(ctx context.Context, sources []asset.Source, asset
 				sfEnvMap["BROWSERSLIST"] = assetConfig.Browserslist
 			}
 
-			webpackExec := sfExec.WithEnv(sfEnvMap)
-			nodeWebpackCmd := webpackExec.NPMCommand(ctx, "exec", "--", "webpack", "--config", "webpack.config.js")
-			nodeWebpackCmd.Cmd.Stdout = os.Stdout
-			nodeWebpackCmd.Cmd.Stderr = os.Stderr
+			storefrontBuildExec := sfExec.WithEnv(sfEnvMap)
+			if npmPackage.HasScript("production") {
+				npmProduction := storefrontBuildExec.NPMCommand(ctx, "run", "production")
+				npmProduction.Cmd.Stdout = os.Stdout
+				npmProduction.Cmd.Stderr = os.Stderr
 
-			if err := nodeWebpackCmd.Run(); err != nil {
-				return err
+				if err := npmProduction.Run(); err != nil {
+					return err
+				}
+			} else {
+				nodeWebpackCmd := storefrontBuildExec.NPMCommand(ctx, "exec", "--", "webpack", "--config", "webpack.config.js")
+				nodeWebpackCmd.Cmd.Stdout = os.Stdout
+				nodeWebpackCmd.Cmd.Stderr = os.Stderr
+
+				if err := nodeWebpackCmd.Run(); err != nil {
+					return err
+				}
 			}
 
 			if assetConfig.CleanupNodeModules {
 				defer deletePaths(ctx, path.Join(storefrontRoot, "node_modules"))
-			}
-
-			if err != nil {
-				return err
 			}
 		}
 

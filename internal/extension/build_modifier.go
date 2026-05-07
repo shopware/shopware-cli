@@ -2,11 +2,12 @@ package extension
 
 import (
 	"encoding/json"
-	"encoding/xml"
 	"fmt"
 	"net/url"
 	"os"
 	"path"
+
+	"github.com/shopware/shopware-cli/internal/xmlpath"
 )
 
 type BuildModifierConfig struct {
@@ -19,27 +20,29 @@ func BuildModifier(ext Extension, extensionRoot string, config BuildModifierConf
 	if (config.AppBackendUrl != "" || config.AppBackendSecret != "" || config.Version != "") && ext.GetType() == TypePlatformApp {
 		manifestBytes, _ := os.ReadFile(path.Join(extensionRoot, "manifest.xml"))
 
-		var manifest Manifest
-
-		if err := xml.Unmarshal(manifestBytes, &manifest); err != nil {
+		manifest, err := xmlpath.Parse(manifestBytes)
+		if err != nil {
 			return fmt.Errorf("could not parse manifest.xml: %w", err)
 		}
+		manifestRoot := manifest.Root()
 
 		if config.Version != "" {
-			manifest.Meta.Version = config.Version
+			manifestRoot.EnsurePath("meta/version").SetText(config.Version)
 		}
 
-		if config.AppBackendSecret != "" && manifest.Setup != nil {
-			manifest.Setup.Secret = config.AppBackendSecret
+		if config.AppBackendSecret != "" {
+			if setup := manifestRoot.Find("setup"); setup != nil {
+				setup.EnsurePath("secret").SetText(config.AppBackendSecret)
+			}
 		}
 
 		if config.AppBackendUrl != "" {
-			if err := replaceUrlsInManifest(config, manifest); err != nil {
+			if err := replaceUrlsInManifest(config, manifestRoot); err != nil {
 				return err
 			}
 		}
 
-		newXml, err := xml.MarshalIndent(manifest, "", "  ")
+		newXml, err := manifest.MarshalIndent("", "  ")
 
 		if err != nil {
 			return fmt.Errorf("could not marshal manifest.xml: %w", err)
@@ -79,98 +82,113 @@ func BuildModifier(ext Extension, extensionRoot string, config BuildModifierConf
 	return nil
 }
 
-func replaceUrlsInManifest(config BuildModifierConfig, manifest Manifest) error {
+func replaceUrlsInManifest(config BuildModifierConfig, manifest *xmlpath.Element) error {
 	newBackendUrl, err := url.Parse(config.AppBackendUrl)
 
 	if err != nil {
 		return fmt.Errorf("could not parse app backend url: %w", err)
 	}
 
-	if manifest.Setup != nil {
-		if err := replaceUrl(&manifest.Setup.RegistrationUrl, newBackendUrl); err != nil {
+	if registrationUrl := manifest.Find("setup/registrationUrl"); registrationUrl != nil {
+		if err := replaceElementUrl(registrationUrl, newBackendUrl); err != nil {
 			return fmt.Errorf("could not replace app backend url: %w", err)
 		}
 	}
 
-	if manifest.Admin != nil {
-		if err := replaceUrl(&manifest.Admin.BaseAppUrl, newBackendUrl); err != nil {
+	if baseAppUrl := manifest.Find("admin/base-app-url"); baseAppUrl != nil {
+		if err := replaceElementUrl(baseAppUrl, newBackendUrl); err != nil {
 			return fmt.Errorf("could not replace app backend url: %w", err)
-		}
-
-		for index, button := range manifest.Admin.ActionButton {
-			if err := replaceUrl(&button.URL, newBackendUrl); err != nil {
-				return fmt.Errorf("could not replace action button url on index %d: %w", index, err)
-			}
 		}
 	}
 
-	if manifest.Gateways != nil {
-		if err := replaceUrl(&manifest.Gateways.Checkout, newBackendUrl); err != nil {
+	for index, button := range manifest.FindAll("admin/action-button") {
+		if err := replaceElementAttrUrl(button, "url", newBackendUrl); err != nil {
+			return fmt.Errorf("could not replace action button url on index %d: %w", index, err)
+		}
+	}
+
+	if checkout := manifest.Find("gateways/checkout"); checkout != nil {
+		if err := replaceElementUrl(checkout, newBackendUrl); err != nil {
 			return fmt.Errorf("could not replace checkout gateway url: %w", err)
 		}
 	}
 
-	if manifest.Payments != nil {
-		for _, payment := range manifest.Payments.PaymentMethod {
-			if err := replaceUrl(&payment.RefundURL, newBackendUrl); err != nil {
-				return fmt.Errorf("could not replace refund url: %w", err)
+	for _, payment := range manifest.FindAll("payments/payment-method") {
+		for _, child := range []struct {
+			name        string
+			description string
+		}{
+			{"refund-url", "refund url"},
+			{"capture-url", "capture url"},
+			{"finalize-url", "finalize url"},
+			{"pay-url", "pay url"},
+			{"recurring-url", "recurring url"},
+			{"validate-url", "validate url"},
+		} {
+			urlElement := payment.Find(child.name)
+			if urlElement == nil {
+				continue
 			}
-
-			if err := replaceUrl(&payment.CaptureURL, newBackendUrl); err != nil {
-				return fmt.Errorf("could not replace capture url: %w", err)
-			}
-
-			if err := replaceUrl(&payment.FinalizeURL, newBackendUrl); err != nil {
-				return fmt.Errorf("could not replace finanlize url: %w", err)
-			}
-
-			if err := replaceUrl(&payment.PayURL, newBackendUrl); err != nil {
-				return fmt.Errorf("could not replace pay url: %w", err)
-			}
-
-			if err := replaceUrl(&payment.RecurringURL, newBackendUrl); err != nil {
-				return fmt.Errorf("could not replace recurring url: %w", err)
-			}
-
-			if err := replaceUrl(&payment.ValidateURL, newBackendUrl); err != nil {
-				return fmt.Errorf("could not replace validate url: %w", err)
+			if err := replaceElementUrl(urlElement, newBackendUrl); err != nil {
+				return fmt.Errorf("could not replace %s: %w", child.description, err)
 			}
 		}
 	}
 
-	if manifest.Tax != nil {
-		for _, tax := range manifest.Tax.TaxProvider {
-			if err := replaceUrl(&tax.ProcessURL, newBackendUrl); err != nil {
-				return fmt.Errorf("could not replace tax provider url: %w", err)
-			}
+	for _, tax := range manifest.FindAll("tax/tax-provider") {
+		processURL := tax.Find("process-url")
+		if processURL == nil {
+			continue
+		}
+		if err := replaceElementUrl(processURL, newBackendUrl); err != nil {
+			return fmt.Errorf("could not replace tax provider url: %w", err)
 		}
 	}
 
-	if manifest.Webhooks != nil {
-		for _, webhook := range manifest.Webhooks.Webhook {
-			if err := replaceUrl(&webhook.URL, newBackendUrl); err != nil {
-				return fmt.Errorf("could not replace webhook url: %w", err)
-			}
+	for _, webhook := range manifest.FindAll("webhooks/webhook") {
+		if err := replaceElementAttrUrl(webhook, "url", newBackendUrl); err != nil {
+			return fmt.Errorf("could not replace webhook url: %w", err)
 		}
 	}
 	return nil
 }
 
-func replaceUrl(registrationUrl *string, backendUrl *url.URL) error {
-	if registrationUrl == nil || *registrationUrl == "" {
+func replaceElementUrl(element *xmlpath.Element, backendUrl *url.URL) error {
+	replaced, err := replaceUrl(element.Text(), backendUrl)
+	if err != nil {
+		return err
+	}
+	element.SetText(replaced)
+	return nil
+}
+
+func replaceElementAttrUrl(element *xmlpath.Element, attr string, backendUrl *url.URL) error {
+	currentURL, ok := element.Attr(attr)
+	if !ok {
 		return nil
 	}
 
-	currentUrl, err := url.Parse(*registrationUrl)
+	replaced, err := replaceUrl(currentURL, backendUrl)
+	if err != nil {
+		return err
+	}
+	element.SetAttr(attr, replaced)
+	return nil
+}
+
+func replaceUrl(registrationUrl string, backendUrl *url.URL) (string, error) {
+	if registrationUrl == "" {
+		return registrationUrl, nil
+	}
+
+	currentUrl, err := url.Parse(registrationUrl)
 
 	if err != nil {
-		return fmt.Errorf("could not parse url: %w", err)
+		return "", fmt.Errorf("could not parse url: %w", err)
 	}
 
 	currentUrl.Scheme = backendUrl.Scheme
 	currentUrl.Host = backendUrl.Host
 
-	*registrationUrl = currentUrl.String()
-
-	return nil
+	return currentUrl.String(), nil
 }

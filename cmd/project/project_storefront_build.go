@@ -69,6 +69,13 @@ var projectStorefrontBuildCmd = &cobra.Command{
 			return err
 		}
 
+		skipAssetsInstall, _ := cmd.PersistentFlags().GetBool("skip-assets-install")
+		if !skipAssetsInstall {
+			if err := runTransparentCommand(cmdExecutor.ConsoleCommand(cmd.Context(), "assets:install")); err != nil {
+				return err
+			}
+		}
+
 		skipThemeCompile, _ := cmd.PersistentFlags().GetBool("skip-theme-compile")
 		if skipThemeCompile {
 			return nil
@@ -80,6 +87,7 @@ var projectStorefrontBuildCmd = &cobra.Command{
 
 func init() {
 	projectRootCmd.AddCommand(projectStorefrontBuildCmd)
+	projectStorefrontBuildCmd.PersistentFlags().Bool("skip-assets-install", false, "Skips the assets installation")
 	projectStorefrontBuildCmd.PersistentFlags().Bool("skip-theme-compile", false, "Skip theme compilation")
 	projectStorefrontBuildCmd.PersistentFlags().Bool("force-install-dependencies", false, "Force install NPM dependencies")
 	projectStorefrontBuildCmd.PersistentFlags().String("only-extensions", "", "Only watch the given extensions (comma separated)")

@@ -438,6 +438,28 @@ var projectCreateCmd = &cobra.Command{
 			}
 		}
 
+		incompatibilities := system.CheckIncompatibilities(useDocker, projectFolder)
+
+		for _, incompatibility := range incompatibilities {
+			if interactive {
+				var continueAnyway string
+				if err := huh.NewForm(huh.NewGroup(
+					tui.NewYesNo().
+						Title(incompatibility.Title).
+						Description(fmt.Sprintf("%s. Do you want to continue anyway?", incompatibility.Description)).
+						Value(&continueAnyway),
+				)).Run(); err != nil {
+					return err
+				}
+
+				if continueAnyway == tui.No {
+					return fmt.Errorf("project creation cancelled")
+				}
+			} else {
+				logging.FromContext(cmd.Context()).Warnf("%s. %s", incompatibility.Title, incompatibility.Description)
+			}
+		}
+
 		if _, err := os.Stat(projectFolder); err == nil {
 			empty, err := system.IsDirEmpty(projectFolder)
 			if err != nil {
