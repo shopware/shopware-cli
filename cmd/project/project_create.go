@@ -437,25 +437,25 @@ var projectCreateCmd = &cobra.Command{
 			}
 		}
 
-		if system.IsWSLWindowsMount(projectFolder) {
-			wslMsg := "Creating a project in a Windows-mounted directory (/mnt/c, etc.) under WSL is known to cause severe performance issues. Consider creating the project in the native Linux filesystem instead (e.g., ~/projects/)."
+		incompatibilities := system.CheckIncompatibilities(useDocker, projectFolder)
 
+		for _, incompatibility := range incompatibilities {
 			if interactive {
-				var wslContinue string
+				var continueAnyway string
 				if err := huh.NewForm(huh.NewGroup(
 					tui.NewYesNo().
-						Title(wslMsg).
-						Description("Do you want to continue anyway?").
-						Value(&wslContinue),
+						Title(incompatibility.Title).
+						Description(fmt.Sprintf("%s. Do you want to continue anyway?", incompatibility.Description)).
+						Value(&continueAnyway),
 				)).Run(); err != nil {
 					return err
 				}
 
-				if wslContinue == tui.No {
+				if continueAnyway == tui.No {
 					return fmt.Errorf("project creation cancelled")
 				}
 			} else {
-				logging.FromContext(cmd.Context()).Warnf(wslMsg)
+				logging.FromContext(cmd.Context()).Warnf("%s. %s", incompatibility.Title, incompatibility.Description)
 			}
 		}
 
