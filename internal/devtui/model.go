@@ -94,13 +94,14 @@ var (
 )
 
 type installWizard struct {
-	step       installStep
-	cursor     int
-	confirmYes bool
-	language   string
-	currency   string
-	username   textinput.Model
-	password   textinput.Model
+	step            installStep
+	cursor          int
+	confirmYes      bool
+	language        string
+	currency        string
+	username        textinput.Model
+	password        textinput.Model
+	checkboxFocused bool
 }
 
 type Options struct {
