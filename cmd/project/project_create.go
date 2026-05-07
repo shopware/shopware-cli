@@ -402,13 +402,17 @@ var projectCreateCmd = &cobra.Command{
 			}
 		}
 
-		if !useDocker {
+		if useDocker {
+			if _, err := exec.LookPath("docker"); err != nil {
+				return fmt.Errorf("docker is not installed.\n\nTo create a Shopware project, you need either:\n  - Docker (recommended): install from https://docs.docker.com/get-docker/\n  - PHP 8.2+ and Composer: run again without --docker after installing PHP (https://www.php.net/manual/en/install.php) and Composer (https://getcomposer.org/)")
+			}
+		} else {
 			phpOk, err := system.IsPHPVersionAtLeast(cmd.Context(), "8.2")
 			if err != nil {
-				return fmt.Errorf("PHP 8.2 or higher is required: %w", err)
+				return fmt.Errorf("PHP 8.2 or higher is required for Shopware 6.\n\nTo create a Shopware project, you need either:\n  - Docker (recommended): install from https://docs.docker.com/get-docker/ and re-run with --docker\n  - PHP 8.2+ and Composer: install PHP from https://www.php.net/manual/en/install.php\n\nUnderlying error: %w", err)
 			}
 			if !phpOk {
-				return fmt.Errorf("PHP 8.2 or higher is required for Shopware 6")
+				return fmt.Errorf("PHP 8.2 or higher is required for Shopware 6.\n\nTo create a Shopware project, you need either:\n  - Docker (recommended): install from https://docs.docker.com/get-docker/ and re-run with --docker\n  - PHP 8.2+ and Composer: upgrade PHP from https://www.php.net/manual/en/install.php")
 			}
 		}
 
@@ -433,7 +437,7 @@ var projectCreateCmd = &cobra.Command{
 
 		if !useDocker {
 			if _, err := exec.LookPath("composer"); err != nil {
-				return fmt.Errorf("composer is not installed. Please install Composer (https://getcomposer.org/) or use the --docker flag")
+				return fmt.Errorf("composer is not installed.\n\nTo create a Shopware project, you need either:\n  - Docker (recommended): install from https://docs.docker.com/get-docker/ and re-run with --docker\n  - Composer: install from https://getcomposer.org/")
 			}
 		}
 
