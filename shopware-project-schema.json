@@ -140,7 +140,7 @@
         },
         "asset_caching": {
           "type": "boolean",
-          "description": "When enabled, built assets are cached locally and restored on subsequent builds when sources haven't changed"
+          "description": "When enabled, built assets are cached and restored on subsequent builds when sources haven't changed"
         },
         "hooks": {
           "$ref": "#/$defs/ConfigBuildHooks",
@@ -331,6 +331,10 @@
             ]
           },
           "type": "array"
+        },
+        "staging": {
+          "$ref": "#/$defs/ConfigDeploymentStaging",
+          "description": "Staging mode configuration for the deployment"
         }
       },
       "additionalProperties": false,
@@ -359,6 +363,17 @@
       },
       "type": "object",
       "title": "Extension overrides"
+    },
+    "ConfigDeploymentStaging": {
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "description": "When enabled, staging setup commands will be executed during installation and upgrade"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "description": "ConfigDeploymentStaging defines staging mode configuration."
     },
     "ConfigDump": {
       "properties": {
