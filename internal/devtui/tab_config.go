@@ -20,7 +20,6 @@ const (
 	fieldBlackfireServerID
 	fieldBlackfireServerToken
 	fieldTidewaysAPIKey
-	fieldNodeVersion
 	fieldSave
 	fieldCount // sentinel – number of fields
 )
@@ -33,18 +32,16 @@ const (
 )
 
 var (
-	phpVersions  = []string{"8.2", "8.3", "8.4", "8.5"}
-	nodeVersions = []string{"22", "24"}
-	profilers    = []string{"", "xdebug", profilerBlackfire, profilerTideways, "pcov", "spx"}
+	phpVersions = []string{"8.2", "8.3", "8.4", "8.5"}
+	profilers   = []string{"", "xdebug", profilerBlackfire, profilerTideways, "pcov", "spx"}
 )
 
 // ConfigModel holds the state for the Environment Config tab.
 type ConfigModel struct {
 	cursor configField
 
-	phpVersion  int // index into phpVersions
-	nodeVersion int // index into nodeVersions
-	profiler    int // index into profilers
+	phpVersion int // index into phpVersions
+	profiler   int // index into profilers
 
 	blackfireServerID    textinput.Model
 	blackfireServerToken textinput.Model
@@ -64,17 +61,12 @@ func NewConfigModel(cfg *shop.Config) ConfigModel {
 		phpVersion: defaultPHPVersionIndex,
 	}
 
-	if cfg != nil && cfg.Docker != nil {
-		if cfg.Docker.PHP != nil {
-			m.phpVersion = indexOf(phpVersions, cfg.Docker.PHP.Version, defaultPHPVersionIndex) // default 8.3
-			m.profiler = indexOf(profilers, cfg.Docker.PHP.Profiler, 0)
-			m.blackfireServerID = newConfigInput("Server ID", cfg.Docker.PHP.BlackfireServerID)
-			m.blackfireServerToken = newConfigInput("Server Token", cfg.Docker.PHP.BlackfireServerToken)
-			m.tidewaysAPIKey = newConfigInput("API Key", cfg.Docker.PHP.TidewaysAPIKey)
-		}
-		if cfg.Docker.Node != nil {
-			m.nodeVersion = indexOf(nodeVersions, cfg.Docker.Node.Version, 0)
-		}
+	if cfg != nil && cfg.Docker != nil && cfg.Docker.PHP != nil {
+		m.phpVersion = indexOf(phpVersions, cfg.Docker.PHP.Version, defaultPHPVersionIndex) // default 8.3
+		m.profiler = indexOf(profilers, cfg.Docker.PHP.Profiler, 0)
+		m.blackfireServerID = newConfigInput("Server ID", cfg.Docker.PHP.BlackfireServerID)
+		m.blackfireServerToken = newConfigInput("Server Token", cfg.Docker.PHP.BlackfireServerToken)
+		m.tidewaysAPIKey = newConfigInput("API Key", cfg.Docker.PHP.TidewaysAPIKey)
 	}
 
 	// Ensure text inputs are initialized even if config was nil.
@@ -142,8 +134,6 @@ func (m ConfigModel) PickerForCursor() Modal {
 	switch m.cursor { //nolint:exhaustive
 	case fieldPHPVersion:
 		return newListPicker(fieldPHPVersion, "PHP Version", phpVersions, nil, m.phpVersion)
-	case fieldNodeVersion:
-		return newListPicker(fieldNodeVersion, "Node.js Version", nodeVersions, nil, m.nodeVersion)
 	case fieldProfiler:
 		labels := make([]string, len(profilers))
 		for i, p := range profilers {
@@ -173,12 +163,6 @@ func (m *ConfigModel) ApplyPickerValue(field configField, value string) bool {
 		idx := indexOf(phpVersions, value, m.phpVersion)
 		if idx != m.phpVersion {
 			m.phpVersion = idx
-			changed = true
-		}
-	case fieldNodeVersion:
-		idx := indexOf(nodeVersions, value, m.nodeVersion)
-		if idx != m.nodeVersion {
-			m.nodeVersion = idx
 			changed = true
 		}
 	case fieldProfiler:
@@ -244,7 +228,7 @@ func (m ConfigModel) isFieldVisible(f configField) bool {
 		return profilerName == profilerBlackfire
 	case fieldTidewaysAPIKey:
 		return profilerName == profilerTideways
-	case fieldPHPVersion, fieldProfiler, fieldNodeVersion, fieldSave, fieldCount:
+	case fieldPHPVersion, fieldProfiler, fieldSave, fieldCount:
 		return true
 	}
 	return true
@@ -259,12 +243,8 @@ func (m ConfigModel) ApplyToConfig(cfg *shop.Config) {
 	if cfg.Docker.PHP == nil {
 		cfg.Docker.PHP = &shop.ConfigDockerPHP{}
 	}
-	if cfg.Docker.Node == nil {
-		cfg.Docker.Node = &shop.ConfigDockerNode{}
-	}
 
 	cfg.Docker.PHP.Version = phpVersions[m.phpVersion]
-	cfg.Docker.Node.Version = nodeVersions[m.nodeVersion]
 	cfg.Docker.PHP.Profiler = profilers[m.profiler]
 
 	// Credentials are stored in the local config file, not here.
@@ -319,13 +299,6 @@ func (m ConfigModel) View(width, height int) string {
 	if profilerName == profilerTideways {
 		s.WriteString(m.renderInput(fieldTidewaysAPIKey, "API Key", m.tidewaysAPIKey, selectedArrow, normalIndent))
 	}
-
-	s.WriteString(divider)
-
-	// --- Node Settings ---
-	s.WriteString(tui.TitleStyle.Render("Node.js"))
-	s.WriteString("\n")
-	s.WriteString(m.renderSelect(fieldNodeVersion, "Version", nodeVersions[m.nodeVersion], selectedArrow, normalIndent))
 
 	s.WriteString(divider)
 

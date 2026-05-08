@@ -11,9 +11,8 @@ import (
 func TestNewConfigModel_NilConfig(t *testing.T) {
 	m := NewConfigModel(nil)
 
-	assert.Equal(t, 1, m.phpVersion)  // default 8.3 (index 1)
-	assert.Equal(t, 0, m.nodeVersion) // default 22 (index 0)
-	assert.Equal(t, 0, m.profiler)    // default none (index 0)
+	assert.Equal(t, 1, m.phpVersion) // default 8.3 (index 1)
+	assert.Equal(t, 0, m.profiler)   // default none (index 0)
 	assert.False(t, m.saved)
 	assert.False(t, m.modified)
 }
@@ -26,31 +25,25 @@ func TestNewConfigModel_WithConfig(t *testing.T) {
 				Profiler:          "blackfire",
 				BlackfireServerID: "my-server-id",
 			},
-			Node: &shop.ConfigDockerNode{
-				Version: "24",
-			},
 		},
 	}
 
 	m := NewConfigModel(cfg)
 
-	assert.Equal(t, 0, m.phpVersion)  // 8.2 is index 0
-	assert.Equal(t, 1, m.nodeVersion) // 24 is index 1
-	assert.Equal(t, 2, m.profiler)    // blackfire is index 2
+	assert.Equal(t, 0, m.phpVersion) // 8.2 is index 0
+	assert.Equal(t, 2, m.profiler)   // blackfire is index 2
 	assert.Equal(t, "my-server-id", m.blackfireServerID.Value())
 }
 
 func TestConfigModel_ApplyToConfig(t *testing.T) {
 	cfg := &shop.Config{}
 	m := NewConfigModel(nil)
-	m.phpVersion = 2  // 8.4
-	m.nodeVersion = 1 // 24
-	m.profiler = 1    // xdebug
+	m.phpVersion = 2 // 8.4
+	m.profiler = 1   // xdebug
 
 	m.ApplyToConfig(cfg)
 
 	assert.Equal(t, "8.4", cfg.Docker.PHP.Version)
-	assert.Equal(t, "24", cfg.Docker.Node.Version)
 	assert.Equal(t, "xdebug", cfg.Docker.PHP.Profiler)
 	assert.Empty(t, cfg.Docker.PHP.BlackfireServerID)
 }
@@ -133,18 +126,27 @@ func TestConfigModel_CursorNavigation(t *testing.T) {
 	m.moveCursorDown()
 	assert.Equal(t, fieldProfiler, m.cursor)
 
-	// Should skip hidden credential fields to Node Version.
+	// Should skip hidden credential fields straight to Save.
 	m.moveCursorDown()
-	assert.Equal(t, fieldNodeVersion, m.cursor, "should skip hidden fields to Node Version")
-
-	m.moveCursorDown()
-	assert.Equal(t, fieldSave, m.cursor)
-
-	m.moveCursorUp()
-	assert.Equal(t, fieldNodeVersion, m.cursor, "should go back to Node Version")
+	assert.Equal(t, fieldSave, m.cursor, "should skip hidden fields to Save")
 
 	m.moveCursorUp()
 	assert.Equal(t, fieldProfiler, m.cursor, "should skip hidden fields going up")
+}
+
+func TestConfigModel_CursorNavigation_BlackfireVisible(t *testing.T) {
+	m := NewConfigModel(nil)
+	m.profiler = indexOf(profilers, "blackfire", 0)
+
+	assert.Equal(t, fieldPHPVersion, m.cursor)
+	m.moveCursorDown()
+	assert.Equal(t, fieldProfiler, m.cursor)
+	m.moveCursorDown()
+	assert.Equal(t, fieldBlackfireServerID, m.cursor)
+	m.moveCursorDown()
+	assert.Equal(t, fieldBlackfireServerToken, m.cursor)
+	m.moveCursorDown()
+	assert.Equal(t, fieldSave, m.cursor)
 }
 
 func TestConfigModel_PickerForCursor_Select(t *testing.T) {

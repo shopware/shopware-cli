@@ -151,7 +151,7 @@
         },
         "asset_caching": {
           "type": "boolean",
-          "description": "When enabled, built assets are cached locally and restored on subsequent builds when sources haven't changed"
+          "description": "When enabled, built assets are cached and restored on subsequent builds when sources haven't changed"
         },
         "hooks": {
           "$ref": "#/$defs/ConfigBuildHooks",
@@ -376,24 +376,6 @@
         "php": {
           "$ref": "#/$defs/ConfigDockerPHP",
           "description": "PHP configuration for the Docker dev image"
-        },
-        "node": {
-          "$ref": "#/$defs/ConfigDockerNode",
-          "description": "Node.js configuration for the Docker dev image"
-        }
-      },
-      "additionalProperties": false,
-      "type": "object"
-    },
-    "ConfigDockerNode": {
-      "properties": {
-        "version": {
-          "type": "string",
-          "enum": [
-            "22",
-            "24"
-          ],
-          "description": "Node.js version (e.g. \"22\", \"24\"). Defaults to \"22\"."
         }
       },
       "additionalProperties": false,

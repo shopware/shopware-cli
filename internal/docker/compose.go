@@ -11,10 +11,13 @@ import (
 	"github.com/shopware/shopware-cli/internal/shop"
 )
 
+// nodeVersion is the Node.js version baked into the dev container image. It
+// is no longer user-configurable: only one version is supported at a time.
+const nodeVersion = "24"
+
 // ComposeOptions holds configuration for generating the compose file.
 type ComposeOptions struct {
 	PHPVersion           string
-	NodeVersion          string
 	PHPProfiler          string
 	BlackfireServerID    string
 	BlackfireServerToken string
@@ -26,13 +29,6 @@ func (o *ComposeOptions) phpVersion() string {
 		return o.PHPVersion
 	}
 	return "8.3"
-}
-
-func (o *ComposeOptions) nodeVersion() string {
-	if o != nil && o.NodeVersion != "" {
-		return o.NodeVersion
-	}
-	return "22"
 }
 
 // ComposeOptionsFromConfig creates ComposeOptions from a shop.Config.
@@ -47,9 +43,6 @@ func ComposeOptionsFromConfig(cfg *shop.Config) *ComposeOptions {
 		opts.BlackfireServerID = cfg.Docker.PHP.BlackfireServerID
 		opts.BlackfireServerToken = cfg.Docker.PHP.BlackfireServerToken
 		opts.TidewaysAPIKey = cfg.Docker.PHP.TidewaysAPIKey
-	}
-	if cfg.Docker.Node != nil {
-		opts.NodeVersion = cfg.Docker.Node.Version
 	}
 	return opts
 }
@@ -124,7 +117,7 @@ func buildCompose(hasAMQP, hasElasticsearch bool, opts *ComposeOptions) yaml.Nod
 	}
 
 	web := newMappingNode()
-	addKeyValue(web, "image", fmt.Sprintf("ghcr.io/shopware/docker-dev:php%s-node%s-caddy", opts.phpVersion(), opts.nodeVersion()))
+	addKeyValue(web, "image", fmt.Sprintf("ghcr.io/shopware/docker-dev:php%s-node%s-caddy", opts.phpVersion(), nodeVersion))
 	addKeyValueNode(web, "ports", newSequenceNode(
 		"8000:8000", "8080:8080", "9999:9999", "9998:9998", "5173:5173", "5773:5773",
 	))

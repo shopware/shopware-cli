@@ -419,8 +419,6 @@ type ConfigValidationIgnoreExtension struct {
 type ConfigDocker struct {
 	// PHP configuration for the Docker dev image
 	PHP *ConfigDockerPHP `yaml:"php,omitempty"`
-	// Node.js configuration for the Docker dev image
-	Node *ConfigDockerNode `yaml:"node,omitempty"`
 }
 
 type ConfigDockerPHP struct {
@@ -496,11 +494,6 @@ func (ConfigDockerPHP) JSONSchema() *jsonschema.Schema {
 			},
 		},
 	}
-}
-
-type ConfigDockerNode struct {
-	// Node.js version (e.g. "22", "24"). Defaults to "22".
-	Version string `yaml:"version,omitempty" jsonschema:"enum=22,enum=24"`
 }
 
 type ConfigImageProxy struct {

@@ -28,7 +28,7 @@ func TestGenerateComposeFile(t *testing.T) {
 		assert.Contains(t, compose, "adminer:")
 		assert.Contains(t, compose, "mailer:")
 		assert.Contains(t, compose, "db-data:")
-		assert.Contains(t, compose, "ghcr.io/shopware/docker-dev:php8.3-node22-caddy")
+		assert.Contains(t, compose, "ghcr.io/shopware/docker-dev:php8.3-node24-caddy")
 		assert.Contains(t, compose, "mariadb:11.8")
 		assert.Contains(t, compose, "mailpit")
 		assert.NotContains(t, compose, "lavinmq")
@@ -94,24 +94,8 @@ func TestGenerateComposeFile(t *testing.T) {
 		assert.NoError(t, err)
 
 		compose := string(result)
-		assert.Contains(t, compose, "ghcr.io/shopware/docker-dev:php8.2-node22-caddy")
+		assert.Contains(t, compose, "ghcr.io/shopware/docker-dev:php8.2-node24-caddy")
 		assert.NotContains(t, compose, "php8.3")
-	})
-
-	t.Run("custom node version", func(t *testing.T) {
-		t.Parallel()
-		lock := &packagist.ComposerLock{
-			Packages: []packagist.ComposerLockPackage{
-				{Name: "shopware/core", Version: "6.6.0.0"},
-			},
-		}
-
-		result, err := GenerateComposeFile(lock, &ComposeOptions{NodeVersion: "24"})
-		assert.NoError(t, err)
-
-		compose := string(result)
-		assert.Contains(t, compose, "ghcr.io/shopware/docker-dev:php8.3-node24-caddy")
-		assert.NotContains(t, compose, "node22")
 	})
 
 	t.Run("with php profiler", func(t *testing.T) {
