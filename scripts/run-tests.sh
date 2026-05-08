@@ -19,6 +19,10 @@ go test -run='^$' ./...
 export GOFLAGS="${GOFLAGS:-} -mod=readonly"
 export GOPROXY=off
 
+# Tells tests that depend on real external downloads (e.g. fetching PHP wasm
+# binaries or dart-sass) to skip themselves instead of failing on DNS.
+export SHOPWARE_CLI_NO_NETWORK=1
+
 case "$(uname -s)" in
     Darwin)
         if ! command -v sandbox-exec >/dev/null 2>&1; then

@@ -8,8 +8,8 @@ import (
 )
 
 func TestDownloadPHPFile(t *testing.T) {
-	if os.Getenv("NIX_CC") != "" {
-		t.Skip("Downloading does not work in Nix build")
+	if os.Getenv("NIX_CC") != "" || os.Getenv("SHOPWARE_CLI_NO_NETWORK") != "" {
+		t.Skip("Downloading does not work without network access")
 	}
 
 	t.Setenv("SHOPWARE_CLI_CACHE_DIR", t.TempDir())

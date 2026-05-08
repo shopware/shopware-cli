@@ -46,8 +46,8 @@ func TestESBuildAdmin(t *testing.T) {
 }
 
 func TestESBuildAdminWithSCSS(t *testing.T) {
-	if os.Getenv("NIX_CC") != "" {
-		t.Skip("Downloading does not work in Nix build")
+	if os.Getenv("NIX_CC") != "" || os.Getenv("SHOPWARE_CLI_NO_NETWORK") != "" {
+		t.Skip("Downloading does not work without network access")
 	}
 
 	dir := t.TempDir()
