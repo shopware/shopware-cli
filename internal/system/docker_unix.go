@@ -49,4 +49,3 @@ func IsDockerUsingLibkrun() bool {
 
 	return settings.UseLibkrun
 }
-

@@ -56,4 +56,3 @@ func TestIsDockerUsingLibkrun(t *testing.T) {
 		})
 	}
 }
-
