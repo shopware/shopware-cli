@@ -396,8 +396,12 @@ func (p PlatformPlugin) Validate(c context.Context, check validation.Check) {
 	validateExtensionIcon(p, check)
 
 	validateTheme(p, check)
-	validatePHPFiles(c, p, check)
+	validatePHPFilesFn(c, p, check)
 }
+
+// validatePHPFilesFn can be overridden in tests to skip PHP file validation,
+// which would otherwise require network access to download the PHP wasm binary.
+var validatePHPFilesFn = validatePHPFiles
 
 func validatePHPFiles(c context.Context, ext Extension, check validation.Check) {
 	constraint, err := ext.GetShopwareVersionConstraint()

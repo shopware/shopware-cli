@@ -1,17 +1,21 @@
 package extension
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"testing"
 
+	"github.com/shopware/shopware-cli/internal/validation"
 	"github.com/stretchr/testify/assert"
 )
 
 func setupMockPHPVersionServer(t *testing.T) {
 	t.Helper()
+	t.Setenv("SHOPWARE_CLI_CACHE_DIR", t.TempDir())
+
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(`{"6.4.0.0": "7.4", "6.5.0.0": "8.1", "6.6.0.0": "8.2"}`))
@@ -22,6 +26,12 @@ func setupMockPHPVersionServer(t *testing.T) {
 	phpVersionURL = server.URL
 	t.Cleanup(func() {
 		phpVersionURL = original
+	})
+
+	originalValidate := validatePHPFilesFn
+	validatePHPFilesFn = func(_ context.Context, _ Extension, _ validation.Check) {}
+	t.Cleanup(func() {
+		validatePHPFilesFn = originalValidate
 	})
 }
 

@@ -12,6 +12,8 @@ func TestDownloadPHPFile(t *testing.T) {
 		t.Skip("Downloading does not work in Nix build")
 	}
 
+	t.Setenv("SHOPWARE_CLI_CACHE_DIR", t.TempDir())
+
 	_, err := findPHPWasmFile(t.Context(), "7.4")
 	assert.NoError(t, err)
 }
