@@ -5,3 +5,7 @@ package system
 func IsDockerMountable() bool {
 	return false
 }
+
+func IsDockerUsingLibkrun() bool {
+	return false
+}
