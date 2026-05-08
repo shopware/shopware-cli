@@ -720,7 +720,7 @@ func runComposerInstall(ctx context.Context, projectFolder string, useDocker boo
 		}
 
 		dockerArgs = append(dockerArgs,
-			"ghcr.io/shopware/docker-dev:php8.3-node22-caddy",
+			"ghcr.io/shopware/docker-dev:php8.3-node24-caddy",
 			"composer", "install", "--no-interaction")
 
 		cmdInstall = exec.CommandContext(ctx, "docker", dockerArgs...)
