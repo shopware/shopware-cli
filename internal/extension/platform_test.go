@@ -8,8 +8,9 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/shopware/shopware-cli/internal/validation"
 	"github.com/stretchr/testify/assert"
+
+	"github.com/shopware/shopware-cli/internal/validation"
 )
 
 func setupMockPHPVersionServer(t *testing.T) {
