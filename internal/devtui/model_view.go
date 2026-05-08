@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"strings"
 
-	"charm.land/bubbles/v2/textinput"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 
@@ -19,15 +18,17 @@ func (m Model) View() tea.View {
 	v := tea.NewView("")
 	v.AltScreen = true
 
-	switch m.overlay {
-	case overlayNone:
+	switch m.phase {
+	case phaseDashboard:
 		v.Content = m.renderDashboard()
-	case overlayCommandPalette:
-		v.Content = m.palette.view(m.width, m.height)
-	case overlayStarting, overlayStopConfirm, overlayStopping, overlayInstallPrompt, overlayInstalling:
-		v.Content = m.renderOverlay()
-	case overlayTask:
+	case phaseStarting, phaseStopping, phaseInstallPrompt, phaseInstalling:
+		v.Content = m.renderPhase()
+	case phaseTask:
 		v.Content = m.renderDockerLogs(m.taskTitle, "")
+	}
+
+	if m.modal != nil {
+		v.Content = m.modal.View(m.width, m.height)
 	}
 
 	return v
@@ -88,7 +89,6 @@ func (m Model) renderDashboardFooter() string {
 	if m.activeTab == tabConfig {
 		shortcuts := []tui.Shortcut{
 			{Key: "↑/↓", Label: "Navigate"},
-			{Key: "←/→", Label: "Change value"},
 			{Key: "enter", Label: "Edit/Save"},
 			{Key: "tab", Label: "Next tab"},
 			{Key: "ctrl+c", Label: "Exit"},
@@ -103,44 +103,31 @@ func (m Model) renderDashboardFooter() string {
 	)
 }
 
-func (m Model) renderOverlay() string {
+func (m Model) renderPhase() string {
 	var content strings.Builder
 	var footerHint string
 
-	switch m.overlay {
-	case overlayStarting:
+	switch m.phase {
+	case phaseStarting:
 		footerHint = tui.ShortcutBadge("l", "Toggle logs")
 		if m.dockerShowLogs {
 			return m.renderDockerLogs("Starting Docker containers...", footerHint)
 		}
 		cardContent := fmt.Sprintf("%s Starting Docker containers...", m.dockerSpinner.View())
 		content.WriteString(tui.RenderPhaseCard(cardContent))
-	case overlayStopConfirm:
-		var card strings.Builder
-		warnStyle := lipgloss.NewStyle().Bold(true).Foreground(tui.ErrorColor)
-		card.WriteString(warnStyle.Render("Stop Docker containers?"))
-		card.WriteString("\n")
-		card.WriteString(tui.DimStyle.Render("Do you want to stop the running Docker containers?\nThey can be restarted with shopware-cli project dev."))
-		card.WriteString("\n\n")
-		card.WriteString(renderConfirmButtons("Yes, stop", "No, quit", m.stopConfirmYes))
-		content.WriteString(tui.RenderPhaseCard(card.String()))
-		footerHint = tui.ShortcutBar(
-			tui.Shortcut{Key: "←/→", Label: "Select"},
-			tui.Shortcut{Key: "enter", Label: "Confirm"},
-		)
-	case overlayStopping:
+	case phaseStopping:
 		footerHint = tui.ShortcutBadge("l", "Toggle logs")
 		if m.dockerShowLogs {
 			return m.renderDockerLogs("Stopping Docker containers...", footerHint)
 		}
 		cardContent := fmt.Sprintf("%s Stopping Docker containers...", m.dockerSpinner.View())
 		content.WriteString(tui.RenderPhaseCard(cardContent))
-	case overlayInstallPrompt:
+	case phaseInstallPrompt:
 		var card strings.Builder
 		m.renderInstallPrompt(&card)
 		content.WriteString(tui.RenderPhaseCard(card.String()))
 		footerHint = m.installFooterHint()
-	case overlayInstalling:
+	case phaseInstalling:
 		if m.installProg.showLogs {
 			footerHint = tui.ShortcutBadge("l", "Toggle logs")
 			return m.renderDockerLogs("Installing Shopware...", footerHint)
@@ -164,7 +151,7 @@ func (m Model) renderOverlay() string {
 		}
 		content.WriteString(tui.RenderPhaseCard(strings.TrimRight(card.String(), "\n")))
 		footerHint = tui.ShortcutBadge("l", "Toggle logs")
-	case overlayNone, overlayCommandPalette, overlayTask:
+	case phaseDashboard, phaseTask:
 	}
 
 	return renderPhaseLayout(content.String(), m.width, m.height, footerHint)
@@ -253,85 +240,4 @@ func (m Model) overlayMaxLines() int {
 		return 10
 	}
 	return maxLines
-}
-
-func (m Model) renderInstallPrompt(b *strings.Builder) {
-	switch m.install.step {
-	case installStepAsk:
-		warnStyle := lipgloss.NewStyle().Bold(true).Foreground(tui.ErrorColor)
-		b.WriteString(warnStyle.Render("Shopware is not installed"))
-		b.WriteString("\n")
-		b.WriteString(tui.DimStyle.Render("This project has not been set up yet. The installation\nwill create the database, run migrations and configure\nyour local development environment."))
-		b.WriteString("\n\n")
-		b.WriteString(renderConfirmButtons("Yes, install now", "No, skip", m.install.confirmYes))
-
-	case installStepLanguage:
-		b.WriteString(tui.TextBadge("Step 1/4"))
-		b.WriteString("\n\n")
-		opts := make([]tui.SelectOption, len(installLanguages))
-		for i, lang := range installLanguages {
-			opts[i] = tui.SelectOption{Label: lang.label, Detail: lang.id}
-		}
-		b.WriteString(tui.RenderSelectList("Default Language", "Select the primary language for your storefront", opts, m.install.cursor))
-
-	case installStepCurrency:
-		b.WriteString(tui.TextBadge("Step 2/4"))
-		b.WriteString("\n\n")
-		opts := make([]tui.SelectOption, len(installCurrencies))
-		for i, curr := range installCurrencies {
-			opts[i] = tui.SelectOption{Label: curr}
-		}
-		b.WriteString(tui.RenderSelectList("Default Currency", "Select the default currency for pricing", opts, m.install.cursor))
-
-	case installStepUsername:
-		b.WriteString(tui.TextBadge("Step 3/4"))
-		b.WriteString("\n\n")
-		b.WriteString(tui.TitleStyle.Render("Admin Username"))
-		b.WriteString("\n")
-		b.WriteString(tui.DimStyle.Render("Enter the username for the admin account"))
-		b.WriteString("\n\n")
-		b.WriteString(m.install.username.View())
-
-	case installStepPassword:
-		b.WriteString(tui.TextBadge("Step 4/4"))
-		b.WriteString("\n\n")
-		b.WriteString(tui.TitleStyle.Render("Admin Password"))
-		b.WriteString("\n")
-		b.WriteString(tui.DimStyle.Render("Enter the password for the admin account (default: shopware)"))
-		b.WriteString("\n\n")
-		b.WriteString(m.install.password.View())
-		b.WriteString("\n\n")
-		b.WriteString(renderShowPasswordCheckbox(m.install.password.EchoMode == textinput.EchoNormal, m.install.checkboxFocused))
-	}
-}
-
-func (m Model) installFooterHint() string {
-	switch m.install.step {
-	case installStepAsk:
-		return tui.ShortcutBar(
-			tui.Shortcut{Key: "←/→", Label: "Select"},
-			tui.Shortcut{Key: "enter", Label: "Confirm"},
-		)
-	case installStepLanguage, installStepCurrency:
-		return tui.ShortcutBar(
-			tui.Shortcut{Key: "↑/↓", Label: "Select"},
-			tui.Shortcut{Key: "enter", Label: "Confirm"},
-		)
-	case installStepUsername:
-		return tui.ShortcutBar(
-			tui.Shortcut{Key: "enter", Label: "Continue"},
-		)
-	case installStepPassword:
-		if m.install.checkboxFocused {
-			return tui.ShortcutBar(
-				tui.Shortcut{Key: "↑", Label: "Back"},
-				tui.Shortcut{Key: "enter", Label: "Toggle"},
-			)
-		}
-		return tui.ShortcutBar(
-			tui.Shortcut{Key: "↓/tab", Label: "Show password"},
-			tui.Shortcut{Key: "enter", Label: "Install"},
-		)
-	}
-	return ""
 }

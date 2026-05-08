@@ -50,7 +50,6 @@ type ConfigModel struct {
 	blackfireServerToken textinput.Model
 	tidewaysAPIKey       textinput.Model
 
-	editing  bool // true when a text input is focused
 	saved    bool // flash a "saved" indicator
 	modified bool // config has unsaved changes
 
@@ -127,44 +126,91 @@ func (m ConfigModel) Update(msg tea.Msg) (ConfigModel, tea.Cmd) {
 }
 
 func (m ConfigModel) HandleKey(msg tea.KeyPressMsg) (ConfigModel, tea.Cmd) {
-	key := msg.String()
-
-	// When editing a text field, route keys to the active input.
-	if m.editing {
-		switch key {
-		case keyEnter, "esc":
-			m.blurAll()
-			m.editing = false
-			return m, nil
-		default:
-			var cmd tea.Cmd
-			switch m.cursor { //nolint:exhaustive
-			case fieldBlackfireServerID:
-				m.blackfireServerID, cmd = m.blackfireServerID.Update(msg)
-			case fieldBlackfireServerToken:
-				m.blackfireServerToken, cmd = m.blackfireServerToken.Update(msg)
-			case fieldTidewaysAPIKey:
-				m.tidewaysAPIKey, cmd = m.tidewaysAPIKey.Update(msg)
-			}
-			m.modified = true
-			return m, cmd
-		}
-	}
-
-	switch key {
+	switch msg.String() {
 	case keyUp, keyK:
 		m.moveCursorUp()
 	case keyDown, keyJ:
 		m.moveCursorDown()
-	case keyEnter, " ":
-		return m.activateField()
-	case keyLeft, "h":
-		m.cyclePrev()
-	case keyRight, "l":
-		m.cycleNext()
 	}
 
 	return m, nil
+}
+
+// PickerForCursor returns a Modal that edits the field under the cursor, or
+// nil if the cursor is not on an editable field.
+func (m ConfigModel) PickerForCursor() Modal {
+	switch m.cursor { //nolint:exhaustive
+	case fieldPHPVersion:
+		return newListPicker(fieldPHPVersion, "PHP Version", phpVersions, nil, m.phpVersion)
+	case fieldNodeVersion:
+		return newListPicker(fieldNodeVersion, "Node.js Version", nodeVersions, nil, m.nodeVersion)
+	case fieldProfiler:
+		labels := make([]string, len(profilers))
+		for i, p := range profilers {
+			if p == "" {
+				labels[i] = "none"
+			} else {
+				labels[i] = p
+			}
+		}
+		return newListPicker(fieldProfiler, "PHP Profiler", profilers, labels, m.profiler)
+	case fieldBlackfireServerID:
+		return newTextPicker(fieldBlackfireServerID, "Blackfire Server ID", "Server ID for the Blackfire profiler", m.blackfireServerID.Value(), true)
+	case fieldBlackfireServerToken:
+		return newTextPicker(fieldBlackfireServerToken, "Blackfire Server Token", "Server token for the Blackfire profiler", m.blackfireServerToken.Value(), true)
+	case fieldTidewaysAPIKey:
+		return newTextPicker(fieldTidewaysAPIKey, "Tideways API Key", "API key for Tideways", m.tidewaysAPIKey.Value(), true)
+	}
+	return nil
+}
+
+// ApplyPickerValue stores the chosen value for the field. Returns true if the
+// value changed.
+func (m *ConfigModel) ApplyPickerValue(field configField, value string) bool {
+	changed := false
+	switch field { //nolint:exhaustive
+	case fieldPHPVersion:
+		idx := indexOf(phpVersions, value, m.phpVersion)
+		if idx != m.phpVersion {
+			m.phpVersion = idx
+			changed = true
+		}
+	case fieldNodeVersion:
+		idx := indexOf(nodeVersions, value, m.nodeVersion)
+		if idx != m.nodeVersion {
+			m.nodeVersion = idx
+			changed = true
+		}
+	case fieldProfiler:
+		idx := indexOf(profilers, value, m.profiler)
+		if idx != m.profiler {
+			m.profiler = idx
+			changed = true
+			if !m.isFieldVisible(m.cursor) {
+				m.moveCursorDown()
+			}
+		}
+	case fieldBlackfireServerID:
+		if m.blackfireServerID.Value() != value {
+			m.blackfireServerID.SetValue(value)
+			changed = true
+		}
+	case fieldBlackfireServerToken:
+		if m.blackfireServerToken.Value() != value {
+			m.blackfireServerToken.SetValue(value)
+			changed = true
+		}
+	case fieldTidewaysAPIKey:
+		if m.tidewaysAPIKey.Value() != value {
+			m.tidewaysAPIKey.SetValue(value)
+			changed = true
+		}
+	}
+	if changed {
+		m.modified = true
+		m.saved = false
+	}
+	return changed
 }
 
 func (m *ConfigModel) moveCursorUp() {
@@ -202,76 +248,6 @@ func (m ConfigModel) isFieldVisible(f configField) bool {
 		return true
 	}
 	return true
-}
-
-func (m *ConfigModel) activateField() (ConfigModel, tea.Cmd) {
-	switch m.cursor {
-	case fieldPHPVersion:
-		m.phpVersion = (m.phpVersion + 1) % len(phpVersions)
-		m.modified = true
-	case fieldNodeVersion:
-		m.nodeVersion = (m.nodeVersion + 1) % len(nodeVersions)
-		m.modified = true
-	case fieldProfiler:
-		m.profiler = (m.profiler + 1) % len(profilers)
-		m.modified = true
-		// Re-validate cursor position after profiler change.
-		if !m.isFieldVisible(m.cursor) {
-			m.moveCursorDown()
-		}
-	case fieldBlackfireServerID:
-		m.editing = true
-		m.blackfireServerID.Focus()
-		return *m, textinput.Blink
-	case fieldBlackfireServerToken:
-		m.editing = true
-		m.blackfireServerToken.Focus()
-		return *m, textinput.Blink
-	case fieldTidewaysAPIKey:
-		m.editing = true
-		m.tidewaysAPIKey.Focus()
-		return *m, textinput.Blink
-	case fieldSave, fieldCount:
-		// Save is handled by the parent model; fieldCount is a sentinel.
-		return *m, nil
-	}
-	return *m, nil
-}
-
-func (m *ConfigModel) cyclePrev() {
-	m.saved = false
-	switch m.cursor { //nolint:exhaustive
-	case fieldPHPVersion:
-		m.phpVersion = (m.phpVersion - 1 + len(phpVersions)) % len(phpVersions)
-		m.modified = true
-	case fieldNodeVersion:
-		m.nodeVersion = (m.nodeVersion - 1 + len(nodeVersions)) % len(nodeVersions)
-		m.modified = true
-	case fieldProfiler:
-		m.profiler = (m.profiler - 1 + len(profilers)) % len(profilers)
-		m.modified = true
-	}
-}
-
-func (m *ConfigModel) cycleNext() {
-	m.saved = false
-	switch m.cursor { //nolint:exhaustive
-	case fieldPHPVersion:
-		m.phpVersion = (m.phpVersion + 1) % len(phpVersions)
-		m.modified = true
-	case fieldNodeVersion:
-		m.nodeVersion = (m.nodeVersion + 1) % len(nodeVersions)
-		m.modified = true
-	case fieldProfiler:
-		m.profiler = (m.profiler + 1) % len(profilers)
-		m.modified = true
-	}
-}
-
-func (m *ConfigModel) blurAll() {
-	m.blackfireServerID.Blur()
-	m.blackfireServerToken.Blur()
-	m.tidewaysAPIKey.Blur()
 }
 
 // ApplyToConfig writes the non-sensitive form values into the given Config.
@@ -399,22 +375,13 @@ func (m ConfigModel) renderSelect(field configField, label, value, selectedArrow
 		valStyle = lipgloss.NewStyle().Foreground(tui.BrandColor).Bold(true)
 	}
 
-	arrows := ""
-	if m.cursor == field {
-		arrows = helpStyle.Render(" ◂ ▸")
-	}
-
-	return prefix + configKeyStyle.Render(label) + valStyle.Render(value) + arrows + "\n"
+	return prefix + configKeyStyle.Render(label) + valStyle.Render(value) + "\n"
 }
 
 func (m ConfigModel) renderInput(field configField, label string, input textinput.Model, selectedArrow, normalIndent string) string {
 	prefix := normalIndent
 	if m.cursor == field {
 		prefix = selectedArrow
-	}
-
-	if m.cursor == field && m.editing {
-		return prefix + configKeyStyle.Render(label) + input.View() + "\n"
 	}
 
 	val := input.Value()
