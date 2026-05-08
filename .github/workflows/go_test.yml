@@ -42,11 +42,14 @@ jobs:
           check-latest: true
           cache: true
 
+      - name: Install bubblewrap
+        run: sudo apt-get update && sudo apt-get install -y bubblewrap
+
       - name: Download modules
         run: go mod download
 
       - name: Build
         run: go build -v ./...
 
-      - name: Test
-        run: go test -v ./...
+      - name: Test (sandboxed, no network)
+        run: ./scripts/run-tests.sh
