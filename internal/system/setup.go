@@ -105,7 +105,7 @@ func RenderMissingDependencies(useDocker bool, missing []MissingDependency) stri
 		b.WriteString(tui.BoldText.Render("To create a Shopware project from inside this container, install:"))
 		b.WriteString("\n\n")
 		b.WriteString("  " + arrow + " " + tui.BoldText.Render("PHP 8.2+ and Composer") + "\n")
-		b.WriteString("    PHP:      " + tui.BlueText.Render("https://www.php.net/manual/en/install.php") + "\n")
+		b.WriteString("    PHP:      " + tui.BlueText.Render("https://www.php.net/downloads.php") + "\n")
 		b.WriteString("    Composer: " + tui.BlueText.Render("https://getcomposer.org/") + "\n")
 	} else {
 		b.WriteString(tui.BoldText.Render("To create a Shopware project, install one of:"))
@@ -117,7 +117,7 @@ func RenderMissingDependencies(useDocker bool, missing []MissingDependency) stri
 		}
 		b.WriteString("\n")
 		b.WriteString("  " + arrow + " " + tui.BoldText.Render("PHP 8.2+ and Composer") + "\n")
-		b.WriteString("    PHP:      " + tui.BlueText.Render("https://www.php.net/manual/en/install.php") + "\n")
+		b.WriteString("    PHP:      " + tui.BlueText.Render("https://www.php.net/downloads.php") + "\n")
 		b.WriteString("    Composer: " + tui.BlueText.Render("https://getcomposer.org/") + "\n")
 	}
 
