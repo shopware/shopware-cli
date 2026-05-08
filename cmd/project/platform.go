@@ -91,8 +91,6 @@ func filterAndWritePluginJson(cmd *cobra.Command, projectRoot string, shopCfg *s
 		}
 	}
 
-	fmt.Println(cfgs)
-
 	pluginJson, err := json.MarshalIndent(cfgs, "", "  ")
 	if err != nil {
 		return err
