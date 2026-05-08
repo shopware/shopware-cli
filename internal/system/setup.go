@@ -47,11 +47,13 @@ func CheckIncompatibilities(useDocker bool, projectFolder string) []Incompatibil
 
 // CheckProjectDependencies returns the dependencies required to set up a
 // Shopware project that are not currently available. When useDocker is true
-// only Docker is required; otherwise PHP 8.2+ and Composer must be present.
+// and we are not already inside a container, only Docker is required;
+// otherwise PHP 8.2+ and Composer must be present locally (matching the
+// fallback in runComposerInstall).
 func CheckProjectDependencies(ctx context.Context, useDocker bool) []MissingDependency {
 	var missing []MissingDependency
 
-	if useDocker {
+	if useDocker && !IsInsideContainer() {
 		if _, err := exec.LookPath("docker"); err != nil {
 			missing = append(missing, MissingDependency{Name: "Docker", Reason: "not installed"})
 		}
@@ -96,19 +98,28 @@ func RenderMissingDependencies(useDocker bool, missing []MissingDependency) stri
 	}
 
 	b.WriteString("\n")
-	b.WriteString(tui.BoldText.Render("To create a Shopware project, install one of:"))
-	b.WriteString("\n\n")
-
 	arrow := tui.GreenText.Render("→")
-	b.WriteString("  " + arrow + " " + tui.RecommendedText.Render("Docker") + " " + tui.DimText.Render("(recommended)") + "\n")
-	b.WriteString("    " + tui.BlueText.Render("https://docs.docker.com/get-docker/") + "\n")
-	if !useDocker {
-		b.WriteString("    Then re-run with " + tui.BoldText.Render("--docker") + "\n")
+	insideContainer := IsInsideContainer()
+
+	if insideContainer {
+		b.WriteString(tui.BoldText.Render("To create a Shopware project from inside this container, install:"))
+		b.WriteString("\n\n")
+		b.WriteString("  " + arrow + " " + tui.BoldText.Render("PHP 8.2+ and Composer") + "\n")
+		b.WriteString("    PHP:      " + tui.BlueText.Render("https://www.php.net/manual/en/install.php") + "\n")
+		b.WriteString("    Composer: " + tui.BlueText.Render("https://getcomposer.org/") + "\n")
+	} else {
+		b.WriteString(tui.BoldText.Render("To create a Shopware project, install one of:"))
+		b.WriteString("\n\n")
+		b.WriteString("  " + arrow + " " + tui.RecommendedText.Render("Docker") + " " + tui.DimText.Render("(recommended)") + "\n")
+		b.WriteString("    " + tui.BlueText.Render("https://docs.docker.com/get-docker/") + "\n")
+		if !useDocker {
+			b.WriteString("    Then re-run with " + tui.BoldText.Render("--docker") + "\n")
+		}
+		b.WriteString("\n")
+		b.WriteString("  " + arrow + " " + tui.BoldText.Render("PHP 8.2+ and Composer") + "\n")
+		b.WriteString("    PHP:      " + tui.BlueText.Render("https://www.php.net/manual/en/install.php") + "\n")
+		b.WriteString("    Composer: " + tui.BlueText.Render("https://getcomposer.org/") + "\n")
 	}
-	b.WriteString("\n")
-	b.WriteString("  " + arrow + " " + tui.BoldText.Render("PHP 8.2+ and Composer") + "\n")
-	b.WriteString("    PHP:      " + tui.BlueText.Render("https://www.php.net/manual/en/install.php") + "\n")
-	b.WriteString("    Composer: " + tui.BlueText.Render("https://getcomposer.org/") + "\n")
 
 	return lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
