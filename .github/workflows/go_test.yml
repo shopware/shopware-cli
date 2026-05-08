@@ -21,9 +21,6 @@ jobs:
 
     runs-on: ubuntu-latest
     steps:
-      - name: Install bubblewrap
-        run: sudo apt-get update && sudo apt-get install -y bubblewrap
-
       - name: Harden Runner
         uses: step-security/harden-runner@a5ad31d6a139d249332a2605b85202e8c0b78450 # ratchet:step-security/harden-runner@v2.19.1
         with:

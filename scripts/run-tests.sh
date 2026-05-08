@@ -28,17 +28,11 @@ case "$(uname -s)" in
         exec sandbox-exec -f "$REPO_DIR/sandbox-no-network.sb" go test "$@"
         ;;
     Linux)
-        if ! command -v bwrap >/dev/null 2>&1; then
-            echo "error: bwrap (bubblewrap) not found; install it (e.g. apt-get install bubblewrap)" >&2
+        if ! command -v unshare >/dev/null 2>&1; then
+            echo "error: unshare not found (expected from util-linux)" >&2
             exit 1
         fi
-        exec bwrap \
-            --dev-bind / / \
-            --tmpfs /tmp \
-            --unshare-net \
-            --die-with-parent \
-            --chdir "$REPO_DIR" \
-            go test "$@"
+        exec unshare --user --map-root-user --net -- go test "$@"
         ;;
     *)
         echo "error: unsupported OS: $(uname -s)" >&2
