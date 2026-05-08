@@ -4,6 +4,7 @@ import (
 	"strings"
 
 	"charm.land/bubbles/v2/textinput"
+	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 
 	"github.com/shopware/shopware-cli/internal/tui"
@@ -31,22 +32,24 @@ var paletteCommands = []paletteCommand{
 	{Label: "Quit", Shortcut: "ctrl+c", ID: "quit"},
 }
 
+// paletteResultMsg is emitted when the user picks a command. ID is empty if
+// the palette was cancelled.
+type paletteResultMsg struct{ ID string }
+
 type commandPalette struct {
 	filter   textinput.Model
 	cursor   int
 	filtered []int // indices into paletteCommands
 }
 
-func newCommandPalette() commandPalette {
+func newCommandPalette() *commandPalette {
 	ti := textinput.New()
 	ti.Prompt = lipgloss.NewStyle().Foreground(tui.BrandColor).Render("> ")
 	ti.Placeholder = "Type to filter"
 	ti.CharLimit = 64
 	ti.Focus()
 
-	cp := commandPalette{
-		filter: ti,
-	}
+	cp := &commandPalette{filter: ti}
 	cp.applyFilter()
 	return cp
 }
@@ -64,35 +67,49 @@ func (cp *commandPalette) applyFilter() {
 	}
 }
 
-func (cp *commandPalette) moveUp() {
-	if cp.cursor > 0 {
-		cp.cursor--
-	}
-}
-
-func (cp *commandPalette) moveDown() {
-	if cp.cursor < len(cp.filtered)-1 {
-		cp.cursor++
-	}
-}
-
-func (cp commandPalette) selectedID() string {
+func (cp *commandPalette) selectedID() string {
 	if len(cp.filtered) == 0 {
 		return ""
 	}
 	return paletteCommands[cp.filtered[cp.cursor]].ID
 }
 
-func (cp commandPalette) view(width, height int) string {
+func (cp *commandPalette) Update(msg tea.Msg) (Modal, tea.Cmd) {
+	key, ok := msg.(tea.KeyPressMsg)
+	if !ok {
+		return cp, nil
+	}
+
+	switch key.String() {
+	case "esc", "ctrl+p":
+		return nil, emit(paletteResultMsg{})
+	case keyUp, keyK:
+		if cp.cursor > 0 {
+			cp.cursor--
+		}
+		return cp, nil
+	case keyDown, keyJ:
+		if cp.cursor < len(cp.filtered)-1 {
+			cp.cursor++
+		}
+		return cp, nil
+	case keyEnter:
+		return nil, emit(paletteResultMsg{ID: cp.selectedID()})
+	}
+
+	var cmd tea.Cmd
+	cp.filter, cmd = cp.filter.Update(msg)
+	cp.applyFilter()
+	return cp, cmd
+}
+
+func (cp *commandPalette) View(width, height int) string {
 	paletteWidth := min(width-4, 70)
 	innerWidth := paletteWidth - 6 // border(2) + padding(4)
 
-	titleStyle := lipgloss.NewStyle().
-		Bold(true).
-		Foreground(tui.BrandColor)
+	titleStyle := lipgloss.NewStyle().Bold(true).Foreground(tui.BrandColor)
 
 	var b strings.Builder
-
 	b.WriteString(titleStyle.Render("Commands"))
 	b.WriteString("\n\n")
 	b.WriteString(cp.filter.View())
@@ -103,14 +120,10 @@ func (cp commandPalette) view(width, height int) string {
 		Background(tui.SelectedBgColor).
 		Bold(true).
 		Width(innerWidth)
-
 	normalStyle := lipgloss.NewStyle().
 		Foreground(tui.TextColor).
 		Width(innerWidth)
-
-	shortcutStyle := lipgloss.NewStyle().
-		Foreground(tui.MutedColor)
-
+	shortcutStyle := lipgloss.NewStyle().Foreground(tui.MutedColor)
 	selectedShortcutStyle := lipgloss.NewStyle().
 		Foreground(tui.MutedColor).
 		Background(tui.SelectedBgColor)
@@ -121,7 +134,6 @@ func (cp commandPalette) view(width, height int) string {
 		if i == cp.cursor {
 			rowStyle, scStyle = selectedStyle, selectedShortcutStyle
 		}
-
 		if cmd.Shortcut != "" {
 			sc := scStyle.Render(cmd.Shortcut)
 			gap := max(innerWidth-lipgloss.Width(cmd.Label)-lipgloss.Width(cmd.Shortcut), 1)
@@ -131,7 +143,6 @@ func (cp commandPalette) view(width, height int) string {
 		}
 		b.WriteString("\n")
 	}
-
 	if len(cp.filtered) == 0 {
 		b.WriteString(lipgloss.NewStyle().Foreground(tui.MutedColor).Render("No matching commands"))
 		b.WriteString("\n")
@@ -144,19 +155,21 @@ func (cp commandPalette) view(width, height int) string {
 		tui.Shortcut{Key: "esc", Label: "Cancel"},
 	))
 
+	return centeredModal(b.String(), paletteWidth, width, height)
+}
+
+// emit returns a tea.Cmd that yields msg.
+func emit(msg tea.Msg) tea.Cmd {
+	return func() tea.Msg { return msg }
+}
+
+// centeredModal wraps content in the standard rounded brand-colored box and
+// centers it within (width, height).
+func centeredModal(content string, modalWidth, width, height int) string {
 	box := lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
 		BorderForeground(tui.BrandColor).
 		Padding(1, 2).
-		Width(paletteWidth)
-
-	modal := box.Render(b.String())
-
-	return lipgloss.Place(
-		width,
-		height,
-		lipgloss.Center,
-		lipgloss.Center,
-		modal,
-	)
+		Width(modalWidth)
+	return lipgloss.Place(width, height, lipgloss.Center, lipgloss.Center, box.Render(content))
 }

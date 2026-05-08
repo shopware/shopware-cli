@@ -6,7 +6,6 @@ import (
 
 	"charm.land/bubbles/v2/progress"
 	"charm.land/bubbles/v2/spinner"
-	"charm.land/bubbles/v2/textinput"
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/shopware/shopware-cli/internal/executor"
@@ -24,111 +23,32 @@ const (
 var tabNames = []string{"General", "Logs", "Config"}
 
 const (
-	keyCtrlC    = "ctrl+c"
-	keyDown     = "down"
-	keyEnter    = "enter"
-	keyUp       = "up"
-	keyTab      = "tab"
-	keyShiftTab = "shift+tab"
-	keyQ        = "q"
-	keyF        = "f"
-	keyJ        = "j"
-	keyK        = "k"
-	key1        = "1"
-	key2        = "2"
-	key3        = "3"
-	keyLeft     = "left"
-	keyRight    = "right"
-
 	defaultUsername = "admin"
 
 	watcherAdmin      = "Admin Watcher"
 	watcherStorefront = "Storefront Watcher"
 )
 
-type overlay int
+// phase identifies the lifecycle phase of the dashboard. A phase fills the
+// whole screen and transitions via async messages (Docker start/stop,
+// install). Modals (commandPalette, valuePicker, stopConfirm) float above
+// phaseDashboard and are tracked separately on Model.modal.
+type phase int
 
 const (
-	overlayNone overlay = iota
-	overlayStarting
-	overlayStopConfirm
-	overlayStopping
-	overlayInstallPrompt
-	overlayInstalling
-	overlayCommandPalette
-	overlayTask
+	phaseDashboard phase = iota
+	phaseStarting
+	phaseStopping
+	phaseInstallPrompt
+	phaseInstalling
+	phaseTask
 )
-
-type installStep int
-
-const (
-	installStepAsk installStep = iota
-	installStepLanguage
-	installStepCurrency
-	installStepUsername
-	installStepPassword
-)
-
-type installLanguage struct {
-	id    string
-	label string
-}
-
-var (
-	installLanguages = []installLanguage{
-		{"en-GB", "English (UK)"},
-		{"en-US", "English (US)"},
-		{"de-DE", "Deutsch"},
-		{"cs-CZ", "Čeština"},
-		{"da-DK", "Dansk"},
-		{"es-ES", "Español"},
-		{"fr-FR", "Français"},
-		{"it-IT", "Italiano"},
-		{"nl-NL", "Nederlands"},
-		{"nn-NO", "Norsk"},
-		{"pl-PL", "Język polski"},
-		{"pt-PT", "Português"},
-		{"sv-SE", "Svenska"},
-	}
-	installCurrencies = []string{"EUR", "USD", "GBP", "PLN", "CHF", "SEK", "DKK", "NOK", "CZK"}
-)
-
-type installWizard struct {
-	step            installStep
-	cursor          int
-	confirmYes      bool
-	language        string
-	currency        string
-	username        textinput.Model
-	password        textinput.Model
-	checkboxFocused bool
-}
 
 type Options struct {
 	ProjectRoot string
 	Config      *shop.Config
 	EnvConfig   *shop.EnvironmentConfig
 	Executor    executor.Executor
-}
-
-type installProgress struct {
-	currentStep int
-	done        bool
-	showLogs    bool
-	spinner     spinner.Model
-	progress    progress.Model
-}
-
-var installStepPatterns = []struct {
-	pattern string
-	label   string
-}{
-	{"system:install", "Installing Shopware"},
-	{"user:create", "Creating admin account"},
-	{"messenger:setup-transports", "Setting up message transports"},
-	{"sales-channel:create:storefront", "Creating storefront"},
-	{"theme:change", "Compiling theme"},
-	{"plugin:refresh", "Refreshing plugins"},
 }
 
 type Model struct {
@@ -139,23 +59,22 @@ type Model struct {
 	width          int
 	height         int
 	dockerMode     bool
-	overlay        overlay
+	phase          phase
+	modal          Modal // floating overlay above the dashboard; nil when none
 	overlayLines   []string
 	projectRoot    string
 	executor       executor.Executor
 	dockerOutChan  <-chan string
 	install        installWizard
 	installProg    installProgress
-	stopConfirmYes bool
 	dockerSpinner  spinner.Model
 	dockerShowLogs bool
-	palette        commandPalette
 	config         *shop.Config
 	envConfig      *shop.EnvironmentConfig
 	taskTitle      string
 	taskDone       bool
 	taskErr        error
-	watchers       map[string]*executor.Process // running watcher processes keyed by name
+	watchers       map[string]*executor.Process
 }
 
 type dockerAlreadyRunningMsg struct{}
@@ -291,11 +210,38 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		delete(m.watchers, name)
 		return m.updateChildren(msg)
 
+	case paletteResultMsg:
+		m.modal = nil
+		if msg.ID == "" {
+			return m, nil
+		}
+		return m.executeCommand(msg.ID)
+
+	case valuePickerResultMsg:
+		m.modal = nil
+		if msg.Cancelled {
+			return m, nil
+		}
+		m.configTab.ApplyPickerValue(msg.Field, msg.Value)
+		return m, nil
+
+	case stopConfirmResultMsg:
+		m.modal = nil
+		m.shutdown()
+		if msg.Stop {
+			m.phase = phaseStopping
+			m.overlayLines = nil
+			m.dockerShowLogs = false
+			m.dockerSpinner = newBrandSpinner()
+			return m, tea.Batch(m.dockerSpinner.Tick, m.stopContainers())
+		}
+		return m, tea.Quit
+
 	case tea.KeyPressMsg:
 		return m.updateKeyPress(msg)
 	}
 
-	if m.overlay == overlayInstalling {
+	if m.phase == phaseInstalling {
 		switch msg := msg.(type) {
 		case spinner.TickMsg:
 			var cmd tea.Cmd
@@ -309,7 +255,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
-	if m.overlay == overlayStarting || m.overlay == overlayStopping {
+	if m.phase == phaseStarting || m.phase == phaseStopping {
 		if msg, ok := msg.(spinner.TickMsg); ok {
 			var cmd tea.Cmd
 			m.dockerSpinner, cmd = m.dockerSpinner.Update(msg)
@@ -318,7 +264,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
-	if m.overlay != overlayNone {
+	if m.phase != phaseDashboard {
 		return m, nil
 	}
 

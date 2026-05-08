@@ -14,7 +14,6 @@ func TestNewConfigModel_NilConfig(t *testing.T) {
 	assert.Equal(t, 1, m.phpVersion)  // default 8.3 (index 1)
 	assert.Equal(t, 0, m.nodeVersion) // default 22 (index 0)
 	assert.Equal(t, 0, m.profiler)    // default none (index 0)
-	assert.False(t, m.editing)
 	assert.False(t, m.saved)
 	assert.False(t, m.modified)
 }
@@ -148,17 +147,54 @@ func TestConfigModel_CursorNavigation(t *testing.T) {
 	assert.Equal(t, fieldProfiler, m.cursor, "should skip hidden fields going up")
 }
 
-func TestConfigModel_CycleValues(t *testing.T) {
+func TestConfigModel_PickerForCursor_Select(t *testing.T) {
 	m := NewConfigModel(nil)
+	m.cursor = fieldPHPVersion
 
-	initial := m.phpVersion
-	m.cycleNext()
-	assert.NotEqual(t, initial, m.phpVersion)
+	modal := m.PickerForCursor()
+	picker, ok := modal.(*valuePicker)
+	assert.True(t, ok)
+	assert.Equal(t, valuePickerList, picker.kind)
+	assert.Equal(t, fieldPHPVersion, picker.field)
+	assert.ElementsMatch(t, phpVersions, picker.options)
+}
+
+func TestConfigModel_PickerForCursor_Text(t *testing.T) {
+	m := NewConfigModel(nil)
+	m.profiler = indexOf(profilers, "blackfire", 0)
+	m.blackfireServerID.SetValue("existing")
+	m.cursor = fieldBlackfireServerID
+
+	modal := m.PickerForCursor()
+	picker, ok := modal.(*valuePicker)
+	assert.True(t, ok)
+	assert.Equal(t, valuePickerText, picker.kind)
+	assert.Equal(t, "existing", picker.input.Value())
+}
+
+func TestConfigModel_ApplyPickerValue(t *testing.T) {
+	m := NewConfigModel(nil)
+	m.modified = false
+
+	changed := m.ApplyPickerValue(fieldPHPVersion, "8.4")
+	assert.True(t, changed)
+	assert.Equal(t, indexOf(phpVersions, "8.4", -1), m.phpVersion)
 	assert.True(t, m.modified)
 
+	// Same value again — no change.
 	m.modified = false
-	m.cursor = fieldNodeVersion
-	m.cycleNext()
+	changed = m.ApplyPickerValue(fieldPHPVersion, "8.4")
+	assert.False(t, changed)
+	assert.False(t, m.modified)
+}
+
+func TestConfigModel_ApplyPickerValue_TextField(t *testing.T) {
+	m := NewConfigModel(nil)
+	m.profiler = indexOf(profilers, "tideways", 0)
+
+	changed := m.ApplyPickerValue(fieldTidewaysAPIKey, "secret-key")
+	assert.True(t, changed)
+	assert.Equal(t, "secret-key", m.tidewaysAPIKey.Value())
 	assert.True(t, m.modified)
 }
 
