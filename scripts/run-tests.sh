@@ -32,7 +32,20 @@ case "$(uname -s)" in
             echo "error: unshare not found (expected from util-linux)" >&2
             exit 1
         fi
-        exec unshare --user --map-root-user --net -- go test "$@"
+        # Bring loopback up inside the new netns so tests that use
+        # httptest.NewServer (127.0.0.1) keep working; only external
+        # network is blocked, matching the nix-build sandbox.
+        exec unshare --user --map-root-user --net -- bash -c '
+            if command -v ip >/dev/null 2>&1; then
+                ip link set dev lo up
+            elif command -v ifconfig >/dev/null 2>&1; then
+                ifconfig lo up
+            else
+                echo "error: need either ip (iproute2) or ifconfig to bring up loopback" >&2
+                exit 1
+            fi
+            exec go test "$@"
+        ' bash "$@"
         ;;
     *)
         echo "error: unsupported OS: $(uname -s)" >&2
