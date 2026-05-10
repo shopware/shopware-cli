@@ -1,15 +1,14 @@
 package phplint
 
 import (
-	"os"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 )
 
 func TestLintTestData(t *testing.T) {
-	if os.Getenv("NIX_CC") != "" || os.Getenv("SHOPWARE_CLI_NO_NETWORK") != "" {
-		t.Skip("Downloading does not work without network access")
+	if !IsPHPWasmCached("8.2") {
+		t.Skip("PHP WASM binary not cached; run once with network to download")
 	}
 
 	t.Setenv("SHOPWARE_CLI_CACHE_DIR", t.TempDir())

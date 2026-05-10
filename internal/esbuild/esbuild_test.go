@@ -46,8 +46,8 @@ func TestESBuildAdmin(t *testing.T) {
 }
 
 func TestESBuildAdminWithSCSS(t *testing.T) {
-	if os.Getenv("NIX_CC") != "" || os.Getenv("SHOPWARE_CLI_NO_NETWORK") != "" {
-		t.Skip("Downloading does not work without network access")
+	if !IsDartSassAvailable() {
+		t.Skip("dart-sass not available locally; install it or run once with network to cache")
 	}
 
 	dir := t.TempDir()
