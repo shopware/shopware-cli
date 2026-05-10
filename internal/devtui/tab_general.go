@@ -176,7 +176,7 @@ func (m *GeneralModel) startStorefrontWatch() tea.Cmd {
 	projectRoot := m.projectRoot
 
 	return func() tea.Msg {
-		watchProcess, err := extension.PrepareStorefrontWatcher(context.Background(), projectRoot, e)
+		watchProcess, err := extension.PrepareStorefrontWatcher(context.Background(), projectRoot, e, extension.StorefrontWatcherOptions{})
 		if err != nil {
 			return watcherStoppedMsg{name: watcherStorefront}
 		}

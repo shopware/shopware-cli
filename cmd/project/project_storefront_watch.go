@@ -2,10 +2,14 @@ package project
 
 import (
 	"context"
+	"fmt"
+	"strings"
 	"time"
 
+	"charm.land/huh/v2"
 	"github.com/spf13/cobra"
 
+	adminSdk "github.com/shopware/shopware-cli/internal/admin-api"
 	"github.com/shopware/shopware-cli/internal/envfile"
 	"github.com/shopware/shopware-cli/internal/extension"
 	"github.com/shopware/shopware-cli/internal/shop"
@@ -43,7 +47,16 @@ var projectStorefrontWatchCmd = &cobra.Command{
 			return err
 		}
 
-		watchProcess, err := extension.PrepareStorefrontWatcher(cmd.Context(), projectRoot, cmdExecutor)
+		var opts extension.StorefrontWatcherOptions
+		if cmd.PersistentFlags().Changed("sales-channel-id") {
+			salesChannelID, _ := cmd.PersistentFlags().GetString("sales-channel-id")
+			opts, err = resolveStorefrontWatcherOptions(cmd.Context(), shopCfg, salesChannelID)
+			if err != nil {
+				return err
+			}
+		}
+
+		watchProcess, err := extension.PrepareStorefrontWatcher(cmd.Context(), projectRoot, cmdExecutor, opts)
 		if err != nil {
 			return err
 		}
@@ -63,4 +76,87 @@ func init() {
 	projectStorefrontWatchCmd.PersistentFlags().String("only-extensions", "", "Only watch the given extensions (comma separated)")
 	projectStorefrontWatchCmd.PersistentFlags().String("skip-extensions", "", "Skips the given extensions (comma separated)")
 	projectStorefrontWatchCmd.PersistentFlags().Bool("only-custom-static-extensions", false, "Only build extensions from custom/static-plugins directory")
+	projectStorefrontWatchCmd.PersistentFlags().String("sales-channel-id", "", "Sales channel ID to target with theme:dump. Pass without a value (--sales-channel-id) to pick interactively. Omit the flag entirely to keep the legacy theme:dump behavior")
+	projectStorefrontWatchCmd.PersistentFlags().Lookup("sales-channel-id").NoOptDefVal = " "
+}
+
+// resolveStorefrontWatcherOptions picks the theme + domain that theme:dump should target.
+// Only invoked when the user explicitly passes --sales-channel-id; an empty salesChannelID
+// (flag present without a value) triggers an interactive picker.
+func resolveStorefrontWatcherOptions(ctx context.Context, cfg *shop.Config, salesChannelID string) (extension.StorefrontWatcherOptions, error) {
+	salesChannelID = strings.TrimSpace(salesChannelID)
+
+	if !cfg.IsAdminAPIConfigured() {
+		return extension.StorefrontWatcherOptions{}, fmt.Errorf("--sales-channel-id requires admin api credentials in .shopware-project.yml")
+	}
+
+	client, err := shop.NewShopClient(ctx, cfg)
+	if err != nil {
+		return extension.StorefrontWatcherOptions{}, fmt.Errorf("--sales-channel-id requires a working admin api connection: %w", err)
+	}
+
+	apiCtx := adminSdk.NewApiContext(ctx)
+	channels, err := client.SalesChannel.ListStorefront(apiCtx)
+	if err != nil {
+		return extension.StorefrontWatcherOptions{}, fmt.Errorf("listing storefront sales channels: %w", err)
+	}
+
+	if len(channels) == 0 {
+		return extension.StorefrontWatcherOptions{}, fmt.Errorf("no storefront sales channels found")
+	}
+
+	var picked *adminSdk.SalesChannel
+	if salesChannelID != "" {
+		for i, sc := range channels {
+			if sc.Id == salesChannelID {
+				picked = &channels[i]
+				break
+			}
+		}
+		if picked == nil {
+			return extension.StorefrontWatcherOptions{}, fmt.Errorf("sales channel %q not found or not a storefront", salesChannelID)
+		}
+	} else {
+		opts := make([]huh.Option[string], 0, len(channels))
+		for _, sc := range channels {
+			label := sc.Name
+			if len(sc.Domains) > 0 {
+				label = fmt.Sprintf("%s (%s)", sc.Name, sc.Domains[0].Url)
+			}
+			opts = append(opts, huh.NewOption(label, sc.Id))
+		}
+
+		var chosenID string
+		if err := huh.NewSelect[string]().
+			Title("Which sales channel should the storefront watcher target?").
+			Options(opts...).
+			Value(&chosenID).
+			Run(); err != nil {
+			return extension.StorefrontWatcherOptions{}, err
+		}
+
+		for i, sc := range channels {
+			if sc.Id == chosenID {
+				picked = &channels[i]
+				break
+			}
+		}
+		if picked == nil {
+			return extension.StorefrontWatcherOptions{}, fmt.Errorf("no sales channel selected")
+		}
+	}
+
+	theme, err := client.SalesChannel.FindThemeForSalesChannel(apiCtx, picked.Id)
+	if err != nil {
+		return extension.StorefrontWatcherOptions{}, fmt.Errorf("resolving theme for sales channel %s: %w", picked.Name, err)
+	}
+	if theme == nil {
+		return extension.StorefrontWatcherOptions{}, fmt.Errorf("no theme assigned to sales channel %s", picked.Name)
+	}
+
+	out := extension.StorefrontWatcherOptions{ThemeID: theme.Id}
+	if len(picked.Domains) > 0 {
+		out.DomainURL = picked.Domains[0].Url
+	}
+	return out, nil
 }
