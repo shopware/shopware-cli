@@ -3,12 +3,15 @@ package executor
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
 	"sync"
 
+	adminSdk "github.com/shopware/shopware-cli/internal/admin-api"
+	"github.com/shopware/shopware-cli/internal/shop"
 	"github.com/shopware/shopware-cli/logging"
 )
 
@@ -41,16 +44,41 @@ type Executor interface {
 	// StopEnvironment stops the backing environment (e.g. docker compose down).
 	// Returns ErrNotSupported for executors that have no managed environment.
 	StopEnvironment(ctx context.Context) error
+	// AdminAPIClient returns an authenticated admin API client for the configured shop.
+	// Credentials come from SHOPWARE_CLI_API_* env vars first, then admin_api in the project config.
+	AdminAPIClient(ctx context.Context) (*adminSdk.Client, error)
+}
+
+// adminAPIClient is the shared implementation used by all executors. It defers
+// to shop.NewShopClient so env vars (SHOPWARE_CLI_API_*) take precedence over
+// the project config like elsewhere in the CLI. When an envCfg is supplied
+// (the selected named environment from .shopware-project.yml), its URL and
+// admin_api block overlay the top-level config so per-environment credentials
+// are honored.
+func adminAPIClient(ctx context.Context, cfg *shop.Config, envCfg *shop.EnvironmentConfig) (*adminSdk.Client, error) {
+	if cfg == nil {
+		return nil, fmt.Errorf("admin api requires a shop configuration")
+	}
+
+	effective := *cfg
+	if envCfg != nil {
+		if envCfg.URL != "" {
+			effective.URL = envCfg.URL
+		}
+		if envCfg.AdminApi != nil {
+			effective.AdminApi = envCfg.AdminApi
+		}
+	}
+
+	return shop.NewShopClient(ctx, &effective)
 }
 
 type allowBinCIKey struct{}
 
-// AllowBinCI marks a context so that ConsoleCommand may use bin/ci instead of bin/console in CI environments.
 func AllowBinCI(ctx context.Context) context.Context {
 	return context.WithValue(ctx, allowBinCIKey{}, true)
 }
 
-// IsBinCIAllowed returns true if the context has AllowBinCI set and the CI env var is detected.
 func IsBinCIAllowed(ctx context.Context) bool {
 	_, ok := ctx.Value(allowBinCIKey{}).(bool)
 	return ok && isCI()
@@ -60,7 +88,6 @@ var isCI = sync.OnceValue(func() bool {
 	return os.Getenv("CI") != ""
 })
 
-// consoleCommandName returns "bin/ci" or "bin/console" depending on context and CI detection.
 func consoleCommandName(ctx context.Context) string {
 	if IsBinCIAllowed(ctx) {
 		return "bin/ci"
@@ -68,7 +95,6 @@ func consoleCommandName(ctx context.Context) string {
 	return "bin/console"
 }
 
-// resolveDir returns the absolute directory from projectRoot and relDir.
 func resolveDir(projectRoot, relDir string) string {
 	if relDir == "" {
 		return projectRoot
@@ -77,14 +103,12 @@ func resolveDir(projectRoot, relDir string) string {
 	return filepath.Join(projectRoot, relDir)
 }
 
-// applyDir sets the working directory on a command if dir is non-empty.
 func applyDir(dir string, cmd *exec.Cmd) {
 	if dir != "" {
 		cmd.Dir = dir
 	}
 }
 
-// logCmd logs the command that will be executed at debug level.
 func logCmd(ctx context.Context, cmd *exec.Cmd) {
 	logging.FromContext(ctx).Debugf("exec: %s (dir: %s)", strings.Join(cmd.Args, " "), cmd.Dir)
 }

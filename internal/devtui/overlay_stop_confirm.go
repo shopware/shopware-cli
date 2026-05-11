@@ -9,10 +9,6 @@ import (
 	"github.com/shopware/shopware-cli/internal/tui"
 )
 
-// stopConfirmResultMsg is emitted when the user resolves the stop-confirm
-// dialog. Stop is true if the user chose to stop containers; if Cancelled is
-// true the dialog was dismissed without action (currently unused — Esc is
-// not bound).
 type stopConfirmResultMsg struct {
 	Stop bool
 }

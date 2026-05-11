@@ -11,6 +11,7 @@ import (
 
 	adminSdk "github.com/shopware/shopware-cli/internal/admin-api"
 	"github.com/shopware/shopware-cli/internal/envfile"
+	"github.com/shopware/shopware-cli/internal/executor"
 	"github.com/shopware/shopware-cli/internal/extension"
 	"github.com/shopware/shopware-cli/internal/shop"
 )
@@ -48,9 +49,9 @@ var projectStorefrontWatchCmd = &cobra.Command{
 		}
 
 		var opts extension.StorefrontWatcherOptions
-		if cmd.PersistentFlags().Changed("sales-channel-id") {
-			salesChannelID, _ := cmd.PersistentFlags().GetString("sales-channel-id")
-			opts, err = resolveStorefrontWatcherOptions(cmd.Context(), shopCfg, salesChannelID)
+		if cmd.PersistentFlags().Changed("sales-channel") {
+			salesChannelID, _ := cmd.PersistentFlags().GetString("sales-channel")
+			opts, err = resolveStorefrontWatcherOptions(cmd.Context(), cmdExecutor, salesChannelID)
 			if err != nil {
 				return err
 			}
@@ -76,23 +77,19 @@ func init() {
 	projectStorefrontWatchCmd.PersistentFlags().String("only-extensions", "", "Only watch the given extensions (comma separated)")
 	projectStorefrontWatchCmd.PersistentFlags().String("skip-extensions", "", "Skips the given extensions (comma separated)")
 	projectStorefrontWatchCmd.PersistentFlags().Bool("only-custom-static-extensions", false, "Only build extensions from custom/static-plugins directory")
-	projectStorefrontWatchCmd.PersistentFlags().String("sales-channel-id", "", "Sales channel ID to target with theme:dump. Pass without a value (--sales-channel-id) to pick interactively. Omit the flag entirely to keep the legacy theme:dump behavior")
-	projectStorefrontWatchCmd.PersistentFlags().Lookup("sales-channel-id").NoOptDefVal = " "
+	projectStorefrontWatchCmd.PersistentFlags().String("sales-channel", "", "Sales channel ID to target with theme:dump. Pass without a value (--sales-channel) to pick interactively. Omit the flag entirely to keep the legacy theme:dump behavior")
+	projectStorefrontWatchCmd.PersistentFlags().Lookup("sales-channel").NoOptDefVal = " "
 }
 
 // resolveStorefrontWatcherOptions picks the theme + domain that theme:dump should target.
-// Only invoked when the user explicitly passes --sales-channel-id; an empty salesChannelID
+// Only invoked when the user explicitly passes --sales-channel; an empty salesChannelID
 // (flag present without a value) triggers an interactive picker.
-func resolveStorefrontWatcherOptions(ctx context.Context, cfg *shop.Config, salesChannelID string) (extension.StorefrontWatcherOptions, error) {
+func resolveStorefrontWatcherOptions(ctx context.Context, cmdExecutor executor.Executor, salesChannelID string) (extension.StorefrontWatcherOptions, error) {
 	salesChannelID = strings.TrimSpace(salesChannelID)
 
-	if !cfg.IsAdminAPIConfigured() {
-		return extension.StorefrontWatcherOptions{}, fmt.Errorf("--sales-channel-id requires admin api credentials in .shopware-project.yml")
-	}
-
-	client, err := shop.NewShopClient(ctx, cfg)
+	client, err := cmdExecutor.AdminAPIClient(ctx)
 	if err != nil {
-		return extension.StorefrontWatcherOptions{}, fmt.Errorf("--sales-channel-id requires a working admin api connection: %w", err)
+		return extension.StorefrontWatcherOptions{}, fmt.Errorf("--sales-channel requires admin api access (set admin_api in .shopware-project.yml or SHOPWARE_CLI_API_* env vars): %w", err)
 	}
 
 	apiCtx := adminSdk.NewApiContext(ctx)

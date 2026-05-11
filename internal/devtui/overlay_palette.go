@@ -158,13 +158,10 @@ func (cp *commandPalette) View(width, height int) string {
 	return centeredModal(b.String(), paletteWidth, width, height)
 }
 
-// emit returns a tea.Cmd that yields msg.
 func emit(msg tea.Msg) tea.Cmd {
 	return func() tea.Msg { return msg }
 }
 
-// centeredModal wraps content in the standard rounded brand-colored box and
-// centers it within (width, height).
 func centeredModal(content string, modalWidth, width, height int) string {
 	box := lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).

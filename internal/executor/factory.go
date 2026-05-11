@@ -15,24 +15,26 @@ func New(projectRoot string, cfg *shop.EnvironmentConfig, shopCfg *shop.Config) 
 	case "local", "":
 		if shopCfg.IsCompatibilityDateBefore(shop.CompatibilityDevMode) {
 			if path := pathToSymfonyCLI(); path != "" && symfonyCliAllowed() {
-				return &SymfonyCLIExecutor{BinaryPath: path, projectRoot: projectRoot}, nil
+				return &SymfonyCLIExecutor{BinaryPath: path, projectRoot: projectRoot, shopCfg: shopCfg, envCfg: cfg}, nil
 			}
 		}
-		return &LocalExecutor{projectRoot: projectRoot}, nil
+		return &LocalExecutor{projectRoot: projectRoot, shopCfg: shopCfg, envCfg: cfg}, nil
 	case "symfony-cli":
 		path := pathToSymfonyCLI()
 		if path == "" {
 			return nil, fmt.Errorf("symfony CLI not found in PATH")
 		}
-		return &SymfonyCLIExecutor{BinaryPath: path, projectRoot: projectRoot}, nil
+		return &SymfonyCLIExecutor{BinaryPath: path, projectRoot: projectRoot, shopCfg: shopCfg, envCfg: cfg}, nil
 	case "docker":
-		return &DockerExecutor{projectRoot: projectRoot}, nil
+		return &DockerExecutor{projectRoot: projectRoot, shopCfg: shopCfg, envCfg: cfg}, nil
 	default:
 		return nil, fmt.Errorf("unsupported environment type: %s", cfg.Type)
 	}
 }
 
 // NewLocal creates a LocalExecutor with the given project root directory.
+// AdminAPIClient on the returned executor will error because no shop config is bound;
+// use New for that.
 func NewLocal(projectRoot string) Executor {
 	return &LocalExecutor{projectRoot: projectRoot}
 }

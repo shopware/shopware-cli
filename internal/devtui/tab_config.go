@@ -133,17 +133,21 @@ func (m ConfigModel) HandleKey(msg tea.KeyPressMsg) (ConfigModel, tea.Cmd) {
 func (m ConfigModel) PickerForCursor() Modal {
 	switch m.cursor { //nolint:exhaustive
 	case fieldPHPVersion:
-		return newListPicker(fieldPHPVersion, "PHP Version", phpVersions, nil, m.phpVersion)
-	case fieldProfiler:
-		labels := make([]string, len(profilers))
-		for i, p := range profilers {
-			if p == "" {
-				labels[i] = "none"
-			} else {
-				labels[i] = p
-			}
+		items := make([]listPickerItem, len(phpVersions))
+		for i, v := range phpVersions {
+			items[i] = listPickerItem{Label: v, Value: v}
 		}
-		return newListPicker(fieldProfiler, "PHP Profiler", profilers, labels, m.profiler)
+		return newListPicker(fieldPHPVersion, "PHP Version", "", items, m.phpVersion)
+	case fieldProfiler:
+		items := make([]listPickerItem, len(profilers))
+		for i, p := range profilers {
+			label := p
+			if p == "" {
+				label = "none"
+			}
+			items[i] = listPickerItem{Label: label, Value: p}
+		}
+		return newListPicker(fieldProfiler, "PHP Profiler", "", items, m.profiler)
 	case fieldBlackfireServerID:
 		return newTextPicker(fieldBlackfireServerID, "Blackfire Server ID", "Server ID for the Blackfire profiler", m.blackfireServerID.Value(), true)
 	case fieldBlackfireServerToken:

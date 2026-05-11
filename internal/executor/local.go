@@ -5,6 +5,9 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+
+	adminSdk "github.com/shopware/shopware-cli/internal/admin-api"
+	"github.com/shopware/shopware-cli/internal/shop"
 )
 
 // LocalExecutor runs commands using the local PHP installation directly.
@@ -12,6 +15,8 @@ type LocalExecutor struct {
 	env         map[string]string
 	projectRoot string
 	relDir      string
+	shopCfg     *shop.Config
+	envCfg      *shop.EnvironmentConfig
 }
 
 func (l *LocalExecutor) ConsoleCommand(ctx context.Context, args ...string) *Process {
@@ -57,11 +62,15 @@ func (l *LocalExecutor) Type() string {
 }
 
 func (l *LocalExecutor) WithEnv(env map[string]string) Executor {
-	return &LocalExecutor{env: mergeEnv(l.env, env), projectRoot: l.projectRoot, relDir: l.relDir}
+	return &LocalExecutor{env: mergeEnv(l.env, env), projectRoot: l.projectRoot, relDir: l.relDir, shopCfg: l.shopCfg, envCfg: l.envCfg}
 }
 
 func (l *LocalExecutor) WithRelDir(relDir string) Executor {
-	return &LocalExecutor{env: l.env, projectRoot: l.projectRoot, relDir: relDir}
+	return &LocalExecutor{env: l.env, projectRoot: l.projectRoot, relDir: relDir, shopCfg: l.shopCfg, envCfg: l.envCfg}
+}
+
+func (l *LocalExecutor) AdminAPIClient(ctx context.Context) (*adminSdk.Client, error) {
+	return adminAPIClient(ctx, l.shopCfg, l.envCfg)
 }
 
 func (l *LocalExecutor) StartEnvironment(_ context.Context) error {

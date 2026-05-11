@@ -1,9 +1,12 @@
 package admin_sdk
 
 import (
+	"errors"
 	"fmt"
 	"net/http"
 )
+
+var ErrNotFound = errors.New("not found")
 
 type SalesChannelService ClientService
 
@@ -51,9 +54,11 @@ func (s SalesChannelService) ListStorefront(ctx ApiContext) ([]SalesChannel, err
 	}
 
 	var out searchResponse[SalesChannel]
-	if _, err := s.Client.Do(ctx.Context, r, &out); err != nil {
+	resp, err := s.Client.Do(ctx.Context, r, &out)
+	if err != nil {
 		return nil, err
 	}
+	defer func() { _ = resp.Body.Close() }()
 
 	return out.Data, nil
 }
@@ -74,12 +79,14 @@ func (s SalesChannelService) FindThemeForSalesChannel(ctx ApiContext, salesChann
 	}
 
 	var out searchResponse[Theme]
-	if _, err := s.Client.Do(ctx.Context, r, &out); err != nil {
+	resp, err := s.Client.Do(ctx.Context, r, &out)
+	if err != nil {
 		return nil, err
 	}
+	defer func() { _ = resp.Body.Close() }()
 
 	if len(out.Data) == 0 {
-		return nil, nil
+		return nil, ErrNotFound
 	}
 
 	return &out.Data[0], nil

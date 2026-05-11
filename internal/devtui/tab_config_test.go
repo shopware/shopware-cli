@@ -154,11 +154,15 @@ func TestConfigModel_PickerForCursor_Select(t *testing.T) {
 	m.cursor = fieldPHPVersion
 
 	modal := m.PickerForCursor()
-	picker, ok := modal.(*valuePicker)
+	picker, ok := modal.(*listPicker)
 	assert.True(t, ok)
-	assert.Equal(t, valuePickerList, picker.kind)
-	assert.Equal(t, fieldPHPVersion, picker.field)
-	assert.ElementsMatch(t, phpVersions, picker.options)
+	assert.Equal(t, fieldPHPVersion, picker.key)
+	assert.Len(t, picker.items, len(phpVersions))
+	values := make([]string, len(picker.items))
+	for i, it := range picker.items {
+		values[i] = it.Value
+	}
+	assert.ElementsMatch(t, phpVersions, values)
 }
 
 func TestConfigModel_PickerForCursor_Text(t *testing.T) {
@@ -168,9 +172,8 @@ func TestConfigModel_PickerForCursor_Text(t *testing.T) {
 	m.cursor = fieldBlackfireServerID
 
 	modal := m.PickerForCursor()
-	picker, ok := modal.(*valuePicker)
+	picker, ok := modal.(*textPicker)
 	assert.True(t, ok)
-	assert.Equal(t, valuePickerText, picker.kind)
 	assert.Equal(t, "existing", picker.input.Value())
 }
 

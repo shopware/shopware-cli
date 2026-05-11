@@ -9,10 +9,6 @@ import (
 	"github.com/shopware/shopware-cli/internal/shop"
 )
 
-// updateLifecycle handles async messages from the boot state machine: Docker
-// container start/stop, Shopware install detection, install completion. The
-// state machine drives m.phase forward; user input during a phase is handled
-// by phase-specific key handlers in updateKeyPress.
 func (m Model) updateLifecycle(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case dockerAlreadyRunningMsg:
