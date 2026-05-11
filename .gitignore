@@ -29,3 +29,4 @@ devenv.local.nix
 /.gocache
 /.gomodcache
 /.gopath
+.soulforge
