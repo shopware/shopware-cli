@@ -462,10 +462,13 @@ var projectCreateCmd = &cobra.Command{
 		}
 
 		go tracking.Track(cmd.Context(), "project.create", map[string]string{
-			"version":    selectedVersion,
-			"deployment": selectedDeployment,
-			"ci":         selectedCI,
-			"docker":     fmt.Sprintf("%v", useDocker),
+			"version":            selectedVersion,
+			"deployment":         selectedDeployment,
+			"ci":                 selectedCI,
+			"docker":             fmt.Sprintf("%v", useDocker),
+			"with_elasticsearch": fmt.Sprintf("%v", withElasticsearch),
+			"with_amqp":          fmt.Sprintf("%v", withAMQP),
+			"interactive":        fmt.Sprintf("%v", interactive),
 		})
 
 		chooseVersion := resolveVersion(selectedVersion, filteredVersions)
