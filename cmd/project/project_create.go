@@ -403,15 +403,7 @@ var projectCreateCmd = &cobra.Command{
 			}
 		}
 
-		if !useDocker {
-			phpOk, err := system.IsPHPVersionAtLeast(cmd.Context(), "8.2")
-			if err != nil {
-				return fmt.Errorf("PHP 8.2 or higher is required: %w", err)
-			}
-			if !phpOk {
-				return fmt.Errorf("PHP 8.2 or higher is required for Shopware 6")
-			}
-		}
+		missingDeps := system.CheckProjectDependencies(cmd.Context(), useDocker)
 
 		validDeployments := map[string]bool{
 			packagist.DeploymentNone:         true,
@@ -432,10 +424,9 @@ var projectCreateCmd = &cobra.Command{
 			return fmt.Errorf("invalid CI system: %s. Valid options: none, github, gitlab", selectedCI)
 		}
 
-		if !useDocker {
-			if _, err := exec.LookPath("composer"); err != nil {
-				return fmt.Errorf("composer is not installed. Please install Composer (https://getcomposer.org/) or use the --docker flag")
-			}
+		if len(missingDeps) > 0 {
+			fmt.Fprintln(os.Stderr, system.RenderMissingDependencies(useDocker, missingDeps))
+			return fmt.Errorf("missing required dependencies")
 		}
 
 		incompatibilities := system.CheckIncompatibilities(useDocker, projectFolder)

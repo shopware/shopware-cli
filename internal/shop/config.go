@@ -364,6 +364,15 @@ type ConfigDeployment struct {
 		Id     string `yaml:"id" jsonschema:"required"`
 		Script string `yaml:"script" jsonschema:"required"`
 	} `yaml:"one-time-tasks"`
+
+	// Staging mode configuration for the deployment
+	Staging *ConfigDeploymentStaging `yaml:"staging,omitempty"`
+}
+
+// ConfigDeploymentStaging defines staging mode configuration.
+type ConfigDeploymentStaging struct {
+	// When enabled, staging setup commands will be executed during installation and upgrade
+	Enabled bool `yaml:"enabled,omitempty"`
 }
 
 type ConfigDeploymentOverrides map[string]struct {

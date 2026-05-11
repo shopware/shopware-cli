@@ -49,28 +49,3 @@ func IsDockerUsingLibkrun() bool {
 
 	return settings.UseLibkrun
 }
-
-type Incompatibility struct {
-	Title       string
-	Description string
-}
-
-func CheckIncompatibilities(useDocker bool, projectFolder string) []Incompatibility {
-	var incompatibilities []Incompatibility
-
-	if useDocker && runtime.GOOS == "darwin" && !IsDockerUsingLibkrun() {
-		incompatibilities = append(incompatibilities, Incompatibility{
-			Title:       "Using Docker on macOS without libkrun (Docker VMM) may cause severe performance issues with file watching",
-			Description: "Consider enabling libkrun in Docker Desktop settings for improved host mount performance",
-		})
-	}
-
-	if IsWSL() && IsWSLWindowsMount(projectFolder) {
-		incompatibilities = append(incompatibilities, Incompatibility{
-			Title:       "Creating a project in a Windows-mounted directory (/mnt/c, etc.) under WSL is known to cause severe performance issues",
-			Description: "Consider creating the project in the native Linux filesystem instead (e.g., ~/projects/)",
-		})
-	}
-
-	return incompatibilities
-}

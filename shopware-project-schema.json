@@ -342,6 +342,10 @@
             ]
           },
           "type": "array"
+        },
+        "staging": {
+          "$ref": "#/$defs/ConfigDeploymentStaging",
+          "description": "Staging mode configuration for the deployment"
         }
       },
       "additionalProperties": false,
@@ -450,6 +454,18 @@
       },
       "additionalProperties": false,
       "type": "object"
+    },
+    "ConfigDeploymentStaging": {
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "description": "When enabled, staging setup commands will be executed during installation and upgrade"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "description": "ConfigDeploymentStaging defines staging mode configuration."
+    }
     },
     "ConfigDump": {
       "properties": {

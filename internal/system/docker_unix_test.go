@@ -56,11 +56,3 @@ func TestIsDockerUsingLibkrun(t *testing.T) {
 		})
 	}
 }
-
-func TestCheckIncompatibilities(t *testing.T) {
-	t.Run("no incompatibilities on non-darwin", func(t *testing.T) {
-		t.Setenv("HOME", "/tmp/test-home")
-		incompatibilities := CheckIncompatibilities(false, "/tmp/project")
-		assert.Empty(t, incompatibilities)
-	})
-}
