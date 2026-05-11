@@ -59,9 +59,11 @@ func TestValidateTheme_ReadError(t *testing.T) {
 	err := os.MkdirAll(resourcesDir, 0755)
 	assert.NoError(t, err)
 
-	// Create a file with no read permissions
+	// Create a directory in place of theme.json so os.ReadFile fails.
+	// Using a 0000 file is unreliable because root bypasses permissions,
+	// which breaks the test in sandboxed CI runs that need root.
 	themeJSONPath := filepath.Join(resourcesDir, "theme.json")
-	err = os.WriteFile(themeJSONPath, []byte(`{"previewMedia": "test.png"}`), 0000)
+	err = os.Mkdir(themeJSONPath, 0755)
 	assert.NoError(t, err)
 
 	ext := &mockExtension{
