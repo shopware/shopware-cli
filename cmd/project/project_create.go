@@ -461,6 +461,11 @@ var projectCreateCmd = &cobra.Command{
 			}
 		}
 
+		// @todo: it's broken in paas deployments, the paas recipe configures Elasticsearch and it's difficult to do it only when elasticsearch is available.
+		if selectedDeployment == packagist.DeploymentShopwarePaaS {
+			withElasticsearch = true
+		}
+
 		go tracking.Track(cmd.Context(), "project.create", map[string]string{
 			"version":            selectedVersion,
 			"deployment":         selectedDeployment,
@@ -481,11 +486,6 @@ var projectCreateCmd = &cobra.Command{
 		}
 
 		logging.FromContext(cmd.Context()).Infof("Setting up Shopware %s", chooseVersion)
-
-		// @todo: it's broken in paas deployments, the paas recipe configures Elasticsearch and it's difficult to do it only when elasticsearch is available.
-		if selectedDeployment == packagist.DeploymentShopwarePaaS {
-			withElasticsearch = true
-		}
 
 		composerJson, err := packagist.GenerateComposerJson(cmd.Context(), packagist.ComposerJsonOptions{
 			Version:          chooseVersion,
