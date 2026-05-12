@@ -81,10 +81,6 @@ func GetAvailablePackagesFromShopwareStore(ctx context.Context, token string) (*
 // returned when the version is a dev branch, cannot be found, or has no PHP
 // requirement.
 func GetPHPConstraintForShopwareVersion(ctx context.Context, chosenVersion string) (*PHPConstraint, error) {
-	if strings.HasPrefix(chosenVersion, "dev-") {
-		return nil, nil
-	}
-
 	releases, err := GetShopwarePackageVersions(ctx)
 	if err != nil {
 		return nil, err

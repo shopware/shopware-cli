@@ -405,7 +405,14 @@ var projectCreateCmd = &cobra.Command{
 			}
 		}
 
-		missingDeps := system.CheckProjectDependencies(cmd.Context(), useDocker)
+		chooseVersion := resolveVersion(selectedVersion, filteredVersions)
+		if chooseVersion == "" {
+			return fmt.Errorf("cannot find version %s", selectedVersion)
+		}
+
+		phpConstraint := packagist.PHPConstraintForShopwareVersion(releases, chooseVersion)
+
+		missingDeps := system.CheckProjectDependencies(cmd.Context(), useDocker, phpConstraint)
 
 		validDeployments := map[string]bool{
 			packagist.DeploymentNone:         true,
@@ -478,23 +485,6 @@ var projectCreateCmd = &cobra.Command{
 			"with_amqp":          fmt.Sprintf("%v", withAMQP),
 			"interactive":        fmt.Sprintf("%v", interactive),
 		})
-
-		chooseVersion := resolveVersion(selectedVersion, filteredVersions)
-		if chooseVersion == "" {
-			return fmt.Errorf("cannot find version %s", selectedVersion)
-		}
-
-		phpConstraint := packagist.PHPConstraintForShopwareVersion(releases, chooseVersion)
-
-		if !useDocker && phpConstraint != nil {
-			installedPHP, err := system.GetInstalledPHPVersion(cmd.Context())
-			if err != nil {
-				return fmt.Errorf("failed to determine installed PHP version: %w", err)
-			}
-			if !phpConstraint.Check(installedPHP) {
-				return fmt.Errorf("installed PHP version %s does not satisfy Shopware %s requirement %q", installedPHP, chooseVersion, phpConstraint)
-			}
-		}
 
 		if err := os.MkdirAll(projectFolder, os.ModePerm); err != nil {
 			return err
