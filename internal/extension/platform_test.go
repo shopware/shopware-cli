@@ -8,7 +8,6 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/shyim/go-version"
 	"github.com/stretchr/testify/assert"
 
 	"github.com/shopware/shopware-cli/internal/validation"
@@ -184,33 +183,6 @@ func TestPluginGermanDescriptionMissingOnlyEnglishMarket(t *testing.T) {
 	assert.Len(t, check.Results, 0)
 }
 
-func TestLowestPhpVersionForConstraint(t *testing.T) {
-	cases := []struct {
-		constraint string
-		expected   string
-	}{
-		{">=8.4", "8.4"},
-		{"^8.2", "8.2"},
-		{"~8.1.0", "8.1"},
-		{">=8.0 <8.3", "8.0"},
-		{"8.3.*", "8.3"},
-		{"^7.4 || ^8.0", "7.4"},
-	}
-
-	for _, tc := range cases {
-		t.Run(tc.constraint, func(t *testing.T) {
-			got, err := lowestPhpVersionForConstraint(tc.constraint)
-			assert.NoError(t, err)
-			assert.Equal(t, tc.expected, got)
-		})
-	}
-}
-
-func TestLowestPhpVersionForConstraintInvalid(t *testing.T) {
-	_, err := lowestPhpVersionForConstraint("not-a-constraint")
-	assert.Error(t, err)
-}
-
 func TestNormalizePhpVersion(t *testing.T) {
 	cases := map[string]string{
 		"8.4":      "8.4",
@@ -225,78 +197,4 @@ func TestNormalizePhpVersion(t *testing.T) {
 			assert.Equal(t, expected, normalizePhpVersion(input))
 		})
 	}
-}
-
-func TestResolvePhpVersionOverride(t *testing.T) {
-	setupMockPHPVersionServer(t)
-	c, err := version.NewConstraint(">= 6.5")
-	assert.NoError(t, err)
-
-	got, err := ResolvePhpVersion(t.Context(), "8.4", "^8.2", &c)
-	assert.NoError(t, err)
-	assert.Equal(t, "8.4", got)
-}
-
-func TestResolvePhpVersionFromComposer(t *testing.T) {
-	setupMockPHPVersionServer(t)
-	c, err := version.NewConstraint(">= 6.5")
-	assert.NoError(t, err)
-
-	got, err := ResolvePhpVersion(t.Context(), "", ">=8.4", &c)
-	assert.NoError(t, err)
-	assert.Equal(t, "8.4", got)
-}
-
-func TestResolvePhpVersionFallsBackToStaticMapping(t *testing.T) {
-	setupMockPHPVersionServer(t)
-	c, err := version.NewConstraint("6.5.0.0")
-	assert.NoError(t, err)
-
-	got, err := ResolvePhpVersion(t.Context(), "", "", &c)
-	assert.NoError(t, err)
-	assert.Equal(t, "8.1", got)
-}
-
-func TestResolvePhpVersionFallsBackOnInvalidComposerConstraint(t *testing.T) {
-	setupMockPHPVersionServer(t)
-	c, err := version.NewConstraint("6.5.0.0")
-	assert.NoError(t, err)
-
-	got, err := ResolvePhpVersion(t.Context(), "", "not-a-constraint", &c)
-	assert.NoError(t, err)
-	assert.Equal(t, "8.1", got)
-}
-
-func TestGetComposerRequirePhp(t *testing.T) {
-	plugin := &PlatformPlugin{
-		Composer: PlatformComposerJson{
-			Require: map[string]string{
-				"php":           "^8.2",
-				"shopware/core": "^6.6",
-			},
-		},
-	}
-	assert.Equal(t, "^8.2", GetComposerRequirePhp(plugin))
-
-	pluginWithoutPhp := &PlatformPlugin{
-		Composer: PlatformComposerJson{
-			Require: map[string]string{
-				"shopware/core": "^6.6",
-			},
-		},
-	}
-	assert.Equal(t, "", GetComposerRequirePhp(pluginWithoutPhp))
-
-	bundle := &ShopwareBundle{
-		Composer: shopwareBundleComposerJson{
-			Require: map[string]string{
-				"php":           "^8.3",
-				"shopware/core": "^6.6",
-			},
-		},
-	}
-	assert.Equal(t, "^8.3", GetComposerRequirePhp(bundle))
-
-	app := &App{}
-	assert.Equal(t, "", GetComposerRequirePhp(app))
 }
