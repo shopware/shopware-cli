@@ -438,6 +438,35 @@ var projectCreateCmd = &cobra.Command{
 			return fmt.Errorf("missing required dependencies")
 		}
 
+		advisories, err := packagist.GetShopwareSecurityAdvisories(cmd.Context())
+		if err != nil {
+			logging.FromContext(cmd.Context()).Warnf("Could not fetch security advisories: %v", err)
+		}
+		matchingAdvisories := packagist.FilterAdvisoriesForVersion(advisories, chooseVersion)
+		if len(matchingAdvisories) > 0 {
+			fmt.Fprintln(os.Stderr, renderSecurityAdvisories(chooseVersion, matchingAdvisories))
+
+			if interactive {
+				var continueAnyway string
+				if err := huh.NewForm(huh.NewGroup(
+					tui.NewYesNo().
+						Title(fmt.Sprintf("Shopware %s is affected by %d known security advisor%s", chooseVersion, len(matchingAdvisories), pluralize(len(matchingAdvisories), "y", "ies"))).
+						Description("Continuing will disable composer's audit blocking (--no-audit) so installation can proceed. Do you want to continue anyway?").
+						Value(&continueAnyway),
+				)).Run(); err != nil {
+					return err
+				}
+
+				if continueAnyway == tui.No {
+					return fmt.Errorf("project creation cancelled")
+				}
+
+				noAudit = true
+			} else if !noAudit {
+				return fmt.Errorf("shopware %s is affected by known security advisories; re-run with --no-audit to proceed", chooseVersion)
+			}
+		}
+
 		incompatibilities := system.CheckIncompatibilities(useDocker, projectFolder)
 
 		for _, incompatibility := range incompatibilities {
@@ -615,6 +644,41 @@ var projectCreateCmd = &cobra.Command{
 
 		return nil
 	},
+}
+
+func renderSecurityAdvisories(chosenVersion string, advisories []packagist.SecurityAdvisory) string {
+	var b strings.Builder
+
+	b.WriteString(tui.RedText.Bold(true).Render(fmt.Sprintf("Security Advisories for Shopware %s", chosenVersion)))
+	b.WriteString("\n\n")
+
+	warn := tui.YellowText.Render("⚠")
+	for _, a := range advisories {
+		severity := strings.ToUpper(a.Severity)
+		if severity == "" {
+			severity = "UNKNOWN"
+		}
+		fmt.Fprintf(&b, "  %s [%s] %s\n", warn, tui.BoldText.Render(severity), a.Title)
+		if a.CVE != "" {
+			fmt.Fprintf(&b, "    %s: %s\n", tui.DimText.Render("CVE"), a.CVE)
+		}
+		if a.Link != "" {
+			fmt.Fprintf(&b, "    %s\n", tui.BlueText.Render(a.Link))
+		}
+	}
+
+	return lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(tui.BlueColor).
+		Padding(1, 2).
+		Render(strings.TrimRight(b.String(), "\n"))
+}
+
+func pluralize(n int, singular, plural string) string {
+	if n == 1 {
+		return singular
+	}
+	return plural
 }
 
 func resolveVersion(selectedVersion string, filteredVersions []*version.Version) string {
