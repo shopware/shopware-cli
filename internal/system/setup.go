@@ -45,12 +45,21 @@ func CheckIncompatibilities(useDocker bool, projectFolder string) []Incompatibil
 	return incompatibilities
 }
 
+// PHPVersionChecker is satisfied by anything that can verify a PHP version
+// string against a constraint (e.g. packagist.PHPConstraint). The interface
+// keeps the system package free of cyclic packagist imports.
+type PHPVersionChecker interface {
+	Check(phpVersion string) bool
+	String() string
+}
+
 // CheckProjectDependencies returns the dependencies required to set up a
 // Shopware project that are not currently available. When useDocker is true
 // and we are not already inside a container, only Docker is required;
 // otherwise PHP 8.2+ and Composer must be present locally (matching the
-// fallback in runComposerInstall).
-func CheckProjectDependencies(ctx context.Context, useDocker bool) []MissingDependency {
+// fallback in runComposerInstall). If phpConstraint is non-nil and the local
+// PHP does not satisfy it, that mismatch is reported as well.
+func CheckProjectDependencies(ctx context.Context, useDocker bool, phpConstraint PHPVersionChecker) []MissingDependency {
 	var missing []MissingDependency
 
 	if useDocker && !IsInsideContainer() {
@@ -67,6 +76,16 @@ func CheckProjectDependencies(ctx context.Context, useDocker bool) []MissingDepe
 	case !phpOk:
 		installed, _ := GetInstalledPHPVersion(ctx)
 		missing = append(missing, MissingDependency{Name: "PHP 8.2+", Reason: fmt.Sprintf("found PHP %s", strings.TrimSpace(installed))})
+	default:
+		if phpConstraint != nil {
+			installed, _ := GetInstalledPHPVersion(ctx)
+			if installed != "" && !phpConstraint.Check(installed) {
+				missing = append(missing, MissingDependency{
+					Name:   fmt.Sprintf("PHP %s", phpConstraint),
+					Reason: fmt.Sprintf("found PHP %s", strings.TrimSpace(installed)),
+				})
+			}
+		}
 	}
 
 	if _, err := exec.LookPath("composer"); err != nil {

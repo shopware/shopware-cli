@@ -36,6 +36,7 @@ type ComposerPackageVersion struct {
 	Description       string            `json:"description"`
 	Time              string            `json:"time"`
 	Replace           map[string]string `json:"replace"`
+	Require           map[string]string `json:"require"`
 }
 
 type composerPackageVersionsResponse struct {
@@ -73,6 +74,37 @@ func GetAvailablePackagesFromShopwareStore(ctx context.Context, token string) (*
 	}
 
 	return &packages, nil
+}
+
+// GetPHPConstraintForShopwareVersion fetches shopware/core's metadata from packagist
+// and returns the `require.php` constraint declared for the given version. nil is
+// returned when the version is a dev branch, cannot be found, or has no PHP
+// requirement.
+func GetPHPConstraintForShopwareVersion(ctx context.Context, chosenVersion string) (*PHPConstraint, error) {
+	releases, err := GetShopwarePackageVersions(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	return PHPConstraintForShopwareVersion(releases, chosenVersion), nil
+}
+
+// PHPConstraintForShopwareVersion returns the `require.php` constraint declared for
+// the given version in the provided release list. nil is returned when the version is
+// a dev branch, cannot be found, or has no PHP requirement.
+func PHPConstraintForShopwareVersion(releases []ComposerPackageVersion, chosenVersion string) *PHPConstraint {
+	if strings.HasPrefix(chosenVersion, "dev-") {
+		return nil
+	}
+
+	normalized := strings.TrimPrefix(chosenVersion, "v")
+	for _, release := range releases {
+		if strings.TrimPrefix(release.Version, "v") == normalized {
+			return NewPHPConstraint(release.Require["php"])
+		}
+	}
+
+	return nil
 }
 
 func GetShopwarePackageVersions(ctx context.Context) ([]ComposerPackageVersion, error) {
