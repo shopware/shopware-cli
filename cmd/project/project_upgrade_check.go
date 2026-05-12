@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"path"
+	"strconv"
 	"strings"
 
 	"charm.land/huh/v2"
@@ -18,6 +19,7 @@ import (
 	"github.com/shopware/shopware-cli/internal/packagist"
 	"github.com/shopware/shopware-cli/internal/shop"
 	"github.com/shopware/shopware-cli/internal/system"
+	"github.com/shopware/shopware-cli/internal/tracking"
 	"github.com/shopware/shopware-cli/logging"
 )
 
@@ -154,6 +156,19 @@ var projectUpgradeCheckCmd = &cobra.Command{
 		}
 
 		fmt.Println(t.Render())
+
+		hasBlockers := false
+		for _, update := range updates {
+			if update.Status.IsBlocker() {
+				hasBlockers = true
+				break
+			}
+		}
+		go tracking.Track(cmd.Context(), "project.upgrade_check", map[string]string{
+			"from_version":   shopwareVersion.String(),
+			"target_version": selectedVersion,
+			"has_blockers":   strconv.FormatBool(hasBlockers),
+		})
 
 		return nil
 	},
