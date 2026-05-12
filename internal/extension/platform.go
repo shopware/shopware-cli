@@ -415,7 +415,12 @@ func validatePHPFiles(c context.Context, ext Extension, check validation.Check) 
 		return
 	}
 
-	phpVersion, err := GetPhpVersion(c, constraint)
+	override := ""
+	if cfg := ext.GetExtensionConfig(); cfg != nil {
+		override = cfg.Validation.PhpVersion
+	}
+
+	phpVersion, err := ResolvePhpVersion(c, override, GetComposerRequirePhp(ext), constraint)
 	if err != nil {
 		check.AddResult(validation.CheckResult{
 			Path:       "composer.json",
@@ -453,6 +458,73 @@ func validatePHPFiles(c context.Context, ext Extension, check validation.Check) 
 			})
 		}
 	}
+}
+
+// GetComposerRequirePhp returns the value of `require.php` from the extension's composer.json,
+// or an empty string when the extension does not declare a PHP requirement.
+func GetComposerRequirePhp(ext Extension) string {
+	switch e := ext.(type) {
+	case *PlatformPlugin:
+		return e.Composer.Require["php"]
+	case *ShopwareBundle:
+		return e.Composer.Require["php"]
+	}
+	return ""
+}
+
+// ResolvePhpVersion determines the PHP version for linting using the following priority:
+//  1. explicit override (e.g. validation.php_version in .shopware-project.yml or .shopware-extension.yml)
+//  2. composer.json require.php constraint
+//  3. static Shopware-to-PHP mapping fallback (via GetPhpVersion)
+func ResolvePhpVersion(ctx context.Context, override, composerPhpConstraint string, shopwareConstraint *version.Constraints) (string, error) {
+	if override != "" {
+		return normalizePhpVersion(override), nil
+	}
+
+	if composerPhpConstraint != "" {
+		if v, err := lowestPhpVersionForConstraint(composerPhpConstraint); err == nil && v != "" {
+			return v, nil
+		}
+	}
+
+	return GetPhpVersion(ctx, shopwareConstraint)
+}
+
+// knownPhpVersions lists PHP versions (in ascending order) that we can probe against a composer constraint.
+var knownPhpVersions = []string{
+	"7.2", "7.3", "7.4",
+	"8.0", "8.1", "8.2", "8.3", "8.4", "8.5",
+}
+
+// lowestPhpVersionForConstraint returns the lowest known PHP version that satisfies the given composer constraint.
+func lowestPhpVersionForConstraint(constraintStr string) (string, error) {
+	c, err := version.NewConstraint(constraintStr)
+	if err != nil {
+		return "", err
+	}
+
+	for _, v := range knownPhpVersions {
+		candidate, err := version.NewVersion(v + ".0")
+		if err != nil {
+			continue
+		}
+
+		if c.Check(candidate) {
+			return v, nil
+		}
+	}
+
+	return "", errors.New("could not find php version satisfying composer constraint")
+}
+
+// normalizePhpVersion trims a PHP version string to the major.minor form expected by the phplint package.
+func normalizePhpVersion(v string) string {
+	v = strings.TrimSpace(v)
+	parts := strings.Split(v, ".")
+	if len(parts) >= 2 {
+		return parts[0] + "." + parts[1]
+	}
+	return v
 }
 
 // phpVersionURL can be overridden in tests to use a mock server

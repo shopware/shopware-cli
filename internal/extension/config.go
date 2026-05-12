@@ -195,6 +195,9 @@ type ConfigValidation struct {
 	// Ignore items from the validation.
 	Ignore          ConfigValidationList `yaml:"ignore,omitempty"`
 	StoreCompliance bool                 `yaml:"store_compliance,omitempty"`
+	// PhpVersion overrides the PHP version used for linting (e.g. "8.4").
+	// When set, this takes precedence over the version derived from composer.json or the static Shopware-to-PHP mapping.
+	PhpVersion string `yaml:"php_version,omitempty"`
 }
 
 type ConfigValidationList []validation.ToolConfigIgnore
