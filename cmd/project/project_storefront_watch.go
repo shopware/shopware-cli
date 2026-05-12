@@ -6,7 +6,6 @@ import (
 	"strings"
 	"time"
 
-	"charm.land/huh/v2"
 	"github.com/spf13/cobra"
 
 	adminSdk "github.com/shopware/shopware-cli/internal/admin-api"
@@ -14,6 +13,7 @@ import (
 	"github.com/shopware/shopware-cli/internal/executor"
 	"github.com/shopware/shopware-cli/internal/extension"
 	"github.com/shopware/shopware-cli/internal/shop"
+	"github.com/shopware/shopware-cli/internal/tui"
 )
 
 var projectStorefrontWatchCmd = &cobra.Command{
@@ -114,21 +114,20 @@ func resolveStorefrontWatcherOptions(ctx context.Context, cmdExecutor executor.E
 			return extension.StorefrontWatcherOptions{}, fmt.Errorf("sales channel %q not found or not a storefront", salesChannelID)
 		}
 	} else {
-		opts := make([]huh.Option[string], 0, len(channels))
-		for _, sc := range channels {
-			label := sc.Name
+		items := make([]tui.FilterSelectItem, len(channels))
+		for i, sc := range channels {
+			detail := ""
 			if len(sc.Domains) > 0 {
-				label = fmt.Sprintf("%s (%s)", sc.Name, sc.Domains[0].Url)
+				detail = sc.Domains[0].Url
 			}
-			opts = append(opts, huh.NewOption(label, sc.Id))
+			items[i] = tui.FilterSelectItem{Label: sc.Name, Detail: detail, Value: sc.Id}
 		}
 
-		var chosenID string
-		if err := huh.NewSelect[string]().
-			Title("Which sales channel should the storefront watcher target?").
-			Options(opts...).
-			Value(&chosenID).
-			Run(); err != nil {
+		chosenID, err := tui.FilterSelect(ctx,
+			"Which sales channel should the storefront watcher target?",
+			"Type to filter by name or domain.",
+			items)
+		if err != nil {
 			return extension.StorefrontWatcherOptions{}, err
 		}
 
