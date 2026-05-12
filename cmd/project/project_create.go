@@ -56,10 +56,11 @@ var projectCreateCmd = &cobra.Command{
 		}
 
 		if len(args) == 1 {
-			filteredVersions, err := getFilteredInstallVersions(cmd.Context())
+			releases, err := packagist.GetShopwarePackageVersions(cmd.Context())
 			if err != nil {
 				return []string{}, cobra.ShellCompDirectiveNoFileComp
 			}
+			filteredVersions := filterInstallVersions(releases)
 			versions := make([]string, 0, len(filteredVersions)+1)
 			versions = append(versions, versionLatest)
 			for _, v := range filteredVersions {
@@ -99,10 +100,11 @@ var projectCreateCmd = &cobra.Command{
 			ciGitLab = "gitlab"
 		)
 
-		filteredVersions, err := getFilteredInstallVersions(cmd.Context())
+		releases, err := packagist.GetShopwarePackageVersions(cmd.Context())
 		if err != nil {
 			return err
 		}
+		filteredVersions := filterInstallVersions(releases)
 
 		type minorGroup struct {
 			label    string
@@ -482,6 +484,18 @@ var projectCreateCmd = &cobra.Command{
 			return fmt.Errorf("cannot find version %s", selectedVersion)
 		}
 
+		phpConstraint := packagist.PHPConstraintForShopwareVersion(releases, chooseVersion)
+
+		if !useDocker && phpConstraint != nil {
+			installedPHP, err := system.GetInstalledPHPVersion(cmd.Context())
+			if err != nil {
+				return fmt.Errorf("failed to determine installed PHP version: %w", err)
+			}
+			if !phpConstraint.Check(installedPHP) {
+				return fmt.Errorf("installed PHP version %s does not satisfy Shopware %s requirement %q", installedPHP, chooseVersion, phpConstraint)
+			}
+		}
+
 		if err := os.MkdirAll(projectFolder, os.ModePerm); err != nil {
 			return err
 		}
@@ -549,12 +563,18 @@ var projectCreateCmd = &cobra.Command{
 		isVerbose, _ := cmd.Flags().GetBool("verbose")
 		showSpinner := system.IsInteractionEnabled(cmd.Context()) && !isVerbose
 
-		if err := runComposerInstall(cmd.Context(), projectFolder, useDocker, showSpinner); err != nil {
+		composerInstallPHP := ""
+		if useDocker {
+			composerInstallPHP = phpConstraint.HighestSupported()
+			logging.FromContext(cmd.Context()).Infof("Using PHP %s for composer install", composerInstallPHP)
+		}
+
+		if err := runComposerInstall(cmd.Context(), projectFolder, useDocker, showSpinner, composerInstallPHP); err != nil {
 			return err
 		}
 
 		if useDocker {
-			if err := dockerpkg.WriteComposeFile(projectFolder, nil); err != nil {
+			if err := dockerpkg.WriteComposeFile(projectFolder, &dockerpkg.ComposeOptions{PHPVersion: composerInstallPHP}); err != nil {
 				return err
 			}
 		}
@@ -569,6 +589,9 @@ var projectCreateCmd = &cobra.Command{
 		shopCfg := shop.NewConfig()
 		if useDocker {
 			shopCfg.Environments["local"].Type = "docker"
+			shopCfg.Docker = &shop.ConfigDocker{
+				PHP: &shop.ConfigDockerPHP{Version: composerInstallPHP},
+			}
 		}
 
 		if err := shop.WriteConfig(shopCfg, projectFolder); err != nil {
@@ -689,7 +712,7 @@ func setupCI(ctx context.Context, projectFolder, ciSystem, deploymentMethod stri
 	return nil
 }
 
-func runComposerInstall(ctx context.Context, projectFolder string, useDocker bool, showSpinner bool) error {
+func runComposerInstall(ctx context.Context, projectFolder string, useDocker bool, showSpinner bool, phpVersion string) error {
 	var cmdInstall *exec.Cmd
 
 	if useDocker && !system.IsInsideContainer() {
@@ -713,8 +736,11 @@ func runComposerInstall(ctx context.Context, projectFolder string, useDocker boo
 			}
 		}
 
+		if phpVersion == "" {
+			phpVersion = packagist.SupportedPHPVersions[len(packagist.SupportedPHPVersions)-1]
+		}
 		dockerArgs = append(dockerArgs,
-			"ghcr.io/shopware/docker-dev:php8.3-node24-caddy",
+			fmt.Sprintf("ghcr.io/shopware/docker-dev:php%s-node24-caddy", phpVersion),
 			"composer", "install", "--no-interaction")
 
 		cmdInstall = exec.CommandContext(ctx, "docker", dockerArgs...)
@@ -765,12 +791,7 @@ func runComposerInstall(ctx context.Context, projectFolder string, useDocker boo
 	return nil
 }
 
-func getFilteredInstallVersions(ctx context.Context) ([]*version.Version, error) {
-	releases, err := packagist.GetShopwarePackageVersions(ctx)
-	if err != nil {
-		return nil, err
-	}
-
+func filterInstallVersions(releases []packagist.ComposerPackageVersion) []*version.Version {
 	filteredVersions := make([]*version.Version, 0)
 	constraint, _ := version.NewConstraint(">=6.4.18.0")
 
@@ -795,7 +816,7 @@ func getFilteredInstallVersions(ctx context.Context) ([]*version.Version, error)
 		filteredVersions[i], _ = version.NewVersion(strings.TrimPrefix(v.String(), "v"))
 	}
 
-	return filteredVersions, nil
+	return filteredVersions
 }
 
 func init() {
