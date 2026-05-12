@@ -159,7 +159,7 @@ var projectUpgradeCheckCmd = &cobra.Command{
 
 		hasBlockers := false
 		for _, update := range updates {
-			if update.Status.Type != "success" && update.Status.Type != "" {
+			if update.Status.IsBlocker() {
 				hasBlockers = true
 				break
 			}
