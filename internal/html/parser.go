@@ -1497,6 +1497,17 @@ func (p *Parser) parseIfBranch() (NodeList, error) {
 			continue
 		}
 
+		// Try parsing as a nested if statement
+		ifNode, err := p.parseTwigIf()
+		if err != nil {
+			return nodes, err
+		}
+		if ifNode != nil {
+			nodes = append(nodes, ifNode)
+			rawStart = p.pos
+			continue
+		}
+
 		// Try parsing template expressions {{ ... }}
 		expr, err := p.parseTemplateExpression()
 		if err != nil {
