@@ -184,17 +184,20 @@ func TestPluginGermanDescriptionMissingOnlyEnglishMarket(t *testing.T) {
 }
 
 func TestNormalizePhpVersion(t *testing.T) {
-	cases := map[string]string{
-		"8.4":      "8.4",
-		"8.4.1":    "8.4",
-		" 8.2 ":    "8.2",
-		"8":        "8",
-		"7.4.33-1": "7.4",
+	cases := []struct {
+		input    string
+		expected string
+	}{
+		{"8.4", "8.4"},
+		{"8.4.1", "8.4"},
+		{" 8.2 ", "8.2"},
+		{"8", "8"},
+		{"7.4.33-1", "7.4"},
 	}
 
-	for input, expected := range cases {
-		t.Run(input, func(t *testing.T) {
-			assert.Equal(t, expected, normalizePhpVersion(input))
+	for _, tc := range cases {
+		t.Run(tc.input, func(t *testing.T) {
+			assert.Equal(t, tc.expected, normalizePhpVersion(tc.input))
 		})
 	}
 }
