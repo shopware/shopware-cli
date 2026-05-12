@@ -30,8 +30,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **`internal/system/`** - System utilities (PHP/Node detection, filesystem)
 - **`internal/packagist/`** - Composer/Packagist integration
 - **`internal/llm/`** - AI integration (OpenAI, Gemini, OpenRouter)
-- **`internal/twigparser/`** - Custom Twig parsing for validation
-- **`internal/html/`** - HTML parsing and formatting
+- **`internal/html/`** - Twig + HTML parsing and formatting
 - **`internal/git/`** - Git operations
 - **`internal/ci/`** - CI/CD configuration generation
 
