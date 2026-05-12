@@ -21,6 +21,34 @@ var scssVariables []byte
 //go:embed static/mixins.scss
 var scssMixins []byte
 
+// IsDartSassAvailable checks whether dart-sass is available locally (on PATH or in cache),
+// without triggering a network download. Returns true if the binary is available.
+func IsDartSassAvailable() bool {
+	if _, err := exec.LookPath("dart-sass"); err == nil {
+		return true
+	}
+
+	cache := system.GetCacheWithPrefix("dart-sass")
+	cacheKey := "dart-sass-" + dartSassVersion + "-" + runtime.GOOS + "-" + runtime.GOARCH
+
+	expectedBinary := "sass"
+	if runtime.GOOS == "windows" {
+		expectedBinary += ".bat"
+	}
+
+	cachedPath, err := cache.GetFolderCachePath(context.Background(), cacheKey)
+	if err != nil {
+		return false
+	}
+
+	executablePath := filepath.Join(cachedPath, expectedBinary)
+	if _, statErr := os.Stat(executablePath); statErr == nil {
+		return true
+	}
+
+	return false
+}
+
 func locateDartSass(ctx context.Context) (string, error) {
 	if exePath, err := exec.LookPath("dart-sass"); err == nil {
 		return exePath, nil

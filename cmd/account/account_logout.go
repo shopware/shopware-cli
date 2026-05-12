@@ -19,14 +19,6 @@ var logoutCmd = &cobra.Command{
 			return fmt.Errorf("cannot invalidate token cache: %w", err)
 		}
 
-		_ = services.Conf.SetAccountCompanyId(0)
-		_ = services.Conf.SetAccountEmail("")
-		_ = services.Conf.SetAccountPassword("")
-
-		if err := services.Conf.Save(); err != nil {
-			return fmt.Errorf("cannot write config: %w", err)
-		}
-
 		logging.FromContext(cmd.Context()).Infof("You have been logged out")
 
 		return nil

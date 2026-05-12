@@ -10,8 +10,12 @@ import (
 // contextKey is a private string type to prevent collisions in the context map.
 type contextKey string
 
-// loggerKey points to the value in the context where the logging is stored.
-const loggerKey = contextKey("logging")
+const (
+	// loggerKey points to the value in the context where the logging is stored.
+	loggerKey = contextKey("logging")
+	// verboseKey points to the value in the context where verbose mode is stored.
+	verboseKey = contextKey("verbose")
+)
 
 var fallbackLogger *zap.SugaredLogger
 
@@ -41,6 +45,16 @@ func NewLogger(verbose bool) *zap.SugaredLogger {
 
 func WithLogger(ctx context.Context, logger *zap.SugaredLogger) context.Context {
 	return context.WithValue(ctx, loggerKey, logger)
+}
+
+func WithVerbose(ctx context.Context, verbose bool) context.Context {
+	return context.WithValue(ctx, verboseKey, verbose)
+}
+
+func IsVerbose(ctx context.Context) bool {
+	verbose, ok := ctx.Value(verboseKey).(bool)
+
+	return ok && verbose
 }
 
 func FromContext(ctx context.Context) *zap.SugaredLogger {

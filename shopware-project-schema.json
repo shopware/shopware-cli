@@ -138,9 +138,20 @@
           "$ref": "#/$defs/ConfigBuildMJML",
           "description": "MJML email template compilation configuration"
         },
+        "asset_caching": {
+          "type": "boolean",
+          "description": "When enabled, built assets are cached and restored on subsequent builds when sources haven't changed"
+        },
         "hooks": {
           "$ref": "#/$defs/ConfigBuildHooks",
           "description": "Hooks to run at specific points during CI builds"
+        },
+        "bundles": {
+          "items": {
+            "$ref": "#/$defs/ConfigProjectBundle"
+          },
+          "type": "array",
+          "description": "Shopware bundles to include in builds (alternative to composer.json extra.shopware-bundles)"
         }
       },
       "additionalProperties": false,
@@ -320,6 +331,10 @@
             ]
           },
           "type": "array"
+        },
+        "staging": {
+          "$ref": "#/$defs/ConfigDeploymentStaging",
+          "description": "Staging mode configuration for the deployment"
         }
       },
       "additionalProperties": false,
@@ -333,7 +348,8 @@
             "enum": [
               "inactive",
               "remove",
-              "ignore"
+              "ignore",
+              "installed"
             ]
           },
           "keepUserData": {
@@ -347,6 +363,17 @@
       },
       "type": "object",
       "title": "Extension overrides"
+    },
+    "ConfigDeploymentStaging": {
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "description": "When enabled, staging setup commands will be executed during installation and upgrade"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "description": "ConfigDeploymentStaging defines staging mode configuration."
     },
     "ConfigDump": {
       "properties": {
@@ -394,6 +421,24 @@
       },
       "additionalProperties": false,
       "type": "object"
+    },
+    "ConfigProjectBundle": {
+      "properties": {
+        "path": {
+          "type": "string",
+          "description": "Relative path from project root to the bundle directory"
+        },
+        "name": {
+          "type": "string",
+          "description": "Optional override for the bundle name; defaults to the directory basename"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "required": [
+        "path"
+      ],
+      "description": "ConfigProjectBundle defines a project-level Shopware bundle."
     },
     "ConfigValidation": {
       "properties": {

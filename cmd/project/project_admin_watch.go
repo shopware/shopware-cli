@@ -7,6 +7,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/shopware/shopware-cli/internal/envfile"
 	"github.com/shopware/shopware-cli/internal/extension"
 	"github.com/shopware/shopware-cli/internal/npm"
 	"github.com/shopware/shopware-cli/internal/phpexec"
@@ -27,7 +28,7 @@ var projectAdminWatchCmd = &cobra.Command{
 			return err
 		}
 
-		if err := extension.LoadSymfonyEnvFile(projectRoot); err != nil {
+		if err := envfile.LoadSymfonyEnvFile(projectRoot); err != nil {
 			return err
 		}
 

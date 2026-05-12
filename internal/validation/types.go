@@ -4,7 +4,7 @@ import (
 	"fmt"
 
 	"github.com/invopop/jsonschema"
-	orderedmap "github.com/wk8/go-ordered-map/v2"
+	orderedmap "github.com/pb33f/ordered-map/v2"
 	"gopkg.in/yaml.v3"
 )
 

@@ -8,6 +8,22 @@ import (
 	"github.com/shopware/shopware-cli/logging"
 )
 
+func convertAdditionalCaches(configCaches []ConfigBuildZipAssetsAdditionalCache) []asset.AdditionalCache {
+	if len(configCaches) == 0 {
+		return nil
+	}
+
+	caches := make([]asset.AdditionalCache, len(configCaches))
+	for i, cp := range configCaches {
+		caches[i] = asset.AdditionalCache{
+			Path:        cp.Path,
+			SourcePaths: cp.SourcePaths,
+		}
+	}
+
+	return caches
+}
+
 func ConvertExtensionsToSources(ctx context.Context, extensions []Extension) []asset.Source {
 	sources := make([]asset.Source, 0)
 
@@ -25,6 +41,7 @@ func ConvertExtensionsToSources(ctx context.Context, extensions []Extension) []a
 			StorefrontEsbuildCompatible: ext.GetExtensionConfig().Build.Zip.Assets.EnableESBuildForStorefront,
 			DisableSass:                 ext.GetExtensionConfig().Build.Zip.Assets.DisableSass,
 			NpmStrict:                   ext.GetExtensionConfig().Build.Zip.Assets.NpmStrict,
+			AdditionalCaches:            convertAdditionalCaches(ext.GetExtensionConfig().Build.Zip.Assets.AdditionalCaches),
 		})
 
 		extConfig := ext.GetExtensionConfig()

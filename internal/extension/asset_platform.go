@@ -237,6 +237,10 @@ func BuildAssetsForExtensions(ctx context.Context, sources []asset.Source, asset
 			}
 
 			storefrontRoot := PlatformPath(shopwareRoot, "Storefront", "Resources/app/storefront")
+			npmPackage, err := npm.ReadPackage(storefrontRoot)
+			if err != nil {
+				return err
+			}
 
 			if assetConfig.NPMForceInstall || !npm.NodeModulesExists(storefrontRoot) {
 				if err := npm.PatchPackageLockToRemoveCanIUse(path.Join(storefrontRoot, "package-lock.json")); err != nil {
@@ -244,11 +248,6 @@ func BuildAssetsForExtensions(ctx context.Context, sources []asset.Source, asset
 				}
 
 				additionalNpmParameters := []string{"caniuse-lite"}
-
-				npmPackage, err := npm.ReadPackage(storefrontRoot)
-				if err != nil {
-					return err
-				}
 
 				if npmPackage.HasDevDependency("puppeteer") {
 					additionalNpmParameters = append(additionalNpmParameters, "--production")
@@ -291,23 +290,25 @@ func BuildAssetsForExtensions(ctx context.Context, sources []asset.Source, asset
 				envList = append(envList, fmt.Sprintf("BROWSERSLIST=%s", assetConfig.Browserslist))
 			}
 
-			nodeWebpackCmd := exec.CommandContext(ctx, "node", "node_modules/.bin/webpack", "--config", "webpack.config.js")
-			nodeWebpackCmd.Dir = storefrontRoot
-			nodeWebpackCmd.Env = os.Environ()
-			nodeWebpackCmd.Env = append(nodeWebpackCmd.Env, envList...)
-			nodeWebpackCmd.Stdout = os.Stdout
-			nodeWebpackCmd.Stderr = os.Stderr
+			if npmPackage.HasScript("production") {
+				if err := npm.RunScript(ctx, storefrontRoot, "production", envList); err != nil {
+					return err
+				}
+			} else {
+				nodeWebpackCmd := exec.CommandContext(ctx, "node", "node_modules/.bin/webpack", "--config", "webpack.config.js")
+				nodeWebpackCmd.Dir = storefrontRoot
+				nodeWebpackCmd.Env = os.Environ()
+				nodeWebpackCmd.Env = append(nodeWebpackCmd.Env, envList...)
+				nodeWebpackCmd.Stdout = os.Stdout
+				nodeWebpackCmd.Stderr = os.Stderr
 
-			if err := nodeWebpackCmd.Run(); err != nil {
-				return err
+				if err := nodeWebpackCmd.Run(); err != nil {
+					return err
+				}
 			}
 
 			if assetConfig.CleanupNodeModules {
 				defer deletePaths(ctx, path.Join(storefrontRoot, "node_modules"))
-			}
-
-			if err != nil {
-				return err
 			}
 		}
 

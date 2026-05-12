@@ -61,6 +61,7 @@ func GenerateComposerJson(ctx context.Context, opts ComposerJsonOptions) (string
 
 	require := newOrderedMap()
 	require.set("composer-runtime-api", "^2.0")
+	require.set("shopware/deployment-helper", "*")
 	require.set("shopware/administration", opts.DependingVersion)
 	require.set("shopware/core", opts.Version)
 	if opts.UseElasticsearch {

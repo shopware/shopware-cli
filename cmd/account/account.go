@@ -4,7 +4,6 @@ import (
 	"github.com/spf13/cobra"
 
 	account_api "github.com/shopware/shopware-cli/internal/account-api"
-	"github.com/shopware/shopware-cli/internal/config"
 )
 
 var accountRootCmd = &cobra.Command{
@@ -13,7 +12,6 @@ var accountRootCmd = &cobra.Command{
 }
 
 type ServiceContainer struct {
-	Conf          config.Config
 	AccountClient *account_api.Client
 }
 

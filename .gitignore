@@ -23,3 +23,10 @@ dump.sql*
 devenv.local.nix
 
 /.direnv
+/env-bridge/env-bridge
+
+# Go cache
+/.gocache
+/.gomodcache
+/.gopath
+.soulforge

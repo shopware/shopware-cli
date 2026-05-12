@@ -1,14 +1,16 @@
 package account
 
 import (
+	"cmp"
 	"fmt"
-	"strconv"
+	"slices"
 
 	"charm.land/lipgloss/v2"
 	liplogtable "charm.land/lipgloss/v2/table"
 	"github.com/spf13/cobra"
 
 	account_api "github.com/shopware/shopware-cli/internal/account-api"
+	"github.com/shopware/shopware-cli/internal/tui"
 )
 
 var accountCompanyProducerExtensionListCmd = &cobra.Command{
@@ -35,26 +37,53 @@ var accountCompanyProducerExtensionListCmd = &cobra.Command{
 			return err
 		}
 
+		slices.SortFunc(extensions, func(a, b account_api.Extension) int {
+			if c := cmp.Compare(a.Producer.Name, b.Producer.Name); c != 0 {
+				return c
+			}
+			return cmp.Compare(a.Name, b.Name)
+		})
+
+		cellStyle := lipgloss.NewStyle().Padding(0, 1)
+
 		t := liplogtable.New().
 			Border(lipgloss.NormalBorder()).
-			Headers("ID", "Name", "Type", "Compatible with latest version", "Status")
+			StyleFunc(func(row, col int) lipgloss.Style {
+				return cellStyle
+			}).
+			Headers("Name", "Type", "Compatible with latest version", "Status")
 
+		lastProducerId := 0
 		for _, extension := range extensions {
-			if extension.Status.Name == "deleted" {
+			if extension.Status.Name == "deleted" || extension.Name == "" || extension.Generation.Name == "classic" {
 				continue
 			}
 
-			compatible := "No"
+			if extension.Producer.Id != lastProducerId {
+				lastProducerId = extension.Producer.Id
+				t.Row(tui.BoldText.Render(extension.Producer.Name), "", "", "")
+			}
+
+			compatible := tui.RedText.Render("No")
 			if extension.IsCompatibleWithLatestShopwareVersion {
-				compatible = "Yes"
+				compatible = tui.GreenText.Render("Yes")
+			}
+
+			var status string
+			switch extension.Status.Name {
+			case "instore", "approved":
+				status = tui.GreenText.Render(extension.Status.Name)
+			case "incomplete", "waitingforapproval":
+				status = tui.YellowText.Render(extension.Status.Name)
+			default:
+				status = tui.DimText.Render(extension.Status.Name)
 			}
 
 			t.Row(
-				strconv.FormatInt(int64(extension.Id), 10),
-				extension.Name,
-				extension.Generation.Description,
+				"  "+extension.Name,
+				tui.DimText.Render(extension.Generation.Description),
 				compatible,
-				extension.Status.Name,
+				status,
 			)
 		}
 

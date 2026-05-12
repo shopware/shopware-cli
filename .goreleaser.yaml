@@ -35,15 +35,28 @@ release:
   github:
     owner: shopware
     name: shopware-cli
+  prerelease: auto
 
 dockers_v2:
+  - id: php-85
+    images:
+      - "shopware/shopware-cli"
+      - "ghcr.io/shopware/shopware-cli"
+    tags:
+      - "{{ .Version }}-php-8.5"
+      - '{{ if not .Prerelease }}latest-php-8.5{{ end }}'
+    build_args:
+      PHP_VERSION: "8.5"
+    platforms:
+      - "linux/amd64"
+      - "linux/arm64"
   - id: php-84
     images:
       - "shopware/shopware-cli"
       - "ghcr.io/shopware/shopware-cli"
     tags:
       - "{{ .Version }}-php-8.4"
-      - "latest-php-8.4"
+      - '{{ if not .Prerelease }}latest-php-8.4{{ end }}'
     build_args:
       PHP_VERSION: "8.4"
     platforms:
@@ -55,9 +68,9 @@ dockers_v2:
       - "ghcr.io/shopware/shopware-cli"
     tags:
       - "{{ .Version }}-php-8.3"
-      - "latest-php-8.3"
+      - '{{ if not .Prerelease }}latest-php-8.3{{ end }}'
       - "{{ .Version }}"
-      - "latest"
+      - '{{ if not .Prerelease }}latest{{ end }}'
     build_args:
       PHP_VERSION: "8.3"
     platforms:
@@ -69,21 +82,9 @@ dockers_v2:
       - "ghcr.io/shopware/shopware-cli"
     tags:
       - "{{ .Version }}-php-8.2"
-      - "latest-php-8.2"
+      - '{{ if not .Prerelease }}latest-php-8.2{{ end }}'
     build_args:
       PHP_VERSION: "8.2"
-    platforms:
-      - "linux/amd64"
-      - "linux/arm64"
-  - id: php-81
-    images:
-      - "shopware/shopware-cli"
-      - "ghcr.io/shopware/shopware-cli"
-    tags:
-      - "{{ .Version }}-php-8.1"
-      - "latest-php-8.1"
-    build_args:
-      PHP_VERSION: "8.1"
     platforms:
       - "linux/amd64"
       - "linux/arm64"
@@ -94,7 +95,7 @@ dockers_v2:
     dockerfile: Dockerfile.bin
     tags:
       - "bin-{{ .Version }}"
-      - "bin"
+      - '{{ if not .Prerelease }}bin{{ end }}'
     platforms:
       - "linux/amd64"
       - "linux/arm64"
@@ -150,6 +151,7 @@ aurs:
   - homepage: https://developer.shopware.com/
     description: A cli which contains handy helpful commands for daily Shopware tasks
     license: MIT
+    disable: '{{ .Prerelease }}'
     maintainers:
       - "Soner Sayakci <s.sayakci@shopware.com>"
       - "Max <max@swk-web.com>"
@@ -177,6 +179,7 @@ aurs:
 
 nix:
   - name: shopware-cli
+    disable: '{{ .Prerelease }}'
     repository:
       owner: FriendsOfShopware
       name: nur-packages
@@ -220,6 +223,7 @@ nfpms:
 
 homebrew_casks:
   - name: shopware-cli
+    disable: '{{ .Prerelease }}'
     repository:
       owner: shopware
       name: homebrew-tap
@@ -252,6 +256,7 @@ npms:
     repository: https://github.com/shopware/shopware-cli
     bugs: https://github.com/shopware/shopware-cli/issues
     access: public
+    tag: '{{ if .Prerelease }}prerelease{{ else }}latest{{ end }}'
 
 notarize:
   macos:

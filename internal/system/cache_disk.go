@@ -88,11 +88,20 @@ func (c *DiskCache) GetFilePath(ctx context.Context, key string) (string, error)
 
 // StoreFolderCache stores an entire folder structure in the cache
 func (c *DiskCache) StoreFolderCache(ctx context.Context, key string, folderPath string) error {
+	if _, err := os.Stat(folderPath); os.IsNotExist(err) {
+		return fmt.Errorf("source folder %q does not exist", folderPath)
+	}
+
 	// Get the cache folder path
 	cacheFolderPath := c.getFolderPath(key)
 
 	// Create a temporary folder first for atomic operation
 	tmpPath := cacheFolderPath + ".tmp"
+
+	// Ensure parent directory exists
+	if err := os.MkdirAll(filepath.Dir(cacheFolderPath), 0755); err != nil {
+		return fmt.Errorf("failed to create cache directory structure: %w", err)
+	}
 
 	// Remove any existing temporary folder
 	_ = os.RemoveAll(tmpPath)
@@ -105,12 +114,6 @@ func (c *DiskCache) StoreFolderCache(ctx context.Context, key string, folderPath
 
 	// Remove any existing cached folder
 	_ = os.RemoveAll(cacheFolderPath)
-
-	// Ensure parent directory exists for the final location
-	if err := os.MkdirAll(filepath.Dir(cacheFolderPath), 0755); err != nil {
-		_ = os.RemoveAll(tmpPath)
-		return fmt.Errorf("failed to create cache directory structure: %w", err)
-	}
 
 	// Atomically rename temporary folder to final location
 	if err := os.Rename(tmpPath, cacheFolderPath); err != nil {

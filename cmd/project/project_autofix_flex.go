@@ -8,9 +8,9 @@ import (
 	"charm.land/huh/v2"
 	"github.com/spf13/cobra"
 
-	"github.com/shopware/shopware-cli/internal/color"
 	"github.com/shopware/shopware-cli/internal/flexmigrator"
 	"github.com/shopware/shopware-cli/internal/system"
+	"github.com/shopware/shopware-cli/internal/tui"
 )
 
 var projectAutofixFlexCmd = &cobra.Command{
@@ -55,8 +55,8 @@ var projectAutofixFlexCmd = &cobra.Command{
 		}
 
 		fmt.Println("Project migrated to Symfony Flex")
-		fmt.Printf("Please run %s to install the new dependencies\n", color.GreenText.Render("composer update"))
-		fmt.Printf("and %s to apply the recipes\n", color.GreenText.Render("yes | composer recipes:install --reset --force"))
+		fmt.Printf("Please run %s to install the new dependencies\n", tui.GreenText.Render("composer update"))
+		fmt.Printf("and %s to apply the recipes\n", tui.GreenText.Render("yes | composer recipes:install --reset --force"))
 
 		return nil
 	},

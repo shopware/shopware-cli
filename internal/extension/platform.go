@@ -160,18 +160,87 @@ func (p PlatformPlugin) GetPath() string {
 	return p.path
 }
 
-func (p PlatformPlugin) GetMetaData() *extensionMetadata {
-	return &extensionMetadata{
+func (p PlatformPlugin) GetMetaData() *ExtensionMetadata {
+	return &ExtensionMetadata{
 		Name: p.Composer.Name,
-		Label: extensionTranslated{
+		Label: ExtensionTranslated{
 			German:  p.Composer.Extra.Label["de-DE"],
 			English: p.Composer.Extra.Label["en-GB"],
 		},
-		Description: extensionTranslated{
+		Description: ExtensionTranslated{
 			German:  p.Composer.Extra.Description["de-DE"],
 			English: p.Composer.Extra.Description["en-GB"],
 		},
 	}
+}
+
+func (p PlatformPlugin) UpdateMetaData(metadata *ExtensionMetadata) error {
+	composerJsonFile := fmt.Sprintf("%s/composer.json", p.path)
+
+	composerJson, err := os.ReadFile(composerJsonFile)
+	if err != nil {
+		return fmt.Errorf("could not read composer.json: %w", err)
+	}
+
+	var composerJsonStruct map[string]interface{}
+	if err := json.Unmarshal(composerJson, &composerJsonStruct); err != nil {
+		return fmt.Errorf("could not unmarshal composer.json: %w", err)
+	}
+
+	extra, ok := composerJsonStruct["extra"].(map[string]interface{})
+	if !ok {
+		extra = make(map[string]interface{})
+		composerJsonStruct["extra"] = extra
+	}
+
+	changed := false
+
+	if metadata.Label.German != "" || metadata.Label.English != "" {
+		label, ok := extra["label"].(map[string]interface{})
+		if !ok {
+			label = make(map[string]interface{})
+		}
+		if metadata.Label.German != "" {
+			label["de-DE"] = metadata.Label.German
+		}
+		if metadata.Label.English != "" {
+			label["en-GB"] = metadata.Label.English
+		}
+		extra["label"] = label
+		changed = true
+	}
+
+	if metadata.Description.German != "" || metadata.Description.English != "" {
+		description, ok := extra["description"].(map[string]interface{})
+		if !ok {
+			description = make(map[string]interface{})
+		}
+		if metadata.Description.German != "" {
+			description["de-DE"] = metadata.Description.German
+		}
+		if metadata.Description.English != "" {
+			description["en-GB"] = metadata.Description.English
+		}
+		extra["description"] = description
+		changed = true
+	}
+
+	if !changed {
+		return nil
+	}
+
+	newComposerJson, err := json.MarshalIndent(composerJsonStruct, "", "  ")
+	if err != nil {
+		return fmt.Errorf("could not marshal composer.json: %w", err)
+	}
+
+	newComposerJson = append(newComposerJson, '\n')
+
+	if err := os.WriteFile(composerJsonFile, newComposerJson, os.ModePerm); err != nil {
+		return fmt.Errorf("could not write composer.json: %w", err)
+	}
+
+	return nil
 }
 
 func (p PlatformPlugin) GetIconPath() string {
@@ -327,8 +396,12 @@ func (p PlatformPlugin) Validate(c context.Context, check validation.Check) {
 	validateExtensionIcon(p, check)
 
 	validateTheme(p, check)
-	validatePHPFiles(c, p, check)
+	validatePHPFilesFn(c, p, check)
 }
+
+// validatePHPFilesFn can be overridden in tests to skip PHP file validation,
+// which would otherwise require network access to download the PHP wasm binary.
+var validatePHPFilesFn = validatePHPFiles
 
 func validatePHPFiles(c context.Context, ext Extension, check validation.Check) {
 	constraint, err := ext.GetShopwareVersionConstraint()

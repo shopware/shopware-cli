@@ -127,7 +127,7 @@ func TestSetupCI(t *testing.T) {
 		t.Parallel()
 		tmpDir := t.TempDir()
 
-		err := setupCI(tmpDir, "none", packagist.DeploymentNone)
+		err := setupCI(t.Context(), tmpDir, "none", packagist.DeploymentNone)
 		assert.NoError(t, err)
 
 		entries, err := os.ReadDir(tmpDir)
@@ -139,7 +139,7 @@ func TestSetupCI(t *testing.T) {
 		t.Parallel()
 		tmpDir := t.TempDir()
 
-		err := setupCI(tmpDir, "github", packagist.DeploymentNone)
+		err := setupCI(t.Context(), tmpDir, "github", packagist.DeploymentNone)
 		assert.NoError(t, err)
 
 		assert.DirExists(t, filepath.Join(tmpDir, ".github", "workflows"))
@@ -151,7 +151,7 @@ func TestSetupCI(t *testing.T) {
 		t.Parallel()
 		tmpDir := t.TempDir()
 
-		err := setupCI(tmpDir, "github", packagist.DeploymentDeployer)
+		err := setupCI(t.Context(), tmpDir, "github", packagist.DeploymentDeployer)
 		assert.NoError(t, err)
 
 		assert.FileExists(t, filepath.Join(tmpDir, ".github", "workflows", "ci.yml"))
@@ -162,7 +162,7 @@ func TestSetupCI(t *testing.T) {
 		t.Parallel()
 		tmpDir := t.TempDir()
 
-		err := setupCI(tmpDir, "gitlab", packagist.DeploymentNone)
+		err := setupCI(t.Context(), tmpDir, "gitlab", packagist.DeploymentNone)
 		assert.NoError(t, err)
 
 		assert.FileExists(t, filepath.Join(tmpDir, ".gitlab-ci.yml"))
@@ -172,7 +172,7 @@ func TestSetupCI(t *testing.T) {
 		t.Parallel()
 		tmpDir := t.TempDir()
 
-		err := setupCI(tmpDir, "gitlab", packagist.DeploymentDeployer)
+		err := setupCI(t.Context(), tmpDir, "gitlab", packagist.DeploymentDeployer)
 		assert.NoError(t, err)
 
 		content, err := os.ReadFile(filepath.Join(tmpDir, ".gitlab-ci.yml"))

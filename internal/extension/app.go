@@ -11,6 +11,7 @@ import (
 	"github.com/shyim/go-version"
 
 	"github.com/shopware/shopware-cli/internal/validation"
+	"github.com/shopware/shopware-cli/internal/xmlpath"
 )
 
 type App struct {
@@ -136,19 +137,101 @@ func (a App) GetIconPath() string {
 	return filepath.Join(a.GetRootDir(), iconPath)
 }
 
-func (a App) GetMetaData() *extensionMetadata {
+func (a App) GetMetaData() *ExtensionMetadata {
 	german := []string{"de-DE", "de"}
 	english := []string{"en-GB", "en-US", "en", ""}
 
-	return &extensionMetadata{
-		Label: extensionTranslated{
+	return &ExtensionMetadata{
+		Label: ExtensionTranslated{
 			German:  a.manifest.Meta.Label.GetValueByLanguage(german),
 			English: a.manifest.Meta.Label.GetValueByLanguage(english),
 		},
-		Description: extensionTranslated{
+		Description: ExtensionTranslated{
 			German:  a.manifest.Meta.Description.GetValueByLanguage(german),
 			English: a.manifest.Meta.Description.GetValueByLanguage(english),
 		},
+	}
+}
+
+func (a App) UpdateMetaData(metadata *ExtensionMetadata) error {
+	manifestFile := fmt.Sprintf("%s/manifest.xml", a.path)
+
+	manifestBytes, err := os.ReadFile(manifestFile)
+	if err != nil {
+		return fmt.Errorf("could not read manifest.xml: %w", err)
+	}
+
+	manifest, err := xmlpath.Parse(manifestBytes)
+	if err != nil {
+		return fmt.Errorf("could not parse manifest.xml: %w", err)
+	}
+
+	meta := manifest.Root().Find("meta")
+	if meta == nil {
+		return fmt.Errorf("could not update manifest.xml: meta element not found")
+	}
+
+	updateTranslatableXMLElement(meta, "label", metadata.Label)
+	updateTranslatableXMLElement(meta, "description", metadata.Description)
+
+	newXml, err := manifest.MarshalIndent("", "  ")
+	if err != nil {
+		return fmt.Errorf("could not marshal manifest.xml: %w", err)
+	}
+
+	newXml = append([]byte(xml.Header), newXml...)
+
+	if err := os.WriteFile(manifestFile, newXml, os.ModePerm); err != nil {
+		return fmt.Errorf("could not write manifest.xml: %w", err)
+	}
+
+	return nil
+}
+
+var metaElementOrder = []string{
+	"name",
+	"label",
+	"description",
+	"author",
+	"copyright",
+	"version",
+	"icon",
+	"license",
+	"compatibility",
+	"privacy",
+	"privacyPolicyExtensions",
+}
+
+func updateTranslatableXMLElement(parent *xmlpath.Element, name string, translated ExtensionTranslated) {
+	translations := []struct {
+		lang  string
+		value string
+	}{
+		{"en-GB", translated.English},
+		{"de-DE", translated.German},
+	}
+
+	matched := make(map[string]bool)
+	for _, entry := range parent.FindAll(name) {
+		lang, _ := entry.Attr("lang")
+		for _, translation := range translations {
+			if translation.value == "" {
+				continue
+			}
+			if lang == translation.lang || (lang == "" && translation.lang == "en-GB") {
+				entry.SetText(translation.value)
+				matched[translation.lang] = true
+			}
+		}
+	}
+
+	for _, translation := range translations {
+		if translation.value == "" || matched[translation.lang] {
+			continue
+		}
+		entry := parent.AppendChildInOrder(name, metaElementOrder)
+		entry.SetText(translation.value)
+		entry.SetAttr("lang", translation.lang)
 	}
 }
 

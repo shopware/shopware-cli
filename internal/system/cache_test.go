@@ -283,6 +283,16 @@ func TestDiskCacheStoreFolderCreatesParentDirectory(t *testing.T) {
 	require.NoError(t, err, "Parent directory should exist")
 }
 
+func TestDiskCacheStoreFolderErrorsOnMissingSource(t *testing.T) {
+	t.Parallel()
+	cache := NewDiskCache(t.TempDir())
+	ctx := t.Context()
+
+	err := cache.StoreFolderCache(ctx, "some-key", filepath.Join(t.TempDir(), "nonexistent"))
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "does not exist")
+}
+
 func TestGitHubActionsCacheSymlinksAndPermissions(t *testing.T) {
 	t.Parallel()
 	// This test would only work in GitHub Actions, but we can test the tar creation logic

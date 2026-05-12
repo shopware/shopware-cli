@@ -3,6 +3,7 @@ package project
 import (
 	"bytes"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
@@ -27,32 +28,22 @@ var (
 	imageProxySkipConfig  bool
 )
 
-type responseCapture struct {
-	http.ResponseWriter
-	body        *bytes.Buffer
-	statusCode  *int
-	contentType *string
+// cacheReadCloser wraps a response body, teeing reads into a buffer.
+// When the body is closed, onClose is called to persist the captured bytes.
+type cacheReadCloser struct {
+	io.ReadCloser
+	tee     io.Reader
+	onClose func()
 }
 
-func (r *responseCapture) WriteHeader(code int) {
-	*r.statusCode = code
-	r.ResponseWriter.WriteHeader(code)
+func (c *cacheReadCloser) Read(p []byte) (int, error) {
+	return c.tee.Read(p)
 }
 
-func (r *responseCapture) Write(b []byte) (int, error) {
-	if *r.statusCode == 0 {
-		*r.statusCode = http.StatusOK
-	}
-	r.body.Write(b)
-	return r.ResponseWriter.Write(b)
-}
-
-func (r *responseCapture) Header() http.Header {
-	h := r.ResponseWriter.Header()
-	if ct := h.Get("Content-Type"); ct != "" {
-		*r.contentType = ct
-	}
-	return h
+func (c *cacheReadCloser) Close() error {
+	err := c.ReadCloser.Close()
+	c.onClose()
+	return err
 }
 
 var projectImageProxyCmd = &cobra.Command{
@@ -108,11 +99,59 @@ If a file is not found locally, it proxies the request to the upstream server.`,
 			return fmt.Errorf("failed to create cache directory: %w", err)
 		}
 
-		// Create reverse proxy with custom transport to capture responses
+		// Create reverse proxy that captures response bodies for caching
 		proxy := httputil.NewSingleHostReverseProxy(upstream)
 		proxy.ErrorHandler = func(w http.ResponseWriter, r *http.Request, err error) {
 			logging.FromContext(cmd.Context()).Errorf("proxy error: %v", err)
 			http.Error(w, "Bad Gateway", http.StatusBadGateway)
+		}
+
+		// Strip Accept-Encoding from the outgoing request so Go's Transport
+		// transparently decompresses upstream responses. This ensures the
+		// cache always stores identity-encoded (uncompressed) content, avoiding
+		// double-compression when serving cache hits through the gzip handler.
+		defaultDirector := proxy.Director
+		proxy.Director = func(req *http.Request) {
+			defaultDirector(req)
+			req.Header.Del("Accept-Encoding")
+		}
+
+		// ModifyResponse tees the response body so that bytes are captured for
+		// caching as the reverse proxy streams them to the client. This avoids
+		// buffering the entire response in memory before writing.
+		proxy.ModifyResponse = func(res *http.Response) error {
+			if res.StatusCode != http.StatusOK {
+				return nil
+			}
+
+			cleanPath := filepath.Clean(res.Request.URL.Path)
+			contentType := res.Header.Get("Content-Type")
+			cachePath := filepath.Join(cacheDir, strings.ReplaceAll(cleanPath, "/", "_"))
+			cacheMetaPath := cachePath + ".meta"
+
+			var buf bytes.Buffer
+			res.Body = &cacheReadCloser{
+				ReadCloser: res.Body,
+				tee:        io.TeeReader(res.Body, &buf),
+				onClose: func() {
+					if buf.Len() == 0 {
+						return
+					}
+
+					if dir := filepath.Dir(cachePath); dir != cacheDir {
+						_ = os.MkdirAll(dir, 0755)
+					}
+
+					if err := os.WriteFile(cachePath, buf.Bytes(), 0644); err == nil {
+						if contentType != "" {
+							_ = os.WriteFile(cacheMetaPath, []byte(contentType), 0644)
+						}
+						logging.FromContext(cmd.Context()).Debugf("Cached file: %s", cleanPath)
+					}
+				},
+			}
+
+			return nil
 		}
 
 		// Create handler
@@ -158,43 +197,12 @@ If a file is not found locally, it proxies the request to the upstream server.`,
 			// If not found locally or in cache, proxy to upstream
 			logging.FromContext(cmd.Context()).Debugf("Proxying to upstream: %s", cleanPath)
 
-			// Create a custom response writer to capture the response
-			var buf bytes.Buffer
-			var statusCode int
-			var contentType string
-			captureWriter := &responseCapture{
-				ResponseWriter: w,
-				body:           &buf,
-				statusCode:     &statusCode,
-				contentType:    &contentType,
-			}
-
 			// Preserve the original path in the proxied request
 			r.URL.Host = upstream.Host
 			r.URL.Scheme = upstream.Scheme
 			r.Host = upstream.Host
 
-			proxy.ServeHTTP(captureWriter, r)
-
-			// Cache successful responses
-			if statusCode == http.StatusOK && buf.Len() > 0 {
-				cachePath := filepath.Join(cacheDir, strings.ReplaceAll(cleanPath, "/", "_"))
-				cacheMetaPath := cachePath + ".meta"
-
-				// Ensure cache subdirectories exist
-				if dir := filepath.Dir(cachePath); dir != cacheDir {
-					_ = os.MkdirAll(dir, 0755)
-				}
-
-				// Write the file content
-				if err := os.WriteFile(cachePath, buf.Bytes(), 0644); err == nil {
-					// Write content type to meta file
-					if contentType != "" {
-						_ = os.WriteFile(cacheMetaPath, []byte(contentType), 0644)
-					}
-					logging.FromContext(cmd.Context()).Debugf("Cached file: %s", cleanPath)
-				}
-			}
+			proxy.ServeHTTP(w, r)
 		})
 
 		// Prepare server address
@@ -267,8 +275,11 @@ If a file is not found locally, it proxies the request to the upstream server.`,
 		logging.FromContext(cmd.Context()).Infof("Proxying to: %s", upstreamURL)
 		logging.FromContext(cmd.Context()).Infof("Cache directory: %s", cacheDir)
 
-		// Enable gzip compression for common web content types
+		// Enable gzip compression for text-based content types.
+		// Binary image formats (JPEG, PNG, GIF, WebP) are excluded because
+		// they are already compressed and gzip provides no benefit.
 		gzipWrapper, _ := gziphandler.GzipHandlerWithOpts(
+			gziphandler.MinSize(gziphandler.DefaultMinSize),
 			gziphandler.ContentTypes([]string{
 				"text/html",
 				"text/css",
@@ -277,10 +288,6 @@ If a file is not found locally, it proxies the request to the upstream server.`,
 				"application/json",
 				"application/vnd.api+json",
 				"image/svg+xml",
-				"image/jpeg",
-				"image/png",
-				"image/gif",
-				"image/webp",
 				"text/xml",
 				"application/xml",
 				"text/plain",

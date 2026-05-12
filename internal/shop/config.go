@@ -10,7 +10,7 @@ import (
 
 	"dario.cat/mergo"
 	"github.com/invopop/jsonschema"
-	orderedmap "github.com/wk8/go-ordered-map/v2"
+	orderedmap "github.com/pb33f/ordered-map/v2"
 	"gopkg.in/yaml.v3"
 
 	"github.com/shopware/shopware-cli/internal/compatibility"
@@ -78,8 +78,20 @@ type ConfigBuild struct {
 	KeepNodeModules []string `yaml:"keep_node_modules,omitempty"`
 	// MJML email template compilation configuration
 	MJML *ConfigBuildMJML `yaml:"mjml,omitempty"`
+	// When enabled, built assets are cached and restored on subsequent builds when sources haven't changed
+	AssetCaching bool `yaml:"asset_caching,omitempty"`
 	// Hooks to run at specific points during CI builds
 	Hooks *ConfigBuildHooks `yaml:"hooks,omitempty"`
+	// Shopware bundles to include in builds (alternative to composer.json extra.shopware-bundles)
+	Bundles []ConfigProjectBundle `yaml:"bundles,omitempty"`
+}
+
+// ConfigProjectBundle defines a project-level Shopware bundle.
+type ConfigProjectBundle struct {
+	// Relative path from project root to the bundle directory
+	Path string `yaml:"path" jsonschema:"required"`
+	// Optional override for the bundle name; defaults to the directory basename
+	Name string `yaml:"name,omitempty"`
 }
 
 // ConfigBuildHooks defines hooks to run at specific points during CI builds.
@@ -318,6 +330,15 @@ type ConfigDeployment struct {
 		Id     string `yaml:"id" jsonschema:"required"`
 		Script string `yaml:"script" jsonschema:"required"`
 	} `yaml:"one-time-tasks"`
+
+	// Staging mode configuration for the deployment
+	Staging *ConfigDeploymentStaging `yaml:"staging,omitempty"`
+}
+
+// ConfigDeploymentStaging defines staging mode configuration.
+type ConfigDeploymentStaging struct {
+	// When enabled, staging setup commands will be executed during installation and upgrade
+	Enabled bool `yaml:"enabled,omitempty"`
 }
 
 type ConfigDeploymentOverrides map[string]struct {
@@ -329,7 +350,7 @@ func (c ConfigDeploymentOverrides) JSONSchema() *jsonschema.Schema {
 
 	properties.Set("state", &jsonschema.Schema{
 		Type: "string",
-		Enum: []interface{}{"inactive", "remove", "ignore"},
+		Enum: []interface{}{"inactive", "remove", "ignore", "installed"},
 	})
 
 	properties.Set("keepUserData", &jsonschema.Schema{
@@ -392,15 +413,45 @@ func ReadConfig(ctx context.Context, fileName string, allowFallback bool) (*Conf
 		return nil, err
 	}
 
-	fileHandle, err := os.ReadFile(fileName)
-	if err != nil {
-		return nil, fmt.Errorf("ReadConfig (%s): %v", fileName, err)
+	localFile := localConfigFileName(fileName)
+	_, localErr := os.Stat(localFile)
+	if localErr != nil && !os.IsNotExist(localErr) {
+		logging.FromContext(ctx).Warnf("unable to access local config override %s: %v", localFile, localErr)
+	}
+	hasLocalFile := localErr == nil
+
+	if hasLocalFile {
+		baseMap, err := readConfigAsMap(fileName)
+		if err != nil {
+			return nil, fmt.Errorf("ReadConfig(%s): %v", fileName, err)
+		}
+
+		mergedMap, err := mergeLocalConfig(baseMap, localFile)
+		if err != nil {
+			return nil, fmt.Errorf("ReadConfig(%s): %v", fileName, err)
+		}
+
+		mergedYAML, err := marshalMap(mergedMap)
+		if err != nil {
+			return nil, fmt.Errorf("ReadConfig(%s): %v", fileName, err)
+		}
+
+		if err := yaml.Unmarshal(mergedYAML, &config); err != nil {
+			return nil, fmt.Errorf("ReadConfig(%s): %v", fileName, err)
+		}
+	} else {
+		fileHandle, err := os.ReadFile(fileName)
+		if err != nil {
+			return nil, fmt.Errorf("ReadConfig(%s): %v", fileName, err)
+		}
+
+		substitutedConfig := system.ExpandEnv(string(fileHandle))
+		if err := yaml.Unmarshal([]byte(substitutedConfig), &config); err != nil {
+			return nil, fmt.Errorf("ReadConfig(%s): %v", fileName, err)
+		}
 	}
 
 	config.foundConfig = true
-
-	substitutedConfig := system.ExpandEnv(string(fileHandle))
-	err = yaml.Unmarshal([]byte(substitutedConfig), &config)
 
 	if len(config.AdditionalConfigs) > 0 {
 		for _, additionalConfigFile := range config.AdditionalConfigs {
@@ -414,10 +465,6 @@ func ReadConfig(ctx context.Context, fileName string, allowFallback bool) (*Conf
 				return nil, fmt.Errorf("error while merging included config: %s", err.Error())
 			}
 		}
-	}
-
-	if err != nil {
-		return nil, fmt.Errorf("ReadConfig(%s): %v", fileName, err)
 	}
 
 	if config.foundConfig && config.CompatibilityDate == "" {

@@ -41,11 +41,35 @@ func TestPHPVersionIsNotAtLeast(t *testing.T) {
 	assert.False(t, hit, "PHP version should not be at least 8.0.0")
 }
 
+func TestGetAvailablePHPExtensionsNotInstalled(t *testing.T) {
+	t.Setenv("PATH", "")
+	_, err := GetAvailablePHPExtensions(t.Context())
+	assert.ErrorContains(t, err, "PHP is not installed")
+}
+
+func TestGetAvailablePHPExtensions(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	setupFakePHP(t, tmpDir, "8.0.0")
+
+	extensions, err := GetAvailablePHPExtensions(t.Context())
+	assert.NoError(t, err)
+	assert.ElementsMatch(t, []string{"Core", "curl", "json", "mbstring"}, extensions)
+}
+
 func setupFakePHP(t *testing.T, tmpDir string, version string) {
 	t.Helper()
 	shPath, err := exec.LookPath("sh")
 	assert.NoError(t, err)
 
-	assert.NoError(t, os.WriteFile(tmpDir+"/php", []byte(fmt.Sprintf("#!%s\necho PHP %s", shPath, version)), 0755))
+	script := fmt.Sprintf(`#!%s
+if [ "$1" = "-m" ]; then
+  printf '[PHP Modules]\nCore\ncurl\njson\nmbstring\n\n[Zend Modules]\n'
+else
+  echo PHP %s
+fi
+`, shPath, version)
+
+	assert.NoError(t, os.WriteFile(tmpDir+"/php", []byte(script), 0755))
 	t.Setenv("PATH", tmpDir)
 }

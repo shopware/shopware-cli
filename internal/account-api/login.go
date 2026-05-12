@@ -7,45 +7,95 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
+
+	"golang.org/x/oauth2"
+	"golang.org/x/oauth2/clientcredentials"
 
 	"github.com/shopware/shopware-cli/logging"
 )
 
-const ApiUrl = "https://api.shopware.com"
+func NewApi(ctx context.Context) (*Client, error) {
+	client, _ := createApiFromTokenCache(ctx)
 
-type AccountConfig interface {
-	GetAccountEmail() string
-	GetAccountPassword() string
-}
-
-func NewApi(ctx context.Context, config AccountConfig) (*Client, error) {
-	errorFormat := "login: %v"
-
-	request := LoginRequest{
-		Email:    config.GetAccountEmail(),
-		Password: config.GetAccountPassword(),
-	}
-	client, err := createApiFromTokenCache(ctx)
-
-	if err == nil {
+	if client != nil && client.isTokenValid() {
 		return client, nil
 	}
 
-	s, err := json.Marshal(request)
-	if err != nil {
-		return nil, fmt.Errorf(errorFormat, err)
+	// Try OAuth2 client credentials from environment variables (for CI/CD)
+	clientID := os.Getenv("SHOPWARE_CLI_ACCOUNT_CLIENT_ID")
+	clientSecret := os.Getenv("SHOPWARE_CLI_ACCOUNT_CLIENT_SECRET")
+
+	if clientID != "" || clientSecret != "" {
+		if clientID == "" || clientSecret == "" {
+			return nil, fmt.Errorf("both SHOPWARE_CLI_ACCOUNT_CLIENT_ID and SHOPWARE_CLI_ACCOUNT_CLIENT_SECRET must be set")
+		}
+		return loginWithClientCredentials(ctx, clientID, clientSecret)
 	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, ApiUrl+"/accesstokens", bytes.NewBuffer(s))
+	// Try legacy username/password auth from environment variables
+	email := os.Getenv("SHOPWARE_CLI_ACCOUNT_EMAIL")
+	password := os.Getenv("SHOPWARE_CLI_ACCOUNT_PASSWORD")
+
+	if email != "" && password != "" {
+		logging.FromContext(ctx).Warnf("authentication with username/password is deprecated and will be removed in future. Please switch to OAuth2 client credentials, see https://developer.shopware.com/docs/products/cli/shopware-account-commands/authentication.html")
+		return loginWithCredentials(ctx, email, password)
+	}
+
+	// Fall back to interactive OAuth2 login
+	token, err := InteractiveLogin(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("create access token request: %w", err)
+		return nil, fmt.Errorf("login: %v", err)
+	}
+
+	client = &Client{Token: token}
+
+	if err := saveApiTokenToTokenCache(client); err != nil {
+		logging.FromContext(ctx).Errorf(fmt.Sprintf("Cannot save token cache: %v", err))
+	}
+
+	return client, nil
+}
+
+func loginWithClientCredentials(ctx context.Context, clientID, clientSecret string) (*Client, error) {
+	conf := &clientcredentials.Config{
+		ClientID:     clientID,
+		ClientSecret: clientSecret,
+		TokenURL:     fmt.Sprintf("%s/oauth2/token", getOIDCEndpoint()),
+		Scopes:       []string{ClientCredentialsScopes},
+		AuthStyle:    oauth2.AuthStyleInParams,
+	}
+
+	token, err := conf.Token(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("client credentials login: %w", err)
+	}
+
+	client := &Client{Token: token}
+
+	if err := saveApiTokenToTokenCache(client); err != nil {
+		logging.FromContext(ctx).Errorf("Cannot save token cache: %v", err)
+	}
+
+	return client, nil
+}
+
+func loginWithCredentials(ctx context.Context, email, password string) (*Client, error) {
+	s, err := json.Marshal(loginRequest{Email: email, Password: password})
+	if err != nil {
+		return nil, fmt.Errorf("login: %v", err)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, getApiUrl()+"/accesstokens", bytes.NewBuffer(s))
+	if err != nil {
+		return nil, fmt.Errorf("login: %w", err)
 	}
 
 	req.Header.Set("Content-Type", "application/json")
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf(errorFormat, err)
+		return nil, fmt.Errorf("login: %v", err)
 	}
 
 	defer func() {
@@ -56,87 +106,42 @@ func NewApi(ctx context.Context, config AccountConfig) (*Client, error) {
 
 	data, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return nil, fmt.Errorf(errorFormat, err)
+		return nil, fmt.Errorf("login: %v", err)
 	}
 
 	if resp.StatusCode != 200 {
 		logging.FromContext(ctx).Debugf("Login failed with response: %s", string(data))
+
+		var apiErr struct {
+			Detail string `json:"detail"`
+		}
+		if err := json.Unmarshal(data, &apiErr); err == nil && apiErr.Detail != "" {
+			return nil, fmt.Errorf("login failed: %s", apiErr.Detail)
+		}
+
 		return nil, fmt.Errorf("login failed. Check your credentials")
 	}
 
-	var token token
-	if err := json.Unmarshal(data, &token); err != nil {
-		return nil, fmt.Errorf(errorFormat, err)
+	var tokenResp legacyToken
+	if err := json.Unmarshal(data, &tokenResp); err != nil {
+		return nil, fmt.Errorf("login: %v", err)
 	}
 
-	memberships, err := fetchMemberships(ctx, token)
-	if err != nil {
-		return nil, err
-	}
-
-	var activeMemberShip Membership
-
-	for _, membership := range memberships {
-		if membership.Company.Id == token.UserID {
-			activeMemberShip = membership
-		}
-	}
-
-	client = &Client{
-		Token:            token,
-		Memberships:      memberships,
-		ActiveMembership: activeMemberShip,
+	client := &Client{
+		LegacyToken: &tokenResp,
 	}
 
 	if err := saveApiTokenToTokenCache(client); err != nil {
-		logging.FromContext(ctx).Errorf(fmt.Sprintf("Cannot token cache: %v", err))
+		logging.FromContext(ctx).Errorf(fmt.Sprintf("Cannot save token cache: %v", err))
 	}
 
 	return client, nil
 }
 
-func fetchMemberships(ctx context.Context, token token) ([]Membership, error) {
-	r, err := http.NewRequestWithContext(ctx, "GET", fmt.Sprintf("%s/account/%d/memberships", ApiUrl, token.UserAccountID), http.NoBody)
-	r.Header.Set("x-shopware-token", token.Token)
-
-	if err != nil {
-		return nil, err
-	}
-
-	resp, err := http.DefaultClient.Do(r)
-	if err != nil {
-		return nil, err
-	}
-
-	defer func() {
-		if err := resp.Body.Close(); err != nil {
-			logging.FromContext(ctx).Errorf("Cannot close response body: %v", err)
-		}
-	}()
-
-	data, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("fetchMemberships: %v", err)
-	}
-
-	if resp.StatusCode != 200 {
-		return nil, fmt.Errorf(string(data)+" but got status code %d", resp.StatusCode)
-	}
-
-	var companies []Membership
-	if err := json.Unmarshal(data, &companies); err != nil {
-		return nil, fmt.Errorf("fetchMemberships: %v", err)
-	}
-
-	return companies, nil
-}
-
-type token struct {
-	Token         string      `json:"token"`
-	Expire        tokenExpire `json:"expire"`
-	UserAccountID int         `json:"userAccountId"`
-	UserID        int         `json:"userId"`
-	LegacyLogin   bool        `json:"legacyLogin"`
+type legacyToken struct {
+	Token       string      `json:"token"`
+	Expire      tokenExpire `json:"expire"`
+	LegacyLogin bool        `json:"legacyLogin"`
 }
 
 type tokenExpire struct {
@@ -145,112 +150,7 @@ type tokenExpire struct {
 	Timezone     string `json:"timezone"`
 }
 
-type LoginRequest struct {
+type loginRequest struct {
 	Email    string `json:"shopwareId"`
 	Password string `json:"password"`
-}
-
-func (l LoginRequest) GetAccountEmail() string {
-	return l.Email
-}
-
-func (l LoginRequest) GetAccountPassword() string {
-	return l.Password
-}
-
-type Membership struct {
-	Id           int    `json:"id"`
-	CreationDate string `json:"creationDate"`
-	Active       bool   `json:"active"`
-	Member       struct {
-		Id           int         `json:"id"`
-		Email        string      `json:"email"`
-		AvatarUrl    interface{} `json:"avatarUrl"`
-		PersonalData struct {
-			Id         int `json:"id"`
-			Salutation struct {
-				Id          int    `json:"id"`
-				Name        string `json:"name"`
-				Description string `json:"description"`
-			} `json:"salutation"`
-			FirstName string `json:"firstName"`
-			LastName  string `json:"lastName"`
-			Locale    struct {
-				Id          int    `json:"id"`
-				Name        string `json:"name"`
-				Description string `json:"description"`
-			} `json:"locale"`
-		} `json:"personalData"`
-	} `json:"member"`
-	Company struct {
-		Id             int    `json:"id"`
-		Name           string `json:"name"`
-		CustomerNumber string `json:"customerNumber"`
-	} `json:"company"`
-	Roles []struct {
-		Id           int         `json:"id"`
-		Name         string      `json:"name"`
-		CreationDate string      `json:"creationDate"`
-		Company      interface{} `json:"company"`
-		Permissions  []struct {
-			Id      int    `json:"id"`
-			Context string `json:"context"`
-			Name    string `json:"name"`
-		} `json:"permissions"`
-	} `json:"roles"`
-}
-
-func (m Membership) GetRoles() []string {
-	roles := make([]string, 0)
-
-	for _, role := range m.Roles {
-		roles = append(roles, role.Name)
-	}
-
-	return roles
-}
-
-type changeMembershipRequest struct {
-	SelectedMembership struct {
-		Id int `json:"id"`
-	} `json:"membership"`
-}
-
-func (c *Client) ChangeActiveMembership(ctx context.Context, selected Membership) error {
-	s, err := json.Marshal(changeMembershipRequest{SelectedMembership: struct {
-		Id int `json:"id"`
-	}(struct{ Id int }{Id: selected.Id})})
-	if err != nil {
-		return fmt.Errorf("ChangeActiveMembership: %v", err)
-	}
-
-	r, err := c.NewAuthenticatedRequest(ctx, "POST", fmt.Sprintf("%s/account/%d/memberships/change", ApiUrl, c.GetUserID()), bytes.NewBuffer(s))
-	if err != nil {
-		return err
-	}
-
-	resp, err := http.DefaultClient.Do(r)
-	if err != nil {
-		return err
-	}
-
-	defer func() {
-		if err := resp.Body.Close(); err != nil {
-			logging.FromContext(ctx).Errorf("ChangeActiveMembership: %v", err)
-		}
-	}()
-	_, _ = io.Copy(io.Discard, resp.Body)
-
-	if resp.StatusCode == 200 {
-		c.ActiveMembership = selected
-		c.Token.UserID = selected.Company.Id
-
-		if err := saveApiTokenToTokenCache(c); err != nil {
-			return err
-		}
-
-		return nil
-	}
-
-	return fmt.Errorf("could not change active membership due http error %d", resp.StatusCode)
 }

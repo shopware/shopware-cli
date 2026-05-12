@@ -35,6 +35,31 @@ func GetInstalledPHPVersion(ctx context.Context) (string, error) {
 	return strings.TrimSpace(version), nil
 }
 
+// GetAvailablePHPExtensions returns the list of loaded PHP extensions by parsing `php -m` output.
+func GetAvailablePHPExtensions(ctx context.Context) ([]string, error) {
+	phpPath, err := exec.LookPath("php")
+	if err != nil {
+		return nil, fmt.Errorf("PHP is not installed: %w", err)
+	}
+
+	cmd := exec.CommandContext(ctx, phpPath, "-m")
+	output, err := cmd.Output()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get PHP extensions: %w, output: %s", err, string(output))
+	}
+
+	var extensions []string
+	for line := range strings.SplitSeq(string(output), "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" || strings.HasPrefix(line, "[") {
+			continue
+		}
+		extensions = append(extensions, line)
+	}
+
+	return extensions, nil
+}
+
 func IsPHPVersionAtLeast(ctx context.Context, requiredVersion string) (bool, error) {
 	installedVersion, err := GetInstalledPHPVersion(ctx)
 	if err != nil {

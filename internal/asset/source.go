@@ -7,4 +7,10 @@ type Source struct {
 	StorefrontEsbuildCompatible bool
 	DisableSass                 bool
 	NpmStrict                   bool
+	AdditionalCaches            []AdditionalCache
+}
+
+type AdditionalCache struct {
+	Path        string
+	SourcePaths []string
 }
