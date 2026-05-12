@@ -32,14 +32,12 @@ var paletteCommands = []paletteCommand{
 	{Label: "Quit", Shortcut: "ctrl+c", ID: "quit"},
 }
 
-// paletteResultMsg is emitted when the user picks a command. ID is empty if
-// the palette was cancelled.
 type paletteResultMsg struct{ ID string }
 
 type commandPalette struct {
 	filter   textinput.Model
 	cursor   int
-	filtered []int // indices into paletteCommands
+	filtered []int
 }
 
 func newCommandPalette() *commandPalette {
@@ -105,7 +103,7 @@ func (cp *commandPalette) Update(msg tea.Msg) (Modal, tea.Cmd) {
 
 func (cp *commandPalette) View(width, height int) string {
 	paletteWidth := min(width-4, 70)
-	innerWidth := paletteWidth - 6 // border(2) + padding(4)
+	innerWidth := paletteWidth - 6
 
 	titleStyle := lipgloss.NewStyle().Bold(true).Foreground(tui.BrandColor)
 

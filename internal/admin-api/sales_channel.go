@@ -63,8 +63,6 @@ func (s SalesChannelService) ListStorefront(ctx ApiContext) ([]SalesChannel, err
 	return out.Data, nil
 }
 
-// FindThemeForSalesChannel returns the theme assigned to the given sales channel,
-// resolving the parent theme chain so the returned theme has a non-empty TechnicalName.
 func (s SalesChannelService) FindThemeForSalesChannel(ctx ApiContext, salesChannelId string) (*Theme, error) {
 	body := map[string]any{
 		"filter": []map[string]any{

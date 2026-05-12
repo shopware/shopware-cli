@@ -167,10 +167,8 @@ func (m Model) executeCommand(id string) (tea.Model, tea.Cmd) {
 }
 
 func (m *Model) stopWatcher(name string) tea.Cmd {
-	// Stop log streaming first.
 	m.logs.StopStreaming()
 
-	// Get and remove the tracked process.
 	p := m.watchers[name]
 	delete(m.watchers, name)
 

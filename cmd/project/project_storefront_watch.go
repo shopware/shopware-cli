@@ -81,9 +81,6 @@ func init() {
 	projectStorefrontWatchCmd.PersistentFlags().Lookup("sales-channel").NoOptDefVal = " "
 }
 
-// resolveStorefrontWatcherOptions picks the theme + domain that theme:dump should target.
-// Only invoked when the user explicitly passes --sales-channel; an empty salesChannelID
-// (flag present without a value) triggers an interactive picker.
 func resolveStorefrontWatcherOptions(ctx context.Context, cmdExecutor executor.Executor, salesChannelID string) (extension.StorefrontWatcherOptions, error) {
 	salesChannelID = strings.TrimSpace(salesChannelID)
 

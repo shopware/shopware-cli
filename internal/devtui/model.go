@@ -56,7 +56,7 @@ type Model struct {
 	height         int
 	dockerMode     bool
 	phase          phase
-	modal          Modal // floating overlay above the dashboard; nil when none
+	modal          Modal
 	overlayLines   []string
 	projectRoot    string
 	executor       executor.Executor
@@ -210,8 +210,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.handlePaletteResult(msg)
 
 	case pickerResultMsg:
-		// salesChannelPickerKey routes through the sales-channel picker, which
-		// will re-emit a salesChannelPickerResultMsg — fall through to its modal.
 		if _, ok := msg.Key.(salesChannelPickerKey); ok {
 			break
 		}

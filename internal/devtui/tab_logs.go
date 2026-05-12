@@ -18,21 +18,21 @@ import (
 
 type logSource struct {
 	name      string
-	container string            // non-empty for docker containers
-	filePath  string            // non-empty for log files
-	process   *executor.Process // non-nil for process sources
-	dead      bool              // true after a process source has exited
+	container string
+	filePath  string
+	process   *executor.Process
+	dead      bool
 }
 
 type LogsModel struct {
 	viewport      viewport.Model
 	sources       []logSource
 	cursor        int
-	active        int // index of currently streaming source
+	active        int
 	lines         []string
 	follow        bool
-	cancel        context.CancelFunc // cancel func for container/file log streams
-	activeProcess *executor.Process  // active process source (for Stop on cleanup)
+	cancel        context.CancelFunc
+	activeProcess *executor.Process
 	logChan       <-chan string
 	projectRoot   string
 	dockerMode    bool
@@ -265,9 +265,6 @@ func (m *LogsModel) stopStreaming() {
 		m.cancel()
 		m.cancel = nil
 	}
-	// Clear the active process reference. The actual process cleanup
-	// is handled by the caller (stopWatcher or shutdown) which calls
-	// Process.Stop() asynchronously to avoid blocking the UI.
 	m.activeProcess = nil
 	m.logChan = nil
 }
@@ -345,8 +342,6 @@ func (m *LogsModel) streamFile(filePath string) tea.Cmd {
 	return m.streamCommand(ctx, cmd, false)
 }
 
-// streamCommand runs cmd in a goroutine, scanning its stdout into a channel.
-// If mergeStderr is true, stderr is merged into stdout.
 func (m *LogsModel) streamCommand(ctx context.Context, cmd *exec.Cmd, mergeStderr bool) tea.Cmd {
 	ch := make(chan string, 100)
 	m.logChan = ch

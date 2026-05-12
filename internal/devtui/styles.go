@@ -105,9 +105,6 @@ func renderConfirmButtons(yesLabel, noLabel string, yesActive bool) string {
 	return yes + "  " + no
 }
 
-// buildTabHeader renders the tui-example-style tab header with numbered tabs
-// and a right-aligned branding line. The active tab's bottom border is open
-// so it flows into the content box below.
 func buildTabHeader(activeTab int, width int) string {
 	tabWidths := make([]int, len(tabNames))
 	for i, name := range tabNames {
@@ -137,7 +134,6 @@ func buildTabHeader(activeTab int, width int) string {
 		tabAreaWidth += w + 1
 	}
 
-	// Row 1: tab top border
 	var r1 strings.Builder
 	r1.WriteString(bdr("╭"))
 	for i, w := range tabWidths {
@@ -148,7 +144,6 @@ func buildTabHeader(activeTab int, width int) string {
 	}
 	r1.WriteString(bdr("╮"))
 
-	// Row 2: tab labels + right-aligned branding
 	var r2 strings.Builder
 	for i, name := range tabNames {
 		r2.WriteString(bdr("│"))
@@ -168,7 +163,6 @@ func buildTabHeader(activeTab int, width int) string {
 	}
 	r2.WriteString(strings.Repeat(" ", fill) + branding)
 
-	// Row 3: junction — active tab open bottom meets content box top border
 	var r3 strings.Builder
 	if activeTab == 0 {
 		r3.WriteString(bdr("│"))

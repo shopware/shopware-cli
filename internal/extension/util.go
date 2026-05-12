@@ -10,7 +10,6 @@ func PlatformPath(projectRoot, component, subPath string) string {
 	return filepath.Join(projectRoot, PlatformRelPath(projectRoot, component, subPath))
 }
 
-// PlatformRelPath returns the platform component path relative to the project root.
 func PlatformRelPath(projectRoot, component, subPath string) string {
 	if _, err := os.Stat(filepath.Join(projectRoot, "src", "Core", "composer.json")); err == nil {
 		return filepath.Join("src", component, subPath)

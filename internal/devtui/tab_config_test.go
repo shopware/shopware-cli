@@ -11,8 +11,8 @@ import (
 func TestNewConfigModel_NilConfig(t *testing.T) {
 	m := NewConfigModel(nil)
 
-	assert.Equal(t, 1, m.phpVersion) // default 8.3 (index 1)
-	assert.Equal(t, 0, m.profiler)   // default none (index 0)
+	assert.Equal(t, 1, m.phpVersion)
+	assert.Equal(t, 0, m.profiler)
 	assert.False(t, m.saved)
 	assert.False(t, m.modified)
 }
@@ -30,16 +30,16 @@ func TestNewConfigModel_WithConfig(t *testing.T) {
 
 	m := NewConfigModel(cfg)
 
-	assert.Equal(t, 0, m.phpVersion) // 8.2 is index 0
-	assert.Equal(t, 2, m.profiler)   // blackfire is index 2
+	assert.Equal(t, 0, m.phpVersion)
+	assert.Equal(t, 2, m.profiler)
 	assert.Equal(t, "my-server-id", m.blackfireServerID.Value())
 }
 
 func TestConfigModel_ApplyToConfig(t *testing.T) {
 	cfg := &shop.Config{}
 	m := NewConfigModel(nil)
-	m.phpVersion = 2 // 8.4
-	m.profiler = 1   // xdebug
+	m.phpVersion = 2
+	m.profiler = 1
 
 	m.ApplyToConfig(cfg)
 
@@ -51,21 +51,20 @@ func TestConfigModel_ApplyToConfig(t *testing.T) {
 func TestConfigModel_ApplyToConfig_BlackfireCredentialsExcluded(t *testing.T) {
 	cfg := &shop.Config{}
 	m := NewConfigModel(nil)
-	m.profiler = 2 // blackfire
+	m.profiler = 2
 	m.blackfireServerID.SetValue("srv-id")
 	m.blackfireServerToken.SetValue("srv-token")
 
 	m.ApplyToConfig(cfg)
 
 	assert.Equal(t, "blackfire", cfg.Docker.PHP.Profiler)
-	// Credentials should NOT be in the main config.
 	assert.Empty(t, cfg.Docker.PHP.BlackfireServerID)
 	assert.Empty(t, cfg.Docker.PHP.BlackfireServerToken)
 }
 
 func TestConfigModel_LocalConfig_Blackfire(t *testing.T) {
 	m := NewConfigModel(nil)
-	m.profiler = 2 // blackfire
+	m.profiler = 2
 	m.blackfireServerID.SetValue("srv-id")
 	m.blackfireServerToken.SetValue("srv-token")
 
@@ -77,7 +76,7 @@ func TestConfigModel_LocalConfig_Blackfire(t *testing.T) {
 
 func TestConfigModel_LocalConfig_Tideways(t *testing.T) {
 	m := NewConfigModel(nil)
-	m.profiler = 3 // tideways
+	m.profiler = 3
 	m.tidewaysAPIKey.SetValue("tw-key")
 
 	localCfg := m.LocalConfig()
@@ -88,30 +87,27 @@ func TestConfigModel_LocalConfig_Tideways(t *testing.T) {
 
 func TestConfigModel_LocalConfig_NoCredentials(t *testing.T) {
 	m := NewConfigModel(nil)
-	m.profiler = 0 // none
+	m.profiler = 0
 
 	assert.Nil(t, m.LocalConfig())
 
-	m.profiler = 1 // xdebug
+	m.profiler = 1
 	assert.Nil(t, m.LocalConfig())
 }
 
 func TestConfigModel_FieldVisibility(t *testing.T) {
 	m := NewConfigModel(nil)
 
-	// No profiler - credential fields should be hidden.
 	m.profiler = 0
 	assert.False(t, m.isFieldVisible(fieldBlackfireServerID))
 	assert.False(t, m.isFieldVisible(fieldBlackfireServerToken))
 	assert.False(t, m.isFieldVisible(fieldTidewaysAPIKey))
 
-	// Blackfire - only blackfire fields visible.
 	m.profiler = indexOf(profilers, "blackfire", 0)
 	assert.True(t, m.isFieldVisible(fieldBlackfireServerID))
 	assert.True(t, m.isFieldVisible(fieldBlackfireServerToken))
 	assert.False(t, m.isFieldVisible(fieldTidewaysAPIKey))
 
-	// Tideways - only tideways field visible.
 	m.profiler = indexOf(profilers, "tideways", 0)
 	assert.False(t, m.isFieldVisible(fieldBlackfireServerID))
 	assert.True(t, m.isFieldVisible(fieldTidewaysAPIKey))
@@ -119,19 +115,18 @@ func TestConfigModel_FieldVisibility(t *testing.T) {
 
 func TestConfigModel_CursorNavigation(t *testing.T) {
 	m := NewConfigModel(nil)
-	m.profiler = 0 // no profiler, so credential fields are hidden.
+	m.profiler = 0
 
 	assert.Equal(t, fieldPHPVersion, m.cursor)
 
 	m.moveCursorDown()
 	assert.Equal(t, fieldProfiler, m.cursor)
 
-	// Should skip hidden credential fields straight to Save.
 	m.moveCursorDown()
-	assert.Equal(t, fieldSave, m.cursor, "should skip hidden fields to Save")
+	assert.Equal(t, fieldSave, m.cursor)
 
 	m.moveCursorUp()
-	assert.Equal(t, fieldProfiler, m.cursor, "should skip hidden fields going up")
+	assert.Equal(t, fieldProfiler, m.cursor)
 }
 
 func TestConfigModel_CursorNavigation_BlackfireVisible(t *testing.T) {
@@ -186,7 +181,6 @@ func TestConfigModel_ApplyPickerValue(t *testing.T) {
 	assert.Equal(t, indexOf(phpVersions, "8.4", -1), m.phpVersion)
 	assert.True(t, m.modified)
 
-	// Same value again — no change.
 	m.modified = false
 	changed = m.ApplyPickerValue(fieldPHPVersion, "8.4")
 	assert.False(t, changed)
@@ -207,5 +201,5 @@ func TestIndexOf(t *testing.T) {
 	assert.Equal(t, 0, indexOf(phpVersions, "8.2", 1))
 	assert.Equal(t, 1, indexOf(phpVersions, "8.3", 0))
 	assert.Equal(t, 2, indexOf(phpVersions, "8.4", 0))
-	assert.Equal(t, 1, indexOf(phpVersions, "unknown", 1)) // default
+	assert.Equal(t, 1, indexOf(phpVersions, "unknown", 1))
 }

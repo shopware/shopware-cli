@@ -11,11 +11,8 @@ import (
 	"github.com/shopware/shopware-cli/internal/shop"
 )
 
-// nodeVersion is the Node.js version baked into the dev container image. It
-// is no longer user-configurable: only one version is supported at a time.
 const nodeVersion = "24"
 
-// ComposeOptions holds configuration for generating the compose file.
 type ComposeOptions struct {
 	PHPVersion           string
 	PHPProfiler          string
@@ -31,7 +28,6 @@ func (o *ComposeOptions) phpVersion() string {
 	return "8.3"
 }
 
-// ComposeOptionsFromConfig creates ComposeOptions from a shop.Config.
 func ComposeOptionsFromConfig(cfg *shop.Config) *ComposeOptions {
 	if cfg == nil || cfg.Docker == nil {
 		return nil
@@ -240,8 +236,6 @@ func buildCompose(hasAMQP, hasElasticsearch bool, opts *ComposeOptions) yaml.Nod
 		Content: []*yaml.Node{root},
 	}
 }
-
-// YAML node helpers to preserve insertion order.
 
 func newMappingNode() *yaml.Node {
 	return &yaml.Node{Kind: yaml.MappingNode, Tag: "!!map"}

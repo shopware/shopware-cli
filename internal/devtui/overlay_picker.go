@@ -11,9 +11,6 @@ import (
 	"github.com/shopware/shopware-cli/internal/tui"
 )
 
-// pickerResultMsg is emitted when a list or text picker is dismissed. Key
-// identifies the caller (typically a typed sentinel struct) so the parent
-// Model can route the result; Index is set for list pickers, Value for both.
 type pickerResultMsg struct {
 	Key       any
 	Cancelled bool
@@ -21,21 +18,12 @@ type pickerResultMsg struct {
 	Index     int
 }
 
-// listPickerItem is a single row in a listPicker.
 type listPickerItem struct {
-	// Label is the primary display text and is matched against the filter.
-	Label string
-	// Detail is an optional secondary text shown on the same row (e.g. a URL).
-	// Detail is also matched against the filter.
+	Label  string
 	Detail string
-	// Value is the string returned in pickerResultMsg.Value.
-	Value string
+	Value  string
 }
 
-// listPicker is the shared filterable list modal used everywhere a user has to
-// pick one of N items. Callers supply a Key, title, help text and items. When
-// the user confirms, Model.Update receives a pickerResultMsg with the chosen
-// item; the caller uses Key to discriminate.
 type listPicker struct {
 	key      any
 	title    string
@@ -44,9 +32,7 @@ type listPicker struct {
 	filter   textinput.Model
 	filtered []int
 	cursor   int
-	// scroll is the index of the first visible item in filtered.
-	scroll int
-	// pageSize is the max number of rows rendered at once.
+	scroll   int
 	pageSize int
 }
 
@@ -69,8 +55,6 @@ func newListPicker(key any, title, help string, items []listPickerItem, initialI
 	}
 	lp.applyFilter()
 
-	// Position the cursor on the initially selected item if it's still in the
-	// filtered set (it always is with an empty filter).
 	for i, idx := range lp.filtered {
 		if idx == initialIndex {
 			lp.cursor = i
@@ -220,8 +204,6 @@ func (lp *listPicker) View(width, height int) string {
 	return centeredModal(b.String(), modalWidth, width, height)
 }
 
-// textPicker is a single-line text input modal used for fields that take a
-// free-form string (Blackfire IDs, API keys).
 type textPicker struct {
 	key    any
 	title  string

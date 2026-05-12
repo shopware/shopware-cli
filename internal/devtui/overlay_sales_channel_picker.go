@@ -13,15 +13,11 @@ import (
 	"github.com/shopware/shopware-cli/internal/tui"
 )
 
-// salesChannelPickerResultMsg is emitted when the picker is dismissed. When
-// Cancelled is true the user pressed Esc; otherwise Opts carries the resolved
-// theme/domain pair to pass to PrepareStorefrontWatcher.
 type salesChannelPickerResultMsg struct {
 	Cancelled bool
 	Opts      extension.StorefrontWatcherOptions
 }
 
-// salesChannelPickerKey is the routing tag for the inner listPicker.
 type salesChannelPickerKey struct{}
 
 type salesChannelsLoadedMsg struct {
@@ -36,10 +32,6 @@ type salesChannelEntry struct {
 	theme  *adminSdk.Theme
 }
 
-// salesChannelPicker loads storefront sales channels asynchronously and then
-// delegates list/filter/select UX to listPicker. It translates the inner
-// pickerResultMsg into a salesChannelPickerResultMsg carrying the resolved
-// theme + domain.
 type salesChannelPicker struct {
 	executor executor.Executor
 	loading  bool
@@ -115,14 +107,12 @@ func (sp *salesChannelPicker) Update(msg tea.Msg) (Modal, tea.Cmd) {
 		return nil, emit(salesChannelPickerResultMsg{Opts: opts})
 
 	case tea.KeyPressMsg:
-		// While loading or on error, Esc/Enter cancel; no other keys do anything.
 		if sp.inner == nil {
 			if msg.String() == "esc" || msg.String() == keyEnter {
 				return nil, emit(salesChannelPickerResultMsg{Cancelled: true})
 			}
 			return sp, nil
 		}
-		// Delegate to the inner list picker.
 		next, cmd := sp.inner.Update(msg)
 		if next == nil {
 			sp.inner = nil

@@ -9,17 +9,11 @@ import (
 	"github.com/shopware/shopware-cli/internal/npm"
 )
 
-// StorefrontWatcherOptions narrows what theme:dump targets when more than one
-// storefront sales channel exists.
 type StorefrontWatcherOptions struct {
 	ThemeID   string
 	DomainURL string
 }
 
-// PrepareStorefrontWatcher performs all setup steps needed before running the
-// storefront watcher (feature dump, theme compile, theme dump, node_modules,
-// env vars) and returns the Process for "npm run-script hot-proxy" ready
-// to be started.
 func PrepareStorefrontWatcher(ctx context.Context, projectRoot string, cmdExecutor executor.Executor, opts StorefrontWatcherOptions) (*executor.Process, error) {
 	if err := cmdExecutor.ConsoleCommand(ctx, "feature:dump").Run(); err != nil {
 		return nil, err

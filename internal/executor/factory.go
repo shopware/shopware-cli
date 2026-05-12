@@ -9,7 +9,6 @@ import (
 	"github.com/shopware/shopware-cli/internal/shop"
 )
 
-// New creates an Executor for the given environment, shop configuration, and project root directory.
 func New(projectRoot string, cfg *shop.EnvironmentConfig, shopCfg *shop.Config) (Executor, error) {
 	switch cfg.Type {
 	case "local", "":
@@ -32,9 +31,6 @@ func New(projectRoot string, cfg *shop.EnvironmentConfig, shopCfg *shop.Config) 
 	}
 }
 
-// NewLocal creates a LocalExecutor with the given project root directory.
-// AdminAPIClient on the returned executor will error because no shop config is bound;
-// use New for that.
 func NewLocal(projectRoot string) Executor {
 	return &LocalExecutor{projectRoot: projectRoot}
 }

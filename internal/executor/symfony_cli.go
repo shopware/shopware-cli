@@ -8,7 +8,6 @@ import (
 	"github.com/shopware/shopware-cli/internal/shop"
 )
 
-// SymfonyCLIExecutor runs commands through the Symfony CLI binary.
 type SymfonyCLIExecutor struct {
 	BinaryPath  string
 	env         map[string]string

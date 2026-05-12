@@ -10,7 +10,6 @@ import (
 	"github.com/shopware/shopware-cli/internal/shop"
 )
 
-// LocalExecutor runs commands using the local PHP installation directly.
 type LocalExecutor struct {
 	env         map[string]string
 	projectRoot string
@@ -81,7 +80,6 @@ func (l *LocalExecutor) StopEnvironment(_ context.Context) error {
 	return ErrNotSupported
 }
 
-// applyLocalEnv sets PROJECT_ROOT and extra environment variables on a local command.
 func applyLocalEnv(projectRoot string, env map[string]string, cmd *exec.Cmd) {
 	cmd.Env = os.Environ()
 
