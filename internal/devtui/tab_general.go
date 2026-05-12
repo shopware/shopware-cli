@@ -33,7 +33,6 @@ type GeneralModel struct {
 	sfWatchStarting    bool
 }
 
-// DiscoveredService represents an auxiliary service discovered via docker compose.
 type DiscoveredService struct {
 	Name     string
 	URL      string
@@ -171,12 +170,12 @@ func (m *GeneralModel) startAdminWatch() tea.Cmd {
 	}
 }
 
-func (m *GeneralModel) startStorefrontWatch() tea.Cmd {
+func (m *GeneralModel) startStorefrontWatch(opts extension.StorefrontWatcherOptions) tea.Cmd {
 	e := m.executor
 	projectRoot := m.projectRoot
 
 	return func() tea.Msg {
-		watchProcess, err := extension.PrepareStorefrontWatcher(context.Background(), projectRoot, e)
+		watchProcess, err := extension.PrepareStorefrontWatcher(context.Background(), projectRoot, e, opts)
 		if err != nil {
 			return watcherStoppedMsg{name: watcherStorefront}
 		}
@@ -223,7 +222,6 @@ func (m GeneralModel) renderServices() string {
 	return s.String()
 }
 
-// dockerComposePSOutput represents a single container from `docker compose ps --format json`.
 type dockerComposePSOutput struct {
 	Name       string `json:"Name"`
 	Service    string `json:"Service"`
@@ -236,8 +234,6 @@ type dockerComposePSOutput struct {
 	} `json:"Publishers"`
 }
 
-// DiscoverServices queries docker compose for running containers and returns
-// auxiliary services (Adminer, Mailpit, etc.) with their published URLs.
 func DiscoverServices(ctx context.Context, projectRoot string) ([]DiscoveredService, error) {
 	cmd := exec.CommandContext(ctx, "docker", "compose", "ps", "--format", "json")
 	cmd.Dir = projectRoot
@@ -248,10 +244,9 @@ func DiscoverServices(ctx context.Context, projectRoot string) ([]DiscoveredServ
 
 	var services []DiscoveredService
 
-	// Collect all containers with their published ports
 	type containerInfo struct {
 		service    string
-		publishers map[int]int // targetPort -> publishedPort
+		publishers map[int]int
 	}
 	var containers []containerInfo
 
@@ -280,7 +275,6 @@ func DiscoverServices(ctx context.Context, projectRoot string) ([]DiscoveredServ
 		}
 	}
 
-	// Match containers against known services or skip ignored ones
 	for _, c := range containers {
 		if ignoredServices[c.service] {
 			continue

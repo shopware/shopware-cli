@@ -9,11 +9,12 @@ import (
 	"github.com/shopware/shopware-cli/internal/npm"
 )
 
-// PrepareStorefrontWatcher performs all setup steps needed before running the
-// storefront watcher (feature dump, theme compile, theme dump, node_modules,
-// env vars) and returns the Process for "npm run-script hot-proxy" ready
-// to be started.
-func PrepareStorefrontWatcher(ctx context.Context, projectRoot string, cmdExecutor executor.Executor) (*executor.Process, error) {
+type StorefrontWatcherOptions struct {
+	ThemeID   string
+	DomainURL string
+}
+
+func PrepareStorefrontWatcher(ctx context.Context, projectRoot string, cmdExecutor executor.Executor, opts StorefrontWatcherOptions) (*executor.Process, error) {
 	if err := cmdExecutor.ConsoleCommand(ctx, "feature:dump").Run(); err != nil {
 		return nil, err
 	}
@@ -27,7 +28,15 @@ func PrepareStorefrontWatcher(ctx context.Context, projectRoot string, cmdExecut
 		return nil, err
 	}
 
-	if err := cmdExecutor.ConsoleCommand(ctx, "theme:dump").Run(); err != nil {
+	dumpArgs := []string{"theme:dump"}
+	if opts.ThemeID != "" {
+		dumpArgs = append(dumpArgs, opts.ThemeID)
+		if opts.DomainURL != "" {
+			dumpArgs = append(dumpArgs, opts.DomainURL)
+		}
+	}
+
+	if err := cmdExecutor.ConsoleCommand(ctx, dumpArgs...).Run(); err != nil {
 		return nil, err
 	}
 

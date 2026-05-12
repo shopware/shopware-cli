@@ -70,8 +70,6 @@ var projectDevStopCmd = &cobra.Command{
 	},
 }
 
-// setupDevEnvironment reads config, creates the executor, and writes the compose
-// file if using Docker. It is shared by all dev subcommands.
 func setupDevEnvironment(cmd *cobra.Command) (*devEnvironment, error) {
 	projectRoot, err := findClosestShopwareProject()
 	if err != nil {

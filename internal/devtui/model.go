@@ -29,10 +29,6 @@ const (
 	watcherStorefront = "Storefront Watcher"
 )
 
-// phase identifies the lifecycle phase of the dashboard. A phase fills the
-// whole screen and transitions via async messages (Docker start/stop,
-// install). Modals (commandPalette, valuePicker, stopConfirm) float above
-// phaseDashboard and are tracked separately on Model.modal.
 type phase int
 
 const (
@@ -60,7 +56,7 @@ type Model struct {
 	height         int
 	dockerMode     bool
 	phase          phase
-	modal          Modal // floating overlay above the dashboard; nil when none
+	modal          Modal
 	overlayLines   []string
 	projectRoot    string
 	executor       executor.Executor
@@ -211,34 +207,28 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.updateChildren(msg)
 
 	case paletteResultMsg:
-		m.modal = nil
-		if msg.ID == "" {
-			return m, nil
-		}
-		return m.executeCommand(msg.ID)
+		return m.handlePaletteResult(msg)
 
-	case valuePickerResultMsg:
-		m.modal = nil
-		if msg.Cancelled {
-			return m, nil
+	case pickerResultMsg:
+		if _, ok := msg.Key.(salesChannelPickerKey); ok {
+			break
 		}
-		m.configTab.ApplyPickerValue(msg.Field, msg.Value)
-		return m, nil
+		return m.handlePickerResult(msg)
+
+	case salesChannelPickerResultMsg:
+		return m.handleSalesChannelPickerResult(msg)
 
 	case stopConfirmResultMsg:
-		m.modal = nil
-		m.shutdown()
-		if msg.Stop {
-			m.phase = phaseStopping
-			m.overlayLines = nil
-			m.dockerShowLogs = false
-			m.dockerSpinner = newBrandSpinner()
-			return m, tea.Batch(m.dockerSpinner.Tick, m.stopContainers())
-		}
-		return m, tea.Quit
+		return m.handleStopConfirmResult(msg)
 
 	case tea.KeyPressMsg:
 		return m.updateKeyPress(msg)
+	}
+
+	if m.modal != nil {
+		next, cmd := m.modal.Update(msg)
+		m.modal = next
+		return m, cmd
 	}
 
 	if m.phase == phaseInstalling {
@@ -269,6 +259,47 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	}
 
 	return m.updateChildren(msg)
+}
+
+func (m Model) handlePaletteResult(msg paletteResultMsg) (tea.Model, tea.Cmd) {
+	m.modal = nil
+	if msg.ID == "" {
+		return m, nil
+	}
+	return m.executeCommand(msg.ID)
+}
+
+func (m Model) handlePickerResult(msg pickerResultMsg) (tea.Model, tea.Cmd) {
+	m.modal = nil
+	if msg.Cancelled {
+		return m, nil
+	}
+	if field, ok := msg.Key.(configField); ok {
+		m.configTab.ApplyPickerValue(field, msg.Value)
+	}
+	return m, nil
+}
+
+func (m Model) handleSalesChannelPickerResult(msg salesChannelPickerResultMsg) (tea.Model, tea.Cmd) {
+	m.modal = nil
+	if msg.Cancelled {
+		return m, nil
+	}
+	m.general.sfWatchStarting = true
+	return m, m.general.startStorefrontWatch(msg.Opts)
+}
+
+func (m Model) handleStopConfirmResult(msg stopConfirmResultMsg) (tea.Model, tea.Cmd) {
+	m.modal = nil
+	m.shutdown()
+	if msg.Stop {
+		m.phase = phaseStopping
+		m.overlayLines = nil
+		m.dockerShowLogs = false
+		m.dockerSpinner = newBrandSpinner()
+		return m, tea.Batch(m.dockerSpinner.Tick, m.stopContainers())
+	}
+	return m, tea.Quit
 }
 
 func (m Model) updateChildren(msg tea.Msg) (tea.Model, tea.Cmd) {

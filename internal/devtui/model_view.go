@@ -198,7 +198,6 @@ func renderPhaseLayout(content string, width, height int, footerHint string) str
 func (m Model) renderDockerLogs(title, footerHint string) string {
 	header, footer, boxHeight := phaseHeaderFooter(m.width, m.height, footerHint)
 
-	// border (2) + padding (2) + title (1) + blank (1) = 6 lines overhead
 	visibleLines := boxHeight - 6
 	if visibleLines < 1 {
 		visibleLines = 1
@@ -233,7 +232,6 @@ func (m Model) overlayMaxLines() int {
 	if m.height <= 0 {
 		return 10
 	}
-	// Account for border (2), padding (2), title (1), blank line after title (1)
 	const overhead = 6
 	maxLines := m.height - 2 - overhead
 	if maxLines < 10 {

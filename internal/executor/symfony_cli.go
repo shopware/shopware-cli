@@ -3,14 +3,18 @@ package executor
 import (
 	"context"
 	"os/exec"
+
+	adminSdk "github.com/shopware/shopware-cli/internal/admin-api"
+	"github.com/shopware/shopware-cli/internal/shop"
 )
 
-// SymfonyCLIExecutor runs commands through the Symfony CLI binary.
 type SymfonyCLIExecutor struct {
 	BinaryPath  string
 	env         map[string]string
 	projectRoot string
 	relDir      string
+	shopCfg     *shop.Config
+	envCfg      *shop.EnvironmentConfig
 }
 
 func (s *SymfonyCLIExecutor) ConsoleCommand(ctx context.Context, args ...string) *Process {
@@ -60,11 +64,15 @@ func (s *SymfonyCLIExecutor) Type() string {
 }
 
 func (s *SymfonyCLIExecutor) WithEnv(env map[string]string) Executor {
-	return &SymfonyCLIExecutor{BinaryPath: s.BinaryPath, env: mergeEnv(s.env, env), projectRoot: s.projectRoot, relDir: s.relDir}
+	return &SymfonyCLIExecutor{BinaryPath: s.BinaryPath, env: mergeEnv(s.env, env), projectRoot: s.projectRoot, relDir: s.relDir, shopCfg: s.shopCfg, envCfg: s.envCfg}
 }
 
 func (s *SymfonyCLIExecutor) WithRelDir(relDir string) Executor {
-	return &SymfonyCLIExecutor{BinaryPath: s.BinaryPath, env: s.env, projectRoot: s.projectRoot, relDir: relDir}
+	return &SymfonyCLIExecutor{BinaryPath: s.BinaryPath, env: s.env, projectRoot: s.projectRoot, relDir: relDir, shopCfg: s.shopCfg, envCfg: s.envCfg}
+}
+
+func (s *SymfonyCLIExecutor) AdminAPIClient(ctx context.Context) (*adminSdk.Client, error) {
+	return adminAPIClient(ctx, s.shopCfg, s.envCfg)
 }
 
 func (s *SymfonyCLIExecutor) StartEnvironment(_ context.Context) error {

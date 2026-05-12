@@ -11,7 +11,6 @@ import (
 	"github.com/shopware/shopware-cli/internal/tui"
 )
 
-// configField identifies an editable field in the config tab.
 type configField int
 
 const (
@@ -21,7 +20,7 @@ const (
 	fieldBlackfireServerToken
 	fieldTidewaysAPIKey
 	fieldSave
-	fieldCount // sentinel – number of fields
+	fieldCount
 )
 
 const (
@@ -36,19 +35,18 @@ var (
 	profilers   = []string{"", "xdebug", profilerBlackfire, profilerTideways, "pcov", "spx"}
 )
 
-// ConfigModel holds the state for the Environment Config tab.
 type ConfigModel struct {
 	cursor configField
 
-	phpVersion int // index into phpVersions
-	profiler   int // index into profilers
+	phpVersion int
+	profiler   int
 
 	blackfireServerID    textinput.Model
 	blackfireServerToken textinput.Model
 	tidewaysAPIKey       textinput.Model
 
-	saved    bool // flash a "saved" indicator
-	modified bool // config has unsaved changes
+	saved    bool
+	modified bool
 
 	width  int
 	height int
@@ -62,14 +60,13 @@ func NewConfigModel(cfg *shop.Config) ConfigModel {
 	}
 
 	if cfg != nil && cfg.Docker != nil && cfg.Docker.PHP != nil {
-		m.phpVersion = indexOf(phpVersions, cfg.Docker.PHP.Version, defaultPHPVersionIndex) // default 8.3
+		m.phpVersion = indexOf(phpVersions, cfg.Docker.PHP.Version, defaultPHPVersionIndex)
 		m.profiler = indexOf(profilers, cfg.Docker.PHP.Profiler, 0)
 		m.blackfireServerID = newConfigInput("Server ID", cfg.Docker.PHP.BlackfireServerID)
 		m.blackfireServerToken = newConfigInput("Server Token", cfg.Docker.PHP.BlackfireServerToken)
 		m.tidewaysAPIKey = newConfigInput("API Key", cfg.Docker.PHP.TidewaysAPIKey)
 	}
 
-	// Ensure text inputs are initialized even if config was nil.
 	if m.blackfireServerID.Placeholder == "" {
 		m.blackfireServerID = newConfigInput("Server ID", "")
 	}
@@ -128,22 +125,24 @@ func (m ConfigModel) HandleKey(msg tea.KeyPressMsg) (ConfigModel, tea.Cmd) {
 	return m, nil
 }
 
-// PickerForCursor returns a Modal that edits the field under the cursor, or
-// nil if the cursor is not on an editable field.
 func (m ConfigModel) PickerForCursor() Modal {
 	switch m.cursor { //nolint:exhaustive
 	case fieldPHPVersion:
-		return newListPicker(fieldPHPVersion, "PHP Version", phpVersions, nil, m.phpVersion)
-	case fieldProfiler:
-		labels := make([]string, len(profilers))
-		for i, p := range profilers {
-			if p == "" {
-				labels[i] = "none"
-			} else {
-				labels[i] = p
-			}
+		items := make([]listPickerItem, len(phpVersions))
+		for i, v := range phpVersions {
+			items[i] = listPickerItem{Label: v, Value: v}
 		}
-		return newListPicker(fieldProfiler, "PHP Profiler", profilers, labels, m.profiler)
+		return newListPicker(fieldPHPVersion, "PHP Version", "", items, m.phpVersion)
+	case fieldProfiler:
+		items := make([]listPickerItem, len(profilers))
+		for i, p := range profilers {
+			label := p
+			if p == "" {
+				label = "none"
+			}
+			items[i] = listPickerItem{Label: label, Value: p}
+		}
+		return newListPicker(fieldProfiler, "PHP Profiler", "", items, m.profiler)
 	case fieldBlackfireServerID:
 		return newTextPicker(fieldBlackfireServerID, "Blackfire Server ID", "Server ID for the Blackfire profiler", m.blackfireServerID.Value(), true)
 	case fieldBlackfireServerToken:
@@ -154,8 +153,6 @@ func (m ConfigModel) PickerForCursor() Modal {
 	return nil
 }
 
-// ApplyPickerValue stores the chosen value for the field. Returns true if the
-// value changed.
 func (m *ConfigModel) ApplyPickerValue(field configField, value string) bool {
 	changed := false
 	switch field { //nolint:exhaustive
@@ -234,8 +231,6 @@ func (m ConfigModel) isFieldVisible(f configField) bool {
 	return true
 }
 
-// ApplyToConfig writes the non-sensitive form values into the given Config.
-// Credentials are excluded — use LocalConfig to obtain them separately.
 func (m ConfigModel) ApplyToConfig(cfg *shop.Config) {
 	if cfg.Docker == nil {
 		cfg.Docker = &shop.ConfigDocker{}
@@ -247,15 +242,11 @@ func (m ConfigModel) ApplyToConfig(cfg *shop.Config) {
 	cfg.Docker.PHP.Version = phpVersions[m.phpVersion]
 	cfg.Docker.PHP.Profiler = profilers[m.profiler]
 
-	// Credentials are stored in the local config file, not here.
 	cfg.Docker.PHP.BlackfireServerID = ""
 	cfg.Docker.PHP.BlackfireServerToken = ""
 	cfg.Docker.PHP.TidewaysAPIKey = ""
 }
 
-// LocalConfig returns a partial Config containing only the sensitive
-// credential fields for the active profiler. This is written to
-// .shopware-project.local.yml so secrets stay out of version control.
 func (m ConfigModel) LocalConfig() *shop.Config {
 	php := &shop.ConfigDockerPHP{}
 
@@ -266,7 +257,7 @@ func (m ConfigModel) LocalConfig() *shop.Config {
 	case profilerTideways:
 		php.TidewaysAPIKey = m.tidewaysAPIKey.Value()
 	default:
-		return nil // no credentials to persist
+		return nil
 	}
 
 	return &shop.Config{
@@ -284,13 +275,11 @@ func (m ConfigModel) View(width, height int) string {
 
 	divider := tui.SectionDivider(width - 8)
 
-	// --- PHP Settings ---
 	s.WriteString(tui.TitleStyle.Render("PHP"))
 	s.WriteString("\n")
 	s.WriteString(m.renderSelect(fieldPHPVersion, "Version", phpVersions[m.phpVersion], selectedArrow, normalIndent))
 	s.WriteString(m.renderSelect(fieldProfiler, "Profiler", m.profilerLabel(), selectedArrow, normalIndent))
 
-	// Profiler-specific credential fields.
 	profilerName := profilers[m.profiler]
 	if profilerName == profilerBlackfire {
 		s.WriteString(m.renderInput(fieldBlackfireServerID, "Server ID", m.blackfireServerID, selectedArrow, normalIndent))
@@ -302,7 +291,6 @@ func (m ConfigModel) View(width, height int) string {
 
 	s.WriteString(divider)
 
-	// --- Save Button ---
 	if m.cursor == fieldSave {
 		s.WriteString(selectedArrow)
 	} else {

@@ -7,13 +7,17 @@ import (
 	"path/filepath"
 	"strings"
 	"syscall"
+
+	adminSdk "github.com/shopware/shopware-cli/internal/admin-api"
+	"github.com/shopware/shopware-cli/internal/shop"
 )
 
-// DockerExecutor runs commands via docker compose exec against the "web" service.
 type DockerExecutor struct {
 	env         map[string]string
 	projectRoot string
 	relDir      string
+	shopCfg     *shop.Config
+	envCfg      *shop.EnvironmentConfig
 }
 
 func (d *DockerExecutor) ConsoleCommand(ctx context.Context, args ...string) *Process {
@@ -88,14 +92,17 @@ func (d *DockerExecutor) WithEnv(env map[string]string) Executor {
 		}
 	}
 
-	return &DockerExecutor{env: mergeEnv(d.env, env), projectRoot: d.projectRoot, relDir: d.relDir}
+	return &DockerExecutor{env: mergeEnv(d.env, env), projectRoot: d.projectRoot, relDir: d.relDir, shopCfg: d.shopCfg, envCfg: d.envCfg}
 }
 
 func (d *DockerExecutor) WithRelDir(relDir string) Executor {
-	return &DockerExecutor{env: d.env, projectRoot: d.projectRoot, relDir: relDir}
+	return &DockerExecutor{env: d.env, projectRoot: d.projectRoot, relDir: relDir, shopCfg: d.shopCfg, envCfg: d.envCfg}
 }
 
-// containerWorkdir returns the container-side working directory.
+func (d *DockerExecutor) AdminAPIClient(ctx context.Context) (*adminSdk.Client, error) {
+	return adminAPIClient(ctx, d.shopCfg, d.envCfg)
+}
+
 func (d *DockerExecutor) containerWorkdir() string {
 	if d.relDir == "" {
 		return "/var/www/html"
@@ -104,9 +111,6 @@ func (d *DockerExecutor) containerWorkdir() string {
 	return filepath.Join("/var/www/html", d.relDir)
 }
 
-// newProcess wraps the command in a Process with a Docker-aware stop function.
-// The innerArgs are the command args as seen inside the container (used as the
-// pkill pattern for cleanup).
 func (d *DockerExecutor) newProcess(cmd *exec.Cmd, innerArgs []string) *Process {
 	projectRoot := d.projectRoot
 	pattern := strings.Join(innerArgs, " ")
@@ -114,15 +118,12 @@ func (d *DockerExecutor) newProcess(cmd *exec.Cmd, innerArgs []string) *Process 
 	return &Process{
 		Cmd: cmd,
 		stop: func(ctx context.Context) error {
-			// First, kill the process inside the container via pkill.
 			killCmd := exec.CommandContext(ctx, "docker", "compose", "exec", "-T", "web",
 				"pkill", "-INT", "-f", pattern,
 			)
 			killCmd.Dir = projectRoot
 			_ = killCmd.Run()
 
-			// Also signal the host-side "docker compose exec" process so it
-			// exits promptly instead of lingering after its child dies.
 			if cmd.Process != nil {
 				_ = cmd.Process.Signal(syscall.SIGINT)
 			}

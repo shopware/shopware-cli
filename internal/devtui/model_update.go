@@ -140,8 +140,9 @@ func (m Model) executeCommand(id string) (tea.Model, tea.Cmd) {
 		}
 	case "sf-watch-start":
 		if !m.general.sfWatchRunning && !m.general.sfWatchStarting {
-			m.general.sfWatchStarting = true
-			return m, m.general.startStorefrontWatch()
+			picker := newSalesChannelPicker(m.executor)
+			m.modal = picker
+			return m, picker.Init()
 		}
 	case "sf-watch-stop":
 		if m.general.sfWatchRunning {
@@ -166,10 +167,8 @@ func (m Model) executeCommand(id string) (tea.Model, tea.Cmd) {
 }
 
 func (m *Model) stopWatcher(name string) tea.Cmd {
-	// Stop log streaming first.
 	m.logs.StopStreaming()
 
-	// Get and remove the tracked process.
 	p := m.watchers[name]
 	delete(m.watchers, name)
 

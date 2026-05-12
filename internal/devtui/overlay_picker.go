@@ -1,6 +1,7 @@
 package devtui
 
 import (
+	"strconv"
 	"strings"
 
 	"charm.land/bubbles/v2/textinput"
@@ -10,49 +11,208 @@ import (
 	"github.com/shopware/shopware-cli/internal/tui"
 )
 
-type valuePickerKind int
-
-const (
-	valuePickerList valuePickerKind = iota
-	valuePickerText
-)
-
-// valuePickerResultMsg is emitted when the picker is dismissed. Cancelled is
-// true if Esc was pressed; otherwise Field/Value carry the chosen value.
-type valuePickerResultMsg struct {
+type pickerResultMsg struct {
+	Key       any
 	Cancelled bool
-	Field     configField
 	Value     string
+	Index     int
 }
 
-// valuePicker is a modal that edits a single config field. It renders either
-// a selectable list of options or a text input, depending on kind.
-type valuePicker struct {
-	kind   valuePickerKind
-	field  configField
-	title  string
-	help   string
-	secret bool
-
-	options []string // list mode
-	labels  []string // optional pretty labels; falls back to options
-	cursor  int
-
-	input textinput.Model // text mode
+type listPickerItem struct {
+	Label  string
+	Detail string
+	Value  string
 }
 
-func newListPicker(field configField, title string, options []string, labels []string, current int) *valuePicker {
-	return &valuePicker{
-		kind:    valuePickerList,
-		field:   field,
-		title:   title,
-		options: options,
-		labels:  labels,
-		cursor:  current,
+type listPicker struct {
+	key      any
+	title    string
+	help     string
+	items    []listPickerItem
+	filter   textinput.Model
+	filtered []int
+	cursor   int
+	scroll   int
+	pageSize int
+}
+
+const listPickerPageSize = 10
+
+func newListPicker(key any, title, help string, items []listPickerItem, initialIndex int) *listPicker {
+	ti := textinput.New()
+	ti.Prompt = lipgloss.NewStyle().Foreground(tui.BrandColor).Render("> ")
+	ti.Placeholder = "Type to filter"
+	ti.CharLimit = 64
+	ti.Focus()
+
+	lp := &listPicker{
+		key:      key,
+		title:    title,
+		help:     help,
+		items:    items,
+		filter:   ti,
+		pageSize: listPickerPageSize,
+	}
+	lp.applyFilter()
+
+	for i, idx := range lp.filtered {
+		if idx == initialIndex {
+			lp.cursor = i
+			break
+		}
+	}
+	lp.clampScroll()
+	return lp
+}
+
+func (lp *listPicker) applyFilter() {
+	query := strings.ToLower(lp.filter.Value())
+	lp.filtered = lp.filtered[:0]
+	for i, it := range lp.items {
+		if query == "" ||
+			strings.Contains(strings.ToLower(it.Label), query) ||
+			strings.Contains(strings.ToLower(it.Detail), query) {
+			lp.filtered = append(lp.filtered, i)
+		}
+	}
+	if lp.cursor >= len(lp.filtered) {
+		lp.cursor = max(len(lp.filtered)-1, 0)
+	}
+	lp.clampScroll()
+}
+
+func (lp *listPicker) clampScroll() {
+	if lp.cursor < lp.scroll {
+		lp.scroll = lp.cursor
+	}
+	if lp.cursor >= lp.scroll+lp.pageSize {
+		lp.scroll = lp.cursor - lp.pageSize + 1
+	}
+	if lp.scroll < 0 {
+		lp.scroll = 0
 	}
 }
 
-func newTextPicker(field configField, title, help, value string, secret bool) *valuePicker {
+func (lp *listPicker) selected() (listPickerItem, int, bool) {
+	if len(lp.filtered) == 0 {
+		return listPickerItem{}, -1, false
+	}
+	idx := lp.filtered[lp.cursor]
+	return lp.items[idx], idx, true
+}
+
+func (lp *listPicker) Update(msg tea.Msg) (Modal, tea.Cmd) {
+	key, ok := msg.(tea.KeyPressMsg)
+	if !ok {
+		return lp, nil
+	}
+
+	switch key.String() {
+	case "esc":
+		return nil, emit(pickerResultMsg{Key: lp.key, Cancelled: true})
+	case keyEnter:
+		item, idx, ok := lp.selected()
+		if !ok {
+			return nil, emit(pickerResultMsg{Key: lp.key, Cancelled: true})
+		}
+		return nil, emit(pickerResultMsg{Key: lp.key, Value: item.Value, Index: idx})
+	case keyUp:
+		if lp.cursor > 0 {
+			lp.cursor--
+			lp.clampScroll()
+		}
+		return lp, nil
+	case keyDown:
+		if lp.cursor < len(lp.filtered)-1 {
+			lp.cursor++
+			lp.clampScroll()
+		}
+		return lp, nil
+	}
+
+	var cmd tea.Cmd
+	lp.filter, cmd = lp.filter.Update(msg)
+	lp.applyFilter()
+	return lp, cmd
+}
+
+func (lp *listPicker) View(width, height int) string {
+	modalWidth := min(width-4, 70)
+	innerWidth := modalWidth - 6
+
+	titleStyle := lipgloss.NewStyle().Bold(true).Foreground(tui.BrandColor)
+
+	var b strings.Builder
+	b.WriteString(titleStyle.Render(lp.title))
+	b.WriteString("\n\n")
+	if lp.help != "" {
+		b.WriteString(helpStyle.Render(lp.help))
+		b.WriteString("\n\n")
+	}
+
+	b.WriteString(lp.filter.View())
+	b.WriteString("\n\n")
+
+	selectedStyle := lipgloss.NewStyle().
+		Foreground(tui.BrandColor).
+		Background(tui.SelectedBgColor).
+		Bold(true).
+		Width(innerWidth)
+	normalStyle := lipgloss.NewStyle().
+		Foreground(tui.TextColor).
+		Width(innerWidth)
+	detailStyle := lipgloss.NewStyle().Foreground(tui.MutedColor)
+	selectedDetailStyle := lipgloss.NewStyle().
+		Foreground(tui.MutedColor).
+		Background(tui.SelectedBgColor)
+
+	end := lp.scroll + lp.pageSize
+	if end > len(lp.filtered) {
+		end = len(lp.filtered)
+	}
+
+	for i := lp.scroll; i < end; i++ {
+		idx := lp.filtered[i]
+		item := lp.items[idx]
+		rowStyle, dStyle := normalStyle, detailStyle
+		if i == lp.cursor {
+			rowStyle, dStyle = selectedStyle, selectedDetailStyle
+		}
+		if item.Detail != "" {
+			gap := max(innerWidth-lipgloss.Width(item.Label)-lipgloss.Width(item.Detail), 1)
+			b.WriteString(rowStyle.Render(item.Label + strings.Repeat(" ", gap) + dStyle.Render(item.Detail)))
+		} else {
+			b.WriteString(rowStyle.Render(item.Label))
+		}
+		b.WriteString("\n")
+	}
+	if len(lp.filtered) == 0 {
+		b.WriteString(lipgloss.NewStyle().Foreground(tui.MutedColor).Render("No matching items"))
+		b.WriteString("\n")
+	} else if len(lp.filtered) > lp.pageSize {
+		b.WriteString(detailStyle.Render("Showing " + strconv.Itoa(lp.scroll+1) + "–" + strconv.Itoa(end) + " of " + strconv.Itoa(len(lp.filtered))))
+		b.WriteString("\n")
+	}
+
+	b.WriteString("\n")
+	b.WriteString(tui.ShortcutBar(
+		tui.Shortcut{Key: "↑/↓", Label: "Choose"},
+		tui.Shortcut{Key: "enter", Label: "Confirm"},
+		tui.Shortcut{Key: "esc", Label: "Cancel"},
+	))
+
+	return centeredModal(b.String(), modalWidth, width, height)
+}
+
+type textPicker struct {
+	key    any
+	title  string
+	help   string
+	input  textinput.Model
+	secret bool
+}
+
+func newTextPicker(key any, title, help, value string, secret bool) *textPicker {
 	ti := textinput.New()
 	ti.Placeholder = title
 	ti.CharLimit = 128
@@ -61,117 +221,43 @@ func newTextPicker(field configField, title, help, value string, secret bool) *v
 		ti.SetValue(value)
 	}
 	ti.Focus()
-	return &valuePicker{
-		kind:   valuePickerText,
-		field:  field,
-		title:  title,
-		help:   help,
-		secret: secret,
-		input:  ti,
-	}
+	return &textPicker{key: key, title: title, help: help, input: ti, secret: secret}
 }
 
-func (vp *valuePicker) selectedValue() string {
-	if vp.kind == valuePickerText {
-		return vp.input.Value()
-	}
-	if len(vp.options) == 0 {
-		return ""
-	}
-	return vp.options[vp.cursor]
-}
-
-func (vp *valuePicker) optionLabel(i int) string {
-	if i < len(vp.labels) && vp.labels[i] != "" {
-		return vp.labels[i]
-	}
-	if i < len(vp.options) {
-		return vp.options[i]
-	}
-	return ""
-}
-
-func (vp *valuePicker) Update(msg tea.Msg) (Modal, tea.Cmd) {
+func (tp *textPicker) Update(msg tea.Msg) (Modal, tea.Cmd) {
 	key, ok := msg.(tea.KeyPressMsg)
 	if !ok {
-		return vp, nil
+		return tp, nil
 	}
-
 	switch key.String() {
 	case "esc":
-		return nil, emit(valuePickerResultMsg{Cancelled: true, Field: vp.field})
+		return nil, emit(pickerResultMsg{Key: tp.key, Cancelled: true})
 	case keyEnter:
-		return nil, emit(valuePickerResultMsg{Field: vp.field, Value: vp.selectedValue()})
+		return nil, emit(pickerResultMsg{Key: tp.key, Value: tp.input.Value()})
 	}
-
-	if vp.kind == valuePickerList {
-		switch key.String() {
-		case keyUp, keyK:
-			if vp.cursor > 0 {
-				vp.cursor--
-			}
-		case keyDown, keyJ:
-			if vp.cursor < len(vp.options)-1 {
-				vp.cursor++
-			}
-		}
-		return vp, nil
-	}
-
 	var cmd tea.Cmd
-	vp.input, cmd = vp.input.Update(msg)
-	return vp, cmd
+	tp.input, cmd = tp.input.Update(msg)
+	return tp, cmd
 }
 
-func (vp *valuePicker) View(width, height int) string {
+func (tp *textPicker) View(width, height int) string {
 	modalWidth := min(width-4, 70)
-	innerWidth := modalWidth - 6
 
 	titleStyle := lipgloss.NewStyle().Bold(true).Foreground(tui.BrandColor)
 
 	var b strings.Builder
-	b.WriteString(titleStyle.Render(vp.title))
+	b.WriteString(titleStyle.Render(tp.title))
 	b.WriteString("\n\n")
-	if vp.help != "" {
-		b.WriteString(helpStyle.Render(vp.help))
+	if tp.help != "" {
+		b.WriteString(helpStyle.Render(tp.help))
 		b.WriteString("\n\n")
 	}
-
-	switch vp.kind {
-	case valuePickerList:
-		selectedStyle := lipgloss.NewStyle().
-			Foreground(tui.BrandColor).
-			Background(tui.SelectedBgColor).
-			Bold(true).
-			Width(innerWidth)
-		normalStyle := lipgloss.NewStyle().
-			Foreground(tui.TextColor).
-			Width(innerWidth)
-
-		for i := range vp.options {
-			label := vp.optionLabel(i)
-			if i == vp.cursor {
-				b.WriteString(selectedStyle.Render(label))
-			} else {
-				b.WriteString(normalStyle.Render(label))
-			}
-			b.WriteString("\n")
-		}
-		b.WriteString("\n")
-		b.WriteString(tui.ShortcutBar(
-			tui.Shortcut{Key: "↑/↓", Label: "Choose"},
-			tui.Shortcut{Key: "enter", Label: "Confirm"},
-			tui.Shortcut{Key: "esc", Label: "Cancel"},
-		))
-
-	case valuePickerText:
-		b.WriteString(vp.input.View())
-		b.WriteString("\n\n")
-		b.WriteString(tui.ShortcutBar(
-			tui.Shortcut{Key: "enter", Label: "Confirm"},
-			tui.Shortcut{Key: "esc", Label: "Cancel"},
-		))
-	}
+	b.WriteString(tp.input.View())
+	b.WriteString("\n\n")
+	b.WriteString(tui.ShortcutBar(
+		tui.Shortcut{Key: "enter", Label: "Confirm"},
+		tui.Shortcut{Key: "esc", Label: "Cancel"},
+	))
 
 	return centeredModal(b.String(), modalWidth, width, height)
 }
