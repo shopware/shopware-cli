@@ -165,6 +165,7 @@ var projectUpgradeCheckCmd = &cobra.Command{
 			}
 		}
 		go tracking.Track(cmd.Context(), "project.upgrade_check", map[string]string{
+			"from_version":   shopwareVersion.String(),
 			"target_version": selectedVersion,
 			"has_blockers":   strconv.FormatBool(hasBlockers),
 		})
