@@ -67,15 +67,22 @@ type TwigBlockNode struct {
 	Line     int
 }
 
+// TwigIfBranch is one conditional branch of a {% if %}...{% endif %} block.
+// The first branch in TwigIfNode.Branches is the "if" itself; subsequent
+// entries are "elseif" branches. The else (no-condition) branch is held
+// separately on TwigIfNode.ElseChildren.
+type TwigIfBranch struct {
+	Condition string
+	Body      NodeList
+}
+
 // TwigIfNode represents `{% if %}...{% elseif %}...{% else %}...{% endif %}`.
-// Branches are stored as parallel slices ElseIfConditions / ElseIfChildren.
+// Branches[0] is always the "if"; Branches[1..] are "elseif"s.
+// ElseChildren is nil/empty when there is no {% else %} clause.
 type TwigIfNode struct {
-	Condition        string
-	Children         NodeList
-	ElseIfConditions []string
-	ElseIfChildren   []NodeList
-	ElseChildren     NodeList
-	Line             int
+	Branches     []TwigIfBranch
+	ElseChildren NodeList
+	Line         int
 }
 
 // ParentNode represents `{% parent %}` or `{% parent() %}`.

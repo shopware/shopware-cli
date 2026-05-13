@@ -581,128 +581,67 @@ func (t *TwigBlockNode) Dump(indent int) string {
 func (t *TwigIfNode) Dump(indent int) string {
 	var builder strings.Builder
 	indentStr := indentConfig.GetIndent()
-
-	for i := 0; i < indent; i++ {
-		builder.WriteString(indentStr)
+	writeIndent := func(n int) {
+		for i := 0; i < n; i++ {
+			builder.WriteString(indentStr)
+		}
 	}
 
-	builder.WriteString("{% if " + t.Condition + " %}")
-
-	// Filter out empty nodes and normalize newlines for if branch
-	var nonEmptyChildren NodeList
-	for _, child := range t.Children {
-		if raw, ok := child.(*RawNode); ok {
-			if strings.TrimSpace(raw.Text) != "" {
-				nonEmptyChildren = append(nonEmptyChildren, raw)
-			}
+	// Each branch (if + any elseifs) renders the same way: a header line
+	// at `indent`, then its body indented one level deeper.
+	for i, br := range t.Branches {
+		writeIndent(indent)
+		if i == 0 {
+			builder.WriteString("{% if " + br.Condition + " %}")
 		} else {
-			nonEmptyChildren = append(nonEmptyChildren, child)
+			builder.WriteString("{% elseif " + br.Condition + " %}")
 		}
+		writeIfBranchBody(&builder, br.Body, indent, indentStr)
 	}
 
-	if len(nonEmptyChildren) > 0 {
-		builder.WriteString("\n")
-		for i, child := range nonEmptyChildren {
-			if elementChild, ok := child.(*ElementNode); ok {
-				builder.WriteString(elementChild.Dump(indent + 1))
-			} else {
-				for i := 0; i < indent+1; i++ {
-					builder.WriteString(indentStr)
-				}
-				builder.WriteString(strings.TrimSpace(child.Dump(indent + 1)))
-			}
-			if i < len(nonEmptyChildren)-1 {
-				// Add an extra newline between elements
-				builder.WriteString("\n")
-			}
-		}
-		builder.WriteString("\n")
-	}
-
-	// Handle elseif branches if they exist
-	for i, condition := range t.ElseIfConditions {
-		for i := 0; i < indent; i++ {
-			builder.WriteString(indentStr)
-		}
-		builder.WriteString("{% elseif " + condition + " %}")
-
-		// Filter out empty nodes and normalize newlines for elseif branch
-		nonEmptyChildren = NodeList{}
-		for _, child := range t.ElseIfChildren[i] {
-			if raw, ok := child.(*RawNode); ok {
-				if strings.TrimSpace(raw.Text) != "" {
-					nonEmptyChildren = append(nonEmptyChildren, raw)
-				}
-			} else {
-				nonEmptyChildren = append(nonEmptyChildren, child)
-			}
-		}
-
-		if len(nonEmptyChildren) > 0 {
-			builder.WriteString("\n")
-			for j, child := range nonEmptyChildren {
-				if elementChild, ok := child.(*ElementNode); ok {
-					builder.WriteString(elementChild.Dump(indent + 1))
-				} else {
-					for i := 0; i < indent+1; i++ {
-						builder.WriteString(indentStr)
-					}
-					builder.WriteString(strings.TrimSpace(child.Dump(indent + 1)))
-				}
-				if j < len(nonEmptyChildren)-1 {
-					// Add an extra newline between elements
-					builder.WriteString("\n")
-				}
-			}
-			builder.WriteString("\n")
-		}
-	}
-
-	// Handle else branch if it exists
 	if len(t.ElseChildren) > 0 {
-		for i := 0; i < indent; i++ {
-			builder.WriteString(indentStr)
-		}
+		writeIndent(indent)
 		builder.WriteString("{% else %}")
-
-		// Filter out empty nodes and normalize newlines for else branch
-		var nonEmptyElseChildren NodeList
-		for _, child := range t.ElseChildren {
-			if raw, ok := child.(*RawNode); ok {
-				if strings.TrimSpace(raw.Text) != "" {
-					nonEmptyElseChildren = append(nonEmptyElseChildren, raw)
-				}
-			} else {
-				nonEmptyElseChildren = append(nonEmptyElseChildren, child)
-			}
-		}
-
-		if len(nonEmptyElseChildren) > 0 {
-			builder.WriteString("\n")
-			for i, child := range nonEmptyElseChildren {
-				if elementChild, ok := child.(*ElementNode); ok {
-					builder.WriteString(elementChild.Dump(indent + 1))
-				} else {
-					for i := 0; i < indent+1; i++ {
-						builder.WriteString(indentStr)
-					}
-					builder.WriteString(strings.TrimSpace(child.Dump(indent + 1)))
-				}
-				if i < len(nonEmptyElseChildren)-1 {
-					// Add an extra newline between elements
-					builder.WriteString("\n")
-				}
-			}
-			builder.WriteString("\n")
-		}
+		writeIfBranchBody(&builder, t.ElseChildren, indent, indentStr)
 	}
 
-	for i := 0; i < indent; i++ {
-		builder.WriteString(indentStr)
-	}
-
+	writeIndent(indent)
 	builder.WriteString("{% endif %}")
 	return builder.String()
+}
+
+// writeIfBranchBody emits the body of a single if/elseif/else branch,
+// filtering whitespace-only RawNodes and one-level-indented per child.
+func writeIfBranchBody(builder *strings.Builder, children NodeList, indent int, indentStr string) {
+	var nonEmpty NodeList
+	for _, child := range children {
+		if raw, ok := child.(*RawNode); ok {
+			if strings.TrimSpace(raw.Text) == "" {
+				continue
+			}
+			nonEmpty = append(nonEmpty, raw)
+			continue
+		}
+		nonEmpty = append(nonEmpty, child)
+	}
+	if len(nonEmpty) == 0 {
+		return
+	}
+	builder.WriteString("\n")
+	for i, child := range nonEmpty {
+		if elementChild, ok := child.(*ElementNode); ok {
+			builder.WriteString(elementChild.Dump(indent + 1))
+		} else {
+			for j := 0; j < indent+1; j++ {
+				builder.WriteString(indentStr)
+			}
+			builder.WriteString(strings.TrimSpace(child.Dump(indent + 1)))
+		}
+		if i < len(nonEmpty)-1 {
+			builder.WriteString("\n")
+		}
+	}
+	builder.WriteString("\n")
 }
 
 func (p *ParentNode) Dump(indent int) string {

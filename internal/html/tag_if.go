@@ -11,9 +11,9 @@ func init() {
 	})
 }
 
-// parseIfTag parses `{% if cond %}...{% elseif x %}...{% else %}...{% endif %}`.
-// TwigIfNode uses parallel ElseIfConditions/ElseIfChildren slices; a future
-// refactor could collapse them into a single []TwigIfBranch.
+// parseIfTag parses `{% if cond %}...{% elseif x %}...{% else %}...{% endif %}`
+// into a TwigIfNode whose Branches slice holds the "if" entry plus every
+// "elseif" in order. The else clause (if any) lives on ElseChildren.
 func parseIfTag(p *parser, openTok token) (Node, error) {
 	if openTok.Type != tokTwigStmtOpen {
 		return nil, errAt(p.source, p.filename, openTok.Pos, "expected open delimiter for if tag")
@@ -26,16 +26,13 @@ func parseIfTag(p *parser, openTok token) (Node, error) {
 	}
 
 	spec := lookupTag("if")
-	ifChildren, reason, err := p.parseNodesUntil(nodeContextTopLevel, "", spec)
+	ifBody, reason, err := p.parseNodesUntil(nodeContextTopLevel, "", spec)
 	if err != nil {
 		return nil, err
 	}
 
-	var (
-		elseIfConditions []string
-		elseIfChildren   []NodeList
-		elseChildren     NodeList
-	)
+	branches := []TwigIfBranch{{Condition: condition, Body: ifBody}}
+	var elseChildren NodeList
 
 	// Walk follower tags (elseif... else) then expect endif.
 	for reason == stopIfTerminator {
@@ -45,7 +42,7 @@ func parseIfTag(p *parser, openTok token) (Node, error) {
 		}
 		switch nameTok.Lit {
 		case "elseif":
-			condTok, err := p.consumeStmtHeader("elseif")
+			cond, err := p.consumeStmtHeader("elseif")
 			if err != nil {
 				return nil, err
 			}
@@ -53,8 +50,7 @@ func parseIfTag(p *parser, openTok token) (Node, error) {
 			if err != nil {
 				return nil, err
 			}
-			elseIfConditions = append(elseIfConditions, condTok)
-			elseIfChildren = append(elseIfChildren, body)
+			branches = append(branches, TwigIfBranch{Condition: cond, Body: body})
 			reason = r
 		case "else":
 			if _, err := p.consumeStmtHeader("else"); err != nil {
@@ -79,12 +75,9 @@ func parseIfTag(p *parser, openTok token) (Node, error) {
 	}
 
 	return &TwigIfNode{
-		Condition:        condition,
-		Children:         ifChildren,
-		ElseIfConditions: elseIfConditions,
-		ElseIfChildren:   elseIfChildren,
-		ElseChildren:     elseChildren,
-		Line:             startLine,
+		Branches:     branches,
+		ElseChildren: elseChildren,
+		Line:         startLine,
 	}, nil
 }
 
