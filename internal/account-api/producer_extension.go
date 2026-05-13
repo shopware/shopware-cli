@@ -167,6 +167,13 @@ func (e ProducerEndpoint) UpdateExtensionBinaryFile(ctx context.Context, produce
 	}
 
 	r.Header.Set("content-type", w.FormDataContentType())
+	// The upload endpoint sits behind a proxy that enforces a stricter
+	// body-size limit when the request does not look like it originates from
+	// the Account UI, leading to 413 responses for larger zips (issue #970).
+	// Mirror the Origin/Referer the browser sends so the proxy applies the
+	// same limit as for uploads from account.shopware.com.
+	r.Header.Set("origin", "https://account.shopware.com")
+	r.Header.Set("referer", "https://account.shopware.com/")
 
 	_, err = e.c.doRequest(r)
 
