@@ -160,10 +160,14 @@ func isASCIIWhitespace(c byte) bool {
 func (l *lexer) lexHTMLComment() error {
 	startPos := l.pt.pos()
 	rem := l.remaining()
-	end := strings.Index(rem, "-->")
+	// Search for the closer after the opening "<!--" (4 bytes). HTML disallows
+	// overlapping the open and close, and skipping the prefix prevents a
+	// negative-length slice for inputs like "<!-->".
+	end := strings.Index(rem[4:], "-->")
 	if end == -1 {
 		return &ParseError{Pos: startPos, Msg: "unterminated HTML comment", Source: l.src}
 	}
+	end += 4 // adjust back to an index into rem
 	raw := rem[:end+3]
 	body := strings.TrimSpace(rem[4:end])
 	l.emit(token{Type: tokHTMLComment, Lit: body, Raw: raw, Pos: startPos})
