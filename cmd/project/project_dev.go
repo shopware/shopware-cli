@@ -31,9 +31,45 @@ var projectDevCmd = &cobra.Command{
 	Short: "Start the development environment",
 	Long:  "Start the development environment. Launches the interactive TUI dashboard when run in a terminal, or starts containers in the background otherwise.",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		env, err := setupDevEnvironment(cmd)
+		projectRoot, err := findClosestShopwareProject()
 		if err != nil {
 			return err
+		}
+
+		cfg, err := shop.ReadConfig(cmd.Context(), projectConfigPath, true)
+		if err != nil {
+			return err
+		}
+
+		// If the compatibility date is too old, offer to set up dev mode via the TUI
+		if cfg.IsCompatibilityDateBefore(shop.CompatibilityDevMode) {
+			if !isatty.IsTerminal(os.Stdin.Fd()) {
+				return shop.ErrDevModeNotSupported
+			}
+			return runSetupGuideTUI(projectRoot, cfg)
+		}
+
+		envCfg, err := cfg.ResolveEnvironment(environmentName)
+		if err != nil {
+			return err
+		}
+
+		exec, err := executor.New(projectRoot, envCfg, cfg)
+		if err != nil {
+			return err
+		}
+
+		if exec.Type() == executor.TypeDocker {
+			if err := dockerpkg.WriteComposeFile(projectRoot, dockerpkg.ComposeOptionsFromConfig(cfg)); err != nil {
+				return err
+			}
+		}
+
+		env := &devEnvironment{
+			projectRoot: projectRoot,
+			cfg:         cfg,
+			envCfg:      envCfg,
+			executor:    exec,
 		}
 
 		if !isatty.IsTerminal(os.Stdin.Fd()) {
@@ -68,6 +104,25 @@ var projectDevStopCmd = &cobra.Command{
 
 		return env.stop(cmd)
 	},
+}
+
+func runSetupGuideTUI(projectRoot string, cfg *shop.Config) error {
+	envCfg := &shop.EnvironmentConfig{Type: "docker", URL: "http://127.0.0.1:8000"}
+	exec, err := executor.New(projectRoot, envCfg, cfg)
+	if err != nil {
+		return err
+	}
+
+	m := devtui.NewSetupGuide(devtui.Options{
+		ProjectRoot: projectRoot,
+		Config:      cfg,
+		EnvConfig:   envCfg,
+		Executor:    exec,
+	})
+
+	p := tea.NewProgram(m)
+	_, err = p.Run()
+	return err
 }
 
 func setupDevEnvironment(cmd *cobra.Command) (*devEnvironment, error) {

@@ -38,6 +38,7 @@ const (
 	phaseInstallPrompt
 	phaseInstalling
 	phaseTask
+	phaseSetupGuide
 )
 
 type Options struct {
@@ -71,6 +72,7 @@ type Model struct {
 	taskDone       bool
 	taskErr        error
 	watchers       map[string]*executor.Process
+	setupGuide     setupGuide
 }
 
 type dockerAlreadyRunningMsg struct{}
@@ -119,7 +121,20 @@ func New(opts Options) Model {
 	}
 }
 
+// NewSetupGuide creates a Model that starts in the setup guide phase
+// for projects that don't yet have a development environment configured.
+func NewSetupGuide(opts Options) Model {
+	m := New(opts)
+	m.phase = phaseSetupGuide
+	m.dockerMode = true // setup guide always creates Docker env
+	m.setupGuide = newSetupGuide()
+	return m
+}
+
 func (m Model) Init() tea.Cmd {
+	if m.phase == phaseSetupGuide {
+		return nil
+	}
 	if m.dockerMode {
 		return checkContainersRunning(m.projectRoot)
 	}
