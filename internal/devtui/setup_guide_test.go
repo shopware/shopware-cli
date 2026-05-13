@@ -1,6 +1,8 @@
 package devtui
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
@@ -9,10 +11,57 @@ import (
 	"github.com/shopware/shopware-cli/internal/shop"
 )
 
+func writeLockWithCore(t *testing.T, dir, phpRequire string) {
+	t.Helper()
+	content := `{"packages":[{"name":"shopware/core","version":"v6.6.10.0","require":{"php":"` + phpRequire + `"}}]}`
+	assert.NoError(t, os.WriteFile(filepath.Join(dir, "composer.lock"), []byte(content), 0o644))
+}
+
+func TestResolvePHPVersions_NoLockFile(t *testing.T) {
+	versions, idx, constraint := resolvePHPVersions(t.TempDir())
+	assert.Equal(t, []string{"8.2", "8.3", "8.4", "8.5"}, versions)
+	assert.Equal(t, len(versions)-1, idx)
+	assert.Empty(t, constraint)
+}
+
+func TestResolvePHPVersions_FiltersByShopwareCore(t *testing.T) {
+	dir := t.TempDir()
+	writeLockWithCore(t, dir, "~8.2.0 || ~8.3.0")
+
+	versions, idx, constraint := resolvePHPVersions(dir)
+	assert.Equal(t, []string{"8.2", "8.3"}, versions)
+	assert.Equal(t, 1, idx) // highest compatible
+	assert.Equal(t, "~8.2.0 || ~8.3.0", constraint)
+}
+
+func TestResolvePHPVersions_NoMatchingVersionsFallsBackToAll(t *testing.T) {
+	dir := t.TempDir()
+	writeLockWithCore(t, dir, "^9.0")
+
+	versions, idx, constraint := resolvePHPVersions(dir)
+	// Constraint matches nothing → fall back to the full list so the user
+	// can still pick something.
+	assert.Equal(t, []string{"8.2", "8.3", "8.4", "8.5"}, versions)
+	assert.Equal(t, len(versions)-1, idx)
+	assert.Equal(t, "^9.0", constraint)
+}
+
+func TestResolvePHPVersions_PlatformFallback(t *testing.T) {
+	dir := t.TempDir()
+	content := `{"packages":[{"name":"shopware/platform","version":"v6.5.0.0","require":{"php":">=8.2"}}]}`
+	assert.NoError(t, os.WriteFile(filepath.Join(dir, "composer.lock"), []byte(content), 0o644))
+
+	versions, _, constraint := resolvePHPVersions(dir)
+	assert.Equal(t, []string{"8.2", "8.3", "8.4", "8.5"}, versions)
+	assert.Equal(t, ">=8.2", constraint)
+}
+
 func TestNewSetupGuide(t *testing.T) {
-	sg := newSetupGuide()
+	sg := newSetupGuide("")
 	assert.Equal(t, setupStepWelcome, sg.step)
-	assert.Equal(t, 1, sg.phpCursor)      // Default to 8.3
+	// Without a composer.lock the wizard offers every supported PHP version
+	// and defaults the cursor to the highest.
+	assert.Equal(t, len(sg.phpVersions)-1, sg.phpCursor)
 	assert.Equal(t, 0, sg.profilerCursor) // Default to none
 	assert.True(t, sg.confirmYes)
 	assert.Equal(t, "http://127.0.0.1:8000", sg.url.Value())
@@ -21,7 +70,7 @@ func TestNewSetupGuide(t *testing.T) {
 }
 
 func TestSetupGuideCurrentConfig(t *testing.T) {
-	sg := newSetupGuide()
+	sg := newSetupGuide("")
 	sg.phpCursor = 2      // 8.4
 	sg.profilerCursor = 0 // none
 
@@ -34,7 +83,7 @@ func TestSetupGuideCurrentConfig(t *testing.T) {
 }
 
 func TestSetupGuideCurrentConfig_Xdebug(t *testing.T) {
-	sg := newSetupGuide()
+	sg := newSetupGuide("")
 	sg.profilerCursor = 1 // xdebug
 
 	c := sg.currentConfig()
@@ -43,7 +92,7 @@ func TestSetupGuideCurrentConfig_Xdebug(t *testing.T) {
 
 func TestSetupGuideApplyToConfig(t *testing.T) {
 	cfg := &shop.Config{}
-	sg := newSetupGuide()
+	sg := newSetupGuide("")
 	sg.phpCursor = 2 // 8.4
 
 	sg.applyToConfig(cfg)
@@ -65,7 +114,7 @@ func TestSetupGuideApplyToConfig(t *testing.T) {
 
 func TestSetupGuideApplyToConfig_PreservesExistingURL(t *testing.T) {
 	cfg := &shop.Config{URL: "https://myshop.example.com"}
-	sg := newSetupGuide()
+	sg := newSetupGuide("")
 
 	sg.applyToConfig(cfg)
 
@@ -76,14 +125,14 @@ func TestSetupGuideApplyToConfig_PreservesExistingURL(t *testing.T) {
 }
 
 func TestSetupGuideLocalConfig_None(t *testing.T) {
-	sg := newSetupGuide()
+	sg := newSetupGuide("")
 	sg.profilerCursor = 0 // none
 
 	assert.Nil(t, sg.localConfig())
 }
 
 func TestSetupGuideLocalConfig_Blackfire(t *testing.T) {
-	sg := newSetupGuide()
+	sg := newSetupGuide("")
 	sg.profilerCursor = 2 // blackfire
 	sg.blackfireServerID.SetValue("my-id")
 	sg.blackfireServerToken.SetValue("my-token")
@@ -95,7 +144,7 @@ func TestSetupGuideLocalConfig_Blackfire(t *testing.T) {
 }
 
 func TestSetupGuideLocalConfig_Tideways(t *testing.T) {
-	sg := newSetupGuide()
+	sg := newSetupGuide("")
 	sg.profilerCursor = 3 // tideways
 	sg.tidewaysAPIKey.SetValue("my-key")
 
@@ -105,7 +154,7 @@ func TestSetupGuideLocalConfig_Tideways(t *testing.T) {
 }
 
 func TestSetupGuideViewSteps(t *testing.T) {
-	sg := newSetupGuide()
+	sg := newSetupGuide("")
 
 	// Welcome should render without panic
 	view := sg.viewContent()
@@ -139,12 +188,12 @@ func TestSetupGuideViewSteps(t *testing.T) {
 }
 
 func TestSetupGuideWelcomeDefaultConfirmYes(t *testing.T) {
-	suggest := newSetupGuide()
+	suggest := newSetupGuide("")
 	assert.True(t, suggest.confirmYes)
 }
 
 func TestSetupGuideProfiler_NoneSkipsCredsStep(t *testing.T) {
-	sg := newSetupGuide()
+	sg := newSetupGuide("")
 	sg.step = setupStepDockerProfiler
 	sg.profilerCursor = 0 // none
 
@@ -155,7 +204,7 @@ func TestSetupGuideProfiler_NoneSkipsCredsStep(t *testing.T) {
 }
 
 func TestSetupGuideProfiler_BlackfireRoutesToCredsAndFocusesID(t *testing.T) {
-	sg := newSetupGuide()
+	sg := newSetupGuide("")
 	sg.step = setupStepDockerProfiler
 	sg.profilerCursor = 2 // blackfire
 
@@ -166,7 +215,7 @@ func TestSetupGuideProfiler_BlackfireRoutesToCredsAndFocusesID(t *testing.T) {
 }
 
 func TestSetupGuideProfiler_TidewaysRoutesToCredsAndFocusesKey(t *testing.T) {
-	sg := newSetupGuide()
+	sg := newSetupGuide("")
 	sg.step = setupStepDockerProfiler
 	sg.profilerCursor = 3 // tideways
 
@@ -176,7 +225,7 @@ func TestSetupGuideProfiler_TidewaysRoutesToCredsAndFocusesKey(t *testing.T) {
 }
 
 func TestSetupGuideProfiler_BlackfireCredsAdvanceThroughInputs(t *testing.T) {
-	sg := newSetupGuide()
+	sg := newSetupGuide("")
 	sg.step = setupStepDockerProfiler
 	sg.profilerCursor = 2 // blackfire
 
@@ -197,7 +246,7 @@ func TestSetupGuideProfiler_BlackfireCredsAdvanceThroughInputs(t *testing.T) {
 }
 
 func TestSetupGuideProfiler_TidewaysCredsAdvanceToReview(t *testing.T) {
-	sg := newSetupGuide()
+	sg := newSetupGuide("")
 	sg.step = setupStepDockerProfiler
 	sg.profilerCursor = 3 // tideways
 
@@ -210,7 +259,7 @@ func TestSetupGuideProfiler_TidewaysCredsAdvanceToReview(t *testing.T) {
 }
 
 func TestSetupGuideViewProfilerCreds(t *testing.T) {
-	sg := newSetupGuide()
+	sg := newSetupGuide("")
 	sg.step = setupStepProfilerCreds
 	sg.profilerCursor = 2 // blackfire
 	sg.blackfireServerID.Focus()
@@ -221,7 +270,7 @@ func TestSetupGuideViewProfilerCreds(t *testing.T) {
 }
 
 func TestSetupGuideStepNumbering_NoProfilerCreds(t *testing.T) {
-	sg := newSetupGuide()
+	sg := newSetupGuide("")
 	sg.profilerCursor = 0 // none → no creds step
 	assert.Equal(t, 5, sg.totalSteps())
 	assert.Equal(t, 1, sg.stepNum(setupStepAdminUser))
@@ -234,7 +283,7 @@ func TestSetupGuideStepNumbering_NoProfilerCreds(t *testing.T) {
 }
 
 func TestSetupGuideStepNumbering_WithProfilerCreds(t *testing.T) {
-	sg := newSetupGuide()
+	sg := newSetupGuide("")
 	sg.profilerCursor = 2 // blackfire → adds creds step
 	assert.Equal(t, 6, sg.totalSteps())
 	assert.Equal(t, 5, sg.stepNum(setupStepProfilerCreds))

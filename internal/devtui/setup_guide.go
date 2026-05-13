@@ -2,12 +2,15 @@ package devtui
 
 import (
 	"fmt"
+	"path/filepath"
+	"slices"
 	"strings"
 
 	"charm.land/bubbles/v2/textinput"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 
+	"github.com/shopware/shopware-cli/internal/packagist"
 	"github.com/shopware/shopware-cli/internal/shop"
 	"github.com/shopware/shopware-cli/internal/tui"
 )
@@ -25,10 +28,7 @@ const (
 	setupStepDone
 )
 
-var (
-	phpVersionChoices = []string{"8.2", "8.3", "8.4", "8.5"}
-	profilerChoices   = []string{"none", "xdebug", "blackfire", "tideways", "pcov", "spx"}
-)
+var profilerChoices = []string{"none", "xdebug", "blackfire", "tideways", "pcov", "spx"}
 
 // profilerNeedsCreds reports whether the given profiler choice requires
 // additional credentials to be collected from the user.
@@ -38,6 +38,8 @@ func profilerNeedsCreds(profiler string) bool {
 
 type setupGuide struct {
 	step                 setupStep
+	phpVersions          []string // PHP versions compatible with the project
+	phpConstraint        string   // raw constraint string, for display ("" if none)
 	phpCursor            int
 	profilerCursor       int
 	confirmYes           bool
@@ -64,7 +66,39 @@ type setupGuideConfig struct {
 	tidewaysAPIKey       string
 }
 
-func newSetupGuide() setupGuide {
+// resolvePHPVersions reads composer.lock from projectRoot and returns the
+// supported PHP versions that satisfy shopware/core (or shopware/platform)'s
+// require.php, the index of the highest compatible version (best default),
+// and the raw constraint string for display. If composer.lock is missing or
+// the Shopware package declares no PHP requirement, all SupportedPHPVersions
+// are returned.
+func resolvePHPVersions(projectRoot string) (versions []string, defaultIdx int, constraint string) {
+	versions = append([]string(nil), packagist.SupportedPHPVersions...)
+	defaultIdx = len(versions) - 1
+
+	lock, err := packagist.ReadComposerLock(filepath.Join(projectRoot, "composer.lock"))
+	if err != nil {
+		return versions, defaultIdx, ""
+	}
+
+	c := lock.ShopwarePHPConstraint()
+	if c == nil {
+		return versions, defaultIdx, ""
+	}
+
+	filtered := c.SupportedVersions()
+	if len(filtered) == 0 {
+		return versions, defaultIdx, c.String()
+	}
+
+	idx := slices.Index(filtered, c.HighestSupported())
+	if idx < 0 {
+		idx = len(filtered) - 1
+	}
+	return filtered, idx, c.String()
+}
+
+func newSetupGuide(projectRoot string) setupGuide {
 	urlInput := textinput.New()
 	urlInput.Placeholder = "http://127.0.0.1:8000"
 	urlInput.CharLimit = 256
@@ -99,9 +133,13 @@ func newSetupGuide() setupGuide {
 	tidewaysKeyInput.CharLimit = 128
 	tidewaysKeyInput.Prompt = ""
 
+	phpVersions, phpCursor, phpConstraint := resolvePHPVersions(projectRoot)
+
 	return setupGuide{
 		step:                 setupStepWelcome,
-		phpCursor:            1, // Default to 8.3
+		phpVersions:          phpVersions,
+		phpConstraint:        phpConstraint,
+		phpCursor:            phpCursor,
 		profilerCursor:       0, // Default to none
 		confirmYes:           true,
 		url:                  urlInput,
@@ -122,7 +160,7 @@ func (sg *setupGuide) currentConfig() setupGuideConfig {
 		url:                  sg.url.Value(),
 		username:             sg.username.Value(),
 		password:             sg.password.Value(),
-		phpVersion:           phpVersionChoices[sg.phpCursor],
+		phpVersion:           sg.phpVersions[sg.phpCursor],
 		profiler:             profiler,
 		blackfireServerID:    sg.blackfireServerID.Value(),
 		blackfireServerToken: sg.blackfireServerToken.Value(),
@@ -279,7 +317,7 @@ func (sg *setupGuide) updateDockerPHP(msg tea.KeyPressMsg) (setupGuide, tea.Cmd)
 			sg.phpCursor--
 		}
 	case keyDown, keyJ:
-		if sg.phpCursor < len(phpVersionChoices)-1 {
+		if sg.phpCursor < len(sg.phpVersions)-1 {
 			sg.phpCursor++
 		}
 	case keyEnter:
@@ -497,10 +535,15 @@ func (sg setupGuide) viewDockerPHP() string {
 	b.WriteString(tui.TitleStyle.Render("Docker Configuration"))
 	b.WriteString("\n")
 	b.WriteString(tui.DimStyle.Render("Select the PHP version for your Docker containers."))
+	if sg.phpConstraint != "" {
+		b.WriteString("\n")
+		b.WriteString(tui.DimStyle.Render("Filtered by shopware/core require.php: "))
+		b.WriteString(valueStyle.Render(sg.phpConstraint))
+	}
 	b.WriteString("\n\n")
 
-	opts := make([]tui.SelectOption, len(phpVersionChoices))
-	for i, v := range phpVersionChoices {
+	opts := make([]tui.SelectOption, len(sg.phpVersions))
+	for i, v := range sg.phpVersions {
 		opts[i] = tui.SelectOption{Label: "PHP " + v}
 	}
 	b.WriteString(tui.RenderSelectList("PHP Version", "", opts, sg.phpCursor))

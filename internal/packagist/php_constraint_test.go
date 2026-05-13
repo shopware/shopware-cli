@@ -25,6 +25,29 @@ func TestPHPConstraintHighestSupported(t *testing.T) {
 	})
 }
 
+func TestPHPConstraintSupportedVersions(t *testing.T) {
+	t.Run("nil receiver returns all", func(t *testing.T) {
+		var c *PHPConstraint
+		assert.Equal(t, []string{"8.2", "8.3", "8.4", "8.5"}, c.SupportedVersions())
+	})
+
+	t.Run("filters by constraint", func(t *testing.T) {
+		assert.Equal(t, []string{"8.2", "8.3"}, NewPHPConstraint("~8.2.0 || ~8.3.0").SupportedVersions())
+	})
+
+	t.Run("multiple constraints take intersection", func(t *testing.T) {
+		assert.Equal(t, []string{"8.2", "8.3", "8.4"}, NewPHPConstraint("^8.2", "<8.5").SupportedVersions())
+	})
+
+	t.Run("no match falls back to full list", func(t *testing.T) {
+		assert.Equal(t, []string{"8.2", "8.3", "8.4", "8.5"}, NewPHPConstraint("^9.0").SupportedVersions())
+	})
+
+	t.Run("invalid constraint is ignored", func(t *testing.T) {
+		assert.Equal(t, []string{"8.2", "8.3", "8.4", "8.5"}, NewPHPConstraint("not-a-constraint").SupportedVersions())
+	})
+}
+
 func TestPHPConstraintCheck(t *testing.T) {
 	t.Run("nil receiver always matches", func(t *testing.T) {
 		var c *PHPConstraint

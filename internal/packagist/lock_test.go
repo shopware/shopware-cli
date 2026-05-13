@@ -52,3 +52,50 @@ func TestReadComposerLock(t *testing.T) {
 		assert.Nil(t, lock)
 	})
 }
+
+func TestShopwarePHPConstraint(t *testing.T) {
+	t.Run("from shopware/core", func(t *testing.T) {
+		lock := &ComposerLock{
+			Packages: []ComposerLockPackage{
+				{Name: "symfony/console", Version: "v6.3.0"},
+				{Name: "shopware/core", Version: "v6.6.10.0", Require: map[string]string{"php": "~8.2.0 || ~8.3.0"}},
+			},
+		}
+		c := lock.ShopwarePHPConstraint()
+		assert.NotNil(t, c)
+		assert.Equal(t, "~8.2.0 || ~8.3.0", c.String())
+	})
+
+	t.Run("falls back to shopware/platform", func(t *testing.T) {
+		lock := &ComposerLock{
+			Packages: []ComposerLockPackage{
+				{Name: "shopware/platform", Version: "v6.5.0.0", Require: map[string]string{"php": ">=8.1"}},
+			},
+		}
+		c := lock.ShopwarePHPConstraint()
+		assert.NotNil(t, c)
+		assert.Equal(t, ">=8.1", c.String())
+	})
+
+	t.Run("prefers core over platform", func(t *testing.T) {
+		lock := &ComposerLock{
+			Packages: []ComposerLockPackage{
+				{Name: "shopware/platform", Version: "v6.5.0.0", Require: map[string]string{"php": ">=8.1"}},
+				{Name: "shopware/core", Version: "v6.6.10.0", Require: map[string]string{"php": ">=8.2"}},
+			},
+		}
+		assert.Equal(t, ">=8.2", lock.ShopwarePHPConstraint().String())
+	})
+
+	t.Run("returns nil when no shopware package present", func(t *testing.T) {
+		lock := &ComposerLock{Packages: []ComposerLockPackage{{Name: "symfony/console"}}}
+		assert.Nil(t, lock.ShopwarePHPConstraint())
+	})
+
+	t.Run("returns nil when shopware package has no php require", func(t *testing.T) {
+		lock := &ComposerLock{
+			Packages: []ComposerLockPackage{{Name: "shopware/core", Version: "v6.6.0.0"}},
+		}
+		assert.Nil(t, lock.ShopwarePHPConstraint())
+	})
+}

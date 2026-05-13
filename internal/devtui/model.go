@@ -127,7 +127,7 @@ func NewSetupGuide(opts Options) Model {
 	m := New(opts)
 	m.phase = phaseSetupGuide
 	m.dockerMode = true // setup guide always creates Docker env
-	m.setupGuide = newSetupGuide()
+	m.setupGuide = newSetupGuide(opts.ProjectRoot)
 	return m
 }
 

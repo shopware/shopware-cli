@@ -23,6 +23,32 @@ func NewPHPConstraint(constraints ...string) *PHPConstraint {
 	return &PHPConstraint{raw: constraints}
 }
 
+// SupportedVersions returns the entries from SupportedPHPVersions that satisfy
+// every constraint. Invalid or empty constraints are ignored. A nil receiver
+// returns all supported versions. If no version satisfies the constraints, the
+// full list is returned as a best-effort default.
+func (c *PHPConstraint) SupportedVersions() []string {
+	parsed := c.parse()
+	if len(parsed) == 0 {
+		return append([]string(nil), SupportedPHPVersions...)
+	}
+
+	out := make([]string, 0, len(SupportedPHPVersions))
+	for _, candidate := range SupportedPHPVersions {
+		v, err := version.NewVersion(candidate + ".0")
+		if err != nil {
+			continue
+		}
+		if satisfiesAll(v, parsed) {
+			out = append(out, candidate)
+		}
+	}
+	if len(out) == 0 {
+		return append([]string(nil), SupportedPHPVersions...)
+	}
+	return out
+}
+
 // HighestSupported returns the highest entry from SupportedPHPVersions that satisfies
 // every constraint. Invalid or empty constraints are ignored. A nil receiver returns
 // the highest supported version. If no version satisfies all constraints, the highest
