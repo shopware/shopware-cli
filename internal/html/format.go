@@ -296,14 +296,19 @@ func (e *ElementNode) Dump(indent int) string {
 					// When a Twig structural child (it emits its own indent
 					// prefix) follows a RawNode whose tail is line-leading
 					// whitespace, drop that whitespace so the two don't
-					// compound. Without this, parse → format → parse → format
-					// adds one indent level per round inside <p>. Inline
-					// elements like <span> are excluded because their Dump
-					// output has no leading indent at <p>'s call-indent.
+					// compound on each format pass.
 					if isTwigStructured(child) {
 						trimmed := strings.TrimRight(builder.String(), " \t")
 						builder.Reset()
 						builder.WriteString(trimmed)
+					}
+					// Inline HTML elements inside <p> are phrasing content;
+					// render at indent 0 so their leading indent doesn't pile
+					// on top of either an existing RawNode whitespace prefix
+					// or <p>'s own leading indent on the same line.
+					if _, ok := child.(*ElementNode); ok {
+						builder.WriteString(child.Dump(0))
+						continue
 					}
 					builder.WriteString(child.Dump(indent))
 				}

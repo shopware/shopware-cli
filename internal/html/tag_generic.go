@@ -30,6 +30,20 @@ func (n *TwigGenericBlockNode) Dump(indent int) string {
 	}
 	b.WriteString(" %}")
 
+	// Inline-mixed body (text + {{ x }} only, no nested blocks/elements):
+	// flow children verbatim so embedded whitespace drives layout. Without
+	// this, the per-child re-indent and TrimSpace strip the spaces around
+	// expressions and the layout drifts on every format pass.
+	if blockHasInlineMixedContent(n.Body) {
+		for _, child := range n.Body {
+			b.WriteString(child.Dump(indent))
+		}
+		b.WriteString("{% ")
+		b.WriteString(n.EndTag)
+		b.WriteString(" %}")
+		return b.String()
+	}
+
 	if len(n.Body) > 0 {
 		b.WriteString("\n")
 		for i, child := range n.Body {
