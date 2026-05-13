@@ -451,7 +451,7 @@ var projectCreateCmd = &cobra.Command{
 				if err := huh.NewForm(huh.NewGroup(
 					tui.NewYesNo().
 						Title(fmt.Sprintf("Shopware %s is affected by %d known security advisor%s", chooseVersion, len(matchingAdvisories), pluralize(len(matchingAdvisories), "y", "ies"))).
-						Description("Continuing will disable composer's audit blocking (--no-audit) so installation can proceed. Do you want to continue anyway?").
+						Description("Continuing will disable composer's audit blocking (--no-audit) so installation can proceed. If you continue, we strongly recommend installing the Shopware Security plugin (https://store.shopware.com/en/swag136939272659f/shopware-6-security-plugin.html) which backports security fixes to older versions. Do you want to continue anyway?").
 						Value(&continueAnyway),
 				)).Run(); err != nil {
 					return err
@@ -463,7 +463,7 @@ var projectCreateCmd = &cobra.Command{
 
 				noAudit = true
 			} else if !noAudit {
-				return fmt.Errorf("shopware %s is affected by known security advisories; re-run with --no-audit to proceed", chooseVersion)
+				return fmt.Errorf("shopware %s is affected by known security advisories; re-run with --no-audit to proceed. We strongly recommend installing the Shopware Security plugin (https://store.shopware.com/en/swag136939272659f/shopware-6-security-plugin.html) which backports security fixes to older versions", chooseVersion)
 			}
 		}
 
