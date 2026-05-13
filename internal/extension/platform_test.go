@@ -182,3 +182,22 @@ func TestPluginGermanDescriptionMissingOnlyEnglishMarket(t *testing.T) {
 
 	assert.Len(t, check.Results, 0)
 }
+
+func TestNormalizePhpVersion(t *testing.T) {
+	cases := []struct {
+		input    string
+		expected string
+	}{
+		{"8.4", "8.4"},
+		{"8.4.1", "8.4"},
+		{" 8.2 ", "8.2"},
+		{"8", "8"},
+		{"7.4.33-1", "7.4"},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.input, func(t *testing.T) {
+			assert.Equal(t, tc.expected, normalizePhpVersion(tc.input))
+		})
+	}
+}

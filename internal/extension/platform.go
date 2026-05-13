@@ -415,15 +415,25 @@ func validatePHPFiles(c context.Context, ext Extension, check validation.Check) 
 		return
 	}
 
-	phpVersion, err := GetPhpVersion(c, constraint)
-	if err != nil {
-		check.AddResult(validation.CheckResult{
-			Path:       "composer.json",
-			Identifier: "php.linter",
-			Message:    fmt.Sprintf("Could not find min php version for plugin: %s", err.Error()),
-			Severity:   validation.SeverityWarning,
-		})
-		return
+	override := ""
+	if cfg := ext.GetExtensionConfig(); cfg != nil {
+		override = cfg.Validation.PhpVersion
+	}
+
+	var phpVersion string
+	if override != "" {
+		phpVersion = normalizePhpVersion(override)
+	} else {
+		phpVersion, err = GetPhpVersion(c, constraint)
+		if err != nil {
+			check.AddResult(validation.CheckResult{
+				Path:       "composer.json",
+				Identifier: "php.linter",
+				Message:    fmt.Sprintf("Could not find min php version for plugin: %s", err.Error()),
+				Severity:   validation.SeverityWarning,
+			})
+			return
+		}
 	}
 
 	if phpVersion == "7.2" {
@@ -453,6 +463,16 @@ func validatePHPFiles(c context.Context, ext Extension, check validation.Check) 
 			})
 		}
 	}
+}
+
+// normalizePhpVersion trims a PHP version string to the major.minor form expected by the phplint package.
+func normalizePhpVersion(v string) string {
+	v = strings.TrimSpace(v)
+	parts := strings.Split(v, ".")
+	if len(parts) >= 2 {
+		return parts[0] + "." + parts[1]
+	}
+	return v
 }
 
 // phpVersionURL can be overridden in tests to use a mock server

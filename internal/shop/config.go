@@ -374,6 +374,10 @@ type ConfigValidation struct {
 	Ignore []ConfigValidationIgnoreItem `yaml:"ignore,omitempty"`
 
 	IgnoreExtensions []ConfigValidationIgnoreExtension `yaml:"ignore_extensions,omitempty"`
+
+	// PhpVersion overrides the PHP version used for linting (e.g. "8.4").
+	// When set, this takes precedence over the version derived from composer.json or the static Shopware-to-PHP mapping.
+	PhpVersion string `yaml:"php_version,omitempty"`
 }
 
 // ConfigValidationIgnoreItem is used to ignore items from the validation.

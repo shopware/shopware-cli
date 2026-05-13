@@ -556,6 +556,10 @@
         },
         "store_compliance": {
           "type": "boolean"
+        },
+        "php_version": {
+          "type": "string",
+          "description": "PhpVersion overrides the PHP version used for linting (e.g. \"8.4\").\nWhen set, this takes precedence over the version derived from composer.json or the static Shopware-to-PHP mapping."
         }
       },
       "additionalProperties": false,
