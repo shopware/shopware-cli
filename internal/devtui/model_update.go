@@ -220,6 +220,14 @@ func (m Model) saveSetupGuide() (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
+	changed, err := ensureDeploymentHelper(m.projectRoot)
+	if err != nil {
+		m.setupGuide.err = err
+		m.setupGuide.step = setupStepDone
+		return m, nil
+	}
+	m.setupGuide.deploymentHelperAdded = changed
+
 	if localCfg := m.setupGuide.localConfig(); localCfg != nil {
 		if err := shop.WriteLocalConfig(localCfg, m.projectRoot); err != nil {
 			m.setupGuide.err = err

@@ -46,6 +46,67 @@ func TestResolvePHPVersions_NoMatchingVersionsFallsBackToAll(t *testing.T) {
 	assert.Equal(t, "^9.0", constraint)
 }
 
+func TestEnsureDeploymentHelper_AddsWhenMissing(t *testing.T) {
+	dir := t.TempDir()
+	composer := `{
+  "name": "shopware/production",
+  "require": {
+    "shopware/core": "^6.6"
+  }
+}`
+	assert.NoError(t, os.WriteFile(filepath.Join(dir, "composer.json"), []byte(composer), 0o644))
+
+	changed, err := ensureDeploymentHelper(dir)
+	assert.NoError(t, err)
+	assert.True(t, changed)
+
+	// Verify it was actually written
+	out, err := os.ReadFile(filepath.Join(dir, "composer.json"))
+	assert.NoError(t, err)
+	assert.Contains(t, string(out), `"shopware/deployment-helper": "*"`)
+}
+
+func TestEnsureDeploymentHelper_NoOpWhenAlreadyInRequire(t *testing.T) {
+	dir := t.TempDir()
+	composer := `{
+  "name": "shopware/production",
+  "require": {
+    "shopware/core": "^6.6",
+    "shopware/deployment-helper": "^1.0"
+  }
+}`
+	assert.NoError(t, os.WriteFile(filepath.Join(dir, "composer.json"), []byte(composer), 0o644))
+
+	changed, err := ensureDeploymentHelper(dir)
+	assert.NoError(t, err)
+	assert.False(t, changed)
+
+	// Existing pin must not be overwritten
+	out, err := os.ReadFile(filepath.Join(dir, "composer.json"))
+	assert.NoError(t, err)
+	assert.Contains(t, string(out), `"shopware/deployment-helper": "^1.0"`)
+}
+
+func TestEnsureDeploymentHelper_NoOpWhenInRequireDev(t *testing.T) {
+	dir := t.TempDir()
+	composer := `{
+  "name": "shopware/production",
+  "require": {"shopware/core": "^6.6"},
+  "require-dev": {"shopware/deployment-helper": "^1.0"}
+}`
+	assert.NoError(t, os.WriteFile(filepath.Join(dir, "composer.json"), []byte(composer), 0o644))
+
+	changed, err := ensureDeploymentHelper(dir)
+	assert.NoError(t, err)
+	assert.False(t, changed)
+}
+
+func TestEnsureDeploymentHelper_MissingComposerJson(t *testing.T) {
+	changed, err := ensureDeploymentHelper(t.TempDir())
+	assert.NoError(t, err)
+	assert.False(t, changed)
+}
+
 func TestResolvePHPVersions_PlatformFallback(t *testing.T) {
 	dir := t.TempDir()
 	content := `{"packages":[{"name":"shopware/platform","version":"v6.5.0.0","require":{"php":">=8.2"}}]}`

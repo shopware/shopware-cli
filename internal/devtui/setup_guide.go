@@ -2,6 +2,7 @@ package devtui
 
 import (
 	"fmt"
+	"os"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -37,19 +38,20 @@ func profilerNeedsCreds(profiler string) bool {
 }
 
 type setupGuide struct {
-	step                 setupStep
-	phpVersions          []string // PHP versions compatible with the project
-	phpConstraint        string   // raw constraint string, for display ("" if none)
-	phpCursor            int
-	profilerCursor       int
-	confirmYes           bool
-	url                  textinput.Model
-	username             textinput.Model
-	password             textinput.Model
-	showPassword         bool
-	blackfireServerID    textinput.Model
-	blackfireServerToken textinput.Model
-	tidewaysAPIKey       textinput.Model
+	step                  setupStep
+	phpVersions           []string // PHP versions compatible with the project
+	phpConstraint         string   // raw constraint string, for display ("" if none)
+	phpCursor             int
+	profilerCursor        int
+	confirmYes            bool
+	deploymentHelperAdded bool // composer.json was updated to require shopware/deployment-helper
+	url                   textinput.Model
+	username              textinput.Model
+	password              textinput.Model
+	showPassword          bool
+	blackfireServerID     textinput.Model
+	blackfireServerToken  textinput.Model
+	tidewaysAPIKey        textinput.Model
 
 	err error
 }
@@ -204,6 +206,45 @@ func (sg *setupGuide) applyToConfig(cfg *shop.Config) {
 	}
 	cfg.Docker.PHP.Version = c.phpVersion
 	cfg.Docker.PHP.Profiler = c.profiler
+}
+
+// ensureDeploymentHelper adds shopware/deployment-helper to the project's
+// composer.json require block when it's missing. New projects created via
+// `shopware-cli project create` pin this package; older projects being
+// migrated to dev mode need it added so devtui can run
+// `vendor/bin/shopware-deployment-helper`.
+//
+// Returns true when composer.json was changed and the user should re-run
+// `composer install` (or `composer update`) to pull the package in.
+// Errors reading or writing composer.json are returned to the caller;
+// a missing composer.json is treated as nothing-to-do (returns false, nil).
+func ensureDeploymentHelper(projectRoot string) (changed bool, err error) {
+	composerPath := filepath.Join(projectRoot, "composer.json")
+	if _, statErr := os.Stat(composerPath); statErr != nil {
+		if os.IsNotExist(statErr) {
+			return false, nil
+		}
+		return false, statErr
+	}
+
+	cj, err := packagist.ReadComposerJson(composerPath)
+	if err != nil {
+		return false, err
+	}
+
+	if cj.HasPackage("shopware/deployment-helper") || cj.HasPackageDev("shopware/deployment-helper") {
+		return false, nil
+	}
+
+	if cj.Require == nil {
+		cj.Require = packagist.ComposerPackageLink{}
+	}
+	cj.Require["shopware/deployment-helper"] = "*"
+
+	if err := cj.Save(); err != nil {
+		return false, err
+	}
+	return true, nil
 }
 
 // localConfig returns a partial Config containing secrets that should be
@@ -670,6 +711,20 @@ func (sg setupGuide) viewDone() string {
 		b.WriteString(tui.DimStyle.Render("Your project is now configured for Docker development."))
 		b.WriteString("\n")
 		b.WriteString(tui.DimStyle.Render("The environment will start on the next screen."))
+
+		if sg.deploymentHelperAdded {
+			b.WriteString("\n\n")
+			b.WriteString(tui.BoldText.Render("Note: "))
+			b.WriteString(tui.DimStyle.Render("Added "))
+			b.WriteString(valueStyle.Render("shopware/deployment-helper"))
+			b.WriteString(tui.DimStyle.Render(" to "))
+			b.WriteString(tui.BoldText.Render("composer.json"))
+			b.WriteString(tui.DimStyle.Render("."))
+			b.WriteString("\n")
+			b.WriteString(tui.DimStyle.Render("Run "))
+			b.WriteString(tui.BoldText.Render("composer update shopware/deployment-helper"))
+			b.WriteString(tui.DimStyle.Render(" before installing Shopware."))
+		}
 	}
 	b.WriteString("\n\n")
 	return tui.RenderPhaseCard(b.String())
