@@ -167,13 +167,18 @@ func (p *parser) parseNodesUntil(ctx nodeContext, closeTag string, parentTagSpec
 			rawStartPos = p.peek(0).Pos
 
 		case tokTwigCommentOpen:
-			// Twig {# ... #} comments aren't represented as AST nodes by the
-			// legacy parser (no support for them at all). Fold into raw text
-			// for now so they round-trip through Dump.
-			if rawBuf.Len() == 0 {
-				rawStartPos = tk.Pos
+			flush()
+			openPos := tk.Pos
+			p.advance() // {#
+			body := ""
+			if p.peek(0).Type == tokTwigCommentText {
+				body = p.advance().Lit
 			}
-			p.appendRawTokens(&rawBuf, tk)
+			if p.peek(0).Type == tokTwigCommentClose {
+				p.advance()
+			}
+			nodes = append(nodes, &TwigCommentNode{Body: body, Line: openPos.Line})
+			rawStartPos = p.peek(0).Pos
 
 		case tokHTMLComment:
 			flush()
