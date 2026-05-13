@@ -72,15 +72,19 @@ func (l *lexer) lexContent() error {
 		c := rem[i]
 		switch c {
 		case '<':
+			// Don't recognize `<` as a tag start if the previous byte is also `<`
+			// (legacy parity: `<<Success>>` flows through as text).
+			absOff := l.pt.cur.Offset + i
+			prevIsLT := absOff > 0 && l.src[absOff-1] == '<'
 			if strings.HasPrefix(rem[i:], "<!--") {
 				idx, kind = i, "html-comment"
 			} else if strings.HasPrefix(rem[i:], "<!DOCTYPE") || strings.HasPrefix(rem[i:], "<!doctype") {
 				idx, kind = i, "html-doctype"
-			} else if i+1 < len(rem) && rem[i+1] == '/' {
+			} else if !prevIsLT && i+1 < len(rem) && rem[i+1] == '/' {
 				if i+2 < len(rem) && isHTMLNameStart(rem[i+2]) {
 					idx, kind = i, "html-close"
 				}
-			} else if i+1 < len(rem) && isHTMLNameStart(rem[i+1]) {
+			} else if !prevIsLT && i+1 < len(rem) && isHTMLNameStart(rem[i+1]) {
 				idx, kind = i, "html-open"
 			}
 		case '{':
@@ -308,6 +312,7 @@ func (l *lexer) lexHTMLAttrValue() error {
 	c := l.peekByte(0)
 	if c == '"' || c == '\'' {
 		quote := c
+		rawStart := l.pt.cur.Offset
 		l.pt.advance(1)
 		start := l.pt.cur.Offset
 		for l.pt.cur.Offset < len(l.src) && l.src[l.pt.cur.Offset] != quote {
@@ -317,7 +322,8 @@ func (l *lexer) lexHTMLAttrValue() error {
 		if l.pt.cur.Offset < len(l.src) && l.src[l.pt.cur.Offset] == quote {
 			l.pt.advance(1)
 		}
-		l.emit(token{Type: tokHTMLAttrValue, Lit: val, Raw: val, Pos: startPos, QuoteChar: quote})
+		raw := l.src[rawStart:l.pt.cur.Offset]
+		l.emit(token{Type: tokHTMLAttrValue, Lit: val, Raw: raw, Pos: startPos, QuoteChar: quote})
 		return nil
 	}
 	// Bareword.

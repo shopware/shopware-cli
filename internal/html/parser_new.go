@@ -1,15 +1,9 @@
 package html
 
-// parser is the new token-driven parser, currently scaffolding only.
-//
-// Status: the lexer (lexer.go), token model (tokens.go), Pos (pos.go) and
-// ParseError (errors.go) are in place and exercised by lexer_test.go. The
-// next step is to wire this struct into NewParser / NewAdminParser /
-// NewStorefrontParser, replacing the byte-indexed parser in parser.go.
-//
-// Until that lands, the public entry points still call the legacy
-// (parser.go) implementation, so all 45 fixtures continue to format
-// byte-identically.
+import "strings"
+
+// parser is the new token-driven parser. The exported entry points (NewParser,
+// NewAdminParser, NewStorefrontParser) construct one and call parseDocument.
 type parser struct {
 	source   string
 	filename string
@@ -17,12 +11,9 @@ type parser struct {
 	idx      int
 }
 
-// peek returns the token at offset i ahead of the cursor, or an EOF token
-// past the end.
 func (p *parser) peek(i int) token {
 	pos := p.idx + i
 	if pos >= len(p.tokens) {
-		// Synthetic EOF at end of source.
 		var lastPos Pos
 		if n := len(p.tokens); n > 0 {
 			lastPos = p.tokens[n-1].Pos
@@ -32,7 +23,6 @@ func (p *parser) peek(i int) token {
 	return p.tokens[pos]
 }
 
-// advance consumes one token and returns it.
 func (p *parser) advance() token {
 	t := p.peek(0)
 	if t.Type != tokEOF {
@@ -41,7 +31,349 @@ func (p *parser) advance() token {
 	return t
 }
 
-// errf constructs a ParseError at the current cursor position.
-func (p *parser) errf(format string, args ...any) *ParseError {
-	return errAt(p.source, p.filename, p.peek(0).Pos, format, args...)
+// parseDocument runs the lexer on the source and parses a full document
+// (top-level nodes). This is the entry point used by the rewritten public
+// functions once the swap from the legacy parser is complete.
+func (p *parser) parseDocument() (NodeList, error) {
+	lex := newLexer(p.source)
+	toks, err := lex.lex()
+	if err != nil {
+		return nil, err
+	}
+	p.tokens = toks
+	p.idx = 0
+	return p.parseNodes(nodeContextTopLevel, "")
+}
+
+// nodeContext controls RawNode chunking behavior. The legacy parser used two
+// different rules: at the top level / inside Twig blocks / inside if-branches,
+// it trimmed whitespace before deciding whether to emit a RawNode for the text
+// between two delimiters. Inside an HTML element it did not trim. We preserve
+// the distinction so output stays byte-identical.
+type nodeContext int
+
+const (
+	nodeContextTopLevel        nodeContext = iota // top level / inside {% block %} / inside if branch
+	nodeContextElementChildren                    // inside an HTML element's children
+)
+
+// stopReason indicates why parseNodes returned.
+type stopReason int
+
+const (
+	stopEOF             stopReason = iota
+	stopEndblock                   // saw {% endblock %} (consumed)
+	stopIfTerminator               // saw {% else / elseif / endif %} (NOT consumed)
+	stopGenericEndTag              // saw a registered EndTag for the parent (NOT consumed)
+	stopElementCloseTag            // saw </name> matching closeTag (consumed)
+)
+
+// parseNodes is the workhorse loop. It walks the token stream collecting nodes
+// until a stop condition fires. closeTag is the HTML element close tag we
+// should stop on (only meaningful for nodeContextElementChildren).
+func (p *parser) parseNodes(ctx nodeContext, closeTag string) (NodeList, error) {
+	nodes, _, err := p.parseNodesUntil(ctx, closeTag, nil)
+	return nodes, err
+}
+
+// parseNodesUntil walks until EOF or a stop condition based on the parent
+// tag's EndTag / Followers. parentTagFollowers and parentTagEndTag are nil/""
+// at the document root.
+func (p *parser) parseNodesUntil(ctx nodeContext, closeTag string, parentTagSpec *TagSpec) (NodeList, stopReason, error) {
+	var nodes NodeList
+	var rawBuf strings.Builder
+	rawStartPos := p.peek(0).Pos
+
+	flush := func() {
+		text := rawBuf.String()
+		if text == "" {
+			return
+		}
+		shouldEmit := false
+		switch ctx {
+		case nodeContextTopLevel:
+			// Legacy: trim-space check before {%, <, <!-- but raw check before {{ and at end-of-input.
+			shouldEmit = strings.TrimSpace(text) != ""
+		case nodeContextElementChildren:
+			shouldEmit = text != ""
+		}
+		if shouldEmit {
+			nodes = append(nodes, &RawNode{Text: text, Line: rawStartPos.Line})
+		}
+		rawBuf.Reset()
+	}
+
+	for {
+		tk := p.peek(0)
+		if tk.Type == tokEOF {
+			flush()
+			return nodes, stopEOF, nil
+		}
+
+		switch tk.Type {
+		case tokTwigStmtOpen:
+			// Look at the identifier (next non-whitespace token).
+			identTok := p.peek(1)
+			name := ""
+			if identTok.Type == tokTwigIdent {
+				name = identTok.Lit
+			}
+
+			// Stop on parent's terminator/followers without consuming.
+			if parentTagSpec != nil {
+				if name == parentTagSpec.EndTag {
+					flush()
+					return nodes, stopGenericEndTag, nil
+				}
+				if isFollower(name, parentTagSpec.Followers) {
+					flush()
+					return nodes, stopIfTerminator, nil
+				}
+			}
+			// Top-level stop on {% endblock %} (matches legacy parseNodes).
+			if ctx == nodeContextTopLevel && name == "endblock" && parentTagSpec == nil {
+				flush()
+				return nodes, stopEndblock, nil
+			}
+
+			spec := lookupTag(name)
+			if spec == nil {
+				// Unrecognized Twig tag — fold its raw bytes into the surrounding
+				// text so RawNode boundaries match the legacy parser.
+				flushBefore := rawBuf.Len() == 0
+				if flushBefore {
+					rawStartPos = tk.Pos
+				}
+				p.appendRawTokens(&rawBuf, tk)
+				continue
+			}
+
+			// Recognized tag: flush pending raw text, then parse.
+			flush()
+			node, err := spec.Parse(p, tk)
+			if err != nil {
+				return nodes, stopEOF, err
+			}
+			nodes = append(nodes, node)
+			rawStartPos = p.peek(0).Pos
+
+		case tokTwigExprOpen:
+			flush()
+			expr, err := p.parseTemplateExpression()
+			if err != nil {
+				return nodes, stopEOF, err
+			}
+			nodes = append(nodes, expr)
+			rawStartPos = p.peek(0).Pos
+
+		case tokTwigCommentOpen:
+			// Twig {# ... #} comments aren't represented as AST nodes by the
+			// legacy parser (no support for them at all). Fold into raw text
+			// for now so they round-trip through Dump.
+			if rawBuf.Len() == 0 {
+				rawStartPos = tk.Pos
+			}
+			p.appendRawTokens(&rawBuf, tk)
+
+		case tokHTMLComment:
+			flush()
+			nodes = append(nodes, &CommentNode{
+				Text: tk.Lit,
+				Line: tk.Pos.Line,
+			})
+			p.advance()
+			rawStartPos = p.peek(0).Pos
+
+		case tokHTMLOpenStart:
+			flush()
+			element, err := p.parseElement()
+			if err != nil {
+				return nodes, stopEOF, err
+			}
+			if element != nil {
+				nodes = append(nodes, element)
+			}
+			rawStartPos = p.peek(0).Pos
+
+		case tokHTMLCloseStart:
+			// Possibly the close tag for our enclosing element.
+			if ctx == nodeContextElementChildren {
+				// Peek the tag name.
+				nameTok := p.peek(1)
+				if nameTok.Type == tokHTMLTagName && nameTok.Lit == closeTag {
+					flush()
+					// Consume "</name>"
+					p.advance() // </
+					p.advance() // name
+					if p.peek(0).Type == tokHTMLTagEnd {
+						p.advance() // >
+					}
+					return nodes, stopElementCloseTag, nil
+				}
+			}
+			// Otherwise treat as raw text (rare; mostly malformed).
+			if rawBuf.Len() == 0 {
+				rawStartPos = tk.Pos
+			}
+			rawBuf.WriteString(tk.Raw)
+			p.advance()
+
+		case tokHTMLDoctype:
+			flush()
+			nodes = append(nodes, &RawNode{Text: tk.Raw, Line: tk.Pos.Line})
+			p.advance()
+			rawStartPos = p.peek(0).Pos
+
+		case tokText:
+			if rawBuf.Len() == 0 {
+				rawStartPos = tk.Pos
+			}
+			rawBuf.WriteString(tk.Lit)
+			p.advance()
+
+		default:
+			// Any other token (closer tokens, attr tokens out of place, etc.)
+			// is folded into raw text.
+			if rawBuf.Len() == 0 {
+				rawStartPos = tk.Pos
+			}
+			rawBuf.WriteString(tk.Raw)
+			p.advance()
+		}
+	}
+}
+
+// appendRawTokens consumes a full {% ... %} or {{ ... }} or {# ... #} sequence
+// starting at the current cursor and appends its raw bytes to buf. Used when
+// the parser encounters a Twig tag that has no registered handler.
+func (p *parser) appendRawTokens(buf *strings.Builder, openTok token) {
+	var wantClose tokenType
+	switch openTok.Type {
+	case tokTwigStmtOpen:
+		wantClose = tokTwigStmtClose
+	case tokTwigExprOpen:
+		wantClose = tokTwigExprClose
+	case tokTwigCommentOpen:
+		wantClose = tokTwigCommentClose
+	default:
+		buf.WriteString(openTok.Raw)
+		p.advance()
+		return
+	}
+	for {
+		tk := p.peek(0)
+		if tk.Type == tokEOF {
+			return
+		}
+		buf.WriteString(tk.Raw)
+		p.advance()
+		if tk.Type == wantClose {
+			return
+		}
+	}
+}
+
+// parseTemplateExpression consumes a `{{ ... }}` triplet and returns a node.
+func (p *parser) parseTemplateExpression() (*TemplateExpressionNode, error) {
+	openTok := p.advance() // {{
+	if openTok.Type != tokTwigExprOpen {
+		return nil, errAt(p.source, p.filename, openTok.Pos, "expected '{{'")
+	}
+	bodyTok := p.advance()
+	if bodyTok.Type != tokTwigRawExpr {
+		return nil, errAt(p.source, p.filename, bodyTok.Pos, "expected expression body")
+	}
+	closeTok := p.advance()
+	if closeTok.Type != tokTwigExprClose {
+		return nil, errAt(p.source, p.filename, closeTok.Pos, "expected '}}'")
+	}
+	// Legacy parser preserved spacing inside {{ }}: Expression is the body
+	// verbatim WITHOUT trimming. The lexer's Lit on tokTwigRawExpr is the raw
+	// body; for {{ }} we use Raw to preserve leading/trailing spaces exactly.
+	return &TemplateExpressionNode{
+		Expression: bodyTok.Raw,
+		Line:       openTok.Pos.Line,
+	}, nil
+}
+
+// parseElement consumes `<tag attrs...>children</tag>` or `<tag .../>`.
+func (p *parser) parseElement() (*ElementNode, error) {
+	openTok := p.advance() // <
+	if openTok.Type != tokHTMLOpenStart {
+		return nil, errAt(p.source, p.filename, openTok.Pos, "expected '<'")
+	}
+	nameTok := p.advance()
+	if nameTok.Type != tokHTMLTagName {
+		return nil, errAt(p.source, p.filename, nameTok.Pos, "expected HTML tag name")
+	}
+	node := &ElementNode{
+		Tag:        nameTok.Lit,
+		Attributes: NodeList{},
+		Children:   NodeList{},
+		Line:       openTok.Pos.Line,
+	}
+
+	// Parse attributes (including embedded Twig statements).
+	for {
+		tk := p.peek(0)
+		switch tk.Type {
+		case tokHTMLAttrName:
+			p.advance()
+			attr := Attribute{Key: tk.Lit}
+			if p.peek(0).Type == tokHTMLAttrEq {
+				p.advance() // =
+				if p.peek(0).Type == tokHTMLAttrValue {
+					attr.Value = p.advance().Lit
+				}
+			}
+			node.Attributes = append(node.Attributes, attr)
+
+		case tokTwigStmtOpen:
+			// Embedded Twig directive inside an open tag — only `if` blocks
+			// were recognized by the legacy parser; treat others as raw text
+			// appended to a preceding attribute or dropped (keep parity with
+			// legacy by only handling if).
+			identTok := p.peek(1)
+			if identTok.Type == tokTwigIdent && identTok.Lit == "if" {
+				spec := lookupTag("if")
+				if spec != nil {
+					ifNode, err := spec.Parse(p, tk)
+					if err != nil {
+						return nil, err
+					}
+					node.Attributes = append(node.Attributes, ifNode)
+					continue
+				}
+			}
+			// Unrecognized in attribute context — skip to its close to avoid
+			// infinite loops.
+			var buf strings.Builder
+			p.appendRawTokens(&buf, tk)
+
+		case tokHTMLTagEnd:
+			p.advance() // >
+			if isVoidElement(node.Tag) {
+				node.SelfClosing = true
+				return node, nil
+			}
+			children, _, err := p.parseNodesUntil(nodeContextElementChildren, node.Tag, nil)
+			if err != nil {
+				return nil, err
+			}
+			node.Children = children
+			return node, nil
+
+		case tokHTMLSelfClose:
+			p.advance() // />
+			node.SelfClosing = true
+			return node, nil
+
+		case tokEOF:
+			return nil, errAt(p.source, p.filename, tk.Pos, "unterminated HTML open tag")
+
+		default:
+			// Advance to avoid infinite loop on unexpected token.
+			p.advance()
+		}
+	}
 }

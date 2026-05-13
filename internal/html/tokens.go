@@ -3,8 +3,8 @@ package html
 type tokenType int
 
 const (
-	tokEOF tokenType = iota
-	tokText // raw text outside any tag/expression
+	tokEOF  tokenType = iota
+	tokText           // raw text outside any tag/expression
 
 	// HTML
 	tokHTMLOpenStart  // '<' followed by tag name
