@@ -1,24 +1,36 @@
 package html
 
-// Registration of straightforward Twig tags that don't need a dedicated file.
+// Built-in Twig tags. Tags with their own non-trivial parser (block, if,
+// parent, set, verbatim, twig comment) live in dedicated files. Everything
+// else funnels through the makeBlockTagParser / makeStandaloneTagParser
+// helpers.
 //
-// Block tags (have a body and an EndTag):
+// Custom project-specific tags should be registered from the caller's own
+// init() via RegisterBlockTag / RegisterStandaloneTag — see tags.go.
 func init() {
-	registerTag(TagSpec{Name: "for", EndTag: "endfor", Followers: []string{"else"}, Parse: makeBlockTagParser("for", "endfor", []string{"else"})})
-	registerTag(TagSpec{Name: "embed", EndTag: "endembed", Parse: makeBlockTagParser("embed", "endembed", nil)})
-	registerTag(TagSpec{Name: "macro", EndTag: "endmacro", Parse: makeBlockTagParser("macro", "endmacro", nil)})
-	registerTag(TagSpec{Name: "apply", EndTag: "endapply", Parse: makeBlockTagParser("apply", "endapply", nil)})
-	registerTag(TagSpec{Name: "with", EndTag: "endwith", Parse: makeBlockTagParser("with", "endwith", nil)})
+	// Block tags (body + EndTag).
+	RegisterBlockTag("for", "endfor", "else")
+	RegisterBlockTag("embed", "endembed")
+	RegisterBlockTag("macro", "endmacro")
+	RegisterBlockTag("apply", "endapply")
+	RegisterBlockTag("with", "endwith")
 
-	// Standalone tags (no body, no closing tag):
-	registerTag(TagSpec{Name: "include", Parse: makeStandaloneTagParser("include")})
-	registerTag(TagSpec{Name: "sw_include", Parse: makeStandaloneTagParser("sw_include")})
-	registerTag(TagSpec{Name: "extends", Parse: makeStandaloneTagParser("extends")})
-	registerTag(TagSpec{Name: "sw_extends", Parse: makeStandaloneTagParser("sw_extends")})
-	registerTag(TagSpec{Name: "import", Parse: makeStandaloneTagParser("import")})
-	registerTag(TagSpec{Name: "from", Parse: makeStandaloneTagParser("from")})
-	registerTag(TagSpec{Name: "use", Parse: makeStandaloneTagParser("use")})
-	registerTag(TagSpec{Name: "do", Parse: makeStandaloneTagParser("do")})
-	registerTag(TagSpec{Name: "deprecated", Parse: makeStandaloneTagParser("deprecated")})
-	registerTag(TagSpec{Name: "flush", Parse: makeStandaloneTagParser("flush")})
+	// Standalone tags (no body, no closing tag). Twig core + Shopware
+	// storefront extensions. Unknown standalone tags still round-trip
+	// fine via the raw-text fallback; registering them just gives
+	// downstream AST consumers a structured node.
+	RegisterStandaloneTag("include")
+	RegisterStandaloneTag("sw_include")
+	RegisterStandaloneTag("extends")
+	RegisterStandaloneTag("sw_extends")
+	RegisterStandaloneTag("import")
+	RegisterStandaloneTag("from")
+	RegisterStandaloneTag("use")
+	RegisterStandaloneTag("do")
+	RegisterStandaloneTag("deprecated")
+	RegisterStandaloneTag("flush")
+	RegisterStandaloneTag("break")
+	RegisterStandaloneTag("return")
+	RegisterStandaloneTag("sw_icon")
+	RegisterStandaloneTag("sw_thumbnails")
 }

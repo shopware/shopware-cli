@@ -31,29 +31,32 @@
 //     callers concurrently dumping with different configurations should
 //     serialize.
 //
-// # Adding a new Twig tag
+// # Adding a Twig tag
 //
-// Twig tag dispatch goes through a registry — tags.go defines TagSpec and
-// the registerTag function. Each tag is one file:
+// Tag dispatch goes through a registry in tags.go. For most tags the
+// public RegisterStandaloneTag / RegisterBlockTag helpers are enough:
 //
-//	internal/html/tag_<name>.go
-//	    func init() { registerTag(TagSpec{...}) }
-//	    func parse<Name>Tag(p *parser, openTok token) (Node, error) { ... }
+//	func init() {
+//	    html.RegisterStandaloneTag("sw_icon")            // {% sw_icon 'foo' %}
+//	    html.RegisterBlockTag("trans", "endtrans")       // {% trans %}...{% endtrans %}
+//	    html.RegisterBlockTag("if", "endif", "elseif", "else")
+//	}
 //
-// See tag_block.go, tag_if.go, tag_parent.go for working examples.
+// Call them from your own package's init(). They panic on duplicate
+// registration so name collisions surface at startup.
 //
-//   - TagSpec.EndTag declares the closing tag ("endblock", "endif", ...).
-//     Tags with no body (e.g. {% set x = 1 %}, {% include "..." %}) leave
-//     EndTag empty.
-//   - TagSpec.Followers declares sibling tags that appear inside the body
-//     without closing it (e.g. "elseif", "else" inside an "if").
-//   - The handler is responsible for advancing past its tokens, parsing
-//     the body via parser.parseNodesUntil(...), and consuming the close
-//     tag via parser.consumeEndTag(...).
+// Tags with bespoke parsing logic (block, if, parent, set, verbatim, twig
+// comment) live in dedicated tag_*.go files and call the lower-level
+// registerTag with a custom TagSpec.Parse function.
 //
-// Unrecognized tags are folded into the surrounding RawNode (via
+// # Unregistered tags
+//
+// Unknown tags are folded into the surrounding RawNode (via
 // parser.appendRawTokens) so the parser is forward-compatible with future
-// Twig syntax: an unknown {% something %} round-trips through Dump as-is.
+// Twig syntax — an unknown {% something %} round-trips through Dump as-is.
+// This works perfectly for standalone tags. For block tags with a body,
+// registration is required: without it the body's contents leak into the
+// outer scope and the end tag becomes orphan raw text.
 //
 // # Public API and back-compat
 //

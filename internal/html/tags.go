@@ -73,3 +73,37 @@ func isFollower(name string, followers []string) bool {
 	}
 	return false
 }
+
+// RegisterStandaloneTag registers a Twig tag that has no body, e.g.
+// `{% sw_icon 'foo' %}` or `{% include 'x.twig' %}`. The parser will yield
+// a *TwigStandaloneTagNode with the tag's name and verbatim argument body.
+//
+// Call from an init() in your own package to teach the parser about
+// project-specific tags. Standalone tags that are NOT registered still
+// round-trip through Dump as raw text — registration just gives downstream
+// AST consumers a semantic node to reason about.
+//
+// Panics if name is empty or already registered.
+func RegisterStandaloneTag(name string) {
+	registerTag(TagSpec{Name: name, Parse: makeStandaloneTagParser(name)})
+}
+
+// RegisterBlockTag registers a Twig tag that wraps a body, e.g.
+// `{% trans %}...{% endtrans %}`. The endTag must match what closes the
+// block (typically "end"+name). Optional followers are sibling tags that
+// appear inside the body without closing it (e.g. for `{% if %}` the
+// followers are `{"elseif", "else"}`); pass none for tags like `{% trans %}`.
+//
+// Unlike standalone tags, block tags MUST be registered for the parser to
+// know where the body ends — without registration the body's contents leak
+// into the outer scope and the end tag becomes orphan raw text.
+//
+// Panics if name is empty or already registered.
+func RegisterBlockTag(name, endTag string, followers ...string) {
+	registerTag(TagSpec{
+		Name:      name,
+		EndTag:    endTag,
+		Followers: followers,
+		Parse:     makeBlockTagParser(name, endTag, followers),
+	})
+}
