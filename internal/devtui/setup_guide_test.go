@@ -220,6 +220,27 @@ func TestSetupGuideViewProfilerCreds(t *testing.T) {
 	assert.Contains(t, view, "Server ID")
 }
 
+func TestSetupGuideStepNumbering_NoProfilerCreds(t *testing.T) {
+	sg := newSetupGuide()
+	sg.profilerCursor = 0 // none → no creds step
+	assert.Equal(t, 5, sg.totalSteps())
+	assert.Equal(t, 1, sg.stepNum(setupStepAdminUser))
+	assert.Equal(t, 2, sg.stepNum(setupStepAdminPassword))
+	assert.Equal(t, 3, sg.stepNum(setupStepDockerPHP))
+	assert.Equal(t, 4, sg.stepNum(setupStepDockerProfiler))
+	assert.Equal(t, 5, sg.stepNum(setupStepReview))
+	assert.Equal(t, 0, sg.stepNum(setupStepWelcome))
+	assert.Equal(t, 0, sg.stepNum(setupStepDone))
+}
+
+func TestSetupGuideStepNumbering_WithProfilerCreds(t *testing.T) {
+	sg := newSetupGuide()
+	sg.profilerCursor = 2 // blackfire → adds creds step
+	assert.Equal(t, 6, sg.totalSteps())
+	assert.Equal(t, 5, sg.stepNum(setupStepProfilerCreds))
+	assert.Equal(t, 6, sg.stepNum(setupStepReview))
+}
+
 func TestProfilerNeedsCreds(t *testing.T) {
 	assert.False(t, profilerNeedsCreds("none"))
 	assert.False(t, profilerNeedsCreds(""))

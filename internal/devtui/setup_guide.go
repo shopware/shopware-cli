@@ -394,8 +394,41 @@ func stepBadge(stepNum, totalSteps int) string {
 	return tui.TextBadge(fmt.Sprintf("Step %d/%d", stepNum, totalSteps))
 }
 
+// totalSteps returns the number of numbered wizard steps. The profiler
+// credentials step is only counted when the chosen profiler needs them.
 func (sg setupGuide) totalSteps() int {
-	return 4 // admin, password, docker-php, review
+	// admin user, admin password, PHP version, profiler, review
+	total := 5
+	if profilerNeedsCreds(profilerChoices[sg.profilerCursor]) {
+		total++
+	}
+	return total
+}
+
+// stepNum returns the 1-based index of the given wizard step within the
+// currently active step sequence. Steps outside the numbered sequence
+// (welcome, done) return 0.
+func (sg setupGuide) stepNum(step setupStep) int {
+	switch step {
+	case setupStepAdminUser:
+		return 1
+	case setupStepAdminPassword:
+		return 2
+	case setupStepDockerPHP:
+		return 3
+	case setupStepDockerProfiler:
+		return 4
+	case setupStepProfilerCreds:
+		return 5
+	case setupStepReview:
+		if profilerNeedsCreds(profilerChoices[sg.profilerCursor]) {
+			return 6
+		}
+		return 5
+	case setupStepWelcome, setupStepDone:
+		return 0
+	}
+	return 0
 }
 
 func (sg setupGuide) viewWelcome() string {
@@ -426,12 +459,12 @@ func (sg setupGuide) viewWelcome() string {
 	b.WriteString("\n\n")
 	b.WriteString(renderConfirmButtons("Start setup", "Quit", sg.confirmYes))
 	b.WriteString("\n\n")
-	return tui.RenderPhaseCard(b.String())
+	return tui.RenderPhaseCardCowsay("Let me help you to set up Docker!", b.String())
 }
 
 func (sg setupGuide) viewAdminUser() string {
 	var b strings.Builder
-	b.WriteString(stepBadge(1, sg.totalSteps()))
+	b.WriteString(stepBadge(sg.stepNum(setupStepAdminUser), sg.totalSteps()))
 	b.WriteString("\n\n")
 	b.WriteString(tui.TitleStyle.Render("Admin Username"))
 	b.WriteString("\n")
@@ -444,7 +477,7 @@ func (sg setupGuide) viewAdminUser() string {
 
 func (sg setupGuide) viewAdminPassword() string {
 	var b strings.Builder
-	b.WriteString(stepBadge(1, sg.totalSteps()))
+	b.WriteString(stepBadge(sg.stepNum(setupStepAdminPassword), sg.totalSteps()))
 	b.WriteString("\n\n")
 	b.WriteString(tui.TitleStyle.Render("Admin Password"))
 	b.WriteString("\n")
@@ -459,7 +492,7 @@ func (sg setupGuide) viewAdminPassword() string {
 
 func (sg setupGuide) viewDockerPHP() string {
 	var b strings.Builder
-	b.WriteString(stepBadge(2, sg.totalSteps()))
+	b.WriteString(stepBadge(sg.stepNum(setupStepDockerPHP), sg.totalSteps()))
 	b.WriteString("\n\n")
 	b.WriteString(tui.TitleStyle.Render("Docker Configuration"))
 	b.WriteString("\n")
@@ -477,7 +510,7 @@ func (sg setupGuide) viewDockerPHP() string {
 
 func (sg setupGuide) viewDockerProfiler() string {
 	var b strings.Builder
-	b.WriteString(stepBadge(3, sg.totalSteps()))
+	b.WriteString(stepBadge(sg.stepNum(setupStepDockerProfiler), sg.totalSteps()))
 	b.WriteString("\n\n")
 	b.WriteString(tui.TitleStyle.Render("PHP Profiler"))
 	b.WriteString("\n")
@@ -506,7 +539,7 @@ func (sg setupGuide) viewDockerProfiler() string {
 
 func (sg setupGuide) viewProfilerCreds() string {
 	var b strings.Builder
-	b.WriteString(stepBadge(4, sg.totalSteps()))
+	b.WriteString(stepBadge(sg.stepNum(setupStepProfilerCreds), sg.totalSteps()))
 	b.WriteString("\n\n")
 
 	switch {
@@ -537,7 +570,7 @@ func (sg setupGuide) viewProfilerCreds() string {
 func (sg setupGuide) viewReview() string {
 	c := sg.currentConfig()
 	var b strings.Builder
-	b.WriteString(stepBadge(4, sg.totalSteps()))
+	b.WriteString(stepBadge(sg.stepNum(setupStepReview), sg.totalSteps()))
 	b.WriteString("\n\n")
 	b.WriteString(tui.TitleStyle.Render("Review Configuration"))
 	b.WriteString("\n")
