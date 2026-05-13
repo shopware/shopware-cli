@@ -2,6 +2,7 @@ package verifier
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io/fs"
 	"os"
@@ -54,12 +55,17 @@ func (s StorefrontTwigLinter) Check(ctx context.Context, check *Check, config To
 
 			parsed, err := html.NewStorefrontParser(string(file))
 			if err != nil {
+				line := 0
+				var pe *html.ParseError
+				if errors.As(err, &pe) {
+					line = pe.Pos.Line
+				}
 				check.AddResult(validation.CheckResult{
 					Path:       relPath,
 					Message:    fmt.Sprintf("Failed to parse %s: %v. Create a GitHub issue with the file content.", path, err),
 					Severity:   validation.SeverityWarning,
 					Identifier: "could-not-parse-twig",
-					Line:       0,
+					Line:       line,
 				})
 
 				return nil
