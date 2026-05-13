@@ -17,18 +17,19 @@
 //     parses correctly. Twig identifiers are scanned with proper word
 //     boundaries (no more {% iff %} matching `if`).
 //
-//  3. Parser — parser_new.go, plus per-tag files
+//  3. Parser — parser.go, plus per-tag files
 //     parseDocument runs the lexer and walks the token stream.
 //     parseNodesUntil collects child nodes until a stop condition fires
 //     (EOF, the parent tag's EndTag, one of its Followers, or the matching
-//     HTML element close tag). Two chunking contexts preserve the legacy
-//     RawNode boundaries that the formatter depends on.
+//     HTML element close tag). Two RawNode chunking contexts (top-level
+//     and element-children) keep formatter output stable across passes.
 //
-//  4. AST + formatter — parser.go (legacy combined file)
-//     Each AST node has a Dump(indent int) string method that produces
-//     the textual representation. Today this lives in parser.go alongside
-//     the AST definitions; future work extracts it into format.go as a
-//     visitor and removes the global indentConfig variable.
+//  4. AST + formatter — ast.go and format.go
+//     ast.go holds the node type definitions; format.go holds every
+//     Dump(int) string method plus IndentConfig. A package-level
+//     indentConfig is mutated via ConfiguredNodeList.Dump for back-compat;
+//     callers concurrently dumping with different configurations should
+//     serialize.
 //
 // # Adding a new Twig tag
 //

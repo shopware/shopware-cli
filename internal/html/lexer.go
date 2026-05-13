@@ -73,7 +73,7 @@ func (l *lexer) lexContent() error {
 		switch c {
 		case '<':
 			// Don't recognize `<` as a tag start if the previous byte is also `<`
-			// (legacy parity: `<<Success>>` flows through as text).
+			// (so inputs like `<<Success>>` flow through as text).
 			absOff := l.pt.cur.Offset + i
 			prevIsLT := absOff > 0 && l.src[absOff-1] == '<'
 			if strings.HasPrefix(rem[i:], "<!--") {

@@ -25,11 +25,11 @@ func TestSmokeShopwareStorefront(t *testing.T) {
 	}
 
 	var (
-		total     int
-		lexFails  int
+		total      int
+		lexFails   int
 		parseFails int
-		fmtFails  int
-		failures  []string
+		fmtFails   int
+		failures   []string
 	)
 	err = filepath.WalkDir(root, func(path string, d os.DirEntry, walkErr error) error {
 		if walkErr != nil || d.IsDir() {

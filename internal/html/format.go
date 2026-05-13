@@ -15,7 +15,6 @@ var fromTextToEntities = []AttributeEntityEncodingFromTo{
 	{From: "\"", To: "&quot;"},
 }
 
-
 func (a Attribute) Dump(indent int) string {
 	var builder strings.Builder
 	indentStr := indentConfig.GetIndent()
@@ -37,7 +36,7 @@ func (a Attribute) Dump(indent int) string {
 	return builder.String() + a.Key + "=\"" + val + "\""
 }
 
-
+// IndentConfig controls how the formatter emits indentation.
 type IndentConfig struct {
 	SpaceIndent             bool
 	IndentSize              int
@@ -60,7 +59,6 @@ func (c IndentConfig) GetIndent() string {
 	}
 	return "\t"
 }
-
 
 var indentConfig = DefaultIndentConfig()
 
@@ -128,7 +126,6 @@ func (nodeList NodeList) Dump(indent int) string {
 	return result
 }
 
-
 // blockHasInlineMixedContent reports whether a TwigBlockNode's body is
 // inline-mixed: at least one RawNode carries non-whitespace text and all
 // children are inline types. This is the JS/CSS-in-{% block %} case where
@@ -179,13 +176,9 @@ func isTemplateElement(node Node) bool {
 	return false
 }
 
-
-
 func (r *RawNode) Dump(indent int) string {
 	return r.Text
 }
-
-// CommentNode represents an HTML comment.
 
 func (c *CommentNode) Dump(indent int) string {
 	var builder strings.Builder
@@ -199,13 +192,9 @@ func (c *CommentNode) Dump(indent int) string {
 	return builder.String()
 }
 
-// TemplateExpressionNode represents a {{...}} template expression.
-
 func (t *TemplateExpressionNode) Dump(indent int) string {
 	return "{{" + t.Expression + "}}"
 }
-
-// ElementNode represents an HTML element.
 
 func (e *ElementNode) Dump(indent int) string {
 	var builder strings.Builder
@@ -589,7 +578,6 @@ func (t *TwigBlockNode) Dump(indent int) string {
 	return builder.String()
 }
 
-
 func (t *TwigIfNode) Dump(indent int) string {
 	var builder strings.Builder
 	indentStr := indentConfig.GetIndent()
@@ -717,7 +705,6 @@ func (t *TwigIfNode) Dump(indent int) string {
 	return builder.String()
 }
 
-
 func (p *ParentNode) Dump(indent int) string {
 	var builder strings.Builder
 	indentStr := indentConfig.GetIndent()
@@ -729,4 +716,3 @@ func (p *ParentNode) Dump(indent int) string {
 
 	return builder.String()
 }
-

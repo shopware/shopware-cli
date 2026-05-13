@@ -12,8 +12,8 @@ func init() {
 }
 
 // parseIfTag parses `{% if cond %}...{% elseif x %}...{% else %}...{% endif %}`.
-// Keeps the legacy AST shape with parallel ElseIfConditions/ElseIfChildren
-// slices so the existing formatter works unchanged.
+// TwigIfNode uses parallel ElseIfConditions/ElseIfChildren slices; a future
+// refactor could collapse them into a single []TwigIfBranch.
 func parseIfTag(p *parser, openTok token) (Node, error) {
 	if openTok.Type != tokTwigStmtOpen {
 		return nil, errAt(p.source, p.filename, openTok.Pos, "expected open delimiter for if tag")
