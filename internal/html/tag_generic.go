@@ -36,6 +36,10 @@ func (n *TwigGenericBlockNode) Dump(indent int) string {
 	// expressions and the layout drifts on every format pass.
 	if blockHasInlineMixedContent(n.Body) {
 		for _, child := range n.Body {
+			if _, ok := child.(*TwigCommentNode); ok {
+				b.WriteString(child.Dump(0))
+				continue
+			}
 			b.WriteString(child.Dump(indent))
 		}
 		b.WriteString("{% ")

@@ -497,6 +497,14 @@ func (t *TwigBlockNode) Dump(indent int) string {
 	// whitespace from RawNodes drives layout.
 	if blockHasInlineMixedContent(t.Children) {
 		for _, child := range t.Children {
+			// Twig comments inside inline-mixed bodies (e.g. {# note #}
+			// between JS statements) get their visible indent from the
+			// preceding RawNode; calling Dump(indent) would have them add
+			// their own indent on top, compounding on every pass.
+			if _, ok := child.(*TwigCommentNode); ok {
+				builder.WriteString(child.Dump(0))
+				continue
+			}
 			builder.WriteString(child.Dump(indent))
 		}
 		builder.WriteString("{% endblock %}")
@@ -535,6 +543,13 @@ func (t *TwigBlockNode) Dump(indent int) string {
 					builder.WriteString(indentStr)
 				}
 				builder.WriteString(tplChild.Dump(childIndent))
+			} else if rawChild, ok := child.(*RawNode); ok {
+				// Trim incidental whitespace from the source so re-formats
+				// don't compound newlines on either side of the RawNode.
+				for j := 0; j < childIndent; j++ {
+					builder.WriteString(indentStr)
+				}
+				builder.WriteString(strings.TrimSpace(rawChild.Text))
 			} else {
 				builder.WriteString(child.Dump(childIndent))
 			}
