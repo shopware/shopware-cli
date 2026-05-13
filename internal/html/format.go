@@ -121,6 +121,20 @@ func (nodeList NodeList) Dump(indent int) string {
 }
 
 
+// isTwigStructured reports whether a node is a Twig structural tag whose
+// Dump output starts with its own indent prefix (vs. an inline value like
+// {{ x }} or <span>). Used by the <p>-children formatter to avoid
+// double-counting whitespace.
+func isTwigStructured(n Node) bool {
+	switch n.(type) {
+	case *TwigBlockNode, *TwigIfNode, *TwigGenericBlockNode,
+		*TwigStandaloneTagNode, *TwigVerbatimNode, *TwigCommentNode,
+		*ParentNode:
+		return true
+	}
+	return false
+}
+
 func isTemplateElement(node Node) bool {
 	if elem, ok := node.(*ElementNode); ok {
 		return elem.Tag == "template"
@@ -131,6 +145,7 @@ func isTemplateElement(node Node) bool {
 	}
 	return false
 }
+
 
 
 func (r *RawNode) Dump(indent int) string {
@@ -253,6 +268,18 @@ func (e *ElementNode) Dump(indent int) string {
 				}
 			} else {
 				for _, child := range e.Children {
+					// When a Twig structural child (it emits its own indent
+					// prefix) follows a RawNode whose tail is line-leading
+					// whitespace, drop that whitespace so the two don't
+					// compound. Without this, parse → format → parse → format
+					// adds one indent level per round inside <p>. Inline
+					// elements like <span> are excluded because their Dump
+					// output has no leading indent at <p>'s call-indent.
+					if isTwigStructured(child) {
+						trimmed := strings.TrimRight(builder.String(), " \t")
+						builder.Reset()
+						builder.WriteString(trimmed)
+					}
 					builder.WriteString(child.Dump(indent))
 				}
 			}
