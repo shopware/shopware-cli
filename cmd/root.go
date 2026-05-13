@@ -59,12 +59,12 @@ func Execute(ctx context.Context) {
 		name = strings.ReplaceAll(name, " ", ".")
 		name = strings.ReplaceAll(name, "-", "_")
 		go tracking.Track(ctx, "command", map[string]string{
-			"command":     name,
-			"result":      result,
-			"duration_ms": strconv.FormatInt(time.Since(start).Milliseconds(), 10),
-			"cli_version": version,
-			"os":          runtime.GOOS,
-			"is_tui":      strconv.FormatBool(system.IsInteractionEnabled(ctx)),
+			"command_name": name,
+			"result":       result,
+			"duration_ms":  strconv.FormatInt(time.Since(start).Milliseconds(), 10),
+			"cli_version":  version,
+			"os":           runtime.GOOS,
+			"is_tui":       strconv.FormatBool(system.IsInteractionEnabled(ctx)),
 		})
 	}
 
