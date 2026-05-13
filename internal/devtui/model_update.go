@@ -198,9 +198,13 @@ func (m Model) updateSetupGuide(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m, tea.Quit
 	}
 
-	// User confirmed the review step → write config files
-	if m.setupGuide.step == setupStepReview && msg.String() == keyEnter && m.setupGuide.confirmYes {
-		return m.saveSetupGuide()
+	// User pressed Enter on the review step. confirmYes=true saves and
+	// continues, confirmYes=false picks the Quit button and exits the wizard.
+	if m.setupGuide.step == setupStepReview && msg.String() == keyEnter {
+		if m.setupGuide.confirmYes {
+			return m.saveSetupGuide()
+		}
+		return m, tea.Quit
 	}
 
 	// User pressed Enter on the done screen → start docker containers.
@@ -234,10 +238,40 @@ func (m Model) saveSetupGuide() (tea.Model, tea.Cmd) {
 			m.setupGuide.step = setupStepDone
 			return m, nil
 		}
+		// Mirror the just-written profiler secrets onto the in-memory config
+		// so the first generated compose.yaml wires them up. They remain in
+		// .shopware-project.local.yml (not the committed config); this is
+		// only the runtime view ReadConfig would have produced on next launch.
+		mergeLocalProfilerSecrets(m.config, localCfg)
 	}
 
 	m.setupGuide.step = setupStepDone
 	return m, nil
+}
+
+// mergeLocalProfilerSecrets copies profiler credential fields from the
+// .shopware-project.local.yml partial config onto the main runtime config.
+// Only profiler secrets are merged — other fields are intentionally left as
+// the project-level config defines them.
+func mergeLocalProfilerSecrets(dst, src *shop.Config) {
+	if src == nil || src.Docker == nil || src.Docker.PHP == nil {
+		return
+	}
+	if dst.Docker == nil {
+		dst.Docker = &shop.ConfigDocker{}
+	}
+	if dst.Docker.PHP == nil {
+		dst.Docker.PHP = &shop.ConfigDockerPHP{}
+	}
+	if v := src.Docker.PHP.BlackfireServerID; v != "" {
+		dst.Docker.PHP.BlackfireServerID = v
+	}
+	if v := src.Docker.PHP.BlackfireServerToken; v != "" {
+		dst.Docker.PHP.BlackfireServerToken = v
+	}
+	if v := src.Docker.PHP.TidewaysAPIKey; v != "" {
+		dst.Docker.PHP.TidewaysAPIKey = v
+	}
 }
 
 func (m Model) startAfterSetupGuide() (tea.Model, tea.Cmd) {

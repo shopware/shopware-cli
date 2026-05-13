@@ -8,6 +8,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"github.com/stretchr/testify/assert"
 
+	"github.com/shopware/shopware-cli/internal/executor"
 	"github.com/shopware/shopware-cli/internal/shop"
 )
 
@@ -44,6 +45,92 @@ func TestResolvePHPVersions_NoMatchingVersionsFallsBackToAll(t *testing.T) {
 	assert.Equal(t, []string{"8.2", "8.3", "8.4", "8.5"}, versions)
 	assert.Equal(t, len(versions)-1, idx)
 	assert.Equal(t, "^9.0", constraint)
+}
+
+func TestSetupGuideReview_QuitButtonQuits(t *testing.T) {
+	sg := newSetupGuide("")
+	sg.step = setupStepReview
+	sg.confirmYes = false // user selected the "Quit" button
+
+	m := Model{
+		phase:      phaseSetupGuide,
+		setupGuide: sg,
+		config:     &shop.Config{},
+		watchers:   make(map[string]*executor.Process),
+	}
+
+	_, cmd := m.Update(tea.KeyPressMsg(tea.Key{Code: tea.KeyEnter}))
+	assert.NotNil(t, cmd, "Enter on Quit button should yield a cmd")
+	_, isQuit := cmd().(tea.QuitMsg)
+	assert.True(t, isQuit, "Enter on Quit button should emit tea.QuitMsg")
+}
+
+func TestSetupGuideReview_SaveButtonDoesNotQuit(t *testing.T) {
+	sg := newSetupGuide("")
+	sg.step = setupStepReview
+	sg.confirmYes = true // user selected "Save & start"
+
+	m := Model{
+		phase:       phaseSetupGuide,
+		setupGuide:  sg,
+		config:      &shop.Config{},
+		projectRoot: t.TempDir(),
+		watchers:    make(map[string]*executor.Process),
+	}
+
+	updated, cmd := m.Update(tea.KeyPressMsg(tea.Key{Code: tea.KeyEnter}))
+	// Should have transitioned to the done step, not quit.
+	if cmd != nil {
+		_, isQuit := cmd().(tea.QuitMsg)
+		assert.False(t, isQuit, "Save button must not quit")
+	}
+	assert.Equal(t, setupStepDone, updated.(Model).setupGuide.step)
+}
+
+func TestMergeLocalProfilerSecrets(t *testing.T) {
+	t.Run("copies blackfire and tideways onto runtime config", func(t *testing.T) {
+		dst := &shop.Config{
+			Docker: &shop.ConfigDocker{
+				PHP: &shop.ConfigDockerPHP{Version: "8.3", Profiler: "blackfire"},
+			},
+		}
+		src := &shop.Config{
+			Docker: &shop.ConfigDocker{
+				PHP: &shop.ConfigDockerPHP{
+					BlackfireServerID:    "id",
+					BlackfireServerToken: "token",
+					TidewaysAPIKey:       "key",
+				},
+			},
+		}
+		mergeLocalProfilerSecrets(dst, src)
+		assert.Equal(t, "id", dst.Docker.PHP.BlackfireServerID)
+		assert.Equal(t, "token", dst.Docker.PHP.BlackfireServerToken)
+		assert.Equal(t, "key", dst.Docker.PHP.TidewaysAPIKey)
+		// non-secret fields stay untouched
+		assert.Equal(t, "8.3", dst.Docker.PHP.Version)
+		assert.Equal(t, "blackfire", dst.Docker.PHP.Profiler)
+	})
+
+	t.Run("creates intermediate structs when missing on dst", func(t *testing.T) {
+		dst := &shop.Config{}
+		src := &shop.Config{
+			Docker: &shop.ConfigDocker{
+				PHP: &shop.ConfigDockerPHP{TidewaysAPIKey: "key"},
+			},
+		}
+		mergeLocalProfilerSecrets(dst, src)
+		assert.NotNil(t, dst.Docker)
+		assert.NotNil(t, dst.Docker.PHP)
+		assert.Equal(t, "key", dst.Docker.PHP.TidewaysAPIKey)
+	})
+
+	t.Run("nil src is a no-op", func(t *testing.T) {
+		dst := &shop.Config{Docker: &shop.ConfigDocker{PHP: &shop.ConfigDockerPHP{Version: "8.4"}}}
+		mergeLocalProfilerSecrets(dst, nil)
+		assert.Equal(t, "8.4", dst.Docker.PHP.Version)
+		assert.Empty(t, dst.Docker.PHP.BlackfireServerID)
+	})
 }
 
 func TestEnsureDeploymentHelper_AddsWhenMissing(t *testing.T) {
