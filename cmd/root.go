@@ -58,7 +58,8 @@ func Execute(ctx context.Context) {
 		name := strings.TrimPrefix(cmd.CommandPath(), "shopware-cli ")
 		name = strings.ReplaceAll(name, " ", ".")
 		name = strings.ReplaceAll(name, "-", "_")
-		go tracking.Track(ctx, name, map[string]string{
+		go tracking.Track(ctx, "command", map[string]string{
+			"command":     name,
 			"result":      result,
 			"duration_ms": strconv.FormatInt(time.Since(start).Milliseconds(), 10),
 			"cli_version": version,
