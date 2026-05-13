@@ -598,6 +598,14 @@ func (d *Dumper) fetchAllColumns(ctx context.Context) error {
 			col.Type = "int(11)"
 		}
 
+		// For generated default values, INFORMATION_SCHEMA.COLUMNS.COLUMN_DEFAULT contains escaped strings which we
+		// must unescape.
+		//
+		// For example a default like ('{}') is stored as _utf8mb4\'{}\' in COLUMN_DEFAULT.
+		if strings.Contains(col.Extra, "DEFAULT_GENERATED") {
+			col.Default.String = unescape(col.Default.String)
+		}
+
 		schema.Columns = append(schema.Columns, col)
 	}
 

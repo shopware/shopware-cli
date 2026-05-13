@@ -352,6 +352,8 @@ func TestFetchTableSchema(t *testing.T) {
 		}).
 			AddRow("test_table", "id", "binary(16)", nil, "NO", nil, "", nil, "", nil).
 			AddRow("test_table", "name", "varchar(255)", "utf8mb4", "NO", nil, "", "utf8mb4_0900_ai_ci", "", nil).
+			AddRow("test_table", "varchar_default", "json", "utf8mb4", "NO", "{}", "", "utf8mb4_0900_ai_ci", "", nil).
+			AddRow("test_table", "json_default", "json", "utf8mb4", "NO", "_utf8mb4\\'{}\\'", "DEFAULT_GENERATED", nil, "", nil).
 			AddRow("test_table", "created_at", "datetime", nil, "NO", "CURRENT_TIMESTAMP", "", nil, "", nil))
 
 	mock.ExpectQuery("SELECT.*FROM INFORMATION_SCHEMA.STATISTICS.*WHERE TABLE_SCHEMA = DATABASE()").
@@ -383,9 +385,11 @@ func TestFetchTableSchema(t *testing.T) {
 	assert.Equal(t, "utf8mb4_unicode_ci", schema.Collation) // Should be mapped
 	assert.Equal(t, "utf8mb4", schema.Charset)
 	assert.Equal(t, int64(100), schema.AutoIncrement.Int64)
-	assert.Len(t, schema.Columns, 3)
+	assert.Len(t, schema.Columns, 5)
 	assert.Equal(t, []string{"id"}, schema.PrimaryKey)
 	assert.Equal(t, "utf8mb4_unicode_ci", schema.Columns[1].Collation.String)
+	assert.Equal(t, "{}", schema.Columns[2].Default.String)
+	assert.Equal(t, "_utf8mb4'{}'", schema.Columns[3].Default.String)
 	assert.Equal(t, 1, len(schema.CheckConstraints))
 	assert.Equal(t, "test_table.check.with_string_literal", schema.CheckConstraints[0].Name)
 	assert.Equal(t, "`name` LIKE _utf8mb4'A%'", schema.CheckConstraints[0].Expression)
