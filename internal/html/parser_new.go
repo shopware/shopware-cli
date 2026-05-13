@@ -191,7 +191,7 @@ func (p *parser) parseNodesUntil(ctx nodeContext, closeTag string, parentTagSpec
 
 		case tokHTMLOpenStart:
 			flush()
-			element, err := p.parseElement()
+			element, err := p.parseElement(parentTagSpec)
 			if err != nil {
 				return nodes, stopEOF, err
 			}
@@ -302,7 +302,12 @@ func (p *parser) parseTemplateExpression() (*TemplateExpressionNode, error) {
 }
 
 // parseElement consumes `<tag attrs...>children</tag>` or `<tag .../>`.
-func (p *parser) parseElement() (*ElementNode, error) {
+// parentTagSpec is the Twig tag spec of the enclosing scope (if any). It is
+// threaded down so that element-children parsing can yield on an outer
+// Twig terminator like `{% endblock %}` when a template wraps just the
+// opening or closing HTML tag in a control-flow block. See the comment on
+// parseElement's children call below.
+func (p *parser) parseElement(parentTagSpec *TagSpec) (*ElementNode, error) {
 	openTok := p.advance() // <
 	if openTok.Type != tokHTMLOpenStart {
 		return nil, errAt(p.source, p.filename, openTok.Pos, "expected '<'")
@@ -361,9 +366,35 @@ func (p *parser) parseElement() (*ElementNode, error) {
 				node.SelfClosing = true
 				return node, nil
 			}
-			children, _, err := p.parseNodesUntil(nodeContextElementChildren, node.Tag, nil)
+			// Pass parentTagSpec down so the children parser yields on an
+			// outer Twig terminator. Real-world templates often wrap just
+			// the opening (or just the closing) HTML tag in {% if %} or
+			// {% block %}, leaving the element's children syntactically
+			// outside the Twig control-flow scope. Without this, the
+			// element children parser would consume {% endif %} / {%
+			// endblock %} as raw text while searching for </tag>, then
+			// the outer Twig tag could not find its terminator.
+			children, reason, err := p.parseNodesUntil(nodeContextElementChildren, node.Tag, parentTagSpec)
 			if err != nil {
 				return nil, err
+			}
+			// If we stopped on something other than </tag>, the element is
+			// unclosed in this control-flow scope; its </tag> appears later
+			// as raw text and the formatter should not synthesize one.
+			// Also drop any whitespace-only RawNode tail that the children
+			// loop accumulated before the outer Twig terminator — those
+			// bytes belong to the outer scope's indentation, not the
+			// element's body, and would otherwise round-trip as a stray
+			// indented blank line.
+			if reason != stopElementCloseTag {
+				node.Unclosed = true
+				for len(children) > 0 {
+					if raw, ok := children[len(children)-1].(*RawNode); ok && strings.TrimSpace(raw.Text) == "" {
+						children = children[:len(children)-1]
+						continue
+					}
+					break
+				}
 			}
 			node.Children = children
 			return node, nil

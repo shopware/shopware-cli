@@ -56,7 +56,14 @@ type ElementNode struct {
 	Attributes  NodeList
 	Children    NodeList
 	SelfClosing bool
-	Line        int // added field
+	// Unclosed reports that the element opened with `<tag>` but its
+	// children parser yielded on an outer Twig terminator (e.g.
+	// `{% endblock %}`) before reaching `</tag>`. The closing tag is
+	// elsewhere in the source, typically wrapped in another control-flow
+	// block. The formatter therefore does NOT emit `</tag>` for unclosed
+	// elements — the matching `</tag>` lives as a RawNode further down.
+	Unclosed bool
+	Line     int // added field
 }
 
 // Dump returns the HTML representation of the element and its children.

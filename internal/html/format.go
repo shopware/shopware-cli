@@ -93,18 +93,26 @@ func (nodeList NodeList) Dump(indent int) string {
 			builder.WriteString("\n")
 			continue
 		}
+		nodeOut := node.Dump(indent)
 		if i > 0 {
 			// Add newline between non-comment nodes if not first
 			if _, ok := nodeList[i-1].(*CommentNode); !ok {
-				builder.WriteString("\n")
+				// Avoid compounding a leading "\n" already at the start of
+				// the next node's output (e.g. a RawNode whose source text
+				// began with a newline). Without this, parse → format →
+				// parse → format would add one newline per pass at that
+				// boundary.
+				if !strings.HasPrefix(nodeOut, "\n") {
+					builder.WriteString("\n")
+				}
 
 				// Add extra newline between template elements
-				if isTemplateElement(node) && i > 0 && isTemplateElement(nodeList[i-1]) {
+				if isTemplateElement(node) && isTemplateElement(nodeList[i-1]) {
 					builder.WriteString("\n")
 				}
 			}
 		}
-		builder.WriteString(node.Dump(indent))
+		builder.WriteString(nodeOut)
 	}
 
 	// Remove trailing newlines
@@ -477,7 +485,9 @@ func (e *ElementNode) Dump(indent int) string {
 		}
 	}
 
-	builder.WriteString("</" + e.Tag + ">")
+	if !e.Unclosed {
+		builder.WriteString("</" + e.Tag + ">")
+	}
 	return builder.String()
 }
 
