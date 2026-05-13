@@ -121,6 +121,31 @@ func (nodeList NodeList) Dump(indent int) string {
 }
 
 
+// blockHasInlineMixedContent reports whether a TwigBlockNode's body is
+// inline-mixed: at least one RawNode carries non-whitespace text and all
+// children are inline types. This is the JS/CSS-in-{% block %} case where
+// flowing children as-is is correct; inserting blank lines between them
+// (the default block-content formatting) would compound on every pass.
+func blockHasInlineMixedContent(children NodeList) bool {
+	if len(children) == 0 {
+		return false
+	}
+	hasMeaningfulRaw := false
+	for _, c := range children {
+		switch n := c.(type) {
+		case *RawNode:
+			if strings.TrimSpace(n.Text) != "" {
+				hasMeaningfulRaw = true
+			}
+		case *TemplateExpressionNode, *CommentNode, *TwigCommentNode:
+			// inline
+		default:
+			return false
+		}
+	}
+	return hasMeaningfulRaw
+}
+
 // isTwigStructured reports whether a node is a Twig structural tag whose
 // Dump output starts with its own indent prefix (vs. an inline value like
 // {{ x }} or <span>). Used by the <p>-children formatter to avoid
@@ -458,6 +483,20 @@ func (t *TwigBlockNode) Dump(indent int) string {
 		builder.WriteString(indentStr)
 	}
 	builder.WriteString("{% block " + t.Name + " %}")
+
+	// Inline content: all children are text or short expressions (no nested
+	// block/element). This is the common case for {% block %} wrapping JS or
+	// CSS where embedded {{ x }} interpolations break naive block-format
+	// rules (`\n\n` between children would add blank lines that compound on
+	// every format pass). Concatenate children as-is so the embedded
+	// whitespace from RawNodes drives layout.
+	if blockHasInlineMixedContent(t.Children) {
+		for _, child := range t.Children {
+			builder.WriteString(child.Dump(indent))
+		}
+		builder.WriteString("{% endblock %}")
+		return builder.String()
+	}
 
 	// Filter out empty nodes and normalize newlines
 	var nonEmptyChildren NodeList
