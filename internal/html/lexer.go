@@ -286,6 +286,14 @@ func (l *lexer) lexHTMLAttr() error {
 		if isASCIIWhitespace(c) || c == '=' || c == '>' || c == '/' {
 			break
 		}
+		// Also break on Twig delimiters so e.g. `A{% else %}` doesn't fuse
+		// into a single attribute name.
+		if c == '{' && l.pt.cur.Offset+1 < len(l.src) {
+			next := l.src[l.pt.cur.Offset+1]
+			if next == '%' || next == '{' || next == '#' {
+				break
+			}
+		}
 		l.pt.advance(1)
 	}
 	name := l.src[start:l.pt.cur.Offset]
