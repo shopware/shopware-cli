@@ -31,17 +31,23 @@ func TestSmokeShopwareStorefront(t *testing.T) {
 		fmtFails   int
 		failures   []string
 	)
+	// The walk records per-file errors into `failures` and continues — the
+	// whole point of a smoke test is to surface every failure, not to abort
+	// on the first one. nolint:nilerr applies to every "captured error → return
+	// nil to keep walking" branch below.
 	err = filepath.WalkDir(root, func(path string, d os.DirEntry, walkErr error) error {
-		if walkErr != nil || d.IsDir() {
-			return nil
-		}
-		if !strings.HasSuffix(path, ".twig") {
+		switch {
+		case walkErr != nil:
+			failures = append(failures, "WALK "+path+": "+walkErr.Error())
+			return nil //nolint:nilerr
+		case d.IsDir(), !strings.HasSuffix(path, ".twig"):
 			return nil
 		}
 		total++
 		data, readErr := os.ReadFile(path)
 		if readErr != nil {
-			return nil
+			failures = append(failures, "READ "+path+": "+readErr.Error())
+			return nil //nolint:nilerr
 		}
 		src := string(data)
 
@@ -49,7 +55,7 @@ func TestSmokeShopwareStorefront(t *testing.T) {
 		if _, lexErr := newLexer(src).lex(); lexErr != nil {
 			lexFails++
 			failures = append(failures, "LEX  "+path+": "+lexErr.Error())
-			return nil
+			return nil //nolint:nilerr
 		}
 
 		// Layer 2: parser must not error.
@@ -57,16 +63,16 @@ func TestSmokeShopwareStorefront(t *testing.T) {
 		if parseErr != nil {
 			parseFails++
 			failures = append(failures, "PARSE "+path+": "+parseErr.Error())
-			return nil
+			return nil //nolint:nilerr
 		}
 
 		// Layer 3: formatter idempotency — parse, format, re-parse, re-format.
 		formatted := nodes.Dump(0)
-		nodes2, err2 := NewParser(formatted)
-		if err2 != nil {
+		nodes2, reparseErr := NewParser(formatted)
+		if reparseErr != nil {
 			fmtFails++
-			failures = append(failures, "FMT-REPARSE "+path+": "+err2.Error())
-			return nil
+			failures = append(failures, "FMT-REPARSE "+path+": "+reparseErr.Error())
+			return nil //nolint:nilerr
 		}
 		if nodes2.Dump(0) != formatted {
 			fmtFails++
@@ -85,15 +91,15 @@ func TestSmokeShopwareStorefront(t *testing.T) {
 		_ = os.WriteFile(dump, []byte(strings.Join(failures, "\n")+"\n"), 0o644)
 	}
 	if len(failures) > 0 {
-		max := 30
-		if len(failures) < max {
-			max = len(failures)
+		limit := 30
+		if len(failures) < limit {
+			limit = len(failures)
 		}
-		for _, f := range failures[:max] {
+		for _, f := range failures[:limit] {
 			t.Log(f)
 		}
-		if len(failures) > max {
-			t.Logf("... and %d more", len(failures)-max)
+		if len(failures) > limit {
+			t.Logf("... and %d more", len(failures)-limit)
 		}
 		t.Fail()
 	}

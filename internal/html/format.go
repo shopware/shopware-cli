@@ -196,6 +196,9 @@ func (t *TemplateExpressionNode) Dump(indent int) string {
 	return "{{" + t.Expression + "}}"
 }
 
+// Dump renders an HTML element with attributes, children, and end tag.
+//
+//nolint:gocyclo // formatter has many small special cases for <p>, long template expressions, etc.
 func (e *ElementNode) Dump(indent int) string {
 	var builder strings.Builder
 	indentStr := indentConfig.GetIndent()

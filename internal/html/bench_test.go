@@ -22,7 +22,8 @@ func BenchmarkStorefront(b *testing.B) {
 		}
 		data, err := os.ReadFile(path)
 		if err != nil {
-			return nil
+			// Skip unreadable files; the benchmark only cares about parsable ones.
+			return nil //nolint:nilerr
 		}
 		files = append(files, data)
 		return nil

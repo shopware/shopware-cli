@@ -38,15 +38,6 @@ func (l *lexer) remaining() string {
 	return l.src[l.pt.cur.Offset:]
 }
 
-// peekStr returns the next n bytes without advancing.
-func (l *lexer) peekStr(n int) string {
-	r := l.remaining()
-	if len(r) < n {
-		return r
-	}
-	return r[:n]
-}
-
 // peekByte returns the byte at offset i ahead of the cursor, or 0 if past end.
 func (l *lexer) peekByte(i int) byte {
 	off := l.pt.cur.Offset + i
@@ -58,6 +49,8 @@ func (l *lexer) peekByte(i int) byte {
 
 // lexContent scans raw text/HTML markup/Twig delimiters at the top level.
 // It detects the next interesting boundary and dispatches to the right scanner.
+//
+//nolint:gocyclo // boundary scan covers <!--, <!DOCTYPE, <, </, {%, {{, {# in one pass.
 func (l *lexer) lexContent() error {
 	startPos := l.pt.pos()
 	rem := l.remaining()
@@ -76,15 +69,16 @@ func (l *lexer) lexContent() error {
 			// (so inputs like `<<Success>>` flow through as text).
 			absOff := l.pt.cur.Offset + i
 			prevIsLT := absOff > 0 && l.src[absOff-1] == '<'
-			if strings.HasPrefix(rem[i:], "<!--") {
+			switch {
+			case strings.HasPrefix(rem[i:], "<!--"):
 				idx, kind = i, "html-comment"
-			} else if strings.HasPrefix(rem[i:], "<!DOCTYPE") || strings.HasPrefix(rem[i:], "<!doctype") {
+			case strings.HasPrefix(rem[i:], "<!DOCTYPE") || strings.HasPrefix(rem[i:], "<!doctype"):
 				idx, kind = i, "html-doctype"
-			} else if !prevIsLT && i+1 < len(rem) && rem[i+1] == '/' {
+			case !prevIsLT && i+1 < len(rem) && rem[i+1] == '/':
 				if i+2 < len(rem) && isHTMLNameStart(rem[i+2]) {
 					idx, kind = i, "html-close"
 				}
-			} else if !prevIsLT && i+1 < len(rem) && isHTMLNameStart(rem[i+1]) {
+			case !prevIsLT && i+1 < len(rem) && isHTMLNameStart(rem[i+1]):
 				idx, kind = i, "html-open"
 			}
 		case '{':
@@ -383,10 +377,7 @@ func (l *lexer) lexTwigStmt() error {
 
 	bodyStart := l.pt.cur.Offset
 	bodyPos := l.pt.pos()
-	closeOffset, trimRight, err := scanToTwigClose(l.src, l.pt.cur.Offset, "%}")
-	if err != nil {
-		return err
-	}
+	closeOffset, trimRight := scanToTwigClose(l.src, l.pt.cur.Offset, "%}")
 	if closeOffset == -1 {
 		return &ParseError{Pos: openPos, Msg: "unterminated {% ... %}", Source: l.src}
 	}
@@ -420,10 +411,7 @@ func (l *lexer) lexTwigExpr() error {
 
 	bodyStart := l.pt.cur.Offset
 	bodyPos := l.pt.pos()
-	closeOffset, trimRight, err := scanToTwigClose(l.src, l.pt.cur.Offset, "}}")
-	if err != nil {
-		return err
-	}
+	closeOffset, trimRight := scanToTwigClose(l.src, l.pt.cur.Offset, "}}")
 	if closeOffset == -1 {
 		return &ParseError{Pos: openPos, Msg: "unterminated {{ ... }}", Source: l.src}
 	}
@@ -475,12 +463,8 @@ func (l *lexer) lexTwigComment() error {
 	body := l.src[bodyStart:bodyEnd]
 	l.emit(token{Type: tokTwigCommentText, Lit: body, Raw: body, Pos: bodyPos})
 	l.pt.advance(end)
-	if trimRight {
-		// Already consumed up to '-', now consume '-#}'
-		// Wait: end is offset of '#}' within rem. So we've advanced to '#}' itself.
-		// Re-think: we need to step back by 1 if trimRight, since body excluded the '-'.
-		// Simpler approach: advance to the offset of '#}' minus the '-' if trimRight.
-	}
+	// Cursor is at '#}'. The closer emission below backs up one byte when
+	// trimRight so the '-' becomes part of the close token's Raw.
 	closePos := l.pt.pos()
 	closeLen := 2
 	closeStart := l.pt.cur.Offset
@@ -502,16 +486,16 @@ func (l *lexer) lexTwigComment() error {
 // respecting string literals and bracket balance so values like
 // `{% set x = "a%}b" %}` and `{{ x|filter({a: 1}) }}` parse correctly.
 // Returns -1 if not found. trimRight is true when the closer is preceded by '-'.
-func scanToTwigClose(src string, start int, close string) (int, bool, error) {
+func scanToTwigClose(src string, start int, closer string) (int, bool) {
 	depth := 0
 	i := start
 	for i < len(src) {
 		// Check for close delimiter first when we're at bracket depth 0.
-		if depth == 0 && i+1 < len(src) && src[i] == close[0] && src[i+1] == close[1] {
+		if depth == 0 && i+1 < len(src) && src[i] == closer[0] && src[i+1] == closer[1] {
 			if i > start && src[i-1] == '-' {
-				return i - 1, true, nil
+				return i - 1, true
 			}
-			return i, false, nil
+			return i, false
 		}
 		c := src[i]
 		switch c {
@@ -540,5 +524,5 @@ func scanToTwigClose(src string, start int, close string) (int, bool, error) {
 			i++
 		}
 	}
-	return -1, false, nil
+	return -1, false
 }

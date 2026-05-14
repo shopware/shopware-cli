@@ -150,6 +150,8 @@ const (
 // is the HTML element close tag the children parser should stop on (only
 // meaningful for nodeContextElementChildren). parentTagSpec is nil at the
 // document root.
+//
+//nolint:gocyclo // top-level dispatcher; complexity is from one arm per token kind.
 func (p *parser) parseNodesUntil(ctx nodeContext, closeTag string, parentTagSpec *TagSpec) (NodeList, stopReason, error) {
 	var nodes NodeList
 	var rawBuf strings.Builder
@@ -183,6 +185,9 @@ func (p *parser) parseNodesUntil(ctx nodeContext, closeTag string, parentTagSpec
 			return nodes, stopEOF, nil
 		}
 
+		// Token dispatch. Cases not listed fall to default and get folded
+		// into the surrounding RawNode (whitespace, stray attr tokens, etc.).
+		//exhaustive:ignore
 		switch tk.Type {
 		case tokTwigStmtOpen:
 			// Look at the identifier (next non-whitespace token).
@@ -326,6 +331,9 @@ func (p *parser) parseNodesUntil(ctx nodeContext, closeTag string, parentTagSpec
 // the parser encounters a Twig tag that has no registered handler.
 func (p *parser) appendRawTokens(buf *strings.Builder, openTok token) {
 	var wantClose tokenType
+	// Only the three Twig opener token types are valid here; anything else
+	// is a caller bug and falls through to the default arm.
+	//exhaustive:ignore
 	switch openTok.Type {
 	case tokTwigStmtOpen:
 		wantClose = tokTwigStmtClose
@@ -399,6 +407,9 @@ func (p *parser) parseElement(parentTagSpec *TagSpec) (*ElementNode, error) {
 	// Parse attributes (including embedded Twig statements).
 	for {
 		tk := p.peek(0)
+		// Attribute-loop dispatch. Stray tokens fall to default which
+		// advances one position to make progress.
+		//exhaustive:ignore
 		switch tk.Type {
 		case tokHTMLAttrName:
 			p.advance()
