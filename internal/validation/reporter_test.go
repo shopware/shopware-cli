@@ -75,18 +75,28 @@ func TestReportingOutputIsDeterministic(t *testing.T) {
 			_ = doGitHubReport(check)
 		})
 
-		lines := strings.Split(strings.TrimSpace(output), "\n")
-		assert.Len(t, lines, 4) // 4 results
+		// The GitHub reporter now prefixes the summary output before the
+		// annotations. Extract only the annotation lines for ordering checks.
+		var annotationLines []string
+		for _, line := range strings.Split(strings.TrimSpace(output), "\n") {
+			if strings.HasPrefix(line, "::") {
+				annotationLines = append(annotationLines, line)
+			}
+		}
+		assert.Len(t, annotationLines, 4) // 4 results
 
 		// Check that results are sorted by path first, then by line
-		assert.Contains(t, lines[0], "a_file.go")
-		assert.Contains(t, lines[0], "line=5")
-		assert.Contains(t, lines[1], "a_file.go")
-		assert.Contains(t, lines[1], "line=10")
-		assert.Contains(t, lines[2], "b_file.go")
-		assert.Contains(t, lines[2], "line=1")
-		assert.Contains(t, lines[3], "z_file.go")
-		assert.Contains(t, lines[3], "line=5")
+		assert.Contains(t, annotationLines[0], "a_file.go")
+		assert.Contains(t, annotationLines[0], "line=5")
+		assert.Contains(t, annotationLines[1], "a_file.go")
+		assert.Contains(t, annotationLines[1], "line=10")
+		assert.Contains(t, annotationLines[2], "b_file.go")
+		assert.Contains(t, annotationLines[2], "line=1")
+		assert.Contains(t, annotationLines[3], "z_file.go")
+		assert.Contains(t, annotationLines[3], "line=5")
+
+		// And the summary header should be present
+		assert.Contains(t, output, "problems")
 	}
 }
 

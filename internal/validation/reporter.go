@@ -129,6 +129,12 @@ func doJSONReport(result Check) error {
 }
 
 func doGitHubReport(result Check) error {
+	// Print the human-readable summary first so the GitHub Actions log
+	// shows file/line context, then emit annotations for PR inline display.
+	if err := doSummaryReport(result); err != nil {
+		return err
+	}
+
 	// Sort results for deterministic output
 	results := result.GetResults()
 	sort.Slice(results, func(i, j int) bool {
