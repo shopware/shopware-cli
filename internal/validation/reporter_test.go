@@ -79,7 +79,7 @@ func TestReportingOutputIsDeterministic(t *testing.T) {
 		// annotations. Extract only the annotation lines for ordering checks.
 		var annotationLines []string
 		for _, line := range strings.Split(strings.TrimSpace(output), "\n") {
-			if strings.HasPrefix(line, "::") {
+			if strings.HasPrefix(line, "::error") || strings.HasPrefix(line, "::warning") {
 				annotationLines = append(annotationLines, line)
 			}
 		}
@@ -318,6 +318,50 @@ func TestSummaryReportWithTip(t *testing.T) {
 	assert.Contains(t, output, "Method has no return type")
 	assert.Contains(t, output, "Tip: Add a return type declaration")
 	assert.Contains(t, output, "Some other error")
+}
+
+func TestGitHubReportNeutralizesSummaryCommands(t *testing.T) {
+	// A malicious path containing a workflow command must not be executed
+	// by the runner when emitted via the summary section.
+	testResults := []CheckResult{
+		{
+			Path:       "::add-mask::secret",
+			Line:       1,
+			Identifier: "test.rule",
+			Message:    "boom",
+			Severity:   SeverityError,
+		},
+	}
+
+	check := &testCheck{Results: testResults}
+
+	output := captureOutput(func() {
+		_ = doGitHubReport(check)
+	})
+
+	lines := strings.Split(strings.TrimSpace(output), "\n")
+	assert.True(t, strings.HasPrefix(lines[0], "::stop-commands::"), "summary must be wrapped in ::stop-commands::")
+
+	token := strings.TrimPrefix(lines[0], "::stop-commands::")
+	assert.NotEmpty(t, token)
+
+	// The matching resume marker must appear before any annotation lines.
+	resume := "::" + token + "::"
+	resumeIdx := -1
+	for i, line := range lines {
+		if line == resume {
+			resumeIdx = i
+			break
+		}
+	}
+	assert.GreaterOrEqual(t, resumeIdx, 1, "resume marker must follow the stop marker")
+
+	// Annotations should appear only after the resume marker.
+	for i, line := range lines {
+		if strings.HasPrefix(line, "::error") || strings.HasPrefix(line, "::warning") {
+			assert.Greater(t, i, resumeIdx, "annotations must come after resume marker")
+		}
+	}
 }
 
 func TestGitHubReportWithTip(t *testing.T) {
