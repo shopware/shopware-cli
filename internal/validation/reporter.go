@@ -104,7 +104,7 @@ func doSummaryReport(result Check) error {
 				warningCount++
 			}
 			//nolint:forbidigo
-			fmt.Printf("  %d  %-7s  %s  %s\n", r.Line, r.Severity, r.Message, r.Identifier)
+			fmt.Printf("  %d  %-7s  [%s]  %s\n", r.Line, r.Severity, r.Identifier, r.Message)
 			if r.Tip != "" {
 				//nolint:forbidigo
 				fmt.Printf("             Tip: %s\n", r.Tip)
