@@ -36,7 +36,7 @@ func (e *ParseError) PrettyError() string {
 	b.WriteString("\n")
 	b.WriteString(snippet(e.Source, e.Pos))
 	for _, r := range e.Related {
-		b.WriteString(fmt.Sprintf("  = note: %s at %d:%d\n", r.Msg, r.Pos.Line, r.Pos.Column))
+		fmt.Fprintf(&b, "  = note: %s at %d:%d\n", r.Msg, r.Pos.Line, r.Pos.Column)
 	}
 	return b.String()
 }
