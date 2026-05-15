@@ -51,7 +51,7 @@ func generateProjectSchema() error {
 		return err
 	}
 
-	if err := os.WriteFile("shopware-project-schema.json", bytes, 0o644); err != nil {
+	if err := os.WriteFile("internal/shop/config_schema.json", bytes, 0o644); err != nil {
 		return err
 	}
 
@@ -99,7 +99,7 @@ func generateExtensionSchema() error {
 		return err
 	}
 
-	if err := os.WriteFile("shopware-extension-schema.json", bytes, 0o644); err != nil {
+	if err := os.WriteFile("internal/extension/config_schema.json", bytes, 0o644); err != nil {
 		return err
 	}
 
