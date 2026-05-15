@@ -2,6 +2,8 @@ package validation
 
 import (
 	"crypto/md5"
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"encoding/xml"
 	"fmt"
@@ -104,7 +106,7 @@ func doSummaryReport(result Check) error {
 				warningCount++
 			}
 			//nolint:forbidigo
-			fmt.Printf("  %d  %-7s  %s  %s\n", r.Line, r.Severity, r.Message, r.Identifier)
+			fmt.Printf("  %d  %-7s  [%s]  %s\n", r.Line, r.Severity, r.Identifier, r.Message)
 			if r.Tip != "" {
 				//nolint:forbidigo
 				fmt.Printf("             Tip: %s\n", r.Tip)
@@ -129,6 +131,24 @@ func doJSONReport(result Check) error {
 }
 
 func doGitHubReport(result Check) error {
+	// Print the human-readable summary first so the GitHub Actions log
+	// shows file/line context, then emit annotations for PR inline display.
+	// File paths and messages can contain `::` which the runner would parse
+	// as a workflow command, so wrap the summary in stop-commands/resume
+	// using a random token to neutralize any embedded commands.
+	var tokenBytes [16]byte
+	if _, err := rand.Read(tokenBytes[:]); err != nil {
+		return err
+	}
+	token := hex.EncodeToString(tokenBytes[:])
+
+	fmt.Printf("::stop-commands::%s\n", token)
+	if err := doSummaryReport(result); err != nil {
+		fmt.Printf("::%s::\n", token)
+		return err
+	}
+	fmt.Printf("::%s::\n", token)
+
 	// Sort results for deterministic output
 	results := result.GetResults()
 	sort.Slice(results, func(i, j int) bool {

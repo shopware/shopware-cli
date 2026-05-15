@@ -518,6 +518,7 @@ func TestFormatDefault(t *testing.T) {
 		// These must not be double-quoted/escaped.
 		{"mariadb escaped string default", "\\'product\\'", "varchar(255)", "'product'"},
 		{"mariadb escaped binary string default", "\\'somevalue\\'", "binary(16)", "'somevalue'"},
+		{"mysql escaped json default", "_utf8mb4\\'{}\\'", "json", "(_utf8mb4'{}')"},
 	}
 
 	for _, tt := range tests {

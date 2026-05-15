@@ -434,6 +434,12 @@ func formatDefault(value string, colType string) string {
 		return unescaped
 	}
 
+	// JSON columns always use generated default values, which are stored as escaped strings, so we need to use the
+	// unescaped value
+	if colType == "json" {
+		return "(" + unescaped + ")"
+	}
+
 	if isExpression(value) {
 		if isSpecialDefault(value) {
 			return value
