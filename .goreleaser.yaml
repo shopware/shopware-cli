@@ -178,7 +178,7 @@ aurs:
 
 nix:
   - name: shopware-cli
-    disable: '{{ .Prerelease }}'
+    skip_upload: '{{ .Prerelease }}'
     repository:
       owner: FriendsOfShopware
       name: nur-packages
@@ -218,7 +218,7 @@ nfpms:
 
 homebrew_casks:
   - name: shopware-cli
-    disable: '{{ .Prerelease }}'
+    skip_upload: '{{ .Prerelease }}'
     repository:
       owner: shopware
       name: homebrew-tap
