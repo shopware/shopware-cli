@@ -25,6 +25,8 @@ func (m Model) View() tea.View {
 		v.Content = m.renderPhase()
 	case phaseTask:
 		v.Content = m.renderDockerLogs(m.taskTitle, "")
+	case phaseSetupGuide:
+		v.Content = m.renderSetupGuide()
 	}
 
 	if m.modal != nil {
@@ -151,7 +153,8 @@ func (m Model) renderPhase() string {
 		}
 		content.WriteString(tui.RenderPhaseCard(strings.TrimRight(card.String(), "\n")))
 		footerHint = tui.ShortcutBadge("l", "Toggle logs")
-	case phaseDashboard, phaseTask:
+	case phaseDashboard, phaseTask, phaseSetupGuide:
+		// Rendered by the outer View() dispatch, not here.
 	}
 
 	return renderPhaseLayout(content.String(), m.width, m.height, footerHint)
@@ -193,6 +196,12 @@ func renderPhaseLayout(content string, width, height int, footerHint string) str
 	normalized := lipgloss.NewStyle().Width(contentWidth).Render(content)
 
 	return header + "\n" + contentBox.Render(normalized) + "\n" + footer
+}
+
+func (m Model) renderSetupGuide() string {
+	footerHint := m.setupGuide.footerHint()
+	cardContent := m.setupGuide.viewContent()
+	return renderPhaseLayout(cardContent, m.width, m.height, footerHint)
 }
 
 func (m Model) renderDockerLogs(title, footerHint string) string {

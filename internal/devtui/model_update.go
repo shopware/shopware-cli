@@ -7,6 +7,8 @@ import (
 	"charm.land/bubbles/v2/textinput"
 	tea "charm.land/bubbletea/v2"
 
+	dockerpkg "github.com/shopware/shopware-cli/internal/docker"
+	"github.com/shopware/shopware-cli/internal/executor"
 	"github.com/shopware/shopware-cli/internal/shop"
 )
 
@@ -15,6 +17,10 @@ func (m Model) updateKeyPress(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		next, cmd := m.modal.Update(msg)
 		m.modal = next
 		return m, cmd
+	}
+
+	if m.phase == phaseSetupGuide {
+		return m.updateSetupGuide(msg)
 	}
 
 	if m.phase == phaseInstallPrompt {
@@ -181,4 +187,131 @@ func (m *Model) stopWatcher(name string) tea.Cmd {
 
 		return watcherStoppedMsg{name: name}
 	}
+}
+
+func (m Model) updateSetupGuide(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+	newGuide, cmd := m.setupGuide.update(msg)
+	m.setupGuide = newGuide
+
+	// Ctrl+C on any step quits the app
+	if msg.String() == keyCtrlC {
+		return m, tea.Quit
+	}
+
+	// User pressed Enter on the review step. confirmYes=true saves and
+	// continues, confirmYes=false picks the Quit button and exits the wizard.
+	if m.setupGuide.step == setupStepReview && msg.String() == keyEnter {
+		if m.setupGuide.confirmYes {
+			return m.saveSetupGuide()
+		}
+		return m, tea.Quit
+	}
+
+	// User pressed Enter on the done screen → start docker containers.
+	// If the previous save errored, stay on the done screen so the user can read it.
+	if m.setupGuide.step == setupStepDone && msg.String() == keyEnter && m.setupGuide.err == nil {
+		return m.startAfterSetupGuide()
+	}
+
+	return m, cmd
+}
+
+func (m Model) saveSetupGuide() (tea.Model, tea.Cmd) {
+	m.setupGuide.applyToConfig(m.config)
+	if err := shop.WriteConfig(m.config, m.projectRoot); err != nil {
+		m.setupGuide.err = err
+		m.setupGuide.step = setupStepDone
+		return m, nil
+	}
+
+	changed, err := ensureDeploymentHelper(m.projectRoot)
+	if err != nil {
+		m.setupGuide.err = err
+		m.setupGuide.step = setupStepDone
+		return m, nil
+	}
+	m.setupGuide.deploymentHelperAdded = changed
+
+	if localCfg := m.setupGuide.localConfig(); localCfg != nil {
+		if err := shop.WriteLocalConfig(localCfg, m.projectRoot); err != nil {
+			m.setupGuide.err = err
+			m.setupGuide.step = setupStepDone
+			return m, nil
+		}
+		// Mirror the just-written profiler secrets onto the in-memory config
+		// so the first generated compose.yaml wires them up. They remain in
+		// .shopware-project.local.yml (not the committed config); this is
+		// only the runtime view ReadConfig would have produced on next launch.
+		mergeLocalProfilerSecrets(m.config, localCfg)
+	}
+
+	m.setupGuide.step = setupStepDone
+	return m, nil
+}
+
+// mergeLocalProfilerSecrets copies profiler credential fields from the
+// .shopware-project.local.yml partial config onto the main runtime config.
+// Only profiler secrets are merged — other fields are intentionally left as
+// the project-level config defines them.
+func mergeLocalProfilerSecrets(dst, src *shop.Config) {
+	if src == nil || src.Docker == nil || src.Docker.PHP == nil {
+		return
+	}
+	if dst.Docker == nil {
+		dst.Docker = &shop.ConfigDocker{}
+	}
+	if dst.Docker.PHP == nil {
+		dst.Docker.PHP = &shop.ConfigDockerPHP{}
+	}
+	if v := src.Docker.PHP.BlackfireServerID; v != "" {
+		dst.Docker.PHP.BlackfireServerID = v
+	}
+	if v := src.Docker.PHP.BlackfireServerToken; v != "" {
+		dst.Docker.PHP.BlackfireServerToken = v
+	}
+	if v := src.Docker.PHP.TidewaysAPIKey; v != "" {
+		dst.Docker.PHP.TidewaysAPIKey = v
+	}
+}
+
+func (m Model) startAfterSetupGuide() (tea.Model, tea.Cmd) {
+	envCfg, err := m.config.ResolveEnvironment("")
+	if err != nil {
+		m.setupGuide.err = err
+		return m, nil
+	}
+	m.envConfig = envCfg
+
+	exec, err := executor.New(m.projectRoot, envCfg, m.config)
+	if err != nil {
+		m.setupGuide.err = err
+		return m, nil
+	}
+	m.executor = exec
+
+	if m.executor.Type() == executor.TypeDocker {
+		if err := dockerpkg.WriteComposeFile(m.projectRoot, dockerpkg.ComposeOptionsFromConfig(m.config)); err != nil {
+			m.setupGuide.err = err
+			return m, nil
+		}
+	}
+
+	m.phase = phaseStarting
+	m.overlayLines = nil
+	m.dockerShowLogs = false
+	m.dockerSpinner = newBrandSpinner()
+
+	shopURL := m.config.URL
+	if m.envConfig.URL != "" {
+		shopURL = m.envConfig.URL
+	}
+	var username, password string
+	if m.envConfig.AdminApi != nil {
+		username = m.envConfig.AdminApi.Username
+		password = m.envConfig.AdminApi.Password
+	}
+	m.general = NewGeneralModel(m.executor.Type(), shopURL, username, password, m.projectRoot, m.executor)
+	m.configTab = NewConfigModel(m.config)
+
+	return m, tea.Batch(m.dockerSpinner.Tick, m.startContainers())
 }
