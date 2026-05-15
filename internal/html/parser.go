@@ -15,19 +15,29 @@ func isVoidElement(tag string) bool {
 	return false
 }
 
+// TraverseNode walks the AST and invokes f on every ElementNode it finds,
+// including ones nested inside Twig structural nodes (block, if, for, embed,
+// macro, etc.) and ones embedded in an element's Attributes slice (a Twig
+// {% if %} can hold attribute-toggling element fragments). Downstream linters
+// and fixers rely on this — adding a new structural node type means also
+// teaching TraverseNode to recurse into its children.
 func TraverseNode(n NodeList, f func(*ElementNode)) {
 	for _, node := range n {
 		switch node := node.(type) {
 		case *ElementNode:
 			f(node)
-			for _, child := range node.Children {
-				TraverseNode(NodeList{child}, f)
-			}
+			TraverseNode(node.Attributes, f)
+			TraverseNode(node.Children, f)
 		case *TwigBlockNode:
 			TraverseNode(node.Children, f)
-		case *TemplateExpressionNode:
-			// Template expressions don't have children to traverse
-			continue
+		case *TwigIfNode:
+			for _, br := range node.Branches {
+				TraverseNode(br.Body, f)
+			}
+			TraverseNode(node.ElseChildren, f)
+		case *TwigGenericBlockNode:
+			TraverseNode(node.Body, f)
+			TraverseNode(node.Else, f)
 		}
 	}
 }
@@ -247,15 +257,17 @@ func (p *parser) parseNodesUntil(ctx nodeContext, closeTag string, parentTagSpec
 		case tokTwigCommentOpen:
 			flush()
 			openPos := tk.Pos
+			trim := TwigTrim{Left: tk.TrimLeft}
 			p.advance() // {#
 			body := ""
 			if p.peek(0).Type == tokTwigCommentText {
 				body = p.advance().Lit
 			}
 			if p.peek(0).Type == tokTwigCommentClose {
+				trim.Right = p.peek(0).TrimRight
 				p.advance()
 			}
-			nodes = append(nodes, &TwigCommentNode{Body: body, Line: openPos.Line})
+			nodes = append(nodes, &TwigCommentNode{Body: body, Trim: trim, Line: openPos.Line})
 			rawStartPos = p.peek(0).Pos
 
 		case tokHTMLComment:
@@ -373,11 +385,14 @@ func (p *parser) parseTemplateExpression() (*TemplateExpressionNode, error) {
 	if closeTok.Type != tokTwigExprClose {
 		return nil, errAt(p.source, p.filename, closeTok.Pos, "expected '}}'")
 	}
-	// Legacy parser preserved spacing inside {{ }}: Expression is the body
-	// verbatim WITHOUT trimming. The lexer's Lit on tokTwigRawExpr is the raw
-	// body; for {{ }} we use Raw to preserve leading/trailing spaces exactly.
+	// Expression preserves the body bytes verbatim WITHOUT trimming; the
+	// lexer's Lit on tokTwigRawExpr is the raw body, and we use Raw to keep
+	// any leading/trailing spaces inside the {{ }} delimiters intact. The
+	// trim flags on the open/close delimiters round-trip via Trim so a
+	// `{{- x -}}` formats back as `{{- x -}}` and not `{{ x }}`.
 	return &TemplateExpressionNode{
 		Expression: bodyTok.Raw,
+		Trim:       TwigTrim{Left: openTok.TrimLeft, Right: closeTok.TrimRight},
 		Line:       openTok.Pos.Line,
 	}, nil
 }
@@ -423,14 +438,16 @@ func (p *parser) parseElement(parentTagSpec *TagSpec) (*ElementNode, error) {
 			node.Attributes = append(node.Attributes, attr)
 
 		case tokTwigStmtOpen:
-			// Embedded Twig directive inside an open tag. Only `{% if %}`
-			// produces a structured Attribute child (a TwigIfNode in the
-			// attribute list); other tags are dropped to keep the
-			// attribute list semantically clean.
+			// Embedded Twig directive inside an open tag. `{% if %}` becomes a
+			// structured TwigIfNode in the attribute list (the formatter knows
+			// how to render it across multiple lines). Other tags fall back
+			// to a RawNode that preserves the original bytes verbatim —
+			// dropping them would silently strip dynamic attributes like
+			// `{% if x %}data-y{% endif %}` (when `if` is somehow missing)
+			// or future Twig statements we don't yet recognize.
 			identTok := p.peek(1)
 			if identTok.Type == tokTwigIdent && identTok.Lit == "if" {
-				spec := lookupTag("if")
-				if spec != nil {
+				if spec := lookupTag("if"); spec != nil {
 					ifNode, err := spec.Parse(p, tk)
 					if err != nil {
 						return nil, err
@@ -439,10 +456,35 @@ func (p *parser) parseElement(parentTagSpec *TagSpec) (*ElementNode, error) {
 					continue
 				}
 			}
-			// Unrecognized in attribute context — skip to its close to avoid
-			// infinite loops.
 			var buf strings.Builder
+			startPos := tk.Pos
 			p.appendRawTokens(&buf, tk)
+			node.Attributes = append(node.Attributes, &RawNode{Text: buf.String(), Line: startPos.Line})
+
+		case tokTwigExprOpen:
+			// `<div {{ attributes }}>` — preserve the dynamic expression in
+			// the attribute list so formatter passes don't strip it.
+			expr, err := p.parseTemplateExpression()
+			if err != nil {
+				return nil, err
+			}
+			node.Attributes = append(node.Attributes, expr)
+
+		case tokTwigCommentOpen:
+			// `<div {# author note #}>` — preserve as a TwigCommentNode in
+			// the attribute list.
+			openPos := tk.Pos
+			trim := TwigTrim{Left: tk.TrimLeft}
+			p.advance()
+			body := ""
+			if p.peek(0).Type == tokTwigCommentText {
+				body = p.advance().Lit
+			}
+			if p.peek(0).Type == tokTwigCommentClose {
+				trim.Right = p.peek(0).TrimRight
+				p.advance()
+			}
+			node.Attributes = append(node.Attributes, &TwigCommentNode{Body: body, Trim: trim, Line: openPos.Line})
 
 		case tokHTMLTagEnd:
 			p.advance() // >

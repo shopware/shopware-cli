@@ -16,7 +16,7 @@ func init() {
 //	{% set x %}body{% endset %}           — block, has endset
 func parseSetTag(p *parser, openTok token) (Node, error) {
 	startLine := openTok.Pos.Line
-	args, err := p.consumeStmtHeader("set")
+	args, openTrim, err := p.consumeStmtHeader("set")
 	if err != nil {
 		return nil, err
 	}
@@ -25,7 +25,7 @@ func parseSetTag(p *parser, openTok token) (Node, error) {
 	// and `==` only appears in expression contexts where `set` itself
 	// already implies the inline form.
 	if strings.Contains(args, "=") {
-		return &TwigStandaloneTagNode{Name: "set", Args: args, Line: startLine}, nil
+		return &TwigStandaloneTagNode{Name: "set", Args: args, Trim: openTrim, Line: startLine}, nil
 	}
 	spec := lookupTag("set")
 	body, reason, err := p.parseNodesUntil(nodeContextTopLevel, "", spec)
@@ -35,14 +35,17 @@ func parseSetTag(p *parser, openTok token) (Node, error) {
 	if reason != stopGenericEndTag {
 		return nil, errAt(p.source, p.filename, openTok.Pos, "missing {%% endset %%}")
 	}
-	if err := p.consumeEndTag("endset"); err != nil {
+	closeTrim, err := p.consumeEndTag("endset")
+	if err != nil {
 		return nil, err
 	}
 	return &TwigGenericBlockNode{
-		Name:   "set",
-		Args:   args,
-		EndTag: "endset",
-		Body:   body,
-		Line:   startLine,
+		Name:      "set",
+		Args:      args,
+		EndTag:    "endset",
+		Body:      body,
+		OpenTrim:  openTrim,
+		CloseTrim: closeTrim,
+		Line:      startLine,
 	}, nil
 }

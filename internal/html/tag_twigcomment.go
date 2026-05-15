@@ -7,6 +7,7 @@ import "strings"
 // and trailing whitespace).
 type TwigCommentNode struct {
 	Body string
+	Trim TwigTrim
 	Line int
 }
 
@@ -16,8 +17,8 @@ func (c *TwigCommentNode) Dump(indent int) string {
 	for i := 0; i < indent; i++ {
 		b.WriteString(indentStr)
 	}
-	b.WriteString("{#")
+	b.WriteString(openComment(c.Trim.Left))
 	b.WriteString(c.Body)
-	b.WriteString("#}")
+	b.WriteString(closeComment(c.Trim.Right))
 	return b.String()
 }

@@ -193,7 +193,7 @@ func (c *CommentNode) Dump(indent int) string {
 }
 
 func (t *TemplateExpressionNode) Dump(indent int) string {
-	return "{{" + t.Expression + "}}"
+	return openExpr(t.Trim.Left) + t.Expression + closeExpr(t.Trim.Right)
 }
 
 // Dump renders an HTML element with attributes, children, and end tag.
@@ -489,7 +489,9 @@ func (t *TwigBlockNode) Dump(indent int) string {
 	for i := 0; i < indent; i++ {
 		builder.WriteString(indentStr)
 	}
-	builder.WriteString("{% block " + t.Name + " %}")
+	builder.WriteString(openStmt(t.OpenTrim.Left))
+	builder.WriteString(" block " + t.Name + " ")
+	builder.WriteString(closeStmt(t.OpenTrim.Right))
 
 	// Inline content: all children are text or short expressions (no nested
 	// block/element). This is the common case for {% block %} wrapping JS or
@@ -509,7 +511,9 @@ func (t *TwigBlockNode) Dump(indent int) string {
 			}
 			builder.WriteString(child.Dump(indent))
 		}
-		builder.WriteString("{% endblock %}")
+		builder.WriteString(openStmt(t.CloseTrim.Left))
+		builder.WriteString(" endblock ")
+		builder.WriteString(closeStmt(t.CloseTrim.Right))
 		return builder.String()
 	}
 
@@ -573,9 +577,13 @@ func (t *TwigBlockNode) Dump(indent int) string {
 			builder.WriteString(indentStr)
 		}
 
-		builder.WriteString("{% endblock %}")
+		builder.WriteString(openStmt(t.CloseTrim.Left))
+		builder.WriteString(" endblock ")
+		builder.WriteString(closeStmt(t.CloseTrim.Right))
 	} else {
-		builder.WriteString("{% endblock %}")
+		builder.WriteString(openStmt(t.CloseTrim.Left))
+		builder.WriteString(" endblock ")
+		builder.WriteString(closeStmt(t.CloseTrim.Right))
 	}
 
 	return builder.String()
@@ -594,22 +602,28 @@ func (t *TwigIfNode) Dump(indent int) string {
 	// at `indent`, then its body indented one level deeper.
 	for i, br := range t.Branches {
 		writeIndent(indent)
+		builder.WriteString(openStmt(br.Trim.Left))
 		if i == 0 {
-			builder.WriteString("{% if " + br.Condition + " %}")
+			builder.WriteString(" if " + br.Condition + " ")
 		} else {
-			builder.WriteString("{% elseif " + br.Condition + " %}")
+			builder.WriteString(" elseif " + br.Condition + " ")
 		}
+		builder.WriteString(closeStmt(br.Trim.Right))
 		writeIfBranchBody(&builder, br.Body, indent, indentStr)
 	}
 
 	if len(t.ElseChildren) > 0 {
 		writeIndent(indent)
-		builder.WriteString("{% else %}")
+		builder.WriteString(openStmt(t.ElseTrim.Left))
+		builder.WriteString(" else ")
+		builder.WriteString(closeStmt(t.ElseTrim.Right))
 		writeIfBranchBody(&builder, t.ElseChildren, indent, indentStr)
 	}
 
 	writeIndent(indent)
-	builder.WriteString("{% endif %}")
+	builder.WriteString(openStmt(t.EndTrim.Left))
+	builder.WriteString(" endif ")
+	builder.WriteString(closeStmt(t.EndTrim.Right))
 	return builder.String()
 }
 
@@ -653,8 +667,8 @@ func (p *ParentNode) Dump(indent int) string {
 	for i := 0; i < indent; i++ {
 		builder.WriteString(indentStr)
 	}
-
-	builder.WriteString("{% parent() %}")
-
+	builder.WriteString(openStmt(p.Trim.Left))
+	builder.WriteString(" parent() ")
+	builder.WriteString(closeStmt(p.Trim.Right))
 	return builder.String()
 }

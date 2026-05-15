@@ -15,8 +15,10 @@ func init() {
 // the body, since the whole point of `{% verbatim %}` is to disable Twig
 // interpretation for its contents.
 type TwigVerbatimNode struct {
-	Body string
-	Line int
+	Body      string
+	OpenTrim  TwigTrim
+	CloseTrim TwigTrim
+	Line      int
 }
 
 // Dump renders the verbatim block with its body byte-identical to source.
@@ -26,9 +28,13 @@ func (v *TwigVerbatimNode) Dump(indent int) string {
 	for i := 0; i < indent; i++ {
 		b.WriteString(indentStr)
 	}
-	b.WriteString("{% verbatim %}")
+	b.WriteString(openStmt(v.OpenTrim.Left))
+	b.WriteString(" verbatim ")
+	b.WriteString(closeStmt(v.OpenTrim.Right))
 	b.WriteString(v.Body)
-	b.WriteString("{% endverbatim %}")
+	b.WriteString(openStmt(v.CloseTrim.Left))
+	b.WriteString(" endverbatim ")
+	b.WriteString(closeStmt(v.CloseTrim.Right))
 	return b.String()
 }
 
@@ -37,7 +43,8 @@ func (v *TwigVerbatimNode) Dump(indent int) string {
 // constructs inside the body are not re-parsed.
 func parseVerbatimTag(p *parser, openTok token) (Node, error) {
 	startLine := openTok.Pos.Line
-	if _, err := p.consumeStmtHeader("verbatim"); err != nil {
+	_, openTrim, err := p.consumeStmtHeader("verbatim")
+	if err != nil {
 		return nil, err
 	}
 
@@ -59,8 +66,9 @@ func parseVerbatimTag(p *parser, openTok token) (Node, error) {
 		body.WriteString(tk.Raw)
 		p.advance()
 	}
-	if err := p.consumeEndTag("endverbatim"); err != nil {
+	closeTrim, err := p.consumeEndTag("endverbatim")
+	if err != nil {
 		return nil, err
 	}
-	return &TwigVerbatimNode{Body: body.String(), Line: startLine}, nil
+	return &TwigVerbatimNode{Body: body.String(), OpenTrim: openTrim, CloseTrim: closeTrim, Line: startLine}, nil
 }

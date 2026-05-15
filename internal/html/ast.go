@@ -17,6 +17,17 @@ type Node interface {
 // arranges children with appropriate inter-node whitespace.
 type NodeList []Node
 
+// TwigTrim records the whitespace-control modifiers on a single Twig
+// delimiter pair. `{%- if -%}` is TwigTrim{Left: true, Right: true} on
+// the if-header, for example. Twig strips surrounding whitespace at
+// render time when a side is true, so the formatter must emit `{%-`/`-%}`
+// (or `{{-`/`-}}`, `{#-`/`-#}`) verbatim — losing them would change
+// rendered output.
+type TwigTrim struct {
+	Left  bool // open delimiter has a leading '-' (e.g. {%-)
+	Right bool // close delimiter has a trailing '-' (e.g. -%})
+}
+
 // ConfiguredNodeList wraps a NodeList with the IndentConfig under which it
 // should format. NewAdminParser and NewStorefrontParser return this so the
 // caller can Dump(0) without managing config separately.
@@ -41,6 +52,7 @@ type CommentNode struct {
 // TemplateExpressionNode represents a `{{ ... }}` Twig expression.
 type TemplateExpressionNode struct {
 	Expression string
+	Trim       TwigTrim
 	Line       int
 }
 
@@ -61,19 +73,25 @@ type ElementNode struct {
 }
 
 // TwigBlockNode represents `{% block name %}...{% endblock %}`.
+// OpenTrim is the trim flags on the `{% block name %}` delimiters; CloseTrim
+// is the trim flags on the `{% endblock %}` delimiters.
 type TwigBlockNode struct {
-	Name     string
-	Children NodeList
-	Line     int
+	Name      string
+	Children  NodeList
+	OpenTrim  TwigTrim
+	CloseTrim TwigTrim
+	Line      int
 }
 
 // TwigIfBranch is one conditional branch of a {% if %}...{% endif %} block.
 // The first branch in TwigIfNode.Branches is the "if" itself; subsequent
 // entries are "elseif" branches. The else (no-condition) branch is held
-// separately on TwigIfNode.ElseChildren.
+// separately on TwigIfNode.ElseChildren. Trim is the trim flags on the
+// branch's own header delimiters.
 type TwigIfBranch struct {
 	Condition string
 	Body      NodeList
+	Trim      TwigTrim
 }
 
 // TwigIfNode represents `{% if %}...{% elseif %}...{% else %}...{% endif %}`.
@@ -82,10 +100,16 @@ type TwigIfBranch struct {
 type TwigIfNode struct {
 	Branches     []TwigIfBranch
 	ElseChildren NodeList
-	Line         int
+	// ElseTrim is the trim flags on the `{% else %}` delimiters when the
+	// else clause is present.
+	ElseTrim TwigTrim
+	// EndTrim is the trim flags on the `{% endif %}` delimiters.
+	EndTrim TwigTrim
+	Line    int
 }
 
 // ParentNode represents `{% parent %}` or `{% parent() %}`.
 type ParentNode struct {
+	Trim TwigTrim
 	Line int
 }

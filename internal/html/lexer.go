@@ -270,6 +270,12 @@ func (l *lexer) lexHTMLAttrsAndClose() error {
 			}
 			continue
 		}
+		if c == '{' && l.peekByte(1) == '#' {
+			if err := l.lexTwigComment(); err != nil {
+				return err
+			}
+			continue
+		}
 		if err := l.lexHTMLAttr(); err != nil {
 			return err
 		}

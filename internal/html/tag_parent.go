@@ -13,6 +13,7 @@ func parseParentTag(p *parser, openTok token) (Node, error) {
 		return nil, errAt(p.source, p.filename, openTok.Pos, "expected open delimiter for parent tag")
 	}
 	startLine := openTok.Pos.Line
+	trim := TwigTrim{Left: openTok.TrimLeft}
 	p.advance() // {%
 	identTok := p.advance()
 	if identTok.Type != tokTwigIdent || identTok.Lit != "parent" {
@@ -26,6 +27,7 @@ func parseParentTag(p *parser, openTok token) (Node, error) {
 	if closeTok.Type != tokTwigStmtClose {
 		return nil, errAt(p.source, p.filename, closeTok.Pos, "expected '%%}' for parent tag")
 	}
+	trim.Right = closeTok.TrimRight
 	p.advance()
-	return &ParentNode{Line: startLine}, nil
+	return &ParentNode{Trim: trim, Line: startLine}, nil
 }
