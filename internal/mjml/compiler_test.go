@@ -167,7 +167,6 @@ exit 0`
 		if err != nil {
 			t.Fatalf("failed to create temp file: %v", err)
 		}
-		defer os.Remove(tmpFile.Name())
 
 		if _, err := Compile(ctx, tmpFile.Name(), CompileOptions{}); err != nil {
 			t.Fatalf("compile failed: %v", err)
@@ -192,7 +191,6 @@ exit 0`
 		if err != nil {
 			t.Fatalf("failed to create temp file: %v", err)
 		}
-		defer os.Remove(tmpFile.Name())
 
 		if _, err := Compile(ctx, tmpFile.Name(), CompileOptions{AllowIncludes: true}); err != nil {
 			t.Fatalf("compile failed: %v", err)
@@ -212,7 +210,6 @@ exit 0`
 		if err != nil {
 			t.Fatalf("failed to create temp file: %v", err)
 		}
-		defer os.Remove(tmpFile.Name())
 
 		opts := CompileOptions{IncludePaths: []string{"../_includes", "../_shared"}}
 		if _, err := Compile(ctx, tmpFile.Name(), opts); err != nil {
