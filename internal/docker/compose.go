@@ -72,7 +72,7 @@ func WriteComposeFile(projectFolder string, opts *ComposeOptions) error {
 		return fmt.Errorf("failed to generate compose.yaml: %w", err)
 	}
 
-	return os.WriteFile(filepath.Join(projectFolder, "compose.yaml"), composeBytes, os.ModePerm)
+	return os.WriteFile(filepath.Join(projectFolder, "compose.yaml"), composeBytes, 0o644)
 }
 
 func buildCompose(hasAMQP, hasElasticsearch bool, opts *ComposeOptions) yaml.Node {

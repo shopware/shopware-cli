@@ -534,7 +534,7 @@ func WriteConfig(cfg *Config, dir string) error {
 
 	filePath := filepath.Join(dir, ".shopware-project.yml")
 
-	if err := os.WriteFile(filePath, data, os.ModePerm); err != nil {
+	if err := os.WriteFile(filePath, data, 0o644); err != nil {
 		return fmt.Errorf("failed to write shop configuration to %s: %w", filePath, err)
 	}
 
@@ -552,7 +552,7 @@ func WriteLocalConfig(cfg *Config, dir string) error {
 
 	filePath := filepath.Join(dir, ".shopware-project.local.yml")
 
-	if err := os.WriteFile(filePath, data, os.ModePerm); err != nil {
+	if err := os.WriteFile(filePath, data, 0o600); err != nil {
 		return fmt.Errorf("failed to write local shop configuration to %s: %w", filePath, err)
 	}
 
