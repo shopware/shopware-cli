@@ -77,7 +77,7 @@ func downloadDartSass(ctx context.Context, cacheDir string) error {
 
 		if !strings.HasSuffix(folder, ".") {
 			if _, err := os.Stat(folder); os.IsNotExist(err) {
-				if err := os.MkdirAll(folder, os.ModePerm); err != nil {
+				if err := os.MkdirAll(folder, 0o755); err != nil {
 					return err
 				}
 			}

@@ -481,7 +481,7 @@ var projectCreateCmd = &cobra.Command{
 			return fmt.Errorf("cannot find version %s", selectedVersion)
 		}
 
-		if err := os.MkdirAll(projectFolder, os.ModePerm); err != nil {
+		if err := os.MkdirAll(projectFolder, 0o755); err != nil {
 			return err
 		}
 
@@ -500,11 +500,11 @@ var projectCreateCmd = &cobra.Command{
 			return err
 		}
 
-		if err := os.WriteFile(filepath.Join(projectFolder, "composer.json"), []byte(composerJson), os.ModePerm); err != nil {
+		if err := os.WriteFile(filepath.Join(projectFolder, "composer.json"), []byte(composerJson), 0o644); err != nil {
 			return err
 		}
 
-		if err := os.WriteFile(filepath.Join(projectFolder, ".env"), []byte(""), os.ModePerm); err != nil {
+		if err := os.WriteFile(filepath.Join(projectFolder, ".env"), []byte(""), 0o600); err != nil {
 			return err
 		}
 
@@ -514,24 +514,24 @@ var projectCreateCmd = &cobra.Command{
 			envLocalContent += "APP_ENV=dev\n"
 		}
 
-		if err := os.WriteFile(filepath.Join(projectFolder, ".env.local"), []byte(envLocalContent), os.ModePerm); err != nil {
+		if err := os.WriteFile(filepath.Join(projectFolder, ".env.local"), []byte(envLocalContent), 0o600); err != nil {
 			return err
 		}
 
-		if err := os.WriteFile(filepath.Join(projectFolder, ".gitignore"), []byte("/.idea\n/vendor"), os.ModePerm); err != nil {
+		if err := os.WriteFile(filepath.Join(projectFolder, ".gitignore"), []byte("/.idea\n/vendor"), 0o644); err != nil {
 			return err
 		}
 
-		if err := os.MkdirAll(filepath.Join(projectFolder, "custom", "plugins"), os.ModePerm); err != nil {
+		if err := os.MkdirAll(filepath.Join(projectFolder, "custom", "plugins"), 0o755); err != nil {
 			return err
 		}
 
-		if err := os.MkdirAll(filepath.Join(projectFolder, "custom", "static-plugins"), os.ModePerm); err != nil {
+		if err := os.MkdirAll(filepath.Join(projectFolder, "custom", "static-plugins"), 0o755); err != nil {
 			return err
 		}
 
 		if !useDocker && system.IsSymfonyCliInstalled() {
-			if err := os.WriteFile(filepath.Join(projectFolder, "php.ini"), []byte("memory_limit=512M"), os.ModePerm); err != nil {
+			if err := os.WriteFile(filepath.Join(projectFolder, "php.ini"), []byte("memory_limit=512M"), 0o644); err != nil {
 				return err
 			}
 		}
@@ -623,7 +623,7 @@ func resolveVersion(selectedVersion string, filteredVersions []*version.Version)
 func setupDeployment(projectFolder, deploymentMethod string) error {
 	switch deploymentMethod {
 	case packagist.DeploymentDeployer:
-		if err := os.WriteFile(filepath.Join(projectFolder, "deploy.php"), []byte(deployerTemplate), os.ModePerm); err != nil {
+		if err := os.WriteFile(filepath.Join(projectFolder, "deploy.php"), []byte(deployerTemplate), 0o644); err != nil {
 			return err
 		}
 
@@ -636,7 +636,7 @@ services:
     version: "8.0"
 `
 
-		if err := os.WriteFile(filepath.Join(projectFolder, "application.yaml"), []byte(shopwarePaasApp), os.ModePerm); err != nil {
+		if err := os.WriteFile(filepath.Join(projectFolder, "application.yaml"), []byte(shopwarePaasApp), 0o644); err != nil {
 			return err
 		}
 	}
@@ -647,17 +647,17 @@ services:
 func setupCI(ctx context.Context, projectFolder, ciSystem, deploymentMethod string) error {
 	switch ciSystem {
 	case "github":
-		if err := os.MkdirAll(filepath.Join(projectFolder, ".github", "workflows"), os.ModePerm); err != nil {
+		if err := os.MkdirAll(filepath.Join(projectFolder, ".github", "workflows"), 0o755); err != nil {
 			return err
 		}
 		ciPath := filepath.Join(".github", "workflows", "ci.yml")
-		if err := os.WriteFile(filepath.Join(projectFolder, ciPath), []byte(githubCITemplate), os.ModePerm); err != nil {
+		if err := os.WriteFile(filepath.Join(projectFolder, ciPath), []byte(githubCITemplate), 0o644); err != nil {
 			return err
 		}
 		logging.FromContext(ctx).Infof("Created CI template %s", ciPath)
 		if deploymentMethod == packagist.DeploymentDeployer {
 			deployPath := filepath.Join(".github", "workflows", "deploy.yml")
-			if err := os.WriteFile(filepath.Join(projectFolder, deployPath), []byte(githubDeployTemplate), os.ModePerm); err != nil {
+			if err := os.WriteFile(filepath.Join(projectFolder, deployPath), []byte(githubDeployTemplate), 0o644); err != nil {
 				return err
 			}
 			logging.FromContext(ctx).Infof("Created CI template %s", deployPath)
@@ -675,7 +675,7 @@ func setupCI(ctx context.Context, projectFolder, ciSystem, deploymentMethod stri
 		}
 
 		ciPath := ".gitlab-ci.yml"
-		if err := os.WriteFile(filepath.Join(projectFolder, ciPath), buf.Bytes(), os.ModePerm); err != nil {
+		if err := os.WriteFile(filepath.Join(projectFolder, ciPath), buf.Bytes(), 0o644); err != nil {
 			return err
 		}
 		logging.FromContext(ctx).Infof("Created CI template %s", ciPath)

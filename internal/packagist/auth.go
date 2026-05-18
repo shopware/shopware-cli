@@ -116,7 +116,7 @@ func (a *ComposerAuth) Save() error {
 		return err
 	}
 
-	return os.WriteFile(a.path, content, os.ModePerm)
+	return os.WriteFile(a.path, content, 0o600)
 }
 
 func (a *ComposerAuth) Json(formatted bool) ([]byte, error) {

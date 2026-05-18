@@ -120,7 +120,7 @@ const testAppManifestSetup = `<?xml version="1.0" encoding="UTF-8"?>
 func TestIconNotExists(t *testing.T) {
 	appPath := t.TempDir()
 
-	assert.NoError(t, os.WriteFile(filepath.Join(appPath, "manifest.xml"), []byte(testAppManifest), os.ModePerm))
+	assert.NoError(t, os.WriteFile(filepath.Join(appPath, "manifest.xml"), []byte(testAppManifest), 0o644))
 
 	app, err := newApp(t.Context(), appPath)
 
@@ -139,8 +139,8 @@ func TestIconNotExists(t *testing.T) {
 func TestAppNoLicense(t *testing.T) {
 	appPath := t.TempDir()
 
-	assert.NoError(t, os.WriteFile(filepath.Join(appPath, "manifest.xml"), []byte(testAppManifestMissingLicense), os.ModePerm))
-	assert.NoError(t, os.MkdirAll(filepath.Join(appPath, "Resources/config"), os.ModePerm))
+	assert.NoError(t, os.WriteFile(filepath.Join(appPath, "manifest.xml"), []byte(testAppManifestMissingLicense), 0o644))
+	assert.NoError(t, os.MkdirAll(filepath.Join(appPath, "Resources/config"), 0o755))
 	assert.NoError(t, createTestImage(filepath.Join(appPath, "Resources/config/plugin.png")))
 
 	app, err := newApp(t.Context(), appPath)
@@ -157,8 +157,8 @@ func TestAppNoLicense(t *testing.T) {
 func TestAppNoCopyright(t *testing.T) {
 	appPath := t.TempDir()
 
-	assert.NoError(t, os.WriteFile(filepath.Join(appPath, "manifest.xml"), []byte(testAppManifestMissingCopyright), os.ModePerm))
-	assert.NoError(t, os.MkdirAll(filepath.Join(appPath, "Resources/config"), os.ModePerm))
+	assert.NoError(t, os.WriteFile(filepath.Join(appPath, "manifest.xml"), []byte(testAppManifestMissingCopyright), 0o644))
+	assert.NoError(t, os.MkdirAll(filepath.Join(appPath, "Resources/config"), 0o755))
 	assert.NoError(t, createTestImage(filepath.Join(appPath, "Resources/config/plugin.png")))
 
 	app, err := newApp(t.Context(), appPath)
@@ -175,8 +175,8 @@ func TestAppNoCopyright(t *testing.T) {
 func TestAppNoAuthor(t *testing.T) {
 	appPath := t.TempDir()
 
-	assert.NoError(t, os.WriteFile(filepath.Join(appPath, "manifest.xml"), []byte(testAppManifestMissingAuthor), os.ModePerm))
-	assert.NoError(t, os.MkdirAll(filepath.Join(appPath, "Resources/config"), os.ModePerm))
+	assert.NoError(t, os.WriteFile(filepath.Join(appPath, "manifest.xml"), []byte(testAppManifestMissingAuthor), 0o644))
+	assert.NoError(t, os.MkdirAll(filepath.Join(appPath, "Resources/config"), 0o755))
 	assert.NoError(t, createTestImage(filepath.Join(appPath, "Resources/config/plugin.png")))
 
 	app, err := newApp(t.Context(), appPath)
@@ -193,8 +193,8 @@ func TestAppNoAuthor(t *testing.T) {
 func TestAppHasSecret(t *testing.T) {
 	appPath := t.TempDir()
 
-	assert.NoError(t, os.WriteFile(filepath.Join(appPath, "manifest.xml"), []byte(testAppManifestSetup), os.ModePerm))
-	assert.NoError(t, os.MkdirAll(filepath.Join(appPath, "Resources/config"), os.ModePerm))
+	assert.NoError(t, os.WriteFile(filepath.Join(appPath, "manifest.xml"), []byte(testAppManifestSetup), 0o644))
+	assert.NoError(t, os.MkdirAll(filepath.Join(appPath, "Resources/config"), 0o755))
 	assert.NoError(t, createTestImage(filepath.Join(appPath, "Resources/config/plugin.png")))
 
 	app, err := newApp(t.Context(), appPath)
@@ -211,10 +211,10 @@ func TestAppHasSecret(t *testing.T) {
 func TestIconExistsDefaultsPath(t *testing.T) {
 	appPath := t.TempDir()
 
-	assert.NoError(t, os.MkdirAll(filepath.Join(appPath, "Resources/config"), os.ModePerm))
+	assert.NoError(t, os.MkdirAll(filepath.Join(appPath, "Resources/config"), 0o755))
 	assert.NoError(t, createTestImage(filepath.Join(appPath, "Resources/config/plugin.png")))
 
-	assert.NoError(t, os.WriteFile(filepath.Join(appPath, "manifest.xml"), []byte(testAppManifest), os.ModePerm))
+	assert.NoError(t, os.WriteFile(filepath.Join(appPath, "manifest.xml"), []byte(testAppManifest), 0o644))
 
 	app, err := newApp(t.Context(), appPath)
 
@@ -232,7 +232,7 @@ func TestIconExistsDefaultsPath(t *testing.T) {
 func TestIconExistsDifferentPath(t *testing.T) {
 	appPath := t.TempDir()
 
-	assert.NoError(t, os.WriteFile(filepath.Join(appPath, "manifest.xml"), []byte(testAppManifestIcon), os.ModePerm))
+	assert.NoError(t, os.WriteFile(filepath.Join(appPath, "manifest.xml"), []byte(testAppManifestIcon), 0o644))
 	assert.NoError(t, createTestImageWithSize(filepath.Join(appPath, "app.png"), 120, 120))
 
 	app, err := newApp(t.Context(), appPath)
@@ -251,7 +251,7 @@ func TestIconExistsDifferentPath(t *testing.T) {
 func TestNoCompatibilityGiven(t *testing.T) {
 	appPath := t.TempDir()
 
-	assert.NoError(t, os.WriteFile(filepath.Join(appPath, "manifest.xml"), []byte(testAppManifest), os.ModePerm))
+	assert.NoError(t, os.WriteFile(filepath.Join(appPath, "manifest.xml"), []byte(testAppManifest), 0o644))
 
 	app, err := newApp(t.Context(), appPath)
 
@@ -266,7 +266,7 @@ func TestNoCompatibilityGiven(t *testing.T) {
 func TestCompatibilityGiven(t *testing.T) {
 	appPath := t.TempDir()
 
-	assert.NoError(t, os.WriteFile(filepath.Join(appPath, "manifest.xml"), []byte(testAppManifestCompatibility), os.ModePerm))
+	assert.NoError(t, os.WriteFile(filepath.Join(appPath, "manifest.xml"), []byte(testAppManifestCompatibility), 0o644))
 
 	app, err := newApp(t.Context(), appPath)
 
@@ -281,11 +281,11 @@ func TestCompatibilityGiven(t *testing.T) {
 func TestAppWithPHPFiles(t *testing.T) {
 	appPath := t.TempDir()
 
-	assert.NoError(t, os.MkdirAll(filepath.Join(appPath, "Resources/config"), os.ModePerm))
+	assert.NoError(t, os.MkdirAll(filepath.Join(appPath, "Resources/config"), 0o755))
 
-	assert.NoError(t, os.WriteFile(filepath.Join(appPath, "manifest.xml"), []byte(testAppManifest), os.ModePerm))
+	assert.NoError(t, os.WriteFile(filepath.Join(appPath, "manifest.xml"), []byte(testAppManifest), 0o644))
 	assert.NoError(t, createTestImage(filepath.Join(appPath, "Resources/config/plugin.png")))
-	assert.NoError(t, os.WriteFile(filepath.Join(appPath, "test.php"), []byte("<?php echo 'Hello World';"), os.ModePerm))
+	assert.NoError(t, os.WriteFile(filepath.Join(appPath, "test.php"), []byte("<?php echo 'Hello World';"), 0o644))
 
 	app, err := newApp(t.Context(), appPath)
 
@@ -305,13 +305,13 @@ func TestAppWithTwigFiles(t *testing.T) {
 
 	appPath := t.TempDir()
 
-	assert.NoError(t, os.MkdirAll(filepath.Join(appPath, "Resources/config"), os.ModePerm))
-	assert.NoError(t, os.MkdirAll(filepath.Join(appPath, "Resources/views/"), os.ModePerm))
+	assert.NoError(t, os.MkdirAll(filepath.Join(appPath, "Resources/config"), 0o755))
+	assert.NoError(t, os.MkdirAll(filepath.Join(appPath, "Resources/views/"), 0o755))
 
-	assert.NoError(t, os.WriteFile(filepath.Join(appPath, "manifest.xml"), []byte(testAppManifest), os.ModePerm))
+	assert.NoError(t, os.WriteFile(filepath.Join(appPath, "manifest.xml"), []byte(testAppManifest), 0o644))
 	assert.NoError(t, createTestImage(filepath.Join(appPath, "Resources/config/plugin.png")))
-	assert.NoError(t, os.WriteFile(filepath.Join(appPath, "test.twig"), []byte("<?php echo 'Hello World';"), os.ModePerm))
-	assert.NoError(t, os.WriteFile(filepath.Join(appPath, "Resources/views/test.twig"), []byte("<?php echo 'Hello World';"), os.ModePerm))
+	assert.NoError(t, os.WriteFile(filepath.Join(appPath, "test.twig"), []byte("<?php echo 'Hello World';"), 0o644))
+	assert.NoError(t, os.WriteFile(filepath.Join(appPath, "Resources/views/test.twig"), []byte("<?php echo 'Hello World';"), 0o644))
 
 	app, err := newApp(t.Context(), appPath)
 

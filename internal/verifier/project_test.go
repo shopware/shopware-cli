@@ -58,7 +58,7 @@ func TestGetConfigFromProjectYAMLBundles(t *testing.T) {
 
 	// Create bundle directory with an admin subfolder
 	adminPath := filepath.Join(tmpDir, "src", "MyBundle", "Resources", "app", "administration")
-	assert.NoError(t, os.MkdirAll(adminPath, os.ModePerm))
+	assert.NoError(t, os.MkdirAll(adminPath, 0o755))
 
 	// Write .shopware-project.yml with the bundle declared
 	assert.NoError(t, os.WriteFile(filepath.Join(tmpDir, ".shopware-project.yml"), []byte(testProjectYAMLSingleBundle), 0o644))
@@ -81,7 +81,7 @@ func TestGetConfigFromProjectYAMLBundleStorefront(t *testing.T) {
 
 	// Create bundle directory with a storefront subfolder only
 	storefrontPath := filepath.Join(tmpDir, "src", "MyBundle", "Resources", "app", "storefront")
-	assert.NoError(t, os.MkdirAll(storefrontPath, os.ModePerm))
+	assert.NoError(t, os.MkdirAll(storefrontPath, 0o755))
 
 	assert.NoError(t, os.WriteFile(filepath.Join(tmpDir, ".shopware-project.yml"), []byte(testProjectYAMLSingleBundle), 0o644))
 
@@ -103,7 +103,7 @@ func TestGetConfigFromProjectYAMLBundleDeduplication(t *testing.T) {
 		"extra": {"shopware-bundles": {"src/MyBundle": {"name": "MyBundle"}}}
 	}`), 0o644))
 
-	assert.NoError(t, os.MkdirAll(filepath.Join(tmpDir, "src", "MyBundle"), os.ModePerm))
+	assert.NoError(t, os.MkdirAll(filepath.Join(tmpDir, "src", "MyBundle"), 0o755))
 
 	assert.NoError(t, os.WriteFile(filepath.Join(tmpDir, ".shopware-project.yml"), []byte(testProjectYAMLSingleBundle), 0o644))
 

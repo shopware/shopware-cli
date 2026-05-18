@@ -192,12 +192,12 @@ func writeBundlerResultToDisk(result api.BuildResult, jsFile, cssFile string) er
 		outFolder := filepath.Dir(outFile)
 
 		if _, err := os.Stat(outFolder); os.IsNotExist(err) {
-			if err := os.MkdirAll(outFolder, os.ModePerm); err != nil {
+			if err := os.MkdirAll(outFolder, 0o755); err != nil {
 				return err
 			}
 		}
 
-		if err := os.WriteFile(outFile, file.Contents, os.ModePerm); err != nil {
+		if err := os.WriteFile(outFile, file.Contents, 0o644); err != nil {
 			return err
 		}
 	}

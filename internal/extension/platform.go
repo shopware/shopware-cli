@@ -236,7 +236,7 @@ func (p PlatformPlugin) UpdateMetaData(metadata *ExtensionMetadata) error {
 
 	newComposerJson = append(newComposerJson, '\n')
 
-	if err := os.WriteFile(composerJsonFile, newComposerJson, os.ModePerm); err != nil {
+	if err := os.WriteFile(composerJsonFile, newComposerJson, 0o644); err != nil {
 		return fmt.Errorf("could not write composer.json: %w", err)
 	}
 

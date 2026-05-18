@@ -259,13 +259,13 @@ var projectCI = &cobra.Command{
 
 			for _, source := range sources {
 				if _, err := os.Stat(path.Join(source.Path, "Resources", "public", "administration", "css")); err == nil {
-					if err := os.WriteFile(path.Join(source.Path, "Resources", ".administration-css"), []byte{}, os.ModePerm); err != nil {
+					if err := os.WriteFile(path.Join(source.Path, "Resources", ".administration-css"), []byte{}, 0o644); err != nil {
 						return err
 					}
 				}
 
 				if _, err := os.Stat(path.Join(source.Path, "Resources", "public", "administration", "js")); err == nil {
-					if err := os.WriteFile(path.Join(source.Path, "Resources", ".administration-js"), []byte{}, os.ModePerm); err != nil {
+					if err := os.WriteFile(path.Join(source.Path, "Resources", ".administration-js"), []byte{}, 0o644); err != nil {
 						return err
 					}
 				}
@@ -279,11 +279,11 @@ var projectCI = &cobra.Command{
 				return err
 			}
 
-			if err := os.WriteFile(path.Join(args[0], "vendor", "shopware", "administration", "Resources", ".administration-js"), []byte{}, os.ModePerm); err != nil {
+			if err := os.WriteFile(path.Join(args[0], "vendor", "shopware", "administration", "Resources", ".administration-js"), []byte{}, 0o644); err != nil {
 				return err
 			}
 
-			if err := os.WriteFile(path.Join(args[0], "vendor", "shopware", "administration", "Resources", ".administration-css"), []byte{}, os.ModePerm); err != nil {
+			if err := os.WriteFile(path.Join(args[0], "vendor", "shopware", "administration", "Resources", ".administration-css"), []byte{}, 0o644); err != nil {
 				return err
 			}
 
@@ -310,7 +310,7 @@ func createEmptySnippetFolder(root string) error {
 	for _, dir := range dirs {
 		fullPath := path.Join(root, dir)
 
-		if err := os.MkdirAll(fullPath, os.ModePerm); err != nil {
+		if err := os.MkdirAll(fullPath, 0o755); err != nil {
 			return err
 		}
 
@@ -442,7 +442,7 @@ func cleanupAdministrationFiles(ctx context.Context, folder string) error {
 					return err
 				}
 
-				if err := os.WriteFile(path.Join(folder, language), data, os.ModePerm); err != nil {
+				if err := os.WriteFile(path.Join(folder, language), data, 0o644); err != nil {
 					return err
 				}
 
@@ -473,7 +473,7 @@ func cleanupAdministrationFiles(ctx context.Context, folder string) error {
 				return err
 			}
 
-			if err := os.WriteFile(path.Join(folder, language), mergedData, os.ModePerm); err != nil {
+			if err := os.WriteFile(path.Join(folder, language), mergedData, 0o644); err != nil {
 				return err
 			}
 		}
@@ -487,7 +487,7 @@ func cleanupAdministrationFiles(ctx context.Context, folder string) error {
 		logging.FromContext(ctx).Infof("Migrating generated snippet file for %s", folder)
 
 		snippetFolder := path.Join(adminFolder, "src", "app", "snippet")
-		if err := os.MkdirAll(snippetFolder, os.ModePerm); err != nil {
+		if err := os.MkdirAll(snippetFolder, 0o755); err != nil {
 			return err
 		}
 
@@ -498,7 +498,7 @@ func cleanupAdministrationFiles(ctx context.Context, folder string) error {
 		}
 
 		logging.FromContext(ctx).Infof("Creating empty main.js for %s", folder)
-		return os.WriteFile(path.Join(adminFolder, "src", "main.js"), []byte(""), os.ModePerm)
+		return os.WriteFile(path.Join(adminFolder, "src", "main.js"), []byte(""), 0o644)
 	}
 
 	return nil
@@ -545,7 +545,7 @@ func cleanupJavaScriptSourceMaps(folder string) error {
 
 		overwrittenContent := strings.ReplaceAll(string(content), expectedSourceMapComment, "")
 
-		return os.WriteFile(expectedJsFile, []byte(overwrittenContent), os.ModePerm)
+		return os.WriteFile(expectedJsFile, []byte(overwrittenContent), 0o644)
 	})
 }
 

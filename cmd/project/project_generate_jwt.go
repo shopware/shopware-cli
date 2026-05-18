@@ -43,7 +43,7 @@ var projectNewJWTCmd = &cobra.Command{
 		jwtFolder := path.Join(projectRoot, "config", "jwt")
 
 		if _, err := os.Stat(jwtFolder); os.IsNotExist(err) {
-			if err := os.MkdirAll(jwtFolder, os.ModePerm); err != nil {
+			if err := os.MkdirAll(jwtFolder, 0o700); err != nil {
 				return err
 			}
 		}

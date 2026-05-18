@@ -46,7 +46,7 @@ func SetupTools(ctx context.Context, currentVersion string) error {
 	}
 
 	logging.FromContext(ctx).Debugf("Using tool directory: %s", toolsDir)
-	if err := os.MkdirAll(toolsDir, os.ModePerm); err != nil {
+	if err := os.MkdirAll(toolsDir, 0o755); err != nil {
 		return fmt.Errorf("failed to create directory %s: %w", toolsDir, err)
 	}
 
@@ -91,7 +91,7 @@ func unpackFile(fs embed.FS, filePath, unpackDir string) error {
 
 	for _, file := range f {
 		if file.IsDir() {
-			if err := os.MkdirAll(path.Join(unpackDir, file.Name()), os.ModePerm); err != nil {
+			if err := os.MkdirAll(path.Join(unpackDir, file.Name()), 0o755); err != nil {
 				return fmt.Errorf("failed to create directory %s: %w", path.Join(unpackDir, file.Name()), err)
 			}
 
@@ -104,7 +104,7 @@ func unpackFile(fs embed.FS, filePath, unpackDir string) error {
 				return fmt.Errorf("failed to read file %s: %w", path.Join(filePath, file.Name()), err)
 			}
 
-			if err := os.WriteFile(path.Join(unpackDir, file.Name()), content, os.ModePerm); err != nil {
+			if err := os.WriteFile(path.Join(unpackDir, file.Name()), content, 0o644); err != nil {
 				return fmt.Errorf("failed to write file %s: %w", path.Join(unpackDir, file.Name()), err)
 			}
 		}

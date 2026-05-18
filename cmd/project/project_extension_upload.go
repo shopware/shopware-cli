@@ -91,7 +91,7 @@ var projectExtensionUploadCmd = &cobra.Command{
 
 			extDir := fmt.Sprintf("%s/%s/", tempDir, extName)
 
-			err = os.Mkdir(extDir, os.ModePerm)
+			err = os.Mkdir(extDir, 0o755)
 			if err != nil {
 				return fmt.Errorf("create temp directory: %w", err)
 			}
@@ -297,7 +297,7 @@ func increaseExtensionVersion(ctx context.Context, ext extension.Extension) erro
 		newManifest = strings.ReplaceAll(newManifest, "xmlns:_xmlns=\"xmlns\" _xmlns:xsi=", "xmlns:xsi=")
 		newManifest = strings.ReplaceAll(newManifest, "xmlns:_XMLSchema-instance=\"http://www.w3.org/2001/XMLSchema-instance\" _XMLSchema-instance:noNamespaceSchemaLocation=", "xsi:noNamespaceSchemaLocation=")
 
-		if err := os.WriteFile(manifestPath, []byte(newManifest), os.ModePerm); err != nil {
+		if err := os.WriteFile(manifestPath, []byte(newManifest), 0o644); err != nil {
 			return err
 		}
 
@@ -337,7 +337,7 @@ func increaseExtensionVersion(ctx context.Context, ext extension.Extension) erro
 		return err
 	}
 
-	if err := os.WriteFile(composerJsonPath, composerJsonContent, os.ModePerm); err != nil {
+	if err := os.WriteFile(composerJsonPath, composerJsonContent, 0o644); err != nil {
 		return err
 	}
 
