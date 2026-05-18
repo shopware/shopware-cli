@@ -8,8 +8,6 @@ import (
 	"strings"
 
 	"github.com/shyim/go-version"
-
-	"github.com/shopware/shopware-cli/logging"
 )
 
 // SecurityAdvisory describes a single packagist security advisory for a package.
@@ -64,15 +62,11 @@ func GetShopwareSecurityAdvisories(ctx context.Context) ([]SecurityAdvisory, err
 	}
 	req.Header.Set("User-Agent", "Shopware CLI")
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := httpClient.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("fetch advisories: %w", err)
 	}
-	defer func() {
-		if err := resp.Body.Close(); err != nil {
-			logging.FromContext(ctx).Errorf("Cannot close response body: %v", err)
-		}
-	}()
+	defer closeResponseBody(ctx, resp)
 
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("fetch advisories: %s", resp.Status)
