@@ -95,7 +95,7 @@ func checkSecurityAdvisories(ctx context.Context, opts *createOptions, chosenVer
 		var continueAnyway string
 		if err := huh.NewForm(huh.NewGroup(
 			tui.NewYesNo().
-				Title(fmt.Sprintf("Shopware %s is affected by %d known security advisor%s", chosenVersion, len(matchingAdvisories), pluralize(len(matchingAdvisories), "y", "ies"))).
+				Title(fmt.Sprintf("Shopware %s is affected by %d known security %s", chosenVersion, len(matchingAdvisories), pluralize(len(matchingAdvisories), "advisory", "advisories"))).
 				Description("Continuing will disable composer's audit blocking (--no-audit) so installation can proceed. If you continue, we strongly recommend installing the Shopware Security plugin (https://store.shopware.com/en/swag136939272659f/shopware-6-security-plugin.html) which backports security fixes to older versions. Do you want to continue anyway?").
 				Value(&continueAnyway),
 		)).Run(); err != nil {
