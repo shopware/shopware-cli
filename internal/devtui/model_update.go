@@ -104,11 +104,20 @@ func (m Model) updateConfigTab(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	if msg.String() == keyEnter {
 		if m.configTab.cursor == fieldSave && m.configTab.modified {
 			m.configTab.ApplyToConfig(m.config)
-			_ = shop.WriteConfig(m.config, m.projectRoot)
-			if localCfg := m.configTab.LocalConfig(); localCfg != nil {
-				_ = shop.WriteLocalConfig(localCfg, m.projectRoot)
+			cfg := m.config
+			localCfg := m.configTab.LocalConfig()
+			projectRoot := m.projectRoot
+			return m, func() tea.Msg {
+				if err := shop.WriteConfig(cfg, projectRoot); err != nil {
+					return configSavedMsg{err: err}
+				}
+				if localCfg != nil {
+					if err := shop.WriteLocalConfig(localCfg, projectRoot); err != nil {
+						return configSavedMsg{err: err}
+					}
+				}
+				return configSavedMsg{}
 			}
-			return m, func() tea.Msg { return configSavedMsg{} }
 		}
 		if picker := m.configTab.PickerForCursor(); picker != nil {
 			m.modal = picker

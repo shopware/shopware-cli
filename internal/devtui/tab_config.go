@@ -49,12 +49,13 @@ type ConfigModel struct {
 
 	saved    bool
 	modified bool
+	err      error
 
 	width  int
 	height int
 }
 
-type configSavedMsg struct{}
+type configSavedMsg struct{ err error }
 
 func NewConfigModel(cfg *shop.Config) ConfigModel {
 	m := ConfigModel{
@@ -108,9 +109,15 @@ func (m *ConfigModel) SetSize(width, height int) {
 }
 
 func (m ConfigModel) Update(msg tea.Msg) (ConfigModel, tea.Cmd) {
-	if _, ok := msg.(configSavedMsg); ok {
+	if saved, ok := msg.(configSavedMsg); ok {
+		if saved.err != nil {
+			m.err = saved.err
+			m.saved = false
+			return m, nil
+		}
 		m.saved = true
 		m.modified = false
+		m.err = nil
 		return m, nil
 	}
 	return m, nil
@@ -192,6 +199,7 @@ func (m *ConfigModel) ApplyPickerValue(field configField, value string) bool {
 	if changed {
 		m.modified = true
 		m.saved = false
+		m.err = nil
 	}
 	return changed
 }
@@ -299,6 +307,12 @@ func (m ConfigModel) View(width, height int) string {
 		s.WriteString(normalIndent)
 	}
 	switch {
+	case m.err != nil && m.cursor == fieldSave:
+		s.WriteString(activeBtnStyle.Render("Retry Save"))
+	case m.err != nil:
+		s.WriteString(warningBadgeStyle.Render("save failed"))
+		s.WriteString("  ")
+		s.WriteString(helpStyle.Render("Navigate to Retry Save"))
 	case m.saved:
 		s.WriteString(activeBadgeStyle.Render("Saved"))
 		s.WriteString("  ")
@@ -313,6 +327,12 @@ func (m ConfigModel) View(width, height int) string {
 		s.WriteString(helpStyle.Render("No changes"))
 	}
 	s.WriteString("\n")
+
+	if m.err != nil {
+		s.WriteString("  ")
+		s.WriteString(errorStyle.Render("Could not write config: " + m.err.Error()))
+		s.WriteString("\n")
+	}
 
 	return s.String()
 }
