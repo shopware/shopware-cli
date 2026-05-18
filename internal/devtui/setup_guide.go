@@ -11,6 +11,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 
+	dockerpkg "github.com/shopware/shopware-cli/internal/docker"
 	"github.com/shopware/shopware-cli/internal/packagist"
 	"github.com/shopware/shopware-cli/internal/shop"
 	"github.com/shopware/shopware-cli/internal/tui"
@@ -29,13 +30,10 @@ const (
 	setupStepDone
 )
 
-var profilerChoices = []string{"none", "xdebug", "blackfire", "tideways", "pcov", "spx"}
-
-// profilerNeedsCreds reports whether the given profiler choice requires
-// additional credentials to be collected from the user.
-func profilerNeedsCreds(profiler string) bool {
-	return profiler == "blackfire" || profiler == "tideways"
-}
+// profilerChoices is the list of profiler options shown in the setup guide UI.
+// The first entry uses "none" for display; internally it maps to "" (empty string)
+// which is the canonical value stored in config.
+var profilerChoices = []string{"none", dockerpkg.ProfilerXdebug, dockerpkg.ProfilerBlackfire, dockerpkg.ProfilerTideways, dockerpkg.ProfilerPcov, dockerpkg.ProfilerSpx}
 
 type setupGuide struct {
 	step                  setupStep
@@ -380,7 +378,7 @@ func (sg *setupGuide) updateDockerProfiler(msg tea.KeyPressMsg) (setupGuide, tea
 		}
 	case keyEnter:
 		profiler := profilerChoices[sg.profilerCursor]
-		if !profilerNeedsCreds(profiler) {
+		if !dockerpkg.ProfilerNeedsCredentials(profiler) {
 			sg.step = setupStepReview
 			return *sg, nil
 		}
@@ -478,7 +476,7 @@ func stepBadge(stepNum, totalSteps int) string {
 func (sg setupGuide) totalSteps() int {
 	// admin user, admin password, PHP version, profiler, review
 	total := 5
-	if profilerNeedsCreds(profilerChoices[sg.profilerCursor]) {
+	if dockerpkg.ProfilerNeedsCredentials(profilerChoices[sg.profilerCursor]) {
 		total++
 	}
 	return total
@@ -500,7 +498,7 @@ func (sg setupGuide) stepNum(step setupStep) int {
 	case setupStepProfilerCreds:
 		return 5
 	case setupStepReview:
-		if profilerNeedsCreds(profilerChoices[sg.profilerCursor]) {
+		if dockerpkg.ProfilerNeedsCredentials(profilerChoices[sg.profilerCursor]) {
 			return 6
 		}
 		return 5

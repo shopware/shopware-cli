@@ -13,6 +13,24 @@ import (
 
 const nodeVersion = "24"
 
+// Profiler constants for the Docker dev environment.
+const (
+	ProfilerBlackfire = "blackfire"
+	ProfilerTideways  = "tideways"
+	ProfilerXdebug    = "xdebug"
+	ProfilerPcov      = "pcov"
+	ProfilerSpx       = "spx"
+)
+
+// Profilers is the ordered list of profiler names for the Docker dev environment.
+// The empty string means "no profiler".
+var Profilers = []string{"", ProfilerXdebug, ProfilerBlackfire, ProfilerTideways, ProfilerPcov, ProfilerSpx}
+
+// ProfilerNeedsCredentials reports whether the given profiler requires API credentials.
+func ProfilerNeedsCredentials(profiler string) bool {
+	return profiler == ProfilerBlackfire || profiler == ProfilerTideways
+}
+
 type ComposeOptions struct {
 	PHPVersion           string
 	PHPProfiler          string
