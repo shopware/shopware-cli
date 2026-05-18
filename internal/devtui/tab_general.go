@@ -134,7 +134,9 @@ func (m GeneralModel) View(width, height int) string {
 	s.WriteString(tui.TitleStyle.Render("Admin Access"))
 	s.WriteString("\n")
 	if m.username == "" && m.password == "" {
-		s.WriteString("  " + helpStyle.Render("Credentials will appear here once Shopware is installed.") + "\n")
+		s.WriteString("  ")
+		s.WriteString(helpStyle.Render("Credentials will appear here once Shopware is installed."))
+		s.WriteString("\n")
 	} else {
 		s.WriteString(tui.KVRow("Username", valueStyle.Render(m.username)))
 		s.WriteString(tui.KVRow("Password", secretStyle.Render(m.password)))

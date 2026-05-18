@@ -129,6 +129,10 @@ func streamCmdOutput(cmd *exec.Cmd, ch chan<- string, useStdout bool) error {
 	}
 	close(ch)
 
+	if err := scanner.Err(); err != nil {
+		_ = cmd.Wait()
+		return err
+	}
 	return cmd.Wait()
 }
 

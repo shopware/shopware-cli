@@ -149,9 +149,17 @@ func buildTabHeader(activeTab int, width int) string {
 		r2.WriteString(bdr("│"))
 		num := fmt.Sprintf(" %d ", i+1)
 		if i == activeTab {
-			r2.WriteString("  " + activeNumStyle.Render(num) + " " + activeLabelStyle.Render(name) + "  ")
+			r2.WriteString("  ")
+			r2.WriteString(activeNumStyle.Render(num))
+			r2.WriteString(" ")
+			r2.WriteString(activeLabelStyle.Render(name))
+			r2.WriteString("  ")
 		} else {
-			r2.WriteString("  " + inactiveNumStyle.Render(num) + " " + inactiveLabelStyle.Render(name) + "  ")
+			r2.WriteString("  ")
+			r2.WriteString(inactiveNumStyle.Render(num))
+			r2.WriteString(" ")
+			r2.WriteString(inactiveLabelStyle.Render(name))
+			r2.WriteString("  ")
 		}
 	}
 	r2.WriteString(bdr("│"))
@@ -161,7 +169,8 @@ func buildTabHeader(activeTab int, width int) string {
 	if fill < 0 {
 		fill = 0
 	}
-	r2.WriteString(strings.Repeat(" ", fill) + branding)
+	r2.WriteString(strings.Repeat(" ", fill))
+	r2.WriteString(branding)
 
 	var r3 strings.Builder
 	if activeTab == 0 {
