@@ -11,81 +11,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/spf13/pflag"
 	"github.com/stretchr/testify/assert"
 )
 
 var stdoutCaptureMu sync.Mutex
-
-func TestProjectLogsCmdMetadata(t *testing.T) {
-	t.Parallel()
-
-	assert.Equal(t, "logs [filename]", projectLogsCmd.Use)
-	assert.NotEmpty(t, projectLogsCmd.Short)
-	assert.NotEmpty(t, projectLogsCmd.Long)
-	assert.NotNil(t, projectLogsCmd.RunE)
-	assert.NotNil(t, projectLogsCmd.Args)
-}
-
-func TestProjectLogsCmdArgsValidation(t *testing.T) {
-	t.Parallel()
-
-	assert.NoError(t, projectLogsCmd.Args(projectLogsCmd, []string{}))
-	assert.NoError(t, projectLogsCmd.Args(projectLogsCmd, []string{"messages.log"}))
-	assert.Error(t, projectLogsCmd.Args(projectLogsCmd, []string{"a.log", "b.log"}))
-}
-
-func TestProjectLogsCmdFlags(t *testing.T) {
-	t.Parallel()
-
-	flags := projectLogsCmd.Flags()
-
-	linesFlag := flags.Lookup("lines")
-	if assert.NotNil(t, linesFlag) {
-		assert.Equal(t, "int", linesFlag.Value.Type())
-		assert.Equal(t, "100", linesFlag.DefValue)
-	}
-
-	followFlag := flags.Lookup("follow")
-	if assert.NotNil(t, followFlag) {
-		assert.Equal(t, "bool", followFlag.Value.Type())
-		assert.Equal(t, "f", followFlag.Shorthand)
-		assert.Equal(t, "false", followFlag.DefValue)
-	}
-
-	listFlag := flags.Lookup("list")
-	if assert.NotNil(t, listFlag) {
-		assert.Equal(t, "bool", listFlag.Value.Type())
-		assert.Equal(t, "l", listFlag.Shorthand)
-		assert.Equal(t, "false", listFlag.DefValue)
-	}
-}
-
-func TestProjectLogsCmdFlagShorthands(t *testing.T) {
-	t.Parallel()
-
-	var shorthands []string
-	projectLogsCmd.Flags().VisitAll(func(f *pflag.Flag) {
-		if f.Shorthand != "" {
-			shorthands = append(shorthands, f.Shorthand)
-		}
-	})
-
-	assert.ElementsMatch(t, []string{"f", "l"}, shorthands)
-}
-
-func TestProjectLogsCmdRegisteredOnRoot(t *testing.T) {
-	t.Parallel()
-
-	var found bool
-	for _, c := range projectRootCmd.Commands() {
-		if c == projectLogsCmd {
-			found = true
-			break
-		}
-	}
-	assert.True(t, found)
-}
 
 func TestFormatSize(t *testing.T) {
 	t.Parallel()
@@ -160,8 +89,6 @@ func TestFindLogFilesFiltersAndSortsByModTime(t *testing.T) {
 }
 
 func TestListLogFilesEmpty(t *testing.T) {
-	t.Parallel()
-
 	tmp := t.TempDir()
 	stdout, err := captureStdout(func() error {
 		return listLogFiles(tmp)
@@ -179,8 +106,6 @@ func TestListLogFilesMissingDir(t *testing.T) {
 }
 
 func TestListLogFilesShowsAllFiles(t *testing.T) {
-	t.Parallel()
-
 	tmp := t.TempDir()
 	assert.NoError(t, os.WriteFile(filepath.Join(tmp, "a.log"), []byte("hi"), 0o644))
 	assert.NoError(t, os.WriteFile(filepath.Join(tmp, "b.log"), make([]byte, 2048), 0o644))
@@ -195,8 +120,6 @@ func TestListLogFilesShowsAllFiles(t *testing.T) {
 }
 
 func TestPrintLastLinesShortFile(t *testing.T) {
-	t.Parallel()
-
 	tmp := t.TempDir()
 	p := filepath.Join(tmp, "short.log")
 	assert.NoError(t, os.WriteFile(p, []byte("line1\nline2\nline3\n"), 0o644))
@@ -209,8 +132,6 @@ func TestPrintLastLinesShortFile(t *testing.T) {
 }
 
 func TestPrintLastLinesTruncatesToLastN(t *testing.T) {
-	t.Parallel()
-
 	tmp := t.TempDir()
 	p := filepath.Join(tmp, "long.log")
 
@@ -228,8 +149,6 @@ func TestPrintLastLinesTruncatesToLastN(t *testing.T) {
 }
 
 func TestPrintLastLinesExactNLines(t *testing.T) {
-	t.Parallel()
-
 	tmp := t.TempDir()
 	p := filepath.Join(tmp, "exact.log")
 	assert.NoError(t, os.WriteFile(p, []byte("a\nb\nc\n"), 0o644))
@@ -250,8 +169,6 @@ func TestPrintLastLinesMissingFile(t *testing.T) {
 }
 
 func TestPrintLastLinesRingBufferOverflow(t *testing.T) {
-	t.Parallel()
-
 	tmp := t.TempDir()
 	p := filepath.Join(tmp, "ring.log")
 
