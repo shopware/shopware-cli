@@ -505,3 +505,40 @@ func TestConfigDump_EnableClean(t *testing.T) {
 		assert.Equal(t, "cart", config.NoData[3])
 	})
 }
+
+func TestConfigBuildMJMLResolveIncludePaths(t *testing.T) {
+	projectRoot := filepath.FromSlash("/abs/project")
+
+	t.Run("returns nil when no paths configured", func(t *testing.T) {
+		c := ConfigBuildMJML{}
+		assert.Nil(t, c.ResolveIncludePaths(projectRoot))
+	})
+
+	t.Run("relative paths are joined with project root", func(t *testing.T) {
+		c := ConfigBuildMJML{IncludePaths: []string{
+			"shared/email",
+			filepath.FromSlash("custom/static-plugins/Other/Resources/views/email/_includes"),
+		}}
+		got := c.ResolveIncludePaths(projectRoot)
+		want := []string{
+			filepath.Join(projectRoot, "shared/email"),
+			filepath.Join(projectRoot, "custom/static-plugins/Other/Resources/views/email/_includes"),
+		}
+		assert.Equal(t, want, got)
+	})
+
+	t.Run("absolute paths are returned unchanged", func(t *testing.T) {
+		abs := filepath.FromSlash("/somewhere/else/_includes")
+		c := ConfigBuildMJML{IncludePaths: []string{abs}}
+		got := c.ResolveIncludePaths(projectRoot)
+		assert.Equal(t, []string{abs}, got)
+	})
+
+	t.Run("mixed entries are resolved independently", func(t *testing.T) {
+		abs := filepath.FromSlash("/somewhere/else/_includes")
+		c := ConfigBuildMJML{IncludePaths: []string{"shared/email", abs}}
+		got := c.ResolveIncludePaths(projectRoot)
+		want := []string{filepath.Join(projectRoot, "shared/email"), abs}
+		assert.Equal(t, want, got)
+	})
+}

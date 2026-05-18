@@ -63,6 +63,18 @@ func newMockExec(t *testing.T, scriptContent string) {
 	t.Setenv("PATH", fmt.Sprintf("%s%c%s", binDir, filepath.ListSeparator, originalPath))
 }
 
+// newArgRecordingMockExec creates a mock npx that writes its full argv to a
+// file so tests can assert which CLI flags Compile forwarded.
+func newArgRecordingMockExec(t *testing.T, argsFile string) {
+	t.Helper()
+	script := fmt.Sprintf(`#!/bin/sh
+printf '%%s\n' "$@" > %q
+echo "<h1>Hello</h1>"
+exit 0
+`, argsFile)
+	newMockExec(t, script)
+}
+
 func TestCompile(t *testing.T) {
 	ctx := t.Context()
 
@@ -82,7 +94,7 @@ exit 0`
 			}
 		}()
 
-		output, err := Compile(ctx, tmpFile.Name())
+		output, err := Compile(ctx, tmpFile.Name(), CompileOptions{})
 		if err != nil {
 			t.Errorf("expected no error, got %v", err)
 		}
@@ -108,7 +120,7 @@ exit 1`
 			}
 		}()
 
-		_, err = Compile(ctx, tmpFile.Name())
+		_, err = Compile(ctx, tmpFile.Name(), CompileOptions{})
 		if err == nil {
 			t.Error("expected an error, got nil")
 		}
@@ -137,13 +149,83 @@ exit 0`
 			}
 		}()
 
-		output, err := Compile(ctx, tmpFile.Name())
+		output, err := Compile(ctx, tmpFile.Name(), CompileOptions{})
 		if err != nil {
 			t.Errorf("expected no error, got %v", err)
 		}
 
 		if strings.TrimSpace(output) != "<h1>Hello</h1>" {
 			t.Errorf("unexpected output: got %q", output)
+		}
+	})
+
+	t.Run("default options pass no include flags", func(t *testing.T) {
+		argsFile := filepath.Join(t.TempDir(), "args.txt")
+		newArgRecordingMockExec(t, argsFile)
+
+		tmpFile, err := os.CreateTemp(t.TempDir(), "test.mjml")
+		if err != nil {
+			t.Fatalf("failed to create temp file: %v", err)
+		}
+		defer os.Remove(tmpFile.Name())
+
+		if _, err := Compile(ctx, tmpFile.Name(), CompileOptions{}); err != nil {
+			t.Fatalf("compile failed: %v", err)
+		}
+
+		args := readArgs(t, argsFile)
+		if containsArg(args, "--config.allowIncludes=true") {
+			t.Errorf("did not expect --config.allowIncludes=true with default options, got %v", args)
+		}
+		for _, a := range args {
+			if strings.HasPrefix(a, "--config.includePath=") {
+				t.Errorf("did not expect --config.includePath flag with default options, got %q", a)
+			}
+		}
+	})
+
+	t.Run("allow_includes forwards --config.allowIncludes=true", func(t *testing.T) {
+		argsFile := filepath.Join(t.TempDir(), "args.txt")
+		newArgRecordingMockExec(t, argsFile)
+
+		tmpFile, err := os.CreateTemp(t.TempDir(), "test.mjml")
+		if err != nil {
+			t.Fatalf("failed to create temp file: %v", err)
+		}
+		defer os.Remove(tmpFile.Name())
+
+		if _, err := Compile(ctx, tmpFile.Name(), CompileOptions{AllowIncludes: true}); err != nil {
+			t.Fatalf("compile failed: %v", err)
+		}
+
+		args := readArgs(t, argsFile)
+		if !containsArg(args, "--config.allowIncludes=true") {
+			t.Errorf("expected --config.allowIncludes=true in args, got %v", args)
+		}
+	})
+
+	t.Run("include_paths forwards JSON-encoded array and implies allow_includes", func(t *testing.T) {
+		argsFile := filepath.Join(t.TempDir(), "args.txt")
+		newArgRecordingMockExec(t, argsFile)
+
+		tmpFile, err := os.CreateTemp(t.TempDir(), "test.mjml")
+		if err != nil {
+			t.Fatalf("failed to create temp file: %v", err)
+		}
+		defer os.Remove(tmpFile.Name())
+
+		opts := CompileOptions{IncludePaths: []string{"../_includes", "../_shared"}}
+		if _, err := Compile(ctx, tmpFile.Name(), opts); err != nil {
+			t.Fatalf("compile failed: %v", err)
+		}
+
+		args := readArgs(t, argsFile)
+		if !containsArg(args, "--config.allowIncludes=true") {
+			t.Errorf("expected include_paths to imply --config.allowIncludes=true, got %v", args)
+		}
+		want := `--config.includePath=["../_includes","../_shared"]`
+		if !containsArg(args, want) {
+			t.Errorf("expected %q in args, got %v", want, args)
 		}
 	})
 }
@@ -194,7 +276,7 @@ exit 0`
 			t.Fatalf("failed to write test file: %v", err)
 		}
 
-		err := ProcessDirectory(ctx, tmpDir)
+		err := ProcessDirectory(ctx, tmpDir, CompileOptions{})
 		if err != nil {
 			t.Fatalf("ProcessDirectory failed: %v", err)
 		}
@@ -254,7 +336,7 @@ exit 1`
 			t.Fatalf("failed to write test file: %v", err)
 		}
 
-		err := ProcessDirectory(ctx, tmpDir)
+		err := ProcessDirectory(ctx, tmpDir, CompileOptions{})
 		if err == nil {
 			t.Fatal("expected ProcessDirectory to return an error, but it didn't")
 		}
@@ -267,4 +349,112 @@ exit 1`
 			t.Error("original mjml file should still exist after compilation failure")
 		}
 	})
+
+	t.Run("forwards include options to each file", func(t *testing.T) {
+		argsFile := filepath.Join(t.TempDir(), "args.txt")
+		newArgRecordingMockExec(t, argsFile)
+
+		tmpDir := t.TempDir()
+		mailDir := filepath.Join(tmpDir, "mail", "welcome")
+		if err := os.MkdirAll(mailDir, 0755); err != nil {
+			t.Fatalf("failed to create test dir: %v", err)
+		}
+		mjmlFile := filepath.Join(mailDir, "html.mjml")
+		if err := os.WriteFile(mjmlFile, []byte("<mjml></mjml>"), 0644); err != nil {
+			t.Fatalf("failed to write test file: %v", err)
+		}
+
+		opts := CompileOptions{AllowIncludes: true, IncludePaths: []string{"../_includes"}}
+		if err := ProcessDirectory(ctx, tmpDir, opts); err != nil {
+			t.Fatalf("ProcessDirectory failed: %v", err)
+		}
+
+		args := readArgs(t, argsFile)
+		if !containsArg(args, "--config.allowIncludes=true") {
+			t.Errorf("expected --config.allowIncludes=true, got %v", args)
+		}
+		if !containsArg(args, `--config.includePath=["../_includes"]`) {
+			t.Errorf("expected JSON-encoded includePath, got %v", args)
+		}
+	})
+}
+
+func readArgs(t *testing.T, path string) []string {
+	t.Helper()
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("failed to read args file: %v", err)
+	}
+	return strings.Split(strings.TrimRight(string(data), "\n"), "\n")
+}
+
+func containsArg(args []string, want string) bool {
+	for _, a := range args {
+		if a == want {
+			return true
+		}
+	}
+	return false
+}
+
+func TestNewCompileOptions(t *testing.T) {
+	t.Run("returns zero value when nothing is opted in", func(t *testing.T) {
+		opts := NewCompileOptions("/abs/search", false, nil)
+		if opts.AllowIncludes {
+			t.Errorf("expected AllowIncludes=false, got true")
+		}
+		if len(opts.IncludePaths) != 0 {
+			t.Errorf("expected no IncludePaths, got %v", opts.IncludePaths)
+		}
+	})
+
+	t.Run("allow_includes auto-allowlists the search path root", func(t *testing.T) {
+		opts := NewCompileOptions("/abs/search", true, nil)
+		if !opts.AllowIncludes {
+			t.Errorf("expected AllowIncludes=true")
+		}
+		want := []string{"/abs/search"}
+		if !slicesEqual(opts.IncludePaths, want) {
+			t.Errorf("expected IncludePaths=%v, got %v", want, opts.IncludePaths)
+		}
+	})
+
+	t.Run("extra include paths are appended after the search path root", func(t *testing.T) {
+		opts := NewCompileOptions("/abs/search", true, []string{"/abs/other", "/abs/shared"})
+		want := []string{"/abs/search", "/abs/other", "/abs/shared"}
+		if !slicesEqual(opts.IncludePaths, want) {
+			t.Errorf("expected IncludePaths=%v, got %v", want, opts.IncludePaths)
+		}
+	})
+
+	t.Run("extra include paths alone imply allow_includes", func(t *testing.T) {
+		opts := NewCompileOptions("/abs/search", false, []string{"/abs/shared"})
+		if !opts.AllowIncludes {
+			t.Errorf("expected extras to imply AllowIncludes=true")
+		}
+		want := []string{"/abs/search", "/abs/shared"}
+		if !slicesEqual(opts.IncludePaths, want) {
+			t.Errorf("expected IncludePaths=%v, got %v", want, opts.IncludePaths)
+		}
+	})
+
+	t.Run("empty search path root is skipped", func(t *testing.T) {
+		opts := NewCompileOptions("", true, []string{"/abs/shared"})
+		want := []string{"/abs/shared"}
+		if !slicesEqual(opts.IncludePaths, want) {
+			t.Errorf("expected IncludePaths=%v, got %v", want, opts.IncludePaths)
+		}
+	})
+}
+
+func slicesEqual(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
 }
