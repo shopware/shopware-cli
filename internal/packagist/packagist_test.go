@@ -74,9 +74,9 @@ func TestPackageResponseHasPackage(t *testing.T) {
 }
 
 func TestGetPackages(t *testing.T) {
-	originalClient := http.DefaultClient
+	originalClient := httpClient
 	defer func() {
-		http.DefaultClient = originalClient
+		httpClient = originalClient
 	}()
 
 	t.Run("successful request", func(t *testing.T) {
@@ -102,7 +102,7 @@ func TestGetPackages(t *testing.T) {
 		}))
 		defer server.Close()
 
-		http.DefaultClient = &http.Client{
+		httpClient = &http.Client{
 			Transport: &mockTransport{
 				server: server,
 			},
@@ -122,7 +122,7 @@ func TestGetPackages(t *testing.T) {
 		}))
 		defer server.Close()
 
-		http.DefaultClient = &http.Client{
+		httpClient = &http.Client{
 			Transport: &mockTransport{
 				server: server,
 			},
@@ -143,7 +143,7 @@ func TestGetPackages(t *testing.T) {
 		}))
 		defer server.Close()
 
-		http.DefaultClient = &http.Client{
+		httpClient = &http.Client{
 			Transport: &mockTransport{
 				server: server,
 			},
@@ -161,7 +161,7 @@ func TestGetPackages(t *testing.T) {
 		}))
 		defer server.Close()
 
-		http.DefaultClient = &http.Client{
+		httpClient = &http.Client{
 			Transport: &mockTransport{
 				server: server,
 			},
@@ -186,9 +186,9 @@ func TestGetPackages(t *testing.T) {
 }
 
 func TestGetPackageVersions(t *testing.T) {
-	originalClient := http.DefaultClient
+	originalClient := httpClient
 	defer func() {
-		http.DefaultClient = originalClient
+		httpClient = originalClient
 	}()
 
 	t.Run("successful request with composer unminify", func(t *testing.T) {
@@ -229,7 +229,7 @@ func TestGetPackageVersions(t *testing.T) {
 		}))
 		defer server.Close()
 
-		http.DefaultClient = &http.Client{
+		httpClient = &http.Client{
 			Transport: &mockTransport{
 				server: server,
 			},
@@ -266,7 +266,7 @@ func TestGetPackageVersions(t *testing.T) {
 		}))
 		defer server.Close()
 
-		http.DefaultClient = &http.Client{
+		httpClient = &http.Client{
 			Transport: &mockTransport{
 				server: server,
 			},
@@ -293,7 +293,7 @@ func TestGetPackageVersions(t *testing.T) {
 		}))
 		defer server.Close()
 
-		http.DefaultClient = &http.Client{
+		httpClient = &http.Client{
 			Transport: &mockTransport{
 				server: server,
 			},
@@ -312,7 +312,7 @@ func TestGetPackageVersions(t *testing.T) {
 		}))
 		defer server.Close()
 
-		http.DefaultClient = &http.Client{
+		httpClient = &http.Client{
 			Transport: &mockTransport{
 				server: server,
 			},

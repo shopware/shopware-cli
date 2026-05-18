@@ -8,8 +8,6 @@ import (
 	"net/http"
 	"regexp"
 	"strings"
-
-	"github.com/shopware/shopware-cli/logging"
 )
 
 const (
@@ -212,20 +210,15 @@ func getLatestFallbackVersion(ctx context.Context, branch string) (string, error
 
 	r.Header.Set("User-Agent", "shopware-cli")
 
-	resp, err := http.DefaultClient.Do(r)
+	resp, err := httpClient.Do(r)
 	if err != nil {
 		return "", err
 	}
+	defer closeResponseBody(ctx, resp)
 
 	if resp.StatusCode != http.StatusOK {
 		return "", fmt.Errorf("could not fetch kernel.php from branch %s", branch)
 	}
-
-	defer func() {
-		if err := resp.Body.Close(); err != nil {
-			logging.FromContext(context.Background()).Errorf("getLatestFallbackVersion: %v", err)
-		}
-	}()
 
 	content, err := io.ReadAll(resp.Body)
 	if err != nil {

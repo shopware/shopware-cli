@@ -7,9 +7,15 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/shopware/shopware-cli/logging"
 )
+
+// httpClient is the default HTTP client used for all packagist API requests.
+// It has a 30-second timeout to prevent indefinite hangs and avoids the
+// shared http.DefaultClient which is not safe to override in tests.
+var httpClient = &http.Client{Timeout: 30 * time.Second}
 
 type PackageResponse struct {
 	Packages map[string]map[string]PackageVersion `json:"packages"`
@@ -53,16 +59,11 @@ func GetAvailablePackagesFromShopwareStore(ctx context.Context, token string) (*
 	req.Header.Set("User-Agent", "Shopware CLI")
 	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := httpClient.Do(req)
 	if err != nil {
 		return nil, err
 	}
-
-	defer func() {
-		if err := resp.Body.Close(); err != nil {
-			logging.FromContext(ctx).Errorf("Cannot close response body: %v", err)
-		}
-	}()
+	defer closeResponseBody(ctx, resp)
 
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("failed to get packages: %s", resp.Status)
@@ -115,16 +116,11 @@ func GetShopwarePackageVersions(ctx context.Context) ([]ComposerPackageVersion, 
 
 	req.Header.Set("User-Agent", "Shopware CLI")
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := httpClient.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("fetch package versions: %w", err)
 	}
-
-	defer func() {
-		if err := resp.Body.Close(); err != nil {
-			logging.FromContext(ctx).Errorf("Cannot close response body: %v", err)
-		}
-	}()
+	defer closeResponseBody(ctx, resp)
 
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("fetch package versions: %s", resp.Status)
@@ -203,4 +199,11 @@ func cloneRawMessageMap(in map[string]json.RawMessage) map[string]json.RawMessag
 	}
 
 	return out
+}
+
+// closeResponseBody safely closes an HTTP response body, logging any error.
+func closeResponseBody(ctx context.Context, resp *http.Response) {
+	if err := resp.Body.Close(); err != nil {
+		logging.FromContext(ctx).Errorf("Cannot close response body: %v", err)
+	}
 }
