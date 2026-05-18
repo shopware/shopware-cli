@@ -15,7 +15,7 @@ import (
 	"github.com/shopware/shopware-cli/internal/tui"
 )
 
-func runCreateForm(cmd *cobra.Command, opts *createOptions, filteredVersions []*version.Version) error {
+func runCreateForm(cmd *cobra.Command, opts *createOptions, filteredVersions []*version.Version) error { //nolint:gocyclo
 	type minorGroup struct {
 		label    string
 		versions []string
