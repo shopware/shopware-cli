@@ -82,6 +82,79 @@ func TestUnregisteredTagFallback(t *testing.T) {
 	assert.Equal(t, src, nodes.Dump(0))
 }
 
+// TestNestedBlocksWithCommentsIdempotent is a regression test for a user
+// report: the legacy formatter was non-idempotent on nested {% block %}
+// structures whose innermost bodies contained a {# Twig comment #}. Each
+// parse → format pass added bytes (381 → 395 → 409 in the legacy parser,
+// because the inner comment's leading whitespace was being preserved into
+// the next RawNode chunk and then re-indented again on the next pass).
+//
+// The rewrite produces byte-identical output across passes. This test
+// pins that behavior with the exact template the user posted (a Shopware
+// admin component using nested {% block %}s with {# #} placeholders for
+// child themes to fill in).
+func TestNestedBlocksWithCommentsIdempotent(t *testing.T) {
+	src := `{% block swag_customized_products_option_type_base_tree %}
+<div class="swag-customized-products-option-type-modal-content-tree">
+    {% block swag_customized_products_option_type_base_tree_option_tree %}
+    <swag-customized-products-option-tree
+        ref="optionValueTree"
+        class="swag-customized-products-option-type-modal-content-tree__tree"
+        :versionContext="versionContext"
+        :option="option"
+        @option-valid="$emit('option-valid', $event)"
+        @option-value-change="setOptionValues"
+        @save-method-add="$emit('save-method-add', $event)"
+        @active-item-change="setActiveItem"
+    >
+            </swag-customized-products-option-tree>
+    {% endblock %}
+
+    {% block swag_customized_products_option_type_base_tree_content %}
+    <swag-customized-products-option-tree-content
+        class="swag-customized-products-option-type-modal-content-tree__form"
+        :data="activeItem"
+        :versionContext="versionContext"
+        :option="option"
+    >
+        <template #root-content>
+            {% block swag_customized_products_option_type_base_tree_content_root_component %}
+                        {# Add root content here #}
+            {% endblock %}
+        </template>
+
+        <template #content="{ data }">
+            {% block swag_customized_products_option_type_base_tree_content_component %}
+                        {# Add content here #}
+            {% endblock %}
+        </template>
+    </swag-customized-products-option-tree-content>
+    {% endblock %}
+</div>
+{% endblock %}`
+
+	cnl, err := NewAdminParser(src)
+	assert.NoError(t, err)
+	out1 := cnl.Dump(0)
+
+	cnl2, err := NewAdminParser(out1)
+	assert.NoError(t, err)
+	out2 := cnl2.Dump(0)
+	assert.Equal(t, out1, out2, "parse → format → parse → format must be byte-identical")
+
+	// And a third pass, since the legacy bug compounded across passes.
+	cnl3, err := NewAdminParser(out2)
+	assert.NoError(t, err)
+	out3 := cnl3.Dump(0)
+	assert.Equal(t, out2, out3, "third format pass must still be byte-identical")
+
+	// The user's complaint was specifically that the formatter added new
+	// lines on every pass. Pin a hard upper bound on the line count so a
+	// future change that re-introduces blank-line growth is caught.
+	lineCount := strings.Count(out1, "\n") + 1
+	assert.LessOrEqual(t, lineCount, 40, "formatted output should be ~38 lines, was %d", lineCount)
+}
+
 // TestParentRejectsArguments is a regression test for the {% parent foo %}
 // case. parent is supposed to take no arguments (or an empty `()`); silently
 // dropping unexpected args would hide real authoring mistakes when the
