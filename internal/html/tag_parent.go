@@ -1,5 +1,7 @@
 package html
 
+import "strings"
+
 func init() {
 	registerTag(TagSpec{
 		Name:  "parent",
@@ -8,6 +10,9 @@ func init() {
 }
 
 // parseParentTag handles both `{% parent %}` and `{% parent() %}`.
+// Anything else after `parent` (e.g. `{% parent foo %}`) is a parse error —
+// silently rewriting it to `{% parent() %}` would hide real authoring
+// mistakes from the verifier and formatter pipelines.
 func parseParentTag(p *parser, openTok token) (Node, error) {
 	if openTok.Type != tokTwigStmtOpen {
 		return nil, errAt(p.source, p.filename, openTok.Pos, "expected open delimiter for parent tag")
@@ -19,9 +24,14 @@ func parseParentTag(p *parser, openTok token) (Node, error) {
 	if identTok.Type != tokTwigIdent || identTok.Lit != "parent" {
 		return nil, errAt(p.source, p.filename, identTok.Pos, "expected 'parent'")
 	}
-	// Body may be empty or "()".
+	// Body must be empty or exactly "()" (optionally surrounded by
+	// whitespace). Anything else is rejected to avoid silently rewriting
+	// malformed tags.
 	if p.peek(0).Type == tokTwigRawExpr {
-		p.advance()
+		bodyTok := p.advance()
+		if body := strings.TrimSpace(bodyTok.Lit); body != "" && body != "()" {
+			return nil, errAt(p.source, p.filename, bodyTok.Pos, "unexpected argument to parent: %q", body)
+		}
 	}
 	closeTok := p.peek(0)
 	if closeTok.Type != tokTwigStmtClose {

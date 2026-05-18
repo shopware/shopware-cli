@@ -82,6 +82,36 @@ func TestUnregisteredTagFallback(t *testing.T) {
 	assert.Equal(t, src, nodes.Dump(0))
 }
 
+// TestParentRejectsArguments is a regression test for the {% parent foo %}
+// case. parent is supposed to take no arguments (or an empty `()`); silently
+// dropping unexpected args would hide real authoring mistakes when the
+// formatter rewrites them to `{% parent() %}`.
+func TestParentRejectsArguments(t *testing.T) {
+	bad := []string{
+		`{% parent foo %}`,
+		`{% parent 1 %}`,
+		`{% parent(x) %}`,
+	}
+	for _, src := range bad {
+		t.Run(src, func(t *testing.T) {
+			_, err := NewParser(src)
+			assert.Error(t, err, "parent with unexpected argument must not silently parse")
+		})
+	}
+
+	good := []string{
+		`{% parent %}`,
+		`{% parent() %}`,
+		`{%- parent -%}`,
+	}
+	for _, src := range good {
+		t.Run(src, func(t *testing.T) {
+			_, err := NewParser(src)
+			assert.NoError(t, err)
+		})
+	}
+}
+
 // TestTrimModifiersRoundTrip is a regression test for whitespace-control
 // delimiters. The lexer captures `{%-`, `-%}`, `{{-`, `-}}`, `{#-`, `-#}`
 // on the open/close tokens; the AST stores them and the formatter has to
