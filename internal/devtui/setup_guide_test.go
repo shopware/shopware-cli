@@ -437,13 +437,3 @@ func TestSetupGuideStepNumbering_WithProfilerCreds(t *testing.T) {
 	assert.Equal(t, 5, sg.stepNum(setupStepProfilerCreds))
 	assert.Equal(t, 6, sg.stepNum(setupStepReview))
 }
-
-func TestProfilerNeedsCreds(t *testing.T) {
-	assert.False(t, profilerNeedsCreds("none"))
-	assert.False(t, profilerNeedsCreds(""))
-	assert.False(t, profilerNeedsCreds("xdebug"))
-	assert.False(t, profilerNeedsCreds("pcov"))
-	assert.False(t, profilerNeedsCreds("spx"))
-	assert.True(t, profilerNeedsCreds("blackfire"))
-	assert.True(t, profilerNeedsCreds("tideways"))
-}

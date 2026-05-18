@@ -8,6 +8,18 @@ import (
 	"github.com/shopware/shopware-cli/internal/packagist"
 )
 
+func TestProfilerNeedsCredentials(t *testing.T) {
+	t.Parallel()
+
+	assert.False(t, ProfilerNeedsCredentials("none"))
+	assert.False(t, ProfilerNeedsCredentials(""))
+	assert.False(t, ProfilerNeedsCredentials(ProfilerXdebug))
+	assert.False(t, ProfilerNeedsCredentials(ProfilerPcov))
+	assert.False(t, ProfilerNeedsCredentials(ProfilerSpx))
+	assert.True(t, ProfilerNeedsCredentials(ProfilerBlackfire))
+	assert.True(t, ProfilerNeedsCredentials(ProfilerTideways))
+}
+
 func TestGenerateComposeFile(t *testing.T) {
 	t.Parallel()
 

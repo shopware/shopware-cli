@@ -7,6 +7,8 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 
+	dockerpkg "github.com/shopware/shopware-cli/internal/docker"
+	"github.com/shopware/shopware-cli/internal/packagist"
 	"github.com/shopware/shopware-cli/internal/shop"
 	"github.com/shopware/shopware-cli/internal/tui"
 )
@@ -24,15 +26,15 @@ const (
 )
 
 const (
-	profilerBlackfire = "blackfire"
-	profilerTideways  = "tideways"
+	profilerBlackfire = dockerpkg.ProfilerBlackfire
+	profilerTideways  = dockerpkg.ProfilerTideways
 
 	defaultPHPVersionIndex = 1
 )
 
 var (
-	phpVersions = []string{"8.2", "8.3", "8.4", "8.5"}
-	profilers   = []string{"", "xdebug", profilerBlackfire, profilerTideways, "pcov", "spx"}
+	phpVersions = packagist.SupportedPHPVersions
+	profilers   = dockerpkg.Profilers
 )
 
 type ConfigModel struct {
