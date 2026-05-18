@@ -102,7 +102,7 @@ func TestPluginIconExists(t *testing.T) {
 
 	plugin := getTestPlugin(dir)
 
-	assert.NoError(t, os.MkdirAll(filepath.Join(dir, "src", "Resources", "config"), os.ModePerm))
+	assert.NoError(t, os.MkdirAll(filepath.Join(dir, "src", "Resources", "config"), 0o755))
 	assert.NoError(t, createTestImage(filepath.Join(dir, "src", "Resources", "config", "plugin.png")))
 
 	check := &testCheck{}
@@ -134,7 +134,7 @@ func TestPluginIconIsTooBig(t *testing.T) {
 
 	plugin := getTestPlugin(dir)
 
-	assert.NoError(t, os.MkdirAll(filepath.Join(dir, "src", "Resources", "config"), os.ModePerm))
+	assert.NoError(t, os.MkdirAll(filepath.Join(dir, "src", "Resources", "config"), 0o755))
 	assert.NoError(t, createTestImageWithSize(filepath.Join(dir, "src", "Resources", "config", "plugin.png"), 1000, 1000))
 
 	check := &testCheck{}
@@ -155,7 +155,7 @@ func TestPluginGermanDescriptionMissing(t *testing.T) {
 	}
 
 	check := &testCheck{}
-	assert.NoError(t, os.MkdirAll(filepath.Join(dir, "src", "Resources", "config"), os.ModePerm))
+	assert.NoError(t, os.MkdirAll(filepath.Join(dir, "src", "Resources", "config"), 0o755))
 	assert.NoError(t, createTestImage(filepath.Join(dir, "src", "Resources", "config", "plugin.png")))
 
 	plugin.Validate(getTestContext(), check)
@@ -173,7 +173,7 @@ func TestPluginGermanDescriptionMissingOnlyEnglishMarket(t *testing.T) {
 		"en-GB": "Frosh Tools",
 	}
 	plugin.config.Store.Availabilities = &[]string{"International"}
-	assert.NoError(t, os.MkdirAll(filepath.Join(dir, "src", "Resources", "config"), os.ModePerm))
+	assert.NoError(t, os.MkdirAll(filepath.Join(dir, "src", "Resources", "config"), 0o755))
 	assert.NoError(t, createTestImage(filepath.Join(dir, "src", "Resources", "config", "plugin.png")))
 
 	check := &testCheck{}

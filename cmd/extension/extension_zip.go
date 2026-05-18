@@ -76,7 +76,7 @@ var extensionZipCmd = &cobra.Command{
 
 		extDir := fmt.Sprintf("%s/%s/", tempDir, extName)
 
-		err = os.Mkdir(extDir, os.ModePerm)
+		err = os.Mkdir(extDir, 0o755)
 		if err != nil {
 			return fmt.Errorf("create temp directory: %w", err)
 		}
@@ -202,7 +202,7 @@ var extensionZipCmd = &cobra.Command{
 
 		if len(outputDir) > 0 {
 			if _, err := os.Stat(outputDir); os.IsNotExist(err) {
-				if err := os.MkdirAll(outputDir, os.ModePerm); err != nil {
+				if err := os.MkdirAll(outputDir, 0o755); err != nil {
 					return fmt.Errorf("create output directory: %w", err)
 				}
 			}

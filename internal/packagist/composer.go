@@ -161,7 +161,7 @@ func (c *ComposerJson) Save() error {
 		return err
 	}
 
-	return os.WriteFile(c.path, content, os.ModePerm)
+	return os.WriteFile(c.path, content, 0o644)
 }
 
 func ReadComposerJson(composerPath string) (*ComposerJson, error) {

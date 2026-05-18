@@ -181,7 +181,7 @@ func (a App) UpdateMetaData(metadata *ExtensionMetadata) error {
 
 	newXml = append([]byte(xml.Header), newXml...)
 
-	if err := os.WriteFile(manifestFile, newXml, os.ModePerm); err != nil {
+	if err := os.WriteFile(manifestFile, newXml, 0o644); err != nil {
 		return fmt.Errorf("could not write manifest.xml: %w", err)
 	}
 

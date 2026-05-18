@@ -35,7 +35,7 @@ var projectConfigInitCmd = &cobra.Command{
 			return err
 		}
 
-		if err := os.WriteFile(".shopware-project.yml", content, os.ModePerm); err != nil {
+		if err := os.WriteFile(".shopware-project.yml", content, 0o600); err != nil {
 			return err
 		}
 

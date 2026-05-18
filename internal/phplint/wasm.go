@@ -15,7 +15,7 @@ func getWazeroRuntime(ctx context.Context) (wazero.Runtime, error) {
 	wazeroCacheDir := path.Join(system.GetShopwareCliCacheDir(), "wasm", "cache")
 
 	if _, err := os.Stat(wazeroCacheDir); os.IsNotExist(err) {
-		if err := os.MkdirAll(wazeroCacheDir, os.ModePerm); err != nil {
+		if err := os.MkdirAll(wazeroCacheDir, 0o755); err != nil {
 			return nil, err
 		}
 	}

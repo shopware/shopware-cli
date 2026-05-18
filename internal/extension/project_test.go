@@ -134,7 +134,7 @@ final public const SHOPWARE_FALLBACK_VERSION = '6.6.9999999.9999999-dev';
 				parentDir := filepath.Dir(tmpFile)
 
 				if _, err := os.Stat(parentDir); os.IsNotExist(err) {
-					assert.NoError(t, os.MkdirAll(parentDir, os.ModePerm))
+					assert.NoError(t, os.MkdirAll(parentDir, 0o755))
 				}
 
 				assert.NoError(t, os.WriteFile(tmpFile, []byte(content), 0o644))
@@ -162,7 +162,7 @@ func TestFindAssetSourcesOfProjectYAMLBundles(t *testing.T) {
 	assert.NoError(t, os.WriteFile(filepath.Join(tmpDir, "composer.json"), []byte(`{"require": {"shopware/core": "~6.6.0"}}`), 0o644))
 
 	// Create the bundle directory
-	assert.NoError(t, os.MkdirAll(filepath.Join(tmpDir, "src", "MyBundle"), os.ModePerm))
+	assert.NoError(t, os.MkdirAll(filepath.Join(tmpDir, "src", "MyBundle"), 0o755))
 
 	shopCfg := &shop.Config{
 		Build: &shop.ConfigBuild{
@@ -192,7 +192,7 @@ func TestFindAssetSourcesOfProjectYAMLBundleNameOverride(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	assert.NoError(t, os.WriteFile(filepath.Join(tmpDir, "composer.json"), []byte(`{"require": {"shopware/core": "~6.6.0"}}`), 0o644))
-	assert.NoError(t, os.MkdirAll(filepath.Join(tmpDir, "src", "MyBundle"), os.ModePerm))
+	assert.NoError(t, os.MkdirAll(filepath.Join(tmpDir, "src", "MyBundle"), 0o755))
 
 	shopCfg := &shop.Config{
 		Build: &shop.ConfigBuild{
@@ -221,7 +221,7 @@ func TestFindAssetSourcesOfProjectYAMLBundleDeduplication(t *testing.T) {
 		"require": {"shopware/core": "~6.6.0"},
 		"extra": {"shopware-bundles": {"src/MyBundle": {"name": "MyBundle"}}}
 	}`), 0o644))
-	assert.NoError(t, os.MkdirAll(filepath.Join(tmpDir, "src", "MyBundle"), os.ModePerm))
+	assert.NoError(t, os.MkdirAll(filepath.Join(tmpDir, "src", "MyBundle"), 0o755))
 
 	shopCfg := &shop.Config{
 		Build: &shop.ConfigBuild{

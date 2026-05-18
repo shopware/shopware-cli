@@ -69,7 +69,7 @@ func GetConsoleCompletion(ctx context.Context, projectRoot string) (*ConsoleResp
 		return nil, err
 	}
 
-	if err := os.WriteFile(cachePath, commandJson, os.ModePerm); err != nil {
+	if err := os.WriteFile(cachePath, commandJson, 0o644); err != nil {
 		return nil, err
 	}
 

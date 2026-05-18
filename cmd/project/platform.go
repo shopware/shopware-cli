@@ -81,7 +81,7 @@ func filterAndWritePluginJson(cmd *cobra.Command, projectRoot string, shopCfg *s
 		return err
 	}
 
-	if err := os.WriteFile(path.Join(projectRoot, "var", "plugins.json"), pluginJson, os.ModePerm); err != nil {
+	if err := os.WriteFile(path.Join(projectRoot, "var", "plugins.json"), pluginJson, 0o644); err != nil {
 		return err
 	}
 

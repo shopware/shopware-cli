@@ -26,7 +26,7 @@ func TestDetectPlatformTrunk(t *testing.T) {
 
 	bytes, _ := json.Marshal(jsonStruct)
 
-	_ = os.WriteFile(composerJson, bytes, os.ModePerm)
+	_ = os.WriteFile(composerJson, bytes, 0o644)
 
 	val, err := IsShopwareVersion(tmpDir, ">=6.3")
 
@@ -45,7 +45,7 @@ func TestDetectComposerJsonNotPlatform(t *testing.T) {
 
 	bytes, _ := json.Marshal(jsonStruct)
 
-	_ = os.WriteFile(composerJson, bytes, os.ModePerm)
+	_ = os.WriteFile(composerJson, bytes, 0o644)
 
 	val, err := IsShopwareVersion(tmpDir, ">=6.3")
 
@@ -72,7 +72,7 @@ func TestComposerLockMatching(t *testing.T) {
 
 	bytes, _ := json.Marshal(jsonStruct)
 
-	_ = os.WriteFile(composerLock, bytes, os.ModePerm)
+	_ = os.WriteFile(composerLock, bytes, 0o644)
 
 	val, err := IsShopwareVersion(tmpDir, ">=6.3")
 
@@ -99,7 +99,7 @@ func TestComposerLockNotMatching(t *testing.T) {
 
 	bytes, _ := json.Marshal(jsonStruct)
 
-	_ = os.WriteFile(composerLock, bytes, os.ModePerm)
+	_ = os.WriteFile(composerLock, bytes, 0o644)
 
 	val, err := IsShopwareVersion(tmpDir, "<=6.3")
 
@@ -121,7 +121,7 @@ func TestComposerLockNoDependency(t *testing.T) {
 
 	bytes, _ := json.Marshal(jsonStruct)
 
-	_ = os.WriteFile(composerLock, bytes, os.ModePerm)
+	_ = os.WriteFile(composerLock, bytes, 0o644)
 
 	val, err := IsShopwareVersion(tmpDir, "<=6.3")
 

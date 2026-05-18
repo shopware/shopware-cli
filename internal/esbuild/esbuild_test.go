@@ -30,9 +30,9 @@ func TestESBuildAdmin(t *testing.T) {
 	dir := t.TempDir()
 
 	adminDir := filepath.Join(dir, "Resources", "app", "administration", "src")
-	_ = os.MkdirAll(adminDir, os.ModePerm)
+	_ = os.MkdirAll(adminDir, 0o755)
 
-	_ = os.WriteFile(filepath.Join(adminDir, "main.js"), []byte("console.log('bla')"), os.ModePerm)
+	_ = os.WriteFile(filepath.Join(adminDir, "main.js"), []byte("console.log('bla')"), 0o644)
 
 	options := NewAssetCompileOptionsAdmin("Bla", dir)
 	options.DisableSass = true
@@ -53,10 +53,10 @@ func TestESBuildAdminWithSCSS(t *testing.T) {
 	dir := t.TempDir()
 
 	adminDir := filepath.Join(dir, "Resources", "app", "administration", "src")
-	_ = os.MkdirAll(adminDir, os.ModePerm)
+	_ = os.MkdirAll(adminDir, 0o755)
 
-	_ = os.WriteFile(filepath.Join(adminDir, "main.js"), []byte("import './a.scss'"), os.ModePerm)
-	_ = os.WriteFile(filepath.Join(adminDir, "a.scss"), []byte(".a { .b { color: red } }"), os.ModePerm)
+	_ = os.WriteFile(filepath.Join(adminDir, "main.js"), []byte("import './a.scss'"), 0o644)
+	_ = os.WriteFile(filepath.Join(adminDir, "a.scss"), []byte(".a { .b { color: red } }"), 0o644)
 
 	options := NewAssetCompileOptionsAdmin("Bla", dir)
 	_, err := CompileExtensionAsset(getTestContext(), options)
@@ -81,9 +81,9 @@ func TestESBuildAdminTypeScript(t *testing.T) {
 	dir := t.TempDir()
 
 	adminDir := filepath.Join(dir, "Resources", "app", "administration", "src")
-	_ = os.MkdirAll(adminDir, os.ModePerm)
+	_ = os.MkdirAll(adminDir, 0o755)
 
-	_ = os.WriteFile(filepath.Join(adminDir, "main.ts"), []byte("console.log('bla')"), os.ModePerm)
+	_ = os.WriteFile(filepath.Join(adminDir, "main.ts"), []byte("console.log('bla')"), 0o644)
 
 	options := NewAssetCompileOptionsAdmin("Bla", dir)
 	options.DisableSass = true
@@ -101,9 +101,9 @@ func TestESBuildStorefront(t *testing.T) {
 	dir := t.TempDir()
 
 	storefrontDir := filepath.Join(dir, "Resources", "app", "storefront", "src")
-	_ = os.MkdirAll(storefrontDir, os.ModePerm)
+	_ = os.MkdirAll(storefrontDir, 0o755)
 
-	_ = os.WriteFile(filepath.Join(storefrontDir, "main.js"), []byte("console.log('bla')"), os.ModePerm)
+	_ = os.WriteFile(filepath.Join(storefrontDir, "main.js"), []byte("console.log('bla')"), 0o644)
 
 	options := NewAssetCompileOptionsStorefront("Bla", dir, false)
 	_, err := CompileExtensionAsset(getTestContext(), options)
@@ -119,9 +119,9 @@ func TestESBuildStorefrontNewLayout(t *testing.T) {
 	dir := t.TempDir()
 
 	storefrontDir := filepath.Join(dir, "Resources", "app", "storefront", "src")
-	_ = os.MkdirAll(storefrontDir, os.ModePerm)
+	_ = os.MkdirAll(storefrontDir, 0o755)
 
-	_ = os.WriteFile(filepath.Join(storefrontDir, "main.js"), []byte("console.log('bla')"), os.ModePerm)
+	_ = os.WriteFile(filepath.Join(storefrontDir, "main.js"), []byte("console.log('bla')"), 0o644)
 
 	options := NewAssetCompileOptionsStorefront("Bla", dir, true)
 	_, err := CompileExtensionAsset(getTestContext(), options)

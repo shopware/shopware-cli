@@ -57,7 +57,7 @@ func downloadDartSass(ctx context.Context, cacheDir string) error {
 		extractedFolder := filepath.Dir(extractedPath)
 
 		if _, err := os.Stat(extractedFolder); os.IsNotExist(err) {
-			if err := os.MkdirAll(extractedFolder, os.ModePerm); err != nil {
+			if err := os.MkdirAll(extractedFolder, 0o755); err != nil {
 				return fmt.Errorf("cannot create dart-sass in temp: %w", err)
 			}
 		}

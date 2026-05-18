@@ -21,10 +21,10 @@ func getTestContext() context.Context {
 func TestGenerateConfigWithAdminAndStorefrontFiles(t *testing.T) {
 	dir := t.TempDir()
 
-	assert.NoError(t, os.MkdirAll(filepath.Join(dir, "Resources", "app", "administration", "src"), os.ModePerm))
-	assert.NoError(t, os.WriteFile(filepath.Join(dir, "Resources", "app", "administration", "src", "main.js"), []byte("test"), os.ModePerm))
-	assert.NoError(t, os.MkdirAll(filepath.Join(dir, "Resources", "app", "storefront", "src"), os.ModePerm))
-	assert.NoError(t, os.WriteFile(filepath.Join(dir, "Resources", "app", "storefront", "src", "main.js"), []byte("test"), os.ModePerm))
+	assert.NoError(t, os.MkdirAll(filepath.Join(dir, "Resources", "app", "administration", "src"), 0o755))
+	assert.NoError(t, os.WriteFile(filepath.Join(dir, "Resources", "app", "administration", "src", "main.js"), []byte("test"), 0o644))
+	assert.NoError(t, os.MkdirAll(filepath.Join(dir, "Resources", "app", "storefront", "src"), 0o755))
+	assert.NoError(t, os.WriteFile(filepath.Join(dir, "Resources", "app", "storefront", "src", "main.js"), []byte("test"), 0o644))
 
 	config := BuildAssetConfigFromExtensions(getTestContext(), []asset.Source{{Name: "FroshTools", Path: dir}}, AssetBuildConfig{})
 
@@ -43,18 +43,18 @@ func TestGenerateConfigWithAdminAndStorefrontFiles(t *testing.T) {
 func TestGenerateConfigWithTypeScript(t *testing.T) {
 	dir := t.TempDir()
 
-	assert.NoError(t, os.MkdirAll(filepath.Join(dir, "Resources", "app", "administration", "src"), os.ModePerm))
-	assert.NoError(t, os.MkdirAll(filepath.Join(dir, "Resources", "app", "administration", "build"), os.ModePerm))
+	assert.NoError(t, os.MkdirAll(filepath.Join(dir, "Resources", "app", "administration", "src"), 0o755))
+	assert.NoError(t, os.MkdirAll(filepath.Join(dir, "Resources", "app", "administration", "build"), 0o755))
 
-	assert.NoError(t, os.MkdirAll(filepath.Join(dir, "Resources", "app", "storefront", "src"), os.ModePerm))
-	assert.NoError(t, os.MkdirAll(filepath.Join(dir, "Resources", "app", "storefront", "build"), os.ModePerm))
+	assert.NoError(t, os.MkdirAll(filepath.Join(dir, "Resources", "app", "storefront", "src"), 0o755))
+	assert.NoError(t, os.MkdirAll(filepath.Join(dir, "Resources", "app", "storefront", "build"), 0o755))
 
-	assert.NoError(t, os.WriteFile(filepath.Join(dir, "Resources", "app", "administration", "src", "main.ts"), []byte("test"), os.ModePerm))
+	assert.NoError(t, os.WriteFile(filepath.Join(dir, "Resources", "app", "administration", "src", "main.ts"), []byte("test"), 0o644))
 
-	assert.NoError(t, os.WriteFile(filepath.Join(dir, "Resources", "app", "administration", "build", "webpack.config.js"), []byte("test"), os.ModePerm))
+	assert.NoError(t, os.WriteFile(filepath.Join(dir, "Resources", "app", "administration", "build", "webpack.config.js"), []byte("test"), 0o644))
 
-	assert.NoError(t, os.WriteFile(filepath.Join(dir, "Resources", "app", "storefront", "src", "main.ts"), []byte("test"), os.ModePerm))
-	assert.NoError(t, os.WriteFile(filepath.Join(dir, "Resources", "app", "storefront", "build", "webpack.config.js"), []byte("test"), os.ModePerm))
+	assert.NoError(t, os.WriteFile(filepath.Join(dir, "Resources", "app", "storefront", "src", "main.ts"), []byte("test"), 0o644))
+	assert.NoError(t, os.WriteFile(filepath.Join(dir, "Resources", "app", "storefront", "build", "webpack.config.js"), []byte("test"), 0o644))
 
 	config := BuildAssetConfigFromExtensions(getTestContext(), []asset.Source{{Name: "FroshTools", Path: dir}}, AssetBuildConfig{})
 
@@ -73,18 +73,18 @@ func TestGenerateConfigWithTypeScript(t *testing.T) {
 func TestGenerateWebpackCJS(t *testing.T) {
 	dir := t.TempDir()
 
-	assert.NoError(t, os.MkdirAll(filepath.Join(dir, "Resources", "app", "administration", "src"), os.ModePerm))
-	assert.NoError(t, os.MkdirAll(filepath.Join(dir, "Resources", "app", "administration", "build"), os.ModePerm))
+	assert.NoError(t, os.MkdirAll(filepath.Join(dir, "Resources", "app", "administration", "src"), 0o755))
+	assert.NoError(t, os.MkdirAll(filepath.Join(dir, "Resources", "app", "administration", "build"), 0o755))
 
-	assert.NoError(t, os.MkdirAll(filepath.Join(dir, "Resources", "app", "storefront", "src"), os.ModePerm))
-	assert.NoError(t, os.MkdirAll(filepath.Join(dir, "Resources", "app", "storefront", "build"), os.ModePerm))
+	assert.NoError(t, os.MkdirAll(filepath.Join(dir, "Resources", "app", "storefront", "src"), 0o755))
+	assert.NoError(t, os.MkdirAll(filepath.Join(dir, "Resources", "app", "storefront", "build"), 0o755))
 
-	assert.NoError(t, os.WriteFile(filepath.Join(dir, "Resources", "app", "administration", "src", "main.ts"), []byte("test"), os.ModePerm))
+	assert.NoError(t, os.WriteFile(filepath.Join(dir, "Resources", "app", "administration", "src", "main.ts"), []byte("test"), 0o644))
 
-	assert.NoError(t, os.WriteFile(filepath.Join(dir, "Resources", "app", "administration", "build", "webpack.config.cjs"), []byte("test"), os.ModePerm))
+	assert.NoError(t, os.WriteFile(filepath.Join(dir, "Resources", "app", "administration", "build", "webpack.config.cjs"), []byte("test"), 0o644))
 
-	assert.NoError(t, os.WriteFile(filepath.Join(dir, "Resources", "app", "storefront", "src", "main.ts"), []byte("test"), os.ModePerm))
-	assert.NoError(t, os.WriteFile(filepath.Join(dir, "Resources", "app", "storefront", "build", "webpack.config.cjs"), []byte("test"), os.ModePerm))
+	assert.NoError(t, os.WriteFile(filepath.Join(dir, "Resources", "app", "storefront", "src", "main.ts"), []byte("test"), 0o644))
+	assert.NoError(t, os.WriteFile(filepath.Join(dir, "Resources", "app", "storefront", "build", "webpack.config.cjs"), []byte("test"), 0o644))
 
 	config := BuildAssetConfigFromExtensions(getTestContext(), []asset.Source{{Name: "FroshTools", Path: dir}}, AssetBuildConfig{})
 
