@@ -55,8 +55,6 @@ type ConfigModel struct {
 	height int
 }
 
-type configSavedMsg struct{ err error }
-
 func NewConfigModel(cfg *shop.Config) ConfigModel {
 	m := ConfigModel{
 		phpVersion: defaultPHPVersionIndex,
@@ -109,17 +107,6 @@ func (m *ConfigModel) SetSize(width, height int) {
 }
 
 func (m ConfigModel) Update(msg tea.Msg) (ConfigModel, tea.Cmd) {
-	if saved, ok := msg.(configSavedMsg); ok {
-		if saved.err != nil {
-			m.err = saved.err
-			m.saved = false
-			return m, nil
-		}
-		m.saved = true
-		m.modified = false
-		m.err = nil
-		return m, nil
-	}
 	return m, nil
 }
 
