@@ -317,6 +317,7 @@ func (m *LogsModel) streamProcess(src logSource) tea.Cmd {
 		for scanner.Scan() {
 			ch <- scanner.Text()
 		}
+		_ = scanner.Err()
 		_ = cmd.Wait()
 	}()
 
@@ -370,6 +371,7 @@ func (m *LogsModel) streamCommand(ctx context.Context, cmd *exec.Cmd, mergeStder
 			case ch <- scanner.Text():
 			}
 		}
+		_ = scanner.Err()
 
 		_ = cmd.Wait()
 	}()

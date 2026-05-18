@@ -137,7 +137,9 @@ func (m Model) renderPhase() string {
 		var card strings.Builder
 		total := len(installStepPatterns)
 		pctText := fmt.Sprintf(" %d%%", int(float64(m.installProg.currentStep)/float64(total)*100))
-		card.WriteString(m.installProg.progress.View() + tui.DimStyle.Render(pctText) + "\n\n")
+		card.WriteString(m.installProg.progress.View())
+		card.WriteString(tui.DimStyle.Render(pctText))
+		card.WriteString("\n\n")
 
 		for i, sp := range installStepPatterns {
 			switch {
@@ -221,7 +223,8 @@ func (m Model) renderDockerLogs(title, footerHint string) string {
 		start = len(m.overlayLines) - visibleLines
 	}
 	for _, line := range m.overlayLines[start:] {
-		body.WriteString(line + "\n")
+		body.WriteString(line)
+		body.WriteString("\n")
 	}
 	if len(m.overlayLines) == 0 {
 		body.WriteString(helpStyle.Render("Waiting for command output..."))
