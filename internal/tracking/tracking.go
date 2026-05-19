@@ -118,7 +118,7 @@ func Track(ctx context.Context, eventName string, tags map[string]string) {
 		return
 	}
 
-	dialCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
+	dialCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 2*time.Second)
 	defer cancel()
 
 	var d net.Dialer
