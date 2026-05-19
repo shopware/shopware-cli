@@ -1,6 +1,7 @@
 package tracking
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -127,6 +128,34 @@ func TestResolveIDPersistsLocally(t *testing.T) {
 	// Second call reads from file
 	id2 := resolveID()
 	assert.Equal(t, id1, id2)
+}
+
+func TestTrackSendsWithCancelledContext(t *testing.T) {
+	resetInit(t)
+	clearCIEnvVars(t)
+
+	udpAddr, err := net.ResolveUDPAddr("udp", "127.0.0.1:0")
+	assert.NoError(t, err)
+
+	conn, err := net.ListenUDP("udp", udpAddr)
+	assert.NoError(t, err)
+	defer func() { _ = conn.Close() }()
+
+	ensureInitialized()
+	addr = conn.LocalAddr().String()
+
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+
+	Track(ctx, "cancelled_event", nil)
+
+	buf := make([]byte, 4096)
+	n, err := conn.Read(buf)
+	assert.NoError(t, err)
+
+	var received event
+	assert.NoError(t, json.Unmarshal(buf[:n], &received))
+	assert.Equal(t, "shopware_cli.cancelled_event", received.Event)
 }
 
 func TestResolveIDCIPrioritizedOverLocal(t *testing.T) {
