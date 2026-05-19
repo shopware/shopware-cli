@@ -257,13 +257,15 @@ func (c *ConfigDump) EnableAnonymization() {
 		},
 	}
 
-	// Merge with existing rewrites
+	// Merge with existing rewrites; user-supplied values take precedence over defaults
 	for table, columns := range anonymizationRewrites {
 		if _, exists := c.Rewrite[table]; !exists {
 			c.Rewrite[table] = columns
-		} else {
-			// Merge column rewrites for existing table
-			for column, rewrite := range columns {
+			continue
+		}
+
+		for column, rewrite := range columns {
+			if _, columnExists := c.Rewrite[table][column]; !columnExists {
 				c.Rewrite[table][column] = rewrite
 			}
 		}
