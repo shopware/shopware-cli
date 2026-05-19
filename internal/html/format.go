@@ -95,12 +95,17 @@ func (nodeList NodeList) Dump(indent int) string {
 		if i > 0 {
 			// Add newline between non-comment nodes if not first
 			if _, ok := nodeList[i-1].(*CommentNode); !ok {
-				// Avoid compounding a leading "\n" already at the start of
-				// the next node's output (e.g. a RawNode whose source text
-				// began with a newline). Without this, parse → format →
-				// parse → format would add one newline per pass at that
-				// boundary.
-				if !strings.HasPrefix(nodeOut, "\n") {
+				// Skip the separator when either side already supplies a
+				// newline at the boundary — the previous node's output
+				// ending with "\n" (e.g. a RawNode whose source text
+				// ended at a line break), or the next node's output
+				// starting with "\n". Without this, parse → format →
+				// parse → format adds one newline per pass at that
+				// boundary, which surfaces on CSV/XML export templates
+				// that emit one record per line via "{#- -#}" between
+				// text segments.
+				prev := builder.String()
+				if !strings.HasSuffix(prev, "\n") && !strings.HasPrefix(nodeOut, "\n") {
 					builder.WriteString("\n")
 				}
 
@@ -151,15 +156,15 @@ func blockHasInlineMixedContent(children NodeList) bool {
 	return hasMeaningfulRaw
 }
 
-// isTwigStructured reports whether a node is a Twig structural tag whose
-// Dump output starts with its own indent prefix (vs. an inline value like
-// {{ x }} or <span>). Used by the <p>-children formatter to avoid
-// double-counting whitespace.
-func isTwigStructured(n Node) bool {
+// isStructuredChild reports whether a node's Dump output starts with its
+// own indent prefix (vs. an inline value like {{ x }} or <span> text).
+// Used by the <p>-children formatter to avoid double-counting whitespace
+// when a preceding RawNode already supplies it.
+func isStructuredChild(n Node) bool {
 	switch n.(type) {
 	case *TwigBlockNode, *TwigIfNode, *TwigGenericBlockNode,
 		*TwigStandaloneTagNode, *TwigVerbatimNode, *TwigCommentNode,
-		*ParentNode:
+		*ParentNode, *CommentNode:
 		return true
 	}
 	return false
@@ -297,7 +302,7 @@ func (e *ElementNode) Dump(indent int) string {
 					// prefix) follows a RawNode whose tail is line-leading
 					// whitespace, drop that whitespace so the two don't
 					// compound on each format pass.
-					if isTwigStructured(child) {
+					if isStructuredChild(child) {
 						trimmed := strings.TrimRight(builder.String(), " \t")
 						builder.Reset()
 						builder.WriteString(trimmed)
