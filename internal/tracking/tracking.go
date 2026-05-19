@@ -118,8 +118,11 @@ func Track(ctx context.Context, eventName string, tags map[string]string) {
 		return
 	}
 
+	dialCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
+	defer cancel()
+
 	var d net.Dialer
-	conn, err := d.DialContext(ctx, "udp", addr)
+	conn, err := d.DialContext(dialCtx, "udp", addr)
 	if err != nil {
 		logging.FromContext(ctx).Debugf("tracking: failed to connect: %v", err)
 		return
