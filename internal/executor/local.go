@@ -80,6 +80,10 @@ func (l *LocalExecutor) StopEnvironment(_ context.Context) error {
 	return ErrNotSupported
 }
 
+func (l *LocalExecutor) Deployer() Deployer {
+	return nil
+}
+
 func applyLocalEnv(projectRoot string, env map[string]string, cmd *exec.Cmd) {
 	cmd.Env = os.Environ()
 

@@ -371,3 +371,124 @@ func TestSymfonyCLINormalizePath(t *testing.T) {
 	exec := &SymfonyCLIExecutor{BinaryPath: "/usr/local/bin/symfony", projectRoot: "/host/project"}
 	assert.Equal(t, "/host/project/custom/plugins/MyPlugin", exec.NormalizePath("/host/project/custom/plugins/MyPlugin"))
 }
+
+func TestNewSSHExecutor(t *testing.T) {
+	cfg := &shop.EnvironmentConfig{
+		Type: "ssh",
+		SSH: &shop.EnvironmentSSHConfig{
+			Host:       "example.com",
+			User:       "deploy",
+			DeployPath: "/var/www/shop",
+		},
+	}
+
+	exec, err := New("/project", cfg, &shop.Config{})
+	assert.NoError(t, err)
+	assert.Equal(t, TypeSSH, exec.Type())
+}
+
+func TestNewSSHExecutorRequiresSSHSection(t *testing.T) {
+	cfg := &shop.EnvironmentConfig{Type: "ssh"}
+
+	_, err := New("/project", cfg, &shop.Config{})
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "ssh: section")
+}
+
+func TestLocalExecutorDeployerNil(t *testing.T) {
+	exec := &LocalExecutor{projectRoot: "/project"}
+	assert.Nil(t, exec.Deployer())
+}
+
+func TestDockerExecutorDeployerNil(t *testing.T) {
+	exec := &DockerExecutor{projectRoot: "/project"}
+	assert.Nil(t, exec.Deployer())
+}
+
+func TestSymfonyCLIExecutorDeployerNil(t *testing.T) {
+	exec := &SymfonyCLIExecutor{BinaryPath: "/usr/local/bin/symfony", projectRoot: "/project"}
+	assert.Nil(t, exec.Deployer())
+}
+
+func TestSSHExecutorDeployer(t *testing.T) {
+	envCfg := &shop.EnvironmentConfig{
+		Type: "ssh",
+		SSH: &shop.EnvironmentSSHConfig{
+			Host:       "example.com",
+			User:       "deploy",
+			DeployPath: "/var/www/shop",
+		},
+	}
+	exec := &SSHExecutor{projectRoot: "/project", envCfg: envCfg}
+
+	d := exec.Deployer()
+	assert.NotNil(t, d)
+}
+
+func TestSSHExecutorDeployerNilWithoutDeployPath(t *testing.T) {
+	envCfg := &shop.EnvironmentConfig{
+		Type: "ssh",
+		SSH: &shop.EnvironmentSSHConfig{
+			Host: "example.com",
+		},
+	}
+	exec := &SSHExecutor{projectRoot: "/project", envCfg: envCfg}
+
+	assert.Nil(t, exec.Deployer())
+}
+
+func TestSSHExecutorConsoleCommand(t *testing.T) {
+	envCfg := &shop.EnvironmentConfig{
+		Type: "ssh",
+		SSH: &shop.EnvironmentSSHConfig{
+			Host:         "example.com",
+			User:         "deploy",
+			Port:         2222,
+			IdentityFile: "/keys/id",
+			DeployPath:   "/var/www/shop",
+		},
+	}
+	exec := &SSHExecutor{projectRoot: "/project", envCfg: envCfg}
+
+	p := exec.ConsoleCommand(t.Context(), "cache:clear")
+	assert.Contains(t, p.Cmd.Path, "ssh")
+	assert.Contains(t, p.Cmd.Args, "-p")
+	assert.Contains(t, p.Cmd.Args, "2222")
+	assert.Contains(t, p.Cmd.Args, "-i")
+	assert.Contains(t, p.Cmd.Args, "/keys/id")
+	assert.Contains(t, p.Cmd.Args, "deploy@example.com")
+	remoteCmd := p.Cmd.Args[len(p.Cmd.Args)-1]
+	assert.Contains(t, remoteCmd, "cd '/var/www/shop/current'")
+	assert.Contains(t, remoteCmd, "'php' 'bin/console' 'cache:clear'")
+}
+
+func TestSSHExecutorWithRelDirOnRemote(t *testing.T) {
+	envCfg := &shop.EnvironmentConfig{
+		Type: "ssh",
+		SSH:  &shop.EnvironmentSSHConfig{Host: "example.com", DeployPath: "/srv/shop"},
+	}
+	exec := &SSHExecutor{projectRoot: "/project", envCfg: envCfg}
+	withDir := exec.WithRelDir("custom/plugins/MyPlugin")
+
+	p := withDir.PHPCommand(t.Context(), "-v")
+	remoteCmd := p.Cmd.Args[len(p.Cmd.Args)-1]
+	assert.Contains(t, remoteCmd, "cd '/srv/shop/current/custom/plugins/MyPlugin'")
+}
+
+func TestSSHExecutorWithEnvOnRemote(t *testing.T) {
+	envCfg := &shop.EnvironmentConfig{
+		Type: "ssh",
+		SSH:  &shop.EnvironmentSSHConfig{Host: "example.com", DeployPath: "/srv/shop"},
+	}
+	exec := &SSHExecutor{projectRoot: "/project", envCfg: envCfg}
+	withEnv := exec.WithEnv(map[string]string{"APP_ENV": "prod"})
+
+	p := withEnv.PHPCommand(t.Context(), "-v")
+	remoteCmd := p.Cmd.Args[len(p.Cmd.Args)-1]
+	assert.Contains(t, remoteCmd, "APP_ENV='prod'")
+}
+
+func TestShellQuoteEscapesSingleQuotes(t *testing.T) {
+	assert.Equal(t, `'foo'`, shellQuote("foo"))
+	assert.Equal(t, `'O'\''Brien'`, shellQuote("O'Brien"))
+}

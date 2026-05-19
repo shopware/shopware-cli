@@ -19,9 +19,34 @@ import (
 )
 
 type EnvironmentConfig struct {
-	Type     string          `yaml:"type" jsonschema:"enum=local,enum=docker"`
-	URL      string          `yaml:"url,omitempty"`
-	AdminApi *ConfigAdminApi `yaml:"admin_api,omitempty"`
+	Type     string                `yaml:"type" jsonschema:"enum=local,enum=docker,enum=ssh"`
+	URL      string                `yaml:"url,omitempty"`
+	AdminApi *ConfigAdminApi       `yaml:"admin_api,omitempty"`
+	SSH      *EnvironmentSSHConfig `yaml:"ssh,omitempty"`
+}
+
+// EnvironmentSSHConfig configures the SSH-based deploy executor.
+type EnvironmentSSHConfig struct {
+	// SSH host name or IP. Required.
+	Host string `yaml:"host" jsonschema:"required"`
+	// SSH port. Defaults to 22.
+	Port int `yaml:"port,omitempty"`
+	// Remote user. Falls back to ~/.ssh/config if empty.
+	User string `yaml:"user,omitempty"`
+	// Absolute path to the private key on the local machine. Falls back to ssh-agent / default keys if empty.
+	IdentityFile string `yaml:"identity_file,omitempty"`
+	// Absolute path on the remote where releases/, shared/ and current live.
+	DeployPath string `yaml:"deploy_path" jsonschema:"required"`
+	// Number of releases to keep before pruning. Defaults to 5.
+	KeepReleases int `yaml:"keep_releases,omitempty"`
+	// Files that are persisted across releases (relative to project root). e.g. .env
+	SharedFiles []string `yaml:"shared_files,omitempty"`
+	// Directories that are persisted across releases (relative to project root). e.g. public/media, files
+	SharedDirs []string `yaml:"shared_dirs,omitempty"`
+	// Additional rsync exclude patterns. Sensible defaults are always applied.
+	Excludes []string `yaml:"excludes,omitempty"`
+	// Additional rsync flags appended verbatim (advanced).
+	RsyncOptions []string `yaml:"rsync_options,omitempty"`
 }
 
 type Config struct {
@@ -322,51 +347,61 @@ func (c *ConfigDump) NormalizeFakerExpressions() {
 }
 
 type ConfigDeployment struct {
-	Hooks struct {
-		// The pre hook will be executed before the deployment
-		Pre string `yaml:"pre"`
-		// The post hook will be executed after the deployment
-		Post string `yaml:"post"`
-		// The pre-install hook will be executed before the installation
-		PreInstall string `yaml:"pre-install"`
-		// The post-install hook will be executed after the installation
-		PostInstall string `yaml:"post-install"`
-		// The pre-update hook will be executed before the update
-		PreUpdate string `yaml:"pre-update"`
-		// The post-update hook will be executed after the update
-		PostUpdate string `yaml:"post-update"`
-	} `yaml:"hooks"`
+	Hooks ConfigDeploymentHooks `yaml:"hooks"`
 
-	Store struct {
-		LicenseDomain string `yaml:"license-domain"`
-	} `yaml:"store"`
+	Store ConfigDeploymentStore `yaml:"store"`
 
-	Cache struct {
-		AlwaysClear bool `yaml:"always_clear"`
-	} `yaml:"cache"`
+	Cache ConfigDeploymentCache `yaml:"cache"`
 
 	// The extension management of the deployment
-	ExtensionManagement struct {
-		// When enabled, the extensions will be installed, updated, and removed
-		Enabled bool `yaml:"enabled"`
-		// Which extensions should not be managed
-		Exclude []string `yaml:"exclude"`
+	ExtensionManagement ConfigDeploymentExtensionManagement `yaml:"extension-management"`
 
-		Overrides ConfigDeploymentOverrides `yaml:"overrides"`
-
-		// DEPRECATED, On these extensions, it will be always called plugin:update
-		ForceUpdatesDeprecated []string `yaml:"force_updates,omitempty" jsonschema:"deprecated=true"`
-		// On these extensions, it will be always called plugin:update
-		ForceUpdate []string `yaml:"force-update,omitempty"`
-	} `yaml:"extension-management"`
-
-	OneTimeTasks []struct {
-		Id     string `yaml:"id" jsonschema:"required"`
-		Script string `yaml:"script" jsonschema:"required"`
-	} `yaml:"one-time-tasks"`
+	OneTimeTasks []ConfigDeploymentOneTimeTask `yaml:"one-time-tasks"`
 
 	// Staging mode configuration for the deployment
 	Staging *ConfigDeploymentStaging `yaml:"staging,omitempty"`
+}
+
+type ConfigDeploymentHooks struct {
+	// The pre hook will be executed before the deployment
+	Pre string `yaml:"pre"`
+	// The post hook will be executed after the deployment
+	Post string `yaml:"post"`
+	// The pre-install hook will be executed before the installation
+	PreInstall string `yaml:"pre-install"`
+	// The post-install hook will be executed after the installation
+	PostInstall string `yaml:"post-install"`
+	// The pre-update hook will be executed before the update
+	PreUpdate string `yaml:"pre-update"`
+	// The post-update hook will be executed after the update
+	PostUpdate string `yaml:"post-update"`
+}
+
+type ConfigDeploymentStore struct {
+	LicenseDomain string `yaml:"license-domain"`
+}
+
+type ConfigDeploymentCache struct {
+	AlwaysClear bool `yaml:"always_clear"`
+}
+
+type ConfigDeploymentExtensionManagement struct {
+	// When enabled, the extensions will be installed, updated, and removed
+	Enabled bool `yaml:"enabled"`
+	// Which extensions should not be managed
+	Exclude []string `yaml:"exclude"`
+
+	Overrides ConfigDeploymentOverrides `yaml:"overrides"`
+
+	// DEPRECATED, On these extensions, it will be always called plugin:update
+	ForceUpdatesDeprecated []string `yaml:"force_updates,omitempty" jsonschema:"deprecated=true"`
+	// On these extensions, it will be always called plugin:update
+	ForceUpdate []string `yaml:"force-update,omitempty"`
+}
+
+type ConfigDeploymentOneTimeTask struct {
+	Id     string `yaml:"id" jsonschema:"required"`
+	Script string `yaml:"script" jsonschema:"required"`
 }
 
 // ConfigDeploymentStaging defines staging mode configuration.

@@ -145,6 +145,10 @@ func (d *DockerExecutor) StartEnvironment(ctx context.Context) error {
 	return nil
 }
 
+func (d *DockerExecutor) Deployer() Deployer {
+	return nil
+}
+
 func (d *DockerExecutor) StopEnvironment(ctx context.Context) error {
 	cmd := exec.CommandContext(ctx, "docker", "compose", "down")
 	cmd.Dir = d.projectRoot

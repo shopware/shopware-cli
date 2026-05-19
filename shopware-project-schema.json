@@ -252,94 +252,21 @@
     "ConfigDeployment": {
       "properties": {
         "hooks": {
-          "properties": {
-            "pre": {
-              "type": "string"
-            },
-            "post": {
-              "type": "string"
-            },
-            "pre-install": {
-              "type": "string"
-            },
-            "post-install": {
-              "type": "string"
-            },
-            "pre-update": {
-              "type": "string"
-            },
-            "post-update": {
-              "type": "string"
-            }
-          },
-          "additionalProperties": false,
-          "type": "object"
+          "$ref": "#/$defs/ConfigDeploymentHooks"
         },
         "store": {
-          "properties": {
-            "license-domain": {
-              "type": "string"
-            }
-          },
-          "additionalProperties": false,
-          "type": "object"
+          "$ref": "#/$defs/ConfigDeploymentStore"
         },
         "cache": {
-          "properties": {
-            "always_clear": {
-              "type": "boolean"
-            }
-          },
-          "additionalProperties": false,
-          "type": "object"
+          "$ref": "#/$defs/ConfigDeploymentCache"
         },
         "extension-management": {
-          "properties": {
-            "enabled": {
-              "type": "boolean"
-            },
-            "exclude": {
-              "items": {
-                "type": "string"
-              },
-              "type": "array"
-            },
-            "overrides": {
-              "$ref": "#/$defs/ConfigDeploymentOverrides"
-            },
-            "force_updates": {
-              "items": {
-                "type": "string"
-              },
-              "type": "array"
-            },
-            "force-update": {
-              "items": {
-                "type": "string"
-              },
-              "type": "array"
-            }
-          },
-          "additionalProperties": false,
-          "type": "object",
+          "$ref": "#/$defs/ConfigDeploymentExtensionManagement",
           "description": "The extension management of the deployment"
         },
         "one-time-tasks": {
           "items": {
-            "properties": {
-              "id": {
-                "type": "string"
-              },
-              "script": {
-                "type": "string"
-              }
-            },
-            "additionalProperties": false,
-            "type": "object",
-            "required": [
-              "id",
-              "script"
-            ]
+            "$ref": "#/$defs/ConfigDeploymentOneTimeTask"
           },
           "type": "array"
         },
@@ -350,6 +277,95 @@
       },
       "additionalProperties": false,
       "type": "object"
+    },
+    "ConfigDeploymentCache": {
+      "properties": {
+        "always_clear": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object"
+    },
+    "ConfigDeploymentExtensionManagement": {
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "description": "When enabled, the extensions will be installed, updated, and removed"
+        },
+        "exclude": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array",
+          "description": "Which extensions should not be managed"
+        },
+        "overrides": {
+          "$ref": "#/$defs/ConfigDeploymentOverrides"
+        },
+        "force_updates": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array",
+          "description": "DEPRECATED, On these extensions, it will be always called plugin:update"
+        },
+        "force-update": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array",
+          "description": "On these extensions, it will be always called plugin:update"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object"
+    },
+    "ConfigDeploymentHooks": {
+      "properties": {
+        "pre": {
+          "type": "string",
+          "description": "The pre hook will be executed before the deployment"
+        },
+        "post": {
+          "type": "string",
+          "description": "The post hook will be executed after the deployment"
+        },
+        "pre-install": {
+          "type": "string",
+          "description": "The pre-install hook will be executed before the installation"
+        },
+        "post-install": {
+          "type": "string",
+          "description": "The post-install hook will be executed after the installation"
+        },
+        "pre-update": {
+          "type": "string",
+          "description": "The pre-update hook will be executed before the update"
+        },
+        "post-update": {
+          "type": "string",
+          "description": "The post-update hook will be executed after the update"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object"
+    },
+    "ConfigDeploymentOneTimeTask": {
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "script": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "required": [
+        "id",
+        "script"
+      ]
     },
     "ConfigDeploymentOverrides": {
       "additionalProperties": {
@@ -374,6 +390,26 @@
       },
       "type": "object",
       "title": "Extension overrides"
+    },
+    "ConfigDeploymentStaging": {
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "description": "When enabled, staging setup commands will be executed during installation and upgrade"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "description": "ConfigDeploymentStaging defines staging mode configuration."
+    },
+    "ConfigDeploymentStore": {
+      "properties": {
+        "license-domain": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object"
     },
     "ConfigDocker": {
       "properties": {
@@ -454,18 +490,6 @@
       },
       "additionalProperties": false,
       "type": "object"
-    },
-    "ConfigDeploymentStaging": {
-      "properties": {
-        "enabled": {
-          "type": "boolean",
-          "description": "When enabled, staging setup commands will be executed during installation and upgrade"
-        }
-      },
-      "additionalProperties": false,
-      "type": "object",
-      "description": "ConfigDeploymentStaging defines staging mode configuration."
-    }
     },
     "ConfigDump": {
       "properties": {
@@ -587,7 +611,8 @@
           "type": "string",
           "enum": [
             "local",
-            "docker"
+            "docker",
+            "ssh"
           ]
         },
         "url": {
@@ -595,10 +620,76 @@
         },
         "admin_api": {
           "$ref": "#/$defs/ConfigAdminApi"
+        },
+        "ssh": {
+          "$ref": "#/$defs/EnvironmentSSHConfig"
         }
       },
       "additionalProperties": false,
       "type": "object"
+    },
+    "EnvironmentSSHConfig": {
+      "properties": {
+        "host": {
+          "type": "string",
+          "description": "SSH host name or IP. Required."
+        },
+        "port": {
+          "type": "integer",
+          "description": "SSH port. Defaults to 22."
+        },
+        "user": {
+          "type": "string",
+          "description": "Remote user. Falls back to ~/.ssh/config if empty."
+        },
+        "identity_file": {
+          "type": "string",
+          "description": "Absolute path to the private key on the local machine. Falls back to ssh-agent / default keys if empty."
+        },
+        "deploy_path": {
+          "type": "string",
+          "description": "Absolute path on the remote where releases/, shared/ and current live."
+        },
+        "keep_releases": {
+          "type": "integer",
+          "description": "Number of releases to keep before pruning. Defaults to 5."
+        },
+        "shared_files": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array",
+          "description": "Files that are persisted across releases (relative to project root). e.g. .env"
+        },
+        "shared_dirs": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array",
+          "description": "Directories that are persisted across releases (relative to project root). e.g. public/media, files"
+        },
+        "excludes": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array",
+          "description": "Additional rsync exclude patterns. Sensible defaults are always applied."
+        },
+        "rsync_options": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array",
+          "description": "Additional rsync flags appended verbatim (advanced)."
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "required": [
+        "host",
+        "deploy_path"
+      ],
+      "description": "EnvironmentSSHConfig configures the SSH-based deploy executor."
     }
   }
 }

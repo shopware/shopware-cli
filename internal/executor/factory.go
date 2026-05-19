@@ -26,6 +26,11 @@ func New(projectRoot string, cfg *shop.EnvironmentConfig, shopCfg *shop.Config) 
 		return &SymfonyCLIExecutor{BinaryPath: path, projectRoot: projectRoot, shopCfg: shopCfg, envCfg: cfg}, nil
 	case "docker":
 		return &DockerExecutor{projectRoot: projectRoot, shopCfg: shopCfg, envCfg: cfg}, nil
+	case "ssh":
+		if cfg.SSH == nil {
+			return nil, fmt.Errorf("ssh environment requires an ssh: section in the environment config")
+		}
+		return &SSHExecutor{projectRoot: projectRoot, shopCfg: shopCfg, envCfg: cfg}, nil
 	default:
 		return nil, fmt.Errorf("unsupported environment type: %s", cfg.Type)
 	}

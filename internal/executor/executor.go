@@ -21,6 +21,7 @@ const (
 	TypeDocker     = "docker"
 	TypeLocal      = "local"
 	TypeSymfonyCLI = "symfony-cli"
+	TypeSSH        = "ssh"
 )
 
 type Executor interface {
@@ -35,6 +36,9 @@ type Executor interface {
 	StartEnvironment(ctx context.Context) error
 	StopEnvironment(ctx context.Context) error
 	AdminAPIClient(ctx context.Context) (*adminSdk.Client, error)
+	// Deployer returns a Deployer for this executor, or nil if the executor
+	// does not support release-based deployment.
+	Deployer() Deployer
 }
 
 func adminAPIClient(ctx context.Context, cfg *shop.Config, envCfg *shop.EnvironmentConfig) (*adminSdk.Client, error) {
