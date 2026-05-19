@@ -1,0 +1,67 @@
+{% block buy_widget_price_unit_content_custom %}
+    {% if not isFractional %}
+        {% if numberOfSubitems == 1 %}
+            1 {{ packUnit }}
+        {% else %}
+            {{ packUnit }}
+            {% if isWeighted %}
+                ca.
+            {% else %}
+                a
+            {% endif %}
+            {{ numberOfSubitems }} {{ packagingUnit }}
+        {% endif %}
+    {% else %}
+        {{ 'foo'|trans }}: <br>
+        {{ fractionalUnit }}
+        {{ packagingUnit }}
+    {% endif %}
+{% endblock %}
+-----
+{% block buy_widget_price_unit_content_custom %}
+{% if not isFractional %}
+    {% if numberOfSubitems == 1 %}
+        1
+        {{ packUnit }}
+    {% else %}
+        {{ packUnit }}
+        {% if isWeighted %}
+            ca.
+        {% else %}
+            a
+        {% endif %}
+        {{ numberOfSubitems }}
+        {{ packagingUnit }}
+    {% endif %}
+{% else %}
+    {{ 'foo'|trans }}
+    :
+    <br/>
+    {{ fractionalUnit }}
+    {{ packagingUnit }}
+{% endif %}
+{% endblock %}
+-----
+{% block buy_widget_price_unit_content_custom %}
+    {% if not isFractional %}
+        {% if numberOfSubitems == 1 %}
+            1
+            {{ packUnit }}
+        {% else %}
+            {{ packUnit }}
+            {% if isWeighted %}
+                ca.
+            {% else %}
+                a
+            {% endif %}
+            {{ numberOfSubitems }}
+            {{ packagingUnit }}
+        {% endif %}
+    {% else %}
+        {{ 'foo'|trans }}
+        :
+        <br/>
+        {{ fractionalUnit }}
+        {{ packagingUnit }}
+    {% endif %}
+{% endblock %}

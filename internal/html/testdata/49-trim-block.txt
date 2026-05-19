@@ -1,0 +1,5 @@
+{%- block foo -%}body{%- endblock -%}
+-----
+{%- block foo -%}body{%- endblock -%}
+-----
+{%- block foo -%}body{%- endblock -%}

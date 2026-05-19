@@ -1,0 +1,13 @@
+{%- if x -%}A{%- else -%}B{%- endif -%}
+-----
+{%- if x -%}
+    A
+{%- else -%}
+    B
+{%- endif -%}
+-----
+{%- if x -%}
+    A
+{%- else -%}
+    B
+{%- endif -%}

@@ -1,0 +1,19 @@
+{% for item in items %}
+    item: {{ item }}
+{% else %}
+    empty
+{% endfor %}
+-----
+{% for item in items %}
+    item:
+    {{ item }}
+{% else %}
+    empty
+{% endfor %}
+-----
+{% for item in items %}
+    item:
+    {{ item }}
+{% else %}
+    empty
+{% endfor %}

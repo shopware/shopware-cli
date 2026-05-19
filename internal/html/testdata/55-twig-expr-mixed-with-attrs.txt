@@ -1,0 +1,13 @@
+<div data-x="y" {{ attributes }} class="z"></div>
+-----
+<div
+    data-x="y"
+{{ attributes }}
+    class="z"
+></div>
+-----
+<div
+    data-x="y"
+{{ attributes }}
+    class="z"
+></div>

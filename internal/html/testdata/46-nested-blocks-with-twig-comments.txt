@@ -1,0 +1,116 @@
+{% block swag_customized_products_option_type_base_tree %}
+<div class="swag-customized-products-option-type-modal-content-tree">
+    {% block swag_customized_products_option_type_base_tree_option_tree %}
+    <swag-customized-products-option-tree
+        ref="optionValueTree"
+        class="swag-customized-products-option-type-modal-content-tree__tree"
+        :versionContext="versionContext"
+        :option="option"
+        @option-valid="$emit('option-valid', $event)"
+        @option-value-change="setOptionValues"
+        @save-method-add="$emit('save-method-add', $event)"
+        @active-item-change="setActiveItem"
+    >
+            </swag-customized-products-option-tree>
+    {% endblock %}
+
+    {% block swag_customized_products_option_type_base_tree_content %}
+    <swag-customized-products-option-tree-content
+        class="swag-customized-products-option-type-modal-content-tree__form"
+        :data="activeItem"
+        :versionContext="versionContext"
+        :option="option"
+    >
+        <template #root-content>
+            {% block swag_customized_products_option_type_base_tree_content_root_component %}
+                        {# Add root content here #}
+            {% endblock %}
+        </template>
+
+        <template #content="{ data }">
+            {% block swag_customized_products_option_type_base_tree_content_component %}
+                        {# Add content here #}
+            {% endblock %}
+        </template>
+    </swag-customized-products-option-tree-content>
+    {% endblock %}
+</div>
+{% endblock %}
+-----
+{% block swag_customized_products_option_type_base_tree %}
+<div class="swag-customized-products-option-type-modal-content-tree">
+    {% block swag_customized_products_option_type_base_tree_option_tree %}
+    <swag-customized-products-option-tree
+        ref="optionValueTree"
+        class="swag-customized-products-option-type-modal-content-tree__tree"
+        :versionContext="versionContext"
+        :option="option"
+        @option-valid="$emit('option-valid', $event)"
+        @option-value-change="setOptionValues"
+        @save-method-add="$emit('save-method-add', $event)"
+        @active-item-change="setActiveItem"
+    >
+            </swag-customized-products-option-tree>
+    {% endblock %}
+
+    {% block swag_customized_products_option_type_base_tree_content %}
+    <swag-customized-products-option-tree-content
+        class="swag-customized-products-option-type-modal-content-tree__form"
+        :data="activeItem"
+        :versionContext="versionContext"
+        :option="option"
+    >
+        <template #root-content>
+            {% block swag_customized_products_option_type_base_tree_content_root_component %}
+            {# Add root content here #}
+            {% endblock %}
+        </template>
+
+        <template #content="{ data }">
+            {% block swag_customized_products_option_type_base_tree_content_component %}
+            {# Add content here #}
+            {% endblock %}
+        </template>
+    </swag-customized-products-option-tree-content>
+    {% endblock %}
+</div>
+{% endblock %}
+-----
+{% block swag_customized_products_option_type_base_tree %}
+    <div class="swag-customized-products-option-type-modal-content-tree">
+        {% block swag_customized_products_option_type_base_tree_option_tree %}
+            <swag-customized-products-option-tree
+                ref="optionValueTree"
+                class="swag-customized-products-option-type-modal-content-tree__tree"
+                :versionContext="versionContext"
+                :option="option"
+                @option-valid="$emit('option-valid', $event)"
+                @option-value-change="setOptionValues"
+                @save-method-add="$emit('save-method-add', $event)"
+                @active-item-change="setActiveItem"
+            >
+            </swag-customized-products-option-tree>
+        {% endblock %}
+
+        {% block swag_customized_products_option_type_base_tree_content %}
+            <swag-customized-products-option-tree-content
+                class="swag-customized-products-option-type-modal-content-tree__form"
+                :data="activeItem"
+                :versionContext="versionContext"
+                :option="option"
+            >
+                <template #root-content>
+                    {% block swag_customized_products_option_type_base_tree_content_root_component %}
+                        {# Add root content here #}
+                    {% endblock %}
+                </template>
+
+                <template #content="{ data }">
+                    {% block swag_customized_products_option_type_base_tree_content_component %}
+                        {# Add content here #}
+                    {% endblock %}
+                </template>
+            </swag-customized-products-option-tree-content>
+        {% endblock %}
+    </div>
+{% endblock %}
