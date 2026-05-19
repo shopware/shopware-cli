@@ -240,10 +240,13 @@ var projectCI = &cobra.Command{
 		if shopCfg.Build.IsMjmlEnabled() {
 			mjmlSection := ci.Default.Section(cmd.Context(), "Compiling MJML templates")
 
+			extraIncludePaths := shopCfg.Build.MJML.ResolveIncludePaths(args[0])
+
 			for _, searchPath := range shopCfg.Build.MJML.GetPaths(args[0]) {
 				if _, err := os.Stat(searchPath); !os.IsNotExist(err) {
 					logging.FromContext(cmd.Context()).Infof("Processing MJML files in: %s", searchPath)
-					if err := mjml.ProcessDirectory(cmd.Context(), searchPath); err != nil {
+					mjmlOpts := mjml.NewCompileOptions(searchPath, shopCfg.Build.MJML.AllowIncludes, extraIncludePaths)
+					if err := mjml.ProcessDirectory(cmd.Context(), searchPath, mjmlOpts); err != nil {
 						logging.FromContext(cmd.Context()).Warnf("MJML compilation had issues in %s: %v", searchPath, err)
 					}
 				} else {
