@@ -250,6 +250,14 @@ func (m *LogsModel) StopStreaming() {
 	m.stopStreaming()
 }
 
+func (m *LogsModel) AppendErrorLine(msg string) {
+	m.lines = append(m.lines, errorStyle.Render(msg))
+	m.viewport.SetContent(strings.Join(m.lines, "\n"))
+	if m.follow {
+		m.viewport.GotoBottom()
+	}
+}
+
 func (m *LogsModel) ActiveProcessSourceName() string {
 	if m.active >= 0 && m.active < len(m.sources) {
 		src := m.sources[m.active]
