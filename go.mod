@@ -28,7 +28,7 @@ require (
 	github.com/stretchr/testify v1.11.1
 	github.com/tetratelabs/wazero v1.11.0
 	github.com/tonistiigi/go-actions-cache v0.0.0-20260120203934-54bc28c26fd2
-	github.com/vulcand/oxy/v2 v2.1.0
+	github.com/vulcand/oxy/v2 v2.1.1
 	github.com/wI2L/jsondiff v0.7.1
 	github.com/yuin/goldmark v1.8.2
 	github.com/zeebo/xxh3 v1.1.0

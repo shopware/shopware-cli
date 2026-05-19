@@ -291,13 +291,15 @@ func (c *ConfigDump) EnableAnonymization() {
 		},
 	}
 
-	// Merge with existing rewrites
+	// Merge with existing rewrites; user-supplied values take precedence over defaults
 	for table, columns := range anonymizationRewrites {
 		if _, exists := c.Rewrite[table]; !exists {
 			c.Rewrite[table] = columns
-		} else {
-			// Merge column rewrites for existing table
-			for column, rewrite := range columns {
+			continue
+		}
+
+		for column, rewrite := range columns {
+			if _, columnExists := c.Rewrite[table][column]; !columnExists {
 				c.Rewrite[table][column] = rewrite
 			}
 		}
@@ -408,6 +410,10 @@ type ConfigValidation struct {
 	Ignore []ConfigValidationIgnoreItem `yaml:"ignore,omitempty"`
 
 	IgnoreExtensions []ConfigValidationIgnoreExtension `yaml:"ignore_extensions,omitempty"`
+
+	// PhpVersion overrides the PHP version used for linting (e.g. "8.4").
+	// When set, this takes precedence over the version derived from composer.json or the static Shopware-to-PHP mapping.
+	PhpVersion string `yaml:"php_version,omitempty"`
 }
 
 // ConfigValidationIgnoreItem is used to ignore items from the validation.

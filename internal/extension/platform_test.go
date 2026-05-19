@@ -102,7 +102,7 @@ func TestPluginIconExists(t *testing.T) {
 
 	plugin := getTestPlugin(dir)
 
-	assert.NoError(t, os.MkdirAll(filepath.Join(dir, "src", "Resources", "config"), os.ModePerm))
+	assert.NoError(t, os.MkdirAll(filepath.Join(dir, "src", "Resources", "config"), 0o755))
 	assert.NoError(t, createTestImage(filepath.Join(dir, "src", "Resources", "config", "plugin.png")))
 
 	check := &testCheck{}
@@ -134,7 +134,7 @@ func TestPluginIconIsTooBig(t *testing.T) {
 
 	plugin := getTestPlugin(dir)
 
-	assert.NoError(t, os.MkdirAll(filepath.Join(dir, "src", "Resources", "config"), os.ModePerm))
+	assert.NoError(t, os.MkdirAll(filepath.Join(dir, "src", "Resources", "config"), 0o755))
 	assert.NoError(t, createTestImageWithSize(filepath.Join(dir, "src", "Resources", "config", "plugin.png"), 1000, 1000))
 
 	check := &testCheck{}
@@ -155,7 +155,7 @@ func TestPluginGermanDescriptionMissing(t *testing.T) {
 	}
 
 	check := &testCheck{}
-	assert.NoError(t, os.MkdirAll(filepath.Join(dir, "src", "Resources", "config"), os.ModePerm))
+	assert.NoError(t, os.MkdirAll(filepath.Join(dir, "src", "Resources", "config"), 0o755))
 	assert.NoError(t, createTestImage(filepath.Join(dir, "src", "Resources", "config", "plugin.png")))
 
 	plugin.Validate(getTestContext(), check)
@@ -173,7 +173,7 @@ func TestPluginGermanDescriptionMissingOnlyEnglishMarket(t *testing.T) {
 		"en-GB": "Frosh Tools",
 	}
 	plugin.config.Store.Availabilities = &[]string{"International"}
-	assert.NoError(t, os.MkdirAll(filepath.Join(dir, "src", "Resources", "config"), os.ModePerm))
+	assert.NoError(t, os.MkdirAll(filepath.Join(dir, "src", "Resources", "config"), 0o755))
 	assert.NoError(t, createTestImage(filepath.Join(dir, "src", "Resources", "config", "plugin.png")))
 
 	check := &testCheck{}
@@ -181,4 +181,23 @@ func TestPluginGermanDescriptionMissingOnlyEnglishMarket(t *testing.T) {
 	plugin.Validate(getTestContext(), check)
 
 	assert.Len(t, check.Results, 0)
+}
+
+func TestNormalizePhpVersion(t *testing.T) {
+	cases := []struct {
+		input    string
+		expected string
+	}{
+		{"8.4", "8.4"},
+		{"8.4.1", "8.4"},
+		{" 8.2 ", "8.2"},
+		{"8", "8"},
+		{"7.4.33-1", "7.4"},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.input, func(t *testing.T) {
+			assert.Equal(t, tc.expected, normalizePhpVersion(tc.input))
+		})
+	}
 }

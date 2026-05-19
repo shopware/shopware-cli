@@ -150,7 +150,7 @@ func saveApiTokenToTokenCache(client *Client) error {
 		}
 	}
 
-	err = os.WriteFile(tokenFilePath, content, os.ModePerm)
+	err = os.WriteFile(tokenFilePath, content, 0o600)
 	if err != nil {
 		return err
 	}

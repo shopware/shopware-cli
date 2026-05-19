@@ -336,7 +336,7 @@ func TestConfigDump_EnableAnonymization(t *testing.T) {
 		assert.Equal(t, "faker.Internet.Email()", customerRewrites["email"])
 	})
 
-	t.Run("override existing column rewrites", func(t *testing.T) {
+	t.Run("user rewrites take precedence over defaults", func(t *testing.T) {
 		config := &ConfigDump{
 			Rewrite: map[string]map[string]string{
 				"customer": {
@@ -348,10 +348,11 @@ func TestConfigDump_EnableAnonymization(t *testing.T) {
 
 		config.EnableAnonymization()
 
-		// Anonymization should override existing rewrites
+		// User-supplied column rewrites must not be overwritten by the defaults
 		customerRewrites := config.Rewrite["customer"]
-		assert.Equal(t, "faker.Person.FirstName()", customerRewrites["first_name"])
-		assert.Equal(t, "faker.Person.LastName()", customerRewrites["last_name"])
+		assert.Equal(t, "my_custom_rewrite", customerRewrites["first_name"])
+		assert.Equal(t, "another_custom_rewrite", customerRewrites["last_name"])
+		// Columns not configured by the user still get the default
 		assert.Equal(t, "faker.Internet.Email()", customerRewrites["email"])
 	})
 

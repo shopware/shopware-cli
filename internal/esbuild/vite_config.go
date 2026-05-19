@@ -36,7 +36,7 @@ func dumpViteManifest(options AssetCompileOptions, viteDir string) error {
 		return err
 	}
 
-	return os.WriteFile(path.Join(viteDir, "manifest.json"), j, os.ModePerm)
+	return os.WriteFile(path.Join(viteDir, "manifest.json"), j, 0o644)
 }
 
 type ViteEntrypoint struct {
@@ -100,7 +100,7 @@ func dumpViteEntrypoint(options AssetCompileOptions, viteDir string) error {
 		return err
 	}
 
-	return os.WriteFile(path.Join(viteDir, "entrypoints.json"), j, os.ModePerm)
+	return os.WriteFile(path.Join(viteDir, "entrypoints.json"), j, 0o644)
 }
 
 func DumpViteConfig(options AssetCompileOptions) error {

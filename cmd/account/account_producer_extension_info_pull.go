@@ -64,7 +64,7 @@ var accountCompanyProducerExtensionInfoPullCmd = &cobra.Command{
 		faqEN := make([]extension.ConfigStoreFaq, 0)
 
 		if _, err := os.Stat(resourcesFolder); os.IsNotExist(err) {
-			err = os.MkdirAll(resourcesFolder, os.ModePerm)
+			err = os.MkdirAll(resourcesFolder, 0o755)
 			if err != nil {
 				return fmt.Errorf("cannot create file: %w", err)
 			}
@@ -139,11 +139,11 @@ var accountCompanyProducerExtensionInfoPullCmd = &cobra.Command{
 				germanMetaTitle = info.MetaTitle
 				germanMetaDescription = info.MetaDescription
 
-				if err := os.WriteFile(path.Join(zipExt.GetPath(), germanDescription[5:]), []byte(info.Description), os.ModePerm); err != nil {
+				if err := os.WriteFile(path.Join(zipExt.GetPath(), germanDescription[5:]), []byte(info.Description), 0o644); err != nil {
 					return fmt.Errorf("cannot write file: %w", err)
 				}
 
-				if err := os.WriteFile(path.Join(zipExt.GetPath(), germanInstallationManual[5:]), []byte(info.InstallationManual), os.ModePerm); err != nil {
+				if err := os.WriteFile(path.Join(zipExt.GetPath(), germanInstallationManual[5:]), []byte(info.InstallationManual), 0o644); err != nil {
 					return fmt.Errorf("cannot write file: %w", err)
 				}
 
@@ -173,11 +173,11 @@ var accountCompanyProducerExtensionInfoPullCmd = &cobra.Command{
 				englishMetaTitle = info.MetaTitle
 				englishMetaDescription = info.MetaDescription
 
-				if err := os.WriteFile(path.Join(zipExt.GetPath(), englishDescription[5:]), []byte(info.Description), os.ModePerm); err != nil {
+				if err := os.WriteFile(path.Join(zipExt.GetPath(), englishDescription[5:]), []byte(info.Description), 0o644); err != nil {
 					return fmt.Errorf("cannot write file: %w", err)
 				}
 
-				if err := os.WriteFile(path.Join(zipExt.GetPath(), englishInstallationManual[5:]), []byte(info.InstallationManual), os.ModePerm); err != nil {
+				if err := os.WriteFile(path.Join(zipExt.GetPath(), englishInstallationManual[5:]), []byte(info.InstallationManual), 0o644); err != nil {
 					return fmt.Errorf("cannot write file: %w", err)
 				}
 
@@ -256,7 +256,7 @@ var accountCompanyProducerExtensionInfoPullCmd = &cobra.Command{
 		}
 
 		extCfgFile := fmt.Sprintf("%s/%s", zipExt.GetPath(), newCfg.FileName)
-		err = os.WriteFile(extCfgFile, content, os.ModePerm)
+		err = os.WriteFile(extCfgFile, content, 0o644)
 		if err != nil {
 			return fmt.Errorf("cannot save file: %w", err)
 		}
@@ -293,7 +293,7 @@ func downloadFileTo(ctx context.Context, url string, target string) error {
 		return fmt.Errorf("read file body: %w", err)
 	}
 
-	err = os.WriteFile(target, content, os.ModePerm)
+	err = os.WriteFile(target, content, 0o644)
 	if err != nil {
 		return fmt.Errorf("write to file: %w", err)
 	}
@@ -329,7 +329,7 @@ func writeImages(ctx context.Context, imagePath string, index int, storeImages [
 	}
 
 	if _, err := os.Stat(imagePath); os.IsNotExist(err) {
-		if err := os.MkdirAll(imagePath, os.ModePerm); err != nil {
+		if err := os.MkdirAll(imagePath, 0o755); err != nil {
 			return err
 		}
 	}

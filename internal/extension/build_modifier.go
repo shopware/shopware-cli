@@ -48,7 +48,7 @@ func BuildModifier(ext Extension, extensionRoot string, config BuildModifierConf
 			return fmt.Errorf("could not marshal manifest.xml: %w", err)
 		}
 
-		if err := os.WriteFile(path.Join(extensionRoot, "manifest.xml"), newXml, os.ModePerm); err != nil {
+		if err := os.WriteFile(path.Join(extensionRoot, "manifest.xml"), newXml, 0o644); err != nil {
 			return fmt.Errorf("could not write manifest.xml: %w", err)
 		}
 	}
@@ -74,7 +74,7 @@ func BuildModifier(ext Extension, extensionRoot string, config BuildModifierConf
 			return fmt.Errorf("could not marshal composer.json: %w", err)
 		}
 
-		if err := os.WriteFile(path.Join(extensionRoot, "composer.json"), newComposerJson, os.ModePerm); err != nil {
+		if err := os.WriteFile(path.Join(extensionRoot, "composer.json"), newComposerJson, 0o644); err != nil {
 			return fmt.Errorf("could not write composer.json: %w", err)
 		}
 	}

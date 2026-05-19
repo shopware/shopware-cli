@@ -16,7 +16,7 @@ func copyStaticFiles(currentPath string, targetPath string) error {
 	}
 
 	// Create target directory if it doesn't exist
-	if err := os.MkdirAll(targetPath, os.ModePerm); err != nil {
+	if err := os.MkdirAll(targetPath, 0o755); err != nil {
 		return fmt.Errorf("failed to create target directory: %w", err)
 	}
 
@@ -37,7 +37,7 @@ func copyStaticFiles(currentPath string, targetPath string) error {
 
 		// If it's a directory, create it in target
 		if info.IsDir() {
-			return os.MkdirAll(targetFilePath, os.ModePerm)
+			return os.MkdirAll(targetFilePath, 0o755)
 		}
 
 		// Copy the file

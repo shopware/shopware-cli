@@ -33,7 +33,7 @@ func PatchPackageLockToRemoveCanIUse(packageLockPath string) error {
 		return err
 	}
 
-	return os.WriteFile(packageLockPath, updatedBody, os.ModePerm)
+	return os.WriteFile(packageLockPath, updatedBody, 0o644)
 }
 
 func removeCanIUsePackage(pkg map[string]any) {

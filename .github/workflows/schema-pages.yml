@@ -1,0 +1,66 @@
+name: Publish Config Schemas
+
+on:
+  push:
+    branches: ["main"]
+    paths:
+      - 'internal/shop/config_schema.json'
+      - 'internal/extension/config_schema.json'
+      - '.github/workflows/schema-pages.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@ab7a9404c0f3da075243ca237b5fac12c98deaa5 # ratchet:step-security/harden-runner@v2.19.3
+        with:
+          egress-policy: audit
+
+      - name: Checkout Repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # ratchet:actions/checkout@v6
+
+      - name: Assemble Pages site
+        run: |
+          mkdir -p _site
+          cp internal/shop/config_schema.json _site/shopware-project-schema.json
+          cp internal/extension/config_schema.json _site/shopware-extension-schema.json
+          cat > _site/index.html <<'EOF'
+          <!DOCTYPE html>
+          <html lang="en">
+          <head>
+            <meta charset="utf-8">
+            <title>shopware-cli config schemas</title>
+          </head>
+          <body>
+            <h1>shopware-cli config schemas</h1>
+            <ul>
+              <li><a href="shopware-project-schema.json">shopware-project-schema.json</a> &mdash; schema for <code>.shopware-project.yml</code></li>
+              <li><a href="shopware-extension-schema.json">shopware-extension-schema.json</a> &mdash; schema for <code>.shopware-extension.yml</code></li>
+            </ul>
+          </body>
+          </html>
+          EOF
+
+      - name: Setup Pages
+        uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d # ratchet:actions/configure-pages@v6.0.0
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # ratchet:actions/upload-pages-artifact@v5.0.0
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@cd2ce8fcbc39b97be8ca5fce6e763baed58fa128 # ratchet:actions/deploy-pages@v5.0.0

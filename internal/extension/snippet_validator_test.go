@@ -32,8 +32,8 @@ func TestSnippetValidateStorefrontByPathOneFileIsIgnored(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	check := &testCheck{}
-	_ = os.MkdirAll(path.Join(tmpDir, "Resources", "snippet"), os.ModePerm)
-	_ = os.WriteFile(path.Join(tmpDir, "Resources", "snippet", "storefront.en-GB.json"), []byte(`{}`), os.ModePerm)
+	_ = os.MkdirAll(path.Join(tmpDir, "Resources", "snippet"), 0o755)
+	_ = os.WriteFile(path.Join(tmpDir, "Resources", "snippet", "storefront.en-GB.json"), []byte(`{}`), 0o644)
 
 	assert.NoError(t, validateSnippetsByPath(tmpDir, tmpDir, check, storefrontSnippetFilter))
 	assert.Len(t, check.Results, 0)
@@ -45,9 +45,9 @@ func TestSnippetValidateStorefrontByPathSameFile(t *testing.T) {
 
 	check := &testCheck{}
 
-	_ = os.MkdirAll(path.Join(tmpDir, "Resources", "snippet"), os.ModePerm)
-	_ = os.WriteFile(path.Join(tmpDir, "Resources", "snippet", "storefront.en-GB.json"), []byte(`{"test": "1"}`), os.ModePerm)
-	_ = os.WriteFile(path.Join(tmpDir, "Resources", "snippet", "storefront.de-DE.json"), []byte(`{"test": "2"}`), os.ModePerm)
+	_ = os.MkdirAll(path.Join(tmpDir, "Resources", "snippet"), 0o755)
+	_ = os.WriteFile(path.Join(tmpDir, "Resources", "snippet", "storefront.en-GB.json"), []byte(`{"test": "1"}`), 0o644)
+	_ = os.WriteFile(path.Join(tmpDir, "Resources", "snippet", "storefront.de-DE.json"), []byte(`{"test": "2"}`), 0o644)
 
 	assert.NoError(t, validateSnippetsByPath(tmpDir, tmpDir, check, storefrontSnippetFilter))
 	assert.Len(t, check.Results, 0)
@@ -59,9 +59,9 @@ func TestSnippetValidateStorefrontByPathTestDifferent(t *testing.T) {
 
 	check := &testCheck{}
 
-	_ = os.MkdirAll(path.Join(tmpDir, "Resources", "snippet"), os.ModePerm)
-	_ = os.WriteFile(path.Join(tmpDir, "Resources", "snippet", "storefront.en-GB.json"), []byte(`{"a": "1"}`), os.ModePerm)
-	_ = os.WriteFile(path.Join(tmpDir, "Resources", "snippet", "storefront.de-DE.json"), []byte(`{"b": "2"}`), os.ModePerm)
+	_ = os.MkdirAll(path.Join(tmpDir, "Resources", "snippet"), 0o755)
+	_ = os.WriteFile(path.Join(tmpDir, "Resources", "snippet", "storefront.en-GB.json"), []byte(`{"a": "1"}`), 0o644)
+	_ = os.WriteFile(path.Join(tmpDir, "Resources", "snippet", "storefront.de-DE.json"), []byte(`{"b": "2"}`), 0o644)
 
 	assert.NoError(t, validateSnippetsByPath(tmpDir, tmpDir, check, storefrontSnippetFilter))
 	assert.Len(t, check.Results, 2)
@@ -74,9 +74,9 @@ func TestSnippetValidateFindsInvalidJsonInMainFile(t *testing.T) {
 
 	check := &testCheck{}
 
-	_ = os.MkdirAll(path.Join(tmpDir, "Resources", "snippet"), os.ModePerm)
-	_ = os.WriteFile(path.Join(tmpDir, "Resources", "snippet", "storefront.en-GB.json"), []byte(`{"a": "1",}`), os.ModePerm)
-	_ = os.WriteFile(path.Join(tmpDir, "Resources", "snippet", "storefront.de-DE.json"), []byte(`{"a": "2"}`), os.ModePerm)
+	_ = os.MkdirAll(path.Join(tmpDir, "Resources", "snippet"), 0o755)
+	_ = os.WriteFile(path.Join(tmpDir, "Resources", "snippet", "storefront.en-GB.json"), []byte(`{"a": "1",}`), 0o644)
+	_ = os.WriteFile(path.Join(tmpDir, "Resources", "snippet", "storefront.de-DE.json"), []byte(`{"a": "2"}`), 0o644)
 
 	assert.NoError(t, validateSnippetsByPath(tmpDir, tmpDir, check, storefrontSnippetFilter))
 	assert.Len(t, check.Results, 1)
@@ -88,9 +88,9 @@ func TestSnippetValidateFindsInvalidJsonInGermanFile(t *testing.T) {
 
 	check := &testCheck{}
 
-	_ = os.MkdirAll(path.Join(tmpDir, "Resources", "snippet"), os.ModePerm)
-	_ = os.WriteFile(path.Join(tmpDir, "Resources", "snippet", "storefront.en-GB.json"), []byte(`{"a": "1"}`), os.ModePerm)
-	_ = os.WriteFile(path.Join(tmpDir, "Resources", "snippet", "storefront.de-DE.json"), []byte(`{"a": "2",}`), os.ModePerm)
+	_ = os.MkdirAll(path.Join(tmpDir, "Resources", "snippet"), 0o755)
+	_ = os.WriteFile(path.Join(tmpDir, "Resources", "snippet", "storefront.en-GB.json"), []byte(`{"a": "1"}`), 0o644)
+	_ = os.WriteFile(path.Join(tmpDir, "Resources", "snippet", "storefront.de-DE.json"), []byte(`{"a": "2",}`), 0o644)
 
 	assert.NoError(t, validateSnippetsByPath(tmpDir, tmpDir, check, storefrontSnippetFilter))
 	assert.Len(t, check.Results, 1)
@@ -101,10 +101,10 @@ func TestSnippetValidatePrioritizesCountryAgnosticEnglish(t *testing.T) {
 	tmpDir := t.TempDir()
 	check := &testCheck{}
 
-	_ = os.MkdirAll(path.Join(tmpDir, "Resources", "snippet"), os.ModePerm)
-	_ = os.WriteFile(path.Join(tmpDir, "Resources", "snippet", "storefront.en.json"), []byte(`{"a": "1"}`), os.ModePerm)
-	_ = os.WriteFile(path.Join(tmpDir, "Resources", "snippet", "storefront.en-GB.json"), []byte(`{"a": "1", "b": "2"}`), os.ModePerm)
-	_ = os.WriteFile(path.Join(tmpDir, "Resources", "snippet", "storefront.de-DE.json"), []byte(`{"a": "3"}`), os.ModePerm)
+	_ = os.MkdirAll(path.Join(tmpDir, "Resources", "snippet"), 0o755)
+	_ = os.WriteFile(path.Join(tmpDir, "Resources", "snippet", "storefront.en.json"), []byte(`{"a": "1"}`), 0o644)
+	_ = os.WriteFile(path.Join(tmpDir, "Resources", "snippet", "storefront.en-GB.json"), []byte(`{"a": "1", "b": "2"}`), 0o644)
+	_ = os.WriteFile(path.Join(tmpDir, "Resources", "snippet", "storefront.de-DE.json"), []byte(`{"a": "3"}`), 0o644)
 
 	assert.NoError(t, validateSnippetsByPath(tmpDir, tmpDir, check, storefrontSnippetFilter))
 	assert.Len(t, check.Results, 1)

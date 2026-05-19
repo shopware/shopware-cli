@@ -29,6 +29,10 @@ type UpdateCheckExtensionCompatibilityStatus struct {
 	Type  string `json:"type"`
 }
 
+func (s UpdateCheckExtensionCompatibilityStatus) IsBlocker() bool {
+	return s.Type != "success" && s.Type != ""
+}
+
 func GetFutureExtensionUpdates(ctx context.Context, currentVersion string, futureVersion string, extensions []UpdateCheckExtension) ([]UpdateCheckExtensionCompatibility, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, getApiUrl()+"/swplatform/autoupdate", nil)
 	if err != nil {

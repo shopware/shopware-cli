@@ -24,12 +24,12 @@ func Unzip(r *zip.Reader, dest string) error {
 
 		if f.FileInfo().IsDir() {
 			// Make Folder
-			_ = os.MkdirAll(fpath, os.ModePerm)
+			_ = os.MkdirAll(fpath, 0o755)
 			continue
 		}
 
 		// Make File
-		if err := os.MkdirAll(filepath.Dir(fpath), os.ModePerm); err != nil {
+		if err := os.MkdirAll(filepath.Dir(fpath), 0o755); err != nil {
 			return err
 		}
 

@@ -205,7 +205,7 @@ func PrepareExtensionForRelease(ctx context.Context, sourceRoot, extensionRoot s
 
 		logging.FromContext(ctx).Debugf("Changelog:\n%s", changelogFile)
 
-		if err := os.WriteFile(path.Join(extensionRoot, "CHANGELOG_en-GB.md"), []byte(changelogFile), os.ModePerm); err != nil {
+		if err := os.WriteFile(path.Join(extensionRoot, "CHANGELOG_en-GB.md"), []byte(changelogFile), 0o644); err != nil {
 			return err
 		}
 	}
@@ -233,7 +233,7 @@ func PrepareExtensionForRelease(ctx context.Context, sourceRoot, extensionRoot s
 		return fmt.Errorf("cannot marshal manifest failed: %w", err)
 	}
 
-	if err := os.WriteFile(manifestPath, newManifest, os.ModePerm); err != nil {
+	if err := os.WriteFile(manifestPath, newManifest, 0o644); err != nil {
 		return err
 	}
 

@@ -23,7 +23,7 @@ func TestNoTags(t *testing.T) {
 	t.Parallel()
 	tmpDir := t.TempDir()
 	prepareRepository(t, tmpDir)
-	_ = os.WriteFile(filepath.Join(tmpDir, "a"), []byte(""), os.ModePerm)
+	_ = os.WriteFile(filepath.Join(tmpDir, "a"), []byte(""), 0o644)
 	runCommand(t, tmpDir, "add", "a")
 	runCommand(t, tmpDir, "commit", "-m", "initial commit", "--no-verify", "--no-gpg-sign")
 
@@ -44,11 +44,11 @@ func TestWithOneTagAndCommit(t *testing.T) {
 	t.Parallel()
 	tmpDir := t.TempDir()
 	prepareRepository(t, tmpDir)
-	_ = os.WriteFile(filepath.Join(tmpDir, "a"), []byte(""), os.ModePerm)
+	_ = os.WriteFile(filepath.Join(tmpDir, "a"), []byte(""), 0o644)
 	runCommand(t, tmpDir, "add", "a")
 	runCommand(t, tmpDir, "commit", "-m", "initial commit", "--no-verify", "--no-gpg-sign")
 	runCommand(t, tmpDir, "tag", "v1.0.0", "-m", "initial release")
-	_ = os.WriteFile(filepath.Join(tmpDir, "b"), []byte(""), os.ModePerm)
+	_ = os.WriteFile(filepath.Join(tmpDir, "b"), []byte(""), 0o644)
 	runCommand(t, tmpDir, "add", "b")
 	runCommand(t, tmpDir, "commit", "-m", "second commit", "--no-verify", "--no-gpg-sign")
 

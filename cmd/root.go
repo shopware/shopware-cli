@@ -2,12 +2,16 @@ package cmd
 
 import (
 	"context"
+	"errors"
 	"os"
 	"os/signal"
 	"path"
+	"runtime"
 	"slices"
+	"strconv"
 	"strings"
 	"syscall"
+	"time"
 
 	"github.com/mattn/go-isatty"
 	"github.com/spf13/cobra"
@@ -17,6 +21,7 @@ import (
 	"github.com/shopware/shopware-cli/cmd/project"
 	accountApi "github.com/shopware/shopware-cli/internal/account-api"
 	"github.com/shopware/shopware-cli/internal/system"
+	"github.com/shopware/shopware-cli/internal/tracking"
 	"github.com/shopware/shopware-cli/internal/tui"
 	"github.com/shopware/shopware-cli/logging"
 )
@@ -44,7 +49,32 @@ func Execute(ctx context.Context) {
 	accountApi.SetUserAgent("shopware-cli/" + version)
 	rootCmd.SetArgs(args)
 
-	if err := rootCmd.ExecuteContext(ctx); err != nil {
+	start := time.Now()
+	err := rootCmd.ExecuteContext(ctx)
+
+	if cmd, _, findErr := rootCmd.Find(os.Args[1:]); findErr == nil && cmd != rootCmd && cmd.RunE != nil {
+		result := "success"
+		if err != nil {
+			if errors.Is(err, context.Canceled) {
+				result = "cancelled"
+			} else {
+				result = "failure"
+			}
+		}
+		name := strings.TrimPrefix(cmd.CommandPath(), "shopware-cli ")
+		name = strings.ReplaceAll(name, " ", ".")
+		name = strings.ReplaceAll(name, "-", "_")
+		go tracking.Track(ctx, "command", map[string]string{
+			"command_name": name,
+			"result":       result,
+			"duration_ms":  strconv.FormatInt(time.Since(start).Milliseconds(), 10),
+			"cli_version":  version,
+			"os":           runtime.GOOS,
+			"is_tui":       strconv.FormatBool(system.IsInteractionEnabled(ctx)),
+		})
+	}
+
+	if err != nil {
 		logging.FromContext(ctx).Fatalln(err)
 	}
 }

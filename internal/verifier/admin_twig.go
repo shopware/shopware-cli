@@ -120,7 +120,7 @@ func (a AdminTwigLinter) Fix(ctx context.Context, config ToolConfig) error {
 				}
 			}
 
-			return os.WriteFile(path, []byte(parsed.Dump(0)), os.ModePerm)
+			return os.WriteFile(path, []byte(parsed.Dump(0)), 0o644)
 		})
 		if err != nil {
 			return err
@@ -162,7 +162,7 @@ func (a AdminTwigLinter) Format(ctx context.Context, config ToolConfig, dryRun b
 
 				return nil
 			} else {
-				return os.WriteFile(path, []byte(parsed.Dump(0)), os.ModePerm)
+				return os.WriteFile(path, []byte(parsed.Dump(0)), 0o644)
 			}
 		})
 		if err != nil {
