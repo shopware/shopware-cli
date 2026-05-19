@@ -11,7 +11,9 @@ import (
 
 	"github.com/shopware/shopware-cli/internal/executor"
 	"github.com/shopware/shopware-cli/internal/extension"
+	"github.com/shopware/shopware-cli/internal/shop"
 	"github.com/shopware/shopware-cli/internal/tui"
+	"github.com/shopware/shopware-cli/logging"
 )
 
 type GeneralModel struct {
@@ -23,6 +25,7 @@ type GeneralModel struct {
 	services           []DiscoveredService
 	projectRoot        string
 	executor           executor.Executor
+	shopCfg            *shop.Config
 	loading            bool
 	err                error
 	width              int
@@ -51,6 +54,7 @@ type watcherStartedMsg struct {
 }
 type watcherStoppedMsg struct {
 	name string
+	err  error
 }
 
 type knownService struct {
@@ -72,7 +76,7 @@ var ignoredServices = map[string]bool{
 	"database": true,
 }
 
-func NewGeneralModel(envType, shopURL, username, password, projectRoot string, exec executor.Executor) GeneralModel {
+func NewGeneralModel(envType, shopURL, username, password, projectRoot string, exec executor.Executor, shopCfg *shop.Config) GeneralModel {
 	adminURL := shopURL
 	if adminURL != "" && !strings.HasSuffix(adminURL, "/") {
 		adminURL += "/"
@@ -87,6 +91,7 @@ func NewGeneralModel(envType, shopURL, username, password, projectRoot string, e
 		password:    password,
 		projectRoot: projectRoot,
 		executor:    exec,
+		shopCfg:     shopCfg,
 		loading:     true,
 	}
 }
@@ -161,11 +166,17 @@ func (m GeneralModel) View(width, height int) string {
 func (m *GeneralModel) startAdminWatch() tea.Cmd {
 	e := m.executor
 	projectRoot := m.projectRoot
+	shopCfg := m.shopCfg
 
 	return func() tea.Msg {
-		watchProcess, err := extension.PrepareAdminWatcher(context.Background(), projectRoot, e)
+		ctx := logging.DisableLogger(context.Background())
+		if err := extension.WriteProjectPluginJson(ctx, projectRoot, shopCfg, e); err != nil {
+			return watcherStoppedMsg{name: watcherAdmin, err: fmt.Errorf("preparing plugins.json: %w", err)}
+		}
+
+		watchProcess, err := extension.PrepareAdminWatcher(ctx, projectRoot, e)
 		if err != nil {
-			return watcherStoppedMsg{name: watcherAdmin}
+			return watcherStoppedMsg{name: watcherAdmin, err: fmt.Errorf("starting admin watcher: %w", err)}
 		}
 
 		return watcherStartedMsg{name: watcherAdmin, process: watchProcess}
@@ -175,11 +186,17 @@ func (m *GeneralModel) startAdminWatch() tea.Cmd {
 func (m *GeneralModel) startStorefrontWatch(opts extension.StorefrontWatcherOptions) tea.Cmd {
 	e := m.executor
 	projectRoot := m.projectRoot
+	shopCfg := m.shopCfg
 
 	return func() tea.Msg {
-		watchProcess, err := extension.PrepareStorefrontWatcher(context.Background(), projectRoot, e, opts)
+		ctx := logging.DisableLogger(context.Background())
+		if err := extension.WriteProjectPluginJson(ctx, projectRoot, shopCfg, e); err != nil {
+			return watcherStoppedMsg{name: watcherStorefront, err: fmt.Errorf("preparing plugins.json: %w", err)}
+		}
+
+		watchProcess, err := extension.PrepareStorefrontWatcher(ctx, projectRoot, e, opts)
 		if err != nil {
-			return watcherStoppedMsg{name: watcherStorefront}
+			return watcherStoppedMsg{name: watcherStorefront, err: fmt.Errorf("starting storefront watcher: %w", err)}
 		}
 
 		return watcherStartedMsg{name: watcherStorefront, process: watchProcess}

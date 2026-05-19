@@ -321,7 +321,7 @@ func (m Model) startAfterSetupGuide() (tea.Model, tea.Cmd) {
 		username = m.envConfig.AdminApi.Username
 		password = m.envConfig.AdminApi.Password
 	}
-	m.general = NewGeneralModel(m.executor.Type(), shopURL, username, password, m.projectRoot, m.executor)
+	m.general = NewGeneralModel(m.executor.Type(), shopURL, username, password, m.projectRoot, m.executor, m.config)
 	m.configTab = NewConfigModel(m.config)
 
 	return m, tea.Batch(m.dockerSpinner.Tick, m.startContainers())

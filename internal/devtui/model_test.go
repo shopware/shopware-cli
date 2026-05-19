@@ -18,7 +18,7 @@ import (
 func newTestModel() Model {
 	return Model{
 		phase:       phaseDashboard,
-		general:     NewGeneralModel("local", "http://localhost:8000", "", "", "/tmp/project", nil),
+		general:     NewGeneralModel("local", "http://localhost:8000", "", "", "/tmp/project", nil, nil),
 		logs:        NewLogsModel("/tmp/project", false),
 		configTab:   NewConfigModel(nil),
 		watchers:    make(map[string]*executor.Process),

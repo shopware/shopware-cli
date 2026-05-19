@@ -109,7 +109,7 @@ func New(opts Options) Model {
 
 	return Model{
 		activeTab:   tabGeneral,
-		general:     NewGeneralModel(opts.Executor.Type(), shopURL, username, password, opts.ProjectRoot, opts.Executor),
+		general:     NewGeneralModel(opts.Executor.Type(), shopURL, username, password, opts.ProjectRoot, opts.Executor, opts.Config),
 		logs:        NewLogsModel(opts.ProjectRoot, isDocker),
 		configTab:   NewConfigModel(opts.Config),
 		dockerMode:  isDocker,
@@ -208,6 +208,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.general.sfWatchRunning = false
 		}
 		delete(m.watchers, msg.name)
+		if msg.err != nil {
+			m.logs.AppendErrorLine(msg.name + " failed to start: " + msg.err.Error())
+			m.activeTab = tabLogs
+		}
 		return m, nil
 
 	case logDoneMsg:
