@@ -92,8 +92,7 @@ func filterAndGetSources(cmd *cobra.Command, projectRoot string, shopCfg *shop.C
 
 	logger := logging.FromContext(cmd.Context())
 
-	switch {
-	case onlyCustomStatic:
+	if onlyCustomStatic {
 		logger.Infof("Only including extensions from custom/static-plugins directory")
 		logger.Debugf("Found %d total extensions before filtering", len(sources))
 		for _, s := range sources {
@@ -132,7 +131,9 @@ func filterAndGetSources(cmd *cobra.Command, projectRoot string, shopCfg *shop.C
 		for _, s := range sources {
 			logger.Debugf("Included extension: %s, Path: %s", s.Name, s.Path)
 		}
+	}
 
+	switch {
 	case onlyExtensions != "":
 		logger.Infof("Only including extensions: %s", onlyExtensions)
 		allowed := strings.Split(onlyExtensions, ",")
@@ -148,7 +149,7 @@ func filterAndGetSources(cmd *cobra.Command, projectRoot string, shopCfg *shop.C
 		logger.Infof("Excluding extensions: %s", skipExtensions)
 		sources = extension.ExcludeExtensionsFromSources(sources, strings.Split(skipExtensions, ","))
 
-	default:
+	case !onlyCustomStatic:
 		logger.Infof("Excluding extensions based on project config: %s", strings.Join(shopCfg.Build.ExcludeExtensions, ", "))
 		sources = extension.ExcludeExtensionsFromSources(sources, shopCfg.Build.ExcludeExtensions)
 	}
