@@ -151,7 +151,7 @@ aurs:
   - homepage: https://developer.shopware.com/
     description: A cli which contains handy helpful commands for daily Shopware tasks
     license: MIT
-    disable: '{{ .Prerelease }}'
+    disable: '{{ if .Prerelease }}true{{ end }}'
     maintainers:
       - "Soner Sayakci <s.sayakci@shopware.com>"
       - "Max <max@swk-web.com>"
@@ -178,7 +178,7 @@ aurs:
 
 nix:
   - name: shopware-cli
-    skip_upload: '{{ .Prerelease }}'
+    skip_upload: auto
     repository:
       owner: FriendsOfShopware
       name: nur-packages
@@ -218,7 +218,7 @@ nfpms:
 
 homebrew_casks:
   - name: shopware-cli
-    skip_upload: '{{ .Prerelease }}'
+    skip_upload: auto
     repository:
       owner: shopware
       name: homebrew-tap
