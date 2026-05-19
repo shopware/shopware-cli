@@ -25,6 +25,38 @@ func TestSSHDeployerValidate(t *testing.T) {
 	assert.NoError(t, d.validate())
 }
 
+func TestSSHDeployerValidateMultiHost(t *testing.T) {
+	envCfg := &shop.EnvironmentConfig{
+		Type: "ssh",
+		SSH: &shop.EnvironmentSSHConfig{
+			DeployPath: "/srv/shop",
+			Hosts: []shop.EnvironmentSSHHostConfig{
+				{Host: "web1.example.com"},
+				{Host: "web2.example.com"},
+			},
+		},
+	}
+	d := &SSHDeployer{exec: &SSHExecutor{envCfg: envCfg}, sshCfg: envCfg.SSH, projectRoot: "/p"}
+	assert.NoError(t, d.validate())
+}
+
+func TestSSHDeployerValidateMultiHostMissingHost(t *testing.T) {
+	envCfg := &shop.EnvironmentConfig{
+		Type: "ssh",
+		SSH: &shop.EnvironmentSSHConfig{
+			DeployPath: "/srv/shop",
+			Hosts: []shop.EnvironmentSSHHostConfig{
+				{Host: "web1.example.com"},
+				{},
+			},
+		},
+	}
+	d := &SSHDeployer{exec: &SSHExecutor{envCfg: envCfg}, sshCfg: envCfg.SSH, projectRoot: "/p"}
+	err := d.validate()
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "missing host")
+}
+
 func TestSSHDeployerHooksWithoutConfig(t *testing.T) {
 	d := &SSHDeployer{shopCfg: &shop.Config{}}
 	hooks := d.deploymentHooks()

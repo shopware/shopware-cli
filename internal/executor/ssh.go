@@ -18,7 +18,8 @@ import (
 //
 // Local commands (composer, npm, ...) are not executed locally; the executor
 // shells out to ssh user@host so that operations like `project console` can
-// be aimed at the remote shop's current release.
+// be aimed at the remote shop's current release. When multiple hosts are
+// configured, executor commands target the first (primary) host.
 type SSHExecutor struct {
 	env         map[string]string
 	projectRoot string
@@ -34,42 +35,51 @@ func (s *SSHExecutor) sshConfig() *shop.EnvironmentSSHConfig {
 	return s.envCfg.SSH
 }
 
-func (s *SSHExecutor) sshTarget() string {
-	cfg := s.sshConfig()
-	if cfg == nil {
-		return ""
-	}
-	if cfg.User != "" {
-		return cfg.User + "@" + cfg.Host
-	}
-	return cfg.Host
+// resolvedHosts returns the effective SSH targets for this executor.
+func (s *SSHExecutor) resolvedHosts() []shop.EnvironmentSSHHostConfig {
+	return s.sshConfig().ResolvedHosts()
 }
 
-// sshArgs returns the leading arguments for an `ssh` invocation (port,
-// identity file, target). Trailing remote command words should be appended
-// by the caller.
-func (s *SSHExecutor) sshArgs() []string {
-	cfg := s.sshConfig()
-	args := []string{"-o", "BatchMode=yes"}
-	if cfg != nil {
-		if cfg.Port != 0 && cfg.Port != 22 {
-			args = append(args, "-p", strconv.Itoa(cfg.Port))
-		}
-		if cfg.IdentityFile != "" {
-			args = append(args, "-i", expandHome(cfg.IdentityFile))
-		}
+// primaryHost returns the first resolved host, used for executor commands
+// like ConsoleCommand that target a single shop.
+func (s *SSHExecutor) primaryHost() (shop.EnvironmentSSHHostConfig, bool) {
+	hosts := s.resolvedHosts()
+	if len(hosts) == 0 {
+		return shop.EnvironmentSSHHostConfig{}, false
 	}
-	args = append(args, s.sshTarget())
+	return hosts[0], true
+}
+
+// sshTargetFor returns the user@host form for an ssh invocation.
+func sshTargetFor(h shop.EnvironmentSSHHostConfig) string {
+	if h.User != "" {
+		return h.User + "@" + h.Host
+	}
+	return h.Host
+}
+
+// sshArgsFor returns the leading arguments for an `ssh` invocation to a
+// specific host (port, identity file, target). Trailing remote command
+// words should be appended by the caller.
+func sshArgsFor(h shop.EnvironmentSSHHostConfig) []string {
+	args := []string{"-o", "BatchMode=yes"}
+	if h.Port != 0 && h.Port != 22 {
+		args = append(args, "-p", strconv.Itoa(h.Port))
+	}
+	if h.IdentityFile != "" {
+		args = append(args, "-i", expandHome(h.IdentityFile))
+	}
+	args = append(args, sshTargetFor(h))
 	return args
 }
 
 // remoteCommand wraps a shell command to be executed inside the current release
-// directory, applying the executor's env and relDir.
+// directory of the primary host, applying the executor's env and relDir.
 func (s *SSHExecutor) remoteCommand(ctx context.Context, command string) *exec.Cmd {
-	cfg := s.sshConfig()
+	host, ok := s.primaryHost()
 	workdir := ""
-	if cfg != nil {
-		workdir = path.Join(cfg.DeployPath, "current")
+	if ok {
+		workdir = path.Join(host.DeployPath, "current")
 		if s.relDir != "" {
 			workdir = path.Join(workdir, s.relDir)
 		}
@@ -84,7 +94,7 @@ func (s *SSHExecutor) remoteCommand(ctx context.Context, command string) *exec.C
 	}
 	b.WriteString(command)
 
-	args := append(s.sshArgs(), b.String())
+	args := append(sshArgsFor(host), b.String())
 	cmd := exec.CommandContext(ctx, "ssh", args...)
 	logCmd(ctx, cmd)
 	return cmd
@@ -139,8 +149,14 @@ func (s *SSHExecutor) StopEnvironment(_ context.Context) error {
 }
 
 func (s *SSHExecutor) Deployer() Deployer {
-	if s.sshConfig() == nil || s.sshConfig().Host == "" || s.sshConfig().DeployPath == "" {
+	hosts := s.resolvedHosts()
+	if len(hosts) == 0 {
 		return nil
+	}
+	for _, h := range hosts {
+		if h.Host == "" || h.DeployPath == "" {
+			return nil
+		}
 	}
 	return &SSHDeployer{exec: s, projectRoot: s.projectRoot, shopCfg: s.shopCfg, envCfg: s.envCfg, sshCfg: s.sshConfig()}
 }

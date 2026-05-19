@@ -23,6 +23,10 @@ const deployTimeFormat = "20060102150405"
 // rsync to transfer the local working directory and ssh to run remote
 // commands. It manages atomic releases via a `current` symlink and a
 // `releases/` directory, plus persistent `shared/` files and directories.
+//
+// When multiple hosts are configured, every step of the deploy is executed
+// against each host sequentially with the same release name, so all hosts
+// converge on the same release.
 type SSHDeployer struct {
 	exec        *SSHExecutor
 	projectRoot string
@@ -38,82 +42,97 @@ func (d *SSHDeployer) Deploy(ctx context.Context) error {
 
 	log := logging.FromContext(ctx)
 	release := time.Now().UTC().Format(deployTimeFormat)
-	releaseDir := path.Join(d.sshCfg.DeployPath, "releases", release)
-	sharedDir := path.Join(d.sshCfg.DeployPath, "shared")
-	currentLink := path.Join(d.sshCfg.DeployPath, "current")
+	hosts := d.sshCfg.ResolvedHosts()
 
-	log.Infof("Deploying release %s to %s", release, d.exec.sshTarget())
+	log.Infof("Deploying release %s to %d host(s)", release, len(hosts))
 
-	if err := d.runRemote(ctx, fmt.Sprintf("mkdir -p %s %s", shellQuote(path.Join(d.sshCfg.DeployPath, "releases")), shellQuote(sharedDir))); err != nil {
+	for _, h := range hosts {
+		if err := d.deployHost(ctx, h, release); err != nil {
+			return fmt.Errorf("host %s: %w", h.Host, err)
+		}
+	}
+
+	log.Infof("Release %s is now active on all hosts", release)
+	return nil
+}
+
+func (d *SSHDeployer) deployHost(ctx context.Context, h shop.EnvironmentSSHHostConfig, release string) error {
+	log := logging.FromContext(ctx)
+	releaseDir := path.Join(h.DeployPath, "releases", release)
+	sharedDir := path.Join(h.DeployPath, "shared")
+	currentLink := path.Join(h.DeployPath, "current")
+
+	log.Infof("[%s] Deploying release %s", h.Host, release)
+
+	if err := d.runRemote(ctx, h, fmt.Sprintf("mkdir -p %s %s", shellQuote(path.Join(h.DeployPath, "releases")), shellQuote(sharedDir))); err != nil {
 		return fmt.Errorf("preparing remote layout: %w", err)
 	}
 
-	if err := d.runHook(ctx, "pre", d.deploymentHooks().Pre, currentLink); err != nil {
+	if err := d.runHook(ctx, h, "pre", d.deploymentHooks().Pre, currentLink); err != nil {
 		return err
 	}
 
-	log.Infof("Uploading source via rsync")
-	if err := d.rsyncTo(ctx, releaseDir); err != nil {
+	log.Infof("[%s] Uploading source via rsync", h.Host)
+	if err := d.rsyncTo(ctx, h, releaseDir); err != nil {
 		return fmt.Errorf("rsync upload: %w", err)
 	}
 
-	if err := d.linkShared(ctx, releaseDir, sharedDir); err != nil {
+	if err := d.linkShared(ctx, h, releaseDir, sharedDir); err != nil {
 		return fmt.Errorf("linking shared paths: %w", err)
 	}
 
-	isUpdate, err := d.currentExists(ctx)
+	isUpdate, err := d.currentExists(ctx, h)
 	if err != nil {
 		return err
 	}
 
 	composerCmd := "composer install --no-dev --optimize-autoloader --no-interaction"
-	if err := d.runRemote(ctx, fmt.Sprintf("cd %s && %s", shellQuote(releaseDir), composerCmd)); err != nil {
+	if err := d.runRemote(ctx, h, fmt.Sprintf("cd %s && %s", shellQuote(releaseDir), composerCmd)); err != nil {
 		return fmt.Errorf("composer install on remote: %w", err)
 	}
 
 	hooks := d.deploymentHooks()
 	if isUpdate {
-		if err := d.runHook(ctx, "pre-update", hooks.PreUpdate, releaseDir); err != nil {
+		if err := d.runHook(ctx, h, "pre-update", hooks.PreUpdate, releaseDir); err != nil {
 			return err
 		}
 	} else {
-		if err := d.runHook(ctx, "pre-install", hooks.PreInstall, releaseDir); err != nil {
+		if err := d.runHook(ctx, h, "pre-install", hooks.PreInstall, releaseDir); err != nil {
 			return err
 		}
 	}
 
-	if err := d.runDeploymentHelper(ctx, releaseDir); err != nil {
+	if err := d.runDeploymentHelper(ctx, h, releaseDir); err != nil {
 		return fmt.Errorf("shopware-deployment-helper: %w", err)
 	}
 
-	if err := d.runOneTimeTasks(ctx, releaseDir, sharedDir); err != nil {
+	if err := d.runOneTimeTasks(ctx, h, releaseDir, sharedDir); err != nil {
 		return fmt.Errorf("one-time tasks: %w", err)
 	}
 
 	if isUpdate {
-		if err := d.runHook(ctx, "post-update", hooks.PostUpdate, releaseDir); err != nil {
+		if err := d.runHook(ctx, h, "post-update", hooks.PostUpdate, releaseDir); err != nil {
 			return err
 		}
 	} else {
-		if err := d.runHook(ctx, "post-install", hooks.PostInstall, releaseDir); err != nil {
+		if err := d.runHook(ctx, h, "post-install", hooks.PostInstall, releaseDir); err != nil {
 			return err
 		}
 	}
 
-	log.Infof("Activating release %s", release)
-	if err := d.swapCurrent(ctx, releaseDir, currentLink); err != nil {
+	log.Infof("[%s] Activating release %s", h.Host, release)
+	if err := d.swapCurrent(ctx, h, releaseDir, currentLink); err != nil {
 		return fmt.Errorf("activating release: %w", err)
 	}
 
-	if err := d.runHook(ctx, "post", hooks.Post, currentLink); err != nil {
+	if err := d.runHook(ctx, h, "post", hooks.Post, currentLink); err != nil {
 		return err
 	}
 
-	if err := d.cleanupOldReleases(ctx); err != nil {
-		log.Warnf("cleaning up old releases failed: %v", err)
+	if err := d.cleanupOldReleases(ctx, h); err != nil {
+		log.Warnf("[%s] cleaning up old releases failed: %v", h.Host, err)
 	}
 
-	log.Infof("Release %s is now active", release)
 	return nil
 }
 
@@ -122,12 +141,15 @@ func (d *SSHDeployer) ListReleases(ctx context.Context) ([]Release, error) {
 		return nil, err
 	}
 
-	out, err := d.captureRemote(ctx, fmt.Sprintf("ls -1 %s 2>/dev/null || true", shellQuote(path.Join(d.sshCfg.DeployPath, "releases"))))
+	hosts := d.sshCfg.ResolvedHosts()
+	primary := hosts[0]
+
+	out, err := d.captureRemote(ctx, primary, fmt.Sprintf("ls -1 %s 2>/dev/null || true", shellQuote(path.Join(primary.DeployPath, "releases"))))
 	if err != nil {
 		return nil, fmt.Errorf("listing releases: %w", err)
 	}
 
-	current, _ := d.currentRelease(ctx)
+	current, _ := d.currentRelease(ctx, primary)
 
 	var releases []Release
 	for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
@@ -158,7 +180,7 @@ func (d *SSHDeployer) Rollback(ctx context.Context, name string) error {
 		return err
 	}
 	if len(releases) == 0 {
-		return fmt.Errorf("no releases found on %s", d.exec.sshTarget())
+		return fmt.Errorf("no releases found on primary host")
 	}
 
 	target := name
@@ -177,23 +199,26 @@ func (d *SSHDeployer) Rollback(ctx context.Context, name string) error {
 	} else {
 		idx := slices.IndexFunc(releases, func(r Release) bool { return r.Name == target })
 		if idx == -1 {
-			return fmt.Errorf("release %q not found on %s", target, d.exec.sshTarget())
+			return fmt.Errorf("release %q not found on primary host", target)
 		}
 	}
 
 	log := logging.FromContext(ctx)
-	log.Infof("Rolling back to release %s", target)
+	log.Infof("Rolling back to release %s on all hosts", target)
 
-	releaseDir := path.Join(d.sshCfg.DeployPath, "releases", target)
-	currentLink := path.Join(d.sshCfg.DeployPath, "current")
+	for _, h := range d.sshCfg.ResolvedHosts() {
+		log.Infof("[%s] Activating release %s", h.Host, target)
+		releaseDir := path.Join(h.DeployPath, "releases", target)
+		currentLink := path.Join(h.DeployPath, "current")
 
-	if err := d.swapCurrent(ctx, releaseDir, currentLink); err != nil {
-		return fmt.Errorf("activating release %s: %w", target, err)
-	}
+		if err := d.swapCurrent(ctx, h, releaseDir, currentLink); err != nil {
+			return fmt.Errorf("[%s] activating release %s: %w", h.Host, target, err)
+		}
 
-	if d.shouldClearCache() {
-		if err := d.runRemote(ctx, fmt.Sprintf("cd %s && php bin/console cache:clear", shellQuote(currentLink))); err != nil {
-			log.Warnf("cache:clear after rollback failed: %v", err)
+		if d.shouldClearCache() {
+			if err := d.runRemote(ctx, h, fmt.Sprintf("cd %s && php bin/console cache:clear", shellQuote(currentLink))); err != nil {
+				log.Warnf("[%s] cache:clear after rollback failed: %v", h.Host, err)
+			}
 		}
 	}
 
@@ -205,11 +230,17 @@ func (d *SSHDeployer) validate() error {
 	if d.sshCfg == nil {
 		return fmt.Errorf("ssh configuration missing for environment")
 	}
-	if d.sshCfg.Host == "" {
-		return fmt.Errorf("ssh.host is required")
+	hosts := d.sshCfg.ResolvedHosts()
+	if len(hosts) == 0 {
+		return fmt.Errorf("ssh.host or ssh.hosts is required")
 	}
-	if d.sshCfg.DeployPath == "" {
-		return fmt.Errorf("ssh.deploy_path is required")
+	for _, h := range hosts {
+		if h.Host == "" {
+			return fmt.Errorf("ssh.hosts entry is missing host")
+		}
+		if h.DeployPath == "" {
+			return fmt.Errorf("ssh.deploy_path is required (host %s)", h.Host)
+		}
 	}
 	if d.projectRoot == "" {
 		return fmt.Errorf("project root not set")
@@ -231,19 +262,18 @@ func (d *SSHDeployer) shouldClearCache() bool {
 	return d.shopCfg.ConfigDeployment.Cache.AlwaysClear
 }
 
-// runRemote streams a shell command to the remote and returns an error if it
-// exits non-zero. Output is forwarded to the calling process's stdout/stderr.
-func (d *SSHDeployer) runRemote(ctx context.Context, command string) error {
-	cmd := d.sshCommand(ctx, command)
+// runRemote streams a shell command to the given host and returns an error
+// if it exits non-zero. Output is forwarded to stdout/stderr.
+func (d *SSHDeployer) runRemote(ctx context.Context, h shop.EnvironmentSSHHostConfig, command string) error {
+	cmd := d.sshCommand(ctx, h, command)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	return cmd.Run()
 }
 
-// captureRemote runs a remote shell command and returns its stdout. Stderr is
-// forwarded so connection issues are visible.
-func (d *SSHDeployer) captureRemote(ctx context.Context, command string) ([]byte, error) {
-	cmd := d.sshCommand(ctx, command)
+// captureRemote runs a remote shell command and returns its stdout.
+func (d *SSHDeployer) captureRemote(ctx context.Context, h shop.EnvironmentSSHHostConfig, command string) ([]byte, error) {
+	cmd := d.sshCommand(ctx, h, command)
 	var buf bytes.Buffer
 	cmd.Stdout = &buf
 	cmd.Stderr = os.Stderr
@@ -253,26 +283,26 @@ func (d *SSHDeployer) captureRemote(ctx context.Context, command string) ([]byte
 	return buf.Bytes(), nil
 }
 
-func (d *SSHDeployer) sshCommand(ctx context.Context, command string) *exec.Cmd {
-	args := append(d.exec.sshArgs(), command)
+func (d *SSHDeployer) sshCommand(ctx context.Context, h shop.EnvironmentSSHHostConfig, command string) *exec.Cmd {
+	args := append(sshArgsFor(h), command)
 	cmd := exec.CommandContext(ctx, "ssh", args...)
 	logCmd(ctx, cmd)
 	return cmd
 }
 
-func (d *SSHDeployer) rsyncTo(ctx context.Context, releaseDir string) error {
-	if err := d.runRemote(ctx, fmt.Sprintf("mkdir -p %s", shellQuote(releaseDir))); err != nil {
+func (d *SSHDeployer) rsyncTo(ctx context.Context, h shop.EnvironmentSSHHostConfig, releaseDir string) error {
+	if err := d.runRemote(ctx, h, fmt.Sprintf("mkdir -p %s", shellQuote(releaseDir))); err != nil {
 		return err
 	}
 
-	target := d.exec.sshTarget() + ":" + releaseDir + "/"
+	target := sshTargetFor(h) + ":" + releaseDir + "/"
 
 	sshCmd := "ssh -o BatchMode=yes"
-	if d.sshCfg.Port != 0 && d.sshCfg.Port != 22 {
-		sshCmd += " -p " + strconv.Itoa(d.sshCfg.Port)
+	if h.Port != 0 && h.Port != 22 {
+		sshCmd += " -p " + strconv.Itoa(h.Port)
 	}
-	if d.sshCfg.IdentityFile != "" {
-		sshCmd += " -i " + shellQuote(expandHome(d.sshCfg.IdentityFile))
+	if h.IdentityFile != "" {
+		sshCmd += " -i " + shellQuote(expandHome(h.IdentityFile))
 	}
 
 	args := []string{"-az", "--delete", "-e", sshCmd}
@@ -308,7 +338,7 @@ func defaultRsyncExcludes() []string {
 	}
 }
 
-func (d *SSHDeployer) linkShared(ctx context.Context, releaseDir, sharedDir string) error {
+func (d *SSHDeployer) linkShared(ctx context.Context, h shop.EnvironmentSSHHostConfig, releaseDir, sharedDir string) error {
 	var script strings.Builder
 	script.WriteString("set -e\n")
 
@@ -345,19 +375,19 @@ func (d *SSHDeployer) linkShared(ctx context.Context, releaseDir, sharedDir stri
 	if script.Len() == 0 {
 		return nil
 	}
-	return d.runRemote(ctx, script.String())
+	return d.runRemote(ctx, h, script.String())
 }
 
-func (d *SSHDeployer) currentExists(ctx context.Context) (bool, error) {
-	out, err := d.captureRemote(ctx, fmt.Sprintf("if [ -L %s ]; then echo yes; else echo no; fi", shellQuote(path.Join(d.sshCfg.DeployPath, "current"))))
+func (d *SSHDeployer) currentExists(ctx context.Context, h shop.EnvironmentSSHHostConfig) (bool, error) {
+	out, err := d.captureRemote(ctx, h, fmt.Sprintf("if [ -L %s ]; then echo yes; else echo no; fi", shellQuote(path.Join(h.DeployPath, "current"))))
 	if err != nil {
 		return false, err
 	}
 	return strings.TrimSpace(string(out)) == "yes", nil
 }
 
-func (d *SSHDeployer) currentRelease(ctx context.Context) (string, error) {
-	out, err := d.captureRemote(ctx, fmt.Sprintf("readlink %s 2>/dev/null || true", shellQuote(path.Join(d.sshCfg.DeployPath, "current"))))
+func (d *SSHDeployer) currentRelease(ctx context.Context, h shop.EnvironmentSSHHostConfig) (string, error) {
+	out, err := d.captureRemote(ctx, h, fmt.Sprintf("readlink %s 2>/dev/null || true", shellQuote(path.Join(h.DeployPath, "current"))))
 	if err != nil {
 		return "", err
 	}
@@ -368,33 +398,32 @@ func (d *SSHDeployer) currentRelease(ctx context.Context) (string, error) {
 	return path.Base(target), nil
 }
 
-func (d *SSHDeployer) swapCurrent(ctx context.Context, releaseDir, currentLink string) error {
-	return d.runRemote(ctx, fmt.Sprintf("ln -sfn %s %s", shellQuote(releaseDir), shellQuote(currentLink)))
+func (d *SSHDeployer) swapCurrent(ctx context.Context, h shop.EnvironmentSSHHostConfig, releaseDir, currentLink string) error {
+	return d.runRemote(ctx, h, fmt.Sprintf("ln -sfn %s %s", shellQuote(releaseDir), shellQuote(currentLink)))
 }
 
-func (d *SSHDeployer) runHook(ctx context.Context, name, command, workdir string) error {
+func (d *SSHDeployer) runHook(ctx context.Context, h shop.EnvironmentSSHHostConfig, name, command, workdir string) error {
 	if strings.TrimSpace(command) == "" {
 		return nil
 	}
-	logging.FromContext(ctx).Infof("Running %s hook", name)
-	return d.runRemote(ctx, fmt.Sprintf("cd %s && %s", shellQuote(workdir), command))
+	logging.FromContext(ctx).Infof("[%s] Running %s hook", h.Host, name)
+	return d.runRemote(ctx, h, fmt.Sprintf("cd %s && %s", shellQuote(workdir), command))
 }
 
-func (d *SSHDeployer) runDeploymentHelper(ctx context.Context, releaseDir string) error {
-	logging.FromContext(ctx).Infof("Running shopware-deployment-helper")
+func (d *SSHDeployer) runDeploymentHelper(ctx context.Context, h shop.EnvironmentSSHHostConfig, releaseDir string) error {
+	logging.FromContext(ctx).Infof("[%s] Running shopware-deployment-helper", h.Host)
 	cmd := fmt.Sprintf("cd %s && if [ -x vendor/bin/shopware-deployment-helper ]; then vendor/bin/shopware-deployment-helper run; else php bin/console system:update:finish --no-interaction && php bin/console cache:clear --no-interaction; fi",
 		shellQuote(releaseDir))
-	return d.runRemote(ctx, cmd)
+	return d.runRemote(ctx, h, cmd)
 }
 
-func (d *SSHDeployer) runOneTimeTasks(ctx context.Context, releaseDir, sharedDir string) error {
+func (d *SSHDeployer) runOneTimeTasks(ctx context.Context, h shop.EnvironmentSSHHostConfig, releaseDir, sharedDir string) error {
 	if d.shopCfg == nil || d.shopCfg.ConfigDeployment == nil || len(d.shopCfg.ConfigDeployment.OneTimeTasks) == 0 {
 		return nil
 	}
 
 	stateFile := path.Join(sharedDir, ".shopware-cli-one-time-tasks")
-	// Ensure state file exists for the grep below.
-	if err := d.runRemote(ctx, fmt.Sprintf("touch %s", shellQuote(stateFile))); err != nil {
+	if err := d.runRemote(ctx, h, fmt.Sprintf("touch %s", shellQuote(stateFile))); err != nil {
 		return err
 	}
 
@@ -406,34 +435,45 @@ func (d *SSHDeployer) runOneTimeTasks(ctx context.Context, releaseDir, sharedDir
 			shellQuote(releaseDir), task.Script,
 			shellQuote(idLine), shellQuote(stateFile),
 		)
-		if err := d.runRemote(ctx, script); err != nil {
+		if err := d.runRemote(ctx, h, script); err != nil {
 			return fmt.Errorf("one-time task %s: %w", task.Id, err)
 		}
 	}
 	return nil
 }
 
-func (d *SSHDeployer) cleanupOldReleases(ctx context.Context) error {
+func (d *SSHDeployer) cleanupOldReleases(ctx context.Context, h shop.EnvironmentSSHHostConfig) error {
 	keep := d.sshCfg.KeepReleases
 	if keep <= 0 {
 		keep = 5
 	}
 
-	releases, err := d.ListReleases(ctx)
+	out, err := d.captureRemote(ctx, h, fmt.Sprintf("ls -1 %s 2>/dev/null || true", shellQuote(path.Join(h.DeployPath, "releases"))))
 	if err != nil {
 		return err
 	}
-	if len(releases) <= keep {
+	currentName, _ := d.currentRelease(ctx, h)
+
+	var names []string
+	for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
+		name := strings.TrimSpace(line)
+		if name == "" {
+			continue
+		}
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	if len(names) <= keep {
 		return nil
 	}
 
-	toRemove := releases[:len(releases)-keep]
-	for _, r := range toRemove {
-		if r.Current {
+	toRemove := names[:len(names)-keep]
+	for _, name := range toRemove {
+		if name == currentName {
 			continue
 		}
-		releasePath := path.Join(d.sshCfg.DeployPath, "releases", r.Name)
-		if err := d.runRemote(ctx, fmt.Sprintf("rm -rf %s", shellQuote(releasePath))); err != nil {
+		releasePath := path.Join(h.DeployPath, "releases", name)
+		if err := d.runRemote(ctx, h, fmt.Sprintf("rm -rf %s", shellQuote(releasePath))); err != nil {
 			return err
 		}
 	}

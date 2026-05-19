@@ -167,6 +167,68 @@ func TestResolveEnvironment(t *testing.T) {
 	})
 }
 
+func TestEnvironmentSSHConfigResolvedHosts(t *testing.T) {
+	t.Run("nil returns nil", func(t *testing.T) {
+		var cfg *EnvironmentSSHConfig
+		assert.Nil(t, cfg.ResolvedHosts())
+	})
+
+	t.Run("single host", func(t *testing.T) {
+		cfg := &EnvironmentSSHConfig{
+			Host:         "shop.example.com",
+			Port:         2222,
+			User:         "deploy",
+			IdentityFile: "~/.ssh/id",
+			DeployPath:   "/srv/shop",
+		}
+		hosts := cfg.ResolvedHosts()
+		assert.Equal(t, 1, len(hosts))
+		assert.Equal(t, "shop.example.com", hosts[0].Host)
+		assert.Equal(t, 2222, hosts[0].Port)
+		assert.Equal(t, "deploy", hosts[0].User)
+		assert.Equal(t, "/srv/shop", hosts[0].DeployPath)
+	})
+
+	t.Run("multi host inherits defaults", func(t *testing.T) {
+		cfg := &EnvironmentSSHConfig{
+			User:         "deploy",
+			Port:         22,
+			IdentityFile: "~/.ssh/id",
+			DeployPath:   "/srv/shop",
+			Hosts: []EnvironmentSSHHostConfig{
+				{Host: "web1.example.com"},
+				{Host: "web2.example.com", Port: 2222, User: "ops"},
+			},
+		}
+		hosts := cfg.ResolvedHosts()
+		assert.Equal(t, 2, len(hosts))
+		assert.Equal(t, "deploy", hosts[0].User)
+		assert.Equal(t, 22, hosts[0].Port)
+		assert.Equal(t, "/srv/shop", hosts[0].DeployPath)
+		assert.Equal(t, "ops", hosts[1].User)
+		assert.Equal(t, 2222, hosts[1].Port)
+		assert.Equal(t, "/srv/shop", hosts[1].DeployPath)
+	})
+
+	t.Run("hosts overrides singular host", func(t *testing.T) {
+		cfg := &EnvironmentSSHConfig{
+			Host:       "ignored.example.com",
+			DeployPath: "/srv/shop",
+			Hosts: []EnvironmentSSHHostConfig{
+				{Host: "web1.example.com"},
+			},
+		}
+		hosts := cfg.ResolvedHosts()
+		assert.Equal(t, 1, len(hosts))
+		assert.Equal(t, "web1.example.com", hosts[0].Host)
+	})
+
+	t.Run("no host returns empty", func(t *testing.T) {
+		cfg := &EnvironmentSSHConfig{DeployPath: "/srv/shop"}
+		assert.Empty(t, cfg.ResolvedHosts())
+	})
+}
+
 func TestReadConfigWithEnvironments(t *testing.T) {
 	tmpDir := t.TempDir()
 	configPath := filepath.Join(tmpDir, ".shopware-project.yml")

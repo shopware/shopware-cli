@@ -492,3 +492,44 @@ func TestShellQuoteEscapesSingleQuotes(t *testing.T) {
 	assert.Equal(t, `'foo'`, shellQuote("foo"))
 	assert.Equal(t, `'O'\''Brien'`, shellQuote("O'Brien"))
 }
+
+func TestSSHExecutorMultiHostPrimary(t *testing.T) {
+	envCfg := &shop.EnvironmentConfig{
+		Type: "ssh",
+		SSH: &shop.EnvironmentSSHConfig{
+			User:       "deploy",
+			DeployPath: "/srv/shop",
+			Hosts: []shop.EnvironmentSSHHostConfig{
+				{Host: "web1.example.com"},
+				{Host: "web2.example.com", Port: 2222, User: "ops"},
+			},
+		},
+	}
+	exec := &SSHExecutor{projectRoot: "/project", envCfg: envCfg}
+
+	p := exec.ConsoleCommand(t.Context(), "cache:clear")
+	assert.Contains(t, p.Cmd.Args, "deploy@web1.example.com")
+	assert.NotContains(t, p.Cmd.Args, "ops@web2.example.com")
+
+	hosts := exec.resolvedHosts()
+	assert.Equal(t, 2, len(hosts))
+	assert.Equal(t, "ops", hosts[1].User)
+	assert.Equal(t, 2222, hosts[1].Port)
+	assert.Equal(t, "/srv/shop", hosts[1].DeployPath)
+}
+
+func TestSSHExecutorDeployerRequiresAllHostsConfigured(t *testing.T) {
+	envCfg := &shop.EnvironmentConfig{
+		Type: "ssh",
+		SSH: &shop.EnvironmentSSHConfig{
+			DeployPath: "/srv/shop",
+			Hosts: []shop.EnvironmentSSHHostConfig{
+				{Host: "web1.example.com"},
+				{Host: ""},
+			},
+		},
+	}
+	exec := &SSHExecutor{projectRoot: "/project", envCfg: envCfg}
+
+	assert.Nil(t, exec.Deployer())
+}

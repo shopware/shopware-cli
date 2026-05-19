@@ -632,7 +632,7 @@
       "properties": {
         "host": {
           "type": "string",
-          "description": "SSH host name or IP. Required."
+          "description": "SSH host name or IP. Required in single-host mode (omit when using Hosts)."
         },
         "port": {
           "type": "integer",
@@ -649,6 +649,13 @@
         "deploy_path": {
           "type": "string",
           "description": "Absolute path on the remote where releases/, shared/ and current live."
+        },
+        "hosts": {
+          "items": {
+            "$ref": "#/$defs/EnvironmentSSHHostConfig"
+          },
+          "type": "array",
+          "description": "Additional SSH targets for fleet deploys. Each entry inherits the\ntop-level connection defaults (Port/User/IdentityFile/DeployPath) when\nits own value is empty. When non-empty, Hosts takes precedence over\nthe top-level Host."
         },
         "keep_releases": {
           "type": "integer",
@@ -686,10 +693,39 @@
       "additionalProperties": false,
       "type": "object",
       "required": [
-        "host",
         "deploy_path"
       ],
       "description": "EnvironmentSSHConfig configures the SSH-based deploy executor."
+    },
+    "EnvironmentSSHHostConfig": {
+      "properties": {
+        "host": {
+          "type": "string",
+          "description": "SSH host name or IP. Required."
+        },
+        "port": {
+          "type": "integer",
+          "description": "SSH port override."
+        },
+        "user": {
+          "type": "string",
+          "description": "Remote user override."
+        },
+        "identity_file": {
+          "type": "string",
+          "description": "Identity file override."
+        },
+        "deploy_path": {
+          "type": "string",
+          "description": "Deploy path override (rare; only set when this host stores releases under a different path)."
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "required": [
+        "host"
+      ],
+      "description": "EnvironmentSSHHostConfig describes one SSH target in a multi-host deploy."
     }
   }
 }

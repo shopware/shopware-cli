@@ -26,9 +26,13 @@ type EnvironmentConfig struct {
 }
 
 // EnvironmentSSHConfig configures the SSH-based deploy executor.
+//
+// In single-host mode set the top-level Host/Port/User/IdentityFile.
+// For multi-host (fleet) deploys provide Hosts; each entry inherits the
+// top-level Port/User/IdentityFile/DeployPath when its own field is empty.
 type EnvironmentSSHConfig struct {
-	// SSH host name or IP. Required.
-	Host string `yaml:"host" jsonschema:"required"`
+	// SSH host name or IP. Required in single-host mode (omit when using Hosts).
+	Host string `yaml:"host,omitempty"`
 	// SSH port. Defaults to 22.
 	Port int `yaml:"port,omitempty"`
 	// Remote user. Falls back to ~/.ssh/config if empty.
@@ -37,6 +41,11 @@ type EnvironmentSSHConfig struct {
 	IdentityFile string `yaml:"identity_file,omitempty"`
 	// Absolute path on the remote where releases/, shared/ and current live.
 	DeployPath string `yaml:"deploy_path" jsonschema:"required"`
+	// Additional SSH targets for fleet deploys. Each entry inherits the
+	// top-level connection defaults (Port/User/IdentityFile/DeployPath) when
+	// its own value is empty. When non-empty, Hosts takes precedence over
+	// the top-level Host.
+	Hosts []EnvironmentSSHHostConfig `yaml:"hosts,omitempty"`
 	// Number of releases to keep before pruning. Defaults to 5.
 	KeepReleases int `yaml:"keep_releases,omitempty"`
 	// Files that are persisted across releases (relative to project root). e.g. .env
@@ -47,6 +56,60 @@ type EnvironmentSSHConfig struct {
 	Excludes []string `yaml:"excludes,omitempty"`
 	// Additional rsync flags appended verbatim (advanced).
 	RsyncOptions []string `yaml:"rsync_options,omitempty"`
+}
+
+// EnvironmentSSHHostConfig describes one SSH target in a multi-host
+// deploy. Unset fields fall back to the parent EnvironmentSSHConfig.
+type EnvironmentSSHHostConfig struct {
+	// SSH host name or IP. Required.
+	Host string `yaml:"host" jsonschema:"required"`
+	// SSH port override.
+	Port int `yaml:"port,omitempty"`
+	// Remote user override.
+	User string `yaml:"user,omitempty"`
+	// Identity file override.
+	IdentityFile string `yaml:"identity_file,omitempty"`
+	// Deploy path override (rare; only set when this host stores releases under a different path).
+	DeployPath string `yaml:"deploy_path,omitempty"`
+}
+
+// ResolvedHosts returns the effective list of SSH targets for this
+// environment, merging top-level defaults into each entry. Returns a
+// single-entry list in single-host mode, or an empty slice when no host
+// information is configured.
+func (c *EnvironmentSSHConfig) ResolvedHosts() []EnvironmentSSHHostConfig {
+	if c == nil {
+		return nil
+	}
+	if len(c.Hosts) == 0 {
+		if c.Host == "" {
+			return nil
+		}
+		return []EnvironmentSSHHostConfig{{
+			Host:         c.Host,
+			Port:         c.Port,
+			User:         c.User,
+			IdentityFile: c.IdentityFile,
+			DeployPath:   c.DeployPath,
+		}}
+	}
+	resolved := make([]EnvironmentSSHHostConfig, len(c.Hosts))
+	for i, h := range c.Hosts {
+		if h.Port == 0 {
+			h.Port = c.Port
+		}
+		if h.User == "" {
+			h.User = c.User
+		}
+		if h.IdentityFile == "" {
+			h.IdentityFile = c.IdentityFile
+		}
+		if h.DeployPath == "" {
+			h.DeployPath = c.DeployPath
+		}
+		resolved[i] = h
+	}
+	return resolved
 }
 
 type Config struct {
