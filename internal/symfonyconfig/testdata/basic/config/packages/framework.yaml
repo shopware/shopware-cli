@@ -1,0 +1,11 @@
+framework:
+    messenger:
+        transports:
+            async:
+                dsn: '%env(MESSENGER_TRANSPORT_DSN)%'
+            failed:
+                dsn: '%env(MESSENGER_TRANSPORT_FAILURE_DSN)%'
+    cache:
+        app: cache.adapter.filesystem
+parameters:
+    shopware.cart.compress: false

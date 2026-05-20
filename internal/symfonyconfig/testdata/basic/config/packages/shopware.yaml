@@ -1,0 +1,14 @@
+shopware:
+    admin_worker:
+        enable_admin_worker: true
+    increment:
+        user_activity:
+            type: mysql
+        message_queue:
+            type: mysql
+    cache:
+        tagging:
+            each_config: true
+            each_snippet: true
+    mail:
+        update_mail_variables_on_send: true
