@@ -58,7 +58,9 @@ func Execute(ctx context.Context) {
 		name := strings.TrimPrefix(cmd.CommandPath(), "shopware-cli ")
 		name = strings.ReplaceAll(name, " ", ".")
 		name = strings.ReplaceAll(name, "-", "_")
-		tracking.Track(ctx, "command", map[string]string{
+		trackCtx, trackCancel := context.WithTimeout(context.WithoutCancel(ctx), 2*time.Second)
+		defer trackCancel()
+		tracking.Track(trackCtx, "command", map[string]string{
 			"command_name": name,
 			"result":       result,
 			"duration_ms":  strconv.FormatInt(time.Since(start).Milliseconds(), 10),
