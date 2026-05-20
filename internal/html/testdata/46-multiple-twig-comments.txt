@@ -1,0 +1,7 @@
+<div>{# header #}Content{# footer #}</div>
+-----
+<div>
+    {# header #}
+    Content
+    {# footer #}
+</div>

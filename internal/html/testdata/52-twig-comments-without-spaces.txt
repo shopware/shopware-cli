@@ -1,0 +1,9 @@
+<div>{#no leading space #}Hello{#no spaces#}World{# no trailing space#}</div>
+-----
+<div>
+    {# no leading space #}
+    Hello
+    {# no spaces #}
+    World
+    {# no trailing space #}
+</div>

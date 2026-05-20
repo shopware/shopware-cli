@@ -1,0 +1,6 @@
+<div>{# comment{# with #} nested #}</div>
+-----
+<div>
+    {# comment{# with #}
+    nested #}
+</div>
