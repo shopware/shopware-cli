@@ -117,6 +117,7 @@ func TestUpdateLifecycle_DockerStarted_ErrorStaysAndRendersError(t *testing.T) {
 
 	// Phase stays on starting so the error overlay remains visible.
 	assert.Equal(t, phaseStarting, final.phase)
+	assert.True(t, final.dockerShowLogs, "logs view must be forced on so the error is visible without pressing 'l'")
 	assert.Nil(t, cmd)
 	joined := strings.Join(final.overlayLines, "\n")
 	assert.Contains(t, joined, "Failed:")
