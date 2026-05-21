@@ -254,7 +254,7 @@ func runCreateForm(cmd *cobra.Command, opts *createOptions, filteredVersions []*
 		fmt.Printf("  %s %s\n", labelStyle.Render("Deployment:"), opts.selectedDeployment)
 		fmt.Printf("  %s %s\n", labelStyle.Render("CI/CD:"), opts.selectedCI)
 		fmt.Printf("  %s %s\n", labelStyle.Render("Docker:"), onOff(opts.useDocker))
-		fmt.Printf("  %s %s\n", labelStyle.Render("Git:"), onOff(opts.initGit))
+		fmt.Printf("  %s %s\n", labelStyle.Render("Git Repository:"), onOff(opts.initGit))
 		fmt.Printf("  %s %s\n", labelStyle.Render("OpenSearch:"), onOff(opts.withElasticsearch))
 		fmt.Printf("  %s %s\n", labelStyle.Render("AMQP:"), onOff(opts.withAMQP))
 		fmt.Println()
