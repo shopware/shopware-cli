@@ -20,7 +20,7 @@ func newTestModel() Model {
 		phase:       phaseDashboard,
 		general:     NewGeneralModel("local", "http://localhost:8000", "", "", "/tmp/project", nil, nil),
 		logs:        NewLogsModel("/tmp/project", false),
-		configTab:   NewConfigModel(nil),
+		configTab:   NewConfigModel(nil, ""),
 		watchers:    make(map[string]*executor.Process),
 		projectRoot: "/tmp/project",
 		config:      &shop.Config{},
@@ -291,7 +291,7 @@ func TestUpdateConfigTab_EnterOnSaveWritesConfig(t *testing.T) {
 	m.config = cfg
 	m.projectRoot = dir
 	m.activeTab = tabConfig
-	m.configTab = NewConfigModel(cfg)
+	m.configTab = NewConfigModel(cfg, "")
 	m.configTab.cursor = fieldSave
 	m.configTab.modified = true
 	m.configTab.phpVersion = 0
@@ -323,7 +323,7 @@ func TestUpdateConfigTab_EnterOnSaveFailureSetsErr(t *testing.T) {
 	m.config = cfg
 	m.projectRoot = dir
 	m.activeTab = tabConfig
-	m.configTab = NewConfigModel(cfg)
+	m.configTab = NewConfigModel(cfg, "")
 	m.configTab.cursor = fieldSave
 	m.configTab.modified = true
 

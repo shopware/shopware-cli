@@ -8,6 +8,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	dockerpkg "github.com/shopware/shopware-cli/internal/docker"
+	"github.com/shopware/shopware-cli/internal/envfile"
 	"github.com/shopware/shopware-cli/internal/executor"
 	"github.com/shopware/shopware-cli/internal/shop"
 )
@@ -115,6 +116,14 @@ func (m Model) updateConfigTab(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 					m.configTab.saved = false
 					return m, nil
 				}
+			}
+			if m.configTab.AppEnvChanged() {
+				if err := envfile.WriteAppEnv(m.projectRoot, m.configTab.AppEnv()); err != nil {
+					m.configTab.err = err
+					m.configTab.saved = false
+					return m, nil
+				}
+				m.configTab.MarkAppEnvPersisted()
 			}
 			m.configTab.saved = true
 			m.configTab.modified = false
@@ -322,7 +331,8 @@ func (m Model) startAfterSetupGuide() (tea.Model, tea.Cmd) {
 		password = m.envConfig.AdminApi.Password
 	}
 	m.general = NewGeneralModel(m.executor.Type(), shopURL, username, password, m.projectRoot, m.executor, m.config)
-	m.configTab = NewConfigModel(m.config)
+	appEnv, _ := envfile.ReadAppEnv(m.projectRoot)
+	m.configTab = NewConfigModel(m.config, appEnv)
 
 	return m, tea.Batch(m.dockerSpinner.Tick, m.startContainers())
 }

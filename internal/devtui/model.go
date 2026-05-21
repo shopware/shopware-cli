@@ -8,6 +8,7 @@ import (
 	"charm.land/bubbles/v2/spinner"
 	tea "charm.land/bubbletea/v2"
 
+	"github.com/shopware/shopware-cli/internal/envfile"
 	"github.com/shopware/shopware-cli/internal/executor"
 	"github.com/shopware/shopware-cli/internal/shop"
 )
@@ -107,11 +108,13 @@ func New(opts Options) Model {
 
 	isDocker := opts.Executor.Type() == executor.TypeDocker
 
+	appEnv, _ := envfile.ReadAppEnv(opts.ProjectRoot)
+
 	return Model{
 		activeTab:   tabGeneral,
 		general:     NewGeneralModel(opts.Executor.Type(), shopURL, username, password, opts.ProjectRoot, opts.Executor, opts.Config),
 		logs:        NewLogsModel(opts.ProjectRoot, isDocker),
-		configTab:   NewConfigModel(opts.Config),
+		configTab:   NewConfigModel(opts.Config, appEnv),
 		dockerMode:  isDocker,
 		projectRoot: opts.ProjectRoot,
 		executor:    opts.Executor,

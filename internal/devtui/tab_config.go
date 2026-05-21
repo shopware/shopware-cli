@@ -16,7 +16,8 @@ import (
 type configField int
 
 const (
-	fieldPHPVersion configField = iota
+	fieldAppEnv configField = iota
+	fieldPHPVersion
 	fieldProfiler
 	fieldBlackfireServerID
 	fieldBlackfireServerToken
@@ -30,18 +31,22 @@ const (
 	profilerTideways  = dockerpkg.ProfilerTideways
 
 	defaultPHPVersionIndex = 1
+	defaultAppEnvIndex     = 0
 )
 
 var (
 	phpVersions = packagist.SupportedPHPVersions
 	profilers   = dockerpkg.Profilers
+	appEnvs     = []string{"dev", "prod", "test"}
 )
 
 type ConfigModel struct {
 	cursor configField
 
-	phpVersion int
-	profiler   int
+	appEnv         int
+	originalAppEnv string
+	phpVersion     int
+	profiler       int
 
 	blackfireServerID    textinput.Model
 	blackfireServerToken textinput.Model
@@ -55,9 +60,16 @@ type ConfigModel struct {
 	height int
 }
 
-func NewConfigModel(cfg *shop.Config) ConfigModel {
+func NewConfigModel(cfg *shop.Config, appEnv string) ConfigModel {
+	resolvedAppEnv := appEnv
+	if resolvedAppEnv == "" {
+		resolvedAppEnv = appEnvs[defaultAppEnvIndex]
+	}
 	m := ConfigModel{
-		phpVersion: defaultPHPVersionIndex,
+		cursor:         fieldAppEnv,
+		appEnv:         indexOf(appEnvs, resolvedAppEnv, defaultAppEnvIndex),
+		originalAppEnv: resolvedAppEnv,
+		phpVersion:     defaultPHPVersionIndex,
 	}
 
 	if cfg != nil && cfg.Docker != nil && cfg.Docker.PHP != nil {
@@ -123,6 +135,12 @@ func (m ConfigModel) HandleKey(msg tea.KeyPressMsg) (ConfigModel, tea.Cmd) {
 
 func (m ConfigModel) PickerForCursor() Modal {
 	switch m.cursor { //nolint:exhaustive
+	case fieldAppEnv:
+		items := make([]listPickerItem, len(appEnvs))
+		for i, v := range appEnvs {
+			items[i] = listPickerItem{Label: v, Value: v}
+		}
+		return newListPicker(fieldAppEnv, "APP_ENV", "Symfony application environment (.env.local)", items, m.appEnv)
 	case fieldPHPVersion:
 		items := make([]listPickerItem, len(phpVersions))
 		for i, v := range phpVersions {
@@ -152,6 +170,12 @@ func (m ConfigModel) PickerForCursor() Modal {
 func (m *ConfigModel) ApplyPickerValue(field configField, value string) bool {
 	changed := false
 	switch field { //nolint:exhaustive
+	case fieldAppEnv:
+		idx := indexOf(appEnvs, value, m.appEnv)
+		if idx != m.appEnv {
+			m.appEnv = idx
+			changed = true
+		}
 	case fieldPHPVersion:
 		idx := indexOf(phpVersions, value, m.phpVersion)
 		if idx != m.phpVersion {
@@ -222,7 +246,7 @@ func (m ConfigModel) isFieldVisible(f configField) bool {
 		return profilerName == profilerBlackfire
 	case fieldTidewaysAPIKey:
 		return profilerName == profilerTideways
-	case fieldPHPVersion, fieldProfiler, fieldSave, fieldCount:
+	case fieldAppEnv, fieldPHPVersion, fieldProfiler, fieldSave, fieldCount:
 		return true
 	}
 	return true
@@ -242,6 +266,23 @@ func (m ConfigModel) ApplyToConfig(cfg *shop.Config) {
 	cfg.Docker.PHP.BlackfireServerID = ""
 	cfg.Docker.PHP.BlackfireServerToken = ""
 	cfg.Docker.PHP.TidewaysAPIKey = ""
+}
+
+// AppEnv returns the currently selected APP_ENV value.
+func (m ConfigModel) AppEnv() string {
+	return appEnvs[m.appEnv]
+}
+
+// AppEnvChanged reports whether the APP_ENV selection differs from the
+// value loaded into the model.
+func (m ConfigModel) AppEnvChanged() bool {
+	return appEnvs[m.appEnv] != m.originalAppEnv
+}
+
+// MarkAppEnvPersisted records the current APP_ENV value as the new baseline
+// after it has been written to disk.
+func (m *ConfigModel) MarkAppEnvPersisted() {
+	m.originalAppEnv = appEnvs[m.appEnv]
 }
 
 func (m ConfigModel) LocalConfig() *shop.Config {
@@ -271,6 +312,11 @@ func (m ConfigModel) View(width, height int) string {
 	normalIndent := "  "
 
 	divider := tui.SectionDivider(width - 8)
+
+	s.WriteString(tui.TitleStyle.Render("Environment"))
+	s.WriteString("\n")
+	s.WriteString(m.renderSelect(fieldAppEnv, "APP_ENV", appEnvs[m.appEnv], selectedArrow, normalIndent))
+	s.WriteString(divider)
 
 	s.WriteString(tui.TitleStyle.Render("PHP"))
 	s.WriteString("\n")

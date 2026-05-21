@@ -9,7 +9,7 @@ import (
 )
 
 func TestNewConfigModel_NilConfig(t *testing.T) {
-	m := NewConfigModel(nil)
+	m := NewConfigModel(nil, "")
 
 	assert.Equal(t, 1, m.phpVersion)
 	assert.Equal(t, 0, m.profiler)
@@ -28,7 +28,7 @@ func TestNewConfigModel_WithConfig(t *testing.T) {
 		},
 	}
 
-	m := NewConfigModel(cfg)
+	m := NewConfigModel(cfg, "")
 
 	assert.Equal(t, 0, m.phpVersion)
 	assert.Equal(t, 2, m.profiler)
@@ -37,7 +37,7 @@ func TestNewConfigModel_WithConfig(t *testing.T) {
 
 func TestConfigModel_ApplyToConfig(t *testing.T) {
 	cfg := &shop.Config{}
-	m := NewConfigModel(nil)
+	m := NewConfigModel(nil, "")
 	m.phpVersion = 2
 	m.profiler = 1
 
@@ -50,7 +50,7 @@ func TestConfigModel_ApplyToConfig(t *testing.T) {
 
 func TestConfigModel_ApplyToConfig_BlackfireCredentialsExcluded(t *testing.T) {
 	cfg := &shop.Config{}
-	m := NewConfigModel(nil)
+	m := NewConfigModel(nil, "")
 	m.profiler = 2
 	m.blackfireServerID.SetValue("srv-id")
 	m.blackfireServerToken.SetValue("srv-token")
@@ -63,7 +63,7 @@ func TestConfigModel_ApplyToConfig_BlackfireCredentialsExcluded(t *testing.T) {
 }
 
 func TestConfigModel_LocalConfig_Blackfire(t *testing.T) {
-	m := NewConfigModel(nil)
+	m := NewConfigModel(nil, "")
 	m.profiler = 2
 	m.blackfireServerID.SetValue("srv-id")
 	m.blackfireServerToken.SetValue("srv-token")
@@ -75,7 +75,7 @@ func TestConfigModel_LocalConfig_Blackfire(t *testing.T) {
 }
 
 func TestConfigModel_LocalConfig_Tideways(t *testing.T) {
-	m := NewConfigModel(nil)
+	m := NewConfigModel(nil, "")
 	m.profiler = 3
 	m.tidewaysAPIKey.SetValue("tw-key")
 
@@ -86,7 +86,7 @@ func TestConfigModel_LocalConfig_Tideways(t *testing.T) {
 }
 
 func TestConfigModel_LocalConfig_NoCredentials(t *testing.T) {
-	m := NewConfigModel(nil)
+	m := NewConfigModel(nil, "")
 	m.profiler = 0
 
 	assert.Nil(t, m.LocalConfig())
@@ -96,7 +96,7 @@ func TestConfigModel_LocalConfig_NoCredentials(t *testing.T) {
 }
 
 func TestConfigModel_FieldVisibility(t *testing.T) {
-	m := NewConfigModel(nil)
+	m := NewConfigModel(nil, "")
 
 	m.profiler = 0
 	assert.False(t, m.isFieldVisible(fieldBlackfireServerID))
@@ -114,9 +114,12 @@ func TestConfigModel_FieldVisibility(t *testing.T) {
 }
 
 func TestConfigModel_CursorNavigation(t *testing.T) {
-	m := NewConfigModel(nil)
+	m := NewConfigModel(nil, "")
 	m.profiler = 0
 
+	assert.Equal(t, fieldAppEnv, m.cursor)
+
+	m.moveCursorDown()
 	assert.Equal(t, fieldPHPVersion, m.cursor)
 
 	m.moveCursorDown()
@@ -130,9 +133,11 @@ func TestConfigModel_CursorNavigation(t *testing.T) {
 }
 
 func TestConfigModel_CursorNavigation_BlackfireVisible(t *testing.T) {
-	m := NewConfigModel(nil)
+	m := NewConfigModel(nil, "")
 	m.profiler = indexOf(profilers, "blackfire", 0)
 
+	assert.Equal(t, fieldAppEnv, m.cursor)
+	m.moveCursorDown()
 	assert.Equal(t, fieldPHPVersion, m.cursor)
 	m.moveCursorDown()
 	assert.Equal(t, fieldProfiler, m.cursor)
@@ -145,7 +150,7 @@ func TestConfigModel_CursorNavigation_BlackfireVisible(t *testing.T) {
 }
 
 func TestConfigModel_PickerForCursor_Select(t *testing.T) {
-	m := NewConfigModel(nil)
+	m := NewConfigModel(nil, "")
 	m.cursor = fieldPHPVersion
 
 	modal := m.PickerForCursor()
@@ -161,7 +166,7 @@ func TestConfigModel_PickerForCursor_Select(t *testing.T) {
 }
 
 func TestConfigModel_PickerForCursor_Text(t *testing.T) {
-	m := NewConfigModel(nil)
+	m := NewConfigModel(nil, "")
 	m.profiler = indexOf(profilers, "blackfire", 0)
 	m.blackfireServerID.SetValue("existing")
 	m.cursor = fieldBlackfireServerID
@@ -173,7 +178,7 @@ func TestConfigModel_PickerForCursor_Text(t *testing.T) {
 }
 
 func TestConfigModel_ApplyPickerValue(t *testing.T) {
-	m := NewConfigModel(nil)
+	m := NewConfigModel(nil, "")
 	m.modified = false
 
 	changed := m.ApplyPickerValue(fieldPHPVersion, "8.4")
@@ -188,13 +193,66 @@ func TestConfigModel_ApplyPickerValue(t *testing.T) {
 }
 
 func TestConfigModel_ApplyPickerValue_TextField(t *testing.T) {
-	m := NewConfigModel(nil)
+	m := NewConfigModel(nil, "")
 	m.profiler = indexOf(profilers, "tideways", 0)
 
 	changed := m.ApplyPickerValue(fieldTidewaysAPIKey, "secret-key")
 	assert.True(t, changed)
 	assert.Equal(t, "secret-key", m.tidewaysAPIKey.Value())
 	assert.True(t, m.modified)
+}
+
+func TestConfigModel_AppEnv_DefaultsToDev(t *testing.T) {
+	m := NewConfigModel(nil, "")
+
+	assert.Equal(t, "dev", m.AppEnv())
+	assert.False(t, m.AppEnvChanged())
+}
+
+func TestConfigModel_AppEnv_LoadedFromExisting(t *testing.T) {
+	m := NewConfigModel(nil, "prod")
+
+	assert.Equal(t, "prod", m.AppEnv())
+	assert.False(t, m.AppEnvChanged())
+}
+
+func TestConfigModel_AppEnv_PickerOptions(t *testing.T) {
+	m := NewConfigModel(nil, "dev")
+	m.cursor = fieldAppEnv
+
+	modal := m.PickerForCursor()
+	picker, ok := modal.(*listPicker)
+	assert.True(t, ok)
+	assert.Equal(t, fieldAppEnv, picker.key)
+	values := make([]string, len(picker.items))
+	for i, it := range picker.items {
+		values[i] = it.Value
+	}
+	assert.ElementsMatch(t, appEnvs, values)
+}
+
+func TestConfigModel_AppEnv_ApplyPickerValue(t *testing.T) {
+	m := NewConfigModel(nil, "dev")
+
+	changed := m.ApplyPickerValue(fieldAppEnv, "prod")
+	assert.True(t, changed)
+	assert.Equal(t, "prod", m.AppEnv())
+	assert.True(t, m.AppEnvChanged())
+	assert.True(t, m.modified)
+
+	m.modified = false
+	changed = m.ApplyPickerValue(fieldAppEnv, "prod")
+	assert.False(t, changed)
+	assert.False(t, m.modified)
+}
+
+func TestConfigModel_AppEnv_MarkPersistedClearsChange(t *testing.T) {
+	m := NewConfigModel(nil, "dev")
+	m.ApplyPickerValue(fieldAppEnv, "prod")
+	assert.True(t, m.AppEnvChanged())
+
+	m.MarkAppEnvPersisted()
+	assert.False(t, m.AppEnvChanged())
 }
 
 func TestIndexOf(t *testing.T) {
