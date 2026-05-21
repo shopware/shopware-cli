@@ -129,10 +129,8 @@ var projectCI = &cobra.Command{
 			logging.FromContext(cmd.Context()).Infof("Skipping composer install")
 		}
 
-		if shopCfg.Build.SBOM != nil && shopCfg.Build.SBOM.Enabled {
-			if err := generateProjectSBOM(cmd.Context(), args[0], shopCfg.Build.SBOM); err != nil {
-				return fmt.Errorf("failed to generate SBOM: %w", err)
-			}
+		if err := generateProjectSBOM(cmd.Context(), args[0], shopCfg.Build.SBOM); err != nil {
+			return fmt.Errorf("failed to generate SBOM: %w", err)
 		}
 
 		if _, err := os.Stat(path.Join(args[0], "var", "cache")); err == nil {
@@ -337,12 +335,23 @@ func createEmptySnippetFolder(root string) error {
 }
 
 // generateProjectSBOM reads composer.lock from the project root and writes a
-// CycloneDX SBOM JSON document to the configured path.
+// CycloneDX SBOM JSON document to the configured path. When composer.lock is
+// absent (for example when composer install was skipped on a project without
+// PHP dependencies) the step is a no-op.
 func generateProjectSBOM(ctx context.Context, root string, cfg *shop.ConfigBuildSBOM) error {
+	if cfg == nil {
+		cfg = &shop.ConfigBuildSBOM{}
+	}
+
 	section := ci.Default.Section(ctx, "Generating SBOM")
 	defer section.End(ctx)
 
 	lockPath := path.Join(root, "composer.lock")
+	if _, err := os.Stat(lockPath); os.IsNotExist(err) {
+		logging.FromContext(ctx).Infof("Skipping SBOM generation: %s not found", lockPath)
+		return nil
+	}
+
 	lock, err := packagist.ReadComposerLock(lockPath)
 	if err != nil {
 		return fmt.Errorf("read composer.lock: %w", err)

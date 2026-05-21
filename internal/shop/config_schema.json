@@ -255,10 +255,6 @@
     },
     "ConfigBuildSBOM": {
       "properties": {
-        "enabled": {
-          "type": "boolean",
-          "description": "When enabled, a CycloneDX SBOM is generated from the project's composer.lock"
-        },
         "path": {
           "type": "string",
           "description": "Path (relative to the project root) where the SBOM is written. Defaults to \"sbom.cdx.json\"."

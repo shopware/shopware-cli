@@ -124,8 +124,6 @@ type ConfigBuild struct {
 
 // ConfigBuildSBOM defines the configuration for SBOM generation during CI builds.
 type ConfigBuildSBOM struct {
-	// When enabled, a CycloneDX SBOM is generated from the project's composer.lock
-	Enabled bool `yaml:"enabled,omitempty"`
 	// Path (relative to the project root) where the SBOM is written. Defaults to "sbom.cdx.json".
 	Path string `yaml:"path,omitempty"`
 	// When enabled, dev dependencies are also included in the SBOM

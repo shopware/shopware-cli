@@ -76,7 +76,7 @@ func TestGenerateProjectSBOM(t *testing.T) {
 		]
 	}`), 0o644))
 
-	cfg := &shop.ConfigBuildSBOM{Enabled: true, Path: "build/sbom.cdx.json"}
+	cfg := &shop.ConfigBuildSBOM{Path: "build/sbom.cdx.json"}
 
 	assert.NoError(t, generateProjectSBOM(t.Context(), root, cfg))
 
@@ -108,7 +108,7 @@ func TestGenerateProjectSBOMIncludeDev(t *testing.T) {
 		"packages-dev": [{"name": "phpunit/phpunit", "version": "10.0.0"}]
 	}`), 0o644))
 
-	cfg := &shop.ConfigBuildSBOM{Enabled: true, IncludeDev: true}
+	cfg := &shop.ConfigBuildSBOM{IncludeDev: true}
 	assert.NoError(t, generateProjectSBOM(t.Context(), root, cfg))
 
 	data, err := os.ReadFile(filepath.Join(root, "sbom.cdx.json"))
@@ -119,8 +119,10 @@ func TestGenerateProjectSBOMIncludeDev(t *testing.T) {
 	assert.Len(t, doc["components"].([]interface{}), 2)
 }
 
-func TestGenerateProjectSBOMMissingLock(t *testing.T) {
-	cfg := &shop.ConfigBuildSBOM{Enabled: true}
-	err := generateProjectSBOM(t.Context(), t.TempDir(), cfg)
-	assert.Error(t, err)
+func TestGenerateProjectSBOMSkipsWhenLockMissing(t *testing.T) {
+	root := t.TempDir()
+	assert.NoError(t, generateProjectSBOM(t.Context(), root, nil))
+
+	_, err := os.Stat(filepath.Join(root, "sbom.cdx.json"))
+	assert.True(t, os.IsNotExist(err), "no SBOM should be written when composer.lock is absent")
 }
