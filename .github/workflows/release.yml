@@ -94,20 +94,4 @@ jobs:
           APPLE_APP_STORE_CONNECT_ISSUER: ${{ secrets.APPLE_APP_STORE_CONNECT_ISSUER }}
           APPLE_APP_STORE_CONNECT_KEY_ID: ${{ secrets.APPLE_APP_STORE_CONNECT_KEY_ID }}
           APPLE_APP_STORE_CONNECT_KEY: ${{ secrets.APPLE_APP_STORE_CONNECT_KEY }}
-
-      - name: Install Cloudsmith CLI
-        run: pip install --upgrade cloudsmith-cli
-
-      - name: Cloudsmith Uploads
-        env:
           CLOUDSMITH_API_KEY: ${{ secrets.CLOUDSMITH_API_KEY }}
-        run: |
-          for filename in dist/*.deb; do
-              cloudsmith push deb friendsofshopware/stable/any-distro/any-version $filename
-          done
-          for filename in dist/*.rpm; do
-              cloudsmith push rpm friendsofshopware/stable/any-distro/any-version $filename
-          done
-          for filename in dist/*.apk; do
-              cloudsmith push alpine friendsofshopware/stable/alpine/any-version $filename
-          done
