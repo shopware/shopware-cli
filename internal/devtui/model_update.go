@@ -125,9 +125,14 @@ func (m Model) updateConfigTab(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 				}
 				m.configTab.MarkEnvValuesPersisted()
 			}
-			m.configTab.saved = true
 			m.configTab.modified = false
 			m.configTab.err = nil
+			if m.dockerMode {
+				m.configTab.saved = false
+				m.configTab.restarting = true
+				return m, m.restartContainersForConfig()
+			}
+			m.configTab.saved = true
 			return m, nil
 		}
 		if picker := m.configTab.PickerForCursor(); picker != nil {

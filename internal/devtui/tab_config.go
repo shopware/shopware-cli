@@ -17,6 +17,7 @@ type configField int
 
 const (
 	fieldAppEnv configField = iota
+	fieldHTTPCache
 	fieldPHPVersion
 	fieldProfiler
 	fieldBlackfireServerID
@@ -42,14 +43,30 @@ var (
 // config tab. Adding a new entry to envFields is enough to surface another
 // env variable: it gets a picker, is loaded from .env.local on startup, and
 // is written back through envfile.WriteValues on save.
+//
+// choices holds the canonical values written to .env.local. choiceLabels is
+// optional; when set, it provides display labels (in the same order as
+// choices) so the row and picker can show e.g. "enabled"/"disabled" while
+// still writing "1"/"0".
 type envFieldDef struct {
-	field      configField
-	key        string
-	label      string
-	title      string
-	help       string
-	choices    []string
-	defaultIdx int
+	field        configField
+	key          string
+	label        string
+	title        string
+	help         string
+	choices      []string
+	choiceLabels []string
+	defaultIdx   int
+}
+
+func (def envFieldDef) choiceLabel(idx int) string {
+	if idx < 0 || idx >= len(def.choices) {
+		return ""
+	}
+	if def.choiceLabels != nil && idx < len(def.choiceLabels) {
+		return def.choiceLabels[idx]
+	}
+	return def.choices[idx]
 }
 
 var envFields = []envFieldDef{
@@ -58,9 +75,19 @@ var envFields = []envFieldDef{
 		key:        "APP_ENV",
 		label:      "APP_ENV",
 		title:      "APP_ENV",
-		help:       "Symfony application environment (.env.local)",
+		help:       "Shopware application environment (.env.local)",
 		choices:    []string{"dev", "prod", "test"},
 		defaultIdx: 0,
+	},
+	{
+		field:        fieldHTTPCache,
+		key:          "SHOPWARE_HTTP_CACHE_ENABLED",
+		label:        "HTTP Cache",
+		title:        "HTTP Cache",
+		help:         "Toggle the Shopware HTTP cache (SHOPWARE_HTTP_CACHE_ENABLED in .env.local)",
+		choices:      []string{"0", "1"},
+		choiceLabels: []string{"disabled", "enabled"},
+		defaultIdx:   0,
 	},
 }
 
@@ -96,9 +123,10 @@ type ConfigModel struct {
 	blackfireServerToken textinput.Model
 	tidewaysAPIKey       textinput.Model
 
-	saved    bool
-	modified bool
-	err      error
+	saved      bool
+	modified   bool
+	restarting bool
+	err        error
 
 	width  int
 	height int
@@ -190,7 +218,7 @@ func (m ConfigModel) PickerForCursor() Modal {
 	if def, ok := envFieldByConfigField(m.cursor); ok {
 		items := make([]listPickerItem, len(def.choices))
 		for i, v := range def.choices {
-			items[i] = listPickerItem{Label: v, Value: v}
+			items[i] = listPickerItem{Label: def.choiceLabel(i), Value: v}
 		}
 		return newListPicker(def.field, def.title, def.help, items, m.envSelections[def.key])
 	}
@@ -310,7 +338,7 @@ func (m ConfigModel) isFieldVisible(f configField) bool {
 		return profilerName == profilerBlackfire
 	case fieldTidewaysAPIKey:
 		return profilerName == profilerTideways
-	case fieldPHPVersion, fieldProfiler, fieldSave, fieldCount:
+	case fieldAppEnv, fieldHTTPCache, fieldPHPVersion, fieldProfiler, fieldSave, fieldCount:
 		return true
 	}
 	return true
@@ -396,7 +424,7 @@ func (m ConfigModel) View(width, height int) string {
 		s.WriteString(tui.TitleStyle.Render("Environment"))
 		s.WriteString("\n")
 		for _, def := range envFields {
-			s.WriteString(m.renderSelect(def.field, def.label, def.choices[m.envSelections[def.key]], selectedArrow, normalIndent))
+			s.WriteString(m.renderSelect(def.field, def.label, def.choiceLabel(m.envSelections[def.key]), selectedArrow, normalIndent))
 		}
 		s.WriteString(divider)
 	}
@@ -423,6 +451,8 @@ func (m ConfigModel) View(width, height int) string {
 		s.WriteString(normalIndent)
 	}
 	switch {
+	case m.restarting:
+		s.WriteString(warningBadgeStyle.Render("restarting docker…"))
 	case m.err != nil && m.cursor == fieldSave:
 		s.WriteString(activeBtnStyle.Render("Retry Save"))
 	case m.err != nil:
@@ -432,7 +462,7 @@ func (m ConfigModel) View(width, height int) string {
 	case m.saved:
 		s.WriteString(activeBadgeStyle.Render("Saved"))
 		s.WriteString("  ")
-		s.WriteString(helpStyle.Render("Restart Docker to apply changes."))
+		s.WriteString(helpStyle.Render("Docker restarted with new config."))
 	case m.modified && m.cursor == fieldSave:
 		s.WriteString(activeBtnStyle.Render("Save & Regenerate"))
 	case m.modified:

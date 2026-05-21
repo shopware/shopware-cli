@@ -120,6 +120,9 @@ func TestConfigModel_CursorNavigation(t *testing.T) {
 	assert.Equal(t, fieldAppEnv, m.cursor)
 
 	m.moveCursorDown()
+	assert.Equal(t, fieldHTTPCache, m.cursor)
+
+	m.moveCursorDown()
 	assert.Equal(t, fieldPHPVersion, m.cursor)
 
 	m.moveCursorDown()
@@ -137,6 +140,8 @@ func TestConfigModel_CursorNavigation_BlackfireVisible(t *testing.T) {
 	m.profiler = indexOf(profilers, "blackfire", 0)
 
 	assert.Equal(t, fieldAppEnv, m.cursor)
+	m.moveCursorDown()
+	assert.Equal(t, fieldHTTPCache, m.cursor)
 	m.moveCursorDown()
 	assert.Equal(t, fieldPHPVersion, m.cursor)
 	m.moveCursorDown()
@@ -260,6 +265,44 @@ func TestConfigModel_EnvField_MarkPersistedClearsChange(t *testing.T) {
 
 func TestEnvFieldKeys_IncludesAppEnv(t *testing.T) {
 	assert.Contains(t, EnvFieldKeys(), "APP_ENV")
+}
+
+func TestConfigModel_HTTPCache_DefaultsToDisabled(t *testing.T) {
+	m := NewConfigModel(nil, nil)
+
+	assert.Equal(t, "0", m.EnvValue("SHOPWARE_HTTP_CACHE_ENABLED"))
+	assert.Empty(t, m.ChangedEnvValues())
+}
+
+func TestConfigModel_HTTPCache_ToggleProducesEnvChange(t *testing.T) {
+	m := NewConfigModel(nil, map[string]string{"SHOPWARE_HTTP_CACHE_ENABLED": "0"})
+
+	changed := m.ApplyPickerValue(fieldHTTPCache, "1")
+	assert.True(t, changed)
+	assert.Equal(t, "1", m.EnvValue("SHOPWARE_HTTP_CACHE_ENABLED"))
+	assert.Equal(t, map[string]string{"SHOPWARE_HTTP_CACHE_ENABLED": "1"}, m.ChangedEnvValues())
+}
+
+func TestConfigModel_HTTPCache_PickerUsesFriendlyLabels(t *testing.T) {
+	m := NewConfigModel(nil, nil)
+	m.cursor = fieldHTTPCache
+
+	modal := m.PickerForCursor()
+	picker, ok := modal.(*listPicker)
+	assert.True(t, ok)
+
+	labels := make([]string, len(picker.items))
+	values := make([]string, len(picker.items))
+	for i, it := range picker.items {
+		labels[i] = it.Label
+		values[i] = it.Value
+	}
+	assert.Equal(t, []string{"disabled", "enabled"}, labels)
+	assert.Equal(t, []string{"0", "1"}, values)
+}
+
+func TestEnvFieldKeys_IncludesHTTPCache(t *testing.T) {
+	assert.Contains(t, EnvFieldKeys(), "SHOPWARE_HTTP_CACHE_ENABLED")
 }
 
 func TestIndexOf(t *testing.T) {

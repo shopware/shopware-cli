@@ -12,6 +12,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 
+	dockerpkg "github.com/shopware/shopware-cli/internal/docker"
 	"github.com/shopware/shopware-cli/internal/tui"
 )
 
@@ -157,6 +158,19 @@ func (m *Model) startContainers() tea.Cmd {
 	)
 	m.dockerOutChan = ch
 	return tea.Batch(outputCmd, doneCmd)
+}
+
+func (m *Model) restartContainersForConfig() tea.Cmd {
+	projectRoot := m.projectRoot
+	cfg := m.config
+	return func() tea.Msg {
+		if err := dockerpkg.WriteComposeFile(projectRoot, dockerpkg.ComposeOptionsFromConfig(cfg)); err != nil {
+			return configRestartDoneMsg{err: err}
+		}
+		cmd := exec.CommandContext(context.Background(), "docker", "compose", "up", "-d")
+		cmd.Dir = projectRoot
+		return configRestartDoneMsg{err: cmd.Run()}
+	}
 }
 
 func (m *Model) stopContainers() tea.Cmd {
