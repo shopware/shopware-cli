@@ -151,7 +151,7 @@ aurs:
   - homepage: https://developer.shopware.com/
     description: A cli which contains handy helpful commands for daily Shopware tasks
     license: MIT
-    disable: '{{ .Prerelease }}'
+    disable: '{{ if .Prerelease }}true{{ end }}'
     maintainers:
       - "Soner Sayakci <s.sayakci@shopware.com>"
       - "Max <max@swk-web.com>"
@@ -179,7 +179,7 @@ aurs:
 
 nix:
   - name: shopware-cli
-    skip_upload: '{{ .Prerelease }}'
+    skip_upload: auto
     repository:
       owner: FriendsOfShopware
       name: nur-packages
@@ -223,7 +223,7 @@ nfpms:
 
 homebrew_casks:
   - name: shopware-cli
-    skip_upload: '{{ .Prerelease }}'
+    skip_upload: auto
     repository:
       owner: shopware
       name: homebrew-tap
@@ -257,6 +257,16 @@ npms:
     bugs: https://github.com/shopware/shopware-cli/issues
     access: public
     tag: '{{ if .Prerelease }}prerelease{{ else }}latest{{ end }}'
+
+cloudsmiths:
+  - organization: friendsofshopware
+    repository: stable
+    secret_name: CLOUDSMITH_API_KEY
+    disable: '{{ if .Prerelease }}true{{ end }}'
+    distributions:
+      deb: "any-distro/any-version"
+      rpm: "any-distro/any-version"
+      alpine: "alpine/any-version"
 
 notarize:
   macos:

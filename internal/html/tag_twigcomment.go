@@ -18,7 +18,15 @@ func (c *TwigCommentNode) Dump(indent int) string {
 		b.WriteString(indentStr)
 	}
 	b.WriteString(openComment(c.Trim.Left))
-	b.WriteString(c.Body)
+	b.WriteString(normalizeTwigCommentBody(c.Body))
 	b.WriteString(closeComment(c.Trim.Right))
 	return b.String()
+}
+
+func normalizeTwigCommentBody(body string) string {
+	trimmed := strings.TrimSpace(body)
+	if trimmed == "" {
+		return body
+	}
+	return " " + trimmed + " "
 }
