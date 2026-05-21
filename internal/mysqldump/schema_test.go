@@ -360,7 +360,12 @@ func TestFetchTableSchema(t *testing.T) {
 		}).
 			AddRow("test_table", "PRIMARY", "id", 0, "BTREE", nil, "A", "", 1))
 
-	mock.ExpectQuery("SELECT.*FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE.*").
+	mock.ExpectQuery("SELECT COUNT.*KEY_COLUMN_USAGE.*").
+		WillReturnRows(sqlmock.NewRows([]string{"c"}).AddRow(0))
+	mock.ExpectQuery("SELECT COUNT.*REFERENTIAL_CONSTRAINTS.*").
+		WillReturnRows(sqlmock.NewRows([]string{"c"}).AddRow(0))
+
+	mock.ExpectQuery("SELECT DISTINCT.*FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE.*").
 		WillReturnRows(sqlmock.NewRows([]string{
 			"TABLE_NAME", "CONSTRAINT_NAME", "COLUMN_NAME", "REFERENCED_TABLE_NAME",
 			"REFERENCED_COLUMN_NAME", "UPDATE_RULE", "DELETE_RULE", "ORDINAL_POSITION",
@@ -413,7 +418,12 @@ func TestGetCreateTableStatement_Integration(t *testing.T) {
 		}).
 			AddRow("products", "PRIMARY", "id", 0, "BTREE", nil, "A", "", 1))
 
-	mock.ExpectQuery("SELECT.*FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE.*").
+	mock.ExpectQuery("SELECT COUNT.*KEY_COLUMN_USAGE.*").
+		WillReturnRows(sqlmock.NewRows([]string{"c"}).AddRow(0))
+	mock.ExpectQuery("SELECT COUNT.*REFERENTIAL_CONSTRAINTS.*").
+		WillReturnRows(sqlmock.NewRows([]string{"c"}).AddRow(0))
+
+	mock.ExpectQuery("SELECT DISTINCT.*FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE.*").
 		WillReturnRows(sqlmock.NewRows([]string{
 			"TABLE_NAME", "CONSTRAINT_NAME", "COLUMN_NAME", "REFERENCED_TABLE_NAME",
 			"REFERENCED_COLUMN_NAME", "UPDATE_RULE", "DELETE_RULE", "ORDINAL_POSITION",
@@ -560,7 +570,12 @@ func TestFetchAllForeignKeys_NumericName(t *testing.T) {
 		"product": {Name: "product"},
 	}
 
-	mock.ExpectQuery("SELECT.*FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE.*").
+	mock.ExpectQuery("SELECT COUNT.*KEY_COLUMN_USAGE.*").
+		WillReturnRows(sqlmock.NewRows([]string{"c"}).AddRow(1))
+	mock.ExpectQuery("SELECT COUNT.*REFERENTIAL_CONSTRAINTS.*").
+		WillReturnRows(sqlmock.NewRows([]string{"c"}).AddRow(1))
+
+	mock.ExpectQuery("SELECT DISTINCT.*FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE.*").
 		WillReturnRows(sqlmock.NewRows([]string{
 			"TABLE_NAME", "CONSTRAINT_NAME", "COLUMN_NAME", "REFERENCED_TABLE_NAME",
 			"REFERENCED_COLUMN_NAME", "UPDATE_RULE", "DELETE_RULE", "ORDINAL_POSITION",
