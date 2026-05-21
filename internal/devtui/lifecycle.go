@@ -48,6 +48,7 @@ func (m Model) updateLifecycle(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case dockerStartedMsg:
 		if msg.err != nil {
+			m.dockerShowLogs = true
 			m.overlayLines = append(m.overlayLines, errorStyle.Render("Failed: "+msg.err.Error()))
 			m.overlayLines = append(m.overlayLines, "", helpStyle.Render("Press q to exit"))
 			return m, nil
