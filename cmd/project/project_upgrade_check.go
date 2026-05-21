@@ -165,7 +165,7 @@ var projectUpgradeCheckCmd = &cobra.Command{
 				break
 			}
 		}
-		trackCtx, trackCancel := context.WithTimeout(context.WithoutCancel(cmd.Context()), 2*time.Second)
+		trackCtx, trackCancel := context.WithTimeout(context.WithoutCancel(cmd.Context()), 300*time.Millisecond)
 		defer trackCancel()
 		tracking.Track(trackCtx, "project.upgrade_check", map[string]string{
 			"from_version":   shopwareVersion.String(),
