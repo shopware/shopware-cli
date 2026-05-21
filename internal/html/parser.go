@@ -161,6 +161,25 @@ func (r *RawNode) Dump(indent int) string {
 	return r.Text
 }
 
+// TwigCommentNode represents an HTML comment.
+type TwigCommentNode struct {
+	Text string
+	Line int
+}
+
+// Dump returns the comment text with HTML comment syntax.
+func (c *TwigCommentNode) Dump(indent int) string {
+	var builder strings.Builder
+	indentStr := indentConfig.GetIndent()
+	for i := 0; i < indent; i++ {
+		builder.WriteString(indentStr)
+	}
+
+	builder.WriteString("{# " + c.Text + " #}")
+
+	return builder.String()
+}
+
 // CommentNode represents an HTML comment.
 type CommentNode struct {
 	Text string
@@ -746,6 +765,30 @@ func (p *Parser) getLineAt(pos int) int {
 	return strings.Count(p.input[:pos], "\n") + 1
 }
 
+// parseTwigComment parses a Twig comment and returns a TwigCommentNode
+func (p *Parser) parseTwigComment() (*TwigCommentNode, error) {
+	if p.peek(2) != "{#" {
+		//nolint: nilnil
+		return nil, nil
+	}
+	startPos := p.pos
+	p.pos += 2 // skip "{#"
+
+	start := p.pos
+	idx := strings.Index(p.input[p.pos:], "#}")
+	if idx == -1 {
+		return nil, fmt.Errorf("unterminated Twig comment starting at pos %d", startPos)
+	}
+
+	commentText := strings.TrimSpace(p.input[start : start+idx])
+	p.pos += idx + 2 // skip past "#}"
+
+	return &TwigCommentNode{
+		Text: commentText,
+		Line: p.getLineAt(startPos),
+	}, nil
+}
+
 // parseComment parses an HTML comment and returns a CommentNode
 func (p *Parser) parseComment() (*CommentNode, error) {
 	if p.peek(4) != htmlCommentStart {
@@ -854,6 +897,25 @@ func (p *Parser) parseNodes(stopTag string) (NodeList, error) {
 			}
 
 			nodes = append(nodes, expression)
+			rawStart = p.pos
+			continue
+		}
+
+		if p.peek(2) == "{#" {
+			if p.pos > rawStart {
+				text := p.input[rawStart:p.pos]
+				if strings.TrimSpace(text) != "" {
+					nodes = append(nodes, &RawNode{
+						Text: text,
+						Line: p.getLineAt(rawStart),
+					})
+				}
+			}
+			comment, err := p.parseTwigComment()
+			if err != nil {
+				return nodes, err
+			}
+			nodes = append(nodes, comment)
 			rawStart = p.pos
 			continue
 		}
@@ -1050,6 +1112,17 @@ func (p *Parser) parseElementChildren(tag string) (NodeList, error) {
 	rawStart := p.pos
 
 	for p.pos < p.length {
+		if p.peek(2) == "{#" {
+			children = p.flushRawText(children, rawStart, p.pos)
+			comment, err := p.parseTwigComment()
+			if err != nil {
+				return children, err
+			}
+			children = append(children, comment)
+			rawStart = p.pos
+			continue
+		}
+
 		if p.peek(4) == htmlCommentStart {
 			children = p.flushRawText(children, rawStart, p.pos)
 			comment, err := p.parseComment()
