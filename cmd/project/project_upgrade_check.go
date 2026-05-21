@@ -6,6 +6,7 @@ import (
 	"path"
 	"strconv"
 	"strings"
+	"time"
 
 	"charm.land/huh/v2"
 	"charm.land/lipgloss/v2"
@@ -164,7 +165,9 @@ var projectUpgradeCheckCmd = &cobra.Command{
 				break
 			}
 		}
-		go tracking.Track(cmd.Context(), "project.upgrade_check", map[string]string{
+		trackCtx, trackCancel := context.WithTimeout(context.WithoutCancel(cmd.Context()), 300*time.Millisecond)
+		defer trackCancel()
+		tracking.Track(trackCtx, "project.upgrade_check", map[string]string{
 			"from_version":   shopwareVersion.String(),
 			"target_version": selectedVersion,
 			"has_blockers":   strconv.FormatBool(hasBlockers),
