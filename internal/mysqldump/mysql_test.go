@@ -38,7 +38,12 @@ func mockPrefetchSchemas(mock sqlmock.Sqlmock) {
 			"TABLE_NAME", "INDEX_NAME", "COLUMN_NAME", "NON_UNIQUE", "INDEX_TYPE", "SUB_PART", "COLLATION", "INDEX_COMMENT", "SEQ_IN_INDEX",
 		}))
 
-	mock.ExpectQuery("SELECT.*FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE.*").
+	mock.ExpectQuery("SELECT COUNT.*KEY_COLUMN_USAGE.*").
+		WillReturnRows(sqlmock.NewRows([]string{"c"}).AddRow(0))
+	mock.ExpectQuery("SELECT COUNT.*REFERENTIAL_CONSTRAINTS.*").
+		WillReturnRows(sqlmock.NewRows([]string{"c"}).AddRow(0))
+
+	mock.ExpectQuery("SELECT DISTINCT.*FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE.*").
 		WillReturnRows(sqlmock.NewRows([]string{
 			"TABLE_NAME", "CONSTRAINT_NAME", "COLUMN_NAME", "REFERENCED_TABLE_NAME",
 			"REFERENCED_COLUMN_NAME", "UPDATE_RULE", "DELETE_RULE", "ORDINAL_POSITION",
@@ -124,7 +129,12 @@ func TestMySQLDumpCreateTable(t *testing.T) {
 			AddRow("table", "PRIMARY", "id", 0, "BTREE", nil, "A", "", 1).
 			AddRow("table", "idx_name", "name", 1, "BTREE", nil, "A", "", 1))
 
-	mock.ExpectQuery("SELECT.*FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE.*").
+	mock.ExpectQuery("SELECT COUNT.*KEY_COLUMN_USAGE.*").
+		WillReturnRows(sqlmock.NewRows([]string{"c"}).AddRow(0))
+	mock.ExpectQuery("SELECT COUNT.*REFERENTIAL_CONSTRAINTS.*").
+		WillReturnRows(sqlmock.NewRows([]string{"c"}).AddRow(0))
+
+	mock.ExpectQuery("SELECT DISTINCT.*FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE.*").
 		WillReturnRows(sqlmock.NewRows([]string{
 			"TABLE_NAME", "CONSTRAINT_NAME", "COLUMN_NAME", "REFERENCED_TABLE_NAME",
 			"REFERENCED_COLUMN_NAME", "UPDATE_RULE", "DELETE_RULE", "ORDINAL_POSITION",

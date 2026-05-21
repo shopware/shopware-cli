@@ -7,6 +7,8 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+
+	"github.com/shopware/shopware-cli/logging"
 )
 
 type TableSchema struct {
@@ -711,6 +713,24 @@ func (d *Dumper) fetchAllIndexes(ctx context.Context) error {
 }
 
 func (d *Dumper) fetchAllForeignKeys(ctx context.Context) error {
+	var expectedFKs, fetchedFKs int
+	if err := d.db.QueryRowContext(ctx, `
+		SELECT COUNT(DISTINCT CONCAT(TABLE_NAME, '|', CONSTRAINT_NAME))
+		FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE
+		WHERE TABLE_SCHEMA = DATABASE() AND REFERENCED_TABLE_NAME IS NOT NULL`).Scan(&expectedFKs); err != nil {
+		return fmt.Errorf("count foreign keys in KEY_COLUMN_USAGE: %w", err)
+	}
+	if err := d.db.QueryRowContext(ctx, `
+		SELECT COUNT(*) FROM INFORMATION_SCHEMA.REFERENTIAL_CONSTRAINTS
+		WHERE CONSTRAINT_SCHEMA = DATABASE()`).Scan(&fetchedFKs); err != nil {
+		return fmt.Errorf("count foreign keys in REFERENTIAL_CONSTRAINTS: %w", err)
+	}
+	if expectedFKs > fetchedFKs {
+		logging.FromContext(ctx).Warnf(
+			"Found %d foreign key columns in KEY_COLUMN_USAGE but only %d rows in REFERENTIAL_CONSTRAINTS — %d foreign key constraint(s) will be missing from the dump. This usually means the connecting user lacks privileges on the referenced tables. Grant SELECT (or REFERENCES) on the parent tables and re-run.",
+			expectedFKs, fetchedFKs, expectedFKs-fetchedFKs)
+	}
+
 	query := `
 		SELECT DISTINCT
 			kcu.TABLE_NAME,
