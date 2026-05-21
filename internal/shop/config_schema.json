@@ -38,6 +38,17 @@
         "image_proxy": {
           "$ref": "#/$defs/ConfigImageProxy"
         },
+        "docker": {
+          "$ref": "#/$defs/ConfigDocker",
+          "description": "Docker dev environment configuration"
+        },
+        "environments": {
+          "additionalProperties": {
+            "$ref": "#/$defs/EnvironmentConfig"
+          },
+          "type": "object",
+          "description": "Named environments for multi-environment management"
+        },
         "disable_composer_scripts": {
           "type": "boolean",
           "description": "When enabled, composer scripts will be disabled during CI builds"
@@ -152,6 +163,10 @@
           },
           "type": "array",
           "description": "Shopware bundles to include in builds (alternative to composer.json extra.shopware-bundles)"
+        },
+        "sbom": {
+          "$ref": "#/$defs/ConfigBuildSBOM",
+          "description": "SBOM (Software Bill of Materials) generation configuration"
         }
       },
       "additionalProperties": false,
@@ -237,6 +252,25 @@
       "additionalProperties": false,
       "type": "object",
       "description": "ConfigBuildMJML defines the configuration for MJML email template compilation."
+    },
+    "ConfigBuildSBOM": {
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "description": "When enabled, a CycloneDX SBOM is generated from the project's composer.lock"
+        },
+        "path": {
+          "type": "string",
+          "description": "Path (relative to the project root) where the SBOM is written. Defaults to \"sbom.cdx.json\"."
+        },
+        "include_dev": {
+          "type": "boolean",
+          "description": "When enabled, dev dependencies are also included in the SBOM"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "description": "ConfigBuildSBOM defines the configuration for SBOM generation during CI builds."
     },
     "ConfigDeployment": {
       "properties": {
@@ -375,6 +409,86 @@
       "type": "object",
       "description": "ConfigDeploymentStaging defines staging mode configuration."
     },
+    "ConfigDocker": {
+      "properties": {
+        "php": {
+          "$ref": "#/$defs/ConfigDockerPHP",
+          "description": "PHP configuration for the Docker dev image"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object"
+    },
+    "ConfigDockerPHP": {
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "profiler": {
+                "const": "blackfire"
+              }
+            },
+            "required": [
+              "profiler"
+            ]
+          },
+          "then": {
+            "required": [
+              "blackfire_server_id",
+              "blackfire_server_token"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "profiler": {
+                "const": "tideways"
+              }
+            },
+            "required": [
+              "profiler"
+            ]
+          },
+          "then": {
+            "required": [
+              "tideways_api_key"
+            ]
+          }
+        }
+      ],
+      "properties": {
+        "version": {
+          "type": "string",
+          "description": "PHP version (e.g. \"8.3\", \"8.2\"). Defaults to \"8.3\"."
+        },
+        "profiler": {
+          "type": "string",
+          "enum": [
+            "xdebug",
+            "blackfire",
+            "tideways",
+            "pcov",
+            "spx"
+          ],
+          "description": "Profiler to enable. Possible values: xdebug, blackfire, tideways, pcov, spx."
+        },
+        "blackfire_server_id": {
+          "type": "string",
+          "description": "Blackfire server ID from your Blackfire account. Required when profiler is \"blackfire\"."
+        },
+        "blackfire_server_token": {
+          "type": "string",
+          "description": "Blackfire server token from your Blackfire account. Required when profiler is \"blackfire\"."
+        },
+        "tideways_api_key": {
+          "type": "string",
+          "description": "Tideways API key from your Tideways account. Required when profiler is \"tideways\"."
+        }
+      },
+      "additionalProperties": false,
+      "type": "object"
+    },
     "ConfigDump": {
       "properties": {
         "rewrite": {
@@ -492,6 +606,25 @@
       "additionalProperties": false,
       "type": "object",
       "description": "ConfigValidationIgnoreItem is used to ignore items from the validation."
+    },
+    "EnvironmentConfig": {
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": [
+            "local",
+            "docker"
+          ]
+        },
+        "url": {
+          "type": "string"
+        },
+        "admin_api": {
+          "$ref": "#/$defs/ConfigAdminApi"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object"
     }
   }
 }

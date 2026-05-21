@@ -118,6 +118,18 @@ type ConfigBuild struct {
 	Hooks *ConfigBuildHooks `yaml:"hooks,omitempty"`
 	// Shopware bundles to include in builds (alternative to composer.json extra.shopware-bundles)
 	Bundles []ConfigProjectBundle `yaml:"bundles,omitempty"`
+	// SBOM (Software Bill of Materials) generation configuration
+	SBOM *ConfigBuildSBOM `yaml:"sbom,omitempty"`
+}
+
+// ConfigBuildSBOM defines the configuration for SBOM generation during CI builds.
+type ConfigBuildSBOM struct {
+	// When enabled, a CycloneDX SBOM is generated from the project's composer.lock
+	Enabled bool `yaml:"enabled,omitempty"`
+	// Path (relative to the project root) where the SBOM is written. Defaults to "sbom.cdx.json".
+	Path string `yaml:"path,omitempty"`
+	// When enabled, dev dependencies are also included in the SBOM
+	IncludeDev bool `yaml:"include_dev,omitempty"`
 }
 
 // ConfigProjectBundle defines a project-level Shopware bundle.

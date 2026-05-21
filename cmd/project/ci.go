@@ -19,7 +19,9 @@ import (
 	"github.com/shopware/shopware-cli/internal/extension"
 	"github.com/shopware/shopware-cli/internal/mjml"
 	"github.com/shopware/shopware-cli/internal/packagist"
+	"github.com/shopware/shopware-cli/internal/sbom"
 	"github.com/shopware/shopware-cli/internal/shop"
+	"github.com/shopware/shopware-cli/internal/tui"
 	"github.com/shopware/shopware-cli/logging"
 )
 
@@ -125,6 +127,12 @@ var projectCI = &cobra.Command{
 			}
 		} else {
 			logging.FromContext(cmd.Context()).Infof("Skipping composer install")
+		}
+
+		if shopCfg.Build.SBOM != nil && shopCfg.Build.SBOM.Enabled {
+			if err := generateProjectSBOM(cmd.Context(), args[0], shopCfg.Build.SBOM); err != nil {
+				return fmt.Errorf("failed to generate SBOM: %w", err)
+			}
 		}
 
 		if _, err := os.Stat(path.Join(args[0], "var", "cache")); err == nil {
@@ -325,6 +333,65 @@ func createEmptySnippetFolder(root string) error {
 		}
 	}
 
+	return nil
+}
+
+// generateProjectSBOM reads composer.lock from the project root and writes a
+// CycloneDX SBOM JSON document to the configured path.
+func generateProjectSBOM(ctx context.Context, root string, cfg *shop.ConfigBuildSBOM) error {
+	section := ci.Default.Section(ctx, "Generating SBOM")
+	defer section.End(ctx)
+
+	lockPath := path.Join(root, "composer.lock")
+	lock, err := packagist.ReadComposerLock(lockPath)
+	if err != nil {
+		return fmt.Errorf("read composer.lock: %w", err)
+	}
+
+	projectComposer, err := packagist.ReadComposerJson(path.Join(root, "composer.json"))
+	appName := "shopware-project"
+	appVersion := ""
+	if err == nil && projectComposer != nil {
+		if projectComposer.Name != "" {
+			appName = projectComposer.Name
+		}
+		if projectComposer.Version != "" {
+			appVersion = projectComposer.Version
+		}
+	}
+
+	bom, err := sbom.Generate(lock, sbom.Options{
+		ApplicationName:        appName,
+		ApplicationVersion:     appVersion,
+		ToolVersion:            tui.AppVersion,
+		IncludeDevDependencies: cfg.IncludeDev,
+	})
+	if err != nil {
+		return err
+	}
+
+	data, err := sbom.Marshal(bom)
+	if err != nil {
+		return fmt.Errorf("marshal SBOM: %w", err)
+	}
+
+	outputPath := cfg.Path
+	if outputPath == "" {
+		outputPath = "sbom.cdx.json"
+	}
+	if !filepath.IsAbs(outputPath) {
+		outputPath = filepath.Join(root, outputPath)
+	}
+
+	if err := os.MkdirAll(filepath.Dir(outputPath), 0o755); err != nil {
+		return fmt.Errorf("create SBOM output directory: %w", err)
+	}
+
+	if err := os.WriteFile(outputPath, data, 0o644); err != nil {
+		return fmt.Errorf("write SBOM: %w", err)
+	}
+
+	logging.FromContext(ctx).Infof("Wrote SBOM with %d components to %s", len(bom.Components), outputPath)
 	return nil
 }
 
