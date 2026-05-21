@@ -31,22 +31,66 @@ const (
 	profilerTideways  = dockerpkg.ProfilerTideways
 
 	defaultPHPVersionIndex = 1
-	defaultAppEnvIndex     = 0
 )
 
 var (
 	phpVersions = packagist.SupportedPHPVersions
 	profilers   = dockerpkg.Profilers
-	appEnvs     = []string{"dev", "prod", "test"}
 )
+
+// envFieldDef describes a Symfony .env-backed choice field rendered in the
+// config tab. Adding a new entry to envFields is enough to surface another
+// env variable: it gets a picker, is loaded from .env.local on startup, and
+// is written back through envfile.WriteValues on save.
+type envFieldDef struct {
+	field      configField
+	key        string
+	label      string
+	title      string
+	help       string
+	choices    []string
+	defaultIdx int
+}
+
+var envFields = []envFieldDef{
+	{
+		field:      fieldAppEnv,
+		key:        "APP_ENV",
+		label:      "APP_ENV",
+		title:      "APP_ENV",
+		help:       "Symfony application environment (.env.local)",
+		choices:    []string{"dev", "prod", "test"},
+		defaultIdx: 0,
+	},
+}
+
+// EnvFieldKeys returns the env variable names this tab manages, suitable for
+// passing to envfile.ReadValues.
+func EnvFieldKeys() []string {
+	keys := make([]string, len(envFields))
+	for i, def := range envFields {
+		keys[i] = def.key
+	}
+	return keys
+}
+
+func envFieldByConfigField(f configField) (envFieldDef, bool) {
+	for _, def := range envFields {
+		if def.field == f {
+			return def, true
+		}
+	}
+	return envFieldDef{}, false
+}
 
 type ConfigModel struct {
 	cursor configField
 
-	appEnv         int
-	originalAppEnv string
-	phpVersion     int
-	profiler       int
+	envSelections map[string]int    // env key -> index in envFieldDef.choices
+	envOriginals  map[string]string // env key -> value loaded from .env files
+
+	phpVersion int
+	profiler   int
 
 	blackfireServerID    textinput.Model
 	blackfireServerToken textinput.Model
@@ -60,16 +104,25 @@ type ConfigModel struct {
 	height int
 }
 
-func NewConfigModel(cfg *shop.Config, appEnv string) ConfigModel {
-	resolvedAppEnv := appEnv
-	if resolvedAppEnv == "" {
-		resolvedAppEnv = appEnvs[defaultAppEnvIndex]
-	}
+// NewConfigModel constructs the Config tab. envValues maps env variable
+// names (see EnvFieldKeys) to the values currently effective in the
+// project's .env files; missing or empty entries fall back to each field's
+// default choice.
+func NewConfigModel(cfg *shop.Config, envValues map[string]string) ConfigModel {
 	m := ConfigModel{
-		cursor:         fieldAppEnv,
-		appEnv:         indexOf(appEnvs, resolvedAppEnv, defaultAppEnvIndex),
-		originalAppEnv: resolvedAppEnv,
-		phpVersion:     defaultPHPVersionIndex,
+		cursor:        fieldAppEnv,
+		envSelections: make(map[string]int, len(envFields)),
+		envOriginals:  make(map[string]string, len(envFields)),
+		phpVersion:    defaultPHPVersionIndex,
+	}
+
+	for _, def := range envFields {
+		current := envValues[def.key]
+		if current == "" {
+			current = def.choices[def.defaultIdx]
+		}
+		m.envSelections[def.key] = indexOf(def.choices, current, def.defaultIdx)
+		m.envOriginals[def.key] = current
 	}
 
 	if cfg != nil && cfg.Docker != nil && cfg.Docker.PHP != nil {
@@ -134,13 +187,14 @@ func (m ConfigModel) HandleKey(msg tea.KeyPressMsg) (ConfigModel, tea.Cmd) {
 }
 
 func (m ConfigModel) PickerForCursor() Modal {
-	switch m.cursor { //nolint:exhaustive
-	case fieldAppEnv:
-		items := make([]listPickerItem, len(appEnvs))
-		for i, v := range appEnvs {
+	if def, ok := envFieldByConfigField(m.cursor); ok {
+		items := make([]listPickerItem, len(def.choices))
+		for i, v := range def.choices {
 			items[i] = listPickerItem{Label: v, Value: v}
 		}
-		return newListPicker(fieldAppEnv, "APP_ENV", "Symfony application environment (.env.local)", items, m.appEnv)
+		return newListPicker(def.field, def.title, def.help, items, m.envSelections[def.key])
+	}
+	switch m.cursor { //nolint:exhaustive
 	case fieldPHPVersion:
 		items := make([]listPickerItem, len(phpVersions))
 		for i, v := range phpVersions {
@@ -168,14 +222,21 @@ func (m ConfigModel) PickerForCursor() Modal {
 }
 
 func (m *ConfigModel) ApplyPickerValue(field configField, value string) bool {
+	if def, ok := envFieldByConfigField(field); ok {
+		current := m.envSelections[def.key]
+		idx := indexOf(def.choices, value, current)
+		if idx == current {
+			return false
+		}
+		m.envSelections[def.key] = idx
+		m.modified = true
+		m.saved = false
+		m.err = nil
+		return true
+	}
+
 	changed := false
 	switch field { //nolint:exhaustive
-	case fieldAppEnv:
-		idx := indexOf(appEnvs, value, m.appEnv)
-		if idx != m.appEnv {
-			m.appEnv = idx
-			changed = true
-		}
 	case fieldPHPVersion:
 		idx := indexOf(phpVersions, value, m.phpVersion)
 		if idx != m.phpVersion {
@@ -240,13 +301,16 @@ func (m *ConfigModel) moveCursorDown() {
 }
 
 func (m ConfigModel) isFieldVisible(f configField) bool {
+	if _, ok := envFieldByConfigField(f); ok {
+		return true
+	}
 	profilerName := profilers[m.profiler]
 	switch f {
 	case fieldBlackfireServerID, fieldBlackfireServerToken:
 		return profilerName == profilerBlackfire
 	case fieldTidewaysAPIKey:
 		return profilerName == profilerTideways
-	case fieldAppEnv, fieldPHPVersion, fieldProfiler, fieldSave, fieldCount:
+	case fieldPHPVersion, fieldProfiler, fieldSave, fieldCount:
 		return true
 	}
 	return true
@@ -268,21 +332,36 @@ func (m ConfigModel) ApplyToConfig(cfg *shop.Config) {
 	cfg.Docker.PHP.TidewaysAPIKey = ""
 }
 
-// AppEnv returns the currently selected APP_ENV value.
-func (m ConfigModel) AppEnv() string {
-	return appEnvs[m.appEnv]
+// EnvValue returns the currently selected value for the env field with the
+// given key, or "" when no such field is registered.
+func (m ConfigModel) EnvValue(key string) string {
+	for _, def := range envFields {
+		if def.key == key {
+			return def.choices[m.envSelections[key]]
+		}
+	}
+	return ""
 }
 
-// AppEnvChanged reports whether the APP_ENV selection differs from the
-// value loaded into the model.
-func (m ConfigModel) AppEnvChanged() bool {
-	return appEnvs[m.appEnv] != m.originalAppEnv
+// ChangedEnvValues returns the env entries whose selected value differs from
+// the value loaded into the model.
+func (m ConfigModel) ChangedEnvValues() map[string]string {
+	changes := make(map[string]string)
+	for _, def := range envFields {
+		current := def.choices[m.envSelections[def.key]]
+		if current != m.envOriginals[def.key] {
+			changes[def.key] = current
+		}
+	}
+	return changes
 }
 
-// MarkAppEnvPersisted records the current APP_ENV value as the new baseline
-// after it has been written to disk.
-func (m *ConfigModel) MarkAppEnvPersisted() {
-	m.originalAppEnv = appEnvs[m.appEnv]
+// MarkEnvValuesPersisted records the current env selections as the new
+// baseline after they have been written to disk.
+func (m *ConfigModel) MarkEnvValuesPersisted() {
+	for _, def := range envFields {
+		m.envOriginals[def.key] = def.choices[m.envSelections[def.key]]
+	}
 }
 
 func (m ConfigModel) LocalConfig() *shop.Config {
@@ -313,10 +392,14 @@ func (m ConfigModel) View(width, height int) string {
 
 	divider := tui.SectionDivider(width - 8)
 
-	s.WriteString(tui.TitleStyle.Render("Environment"))
-	s.WriteString("\n")
-	s.WriteString(m.renderSelect(fieldAppEnv, "APP_ENV", appEnvs[m.appEnv], selectedArrow, normalIndent))
-	s.WriteString(divider)
+	if len(envFields) > 0 {
+		s.WriteString(tui.TitleStyle.Render("Environment"))
+		s.WriteString("\n")
+		for _, def := range envFields {
+			s.WriteString(m.renderSelect(def.field, def.label, def.choices[m.envSelections[def.key]], selectedArrow, normalIndent))
+		}
+		s.WriteString(divider)
+	}
 
 	s.WriteString(tui.TitleStyle.Render("PHP"))
 	s.WriteString("\n")

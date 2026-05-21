@@ -117,13 +117,13 @@ func (m Model) updateConfigTab(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 					return m, nil
 				}
 			}
-			if m.configTab.AppEnvChanged() {
-				if err := envfile.WriteAppEnv(m.projectRoot, m.configTab.AppEnv()); err != nil {
+			if envChanges := m.configTab.ChangedEnvValues(); len(envChanges) > 0 {
+				if err := envfile.WriteValues(m.projectRoot, envChanges); err != nil {
 					m.configTab.err = err
 					m.configTab.saved = false
 					return m, nil
 				}
-				m.configTab.MarkAppEnvPersisted()
+				m.configTab.MarkEnvValuesPersisted()
 			}
 			m.configTab.saved = true
 			m.configTab.modified = false
@@ -331,8 +331,8 @@ func (m Model) startAfterSetupGuide() (tea.Model, tea.Cmd) {
 		password = m.envConfig.AdminApi.Password
 	}
 	m.general = NewGeneralModel(m.executor.Type(), shopURL, username, password, m.projectRoot, m.executor, m.config)
-	appEnv, _ := envfile.ReadAppEnv(m.projectRoot)
-	m.configTab = NewConfigModel(m.config, appEnv)
+	envValues, _ := envfile.ReadValues(m.projectRoot, EnvFieldKeys()...)
+	m.configTab = NewConfigModel(m.config, envValues)
 
 	return m, tea.Batch(m.dockerSpinner.Tick, m.startContainers())
 }

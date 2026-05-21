@@ -9,87 +9,137 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestReadAppEnv_NoFiles(t *testing.T) {
+func TestReadValue_NoFiles(t *testing.T) {
 	tempDir := t.TempDir()
 
-	value, err := ReadAppEnv(tempDir)
+	value, err := ReadValue(tempDir, "APP_ENV")
 	require.NoError(t, err)
 	assert.Equal(t, "", value)
 }
 
-func TestReadAppEnv_FromEnv(t *testing.T) {
+func TestReadValue_FromEnv(t *testing.T) {
 	tempDir := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(tempDir, ".env"), []byte("APP_ENV=dev\n"), 0o644))
 
-	value, err := ReadAppEnv(tempDir)
+	value, err := ReadValue(tempDir, "APP_ENV")
 	require.NoError(t, err)
 	assert.Equal(t, "dev", value)
 }
 
-func TestReadAppEnv_EnvLocalOverridesEnv(t *testing.T) {
+func TestReadValue_EnvLocalOverridesEnv(t *testing.T) {
 	tempDir := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(tempDir, ".env"), []byte("APP_ENV=prod\n"), 0o644))
 	require.NoError(t, os.WriteFile(filepath.Join(tempDir, ".env.local"), []byte("APP_ENV=dev\n"), 0o644))
 
-	value, err := ReadAppEnv(tempDir)
+	value, err := ReadValue(tempDir, "APP_ENV")
 	require.NoError(t, err)
 	assert.Equal(t, "dev", value)
 }
 
-func TestWriteAppEnv_CreatesFile(t *testing.T) {
+func TestReadValues_ReturnsRequestedKeys(t *testing.T) {
+	tempDir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(tempDir, ".env.local"),
+		[]byte("APP_ENV=prod\nAPP_SECRET=abc\nOTHER=ignored\n"), 0o644))
+
+	values, err := ReadValues(tempDir, "APP_ENV", "APP_SECRET", "MISSING")
+	require.NoError(t, err)
+	assert.Equal(t, "prod", values["APP_ENV"])
+	assert.Equal(t, "abc", values["APP_SECRET"])
+	assert.Equal(t, "", values["MISSING"])
+	assert.NotContains(t, values, "OTHER")
+}
+
+func TestReadValues_NoFiles(t *testing.T) {
 	tempDir := t.TempDir()
 
-	require.NoError(t, WriteAppEnv(tempDir, "prod"))
+	values, err := ReadValues(tempDir, "APP_ENV", "APP_SECRET")
+	require.NoError(t, err)
+	assert.Equal(t, "", values["APP_ENV"])
+	assert.Equal(t, "", values["APP_SECRET"])
+}
+
+func TestWriteValue_CreatesFile(t *testing.T) {
+	tempDir := t.TempDir()
+
+	require.NoError(t, WriteValue(tempDir, "APP_ENV", "prod"))
 
 	content, err := os.ReadFile(filepath.Join(tempDir, ".env.local"))
 	require.NoError(t, err)
 	assert.Equal(t, "APP_ENV=prod\n", string(content))
 }
 
-func TestWriteAppEnv_ReplacesExistingLine(t *testing.T) {
+func TestWriteValue_ReplacesExistingLine(t *testing.T) {
 	tempDir := t.TempDir()
 	envLocal := filepath.Join(tempDir, ".env.local")
-	require.NoError(t, os.WriteFile(envLocal, []byte("APP_SECRET=secret\nAPP_ENV=dev\nDATABASE_URL=mysql://...\n"), 0o644))
+	require.NoError(t, os.WriteFile(envLocal,
+		[]byte("APP_SECRET=secret\nAPP_ENV=dev\nDATABASE_URL=mysql://...\n"), 0o644))
 
-	require.NoError(t, WriteAppEnv(tempDir, "prod"))
+	require.NoError(t, WriteValue(tempDir, "APP_ENV", "prod"))
 
 	content, err := os.ReadFile(envLocal)
 	require.NoError(t, err)
 	assert.Equal(t, "APP_SECRET=secret\nAPP_ENV=prod\nDATABASE_URL=mysql://...\n", string(content))
 }
 
-func TestWriteAppEnv_AppendsWhenMissing(t *testing.T) {
+func TestWriteValue_AppendsWhenMissing(t *testing.T) {
 	tempDir := t.TempDir()
 	envLocal := filepath.Join(tempDir, ".env.local")
 	require.NoError(t, os.WriteFile(envLocal, []byte("APP_SECRET=secret\n"), 0o644))
 
-	require.NoError(t, WriteAppEnv(tempDir, "test"))
+	require.NoError(t, WriteValue(tempDir, "APP_ENV", "test"))
 
 	content, err := os.ReadFile(envLocal)
 	require.NoError(t, err)
 	assert.Equal(t, "APP_SECRET=secret\nAPP_ENV=test\n", string(content))
 }
 
-func TestWriteAppEnv_AppendsNewlineWhenMissing(t *testing.T) {
+func TestWriteValue_AppendsNewlineWhenMissing(t *testing.T) {
 	tempDir := t.TempDir()
 	envLocal := filepath.Join(tempDir, ".env.local")
 	require.NoError(t, os.WriteFile(envLocal, []byte("APP_SECRET=secret"), 0o644))
 
-	require.NoError(t, WriteAppEnv(tempDir, "prod"))
+	require.NoError(t, WriteValue(tempDir, "APP_ENV", "prod"))
 
 	content, err := os.ReadFile(envLocal)
 	require.NoError(t, err)
 	assert.Equal(t, "APP_SECRET=secret\nAPP_ENV=prod\n", string(content))
 }
 
-func TestWriteAppEnv_PreservesComments(t *testing.T) {
+func TestWriteValue_PreservesComments(t *testing.T) {
 	tempDir := t.TempDir()
 	envLocal := filepath.Join(tempDir, ".env.local")
-	require.NoError(t, os.WriteFile(envLocal, []byte("# Local environment\nAPP_ENV=dev\n# trailing comment\n"), 0o644))
+	require.NoError(t, os.WriteFile(envLocal,
+		[]byte("# Local environment\nAPP_ENV=dev\n# trailing comment\n"), 0o644))
 
-	require.NoError(t, WriteAppEnv(tempDir, "test"))
+	require.NoError(t, WriteValue(tempDir, "APP_ENV", "test"))
 
 	content, err := os.ReadFile(envLocal)
 	require.NoError(t, err)
 	assert.Equal(t, "# Local environment\nAPP_ENV=test\n# trailing comment\n", string(content))
+}
+
+func TestWriteValues_BatchReplaceAndAppendDeterministic(t *testing.T) {
+	tempDir := t.TempDir()
+	envLocal := filepath.Join(tempDir, ".env.local")
+	require.NoError(t, os.WriteFile(envLocal, []byte("APP_ENV=dev\n"), 0o644))
+
+	require.NoError(t, WriteValues(tempDir, map[string]string{
+		"APP_ENV":      "prod",
+		"NEW_FLAG":     "1",
+		"ANOTHER_FLAG": "yes",
+	}))
+
+	content, err := os.ReadFile(envLocal)
+	require.NoError(t, err)
+	// Replaces APP_ENV in place; appends new keys in alphabetical order.
+	assert.Equal(t, "APP_ENV=prod\nANOTHER_FLAG=yes\nNEW_FLAG=1\n", string(content))
+}
+
+func TestWriteValues_EmptyMapIsNoOp(t *testing.T) {
+	tempDir := t.TempDir()
+
+	require.NoError(t, WriteValues(tempDir, nil))
+
+	_, err := os.Stat(filepath.Join(tempDir, ".env.local"))
+	assert.True(t, os.IsNotExist(err))
 }

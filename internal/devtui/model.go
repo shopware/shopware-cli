@@ -108,13 +108,13 @@ func New(opts Options) Model {
 
 	isDocker := opts.Executor.Type() == executor.TypeDocker
 
-	appEnv, _ := envfile.ReadAppEnv(opts.ProjectRoot)
+	envValues, _ := envfile.ReadValues(opts.ProjectRoot, EnvFieldKeys()...)
 
 	return Model{
 		activeTab:   tabGeneral,
 		general:     NewGeneralModel(opts.Executor.Type(), shopURL, username, password, opts.ProjectRoot, opts.Executor, opts.Config),
 		logs:        NewLogsModel(opts.ProjectRoot, isDocker),
-		configTab:   NewConfigModel(opts.Config, appEnv),
+		configTab:   NewConfigModel(opts.Config, envValues),
 		dockerMode:  isDocker,
 		projectRoot: opts.ProjectRoot,
 		executor:    opts.Executor,
