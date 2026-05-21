@@ -3,6 +3,7 @@ package configcheck
 import (
 	"testing"
 
+	"github.com/shyim/go-version"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -10,14 +11,27 @@ import (
 )
 
 // makeConfig builds a Config in-memory without touching the filesystem.
+// shopwareVer defaults to "6.6.10.5" so that all version-gated checks are
+// active; tests that need a specific version use makeConfigWithVersion.
 func makeConfig(data map[string]any, env map[string]string) *symfonyconfig.Config {
+	return makeConfigWithVersion(data, env, "6.6.10.5")
+}
+
+func makeConfigWithVersion(data map[string]any, env map[string]string, shopwareVer string) *symfonyconfig.Config {
 	if env == nil {
 		env = map[string]string{}
 	}
 	if data == nil {
 		data = map[string]any{}
 	}
-	return &symfonyconfig.Config{Data: data, EnvVars: env, Env: "prod"}
+	cfg := &symfonyconfig.Config{Data: data, EnvVars: env, Env: "prod"}
+	if shopwareVer != "" {
+		v, err := version.NewVersion(shopwareVer)
+		if err == nil {
+			cfg.ShopwareVersion = v
+		}
+	}
+	return cfg
 }
 
 func resultIDs(rs []Result) []string {

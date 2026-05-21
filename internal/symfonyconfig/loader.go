@@ -21,7 +21,10 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/shyim/go-version"
 	"gopkg.in/yaml.v3"
+
+	"github.com/shopware/shopware-cli/internal/packagist"
 )
 
 // Options configures the loader.
@@ -33,6 +36,10 @@ type Options struct {
 	// ExtraEnv supplies additional environment variables to make available to
 	// %env(VAR)% resolution. They take precedence over the process environment.
 	ExtraEnv map[string]string
+	// ShopwareVersion overrides the version detected from composer.lock.
+	// Useful for tests and for callers that already know the Shopware version
+	// out-of-band.
+	ShopwareVersion string
 }
 
 // File describes a single YAML config file that contributed to the merged
@@ -54,6 +61,12 @@ type Config struct {
 	// EnvVars holds the merged environment (.env + .env.local + .env.<env> + .env.<env>.local
 	// + process env + Options.ExtraEnv). Used by Resolve().
 	EnvVars map[string]string
+	// ShopwareVersion is the version of shopware/core (or shopware/platform)
+	// read from composer.lock at the project root, or set explicitly through
+	// Options.ShopwareVersion. nil when the version is unknown - callers
+	// should treat that as "version constraint not satisfied" for any
+	// version-gated check.
+	ShopwareVersion *version.Version
 }
 
 // Load reads the Symfony configuration for the given project root.
@@ -78,6 +91,14 @@ func Load(projectRoot string, opts Options) (*Config, error) {
 		Data:    map[string]any{},
 		Env:     env,
 		EnvVars: envVars,
+	}
+
+	if opts.ShopwareVersion != "" {
+		if v, err := version.NewVersion(strings.TrimPrefix(opts.ShopwareVersion, "v")); err == nil {
+			cfg.ShopwareVersion = v
+		}
+	} else if lock, err := packagist.ReadComposerLock(filepath.Join(projectRoot, "composer.lock")); err == nil {
+		cfg.ShopwareVersion = lock.ShopwareVersion()
 	}
 
 	files, err := collectFiles(projectRoot, env, opts.IncludeServices)

@@ -14,7 +14,14 @@ type FineGrainedCachingCheck struct{}
 
 func (FineGrainedCachingCheck) ID() string { return "fine-grained-caching" }
 
+// fineGrainedCachingConstraint mirrors FroshTools: the each_* tagging
+// options exist from 6.5.4.0 and were removed in 6.7.0.0.
+const fineGrainedCachingConstraint = ">=6.5.4.0 <6.7.0.0"
+
 func (FineGrainedCachingCheck) Run(cfg *symfonyconfig.Config) []Result {
+	if !shopwareVersionMatches(cfg, fineGrainedCachingConstraint) {
+		return nil
+	}
 	var out []Result
 	for _, key := range []string{"each_config", "each_snippet", "each_theme_config"} {
 		path := fmt.Sprintf("shopware.cache.tagging.%s", key)

@@ -52,6 +52,10 @@ func TestRun_AgainstRealProjectLayout(t *testing.T) {
 	// Bad messenger DSN in env.
 	write("MESSENGER_TRANSPORT_DSN=doctrine://default\n", ".env")
 
+	// composer.lock pinning Shopware to a version that activates the
+	// fine-grained-caching and compression checks (both in 6.6.x window).
+	write(`{"packages":[{"name":"shopware/core","version":"v6.6.5.0"}]}`, "composer.lock")
+
 	t.Setenv("MESSENGER_TRANSPORT_DSN", "")
 	t.Setenv("APP_URL_CHECK_DISABLED", "")
 	t.Setenv("APP_ENV", "")

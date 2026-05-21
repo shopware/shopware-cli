@@ -130,6 +130,45 @@ func TestLoad_IgnoresSubdirectoriesThatArentTheEnv(t *testing.T) {
 	assert.Equal(t, "base", v, "test/ files must not leak into dev")
 }
 
+func TestLoad_ReadsShopwareVersionFromComposerLock(t *testing.T) {
+	dir := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, "config", "packages"), 0o755))
+	require.NoError(t, os.WriteFile(
+		filepath.Join(dir, "composer.lock"),
+		[]byte(`{"packages":[{"name":"shopware/core","version":"v6.6.10.0"}]}`),
+		0o644,
+	))
+
+	cfg, err := Load(dir, Options{Env: "dev"})
+	require.NoError(t, err)
+	require.NotNil(t, cfg.ShopwareVersion)
+	assert.Equal(t, "6.6.10.0", cfg.ShopwareVersion.String())
+}
+
+func TestLoad_ShopwareVersionOverrideWinsOverLock(t *testing.T) {
+	dir := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, "config", "packages"), 0o755))
+	require.NoError(t, os.WriteFile(
+		filepath.Join(dir, "composer.lock"),
+		[]byte(`{"packages":[{"name":"shopware/core","version":"v6.6.10.0"}]}`),
+		0o644,
+	))
+
+	cfg, err := Load(dir, Options{Env: "dev", ShopwareVersion: "6.7.2.0"})
+	require.NoError(t, err)
+	require.NotNil(t, cfg.ShopwareVersion)
+	assert.Equal(t, "6.7.2.0", cfg.ShopwareVersion.String())
+}
+
+func TestLoad_NoComposerLockMeansNilVersion(t *testing.T) {
+	dir := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, "config", "packages"), 0o755))
+
+	cfg, err := Load(dir, Options{Env: "dev"})
+	require.NoError(t, err)
+	assert.Nil(t, cfg.ShopwareVersion)
+}
+
 func TestLoad_IncludesServicesWhenRequested(t *testing.T) {
 	dir := t.TempDir()
 	require.NoError(t, os.MkdirAll(filepath.Join(dir, "config", "packages"), 0o755))

@@ -9,7 +9,14 @@ type ProductStreamIndexingCheck struct{}
 
 func (ProductStreamIndexingCheck) ID() string { return "product-stream-indexing" }
 
+// productStreamIndexingConstraint mirrors FroshTools: the disable-indexing
+// option was introduced in 6.6.10.5.
+const productStreamIndexingConstraint = ">=6.6.10.5"
+
 func (ProductStreamIndexingCheck) Run(cfg *symfonyconfig.Config) []Result {
+	if !shopwareVersionMatches(cfg, productStreamIndexingConstraint) {
+		return nil
+	}
 	const path = "shopware.product_stream.indexing"
 	v, ok := cfg.GetBool(path)
 	if !ok || !v {

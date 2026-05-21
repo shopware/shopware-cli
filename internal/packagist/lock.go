@@ -4,6 +4,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"strings"
+
+	"github.com/shyim/go-version"
 )
 
 type ComposerLockPackage struct {
@@ -39,6 +42,27 @@ func (c *ComposerLock) ShopwarePHPConstraint() *PHPConstraint {
 		if php, ok := pkg.Require["php"]; ok && php != "" {
 			return NewPHPConstraint(php)
 		}
+	}
+	return nil
+}
+
+// ShopwareVersion returns the parsed version of the installed Shopware
+// package (shopware/core, falling back to shopware/platform). Returns nil
+// when no Shopware package is present or its version cannot be parsed.
+// Composer lock entries are typically prefixed with "v" (e.g. "v6.6.10.0"),
+// which is stripped before parsing.
+func (c *ComposerLock) ShopwareVersion() *version.Version {
+	for _, name := range []string{"shopware/core", "shopware/platform"} {
+		pkg := c.GetPackage(name)
+		if pkg == nil {
+			continue
+		}
+		raw := strings.TrimPrefix(pkg.Version, "v")
+		v, err := version.NewVersion(raw)
+		if err != nil {
+			continue
+		}
+		return v
 	}
 	return nil
 }
