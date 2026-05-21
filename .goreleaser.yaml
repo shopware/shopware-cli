@@ -247,6 +247,16 @@ npms:
     access: public
     tag: '{{ if .Prerelease }}prerelease{{ else }}latest{{ end }}'
 
+cloudsmiths:
+  - organization: friendsofshopware
+    repository: stable
+    secret_name: CLOUDSMITH_API_KEY
+    disable: '{{ if .Prerelease }}true{{ end }}'
+    distributions:
+      deb: "any-distro/any-version"
+      rpm: "any-distro/any-version"
+      alpine: "alpine/any-version"
+
 notarize:
   macos:
     - enabled: '{{ isEnvSet "APPLE_CODE_SIGNING_KEY" }}'
