@@ -8,6 +8,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	dockerpkg "github.com/shopware/shopware-cli/internal/docker"
+	"github.com/shopware/shopware-cli/internal/envfile"
 	"github.com/shopware/shopware-cli/internal/executor"
 	"github.com/shopware/shopware-cli/internal/shop"
 )
@@ -116,9 +117,22 @@ func (m Model) updateConfigTab(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 					return m, nil
 				}
 			}
-			m.configTab.saved = true
+			if envChanges := m.configTab.ChangedEnvValues(); len(envChanges) > 0 {
+				if err := envfile.WriteValues(m.projectRoot, envChanges); err != nil {
+					m.configTab.err = err
+					m.configTab.saved = false
+					return m, nil
+				}
+				m.configTab.MarkEnvValuesPersisted()
+			}
 			m.configTab.modified = false
 			m.configTab.err = nil
+			if m.dockerMode {
+				m.configTab.saved = false
+				m.configTab.restarting = true
+				return m, m.restartContainersForConfig()
+			}
+			m.configTab.saved = true
 			return m, nil
 		}
 		if picker := m.configTab.PickerForCursor(); picker != nil {
@@ -322,7 +336,8 @@ func (m Model) startAfterSetupGuide() (tea.Model, tea.Cmd) {
 		password = m.envConfig.AdminApi.Password
 	}
 	m.general = NewGeneralModel(m.executor.Type(), shopURL, username, password, m.projectRoot, m.executor, m.config)
-	m.configTab = NewConfigModel(m.config)
+	envValues, _ := envfile.ReadValues(m.projectRoot, EnvFieldKeys()...)
+	m.configTab = NewConfigModel(m.config, envValues)
 
 	return m, tea.Batch(m.dockerSpinner.Tick, m.startContainers())
 }

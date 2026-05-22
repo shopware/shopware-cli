@@ -16,7 +16,9 @@ import (
 type configField int
 
 const (
-	fieldPHPVersion configField = iota
+	fieldAppEnv configField = iota
+	fieldHTTPCache
+	fieldPHPVersion
 	fieldProfiler
 	fieldBlackfireServerID
 	fieldBlackfireServerToken
@@ -37,8 +39,82 @@ var (
 	profilers   = dockerpkg.Profilers
 )
 
+// envFieldDef describes a Symfony .env-backed choice field rendered in the
+// config tab. Adding a new entry to envFields is enough to surface another
+// env variable: it gets a picker, is loaded from .env.local on startup, and
+// is written back through envfile.WriteValues on save.
+//
+// choices holds the canonical values written to .env.local. choiceLabels is
+// optional; when set, it provides display labels (in the same order as
+// choices) so the row and picker can show e.g. "enabled"/"disabled" while
+// still writing "1"/"0".
+type envFieldDef struct {
+	field        configField
+	key          string
+	label        string
+	title        string
+	help         string
+	choices      []string
+	choiceLabels []string
+	defaultIdx   int
+}
+
+func (def envFieldDef) choiceLabel(idx int) string {
+	if idx < 0 || idx >= len(def.choices) {
+		return ""
+	}
+	if def.choiceLabels != nil && idx < len(def.choiceLabels) {
+		return def.choiceLabels[idx]
+	}
+	return def.choices[idx]
+}
+
+var envFields = []envFieldDef{
+	{
+		field:      fieldAppEnv,
+		key:        "APP_ENV",
+		label:      "APP_ENV",
+		title:      "APP_ENV",
+		help:       "Shopware application environment (.env.local)",
+		choices:    []string{"dev", "prod", "test"},
+		defaultIdx: 0,
+	},
+	{
+		field:        fieldHTTPCache,
+		key:          "SHOPWARE_HTTP_CACHE_ENABLED",
+		label:        "HTTP Cache",
+		title:        "HTTP Cache",
+		help:         "Toggle the Shopware HTTP cache (SHOPWARE_HTTP_CACHE_ENABLED in .env.local)",
+		choices:      []string{"0", "1"},
+		choiceLabels: []string{"disabled", "enabled"},
+		defaultIdx:   0,
+	},
+}
+
+// EnvFieldKeys returns the env variable names this tab manages, suitable for
+// passing to envfile.ReadValues.
+func EnvFieldKeys() []string {
+	keys := make([]string, len(envFields))
+	for i, def := range envFields {
+		keys[i] = def.key
+	}
+	return keys
+}
+
+func envFieldByConfigField(f configField) (envFieldDef, bool) {
+	for _, def := range envFields {
+		if def.field == f {
+			return def, true
+		}
+	}
+	return envFieldDef{}, false
+}
+
 type ConfigModel struct {
 	cursor configField
+
+	envSelections map[string]int    // env key -> index in envFieldDef.choices
+	envOriginals  map[string]string // env key -> value loaded from .env files
 
 	phpVersion int
 	profiler   int
@@ -47,17 +123,34 @@ type ConfigModel struct {
 	blackfireServerToken textinput.Model
 	tidewaysAPIKey       textinput.Model
 
-	saved    bool
-	modified bool
-	err      error
+	saved      bool
+	modified   bool
+	restarting bool
+	err        error
 
 	width  int
 	height int
 }
 
-func NewConfigModel(cfg *shop.Config) ConfigModel {
+// NewConfigModel constructs the Config tab. envValues maps env variable
+// names (see EnvFieldKeys) to the values currently effective in the
+// project's .env files; missing or empty entries fall back to each field's
+// default choice.
+func NewConfigModel(cfg *shop.Config, envValues map[string]string) ConfigModel {
 	m := ConfigModel{
-		phpVersion: defaultPHPVersionIndex,
+		cursor:        fieldAppEnv,
+		envSelections: make(map[string]int, len(envFields)),
+		envOriginals:  make(map[string]string, len(envFields)),
+		phpVersion:    defaultPHPVersionIndex,
+	}
+
+	for _, def := range envFields {
+		current := envValues[def.key]
+		if current == "" {
+			current = def.choices[def.defaultIdx]
+		}
+		m.envSelections[def.key] = indexOf(def.choices, current, def.defaultIdx)
+		m.envOriginals[def.key] = current
 	}
 
 	if cfg != nil && cfg.Docker != nil && cfg.Docker.PHP != nil {
@@ -122,6 +215,13 @@ func (m ConfigModel) HandleKey(msg tea.KeyPressMsg) (ConfigModel, tea.Cmd) {
 }
 
 func (m ConfigModel) PickerForCursor() Modal {
+	if def, ok := envFieldByConfigField(m.cursor); ok {
+		items := make([]listPickerItem, len(def.choices))
+		for i, v := range def.choices {
+			items[i] = listPickerItem{Label: def.choiceLabel(i), Value: v}
+		}
+		return newListPicker(def.field, def.title, def.help, items, m.envSelections[def.key])
+	}
 	switch m.cursor { //nolint:exhaustive
 	case fieldPHPVersion:
 		items := make([]listPickerItem, len(phpVersions))
@@ -150,6 +250,19 @@ func (m ConfigModel) PickerForCursor() Modal {
 }
 
 func (m *ConfigModel) ApplyPickerValue(field configField, value string) bool {
+	if def, ok := envFieldByConfigField(field); ok {
+		current := m.envSelections[def.key]
+		idx := indexOf(def.choices, value, current)
+		if idx == current {
+			return false
+		}
+		m.envSelections[def.key] = idx
+		m.modified = true
+		m.saved = false
+		m.err = nil
+		return true
+	}
+
 	changed := false
 	switch field { //nolint:exhaustive
 	case fieldPHPVersion:
@@ -216,13 +329,16 @@ func (m *ConfigModel) moveCursorDown() {
 }
 
 func (m ConfigModel) isFieldVisible(f configField) bool {
+	if _, ok := envFieldByConfigField(f); ok {
+		return true
+	}
 	profilerName := profilers[m.profiler]
 	switch f {
 	case fieldBlackfireServerID, fieldBlackfireServerToken:
 		return profilerName == profilerBlackfire
 	case fieldTidewaysAPIKey:
 		return profilerName == profilerTideways
-	case fieldPHPVersion, fieldProfiler, fieldSave, fieldCount:
+	case fieldAppEnv, fieldHTTPCache, fieldPHPVersion, fieldProfiler, fieldSave, fieldCount:
 		return true
 	}
 	return true
@@ -242,6 +358,38 @@ func (m ConfigModel) ApplyToConfig(cfg *shop.Config) {
 	cfg.Docker.PHP.BlackfireServerID = ""
 	cfg.Docker.PHP.BlackfireServerToken = ""
 	cfg.Docker.PHP.TidewaysAPIKey = ""
+}
+
+// EnvValue returns the currently selected value for the env field with the
+// given key, or "" when no such field is registered.
+func (m ConfigModel) EnvValue(key string) string {
+	for _, def := range envFields {
+		if def.key == key {
+			return def.choices[m.envSelections[key]]
+		}
+	}
+	return ""
+}
+
+// ChangedEnvValues returns the env entries whose selected value differs from
+// the value loaded into the model.
+func (m ConfigModel) ChangedEnvValues() map[string]string {
+	changes := make(map[string]string)
+	for _, def := range envFields {
+		current := def.choices[m.envSelections[def.key]]
+		if current != m.envOriginals[def.key] {
+			changes[def.key] = current
+		}
+	}
+	return changes
+}
+
+// MarkEnvValuesPersisted records the current env selections as the new
+// baseline after they have been written to disk.
+func (m *ConfigModel) MarkEnvValuesPersisted() {
+	for _, def := range envFields {
+		m.envOriginals[def.key] = def.choices[m.envSelections[def.key]]
+	}
 }
 
 func (m ConfigModel) LocalConfig() *shop.Config {
@@ -272,6 +420,15 @@ func (m ConfigModel) View(width, height int) string {
 
 	divider := tui.SectionDivider(width - 8)
 
+	if len(envFields) > 0 {
+		s.WriteString(tui.TitleStyle.Render("Environment"))
+		s.WriteString("\n")
+		for _, def := range envFields {
+			s.WriteString(m.renderSelect(def.field, def.label, def.choiceLabel(m.envSelections[def.key]), selectedArrow, normalIndent))
+		}
+		s.WriteString(divider)
+	}
+
 	s.WriteString(tui.TitleStyle.Render("PHP"))
 	s.WriteString("\n")
 	s.WriteString(m.renderSelect(fieldPHPVersion, "Version", phpVersions[m.phpVersion], selectedArrow, normalIndent))
@@ -294,6 +451,8 @@ func (m ConfigModel) View(width, height int) string {
 		s.WriteString(normalIndent)
 	}
 	switch {
+	case m.restarting:
+		s.WriteString(warningBadgeStyle.Render("restarting docker…"))
 	case m.err != nil && m.cursor == fieldSave:
 		s.WriteString(activeBtnStyle.Render("Retry Save"))
 	case m.err != nil:
@@ -303,7 +462,7 @@ func (m ConfigModel) View(width, height int) string {
 	case m.saved:
 		s.WriteString(activeBadgeStyle.Render("Saved"))
 		s.WriteString("  ")
-		s.WriteString(helpStyle.Render("Restart Docker to apply changes."))
+		s.WriteString(helpStyle.Render("Docker restarted with new config."))
 	case m.modified && m.cursor == fieldSave:
 		s.WriteString(activeBtnStyle.Render("Save & Regenerate"))
 	case m.modified:

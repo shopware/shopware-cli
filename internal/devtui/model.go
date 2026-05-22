@@ -8,6 +8,7 @@ import (
 	"charm.land/bubbles/v2/spinner"
 	tea "charm.land/bubbletea/v2"
 
+	"github.com/shopware/shopware-cli/internal/envfile"
 	"github.com/shopware/shopware-cli/internal/executor"
 	"github.com/shopware/shopware-cli/internal/shop"
 )
@@ -88,6 +89,8 @@ type shopwareInstallDoneMsg struct{ err error }
 
 type taskDoneMsg struct{ err error }
 
+type configRestartDoneMsg struct{ err error }
+
 func New(opts Options) Model {
 	effectiveAdminApi := opts.Config.AdminApi
 	if opts.EnvConfig.AdminApi != nil {
@@ -107,11 +110,13 @@ func New(opts Options) Model {
 
 	isDocker := opts.Executor.Type() == executor.TypeDocker
 
+	envValues, _ := envfile.ReadValues(opts.ProjectRoot, EnvFieldKeys()...)
+
 	return Model{
 		activeTab:   tabGeneral,
 		general:     NewGeneralModel(opts.Executor.Type(), shopURL, username, password, opts.ProjectRoot, opts.Executor, opts.Config),
 		logs:        NewLogsModel(opts.ProjectRoot, isDocker),
-		configTab:   NewConfigModel(opts.Config),
+		configTab:   NewConfigModel(opts.Config, envValues),
 		dockerMode:  isDocker,
 		projectRoot: opts.ProjectRoot,
 		executor:    opts.Executor,
@@ -184,6 +189,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.overlayLines = append(m.overlayLines, "", helpStyle.Render("Done. Press any key to close."))
 		}
 		return m, nil
+
+	case configRestartDoneMsg:
+		return m.handleConfigRestartDone(msg)
 
 	case watcherStartedMsg:
 		switch msg.name {
@@ -343,4 +351,15 @@ func (m Model) updateChildren(msg tea.Msg) (tea.Model, tea.Cmd) {
 	}
 
 	return m, tea.Batch(cmds...)
+}
+
+func (m Model) handleConfigRestartDone(msg configRestartDoneMsg) (tea.Model, tea.Cmd) {
+	m.configTab.restarting = false
+	if msg.err != nil {
+		m.configTab.err = msg.err
+		m.configTab.saved = false
+	} else {
+		m.configTab.saved = true
+	}
+	return m, nil
 }
