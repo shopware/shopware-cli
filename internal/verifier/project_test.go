@@ -8,6 +8,8 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+
+	"github.com/shopware/shopware-cli/internal/packagist"
 )
 
 // mockPackagistTransport redirects all HTTP requests to a test server, preserving the path.
@@ -35,9 +37,8 @@ func mockPackagistAPI(t *testing.T) {
 	}))
 	t.Cleanup(server.Close)
 
-	original := http.DefaultClient
-	t.Cleanup(func() { http.DefaultClient = original })
-	http.DefaultClient = &http.Client{Transport: &mockPackagistTransport{server: server}}
+	restore := packagist.SwapHTTPClient(&http.Client{Transport: &mockPackagistTransport{server: server}})
+	t.Cleanup(restore)
 }
 
 const testProjectYAMLSingleBundle = `compatibility_date: "2024-01-01"
