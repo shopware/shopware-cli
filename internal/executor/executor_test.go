@@ -356,6 +356,20 @@ func TestNewLocal(t *testing.T) {
 	assert.Equal(t, []string{"npm", "install"}, p.Cmd.Args)
 }
 
+func TestNewLocalWithConfig(t *testing.T) {
+	envCfg := &shop.EnvironmentConfig{Type: TypeDocker}
+	shopCfg := &shop.Config{}
+
+	exec := NewLocalWithConfig("/my/project", envCfg, shopCfg)
+	localExec, ok := exec.(*LocalExecutor)
+
+	assert.True(t, ok)
+	assert.Equal(t, TypeLocal, exec.Type())
+	assert.Equal(t, "/my/project", localExec.projectRoot)
+	assert.Same(t, envCfg, localExec.envCfg)
+	assert.Same(t, shopCfg, localExec.shopCfg)
+}
+
 func TestLocalNormalizePath(t *testing.T) {
 	exec := &LocalExecutor{projectRoot: "/host/project"}
 	assert.Equal(t, "/host/project/custom/plugins/MyPlugin", exec.NormalizePath("/host/project/custom/plugins/MyPlugin"))

@@ -13,6 +13,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/shopware/shopware-cli/internal/archiver"
+	"github.com/shopware/shopware-cli/internal/executor"
 	"github.com/shopware/shopware-cli/internal/extension"
 	"github.com/shopware/shopware-cli/internal/validation"
 	"github.com/shopware/shopware-cli/logging"
@@ -143,6 +144,9 @@ var extensionZipCmd = &cobra.Command{
 				CleanupNodeModules: true,
 				ShopwareRoot:       os.Getenv("SHOPWARE_PROJECT_ROOT"),
 				ShopwareVersion:    shopwareConstraint,
+			}
+			if assetBuildConfig.ShopwareRoot != "" {
+				assetBuildConfig.Executor = executor.NewLocal(assetBuildConfig.ShopwareRoot)
 			}
 
 			if err := extension.BuildAssetsForExtensions(cmd.Context(), extension.ConvertExtensionsToSources(cmd.Context(), []extension.Extension{tempExt}), assetBuildConfig); err != nil {

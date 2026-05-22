@@ -49,6 +49,7 @@ func BuildAssetsForExtensions(ctx context.Context, sources []asset.Source, asset
 			return err
 		}
 
+		assetConfig.ShopwareRoot = shopwareRoot
 		defer deletePaths(ctx, shopwareRoot)
 	}
 
