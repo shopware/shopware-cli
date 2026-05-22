@@ -163,10 +163,6 @@
           },
           "type": "array",
           "description": "Shopware bundles to include in builds (alternative to composer.json extra.shopware-bundles)"
-        },
-        "sbom": {
-          "$ref": "#/$defs/ConfigBuildSBOM",
-          "description": "SBOM (Software Bill of Materials) generation configuration"
         }
       },
       "additionalProperties": false,
@@ -252,21 +248,6 @@
       "additionalProperties": false,
       "type": "object",
       "description": "ConfigBuildMJML defines the configuration for MJML email template compilation."
-    },
-    "ConfigBuildSBOM": {
-      "properties": {
-        "path": {
-          "type": "string",
-          "description": "Path (relative to the project root) where the SBOM is written. Defaults to \"sbom.cdx.json\"."
-        },
-        "include_dev": {
-          "type": "boolean",
-          "description": "When enabled, dev dependencies are also included in the SBOM"
-        }
-      },
-      "additionalProperties": false,
-      "type": "object",
-      "description": "ConfigBuildSBOM defines the configuration for SBOM generation during CI builds."
     },
     "ConfigDeployment": {
       "properties": {

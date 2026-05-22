@@ -129,7 +129,7 @@ var projectCI = &cobra.Command{
 			logging.FromContext(cmd.Context()).Infof("Skipping composer install")
 		}
 
-		if err := generateProjectSBOM(cmd.Context(), args[0], shopCfg.Build.SBOM); err != nil {
+		if err := generateProjectSBOM(cmd.Context(), args[0]); err != nil {
 			return fmt.Errorf("failed to generate SBOM: %w", err)
 		}
 
@@ -338,11 +338,7 @@ func createEmptySnippetFolder(root string) error {
 // CycloneDX SBOM JSON document to the configured path. When composer.lock is
 // absent (for example when composer install was skipped on a project without
 // PHP dependencies) the step is a no-op.
-func generateProjectSBOM(ctx context.Context, root string, cfg *shop.ConfigBuildSBOM) error {
-	if cfg == nil {
-		cfg = &shop.ConfigBuildSBOM{}
-	}
-
+func generateProjectSBOM(ctx context.Context, root string) error {
 	section := ci.Default.Section(ctx, "Generating SBOM")
 	defer section.End(ctx)
 
@@ -373,7 +369,7 @@ func generateProjectSBOM(ctx context.Context, root string, cfg *shop.ConfigBuild
 		ApplicationName:        appName,
 		ApplicationVersion:     appVersion,
 		ToolVersion:            tui.AppVersion,
-		IncludeDevDependencies: cfg.IncludeDev,
+		IncludeDevDependencies: false,
 	})
 	if err != nil {
 		return err
@@ -384,13 +380,7 @@ func generateProjectSBOM(ctx context.Context, root string, cfg *shop.ConfigBuild
 		return fmt.Errorf("marshal SBOM: %w", err)
 	}
 
-	outputPath := cfg.Path
-	if outputPath == "" {
-		outputPath = "sbom.cdx.json"
-	}
-	if !filepath.IsAbs(outputPath) {
-		outputPath = filepath.Join(root, outputPath)
-	}
+	outputPath := filepath.Join(root, "sbom.cdx.json")
 
 	if err := os.MkdirAll(filepath.Dir(outputPath), 0o755); err != nil {
 		return fmt.Errorf("create SBOM output directory: %w", err)

@@ -7,8 +7,6 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-
-	"github.com/shopware/shopware-cli/internal/shop"
 )
 
 func TestSourceMapCleanup(t *testing.T) {
@@ -76,11 +74,9 @@ func TestGenerateProjectSBOM(t *testing.T) {
 		]
 	}`), 0o644))
 
-	cfg := &shop.ConfigBuildSBOM{Path: "build/sbom.cdx.json"}
+	assert.NoError(t, generateProjectSBOM(t.Context(), root))
 
-	assert.NoError(t, generateProjectSBOM(t.Context(), root, cfg))
-
-	data, err := os.ReadFile(filepath.Join(root, "build", "sbom.cdx.json"))
+	data, err := os.ReadFile(filepath.Join(root, "sbom.cdx.json"))
 	assert.NoError(t, err)
 
 	doc := map[string]interface{}{}
@@ -99,29 +95,9 @@ func TestGenerateProjectSBOM(t *testing.T) {
 	assert.Equal(t, "console", components[0].(map[string]interface{})["name"])
 }
 
-func TestGenerateProjectSBOMIncludeDev(t *testing.T) {
-	root := t.TempDir()
-
-	assert.NoError(t, os.WriteFile(filepath.Join(root, "composer.json"), []byte(`{"name": "acme/shop"}`), 0o644))
-	assert.NoError(t, os.WriteFile(filepath.Join(root, "composer.lock"), []byte(`{
-		"packages": [{"name": "symfony/console", "version": "v6.3.0"}],
-		"packages-dev": [{"name": "phpunit/phpunit", "version": "10.0.0"}]
-	}`), 0o644))
-
-	cfg := &shop.ConfigBuildSBOM{IncludeDev: true}
-	assert.NoError(t, generateProjectSBOM(t.Context(), root, cfg))
-
-	data, err := os.ReadFile(filepath.Join(root, "sbom.cdx.json"))
-	assert.NoError(t, err)
-
-	doc := map[string]interface{}{}
-	assert.NoError(t, json.Unmarshal(data, &doc))
-	assert.Len(t, doc["components"].([]interface{}), 2)
-}
-
 func TestGenerateProjectSBOMSkipsWhenLockMissing(t *testing.T) {
 	root := t.TempDir()
-	assert.NoError(t, generateProjectSBOM(t.Context(), root, nil))
+	assert.NoError(t, generateProjectSBOM(t.Context(), root))
 
 	_, err := os.Stat(filepath.Join(root, "sbom.cdx.json"))
 	assert.True(t, os.IsNotExist(err), "no SBOM should be written when composer.lock is absent")
