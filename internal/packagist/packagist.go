@@ -17,15 +17,6 @@ import (
 // shared http.DefaultClient which is not safe to override in tests.
 var httpClient = &http.Client{Timeout: 30 * time.Second}
 
-// SwapHTTPClient replaces the package-level HTTP client used for packagist
-// requests and returns a function that restores the previous one. Intended
-// for tests in other packages that need to intercept calls to repo.packagist.org.
-func SwapHTTPClient(client *http.Client) func() {
-	previous := httpClient
-	httpClient = client
-	return func() { httpClient = previous }
-}
-
 type PackageResponse struct {
 	Packages map[string]map[string]PackageVersion `json:"packages"`
 }

@@ -45,8 +45,12 @@ func ConvertExtensionToToolConfig(ext extension.Extension) (*ToolConfig, error) 
 	return cfg, nil
 }
 
+// getShopwareVersions returns the available Shopware versions. It is a package
+// variable so tests can replace it with a fake that does not hit the network.
+var getShopwareVersions = extension.GetShopwareVersions
+
 func determineVersionRange(cfg *ToolConfig, versionConstraint *version.Constraints) error {
-	versions, err := extension.GetShopwareVersions(context.Background())
+	versions, err := getShopwareVersions(context.Background())
 	if err != nil {
 		return err
 	}
