@@ -19,7 +19,9 @@ import (
 	"github.com/shopware/shopware-cli/internal/extension"
 	"github.com/shopware/shopware-cli/internal/mjml"
 	"github.com/shopware/shopware-cli/internal/packagist"
+	"github.com/shopware/shopware-cli/internal/sbom"
 	"github.com/shopware/shopware-cli/internal/shop"
+	"github.com/shopware/shopware-cli/internal/tui"
 	"github.com/shopware/shopware-cli/logging"
 )
 
@@ -127,6 +129,10 @@ var projectCI = &cobra.Command{
 			logging.FromContext(cmd.Context()).Infof("Skipping composer install")
 		}
 
+		if err := generateProjectSBOM(cmd.Context(), args[0]); err != nil {
+			return fmt.Errorf("failed to generate SBOM: %w", err)
+		}
+
 		if _, err := os.Stat(path.Join(args[0], "var", "cache")); err == nil {
 			logging.FromContext(cmd.Context()).Infof("Removing var/cache")
 			if err := os.RemoveAll(path.Join(args[0], "var", "cache")); err != nil {
@@ -220,7 +226,7 @@ var projectCI = &cobra.Command{
 
 		warumupSection := ci.Default.Section(cmd.Context(), "Warming up container cache")
 
-		if err := runTransparentCommand(cmdExecutor.PHPCommand(cmd.Context(), path.Join(args[0], "bin", "ci"), "--version")); err != nil { //nolint: gosec
+		if err := runTransparentCommand(cmdExecutor.PHPCommand(cmd.Context(), "bin", "ci", "--version")); err != nil { //nolint: gosec
 			return fmt.Errorf("failed to warmup container cache (php bin/ci --version): %w", err)
 		}
 
@@ -235,7 +241,7 @@ var projectCI = &cobra.Command{
 				}
 			}
 
-			if err := runTransparentCommand(cmdExecutor.PHPCommand(cmd.Context(), path.Join(args[0], "bin", "ci"), "asset:install")); err != nil { //nolint: gosec
+			if err := runTransparentCommand(cmdExecutor.PHPCommand(cmd.Context(), "bin", "ci", "asset:install")); err != nil { //nolint: gosec
 				return fmt.Errorf("failed to install assets (php bin/ci asset:install): %w", err)
 			}
 		}
@@ -325,6 +331,66 @@ func createEmptySnippetFolder(root string) error {
 		}
 	}
 
+	return nil
+}
+
+// generateProjectSBOM reads composer.lock from the project root and writes a
+// CycloneDX SBOM JSON document to the configured path. When composer.lock is
+// absent (for example when composer install was skipped on a project without
+// PHP dependencies) the step is a no-op.
+func generateProjectSBOM(ctx context.Context, root string) error {
+	section := ci.Default.Section(ctx, "Generating SBOM")
+	defer section.End(ctx)
+
+	lockPath := path.Join(root, "composer.lock")
+	if _, err := os.Stat(lockPath); os.IsNotExist(err) {
+		logging.FromContext(ctx).Infof("Skipping SBOM generation: %s not found", lockPath)
+		return nil
+	}
+
+	lock, err := packagist.ReadComposerLock(lockPath)
+	if err != nil {
+		return fmt.Errorf("read composer.lock: %w", err)
+	}
+
+	projectComposer, err := packagist.ReadComposerJson(path.Join(root, "composer.json"))
+	appName := "shopware-project"
+	appVersion := ""
+	if err == nil && projectComposer != nil {
+		if projectComposer.Name != "" {
+			appName = projectComposer.Name
+		}
+		if projectComposer.Version != "" {
+			appVersion = projectComposer.Version
+		}
+	}
+
+	bom, err := sbom.Generate(lock, sbom.Options{
+		ApplicationName:        appName,
+		ApplicationVersion:     appVersion,
+		ToolVersion:            tui.AppVersion,
+		IncludeDevDependencies: false,
+	})
+	if err != nil {
+		return err
+	}
+
+	data, err := sbom.Marshal(bom)
+	if err != nil {
+		return fmt.Errorf("marshal SBOM: %w", err)
+	}
+
+	outputPath := filepath.Join(root, "sbom.cdx.json")
+
+	if err := os.MkdirAll(filepath.Dir(outputPath), 0o755); err != nil {
+		return fmt.Errorf("create SBOM output directory: %w", err)
+	}
+
+	if err := os.WriteFile(outputPath, data, 0o644); err != nil {
+		return fmt.Errorf("write SBOM: %w", err)
+	}
+
+	logging.FromContext(ctx).Infof("Wrote SBOM with %d components to %s", len(bom.Components), outputPath)
 	return nil
 }
 
