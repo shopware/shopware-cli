@@ -17,7 +17,7 @@ import (
 
 const (
 	cyclonedxBOMFormat   = "CycloneDX"
-	cyclonedxSpecVersion = "1.5"
+	cyclonedxSpecVersion = "1.7"
 )
 
 // BOM is the root document of a CycloneDX SBOM.
@@ -33,14 +33,14 @@ type BOM struct {
 
 type Metadata struct {
 	Timestamp string     `json:"timestamp"`
-	Tools     []Tool     `json:"tools,omitempty"`
+	Tools     *Tools     `json:"tools,omitempty"`
 	Component *Component `json:"component,omitempty"`
 }
 
-type Tool struct {
-	Vendor  string `json:"vendor,omitempty"`
-	Name    string `json:"name,omitempty"`
-	Version string `json:"version,omitempty"`
+// Tools is the CycloneDX 1.6+ structured tools container. The legacy flat
+// array form was deprecated in 1.6 and is no longer emitted.
+type Tools struct {
+	Components []Component `json:"components,omitempty"`
 }
 
 type Component struct {
@@ -122,8 +122,15 @@ func Generate(lock *packagist.ComposerLock, opts Options) (*BOM, error) {
 		Version:      1,
 		Metadata: Metadata{
 			Timestamp: time.Now().UTC().Format(time.RFC3339),
-			Tools: []Tool{
-				{Vendor: "Shopware", Name: "shopware-cli", Version: opts.ToolVersion},
+			Tools: &Tools{
+				Components: []Component{
+					{
+						Type:    "application",
+						Group:   "shopware",
+						Name:    "shopware-cli",
+						Version: opts.ToolVersion,
+					},
+				},
 			},
 			Component: &Component{
 				Type:    "application",

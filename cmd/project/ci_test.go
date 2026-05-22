@@ -87,7 +87,7 @@ func TestGenerateProjectSBOM(t *testing.T) {
 	assert.NoError(t, json.Unmarshal(data, &doc))
 
 	assert.Equal(t, "CycloneDX", doc["bomFormat"])
-	assert.Equal(t, "1.5", doc["specVersion"])
+	assert.Equal(t, "1.7", doc["specVersion"])
 
 	metadata := doc["metadata"].(map[string]interface{})
 	component := metadata["component"].(map[string]interface{})

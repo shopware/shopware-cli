@@ -53,7 +53,7 @@ func TestGenerate(t *testing.T) {
 		assert.NotNil(t, bom)
 
 		assert.Equal(t, "CycloneDX", bom.BOMFormat)
-		assert.Equal(t, "1.5", bom.SpecVersion)
+		assert.Equal(t, "1.7", bom.SpecVersion)
 		assert.True(t, strings.HasPrefix(bom.SerialNumber, "urn:uuid:"))
 		assert.Equal(t, 1, bom.Version)
 
@@ -146,7 +146,12 @@ func TestMarshalProducesValidCycloneDXJSON(t *testing.T) {
 	assert.NoError(t, json.Unmarshal(data, &roundTrip))
 
 	assert.Equal(t, "CycloneDX", roundTrip["bomFormat"])
-	assert.Equal(t, "1.5", roundTrip["specVersion"])
+	assert.Equal(t, "1.7", roundTrip["specVersion"])
+
+	tools := roundTrip["metadata"].(map[string]interface{})["tools"].(map[string]interface{})
+	toolComponents := tools["components"].([]interface{})
+	assert.Len(t, toolComponents, 1)
+	assert.Equal(t, "shopware-cli", toolComponents[0].(map[string]interface{})["name"])
 }
 
 func TestIsPlatformPackage(t *testing.T) {
