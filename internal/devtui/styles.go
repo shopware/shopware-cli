@@ -24,8 +24,7 @@ var (
 
 	activeBadgeStyle = lipgloss.NewStyle().
 				Foreground(tui.SuccessColor).
-				Bold(true).
-				Padding(0, 1)
+				Bold(true)
 
 	warningBadgeStyle = lipgloss.NewStyle().
 				Foreground(tui.WarnColor).

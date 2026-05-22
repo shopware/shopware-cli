@@ -5,12 +5,14 @@ import (
 	"encoding/json"
 	"fmt"
 	"os/exec"
+	"path/filepath"
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/shopware/shopware-cli/internal/executor"
 	"github.com/shopware/shopware-cli/internal/extension"
+	"github.com/shopware/shopware-cli/internal/packagist"
 	"github.com/shopware/shopware-cli/internal/shop"
 	"github.com/shopware/shopware-cli/internal/tui"
 	"github.com/shopware/shopware-cli/logging"
@@ -34,6 +36,7 @@ type GeneralModel struct {
 	adminWatchStarting bool
 	sfWatchRunning     bool
 	sfWatchStarting    bool
+	shopwareVersion    string
 }
 
 type DiscoveredService struct {
@@ -46,6 +49,10 @@ type DiscoveredService struct {
 type servicesLoadedMsg struct {
 	services []DiscoveredService
 	err      error
+}
+
+type shopwareVersionLoadedMsg struct {
+	version string
 }
 
 type watcherStartedMsg struct {
@@ -97,7 +104,7 @@ func NewGeneralModel(envType, shopURL, username, password, projectRoot string, e
 }
 
 func (m GeneralModel) Init() tea.Cmd {
-	return discoverServices(m.projectRoot)
+	return tea.Batch(discoverServices(m.projectRoot), loadShopwareVersion(m.projectRoot))
 }
 
 func (m *GeneralModel) SetSize(width, height int) {
@@ -108,10 +115,13 @@ func (m *GeneralModel) SetSize(width, height int) {
 type browserOpenedMsg struct{}
 
 func (m GeneralModel) Update(msg tea.Msg) (GeneralModel, tea.Cmd) {
-	if msg, ok := msg.(servicesLoadedMsg); ok {
+	switch msg := msg.(type) {
+	case servicesLoadedMsg:
 		m.loading = false
 		m.services = msg.services
 		m.err = msg.err
+	case shopwareVersionLoadedMsg:
+		m.shopwareVersion = msg.version
 	}
 	return m, nil
 }
@@ -130,6 +140,9 @@ func (m GeneralModel) View(width, height int) string {
 
 	s.WriteString(tui.TitleStyle.Render("Shop"))
 	s.WriteString("\n")
+	if m.shopwareVersion != "" {
+		s.WriteString(tui.KVRow("Version", valueStyle.Render(m.shopwareVersion)))
+	}
 	s.WriteString(tui.KVRow("Environment", activeBadgeStyle.Render(m.envType)))
 	s.WriteString(tui.KVRow("Shop URL", urlStyle.Render(m.shopURL)))
 	s.WriteString(tui.KVRow("Admin URL", urlStyle.Render(m.adminURL)))
@@ -325,4 +338,23 @@ func discoverServices(projectRoot string) tea.Cmd {
 		services, err := DiscoverServices(context.Background(), projectRoot)
 		return servicesLoadedMsg{services: services, err: err}
 	}
+}
+
+func loadShopwareVersion(projectRoot string) tea.Cmd {
+	return func() tea.Msg {
+		return shopwareVersionLoadedMsg{version: detectShopwareVersion(projectRoot)}
+	}
+}
+
+func detectShopwareVersion(projectRoot string) string {
+	lock, err := packagist.ReadComposerLock(filepath.Join(projectRoot, "composer.lock"))
+	if err != nil {
+		return ""
+	}
+	for _, name := range []string{"shopware/core", "shopware/platform"} {
+		if pkg := lock.GetPackage(name); pkg != nil {
+			return strings.TrimPrefix(pkg.Version, "v")
+		}
+	}
+	return ""
 }
