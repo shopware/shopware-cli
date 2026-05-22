@@ -7,6 +7,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/shopware/shopware-cli/internal/executor"
 	"github.com/shopware/shopware-cli/internal/extension"
 )
 
@@ -17,6 +18,9 @@ var extensionAssetBundleCmd = &cobra.Command{
 	RunE: func(cmd *cobra.Command, args []string) error {
 		assetCfg := extension.AssetBuildConfig{
 			ShopwareRoot: os.Getenv("SHOPWARE_PROJECT_ROOT"),
+		}
+		if assetCfg.ShopwareRoot != "" {
+			assetCfg.Executor = executor.NewLocal(assetCfg.ShopwareRoot)
 		}
 		validatedExtensions := make([]extension.Extension, 0)
 
