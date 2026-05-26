@@ -176,11 +176,11 @@ func TestWizardLogLineMsgAppendsAndTrims(t *testing.T) {
 	assert.LessOrEqual(t, len(m.logLines), maxLogLines)
 }
 
-type stringErr string
+type testError string
 
-func (e stringErr) Error() string { return string(e) }
+func (e testError) Error() string { return string(e) }
 
-func assertErr(s string) error { return stringErr(s) }
+func assertErr(s string) error { return testError(s) }
 
 func TestWizardRendersAllPhases(t *testing.T) {
 	t.Parallel()
@@ -198,6 +198,7 @@ func TestWizardRendersAllPhases(t *testing.T) {
 	for _, p := range phases {
 		p := p
 		t.Run(t.Name(), func(t *testing.T) {
+			t.Parallel()
 			m := newTestModel(t)
 			m.phase = p
 			m.targetVersion = "6.6.4.0"

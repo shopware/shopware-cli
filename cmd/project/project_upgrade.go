@@ -143,7 +143,7 @@ func runUpgradeHeadless(cmd *cobra.Command, projectRoot, composerJsonPath string
 		return err
 	}
 
-	if err := runCompatibilityCheck(ctx, projectRoot, currentVersion, targetVersion); err != nil {
+	if err := runCompatibilityCheck(ctx, currentVersion, targetVersion); err != nil {
 		return err
 	}
 
@@ -278,7 +278,7 @@ func selectTargetVersion(cmd *cobra.Command, updateVersions []string) (string, e
 	return selected, nil
 }
 
-func runCompatibilityCheck(ctx context.Context, projectRoot string, currentVersion *version.Version, targetVersion string) error {
+func runCompatibilityCheck(ctx context.Context, currentVersion *version.Version, targetVersion string) error {
 	log := logging.FromContext(ctx)
 
 	_, extensions, err := getLocalExtensions()
@@ -402,8 +402,8 @@ func ensureCleanGitTree(ctx context.Context, projectRoot string, allowDirty bool
 	}
 
 	return fmt.Errorf(
-		"the upgrade rewrites composer.json and removes recipe-managed files, so the working tree must be clean.\n"+
-			"%d uncommitted change(s) detected in %s:\n  %s%s\n\nCommit or stash your changes, or rerun with --allow-dirty to override.",
+		"the upgrade rewrites composer.json and removes recipe-managed files, so the working tree must be clean - "+
+			"%d uncommitted change(s) detected in %s:\n  %s%s\n\ncommit or stash your changes, or rerun with --allow-dirty to override",
 		len(changes),
 		projectRoot,
 		strings.Join(preview, "\n  "),
@@ -429,7 +429,7 @@ func ensureAllPluginsAreComposerManaged(projectRoot string, allow bool) error {
 	}
 
 	return fmt.Errorf(
-		"the upgrade can only bump composer-managed plugins, but %d directory/ies in custom/plugins/ are not tracked by composer:\n  %s\n\nRun `shopware-cli project autofix composer-plugins` to migrate them, or rerun with --allow-non-composer to override.",
+		"the upgrade can only bump composer-managed plugins, but %d director(ies) in custom/plugins/ are not tracked by composer:\n  %s\n\nrun `shopware-cli project autofix composer-plugins` to migrate them, or rerun with --allow-non-composer to override",
 		len(orphans),
 		strings.Join(orphans, "\n  "),
 	)

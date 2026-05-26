@@ -100,9 +100,6 @@ type (
 	startNextTaskMsg struct{}
 	logLineMsg       string
 	logDoneMsg       struct{}
-	upgradeDoneMsg   struct {
-		err error
-	}
 )
 
 // wizardModel is a small standalone bubbletea Program that walks the user
@@ -680,6 +677,8 @@ func (m wizardModel) stepNum(p phase) int {
 			return 3
 		}
 		return 4
+	case phaseWelcome, phaseDone:
+		return 0
 	}
 	return 0
 }
@@ -773,15 +772,16 @@ func (m wizardModel) viewCompatResult() string {
 	b.WriteString(tui.DimStyle.Render(fmt.Sprintf("Upgrade to %s", m.targetVersion)))
 	b.WriteString("\n\n")
 
-	if m.compatErr != nil {
+	switch {
+	case m.compatErr != nil:
 		b.WriteString(lipgloss.NewStyle().Foreground(tui.ErrorColor).Render("Compatibility lookup failed: " + m.compatErr.Error()))
 		b.WriteString("\n")
 		b.WriteString(tui.DimStyle.Render("You may still proceed; the wizard cannot guarantee extensions will install."))
 		b.WriteString("\n\n")
-	} else if len(m.compatUpdates) == 0 {
+	case len(m.compatUpdates) == 0:
 		b.WriteString(tui.DimStyle.Render("No store-managed extensions to check."))
 		b.WriteString("\n\n")
-	} else {
+	default:
 		for _, u := range m.compatUpdates {
 			icon := tui.Checkmark
 			if u.Status.IsBlocker() {
@@ -951,6 +951,8 @@ func (m wizardModel) renderTaskLine(i int, t task) string {
 		icon = lipgloss.NewStyle().Foreground(tui.ErrorColor).Bold(true).Render("✗")
 	case taskSkipped:
 		icon = tui.DimStyle.Render("·")
+	case taskPending:
+		icon = tui.DimStyle.Render("○")
 	default:
 		icon = tui.DimStyle.Render("○")
 	}
@@ -996,13 +998,13 @@ func renderConfirmButtons(yesLabel, noLabel string, yesActive bool) string {
 	return yes + "  " + no
 }
 
-func truncate(s string, max int) string {
-	if max <= 0 {
+func truncate(s string, maxRunes int) string {
+	if maxRunes <= 0 {
 		return s
 	}
-	if len([]rune(s)) <= max {
+	if len([]rune(s)) <= maxRunes {
 		return s
 	}
 	r := []rune(s)
-	return string(r[:max-1]) + "…"
+	return string(r[:maxRunes-1]) + "…"
 }

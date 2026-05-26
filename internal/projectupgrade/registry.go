@@ -71,7 +71,7 @@ func (p PackagistRegistry) GetPackageVersions(ctx context.Context, name string) 
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer closeBody(resp)
 
 	if resp.StatusCode == http.StatusNotFound {
 		return nil, nil
@@ -178,7 +178,7 @@ func (s *ShopwareStoreRegistry) load(ctx context.Context) error {
 			s.loadErr = err
 			return
 		}
-		defer resp.Body.Close()
+		defer closeBody(resp)
 
 		if resp.StatusCode != http.StatusOK {
 			s.loadErr = fmt.Errorf("shopware packages returned %s", resp.Status)
@@ -213,6 +213,12 @@ func (s *ShopwareStoreRegistry) GetPackageVersions(ctx context.Context, name str
 		return nil, nil
 	}
 	return versions, nil
+}
+
+// closeBody drains and closes an HTTP response body, swallowing any close
+// error since callers can't act on it once they've already read the payload.
+func closeBody(resp *http.Response) {
+	_ = resp.Body.Close()
 }
 
 // DefaultRegistry builds a CombinedRegistry that uses packages.shopware.com
