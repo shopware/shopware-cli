@@ -115,3 +115,45 @@ func prepareRepository(t *testing.T, tmpDir string) {
 	runCommand(t, tmpDir, "config", "user.name", "test")
 	runCommand(t, tmpDir, "config", "user.email", "test@test.de")
 }
+
+func TestIsRepositoryFalseForPlainDir(t *testing.T) {
+	t.Parallel()
+	tmpDir := t.TempDir()
+	assert.False(t, IsRepository(t.Context(), tmpDir))
+}
+
+func TestIsRepositoryTrueForInitializedRepo(t *testing.T) {
+	t.Parallel()
+	tmpDir := t.TempDir()
+	prepareRepository(t, tmpDir)
+	assert.True(t, IsRepository(t.Context(), tmpDir))
+}
+
+func TestWorkingTreeStatusCleanRepo(t *testing.T) {
+	t.Parallel()
+	tmpDir := t.TempDir()
+	prepareRepository(t, tmpDir)
+	_ = os.WriteFile(filepath.Join(tmpDir, "a"), []byte("hi"), 0o644)
+	runCommand(t, tmpDir, "add", "a")
+	runCommand(t, tmpDir, "commit", "-m", "initial", "--no-verify", "--no-gpg-sign")
+
+	lines, err := WorkingTreeStatus(t.Context(), tmpDir)
+	assert.NoError(t, err)
+	assert.Empty(t, lines, "freshly committed repo should be clean")
+}
+
+func TestWorkingTreeStatusReportsUntrackedAndModified(t *testing.T) {
+	t.Parallel()
+	tmpDir := t.TempDir()
+	prepareRepository(t, tmpDir)
+	_ = os.WriteFile(filepath.Join(tmpDir, "tracked.txt"), []byte("hi"), 0o644)
+	runCommand(t, tmpDir, "add", "tracked.txt")
+	runCommand(t, tmpDir, "commit", "-m", "initial", "--no-verify", "--no-gpg-sign")
+
+	_ = os.WriteFile(filepath.Join(tmpDir, "tracked.txt"), []byte("modified"), 0o644)
+	_ = os.WriteFile(filepath.Join(tmpDir, "untracked.txt"), []byte("new"), 0o644)
+
+	lines, err := WorkingTreeStatus(t.Context(), tmpDir)
+	assert.NoError(t, err)
+	assert.Len(t, lines, 2)
+}

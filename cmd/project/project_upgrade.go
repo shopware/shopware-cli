@@ -7,6 +7,7 @@ import (
 	"os"
 	"path"
 	"strconv"
+	"strings"
 	"time"
 
 	"charm.land/huh/v2"
@@ -19,6 +20,7 @@ import (
 	"github.com/shopware/shopware-cli/internal/executor"
 	"github.com/shopware/shopware-cli/internal/extension"
 	"github.com/shopware/shopware-cli/internal/flexmigrator"
+	"github.com/shopware/shopware-cli/internal/git"
 	"github.com/shopware/shopware-cli/internal/projectupgrade"
 	"github.com/shopware/shopware-cli/internal/system"
 	"github.com/shopware/shopware-cli/internal/tracking"
@@ -56,6 +58,11 @@ bin/console system:update:prepare and system:update:finish.`,
 		}
 
 		log.Infof("Current Shopware version: %s", currentVersion.String())
+
+		allowDirty, _ := cmd.Flags().GetBool("allow-dirty")
+		if err := ensureCleanGitTree(ctx, projectRoot, allowDirty); err != nil {
+			return err
+		}
 
 		allVersions, err := extension.GetShopwareVersions(ctx)
 		if err != nil {
@@ -346,7 +353,48 @@ func trackUpgrade(ctx context.Context, fromVersion, toVersion, status string) {
 	})
 }
 
+// ensureCleanGitTree aborts the upgrade if projectRoot is inside a git
+// working tree that has uncommitted changes. The check is skipped when the
+// directory is not a git repository (greenfield projects, vendored copies)
+// or when --allow-dirty was passed.
+func ensureCleanGitTree(ctx context.Context, projectRoot string, allowDirty bool) error {
+	if allowDirty {
+		return nil
+	}
+
+	if !git.IsRepository(ctx, projectRoot) {
+		return nil
+	}
+
+	changes, err := git.WorkingTreeStatus(ctx, projectRoot)
+	if err != nil {
+		return fmt.Errorf("could not read git working tree status: %w", err)
+	}
+
+	if len(changes) == 0 {
+		return nil
+	}
+
+	preview := changes
+	const maxPreview = 10
+	suffix := ""
+	if len(preview) > maxPreview {
+		preview = preview[:maxPreview]
+		suffix = fmt.Sprintf("\n  … and %d more", len(changes)-maxPreview)
+	}
+
+	return fmt.Errorf(
+		"the upgrade rewrites composer.json and removes recipe-managed files, so the working tree must be clean.\n"+
+			"%d uncommitted change(s) detected in %s:\n  %s%s\n\nCommit or stash your changes, or rerun with --allow-dirty to override.",
+		len(changes),
+		projectRoot,
+		strings.Join(preview, "\n  "),
+		suffix,
+	)
+}
+
 func init() {
 	projectRootCmd.AddCommand(projectUpgradeCmd)
 	projectUpgradeCmd.Flags().String("to", "", "Target Shopware version. Skips the interactive wizard.")
+	projectUpgradeCmd.Flags().Bool("allow-dirty", false, "Allow running the upgrade even when the git working tree has uncommitted changes.")
 }
