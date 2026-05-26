@@ -232,6 +232,17 @@
           },
           "type": "array",
           "description": "Directories to search for MJML files"
+        },
+        "allow_includes": {
+          "type": "boolean",
+          "description": "When enabled, mj-include directives in MJML templates are processed.\nMJML 5 ignores mj-include by default for security reasons; set this to\ntrue to opt back in. Each search_path is automatically added to the\nmj-include allowlist for files compiled inside it, so templates can\ninclude siblings under the same search_path (e.g. a shared _includes/\nfolder) without further configuration."
+        },
+        "include_paths": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array",
+          "description": "Extra directories outside any search_path that mj-include is allowed to\nread from. Relative paths are resolved against the project root.\nAbsolute paths are used as-is. Most projects do not need this — set it\nonly when partials live outside the search_path tree. Implies\nallow_includes."
         }
       },
       "additionalProperties": false,
