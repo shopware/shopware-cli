@@ -219,11 +219,11 @@ func (m Model) renderInstallPrompt(b *strings.Builder) {
 	switch m.install.step {
 	case installStepAsk:
 		warnStyle := lipgloss.NewStyle().Bold(true).Foreground(tui.ErrorColor)
-		b.WriteString(warnStyle.Render("Shopware is not installed"))
+		b.WriteString(warnStyle.Render("Shopware is not initialized yet"))
 		b.WriteString("\n")
 		b.WriteString(tui.DimStyle.Render("This project has not been set up yet. The installation\nwill create the database, run migrations and configure\nyour local development environment."))
 		b.WriteString("\n\n")
-		b.WriteString(renderConfirmButtons("Yes, install now", "No, skip", m.install.confirmYes))
+		b.WriteString(renderConfirmButtons("Initialize now", "No, skip", m.install.confirmYes))
 
 	case installStepLanguage:
 		b.WriteString(tui.TextBadge("Step 1/4"))

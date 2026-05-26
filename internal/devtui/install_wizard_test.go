@@ -250,7 +250,7 @@ func TestRenderInstallPrompt_AllStepsDoNotPanic(t *testing.T) {
 		step    installStep
 		expects []string
 	}{
-		{installStepAsk, []string{"Shopware is not installed", "Yes, install now"}},
+		{installStepAsk, []string{"Shopware is not initialized yet", "Initialize now"}},
 		{installStepLanguage, []string{"Step 1/4", "Default Language"}},
 		{installStepCurrency, []string{"Step 2/4", "Default Currency"}},
 		{installStepUsername, []string{"Step 3/4", "Admin Username"}},
