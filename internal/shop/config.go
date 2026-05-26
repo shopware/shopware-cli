@@ -6,6 +6,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"dario.cat/mergo"
@@ -229,18 +230,10 @@ func (c *ConfigDump) EnableClean() {
 		"version_commit_data",
 		"webhook_event_log",
 	}
-	existingNoData := make(map[string]struct{}, len(c.NoData))
-	for _, table := range c.NoData {
-		existingNoData[table] = struct{}{}
-	}
-
 	for _, table := range cleanTables {
-		if _, exists := existingNoData[table]; exists {
-			continue
+		if !slices.Contains(c.NoData, table) {
+			c.NoData = append(c.NoData, table)
 		}
-
-		c.NoData = append(c.NoData, table)
-		existingNoData[table] = struct{}{}
 	}
 }
 
