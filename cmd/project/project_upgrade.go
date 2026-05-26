@@ -2,6 +2,7 @@ package project
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path"
@@ -15,6 +16,7 @@ import (
 	"github.com/spf13/cobra"
 
 	account_api "github.com/shopware/shopware-cli/internal/account-api"
+	"github.com/shopware/shopware-cli/internal/executor"
 	"github.com/shopware/shopware-cli/internal/extension"
 	"github.com/shopware/shopware-cli/internal/flexmigrator"
 	"github.com/shopware/shopware-cli/internal/projectupgrade"
@@ -66,120 +68,155 @@ bin/console system:update:prepare and system:update:finish.`,
 			return nil
 		}
 
-		targetVersion, err := selectTargetVersion(cmd, updateVersions)
-		if err != nil {
-			return err
-		}
-
-		if err := runCompatibilityCheck(ctx, projectRoot, currentVersion, targetVersion); err != nil {
-			return err
-		}
-
-		confirmed := !system.IsInteractionEnabled(ctx)
-		if !confirmed {
-			if err := huh.NewConfirm().
-				Title(fmt.Sprintf("Upgrade Shopware from %s to %s?", currentVersion.String(), targetVersion)).
-				Description("This will modify composer.json, run composer update --with-all-dependencies, and execute system:update:prepare/finish. Commit your changes before running this command.").
-				Value(&confirmed).
-				Run(); err != nil {
-				return err
-			}
-		}
-
-		if !confirmed {
-			return fmt.Errorf("upgrade cancelled")
-		}
-
-		log.Infof("Backing up composer.json")
-		backup, err := os.ReadFile(composerJsonPath)
-		if err != nil {
-			return fmt.Errorf("failed to backup composer.json: %w", err)
-		}
-
-		log.Infof("Cleaning up stale recipe files")
-		if err := flexmigrator.CleanupByHash(projectRoot); err != nil {
-			return fmt.Errorf("cleanup stale files: %w", err)
-		}
-
-		log.Infof("Checking custom plugins for incompatibilities")
-		removed, err := projectupgrade.RemoveIncompatiblePlugins(composerJsonPath, targetVersion)
-		if err != nil {
-			restoreComposerJson(ctx, composerJsonPath, backup)
-			return fmt.Errorf("remove incompatible plugins: %w", err)
-		}
-
-		for _, name := range removed {
-			log.Infof("Removed incompatible plugin %s from composer.json. Re-require it once a compatible version is published.", tui.YellowText.Render(name))
-		}
-
-		log.Infof("Updating composer.json to %s", targetVersion)
-		if err := projectupgrade.UpdateComposerJson(composerJsonPath, targetVersion); err != nil {
-			restoreComposerJson(ctx, composerJsonPath, backup)
-			return fmt.Errorf("update composer.json: %w", err)
-		}
-
 		cmdExecutor, err := resolveExecutor(cmd, projectRoot)
 		if err != nil {
-			restoreComposerJson(ctx, composerJsonPath, backup)
 			return err
 		}
 
-		log.Infof("Running composer update")
-		composerArgs := []string{
-			"update",
-			"--no-interaction",
-			"--no-scripts",
-			"--with-all-dependencies",
-			"-v",
+		// Non-interactive: keep the headless flow so CI runs stay unchanged.
+		if !system.IsInteractionEnabled(ctx) || cmd.Flag("to").Value.String() != "" {
+			return runUpgradeHeadless(cmd, projectRoot, composerJsonPath, currentVersion, updateVersions, cmdExecutor)
 		}
 
-		composerCmd := cmdExecutor.ComposerCommand(ctx, composerArgs...)
-		composerCmd.Cmd.Stdin = cmd.InOrStdin()
-		composerCmd.Cmd.Stdout = cmd.OutOrStdout()
-		composerCmd.Cmd.Stderr = cmd.ErrOrStderr()
-
-		composerSuccess := true
-		if err := composerCmd.Run(); err != nil {
-			composerSuccess = false
-			log.Errorf("composer update failed: %v", err)
-			restoreComposerJson(ctx, composerJsonPath, backup)
-			trackUpgrade(ctx, currentVersion.String(), targetVersion, "composer_update_failed")
-			return fmt.Errorf("composer update failed, composer.json was restored: %w", err)
+		// Interactive: hand off to the devtui-styled wizard.
+		_, extensions, err := getLocalExtensions()
+		if err != nil {
+			log.Warnf("Could not gather local extensions for compatibility check: %v", err)
+			extensions = nil
 		}
 
-		log.Infof("Running bin/console system:update:prepare")
-		prepareCmd := cmdExecutor.ConsoleCommand(ctx, "system:update:prepare", "--no-interaction")
-		prepareCmd.Cmd.Stdin = cmd.InOrStdin()
-		prepareCmd.Cmd.Stdout = cmd.OutOrStdout()
-		prepareCmd.Cmd.Stderr = cmd.ErrOrStderr()
-
-		if err := prepareCmd.Run(); err != nil {
-			trackUpgrade(ctx, currentVersion.String(), targetVersion, "system_update_prepare_failed")
-			return fmt.Errorf("system:update:prepare failed: %w", err)
-		}
-
-		log.Infof("Running bin/console system:update:finish")
-		finishCmd := cmdExecutor.ConsoleCommand(ctx, "system:update:finish", "--no-interaction")
-		finishCmd.Cmd.Stdin = cmd.InOrStdin()
-		finishCmd.Cmd.Stdout = cmd.OutOrStdout()
-		finishCmd.Cmd.Stderr = cmd.ErrOrStderr()
-
-		if err := finishCmd.Run(); err != nil {
-			trackUpgrade(ctx, currentVersion.String(), targetVersion, "system_update_finish_failed")
-			return fmt.Errorf("system:update:finish failed: %w", err)
-		}
+		target, success, err := projectupgrade.RunWizard(projectupgrade.WizardOptions{
+			ProjectRoot:      projectRoot,
+			ComposerJSONPath: composerJsonPath,
+			CurrentVersion:   currentVersion,
+			UpdateVersions:   updateVersions,
+			Extensions:       extensions,
+			Executor:         cmdExecutor,
+		})
 
 		status := "ok"
-		if !composerSuccess {
-			status = "composer_update_failed"
+		switch {
+		case errors.Is(err, projectupgrade.ErrCancelled):
+			status = "cancelled"
+		case err != nil:
+			status = "failed"
+		case !success:
+			status = "failed"
 		}
 
-		trackUpgrade(ctx, currentVersion.String(), targetVersion, status)
+		trackUpgrade(ctx, currentVersion.String(), target, status)
 
-		fmt.Printf("\n%s\n", tui.GreenText.Render(fmt.Sprintf("Shopware was upgraded from %s to %s", currentVersion.String(), targetVersion)))
+		if errors.Is(err, projectupgrade.ErrCancelled) {
+			fmt.Println("Upgrade cancelled.")
+			return nil
+		}
 
-		return nil
+		return err
 	},
+}
+
+func runUpgradeHeadless(cmd *cobra.Command, projectRoot, composerJsonPath string, currentVersion *version.Version, updateVersions []string, cmdExecutor executor.Executor) error {
+	ctx := cmd.Context()
+	log := logging.FromContext(ctx)
+
+	targetVersion, err := selectTargetVersion(cmd, updateVersions)
+	if err != nil {
+		return err
+	}
+
+	if err := runCompatibilityCheck(ctx, projectRoot, currentVersion, targetVersion); err != nil {
+		return err
+	}
+
+	confirmed := !system.IsInteractionEnabled(ctx)
+	if !confirmed {
+		if err := huh.NewConfirm().
+			Title(fmt.Sprintf("Upgrade Shopware from %s to %s?", currentVersion.String(), targetVersion)).
+			Description("This will modify composer.json, run composer update --with-all-dependencies, and execute system:update:prepare/finish. Commit your changes before running this command.").
+			Value(&confirmed).
+			Run(); err != nil {
+			return err
+		}
+	}
+
+	if !confirmed {
+		return fmt.Errorf("upgrade cancelled")
+	}
+
+	log.Infof("Backing up composer.json")
+	backup, err := os.ReadFile(composerJsonPath)
+	if err != nil {
+		return fmt.Errorf("failed to backup composer.json: %w", err)
+	}
+
+	log.Infof("Cleaning up stale recipe files")
+	if err := flexmigrator.CleanupByHash(projectRoot); err != nil {
+		return fmt.Errorf("cleanup stale files: %w", err)
+	}
+
+	log.Infof("Checking custom plugins for incompatibilities")
+	removed, err := projectupgrade.RemoveIncompatiblePlugins(composerJsonPath, targetVersion)
+	if err != nil {
+		restoreComposerJson(ctx, composerJsonPath, backup)
+		return fmt.Errorf("remove incompatible plugins: %w", err)
+	}
+
+	for _, name := range removed {
+		log.Infof("Removed incompatible plugin %s from composer.json. Re-require it once a compatible version is published.", tui.YellowText.Render(name))
+	}
+
+	log.Infof("Updating composer.json to %s", targetVersion)
+	if err := projectupgrade.UpdateComposerJson(composerJsonPath, targetVersion); err != nil {
+		restoreComposerJson(ctx, composerJsonPath, backup)
+		return fmt.Errorf("update composer.json: %w", err)
+	}
+
+	log.Infof("Running composer update")
+	composerArgs := []string{
+		"update",
+		"--no-interaction",
+		"--no-scripts",
+		"--with-all-dependencies",
+		"-v",
+	}
+
+	composerCmd := cmdExecutor.ComposerCommand(ctx, composerArgs...)
+	composerCmd.Cmd.Stdin = cmd.InOrStdin()
+	composerCmd.Cmd.Stdout = cmd.OutOrStdout()
+	composerCmd.Cmd.Stderr = cmd.ErrOrStderr()
+
+	if err := composerCmd.Run(); err != nil {
+		log.Errorf("composer update failed: %v", err)
+		restoreComposerJson(ctx, composerJsonPath, backup)
+		trackUpgrade(ctx, currentVersion.String(), targetVersion, "composer_update_failed")
+		return fmt.Errorf("composer update failed, composer.json was restored: %w", err)
+	}
+
+	log.Infof("Running bin/console system:update:prepare")
+	prepareCmd := cmdExecutor.ConsoleCommand(ctx, "system:update:prepare", "--no-interaction")
+	prepareCmd.Cmd.Stdin = cmd.InOrStdin()
+	prepareCmd.Cmd.Stdout = cmd.OutOrStdout()
+	prepareCmd.Cmd.Stderr = cmd.ErrOrStderr()
+
+	if err := prepareCmd.Run(); err != nil {
+		trackUpgrade(ctx, currentVersion.String(), targetVersion, "system_update_prepare_failed")
+		return fmt.Errorf("system:update:prepare failed: %w", err)
+	}
+
+	log.Infof("Running bin/console system:update:finish")
+	finishCmd := cmdExecutor.ConsoleCommand(ctx, "system:update:finish", "--no-interaction")
+	finishCmd.Cmd.Stdin = cmd.InOrStdin()
+	finishCmd.Cmd.Stdout = cmd.OutOrStdout()
+	finishCmd.Cmd.Stderr = cmd.ErrOrStderr()
+
+	if err := finishCmd.Run(); err != nil {
+		trackUpgrade(ctx, currentVersion.String(), targetVersion, "system_update_finish_failed")
+		return fmt.Errorf("system:update:finish failed: %w", err)
+	}
+
+	trackUpgrade(ctx, currentVersion.String(), targetVersion, "ok")
+	fmt.Printf("\n%s\n", tui.GreenText.Render(fmt.Sprintf("Shopware was upgraded from %s to %s", currentVersion.String(), targetVersion)))
+	return nil
 }
 
 func selectTargetVersion(cmd *cobra.Command, updateVersions []string) (string, error) {
@@ -311,5 +348,5 @@ func trackUpgrade(ctx context.Context, fromVersion, toVersion, status string) {
 
 func init() {
 	projectRootCmd.AddCommand(projectUpgradeCmd)
-	projectUpgradeCmd.Flags().String("to", "", "Target Shopware version. Skips the interactive selection prompt.")
+	projectUpgradeCmd.Flags().String("to", "", "Target Shopware version. Skips the interactive wizard.")
 }
