@@ -36,6 +36,12 @@ var rootCmd = &cobra.Command{
 }
 
 func Execute(ctx context.Context) {
+	os.Exit(run(ctx))
+}
+
+// run executes the root command and returns the process exit code. It is kept
+// separate from Execute so its deferred cleanup runs before os.Exit is called.
+func run(ctx context.Context) int {
 	rootCmd.Use = commandNameFromArgs(os.Args)
 	args := mapAliasArgs(os.Args)
 	ctx, stop := signal.NotifyContext(ctx, syscall.SIGINT, syscall.SIGTERM)
@@ -76,9 +82,18 @@ func Execute(ctx context.Context) {
 		})
 	}
 
-	if err != nil {
-		logging.FromContext(ctx).Fatalln(err)
+	if errors.Is(err, project.ErrEnvironmentDown) {
+		// The command already printed a human-readable status; exit 1 without
+		// logging an error.
+		return 1
 	}
+
+	if err != nil {
+		logging.FromContext(ctx).Errorln(err)
+		return 1
+	}
+
+	return 0
 }
 
 func mapAliasArgs(argv []string) []string {

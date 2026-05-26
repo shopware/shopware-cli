@@ -157,6 +157,18 @@ func (d *DockerExecutor) StopEnvironment(ctx context.Context) error {
 	return nil
 }
 
+func (d *DockerExecutor) EnvironmentStatus(ctx context.Context) (bool, error) {
+	cmd := exec.CommandContext(ctx, "docker", "compose", "ps", "--status=running", "-q")
+	cmd.Dir = d.projectRoot
+
+	output, err := cmd.Output()
+	if err != nil {
+		return false, fmt.Errorf("checking environment status: %w", err)
+	}
+
+	return len(strings.TrimSpace(string(output))) > 0, nil
+}
+
 func (d *DockerExecutor) baseArgs() []string {
 	args := []string{"compose", "exec"}
 
