@@ -54,7 +54,7 @@ func Execute(ctx context.Context) {
 
 	if cmd, _, findErr := rootCmd.Find(os.Args[1:]); findErr == nil && cmd != rootCmd && cmd.RunE != nil {
 		result := "success"
-		if err != nil {
+		if err != nil && !errors.Is(err, project.ErrEnvironmentDown) {
 			if errors.Is(err, context.Canceled) {
 				result = "cancelled"
 			} else {
@@ -74,6 +74,12 @@ func Execute(ctx context.Context) {
 			"os":           runtime.GOOS,
 			"is_tui":       strconv.FormatBool(system.IsInteractionEnabled(ctx)),
 		})
+	}
+
+	if errors.Is(err, project.ErrEnvironmentDown) {
+		// The command already printed a human-readable status; exit 1 without
+		// logging an error.
+		os.Exit(1)
 	}
 
 	if err != nil {

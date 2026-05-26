@@ -2,6 +2,7 @@ package project
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"strings"
@@ -18,6 +19,11 @@ import (
 	"github.com/shopware/shopware-cli/internal/shop"
 	"github.com/shopware/shopware-cli/internal/tui"
 )
+
+// ErrEnvironmentDown is returned by the `project dev status` command when the
+// development environment is not running. It causes the CLI to exit with code 1
+// without printing an additional error message.
+var ErrEnvironmentDown = errors.New("development environment is down")
 
 type devEnvironment struct {
 	projectRoot string
@@ -103,6 +109,21 @@ var projectDevStopCmd = &cobra.Command{
 		}
 
 		return env.stop(cmd)
+	},
+}
+
+var projectDevStatusCmd = &cobra.Command{
+	Use:          "status",
+	Short:        "Report whether the development environment is running",
+	Long:         "Report whether the development environment is running. Exits with code 0 when it is up and code 1 when it is down.",
+	SilenceUsage: true,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		env, err := setupDevEnvironment(cmd)
+		if err != nil {
+			return err
+		}
+
+		return env.status(cmd)
 	},
 }
 
@@ -243,6 +264,24 @@ func (e *devEnvironment) stop(cmd *cobra.Command) error {
 	return nil
 }
 
+func (e *devEnvironment) status(cmd *cobra.Command) error {
+	running, err := e.executor.EnvironmentStatus(cmd.Context())
+	if err != nil {
+		if errors.Is(err, executor.ErrNotSupported) {
+			return fmt.Errorf("the %s environment does not manage a development environment", e.executor.Type())
+		}
+		return fmt.Errorf("checking environment status: %w", err)
+	}
+
+	if running {
+		fmt.Println(tui.GreenText.Bold(true).Render("  ✓ Development environment is up"))
+		return nil
+	}
+
+	fmt.Println(tui.RedText.Bold(true).Render("  ✗ Development environment is down"))
+	return ErrEnvironmentDown
+}
+
 func (e *devEnvironment) runTUI() error {
 	m := devtui.New(devtui.Options{
 		ProjectRoot: e.projectRoot,
@@ -260,4 +299,5 @@ func init() {
 	projectRootCmd.AddCommand(projectDevCmd)
 	projectDevCmd.AddCommand(projectDevStartCmd)
 	projectDevCmd.AddCommand(projectDevStopCmd)
+	projectDevCmd.AddCommand(projectDevStatusCmd)
 }
