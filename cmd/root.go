@@ -54,7 +54,7 @@ func Execute(ctx context.Context) {
 
 	if cmd, _, findErr := rootCmd.Find(os.Args[1:]); findErr == nil && cmd != rootCmd && cmd.RunE != nil {
 		result := "success"
-		if err != nil && !errors.Is(err, project.ErrEnvironmentDown) {
+		if err != nil {
 			if errors.Is(err, context.Canceled) {
 				result = "cancelled"
 			} else {
