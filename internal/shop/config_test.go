@@ -42,8 +42,6 @@ include:
 	assert.NoError(t, err)
 
 	assert.NotNil(t, config.ConfigDump.Where)
-
-	assert.NoError(t, os.RemoveAll(tmpDir))
 }
 
 func TestReadConfigCompatibilityDateValidation(t *testing.T) {
