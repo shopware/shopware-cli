@@ -1,6 +1,7 @@
 package project
 
 import (
+	"encoding/json"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -9,6 +10,10 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+func jsonMarshal(v any) ([]byte, error) {
+	return json.MarshalIndent(v, "", "  ")
+}
 
 func gitCmd(t *testing.T, dir string, args ...string) {
 	t.Helper()
@@ -62,4 +67,48 @@ func TestEnsureCleanGitTreeAllowDirtyFlagBypassesCheck(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "untracked"), []byte("x"), 0o644))
 
 	assert.NoError(t, ensureCleanGitTree(t.Context(), dir, true))
+}
+
+func writeInstalledJSON(t *testing.T, projectDir string, packages []map[string]any) {
+	t.Helper()
+	installedDir := filepath.Join(projectDir, "vendor", "composer")
+	require.NoError(t, os.MkdirAll(installedDir, 0o755))
+	body, err := jsonMarshal(map[string]any{"packages": packages})
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(filepath.Join(installedDir, "installed.json"), body, 0o644))
+}
+
+func TestEnsureAllPluginsAreComposerManagedAllowsTrackedDirectories(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, "custom", "plugins", "Tracked"), 0o755))
+	writeInstalledJSON(t, dir, []map[string]any{
+		{
+			"name":         "vendor/tracked",
+			"type":         "shopware-platform-plugin",
+			"install-path": "../../custom/plugins/Tracked",
+		},
+	})
+
+	assert.NoError(t, ensureAllPluginsAreComposerManaged(dir, false))
+}
+
+func TestEnsureAllPluginsAreComposerManagedRejectsOrphanedDirectory(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, "custom", "plugins", "Orphan"), 0o755))
+
+	err := ensureAllPluginsAreComposerManaged(dir, false)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "not tracked by composer")
+	assert.Contains(t, err.Error(), "Orphan")
+	assert.Contains(t, err.Error(), "autofix composer-plugins")
+}
+
+func TestEnsureAllPluginsAreComposerManagedAllowFlagBypasses(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, "custom", "plugins", "Orphan"), 0o755))
+
+	assert.NoError(t, ensureAllPluginsAreComposerManaged(dir, true))
 }

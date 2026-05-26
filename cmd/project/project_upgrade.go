@@ -21,6 +21,7 @@ import (
 	"github.com/shopware/shopware-cli/internal/extension"
 	"github.com/shopware/shopware-cli/internal/flexmigrator"
 	"github.com/shopware/shopware-cli/internal/git"
+	"github.com/shopware/shopware-cli/internal/packagist"
 	"github.com/shopware/shopware-cli/internal/projectupgrade"
 	"github.com/shopware/shopware-cli/internal/system"
 	"github.com/shopware/shopware-cli/internal/tracking"
@@ -64,6 +65,11 @@ bin/console system:update:prepare and system:update:finish.`,
 			return err
 		}
 
+		allowNonComposer, _ := cmd.Flags().GetBool("allow-non-composer")
+		if err := ensureAllPluginsAreComposerManaged(projectRoot, allowNonComposer); err != nil {
+			return err
+		}
+
 		allVersions, err := extension.GetShopwareVersions(ctx)
 		if err != nil {
 			return fmt.Errorf("failed to fetch available Shopware versions: %w", err)
@@ -92,6 +98,11 @@ bin/console system:update:prepare and system:update:finish.`,
 			extensions = nil
 		}
 
+		registry, err := buildRegistry(cmd, projectRoot)
+		if err != nil {
+			return err
+		}
+
 		target, success, err := projectupgrade.RunWizard(projectupgrade.WizardOptions{
 			ProjectRoot:      projectRoot,
 			ComposerJSONPath: composerJsonPath,
@@ -99,6 +110,7 @@ bin/console system:update:prepare and system:update:finish.`,
 			UpdateVersions:   updateVersions,
 			Extensions:       extensions,
 			Executor:         cmdExecutor,
+			Registry:         registry,
 		})
 
 		status := "ok"
@@ -162,14 +174,20 @@ func runUpgradeHeadless(cmd *cobra.Command, projectRoot, composerJsonPath string
 	}
 
 	log.Infof("Checking custom plugins for incompatibilities")
-	removed, err := projectupgrade.RemoveIncompatiblePlugins(composerJsonPath, targetVersion)
+	registry, _ := buildRegistry(cmd, projectRoot)
+	result, err := projectupgrade.ResolveIncompatiblePlugins(ctx, composerJsonPath, targetVersion, registry)
 	if err != nil {
 		restoreComposerJson(ctx, composerJsonPath, backup)
-		return fmt.Errorf("remove incompatible plugins: %w", err)
+		return fmt.Errorf("resolve incompatible plugins: %w", err)
 	}
 
-	for _, name := range removed {
-		log.Infof("Removed incompatible plugin %s from composer.json. Re-require it once a compatible version is published.", tui.YellowText.Render(name))
+	if result != nil {
+		for _, action := range result.Bumped() {
+			log.Infof("Bumped %s: %s → %s", tui.YellowText.Render(action.Name), action.OldConstraint, action.NewConstraint)
+		}
+		for _, action := range result.Removed() {
+			log.Infof("Removed incompatible plugin %s (%s). Re-require it once a compatible version is published.", tui.YellowText.Render(action.Name), action.Reason)
+		}
 	}
 
 	log.Infof("Updating composer.json to %s", targetVersion)
@@ -393,8 +411,89 @@ func ensureCleanGitTree(ctx context.Context, projectRoot string, allowDirty bool
 	)
 }
 
+// ensureAllPluginsAreComposerManaged aborts when custom/plugins/ contains
+// directories that are not tracked by composer. The upgrade can only bump
+// plugin constraints in composer.json, so out-of-band drops would otherwise
+// silently keep stale code on disk.
+func ensureAllPluginsAreComposerManaged(projectRoot string, allow bool) error {
+	if allow {
+		return nil
+	}
+
+	orphans, err := projectupgrade.FindNonComposerPlugins(projectRoot)
+	if err != nil {
+		return fmt.Errorf("scan custom/plugins: %w", err)
+	}
+	if len(orphans) == 0 {
+		return nil
+	}
+
+	return fmt.Errorf(
+		"the upgrade can only bump composer-managed plugins, but %d directory/ies in custom/plugins/ are not tracked by composer:\n  %s\n\nRun `shopware-cli project autofix composer-plugins` to migrate them, or rerun with --allow-non-composer to override.",
+		len(orphans),
+		strings.Join(orphans, "\n  "),
+	)
+}
+
+// buildRegistry constructs the package registry used to look up newer
+// compatible plugin versions. The Shopware Packages token is read from the
+// SHOPWARE_PACKAGES_TOKEN env var, the project's auth.json, or — in
+// interactive mode — prompted from the user if the project has store
+// plugins. Missing tokens degrade gracefully: store lookups fall back to the
+// "remove plugin" behaviour.
+func buildRegistry(cmd *cobra.Command, projectRoot string) (projectupgrade.Registry, error) {
+	token := storeTokenFromAuthJSON(projectRoot)
+
+	hasStorePlugins, err := projectHasStorePlugins(projectRoot)
+	if err != nil {
+		logging.FromContext(cmd.Context()).Debugf("could not inspect installed.json: %v", err)
+	}
+
+	if token == "" && hasStorePlugins && system.IsInteractionEnabled(cmd.Context()) {
+		var entered string
+		if err := huh.NewInput().
+			Title("Shopware Packages token (packages.shopware.com)").
+			Description("Used to look up newer compatible versions of store plugins. Leave empty to skip store lookups.").
+			Value(&entered).
+			EchoMode(huh.EchoModePassword).
+			Run(); err != nil {
+			return nil, err
+		}
+		token = strings.TrimSpace(entered)
+	}
+
+	return projectupgrade.DefaultRegistry(token), nil
+}
+
+func storeTokenFromAuthJSON(projectRoot string) string {
+	if v := strings.TrimSpace(os.Getenv("SHOPWARE_PACKAGES_TOKEN")); v != "" {
+		return v
+	}
+
+	authPath := path.Join(projectRoot, "auth.json")
+	auth, err := packagist.ReadComposerAuth(authPath)
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(auth.BearerAuth["packages.shopware.com"])
+}
+
+func projectHasStorePlugins(projectRoot string) (bool, error) {
+	composerJson, err := packagist.ReadComposerJson(path.Join(projectRoot, "composer.json"))
+	if err != nil {
+		return false, err
+	}
+	for name := range composerJson.Require {
+		if strings.HasPrefix(name, "store.shopware.com/") {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
 func init() {
 	projectRootCmd.AddCommand(projectUpgradeCmd)
 	projectUpgradeCmd.Flags().String("to", "", "Target Shopware version. Skips the interactive wizard.")
 	projectUpgradeCmd.Flags().Bool("allow-dirty", false, "Allow running the upgrade even when the git working tree has uncommitted changes.")
+	projectUpgradeCmd.Flags().Bool("allow-non-composer", false, "Allow running the upgrade even when custom/plugins/ contains plugins not managed by composer.")
 }

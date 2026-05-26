@@ -38,6 +38,10 @@ type WizardOptions struct {
 	UpdateVersions   []string
 	Extensions       map[string]string
 	Executor         executor.Executor
+	// Registry is consulted to find newer compatible versions of plugins
+	// whose installed shopware/core constraint is no longer satisfied. May
+	// be nil, in which case incompatible plugins are simply removed.
+	Registry Registry
 }
 
 type phase int
@@ -91,7 +95,7 @@ type (
 		err            error
 		detail         string
 		composerBackup []byte
-		pluginsRemoved []string
+		pluginActions  *ResolveResult
 	}
 	startNextTaskMsg struct{}
 	logLineMsg       string
@@ -113,7 +117,7 @@ type wizardModel struct {
 	targetVersion   string
 	confirmYes      bool
 	composerBackup  []byte
-	pluginsRemoved  []string
+	pluginActions   *ResolveResult
 	compatUpdates   []account_api.UpdateCheckExtensionCompatibility
 	compatHasBlock  bool
 	compatErr       error
@@ -172,7 +176,7 @@ func defaultTasks() []task {
 	return []task{
 		{label: "Back up composer.json"},
 		{label: "Clean up stale recipe files"},
-		{label: "Remove incompatible custom plugins"},
+		{label: "Resolve incompatible custom plugins"},
 		{label: "Rewrite composer.json"},
 		{label: "composer update --with-all-dependencies"},
 		{label: "bin/console system:update:prepare"},
@@ -215,8 +219,8 @@ func (m wizardModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.composerBackup != nil {
 			m.composerBackup = msg.composerBackup
 		}
-		if msg.pluginsRemoved != nil {
-			m.pluginsRemoved = msg.pluginsRemoved
+		if msg.pluginActions != nil {
+			m.pluginActions = msg.pluginActions
 		}
 		if msg.task < len(m.tasks) {
 			if msg.err != nil {
@@ -493,20 +497,31 @@ func (m wizardModel) runRemovePlugins() tea.Cmd {
 	target := m.targetVersion
 	idx := taskPlugins
 	restore := m.composerBackup
+	registry := m.opts.Registry
 	return func() tea.Msg {
-		removed, err := RemoveIncompatiblePlugins(composerJSONPath, target)
+		ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+		defer cancel()
+
+		result, err := ResolveIncompatiblePlugins(ctx, composerJSONPath, target, registry)
 		if err != nil {
 			_ = os.WriteFile(composerJSONPath, restore, 0o644)
 			return taskCompleteMsg{task: idx, err: err}
 		}
+		if result == nil {
+			result = &ResolveResult{}
+		}
+		bumped := len(result.Bumped())
+		removed := len(result.Removed())
 		detail := "no incompatibilities"
-		if len(removed) > 0 {
-			detail = fmt.Sprintf("removed %d incompatible plugin(s)", len(removed))
+		switch {
+		case bumped > 0 && removed > 0:
+			detail = fmt.Sprintf("bumped %d, removed %d", bumped, removed)
+		case bumped > 0:
+			detail = fmt.Sprintf("bumped %d to a compatible version", bumped)
+		case removed > 0:
+			detail = fmt.Sprintf("removed %d (no compatible release)", removed)
 		}
-		if removed == nil {
-			removed = []string{}
-		}
-		return taskCompleteMsg{task: idx, detail: detail, pluginsRemoved: removed}
+		return taskCompleteMsg{task: idx, detail: detail, pluginActions: result}
 	}
 }
 
@@ -877,16 +892,39 @@ func (m wizardModel) viewDone() string {
 		b.WriteString("\n\n")
 		b.WriteString(tui.DimStyle.Render("All tasks completed. Verify your shop and run your test suite."))
 
-		if len(m.pluginsRemoved) > 0 {
-			b.WriteString("\n\n")
-			b.WriteString(tui.BoldText.Render("Removed incompatible custom plugins:"))
-			b.WriteString("\n")
-			for _, name := range m.pluginsRemoved {
-				b.WriteString(tui.DimStyle.Render("  • "))
-				b.WriteString(tui.LabelStyle.Render(name))
+		if m.pluginActions != nil {
+			bumped := m.pluginActions.Bumped()
+			removed := m.pluginActions.Removed()
+
+			if len(bumped) > 0 {
+				b.WriteString("\n\n")
+				b.WriteString(tui.BoldText.Render("Bumped plugin constraints:"))
 				b.WriteString("\n")
+				for _, action := range bumped {
+					b.WriteString(tui.DimStyle.Render("  • "))
+					b.WriteString(tui.LabelStyle.Render(action.Name))
+					b.WriteString("  ")
+					b.WriteString(tui.DimStyle.Render(action.OldConstraint))
+					b.WriteString(" → ")
+					b.WriteString(lipgloss.NewStyle().Foreground(tui.SuccessColor).Render(action.NewConstraint))
+					b.WriteString("\n")
+				}
 			}
-			b.WriteString(tui.DimStyle.Render("Re-require them in composer.json once they publish compatible versions."))
+
+			if len(removed) > 0 {
+				b.WriteString("\n\n")
+				b.WriteString(tui.BoldText.Render("Removed incompatible custom plugins:"))
+				b.WriteString("\n")
+				for _, action := range removed {
+					b.WriteString(tui.DimStyle.Render("  • "))
+					b.WriteString(tui.LabelStyle.Render(action.Name))
+					if action.Reason != "" {
+						b.WriteString(tui.DimStyle.Render(" (" + action.Reason + ")"))
+					}
+					b.WriteString("\n")
+				}
+				b.WriteString(tui.DimStyle.Render("Re-require them in composer.json once they publish compatible versions."))
+			}
 		}
 	}
 
