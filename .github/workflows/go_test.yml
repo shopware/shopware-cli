@@ -10,6 +10,7 @@ on:
 
 permissions:
   contents: read
+  code-quality: write
 
 env:
   GOTOOLCHAIN: local
@@ -53,3 +54,13 @@ jobs:
 
       - name: Test (sandboxed, no network)
         run: ./scripts/run-tests.sh
+        env:
+          COVERAGE_FILE: coverage.out
+
+      - name: Upload code coverage
+        uses: actions/upload-code-coverage@v1
+        with:
+          file: coverage.xml
+          language: Go
+          label: code-coverage/go-test
+          fail-on-error: false
