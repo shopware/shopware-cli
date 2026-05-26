@@ -213,6 +213,26 @@ var projectCI = &cobra.Command{
 
 		optimizeSection.End(cmd.Context())
 
+		checksumSection := ci.Default.Section(cmd.Context(), "Generating extension checksums")
+
+		extensions := extension.FindExtensionsFromProject(cmd.Context(), args[0], false)
+
+		for _, ext := range extensions {
+			extPath := ext.GetPath()
+			checksumPath := filepath.Join(extPath, "checksum.json")
+
+			if _, err := os.Stat(checksumPath); err == nil {
+				logging.FromContext(cmd.Context()).Infof("Skipping checksum generation for %s: checksum.json already exists", extPath)
+				continue
+			}
+
+			if err := extension.GenerateChecksumJSON(cmd.Context(), extPath, ext); err != nil {
+				logging.FromContext(cmd.Context()).Warnf("Failed to generate checksum for %s: %v", extPath, err)
+			}
+		}
+
+		checksumSection.End(cmd.Context())
+
 		warumupSection := ci.Default.Section(cmd.Context(), "Warming up container cache")
 
 		if err := runTransparentCommand(phpexec.PHPCommand(cmd.Context(), path.Join(args[0], "bin", "ci"), "--version")); err != nil { //nolint: gosec
