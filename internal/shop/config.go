@@ -6,6 +6,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"dario.cat/mergo"
@@ -229,7 +230,11 @@ func (c *ConfigDump) EnableClean() {
 		"version_commit_data",
 		"webhook_event_log",
 	}
-	c.NoData = append(c.NoData, cleanTables...)
+	for _, table := range cleanTables {
+		if !slices.Contains(c.NoData, table) {
+			c.NoData = append(c.NoData, table)
+		}
+	}
 }
 
 // EnableAnonymization adds default column rewrites for anonymizing customer data
