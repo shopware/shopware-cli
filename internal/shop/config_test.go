@@ -456,15 +456,17 @@ func TestConfigDump_EnableClean(t *testing.T) {
 		assert.Contains(t, config.NoData, "webhook_event_log")
 	})
 
-	t.Run("multiple calls append duplicates", func(t *testing.T) {
+	t.Run("multiple calls are idempotent", func(t *testing.T) {
 		config := &ConfigDump{}
 		config.EnableClean()
 		firstCallLength := len(config.NoData)
 
 		config.EnableClean()
 
-		// Second call will append again (duplicates)
-		assert.Len(t, config.NoData, firstCallLength*2)
+		// Second call should not add duplicates
+		assert.Len(t, config.NoData, firstCallLength)
+		assert.Contains(t, config.NoData, "cart")
+		assert.Contains(t, config.NoData, "version")
 	})
 
 	t.Run("does not affect other fields", func(t *testing.T) {

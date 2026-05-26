@@ -229,7 +229,19 @@ func (c *ConfigDump) EnableClean() {
 		"version_commit_data",
 		"webhook_event_log",
 	}
-	c.NoData = append(c.NoData, cleanTables...)
+	existingNoData := make(map[string]struct{}, len(c.NoData))
+	for _, table := range c.NoData {
+		existingNoData[table] = struct{}{}
+	}
+
+	for _, table := range cleanTables {
+		if _, exists := existingNoData[table]; exists {
+			continue
+		}
+
+		c.NoData = append(c.NoData, table)
+		existingNoData[table] = struct{}{}
+	}
 }
 
 // EnableAnonymization adds default column rewrites for anonymizing customer data
