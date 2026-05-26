@@ -211,6 +211,13 @@ func Cleanup(project string) error {
 		}
 	}
 
+	return CleanupByHash(project)
+}
+
+// CleanupByHash removes recipe-managed files that still match a known stale
+// template hash. This makes sure the recipe can recreate them on the next
+// composer install.
+func CleanupByHash(project string) error {
 	for file, md5s := range cleanupByMd5 {
 		content, err := os.ReadFile(path.Join(project, file))
 		if err != nil {
