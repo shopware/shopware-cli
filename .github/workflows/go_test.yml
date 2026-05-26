@@ -10,6 +10,7 @@ on:
 
 permissions:
   contents: read
+  code-quality: write
 
 env:
   GOTOOLCHAIN: local
@@ -31,6 +32,7 @@ jobs:
             proxy.golang.org:443
             release-assets.githubusercontent.com:443
             storage.googleapis.com:443
+            sum.golang.org:443
 
       - name: Checkout Repository
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # ratchet:actions/checkout@v6
@@ -53,3 +55,13 @@ jobs:
 
       - name: Test (sandboxed, no network)
         run: ./scripts/run-tests.sh
+        env:
+          COVERAGE_FILE: coverage.out
+
+      - name: Upload code coverage
+        uses: actions/upload-code-coverage@v1
+        with:
+          file: coverage.xml
+          language: Go
+          label: code-coverage/go-test
+          fail-on-error: false
