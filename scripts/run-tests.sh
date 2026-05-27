@@ -60,8 +60,8 @@ case "$(uname -s)" in
                 echo "error: need either ip (iproute2) or ifconfig to bring up loopback" >&2
                 exit 1
             fi
-            exec go test '"${COVER_FLAGS[@]}"' "$@"
-        ' bash "$@"
+            exec go test "$@"
+        ' bash "${COVER_FLAGS[@]}" "$@"
         ;;
     *)
         echo "error: unsupported OS: $(uname -s)" >&2
