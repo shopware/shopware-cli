@@ -1,15 +1,10 @@
 package projectupgrade
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
 	"errors"
-	"fmt"
-	"net/http"
 	"strings"
 	"sync"
-	"time"
 
 	"github.com/shopware/shopware-cli/internal/packagist"
 )
@@ -47,115 +42,22 @@ func (c *CombinedRegistry) GetPackageVersions(ctx context.Context, name string) 
 	return c.Packagist.GetPackageVersions(ctx, name)
 }
 
-var registryHTTPClient = &http.Client{Timeout: 30 * time.Second}
-
-// PackagistRegistry queries https://repo.packagist.org for any composer
-// package's available versions. The package metadata is returned with full
-// require/replace info so we can pick a Shopware-compatible release.
+// PackagistRegistry resolves package versions via repo.packagist.org.
 type PackagistRegistry struct{}
 
-type packagistResponse struct {
-	Minified string                                  `json:"minified"`
-	Packages map[string][]map[string]json.RawMessage `json:"packages"`
+func (PackagistRegistry) GetPackageVersions(ctx context.Context, name string) ([]packagist.ComposerPackageVersion, error) {
+	return packagist.GetComposerPackageVersions(ctx, name)
 }
 
-func (p PackagistRegistry) GetPackageVersions(ctx context.Context, name string) ([]packagist.ComposerPackageVersion, error) {
-	url := fmt.Sprintf("https://repo.packagist.org/p2/%s.json", name)
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, http.NoBody)
-	if err != nil {
-		return nil, err
-	}
-	req.Header.Set("User-Agent", "Shopware CLI")
-
-	resp, err := registryHTTPClient.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer closeBody(resp)
-
-	if resp.StatusCode == http.StatusNotFound {
-		return nil, nil
-	}
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("packagist returned %s for %s", resp.Status, name)
-	}
-
-	var body packagistResponse
-	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
-		return nil, fmt.Errorf("decode packagist response: %w", err)
-	}
-
-	raw, ok := body.Packages[name]
-	if !ok || len(raw) == 0 {
-		return nil, nil
-	}
-
-	if body.Minified != "" {
-		raw = unminify(raw)
-	}
-
-	versions := make([]packagist.ComposerPackageVersion, 0, len(raw))
-	for _, m := range raw {
-		payload, err := json.Marshal(m)
-		if err != nil {
-			continue
-		}
-		var v packagist.ComposerPackageVersion
-		if err := json.Unmarshal(payload, &v); err != nil {
-			continue
-		}
-		versions = append(versions, v)
-	}
-	return versions, nil
-}
-
-// unminify expands the composer v2 minified packages format ("__unset"
-// markers and inheritance from the previous entry) into independent records.
-func unminify(versions []map[string]json.RawMessage) []map[string]json.RawMessage {
-	if len(versions) == 0 {
-		return nil
-	}
-	expanded := make([]map[string]json.RawMessage, 0, len(versions))
-	var current map[string]json.RawMessage
-	for _, v := range versions {
-		if current == nil {
-			current = cloneRaw(v)
-			expanded = append(expanded, cloneRaw(current))
-			continue
-		}
-		for k, val := range v {
-			if bytes.Equal(val, []byte(`"__unset"`)) {
-				delete(current, k)
-			} else {
-				current[k] = val
-			}
-		}
-		expanded = append(expanded, cloneRaw(current))
-	}
-	return expanded
-}
-
-func cloneRaw(in map[string]json.RawMessage) map[string]json.RawMessage {
-	out := make(map[string]json.RawMessage, len(in))
-	for k, v := range in {
-		out[k] = v
-	}
-	return out
-}
-
-// ShopwareStoreRegistry queries https://packages.shopware.com/packages.json
-// for store-managed plugins. The full listing is fetched once and cached for
-// the lifetime of the registry instance.
+// ShopwareStoreRegistry resolves store-managed plugins via
+// packages.shopware.com. The full listing is fetched once and cached for the
+// lifetime of the registry instance.
 type ShopwareStoreRegistry struct {
 	Token string
 
 	once     sync.Once
 	loadErr  error
 	packages map[string][]packagist.ComposerPackageVersion
-}
-
-type shopwareStoreResponse struct {
-	Packages map[string]map[string]packagist.ComposerPackageVersion `json:"packages"`
 }
 
 func (s *ShopwareStoreRegistry) load(ctx context.Context) error {
@@ -165,37 +67,23 @@ func (s *ShopwareStoreRegistry) load(ctx context.Context) error {
 			return
 		}
 
-		req, err := http.NewRequestWithContext(ctx, http.MethodGet, "https://packages.shopware.com/packages.json", http.NoBody)
+		response, err := packagist.GetAvailablePackagesFromShopwareStore(ctx, s.Token)
 		if err != nil {
 			s.loadErr = err
 			return
 		}
-		req.Header.Set("User-Agent", "Shopware CLI")
-		req.Header.Set("Authorization", "Bearer "+s.Token)
 
-		resp, err := registryHTTPClient.Do(req)
-		if err != nil {
-			s.loadErr = err
-			return
-		}
-		defer closeBody(resp)
-
-		if resp.StatusCode != http.StatusOK {
-			s.loadErr = fmt.Errorf("shopware packages returned %s", resp.Status)
-			return
-		}
-
-		var body shopwareStoreResponse
-		if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
-			s.loadErr = fmt.Errorf("decode shopware packages: %w", err)
-			return
-		}
-
-		s.packages = make(map[string][]packagist.ComposerPackageVersion, len(body.Packages))
-		for name, versions := range body.Packages {
+		s.packages = make(map[string][]packagist.ComposerPackageVersion, len(response.Packages))
+		for name, versions := range response.Packages {
 			list := make([]packagist.ComposerPackageVersion, 0, len(versions))
 			for _, v := range versions {
-				list = append(list, v)
+				list = append(list, packagist.ComposerPackageVersion{
+					Name:        name,
+					Version:     v.Version,
+					Description: v.Description,
+					Replace:     v.Replace,
+					Require:     v.Require,
+				})
 			}
 			s.packages[name] = list
 		}
@@ -208,17 +96,7 @@ func (s *ShopwareStoreRegistry) GetPackageVersions(ctx context.Context, name str
 		return nil, err
 	}
 
-	versions, ok := s.packages[name]
-	if !ok {
-		return nil, nil
-	}
-	return versions, nil
-}
-
-// closeBody drains and closes an HTTP response body, swallowing any close
-// error since callers can't act on it once they've already read the payload.
-func closeBody(resp *http.Response) {
-	_ = resp.Body.Close()
+	return s.packages[name], nil
 }
 
 // DefaultRegistry builds a CombinedRegistry that uses packages.shopware.com
