@@ -10,9 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"dario.cat/mergo"
 	"github.com/spf13/cobra"
-	"golang.org/x/text/language"
 
 	"github.com/shopware/shopware-cli/internal/ci"
 	"github.com/shopware/shopware-cli/internal/extension"
@@ -171,7 +169,8 @@ var projectCI = &cobra.Command{
 		}
 
 		optimizeSection := ci.Default.Section(cmd.Context(), "Optimizing Administration Assets")
-		if err := cleanupAdministrationFiles(cmd.Context(), path.Join(args[0], "vendor", "shopware", "administration")); err != nil {
+
+		if err := extension.CleanupAdministrationFiles(cmd.Context(), path.Join(args[0], "vendor", "shopware", "administration")); err != nil {
 			return err
 		}
 
@@ -181,19 +180,19 @@ var projectCI = &cobra.Command{
 
 		if !shopCfg.Build.KeepExtensionSource {
 			for _, source := range sources {
-				if err := cleanupAdministrationFiles(cmd.Context(), source.Path); err != nil {
+				if err := extension.CleanupAdministrationFiles(cmd.Context(), source.Path); err != nil {
 					return err
 				}
 			}
 		}
 
 		if !shopCfg.Build.KeepSourceMaps {
-			if err := cleanupJavaScriptSourceMaps(path.Join(args[0], "vendor", "shopware", "administration", "Resources", "public")); err != nil {
+			if err := extension.CleanupJavaScriptSourceMaps(path.Join(args[0], "vendor", "shopware", "administration", "Resources", "public")); err != nil {
 				return err
 			}
 
 			for _, source := range sources {
-				if err := cleanupJavaScriptSourceMaps(path.Join(source.Path, "Resources", "public")); err != nil {
+				if err := extension.CleanupJavaScriptSourceMaps(path.Join(source.Path, "Resources", "public")); err != nil {
 					return err
 				}
 			}
@@ -201,8 +200,8 @@ var projectCI = &cobra.Command{
 
 		for _, removePath := range cleanupPaths {
 			logging.FromContext(cmd.Context()).Infof("Removing %s", removePath)
-
-			if err := os.RemoveAll(path.Join(args[0], removePath)); err != nil {
+			fullPath := path.Join(args[0], removePath)
+			if err := os.RemoveAll(fullPath); err != nil {
 				return err
 			}
 		}
@@ -212,26 +211,6 @@ var projectCI = &cobra.Command{
 		}
 
 		optimizeSection.End(cmd.Context())
-
-		checksumSection := ci.Default.Section(cmd.Context(), "Generating extension checksums")
-
-		extensions := extension.FindExtensionsFromProject(cmd.Context(), args[0], false)
-
-		for _, ext := range extensions {
-			extPath := ext.GetPath()
-			checksumPath := filepath.Join(extPath, "checksum.json")
-
-			if _, err := os.Stat(checksumPath); err == nil {
-				logging.FromContext(cmd.Context()).Infof("Skipping checksum generation for %s: checksum.json already exists", extPath)
-				continue
-			}
-
-			if err := extension.GenerateChecksumJSON(cmd.Context(), extPath, ext); err != nil {
-				logging.FromContext(cmd.Context()).Warnf("Failed to generate checksum for %s: %v", extPath, err)
-			}
-		}
-
-		checksumSection.End(cmd.Context())
 
 		warumupSection := ci.Default.Section(cmd.Context(), "Warming up container cache")
 
@@ -312,6 +291,20 @@ var projectCI = &cobra.Command{
 
 			deleteAssetsSection.End(cmd.Context())
 		}
+
+		checksumSection := ci.Default.Section(cmd.Context(), "Generating extension checksums")
+
+		extensions := extension.FindExtensionsFromProject(cmd.Context(), args[0], false)
+
+		for _, ext := range extensions {
+			extPath := ext.GetPath()
+
+			if err := extension.GenerateChecksumJSON(cmd.Context(), extPath, ext); err != nil {
+				logging.FromContext(cmd.Context()).Warnf("Failed to generate checksum for %s: %v", extPath, err)
+			}
+		}
+
+		checksumSection.End(cmd.Context())
 
 		if shopCfg.Build.Hooks != nil && len(shopCfg.Build.Hooks.Post) > 0 {
 			if err := executeCIHooks(cmd.Context(), "Running post hooks", shopCfg.Build.Hooks.Post, args[0]); err != nil {
@@ -411,164 +404,6 @@ func cleanupTcpdf(folder string, ctx context.Context) error {
 		}
 
 		return os.Remove(path)
-	})
-}
-
-func cleanupAdministrationFiles(ctx context.Context, folder string) error {
-	adminFolder := path.Join(folder, "Resources", "app", "administration")
-
-	if _, err := os.Stat(adminFolder); err == nil {
-		logging.FromContext(ctx).Infof("Merging Administration snippet for %s", folder)
-
-		snippetFiles := make(map[string][]string)
-
-		err = filepath.WalkDir(adminFolder, func(path string, d os.DirEntry, err error) error {
-			if d.IsDir() {
-				return nil
-			}
-
-			fileExt := filepath.Ext(path)
-
-			if fileExt != ".json" {
-				return nil
-			}
-
-			languageName := strings.TrimSuffix(filepath.Base(path), fileExt)
-
-			if _, err := language.Parse(languageName); err != nil {
-				logging.FromContext(ctx).Infof("Ignoring invalid locale filename %s", path)
-				// we can safely ignore the error from language.Parse as we use language.Parse to check and stop processing this file
-				// thus checking for the error is the point of this condition
-				return nil //nolint:nilerr
-			}
-
-			if language.Make(languageName).IsRoot() {
-				return nil
-			}
-
-			if _, ok := snippetFiles[languageName]; !ok {
-				snippetFiles[languageName] = []string{}
-			}
-
-			snippetFiles[languageName] = append(snippetFiles[languageName], path)
-
-			return nil
-		})
-		if err != nil {
-			return err
-		}
-
-		for language, files := range snippetFiles {
-			if len(files) == 1 {
-				data, err := os.ReadFile(files[0])
-				if err != nil {
-					return err
-				}
-
-				if err := os.WriteFile(path.Join(folder, language), data, 0o644); err != nil {
-					return err
-				}
-
-				continue
-			}
-
-			merged := make(map[string]interface{})
-
-			for _, file := range files {
-				snippetFile := make(map[string]interface{})
-
-				data, err := os.ReadFile(file)
-				if err != nil {
-					return err
-				}
-
-				if err := json.Unmarshal(data, &snippetFile); err != nil {
-					return fmt.Errorf("unable to parse %s: %w", file, err)
-				}
-
-				if err := mergo.Merge(&merged, snippetFile, mergo.WithOverride); err != nil {
-					return err
-				}
-			}
-
-			mergedData, err := json.Marshal(merged)
-			if err != nil {
-				return err
-			}
-
-			if err := os.WriteFile(path.Join(folder, language), mergedData, 0o644); err != nil {
-				return err
-			}
-		}
-
-		logging.FromContext(ctx).Infof("Deleting Administration source files for %s", folder)
-
-		if err := os.RemoveAll(adminFolder); err != nil {
-			return err
-		}
-
-		logging.FromContext(ctx).Infof("Migrating generated snippet file for %s", folder)
-
-		snippetFolder := path.Join(adminFolder, "src", "app", "snippet")
-		if err := os.MkdirAll(snippetFolder, 0o755); err != nil {
-			return err
-		}
-
-		for language := range snippetFiles {
-			if err := os.Rename(path.Join(folder, language), path.Join(snippetFolder, language+".json")); err != nil {
-				return err
-			}
-		}
-
-		logging.FromContext(ctx).Infof("Creating empty main.js for %s", folder)
-		return os.WriteFile(path.Join(adminFolder, "src", "main.js"), []byte(""), 0o644)
-	}
-
-	return nil
-}
-
-func cleanupJavaScriptSourceMaps(folder string) error {
-	if _, err := os.Stat(folder); err != nil {
-		if os.IsNotExist(err) {
-			return nil
-		}
-
-		return err
-	}
-
-	return filepath.WalkDir(folder, func(path string, d os.DirEntry, err error) error {
-		if d.IsDir() {
-			return nil
-		}
-
-		if !strings.HasSuffix(path, ".js.map") {
-			return nil
-		}
-
-		if err := os.Remove(path); err != nil {
-			return err
-		}
-
-		expectedJsFile := path[0 : len(path)-4]
-
-		if _, err := os.Stat(expectedJsFile); err != nil {
-			if os.IsNotExist(err) {
-				return nil
-			}
-
-			return err
-		}
-
-		content, readErr := os.ReadFile(expectedJsFile)
-		if readErr != nil {
-			return fmt.Errorf("could not open file %s: %w", expectedJsFile, readErr)
-		}
-
-		expectedSourceMapComment := fmt.Sprintf("//# sourceMappingURL=%s", filepath.Base(path))
-
-		overwrittenContent := strings.ReplaceAll(string(content), expectedSourceMapComment, "")
-
-		return os.WriteFile(expectedJsFile, []byte(overwrittenContent), 0o644)
 	})
 }
 
