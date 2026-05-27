@@ -2,7 +2,6 @@ package projectupgrade
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -18,27 +17,6 @@ import (
 
 // composerPluginType is the composer "type" used by Shopware platform plugins.
 const composerPluginType = "shopware-platform-plugin"
-
-// pluginShopwarePackages are the Shopware first-party packages a plugin can
-// declare a constraint against. If any constraint cannot be satisfied by the
-// target version, the plugin is considered incompatible.
-var pluginShopwarePackages = []string{
-	"shopware/core",
-	"shopware/administration",
-	"shopware/storefront",
-	"shopware/elasticsearch",
-}
-
-type installedPackage struct {
-	Name        string            `json:"name"`
-	Type        string            `json:"type"`
-	Require     map[string]string `json:"require"`
-	InstallPath string            `json:"install-path"`
-}
-
-type installedJSON struct {
-	Packages []installedPackage `json:"packages"`
-}
 
 // PluginAction describes how the resolver dealt with one incompatible plugin.
 type PluginAction struct {
@@ -100,19 +78,9 @@ func (r *ResolveResult) Removed() []PluginAction {
 func ResolveIncompatiblePlugins(ctx context.Context, composerJsonPath, targetVersion string, registry Registry) (*ResolveResult, error) {
 	projectDir := filepath.Dir(composerJsonPath)
 
-	installedPath := filepath.Join(projectDir, "vendor", "composer", "installed.json")
-
-	data, err := os.ReadFile(installedPath)
+	installed, err := packagist.ReadInstalledJson(projectDir)
 	if err != nil {
-		if errors.Is(err, fs.ErrNotExist) {
-			return &ResolveResult{}, nil
-		}
-		return nil, fmt.Errorf("read installed.json: %w", err)
-	}
-
-	var installed installedJSON
-	if err := json.Unmarshal(data, &installed); err != nil {
-		return nil, fmt.Errorf("parse installed.json: %w", err)
+		return nil, err
 	}
 
 	target, err := version.NewVersion(strings.TrimPrefix(targetVersion, "v"))
@@ -120,15 +88,17 @@ func ResolveIncompatiblePlugins(ctx context.Context, composerJsonPath, targetVer
 		return nil, fmt.Errorf("parse target version: %w", err)
 	}
 
-	incompatible := make([]installedPackage, 0)
+	customPlugins := filepath.Join(projectDir, "custom", "plugins")
+
+	incompatible := make([]packagist.InstalledPackage, 0)
 	for _, pkg := range installed.Packages {
 		if pkg.Type != composerPluginType {
 			continue
 		}
-		if !isInstalledUnderCustomPlugins(projectDir, pkg.InstallPath) {
+		if _, ok := pkg.InstallDirName(projectDir, customPlugins); !ok {
 			continue
 		}
-		if pluginSatisfies(pkg.Require, target) {
+		if packagist.ConstraintsSatisfiedBy(pkg.Require, ShopwarePackages, target) {
 			continue
 		}
 		incompatible = append(incompatible, pkg)
@@ -165,7 +135,7 @@ func ResolveIncompatiblePlugins(ctx context.Context, composerJsonPath, targetVer
 			continue
 		}
 
-		newConstraint := bumpConstraint(newVersion)
+		newConstraint := packagist.BumpConstraint(newVersion)
 		composerJson.Require[pkg.Name] = newConstraint
 		action.NewConstraint = newConstraint
 		action.NewVersion = newVersion
@@ -201,7 +171,7 @@ func findCompatibleVersion(ctx context.Context, registry Registry, name string, 
 		if isPreReleaseVersion(v.Version) {
 			continue
 		}
-		if !satisfiesShopwareTarget(v.Require, target) {
+		if !packagist.ConstraintsSatisfiedBy(v.Require, ShopwarePackages, target) {
 			continue
 		}
 		parsed = append(parsed, v)
@@ -233,39 +203,6 @@ func isPreReleaseVersion(v string) bool {
 	return false
 }
 
-func satisfiesShopwareTarget(requires map[string]string, target *version.Version) bool {
-	if len(requires) == 0 {
-		// No shopware/core constraint declared — assume compatible.
-		return true
-	}
-	for dep, constraint := range requires {
-		if !containsString(pluginShopwarePackages, dep) {
-			continue
-		}
-		c, err := version.NewConstraint(constraint)
-		if err != nil {
-			return false
-		}
-		if !c.Check(target) {
-			return false
-		}
-	}
-	return true
-}
-
-// bumpConstraint converts a concrete version (e.g. "2.3.4") into a caret
-// constraint ("^2.3.4") suitable for composer.json. Versions that already
-// look like a constraint are passed through unchanged.
-func bumpConstraint(version string) string {
-	if version == "" {
-		return version
-	}
-	if strings.ContainsAny(version, "^~><*|, ") {
-		return version
-	}
-	return "^" + version
-}
-
 // FindNonComposerPlugins returns directories under custom/plugins/ that are
 // not tracked by composer (no entry in vendor/composer/installed.json).
 // Returns an empty slice when no installed.json is present.
@@ -279,15 +216,14 @@ func FindNonComposerPlugins(projectRoot string) ([]string, error) {
 		return nil, fmt.Errorf("read %s: %w", customPlugins, err)
 	}
 
-	installedPath := filepath.Join(projectRoot, "vendor", "composer", "installed.json")
 	composerTracked := make(map[string]struct{})
-	if data, err := os.ReadFile(installedPath); err == nil {
-		var installed installedJSON
-		if jsonErr := json.Unmarshal(data, &installed); jsonErr == nil {
-			for _, pkg := range installed.Packages {
-				if dir, ok := installedDirName(projectRoot, pkg.InstallPath); ok {
-					composerTracked[dir] = struct{}{}
-				}
+	// Best-effort: a missing or malformed installed.json simply means nothing
+	// is tracked, so every plugin directory is reported.
+	installed, _ := packagist.ReadInstalledJson(projectRoot)
+	if installed != nil {
+		for _, pkg := range installed.Packages {
+			if dir, ok := pkg.InstallDirName(projectRoot, customPlugins); ok {
+				composerTracked[dir] = struct{}{}
 			}
 		}
 	}
@@ -308,86 +244,4 @@ func FindNonComposerPlugins(projectRoot string) ([]string, error) {
 
 	sort.Strings(orphans)
 	return orphans, nil
-}
-
-func installedDirName(projectRoot, installPath string) (string, bool) {
-	if installPath == "" {
-		return "", false
-	}
-	abs := installPath
-	if !filepath.IsAbs(abs) {
-		abs = filepath.Join(projectRoot, "vendor", "composer", installPath)
-	}
-	resolved, err := filepath.EvalSymlinks(abs)
-	if err != nil {
-		resolved = filepath.Clean(abs)
-	}
-	customPlugins := filepath.Join(projectRoot, "custom", "plugins")
-	resolvedCustom, err := filepath.EvalSymlinks(customPlugins)
-	if err != nil {
-		resolvedCustom = filepath.Clean(customPlugins)
-	}
-	rel, err := filepath.Rel(resolvedCustom, resolved)
-	if err != nil {
-		return "", false
-	}
-	if rel == "." || rel == "" || strings.HasPrefix(rel, "..") {
-		return "", false
-	}
-	if strings.ContainsRune(rel, filepath.Separator) {
-		return "", false
-	}
-	return rel, true
-}
-
-func isInstalledUnderCustomPlugins(projectDir, installPath string) bool {
-	if installPath == "" {
-		return false
-	}
-	absPath := installPath
-	if !filepath.IsAbs(absPath) {
-		absPath = filepath.Join(projectDir, "vendor", "composer", installPath)
-	}
-	resolved, err := filepath.EvalSymlinks(absPath)
-	if err != nil {
-		resolved = filepath.Clean(absPath)
-	}
-	customPlugins := filepath.Join(projectDir, "custom", "plugins")
-	resolvedCustom, err := filepath.EvalSymlinks(customPlugins)
-	if err != nil {
-		resolvedCustom = filepath.Clean(customPlugins)
-	}
-	rel, err := filepath.Rel(resolvedCustom, resolved)
-	if err != nil {
-		return false
-	}
-	if rel == "." || rel == "" || strings.HasPrefix(rel, "..") {
-		return false
-	}
-	return !strings.ContainsRune(rel, filepath.Separator)
-}
-
-func pluginSatisfies(requires map[string]string, target *version.Version) bool {
-	for dep, constraint := range requires {
-		if !containsString(pluginShopwarePackages, dep) {
-			continue
-		}
-		c, err := version.NewConstraint(constraint)
-		if err != nil {
-			continue
-		}
-		if !c.Check(target) {
-			return false
-		}
-	}
-	return true
-}
-
-func containsString(haystack []string, needle string) bool {
-	for _, item := range haystack {
-		if item == needle {
-			return true
-		}
-	}
-	return false
 }

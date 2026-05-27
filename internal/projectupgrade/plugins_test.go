@@ -13,13 +13,13 @@ import (
 	"github.com/shopware/shopware-cli/internal/packagist"
 )
 
-func writeInstalledJSON(t *testing.T, projectDir string, packages []installedPackage) {
+func writeInstalledJSON(t *testing.T, projectDir string, packages []packagist.InstalledPackage) {
 	t.Helper()
 
 	installedDir := filepath.Join(projectDir, "vendor", "composer")
 	require.NoError(t, os.MkdirAll(installedDir, 0o755))
 
-	data, err := json.MarshalIndent(installedJSON{Packages: packages}, "", "  ")
+	data, err := json.MarshalIndent(packagist.InstalledJson{Packages: packages}, "", "  ")
 	require.NoError(t, err)
 	require.NoError(t, os.WriteFile(filepath.Join(installedDir, "installed.json"), data, 0o644))
 }
@@ -55,7 +55,7 @@ func TestResolveIncompatiblePluginsRemovesWhenNoRegistry(t *testing.T) {
 		},
 	})
 
-	writeInstalledJSON(t, dir, []installedPackage{
+	writeInstalledJSON(t, dir, []packagist.InstalledPackage{
 		{
 			Name:        "vendor/incompat",
 			Type:        composerPluginType,
@@ -92,7 +92,7 @@ func TestResolveIncompatiblePluginsBumpsConstraintWhenRegistryHasCompatibleVersi
 		},
 	})
 
-	writeInstalledJSON(t, dir, []installedPackage{
+	writeInstalledJSON(t, dir, []packagist.InstalledPackage{
 		{
 			Name:        "vendor/incompat",
 			Type:        composerPluginType,
@@ -144,7 +144,7 @@ func TestResolveIncompatiblePluginsRemovesWhenNoCompatibleRelease(t *testing.T) 
 		},
 	})
 
-	writeInstalledJSON(t, dir, []installedPackage{
+	writeInstalledJSON(t, dir, []packagist.InstalledPackage{
 		{
 			Name:        "vendor/incompat",
 			Type:        composerPluginType,
@@ -187,7 +187,7 @@ func TestResolveIncompatiblePluginsRegistryErrorFallsBackToRemove(t *testing.T) 
 		},
 	})
 
-	writeInstalledJSON(t, dir, []installedPackage{
+	writeInstalledJSON(t, dir, []packagist.InstalledPackage{
 		{
 			Name:        "vendor/incompat",
 			Type:        composerPluginType,
@@ -228,7 +228,7 @@ func TestFindNonComposerPluginsReportsUntrackedDirectories(t *testing.T) {
 	require.NoError(t, os.MkdirAll(filepath.Join(dir, "custom", "plugins", "UntrackedPlugin"), 0o755))
 	require.NoError(t, os.MkdirAll(filepath.Join(dir, "custom", "plugins", "AnotherUntracked"), 0o755))
 
-	writeInstalledJSON(t, dir, []installedPackage{
+	writeInstalledJSON(t, dir, []packagist.InstalledPackage{
 		{
 			Name:        "vendor/tracked",
 			Type:        composerPluginType,
@@ -257,7 +257,7 @@ func TestFindNonComposerPluginsAllTracked(t *testing.T) {
 	require.NoError(t, os.MkdirAll(filepath.Join(dir, "custom", "plugins", "A"), 0o755))
 	require.NoError(t, os.MkdirAll(filepath.Join(dir, "custom", "plugins", "B"), 0o755))
 
-	writeInstalledJSON(t, dir, []installedPackage{
+	writeInstalledJSON(t, dir, []packagist.InstalledPackage{
 		{Name: "vendor/a", Type: composerPluginType, InstallPath: "../../custom/plugins/A"},
 		{Name: "vendor/b", Type: composerPluginType, InstallPath: "../../custom/plugins/B"},
 	})
