@@ -64,14 +64,26 @@ func CleanupAdministrationFiles(ctx context.Context, folder string) error {
 		return err
 	}
 
+	var tmpSnippetFolder string
+
+	if len(snippetFiles) > 0 {
+		tmpSnippetFolder, err = os.MkdirTemp(folder, ".shopware-admin-snippets-*")
+		if err != nil {
+			return err
+		}
+		defer func() { _ = os.RemoveAll(tmpSnippetFolder) }()
+	}
+
 	for language, files := range snippetFiles {
+		tmpSnippetPath := filepath.Join(tmpSnippetFolder, language+".json")
+
 		if len(files) == 1 {
 			data, err := os.ReadFile(files[0])
 			if err != nil {
 				return err
 			}
 
-			if err := os.WriteFile(filepath.Join(folder, language), data, 0o644); err != nil {
+			if err := os.WriteFile(tmpSnippetPath, data, 0o644); err != nil {
 				return err
 			}
 
@@ -102,7 +114,7 @@ func CleanupAdministrationFiles(ctx context.Context, folder string) error {
 			return err
 		}
 
-		if err := os.WriteFile(filepath.Join(folder, language), mergedData, 0o644); err != nil {
+		if err := os.WriteFile(tmpSnippetPath, mergedData, 0o644); err != nil {
 			return err
 		}
 	}
@@ -121,7 +133,7 @@ func CleanupAdministrationFiles(ctx context.Context, folder string) error {
 	}
 
 	for language := range snippetFiles {
-		if err := os.Rename(filepath.Join(folder, language), filepath.Join(snippetFolder, language+".json")); err != nil {
+		if err := os.Rename(filepath.Join(tmpSnippetFolder, language+".json"), filepath.Join(snippetFolder, language+".json")); err != nil {
 			return err
 		}
 	}

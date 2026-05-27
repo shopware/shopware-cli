@@ -71,6 +71,33 @@ func TestCleanupAdministrationFiles_MergesSnippetFiles(t *testing.T) {
 	assert.Equal(t, "value2", merged["key2"])
 }
 
+func TestCleanupAdministrationFiles_DoesNotOverwriteRootLocaleFileWhenMergingSnippets(t *testing.T) {
+	tmpDir := t.TempDir()
+	adminDir := filepath.Join(tmpDir, "Resources", "app", "administration")
+
+	snippetDir1 := filepath.Join(adminDir, "src", "app", "snippet")
+	snippetDir2 := filepath.Join(adminDir, "src", "module", "test", "snippet")
+
+	require.NoError(t, os.MkdirAll(snippetDir1, 0755))
+	require.NoError(t, os.MkdirAll(snippetDir2, 0755))
+
+	rootLocalePath := filepath.Join(tmpDir, "en-GB")
+	require.NoError(t, os.WriteFile(rootLocalePath, []byte("keep me"), 0644))
+
+	require.NoError(t, os.WriteFile(filepath.Join(snippetDir1, "en-GB.json"), []byte(`{"key1":"value1"}`), 0644))
+	require.NoError(t, os.WriteFile(filepath.Join(snippetDir2, "en-GB.json"), []byte(`{"key2":"value2"}`), 0644))
+
+	err := CleanupAdministrationFiles(context.Background(), tmpDir)
+	require.NoError(t, err)
+
+	rootLocaleContent, err := os.ReadFile(rootLocalePath)
+	require.NoError(t, err)
+	assert.Equal(t, "keep me", string(rootLocaleContent))
+
+	assert.FileExists(t, filepath.Join(snippetDir1, "en-GB.json"))
+	assert.NoFileExists(t, filepath.Join(snippetDir1, "en-GB"))
+}
+
 func TestCleanupAdministrationFiles_NoAdminFolder(t *testing.T) {
 	tmpDir := t.TempDir()
 
