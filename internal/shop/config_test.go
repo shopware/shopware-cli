@@ -430,6 +430,39 @@ func TestConfigDump_EnableClean(t *testing.T) {
 		assert.Len(t, config.NoData, 19)
 	})
 
+	t.Run("no duplicates when pre-existing entry overlaps with defaults", func(t *testing.T) {
+		config := &ConfigDump{
+			NoData: []string{"my_custom_table", "cart", "version"},
+		}
+
+		config.EnableClean()
+
+		// Should not introduce duplicates for 'cart' and 'version'
+		count := 0
+		for _, table := range config.NoData {
+			if table == "cart" {
+				count++
+			}
+		}
+		assert.Equal(t, 1, count, "cart should appear exactly once")
+
+		count = 0
+		for _, table := range config.NoData {
+			if table == "version" {
+				count++
+			}
+		}
+		assert.Equal(t, 1, count, "version should appear exactly once")
+
+		// Total should be custom tables (3) + remaining clean tables (15)
+		assert.Len(t, config.NoData, 18)
+
+		// Pre-existing tables should be preserved in their original positions
+		assert.Equal(t, "my_custom_table", config.NoData[0])
+		assert.Equal(t, "cart", config.NoData[1])
+		assert.Equal(t, "version", config.NoData[2])
+	})
+
 	t.Run("verify all expected tables", func(t *testing.T) {
 		config := &ConfigDump{}
 		config.EnableClean()
