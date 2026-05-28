@@ -3,6 +3,7 @@ package project
 import (
 	"context"
 	"fmt"
+	"os"
 	"strings"
 	"time"
 
@@ -57,7 +58,7 @@ var projectStorefrontWatchCmd = &cobra.Command{
 			}
 		}
 
-		watchProcess, err := extension.PrepareStorefrontWatcher(cmd.Context(), projectRoot, cmdExecutor, opts)
+		watchProcess, err := extension.PrepareStorefrontWatcher(cmd.Context(), projectRoot, cmdExecutor, opts, os.Stdout)
 		if err != nil {
 			return err
 		}

@@ -8,7 +8,6 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"github.com/stretchr/testify/assert"
 
-	"github.com/shopware/shopware-cli/internal/executor"
 	"github.com/shopware/shopware-cli/internal/shop"
 )
 
@@ -56,7 +55,7 @@ func TestSetupGuideReview_QuitButtonQuits(t *testing.T) {
 		phase:      phaseSetupGuide,
 		setupGuide: sg,
 		config:     &shop.Config{},
-		watchers:   make(map[string]*executor.Process),
+		watchers:   make(map[string]*watcherHandle),
 	}
 
 	_, cmd := m.Update(tea.KeyPressMsg(tea.Key{Code: tea.KeyEnter}))
@@ -75,7 +74,7 @@ func TestSetupGuideReview_SaveButtonDoesNotQuit(t *testing.T) {
 		setupGuide:  sg,
 		config:      &shop.Config{},
 		projectRoot: t.TempDir(),
-		watchers:    make(map[string]*executor.Process),
+		watchers:    make(map[string]*watcherHandle),
 	}
 
 	updated, cmd := m.Update(tea.KeyPressMsg(tea.Key{Code: tea.KeyEnter}))

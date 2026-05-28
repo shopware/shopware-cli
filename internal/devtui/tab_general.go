@@ -1,12 +1,16 @@
 package devtui
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
 
@@ -55,9 +59,70 @@ type shopwareVersionLoadedMsg struct {
 	version string
 }
 
-type watcherStartedMsg struct {
-	name    string
+// watcherHandle is shared between the goroutine running a watcher's preparation
+// steps and the UI model. The goroutine stores the dev-server process on it once
+// preparation succeeds, so the model can stop it later. Stopping before that
+// cancels the preparation context so an in-flight prepare does not start an
+// orphan dev server after the UI has marked the watcher as stopped.
+type watcherHandle struct {
+	mu      sync.Mutex
+	cancel  context.CancelFunc
 	process *executor.Process
+	stopped bool
+}
+
+// begin returns the cancellable context for the preparation steps. If the
+// watcher was already stopped before preparation started, the returned context
+// is already cancelled.
+func (h *watcherHandle) begin(parent context.Context) context.Context {
+	ctx, cancel := context.WithCancel(parent)
+	h.mu.Lock()
+	h.cancel = cancel
+	stopped := h.stopped
+	h.mu.Unlock()
+	if stopped {
+		cancel()
+	}
+	return ctx
+}
+
+// set stores the started dev-server process. It reports whether the watcher was
+// already stopped, in which case the caller must not keep the process running.
+func (h *watcherHandle) set(p *executor.Process) (alreadyStopped bool) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if h.stopped {
+		return true
+	}
+	h.process = p
+	return false
+}
+
+func (h *watcherHandle) isStopped() bool {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	return h.stopped
+}
+
+func (h *watcherHandle) stop(ctx context.Context) {
+	h.mu.Lock()
+	h.stopped = true
+	p := h.process
+	cancel := h.cancel
+	h.mu.Unlock()
+
+	if cancel != nil {
+		cancel()
+	}
+	if p != nil {
+		_ = p.Stop(ctx)
+	}
+}
+
+type watcherStartedMsg struct {
+	name   string
+	handle *watcherHandle
+	lines  <-chan string
 }
 type watcherStoppedMsg struct {
 	name string
@@ -181,19 +246,19 @@ func (m *GeneralModel) startAdminWatch() tea.Cmd {
 	projectRoot := m.projectRoot
 	shopCfg := m.shopCfg
 
-	return func() tea.Msg {
-		ctx := logging.DisableLogger(context.Background())
+	return startWatcher(watcherAdmin, func(ctx context.Context, out io.Writer) (*executor.Process, error) {
+		logStep(out, "Preparing plugins.json...")
 		if err := extension.WriteProjectPluginJson(ctx, projectRoot, shopCfg, e); err != nil {
-			return watcherStoppedMsg{name: watcherAdmin, err: fmt.Errorf("preparing plugins.json: %w", err)}
+			return nil, fmt.Errorf("preparing plugins.json: %w", err)
 		}
 
-		watchProcess, err := extension.PrepareAdminWatcher(ctx, projectRoot, e)
+		watchProcess, err := extension.PrepareAdminWatcher(ctx, projectRoot, e, out)
 		if err != nil {
-			return watcherStoppedMsg{name: watcherAdmin, err: fmt.Errorf("starting admin watcher: %w", err)}
+			return nil, fmt.Errorf("starting admin watcher: %w", err)
 		}
 
-		return watcherStartedMsg{name: watcherAdmin, process: watchProcess}
-	}
+		return watchProcess, nil
+	})
 }
 
 func (m *GeneralModel) startStorefrontWatch(opts extension.StorefrontWatcherOptions) tea.Cmd {
@@ -201,18 +266,93 @@ func (m *GeneralModel) startStorefrontWatch(opts extension.StorefrontWatcherOpti
 	projectRoot := m.projectRoot
 	shopCfg := m.shopCfg
 
-	return func() tea.Msg {
-		ctx := logging.DisableLogger(context.Background())
+	return startWatcher(watcherStorefront, func(ctx context.Context, out io.Writer) (*executor.Process, error) {
+		logStep(out, "Preparing plugins.json...")
 		if err := extension.WriteProjectPluginJson(ctx, projectRoot, shopCfg, e); err != nil {
-			return watcherStoppedMsg{name: watcherStorefront, err: fmt.Errorf("preparing plugins.json: %w", err)}
+			return nil, fmt.Errorf("preparing plugins.json: %w", err)
 		}
 
-		watchProcess, err := extension.PrepareStorefrontWatcher(ctx, projectRoot, e, opts)
+		watchProcess, err := extension.PrepareStorefrontWatcher(ctx, projectRoot, e, opts, out)
 		if err != nil {
-			return watcherStoppedMsg{name: watcherStorefront, err: fmt.Errorf("starting storefront watcher: %w", err)}
+			return nil, fmt.Errorf("starting storefront watcher: %w", err)
 		}
 
-		return watcherStartedMsg{name: watcherStorefront, process: watchProcess}
+		return watchProcess, nil
+	})
+}
+
+// logStep mirrors extension.logStep for prep work done inside devtui itself.
+func logStep(out io.Writer, msg string) {
+	_, _ = fmt.Fprintf(out, "\n> %s\n", msg)
+}
+
+// startWatcher runs a watcher's preparation steps in the background, streaming
+// all of their output (including npm install) into a line channel that is shown
+// live in the Logs tab. The watcher process started by prepare is streamed into
+// the same channel and stored on the returned handle so it can be stopped later.
+func startWatcher(name string, prepare func(ctx context.Context, out io.Writer) (*executor.Process, error)) tea.Cmd {
+	return func() tea.Msg {
+		handle := &watcherHandle{}
+		lines := make(chan string, streamBufferSize)
+
+		go func() {
+			defer close(lines)
+
+			ctx := handle.begin(logging.DisableLogger(context.Background()))
+			pr, pw := io.Pipe()
+
+			scanDone := make(chan struct{})
+			go func() {
+				defer close(scanDone)
+				scanner := bufio.NewScanner(pr)
+				scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
+				for scanner.Scan() {
+					lines <- scanner.Text()
+				}
+			}()
+
+			process, err := prepare(ctx, pw)
+			// Stop streaming the preparation output before handling the process so
+			// the prep scanner drains and following process output stays ordered.
+			_ = pw.Close()
+			<-scanDone
+
+			if err != nil {
+				lines <- errorStyle.Render(err.Error())
+				return
+			}
+
+			// If the user stopped the watcher while prepare was running, do not
+			// keep the freshly started dev server around as an orphan.
+			if handle.set(process) {
+				stopCtx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+				_ = process.Stop(stopCtx)
+				cancel()
+				return
+			}
+
+			lines <- helpStyle.Render("> Starting watcher...")
+
+			stdout, err := process.StartCombined()
+			if err != nil {
+				lines <- errorStyle.Render(err.Error())
+				return
+			}
+
+			scanner := bufio.NewScanner(stdout)
+			scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
+			for scanner.Scan() {
+				lines <- scanner.Text()
+			}
+			// Surface a non-zero exit (e.g. the dev server crashing on a busy
+			// port) unless the user stopped the watcher, where the signal-induced
+			// exit error is expected.
+			if runErr := process.Wait(); runErr != nil && !handle.isStopped() {
+				lines <- errorStyle.Render(runErr.Error())
+			}
+		}()
+
+		return watcherStartedMsg{name: name, handle: handle, lines: lines}
 	}
 }
 

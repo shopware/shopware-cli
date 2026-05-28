@@ -2,6 +2,7 @@ package extension
 
 import (
 	"context"
+	"io"
 	"os"
 	"strings"
 
@@ -14,8 +15,13 @@ type StorefrontWatcherOptions struct {
 	DomainURL string
 }
 
-func PrepareStorefrontWatcher(ctx context.Context, projectRoot string, cmdExecutor executor.Executor, opts StorefrontWatcherOptions) (*executor.Process, error) {
-	if err := cmdExecutor.ConsoleCommand(ctx, "feature:dump").Run(); err != nil {
+// PrepareStorefrontWatcher runs the storefront watcher preparation steps and
+// returns the hot-proxy process. When out is non-nil, the output of every
+// preparation step (feature:dump, theme:compile, theme:dump, npm install) is
+// streamed to it so the steps are not silent while they run.
+func PrepareStorefrontWatcher(ctx context.Context, projectRoot string, cmdExecutor executor.Executor, opts StorefrontWatcherOptions, out io.Writer) (*executor.Process, error) {
+	logStep(out, "Dumping features...")
+	if err := runStep(ctx, cmdExecutor, out, "feature:dump"); err != nil {
 		return nil, err
 	}
 
@@ -24,7 +30,8 @@ func PrepareStorefrontWatcher(ctx context.Context, projectRoot string, cmdExecut
 		activeOnly = "-v"
 	}
 
-	if err := cmdExecutor.ConsoleCommand(ctx, "theme:compile", activeOnly).Run(); err != nil {
+	logStep(out, "Compiling theme...")
+	if err := runStep(ctx, cmdExecutor, out, "theme:compile", activeOnly); err != nil {
 		return nil, err
 	}
 
@@ -36,7 +43,8 @@ func PrepareStorefrontWatcher(ctx context.Context, projectRoot string, cmdExecut
 		}
 	}
 
-	if err := cmdExecutor.ConsoleCommand(ctx, dumpArgs...).Run(); err != nil {
+	logStep(out, "Dumping theme...")
+	if err := runStep(ctx, cmdExecutor, out, dumpArgs...); err != nil {
 		return nil, err
 	}
 
@@ -44,7 +52,8 @@ func PrepareStorefrontWatcher(ctx context.Context, projectRoot string, cmdExecut
 	storefrontExecutor := cmdExecutor.WithRelDir(storefrontRelPath)
 
 	if _, err := os.Stat(PlatformPath(projectRoot, "Storefront", "Resources/app/storefront/node_modules/webpack-dev-server")); os.IsNotExist(err) {
-		if err := npm.InstallDependencies(ctx, storefrontExecutor, npm.NonEmptyPackage); err != nil {
+		logStep(out, "Installing npm dependencies (this can take a few minutes)...")
+		if err := npm.InstallDependenciesStreamed(ctx, storefrontExecutor, npm.NonEmptyPackage, out); err != nil {
 			return nil, err
 		}
 	}

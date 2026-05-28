@@ -9,7 +9,6 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"github.com/stretchr/testify/assert"
 
-	"github.com/shopware/shopware-cli/internal/executor"
 	"github.com/shopware/shopware-cli/internal/shop"
 )
 
@@ -20,7 +19,7 @@ func newLifecycleModel(t *testing.T) Model {
 		projectRoot: t.TempDir(),
 		config:      &shop.Config{},
 		envConfig:   &shop.EnvironmentConfig{},
-		watchers:    make(map[string]*executor.Process),
+		watchers:    make(map[string]*watcherHandle),
 	}
 }
 
@@ -166,7 +165,7 @@ func TestUpdateLifecycle_ShopwareInstallDone_Success(t *testing.T) {
 		projectRoot: dir,
 		config:      &shop.Config{URL: "http://127.0.0.1:8000"},
 		envConfig:   &shop.EnvironmentConfig{},
-		watchers:    make(map[string]*executor.Process),
+		watchers:    make(map[string]*watcherHandle),
 		install: installWizard{
 			step:     installStepPassword,
 			username: usernameInput,
@@ -206,7 +205,7 @@ func TestUpdateLifecycle_ShopwareInstallDone_ErrorShowsLogs(t *testing.T) {
 		projectRoot: t.TempDir(),
 		config:      &shop.Config{},
 		envConfig:   &shop.EnvironmentConfig{},
-		watchers:    make(map[string]*executor.Process),
+		watchers:    make(map[string]*watcherHandle),
 		install: installWizard{
 			username: usernameInput,
 			password: passwordInput,
