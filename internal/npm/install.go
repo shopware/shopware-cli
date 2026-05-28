@@ -3,6 +3,7 @@ package npm
 import (
 	"context"
 	"fmt"
+	"io"
 
 	"github.com/shopware/shopware-cli/internal/executor"
 	"github.com/shopware/shopware-cli/logging"
@@ -11,6 +12,13 @@ import (
 // InstallDependencies runs npm install using the given executor.
 // Additional parameters can be passed to customize the install behavior.
 func InstallDependencies(ctx context.Context, exec executor.Executor, pkg *Package, additionalParams ...string) error {
+	return InstallDependenciesStreamed(ctx, exec, pkg, nil, additionalParams...)
+}
+
+// InstallDependenciesStreamed behaves like InstallDependencies but, when out is
+// non-nil, streams the combined npm output to it live instead of buffering it
+// and only surfacing it on failure.
+func InstallDependenciesStreamed(ctx context.Context, exec executor.Executor, pkg *Package, out io.Writer, additionalParams ...string) error {
 	isProductionMode := false
 
 	for _, param := range additionalParams {
@@ -35,6 +43,13 @@ func InstallDependencies(ctx context.Context, exec executor.Executor, pkg *Packa
 	})
 
 	installProcess := withEnv.NPMCommand(ctx, args...)
+
+	if out != nil {
+		if err := installProcess.RunWithOutput(out); err != nil {
+			return fmt.Errorf("installing dependencies failed with error: %w", err)
+		}
+		return nil
+	}
 
 	combinedOutput, err := installProcess.CombinedOutput()
 	if err != nil {

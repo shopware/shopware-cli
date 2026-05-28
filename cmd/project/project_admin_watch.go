@@ -2,6 +2,7 @@ package project
 
 import (
 	"context"
+	"os"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -43,7 +44,7 @@ var projectAdminWatchCmd = &cobra.Command{
 			return err
 		}
 
-		watchProcess, err := extension.PrepareAdminWatcher(cmd.Context(), projectRoot, cmdExecutor)
+		watchProcess, err := extension.PrepareAdminWatcher(cmd.Context(), projectRoot, cmdExecutor, os.Stdout)
 		if err != nil {
 			return err
 		}

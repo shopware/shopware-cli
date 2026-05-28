@@ -28,6 +28,13 @@ func (p *Process) Run() error {
 	return p.Cmd.Run()
 }
 
+// RunWithOutput runs the command and streams its combined stdout/stderr to w.
+func (p *Process) RunWithOutput(w io.Writer) error {
+	p.Cmd.Stdout = w
+	p.Cmd.Stderr = w
+	return p.Cmd.Run()
+}
+
 func (p *Process) Output() ([]byte, error) {
 	return p.Cmd.Output()
 }

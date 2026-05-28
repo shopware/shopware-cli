@@ -200,14 +200,14 @@ func (m Model) executeCommand(id string) (tea.Model, tea.Cmd) {
 func (m *Model) stopWatcher(name string) tea.Cmd {
 	m.logs.StopStreaming()
 
-	p := m.watchers[name]
+	h := m.watchers[name]
 	delete(m.watchers, name)
 
 	return func() tea.Msg {
-		if p != nil {
+		if h != nil {
 			stopCtx, stopCancel := context.WithTimeout(context.Background(), 3*time.Second)
 			defer stopCancel()
-			_ = p.Stop(stopCtx)
+			h.stop(stopCtx)
 		}
 
 		return watcherStoppedMsg{name: name}

@@ -1,12 +1,15 @@
 package devtui
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 
 	tea "charm.land/bubbletea/v2"
 
@@ -55,9 +58,33 @@ type shopwareVersionLoadedMsg struct {
 	version string
 }
 
-type watcherStartedMsg struct {
-	name    string
+// watcherHandle is shared between the goroutine running a watcher's preparation
+// steps and the UI model. The goroutine stores the dev-server process on it once
+// preparation succeeds, so the model can stop it later.
+type watcherHandle struct {
+	mu      sync.Mutex
 	process *executor.Process
+}
+
+func (h *watcherHandle) set(p *executor.Process) {
+	h.mu.Lock()
+	h.process = p
+	h.mu.Unlock()
+}
+
+func (h *watcherHandle) stop(ctx context.Context) {
+	h.mu.Lock()
+	p := h.process
+	h.mu.Unlock()
+	if p != nil {
+		_ = p.Stop(ctx)
+	}
+}
+
+type watcherStartedMsg struct {
+	name   string
+	handle *watcherHandle
+	lines  <-chan string
 }
 type watcherStoppedMsg struct {
 	name string
@@ -181,19 +208,19 @@ func (m *GeneralModel) startAdminWatch() tea.Cmd {
 	projectRoot := m.projectRoot
 	shopCfg := m.shopCfg
 
-	return func() tea.Msg {
-		ctx := logging.DisableLogger(context.Background())
+	return startWatcher(watcherAdmin, func(ctx context.Context, out io.Writer) (*executor.Process, error) {
+		logStep(out, "Preparing plugins.json...")
 		if err := extension.WriteProjectPluginJson(ctx, projectRoot, shopCfg, e); err != nil {
-			return watcherStoppedMsg{name: watcherAdmin, err: fmt.Errorf("preparing plugins.json: %w", err)}
+			return nil, fmt.Errorf("preparing plugins.json: %w", err)
 		}
 
-		watchProcess, err := extension.PrepareAdminWatcher(ctx, projectRoot, e)
+		watchProcess, err := extension.PrepareAdminWatcher(ctx, projectRoot, e, out)
 		if err != nil {
-			return watcherStoppedMsg{name: watcherAdmin, err: fmt.Errorf("starting admin watcher: %w", err)}
+			return nil, fmt.Errorf("starting admin watcher: %w", err)
 		}
 
-		return watcherStartedMsg{name: watcherAdmin, process: watchProcess}
-	}
+		return watchProcess, nil
+	})
 }
 
 func (m *GeneralModel) startStorefrontWatch(opts extension.StorefrontWatcherOptions) tea.Cmd {
@@ -201,18 +228,71 @@ func (m *GeneralModel) startStorefrontWatch(opts extension.StorefrontWatcherOpti
 	projectRoot := m.projectRoot
 	shopCfg := m.shopCfg
 
-	return func() tea.Msg {
-		ctx := logging.DisableLogger(context.Background())
+	return startWatcher(watcherStorefront, func(ctx context.Context, out io.Writer) (*executor.Process, error) {
+		logStep(out, "Preparing plugins.json...")
 		if err := extension.WriteProjectPluginJson(ctx, projectRoot, shopCfg, e); err != nil {
-			return watcherStoppedMsg{name: watcherStorefront, err: fmt.Errorf("preparing plugins.json: %w", err)}
+			return nil, fmt.Errorf("preparing plugins.json: %w", err)
 		}
 
-		watchProcess, err := extension.PrepareStorefrontWatcher(ctx, projectRoot, e, opts)
+		watchProcess, err := extension.PrepareStorefrontWatcher(ctx, projectRoot, e, opts, out)
 		if err != nil {
-			return watcherStoppedMsg{name: watcherStorefront, err: fmt.Errorf("starting storefront watcher: %w", err)}
+			return nil, fmt.Errorf("starting storefront watcher: %w", err)
 		}
 
-		return watcherStartedMsg{name: watcherStorefront, process: watchProcess}
+		return watchProcess, nil
+	})
+}
+
+// logStep mirrors extension.logStep for prep work done inside devtui itself.
+func logStep(out io.Writer, msg string) {
+	_, _ = fmt.Fprintf(out, "\n> %s\n", msg)
+}
+
+// startWatcher runs a watcher's preparation steps in the background, streaming
+// all of their output (including npm install) into a line channel that is shown
+// live in the Logs tab. The watcher process started by prepare is streamed into
+// the same channel and stored on the returned handle so it can be stopped later.
+func startWatcher(name string, prepare func(ctx context.Context, out io.Writer) (*executor.Process, error)) tea.Cmd {
+	return func() tea.Msg {
+		handle := &watcherHandle{}
+		lines := make(chan string, streamBufferSize)
+
+		go func() {
+			defer close(lines)
+
+			ctx := logging.DisableLogger(context.Background())
+			pr, pw := io.Pipe()
+
+			scanDone := make(chan struct{})
+			go func() {
+				defer close(scanDone)
+				scanner := bufio.NewScanner(pr)
+				scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
+				for scanner.Scan() {
+					lines <- scanner.Text()
+				}
+			}()
+
+			process, err := prepare(ctx, pw)
+			if err != nil {
+				_ = pw.CloseWithError(err)
+				<-scanDone
+				lines <- errorStyle.Render(err.Error())
+				return
+			}
+
+			handle.set(process)
+			logStep(pw, "Starting watcher...")
+			runErr := process.RunWithOutput(pw)
+			_ = pw.Close()
+			<-scanDone
+
+			if runErr != nil {
+				lines <- errorStyle.Render(runErr.Error())
+			}
+		}()
+
+		return watcherStartedMsg{name: name, handle: handle, lines: lines}
 	}
 }
 

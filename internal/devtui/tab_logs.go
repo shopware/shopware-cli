@@ -21,6 +21,7 @@ type logSource struct {
 	container string
 	filePath  string
 	process   *executor.Process
+	lineChan  <-chan string
 	dead      bool
 }
 
@@ -82,8 +83,11 @@ func (m LogsModel) Update(msg tea.Msg) (LogsModel, tea.Cmd) {
 	case logDoneMsg:
 		m.lines = append(m.lines, helpStyle.Render("--- log stream ended ---"))
 		m.viewport.SetContent(strings.Join(m.lines, "\n"))
-		if m.active >= 0 && m.active < len(m.sources) && m.sources[m.active].process != nil {
-			m.sources[m.active].dead = true
+		if m.active >= 0 && m.active < len(m.sources) {
+			src := m.sources[m.active]
+			if src.process != nil || src.lineChan != nil {
+				m.sources[m.active].dead = true
+			}
 		}
 		return m, nil
 
@@ -246,6 +250,37 @@ func (m *LogsModel) AddProcessSource(name string, process *executor.Process) tea
 	return m.streamProcess(src)
 }
 
+// AddStreamingSource registers a log source backed by an externally fed line
+// channel (e.g. a watcher's preparation steps) and starts displaying it live.
+func (m *LogsModel) AddStreamingSource(name string, lineChan <-chan string) tea.Cmd {
+	m.stopStreaming()
+
+	src := logSource{name: name, lineChan: lineChan}
+
+	idx := -1
+	for i, s := range m.sources {
+		if s.name == name {
+			m.sources[i] = src
+			idx = i
+			break
+		}
+	}
+	if idx == -1 {
+		m.sources = append(m.sources, src)
+		idx = len(m.sources) - 1
+	}
+
+	m.active = idx
+	m.cursor = idx
+	m.lines = nil
+	m.follow = true
+	m.viewport.SetContent("")
+	m.viewport.GotoTop()
+
+	m.logChan = lineChan
+	return m.waitForNextLine()
+}
+
 func (m *LogsModel) StopStreaming() {
 	m.stopStreaming()
 }
@@ -261,7 +296,7 @@ func (m *LogsModel) AppendErrorLine(msg string) {
 func (m *LogsModel) ActiveProcessSourceName() string {
 	if m.active >= 0 && m.active < len(m.sources) {
 		src := m.sources[m.active]
-		if src.process != nil {
+		if src.process != nil || src.lineChan != nil {
 			return src.name
 		}
 	}
@@ -283,6 +318,14 @@ func (m *LogsModel) startCurrentSource() tea.Cmd {
 	}
 
 	src := m.sources[m.active]
+
+	if src.lineChan != nil {
+		if src.dead {
+			return nil
+		}
+		m.logChan = src.lineChan
+		return m.waitForNextLine()
+	}
 
 	if src.process != nil {
 		if src.dead {

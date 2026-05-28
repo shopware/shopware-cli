@@ -72,7 +72,7 @@ type Model struct {
 	taskTitle      string
 	taskDone       bool
 	taskErr        error
-	watchers       map[string]*executor.Process
+	watchers       map[string]*watcherHandle
 	setupGuide     setupGuide
 }
 
@@ -122,7 +122,7 @@ func New(opts Options) Model {
 		executor:    opts.Executor,
 		config:      opts.Config,
 		envConfig:   opts.EnvConfig,
-		watchers:    make(map[string]*executor.Process),
+		watchers:    make(map[string]*watcherHandle),
 	}
 }
 
@@ -152,8 +152,8 @@ func (m *Model) shutdown() {
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 
-	for name, p := range m.watchers {
-		_ = p.Stop(ctx)
+	for name, h := range m.watchers {
+		h.stop(ctx)
 		delete(m.watchers, name)
 	}
 }
@@ -202,9 +202,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.general.sfWatchStarting = false
 			m.general.sfWatchRunning = true
 		}
-		m.watchers[msg.name] = msg.process
+		m.watchers[msg.name] = msg.handle
 		m.activeTab = tabLogs
-		return m, m.logs.AddProcessSource(msg.name, msg.process)
+		return m, m.logs.AddStreamingSource(msg.name, msg.lines)
 
 	case watcherStoppedMsg:
 		switch msg.name {
