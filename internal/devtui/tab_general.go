@@ -98,6 +98,12 @@ func (h *watcherHandle) set(p *executor.Process) (alreadyStopped bool) {
 	return false
 }
 
+func (h *watcherHandle) isStopped() bool {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	return h.stopped
+}
+
 func (h *watcherHandle) stop(ctx context.Context) {
 	h.mu.Lock()
 	h.stopped = true
@@ -306,9 +312,12 @@ func startWatcher(name string, prepare func(ctx context.Context, out io.Writer) 
 			}()
 
 			process, err := prepare(ctx, pw)
+			// Stop streaming the preparation output before handling the process so
+			// the prep scanner drains and following process output stays ordered.
+			_ = pw.Close()
+			<-scanDone
+
 			if err != nil {
-				_ = pw.CloseWithError(err)
-				<-scanDone
 				lines <- errorStyle.Render(err.Error())
 				return
 			}
@@ -319,17 +328,26 @@ func startWatcher(name string, prepare func(ctx context.Context, out io.Writer) 
 				stopCtx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 				_ = process.Stop(stopCtx)
 				cancel()
-				_ = pw.Close()
-				<-scanDone
 				return
 			}
 
-			logStep(pw, "Starting watcher...")
-			runErr := process.RunWithOutput(pw)
-			_ = pw.Close()
-			<-scanDone
+			lines <- helpStyle.Render("> Starting watcher...")
 
-			if runErr != nil {
+			stdout, err := process.StartCombined()
+			if err != nil {
+				lines <- errorStyle.Render(err.Error())
+				return
+			}
+
+			scanner := bufio.NewScanner(stdout)
+			scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
+			for scanner.Scan() {
+				lines <- scanner.Text()
+			}
+			// Surface a non-zero exit (e.g. the dev server crashing on a busy
+			// port) unless the user stopped the watcher, where the signal-induced
+			// exit error is expected.
+			if runErr := process.Wait(); runErr != nil && !handle.isStopped() {
 				lines <- errorStyle.Render(runErr.Error())
 			}
 		}()
