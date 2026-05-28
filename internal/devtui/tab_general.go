@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
 
@@ -60,22 +61,53 @@ type shopwareVersionLoadedMsg struct {
 
 // watcherHandle is shared between the goroutine running a watcher's preparation
 // steps and the UI model. The goroutine stores the dev-server process on it once
-// preparation succeeds, so the model can stop it later.
+// preparation succeeds, so the model can stop it later. Stopping before that
+// cancels the preparation context so an in-flight prepare does not start an
+// orphan dev server after the UI has marked the watcher as stopped.
 type watcherHandle struct {
 	mu      sync.Mutex
+	cancel  context.CancelFunc
 	process *executor.Process
+	stopped bool
 }
 
-func (h *watcherHandle) set(p *executor.Process) {
+// begin returns the cancellable context for the preparation steps. If the
+// watcher was already stopped before preparation started, the returned context
+// is already cancelled.
+func (h *watcherHandle) begin(parent context.Context) context.Context {
+	ctx, cancel := context.WithCancel(parent)
 	h.mu.Lock()
-	h.process = p
+	h.cancel = cancel
+	stopped := h.stopped
 	h.mu.Unlock()
+	if stopped {
+		cancel()
+	}
+	return ctx
+}
+
+// set stores the started dev-server process. It reports whether the watcher was
+// already stopped, in which case the caller must not keep the process running.
+func (h *watcherHandle) set(p *executor.Process) (alreadyStopped bool) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if h.stopped {
+		return true
+	}
+	h.process = p
+	return false
 }
 
 func (h *watcherHandle) stop(ctx context.Context) {
 	h.mu.Lock()
+	h.stopped = true
 	p := h.process
+	cancel := h.cancel
 	h.mu.Unlock()
+
+	if cancel != nil {
+		cancel()
+	}
 	if p != nil {
 		_ = p.Stop(ctx)
 	}
@@ -260,7 +292,7 @@ func startWatcher(name string, prepare func(ctx context.Context, out io.Writer) 
 		go func() {
 			defer close(lines)
 
-			ctx := logging.DisableLogger(context.Background())
+			ctx := handle.begin(logging.DisableLogger(context.Background()))
 			pr, pw := io.Pipe()
 
 			scanDone := make(chan struct{})
@@ -281,7 +313,17 @@ func startWatcher(name string, prepare func(ctx context.Context, out io.Writer) 
 				return
 			}
 
-			handle.set(process)
+			// If the user stopped the watcher while prepare was running, do not
+			// keep the freshly started dev server around as an orphan.
+			if handle.set(process) {
+				stopCtx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+				_ = process.Stop(stopCtx)
+				cancel()
+				_ = pw.Close()
+				<-scanDone
+				return
+			}
+
 			logStep(pw, "Starting watcher...")
 			runErr := process.RunWithOutput(pw)
 			_ = pw.Close()
