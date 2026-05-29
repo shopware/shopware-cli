@@ -7,7 +7,71 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+
+	"github.com/shopware/shopware-cli/internal/git"
 )
+
+// clearCIEnv unsets every CI environment variable that ci.IsCI checks so that
+// guardDestructiveCIRun is evaluated as if running on a local workspace, even
+// when the test suite itself runs in CI. Keep this list in sync with
+// internal/ci.ciEnvVars.
+func clearCIEnv(t *testing.T) {
+	t.Helper()
+	for _, env := range []string{
+		"CI",
+		"GITHUB_ACTIONS",
+		"GITLAB_CI",
+		"BITBUCKET_BUILD_NUMBER",
+		"JENKINS_URL",
+		"TEAMCITY_VERSION",
+		"BUILDKITE",
+		"DRONE",
+	} {
+		t.Setenv(env, "")
+	}
+}
+
+// initDirtyRepo creates a git repository with an untracked file, so its working
+// tree is dirty.
+func initDirtyRepo(t *testing.T) string {
+	t.Helper()
+	dir := t.TempDir()
+	assert.NoError(t, git.Init(t.Context(), dir))
+	assert.NoError(t, os.WriteFile(filepath.Join(dir, "main.ts"), []byte("x"), 0o644))
+	return dir
+}
+
+func TestGuardDestructiveCIRun(t *testing.T) {
+	t.Run("force always proceeds", func(t *testing.T) {
+		clearCIEnv(t)
+		assert.NoError(t, guardDestructiveCIRun(t.Context(), initDirtyRepo(t), true))
+	})
+
+	t.Run("CI environment proceeds", func(t *testing.T) {
+		clearCIEnv(t)
+		t.Setenv("CI", "true")
+		assert.NoError(t, guardDestructiveCIRun(t.Context(), initDirtyRepo(t), false))
+	})
+
+	t.Run("dirty working tree refuses", func(t *testing.T) {
+		clearCIEnv(t)
+		err := guardDestructiveCIRun(t.Context(), initDirtyRepo(t), false)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "--force")
+	})
+
+	t.Run("clean working tree proceeds", func(t *testing.T) {
+		clearCIEnv(t)
+		dir := t.TempDir()
+		assert.NoError(t, git.Init(t.Context(), dir))
+		assert.NoError(t, guardDestructiveCIRun(t.Context(), dir, false))
+	})
+
+	t.Run("no git repository proceeds", func(t *testing.T) {
+		clearCIEnv(t)
+		assert.NoError(t, guardDestructiveCIRun(t.Context(), t.TempDir(), false))
+	})
+}
 
 func TestGenerateProjectSBOM(t *testing.T) {
 	root := t.TempDir()

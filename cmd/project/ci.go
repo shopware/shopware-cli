@@ -15,6 +15,7 @@ import (
 	"github.com/shopware/shopware-cli/internal/ci"
 	"github.com/shopware/shopware-cli/internal/executor"
 	"github.com/shopware/shopware-cli/internal/extension"
+	"github.com/shopware/shopware-cli/internal/git"
 	"github.com/shopware/shopware-cli/internal/mjml"
 	"github.com/shopware/shopware-cli/internal/packagist"
 	"github.com/shopware/shopware-cli/internal/sbom"
@@ -43,6 +44,11 @@ var projectCI = &cobra.Command{
 		var err error
 		args[0], err = filepath.Abs(args[0])
 		if err != nil {
+			return err
+		}
+
+		force, _ := cmd.Flags().GetBool("force")
+		if err := guardDestructiveCIRun(cmd.Context(), args[0], force); err != nil {
 			return err
 		}
 
@@ -329,6 +335,46 @@ var projectCI = &cobra.Command{
 	},
 }
 
+// guardDestructiveCIRun protects developers from accidentally running the
+// destructive `project ci` build on a local workspace. The command deletes
+// administration source folders and writes build stubs, which is expected in
+// CI but destroys uncommitted work when run by hand (see issue #1071).
+//
+// The rules are:
+//   - --force or a CI environment: always proceed.
+//   - outside CI on a git working tree with uncommitted changes: refuse.
+//   - outside CI on a clean git working tree: warn but proceed.
+//   - outside CI without a git repository: warn but proceed.
+func guardDestructiveCIRun(ctx context.Context, root string, force bool) error {
+	if force || ci.IsCI() {
+		return nil
+	}
+
+	if git.IsRepository(ctx, root) {
+		dirty, err := git.IsDirty(ctx, root)
+		if err != nil {
+			return err
+		}
+
+		if dirty {
+			return fmt.Errorf(
+				"refusing to run 'project ci' on a git working tree with uncommitted changes outside of CI: "+
+					"this command deletes administration sources (e.g. %q and each plugin's Resources/app/administration) "+
+					"and writes build stubs, which would overwrite your local changes. "+
+					"Commit or stash your changes, or re-run with --force to proceed anyway",
+				path.Join("vendor", "shopware", "administration", "Resources", "app", "administration"),
+			)
+		}
+	}
+
+	logging.FromContext(ctx).Warnf(
+		"'project ci' is a destructive build command intended for CI: it deletes administration source folders and writes build stubs. " +
+			"Continuing outside CI; pass --force to silence this warning.",
+	)
+
+	return nil
+}
+
 func createEmptySnippetFolder(root string) error {
 	dirs := []string{
 		"Resources/app/administration/src/app/snippet",
@@ -431,6 +477,7 @@ func prepareComposerAuth(ctx context.Context, root string) (string, error) {
 func init() {
 	projectRootCmd.AddCommand(projectCI)
 	projectCI.PersistentFlags().Bool("with-dev-dependencies", false, "Install dev dependencies")
+	projectCI.Flags().Bool("force", false, "Run even outside of CI on a dirty git working tree (this command is destructive)")
 }
 
 func runTransparentCommand(p *executor.Process) error {

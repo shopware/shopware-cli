@@ -94,6 +94,47 @@ func TestGetPublicVCSURL(t *testing.T) {
 	assert.NoError(t, err)
 }
 
+func TestIsRepository(t *testing.T) {
+	t.Parallel()
+	tmpDir := t.TempDir()
+
+	// A plain directory is not a git repository.
+	assert.False(t, IsRepository(t.Context(), tmpDir))
+
+	prepareRepository(t, tmpDir)
+	assert.True(t, IsRepository(t.Context(), tmpDir))
+}
+
+func TestIsDirty(t *testing.T) {
+	t.Parallel()
+	tmpDir := t.TempDir()
+	prepareRepository(t, tmpDir)
+
+	// A fresh repository without files is clean.
+	dirty, err := IsDirty(t.Context(), tmpDir)
+	assert.NoError(t, err)
+	assert.False(t, dirty)
+
+	// An untracked file makes the tree dirty.
+	assert.NoError(t, os.WriteFile(filepath.Join(tmpDir, "a"), []byte(""), 0o644))
+	dirty, err = IsDirty(t.Context(), tmpDir)
+	assert.NoError(t, err)
+	assert.True(t, dirty)
+
+	// Committing the file makes the tree clean again.
+	runCommand(t, tmpDir, "add", "a")
+	runCommand(t, tmpDir, "commit", "-m", "add a", "--no-verify", "--no-gpg-sign")
+	dirty, err = IsDirty(t.Context(), tmpDir)
+	assert.NoError(t, err)
+	assert.False(t, dirty)
+
+	// Modifying a tracked file makes the tree dirty again.
+	assert.NoError(t, os.WriteFile(filepath.Join(tmpDir, "a"), []byte("changed"), 0o644))
+	dirty, err = IsDirty(t.Context(), tmpDir)
+	assert.NoError(t, err)
+	assert.True(t, dirty)
+}
+
 func runCommand(t *testing.T, tmpDir string, args ...string) {
 	t.Helper()
 

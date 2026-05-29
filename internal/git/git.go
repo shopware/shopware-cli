@@ -200,3 +200,25 @@ func Init(ctx context.Context, repo string) error {
 	_, err := runGit(ctx, repo, "init")
 	return err
 }
+
+// IsRepository reports whether repo is inside a git working tree. It returns
+// false when repo is not a git repository or when git is not available.
+func IsRepository(ctx context.Context, repo string) bool {
+	out, err := runGit(ctx, repo, "rev-parse", "--is-inside-work-tree")
+	if err != nil {
+		return false
+	}
+
+	return strings.TrimSpace(out) == "true"
+}
+
+// IsDirty reports whether the git working tree at repo has uncommitted or
+// untracked changes. Ignored files are not considered.
+func IsDirty(ctx context.Context, repo string) (bool, error) {
+	out, err := runGit(ctx, repo, "status", "--porcelain")
+	if err != nil {
+		return false, err
+	}
+
+	return strings.TrimSpace(out) != "", nil
+}
