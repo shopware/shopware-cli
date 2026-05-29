@@ -9,24 +9,36 @@ import (
 	"github.com/stretchr/testify/require"
 
 	account_api "github.com/shopware/shopware-cli/internal/account-api"
+	"github.com/shopware/shopware-cli/internal/tui"
 )
 
 func newTestModel(t *testing.T) wizardModel {
 	t.Helper()
+	return newTestModelWithVersions(t, []string{"6.6.4.0", "6.6.3.0", "6.5.9.0"})
+}
+
+func newTestModelWithVersions(t *testing.T, versions []string) wizardModel {
+	t.Helper()
 
 	current, err := version.NewVersion("6.5.8.0")
 	require.NoError(t, err)
+
+	opts := make([]tui.SelectOption, len(versions))
+	for i, v := range versions {
+		opts[i] = tui.SelectOption{Label: v}
+	}
 
 	m := wizardModel{
 		opts: WizardOptions{
 			ProjectRoot:      "/tmp/example",
 			ComposerJSONPath: "/tmp/example/composer.json",
 			CurrentVersion:   current,
-			UpdateVersions:   []string{"6.6.4.0", "6.6.3.0", "6.5.9.0"},
+			UpdateVersions:   versions,
 		},
-		phase:      phaseWelcome,
-		confirmYes: true,
-		tasks:      defaultTasks(),
+		phase:       phaseWelcome,
+		confirmYes:  true,
+		versionList: tui.NewSelectList("Select target version", "", opts, maxVisibleVersions),
+		tasks:       defaultTasks(),
 	}
 	return m
 }
@@ -52,7 +64,9 @@ func TestWizardWelcomeCancelQuits(t *testing.T) {
 	assert.True(t, ok, "cancel should produce QuitMsg")
 }
 
-func TestWizardSelectVersionMovesCursor(t *testing.T) {
+// Navigation/paging is owned and tested by tui.SelectList; here we only verify
+// the wizard forwards keys to it.
+func TestWizardSelectVersionForwardsNavigationToList(t *testing.T) {
 	t.Parallel()
 
 	m := newTestModel(t)
@@ -60,20 +74,7 @@ func TestWizardSelectVersionMovesCursor(t *testing.T) {
 
 	updated, _ := m.Update(tea.KeyPressMsg{Code: tea.KeyDown})
 	wm := updated.(wizardModel)
-	assert.Equal(t, 1, wm.versionCursor)
-
-	updated, _ = wm.Update(tea.KeyPressMsg{Code: tea.KeyDown})
-	wm = updated.(wizardModel)
-	assert.Equal(t, 2, wm.versionCursor)
-
-	// Past end should not wrap.
-	updated, _ = wm.Update(tea.KeyPressMsg{Code: tea.KeyDown})
-	wm = updated.(wizardModel)
-	assert.Equal(t, 2, wm.versionCursor)
-
-	updated, _ = wm.Update(tea.KeyPressMsg{Code: tea.KeyUp})
-	wm = updated.(wizardModel)
-	assert.Equal(t, 1, wm.versionCursor)
+	assert.Equal(t, 1, wm.versionList.Cursor())
 }
 
 func TestWizardSelectVersionWithoutExtensionsSkipsToReview(t *testing.T) {
@@ -81,7 +82,7 @@ func TestWizardSelectVersionWithoutExtensionsSkipsToReview(t *testing.T) {
 
 	m := newTestModel(t)
 	m.phase = phaseSelectVersion
-	m.versionCursor = 1
+	m.versionList.HandleKey("down") // move to "6.6.3.0"
 
 	updated, _ := m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
 	wm := updated.(wizardModel)

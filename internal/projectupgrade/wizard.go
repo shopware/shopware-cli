@@ -30,6 +30,10 @@ const streamBufferSize = 50
 // view doesn't grow unbounded.
 const maxLogLines = 18
 
+// maxVisibleVersions caps how many upgrade targets the version select list
+// shows at once so the card keeps a fixed height when many versions exist.
+const maxVisibleVersions = 10
+
 // WizardOptions configures a single run of the upgrade wizard.
 type WizardOptions struct {
 	ProjectRoot      string
@@ -117,7 +121,7 @@ type wizardModel struct {
 
 	phase phase
 
-	versionCursor      int
+	versionList        *tui.SelectList
 	targetVersion      string
 	confirmYes         bool
 	composerBackup     []byte
@@ -162,13 +166,27 @@ func RunWizard(opts WizardOptions) (WizardResult, error) {
 		spinner.WithStyle(lipgloss.NewStyle().Foreground(tui.BrandColor)),
 	)
 
+	versionOptions := make([]tui.SelectOption, len(opts.UpdateVersions))
+	for i, v := range opts.UpdateVersions {
+		detail := ""
+		if i == 0 {
+			detail = "latest"
+		}
+		versionOptions[i] = tui.SelectOption{Label: v, Detail: detail}
+	}
+
 	m := wizardModel{
-		opts:          opts,
-		phase:         phaseWelcome,
-		confirmYes:    true,
-		versionCursor: 0,
-		spinner:       s,
-		tasks:         defaultTasks(),
+		opts:       opts,
+		phase:      phaseWelcome,
+		confirmYes: true,
+		versionList: tui.NewSelectList(
+			"Select target version",
+			"Pick the Shopware version to upgrade to. Next-major releases are listed first.",
+			versionOptions,
+			maxVisibleVersions,
+		),
+		spinner: s,
+		tasks:   defaultTasks(),
 	}
 
 	prog := tea.NewProgram(m)
@@ -348,19 +366,19 @@ func (m wizardModel) updateWelcome(key string) (tea.Model, tea.Cmd) {
 }
 
 func (m wizardModel) updateSelectVersion(key string) (tea.Model, tea.Cmd) {
+	if m.versionList.HandleKey(key) {
+		return m, nil
+	}
+
 	switch key {
-	case "up", "k":
-		if m.versionCursor > 0 {
-			m.versionCursor--
-		}
-	case "down", "j":
-		if m.versionCursor < len(m.opts.UpdateVersions)-1 {
-			m.versionCursor++
-		}
 	case "q", "esc":
 		return m, tea.Quit
 	case "enter":
-		m.targetVersion = m.opts.UpdateVersions[m.versionCursor]
+		selected, ok := m.versionList.Selected()
+		if !ok {
+			return m, nil
+		}
+		m.targetVersion = selected.Label
 		if len(m.opts.Extensions) == 0 {
 			m.phase = phaseReview
 			m.confirmYes = true
@@ -792,26 +810,14 @@ func (m wizardModel) viewSelectVersion() string {
 	b.WriteString(stepBadge(m.stepNum(phaseSelectVersion), m.totalSteps()))
 	b.WriteString("\n\n")
 
-	opts := make([]tui.SelectOption, len(m.opts.UpdateVersions))
-	for i, v := range m.opts.UpdateVersions {
-		detail := ""
-		if i == 0 {
-			detail = "latest"
-		}
-		opts[i] = tui.SelectOption{Label: v, Detail: detail}
-	}
-	b.WriteString(tui.RenderSelectList(
-		"Select target version",
-		"Pick the Shopware version to upgrade to. Next-major releases are listed first.",
-		opts,
-		m.versionCursor,
-	))
+	b.WriteString(m.versionList.View())
 	b.WriteString("\n\n")
-	b.WriteString(m.footer(
-		tui.Shortcut{Key: "↑/↓", Label: "Select"},
+
+	shortcuts := append(m.versionList.Shortcuts(),
 		tui.Shortcut{Key: "enter", Label: "Continue"},
 		tui.Shortcut{Key: "ctrl+c", Label: "Exit"},
-	))
+	)
+	b.WriteString(m.footer(shortcuts...))
 	return tui.RenderPhaseCard(b.String())
 }
 
