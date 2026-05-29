@@ -3,6 +3,7 @@ package mjml
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
@@ -12,9 +13,58 @@ import (
 	"github.com/shopware/shopware-cli/logging"
 )
 
-func Compile(ctx context.Context, mjmlPath string) (string, error) {
-	// Run mjml command with the file
-	cmd := exec.CommandContext(ctx, "npx", "mjml", mjmlPath, "--stdout")
+// CompileOptions controls how the underlying mjml CLI is invoked.
+type CompileOptions struct {
+	// When true, passes --config.allowIncludes=true to mjml so that
+	// <mj-include> directives are processed. MJML 5 ignores them by default.
+	AllowIncludes bool
+	// Allowlist of directories that mj-include is permitted to read from, on
+	// top of the directory of the file being compiled. Values are forwarded to
+	// mjml verbatim as --config.includePath=[...]; relative paths are resolved
+	// by mjml against its own working directory, so callers should pass
+	// absolute paths. Setting any value implies AllowIncludes.
+	IncludePaths []string
+}
+
+// NewCompileOptions builds CompileOptions for files compiled inside the given
+// search-path root. When mj-include is in use, searchPathRoot is automatically
+// allowlisted so that templates can include any partial inside the same search
+// path (e.g. a sibling _includes/ folder) without having to enumerate each
+// directory. extraIncludePaths are appended after the search-path root.
+//
+// When both allowIncludes is false and extraIncludePaths is empty, the
+// returned CompileOptions is the zero value and no include flags are
+// forwarded to mjml.
+func NewCompileOptions(searchPathRoot string, allowIncludes bool, extraIncludePaths []string) CompileOptions {
+	if !allowIncludes && len(extraIncludePaths) == 0 {
+		return CompileOptions{}
+	}
+
+	paths := make([]string, 0, 1+len(extraIncludePaths))
+	if searchPathRoot != "" {
+		paths = append(paths, searchPathRoot)
+	}
+	paths = append(paths, extraIncludePaths...)
+
+	return CompileOptions{AllowIncludes: true, IncludePaths: paths}
+}
+
+func Compile(ctx context.Context, mjmlPath string, opts CompileOptions) (string, error) {
+	args := []string{"mjml", mjmlPath, "--stdout"}
+
+	if opts.AllowIncludes || len(opts.IncludePaths) > 0 {
+		args = append(args, "--config.allowIncludes=true")
+	}
+
+	if len(opts.IncludePaths) > 0 {
+		encoded, err := json.Marshal(opts.IncludePaths)
+		if err != nil {
+			return "", fmt.Errorf("failed to encode mjml include paths: %w", err)
+		}
+		args = append(args, fmt.Sprintf("--config.includePath=%s", string(encoded)))
+	}
+
+	cmd := exec.CommandContext(ctx, "npx", args...)
 
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
@@ -32,7 +82,7 @@ func Compile(ctx context.Context, mjmlPath string) (string, error) {
 }
 
 // ProcessDirectory walks through a directory and compiles all MJML files
-func ProcessDirectory(ctx context.Context, rootDir string) error {
+func ProcessDirectory(ctx context.Context, rootDir string, opts CompileOptions) error {
 	var processedCount int
 	var errorCount int
 	var skippedCount int
@@ -69,7 +119,7 @@ func ProcessDirectory(ctx context.Context, rootDir string) error {
 		logging.FromContext(ctx).Infof("Processing MJML file: %s", relPath)
 
 		// Always compile to check for errors
-		compiled, err := Compile(ctx, path)
+		compiled, err := Compile(ctx, path, opts)
 		if err != nil {
 			errorCount++
 			logging.FromContext(ctx).Errorf("Failed to compile MJML %s: %v", relPath, err)

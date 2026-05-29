@@ -67,6 +67,84 @@ func TestResolveVersion(t *testing.T) {
 	})
 }
 
+func TestValidateProjectName(t *testing.T) {
+	t.Parallel()
+
+	validNames := []string{
+		"my-shopware-project",
+		"myshop",
+		"my_shop",
+		"shop123",
+		"123shop",
+		"a",
+		"path/to/my-shop",
+	}
+
+	for _, name := range validNames {
+		t.Run("valid: "+name, func(t *testing.T) {
+			t.Parallel()
+			assert.NoError(t, validateProjectName(name))
+		})
+	}
+
+	invalidNames := []string{
+		"MyShop",
+		"myShop",
+		"SHOP",
+		"müller",
+		"über-shop",
+		"Müller-Shop",
+		"café",
+		"straße",
+		"my shop",
+		"my.shop",
+		"shop!",
+		"-shop",
+		"_shop",
+		"ä",
+		"",
+		"path/to/müller",
+		"path/to/MyShop",
+	}
+
+	for _, name := range invalidNames {
+		t.Run("invalid: "+name, func(t *testing.T) {
+			t.Parallel()
+			err := validateProjectName(name)
+			assert.Error(t, err)
+			assert.Contains(t, err.Error(), "invalid project name")
+		})
+	}
+}
+
+func TestProjectNameFieldDescription(t *testing.T) {
+	t.Parallel()
+
+	t.Run("empty shows help text", func(t *testing.T) {
+		t.Parallel()
+		assert.Equal(t, projectNameHelp, projectNameFieldDescription(""))
+	})
+
+	t.Run("valid name shows help text", func(t *testing.T) {
+		t.Parallel()
+		assert.Equal(t, projectNameHelp, projectNameFieldDescription("my-shop"))
+	})
+
+	t.Run("uppercase name shows the rule", func(t *testing.T) {
+		t.Parallel()
+		desc := projectNameFieldDescription("MyShop")
+		assert.NotEqual(t, projectNameHelp, desc)
+		assert.Contains(t, desc, projectNameRule)
+	})
+
+	t.Run("umlaut name shows the rule", func(t *testing.T) {
+		t.Parallel()
+		desc := projectNameFieldDescription("müller")
+		assert.NotEqual(t, projectNameHelp, desc)
+		assert.Contains(t, desc, projectNameRule)
+	})
+}
+
 func TestSetupDeployment(t *testing.T) {
 	t.Parallel()
 	t.Run("none creates no files", func(t *testing.T) {
