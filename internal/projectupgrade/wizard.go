@@ -74,13 +74,16 @@ type task struct {
 }
 
 // taskCleanup, taskPlugins, ... are stable indices into model.tasks.
+// system:update:prepare runs on the still-installed (old) Shopware so it can
+// enter maintenance and record the update before the vendor code changes;
+// composer update then swaps the code, and system:update:finish migrates.
 const (
 	taskBackup = iota
 	taskCleanup
 	taskPlugins
 	taskComposerJSON
-	taskComposerUpdate
 	taskSystemPrepare
+	taskComposerUpdate
 	taskSystemFinish
 )
 
@@ -96,6 +99,10 @@ type (
 		detail         string
 		composerBackup []byte
 		pluginActions  *ResolveResult
+		// output is the full captured subprocess output, set for streaming
+		// tasks so the complete log survives independent of log-line event
+		// ordering. Used to render the error tail on failure.
+		output []string
 	}
 	startNextTaskMsg struct{}
 	logLineMsg       string
@@ -110,29 +117,46 @@ type wizardModel struct {
 
 	phase phase
 
-	versionCursor   int
-	targetVersion   string
-	confirmYes      bool
-	composerBackup  []byte
-	pluginActions   *ResolveResult
-	compatUpdates   []account_api.UpdateCheckExtensionCompatibility
-	compatHasBlock  bool
-	compatErr       error
-	tasks           []task
-	currentTask     int
-	logLines        []string
-	logChan         chan string
-	finalErr        error
-	finished        bool
-	spinner         spinner.Model
-	compatLoading   bool
-	cancelExecution context.CancelFunc
+	versionCursor      int
+	targetVersion      string
+	confirmYes         bool
+	composerBackup     []byte
+	pluginActions      *ResolveResult
+	compatUpdates      []account_api.UpdateCheckExtensionCompatibility
+	compatHasBlock     bool
+	compatHasUpdatable bool
+	compatErr          error
+	tasks              []task
+	currentTask        int
+	logLines           []string
+	fullLog            []string
+	logChan            chan string
+	finalErr           error
+	finished           bool
+	spinner            spinner.Model
+	compatLoading      bool
+	cancelExecution    context.CancelFunc
+	width              int
+	height             int
 }
 
-// RunWizard runs the interactive upgrade wizard. It returns the selected
-// target version, whether the upgrade completed successfully, and any error
-// encountered. A user cancellation returns ErrCancelled.
-func RunWizard(opts WizardOptions) (string, bool, error) {
+// WizardResult is the outcome of a single RunWizard invocation.
+type WizardResult struct {
+	// TargetVersion is the version the user selected (empty if cancelled
+	// before selecting).
+	TargetVersion string
+	// Success is true when every upgrade task completed.
+	Success bool
+	// FailureLog holds the full captured output of the task that failed. It
+	// is nil on success or when the failure produced no subprocess output, so
+	// callers can print it verbatim to give the user the complete log the
+	// alt-screen could not retain.
+	FailureLog []string
+}
+
+// RunWizard runs the interactive upgrade wizard. It returns the result and any
+// error encountered. A user cancellation returns ErrCancelled.
+func RunWizard(opts WizardOptions) (WizardResult, error) {
 	s := spinner.New(
 		spinner.WithSpinner(spinner.Dot),
 		spinner.WithStyle(lipgloss.NewStyle().Foreground(tui.BrandColor)),
@@ -150,7 +174,7 @@ func RunWizard(opts WizardOptions) (string, bool, error) {
 	prog := tea.NewProgram(m)
 	final, err := prog.Run()
 	if err != nil {
-		return "", false, err
+		return WizardResult{}, err
 	}
 
 	fm, _ := final.(wizardModel)
@@ -159,10 +183,17 @@ func RunWizard(opts WizardOptions) (string, bool, error) {
 	}
 
 	if !fm.finished {
-		return fm.targetVersion, false, ErrCancelled
+		return WizardResult{TargetVersion: fm.targetVersion}, ErrCancelled
 	}
 
-	return fm.targetVersion, fm.finalErr == nil, fm.finalErr
+	result := WizardResult{
+		TargetVersion: fm.targetVersion,
+		Success:       fm.finalErr == nil,
+	}
+	if fm.finalErr != nil {
+		result.FailureLog = fm.fullLog
+	}
+	return result, fm.finalErr
 }
 
 // ErrCancelled is returned when the user exits the wizard before the upgrade
@@ -175,8 +206,8 @@ func defaultTasks() []task {
 		{label: "Clean up stale recipe files"},
 		{label: "Resolve incompatible custom plugins"},
 		{label: "Rewrite composer.json"},
-		{label: "composer update --with-all-dependencies"},
 		{label: "bin/console system:update:prepare"},
+		{label: "composer update --with-all-dependencies"},
 		{label: "bin/console system:update:finish"},
 	}
 }
@@ -187,6 +218,11 @@ func (m wizardModel) Init() tea.Cmd {
 
 func (m wizardModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
+	case tea.WindowSizeMsg:
+		m.width = msg.Width
+		m.height = msg.Height
+		return m, nil
+
 	case tea.KeyPressMsg:
 		return m.updateKey(msg)
 
@@ -202,7 +238,9 @@ func (m wizardModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		for _, u := range msg.updates {
 			if u.Status.IsBlocker() {
 				m.compatHasBlock = true
-				break
+			}
+			if u.Status.IsUpdatable() {
+				m.compatHasUpdatable = true
 			}
 		}
 		m.phase = phaseCompatResult
@@ -218,6 +256,9 @@ func (m wizardModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		if msg.pluginActions != nil {
 			m.pluginActions = msg.pluginActions
+		}
+		if msg.output != nil {
+			m.fullLog = msg.output
 		}
 		if msg.task < len(m.tasks) {
 			if msg.err != nil {
@@ -375,6 +416,10 @@ func (m wizardModel) updateReview(key string) (tea.Model, tea.Cmd) {
 }
 
 func (m *wizardModel) appendLog(line string) {
+	// fullLog keeps the complete subprocess output so it can be surfaced on
+	// failure (both in the done view and printed to the terminal after the
+	// alt-screen tears down). logLines is the capped window shown live.
+	m.fullLog = append(m.fullLog, line)
 	m.logLines = append(m.logLines, line)
 	if len(m.logLines) > maxLogLines {
 		m.logLines = m.logLines[len(m.logLines)-maxLogLines:]
@@ -458,9 +503,13 @@ func (m wizardModel) startTask() (tea.Model, tea.Cmd) {
 	case taskComposerUpdate:
 		return m.startComposerUpdate()
 	case taskSystemPrepare:
-		return m.startSystemUpdate("system:update:prepare", taskSystemPrepare)
+		// prepare runs before composer update, while composer.json is already
+		// rewritten - restore it on failure so the project is left untouched.
+		return m.startSystemUpdate("system:update:prepare", taskSystemPrepare, true)
 	case taskSystemFinish:
-		return m.startSystemUpdate("system:update:finish", taskSystemFinish)
+		// finish runs after a successful composer update; restoring the old
+		// composer.json here would undo the upgrade, so leave it in place.
+		return m.startSystemUpdate("system:update:finish", taskSystemFinish, false)
 	}
 
 	return m, nil
@@ -543,6 +592,7 @@ func (m wizardModel) startComposerUpdate() (tea.Model, tea.Cmd) {
 	ch := make(chan string, streamBufferSize)
 	m.logChan = ch
 	m.logLines = nil
+	m.fullLog = nil
 
 	args := []string{
 		"update",
@@ -558,37 +608,46 @@ func (m wizardModel) startComposerUpdate() (tea.Model, tea.Cmd) {
 	idx := taskComposerUpdate
 
 	doneCmd := func() tea.Msg {
-		err := streamCmdOutput(p.Cmd, ch, true)
+		output, err := streamCmdOutput(p.Cmd, ch, true)
 		if err != nil {
 			_ = os.WriteFile(composerJSONPath, restore, 0o644)
 		}
-		return taskCompleteMsg{task: idx, err: err}
+		return taskCompleteMsg{task: idx, err: err, output: output}
 	}
 
 	return m, tea.Batch(m.readNextLog(), doneCmd)
 }
 
-func (m wizardModel) startSystemUpdate(consoleCmd string, idx int) (tea.Model, tea.Cmd) {
+func (m wizardModel) startSystemUpdate(consoleCmd string, idx int, restoreOnFail bool) (tea.Model, tea.Cmd) {
 	ctx, cancel := context.WithCancel(context.Background())
 	m.cancelExecution = cancel
 
 	ch := make(chan string, streamBufferSize)
 	m.logChan = ch
 	m.logLines = nil
+	m.fullLog = nil
 
 	p := m.opts.Executor.ConsoleCommand(ctx, consoleCmd, "--no-interaction")
 
+	restore := m.composerBackup
+	composerJSONPath := m.opts.ComposerJSONPath
+
 	doneCmd := func() tea.Msg {
-		err := streamCmdOutput(p.Cmd, ch, true)
-		return taskCompleteMsg{task: idx, err: err}
+		output, err := streamCmdOutput(p.Cmd, ch, true)
+		if err != nil && restoreOnFail {
+			_ = os.WriteFile(composerJSONPath, restore, 0o644)
+		}
+		return taskCompleteMsg{task: idx, err: err, output: output}
 	}
 
 	return m, tea.Batch(m.readNextLog(), doneCmd)
 }
 
 // streamCmdOutput starts cmd, fans stdout (or stderr) lines into ch, and
-// closes ch when done. The returned error is the process exit error, if any.
-func streamCmdOutput(cmd *exec.Cmd, ch chan<- string, useStdout bool) error {
+// closes ch when done. It also returns the complete captured output so the
+// caller can surface it on failure regardless of how many lines the live
+// view kept. The returned error is the process exit error, if any.
+func streamCmdOutput(cmd *exec.Cmd, ch chan<- string, useStdout bool) ([]string, error) {
 	var pipe io.Reader
 	var err error
 	if useStdout {
@@ -604,32 +663,39 @@ func streamCmdOutput(cmd *exec.Cmd, ch chan<- string, useStdout bool) error {
 	}
 	if err != nil {
 		close(ch)
-		return err
+		return nil, err
 	}
 
 	if err := cmd.Start(); err != nil {
 		close(ch)
-		return err
+		return nil, err
 	}
 
+	var captured []string
 	scanner := bufio.NewScanner(pipe)
 	scanner.Buffer(make([]byte, 64*1024), 1024*1024)
 	for scanner.Scan() {
-		ch <- scanner.Text()
+		line := scanner.Text()
+		captured = append(captured, line)
+		ch <- line
 	}
 	close(ch)
 
 	if err := scanner.Err(); err != nil {
 		_ = cmd.Wait()
-		return err
+		return captured, err
 	}
-	return cmd.Wait()
+	return captured, cmd.Wait()
 }
 
 // --- View ---
 
 func (m wizardModel) View() tea.View {
-	v := tea.NewView(m.viewContent())
+	content := m.viewContent()
+	if m.width > 0 && m.height > 0 {
+		content = lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, content)
+	}
+	v := tea.NewView(content)
 	v.AltScreen = true
 	return v
 }
@@ -783,9 +849,14 @@ func (m wizardModel) viewCompatResult() string {
 		b.WriteString("\n\n")
 	default:
 		for _, u := range m.compatUpdates {
-			icon := tui.Checkmark
-			if u.Status.IsBlocker() {
+			var icon string
+			switch {
+			case u.Status.IsBlocker():
 				icon = lipgloss.NewStyle().Foreground(tui.ErrorColor).Bold(true).Render("✗")
+			case u.Status.IsUpdatable():
+				icon = lipgloss.NewStyle().Foreground(tui.WarnColor).Bold(true).Render("↑")
+			default:
+				icon = tui.Checkmark
 			}
 			b.WriteString("  ")
 			b.WriteString(icon)
@@ -797,10 +868,15 @@ func (m wizardModel) viewCompatResult() string {
 		b.WriteString("\n")
 	}
 
+	if m.compatHasUpdatable {
+		b.WriteString(lipgloss.NewStyle().Foreground(tui.WarnColor).Render("↑ Extensions marked with ↑ have a compatible release; their constraints will be bumped during the upgrade."))
+		b.WriteString("\n\n")
+	}
+
 	if m.compatHasBlock {
-		b.WriteString(lipgloss.NewStyle().Foreground(tui.WarnColor).Bold(true).Render("⚠ Some extensions are not compatible yet."))
+		b.WriteString(lipgloss.NewStyle().Foreground(tui.ErrorColor).Bold(true).Render("✗ Some extensions have no compatible version yet."))
 		b.WriteString("\n")
-		b.WriteString(tui.DimStyle.Render("Continuing may break those extensions until they release updates."))
+		b.WriteString(tui.DimStyle.Render("They will be removed from composer.json so the upgrade can proceed. Re-require them once they publish a compatible release."))
 		b.WriteString("\n\n")
 	}
 
@@ -886,6 +962,19 @@ func (m wizardModel) viewDone() string {
 		b.WriteString("\n\n")
 		b.WriteString(lipgloss.NewStyle().Foreground(tui.ErrorColor).Render(m.finalErr.Error()))
 		b.WriteString("\n\n")
+
+		if tail := lastLines(m.fullLog, maxLogLines); len(tail) > 0 {
+			b.WriteString(tui.BoldText.Render("Last output:"))
+			b.WriteString("\n")
+			for _, line := range tail {
+				b.WriteString(tui.DimStyle.Render("  " + truncate(line, tui.PhaseCardWidth-10)))
+				b.WriteString("\n")
+			}
+			b.WriteString("\n")
+			b.WriteString(tui.DimStyle.Render("The full log is printed below the wizard after you close it."))
+			b.WriteString("\n\n")
+		}
+
 		b.WriteString(tui.DimStyle.Render("composer.json was restored from the backup taken before the upgrade."))
 	} else {
 		b.WriteString(lipgloss.NewStyle().Bold(true).Foreground(tui.SuccessColor).Render(fmt.Sprintf("✓ Upgraded to Shopware %s", m.targetVersion)))
@@ -1007,4 +1096,12 @@ func truncate(s string, maxRunes int) string {
 	}
 	r := []rune(s)
 	return string(r[:maxRunes-1]) + "…"
+}
+
+// lastLines returns up to n trailing lines of lines.
+func lastLines(lines []string, n int) []string {
+	if n <= 0 || len(lines) <= n {
+		return lines
+	}
+	return lines[len(lines)-n:]
 }

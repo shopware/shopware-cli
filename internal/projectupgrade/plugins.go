@@ -88,14 +88,23 @@ func ResolveIncompatiblePlugins(ctx context.Context, composerJsonPath, targetVer
 		return nil, fmt.Errorf("parse target version: %w", err)
 	}
 
-	customPlugins := filepath.Join(projectDir, "custom", "plugins")
+	composerJson, err := packagist.ReadComposerJson(composerJsonPath)
+	if err != nil {
+		return nil, err
+	}
 
+	// Consider every shopware platform plugin that the root composer.json
+	// requires and whose installed shopware/* constraint is not satisfied by
+	// the target version - regardless of where composer installed it. Store
+	// plugins (swag/*, frosh/*, …) install into vendor/, not custom/plugins/,
+	// so restricting to custom/plugins/ would leave their stale constraints in
+	// place and break `composer update`.
 	incompatible := make([]packagist.InstalledPackage, 0)
 	for _, pkg := range installed.Packages {
 		if pkg.Type != composerPluginType {
 			continue
 		}
-		if _, ok := pkg.InstallDirName(projectDir, customPlugins); !ok {
+		if _, ok := composerJson.Require[pkg.Name]; !ok {
 			continue
 		}
 		if packagist.ConstraintsSatisfiedBy(pkg.Require, ShopwarePackages, target) {
@@ -106,11 +115,6 @@ func ResolveIncompatiblePlugins(ctx context.Context, composerJsonPath, targetVer
 
 	if len(incompatible) == 0 {
 		return &ResolveResult{}, nil
-	}
-
-	composerJson, err := packagist.ReadComposerJson(composerJsonPath)
-	if err != nil {
-		return nil, err
 	}
 
 	result := &ResolveResult{}

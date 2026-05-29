@@ -3,7 +3,6 @@ package projectupgrade
 import (
 	"context"
 	"errors"
-	"strings"
 	"sync"
 
 	"github.com/shopware/shopware-cli/internal/packagist"
@@ -19,21 +18,29 @@ type Registry interface {
 // (e.g. a store.shopware.com package when no token is configured).
 var ErrRegistryUnavailable = errors.New("registry unavailable for this package")
 
-// CombinedRegistry routes lookups to the appropriate backend based on the
-// package name prefix.
+// CombinedRegistry resolves a package against the Shopware store first (when
+// configured) and falls back to Packagist. Commercial store plugins are
+// required under ordinary vendor names (e.g. swag/paypal, not
+// store.shopware.com/…) and only exist on packages.shopware.com, so routing
+// cannot be decided from the name alone: the store listing is the only source
+// that knows whether it owns a package.
 type CombinedRegistry struct {
-	// Store handles store.shopware.com/* packages. May be nil.
+	// Store handles packages published on packages.shopware.com. May be nil
+	// when no store token is configured.
 	Store Registry
-	// Packagist handles every other vendor/name combination. Required.
+	// Packagist handles everything the store does not provide. Required.
 	Packagist Registry
 }
 
 func (c *CombinedRegistry) GetPackageVersions(ctx context.Context, name string) ([]packagist.ComposerPackageVersion, error) {
-	if strings.HasPrefix(name, "store.shopware.com/") {
-		if c.Store == nil {
-			return nil, ErrRegistryUnavailable
+	if c.Store != nil {
+		versions, err := c.Store.GetPackageVersions(ctx, name)
+		// A configured store that knows this package is authoritative. Any
+		// other outcome (unknown package, or store unavailable) falls through
+		// to Packagist so public packages still resolve.
+		if err == nil && len(versions) > 0 {
+			return versions, nil
 		}
-		return c.Store.GetPackageVersions(ctx, name)
 	}
 
 	if c.Packagist == nil {

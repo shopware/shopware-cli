@@ -115,7 +115,8 @@ func TestWizardCompatLoadedSetsBlockerFlag(t *testing.T) {
 			{
 				Name: "Blocker",
 				Status: account_api.UpdateCheckExtensionCompatibilityStatus{
-					Type:  "violation",
+					Name:  account_api.CompatibilityNotCompatible,
+					Type:  "red",
 					Label: "Not compatible",
 				},
 			},
@@ -126,6 +127,49 @@ func TestWizardCompatLoadedSetsBlockerFlag(t *testing.T) {
 	assert.Equal(t, phaseCompatResult, wm.phase)
 	assert.True(t, wm.compatHasBlock)
 	assert.False(t, wm.confirmYes, "blocker should default the confirm to No")
+}
+
+func TestWizardCompatLoadedUpdatableIsNotBlocker(t *testing.T) {
+	t.Parallel()
+
+	m := newTestModel(t)
+	m.phase = phaseCompatCheck
+	m.compatLoading = true
+
+	// "With new Shopware version" — a compatible release exists, so this must
+	// not block the upgrade; the resolver bumps the constraint.
+	updated, _ := m.Update(compatLoadedMsg{
+		updates: []account_api.UpdateCheckExtensionCompatibility{
+			{
+				Name: "SwagPayPal",
+				Status: account_api.UpdateCheckExtensionCompatibilityStatus{
+					Name:  account_api.CompatibilityUpdatableNow,
+					Type:  "yellow",
+					Label: "With new Shopware version",
+				},
+			},
+		},
+	})
+	wm := updated.(wizardModel)
+	assert.Equal(t, phaseCompatResult, wm.phase)
+	assert.False(t, wm.compatHasBlock, "updatable extension must not block")
+	assert.True(t, wm.compatHasUpdatable)
+	assert.True(t, wm.confirmYes, "no blocker means confirm defaults to Yes")
+}
+
+func TestUpgradeTaskOrderRunsPrepareBeforeComposerUpdate(t *testing.T) {
+	t.Parallel()
+
+	// system:update:prepare must run on the old, still-installed Shopware,
+	// i.e. before composer update swaps the vendor code; finish runs last.
+	assert.Less(t, taskSystemPrepare, taskComposerUpdate, "prepare must precede composer update")
+	assert.Less(t, taskComposerUpdate, taskSystemFinish, "finish must run after composer update")
+
+	tasks := defaultTasks()
+	require.Len(t, tasks, taskSystemFinish+1)
+	assert.Equal(t, "bin/console system:update:prepare", tasks[taskSystemPrepare].label)
+	assert.Equal(t, "composer update --with-all-dependencies", tasks[taskComposerUpdate].label)
+	assert.Equal(t, "bin/console system:update:finish", tasks[taskSystemFinish].label)
 }
 
 func TestWizardTaskCompletePersistsBackupAcrossUpdates(t *testing.T) {
@@ -155,25 +199,43 @@ func TestWizardTaskCompleteErrorEndsRun(t *testing.T) {
 	m.currentTask = taskComposerUpdate
 
 	updated, _ := m.Update(taskCompleteMsg{
-		task: taskComposerUpdate,
-		err:  assertErr("composer update failed"),
+		task:   taskComposerUpdate,
+		err:    assertErr("exit status 2"),
+		output: []string{"Loading composer repositories", "Your requirements could not be resolved"},
 	})
 	wm := updated.(wizardModel)
 	assert.Equal(t, phaseDone, wm.phase)
 	assert.True(t, wm.finished)
 	require.Error(t, wm.finalErr)
 	assert.Equal(t, taskFailed, wm.tasks[taskComposerUpdate].status)
+
+	// The full subprocess output must be retained so the user can see what
+	// actually failed instead of just "exit status 2".
+	assert.Equal(t, []string{"Loading composer repositories", "Your requirements could not be resolved"}, wm.fullLog)
+
+	out := wm.viewContent()
+	assert.Contains(t, out, "Your requirements could not be resolved", "failed step output should be shown on the done screen")
 }
 
 func TestWizardLogLineMsgAppendsAndTrims(t *testing.T) {
 	t.Parallel()
 
 	m := newTestModel(t)
-	for i := 0; i < maxLogLines+5; i++ {
+	total := maxLogLines + 5
+	for i := 0; i < total; i++ {
 		updated, _ := m.Update(logLineMsg("line"))
 		m = updated.(wizardModel)
 	}
-	assert.LessOrEqual(t, len(m.logLines), maxLogLines)
+	assert.LessOrEqual(t, len(m.logLines), maxLogLines, "live view stays capped")
+	assert.Len(t, m.fullLog, total, "full log keeps every line for failure reporting")
+}
+
+func TestLastLines(t *testing.T) {
+	t.Parallel()
+
+	assert.Equal(t, []string{"c", "d"}, lastLines([]string{"a", "b", "c", "d"}, 2))
+	assert.Equal(t, []string{"a", "b"}, lastLines([]string{"a", "b"}, 5), "fewer than n returns all")
+	assert.Nil(t, lastLines(nil, 3))
 }
 
 type testError string

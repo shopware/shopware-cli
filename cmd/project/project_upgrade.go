@@ -103,7 +103,7 @@ bin/console system:update:prepare and system:update:finish.`,
 			return err
 		}
 
-		target, success, err := projectupgrade.RunWizard(projectupgrade.WizardOptions{
+		result, err := projectupgrade.RunWizard(projectupgrade.WizardOptions{
 			ProjectRoot:      projectRoot,
 			ComposerJSONPath: composerJsonPath,
 			CurrentVersion:   currentVersion,
@@ -119,15 +119,26 @@ bin/console system:update:prepare and system:update:finish.`,
 			status = "cancelled"
 		case err != nil:
 			status = "failed"
-		case !success:
+		case !result.Success:
 			status = "failed"
 		}
 
-		trackUpgrade(ctx, currentVersion.String(), target, status)
+		trackUpgrade(ctx, currentVersion.String(), result.TargetVersion, status)
 
 		if errors.Is(err, projectupgrade.ErrCancelled) {
 			fmt.Println("Upgrade cancelled.")
 			return nil
+		}
+
+		// The wizard runs in the alt-screen, so its live log is gone once it
+		// exits. Replay the full output of the failed task to the terminal so
+		// the user keeps the complete error in their scrollback.
+		if len(result.FailureLog) > 0 {
+			out := cmd.ErrOrStderr()
+			_, _ = fmt.Fprintln(out, "\nUpgrade failed. Full output of the failed step:")
+			for _, line := range result.FailureLog {
+				_, _ = fmt.Fprintln(out, line)
+			}
 		}
 
 		return err
@@ -196,6 +207,21 @@ func runUpgradeHeadless(cmd *cobra.Command, projectRoot, composerJsonPath string
 		return fmt.Errorf("update composer.json: %w", err)
 	}
 
+	// system:update:prepare must run on the still-installed (old) Shopware so
+	// it can enter maintenance mode and record the pending update before the
+	// vendor code is swapped by composer update.
+	log.Infof("Running bin/console system:update:prepare")
+	prepareCmd := cmdExecutor.ConsoleCommand(ctx, "system:update:prepare", "--no-interaction")
+	prepareCmd.Cmd.Stdin = cmd.InOrStdin()
+	prepareCmd.Cmd.Stdout = cmd.OutOrStdout()
+	prepareCmd.Cmd.Stderr = cmd.ErrOrStderr()
+
+	if err := prepareCmd.Run(); err != nil {
+		restoreComposerJson(ctx, composerJsonPath, backup)
+		trackUpgrade(ctx, currentVersion.String(), targetVersion, "system_update_prepare_failed")
+		return fmt.Errorf("system:update:prepare failed, composer.json was restored: %w", err)
+	}
+
 	log.Infof("Running composer update")
 	composerArgs := []string{
 		"update",
@@ -215,17 +241,6 @@ func runUpgradeHeadless(cmd *cobra.Command, projectRoot, composerJsonPath string
 		restoreComposerJson(ctx, composerJsonPath, backup)
 		trackUpgrade(ctx, currentVersion.String(), targetVersion, "composer_update_failed")
 		return fmt.Errorf("composer update failed, composer.json was restored: %w", err)
-	}
-
-	log.Infof("Running bin/console system:update:prepare")
-	prepareCmd := cmdExecutor.ConsoleCommand(ctx, "system:update:prepare", "--no-interaction")
-	prepareCmd.Cmd.Stdin = cmd.InOrStdin()
-	prepareCmd.Cmd.Stdout = cmd.OutOrStdout()
-	prepareCmd.Cmd.Stderr = cmd.ErrOrStderr()
-
-	if err := prepareCmd.Run(); err != nil {
-		trackUpgrade(ctx, currentVersion.String(), targetVersion, "system_update_prepare_failed")
-		return fmt.Errorf("system:update:prepare failed: %w", err)
 	}
 
 	log.Infof("Running bin/console system:update:finish")
@@ -338,8 +353,8 @@ func runCompatibilityCheck(ctx context.Context, currentVersion *version.Version,
 	if hasBlockers && system.IsInteractionEnabled(ctx) {
 		var proceed bool
 		if err := huh.NewConfirm().
-			Title("Some installed extensions are not yet compatible with the target version").
-			Description("Continuing may break those extensions. Proceed anyway?").
+			Title("Some installed extensions have no compatible version for the target version").
+			Description("They will be removed from composer.json so the upgrade can proceed. Re-require them once they publish a compatible release. Proceed anyway?").
 			Value(&proceed).
 			Run(); err != nil {
 			return err

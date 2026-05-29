@@ -128,6 +128,87 @@ func TestResolveIncompatiblePluginsBumpsConstraintWhenRegistryHasCompatibleVersi
 	assert.Equal(t, "^2.1.0", requireMap["vendor/incompat"])
 }
 
+// Store/composer plugins install into vendor/, not custom/plugins/. They must
+// still be resolved, otherwise their stale shopware/core constraint breaks
+// `composer update` (regression: frosh/tools ^1.4 / swag/paypal ^8.11 left
+// untouched on a 6.5 → 6.6 upgrade).
+func TestResolveIncompatiblePluginsBumpsVendorInstalledPlugin(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	composerJsonPath := filepath.Join(dir, "composer.json")
+
+	writeJSON(t, composerJsonPath, map[string]any{
+		"name": "shopware/production",
+		"require": map[string]any{
+			"shopware/core": "6.5.8.0",
+			"swag/paypal":   "^8.11",
+		},
+	})
+
+	// Installed under vendor/ — no custom/plugins/ entry at all.
+	writeInstalledJSON(t, dir, []packagist.InstalledPackage{
+		{
+			Name:        "swag/paypal",
+			Type:        composerPluginType,
+			InstallPath: "../swag/paypal",
+			Require:     map[string]string{"shopware/core": "~6.5.5"},
+		},
+	})
+
+	registry := &fakeRegistry{
+		versions: map[string][]packagist.ComposerPackageVersion{
+			"swag/paypal": {
+				{Version: "8.11.0", Require: map[string]string{"shopware/core": "~6.5.5"}},
+				{Version: "9.0.0", Require: map[string]string{"shopware/core": "^6.6"}},
+			},
+		},
+	}
+
+	result, err := ResolveIncompatiblePlugins(t.Context(), composerJsonPath, "6.6.4.0", registry)
+	require.NoError(t, err)
+	require.Len(t, result.Bumped(), 1)
+	assert.Empty(t, result.Removed())
+
+	bumped := result.Bumped()[0]
+	assert.Equal(t, "swag/paypal", bumped.Name)
+	assert.Equal(t, "9.0.0", bumped.NewVersion)
+
+	out := readJSON(t, composerJsonPath)
+	requireMap := out["require"].(map[string]any)
+	assert.Equal(t, "^9.0.0", requireMap["swag/paypal"])
+}
+
+// A plugin installed in vendor/ but NOT listed in the root composer.json
+// require (e.g. a transitive dependency) must be left alone — the resolver can
+// only rewrite root constraints.
+func TestResolveIncompatiblePluginsIgnoresPluginsNotInRootRequire(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	composerJsonPath := filepath.Join(dir, "composer.json")
+
+	writeJSON(t, composerJsonPath, map[string]any{
+		"name": "shopware/production",
+		"require": map[string]any{
+			"shopware/core": "6.5.8.0",
+		},
+	})
+
+	writeInstalledJSON(t, dir, []packagist.InstalledPackage{
+		{
+			Name:        "transitive/plugin",
+			Type:        composerPluginType,
+			InstallPath: "../transitive/plugin",
+			Require:     map[string]string{"shopware/core": "~6.5.0"},
+		},
+	})
+
+	result, err := ResolveIncompatiblePlugins(t.Context(), composerJsonPath, "6.6.4.0", &fakeRegistry{})
+	require.NoError(t, err)
+	assert.Empty(t, result.Actions)
+}
+
 func TestResolveIncompatiblePluginsRemovesWhenNoCompatibleRelease(t *testing.T) {
 	t.Parallel()
 
