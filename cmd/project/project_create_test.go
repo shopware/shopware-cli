@@ -76,7 +76,6 @@ func TestValidateProjectName(t *testing.T) {
 		"my_shop",
 		"shop123",
 		"123shop",
-		"MyShop",
 		"a",
 		"path/to/my-shop",
 	}
@@ -89,6 +88,9 @@ func TestValidateProjectName(t *testing.T) {
 	}
 
 	invalidNames := []string{
+		"MyShop",
+		"myShop",
+		"SHOP",
 		"müller",
 		"über-shop",
 		"Müller-Shop",
@@ -102,6 +104,7 @@ func TestValidateProjectName(t *testing.T) {
 		"ä",
 		"",
 		"path/to/müller",
+		"path/to/MyShop",
 	}
 
 	for _, name := range invalidNames {

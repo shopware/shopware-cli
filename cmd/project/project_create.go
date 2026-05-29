@@ -46,12 +46,12 @@ var gitlabCITemplate string
 const versionLatest = "latest"
 
 // composeProjectNameRegexp matches names that are valid as a Docker Compose
-// project name. Docker Compose derives the project name from the project
-// directory and only allows alphanumeric characters, dashes and underscores,
-// and the name must start with a letter or digit. Anything else (umlauts,
-// spaces, dots, …) gets silently stripped or rejected by Docker Compose, so we
-// reject such project names up front.
-var composeProjectNameRegexp = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9_-]*$`)
+// project name. Docker Compose only allows lowercase letters, digits, dashes
+// and underscores, and the name must start with a lowercase letter or digit.
+// Anything else (uppercase letters, umlauts, spaces, dots, …) is rejected by
+// Docker Compose once the generated Docker setup runs from the project
+// directory, so we reject such project names up front.
+var composeProjectNameRegexp = regexp.MustCompile(`^[a-z0-9][a-z0-9_-]*$`)
 
 // validateProjectName ensures the project folder name can be used as a Docker
 // Compose project name. Only the final path element is relevant, as that is
@@ -60,7 +60,7 @@ func validateProjectName(name string) error {
 	base := filepath.Base(name)
 
 	if !composeProjectNameRegexp.MatchString(base) {
-		return fmt.Errorf("invalid project name %q: a project name may only contain letters, digits, dashes (-) and underscores (_), and must start with a letter or digit so it can be used as a Docker Compose project name", base)
+		return fmt.Errorf("invalid project name %q: a project name may only contain lowercase letters, digits, dashes (-) and underscores (_), and must start with a lowercase letter or digit so it can be used as a Docker Compose project name", base)
 	}
 
 	return nil
