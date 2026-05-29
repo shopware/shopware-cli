@@ -34,6 +34,7 @@ type Executor interface {
 	WithRelDir(relDir string) Executor
 	StartEnvironment(ctx context.Context) error
 	StopEnvironment(ctx context.Context) error
+	EnvironmentStatus(ctx context.Context) (bool, error)
 	AdminAPIClient(ctx context.Context) (*adminSdk.Client, error)
 }
 

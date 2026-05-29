@@ -385,3 +385,19 @@ func TestSymfonyCLINormalizePath(t *testing.T) {
 	exec := &SymfonyCLIExecutor{BinaryPath: "/usr/local/bin/symfony", projectRoot: "/host/project"}
 	assert.Equal(t, "/host/project/custom/plugins/MyPlugin", exec.NormalizePath("/host/project/custom/plugins/MyPlugin"))
 }
+
+func TestLocalExecutorEnvironmentStatusNotSupported(t *testing.T) {
+	exec := &LocalExecutor{projectRoot: "/project"}
+
+	running, err := exec.EnvironmentStatus(t.Context())
+	assert.False(t, running)
+	assert.ErrorIs(t, err, ErrNotSupported)
+}
+
+func TestSymfonyCLIExecutorEnvironmentStatusNotSupported(t *testing.T) {
+	exec := &SymfonyCLIExecutor{BinaryPath: "/usr/local/bin/symfony", projectRoot: "/project"}
+
+	running, err := exec.EnvironmentStatus(t.Context())
+	assert.False(t, running)
+	assert.ErrorIs(t, err, ErrNotSupported)
+}

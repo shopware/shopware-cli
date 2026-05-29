@@ -82,3 +82,7 @@ func (s *SymfonyCLIExecutor) StartEnvironment(_ context.Context) error {
 func (s *SymfonyCLIExecutor) StopEnvironment(_ context.Context) error {
 	return ErrNotSupported
 }
+
+func (s *SymfonyCLIExecutor) EnvironmentStatus(_ context.Context) (bool, error) {
+	return false, ErrNotSupported
+}

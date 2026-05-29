@@ -21,7 +21,7 @@ func newTestModel() Model {
 		general:     NewGeneralModel("local", "http://localhost:8000", "", "", "/tmp/project", nil, nil),
 		logs:        NewLogsModel("/tmp/project", false),
 		configTab:   NewConfigModel(nil, nil),
-		watchers:    make(map[string]*executor.Process),
+		watchers:    make(map[string]*watcherHandle),
 		projectRoot: "/tmp/project",
 		config:      &shop.Config{},
 	}
@@ -404,7 +404,7 @@ func TestExecuteCommand_AdminWatchStartNoOpWhenRunning(t *testing.T) {
 func TestExecuteCommand_AdminWatchStopClearsRunning(t *testing.T) {
 	m := newTestModel()
 	m.general.adminWatchRunning = true
-	m.watchers[watcherAdmin] = &executor.Process{}
+	m.watchers[watcherAdmin] = &watcherHandle{}
 
 	updated, cmd := m.executeCommand("admin-watch-stop")
 	um := updated.(Model)

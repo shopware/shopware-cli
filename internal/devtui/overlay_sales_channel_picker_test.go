@@ -7,7 +7,6 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	adminSdk "github.com/shopware/shopware-cli/internal/admin-api"
-	"github.com/shopware/shopware-cli/internal/executor"
 )
 
 func TestSalesChannelPicker_ConfirmEmitsWatcherOpts(t *testing.T) {
@@ -57,7 +56,7 @@ func TestModel_SalesChannelPicker_FullRoutingFlow(t *testing.T) {
 	m := Model{
 		phase:    phaseDashboard,
 		general:  NewGeneralModel("local", "http://localhost:8000", "", "", "/tmp/project", nil, nil),
-		watchers: make(map[string]*executor.Process),
+		watchers: make(map[string]*watcherHandle),
 	}
 
 	sp := newSalesChannelPicker(nil)
