@@ -45,6 +45,15 @@ var gitlabCITemplate string
 
 const versionLatest = "latest"
 
+const (
+	// projectNameHelp is the help text shown under the project name input.
+	projectNameHelp = "The name of the project directory to create"
+	// projectNameRule describes which characters are allowed in a project name.
+	// It is shared between the up-front validation error and the live form hint
+	// so both stay in sync.
+	projectNameRule = "only lowercase letters, digits, dashes (-) and underscores (_) are allowed, and it must start with a lowercase letter or digit"
+)
+
 // composeProjectNameRegexp matches names that are valid as a Docker Compose
 // project name. Docker Compose only allows lowercase letters, digits, dashes
 // and underscores, and the name must start with a lowercase letter or digit.
@@ -60,10 +69,24 @@ func validateProjectName(name string) error {
 	base := filepath.Base(name)
 
 	if !composeProjectNameRegexp.MatchString(base) {
-		return fmt.Errorf("invalid project name %q: a project name may only contain lowercase letters, digits, dashes (-) and underscores (_), and must start with a lowercase letter or digit so it can be used as a Docker Compose project name", base)
+		return fmt.Errorf("invalid project name %q: %s, so it can be used as a Docker Compose project name", base, projectNameRule)
 	}
 
 	return nil
+}
+
+// projectNameFieldDescription returns the description shown under the project
+// name input in the interactive form. While the typed name is invalid it
+// returns the rule highlighted in red, validating the input live; otherwise it
+// returns the regular help text.
+func projectNameFieldDescription(name string) string {
+	if name != "" {
+		if err := validateProjectName(name); err != nil {
+			return tui.RedText.Render(projectNameRule)
+		}
+	}
+
+	return projectNameHelp
 }
 
 var projectCreateCmd = &cobra.Command{
@@ -242,7 +265,9 @@ var projectCreateCmd = &cobra.Command{
 					formGroups = append(formGroups, huh.NewGroup(
 						huh.NewInput().
 							Title("Project Name").
-							Description("The name of the project directory to create").
+							DescriptionFunc(func() string {
+								return projectNameFieldDescription(projectFolder)
+							}, &projectFolder).
 							Placeholder("my-shopware-project").
 							Value(&projectFolder).
 							Validate(func(s string) error {

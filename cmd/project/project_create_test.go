@@ -117,6 +117,34 @@ func TestValidateProjectName(t *testing.T) {
 	}
 }
 
+func TestProjectNameFieldDescription(t *testing.T) {
+	t.Parallel()
+
+	t.Run("empty shows help text", func(t *testing.T) {
+		t.Parallel()
+		assert.Equal(t, projectNameHelp, projectNameFieldDescription(""))
+	})
+
+	t.Run("valid name shows help text", func(t *testing.T) {
+		t.Parallel()
+		assert.Equal(t, projectNameHelp, projectNameFieldDescription("my-shop"))
+	})
+
+	t.Run("uppercase name shows the rule", func(t *testing.T) {
+		t.Parallel()
+		desc := projectNameFieldDescription("MyShop")
+		assert.NotEqual(t, projectNameHelp, desc)
+		assert.Contains(t, desc, projectNameRule)
+	})
+
+	t.Run("umlaut name shows the rule", func(t *testing.T) {
+		t.Parallel()
+		desc := projectNameFieldDescription("müller")
+		assert.NotEqual(t, projectNameHelp, desc)
+		assert.Contains(t, desc, projectNameRule)
+	})
+}
+
 func TestSetupDeployment(t *testing.T) {
 	t.Parallel()
 	t.Run("none creates no files", func(t *testing.T) {
