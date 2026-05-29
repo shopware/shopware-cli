@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"sort"
 	"strings"
@@ -43,6 +44,27 @@ var githubDeployTemplate string
 var gitlabCITemplate string
 
 const versionLatest = "latest"
+
+// composeProjectNameRegexp matches names that are valid as a Docker Compose
+// project name. Docker Compose derives the project name from the project
+// directory and only allows alphanumeric characters, dashes and underscores,
+// and the name must start with a letter or digit. Anything else (umlauts,
+// spaces, dots, …) gets silently stripped or rejected by Docker Compose, so we
+// reject such project names up front.
+var composeProjectNameRegexp = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9_-]*$`)
+
+// validateProjectName ensures the project folder name can be used as a Docker
+// Compose project name. Only the final path element is relevant, as that is
+// what Docker Compose uses to derive the project name.
+func validateProjectName(name string) error {
+	base := filepath.Base(name)
+
+	if !composeProjectNameRegexp.MatchString(base) {
+		return fmt.Errorf("invalid project name %q: a project name may only contain letters, digits, dashes (-) and underscores (_), and must start with a letter or digit so it can be used as a Docker Compose project name", base)
+	}
+
+	return nil
+}
 
 var projectCreateCmd = &cobra.Command{
 	Use:   "create [name] [version]",
@@ -227,6 +249,9 @@ var projectCreateCmd = &cobra.Command{
 								if s == "" {
 									return fmt.Errorf("project name is required")
 								}
+								if err := validateProjectName(s); err != nil {
+									return err
+								}
 								if info, err := os.Stat(s); err == nil && info.IsDir() {
 									empty, err := system.IsDirEmpty(s)
 									if err != nil {
@@ -400,6 +425,10 @@ var projectCreateCmd = &cobra.Command{
 					return fmt.Errorf("project creation cancelled")
 				}
 			}
+		}
+
+		if err := validateProjectName(projectFolder); err != nil {
+			return err
 		}
 
 		missingDeps := system.CheckProjectDependencies(cmd.Context(), useDocker)

@@ -67,6 +67,53 @@ func TestResolveVersion(t *testing.T) {
 	})
 }
 
+func TestValidateProjectName(t *testing.T) {
+	t.Parallel()
+
+	validNames := []string{
+		"my-shopware-project",
+		"myshop",
+		"my_shop",
+		"shop123",
+		"123shop",
+		"MyShop",
+		"a",
+		"path/to/my-shop",
+	}
+
+	for _, name := range validNames {
+		t.Run("valid: "+name, func(t *testing.T) {
+			t.Parallel()
+			assert.NoError(t, validateProjectName(name))
+		})
+	}
+
+	invalidNames := []string{
+		"müller",
+		"über-shop",
+		"Müller-Shop",
+		"café",
+		"straße",
+		"my shop",
+		"my.shop",
+		"shop!",
+		"-shop",
+		"_shop",
+		"ä",
+		"",
+		"path/to/müller",
+	}
+
+	for _, name := range invalidNames {
+		t.Run("invalid: "+name, func(t *testing.T) {
+			t.Parallel()
+			err := validateProjectName(name)
+			assert.Error(t, err)
+			assert.Contains(t, err.Error(), "invalid project name")
+		})
+	}
+}
+
 func TestSetupDeployment(t *testing.T) {
 	t.Parallel()
 	t.Run("none creates no files", func(t *testing.T) {
