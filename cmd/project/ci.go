@@ -3,6 +3,7 @@ package project
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -423,7 +424,12 @@ func isGitWorkingTreeDirty(ctx context.Context, root string) (bool, bool, error)
 	cmd := exec.CommandContext(ctx, "git", "-C", root, "rev-parse", "--is-inside-work-tree") //nolint:gosec
 	output, err := cmd.Output()
 	if err != nil {
-		return false, false, nil
+		var exitErr *exec.ExitError
+		if errors.As(err, &exitErr) {
+			return false, false, nil
+		}
+
+		return false, false, fmt.Errorf("checking git repository: %w", err)
 	}
 
 	if strings.TrimSpace(string(output)) != "true" {
