@@ -16,7 +16,6 @@ import (
 	"github.com/shyim/go-version"
 	"github.com/spf13/cobra"
 
-	account_api "github.com/shopware/shopware-cli/internal/account-api"
 	"github.com/shopware/shopware-cli/internal/executor"
 	"github.com/shopware/shopware-cli/internal/extension"
 	"github.com/shopware/shopware-cli/internal/flexmigrator"
@@ -94,12 +93,6 @@ project doesn't require it yet.`,
 		}
 
 		// Interactive: hand off to the devtui-styled wizard.
-		_, extensions, err := getLocalExtensions()
-		if err != nil {
-			log.Warnf("Could not gather local extensions for compatibility check: %v", err)
-			extensions = nil
-		}
-
 		registry, err := buildRegistry(cmd, projectRoot)
 		if err != nil {
 			return err
@@ -110,7 +103,6 @@ project doesn't require it yet.`,
 			ComposerJSONPath: composerJsonPath,
 			CurrentVersion:   currentVersion,
 			UpdateVersions:   updateVersions,
-			Extensions:       extensions,
 			Executor:         cmdExecutor,
 			Registry:         registry,
 		})
@@ -156,7 +148,12 @@ func runUpgradeHeadless(cmd *cobra.Command, projectRoot, composerJsonPath string
 		return err
 	}
 
-	if err := runCompatibilityCheck(ctx, currentVersion, targetVersion); err != nil {
+	registry, err := buildRegistry(cmd, projectRoot)
+	if err != nil {
+		return err
+	}
+
+	if err := runCompatibilityCheck(ctx, composerJsonPath, targetVersion, registry); err != nil {
 		return err
 	}
 
@@ -181,7 +178,6 @@ func runUpgradeHeadless(cmd *cobra.Command, projectRoot, composerJsonPath string
 	}
 
 	log.Infof("Checking custom plugins for incompatibilities")
-	registry, _ := buildRegistry(cmd, projectRoot)
 	result, err := projectupgrade.ResolveIncompatiblePlugins(ctx, composerJsonPath, targetVersion, registry)
 	if err != nil {
 		return fmt.Errorf("resolve incompatible plugins: %w", err)
@@ -271,67 +267,37 @@ func selectTargetVersion(cmd *cobra.Command, updateVersions []string) (string, e
 	return selected, nil
 }
 
-func runCompatibilityCheck(ctx context.Context, currentVersion *version.Version, targetVersion string) error {
+func runCompatibilityCheck(ctx context.Context, composerJsonPath, targetVersion string, registry projectupgrade.Registry) error {
 	log := logging.FromContext(ctx)
 
-	_, extensions, err := getLocalExtensions()
+	results, err := projectupgrade.CheckPluginCompatibility(ctx, composerJsonPath, targetVersion, registry)
 	if err != nil {
-		log.Warnf("Skipping extension compatibility check: %v", err)
+		log.Warnf("Skipping plugin compatibility check: %v", err)
 		return nil
 	}
 
-	if len(extensions) == 0 {
+	if len(results) == 0 {
 		return nil
 	}
 
-	requests := make([]account_api.UpdateCheckExtension, 0, len(extensions))
-	for name, v := range extensions {
-		requests = append(requests, account_api.UpdateCheckExtension{Name: name, Version: v})
-	}
-
-	updates, err := account_api.GetFutureExtensionUpdates(ctx, currentVersion.String(), targetVersion, requests)
-	if err != nil {
-		log.Warnf("Skipping extension compatibility check: %v", err)
-		return nil
-	}
-
-	for _, name := range requests {
-		found := false
-		for _, update := range updates {
-			if update.Name == name.Name {
-				found = true
-				break
-			}
+	t := table.New().Border(lipgloss.NormalBorder()).Headers("Plugin", "Current", "Status")
+	hasBlockers := false
+	for _, row := range results {
+		status := row.Status.Label()
+		if row.Status == projectupgrade.CompatUpdatable && row.NewVersion != "" {
+			status = fmt.Sprintf("%s → %s", row.Status.Label(), row.NewVersion)
 		}
-
-		if !found {
-			updates = append(updates, account_api.UpdateCheckExtensionCompatibility{
-				Name: name.Name,
-				Status: account_api.UpdateCheckExtensionCompatibilityStatus{
-					Label: "Not available in Store",
-				},
-			})
+		t.Row(row.Name, row.CurrentVersion, status)
+		if row.Status.IsBlocker() {
+			hasBlockers = true
 		}
-	}
-
-	t := table.New().Border(lipgloss.NormalBorder()).Headers("Extension Name", "Compatible")
-	for _, update := range updates {
-		t.Row(update.Name, update.Status.Label)
 	}
 	fmt.Println(t.Render())
-
-	hasBlockers := false
-	for _, update := range updates {
-		if update.Status.IsBlocker() {
-			hasBlockers = true
-			break
-		}
-	}
 
 	if hasBlockers && system.IsInteractionEnabled(ctx) {
 		var proceed bool
 		if err := huh.NewConfirm().
-			Title("Some installed extensions have no compatible version for the target version").
+			Title("Some plugins have no compatible version for the target version").
 			Description("They will be removed from composer.json so the upgrade can proceed. Re-require them once they publish a compatible release. Proceed anyway?").
 			Value(&proceed).
 			Run(); err != nil {
@@ -339,7 +305,7 @@ func runCompatibilityCheck(ctx context.Context, currentVersion *version.Version,
 		}
 
 		if !proceed {
-			return fmt.Errorf("upgrade cancelled due to incompatible extensions")
+			return fmt.Errorf("upgrade cancelled due to incompatible plugins")
 		}
 	}
 

@@ -8,7 +8,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	account_api "github.com/shopware/shopware-cli/internal/account-api"
 	"github.com/shopware/shopware-cli/internal/tui"
 )
 
@@ -77,24 +76,10 @@ func TestWizardSelectVersionForwardsNavigationToList(t *testing.T) {
 	assert.Equal(t, 1, wm.versionList.Cursor())
 }
 
-func TestWizardSelectVersionWithoutExtensionsSkipsToReview(t *testing.T) {
+func TestWizardSelectVersionGoesToCompatCheck(t *testing.T) {
 	t.Parallel()
 
 	m := newTestModel(t)
-	m.phase = phaseSelectVersion
-	m.versionList.HandleKey("down") // move to "6.6.3.0"
-
-	updated, _ := m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
-	wm := updated.(wizardModel)
-	assert.Equal(t, phaseReview, wm.phase)
-	assert.Equal(t, "6.6.3.0", wm.targetVersion)
-}
-
-func TestWizardSelectVersionWithExtensionsGoesToCompatCheck(t *testing.T) {
-	t.Parallel()
-
-	m := newTestModel(t)
-	m.opts.Extensions = map[string]string{"AcmeExtension": "1.0.0"}
 	m.phase = phaseSelectVersion
 
 	updated, _ := m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
@@ -112,15 +97,8 @@ func TestWizardCompatLoadedSetsBlockerFlag(t *testing.T) {
 	m.compatLoading = true
 
 	updated, _ := m.Update(compatLoadedMsg{
-		updates: []account_api.UpdateCheckExtensionCompatibility{
-			{
-				Name: "Blocker",
-				Status: account_api.UpdateCheckExtensionCompatibilityStatus{
-					Name:  account_api.CompatibilityNotCompatible,
-					Type:  "red",
-					Label: "Not compatible",
-				},
-			},
+		updates: []PluginCompat{
+			{Name: "vendor/incompat", CurrentVersion: "1.0.0", Status: CompatBlocker},
 		},
 	})
 	wm := updated.(wizardModel)
@@ -137,23 +115,14 @@ func TestWizardCompatLoadedUpdatableIsNotBlocker(t *testing.T) {
 	m.phase = phaseCompatCheck
 	m.compatLoading = true
 
-	// "With new Shopware version" — a compatible release exists, so this must
-	// not block the upgrade; the resolver bumps the constraint.
 	updated, _ := m.Update(compatLoadedMsg{
-		updates: []account_api.UpdateCheckExtensionCompatibility{
-			{
-				Name: "SwagPayPal",
-				Status: account_api.UpdateCheckExtensionCompatibilityStatus{
-					Name:  account_api.CompatibilityUpdatableNow,
-					Type:  "yellow",
-					Label: "With new Shopware version",
-				},
-			},
+		updates: []PluginCompat{
+			{Name: "swag/paypal", CurrentVersion: "8.11.0", NewVersion: "9.0.0", Status: CompatUpdatable},
 		},
 	})
 	wm := updated.(wizardModel)
 	assert.Equal(t, phaseCompatResult, wm.phase)
-	assert.False(t, wm.compatHasBlock, "updatable extension must not block")
+	assert.False(t, wm.compatHasBlock, "updatable plugin must not block")
 	assert.True(t, wm.compatHasUpdatable)
 	assert.True(t, wm.confirmYes, "no blocker means confirm defaults to Yes")
 }

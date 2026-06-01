@@ -14,6 +14,7 @@ import (
 type InstalledPackage struct {
 	Name        string            `json:"name"`
 	Type        string            `json:"type"`
+	Version     string            `json:"version"`
 	Require     map[string]string `json:"require"`
 	InstallPath string            `json:"install-path"`
 }

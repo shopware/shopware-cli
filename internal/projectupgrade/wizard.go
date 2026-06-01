@@ -15,7 +15,6 @@ import (
 	"charm.land/lipgloss/v2"
 	"github.com/shyim/go-version"
 
-	account_api "github.com/shopware/shopware-cli/internal/account-api"
 	"github.com/shopware/shopware-cli/internal/executor"
 	"github.com/shopware/shopware-cli/internal/flexmigrator"
 	"github.com/shopware/shopware-cli/internal/tui"
@@ -39,7 +38,6 @@ type WizardOptions struct {
 	ComposerJSONPath string
 	CurrentVersion   *version.Version
 	UpdateVersions   []string
-	Extensions       map[string]string
 	Executor         executor.Executor
 	// Registry is consulted to find newer compatible versions of plugins
 	// whose installed shopware/core constraint is no longer satisfied. May
@@ -91,7 +89,7 @@ const (
 // wizardMsg variants advance the upgrade state machine.
 type (
 	compatLoadedMsg struct {
-		updates []account_api.UpdateCheckExtensionCompatibility
+		updates []PluginCompat
 		err     error
 	}
 	taskCompleteMsg struct {
@@ -121,7 +119,7 @@ type wizardModel struct {
 	targetVersion      string
 	confirmYes         bool
 	pluginActions      *ResolveResult
-	compatUpdates      []account_api.UpdateCheckExtensionCompatibility
+	compatUpdates      []PluginCompat
 	compatHasBlock     bool
 	compatHasUpdatable bool
 	compatErr          error
@@ -369,11 +367,6 @@ func (m wizardModel) updateSelectVersion(key string) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		m.targetVersion = selected.Label
-		if len(m.opts.Extensions) == 0 {
-			m.phase = phaseReview
-			m.confirmYes = true
-			return m, nil
-		}
 		m.phase = phaseCompatCheck
 		m.compatLoading = true
 		return m, tea.Batch(m.spinner.Tick, m.loadCompatibility())
@@ -448,44 +441,21 @@ func (m wizardModel) readNextLog() tea.Cmd {
 	}
 }
 
-// loadCompatibility queries the Shopware account API for extension
-// compatibility against the chosen target version.
+// loadCompatibility runs CheckPluginCompatibility against the registry to
+// preview how each composer-managed plugin will be treated by the upgrade.
 func (m wizardModel) loadCompatibility() tea.Cmd {
-	requests := make([]account_api.UpdateCheckExtension, 0, len(m.opts.Extensions))
-	for name, v := range m.opts.Extensions {
-		requests = append(requests, account_api.UpdateCheckExtension{Name: name, Version: v})
-	}
-	currentVersion := m.opts.CurrentVersion.String()
+	composerJsonPath := m.opts.ComposerJSONPath
 	targetVersion := m.targetVersion
+	registry := m.opts.Registry
 
 	return func() tea.Msg {
-		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 		defer cancel()
 
-		updates, err := account_api.GetFutureExtensionUpdates(ctx, currentVersion, targetVersion, requests)
+		updates, err := CheckPluginCompatibility(ctx, composerJsonPath, targetVersion, registry)
 		if err != nil {
 			return compatLoadedMsg{err: err}
 		}
-
-		for _, name := range requests {
-			found := false
-			for _, update := range updates {
-				if update.Name == name.Name {
-					found = true
-					break
-				}
-			}
-
-			if !found {
-				updates = append(updates, account_api.UpdateCheckExtensionCompatibility{
-					Name: name.Name,
-					Status: account_api.UpdateCheckExtensionCompatibilityStatus{
-						Label: "Not available in Store",
-					},
-				})
-			}
-		}
-
 		return compatLoadedMsg{updates: updates}
 	}
 }
@@ -696,10 +666,7 @@ func (m wizardModel) viewContent() string {
 }
 
 func (m wizardModel) totalSteps() int {
-	if len(m.opts.Extensions) == 0 {
-		return 3 // Select version, Review, Run
-	}
-	return 4 // + Compatibility check
+	return 4 // Select version, Compatibility check, Review, Run
 }
 
 func (m wizardModel) stepNum(p phase) int {
@@ -709,14 +676,8 @@ func (m wizardModel) stepNum(p phase) int {
 	case phaseCompatCheck, phaseCompatResult:
 		return 2
 	case phaseReview:
-		if len(m.opts.Extensions) == 0 {
-			return 2
-		}
 		return 3
 	case phaseRunning:
-		if len(m.opts.Extensions) == 0 {
-			return 3
-		}
 		return 4
 	case phaseWelcome, phaseDone:
 		return 0
@@ -747,9 +708,6 @@ func (m wizardModel) viewWelcome() string {
 	b.WriteString(tui.SectionDivider(tui.PhaseCardWidth - 6))
 	b.WriteString(tui.KVRow("Current version", tui.BoldText.Render(m.opts.CurrentVersion.String())))
 	b.WriteString(tui.KVRow("Project root", tui.DimStyle.Render(m.opts.ProjectRoot)))
-	if len(m.opts.Extensions) > 0 {
-		b.WriteString(tui.KVRow("Installed extensions", tui.LabelStyle.Render(fmt.Sprintf("%d", len(m.opts.Extensions)))))
-	}
 	b.WriteString("\n")
 	b.WriteString(renderConfirmButtons("Begin upgrade", "Cancel", m.confirmYes))
 	b.WriteString("\n\n")
@@ -781,9 +739,9 @@ func (m wizardModel) viewCompatCheck() string {
 	var b strings.Builder
 	b.WriteString(stepBadge(m.stepNum(phaseCompatCheck), m.totalSteps()))
 	b.WriteString("\n\n")
-	b.WriteString(tui.TitleStyle.Render("Checking extension compatibility"))
+	b.WriteString(tui.TitleStyle.Render("Checking plugin compatibility"))
 	b.WriteString("\n")
-	b.WriteString(tui.DimStyle.Render(fmt.Sprintf("Asking the Shopware store about %d installed extension(s) against %s…", len(m.opts.Extensions), m.targetVersion)))
+	b.WriteString(tui.DimStyle.Render(fmt.Sprintf("Looking up composer-managed plugins for %s…", m.targetVersion)))
 	b.WriteString("\n\n")
 	b.WriteString(m.spinner.View() + " " + tui.DimStyle.Render("fetching compatibility"))
 	b.WriteString("\n\n")
@@ -795,7 +753,7 @@ func (m wizardModel) viewCompatResult() string {
 	var b strings.Builder
 	b.WriteString(stepBadge(m.stepNum(phaseCompatResult), m.totalSteps()))
 	b.WriteString("\n\n")
-	b.WriteString(tui.TitleStyle.Render("Extension compatibility"))
+	b.WriteString(tui.TitleStyle.Render("Plugin compatibility"))
 	b.WriteString("\n")
 	b.WriteString(tui.DimStyle.Render(fmt.Sprintf("Upgrade to %s", m.targetVersion)))
 	b.WriteString("\n\n")
@@ -804,10 +762,10 @@ func (m wizardModel) viewCompatResult() string {
 	case m.compatErr != nil:
 		b.WriteString(lipgloss.NewStyle().Foreground(tui.ErrorColor).Render("Compatibility lookup failed: " + m.compatErr.Error()))
 		b.WriteString("\n")
-		b.WriteString(tui.DimStyle.Render("You may still proceed; the wizard cannot guarantee extensions will install."))
+		b.WriteString(tui.DimStyle.Render("You may still proceed; the wizard cannot guarantee plugins will install."))
 		b.WriteString("\n\n")
 	case len(m.compatUpdates) == 0:
-		b.WriteString(tui.DimStyle.Render("No store-managed extensions to check."))
+		b.WriteString(tui.DimStyle.Render("No composer-managed plugins to check."))
 		b.WriteString("\n\n")
 	default:
 		for _, u := range m.compatUpdates {
@@ -824,19 +782,25 @@ func (m wizardModel) viewCompatResult() string {
 			b.WriteString(icon)
 			b.WriteString("  ")
 			b.WriteString(tui.LabelStyle.Render(u.Name))
-			b.WriteString(tui.DimStyle.Render(" — " + u.Status.Label))
+			detail := u.Status.Label()
+			if u.Status == CompatUpdatable && u.NewVersion != "" {
+				detail = fmt.Sprintf("%s → %s", u.CurrentVersion, u.NewVersion)
+			} else if u.CurrentVersion != "" {
+				detail = u.CurrentVersion + " — " + detail
+			}
+			b.WriteString(tui.DimStyle.Render(" — " + detail))
 			b.WriteString("\n")
 		}
 		b.WriteString("\n")
 	}
 
 	if m.compatHasUpdatable {
-		b.WriteString(lipgloss.NewStyle().Foreground(tui.WarnColor).Render("↑ Extensions marked with ↑ have a compatible release; their constraints will be bumped during the upgrade."))
+		b.WriteString(lipgloss.NewStyle().Foreground(tui.WarnColor).Render("↑ Plugins marked with ↑ have a compatible release; their constraints will be bumped during the upgrade."))
 		b.WriteString("\n\n")
 	}
 
 	if m.compatHasBlock {
-		b.WriteString(lipgloss.NewStyle().Foreground(tui.ErrorColor).Bold(true).Render("✗ Some extensions have no compatible version yet."))
+		b.WriteString(lipgloss.NewStyle().Foreground(tui.ErrorColor).Bold(true).Render("✗ Some plugins have no compatible version yet."))
 		b.WriteString("\n")
 		b.WriteString(tui.DimStyle.Render("They will be removed from composer.json so the upgrade can proceed. Re-require them once they publish a compatible release."))
 		b.WriteString("\n\n")
