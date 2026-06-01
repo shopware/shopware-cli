@@ -24,7 +24,9 @@ var ShopwarePackages = []string{
 
 // UpdateComposerJson rewrites the project composer.json so that composer can
 // resolve dependencies for targetVersion. It mirrors the logic of
-// `Shopware\WebInstaller\Services\ProjectComposerJsonUpdater`.
+// `Shopware\WebInstaller\Services\ProjectComposerJsonUpdater` and additionally
+// ensures shopware/deployment-helper is required so the post-update step can
+// invoke vendor/bin/shopware-deployment-helper.
 func UpdateComposerJson(composerJsonPath, targetVersion string) error {
 	composerJson, err := packagist.ReadComposerJson(composerJsonPath)
 	if err != nil {
@@ -50,6 +52,8 @@ func UpdateComposerJson(composerJsonPath, targetVersion string) error {
 			composerJson.Require[pkg] = targetVersion
 		}
 	}
+
+	composerJson.EnsureRequire("shopware/deployment-helper", "*")
 
 	return composerJson.Save()
 }

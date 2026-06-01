@@ -32,11 +32,13 @@ import (
 var projectUpgradeCmd = &cobra.Command{
 	Use:   "upgrade",
 	Short: "Upgrade the Shopware version of this project",
-	Long: `Upgrade the Shopware project to a newer version. This command mirrors
-the behaviour of the shopware/web-installer: it picks an upgrade target,
-removes incompatible custom plugins, rewrites composer.json for the new
-version, runs composer update --with-all-dependencies, and finally runs
-bin/console system:update:prepare and system:update:finish.`,
+	Long: `Upgrade the Shopware project to a newer version. The command picks an
+upgrade target, resolves incompatible custom plugins, rewrites composer.json
+for the new version, runs composer update --with-all-dependencies, and then
+invokes vendor/bin/shopware-deployment-helper to run system:update:prepare,
+migrations, system:update:finish and the rest of the deployment lifecycle.
+shopware/deployment-helper is added to composer.json automatically when the
+project doesn't require it yet.`,
 	RunE: func(cmd *cobra.Command, _ []string) error {
 		ctx := cmd.Context()
 		log := logging.FromContext(ctx)
@@ -162,7 +164,7 @@ func runUpgradeHeadless(cmd *cobra.Command, projectRoot, composerJsonPath string
 	if !confirmed {
 		if err := huh.NewConfirm().
 			Title(fmt.Sprintf("Upgrade Shopware from %s to %s?", currentVersion.String(), targetVersion)).
-			Description("This will modify composer.json, run composer update --with-all-dependencies, and execute system:update:prepare/finish. Commit your changes before running this command.").
+			Description("This will modify composer.json, run composer update --with-all-dependencies, and invoke vendor/bin/shopware-deployment-helper. Commit your changes before running this command.").
 			Value(&confirmed).
 			Run(); err != nil {
 			return err
@@ -171,12 +173,6 @@ func runUpgradeHeadless(cmd *cobra.Command, projectRoot, composerJsonPath string
 
 	if !confirmed {
 		return fmt.Errorf("upgrade cancelled")
-	}
-
-	log.Infof("Backing up composer.json")
-	backup, err := os.ReadFile(composerJsonPath)
-	if err != nil {
-		return fmt.Errorf("failed to backup composer.json: %w", err)
 	}
 
 	log.Infof("Cleaning up stale recipe files")
@@ -188,7 +184,6 @@ func runUpgradeHeadless(cmd *cobra.Command, projectRoot, composerJsonPath string
 	registry, _ := buildRegistry(cmd, projectRoot)
 	result, err := projectupgrade.ResolveIncompatiblePlugins(ctx, composerJsonPath, targetVersion, registry)
 	if err != nil {
-		restoreComposerJson(ctx, composerJsonPath, backup)
 		return fmt.Errorf("resolve incompatible plugins: %w", err)
 	}
 
@@ -203,23 +198,7 @@ func runUpgradeHeadless(cmd *cobra.Command, projectRoot, composerJsonPath string
 
 	log.Infof("Updating composer.json to %s", targetVersion)
 	if err := projectupgrade.UpdateComposerJson(composerJsonPath, targetVersion); err != nil {
-		restoreComposerJson(ctx, composerJsonPath, backup)
 		return fmt.Errorf("update composer.json: %w", err)
-	}
-
-	// system:update:prepare must run on the still-installed (old) Shopware so
-	// it can enter maintenance mode and record the pending update before the
-	// vendor code is swapped by composer update.
-	log.Infof("Running bin/console system:update:prepare")
-	prepareCmd := cmdExecutor.ConsoleCommand(ctx, "system:update:prepare", "--no-interaction")
-	prepareCmd.Cmd.Stdin = cmd.InOrStdin()
-	prepareCmd.Cmd.Stdout = cmd.OutOrStdout()
-	prepareCmd.Cmd.Stderr = cmd.ErrOrStderr()
-
-	if err := prepareCmd.Run(); err != nil {
-		restoreComposerJson(ctx, composerJsonPath, backup)
-		trackUpgrade(ctx, currentVersion.String(), targetVersion, "system_update_prepare_failed")
-		return fmt.Errorf("system:update:prepare failed, composer.json was restored: %w", err)
 	}
 
 	log.Infof("Running composer update")
@@ -238,20 +217,19 @@ func runUpgradeHeadless(cmd *cobra.Command, projectRoot, composerJsonPath string
 
 	if err := composerCmd.Run(); err != nil {
 		log.Errorf("composer update failed: %v", err)
-		restoreComposerJson(ctx, composerJsonPath, backup)
 		trackUpgrade(ctx, currentVersion.String(), targetVersion, "composer_update_failed")
-		return fmt.Errorf("composer update failed, composer.json was restored: %w", err)
+		return fmt.Errorf("composer update failed: %w", err)
 	}
 
-	log.Infof("Running bin/console system:update:finish")
-	finishCmd := cmdExecutor.ConsoleCommand(ctx, "system:update:finish", "--no-interaction")
-	finishCmd.Cmd.Stdin = cmd.InOrStdin()
-	finishCmd.Cmd.Stdout = cmd.OutOrStdout()
-	finishCmd.Cmd.Stderr = cmd.ErrOrStderr()
+	log.Infof("Running vendor/bin/shopware-deployment-helper run")
+	deployCmd := cmdExecutor.PHPCommand(ctx, "vendor/bin/shopware-deployment-helper", "run")
+	deployCmd.Cmd.Stdin = cmd.InOrStdin()
+	deployCmd.Cmd.Stdout = cmd.OutOrStdout()
+	deployCmd.Cmd.Stderr = cmd.ErrOrStderr()
 
-	if err := finishCmd.Run(); err != nil {
-		trackUpgrade(ctx, currentVersion.String(), targetVersion, "system_update_finish_failed")
-		return fmt.Errorf("system:update:finish failed: %w", err)
+	if err := deployCmd.Run(); err != nil {
+		trackUpgrade(ctx, currentVersion.String(), targetVersion, "deployment_helper_failed")
+		return fmt.Errorf("shopware-deployment-helper run failed: %w", err)
 	}
 
 	trackUpgrade(ctx, currentVersion.String(), targetVersion, "ok")
@@ -366,12 +344,6 @@ func runCompatibilityCheck(ctx context.Context, currentVersion *version.Version,
 	}
 
 	return nil
-}
-
-func restoreComposerJson(ctx context.Context, composerJsonPath string, backup []byte) {
-	if err := os.WriteFile(composerJsonPath, backup, 0o644); err != nil {
-		logging.FromContext(ctx).Errorf("failed to restore composer.json from backup: %v", err)
-	}
 }
 
 func trackUpgrade(ctx context.Context, fromVersion, toVersion, status string) {

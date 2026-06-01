@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"os"
 	"os/exec"
 	"strings"
 	"time"
@@ -77,18 +76,16 @@ type task struct {
 	detail string
 }
 
-// taskCleanup, taskPlugins, ... are stable indices into model.tasks.
-// system:update:prepare runs on the still-installed (old) Shopware so it can
-// enter maintenance and record the update before the vendor code changes;
-// composer update then swaps the code, and system:update:finish migrates.
+// Stable indices into model.tasks. The flow is: rewrite composer.json,
+// have composer pull the new vendor code, then let shopware-deployment-helper
+// drive the install/update lifecycle (system:update:prepare, migrations,
+// system:update:finish, theme compile, etc.) in one pass.
 const (
-	taskBackup = iota
-	taskCleanup
+	taskCleanup = iota
 	taskPlugins
 	taskComposerJSON
-	taskSystemPrepare
 	taskComposerUpdate
-	taskSystemFinish
+	taskDeploymentHelper
 )
 
 // wizardMsg variants advance the upgrade state machine.
@@ -98,11 +95,10 @@ type (
 		err     error
 	}
 	taskCompleteMsg struct {
-		task           int
-		err            error
-		detail         string
-		composerBackup []byte
-		pluginActions  *ResolveResult
+		task          int
+		err           error
+		detail        string
+		pluginActions *ResolveResult
 		// output is the full captured subprocess output, set for streaming
 		// tasks so the complete log survives independent of log-line event
 		// ordering. Used to render the error tail on failure.
@@ -124,7 +120,6 @@ type wizardModel struct {
 	versionList        *tui.SelectList
 	targetVersion      string
 	confirmYes         bool
-	composerBackup     []byte
 	pluginActions      *ResolveResult
 	compatUpdates      []account_api.UpdateCheckExtensionCompatibility
 	compatHasBlock     bool
@@ -220,13 +215,11 @@ var ErrCancelled = errors.New("upgrade cancelled by user")
 
 func defaultTasks() []task {
 	return []task{
-		{label: "Back up composer.json"},
 		{label: "Clean up stale recipe files"},
 		{label: "Resolve incompatible custom plugins"},
 		{label: "Rewrite composer.json"},
-		{label: "bin/console system:update:prepare"},
 		{label: "composer update --with-all-dependencies"},
-		{label: "bin/console system:update:finish"},
+		{label: "vendor/bin/shopware-deployment-helper run"},
 	}
 }
 
@@ -269,9 +262,6 @@ func (m wizardModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.startTask()
 
 	case taskCompleteMsg:
-		if msg.composerBackup != nil {
-			m.composerBackup = msg.composerBackup
-		}
 		if msg.pluginActions != nil {
 			m.pluginActions = msg.pluginActions
 		}
@@ -510,8 +500,6 @@ func (m wizardModel) startTask() (tea.Model, tea.Cmd) {
 	m.tasks[m.currentTask].status = taskRunning
 
 	switch m.currentTask {
-	case taskBackup:
-		return m, m.runBackup()
 	case taskCleanup:
 		return m, m.runCleanup()
 	case taskPlugins:
@@ -520,29 +508,11 @@ func (m wizardModel) startTask() (tea.Model, tea.Cmd) {
 		return m, m.runUpdateComposer()
 	case taskComposerUpdate:
 		return m.startComposerUpdate()
-	case taskSystemPrepare:
-		// prepare runs before composer update, while composer.json is already
-		// rewritten - restore it on failure so the project is left untouched.
-		return m.startSystemUpdate("system:update:prepare", taskSystemPrepare, true)
-	case taskSystemFinish:
-		// finish runs after a successful composer update; restoring the old
-		// composer.json here would undo the upgrade, so leave it in place.
-		return m.startSystemUpdate("system:update:finish", taskSystemFinish, false)
+	case taskDeploymentHelper:
+		return m.startDeploymentHelper()
 	}
 
 	return m, nil
-}
-
-func (m wizardModel) runBackup() tea.Cmd {
-	composerJSONPath := m.opts.ComposerJSONPath
-	idx := taskBackup
-	return func() tea.Msg {
-		data, err := os.ReadFile(composerJSONPath)
-		if err != nil {
-			return taskCompleteMsg{task: idx, err: fmt.Errorf("read composer.json: %w", err)}
-		}
-		return taskCompleteMsg{task: idx, detail: fmt.Sprintf("%d bytes", len(data)), composerBackup: data}
-	}
 }
 
 func (m wizardModel) runCleanup() tea.Cmd {
@@ -560,7 +530,6 @@ func (m wizardModel) runRemovePlugins() tea.Cmd {
 	composerJSONPath := m.opts.ComposerJSONPath
 	target := m.targetVersion
 	idx := taskPlugins
-	restore := m.composerBackup
 	registry := m.opts.Registry
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
@@ -568,7 +537,6 @@ func (m wizardModel) runRemovePlugins() tea.Cmd {
 
 		result, err := ResolveIncompatiblePlugins(ctx, composerJSONPath, target, registry)
 		if err != nil {
-			_ = os.WriteFile(composerJSONPath, restore, 0o644)
 			return taskCompleteMsg{task: idx, err: err}
 		}
 		if result == nil {
@@ -593,10 +561,8 @@ func (m wizardModel) runUpdateComposer() tea.Cmd {
 	composerJSONPath := m.opts.ComposerJSONPath
 	target := m.targetVersion
 	idx := taskComposerJSON
-	restore := m.composerBackup
 	return func() tea.Msg {
 		if err := UpdateComposerJson(composerJSONPath, target); err != nil {
-			_ = os.WriteFile(composerJSONPath, restore, 0o644)
 			return taskCompleteMsg{task: idx, err: err}
 		}
 		return taskCompleteMsg{task: idx, detail: "pinned to " + target}
@@ -621,22 +587,17 @@ func (m wizardModel) startComposerUpdate() (tea.Model, tea.Cmd) {
 	}
 	p := m.opts.Executor.ComposerCommand(ctx, args...)
 
-	restore := m.composerBackup
-	composerJSONPath := m.opts.ComposerJSONPath
 	idx := taskComposerUpdate
 
 	doneCmd := func() tea.Msg {
 		output, err := streamCmdOutput(p.Cmd, ch, true)
-		if err != nil {
-			_ = os.WriteFile(composerJSONPath, restore, 0o644)
-		}
 		return taskCompleteMsg{task: idx, err: err, output: output}
 	}
 
 	return m, tea.Batch(m.readNextLog(), doneCmd)
 }
 
-func (m wizardModel) startSystemUpdate(consoleCmd string, idx int, restoreOnFail bool) (tea.Model, tea.Cmd) {
+func (m wizardModel) startDeploymentHelper() (tea.Model, tea.Cmd) {
 	ctx, cancel := context.WithCancel(context.Background())
 	m.cancelExecution = cancel
 
@@ -645,16 +606,12 @@ func (m wizardModel) startSystemUpdate(consoleCmd string, idx int, restoreOnFail
 	m.logLines = nil
 	m.fullLog = nil
 
-	p := m.opts.Executor.ConsoleCommand(ctx, consoleCmd, "--no-interaction")
+	p := m.opts.Executor.PHPCommand(ctx, "vendor/bin/shopware-deployment-helper", "run")
 
-	restore := m.composerBackup
-	composerJSONPath := m.opts.ComposerJSONPath
+	idx := taskDeploymentHelper
 
 	doneCmd := func() tea.Msg {
 		output, err := streamCmdOutput(p.Cmd, ch, true)
-		if err != nil && restoreOnFail {
-			_ = os.WriteFile(composerJSONPath, restore, 0o644)
-		}
 		return taskCompleteMsg{task: idx, err: err, output: output}
 	}
 
@@ -776,12 +733,11 @@ func (m wizardModel) viewWelcome() string {
 	b.WriteString(tui.DimStyle.Render("This wizard mirrors the shopware/web-installer flow:"))
 	b.WriteString("\n\n")
 	for _, line := range []string{
-		"Back up composer.json before any change",
 		"Clean up stale recipe-managed files (md5-matched)",
-		"Drop incompatible custom plugins from composer.json",
-		"Rewrite composer.json to pin the target version",
+		"Resolve incompatible custom plugins (bump or drop)",
+		"Rewrite composer.json to pin the target version and ensure shopware/deployment-helper",
 		"Run composer update --with-all-dependencies --no-scripts",
-		"Run bin/console system:update:prepare + finish",
+		"Run vendor/bin/shopware-deployment-helper run",
 	} {
 		b.WriteString(tui.DimStyle.Render("  • "))
 		b.WriteString(tui.LabelStyle.Render(line))
@@ -981,7 +937,7 @@ func (m wizardModel) viewDone() string {
 			b.WriteString("\n\n")
 		}
 
-		b.WriteString(tui.DimStyle.Render("composer.json was restored from the backup taken before the upgrade."))
+		b.WriteString(tui.DimStyle.Render("composer.json and vendor are left as-is; run `git checkout composer.json composer.lock` to revert."))
 	} else {
 		b.WriteString(lipgloss.NewStyle().Bold(true).Foreground(tui.SuccessColor).Render(fmt.Sprintf("✓ Upgraded to Shopware %s", m.targetVersion)))
 		b.WriteString("\n\n")

@@ -248,3 +248,35 @@ func TestReadComposerJsonDifferentRepositoryWritings(t *testing.T) {
 		assert.ElementsMatch(t, expectedRepos, composer.Repositories)
 	})
 }
+
+func TestEnsureRequireAddsWhenMissing(t *testing.T) {
+	t.Parallel()
+
+	cj := &ComposerJson{Require: ComposerPackageLink{"shopware/core": "^6.6"}}
+	assert.True(t, cj.EnsureRequire("shopware/deployment-helper", "*"))
+	assert.Equal(t, "*", cj.Require["shopware/deployment-helper"])
+}
+
+func TestEnsureRequireNoOpWhenAlreadyRequired(t *testing.T) {
+	t.Parallel()
+
+	cj := &ComposerJson{Require: ComposerPackageLink{"shopware/deployment-helper": "^1.0"}}
+	assert.False(t, cj.EnsureRequire("shopware/deployment-helper", "*"))
+	assert.Equal(t, "^1.0", cj.Require["shopware/deployment-helper"], "an existing constraint must not be overwritten")
+}
+
+func TestEnsureRequireNoOpWhenPresentInRequireDev(t *testing.T) {
+	t.Parallel()
+
+	cj := &ComposerJson{RequireDev: ComposerPackageLink{"shopware/deployment-helper": "^1.0"}}
+	assert.False(t, cj.EnsureRequire("shopware/deployment-helper", "*"))
+	assert.NotContains(t, cj.Require, "shopware/deployment-helper", "must not duplicate into require when present in require-dev")
+}
+
+func TestEnsureRequireInitializesRequireMap(t *testing.T) {
+	t.Parallel()
+
+	cj := &ComposerJson{}
+	assert.True(t, cj.EnsureRequire("shopware/deployment-helper", "*"))
+	assert.Equal(t, "*", cj.Require["shopware/deployment-helper"])
+}

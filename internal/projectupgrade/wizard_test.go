@@ -158,38 +158,19 @@ func TestWizardCompatLoadedUpdatableIsNotBlocker(t *testing.T) {
 	assert.True(t, wm.confirmYes, "no blocker means confirm defaults to Yes")
 }
 
-func TestUpgradeTaskOrderRunsPrepareBeforeComposerUpdate(t *testing.T) {
+func TestUpgradeTaskOrderRunsDeploymentHelperLast(t *testing.T) {
 	t.Parallel()
 
-	// system:update:prepare must run on the old, still-installed Shopware,
-	// i.e. before composer update swaps the vendor code; finish runs last.
-	assert.Less(t, taskSystemPrepare, taskComposerUpdate, "prepare must precede composer update")
-	assert.Less(t, taskComposerUpdate, taskSystemFinish, "finish must run after composer update")
+	// composer update must rewrite vendor before shopware-deployment-helper
+	// runs the install/update lifecycle that drives system:update:prepare,
+	// migrations, system:update:finish and theme compilation.
+	assert.Less(t, taskComposerJSON, taskComposerUpdate, "composer.json must be rewritten before composer update")
+	assert.Less(t, taskComposerUpdate, taskDeploymentHelper, "deployment-helper runs after composer update")
 
 	tasks := defaultTasks()
-	require.Len(t, tasks, taskSystemFinish+1)
-	assert.Equal(t, "bin/console system:update:prepare", tasks[taskSystemPrepare].label)
+	require.Len(t, tasks, taskDeploymentHelper+1)
 	assert.Equal(t, "composer update --with-all-dependencies", tasks[taskComposerUpdate].label)
-	assert.Equal(t, "bin/console system:update:finish", tasks[taskSystemFinish].label)
-}
-
-func TestWizardTaskCompletePersistsBackupAcrossUpdates(t *testing.T) {
-	t.Parallel()
-
-	m := newTestModel(t)
-	m.phase = phaseRunning
-	m.currentTask = taskBackup
-
-	// First task: backup captures composer.json bytes.
-	updated, _ := m.Update(taskCompleteMsg{
-		task:           taskBackup,
-		composerBackup: []byte(`{"name":"shopware/production"}`),
-		detail:         "30 bytes",
-	})
-	wm := updated.(wizardModel)
-	assert.Equal(t, []byte(`{"name":"shopware/production"}`), wm.composerBackup, "backup must persist for later restore-on-failure")
-	assert.Equal(t, taskCleanup, wm.currentTask)
-	assert.Equal(t, taskDone, wm.tasks[taskBackup].status)
+	assert.Equal(t, "vendor/bin/shopware-deployment-helper run", tasks[taskDeploymentHelper].label)
 }
 
 func TestWizardTaskCompleteErrorEndsRun(t *testing.T) {

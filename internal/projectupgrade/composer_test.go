@@ -54,6 +54,27 @@ func TestUpdateComposerJsonRewritesShopwarePackages(t *testing.T) {
 	assert.Equal(t, "6.6.4.0", requireMap["shopware/storefront"])
 	assert.Equal(t, "^1.0", requireMap["unrelated/package"])
 	assert.NotContains(t, requireMap, "shopware/elasticsearch", "should not add packages that were not already required")
+	assert.Equal(t, "*", requireMap["shopware/deployment-helper"], "deployment-helper is added so the upgrade can invoke it after composer update")
+}
+
+func TestUpdateComposerJsonLeavesExistingDeploymentHelperConstraint(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	composerJsonPath := filepath.Join(dir, "composer.json")
+
+	writeJSON(t, composerJsonPath, map[string]any{
+		"name": "shopware/production",
+		"require": map[string]any{
+			"shopware/core":              "6.5.8.0",
+			"shopware/deployment-helper": "^1.0",
+		},
+	})
+
+	require.NoError(t, UpdateComposerJson(composerJsonPath, "6.6.4.0"))
+
+	requireMap := readJSON(t, composerJsonPath)["require"].(map[string]any)
+	assert.Equal(t, "^1.0", requireMap["shopware/deployment-helper"], "an existing constraint must not be overwritten")
 }
 
 func TestUpdateComposerJsonSetsRCStability(t *testing.T) {
