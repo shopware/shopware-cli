@@ -44,6 +44,15 @@ var projectCI = &cobra.Command{
 			return err
 		}
 
+		force, err := cmd.Flags().GetBool("force")
+		if err != nil {
+			return err
+		}
+
+		if err := projectCISafetyCheck(cmd.Context(), args[0], force, os.Getenv); err != nil {
+			return err
+		}
+
 		if os.Getenv("APP_ENV") == "" {
 			if err := os.Setenv("APP_ENV", "prod"); err != nil {
 				return err
@@ -358,6 +367,76 @@ func prepareComposerAuth(ctx context.Context, root string) (string, error) {
 func init() {
 	projectRootCmd.AddCommand(projectCI)
 	projectCI.PersistentFlags().Bool("with-dev-dependencies", false, "Install dev dependencies")
+	projectCI.PersistentFlags().Bool("force", false, "Run project ci outside CI even when the git working tree has local changes")
+}
+
+func projectCISafetyCheck(ctx context.Context, root string, force bool, getenv func(string) string) error {
+	if force || isCIEnvironment(getenv) {
+		return nil
+	}
+
+	dirty, isGitRepository, err := isGitWorkingTreeDirty(ctx, root)
+	if err != nil {
+		return err
+	}
+
+	if !isGitRepository {
+		logging.FromContext(ctx).Warnf("Running project ci outside a CI environment; this command removes source files and should usually only be used in CI")
+		return nil
+	}
+
+	if dirty {
+		return fmt.Errorf("project ci removes source files and creates build stubs; refusing to run outside CI with a dirty git working tree. Commit, stash, or clean local changes, or pass --force if you intentionally want to run it")
+	}
+
+	logging.FromContext(ctx).Warnf("Running project ci outside a CI environment; this command removes source files and should usually only be used in CI")
+
+	return nil
+}
+
+func isCIEnvironment(getenv func(string) string) bool {
+	if strings.EqualFold(getenv("CI"), "true") {
+		return true
+	}
+
+	ciEnvVars := []string{
+		"GITHUB_ACTIONS",
+		"GITLAB_CI",
+		"JENKINS_URL",
+		"BUILDKITE",
+		"CIRCLECI",
+		"DRONE",
+		"TEAMCITY_VERSION",
+		"TF_BUILD",
+	}
+
+	for _, envVar := range ciEnvVars {
+		if getenv(envVar) != "" {
+			return true
+		}
+	}
+
+	return false
+}
+
+func isGitWorkingTreeDirty(ctx context.Context, root string) (bool, bool, error) {
+	cmd := exec.CommandContext(ctx, "git", "-C", root, "rev-parse", "--is-inside-work-tree") //nolint:gosec
+	output, err := cmd.Output()
+	if err != nil {
+		return false, false, nil
+	}
+
+	if strings.TrimSpace(string(output)) != "true" {
+		return false, false, nil
+	}
+
+	statusCmd := exec.CommandContext(ctx, "git", "-C", root, "status", "--porcelain", "--untracked-files=all") //nolint:gosec
+	status, err := statusCmd.Output()
+	if err != nil {
+		return false, true, fmt.Errorf("checking git working tree status: %w", err)
+	}
+
+	return strings.TrimSpace(string(status)) != "", true, nil
 }
 
 func commandWithRoot(cmd *exec.Cmd, root string) *exec.Cmd {

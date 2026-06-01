@@ -1,0 +1,100 @@
+package project
+
+import (
+	"os"
+	"os/exec"
+	"path/filepath"
+	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+)
+
+func TestProjectCISafetyCheck(t *testing.T) {
+	t.Run("allows dirty git working tree in CI", func(t *testing.T) {
+		root := newDirtyGitRepository(t)
+
+		err := projectCISafetyCheck(t.Context(), root, false, mapGetenv(map[string]string{"CI": "true"}))
+
+		assert.NoError(t, err)
+	})
+
+	t.Run("allows dirty git working tree with force", func(t *testing.T) {
+		root := newDirtyGitRepository(t)
+
+		err := projectCISafetyCheck(t.Context(), root, true, mapGetenv(nil))
+
+		assert.NoError(t, err)
+	})
+
+	t.Run("rejects dirty git working tree outside CI without force", func(t *testing.T) {
+		root := newDirtyGitRepository(t)
+
+		err := projectCISafetyCheck(t.Context(), root, false, mapGetenv(nil))
+
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "project ci removes source files")
+		assert.Contains(t, err.Error(), "--force")
+	})
+
+	t.Run("allows clean git working tree outside CI without force", func(t *testing.T) {
+		root := newCleanGitRepository(t)
+
+		err := projectCISafetyCheck(t.Context(), root, false, mapGetenv(nil))
+
+		assert.NoError(t, err)
+	})
+}
+
+func TestIsCIEnvironment(t *testing.T) {
+	tests := []struct {
+		name string
+		env  map[string]string
+		want bool
+	}{
+		{name: "CI true", env: map[string]string{"CI": "true"}, want: true},
+		{name: "GitHub Actions", env: map[string]string{"GITHUB_ACTIONS": "true"}, want: true},
+		{name: "GitLab CI", env: map[string]string{"GITLAB_CI": "true"}, want: true},
+		{name: "Jenkins", env: map[string]string{"JENKINS_URL": "https://jenkins.example"}, want: true},
+		{name: "no CI", env: nil, want: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, isCIEnvironment(mapGetenv(tt.env)))
+		})
+	}
+}
+
+func newDirtyGitRepository(t *testing.T) string {
+	t.Helper()
+
+	root := newCleanGitRepository(t)
+	require.NoError(t, os.WriteFile(filepath.Join(root, "untracked.txt"), []byte("local work"), 0o644))
+
+	return root
+}
+
+func newCleanGitRepository(t *testing.T) string {
+	t.Helper()
+
+	root := t.TempDir()
+	runGit(t, root, "init")
+
+	return root
+}
+
+func runGit(t *testing.T, dir string, args ...string) {
+	t.Helper()
+
+	cmd := exec.Command("git", args...)
+	cmd.Dir = dir
+	output, err := cmd.CombinedOutput()
+	require.NoErrorf(t, err, "git %v failed: %s", args, output)
+}
+
+func mapGetenv(env map[string]string) func(string) string {
+	return func(key string) string {
+		return env[key]
+	}
+}
