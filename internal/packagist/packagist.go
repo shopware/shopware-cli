@@ -33,6 +33,7 @@ type PackageVersion struct {
 	Version     string            `json:"version"`
 	Description string            `json:"description"`
 	Replace     map[string]string `json:"replace"`
+	Require     map[string]string `json:"require"`
 }
 
 type ComposerPackageVersion struct {
@@ -109,7 +110,25 @@ func PHPConstraintForShopwareVersion(releases []ComposerPackageVersion, chosenVe
 }
 
 func GetShopwarePackageVersions(ctx context.Context) ([]ComposerPackageVersion, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "https://repo.packagist.org/p2/shopware/core.json", http.NoBody)
+	versions, err := GetComposerPackageVersions(ctx, "shopware/core")
+	if err != nil {
+		return nil, err
+	}
+
+	if len(versions) == 0 {
+		return nil, fmt.Errorf("decode package versions: package shopware/core not found")
+	}
+
+	return versions, nil
+}
+
+// GetComposerPackageVersions fetches every published version of a composer
+// package from repo.packagist.org. An empty slice (and no error) is returned
+// when the package does not exist.
+func GetComposerPackageVersions(ctx context.Context, name string) ([]ComposerPackageVersion, error) {
+	url := fmt.Sprintf("https://repo.packagist.org/p2/%s.json", name)
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, http.NoBody)
 	if err != nil {
 		return nil, fmt.Errorf("create package versions request: %w", err)
 	}
@@ -122,6 +141,10 @@ func GetShopwarePackageVersions(ctx context.Context) ([]ComposerPackageVersion, 
 	}
 	defer closeResponseBody(ctx, resp)
 
+	if resp.StatusCode == http.StatusNotFound {
+		return nil, nil
+	}
+
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("fetch package versions: %s", resp.Status)
 	}
@@ -132,9 +155,9 @@ func GetShopwarePackageVersions(ctx context.Context) ([]ComposerPackageVersion, 
 		return nil, fmt.Errorf("decode package versions: %w", err)
 	}
 
-	rawVersions, ok := packageResponse.Packages["shopware/core"]
+	rawVersions, ok := packageResponse.Packages[name]
 	if !ok {
-		return nil, fmt.Errorf("decode package versions: package shopware/core not found")
+		return nil, nil
 	}
 
 	if packageResponse.Minified != "" {

@@ -23,14 +23,44 @@ type UpdateCheckExtensionCompatibility struct {
 	Status   UpdateCheckExtensionCompatibilityStatus `json:"status"`
 }
 
+// Plugin compatibility status names returned by the store autoupdate
+// endpoint. These mirror the constants in Shopware's
+// Core\Framework\Update\Services\ExtensionCompatibility. The status `type`
+// field is only a display color (green/red/…), so classification must key on
+// the semantic `name` instead.
+const (
+	// CompatibilityCompatible means the installed version already works with
+	// the target Shopware version.
+	CompatibilityCompatible = "compatible"
+	// CompatibilityUpdatableNow / CompatibilityUpdatableFuture mean the
+	// extension has a compatible release available ("With new Shopware
+	// version"): not a blocker, the constraint just needs to be bumped.
+	CompatibilityUpdatableNow    = "updatableNow"
+	CompatibilityUpdatableFuture = "updatableFuture"
+	// CompatibilityNotCompatible means no compatible successor exists. This
+	// is the only genuine blocker.
+	CompatibilityNotCompatible = "notCompatible"
+	// CompatibilityNotInStore means the extension is not managed by the store.
+	CompatibilityNotInStore = "notInStore"
+)
+
 type UpdateCheckExtensionCompatibilityStatus struct {
 	Name  string `json:"name"`
 	Label string `json:"label"`
 	Type  string `json:"type"`
 }
 
+// IsBlocker reports whether this status prevents the upgrade. Only
+// notCompatible (no compatible successor) blocks; updatableNow/updatableFuture
+// are resolvable by bumping the extension constraint, so they are not blockers.
 func (s UpdateCheckExtensionCompatibilityStatus) IsBlocker() bool {
-	return s.Type != "success" && s.Type != ""
+	return s.Name == CompatibilityNotCompatible
+}
+
+// IsUpdatable reports whether a compatible release exists that the installed
+// version must be bumped to ("With new Shopware version").
+func (s UpdateCheckExtensionCompatibilityStatus) IsUpdatable() bool {
+	return s.Name == CompatibilityUpdatableNow || s.Name == CompatibilityUpdatableFuture
 }
 
 func GetFutureExtensionUpdates(ctx context.Context, currentVersion string, futureVersion string, extensions []UpdateCheckExtension) ([]UpdateCheckExtensionCompatibility, error) {

@@ -126,6 +126,21 @@ func (c *ComposerJson) HasPackageDev(name string) bool {
 	return ok
 }
 
+// EnsureRequire adds name=constraint to the require block when the package is
+// not already present in either require or require-dev. Returns true when
+// composer.json was modified; callers must Save() to persist the change.
+func (c *ComposerJson) EnsureRequire(name, constraint string) bool {
+	if c.HasPackage(name) || c.HasPackageDev(name) {
+		return false
+	}
+
+	if c.Require == nil {
+		c.Require = ComposerPackageLink{}
+	}
+	c.Require[name] = constraint
+	return true
+}
+
 func (c *ComposerJson) HasConfig(key string) bool {
 	_, ok := c.Config[key]
 	return ok
