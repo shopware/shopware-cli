@@ -12,7 +12,7 @@ import (
 	"time"
 
 	"github.com/shopware/shopware-cli/internal/packagist"
-	"github.com/shopware/shopware-cli/internal/spdx"
+	"github.com/shyim/go-spdx"
 )
 
 const (
