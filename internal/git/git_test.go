@@ -94,6 +94,39 @@ func TestGetPublicVCSURL(t *testing.T) {
 	assert.NoError(t, err)
 }
 
+func TestIsWorkingTreeDirty(t *testing.T) {
+	t.Run("clean git working tree", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		prepareRepository(t, tmpDir)
+
+		dirty, isGitRepository, err := IsWorkingTreeDirty(t.Context(), tmpDir)
+
+		assert.NoError(t, err)
+		assert.True(t, isGitRepository)
+		assert.False(t, dirty)
+	})
+
+	t.Run("dirty git working tree", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		prepareRepository(t, tmpDir)
+		assert.NoError(t, os.WriteFile(filepath.Join(tmpDir, "untracked.txt"), []byte("local work"), 0o644))
+
+		dirty, isGitRepository, err := IsWorkingTreeDirty(t.Context(), tmpDir)
+
+		assert.NoError(t, err)
+		assert.True(t, isGitRepository)
+		assert.True(t, dirty)
+	})
+
+	t.Run("not a git repository", func(t *testing.T) {
+		dirty, isGitRepository, err := IsWorkingTreeDirty(t.Context(), t.TempDir())
+
+		assert.NoError(t, err)
+		assert.False(t, isGitRepository)
+		assert.False(t, dirty)
+	})
+}
+
 func runCommand(t *testing.T, tmpDir string, args ...string) {
 	t.Helper()
 
