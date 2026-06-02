@@ -14,10 +14,12 @@ import (
 
 	"github.com/shopware/shopware-cli/internal/ci"
 	"github.com/shopware/shopware-cli/internal/extension"
+	internalgit "github.com/shopware/shopware-cli/internal/git"
 	"github.com/shopware/shopware-cli/internal/mjml"
 	"github.com/shopware/shopware-cli/internal/packagist"
 	"github.com/shopware/shopware-cli/internal/phpexec"
 	"github.com/shopware/shopware-cli/internal/shop"
+	"github.com/shopware/shopware-cli/internal/system"
 	"github.com/shopware/shopware-cli/logging"
 )
 
@@ -41,6 +43,15 @@ var projectCI = &cobra.Command{
 		var err error
 		args[0], err = filepath.Abs(args[0])
 		if err != nil {
+			return err
+		}
+
+		force, err := cmd.Flags().GetBool("force")
+		if err != nil {
+			return err
+		}
+
+		if err := projectCISafetyCheck(cmd.Context(), args[0], force, os.Getenv); err != nil {
 			return err
 		}
 
@@ -358,6 +369,31 @@ func prepareComposerAuth(ctx context.Context, root string) (string, error) {
 func init() {
 	projectRootCmd.AddCommand(projectCI)
 	projectCI.PersistentFlags().Bool("with-dev-dependencies", false, "Install dev dependencies")
+	projectCI.PersistentFlags().Bool("force", false, "Run project ci outside CI even when the git working tree has local changes")
+}
+
+func projectCISafetyCheck(ctx context.Context, root string, force bool, getenv func(string) string) error {
+	if force || system.IsCIEnvironment(getenv) {
+		return nil
+	}
+
+	dirty, isGitRepository, err := internalgit.IsWorkingTreeDirty(ctx, root)
+	if err != nil {
+		return err
+	}
+
+	if !isGitRepository {
+		logging.FromContext(ctx).Warnf("Running project ci outside a CI environment; this command removes source files and should usually only be used in CI")
+		return nil
+	}
+
+	if dirty {
+		return fmt.Errorf("project ci removes source files and creates build stubs; refusing to run outside CI with a dirty git working tree. Commit, stash, or clean local changes, or pass --force if you intentionally want to run it")
+	}
+
+	logging.FromContext(ctx).Warnf("Running project ci outside a CI environment; this command removes source files and should usually only be used in CI")
+
+	return nil
 }
 
 func commandWithRoot(cmd *exec.Cmd, root string) *exec.Cmd {

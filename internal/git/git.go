@@ -2,6 +2,7 @@ package git
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -194,6 +195,31 @@ func unshallowRepository(ctx context.Context, repo string) error {
 	_, err := runGit(ctx, repo, "fetch", "--unshallow")
 
 	return err
+}
+
+func IsWorkingTreeDirty(ctx context.Context, repo string) (bool, bool, error) {
+	cmd := exec.CommandContext(ctx, "git", "-C", repo, "rev-parse", "--is-inside-work-tree") //nolint:gosec
+	output, err := cmd.Output()
+	if err != nil {
+		var exitErr *exec.ExitError
+		if errors.As(err, &exitErr) {
+			return false, false, nil
+		}
+
+		return false, false, fmt.Errorf("checking git repository: %w", err)
+	}
+
+	if strings.TrimSpace(string(output)) != "true" {
+		return false, false, nil
+	}
+
+	statusCmd := exec.CommandContext(ctx, "git", "-C", repo, "status", "--porcelain", "--untracked-files=all") //nolint:gosec
+	status, err := statusCmd.Output()
+	if err != nil {
+		return false, true, fmt.Errorf("checking git working tree status: %w", err)
+	}
+
+	return strings.TrimSpace(string(status)) != "", true, nil
 }
 
 func Init(ctx context.Context, repo string) error {
