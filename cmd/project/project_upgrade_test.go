@@ -58,7 +58,6 @@ func TestEnsureCleanGitTreeRejectsDirtyRepo(t *testing.T) {
 	err := ensureCleanGitTree(t.Context(), dir, false)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "working tree must be clean")
-	assert.Contains(t, err.Error(), "untracked")
 }
 
 func TestEnsureCleanGitTreeAllowDirtyFlagBypassesCheck(t *testing.T) {

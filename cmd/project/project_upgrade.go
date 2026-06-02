@@ -333,34 +333,19 @@ func ensureCleanGitTree(ctx context.Context, projectRoot string, allowDirty bool
 		return nil
 	}
 
-	if !git.IsRepository(ctx, projectRoot) {
-		return nil
-	}
-
-	changes, err := git.WorkingTreeStatus(ctx, projectRoot)
+	dirty, isRepo, err := git.IsWorkingTreeDirty(ctx, projectRoot)
 	if err != nil {
 		return fmt.Errorf("could not read git working tree status: %w", err)
 	}
 
-	if len(changes) == 0 {
+	if !isRepo || !dirty {
 		return nil
 	}
 
-	preview := changes
-	const maxPreview = 10
-	suffix := ""
-	if len(preview) > maxPreview {
-		preview = preview[:maxPreview]
-		suffix = fmt.Sprintf("\n  … and %d more", len(changes)-maxPreview)
-	}
-
 	return fmt.Errorf(
-		"the upgrade rewrites composer.json and removes recipe-managed files, so the working tree must be clean - "+
-			"%d uncommitted change(s) detected in %s:\n  %s%s\n\ncommit or stash your changes, or rerun with --allow-dirty to override",
-		len(changes),
+		"the upgrade rewrites composer.json and removes recipe-managed files, so the working tree must be clean in %s - "+
+			"commit or stash your changes, or rerun with --allow-dirty to override",
 		projectRoot,
-		strings.Join(preview, "\n  "),
-		suffix,
 	)
 }
 

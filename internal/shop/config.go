@@ -6,6 +6,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"dario.cat/mergo"
@@ -164,6 +165,19 @@ type ConfigBuildMJML struct {
 	Enabled bool `yaml:"enabled,omitempty"`
 	// Directories to search for MJML files
 	SearchPaths []string `yaml:"search_paths,omitempty"`
+	// When enabled, mj-include directives in MJML templates are processed.
+	// MJML 5 ignores mj-include by default for security reasons; set this to
+	// true to opt back in. Each search_path is automatically added to the
+	// mj-include allowlist for files compiled inside it, so templates can
+	// include siblings under the same search_path (e.g. a shared _includes/
+	// folder) without further configuration.
+	AllowIncludes bool `yaml:"allow_includes,omitempty"`
+	// Extra directories outside any search_path that mj-include is allowed to
+	// read from. Relative paths are resolved against the project root.
+	// Absolute paths are used as-is. Most projects do not need this — set it
+	// only when partials live outside the search_path tree. Implies
+	// allow_includes.
+	IncludePaths []string `yaml:"include_paths,omitempty"`
 }
 
 func (c ConfigBuildMJML) GetPaths(projectRoot string) []string {
@@ -184,6 +198,25 @@ func (c ConfigBuildMJML) GetPaths(projectRoot string) []string {
 		filepath.Join(projectRoot, "custom", "plugins"),
 		filepath.Join(projectRoot, "custom", "static-plugins"),
 	}
+}
+
+// ResolveIncludePaths returns IncludePaths as absolute paths. Relative entries
+// are resolved against projectRoot; absolute entries are returned unchanged.
+// Returns nil when no paths are configured.
+func (c ConfigBuildMJML) ResolveIncludePaths(projectRoot string) []string {
+	if len(c.IncludePaths) == 0 {
+		return nil
+	}
+
+	resolved := make([]string, len(c.IncludePaths))
+	for i, p := range c.IncludePaths {
+		if filepath.IsAbs(p) {
+			resolved[i] = p
+		} else {
+			resolved[i] = filepath.Join(projectRoot, p)
+		}
+	}
+	return resolved
 }
 
 type ConfigAdminApi struct {
@@ -231,7 +264,11 @@ func (c *ConfigDump) EnableClean() {
 		"version_commit_data",
 		"webhook_event_log",
 	}
-	c.NoData = append(c.NoData, cleanTables...)
+	for _, table := range cleanTables {
+		if !slices.Contains(c.NoData, table) {
+			c.NoData = append(c.NoData, table)
+		}
+	}
 }
 
 // EnableAnonymization adds default column rewrites for anonymizing customer data

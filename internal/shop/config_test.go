@@ -42,8 +42,6 @@ include:
 	assert.NoError(t, err)
 
 	assert.NotNil(t, config.ConfigDump.Where)
-
-	assert.NoError(t, os.RemoveAll(tmpDir))
 }
 
 func TestReadConfigCompatibilityDateValidation(t *testing.T) {
@@ -540,6 +538,39 @@ func TestConfigDump_EnableClean(t *testing.T) {
 		assert.Len(t, config.NoData, 19)
 	})
 
+	t.Run("no duplicates when pre-existing entry overlaps with defaults", func(t *testing.T) {
+		config := &ConfigDump{
+			NoData: []string{"my_custom_table", "cart", "version"},
+		}
+
+		config.EnableClean()
+
+		// Should not introduce duplicates for 'cart' and 'version'
+		count := 0
+		for _, table := range config.NoData {
+			if table == "cart" {
+				count++
+			}
+		}
+		assert.Equal(t, 1, count, "cart should appear exactly once")
+
+		count = 0
+		for _, table := range config.NoData {
+			if table == "version" {
+				count++
+			}
+		}
+		assert.Equal(t, 1, count, "version should appear exactly once")
+
+		// Total should be custom tables (3) + remaining clean tables (15)
+		assert.Len(t, config.NoData, 18)
+
+		// Pre-existing tables should be preserved in their original positions
+		assert.Equal(t, "my_custom_table", config.NoData[0])
+		assert.Equal(t, "cart", config.NoData[1])
+		assert.Equal(t, "version", config.NoData[2])
+	})
+
 	t.Run("verify all expected tables", func(t *testing.T) {
 		config := &ConfigDump{}
 		config.EnableClean()
@@ -564,15 +595,17 @@ func TestConfigDump_EnableClean(t *testing.T) {
 		assert.Contains(t, config.NoData, "webhook_event_log")
 	})
 
-	t.Run("multiple calls append duplicates", func(t *testing.T) {
+	t.Run("multiple calls are idempotent", func(t *testing.T) {
 		config := &ConfigDump{}
 		config.EnableClean()
 		firstCallLength := len(config.NoData)
 
 		config.EnableClean()
 
-		// Second call will append again (duplicates)
-		assert.Len(t, config.NoData, firstCallLength*2)
+		// Second call should not add duplicates
+		assert.Len(t, config.NoData, firstCallLength)
+		assert.Contains(t, config.NoData, "cart")
+		assert.Contains(t, config.NoData, "version")
 	})
 
 	t.Run("does not affect other fields", func(t *testing.T) {
@@ -612,5 +645,42 @@ func TestConfigDump_EnableClean(t *testing.T) {
 
 		// Followed by clean tables
 		assert.Equal(t, "cart", config.NoData[3])
+	})
+}
+
+func TestConfigBuildMJMLResolveIncludePaths(t *testing.T) {
+	projectRoot := filepath.FromSlash("/abs/project")
+
+	t.Run("returns nil when no paths configured", func(t *testing.T) {
+		c := ConfigBuildMJML{}
+		assert.Nil(t, c.ResolveIncludePaths(projectRoot))
+	})
+
+	t.Run("relative paths are joined with project root", func(t *testing.T) {
+		c := ConfigBuildMJML{IncludePaths: []string{
+			"shared/email",
+			filepath.FromSlash("custom/static-plugins/Other/Resources/views/email/_includes"),
+		}}
+		got := c.ResolveIncludePaths(projectRoot)
+		want := []string{
+			filepath.Join(projectRoot, "shared/email"),
+			filepath.Join(projectRoot, "custom/static-plugins/Other/Resources/views/email/_includes"),
+		}
+		assert.Equal(t, want, got)
+	})
+
+	t.Run("absolute paths are returned unchanged", func(t *testing.T) {
+		abs := filepath.FromSlash("/somewhere/else/_includes")
+		c := ConfigBuildMJML{IncludePaths: []string{abs}}
+		got := c.ResolveIncludePaths(projectRoot)
+		assert.Equal(t, []string{abs}, got)
+	})
+
+	t.Run("mixed entries are resolved independently", func(t *testing.T) {
+		abs := filepath.FromSlash("/somewhere/else/_includes")
+		c := ConfigBuildMJML{IncludePaths: []string{"shared/email", abs}}
+		got := c.ResolveIncludePaths(projectRoot)
+		want := []string{filepath.Join(projectRoot, "shared/email"), abs}
+		assert.Equal(t, want, got)
 	})
 }

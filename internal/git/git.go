@@ -2,6 +2,7 @@ package git
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -196,37 +197,32 @@ func unshallowRepository(ctx context.Context, repo string) error {
 	return err
 }
 
+func IsWorkingTreeDirty(ctx context.Context, repo string) (bool, bool, error) {
+	cmd := exec.CommandContext(ctx, "git", "-C", repo, "rev-parse", "--is-inside-work-tree") //nolint:gosec
+	output, err := cmd.Output()
+	if err != nil {
+		var exitErr *exec.ExitError
+		if errors.As(err, &exitErr) {
+			return false, false, nil
+		}
+
+		return false, false, fmt.Errorf("checking git repository: %w", err)
+	}
+
+	if strings.TrimSpace(string(output)) != "true" {
+		return false, false, nil
+	}
+
+	statusCmd := exec.CommandContext(ctx, "git", "-C", repo, "status", "--porcelain", "--untracked-files=all") //nolint:gosec
+	status, err := statusCmd.Output()
+	if err != nil {
+		return false, true, fmt.Errorf("checking git working tree status: %w", err)
+	}
+
+	return strings.TrimSpace(string(status)) != "", true, nil
+}
+
 func Init(ctx context.Context, repo string) error {
 	_, err := runGit(ctx, repo, "init")
 	return err
-}
-
-// IsRepository reports whether path is inside a git working tree.
-// Returns false (no error) when git is not installed or the directory is not
-// tracked by git.
-func IsRepository(ctx context.Context, path string) bool {
-	cmd := exec.CommandContext(ctx, "git", "rev-parse", "--is-inside-work-tree")
-	cmd.Dir = path
-	out, err := cmd.Output()
-	if err != nil {
-		return false
-	}
-	return strings.TrimSpace(string(out)) == "true"
-}
-
-// WorkingTreeStatus reports the porcelain status of the working tree at repo.
-// It returns the raw lines of `git status --porcelain`, one entry per changed
-// file. An empty slice means the working tree is clean.
-func WorkingTreeStatus(ctx context.Context, repo string) ([]string, error) {
-	cmd := exec.CommandContext(ctx, "git", "status", "--porcelain")
-	cmd.Dir = repo
-	out, err := cmd.Output()
-	if err != nil {
-		return nil, fmt.Errorf("git status: %w", err)
-	}
-	trimmed := strings.TrimRight(string(out), "\n")
-	if trimmed == "" {
-		return nil, nil
-	}
-	return strings.Split(trimmed, "\n"), nil
 }

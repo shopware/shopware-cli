@@ -30,3 +30,4 @@ devenv.local.nix
 /.gomodcache
 /.gopath
 .soulforge
+.claude/scheduled_tasks.lock
