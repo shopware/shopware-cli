@@ -9,7 +9,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/shopware/shopware-cli/internal/spdx"
+	"github.com/shyim/go-spdx"
+
 	"github.com/shopware/shopware-cli/internal/validation"
 )
 
