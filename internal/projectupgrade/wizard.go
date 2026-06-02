@@ -39,10 +39,6 @@ type WizardOptions struct {
 	CurrentVersion   *version.Version
 	UpdateVersions   []string
 	Executor         executor.Executor
-	// Registry is consulted to find newer compatible versions of plugins
-	// whose installed shopware/core constraint is no longer satisfied. May
-	// be nil, in which case incompatible plugins are simply removed.
-	Registry Registry
 }
 
 type phase int
@@ -89,8 +85,8 @@ const (
 // wizardMsg variants advance the upgrade state machine.
 type (
 	compatLoadedMsg struct {
-		updates []PluginCompat
-		err     error
+		report CompatReport
+		err    error
 	}
 	taskCompleteMsg struct {
 		task          int
@@ -115,26 +111,25 @@ type wizardModel struct {
 
 	phase phase
 
-	versionList        *tui.SelectList
-	targetVersion      string
-	confirmYes         bool
-	pluginActions      *ResolveResult
-	compatUpdates      []PluginCompat
-	compatHasBlock     bool
-	compatHasUpdatable bool
-	compatErr          error
-	tasks              []task
-	currentTask        int
-	logLines           []string
-	fullLog            []string
-	logChan            chan string
-	finalErr           error
-	finished           bool
-	spinner            spinner.Model
-	compatLoading      bool
-	cancelExecution    context.CancelFunc
-	width              int
-	height             int
+	versionList     *tui.SelectList
+	targetVersion   string
+	confirmYes      bool
+	pluginActions   *ResolveResult
+	compatReport    CompatReport
+	compatHasBlock  bool
+	compatErr       error
+	tasks           []task
+	currentTask     int
+	logLines        []string
+	fullLog         []string
+	logChan         chan string
+	finalErr        error
+	finished        bool
+	spinner         spinner.Model
+	compatLoading   bool
+	cancelExecution context.CancelFunc
+	width           int
+	height          int
 }
 
 // WizardResult is the outcome of a single RunWizard invocation.
@@ -243,15 +238,8 @@ func (m wizardModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case compatLoadedMsg:
 		m.compatLoading = false
 		m.compatErr = msg.err
-		m.compatUpdates = msg.updates
-		for _, u := range msg.updates {
-			if u.Status.IsBlocker() {
-				m.compatHasBlock = true
-			}
-			if u.Status.IsUpdatable() {
-				m.compatHasUpdatable = true
-			}
-		}
+		m.compatReport = msg.report
+		m.compatHasBlock = !msg.report.OK
 		m.phase = phaseCompatResult
 		m.confirmYes = !m.compatHasBlock
 		return m, nil
@@ -441,22 +429,23 @@ func (m wizardModel) readNextLog() tea.Cmd {
 	}
 }
 
-// loadCompatibility runs CheckPluginCompatibility against the registry to
-// preview how each composer-managed plugin will be treated by the upgrade.
+// loadCompatibility asks composer (dry run) whether the project can be upgraded
+// to the target version, so the user sees composer's own verdict before
+// applying anything.
 func (m wizardModel) loadCompatibility() tea.Cmd {
 	composerJsonPath := m.opts.ComposerJSONPath
 	targetVersion := m.targetVersion
-	registry := m.opts.Registry
+	exec := m.opts.Executor
 
 	return func() tea.Msg {
-		ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 		defer cancel()
 
-		updates, err := CheckPluginCompatibility(ctx, composerJsonPath, targetVersion, registry)
+		report, err := DryRunRequire(ctx, exec, composerJsonPath, targetVersion)
 		if err != nil {
 			return compatLoadedMsg{err: err}
 		}
-		return compatLoadedMsg{updates: updates}
+		return compatLoadedMsg{report: report}
 	}
 }
 
@@ -500,28 +489,22 @@ func (m wizardModel) runRemovePlugins() tea.Cmd {
 	composerJSONPath := m.opts.ComposerJSONPath
 	target := m.targetVersion
 	idx := taskPlugins
-	registry := m.opts.Registry
+	exec := m.opts.Executor
 	return func() tea.Msg {
-		ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 		defer cancel()
 
-		result, err := ResolveIncompatiblePlugins(ctx, composerJSONPath, target, registry)
+		result, err := ApplyRequire(ctx, exec, composerJSONPath, target)
 		if err != nil {
 			return taskCompleteMsg{task: idx, err: err}
 		}
 		if result == nil {
 			result = &ResolveResult{}
 		}
-		bumped := len(result.Bumped())
 		removed := len(result.Removed())
-		detail := "no incompatibilities"
-		switch {
-		case bumped > 0 && removed > 0:
-			detail = fmt.Sprintf("bumped %d, removed %d", bumped, removed)
-		case bumped > 0:
-			detail = fmt.Sprintf("bumped %d to a compatible version", bumped)
-		case removed > 0:
-			detail = fmt.Sprintf("removed %d (no compatible release)", removed)
+		detail := "composer resolved all plugins"
+		if removed > 0 {
+			detail = fmt.Sprintf("removed %d (composer could not resolve)", removed)
 		}
 		return taskCompleteMsg{task: idx, detail: detail, pluginActions: result}
 	}
@@ -695,7 +678,7 @@ func (m wizardModel) viewWelcome() string {
 	b.WriteString("\n\n")
 	for _, line := range []string{
 		"Clean up stale recipe-managed files (md5-matched)",
-		"Resolve incompatible custom plugins (bump or drop)",
+		"Let composer require the target version (dropping plugins it can't resolve)",
 		"Rewrite composer.json to pin the target version and ensure shopware/deployment-helper",
 		"Run composer update --with-all-dependencies --no-scripts",
 		"Run vendor/bin/shopware-deployment-helper run",
@@ -741,9 +724,9 @@ func (m wizardModel) viewCompatCheck() string {
 	b.WriteString("\n\n")
 	b.WriteString(tui.TitleStyle.Render("Checking plugin compatibility"))
 	b.WriteString("\n")
-	b.WriteString(tui.DimStyle.Render(fmt.Sprintf("Looking up composer-managed plugins for %s…", m.targetVersion)))
+	b.WriteString(tui.DimStyle.Render(fmt.Sprintf("Asking composer to resolve %s…", m.targetVersion)))
 	b.WriteString("\n\n")
-	b.WriteString(m.spinner.View() + " " + tui.DimStyle.Render("fetching compatibility"))
+	b.WriteString(m.spinner.View() + " " + tui.DimStyle.Render("composer require --dry-run"))
 	b.WriteString("\n\n")
 	b.WriteString(m.footer(tui.Shortcut{Key: "ctrl+c", Label: "Cancel"}))
 	return tui.RenderPhaseCard(b.String())
@@ -760,50 +743,37 @@ func (m wizardModel) viewCompatResult() string {
 
 	switch {
 	case m.compatErr != nil:
-		b.WriteString(lipgloss.NewStyle().Foreground(tui.ErrorColor).Render("Compatibility lookup failed: " + m.compatErr.Error()))
+		b.WriteString(lipgloss.NewStyle().Foreground(tui.ErrorColor).Render("Compatibility check failed: " + m.compatErr.Error()))
 		b.WriteString("\n")
 		b.WriteString(tui.DimStyle.Render("You may still proceed; the wizard cannot guarantee plugins will install."))
 		b.WriteString("\n\n")
-	case len(m.compatUpdates) == 0:
-		b.WriteString(tui.DimStyle.Render("No composer-managed plugins to check."))
+	case m.compatReport.OK:
+		b.WriteString("  ")
+		b.WriteString(tui.Checkmark)
+		b.WriteString("  ")
+		b.WriteString(tui.LabelStyle.Render("composer can resolve this upgrade"))
 		b.WriteString("\n\n")
 	default:
-		for _, u := range m.compatUpdates {
-			var icon string
-			switch {
-			case u.Status.IsBlocker():
-				icon = lipgloss.NewStyle().Foreground(tui.ErrorColor).Bold(true).Render("✗")
-			case u.Status.IsUpdatable():
-				icon = lipgloss.NewStyle().Foreground(tui.WarnColor).Bold(true).Render("↑")
-			default:
-				icon = tui.Checkmark
+		b.WriteString(lipgloss.NewStyle().Foreground(tui.ErrorColor).Bold(true).Render("✗ composer could not resolve this upgrade."))
+		b.WriteString("\n\n")
+		if len(m.compatReport.BlockingPlugins) > 0 {
+			b.WriteString(tui.DimStyle.Render("These plugins block the upgrade and will be removed from composer.json so it can proceed:"))
+			b.WriteString("\n")
+			for _, name := range m.compatReport.BlockingPlugins {
+				b.WriteString("  ")
+				b.WriteString(lipgloss.NewStyle().Foreground(tui.ErrorColor).Render("✗"))
+				b.WriteString("  ")
+				b.WriteString(tui.LabelStyle.Render(name))
+				b.WriteString("\n")
 			}
-			b.WriteString("  ")
-			b.WriteString(icon)
-			b.WriteString("  ")
-			b.WriteString(tui.LabelStyle.Render(u.Name))
-			detail := u.Status.Label()
-			if u.Status == CompatUpdatable && u.NewVersion != "" {
-				detail = fmt.Sprintf("%s → %s", u.CurrentVersion, u.NewVersion)
-			} else if u.CurrentVersion != "" {
-				detail = u.CurrentVersion + " — " + detail
-			}
-			b.WriteString(tui.DimStyle.Render(" — " + detail))
+			b.WriteString(tui.DimStyle.Render("Re-require them once they publish a compatible release."))
+			b.WriteString("\n\n")
+		}
+		for _, line := range lastLines(m.compatReport.Output, 12) {
+			b.WriteString(tui.DimStyle.Render("  " + line))
 			b.WriteString("\n")
 		}
 		b.WriteString("\n")
-	}
-
-	if m.compatHasUpdatable {
-		b.WriteString(lipgloss.NewStyle().Foreground(tui.WarnColor).Render("↑ Plugins marked with ↑ have a compatible release; their constraints will be bumped during the upgrade."))
-		b.WriteString("\n\n")
-	}
-
-	if m.compatHasBlock {
-		b.WriteString(lipgloss.NewStyle().Foreground(tui.ErrorColor).Bold(true).Render("✗ Some plugins have no compatible version yet."))
-		b.WriteString("\n")
-		b.WriteString(tui.DimStyle.Render("They will be removed from composer.json so the upgrade can proceed. Re-require them once they publish a compatible release."))
-		b.WriteString("\n\n")
 	}
 
 	b.WriteString(renderConfirmButtons("Continue", "Cancel", m.confirmYes))
@@ -908,23 +878,7 @@ func (m wizardModel) viewDone() string {
 		b.WriteString(tui.DimStyle.Render("All tasks completed. Verify your shop and run your test suite."))
 
 		if m.pluginActions != nil {
-			bumped := m.pluginActions.Bumped()
 			removed := m.pluginActions.Removed()
-
-			if len(bumped) > 0 {
-				b.WriteString("\n\n")
-				b.WriteString(tui.BoldText.Render("Bumped plugin constraints:"))
-				b.WriteString("\n")
-				for _, action := range bumped {
-					b.WriteString(tui.DimStyle.Render("  • "))
-					b.WriteString(tui.LabelStyle.Render(action.Name))
-					b.WriteString("  ")
-					b.WriteString(tui.DimStyle.Render(action.OldConstraint))
-					b.WriteString(" → ")
-					b.WriteString(lipgloss.NewStyle().Foreground(tui.SuccessColor).Render(action.NewConstraint))
-					b.WriteString("\n")
-				}
-			}
 
 			if len(removed) > 0 {
 				b.WriteString("\n\n")

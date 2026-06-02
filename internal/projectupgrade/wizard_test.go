@@ -89,7 +89,7 @@ func TestWizardSelectVersionGoesToCompatCheck(t *testing.T) {
 	assert.Equal(t, "6.6.4.0", wm.targetVersion)
 }
 
-func TestWizardCompatLoadedSetsBlockerFlag(t *testing.T) {
+func TestWizardCompatLoadedConflictSetsBlockerFlag(t *testing.T) {
 	t.Parallel()
 
 	m := newTestModel(t)
@@ -97,18 +97,20 @@ func TestWizardCompatLoadedSetsBlockerFlag(t *testing.T) {
 	m.compatLoading = true
 
 	updated, _ := m.Update(compatLoadedMsg{
-		updates: []PluginCompat{
-			{Name: "vendor/incompat", CurrentVersion: "1.0.0", Status: CompatBlocker},
+		report: CompatReport{
+			OK:              false,
+			Output:          []string{"Your requirements could not be resolved"},
+			BlockingPlugins: []string{"vendor/incompat"},
 		},
 	})
 	wm := updated.(wizardModel)
 	assert.False(t, wm.compatLoading)
 	assert.Equal(t, phaseCompatResult, wm.phase)
 	assert.True(t, wm.compatHasBlock)
-	assert.False(t, wm.confirmYes, "blocker should default the confirm to No")
+	assert.False(t, wm.confirmYes, "a composer conflict should default the confirm to No")
 }
 
-func TestWizardCompatLoadedUpdatableIsNotBlocker(t *testing.T) {
+func TestWizardCompatLoadedResolvableIsNotBlocker(t *testing.T) {
 	t.Parallel()
 
 	m := newTestModel(t)
@@ -116,15 +118,12 @@ func TestWizardCompatLoadedUpdatableIsNotBlocker(t *testing.T) {
 	m.compatLoading = true
 
 	updated, _ := m.Update(compatLoadedMsg{
-		updates: []PluginCompat{
-			{Name: "swag/paypal", CurrentVersion: "8.11.0", NewVersion: "9.0.0", Status: CompatUpdatable},
-		},
+		report: CompatReport{OK: true},
 	})
 	wm := updated.(wizardModel)
 	assert.Equal(t, phaseCompatResult, wm.phase)
-	assert.False(t, wm.compatHasBlock, "updatable plugin must not block")
-	assert.True(t, wm.compatHasUpdatable)
-	assert.True(t, wm.confirmYes, "no blocker means confirm defaults to Yes")
+	assert.False(t, wm.compatHasBlock, "a resolvable upgrade must not block")
+	assert.True(t, wm.confirmYes, "no conflict means confirm defaults to Yes")
 }
 
 func TestUpgradeTaskOrderRunsDeploymentHelperLast(t *testing.T) {

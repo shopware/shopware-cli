@@ -20,7 +20,6 @@ import (
 	"github.com/shopware/shopware-cli/internal/extension"
 	"github.com/shopware/shopware-cli/internal/flexmigrator"
 	"github.com/shopware/shopware-cli/internal/git"
-	"github.com/shopware/shopware-cli/internal/packagist"
 	"github.com/shopware/shopware-cli/internal/projectupgrade"
 	"github.com/shopware/shopware-cli/internal/system"
 	"github.com/shopware/shopware-cli/internal/tracking"
@@ -93,18 +92,12 @@ project doesn't require it yet.`,
 		}
 
 		// Interactive: hand off to the devtui-styled wizard.
-		registry, err := buildRegistry(cmd, projectRoot)
-		if err != nil {
-			return err
-		}
-
 		result, err := projectupgrade.RunWizard(projectupgrade.WizardOptions{
 			ProjectRoot:      projectRoot,
 			ComposerJSONPath: composerJsonPath,
 			CurrentVersion:   currentVersion,
 			UpdateVersions:   updateVersions,
 			Executor:         cmdExecutor,
-			Registry:         registry,
 		})
 
 		status := "ok"
@@ -148,12 +141,7 @@ func runUpgradeHeadless(cmd *cobra.Command, projectRoot, composerJsonPath string
 		return err
 	}
 
-	registry, err := buildRegistry(cmd, projectRoot)
-	if err != nil {
-		return err
-	}
-
-	if err := runCompatibilityCheck(ctx, composerJsonPath, targetVersion, registry); err != nil {
+	if err := runCompatibilityCheck(ctx, cmdExecutor, composerJsonPath, targetVersion); err != nil {
 		return err
 	}
 
@@ -177,16 +165,13 @@ func runUpgradeHeadless(cmd *cobra.Command, projectRoot, composerJsonPath string
 		return fmt.Errorf("cleanup stale files: %w", err)
 	}
 
-	log.Infof("Checking custom plugins for incompatibilities")
-	result, err := projectupgrade.ResolveIncompatiblePlugins(ctx, composerJsonPath, targetVersion, registry)
+	log.Infof("Resolving plugins with composer for %s", targetVersion)
+	result, err := projectupgrade.ApplyRequire(ctx, cmdExecutor, composerJsonPath, targetVersion)
 	if err != nil {
 		return fmt.Errorf("resolve incompatible plugins: %w", err)
 	}
 
 	if result != nil {
-		for _, action := range result.Bumped() {
-			log.Infof("Bumped %s: %s → %s", tui.YellowText.Render(action.Name), action.OldConstraint, action.NewConstraint)
-		}
 		for _, action := range result.Removed() {
 			log.Infof("Removed incompatible plugin %s (%s). Re-require it once a compatible version is published.", tui.YellowText.Render(action.Name), action.Reason)
 		}
@@ -267,38 +252,35 @@ func selectTargetVersion(cmd *cobra.Command, updateVersions []string) (string, e
 	return selected, nil
 }
 
-func runCompatibilityCheck(ctx context.Context, composerJsonPath, targetVersion string, registry projectupgrade.Registry) error {
+func runCompatibilityCheck(ctx context.Context, cmdExecutor executor.Executor, composerJsonPath, targetVersion string) error {
 	log := logging.FromContext(ctx)
 
-	results, err := projectupgrade.CheckPluginCompatibility(ctx, composerJsonPath, targetVersion, registry)
+	report, err := projectupgrade.DryRunRequire(ctx, cmdExecutor, composerJsonPath, targetVersion)
 	if err != nil {
 		log.Warnf("Skipping plugin compatibility check: %v", err)
 		return nil
 	}
 
-	if len(results) == 0 {
+	if report.OK {
+		log.Infof("composer can resolve the upgrade to %s", targetVersion)
 		return nil
 	}
 
-	t := table.New().Border(lipgloss.NormalBorder()).Headers("Plugin", "Current", "Status")
-	hasBlockers := false
-	for _, row := range results {
-		status := row.Status.Label()
-		if row.Status == projectupgrade.CompatUpdatable && row.NewVersion != "" {
-			status = fmt.Sprintf("%s → %s", row.Status.Label(), row.NewVersion)
+	if len(report.BlockingPlugins) > 0 {
+		t := table.New().Border(lipgloss.NormalBorder()).Headers("Plugin", "Status")
+		for _, name := range report.BlockingPlugins {
+			t.Row(name, "no compatible release")
 		}
-		t.Row(row.Name, row.CurrentVersion, status)
-		if row.Status.IsBlocker() {
-			hasBlockers = true
-		}
+		fmt.Println(t.Render())
+	} else {
+		fmt.Println(strings.Join(report.Output, "\n"))
 	}
-	fmt.Println(t.Render())
 
-	if hasBlockers && system.IsInteractionEnabled(ctx) {
+	if system.IsInteractionEnabled(ctx) {
 		var proceed bool
 		if err := huh.NewConfirm().
-			Title("Some plugins have no compatible version for the target version").
-			Description("They will be removed from composer.json so the upgrade can proceed. Re-require them once they publish a compatible release. Proceed anyway?").
+			Title("composer could not resolve the upgrade with all plugins").
+			Description("Incompatible plugins will be removed from composer.json so the upgrade can proceed. Re-require them once they publish a compatible release. Proceed anyway?").
 			Value(&proceed).
 			Run(); err != nil {
 			return err
@@ -371,62 +353,6 @@ func ensureAllPluginsAreComposerManaged(projectRoot string, allow bool) error {
 		len(orphans),
 		strings.Join(orphans, "\n  "),
 	)
-}
-
-// buildRegistry constructs the package registry used to look up newer
-// compatible plugin versions. The Shopware Packages token is read from the
-// SHOPWARE_PACKAGES_TOKEN env var, the project's auth.json, or — in
-// interactive mode — prompted from the user if the project has store
-// plugins. Missing tokens degrade gracefully: store lookups fall back to the
-// "remove plugin" behaviour.
-func buildRegistry(cmd *cobra.Command, projectRoot string) (projectupgrade.Registry, error) {
-	token := storeTokenFromAuthJSON(projectRoot)
-
-	hasStorePlugins, err := projectHasStorePlugins(projectRoot)
-	if err != nil {
-		logging.FromContext(cmd.Context()).Debugf("could not inspect installed.json: %v", err)
-	}
-
-	if token == "" && hasStorePlugins && system.IsInteractionEnabled(cmd.Context()) {
-		var entered string
-		if err := huh.NewInput().
-			Title("Shopware Packages token (packages.shopware.com)").
-			Description("Used to look up newer compatible versions of store plugins. Leave empty to skip store lookups.").
-			Value(&entered).
-			EchoMode(huh.EchoModePassword).
-			Run(); err != nil {
-			return nil, err
-		}
-		token = strings.TrimSpace(entered)
-	}
-
-	return projectupgrade.DefaultRegistry(token), nil
-}
-
-func storeTokenFromAuthJSON(projectRoot string) string {
-	if v := strings.TrimSpace(os.Getenv("SHOPWARE_PACKAGES_TOKEN")); v != "" {
-		return v
-	}
-
-	authPath := path.Join(projectRoot, "auth.json")
-	auth, err := packagist.ReadComposerAuth(authPath)
-	if err != nil {
-		return ""
-	}
-	return strings.TrimSpace(auth.BearerAuth["packages.shopware.com"])
-}
-
-func projectHasStorePlugins(projectRoot string) (bool, error) {
-	composerJson, err := packagist.ReadComposerJson(path.Join(projectRoot, "composer.json"))
-	if err != nil {
-		return false, err
-	}
-	for name := range composerJson.Require {
-		if strings.HasPrefix(name, "store.shopware.com/") {
-			return true, nil
-		}
-	}
-	return false, nil
 }
 
 func init() {
