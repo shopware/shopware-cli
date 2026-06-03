@@ -13,6 +13,7 @@ import (
 	"github.com/shopware/shopware-cli/internal/executor"
 	"github.com/shopware/shopware-cli/internal/extension"
 	"github.com/shopware/shopware-cli/internal/shop"
+	"github.com/shopware/shopware-cli/internal/tui"
 	"github.com/shopware/shopware-cli/logging"
 )
 
@@ -86,6 +87,15 @@ func filterAndGetSources(cmd *cobra.Command, projectRoot string, shopCfg *shop.C
 	skipExtensions, _ := cmd.PersistentFlags().GetString("skip-extensions")
 	onlyCustomStatic, _ := cmd.PersistentFlags().GetBool("only-custom-static-extensions")
 
+	// When --only-extensions is passed without a value, present an interactive
+	// multi-select picker instead of requiring the names upfront.
+	if cmd.PersistentFlags().Changed("only-extensions") && strings.TrimSpace(onlyExtensions) == "" {
+		onlyExtensions, err = selectExtensionsInteractively(cmd, sources)
+		if err != nil {
+			return nil, err
+		}
+	}
+
 	if onlyExtensions != "" && skipExtensions != "" {
 		return nil, fmt.Errorf("only-extensions and skip-extensions cannot be used together")
 	}
@@ -155,4 +165,36 @@ func filterAndGetSources(cmd *cobra.Command, projectRoot string, shopCfg *shop.C
 	}
 
 	return sources, nil
+}
+
+// selectExtensionsInteractively presents a filterable multi-select picker of
+// all available extensions and returns the chosen names as a comma-separated
+// string suitable for the --only-extensions filter. The Storefront bundle is
+// omitted from the list as it is always kept by the filter.
+func selectExtensionsInteractively(cmd *cobra.Command, sources []asset.Source) (string, error) {
+	items := make([]tui.FilterMultiSelectItem, 0, len(sources))
+	for _, s := range sources {
+		if s.Name == storefrontBundleName {
+			continue
+		}
+		items = append(items, tui.FilterMultiSelectItem{Label: s.Name, Detail: s.Path, Value: s.Name})
+	}
+
+	if len(items) == 0 {
+		return "", fmt.Errorf("no extensions available to select")
+	}
+
+	selected, err := tui.FilterMultiSelect(cmd.Context(),
+		"Which extensions should be included?",
+		"Type to filter, space to toggle, enter to confirm.",
+		items)
+	if err != nil {
+		return "", err
+	}
+
+	if len(selected) == 0 {
+		return "", fmt.Errorf("no extensions selected")
+	}
+
+	return strings.Join(selected, ","), nil
 }
