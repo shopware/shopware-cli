@@ -118,7 +118,7 @@ func checkServicesXmlInResourceDir(check validation.Check, resourceDir string) {
 		check.AddResult(validation.CheckResult{
 			Path:       servicesXml,
 			Identifier: "config.services_xml.deprecated",
-			Message:    fmt.Sprintf("Found deprecated %s. Symfony services.xml is deprecated; migrate to services.yaml.", servicesXml),
+			Message:    fmt.Sprintf("Found deprecated %s. Symfony services.xml is deprecated, migrate to services.yaml. The plugin FroshTools offers the command frosh:extension:convert-services-xml for that purpose.", servicesXml),
 			Severity:   validation.SeverityWarning,
 		})
 	}
