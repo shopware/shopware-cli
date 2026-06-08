@@ -93,7 +93,35 @@ func RunValidation(ctx context.Context, ext Extension, check validation.Check) {
 	validateStorefrontSnippets(ext, check)
 	validateAssets(ext, check)
 	validateExtensionIcon(ext, check)
+	validateServicesXml(ext, check)
 	// Note: ignores are now applied in the verifier layer
+}
+
+func validateServicesXml(ext Extension, check validation.Check) {
+	if ext.GetType() != TypePlatformPlugin {
+		return
+	}
+
+	for _, resourceDir := range ext.GetResourcesDirs() {
+		checkServicesXmlInResourceDir(check, resourceDir)
+	}
+
+	for _, extraBundle := range ext.GetExtensionConfig().Build.ExtraBundles {
+		bundlePath := extraBundle.ResolvePath(ext.GetRootDir())
+		checkServicesXmlInResourceDir(check, filepath.Join(bundlePath, "Resources"))
+	}
+}
+
+func checkServicesXmlInResourceDir(check validation.Check, resourceDir string) {
+	servicesXml := filepath.Join(resourceDir, "config", "services.xml")
+	if _, err := os.Stat(servicesXml); err == nil {
+		check.AddResult(validation.CheckResult{
+			Path:       servicesXml,
+			Identifier: "config.services_xml.deprecated",
+			Message:    fmt.Sprintf("Found deprecated %s. Symfony services.xml is deprecated; migrate to services.yaml.", servicesXml),
+			Severity:   validation.SeverityWarning,
+		})
+	}
 }
 
 func runDefaultValidate(ext Extension, check validation.Check) {

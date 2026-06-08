@@ -1,6 +1,8 @@
 package extension
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -90,6 +92,57 @@ func TestIgnores(t *testing.T) {
 		{Identifier: "metadata.name"},
 	})
 	assert.False(t, len(check.Results) > 0)
+}
+
+func TestValidateServicesXmlWarnsWhenPresent(t *testing.T) {
+	tmpDir := t.TempDir()
+	plugin := getTestPlugin(tmpDir)
+
+	configDir := filepath.Join(tmpDir, "src", "Resources", "config")
+	assert.NoError(t, os.MkdirAll(configDir, 0o755))
+	servicesXml := filepath.Join(configDir, "services.xml")
+	assert.NoError(t, os.WriteFile(servicesXml, []byte("<container/>"), 0o644))
+
+	check := &testCheck{}
+	validateServicesXml(plugin, check)
+
+	assert.Len(t, check.Results, 1)
+	assert.Equal(t, "config.services_xml.deprecated", check.Results[0].Identifier)
+	assert.Equal(t, validation.SeverityWarning, check.Results[0].Severity)
+	assert.Equal(t, servicesXml, check.Results[0].Path)
+}
+
+func TestValidateServicesXmlSilentWhenAbsent(t *testing.T) {
+	tmpDir := t.TempDir()
+	plugin := getTestPlugin(tmpDir)
+
+	check := &testCheck{}
+	validateServicesXml(plugin, check)
+
+	assert.Len(t, check.Results, 0)
+}
+
+func TestValidateServicesXmlSilentWhenYaml(t *testing.T) {
+	tmpDir := t.TempDir()
+	plugin := getTestPlugin(tmpDir)
+
+	configDir := filepath.Join(tmpDir, "src", "Resources", "config")
+	assert.NoError(t, os.MkdirAll(configDir, 0o755))
+	assert.NoError(t, os.WriteFile(filepath.Join(configDir, "services.yaml"), []byte("services:"), 0o644))
+
+	check := &testCheck{}
+	validateServicesXml(plugin, check)
+
+	assert.Len(t, check.Results, 0)
+}
+
+func TestValidateServicesXmlSkippedForApp(t *testing.T) {
+	app := getAppForValidation()
+
+	check := &testCheck{}
+	validateServicesXml(app, check)
+
+	assert.Len(t, check.Results, 0)
 }
 
 func TestIgnoresWithMessage(t *testing.T) {
