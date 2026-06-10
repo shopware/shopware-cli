@@ -1,0 +1,8 @@
+services:
+    Shop\A: ~
+
+when@dev:
+    parameters:
+        shop.debug: true
+    services:
+        Shop\DevOnly: ~

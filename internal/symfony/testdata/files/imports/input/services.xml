@@ -1,0 +1,9 @@
+<container>
+    <imports>
+        <import resource="packages/listeners.xml"/>
+        <import resource="packages/missing.xml"/>
+    </imports>
+    <services>
+        <service id="Shop\Service" class="Shop\Service"/>
+    </services>
+</container>

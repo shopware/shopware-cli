@@ -1,0 +1,21 @@
+<container>
+    <parameters>
+        <parameter key="shop.string">hello</parameter>
+        <parameter key="shop.bool">true</parameter>
+        <parameter key="shop.int">42</parameter>
+        <parameter key="shop.float">1.5</parameter>
+        <parameter key="shop.null">null</parameter>
+        <parameter key="shop.forced_string" type="string">true</parameter>
+        <parameter key="shop.constant" type="constant">Shop\Config::LIMIT</parameter>
+        <parameter key="shop.list" type="collection">
+            <parameter>one</parameter>
+            <parameter>two</parameter>
+        </parameter>
+        <parameter key="shop.map" type="collection">
+            <parameter key="a">1</parameter>
+            <parameter key="b" type="collection">
+                <parameter>nested</parameter>
+            </parameter>
+        </parameter>
+    </parameters>
+</container>

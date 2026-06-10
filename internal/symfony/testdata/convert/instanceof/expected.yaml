@@ -1,0 +1,9 @@
+services:
+    _instanceof:
+        Shop\HandlerInterface:
+            public: false
+            autowire: true
+            tags:
+                - shop.handler
+
+    Shop\A: ~

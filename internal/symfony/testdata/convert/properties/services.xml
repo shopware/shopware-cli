@@ -1,0 +1,8 @@
+<container>
+    <services>
+        <service id="Shop\A" class="Shop\A">
+            <property name="logger" type="service" id="logger"/>
+            <property name="limit">25</property>
+        </service>
+    </services>
+</container>

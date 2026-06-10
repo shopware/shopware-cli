@@ -1,0 +1,9 @@
+<container>
+    <services>
+        <defaults autowire="true" autoconfigure="true" public="false">
+            <bind key="$projectDir">%kernel.project_dir%</bind>
+            <bind key="$logger" type="service" id="logger"/>
+        </defaults>
+        <service id="Shop\A" class="Shop\A"/>
+    </services>
+</container>

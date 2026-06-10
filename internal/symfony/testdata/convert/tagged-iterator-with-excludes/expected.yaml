@@ -1,0 +1,4 @@
+services:
+    Shop\A:
+        arguments:
+            - !tagged_iterator {tag: shop.handler, exclude: [Shop\ExcludedHandler], exclude_self: false}

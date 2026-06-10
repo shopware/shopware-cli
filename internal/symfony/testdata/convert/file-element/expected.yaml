@@ -1,0 +1,3 @@
+services:
+    Shop\Legacy:
+        file: '%kernel.project_dir%/legacy/Legacy.php'

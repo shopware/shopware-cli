@@ -1,0 +1,29 @@
+<container>
+    <services>
+        <service id="Shop\A" class="Shop\A">
+            <argument type="service" id="required"/>
+            <argument type="service" id="optional" on-invalid="ignore"/>
+            <argument type="service" id="nullable" on-invalid="null"/>
+            <argument type="service" id="uninitialized" on-invalid="ignore_uninitialized"/>
+            <argument type="expression">service('shop').isActive()</argument>
+            <argument type="string">@literal</argument>
+            <argument type="constant">PHP_INT_MAX</argument>
+            <argument type="tagged_iterator" tag="shop.handler"/>
+            <argument type="tagged_iterator" tag="shop.handler" index-by="key" default-index-method="getKey" default-priority-method="getPriority"/>
+            <argument type="tagged_locator" tag="shop.handler"/>
+            <argument type="service_closure" id="closed"/>
+            <argument type="iterator">
+                <argument type="service" id="one"/>
+                <argument type="service" id="two"/>
+            </argument>
+            <argument type="service_locator">
+                <argument key="first" type="service" id="one"/>
+                <argument key="second" type="service" id="two"/>
+            </argument>
+            <argument type="collection">
+                <argument>plain</argument>
+                <argument type="service" id="inside"/>
+            </argument>
+        </service>
+    </services>
+</container>

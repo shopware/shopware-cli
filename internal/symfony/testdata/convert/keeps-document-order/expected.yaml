@@ -1,0 +1,6 @@
+services:
+    Shop\:
+        resource: ../src/*
+
+    Shop\Special:
+        public: true

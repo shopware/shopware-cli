@@ -1,0 +1,9 @@
+<container>
+    <services>
+        <service id="Shop\A" class="Shop\A">
+            <argument>line1
+line2</argument>
+        </service>
+        <service id="Shop\B" class="Shop\B"/>
+    </services>
+</container>

@@ -1,0 +1,4 @@
+services:
+    Shop\A:
+        bind:
+            $shopName: Demo

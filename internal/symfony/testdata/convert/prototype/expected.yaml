@@ -1,0 +1,12 @@
+services:
+    Shop\:
+        resource: ../src/*
+        exclude: ../src/{DependencyInjection,Entity,Kernel.php}
+
+    Shop\Handler\:
+        resource: ../src/Handler/*
+        exclude:
+            - ../src/Handler/Legacy/*
+            - ../src/Handler/Experimental/*
+        tags:
+            - shop.handler

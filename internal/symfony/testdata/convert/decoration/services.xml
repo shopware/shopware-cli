@@ -1,0 +1,6 @@
+<container>
+    <services>
+        <service id="Shop\Decorator" class="Shop\Decorator" decorates="Shop\Original"
+                 decoration-inner-name="Shop\Original.inner" decoration-priority="5" decoration-on-invalid="ignore"/>
+    </services>
+</container>

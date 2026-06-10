@@ -1,0 +1,6 @@
+imports:
+    - {resource: packages/listeners.yaml}
+    - {resource: packages/missing.xml}
+
+services:
+    Shop\Service: ~

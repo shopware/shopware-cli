@@ -1,0 +1,6 @@
+<container>
+    <services>
+        <service id="shop.order_service" class="Shop\Service\OrderService" public="true"/>
+        <service id="Shop\Service\SameClass" class="Shop\Service\SameClass"/>
+    </services>
+</container>

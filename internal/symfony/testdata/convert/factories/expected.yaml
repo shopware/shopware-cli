@@ -1,0 +1,21 @@
+services:
+    Shop\FromClass:
+        factory: [Shop\Factory, create]
+
+    Shop\FromService:
+        factory: ['@shop.factory', create]
+
+    Shop\FromInvokable:
+        factory: ['@shop.factory', __invoke]
+
+    Shop\FromFunction:
+        factory: shop_create
+
+    Shop\FromExpression:
+        factory: '@=service(''shop.factory'').create()'
+
+    Shop\FromOwnMethod:
+        factory: [null, create]
+
+    Shop\Configured:
+        configurator: ['@shop.configurator', configure]

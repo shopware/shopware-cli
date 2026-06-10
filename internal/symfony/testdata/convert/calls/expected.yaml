@@ -1,0 +1,6 @@
+services:
+    Shop\A:
+        calls:
+            - [setLogger, ['@logger']]
+            - [init]
+            - [withPriority, [5], true]

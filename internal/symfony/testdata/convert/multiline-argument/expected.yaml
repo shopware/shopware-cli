@@ -1,0 +1,8 @@
+services:
+    Shop\A:
+        arguments:
+            - |-
+              line1
+              line2
+
+    Shop\B: ~

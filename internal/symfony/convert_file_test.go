@@ -1,92 +1,95 @@
 package symfony
 
 import (
+	"io/fs"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
-func TestConvertServicesXMLFile(t *testing.T) {
-	tmpDir := t.TempDir()
-	servicesXML := filepath.Join(tmpDir, "services.xml")
+// TestConvertServicesXMLFileFixtures copies every testdata/files/<name>/input
+// tree into a temporary directory, converts its services.xml and compares the
+// resulting tree with testdata/files/<name>/expected.
+func TestConvertServicesXMLFileFixtures(t *testing.T) {
+	fixturesDir := filepath.Join("testdata", "files")
 
-	require.NoError(t, os.WriteFile(servicesXML, []byte(`<container>
-    <services>
-        <service id="Shop\Service" class="Shop\Service">
-            <argument type="service" id="logger"/>
-        </service>
-    </services>
-</container>`), 0o644))
-
-	converted, err := ConvertServicesXMLFile(servicesXML)
+	entries, err := os.ReadDir(fixturesDir)
 	require.NoError(t, err)
+	require.NotEmpty(t, entries)
 
-	servicesYAML := filepath.Join(tmpDir, "services.yaml")
-	assert.Equal(t, map[string]string{servicesXML: servicesYAML}, converted)
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
 
-	assert.NoFileExists(t, servicesXML)
+		t.Run(entry.Name(), func(t *testing.T) {
+			tmpDir := t.TempDir()
+			require.NoError(t, os.CopyFS(tmpDir, os.DirFS(filepath.Join(fixturesDir, entry.Name(), "input"))))
 
-	content, err := os.ReadFile(servicesYAML)
-	require.NoError(t, err)
-	assert.Equal(t, `services:
-    Shop\Service:
-        arguments:
-            - '@logger'
-`, string(content))
+			converted, err := ConvertServicesXMLFile(filepath.Join(tmpDir, "services.xml"))
+			require.NoError(t, err)
+			require.NotEmpty(t, converted)
+
+			for xmlPath, yamlPath := range converted {
+				assert.True(t, strings.HasSuffix(xmlPath, ".xml"), xmlPath)
+				assert.NoFileExists(t, xmlPath)
+				assert.FileExists(t, yamlPath)
+			}
+
+			assertSameFiles(t, filepath.Join(fixturesDir, entry.Name(), "expected"), tmpDir)
+		})
+	}
 }
 
-func TestConvertServicesXMLFileConvertsImports(t *testing.T) {
-	tmpDir := t.TempDir()
-	require.NoError(t, os.MkdirAll(filepath.Join(tmpDir, "packages"), 0o755))
+// assertSameFiles checks that gotDir contains exactly the files of wantDir
+// with identical content.
+func assertSameFiles(t *testing.T, wantDir string, gotDir string) {
+	t.Helper()
 
-	servicesXML := filepath.Join(tmpDir, "services.xml")
-	importedXML := filepath.Join(tmpDir, "packages", "listeners.xml")
+	wantFiles := listFiles(t, wantDir)
+	gotFiles := listFiles(t, gotDir)
+	assert.ElementsMatch(t, wantFiles, gotFiles)
 
-	require.NoError(t, os.WriteFile(servicesXML, []byte(`<container>
-    <imports>
-        <import resource="packages/listeners.xml"/>
-        <import resource="packages/missing.xml"/>
-    </imports>
-    <services>
-        <service id="Shop\Service" class="Shop\Service"/>
-    </services>
-</container>`), 0o644))
+	for _, file := range wantFiles {
+		want, err := os.ReadFile(filepath.Join(wantDir, file))
+		require.NoError(t, err)
 
-	require.NoError(t, os.WriteFile(importedXML, []byte(`<container>
-    <services>
-        <service id="Shop\Listener" class="Shop\Listener"/>
-    </services>
-</container>`), 0o644))
+		got, err := os.ReadFile(filepath.Join(gotDir, file))
+		if assert.NoError(t, err, file) {
+			assert.Equal(t, string(want), string(got), file)
+		}
+	}
+}
 
-	converted, err := ConvertServicesXMLFile(servicesXML)
-	require.NoError(t, err)
+func listFiles(t *testing.T, root string) []string {
+	t.Helper()
 
-	assert.Equal(t, map[string]string{
-		servicesXML: filepath.Join(tmpDir, "services.yaml"),
-		importedXML: filepath.Join(tmpDir, "packages", "listeners.yaml"),
-	}, converted)
+	files := []string{}
 
-	assert.NoFileExists(t, servicesXML)
-	assert.NoFileExists(t, importedXML)
+	require.NoError(t, filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
 
-	content, err := os.ReadFile(filepath.Join(tmpDir, "services.yaml"))
-	require.NoError(t, err)
-	assert.Equal(t, `imports:
-    - {resource: packages/listeners.yaml}
-    - {resource: packages/missing.xml}
+		if d.IsDir() {
+			return nil
+		}
 
-services:
-    Shop\Service: ~
-`, string(content))
+		relPath, err := filepath.Rel(root, path)
+		if err != nil {
+			return err
+		}
 
-	importedContent, err := os.ReadFile(filepath.Join(tmpDir, "packages", "listeners.yaml"))
-	require.NoError(t, err)
-	assert.Equal(t, `services:
-    Shop\Listener: ~
-`, string(importedContent))
+		files = append(files, relPath)
+
+		return nil
+	}))
+
+	return files
 }
 
 func TestConvertServicesXMLFileRefusesWhenYamlExists(t *testing.T) {
@@ -153,25 +156,4 @@ func TestConvertServicesXMLFileUnparsableXML(t *testing.T) {
 	_, err := ConvertServicesXMLFile(servicesXML)
 	assert.Error(t, err)
 	assert.FileExists(t, servicesXML)
-}
-
-func TestConvertServicesXMLFileLeavesGlobImports(t *testing.T) {
-	tmpDir := t.TempDir()
-	servicesXML := filepath.Join(tmpDir, "services.xml")
-
-	require.NoError(t, os.WriteFile(servicesXML, []byte(`<container>
-    <imports>
-        <import resource="packages/*.xml"/>
-    </imports>
-</container>`), 0o644))
-
-	converted, err := ConvertServicesXMLFile(servicesXML)
-	require.NoError(t, err)
-	assert.Len(t, converted, 1)
-
-	content, err := os.ReadFile(filepath.Join(tmpDir, "services.yaml"))
-	require.NoError(t, err)
-	assert.Equal(t, `imports:
-    - {resource: packages/*.xml}
-`, string(content))
 }

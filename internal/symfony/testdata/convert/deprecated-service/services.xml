@@ -1,0 +1,7 @@
+<container>
+    <services>
+        <service id="Shop\Old" class="Shop\Old">
+            <deprecated package="shop/plugin" version="2.0">Use "Shop\New" instead.</deprecated>
+        </service>
+    </services>
+</container>

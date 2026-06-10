@@ -1,0 +1,9 @@
+services:
+    Shop\Service\OrderService:
+        arguments:
+            - '@logger'
+            - '%shop.order_limit%'
+            - true
+            - 42
+        tags:
+            - kernel.event_subscriber

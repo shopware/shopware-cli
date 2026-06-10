@@ -1,0 +1,5 @@
+<container>
+    <services>
+        <service id="Shop\Listener" class="Shop\Listener"/>
+    </services>
+</container>

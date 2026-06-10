@@ -1,0 +1,13 @@
+services:
+    shop.short_alias: '@Shop\Service'
+
+    shop.public_alias:
+        alias: Shop\Service
+        public: true
+
+    shop.deprecated_alias:
+        alias: Shop\Service
+        deprecated:
+            package: shop/plugin
+            version: "1.2"
+            message: The "%alias_id%" alias is deprecated.

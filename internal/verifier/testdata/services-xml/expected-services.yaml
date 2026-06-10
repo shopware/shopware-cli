@@ -1,0 +1,6 @@
+services:
+    Test\TestPlugin\Service\TestService:
+        arguments:
+            - '@logger'
+        tags:
+            - kernel.event_subscriber

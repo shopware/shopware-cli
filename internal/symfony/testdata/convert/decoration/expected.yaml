@@ -1,0 +1,6 @@
+services:
+    Shop\Decorator:
+        decorates: Shop\Original
+        decoration_inner_name: Shop\Original.inner
+        decoration_priority: 5
+        decoration_on_invalid: ignore

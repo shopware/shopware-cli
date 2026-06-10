@@ -1,0 +1,6 @@
+services:
+    shop.order_service:
+        class: Shop\Service\OrderService
+        public: true
+
+    Shop\Service\SameClass: ~

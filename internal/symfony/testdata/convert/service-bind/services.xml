@@ -1,0 +1,7 @@
+<container>
+    <services>
+        <service id="Shop\A" class="Shop\A">
+            <bind key="$shopName">Demo</bind>
+        </service>
+    </services>
+</container>

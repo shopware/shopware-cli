@@ -1,0 +1,5 @@
+<container>
+    <imports>
+        <import resource="packages/*.xml"/>
+    </imports>
+</container>

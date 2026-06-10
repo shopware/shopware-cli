@@ -1,0 +1,5 @@
+services:
+    Shop\A:
+        properties:
+            logger: '@logger'
+            limit: 25

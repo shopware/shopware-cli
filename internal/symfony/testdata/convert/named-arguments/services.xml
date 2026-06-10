@@ -1,0 +1,15 @@
+<container>
+    <services>
+        <service id="Shop\A" class="Shop\A">
+            <argument key="$limit">10</argument>
+            <argument key="$logger" type="service" id="logger"/>
+        </service>
+        <service id="Shop\Child" parent="Shop\A">
+            <argument index="0">20</argument>
+        </service>
+        <service id="Shop\Mixed" class="Shop\Mixed">
+            <argument>positional</argument>
+            <argument key="$named">value</argument>
+        </service>
+    </services>
+</container>

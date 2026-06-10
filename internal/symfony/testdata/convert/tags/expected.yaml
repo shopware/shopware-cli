@@ -1,0 +1,7 @@
+services:
+    Shop\Listener:
+        tags:
+            - {name: kernel.event_listener, event: kernel.request, method: onRequest, priority: -10}
+            - {name: shop.custom, some_attribute: value, some-attribute: value}
+            - shop.text_tag
+            - {name: shop.nested, config: {enabled: true}}

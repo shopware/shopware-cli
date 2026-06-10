@@ -1,0 +1,7 @@
+services:
+    Shop\A:
+        arguments:
+            - !service
+              class: Shop\Inline
+              arguments:
+                - setting

@@ -1,0 +1,8 @@
+<container>
+    <services>
+        <instanceof id="Shop\HandlerInterface" autowire="true" public="false">
+            <tag name="shop.handler"/>
+        </instanceof>
+        <service id="Shop\A" class="Shop\A"/>
+    </services>
+</container>
