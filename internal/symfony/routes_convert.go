@@ -16,6 +16,10 @@ var (
 	importKeySanitizeRegexp = regexp.MustCompile(`[^a-z0-9]+`)
 )
 
+// routingSchemaComment points the YAML language server of editors to the
+// JSON schema that Symfony 7.4+ ships for the routes.yaml format.
+const routingSchemaComment = "# yaml-language-server: $schema=https://raw.githubusercontent.com/symfony/routing/7.4/Loader/schema/routing.schema.json\n"
+
 // ConvertRoutesToYAML converts a parsed routes.xml file into the equivalent
 // routes.yaml content. Like the services conversion it refuses everything
 // that cannot be expressed safely in YAML.
@@ -28,7 +32,7 @@ func ConvertRoutesToYAML(routes *Routes) ([]byte, error) {
 	}
 
 	if len(root.Content) == 0 {
-		return []byte{}, nil
+		return []byte(routingSchemaComment), nil
 	}
 
 	var buf bytes.Buffer
@@ -43,7 +47,7 @@ func ConvertRoutesToYAML(routes *Routes) ([]byte, error) {
 		return nil, err
 	}
 
-	return insertBlankLines(buf.Bytes()), nil
+	return append([]byte(routingSchemaComment), insertBlankLines(buf.Bytes())...), nil
 }
 
 func appendRouteItems(target *yaml.Node, items []xmlRouteItem, usedKeys map[string]bool, allowWhen bool) error {

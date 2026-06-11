@@ -1,3 +1,4 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/symfony/routing/7.4/Loader/schema/routing.schema.json
 controllers:
     resource: ../controllers
     type: attribute

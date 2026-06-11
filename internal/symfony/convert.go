@@ -8,6 +8,10 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+// servicesSchemaComment points the YAML language server of editors to the
+// JSON schema that Symfony 7.4+ ships for the services.yaml format.
+const servicesSchemaComment = "# yaml-language-server: $schema=https://raw.githubusercontent.com/symfony/dependency-injection/7.4/Loader/schema/services.schema.json\n"
+
 // ConvertContainerToYAML converts a parsed services.xml container into the
 // equivalent services.yaml content. It returns an error whenever the XML
 // contains something that cannot be expressed safely in YAML, so a conversion
@@ -41,7 +45,7 @@ func ConvertContainerToYAML(container *Container) ([]byte, error) {
 	}
 
 	if len(root.Content) == 0 {
-		return []byte{}, nil
+		return []byte(servicesSchemaComment), nil
 	}
 
 	var buf bytes.Buffer
@@ -56,7 +60,7 @@ func ConvertContainerToYAML(container *Container) ([]byte, error) {
 		return nil, err
 	}
 
-	return insertBlankLines(buf.Bytes()), nil
+	return append([]byte(servicesSchemaComment), insertBlankLines(buf.Bytes())...), nil
 }
 
 func appendContainerSections(target *yaml.Node, imports *xmlImports, parameters *xmlParameters, services *xmlServices) error {
