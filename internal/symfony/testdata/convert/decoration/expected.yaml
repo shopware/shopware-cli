@@ -4,3 +4,7 @@ services:
         decoration_inner_name: Shop\Original.inner
         decoration_priority: 5
         decoration_on_invalid: ignore
+
+    Shop\NullDecorator:
+        decorates: Shop\Optional
+        decoration_on_invalid: null

@@ -126,6 +126,16 @@ func TestConvertErrors(t *testing.T) {
 			expectedErr: `unsupported on-invalid value "explode"`,
 		},
 		{
+			name:        "null on-invalid cannot be expressed in YAML",
+			xml:         `<container><services><service id="foo" class="Foo"><argument type="service" id="bar" on-invalid="null"/></service></services></container>`,
+			expectedErr: `on-invalid="null" is not supported by the YAML format`,
+		},
+		{
+			name:        "unsupported decoration-on-invalid",
+			xml:         `<container><services><service id="foo" class="Foo" decorates="bar" decoration-on-invalid="explode"/></services></container>`,
+			expectedErr: `unsupported decoration-on-invalid value "explode"`,
+		},
+		{
 			name:        "tag without name",
 			xml:         `<container><services><service id="foo" class="Foo"><tag/></service></services></container>`,
 			expectedErr: "<tag> requires a name",

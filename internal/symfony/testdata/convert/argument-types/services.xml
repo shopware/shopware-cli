@@ -3,7 +3,6 @@
         <service id="Shop\A" class="Shop\A">
             <argument type="service" id="required"/>
             <argument type="service" id="optional" on-invalid="ignore"/>
-            <argument type="service" id="nullable" on-invalid="null"/>
             <argument type="service" id="uninitialized" on-invalid="ignore_uninitialized"/>
             <argument type="expression">service('shop').isActive()</argument>
             <argument type="string">@literal</argument>

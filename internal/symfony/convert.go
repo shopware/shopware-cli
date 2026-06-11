@@ -582,8 +582,15 @@ func appendDecoration(mapping *yaml.Node, service *xmlService) error {
 		mapPut(mapping, "decoration_priority", scalarValue(phpize(service.DecorationPriority)))
 	}
 
-	if service.DecorationOnInvalid != "" {
+	switch service.DecorationOnInvalid {
+	case "":
+	case "exception", "ignore":
 		mapPut(mapping, "decoration_on_invalid", newString(service.DecorationOnInvalid))
+	case "null":
+		// XML uses the string "null" while YAML expects an actual null value.
+		mapPut(mapping, "decoration_on_invalid", newNull("null"))
+	default:
+		return fmt.Errorf("unsupported decoration-on-invalid value %q", service.DecorationOnInvalid)
 	}
 
 	return nil
@@ -949,8 +956,13 @@ func referenceNode(id string, onInvalid string) (*yaml.Node, error) {
 
 	switch onInvalid {
 	case "", "exception":
-	case "ignore", "null":
+	case "ignore":
 		prefix = "@?"
+	case "null":
+		// "@?" means ignore, which removes method calls and collection
+		// entries instead of passing null for them, so the null strategy
+		// cannot be expressed in YAML.
+		return nil, fmt.Errorf(`on-invalid="null" is not supported by the YAML format, change it to on-invalid="ignore" first if dropping the dependency is acceptable`)
 	case "ignore_uninitialized":
 		prefix = "@!"
 	default:

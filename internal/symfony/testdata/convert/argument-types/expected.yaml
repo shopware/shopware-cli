@@ -3,7 +3,6 @@ services:
         arguments:
             - '@required'
             - '@?optional'
-            - '@?nullable'
             - '@!uninitialized'
             - '@=service(''shop'').isActive()'
             - '@@literal'
