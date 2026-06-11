@@ -201,9 +201,9 @@ type ConfigAdminApi struct {
 type ConfigDump struct {
 	// Allows to rewrite single columns, perfect for GDPR compliance
 	Rewrite map[string]map[string]string `yaml:"rewrite,omitempty"`
-	// Only export the schema of these tables
+	// Only export the schema of these tables, supports glob wildcards (e.g. "customer*")
 	NoData []string `yaml:"nodata,omitempty"`
-	// Ignore these tables from export
+	// Ignore these tables from export, supports glob wildcards (e.g. "customer*")
 	Ignore []string `yaml:"ignore,omitempty"`
 	// Add an where condition to that table, schema is table name as key, and where statement as value
 	Where map[string]string `yaml:"where,omitempty"`
