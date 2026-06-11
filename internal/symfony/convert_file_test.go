@@ -11,10 +11,10 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestConvertServicesXMLFileFixtures copies every testdata/files/<name>/input
-// tree into a temporary directory, converts its services.xml and compares the
-// resulting tree with testdata/files/<name>/expected.
-func TestConvertServicesXMLFileFixtures(t *testing.T) {
+// TestConvertXMLFileFixtures copies every testdata/files/<name>/input tree
+// into a temporary directory, converts its services.xml or routes.xml and
+// compares the resulting tree with testdata/files/<name>/expected.
+func TestConvertXMLFileFixtures(t *testing.T) {
 	fixturesDir := filepath.Join("testdata", "files")
 
 	entries, err := os.ReadDir(fixturesDir)
@@ -30,7 +30,15 @@ func TestConvertServicesXMLFileFixtures(t *testing.T) {
 			tmpDir := t.TempDir()
 			require.NoError(t, os.CopyFS(tmpDir, os.DirFS(filepath.Join(fixturesDir, entry.Name(), "input"))))
 
-			converted, err := ConvertServicesXMLFile(filepath.Join(tmpDir, "services.xml"))
+			entryFile := filepath.Join(tmpDir, "services.xml")
+			convert := ConvertServicesXMLFile
+
+			if _, err := os.Stat(entryFile); err != nil {
+				entryFile = filepath.Join(tmpDir, "routes.xml")
+				convert = ConvertRoutesXMLFile
+			}
+
+			converted, err := convert(entryFile)
 			require.NoError(t, err)
 			require.NotEmpty(t, converted)
 

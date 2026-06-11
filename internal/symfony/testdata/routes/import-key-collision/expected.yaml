@@ -1,0 +1,8 @@
+routes_storefront:
+    resource: routes/storefront.xml
+
+routes_storefront_2:
+    resource: routes/storefront.yaml
+
+imported_routes:
+    resource: '*.php'

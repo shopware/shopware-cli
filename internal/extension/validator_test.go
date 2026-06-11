@@ -104,7 +104,7 @@ func TestValidateServicesXmlWarnsWhenPresent(t *testing.T) {
 	assert.NoError(t, os.WriteFile(servicesXml, []byte("<container/>"), 0o644))
 
 	check := &testCheck{}
-	validateServicesXml(plugin, check)
+	validateSymfonyXml(plugin, check)
 
 	assert.Len(t, check.Results, 1)
 	assert.Equal(t, "config.services_xml.deprecated", check.Results[0].Identifier)
@@ -112,12 +112,30 @@ func TestValidateServicesXmlWarnsWhenPresent(t *testing.T) {
 	assert.Equal(t, servicesXml, check.Results[0].Path)
 }
 
+func TestValidateRoutesXmlWarnsWhenPresent(t *testing.T) {
+	tmpDir := t.TempDir()
+	plugin := getTestPlugin(tmpDir)
+
+	configDir := filepath.Join(tmpDir, "src", "Resources", "config")
+	assert.NoError(t, os.MkdirAll(configDir, 0o755))
+	routesXml := filepath.Join(configDir, "routes.xml")
+	assert.NoError(t, os.WriteFile(routesXml, []byte("<routes/>"), 0o644))
+
+	check := &testCheck{}
+	validateSymfonyXml(plugin, check)
+
+	assert.Len(t, check.Results, 1)
+	assert.Equal(t, "config.routes_xml.deprecated", check.Results[0].Identifier)
+	assert.Equal(t, validation.SeverityWarning, check.Results[0].Severity)
+	assert.Equal(t, routesXml, check.Results[0].Path)
+}
+
 func TestValidateServicesXmlSilentWhenAbsent(t *testing.T) {
 	tmpDir := t.TempDir()
 	plugin := getTestPlugin(tmpDir)
 
 	check := &testCheck{}
-	validateServicesXml(plugin, check)
+	validateSymfonyXml(plugin, check)
 
 	assert.Len(t, check.Results, 0)
 }
@@ -131,7 +149,7 @@ func TestValidateServicesXmlSilentWhenYaml(t *testing.T) {
 	assert.NoError(t, os.WriteFile(filepath.Join(configDir, "services.yaml"), []byte("services:"), 0o644))
 
 	check := &testCheck{}
-	validateServicesXml(plugin, check)
+	validateSymfonyXml(plugin, check)
 
 	assert.Len(t, check.Results, 0)
 }
@@ -140,7 +158,7 @@ func TestValidateServicesXmlSkippedForApp(t *testing.T) {
 	app := getAppForValidation()
 
 	check := &testCheck{}
-	validateServicesXml(app, check)
+	validateSymfonyXml(app, check)
 
 	assert.Len(t, check.Results, 0)
 }

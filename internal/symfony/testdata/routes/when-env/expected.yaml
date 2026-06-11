@@ -1,0 +1,9 @@
+frontend.home:
+    path: /
+
+when@dev:
+    frontend.debug:
+        path: /_debug
+        methods: [GET]
+    dev_routes:
+        resource: dev_routes.yaml

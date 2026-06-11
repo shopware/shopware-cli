@@ -1,0 +1,12 @@
+frontend.example:
+    path: /example/{page}
+    controller: Shop\Storefront\Controller\ExampleController::index
+    schemes: [https]
+    methods: [GET, POST]
+    defaults:
+        page: "1"
+    requirements:
+        page: \d+
+    options:
+        seo: false
+    condition: context.getMethod() in ['GET']

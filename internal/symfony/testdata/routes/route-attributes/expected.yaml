@@ -1,0 +1,7 @@
+frontend.attrs:
+    path: /attrs
+    host: shop.example.com
+    locale: en
+    format: html
+    utf8: true
+    stateless: true

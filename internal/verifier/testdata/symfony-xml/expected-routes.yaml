@@ -1,0 +1,3 @@
+storefront_controller:
+    resource: ../../Storefront/Controller/**/*Controller.php
+    type: annotation

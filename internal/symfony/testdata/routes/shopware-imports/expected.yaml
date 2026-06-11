@@ -1,0 +1,10 @@
+storefront_controller:
+    resource: ../../Storefront/Controller/**/*Controller.php
+    type: annotation
+
+core_api:
+    resource: ../../Core/Api
+    type: attribute
+    defaults:
+        _routeScope:
+            - api

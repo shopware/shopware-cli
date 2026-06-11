@@ -1,0 +1,3 @@
+frontend.listing:
+    path: /listing
+    controller: Shop\Controller\ListingController

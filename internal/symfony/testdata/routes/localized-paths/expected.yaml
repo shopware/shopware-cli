@@ -1,0 +1,10 @@
+frontend.about:
+    path:
+        en: /en/about
+        de: /de/ueber-uns
+
+extra:
+    resource: extra
+    prefix:
+        en: /en
+        de: /de

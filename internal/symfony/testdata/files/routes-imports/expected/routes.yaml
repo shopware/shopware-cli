@@ -1,0 +1,11 @@
+routes_storefront:
+    resource: routes/storefront.yaml
+    type: yaml
+
+storefront_controller:
+    resource: ../../Storefront/Controller/**/*Controller.php
+    type: annotation
+
+frontend.home:
+    path: /
+    controller: Shop\Controller\HomeController
