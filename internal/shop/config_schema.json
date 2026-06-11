@@ -403,14 +403,14 @@
             "type": "string"
           },
           "type": "array",
-          "description": "Only export the schema of these tables"
+          "description": "Only export the schema of these tables, supports glob wildcards (e.g. \"customer*\")"
         },
         "ignore": {
           "items": {
             "type": "string"
           },
           "type": "array",
-          "description": "Ignore these tables from export"
+          "description": "Ignore these tables from export, supports glob wildcards (e.g. \"customer*\")"
         },
         "where": {
           "additionalProperties": {

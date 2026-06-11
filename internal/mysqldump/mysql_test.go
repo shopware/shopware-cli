@@ -772,6 +772,177 @@ func Test_mySQL_ignoresTable(t *testing.T) {
 	}
 }
 
+func Test_expandTablePattern(t *testing.T) {
+	tables := []string{"cart", "customer", "customer_address", "OLD_table", "order_customer"}
+
+	tests := []struct {
+		name    string
+		pattern string
+		want    []string
+		wantErr bool
+	}{
+		{"exact name", "cart", []string{"cart"}, false},
+		{"exact name not in table list", "not_existing", []string{"not_existing"}, false},
+		{"exact name is case-insensitive", "old_TABLE", []string{"old_table"}, false},
+		{"prefix wildcard", "customer*", []string{"customer", "customer_address"}, false},
+		{"suffix wildcard", "*customer", []string{"customer", "order_customer"}, false},
+		{"wildcard is case-insensitive", "OLD_*", []string{"old_table"}, false},
+		{"wildcard without matches", "product*", []string{}, false},
+		{"single character wildcard", "car?", []string{"cart"}, false},
+		{"invalid pattern", "customer[", nil, true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := expandTablePattern(tt.pattern, tables)
+			if tt.wantErr {
+				assert.NotNil(t, err)
+				return
+			}
+			assert.Nil(t, err)
+			assert.ElementsMatch(t, tt.want, got)
+		})
+	}
+}
+
+func Test_buildFilterMap(t *testing.T) {
+	tables := []string{"cart", "customer", "customer_address", "order_customer"}
+
+	filterMap, err := buildFilterMap(tables, []string{"customer*"}, []string{"cart", "customer_address"})
+	assert.Nil(t, err)
+	assert.Equal(t, map[string]string{
+		"cart":             IgnoreMapPlacement,
+		"customer":         NoDataMapPlacement,
+		"customer_address": IgnoreMapPlacement,
+	}, filterMap)
+}
+
+func Test_mySQL_ignoresTableWildcard(t *testing.T) {
+	db, mock := getDB(t)
+
+	mock.ExpectQuery("SHOW FULL TABLES").WillReturnRows(
+		sqlmock.NewRows([]string{"Tables_in_database", "Table_type"}).
+			AddRow("OLD_table", "BASE TABLE").
+			AddRow("OLD_archive", "BASE TABLE"),
+	)
+
+	// Mock batch prefetch queries (all tables are ignored, so no schemas to prefetch)
+	mockPrefetchSchemas(mock)
+
+	// Expect SHOW FULL TABLES query for views
+	mock.ExpectQuery("SHOW FULL TABLES").WillReturnRows(
+		sqlmock.NewRows([]string{"Tables_in_database", "Table_type"}),
+	)
+
+	// Expect SHOW TRIGGERS query since triggers are dumped by default
+	mock.ExpectQuery("SHOW TRIGGERS").WillReturnRows(
+		sqlmock.NewRows([]string{"Trigger", "Event", "Table", "Statement", "Timing", "Created", "sql_mode", "Definer", "character_set_client", "collation_connection", "Database Collation"}),
+	)
+
+	dumper := getInternalMySQLInstance(db)
+
+	dumper.Ignore = []string{"old_*"}
+
+	b := new(strings.Builder)
+
+	err := dumper.Dump(t.Context(), b)
+
+	if err != nil {
+		t.Error(err)
+	}
+
+	expected := "SET NAMES utf8mb4;\nSET FOREIGN_KEY_CHECKS = 0;\n\nSET FOREIGN_KEY_CHECKS = 1;\n"
+	if b.String() != expected {
+		t.Errorf("No tables should be dumped, expected:\n%s\ngot:\n%s", expected, b.String())
+	}
+}
+
+func Test_mySQL_noDataTableWildcard(t *testing.T) {
+	db, mock := getDB(t)
+
+	mock.ExpectQuery("SHOW FULL TABLES").WillReturnRows(
+		sqlmock.NewRows([]string{"Tables_in_database", "Table_type"}).
+			AddRow("customer", "BASE TABLE").
+			AddRow("customer_address", "BASE TABLE"),
+	)
+
+	// Mock batch prefetch queries with both tables
+	mock.ExpectQuery("SELECT.*FROM INFORMATION_SCHEMA.TABLES.*TABLE_TYPE = 'BASE TABLE'").
+		WillReturnRows(sqlmock.NewRows([]string{"TABLE_NAME", "ENGINE", "TABLE_COLLATION", "TABLE_COMMENT", "ROW_FORMAT", "AUTO_INCREMENT"}).
+			AddRow("customer", "InnoDB", "utf8mb4_unicode_ci", "", "Dynamic", nil).
+			AddRow("customer_address", "InnoDB", "utf8mb4_unicode_ci", "", "Dynamic", nil))
+
+	mock.ExpectQuery("SELECT.*FROM INFORMATION_SCHEMA.COLUMNS.*WHERE TABLE_SCHEMA = DATABASE()").
+		WillReturnRows(sqlmock.NewRows([]string{
+			"TABLE_NAME", "COLUMN_NAME", "COLUMN_TYPE", "CHARACTER_SET_NAME", "IS_NULLABLE", "COLUMN_DEFAULT",
+			"EXTRA", "COLLATION_NAME", "COLUMN_COMMENT", "GENERATION_EXPRESSION",
+		}).
+			AddRow("customer", "id", "bigint(20)", nil, "NO", nil, "AUTO_INCREMENT", nil, "", nil).
+			AddRow("customer_address", "id", "bigint(20)", nil, "NO", nil, "AUTO_INCREMENT", nil, "", nil))
+
+	mock.ExpectQuery("SELECT.*FROM INFORMATION_SCHEMA.STATISTICS.*WHERE TABLE_SCHEMA = DATABASE()").
+		WillReturnRows(sqlmock.NewRows([]string{
+			"TABLE_NAME", "INDEX_NAME", "COLUMN_NAME", "NON_UNIQUE", "INDEX_TYPE", "SUB_PART", "COLLATION", "INDEX_COMMENT", "SEQ_IN_INDEX",
+		}))
+
+	mock.ExpectQuery("SELECT COUNT.*KEY_COLUMN_USAGE.*").
+		WillReturnRows(sqlmock.NewRows([]string{"c"}).AddRow(0))
+	mock.ExpectQuery("SELECT COUNT.*REFERENTIAL_CONSTRAINTS.*").
+		WillReturnRows(sqlmock.NewRows([]string{"c"}).AddRow(0))
+
+	mock.ExpectQuery("SELECT DISTINCT.*FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE.*").
+		WillReturnRows(sqlmock.NewRows([]string{
+			"TABLE_NAME", "CONSTRAINT_NAME", "COLUMN_NAME", "REFERENCED_TABLE_NAME",
+			"REFERENCED_COLUMN_NAME", "UPDATE_RULE", "DELETE_RULE", "ORDINAL_POSITION",
+		}))
+
+	mock.ExpectQuery("SELECT.*FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS.*CHECK_CONSTRAINTS.*").
+		WillReturnRows(sqlmock.NewRows([]string{
+			"TABLE_NAME", "CONSTRAINT_NAME", "CHECK_CLAUSE",
+		}))
+
+	// Expect SHOW FULL TABLES query for views
+	mock.ExpectQuery("SHOW FULL TABLES").WillReturnRows(
+		sqlmock.NewRows([]string{"Tables_in_database", "Table_type"}),
+	)
+
+	// Expect SHOW TRIGGERS query since triggers are dumped by default
+	mock.ExpectQuery("SHOW TRIGGERS").WillReturnRows(
+		sqlmock.NewRows([]string{"Trigger", "Event", "Table", "Statement", "Timing", "Created", "sql_mode", "Definer", "character_set_client", "collation_connection", "Database Collation"}),
+	)
+
+	dumper := getInternalMySQLInstance(db)
+
+	dumper.NoData = []string{"customer*"}
+
+	b := new(strings.Builder)
+
+	err := dumper.Dump(t.Context(), b)
+	assert.Nil(t, err)
+
+	assert.Contains(t, b.String(), "CREATE TABLE `customer`")
+	assert.Contains(t, b.String(), "CREATE TABLE `customer_address`")
+	assert.NotContains(t, b.String(), "INSERT INTO")
+	assert.NotContains(t, b.String(), "Data for table")
+}
+
+func Test_mySQL_invalidTablePattern(t *testing.T) {
+	db, mock := getDB(t)
+
+	mock.ExpectQuery("SHOW FULL TABLES").WillReturnRows(
+		sqlmock.NewRows([]string{"Tables_in_database", "Table_type"}).
+			AddRow("customer", "BASE TABLE"),
+	)
+
+	dumper := getInternalMySQLInstance(db)
+
+	dumper.NoData = []string{"customer["}
+
+	err := dumper.Dump(t.Context(), new(strings.Builder))
+	assert.NotNil(t, err)
+	assert.Contains(t, err.Error(), "invalid table pattern")
+}
+
 func Test_mySQL_dumpsTriggers(t *testing.T) {
 	db, mock := getDB(t)
 
