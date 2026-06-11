@@ -1,0 +1,13 @@
+<container>
+    <services>
+        <service id="Shop\A" class="Shop\A"/>
+    </services>
+    <when env="dev">
+        <parameters>
+            <parameter key="shop.debug">true</parameter>
+        </parameters>
+        <services>
+            <service id="Shop\DevOnly" class="Shop\DevOnly"/>
+        </services>
+    </when>
+</container>

@@ -1,0 +1,16 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/symfony/dependency-injection/7.4/Loader/schema/services.schema.json
+services:
+    Shop\A:
+        arguments:
+            $limit: 10
+            $logger: '@logger'
+
+    Shop\Child:
+        parent: Shop\A
+        arguments:
+            index_0: 20
+
+    Shop\Mixed:
+        arguments:
+            0: positional
+            $named: value

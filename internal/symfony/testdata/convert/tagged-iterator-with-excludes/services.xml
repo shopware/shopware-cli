@@ -1,0 +1,9 @@
+<container>
+    <services>
+        <service id="Shop\A" class="Shop\A">
+            <argument type="tagged_iterator" tag="shop.handler" exclude-self="false">
+                <exclude>Shop\ExcludedHandler</exclude>
+            </argument>
+        </service>
+    </services>
+</container>

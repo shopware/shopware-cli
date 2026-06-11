@@ -1,0 +1,13 @@
+<container>
+    <services>
+        <service id="Shop\A" class="Shop\A">
+            <call method="setLogger">
+                <argument type="service" id="logger"/>
+            </call>
+            <call method="init"/>
+            <call method="withPriority" returns-clone="true">
+                <argument>5</argument>
+            </call>
+        </service>
+    </services>
+</container>

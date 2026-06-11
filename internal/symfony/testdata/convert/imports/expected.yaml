@@ -1,0 +1,5 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/symfony/dependency-injection/7.4/Loader/schema/services.schema.json
+imports:
+    - {resource: packages/listeners.xml}
+    - {resource: other.yaml, ignore_errors: true}
+    - {resource: not_found.yaml, ignore_errors: not_found}

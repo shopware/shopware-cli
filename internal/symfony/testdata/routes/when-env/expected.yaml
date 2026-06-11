@@ -1,0 +1,10 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/symfony/routing/7.4/Loader/schema/routing.schema.json
+frontend.home:
+    path: /
+
+when@dev:
+    frontend.debug:
+        path: /_debug
+        methods: [GET]
+    dev_routes:
+        resource: dev_routes.yaml

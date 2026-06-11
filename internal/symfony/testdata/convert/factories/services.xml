@@ -1,0 +1,25 @@
+<container>
+    <services>
+        <service id="Shop\FromClass" class="Shop\FromClass">
+            <factory class="Shop\Factory" method="create"/>
+        </service>
+        <service id="Shop\FromService" class="Shop\FromService">
+            <factory service="shop.factory" method="create"/>
+        </service>
+        <service id="Shop\FromInvokable" class="Shop\FromInvokable">
+            <factory service="shop.factory"/>
+        </service>
+        <service id="Shop\FromFunction" class="Shop\FromFunction">
+            <factory function="shop_create"/>
+        </service>
+        <service id="Shop\FromExpression" class="Shop\FromExpression">
+            <factory expression="service('shop.factory').create()"/>
+        </service>
+        <service id="Shop\FromOwnMethod" class="Shop\FromOwnMethod">
+            <factory method="create"/>
+        </service>
+        <service id="Shop\Configured" class="Shop\Configured">
+            <configurator service="shop.configurator" method="configure"/>
+        </service>
+    </services>
+</container>

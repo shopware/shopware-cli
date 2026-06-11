@@ -1,0 +1,7 @@
+<container>
+    <services>
+        <service id="Shop\Service" class="Shop\Service">
+            <argument type="service" id="logger"/>
+        </service>
+    </services>
+</container>

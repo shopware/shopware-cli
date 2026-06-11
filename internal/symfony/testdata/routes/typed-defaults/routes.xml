@@ -1,0 +1,22 @@
+<routes xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+    <route id="frontend.typed" path="/typed">
+        <default key="plain">42</default>
+        <default key="empty" xsi:nil="true"/>
+        <default key="flag"><bool>true</bool></default>
+        <default key="limit"><int>25</int></default>
+        <default key="rate"><float>2.5</float></default>
+        <default key="title"><string>hello</string></default>
+        <default key="list">
+            <list>
+                <string>one</string>
+                <int>2</int>
+            </list>
+        </default>
+        <default key="map">
+            <map>
+                <string key="a">x</string>
+                <bool key="b">false</bool>
+            </map>
+        </default>
+    </route>
+</routes>

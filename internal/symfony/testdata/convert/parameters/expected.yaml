@@ -1,0 +1,16 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/symfony/dependency-injection/7.4/Loader/schema/services.schema.json
+parameters:
+    shop.string: hello
+    shop.bool: true
+    shop.int: 42
+    shop.float: 1.5
+    shop.null: null
+    shop.forced_string: "true"
+    shop.constant: !php/const Shop\Config::LIMIT
+    shop.list:
+        - one
+        - two
+    shop.map:
+        a: 1
+        b:
+            - nested

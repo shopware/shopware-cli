@@ -1,0 +1,11 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/symfony/routing/7.4/Loader/schema/routing.schema.json
+frontend.about:
+    path:
+        en: /en/about
+        de: /de/ueber-uns
+
+extra:
+    resource: extra
+    prefix:
+        en: /en
+        de: /de
