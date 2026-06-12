@@ -249,4 +249,35 @@ func TestGenerateComposeFile(t *testing.T) {
 		assert.Contains(t, compose, "MESSENGER_TRANSPORT_DSN")
 		assert.Contains(t, compose, "OPENSEARCH_URL")
 	})
+
+	t.Run("emits user when set", func(t *testing.T) {
+		t.Parallel()
+		lock := &packagist.ComposerLock{
+			Packages: []packagist.ComposerLockPackage{
+				{Name: "shopware/core", Version: "6.6.0.0"},
+			},
+		}
+
+		result, err := GenerateComposeFile(lock, &ComposeOptions{User: "1001:46"})
+		assert.NoError(t, err)
+
+		compose := string(result)
+		assert.Contains(t, compose, "user:")
+		assert.Contains(t, compose, "1001:46")
+	})
+
+	t.Run("no user key without User", func(t *testing.T) {
+		t.Parallel()
+		lock := &packagist.ComposerLock{
+			Packages: []packagist.ComposerLockPackage{
+				{Name: "shopware/core", Version: "6.6.0.0"},
+			},
+		}
+
+		result, err := GenerateComposeFile(lock, nil)
+		assert.NoError(t, err)
+
+		compose := string(result)
+		assert.NotContains(t, compose, "user:")
+	})
 }
