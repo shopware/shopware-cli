@@ -132,6 +132,10 @@ func (sg setupGuide) viewAdminPassword() string {
 	b.WriteString(tui.DimStyle.Render("Password for the Shopware admin panel and API access."))
 	b.WriteString("\n\n")
 	b.WriteString(sg.password.View())
+	if sg.passwordErr != "" {
+		b.WriteString("\n")
+		b.WriteString(errorStyle.Render(sg.passwordErr))
+	}
 	b.WriteString("\n\n")
 	b.WriteString(renderShowPasswordCheckbox(sg.showPassword, false))
 	b.WriteString("\n\n")

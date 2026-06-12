@@ -46,6 +46,35 @@ func TestResolvePHPVersions_NoMatchingVersionsFallsBackToAll(t *testing.T) {
 	assert.Equal(t, "^9.0", constraint)
 }
 
+func TestSetupGuideAdminPassword_ShortPasswordBlocksAdvance(t *testing.T) {
+	sg := newSetupGuide("")
+	sg.step = setupStepAdminPassword
+	sg.password.SetValue("shopwar")
+
+	out, _ := sg.update(tea.KeyPressMsg(tea.Key{Code: tea.KeyEnter}))
+	assert.Equal(t, setupStepAdminPassword, out.step, "should stay on the admin password step")
+	assert.NotEmpty(t, out.passwordErr, "should set a validation error")
+}
+
+func TestSetupGuideAdminPassword_ValidPasswordAdvances(t *testing.T) {
+	sg := newSetupGuide("")
+	sg.step = setupStepAdminPassword
+	sg.password.SetValue("shopware")
+
+	out, _ := sg.update(tea.KeyPressMsg(tea.Key{Code: tea.KeyEnter}))
+	assert.Equal(t, setupStepDockerPHP, out.step)
+	assert.Empty(t, out.passwordErr)
+}
+
+func TestSetupGuideAdminPassword_TypingClearsError(t *testing.T) {
+	sg := newSetupGuide("")
+	sg.step = setupStepAdminPassword
+	sg.passwordErr = "password must be at least 8 characters long"
+
+	out, _ := sg.update(tea.KeyPressMsg(tea.Key{Code: 'x', Text: "x"}))
+	assert.Empty(t, out.passwordErr)
+}
+
 func TestSetupGuideReview_QuitButtonQuits(t *testing.T) {
 	sg := newSetupGuide("")
 	sg.step = setupStepReview
