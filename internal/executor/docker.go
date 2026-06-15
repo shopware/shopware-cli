@@ -10,6 +10,7 @@ import (
 
 	adminSdk "github.com/shopware/shopware-cli/internal/admin-api"
 	"github.com/shopware/shopware-cli/internal/shop"
+	"github.com/shopware/shopware-cli/internal/system"
 )
 
 type DockerExecutor struct {
@@ -173,6 +174,15 @@ func (d *DockerExecutor) baseArgs() []string {
 	args := []string{"compose", "exec"}
 
 	args = append(args, "-T")
+
+	// When the web service runs as the mapped host user (see the compose
+	// user: directive derived from system.ProjectUserSpec), that UID has no
+	// passwd entry inside the image, so HOME is unset and tools like npm and
+	// composer fall back to / and fail with EACCES. Point HOME at a writable
+	// path, mirroring system.DockerRunUserArgs for the raw composer run.
+	if system.ProjectUserSpec(d.projectRoot) != "" {
+		args = append(args, "-e", "HOME=/tmp")
+	}
 
 	for k, v := range d.env {
 		args = append(args, "-e", fmt.Sprintf("%s=%s", k, v))
