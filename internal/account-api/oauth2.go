@@ -11,6 +11,7 @@ import (
 	"os"
 	"strings"
 	"sync"
+	"time"
 
 	"golang.org/x/oauth2"
 
@@ -18,6 +19,10 @@ import (
 	"github.com/shopware/shopware-cli/internal/tui"
 	"github.com/shopware/shopware-cli/logging"
 )
+
+// interactiveLoginTimeout is the maximum time we wait for the user to complete
+// the browser-based login before giving up, so the command does not hang forever.
+const interactiveLoginTimeout = 5 * time.Minute
 
 func InteractiveLogin(ctx context.Context) (*oauth2.Token, error) {
 	client := &oauth2.Config{
@@ -107,10 +112,15 @@ func InteractiveLogin(ctx context.Context) (*oauth2.Token, error) {
 		close(enterPressed)
 	}()
 
+	timeout := time.NewTimer(interactiveLoginTimeout)
+	defer timeout.Stop()
+
 	for {
 		select {
 		case <-ctx.Done():
 			return nil, ctx.Err()
+		case <-timeout.C:
+			return nil, fmt.Errorf("timed out after %s waiting for login to complete", interactiveLoginTimeout)
 		case <-enterPressed:
 			enterPressed = nil
 			if err := system.OpenURL(ctx, u); err != nil {
