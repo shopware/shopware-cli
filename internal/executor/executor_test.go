@@ -37,6 +37,30 @@ func TestNewDockerExecutor(t *testing.T) {
 	assert.Equal(t, "docker", exec.Type())
 }
 
+func TestNewDockerExecutorFallsBackToLocalInContainer(t *testing.T) {
+	original := resolveDockerFallback
+	t.Cleanup(func() { resolveDockerFallback = original })
+
+	resolveDockerFallback = func() bool { return true }
+
+	cfg := &shop.EnvironmentConfig{Type: "docker"}
+	exec, err := New("/project", cfg, &shop.Config{})
+	assert.NoError(t, err)
+	assert.Equal(t, "local", exec.Type())
+}
+
+func TestNewDockerExecutorKeepsDockerWithoutFallback(t *testing.T) {
+	original := resolveDockerFallback
+	t.Cleanup(func() { resolveDockerFallback = original })
+
+	resolveDockerFallback = func() bool { return false }
+
+	cfg := &shop.EnvironmentConfig{Type: "docker"}
+	exec, err := New("/project", cfg, &shop.Config{})
+	assert.NoError(t, err)
+	assert.Equal(t, "docker", exec.Type())
+}
+
 func TestNewUnsupportedType(t *testing.T) {
 	cfg := &shop.EnvironmentConfig{Type: "unknown"}
 
