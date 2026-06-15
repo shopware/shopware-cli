@@ -51,6 +51,11 @@ func run(ctx context.Context) int {
 	ctx = logging.WithLogger(ctx, logging.NewLogger(verbose))
 	ctx = logging.WithVerbose(ctx, verbose)
 	ctx = system.WithInteraction(ctx, !slices.Contains(args, "--no-interaction") && !slices.Contains(args, "-n") && isatty.IsTerminal(os.Stdin.Fd()))
+
+	if dir := system.EnsureWritableHome(); dir != "" {
+		logging.FromContext(ctx).Debugf("HOME was unset or not writable; redirected to %s so child tools (npm/composer) can write their caches", dir)
+	}
+
 	tui.AppVersion = version
 	accountApi.SetUserAgent("shopware-cli/" + version)
 	rootCmd.SetArgs(args)
