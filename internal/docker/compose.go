@@ -9,6 +9,7 @@ import (
 
 	"github.com/shopware/shopware-cli/internal/packagist"
 	"github.com/shopware/shopware-cli/internal/shop"
+	"github.com/shopware/shopware-cli/internal/system"
 )
 
 const nodeVersion = "24"
@@ -37,6 +38,10 @@ type ComposeOptions struct {
 	BlackfireServerID    string
 	BlackfireServerToken string
 	TidewaysAPIKey       string
+	// User is the "uid:gid" the web container should run as so that
+	// writes to the bind-mounted project (var/, files/, public/, ...)
+	// are owned by the host user. Empty means: use the image default.
+	User string
 }
 
 func (o *ComposeOptions) phpVersion() string {
@@ -80,6 +85,13 @@ func GenerateComposeFile(lock *packagist.ComposerLock, opts *ComposeOptions) ([]
 }
 
 func WriteComposeFile(projectFolder string, opts *ComposeOptions) error {
+	if opts == nil {
+		opts = &ComposeOptions{}
+	}
+	if opts.User == "" {
+		opts.User = system.ProjectUserSpec(projectFolder)
+	}
+
 	lock, err := packagist.ReadComposerLock(filepath.Join(projectFolder, "composer.lock"))
 	if err != nil {
 		return fmt.Errorf("failed to read composer.lock: %w", err)
@@ -132,6 +144,9 @@ func buildCompose(hasAMQP, hasElasticsearch bool, opts *ComposeOptions) yaml.Nod
 
 	web := newMappingNode()
 	addKeyValue(web, "image", fmt.Sprintf("ghcr.io/shopware/docker-dev:php%s-node%s-caddy", opts.phpVersion(), nodeVersion))
+	if opts != nil && opts.User != "" {
+		addKeyValue(web, "user", opts.User)
+	}
 	addKeyValueNode(web, "ports", newSequenceNode(
 		"8000:8000", "8080:8080", "9999:9999", "9998:9998", "5173:5173", "5773:5773",
 	))
