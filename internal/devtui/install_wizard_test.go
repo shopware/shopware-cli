@@ -243,6 +243,62 @@ func TestInstallStepPassword_CheckboxFocusedSwallowsTypedKeys(t *testing.T) {
 	assert.Nil(t, cmd)
 }
 
+func TestValidateAdminPassword(t *testing.T) {
+	assert.NoError(t, validateAdminPassword("shopware"))
+	assert.NoError(t, validateAdminPassword("12345678"))
+	assert.Error(t, validateAdminPassword("shopwar"))
+	assert.Error(t, validateAdminPassword(""))
+	// Length is counted in runes, not bytes.
+	assert.Error(t, validateAdminPassword("äöü"))
+}
+
+func TestInstallStepPassword_EnterWithShortPasswordBlocks(t *testing.T) {
+	m := newTestInstallModel()
+	m.install.step = installStepPassword
+	m.install.password.SetValue("shopwar")
+	m.install.password.Focus()
+
+	updated, cmd := m.updateInstallPrompt(enterKey())
+	mm := updated.(Model)
+	assert.Equal(t, installStepPassword, mm.install.step, "should stay on the password step")
+	assert.Equal(t, phaseInstallPrompt, mm.phase, "should not start installing")
+	assert.NotEmpty(t, mm.install.passwordErr, "should set a validation error")
+	assert.Nil(t, cmd)
+}
+
+func TestInstallStepPassword_EnterWithValidPasswordStartsInstall(t *testing.T) {
+	m := newTestInstallModel()
+	m.install.step = installStepPassword
+	m.install.password.SetValue("shopware")
+	m.install.password.Focus()
+
+	updated, cmd := m.updateInstallPrompt(enterKey())
+	mm := updated.(Model)
+	assert.Equal(t, phaseInstalling, mm.phase)
+	assert.Empty(t, mm.install.passwordErr)
+	assert.NotNil(t, cmd)
+}
+
+func TestInstallStepPassword_TypingClearsError(t *testing.T) {
+	m := newTestInstallModel()
+	m.install.step = installStepPassword
+	m.install.passwordErr = "password must be at least 8 characters long"
+	m.install.password.Focus()
+
+	updated, _ := m.updateInstallPrompt(tea.KeyPressMsg(tea.Key{Code: 'x', Text: "x"}))
+	assert.Empty(t, updated.(Model).install.passwordErr)
+}
+
+func TestRenderInstallPrompt_PasswordErrorShown(t *testing.T) {
+	m := newTestInstallModel()
+	m.install.step = installStepPassword
+	m.install.passwordErr = "password must be at least 8 characters long"
+
+	var b strings.Builder
+	m.renderInstallPrompt(&b)
+	assert.Contains(t, b.String(), "at least 8 characters")
+}
+
 func TestRenderInstallPrompt_AllStepsDoNotPanic(t *testing.T) {
 	m := newTestInstallModel()
 

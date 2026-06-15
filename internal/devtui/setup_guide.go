@@ -40,6 +40,7 @@ type setupGuide struct {
 	url                   textinput.Model
 	username              textinput.Model
 	password              textinput.Model
+	passwordErr           string
 	showPassword          bool
 	blackfireServerID     textinput.Model
 	blackfireServerToken  textinput.Model
@@ -222,6 +223,11 @@ func (sg *setupGuide) updateAdminUser(msg tea.KeyPressMsg) (setupGuide, tea.Cmd)
 func (sg *setupGuide) updateAdminPassword(msg tea.KeyPressMsg) (setupGuide, tea.Cmd) {
 	switch msg.String() {
 	case keyEnter:
+		if err := validateAdminPassword(sg.password.Value()); err != nil {
+			sg.passwordErr = err.Error()
+			return *sg, nil
+		}
+		sg.passwordErr = ""
 		sg.password.Blur()
 		sg.step = setupStepDockerPHP
 		return *sg, nil
@@ -234,6 +240,7 @@ func (sg *setupGuide) updateAdminPassword(msg tea.KeyPressMsg) (setupGuide, tea.
 		}
 		return *sg, nil
 	}
+	sg.passwordErr = ""
 	var cmd tea.Cmd
 	sg.password, cmd = sg.password.Update(msg)
 	return *sg, cmd

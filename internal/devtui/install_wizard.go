@@ -1,6 +1,7 @@
 package devtui
 
 import (
+	"fmt"
 	"strings"
 
 	"charm.land/bubbles/v2/progress"
@@ -11,6 +12,20 @@ import (
 
 	"github.com/shopware/shopware-cli/internal/tui"
 )
+
+// minAdminPasswordLength is the minimum admin password length enforced by the
+// Shopware core (user:create / system:install). Validating it here lets the
+// wizard reject too-short passwords up front instead of failing late during the
+// deployment-helper run.
+const minAdminPasswordLength = 8
+
+// validateAdminPassword mirrors the Shopware core password length requirement.
+func validateAdminPassword(password string) error {
+	if len([]rune(password)) < minAdminPasswordLength {
+		return fmt.Errorf("password must be at least %d characters long", minAdminPasswordLength)
+	}
+	return nil
+}
 
 type installStep int
 
@@ -55,6 +70,7 @@ type installWizard struct {
 	username        textinput.Model
 	password        textinput.Model
 	checkboxFocused bool
+	passwordErr     string
 }
 
 type installProgress struct {
@@ -191,6 +207,7 @@ func (m Model) updateInstallStepPassword(msg tea.KeyPressMsg) (tea.Model, tea.Cm
 	if m.install.checkboxFocused {
 		return m, nil
 	}
+	m.install.passwordErr = ""
 	var cmd tea.Cmd
 	m.install.password, cmd = m.install.password.Update(msg)
 	return m, cmd
@@ -205,6 +222,11 @@ func (m Model) handleInstallPasswordEnter() (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 	}
+	if err := validateAdminPassword(m.install.password.Value()); err != nil {
+		m.install.passwordErr = err.Error()
+		return m, nil
+	}
+	m.install.passwordErr = ""
 	m.install.password.Blur()
 	m.phase = phaseInstalling
 	m.overlayLines = nil
@@ -260,6 +282,10 @@ func (m Model) renderInstallPrompt(b *strings.Builder) {
 		b.WriteString(tui.DimStyle.Render("Enter the password for the admin account (default: shopware)"))
 		b.WriteString("\n\n")
 		b.WriteString(m.install.password.View())
+		if m.install.passwordErr != "" {
+			b.WriteString("\n")
+			b.WriteString(errorStyle.Render(m.install.passwordErr))
+		}
 		b.WriteString("\n\n")
 		b.WriteString(renderShowPasswordCheckbox(m.install.password.EchoMode == textinput.EchoNormal, m.install.checkboxFocused))
 	}
