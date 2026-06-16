@@ -106,6 +106,16 @@ var projectCreateCmd = &cobra.Command{
 	RunE: func(cmd *cobra.Command, args []string) error {
 		opts := parseCreateFlags(cmd, args)
 
+		// A name passed directly as an argument skips the interactive name
+		// prompt, which is where invalid names (e.g. wrong casing) are normally
+		// rejected live. Validate it up front so it is forbidden immediately
+		// instead of only after the rest of the form has been completed.
+		if opts.projectFolder != "" {
+			if err := validateProjectName(opts.projectFolder); err != nil {
+				return err
+			}
+		}
+
 		if opts.interactive {
 			tui.PrintBanner()
 		}

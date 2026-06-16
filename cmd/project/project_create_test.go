@@ -117,6 +117,22 @@ func TestValidateProjectName(t *testing.T) {
 	}
 }
 
+func TestProjectCreateRejectsInvalidNameArgument(t *testing.T) {
+	// A name provided directly as an argument must be rejected up front,
+	// before the interactive form or any network call, the same way the
+	// interactive name prompt rejects it live.
+	invalidNames := []string{"myShop", "MyShop", "müller", "my shop"}
+
+	for _, name := range invalidNames {
+		t.Run(name, func(t *testing.T) {
+			projectCreateCmd.SetContext(t.Context())
+			err := projectCreateCmd.RunE(projectCreateCmd, []string{name})
+			assert.Error(t, err)
+			assert.Contains(t, err.Error(), "invalid project name")
+		})
+	}
+}
+
 func TestProjectNameFieldDescription(t *testing.T) {
 	t.Parallel()
 
