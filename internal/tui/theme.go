@@ -42,6 +42,11 @@ var (
 	// TextColor is the primary foreground for labels, headings, and prominent content.
 	TextColor = adaptiveColor("#FFFFFF", "#1A1A1A")
 
+	// OnBrandColor is the foreground for text placed on top of BrandColor.
+	// BrandColor is a fixed blue regardless of terminal theme, so this stays
+	// light in both modes to keep contrast readable.
+	OnBrandColor = lipgloss.Color("#FFFDF5")
+
 	// BorderColor is used for box borders, dividers, and separator lines.
 	BorderColor = adaptiveColor("#303030", "#BCBCBC")
 

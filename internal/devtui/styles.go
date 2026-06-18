@@ -70,7 +70,7 @@ var (
 				Padding(0, 0, 1)
 
 	activeBtnStyle = lipgloss.NewStyle().
-			Foreground(tui.TextColor).
+			Foreground(tui.OnBrandColor).
 			Background(tui.BrandColor).
 			Padding(0, 2)
 
@@ -112,7 +112,7 @@ func buildTabHeader(activeTab int, width int) string {
 
 	activeNumStyle := lipgloss.NewStyle().
 		Bold(true).
-		Foreground(tui.TextColor).
+		Foreground(tui.OnBrandColor).
 		Background(tui.BrandColor)
 	activeLabelStyle := lipgloss.NewStyle().
 		Bold(true).
