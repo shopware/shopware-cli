@@ -16,7 +16,6 @@ type setupStep int
 const (
 	setupStepWelcome setupStep = iota
 	setupStepAdminUser
-	setupStepAdminPassword
 	setupStepDockerPHP
 	setupStepDockerProfiler
 	setupStepProfilerCreds
@@ -41,7 +40,7 @@ type setupGuide struct {
 	username              textinput.Model
 	password              textinput.Model
 	passwordErr           string
-	showPassword          bool
+	credFocus             credFocus
 	blackfireServerID     textinput.Model
 	blackfireServerToken  textinput.Model
 	tidewaysAPIKey        textinput.Model
@@ -172,8 +171,6 @@ func (sg *setupGuide) update(msg tea.KeyPressMsg) (setupGuide, tea.Cmd) {
 		return sg.updateWelcome(msg)
 	case setupStepAdminUser:
 		return sg.updateAdminUser(msg)
-	case setupStepAdminPassword:
-		return sg.updateAdminPassword(msg)
 	case setupStepDockerPHP:
 		return sg.updateDockerPHP(msg)
 	case setupStepDockerProfiler:
@@ -200,50 +197,88 @@ func (sg *setupGuide) updateWelcome(msg tea.KeyPressMsg) (setupGuide, tea.Cmd) {
 	case keyEnter:
 		if sg.confirmYes {
 			sg.step = setupStepAdminUser
-			sg.username.Focus()
-			return *sg, textinput.Blink
+			return sg.focusAdminCred(credFocusUsername)
 		}
 		return *sg, tea.Quit
 	}
 	return *sg, nil
 }
 
-func (sg *setupGuide) updateAdminUser(msg tea.KeyPressMsg) (setupGuide, tea.Cmd) {
-	if msg.String() == keyEnter {
-		sg.username.Blur()
-		sg.step = setupStepAdminPassword
-		sg.password.Focus()
-		return *sg, textinput.Blink
+// focusAdminCred moves focus to the given element of the combined admin
+// account step, clamping to the valid range and syncing the text input focus.
+func (sg *setupGuide) focusAdminCred(target credFocus) (setupGuide, tea.Cmd) {
+	if target < credFocusUsername {
+		target = credFocusUsername
 	}
+	if target > credFocusShowPassword {
+		target = credFocusShowPassword
+	}
+	sg.credFocus = target
+	sg.username.Blur()
+	sg.password.Blur()
 	var cmd tea.Cmd
-	sg.username, cmd = sg.username.Update(msg)
+	switch target {
+	case credFocusUsername:
+		sg.username.Focus()
+		cmd = textinput.Blink
+	case credFocusPassword:
+		sg.password.Focus()
+		cmd = textinput.Blink
+	case credFocusShowPassword:
+		// The checkbox has no text input to focus.
+	}
 	return *sg, cmd
 }
 
-func (sg *setupGuide) updateAdminPassword(msg tea.KeyPressMsg) (setupGuide, tea.Cmd) {
+func (sg *setupGuide) updateAdminUser(msg tea.KeyPressMsg) (setupGuide, tea.Cmd) {
 	switch msg.String() {
 	case keyEnter:
-		if err := validateAdminPassword(sg.password.Value()); err != nil {
-			sg.passwordErr = err.Error()
-			return *sg, nil
-		}
+		return sg.handleAdminUserEnter()
+	case keyTab, keyDown:
+		return sg.focusAdminCred(sg.credFocus + 1)
+	case keyShiftTab, keyUp:
+		return sg.focusAdminCred(sg.credFocus - 1)
+	}
+	switch sg.credFocus {
+	case credFocusUsername:
+		var cmd tea.Cmd
+		sg.username, cmd = sg.username.Update(msg)
+		return *sg, cmd
+	case credFocusPassword:
 		sg.passwordErr = ""
-		sg.password.Blur()
-		sg.step = setupStepDockerPHP
-		return *sg, nil
-	case keyTab:
-		sg.showPassword = !sg.showPassword
-		if sg.showPassword {
+		var cmd tea.Cmd
+		sg.password, cmd = sg.password.Update(msg)
+		return *sg, cmd
+	case credFocusShowPassword:
+		// The checkbox swallows typed keys.
+	}
+	return *sg, nil
+}
+
+func (sg *setupGuide) handleAdminUserEnter() (setupGuide, tea.Cmd) {
+	switch sg.credFocus {
+	case credFocusUsername:
+		// Enter on the username field advances to the password field.
+		return sg.focusAdminCred(credFocusPassword)
+	case credFocusShowPassword:
+		if sg.password.EchoMode == textinput.EchoPassword {
 			sg.password.EchoMode = textinput.EchoNormal
 		} else {
 			sg.password.EchoMode = textinput.EchoPassword
 		}
 		return *sg, nil
+	case credFocusPassword:
+		// Enter on the password field submits; handled below.
+	}
+	if err := validateAdminPassword(sg.password.Value()); err != nil {
+		sg.passwordErr = err.Error()
+		return *sg, nil
 	}
 	sg.passwordErr = ""
-	var cmd tea.Cmd
-	sg.password, cmd = sg.password.Update(msg)
-	return *sg, cmd
+	sg.username.Blur()
+	sg.password.Blur()
+	sg.step = setupStepDockerPHP
+	return *sg, nil
 }
 
 func (sg *setupGuide) updateDockerPHP(msg tea.KeyPressMsg) (setupGuide, tea.Cmd) {

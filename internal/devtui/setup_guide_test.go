@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"charm.land/bubbles/v2/textinput"
 	tea "charm.land/bubbletea/v2"
 	"github.com/stretchr/testify/assert"
 
@@ -46,19 +47,33 @@ func TestResolvePHPVersions_NoMatchingVersionsFallsBackToAll(t *testing.T) {
 	assert.Equal(t, "^9.0", constraint)
 }
 
-func TestSetupGuideAdminPassword_ShortPasswordBlocksAdvance(t *testing.T) {
+func TestSetupGuideAdminUser_EnterOnUsernameFocusesPassword(t *testing.T) {
 	sg := newSetupGuide("")
-	sg.step = setupStepAdminPassword
+	sg.step = setupStepAdminUser
+	sg.credFocus = credFocusUsername
+	sg.username.Focus()
+
+	out, _ := sg.update(tea.KeyPressMsg(tea.Key{Code: tea.KeyEnter}))
+	assert.Equal(t, setupStepAdminUser, out.step, "should stay on the admin account step")
+	assert.Equal(t, credFocusPassword, out.credFocus)
+	assert.True(t, out.password.Focused())
+}
+
+func TestSetupGuideAdminUser_ShortPasswordBlocksAdvance(t *testing.T) {
+	sg := newSetupGuide("")
+	sg.step = setupStepAdminUser
+	sg.credFocus = credFocusPassword
 	sg.password.SetValue("shopwar")
 
 	out, _ := sg.update(tea.KeyPressMsg(tea.Key{Code: tea.KeyEnter}))
-	assert.Equal(t, setupStepAdminPassword, out.step, "should stay on the admin password step")
+	assert.Equal(t, setupStepAdminUser, out.step, "should stay on the admin account step")
 	assert.NotEmpty(t, out.passwordErr, "should set a validation error")
 }
 
-func TestSetupGuideAdminPassword_ValidPasswordAdvances(t *testing.T) {
+func TestSetupGuideAdminUser_ValidPasswordAdvances(t *testing.T) {
 	sg := newSetupGuide("")
-	sg.step = setupStepAdminPassword
+	sg.step = setupStepAdminUser
+	sg.credFocus = credFocusPassword
 	sg.password.SetValue("shopware")
 
 	out, _ := sg.update(tea.KeyPressMsg(tea.Key{Code: tea.KeyEnter}))
@@ -66,13 +81,41 @@ func TestSetupGuideAdminPassword_ValidPasswordAdvances(t *testing.T) {
 	assert.Empty(t, out.passwordErr)
 }
 
-func TestSetupGuideAdminPassword_TypingClearsError(t *testing.T) {
+func TestSetupGuideAdminUser_TypingClearsError(t *testing.T) {
 	sg := newSetupGuide("")
-	sg.step = setupStepAdminPassword
+	sg.step = setupStepAdminUser
+	sg.credFocus = credFocusPassword
 	sg.passwordErr = "password must be at least 8 characters long"
 
 	out, _ := sg.update(tea.KeyPressMsg(tea.Key{Code: 'x', Text: "x"}))
 	assert.Empty(t, out.passwordErr)
+}
+
+func TestSetupGuideAdminUser_TabNavigatesFocus(t *testing.T) {
+	sg := newSetupGuide("")
+	sg.step = setupStepAdminUser
+	sg.credFocus = credFocusUsername
+
+	sg, _ = sg.update(tea.KeyPressMsg(tea.Key{Code: tea.KeyTab}))
+	assert.Equal(t, credFocusPassword, sg.credFocus)
+	assert.True(t, sg.password.Focused())
+
+	sg, _ = sg.update(tea.KeyPressMsg(tea.Key{Code: tea.KeyTab}))
+	assert.Equal(t, credFocusShowPassword, sg.credFocus)
+	assert.False(t, sg.password.Focused())
+}
+
+func TestSetupGuideAdminUser_EnterOnCheckboxTogglesEcho(t *testing.T) {
+	sg := newSetupGuide("")
+	sg.step = setupStepAdminUser
+	sg.credFocus = credFocusShowPassword
+
+	sg, _ = sg.update(tea.KeyPressMsg(tea.Key{Code: tea.KeyEnter}))
+	assert.Equal(t, textinput.EchoNormal, sg.password.EchoMode)
+	assert.Equal(t, setupStepAdminUser, sg.step)
+
+	sg, _ = sg.update(tea.KeyPressMsg(tea.Key{Code: tea.KeyEnter}))
+	assert.Equal(t, textinput.EchoPassword, sg.password.EchoMode)
 }
 
 func TestSetupGuideReview_QuitButtonQuits(t *testing.T) {
@@ -340,10 +383,7 @@ func TestSetupGuideViewSteps(t *testing.T) {
 	sg.username.Focus()
 	view = sg.viewContent()
 	assert.Contains(t, view, "Step")
-
-	sg.step = setupStepAdminPassword
-	sg.password.Focus()
-	view = sg.viewContent()
+	assert.Contains(t, view, "Username")
 	assert.Contains(t, view, "Password")
 
 	sg.step = setupStepDockerPHP
@@ -448,12 +488,11 @@ func TestSetupGuideViewProfilerCreds(t *testing.T) {
 func TestSetupGuideStepNumbering_NoProfilerCreds(t *testing.T) {
 	sg := newSetupGuide("")
 	sg.profilerCursor = 0 // none → no creds step
-	assert.Equal(t, 5, sg.totalSteps())
+	assert.Equal(t, 4, sg.totalSteps())
 	assert.Equal(t, 1, sg.stepNum(setupStepAdminUser))
-	assert.Equal(t, 2, sg.stepNum(setupStepAdminPassword))
-	assert.Equal(t, 3, sg.stepNum(setupStepDockerPHP))
-	assert.Equal(t, 4, sg.stepNum(setupStepDockerProfiler))
-	assert.Equal(t, 5, sg.stepNum(setupStepReview))
+	assert.Equal(t, 2, sg.stepNum(setupStepDockerPHP))
+	assert.Equal(t, 3, sg.stepNum(setupStepDockerProfiler))
+	assert.Equal(t, 4, sg.stepNum(setupStepReview))
 	assert.Equal(t, 0, sg.stepNum(setupStepWelcome))
 	assert.Equal(t, 0, sg.stepNum(setupStepDone))
 }
@@ -461,7 +500,7 @@ func TestSetupGuideStepNumbering_NoProfilerCreds(t *testing.T) {
 func TestSetupGuideStepNumbering_WithProfilerCreds(t *testing.T) {
 	sg := newSetupGuide("")
 	sg.profilerCursor = 2 // blackfire → adds creds step
-	assert.Equal(t, 6, sg.totalSteps())
-	assert.Equal(t, 5, sg.stepNum(setupStepProfilerCreds))
-	assert.Equal(t, 6, sg.stepNum(setupStepReview))
+	assert.Equal(t, 5, sg.totalSteps())
+	assert.Equal(t, 4, sg.stepNum(setupStepProfilerCreds))
+	assert.Equal(t, 5, sg.stepNum(setupStepReview))
 }
