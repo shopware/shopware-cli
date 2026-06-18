@@ -224,6 +224,8 @@ func (sg *setupGuide) focusAdminCred(target credFocus) (setupGuide, tea.Cmd) {
 	case credFocusPassword:
 		sg.password.Focus()
 		cmd = textinput.Blink
+	case credFocusShowPassword:
+		// The checkbox has no text input to focus.
 	}
 	return *sg, cmd
 }
@@ -247,6 +249,8 @@ func (sg *setupGuide) updateAdminUser(msg tea.KeyPressMsg) (setupGuide, tea.Cmd)
 		var cmd tea.Cmd
 		sg.password, cmd = sg.password.Update(msg)
 		return *sg, cmd
+	case credFocusShowPassword:
+		// The checkbox swallows typed keys.
 	}
 	return *sg, nil
 }
@@ -263,6 +267,8 @@ func (sg *setupGuide) handleAdminUserEnter() (setupGuide, tea.Cmd) {
 			sg.password.EchoMode = textinput.EchoPassword
 		}
 		return *sg, nil
+	case credFocusPassword:
+		// Enter on the password field submits; handled below.
 	}
 	if err := validateAdminPassword(sg.password.Value()); err != nil {
 		sg.passwordErr = err.Error()

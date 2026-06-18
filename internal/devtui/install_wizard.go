@@ -200,6 +200,8 @@ func (m Model) focusInstallCred(target credFocus) (tea.Model, tea.Cmd) {
 	case credFocusPassword:
 		m.install.password.Focus()
 		cmd = textinput.Blink
+	case credFocusShowPassword:
+		// The checkbox has no text input to focus.
 	}
 	return m, cmd
 }
@@ -223,6 +225,8 @@ func (m Model) updateInstallStepCredentials(msg tea.KeyPressMsg) (tea.Model, tea
 		var cmd tea.Cmd
 		m.install.password, cmd = m.install.password.Update(msg)
 		return m, cmd
+	case credFocusShowPassword:
+		// The checkbox swallows typed keys.
 	}
 	return m, nil
 }
@@ -239,6 +243,8 @@ func (m Model) handleInstallCredentialsEnter() (tea.Model, tea.Cmd) {
 			m.install.password.EchoMode = textinput.EchoPassword
 		}
 		return m, nil
+	case credFocusPassword:
+		// Enter on the password field submits; handled below.
 	}
 	if err := validateAdminPassword(m.install.password.Value()); err != nil {
 		m.install.passwordErr = err.Error()
