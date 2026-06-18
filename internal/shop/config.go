@@ -329,17 +329,17 @@ func (c *ConfigDump) NormalizeFakerExpressions() {
 type ConfigDeployment struct {
 	Hooks struct {
 		// The pre hook will be executed before the deployment
-		Pre string `yaml:"pre"`
+		Pre ConfigDeploymentHook `yaml:"pre"`
 		// The post hook will be executed after the deployment
-		Post string `yaml:"post"`
+		Post ConfigDeploymentHook `yaml:"post"`
 		// The pre-install hook will be executed before the installation
-		PreInstall string `yaml:"pre-install"`
+		PreInstall ConfigDeploymentHook `yaml:"pre-install"`
 		// The post-install hook will be executed after the installation
-		PostInstall string `yaml:"post-install"`
+		PostInstall ConfigDeploymentHook `yaml:"post-install"`
 		// The pre-update hook will be executed before the update
-		PreUpdate string `yaml:"pre-update"`
+		PreUpdate ConfigDeploymentHook `yaml:"pre-update"`
 		// The post-update hook will be executed after the update
-		PostUpdate string `yaml:"post-update"`
+		PostUpdate ConfigDeploymentHook `yaml:"post-update"`
 	} `yaml:"hooks"`
 
 	Store struct {
@@ -378,6 +378,101 @@ type ConfigDeployment struct {
 type ConfigDeploymentStaging struct {
 	// When enabled, staging setup commands will be executed during installation and upgrade
 	Enabled bool `yaml:"enabled,omitempty"`
+}
+
+// ConfigDeploymentHookStep is a single titled step of a deployment hook.
+type ConfigDeploymentHookStep struct {
+	// An optional title shown in the deployment output for this step
+	Title string `yaml:"title,omitempty"`
+	// The script that is executed for this step
+	Script string `yaml:"script"`
+}
+
+// ConfigDeploymentHook is a deployment hook. It can either be a single script
+// (string) or a list of steps that are executed individually. Each step can be
+// a plain script string or an object with a "title" and a "script".
+type ConfigDeploymentHook struct {
+	Steps []ConfigDeploymentHookStep
+}
+
+func (h *ConfigDeploymentHook) UnmarshalYAML(value *yaml.Node) error {
+	if value.Kind == yaml.ScalarNode {
+		var script string
+		if err := value.Decode(&script); err != nil {
+			return err
+		}
+
+		h.Steps = nil
+		if script != "" {
+			h.Steps = []ConfigDeploymentHookStep{{Script: script}}
+		}
+
+		return nil
+	}
+
+	if value.Kind == yaml.SequenceNode {
+		steps := make([]ConfigDeploymentHookStep, 0, len(value.Content))
+		for _, node := range value.Content {
+			if node.Kind == yaml.ScalarNode {
+				var script string
+				if err := node.Decode(&script); err != nil {
+					return err
+				}
+
+				steps = append(steps, ConfigDeploymentHookStep{Script: script})
+
+				continue
+			}
+
+			var step ConfigDeploymentHookStep
+			if err := node.Decode(&step); err != nil {
+				return err
+			}
+
+			steps = append(steps, step)
+		}
+
+		h.Steps = steps
+
+		return nil
+	}
+
+	return fmt.Errorf("invalid hook: expected a script string or a list of steps")
+}
+
+func (ConfigDeploymentHook) JSONSchema() *jsonschema.Schema {
+	stepProperties := orderedmap.New[string, *jsonschema.Schema]()
+	stepProperties.Set("title", &jsonschema.Schema{
+		Type:        "string",
+		Description: "An optional title shown in the deployment output for this step",
+	})
+	stepProperties.Set("script", &jsonschema.Schema{
+		Type:        "string",
+		Description: "The script that is executed for this step",
+	})
+
+	step := &jsonschema.Schema{
+		Type:                 "object",
+		Properties:           stepProperties,
+		Required:             []string{"script"},
+		AdditionalProperties: jsonschema.FalseSchema,
+	}
+
+	return &jsonschema.Schema{
+		Description: "Either a single script or a list of steps (a script string or a {title, script} object) executed individually",
+		OneOf: []*jsonschema.Schema{
+			{Type: "string"},
+			{
+				Type: "array",
+				Items: &jsonschema.Schema{
+					OneOf: []*jsonschema.Schema{
+						{Type: "string"},
+						step,
+					},
+				},
+			},
+		},
+	}
 }
 
 type ConfigDeploymentOverrides map[string]struct {
