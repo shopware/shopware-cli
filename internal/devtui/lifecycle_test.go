@@ -167,7 +167,7 @@ func TestUpdateLifecycle_ShopwareInstallDone_Success(t *testing.T) {
 		envConfig:   &shop.EnvironmentConfig{},
 		watchers:    make(map[string]*watcherHandle),
 		install: installWizard{
-			step:     installStepPassword,
+			step:     installStepCredentials,
 			username: usernameInput,
 			password: passwordInput,
 		},

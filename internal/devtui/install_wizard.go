@@ -33,8 +33,18 @@ const (
 	installStepAsk installStep = iota
 	installStepLanguage
 	installStepCurrency
-	installStepUsername
-	installStepPassword
+	installStepCredentials
+)
+
+// credFocus identifies which element of a combined admin-account step
+// (username field, password field, or the show-password checkbox) currently
+// has focus. It is shared by the install wizard and the setup guide.
+type credFocus int
+
+const (
+	credFocusUsername credFocus = iota
+	credFocusPassword
+	credFocusShowPassword
 )
 
 type installLanguage struct {
@@ -62,15 +72,15 @@ var (
 )
 
 type installWizard struct {
-	step            installStep
-	cursor          int
-	confirmYes      bool
-	language        string
-	currency        string
-	username        textinput.Model
-	password        textinput.Model
-	checkboxFocused bool
-	passwordErr     string
+	step        installStep
+	cursor      int
+	confirmYes  bool
+	language    string
+	currency    string
+	username    textinput.Model
+	password    textinput.Model
+	credFocus   credFocus
+	passwordErr string
 }
 
 type installProgress struct {
@@ -105,10 +115,8 @@ func (m Model) updateInstallPrompt(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m.updateInstallStepLanguage(msg)
 	case installStepCurrency:
 		return m.updateInstallStepCurrency(msg)
-	case installStepUsername:
-		return m.updateInstallStepUsername(msg)
-	case installStepPassword:
-		return m.updateInstallStepPassword(msg)
+	case installStepCredentials:
+		return m.updateInstallStepCredentials(msg)
 	}
 
 	return m, nil
@@ -164,57 +172,67 @@ func (m Model) updateInstallStepCurrency(msg tea.KeyPressMsg) (tea.Model, tea.Cm
 		}
 	case keyEnter:
 		m.install.currency = installCurrencies[m.install.cursor]
-		m.install.step = installStepUsername
+		m.install.step = installStepCredentials
 		m.install.username.SetValue(defaultUsername)
-		m.install.username.Focus()
-		return m, textinput.Blink
+		m.install.password.SetValue("shopware")
+		return m.focusInstallCred(credFocusUsername)
 	}
 	return m, nil
 }
 
-func (m Model) updateInstallStepUsername(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
-	if msg.String() == keyEnter {
-		m.install.step = installStepPassword
-		m.install.username.Blur()
-		m.install.password.SetValue("shopware")
-		m.install.password.Focus()
-		m.install.checkboxFocused = false
-		return m, textinput.Blink
+// focusInstallCred moves focus to the given element of the combined admin
+// account step, clamping to the valid range and syncing the text input focus.
+func (m Model) focusInstallCred(target credFocus) (tea.Model, tea.Cmd) {
+	if target < credFocusUsername {
+		target = credFocusUsername
 	}
+	if target > credFocusShowPassword {
+		target = credFocusShowPassword
+	}
+	m.install.credFocus = target
+	m.install.username.Blur()
+	m.install.password.Blur()
 	var cmd tea.Cmd
-	m.install.username, cmd = m.install.username.Update(msg)
+	switch target {
+	case credFocusUsername:
+		m.install.username.Focus()
+		cmd = textinput.Blink
+	case credFocusPassword:
+		m.install.password.Focus()
+		cmd = textinput.Blink
+	}
 	return m, cmd
 }
 
-func (m Model) updateInstallStepPassword(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+func (m Model) updateInstallStepCredentials(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
 	case keyEnter:
-		return m.handleInstallPasswordEnter()
+		return m.handleInstallCredentialsEnter()
 	case keyTab, keyDown:
-		if !m.install.checkboxFocused {
-			m.install.checkboxFocused = true
-			m.install.password.Blur()
-		}
-		return m, nil
+		return m.focusInstallCred(m.install.credFocus + 1)
 	case keyShiftTab, keyUp:
-		if m.install.checkboxFocused {
-			m.install.checkboxFocused = false
-			m.install.password.Focus()
-			return m, textinput.Blink
-		}
-		return m, nil
+		return m.focusInstallCred(m.install.credFocus - 1)
 	}
-	if m.install.checkboxFocused {
-		return m, nil
+	switch m.install.credFocus {
+	case credFocusUsername:
+		var cmd tea.Cmd
+		m.install.username, cmd = m.install.username.Update(msg)
+		return m, cmd
+	case credFocusPassword:
+		m.install.passwordErr = ""
+		var cmd tea.Cmd
+		m.install.password, cmd = m.install.password.Update(msg)
+		return m, cmd
 	}
-	m.install.passwordErr = ""
-	var cmd tea.Cmd
-	m.install.password, cmd = m.install.password.Update(msg)
-	return m, cmd
+	return m, nil
 }
 
-func (m Model) handleInstallPasswordEnter() (tea.Model, tea.Cmd) {
-	if m.install.checkboxFocused {
+func (m Model) handleInstallCredentialsEnter() (tea.Model, tea.Cmd) {
+	switch m.install.credFocus {
+	case credFocusUsername:
+		// Enter on the username field advances to the password field.
+		return m.focusInstallCred(credFocusPassword)
+	case credFocusShowPassword:
 		if m.install.password.EchoMode == textinput.EchoPassword {
 			m.install.password.EchoMode = textinput.EchoNormal
 		} else {
@@ -227,6 +245,7 @@ func (m Model) handleInstallPasswordEnter() (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	m.install.passwordErr = ""
+	m.install.username.Blur()
 	m.install.password.Blur()
 	m.phase = phaseInstalling
 	m.overlayLines = nil
@@ -248,7 +267,7 @@ func (m Model) renderInstallPrompt(b *strings.Builder) {
 		b.WriteString(renderConfirmButtons("Initialize now", "No, skip", m.install.confirmYes))
 
 	case installStepLanguage:
-		b.WriteString(tui.TextBadge("Step 1/4"))
+		b.WriteString(tui.TextBadge("Step 1/3"))
 		b.WriteString("\n\n")
 		opts := make([]tui.SelectOption, len(installLanguages))
 		for i, lang := range installLanguages {
@@ -257,7 +276,7 @@ func (m Model) renderInstallPrompt(b *strings.Builder) {
 		b.WriteString(tui.RenderSelectList("Default Language", "Select the primary language for your storefront", opts, m.install.cursor))
 
 	case installStepCurrency:
-		b.WriteString(tui.TextBadge("Step 2/4"))
+		b.WriteString(tui.TextBadge("Step 2/3"))
 		b.WriteString("\n\n")
 		opts := make([]tui.SelectOption, len(installCurrencies))
 		for i, curr := range installCurrencies {
@@ -265,29 +284,26 @@ func (m Model) renderInstallPrompt(b *strings.Builder) {
 		}
 		b.WriteString(tui.RenderSelectList("Default Currency", "Select the default currency for pricing", opts, m.install.cursor))
 
-	case installStepUsername:
-		b.WriteString(tui.TextBadge("Step 3/4"))
+	case installStepCredentials:
+		b.WriteString(tui.TextBadge("Step 3/3"))
 		b.WriteString("\n\n")
-		b.WriteString(tui.TitleStyle.Render("Admin Username"))
+		b.WriteString(tui.TitleStyle.Render("Admin Account"))
 		b.WriteString("\n")
-		b.WriteString(tui.DimStyle.Render("Enter the username for the admin account"))
+		b.WriteString(tui.DimStyle.Render("Set the username and password for the admin account"))
 		b.WriteString("\n\n")
+		b.WriteString(tui.DimStyle.Render("Username"))
+		b.WriteString("\n")
 		b.WriteString(m.install.username.View())
-
-	case installStepPassword:
-		b.WriteString(tui.TextBadge("Step 4/4"))
 		b.WriteString("\n\n")
-		b.WriteString(tui.TitleStyle.Render("Admin Password"))
+		b.WriteString(tui.DimStyle.Render("Password (default: shopware)"))
 		b.WriteString("\n")
-		b.WriteString(tui.DimStyle.Render("Enter the password for the admin account (default: shopware)"))
-		b.WriteString("\n\n")
 		b.WriteString(m.install.password.View())
 		if m.install.passwordErr != "" {
 			b.WriteString("\n")
 			b.WriteString(errorStyle.Render(m.install.passwordErr))
 		}
 		b.WriteString("\n\n")
-		b.WriteString(renderShowPasswordCheckbox(m.install.password.EchoMode == textinput.EchoNormal, m.install.checkboxFocused))
+		b.WriteString(renderShowPasswordCheckbox(m.install.password.EchoMode == textinput.EchoNormal, m.install.credFocus == credFocusShowPassword))
 	}
 }
 
@@ -303,19 +319,15 @@ func (m Model) installFooterHint() string {
 			tui.Shortcut{Key: "↑/↓", Label: "Select"},
 			tui.Shortcut{Key: "enter", Label: "Confirm"},
 		)
-	case installStepUsername:
-		return tui.ShortcutBar(
-			tui.Shortcut{Key: "enter", Label: "Continue"},
-		)
-	case installStepPassword:
-		if m.install.checkboxFocused {
+	case installStepCredentials:
+		if m.install.credFocus == credFocusShowPassword {
 			return tui.ShortcutBar(
-				tui.Shortcut{Key: "↑", Label: "Back"},
+				tui.Shortcut{Key: "↑/↓/tab", Label: "Navigate"},
 				tui.Shortcut{Key: "enter", Label: "Toggle"},
 			)
 		}
 		return tui.ShortcutBar(
-			tui.Shortcut{Key: "↓/tab", Label: "Show password"},
+			tui.Shortcut{Key: "↑/↓/tab", Label: "Navigate"},
 			tui.Shortcut{Key: "enter", Label: "Install"},
 		)
 	}

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 
+	"charm.land/bubbles/v2/textinput"
 	"charm.land/lipgloss/v2"
 
 	dockerpkg "github.com/shopware/shopware-cli/internal/docker"
@@ -16,8 +17,6 @@ func (sg setupGuide) viewContent() string {
 		return sg.viewWelcome()
 	case setupStepAdminUser:
 		return sg.viewAdminUser()
-	case setupStepAdminPassword:
-		return sg.viewAdminPassword()
 	case setupStepDockerPHP:
 		return sg.viewDockerPHP()
 	case setupStepDockerProfiler:
@@ -39,8 +38,8 @@ func stepBadge(stepNum, totalSteps int) string {
 // totalSteps returns the number of numbered wizard steps. The profiler
 // credentials step is only counted when the chosen profiler needs them.
 func (sg setupGuide) totalSteps() int {
-	// admin user, admin password, PHP version, profiler, review
-	total := 5
+	// admin account, PHP version, profiler, review
+	total := 4
 	if dockerpkg.ProfilerNeedsCredentials(profilerChoices[sg.profilerCursor]) {
 		total++
 	}
@@ -54,19 +53,17 @@ func (sg setupGuide) stepNum(step setupStep) int {
 	switch step {
 	case setupStepAdminUser:
 		return 1
-	case setupStepAdminPassword:
-		return 2
 	case setupStepDockerPHP:
-		return 3
+		return 2
 	case setupStepDockerProfiler:
-		return 4
+		return 3
 	case setupStepProfilerCreds:
-		return 5
+		return 4
 	case setupStepReview:
 		if dockerpkg.ProfilerNeedsCredentials(profilerChoices[sg.profilerCursor]) {
-			return 6
+			return 5
 		}
-		return 5
+		return 4
 	case setupStepWelcome, setupStepDone:
 		return 0
 	}
@@ -114,30 +111,23 @@ func (sg setupGuide) viewAdminUser() string {
 	var b strings.Builder
 	b.WriteString(stepBadge(sg.stepNum(setupStepAdminUser), sg.totalSteps()))
 	b.WriteString("\n\n")
-	b.WriteString(tui.TitleStyle.Render("Admin Username"))
+	b.WriteString(tui.TitleStyle.Render("Admin Account"))
 	b.WriteString("\n")
-	b.WriteString(tui.DimStyle.Render("Username for the Shopware admin panel and API access."))
+	b.WriteString(tui.DimStyle.Render("Credentials for the Shopware admin panel and API access."))
 	b.WriteString("\n\n")
+	b.WriteString(tui.DimStyle.Render("Username"))
+	b.WriteString("\n")
 	b.WriteString(sg.username.View())
 	b.WriteString("\n\n")
-	return tui.RenderPhaseCard(b.String())
-}
-
-func (sg setupGuide) viewAdminPassword() string {
-	var b strings.Builder
-	b.WriteString(stepBadge(sg.stepNum(setupStepAdminPassword), sg.totalSteps()))
-	b.WriteString("\n\n")
-	b.WriteString(tui.TitleStyle.Render("Admin Password"))
+	b.WriteString(tui.DimStyle.Render("Password"))
 	b.WriteString("\n")
-	b.WriteString(tui.DimStyle.Render("Password for the Shopware admin panel and API access."))
-	b.WriteString("\n\n")
 	b.WriteString(sg.password.View())
 	if sg.passwordErr != "" {
 		b.WriteString("\n")
 		b.WriteString(errorStyle.Render(sg.passwordErr))
 	}
 	b.WriteString("\n\n")
-	b.WriteString(renderShowPasswordCheckbox(sg.showPassword, false))
+	b.WriteString(renderShowPasswordCheckbox(sg.password.EchoMode == textinput.EchoNormal, sg.credFocus == credFocusShowPassword))
 	b.WriteString("\n\n")
 	return tui.RenderPhaseCard(b.String())
 }
@@ -317,12 +307,14 @@ func (sg setupGuide) footerHint() string {
 			tui.Shortcut{Key: "enter", Label: "Confirm"},
 		)
 	case setupStepAdminUser:
+		if sg.credFocus == credFocusShowPassword {
+			return tui.ShortcutBar(
+				tui.Shortcut{Key: "↑/↓/tab", Label: "Navigate"},
+				tui.Shortcut{Key: "enter", Label: "Toggle"},
+			)
+		}
 		return tui.ShortcutBar(
-			tui.Shortcut{Key: "enter", Label: "Continue"},
-		)
-	case setupStepAdminPassword:
-		return tui.ShortcutBar(
-			tui.Shortcut{Key: "tab", Label: "Show password"},
+			tui.Shortcut{Key: "↑/↓/tab", Label: "Navigate"},
 			tui.Shortcut{Key: "enter", Label: "Continue"},
 		)
 	case setupStepDockerPHP, setupStepDockerProfiler:
