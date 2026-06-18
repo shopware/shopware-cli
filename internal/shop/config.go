@@ -396,8 +396,7 @@ type ConfigDeploymentHook struct {
 }
 
 func (h *ConfigDeploymentHook) UnmarshalYAML(value *yaml.Node) error {
-	switch value.Kind {
-	case yaml.ScalarNode:
+	if value.Kind == yaml.ScalarNode {
 		var script string
 		if err := value.Decode(&script); err != nil {
 			return err
@@ -409,7 +408,9 @@ func (h *ConfigDeploymentHook) UnmarshalYAML(value *yaml.Node) error {
 		}
 
 		return nil
-	case yaml.SequenceNode:
+	}
+
+	if value.Kind == yaml.SequenceNode {
 		steps := make([]ConfigDeploymentHookStep, 0, len(value.Content))
 		for _, node := range value.Content {
 			if node.Kind == yaml.ScalarNode {
@@ -434,9 +435,9 @@ func (h *ConfigDeploymentHook) UnmarshalYAML(value *yaml.Node) error {
 		h.Steps = steps
 
 		return nil
-	default:
-		return fmt.Errorf("invalid hook: expected a script string or a list of steps")
 	}
+
+	return fmt.Errorf("invalid hook: expected a script string or a list of steps")
 }
 
 func (ConfigDeploymentHook) JSONSchema() *jsonschema.Schema {
