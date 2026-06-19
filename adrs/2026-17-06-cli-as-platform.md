@@ -133,7 +133,7 @@ None are broken, but some are slower.
 - **Medium:** cache is local/CI-only. No shared backend a whole CI fleet can reuse. `internal/system/cache_*`
   - **TODO:** For GH, whole fleet can use it. for gitlab you kinda have to share the directory, so we need to document what to do in GitLab.
 - **Low:** untuned HTTP client. Uses Go's defaults: no connection-reuse tuning, no retries. `internal/shop/client.go:37`
-  - **TODO:** remove and replace with https://github.com/shopware/app-sdk-go
+  - **TODO:** remove and replace with a general http client for Shopware in Go, wired into https://github.com/shopware/app-sdk-go
 
 A fresh php/composer/node process is started for every call, but it's not possible to reuse them so this isn't an issue. `internal/phpexec`, `internal/npm`
 
