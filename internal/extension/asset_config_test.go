@@ -40,6 +40,36 @@ func TestGetContentHash_AdditionalCaches(t *testing.T) {
 	assert.NotEqual(t, hash1, hash2)
 }
 
+func TestGetContentHash_StableAcrossBasePaths(t *testing.T) {
+	// `extension zip` copies the extension into a fresh temp dir on every run,
+	// so the content hash must not depend on the absolute BasePath, otherwise
+	// the cache key changes every run and never hits.
+	build := func(t *testing.T) string {
+		t.Helper()
+		base := t.TempDir() + "/"
+
+		srcDir := filepath.Join(base, "Resources", "app", "custom", "src")
+		require.NoError(t, os.MkdirAll(srcDir, 0o755))
+		require.NoError(t, os.WriteFile(filepath.Join(srcDir, "index.js"), []byte("console.log('v1')"), 0o644))
+
+		entry := &ExtensionAssetConfigEntry{
+			BasePath: base,
+			AdditionalCaches: []ConfigBuildZipAssetsAdditionalCache{
+				{
+					Path:        "Resources/public/custom",
+					SourcePaths: []string{"Resources/app/custom/src"},
+				},
+			},
+		}
+
+		hash, err := entry.GetContentHash()
+		require.NoError(t, err)
+		return hash
+	}
+
+	assert.Equal(t, build(t), build(t), "identical content in different base paths must hash equally")
+}
+
 func TestGetContentHash_AssetConfigChangeInvalidatesHash(t *testing.T) {
 	tmpDir := t.TempDir()
 
