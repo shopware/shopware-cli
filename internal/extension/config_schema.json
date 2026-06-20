@@ -104,6 +104,10 @@
           "type": "boolean",
           "description": "When enabled, the shopware-cli build the assets"
         },
+        "enable_asset_caching": {
+          "type": "boolean",
+          "description": "When enabled, compiled assets are cached and restored across builds, keyed by the source-file content hash"
+        },
         "before_hooks": {
           "items": {
             "type": "string"
