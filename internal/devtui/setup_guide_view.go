@@ -127,16 +127,15 @@ func (sg setupGuide) viewDockerPHP() string {
 	b.WriteString(tui.TitleStyle.Render("Docker Configuration"))
 	b.WriteString("\n")
 	b.WriteString(tui.DimStyle.Render("Select the PHP version for your Docker containers."))
-	if sg.phpConstraint != "" {
-		b.WriteString("\n")
-		b.WriteString(tui.DimStyle.Render("Filtered by shopware/core require.php: "))
-		b.WriteString(valueStyle.Render(sg.phpConstraint))
-	}
 	b.WriteString("\n\n")
 
 	opts := make([]tui.SelectOption, len(sg.phpVersions))
 	for i, v := range sg.phpVersions {
-		opts[i] = tui.SelectOption{Label: "PHP " + v}
+		label := "PHP " + v
+		if i == len(sg.phpVersions)-1 {
+			label += " " + tui.DimStyle.Render("(Recommended)")
+		}
+		opts[i] = tui.SelectOption{Label: label}
 	}
 	b.WriteString(tui.RenderSelectList("PHP Version", "", opts, sg.phpCursor))
 	b.WriteString("\n")

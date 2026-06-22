@@ -23,7 +23,6 @@ const (
 type setupGuide struct {
 	step                  setupStep
 	phpVersions           []string // PHP versions compatible with the project
-	phpConstraint         string   // raw constraint string, for display ("" if none)
 	phpCursor             int
 	confirmYes            bool
 	deploymentHelperAdded bool // composer.json was updated to require shopware/deployment-helper
@@ -98,17 +97,16 @@ func newSetupGuide(projectRoot string) setupGuide {
 	passwordInput.EchoMode = textinput.EchoPassword
 	passwordInput.SetValue("shopware")
 
-	phpVersions, phpCursor, phpConstraint := resolvePHPVersions(projectRoot)
+	phpVersions, phpCursor, _ := resolvePHPVersions(projectRoot)
 
 	return setupGuide{
-		step:          setupStepWelcome,
-		phpVersions:   phpVersions,
-		phpConstraint: phpConstraint,
-		phpCursor:     phpCursor,
-		confirmYes:    true,
-		url:           urlInput,
-		username:      usernameInput,
-		password:      passwordInput,
+		step:        setupStepWelcome,
+		phpVersions: phpVersions,
+		phpCursor:   phpCursor,
+		confirmYes:  true,
+		url:         urlInput,
+		username:    usernameInput,
+		password:    passwordInput,
 	}
 }
 
