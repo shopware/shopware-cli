@@ -1,0 +1,10 @@
+<routes>
+    <route id="frontend.about">
+        <path locale="en">/en/about</path>
+        <path locale="de">/de/ueber-uns</path>
+    </route>
+    <import resource="extra">
+        <prefix locale="en">/en</prefix>
+        <prefix locale="de">/de</prefix>
+    </import>
+</routes>

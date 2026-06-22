@@ -12,7 +12,11 @@ import (
 )
 
 func gitTagOrBranchOfFolder(ctx context.Context, source string) (string, error) {
-	tagCmd := exec.CommandContext(ctx, "git", "-C", source, "tag", "--sort=-creatordate")
+	// Prefer a tag that points exactly at HEAD. This keeps the resulting filename
+	// in sync with the actually checked-out commit (e.g. when a CI pipeline builds
+	// a specific tag in detached-HEAD state). Picking the newest tag in the repo
+	// regardless of HEAD would package the wrong tree (see issue #1116 / #753).
+	tagCmd := exec.CommandContext(ctx, "git", "-C", source, "tag", "--points-at", "HEAD", "--sort=-creatordate")
 
 	stdout, err := tagCmd.Output()
 	if err != nil {

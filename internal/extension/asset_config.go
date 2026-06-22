@@ -292,8 +292,10 @@ func (e *ExtensionAssetConfigEntry) GetContentHash() (string, error) {
 	// Combine hashes in sorted order for consistency
 	hasher := xxhash.New()
 	for _, file := range files {
-		// Write file path and its hash
-		if _, err := hasher.Write([]byte(file)); err != nil {
+		// Write the BasePath-relative file path so the hash stays stable
+		// regardless of where the extension is located on disk (e.g. the
+		// temp directory used by `extension zip`).
+		if _, err := hasher.Write([]byte(e.relPath(file))); err != nil {
 			return "", err
 		}
 		if _, err := fmt.Fprintf(hasher, "%x", fileHashes[file]); err != nil {
@@ -421,8 +423,9 @@ func (e *ExtensionAssetConfigEntry) hashSingleFile(filePath string) (uint64, err
 
 	hasher := xxhash.New()
 
-	// Write the file path to the hasher for uniqueness
-	if _, err := hasher.Write([]byte(filePath)); err != nil {
+	// Write the BasePath-relative file path to the hasher for uniqueness so
+	// the hash does not depend on the absolute location of the extension.
+	if _, err := hasher.Write([]byte(e.relPath(filePath))); err != nil {
 		return 0, err
 	}
 
@@ -432,6 +435,20 @@ func (e *ExtensionAssetConfigEntry) hashSingleFile(filePath string) (uint64, err
 	}
 
 	return hasher.Sum64(), nil
+}
+
+// relPath returns the given path relative to the extension BasePath. It is used
+// when folding file paths into the content hash so the resulting cache key is
+// independent of the absolute extension location (e.g. the temp directory used
+// by `extension zip`). It falls back to the input path if it cannot be made
+// relative.
+func (e *ExtensionAssetConfigEntry) relPath(p string) string {
+	rel, err := filepath.Rel(filepath.Clean(e.BasePath), p)
+	if err != nil {
+		return p
+	}
+
+	return filepath.ToSlash(rel)
 }
 
 func (e *ExtensionAssetConfigEntry) GetOutputAdminPath() string {

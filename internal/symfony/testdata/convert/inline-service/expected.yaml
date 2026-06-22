@@ -1,0 +1,8 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/symfony/dependency-injection/7.4/Loader/schema/services.schema.json
+services:
+    Shop\A:
+        arguments:
+            - !service
+              class: Shop\Inline
+              arguments:
+                - setting

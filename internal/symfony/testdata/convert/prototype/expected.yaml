@@ -1,0 +1,13 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/symfony/dependency-injection/7.4/Loader/schema/services.schema.json
+services:
+    Shop\:
+        resource: ../src/*
+        exclude: ../src/{DependencyInjection,Entity,Kernel.php}
+
+    Shop\Handler\:
+        resource: ../src/Handler/*
+        exclude:
+            - ../src/Handler/Legacy/*
+            - ../src/Handler/Experimental/*
+        tags:
+            - shop.handler

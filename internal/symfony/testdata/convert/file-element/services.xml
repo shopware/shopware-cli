@@ -1,0 +1,7 @@
+<container>
+    <services>
+        <service id="Shop\Legacy" class="Shop\Legacy">
+            <file>%kernel.project_dir%/legacy/Legacy.php</file>
+        </service>
+    </services>
+</container>

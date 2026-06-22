@@ -1,0 +1,9 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/symfony/routing/7.4/Loader/schema/routing.schema.json
+routes_storefront:
+    resource: routes/storefront.xml
+
+routes_storefront_2:
+    resource: routes/storefront.yaml
+
+imported_routes:
+    resource: '*.php'

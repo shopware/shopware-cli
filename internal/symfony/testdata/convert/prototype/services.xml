@@ -1,0 +1,10 @@
+<container>
+    <services>
+        <prototype namespace="Shop\" resource="../src/*" exclude="../src/{DependencyInjection,Entity,Kernel.php}"/>
+        <prototype namespace="Shop\Handler\" resource="../src/Handler/*">
+            <exclude>../src/Handler/Legacy/*</exclude>
+            <exclude>../src/Handler/Experimental/*</exclude>
+            <tag name="shop.handler"/>
+        </prototype>
+    </services>
+</container>

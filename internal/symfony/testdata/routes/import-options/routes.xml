@@ -1,0 +1,7 @@
+<routes>
+    <import resource="../controllers" type="attribute" prefix="/shop" name-prefix="shop_" host="shop.example.com" trailing-slash-on-root="false">
+        <exclude>../controllers/Internal</exclude>
+        <exclude>../controllers/Legacy</exclude>
+        <requirement key="_locale">en|de</requirement>
+    </import>
+</routes>

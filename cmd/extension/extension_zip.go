@@ -141,6 +141,7 @@ var extensionZipCmd = &cobra.Command{
 			}
 
 			assetBuildConfig := extension.AssetBuildConfig{
+				EnableAssetCaching: extCfg.Build.Zip.Assets.EnableAssetCaching,
 				CleanupNodeModules: true,
 				ShopwareRoot:       os.Getenv("SHOPWARE_PROJECT_ROOT"),
 				ShopwareVersion:    shopwareConstraint,

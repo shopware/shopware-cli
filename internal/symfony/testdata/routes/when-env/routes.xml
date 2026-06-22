@@ -1,0 +1,7 @@
+<routes>
+    <route id="frontend.home" path="/"/>
+    <when env="dev">
+        <route id="frontend.debug" path="/_debug" methods="GET"/>
+        <import resource="dev_routes.yaml"/>
+    </when>
+</routes>

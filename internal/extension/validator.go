@@ -94,7 +94,47 @@ func RunValidation(ctx context.Context, ext Extension, check validation.Check) {
 	validateStorefrontSnippets(ext, check)
 	validateAssets(ext, check)
 	validateExtensionIcon(ext, check)
+	validateSymfonyXml(ext, check)
 	// Note: ignores are now applied in the verifier layer
+}
+
+func validateSymfonyXml(ext Extension, check validation.Check) {
+	if ext.GetType() != TypePlatformPlugin {
+		return
+	}
+
+	for _, resourceDir := range ext.GetResourcesDirs() {
+		checkSymfonyXmlInResourceDir(check, resourceDir)
+	}
+
+	for _, extraBundle := range ext.GetExtensionConfig().Build.ExtraBundles {
+		bundlePath := extraBundle.ResolvePath(ext.GetRootDir())
+		checkSymfonyXmlInResourceDir(check, filepath.Join(bundlePath, "Resources"))
+	}
+}
+
+func checkSymfonyXmlInResourceDir(check validation.Check, resourceDir string) {
+	deprecatedFiles := []struct {
+		name       string
+		identifier string
+	}{
+		{"services.xml", "config.services_xml.deprecated"},
+		{"routes.xml", "config.routes_xml.deprecated"},
+	}
+
+	for _, file := range deprecatedFiles {
+		xmlPath := filepath.Join(resourceDir, "config", file.name)
+		if _, err := os.Stat(xmlPath); err == nil {
+			yamlName := strings.TrimSuffix(file.name, ".xml") + ".yaml"
+
+			check.AddResult(validation.CheckResult{
+				Path:       xmlPath,
+				Identifier: file.identifier,
+				Message:    fmt.Sprintf("Found deprecated %s. Symfony %s is deprecated, migrate to %s. Run \"shopware-cli extension fix\" to convert it automatically.", xmlPath, file.name, yamlName),
+				Severity:   validation.SeverityWarning,
+			})
+		}
+	}
 }
 
 func runDefaultValidate(ext Extension, check validation.Check) {

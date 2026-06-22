@@ -6,14 +6,14 @@ require (
 	charm.land/bubbles/v2 v2.0.0
 	charm.land/bubbletea/v2 v2.0.2
 	charm.land/huh/v2 v2.0.3
-	charm.land/lipgloss/v2 v2.0.3
+	charm.land/lipgloss/v2 v2.0.4
 	dario.cat/mergo v1.0.2
 	github.com/DATA-DOG/go-sqlmock v1.5.2
 	github.com/NYTimes/gziphandler v1.1.1
 	github.com/bep/godartsass/v2 v2.5.0
 	github.com/cespare/xxhash/v2 v2.3.0
 	github.com/charmbracelet/x/term v0.2.2
-	github.com/evanw/esbuild v0.28.0
+	github.com/evanw/esbuild v0.28.1
 	github.com/go-sql-driver/mysql v1.10.0
 	github.com/gorilla/schema v1.4.1
 	github.com/invopop/jsonschema v0.14.0
@@ -27,15 +27,15 @@ require (
 	github.com/shyim/go-version v0.0.0-20250828113848-97ec77491b32
 	github.com/spf13/cobra v1.10.2
 	github.com/stretchr/testify v1.11.1
-	github.com/tetratelabs/wazero v1.11.0
+	github.com/tetratelabs/wazero v1.12.0
 	github.com/tonistiigi/go-actions-cache v0.0.0-20260120203934-54bc28c26fd2
 	github.com/vulcand/oxy/v2 v2.1.1
 	github.com/wI2L/jsondiff v0.7.1
 	github.com/yuin/goldmark v1.8.2
 	github.com/zeebo/xxh3 v1.1.0
 	go.uber.org/zap v1.28.0
-	golang.org/x/image v0.41.0
-	golang.org/x/text v0.37.0
+	golang.org/x/image v0.42.0
+	golang.org/x/text v0.38.0
 	golang.org/x/time v0.15.0
 	gopkg.in/yaml.v3 v3.0.1
 )
@@ -89,9 +89,9 @@ require (
 	github.com/tidwall/pretty v1.2.1 // indirect
 	github.com/tidwall/sjson v1.2.5 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
-	golang.org/x/net v0.55.0
+	golang.org/x/net v0.56.0
 	golang.org/x/oauth2 v0.36.0
-	golang.org/x/sync v0.20.0
-	golang.org/x/sys v0.45.0 // indirect
+	golang.org/x/sync v0.21.0
+	golang.org/x/sys v0.46.0 // indirect
 	google.golang.org/protobuf v1.36.11 // indirect
 )

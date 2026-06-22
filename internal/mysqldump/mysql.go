@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path"
 	"regexp"
 	"slices"
 	"strings"
@@ -22,9 +23,9 @@ type Dumper struct {
 	SelectMap map[string]map[string]string
 	// WhereMap contains WHERE clauses per table (table -> WHERE clause)
 	WhereMap map[string]string
-	// NoData contains list of tables to dump structure only (no data)
+	// NoData contains list of tables to dump structure only (no data), supports glob wildcards (e.g. "cart*")
 	NoData []string
-	// Ignore contains list of tables to skip entirely
+	// Ignore contains list of tables to skip entirely, supports glob wildcards (e.g. "cart*")
 	Ignore    []string
 	filterMap map[string]string
 	// LockTables controls whether to lock tables during dump (default: true)
@@ -77,12 +78,9 @@ func (d *Dumper) Dump(ctx context.Context, w io.Writer) error {
 		return err
 	}
 
-	d.filterMap = make(map[string]string)
-	for _, table := range d.NoData {
-		d.filterMap[strings.ToLower(table)] = NoDataMapPlacement
-	}
-	for _, table := range d.Ignore {
-		d.filterMap[strings.ToLower(table)] = IgnoreMapPlacement
+	d.filterMap, err = buildFilterMap(tables, d.NoData, d.Ignore)
+	if err != nil {
+		return err
 	}
 
 	tablesToDump := make([]string, 0, len(tables))
@@ -121,6 +119,62 @@ func (d *Dumper) Dump(ctx context.Context, w io.Writer) error {
 	}
 
 	return err
+}
+
+// buildFilterMap maps lowercased table names to their placement (nodata or
+// ignore). Entries may contain glob wildcards ('*', '?', '[...]'), which are
+// expanded against the actual table list. Ignore wins over NoData when both
+// match a table.
+func buildFilterMap(tables, noData, ignore []string) (map[string]string, error) {
+	filterMap := make(map[string]string)
+
+	for _, pattern := range noData {
+		matches, err := expandTablePattern(pattern, tables)
+		if err != nil {
+			return nil, err
+		}
+		for _, table := range matches {
+			filterMap[table] = NoDataMapPlacement
+		}
+	}
+
+	for _, pattern := range ignore {
+		matches, err := expandTablePattern(pattern, tables)
+		if err != nil {
+			return nil, err
+		}
+		for _, table := range matches {
+			filterMap[table] = IgnoreMapPlacement
+		}
+	}
+
+	return filterMap, nil
+}
+
+// expandTablePattern returns the lowercased table names matching the given
+// glob pattern, case-insensitively. Patterns without wildcards are returned
+// verbatim so they don't have to exist in the table list.
+func expandTablePattern(pattern string, tables []string) ([]string, error) {
+	pattern = strings.ToLower(pattern)
+
+	if !strings.ContainsAny(pattern, "*?[") {
+		return []string{pattern}, nil
+	}
+
+	matches := make([]string, 0)
+	for _, table := range tables {
+		table = strings.ToLower(table)
+		ok, err := path.Match(pattern, table)
+		if err != nil {
+			return nil, fmt.Errorf("invalid table pattern %q: %w", pattern, err)
+		}
+
+		if ok {
+			matches = append(matches, table)
+		}
+	}
+
+	return matches, nil
 }
 
 func (d *Dumper) dumpTablesSequential(ctx context.Context, w io.Writer, tables []string) error {
