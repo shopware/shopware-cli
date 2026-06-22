@@ -295,13 +295,14 @@ func (m Model) renderInstallPrompt(b *strings.Builder) {
 		b.WriteString("\n\n")
 		b.WriteString(tui.TitleStyle.Render("Admin Account"))
 		b.WriteString("\n")
-		b.WriteString(tui.DimStyle.Render("Set the username and password for the admin account"))
+		b.WriteString(tui.DimStyle.Render("The login for the Shopware admin panel and API."))
 		b.WriteString("\n\n")
-		b.WriteString(tui.DimStyle.Render("Username"))
+		b.WriteString(valueStyle.Render("Choose a username"))
 		b.WriteString("\n")
 		b.WriteString(m.install.username.View())
 		b.WriteString("\n\n")
-		b.WriteString(tui.DimStyle.Render("Password (default: shopware)"))
+		b.WriteString(valueStyle.Render("Choose a password"))
+		b.WriteString(tui.DimStyle.Render("  at least 8 characters"))
 		b.WriteString("\n")
 		b.WriteString(m.install.password.View())
 		if m.install.passwordErr != "" {
@@ -310,6 +311,8 @@ func (m Model) renderInstallPrompt(b *strings.Builder) {
 		}
 		b.WriteString("\n\n")
 		b.WriteString(renderShowPasswordCheckbox(m.install.password.EchoMode == textinput.EchoNormal, m.install.credFocus == credFocusShowPassword))
+		b.WriteString("\n\n")
+		b.WriteString(tui.DimStyle.Render("Used to create the Shopware admin user."))
 	}
 }
 

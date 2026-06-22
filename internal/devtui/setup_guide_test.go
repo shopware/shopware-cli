@@ -103,6 +103,10 @@ func TestSetupGuideAdminUser_TabNavigatesFocus(t *testing.T) {
 	sg, _ = sg.update(tea.KeyPressMsg(tea.Key{Code: tea.KeyTab}))
 	assert.Equal(t, credFocusShowPassword, sg.credFocus)
 	assert.False(t, sg.password.Focused())
+
+	// Tab past the checkbox stays on the checkbox.
+	sg, _ = sg.update(tea.KeyPressMsg(tea.Key{Code: tea.KeyTab}))
+	assert.Equal(t, credFocusShowPassword, sg.credFocus)
 }
 
 func TestSetupGuideAdminUser_EnterOnCheckboxTogglesEcho(t *testing.T) {
@@ -343,8 +347,8 @@ func TestSetupGuideViewSteps(t *testing.T) {
 	sg.username.Focus()
 	view = sg.viewContent()
 	assert.Contains(t, view, "Step")
-	assert.Contains(t, view, "Username")
-	assert.Contains(t, view, "Password")
+	assert.Contains(t, view, "Choose a username")
+	assert.Contains(t, view, "Choose a password")
 
 	sg.step = setupStepDockerPHP
 	view = sg.viewContent()
