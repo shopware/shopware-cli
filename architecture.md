@@ -1,5 +1,5 @@
 ---
-title: Evolving shopware-cli from a command set into a CLI-as-Platform
+title: Evolving Shopware CLI from a command set into a CLI-as-Platform
 date: 2026-17-06
 area: architecture
 tags: [boundaries, commands, patterns]
@@ -9,7 +9,7 @@ tags: [boundaries, commands, patterns]
 
 ## 1. Summary
 
-`shopware-cli` is a Go/Cobra CLI with three command groups, registering from [cmd/root.go](../cmd/root.go): `account`, `extension`, and `project`. Entry is [main.go](../main.go) → `cmd.Execute`.
+`shopware-cli` is a Go/Cobra CLI with three command groups, registering from [cmd/root.go](cmd/root.go): `account`, `extension`, and `project`. Entry is [main.go](main.go) → `cmd.Execute`.
 
 The CLI already runs every command in two modes from one code path: TUI-guided/interactive and headless (flags / CI / AI agent). That duality is a global invariant, not a per-command feature, and it is the contract that supports "rarely leave the IDE/TUI."
 
@@ -54,7 +54,7 @@ Currently registered: phpstan, eslint, stylelint, prettier, php-cs-fixer, rector
 
 Two primary types, app and plugin (themes and bundles are kinds of plugins). The CLI detects three packaging signatures behind one shared `Extension` interface ([internal/extension/root.go:103](https://github.com/shopware/shopware-cli/blob/6ebf84df16147190a258d2aeadf91a4a15c707d7/internal/extension/root.go#L103)), and the CLI tells them apart by a file it finds: `manifest.xml` → App; `composer.json` with `shopware-platform-plugin` → plugin; shopware-bundle → bundle.
 
-The `Extension` interface abstracts extension type behind `GetName/GetType/GetSourceDirs/Validate/GetExtensionConfig/…`. Detection is by file signature ([../internal/extension/root.go#L28](https://github.com/shopware/shopware-cli/blob/6ebf84df16147190a258d2aeadf91a4a15c707d7/internal/extension/root.go#L28)).
+The `Extension` interface abstracts extension type behind `GetName/GetType/GetSourceDirs/Validate/GetExtensionConfig/…`. Detection is by file signature ([internal/extension/root.go#L28](https://github.com/shopware/shopware-cli/blob/6ebf84df16147190a258d2aeadf91a4a15c707d7/internal/extension/root.go#L28)).
 
 ### 2.4 Config schema: one field to add, embedded, self-validating
 
@@ -66,7 +66,7 @@ Deployment Helper re-parses this same `deployment:` block by hand rather than fr
 
 In the CLI, only the `account` command group builds its dependencies (clients, config) through a real service container (`cmd/account/account.go:20`):
 
-- `Register(rootCmd, onInit func(cmd string) (ServiceContainer, error))` wires deps in `PersistentPreRunE` ([../cmd/account/account.go#L20](https://github.com/shopware/shopware-cli/blob/6ebf84df16147190a258d2aeadf91a4a15c707d7/cmd/account/account.go#L20)).
+- `Register(rootCmd, onInit func(cmd string) (ServiceContainer, error))` wires deps in `PersistentPreRunE` ([cmd/account/account.go#L20](https://github.com/shopware/shopware-cli/blob/6ebf84df16147190a258d2aeadf91a4a15c707d7/cmd/account/account.go#L20)).
 
 **Scalability blocker:** `extension` and `project` use ad-hoc context lookups + direct instantiation. As the surface grows, it makes commands harder to test or mock and forces expensive clients to be built even when they aren't used.
 
