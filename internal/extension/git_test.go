@@ -1,7 +1,6 @@
 package extension
 
 import (
-	"context"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -13,7 +12,7 @@ import (
 
 func gitRun(t *testing.T, dir string, args ...string) {
 	t.Helper()
-	cmd := exec.Command("git", append([]string{"-C", dir}, args...)...)
+	cmd := exec.CommandContext(t.Context(), "git", append([]string{"-C", dir}, args...)...)
 	cmd.Env = append(os.Environ(),
 		"GIT_AUTHOR_NAME=test",
 		"GIT_AUTHOR_EMAIL=test@example.com",
@@ -24,14 +23,14 @@ func gitRun(t *testing.T, dir string, args ...string) {
 	require.NoError(t, err, "git %v: %s", args, string(out))
 }
 
-func writeFile(t *testing.T, dir, name, content string) {
+func writeComposerJSON(t *testing.T, dir, content string) {
 	t.Helper()
-	require.NoError(t, os.WriteFile(filepath.Join(dir, name), []byte(content), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "composer.json"), []byte(content), 0o644))
 }
 
 func TestGitCopyFolderArchivesHeadNotNewestTag(t *testing.T) {
 	source := t.TempDir()
-	ctx := context.Background()
+	ctx := t.Context()
 
 	gitRun(t, source, "init")
 	gitRun(t, source, "config", "commit.gpgsign", "false")
@@ -39,12 +38,12 @@ func TestGitCopyFolderArchivesHeadNotNewestTag(t *testing.T) {
 	gitRun(t, source, "config", "tag.forceSignAnnotated", "false")
 
 	// Older release 1.0.0
-	writeFile(t, source, "composer.json", `{"version":"1.0.0"}`)
+	writeComposerJSON(t, source, `{"version":"1.0.0"}`)
 	gitRun(t, source, "add", ".")
 	gitRun(t, source, "commit", "-m", "1.0.0")
 
 	// Current release 2.0.0 on HEAD
-	writeFile(t, source, "composer.json", `{"version":"2.0.0"}`)
+	writeComposerJSON(t, source, `{"version":"2.0.0"}`)
 	gitRun(t, source, "add", ".")
 	gitRun(t, source, "commit", "-m", "2.0.0")
 	gitRun(t, source, "tag", "-a", "-m", "2.0.0", "2.0.0")
@@ -67,7 +66,7 @@ func TestGitCopyFolderArchivesHeadNotNewestTag(t *testing.T) {
 
 func TestGitCopyFolderFallsBackToBranchWithoutTagAtHead(t *testing.T) {
 	source := t.TempDir()
-	ctx := context.Background()
+	ctx := t.Context()
 
 	gitRun(t, source, "init")
 	gitRun(t, source, "config", "commit.gpgsign", "false")
@@ -75,13 +74,13 @@ func TestGitCopyFolderFallsBackToBranchWithoutTagAtHead(t *testing.T) {
 	gitRun(t, source, "config", "tag.forceSignAnnotated", "false")
 	gitRun(t, source, "checkout", "-b", "main")
 
-	writeFile(t, source, "composer.json", `{"version":"1.0.0"}`)
+	writeComposerJSON(t, source, `{"version":"1.0.0"}`)
 	gitRun(t, source, "add", ".")
 	gitRun(t, source, "commit", "-m", "1.0.0")
 	gitRun(t, source, "tag", "-a", "-m", "1.0.0", "1.0.0")
 
 	// New unreleased commit on top of the tag - no tag points at HEAD.
-	writeFile(t, source, "composer.json", `{"version":"1.0.1"}`)
+	writeComposerJSON(t, source, `{"version":"1.0.1"}`)
 	gitRun(t, source, "add", ".")
 	gitRun(t, source, "commit", "-m", "wip")
 
