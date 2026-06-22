@@ -179,8 +179,8 @@ func (sg setupGuide) viewReview() string {
 }
 
 func (sg setupGuide) viewDone() string {
-	var b strings.Builder
 	if sg.err != nil {
+		var b strings.Builder
 		b.WriteString(lipgloss.NewStyle().Bold(true).Foreground(tui.ErrorColor).Render("Configuration failed"))
 		b.WriteString("\n\n")
 		b.WriteString(errorStyle.Render(sg.err.Error()))
@@ -189,29 +189,35 @@ func (sg setupGuide) viewDone() string {
 		b.WriteString(tui.BoldText.Render(".shopware-project.yml"))
 		b.WriteString("\n")
 		b.WriteString(tui.DimStyle.Render("or try again with shopware-cli project dev"))
-	} else {
-		b.WriteString(lipgloss.NewStyle().Bold(true).Foreground(tui.SuccessColor).Render("✓ Configuration saved"))
 		b.WriteString("\n\n")
-		b.WriteString(tui.DimStyle.Render("Your project is now configured for Docker development."))
-		b.WriteString("\n")
-		b.WriteString(tui.DimStyle.Render("The environment will start on the next screen."))
-
-		if sg.deploymentHelperAdded {
-			b.WriteString("\n\n")
-			b.WriteString(tui.BoldText.Render("Note: "))
-			b.WriteString(tui.DimStyle.Render("Added "))
-			b.WriteString(valueStyle.Render("shopware/deployment-helper"))
-			b.WriteString(tui.DimStyle.Render(" to "))
-			b.WriteString(tui.BoldText.Render("composer.json"))
-			b.WriteString(tui.DimStyle.Render("."))
-			b.WriteString("\n")
-			b.WriteString(tui.DimStyle.Render("Run "))
-			b.WriteString(tui.BoldText.Render("composer update shopware/deployment-helper"))
-			b.WriteString(tui.DimStyle.Render(" before installing Shopware."))
-		}
+		return tui.RenderPhaseCard(b.String())
 	}
+
+	var b strings.Builder
+	b.WriteString(lipgloss.NewStyle().Bold(true).Foreground(tui.SuccessColor).Render("✓ Configuration saved"))
 	b.WriteString("\n\n")
-	return tui.RenderPhaseCard(b.String())
+	b.WriteString(tui.DimStyle.Render("Your project is now configured for Docker development."))
+	b.WriteString("\n")
+	b.WriteString(tui.DimStyle.Render("The environment will start on the next screen."))
+
+	if sg.deploymentHelperAdded {
+		b.WriteString("\n\n")
+		b.WriteString(tui.BoldText.Render("Note: "))
+		b.WriteString(tui.DimStyle.Render("Added "))
+		b.WriteString(valueStyle.Render("shopware/deployment-helper"))
+		b.WriteString(tui.DimStyle.Render(" to "))
+		b.WriteString(tui.BoldText.Render("composer.json"))
+		b.WriteString(tui.DimStyle.Render("."))
+		b.WriteString("\n")
+		b.WriteString(tui.DimStyle.Render("Run "))
+		b.WriteString(tui.BoldText.Render("composer update shopware/deployment-helper"))
+		b.WriteString(tui.DimStyle.Render(" before installing Shopware."))
+	}
+
+	b.WriteString("\n\n")
+	b.WriteString(tui.BoldText.Render("Press Enter to start the Docker containers and open the project dev workspace."))
+	b.WriteString("\n\n")
+	return tui.RenderPhaseCardCowsay("Setup's complete!", b.String())
 }
 
 func (sg setupGuide) footerHint() string {

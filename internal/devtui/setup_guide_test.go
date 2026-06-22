@@ -368,6 +368,28 @@ func TestSetupGuideWelcomeDefaultConfirmYes(t *testing.T) {
 	assert.True(t, suggest.confirmYes)
 }
 
+func TestSetupGuideViewDone_Success(t *testing.T) {
+	sg := newSetupGuide("")
+	sg.step = setupStepDone
+
+	view := sg.viewContent()
+	assert.Contains(t, view, "Setup's complete!")
+	assert.Contains(t, view, "Configuration saved")
+	assert.Contains(t, view, "Press Enter to start the Docker containers")
+}
+
+func TestSetupGuideViewDone_Error(t *testing.T) {
+	sg := newSetupGuide("")
+	sg.step = setupStepDone
+	sg.err = assert.AnError
+
+	view := sg.viewContent()
+	assert.Contains(t, view, "Configuration failed")
+	// The success-only chrome must not leak into the error screen.
+	assert.NotContains(t, view, "Setup's complete!")
+	assert.NotContains(t, view, "Press Enter to start the Docker containers")
+}
+
 func TestSetupGuideDockerPHPAdvancesToReview(t *testing.T) {
 	sg := newSetupGuide("")
 	sg.step = setupStepDockerPHP
