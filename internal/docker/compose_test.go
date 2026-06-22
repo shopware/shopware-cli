@@ -20,6 +20,17 @@ func TestProfilerNeedsCredentials(t *testing.T) {
 	assert.True(t, ProfilerNeedsCredentials(ProfilerTideways))
 }
 
+func TestProfilerIsPaid(t *testing.T) {
+	t.Parallel()
+
+	assert.False(t, ProfilerIsPaid(""))
+	assert.False(t, ProfilerIsPaid(ProfilerXdebug))
+	assert.False(t, ProfilerIsPaid(ProfilerPcov))
+	assert.False(t, ProfilerIsPaid(ProfilerSpx))
+	assert.True(t, ProfilerIsPaid(ProfilerBlackfire))
+	assert.True(t, ProfilerIsPaid(ProfilerTideways))
+}
+
 func TestGenerateComposeFile(t *testing.T) {
 	t.Parallel()
 

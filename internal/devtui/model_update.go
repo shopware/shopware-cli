@@ -257,19 +257,6 @@ func (m Model) saveSetupGuide() (tea.Model, tea.Cmd) {
 	}
 	m.setupGuide.deploymentHelperAdded = changed
 
-	if localCfg := m.setupGuide.localConfig(); localCfg != nil {
-		if err := shop.WriteLocalConfig(localCfg, m.projectRoot); err != nil {
-			m.setupGuide.err = err
-			m.setupGuide.step = setupStepDone
-			return m, nil
-		}
-		// Mirror the just-written profiler secrets onto the in-memory config
-		// so the first generated compose.yaml wires them up. They remain in
-		// .shopware-project.local.yml (not the committed config); this is
-		// only the runtime view ReadConfig would have produced on next launch.
-		mergeLocalProfilerSecrets(m.config, localCfg)
-	}
-
 	m.setupGuide.step = setupStepDone
 	return m, nil
 }

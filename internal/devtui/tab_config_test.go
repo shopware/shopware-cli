@@ -170,6 +170,27 @@ func TestConfigModel_PickerForCursor_Select(t *testing.T) {
 	assert.ElementsMatch(t, phpVersions, values)
 }
 
+func TestConfigModel_PickerForCursor_ProfilerFreePaidLabels(t *testing.T) {
+	m := NewConfigModel(nil, nil)
+	m.cursor = fieldProfiler
+
+	modal := m.PickerForCursor()
+	picker, ok := modal.(*listPicker)
+	assert.True(t, ok)
+
+	details := make(map[string]string, len(picker.items))
+	for _, it := range picker.items {
+		details[it.Value] = it.Detail
+	}
+
+	assert.Equal(t, "", details[""])              // none has no free/paid badge
+	assert.Equal(t, "free", details["xdebug"])    // open source
+	assert.Equal(t, "free", details["pcov"])      // open source
+	assert.Equal(t, "free", details["spx"])       // open source
+	assert.Equal(t, "paid", details["blackfire"]) // commercial SaaS
+	assert.Equal(t, "paid", details["tideways"])  // commercial SaaS
+}
+
 func TestConfigModel_PickerForCursor_Text(t *testing.T) {
 	m := NewConfigModel(nil, nil)
 	m.profiler = indexOf(profilers, "blackfire", 0)

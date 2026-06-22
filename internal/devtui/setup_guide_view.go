@@ -7,7 +7,6 @@ import (
 	"charm.land/bubbles/v2/textinput"
 	"charm.land/lipgloss/v2"
 
-	dockerpkg "github.com/shopware/shopware-cli/internal/docker"
 	"github.com/shopware/shopware-cli/internal/tui"
 )
 
@@ -19,10 +18,6 @@ func (sg setupGuide) viewContent() string {
 		return sg.viewAdminUser()
 	case setupStepDockerPHP:
 		return sg.viewDockerPHP()
-	case setupStepDockerProfiler:
-		return sg.viewDockerProfiler()
-	case setupStepProfilerCreds:
-		return sg.viewProfilerCreds()
 	case setupStepReview:
 		return sg.viewReview()
 	case setupStepDone:
@@ -35,15 +30,10 @@ func stepBadge(stepNum, totalSteps int) string {
 	return tui.TextBadge(fmt.Sprintf("Step %d/%d", stepNum, totalSteps))
 }
 
-// totalSteps returns the number of numbered wizard steps. The profiler
-// credentials step is only counted when the chosen profiler needs them.
+// totalSteps returns the number of numbered wizard steps:
+// admin account, PHP version, review.
 func (sg setupGuide) totalSteps() int {
-	// admin account, PHP version, profiler, review
-	total := 4
-	if dockerpkg.ProfilerNeedsCredentials(profilerChoices[sg.profilerCursor]) {
-		total++
-	}
-	return total
+	return 3
 }
 
 // stepNum returns the 1-based index of the given wizard step within the
@@ -55,15 +45,8 @@ func (sg setupGuide) stepNum(step setupStep) int {
 		return 1
 	case setupStepDockerPHP:
 		return 2
-	case setupStepDockerProfiler:
-		return 3
-	case setupStepProfilerCreds:
-		return 4
 	case setupStepReview:
-		if dockerpkg.ProfilerNeedsCredentials(profilerChoices[sg.profilerCursor]) {
-			return 5
-		}
-		return 4
+		return 3
 	case setupStepWelcome, setupStepDone:
 		return 0
 	}
@@ -155,65 +138,6 @@ func (sg setupGuide) viewDockerPHP() string {
 	return tui.RenderPhaseCard(b.String())
 }
 
-func (sg setupGuide) viewDockerProfiler() string {
-	var b strings.Builder
-	b.WriteString(stepBadge(sg.stepNum(setupStepDockerProfiler), sg.totalSteps()))
-	b.WriteString("\n\n")
-	b.WriteString(tui.TitleStyle.Render("PHP Profiler"))
-	b.WriteString("\n")
-	b.WriteString(tui.DimStyle.Render("Optionally enable a profiler for debugging."))
-	b.WriteString("\n")
-	b.WriteString(tui.DimStyle.Render("Can be changed later in the Config tab."))
-	b.WriteString("\n\n")
-
-	opts := make([]tui.SelectOption, len(profilerChoices))
-	for i, p := range profilerChoices {
-		label := p
-		desc := ""
-		switch p {
-		case "none":
-			label = "None"
-			desc = "recommended"
-		case "xdebug":
-			desc = "step debugging"
-		}
-		opts[i] = tui.SelectOption{Label: label, Detail: desc}
-	}
-	b.WriteString(tui.RenderSelectList("Profiler", "", opts, sg.profilerCursor))
-	b.WriteString("\n")
-	return tui.RenderPhaseCard(b.String())
-}
-
-func (sg setupGuide) viewProfilerCreds() string {
-	var b strings.Builder
-	b.WriteString(stepBadge(sg.stepNum(setupStepProfilerCreds), sg.totalSteps()))
-	b.WriteString("\n\n")
-
-	switch {
-	case sg.blackfireServerID.Focused():
-		b.WriteString(tui.TitleStyle.Render("Blackfire Configuration"))
-		b.WriteString("\n")
-		b.WriteString(tui.DimStyle.Render("Enter your Blackfire Server ID from your Blackfire account."))
-		b.WriteString("\n\n")
-		b.WriteString(sg.blackfireServerID.View())
-	case sg.blackfireServerToken.Focused():
-		b.WriteString(tui.TitleStyle.Render("Blackfire Configuration"))
-		b.WriteString("\n")
-		b.WriteString(tui.DimStyle.Render("Enter your Blackfire Server Token."))
-		b.WriteString("\n\n")
-		b.WriteString(sg.blackfireServerToken.View())
-	case sg.tidewaysAPIKey.Focused():
-		b.WriteString(tui.TitleStyle.Render("Tideways Configuration"))
-		b.WriteString("\n")
-		b.WriteString(tui.DimStyle.Render("Enter your Tideways API key."))
-		b.WriteString("\n\n")
-		b.WriteString(sg.tidewaysAPIKey.View())
-	}
-
-	b.WriteString("\n\n")
-	return tui.RenderPhaseCard(b.String())
-}
-
 func (sg setupGuide) viewReview() string {
 	c := sg.currentConfig()
 	var b strings.Builder
@@ -231,11 +155,6 @@ func (sg setupGuide) viewReview() string {
 	b.WriteString(tui.KVRow("Password", secretStyle.Render(strings.Repeat("•", len(c.password)))))
 	b.WriteString(divider)
 	b.WriteString(tui.KVRow("PHP Version", valueStyle.Render("PHP "+c.phpVersion)))
-	profilerLabel := c.profiler
-	if profilerLabel == "" {
-		profilerLabel = "none"
-	}
-	b.WriteString(tui.KVRow("Profiler", valueStyle.Render(profilerLabel)))
 
 	b.WriteString("\n")
 	b.WriteString(tui.DimStyle.Render("This will create:"))
@@ -246,13 +165,6 @@ func (sg setupGuide) viewReview() string {
 	b.WriteString(tui.DimStyle.Render("  • "))
 	b.WriteString(tui.BoldText.Render("compose.yaml"))
 	b.WriteString("\n")
-
-	if c.profiler == "blackfire" || c.profiler == "tideways" {
-		b.WriteString(tui.DimStyle.Render("  • "))
-		b.WriteString(tui.BoldText.Render(".shopware-project.local.yml"))
-		b.WriteString(tui.DimStyle.Render(" (secrets only)"))
-		b.WriteString("\n")
-	}
 
 	b.WriteString("\n")
 	b.WriteString(renderConfirmButtons("Save & start", "Quit", sg.confirmYes))
@@ -317,13 +229,9 @@ func (sg setupGuide) footerHint() string {
 			tui.Shortcut{Key: "↑/↓/tab", Label: "Navigate"},
 			tui.Shortcut{Key: "enter", Label: "Continue"},
 		)
-	case setupStepDockerPHP, setupStepDockerProfiler:
+	case setupStepDockerPHP:
 		return tui.ShortcutBar(
 			tui.Shortcut{Key: "↑/↓", Label: "Select"},
-			tui.Shortcut{Key: "enter", Label: "Continue"},
-		)
-	case setupStepProfilerCreds:
-		return tui.ShortcutBar(
 			tui.Shortcut{Key: "enter", Label: "Continue"},
 		)
 	case setupStepReview:

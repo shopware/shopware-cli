@@ -43,7 +43,6 @@ func (sg *setupGuide) applyToConfig(cfg *shop.Config) {
 		cfg.Docker.PHP = &shop.ConfigDockerPHP{}
 	}
 	cfg.Docker.PHP.Version = c.phpVersion
-	cfg.Docker.PHP.Profiler = c.profiler
 }
 
 // ensureDeploymentHelper adds shopware/deployment-helper to the project's
@@ -83,31 +82,4 @@ func ensureDeploymentHelper(projectRoot string) (changed bool, err error) {
 		return false, err
 	}
 	return true, nil
-}
-
-// localConfig returns a partial Config containing secrets that should be
-// written to .shopware-project.local.yml. Profilers without external
-// credentials (none, xdebug, pcov, spx) return nil.
-func (sg *setupGuide) localConfig() *shop.Config {
-	c := sg.currentConfig()
-	switch c.profiler {
-	case "blackfire":
-		return &shop.Config{
-			Docker: &shop.ConfigDocker{
-				PHP: &shop.ConfigDockerPHP{
-					BlackfireServerID:    c.blackfireServerID,
-					BlackfireServerToken: c.blackfireServerToken,
-				},
-			},
-		}
-	case "tideways":
-		return &shop.Config{
-			Docker: &shop.ConfigDocker{
-				PHP: &shop.ConfigDockerPHP{
-					TidewaysAPIKey: c.tidewaysAPIKey,
-				},
-			},
-		}
-	}
-	return nil
 }
