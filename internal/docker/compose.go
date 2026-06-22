@@ -32,6 +32,13 @@ func ProfilerNeedsCredentials(profiler string) bool {
 	return profiler == ProfilerBlackfire || profiler == ProfilerTideways
 }
 
+// ProfilerIsPaid reports whether the given profiler is a commercial product
+// that requires a paid account or plan. Blackfire and Tideways are paid SaaS
+// products; xdebug, pcov and spx are free and open source.
+func ProfilerIsPaid(profiler string) bool {
+	return profiler == ProfilerBlackfire || profiler == ProfilerTideways
+}
+
 type ComposeOptions struct {
 	PHPVersion           string
 	PHPProfiler          string

@@ -7,7 +7,6 @@ import (
 	"charm.land/bubbles/v2/textinput"
 	tea "charm.land/bubbletea/v2"
 
-	dockerpkg "github.com/shopware/shopware-cli/internal/docker"
 	"github.com/shopware/shopware-cli/internal/packagist"
 )
 
@@ -17,23 +16,15 @@ const (
 	setupStepWelcome setupStep = iota
 	setupStepAdminUser
 	setupStepDockerPHP
-	setupStepDockerProfiler
-	setupStepProfilerCreds
 	setupStepReview
 	setupStepDone
 )
-
-// profilerChoices is the list of profiler options shown in the setup guide UI.
-// The first entry uses "none" for display; internally it maps to "" (empty string)
-// which is the canonical value stored in config.
-var profilerChoices = []string{"none", dockerpkg.ProfilerXdebug, dockerpkg.ProfilerBlackfire, dockerpkg.ProfilerTideways, dockerpkg.ProfilerPcov, dockerpkg.ProfilerSpx}
 
 type setupGuide struct {
 	step                  setupStep
 	phpVersions           []string // PHP versions compatible with the project
 	phpConstraint         string   // raw constraint string, for display ("" if none)
 	phpCursor             int
-	profilerCursor        int
 	confirmYes            bool
 	deploymentHelperAdded bool // composer.json was updated to require shopware/deployment-helper
 	url                   textinput.Model
@@ -41,23 +32,18 @@ type setupGuide struct {
 	password              textinput.Model
 	passwordErr           string
 	credFocus             credFocus
-	blackfireServerID     textinput.Model
-	blackfireServerToken  textinput.Model
-	tidewaysAPIKey        textinput.Model
 
 	err error
 }
 
 // setupGuideConfig holds the final configuration values chosen by the user.
+// The setup wizard no longer selects a PHP profiler; it defaults to none and
+// the user can enable one later in the Config tab.
 type setupGuideConfig struct {
-	url                  string
-	username             string
-	password             string
-	phpVersion           string
-	profiler             string
-	blackfireServerID    string
-	blackfireServerToken string
-	tidewaysAPIKey       string
+	url        string
+	username   string
+	password   string
+	phpVersion string
 }
 
 // resolvePHPVersions reads composer.lock from projectRoot and returns the
@@ -112,53 +98,26 @@ func newSetupGuide(projectRoot string) setupGuide {
 	passwordInput.EchoMode = textinput.EchoPassword
 	passwordInput.SetValue("shopware")
 
-	blackfireIDInput := textinput.New()
-	blackfireIDInput.Placeholder = "Server ID"
-	blackfireIDInput.CharLimit = 128
-	blackfireIDInput.Prompt = ""
-
-	blackfireTokenInput := textinput.New()
-	blackfireTokenInput.Placeholder = "Server Token"
-	blackfireTokenInput.CharLimit = 128
-	blackfireTokenInput.Prompt = ""
-
-	tidewaysKeyInput := textinput.New()
-	tidewaysKeyInput.Placeholder = "API Key"
-	tidewaysKeyInput.CharLimit = 128
-	tidewaysKeyInput.Prompt = ""
-
 	phpVersions, phpCursor, phpConstraint := resolvePHPVersions(projectRoot)
 
 	return setupGuide{
-		step:                 setupStepWelcome,
-		phpVersions:          phpVersions,
-		phpConstraint:        phpConstraint,
-		phpCursor:            phpCursor,
-		profilerCursor:       0, // Default to none
-		confirmYes:           true,
-		url:                  urlInput,
-		username:             usernameInput,
-		password:             passwordInput,
-		blackfireServerID:    blackfireIDInput,
-		blackfireServerToken: blackfireTokenInput,
-		tidewaysAPIKey:       tidewaysKeyInput,
+		step:          setupStepWelcome,
+		phpVersions:   phpVersions,
+		phpConstraint: phpConstraint,
+		phpCursor:     phpCursor,
+		confirmYes:    true,
+		url:           urlInput,
+		username:      usernameInput,
+		password:      passwordInput,
 	}
 }
 
 func (sg *setupGuide) currentConfig() setupGuideConfig {
-	profiler := profilerChoices[sg.profilerCursor]
-	if profiler == "none" {
-		profiler = ""
-	}
 	return setupGuideConfig{
-		url:                  sg.url.Value(),
-		username:             sg.username.Value(),
-		password:             sg.password.Value(),
-		phpVersion:           sg.phpVersions[sg.phpCursor],
-		profiler:             profiler,
-		blackfireServerID:    sg.blackfireServerID.Value(),
-		blackfireServerToken: sg.blackfireServerToken.Value(),
-		tidewaysAPIKey:       sg.tidewaysAPIKey.Value(),
+		url:        sg.url.Value(),
+		username:   sg.username.Value(),
+		password:   sg.password.Value(),
+		phpVersion: sg.phpVersions[sg.phpCursor],
 	}
 }
 
@@ -173,10 +132,6 @@ func (sg *setupGuide) update(msg tea.KeyPressMsg) (setupGuide, tea.Cmd) {
 		return sg.updateAdminUser(msg)
 	case setupStepDockerPHP:
 		return sg.updateDockerPHP(msg)
-	case setupStepDockerProfiler:
-		return sg.updateDockerProfiler(msg)
-	case setupStepProfilerCreds:
-		return sg.updateProfilerCreds(msg)
 	case setupStepReview:
 		return sg.updateReview(msg)
 	case setupStepDone:
@@ -292,74 +247,9 @@ func (sg *setupGuide) updateDockerPHP(msg tea.KeyPressMsg) (setupGuide, tea.Cmd)
 			sg.phpCursor++
 		}
 	case keyEnter:
-		sg.step = setupStepDockerProfiler
+		sg.step = setupStepReview
 		return *sg, nil
 	}
-	return *sg, nil
-}
-
-func (sg *setupGuide) updateDockerProfiler(msg tea.KeyPressMsg) (setupGuide, tea.Cmd) {
-	switch msg.String() {
-	case keyUp, keyK:
-		if sg.profilerCursor > 0 {
-			sg.profilerCursor--
-		}
-	case keyDown, keyJ:
-		if sg.profilerCursor < len(profilerChoices)-1 {
-			sg.profilerCursor++
-		}
-	case keyEnter:
-		profiler := profilerChoices[sg.profilerCursor]
-		if !dockerpkg.ProfilerNeedsCredentials(profiler) {
-			sg.step = setupStepReview
-			return *sg, nil
-		}
-		sg.step = setupStepProfilerCreds
-		switch profiler {
-		case "blackfire":
-			sg.blackfireServerID.Focus()
-		case "tideways":
-			sg.tidewaysAPIKey.Focus()
-		}
-		return *sg, textinput.Blink
-	}
-	return *sg, nil
-}
-
-func (sg *setupGuide) updateProfilerCreds(msg tea.KeyPressMsg) (setupGuide, tea.Cmd) {
-	if sg.blackfireServerID.Focused() {
-		if msg.String() == keyEnter {
-			sg.blackfireServerID.Blur()
-			sg.blackfireServerToken.Focus()
-			return *sg, textinput.Blink
-		}
-		var cmd tea.Cmd
-		sg.blackfireServerID, cmd = sg.blackfireServerID.Update(msg)
-		return *sg, cmd
-	}
-
-	if sg.blackfireServerToken.Focused() {
-		if msg.String() == keyEnter {
-			sg.blackfireServerToken.Blur()
-			sg.step = setupStepReview
-			return *sg, nil
-		}
-		var cmd tea.Cmd
-		sg.blackfireServerToken, cmd = sg.blackfireServerToken.Update(msg)
-		return *sg, cmd
-	}
-
-	if sg.tidewaysAPIKey.Focused() {
-		if msg.String() == keyEnter {
-			sg.tidewaysAPIKey.Blur()
-			sg.step = setupStepReview
-			return *sg, nil
-		}
-		var cmd tea.Cmd
-		sg.tidewaysAPIKey, cmd = sg.tidewaysAPIKey.Update(msg)
-		return *sg, cmd
-	}
-
 	return *sg, nil
 }
 

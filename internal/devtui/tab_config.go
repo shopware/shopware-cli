@@ -233,10 +233,15 @@ func (m ConfigModel) PickerForCursor() Modal {
 		items := make([]listPickerItem, len(profilers))
 		for i, p := range profilers {
 			label := p
-			if p == "" {
+			detail := "free"
+			switch {
+			case p == "":
 				label = "none"
+				detail = ""
+			case dockerpkg.ProfilerIsPaid(p):
+				detail = "paid"
 			}
-			items[i] = listPickerItem{Label: label, Value: p}
+			items[i] = listPickerItem{Label: label, Detail: detail, Value: p}
 		}
 		return newListPicker(fieldProfiler, "PHP Profiler", "", items, m.profiler)
 	case fieldBlackfireServerID:
