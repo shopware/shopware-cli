@@ -335,7 +335,7 @@ func TestRenderInstallPrompt_PasswordErrorShown(t *testing.T) {
 
 	var b strings.Builder
 	m.renderInstallPrompt(&b)
-	assert.Contains(t, b.String(), "at least 8 characters")
+	assert.Contains(t, b.String(), "password must be at least 8 characters long")
 }
 
 func TestRenderInstallPrompt_AllStepsDoNotPanic(t *testing.T) {
@@ -348,7 +348,7 @@ func TestRenderInstallPrompt_AllStepsDoNotPanic(t *testing.T) {
 		{installStepAsk, []string{"Shopware is not initialized yet", "Initialize now"}},
 		{installStepLanguage, []string{"Step 1/3", "Default Language"}},
 		{installStepCurrency, []string{"Step 2/3", "Default Currency"}},
-		{installStepCredentials, []string{"Step 3/3", "Admin Account", "Username", "Password"}},
+		{installStepCredentials, []string{"Step 3/3", "Admin Account", "Choose a username", "Choose a password"}},
 	}
 
 	for _, s := range steps {
