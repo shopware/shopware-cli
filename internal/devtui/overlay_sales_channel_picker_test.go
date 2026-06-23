@@ -55,7 +55,7 @@ func TestSalesChannelPicker_ConfirmEmitsWatcherOpts(t *testing.T) {
 func TestModel_SalesChannelPicker_FullRoutingFlow(t *testing.T) {
 	m := Model{
 		phase:    phaseDashboard,
-		overview:  NewOverviewModel("local", "http://localhost:8000", "", "", "/tmp/project", nil, nil),
+		overview: NewOverviewModel("local", "http://localhost:8000", "", "", "/tmp/project", nil, nil),
 		watchers: make(map[string]*watcherHandle),
 	}
 

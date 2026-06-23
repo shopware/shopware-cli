@@ -260,6 +260,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.updateKeyPress(msg)
 	}
 
+	return m.updateFallback(msg)
+}
+
+// updateFallback handles non-key messages that aren't matched by Update's
+// message-type switch, routing them by modal state and lifecycle phase.
+func (m Model) updateFallback(msg tea.Msg) (tea.Model, tea.Cmd) {
 	if m.modal != nil {
 		next, cmd := m.modal.Update(msg)
 		m.modal = next
