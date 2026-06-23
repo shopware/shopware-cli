@@ -100,8 +100,8 @@ func (m Model) updateLifecycle(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.envConfig.AdminApi = adminApi
 		_ = shop.WriteConfig(m.config, m.projectRoot)
 
-		m.general.username = username
-		m.general.password = password
+		m.overview.username = username
+		m.overview.password = password
 
 		m.phase = phaseDashboard
 		m.overlayLines = nil

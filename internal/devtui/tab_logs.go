@@ -42,7 +42,7 @@ type LogsModel struct {
 }
 
 type logLineMsg string
-type logDoneMsg struct{}
+type logDoneMsg struct{ source string }
 type logErrMsg struct{ err error }
 type logSourcesLoadedMsg struct{ sources []logSource }
 
@@ -435,10 +435,11 @@ func (m *LogsModel) waitForNextLine() tea.Cmd {
 	if ch == nil {
 		return nil
 	}
+	source := m.ActiveProcessSourceName()
 	return func() tea.Msg {
 		line, ok := <-ch
 		if !ok {
-			return logDoneMsg{}
+			return logDoneMsg{source: source}
 		}
 		return logLineMsg(line)
 	}

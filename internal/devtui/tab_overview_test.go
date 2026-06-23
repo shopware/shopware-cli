@@ -6,8 +6,8 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestNewGeneralModel(t *testing.T) {
-	m := NewGeneralModel("docker", "http://localhost:8000", "admin", "shopware", "/tmp/project", nil, nil)
+func TestNewOverviewModel(t *testing.T) {
+	m := NewOverviewModel("docker", "http://localhost:8000", "admin", "shopware", "/tmp/project", nil, nil)
 
 	assert.Equal(t, "docker", m.envType)
 	assert.Equal(t, "http://localhost:8000", m.shopURL)
@@ -18,20 +18,20 @@ func TestNewGeneralModel(t *testing.T) {
 	assert.True(t, m.loading)
 }
 
-func TestNewGeneralModel_AdminURLTrailingSlash(t *testing.T) {
-	m := NewGeneralModel("local", "http://localhost:8000/", "", "", "/tmp/project", nil, nil)
+func TestNewOverviewModel_AdminURLTrailingSlash(t *testing.T) {
+	m := NewOverviewModel("local", "http://localhost:8000/", "", "", "/tmp/project", nil, nil)
 
 	assert.Equal(t, "http://localhost:8000/admin", m.adminURL)
 }
 
-func TestNewGeneralModel_EmptyURL(t *testing.T) {
-	m := NewGeneralModel("local", "", "", "", "/tmp/project", nil, nil)
+func TestNewOverviewModel_EmptyURL(t *testing.T) {
+	m := NewOverviewModel("local", "", "", "", "/tmp/project", nil, nil)
 
 	assert.Equal(t, "admin", m.adminURL)
 }
 
 func TestServicesLoadedMsg(t *testing.T) {
-	m := NewGeneralModel("docker", "http://localhost:8000", "", "", "/tmp/project", nil, nil)
+	m := NewOverviewModel("docker", "http://localhost:8000", "", "", "/tmp/project", nil, nil)
 
 	services := []DiscoveredService{
 		{Name: "Adminer", URL: "http://127.0.0.1:9080", Username: "root", Password: "root"},
@@ -49,7 +49,7 @@ func TestServicesLoadedMsg(t *testing.T) {
 }
 
 func TestServicesLoadedMsg_WithError(t *testing.T) {
-	m := NewGeneralModel("docker", "http://localhost:8000", "", "", "/tmp/project", nil, nil)
+	m := NewOverviewModel("docker", "http://localhost:8000", "", "", "/tmp/project", nil, nil)
 
 	updated, _ := m.Update(servicesLoadedMsg{err: assert.AnError})
 	assert.False(t, updated.loading)
@@ -78,7 +78,7 @@ func TestKnownServices(t *testing.T) {
 }
 
 func TestViewShowsCredentials(t *testing.T) {
-	m := NewGeneralModel("docker", "http://localhost:8000", "", "", "/tmp/project", nil, nil)
+	m := NewOverviewModel("docker", "http://localhost:8000", "", "", "/tmp/project", nil, nil)
 	m.loading = false
 	m.services = []DiscoveredService{
 		{Name: "Adminer", URL: "http://127.0.0.1:9080", Username: "root", Password: "root"},

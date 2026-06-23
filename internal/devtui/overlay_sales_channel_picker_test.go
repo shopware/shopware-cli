@@ -55,7 +55,7 @@ func TestSalesChannelPicker_ConfirmEmitsWatcherOpts(t *testing.T) {
 func TestModel_SalesChannelPicker_FullRoutingFlow(t *testing.T) {
 	m := Model{
 		phase:    phaseDashboard,
-		general:  NewGeneralModel("local", "http://localhost:8000", "", "", "/tmp/project", nil, nil),
+		overview: NewOverviewModel("local", "http://localhost:8000", "", "", "/tmp/project", nil, nil),
 		watchers: make(map[string]*watcherHandle),
 	}
 
@@ -94,5 +94,5 @@ func TestModel_SalesChannelPicker_FullRoutingFlow(t *testing.T) {
 
 	updated, _ = m.Update(res)
 	m = updated.(Model)
-	assert.True(t, m.general.sfWatchStarting, "sfWatchStarting must be true after the picker confirms")
+	assert.True(t, m.overview.sfWatchStarting, "sfWatchStarting must be true after the picker confirms")
 }

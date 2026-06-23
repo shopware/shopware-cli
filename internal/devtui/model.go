@@ -16,12 +16,12 @@ import (
 type activeTab int
 
 const (
-	tabGeneral activeTab = iota
+	tabOverview activeTab = iota
 	tabLogs
 	tabConfig
 )
 
-var tabNames = []string{"General", "Logs", "Config"}
+var tabNames = []string{"Overview", "Logs", "Config"}
 
 const (
 	defaultUsername = "admin"
@@ -51,7 +51,7 @@ type Options struct {
 
 type Model struct {
 	activeTab      activeTab
-	general        GeneralModel
+	overview       OverviewModel
 	logs           LogsModel
 	configTab      ConfigModel
 	width          int
@@ -113,8 +113,8 @@ func New(opts Options) Model {
 	envValues, _ := envfile.ReadValues(opts.ProjectRoot, EnvFieldKeys()...)
 
 	return Model{
-		activeTab:   tabGeneral,
-		general:     NewGeneralModel(opts.Executor.Type(), shopURL, username, password, opts.ProjectRoot, opts.Executor, opts.Config),
+		activeTab:   tabOverview,
+		overview:    NewOverviewModel(opts.Executor.Type(), shopURL, username, password, opts.ProjectRoot, opts.Executor, opts.Config),
 		logs:        NewLogsModel(opts.ProjectRoot, isDocker),
 		configTab:   NewConfigModel(opts.Config, envValues),
 		dockerMode:  isDocker,
@@ -160,7 +160,7 @@ func (m *Model) shutdown() {
 
 func (m *Model) startDashboard() tea.Cmd {
 	return tea.Batch(
-		m.general.Init(),
+		m.overview.Init(),
 		m.logs.StartStreaming(),
 	)
 }
@@ -170,7 +170,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
-		m.general.SetSize(m.width, m.height-4)
+		m.overview.SetSize(m.width, m.height-4)
 		m.logs.SetSize(m.width, m.height-4)
 		m.configTab.SetSize(m.width, m.height-4)
 		return m, nil
@@ -194,43 +194,54 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.handleConfigRestartDone(msg)
 
 	case watcherStartedMsg:
+		m.watchers[msg.name] = msg.handle
+		return m, m.logs.AddStreamingSource(msg.name, msg.lines)
+
+	case watcherRunningMsg:
+		_, exists := m.watchers[msg.name]
 		switch msg.name {
 		case watcherAdmin:
-			m.general.adminWatchStarting = false
-			m.general.adminWatchRunning = true
+			m.overview.adminWatchStarting = false
+			if msg.err == nil && exists {
+				m.overview.adminWatchRunning = true
+			}
 		case watcherStorefront:
-			m.general.sfWatchStarting = false
-			m.general.sfWatchRunning = true
+			m.overview.sfWatchStarting = false
+			if msg.err == nil && exists {
+				m.overview.sfWatchRunning = true
+			}
 		}
-		m.watchers[msg.name] = msg.handle
-		m.activeTab = tabLogs
-		return m, m.logs.AddStreamingSource(msg.name, msg.lines)
+		return m, nil
+
+	case stopWatcherRequestMsg:
+		return m, m.stopWatcher(msg.name)
+
+	case startStorefrontWatchRequestMsg:
+		return m.openSalesChannelPicker()
 
 	case watcherStoppedMsg:
 		switch msg.name {
 		case watcherAdmin:
-			m.general.adminWatchStarting = false
-			m.general.adminWatchRunning = false
+			m.overview.adminWatchStarting = false
+			m.overview.adminWatchRunning = false
 		case watcherStorefront:
-			m.general.sfWatchStarting = false
-			m.general.sfWatchRunning = false
+			m.overview.sfWatchStarting = false
+			m.overview.sfWatchRunning = false
 		}
 		delete(m.watchers, msg.name)
 		if msg.err != nil {
 			m.logs.AppendErrorLine(msg.name + " failed to start: " + msg.err.Error())
-			m.activeTab = tabLogs
 		}
 		return m, nil
 
 	case logDoneMsg:
-		name := m.logs.ActiveProcessSourceName()
-		switch name {
+		switch msg.source {
 		case watcherAdmin:
-			m.general.adminWatchRunning = false
+			m.overview.adminWatchRunning = false
 		case watcherStorefront:
-			m.general.sfWatchRunning = false
+			m.overview.sfWatchRunning = false
 		}
-		delete(m.watchers, name)
+		delete(m.watchers, msg.source)
 		return m.updateChildren(msg)
 
 	case paletteResultMsg:
@@ -252,6 +263,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.updateKeyPress(msg)
 	}
 
+	return m.updateFallback(msg)
+}
+
+// updateFallback handles non-key messages that aren't matched by Update's
+// message-type switch, routing them by modal state and lifecycle phase.
+func (m Model) updateFallback(msg tea.Msg) (tea.Model, tea.Cmd) {
 	if m.modal != nil {
 		next, cmd := m.modal.Update(msg)
 		m.modal = next
@@ -312,8 +329,8 @@ func (m Model) handleSalesChannelPickerResult(msg salesChannelPickerResultMsg) (
 	if msg.Cancelled {
 		return m, nil
 	}
-	m.general.sfWatchStarting = true
-	return m, m.general.startStorefrontWatch(msg.Opts)
+	m.overview.sfWatchStarting = true
+	return m, m.overview.startStorefrontWatch(msg.Opts)
 }
 
 func (m Model) handleStopConfirmResult(msg stopConfirmResultMsg) (tea.Model, tea.Cmd) {
@@ -330,10 +347,32 @@ func (m Model) handleStopConfirmResult(msg stopConfirmResultMsg) (tea.Model, tea
 }
 
 func (m Model) updateChildren(msg tea.Msg) (tea.Model, tea.Cmd) {
+	// Key presses must only reach the active tab, otherwise a key meant for one
+	// tab (e.g. Enter to pick a log source) also triggers the hidden tabs'
+	// handlers. Non-key messages are broadcast so background updates reach every
+	// child regardless of which tab is focused.
+	if _, isKey := msg.(tea.KeyPressMsg); isKey {
+		switch m.activeTab {
+		case tabOverview:
+			newOverview, cmd := m.overview.Update(msg)
+			m.overview = newOverview
+			return m, cmd
+		case tabLogs:
+			newLogs, cmd := m.logs.Update(msg)
+			m.logs = newLogs
+			return m, cmd
+		case tabConfig:
+			newConfig, cmd := m.configTab.Update(msg)
+			m.configTab = newConfig
+			return m, cmd
+		}
+		return m, nil
+	}
+
 	var cmds []tea.Cmd
 
-	newGeneral, cmd := m.general.Update(msg)
-	m.general = newGeneral
+	newOverview, cmd := m.overview.Update(msg)
+	m.overview = newOverview
 	if cmd != nil {
 		cmds = append(cmds, cmd)
 	}

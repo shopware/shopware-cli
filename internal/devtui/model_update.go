@@ -78,7 +78,7 @@ func (m Model) updateDashboardKeys(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.shutdown()
 		return m, tea.Quit
 	case key1:
-		m.activeTab = tabGeneral
+		m.activeTab = tabOverview
 		return m, nil
 	case key2:
 		m.activeTab = tabLogs
@@ -150,9 +150,9 @@ func (m Model) updateConfigTab(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 func (m Model) executeCommand(id string) (tea.Model, tea.Cmd) {
 	switch id {
 	case "open-shop":
-		return m, openInBrowser(m.general.shopURL)
+		return m, openInBrowser(m.overview.shopURL)
 	case "open-admin":
-		return m, openInBrowser(m.general.adminURL)
+		return m, openInBrowser(m.overview.adminURL)
 	case "cache-clear":
 		return m, m.runCacheClear()
 	case "admin-build":
@@ -160,30 +160,26 @@ func (m Model) executeCommand(id string) (tea.Model, tea.Cmd) {
 	case "sf-build":
 		return m, m.runStorefrontBuild()
 	case "admin-watch-start":
-		if !m.general.adminWatchRunning && !m.general.adminWatchStarting {
-			m.general.adminWatchStarting = true
-			return m, m.general.startAdminWatch()
+		if !m.overview.adminWatchRunning && !m.overview.adminWatchStarting {
+			m.overview.adminWatchStarting = true
+			return m, m.overview.startAdminWatch()
 		}
 	case "admin-watch-stop":
-		if m.general.adminWatchRunning {
-			m.general.adminWatchRunning = false
+		if m.overview.adminWatchRunning {
+			m.overview.adminWatchRunning = false
 			return m, m.stopWatcher(watcherAdmin)
 		}
 	case "sf-watch-start":
-		if !m.general.sfWatchRunning && !m.general.sfWatchStarting {
-			picker := newSalesChannelPicker(m.executor)
-			m.modal = picker
-			return m, picker.Init()
-		}
+		return m.openSalesChannelPicker()
 	case "sf-watch-stop":
-		if m.general.sfWatchRunning {
-			m.general.sfWatchRunning = false
+		if m.overview.sfWatchRunning {
+			m.overview.sfWatchRunning = false
 			return m, m.stopWatcher(watcherStorefront)
 		}
 	case "tab-logs":
 		m.activeTab = tabLogs
-	case "tab-general":
-		m.activeTab = tabGeneral
+	case "tab-overview":
+		m.activeTab = tabOverview
 	case "tab-config":
 		m.activeTab = tabConfig
 	case "quit":
@@ -195,6 +191,18 @@ func (m Model) executeCommand(id string) (tea.Model, tea.Cmd) {
 		return m, tea.Quit
 	}
 	return m, nil
+}
+
+// openSalesChannelPicker opens the sales-channel picker modal so the user can
+// resolve a storefront's theme/domain before the watcher starts. Used by both
+// the command palette and the Overview tab's storefront activation.
+func (m Model) openSalesChannelPicker() (tea.Model, tea.Cmd) {
+	if m.overview.sfWatchRunning || m.overview.sfWatchStarting {
+		return m, nil
+	}
+	picker := newSalesChannelPicker(m.executor)
+	m.modal = picker
+	return m, picker.Init()
 }
 
 func (m *Model) stopWatcher(name string) tea.Cmd {
@@ -322,7 +330,7 @@ func (m Model) startAfterSetupGuide() (tea.Model, tea.Cmd) {
 		username = m.envConfig.AdminApi.Username
 		password = m.envConfig.AdminApi.Password
 	}
-	m.general = NewGeneralModel(m.executor.Type(), shopURL, username, password, m.projectRoot, m.executor, m.config)
+	m.overview = NewOverviewModel(m.executor.Type(), shopURL, username, password, m.projectRoot, m.executor, m.config)
 	envValues, _ := envfile.ReadValues(m.projectRoot, EnvFieldKeys()...)
 	m.configTab = NewConfigModel(m.config, envValues)
 
