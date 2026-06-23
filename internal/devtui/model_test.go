@@ -578,3 +578,58 @@ func TestSaveSetupGuide_FailedWriteSetsErr(t *testing.T) {
 	assert.Error(t, um.setupGuide.err)
 	assert.Equal(t, setupStepDone, um.setupGuide.step)
 }
+
+// TestUpdateChildren_KeyOnlyReachesActiveTab guards against keypresses meant for
+// one tab leaking into the hidden tabs' handlers. With the Logs tab active,
+// pressing Enter must not run the Overview tab's activate() logic.
+func TestUpdateChildren_KeyOnlyReachesActiveTab(t *testing.T) {
+	m := newTestModel()
+	m.activeTab = tabLogs
+	// Overview cursor sits on the Admin watcher (0); an Enter leaking through
+	// would flip adminWatchStarting.
+	m.overview.cursor = 0
+
+	updated, _ := m.updateChildren(keySpecial(tea.KeyEnter))
+	um := updated.(Model)
+
+	assert.False(t, um.overview.adminWatchStarting, "Enter on the Logs tab must not activate the Overview watcher")
+}
+
+// TestUpdateChildren_KeyReachesActiveOverview confirms the active tab still
+// receives its keys after the routing change.
+func TestUpdateChildren_KeyReachesActiveOverview(t *testing.T) {
+	m := newTestModel()
+	m.activeTab = tabOverview
+	m.overview.cursor = 0 // Admin watcher
+
+	updated, cmd := m.updateChildren(keySpecial(tea.KeyEnter))
+	um := updated.(Model)
+
+	assert.True(t, um.overview.adminWatchStarting, "Enter on the Overview tab must activate the Admin watcher")
+	assert.NotNil(t, cmd)
+}
+
+// TestStartStorefrontWatchRequest_OpensPicker verifies the Overview tab delegates
+// storefront-watch start to the parent so the sales-channel picker resolves the
+// theme/domain, instead of starting with empty options.
+func TestStartStorefrontWatchRequest_OpensPicker(t *testing.T) {
+	m := newTestModel()
+	m.activeTab = tabOverview
+	m.executor = &executor.LocalExecutor{}
+	m.overview.cursor = 1 // Storefront watcher
+
+	// Enter on the storefront row should emit startStorefrontWatchRequestMsg.
+	updated, cmd := m.updateChildren(keySpecial(tea.KeyEnter))
+	m = updated.(Model)
+	if assert.NotNil(t, cmd) {
+		_, ok := cmd().(startStorefrontWatchRequestMsg)
+		assert.True(t, ok, "storefront activation must request the picker, not start directly")
+	}
+	assert.False(t, m.overview.sfWatchStarting, "watcher must not be marked starting before the picker resolves")
+
+	// The parent handling that request opens the picker modal.
+	updated, _ = m.Update(startStorefrontWatchRequestMsg{})
+	m = updated.(Model)
+	_, ok := m.modal.(*salesChannelPicker)
+	assert.True(t, ok, "parent must open the sales-channel picker on the request")
+}

@@ -192,6 +192,11 @@ type browserOpenedMsg struct{}
 // call stopWatcher (which needs access to the logs model and watcher map).
 type stopWatcherRequestMsg struct{ name string }
 
+// startStorefrontWatchRequestMsg flows from OverviewModel to Model so the parent
+// can open the sales-channel picker (which needs the executor) before starting
+// the storefront watcher, matching the command-palette flow.
+type startStorefrontWatchRequestMsg struct{}
+
 func (m OverviewModel) Update(msg tea.Msg) (OverviewModel, tea.Cmd) {
 	switch msg := msg.(type) {
 	case servicesLoadedMsg:
@@ -247,8 +252,7 @@ func (m *OverviewModel) activate() (OverviewModel, tea.Cmd) {
 			return *m, func() tea.Msg { return stopWatcherRequestMsg{name: watcherStorefront} }
 		}
 		if !m.sfWatchStarting {
-			m.sfWatchStarting = true
-			return *m, m.startStorefrontWatch(extension.StorefrontWatcherOptions{})
+			return *m, func() tea.Msg { return startStorefrontWatchRequestMsg{} }
 		}
 	default: // Service — open URL
 		svcIdx := m.cursor - 2

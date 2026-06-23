@@ -216,6 +216,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case stopWatcherRequestMsg:
 		return m, m.stopWatcher(msg.name)
 
+	case startStorefrontWatchRequestMsg:
+		return m.openSalesChannelPicker()
+
 	case watcherStoppedMsg:
 		switch msg.name {
 		case watcherAdmin:
@@ -344,6 +347,28 @@ func (m Model) handleStopConfirmResult(msg stopConfirmResultMsg) (tea.Model, tea
 }
 
 func (m Model) updateChildren(msg tea.Msg) (tea.Model, tea.Cmd) {
+	// Key presses must only reach the active tab, otherwise a key meant for one
+	// tab (e.g. Enter to pick a log source) also triggers the hidden tabs'
+	// handlers. Non-key messages are broadcast so background updates reach every
+	// child regardless of which tab is focused.
+	if _, isKey := msg.(tea.KeyPressMsg); isKey {
+		switch m.activeTab {
+		case tabOverview:
+			newOverview, cmd := m.overview.Update(msg)
+			m.overview = newOverview
+			return m, cmd
+		case tabLogs:
+			newLogs, cmd := m.logs.Update(msg)
+			m.logs = newLogs
+			return m, cmd
+		case tabConfig:
+			newConfig, cmd := m.configTab.Update(msg)
+			m.configTab = newConfig
+			return m, cmd
+		}
+		return m, nil
+	}
+
 	var cmds []tea.Cmd
 
 	newOverview, cmd := m.overview.Update(msg)

@@ -170,11 +170,7 @@ func (m Model) executeCommand(id string) (tea.Model, tea.Cmd) {
 			return m, m.stopWatcher(watcherAdmin)
 		}
 	case "sf-watch-start":
-		if !m.overview.sfWatchRunning && !m.overview.sfWatchStarting {
-			picker := newSalesChannelPicker(m.executor)
-			m.modal = picker
-			return m, picker.Init()
-		}
+		return m.openSalesChannelPicker()
 	case "sf-watch-stop":
 		if m.overview.sfWatchRunning {
 			m.overview.sfWatchRunning = false
@@ -195,6 +191,18 @@ func (m Model) executeCommand(id string) (tea.Model, tea.Cmd) {
 		return m, tea.Quit
 	}
 	return m, nil
+}
+
+// openSalesChannelPicker opens the sales-channel picker modal so the user can
+// resolve a storefront's theme/domain before the watcher starts. Used by both
+// the command palette and the Overview tab's storefront activation.
+func (m Model) openSalesChannelPicker() (tea.Model, tea.Cmd) {
+	if m.overview.sfWatchRunning || m.overview.sfWatchStarting {
+		return m, nil
+	}
+	picker := newSalesChannelPicker(m.executor)
+	m.modal = picker
+	return m, picker.Init()
 }
 
 func (m *Model) stopWatcher(name string) tea.Cmd {
