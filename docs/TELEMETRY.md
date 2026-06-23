@@ -165,12 +165,3 @@ export DO_NOT_TRACK=1
 ```
 
 When set, the `Track` function returns immediately and **no event is ever sent**.
-
-## Where this lives in the code
-
-- Core implementation: `internal/tracking/tracking.go`
-- Tests (including ID derivation behavior): `internal/tracking/tracking_test.go`
-- Tracking call sites:
-  - `cmd/root.go` — `shopware_cli.command`
-  - `cmd/project/project_create.go` — `shopware_cli.project.create`
-  - `cmd/project/project_upgrade_check.go` — `shopware_cli.project.upgrade_check`
