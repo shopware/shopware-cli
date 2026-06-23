@@ -37,15 +37,14 @@ var (
 	sidebarStyle = lipgloss.NewStyle().
 			Border(lipgloss.RoundedBorder()).
 			BorderForeground(tui.BorderColor).
-			Padding(1, 1)
+			Padding(0, 1)
 
 	sidebarItemStyle = lipgloss.NewStyle().
 				Foreground(tui.MutedColor).
 				Padding(0, 1)
 
 	selectedSidebarItemStyle = lipgloss.NewStyle().
-					Foreground(tui.TextColor).
-					Background(tui.SubtleBgColor).
+					Foreground(tui.BrandColor).
 					Bold(true).
 					Padding(0, 1)
 
@@ -54,8 +53,7 @@ var (
 				Padding(0, 1)
 
 	activeSelectedSidebarItemStyle = lipgloss.NewStyle().
-					Foreground(tui.TextColor).
-					Background(tui.SelectedBgColor).
+					Foreground(tui.BrandColor).
 					Bold(true).
 					Padding(0, 1)
 

@@ -81,7 +81,7 @@ func (m Model) updateDashboardKeys(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.activeTab = tabOverview
 		return m, nil
 	case key2:
-		m.activeTab = tabLogs
+		m.activeTab = tabInstance
 		return m, nil
 	case key3:
 		m.activeTab = tabConfig
@@ -176,8 +176,8 @@ func (m Model) executeCommand(id string) (tea.Model, tea.Cmd) {
 			m.overview.sfWatchRunning = false
 			return m, m.stopWatcher(watcherStorefront)
 		}
-	case "tab-logs":
-		m.activeTab = tabLogs
+	case "tab-instance":
+		m.activeTab = tabInstance
 	case "tab-overview":
 		m.activeTab = tabOverview
 	case "tab-config":
@@ -206,7 +206,7 @@ func (m Model) openSalesChannelPicker() (tea.Model, tea.Cmd) {
 }
 
 func (m *Model) stopWatcher(name string) tea.Cmd {
-	m.logs.StopStreaming()
+	m.instance.StopStreaming()
 
 	h := m.watchers[name]
 	delete(m.watchers, name)

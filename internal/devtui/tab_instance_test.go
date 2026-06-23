@@ -9,8 +9,8 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestNewLogsModel(t *testing.T) {
-	m := NewLogsModel("/tmp/project", true)
+func TestNewInstanceModel(t *testing.T) {
+	m := NewInstanceModel("/tmp/project", true)
 
 	assert.Equal(t, "/tmp/project", m.projectRoot)
 	assert.True(t, m.dockerMode)
@@ -21,8 +21,8 @@ func TestNewLogsModel(t *testing.T) {
 	assert.Empty(t, m.lines)
 }
 
-func TestLogsModel_LogLineMsg_AppendsLine(t *testing.T) {
-	m := NewLogsModel("/tmp", false)
+func TestInstanceModel_LogLineMsg_AppendsLine(t *testing.T) {
+	m := NewInstanceModel("/tmp", false)
 	m.SetSize(120, 40)
 
 	updated, _ := m.Update(logLineMsg("first line"))
@@ -32,8 +32,8 @@ func TestLogsModel_LogLineMsg_AppendsLine(t *testing.T) {
 	assert.Equal(t, []string{"first line", "second line"}, updated.lines)
 }
 
-func TestLogsModel_LogLineMsg_NoCap(t *testing.T) {
-	m := NewLogsModel("/tmp", false)
+func TestInstanceModel_LogLineMsg_NoCap(t *testing.T) {
+	m := NewInstanceModel("/tmp", false)
 	m.SetSize(120, 40)
 
 	const count = 1500
@@ -42,11 +42,11 @@ func TestLogsModel_LogLineMsg_NoCap(t *testing.T) {
 		current, _ = current.Update(logLineMsg("line"))
 	}
 
-	assert.Len(t, current.lines, count, "LogsModel does not currently cap line buffer")
+	assert.Len(t, current.lines, count, "InstanceModel does not currently cap line buffer")
 }
 
-func TestLogsModel_LogLineMsg_FollowAutoScrolls(t *testing.T) {
-	m := NewLogsModel("/tmp", false)
+func TestInstanceModel_LogLineMsg_FollowAutoScrolls(t *testing.T) {
+	m := NewInstanceModel("/tmp", false)
 	m.SetSize(120, 10)
 
 	current := m
@@ -58,8 +58,8 @@ func TestLogsModel_LogLineMsg_FollowAutoScrolls(t *testing.T) {
 	assert.True(t, current.viewport.AtBottom(), "follow mode should keep viewport at the bottom")
 }
 
-func TestLogsModel_LogErrMsg_StylesErrorLine(t *testing.T) {
-	m := NewLogsModel("/tmp", false)
+func TestInstanceModel_LogErrMsg_StylesErrorLine(t *testing.T) {
+	m := NewInstanceModel("/tmp", false)
 	m.SetSize(120, 40)
 
 	updated, cmd := m.Update(logErrMsg{err: errors.New("boom")})
@@ -71,8 +71,8 @@ func TestLogsModel_LogErrMsg_StylesErrorLine(t *testing.T) {
 	assert.Equal(t, expected, updated.lines[0])
 }
 
-func TestLogsModel_LogDoneMsg_AppendsTerminator(t *testing.T) {
-	m := NewLogsModel("/tmp", false)
+func TestInstanceModel_LogDoneMsg_AppendsTerminator(t *testing.T) {
+	m := NewInstanceModel("/tmp", false)
 	m.SetSize(120, 40)
 	m.sources = []logSource{{name: "test"}}
 	m.active = 0
@@ -83,8 +83,8 @@ func TestLogsModel_LogDoneMsg_AppendsTerminator(t *testing.T) {
 	assert.Contains(t, updated.lines[0], "log stream ended")
 }
 
-func TestLogsModel_FollowToggle(t *testing.T) {
-	m := NewLogsModel("/tmp", false)
+func TestInstanceModel_FollowToggle(t *testing.T) {
+	m := NewInstanceModel("/tmp", false)
 	m.SetSize(120, 40)
 	assert.True(t, m.follow)
 
@@ -97,8 +97,8 @@ func TestLogsModel_FollowToggle(t *testing.T) {
 	assert.True(t, updated.follow)
 }
 
-func TestLogsModel_SourcesLoadedMsg(t *testing.T) {
-	m := NewLogsModel("/tmp", false)
+func TestInstanceModel_SourcesLoadedMsg(t *testing.T) {
+	m := NewInstanceModel("/tmp", false)
 
 	sources := []logSource{
 		{name: "web"},
@@ -111,16 +111,16 @@ func TestLogsModel_SourcesLoadedMsg(t *testing.T) {
 	assert.Equal(t, 0, updated.cursor)
 }
 
-func TestLogsModel_SourcesLoadedMsg_EmptyKeepsInactive(t *testing.T) {
-	m := NewLogsModel("/tmp", false)
+func TestInstanceModel_SourcesLoadedMsg_EmptyKeepsInactive(t *testing.T) {
+	m := NewInstanceModel("/tmp", false)
 
 	updated, cmd := m.Update(logSourcesLoadedMsg{sources: nil})
 	assert.Nil(t, cmd)
 	assert.Equal(t, -1, updated.active)
 }
 
-func TestLogsModel_CursorNavigation(t *testing.T) {
-	m := NewLogsModel("/tmp", false)
+func TestInstanceModel_CursorNavigation(t *testing.T) {
+	m := NewInstanceModel("/tmp", false)
 	m.sources = []logSource{{name: "a"}, {name: "b"}, {name: "c"}}
 	m.cursor = 0
 
@@ -144,8 +144,8 @@ func TestLogsModel_CursorNavigation(t *testing.T) {
 	assert.Equal(t, 0, updated.cursor, "cursor should clamp at zero")
 }
 
-func TestLogsModel_EnterResetsLinesAndFollow(t *testing.T) {
-	m := NewLogsModel("/tmp", false)
+func TestInstanceModel_EnterResetsLinesAndFollow(t *testing.T) {
+	m := NewInstanceModel("/tmp", false)
 	m.SetSize(120, 40)
 	m.sources = []logSource{
 		{name: "a", filePath: "/nonexistent/a.log"},
@@ -166,8 +166,8 @@ func TestLogsModel_EnterResetsLinesAndFollow(t *testing.T) {
 	updated.StopStreaming()
 }
 
-func TestLogsModel_EnterNoChangeWhenCursorEqualsActive(t *testing.T) {
-	m := NewLogsModel("/tmp", false)
+func TestInstanceModel_EnterNoChangeWhenCursorEqualsActive(t *testing.T) {
+	m := NewInstanceModel("/tmp", false)
 	m.sources = []logSource{{name: "a"}}
 	m.active = 0
 	m.cursor = 0
@@ -179,8 +179,8 @@ func TestLogsModel_EnterNoChangeWhenCursorEqualsActive(t *testing.T) {
 	assert.Equal(t, []string{"keep"}, updated.lines)
 }
 
-func TestLogsModel_StopStreamingClearsState(t *testing.T) {
-	m := NewLogsModel("/tmp", false)
+func TestInstanceModel_StopStreamingClearsState(t *testing.T) {
+	m := NewInstanceModel("/tmp", false)
 	ch := make(chan string, 1)
 	m.logChan = ch
 	cancelCalled := false
@@ -196,15 +196,15 @@ func TestLogsModel_StopStreamingClearsState(t *testing.T) {
 	assert.Nil(t, m.activeProcess)
 }
 
-func TestLogsModel_StopStreaming_NoState(t *testing.T) {
-	m := NewLogsModel("/tmp", false)
+func TestInstanceModel_StopStreaming_NoState(t *testing.T) {
+	m := NewInstanceModel("/tmp", false)
 	assert.NotPanics(t, func() {
 		m.StopStreaming()
 	})
 }
 
-func TestLogsModel_ActiveProcessSourceName(t *testing.T) {
-	m := NewLogsModel("/tmp", false)
+func TestInstanceModel_ActiveProcessSourceName(t *testing.T) {
+	m := NewInstanceModel("/tmp", false)
 	assert.Equal(t, "", m.ActiveProcessSourceName())
 
 	m.sources = []logSource{{name: "file-only", filePath: "/tmp/x.log"}}
@@ -213,8 +213,8 @@ func TestLogsModel_ActiveProcessSourceName(t *testing.T) {
 		"sources without a Process should not be reported as process sources")
 }
 
-func TestLogsModel_View_FollowBadgeOn(t *testing.T) {
-	m := NewLogsModel("/tmp", false)
+func TestInstanceModel_View_FollowBadgeOn(t *testing.T) {
+	m := NewInstanceModel("/tmp", false)
 	m.SetSize(120, 40)
 	m.follow = true
 
@@ -226,8 +226,8 @@ func TestLogsModel_View_FollowBadgeOn(t *testing.T) {
 	assert.NotContains(t, view, "FOLLOW OFF")
 }
 
-func TestLogsModel_View_FollowBadgeOff(t *testing.T) {
-	m := NewLogsModel("/tmp", false)
+func TestInstanceModel_View_FollowBadgeOff(t *testing.T) {
+	m := NewInstanceModel("/tmp", false)
 	m.SetSize(120, 40)
 	m.follow = false
 
@@ -236,16 +236,16 @@ func TestLogsModel_View_FollowBadgeOff(t *testing.T) {
 	assert.NotContains(t, view, "FOLLOW ON")
 }
 
-func TestLogsModel_View_NoSourceSelected(t *testing.T) {
-	m := NewLogsModel("/tmp", false)
+func TestInstanceModel_View_NoSourceSelected(t *testing.T) {
+	m := NewInstanceModel("/tmp", false)
 	m.SetSize(120, 40)
 
 	view := m.View()
 	assert.Contains(t, view, "No source selected")
 }
 
-func TestLogsModel_View_ShowsActiveSourceAndLive(t *testing.T) {
-	m := NewLogsModel("/tmp", false)
+func TestInstanceModel_View_ShowsActiveSourceAndLive(t *testing.T) {
+	m := NewInstanceModel("/tmp", false)
 	m.SetSize(120, 40)
 	m.sources = []logSource{{name: "varnish"}, {name: "mysql"}}
 	m.active = 0
@@ -257,7 +257,7 @@ func TestLogsModel_View_ShowsActiveSourceAndLive(t *testing.T) {
 	assert.Contains(t, view, "mysql")
 }
 
-func TestLogsModel_View_RendersAtVariousSizes(t *testing.T) {
+func TestInstanceModel_View_RendersAtVariousSizes(t *testing.T) {
 	sizes := []struct {
 		w, h int
 	}{
@@ -268,7 +268,7 @@ func TestLogsModel_View_RendersAtVariousSizes(t *testing.T) {
 	}
 
 	for _, sz := range sizes {
-		m := NewLogsModel("/tmp", false)
+		m := NewInstanceModel("/tmp", false)
 		m.SetSize(sz.w, sz.h)
 		assert.NotPanics(t, func() {
 			_ = m.View()
@@ -276,16 +276,16 @@ func TestLogsModel_View_RendersAtVariousSizes(t *testing.T) {
 	}
 }
 
-func TestLogsModel_View_NoSourcesShowsHelp(t *testing.T) {
-	m := NewLogsModel("/tmp", false)
+func TestInstanceModel_View_NoSourcesShowsHelp(t *testing.T) {
+	m := NewInstanceModel("/tmp", false)
 	m.SetSize(120, 40)
 
 	view := m.View()
-	assert.Contains(t, view, "No log sources found")
+	assert.Contains(t, view, "No sources found")
 }
 
-func TestLogsModel_LogLineMsg_RendersInViewport(t *testing.T) {
-	m := NewLogsModel("/tmp", false)
+func TestInstanceModel_LogLineMsg_RendersInViewport(t *testing.T) {
+	m := NewInstanceModel("/tmp", false)
 	m.SetSize(120, 40)
 
 	updated, _ := m.Update(logLineMsg("hello world"))
@@ -294,7 +294,7 @@ func TestLogsModel_LogLineMsg_RendersInViewport(t *testing.T) {
 		"viewport content should include appended log line, got %q", content)
 }
 
-func TestLogsModel_Init(t *testing.T) {
-	m := NewLogsModel("/tmp", false)
+func TestInstanceModel_Init(t *testing.T) {
+	m := NewInstanceModel("/tmp", false)
 	assert.Nil(t, m.Init())
 }

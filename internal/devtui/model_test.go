@@ -19,7 +19,7 @@ func newTestModel() Model {
 	return Model{
 		phase:       phaseDashboard,
 		overview:    NewOverviewModel("local", "http://localhost:8000", "", "", "/tmp/project", nil, nil),
-		logs:        NewLogsModel("/tmp/project", false),
+		instance:    NewInstanceModel("/tmp/project", false),
 		configTab:   NewConfigModel(nil, nil),
 		watchers:    make(map[string]*watcherHandle),
 		projectRoot: "/tmp/project",
@@ -219,7 +219,7 @@ func TestUpdateDashboardKeys_DigitSwitchesTabs(t *testing.T) {
 	m := newTestModel()
 
 	updated, _ := m.Update(keyRune('2'))
-	assert.Equal(t, tabLogs, updated.(Model).activeTab)
+	assert.Equal(t, tabInstance, updated.(Model).activeTab)
 
 	updated, _ = updated.(Model).Update(keyRune('3'))
 	assert.Equal(t, tabConfig, updated.(Model).activeTab)
@@ -233,7 +233,7 @@ func TestUpdateDashboardKeys_TabCyclesForward(t *testing.T) {
 	assert.Equal(t, tabOverview, m.activeTab)
 
 	updated, _ := m.Update(keySpecial(tea.KeyTab))
-	assert.Equal(t, tabLogs, updated.(Model).activeTab)
+	assert.Equal(t, tabInstance, updated.(Model).activeTab)
 
 	updated, _ = updated.(Model).Update(keySpecial(tea.KeyTab))
 	assert.Equal(t, tabConfig, updated.(Model).activeTab)
@@ -249,7 +249,7 @@ func TestUpdateDashboardKeys_ShiftTabCyclesBackward(t *testing.T) {
 	assert.Equal(t, tabConfig, updated.(Model).activeTab)
 
 	updated, _ = updated.(Model).Update(keyShiftTabMsg())
-	assert.Equal(t, tabLogs, updated.(Model).activeTab)
+	assert.Equal(t, tabInstance, updated.(Model).activeTab)
 }
 
 func TestUpdateDashboardKeys_QuitWhenNotDockerQuits(t *testing.T) {
@@ -349,8 +349,8 @@ func TestUpdateConfigTab_EnterOnPickerFieldOpensModal(t *testing.T) {
 func TestExecuteCommand_TabRouting(t *testing.T) {
 	m := newTestModel()
 
-	updated, _ := m.executeCommand("tab-logs")
-	assert.Equal(t, tabLogs, updated.(Model).activeTab)
+	updated, _ := m.executeCommand("tab-instance")
+	assert.Equal(t, tabInstance, updated.(Model).activeTab)
 
 	updated, _ = updated.(Model).executeCommand("tab-config")
 	assert.Equal(t, tabConfig, updated.(Model).activeTab)
@@ -584,7 +584,7 @@ func TestSaveSetupGuide_FailedWriteSetsErr(t *testing.T) {
 // pressing Enter must not run the Overview tab's activate() logic.
 func TestUpdateChildren_KeyOnlyReachesActiveTab(t *testing.T) {
 	m := newTestModel()
-	m.activeTab = tabLogs
+	m.activeTab = tabInstance
 	// Overview cursor sits on the Admin watcher (0); an Enter leaking through
 	// would flip adminWatchStarting.
 	m.overview.cursor = 0

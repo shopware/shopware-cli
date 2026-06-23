@@ -45,7 +45,7 @@ func (m Model) renderDashboard() string {
 
 	padV := 1
 	padH := 3
-	if m.activeTab == tabLogs {
+	if m.activeTab == tabInstance {
 		padV = 0
 		padH = 1
 	}
@@ -57,9 +57,9 @@ func (m Model) renderDashboard() string {
 	switch m.activeTab {
 	case tabOverview:
 		content = m.overview.View(m.width, boxHeight)
-	case tabLogs:
-		m.logs.SetSize(contentW, contentH)
-		content = m.logs.View()
+	case tabInstance:
+		m.instance.SetSize(contentW, contentH)
+		content = m.instance.View()
 	case tabConfig:
 		content = m.configTab.View(m.width, boxHeight)
 	}
@@ -76,12 +76,12 @@ func (m Model) renderDashboard() string {
 }
 
 func (m Model) renderDashboardFooter() string {
-	if m.activeTab == tabLogs {
-		followState := "Follow"
+	if m.activeTab == tabInstance {
 		shortcuts := []tui.Shortcut{
-			{Key: "↑/↓", Label: "Move cursor"},
-			{Key: "enter", Label: "Open source"},
-			{Key: "f", Label: followState},
+			{Key: "↑/↓", Label: "Navigate"},
+			{Key: "enter", Label: "Select source"},
+			{Key: "pgup/pgdn", Label: "Scroll"},
+			{Key: "f", Label: "Follow"},
 			{Key: "tab", Label: "Next tab"},
 			{Key: "ctrl+c", Label: "Exit"},
 		}

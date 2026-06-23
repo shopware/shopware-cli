@@ -17,11 +17,11 @@ type activeTab int
 
 const (
 	tabOverview activeTab = iota
-	tabLogs
+	tabInstance
 	tabConfig
 )
 
-var tabNames = []string{"Overview", "Logs", "Config"}
+var tabNames = []string{"Overview", "Instance", "Config"}
 
 const (
 	defaultUsername = "admin"
@@ -52,7 +52,7 @@ type Options struct {
 type Model struct {
 	activeTab      activeTab
 	overview       OverviewModel
-	logs           LogsModel
+	instance       InstanceModel
 	configTab      ConfigModel
 	width          int
 	height         int
@@ -115,7 +115,7 @@ func New(opts Options) Model {
 	return Model{
 		activeTab:   tabOverview,
 		overview:    NewOverviewModel(opts.Executor.Type(), shopURL, username, password, opts.ProjectRoot, opts.Executor, opts.Config),
-		logs:        NewLogsModel(opts.ProjectRoot, isDocker),
+		instance:    NewInstanceModel(opts.ProjectRoot, isDocker),
 		configTab:   NewConfigModel(opts.Config, envValues),
 		dockerMode:  isDocker,
 		projectRoot: opts.ProjectRoot,
@@ -147,7 +147,7 @@ func (m Model) Init() tea.Cmd {
 }
 
 func (m *Model) shutdown() {
-	m.logs.StopStreaming()
+	m.instance.StopStreaming()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
@@ -161,7 +161,7 @@ func (m *Model) shutdown() {
 func (m *Model) startDashboard() tea.Cmd {
 	return tea.Batch(
 		m.overview.Init(),
-		m.logs.StartStreaming(),
+		m.instance.StartStreaming(),
 	)
 }
 
@@ -171,7 +171,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.width = msg.Width
 		m.height = msg.Height
 		m.overview.SetSize(m.width, m.height-4)
-		m.logs.SetSize(m.width, m.height-4)
+		m.instance.SetSize(m.width, m.height-4)
 		m.configTab.SetSize(m.width, m.height-4)
 		return m, nil
 
@@ -195,7 +195,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case watcherStartedMsg:
 		m.watchers[msg.name] = msg.handle
-		return m, m.logs.AddStreamingSource(msg.name, msg.lines)
+		return m, m.instance.AddStreamingSource(msg.name, msg.lines)
 
 	case watcherRunningMsg:
 		_, exists := m.watchers[msg.name]
@@ -230,7 +230,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		delete(m.watchers, msg.name)
 		if msg.err != nil {
-			m.logs.AppendErrorLine(msg.name + " failed to start: " + msg.err.Error())
+			m.instance.AppendErrorLine(msg.name + " failed to start: " + msg.err.Error())
 		}
 		return m, nil
 
@@ -357,9 +357,9 @@ func (m Model) updateChildren(msg tea.Msg) (tea.Model, tea.Cmd) {
 			newOverview, cmd := m.overview.Update(msg)
 			m.overview = newOverview
 			return m, cmd
-		case tabLogs:
-			newLogs, cmd := m.logs.Update(msg)
-			m.logs = newLogs
+		case tabInstance:
+			newInstance, cmd := m.instance.Update(msg)
+			m.instance = newInstance
 			return m, cmd
 		case tabConfig:
 			newConfig, cmd := m.configTab.Update(msg)
@@ -377,8 +377,8 @@ func (m Model) updateChildren(msg tea.Msg) (tea.Model, tea.Cmd) {
 		cmds = append(cmds, cmd)
 	}
 
-	newLogs, cmd := m.logs.Update(msg)
-	m.logs = newLogs
+	newInstance, cmd := m.instance.Update(msg)
+	m.instance = newInstance
 	if cmd != nil {
 		cmds = append(cmds, cmd)
 	}
