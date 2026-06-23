@@ -2,8 +2,8 @@
 
 This document describes the anonymous usage telemetry built into `shopware-cli`:
 how users are identified, what data we collect, where it goes, and how users can
-opt out. It is written for a product/PM audience but is accurate to the current
-implementation (`internal/tracking/tracking.go`).
+opt out. It is accurate to the current implementation
+(`internal/tracking/tracking.go`).
 
 ## TL;DR
 
@@ -19,7 +19,7 @@ implementation (`internal/tracking/tracking.go`).
   the CLI continues normally — telemetry never blocks or slows down a command in
   a way the user notices.
 
-## What we want to learn (product perspective)
+## What we want to learn
 
 The goal of telemetry is to answer questions like:
 
