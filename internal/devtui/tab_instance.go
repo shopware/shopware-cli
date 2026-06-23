@@ -16,8 +16,17 @@ import (
 	"github.com/shopware/shopware-cli/internal/tui"
 )
 
+type logSourceKind int
+
+const (
+	sourceContainer logSourceKind = iota // docker compose logs <service>
+	sourceProcess                        // watcher / app process (lineChan or process)
+	sourceFile                           // var/log/*.log
+)
+
 type logSource struct {
 	name      string
+	kind      logSourceKind
 	container string
 	filePath  string
 	process   *executor.Process
@@ -25,7 +34,7 @@ type logSource struct {
 	dead      bool
 }
 
-type LogsModel struct {
+type InstanceModel struct {
 	viewport      viewport.Model
 	sources       []logSource
 	cursor        int
@@ -48,8 +57,8 @@ type logSourcesLoadedMsg struct{ sources []logSource }
 
 const sidebarWidth = 28
 
-func NewLogsModel(projectRoot string, dockerMode bool) LogsModel {
-	return LogsModel{
+func NewInstanceModel(projectRoot string, dockerMode bool) InstanceModel {
+	return InstanceModel{
 		projectRoot: projectRoot,
 		dockerMode:  dockerMode,
 		follow:      true,
@@ -57,11 +66,11 @@ func NewLogsModel(projectRoot string, dockerMode bool) LogsModel {
 	}
 }
 
-func (m LogsModel) Init() tea.Cmd {
+func (m InstanceModel) Init() tea.Cmd {
 	return nil
 }
 
-func (m LogsModel) Update(msg tea.Msg) (LogsModel, tea.Cmd) {
+func (m InstanceModel) Update(msg tea.Msg) (InstanceModel, tea.Cmd) {
 	switch msg := msg.(type) {
 	case logSourcesLoadedMsg:
 		m.sources = msg.sources
@@ -138,42 +147,97 @@ func (m LogsModel) Update(msg tea.Msg) (LogsModel, tea.Cmd) {
 	return m, cmd
 }
 
-func (m LogsModel) View() string {
+func (m InstanceModel) View() string {
 	return lipgloss.JoinHorizontal(lipgloss.Top, m.renderSidebar(), m.renderContent())
 }
 
-func (m LogsModel) renderSidebar() string {
+func (m InstanceModel) renderSidebar() string {
 	var b strings.Builder
-	b.WriteString(tui.TitleStyle.Render("Sources"))
-	b.WriteString("\n\n")
-
-	for i, src := range m.sources {
-		item := src.name
-		if i == m.active {
-			item = lipgloss.JoinHorizontal(
-				lipgloss.Center,
-				item,
-				" ",
-				activeBadgeStyle.Render("LIVE"),
-			)
-		}
-
-		style := sidebarItemStyle
-		switch {
-		case i == m.cursor && m.cursor == m.active:
-			style = activeSelectedSidebarItemStyle
-		case i == m.cursor:
-			style = selectedSidebarItemStyle
-		case i == m.active:
-			style = activeSidebarItemStyle
-		}
-
-		b.WriteString(style.Width(sidebarWidth - 4).Render(item))
-		b.WriteString("\n")
-	}
+	b.WriteString(tui.TitleStyle.Render("Instance Stack"))
+	b.WriteString("\n")
 
 	if len(m.sources) == 0 {
-		b.WriteString(helpStyle.Render("No log sources found yet."))
+		b.WriteString(helpStyle.Render("No sources found yet."))
+		return sidebarStyle.
+			Width(sidebarWidth).
+			Height(max(m.height-3, 8)).
+			Render(b.String())
+	}
+
+	// Group sources by kind in a fixed order: containers, processes, files.
+	type group struct {
+		header  string
+		sources []int // indices into m.sources
+	}
+	groupOrder := []logSourceKind{sourceContainer, sourceProcess, sourceFile}
+	groupHeaders := map[logSourceKind]string{
+		sourceContainer: "Containers",
+		sourceProcess:   "Processes",
+		sourceFile:      "Log Files",
+	}
+	var groups []group
+	for _, kind := range groupOrder {
+		var indices []int
+		for i, src := range m.sources {
+			if src.kind == kind {
+				indices = append(indices, i)
+			}
+		}
+		if len(indices) > 0 {
+			groups = append(groups, group{header: groupHeaders[kind], sources: indices})
+		}
+	}
+
+	groupHeaderStyle := lipgloss.NewStyle().
+		Foreground(tui.MutedColor).
+		Bold(true).
+		Padding(0, 1)
+
+	for gi, g := range groups {
+		if gi > 0 {
+			b.WriteString("\n")
+		}
+		b.WriteString(groupHeaderStyle.Render(strings.ToUpper(g.header)))
+		b.WriteString("\n")
+
+		for _, i := range g.sources {
+			src := m.sources[i]
+			indicator := tui.DimStyle.Render("·")
+			if i == m.active {
+				indicator = activeBadgeStyle.Render("●")
+			} else if src.kind == sourceProcess && (src.lineChan != nil || src.process != nil) && !src.dead {
+				indicator = activeBadgeStyle.Render("●")
+			}
+
+			item := lipgloss.JoinHorizontal(lipgloss.Center, indicator, " ", src.name)
+			if i == m.active {
+				item = lipgloss.JoinHorizontal(
+					lipgloss.Center,
+					item,
+					" ",
+					activeBadgeStyle.Render("LIVE"),
+				)
+			}
+
+			style := sidebarItemStyle
+			switch {
+			case i == m.cursor && m.cursor == m.active:
+				style = activeSelectedSidebarItemStyle
+			case i == m.cursor:
+				style = selectedSidebarItemStyle
+			case i == m.active:
+				style = activeSidebarItemStyle
+			}
+
+			if i == m.cursor {
+				item = lipgloss.JoinHorizontal(lipgloss.Center, lipgloss.NewStyle().Foreground(tui.BrandColor).Bold(true).Render("▸"), " ", item)
+			} else {
+				item = lipgloss.JoinHorizontal(lipgloss.Center, "  ", item)
+			}
+
+			b.WriteString(style.Width(sidebarWidth - 4).Render(item))
+			b.WriteString("\n")
+		}
 	}
 
 	return sidebarStyle.
@@ -182,10 +246,20 @@ func (m LogsModel) renderSidebar() string {
 		Render(b.String())
 }
 
-func (m LogsModel) renderContent() string {
+func (m InstanceModel) renderContent() string {
 	sourceName := "No source selected"
+	kindLabel := ""
 	if m.active >= 0 && m.active < len(m.sources) {
-		sourceName = m.sources[m.active].name
+		src := m.sources[m.active]
+		sourceName = src.name
+		switch src.kind {
+		case sourceContainer:
+			kindLabel = "container"
+		case sourceProcess:
+			kindLabel = "process"
+		case sourceFile:
+			kindLabel = "file"
+		}
 	}
 
 	followBadge := warningBadgeStyle.Render("FOLLOW OFF")
@@ -198,7 +272,11 @@ func (m LogsModel) renderContent() string {
 		Bold(true).
 		Render(sourceName)
 
-	header := headerText + " " + followBadge
+	header := headerText
+	if kindLabel != "" {
+		header += " " + tui.TextBadge(kindLabel)
+	}
+	header += " " + followBadge
 
 	return contentPanelStyle.Render(
 		lipgloss.JoinVertical(
@@ -210,7 +288,7 @@ func (m LogsModel) renderContent() string {
 	)
 }
 
-func (m *LogsModel) SetSize(width, height int) {
+func (m *InstanceModel) SetSize(width, height int) {
 	m.width = width
 	m.height = height
 	viewportWidth := max(width-sidebarWidth-8, 20)
@@ -218,14 +296,14 @@ func (m *LogsModel) SetSize(width, height int) {
 	m.viewport.SetHeight(max(height-7, 8))
 }
 
-func (m *LogsModel) StartStreaming() tea.Cmd {
+func (m *InstanceModel) StartStreaming() tea.Cmd {
 	return m.discoverSources()
 }
 
-func (m *LogsModel) AddProcessSource(name string, process *executor.Process) tea.Cmd {
+func (m *InstanceModel) AddProcessSource(name string, process *executor.Process) tea.Cmd {
 	m.stopStreaming()
 
-	src := logSource{name: name, process: process}
+	src := logSource{name: name, kind: sourceProcess, process: process}
 
 	idx := -1
 	for i, s := range m.sources {
@@ -252,10 +330,10 @@ func (m *LogsModel) AddProcessSource(name string, process *executor.Process) tea
 
 // AddStreamingSource registers a log source backed by an externally fed line
 // channel (e.g. a watcher's preparation steps) and starts displaying it live.
-func (m *LogsModel) AddStreamingSource(name string, lineChan <-chan string) tea.Cmd {
+func (m *InstanceModel) AddStreamingSource(name string, lineChan <-chan string) tea.Cmd {
 	m.stopStreaming()
 
-	src := logSource{name: name, lineChan: lineChan}
+	src := logSource{name: name, kind: sourceProcess, lineChan: lineChan}
 
 	idx := -1
 	for i, s := range m.sources {
@@ -281,11 +359,11 @@ func (m *LogsModel) AddStreamingSource(name string, lineChan <-chan string) tea.
 	return m.waitForNextLine()
 }
 
-func (m *LogsModel) StopStreaming() {
+func (m *InstanceModel) StopStreaming() {
 	m.stopStreaming()
 }
 
-func (m *LogsModel) AppendErrorLine(msg string) {
+func (m *InstanceModel) AppendErrorLine(msg string) {
 	m.lines = append(m.lines, errorStyle.Render(msg))
 	m.viewport.SetContent(strings.Join(m.lines, "\n"))
 	if m.follow {
@@ -293,7 +371,7 @@ func (m *LogsModel) AppendErrorLine(msg string) {
 	}
 }
 
-func (m *LogsModel) ActiveProcessSourceName() string {
+func (m *InstanceModel) ActiveProcessSourceName() string {
 	if m.active >= 0 && m.active < len(m.sources) {
 		src := m.sources[m.active]
 		if src.process != nil || src.lineChan != nil {
@@ -303,7 +381,7 @@ func (m *LogsModel) ActiveProcessSourceName() string {
 	return ""
 }
 
-func (m *LogsModel) stopStreaming() {
+func (m *InstanceModel) stopStreaming() {
 	if m.cancel != nil {
 		m.cancel()
 		m.cancel = nil
@@ -312,7 +390,7 @@ func (m *LogsModel) stopStreaming() {
 	m.logChan = nil
 }
 
-func (m *LogsModel) startCurrentSource() tea.Cmd {
+func (m *InstanceModel) startCurrentSource() tea.Cmd {
 	if m.active < 0 || m.active >= len(m.sources) {
 		return nil
 	}
@@ -341,7 +419,7 @@ func (m *LogsModel) startCurrentSource() tea.Cmd {
 	return m.streamFile(src.filePath)
 }
 
-func (m *LogsModel) streamProcess(src logSource) tea.Cmd {
+func (m *InstanceModel) streamProcess(src logSource) tea.Cmd {
 	p := src.process
 	cmd := p.Cmd
 	m.activeProcess = p
@@ -375,7 +453,7 @@ func (m *LogsModel) streamProcess(src logSource) tea.Cmd {
 	return m.waitForNextLine()
 }
 
-func (m *LogsModel) streamContainer(container string) tea.Cmd {
+func (m *InstanceModel) streamContainer(container string) tea.Cmd {
 	ctx, cancel := context.WithCancel(context.Background())
 	m.cancel = cancel
 
@@ -385,7 +463,7 @@ func (m *LogsModel) streamContainer(container string) tea.Cmd {
 	return m.streamCommand(ctx, cmd, true)
 }
 
-func (m *LogsModel) streamFile(filePath string) tea.Cmd {
+func (m *InstanceModel) streamFile(filePath string) tea.Cmd {
 	ctx, cancel := context.WithCancel(context.Background())
 	m.cancel = cancel
 
@@ -394,7 +472,7 @@ func (m *LogsModel) streamFile(filePath string) tea.Cmd {
 	return m.streamCommand(ctx, cmd, false)
 }
 
-func (m *LogsModel) streamCommand(ctx context.Context, cmd *exec.Cmd, mergeStderr bool) tea.Cmd {
+func (m *InstanceModel) streamCommand(ctx context.Context, cmd *exec.Cmd, mergeStderr bool) tea.Cmd {
 	ch := make(chan string, 100)
 	m.logChan = ch
 
@@ -430,7 +508,7 @@ func (m *LogsModel) streamCommand(ctx context.Context, cmd *exec.Cmd, mergeStder
 	return m.waitForNextLine()
 }
 
-func (m *LogsModel) waitForNextLine() tea.Cmd {
+func (m *InstanceModel) waitForNextLine() tea.Cmd {
 	ch := m.logChan
 	if ch == nil {
 		return nil
@@ -445,7 +523,7 @@ func (m *LogsModel) waitForNextLine() tea.Cmd {
 	}
 }
 
-func (m *LogsModel) discoverSources() tea.Cmd {
+func (m *InstanceModel) discoverSources() tea.Cmd {
 	projectRoot := m.projectRoot
 	dockerMode := m.dockerMode
 	return func() tea.Msg {
@@ -478,6 +556,7 @@ func discoverContainers(projectRoot string) []logSource {
 		}
 		sources = append(sources, logSource{
 			name:      line,
+			kind:      sourceContainer,
 			container: line,
 		})
 	}
@@ -501,6 +580,7 @@ func discoverLogFiles(projectRoot string) []logSource {
 		}
 		sources = append(sources, logSource{
 			name:     entry.Name(),
+			kind:     sourceFile,
 			filePath: filepath.Join(logDir, entry.Name()),
 		})
 	}
