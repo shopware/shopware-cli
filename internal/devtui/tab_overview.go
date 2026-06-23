@@ -13,6 +13,7 @@ import (
 	"time"
 
 	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 
 	"github.com/shopware/shopware-cli/internal/executor"
 	"github.com/shopware/shopware-cli/internal/extension"
@@ -22,7 +23,7 @@ import (
 	"github.com/shopware/shopware-cli/logging"
 )
 
-type GeneralModel struct {
+type OverviewModel struct {
 	envType            string
 	shopURL            string
 	adminURL           string
@@ -41,6 +42,7 @@ type GeneralModel struct {
 	sfWatchRunning     bool
 	sfWatchStarting    bool
 	shopwareVersion    string
+	cursor             int // focus index: 0=Admin watcher, 1=Storefront watcher, 2..=services
 }
 
 type DiscoveredService struct {
@@ -129,6 +131,13 @@ type watcherStoppedMsg struct {
 	err  error
 }
 
+// watcherRunningMsg is emitted when a watcher's preparation completes and the
+// dev-server process is about to start. err is non-nil if preparation failed.
+type watcherRunningMsg struct {
+	name string
+	err  error
+}
+
 type knownService struct {
 	Name       string
 	TargetPort int
@@ -148,14 +157,14 @@ var ignoredServices = map[string]bool{
 	"database": true,
 }
 
-func NewGeneralModel(envType, shopURL, username, password, projectRoot string, exec executor.Executor, shopCfg *shop.Config) GeneralModel {
+func NewOverviewModel(envType, shopURL, username, password, projectRoot string, exec executor.Executor, shopCfg *shop.Config) OverviewModel {
 	adminURL := shopURL
 	if adminURL != "" && !strings.HasSuffix(adminURL, "/") {
 		adminURL += "/"
 	}
 	adminURL += "admin"
 
-	return GeneralModel{
+	return OverviewModel{
 		envType:     envType,
 		shopURL:     shopURL,
 		adminURL:    adminURL,
@@ -168,18 +177,22 @@ func NewGeneralModel(envType, shopURL, username, password, projectRoot string, e
 	}
 }
 
-func (m GeneralModel) Init() tea.Cmd {
+func (m OverviewModel) Init() tea.Cmd {
 	return tea.Batch(discoverServices(m.projectRoot), loadShopwareVersion(m.projectRoot))
 }
 
-func (m *GeneralModel) SetSize(width, height int) {
+func (m *OverviewModel) SetSize(width, height int) {
 	m.width = width
 	m.height = height
 }
 
 type browserOpenedMsg struct{}
 
-func (m GeneralModel) Update(msg tea.Msg) (GeneralModel, tea.Cmd) {
+// stopWatcherRequestMsg flows from OverviewModel to Model so the parent can
+// call stopWatcher (which needs access to the logs model and watcher map).
+type stopWatcherRequestMsg struct{ name string }
+
+func (m OverviewModel) Update(msg tea.Msg) (OverviewModel, tea.Cmd) {
 	switch msg := msg.(type) {
 	case servicesLoadedMsg:
 		m.loading = false
@@ -187,8 +200,63 @@ func (m GeneralModel) Update(msg tea.Msg) (GeneralModel, tea.Cmd) {
 		m.err = msg.err
 	case shopwareVersionLoadedMsg:
 		m.shopwareVersion = msg.version
+	case tea.KeyPressMsg:
+		return m.handleKey(msg)
 	}
 	return m, nil
+}
+
+func (m OverviewModel) focusCount() int {
+	// Admin watcher + Storefront watcher + discovered services
+	return 2 + len(m.services)
+}
+
+func (m OverviewModel) handleKey(msg tea.KeyPressMsg) (OverviewModel, tea.Cmd) {
+	count := m.focusCount()
+	if count == 0 {
+		return m, nil
+	}
+
+	switch msg.String() {
+	case "up", "k":
+		if m.cursor > 0 {
+			m.cursor--
+		}
+	case "down", "j":
+		if m.cursor < count-1 {
+			m.cursor++
+		}
+	case "enter":
+		return m.activate()
+	}
+	return m, nil
+}
+
+func (m *OverviewModel) activate() (OverviewModel, tea.Cmd) {
+	switch m.cursor {
+	case 0: // Admin watcher
+		if m.adminWatchRunning {
+			return *m, func() tea.Msg { return stopWatcherRequestMsg{name: watcherAdmin} }
+		}
+		if !m.adminWatchStarting {
+			m.adminWatchStarting = true
+			return *m, m.startAdminWatch()
+		}
+	case 1: // Storefront watcher
+		if m.sfWatchRunning {
+			return *m, func() tea.Msg { return stopWatcherRequestMsg{name: watcherStorefront} }
+		}
+		if !m.sfWatchStarting {
+			m.sfWatchStarting = true
+			return *m, m.startStorefrontWatch(extension.StorefrontWatcherOptions{})
+		}
+	default: // Service — open URL
+		svcIdx := m.cursor - 2
+		if svcIdx < len(m.services) && m.services[svcIdx].URL != "" {
+			return *m, openInBrowser(m.services[svcIdx].URL)
+		}
+	}
+	return *m, nil
 }
 
 func openInBrowser(url string) tea.Cmd {
@@ -198,7 +266,7 @@ func openInBrowser(url string) tea.Cmd {
 	}
 }
 
-func (m GeneralModel) View(width, height int) string {
+func (m OverviewModel) View(width, height int) string {
 	var s strings.Builder
 
 	divider := tui.SectionDivider(width - 8)
@@ -229,8 +297,8 @@ func (m GeneralModel) View(width, height int) string {
 
 	s.WriteString(tui.TitleStyle.Render("Watchers"))
 	s.WriteString("\n")
-	s.WriteString(m.renderWatcherStatus("Admin", m.adminWatchRunning, m.adminWatchStarting, "http://127.0.0.1:5173"))
-	s.WriteString(m.renderWatcherStatus("Storefront", m.sfWatchRunning, m.sfWatchStarting, "http://127.0.0.1:9998"))
+	s.WriteString(m.renderWatcherStatus("Admin", m.adminWatchRunning, m.adminWatchStarting, "http://127.0.0.1:5173", m.cursor == 0))
+	s.WriteString(m.renderWatcherStatus("Storefront", m.sfWatchRunning, m.sfWatchStarting, "http://127.0.0.1:9998", m.cursor == 1))
 
 	s.WriteString(divider)
 
@@ -241,7 +309,7 @@ func (m GeneralModel) View(width, height int) string {
 	return s.String()
 }
 
-func (m *GeneralModel) startAdminWatch() tea.Cmd {
+func (m *OverviewModel) startAdminWatch() tea.Cmd {
 	e := m.executor
 	projectRoot := m.projectRoot
 	shopCfg := m.shopCfg
@@ -261,7 +329,7 @@ func (m *GeneralModel) startAdminWatch() tea.Cmd {
 	})
 }
 
-func (m *GeneralModel) startStorefrontWatch(opts extension.StorefrontWatcherOptions) tea.Cmd {
+func (m *OverviewModel) startStorefrontWatch(opts extension.StorefrontWatcherOptions) tea.Cmd {
 	e := m.executor
 	projectRoot := m.projectRoot
 	shopCfg := m.shopCfg
@@ -290,11 +358,18 @@ func logStep(out io.Writer, msg string) {
 // all of their output (including npm install) into a line channel that is shown
 // live in the Logs tab. The watcher process started by prepare is streamed into
 // the same channel and stored on the returned handle so it can be stopped later.
+//
+// It returns a batch of two commands: one emits watcherStartedMsg immediately
+// (so log streaming begins), and another emits watcherRunningMsg once the
+// preparation goroutine signals that the dev-server process is starting (or
+// preparation failed). This keeps the UI in a visible "starting" state during
+// preparation rather than flipping to "running" instantly.
 func startWatcher(name string, prepare func(ctx context.Context, out io.Writer) (*executor.Process, error)) tea.Cmd {
-	return func() tea.Msg {
-		handle := &watcherHandle{}
-		lines := make(chan string, streamBufferSize)
+	handle := &watcherHandle{}
+	lines := make(chan string, streamBufferSize)
+	running := make(chan error, 1) // buffered so the goroutine never blocks
 
+	startedCmd := func() tea.Msg {
 		go func() {
 			defer close(lines)
 
@@ -319,6 +394,7 @@ func startWatcher(name string, prepare func(ctx context.Context, out io.Writer) 
 
 			if err != nil {
 				lines <- errorStyle.Render(err.Error())
+				running <- err
 				return
 			}
 
@@ -328,10 +404,12 @@ func startWatcher(name string, prepare func(ctx context.Context, out io.Writer) 
 				stopCtx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 				_ = process.Stop(stopCtx)
 				cancel()
+				running <- fmt.Errorf("watcher stopped")
 				return
 			}
 
 			lines <- helpStyle.Render("> Starting watcher...")
+			running <- nil // signal: preparation succeeded, process is starting
 
 			stdout, err := process.StartCombined()
 			if err != nil {
@@ -354,24 +432,44 @@ func startWatcher(name string, prepare func(ctx context.Context, out io.Writer) 
 
 		return watcherStartedMsg{name: name, handle: handle, lines: lines}
 	}
+
+	runningCmd := func() tea.Msg {
+		err := <-running
+		return watcherRunningMsg{name: name, err: err}
+	}
+
+	return tea.Batch(startedCmd, runningCmd)
 }
 
-func (m GeneralModel) renderWatcherStatus(label string, running, starting bool, url string) string {
+func (m OverviewModel) renderWatcherStatus(label string, running, starting bool, url string, focused bool) string {
+	var checkbox, status string
 	switch {
 	case running:
-		row := tui.KVRow(label, activeBadgeStyle.Render("RUNNING"))
-		if url != "" {
-			row += tui.KVRow("  URL", urlStyle.Render(url))
+		if focused {
+			checkbox = lipgloss.NewStyle().Bold(true).Foreground(tui.BrandColor).Render("[x]")
+		} else {
+			checkbox = lipgloss.NewStyle().Render("[x]")
 		}
-		return row
+		status = lipgloss.NewStyle().Bold(true).Render("running")
+		if url != "" {
+			status += "  " + urlStyle.Render(url)
+		}
 	case starting:
-		return tui.KVRow(label, tui.StatusBadge("starting", tui.BrandColor))
+		checkbox = lipgloss.NewStyle().Foreground(tui.BrandColor).Render("[~]")
+		status = lipgloss.NewStyle().Foreground(tui.BrandColor).Render("starting...")
 	default:
-		return tui.KVRow(label, helpStyle.Render("stopped"))
+		if focused {
+			checkbox = lipgloss.NewStyle().Bold(true).Foreground(tui.BrandColor).Render("[ ]")
+		} else {
+			checkbox = tui.DimStyle.Render("[ ]")
+		}
+		status = tui.DimStyle.Render("stopped")
 	}
+
+	return tui.KVRow(checkbox+" "+label, status)
 }
 
-func (m GeneralModel) renderServices() string {
+func (m OverviewModel) renderServices() string {
 	switch {
 	case m.loading:
 		return "  " + tui.StatusBadge("scanning", tui.BrandColor) + "\n" +
@@ -384,8 +482,14 @@ func (m GeneralModel) renderServices() string {
 	}
 
 	var s strings.Builder
-	for _, service := range m.services {
-		s.WriteString(tui.KVRow(service.Name, urlStyle.Render(service.URL)))
+	for i, service := range m.services {
+		focused := m.cursor == i+2
+		name := service.Name
+		if focused {
+			name = lipgloss.NewStyle().Bold(true).Foreground(tui.BrandColor).Render(service.Name)
+		}
+		row := tui.KVRow(name, urlStyle.Render(service.URL))
+		s.WriteString(row)
 		if service.Username != "" {
 			s.WriteString(tui.KVRow("  Username", valueStyle.Render(service.Username)))
 			s.WriteString(tui.KVRow("  Password", secretStyle.Render(service.Password)))

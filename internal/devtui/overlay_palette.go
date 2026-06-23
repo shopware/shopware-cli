@@ -26,10 +26,7 @@ var paletteCommands = []paletteCommand{
 	{Label: "Stop Admin Watcher", ID: "admin-watch-stop"},
 	{Label: "Start Storefront Watcher", ID: "sf-watch-start"},
 	{Label: "Stop Storefront Watcher", ID: "sf-watch-stop"},
-	{Label: "Toggle Logs Tab", Shortcut: "2", ID: "tab-logs"},
-	{Label: "Toggle General Tab", Shortcut: "1", ID: "tab-general"},
-	{Label: "Toggle Config Tab", Shortcut: "3", ID: "tab-config"},
-	{Label: "Quit", Shortcut: "ctrl+c", ID: "quit"},
+	{Label: "Quit", ID: "quit"},
 }
 
 type paletteResultMsg struct{ ID string }

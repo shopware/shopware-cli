@@ -55,8 +55,8 @@ func (m Model) renderDashboard() string {
 
 	var content string
 	switch m.activeTab {
-	case tabGeneral:
-		content = m.general.View(m.width, boxHeight)
+	case tabOverview:
+		content = m.overview.View(m.width, boxHeight)
 	case tabLogs:
 		m.logs.SetSize(contentW, contentH)
 		content = m.logs.View()
@@ -92,6 +92,17 @@ func (m Model) renderDashboardFooter() string {
 		shortcuts := []tui.Shortcut{
 			{Key: "↑/↓", Label: "Navigate"},
 			{Key: "enter", Label: "Edit/Save"},
+			{Key: "tab", Label: "Next tab"},
+			{Key: "ctrl+c", Label: "Exit"},
+		}
+		return tui.ShortcutBar(shortcuts...)
+	}
+
+	if m.activeTab == tabOverview {
+		shortcuts := []tui.Shortcut{
+			{Key: "↑/↓", Label: "Focus item"},
+			{Key: "enter", Label: "Activate"},
+			{Key: "ctrl+p", Label: "Commands"},
 			{Key: "tab", Label: "Next tab"},
 			{Key: "ctrl+c", Label: "Exit"},
 		}

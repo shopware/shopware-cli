@@ -188,8 +188,8 @@ func TestUpdateLifecycle_ShopwareInstallDone_Success(t *testing.T) {
 	assert.Equal(t, "myadmin", final.envConfig.AdminApi.Username)
 	assert.Equal(t, "supersecret", final.envConfig.AdminApi.Password)
 
-	assert.Equal(t, "myadmin", final.general.username)
-	assert.Equal(t, "supersecret", final.general.password)
+	assert.Equal(t, "myadmin", final.overview.username)
+	assert.Equal(t, "supersecret", final.overview.password)
 
 	assert.Empty(t, final.overlayLines)
 	assert.Nil(t, final.dockerOutChan)

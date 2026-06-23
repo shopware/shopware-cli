@@ -18,7 +18,7 @@ import (
 func newTestModel() Model {
 	return Model{
 		phase:       phaseDashboard,
-		general:     NewGeneralModel("local", "http://localhost:8000", "", "", "/tmp/project", nil, nil),
+		overview:    NewOverviewModel("local", "http://localhost:8000", "", "", "/tmp/project", nil, nil),
 		logs:        NewLogsModel("/tmp/project", false),
 		configTab:   NewConfigModel(nil, nil),
 		watchers:    make(map[string]*watcherHandle),
@@ -59,7 +59,7 @@ func TestNew_InitializesFields(t *testing.T) {
 	opts.Executor = exec
 	m := New(opts)
 
-	assert.Equal(t, tabGeneral, m.activeTab)
+	assert.Equal(t, tabOverview, m.activeTab)
 	assert.False(t, m.dockerMode)
 	assert.NotNil(t, m.watchers)
 	assert.Empty(t, m.watchers)
@@ -225,12 +225,12 @@ func TestUpdateDashboardKeys_DigitSwitchesTabs(t *testing.T) {
 	assert.Equal(t, tabConfig, updated.(Model).activeTab)
 
 	updated, _ = updated.(Model).Update(keyRune('1'))
-	assert.Equal(t, tabGeneral, updated.(Model).activeTab)
+	assert.Equal(t, tabOverview, updated.(Model).activeTab)
 }
 
 func TestUpdateDashboardKeys_TabCyclesForward(t *testing.T) {
 	m := newTestModel()
-	assert.Equal(t, tabGeneral, m.activeTab)
+	assert.Equal(t, tabOverview, m.activeTab)
 
 	updated, _ := m.Update(keySpecial(tea.KeyTab))
 	assert.Equal(t, tabLogs, updated.(Model).activeTab)
@@ -239,7 +239,7 @@ func TestUpdateDashboardKeys_TabCyclesForward(t *testing.T) {
 	assert.Equal(t, tabConfig, updated.(Model).activeTab)
 
 	updated, _ = updated.(Model).Update(keySpecial(tea.KeyTab))
-	assert.Equal(t, tabGeneral, updated.(Model).activeTab)
+	assert.Equal(t, tabOverview, updated.(Model).activeTab)
 }
 
 func TestUpdateDashboardKeys_ShiftTabCyclesBackward(t *testing.T) {
@@ -355,8 +355,8 @@ func TestExecuteCommand_TabRouting(t *testing.T) {
 	updated, _ = updated.(Model).executeCommand("tab-config")
 	assert.Equal(t, tabConfig, updated.(Model).activeTab)
 
-	updated, _ = updated.(Model).executeCommand("tab-general")
-	assert.Equal(t, tabGeneral, updated.(Model).activeTab)
+	updated, _ = updated.(Model).executeCommand("tab-overview")
+	assert.Equal(t, tabOverview, updated.(Model).activeTab)
 }
 
 func TestExecuteCommand_QuitNonDockerReturnsTeaQuit(t *testing.T) {
@@ -382,33 +382,33 @@ func TestExecuteCommand_QuitDockerOpensStopConfirm(t *testing.T) {
 
 func TestExecuteCommand_AdminWatchStartSetsStarting(t *testing.T) {
 	m := newTestModel()
-	m.general.adminWatchRunning = false
-	m.general.adminWatchStarting = false
+	m.overview.adminWatchRunning = false
+	m.overview.adminWatchStarting = false
 
 	updated, cmd := m.executeCommand("admin-watch-start")
 	um := updated.(Model)
-	assert.True(t, um.general.adminWatchStarting)
+	assert.True(t, um.overview.adminWatchStarting)
 	assert.NotNil(t, cmd)
 }
 
 func TestExecuteCommand_AdminWatchStartNoOpWhenRunning(t *testing.T) {
 	m := newTestModel()
-	m.general.adminWatchRunning = true
+	m.overview.adminWatchRunning = true
 
 	updated, cmd := m.executeCommand("admin-watch-start")
 	um := updated.(Model)
-	assert.False(t, um.general.adminWatchStarting)
+	assert.False(t, um.overview.adminWatchStarting)
 	assert.Nil(t, cmd)
 }
 
 func TestExecuteCommand_AdminWatchStopClearsRunning(t *testing.T) {
 	m := newTestModel()
-	m.general.adminWatchRunning = true
+	m.overview.adminWatchRunning = true
 	m.watchers[watcherAdmin] = &watcherHandle{}
 
 	updated, cmd := m.executeCommand("admin-watch-stop")
 	um := updated.(Model)
-	assert.False(t, um.general.adminWatchRunning)
+	assert.False(t, um.overview.adminWatchRunning)
 	assert.NotNil(t, cmd)
 	// stopWatcher deletes the entry from the map
 	_, exists := um.watchers[watcherAdmin]
