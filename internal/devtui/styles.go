@@ -70,10 +70,11 @@ var (
 	activeBtnStyle = lipgloss.NewStyle().
 			Foreground(tui.OnBrandColor).
 			Background(tui.BrandColor).
+			Bold(true).
 			Padding(0, 2)
 
 	inactiveBtnStyle = lipgloss.NewStyle().
-				Foreground(tui.MutedColor).
+				Foreground(tui.TextColor).
 				Background(tui.SubtleBgColor).
 				Padding(0, 2)
 )
