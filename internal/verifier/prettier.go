@@ -10,12 +10,13 @@ import (
 )
 
 var ignoredPaths = `
-package-lock.json
-Resources/public/**
-Resources/app/storefront/dist/**
-dist/**
 Resources/app/administration/.tmp/**
+Resources/app/storefront/dist/**
+Resources/public/**
 Resources/store/**
+Resources/**/vendor/**
+dist/**
+package-lock.json
 `
 
 type Prettier struct{}
@@ -62,6 +63,8 @@ func (b Prettier) Format(ctx context.Context, config ToolConfig, dryRun bool) er
 			cmd.Stdout = os.Stdout
 
 			if err := cmd.Run(); err != nil {
+				_ = os.Remove(path.Join(sourceDirectory, ".prettierignore"))
+
 				return err
 			}
 
