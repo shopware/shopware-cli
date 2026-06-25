@@ -48,6 +48,43 @@ func TestServicesLoadedMsg(t *testing.T) {
 	assert.Equal(t, "Shopware", updated.services[1].Name)
 }
 
+func TestServicesLoadedMsg_UpdatesPortFromWebService(t *testing.T) {
+	m := NewOverviewModel("docker", "http://127.0.0.1:8000", "", "", "/tmp/project", nil, nil)
+
+	updated, _ := m.Update(servicesLoadedMsg{webPort: 8002})
+	assert.Equal(t, "http://127.0.0.1:8002", updated.shopURL)
+	assert.Equal(t, "http://127.0.0.1:8002/admin", updated.adminURL)
+}
+
+func TestServicesLoadedMsg_KeepsCustomHostWhenUpdatingPort(t *testing.T) {
+	m := NewOverviewModel("docker", "http://foo.localhost:8000", "", "", "/tmp/project", nil, nil)
+
+	updated, _ := m.Update(servicesLoadedMsg{webPort: 8002})
+	assert.Equal(t, "http://foo.localhost:8002", updated.shopURL)
+	assert.Equal(t, "http://foo.localhost:8002/admin", updated.adminURL)
+}
+
+func TestServicesLoadedMsg_NoWebPortKeepsURL(t *testing.T) {
+	m := NewOverviewModel("docker", "http://127.0.0.1:8000", "", "", "/tmp/project", nil, nil)
+
+	updated, _ := m.Update(servicesLoadedMsg{})
+	assert.Equal(t, "http://127.0.0.1:8000", updated.shopURL)
+	assert.Equal(t, "http://127.0.0.1:8000/admin", updated.adminURL)
+}
+
+func TestResolveShopURL(t *testing.T) {
+	assert.Equal(t, "http://127.0.0.1:8002", ResolveShopURL("http://127.0.0.1:8000", 8002))
+	assert.Equal(t, "http://foo.localhost:8002", ResolveShopURL("http://foo.localhost:8000", 8002))
+	// URL without an explicit port still gets the discovered port applied.
+	assert.Equal(t, "http://foo.localhost:8002", ResolveShopURL("http://foo.localhost", 8002))
+	// HTTPS and paths are preserved.
+	assert.Equal(t, "https://shop.example.com:8443/", ResolveShopURL("https://shop.example.com/", 8443))
+
+	// Unchanged when there is nothing to resolve.
+	assert.Equal(t, "", ResolveShopURL("", 8002))
+	assert.Equal(t, "http://127.0.0.1:8000", ResolveShopURL("http://127.0.0.1:8000", 0))
+}
+
 func TestServicesLoadedMsg_WithError(t *testing.T) {
 	m := NewOverviewModel("docker", "http://localhost:8000", "", "", "/tmp/project", nil, nil)
 
