@@ -16,6 +16,15 @@ func TestResizeExtensionIcon(t *testing.T) {
 		assert.NoError(t, err)
 	})
 
+	t.Run("icon path is set but file does not exist", func(t *testing.T) {
+		tempDir := t.TempDir()
+		iconPath := filepath.Join(tempDir, "missing.png")
+
+		ext := &mockExtension{iconPath: iconPath}
+		err := ResizeExtensionIcon(getTestContext(), ext)
+		assert.NoError(t, err)
+	})
+
 	t.Run("icon is smaller than 56x56", func(t *testing.T) {
 		tempDir := t.TempDir()
 		iconPath := filepath.Join(tempDir, "icon.png")
