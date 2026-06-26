@@ -2,6 +2,7 @@ package devtui
 
 import (
 	"context"
+	"strconv"
 	"time"
 
 	"charm.land/bubbles/v2/textinput"
@@ -11,6 +12,7 @@ import (
 	"github.com/shopware/shopware-cli/internal/envfile"
 	"github.com/shopware/shopware-cli/internal/executor"
 	"github.com/shopware/shopware-cli/internal/shop"
+	"github.com/shopware/shopware-cli/internal/tracking"
 )
 
 func (m Model) updateKeyPress(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
@@ -266,7 +268,15 @@ func (m Model) saveSetupGuide() (tea.Model, tea.Cmd) {
 	m.setupGuide.deploymentHelperAdded = changed
 
 	m.setupGuide.step = setupStepDone
-	return m, nil
+	duration := time.Since(m.setupGuide.startedAt)
+	return m, func() tea.Msg {
+		ctx, cancel := context.WithTimeout(context.Background(), 300*time.Millisecond)
+		defer cancel()
+		tracking.Track(ctx, "migration_wizard_completed", map[string]string{
+			"duration_ms": strconv.FormatInt(duration.Milliseconds(), 10),
+		})
+		return nil
+	}
 }
 
 // mergeLocalProfilerSecrets copies profiler credential fields from the

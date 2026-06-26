@@ -3,6 +3,7 @@ package devtui
 import (
 	"path/filepath"
 	"slices"
+	"time"
 
 	"charm.land/bubbles/v2/textinput"
 	tea "charm.land/bubbletea/v2"
@@ -31,6 +32,7 @@ type setupGuide struct {
 	password              textinput.Model
 	passwordErr           string
 	credFocus             credFocus
+	startedAt             time.Time
 
 	err error
 }
@@ -149,6 +151,7 @@ func (sg *setupGuide) updateWelcome(msg tea.KeyPressMsg) (setupGuide, tea.Cmd) {
 		sg.confirmYes = !sg.confirmYes
 	case keyEnter:
 		if sg.confirmYes {
+			sg.startedAt = time.Now()
 			sg.step = setupStepAdminUser
 			return sg.focusAdminCred(credFocusUsername)
 		}
