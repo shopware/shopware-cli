@@ -10,7 +10,7 @@ import (
 func TestNewStopConfirm_DefaultsToYes(t *testing.T) {
 	sc := newStopConfirm()
 	assert.NotNil(t, sc)
-	assert.True(t, sc.yes, "default focus should be on 'Yes, stop'")
+	assert.True(t, sc.yes, "default focus should be on 'Stop containers & quit'")
 }
 
 func TestStopConfirm_RightArrowSelectsNo(t *testing.T) {
@@ -58,7 +58,7 @@ func TestStopConfirm_EnterOnConfirmEmitsStopTrue(t *testing.T) {
 
 func TestStopConfirm_EnterOnCancelEmitsStopFalse(t *testing.T) {
 	sc := newStopConfirm()
-	// Move focus to "No, quit"
+	// Move focus to "Quit, keep running"
 	next, _ := sc.Update(tea.KeyPressMsg(tea.Key{Code: tea.KeyRight}))
 	sc = next.(*stopConfirm)
 	assert.False(t, sc.yes)
@@ -107,9 +107,9 @@ func TestStopConfirm_ViewRendersWithoutPanic(t *testing.T) {
 	sc := newStopConfirm()
 	assert.NotPanics(t, func() {
 		view := sc.View(120, 40)
-		assert.Contains(t, view, "Stop Docker containers?")
-		assert.Contains(t, view, "Yes, stop")
-		assert.Contains(t, view, "No, quit")
+		assert.Contains(t, view, "Leaving the workspace")
+		assert.Contains(t, view, "Stop containers & quit")
+		assert.Contains(t, view, "Quit, keep running")
 	})
 
 	sc.yes = false

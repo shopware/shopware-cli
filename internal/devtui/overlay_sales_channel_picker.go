@@ -87,7 +87,7 @@ func (sp *salesChannelPicker) Update(msg tea.Msg) (Modal, tea.Cmd) {
 				items[i] = listPickerItem{Label: c.name, Detail: c.domain, Value: c.id}
 			}
 			sp.inner = newListPicker(salesChannelPickerKey{}, "Select Sales Channel",
-				"Pick the storefront the watcher should target. theme:dump is run with this channel's theme and domain.",
+				"Pick the storefront the watcher should target. Its theme and domain are used when building storefront assets.",
 				items, 0)
 		}
 		return sp, nil
@@ -96,23 +96,22 @@ func (sp *salesChannelPicker) Update(msg tea.Msg) (Modal, tea.Cmd) {
 		if _, ok := msg.Key.(salesChannelPickerKey); !ok {
 			return sp, nil
 		}
-		if msg.Cancelled {
-			return nil, emit(salesChannelPickerResultMsg{Cancelled: true})
-		}
-		entry := sp.channels[msg.Index]
-		opts := extension.StorefrontWatcherOptions{DomainURL: entry.domain}
-		if entry.theme != nil {
-			opts.ThemeID = entry.theme.Id
-		}
-		return nil, emit(salesChannelPickerResultMsg{Opts: opts})
+		return nil, emit(sp.resultFor(msg))
 
 	case tea.KeyPressMsg:
+		// Before the channel list has loaded (loading / error / empty states),
+		// any of esc/enter/q closes the picker so the user is never stuck
+		// waiting on a view with no obvious way out.
 		if sp.inner == nil {
-			if msg.String() == "esc" || msg.String() == keyEnter {
+			if msg.String() == "esc" || msg.String() == keyEnter || msg.String() == keyQ {
 				return nil, emit(salesChannelPickerResultMsg{Cancelled: true})
 			}
 			return sp, nil
 		}
+		// Delegate to the list picker. When it resolves (esc cancels, enter
+		// selects) it returns nil and emits a pickerResultMsg; translate that
+		// straight into our result and close, instead of lingering as the
+		// active modal and briefly rendering the empty fallback view.
 		next, cmd := sp.inner.Update(msg)
 		if next == nil {
 			sp.inner = nil
@@ -121,6 +120,20 @@ func (sp *salesChannelPicker) Update(msg tea.Msg) (Modal, tea.Cmd) {
 	}
 
 	return sp, nil
+}
+
+// resultFor translates a list-picker result for this picker's key into the
+// sales-channel result, mapping the selected index back to watcher options.
+func (sp *salesChannelPicker) resultFor(msg pickerResultMsg) salesChannelPickerResultMsg {
+	if msg.Cancelled {
+		return salesChannelPickerResultMsg{Cancelled: true}
+	}
+	entry := sp.channels[msg.Index]
+	opts := extension.StorefrontWatcherOptions{DomainURL: entry.domain}
+	if entry.theme != nil {
+		opts.ThemeID = entry.theme.Id
+	}
+	return salesChannelPickerResultMsg{Opts: opts}
 }
 
 func (sp *salesChannelPicker) View(width, height int) string {
@@ -142,19 +155,19 @@ func (sp *salesChannelPicker) View(width, height int) string {
 		b.WriteString(" ")
 		b.WriteString(helpStyle.Render("Fetching sales channels from the admin API…"))
 		b.WriteString("\n\n")
-		b.WriteString(tui.ShortcutBar(tui.Shortcut{Key: "esc", Label: "Cancel"}))
+		b.WriteString(tui.ShortcutBar(tui.Shortcut{Key: "esc/q", Label: "Cancel"}))
 
 	case sp.err != nil:
 		b.WriteString(errorStyle.Render("Could not load sales channels:"))
 		b.WriteString("\n")
 		b.WriteString(errorStyle.Render(sp.err.Error()))
 		b.WriteString("\n\n")
-		b.WriteString(tui.ShortcutBar(tui.Shortcut{Key: "esc", Label: "Close"}))
+		b.WriteString(tui.ShortcutBar(tui.Shortcut{Key: "esc/q", Label: "Close"}))
 
 	default:
 		b.WriteString(helpStyle.Render("No storefront sales channels found."))
 		b.WriteString("\n\n")
-		b.WriteString(tui.ShortcutBar(tui.Shortcut{Key: "esc", Label: "Close"}))
+		b.WriteString(tui.ShortcutBar(tui.Shortcut{Key: "esc/q", Label: "Close"}))
 	}
 
 	return centeredModal(b.String(), modalWidth, width, height)

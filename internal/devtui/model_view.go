@@ -24,7 +24,11 @@ func (m Model) View() tea.View {
 	case phaseStarting, phaseStopping, phaseInstallPrompt, phaseInstalling:
 		v.Content = m.renderPhase()
 	case phaseTask:
-		v.Content = m.renderDockerLogs(m.taskTitle, "")
+		title := m.taskTitle
+		if !m.taskDone {
+			title = m.dockerSpinner.View() + " " + title
+		}
+		v.Content = m.renderDockerLogs(title, "")
 	case phaseSetupGuide:
 		v.Content = m.renderSetupGuide()
 	}

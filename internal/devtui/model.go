@@ -298,6 +298,20 @@ func (m Model) updateFallback(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
+	if m.phase == phaseTask {
+		// Keep ticking the header spinner while the task runs; stop once it's
+		// done so the final output stays static.
+		if msg, ok := msg.(spinner.TickMsg); ok {
+			if m.taskDone {
+				return m, nil
+			}
+			var cmd tea.Cmd
+			m.dockerSpinner, cmd = m.dockerSpinner.Update(msg)
+			return m, cmd
+		}
+		return m, nil
+	}
+
 	if m.phase != phaseDashboard {
 		return m, nil
 	}

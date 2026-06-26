@@ -43,11 +43,11 @@ func (sc *stopConfirm) Update(msg tea.Msg) (Modal, tea.Cmd) {
 func (sc *stopConfirm) View(width, height int) string {
 	var card strings.Builder
 	warnStyle := lipgloss.NewStyle().Bold(true).Foreground(tui.ErrorColor)
-	card.WriteString(warnStyle.Render("Stop Docker containers?"))
+	card.WriteString(warnStyle.Render("Leaving the workspace"))
 	card.WriteString("\n")
-	card.WriteString(tui.DimStyle.Render("Do you want to stop the running Docker containers?\nThey can be restarted with shopware-cli project dev."))
+	card.WriteString(tui.DimStyle.Render("Do you also want to stop the running Docker containers?\nEither way you can restart them anytime with shopware-cli project dev."))
 	card.WriteString("\n\n")
-	card.WriteString(renderConfirmButtons("Yes, stop", "No, quit", sc.yes))
+	card.WriteString(renderConfirmButtons("Stop containers & quit", "Quit, keep running", sc.yes))
 
 	footerHint := tui.ShortcutBar(
 		tui.Shortcut{Key: "←/→", Label: "Select"},

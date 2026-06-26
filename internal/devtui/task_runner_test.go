@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"charm.land/bubbles/v2/spinner"
 	tea "charm.land/bubbletea/v2"
 	"github.com/stretchr/testify/assert"
 )
@@ -56,10 +57,12 @@ func TestRunTask_FactoryErrorEmitsTaskDoneMsg(t *testing.T) {
 	batchMsg := cmd()
 	batch, ok := batchMsg.(tea.BatchMsg)
 	assert.True(t, ok, "runTask should return a tea.Batch, got %T", batchMsg)
-	assert.Len(t, batch, 2)
+	// reader + runner + spinner tick; the tick is last and is a no-op here.
+	assert.Len(t, batch, 3)
 
-	// The two batched commands must run concurrently: the doneCmd closes
+	// The first two batched commands must run concurrently: the doneCmd closes
 	// the channel, which unblocks readFromChan.
+	batch = batch[:2]
 	type result struct{ msg tea.Msg }
 	results := make(chan result, 2)
 	for _, c := range batch {
@@ -102,7 +105,8 @@ func TestRunTask_SmokeEchoStreamsLinesAndCompletes(t *testing.T) {
 	batchMsg := cmd()
 	batch, ok := batchMsg.(tea.BatchMsg)
 	assert.True(t, ok)
-	assert.Len(t, batch, 2)
+	// reader + runner + spinner tick; only the first two are exercised below.
+	assert.Len(t, batch, 3)
 
 	// Identify which cmd is the channel reader vs which is the runner by
 	// invoking both concurrently and accumulating messages.
@@ -156,6 +160,37 @@ loop:
 
 	assert.NoError(t, done.err)
 	assert.Contains(t, lines, "hello")
+}
+
+func TestRunTask_StartsSpinnerTick(t *testing.T) {
+	m := &Model{}
+	cmd := m.runTask("Building...", func() (*exec.Cmd, error) {
+		return nil, errors.New("factory failed")
+	})
+
+	batch, ok := cmd().(tea.BatchMsg)
+	assert.True(t, ok)
+	// The spinner tick is the last batched cmd and must produce a TickMsg so
+	// the header animates while the task runs.
+	tick := batch[len(batch)-1]()
+	_, isTick := tick.(spinner.TickMsg)
+	assert.True(t, isTick, "last batched cmd should be the spinner tick, got %T", tick)
+}
+
+func TestTaskView_ShowsSpinnerWhileRunningNotAfterDone(t *testing.T) {
+	m := Model{width: 100, height: 30, phase: phaseTask, taskTitle: "Building Administration..."}
+	m.dockerSpinner = newBrandSpinner()
+
+	running := m.View().Content
+	assert.Contains(t, running, "Building Administration...")
+
+	m.taskDone = true
+	done := m.View().Content
+	assert.Contains(t, done, "Building Administration...")
+
+	// The spinner glyph adds leading runes before the title only while running,
+	// so the rendered task header differs between the two states.
+	assert.NotEqual(t, running, done)
 }
 
 func TestRunSelfCommand_ConstructsTaskWithoutExecuting(t *testing.T) {

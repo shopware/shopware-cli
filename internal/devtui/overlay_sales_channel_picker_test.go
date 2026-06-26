@@ -96,3 +96,28 @@ func TestModel_SalesChannelPicker_FullRoutingFlow(t *testing.T) {
 	m = updated.(Model)
 	assert.True(t, m.overview.sfWatchStarting, "sfWatchStarting must be true after the picker confirms")
 }
+
+func TestSalesChannelPicker_ExitWhileLoading(t *testing.T) {
+	// Before channels load the user must always have a way out, otherwise the
+	// loading/error/empty view feels stuck.
+	for _, key := range []rune{tea.KeyEsc, tea.KeyEnter} {
+		sp := newSalesChannelPicker(nil)
+		assert.Nil(t, sp.inner, "inner picker should not exist before channels load")
+
+		next, cmd := sp.Update(tea.KeyPressMsg(tea.Key{Code: key}))
+		assert.Nil(t, next, "%v should dismiss the picker while loading", key)
+		assert.NotNil(t, cmd)
+
+		res, ok := cmd().(salesChannelPickerResultMsg)
+		assert.True(t, ok)
+		assert.True(t, res.Cancelled, "%v while loading should cancel", key)
+	}
+
+	// 'q' is also accepted as an exit key.
+	sp := newSalesChannelPicker(nil)
+	next, cmd := sp.Update(tea.KeyPressMsg(tea.Key{Code: 'q', Text: "q"}))
+	assert.Nil(t, next)
+	res, ok := cmd().(salesChannelPickerResultMsg)
+	assert.True(t, ok)
+	assert.True(t, res.Cancelled, "q while loading should cancel")
+}
