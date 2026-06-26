@@ -6,8 +6,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net"
+	"net/url"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -54,6 +57,7 @@ type DiscoveredService struct {
 
 type servicesLoadedMsg struct {
 	services []DiscoveredService
+	webPort  int
 	err      error
 }
 
@@ -157,17 +161,25 @@ var ignoredServices = map[string]bool{
 	"database": true,
 }
 
-func NewOverviewModel(envType, shopURL, username, password, projectRoot string, exec executor.Executor, shopCfg *shop.Config) OverviewModel {
+// webServiceTargetPort is the container port the Shopware web server (the "web"
+// service) listens on. Its published host port determines the shop URL port.
+const webServiceTargetPort = 8000
+
+// deriveAdminURL returns the admin URL for the given shop URL by appending the
+// "admin" path segment.
+func deriveAdminURL(shopURL string) string {
 	adminURL := shopURL
 	if adminURL != "" && !strings.HasSuffix(adminURL, "/") {
 		adminURL += "/"
 	}
-	adminURL += "admin"
+	return adminURL + "admin"
+}
 
+func NewOverviewModel(envType, shopURL, username, password, projectRoot string, exec executor.Executor, shopCfg *shop.Config) OverviewModel {
 	return OverviewModel{
 		envType:     envType,
 		shopURL:     shopURL,
-		adminURL:    adminURL,
+		adminURL:    deriveAdminURL(shopURL),
 		username:    username,
 		password:    password,
 		projectRoot: projectRoot,
@@ -203,6 +215,10 @@ func (m OverviewModel) Update(msg tea.Msg) (OverviewModel, tea.Cmd) {
 		m.loading = false
 		m.services = msg.services
 		m.err = msg.err
+		if msg.webPort != 0 {
+			m.shopURL = ResolveShopURL(m.shopURL, msg.webPort)
+			m.adminURL = deriveAdminURL(m.shopURL)
+		}
 	case shopwareVersionLoadedMsg:
 		m.shopwareVersion = msg.version
 	case tea.KeyPressMsg:
@@ -514,15 +530,24 @@ type dockerComposePSOutput struct {
 	} `json:"Publishers"`
 }
 
+// DiscoverServices returns the auxiliary services published by the running
+// docker development environment.
 func DiscoverServices(ctx context.Context, projectRoot string) ([]DiscoveredService, error) {
+	services, _, err := DiscoverComposeServices(ctx, projectRoot)
+	return services, err
+}
+
+// DiscoverComposeServices parses `docker compose ps` once and returns both the
+// auxiliary services and the host port the web service's HTTP port (8000) is
+// published on. webPort is 0 when it cannot be determined (e.g. the environment
+// is down or the web container does not publish port 8000).
+func DiscoverComposeServices(ctx context.Context, projectRoot string) (services []DiscoveredService, webPort int, err error) {
 	cmd := exec.CommandContext(ctx, "docker", "compose", "ps", "--format", "json")
 	cmd.Dir = projectRoot
 	output, err := cmd.Output()
 	if err != nil {
-		return nil, fmt.Errorf("docker compose ps: %w", err)
+		return nil, 0, fmt.Errorf("docker compose ps: %w", err)
 	}
-
-	var services []DiscoveredService
 
 	type containerInfo struct {
 		service    string
@@ -544,6 +569,12 @@ func DiscoverServices(ctx context.Context, projectRoot string) ([]DiscoveredServ
 		for _, pub := range container.Publishers {
 			if pub.PublishedPort != 0 {
 				ports[pub.TargetPort] = pub.PublishedPort
+			}
+		}
+
+		if container.Service == "web" {
+			if port, ok := ports[webServiceTargetPort]; ok {
+				webPort = port
 			}
 		}
 
@@ -578,13 +609,30 @@ func DiscoverServices(ctx context.Context, projectRoot string) ([]DiscoveredServ
 		})
 	}
 
-	return services, nil
+	return services, webPort, nil
+}
+
+// ResolveShopURL rewrites the port in shopURL to webPort, the host port the web
+// container is actually published on. The configured URL is returned unchanged
+// when shopURL is empty, webPort is 0, or shopURL cannot be parsed.
+func ResolveShopURL(shopURL string, webPort int) string {
+	if shopURL == "" || webPort == 0 {
+		return shopURL
+	}
+
+	u, err := url.Parse(shopURL)
+	if err != nil || u.Host == "" {
+		return shopURL
+	}
+
+	u.Host = net.JoinHostPort(u.Hostname(), strconv.Itoa(webPort))
+	return u.String()
 }
 
 func discoverServices(projectRoot string) tea.Cmd {
 	return func() tea.Msg {
-		services, err := DiscoverServices(context.Background(), projectRoot)
-		return servicesLoadedMsg{services: services, err: err}
+		services, webPort, err := DiscoverComposeServices(context.Background(), projectRoot)
+		return servicesLoadedMsg{services: services, webPort: webPort, err: err}
 	}
 }
 
