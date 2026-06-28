@@ -10,7 +10,9 @@ import (
 	"github.com/yuin/goldmark"
 	goldmarkExtension "github.com/yuin/goldmark/extension"
 	"github.com/yuin/goldmark/parser"
+	"github.com/yuin/goldmark/renderer"
 	"github.com/yuin/goldmark/renderer/html"
+	"github.com/yuin/goldmark/util"
 )
 
 func parseMarkdownChangelogInPath(path string) (map[string]map[string]string, error) {
@@ -131,6 +133,11 @@ func GetConfiguredGoldMark() goldmark.Markdown {
 		goldmark.WithRendererOptions(
 			html.WithHardWraps(),
 			html.WithXHTML(),
+			// Override heading rendering so Markdown headings become
+			// <span class="hN"> instead of competing <h1>-<h6> tags in the
+			// store page. Priority < 1000 makes it win over the default
+			// HTML renderer.
+			renderer.WithNodeRenderers(util.Prioritized(&spanHeadingRenderer{}, 100)),
 		),
 	)
 }
