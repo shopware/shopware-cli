@@ -1,4 +1,4 @@
-package extension
+package markdown
 
 import (
 	"github.com/yuin/goldmark/ast"
@@ -10,7 +10,7 @@ import (
 // spanHeadingRenderer renders Markdown headings as <span class="hN"> elements
 // instead of real <h1>-<h6> tags.
 //
-// The HTML produced by GetConfiguredGoldMark is pushed to the Shopware Store
+// The HTML produced by this package is pushed to the Shopware Store
 // (extension description, installation manual and changelog) where it is
 // embedded inside a store page that already owns its heading hierarchy
 // (the <h1> is the product title). Emitting real headings for this description

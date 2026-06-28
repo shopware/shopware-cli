@@ -1,7 +1,6 @@
-package extension
+package markdown
 
 import (
-	"bytes"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -10,11 +9,10 @@ import (
 func renderMarkdown(t *testing.T, source string) string {
 	t.Helper()
 
-	var buf bytes.Buffer
-	err := GetConfiguredGoldMark().Convert([]byte(source), &buf)
+	html, err := ToHTML([]byte(source))
 	assert.NoError(t, err)
 
-	return buf.String()
+	return html
 }
 
 func TestMarkdownHeadingsRenderedAsSpans(t *testing.T) {

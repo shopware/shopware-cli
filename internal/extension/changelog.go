@@ -1,18 +1,12 @@
 package extension
 
 import (
-	"bytes"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 
-	"github.com/yuin/goldmark"
-	goldmarkExtension "github.com/yuin/goldmark/extension"
-	"github.com/yuin/goldmark/parser"
-	"github.com/yuin/goldmark/renderer"
-	"github.com/yuin/goldmark/renderer/html"
-	"github.com/yuin/goldmark/util"
+	"github.com/shopware/shopware-cli/internal/markdown"
 )
 
 func parseMarkdownChangelogInPath(path string) (map[string]map[string]string, error) {
@@ -66,14 +60,12 @@ func parseMarkdownChangelog(content string) (map[string]string, error) {
 	versions[currentVersion] = versionText
 
 	for key, changelog := range versions {
-		var buf bytes.Buffer
-
-		err := GetConfiguredGoldMark().Convert([]byte(changelog), &buf)
+		html, err := markdown.ToHTML([]byte(changelog))
 		if err != nil {
 			return nil, err
 		}
 
-		versions[key] = buf.String()
+		versions[key] = html
 	}
 
 	return versions, nil
@@ -122,22 +114,4 @@ func parseExtensionMarkdownChangelog(ext Extension) (*ExtensionChangelog, error)
 	}
 
 	return &ExtensionChangelog{German: changelogDeVersion, English: changelogEnVersion, Changelogs: allChangelogsInVersion}, nil
-}
-
-func GetConfiguredGoldMark() goldmark.Markdown {
-	return goldmark.New(
-		goldmark.WithExtensions(goldmarkExtension.GFM),
-		goldmark.WithParserOptions(
-			parser.WithAutoHeadingID(),
-		),
-		goldmark.WithRendererOptions(
-			html.WithHardWraps(),
-			html.WithXHTML(),
-			// Override heading rendering so Markdown headings become
-			// <span class="hN"> instead of competing <h1>-<h6> tags in the
-			// store page. Priority < 1000 makes it win over the default
-			// HTML renderer.
-			renderer.WithNodeRenderers(util.Prioritized(&spanHeadingRenderer{}, 100)),
-		),
-	)
 }
