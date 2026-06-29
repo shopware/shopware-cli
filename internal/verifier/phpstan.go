@@ -56,6 +56,28 @@ func (p PhpStan) configExists(pluginPath string) bool {
 	return false
 }
 
+// pathsKeyRegex matches a top-level `paths:` key in a PHPStan neon config. It does
+// not match `excludePaths:` since that key does not start with `paths`.
+var pathsKeyRegex = regexp.MustCompile(`(?m)^\s*paths:`)
+
+// configDefinesPaths reports whether the project's local PHPStan config declares a
+// `paths` parameter. If it does, PHPStan already knows what to analyse and we must
+// not override it with source-directory CLI arguments.
+func (p PhpStan) configDefinesPaths(pluginPath string) bool {
+	for _, config := range possiblePHPStanConfigs {
+		content, err := os.ReadFile(path.Join(pluginPath, config))
+		if err != nil {
+			continue
+		}
+
+		if pathsKeyRegex.Match(content) {
+			return true
+		}
+	}
+
+	return false
+}
+
 func (p PhpStan) Check(ctx context.Context, check *Check, config ToolConfig) error {
 	// Apps don't have an composer.json file, skip them
 	if _, err := os.Stat(path.Join(config.RootDir, "composer.json")); err != nil {
@@ -67,10 +89,28 @@ func (p PhpStan) Check(ctx context.Context, check *Check, config ToolConfig) err
 		return err
 	}
 
-	for _, sourceDirectory := range config.SourceDirectories {
-		phpstanArguments := []string{"-dmemory_limit=2G", path.Join(config.ToolDirectory, "php", "vendor", "bin", "phpstan"), "analyse", "--no-progress", "--no-interaction", "--error-format=json", sourceDirectory}
+	hasLocalConfig := p.configExists(config.RootDir)
 
-		if !p.configExists(config.RootDir) {
+	// When the project ships its own PHPStan config that defines `paths`, let that
+	// config govern the analysis by running PHPStan a single time without passing
+	// source directories as CLI arguments. Passing a directory as an argument
+	// overrides the configured `paths`, which makes PHPStan fail with "No files found
+	// to analyse" whenever that directory is fully covered by `excludePaths`. A local
+	// config without `paths`, as well as the bundled config, still relies on the
+	// per-source-directory arguments, so we keep analysing each detected directory.
+	analyseTargets := config.SourceDirectories
+	if hasLocalConfig && p.configDefinesPaths(config.RootDir) {
+		analyseTargets = []string{""}
+	}
+
+	for _, sourceDirectory := range analyseTargets {
+		phpstanArguments := []string{"-dmemory_limit=2G", path.Join(config.ToolDirectory, "php", "vendor", "bin", "phpstan"), "analyse", "--no-progress", "--no-interaction", "--error-format=json"}
+
+		if sourceDirectory != "" {
+			phpstanArguments = append(phpstanArguments, sourceDirectory)
+		}
+
+		if !hasLocalConfig {
 			phpstanArguments = append(phpstanArguments, "--configuration", path.Join(config.ToolDirectory, "php", "configs", "phpstan.neon"))
 		}
 
@@ -92,6 +132,14 @@ func (p PhpStan) Check(ctx context.Context, check *Check, config ToolConfig) err
 		var phpstanResult PhpStanOutput
 
 		if err := json.Unmarshal(log, &phpstanResult); err != nil {
+			// PHPStan exits without producing JSON when it has nothing to analyse
+			// (e.g. every analysed path is covered by `excludePaths`). This is not an
+			// error from the project's point of view, so skip it instead of reporting
+			// a spurious unmarshal failure.
+			if isNoFilesToAnalyse(log, &stderr) {
+				continue
+			}
+
 			check.AddResult(validation.CheckResult{
 				Path:       "phpstan.neon",
 				Message:    "failed to unmarshal phpstan output: " + stderr.String(),
@@ -132,6 +180,18 @@ func (p PhpStan) Check(ctx context.Context, check *Check, config ToolConfig) err
 	}
 
 	return nil
+}
+
+// isNoFilesToAnalyse reports whether PHPStan produced no parseable output because
+// it found no files to analyse, which happens when every analysed path is covered
+// by `excludePaths`. In that case stdout is empty and PHPStan prints a notice on
+// stderr instead of valid JSON.
+func isNoFilesToAnalyse(stdout []byte, stderr *bytes.Buffer) bool {
+	if len(bytes.TrimSpace(stdout)) != 0 {
+		return false
+	}
+
+	return strings.Contains(stderr.String(), "No files found to analyse")
 }
 
 func (p PhpStan) Fix(ctx context.Context, config ToolConfig) error {
