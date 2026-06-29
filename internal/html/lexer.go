@@ -95,16 +95,14 @@ func (l *lexer) lexContent() error {
 			case !prevIsLT && i+1 < len(rem) && isHTMLNameStart(rem[i+1]):
 				idx, kind = i, "html-open"
 			}
-		} else { // '{'
-			if i+1 < len(rem) {
-				switch rem[i+1] {
-				case '%':
-					idx, kind = i, "twig-stmt"
-				case '{':
-					idx, kind = i, "twig-expr"
-				case '#':
-					idx, kind = i, "twig-comment"
-				}
+		} else if i+1 < len(rem) { // '{'
+			switch rem[i+1] {
+			case '%':
+				idx, kind = i, "twig-stmt"
+			case '{':
+				idx, kind = i, "twig-expr"
+			case '#':
+				idx, kind = i, "twig-comment"
 			}
 		}
 		if idx != -1 {
