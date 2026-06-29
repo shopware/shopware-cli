@@ -213,29 +213,6 @@ func TestInstanceModel_ActiveProcessSourceName(t *testing.T) {
 		"sources without a Process should not be reported as process sources")
 }
 
-func TestInstanceModel_View_FollowBadgeOn(t *testing.T) {
-	m := NewInstanceModel("/tmp", false)
-	m.SetSize(120, 40)
-	m.follow = true
-
-	var view string
-	assert.NotPanics(t, func() {
-		view = m.View()
-	})
-	assert.Contains(t, view, "FOLLOW ON")
-	assert.NotContains(t, view, "FOLLOW OFF")
-}
-
-func TestInstanceModel_View_FollowBadgeOff(t *testing.T) {
-	m := NewInstanceModel("/tmp", false)
-	m.SetSize(120, 40)
-	m.follow = false
-
-	view := m.View()
-	assert.Contains(t, view, "FOLLOW OFF")
-	assert.NotContains(t, view, "FOLLOW ON")
-}
-
 func TestInstanceModel_View_NoSourceSelected(t *testing.T) {
 	m := NewInstanceModel("/tmp", false)
 	m.SetSize(120, 40)

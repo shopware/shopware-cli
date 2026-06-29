@@ -204,9 +204,9 @@ func (m InstanceModel) renderSidebar() string {
 			src := m.sources[i]
 			indicator := tui.DimStyle.Render("·")
 			if i == m.active {
-				indicator = activeBadgeStyle.Render("●")
+				indicator = brandColor.Render("●")
 			} else if src.kind == sourceProcess && (src.lineChan != nil || src.process != nil) && !src.dead {
-				indicator = activeBadgeStyle.Render("●")
+				indicator = brandColor.Render("●")
 			}
 
 			item := lipgloss.JoinHorizontal(lipgloss.Center, indicator, " ", src.name)
@@ -262,11 +262,6 @@ func (m InstanceModel) renderContent() string {
 		}
 	}
 
-	followBadge := warningBadgeStyle.Render("FOLLOW OFF")
-	if m.follow {
-		followBadge = activeBadgeStyle.Render("FOLLOW ON")
-	}
-
 	headerText := lipgloss.NewStyle().
 		Foreground(tui.TextColor).
 		Bold(true).
@@ -276,7 +271,6 @@ func (m InstanceModel) renderContent() string {
 	if kindLabel != "" {
 		header += " " + tui.TextBadge(kindLabel)
 	}
-	header += " " + followBadge
 
 	return contentPanelStyle.Render(
 		lipgloss.JoinVertical(

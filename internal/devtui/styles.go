@@ -22,6 +22,9 @@ var (
 	helpStyle = lipgloss.NewStyle().
 			Foreground(tui.MutedColor)
 
+	brandColor = lipgloss.NewStyle().
+			Foreground(tui.BrandColor)
+
 	activeBadgeStyle = lipgloss.NewStyle().
 				Foreground(tui.SuccessColor).
 				Bold(true)
