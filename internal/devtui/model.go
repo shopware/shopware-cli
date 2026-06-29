@@ -349,6 +349,9 @@ func (m Model) handleSalesChannelPickerResult(msg salesChannelPickerResultMsg) (
 
 func (m Model) handleStopConfirmResult(msg stopConfirmResultMsg) (tea.Model, tea.Cmd) {
 	m.modal = nil
+	if msg.Cancel {
+		return m, nil
+	}
 	m.shutdown()
 	if msg.Stop {
 		m.phase = phaseStopping

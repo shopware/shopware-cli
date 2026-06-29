@@ -9,16 +9,25 @@ import (
 	"github.com/shopware/shopware-cli/internal/tui"
 )
 
+const (
+	stopConfirmStop = iota
+	stopConfirmQuit
+	stopConfirmCancel
+)
+
+var stopConfirmLabels = []string{"Stop containers & quit", "Quit, keep running", "Cancel"}
+
 type stopConfirmResultMsg struct {
-	Stop bool
+	Stop   bool
+	Cancel bool
 }
 
 type stopConfirm struct {
-	yes bool
+	selected int
 }
 
 func newStopConfirm() *stopConfirm {
-	return &stopConfirm{yes: true}
+	return &stopConfirm{selected: stopConfirmStop}
 }
 
 func (sc *stopConfirm) Update(msg tea.Msg) (Modal, tea.Cmd) {
@@ -27,15 +36,25 @@ func (sc *stopConfirm) Update(msg tea.Msg) (Modal, tea.Cmd) {
 		return sc, nil
 	}
 
+	count := len(stopConfirmLabels)
 	switch key.String() {
 	case keyLeft, "h":
-		sc.yes = true
+		if sc.selected > 0 {
+			sc.selected--
+		}
 	case keyRight, "l":
-		sc.yes = false
+		if sc.selected < count-1 {
+			sc.selected++
+		}
 	case keyTab:
-		sc.yes = !sc.yes
+		sc.selected = (sc.selected + 1) % count
 	case keyEnter:
-		return nil, emit(stopConfirmResultMsg{Stop: sc.yes})
+		switch sc.selected {
+		case stopConfirmCancel:
+			return nil, emit(stopConfirmResultMsg{Cancel: true})
+		default:
+			return nil, emit(stopConfirmResultMsg{Stop: sc.selected == stopConfirmStop})
+		}
 	}
 	return sc, nil
 }
@@ -47,7 +66,7 @@ func (sc *stopConfirm) View(width, height int) string {
 	card.WriteString("\n")
 	card.WriteString(tui.DimStyle.Render("Do you also want to stop the running Docker containers?\nEither way you can restart them anytime with shopware-cli project dev."))
 	card.WriteString("\n\n")
-	card.WriteString(renderConfirmButtons("Stop containers & quit", "Quit, keep running", sc.yes))
+	card.WriteString(renderButtonRow(stopConfirmLabels, sc.selected))
 
 	footerHint := tui.ShortcutBar(
 		tui.Shortcut{Key: "←/→", Label: "Select"},

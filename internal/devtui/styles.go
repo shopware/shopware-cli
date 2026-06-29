@@ -92,15 +92,23 @@ func renderShowPasswordCheckbox(checked, focused bool) string {
 }
 
 func renderConfirmButtons(yesLabel, noLabel string, yesActive bool) string {
-	var yes, no string
+	active := 1
 	if yesActive {
-		yes = activeBtnStyle.Render(yesLabel)
-		no = inactiveBtnStyle.Render(noLabel)
-	} else {
-		yes = inactiveBtnStyle.Render(yesLabel)
-		no = activeBtnStyle.Render(noLabel)
+		active = 0
 	}
-	return yes + "  " + no
+	return renderButtonRow([]string{yesLabel, noLabel}, active)
+}
+
+func renderButtonRow(labels []string, active int) string {
+	buttons := make([]string, len(labels))
+	for i, label := range labels {
+		if i == active {
+			buttons[i] = activeBtnStyle.Render(label)
+		} else {
+			buttons[i] = inactiveBtnStyle.Render(label)
+		}
+	}
+	return strings.Join(buttons, "  ")
 }
 
 func buildTabHeader(activeTab int, width int) string {
