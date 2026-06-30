@@ -140,7 +140,11 @@ func (f *ConfigFile) definedDepth(environment string, segments []string) (int, b
 	underWhen := false
 
 	if when := mappingChild(root, whenPrefix+environment); when != nil {
-		if d := mappingDepth(when, segments); d > depth {
+		// The when@<env> block has higher precedence than the root for this
+		// environment, so an equal-depth match there is the effective value and
+		// is where the write must land — otherwise the existing when@ value
+		// would keep shadowing a root-level write.
+		if d := mappingDepth(when, segments); d > 0 && d >= depth {
 			depth = d
 			underWhen = true
 		}

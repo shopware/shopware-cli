@@ -253,3 +253,26 @@ func TestSetConfigValueWritesIntoMatchingWhenBlock(t *testing.T) {
 	require.NoError(t, err)
 	assert.False(t, ok)
 }
+
+func TestSetConfigValueWritesIntoWhenBlockOnEqualDepth(t *testing.T) {
+	root := copyFixture(t)
+
+	pc, err := NewProjectConfig(root)
+	require.NoError(t, err)
+
+	// mailer.dsn exists at both the root and the when@prod block of mailer.yaml.
+	// For prod the when@prod value is effective, so the write must update it
+	// there rather than the root (which would stay shadowed).
+	require.NoError(t, pc.SetConfigValue("prod", "mailer.dsn", "smtp://updated"))
+
+	prodValue, ok, err := pc.GetConfigValue("prod", "mailer.dsn")
+	require.NoError(t, err)
+	assert.True(t, ok)
+	assert.Equal(t, "smtp://updated", prodValue)
+
+	// dev resolves to the untouched root value.
+	devValue, ok, err := pc.GetConfigValue("dev", "mailer.dsn")
+	require.NoError(t, err)
+	assert.True(t, ok)
+	assert.Equal(t, "smtp://localhost", devValue)
+}
