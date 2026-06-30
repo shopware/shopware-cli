@@ -1,7 +1,6 @@
 package account
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	"os"
@@ -15,6 +14,7 @@ import (
 
 	accountApi "github.com/shopware/shopware-cli/internal/account-api"
 	"github.com/shopware/shopware-cli/internal/extension"
+	"github.com/shopware/shopware-cli/internal/markdown"
 	"github.com/shopware/shopware-cli/logging"
 )
 
@@ -312,15 +312,12 @@ func parseInlineablePath(path, extensionDir string) (string, error) {
 		return string(content), nil
 	}
 
-	md := extension.GetConfiguredGoldMark()
-
-	var buf bytes.Buffer
-	err = md.Convert(content, &buf)
+	html, err := markdown.ToHTML(content)
 	if err != nil {
 		return "", fmt.Errorf("cannot convert file at path %s from markdown to html with error: %v", filePath, err)
 	}
 
-	return buf.String(), nil
+	return html, nil
 }
 
 func uploadImagesByDirectory(ctx context.Context, extensionId int, directory string, index int, p *accountApi.ProducerEndpoint) error {

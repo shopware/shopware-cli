@@ -21,6 +21,11 @@ func ResizeExtensionIcon(ctx context.Context, ext Extension) error {
 
 	file, err := os.Open(iconPath)
 	if err != nil {
+		if os.IsNotExist(err) {
+			logging.FromContext(ctx).Infof("Extension icon %s does not exist, skipping resize", iconPath)
+			return nil // No icon to resize
+		}
+
 		return fmt.Errorf("cannot open icon: %w", err)
 	}
 

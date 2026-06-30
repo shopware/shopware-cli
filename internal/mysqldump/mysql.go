@@ -754,6 +754,10 @@ func (d *Dumper) dumpTriggers(ctx context.Context, w io.Writer) error {
 			return err
 		}
 
+		if _, err := fmt.Fprintf(w, "DROP TRIGGER IF EXISTS `%s`;\n", trigger); err != nil {
+			return err
+		}
+
 		// Always use // as delimiter for triggers
 		if _, err := fmt.Fprintf(w, "DELIMITER //\n"); err != nil {
 			return err
