@@ -26,7 +26,7 @@ func (e *ParseError) Error() string {
 	if prefix == "" {
 		prefix = "<input>"
 	}
-	return fmt.Sprintf("%s:%d:%d: %s", prefix, e.Pos.Line, e.Pos.Column, e.Msg)
+	return fmt.Sprintf("%s:%d:%d: %s", prefix, e.Pos.Line, e.Pos.ColumnIn(e.Source), e.Msg)
 }
 
 // PrettyError returns the error with a source snippet, suitable for terminal display.
@@ -36,7 +36,7 @@ func (e *ParseError) PrettyError() string {
 	b.WriteString("\n")
 	b.WriteString(snippet(e.Source, e.Pos))
 	for _, r := range e.Related {
-		fmt.Fprintf(&b, "  = note: %s at %d:%d\n", r.Msg, r.Pos.Line, r.Pos.Column)
+		fmt.Fprintf(&b, "  = note: %s at %d:%d\n", r.Msg, r.Pos.Line, r.Pos.ColumnIn(e.Source))
 	}
 	return b.String()
 }
@@ -51,7 +51,7 @@ func snippet(src string, pos Pos) string {
 		return ""
 	}
 	line := lines[pos.Line-1]
-	col := pos.Column
+	col := pos.ColumnIn(src)
 	if col < 1 {
 		col = 1
 	}

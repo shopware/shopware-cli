@@ -32,10 +32,14 @@ func parseBlockTag(p *parser, openTok token) (Node, error) {
 	}
 	openTrim.Right = closeTok.TrimRight
 
-	// Block name is the first whitespace-delimited token of the body.
+	// Block name is the first whitespace-delimited token of the body. Scan for
+	// it directly rather than via strings.Fields, which would allocate a slice
+	// for the whole body just to read fields[0].
 	name := strings.TrimSpace(bodyTok.Lit)
-	if fields := strings.Fields(name); len(fields) > 0 {
-		name = fields[0]
+	if i := strings.IndexFunc(name, func(r rune) bool {
+		return r == ' ' || r == '\t' || r == '\n' || r == '\r'
+	}); i != -1 {
+		name = name[:i]
 	}
 
 	spec := lookupTag("block")
