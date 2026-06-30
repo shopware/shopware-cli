@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+
+	"github.com/shopware/shopware-cli/internal/envfile"
 )
 
 // Symfony only treats a value as an env reference when the whole string is a
@@ -18,10 +20,11 @@ const (
 )
 
 // ResolvedConfig is like Config but additionally resolves %env(...)% references
-// in string values against the project's .env files (.env.dist < .env <
-// .env.local, following Symfony precedence). Values that are not env
-// expressions are returned unchanged, and an unresolved variable becomes an
-// empty string unless a default processor supplies a fallback.
+// in string values against the project's .env files for that environment
+// (.env.dist < .env < .env.local < .env.<env> < .env.<env>.local, following
+// Symfony precedence). Values that are not env expressions are returned
+// unchanged, and an unresolved variable becomes an empty string unless a
+// default processor supplies a fallback.
 //
 // Only string scalars are inspected; a successful cast processor (bool, int,
 // json, ...) can change the Go type of the resulting value.
@@ -31,7 +34,7 @@ func (pc *ProjectConfig) ResolvedConfig(environment string) (map[string]any, err
 		return nil, err
 	}
 
-	resolver, err := pc.newEnvResolver(cfg)
+	resolver, err := pc.newEnvResolver(environment, cfg)
 	if err != nil {
 		return nil, err
 	}
@@ -44,12 +47,17 @@ func (pc *ProjectConfig) ResolvedConfig(environment string) (map[string]any, err
 // GetResolvedConfigValue is GetConfigValue with %env(...)% resolution applied to
 // the returned value (and recursively to nested values).
 func (pc *ProjectConfig) GetResolvedConfigValue(environment, path string) (any, bool, error) {
-	value, ok, err := pc.GetConfigValue(environment, path)
+	cfg, err := pc.Config(environment)
+	if err != nil {
+		return nil, false, err
+	}
+
+	value, ok, err := getConfigValue(cfg, path)
 	if err != nil || !ok {
 		return nil, ok, err
 	}
 
-	resolver, err := pc.newEnvResolver(nil)
+	resolver, err := pc.newEnvResolver(environment, cfg)
 	if err != nil {
 		return nil, false, err
 	}
@@ -61,7 +69,7 @@ func (pc *ProjectConfig) GetResolvedConfigValue(environment, path string) (any, 
 // it is a %env(...)% expression it is resolved against the project's .env files,
 // otherwise it is returned unchanged.
 func (pc *ProjectConfig) ResolveEnvExpression(value any) (any, error) {
-	resolver, err := pc.newEnvResolver(nil)
+	resolver, err := pc.newEnvResolver("", nil)
 	if err != nil {
 		return nil, err
 	}
@@ -78,12 +86,12 @@ type envResolver struct {
 	paramDefaults map[string]string
 }
 
-// newEnvResolver builds a resolver, loading the project's env files once. When
-// cfg is provided, env(VAR) defaults declared under any package's parameters
-// block are collected so they can act as fallbacks, mirroring Symfony's
-// behaviour.
-func (pc *ProjectConfig) newEnvResolver(cfg map[string]any) (*envResolver, error) {
-	env, err := pc.Env()
+// newEnvResolver builds a resolver, loading the project's env files for the
+// given environment once. When cfg is provided, env(VAR) defaults declared in
+// the top-level parameters block are collected so they can act as fallbacks,
+// mirroring Symfony's behaviour.
+func (pc *ProjectConfig) newEnvResolver(environment string, cfg map[string]any) (*envResolver, error) {
+	env, err := envfile.ReadAllForEnvironment(pc.projectRoot, environment)
 	if err != nil {
 		return nil, err
 	}
@@ -337,33 +345,25 @@ func parseEnvCSV(value string) ([]any, error) {
 }
 
 // collectEnvParamDefaults scans every package's parameters block for env(VAR)
-// keys, which declare default values for environment variables.
+// keys, which declare default values for environment variables. Symfony
+// declares them in the top-level parameters: section, which the merged config
+// exposes as the "parameters" key.
 func collectEnvParamDefaults(cfg map[string]any) map[string]string {
 	defaults := map[string]string{}
-	if cfg == nil {
+
+	params, ok := asStringMap(cfg["parameters"])
+	if !ok {
 		return defaults
 	}
 
-	for _, pkg := range cfg {
-		pkgMap, ok := asStringMap(pkg)
+	for key, value := range params {
+		varName, ok := envParamKey(key)
 		if !ok {
 			continue
 		}
 
-		params, ok := asStringMap(pkgMap["parameters"])
-		if !ok {
-			continue
-		}
-
-		for key, value := range params {
-			varName, ok := envParamKey(key)
-			if !ok {
-				continue
-			}
-
-			if str, ok := value.(string); ok {
-				defaults[varName] = str
-			}
+		if str, ok := value.(string); ok {
+			defaults[varName] = str
 		}
 	}
 

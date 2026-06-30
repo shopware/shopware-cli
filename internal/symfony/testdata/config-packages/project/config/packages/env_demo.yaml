@@ -1,3 +1,6 @@
+parameters:
+    env(REQUEST_TIMEOUT): '45'
+
 env_demo:
     secret: '%env(APP_SECRET)%'
     debug: '%env(bool:APP_DEBUG)%'
@@ -6,5 +9,3 @@ env_demo:
     flags: '%env(json:FEATURE_FLAGS)%'
     timeout: '%env(int:default:30:REQUEST_TIMEOUT)%'
     literal: not-an-env-var
-    parameters:
-        env(REQUEST_TIMEOUT): '45'

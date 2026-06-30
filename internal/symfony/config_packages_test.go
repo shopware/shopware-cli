@@ -96,6 +96,21 @@ func TestConfigWhenBlockOnlyAppliesToItsEnvironment(t *testing.T) {
 	assert.NotContains(t, devCfg["framework"].(map[string]any), "test")
 }
 
+func TestConfigWhenBlockOverridesBaseKeyInSameFile(t *testing.T) {
+	pc, err := NewProjectConfig(fixtureProject)
+	require.NoError(t, err)
+
+	// logging.yaml declares `logging: { level: info }` followed by a when@dev
+	// override. The override must win for dev regardless of map iteration order.
+	dev, err := pc.Config("dev")
+	require.NoError(t, err)
+	prod, err := pc.Config("prod")
+	require.NoError(t, err)
+
+	assert.Equal(t, "debug", dev["logging"].(map[string]any)["level"])
+	assert.Equal(t, "info", prod["logging"].(map[string]any)["level"])
+}
+
 func TestGetConfigValue(t *testing.T) {
 	pc, err := NewProjectConfig(fixtureProject)
 	require.NoError(t, err)
@@ -212,4 +227,52 @@ func TestSetConfigValueCreatesBaseFile(t *testing.T) {
 	require.NoError(t, err)
 	assert.True(t, ok)
 	assert.Equal(t, []any{"deprecation"}, value)
+}
+
+func TestSetConfigValueWritesIntoMatchingWhenBlock(t *testing.T) {
+	root := copyFixture(t)
+
+	pc, err := NewProjectConfig(root)
+	require.NoError(t, err)
+
+	// framework.test exists only inside framework.yaml's when@test block, so the
+	// write must update that block rather than leaking a root-level key.
+	require.NoError(t, pc.SetConfigValue("test", "framework.test", false))
+
+	content, err := os.ReadFile(filepath.Join(root, "config", "packages", "framework.yaml"))
+	require.NoError(t, err)
+	assert.Contains(t, string(content), "when@test:")
+
+	testValue, ok, err := pc.GetConfigValue("test", "framework.test")
+	require.NoError(t, err)
+	assert.True(t, ok)
+	assert.Equal(t, false, testValue)
+
+	// dev never had framework.test and must not gain it from this write.
+	_, ok, err = pc.GetConfigValue("dev", "framework.test")
+	require.NoError(t, err)
+	assert.False(t, ok)
+}
+
+func TestSetConfigValueWritesIntoWhenBlockOnEqualDepth(t *testing.T) {
+	root := copyFixture(t)
+
+	pc, err := NewProjectConfig(root)
+	require.NoError(t, err)
+
+	// mailer.dsn exists at both the root and the when@prod block of mailer.yaml.
+	// For prod the when@prod value is effective, so the write must update it
+	// there rather than the root (which would stay shadowed).
+	require.NoError(t, pc.SetConfigValue("prod", "mailer.dsn", "smtp://updated"))
+
+	prodValue, ok, err := pc.GetConfigValue("prod", "mailer.dsn")
+	require.NoError(t, err)
+	assert.True(t, ok)
+	assert.Equal(t, "smtp://updated", prodValue)
+
+	// dev resolves to the untouched root value.
+	devValue, ok, err := pc.GetConfigValue("dev", "mailer.dsn")
+	require.NoError(t, err)
+	assert.True(t, ok)
+	assert.Equal(t, "smtp://localhost", devValue)
 }

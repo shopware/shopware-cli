@@ -64,6 +64,38 @@ func TestGetResolvedConfigValue(t *testing.T) {
 	assert.Equal(t, 3, value)
 }
 
+func TestGetResolvedConfigValueAgreesWithResolvedConfig(t *testing.T) {
+	pc, err := NewProjectConfig(fixtureProject)
+	require.NoError(t, err)
+
+	// timeout resolves via a top-level env(REQUEST_TIMEOUT) default; the
+	// single-value API must apply the same default as ResolvedConfig.
+	cfg, err := pc.ResolvedConfig("dev")
+	require.NoError(t, err)
+	want := cfg["env_demo"].(map[string]any)["timeout"]
+
+	got, ok, err := pc.GetResolvedConfigValue("dev", "env_demo.timeout")
+	require.NoError(t, err)
+	assert.True(t, ok)
+	assert.Equal(t, want, got)
+	assert.Equal(t, 45, got)
+}
+
+func TestResolvedConfigLayersEnvironmentEnvFile(t *testing.T) {
+	pc, err := NewProjectConfig(fixtureProject)
+	require.NoError(t, err)
+
+	// .env.prod overrides REDIS_URL; dev keeps the base .env value.
+	prod, err := pc.ResolvedConfig("prod")
+	require.NoError(t, err)
+	prodCache := prod["framework"].(map[string]any)["cache"].(map[string]any)
+	assert.Equal(t, "redis://prod-host:6379", prodCache["default_redis_provider"])
+
+	devValue, err := pc.ResolveEnvExpression("%env(REDIS_URL)%")
+	require.NoError(t, err)
+	assert.Equal(t, "redis://localhost:6379", devValue)
+}
+
 func TestResolveEnvExpression(t *testing.T) {
 	pc, err := NewProjectConfig(fixtureProject)
 	require.NoError(t, err)
