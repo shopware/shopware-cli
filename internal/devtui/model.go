@@ -92,14 +92,32 @@ type taskDoneMsg struct{ err error }
 type configRestartDoneMsg struct{ err error }
 
 func New(opts Options) Model {
-	effectiveAdminApi := opts.Config.AdminApi
-	if opts.EnvConfig.AdminApi != nil {
-		effectiveAdminApi = opts.EnvConfig.AdminApi
+	m := Model{
+		activeTab:   tabOverview,
+		dockerMode:  opts.Executor.Type() == executor.TypeDocker,
+		projectRoot: opts.ProjectRoot,
+		executor:    opts.Executor,
+		config:      opts.Config,
+		envConfig:   opts.EnvConfig,
+		watchers:    make(map[string]*watcherHandle),
+	}
+	m.rebuildTabs()
+	return m
+}
+
+// rebuildTabs (re)creates the three tab models from the model's current
+// config, environment config, and executor. It is used both at construction
+// and after the migration wizard resolves a fresh environment, so the
+// shop URL / admin credential resolution lives in one place.
+func (m *Model) rebuildTabs() {
+	effectiveAdminApi := m.config.AdminApi
+	if m.envConfig.AdminApi != nil {
+		effectiveAdminApi = m.envConfig.AdminApi
 	}
 
-	shopURL := opts.Config.URL
-	if opts.EnvConfig.URL != "" {
-		shopURL = opts.EnvConfig.URL
+	shopURL := m.config.URL
+	if m.envConfig.URL != "" {
+		shopURL = m.envConfig.URL
 	}
 
 	var username, password string
@@ -108,22 +126,12 @@ func New(opts Options) Model {
 		password = effectiveAdminApi.Password
 	}
 
-	isDocker := opts.Executor.Type() == executor.TypeDocker
+	isDocker := m.executor.Type() == executor.TypeDocker
+	envValues, _ := envfile.ReadValues(m.projectRoot, EnvFieldKeys()...)
 
-	envValues, _ := envfile.ReadValues(opts.ProjectRoot, EnvFieldKeys()...)
-
-	return Model{
-		activeTab:   tabOverview,
-		overview:    NewOverviewModel(opts.Executor.Type(), shopURL, username, password, opts.ProjectRoot, opts.Executor, opts.Config),
-		instance:    NewInstanceModel(opts.ProjectRoot, isDocker),
-		configTab:   NewConfigModel(opts.Config, envValues),
-		dockerMode:  isDocker,
-		projectRoot: opts.ProjectRoot,
-		executor:    opts.Executor,
-		config:      opts.Config,
-		envConfig:   opts.EnvConfig,
-		watchers:    make(map[string]*watcherHandle),
-	}
+	m.overview = NewOverviewModel(m.executor.Type(), shopURL, username, password, m.projectRoot, m.executor, m.config)
+	m.instance = NewInstanceModel(m.projectRoot, isDocker)
+	m.configTab = NewConfigModel(m.config, envValues)
 }
 
 // NewMigrationWizard creates a Model that starts in the migration wizard phase

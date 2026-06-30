@@ -333,18 +333,7 @@ func (m Model) startAfterMigrationWizard() (tea.Model, tea.Cmd) {
 	m.dockerShowLogs = false
 	m.dockerSpinner = newBrandSpinner()
 
-	shopURL := m.config.URL
-	if m.envConfig.URL != "" {
-		shopURL = m.envConfig.URL
-	}
-	var username, password string
-	if m.envConfig.AdminApi != nil {
-		username = m.envConfig.AdminApi.Username
-		password = m.envConfig.AdminApi.Password
-	}
-	m.overview = NewOverviewModel(m.executor.Type(), shopURL, username, password, m.projectRoot, m.executor, m.config)
-	envValues, _ := envfile.ReadValues(m.projectRoot, EnvFieldKeys()...)
-	m.configTab = NewConfigModel(m.config, envValues)
+	m.rebuildTabs()
 
 	return m, tea.Batch(m.dockerSpinner.Tick, m.startContainers())
 }
