@@ -26,6 +26,11 @@ import (
 	"github.com/shopware/shopware-cli/logging"
 )
 
+// Receiver convention for the tab models (Overview, Instance, Config):
+// methods that return the model (Update/handleKey/activate/View and other
+// pure reads) use value receivers; methods that mutate the model in place and
+// return nothing or only a tea.Cmd (SetSize, start*/stop* streaming helpers)
+// use pointer receivers.
 type OverviewModel struct {
 	envType            string
 	shopURL            string
@@ -253,30 +258,30 @@ func (m OverviewModel) handleKey(msg tea.KeyPressMsg) (OverviewModel, tea.Cmd) {
 	return m, nil
 }
 
-func (m *OverviewModel) activate() (OverviewModel, tea.Cmd) {
+func (m OverviewModel) activate() (OverviewModel, tea.Cmd) {
 	switch m.cursor {
 	case 0: // Admin watcher
 		if m.adminWatchRunning {
-			return *m, func() tea.Msg { return stopWatcherRequestMsg{name: watcherAdmin} }
+			return m, func() tea.Msg { return stopWatcherRequestMsg{name: watcherAdmin} }
 		}
 		if !m.adminWatchStarting {
 			m.adminWatchStarting = true
-			return *m, m.startAdminWatch()
+			return m, m.startAdminWatch()
 		}
 	case 1: // Storefront watcher
 		if m.sfWatchRunning {
-			return *m, func() tea.Msg { return stopWatcherRequestMsg{name: watcherStorefront} }
+			return m, func() tea.Msg { return stopWatcherRequestMsg{name: watcherStorefront} }
 		}
 		if !m.sfWatchStarting {
-			return *m, func() tea.Msg { return startStorefrontWatchRequestMsg{} }
+			return m, func() tea.Msg { return startStorefrontWatchRequestMsg{} }
 		}
 	default: // Service — open URL
 		svcIdx := m.cursor - 2
 		if svcIdx < len(m.services) && m.services[svcIdx].URL != "" {
-			return *m, openInBrowser(m.services[svcIdx].URL)
+			return m, openInBrowser(m.services[svcIdx].URL)
 		}
 	}
-	return *m, nil
+	return m, nil
 }
 
 func openInBrowser(url string) tea.Cmd {
@@ -329,7 +334,7 @@ func (m OverviewModel) View(width, height int) string {
 	return s.String()
 }
 
-func (m *OverviewModel) startAdminWatch() tea.Cmd {
+func (m OverviewModel) startAdminWatch() tea.Cmd {
 	e := m.executor
 	projectRoot := m.projectRoot
 	shopCfg := m.shopCfg
@@ -349,7 +354,7 @@ func (m *OverviewModel) startAdminWatch() tea.Cmd {
 	})
 }
 
-func (m *OverviewModel) startStorefrontWatch(opts extension.StorefrontWatcherOptions) tea.Cmd {
+func (m OverviewModel) startStorefrontWatch(opts extension.StorefrontWatcherOptions) tea.Cmd {
 	e := m.executor
 	projectRoot := m.projectRoot
 	shopCfg := m.shopCfg
