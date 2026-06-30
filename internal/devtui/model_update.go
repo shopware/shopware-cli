@@ -269,11 +269,13 @@ func (m Model) saveSetupGuide() (tea.Model, tea.Cmd) {
 
 	m.setupGuide.step = setupStepDone
 	duration := time.Since(m.setupGuide.startedAt)
+	phpVersion := m.setupGuide.phpVersions[m.setupGuide.phpCursor]
 	return m, func() tea.Msg {
 		ctx, cancel := context.WithTimeout(context.Background(), 300*time.Millisecond)
 		defer cancel()
 		tracking.Track(ctx, "migration_wizard_completed", map[string]string{
 			"duration_ms": strconv.FormatInt(duration.Milliseconds(), 10),
+			"php_version": phpVersion,
 		})
 		return nil
 	}
