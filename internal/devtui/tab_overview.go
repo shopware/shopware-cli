@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"image/color"
 	"io"
 	"net"
 	"net/url"
@@ -16,6 +17,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
+	endoflife "github.com/shyim/go-endoflife-api"
 
 	"github.com/shopware/shopware-cli/internal/executor"
 	"github.com/shopware/shopware-cli/internal/extension"
@@ -50,6 +52,7 @@ type OverviewModel struct {
 	sfWatchRunning     bool
 	sfWatchStarting    bool
 	shopwareVersion    string
+	securityEnd        time.Time
 	cursor             int // focus index: 0=Admin watcher, 1=Storefront watcher, 2..=services
 }
 
@@ -68,6 +71,10 @@ type servicesLoadedMsg struct {
 
 type shopwareVersionLoadedMsg struct {
 	version string
+}
+
+type securityEndLoadedMsg struct {
+	securityEnd time.Time
 }
 
 // watcherHandle is shared between the goroutine running a watcher's preparation
@@ -226,6 +233,11 @@ func (m OverviewModel) Update(msg tea.Msg) (OverviewModel, tea.Cmd) {
 		}
 	case shopwareVersionLoadedMsg:
 		m.shopwareVersion = msg.version
+		if msg.version != "" {
+			return m, loadSecurityEnd(msg.version)
+		}
+	case securityEndLoadedMsg:
+		m.securityEnd = msg.securityEnd
 	case tea.KeyPressMsg:
 		return m.handleKey(msg)
 	}
@@ -300,6 +312,9 @@ func (m OverviewModel) View(width, height int) string {
 	s.WriteString("\n")
 	if m.shopwareVersion != "" {
 		s.WriteString(tui.KVRow("Version", valueStyle.Render(m.shopwareVersion)))
+	}
+	if !m.securityEnd.IsZero() {
+		s.WriteString(tui.KVRow("Security updates", renderSecurityEnd(m.securityEnd, time.Now())))
 	}
 	s.WriteString(tui.KVRow("Environment", activeBadgeStyle.Render(m.envType)))
 	s.WriteString(tui.KVRow("Shop URL", urlStyle.Render(m.shopURL)))
@@ -644,6 +659,105 @@ func loadShopwareVersion(projectRoot string) tea.Cmd {
 	return func() tea.Msg {
 		return shopwareVersionLoadedMsg{version: detectShopwareVersion(projectRoot)}
 	}
+}
+
+// loadSecurityEnd fetches, for the running Shopware major.minor release, the
+// date until which security updates are provided (the end-of-life date reported
+// by endoflife.date). It resolves to an empty string when the version cannot be
+// reduced to a major.minor cycle or the release is unknown to the API.
+func loadSecurityEnd(version string) tea.Cmd {
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(context.Background(), securityEndTimeout)
+		defer cancel()
+		return securityEndLoadedMsg{securityEnd: fetchSecurityEnd(ctx, version)}
+	}
+}
+
+// securityEndTimeout bounds the endoflife.date lookup so a slow or unreachable
+// API cannot leave the lookup hanging.
+const securityEndTimeout = 5 * time.Second
+
+func fetchSecurityEnd(ctx context.Context, version string) time.Time {
+	release := majorMinor(version)
+	if release == "" {
+		return time.Time{}
+	}
+
+	resp, err := endoflife.NewClient().ProductRelease(ctx, "shopware", release)
+	if err != nil || resp.Result.EolFrom == nil {
+		return time.Time{}
+	}
+	return resp.Result.EolFrom.Time
+}
+
+// renderSecurityEnd formats the end-of-life date as "until YYYY-MM-DD (N days
+// left)", colored by how much runway is left relative to now: green with more
+// than a year, yellow within a year, and red within a month or already expired.
+func renderSecurityEnd(eol, now time.Time) string {
+	text := "until " + eol.Format("2006-01-02") + " (" + securityEndRemaining(eol, now) + ")"
+
+	var c color.Color
+	switch securityEndLevel(eol, now) {
+	case securityEndCritical:
+		c = tui.ErrorColor
+	case securityEndWarning:
+		c = tui.WarnColor
+	default:
+		c = tui.SuccessColor
+	}
+
+	return lipgloss.NewStyle().Foreground(c).Render(text)
+}
+
+// securityEndRemaining returns a human-readable description of the time left
+// until eol, counted in whole days: "N days left", "1 day left", "expires
+// today", or "expired" once the date has passed.
+func securityEndRemaining(eol, now time.Time) string {
+	remaining := eol.Sub(now)
+	if remaining < 0 {
+		return "expired"
+	}
+	days := int(remaining / (24 * time.Hour))
+	switch {
+	case days == 0:
+		return "expires today"
+	case days == 1:
+		return "1 day left"
+	default:
+		return fmt.Sprintf("%d days left", days)
+	}
+}
+
+type securityEndStatus int
+
+const (
+	securityEndOK       securityEndStatus = iota // more than a year of support left
+	securityEndWarning                           // less than a year left
+	securityEndCritical                          // within a month or already expired
+)
+
+// securityEndLevel classifies how urgent the end of security support is: red
+// within a month or expired, yellow within a year, green otherwise.
+func securityEndLevel(eol, now time.Time) securityEndStatus {
+	switch remaining := eol.Sub(now); {
+	case remaining < 30*24*time.Hour:
+		return securityEndCritical
+	case remaining < 365*24*time.Hour:
+		return securityEndWarning
+	default:
+		return securityEndOK
+	}
+}
+
+// majorMinor reduces a full Shopware version like "6.7.0.0" to its major.minor
+// release cycle ("6.7"), which is how endoflife.date identifies releases. It
+// returns an empty string when the version does not have at least two segments.
+func majorMinor(version string) string {
+	parts := strings.Split(version, ".")
+	if len(parts) < 2 {
+		return ""
+	}
+	return parts[0] + "." + parts[1]
 }
 
 func detectShopwareVersion(projectRoot string) string {

@@ -2,9 +2,36 @@ package devtui
 
 import (
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 )
+
+func TestMajorMinor(t *testing.T) {
+	assert.Equal(t, "6.7", majorMinor("6.7.0.0"))
+	assert.Equal(t, "6.6", majorMinor("6.6.10.19"))
+	assert.Equal(t, "6.7", majorMinor("6.7"))
+	assert.Equal(t, "", majorMinor("6"))
+	assert.Equal(t, "", majorMinor(""))
+}
+
+func TestSecurityEndLevel(t *testing.T) {
+	now := time.Date(2026, 6, 30, 0, 0, 0, 0, time.UTC)
+
+	assert.Equal(t, securityEndOK, securityEndLevel(now.AddDate(2, 0, 0), now))
+	assert.Equal(t, securityEndWarning, securityEndLevel(now.AddDate(0, 6, 0), now))
+	assert.Equal(t, securityEndCritical, securityEndLevel(now.AddDate(0, 0, 10), now))
+	assert.Equal(t, securityEndCritical, securityEndLevel(now.AddDate(0, 0, -1), now))
+}
+
+func TestSecurityEndRemaining(t *testing.T) {
+	now := time.Date(2026, 6, 30, 12, 0, 0, 0, time.UTC)
+
+	assert.Equal(t, "607 days left", securityEndRemaining(time.Date(2028, 2, 28, 0, 0, 0, 0, time.UTC), now))
+	assert.Equal(t, "1 day left", securityEndRemaining(now.Add(36*time.Hour), now))
+	assert.Equal(t, "expires today", securityEndRemaining(now.Add(12*time.Hour), now))
+	assert.Equal(t, "expired", securityEndRemaining(now.Add(-1*time.Hour), now))
+}
 
 func TestNewOverviewModel(t *testing.T) {
 	m := NewOverviewModel("docker", "http://localhost:8000", "admin", "shopware", "/tmp/project", nil, nil)
