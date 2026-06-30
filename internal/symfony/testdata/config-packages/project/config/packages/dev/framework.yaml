@@ -1,0 +1,5 @@
+framework:
+    profiler:
+        only_exceptions: false
+    php_errors:
+        log: true

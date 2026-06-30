@@ -89,6 +89,18 @@ func ReadValues(projectRoot string, keys ...string) (map[string]string, error) {
 	return out, nil
 }
 
+// ReadAll returns every variable defined across the project's Symfony env
+// files, merged with Symfony precedence (.env.dist < .env < .env.local). An
+// empty map is returned when no env file exists.
+func ReadAll(projectRoot string) (map[string]string, error) {
+	files := resolveEnvFiles(projectRoot)
+	if len(files) == 0 {
+		return map[string]string{}, nil
+	}
+
+	return godotenv.Read(files...)
+}
+
 // WriteValue is a convenience wrapper around WriteValues for a single key.
 func WriteValue(projectRoot, key, value string) error {
 	return WriteValues(projectRoot, map[string]string{key: value})
