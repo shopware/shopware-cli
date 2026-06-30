@@ -167,9 +167,8 @@ func TestUpdateLifecycle_ShopwareInstallDone_Success(t *testing.T) {
 		envConfig:   &shop.EnvironmentConfig{},
 		watchers:    make(map[string]*watcherHandle),
 		install: installWizard{
-			step:     installStepCredentials,
-			username: usernameInput,
-			password: passwordInput,
+			credentialStep: credentialStep{username: usernameInput, password: passwordInput},
+			step:           installStepCredentials,
 		},
 		installProg: installProgress{progress: newInstallProgress()},
 	}
@@ -207,8 +206,7 @@ func TestUpdateLifecycle_ShopwareInstallDone_ErrorShowsLogs(t *testing.T) {
 		envConfig:   &shop.EnvironmentConfig{},
 		watchers:    make(map[string]*watcherHandle),
 		install: installWizard{
-			username: usernameInput,
-			password: passwordInput,
+			credentialStep: credentialStep{username: usernameInput, password: passwordInput},
 		},
 		installProg: installProgress{progress: newInstallProgress()},
 	}

@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"strings"
 
-	"charm.land/bubbles/v2/textinput"
 	"charm.land/lipgloss/v2"
 
 	"github.com/shopware/shopware-cli/internal/tui"
@@ -95,20 +94,7 @@ func (sg migrationWizard) viewAdminUser() string {
 	b.WriteString("\n")
 	b.WriteString(tui.DimStyle.Render("The login for your local Shopware admin panel and API."))
 	b.WriteString("\n\n")
-	b.WriteString(valueStyle.Render("Choose a username"))
-	b.WriteString("\n")
-	b.WriteString(sg.username.View())
-	b.WriteString("\n\n")
-	b.WriteString(valueStyle.Render("Choose a password"))
-	b.WriteString(tui.DimStyle.Render("  at least 8 characters"))
-	b.WriteString("\n")
-	b.WriteString(sg.password.View())
-	if sg.passwordErr != "" {
-		b.WriteString("\n")
-		b.WriteString(errorStyle.Render(sg.passwordErr))
-	}
-	b.WriteString("\n\n")
-	b.WriteString(renderShowPasswordCheckbox(sg.password.EchoMode == textinput.EchoNormal, sg.credFocus == credFocusShowPassword))
+	sg.credentialStep.render(&b)
 	b.WriteString("\n\n")
 	b.WriteString(tui.DimStyle.Render("Will be written to "))
 	b.WriteString(tui.BoldText.Render(".shopware-project.yml"))

@@ -10,24 +10,12 @@ import (
 )
 
 func newTestInstallModel() Model {
-	username := textinput.New()
-	username.Placeholder = defaultUsername
-	username.Prompt = "Username: "
-	username.CharLimit = 50
-
-	password := textinput.New()
-	password.Placeholder = "shopware"
-	password.Prompt = "Password: "
-	password.CharLimit = 50
-	password.EchoMode = textinput.EchoPassword
-
 	return Model{
 		phase: phaseInstallPrompt,
 		install: installWizard{
-			step:       installStepAsk,
-			confirmYes: true,
-			username:   username,
-			password:   password,
+			credentialStep: newInstallCredentialStep(),
+			step:           installStepAsk,
+			confirmYes:     true,
 		},
 	}
 }

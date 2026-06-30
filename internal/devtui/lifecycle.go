@@ -3,7 +3,6 @@ package devtui
 import (
 	"strings"
 
-	"charm.land/bubbles/v2/textinput"
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/shopware/shopware-cli/internal/shop"
@@ -66,18 +65,11 @@ func (m Model) updateLifecycle(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.phase = phaseInstallPrompt
 		m.overlayLines = nil
 
-		usernameInput := textinput.New()
-		usernameInput.Placeholder = defaultUsername
-		usernameInput.Prompt = "Username: "
-		usernameInput.CharLimit = 50
-
-		passwordInput := textinput.New()
-		passwordInput.Placeholder = "shopware"
-		passwordInput.Prompt = "Password: "
-		passwordInput.CharLimit = 50
-		passwordInput.EchoMode = textinput.EchoPassword
-
-		m.install = installWizard{step: installStepAsk, confirmYes: true, username: usernameInput, password: passwordInput}
+		m.install = installWizard{
+			credentialStep: newInstallCredentialStep(),
+			step:           installStepAsk,
+			confirmYes:     true,
+		}
 		return m, nil
 
 	case shopwareInstallDoneMsg:

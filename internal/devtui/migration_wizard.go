@@ -22,16 +22,14 @@ const (
 )
 
 type migrationWizard struct {
+	credentialStep
+
 	step                  migrationStep
 	phpVersions           []string // PHP versions compatible with the project
 	phpCursor             int
 	confirmYes            bool
 	deploymentHelperAdded bool // composer.json was updated to require shopware/deployment-helper
 	url                   textinput.Model
-	username              textinput.Model
-	password              textinput.Model
-	passwordErr           string
-	credFocus             credFocus
 	startedAt             time.Time
 
 	err error
@@ -86,29 +84,15 @@ func newMigrationWizard(projectRoot string) migrationWizard {
 	urlInput.Prompt = ""
 	urlInput.SetValue("http://127.0.0.1:8000")
 
-	usernameInput := textinput.New()
-	usernameInput.Placeholder = "admin"
-	usernameInput.CharLimit = 64
-	usernameInput.Prompt = ""
-	usernameInput.SetValue("admin")
-
-	passwordInput := textinput.New()
-	passwordInput.Placeholder = "shopware"
-	passwordInput.CharLimit = 64
-	passwordInput.Prompt = ""
-	passwordInput.EchoMode = textinput.EchoPassword
-	passwordInput.SetValue("shopware")
-
 	phpVersions, phpCursor, _ := resolvePHPVersions(projectRoot)
 
 	return migrationWizard{
-		step:        migrationStepWelcome,
-		phpVersions: phpVersions,
-		phpCursor:   phpCursor,
-		confirmYes:  true,
-		url:         urlInput,
-		username:    usernameInput,
-		password:    passwordInput,
+		credentialStep: newCredentialStep("admin", "shopware"),
+		step:           migrationStepWelcome,
+		phpVersions:    phpVersions,
+		phpCursor:      phpCursor,
+		confirmYes:     true,
+		url:            urlInput,
 	}
 }
 
@@ -153,37 +137,11 @@ func (sg *migrationWizard) updateWelcome(msg tea.KeyPressMsg) (migrationWizard, 
 		if sg.confirmYes {
 			sg.startedAt = time.Now()
 			sg.step = migrationStepAdminUser
-			return sg.focusAdminCred(credFocusUsername)
+			return *sg, sg.focus(credFocusUsername)
 		}
 		return *sg, tea.Quit
 	}
 	return *sg, nil
-}
-
-// focusAdminCred moves focus to the given element of the combined admin
-// account step, clamping to the valid range and syncing the text input focus.
-func (sg *migrationWizard) focusAdminCred(target credFocus) (migrationWizard, tea.Cmd) {
-	if target < credFocusUsername {
-		target = credFocusUsername
-	}
-	if target > credFocusShowPassword {
-		target = credFocusShowPassword
-	}
-	sg.credFocus = target
-	sg.username.Blur()
-	sg.password.Blur()
-	var cmd tea.Cmd
-	switch target {
-	case credFocusUsername:
-		sg.username.Focus()
-		cmd = textinput.Blink
-	case credFocusPassword:
-		sg.password.Focus()
-		cmd = textinput.Blink
-	case credFocusShowPassword:
-		// The checkbox has no text input to focus.
-	}
-	return *sg, cmd
 }
 
 func (sg *migrationWizard) updateAdminUser(msg tea.KeyPressMsg) (migrationWizard, tea.Cmd) {
@@ -191,48 +149,28 @@ func (sg *migrationWizard) updateAdminUser(msg tea.KeyPressMsg) (migrationWizard
 	case keyEnter:
 		return sg.handleAdminUserEnter()
 	case keyTab, keyDown:
-		return sg.focusAdminCred(sg.credFocus + 1)
+		return *sg, sg.focus(sg.credFocus + 1)
 	case keyShiftTab, keyUp:
-		return sg.focusAdminCred(sg.credFocus - 1)
+		return *sg, sg.focus(sg.credFocus - 1)
 	}
-	switch sg.credFocus {
-	case credFocusUsername:
-		var cmd tea.Cmd
-		sg.username, cmd = sg.username.Update(msg)
-		return *sg, cmd
-	case credFocusPassword:
-		sg.passwordErr = ""
-		var cmd tea.Cmd
-		sg.password, cmd = sg.password.Update(msg)
-		return *sg, cmd
-	case credFocusShowPassword:
-		// The checkbox swallows typed keys.
-	}
-	return *sg, nil
+	return *sg, sg.updateInput(msg)
 }
 
 func (sg *migrationWizard) handleAdminUserEnter() (migrationWizard, tea.Cmd) {
 	switch sg.credFocus {
 	case credFocusUsername:
 		// Enter on the username field advances to the password field.
-		return sg.focusAdminCred(credFocusPassword)
+		return *sg, sg.focus(credFocusPassword)
 	case credFocusShowPassword:
-		if sg.password.EchoMode == textinput.EchoPassword {
-			sg.password.EchoMode = textinput.EchoNormal
-		} else {
-			sg.password.EchoMode = textinput.EchoPassword
-		}
+		sg.toggleShowPassword()
 		return *sg, nil
 	case credFocusPassword:
 		// Enter on the password field submits; handled below.
 	}
-	if err := validateAdminPassword(sg.password.Value()); err != nil {
-		sg.passwordErr = err.Error()
+	if !sg.validatePassword() {
 		return *sg, nil
 	}
-	sg.passwordErr = ""
-	sg.username.Blur()
-	sg.password.Blur()
+	sg.blur()
 	sg.step = migrationStepDockerPHP
 	return *sg, nil
 }

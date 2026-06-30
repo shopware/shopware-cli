@@ -36,17 +36,6 @@ const (
 	installStepCredentials
 )
 
-// credFocus identifies which element of a combined admin-account step
-// (username field, password field, or the show-password checkbox) currently
-// has focus. It is shared by the install wizard and the migration wizard.
-type credFocus int
-
-const (
-	credFocusUsername credFocus = iota
-	credFocusPassword
-	credFocusShowPassword
-)
-
 type installLanguage struct {
 	id    string
 	label string
@@ -72,15 +61,31 @@ var (
 )
 
 type installWizard struct {
-	step        installStep
-	cursor      int
-	confirmYes  bool
-	language    string
-	currency    string
-	username    textinput.Model
-	password    textinput.Model
-	credFocus   credFocus
-	passwordErr string
+	credentialStep
+
+	step       installStep
+	cursor     int
+	confirmYes bool
+	language   string
+	currency   string
+}
+
+// newInstallCredentialStep builds the install wizard's credential inputs. They
+// start empty (filled in later from the chosen defaults) and use labelled
+// prompts that match the install prompt layout.
+func newInstallCredentialStep() credentialStep {
+	username := textinput.New()
+	username.Placeholder = defaultUsername
+	username.Prompt = "Username: "
+	username.CharLimit = 50
+
+	password := textinput.New()
+	password.Placeholder = "shopware"
+	password.Prompt = "Password: "
+	password.CharLimit = 50
+	password.EchoMode = textinput.EchoPassword
+
+	return credentialStep{username: username, password: password}
 }
 
 type installProgress struct {
@@ -175,35 +180,9 @@ func (m Model) updateInstallStepCurrency(msg tea.KeyPressMsg) (tea.Model, tea.Cm
 		m.install.step = installStepCredentials
 		m.install.username.SetValue(defaultUsername)
 		m.install.password.SetValue("shopware")
-		return m.focusInstallCred(credFocusUsername)
+		return m, m.install.focus(credFocusUsername)
 	}
 	return m, nil
-}
-
-// focusInstallCred moves focus to the given element of the combined admin
-// account step, clamping to the valid range and syncing the text input focus.
-func (m Model) focusInstallCred(target credFocus) (tea.Model, tea.Cmd) {
-	if target < credFocusUsername {
-		target = credFocusUsername
-	}
-	if target > credFocusShowPassword {
-		target = credFocusShowPassword
-	}
-	m.install.credFocus = target
-	m.install.username.Blur()
-	m.install.password.Blur()
-	var cmd tea.Cmd
-	switch target {
-	case credFocusUsername:
-		m.install.username.Focus()
-		cmd = textinput.Blink
-	case credFocusPassword:
-		m.install.password.Focus()
-		cmd = textinput.Blink
-	case credFocusShowPassword:
-		// The checkbox has no text input to focus.
-	}
-	return m, cmd
 }
 
 func (m Model) updateInstallStepCredentials(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
@@ -211,48 +190,28 @@ func (m Model) updateInstallStepCredentials(msg tea.KeyPressMsg) (tea.Model, tea
 	case keyEnter:
 		return m.handleInstallCredentialsEnter()
 	case keyTab, keyDown:
-		return m.focusInstallCred(m.install.credFocus + 1)
+		return m, m.install.focus(m.install.credFocus + 1)
 	case keyShiftTab, keyUp:
-		return m.focusInstallCred(m.install.credFocus - 1)
+		return m, m.install.focus(m.install.credFocus - 1)
 	}
-	switch m.install.credFocus {
-	case credFocusUsername:
-		var cmd tea.Cmd
-		m.install.username, cmd = m.install.username.Update(msg)
-		return m, cmd
-	case credFocusPassword:
-		m.install.passwordErr = ""
-		var cmd tea.Cmd
-		m.install.password, cmd = m.install.password.Update(msg)
-		return m, cmd
-	case credFocusShowPassword:
-		// The checkbox swallows typed keys.
-	}
-	return m, nil
+	return m, m.install.updateInput(msg)
 }
 
 func (m Model) handleInstallCredentialsEnter() (tea.Model, tea.Cmd) {
 	switch m.install.credFocus {
 	case credFocusUsername:
 		// Enter on the username field advances to the password field.
-		return m.focusInstallCred(credFocusPassword)
+		return m, m.install.focus(credFocusPassword)
 	case credFocusShowPassword:
-		if m.install.password.EchoMode == textinput.EchoPassword {
-			m.install.password.EchoMode = textinput.EchoNormal
-		} else {
-			m.install.password.EchoMode = textinput.EchoPassword
-		}
+		m.install.toggleShowPassword()
 		return m, nil
 	case credFocusPassword:
 		// Enter on the password field submits; handled below.
 	}
-	if err := validateAdminPassword(m.install.password.Value()); err != nil {
-		m.install.passwordErr = err.Error()
+	if !m.install.validatePassword() {
 		return m, nil
 	}
-	m.install.passwordErr = ""
-	m.install.username.Blur()
-	m.install.password.Blur()
+	m.install.blur()
 	m.phase = phaseInstalling
 	m.overlayLines = nil
 	m.installProg = installProgress{
@@ -297,20 +256,7 @@ func (m Model) renderInstallPrompt(b *strings.Builder) {
 		b.WriteString("\n")
 		b.WriteString(tui.DimStyle.Render("The login for the Shopware admin panel and API."))
 		b.WriteString("\n\n")
-		b.WriteString(valueStyle.Render("Choose a username"))
-		b.WriteString("\n")
-		b.WriteString(m.install.username.View())
-		b.WriteString("\n\n")
-		b.WriteString(valueStyle.Render("Choose a password"))
-		b.WriteString(tui.DimStyle.Render("  at least 8 characters"))
-		b.WriteString("\n")
-		b.WriteString(m.install.password.View())
-		if m.install.passwordErr != "" {
-			b.WriteString("\n")
-			b.WriteString(errorStyle.Render(m.install.passwordErr))
-		}
-		b.WriteString("\n\n")
-		b.WriteString(renderShowPasswordCheckbox(m.install.password.EchoMode == textinput.EchoNormal, m.install.credFocus == credFocusShowPassword))
+		m.install.credentialStep.render(b)
 		b.WriteString("\n\n")
 		b.WriteString(tui.DimStyle.Render("Used to create the Shopware admin user."))
 	}
