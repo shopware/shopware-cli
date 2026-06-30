@@ -29,8 +29,8 @@ func (m Model) View() tea.View {
 			title = m.dockerSpinner.View() + " " + title
 		}
 		v.Content = m.renderDockerLogs(title, "")
-	case phaseSetupGuide:
-		v.Content = m.renderSetupGuide()
+	case phaseMigrationWizard:
+		v.Content = m.renderMigrationWizard()
 	}
 
 	if m.modal != nil {
@@ -170,7 +170,7 @@ func (m Model) renderPhase() string {
 		}
 		content.WriteString(tui.RenderPhaseCard(strings.TrimRight(card.String(), "\n")))
 		footerHint = tui.ShortcutBadge("l", "Toggle logs")
-	case phaseDashboard, phaseTask, phaseSetupGuide:
+	case phaseDashboard, phaseTask, phaseMigrationWizard:
 		// Rendered by the outer View() dispatch, not here.
 	}
 
@@ -215,9 +215,9 @@ func renderPhaseLayout(content string, width, height int, footerHint string) str
 	return header + "\n" + contentBox.Render(normalized) + "\n" + footer
 }
 
-func (m Model) renderSetupGuide() string {
-	footerHint := m.setupGuide.footerHint()
-	cardContent := m.setupGuide.viewContent()
+func (m Model) renderMigrationWizard() string {
+	footerHint := m.migrationWizard.footerHint()
+	cardContent := m.migrationWizard.viewContent()
 	return renderPhaseLayout(cardContent, m.width, m.height, footerHint)
 }
 

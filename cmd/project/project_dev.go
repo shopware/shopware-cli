@@ -52,7 +52,7 @@ var projectDevCmd = &cobra.Command{
 			if !isatty.IsTerminal(os.Stdin.Fd()) {
 				return shop.ErrDevModeNotSupported
 			}
-			return runSetupGuideTUI(projectRoot, cfg)
+			return runMigrationWizardTUI(projectRoot, cfg)
 		}
 
 		envCfg, err := cfg.ResolveEnvironment(environmentName)
@@ -127,14 +127,14 @@ var projectDevStatusCmd = &cobra.Command{
 	},
 }
 
-func runSetupGuideTUI(projectRoot string, cfg *shop.Config) error {
+func runMigrationWizardTUI(projectRoot string, cfg *shop.Config) error {
 	envCfg := &shop.EnvironmentConfig{Type: "docker", URL: "http://127.0.0.1:8000"}
 	exec, err := executor.New(projectRoot, envCfg, cfg)
 	if err != nil {
 		return err
 	}
 
-	m := devtui.NewSetupGuide(devtui.Options{
+	m := devtui.NewMigrationWizard(devtui.Options{
 		ProjectRoot: projectRoot,
 		Config:      cfg,
 		EnvConfig:   envCfg,

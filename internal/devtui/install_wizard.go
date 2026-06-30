@@ -38,7 +38,7 @@ const (
 
 // credFocus identifies which element of a combined admin-account step
 // (username field, password field, or the show-password checkbox) currently
-// has focus. It is shared by the install wizard and the setup guide.
+// has focus. It is shared by the install wizard and the migration wizard.
 type credFocus int
 
 const (

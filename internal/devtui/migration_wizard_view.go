@@ -10,17 +10,17 @@ import (
 	"github.com/shopware/shopware-cli/internal/tui"
 )
 
-func (sg setupGuide) viewContent() string {
+func (sg migrationWizard) viewContent() string {
 	switch sg.step {
-	case setupStepWelcome:
+	case migrationStepWelcome:
 		return sg.viewWelcome()
-	case setupStepAdminUser:
+	case migrationStepAdminUser:
 		return sg.viewAdminUser()
-	case setupStepDockerPHP:
+	case migrationStepDockerPHP:
 		return sg.viewDockerPHP()
-	case setupStepReview:
+	case migrationStepReview:
 		return sg.viewReview()
-	case setupStepDone:
+	case migrationStepDone:
 		return sg.viewDone()
 	}
 	return ""
@@ -32,28 +32,28 @@ func stepBadge(stepNum, totalSteps int) string {
 
 // totalSteps returns the number of numbered wizard steps:
 // admin account, PHP version, review.
-func (sg setupGuide) totalSteps() int {
+func (sg migrationWizard) totalSteps() int {
 	return 3
 }
 
 // stepNum returns the 1-based index of the given wizard step within the
 // currently active step sequence. Steps outside the numbered sequence
 // (welcome, done) return 0.
-func (sg setupGuide) stepNum(step setupStep) int {
+func (sg migrationWizard) stepNum(step migrationStep) int {
 	switch step {
-	case setupStepAdminUser:
+	case migrationStepAdminUser:
 		return 1
-	case setupStepDockerPHP:
+	case migrationStepDockerPHP:
 		return 2
-	case setupStepReview:
+	case migrationStepReview:
 		return 3
-	case setupStepWelcome, setupStepDone:
+	case migrationStepWelcome, migrationStepDone:
 		return 0
 	}
 	return 0
 }
 
-func (sg setupGuide) viewWelcome() string {
+func (sg migrationWizard) viewWelcome() string {
 	var b strings.Builder
 	b.WriteString(tui.TextBadge("Setup"))
 	b.WriteString("\n\n")
@@ -87,9 +87,9 @@ func (sg setupGuide) viewWelcome() string {
 	return tui.RenderPhaseCardCowsay("Let me help you to set up Docker!", b.String())
 }
 
-func (sg setupGuide) viewAdminUser() string {
+func (sg migrationWizard) viewAdminUser() string {
 	var b strings.Builder
-	b.WriteString(stepBadge(sg.stepNum(setupStepAdminUser), sg.totalSteps()))
+	b.WriteString(stepBadge(sg.stepNum(migrationStepAdminUser), sg.totalSteps()))
 	b.WriteString("\n\n")
 	b.WriteString(tui.TitleStyle.Render("Admin Account"))
 	b.WriteString("\n")
@@ -117,9 +117,9 @@ func (sg setupGuide) viewAdminUser() string {
 	return tui.RenderPhaseCard(b.String())
 }
 
-func (sg setupGuide) viewDockerPHP() string {
+func (sg migrationWizard) viewDockerPHP() string {
 	var b strings.Builder
-	b.WriteString(stepBadge(sg.stepNum(setupStepDockerPHP), sg.totalSteps()))
+	b.WriteString(stepBadge(sg.stepNum(migrationStepDockerPHP), sg.totalSteps()))
 	b.WriteString("\n\n")
 	b.WriteString(tui.TitleStyle.Render("Docker Configuration"))
 	b.WriteString("\n")
@@ -139,10 +139,10 @@ func (sg setupGuide) viewDockerPHP() string {
 	return tui.RenderPhaseCard(b.String())
 }
 
-func (sg setupGuide) viewReview() string {
+func (sg migrationWizard) viewReview() string {
 	c := sg.currentConfig()
 	var b strings.Builder
-	b.WriteString(stepBadge(sg.stepNum(setupStepReview), sg.totalSteps()))
+	b.WriteString(stepBadge(sg.stepNum(migrationStepReview), sg.totalSteps()))
 	b.WriteString("\n\n")
 	b.WriteString(tui.TitleStyle.Render("Review Configuration"))
 	b.WriteString("\n")
@@ -174,7 +174,7 @@ func (sg setupGuide) viewReview() string {
 	return tui.RenderPhaseCard(b.String())
 }
 
-func (sg setupGuide) viewDone() string {
+func (sg migrationWizard) viewDone() string {
 	if sg.err != nil {
 		var b strings.Builder
 		b.WriteString(lipgloss.NewStyle().Bold(true).Foreground(tui.ErrorColor).Render("Configuration failed"))
@@ -216,16 +216,16 @@ func (sg setupGuide) viewDone() string {
 	return tui.RenderPhaseCardCowsay("Setup's complete!", b.String())
 }
 
-func (sg setupGuide) footerHint() string {
+func (sg migrationWizard) footerHint() string {
 	// phaseHeaderFooter always appends a "ctrl+c Exit" badge, so don't
 	// repeat it here.
 	switch sg.step {
-	case setupStepWelcome:
+	case migrationStepWelcome:
 		return tui.ShortcutBar(
 			tui.Shortcut{Key: "←/→", Label: "Select"},
 			tui.Shortcut{Key: "enter", Label: "Confirm"},
 		)
-	case setupStepAdminUser:
+	case migrationStepAdminUser:
 		if sg.credFocus == credFocusShowPassword {
 			return tui.ShortcutBar(
 				tui.Shortcut{Key: "↑/↓/tab", Label: "Navigate"},
@@ -236,17 +236,17 @@ func (sg setupGuide) footerHint() string {
 			tui.Shortcut{Key: "↑/↓/tab", Label: "Navigate"},
 			tui.Shortcut{Key: "enter", Label: "Continue"},
 		)
-	case setupStepDockerPHP:
+	case migrationStepDockerPHP:
 		return tui.ShortcutBar(
 			tui.Shortcut{Key: "↑/↓", Label: "Select"},
 			tui.Shortcut{Key: "enter", Label: "Continue"},
 		)
-	case setupStepReview:
+	case migrationStepReview:
 		return tui.ShortcutBar(
 			tui.Shortcut{Key: "←/→", Label: "Select"},
 			tui.Shortcut{Key: "enter", Label: "Confirm"},
 		)
-	case setupStepDone:
+	case migrationStepDone:
 		return tui.ShortcutBar(tui.Shortcut{Key: "enter", Label: "Continue"})
 	}
 	return ""

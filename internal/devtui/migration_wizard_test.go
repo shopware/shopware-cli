@@ -48,43 +48,43 @@ func TestResolvePHPVersions_NoMatchingVersionsFallsBackToAll(t *testing.T) {
 	assert.Equal(t, "^9.0", constraint)
 }
 
-func TestSetupGuideAdminUser_EnterOnUsernameFocusesPassword(t *testing.T) {
-	sg := newSetupGuide("")
-	sg.step = setupStepAdminUser
+func TestMigrationWizardAdminUser_EnterOnUsernameFocusesPassword(t *testing.T) {
+	sg := newMigrationWizard("")
+	sg.step = migrationStepAdminUser
 	sg.credFocus = credFocusUsername
 	sg.username.Focus()
 
 	out, _ := sg.update(tea.KeyPressMsg(tea.Key{Code: tea.KeyEnter}))
-	assert.Equal(t, setupStepAdminUser, out.step, "should stay on the admin account step")
+	assert.Equal(t, migrationStepAdminUser, out.step, "should stay on the admin account step")
 	assert.Equal(t, credFocusPassword, out.credFocus)
 	assert.True(t, out.password.Focused())
 }
 
-func TestSetupGuideAdminUser_ShortPasswordBlocksAdvance(t *testing.T) {
-	sg := newSetupGuide("")
-	sg.step = setupStepAdminUser
+func TestMigrationWizardAdminUser_ShortPasswordBlocksAdvance(t *testing.T) {
+	sg := newMigrationWizard("")
+	sg.step = migrationStepAdminUser
 	sg.credFocus = credFocusPassword
 	sg.password.SetValue("shopwar")
 
 	out, _ := sg.update(tea.KeyPressMsg(tea.Key{Code: tea.KeyEnter}))
-	assert.Equal(t, setupStepAdminUser, out.step, "should stay on the admin account step")
+	assert.Equal(t, migrationStepAdminUser, out.step, "should stay on the admin account step")
 	assert.NotEmpty(t, out.passwordErr, "should set a validation error")
 }
 
-func TestSetupGuideAdminUser_ValidPasswordAdvances(t *testing.T) {
-	sg := newSetupGuide("")
-	sg.step = setupStepAdminUser
+func TestMigrationWizardAdminUser_ValidPasswordAdvances(t *testing.T) {
+	sg := newMigrationWizard("")
+	sg.step = migrationStepAdminUser
 	sg.credFocus = credFocusPassword
 	sg.password.SetValue("shopware")
 
 	out, _ := sg.update(tea.KeyPressMsg(tea.Key{Code: tea.KeyEnter}))
-	assert.Equal(t, setupStepDockerPHP, out.step)
+	assert.Equal(t, migrationStepDockerPHP, out.step)
 	assert.Empty(t, out.passwordErr)
 }
 
-func TestSetupGuideAdminUser_TypingClearsError(t *testing.T) {
-	sg := newSetupGuide("")
-	sg.step = setupStepAdminUser
+func TestMigrationWizardAdminUser_TypingClearsError(t *testing.T) {
+	sg := newMigrationWizard("")
+	sg.step = migrationStepAdminUser
 	sg.credFocus = credFocusPassword
 	sg.passwordErr = "password must be at least 8 characters long"
 
@@ -92,9 +92,9 @@ func TestSetupGuideAdminUser_TypingClearsError(t *testing.T) {
 	assert.Empty(t, out.passwordErr)
 }
 
-func TestSetupGuideAdminUser_TabNavigatesFocus(t *testing.T) {
-	sg := newSetupGuide("")
-	sg.step = setupStepAdminUser
+func TestMigrationWizardAdminUser_TabNavigatesFocus(t *testing.T) {
+	sg := newMigrationWizard("")
+	sg.step = migrationStepAdminUser
 	sg.credFocus = credFocusUsername
 
 	sg, _ = sg.update(tea.KeyPressMsg(tea.Key{Code: tea.KeyTab}))
@@ -110,27 +110,27 @@ func TestSetupGuideAdminUser_TabNavigatesFocus(t *testing.T) {
 	assert.Equal(t, credFocusShowPassword, sg.credFocus)
 }
 
-func TestSetupGuideAdminUser_EnterOnCheckboxTogglesEcho(t *testing.T) {
-	sg := newSetupGuide("")
-	sg.step = setupStepAdminUser
+func TestMigrationWizardAdminUser_EnterOnCheckboxTogglesEcho(t *testing.T) {
+	sg := newMigrationWizard("")
+	sg.step = migrationStepAdminUser
 	sg.credFocus = credFocusShowPassword
 
 	sg, _ = sg.update(tea.KeyPressMsg(tea.Key{Code: tea.KeyEnter}))
 	assert.Equal(t, textinput.EchoNormal, sg.password.EchoMode)
-	assert.Equal(t, setupStepAdminUser, sg.step)
+	assert.Equal(t, migrationStepAdminUser, sg.step)
 
 	sg, _ = sg.update(tea.KeyPressMsg(tea.Key{Code: tea.KeyEnter}))
 	assert.Equal(t, textinput.EchoPassword, sg.password.EchoMode)
 }
 
-func TestSetupGuideReview_QuitButtonQuits(t *testing.T) {
-	sg := newSetupGuide("")
-	sg.step = setupStepReview
+func TestMigrationWizardReview_QuitButtonQuits(t *testing.T) {
+	sg := newMigrationWizard("")
+	sg.step = migrationStepReview
 	sg.confirmYes = false // user selected the "Quit" button
 
 	m := Model{
-		phase:      phaseSetupGuide,
-		setupGuide: sg,
+		phase:      phaseMigrationWizard,
+		migrationWizard: sg,
 		config:     &shop.Config{},
 		watchers:   make(map[string]*watcherHandle),
 	}
@@ -141,14 +141,14 @@ func TestSetupGuideReview_QuitButtonQuits(t *testing.T) {
 	assert.True(t, isQuit, "Enter on Quit button should emit tea.QuitMsg")
 }
 
-func TestSetupGuideReview_SaveButtonDoesNotQuit(t *testing.T) {
-	sg := newSetupGuide("")
-	sg.step = setupStepReview
+func TestMigrationWizardReview_SaveButtonDoesNotQuit(t *testing.T) {
+	sg := newMigrationWizard("")
+	sg.step = migrationStepReview
 	sg.confirmYes = true // user selected "Save & start"
 
 	m := Model{
-		phase:       phaseSetupGuide,
-		setupGuide:  sg,
+		phase:       phaseMigrationWizard,
+		migrationWizard:  sg,
 		config:      &shop.Config{},
 		projectRoot: t.TempDir(),
 		watchers:    make(map[string]*watcherHandle),
@@ -160,7 +160,7 @@ func TestSetupGuideReview_SaveButtonDoesNotQuit(t *testing.T) {
 		_, isQuit := cmd().(tea.QuitMsg)
 		assert.False(t, isQuit, "Save button must not quit")
 	}
-	assert.Equal(t, setupStepDone, updated.(Model).setupGuide.step)
+	assert.Equal(t, migrationStepDone, updated.(Model).migrationWizard.step)
 }
 
 func TestMergeLocalProfilerSecrets(t *testing.T) {
@@ -280,9 +280,9 @@ func TestResolvePHPVersions_PlatformFallback(t *testing.T) {
 	assert.Equal(t, ">=8.2", constraint)
 }
 
-func TestNewSetupGuide(t *testing.T) {
-	sg := newSetupGuide("")
-	assert.Equal(t, setupStepWelcome, sg.step)
+func TestNewMigrationWizard(t *testing.T) {
+	sg := newMigrationWizard("")
+	assert.Equal(t, migrationStepWelcome, sg.step)
 	// Without a composer.lock the wizard offers every supported PHP version
 	// and defaults the cursor to the highest.
 	assert.Equal(t, len(sg.phpVersions)-1, sg.phpCursor)
@@ -292,8 +292,8 @@ func TestNewSetupGuide(t *testing.T) {
 	assert.Equal(t, "shopware", sg.password.Value())
 }
 
-func TestSetupGuideCurrentConfig(t *testing.T) {
-	sg := newSetupGuide("")
+func TestMigrationWizardCurrentConfig(t *testing.T) {
+	sg := newMigrationWizard("")
 	sg.phpCursor = 2 // 8.4
 
 	c := sg.currentConfig()
@@ -303,9 +303,9 @@ func TestSetupGuideCurrentConfig(t *testing.T) {
 	assert.Equal(t, "8.4", c.phpVersion)
 }
 
-func TestSetupGuideApplyToConfig(t *testing.T) {
+func TestMigrationWizardApplyToConfig(t *testing.T) {
 	cfg := &shop.Config{}
-	sg := newSetupGuide("")
+	sg := newMigrationWizard("")
 	sg.phpCursor = 2 // 8.4
 
 	sg.applyToConfig(cfg)
@@ -325,9 +325,9 @@ func TestSetupGuideApplyToConfig(t *testing.T) {
 	assert.Equal(t, "", cfg.Docker.PHP.Profiler)
 }
 
-func TestSetupGuideApplyToConfig_PreservesExistingURL(t *testing.T) {
+func TestMigrationWizardApplyToConfig_PreservesExistingURL(t *testing.T) {
 	cfg := &shop.Config{URL: "https://myshop.example.com"}
-	sg := newSetupGuide("")
+	sg := newMigrationWizard("")
 
 	sg.applyToConfig(cfg)
 
@@ -337,41 +337,41 @@ func TestSetupGuideApplyToConfig_PreservesExistingURL(t *testing.T) {
 	assert.Equal(t, "http://127.0.0.1:8000", cfg.Environments["local"].URL)
 }
 
-func TestSetupGuideViewSteps(t *testing.T) {
-	sg := newSetupGuide("")
+func TestMigrationWizardViewSteps(t *testing.T) {
+	sg := newMigrationWizard("")
 
 	// Welcome should render without panic
 	view := sg.viewContent()
 	assert.Contains(t, view, "Docker")
 
-	sg.step = setupStepAdminUser
+	sg.step = migrationStepAdminUser
 	sg.username.Focus()
 	view = sg.viewContent()
 	assert.Contains(t, view, "Step")
 	assert.Contains(t, view, "Choose a username")
 	assert.Contains(t, view, "Choose a password")
 
-	sg.step = setupStepDockerPHP
+	sg.step = migrationStepDockerPHP
 	view = sg.viewContent()
 	assert.Contains(t, view, "PHP")
 
-	sg.step = setupStepReview
+	sg.step = migrationStepReview
 	view = sg.viewContent()
 	assert.Contains(t, view, "Review")
 
-	sg.step = setupStepDone
+	sg.step = migrationStepDone
 	view = sg.viewContent()
 	assert.Contains(t, view, "saved")
 }
 
-func TestSetupGuideWelcomeDefaultConfirmYes(t *testing.T) {
-	suggest := newSetupGuide("")
+func TestMigrationWizardWelcomeDefaultConfirmYes(t *testing.T) {
+	suggest := newMigrationWizard("")
 	assert.True(t, suggest.confirmYes)
 }
 
-func TestSetupGuideViewDone_Success(t *testing.T) {
-	sg := newSetupGuide("")
-	sg.step = setupStepDone
+func TestMigrationWizardViewDone_Success(t *testing.T) {
+	sg := newMigrationWizard("")
+	sg.step = migrationStepDone
 
 	view := sg.viewContent()
 	assert.Contains(t, view, "Setup's complete!")
@@ -379,9 +379,9 @@ func TestSetupGuideViewDone_Success(t *testing.T) {
 	assert.Contains(t, view, "Press Enter to start the Docker containers")
 }
 
-func TestSetupGuideViewDone_Error(t *testing.T) {
-	sg := newSetupGuide("")
-	sg.step = setupStepDone
+func TestMigrationWizardViewDone_Error(t *testing.T) {
+	sg := newMigrationWizard("")
+	sg.step = migrationStepDone
 	sg.err = assert.AnError
 
 	view := sg.viewContent()
@@ -391,26 +391,26 @@ func TestSetupGuideViewDone_Error(t *testing.T) {
 	assert.NotContains(t, view, "Press Enter to start the Docker containers")
 }
 
-func TestSetupGuideDockerPHPAdvancesToReview(t *testing.T) {
-	sg := newSetupGuide("")
-	sg.step = setupStepDockerPHP
+func TestMigrationWizardDockerPHPAdvancesToReview(t *testing.T) {
+	sg := newMigrationWizard("")
+	sg.step = migrationStepDockerPHP
 
 	next, _ := sg.update(tea.KeyPressMsg(tea.Key{Code: tea.KeyEnter}))
-	assert.Equal(t, setupStepReview, next.step)
+	assert.Equal(t, migrationStepReview, next.step)
 }
 
-func TestSetupGuideStepNumbering(t *testing.T) {
-	sg := newSetupGuide("")
+func TestMigrationWizardStepNumbering(t *testing.T) {
+	sg := newMigrationWizard("")
 	assert.Equal(t, 3, sg.totalSteps())
-	assert.Equal(t, 1, sg.stepNum(setupStepAdminUser))
-	assert.Equal(t, 2, sg.stepNum(setupStepDockerPHP))
-	assert.Equal(t, 3, sg.stepNum(setupStepReview))
-	assert.Equal(t, 0, sg.stepNum(setupStepWelcome))
-	assert.Equal(t, 0, sg.stepNum(setupStepDone))
+	assert.Equal(t, 1, sg.stepNum(migrationStepAdminUser))
+	assert.Equal(t, 2, sg.stepNum(migrationStepDockerPHP))
+	assert.Equal(t, 3, sg.stepNum(migrationStepReview))
+	assert.Equal(t, 0, sg.stepNum(migrationStepWelcome))
+	assert.Equal(t, 0, sg.stepNum(migrationStepDone))
 }
 
-func TestSetupGuideWelcome_EnterSetsStartedAt(t *testing.T) {
-	sg := newSetupGuide("")
+func TestMigrationWizardWelcome_EnterSetsStartedAt(t *testing.T) {
+	sg := newMigrationWizard("")
 	sg.confirmYes = true
 
 	before := time.Now()

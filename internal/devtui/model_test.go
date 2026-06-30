@@ -66,7 +66,7 @@ func TestNew_InitializesFields(t *testing.T) {
 	assert.Equal(t, phaseDashboard, m.phase)
 }
 
-func TestNewSetupGuide_StartsInSetupPhase(t *testing.T) {
+func TestNewMigrationWizard_StartsInMigrationWizardPhase(t *testing.T) {
 	cfg := &shop.Config{}
 	opts := Options{
 		ProjectRoot: t.TempDir(),
@@ -74,14 +74,14 @@ func TestNewSetupGuide_StartsInSetupPhase(t *testing.T) {
 		EnvConfig:   &shop.EnvironmentConfig{},
 		Executor:    &executor.LocalExecutor{},
 	}
-	m := NewSetupGuide(opts)
-	assert.Equal(t, phaseSetupGuide, m.phase)
+	m := NewMigrationWizard(opts)
+	assert.Equal(t, phaseMigrationWizard, m.phase)
 	assert.True(t, m.dockerMode)
 }
 
-func TestInit_SetupGuidePhaseReturnsNil(t *testing.T) {
+func TestInit_MigrationWizardPhaseReturnsNil(t *testing.T) {
 	m := newTestModel()
-	m.phase = phaseSetupGuide
+	m.phase = phaseMigrationWizard
 	assert.Nil(t, m.Init())
 }
 
@@ -193,15 +193,15 @@ func TestUpdateKeyPress_PhaseInstallPrompt_Routed(t *testing.T) {
 	assert.True(t, isQuit)
 }
 
-func TestUpdateKeyPress_PhaseSetupGuide_RoutesToSetupGuide(t *testing.T) {
+func TestUpdateKeyPress_PhaseMigrationWizard_RoutesToMigrationWizard(t *testing.T) {
 	m := newTestModel()
-	m.phase = phaseSetupGuide
-	m.setupGuide = newSetupGuide("")
+	m.phase = phaseMigrationWizard
+	m.migrationWizard = newMigrationWizard("")
 	// Welcome step: Enter with confirmYes=true advances to admin user step
-	m.setupGuide.confirmYes = true
+	m.migrationWizard.confirmYes = true
 
 	updated, _ := m.Update(keySpecial(tea.KeyEnter))
-	assert.Equal(t, setupStepAdminUser, updated.(Model).setupGuide.step)
+	assert.Equal(t, migrationStepAdminUser, updated.(Model).migrationWizard.step)
 }
 
 func TestUpdateDashboardKeys_CtrlPOpensPalette(t *testing.T) {
@@ -499,14 +499,14 @@ func TestMergeLocalProfilerSecrets_EmptySrcValuesDoNotOverwriteDst(t *testing.T)
 }
 
 func TestView_DoesNotPanicForEachPhase(t *testing.T) {
-	phases := []phase{phaseDashboard, phaseStarting, phaseStopping, phaseInstallPrompt, phaseInstalling, phaseTask, phaseSetupGuide}
+	phases := []phase{phaseDashboard, phaseStarting, phaseStopping, phaseInstallPrompt, phaseInstalling, phaseTask, phaseMigrationWizard}
 	for _, p := range phases {
 		m := newTestModel()
 		m.width = 120
 		m.height = 40
 		m.phase = p
-		if p == phaseSetupGuide {
-			m.setupGuide = newSetupGuide("")
+		if p == phaseMigrationWizard {
+			m.migrationWizard = newMigrationWizard("")
 		}
 		if p == phaseStarting || p == phaseStopping {
 			m.dockerSpinner = newBrandSpinner()
@@ -541,23 +541,23 @@ func TestView_ModalOverridesContent(t *testing.T) {
 	})
 }
 
-func TestSaveSetupGuide_PersistsConfigToDisk(t *testing.T) {
+func TestSaveMigrationWizard_PersistsConfigToDisk(t *testing.T) {
 	dir := t.TempDir()
 	m := newTestModel()
 	m.projectRoot = dir
 	m.config = &shop.Config{}
-	m.setupGuide = newSetupGuide(dir)
-	m.setupGuide.step = setupStepReview
+	m.migrationWizard = newMigrationWizard(dir)
+	m.migrationWizard.step = migrationStepReview
 
-	updated, _ := m.saveSetupGuide()
+	updated, _ := m.saveMigrationWizard()
 	um := updated.(Model)
-	assert.NoError(t, um.setupGuide.err)
-	assert.Equal(t, setupStepDone, um.setupGuide.step)
+	assert.NoError(t, um.migrationWizard.err)
+	assert.Equal(t, migrationStepDone, um.migrationWizard.step)
 	_, err := os.Stat(filepath.Join(dir, ".shopware-project.yml"))
 	assert.NoError(t, err)
 }
 
-func TestSaveSetupGuide_FailedWriteSetsErr(t *testing.T) {
+func TestSaveMigrationWizard_FailedWriteSetsErr(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("chmod-based unwritable directory not reliable on Windows")
 	}
@@ -571,12 +571,12 @@ func TestSaveSetupGuide_FailedWriteSetsErr(t *testing.T) {
 	m := newTestModel()
 	m.projectRoot = dir
 	m.config = &shop.Config{}
-	m.setupGuide = newSetupGuide("")
+	m.migrationWizard = newMigrationWizard("")
 
-	updated, _ := m.saveSetupGuide()
+	updated, _ := m.saveMigrationWizard()
 	um := updated.(Model)
-	assert.Error(t, um.setupGuide.err)
-	assert.Equal(t, setupStepDone, um.setupGuide.step)
+	assert.Error(t, um.migrationWizard.err)
+	assert.Equal(t, migrationStepDone, um.migrationWizard.step)
 }
 
 // TestUpdateChildren_KeyOnlyReachesActiveTab guards against keypresses meant for

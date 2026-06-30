@@ -39,7 +39,7 @@ const (
 	phaseInstallPrompt
 	phaseInstalling
 	phaseTask
-	phaseSetupGuide
+	phaseMigrationWizard
 )
 
 type Options struct {
@@ -73,7 +73,7 @@ type Model struct {
 	taskDone       bool
 	taskErr        error
 	watchers       map[string]*watcherHandle
-	setupGuide     setupGuide
+	migrationWizard     migrationWizard
 }
 
 type dockerAlreadyRunningMsg struct{}
@@ -126,18 +126,18 @@ func New(opts Options) Model {
 	}
 }
 
-// NewSetupGuide creates a Model that starts in the setup guide phase
+// NewMigrationWizard creates a Model that starts in the migration wizard phase
 // for projects that don't yet have a development environment configured.
-func NewSetupGuide(opts Options) Model {
+func NewMigrationWizard(opts Options) Model {
 	m := New(opts)
-	m.phase = phaseSetupGuide
-	m.dockerMode = true // setup guide always creates Docker env
-	m.setupGuide = newSetupGuide(opts.ProjectRoot)
+	m.phase = phaseMigrationWizard
+	m.dockerMode = true // migration wizard always creates Docker env
+	m.migrationWizard = newMigrationWizard(opts.ProjectRoot)
 	return m
 }
 
 func (m Model) Init() tea.Cmd {
-	if m.phase == phaseSetupGuide {
+	if m.phase == phaseMigrationWizard {
 		return nil
 	}
 	if m.dockerMode {

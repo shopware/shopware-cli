@@ -8,7 +8,7 @@ import (
 	"github.com/shopware/shopware-cli/internal/shop"
 )
 
-func (sg *setupGuide) applyToConfig(cfg *shop.Config) {
+func (sg *migrationWizard) applyToConfig(cfg *shop.Config) {
 	c := sg.currentConfig()
 
 	// Always update compatibility_date to support dev mode

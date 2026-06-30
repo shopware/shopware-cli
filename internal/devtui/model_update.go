@@ -22,8 +22,8 @@ func (m Model) updateKeyPress(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m, cmd
 	}
 
-	if m.phase == phaseSetupGuide {
-		return m.updateSetupGuide(msg)
+	if m.phase == phaseMigrationWizard {
+		return m.updateMigrationWizard(msg)
 	}
 
 	if m.phase == phaseInstallPrompt {
@@ -224,9 +224,9 @@ func (m *Model) stopWatcher(name string) tea.Cmd {
 	}
 }
 
-func (m Model) updateSetupGuide(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
-	newGuide, cmd := m.setupGuide.update(msg)
-	m.setupGuide = newGuide
+func (m Model) updateMigrationWizard(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+	newGuide, cmd := m.migrationWizard.update(msg)
+	m.migrationWizard = newGuide
 
 	// Ctrl+C on any step quits the app
 	if msg.String() == keyCtrlC {
@@ -235,41 +235,41 @@ func (m Model) updateSetupGuide(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 
 	// User pressed Enter on the review step. confirmYes=true saves and
 	// continues, confirmYes=false picks the Quit button and exits the wizard.
-	if m.setupGuide.step == setupStepReview && msg.String() == keyEnter {
-		if m.setupGuide.confirmYes {
-			return m.saveSetupGuide()
+	if m.migrationWizard.step == migrationStepReview && msg.String() == keyEnter {
+		if m.migrationWizard.confirmYes {
+			return m.saveMigrationWizard()
 		}
 		return m, tea.Quit
 	}
 
 	// User pressed Enter on the done screen → start docker containers.
 	// If the previous save errored, stay on the done screen so the user can read it.
-	if m.setupGuide.step == setupStepDone && msg.String() == keyEnter && m.setupGuide.err == nil {
-		return m.startAfterSetupGuide()
+	if m.migrationWizard.step == migrationStepDone && msg.String() == keyEnter && m.migrationWizard.err == nil {
+		return m.startAfterMigrationWizard()
 	}
 
 	return m, cmd
 }
 
-func (m Model) saveSetupGuide() (tea.Model, tea.Cmd) {
-	m.setupGuide.applyToConfig(m.config)
+func (m Model) saveMigrationWizard() (tea.Model, tea.Cmd) {
+	m.migrationWizard.applyToConfig(m.config)
 	if err := shop.WriteConfig(m.config, m.projectRoot); err != nil {
-		m.setupGuide.err = err
-		m.setupGuide.step = setupStepDone
+		m.migrationWizard.err = err
+		m.migrationWizard.step = migrationStepDone
 		return m, nil
 	}
 
 	changed, err := ensureDeploymentHelper(m.projectRoot)
 	if err != nil {
-		m.setupGuide.err = err
-		m.setupGuide.step = setupStepDone
+		m.migrationWizard.err = err
+		m.migrationWizard.step = migrationStepDone
 		return m, nil
 	}
-	m.setupGuide.deploymentHelperAdded = changed
+	m.migrationWizard.deploymentHelperAdded = changed
 
-	m.setupGuide.step = setupStepDone
-	duration := time.Since(m.setupGuide.startedAt)
-	phpVersion := m.setupGuide.phpVersions[m.setupGuide.phpCursor]
+	m.migrationWizard.step = migrationStepDone
+	duration := time.Since(m.migrationWizard.startedAt)
+	phpVersion := m.migrationWizard.phpVersions[m.migrationWizard.phpCursor]
 	return m, func() tea.Msg {
 		ctx, cancel := context.WithTimeout(context.Background(), 300*time.Millisecond)
 		defer cancel()
@@ -306,24 +306,24 @@ func mergeLocalProfilerSecrets(dst, src *shop.Config) {
 	}
 }
 
-func (m Model) startAfterSetupGuide() (tea.Model, tea.Cmd) {
+func (m Model) startAfterMigrationWizard() (tea.Model, tea.Cmd) {
 	envCfg, err := m.config.ResolveEnvironment("")
 	if err != nil {
-		m.setupGuide.err = err
+		m.migrationWizard.err = err
 		return m, nil
 	}
 	m.envConfig = envCfg
 
 	exec, err := executor.New(m.projectRoot, envCfg, m.config)
 	if err != nil {
-		m.setupGuide.err = err
+		m.migrationWizard.err = err
 		return m, nil
 	}
 	m.executor = exec
 
 	if m.executor.Type() == executor.TypeDocker {
 		if err := dockerpkg.WriteComposeFile(m.projectRoot, dockerpkg.ComposeOptionsFromConfig(m.config)); err != nil {
-			m.setupGuide.err = err
+			m.migrationWizard.err = err
 			return m, nil
 		}
 	}

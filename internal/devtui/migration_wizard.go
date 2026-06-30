@@ -11,18 +11,18 @@ import (
 	"github.com/shopware/shopware-cli/internal/packagist"
 )
 
-type setupStep int
+type migrationStep int
 
 const (
-	setupStepWelcome setupStep = iota
-	setupStepAdminUser
-	setupStepDockerPHP
-	setupStepReview
-	setupStepDone
+	migrationStepWelcome migrationStep = iota
+	migrationStepAdminUser
+	migrationStepDockerPHP
+	migrationStepReview
+	migrationStepDone
 )
 
-type setupGuide struct {
-	step                  setupStep
+type migrationWizard struct {
+	step                  migrationStep
 	phpVersions           []string // PHP versions compatible with the project
 	phpCursor             int
 	confirmYes            bool
@@ -37,10 +37,10 @@ type setupGuide struct {
 	err error
 }
 
-// setupGuideConfig holds the final configuration values chosen by the user.
-// The setup wizard no longer selects a PHP profiler; it defaults to none and
+// migrationWizardConfig holds the final configuration values chosen by the user.
+// The migration wizard no longer selects a PHP profiler; it defaults to none and
 // the user can enable one later in the Config tab.
-type setupGuideConfig struct {
+type migrationWizardConfig struct {
 	url        string
 	username   string
 	password   string
@@ -79,7 +79,7 @@ func resolvePHPVersions(projectRoot string) (versions []string, defaultIdx int, 
 	return filtered, idx, c.String()
 }
 
-func newSetupGuide(projectRoot string) setupGuide {
+func newMigrationWizard(projectRoot string) migrationWizard {
 	urlInput := textinput.New()
 	urlInput.Placeholder = "http://127.0.0.1:8000"
 	urlInput.CharLimit = 256
@@ -101,8 +101,8 @@ func newSetupGuide(projectRoot string) setupGuide {
 
 	phpVersions, phpCursor, _ := resolvePHPVersions(projectRoot)
 
-	return setupGuide{
-		step:        setupStepWelcome,
+	return migrationWizard{
+		step:        migrationStepWelcome,
 		phpVersions: phpVersions,
 		phpCursor:   phpCursor,
 		confirmYes:  true,
@@ -112,8 +112,8 @@ func newSetupGuide(projectRoot string) setupGuide {
 	}
 }
 
-func (sg *setupGuide) currentConfig() setupGuideConfig {
-	return setupGuideConfig{
+func (sg *migrationWizard) currentConfig() migrationWizardConfig {
+	return migrationWizardConfig{
 		url:        sg.url.Value(),
 		username:   sg.username.Value(),
 		password:   sg.password.Value(),
@@ -121,27 +121,27 @@ func (sg *setupGuide) currentConfig() setupGuideConfig {
 	}
 }
 
-// update handles key events for the setup guide.
+// update handles key events for the migration wizard.
 // Ctrl+C is handled centrally by updateKeyPress, so individual steps
 // should not handle it — they just need to handle their own navigation keys.
-func (sg *setupGuide) update(msg tea.KeyPressMsg) (setupGuide, tea.Cmd) {
+func (sg *migrationWizard) update(msg tea.KeyPressMsg) (migrationWizard, tea.Cmd) {
 	switch sg.step {
-	case setupStepWelcome:
+	case migrationStepWelcome:
 		return sg.updateWelcome(msg)
-	case setupStepAdminUser:
+	case migrationStepAdminUser:
 		return sg.updateAdminUser(msg)
-	case setupStepDockerPHP:
+	case migrationStepDockerPHP:
 		return sg.updateDockerPHP(msg)
-	case setupStepReview:
+	case migrationStepReview:
 		return sg.updateReview(msg)
-	case setupStepDone:
+	case migrationStepDone:
 		// Handled by updateKeyPress to transition to Docker startup
 		return *sg, nil
 	}
 	return *sg, nil
 }
 
-func (sg *setupGuide) updateWelcome(msg tea.KeyPressMsg) (setupGuide, tea.Cmd) {
+func (sg *migrationWizard) updateWelcome(msg tea.KeyPressMsg) (migrationWizard, tea.Cmd) {
 	switch msg.String() {
 	case keyLeft, "h":
 		sg.confirmYes = true
@@ -152,7 +152,7 @@ func (sg *setupGuide) updateWelcome(msg tea.KeyPressMsg) (setupGuide, tea.Cmd) {
 	case keyEnter:
 		if sg.confirmYes {
 			sg.startedAt = time.Now()
-			sg.step = setupStepAdminUser
+			sg.step = migrationStepAdminUser
 			return sg.focusAdminCred(credFocusUsername)
 		}
 		return *sg, tea.Quit
@@ -162,7 +162,7 @@ func (sg *setupGuide) updateWelcome(msg tea.KeyPressMsg) (setupGuide, tea.Cmd) {
 
 // focusAdminCred moves focus to the given element of the combined admin
 // account step, clamping to the valid range and syncing the text input focus.
-func (sg *setupGuide) focusAdminCred(target credFocus) (setupGuide, tea.Cmd) {
+func (sg *migrationWizard) focusAdminCred(target credFocus) (migrationWizard, tea.Cmd) {
 	if target < credFocusUsername {
 		target = credFocusUsername
 	}
@@ -186,7 +186,7 @@ func (sg *setupGuide) focusAdminCred(target credFocus) (setupGuide, tea.Cmd) {
 	return *sg, cmd
 }
 
-func (sg *setupGuide) updateAdminUser(msg tea.KeyPressMsg) (setupGuide, tea.Cmd) {
+func (sg *migrationWizard) updateAdminUser(msg tea.KeyPressMsg) (migrationWizard, tea.Cmd) {
 	switch msg.String() {
 	case keyEnter:
 		return sg.handleAdminUserEnter()
@@ -211,7 +211,7 @@ func (sg *setupGuide) updateAdminUser(msg tea.KeyPressMsg) (setupGuide, tea.Cmd)
 	return *sg, nil
 }
 
-func (sg *setupGuide) handleAdminUserEnter() (setupGuide, tea.Cmd) {
+func (sg *migrationWizard) handleAdminUserEnter() (migrationWizard, tea.Cmd) {
 	switch sg.credFocus {
 	case credFocusUsername:
 		// Enter on the username field advances to the password field.
@@ -233,11 +233,11 @@ func (sg *setupGuide) handleAdminUserEnter() (setupGuide, tea.Cmd) {
 	sg.passwordErr = ""
 	sg.username.Blur()
 	sg.password.Blur()
-	sg.step = setupStepDockerPHP
+	sg.step = migrationStepDockerPHP
 	return *sg, nil
 }
 
-func (sg *setupGuide) updateDockerPHP(msg tea.KeyPressMsg) (setupGuide, tea.Cmd) {
+func (sg *migrationWizard) updateDockerPHP(msg tea.KeyPressMsg) (migrationWizard, tea.Cmd) {
 	switch msg.String() {
 	case keyUp, keyK:
 		if sg.phpCursor > 0 {
@@ -248,13 +248,13 @@ func (sg *setupGuide) updateDockerPHP(msg tea.KeyPressMsg) (setupGuide, tea.Cmd)
 			sg.phpCursor++
 		}
 	case keyEnter:
-		sg.step = setupStepReview
+		sg.step = migrationStepReview
 		return *sg, nil
 	}
 	return *sg, nil
 }
 
-func (sg *setupGuide) updateReview(msg tea.KeyPressMsg) (setupGuide, tea.Cmd) {
+func (sg *migrationWizard) updateReview(msg tea.KeyPressMsg) (migrationWizard, tea.Cmd) {
 	switch msg.String() {
 	case keyLeft, "h":
 		sg.confirmYes = true
