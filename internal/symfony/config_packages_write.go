@@ -39,43 +39,62 @@ func (pc *ProjectConfig) SetConfigValue(environment string, path string, value a
 		return err
 	}
 
-	if err := target.save(); err != nil {
+	if err := target.file.save(); err != nil {
 		return err
 	}
 
 	return pc.load()
 }
 
-// resolveWriteTarget picks the ConfigFile that SetConfigValue should edit for
-// the given environment and path, creating an in-memory file handle when no
-// existing file is suitable.
-func (pc *ProjectConfig) resolveWriteTarget(environment string, segments []string) *ConfigFile {
-	if existing := pc.fileDefiningPath(environment, segments); existing != nil {
-		return existing
+// writeTarget is the resolved destination of a SetConfigValue: the file to edit
+// and, when non-empty, the when@<whenEnv> block inside it the value belongs to.
+type writeTarget struct {
+	file    *ConfigFile
+	whenEnv string
+}
+
+// set writes value into the target, descending into the when@<env> block first
+// when the target points at one.
+func (t writeTarget) set(segments []string, value any) error {
+	if t.whenEnv == "" {
+		return t.file.set(segments, value)
+	}
+
+	return t.file.setUnderWhen(t.whenEnv, segments, value)
+}
+
+// resolveWriteTarget picks where SetConfigValue should write for the given
+// environment and path, creating an in-memory file handle when no existing file
+// is suitable.
+func (pc *ProjectConfig) resolveWriteTarget(environment string, segments []string) writeTarget {
+	if target, ok := pc.fileDefiningPath(environment, segments); ok {
+		return target
 	}
 
 	pkg := segments[0]
 
 	if environment != BaseEnvironment && pc.hasEnvironmentDir(environment) {
-		return &ConfigFile{
+		return writeTarget{file: &ConfigFile{
 			Path:        filepath.Join(pc.packagesDir, environment, pkg+".yaml"),
 			Environment: environment,
-		}
+		}}
 	}
 
-	return &ConfigFile{
+	return writeTarget{file: &ConfigFile{
 		Path:        filepath.Join(pc.packagesDir, pkg+".yaml"),
 		Environment: BaseEnvironment,
-	}
+	}}
 }
 
 // fileDefiningPath returns the highest-precedence loaded file (for the base or
 // the given environment) that already defines the deepest possible prefix of
 // segments. It prefers the most specific match so an override lands next to the
-// value it overrides.
-func (pc *ProjectConfig) fileDefiningPath(environment string, segments []string) *ConfigFile {
-	var best *ConfigFile
-	bestDepth := -1
+// value it overrides, and reports whether that match lives in the file's
+// when@<env> block so the write stays scoped to the right environment.
+func (pc *ProjectConfig) fileDefiningPath(environment string, segments []string) (writeTarget, bool) {
+	var best writeTarget
+	found := false
+	bestDepth := 0
 
 	// Iterate in load order so that, for an equal match depth, the
 	// highest-precedence (latest) file wins.
@@ -84,14 +103,20 @@ func (pc *ProjectConfig) fileDefiningPath(environment string, segments []string)
 			continue
 		}
 
-		depth := file.definedDepth(environment, segments)
-		if depth >= bestDepth && depth > 0 {
-			best = file
+		depth, underWhen := file.definedDepth(environment, segments)
+		if depth > 0 && depth >= bestDepth {
+			whenEnv := ""
+			if underWhen {
+				whenEnv = environment
+			}
+
+			best = writeTarget{file: file, whenEnv: whenEnv}
 			bestDepth = depth
+			found = true
 		}
 	}
 
-	return best
+	return best, found
 }
 
 // hasEnvironmentDir reports whether config/packages/<environment>/ exists.
@@ -102,28 +127,70 @@ func (pc *ProjectConfig) hasEnvironmentDir(environment string) bool {
 }
 
 // definedDepth returns how many leading segments of path are present in the
-// file, considering both the file root and its when@<environment> block.
-// A return value of 0 means the file does not contribute to this path.
-func (f *ConfigFile) definedDepth(environment string, segments []string) int {
+// file and whether that deepest match lives in the file's when@<environment>
+// block rather than at the document root. A depth of 0 means the file does not
+// contribute to this path.
+func (f *ConfigFile) definedDepth(environment string, segments []string) (int, bool) {
 	root := f.rootMapping()
 	if root == nil {
-		return 0
+		return 0, false
 	}
 
 	depth := mappingDepth(root, segments)
+	underWhen := false
 
 	if when := mappingChild(root, whenPrefix+environment); when != nil {
 		if d := mappingDepth(when, segments); d > depth {
 			depth = d
+			underWhen = true
 		}
 	}
 
-	return depth
+	return depth, underWhen
 }
 
 // set writes value at the dotted path inside the file, creating intermediate
 // mappings as needed. The document and its comments are preserved.
 func (f *ConfigFile) set(segments []string, value any) error {
+	root, err := f.rootNode()
+	if err != nil {
+		return err
+	}
+
+	valueNode, err := encodeValue(value)
+	if err != nil {
+		return err
+	}
+
+	return setInMapping(root, segments, valueNode)
+}
+
+// setUnderWhen writes value at the dotted path inside the file's when@<env>
+// block, creating the block when it does not exist yet, so the value stays
+// scoped to that environment.
+func (f *ConfigFile) setUnderWhen(env string, segments []string, value any) error {
+	root, err := f.rootNode()
+	if err != nil {
+		return err
+	}
+
+	when := mappingChild(root, whenPrefix+env)
+	if when == nil {
+		when = newMapping()
+		mapPut(root, whenPrefix+env, when)
+	}
+
+	valueNode, err := encodeValue(value)
+	if err != nil {
+		return err
+	}
+
+	return setInMapping(when, segments, valueNode)
+}
+
+// rootNode returns the document's root mapping, creating an empty document and
+// mapping when the file is new or empty.
+func (f *ConfigFile) rootNode() (*yaml.Node, error) {
 	if f.doc == nil {
 		f.doc = &yaml.Node{
 			Kind:    yaml.DocumentNode,
@@ -137,15 +204,10 @@ func (f *ConfigFile) set(segments []string, value any) error {
 
 	root := f.doc.Content[0]
 	if root.Kind != yaml.MappingNode {
-		return fmt.Errorf("%s: root node is not a mapping", f.Path)
+		return nil, fmt.Errorf("%s: root node is not a mapping", f.Path)
 	}
 
-	valueNode, err := encodeValue(value)
-	if err != nil {
-		return err
-	}
-
-	return setInMapping(root, segments, valueNode)
+	return root, nil
 }
 
 // save serialises the document back to disk, creating parent directories when

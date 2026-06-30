@@ -173,25 +173,25 @@ func (pc *ProjectConfig) Config(environment string) (map[string]any, error) {
 			continue
 		}
 
-		root, err := file.decodeRoot()
+		entries, err := file.orderedEntries()
 		if err != nil {
 			return nil, fmt.Errorf("decoding %s: %w", file.Path, err)
 		}
 
-		for key, value := range root {
-			if env, ok := whenEnvFromKey(key); ok {
+		for _, entry := range entries {
+			if env, ok := whenEnvFromKey(entry.key); ok {
 				if env != environment {
 					continue
 				}
 
-				if block, ok := value.(map[string]any); ok {
+				if block, ok := entry.value.(map[string]any); ok {
 					merged = mergeValue(merged, block).(map[string]any)
 				}
 
 				continue
 			}
 
-			merged = mergeValue(merged, map[string]any{key: value}).(map[string]any)
+			merged = mergeValue(merged, map[string]any{entry.key: entry.value}).(map[string]any)
 		}
 	}
 
@@ -229,6 +229,11 @@ func (pc *ProjectConfig) GetConfigValue(environment, path string) (any, bool, er
 		return nil, false, err
 	}
 
+	return getConfigValue(cfg, path)
+}
+
+// getConfigValue resolves a dotted path inside an already-merged config map.
+func getConfigValue(cfg map[string]any, path string) (any, bool, error) {
 	segments := splitPath(path)
 	if len(segments) == 0 {
 		return nil, false, fmt.Errorf("empty config path")
@@ -272,23 +277,34 @@ func (f *ConfigFile) whenEnvironments() []string {
 	return envs
 }
 
-// decodeRoot decodes the file's root mapping into plain Go values.
-func (f *ConfigFile) decodeRoot() (map[string]any, error) {
+// configEntry is a single top-level key/value pair of a config file, decoded
+// into plain Go values while keeping its document position.
+type configEntry struct {
+	key   string
+	value any
+}
+
+// orderedEntries decodes the file's root mapping into key/value pairs in
+// document order, so when@<env> overrides merge after the base keys that
+// precede them in the file.
+func (f *ConfigFile) orderedEntries() ([]configEntry, error) {
 	root := f.rootMapping()
 	if root == nil {
-		return map[string]any{}, nil
+		return nil, nil
 	}
 
-	var out map[string]any
-	if err := root.Decode(&out); err != nil {
-		return nil, err
+	entries := make([]configEntry, 0, len(root.Content)/2)
+
+	for i := 0; i+1 < len(root.Content); i += 2 {
+		var value any
+		if err := root.Content[i+1].Decode(&value); err != nil {
+			return nil, err
+		}
+
+		entries = append(entries, configEntry{key: root.Content[i].Value, value: value})
 	}
 
-	if out == nil {
-		out = map[string]any{}
-	}
-
-	return out, nil
+	return entries, nil
 }
 
 // rootMapping returns the top-level mapping node of the file, or nil when the
