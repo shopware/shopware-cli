@@ -274,7 +274,7 @@ func (m Model) saveSetupGuide() (tea.Model, tea.Cmd) {
 		ctx, cancel := context.WithTimeout(context.Background(), 300*time.Millisecond)
 		defer cancel()
 		tracking.Track(ctx, "migration_wizard_completed", map[string]string{
-			"duration_ms": strconv.FormatInt(duration.Milliseconds(), 10),
+			"took":        strconv.FormatInt(int64(duration.Seconds()), 10),
 			"php_version": phpVersion,
 		})
 		return nil
