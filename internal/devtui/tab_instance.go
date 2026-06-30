@@ -451,8 +451,7 @@ func (m *InstanceModel) streamContainer(container string) tea.Cmd {
 	ctx, cancel := context.WithCancel(context.Background())
 	m.cancel = cancel
 
-	cmd := exec.CommandContext(ctx, "docker", "compose", "logs", "-f", "--tail=100", container)
-	cmd.Dir = m.projectRoot
+	cmd := composeCommand(ctx, m.projectRoot, "logs", "-f", "--tail=100", container)
 
 	return m.streamCommand(ctx, cmd, true)
 }
@@ -534,9 +533,7 @@ func (m *InstanceModel) discoverSources() tea.Cmd {
 }
 
 func discoverContainers(projectRoot string) []logSource {
-	ctx := context.Background()
-	cmd := exec.CommandContext(ctx, "docker", "compose", "ps", "--format", "{{.Service}}")
-	cmd.Dir = projectRoot
+	cmd := composeCommand(context.Background(), projectRoot, "ps", "--format", "{{.Service}}")
 	output, err := cmd.Output()
 	if err != nil {
 		return nil

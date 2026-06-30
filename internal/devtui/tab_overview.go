@@ -8,7 +8,6 @@ import (
 	"io"
 	"net"
 	"net/url"
-	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -543,8 +542,7 @@ func DiscoverServices(ctx context.Context, projectRoot string) ([]DiscoveredServ
 // published on. webPort is 0 when it cannot be determined (e.g. the environment
 // is down or the web container does not publish port 8000).
 func DiscoverComposeServices(ctx context.Context, projectRoot string) (services []DiscoveredService, webPort int, err error) {
-	cmd := exec.CommandContext(ctx, "docker", "compose", "ps", "--format", "json")
-	cmd.Dir = projectRoot
+	cmd := composeCommand(ctx, projectRoot, "ps", "--format", "json")
 	output, err := cmd.Output()
 	if err != nil {
 		return nil, 0, fmt.Errorf("docker compose ps: %w", err)

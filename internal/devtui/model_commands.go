@@ -33,9 +33,7 @@ func newInstallProgress() progress.Model {
 
 func checkContainersRunning(projectRoot string) tea.Cmd {
 	return func() tea.Msg {
-		ctx := context.Background()
-		check := exec.CommandContext(ctx, "docker", "compose", "ps", "--status=running", "-q")
-		check.Dir = projectRoot
+		check := composeCommand(context.Background(), projectRoot, "ps", "--status=running", "-q")
 		output, err := check.Output()
 		if err == nil && len(strings.TrimSpace(string(output))) > 0 {
 			return dockerAlreadyRunningMsg{}
@@ -137,12 +135,11 @@ func streamCmdOutput(cmd *exec.Cmd, ch chan<- string, useStdout bool) error {
 	return cmd.Wait()
 }
 
-func runDockerCommandWithArgs(ctx context.Context, projectRoot string, args []string, resultFn func(error) tea.Msg) (outChan <-chan string, outputCmd tea.Cmd, doneCmd tea.Cmd) {
+func runComposeCommand(ctx context.Context, projectRoot string, args []string, resultFn func(error) tea.Msg) (outChan <-chan string, outputCmd tea.Cmd, doneCmd tea.Cmd) {
 	lineChan := make(chan string, streamBufferSize)
 
 	doneCmd = func() tea.Msg {
-		cmd := exec.CommandContext(ctx, "docker", args...)
-		cmd.Dir = projectRoot
+		cmd := composeCommand(ctx, projectRoot, args...)
 		return resultFn(streamCmdOutput(cmd, lineChan, false))
 	}
 
@@ -150,10 +147,10 @@ func runDockerCommandWithArgs(ctx context.Context, projectRoot string, args []st
 }
 
 func (m *Model) startContainers() tea.Cmd {
-	ch, outputCmd, doneCmd := runDockerCommandWithArgs(
+	ch, outputCmd, doneCmd := runComposeCommand(
 		context.Background(),
 		m.projectRoot,
-		[]string{"compose", "up", "-d"},
+		[]string{"up", "-d"},
 		func(err error) tea.Msg { return dockerStartedMsg{err: err} },
 	)
 	m.dockerOutChan = ch
@@ -167,17 +164,16 @@ func (m *Model) restartContainersForConfig() tea.Cmd {
 		if err := dockerpkg.WriteComposeFile(projectRoot, dockerpkg.ComposeOptionsFromConfig(cfg)); err != nil {
 			return configRestartDoneMsg{err: err}
 		}
-		cmd := exec.CommandContext(context.Background(), "docker", "compose", "up", "-d")
-		cmd.Dir = projectRoot
+		cmd := composeCommand(context.Background(), projectRoot, "up", "-d")
 		return configRestartDoneMsg{err: cmd.Run()}
 	}
 }
 
 func (m *Model) stopContainers() tea.Cmd {
-	ch, outputCmd, doneCmd := runDockerCommandWithArgs(
+	ch, outputCmd, doneCmd := runComposeCommand(
 		context.Background(),
 		m.projectRoot,
-		[]string{"compose", "down"},
+		[]string{"down"},
 		func(err error) tea.Msg { return dockerStoppedMsg{err: err} },
 	)
 	m.dockerOutChan = ch
