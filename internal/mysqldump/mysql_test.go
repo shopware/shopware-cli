@@ -960,13 +960,13 @@ func Test_mySQL_dumpsTriggers(t *testing.T) {
 
 	mock.ExpectQuery("SHOW TRIGGERS").WillReturnRows(
 		sqlmock.NewRows([]string{"Trigger", "Event", "Table", "Statement", "Timing", "Created", "sql_mode", "Definer", "character_set_client", "collation_connection", "Database Collation"}).AddRow(
-			"OLD_table", "INSERT", "OLD_table", "BEGIN\n\tINSERT INTO `OLD_table` (`id`, `name`) VALUES (1, 'test');\nEND", "BEFORE", "2019-01-01 00:00:00", "NO_AUTO_CREATE_USER,NO_ENGINE_SUBSTITUTION", "root@localhost", "utf8", "utf8_general_ci", "utf8_general_ci",
+			"ins_sum", "INSERT", "OLD_table", "BEGIN\n\tINSERT INTO `OLD_table` (`id`, `name`) VALUES (1, 'test');\nEND", "BEFORE", "2019-01-01 00:00:00", "NO_AUTO_CREATE_USER,NO_ENGINE_SUBSTITUTION", "root@localhost", "utf8", "utf8_general_ci", "utf8_general_ci",
 		),
 	)
 
-	mock.ExpectQuery("SHOW CREATE TRIGGER `OLD_table`").WillReturnRows(
+	mock.ExpectQuery("SHOW CREATE TRIGGER `ins_sum`").WillReturnRows(
 		sqlmock.NewRows([]string{"Trigger", "sql_mode", "Statement", "character_set_client", "Definer", "collation_connection", "Database Collation"}).AddRow(
-			"OLD_table", "ONLY_FULL_GROUP_BY", "CREATE DEFINER=`root`@`%` TRIGGER `ins_sum` BEFORE INSERT ON `account` FOR EACH ROW SET @sum = @sum + NEW.amount", "", "", "", "",
+			"ins_sum", "ONLY_FULL_GROUP_BY", "CREATE DEFINER=`root`@`%` TRIGGER `ins_sum` BEFORE INSERT ON `account` FOR EACH ROW SET @sum = @sum + NEW.amount", "", "", "", "",
 		),
 	)
 
@@ -978,6 +978,10 @@ func Test_mySQL_dumpsTriggers(t *testing.T) {
 
 	if err != nil {
 		t.Error(err)
+	}
+
+	if !strings.Contains(b.String(), "DROP TRIGGER IF EXISTS `ins_sum`;") {
+		t.Error("Trigger not dropped")
 	}
 
 	// DEFINER is always stripped now
