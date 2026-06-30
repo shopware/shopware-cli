@@ -22,6 +22,7 @@ import (
 	"github.com/shopware/shopware-cli/internal/extension"
 	"github.com/shopware/shopware-cli/internal/packagist"
 	"github.com/shopware/shopware-cli/internal/shop"
+	"github.com/shopware/shopware-cli/internal/system"
 	"github.com/shopware/shopware-cli/internal/tui"
 	"github.com/shopware/shopware-cli/logging"
 )
@@ -281,7 +282,7 @@ func (m *OverviewModel) activate() (OverviewModel, tea.Cmd) {
 
 func openInBrowser(url string) tea.Cmd {
 	return func() tea.Msg {
-		_ = exec.CommandContext(context.Background(), "open", url).Start()
+		_ = system.OpenURL(context.Background(), url)
 		return browserOpenedMsg{}
 	}
 }
