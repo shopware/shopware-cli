@@ -148,40 +148,25 @@ func (m Model) updateInstallStepAsk(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 }
 
 func (m Model) updateInstallStepLanguage(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
-	switch msg.String() {
-	case keyUp, keyK:
-		if m.install.cursor > 0 {
-			m.install.cursor--
-		}
-	case keyDown, keyJ:
-		if m.install.cursor < len(installLanguages)-1 {
-			m.install.cursor++
-		}
-	case keyEnter:
+	if msg.String() == keyEnter {
 		m.install.language = installLanguages[m.install.cursor].id
 		m.install.step = installStepCurrency
 		m.install.cursor = 0
+		return m, nil
 	}
+	m.install.cursor = moveCursor(m.install.cursor, msg.String(), len(installLanguages))
 	return m, nil
 }
 
 func (m Model) updateInstallStepCurrency(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
-	switch msg.String() {
-	case keyUp, keyK:
-		if m.install.cursor > 0 {
-			m.install.cursor--
-		}
-	case keyDown, keyJ:
-		if m.install.cursor < len(installCurrencies)-1 {
-			m.install.cursor++
-		}
-	case keyEnter:
+	if msg.String() == keyEnter {
 		m.install.currency = installCurrencies[m.install.cursor]
 		m.install.step = installStepCredentials
 		m.install.username.SetValue(defaultUsername)
 		m.install.password.SetValue("shopware")
 		return m, m.install.focus(credFocusUsername)
 	}
+	m.install.cursor = moveCursor(m.install.cursor, msg.String(), len(installCurrencies))
 	return m, nil
 }
 

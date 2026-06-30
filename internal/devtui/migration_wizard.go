@@ -177,18 +177,11 @@ func (sg *migrationWizard) handleAdminUserEnter() (migrationWizard, tea.Cmd) {
 
 func (sg *migrationWizard) updateDockerPHP(msg tea.KeyPressMsg) (migrationWizard, tea.Cmd) {
 	switch msg.String() {
-	case keyUp, keyK:
-		if sg.phpCursor > 0 {
-			sg.phpCursor--
-		}
-	case keyDown, keyJ:
-		if sg.phpCursor < len(sg.phpVersions)-1 {
-			sg.phpCursor++
-		}
 	case keyEnter:
 		sg.step = migrationStepReview
 		return *sg, nil
 	}
+	sg.phpCursor = moveCursor(sg.phpCursor, msg.String(), len(sg.phpVersions))
 	return *sg, nil
 }
 
