@@ -129,10 +129,10 @@ func TestMigrationWizardReview_QuitButtonQuits(t *testing.T) {
 	sg.confirmYes = false // user selected the "Quit" button
 
 	m := Model{
-		phase:      phaseMigrationWizard,
+		phase:           phaseMigrationWizard,
 		migrationWizard: sg,
-		config:     &shop.Config{},
-		watchers:   make(map[string]*watcherHandle),
+		config:          &shop.Config{},
+		watchers:        make(map[string]*watcherHandle),
 	}
 
 	_, cmd := m.Update(tea.KeyPressMsg(tea.Key{Code: tea.KeyEnter}))
@@ -147,11 +147,11 @@ func TestMigrationWizardReview_SaveButtonDoesNotQuit(t *testing.T) {
 	sg.confirmYes = true // user selected "Save & start"
 
 	m := Model{
-		phase:       phaseMigrationWizard,
-		migrationWizard:  sg,
-		config:      &shop.Config{},
-		projectRoot: t.TempDir(),
-		watchers:    make(map[string]*watcherHandle),
+		phase:           phaseMigrationWizard,
+		migrationWizard: sg,
+		config:          &shop.Config{},
+		projectRoot:     t.TempDir(),
+		watchers:        make(map[string]*watcherHandle),
 	}
 
 	updated, cmd := m.Update(tea.KeyPressMsg(tea.Key{Code: tea.KeyEnter}))

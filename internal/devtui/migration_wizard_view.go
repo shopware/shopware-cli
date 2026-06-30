@@ -94,7 +94,7 @@ func (sg migrationWizard) viewAdminUser() string {
 	b.WriteString("\n")
 	b.WriteString(tui.DimStyle.Render("The login for your local Shopware admin panel and API."))
 	b.WriteString("\n\n")
-	sg.credentialStep.render(&b)
+	sg.render(&b)
 	b.WriteString("\n\n")
 	b.WriteString(tui.DimStyle.Render("Will be written to "))
 	b.WriteString(tui.BoldText.Render(".shopware-project.yml"))

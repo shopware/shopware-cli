@@ -241,7 +241,7 @@ func (m Model) renderInstallPrompt(b *strings.Builder) {
 		b.WriteString("\n")
 		b.WriteString(tui.DimStyle.Render("The login for the Shopware admin panel and API."))
 		b.WriteString("\n\n")
-		m.install.credentialStep.render(b)
+		m.install.render(b)
 		b.WriteString("\n\n")
 		b.WriteString(tui.DimStyle.Render("Used to create the Shopware admin user."))
 	}

@@ -176,8 +176,7 @@ func (sg *migrationWizard) handleAdminUserEnter() (migrationWizard, tea.Cmd) {
 }
 
 func (sg *migrationWizard) updateDockerPHP(msg tea.KeyPressMsg) (migrationWizard, tea.Cmd) {
-	switch msg.String() {
-	case keyEnter:
+	if msg.String() == keyEnter {
 		sg.step = migrationStepReview
 		return *sg, nil
 	}

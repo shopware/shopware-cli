@@ -50,30 +50,30 @@ type Options struct {
 }
 
 type Model struct {
-	activeTab      activeTab
-	overview       OverviewModel
-	instance       InstanceModel
-	configTab      ConfigModel
-	width          int
-	height         int
-	dockerMode     bool
-	phase          phase
-	modal          Modal
-	overlayLines   []string
-	projectRoot    string
-	executor       executor.Executor
-	dockerOutChan  <-chan string
-	install        installWizard
-	installProg    installProgress
-	dockerSpinner  spinner.Model
-	dockerShowLogs bool
-	config         *shop.Config
-	envConfig      *shop.EnvironmentConfig
-	taskTitle      string
-	taskDone       bool
-	taskErr        error
-	watchers       map[string]*watcherHandle
-	migrationWizard     migrationWizard
+	activeTab       activeTab
+	overview        OverviewModel
+	instance        InstanceModel
+	configTab       ConfigModel
+	width           int
+	height          int
+	dockerMode      bool
+	phase           phase
+	modal           Modal
+	overlayLines    []string
+	projectRoot     string
+	executor        executor.Executor
+	dockerOutChan   <-chan string
+	install         installWizard
+	installProg     installProgress
+	dockerSpinner   spinner.Model
+	dockerShowLogs  bool
+	config          *shop.Config
+	envConfig       *shop.EnvironmentConfig
+	taskTitle       string
+	taskDone        bool
+	taskErr         error
+	watchers        map[string]*watcherHandle
+	migrationWizard migrationWizard
 }
 
 type dockerAlreadyRunningMsg struct{}
