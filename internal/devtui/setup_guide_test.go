@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"charm.land/bubbles/v2/textinput"
 	tea "charm.land/bubbletea/v2"
@@ -406,4 +407,17 @@ func TestSetupGuideStepNumbering(t *testing.T) {
 	assert.Equal(t, 3, sg.stepNum(setupStepReview))
 	assert.Equal(t, 0, sg.stepNum(setupStepWelcome))
 	assert.Equal(t, 0, sg.stepNum(setupStepDone))
+}
+
+func TestSetupGuideWelcome_EnterSetsStartedAt(t *testing.T) {
+	sg := newSetupGuide("")
+	sg.confirmYes = true
+
+	before := time.Now()
+	next, _ := sg.update(tea.KeyPressMsg(tea.Key{Code: tea.KeyEnter}))
+	after := time.Now()
+
+	assert.False(t, next.startedAt.IsZero(), "startedAt should be set after Enter on welcome")
+	assert.False(t, next.startedAt.Before(before), "startedAt should not be before test start")
+	assert.False(t, next.startedAt.After(after), "startedAt should not be after test end")
 }
