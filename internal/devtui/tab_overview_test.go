@@ -33,6 +33,30 @@ func TestSecurityEndRemaining(t *testing.T) {
 	assert.Equal(t, "expired", securityEndRemaining(now.Add(-1*time.Hour), now))
 }
 
+func TestOverviewBackgroundProcessesSection(t *testing.T) {
+	m := NewOverviewModel("docker", "http://localhost:8000", "admin", "shopware", "/tmp/project", nil, nil)
+	m.loading = false
+	m.width = 80
+	m.height = 40
+
+	// Hidden entirely when there are no background processes.
+	assert.NotContains(t, m.View(m.width, m.height), "Background processing")
+
+	m.background = []BackgroundProcess{
+		{Name: "Queue worker", Running: true},
+		{Name: "Scheduled tasks", Running: false},
+	}
+
+	view := m.View(m.width, m.height)
+	assert.Contains(t, view, "Background processing")
+	assert.Contains(t, view, "Queue worker")
+	assert.Contains(t, view, "running")
+	assert.Contains(t, view, "Scheduled tasks")
+	assert.Contains(t, view, "stopped")
+	assert.Contains(t, view, "[x]")
+	assert.Contains(t, view, "[ ]")
+}
+
 func TestNewOverviewModel(t *testing.T) {
 	m := NewOverviewModel("docker", "http://localhost:8000", "admin", "shopware", "/tmp/project", nil, nil)
 

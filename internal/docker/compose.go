@@ -9,10 +9,35 @@ import (
 
 	"github.com/shopware/shopware-cli/internal/packagist"
 	"github.com/shopware/shopware-cli/internal/shop"
+	"github.com/shopware/shopware-cli/internal/symfony"
 	"github.com/shopware/shopware-cli/internal/system"
 )
 
 const nodeVersion = "24"
+
+// backgroundProcessLimits bound the dedicated console processes so they recycle
+// periodically (paired with restart: unless-stopped in the compose file).
+var backgroundProcessLimits = []string{"--time-limit=300", "--memory-limit=512M"}
+
+// BackgroundService describes a long-running console process added to the dev
+// compose file when Shopware's admin worker is disabled. It is the single source
+// of truth for both compose generation (name + command) and the devtui overview
+// (name + Label), so the two never drift apart.
+type BackgroundService struct {
+	// Name is the compose service name.
+	Name string
+	// Label is the human-readable name shown in the devtui overview.
+	Label   string
+	command []string
+}
+
+// BackgroundServices is the ordered set of dedicated processes generated when
+// the admin worker is disabled: the message queue consumer and the scheduled
+// task runner.
+var BackgroundServices = []BackgroundService{
+	{Name: "worker", Label: "Queue worker", command: append([]string{"messenger:consume", "--all"}, backgroundProcessLimits...)},
+	{Name: "scheduler", Label: "Scheduled tasks", command: append([]string{"scheduled-task:run"}, backgroundProcessLimits...)},
+}
 
 // Profiler constants for the Docker dev environment.
 const (
@@ -49,6 +74,11 @@ type ComposeOptions struct {
 	// writes to the bind-mounted project (var/, files/, public/, ...)
 	// are owned by the host user. Empty means: use the image default.
 	User string
+	// DedicatedWorker requests an extra service that runs
+	// messenger:consume. It is needed when Shopware's admin worker is
+	// disabled (shopware.admin_worker.enable_admin_worker: false), because
+	// the message queue is then no longer dispatched from the browser.
+	DedicatedWorker bool
 }
 
 func (o *ComposeOptions) phpVersion() string {
@@ -98,6 +128,14 @@ func WriteComposeFile(projectFolder string, opts *ComposeOptions) error {
 	if opts.User == "" {
 		opts.User = system.ProjectUserSpec(projectFolder)
 	}
+
+	// The compose file targets the dev environment, so evaluate the admin
+	// worker toggle for dev. A dedicated worker is only needed when it is off.
+	adminWorkerEnabled, err := symfony.IsAdminWorkerEnabledForProject(projectFolder, "dev")
+	if err != nil {
+		return fmt.Errorf("failed to read admin worker config: %w", err)
+	}
+	opts.DedicatedWorker = !adminWorkerEnabled
 
 	lock, err := packagist.ReadComposerLock(filepath.Join(projectFolder, "composer.lock"))
 	if err != nil {
@@ -223,6 +261,16 @@ func buildCompose(hasAMQP, hasElasticsearch bool, opts *ComposeOptions) yaml.Nod
 	addKeyValueNode(services, "adminer", adminer)
 	addKeyValueNode(services, "mailer", mailer)
 
+	if opts != nil && opts.DedicatedWorker {
+		// The admin no longer dispatches the queue or scheduled tasks from the
+		// browser, so both need dedicated long-running processes. Each is
+		// bounded by --time-limit / --memory-limit so it recycles periodically
+		// (restart: unless-stopped brings it back up).
+		for _, bg := range BackgroundServices {
+			addKeyValueNode(services, bg.Name, consoleService(opts, webEnv, webDependsOn, bg.command...))
+		}
+	}
+
 	volumes := newMappingNode()
 	addKeyValueNode(volumes, "db-data", newNullNode())
 
@@ -275,6 +323,26 @@ func buildCompose(hasAMQP, hasElasticsearch bool, opts *ComposeOptions) yaml.Nod
 		Kind:    yaml.DocumentNode,
 		Content: []*yaml.Node{root},
 	}
+}
+
+// consoleService builds a long-running service that reuses the web image and
+// its environment to run a `php bin/console <args...>` process. It is used for
+// the messenger worker and scheduled-task runner when the admin worker is
+// disabled.
+func consoleService(opts *ComposeOptions, webEnv, webDependsOn *yaml.Node, consoleArgs ...string) *yaml.Node {
+	svc := newMappingNode()
+	addKeyValue(svc, "image", fmt.Sprintf("ghcr.io/shopware/docker-dev:php%s-node%s-caddy", opts.phpVersion(), nodeVersion))
+	if opts.User != "" {
+		addKeyValue(svc, "user", opts.User)
+	}
+	addKeyValueNode(svc, "command", newSequenceNode(append([]string{"php", "bin/console"}, consoleArgs...)...))
+	addKeyValueNode(svc, "env_file", newSequenceNode(".env.local"))
+	addKeyValueNode(svc, "environment", webEnv)
+	addKeyValueNode(svc, "volumes", newSequenceNode(".:/var/www/html"))
+	addKeyValueNode(svc, "depends_on", webDependsOn)
+	addKeyValueNode(svc, "restart", &yaml.Node{Kind: yaml.ScalarNode, Value: "unless-stopped", Tag: "!!str"})
+
+	return svc
 }
 
 func newMappingNode() *yaml.Node {

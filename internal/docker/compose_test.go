@@ -237,6 +237,47 @@ func TestGenerateComposeFile(t *testing.T) {
 		assert.NotContains(t, compose, "XDEBUG_CONFIG")
 	})
 
+	t.Run("without dedicated worker by default", func(t *testing.T) {
+		t.Parallel()
+		lock := &packagist.ComposerLock{
+			Packages: []packagist.ComposerLockPackage{
+				{Name: "shopware/core", Version: "6.6.0.0"},
+			},
+		}
+
+		result, err := GenerateComposeFile(lock, nil)
+		assert.NoError(t, err)
+
+		compose := string(result)
+		assert.NotContains(t, compose, "worker:")
+		assert.NotContains(t, compose, "messenger:consume")
+		assert.NotContains(t, compose, "scheduler:")
+		assert.NotContains(t, compose, "scheduled-task:run")
+	})
+
+	t.Run("with dedicated worker", func(t *testing.T) {
+		t.Parallel()
+		lock := &packagist.ComposerLock{
+			Packages: []packagist.ComposerLockPackage{
+				{Name: "shopware/core", Version: "6.6.0.0"},
+				{Name: "symfony/amqp-messenger", Version: "v7.0.0"},
+			},
+		}
+
+		result, err := GenerateComposeFile(lock, &ComposeOptions{DedicatedWorker: true})
+		assert.NoError(t, err)
+
+		compose := string(result)
+		assert.Contains(t, compose, "worker:")
+		assert.Contains(t, compose, "messenger:consume")
+		assert.Contains(t, compose, "--all")
+		assert.Contains(t, compose, "scheduler:")
+		assert.Contains(t, compose, "scheduled-task:run")
+		// The worker reuses the web image and shares its messenger transport env.
+		assert.Contains(t, compose, "MESSENGER_TRANSPORT_DSN")
+		assert.Contains(t, compose, "unless-stopped")
+	})
+
 	t.Run("with all optional services", func(t *testing.T) {
 		t.Parallel()
 		lock := &packagist.ComposerLock{

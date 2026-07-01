@@ -33,13 +33,56 @@ func newInstallProgress() progress.Model {
 
 func checkContainersRunning(projectRoot string) tea.Cmd {
 	return func() tea.Msg {
-		check := composeCommand(context.Background(), projectRoot, "ps", "--status=running", "-q")
-		output, err := check.Output()
-		if err == nil && len(strings.TrimSpace(string(output))) > 0 {
-			return dockerAlreadyRunningMsg{}
+		running := composeServiceSet(projectRoot, "ps", "--services", "--status=running")
+		if len(running) == 0 {
+			return dockerNeedStartMsg{}
 		}
-		return dockerNeedStartMsg{}
+
+		// Treat the stack as already up only when every service the compose
+		// file defines is running. A service that was just added to
+		// compose.yaml (e.g. the messenger worker when the admin worker is
+		// disabled) is not running yet, so fall through to a start and let
+		// `up -d` reconcile the newcomers instead of jumping to the dashboard.
+		defined := composeServiceSet(projectRoot, "config", "--services")
+		if !allRunning(defined, running) {
+			return dockerNeedStartMsg{}
+		}
+
+		return dockerAlreadyRunningMsg{}
 	}
+}
+
+// allRunning reports whether every service in defined is present in running.
+// An empty defined set (e.g. when the compose config could not be read) imposes
+// no constraint and is considered satisfied.
+func allRunning(defined, running map[string]struct{}) bool {
+	for name := range defined {
+		if _, ok := running[name]; !ok {
+			return false
+		}
+	}
+
+	return true
+}
+
+// composeServiceSet runs a docker compose command that prints one service name
+// per line (e.g. `config --services` or `ps --services`) and returns the names
+// as a set. It returns nil when the command fails, so callers treat an
+// undeterminable list as "no constraint".
+func composeServiceSet(projectRoot string, args ...string) map[string]struct{} {
+	output, err := composeCommand(context.Background(), projectRoot, args...).Output()
+	if err != nil {
+		return nil
+	}
+
+	set := map[string]struct{}{}
+	for _, line := range strings.Split(strings.TrimSpace(string(output)), "\n") {
+		if name := strings.TrimSpace(line); name != "" {
+			set[name] = struct{}{}
+		}
+	}
+
+	return set
 }
 
 func (m *Model) checkShopwareInstalled() tea.Cmd {

@@ -19,6 +19,7 @@ import (
 	"charm.land/lipgloss/v2"
 	endoflife "github.com/shyim/go-endoflife-api"
 
+	dockerpkg "github.com/shopware/shopware-cli/internal/docker"
 	"github.com/shopware/shopware-cli/internal/executor"
 	"github.com/shopware/shopware-cli/internal/extension"
 	"github.com/shopware/shopware-cli/internal/packagist"
@@ -40,6 +41,7 @@ type OverviewModel struct {
 	username           string
 	password           string
 	services           []DiscoveredService
+	background         []BackgroundProcess
 	projectRoot        string
 	executor           executor.Executor
 	shopCfg            *shop.Config
@@ -63,10 +65,19 @@ type DiscoveredService struct {
 	Password string
 }
 
+// BackgroundProcess is a long-running compose service without a published port
+// (the messenger worker and scheduled-task runner). Running reflects whether its
+// container is currently up.
+type BackgroundProcess struct {
+	Name    string
+	Running bool
+}
+
 type servicesLoadedMsg struct {
-	services []DiscoveredService
-	webPort  int
-	err      error
+	services   []DiscoveredService
+	background []BackgroundProcess
+	webPort    int
+	err        error
 }
 
 type shopwareVersionLoadedMsg struct {
@@ -173,6 +184,20 @@ var ignoredServices = map[string]bool{
 	"database": true,
 }
 
+// backgroundServiceLabel returns the display label for a compose service that is
+// one of the dedicated background processes (defined once in internal/docker),
+// and whether the service is such a process. These have no published port, so
+// they never appear in the Services list and are surfaced in the "Background
+// processing" section instead.
+func backgroundServiceLabel(service string) (string, bool) {
+	for _, bg := range dockerpkg.BackgroundServices {
+		if bg.Name == service {
+			return bg.Label, true
+		}
+	}
+	return "", false
+}
+
 // webServiceTargetPort is the container port the Shopware web server (the "web"
 // service) listens on. Its published host port determines the shop URL port.
 const webServiceTargetPort = 8000
@@ -226,6 +251,7 @@ func (m OverviewModel) Update(msg tea.Msg) (OverviewModel, tea.Cmd) {
 	case servicesLoadedMsg:
 		m.loading = false
 		m.services = msg.services
+		m.background = msg.background
 		m.err = msg.err
 		if msg.webPort != 0 {
 			m.shopURL = ResolveShopURL(m.shopURL, msg.webPort)
@@ -340,12 +366,31 @@ func (m OverviewModel) View(width, height int) string {
 	s.WriteString(m.renderWatcherStatus("Admin", m.adminWatchRunning, m.adminWatchStarting, "http://127.0.0.1:5173", m.cursor == 0))
 	s.WriteString(m.renderWatcherStatus("Storefront", m.sfWatchRunning, m.sfWatchStarting, "http://127.0.0.1:9998", m.cursor == 1))
 
+	if len(m.background) > 0 {
+		s.WriteString(divider)
+		s.WriteString(tui.TitleStyle.Render("Background processing"))
+		s.WriteString("\n")
+		s.WriteString(m.renderBackgroundProcesses())
+	}
+
 	s.WriteString(divider)
 
 	s.WriteString(tui.TitleStyle.Render("Services"))
 	s.WriteString("\n")
 	s.WriteString(m.renderServices())
 
+	return s.String()
+}
+
+func (m OverviewModel) renderBackgroundProcesses() string {
+	var s strings.Builder
+	for _, proc := range m.background {
+		if proc.Running {
+			s.WriteString(tui.CheckboxRow("[x]", proc.Name, "running", tui.SuccessColor, true))
+		} else {
+			s.WriteString(tui.CheckboxRow("[ ]", proc.Name, "stopped", tui.MutedColor, false))
+		}
+	}
 	return s.String()
 }
 
@@ -562,10 +607,18 @@ func DiscoverServices(ctx context.Context, projectRoot string) ([]DiscoveredServ
 // published on. webPort is 0 when it cannot be determined (e.g. the environment
 // is down or the web container does not publish port 8000).
 func DiscoverComposeServices(ctx context.Context, projectRoot string) (services []DiscoveredService, webPort int, err error) {
+	services, _, webPort, err = discoverCompose(ctx, projectRoot)
+	return services, webPort, err
+}
+
+// discoverCompose parses `docker compose ps --format json` once and classifies
+// every container into a published auxiliary service, a background process, or
+// (for web) the shop's published port.
+func discoverCompose(ctx context.Context, projectRoot string) (services []DiscoveredService, background []BackgroundProcess, webPort int, err error) {
 	cmd := composeCommand(ctx, projectRoot, "ps", "--format", "json")
 	output, err := cmd.Output()
 	if err != nil {
-		return nil, 0, fmt.Errorf("docker compose ps: %w", err)
+		return nil, nil, 0, fmt.Errorf("docker compose ps: %w", err)
 	}
 
 	type containerInfo struct {
@@ -581,6 +634,14 @@ func DiscoverComposeServices(ctx context.Context, projectRoot string) (services 
 
 		var container dockerComposePSOutput
 		if err := json.Unmarshal([]byte(line), &container); err != nil {
+			continue
+		}
+
+		if label, ok := backgroundServiceLabel(container.Service); ok {
+			background = append(background, BackgroundProcess{
+				Name:    label,
+				Running: container.State == "running",
+			})
 			continue
 		}
 
@@ -628,7 +689,7 @@ func DiscoverComposeServices(ctx context.Context, projectRoot string) (services 
 		})
 	}
 
-	return services, webPort, nil
+	return services, background, webPort, nil
 }
 
 // ResolveShopURL rewrites the port in shopURL to webPort, the host port the web
@@ -650,8 +711,8 @@ func ResolveShopURL(shopURL string, webPort int) string {
 
 func discoverServices(projectRoot string) tea.Cmd {
 	return func() tea.Msg {
-		services, webPort, err := DiscoverComposeServices(context.Background(), projectRoot)
-		return servicesLoadedMsg{services: services, webPort: webPort, err: err}
+		services, background, webPort, err := discoverCompose(context.Background(), projectRoot)
+		return servicesLoadedMsg{services: services, background: background, webPort: webPort, err: err}
 	}
 }
 
