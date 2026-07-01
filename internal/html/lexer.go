@@ -21,7 +21,7 @@ func newLexer(src string) *lexer {
 	// src/5 (slightly generous) means the slice almost never has to grow, so we
 	// pay one right-sized allocation instead of one allocation plus a doubling
 	// copy. The +16 covers tiny inputs and the trailing EOF.
-	return &lexer{src: src, pt: posTracker{src: src, cur: Pos{Offset: 0, Line: 1}}, tokens: make([]token, 0, len(src)/6+16)}
+	return &lexer{src: src, pt: posTracker{src: src, cur: Pos{Offset: 0, Line: 1}}, tokens: make([]token, 0, len(src)/5+16)}
 }
 
 // lex scans the entire source and returns the token stream.

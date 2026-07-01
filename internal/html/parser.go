@@ -114,11 +114,19 @@ type parser struct {
 
 	// scratch is a single reused stack onto which parseNodesUntil builds each
 	// node list. Recursive calls share the backing array via a mark (the length
-	// at entry); collect() copies the [mark:] window into an exact-size NodeList
-	// and rewinds. This replaces one append-grown slice per list — profiling's
+	// at entry); collect() copies the [mark:] window into the node arena and
+	// rewinds. This replaces one append-grown slice per list — profiling's
 	// single largest remaining allocator — with a handful of grows for the whole
 	// parse.
 	scratch []Node
+
+	// nodeArena packs every collected child list end to end. collect() appends
+	// its scratch window here and returns a capped subslice, so the tree's many
+	// small children/body NodeLists share a few large backing arrays instead of
+	// one make() each (the largest allocator once attributes were slab-backed).
+	// A grown arena leaves earlier subslices pointing at the old backing array,
+	// which stays live and valid — same trade as the node slabs.
+	nodeArena []Node
 }
 
 func (p *parser) newRawNode() *RawNode {
@@ -177,18 +185,21 @@ func (p *parser) newAttrNode() *Attribute {
 	return a
 }
 
-// collect copies the scratch entries pushed since mark into an exact-size
-// NodeList and rewinds the scratch stack to mark for sibling reuse.
+// collect packs the scratch entries pushed since mark into the shared node
+// arena and rewinds the scratch stack to mark for sibling reuse. The returned
+// NodeList is a capped subslice of the arena, so a consumer that appends to it
+// (e.g. a linter growing node.Children) reallocates rather than overwriting the
+// next list packed behind it.
 func (p *parser) collect(mark int) NodeList {
 	n := len(p.scratch) - mark
 	if n == 0 {
 		p.scratch = p.scratch[:mark]
 		return nil
 	}
-	out := make(NodeList, n)
-	copy(out, p.scratch[mark:])
+	start := len(p.nodeArena)
+	p.nodeArena = append(p.nodeArena, p.scratch[mark:]...)
 	p.scratch = p.scratch[:mark]
-	return out
+	return p.nodeArena[start : start+n : start+n]
 }
 
 func (p *parser) peek(i int) token {
@@ -247,6 +258,9 @@ func (p *parser) parseDocument() (NodeList, error) {
 	// scratch only needs to hold one node list's worth at a time (collect()
 	// rewinds between siblings), so it stays small.
 	p.scratch = make([]Node, 0, len(toks)/16+16)
+	// The arena holds every collected node for the whole parse; size it from the
+	// combined raw+element+expression node estimate so it rarely has to grow.
+	p.nodeArena = make([]Node, 0, len(toks)/6+16)
 	nodes, _, err := p.parseNodesUntil(nodeContextTopLevel, "", nil)
 	return nodes, err
 }
