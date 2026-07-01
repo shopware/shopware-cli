@@ -41,7 +41,7 @@ func parseIfTag(p *parser, openTok token) (Node, error) {
 		if nameTok.Type != tokTwigIdent {
 			return nil, errAt(p.source, p.filename, nameTok.Pos, "expected if-follower identifier")
 		}
-		switch nameTok.Lit {
+		switch nameTok.Lit(p.source) {
 		case "elseif":
 			cond, trim, err := p.consumeStmtHeader("elseif")
 			if err != nil {
@@ -66,7 +66,7 @@ func parseIfTag(p *parser, openTok token) (Node, error) {
 			elseChildren = body
 			reason = r
 		default:
-			return nil, errAt(p.source, p.filename, nameTok.Pos, "unexpected if-follower %q", nameTok.Lit)
+			return nil, errAt(p.source, p.filename, nameTok.Pos, "unexpected if-follower %q", nameTok.Lit(p.source))
 		}
 	}
 
@@ -97,12 +97,12 @@ func (p *parser) consumeStmtHeader(name string) (string, TwigTrim, error) {
 	trim := TwigTrim{Left: openTok.TrimLeft}
 	p.advance()
 	identTok := p.advance()
-	if identTok.Type != tokTwigIdent || identTok.Lit != name {
+	if identTok.Type != tokTwigIdent || identTok.Lit(p.source) != name {
 		return "", TwigTrim{}, errAt(p.source, p.filename, identTok.Pos, "expected '%s'", name)
 	}
 	body := ""
 	if p.peek(0).Type == tokTwigRawExpr {
-		body = strings.TrimSpace(p.advance().Lit)
+		body = strings.TrimSpace(p.advance().Lit(p.source))
 	}
 	closeTok := p.peek(0)
 	if closeTok.Type != tokTwigStmtClose {

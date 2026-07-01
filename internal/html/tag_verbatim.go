@@ -59,11 +59,11 @@ func parseVerbatimTag(p *parser, openTok token) (Node, error) {
 		}
 		if tk.Type == tokTwigStmtOpen {
 			identTok := p.peek(1)
-			if identTok.Type == tokTwigIdent && identTok.Lit == "endverbatim" {
+			if identTok.Type == tokTwigIdent && identTok.Lit(p.source) == "endverbatim" {
 				break
 			}
 		}
-		body.WriteString(tk.Raw)
+		body.WriteString(tk.Raw(p.source))
 		p.advance()
 	}
 	closeTrim, err := p.consumeEndTag("endverbatim")

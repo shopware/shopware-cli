@@ -402,7 +402,7 @@ func (p *parser) parseNodesUntil(ctx nodeContext, closeTag string, parentTagSpec
 			identTok := p.peek(1)
 			name := ""
 			if identTok.Type == tokTwigIdent {
-				name = identTok.Lit
+				name = identTok.Lit(p.source)
 			}
 
 			// Stop on parent's terminator/followers without consuming.
@@ -459,7 +459,7 @@ func (p *parser) parseNodesUntil(ctx nodeContext, closeTag string, parentTagSpec
 			p.advance() // {#
 			body := ""
 			if p.peek(0).Type == tokTwigCommentText {
-				body = p.advance().Lit
+				body = p.advance().Lit(p.source)
 			}
 			if p.peek(0).Type == tokTwigCommentClose {
 				trim.Right = p.peek(0).TrimRight
@@ -471,7 +471,7 @@ func (p *parser) parseNodesUntil(ctx nodeContext, closeTag string, parentTagSpec
 		case tokHTMLComment:
 			p.flushRaw(ctx, &rawBuf, rawStartPos)
 			p.scratch = append(p.scratch, &CommentNode{
-				Text: tk.Lit,
+				Text: tk.Lit(p.source),
 				Line: tk.Pos.Line,
 			})
 			p.advance()
@@ -493,7 +493,7 @@ func (p *parser) parseNodesUntil(ctx nodeContext, closeTag string, parentTagSpec
 			if ctx == nodeContextElementChildren {
 				// Peek the tag name.
 				nameTok := p.peek(1)
-				if nameTok.Type == tokHTMLTagName && nameTok.Lit == closeTag {
+				if nameTok.Type == tokHTMLTagName && nameTok.Lit(p.source) == closeTag {
 					p.flushRaw(ctx, &rawBuf, rawStartPos)
 					// Consume "</name>"
 					p.advance() // </
@@ -508,13 +508,13 @@ func (p *parser) parseNodesUntil(ctx nodeContext, closeTag string, parentTagSpec
 			if rawBuf.len() == 0 {
 				rawStartPos = tk.Pos
 			}
-			rawBuf.add(tk.Pos.Offset, len(tk.Raw))
+			rawBuf.add(tk.Pos.Offset, tk.RawLen())
 			p.advance()
 
 		case tokHTMLDoctype:
 			p.flushRaw(ctx, &rawBuf, rawStartPos)
 			dn := p.newRawNode()
-			dn.Text = tk.Raw
+			dn.Text = tk.Raw(p.source)
 			dn.Line = tk.Pos.Line
 			p.scratch = append(p.scratch, dn)
 			p.advance()
@@ -524,7 +524,7 @@ func (p *parser) parseNodesUntil(ctx nodeContext, closeTag string, parentTagSpec
 			if rawBuf.len() == 0 {
 				rawStartPos = tk.Pos
 			}
-			rawBuf.add(tk.Pos.Offset, len(tk.Lit))
+			rawBuf.add(tk.Pos.Offset, tk.LitLen())
 			p.advance()
 
 		default:
@@ -533,7 +533,7 @@ func (p *parser) parseNodesUntil(ctx nodeContext, closeTag string, parentTagSpec
 			if rawBuf.len() == 0 {
 				rawStartPos = tk.Pos
 			}
-			rawBuf.add(tk.Pos.Offset, len(tk.Raw))
+			rawBuf.add(tk.Pos.Offset, tk.RawLen())
 			p.advance()
 		}
 	}
@@ -555,7 +555,7 @@ func (p *parser) appendRawTokens(buf *rawSpan, openTok token) {
 	case tokTwigCommentOpen:
 		wantClose = tokTwigCommentClose
 	default:
-		buf.add(openTok.Pos.Offset, len(openTok.Raw))
+		buf.add(openTok.Pos.Offset, openTok.RawLen())
 		p.advance()
 		return
 	}
@@ -564,7 +564,7 @@ func (p *parser) appendRawTokens(buf *rawSpan, openTok token) {
 		if tk.Type == tokEOF {
 			return
 		}
-		buf.add(tk.Pos.Offset, len(tk.Raw))
+		buf.add(tk.Pos.Offset, tk.RawLen())
 		p.advance()
 		if tk.Type == wantClose {
 			return
@@ -592,7 +592,7 @@ func (p *parser) parseTemplateExpression() (*TemplateExpressionNode, error) {
 	// trim flags on the open/close delimiters round-trip via Trim so a
 	// `{{- x -}}` formats back as `{{- x -}}` and not `{{ x }}`.
 	en := p.newExprNode()
-	en.Expression = bodyTok.Raw
+	en.Expression = bodyTok.Raw(p.source)
 	en.Trim = TwigTrim{Left: openTok.TrimLeft, Right: closeTok.TrimRight}
 	en.Line = openTok.Pos.Line
 	return en, nil
@@ -614,7 +614,7 @@ func (p *parser) parseElement(parentTagSpec *TagSpec) (*ElementNode, error) {
 		return nil, errAt(p.source, p.filename, nameTok.Pos, "expected HTML tag name")
 	}
 	node := p.newElementNode()
-	node.Tag = nameTok.Lit
+	node.Tag = nameTok.Lit(p.source)
 	node.Attributes = NodeList{}
 	node.Children = NodeList{}
 	node.Line = openTok.Pos.Line
@@ -629,12 +629,12 @@ func (p *parser) parseElement(parentTagSpec *TagSpec) (*ElementNode, error) {
 		case tokHTMLAttrName:
 			p.advance()
 			attr := p.newAttrNode()
-			attr.Key = tk.Lit
+			attr.Key = tk.Lit(p.source)
 			attr.Value = ""
 			if p.peek(0).Type == tokHTMLAttrEq {
 				p.advance() // =
 				if p.peek(0).Type == tokHTMLAttrValue {
-					attr.Value = p.advance().Lit
+					attr.Value = p.advance().Lit(p.source)
 				}
 			}
 			node.Attributes = append(node.Attributes, attr)
@@ -648,7 +648,7 @@ func (p *parser) parseElement(parentTagSpec *TagSpec) (*ElementNode, error) {
 			// `{% if x %}data-y{% endif %}` (when `if` is somehow missing)
 			// or future Twig statements we don't yet recognize.
 			identTok := p.peek(1)
-			if identTok.Type == tokTwigIdent && identTok.Lit == "if" {
+			if identTok.Type == tokTwigIdent && identTok.Lit(p.source) == "if" {
 				if spec := lookupTag("if"); spec != nil {
 					ifNode, err := spec.Parse(p, tk)
 					if err != nil {
@@ -683,7 +683,7 @@ func (p *parser) parseElement(parentTagSpec *TagSpec) (*ElementNode, error) {
 			p.advance()
 			body := ""
 			if p.peek(0).Type == tokTwigCommentText {
-				body = p.advance().Lit
+				body = p.advance().Lit(p.source)
 			}
 			if p.peek(0).Type == tokTwigCommentClose {
 				trim.Right = p.peek(0).TrimRight

@@ -21,7 +21,7 @@ func parseParentTag(p *parser, openTok token) (Node, error) {
 	trim := TwigTrim{Left: openTok.TrimLeft}
 	p.advance() // {%
 	identTok := p.advance()
-	if identTok.Type != tokTwigIdent || identTok.Lit != "parent" {
+	if identTok.Type != tokTwigIdent || identTok.Lit(p.source) != "parent" {
 		return nil, errAt(p.source, p.filename, identTok.Pos, "expected 'parent'")
 	}
 	// Body must be empty or exactly "()" (optionally surrounded by
@@ -29,7 +29,7 @@ func parseParentTag(p *parser, openTok token) (Node, error) {
 	// malformed tags.
 	if p.peek(0).Type == tokTwigRawExpr {
 		bodyTok := p.advance()
-		if body := strings.TrimSpace(bodyTok.Lit); body != "" && body != "()" {
+		if body := strings.TrimSpace(bodyTok.Lit(p.source)); body != "" && body != "()" {
 			return nil, errAt(p.source, p.filename, bodyTok.Pos, "unexpected argument to parent: %q", body)
 		}
 	}
