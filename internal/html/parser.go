@@ -109,6 +109,8 @@ type parser struct {
 	elemN    int
 	exprSlab []TemplateExpressionNode
 	exprN    int
+	attrSlab []Attribute
+	attrN    int
 
 	// scratch is a single reused stack onto which parseNodesUntil builds each
 	// node list. Recursive calls share the backing array via a mark (the length
@@ -159,6 +161,20 @@ func (p *parser) newExprNode() *TemplateExpressionNode {
 	e := &p.exprSlab[p.exprN]
 	p.exprN++
 	return e
+}
+
+func (p *parser) newAttrNode() *Attribute {
+	if p.attrN >= len(p.attrSlab) {
+		n := len(p.attrSlab) * 2
+		if n < 16 {
+			n = 16
+		}
+		p.attrSlab = make([]Attribute, n)
+		p.attrN = 0
+	}
+	a := &p.attrSlab[p.attrN]
+	p.attrN++
+	return a
 }
 
 // collect copies the scratch entries pushed since mark into an exact-size
@@ -215,6 +231,15 @@ func (p *parser) parseDocument() (NodeList, error) {
 	if n := len(toks)/15 + 8; n > 0 {
 		p.rawSlab = make([]RawNode, n)
 		p.elemSlab = make([]ElementNode, n)
+	}
+	// Storing attributes as *Attribute out of a slab turns what was one
+	// interface-boxing malloc per attribute — profiling's largest remaining
+	// allocator — into an amortized slab bump. The divisor is the measured
+	// token-per-attribute ratio on real templates (~1 attribute per 32
+	// tokens); slightly under-sizing keeps the initial slab from being zeroed
+	// memory the GC must scan, and newAttrNode grows it on demand if short.
+	if n := len(toks)/32 + 8; n > 0 {
+		p.attrSlab = make([]Attribute, n)
 	}
 	if n := len(toks)/48 + 4; n > 0 {
 		p.exprSlab = make([]TemplateExpressionNode, n)
@@ -589,7 +614,9 @@ func (p *parser) parseElement(parentTagSpec *TagSpec) (*ElementNode, error) {
 		switch tk.Type {
 		case tokHTMLAttrName:
 			p.advance()
-			attr := Attribute{Key: tk.Lit}
+			attr := p.newAttrNode()
+			attr.Key = tk.Lit
+			attr.Value = ""
 			if p.peek(0).Type == tokHTMLAttrEq {
 				p.advance() // =
 				if p.peek(0).Type == tokHTMLAttrValue {

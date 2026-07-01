@@ -41,7 +41,7 @@ func (a AlertFixer) Fix(nodes []html.Node) error {
 
 			for _, attrNode := range node.Attributes {
 				// Check if the attribute is an html.Attribute
-				if attr, ok := attrNode.(html.Attribute); ok {
+				if attr, ok := attrNode.(*html.Attribute); ok {
 					if attr.Key == "variant" {
 						switch attr.Value {
 						case "success":

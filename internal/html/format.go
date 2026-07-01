@@ -15,7 +15,7 @@ var fromTextToEntities = []AttributeEntityEncodingFromTo{
 	{From: "\"", To: "&quot;"},
 }
 
-func (a Attribute) Dump(indent int) string {
+func (a *Attribute) Dump(indent int) string {
 	var builder strings.Builder
 	indentStr := indentConfig.GetIndent()
 
