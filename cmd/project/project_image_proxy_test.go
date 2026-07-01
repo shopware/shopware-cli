@@ -37,8 +37,8 @@ func TestImageProxySVG(t *testing.T) {
 
 		proxy := httputil.NewSingleHostReverseProxy(upstreamURL)
 
-		defaultDirector := proxy.Director
-		proxy.Director = func(req *http.Request) {
+		defaultDirector := proxy.Director          //nolint:staticcheck // ReverseProxy.Director deprecated in Go 1.26; migrate to Rewrite
+		proxy.Director = func(req *http.Request) { //nolint:staticcheck // ReverseProxy.Director deprecated in Go 1.26; migrate to Rewrite
 			defaultDirector(req)
 			req.Header.Del("Accept-Encoding")
 		}

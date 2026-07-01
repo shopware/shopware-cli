@@ -110,8 +110,8 @@ If a file is not found locally, it proxies the request to the upstream server.`,
 		// transparently decompresses upstream responses. This ensures the
 		// cache always stores identity-encoded (uncompressed) content, avoiding
 		// double-compression when serving cache hits through the gzip handler.
-		defaultDirector := proxy.Director
-		proxy.Director = func(req *http.Request) {
+		defaultDirector := proxy.Director          //nolint:staticcheck // ReverseProxy.Director deprecated in Go 1.26; migrate to Rewrite
+		proxy.Director = func(req *http.Request) { //nolint:staticcheck // ReverseProxy.Director deprecated in Go 1.26; migrate to Rewrite
 			defaultDirector(req)
 			req.Header.Del("Accept-Encoding")
 		}
