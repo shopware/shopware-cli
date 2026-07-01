@@ -763,7 +763,7 @@ func renderSecurityEnd(eol, now time.Time) string {
 		c = tui.ErrorColor
 	case securityEndWarning:
 		c = tui.WarnColor
-	default:
+	case securityEndOK:
 		c = tui.SuccessColor
 	}
 
@@ -779,10 +779,10 @@ func securityEndRemaining(eol, now time.Time) string {
 		return "expired"
 	}
 	days := int(remaining / (24 * time.Hour))
-	switch {
-	case days == 0:
+	switch days {
+	case 0:
 		return "expires today"
-	case days == 1:
+	case 1:
 		return "1 day left"
 	default:
 		return fmt.Sprintf("%d days left", days)
