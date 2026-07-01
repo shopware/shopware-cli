@@ -435,7 +435,8 @@ func (l *lexer) lexTwigStmt() error {
 		l.pt.advance(1)
 	}
 	identEnd := l.pt.cur.Offset
-	if identEnd > identStart || identEnd > wsStart {
+	// Emit when there is an identifier or any leading whitespace to preserve.
+	if identEnd > wsStart {
 		l.emit(mkTok(tokTwigIdent, wsPos, identStart, identEnd-identStart, wsStart, identEnd-wsStart))
 	}
 

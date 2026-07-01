@@ -32,14 +32,12 @@ const (
 
 // token is the unit produced by the lexer.
 //
-// Lit and Raw are stored as [offset,len) windows into the source string rather
-// than as string headers: every lexed literal is a substring of the source
-// (even the whitespace-trimmed bodies, since strings.TrimSpace/TrimRight return
-// subslices), so offsets lose no information. This keeps token pointer-free,
-// which matters because the token stream is one large slice — a pointer-free
-// element type is never scanned by the GC and its appends carry no write
-// barriers, the two costs that dominated lexing once the buffer was right-sized.
-// Recover the strings with the Lit(src)/Raw(src) accessors.
+// Lit and Raw are stored as [offset,len) windows into the source rather than as
+// strings: every lexed literal is a substring of the source (trimmed bodies
+// included, since strings.TrimSpace/TrimRight return subslices), so no
+// information is lost. Keeping token pointer-free means the token slice is not
+// GC-scanned and appends need no write barriers. Use the Lit(src)/Raw(src)
+// accessors to recover the strings.
 type token struct {
 	Type   tokenType
 	litOff int32
@@ -61,7 +59,6 @@ func (t token) Lit(src string) string { return src[t.litOff : t.litOff+t.litLen]
 // Raw returns the verbatim source slice the token was scanned from.
 func (t token) Raw(src string) string { return src[t.rawOff : t.rawOff+t.rawLen] }
 
-// LitLen and RawLen return the byte lengths of Lit and Raw without needing the
-// source (the common case where a caller only advances a buffer by the width).
+// LitLen and RawLen return the byte lengths of Lit and Raw without the source.
 func (t token) LitLen() int { return int(t.litLen) }
 func (t token) RawLen() int { return int(t.rawLen) }

@@ -42,14 +42,10 @@ type posTracker struct {
 	cur Pos
 }
 
-// advance moves the position forward by n bytes, counting any newlines in the
-// skipped span to keep Line current (column is derived lazily from the offset
-// only when an error needs it).
-//
-// Most calls advance by 1–2 bytes (a delimiter, bracket, or single char), so
-// the common case is a tiny span. Calling strings.Count there is dominated by
-// its call + SIMD-dispatch overhead, so small spans are scanned inline and only
-// larger runs (raw text, expression/comment bodies) go through the SIMD path.
+// advance moves the position forward by n bytes, counting newlines in the
+// skipped span to keep Line current (column is derived lazily from the offset).
+// Most calls advance by 1–2 bytes, where strings.Count's call overhead exceeds
+// the scan, so small spans are counted inline and only large runs use it.
 func (t *posTracker) advance(n int) {
 	end := t.cur.Offset + n
 	if end > len(t.src) {

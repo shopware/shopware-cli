@@ -115,17 +115,14 @@ type parser struct {
 	// scratch is a single reused stack onto which parseNodesUntil builds each
 	// node list. Recursive calls share the backing array via a mark (the length
 	// at entry); collect() copies the [mark:] window into the node arena and
-	// rewinds. This replaces one append-grown slice per list — profiling's
-	// single largest remaining allocator — with a handful of grows for the whole
-	// parse.
+	// rewinds, so sibling lists reuse the same buffer.
 	scratch []Node
 
 	// nodeArena packs every collected child list end to end. collect() appends
 	// its scratch window here and returns a capped subslice, so the tree's many
 	// small children/body NodeLists share a few large backing arrays instead of
-	// one make() each (the largest allocator once attributes were slab-backed).
-	// A grown arena leaves earlier subslices pointing at the old backing array,
-	// which stays live and valid — same trade as the node slabs.
+	// one make() each. A grown arena leaves earlier subslices pointing at the old
+	// backing array, which stays live and valid — same as the node slabs.
 	nodeArena []Node
 }
 
@@ -243,12 +240,9 @@ func (p *parser) parseDocument() (NodeList, error) {
 		p.rawSlab = make([]RawNode, n)
 		p.elemSlab = make([]ElementNode, n)
 	}
-	// Storing attributes as *Attribute out of a slab turns what was one
-	// interface-boxing malloc per attribute — profiling's largest remaining
-	// allocator — into an amortized slab bump. The divisor is the measured
-	// token-per-attribute ratio on real templates (~1 attribute per 32
-	// tokens); slightly under-sizing keeps the initial slab from being zeroed
-	// memory the GC must scan, and newAttrNode grows it on demand if short.
+	// Attributes come out of a slab as *Attribute, replacing one
+	// interface-boxing alloc per attribute with a slab bump (~1 attribute per
+	// 32 tokens on real templates).
 	if n := len(toks)/32 + 8; n > 0 {
 		p.attrSlab = make([]Attribute, n)
 	}
