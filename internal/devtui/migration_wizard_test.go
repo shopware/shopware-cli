@@ -347,7 +347,6 @@ func TestMigrationWizardViewSteps(t *testing.T) {
 	sg.step = migrationStepAdminUser
 	sg.username.Focus()
 	view = sg.viewContent()
-	assert.Contains(t, view, "Step")
 	assert.Contains(t, view, "Choose a username")
 	assert.Contains(t, view, "Choose a password")
 
@@ -397,16 +396,6 @@ func TestMigrationWizardDockerPHPAdvancesToReview(t *testing.T) {
 
 	next, _ := sg.update(tea.KeyPressMsg(tea.Key{Code: tea.KeyEnter}))
 	assert.Equal(t, migrationStepReview, next.step)
-}
-
-func TestMigrationWizardStepNumbering(t *testing.T) {
-	sg := newMigrationWizard("")
-	assert.Equal(t, 3, sg.totalSteps())
-	assert.Equal(t, 1, sg.stepNum(migrationStepAdminUser))
-	assert.Equal(t, 2, sg.stepNum(migrationStepDockerPHP))
-	assert.Equal(t, 3, sg.stepNum(migrationStepReview))
-	assert.Equal(t, 0, sg.stepNum(migrationStepWelcome))
-	assert.Equal(t, 0, sg.stepNum(migrationStepDone))
 }
 
 func TestMigrationWizardWelcome_EnterSetsStartedAt(t *testing.T) {

@@ -1,7 +1,6 @@
 package devtui
 
 import (
-	"fmt"
 	"strings"
 
 	"charm.land/lipgloss/v2"
@@ -23,33 +22,6 @@ func (sg migrationWizard) viewContent() string {
 		return sg.viewDone()
 	}
 	return ""
-}
-
-func stepBadge(stepNum, totalSteps int) string {
-	return tui.TextBadge(fmt.Sprintf("Step %d/%d", stepNum, totalSteps))
-}
-
-// totalSteps returns the number of numbered wizard steps:
-// admin account, PHP version, review.
-func (sg migrationWizard) totalSteps() int {
-	return 3
-}
-
-// stepNum returns the 1-based index of the given wizard step within the
-// currently active step sequence. Steps outside the numbered sequence
-// (welcome, done) return 0.
-func (sg migrationWizard) stepNum(step migrationStep) int {
-	switch step {
-	case migrationStepAdminUser:
-		return 1
-	case migrationStepDockerPHP:
-		return 2
-	case migrationStepReview:
-		return 3
-	case migrationStepWelcome, migrationStepDone:
-		return 0
-	}
-	return 0
 }
 
 func (sg migrationWizard) viewWelcome() string {
@@ -88,8 +60,6 @@ func (sg migrationWizard) viewWelcome() string {
 
 func (sg migrationWizard) viewAdminUser() string {
 	var b strings.Builder
-	b.WriteString(stepBadge(sg.stepNum(migrationStepAdminUser), sg.totalSteps()))
-	b.WriteString("\n\n")
 	b.WriteString(tui.TitleStyle.Render("Admin Account"))
 	b.WriteString("\n")
 	b.WriteString(tui.DimStyle.Render("The login for your local Shopware admin panel and API."))
@@ -105,8 +75,6 @@ func (sg migrationWizard) viewAdminUser() string {
 
 func (sg migrationWizard) viewDockerPHP() string {
 	var b strings.Builder
-	b.WriteString(stepBadge(sg.stepNum(migrationStepDockerPHP), sg.totalSteps()))
-	b.WriteString("\n\n")
 	b.WriteString(tui.TitleStyle.Render("Docker Configuration"))
 	b.WriteString("\n")
 	b.WriteString(tui.DimStyle.Render("Select the PHP version for your Docker containers."))
@@ -128,8 +96,6 @@ func (sg migrationWizard) viewDockerPHP() string {
 func (sg migrationWizard) viewReview() string {
 	c := sg.currentConfig()
 	var b strings.Builder
-	b.WriteString(stepBadge(sg.stepNum(migrationStepReview), sg.totalSteps()))
-	b.WriteString("\n\n")
 	b.WriteString(tui.TitleStyle.Render("Review Configuration"))
 	b.WriteString("\n")
 	b.WriteString(tui.DimStyle.Render("The following configuration will be written."))
