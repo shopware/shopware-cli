@@ -22,7 +22,7 @@ func (l LinkCheck) Check(nodes []html.Node) []validation.CheckResult {
 		var href, target, rel string
 
 		for _, attr := range node.Attributes {
-			attrElement, ok := attr.(html.Attribute)
+			attrElement, ok := attr.(*html.Attribute)
 			if !ok {
 				continue
 			}

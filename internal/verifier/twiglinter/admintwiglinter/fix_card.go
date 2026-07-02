@@ -44,7 +44,7 @@ func (c CardFixer) Fix(nodes []html.Node) error {
 			// Process attributes: remove aiBadge and contentPadding.
 			for _, attrNode := range node.Attributes {
 				// Check if the attribute is an html.Attribute
-				if attr, ok := attrNode.(html.Attribute); ok {
+				if attr, ok := attrNode.(*html.Attribute); ok {
 					switch attr.Key {
 					case "aiBadge", "contentPadding":
 						if attr.Key == "aiBadge" {
@@ -66,7 +66,7 @@ func (c CardFixer) Fix(nodes []html.Node) error {
 				aiBadgeSlot := &html.ElementNode{
 					Tag: "slot",
 					Attributes: html.NodeList{
-						html.Attribute{Key: "name", Value: "title"},
+						&html.Attribute{Key: "name", Value: "title"},
 					},
 					Children: html.NodeList{
 						&html.ElementNode{Tag: "sw-ai-copilot-badge"},

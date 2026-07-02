@@ -44,18 +44,18 @@ func (i IconFixer) Fix(nodes []html.Node) error {
 
 			for _, attrNode := range node.Attributes {
 				// Check if the attribute is an html.Attribute
-				if attr, ok := attrNode.(html.Attribute); ok {
+				if attr, ok := attrNode.(*html.Attribute); ok {
 					switch strings.ToLower(attr.Key) {
 					case "small":
 						// Replace "small" with size="16px"
-						newAttrs = append(newAttrs, html.Attribute{
+						newAttrs = append(newAttrs, &html.Attribute{
 							Key:   "size",
 							Value: "16px",
 						})
 						hasSize = true
 					case "large":
 						// Replace "large" with size="32px"
-						newAttrs = append(newAttrs, html.Attribute{
+						newAttrs = append(newAttrs, &html.Attribute{
 							Key:   "size",
 							Value: "32px",
 						})
@@ -75,7 +75,7 @@ func (i IconFixer) Fix(nodes []html.Node) error {
 
 			// If no size related prop is set, add default size="24px"
 			if !hasSize {
-				newAttrs = append(newAttrs, html.Attribute{
+				newAttrs = append(newAttrs, &html.Attribute{
 					Key:   "size",
 					Value: "24px",
 				})

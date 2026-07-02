@@ -23,7 +23,7 @@ func (s StyleFixer) Check(nodes []html.Node) []validation.CheckResult {
 		}
 
 		for _, attr := range node.Attributes {
-			attrElement, ok := attr.(html.Attribute)
+			attrElement, ok := attr.(*html.Attribute)
 
 			if ok && attrElement.Key == "style" {
 				errors = append(errors, validation.CheckResult{

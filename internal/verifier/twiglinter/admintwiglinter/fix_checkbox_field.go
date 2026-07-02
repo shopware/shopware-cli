@@ -45,18 +45,18 @@ func (c CheckboxFieldFixer) Fix(nodes []html.Node) error {
 			// Process attribute conversions.
 			for _, attrNode := range node.Attributes {
 				// Check if the attribute is an html.Attribute
-				if attr, ok := attrNode.(html.Attribute); ok {
+				if attr, ok := attrNode.(*html.Attribute); ok {
 					switch attr.Key {
 					case ColonValueAttr:
-						newAttrs = append(newAttrs, html.Attribute{Key: ":checked", Value: attr.Value})
+						newAttrs = append(newAttrs, &html.Attribute{Key: ":checked", Value: attr.Value})
 					case VModelAttr, VModelValueAttr:
-						newAttrs = append(newAttrs, html.Attribute{Key: "v-model:checked", Value: attr.Value})
+						newAttrs = append(newAttrs, &html.Attribute{Key: "v-model:checked", Value: attr.Value})
 					case "id", "ghostValue", "padded":
 						// remove these attributes without replacement
 					case "partlyChecked":
-						newAttrs = append(newAttrs, html.Attribute{Key: "partial"})
+						newAttrs = append(newAttrs, &html.Attribute{Key: "partial"})
 					case UpdateValueAttr:
-						newAttrs = append(newAttrs, html.Attribute{Key: "@update:checked", Value: attr.Value})
+						newAttrs = append(newAttrs, &html.Attribute{Key: "@update:checked", Value: attr.Value})
 					default:
 						newAttrs = append(newAttrs, attr)
 					}
@@ -74,7 +74,7 @@ func (c CheckboxFieldFixer) Fix(nodes []html.Node) error {
 				if elem, ok := child.(*html.ElementNode); ok && elem.Tag == "template" {
 					// Handle label slot.
 					for _, a := range elem.Attributes {
-						if attr, ok := a.(html.Attribute); ok {
+						if attr, ok := a.(*html.Attribute); ok {
 							if attr.Key == "#label" || attr.Key == "v-slot:label" {
 								var sb strings.Builder
 								for _, inner := range elem.Children {
@@ -95,7 +95,7 @@ func (c CheckboxFieldFixer) Fix(nodes []html.Node) error {
 			}
 			node.Children = remainingChildren
 			if labelText != "" {
-				node.Attributes = append(node.Attributes, html.Attribute{
+				node.Attributes = append(node.Attributes, &html.Attribute{
 					Key:   "label",
 					Value: labelText,
 				})

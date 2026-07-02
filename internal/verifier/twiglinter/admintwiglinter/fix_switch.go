@@ -43,14 +43,14 @@ func (s SwitchFixer) Fix(nodes []html.Node) error {
 			// Process attribute conversions.
 			for _, attrNode := range node.Attributes {
 				// Check if the attribute is an html.Attribute
-				if attr, ok := attrNode.(html.Attribute); ok {
+				if attr, ok := attrNode.(*html.Attribute); ok {
 					switch attr.Key {
 					case "noMarginTop":
-						newAttrs = append(newAttrs, html.Attribute{Key: "removeTopMargin"})
+						newAttrs = append(newAttrs, &html.Attribute{Key: "removeTopMargin"})
 					case SizeAttr, "id", "ghostValue", "padded", "partlyChecked":
 						// remove these attributes
 					case ValueAttr:
-						newAttrs = append(newAttrs, html.Attribute{Key: "checked", Value: attr.Value})
+						newAttrs = append(newAttrs, &html.Attribute{Key: "checked", Value: attr.Value})
 					case VModelValueAttr:
 						attr.Key = VModelAttr
 						newAttrs = append(newAttrs, attr)
@@ -71,7 +71,7 @@ func (s SwitchFixer) Fix(nodes []html.Node) error {
 				// Check if child is a slot element.
 				if elem, ok := child.(*html.ElementNode); ok && elem.Tag == TemplateTag {
 					for _, a := range elem.Attributes {
-						if attr, ok := a.(html.Attribute); ok {
+						if attr, ok := a.(*html.Attribute); ok {
 							if attr.Key == LabelSlotAttr {
 								var sb strings.Builder
 								for _, inner := range elem.Children {
@@ -93,7 +93,7 @@ func (s SwitchFixer) Fix(nodes []html.Node) error {
 			node.Children = remainingChildren
 			// If label slot found, add label attribute.
 			if labelText != "" {
-				node.Attributes = append(node.Attributes, html.Attribute{
+				node.Attributes = append(node.Attributes, &html.Attribute{
 					Key:   "label",
 					Value: labelText,
 				})

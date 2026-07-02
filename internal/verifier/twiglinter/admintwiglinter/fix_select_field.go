@@ -48,22 +48,22 @@ func (s SelectFieldFixer) Fix(nodes []html.Node) error {
 
 			for _, attrNode := range node.Attributes {
 				// Check if the attribute is an html.Attribute
-				if attr, ok := attrNode.(html.Attribute); ok {
+				if attr, ok := attrNode.(*html.Attribute); ok {
 					switch attr.Key {
 					case ColonValueAttr:
-						newAttrs = append(newAttrs, html.Attribute{Key: ":model-value", Value: attr.Value})
+						newAttrs = append(newAttrs, &html.Attribute{Key: ":model-value", Value: attr.Value})
 					case VModelValueAttr:
-						newAttrs = append(newAttrs, html.Attribute{Key: "v-model", Value: attr.Value})
+						newAttrs = append(newAttrs, &html.Attribute{Key: "v-model", Value: attr.Value})
 					case ":aside":
 						// Remove aside prop.
 					case ":options":
 						// Convert options format: replace "name" with "label" and "id" with "value"
 						converted := strings.ReplaceAll(attr.Value, "name", "label")
 						converted = strings.ReplaceAll(converted, "id", "value")
-						newAttrs = append(newAttrs, html.Attribute{Key: ":options", Value: converted})
+						newAttrs = append(newAttrs, &html.Attribute{Key: ":options", Value: converted})
 						optionsSet = true
 					case UpdateValueAttr:
-						newAttrs = append(newAttrs, html.Attribute{Key: UpdateModelValueAttr, Value: attr.Value})
+						newAttrs = append(newAttrs, &html.Attribute{Key: UpdateModelValueAttr, Value: attr.Value})
 					default:
 						newAttrs = append(newAttrs, attr)
 					}
@@ -86,7 +86,7 @@ func (s SelectFieldFixer) Fix(nodes []html.Node) error {
 					// Convert label slot to label prop.
 					if elem.Tag == TemplateTag {
 						for _, a := range elem.Attributes {
-							if attr, ok := a.(html.Attribute); ok {
+							if attr, ok := a.(*html.Attribute); ok {
 								if attr.Key == LabelSlotAttr || attr.Key == "v-slot:label" {
 									var sb strings.Builder
 									for _, inner := range elem.Children {
@@ -103,7 +103,7 @@ func (s SelectFieldFixer) Fix(nodes []html.Node) error {
 						opt := make(map[string]interface{})
 						// Get option value from attributes.
 						for _, a := range elem.Attributes {
-							if attr, ok := a.(html.Attribute); ok {
+							if attr, ok := a.(*html.Attribute); ok {
 								switch attr.Key {
 								case ColonValueAttr, VModelValueAttr:
 									expressionKey := fmt.Sprintf("%s:%d", expressionObjectPrefix, expressionObjectKey)
@@ -142,7 +142,7 @@ func (s SelectFieldFixer) Fix(nodes []html.Node) error {
 
 			// If label slot was set, add label attribute.
 			if labelText != "" {
-				node.Attributes = append(node.Attributes, html.Attribute{
+				node.Attributes = append(node.Attributes, &html.Attribute{
 					Key:   "label",
 					Value: labelText,
 				})
@@ -159,7 +159,7 @@ func (s SelectFieldFixer) Fix(nodes []html.Node) error {
 						json = strings.ReplaceAll(json, "\""+replacementKey+"\"", fmt.Sprintf("(%s)", expression))
 					}
 
-					node.Attributes = append(node.Attributes, html.Attribute{
+					node.Attributes = append(node.Attributes, &html.Attribute{
 						Key:   ":options",
 						Value: json,
 					})

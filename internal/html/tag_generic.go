@@ -172,7 +172,7 @@ func makeBlockTagParser(name, endTag string, followers []string) TagParseFunc {
 		// generic block tags — `{% for %}` is the only built-in user.
 		if reason == stopIfTerminator && supportsElse {
 			nameTok := p.peek(1)
-			if nameTok.Type != tokTwigIdent || nameTok.Lit != "else" {
+			if nameTok.Type != tokTwigIdent || nameTok.Lit(p.source) != "else" {
 				return nil, errAt(p.source, p.filename, nameTok.Pos, "expected {%% else %%} inside {%% %s %%}", name)
 			}
 			_, t, err := p.consumeStmtHeader("else")

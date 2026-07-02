@@ -48,7 +48,7 @@ func (b ButtonFixer) Fix(nodes []html.Node) error {
 
 			for _, attrNode := range node.Attributes {
 				// Check if the attribute is an html.Attribute
-				if attr, ok := attrNode.(html.Attribute); ok {
+				if attr, ok := attrNode.(*html.Attribute); ok {
 					switch attr.Key {
 					case "variant":
 						lower := strings.ToLower(attr.Value)
@@ -73,7 +73,7 @@ func (b ButtonFixer) Fix(nodes []html.Node) error {
 					case "router-link":
 						// Replace with @click event.
 						val := attr.Value
-						newAttrs = append(newAttrs, html.Attribute{
+						newAttrs = append(newAttrs, &html.Attribute{
 							Key:   "@click",
 							Value: fmt.Sprintf("this.$router.push('%s')", val),
 						})
@@ -87,7 +87,7 @@ func (b ButtonFixer) Fix(nodes []html.Node) error {
 			}
 
 			if addGhost {
-				newAttrs = append(newAttrs, html.Attribute{
+				newAttrs = append(newAttrs, &html.Attribute{
 					Key: "ghost",
 				})
 			}

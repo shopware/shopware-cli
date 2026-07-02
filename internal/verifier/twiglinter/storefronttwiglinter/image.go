@@ -23,7 +23,7 @@ func (i ImageAltCheck) Check(nodes []html.Node) []validation.CheckResult {
 		var altValue string
 
 		for _, attr := range node.Attributes {
-			attrElement, ok := attr.(html.Attribute)
+			attrElement, ok := attr.(*html.Attribute)
 			if !ok {
 				continue
 			}

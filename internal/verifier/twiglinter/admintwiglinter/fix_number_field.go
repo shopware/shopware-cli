@@ -43,10 +43,10 @@ func (n NumberFieldFixer) Fix(nodes []html.Node) error {
 
 			for _, attrNode := range node.Attributes {
 				// Check if the attribute is an html.Attribute
-				if attr, ok := attrNode.(html.Attribute); ok {
+				if attr, ok := attrNode.(*html.Attribute); ok {
 					switch attr.Key {
 					case ColonValueAttr:
-						newAttrs = append(newAttrs, html.Attribute{
+						newAttrs = append(newAttrs, &html.Attribute{
 							Key:   ":model-value",
 							Value: attr.Value,
 						})
@@ -54,7 +54,7 @@ func (n NumberFieldFixer) Fix(nodes []html.Node) error {
 						attr.Key = VModelAttr
 						newAttrs = append(newAttrs, attr)
 					case "@update:value":
-						newAttrs = append(newAttrs, html.Attribute{
+						newAttrs = append(newAttrs, &html.Attribute{
 							Key:   "@change",
 							Value: attr.Value,
 						})
@@ -73,7 +73,7 @@ func (n NumberFieldFixer) Fix(nodes []html.Node) error {
 			for _, child := range node.Children {
 				if elem, ok := child.(*html.ElementNode); ok && elem.Tag == TemplateTag {
 					for _, a := range elem.Attributes {
-						if attr, ok := a.(html.Attribute); ok {
+						if attr, ok := a.(*html.Attribute); ok {
 							if attr.Key == LabelSlotAttr {
 								var sb strings.Builder
 								for _, inner := range elem.Children {
@@ -90,7 +90,7 @@ func (n NumberFieldFixer) Fix(nodes []html.Node) error {
 			}
 			node.Children = remainingChildren
 			if label != "" {
-				node.Attributes = append(node.Attributes, html.Attribute{
+				node.Attributes = append(node.Attributes, &html.Attribute{
 					Key:   "label",
 					Value: label,
 				})
