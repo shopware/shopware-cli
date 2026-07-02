@@ -84,8 +84,8 @@ func (m Model) renderDashboardFooter() string {
 		shortcuts := []tui.Shortcut{
 			{Key: "↑/↓", Label: "Navigate"},
 			{Key: "enter", Label: "Select source"},
-			{Key: "pgup/pgdn", Label: "Scroll"},
-			{Key: "f", Label: "Follow"},
+			{Key: "pgup/pgdn", Label: "Scroll logs"},
+			{Key: "f", Label: "Follow logs"},
 			{Key: "tab", Label: "Next tab"},
 			{Key: "ctrl+c", Label: "Exit"},
 		}
