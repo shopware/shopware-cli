@@ -70,7 +70,10 @@ func (m Model) updateKeyPress(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 func (m Model) updateDashboardKeys(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
 	case "ctrl+p":
-		m.modal = newCommandPalette()
+		m.modal = newCommandPalette(paletteState{
+			adminWatchActive: m.overview.adminWatchRunning || m.overview.adminWatchStarting,
+			sfWatchActive:    m.overview.sfWatchRunning || m.overview.sfWatchStarting,
+		})
 		return m, textinput.Blink
 	case keyCtrlC, keyQ:
 		if m.dockerMode {
