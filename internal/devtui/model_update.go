@@ -208,7 +208,7 @@ func (m Model) openSalesChannelPicker() (tea.Model, tea.Cmd) {
 }
 
 func (m *Model) stopWatcher(name string) tea.Cmd {
-	m.instance.StopStreaming()
+	m.instance.RemoveSource(name)
 
 	h := m.watchers[name]
 	delete(m.watchers, name)
