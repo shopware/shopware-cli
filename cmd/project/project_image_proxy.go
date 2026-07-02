@@ -28,6 +28,31 @@ var (
 	imageProxySkipConfig  bool
 )
 
+// newImageReverseProxy creates a reverse proxy for the image proxy upstream.
+func newImageReverseProxy(upstream *url.URL) *httputil.ReverseProxy {
+	return &httputil.ReverseProxy{
+		Rewrite: func(req *httputil.ProxyRequest) {
+			req.SetURL(upstream)
+			req.Out.URL.RawQuery = joinRawQuery(upstream.RawQuery, req.In.URL.RawQuery)
+			req.SetXForwarded()
+
+			// Strip Accept-Encoding from the outgoing request so Go's Transport
+			// transparently decompresses upstream responses. This ensures the
+			// cache always stores identity-encoded (uncompressed) content, avoiding
+			// double-compression when serving cache hits through the gzip handler.
+			req.Out.Header.Del("Accept-Encoding")
+		},
+	}
+}
+
+func joinRawQuery(targetQuery, requestQuery string) string {
+	if targetQuery == "" || requestQuery == "" {
+		return targetQuery + requestQuery
+	}
+
+	return targetQuery + "&" + requestQuery
+}
+
 // cacheReadCloser wraps a response body, teeing reads into a buffer.
 // When the body is closed, onClose is called to persist the captured bytes.
 type cacheReadCloser struct {
@@ -100,20 +125,10 @@ If a file is not found locally, it proxies the request to the upstream server.`,
 		}
 
 		// Create reverse proxy that captures response bodies for caching
-		proxy := httputil.NewSingleHostReverseProxy(upstream)
+		proxy := newImageReverseProxy(upstream)
 		proxy.ErrorHandler = func(w http.ResponseWriter, r *http.Request, err error) {
 			logging.FromContext(cmd.Context()).Errorf("proxy error: %v", err)
 			http.Error(w, "Bad Gateway", http.StatusBadGateway)
-		}
-
-		// Strip Accept-Encoding from the outgoing request so Go's Transport
-		// transparently decompresses upstream responses. This ensures the
-		// cache always stores identity-encoded (uncompressed) content, avoiding
-		// double-compression when serving cache hits through the gzip handler.
-		defaultDirector := proxy.Director          //nolint:staticcheck // ReverseProxy.Director deprecated in Go 1.26; migrate to Rewrite
-		proxy.Director = func(req *http.Request) { //nolint:staticcheck // ReverseProxy.Director deprecated in Go 1.26; migrate to Rewrite
-			defaultDirector(req)
-			req.Header.Del("Accept-Encoding")
 		}
 
 		// ModifyResponse tees the response body so that bytes are captured for
@@ -196,11 +211,6 @@ If a file is not found locally, it proxies the request to the upstream server.`,
 
 			// If not found locally or in cache, proxy to upstream
 			logging.FromContext(cmd.Context()).Debugf("Proxying to upstream: %s", cleanPath)
-
-			// Preserve the original path in the proxied request
-			r.URL.Host = upstream.Host
-			r.URL.Scheme = upstream.Scheme
-			r.Host = upstream.Host
 
 			proxy.ServeHTTP(w, r)
 		})
