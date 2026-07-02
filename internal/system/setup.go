@@ -65,6 +65,11 @@ func CheckProjectDependencies(ctx context.Context, useDocker bool, phpConstraint
 	if useDocker && !IsInsideContainer() {
 		if _, err := exec.LookPath("docker"); err != nil {
 			missing = append(missing, MissingDependency{Name: "Docker", Reason: "not installed"})
+		} else {
+			cmd := exec.CommandContext(ctx, "docker", "info")
+			if err := cmd.Run(); err != nil {
+				missing = append(missing, MissingDependency{Name: "Docker", Reason: "not running"})
+			}
 		}
 		return missing
 	}
@@ -120,13 +125,19 @@ func RenderMissingDependencies(useDocker bool, missing []MissingDependency) stri
 	arrow := tui.GreenText.Render("→")
 	insideContainer := IsInsideContainer()
 
-	if insideContainer {
+	dockerOnlyMissing := useDocker && len(missing) == 1 && missing[0].Name == "Docker"
+	switch {
+	case dockerOnlyMissing && missing[0].Reason == "not running":
+		b.WriteString(tui.BoldText.Render("Start Docker and try again."))
+	case dockerOnlyMissing && missing[0].Reason == "not installed":
+		b.WriteString(tui.BoldText.Render("Install Docker and try again."))
+	case insideContainer:
 		b.WriteString(tui.BoldText.Render("To create a Shopware project from inside this container, install:"))
 		b.WriteString("\n\n")
 		b.WriteString("  " + arrow + " " + tui.BoldText.Render("PHP 8.2+ and Composer") + "\n")
 		b.WriteString("    PHP:      " + tui.BlueText.Render("https://www.php.net/downloads.php") + "\n")
 		b.WriteString("    Composer: " + tui.BlueText.Render("https://getcomposer.org/") + "\n")
-	} else {
+	default:
 		b.WriteString(tui.BoldText.Render("To create a Shopware project, install one of:"))
 		b.WriteString("\n\n")
 		b.WriteString("  " + arrow + " " + tui.RecommendedText.Render("Docker") + " " + tui.DimText.Render("(recommended)") + "\n")
