@@ -17,6 +17,7 @@ import (
 
 	"github.com/shopware/shopware-cli/cmd/account"
 	"github.com/shopware/shopware-cli/cmd/extension"
+	"github.com/shopware/shopware-cli/cmd/hub"
 	"github.com/shopware/shopware-cli/cmd/project"
 	accountApi "github.com/shopware/shopware-cli/internal/account-api"
 	"github.com/shopware/shopware-cli/internal/system"
@@ -98,6 +99,15 @@ func init() {
 			return nil, err
 		}
 		return &account.ServiceContainer{
+			AccountClient: client,
+		}, nil
+	})
+	hub.Register(rootCmd, func() (*hub.ServiceContainer, error) {
+		client, err := accountApi.NewApi(rootCmd.Context())
+		if err != nil {
+			return nil, err
+		}
+		return &hub.ServiceContainer{
 			AccountClient: client,
 		}, nil
 	})
