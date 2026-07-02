@@ -25,6 +25,14 @@ func New(projectRoot string, cfg *shop.EnvironmentConfig, shopCfg *shop.Config) 
 		}
 		return &SymfonyCLIExecutor{BinaryPath: path, projectRoot: projectRoot, shopCfg: shopCfg, envCfg: cfg}, nil
 	case TypeDocker:
+		if resolveDockerFallback() {
+			// Running inside a container that has no docker CLI (e.g. the
+			// docker-dev image itself): there is no daemon to `docker compose
+			// exec` into, so the commands run locally — this container *is* the
+			// target environment. The local execution is visible via the
+			// executor's exec logging under --verbose.
+			return NewLocalWithConfig(projectRoot, cfg, shopCfg), nil
+		}
 		return &DockerExecutor{projectRoot: projectRoot, shopCfg: shopCfg, envCfg: cfg}, nil
 	default:
 		return nil, fmt.Errorf("unsupported environment type: %s", cfg.Type)
@@ -51,4 +59,29 @@ var pathToSymfonyCLI = sync.OnceValue(func() string {
 
 func symfonyCliAllowed() bool {
 	return os.Getenv("SHOPWARE_CLI_NO_SYMFONY_CLI") != "1"
+}
+
+// resolveDockerFallback reports whether a type:docker environment should run
+// locally instead. True only when shopware-cli runs inside a container that has
+// no docker CLI: there is nothing to exec into, so the container itself is the
+// execution environment. A host without docker keeps the DockerExecutor so it
+// fails with a clear "docker not found" error instead of silently running on
+// the host. Overridable in tests.
+var resolveDockerFallback = func() bool {
+	return isInsideContainer() && !dockerBinaryAvailable()
+}
+
+func isInsideContainer() bool {
+	if _, err := os.Stat("/.dockerenv"); err == nil {
+		return true
+	}
+	if _, err := os.Stat("/run/.containerenv"); err == nil {
+		return true
+	}
+	return false
+}
+
+func dockerBinaryAvailable() bool {
+	_, err := exec.LookPath("docker")
+	return err == nil
 }
