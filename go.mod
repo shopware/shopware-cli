@@ -12,6 +12,7 @@ require (
 	github.com/NYTimes/gziphandler v1.1.1
 	github.com/bep/godartsass/v2 v2.5.0
 	github.com/cespare/xxhash/v2 v2.3.0
+	github.com/charmbracelet/x/ansi v0.11.7
 	github.com/charmbracelet/x/term v0.2.2
 	github.com/evanw/esbuild v0.28.1
 	github.com/go-sql-driver/mysql v1.10.0
@@ -50,7 +51,6 @@ require (
 	github.com/charmbracelet/colorprofile v0.4.3 // indirect
 	github.com/charmbracelet/harmonica v0.2.0 // indirect
 	github.com/charmbracelet/ultraviolet v0.0.0-20260205113103-524a6607adb8 // indirect
-	github.com/charmbracelet/x/ansi v0.11.7 // indirect
 	github.com/charmbracelet/x/exp/ordered v0.1.0 // indirect
 	github.com/charmbracelet/x/exp/strings v0.1.0 // indirect
 	github.com/charmbracelet/x/termios v0.1.1 // indirect
