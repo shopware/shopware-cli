@@ -12,7 +12,7 @@ import (
 	"github.com/mattn/go-isatty"
 	"github.com/spf13/cobra"
 
-	account_api "github.com/shopware/shopware-cli/internal/account-api"
+	hub_api "github.com/shopware/shopware-cli/internal/hub-api"
 	"github.com/shopware/shopware-cli/internal/tui"
 )
 
@@ -51,8 +51,8 @@ func hyperlink(text, url string) string {
 
 // groupByEvent groups updates by their event.event value and returns the keys
 // sorted by their human-readable label.
-func groupByEvent(updates []account_api.HubUpdate) ([]string, map[string][]account_api.HubUpdate) {
-	grouped := make(map[string][]account_api.HubUpdate)
+func groupByEvent(updates []hub_api.HubUpdate) ([]string, map[string][]hub_api.HubUpdate) {
+	grouped := make(map[string][]hub_api.HubUpdate)
 	for _, u := range updates {
 		key := u.Event.Event
 		grouped[key] = append(grouped[key], u)
@@ -68,9 +68,9 @@ func groupByEvent(updates []account_api.HubUpdate) ([]string, map[string][]accou
 
 var hubUpdatesCmd = &cobra.Command{
 	Use:   "updates",
-	Short: "Show latest updates from the Shopware Hub",
+	Short: "Show latest updates from the Shopware Community Hub",
 	RunE: func(cmd *cobra.Command, _ []string) error {
-		updates, err := services.AccountClient.FetchHubUpdates(cmd.Context())
+		updates, err := hub_api.FetchUpdates(cmd.Context())
 		if err != nil {
 			return fmt.Errorf("could not fetch hub updates: %w", err)
 		}
@@ -124,7 +124,7 @@ var hubUpdatesCmd = &cobra.Command{
 
 // formatDate trims the time portion from ISO 8601 timestamps for a cleaner display.
 func formatDate(s string) string {
-	if idx := strings.IndexByte(s, 'T'); idx > 0 {
+	if idx := strings.IndexByte(s, 'T'); idx >= 0 {
 		return s[:idx]
 	}
 	return s

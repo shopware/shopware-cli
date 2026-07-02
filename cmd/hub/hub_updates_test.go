@@ -5,7 +5,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	account_api "github.com/shopware/shopware-cli/internal/account-api"
+	hub_api "github.com/shopware/shopware-cli/internal/hub-api"
 )
 
 func TestLabelForEvent(t *testing.T) {
@@ -16,10 +16,10 @@ func TestLabelForEvent(t *testing.T) {
 }
 
 func TestGroupByEvent(t *testing.T) {
-	updates := []account_api.HubUpdate{
-		{Event: account_api.HubUpdateEvent{Event: "hub:release:created"}, Title: "Plugin A"},
-		{Event: account_api.HubUpdateEvent{Event: "hub:release:updated"}, Title: "Plugin B"},
-		{Event: account_api.HubUpdateEvent{Event: "hub:release:created"}, Title: "Plugin C"},
+	updates := []hub_api.HubUpdate{
+		{Event: hub_api.HubUpdateEvent{Event: "hub:release:created"}, Title: "Plugin A"},
+		{Event: hub_api.HubUpdateEvent{Event: "hub:release:updated"}, Title: "Plugin B"},
+		{Event: hub_api.HubUpdateEvent{Event: "hub:release:created"}, Title: "Plugin C"},
 	}
 
 	keys, grouped := groupByEvent(updates)
@@ -42,8 +42,8 @@ func TestGroupByEvent_Empty(t *testing.T) {
 }
 
 func TestGroupByEvent_UnknownEvents(t *testing.T) {
-	updates := []account_api.HubUpdate{
-		{Event: account_api.HubUpdateEvent{Event: "hub:custom:event"}, Title: "X"},
+	updates := []hub_api.HubUpdate{
+		{Event: hub_api.HubUpdateEvent{Event: "hub:custom:event"}, Title: "X"},
 	}
 
 	keys, grouped := groupByEvent(updates)
@@ -56,6 +56,8 @@ func TestFormatDate(t *testing.T) {
 	assert.Equal(t, "2024-03-15", formatDate("2024-03-15T12:00:00Z"))
 	assert.Equal(t, "2024-03-15", formatDate("2024-03-15"))
 	assert.Equal(t, "", formatDate(""))
+	// 'T' at position 0: strip everything before (empty string prefix)
+	assert.Equal(t, "", formatDate("T12:00:00"))
 }
 
 func TestHyperlink_NonTTY(t *testing.T) {
