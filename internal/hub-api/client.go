@@ -14,6 +14,11 @@ import (
 
 var hubBaseURL = "https://hub.shopware.com"
 
+// httpClient is used for all Community Hub requests. A 30-second timeout is
+// set to avoid hanging indefinitely on a slow or unresponsive server; context
+// cancellation via the request still takes precedence.
+var httpClient = &http.Client{Timeout: 30 * time.Second}
+
 func init() {
 	if v := os.Getenv("SHOPWARE_CLI_HUB_URL"); v != "" {
 		hubBaseURL = v
@@ -46,7 +51,7 @@ func FetchUpdates(ctx context.Context) ([]HubUpdate, error) {
 	req.Header.Set("Accept", "application/json")
 
 	start := time.Now()
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := httpClient.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("hub updates: %w", err)
 	}
@@ -59,7 +64,10 @@ func FetchUpdates(ctx context.Context) ([]HubUpdate, error) {
 	}()
 
 	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
+		body, readErr := io.ReadAll(resp.Body)
+		if readErr != nil {
+			logging.FromContext(ctx).Debugf("hub updates: read error body: %v", readErr)
+		}
 		return nil, fmt.Errorf("hub updates: API returned status %d: %s", resp.StatusCode, string(body))
 	}
 
