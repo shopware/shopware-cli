@@ -89,7 +89,7 @@ func (m Model) renderDashboardFooter() string {
 			{Key: "tab", Label: "Next tab"},
 			{Key: "ctrl+c", Label: "Exit"},
 		}
-		return tui.ShortcutBar(shortcuts...)
+		return tui.ShortcutBarFit(m.width, shortcuts...)
 	}
 
 	if m.activeTab == tabConfig {
@@ -99,7 +99,7 @@ func (m Model) renderDashboardFooter() string {
 			{Key: "tab", Label: "Next tab"},
 			{Key: "ctrl+c", Label: "Exit"},
 		}
-		return tui.ShortcutBar(shortcuts...)
+		return tui.ShortcutBarFit(m.width, shortcuts...)
 	}
 
 	if m.activeTab == tabOverview {
@@ -110,10 +110,10 @@ func (m Model) renderDashboardFooter() string {
 			{Key: "tab", Label: "Next tab"},
 			{Key: "ctrl+c", Label: "Exit"},
 		}
-		return tui.ShortcutBar(shortcuts...)
+		return tui.ShortcutBarFit(m.width, shortcuts...)
 	}
 
-	return tui.ShortcutBar(
+	return tui.ShortcutBarFit(m.width,
 		tui.Shortcut{Key: "ctrl+p", Label: "Commands"},
 		tui.Shortcut{Key: "tab", Label: "Next tab"},
 		tui.Shortcut{Key: "ctrl+c", Label: "Exit"},
