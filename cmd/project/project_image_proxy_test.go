@@ -6,7 +6,6 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
-	"net/http/httputil"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -16,6 +15,36 @@ import (
 	"github.com/NYTimes/gziphandler"
 	"github.com/stretchr/testify/assert"
 )
+
+func TestImageReverseProxyPreservesRawQuery(t *testing.T) {
+	upstreamRawQuery := make(chan string, 1)
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		upstreamRawQuery <- r.URL.RawQuery
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	defer upstream.Close()
+
+	upstreamURL, err := url.Parse(upstream.URL + "?base=1")
+	assert.NoError(t, err)
+
+	server := httptest.NewServer(newImageReverseProxy(upstreamURL))
+	defer server.Close()
+
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, server.URL+"/test.svg?w=100;h=100&fmt=webp", nil)
+	assert.NoError(t, err)
+
+	resp, err := http.DefaultClient.Do(req)
+	assert.NoError(t, err)
+	_ = resp.Body.Close()
+	assert.Equal(t, http.StatusNoContent, resp.StatusCode)
+
+	select {
+	case rawQuery := <-upstreamRawQuery:
+		assert.Equal(t, "base=1&w=100;h=100&fmt=webp", rawQuery)
+	default:
+		assert.Fail(t, "upstream did not receive request")
+	}
+}
 
 func TestImageProxySVG(t *testing.T) {
 	svgContent := `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">` + strings.Repeat(`<circle cx="50" cy="50" r="40" fill="red"/>`, 100) + `</svg>`
@@ -35,13 +64,7 @@ func TestImageProxySVG(t *testing.T) {
 
 		cacheDir := t.TempDir()
 
-		proxy := httputil.NewSingleHostReverseProxy(upstreamURL)
-
-		defaultDirector := proxy.Director          //nolint:staticcheck // ReverseProxy.Director deprecated in Go 1.26; migrate to Rewrite
-		proxy.Director = func(req *http.Request) { //nolint:staticcheck // ReverseProxy.Director deprecated in Go 1.26; migrate to Rewrite
-			defaultDirector(req)
-			req.Header.Del("Accept-Encoding")
-		}
+		proxy := newImageReverseProxy(upstreamURL)
 
 		proxy.ModifyResponse = func(res *http.Response) error {
 			if res.StatusCode != http.StatusOK {
@@ -85,10 +108,6 @@ func TestImageProxySVG(t *testing.T) {
 				_, _ = w.Write(data)
 				return
 			}
-
-			r.URL.Host = upstreamURL.Host
-			r.URL.Scheme = upstreamURL.Scheme
-			r.Host = upstreamURL.Host
 
 			proxy.ServeHTTP(w, r)
 		})
