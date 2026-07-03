@@ -422,8 +422,13 @@ func (m Model) handleConfigRestartDone(msg configRestartDoneMsg) (tea.Model, tea
 	if msg.err != nil {
 		m.configTab.err = msg.err
 		m.configTab.saved = false
-	} else {
-		m.configTab.saved = true
+		return m, nil
 	}
-	return m, nil
+
+	m.configTab.saved = true
+	// The restart may have changed the runtime (PHP version, published ports,
+	// APP_ENV), so rediscover services and rerun the setup-health checks.
+	m.overview.loading = true
+	m.overview.healthLoading = true
+	return m, m.overview.Init()
 }

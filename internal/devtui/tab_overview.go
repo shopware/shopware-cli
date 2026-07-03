@@ -344,8 +344,10 @@ func openInBrowser(url string) tea.Cmd {
 }
 
 // overviewTwoColumnMinWidth is the tab width below which the overview falls
-// back to a single stacked column instead of the report/user-action split.
-const overviewTwoColumnMinWidth = 100
+// back to a single stacked column instead of the report/user-action split. It
+// leaves the left column enough room for a default Access row (~64 cells), so
+// the table does not wrap into the right column.
+const overviewTwoColumnMinWidth = 110
 
 // overviewRightColumnWidth is the inner width of the "User action" column.
 const overviewRightColumnWidth = 32
