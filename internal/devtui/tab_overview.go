@@ -551,7 +551,7 @@ func (m OverviewModel) renderBackgroundProcesses() string {
 			dot = tui.DimStyle.Render("●")
 			status = tui.DimStyle.Render("stopped")
 		}
-		s.WriteString(fmt.Sprintf("  %s %s%s\n", dot, nameStyle.Render(proc.Name), status))
+		fmt.Fprintf(&s, "  %s %s%s\n", dot, nameStyle.Render(proc.Name), status)
 	}
 	return s.String()
 }

@@ -277,6 +277,8 @@ func (l healthLevel) color() color.Color {
 		return tui.WarnColor
 	case healthCritical:
 		return tui.ErrorColor
+	case healthOK:
+		return tui.SuccessColor
 	default:
 		return tui.SuccessColor
 	}
