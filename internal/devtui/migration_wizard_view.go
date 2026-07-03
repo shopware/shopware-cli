@@ -103,7 +103,7 @@ func (sg migrationWizard) viewReview() string {
 
 	divider := tui.SectionDivider(60)
 	b.WriteString(tui.KVRow("Environment", activeBadgeStyle.Render("Docker")))
-	b.WriteString(tui.KVRow("Shop URL", urlStyle.Render(c.url)))
+	b.WriteString(tui.KVRow("Shop URL", tui.RenderStyledLink(c.url)))
 	b.WriteString(tui.KVRow("Username", valueStyle.Render(c.username)))
 	b.WriteString(tui.KVRow("Password", secretStyle.Render(strings.Repeat("•", len(c.password)))))
 	b.WriteString(divider)
