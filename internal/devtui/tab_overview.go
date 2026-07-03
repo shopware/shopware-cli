@@ -55,7 +55,9 @@ type OverviewModel struct {
 	sfWatchStarting    bool
 	shopwareVersion    string
 	securityEnd        time.Time
-	cursor             int // focus index: 0=Admin watcher, 1=Storefront watcher, 2..=services
+	health             []healthCheck
+	healthLoading      bool
+	cursor             int // focus index: 0=Admin watcher, 1=Storefront watcher
 }
 
 type DiscoveredService struct {
@@ -202,6 +204,15 @@ func backgroundServiceLabel(service string) (string, bool) {
 // service) listens on. Its published host port determines the shop URL port.
 const webServiceTargetPort = 8000
 
+// linkURL renders url as a clickable OSC 8 hyperlink in the shared link style.
+// Terminals without hyperlink support show the plain styled URL instead.
+func linkURL(url string) string {
+	if url == "" {
+		return ""
+	}
+	return tui.RenderStyledLink(url)
+}
+
 // deriveAdminURL returns the admin URL for the given shop URL by appending the
 // "admin" path segment.
 func deriveAdminURL(shopURL string) string {
@@ -214,20 +225,25 @@ func deriveAdminURL(shopURL string) string {
 
 func NewOverviewModel(envType, shopURL, username, password, projectRoot string, exec executor.Executor, shopCfg *shop.Config) OverviewModel {
 	return OverviewModel{
-		envType:     envType,
-		shopURL:     shopURL,
-		adminURL:    deriveAdminURL(shopURL),
-		username:    username,
-		password:    password,
-		projectRoot: projectRoot,
-		executor:    exec,
-		shopCfg:     shopCfg,
-		loading:     true,
+		envType:       envType,
+		shopURL:       shopURL,
+		adminURL:      deriveAdminURL(shopURL),
+		username:      username,
+		password:      password,
+		projectRoot:   projectRoot,
+		executor:      exec,
+		shopCfg:       shopCfg,
+		loading:       true,
+		healthLoading: true,
 	}
 }
 
 func (m OverviewModel) Init() tea.Cmd {
-	return tea.Batch(discoverServices(m.projectRoot), loadShopwareVersion(m.projectRoot))
+	return tea.Batch(
+		discoverServices(m.projectRoot),
+		loadShopwareVersion(m.projectRoot),
+		loadSetupHealth(m.projectRoot, m.executor),
+	)
 }
 
 func (m *OverviewModel) SetSize(width, height int) {
@@ -264,6 +280,9 @@ func (m OverviewModel) Update(msg tea.Msg) (OverviewModel, tea.Cmd) {
 		}
 	case securityEndLoadedMsg:
 		m.securityEnd = msg.securityEnd
+	case setupHealthLoadedMsg:
+		m.healthLoading = false
+		m.health = msg.checks
 	case tea.KeyPressMsg:
 		return m.handleKey(msg)
 	}
@@ -271,8 +290,8 @@ func (m OverviewModel) Update(msg tea.Msg) (OverviewModel, tea.Cmd) {
 }
 
 func (m OverviewModel) focusCount() int {
-	// Admin watcher + Storefront watcher + discovered services
-	return 2 + len(m.services)
+	// Admin watcher + Storefront watcher
+	return 2
 }
 
 func (m OverviewModel) handleKey(msg tea.KeyPressMsg) (OverviewModel, tea.Cmd) {
@@ -313,11 +332,6 @@ func (m OverviewModel) activate() (OverviewModel, tea.Cmd) {
 		if !m.sfWatchStarting {
 			return m, func() tea.Msg { return startStorefrontWatchRequestMsg{} }
 		}
-	default: // Service — open URL
-		svcIdx := m.cursor - 2
-		if svcIdx < len(m.services) && m.services[svcIdx].URL != "" {
-			return m, openInBrowser(m.services[svcIdx].URL)
-		}
 	}
 	return m, nil
 }
@@ -329,11 +343,91 @@ func openInBrowser(url string) tea.Cmd {
 	}
 }
 
+// overviewTwoColumnMinWidth is the tab width below which the overview falls
+// back to a single stacked column instead of the report/user-action split. It
+// leaves the left column enough room for a default Access row (~64 cells), so
+// the table does not wrap into the right column.
+const overviewTwoColumnMinWidth = 110
+
+// overviewRightColumnWidth is the inner width of the "User action" column.
+const overviewRightColumnWidth = 32
+
 func (m OverviewModel) View(width, height int) string {
+	usable := width - 8
+	if width < overviewTwoColumnMinWidth {
+		return m.renderStacked(usable)
+	}
+
+	leftWidth := usable - overviewRightColumnWidth - 3
+
+	left := lipgloss.NewStyle().Width(leftWidth).Render(m.renderProjectReport(leftWidth))
+	right := lipgloss.NewStyle().
+		Border(lipgloss.NormalBorder(), false, false, false, true).
+		BorderForeground(tui.BorderColor).
+		PaddingLeft(2).
+		Height(lipgloss.Height(left)).
+		Render(m.renderUserActions())
+
+	return lipgloss.JoinHorizontal(lipgloss.Top, left, right)
+}
+
+// renderProjectReport renders the left column: the readonly project details
+// and setup report.
+func (m OverviewModel) renderProjectReport(width int) string {
+	divider := tui.SectionDivider(width)
+
 	var s strings.Builder
+	s.WriteString(helpStyle.Render("Project details and readonly setup report."))
+	s.WriteString("\n\n")
+	s.WriteString(m.renderShopSection())
+	s.WriteString(divider)
+	s.WriteString(m.renderAccess())
+	if len(m.background) > 0 {
+		s.WriteString(divider)
+		s.WriteString(tui.TitleStyle.Render("Background processing"))
+		s.WriteString("\n")
+		s.WriteString(m.renderBackgroundProcesses())
+	}
+	s.WriteString(divider)
+	s.WriteString(m.renderSetupHealth())
+	return s.String()
+}
 
-	divider := tui.SectionDivider(width - 8)
+// renderUserActions renders the right column: everything the user can act on.
+func (m OverviewModel) renderUserActions() string {
+	var s strings.Builder
+	s.WriteString(tui.SectionTitleStyle.Render("User action"))
+	s.WriteString("\n\n")
+	s.WriteString(m.renderWatchers())
+	return s.String()
+}
 
+// renderStacked is the single-column fallback for narrow terminals, keeping
+// every section of the two-column layout.
+func (m OverviewModel) renderStacked(width int) string {
+	divider := tui.SectionDivider(width)
+
+	var s strings.Builder
+	s.WriteString(helpStyle.Render("Project details and readonly setup report."))
+	s.WriteString("\n\n")
+	s.WriteString(m.renderShopSection())
+	s.WriteString(divider)
+	s.WriteString(m.renderAccess())
+	if len(m.background) > 0 {
+		s.WriteString(divider)
+		s.WriteString(tui.TitleStyle.Render("Background processing"))
+		s.WriteString("\n")
+		s.WriteString(m.renderBackgroundProcesses())
+	}
+	s.WriteString(divider)
+	s.WriteString(m.renderWatchers())
+	s.WriteString(divider)
+	s.WriteString(m.renderSetupHealth())
+	return s.String()
+}
+
+func (m OverviewModel) renderShopSection() string {
+	var s strings.Builder
 	s.WriteString(tui.TitleStyle.Render("Shop"))
 	s.WriteString("\n")
 	if m.shopwareVersion != "" {
@@ -343,53 +437,123 @@ func (m OverviewModel) View(width, height int) string {
 		s.WriteString(tui.KVRow("Security updates", renderSecurityEnd(m.securityEnd, time.Now())))
 	}
 	s.WriteString(tui.KVRow("Environment", activeBadgeStyle.Render(m.envType)))
-	s.WriteString(tui.KVRow("Shop URL", urlStyle.Render(m.shopURL)))
-	s.WriteString(tui.KVRow("Admin URL", urlStyle.Render(m.adminURL)))
+	s.WriteString(tui.KVRow("Shop URL", linkURL(m.shopURL)))
+	s.WriteString(tui.KVRow("Admin URL", linkURL(m.adminURL)))
+	return s.String()
+}
 
-	s.WriteString(divider)
+// accessRow is one line of the Access table: a reachable service with its URL
+// and credentials. noAuth marks services that are open without credentials, as
+// opposed to credentials that are simply not known yet.
+type accessRow struct {
+	name     string
+	url      string
+	username string
+	password string
+	noAuth   bool
+}
 
-	s.WriteString(tui.TitleStyle.Render("Admin Access"))
+// renderAccess renders the Access table: the Shop Admin login first, followed
+// by every discovered auxiliary service with its credentials.
+func (m OverviewModel) renderAccess() string {
+	rows := []accessRow{{
+		name:     "Shop Admin",
+		url:      m.adminURL,
+		username: m.username,
+		password: m.password,
+	}}
+	for _, service := range m.services {
+		rows = append(rows, accessRow{
+			name:     service.Name,
+			url:      service.URL,
+			username: service.Username,
+			password: service.Password,
+			noAuth:   service.Username == "" && service.Password == "",
+		})
+	}
+
+	serviceWidth, urlWidth, userWidth := lipgloss.Width("Service"), lipgloss.Width("URL"), lipgloss.Width("Username")
+	for _, row := range rows {
+		serviceWidth = max(serviceWidth, lipgloss.Width(row.name))
+		urlWidth = max(urlWidth, lipgloss.Width(row.url))
+		userWidth = max(userWidth, lipgloss.Width(row.username))
+	}
+	serviceStyle := lipgloss.NewStyle().Width(serviceWidth + 3)
+	urlStyleW := lipgloss.NewStyle().Width(urlWidth + 3)
+	userStyle := lipgloss.NewStyle().Width(userWidth + 3)
+
+	var s strings.Builder
+	s.WriteString(tui.TitleStyle.Render("Access"))
 	s.WriteString("\n")
-	if m.username == "" && m.password == "" {
+
+	dim := lipgloss.NewStyle().Foreground(tui.MutedColor)
+	s.WriteString("  ")
+	s.WriteString(serviceStyle.Render(dim.Render("Service")))
+	s.WriteString(urlStyleW.Render(dim.Render("URL")))
+	s.WriteString(userStyle.Render(dim.Render("Username")))
+	s.WriteString(dim.Render("Password / Auth"))
+	s.WriteString("\n")
+
+	for _, row := range rows {
+		username := tui.DimStyle.Render("-")
+		if row.username != "" {
+			username = valueStyle.Render(row.username)
+		}
+
+		auth := tui.DimStyle.Render("-")
+		switch {
+		case row.noAuth:
+			auth = tui.DimStyle.Render("no auth")
+		case row.password != "":
+			auth = secretStyle.Render(row.password)
+		}
+
 		s.WriteString("  ")
-		s.WriteString(helpStyle.Render("Credentials will appear here once Shopware is installed."))
+		s.WriteString(serviceStyle.Render(row.name))
+		s.WriteString(urlStyleW.Render(linkURL(row.url)))
+		s.WriteString(userStyle.Render(username))
+		s.WriteString(auth)
 		s.WriteString("\n")
-	} else {
-		s.WriteString(tui.KVRow("Username", valueStyle.Render(m.username)))
-		s.WriteString(tui.KVRow("Password", secretStyle.Render(m.password)))
 	}
 
-	s.WriteString(divider)
-
-	s.WriteString(tui.TitleStyle.Render("Watchers"))
-	s.WriteString("\n")
-	s.WriteString(m.renderWatcherStatus("Admin", m.adminWatchRunning, m.adminWatchStarting, "http://127.0.0.1:5173", m.cursor == 0))
-	s.WriteString(m.renderWatcherStatus("Storefront", m.sfWatchRunning, m.sfWatchStarting, "http://127.0.0.1:9998", m.cursor == 1))
-
-	if len(m.background) > 0 {
-		s.WriteString(divider)
-		s.WriteString(tui.TitleStyle.Render("Background processing"))
-		s.WriteString("\n")
-		s.WriteString(m.renderBackgroundProcesses())
+	switch {
+	case m.loading:
+		s.WriteString("  " + helpStyle.Render("Scanning for further local services...") + "\n")
+	case m.err != nil:
+		s.WriteString("  " + errorStyle.Render(m.err.Error()) + "\n")
 	}
-
-	s.WriteString(divider)
-
-	s.WriteString(tui.TitleStyle.Render("Services"))
-	s.WriteString("\n")
-	s.WriteString(m.renderServices())
+	if m.username == "" && m.password == "" {
+		s.WriteString("  " + helpStyle.Render("Admin credentials will appear here once Shopware is installed.") + "\n")
+	}
 
 	return s.String()
 }
 
+func (m OverviewModel) renderWatchers() string {
+	var s strings.Builder
+	s.WriteString(tui.TitleStyle.Render("Watchers"))
+	s.WriteString("\n")
+	s.WriteString(m.renderWatcherStatus("Admin", m.adminWatchRunning, m.adminWatchStarting, "http://127.0.0.1:5173", m.cursor == 0))
+	s.WriteString(m.renderWatcherStatus("Storefront", m.sfWatchRunning, m.sfWatchStarting, "http://127.0.0.1:9998", m.cursor == 1))
+	return s.String()
+}
+
 func (m OverviewModel) renderBackgroundProcesses() string {
+	nameWidth := 0
+	for _, proc := range m.background {
+		nameWidth = max(nameWidth, lipgloss.Width(proc.Name))
+	}
+	nameStyle := lipgloss.NewStyle().Width(nameWidth + 3)
+
 	var s strings.Builder
 	for _, proc := range m.background {
-		if proc.Running {
-			s.WriteString(tui.CheckboxRow("[x]", proc.Name, "running", tui.SuccessColor, true))
-		} else {
-			s.WriteString(tui.CheckboxRow("[ ]", proc.Name, "stopped", tui.MutedColor, false))
+		dot := lipgloss.NewStyle().Foreground(tui.SuccessColor).Render("●")
+		status := lipgloss.NewStyle().Foreground(tui.SuccessColor).Render("running")
+		if !proc.Running {
+			dot = tui.DimStyle.Render("●")
+			status = tui.DimStyle.Render("stopped")
 		}
+		fmt.Fprintf(&s, "  %s %s%s\n", dot, nameStyle.Render(proc.Name), status)
 	}
 	return s.String()
 }
@@ -536,9 +700,6 @@ func (m OverviewModel) renderWatcherStatus(label string, running, starting bool,
 			checkbox = lipgloss.NewStyle().Render("[x]")
 		}
 		status = lipgloss.NewStyle().Bold(true).Render("running")
-		if url != "" {
-			status += "  " + urlStyle.Render(url)
-		}
 	case starting:
 		checkbox = lipgloss.NewStyle().Foreground(tui.BrandColor).Render("[~]")
 		status = lipgloss.NewStyle().Foreground(tui.BrandColor).Render("starting...")
@@ -551,36 +712,11 @@ func (m OverviewModel) renderWatcherStatus(label string, running, starting bool,
 		status = tui.DimStyle.Render("stopped")
 	}
 
-	return tui.KVRow(checkbox+" "+label, status)
-}
-
-func (m OverviewModel) renderServices() string {
-	switch {
-	case m.loading:
-		return "  " + tui.StatusBadge("scanning", tui.BrandColor) + "\n" +
-			"  " + helpStyle.Render("Looking for published local services.") + "\n"
-	case m.err != nil:
-		return "  " + tui.StatusBadge("failed", tui.ErrorColor) + "\n" +
-			"  " + errorStyle.Render(m.err.Error()) + "\n"
-	case len(m.services) == 0:
-		return "  " + helpStyle.Render("No auxiliary services detected.") + "\n"
+	row := fmt.Sprintf("  %s %s%s\n", checkbox, lipgloss.NewStyle().Width(14).Render(label), status)
+	if running && url != "" {
+		row += "      " + linkURL(url) + "\n"
 	}
-
-	var s strings.Builder
-	for i, service := range m.services {
-		focused := m.cursor == i+2
-		name := service.Name
-		if focused {
-			name = lipgloss.NewStyle().Bold(true).Foreground(tui.BrandColor).Render(service.Name)
-		}
-		row := tui.KVRow(name, urlStyle.Render(service.URL))
-		s.WriteString(row)
-		if service.Username != "" {
-			s.WriteString(tui.KVRow("  Username", valueStyle.Render(service.Username)))
-			s.WriteString(tui.KVRow("  Password", secretStyle.Render(service.Password)))
-		}
-	}
-	return s.String()
+	return row
 }
 
 type dockerComposePSOutput struct {

@@ -47,14 +47,16 @@ func TestOverviewBackgroundProcessesSection(t *testing.T) {
 		{Name: "Scheduled tasks", Running: false},
 	}
 
-	view := m.View(m.width, m.height)
-	assert.Contains(t, view, "Background processing")
-	assert.Contains(t, view, "Queue worker")
-	assert.Contains(t, view, "running")
-	assert.Contains(t, view, "Scheduled tasks")
-	assert.Contains(t, view, "stopped")
-	assert.Contains(t, view, "[x]")
-	assert.Contains(t, view, "[ ]")
+	for _, width := range []int{120, 80} { // two-column and stacked layouts
+		view := m.View(width, m.height)
+		assert.Contains(t, view, "Background processing")
+		assert.Contains(t, view, "Queue worker")
+		assert.Contains(t, view, "running")
+		assert.Contains(t, view, "Scheduled tasks")
+		assert.Contains(t, view, "stopped")
+		// Background processes use the same status dots as Setup health.
+		assert.Contains(t, view, "●")
+	}
 }
 
 func TestNewOverviewModel(t *testing.T) {
@@ -165,15 +167,35 @@ func TestKnownServices(t *testing.T) {
 	assert.Equal(t, 15672, rabbitmq.TargetPort)
 }
 
-func TestViewShowsCredentials(t *testing.T) {
-	m := NewOverviewModel("docker", "http://localhost:8000", "", "", "/tmp/project", nil, nil)
+func TestViewShowsAccessTable(t *testing.T) {
+	m := NewOverviewModel("docker", "http://localhost:8000", "admin", "shopware", "/tmp/project", nil, nil)
 	m.loading = false
 	m.services = []DiscoveredService{
 		{Name: "Adminer", URL: "http://127.0.0.1:9080", Username: "root", Password: "root"},
+		{Name: "Mailpit", URL: "http://127.0.0.1:8025"},
 	}
 
+	for _, width := range []int{120, 80} { // two-column and stacked layouts
+		view := m.View(width, 40)
+		assert.Contains(t, view, "Access")
+		assert.Contains(t, view, "Password / Auth")
+		assert.Contains(t, view, "Shop Admin")
+		assert.Contains(t, view, "http://localhost:8000/admin")
+		assert.Contains(t, view, "shopware")
+		assert.Contains(t, view, "Adminer")
+		assert.Contains(t, view, "http://127.0.0.1:9080")
+		assert.Contains(t, view, "root")
+		// Services without credentials are marked as open.
+		assert.Contains(t, view, "no auth")
+	}
+}
+
+func TestViewAccessTableWithoutInstallation(t *testing.T) {
+	m := NewOverviewModel("docker", "http://localhost:8000", "", "", "/tmp/project", nil, nil)
+	m.loading = false
+
 	view := m.View(120, 40)
-	assert.Contains(t, view, "Adminer")
-	assert.Contains(t, view, "http://127.0.0.1:9080")
-	assert.Contains(t, view, "root")
+	assert.Contains(t, view, "Shop Admin")
+	assert.Contains(t, view, "Admin credentials will appear here once Shopware is installed.")
+	assert.NotContains(t, view, "no auth")
 }

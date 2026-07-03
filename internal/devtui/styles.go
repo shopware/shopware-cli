@@ -13,9 +13,6 @@ var (
 	valueStyle = lipgloss.NewStyle().
 			Foreground(tui.TextColor)
 
-	urlStyle = lipgloss.NewStyle().
-			Foreground(tui.LinkColor)
-
 	secretStyle = lipgloss.NewStyle().
 			Foreground(tui.WarnColor)
 
