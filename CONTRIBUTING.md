@@ -38,9 +38,8 @@ Please keep PRs focused. Smaller PRs are easier to review and merge.
 Before submitting, run the relevant checks locally:
 
 ```sh
-gofmt -w .
-go vet ./...
 go test ./...
+golangci-lint run ./...
 ```
 
 Add or update tests for bug fixes and new behavior.
