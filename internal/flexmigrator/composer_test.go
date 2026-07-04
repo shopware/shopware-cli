@@ -92,6 +92,7 @@ func TestMigrateComposerJson(t *testing.T) {
 		// Verify repository configuration
 		assert.True(t, migratedComposer.Repositories.HasRepository("custom/plugins/*"))
 		assert.True(t, migratedComposer.Repositories.HasRepository("custom/plugins/*/packages/*"))
+		assert.True(t, migratedComposer.Repositories.HasRepository("https://shopware.github.io/conflicts/"))
 
 		// Verify scripts configuration
 		autoScripts, ok := migratedComposer.Scripts["auto-scripts"].(map[string]interface{})
@@ -105,6 +106,47 @@ func TestMigrateComposerJson(t *testing.T) {
 		postUpdateCmd, ok := migratedComposer.Scripts["post-update-cmd"].([]interface{})
 		require.True(t, ok)
 		assert.Contains(t, postUpdateCmd, "@auto-scripts")
+	})
+
+	t.Run("existing conflicts repository is not duplicated", func(t *testing.T) {
+		t.Parallel()
+		tempDir := t.TempDir()
+
+		initialComposer := &packagist.ComposerJson{
+			Name: "shopware/project",
+			Require: packagist.ComposerPackageLink{
+				"shopware/core": "6.5.0.0",
+			},
+			Repositories: packagist.ComposerJsonRepositories{
+				{
+					Type: "composer",
+					URL:  "https://shopware.github.io/conflicts/",
+				},
+			},
+			Config: map[string]any{
+				"allow-plugins": map[string]any{},
+			},
+			Scripts: map[string]any{},
+			Extra:   map[string]any{},
+		}
+
+		composerFile := filepath.Join(tempDir, "composer.json")
+		content, err := json.MarshalIndent(initialComposer, "", "  ")
+		require.NoError(t, err)
+		require.NoError(t, os.WriteFile(composerFile, content, 0o644))
+
+		require.NoError(t, MigrateComposerJson(tempDir))
+
+		migratedComposer, err := packagist.ReadComposerJson(composerFile)
+		require.NoError(t, err)
+
+		count := 0
+		for _, repo := range migratedComposer.Repositories {
+			if repo.URL == "https://shopware.github.io/conflicts/" {
+				count++
+			}
+		}
+		assert.Equal(t, 1, count)
 	})
 
 	t.Run("non-existent composer.json", func(t *testing.T) {
