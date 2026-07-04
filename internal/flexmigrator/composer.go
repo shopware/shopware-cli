@@ -62,6 +62,13 @@ func MigrateComposerJson(project string) error {
 		})
 	}
 
+	if !composerJson.Repositories.HasRepository("https://shopware.github.io/conflicts/") {
+		composerJson.Repositories = append(composerJson.Repositories, packagist.ComposerJsonRepository{
+			Type: "composer",
+			URL:  "https://shopware.github.io/conflicts/",
+		})
+	}
+
 	composerJson.Scripts = map[string]any{
 		"auto-scripts": map[string]string{
 			"assets:install": "symfony-cmd",

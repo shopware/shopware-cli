@@ -128,7 +128,11 @@ func GenerateComposerJson(ctx context.Context, opts ComposerJsonOptions) (string
 	repo3.set("url", "custom/static-plugins/*")
 	repo3.set("options", symlinkOptions)
 
-	composer.set("repositories", []*orderedMap{repo1, repo2, repo3})
+	repo4 := newOrderedMap()
+	repo4.set("type", "composer")
+	repo4.set("url", "https://shopware.github.io/conflicts/")
+
+	composer.set("repositories", []*orderedMap{repo1, repo2, repo3, repo4})
 	psr4 := newOrderedMap()
 	psr4.set("App\\", "src/")
 	autoload := newOrderedMap()

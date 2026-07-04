@@ -36,6 +36,29 @@ func TestGenerateComposerJson(t *testing.T) {
 		assert.NoError(t, err, "Generated JSON should be valid")
 	})
 
+	t.Run("contains shopware conflicts repository", func(t *testing.T) {
+		t.Parallel()
+		ctx := t.Context()
+		jsonStr, err := GenerateComposerJson(ctx, ComposerJsonOptions{Version: "6.4.18.0"})
+		assert.NoError(t, err)
+
+		var data struct {
+			Repositories []struct {
+				Type string `json:"type"`
+				URL  string `json:"url"`
+			} `json:"repositories"`
+		}
+		assert.NoError(t, json.Unmarshal([]byte(jsonStr), &data))
+
+		found := false
+		for _, repo := range data.Repositories {
+			if repo.Type == "composer" && repo.URL == "https://shopware.github.io/conflicts/" {
+				found = true
+			}
+		}
+		assert.True(t, found, "repositories should contain the shopware conflicts composer repository")
+	})
+
 	t.Run("with elasticsearch", func(t *testing.T) {
 		t.Parallel()
 		ctx := t.Context()
