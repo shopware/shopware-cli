@@ -153,4 +153,21 @@ func TestGenerateComposerJson(t *testing.T) {
 		err = json.Unmarshal([]byte(jsonStr), &data)
 		assert.NoError(t, err, "Generated JSON should be valid")
 	})
+
+	t.Run("allow-plugins includes php-http/discovery", func(t *testing.T) {
+		t.Parallel()
+		ctx := t.Context()
+		jsonStr, err := GenerateComposerJson(ctx, ComposerJsonOptions{Version: "6.4.18.0"})
+		assert.NoError(t, err)
+
+		var data struct {
+			Config struct {
+				AllowPlugins map[string]bool `json:"allow-plugins"`
+			} `json:"config"`
+		}
+		assert.NoError(t, json.Unmarshal([]byte(jsonStr), &data))
+		assert.True(t, data.Config.AllowPlugins["php-http/discovery"], "allow-plugins should include php-http/discovery")
+		assert.True(t, data.Config.AllowPlugins["symfony/flex"], "allow-plugins should include symfony/flex")
+		assert.True(t, data.Config.AllowPlugins["symfony/runtime"], "allow-plugins should include symfony/runtime")
+	})
 }
