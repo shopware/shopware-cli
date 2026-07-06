@@ -11,7 +11,9 @@ import (
 // TestMain disables telemetry for the whole package: tests drive Model.Update
 // through real tracking call sites, and no test run should emit usage events.
 func TestMain(m *testing.M) {
-	os.Setenv("DO_NOT_TRACK", "1")
+	if err := os.Setenv("DO_NOT_TRACK", "1"); err != nil {
+		panic(err)
+	}
 	os.Exit(m.Run())
 }
 

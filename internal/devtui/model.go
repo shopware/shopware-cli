@@ -213,6 +213,43 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case configRestartDoneMsg:
 		return m.handleConfigRestartDone(msg)
 
+	case watcherStartedMsg, watcherRunningMsg, stopWatcherRequestMsg,
+		startStorefrontWatchRequestMsg, watcherStoppedMsg, logDoneMsg:
+		return m.updateWatcherMsg(msg)
+
+	case setupHealthLoadedMsg:
+		if len(msg.checks) > 0 && m.telemetry.healthOnce() {
+			trackEvent(eventDevHealth, healthTags(msg.checks))
+		}
+		return m.updateFallback(msg)
+
+	case paletteResultMsg:
+		return m.handlePaletteResult(msg)
+
+	case pickerResultMsg:
+		if _, ok := msg.Key.(salesChannelPickerKey); ok {
+			break
+		}
+		return m.handlePickerResult(msg)
+
+	case salesChannelPickerResultMsg:
+		return m.handleSalesChannelPickerResult(msg)
+
+	case stopConfirmResultMsg:
+		return m.handleStopConfirmResult(msg)
+
+	case tea.KeyPressMsg:
+		return m.updateKeyPress(msg)
+	}
+
+	return m.updateFallback(msg)
+}
+
+// updateWatcherMsg handles the watcher lifecycle messages: start, prep
+// done/failed, stop requests, stopped, and the log stream ending (the watcher
+// process exiting on its own).
+func (m Model) updateWatcherMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
+	switch msg := msg.(type) {
 	case watcherStartedMsg:
 		m.watchers[msg.name] = msg.handle
 		m.telemetry.watcherStarted(msg.name)
@@ -272,33 +309,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		delete(m.watchers, msg.source)
 		return m.updateChildren(msg)
-
-	case setupHealthLoadedMsg:
-		if len(msg.checks) > 0 && m.telemetry.healthOnce() {
-			trackEvent(eventDevHealth, healthTags(msg.checks))
-		}
-		return m.updateFallback(msg)
-
-	case paletteResultMsg:
-		return m.handlePaletteResult(msg)
-
-	case pickerResultMsg:
-		if _, ok := msg.Key.(salesChannelPickerKey); ok {
-			break
-		}
-		return m.handlePickerResult(msg)
-
-	case salesChannelPickerResultMsg:
-		return m.handleSalesChannelPickerResult(msg)
-
-	case stopConfirmResultMsg:
-		return m.handleStopConfirmResult(msg)
-
-	case tea.KeyPressMsg:
-		return m.updateKeyPress(msg)
 	}
 
-	return m.updateFallback(msg)
+	return m, nil
 }
 
 // updateFallback handles non-key messages that aren't matched by Update's

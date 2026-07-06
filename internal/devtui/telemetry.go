@@ -347,6 +347,8 @@ func healthTags(checks []healthCheck) map[string]string {
 
 func (l healthLevel) tagValue() string {
 	switch l {
+	case healthOK:
+		return "ok"
 	case healthWarn:
 		return "warn"
 	case healthCritical:
