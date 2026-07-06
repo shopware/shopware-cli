@@ -163,11 +163,18 @@ func (m *Model) shutdown() {
 	defer cancel()
 
 	for name, h := range m.watchers {
-		if tags, ok := m.telemetry.watcherEndTags(name, "session_end"); ok {
+		if tags, ok := m.telemetry.watcherEndTags(name, watcherEndSessionEnd); ok {
 			trackEventNow(eventDevWatcher, tags)
 		}
 		h.stop(ctx)
 		delete(m.watchers, name)
+	}
+
+	// A config-change container restart may still be in flight when the user
+	// leaves the dashboard; report it as cancelled instead of dropping it.
+	if tags, ok := m.telemetry.configRestartTags(nil); ok {
+		tags["result"] = resultCancelled
+		trackEventNow(eventDevDockerStart, tags)
 	}
 
 	if tags, ok := m.telemetry.sessionTags(); ok {
@@ -257,7 +264,7 @@ func (m Model) updateWatcherMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case watcherRunningMsg:
 		if msg.err != nil {
-			if tags, ok := m.telemetry.watcherEndTags(msg.name, "prep_failed"); ok {
+			if tags, ok := m.telemetry.watcherEndTags(msg.name, watcherEndPrepFailed); ok {
 				trackEvent(eventDevWatcher, tags)
 			}
 		}
@@ -304,7 +311,7 @@ func (m Model) updateWatcherMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case watcherStorefront:
 			m.overview.sfWatchRunning = false
 		}
-		if tags, ok := m.telemetry.watcherEndTags(msg.source, "crashed"); ok {
+		if tags, ok := m.telemetry.watcherEndTags(msg.source, watcherEndCrashed); ok {
 			trackEvent(eventDevWatcher, tags)
 		}
 		delete(m.watchers, msg.source)
@@ -401,9 +408,9 @@ func (m Model) handleStopConfirmResult(msg stopConfirmResultMsg) (tea.Model, tea
 		return m, nil
 	}
 	if msg.Stop {
-		m.telemetry.setExitChoice("stop_containers")
+		m.telemetry.setExitChoice(exitStopContainers)
 	} else {
-		m.telemetry.setExitChoice("keep_running")
+		m.telemetry.setExitChoice(exitKeepRunning)
 	}
 	m.shutdown()
 	if msg.Stop {

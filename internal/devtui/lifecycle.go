@@ -78,7 +78,7 @@ func (m Model) updateLifecycle(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case shopwareInstallDoneMsg:
 		if msg.err != nil {
 			if m.telemetry.installOnce() {
-				tags := m.telemetry.installTags("failure", m.install)
+				tags := m.telemetry.installTags(resultFailure, m.install)
 				tags["failed_step"] = installFailedStep(m.installProg.currentStep)
 				trackEvent(eventDevInstall, tags)
 			}
@@ -90,7 +90,7 @@ func (m Model) updateLifecycle(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.installProg.done = true
 		m.installProg.currentStep = len(installStepPatterns)
 		if m.telemetry.installOnce() {
-			trackEvent(eventDevInstall, m.telemetry.installTags("success", m.install))
+			trackEvent(eventDevInstall, m.telemetry.installTags(resultSuccess, m.install))
 		}
 
 		username := m.install.username.Value()

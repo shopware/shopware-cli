@@ -22,6 +22,31 @@ const (
 	eventDevHealth          = "project.dev.health"
 )
 
+// Values of the "result" tag shared by the events above.
+const (
+	resultSuccess   = "success"
+	resultFailure   = "failure"
+	resultCancelled = "cancelled"
+	resultSkipped   = "skipped"
+	resultCompleted = "completed"
+	resultFailed    = "failed"
+)
+
+// Values of the watcher event's "result" tag: how a watcher run ended.
+const (
+	watcherEndPrepFailed  = "prep_failed"
+	watcherEndCrashed     = "crashed"
+	watcherEndUserStopped = "user_stopped"
+	watcherEndSessionEnd  = "session_end"
+)
+
+// Values of the session event's "exit" tag.
+const (
+	exitStopContainers = "stop_containers"
+	exitKeepRunning    = "keep_running"
+	exitQuit           = "quit"
+)
+
 // telemetryState accumulates anonymous usage data for one TUI session. It is
 // held by pointer on Model so Bubble Tea's value copies all share it. Tests
 // construct Model directly without it, so every method is nil-safe.
@@ -106,7 +131,7 @@ func (t *telemetryState) sessionTags() (map[string]string, bool) {
 
 	exit := t.exitChoice
 	if exit == "" {
-		exit = "quit"
+		exit = exitQuit
 	}
 	tags := map[string]string{
 		"executor":     t.executor,
@@ -154,7 +179,7 @@ func (t *telemetryState) installTags(result string, w installWizard) map[string]
 	if w.currency != "" {
 		tags["currency"] = w.currency
 	}
-	if w.step == installStepCredentials || result == "success" || result == "failure" {
+	if w.step == installStepCredentials || result == resultSuccess || result == resultFailure {
 		custom := w.username.Value() != defaultUsername || w.password.Value() != "shopware"
 		tags["custom_credentials"] = strconv.FormatBool(custom)
 	}
@@ -184,14 +209,14 @@ func migrationWizardTags(result string, sg migrationWizard) map[string]string {
 		tags["duration_ms"] = durationMS(time.Since(sg.startedAt))
 	}
 	switch result {
-	case "cancelled":
+	case resultCancelled:
 		tags["abandoned_at"] = migrationStepTagName(sg.step)
-	case "completed", "failed":
+	case resultCompleted, resultFailed:
 		if sg.phpCursor >= 0 && sg.phpCursor < len(sg.phpVersions) {
 			tags["php_version"] = sg.phpVersions[sg.phpCursor]
 		}
 	}
-	if result == "completed" {
+	if result == resultCompleted {
 		tags["deployment_helper_added"] = strconv.FormatBool(sg.deploymentHelperAdded)
 	}
 	return tags
@@ -360,9 +385,9 @@ func (l healthLevel) tagValue() string {
 
 func resultTag(err error) string {
 	if err != nil {
-		return "failure"
+		return resultFailure
 	}
-	return "success"
+	return resultSuccess
 }
 
 func durationMS(d time.Duration) string {

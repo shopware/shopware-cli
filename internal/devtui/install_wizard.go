@@ -111,7 +111,7 @@ var installStepPatterns = []struct {
 func (m Model) updateInstallPrompt(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	if k := msg.String(); k == keyQ || k == keyCtrlC {
 		if m.telemetry.installOnce() {
-			tags := m.telemetry.installTags("cancelled", m.install)
+			tags := m.telemetry.installTags(resultCancelled, m.install)
 			tags["abandoned_at"] = installStepTagName(m.install.step)
 			trackEventNow(eventDevInstall, tags)
 		}
@@ -147,7 +147,7 @@ func (m Model) updateInstallStepAsk(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		if m.telemetry.installOnce() {
-			trackEvent(eventDevInstall, m.telemetry.installTags("skipped", m.install))
+			trackEvent(eventDevInstall, m.telemetry.installTags(resultSkipped, m.install))
 		}
 		m.phase = phaseDashboard
 		return m, m.startDashboard()
