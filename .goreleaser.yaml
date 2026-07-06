@@ -16,11 +16,8 @@ builds:
     goos:
       - linux
       - darwin
-      - windows
     ignore:
       - goos: linux
-        goarch: '386'
-      - goos: windows
         goarch: '386'
 
 archives:
@@ -30,9 +27,6 @@ archives:
       {{- if eq .Arch "amd64" }}x86_64
       {{- else if eq .Arch "386" }}i386
       {{- else }}{{ .Arch }}{{ end }}
-    format_overrides:
-      - goos: windows
-        formats: [ zip ]
     files:
       - LICENSE
       - completions/*
