@@ -633,3 +633,37 @@ func TestStartStorefrontWatchRequest_OpensPicker(t *testing.T) {
 	_, ok := m.modal.(*salesChannelPicker)
 	assert.True(t, ok, "parent must open the sales-channel picker on the request")
 }
+
+func TestView_WindowTitlePerPhase(t *testing.T) {
+	cases := []struct {
+		phase     phase
+		wantTitle string
+	}{
+		{phaseDashboard, "[project] · Overview"},
+		{phaseStarting, "[project] · Starting..."},
+		{phaseStopping, "[project] · Stopping"},
+		{phaseInstallPrompt, "[project] · Install"},
+		{phaseInstalling, "[project] · Installing..."},
+		{phaseMigrationWizard, "[project] · Setup"},
+	}
+
+	for _, tc := range cases {
+		m := newTestModel()
+		m.width = 120
+		m.height = 40
+		m.phase = tc.phase
+		if tc.phase == phaseMigrationWizard {
+			m.migrationWizard = newMigrationWizard("")
+		}
+		if tc.phase == phaseStarting || tc.phase == phaseStopping {
+			m.dockerSpinner = newBrandSpinner()
+		}
+		if tc.phase == phaseInstalling {
+			m.installProg.spinner = newBrandSpinner()
+			m.installProg.progress = newInstallProgress()
+		}
+
+		v := m.View()
+		assert.Equal(t, tc.wantTitle, v.WindowTitle, "phase %d", tc.phase)
+	}
+}

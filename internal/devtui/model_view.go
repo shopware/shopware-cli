@@ -2,6 +2,7 @@ package devtui
 
 import (
 	"fmt"
+	"path/filepath"
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
@@ -17,12 +18,24 @@ func (m Model) View() tea.View {
 
 	v := tea.NewView("")
 	v.AltScreen = true
+	dir := "[" + filepath.Base(m.projectRoot) + "] · "
 
 	switch m.phase {
 	case phaseDashboard:
 		v.Content = m.renderDashboard()
-	case phaseStarting, phaseStopping, phaseInstallPrompt, phaseInstalling:
+		v.WindowTitle = dir + tabNames[m.activeTab]
+	case phaseStarting:
 		v.Content = m.renderPhase()
+		v.WindowTitle = dir + "Starting..."
+	case phaseStopping:
+		v.Content = m.renderPhase()
+		v.WindowTitle = dir + "Stopping"
+	case phaseInstallPrompt:
+		v.Content = m.renderPhase()
+		v.WindowTitle = dir + "Install"
+	case phaseInstalling:
+		v.Content = m.renderPhase()
+		v.WindowTitle = dir + "Installing..."
 	case phaseTask:
 		title := m.taskTitle
 		if !m.taskDone {
@@ -31,6 +44,9 @@ func (m Model) View() tea.View {
 		v.Content = m.renderDockerLogs(title, "")
 	case phaseMigrationWizard:
 		v.Content = m.renderMigrationWizard()
+		v.WindowTitle = dir + "Setup"
+	default:
+		v.WindowTitle = dir + "shopware-cli"
 	}
 
 	if m.modal != nil {
