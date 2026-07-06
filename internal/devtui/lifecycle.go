@@ -46,6 +46,9 @@ func (m Model) updateLifecycle(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case dockerStartedMsg:
+		if tags, ok := m.telemetry.dockerStartTags(msg.err); ok {
+			trackEvent(eventDevDockerStart, tags)
+		}
 		if msg.err != nil {
 			m.dockerShowLogs = true
 			m.overlayLines = append(m.overlayLines, errorStyle.Render("Failed: "+msg.err.Error()))
@@ -74,6 +77,11 @@ func (m Model) updateLifecycle(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case shopwareInstallDoneMsg:
 		if msg.err != nil {
+			if m.telemetry.installOnce() {
+				tags := m.telemetry.installTags("failure", m.install)
+				tags["failed_step"] = installFailedStep(m.installProg.currentStep)
+				trackEvent(eventDevInstall, tags)
+			}
 			m.installProg.showLogs = true
 			m.overlayLines = append(m.overlayLines, "", errorStyle.Render("Installation failed: "+msg.err.Error()))
 			m.overlayLines = append(m.overlayLines, "", helpStyle.Render("Press q to exit"))
@@ -81,6 +89,9 @@ func (m Model) updateLifecycle(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.installProg.done = true
 		m.installProg.currentStep = len(installStepPatterns)
+		if m.telemetry.installOnce() {
+			trackEvent(eventDevInstall, m.telemetry.installTags("success", m.install))
+		}
 
 		username := m.install.username.Value()
 		password := m.install.password.Value()

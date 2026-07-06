@@ -74,6 +74,7 @@ type Model struct {
 	taskErr         error
 	watchers        map[string]*watcherHandle
 	migrationWizard migrationWizard
+	telemetry       *telemetryState
 }
 
 type dockerAlreadyRunningMsg struct{}
@@ -100,6 +101,7 @@ func New(opts Options) Model {
 		config:      opts.Config,
 		envConfig:   opts.EnvConfig,
 		watchers:    make(map[string]*watcherHandle),
+		telemetry:   newTelemetryState(opts.Executor.Type() == executor.TypeDocker),
 	}
 	m.rebuildTabs()
 	return m
@@ -161,8 +163,15 @@ func (m *Model) shutdown() {
 	defer cancel()
 
 	for name, h := range m.watchers {
+		if tags, ok := m.telemetry.watcherEndTags(name, "session_end"); ok {
+			trackEventNow(eventDevWatcher, tags)
+		}
 		h.stop(ctx)
 		delete(m.watchers, name)
+	}
+
+	if tags, ok := m.telemetry.sessionTags(); ok {
+		trackEventNow(eventDevSession, tags)
 	}
 }
 
@@ -191,6 +200,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case taskDoneMsg:
 		m.taskDone = true
 		m.taskErr = msg.err
+		if tags, ok := m.telemetry.taskTags(resultTag(msg.err)); ok {
+			trackEvent(eventDevAction, tags)
+		}
 		if msg.err != nil {
 			m.overlayLines = append(m.overlayLines, "", errorStyle.Render("Failed: "+msg.err.Error()))
 		} else {
@@ -203,9 +215,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case watcherStartedMsg:
 		m.watchers[msg.name] = msg.handle
+		m.telemetry.watcherStarted(msg.name)
 		return m, m.instance.AddStreamingSource(msg.name, msg.lines)
 
 	case watcherRunningMsg:
+		if msg.err != nil {
+			if tags, ok := m.telemetry.watcherEndTags(msg.name, "prep_failed"); ok {
+				trackEvent(eventDevWatcher, tags)
+			}
+		}
 		_, exists := m.watchers[msg.name]
 		switch msg.name {
 		case watcherAdmin:
@@ -249,8 +267,17 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case watcherStorefront:
 			m.overview.sfWatchRunning = false
 		}
+		if tags, ok := m.telemetry.watcherEndTags(msg.source, "crashed"); ok {
+			trackEvent(eventDevWatcher, tags)
+		}
 		delete(m.watchers, msg.source)
 		return m.updateChildren(msg)
+
+	case setupHealthLoadedMsg:
+		if len(msg.checks) > 0 && m.telemetry.healthOnce() {
+			trackEvent(eventDevHealth, healthTags(msg.checks))
+		}
+		return m.updateFallback(msg)
 
 	case paletteResultMsg:
 		return m.handlePaletteResult(msg)
@@ -360,6 +387,11 @@ func (m Model) handleStopConfirmResult(msg stopConfirmResultMsg) (tea.Model, tea
 	if msg.Cancel {
 		return m, nil
 	}
+	if msg.Stop {
+		m.telemetry.setExitChoice("stop_containers")
+	} else {
+		m.telemetry.setExitChoice("keep_running")
+	}
 	m.shutdown()
 	if msg.Stop {
 		m.phase = phaseStopping
@@ -418,6 +450,9 @@ func (m Model) updateChildren(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m Model) handleConfigRestartDone(msg configRestartDoneMsg) (tea.Model, tea.Cmd) {
+	if tags, ok := m.telemetry.configRestartTags(msg.err); ok {
+		trackEvent(eventDevDockerStart, tags)
+	}
 	m.configTab.restarting = false
 	if msg.err != nil {
 		m.configTab.err = msg.err

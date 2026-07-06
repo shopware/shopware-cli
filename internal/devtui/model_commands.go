@@ -190,6 +190,7 @@ func runComposeCommand(ctx context.Context, projectRoot string, args []string, r
 }
 
 func (m *Model) startContainers() tea.Cmd {
+	m.telemetry.beginDockerStart()
 	ch, outputCmd, doneCmd := runComposeCommand(
 		context.Background(),
 		m.projectRoot,
@@ -201,6 +202,7 @@ func (m *Model) startContainers() tea.Cmd {
 }
 
 func (m *Model) restartContainersForConfig() tea.Cmd {
+	m.telemetry.beginConfigRestart()
 	projectRoot := m.projectRoot
 	cfg := m.config
 	return func() tea.Msg {
