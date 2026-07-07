@@ -14,6 +14,7 @@ import (
 
 	"golang.org/x/sync/errgroup"
 
+	"github.com/shopware/shopware-cli/internal/shell"
 	"github.com/shopware/shopware-cli/internal/shop"
 	"github.com/shopware/shopware-cli/logging"
 )
@@ -210,15 +211,15 @@ func (d *sshDeployer) prepareHost(ctx context.Context, host deployHost, releaseN
 
 	logger.Infof("%sPreparing deployment structure in %s", d.logPrefix(host), d.deployPath)
 
-	if _, err := host.conn.Run(ctx, fmt.Sprintf("mkdir -p %s %s", shQuote(d.releasesPath()), shQuote(d.sharedPath()))); err != nil {
+	if _, err := host.conn.Run(ctx, fmt.Sprintf("mkdir -p %s %s", shell.Quote(d.releasesPath()), shell.Quote(d.sharedPath()))); err != nil {
 		return err
 	}
 
-	if _, err := host.conn.Run(ctx, fmt.Sprintf("[ ! -e %[1]s ] || [ -L %[1]s ]", shQuote(d.currentPath()))); err != nil {
+	if _, err := host.conn.Run(ctx, fmt.Sprintf("[ ! -e %[1]s ] || [ -L %[1]s ]", shell.Quote(d.currentPath()))); err != nil {
 		return fmt.Errorf("%s exists but is not a symlink, refusing to deploy into an unmanaged directory", d.currentPath())
 	}
 
-	if _, err := host.conn.Run(ctx, fmt.Sprintf("mkdir -p %s", shQuote(releaseDir))); err != nil {
+	if _, err := host.conn.Run(ctx, fmt.Sprintf("mkdir -p %s", shell.Quote(releaseDir))); err != nil {
 		return err
 	}
 
@@ -242,13 +243,13 @@ func (d *sshDeployer) upload(ctx context.Context, host deployHost, releaseDir st
 		writer.CloseWithError(writeProjectArchive(writer, d.projectRoot, exclude))
 	}()
 
-	if err := host.conn.Stream(ctx, fmt.Sprintf("tar -xzpf - -C %s", shQuote(releaseDir)), reader); err != nil {
+	if err := host.conn.Stream(ctx, fmt.Sprintf("tar -xzpf - -C %s", shell.Quote(releaseDir)), reader); err != nil {
 		_ = reader.CloseWithError(err)
 		return fmt.Errorf("upload failed: %w", err)
 	}
 
 	// var/cache and var/log are excluded from the upload but Shopware expects them
-	_, err := host.conn.Run(ctx, fmt.Sprintf("mkdir -p %s %s", shQuote(path.Join(releaseDir, "var", "cache")), shQuote(path.Join(releaseDir, "var", "log"))))
+	_, err := host.conn.Run(ctx, fmt.Sprintf("mkdir -p %s %s", shell.Quote(path.Join(releaseDir, "var", "cache")), shell.Quote(path.Join(releaseDir, "var", "log"))))
 
 	return err
 }
@@ -264,10 +265,10 @@ func (d *sshDeployer) linkShared(ctx context.Context, host deployHost, releaseDi
 		// symlink into shared/
 		script := fmt.Sprintf(
 			"if [ -d %[2]s ] && [ ! -e %[1]s ]; then mkdir -p %[3]s && { mv %[2]s %[1]s || true; }; fi && mkdir -p %[1]s && rm -rf %[2]s && mkdir -p %[4]s && ln -sfn %[1]s %[2]s",
-			shQuote(sharedTarget),
-			shQuote(releasePath),
-			shQuote(path.Dir(sharedTarget)),
-			shQuote(path.Dir(releasePath)),
+			shell.Quote(sharedTarget),
+			shell.Quote(releasePath),
+			shell.Quote(path.Dir(sharedTarget)),
+			shell.Quote(path.Dir(releasePath)),
 		)
 
 		if _, err := host.conn.Run(ctx, script); err != nil {
@@ -282,10 +283,10 @@ func (d *sshDeployer) linkShared(ctx context.Context, host deployHost, releaseDi
 
 		script := fmt.Sprintf(
 			"mkdir -p %[3]s && if [ -f %[2]s ] && [ ! -e %[1]s ]; then mv %[2]s %[1]s || true; fi && if [ ! -e %[1]s ]; then touch %[1]s; fi && rm -f %[2]s && mkdir -p %[4]s && ln -sfn %[1]s %[2]s",
-			shQuote(sharedTarget),
-			shQuote(releasePath),
-			shQuote(path.Dir(sharedTarget)),
-			shQuote(path.Dir(releasePath)),
+			shell.Quote(sharedTarget),
+			shell.Quote(releasePath),
+			shell.Quote(path.Dir(sharedTarget)),
+			shell.Quote(path.Dir(releasePath)),
 		)
 
 		if _, err := host.conn.Run(ctx, script); err != nil {
@@ -301,7 +302,7 @@ func (d *sshDeployer) runPreSwitchHooks(ctx context.Context, host deployHost, re
 		return d.runHooks(ctx, host, d.config.Hooks.PreSwitch, releaseDir)
 	}
 
-	output, err := host.conn.Run(ctx, fmt.Sprintf("test -f %s && echo found || true", shQuote(path.Join(releaseDir, "vendor", "bin", "shopware-deployment-helper"))))
+	output, err := host.conn.Run(ctx, fmt.Sprintf("test -f %s && echo found || true", shell.Quote(path.Join(releaseDir, "vendor", "bin", "shopware-deployment-helper"))))
 	if err != nil {
 		return err
 	}
@@ -318,7 +319,7 @@ func (d *sshDeployer) runHooks(ctx context.Context, host deployHost, hooks []str
 	for _, hook := range hooks {
 		logging.FromContext(ctx).Infof("%sRunning remote hook: %s", d.logPrefix(host), hook)
 
-		output, err := host.conn.Run(ctx, fmt.Sprintf("cd %s && { %s; }", shQuote(dir), hook))
+		output, err := host.conn.Run(ctx, fmt.Sprintf("cd %s && { %s; }", shell.Quote(dir), hook))
 		if err != nil {
 			return fmt.Errorf("remote hook %q failed: %w", hook, err)
 		}
@@ -336,7 +337,7 @@ func (d *sshDeployer) switchCurrent(ctx context.Context, host deployHost, releas
 
 	// creating a new symlink and renaming it over the old one is atomic,
 	// ln -sfn on its own is not
-	_, err := host.conn.Run(ctx, fmt.Sprintf("ln -sfn %s %s && mv -fT %s %s", shQuote(releaseDir), shQuote(tmpLink), shQuote(tmpLink), shQuote(d.currentPath())))
+	_, err := host.conn.Run(ctx, fmt.Sprintf("ln -sfn %s %s && mv -fT %s %s", shell.Quote(releaseDir), shell.Quote(tmpLink), shell.Quote(tmpLink), shell.Quote(d.currentPath())))
 
 	return err
 }
@@ -367,19 +368,19 @@ func (d *sshDeployer) Releases(ctx context.Context) ([]HostReleases, error) {
 }
 
 func (d *sshDeployer) hostReleases(ctx context.Context, host deployHost) ([]Release, error) {
-	output, err := host.conn.Run(ctx, fmt.Sprintf("ls -1 %s 2>/dev/null || true", shQuote(d.releasesPath())))
+	output, err := host.conn.Run(ctx, fmt.Sprintf("ls -1 %s 2>/dev/null || true", shell.Quote(d.releasesPath())))
 	if err != nil {
 		return nil, err
 	}
 
-	activeOutput, err := host.conn.Run(ctx, fmt.Sprintf("readlink %s 2>/dev/null || true", shQuote(d.currentPath())))
+	activeOutput, err := host.conn.Run(ctx, fmt.Sprintf("readlink %s 2>/dev/null || true", shell.Quote(d.currentPath())))
 	if err != nil {
 		return nil, err
 	}
 
 	active := path.Base(strings.TrimSpace(activeOutput))
 
-	badOutput, err := host.conn.Run(ctx, fmt.Sprintf("ls -1 %s/*/%s 2>/dev/null || true", shQuote(d.releasesPath()), badReleaseMarker))
+	badOutput, err := host.conn.Run(ctx, fmt.Sprintf("ls -1 %s/*/%s 2>/dev/null || true", shell.Quote(d.releasesPath()), badReleaseMarker))
 	if err != nil {
 		return nil, err
 	}
@@ -466,7 +467,7 @@ func (d *sshDeployer) Rollback(ctx context.Context, target string) error {
 		}
 
 		// mark the release we rolled back from as bad so a later rollback skips it
-		if _, err := host.conn.Run(ctx, fmt.Sprintf("touch %s", shQuote(path.Join(d.releasesPath(), active.Name, badReleaseMarker)))); err != nil {
+		if _, err := host.conn.Run(ctx, fmt.Sprintf("touch %s", shell.Quote(path.Join(d.releasesPath(), active.Name, badReleaseMarker)))); err != nil {
 			logger.Warnf("%sCannot mark release %s as bad: %v", d.logPrefix(host), active.Name, err)
 		}
 	}
@@ -503,7 +504,7 @@ func (d *sshDeployer) cleanupReleases(ctx context.Context, host deployHost) erro
 
 		logging.FromContext(ctx).Infof("%sRemoving old release %s", d.logPrefix(host), release.Name)
 
-		if _, err := host.conn.Run(ctx, fmt.Sprintf("rm -rf %s", shQuote(path.Join(d.releasesPath(), release.Name)))); err != nil {
+		if _, err := host.conn.Run(ctx, fmt.Sprintf("rm -rf %s", shell.Quote(path.Join(d.releasesPath(), release.Name)))); err != nil {
 			return err
 		}
 	}

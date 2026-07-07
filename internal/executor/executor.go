@@ -21,6 +21,7 @@ const (
 	TypeDocker     = "docker"
 	TypeLocal      = "local"
 	TypeSymfonyCLI = "symfony-cli"
+	TypeSSH        = "ssh"
 )
 
 type Executor interface {

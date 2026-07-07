@@ -7,6 +7,7 @@ import (
 	"github.com/spf13/cobra"
 
 	adminSdk "github.com/shopware/shopware-cli/internal/admin-api"
+	"github.com/shopware/shopware-cli/internal/executor"
 	"github.com/shopware/shopware-cli/internal/shop"
 	"github.com/shopware/shopware-cli/logging"
 )
@@ -20,6 +21,28 @@ var projectClearCacheCmd = &cobra.Command{
 
 		if cfg, err = shop.ReadConfig(cmd.Context(), projectConfigPath, false); err != nil {
 			return err
+		}
+
+		if environmentName != "" {
+			envCfg, err := cfg.ResolveEnvironment(environmentName)
+			if err != nil {
+				return err
+			}
+
+			if envCfg.Type == executor.TypeSSH {
+				logging.FromContext(cmd.Context()).Infof("Clearing cache on remote environment %s", environmentName)
+
+				cmdExecutor, err := executor.New("", envCfg, cfg)
+				if err != nil {
+					return err
+				}
+
+				p := cmdExecutor.ConsoleCommand(cmd.Context(), "cache:clear")
+				p.Cmd.Stdout = cmd.OutOrStdout()
+				p.Cmd.Stderr = cmd.ErrOrStderr()
+
+				return p.Run()
+			}
 		}
 
 		if cfg.AdminApi == nil {

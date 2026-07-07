@@ -3,7 +3,6 @@ package deployment
 import (
 	"context"
 	"io"
-	"strings"
 )
 
 // Connection is a shell on the deployment target. It is an interface so the
@@ -15,9 +14,4 @@ type Connection interface {
 	Stream(ctx context.Context, command string, stdin io.Reader) error
 	// Close terminates the connection
 	Close() error
-}
-
-// shQuote quotes a string for safe use in a POSIX shell command.
-func shQuote(s string) string {
-	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
 }

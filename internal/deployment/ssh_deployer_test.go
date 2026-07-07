@@ -349,11 +349,6 @@ func TestNewSSHDeployerRequiresDeploymentPath(t *testing.T) {
 	assert.ErrorContains(t, err, "deployment.path")
 }
 
-func TestShQuote(t *testing.T) {
-	assert.Equal(t, "'/var/www'", shQuote("/var/www"))
-	assert.Equal(t, `'it'\''s'`, shQuote("it's"))
-}
-
 func TestMultiHostDeployRunsOnAllHosts(t *testing.T) {
 	conn1 := &fakeConnection{}
 	conn2 := &fakeConnection{}
