@@ -227,7 +227,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case setupHealthLoadedMsg:
 		if len(msg.checks) > 0 && m.telemetry.healthOnce() {
-			trackEvent(tracking.EventDevHealth, healthTags(msg.checks))
+			for _, tags := range healthEventTags(msg.checks) {
+				trackEvent(tracking.EventDevHealth, tags)
+			}
 		}
 		return m.updateFallback(msg)
 

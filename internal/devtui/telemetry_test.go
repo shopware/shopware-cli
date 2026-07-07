@@ -98,7 +98,7 @@ func TestWatcherEndTagsFireOncePerRun(t *testing.T) {
 	assert.True(t, ok)
 	assert.Equal(t, "admin", tags["watcher"])
 	assert.Equal(t, "user_stopped", tags["result"])
-	assert.Contains(t, tags, "uptime_ms")
+	assert.Contains(t, tags, "duration_ms")
 
 	// A trailing logDoneMsg for the same run must not produce a second event.
 	_, ok = tel.watcherEndTags(watcherAdmin, "crashed")
@@ -129,7 +129,7 @@ func TestSessionTagsSentOnce(t *testing.T) {
 	assert.Equal(t, "config,instance,overview", tags["tabs_visited"])
 	assert.Equal(t, "1", tags["actions"])
 	assert.Equal(t, "storefront", tags["watchers_used"])
-	assert.Equal(t, "keep_running", tags["exit"])
+	assert.Equal(t, "keep_running", tags["result"])
 
 	_, ok = tel.sessionTags()
 	assert.False(t, ok)
@@ -141,7 +141,7 @@ func TestSessionTagsDefaults(t *testing.T) {
 	assert.True(t, ok)
 	assert.Equal(t, "local", tags["executor"])
 	assert.Equal(t, "overview", tags["tabs_visited"])
-	assert.Equal(t, "quit", tags["exit"])
+	assert.Equal(t, "quit", tags["result"])
 	assert.NotContains(t, tags, "watchers_used")
 }
 
@@ -180,7 +180,7 @@ func TestDockerStartTagsRequireBegin(t *testing.T) {
 	assert.Equal(t, "success", tags["result"])
 }
 
-func TestHealthTagsFlattenChecks(t *testing.T) {
+func TestHealthEventTagsOnePerCheck(t *testing.T) {
 	checks := []healthCheck{
 		{Name: "PHP version", Level: healthCritical},
 		{Name: "Memory limit", Level: healthOK},
@@ -188,13 +188,13 @@ func TestHealthTagsFlattenChecks(t *testing.T) {
 		{Name: "Flow Builder log level", Level: healthWarn},
 	}
 
-	tags := healthTags(checks)
-	assert.Equal(t, map[string]string{
-		"php_version":            "critical",
-		"memory_limit":           "ok",
-		"admin_worker":           "warn",
-		"flow_builder_log_level": "warn",
-	}, tags)
+	events := healthEventTags(checks)
+	assert.ElementsMatch(t, []map[string]string{
+		{"check": "php_version", "result": "critical"},
+		{"check": "memory_limit", "result": "ok"},
+		{"check": "admin_worker", "result": "warn"},
+		{"check": "flow_builder_log_level", "result": "warn"},
+	}, events)
 }
 
 func TestInstallOnceLatches(t *testing.T) {

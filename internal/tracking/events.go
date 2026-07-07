@@ -21,8 +21,10 @@ const (
 	EventDevHealth          = "project.dev.health"
 )
 
-// Tag keys used by the events above. The project.dev.health event derives its
-// keys from the setup-health check names at runtime and has no constants here.
+// Tag keys used by the events above. Keys are shared across events wherever
+// the semantic matches (TagResult, TagDurationMS) — the ClickHouse events
+// table materializes columns from these shared keys, so a new event reusing
+// them is aggregatable without schema changes.
 const (
 	// EventCommand
 	TagCommandName = "command_name"
@@ -64,15 +66,16 @@ const (
 	TagAction = "action"
 
 	// EventDevWatcher
-	TagWatcher  = "watcher"
-	TagUptimeMS = "uptime_ms"
+	TagWatcher = "watcher"
+
+	// EventDevHealth
+	TagCheck = "check"
 
 	// EventDevSession
 	TagExecutor     = "executor"
 	TagTabsVisited  = "tabs_visited"
 	TagActions      = "actions"
 	TagWatchersUsed = "watchers_used"
-	TagExit         = "exit"
 )
 
 // Values of the TagResult tag shared across events.

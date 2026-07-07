@@ -204,26 +204,23 @@ their outcome and runtime.
 
 Sent once per watcher run, when the watcher ends.
 
-| Tag         | Meaning                                                     | Example    |
-|-------------|-------------------------------------------------------------|------------|
-| `watcher`   | Which watcher ran                                           | `admin` / `storefront` |
-| `result`    | How the run ended: preparation failed, the dev-server process exited on its own, the user stopped it, or the TUI session ended | `prep_failed` / `crashed` / `user_stopped` / `session_end` |
-| `uptime_ms` | How long the watcher ran                                    | `1830211`  |
+| Tag           | Meaning                                                     | Example    |
+|---------------|-------------------------------------------------------------|------------|
+| `watcher`     | Which watcher ran                                           | `admin` / `storefront` |
+| `result`      | How the run ended: preparation failed, the dev-server process exited on its own, the user stopped it, or the TUI session ended | `prep_failed` / `crashed` / `user_stopped` / `session_end` |
+| `duration_ms` | How long the watcher ran                                    | `1830211`  |
 
 ### `shopware_cli.project.dev.health` — setup health snapshot
 
 Sent once per session when the Overview tab's setup-health report first
-loads: one tag per check, with the check's level as the value. This tells us
-how common misconfigurations are in real projects — and which checks are
-worth turning into automatic fixes. Only the level is sent, never the
-underlying values.
+loads: one event per check. This tells us how common misconfigurations are in
+real projects — and which checks are worth turning into automatic fixes. Only
+the check's level is sent, never the underlying values.
 
-| Tag                      | Meaning                                    | Example |
-|--------------------------|--------------------------------------------|---------|
-| `php_version`            | Running PHP version vs. Shopware constraint| `ok` / `warn` / `critical` |
-| `memory_limit`           | PHP memory_limit vs. recommendation        | `ok` / `warn` |
-| `admin_worker`           | Browser admin worker disabled?             | `ok` / `warn` |
-| `flow_builder_log_level` | Flow Builder log level vs. recommendation  | `ok` / `warn` |
+| Tag      | Meaning                                       | Example |
+|----------|-----------------------------------------------|---------|
+| `check`  | Which check ran (`php_version`, `memory_limit`, `admin_worker`, `flow_builder_log_level`) | `admin_worker` |
+| `result` | The check's level                             | `ok` / `warn` / `critical` |
 
 ### `shopware_cli.project.dev.session` — dashboard session shape
 
@@ -238,7 +235,7 @@ inside the TUI).
 | `tabs_visited`  | Which tabs were opened (sorted, comma-separated)   | `config,instance,overview`  |
 | `actions`       | Number of palette actions invoked                  | `3`                         |
 | `watchers_used` | Which watchers were started (omitted if none)      | `admin,storefront`          |
-| `exit`          | How the session ended: via the "stop containers?" dialog or a plain quit | `stop_containers` / `keep_running` / `quit` |
+| `result`        | How the session ended: via the "stop containers?" dialog or a plain quit | `stop_containers` / `keep_running` / `quit` |
 
 ## What we explicitly do **not** collect
 

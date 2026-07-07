@@ -22,7 +22,7 @@ const (
 	watcherEndSessionEnd  = "session_end"
 )
 
-// Values of the session event's "exit" tag.
+// Values of the session event's "result" tag: how the session ended.
 const (
 	exitStopContainers = "stop_containers"
 	exitKeepRunning    = "keep_running"
@@ -120,7 +120,7 @@ func (t *telemetryState) sessionTags() (map[string]string, bool) {
 		tracking.TagDurationMS:  durationMS(time.Since(t.sessionStart)),
 		tracking.TagTabsVisited: joinSet(t.tabsVisited),
 		tracking.TagActions:     strconv.Itoa(t.actionCount),
-		tracking.TagExit:        exit,
+		tracking.TagResult:      exit,
 	}
 	if len(t.watchersUsed) > 0 {
 		tags[tracking.TagWatchersUsed] = joinSet(t.watchersUsed)
@@ -307,9 +307,9 @@ func (t *telemetryState) watcherEndTags(name, result string) (map[string]string,
 	}
 	delete(t.watcherStarts, name)
 	return map[string]string{
-		tracking.TagWatcher:  watcherTagName(name),
-		tracking.TagResult:   result,
-		tracking.TagUptimeMS: durationMS(time.Since(started)),
+		tracking.TagWatcher:    watcherTagName(name),
+		tracking.TagResult:     result,
+		tracking.TagDurationMS: durationMS(time.Since(started)),
 	}, true
 }
 
@@ -341,15 +341,19 @@ func (t *telemetryState) healthOnce() bool {
 	return true
 }
 
-// healthTags flattens the setup-health report into one tag per check, keyed
-// by the check name ("PHP version" → php_version) with its level as value.
-func healthTags(checks []healthCheck) map[string]string {
-	tags := make(map[string]string, len(checks))
+// healthEventTags turns the setup-health report into one event per check,
+// tagged with the check name ("PHP version" → php_version) and its level as
+// the result. Reusing the shared check/result keys keeps the events
+// aggregatable in ClickHouse without per-check schema knowledge.
+func healthEventTags(checks []healthCheck) []map[string]string {
+	events := make([]map[string]string, 0, len(checks))
 	for _, c := range checks {
-		key := strings.ReplaceAll(strings.ToLower(c.Name), " ", "_")
-		tags[key] = c.Level.tagValue()
+		events = append(events, map[string]string{
+			tracking.TagCheck:  strings.ReplaceAll(strings.ToLower(c.Name), " ", "_"),
+			tracking.TagResult: c.Level.tagValue(),
+		})
 	}
-	return tags
+	return events
 }
 
 func (l healthLevel) tagValue() string {
