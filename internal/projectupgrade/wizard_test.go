@@ -395,6 +395,30 @@ func (e testError) Error() string { return string(e) }
 
 func assertErr(s string) error { return testError(s) }
 
+func TestWizardWindowTitleFollowsStep(t *testing.T) {
+	t.Parallel()
+
+	m := newTestModel(t)
+
+	cases := map[phase]string{
+		phaseWelcome:       "[example] · Upgrade",
+		phasePreflight:     "[example] · Preflight checks",
+		phaseSelectVersion: "[example] · Select target version",
+		phasePrepare:       "[example] · Prepare upgrade",
+		phaseReview:        "[example] · Review upgrade plan",
+		phaseRunning:       "[example] · Upgrading...",
+		phaseDone:          "[example] · Upgrade complete",
+	}
+	for p, want := range cases {
+		m.phase = p
+		assert.Equal(t, want, m.windowTitle())
+	}
+
+	m.phase = phaseDone
+	m.finalErr = assertErr("boom")
+	assert.Equal(t, "[example] · Upgrade failed", m.windowTitle())
+}
+
 func TestWizardRendersAllPhases(t *testing.T) {
 	t.Parallel()
 

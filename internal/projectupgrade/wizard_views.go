@@ -2,6 +2,7 @@ package projectupgrade
 
 import (
 	"fmt"
+	"path/filepath"
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
@@ -20,7 +21,34 @@ func (m wizardModel) View() tea.View {
 	}
 	v := tea.NewView(content)
 	v.AltScreen = true
+	v.WindowTitle = m.windowTitle()
 	return v
+}
+
+// windowTitle mirrors devtui's convention of keeping the terminal window
+// title in sync with the current step or view.
+func (m wizardModel) windowTitle() string {
+	dir := "[" + filepath.Base(m.opts.ProjectRoot) + "] · "
+	switch m.phase {
+	case phaseWelcome:
+		return dir + "Upgrade"
+	case phasePreflight:
+		return dir + "Preflight checks"
+	case phaseSelectVersion:
+		return dir + "Select target version"
+	case phasePrepare:
+		return dir + "Prepare upgrade"
+	case phaseReview:
+		return dir + "Review upgrade plan"
+	case phaseRunning:
+		return dir + "Upgrading..."
+	case phaseDone:
+		if m.finalErr != nil {
+			return dir + "Upgrade failed"
+		}
+		return dir + "Upgrade complete"
+	}
+	return dir + "Upgrade"
 }
 
 // headerBar renders the consistent wizard header: current project context on
@@ -79,28 +107,6 @@ func (m wizardModel) viewContent() string {
 	return ""
 }
 
-func (m wizardModel) totalSteps() int {
-	return 5 // Preflight, Select version, Prepare, Review, Run
-}
-
-func (m wizardModel) stepNum(p phase) int {
-	switch p {
-	case phasePreflight:
-		return 1
-	case phaseSelectVersion:
-		return 2
-	case phasePrepare:
-		return 3
-	case phaseReview:
-		return 4
-	case phaseRunning:
-		return 5
-	case phaseWelcome, phaseDone:
-		return 0
-	}
-	return 0
-}
-
 func (m wizardModel) viewWelcome() string {
 	var b strings.Builder
 	b.WriteString(tui.TextBadge("Upgrade"))
@@ -143,8 +149,6 @@ func (m wizardModel) viewWelcome() string {
 
 func (m wizardModel) viewPreflight() string {
 	var b strings.Builder
-	b.WriteString(stepBadge(m.stepNum(phasePreflight), m.totalSteps()))
-	b.WriteString("\n\n")
 	b.WriteString(tui.TitleStyle.Render("Preflight checks"))
 	b.WriteString("\n")
 	b.WriteString(tui.DimStyle.Render("The project must pass these checks before the upgrade flow starts."))
@@ -214,9 +218,6 @@ func renderPreflightLine(r PreflightResult) string {
 
 func (m wizardModel) viewSelectVersion() string {
 	var b strings.Builder
-	b.WriteString(stepBadge(m.stepNum(phaseSelectVersion), m.totalSteps()))
-	b.WriteString("\n\n")
-
 	b.WriteString(m.versionList.View())
 	b.WriteString("\n\n")
 
@@ -243,7 +244,7 @@ func (m wizardModel) viewPrepare() string {
 	}
 
 	var b strings.Builder
-	b.WriteString(stepBadge(m.stepNum(phasePrepare), m.totalSteps()))
+	b.WriteString(tui.TitleStyle.Render("Prepare upgrade"))
 	b.WriteString("\n\n")
 
 	// Overall preparation state.
@@ -301,9 +302,7 @@ func (m wizardModel) viewPrepare() string {
 
 func (m wizardModel) viewPrepareLoading() string {
 	var b strings.Builder
-	b.WriteString(stepBadge(m.stepNum(phasePrepare), m.totalSteps()))
-	b.WriteString("\n\n")
-	b.WriteString(tui.TitleStyle.Render("Preparing upgrade"))
+	b.WriteString(tui.TitleStyle.Render("Prepare upgrade"))
 	b.WriteString("\n")
 	b.WriteString(tui.DimStyle.Render(fmt.Sprintf("Asking composer to resolve %s…", m.targetVersion)))
 	b.WriteString("\n\n")
@@ -509,8 +508,6 @@ func extensionGuidance(row ExtensionRow) []string {
 
 func (m wizardModel) viewReview() string {
 	var b strings.Builder
-	b.WriteString(stepBadge(m.stepNum(phaseReview), m.totalSteps()))
-	b.WriteString("\n\n")
 	b.WriteString(tui.TitleStyle.Render("Review upgrade plan"))
 	b.WriteString("\n")
 	b.WriteString(tui.DimStyle.Render("Confirm to apply the following changes."))
@@ -571,8 +568,6 @@ func (m wizardModel) reportStatusLine() string {
 
 func (m wizardModel) viewRunning() string {
 	var b strings.Builder
-	b.WriteString(stepBadge(m.stepNum(phaseRunning), m.totalSteps()))
-	b.WriteString("\n\n")
 	b.WriteString(tui.TitleStyle.Render(fmt.Sprintf("Upgrading to %s", m.targetVersion)))
 	b.WriteString("\n")
 	b.WriteString(tui.DimStyle.Render("This may take a few minutes. Live output shown below."))
@@ -726,13 +721,6 @@ func (m wizardModel) renderTaskLine(i int, t task) string {
 
 func (m wizardModel) footer(shortcuts ...tui.Shortcut) string {
 	return tui.ShortcutBar(shortcuts...)
-}
-
-func stepBadge(stepNum, totalSteps int) string {
-	if stepNum == 0 {
-		return tui.TextBadge("Upgrade")
-	}
-	return tui.TextBadge(fmt.Sprintf("Step %d/%d", stepNum, totalSteps))
 }
 
 func renderConfirmButtons(yesLabel, noLabel string, yesActive bool) string {
