@@ -20,9 +20,59 @@ import (
 )
 
 type EnvironmentConfig struct {
-	Type     string          `yaml:"type" jsonschema:"enum=local,enum=docker"`
+	Type     string          `yaml:"type" jsonschema:"enum=local,enum=docker,enum=ssh"`
 	URL      string          `yaml:"url,omitempty"`
 	AdminApi *ConfigAdminApi `yaml:"admin_api,omitempty"`
+	// SSH connection settings, used when type is "ssh"
+	SSH *EnvironmentSSH `yaml:"ssh,omitempty"`
+	// Deployment settings for remote environments
+	Deployment *EnvironmentDeployment `yaml:"deployment,omitempty"`
+}
+
+// EnvironmentSSH holds the SSH connection settings of an environment.
+type EnvironmentSSH struct {
+	// Hostname or IP address of the server
+	Host string `yaml:"host" jsonschema:"required"`
+	// SSH port, defaults to 22
+	Port int `yaml:"port,omitempty"`
+	// User to connect as
+	User string `yaml:"user,omitempty"`
+	// Password for password based authentication (consider using ${ENV_VAR} substitution instead of a plain value)
+	Password string `yaml:"password,omitempty"`
+	// Path to the private key used for authentication. When empty, the SSH agent and default keys (~/.ssh/id_ed25519, ~/.ssh/id_rsa) are tried
+	IdentityFile string `yaml:"identity_file,omitempty"`
+	// Passphrase for the private key (consider using ${ENV_VAR} substitution instead of a plain value)
+	Passphrase string `yaml:"passphrase,omitempty"`
+	// Path to the known_hosts file used for host key verification, defaults to ~/.ssh/known_hosts
+	KnownHostsFile string `yaml:"known_hosts_file,omitempty"`
+	// When enabled, the host key of the server is not verified (insecure)
+	InsecureIgnoreHostKey bool `yaml:"insecure_ignore_host_key,omitempty"`
+}
+
+// EnvironmentDeployment holds the deployment settings of a remote environment.
+type EnvironmentDeployment struct {
+	// Absolute path on the server where the project is deployed to (contains releases/, shared/ and the current symlink)
+	Path string `yaml:"path" jsonschema:"required"`
+	// Amount of releases to keep on the server, defaults to 5
+	KeepReleases int `yaml:"keep_releases,omitempty"`
+	// Files shared between releases, defaults to .env and install.lock
+	SharedFiles []string `yaml:"shared_files,omitempty"`
+	// Directories shared between releases, defaults to files, public/media, public/thumbnail, public/sitemap and var/log
+	SharedDirs []string `yaml:"shared_dirs,omitempty"`
+	// Additional paths that are not uploaded to the server (on top of the built-in defaults like .git and node_modules)
+	Exclude []string `yaml:"exclude,omitempty"`
+	// Hooks executed during the deployment
+	Hooks EnvironmentDeploymentHooks `yaml:"hooks,omitempty"`
+}
+
+// EnvironmentDeploymentHooks defines commands executed during a deployment.
+type EnvironmentDeploymentHooks struct {
+	// Commands executed locally in the project root before the upload (e.g. shopware-cli project ci .)
+	Build []string `yaml:"build,omitempty"`
+	// Commands executed on the server inside the new release before the current symlink is switched. Defaults to running the Shopware Deployment Helper when present
+	PreSwitch []string `yaml:"pre_switch,omitempty"`
+	// Commands executed on the server inside the new release after the current symlink was switched
+	PostSwitch []string `yaml:"post_switch,omitempty"`
 }
 
 type Config struct {

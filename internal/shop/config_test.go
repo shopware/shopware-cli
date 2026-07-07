@@ -684,3 +684,59 @@ func TestConfigBuildMJMLResolveIncludePaths(t *testing.T) {
 		assert.Equal(t, want, got)
 	})
 }
+
+func TestReadConfigSSHEnvironment(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, ".shopware-project.yml")
+	content := []byte(`
+url: https://example.com
+environments:
+  production:
+    type: ssh
+    url: https://shop.example.com
+    ssh:
+      host: shop.example.com
+      port: 2222
+      user: deploy
+      identity_file: ~/.ssh/id_ed25519
+    deployment:
+      path: /var/www/shopware
+      keep_releases: 3
+      shared_dirs:
+        - files
+        - public/media
+      shared_files:
+        - .env
+      hooks:
+        build:
+          - shopware-cli project ci .
+        pre_switch:
+          - vendor/bin/shopware-deployment-helper run
+        post_switch:
+          - php bin/console cache:pool:clear cache.http
+`)
+
+	assert.NoError(t, os.WriteFile(configPath, content, 0o644))
+
+	cfg, err := ReadConfig(t.Context(), configPath, false)
+	assert.NoError(t, err)
+
+	env, err := cfg.ResolveEnvironment("production")
+	assert.NoError(t, err)
+
+	assert.Equal(t, "ssh", env.Type)
+	assert.NotNil(t, env.SSH)
+	assert.Equal(t, "shop.example.com", env.SSH.Host)
+	assert.Equal(t, 2222, env.SSH.Port)
+	assert.Equal(t, "deploy", env.SSH.User)
+	assert.Equal(t, "~/.ssh/id_ed25519", env.SSH.IdentityFile)
+
+	assert.NotNil(t, env.Deployment)
+	assert.Equal(t, "/var/www/shopware", env.Deployment.Path)
+	assert.Equal(t, 3, env.Deployment.KeepReleases)
+	assert.ElementsMatch(t, []string{"files", "public/media"}, env.Deployment.SharedDirs)
+	assert.ElementsMatch(t, []string{".env"}, env.Deployment.SharedFiles)
+	assert.Equal(t, []string{"shopware-cli project ci ."}, env.Deployment.Hooks.Build)
+	assert.Equal(t, []string{"vendor/bin/shopware-deployment-helper run"}, env.Deployment.Hooks.PreSwitch)
+	assert.Equal(t, []string{"php bin/console cache:pool:clear cache.http"}, env.Deployment.Hooks.PostSwitch)
+}

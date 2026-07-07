@@ -636,7 +636,8 @@
           "type": "string",
           "enum": [
             "local",
-            "docker"
+            "docker",
+            "ssh"
           ]
         },
         "url": {
@@ -644,10 +645,131 @@
         },
         "admin_api": {
           "$ref": "#/$defs/ConfigAdminApi"
+        },
+        "ssh": {
+          "$ref": "#/$defs/EnvironmentSSH",
+          "description": "SSH connection settings, used when type is \"ssh\""
+        },
+        "deployment": {
+          "$ref": "#/$defs/EnvironmentDeployment",
+          "description": "Deployment settings for remote environments"
         }
       },
       "additionalProperties": false,
       "type": "object"
+    },
+    "EnvironmentDeployment": {
+      "properties": {
+        "path": {
+          "type": "string",
+          "description": "Absolute path on the server where the project is deployed to (contains releases/, shared/ and the current symlink)"
+        },
+        "keep_releases": {
+          "type": "integer",
+          "description": "Amount of releases to keep on the server, defaults to 5"
+        },
+        "shared_files": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array",
+          "description": "Files shared between releases, defaults to .env and install.lock"
+        },
+        "shared_dirs": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array",
+          "description": "Directories shared between releases, defaults to files, public/media, public/thumbnail, public/sitemap and var/log"
+        },
+        "exclude": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array",
+          "description": "Additional paths that are not uploaded to the server (on top of the built-in defaults like .git and node_modules)"
+        },
+        "hooks": {
+          "$ref": "#/$defs/EnvironmentDeploymentHooks",
+          "description": "Hooks executed during the deployment"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "required": [
+        "path"
+      ],
+      "description": "EnvironmentDeployment holds the deployment settings of a remote environment."
+    },
+    "EnvironmentDeploymentHooks": {
+      "properties": {
+        "build": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array",
+          "description": "Commands executed locally in the project root before the upload (e.g. shopware-cli project ci .)"
+        },
+        "pre_switch": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array",
+          "description": "Commands executed on the server inside the new release before the current symlink is switched. Defaults to running the Shopware Deployment Helper when present"
+        },
+        "post_switch": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array",
+          "description": "Commands executed on the server inside the new release after the current symlink was switched"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "description": "EnvironmentDeploymentHooks defines commands executed during a deployment."
+    },
+    "EnvironmentSSH": {
+      "properties": {
+        "host": {
+          "type": "string",
+          "description": "Hostname or IP address of the server"
+        },
+        "port": {
+          "type": "integer",
+          "description": "SSH port, defaults to 22"
+        },
+        "user": {
+          "type": "string",
+          "description": "User to connect as"
+        },
+        "password": {
+          "type": "string",
+          "description": "Password for password based authentication (consider using ${ENV_VAR} substitution instead of a plain value)"
+        },
+        "identity_file": {
+          "type": "string",
+          "description": "Path to the private key used for authentication. When empty, the SSH agent and default keys (~/.ssh/id_ed25519, ~/.ssh/id_rsa) are tried"
+        },
+        "passphrase": {
+          "type": "string",
+          "description": "Passphrase for the private key (consider using ${ENV_VAR} substitution instead of a plain value)"
+        },
+        "known_hosts_file": {
+          "type": "string",
+          "description": "Path to the known_hosts file used for host key verification, defaults to ~/.ssh/known_hosts"
+        },
+        "insecure_ignore_host_key": {
+          "type": "boolean",
+          "description": "When enabled, the host key of the server is not verified (insecure)"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "required": [
+        "host"
+      ],
+      "description": "EnvironmentSSH holds the SSH connection settings of an environment."
     }
   }
 }

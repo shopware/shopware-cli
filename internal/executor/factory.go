@@ -26,6 +26,8 @@ func New(projectRoot string, cfg *shop.EnvironmentConfig, shopCfg *shop.Config) 
 		return &SymfonyCLIExecutor{BinaryPath: path, projectRoot: projectRoot, shopCfg: shopCfg, envCfg: cfg}, nil
 	case TypeDocker:
 		return &DockerExecutor{projectRoot: projectRoot, shopCfg: shopCfg, envCfg: cfg}, nil
+	case "ssh":
+		return nil, fmt.Errorf("environment type %q can only be used for deployments (shopware-cli project deploy), not for running commands", cfg.Type)
 	default:
 		return nil, fmt.Errorf("unsupported environment type: %s", cfg.Type)
 	}
