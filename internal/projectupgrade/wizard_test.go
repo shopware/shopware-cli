@@ -1,6 +1,8 @@
 package projectupgrade
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
@@ -34,21 +36,28 @@ func newTestModelWithVersions(t *testing.T, versions []string) wizardModel {
 			CurrentVersion:   current,
 			UpdateVersions:   versions,
 		},
-		phase:       phaseWelcome,
-		confirmYes:  true,
-		versionList: tui.NewSelectList("Select target version", "", opts, maxVisibleVersions),
-		tasks:       defaultTasks(),
+		phase:        phaseWelcome,
+		confirmYes:   true,
+		versionList:  tui.NewSelectList("Select target version", "", opts, maxVisibleVersions),
+		tasks:        defaultTasks(),
+		markedRemove: map[string]bool{},
 	}
 	return m
 }
 
-func TestWizardWelcomeConfirmGoesToVersionSelect(t *testing.T) {
+func keyPress(c rune) tea.KeyPressMsg {
+	return tea.KeyPressMsg{Code: c, Text: string(c)}
+}
+
+func TestWizardWelcomeConfirmGoesToPreflight(t *testing.T) {
 	t.Parallel()
 
 	m := newTestModel(t)
-	updated, _ := m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
+	updated, cmd := m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
 	wm := updated.(wizardModel)
-	assert.Equal(t, phaseSelectVersion, wm.phase)
+	assert.Equal(t, phasePreflight, wm.phase)
+	assert.True(t, wm.preflightLoading)
+	assert.NotNil(t, cmd, "entering preflight must schedule the checks")
 }
 
 func TestWizardWelcomeCancelQuits(t *testing.T) {
@@ -61,6 +70,42 @@ func TestWizardWelcomeCancelQuits(t *testing.T) {
 	msg := cmd()
 	_, ok := msg.(tea.QuitMsg)
 	assert.True(t, ok, "cancel should produce QuitMsg")
+}
+
+func TestWizardPreflightBlocksUntilChecksPass(t *testing.T) {
+	t.Parallel()
+
+	m := newTestModel(t)
+	m.phase = phasePreflight
+	m.preflightLoading = true
+
+	updated, _ := m.Update(preflightDoneMsg{results: []PreflightResult{
+		{Label: "Git working tree clean", Status: PreflightFailed, Explanation: "commit your changes"},
+	}})
+	wm := updated.(wizardModel)
+	assert.False(t, wm.preflightLoading)
+
+	// Enter must not advance while a check fails.
+	updated, _ = wm.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
+	wm = updated.(wizardModel)
+	assert.Equal(t, phasePreflight, wm.phase)
+
+	// The failure and its explanation are visible.
+	out := wm.viewContent()
+	assert.Contains(t, out, "commit your changes")
+
+	// A recheck that passes unblocks the flow.
+	updated, _ = wm.Update(keyPress('r'))
+	wm = updated.(wizardModel)
+	assert.True(t, wm.preflightLoading, "r must rerun the checks")
+
+	updated, _ = wm.Update(preflightDoneMsg{results: []PreflightResult{
+		{Label: "Git working tree clean", Status: PreflightOK},
+	}})
+	wm = updated.(wizardModel)
+	updated, _ = wm.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
+	wm = updated.(wizardModel)
+	assert.Equal(t, phaseSelectVersion, wm.phase)
 }
 
 // Navigation/paging is owned and tested by tui.SelectList; here we only verify
@@ -76,7 +121,7 @@ func TestWizardSelectVersionForwardsNavigationToList(t *testing.T) {
 	assert.Equal(t, 1, wm.versionList.Cursor())
 }
 
-func TestWizardSelectVersionGoesToCompatCheck(t *testing.T) {
+func TestWizardSelectVersionGoesToPrepare(t *testing.T) {
 	t.Parallel()
 
 	m := newTestModel(t)
@@ -84,46 +129,188 @@ func TestWizardSelectVersionGoesToCompatCheck(t *testing.T) {
 
 	updated, _ := m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
 	wm := updated.(wizardModel)
-	assert.Equal(t, phaseCompatCheck, wm.phase)
+	assert.Equal(t, phasePrepare, wm.phase)
 	assert.True(t, wm.compatLoading)
 	assert.Equal(t, "6.6.4.0", wm.targetVersion)
 }
 
-func TestWizardCompatLoadedConflictSetsBlockerFlag(t *testing.T) {
+func TestWizardSelectVersionShowsReleaseNotesLink(t *testing.T) {
 	t.Parallel()
 
 	m := newTestModel(t)
-	m.phase = phaseCompatCheck
+	m.phase = phaseSelectVersion
+
+	out := m.viewContent()
+	assert.Contains(t, out, "releases/tag/v6.6.4.0")
+}
+
+func TestWizardPrepareBlockedPreventsContinue(t *testing.T) {
+	t.Parallel()
+
+	m := newTestModel(t)
+	m.phase = phasePrepare
 	m.compatLoading = true
 
 	updated, _ := m.Update(compatLoadedMsg{
-		report: CompatReport{
-			OK:              false,
-			Output:          []string{"Your requirements could not be resolved"},
-			BlockingPlugins: []string{"vendor/incompat"},
+		report: CompatReport{OK: false, BlockingPlugins: []string{"swag/blocked"}},
+		queue: []ExtensionRow{
+			{Name: "swag/blocked", Current: "1.0.0", State: ExtensionBlocked, Result: "no compatible release"},
+			{Name: "swag/ok", Current: "1.0.0", Target: "1.0.0", State: ExtensionOK},
 		},
 	})
 	wm := updated.(wizardModel)
 	assert.False(t, wm.compatLoading)
-	assert.Equal(t, phaseCompatResult, wm.phase)
-	assert.True(t, wm.compatHasBlock)
-	assert.False(t, wm.confirmYes, "a composer conflict should default the confirm to No")
+	assert.True(t, wm.prepareBlocked())
+
+	out := wm.viewContent()
+	assert.Contains(t, out, "BLOCKED")
+	assert.Contains(t, out, "1/2 extensions need fixes")
+
+	// c must not advance while blocked.
+	updated, _ = wm.Update(keyPress('c'))
+	wm = updated.(wizardModel)
+	assert.Equal(t, phasePrepare, wm.phase)
 }
 
-func TestWizardCompatLoadedResolvableIsNotBlocker(t *testing.T) {
+func TestWizardPrepareReadyContinuesToReview(t *testing.T) {
 	t.Parallel()
 
 	m := newTestModel(t)
-	m.phase = phaseCompatCheck
-	m.compatLoading = true
+	m.phase = phasePrepare
+	m.targetVersion = "6.6.4.0"
 
 	updated, _ := m.Update(compatLoadedMsg{
 		report: CompatReport{OK: true},
+		queue: []ExtensionRow{
+			{Name: "swag/ok", Current: "1.0.0", Target: "1.0.0", State: ExtensionOK},
+		},
 	})
 	wm := updated.(wizardModel)
-	assert.Equal(t, phaseCompatResult, wm.phase)
-	assert.False(t, wm.compatHasBlock, "a resolvable upgrade must not block")
-	assert.True(t, wm.confirmYes, "no conflict means confirm defaults to Yes")
+
+	out := wm.viewContent()
+	assert.Contains(t, out, "READY")
+
+	updated, _ = wm.Update(keyPress('c'))
+	wm = updated.(wizardModel)
+	assert.Equal(t, phaseReview, wm.phase)
+}
+
+func TestWizardPrepareOverlayShowsDetailsAndMarksRemoval(t *testing.T) {
+	t.Parallel()
+
+	m := newTestModel(t)
+	m.phase = phasePrepare
+	m.targetVersion = "6.6.4.0"
+	m.extQueue = []ExtensionRow{
+		{Name: "swag/blocked", Current: "1.0.0", State: ExtensionBlocked, Result: "no compatible release"},
+	}
+
+	// Enter opens the detail overlay.
+	updated, _ := m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
+	wm := updated.(wizardModel)
+	assert.True(t, wm.overlayOpen)
+
+	out := wm.viewContent()
+	assert.Contains(t, out, "swag/blocked")
+	assert.Contains(t, out, "User action")
+
+	// d marks the blocked extension for removal, which unblocks the queue.
+	updated, _ = wm.Update(keyPress('d'))
+	wm = updated.(wizardModel)
+	assert.Equal(t, ExtensionRemove, wm.extQueue[0].State)
+	assert.False(t, wm.prepareBlocked())
+	assert.True(t, wm.markedRemove["swag/blocked"])
+
+	// d again undoes the decision.
+	updated, _ = wm.Update(keyPress('d'))
+	wm = updated.(wizardModel)
+	assert.Equal(t, ExtensionBlocked, wm.extQueue[0].State)
+	assert.False(t, wm.markedRemove["swag/blocked"])
+
+	// esc closes the overlay.
+	updated, _ = wm.Update(tea.KeyPressMsg{Code: tea.KeyEscape})
+	wm = updated.(wizardModel)
+	assert.False(t, wm.overlayOpen)
+}
+
+func TestWizardRemovalMarkSurvivesRecheckWhileBlocked(t *testing.T) {
+	t.Parallel()
+
+	m := newTestModel(t)
+	m.phase = phasePrepare
+	m.markedRemove = map[string]bool{"swag/blocked": true}
+
+	// Recheck still reports the extension as blocked: the mark is re-applied.
+	updated, _ := m.Update(compatLoadedMsg{
+		report: CompatReport{OK: false, BlockingPlugins: []string{"swag/blocked"}},
+		queue: []ExtensionRow{
+			{Name: "swag/blocked", Current: "1.0.0", State: ExtensionBlocked, Result: "no compatible release"},
+		},
+	})
+	wm := updated.(wizardModel)
+	assert.Equal(t, ExtensionRemove, wm.extQueue[0].State)
+
+	// A later recheck finds a compatible release: the stale mark is dropped.
+	updated, _ = wm.Update(compatLoadedMsg{
+		report: CompatReport{OK: true},
+		queue: []ExtensionRow{
+			{Name: "swag/blocked", Current: "1.0.0", Target: "2.0.0", State: ExtensionUpdate, Result: "will be updated"},
+		},
+	})
+	wm = updated.(wizardModel)
+	assert.Equal(t, ExtensionUpdate, wm.extQueue[0].State)
+	assert.False(t, wm.markedRemove["swag/blocked"])
+}
+
+func TestWizardReviewShowsPlannedRemovals(t *testing.T) {
+	t.Parallel()
+
+	m := newTestModel(t)
+	m.phase = phaseReview
+	m.targetVersion = "6.6.4.0"
+	m.extQueue = []ExtensionRow{
+		{Name: "swag/drop-me", Current: "1.0.0", State: ExtensionRemove, Result: "will be removed during the upgrade"},
+	}
+
+	out := m.viewContent()
+	assert.Contains(t, out, "swag/drop-me")
+	assert.Contains(t, out, "removed from composer.json")
+}
+
+func TestWizardReportWrittenShownInView(t *testing.T) {
+	t.Parallel()
+
+	m := newTestModel(t)
+	m.phase = phaseReview
+	m.targetVersion = "6.6.4.0"
+
+	updated, _ := m.Update(reportWrittenMsg{path: "/tmp/example/shopware-upgrade-report-6.6.4.0.md"})
+	wm := updated.(wizardModel)
+	assert.Contains(t, wm.viewContent(), "shopware-upgrade-report-6.6.4.0.md")
+}
+
+func TestWizardWriteReportCreatesFile(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	m := newTestModel(t)
+	m.opts.ProjectRoot = dir
+	m.opts.ComposerJSONPath = filepath.Join(dir, "composer.json")
+	m.targetVersion = "6.6.4.0"
+	m.extQueue = []ExtensionRow{
+		{Name: "swag/ok", Current: "1.0.0", Target: "1.0.0", State: ExtensionOK, Result: "compatible as installed"},
+	}
+	require.NoError(t, os.WriteFile(m.opts.ComposerJSONPath, []byte(`{"require":{}}`), 0o644))
+
+	msg := m.writeReport()()
+	written, ok := msg.(reportWrittenMsg)
+	require.True(t, ok)
+	require.NoError(t, written.err)
+
+	content, err := os.ReadFile(written.path)
+	require.NoError(t, err)
+	assert.Contains(t, string(content), "# Shopware Upgrade Report")
+	assert.Contains(t, string(content), "swag/ok")
 }
 
 func TestUpgradeTaskOrderRunsDeploymentHelperLast(t *testing.T) {
@@ -167,6 +354,20 @@ func TestWizardTaskCompleteErrorEndsRun(t *testing.T) {
 	assert.Contains(t, out, "Your requirements could not be resolved", "failed step output should be shown on the done screen")
 }
 
+func TestWizardDoneSuccessShowsPostUpgradeChecklist(t *testing.T) {
+	t.Parallel()
+
+	m := newTestModel(t)
+	m.phase = phaseDone
+	m.finished = true
+	m.targetVersion = "6.6.4.0"
+
+	out := m.viewContent()
+	assert.Contains(t, out, "Post-upgrade validation checklist")
+	assert.Contains(t, out, "storefront")
+	assert.Contains(t, out, "test suite")
+}
+
 func TestWizardLogLineMsgAppendsAndTrims(t *testing.T) {
 	t.Parallel()
 
@@ -199,16 +400,15 @@ func TestWizardRendersAllPhases(t *testing.T) {
 
 	phases := []phase{
 		phaseWelcome,
+		phasePreflight,
 		phaseSelectVersion,
-		phaseCompatCheck,
-		phaseCompatResult,
+		phasePrepare,
 		phaseReview,
 		phaseRunning,
 		phaseDone,
 	}
 
 	for _, p := range phases {
-		p := p
 		t.Run(t.Name(), func(t *testing.T) {
 			t.Parallel()
 			m := newTestModel(t)
@@ -216,6 +416,9 @@ func TestWizardRendersAllPhases(t *testing.T) {
 			m.targetVersion = "6.6.4.0"
 			out := m.viewContent()
 			assert.NotEmpty(t, out, "phase %d should render content", p)
+
+			header := m.headerBar()
+			assert.Contains(t, header, "Shopware 6.5.8.0", "header shows the current project context")
 		})
 	}
 }

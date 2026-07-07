@@ -30,13 +30,26 @@ import (
 var projectUpgradeCmd = &cobra.Command{
 	Use:   "upgrade",
 	Short: "Upgrade the Shopware version of this project",
-	Long: `Upgrade the Shopware project to a newer version. The command picks an
-upgrade target, resolves incompatible custom plugins, rewrites composer.json
-for the new version, runs composer update --with-all-dependencies, and then
-invokes vendor/bin/shopware-deployment-helper to run system:update:prepare,
-migrations, system:update:finish and the rest of the deployment lifecycle.
-shopware/deployment-helper is added to composer.json automatically when the
-project doesn't require it yet.`,
+	Long: `Upgrade the Shopware project to a newer version.
+
+In an interactive terminal this starts the upgrade wizard: it runs preflight
+safety checks (clean git tree, composer-managed plugins, running environment,
+Packagist reachability), lets you pick a target version with release notes,
+shows an extension compatibility queue derived from composer's own dry-run
+verdict (compatible / will update / deprecated / blocked), and blocks the
+upgrade until every blocked extension is either updated or explicitly marked
+for removal. A Markdown support report with the findings, composer.json, and
+raw composer output can be exported at any time from the review and result
+panels.
+
+The upgrade itself resolves incompatible custom plugins, rewrites
+composer.json for the new version, runs composer update
+--with-all-dependencies, and then invokes vendor/bin/shopware-deployment-helper
+to run system:update:prepare, migrations, system:update:finish and the rest of
+the deployment lifecycle. shopware/deployment-helper is added to composer.json
+automatically when the project doesn't require it yet.
+
+With --to or in non-interactive environments the headless flow runs instead.`,
 	RunE: func(cmd *cobra.Command, _ []string) error {
 		ctx := cmd.Context()
 		log := logging.FromContext(ctx)
@@ -61,14 +74,7 @@ project doesn't require it yet.`,
 		log.Infof("Current Shopware version: %s", currentVersion.String())
 
 		allowDirty, _ := cmd.Flags().GetBool("allow-dirty")
-		if err := ensureCleanGitTree(ctx, projectRoot, allowDirty); err != nil {
-			return err
-		}
-
 		allowNonComposer, _ := cmd.Flags().GetBool("allow-non-composer")
-		if err := ensureAllPluginsAreComposerManaged(projectRoot, allowNonComposer); err != nil {
-			return err
-		}
 
 		allVersions, err := extension.GetShopwareVersions(ctx)
 		if err != nil {
@@ -87,7 +93,15 @@ project doesn't require it yet.`,
 		}
 
 		// Non-interactive: keep the headless flow so CI runs stay unchanged.
+		// The safety checks abort hard here; interactively they run as the
+		// wizard's preflight checklist instead, with a visible recheck.
 		if !system.IsInteractionEnabled(ctx) || cmd.Flag("to").Value.String() != "" {
+			if err := ensureCleanGitTree(ctx, projectRoot, allowDirty); err != nil {
+				return err
+			}
+			if err := ensureAllPluginsAreComposerManaged(projectRoot, allowNonComposer); err != nil {
+				return err
+			}
 			return runUpgradeHeadless(cmd, projectRoot, composerJsonPath, currentVersion, updateVersions, cmdExecutor)
 		}
 
@@ -98,6 +112,8 @@ project doesn't require it yet.`,
 			CurrentVersion:   currentVersion,
 			UpdateVersions:   updateVersions,
 			Executor:         cmdExecutor,
+			AllowDirty:       allowDirty,
+			AllowNonComposer: allowNonComposer,
 		})
 
 		status := "ok"
@@ -111,6 +127,12 @@ project doesn't require it yet.`,
 		}
 
 		trackUpgrade(ctx, currentVersion.String(), result.TargetVersion, status)
+
+		// Keep the exported report path in the scrollback; the alt-screen
+		// view that showed it is gone once the wizard exits.
+		if result.ReportPath != "" {
+			fmt.Printf("Upgrade report written to %s\n", result.ReportPath)
+		}
 
 		if errors.Is(err, projectupgrade.ErrCancelled) {
 			fmt.Println("Upgrade cancelled.")
