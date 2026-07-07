@@ -752,23 +752,23 @@
         },
         "password": {
           "type": "string",
-          "description": "Password for password based authentication (consider using ${ENV_VAR} substitution instead of a plain value)"
+          "description": "Password for password based authentication. Requires sshpass for non-interactive use; prefer key based authentication (consider using ${ENV_VAR} substitution instead of a plain value)"
         },
         "identity_file": {
           "type": "string",
-          "description": "Path to the private key used for authentication. When empty, the SSH agent and default keys (~/.ssh/id_ed25519, ~/.ssh/id_rsa) are tried"
-        },
-        "passphrase": {
-          "type": "string",
-          "description": "Passphrase for the private key (consider using ${ENV_VAR} substitution instead of a plain value)"
+          "description": "Path to the private key used for authentication. When empty, the SSH agent and the default keys of the ssh client are used. Encrypted keys are handled by the SSH agent or an interactive passphrase prompt"
         },
         "known_hosts_file": {
           "type": "string",
-          "description": "Path to the known_hosts file used for host key verification, defaults to ~/.ssh/known_hosts"
+          "description": "Path to the known_hosts file used for host key verification, defaults to the ssh client behavior (~/.ssh/known_hosts)"
         },
         "insecure_ignore_host_key": {
           "type": "boolean",
           "description": "When enabled, the host key of the server is not verified (insecure)"
+        },
+        "control_master": {
+          "type": "boolean",
+          "description": "Reuse one SSH connection for consecutive remote commands (OpenSSH ControlMaster). Enabled by default except on Windows; set to false to leave connection sharing to your own ssh_config"
         }
       },
       "additionalProperties": false,
@@ -799,10 +799,6 @@
         "identity_file": {
           "type": "string",
           "description": "Path to the private key used for authentication, inherited from the ssh block when empty"
-        },
-        "passphrase": {
-          "type": "string",
-          "description": "Passphrase for the private key, inherited from the ssh block when empty"
         }
       },
       "additionalProperties": false,

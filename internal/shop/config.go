@@ -41,16 +41,16 @@ type EnvironmentSSH struct {
 	Port int `yaml:"port,omitempty"`
 	// User to connect as
 	User string `yaml:"user,omitempty"`
-	// Password for password based authentication (consider using ${ENV_VAR} substitution instead of a plain value)
+	// Password for password based authentication. Requires sshpass for non-interactive use; prefer key based authentication (consider using ${ENV_VAR} substitution instead of a plain value)
 	Password string `yaml:"password,omitempty"`
-	// Path to the private key used for authentication. When empty, the SSH agent and default keys (~/.ssh/id_ed25519, ~/.ssh/id_rsa) are tried
+	// Path to the private key used for authentication. When empty, the SSH agent and the default keys of the ssh client are used. Encrypted keys are handled by the SSH agent or an interactive passphrase prompt
 	IdentityFile string `yaml:"identity_file,omitempty"`
-	// Passphrase for the private key (consider using ${ENV_VAR} substitution instead of a plain value)
-	Passphrase string `yaml:"passphrase,omitempty"`
-	// Path to the known_hosts file used for host key verification, defaults to ~/.ssh/known_hosts
+	// Path to the known_hosts file used for host key verification, defaults to the ssh client behavior (~/.ssh/known_hosts)
 	KnownHostsFile string `yaml:"known_hosts_file,omitempty"`
 	// When enabled, the host key of the server is not verified (insecure)
 	InsecureIgnoreHostKey bool `yaml:"insecure_ignore_host_key,omitempty"`
+	// Reuse one SSH connection for consecutive remote commands (OpenSSH ControlMaster). Enabled by default except on Windows; set to false to leave connection sharing to your own ssh_config
+	ControlMaster *bool `yaml:"control_master,omitempty"`
 }
 
 // EnvironmentSSHHost is an additional host of a multi-server environment.
@@ -66,8 +66,6 @@ type EnvironmentSSHHost struct {
 	Password string `yaml:"password,omitempty"`
 	// Path to the private key used for authentication, inherited from the ssh block when empty
 	IdentityFile string `yaml:"identity_file,omitempty"`
-	// Passphrase for the private key, inherited from the ssh block when empty
-	Passphrase string `yaml:"passphrase,omitempty"`
 }
 
 // AllHosts returns the primary host and all additional hosts with the
@@ -93,9 +91,6 @@ func (s *EnvironmentSSH) AllHosts() []EnvironmentSSH {
 		}
 		if h.IdentityFile != "" {
 			merged.IdentityFile = h.IdentityFile
-		}
-		if h.Passphrase != "" {
-			merged.Passphrase = h.Passphrase
 		}
 
 		hosts = append(hosts, merged)

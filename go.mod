@@ -36,7 +36,6 @@ require (
 	github.com/yuin/goldmark v1.8.2
 	github.com/zeebo/xxh3 v1.1.0
 	go.uber.org/zap v1.28.0
-	golang.org/x/crypto v0.53.0
 	golang.org/x/image v0.43.0
 	golang.org/x/text v0.38.0
 	golang.org/x/time v0.15.0

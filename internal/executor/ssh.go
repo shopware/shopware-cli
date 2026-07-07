@@ -5,11 +5,9 @@ import (
 	"fmt"
 	"maps"
 	"os"
-	"os/exec"
 	"path"
 	"path/filepath"
 	"slices"
-	"strconv"
 	"strings"
 
 	"github.com/mattn/go-isatty"
@@ -17,12 +15,14 @@ import (
 	adminSdk "github.com/shopware/shopware-cli/internal/admin-api"
 	"github.com/shopware/shopware-cli/internal/shell"
 	"github.com/shopware/shopware-cli/internal/shop"
+	"github.com/shopware/shopware-cli/internal/sshcmd"
 )
 
 // SSHExecutor runs commands on the primary host of an ssh environment inside
 // the currently deployed release (<deployment.path>/current). It wraps the
-// system ssh client, so the user's SSH agent and configuration are honored and
-// interactive commands work like a plain ssh session.
+// system ssh client, so the user's SSH agent and configuration are honored,
+// interactive commands work like a plain ssh session and the multiplexed
+// connection (ControlMaster) is shared with deployments.
 type SSHExecutor struct {
 	env         map[string]string
 	projectRoot string
@@ -66,53 +66,18 @@ func (s *SSHExecutor) NPMCommand(ctx context.Context, args ...string) *Process {
 }
 
 func (s *SSHExecutor) command(ctx context.Context, argv []string) *Process {
-	sshArgs := s.baseArgs()
-	sshArgs = append(sshArgs, s.destination(), s.remoteCommand(argv))
-
-	cmd := exec.CommandContext(ctx, "ssh", sshArgs...)
-	logCmd(ctx, cmd)
-
-	return newProcess(cmd)
-}
-
-func (s *SSHExecutor) baseArgs() []string {
-	cfg := s.envCfg.SSH
-
-	var args []string
-
-	if cfg.Port != 0 {
-		args = append(args, "-p", strconv.Itoa(cfg.Port))
-	}
-
-	if cfg.IdentityFile != "" {
-		args = append(args, "-i", cfg.IdentityFile)
-	}
-
-	if cfg.KnownHostsFile != "" {
-		args = append(args, "-o", "UserKnownHostsFile="+cfg.KnownHostsFile)
-	}
-
-	if cfg.InsecureIgnoreHostKey {
-		args = append(args, "-o", "StrictHostKeyChecking=no", "-o", "UserKnownHostsFile=/dev/null")
-	}
+	var extraArgs []string
 
 	// allocate a TTY when we have one, so interactive console commands
 	// (prompts, progress bars, colors) behave like a plain ssh session
 	if stdinIsTerminal() {
-		args = append(args, "-t")
+		extraArgs = append(extraArgs, "-t")
 	}
 
-	return args
-}
+	cmd := sshcmd.Build(ctx, s.envCfg.SSH, s.remoteCommand(argv), extraArgs...)
+	logCmd(ctx, cmd)
 
-func (s *SSHExecutor) destination() string {
-	cfg := s.envCfg.SSH
-
-	if cfg.User != "" {
-		return cfg.User + "@" + cfg.Host
-	}
-
-	return cfg.Host
+	return newProcess(cmd)
 }
 
 // remoteBase is the root of the currently deployed release on the server.
@@ -193,10 +158,7 @@ func (s *SSHExecutor) StopEnvironment(_ context.Context) error {
 
 // EnvironmentStatus reports whether a release is deployed and linked on the server.
 func (s *SSHExecutor) EnvironmentStatus(ctx context.Context) (bool, error) {
-	sshArgs := s.baseArgs()
-	sshArgs = append(sshArgs, s.destination(), "test -e "+shell.Quote(s.remoteBase()))
-
-	cmd := exec.CommandContext(ctx, "ssh", sshArgs...)
+	cmd := sshcmd.Build(ctx, s.envCfg.SSH, "test -e "+shell.Quote(s.remoteBase()))
 	logCmd(ctx, cmd)
 
 	if err := cmd.Run(); err != nil {

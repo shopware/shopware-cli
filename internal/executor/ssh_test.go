@@ -1,19 +1,48 @@
 package executor
 
 import (
+	"runtime"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 
 	"github.com/shopware/shopware-cli/internal/shop"
+	"github.com/shopware/shopware-cli/internal/sshcmd"
 )
+
+func stubSSHEnvironment(t *testing.T) {
+	t.Helper()
+
+	oldTerminal := stdinIsTerminal
+	stdinIsTerminal = func() bool { return false }
+
+	oldSocketDir := sshcmd.ControlSocketDir
+	sshcmd.ControlSocketDir = func() string { return "/home/user/.ssh" }
+
+	t.Cleanup(func() {
+		stdinIsTerminal = oldTerminal
+		sshcmd.ControlSocketDir = oldSocketDir
+	})
+}
+
+// controlMasterArgs are the multiplexing arguments expected by default; on
+// Windows ControlMaster is unsupported and never emitted.
+var controlMasterArgs = func() []string {
+	if runtime.GOOS == "windows" {
+		return nil
+	}
+
+	return []string{
+		"-o", "ControlMaster=auto",
+		"-o", "ControlPath=/home/user/.ssh/shopware-cli-%C",
+		"-o", "ControlPersist=60",
+	}
+}()
 
 func newTestSSHExecutor(t *testing.T) Executor {
 	t.Helper()
 
-	old := stdinIsTerminal
-	stdinIsTerminal = func() bool { return false }
-	t.Cleanup(func() { stdinIsTerminal = old })
+	stubSSHEnvironment(t)
 
 	envCfg := &shop.EnvironmentConfig{
 		Type: TypeSSH,
@@ -38,12 +67,42 @@ func TestSSHExecutorConsoleCommand(t *testing.T) {
 
 	p := exec.ConsoleCommand(t.Context(), "cache:clear")
 
-	assert.Equal(t, []string{
+	expected := []string{
 		"ssh",
 		"-p", "2222",
 		"-i", "/keys/id_ed25519",
+	}
+	expected = append(expected, controlMasterArgs...)
+	expected = append(expected,
 		"deploy@shop.example.com",
 		"cd '/var/www/shopware/current' && 'php' 'bin/console' 'cache:clear'",
+	)
+
+	assert.Equal(t, expected, p.Cmd.Args)
+}
+
+func TestSSHExecutorControlMasterCanBeDisabled(t *testing.T) {
+	stubSSHEnvironment(t)
+
+	disabled := false
+	envCfg := &shop.EnvironmentConfig{
+		Type: TypeSSH,
+		SSH: &shop.EnvironmentSSH{
+			Host:          "shop.example.com",
+			ControlMaster: &disabled,
+		},
+		Deployment: &shop.EnvironmentDeployment{Path: "/var/www/shopware"},
+	}
+
+	exec, err := New("", envCfg, &shop.Config{})
+	assert.NoError(t, err)
+
+	p := exec.PHPCommand(t.Context(), "-v")
+
+	assert.Equal(t, []string{
+		"ssh",
+		"shop.example.com",
+		"cd '/var/www/shopware/current' && 'php' '-v'",
 	}, p.Cmd.Args)
 }
 
@@ -100,9 +159,7 @@ func TestSSHExecutorQuotesArguments(t *testing.T) {
 }
 
 func TestSSHExecutorHostKeyOptions(t *testing.T) {
-	old := stdinIsTerminal
-	stdinIsTerminal = func() bool { return false }
-	t.Cleanup(func() { stdinIsTerminal = old })
+	stubSSHEnvironment(t)
 
 	envCfg := &shop.EnvironmentConfig{
 		Type: TypeSSH,
@@ -118,13 +175,18 @@ func TestSSHExecutorHostKeyOptions(t *testing.T) {
 
 	p := exec.PHPCommand(t.Context(), "-v")
 
-	assert.Equal(t, []string{
+	expected := []string{
 		"ssh",
 		"-o", "StrictHostKeyChecking=no",
 		"-o", "UserKnownHostsFile=/dev/null",
+	}
+	expected = append(expected, controlMasterArgs...)
+	expected = append(expected,
 		"shop.example.com",
 		"cd '/var/www/shopware/current' && 'php' '-v'",
-	}, p.Cmd.Args)
+	)
+
+	assert.Equal(t, expected, p.Cmd.Args)
 }
 
 func TestSSHExecutorRequiresConfig(t *testing.T) {
