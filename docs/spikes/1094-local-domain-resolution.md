@@ -1,6 +1,8 @@
 # Spike: Local domain resolution for parallel instances (#1094)
 
-Status: investigation · Related: [#1094](https://github.com/shopware/shopware-cli/issues/1094), [#939](https://github.com/shopware/shopware-cli/issues/939)
+Status: first implementation landed (`shopware-cli project proxy`, see
+[docs/proxy.md](../proxy.md)) — shared Traefik container + sslip.io hostnames +
+local CA · Related: [#1094](https://github.com/shopware/shopware-cli/issues/1094), [#939](https://github.com/shopware/shopware-cli/issues/939)
 
 Goal: each local Shopware instance reachable at a stable hostname (e.g.
 `https://instance1.<dev-domain>`) instead of shifting ports, without manual
