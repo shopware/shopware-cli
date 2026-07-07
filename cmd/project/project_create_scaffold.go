@@ -32,14 +32,14 @@ var gitlabCITemplate string
 var shopwarePaasAppTemplate string
 
 func scaffoldProject(ctx context.Context, opts *createOptions, chosenVersion string) error {
-	go tracking.Track(ctx, "project.create", map[string]string{
-		"version":            opts.selectedVersion,
-		"deployment":         opts.selectedDeployment,
-		"ci":                 opts.selectedCI,
-		"docker":             fmt.Sprintf("%v", opts.useDocker),
-		"with_elasticsearch": fmt.Sprintf("%v", opts.withElasticsearch),
-		"with_amqp":          fmt.Sprintf("%v", opts.withAMQP),
-		"interactive":        fmt.Sprintf("%v", opts.interactive),
+	go tracking.Track(ctx, tracking.EventProjectCreate, map[string]string{
+		tracking.TagVersion:           opts.selectedVersion,
+		tracking.TagDeployment:        opts.selectedDeployment,
+		tracking.TagCI:                opts.selectedCI,
+		tracking.TagDocker:            fmt.Sprintf("%v", opts.useDocker),
+		tracking.TagWithElasticsearch: fmt.Sprintf("%v", opts.withElasticsearch),
+		tracking.TagWithAMQP:          fmt.Sprintf("%v", opts.withAMQP),
+		tracking.TagInteractive:       fmt.Sprintf("%v", opts.interactive),
 	})
 
 	if err := os.MkdirAll(opts.projectFolder, os.ModePerm); err != nil {

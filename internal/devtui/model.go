@@ -11,6 +11,7 @@ import (
 	"github.com/shopware/shopware-cli/internal/envfile"
 	"github.com/shopware/shopware-cli/internal/executor"
 	"github.com/shopware/shopware-cli/internal/shop"
+	"github.com/shopware/shopware-cli/internal/tracking"
 )
 
 type activeTab int
@@ -74,6 +75,7 @@ type Model struct {
 	taskErr         error
 	watchers        map[string]*watcherHandle
 	migrationWizard migrationWizard
+	telemetry       *telemetryState
 }
 
 type dockerAlreadyRunningMsg struct{}
@@ -100,6 +102,7 @@ func New(opts Options) Model {
 		config:      opts.Config,
 		envConfig:   opts.EnvConfig,
 		watchers:    make(map[string]*watcherHandle),
+		telemetry:   newTelemetryState(opts.Executor.Type() == executor.TypeDocker),
 	}
 	m.rebuildTabs()
 	return m
@@ -161,8 +164,22 @@ func (m *Model) shutdown() {
 	defer cancel()
 
 	for name, h := range m.watchers {
+		if tags, ok := m.telemetry.watcherEndTags(name, watcherEndSessionEnd); ok {
+			trackEventNow(tracking.EventDevWatcher, tags)
+		}
 		h.stop(ctx)
 		delete(m.watchers, name)
+	}
+
+	// A config-change container restart may still be in flight when the user
+	// leaves the dashboard; report it as cancelled instead of dropping it.
+	if tags, ok := m.telemetry.configRestartTags(nil); ok {
+		tags[tracking.TagResult] = tracking.ResultCancelled
+		trackEventNow(tracking.EventDevDockerStart, tags)
+	}
+
+	if tags, ok := m.telemetry.sessionTags(); ok {
+		trackEventNow(tracking.EventDevSession, tags)
 	}
 }
 
@@ -191,6 +208,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case taskDoneMsg:
 		m.taskDone = true
 		m.taskErr = msg.err
+		if tags, ok := m.telemetry.taskTags(resultTag(msg.err)); ok {
+			trackEvent(tracking.EventDevAction, tags)
+		}
 		if msg.err != nil {
 			m.overlayLines = append(m.overlayLines, "", errorStyle.Render("Failed: "+msg.err.Error()))
 		} else {
@@ -201,11 +221,56 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case configRestartDoneMsg:
 		return m.handleConfigRestartDone(msg)
 
+	case watcherStartedMsg, watcherRunningMsg, stopWatcherRequestMsg,
+		startStorefrontWatchRequestMsg, watcherStoppedMsg, logDoneMsg:
+		return m.updateWatcherMsg(msg)
+
+	case setupHealthLoadedMsg:
+		if len(msg.checks) > 0 && m.telemetry.healthOnce() {
+			for _, tags := range healthEventTags(msg.checks) {
+				trackEvent(tracking.EventDevHealth, tags)
+			}
+		}
+		return m.updateFallback(msg)
+
+	case paletteResultMsg:
+		return m.handlePaletteResult(msg)
+
+	case pickerResultMsg:
+		if _, ok := msg.Key.(salesChannelPickerKey); ok {
+			break
+		}
+		return m.handlePickerResult(msg)
+
+	case salesChannelPickerResultMsg:
+		return m.handleSalesChannelPickerResult(msg)
+
+	case stopConfirmResultMsg:
+		return m.handleStopConfirmResult(msg)
+
+	case tea.KeyPressMsg:
+		return m.updateKeyPress(msg)
+	}
+
+	return m.updateFallback(msg)
+}
+
+// updateWatcherMsg handles the watcher lifecycle messages: start, prep
+// done/failed, stop requests, stopped, and the log stream ending (the watcher
+// process exiting on its own).
+func (m Model) updateWatcherMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
+	switch msg := msg.(type) {
 	case watcherStartedMsg:
 		m.watchers[msg.name] = msg.handle
+		m.telemetry.watcherStarted(msg.name)
 		return m, m.instance.AddStreamingSource(msg.name, msg.lines)
 
 	case watcherRunningMsg:
+		if msg.err != nil {
+			if tags, ok := m.telemetry.watcherEndTags(msg.name, watcherEndPrepFailed); ok {
+				trackEvent(tracking.EventDevWatcher, tags)
+			}
+		}
 		_, exists := m.watchers[msg.name]
 		switch msg.name {
 		case watcherAdmin:
@@ -249,29 +314,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case watcherStorefront:
 			m.overview.sfWatchRunning = false
 		}
+		if tags, ok := m.telemetry.watcherEndTags(msg.source, watcherEndCrashed); ok {
+			trackEvent(tracking.EventDevWatcher, tags)
+		}
 		delete(m.watchers, msg.source)
 		return m.updateChildren(msg)
-
-	case paletteResultMsg:
-		return m.handlePaletteResult(msg)
-
-	case pickerResultMsg:
-		if _, ok := msg.Key.(salesChannelPickerKey); ok {
-			break
-		}
-		return m.handlePickerResult(msg)
-
-	case salesChannelPickerResultMsg:
-		return m.handleSalesChannelPickerResult(msg)
-
-	case stopConfirmResultMsg:
-		return m.handleStopConfirmResult(msg)
-
-	case tea.KeyPressMsg:
-		return m.updateKeyPress(msg)
 	}
 
-	return m.updateFallback(msg)
+	return m, nil
 }
 
 // updateFallback handles non-key messages that aren't matched by Update's
@@ -360,6 +410,11 @@ func (m Model) handleStopConfirmResult(msg stopConfirmResultMsg) (tea.Model, tea
 	if msg.Cancel {
 		return m, nil
 	}
+	if msg.Stop {
+		m.telemetry.setExitChoice(exitStopContainers)
+	} else {
+		m.telemetry.setExitChoice(exitKeepRunning)
+	}
 	m.shutdown()
 	if msg.Stop {
 		m.phase = phaseStopping
@@ -418,6 +473,9 @@ func (m Model) updateChildren(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m Model) handleConfigRestartDone(msg configRestartDoneMsg) (tea.Model, tea.Cmd) {
+	if tags, ok := m.telemetry.configRestartTags(msg.err); ok {
+		trackEvent(tracking.EventDevDockerStart, tags)
+	}
 	m.configTab.restarting = false
 	if msg.err != nil {
 		m.configTab.err = msg.err

@@ -2,7 +2,6 @@ package devtui
 
 import (
 	"context"
-	"strconv"
 	"time"
 
 	"charm.land/bubbles/v2/textinput"
@@ -35,6 +34,12 @@ func (m Model) updateKeyPress(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		case "l":
 			m.dockerShowLogs = !m.dockerShowLogs
 		case keyQ, keyCtrlC:
+			if m.phase == phaseStarting {
+				if tags, ok := m.telemetry.dockerStartTags(nil); ok {
+					tags[tracking.TagResult] = tracking.ResultCancelled
+					trackEventNow(tracking.EventDevDockerStart, tags)
+				}
+			}
 			return m, tea.Quit
 		}
 		return m, nil
@@ -45,6 +50,11 @@ func (m Model) updateKeyPress(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		case "l":
 			m.installProg.showLogs = !m.installProg.showLogs
 		case keyQ, keyCtrlC:
+			if m.telemetry.installOnce() {
+				tags := m.telemetry.installTags(tracking.ResultCancelled, m.install)
+				tags[tracking.TagAbandonedAt] = "installing"
+				trackEventNow(tracking.EventDevInstall, tags)
+			}
 			return m, tea.Quit
 		}
 		return m, nil
@@ -59,6 +69,9 @@ func (m Model) updateKeyPress(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		if msg.String() == keyQ || msg.String() == keyCtrlC {
+			if tags, ok := m.telemetry.taskTags(tracking.ResultCancelled); ok {
+				trackEventNow(tracking.EventDevAction, tags)
+			}
 			return m, tea.Quit
 		}
 		return m, nil
@@ -84,18 +97,23 @@ func (m Model) updateDashboardKeys(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m, tea.Quit
 	case key1:
 		m.activeTab = tabOverview
+		m.telemetry.markTab(m.activeTab)
 		return m, nil
 	case key2:
 		m.activeTab = tabInstance
+		m.telemetry.markTab(m.activeTab)
 		return m, nil
 	case key3:
 		m.activeTab = tabConfig
+		m.telemetry.markTab(m.activeTab)
 		return m, nil
 	case keyTab:
 		m.activeTab = (m.activeTab + 1) % activeTab(len(tabNames))
+		m.telemetry.markTab(m.activeTab)
 		return m, nil
 	case keyShiftTab:
 		m.activeTab = (m.activeTab - 1 + activeTab(len(tabNames))) % activeTab(len(tabNames))
+		m.telemetry.markTab(m.activeTab)
 		return m, nil
 	}
 
@@ -154,15 +172,21 @@ func (m Model) updateConfigTab(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 
 func (m Model) executeCommand(id string) (tea.Model, tea.Cmd) {
 	switch id {
-	case "open-shop":
-		return m, openInBrowser(m.overview.shopURL)
-	case "open-admin":
+	case "open-shop", "open-admin":
+		m.telemetry.countAction()
+		trackEvent(tracking.EventDevAction, map[string]string{tracking.TagAction: id})
+		if id == "open-shop" {
+			return m, openInBrowser(m.overview.shopURL)
+		}
 		return m, openInBrowser(m.overview.adminURL)
 	case "cache-clear":
+		m.telemetry.beginTask(id)
 		return m, m.runCacheClear()
 	case "admin-build":
+		m.telemetry.beginTask(id)
 		return m, m.runAdminBuild()
 	case "sf-build":
+		m.telemetry.beginTask(id)
 		return m, m.runStorefrontBuild()
 	case "admin-watch-start":
 		if !m.overview.adminWatchRunning && !m.overview.adminWatchStarting {
@@ -183,10 +207,13 @@ func (m Model) executeCommand(id string) (tea.Model, tea.Cmd) {
 		}
 	case "tab-instance":
 		m.activeTab = tabInstance
+		m.telemetry.markTab(m.activeTab)
 	case "tab-overview":
 		m.activeTab = tabOverview
+		m.telemetry.markTab(m.activeTab)
 	case "tab-config":
 		m.activeTab = tabConfig
+		m.telemetry.markTab(m.activeTab)
 	case "quit":
 		if m.dockerMode {
 			m.modal = newStopConfirm()
@@ -211,6 +238,9 @@ func (m Model) openSalesChannelPicker() (tea.Model, tea.Cmd) {
 }
 
 func (m *Model) stopWatcher(name string) tea.Cmd {
+	if tags, ok := m.telemetry.watcherEndTags(name, watcherEndUserStopped); ok {
+		trackEvent(tracking.EventDevWatcher, tags)
+	}
 	m.instance.RemoveSource(name)
 
 	h := m.watchers[name]
@@ -228,11 +258,20 @@ func (m *Model) stopWatcher(name string) tea.Cmd {
 }
 
 func (m Model) updateMigrationWizard(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+	// Enter on the welcome screen's "Quit" button exits the wizard from inside
+	// migrationWizard.update, so detect it here before the state advances.
+	welcomeQuit := m.migrationWizard.step == migrationStepWelcome &&
+		!m.migrationWizard.confirmYes && msg.String() == keyEnter
+
 	newGuide, cmd := m.migrationWizard.update(msg)
 	m.migrationWizard = newGuide
 
 	// Ctrl+C on any step quits the app
-	if msg.String() == keyCtrlC {
+	if welcomeQuit || msg.String() == keyCtrlC {
+		// The done screen already sent a completed/failed event for this run.
+		if m.migrationWizard.step != migrationStepDone {
+			trackEventNow(tracking.EventDevMigrationWizard, migrationWizardTags(tracking.ResultCancelled, m.migrationWizard))
+		}
 		return m, tea.Quit
 	}
 
@@ -242,6 +281,7 @@ func (m Model) updateMigrationWizard(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		if m.migrationWizard.confirmYes {
 			return m.saveMigrationWizard()
 		}
+		trackEventNow(tracking.EventDevMigrationWizard, migrationWizardTags(tracking.ResultCancelled, m.migrationWizard))
 		return m, tea.Quit
 	}
 
@@ -259,6 +299,7 @@ func (m Model) saveMigrationWizard() (tea.Model, tea.Cmd) {
 	if err := shop.WriteConfig(m.config, m.projectRoot); err != nil {
 		m.migrationWizard.err = err
 		m.migrationWizard.step = migrationStepDone
+		trackEvent(tracking.EventDevMigrationWizard, migrationWizardTags(tracking.ResultFailed, m.migrationWizard))
 		return m, nil
 	}
 
@@ -266,22 +307,14 @@ func (m Model) saveMigrationWizard() (tea.Model, tea.Cmd) {
 	if err != nil {
 		m.migrationWizard.err = err
 		m.migrationWizard.step = migrationStepDone
+		trackEvent(tracking.EventDevMigrationWizard, migrationWizardTags(tracking.ResultFailed, m.migrationWizard))
 		return m, nil
 	}
 	m.migrationWizard.deploymentHelperAdded = changed
 
 	m.migrationWizard.step = migrationStepDone
-	duration := time.Since(m.migrationWizard.startedAt)
-	phpVersion := m.migrationWizard.phpVersions[m.migrationWizard.phpCursor]
-	return m, func() tea.Msg {
-		ctx, cancel := context.WithTimeout(context.Background(), 300*time.Millisecond)
-		defer cancel()
-		tracking.Track(ctx, "migration_wizard_completed", map[string]string{
-			"took":        strconv.FormatInt(int64(duration.Seconds()), 10),
-			"php_version": phpVersion,
-		})
-		return nil
-	}
+	trackEvent(tracking.EventDevMigrationWizard, migrationWizardTags(tracking.ResultCompleted, m.migrationWizard))
+	return m, nil
 }
 
 // mergeLocalProfilerSecrets copies profiler credential fields from the
