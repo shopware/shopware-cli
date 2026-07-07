@@ -24,18 +24,13 @@ var projectClearCacheCmd = &cobra.Command{
 		}
 
 		if environmentName != "" {
-			envCfg, err := cfg.ResolveEnvironment(environmentName)
+			cmdExecutor, err := resolveExecutor(cmd, "")
 			if err != nil {
 				return err
 			}
 
-			if envCfg.Type == executor.TypeSSH {
+			if cmdExecutor.Type() == executor.TypeSSH {
 				logging.FromContext(cmd.Context()).Infof("Clearing cache on remote environment %s", environmentName)
-
-				cmdExecutor, err := executor.New("", envCfg, cfg)
-				if err != nil {
-					return err
-				}
 
 				p := cmdExecutor.ConsoleCommand(cmd.Context(), "cache:clear")
 				p.Cmd.Stdout = cmd.OutOrStdout()
