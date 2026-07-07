@@ -24,14 +24,14 @@ var projectDeployReleasesCmd = &cobra.Command{
 		for i, hr := range hostReleases {
 			if len(hostReleases) > 1 {
 				if i > 0 {
-					fmt.Fprintln(cmd.OutOrStdout())
+					_, _ = fmt.Fprintln(cmd.OutOrStdout())
 				}
 
-				fmt.Fprintf(cmd.OutOrStdout(), "Host %s:\n", hr.Host)
+				_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Host %s:\n", hr.Host)
 			}
 
 			if len(hr.Releases) == 0 {
-				fmt.Fprintln(cmd.OutOrStdout(), "No releases found")
+				_, _ = fmt.Fprintln(cmd.OutOrStdout(), "No releases found")
 				continue
 			}
 
@@ -44,7 +44,7 @@ var projectDeployReleasesCmd = &cobra.Command{
 					marker += " (bad)"
 				}
 
-				fmt.Fprintf(cmd.OutOrStdout(), "%s%s\n", release.Name, marker)
+				_, _ = fmt.Fprintf(cmd.OutOrStdout(), "%s%s\n", release.Name, marker)
 			}
 		}
 

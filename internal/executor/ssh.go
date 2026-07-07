@@ -161,8 +161,9 @@ func (s *SSHExecutor) EnvironmentStatus(ctx context.Context) (bool, error) {
 	cmd := sshcmd.Build(ctx, s.envCfg.SSH, "test -e "+shell.Quote(s.remoteBase()))
 	logCmd(ctx, cmd)
 
+	// a non-zero exit of test -e means no release is deployed, not a failure
 	if err := cmd.Run(); err != nil {
-		return false, nil
+		return false, nil //nolint:nilerr
 	}
 
 	return true, nil

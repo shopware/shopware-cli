@@ -446,10 +446,8 @@ func (d *sshDeployer) Rollback(ctx context.Context, target string) error {
 		if target == "" {
 			return fmt.Errorf("no earlier release available to roll back to")
 		}
-	} else {
-		if target == active.Name {
-			return fmt.Errorf("release %s is already active", target)
-		}
+	} else if target == active.Name {
+		return fmt.Errorf("release %s is already active", target)
 	}
 
 	// every host must have the target before any host is switched
