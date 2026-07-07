@@ -15,9 +15,12 @@ HTTPS that works for payment provider testing.
 - Hostnames use [sslip.io](https://sslip.io): any `<name>.127.0.0.1.sslip.io`
   resolves to `127.0.0.1` on every OS without touching `/etc/hosts` or local
   DNS. A custom base domain can be configured with `proxy up --domain`.
-- A local certificate authority is generated once and used to issue a
-  wildcard certificate, so all instances get valid HTTPS after trusting the
-  CA a single time (`proxy trust`).
+- Certificates: when [mkcert](https://github.com/FiloSottile/mkcert) is
+  installed, the wildcard certificate is issued by your existing mkcert root
+  CA — if you ever ran `mkcert -install`, HTTPS is trusted immediately with no
+  extra prompts. Without mkcert, shopware-cli generates its own local CA which
+  you trust once via `proxy trust` (set `SHOPWARE_CLI_PROXY_DISABLE_MKCERT=1`
+  to force this even with mkcert installed).
 - Per project, a small `docker-compose.override.yml` attaches the `web`
   service to the proxy network and sets the Traefik routing labels. `APP_URL`
   in `.env.local` and `url` in `.shopware-project.yml` are updated to match.
@@ -27,7 +30,7 @@ HTTPS that works for payment provider testing.
 ```bash
 # once per machine
 shopware-cli project proxy up      # start the shared proxy
-shopware-cli project proxy trust   # trust the local CA (browsers show a green lock)
+shopware-cli project proxy trust   # trust the CA (skip if you already ran "mkcert -install")
 
 # once per project (inside the project directory)
 shopware-cli project proxy add
@@ -72,9 +75,9 @@ user config directory under `shopware-cli/proxy` and can be overridden with
   corporate resolvers block DNS answers pointing to private IPs ("DNS
   rebinding protection"); use `--domain` with a hosts-file entry or a local
   resolver in that case.
-- Firefox uses its own trust store. Either enable
-  `security.enterprise_roots.enabled` in `about:config` or import the CA
-  (path is printed by `proxy trust`) manually.
+- Firefox and Chromium on Linux use NSS trust stores. `proxy trust` handles
+  them when `certutil` (libnss3-tools) is installed — with mkcert this is
+  covered by `mkcert -install` directly.
 - The storefront/admin watchers still use their dedicated ports (5173, 8080,
   9998, …) and are not routed through the proxy yet.
 - Non-Docker setups (Symfony CLI) are not supported yet; the proxy requires a

@@ -5,9 +5,10 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"runtime"
 	"strings"
+
+	"github.com/smallstep/truststore"
 )
 
 // TrustInstructions returns manual steps to trust the local CA on the current
@@ -24,109 +25,45 @@ func TrustInstructions(caPath string) string {
 	}
 }
 
-// InstallTrust tries to install the local CA into the system (and, where
-// possible, browser) trust stores. It returns a human readable summary of
-// what happened.
-func InstallTrust(ctx context.Context, caPath string) (string, error) {
-	switch runtime.GOOS {
-	case "darwin":
-		return installTrustDarwin(ctx, caPath)
-	case "windows":
-		return installTrustWindows(ctx, caPath)
-	case "linux":
-		return installTrustLinux(ctx, caPath)
-	default:
-		return "", fmt.Errorf("automatic trust installation is not supported on %s, install manually:\n%s", runtime.GOOS, TrustInstructions(caPath))
-	}
-}
+// InstallTrust installs the CA used by the proxy into the system and browser
+// trust stores. With mkcert installed this delegates to "mkcert -install",
+// otherwise the shopware-cli CA is installed via the truststore library
+// (the same code mkcert is built on). It returns a human readable summary.
+func InstallTrust(ctx context.Context, dir string) (string, error) {
+	if MkcertAvailable() {
+		cmd := exec.CommandContext(ctx, "mkcert", "-install")
+		cmd.Stdin = os.Stdin
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
 
-func installTrustDarwin(ctx context.Context, caPath string) (string, error) {
-	cmd := exec.CommandContext(ctx, "sudo", "security", "add-trusted-cert", "-d", "-r", "trustRoot", "-k", "/Library/Keychains/System.keychain", caPath)
-	cmd.Stdin = os.Stdin
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-
-	if err := cmd.Run(); err != nil {
-		return "", fmt.Errorf("installing the CA into the system keychain failed: %w", err)
-	}
-
-	return "The CA was added to the system keychain. Firefox uses its own trust store, enable security.enterprise_roots.enabled in about:config or import the CA manually.", nil
-}
-
-func installTrustWindows(ctx context.Context, caPath string) (string, error) {
-	cmd := exec.CommandContext(ctx, "certutil", "-addstore", "-f", "ROOT", caPath)
-	cmd.Stdin = os.Stdin
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-
-	if err := cmd.Run(); err != nil {
-		return "", fmt.Errorf("installing the CA into the Windows root store failed (run the command from an elevated terminal): %w", err)
-	}
-
-	return "The CA was added to the Windows root store. Firefox uses its own trust store, enable security.enterprise_roots.enabled in about:config or import the CA manually.", nil
-}
-
-func installTrustLinux(ctx context.Context, caPath string) (string, error) {
-	var messages []string
-
-	systemTarget := ""
-	updateCommand := []string{}
-
-	switch {
-	case dirExists("/usr/local/share/ca-certificates"):
-		systemTarget = "/usr/local/share/ca-certificates/shopware-cli-ca.crt"
-		updateCommand = []string{"update-ca-certificates"}
-	case dirExists("/etc/pki/ca-trust/source/anchors"):
-		systemTarget = "/etc/pki/ca-trust/source/anchors/shopware-cli-ca.pem"
-		updateCommand = []string{"update-ca-trust"}
-	}
-
-	if systemTarget != "" {
-		copyCmd := exec.CommandContext(ctx, "sudo", "cp", caPath, systemTarget)
-		copyCmd.Stdin = os.Stdin
-		copyCmd.Stdout = os.Stdout
-		copyCmd.Stderr = os.Stderr
-
-		if err := copyCmd.Run(); err != nil {
-			return "", fmt.Errorf("copying the CA into the system trust store failed: %w", err)
+		if err := cmd.Run(); err != nil {
+			return "", fmt.Errorf("mkcert -install failed: %w", err)
 		}
 
-		update := exec.CommandContext(ctx, "sudo", updateCommand[0])
-		update.Stdin = os.Stdin
-		update.Stdout = os.Stdout
-		update.Stderr = os.Stderr
+		return "The mkcert root CA is installed, certificates issued by it are trusted.", nil
+	}
 
-		if err := update.Run(); err != nil {
-			return "", fmt.Errorf("updating the system trust store failed: %w", err)
-		}
+	if _, err := EnsureCA(dir); err != nil {
+		return "", err
+	}
 
-		messages = append(messages, "The CA was added to the system trust store.")
+	caPath := CACertPath(dir)
+
+	if err := truststore.InstallFile(caPath); err != nil {
+		return "", fmt.Errorf("installing the CA into the system trust store failed: %w\n\nCA certificate: %s\nManual steps:\n%s", err, caPath, TrustInstructions(caPath))
+	}
+
+	messages := []string{"The CA was added to the system trust store."}
+
+	// Firefox (and Chromium on Linux) use NSS databases instead of the system
+	// store. This needs certutil (libnss3-tools / nss on Linux, nss via brew
+	// on macOS) and is best-effort.
+	if err := truststore.InstallFile(caPath, truststore.WithFirefox(), truststore.WithNoSystem()); err != nil {
+		messages = append(messages, fmt.Sprintf("The CA could not be added to NSS browser trust stores (Firefox/Chromium): %s", strings.TrimSpace(err.Error())))
+		messages = append(messages, "Either install certutil (libnss3-tools) and re-run, or import the CA in the browser manually: "+caPath)
 	} else {
-		messages = append(messages, "No known system trust store found, install manually:\n"+TrustInstructions(caPath))
-	}
-
-	// Chrome/Chromium and Firefox on Linux use NSS databases instead of the system store.
-	if _, err := exec.LookPath("certutil"); err == nil {
-		if home, err := os.UserHomeDir(); err == nil {
-			nssdb := filepath.Join(home, ".pki", "nssdb")
-			if dirExists(nssdb) {
-				cmd := exec.CommandContext(ctx, "certutil", "-A", "-d", "sql:"+nssdb, "-t", "C,,", "-n", "shopware-cli development CA", "-i", caPath)
-				if output, err := cmd.CombinedOutput(); err != nil {
-					messages = append(messages, fmt.Sprintf("Could not add the CA to the NSS database used by Chrome: %s", strings.TrimSpace(string(output))))
-				} else {
-					messages = append(messages, "The CA was added to the NSS database used by Chrome/Chromium.")
-				}
-			}
-		}
-	} else {
-		messages = append(messages, "certutil (libnss3-tools) is not installed, browsers like Chrome and Firefox need the CA imported manually.")
+		messages = append(messages, "The CA was added to the NSS trust stores used by Firefox/Chromium.")
 	}
 
 	return strings.Join(messages, "\n"), nil
-}
-
-func dirExists(path string) bool {
-	info, err := os.Stat(path)
-
-	return err == nil && info.IsDir()
 }

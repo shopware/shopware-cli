@@ -53,12 +53,8 @@ var projectProxyUpCmd = &cobra.Command{
 			return err
 		}
 
-		caCreated, err := proxy.EnsureCA(dir)
+		certInfo, err := proxy.EnsureCertificate(ctx, dir, proxy.CertHosts(settings.Domain, settings.Hosts))
 		if err != nil {
-			return err
-		}
-
-		if _, err := proxy.EnsureServerCert(dir, proxy.CertHosts(settings.Domain, settings.Hosts)); err != nil {
 			return err
 		}
 
@@ -77,8 +73,10 @@ var projectProxyUpCmd = &cobra.Command{
 		logger.Infof("Proxy is running, instances will be reachable at https://<name>.%s%s", settings.Domain, httpsPortSuffix(settings))
 		logger.Infof("Register a project by running \"shopware-cli project proxy add\" inside the project")
 
-		if caCreated {
-			logger.Infof("A local certificate authority was created. Run \"shopware-cli project proxy trust\" once so browsers accept the HTTPS certificates")
+		if certInfo.Mkcert {
+			logger.Infof("Certificates are issued by your mkcert root CA. If you never ran \"mkcert -install\", run \"shopware-cli project proxy trust\" once")
+		} else {
+			logger.Infof("Run \"shopware-cli project proxy trust\" once so browsers accept the HTTPS certificates (or install mkcert to reuse its CA)")
 		}
 
 		return nil
@@ -200,16 +198,12 @@ var projectProxyAddCmd = &cobra.Command{
 			}
 		}
 
-		if _, err := proxy.EnsureCA(dir); err != nil {
-			return err
-		}
-
-		certChanged, err := proxy.EnsureServerCert(dir, proxy.CertHosts(settings.Domain, settings.Hosts))
+		certInfo, err := proxy.EnsureCertificate(ctx, dir, proxy.CertHosts(settings.Domain, settings.Hosts))
 		if err != nil {
 			return err
 		}
 
-		if certChanged {
+		if certInfo.Changed {
 			if err := proxy.RestartContainer(ctx); err != nil {
 				return err
 			}
@@ -261,15 +255,9 @@ var projectProxyTrustCmd = &cobra.Command{
 			return err
 		}
 
-		if _, err := proxy.EnsureCA(dir); err != nil {
-			return err
-		}
-
-		caPath := proxy.CACertPath(dir)
-
-		summary, err := proxy.InstallTrust(cmd.Context(), caPath)
+		summary, err := proxy.InstallTrust(cmd.Context(), dir)
 		if err != nil {
-			return fmt.Errorf("%w\n\nCA certificate: %s\nManual steps:\n%s", err, caPath, proxy.TrustInstructions(caPath))
+			return err
 		}
 
 		logging.FromContext(cmd.Context()).Infof("%s", summary)
