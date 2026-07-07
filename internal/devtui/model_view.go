@@ -101,7 +101,6 @@ func (m Model) renderDashboardFooter() string {
 			{Key: "↑/↓", Label: "Navigate"},
 			{Key: "enter", Label: "Select source"},
 			{Key: "pgup/pgdn", Label: "Scroll logs"},
-			{Key: "f", Label: "Follow logs"},
 			{Key: "tab", Label: "Next tab"},
 			{Key: "ctrl+c", Label: "Exit"},
 		}

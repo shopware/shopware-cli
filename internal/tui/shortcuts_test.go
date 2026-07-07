@@ -35,7 +35,6 @@ func TestShortcutBarFit_NarrowSeparatorsOn120Columns(t *testing.T) {
 	assert.LessOrEqual(t, lipgloss.Width(bar), 120)
 	assert.Equal(t, 1, lipgloss.Height(bar))
 	// All shortcuts survive; only the separators shrink.
-	assert.Contains(t, bar, "Follow logs")
 	assert.Contains(t, bar, "Exit")
 }
 
