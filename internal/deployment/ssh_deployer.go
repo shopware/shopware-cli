@@ -2,6 +2,7 @@ package deployment
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -10,6 +11,8 @@ import (
 	"slices"
 	"strings"
 	"time"
+
+	"golang.org/x/sync/errgroup"
 
 	"github.com/shopware/shopware-cli/internal/shop"
 	"github.com/shopware/shopware-cli/logging"
@@ -24,13 +27,20 @@ var (
 
 const defaultKeepReleases = 5
 
-// sshDeployer deploys a project using a releases/shared directory layout and an
-// atomically switched "current" symlink, similar to what Deployer (deployer.org) does.
+// deployHost is a single server of the deployment target.
+type deployHost struct {
+	name string
+	conn Connection
+}
+
+// sshDeployer deploys a project to one or more hosts using a releases/shared
+// directory layout and an atomically switched "current" symlink, similar to
+// what Deployer (deployer.org) does.
 type sshDeployer struct {
 	projectRoot string
 	deployPath  string
 	config      *shop.EnvironmentDeployment
-	conn        Connection
+	hosts       []deployHost
 
 	// injected for tests
 	now      func() time.Time
@@ -42,16 +52,30 @@ func newSSHDeployer(projectRoot string, env *shop.EnvironmentConfig, _ *shop.Con
 		return nil, fmt.Errorf("the environment is missing the deployment.path setting")
 	}
 
-	conn, err := newSSHConnection(env.SSH)
-	if err != nil {
-		return nil, err
+	if env.SSH == nil || env.SSH.Host == "" {
+		return nil, fmt.Errorf("the environment is missing the ssh.host setting")
+	}
+
+	var hosts []deployHost
+
+	for _, hostCfg := range env.SSH.AllHosts() {
+		conn, err := newSSHConnection(&hostCfg)
+		if err != nil {
+			for _, host := range hosts {
+				_ = host.conn.Close()
+			}
+
+			return nil, fmt.Errorf("host %s: %w", hostCfg.Host, err)
+		}
+
+		hosts = append(hosts, deployHost{name: hostCfg.Host, conn: conn})
 	}
 
 	return &sshDeployer{
 		projectRoot: projectRoot,
 		deployPath:  strings.TrimRight(env.Deployment.Path, "/"),
 		config:      env.Deployment,
-		conn:        conn,
+		hosts:       hosts,
 		now:         time.Now,
 		runLocal:    runLocalCommand,
 	}, nil
@@ -64,6 +88,15 @@ func runLocalCommand(ctx context.Context, dir string, command string) error {
 	cmd.Stderr = os.Stderr
 
 	return cmd.Run()
+}
+
+// logPrefix identifies the host in log output for multi-host targets.
+func (d *sshDeployer) logPrefix(host deployHost) string {
+	if len(d.hosts) == 1 {
+		return ""
+	}
+
+	return "[" + host.name + "] "
 }
 
 func (d *sshDeployer) sharedFiles() []string {
@@ -118,48 +151,51 @@ func (d *sshDeployer) Deploy(ctx context.Context, opts Options) error {
 	releaseName := d.now().UTC().Format("20060102150405")
 	releaseDir := path.Join(d.releasesPath(), releaseName)
 
-	logger.Infof("Preparing deployment structure in %s", d.deployPath)
+	// upload to all hosts in parallel, nothing is switched yet so a failing
+	// host aborts the deployment without affecting the running release
+	uploads, uploadCtx := errgroup.WithContext(ctx)
 
-	if _, err := d.conn.Run(ctx, fmt.Sprintf("mkdir -p %s %s", shQuote(d.releasesPath()), shQuote(d.sharedPath()))); err != nil {
+	for _, host := range d.hosts {
+		uploads.Go(func() error {
+			if err := d.prepareHost(uploadCtx, host, releaseName, releaseDir); err != nil {
+				return fmt.Errorf("host %s: %w", host.name, err)
+			}
+
+			return nil
+		})
+	}
+
+	if err := uploads.Wait(); err != nil {
 		return err
 	}
 
-	if _, err := d.conn.Run(ctx, fmt.Sprintf("[ ! -e %[1]s ] || [ -L %[1]s ]", shQuote(d.currentPath()))); err != nil {
-		return fmt.Errorf("%s exists but is not a symlink, refusing to deploy into an unmanaged directory", d.currentPath())
+	// hooks run host after host so database work (e.g. migrations run by the
+	// deployment helper) never executes concurrently
+	for _, host := range d.hosts {
+		if err := d.runPreSwitchHooks(ctx, host, releaseDir); err != nil {
+			return fmt.Errorf("host %s: %w", host.name, err)
+		}
 	}
 
-	if _, err := d.conn.Run(ctx, fmt.Sprintf("mkdir -p %s", shQuote(releaseDir))); err != nil {
-		return err
+	// every host finished its setup, now switch them all
+	for _, host := range d.hosts {
+		logger.Infof("%sSwitching %s to release %s", d.logPrefix(host), d.currentPath(), releaseName)
+
+		if err := d.switchCurrent(ctx, host, releaseDir); err != nil {
+			return fmt.Errorf("host %s: %w", host.name, err)
+		}
 	}
 
-	logger.Infof("Uploading project to release %s", releaseName)
-
-	if err := d.upload(ctx, releaseDir); err != nil {
-		return err
+	for _, host := range d.hosts {
+		if err := d.runHooks(ctx, host, d.config.Hooks.PostSwitch, d.currentPath()); err != nil {
+			return fmt.Errorf("host %s: %w", host.name, err)
+		}
 	}
 
-	logger.Infof("Linking shared files and directories")
-
-	if err := d.linkShared(ctx, releaseDir); err != nil {
-		return err
-	}
-
-	if err := d.runPreSwitchHooks(ctx, releaseDir); err != nil {
-		return err
-	}
-
-	logger.Infof("Switching %s to release %s", d.currentPath(), releaseName)
-
-	if err := d.switchCurrent(ctx, releaseDir); err != nil {
-		return err
-	}
-
-	if err := d.runHooks(ctx, d.config.Hooks.PostSwitch, d.currentPath()); err != nil {
-		return err
-	}
-
-	if err := d.cleanupReleases(ctx); err != nil {
-		logger.Warnf("Cleanup of old releases failed: %v", err)
+	for _, host := range d.hosts {
+		if err := d.cleanupReleases(ctx, host); err != nil {
+			logger.Warnf("%sCleanup of old releases failed: %v", d.logPrefix(host), err)
+		}
 	}
 
 	logger.Infof("Deployed release %s", releaseName)
@@ -167,7 +203,37 @@ func (d *sshDeployer) Deploy(ctx context.Context, opts Options) error {
 	return nil
 }
 
-func (d *sshDeployer) upload(ctx context.Context, releaseDir string) error {
+// prepareHost creates the release on a single host: directory structure,
+// upload and shared symlinks.
+func (d *sshDeployer) prepareHost(ctx context.Context, host deployHost, releaseName, releaseDir string) error {
+	logger := logging.FromContext(ctx)
+
+	logger.Infof("%sPreparing deployment structure in %s", d.logPrefix(host), d.deployPath)
+
+	if _, err := host.conn.Run(ctx, fmt.Sprintf("mkdir -p %s %s", shQuote(d.releasesPath()), shQuote(d.sharedPath()))); err != nil {
+		return err
+	}
+
+	if _, err := host.conn.Run(ctx, fmt.Sprintf("[ ! -e %[1]s ] || [ -L %[1]s ]", shQuote(d.currentPath()))); err != nil {
+		return fmt.Errorf("%s exists but is not a symlink, refusing to deploy into an unmanaged directory", d.currentPath())
+	}
+
+	if _, err := host.conn.Run(ctx, fmt.Sprintf("mkdir -p %s", shQuote(releaseDir))); err != nil {
+		return err
+	}
+
+	logger.Infof("%sUploading project to release %s", d.logPrefix(host), releaseName)
+
+	if err := d.upload(ctx, host, releaseDir); err != nil {
+		return err
+	}
+
+	logger.Infof("%sLinking shared files and directories", d.logPrefix(host))
+
+	return d.linkShared(ctx, host, releaseDir)
+}
+
+func (d *sshDeployer) upload(ctx context.Context, host deployHost, releaseDir string) error {
 	exclude := slices.Concat(d.config.Exclude, d.sharedDirs(), d.sharedFiles())
 
 	reader, writer := io.Pipe()
@@ -176,34 +242,35 @@ func (d *sshDeployer) upload(ctx context.Context, releaseDir string) error {
 		writer.CloseWithError(writeProjectArchive(writer, d.projectRoot, exclude))
 	}()
 
-	if err := d.conn.Stream(ctx, fmt.Sprintf("tar -xzpf - -C %s", shQuote(releaseDir)), reader); err != nil {
+	if err := host.conn.Stream(ctx, fmt.Sprintf("tar -xzpf - -C %s", shQuote(releaseDir)), reader); err != nil {
 		_ = reader.CloseWithError(err)
 		return fmt.Errorf("upload failed: %w", err)
 	}
 
 	// var/cache and var/log are excluded from the upload but Shopware expects them
-	_, err := d.conn.Run(ctx, fmt.Sprintf("mkdir -p %s %s", shQuote(path.Join(releaseDir, "var", "cache")), shQuote(path.Join(releaseDir, "var", "log"))))
+	_, err := host.conn.Run(ctx, fmt.Sprintf("mkdir -p %s %s", shQuote(path.Join(releaseDir, "var", "cache")), shQuote(path.Join(releaseDir, "var", "log"))))
 
 	return err
 }
 
-func (d *sshDeployer) linkShared(ctx context.Context, releaseDir string) error {
+func (d *sshDeployer) linkShared(ctx context.Context, host deployHost, releaseDir string) error {
 	for _, dir := range d.sharedDirs() {
 		dir = strings.Trim(dir, "/")
 		sharedTarget := path.Join(d.sharedPath(), dir)
 		releasePath := path.Join(releaseDir, dir)
 
-		// seed the shared directory from the release on first deployment, afterwards
-		// drop the uploaded variant and replace it with a symlink into shared/
+		// seed the shared directory from the release on first deployment (best
+		// effort), afterwards drop the uploaded variant and replace it with a
+		// symlink into shared/
 		script := fmt.Sprintf(
-			"if [ -d %[2]s ] && [ ! -e %[1]s ]; then mkdir -p %[3]s && mv %[2]s %[1]s; fi && mkdir -p %[1]s && rm -rf %[2]s && mkdir -p %[4]s && ln -s %[1]s %[2]s",
+			"if [ -d %[2]s ] && [ ! -e %[1]s ]; then mkdir -p %[3]s && { mv %[2]s %[1]s || true; }; fi && mkdir -p %[1]s && rm -rf %[2]s && mkdir -p %[4]s && ln -sfn %[1]s %[2]s",
 			shQuote(sharedTarget),
 			shQuote(releasePath),
 			shQuote(path.Dir(sharedTarget)),
 			shQuote(path.Dir(releasePath)),
 		)
 
-		if _, err := d.conn.Run(ctx, script); err != nil {
+		if _, err := host.conn.Run(ctx, script); err != nil {
 			return fmt.Errorf("cannot link shared directory %s: %w", dir, err)
 		}
 	}
@@ -214,14 +281,14 @@ func (d *sshDeployer) linkShared(ctx context.Context, releaseDir string) error {
 		releasePath := path.Join(releaseDir, file)
 
 		script := fmt.Sprintf(
-			"mkdir -p %[3]s && if [ -f %[2]s ] && [ ! -e %[1]s ]; then mv %[2]s %[1]s; fi && if [ ! -e %[1]s ]; then touch %[1]s; fi && rm -f %[2]s && mkdir -p %[4]s && ln -s %[1]s %[2]s",
+			"mkdir -p %[3]s && if [ -f %[2]s ] && [ ! -e %[1]s ]; then mv %[2]s %[1]s || true; fi && if [ ! -e %[1]s ]; then touch %[1]s; fi && rm -f %[2]s && mkdir -p %[4]s && ln -sfn %[1]s %[2]s",
 			shQuote(sharedTarget),
 			shQuote(releasePath),
 			shQuote(path.Dir(sharedTarget)),
 			shQuote(path.Dir(releasePath)),
 		)
 
-		if _, err := d.conn.Run(ctx, script); err != nil {
+		if _, err := host.conn.Run(ctx, script); err != nil {
 			return fmt.Errorf("cannot link shared file %s: %w", file, err)
 		}
 	}
@@ -229,65 +296,90 @@ func (d *sshDeployer) linkShared(ctx context.Context, releaseDir string) error {
 	return nil
 }
 
-func (d *sshDeployer) runPreSwitchHooks(ctx context.Context, releaseDir string) error {
+func (d *sshDeployer) runPreSwitchHooks(ctx context.Context, host deployHost, releaseDir string) error {
 	if len(d.config.Hooks.PreSwitch) > 0 {
-		return d.runHooks(ctx, d.config.Hooks.PreSwitch, releaseDir)
+		return d.runHooks(ctx, host, d.config.Hooks.PreSwitch, releaseDir)
 	}
 
-	output, err := d.conn.Run(ctx, fmt.Sprintf("test -f %s && echo found || true", shQuote(path.Join(releaseDir, "vendor", "bin", "shopware-deployment-helper"))))
+	output, err := host.conn.Run(ctx, fmt.Sprintf("test -f %s && echo found || true", shQuote(path.Join(releaseDir, "vendor", "bin", "shopware-deployment-helper"))))
 	if err != nil {
 		return err
 	}
 
 	if !strings.Contains(output, "found") {
-		logging.FromContext(ctx).Warnf("No pre_switch hooks configured and vendor/bin/shopware-deployment-helper is missing, skipping application setup. Consider requiring shopware/deployment-helper in your project")
+		logging.FromContext(ctx).Warnf("%sNo pre_switch hooks configured and vendor/bin/shopware-deployment-helper is missing, skipping application setup. Consider requiring shopware/deployment-helper in your project", d.logPrefix(host))
 		return nil
 	}
 
-	return d.runHooks(ctx, []string{"vendor/bin/shopware-deployment-helper run"}, releaseDir)
+	return d.runHooks(ctx, host, []string{"vendor/bin/shopware-deployment-helper run"}, releaseDir)
 }
 
-func (d *sshDeployer) runHooks(ctx context.Context, hooks []string, dir string) error {
+func (d *sshDeployer) runHooks(ctx context.Context, host deployHost, hooks []string, dir string) error {
 	for _, hook := range hooks {
-		logging.FromContext(ctx).Infof("Running remote hook: %s", hook)
+		logging.FromContext(ctx).Infof("%sRunning remote hook: %s", d.logPrefix(host), hook)
 
-		output, err := d.conn.Run(ctx, fmt.Sprintf("cd %s && { %s; }", shQuote(dir), hook))
+		output, err := host.conn.Run(ctx, fmt.Sprintf("cd %s && { %s; }", shQuote(dir), hook))
 		if err != nil {
 			return fmt.Errorf("remote hook %q failed: %w", hook, err)
 		}
 
 		if trimmed := strings.TrimSpace(output); trimmed != "" {
-			logging.FromContext(ctx).Infof("%s", trimmed)
+			logging.FromContext(ctx).Infof("%s%s", d.logPrefix(host), trimmed)
 		}
 	}
 
 	return nil
 }
 
-func (d *sshDeployer) switchCurrent(ctx context.Context, releaseDir string) error {
+func (d *sshDeployer) switchCurrent(ctx context.Context, host deployHost, releaseDir string) error {
 	tmpLink := d.currentPath() + ".tmp"
 
 	// creating a new symlink and renaming it over the old one is atomic,
 	// ln -sfn on its own is not
-	_, err := d.conn.Run(ctx, fmt.Sprintf("ln -sfn %s %s && mv -fT %s %s", shQuote(releaseDir), shQuote(tmpLink), shQuote(tmpLink), shQuote(d.currentPath())))
+	_, err := host.conn.Run(ctx, fmt.Sprintf("ln -sfn %s %s && mv -fT %s %s", shQuote(releaseDir), shQuote(tmpLink), shQuote(tmpLink), shQuote(d.currentPath())))
 
 	return err
 }
 
-func (d *sshDeployer) Releases(ctx context.Context) ([]Release, error) {
-	output, err := d.conn.Run(ctx, fmt.Sprintf("ls -1 %s 2>/dev/null || true", shQuote(d.releasesPath())))
+func (d *sshDeployer) Releases(ctx context.Context) ([]HostReleases, error) {
+	result := make([]HostReleases, len(d.hosts))
+
+	group, groupCtx := errgroup.WithContext(ctx)
+
+	for i, host := range d.hosts {
+		group.Go(func() error {
+			releases, err := d.hostReleases(groupCtx, host)
+			if err != nil {
+				return fmt.Errorf("host %s: %w", host.name, err)
+			}
+
+			result[i] = HostReleases{Host: host.name, Releases: releases}
+
+			return nil
+		})
+	}
+
+	if err := group.Wait(); err != nil {
+		return nil, err
+	}
+
+	return result, nil
+}
+
+func (d *sshDeployer) hostReleases(ctx context.Context, host deployHost) ([]Release, error) {
+	output, err := host.conn.Run(ctx, fmt.Sprintf("ls -1 %s 2>/dev/null || true", shQuote(d.releasesPath())))
 	if err != nil {
 		return nil, err
 	}
 
-	activeOutput, err := d.conn.Run(ctx, fmt.Sprintf("readlink %s 2>/dev/null || true", shQuote(d.currentPath())))
+	activeOutput, err := host.conn.Run(ctx, fmt.Sprintf("readlink %s 2>/dev/null || true", shQuote(d.currentPath())))
 	if err != nil {
 		return nil, err
 	}
 
 	active := path.Base(strings.TrimSpace(activeOutput))
 
-	badOutput, err := d.conn.Run(ctx, fmt.Sprintf("ls -1 %s/*/%s 2>/dev/null || true", shQuote(d.releasesPath()), badReleaseMarker))
+	badOutput, err := host.conn.Run(ctx, fmt.Sprintf("ls -1 %s/*/%s 2>/dev/null || true", shQuote(d.releasesPath()), badReleaseMarker))
 	if err != nil {
 		return nil, err
 	}
@@ -325,10 +417,13 @@ func (d *sshDeployer) Releases(ctx context.Context) ([]Release, error) {
 func (d *sshDeployer) Rollback(ctx context.Context, target string) error {
 	logger := logging.FromContext(ctx)
 
-	releases, err := d.Releases(ctx)
+	hostReleases, err := d.Releases(ctx)
 	if err != nil {
 		return err
 	}
+
+	// the primary host decides which release to roll back to
+	releases := hostReleases[0].Releases
 
 	activeIdx := slices.IndexFunc(releases, func(r Release) bool { return r.Active })
 	if activeIdx == -1 {
@@ -354,25 +449,32 @@ func (d *sshDeployer) Rollback(ctx context.Context, target string) error {
 		if target == active.Name {
 			return fmt.Errorf("release %s is already active", target)
 		}
+	}
 
-		if !slices.ContainsFunc(releases, func(r Release) bool { return r.Name == target }) {
-			return fmt.Errorf("release %s does not exist on the server", target)
+	// every host must have the target before any host is switched
+	for _, hr := range hostReleases {
+		if !slices.ContainsFunc(hr.Releases, func(r Release) bool { return r.Name == target }) {
+			return fmt.Errorf("release %s does not exist on host %s", target, hr.Host)
 		}
 	}
 
 	logger.Infof("Rolling back from release %s to %s", active.Name, target)
 
-	if err := d.switchCurrent(ctx, path.Join(d.releasesPath(), target)); err != nil {
-		return err
+	for _, host := range d.hosts {
+		if err := d.switchCurrent(ctx, host, path.Join(d.releasesPath(), target)); err != nil {
+			return fmt.Errorf("host %s: %w", host.name, err)
+		}
+
+		// mark the release we rolled back from as bad so a later rollback skips it
+		if _, err := host.conn.Run(ctx, fmt.Sprintf("touch %s", shQuote(path.Join(d.releasesPath(), active.Name, badReleaseMarker)))); err != nil {
+			logger.Warnf("%sCannot mark release %s as bad: %v", d.logPrefix(host), active.Name, err)
+		}
 	}
 
-	// mark the release we rolled back from as bad so a later rollback skips it
-	if _, err := d.conn.Run(ctx, fmt.Sprintf("touch %s", shQuote(path.Join(d.releasesPath(), active.Name, badReleaseMarker)))); err != nil {
-		logger.Warnf("Cannot mark release %s as bad: %v", active.Name, err)
-	}
-
-	if err := d.runHooks(ctx, d.config.Hooks.PostSwitch, d.currentPath()); err != nil {
-		return err
+	for _, host := range d.hosts {
+		if err := d.runHooks(ctx, host, d.config.Hooks.PostSwitch, d.currentPath()); err != nil {
+			return fmt.Errorf("host %s: %w", host.name, err)
+		}
 	}
 
 	logger.Infof("Rolled back to release %s", target)
@@ -380,8 +482,8 @@ func (d *sshDeployer) Rollback(ctx context.Context, target string) error {
 	return nil
 }
 
-func (d *sshDeployer) cleanupReleases(ctx context.Context) error {
-	releases, err := d.Releases(ctx)
+func (d *sshDeployer) cleanupReleases(ctx context.Context, host deployHost) error {
+	releases, err := d.hostReleases(ctx, host)
 	if err != nil {
 		return err
 	}
@@ -399,9 +501,9 @@ func (d *sshDeployer) cleanupReleases(ctx context.Context) error {
 			continue
 		}
 
-		logging.FromContext(ctx).Infof("Removing old release %s", release.Name)
+		logging.FromContext(ctx).Infof("%sRemoving old release %s", d.logPrefix(host), release.Name)
 
-		if _, err := d.conn.Run(ctx, fmt.Sprintf("rm -rf %s", shQuote(path.Join(d.releasesPath(), release.Name)))); err != nil {
+		if _, err := host.conn.Run(ctx, fmt.Sprintf("rm -rf %s", shQuote(path.Join(d.releasesPath(), release.Name)))); err != nil {
 			return err
 		}
 	}
@@ -410,5 +512,13 @@ func (d *sshDeployer) cleanupReleases(ctx context.Context) error {
 }
 
 func (d *sshDeployer) Close() error {
-	return d.conn.Close()
+	var errs []error
+
+	for _, host := range d.hosts {
+		if err := host.conn.Close(); err != nil {
+			errs = append(errs, err)
+		}
+	}
+
+	return errors.Join(errs...)
 }

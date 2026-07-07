@@ -20,6 +20,14 @@ type Release struct {
 	Bad bool
 }
 
+// HostReleases are the releases found on a single host of the target.
+type HostReleases struct {
+	// Host the releases were found on
+	Host string
+	// Releases on the host, sorted from oldest to newest
+	Releases []Release
+}
+
 // Options controls a single deployment run.
 type Options struct {
 	// SkipBuildHooks skips the local build hooks before the upload
@@ -30,11 +38,11 @@ type Options struct {
 type Deployer interface {
 	// Deploy uploads the project as a new release and switches to it
 	Deploy(ctx context.Context, opts Options) error
-	// Rollback switches back to a previous release. When release is empty,
-	// the release deployed before the currently active one is used.
+	// Rollback switches back to a previous release on all hosts. When release
+	// is empty, the release deployed before the currently active one is used.
 	Rollback(ctx context.Context, release string) error
-	// Releases lists the releases available on the target
-	Releases(ctx context.Context) ([]Release, error)
+	// Releases lists the releases available on each host of the target
+	Releases(ctx context.Context) ([]HostReleases, error)
 	// Close releases all resources held by the deployer
 	Close() error
 }

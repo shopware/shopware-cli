@@ -16,26 +16,36 @@ var projectDeployReleasesCmd = &cobra.Command{
 		}
 		defer cleanup()
 
-		releases, err := deployer.Releases(cmd.Context())
+		hostReleases, err := deployer.Releases(cmd.Context())
 		if err != nil {
 			return err
 		}
 
-		if len(releases) == 0 {
-			fmt.Fprintln(cmd.OutOrStdout(), "No releases found")
-			return nil
-		}
+		for i, hr := range hostReleases {
+			if len(hostReleases) > 1 {
+				if i > 0 {
+					fmt.Fprintln(cmd.OutOrStdout())
+				}
 
-		for _, release := range releases {
-			marker := ""
-			if release.Active {
-				marker = " (active)"
-			}
-			if release.Bad {
-				marker += " (bad)"
+				fmt.Fprintf(cmd.OutOrStdout(), "Host %s:\n", hr.Host)
 			}
 
-			fmt.Fprintf(cmd.OutOrStdout(), "%s%s\n", release.Name, marker)
+			if len(hr.Releases) == 0 {
+				fmt.Fprintln(cmd.OutOrStdout(), "No releases found")
+				continue
+			}
+
+			for _, release := range hr.Releases {
+				marker := ""
+				if release.Active {
+					marker = " (active)"
+				}
+				if release.Bad {
+					marker += " (bad)"
+				}
+
+				fmt.Fprintf(cmd.OutOrStdout(), "%s%s\n", release.Name, marker)
+			}
 		}
 
 		return nil

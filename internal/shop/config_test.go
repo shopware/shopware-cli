@@ -740,3 +740,43 @@ environments:
 	assert.Equal(t, []string{"vendor/bin/shopware-deployment-helper run"}, env.Deployment.Hooks.PreSwitch)
 	assert.Equal(t, []string{"php bin/console cache:pool:clear cache.http"}, env.Deployment.Hooks.PostSwitch)
 }
+
+func TestEnvironmentSSHAllHosts(t *testing.T) {
+	ssh := &EnvironmentSSH{
+		Host:         "web1.example.com",
+		Port:         2222,
+		User:         "deploy",
+		IdentityFile: "~/.ssh/id_ed25519",
+		Hosts: []EnvironmentSSHHost{
+			{Host: "web2.example.com"},
+			{Host: "web3.example.com", Port: 22, User: "other"},
+		},
+	}
+
+	hosts := ssh.AllHosts()
+
+	assert.Len(t, hosts, 3)
+
+	assert.Equal(t, "web1.example.com", hosts[0].Host)
+	assert.Empty(t, hosts[0].Hosts)
+
+	// inherited settings
+	assert.Equal(t, "web2.example.com", hosts[1].Host)
+	assert.Equal(t, 2222, hosts[1].Port)
+	assert.Equal(t, "deploy", hosts[1].User)
+	assert.Equal(t, "~/.ssh/id_ed25519", hosts[1].IdentityFile)
+
+	// per-host overrides
+	assert.Equal(t, "web3.example.com", hosts[2].Host)
+	assert.Equal(t, 22, hosts[2].Port)
+	assert.Equal(t, "other", hosts[2].User)
+	assert.Equal(t, "~/.ssh/id_ed25519", hosts[2].IdentityFile)
+}
+
+func TestEnvironmentSSHAllHostsSingle(t *testing.T) {
+	ssh := &EnvironmentSSH{Host: "web1.example.com", User: "deploy"}
+
+	hosts := ssh.AllHosts()
+	assert.Len(t, hosts, 1)
+	assert.Equal(t, "web1.example.com", hosts[0].Host)
+}

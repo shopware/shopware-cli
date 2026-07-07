@@ -54,6 +54,12 @@ func (f *fakeConnection) Close() error {
 func newTestDeployer(t *testing.T, conn *fakeConnection, cfg *shop.EnvironmentDeployment) *sshDeployer {
 	t.Helper()
 
+	return newMultiHostTestDeployer(t, []deployHost{{name: "server1", conn: conn}}, cfg)
+}
+
+func newMultiHostTestDeployer(t *testing.T, hosts []deployHost, cfg *shop.EnvironmentDeployment) *sshDeployer {
+	t.Helper()
+
 	if cfg == nil {
 		cfg = &shop.EnvironmentDeployment{}
 	}
@@ -62,7 +68,7 @@ func newTestDeployer(t *testing.T, conn *fakeConnection, cfg *shop.EnvironmentDe
 		projectRoot: t.TempDir(),
 		deployPath:  "/var/www/shop",
 		config:      cfg,
-		conn:        conn,
+		hosts:       hosts,
 		now:         func() time.Time { return time.Date(2026, 7, 7, 12, 30, 45, 0, time.UTC) },
 		runLocal:    func(context.Context, string, string) error { return nil },
 	}
@@ -109,7 +115,7 @@ func TestDeployLinksDefaultSharedPaths(t *testing.T) {
 	err := deployer.Deploy(t.Context(), Options{})
 	assert.NoError(t, err)
 
-	links := commandsContaining(conn.commands, "ln -s '/var/www/shop/shared/")
+	links := commandsContaining(conn.commands, "ln -sfn '/var/www/shop/shared/")
 
 	assert.Len(t, links, len(defaultSharedDirs)+len(defaultSharedFiles))
 	assert.NotEmpty(t, commandsContaining(links, "'/var/www/shop/shared/public/media'"))
@@ -222,10 +228,15 @@ func TestReleases(t *testing.T) {
 	releases, err := deployer.Releases(t.Context())
 	assert.NoError(t, err)
 
-	assert.Equal(t, []Release{
-		{Name: "1"},
-		{Name: "2", Active: true},
-		{Name: "3", Bad: true},
+	assert.Equal(t, []HostReleases{
+		{
+			Host: "server1",
+			Releases: []Release{
+				{Name: "1"},
+				{Name: "2", Active: true},
+				{Name: "3", Bad: true},
+			},
+		},
 	}, releases)
 }
 
@@ -341,4 +352,102 @@ func TestNewSSHDeployerRequiresDeploymentPath(t *testing.T) {
 func TestShQuote(t *testing.T) {
 	assert.Equal(t, "'/var/www'", shQuote("/var/www"))
 	assert.Equal(t, `'it'\''s'`, shQuote("it's"))
+}
+
+func TestMultiHostDeployRunsOnAllHosts(t *testing.T) {
+	conn1 := &fakeConnection{}
+	conn2 := &fakeConnection{}
+	deployer := newMultiHostTestDeployer(t, []deployHost{
+		{name: "web1", conn: conn1},
+		{name: "web2", conn: conn2},
+	}, &shop.EnvironmentDeployment{
+		Hooks: shop.EnvironmentDeploymentHooks{
+			PreSwitch:  []string{"echo setup"},
+			PostSwitch: []string{"echo done"},
+		},
+	})
+
+	err := deployer.Deploy(t.Context(), Options{})
+	assert.NoError(t, err)
+
+	for _, conn := range []*fakeConnection{conn1, conn2} {
+		assert.Equal(t, []string{"tar -xzpf - -C '/var/www/shop/releases/20260707123045'"}, conn.streamed)
+		assert.Contains(t, conn.commands, "cd '/var/www/shop/releases/20260707123045' && { echo setup; }")
+		assert.Contains(t, conn.commands, "ln -sfn '/var/www/shop/releases/20260707123045' '/var/www/shop/current.tmp' && mv -fT '/var/www/shop/current.tmp' '/var/www/shop/current'")
+		assert.Contains(t, conn.commands, "cd '/var/www/shop/current' && { echo done; }")
+	}
+}
+
+func TestMultiHostDeployAbortsBeforeSwitchWhenHostFails(t *testing.T) {
+	conn1 := &fakeConnection{}
+	conn2 := &fakeConnection{
+		failures: map[string]error{"echo setup": fmt.Errorf("exit 1")},
+	}
+	deployer := newMultiHostTestDeployer(t, []deployHost{
+		{name: "web1", conn: conn1},
+		{name: "web2", conn: conn2},
+	}, &shop.EnvironmentDeployment{
+		Hooks: shop.EnvironmentDeploymentHooks{PreSwitch: []string{"echo setup"}},
+	})
+
+	err := deployer.Deploy(t.Context(), Options{})
+	assert.ErrorContains(t, err, "host web2")
+
+	// no host was switched, the running release stays untouched everywhere
+	assert.Empty(t, commandsContaining(conn1.commands, "mv -fT"))
+	assert.Empty(t, commandsContaining(conn2.commands, "mv -fT"))
+}
+
+func TestMultiHostRollbackRequiresReleaseOnAllHosts(t *testing.T) {
+	conn1 := &fakeConnection{
+		responses: map[string]string{
+			"ls -1 '/var/www/shop/releases' 2>/dev/null": "1\n2\n",
+			"readlink": "/var/www/shop/releases/2\n",
+		},
+	}
+	conn2 := &fakeConnection{
+		responses: map[string]string{
+			"ls -1 '/var/www/shop/releases' 2>/dev/null": "2\n",
+			"readlink": "/var/www/shop/releases/2\n",
+		},
+	}
+	deployer := newMultiHostTestDeployer(t, []deployHost{
+		{name: "web1", conn: conn1},
+		{name: "web2", conn: conn2},
+	}, nil)
+
+	err := deployer.Rollback(t.Context(), "")
+	assert.ErrorContains(t, err, "release 1 does not exist on host web2")
+
+	assert.Empty(t, commandsContaining(conn1.commands, "mv -fT"))
+	assert.Empty(t, commandsContaining(conn2.commands, "mv -fT"))
+}
+
+func TestMultiHostRollbackSwitchesAllHosts(t *testing.T) {
+	responses := map[string]string{
+		"ls -1 '/var/www/shop/releases' 2>/dev/null": "1\n2\n",
+		"readlink": "/var/www/shop/releases/2\n",
+	}
+	conn1 := &fakeConnection{responses: responses}
+	conn2 := &fakeConnection{responses: responses}
+	deployer := newMultiHostTestDeployer(t, []deployHost{
+		{name: "web1", conn: conn1},
+		{name: "web2", conn: conn2},
+	}, nil)
+
+	err := deployer.Rollback(t.Context(), "")
+	assert.NoError(t, err)
+
+	for _, conn := range []*fakeConnection{conn1, conn2} {
+		assert.Contains(t, conn.commands, "ln -sfn '/var/www/shop/releases/1' '/var/www/shop/current.tmp' && mv -fT '/var/www/shop/current.tmp' '/var/www/shop/current'")
+		assert.Contains(t, conn.commands, "touch '/var/www/shop/releases/2/BAD_RELEASE'")
+	}
+}
+
+func TestNewSSHDeployerRequiresHost(t *testing.T) {
+	_, err := newSSHDeployer(t.TempDir(), &shop.EnvironmentConfig{
+		Type:       "ssh",
+		Deployment: &shop.EnvironmentDeployment{Path: "/var/www/shop"},
+	}, &shop.Config{})
+	assert.ErrorContains(t, err, "ssh.host")
 }

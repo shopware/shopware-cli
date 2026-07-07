@@ -735,6 +735,13 @@
           "type": "string",
           "description": "Hostname or IP address of the server"
         },
+        "hosts": {
+          "items": {
+            "$ref": "#/$defs/EnvironmentSSHHost"
+          },
+          "type": "array",
+          "description": "Additional hosts for multi-server deployments. Each entry inherits unset settings (port, user, authentication) from this block"
+        },
         "port": {
           "type": "integer",
           "description": "SSH port, defaults to 22"
@@ -770,6 +777,40 @@
         "host"
       ],
       "description": "EnvironmentSSH holds the SSH connection settings of an environment."
+    },
+    "EnvironmentSSHHost": {
+      "properties": {
+        "host": {
+          "type": "string",
+          "description": "Hostname or IP address of the server"
+        },
+        "port": {
+          "type": "integer",
+          "description": "SSH port, inherited from the ssh block when empty"
+        },
+        "user": {
+          "type": "string",
+          "description": "User to connect as, inherited from the ssh block when empty"
+        },
+        "password": {
+          "type": "string",
+          "description": "Password for password based authentication, inherited from the ssh block when empty"
+        },
+        "identity_file": {
+          "type": "string",
+          "description": "Path to the private key used for authentication, inherited from the ssh block when empty"
+        },
+        "passphrase": {
+          "type": "string",
+          "description": "Passphrase for the private key, inherited from the ssh block when empty"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "required": [
+        "host"
+      ],
+      "description": "EnvironmentSSHHost is an additional host of a multi-server environment."
     }
   }
 }

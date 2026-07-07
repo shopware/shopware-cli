@@ -30,9 +30,13 @@ type EnvironmentConfig struct {
 }
 
 // EnvironmentSSH holds the SSH connection settings of an environment.
+// It describes the primary host; additional hosts for multi-server setups can
+// be listed under hosts and inherit all unset settings from this block.
 type EnvironmentSSH struct {
 	// Hostname or IP address of the server
 	Host string `yaml:"host" jsonschema:"required"`
+	// Additional hosts for multi-server deployments. Each entry inherits unset settings (port, user, authentication) from this block
+	Hosts []EnvironmentSSHHost `yaml:"hosts,omitempty"`
 	// SSH port, defaults to 22
 	Port int `yaml:"port,omitempty"`
 	// User to connect as
@@ -47,6 +51,57 @@ type EnvironmentSSH struct {
 	KnownHostsFile string `yaml:"known_hosts_file,omitempty"`
 	// When enabled, the host key of the server is not verified (insecure)
 	InsecureIgnoreHostKey bool `yaml:"insecure_ignore_host_key,omitempty"`
+}
+
+// EnvironmentSSHHost is an additional host of a multi-server environment.
+// Unset settings are inherited from the surrounding EnvironmentSSH block.
+type EnvironmentSSHHost struct {
+	// Hostname or IP address of the server
+	Host string `yaml:"host" jsonschema:"required"`
+	// SSH port, inherited from the ssh block when empty
+	Port int `yaml:"port,omitempty"`
+	// User to connect as, inherited from the ssh block when empty
+	User string `yaml:"user,omitempty"`
+	// Password for password based authentication, inherited from the ssh block when empty
+	Password string `yaml:"password,omitempty"`
+	// Path to the private key used for authentication, inherited from the ssh block when empty
+	IdentityFile string `yaml:"identity_file,omitempty"`
+	// Passphrase for the private key, inherited from the ssh block when empty
+	Passphrase string `yaml:"passphrase,omitempty"`
+}
+
+// AllHosts returns the primary host and all additional hosts with the
+// inherited settings resolved.
+func (s *EnvironmentSSH) AllHosts() []EnvironmentSSH {
+	primary := *s
+	primary.Hosts = nil
+
+	hosts := []EnvironmentSSH{primary}
+
+	for _, h := range s.Hosts {
+		merged := primary
+		merged.Host = h.Host
+
+		if h.Port != 0 {
+			merged.Port = h.Port
+		}
+		if h.User != "" {
+			merged.User = h.User
+		}
+		if h.Password != "" {
+			merged.Password = h.Password
+		}
+		if h.IdentityFile != "" {
+			merged.IdentityFile = h.IdentityFile
+		}
+		if h.Passphrase != "" {
+			merged.Passphrase = h.Passphrase
+		}
+
+		hosts = append(hosts, merged)
+	}
+
+	return hosts
 }
 
 // EnvironmentDeployment holds the deployment settings of a remote environment.
