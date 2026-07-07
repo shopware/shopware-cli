@@ -51,8 +51,8 @@ func newTestSSHExecutor(t *testing.T) Executor {
 			Port:         2222,
 			User:         "deploy",
 			IdentityFile: "/keys/id_ed25519",
+			Deployment:   &shop.EnvironmentDeployment{Path: "/var/www/shopware/"},
 		},
-		Deployment: &shop.EnvironmentDeployment{Path: "/var/www/shopware/"},
 	}
 
 	exec, err := New("/local/project", envCfg, &shop.Config{})
@@ -90,8 +90,8 @@ func TestSSHExecutorControlMasterCanBeDisabled(t *testing.T) {
 		SSH: &shop.EnvironmentSSH{
 			Host:          "shop.example.com",
 			ControlMaster: &disabled,
+			Deployment:    &shop.EnvironmentDeployment{Path: "/var/www/shopware"},
 		},
-		Deployment: &shop.EnvironmentDeployment{Path: "/var/www/shopware"},
 	}
 
 	exec, err := New("", envCfg, &shop.Config{})
@@ -166,8 +166,8 @@ func TestSSHExecutorHostKeyOptions(t *testing.T) {
 		SSH: &shop.EnvironmentSSH{
 			Host:                  "shop.example.com",
 			InsecureIgnoreHostKey: true,
+			Deployment:            &shop.EnvironmentDeployment{Path: "/var/www/shopware"},
 		},
-		Deployment: &shop.EnvironmentDeployment{Path: "/var/www/shopware"},
 	}
 
 	exec, err := New("", envCfg, &shop.Config{})

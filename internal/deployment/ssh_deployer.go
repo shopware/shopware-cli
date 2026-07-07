@@ -49,12 +49,12 @@ type sshDeployer struct {
 }
 
 func newSSHDeployer(projectRoot string, env *shop.EnvironmentConfig, _ *shop.Config) (Deployer, error) {
-	if env.Deployment == nil || env.Deployment.Path == "" {
-		return nil, fmt.Errorf("the environment is missing the deployment.path setting")
-	}
-
 	if env.SSH == nil || env.SSH.Host == "" {
 		return nil, fmt.Errorf("the environment is missing the ssh.host setting")
+	}
+
+	if env.SSH.Deployment == nil || env.SSH.Deployment.Path == "" {
+		return nil, fmt.Errorf("the environment is missing the ssh.deployment.path setting")
 	}
 
 	var hosts []deployHost
@@ -74,8 +74,8 @@ func newSSHDeployer(projectRoot string, env *shop.EnvironmentConfig, _ *shop.Con
 
 	return &sshDeployer{
 		projectRoot: projectRoot,
-		deployPath:  strings.TrimRight(env.Deployment.Path, "/"),
-		config:      env.Deployment,
+		deployPath:  strings.TrimRight(env.SSH.Deployment.Path, "/"),
+		config:      env.SSH.Deployment,
 		hosts:       hosts,
 		now:         time.Now,
 		runLocal:    runLocalCommand,

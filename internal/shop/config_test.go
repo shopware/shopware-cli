@@ -699,21 +699,21 @@ environments:
       port: 2222
       user: deploy
       identity_file: ~/.ssh/id_ed25519
-    deployment:
-      path: /var/www/shopware
-      keep_releases: 3
-      shared_dirs:
-        - files
-        - public/media
-      shared_files:
-        - .env
-      hooks:
-        build:
-          - shopware-cli project ci .
-        pre_switch:
-          - vendor/bin/shopware-deployment-helper run
-        post_switch:
-          - php bin/console cache:pool:clear cache.http
+      deployment:
+        path: /var/www/shopware
+        keep_releases: 3
+        shared_dirs:
+          - files
+          - public/media
+        shared_files:
+          - .env
+        hooks:
+          build:
+            - shopware-cli project ci .
+          pre_switch:
+            - vendor/bin/shopware-deployment-helper run
+          post_switch:
+            - php bin/console cache:pool:clear cache.http
 `)
 
 	assert.NoError(t, os.WriteFile(configPath, content, 0o644))
@@ -731,14 +731,14 @@ environments:
 	assert.Equal(t, "deploy", env.SSH.User)
 	assert.Equal(t, "~/.ssh/id_ed25519", env.SSH.IdentityFile)
 
-	assert.NotNil(t, env.Deployment)
-	assert.Equal(t, "/var/www/shopware", env.Deployment.Path)
-	assert.Equal(t, 3, env.Deployment.KeepReleases)
-	assert.ElementsMatch(t, []string{"files", "public/media"}, env.Deployment.SharedDirs)
-	assert.ElementsMatch(t, []string{".env"}, env.Deployment.SharedFiles)
-	assert.Equal(t, []string{"shopware-cli project ci ."}, env.Deployment.Hooks.Build)
-	assert.Equal(t, []string{"vendor/bin/shopware-deployment-helper run"}, env.Deployment.Hooks.PreSwitch)
-	assert.Equal(t, []string{"php bin/console cache:pool:clear cache.http"}, env.Deployment.Hooks.PostSwitch)
+	assert.NotNil(t, env.SSH.Deployment)
+	assert.Equal(t, "/var/www/shopware", env.SSH.Deployment.Path)
+	assert.Equal(t, 3, env.SSH.Deployment.KeepReleases)
+	assert.ElementsMatch(t, []string{"files", "public/media"}, env.SSH.Deployment.SharedDirs)
+	assert.ElementsMatch(t, []string{".env"}, env.SSH.Deployment.SharedFiles)
+	assert.Equal(t, []string{"shopware-cli project ci ."}, env.SSH.Deployment.Hooks.Build)
+	assert.Equal(t, []string{"vendor/bin/shopware-deployment-helper run"}, env.SSH.Deployment.Hooks.PreSwitch)
+	assert.Equal(t, []string{"php bin/console cache:pool:clear cache.http"}, env.SSH.Deployment.Hooks.PostSwitch)
 }
 
 func TestEnvironmentSSHAllHosts(t *testing.T) {

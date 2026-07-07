@@ -23,10 +23,8 @@ type EnvironmentConfig struct {
 	Type     string          `yaml:"type" jsonschema:"enum=local,enum=docker,enum=ssh"`
 	URL      string          `yaml:"url,omitempty"`
 	AdminApi *ConfigAdminApi `yaml:"admin_api,omitempty"`
-	// SSH connection settings, used when type is "ssh"
+	// SSH connection and deployment settings, used when type is "ssh"
 	SSH *EnvironmentSSH `yaml:"ssh,omitempty"`
-	// Deployment settings for remote environments
-	Deployment *EnvironmentDeployment `yaml:"deployment,omitempty"`
 }
 
 // EnvironmentSSH holds the SSH connection settings of an environment.
@@ -51,6 +49,8 @@ type EnvironmentSSH struct {
 	InsecureIgnoreHostKey bool `yaml:"insecure_ignore_host_key,omitempty"`
 	// Reuse one SSH connection for consecutive remote commands (OpenSSH ControlMaster). Enabled by default except on Windows; set to false to leave connection sharing to your own ssh_config
 	ControlMaster *bool `yaml:"control_master,omitempty"`
+	// Deployment settings for this environment
+	Deployment *EnvironmentDeployment `yaml:"deployment,omitempty"`
 }
 
 // EnvironmentSSHHost is an additional host of a multi-server environment.

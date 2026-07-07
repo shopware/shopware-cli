@@ -37,8 +37,8 @@ func newSSHExecutor(projectRoot string, envCfg *shop.EnvironmentConfig, shopCfg 
 		return nil, fmt.Errorf("the environment is missing the ssh.host setting")
 	}
 
-	if envCfg.Deployment == nil || envCfg.Deployment.Path == "" {
-		return nil, fmt.Errorf("the environment is missing the deployment.path setting")
+	if envCfg.SSH.Deployment == nil || envCfg.SSH.Deployment.Path == "" {
+		return nil, fmt.Errorf("the environment is missing the ssh.deployment.path setting")
 	}
 
 	return &SSHExecutor{projectRoot: projectRoot, shopCfg: shopCfg, envCfg: envCfg}, nil
@@ -82,7 +82,7 @@ func (s *SSHExecutor) command(ctx context.Context, argv []string) *Process {
 
 // remoteBase is the root of the currently deployed release on the server.
 func (s *SSHExecutor) remoteBase() string {
-	return path.Join(strings.TrimRight(s.envCfg.Deployment.Path, "/"), "current")
+	return path.Join(strings.TrimRight(s.envCfg.SSH.Deployment.Path, "/"), "current")
 }
 
 func (s *SSHExecutor) remoteWorkdir() string {

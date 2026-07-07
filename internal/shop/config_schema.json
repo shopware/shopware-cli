@@ -648,11 +648,7 @@
         },
         "ssh": {
           "$ref": "#/$defs/EnvironmentSSH",
-          "description": "SSH connection settings, used when type is \"ssh\""
-        },
-        "deployment": {
-          "$ref": "#/$defs/EnvironmentDeployment",
-          "description": "Deployment settings for remote environments"
+          "description": "SSH connection and deployment settings, used when type is \"ssh\""
         }
       },
       "additionalProperties": false,
@@ -769,6 +765,10 @@
         "control_master": {
           "type": "boolean",
           "description": "Reuse one SSH connection for consecutive remote commands (OpenSSH ControlMaster). Enabled by default except on Windows; set to false to leave connection sharing to your own ssh_config"
+        },
+        "deployment": {
+          "$ref": "#/$defs/EnvironmentDeployment",
+          "description": "Deployment settings for this environment"
         }
       },
       "additionalProperties": false,

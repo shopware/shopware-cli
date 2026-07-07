@@ -345,8 +345,11 @@ func TestNewDeployerRequiresSupportedType(t *testing.T) {
 }
 
 func TestNewSSHDeployerRequiresDeploymentPath(t *testing.T) {
-	_, err := newSSHDeployer(t.TempDir(), &shop.EnvironmentConfig{Type: "ssh"}, &shop.Config{})
-	assert.ErrorContains(t, err, "deployment.path")
+	_, err := newSSHDeployer(t.TempDir(), &shop.EnvironmentConfig{
+		Type: "ssh",
+		SSH:  &shop.EnvironmentSSH{Host: "example.com"},
+	}, &shop.Config{})
+	assert.ErrorContains(t, err, "ssh.deployment.path")
 }
 
 func TestMultiHostDeployRunsOnAllHosts(t *testing.T) {
@@ -440,9 +443,6 @@ func TestMultiHostRollbackSwitchesAllHosts(t *testing.T) {
 }
 
 func TestNewSSHDeployerRequiresHost(t *testing.T) {
-	_, err := newSSHDeployer(t.TempDir(), &shop.EnvironmentConfig{
-		Type:       "ssh",
-		Deployment: &shop.EnvironmentDeployment{Path: "/var/www/shop"},
-	}, &shop.Config{})
+	_, err := newSSHDeployer(t.TempDir(), &shop.EnvironmentConfig{Type: "ssh"}, &shop.Config{})
 	assert.ErrorContains(t, err, "ssh.host")
 }
