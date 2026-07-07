@@ -73,6 +73,8 @@ bin/console unchanged, including Symfony's own --env flag.`,
 	Args:               cobra.MinimumNArgs(1),
 	DisableFlagParsing: true,
 	ValidArgsFunction: func(cmd *cobra.Command, input []string, _ string) ([]string, cobra.ShellCompDirective) {
+		input = stripConsoleFlags(input)
+
 		projectRoot, err := findClosestShopwareProject()
 		if err != nil {
 			return nil, cobra.ShellCompDirectiveDefault
