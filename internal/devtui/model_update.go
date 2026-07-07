@@ -11,6 +11,7 @@ import (
 	"github.com/shopware/shopware-cli/internal/envfile"
 	"github.com/shopware/shopware-cli/internal/executor"
 	"github.com/shopware/shopware-cli/internal/shop"
+	"github.com/shopware/shopware-cli/internal/tracking"
 )
 
 func (m Model) updateKeyPress(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
@@ -35,8 +36,8 @@ func (m Model) updateKeyPress(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		case keyQ, keyCtrlC:
 			if m.phase == phaseStarting {
 				if tags, ok := m.telemetry.dockerStartTags(nil); ok {
-					tags["result"] = resultCancelled
-					trackEventNow(eventDevDockerStart, tags)
+					tags[tracking.TagResult] = tracking.ResultCancelled
+					trackEventNow(tracking.EventDevDockerStart, tags)
 				}
 			}
 			return m, tea.Quit
@@ -50,9 +51,9 @@ func (m Model) updateKeyPress(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			m.installProg.showLogs = !m.installProg.showLogs
 		case keyQ, keyCtrlC:
 			if m.telemetry.installOnce() {
-				tags := m.telemetry.installTags(resultCancelled, m.install)
-				tags["abandoned_at"] = "installing"
-				trackEventNow(eventDevInstall, tags)
+				tags := m.telemetry.installTags(tracking.ResultCancelled, m.install)
+				tags[tracking.TagAbandonedAt] = "installing"
+				trackEventNow(tracking.EventDevInstall, tags)
 			}
 			return m, tea.Quit
 		}
@@ -68,8 +69,8 @@ func (m Model) updateKeyPress(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		if msg.String() == keyQ || msg.String() == keyCtrlC {
-			if tags, ok := m.telemetry.taskTags(resultCancelled); ok {
-				trackEventNow(eventDevAction, tags)
+			if tags, ok := m.telemetry.taskTags(tracking.ResultCancelled); ok {
+				trackEventNow(tracking.EventDevAction, tags)
 			}
 			return m, tea.Quit
 		}
@@ -173,7 +174,7 @@ func (m Model) executeCommand(id string) (tea.Model, tea.Cmd) {
 	switch id {
 	case "open-shop", "open-admin":
 		m.telemetry.countAction()
-		trackEvent(eventDevAction, map[string]string{"action": id})
+		trackEvent(tracking.EventDevAction, map[string]string{tracking.TagAction: id})
 		if id == "open-shop" {
 			return m, openInBrowser(m.overview.shopURL)
 		}
@@ -238,7 +239,7 @@ func (m Model) openSalesChannelPicker() (tea.Model, tea.Cmd) {
 
 func (m *Model) stopWatcher(name string) tea.Cmd {
 	if tags, ok := m.telemetry.watcherEndTags(name, watcherEndUserStopped); ok {
-		trackEvent(eventDevWatcher, tags)
+		trackEvent(tracking.EventDevWatcher, tags)
 	}
 	m.instance.RemoveSource(name)
 
@@ -269,7 +270,7 @@ func (m Model) updateMigrationWizard(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	if welcomeQuit || msg.String() == keyCtrlC {
 		// The done screen already sent a completed/failed event for this run.
 		if m.migrationWizard.step != migrationStepDone {
-			trackEventNow(eventDevMigrationWizard, migrationWizardTags(resultCancelled, m.migrationWizard))
+			trackEventNow(tracking.EventDevMigrationWizard, migrationWizardTags(tracking.ResultCancelled, m.migrationWizard))
 		}
 		return m, tea.Quit
 	}
@@ -280,7 +281,7 @@ func (m Model) updateMigrationWizard(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		if m.migrationWizard.confirmYes {
 			return m.saveMigrationWizard()
 		}
-		trackEventNow(eventDevMigrationWizard, migrationWizardTags(resultCancelled, m.migrationWizard))
+		trackEventNow(tracking.EventDevMigrationWizard, migrationWizardTags(tracking.ResultCancelled, m.migrationWizard))
 		return m, tea.Quit
 	}
 
@@ -298,7 +299,7 @@ func (m Model) saveMigrationWizard() (tea.Model, tea.Cmd) {
 	if err := shop.WriteConfig(m.config, m.projectRoot); err != nil {
 		m.migrationWizard.err = err
 		m.migrationWizard.step = migrationStepDone
-		trackEvent(eventDevMigrationWizard, migrationWizardTags(resultFailed, m.migrationWizard))
+		trackEvent(tracking.EventDevMigrationWizard, migrationWizardTags(tracking.ResultFailed, m.migrationWizard))
 		return m, nil
 	}
 
@@ -306,13 +307,13 @@ func (m Model) saveMigrationWizard() (tea.Model, tea.Cmd) {
 	if err != nil {
 		m.migrationWizard.err = err
 		m.migrationWizard.step = migrationStepDone
-		trackEvent(eventDevMigrationWizard, migrationWizardTags(resultFailed, m.migrationWizard))
+		trackEvent(tracking.EventDevMigrationWizard, migrationWizardTags(tracking.ResultFailed, m.migrationWizard))
 		return m, nil
 	}
 	m.migrationWizard.deploymentHelperAdded = changed
 
 	m.migrationWizard.step = migrationStepDone
-	trackEvent(eventDevMigrationWizard, migrationWizardTags(resultCompleted, m.migrationWizard))
+	trackEvent(tracking.EventDevMigrationWizard, migrationWizardTags(tracking.ResultCompleted, m.migrationWizard))
 	return m, nil
 }
 

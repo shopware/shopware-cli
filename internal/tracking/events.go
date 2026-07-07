@@ -1,0 +1,86 @@
+package tracking
+
+// Event names passed to Track. The "shopware_cli." prefix is added by Track
+// itself. Every event and its tags are documented in docs/TELEMETRY.md; new
+// events must be added there as well.
+const (
+	// EventCommand is sent after (almost) any sub-command finishes (cmd/root.go).
+	EventCommand = "command"
+	// EventProjectCreate is sent when a new Shopware project is scaffolded.
+	EventProjectCreate = "project.create"
+	// EventProjectUpgradeCheck is sent when an upgrade compatibility check runs.
+	EventProjectUpgradeCheck = "project.upgrade_check"
+
+	// The project.dev.* events are sent by the interactive dev TUI (internal/devtui).
+	EventDevSession         = "project.dev.session"
+	EventDevInstall         = "project.dev.install"
+	EventDevMigrationWizard = "project.dev.migration_wizard"
+	EventDevDockerStart     = "project.dev.docker_start"
+	EventDevAction          = "project.dev.action"
+	EventDevWatcher         = "project.dev.watcher"
+	EventDevHealth          = "project.dev.health"
+)
+
+// Tag keys used by the events above. The project.dev.health event derives its
+// keys from the setup-health check names at runtime and has no constants here.
+const (
+	// EventCommand
+	TagCommandName = "command_name"
+	TagResult      = "result"
+	TagDurationMS  = "duration_ms"
+	TagCLIVersion  = "cli_version"
+	TagOS          = "os"
+	TagIsTUI       = "is_tui"
+
+	// EventProjectCreate
+	TagVersion           = "version"
+	TagDeployment        = "deployment"
+	TagCI                = "ci"
+	TagDocker            = "docker"
+	TagWithElasticsearch = "with_elasticsearch"
+	TagWithAMQP          = "with_amqp"
+	TagInteractive       = "interactive"
+
+	// EventProjectUpgradeCheck
+	TagFromVersion   = "from_version"
+	TagTargetVersion = "target_version"
+	TagHasBlockers   = "has_blockers"
+
+	// EventDevInstall
+	TagAbandonedAt       = "abandoned_at"
+	TagFailedStep        = "failed_step"
+	TagLanguage          = "language"
+	TagCurrency          = "currency"
+	TagCustomCredentials = "custom_credentials"
+
+	// EventDevMigrationWizard
+	TagPHPVersion            = "php_version"
+	TagDeploymentHelperAdded = "deployment_helper_added"
+
+	// EventDevDockerStart
+	TagTrigger = "trigger"
+
+	// EventDevAction
+	TagAction = "action"
+
+	// EventDevWatcher
+	TagWatcher  = "watcher"
+	TagUptimeMS = "uptime_ms"
+
+	// EventDevSession
+	TagExecutor     = "executor"
+	TagTabsVisited  = "tabs_visited"
+	TagActions      = "actions"
+	TagWatchersUsed = "watchers_used"
+	TagExit         = "exit"
+)
+
+// Values of the TagResult tag shared across events.
+const (
+	ResultSuccess   = "success"
+	ResultFailure   = "failure"
+	ResultCancelled = "cancelled"
+	ResultSkipped   = "skipped"
+	ResultCompleted = "completed"
+	ResultFailed    = "failed"
+)

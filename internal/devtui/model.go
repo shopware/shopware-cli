@@ -11,6 +11,7 @@ import (
 	"github.com/shopware/shopware-cli/internal/envfile"
 	"github.com/shopware/shopware-cli/internal/executor"
 	"github.com/shopware/shopware-cli/internal/shop"
+	"github.com/shopware/shopware-cli/internal/tracking"
 )
 
 type activeTab int
@@ -164,7 +165,7 @@ func (m *Model) shutdown() {
 
 	for name, h := range m.watchers {
 		if tags, ok := m.telemetry.watcherEndTags(name, watcherEndSessionEnd); ok {
-			trackEventNow(eventDevWatcher, tags)
+			trackEventNow(tracking.EventDevWatcher, tags)
 		}
 		h.stop(ctx)
 		delete(m.watchers, name)
@@ -173,12 +174,12 @@ func (m *Model) shutdown() {
 	// A config-change container restart may still be in flight when the user
 	// leaves the dashboard; report it as cancelled instead of dropping it.
 	if tags, ok := m.telemetry.configRestartTags(nil); ok {
-		tags["result"] = resultCancelled
-		trackEventNow(eventDevDockerStart, tags)
+		tags[tracking.TagResult] = tracking.ResultCancelled
+		trackEventNow(tracking.EventDevDockerStart, tags)
 	}
 
 	if tags, ok := m.telemetry.sessionTags(); ok {
-		trackEventNow(eventDevSession, tags)
+		trackEventNow(tracking.EventDevSession, tags)
 	}
 }
 
@@ -208,7 +209,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.taskDone = true
 		m.taskErr = msg.err
 		if tags, ok := m.telemetry.taskTags(resultTag(msg.err)); ok {
-			trackEvent(eventDevAction, tags)
+			trackEvent(tracking.EventDevAction, tags)
 		}
 		if msg.err != nil {
 			m.overlayLines = append(m.overlayLines, "", errorStyle.Render("Failed: "+msg.err.Error()))
@@ -226,7 +227,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case setupHealthLoadedMsg:
 		if len(msg.checks) > 0 && m.telemetry.healthOnce() {
-			trackEvent(eventDevHealth, healthTags(msg.checks))
+			trackEvent(tracking.EventDevHealth, healthTags(msg.checks))
 		}
 		return m.updateFallback(msg)
 
@@ -265,7 +266,7 @@ func (m Model) updateWatcherMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case watcherRunningMsg:
 		if msg.err != nil {
 			if tags, ok := m.telemetry.watcherEndTags(msg.name, watcherEndPrepFailed); ok {
-				trackEvent(eventDevWatcher, tags)
+				trackEvent(tracking.EventDevWatcher, tags)
 			}
 		}
 		_, exists := m.watchers[msg.name]
@@ -312,7 +313,7 @@ func (m Model) updateWatcherMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.overview.sfWatchRunning = false
 		}
 		if tags, ok := m.telemetry.watcherEndTags(msg.source, watcherEndCrashed); ok {
-			trackEvent(eventDevWatcher, tags)
+			trackEvent(tracking.EventDevWatcher, tags)
 		}
 		delete(m.watchers, msg.source)
 		return m.updateChildren(msg)
@@ -471,7 +472,7 @@ func (m Model) updateChildren(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 func (m Model) handleConfigRestartDone(msg configRestartDoneMsg) (tea.Model, tea.Cmd) {
 	if tags, ok := m.telemetry.configRestartTags(msg.err); ok {
-		trackEvent(eventDevDockerStart, tags)
+		trackEvent(tracking.EventDevDockerStart, tags)
 	}
 	m.configTab.restarting = false
 	if msg.err != nil {

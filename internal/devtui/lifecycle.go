@@ -6,6 +6,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/shopware/shopware-cli/internal/shop"
+	"github.com/shopware/shopware-cli/internal/tracking"
 )
 
 func (m Model) updateLifecycle(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -47,7 +48,7 @@ func (m Model) updateLifecycle(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case dockerStartedMsg:
 		if tags, ok := m.telemetry.dockerStartTags(msg.err); ok {
-			trackEvent(eventDevDockerStart, tags)
+			trackEvent(tracking.EventDevDockerStart, tags)
 		}
 		if msg.err != nil {
 			m.dockerShowLogs = true
@@ -78,9 +79,9 @@ func (m Model) updateLifecycle(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case shopwareInstallDoneMsg:
 		if msg.err != nil {
 			if m.telemetry.installOnce() {
-				tags := m.telemetry.installTags(resultFailure, m.install)
-				tags["failed_step"] = installFailedStep(m.installProg.currentStep)
-				trackEvent(eventDevInstall, tags)
+				tags := m.telemetry.installTags(tracking.ResultFailure, m.install)
+				tags[tracking.TagFailedStep] = installFailedStep(m.installProg.currentStep)
+				trackEvent(tracking.EventDevInstall, tags)
 			}
 			m.installProg.showLogs = true
 			m.overlayLines = append(m.overlayLines, "", errorStyle.Render("Installation failed: "+msg.err.Error()))
@@ -90,7 +91,7 @@ func (m Model) updateLifecycle(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.installProg.done = true
 		m.installProg.currentStep = len(installStepPatterns)
 		if m.telemetry.installOnce() {
-			trackEvent(eventDevInstall, m.telemetry.installTags(resultSuccess, m.install))
+			trackEvent(tracking.EventDevInstall, m.telemetry.installTags(tracking.ResultSuccess, m.install))
 		}
 
 		username := m.install.username.Value()

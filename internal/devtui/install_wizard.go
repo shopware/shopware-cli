@@ -10,6 +10,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 
+	"github.com/shopware/shopware-cli/internal/tracking"
 	"github.com/shopware/shopware-cli/internal/tui"
 )
 
@@ -111,9 +112,9 @@ var installStepPatterns = []struct {
 func (m Model) updateInstallPrompt(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	if k := msg.String(); k == keyQ || k == keyCtrlC {
 		if m.telemetry.installOnce() {
-			tags := m.telemetry.installTags(resultCancelled, m.install)
-			tags["abandoned_at"] = installStepTagName(m.install.step)
-			trackEventNow(eventDevInstall, tags)
+			tags := m.telemetry.installTags(tracking.ResultCancelled, m.install)
+			tags[tracking.TagAbandonedAt] = installStepTagName(m.install.step)
+			trackEventNow(tracking.EventDevInstall, tags)
 		}
 		return m, tea.Quit
 	}
@@ -147,7 +148,7 @@ func (m Model) updateInstallStepAsk(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		if m.telemetry.installOnce() {
-			trackEvent(eventDevInstall, m.telemetry.installTags(resultSkipped, m.install))
+			trackEvent(tracking.EventDevInstall, m.telemetry.installTags(tracking.ResultSkipped, m.install))
 		}
 		m.phase = phaseDashboard
 		return m, m.startDashboard()

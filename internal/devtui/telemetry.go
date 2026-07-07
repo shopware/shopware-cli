@@ -10,27 +10,9 @@ import (
 	"github.com/shopware/shopware-cli/internal/tracking"
 )
 
-// Event names sent by the dev TUI. All are documented in docs/TELEMETRY.md;
-// new events must be added there as well.
-const (
-	eventDevSession         = "project.dev.session"
-	eventDevInstall         = "project.dev.install"
-	eventDevMigrationWizard = "project.dev.migration_wizard"
-	eventDevDockerStart     = "project.dev.docker_start"
-	eventDevAction          = "project.dev.action"
-	eventDevWatcher         = "project.dev.watcher"
-	eventDevHealth          = "project.dev.health"
-)
-
-// Values of the "result" tag shared by the events above.
-const (
-	resultSuccess   = "success"
-	resultFailure   = "failure"
-	resultCancelled = "cancelled"
-	resultSkipped   = "skipped"
-	resultCompleted = "completed"
-	resultFailed    = "failed"
-)
+// Event names and tag keys live in the tracking package (tracking.EventDev*,
+// tracking.Tag*) so every Track caller shares one vocabulary; the constants
+// below are values specific to the dev TUI's events.
 
 // Values of the watcher event's "result" tag: how a watcher run ended.
 const (
@@ -134,14 +116,14 @@ func (t *telemetryState) sessionTags() (map[string]string, bool) {
 		exit = exitQuit
 	}
 	tags := map[string]string{
-		"executor":     t.executor,
-		"duration_ms":  durationMS(time.Since(t.sessionStart)),
-		"tabs_visited": joinSet(t.tabsVisited),
-		"actions":      strconv.Itoa(t.actionCount),
-		"exit":         exit,
+		tracking.TagExecutor:    t.executor,
+		tracking.TagDurationMS:  durationMS(time.Since(t.sessionStart)),
+		tracking.TagTabsVisited: joinSet(t.tabsVisited),
+		tracking.TagActions:     strconv.Itoa(t.actionCount),
+		tracking.TagExit:        exit,
 	}
 	if len(t.watchersUsed) > 0 {
-		tags["watchers_used"] = joinSet(t.watchersUsed)
+		tags[tracking.TagWatchersUsed] = joinSet(t.watchersUsed)
 	}
 	return tags, true
 }
@@ -169,19 +151,19 @@ func (t *telemetryState) installOnce() bool {
 // carries no language tag). Credentials are never sent — only whether the
 // defaults were changed.
 func (t *telemetryState) installTags(result string, w installWizard) map[string]string {
-	tags := map[string]string{"result": result}
+	tags := map[string]string{tracking.TagResult: result}
 	if t != nil && !t.installStart.IsZero() {
-		tags["duration_ms"] = durationMS(time.Since(t.installStart))
+		tags[tracking.TagDurationMS] = durationMS(time.Since(t.installStart))
 	}
 	if w.language != "" {
-		tags["language"] = w.language
+		tags[tracking.TagLanguage] = w.language
 	}
 	if w.currency != "" {
-		tags["currency"] = w.currency
+		tags[tracking.TagCurrency] = w.currency
 	}
-	if w.step == installStepCredentials || result == resultSuccess || result == resultFailure {
+	if w.step == installStepCredentials || result == tracking.ResultSuccess || result == tracking.ResultFailure {
 		custom := w.username.Value() != defaultUsername || w.password.Value() != "shopware"
-		tags["custom_credentials"] = strconv.FormatBool(custom)
+		tags[tracking.TagCustomCredentials] = strconv.FormatBool(custom)
 	}
 	return tags
 }
@@ -204,20 +186,20 @@ func installStepTagName(step installStep) string {
 // duration_ms is only present once the user has left the welcome screen
 // (startedAt is set on the welcome confirm).
 func migrationWizardTags(result string, sg migrationWizard) map[string]string {
-	tags := map[string]string{"result": result}
+	tags := map[string]string{tracking.TagResult: result}
 	if !sg.startedAt.IsZero() {
-		tags["duration_ms"] = durationMS(time.Since(sg.startedAt))
+		tags[tracking.TagDurationMS] = durationMS(time.Since(sg.startedAt))
 	}
 	switch result {
-	case resultCancelled:
-		tags["abandoned_at"] = migrationStepTagName(sg.step)
-	case resultCompleted, resultFailed:
+	case tracking.ResultCancelled:
+		tags[tracking.TagAbandonedAt] = migrationStepTagName(sg.step)
+	case tracking.ResultCompleted, tracking.ResultFailed:
 		if sg.phpCursor >= 0 && sg.phpCursor < len(sg.phpVersions) {
-			tags["php_version"] = sg.phpVersions[sg.phpCursor]
+			tags[tracking.TagPHPVersion] = sg.phpVersions[sg.phpCursor]
 		}
 	}
-	if result == resultCompleted {
-		tags["deployment_helper_added"] = strconv.FormatBool(sg.deploymentHelperAdded)
+	if result == tracking.ResultCompleted {
+		tags[tracking.TagDeploymentHelperAdded] = strconv.FormatBool(sg.deploymentHelperAdded)
 	}
 	return tags
 }
@@ -252,9 +234,9 @@ func (t *telemetryState) dockerStartTags(err error) (map[string]string, bool) {
 	started := t.dockerStart
 	t.dockerStart = time.Time{}
 	return map[string]string{
-		"trigger":     "initial",
-		"result":      resultTag(err),
-		"duration_ms": durationMS(time.Since(started)),
+		tracking.TagTrigger:    "initial",
+		tracking.TagResult:     resultTag(err),
+		tracking.TagDurationMS: durationMS(time.Since(started)),
 	}, true
 }
 
@@ -272,9 +254,9 @@ func (t *telemetryState) configRestartTags(err error) (map[string]string, bool) 
 	started := t.restartStart
 	t.restartStart = time.Time{}
 	return map[string]string{
-		"trigger":     "config_change",
-		"result":      resultTag(err),
-		"duration_ms": durationMS(time.Since(started)),
+		tracking.TagTrigger:    "config_change",
+		tracking.TagResult:     resultTag(err),
+		tracking.TagDurationMS: durationMS(time.Since(started)),
 	}, true
 }
 
@@ -292,9 +274,9 @@ func (t *telemetryState) taskTags(result string) (map[string]string, bool) {
 		return nil, false
 	}
 	tags := map[string]string{
-		"action":      t.taskAction,
-		"result":      result,
-		"duration_ms": durationMS(time.Since(t.taskStart)),
+		tracking.TagAction:     t.taskAction,
+		tracking.TagResult:     result,
+		tracking.TagDurationMS: durationMS(time.Since(t.taskStart)),
 	}
 	t.taskAction = ""
 	return tags, true
@@ -325,9 +307,9 @@ func (t *telemetryState) watcherEndTags(name, result string) (map[string]string,
 	}
 	delete(t.watcherStarts, name)
 	return map[string]string{
-		"watcher":   watcherTagName(name),
-		"result":    result,
-		"uptime_ms": durationMS(time.Since(started)),
+		tracking.TagWatcher:  watcherTagName(name),
+		tracking.TagResult:   result,
+		tracking.TagUptimeMS: durationMS(time.Since(started)),
 	}, true
 }
 
@@ -385,9 +367,9 @@ func (l healthLevel) tagValue() string {
 
 func resultTag(err error) string {
 	if err != nil {
-		return resultFailure
+		return tracking.ResultFailure
 	}
-	return resultSuccess
+	return tracking.ResultSuccess
 }
 
 func durationMS(d time.Duration) string {
