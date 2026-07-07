@@ -1,0 +1,16 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/symfony/routing/7.4/Loader/schema/routing.schema.json
+frontend.typed:
+    path: /typed
+    defaults:
+        plain: "42"
+        empty: null
+        flag: true
+        limit: 25
+        rate: 2.5
+        title: hello
+        list:
+            - one
+            - 2
+        map:
+            a: x
+            b: false

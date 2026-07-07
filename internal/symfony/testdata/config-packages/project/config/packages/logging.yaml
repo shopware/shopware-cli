@@ -1,0 +1,6 @@
+logging:
+    level: info
+
+when@dev:
+    logging:
+        level: debug

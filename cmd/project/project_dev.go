@@ -52,7 +52,7 @@ var projectDevCmd = &cobra.Command{
 			if !isatty.IsTerminal(os.Stdin.Fd()) {
 				return shop.ErrDevModeNotSupported
 			}
-			return runSetupGuideTUI(projectRoot, cfg)
+			return runMigrationWizardTUI(projectRoot, cfg)
 		}
 
 		envCfg, err := cfg.ResolveEnvironment(environmentName)
@@ -127,14 +127,14 @@ var projectDevStatusCmd = &cobra.Command{
 	},
 }
 
-func runSetupGuideTUI(projectRoot string, cfg *shop.Config) error {
+func runMigrationWizardTUI(projectRoot string, cfg *shop.Config) error {
 	envCfg := &shop.EnvironmentConfig{Type: "docker", URL: "http://127.0.0.1:8000"}
 	exec, err := executor.New(projectRoot, envCfg, cfg)
 	if err != nil {
 		return err
 	}
 
-	m := devtui.NewSetupGuide(devtui.Options{
+	m := devtui.NewMigrationWizard(devtui.Options{
 		ProjectRoot: projectRoot,
 		Config:      cfg,
 		EnvConfig:   envCfg,
@@ -210,6 +210,13 @@ func (e *devEnvironment) start(cmd *cobra.Command) error {
 		shopURL = e.envCfg.URL
 	}
 
+	var services []devtui.DiscoveredService
+	if e.executor.Type() == executor.TypeDocker {
+		var webPort int
+		services, webPort, _ = devtui.DiscoverComposeServices(cmd.Context(), e.projectRoot)
+		shopURL = devtui.ResolveShopURL(shopURL, webPort)
+	}
+
 	if shopURL != "" {
 		adminURL := shopURL
 		if !strings.HasSuffix(adminURL, "/") {
@@ -223,15 +230,12 @@ func (e *devEnvironment) start(cmd *cobra.Command) error {
 		fmt.Println()
 	}
 
-	if e.executor.Type() == executor.TypeDocker {
-		services, _ := devtui.DiscoverServices(cmd.Context(), e.projectRoot)
-		if len(services) > 0 {
-			fmt.Println(tui.SectionTitleStyle.Render("  Services"))
-			for _, svc := range services {
-				fmt.Println(tui.DimText.Render("  "+svc.Name+": ") + tui.BoldText.Render(svc.URL))
-			}
-			fmt.Println()
+	if len(services) > 0 {
+		fmt.Println(tui.SectionTitleStyle.Render("  Services"))
+		for _, svc := range services {
+			fmt.Println(tui.DimText.Render("  "+svc.Name+": ") + tui.BoldText.Render(svc.URL))
 		}
+		fmt.Println()
 	}
 
 	fmt.Println(tui.DimText.Render("  Run ") + tui.BoldText.Render("shopware-cli project dev stop") + tui.DimText.Render(" to stop it."))

@@ -33,15 +33,56 @@ func newInstallProgress() progress.Model {
 
 func checkContainersRunning(projectRoot string) tea.Cmd {
 	return func() tea.Msg {
-		ctx := context.Background()
-		check := exec.CommandContext(ctx, "docker", "compose", "ps", "--status=running", "-q")
-		check.Dir = projectRoot
-		output, err := check.Output()
-		if err == nil && len(strings.TrimSpace(string(output))) > 0 {
-			return dockerAlreadyRunningMsg{}
+		running := composeServiceSet(projectRoot, "ps", "--services", "--status=running")
+		if len(running) == 0 {
+			return dockerNeedStartMsg{}
 		}
-		return dockerNeedStartMsg{}
+
+		// Treat the stack as already up only when every service the compose
+		// file defines is running. A service that was just added to
+		// compose.yaml (e.g. the messenger worker when the admin worker is
+		// disabled) is not running yet, so fall through to a start and let
+		// `up -d` reconcile the newcomers instead of jumping to the dashboard.
+		defined := composeServiceSet(projectRoot, "config", "--services")
+		if !allRunning(defined, running) {
+			return dockerNeedStartMsg{}
+		}
+
+		return dockerAlreadyRunningMsg{}
 	}
+}
+
+// allRunning reports whether every service in defined is present in running.
+// An empty defined set (e.g. when the compose config could not be read) imposes
+// no constraint and is considered satisfied.
+func allRunning(defined, running map[string]struct{}) bool {
+	for name := range defined {
+		if _, ok := running[name]; !ok {
+			return false
+		}
+	}
+
+	return true
+}
+
+// composeServiceSet runs a docker compose command that prints one service name
+// per line (e.g. `config --services` or `ps --services`) and returns the names
+// as a set. It returns nil when the command fails, so callers treat an
+// undeterminable list as "no constraint".
+func composeServiceSet(projectRoot string, args ...string) map[string]struct{} {
+	output, err := composeCommand(context.Background(), projectRoot, args...).Output()
+	if err != nil {
+		return nil
+	}
+
+	set := map[string]struct{}{}
+	for _, line := range strings.Split(strings.TrimSpace(string(output)), "\n") {
+		if name := strings.TrimSpace(line); name != "" {
+			set[name] = struct{}{}
+		}
+	}
+
+	return set
 }
 
 func (m *Model) checkShopwareInstalled() tea.Cmd {
@@ -137,12 +178,11 @@ func streamCmdOutput(cmd *exec.Cmd, ch chan<- string, useStdout bool) error {
 	return cmd.Wait()
 }
 
-func runDockerCommandWithArgs(ctx context.Context, projectRoot string, args []string, resultFn func(error) tea.Msg) (outChan <-chan string, outputCmd tea.Cmd, doneCmd tea.Cmd) {
+func runComposeCommand(ctx context.Context, projectRoot string, args []string, resultFn func(error) tea.Msg) (outChan <-chan string, outputCmd tea.Cmd, doneCmd tea.Cmd) {
 	lineChan := make(chan string, streamBufferSize)
 
 	doneCmd = func() tea.Msg {
-		cmd := exec.CommandContext(ctx, "docker", args...)
-		cmd.Dir = projectRoot
+		cmd := composeCommand(ctx, projectRoot, args...)
 		return resultFn(streamCmdOutput(cmd, lineChan, false))
 	}
 
@@ -150,10 +190,11 @@ func runDockerCommandWithArgs(ctx context.Context, projectRoot string, args []st
 }
 
 func (m *Model) startContainers() tea.Cmd {
-	ch, outputCmd, doneCmd := runDockerCommandWithArgs(
+	m.telemetry.beginDockerStart()
+	ch, outputCmd, doneCmd := runComposeCommand(
 		context.Background(),
 		m.projectRoot,
-		[]string{"compose", "up", "-d"},
+		[]string{"up", "-d"},
 		func(err error) tea.Msg { return dockerStartedMsg{err: err} },
 	)
 	m.dockerOutChan = ch
@@ -161,23 +202,23 @@ func (m *Model) startContainers() tea.Cmd {
 }
 
 func (m *Model) restartContainersForConfig() tea.Cmd {
+	m.telemetry.beginConfigRestart()
 	projectRoot := m.projectRoot
 	cfg := m.config
 	return func() tea.Msg {
 		if err := dockerpkg.WriteComposeFile(projectRoot, dockerpkg.ComposeOptionsFromConfig(cfg)); err != nil {
 			return configRestartDoneMsg{err: err}
 		}
-		cmd := exec.CommandContext(context.Background(), "docker", "compose", "up", "-d")
-		cmd.Dir = projectRoot
+		cmd := composeCommand(context.Background(), projectRoot, "up", "-d")
 		return configRestartDoneMsg{err: cmd.Run()}
 	}
 }
 
 func (m *Model) stopContainers() tea.Cmd {
-	ch, outputCmd, doneCmd := runDockerCommandWithArgs(
+	ch, outputCmd, doneCmd := runComposeCommand(
 		context.Background(),
 		m.projectRoot,
-		[]string{"compose", "down"},
+		[]string{"down"},
 		func(err error) tea.Msg { return dockerStoppedMsg{err: err} },
 	)
 	m.dockerOutChan = ch

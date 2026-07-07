@@ -44,9 +44,9 @@ func TestLexerStringLiteralAware(t *testing.T) {
 	assert.Equal(t, 5, len(toks))
 	assert.Equal(t, tokTwigStmtOpen, toks[0].Type)
 	assert.Equal(t, tokTwigIdent, toks[1].Type)
-	assert.Equal(t, "set", toks[1].Lit)
+	assert.Equal(t, "set", toks[1].Lit(src))
 	assert.Equal(t, tokTwigRawExpr, toks[2].Type)
-	assert.Contains(t, toks[2].Lit, `"contains %}"`)
+	assert.Contains(t, toks[2].Lit(src), `"contains %}"`)
 	assert.Equal(t, tokTwigStmtClose, toks[3].Type)
 }
 
@@ -65,5 +65,5 @@ func TestLexerWordBoundary(t *testing.T) {
 	toks, err := lex.lex()
 	assert.NoError(t, err)
 	assert.Equal(t, tokTwigIdent, toks[1].Type)
-	assert.Equal(t, "iff", toks[1].Lit, "identifier scan must respect word boundaries")
+	assert.Equal(t, "iff", toks[1].Lit(src), "identifier scan must respect word boundaries")
 }

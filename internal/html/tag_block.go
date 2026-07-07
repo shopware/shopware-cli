@@ -19,7 +19,7 @@ func parseBlockTag(p *parser, openTok token) (Node, error) {
 	openTrim := TwigTrim{Left: openTok.TrimLeft}
 	p.advance() // {%
 	identTok := p.advance()
-	if identTok.Type != tokTwigIdent || identTok.Lit != "block" {
+	if identTok.Type != tokTwigIdent || identTok.Lit(p.source) != "block" {
 		return nil, errAt(p.source, p.filename, identTok.Pos, "expected 'block' identifier")
 	}
 	bodyTok := p.advance()
@@ -32,10 +32,14 @@ func parseBlockTag(p *parser, openTok token) (Node, error) {
 	}
 	openTrim.Right = closeTok.TrimRight
 
-	// Block name is the first whitespace-delimited token of the body.
-	name := strings.TrimSpace(bodyTok.Lit)
-	if fields := strings.Fields(name); len(fields) > 0 {
-		name = fields[0]
+	// Block name is the first whitespace-delimited token of the body. Scan for
+	// it directly rather than via strings.Fields, which would allocate a slice
+	// for the whole body just to read fields[0].
+	name := strings.TrimSpace(bodyTok.Lit(p.source))
+	if i := strings.IndexFunc(name, func(r rune) bool {
+		return r == ' ' || r == '\t' || r == '\n' || r == '\r'
+	}); i != -1 {
+		name = name[:i]
 	}
 
 	spec := lookupTag("block")
@@ -71,7 +75,7 @@ func (p *parser) consumeEndTag(name string) (TwigTrim, error) {
 	trim := TwigTrim{Left: openTok.TrimLeft}
 	p.advance()
 	identTok := p.advance()
-	if identTok.Type != tokTwigIdent || identTok.Lit != name {
+	if identTok.Type != tokTwigIdent || identTok.Lit(p.source) != name {
 		return TwigTrim{}, errAt(p.source, p.filename, identTok.Pos, "expected '%s'", name)
 	}
 	// Body is usually empty; skip.

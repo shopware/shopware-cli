@@ -33,8 +33,8 @@ type TagSpec struct {
 type TagParseFunc func(p *parser, openTok token) (Node, error)
 
 var (
-	tagRegistryMu sync.RWMutex
-	tagRegistry   = map[string]TagSpec{}
+	tagRegistryMu sync.Mutex
+	tagRegistry   = map[string]*TagSpec{}
 )
 
 // registerTag adds a tag handler to the registry. Called from init() in each
@@ -51,15 +51,19 @@ func registerTag(spec TagSpec) {
 	if _, dup := tagRegistry[spec.Name]; dup {
 		panic("html: duplicate tag registration: " + spec.Name)
 	}
-	tagRegistry[spec.Name] = spec
+	specCopy := spec
+	tagRegistry[spec.Name] = &specCopy
 }
 
 // lookupTag returns the TagSpec for name, or nil if unregistered.
+//
+// The registry is populated entirely from init() functions in the tag_*.go
+// files, which run before any parsing can occur, so it is effectively immutable
+// on the read path. Looking up without locking avoids RWMutex overhead on the
+// parser hot path; the stored *TagSpec is never mutated after registration.
 func lookupTag(name string) *TagSpec {
-	tagRegistryMu.RLock()
-	defer tagRegistryMu.RUnlock()
 	if spec, ok := tagRegistry[name]; ok {
-		return &spec
+		return spec
 	}
 	return nil
 }

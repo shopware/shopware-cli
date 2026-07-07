@@ -1,0 +1,14 @@
+<container>
+    <services>
+        <service id="Shop\Listener" class="Shop\Listener">
+            <tag name="kernel.event_listener" event="kernel.request" method="onRequest" priority="-10"/>
+            <tag name="shop.custom" some-attribute="value"/>
+            <tag>shop.text_tag</tag>
+            <tag name="shop.nested">
+                <attribute name="config">
+                    <attribute name="enabled">true</attribute>
+                </attribute>
+            </tag>
+        </service>
+    </services>
+</container>

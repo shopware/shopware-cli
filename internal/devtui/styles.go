@@ -13,14 +13,14 @@ var (
 	valueStyle = lipgloss.NewStyle().
 			Foreground(tui.TextColor)
 
-	urlStyle = lipgloss.NewStyle().
-			Foreground(tui.LinkColor)
-
 	secretStyle = lipgloss.NewStyle().
 			Foreground(tui.WarnColor)
 
 	helpStyle = lipgloss.NewStyle().
 			Foreground(tui.MutedColor)
+
+	brandColor = lipgloss.NewStyle().
+			Foreground(tui.BrandColor)
 
 	activeBadgeStyle = lipgloss.NewStyle().
 				Foreground(tui.SuccessColor).
@@ -37,15 +37,14 @@ var (
 	sidebarStyle = lipgloss.NewStyle().
 			Border(lipgloss.RoundedBorder()).
 			BorderForeground(tui.BorderColor).
-			Padding(1, 1)
+			Padding(0, 1)
 
 	sidebarItemStyle = lipgloss.NewStyle().
 				Foreground(tui.MutedColor).
 				Padding(0, 1)
 
 	selectedSidebarItemStyle = lipgloss.NewStyle().
-					Foreground(tui.TextColor).
-					Background(tui.SubtleBgColor).
+					Foreground(tui.BrandColor).
 					Bold(true).
 					Padding(0, 1)
 
@@ -54,8 +53,7 @@ var (
 				Padding(0, 1)
 
 	activeSelectedSidebarItemStyle = lipgloss.NewStyle().
-					Foreground(tui.TextColor).
-					Background(tui.SelectedBgColor).
+					Foreground(tui.BrandColor).
 					Bold(true).
 					Padding(0, 1)
 
@@ -70,12 +68,13 @@ var (
 				Padding(0, 0, 1)
 
 	activeBtnStyle = lipgloss.NewStyle().
-			Foreground(tui.TextColor).
+			Foreground(tui.OnBrandColor).
 			Background(tui.BrandColor).
+			Bold(true).
 			Padding(0, 2)
 
 	inactiveBtnStyle = lipgloss.NewStyle().
-				Foreground(tui.MutedColor).
+				Foreground(tui.TextColor).
 				Background(tui.SubtleBgColor).
 				Padding(0, 2)
 )
@@ -93,15 +92,23 @@ func renderShowPasswordCheckbox(checked, focused bool) string {
 }
 
 func renderConfirmButtons(yesLabel, noLabel string, yesActive bool) string {
-	var yes, no string
+	active := 1
 	if yesActive {
-		yes = activeBtnStyle.Render(yesLabel)
-		no = inactiveBtnStyle.Render(noLabel)
-	} else {
-		yes = inactiveBtnStyle.Render(yesLabel)
-		no = activeBtnStyle.Render(noLabel)
+		active = 0
 	}
-	return yes + "  " + no
+	return renderButtonRow([]string{yesLabel, noLabel}, active)
+}
+
+func renderButtonRow(labels []string, active int) string {
+	buttons := make([]string, len(labels))
+	for i, label := range labels {
+		if i == active {
+			buttons[i] = activeBtnStyle.Render(label)
+		} else {
+			buttons[i] = inactiveBtnStyle.Render(label)
+		}
+	}
+	return strings.Join(buttons, "  ")
 }
 
 func buildTabHeader(activeTab int, width int) string {
@@ -112,7 +119,7 @@ func buildTabHeader(activeTab int, width int) string {
 
 	activeNumStyle := lipgloss.NewStyle().
 		Bold(true).
-		Foreground(tui.TextColor).
+		Foreground(tui.OnBrandColor).
 		Background(tui.BrandColor)
 	activeLabelStyle := lipgloss.NewStyle().
 		Bold(true).

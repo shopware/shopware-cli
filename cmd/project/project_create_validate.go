@@ -18,6 +18,10 @@ import (
 )
 
 func validateAndPreflight(ctx context.Context, opts *createOptions, releases []packagist.ComposerPackageVersion, filteredVersions []*version.Version) (string, *packagist.PHPConstraint, error) {
+	if err := validateProjectName(opts.projectFolder); err != nil {
+		return "", nil, err
+	}
+
 	chosenVersion := resolveVersion(opts.selectedVersion, filteredVersions)
 	if chosenVersion == "" {
 		return "", nil, fmt.Errorf("cannot find version %s", opts.selectedVersion)

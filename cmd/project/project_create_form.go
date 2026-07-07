@@ -103,12 +103,17 @@ func runCreateForm(cmd *cobra.Command, opts *createOptions, filteredVersions []*
 			formGroups = append(formGroups, huh.NewGroup(
 				huh.NewInput().
 					Title("Project Name").
-					Description("The name of the project directory to create").
+					DescriptionFunc(func() string {
+						return projectNameFieldDescription(opts.projectFolder)
+					}, &opts.projectFolder).
 					Placeholder("my-shopware-project").
 					Value(&opts.projectFolder).
 					Validate(func(s string) error {
 						if s == "" {
 							return fmt.Errorf("project name is required")
+						}
+						if err := validateProjectName(s); err != nil {
+							return err
 						}
 						if info, err := os.Stat(s); err == nil && info.IsDir() {
 							empty, err := system.IsDirEmpty(s)

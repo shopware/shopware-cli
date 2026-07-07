@@ -1,0 +1,6 @@
+<container>
+    <services>
+        <prototype namespace="Shop\" resource="../src/*"/>
+        <service id="Shop\Special" class="Shop\Special" public="true"/>
+    </services>
+</container>

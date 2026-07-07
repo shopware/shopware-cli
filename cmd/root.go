@@ -59,12 +59,12 @@ func run(ctx context.Context) int {
 	err := rootCmd.ExecuteContext(ctx)
 
 	if cmd, _, findErr := rootCmd.Find(os.Args[1:]); findErr == nil && cmd != rootCmd && cmd.RunE != nil {
-		result := "success"
+		result := tracking.ResultSuccess
 		if err != nil {
 			if errors.Is(err, context.Canceled) {
-				result = "cancelled"
+				result = tracking.ResultCancelled
 			} else {
-				result = "failure"
+				result = tracking.ResultFailure
 			}
 		}
 		name := strings.TrimPrefix(cmd.CommandPath(), "shopware-cli ")
@@ -72,13 +72,13 @@ func run(ctx context.Context) int {
 		name = strings.ReplaceAll(name, "-", "_")
 		trackCtx, trackCancel := context.WithTimeout(context.WithoutCancel(ctx), 300*time.Millisecond)
 		defer trackCancel()
-		tracking.Track(trackCtx, "command", map[string]string{
-			"command_name": name,
-			"result":       result,
-			"duration_ms":  strconv.FormatInt(time.Since(start).Milliseconds(), 10),
-			"cli_version":  version,
-			"os":           runtime.GOOS,
-			"is_tui":       strconv.FormatBool(system.IsInteractionEnabled(ctx)),
+		tracking.Track(trackCtx, tracking.EventCommand, map[string]string{
+			tracking.TagCommandName: name,
+			tracking.TagResult:      result,
+			tracking.TagDurationMS:  strconv.FormatInt(time.Since(start).Milliseconds(), 10),
+			tracking.TagCLIVersion:  version,
+			tracking.TagOS:          runtime.GOOS,
+			tracking.TagIsTUI:       strconv.FormatBool(system.IsInteractionEnabled(ctx)),
 		})
 	}
 

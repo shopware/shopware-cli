@@ -1,0 +1,15 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/symfony/dependency-injection/7.4/Loader/schema/services.schema.json
+services:
+    Shop\A:
+        lazy: true
+        shared: false
+        synthetic: true
+        abstract: true
+        public: false
+        autowire: true
+        autoconfigure: false
+        constructor: create
+
+    Shop\B:
+        parent: Shop\A
+        lazy: Shop\SomeInterface

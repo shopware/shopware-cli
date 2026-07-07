@@ -2,7 +2,33 @@ package html
 
 import (
 	"strings"
+	"unicode"
+	"unicode/utf8"
 )
+
+// trimSpaceWindow returns the [offset,len) window of strings.TrimSpace applied
+// to src[off:off+n], matching its Unicode whitespace semantics exactly so a
+// token can carry the trimmed body as offsets rather than a computed string.
+func trimSpaceWindow(src string, off, n int) (int, int) {
+	sub := src[off : off+n]
+	start := 0
+	for start < len(sub) {
+		r, size := utf8.DecodeRuneInString(sub[start:])
+		if !unicode.IsSpace(r) {
+			break
+		}
+		start += size
+	}
+	end := len(sub)
+	for end > start {
+		r, size := utf8.DecodeLastRuneInString(sub[:end])
+		if !unicode.IsSpace(r) {
+			break
+		}
+		end -= size
+	}
+	return off + start, end - start
+}
 
 // lexer scans the source into a stream of tokens. It interleaves HTML and Twig
 // recognition. Twig statement/expression/comment bodies are returned as a single
@@ -10,12 +36,18 @@ import (
 // understand Twig expression syntax beyond what is needed for tag dispatch.
 type lexer struct {
 	src    string
-	pt     *posTracker
+	pt     posTracker
 	tokens []token
 }
 
 func newLexer(src string) *lexer {
-	return &lexer{src: src, pt: newPosTracker(src)}
+	// Pre-size the token slice to avoid the repeated geometric reallocations
+	// (and the copies they incur) that dominate lexer allocations. Measured
+	// token density on real twig/HTML is ~5.6 source bytes per token; sizing at
+	// src/5 (slightly generous) means the slice almost never has to grow, so we
+	// pay one right-sized allocation instead of one allocation plus a doubling
+	// copy. The +16 covers tiny inputs and the trailing EOF.
+	return &lexer{src: src, pt: posTracker{src: src, cur: Pos{Offset: 0, Line: 1}}, tokens: make([]token, 0, len(src)/5+16)}
 }
 
 // lex scans the entire source and returns the token stream.
@@ -31,6 +63,26 @@ func (l *lexer) lex() ([]token, error) {
 
 func (l *lexer) emit(t token) {
 	l.tokens = append(l.tokens, t)
+}
+
+// mkTok builds a token from source [offset,len) windows for Lit and Raw. All
+// lexed literals are substrings of l.src, so callers pass offsets instead of
+// string slices — see the token type doc for why this stays pointer-free.
+func mkTok(typ tokenType, pos Pos, litOff, litLen, rawOff, rawLen int) token {
+	return token{
+		Type:   typ,
+		litOff: int32(litOff),
+		litLen: int32(litLen),
+		rawOff: int32(rawOff),
+		rawLen: int32(rawLen),
+		Pos:    pos,
+	}
+}
+
+// span builds a token whose Lit and Raw are the same [off,off+n) window, the
+// common case for text, tag names, and delimiters.
+func span(typ tokenType, pos Pos, off, n int) token {
+	return mkTok(typ, pos, off, n, off, n)
 }
 
 // remaining returns the unconsumed source.
@@ -58,13 +110,21 @@ func (l *lexer) lexContent() error {
 		return nil
 	}
 
-	// Find the next delimiter we care about.
+	// Find the next delimiter we care about. Rather than inspecting every byte,
+	// jump straight to the next '<' or '{' candidate via strings.IndexByte,
+	// which is SIMD-accelerated on amd64/arm64. Text between candidates (the
+	// bulk of most templates) is skipped in bulk instead of one byte at a time.
 	idx := -1
 	kind := ""
-	for i := 0; i < len(rem); i++ {
-		c := rem[i]
-		switch c {
-		case '<':
+	for i := 0; i < len(rem); {
+		// Locate the next '<' or '{' candidate in one SIMD-accelerated pass.
+		rel := strings.IndexAny(rem[i:], "<{")
+		if rel == -1 {
+			break
+		}
+		i += rel
+
+		if rem[i] == '<' {
 			// Don't recognize `<` as a tag start if the previous byte is also `<`
 			// (so inputs like `<<Success>>` flow through as text).
 			absOff := l.pt.cur.Offset + i
@@ -81,33 +141,32 @@ func (l *lexer) lexContent() error {
 			case !prevIsLT && i+1 < len(rem) && isHTMLNameStart(rem[i+1]):
 				idx, kind = i, "html-open"
 			}
-		case '{':
-			if i+1 < len(rem) {
-				switch rem[i+1] {
-				case '%':
-					idx, kind = i, "twig-stmt"
-				case '{':
-					idx, kind = i, "twig-expr"
-				case '#':
-					idx, kind = i, "twig-comment"
-				}
+		} else if i+1 < len(rem) { // '{'
+			switch rem[i+1] {
+			case '%':
+				idx, kind = i, "twig-stmt"
+			case '{':
+				idx, kind = i, "twig-expr"
+			case '#':
+				idx, kind = i, "twig-comment"
 			}
 		}
 		if idx != -1 {
 			break
 		}
+		// This candidate wasn't a real delimiter; resume scanning after it.
+		i++
 	}
 
 	if idx == -1 {
 		// Rest is all text.
-		l.emit(token{Type: tokText, Lit: rem, Raw: rem, Pos: startPos})
+		l.emit(span(tokText, startPos, startPos.Offset, len(rem)))
 		l.pt.advance(len(rem))
 		return nil
 	}
 
 	if idx > 0 {
-		text := rem[:idx]
-		l.emit(token{Type: tokText, Lit: text, Raw: text, Pos: startPos})
+		l.emit(span(tokText, startPos, startPos.Offset, idx))
 		l.pt.advance(idx)
 	}
 
@@ -163,8 +222,9 @@ func (l *lexer) lexHTMLComment() error {
 	}
 	end += 4 // adjust back to an index into rem
 	raw := rem[:end+3]
-	body := strings.TrimSpace(rem[4:end])
-	l.emit(token{Type: tokHTMLComment, Lit: body, Raw: raw, Pos: startPos})
+	rawOff := startPos.Offset
+	litOff, litLen := trimSpaceWindow(l.src, rawOff+4, end-4)
+	l.emit(mkTok(tokHTMLComment, startPos, litOff, litLen, rawOff, len(raw)))
 	l.pt.advance(len(raw))
 	return nil
 }
@@ -177,16 +237,15 @@ func (l *lexer) lexHTMLDoctype() error {
 	if end == -1 {
 		return &ParseError{Pos: startPos, Msg: "unterminated <!DOCTYPE>", Source: l.src}
 	}
-	raw := rem[:end+1]
-	l.emit(token{Type: tokHTMLDoctype, Lit: raw, Raw: raw, Pos: startPos})
-	l.pt.advance(len(raw))
+	l.emit(span(tokHTMLDoctype, startPos, startPos.Offset, end+1))
+	l.pt.advance(end + 1)
 	return nil
 }
 
 // lexHTMLOpenTag emits tokens for `<name attr="val" {% if x %}...{% endif %} ...>` or `... />`.
 func (l *lexer) lexHTMLOpenTag() error {
 	startPos := l.pt.pos()
-	l.emit(token{Type: tokHTMLOpenStart, Lit: "<", Raw: "<", Pos: startPos})
+	l.emit(span(tokHTMLOpenStart, startPos, startPos.Offset, 1))
 	l.pt.advance(1) // skip '<'
 
 	if err := l.lexHTMLTagName(); err != nil {
@@ -198,7 +257,7 @@ func (l *lexer) lexHTMLOpenTag() error {
 // lexHTMLCloseTag emits tokens for `</name>`.
 func (l *lexer) lexHTMLCloseTag() error {
 	startPos := l.pt.pos()
-	l.emit(token{Type: tokHTMLCloseStart, Lit: "</", Raw: "</", Pos: startPos})
+	l.emit(span(tokHTMLCloseStart, startPos, startPos.Offset, 2))
 	l.pt.advance(2)
 	l.skipASCIIWhitespace()
 	if err := l.lexHTMLTagName(); err != nil {
@@ -209,7 +268,7 @@ func (l *lexer) lexHTMLCloseTag() error {
 		return &ParseError{Pos: l.pt.pos(), Msg: "expected '>' for closing tag", Source: l.src}
 	}
 	endPos := l.pt.pos()
-	l.emit(token{Type: tokHTMLTagEnd, Lit: ">", Raw: ">", Pos: endPos})
+	l.emit(span(tokHTMLTagEnd, endPos, endPos.Offset, 1))
 	l.pt.advance(1)
 	return nil
 }
@@ -224,8 +283,7 @@ func (l *lexer) lexHTMLTagName() error {
 	for end < len(l.src) && isHTMLNameRune(l.src[end]) {
 		end++
 	}
-	name := l.src[start:end]
-	l.emit(token{Type: tokHTMLTagName, Lit: name, Raw: name, Pos: startPos})
+	l.emit(span(tokHTMLTagName, startPos, start, end-start))
 	l.pt.advance(end - start)
 	return nil
 }
@@ -247,13 +305,13 @@ func (l *lexer) lexHTMLAttrsAndClose() error {
 		}
 		if c == '>' {
 			pos := l.pt.pos()
-			l.emit(token{Type: tokHTMLTagEnd, Lit: ">", Raw: ">", Pos: pos})
+			l.emit(span(tokHTMLTagEnd, pos, pos.Offset, 1))
 			l.pt.advance(1)
 			return nil
 		}
 		if c == '/' && l.peekByte(1) == '>' {
 			pos := l.pt.pos()
-			l.emit(token{Type: tokHTMLSelfClose, Lit: "/>", Raw: "/>", Pos: pos})
+			l.emit(span(tokHTMLSelfClose, pos, pos.Offset, 2))
 			l.pt.advance(2)
 			return nil
 		}
@@ -300,20 +358,20 @@ func (l *lexer) lexHTMLAttr() error {
 		}
 		l.pt.advance(1)
 	}
-	name := l.src[start:l.pt.cur.Offset]
-	if name == "" {
+	nameEnd := l.pt.cur.Offset
+	if nameEnd == start {
 		// Unexpected character. Skip one byte to make progress and let the
 		// parser raise an error later.
 		l.pt.advance(1)
 		return nil
 	}
-	l.emit(token{Type: tokHTMLAttrName, Lit: name, Raw: name, Pos: startPos})
+	l.emit(span(tokHTMLAttrName, startPos, start, nameEnd-start))
 	l.skipASCIIWhitespace()
 	if l.peekByte(0) != '=' {
 		return nil
 	}
 	eqPos := l.pt.pos()
-	l.emit(token{Type: tokHTMLAttrEq, Lit: "=", Raw: "=", Pos: eqPos})
+	l.emit(span(tokHTMLAttrEq, eqPos, eqPos.Offset, 1))
 	l.pt.advance(1)
 	l.skipASCIIWhitespace()
 	return l.lexHTMLAttrValue()
@@ -330,12 +388,13 @@ func (l *lexer) lexHTMLAttrValue() error {
 		for l.pt.cur.Offset < len(l.src) && l.src[l.pt.cur.Offset] != quote {
 			l.pt.advance(1)
 		}
-		val := l.src[start:l.pt.cur.Offset]
+		valEnd := l.pt.cur.Offset
 		if l.pt.cur.Offset < len(l.src) && l.src[l.pt.cur.Offset] == quote {
 			l.pt.advance(1)
 		}
-		raw := l.src[rawStart:l.pt.cur.Offset]
-		l.emit(token{Type: tokHTMLAttrValue, Lit: val, Raw: raw, Pos: startPos, QuoteChar: quote})
+		t := mkTok(tokHTMLAttrValue, startPos, start, valEnd-start, rawStart, l.pt.cur.Offset-rawStart)
+		t.QuoteChar = quote
+		l.emit(t)
 		return nil
 	}
 	// Bareword.
@@ -347,8 +406,7 @@ func (l *lexer) lexHTMLAttrValue() error {
 		}
 		l.pt.advance(1)
 	}
-	val := l.src[start:l.pt.cur.Offset]
-	l.emit(token{Type: tokHTMLAttrValue, Lit: val, Raw: val, Pos: startPos, QuoteChar: 0})
+	l.emit(span(tokHTMLAttrValue, startPos, start, l.pt.cur.Offset-start))
 	return nil
 }
 
@@ -361,8 +419,9 @@ func (l *lexer) lexTwigStmt() error {
 		trimLeft = true
 		openLen = 3
 	}
-	openRaw := l.src[l.pt.cur.Offset : l.pt.cur.Offset+openLen]
-	l.emit(token{Type: tokTwigStmtOpen, Lit: openRaw, Raw: openRaw, Pos: openPos, TrimLeft: trimLeft})
+	openTok := span(tokTwigStmtOpen, openPos, l.pt.cur.Offset, openLen)
+	openTok.TrimLeft = trimLeft
+	l.emit(openTok)
 	l.pt.advance(openLen)
 
 	// Identifier (tag name) — capture any leading whitespace in Raw.
@@ -375,10 +434,10 @@ func (l *lexer) lexTwigStmt() error {
 	for l.pt.cur.Offset < len(l.src) && isTwigIdentRune(l.src[l.pt.cur.Offset]) {
 		l.pt.advance(1)
 	}
-	ident := l.src[identStart:l.pt.cur.Offset]
-	identRaw := l.src[wsStart:l.pt.cur.Offset]
-	if ident != "" || identRaw != "" {
-		l.emit(token{Type: tokTwigIdent, Lit: ident, Raw: identRaw, Pos: wsPos})
+	identEnd := l.pt.cur.Offset
+	// Emit when there is an identifier or any leading whitespace to preserve.
+	if identEnd > wsStart {
+		l.emit(mkTok(tokTwigIdent, wsPos, identStart, identEnd-identStart, wsStart, identEnd-wsStart))
 	}
 
 	bodyStart := l.pt.cur.Offset
@@ -387,9 +446,8 @@ func (l *lexer) lexTwigStmt() error {
 	if closeOffset == -1 {
 		return &ParseError{Pos: openPos, Msg: "unterminated {% ... %}", Source: l.src}
 	}
-	rawBody := l.src[bodyStart:closeOffset]
-	body := strings.TrimSpace(rawBody)
-	l.emit(token{Type: tokTwigRawExpr, Lit: body, Raw: rawBody, Pos: bodyPos})
+	litOff, litLen := trimSpaceWindow(l.src, bodyStart, closeOffset-bodyStart)
+	l.emit(mkTok(tokTwigRawExpr, bodyPos, litOff, litLen, bodyStart, closeOffset-bodyStart))
 	l.pt.advance(closeOffset - l.pt.cur.Offset)
 
 	closeLen := 2
@@ -397,8 +455,9 @@ func (l *lexer) lexTwigStmt() error {
 		closeLen = 3
 	}
 	closePos := l.pt.pos()
-	closeRaw := l.src[l.pt.cur.Offset : l.pt.cur.Offset+closeLen]
-	l.emit(token{Type: tokTwigStmtClose, Lit: closeRaw, Raw: closeRaw, Pos: closePos, TrimRight: trimRight})
+	closeTok := span(tokTwigStmtClose, closePos, l.pt.cur.Offset, closeLen)
+	closeTok.TrimRight = trimRight
+	l.emit(closeTok)
 	l.pt.advance(closeLen)
 	return nil
 }
@@ -412,7 +471,9 @@ func (l *lexer) lexTwigExpr() error {
 		trimLeft = true
 		openLen = 3
 	}
-	l.emit(token{Type: tokTwigExprOpen, Lit: l.src[l.pt.cur.Offset : l.pt.cur.Offset+openLen], Raw: l.src[l.pt.cur.Offset : l.pt.cur.Offset+openLen], Pos: openPos, TrimLeft: trimLeft})
+	openTok := span(tokTwigExprOpen, openPos, l.pt.cur.Offset, openLen)
+	openTok.TrimLeft = trimLeft
+	l.emit(openTok)
 	l.pt.advance(openLen)
 
 	bodyStart := l.pt.cur.Offset
@@ -421,15 +482,19 @@ func (l *lexer) lexTwigExpr() error {
 	if closeOffset == -1 {
 		return &ParseError{Pos: openPos, Msg: "unterminated {{ ... }}", Source: l.src}
 	}
-	rawBody := l.src[bodyStart:closeOffset]
-	body := rawBody
+	litEnd := closeOffset
 	if trimRight {
-		// trimRight strip: scanToTwigClose returns offset pointing at the '-' of '-}}'.
-		// Body should keep its leading/trailing spaces around the inner expression
-		// to mirror the original (the parser later strips when emitting).
-		body = strings.TrimSuffix(strings.TrimRight(body, " \t"), "-")
+		// scanToTwigClose returns the offset of the '-' in '-}}'. Mirror
+		// strings.TrimSuffix(strings.TrimRight(body, " \t"), "-"): drop trailing
+		// spaces/tabs, then one trailing '-'. Leading spaces are preserved.
+		for litEnd > bodyStart && (l.src[litEnd-1] == ' ' || l.src[litEnd-1] == '\t') {
+			litEnd--
+		}
+		if litEnd > bodyStart && l.src[litEnd-1] == '-' {
+			litEnd--
+		}
 	}
-	l.emit(token{Type: tokTwigRawExpr, Lit: body, Raw: rawBody, Pos: bodyPos})
+	l.emit(mkTok(tokTwigRawExpr, bodyPos, bodyStart, litEnd-bodyStart, bodyStart, closeOffset-bodyStart))
 	l.pt.advance(closeOffset - l.pt.cur.Offset)
 
 	closeLen := 2
@@ -437,7 +502,9 @@ func (l *lexer) lexTwigExpr() error {
 		closeLen = 3
 	}
 	closePos := l.pt.pos()
-	l.emit(token{Type: tokTwigExprClose, Lit: l.src[l.pt.cur.Offset : l.pt.cur.Offset+closeLen], Raw: l.src[l.pt.cur.Offset : l.pt.cur.Offset+closeLen], Pos: closePos, TrimRight: trimRight})
+	closeTok := span(tokTwigExprClose, closePos, l.pt.cur.Offset, closeLen)
+	closeTok.TrimRight = trimRight
+	l.emit(closeTok)
 	l.pt.advance(closeLen)
 	return nil
 }
@@ -451,7 +518,9 @@ func (l *lexer) lexTwigComment() error {
 		trimLeft = true
 		openLen = 3
 	}
-	l.emit(token{Type: tokTwigCommentOpen, Lit: l.src[l.pt.cur.Offset : l.pt.cur.Offset+openLen], Raw: l.src[l.pt.cur.Offset : l.pt.cur.Offset+openLen], Pos: openPos, TrimLeft: trimLeft})
+	openTok := span(tokTwigCommentOpen, openPos, l.pt.cur.Offset, openLen)
+	openTok.TrimLeft = trimLeft
+	l.emit(openTok)
 	l.pt.advance(openLen)
 
 	bodyStart := l.pt.cur.Offset
@@ -466,8 +535,7 @@ func (l *lexer) lexTwigComment() error {
 	if trimRight {
 		bodyEnd--
 	}
-	body := l.src[bodyStart:bodyEnd]
-	l.emit(token{Type: tokTwigCommentText, Lit: body, Raw: body, Pos: bodyPos})
+	l.emit(span(tokTwigCommentText, bodyPos, bodyStart, bodyEnd-bodyStart))
 	l.pt.advance(end)
 	// Cursor is at '#}'. The closer emission below backs up one byte when
 	// trimRight so the '-' becomes part of the close token's Raw.
@@ -480,9 +548,10 @@ func (l *lexer) lexTwigComment() error {
 		closeStart--
 		closeLen = 3
 		closePos.Offset--
-		closePos.Column--
 	}
-	l.emit(token{Type: tokTwigCommentClose, Lit: l.src[closeStart : closeStart+closeLen], Raw: l.src[closeStart : closeStart+closeLen], Pos: closePos, TrimRight: trimRight})
+	closeTok := span(tokTwigCommentClose, closePos, closeStart, closeLen)
+	closeTok.TrimRight = trimRight
+	l.emit(closeTok)
 	// Advance past '#}' (we're already at '#}').
 	l.pt.advance(2)
 	return nil

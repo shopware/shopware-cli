@@ -90,7 +90,8 @@ func init() {
 	projectStorefrontBuildCmd.PersistentFlags().Bool("skip-assets-install", false, "Skips the assets installation")
 	projectStorefrontBuildCmd.PersistentFlags().Bool("skip-theme-compile", false, "Skip theme compilation")
 	projectStorefrontBuildCmd.PersistentFlags().Bool("force-install-dependencies", false, "Force install NPM dependencies")
-	projectStorefrontBuildCmd.PersistentFlags().String("only-extensions", "", "Only watch the given extensions (comma separated)")
+	projectStorefrontBuildCmd.PersistentFlags().String("only-extensions", "", "Only build the given extensions (comma separated). Pass without a value (--only-extensions) to pick interactively")
+	projectStorefrontBuildCmd.PersistentFlags().Lookup("only-extensions").NoOptDefVal = " "
 	projectStorefrontBuildCmd.PersistentFlags().String("skip-extensions", "", "Skips the given extensions (comma separated)")
 	projectStorefrontBuildCmd.PersistentFlags().Bool("only-custom-static-extensions", false, "Only build extensions from custom/static-plugins directory")
 }

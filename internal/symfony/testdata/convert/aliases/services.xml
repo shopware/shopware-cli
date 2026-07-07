@@ -1,0 +1,9 @@
+<container>
+    <services>
+        <service id="shop.short_alias" alias="Shop\Service"/>
+        <service id="shop.public_alias" alias="Shop\Service" public="true"/>
+        <service id="shop.deprecated_alias" alias="Shop\Service">
+            <deprecated package="shop/plugin" version="1.2">The "%alias_id%" alias is deprecated.</deprecated>
+        </service>
+    </services>
+</container>

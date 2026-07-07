@@ -11,6 +11,7 @@ import (
 	"github.com/shopware/shopware-cli/internal/envfile"
 	"github.com/shopware/shopware-cli/internal/executor"
 	"github.com/shopware/shopware-cli/internal/shop"
+	"github.com/shopware/shopware-cli/internal/tracking"
 )
 
 func (m Model) updateKeyPress(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
@@ -20,8 +21,8 @@ func (m Model) updateKeyPress(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m, cmd
 	}
 
-	if m.phase == phaseSetupGuide {
-		return m.updateSetupGuide(msg)
+	if m.phase == phaseMigrationWizard {
+		return m.updateMigrationWizard(msg)
 	}
 
 	if m.phase == phaseInstallPrompt {
@@ -33,6 +34,12 @@ func (m Model) updateKeyPress(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		case "l":
 			m.dockerShowLogs = !m.dockerShowLogs
 		case keyQ, keyCtrlC:
+			if m.phase == phaseStarting {
+				if tags, ok := m.telemetry.dockerStartTags(nil); ok {
+					tags[tracking.TagResult] = tracking.ResultCancelled
+					trackEventNow(tracking.EventDevDockerStart, tags)
+				}
+			}
 			return m, tea.Quit
 		}
 		return m, nil
@@ -43,6 +50,11 @@ func (m Model) updateKeyPress(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		case "l":
 			m.installProg.showLogs = !m.installProg.showLogs
 		case keyQ, keyCtrlC:
+			if m.telemetry.installOnce() {
+				tags := m.telemetry.installTags(tracking.ResultCancelled, m.install)
+				tags[tracking.TagAbandonedAt] = "installing"
+				trackEventNow(tracking.EventDevInstall, tags)
+			}
 			return m, tea.Quit
 		}
 		return m, nil
@@ -57,6 +69,9 @@ func (m Model) updateKeyPress(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		if msg.String() == keyQ || msg.String() == keyCtrlC {
+			if tags, ok := m.telemetry.taskTags(tracking.ResultCancelled); ok {
+				trackEventNow(tracking.EventDevAction, tags)
+			}
 			return m, tea.Quit
 		}
 		return m, nil
@@ -68,7 +83,10 @@ func (m Model) updateKeyPress(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 func (m Model) updateDashboardKeys(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
 	case "ctrl+p":
-		m.modal = newCommandPalette()
+		m.modal = newCommandPalette(paletteState{
+			adminWatchActive: m.overview.adminWatchRunning || m.overview.adminWatchStarting,
+			sfWatchActive:    m.overview.sfWatchRunning || m.overview.sfWatchStarting,
+		})
 		return m, textinput.Blink
 	case keyCtrlC, keyQ:
 		if m.dockerMode {
@@ -78,19 +96,24 @@ func (m Model) updateDashboardKeys(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.shutdown()
 		return m, tea.Quit
 	case key1:
-		m.activeTab = tabGeneral
+		m.activeTab = tabOverview
+		m.telemetry.markTab(m.activeTab)
 		return m, nil
 	case key2:
-		m.activeTab = tabLogs
+		m.activeTab = tabInstance
+		m.telemetry.markTab(m.activeTab)
 		return m, nil
 	case key3:
 		m.activeTab = tabConfig
+		m.telemetry.markTab(m.activeTab)
 		return m, nil
 	case keyTab:
 		m.activeTab = (m.activeTab + 1) % activeTab(len(tabNames))
+		m.telemetry.markTab(m.activeTab)
 		return m, nil
 	case keyShiftTab:
 		m.activeTab = (m.activeTab - 1 + activeTab(len(tabNames))) % activeTab(len(tabNames))
+		m.telemetry.markTab(m.activeTab)
 		return m, nil
 	}
 
@@ -149,43 +172,48 @@ func (m Model) updateConfigTab(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 
 func (m Model) executeCommand(id string) (tea.Model, tea.Cmd) {
 	switch id {
-	case "open-shop":
-		return m, openInBrowser(m.general.shopURL)
-	case "open-admin":
-		return m, openInBrowser(m.general.adminURL)
+	case "open-shop", "open-admin":
+		m.telemetry.countAction()
+		trackEvent(tracking.EventDevAction, map[string]string{tracking.TagAction: id})
+		if id == "open-shop" {
+			return m, openInBrowser(m.overview.shopURL)
+		}
+		return m, openInBrowser(m.overview.adminURL)
 	case "cache-clear":
+		m.telemetry.beginTask(id)
 		return m, m.runCacheClear()
 	case "admin-build":
+		m.telemetry.beginTask(id)
 		return m, m.runAdminBuild()
 	case "sf-build":
+		m.telemetry.beginTask(id)
 		return m, m.runStorefrontBuild()
 	case "admin-watch-start":
-		if !m.general.adminWatchRunning && !m.general.adminWatchStarting {
-			m.general.adminWatchStarting = true
-			return m, m.general.startAdminWatch()
+		if !m.overview.adminWatchRunning && !m.overview.adminWatchStarting {
+			m.overview.adminWatchStarting = true
+			return m, m.overview.startAdminWatch()
 		}
 	case "admin-watch-stop":
-		if m.general.adminWatchRunning {
-			m.general.adminWatchRunning = false
+		if m.overview.adminWatchRunning {
+			m.overview.adminWatchRunning = false
 			return m, m.stopWatcher(watcherAdmin)
 		}
 	case "sf-watch-start":
-		if !m.general.sfWatchRunning && !m.general.sfWatchStarting {
-			picker := newSalesChannelPicker(m.executor)
-			m.modal = picker
-			return m, picker.Init()
-		}
+		return m.openSalesChannelPicker()
 	case "sf-watch-stop":
-		if m.general.sfWatchRunning {
-			m.general.sfWatchRunning = false
+		if m.overview.sfWatchRunning {
+			m.overview.sfWatchRunning = false
 			return m, m.stopWatcher(watcherStorefront)
 		}
-	case "tab-logs":
-		m.activeTab = tabLogs
-	case "tab-general":
-		m.activeTab = tabGeneral
+	case "tab-instance":
+		m.activeTab = tabInstance
+		m.telemetry.markTab(m.activeTab)
+	case "tab-overview":
+		m.activeTab = tabOverview
+		m.telemetry.markTab(m.activeTab)
 	case "tab-config":
 		m.activeTab = tabConfig
+		m.telemetry.markTab(m.activeTab)
 	case "quit":
 		if m.dockerMode {
 			m.modal = newStopConfirm()
@@ -197,8 +225,23 @@ func (m Model) executeCommand(id string) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
+// openSalesChannelPicker opens the sales-channel picker modal so the user can
+// resolve a storefront's theme/domain before the watcher starts. Used by both
+// the command palette and the Overview tab's storefront activation.
+func (m Model) openSalesChannelPicker() (tea.Model, tea.Cmd) {
+	if m.overview.sfWatchRunning || m.overview.sfWatchStarting {
+		return m, nil
+	}
+	picker := newSalesChannelPicker(m.executor)
+	m.modal = picker
+	return m, picker.Init()
+}
+
 func (m *Model) stopWatcher(name string) tea.Cmd {
-	m.logs.StopStreaming()
+	if tags, ok := m.telemetry.watcherEndTags(name, watcherEndUserStopped); ok {
+		trackEvent(tracking.EventDevWatcher, tags)
+	}
+	m.instance.RemoveSource(name)
 
 	h := m.watchers[name]
 	delete(m.watchers, name)
@@ -214,63 +257,63 @@ func (m *Model) stopWatcher(name string) tea.Cmd {
 	}
 }
 
-func (m Model) updateSetupGuide(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
-	newGuide, cmd := m.setupGuide.update(msg)
-	m.setupGuide = newGuide
+func (m Model) updateMigrationWizard(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+	// Enter on the welcome screen's "Quit" button exits the wizard from inside
+	// migrationWizard.update, so detect it here before the state advances.
+	welcomeQuit := m.migrationWizard.step == migrationStepWelcome &&
+		!m.migrationWizard.confirmYes && msg.String() == keyEnter
+
+	newGuide, cmd := m.migrationWizard.update(msg)
+	m.migrationWizard = newGuide
 
 	// Ctrl+C on any step quits the app
-	if msg.String() == keyCtrlC {
+	if welcomeQuit || msg.String() == keyCtrlC {
+		// The done screen already sent a completed/failed event for this run.
+		if m.migrationWizard.step != migrationStepDone {
+			trackEventNow(tracking.EventDevMigrationWizard, migrationWizardTags(tracking.ResultCancelled, m.migrationWizard))
+		}
 		return m, tea.Quit
 	}
 
 	// User pressed Enter on the review step. confirmYes=true saves and
 	// continues, confirmYes=false picks the Quit button and exits the wizard.
-	if m.setupGuide.step == setupStepReview && msg.String() == keyEnter {
-		if m.setupGuide.confirmYes {
-			return m.saveSetupGuide()
+	if m.migrationWizard.step == migrationStepReview && msg.String() == keyEnter {
+		if m.migrationWizard.confirmYes {
+			return m.saveMigrationWizard()
 		}
+		trackEventNow(tracking.EventDevMigrationWizard, migrationWizardTags(tracking.ResultCancelled, m.migrationWizard))
 		return m, tea.Quit
 	}
 
 	// User pressed Enter on the done screen → start docker containers.
 	// If the previous save errored, stay on the done screen so the user can read it.
-	if m.setupGuide.step == setupStepDone && msg.String() == keyEnter && m.setupGuide.err == nil {
-		return m.startAfterSetupGuide()
+	if m.migrationWizard.step == migrationStepDone && msg.String() == keyEnter && m.migrationWizard.err == nil {
+		return m.startAfterMigrationWizard()
 	}
 
 	return m, cmd
 }
 
-func (m Model) saveSetupGuide() (tea.Model, tea.Cmd) {
-	m.setupGuide.applyToConfig(m.config)
+func (m Model) saveMigrationWizard() (tea.Model, tea.Cmd) {
+	m.migrationWizard.applyToConfig(m.config)
 	if err := shop.WriteConfig(m.config, m.projectRoot); err != nil {
-		m.setupGuide.err = err
-		m.setupGuide.step = setupStepDone
+		m.migrationWizard.err = err
+		m.migrationWizard.step = migrationStepDone
+		trackEvent(tracking.EventDevMigrationWizard, migrationWizardTags(tracking.ResultFailed, m.migrationWizard))
 		return m, nil
 	}
 
 	changed, err := ensureDeploymentHelper(m.projectRoot)
 	if err != nil {
-		m.setupGuide.err = err
-		m.setupGuide.step = setupStepDone
+		m.migrationWizard.err = err
+		m.migrationWizard.step = migrationStepDone
+		trackEvent(tracking.EventDevMigrationWizard, migrationWizardTags(tracking.ResultFailed, m.migrationWizard))
 		return m, nil
 	}
-	m.setupGuide.deploymentHelperAdded = changed
+	m.migrationWizard.deploymentHelperAdded = changed
 
-	if localCfg := m.setupGuide.localConfig(); localCfg != nil {
-		if err := shop.WriteLocalConfig(localCfg, m.projectRoot); err != nil {
-			m.setupGuide.err = err
-			m.setupGuide.step = setupStepDone
-			return m, nil
-		}
-		// Mirror the just-written profiler secrets onto the in-memory config
-		// so the first generated compose.yaml wires them up. They remain in
-		// .shopware-project.local.yml (not the committed config); this is
-		// only the runtime view ReadConfig would have produced on next launch.
-		mergeLocalProfilerSecrets(m.config, localCfg)
-	}
-
-	m.setupGuide.step = setupStepDone
+	m.migrationWizard.step = migrationStepDone
+	trackEvent(tracking.EventDevMigrationWizard, migrationWizardTags(tracking.ResultCompleted, m.migrationWizard))
 	return m, nil
 }
 
@@ -299,24 +342,24 @@ func mergeLocalProfilerSecrets(dst, src *shop.Config) {
 	}
 }
 
-func (m Model) startAfterSetupGuide() (tea.Model, tea.Cmd) {
+func (m Model) startAfterMigrationWizard() (tea.Model, tea.Cmd) {
 	envCfg, err := m.config.ResolveEnvironment("")
 	if err != nil {
-		m.setupGuide.err = err
+		m.migrationWizard.err = err
 		return m, nil
 	}
 	m.envConfig = envCfg
 
 	exec, err := executor.New(m.projectRoot, envCfg, m.config)
 	if err != nil {
-		m.setupGuide.err = err
+		m.migrationWizard.err = err
 		return m, nil
 	}
 	m.executor = exec
 
 	if m.executor.Type() == executor.TypeDocker {
 		if err := dockerpkg.WriteComposeFile(m.projectRoot, dockerpkg.ComposeOptionsFromConfig(m.config)); err != nil {
-			m.setupGuide.err = err
+			m.migrationWizard.err = err
 			return m, nil
 		}
 	}
@@ -326,18 +369,7 @@ func (m Model) startAfterSetupGuide() (tea.Model, tea.Cmd) {
 	m.dockerShowLogs = false
 	m.dockerSpinner = newBrandSpinner()
 
-	shopURL := m.config.URL
-	if m.envConfig.URL != "" {
-		shopURL = m.envConfig.URL
-	}
-	var username, password string
-	if m.envConfig.AdminApi != nil {
-		username = m.envConfig.AdminApi.Username
-		password = m.envConfig.AdminApi.Password
-	}
-	m.general = NewGeneralModel(m.executor.Type(), shopURL, username, password, m.projectRoot, m.executor, m.config)
-	envValues, _ := envfile.ReadValues(m.projectRoot, EnvFieldKeys()...)
-	m.configTab = NewConfigModel(m.config, envValues)
+	m.rebuildTabs()
 
 	return m, tea.Batch(m.dockerSpinner.Tick, m.startContainers())
 }

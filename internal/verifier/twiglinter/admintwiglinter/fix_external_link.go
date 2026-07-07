@@ -40,7 +40,7 @@ func (e ExternalLinkFixer) Fix(nodes []html.Node) error {
 			var newAttrs html.NodeList
 			for _, attrNode := range node.Attributes {
 				// Check if the attribute is an html.Attribute
-				if attr, ok := attrNode.(html.Attribute); ok {
+				if attr, ok := attrNode.(*html.Attribute); ok {
 					if attr.Key == "icon" {
 						continue
 					}

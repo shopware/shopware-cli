@@ -18,25 +18,7 @@ const (
 	ciNone   = "none"
 	ciGitHub = "github"
 	ciGitLab = "gitlab"
-)
 
-type createOptions struct {
-	projectFolder      string
-	selectedVersion    string
-	selectedDeployment string
-	selectedCI         string
-	useDocker          bool
-	initGit            bool
-	withElasticsearch  bool
-	withAMQP           bool
-	noAudit            bool
-
-	interactive           bool
-	elasticsearchExplicit bool
-	isVerbose             bool
-}
-
-const (
 	// projectNameHelp is the help text shown under the project name input.
 	projectNameHelp = "The name of the project directory to create"
 	// projectNameRule describes which characters are allowed in a project name.
@@ -80,6 +62,22 @@ func projectNameFieldDescription(name string) string {
 	return projectNameHelp
 }
 
+type createOptions struct {
+	projectFolder      string
+	selectedVersion    string
+	selectedDeployment string
+	selectedCI         string
+	useDocker          bool
+	initGit            bool
+	withElasticsearch  bool
+	withAMQP           bool
+	noAudit            bool
+
+	interactive           bool
+	elasticsearchExplicit bool
+	isVerbose             bool
+}
+
 var projectCreateCmd = &cobra.Command{
 	Use:   "create [name] [version]",
 	Short: "Create a new Shopware 6 project",
@@ -107,6 +105,16 @@ var projectCreateCmd = &cobra.Command{
 	},
 	RunE: func(cmd *cobra.Command, args []string) error {
 		opts := parseCreateFlags(cmd, args)
+
+		// A name passed directly as an argument skips the interactive name
+		// prompt, which is where invalid names (e.g. wrong casing) are normally
+		// rejected live. Validate it up front so it is forbidden immediately
+		// instead of only after the rest of the form has been completed.
+		if opts.projectFolder != "" {
+			if err := validateProjectName(opts.projectFolder); err != nil {
+				return err
+			}
+		}
 
 		if opts.interactive {
 			tui.PrintBanner()

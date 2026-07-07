@@ -167,9 +167,8 @@ func TestUpdateLifecycle_ShopwareInstallDone_Success(t *testing.T) {
 		envConfig:   &shop.EnvironmentConfig{},
 		watchers:    make(map[string]*watcherHandle),
 		install: installWizard{
-			step:     installStepPassword,
-			username: usernameInput,
-			password: passwordInput,
+			credentialStep: credentialStep{username: usernameInput, password: passwordInput},
+			step:           installStepCredentials,
 		},
 		installProg: installProgress{progress: newInstallProgress()},
 	}
@@ -188,8 +187,8 @@ func TestUpdateLifecycle_ShopwareInstallDone_Success(t *testing.T) {
 	assert.Equal(t, "myadmin", final.envConfig.AdminApi.Username)
 	assert.Equal(t, "supersecret", final.envConfig.AdminApi.Password)
 
-	assert.Equal(t, "myadmin", final.general.username)
-	assert.Equal(t, "supersecret", final.general.password)
+	assert.Equal(t, "myadmin", final.overview.username)
+	assert.Equal(t, "supersecret", final.overview.password)
 
 	assert.Empty(t, final.overlayLines)
 	assert.Nil(t, final.dockerOutChan)
@@ -207,8 +206,7 @@ func TestUpdateLifecycle_ShopwareInstallDone_ErrorShowsLogs(t *testing.T) {
 		envConfig:   &shop.EnvironmentConfig{},
 		watchers:    make(map[string]*watcherHandle),
 		install: installWizard{
-			username: usernameInput,
-			password: passwordInput,
+			credentialStep: credentialStep{username: usernameInput, password: passwordInput},
 		},
 		installProg: installProgress{progress: newInstallProgress()},
 	}

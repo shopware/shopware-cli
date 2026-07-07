@@ -1,0 +1,22 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/symfony/dependency-injection/7.4/Loader/schema/services.schema.json
+services:
+    Shop\A:
+        arguments:
+            - '@required'
+            - '@?optional'
+            - '@!uninitialized'
+            - '@=service(''shop'').isActive()'
+            - '@@literal'
+            - !php/const PHP_INT_MAX
+            - !tagged_iterator shop.handler
+            - !tagged_iterator {tag: shop.handler, index_by: key, default_index_method: getKey, default_priority_method: getPriority}
+            - !tagged_locator shop.handler
+            - !service_closure '@closed'
+            - !iterator
+              - '@one'
+              - '@two'
+            - !service_locator
+              first: '@one'
+              second: '@two'
+            - - plain
+              - '@inside'

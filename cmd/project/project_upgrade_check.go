@@ -167,10 +167,10 @@ var projectUpgradeCheckCmd = &cobra.Command{
 		}
 		trackCtx, trackCancel := context.WithTimeout(context.WithoutCancel(cmd.Context()), 300*time.Millisecond)
 		defer trackCancel()
-		tracking.Track(trackCtx, "project.upgrade_check", map[string]string{
-			"from_version":   shopwareVersion.String(),
-			"target_version": selectedVersion,
-			"has_blockers":   strconv.FormatBool(hasBlockers),
+		tracking.Track(trackCtx, tracking.EventProjectUpgradeCheck, map[string]string{
+			tracking.TagFromVersion:   shopwareVersion.String(),
+			tracking.TagTargetVersion: selectedVersion,
+			tracking.TagHasBlockers:   strconv.FormatBool(hasBlockers),
 		})
 
 		return nil

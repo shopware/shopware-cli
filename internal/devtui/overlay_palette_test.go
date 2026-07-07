@@ -8,15 +8,54 @@ import (
 )
 
 func TestNewCommandPalette_PopulatesFullList(t *testing.T) {
-	cp := newCommandPalette()
+	cp := newCommandPalette(paletteState{})
 	assert.NotNil(t, cp)
-	assert.Equal(t, len(paletteCommands), len(cp.filtered))
+	assert.Equal(t, len(cp.commands), len(cp.filtered))
 	assert.Equal(t, 0, cp.cursor)
 	assert.Empty(t, cp.filter.Value())
 }
 
+// paletteIDs collects the command IDs currently in the palette.
+func paletteIDs(cp *commandPalette) []string {
+	ids := make([]string, len(cp.commands))
+	for i, c := range cp.commands {
+		ids[i] = c.ID
+	}
+	return ids
+}
+
+func TestBuildPaletteCommands_ShowsStartWhenInactive(t *testing.T) {
+	cp := newCommandPalette(paletteState{adminWatchActive: false, sfWatchActive: false})
+	ids := paletteIDs(cp)
+
+	assert.Contains(t, ids, "admin-watch-start")
+	assert.NotContains(t, ids, "admin-watch-stop")
+	assert.Contains(t, ids, "sf-watch-start")
+	assert.NotContains(t, ids, "sf-watch-stop")
+}
+
+func TestBuildPaletteCommands_ShowsStopWhenActive(t *testing.T) {
+	cp := newCommandPalette(paletteState{adminWatchActive: true, sfWatchActive: true})
+	ids := paletteIDs(cp)
+
+	assert.Contains(t, ids, "admin-watch-stop")
+	assert.NotContains(t, ids, "admin-watch-start")
+	assert.Contains(t, ids, "sf-watch-stop")
+	assert.NotContains(t, ids, "sf-watch-start")
+}
+
+func TestBuildPaletteCommands_MixedState(t *testing.T) {
+	cp := newCommandPalette(paletteState{adminWatchActive: true, sfWatchActive: false})
+	ids := paletteIDs(cp)
+
+	assert.Contains(t, ids, "admin-watch-stop")
+	assert.NotContains(t, ids, "admin-watch-start")
+	assert.Contains(t, ids, "sf-watch-start")
+	assert.NotContains(t, ids, "sf-watch-stop")
+}
+
 func TestCommandPalette_TypingFiltersList(t *testing.T) {
-	cp := newCommandPalette()
+	cp := newCommandPalette(paletteState{})
 	fullCount := len(cp.filtered)
 
 	// Type "admin" — should narrow to entries containing "admin"
@@ -31,12 +70,12 @@ func TestCommandPalette_TypingFiltersList(t *testing.T) {
 	assert.Less(t, len(cp.filtered), fullCount)
 	assert.NotEmpty(t, cp.filtered)
 	for _, idx := range cp.filtered {
-		assert.Contains(t, paletteCommands[idx].Label, "Admin")
+		assert.Contains(t, cp.commands[idx].Label, "Admin")
 	}
 }
 
 func TestCommandPalette_TypingNoMatchYieldsEmptyFiltered(t *testing.T) {
-	cp := newCommandPalette()
+	cp := newCommandPalette(paletteState{})
 	for _, r := range "zzzzz" {
 		next, _ := cp.Update(tea.KeyPressMsg(tea.Key{Code: r, Text: string(r)}))
 		cp = next.(*commandPalette)
@@ -46,7 +85,7 @@ func TestCommandPalette_TypingNoMatchYieldsEmptyFiltered(t *testing.T) {
 }
 
 func TestCommandPalette_DownArrowMovesCursor(t *testing.T) {
-	cp := newCommandPalette()
+	cp := newCommandPalette(paletteState{})
 	assert.Equal(t, 0, cp.cursor)
 
 	next, _ := cp.Update(tea.KeyPressMsg(tea.Key{Code: tea.KeyDown}))
@@ -64,8 +103,8 @@ func TestCommandPalette_DownArrowMovesCursor(t *testing.T) {
 }
 
 func TestCommandPalette_EnterEmitsSelectedID(t *testing.T) {
-	cp := newCommandPalette()
-	expectedID := paletteCommands[cp.filtered[0]].ID
+	cp := newCommandPalette(paletteState{})
+	expectedID := cp.commands[cp.filtered[0]].ID
 
 	next, cmd := cp.Update(tea.KeyPressMsg(tea.Key{Code: tea.KeyEnter}))
 	assert.Nil(t, next, "enter should dismiss the palette")
@@ -78,7 +117,7 @@ func TestCommandPalette_EnterEmitsSelectedID(t *testing.T) {
 }
 
 func TestCommandPalette_EnterAfterFilterEmitsFilteredID(t *testing.T) {
-	cp := newCommandPalette()
+	cp := newCommandPalette(paletteState{})
 	for _, r := range "clear" {
 		next, _ := cp.Update(tea.KeyPressMsg(tea.Key{Code: r, Text: string(r)}))
 		cp = next.(*commandPalette)
@@ -92,7 +131,7 @@ func TestCommandPalette_EnterAfterFilterEmitsFilteredID(t *testing.T) {
 }
 
 func TestCommandPalette_EscDismissesWithEmptyID(t *testing.T) {
-	cp := newCommandPalette()
+	cp := newCommandPalette(paletteState{})
 	next, cmd := cp.Update(tea.KeyPressMsg(tea.Key{Code: tea.KeyEsc}))
 	assert.Nil(t, next, "esc should dismiss the palette")
 	assert.NotNil(t, cmd)
@@ -103,7 +142,7 @@ func TestCommandPalette_EscDismissesWithEmptyID(t *testing.T) {
 }
 
 func TestCommandPalette_ViewRendersWithoutPanic(t *testing.T) {
-	cp := newCommandPalette()
+	cp := newCommandPalette(paletteState{})
 	assert.NotPanics(t, func() {
 		view := cp.View(120, 40)
 		assert.Contains(t, view, "Commands")
@@ -121,7 +160,7 @@ func TestCommandPalette_ViewRendersWithoutPanic(t *testing.T) {
 }
 
 func TestCommandPalette_NonKeyMsgIsIgnored(t *testing.T) {
-	cp := newCommandPalette()
+	cp := newCommandPalette(paletteState{})
 	next, cmd := cp.Update(struct{}{})
 	assert.Same(t, cp, next)
 	assert.Nil(t, cmd)

@@ -1,6 +1,7 @@
 package executor
 
 import (
+	"runtime"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -201,6 +202,26 @@ func TestDockerExecutorNPMCommand(t *testing.T) {
 	assert.Contains(t, p.Cmd.Args, "npm")
 	assert.Contains(t, p.Cmd.Args, "run")
 	assert.Contains(t, p.Cmd.Args, "dev")
+}
+
+func TestDockerExecutorSetsHomeForMappedUser(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("the user mapping and HOME redirect are Linux-only")
+	}
+
+	exec := &DockerExecutor{projectRoot: "/project"}
+
+	// Every container command must carry HOME=/tmp so that npm (install,
+	// run, exec) and composer do not fall back to / when the container runs
+	// as the mapped host UID with no passwd entry.
+	for _, p := range []*Process{
+		exec.NPMCommand(t.Context(), "install"),
+		exec.NPMCommand(t.Context(), "run", "build"),
+		exec.ComposerCommand(t.Context(), "install"),
+		exec.ConsoleCommand(t.Context(), "cache:clear"),
+	} {
+		assert.Contains(t, p.Cmd.Args, "HOME=/tmp")
+	}
 }
 
 func TestSymfonyCLIExecutorNPMCommand(t *testing.T) {

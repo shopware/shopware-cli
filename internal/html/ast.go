@@ -2,7 +2,9 @@
 // method (defined in format.go) that renders it back to its textual form.
 package html
 
-// Attribute represents an HTML attribute with key and value.
+// Attribute represents an HTML attribute with key and value. Like the other
+// node types it lives in a NodeList as a pointer (*Attribute); its Dump method
+// has a pointer receiver, so a bare Attribute value does not satisfy Node.
 type Attribute struct {
 	Key   string
 	Value string

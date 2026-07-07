@@ -199,7 +199,13 @@ func (m *ConfigModel) SetSize(width, height int) {
 	m.height = height
 }
 
+// Update routes key presses to HandleKey and ignores other messages — the
+// config tab has no background work to react to. Enter (edit/save) is handled
+// one level up in the parent's updateConfigTab before HandleKey is reached.
 func (m ConfigModel) Update(msg tea.Msg) (ConfigModel, tea.Cmd) {
+	if key, ok := msg.(tea.KeyPressMsg); ok {
+		return m.HandleKey(key)
+	}
 	return m, nil
 }
 
@@ -233,10 +239,15 @@ func (m ConfigModel) PickerForCursor() Modal {
 		items := make([]listPickerItem, len(profilers))
 		for i, p := range profilers {
 			label := p
-			if p == "" {
+			detail := "free"
+			switch {
+			case p == "":
 				label = "none"
+				detail = ""
+			case dockerpkg.ProfilerIsPaid(p):
+				detail = "paid"
 			}
-			items[i] = listPickerItem{Label: label, Value: p}
+			items[i] = listPickerItem{Label: label, Detail: detail, Value: p}
 		}
 		return newListPicker(fieldProfiler, "PHP Profiler", "", items, m.profiler)
 	case fieldBlackfireServerID:

@@ -2,6 +2,7 @@ package devtui
 
 import (
 	"fmt"
+	"path/filepath"
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
@@ -17,16 +18,35 @@ func (m Model) View() tea.View {
 
 	v := tea.NewView("")
 	v.AltScreen = true
+	dir := "[" + filepath.Base(m.projectRoot) + "] · "
 
 	switch m.phase {
 	case phaseDashboard:
 		v.Content = m.renderDashboard()
-	case phaseStarting, phaseStopping, phaseInstallPrompt, phaseInstalling:
+		v.WindowTitle = dir + tabNames[m.activeTab]
+	case phaseStarting:
 		v.Content = m.renderPhase()
+		v.WindowTitle = dir + "Starting..."
+	case phaseStopping:
+		v.Content = m.renderPhase()
+		v.WindowTitle = dir + "Stopping"
+	case phaseInstallPrompt:
+		v.Content = m.renderPhase()
+		v.WindowTitle = dir + "Install"
+	case phaseInstalling:
+		v.Content = m.renderPhase()
+		v.WindowTitle = dir + "Installing..."
 	case phaseTask:
-		v.Content = m.renderDockerLogs(m.taskTitle, "")
-	case phaseSetupGuide:
-		v.Content = m.renderSetupGuide()
+		title := m.taskTitle
+		if !m.taskDone {
+			title = m.dockerSpinner.View() + " " + title
+		}
+		v.Content = m.renderDockerLogs(title, "")
+	case phaseMigrationWizard:
+		v.Content = m.renderMigrationWizard()
+		v.WindowTitle = dir + "Setup"
+	default:
+		v.WindowTitle = dir + "shopware-cli"
 	}
 
 	if m.modal != nil {
@@ -45,7 +65,7 @@ func (m Model) renderDashboard() string {
 
 	padV := 1
 	padH := 3
-	if m.activeTab == tabLogs {
+	if m.activeTab == tabInstance {
 		padV = 0
 		padH = 1
 	}
@@ -55,11 +75,11 @@ func (m Model) renderDashboard() string {
 
 	var content string
 	switch m.activeTab {
-	case tabGeneral:
-		content = m.general.View(m.width, boxHeight)
-	case tabLogs:
-		m.logs.SetSize(contentW, contentH)
-		content = m.logs.View()
+	case tabOverview:
+		content = m.overview.View(m.width, boxHeight)
+	case tabInstance:
+		m.instance.SetSize(contentW, contentH)
+		content = m.instance.View()
 	case tabConfig:
 		content = m.configTab.View(m.width, boxHeight)
 	}
@@ -76,16 +96,15 @@ func (m Model) renderDashboard() string {
 }
 
 func (m Model) renderDashboardFooter() string {
-	if m.activeTab == tabLogs {
-		followState := "Follow"
+	if m.activeTab == tabInstance {
 		shortcuts := []tui.Shortcut{
-			{Key: "↑/↓", Label: "Move cursor"},
-			{Key: "enter", Label: "Open source"},
-			{Key: "f", Label: followState},
+			{Key: "↑/↓", Label: "Navigate"},
+			{Key: "enter", Label: "Select source"},
+			{Key: "pgup/pgdn", Label: "Scroll logs"},
 			{Key: "tab", Label: "Next tab"},
 			{Key: "ctrl+c", Label: "Exit"},
 		}
-		return tui.ShortcutBar(shortcuts...)
+		return tui.ShortcutBarFit(m.width, shortcuts...)
 	}
 
 	if m.activeTab == tabConfig {
@@ -95,10 +114,21 @@ func (m Model) renderDashboardFooter() string {
 			{Key: "tab", Label: "Next tab"},
 			{Key: "ctrl+c", Label: "Exit"},
 		}
-		return tui.ShortcutBar(shortcuts...)
+		return tui.ShortcutBarFit(m.width, shortcuts...)
 	}
 
-	return tui.ShortcutBar(
+	if m.activeTab == tabOverview {
+		shortcuts := []tui.Shortcut{
+			{Key: "↑/↓", Label: "Focus item"},
+			{Key: "enter", Label: "Activate"},
+			{Key: "ctrl+p", Label: "Commands"},
+			{Key: "tab", Label: "Next tab"},
+			{Key: "ctrl+c", Label: "Exit"},
+		}
+		return tui.ShortcutBarFit(m.width, shortcuts...)
+	}
+
+	return tui.ShortcutBarFit(m.width,
 		tui.Shortcut{Key: "ctrl+p", Label: "Commands"},
 		tui.Shortcut{Key: "tab", Label: "Next tab"},
 		tui.Shortcut{Key: "ctrl+c", Label: "Exit"},
@@ -155,7 +185,7 @@ func (m Model) renderPhase() string {
 		}
 		content.WriteString(tui.RenderPhaseCard(strings.TrimRight(card.String(), "\n")))
 		footerHint = tui.ShortcutBadge("l", "Toggle logs")
-	case phaseDashboard, phaseTask, phaseSetupGuide:
+	case phaseDashboard, phaseTask, phaseMigrationWizard:
 		// Rendered by the outer View() dispatch, not here.
 	}
 
@@ -200,9 +230,9 @@ func renderPhaseLayout(content string, width, height int, footerHint string) str
 	return header + "\n" + contentBox.Render(normalized) + "\n" + footer
 }
 
-func (m Model) renderSetupGuide() string {
-	footerHint := m.setupGuide.footerHint()
-	cardContent := m.setupGuide.viewContent()
+func (m Model) renderMigrationWizard() string {
+	footerHint := m.migrationWizard.footerHint()
+	cardContent := m.migrationWizard.viewContent()
 	return renderPhaseLayout(cardContent, m.width, m.height, footerHint)
 }
 

@@ -45,7 +45,7 @@ func (p PopoverFixer) Fix(node []html.Node) error {
 
 			for _, attrNode := range node.Attributes {
 				// Check if the attribute is an html.Attribute
-				if attr, ok := attrNode.(html.Attribute); ok {
+				if attr, ok := attrNode.(*html.Attribute); ok {
 					switch attr.Key {
 					case "v-if":
 						attr.Key = ":isOpened"
@@ -63,7 +63,7 @@ func (p PopoverFixer) Fix(node []html.Node) error {
 			}
 
 			if !hasVIf {
-				newAttrs = append(newAttrs, html.Attribute{
+				newAttrs = append(newAttrs, &html.Attribute{
 					Key:   ":isOpened",
 					Value: "true",
 				})

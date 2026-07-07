@@ -18,8 +18,8 @@ import (
 func newTestModel() Model {
 	return Model{
 		phase:       phaseDashboard,
-		general:     NewGeneralModel("local", "http://localhost:8000", "", "", "/tmp/project", nil, nil),
-		logs:        NewLogsModel("/tmp/project", false),
+		overview:    NewOverviewModel("local", "http://localhost:8000", "", "", "/tmp/project", nil, nil),
+		instance:    NewInstanceModel("/tmp/project", false),
 		configTab:   NewConfigModel(nil, nil),
 		watchers:    make(map[string]*watcherHandle),
 		projectRoot: "/tmp/project",
@@ -59,14 +59,14 @@ func TestNew_InitializesFields(t *testing.T) {
 	opts.Executor = exec
 	m := New(opts)
 
-	assert.Equal(t, tabGeneral, m.activeTab)
+	assert.Equal(t, tabOverview, m.activeTab)
 	assert.False(t, m.dockerMode)
 	assert.NotNil(t, m.watchers)
 	assert.Empty(t, m.watchers)
 	assert.Equal(t, phaseDashboard, m.phase)
 }
 
-func TestNewSetupGuide_StartsInSetupPhase(t *testing.T) {
+func TestNewMigrationWizard_StartsInMigrationWizardPhase(t *testing.T) {
 	cfg := &shop.Config{}
 	opts := Options{
 		ProjectRoot: t.TempDir(),
@@ -74,14 +74,14 @@ func TestNewSetupGuide_StartsInSetupPhase(t *testing.T) {
 		EnvConfig:   &shop.EnvironmentConfig{},
 		Executor:    &executor.LocalExecutor{},
 	}
-	m := NewSetupGuide(opts)
-	assert.Equal(t, phaseSetupGuide, m.phase)
+	m := NewMigrationWizard(opts)
+	assert.Equal(t, phaseMigrationWizard, m.phase)
 	assert.True(t, m.dockerMode)
 }
 
-func TestInit_SetupGuidePhaseReturnsNil(t *testing.T) {
+func TestInit_MigrationWizardPhaseReturnsNil(t *testing.T) {
 	m := newTestModel()
-	m.phase = phaseSetupGuide
+	m.phase = phaseMigrationWizard
 	assert.Nil(t, m.Init())
 }
 
@@ -193,15 +193,15 @@ func TestUpdateKeyPress_PhaseInstallPrompt_Routed(t *testing.T) {
 	assert.True(t, isQuit)
 }
 
-func TestUpdateKeyPress_PhaseSetupGuide_RoutesToSetupGuide(t *testing.T) {
+func TestUpdateKeyPress_PhaseMigrationWizard_RoutesToMigrationWizard(t *testing.T) {
 	m := newTestModel()
-	m.phase = phaseSetupGuide
-	m.setupGuide = newSetupGuide("")
+	m.phase = phaseMigrationWizard
+	m.migrationWizard = newMigrationWizard("")
 	// Welcome step: Enter with confirmYes=true advances to admin user step
-	m.setupGuide.confirmYes = true
+	m.migrationWizard.confirmYes = true
 
 	updated, _ := m.Update(keySpecial(tea.KeyEnter))
-	assert.Equal(t, setupStepAdminUser, updated.(Model).setupGuide.step)
+	assert.Equal(t, migrationStepAdminUser, updated.(Model).migrationWizard.step)
 }
 
 func TestUpdateDashboardKeys_CtrlPOpensPalette(t *testing.T) {
@@ -219,27 +219,27 @@ func TestUpdateDashboardKeys_DigitSwitchesTabs(t *testing.T) {
 	m := newTestModel()
 
 	updated, _ := m.Update(keyRune('2'))
-	assert.Equal(t, tabLogs, updated.(Model).activeTab)
+	assert.Equal(t, tabInstance, updated.(Model).activeTab)
 
 	updated, _ = updated.(Model).Update(keyRune('3'))
 	assert.Equal(t, tabConfig, updated.(Model).activeTab)
 
 	updated, _ = updated.(Model).Update(keyRune('1'))
-	assert.Equal(t, tabGeneral, updated.(Model).activeTab)
+	assert.Equal(t, tabOverview, updated.(Model).activeTab)
 }
 
 func TestUpdateDashboardKeys_TabCyclesForward(t *testing.T) {
 	m := newTestModel()
-	assert.Equal(t, tabGeneral, m.activeTab)
+	assert.Equal(t, tabOverview, m.activeTab)
 
 	updated, _ := m.Update(keySpecial(tea.KeyTab))
-	assert.Equal(t, tabLogs, updated.(Model).activeTab)
+	assert.Equal(t, tabInstance, updated.(Model).activeTab)
 
 	updated, _ = updated.(Model).Update(keySpecial(tea.KeyTab))
 	assert.Equal(t, tabConfig, updated.(Model).activeTab)
 
 	updated, _ = updated.(Model).Update(keySpecial(tea.KeyTab))
-	assert.Equal(t, tabGeneral, updated.(Model).activeTab)
+	assert.Equal(t, tabOverview, updated.(Model).activeTab)
 }
 
 func TestUpdateDashboardKeys_ShiftTabCyclesBackward(t *testing.T) {
@@ -249,7 +249,7 @@ func TestUpdateDashboardKeys_ShiftTabCyclesBackward(t *testing.T) {
 	assert.Equal(t, tabConfig, updated.(Model).activeTab)
 
 	updated, _ = updated.(Model).Update(keyShiftTabMsg())
-	assert.Equal(t, tabLogs, updated.(Model).activeTab)
+	assert.Equal(t, tabInstance, updated.(Model).activeTab)
 }
 
 func TestUpdateDashboardKeys_QuitWhenNotDockerQuits(t *testing.T) {
@@ -349,14 +349,14 @@ func TestUpdateConfigTab_EnterOnPickerFieldOpensModal(t *testing.T) {
 func TestExecuteCommand_TabRouting(t *testing.T) {
 	m := newTestModel()
 
-	updated, _ := m.executeCommand("tab-logs")
-	assert.Equal(t, tabLogs, updated.(Model).activeTab)
+	updated, _ := m.executeCommand("tab-instance")
+	assert.Equal(t, tabInstance, updated.(Model).activeTab)
 
 	updated, _ = updated.(Model).executeCommand("tab-config")
 	assert.Equal(t, tabConfig, updated.(Model).activeTab)
 
-	updated, _ = updated.(Model).executeCommand("tab-general")
-	assert.Equal(t, tabGeneral, updated.(Model).activeTab)
+	updated, _ = updated.(Model).executeCommand("tab-overview")
+	assert.Equal(t, tabOverview, updated.(Model).activeTab)
 }
 
 func TestExecuteCommand_QuitNonDockerReturnsTeaQuit(t *testing.T) {
@@ -382,33 +382,33 @@ func TestExecuteCommand_QuitDockerOpensStopConfirm(t *testing.T) {
 
 func TestExecuteCommand_AdminWatchStartSetsStarting(t *testing.T) {
 	m := newTestModel()
-	m.general.adminWatchRunning = false
-	m.general.adminWatchStarting = false
+	m.overview.adminWatchRunning = false
+	m.overview.adminWatchStarting = false
 
 	updated, cmd := m.executeCommand("admin-watch-start")
 	um := updated.(Model)
-	assert.True(t, um.general.adminWatchStarting)
+	assert.True(t, um.overview.adminWatchStarting)
 	assert.NotNil(t, cmd)
 }
 
 func TestExecuteCommand_AdminWatchStartNoOpWhenRunning(t *testing.T) {
 	m := newTestModel()
-	m.general.adminWatchRunning = true
+	m.overview.adminWatchRunning = true
 
 	updated, cmd := m.executeCommand("admin-watch-start")
 	um := updated.(Model)
-	assert.False(t, um.general.adminWatchStarting)
+	assert.False(t, um.overview.adminWatchStarting)
 	assert.Nil(t, cmd)
 }
 
 func TestExecuteCommand_AdminWatchStopClearsRunning(t *testing.T) {
 	m := newTestModel()
-	m.general.adminWatchRunning = true
+	m.overview.adminWatchRunning = true
 	m.watchers[watcherAdmin] = &watcherHandle{}
 
 	updated, cmd := m.executeCommand("admin-watch-stop")
 	um := updated.(Model)
-	assert.False(t, um.general.adminWatchRunning)
+	assert.False(t, um.overview.adminWatchRunning)
 	assert.NotNil(t, cmd)
 	// stopWatcher deletes the entry from the map
 	_, exists := um.watchers[watcherAdmin]
@@ -499,14 +499,14 @@ func TestMergeLocalProfilerSecrets_EmptySrcValuesDoNotOverwriteDst(t *testing.T)
 }
 
 func TestView_DoesNotPanicForEachPhase(t *testing.T) {
-	phases := []phase{phaseDashboard, phaseStarting, phaseStopping, phaseInstallPrompt, phaseInstalling, phaseTask, phaseSetupGuide}
+	phases := []phase{phaseDashboard, phaseStarting, phaseStopping, phaseInstallPrompt, phaseInstalling, phaseTask, phaseMigrationWizard}
 	for _, p := range phases {
 		m := newTestModel()
 		m.width = 120
 		m.height = 40
 		m.phase = p
-		if p == phaseSetupGuide {
-			m.setupGuide = newSetupGuide("")
+		if p == phaseMigrationWizard {
+			m.migrationWizard = newMigrationWizard("")
 		}
 		if p == phaseStarting || p == phaseStopping {
 			m.dockerSpinner = newBrandSpinner()
@@ -541,23 +541,23 @@ func TestView_ModalOverridesContent(t *testing.T) {
 	})
 }
 
-func TestSaveSetupGuide_PersistsConfigToDisk(t *testing.T) {
+func TestSaveMigrationWizard_PersistsConfigToDisk(t *testing.T) {
 	dir := t.TempDir()
 	m := newTestModel()
 	m.projectRoot = dir
 	m.config = &shop.Config{}
-	m.setupGuide = newSetupGuide(dir)
-	m.setupGuide.step = setupStepReview
+	m.migrationWizard = newMigrationWizard(dir)
+	m.migrationWizard.step = migrationStepReview
 
-	updated, _ := m.saveSetupGuide()
+	updated, _ := m.saveMigrationWizard()
 	um := updated.(Model)
-	assert.NoError(t, um.setupGuide.err)
-	assert.Equal(t, setupStepDone, um.setupGuide.step)
+	assert.NoError(t, um.migrationWizard.err)
+	assert.Equal(t, migrationStepDone, um.migrationWizard.step)
 	_, err := os.Stat(filepath.Join(dir, ".shopware-project.yml"))
 	assert.NoError(t, err)
 }
 
-func TestSaveSetupGuide_FailedWriteSetsErr(t *testing.T) {
+func TestSaveMigrationWizard_FailedWriteSetsErr(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("chmod-based unwritable directory not reliable on Windows")
 	}
@@ -571,10 +571,99 @@ func TestSaveSetupGuide_FailedWriteSetsErr(t *testing.T) {
 	m := newTestModel()
 	m.projectRoot = dir
 	m.config = &shop.Config{}
-	m.setupGuide = newSetupGuide("")
+	m.migrationWizard = newMigrationWizard("")
 
-	updated, _ := m.saveSetupGuide()
+	updated, _ := m.saveMigrationWizard()
 	um := updated.(Model)
-	assert.Error(t, um.setupGuide.err)
-	assert.Equal(t, setupStepDone, um.setupGuide.step)
+	assert.Error(t, um.migrationWizard.err)
+	assert.Equal(t, migrationStepDone, um.migrationWizard.step)
+}
+
+// TestUpdateChildren_KeyOnlyReachesActiveTab guards against keypresses meant for
+// one tab leaking into the hidden tabs' handlers. With the Logs tab active,
+// pressing Enter must not run the Overview tab's activate() logic.
+func TestUpdateChildren_KeyOnlyReachesActiveTab(t *testing.T) {
+	m := newTestModel()
+	m.activeTab = tabInstance
+	// Overview cursor sits on the Admin watcher (0); an Enter leaking through
+	// would flip adminWatchStarting.
+	m.overview.cursor = 0
+
+	updated, _ := m.updateChildren(keySpecial(tea.KeyEnter))
+	um := updated.(Model)
+
+	assert.False(t, um.overview.adminWatchStarting, "Enter on the Logs tab must not activate the Overview watcher")
+}
+
+// TestUpdateChildren_KeyReachesActiveOverview confirms the active tab still
+// receives its keys after the routing change.
+func TestUpdateChildren_KeyReachesActiveOverview(t *testing.T) {
+	m := newTestModel()
+	m.activeTab = tabOverview
+	m.overview.cursor = 0 // Admin watcher
+
+	updated, cmd := m.updateChildren(keySpecial(tea.KeyEnter))
+	um := updated.(Model)
+
+	assert.True(t, um.overview.adminWatchStarting, "Enter on the Overview tab must activate the Admin watcher")
+	assert.NotNil(t, cmd)
+}
+
+// TestStartStorefrontWatchRequest_OpensPicker verifies the Overview tab delegates
+// storefront-watch start to the parent so the sales-channel picker resolves the
+// theme/domain, instead of starting with empty options.
+func TestStartStorefrontWatchRequest_OpensPicker(t *testing.T) {
+	m := newTestModel()
+	m.activeTab = tabOverview
+	m.executor = &executor.LocalExecutor{}
+	m.overview.cursor = 1 // Storefront watcher
+
+	// Enter on the storefront row should emit startStorefrontWatchRequestMsg.
+	updated, cmd := m.updateChildren(keySpecial(tea.KeyEnter))
+	m = updated.(Model)
+	if assert.NotNil(t, cmd) {
+		_, ok := cmd().(startStorefrontWatchRequestMsg)
+		assert.True(t, ok, "storefront activation must request the picker, not start directly")
+	}
+	assert.False(t, m.overview.sfWatchStarting, "watcher must not be marked starting before the picker resolves")
+
+	// The parent handling that request opens the picker modal.
+	updated, _ = m.Update(startStorefrontWatchRequestMsg{})
+	m = updated.(Model)
+	_, ok := m.modal.(*salesChannelPicker)
+	assert.True(t, ok, "parent must open the sales-channel picker on the request")
+}
+
+func TestView_WindowTitlePerPhase(t *testing.T) {
+	cases := []struct {
+		phase     phase
+		wantTitle string
+	}{
+		{phaseDashboard, "[project] · Overview"},
+		{phaseStarting, "[project] · Starting..."},
+		{phaseStopping, "[project] · Stopping"},
+		{phaseInstallPrompt, "[project] · Install"},
+		{phaseInstalling, "[project] · Installing..."},
+		{phaseMigrationWizard, "[project] · Setup"},
+	}
+
+	for _, tc := range cases {
+		m := newTestModel()
+		m.width = 120
+		m.height = 40
+		m.phase = tc.phase
+		if tc.phase == phaseMigrationWizard {
+			m.migrationWizard = newMigrationWizard("")
+		}
+		if tc.phase == phaseStarting || tc.phase == phaseStopping {
+			m.dockerSpinner = newBrandSpinner()
+		}
+		if tc.phase == phaseInstalling {
+			m.installProg.spinner = newBrandSpinner()
+			m.installProg.progress = newInstallProgress()
+		}
+
+		v := m.View()
+		assert.Equal(t, tc.wantTitle, v.WindowTitle, "phase %d", tc.phase)
+	}
 }

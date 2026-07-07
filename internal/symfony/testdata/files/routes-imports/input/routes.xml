@@ -1,0 +1,5 @@
+<routes>
+    <import resource="routes/storefront.xml" type="xml"/>
+    <import resource="../../Storefront/Controller/**/*Controller.php" type="annotation"/>
+    <route id="frontend.home" path="/" controller="Shop\Controller\HomeController"/>
+</routes>

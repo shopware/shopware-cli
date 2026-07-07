@@ -1,0 +1,13 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/symfony/routing/7.4/Loader/schema/routing.schema.json
+controllers:
+    resource: ../controllers
+    type: attribute
+    prefix: /shop
+    name_prefix: shop_
+    exclude:
+        - ../controllers/Internal
+        - ../controllers/Legacy
+    trailing_slash_on_root: false
+    host: shop.example.com
+    requirements:
+        _locale: en|de

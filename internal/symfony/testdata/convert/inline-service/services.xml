@@ -1,0 +1,11 @@
+<container>
+    <services>
+        <service id="Shop\A" class="Shop\A">
+            <argument type="service">
+                <service class="Shop\Inline">
+                    <argument>setting</argument>
+                </service>
+            </argument>
+        </service>
+    </services>
+</container>

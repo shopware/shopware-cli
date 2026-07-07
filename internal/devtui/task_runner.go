@@ -14,6 +14,7 @@ func (m *Model) runTask(title string, taskFn func() (*exec.Cmd, error)) tea.Cmd 
 	m.taskDone = false
 	m.taskErr = nil
 	m.overlayLines = nil
+	m.dockerSpinner = newBrandSpinner()
 
 	ch := make(chan string, streamBufferSize)
 	m.dockerOutChan = ch
@@ -28,7 +29,10 @@ func (m *Model) runTask(title string, taskFn func() (*exec.Cmd, error)) tea.Cmd 
 		return taskDoneMsg{err: err}
 	}
 
-	return tea.Batch(readFromChan(ch), doneCmd)
+	// The spinner tick (kept last) keeps the header animated so long-running
+	// commands that emit no early output (e.g. webpack startup on "Build
+	// Administration") never look frozen.
+	return tea.Batch(readFromChan(ch), doneCmd, m.dockerSpinner.Tick)
 }
 
 func (m *Model) runAdminBuild() tea.Cmd {

@@ -1,0 +1,11 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/symfony/dependency-injection/7.4/Loader/schema/services.schema.json
+services:
+    Shop\Decorator:
+        decorates: Shop\Original
+        decoration_inner_name: Shop\Original.inner
+        decoration_priority: 5
+        decoration_on_invalid: ignore
+
+    Shop\NullDecorator:
+        decorates: Shop\Optional
+        decoration_on_invalid: null

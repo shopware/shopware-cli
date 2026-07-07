@@ -1,0 +1,5 @@
+<routes>
+    <import resource="routes/storefront.xml"/>
+    <import resource="routes/storefront.yaml"/>
+    <import resource="*.php"/>
+</routes>

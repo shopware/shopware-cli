@@ -265,22 +265,22 @@
         "hooks": {
           "properties": {
             "pre": {
-              "type": "string"
+              "$ref": "#/$defs/ConfigDeploymentHook"
             },
             "post": {
-              "type": "string"
+              "$ref": "#/$defs/ConfigDeploymentHook"
             },
             "pre-install": {
-              "type": "string"
+              "$ref": "#/$defs/ConfigDeploymentHook"
             },
             "post-install": {
-              "type": "string"
+              "$ref": "#/$defs/ConfigDeploymentHook"
             },
             "pre-update": {
-              "type": "string"
+              "$ref": "#/$defs/ConfigDeploymentHook"
             },
             "post-update": {
-              "type": "string"
+              "$ref": "#/$defs/ConfigDeploymentHook"
             }
           },
           "additionalProperties": false,
@@ -361,6 +361,41 @@
       },
       "additionalProperties": false,
       "type": "object"
+    },
+    "ConfigDeploymentHook": {
+      "oneOf": [
+        {
+          "type": "string"
+        },
+        {
+          "items": {
+            "oneOf": [
+              {
+                "type": "string"
+              },
+              {
+                "properties": {
+                  "title": {
+                    "type": "string",
+                    "description": "An optional title shown in the deployment output for this step"
+                  },
+                  "script": {
+                    "type": "string",
+                    "description": "The script that is executed for this step"
+                  }
+                },
+                "additionalProperties": false,
+                "type": "object",
+                "required": [
+                  "script"
+                ]
+              }
+            ]
+          },
+          "type": "array"
+        }
+      ],
+      "description": "Either a single script or a list of steps (a script string or a {title, script} object) executed individually"
     },
     "ConfigDeploymentOverrides": {
       "additionalProperties": {
@@ -494,14 +529,14 @@
             "type": "string"
           },
           "type": "array",
-          "description": "Only export the schema of these tables"
+          "description": "Only export the schema of these tables, supports glob wildcards (e.g. \"customer*\")"
         },
         "ignore": {
           "items": {
             "type": "string"
           },
           "type": "array",
-          "description": "Ignore these tables from export"
+          "description": "Ignore these tables from export, supports glob wildcards (e.g. \"customer*\")"
         },
         "where": {
           "additionalProperties": {

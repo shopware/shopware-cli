@@ -1,6 +1,7 @@
 package devtui
 
 import (
+	"fmt"
 	"strings"
 
 	"charm.land/bubbles/v2/progress"
@@ -9,8 +10,23 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 
+	"github.com/shopware/shopware-cli/internal/tracking"
 	"github.com/shopware/shopware-cli/internal/tui"
 )
+
+// minAdminPasswordLength is the minimum admin password length enforced by the
+// Shopware core (user:create / system:install). Validating it here lets the
+// wizard reject too-short passwords up front instead of failing late during the
+// deployment-helper run.
+const minAdminPasswordLength = 8
+
+// validateAdminPassword mirrors the Shopware core password length requirement.
+func validateAdminPassword(password string) error {
+	if len([]rune(password)) < minAdminPasswordLength {
+		return fmt.Errorf("password must be at least %d characters long", minAdminPasswordLength)
+	}
+	return nil
+}
 
 type installStep int
 
@@ -18,8 +34,7 @@ const (
 	installStepAsk installStep = iota
 	installStepLanguage
 	installStepCurrency
-	installStepUsername
-	installStepPassword
+	installStepCredentials
 )
 
 type installLanguage struct {
@@ -47,14 +62,31 @@ var (
 )
 
 type installWizard struct {
-	step            installStep
-	cursor          int
-	confirmYes      bool
-	language        string
-	currency        string
-	username        textinput.Model
-	password        textinput.Model
-	checkboxFocused bool
+	credentialStep
+
+	step       installStep
+	cursor     int
+	confirmYes bool
+	language   string
+	currency   string
+}
+
+// newInstallCredentialStep builds the install wizard's credential inputs. They
+// start empty (filled in later from the chosen defaults) and use labelled
+// prompts that match the install prompt layout.
+func newInstallCredentialStep() credentialStep {
+	username := textinput.New()
+	username.Placeholder = defaultUsername
+	username.Prompt = "Username: "
+	username.CharLimit = 50
+
+	password := textinput.New()
+	password.Placeholder = "shopware"
+	password.Prompt = "Password: "
+	password.CharLimit = 50
+	password.EchoMode = textinput.EchoPassword
+
+	return credentialStep{username: username, password: password}
 }
 
 type installProgress struct {
@@ -79,6 +111,11 @@ var installStepPatterns = []struct {
 
 func (m Model) updateInstallPrompt(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	if k := msg.String(); k == keyQ || k == keyCtrlC {
+		if m.telemetry.installOnce() {
+			tags := m.telemetry.installTags(tracking.ResultCancelled, m.install)
+			tags[tracking.TagAbandonedAt] = installStepTagName(m.install.step)
+			trackEventNow(tracking.EventDevInstall, tags)
+		}
 		return m, tea.Quit
 	}
 
@@ -89,10 +126,8 @@ func (m Model) updateInstallPrompt(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m.updateInstallStepLanguage(msg)
 	case installStepCurrency:
 		return m.updateInstallStepCurrency(msg)
-	case installStepUsername:
-		return m.updateInstallStepUsername(msg)
-	case installStepPassword:
-		return m.updateInstallStepPassword(msg)
+	case installStepCredentials:
+		return m.updateInstallStepCredentials(msg)
 	}
 
 	return m, nil
@@ -112,6 +147,9 @@ func (m Model) updateInstallStepAsk(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			m.install.cursor = 0
 			return m, nil
 		}
+		if m.telemetry.installOnce() {
+			trackEvent(tracking.EventDevInstall, m.telemetry.installTags(tracking.ResultSkipped, m.install))
+		}
 		m.phase = phaseDashboard
 		return m, m.startDashboard()
 	}
@@ -119,93 +157,56 @@ func (m Model) updateInstallStepAsk(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 }
 
 func (m Model) updateInstallStepLanguage(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
-	switch msg.String() {
-	case keyUp, keyK:
-		if m.install.cursor > 0 {
-			m.install.cursor--
-		}
-	case keyDown, keyJ:
-		if m.install.cursor < len(installLanguages)-1 {
-			m.install.cursor++
-		}
-	case keyEnter:
+	if msg.String() == keyEnter {
 		m.install.language = installLanguages[m.install.cursor].id
 		m.install.step = installStepCurrency
 		m.install.cursor = 0
+		return m, nil
 	}
+	m.install.cursor = moveCursor(m.install.cursor, msg.String(), len(installLanguages))
 	return m, nil
 }
 
 func (m Model) updateInstallStepCurrency(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
-	switch msg.String() {
-	case keyUp, keyK:
-		if m.install.cursor > 0 {
-			m.install.cursor--
-		}
-	case keyDown, keyJ:
-		if m.install.cursor < len(installCurrencies)-1 {
-			m.install.cursor++
-		}
-	case keyEnter:
+	if msg.String() == keyEnter {
 		m.install.currency = installCurrencies[m.install.cursor]
-		m.install.step = installStepUsername
+		m.install.step = installStepCredentials
 		m.install.username.SetValue(defaultUsername)
-		m.install.username.Focus()
-		return m, textinput.Blink
+		m.install.password.SetValue("shopware")
+		return m, m.install.focus(credFocusUsername)
 	}
+	m.install.cursor = moveCursor(m.install.cursor, msg.String(), len(installCurrencies))
 	return m, nil
 }
 
-func (m Model) updateInstallStepUsername(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
-	if msg.String() == keyEnter {
-		m.install.step = installStepPassword
-		m.install.username.Blur()
-		m.install.password.SetValue("shopware")
-		m.install.password.Focus()
-		m.install.checkboxFocused = false
-		return m, textinput.Blink
-	}
-	var cmd tea.Cmd
-	m.install.username, cmd = m.install.username.Update(msg)
-	return m, cmd
-}
-
-func (m Model) updateInstallStepPassword(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+func (m Model) updateInstallStepCredentials(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
 	case keyEnter:
-		return m.handleInstallPasswordEnter()
+		return m.handleInstallCredentialsEnter()
 	case keyTab, keyDown:
-		if !m.install.checkboxFocused {
-			m.install.checkboxFocused = true
-			m.install.password.Blur()
-		}
-		return m, nil
+		return m, m.install.focus(m.install.credFocus + 1)
 	case keyShiftTab, keyUp:
-		if m.install.checkboxFocused {
-			m.install.checkboxFocused = false
-			m.install.password.Focus()
-			return m, textinput.Blink
-		}
-		return m, nil
+		return m, m.install.focus(m.install.credFocus - 1)
 	}
-	if m.install.checkboxFocused {
-		return m, nil
-	}
-	var cmd tea.Cmd
-	m.install.password, cmd = m.install.password.Update(msg)
-	return m, cmd
+	return m, m.install.updateInput(msg)
 }
 
-func (m Model) handleInstallPasswordEnter() (tea.Model, tea.Cmd) {
-	if m.install.checkboxFocused {
-		if m.install.password.EchoMode == textinput.EchoPassword {
-			m.install.password.EchoMode = textinput.EchoNormal
-		} else {
-			m.install.password.EchoMode = textinput.EchoPassword
-		}
+func (m Model) handleInstallCredentialsEnter() (tea.Model, tea.Cmd) {
+	switch m.install.credFocus {
+	case credFocusUsername:
+		// Enter on the username field advances to the password field.
+		return m, m.install.focus(credFocusPassword)
+	case credFocusShowPassword:
+		m.install.toggleShowPassword()
+		return m, nil
+	case credFocusPassword:
+		// Enter on the password field submits; handled below.
+	}
+	if !m.install.validatePassword() {
 		return m, nil
 	}
-	m.install.password.Blur()
+	m.install.blur()
+	m.telemetry.beginInstall()
 	m.phase = phaseInstalling
 	m.overlayLines = nil
 	m.installProg = installProgress{
@@ -226,7 +227,7 @@ func (m Model) renderInstallPrompt(b *strings.Builder) {
 		b.WriteString(renderConfirmButtons("Initialize now", "No, skip", m.install.confirmYes))
 
 	case installStepLanguage:
-		b.WriteString(tui.TextBadge("Step 1/4"))
+		b.WriteString(tui.TextBadge("Step 1/3"))
 		b.WriteString("\n\n")
 		opts := make([]tui.SelectOption, len(installLanguages))
 		for i, lang := range installLanguages {
@@ -235,7 +236,7 @@ func (m Model) renderInstallPrompt(b *strings.Builder) {
 		b.WriteString(tui.RenderSelectList("Default Language", "Select the primary language for your storefront", opts, m.install.cursor))
 
 	case installStepCurrency:
-		b.WriteString(tui.TextBadge("Step 2/4"))
+		b.WriteString(tui.TextBadge("Step 2/3"))
 		b.WriteString("\n\n")
 		opts := make([]tui.SelectOption, len(installCurrencies))
 		for i, curr := range installCurrencies {
@@ -243,25 +244,16 @@ func (m Model) renderInstallPrompt(b *strings.Builder) {
 		}
 		b.WriteString(tui.RenderSelectList("Default Currency", "Select the default currency for pricing", opts, m.install.cursor))
 
-	case installStepUsername:
-		b.WriteString(tui.TextBadge("Step 3/4"))
+	case installStepCredentials:
+		b.WriteString(tui.TextBadge("Step 3/3"))
 		b.WriteString("\n\n")
-		b.WriteString(tui.TitleStyle.Render("Admin Username"))
+		b.WriteString(tui.TitleStyle.Render("Admin Account"))
 		b.WriteString("\n")
-		b.WriteString(tui.DimStyle.Render("Enter the username for the admin account"))
+		b.WriteString(tui.DimStyle.Render("The login for the Shopware admin panel and API."))
 		b.WriteString("\n\n")
-		b.WriteString(m.install.username.View())
-
-	case installStepPassword:
-		b.WriteString(tui.TextBadge("Step 4/4"))
+		m.install.render(b)
 		b.WriteString("\n\n")
-		b.WriteString(tui.TitleStyle.Render("Admin Password"))
-		b.WriteString("\n")
-		b.WriteString(tui.DimStyle.Render("Enter the password for the admin account (default: shopware)"))
-		b.WriteString("\n\n")
-		b.WriteString(m.install.password.View())
-		b.WriteString("\n\n")
-		b.WriteString(renderShowPasswordCheckbox(m.install.password.EchoMode == textinput.EchoNormal, m.install.checkboxFocused))
+		b.WriteString(tui.DimStyle.Render("Used to create the Shopware admin user."))
 	}
 }
 
@@ -277,19 +269,15 @@ func (m Model) installFooterHint() string {
 			tui.Shortcut{Key: "↑/↓", Label: "Select"},
 			tui.Shortcut{Key: "enter", Label: "Confirm"},
 		)
-	case installStepUsername:
-		return tui.ShortcutBar(
-			tui.Shortcut{Key: "enter", Label: "Continue"},
-		)
-	case installStepPassword:
-		if m.install.checkboxFocused {
+	case installStepCredentials:
+		if m.install.credFocus == credFocusShowPassword {
 			return tui.ShortcutBar(
-				tui.Shortcut{Key: "↑", Label: "Back"},
+				tui.Shortcut{Key: "↑/↓/tab", Label: "Navigate"},
 				tui.Shortcut{Key: "enter", Label: "Toggle"},
 			)
 		}
 		return tui.ShortcutBar(
-			tui.Shortcut{Key: "↓/tab", Label: "Show password"},
+			tui.Shortcut{Key: "↑/↓/tab", Label: "Navigate"},
 			tui.Shortcut{Key: "enter", Label: "Install"},
 		)
 	}

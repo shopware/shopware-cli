@@ -89,6 +89,26 @@ func ReadValues(projectRoot string, keys ...string) (map[string]string, error) {
 	return out, nil
 }
 
+// ReadAll returns every variable defined across the project's Symfony env
+// files, merged with Symfony precedence (.env.dist < .env < .env.local). An
+// empty map is returned when no env file exists.
+func ReadAll(projectRoot string) (map[string]string, error) {
+	return ReadAllForEnvironment(projectRoot, "")
+}
+
+// ReadAllForEnvironment is like ReadAll but additionally layers the
+// environment-specific files on top, following Symfony precedence
+// (.env.dist < .env < .env.local < .env.<env> < .env.<env>.local). An empty
+// environment behaves exactly like ReadAll.
+func ReadAllForEnvironment(projectRoot, environment string) (map[string]string, error) {
+	files := resolveEnvFilesForEnvironment(projectRoot, environment)
+	if len(files) == 0 {
+		return map[string]string{}, nil
+	}
+
+	return godotenv.Read(files...)
+}
+
 // WriteValue is a convenience wrapper around WriteValues for a single key.
 func WriteValue(projectRoot, key, value string) error {
 	return WriteValues(projectRoot, map[string]string{key: value})
@@ -133,11 +153,22 @@ func WriteValues(projectRoot string, values map[string]string) error {
 }
 
 func resolveEnvFiles(projectRoot string) []string {
+	return resolveEnvFilesForEnvironment(projectRoot, "")
+}
+
+func resolveEnvFilesForEnvironment(projectRoot, environment string) []string {
 	candidates := []string{
 		filepath.Join(projectRoot, ".env.dist"),
 		filepath.Join(projectRoot, ".env"),
 		filepath.Join(projectRoot, ".env.local"),
 	}
+	if environment != "" {
+		candidates = append(candidates,
+			filepath.Join(projectRoot, ".env."+environment),
+			filepath.Join(projectRoot, ".env."+environment+".local"),
+		)
+	}
+
 	var found []string
 	for _, p := range candidates {
 		if _, err := os.Stat(p); err == nil {

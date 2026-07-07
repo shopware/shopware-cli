@@ -16,20 +16,38 @@ type paletteCommand struct {
 	ID       string
 }
 
-var paletteCommands = []paletteCommand{
-	{Label: "Open Storefront", ID: "open-shop"},
-	{Label: "Open Admin", ID: "open-admin"},
-	{Label: "Clear Cache", ID: "cache-clear"},
-	{Label: "Build Administration", ID: "admin-build"},
-	{Label: "Build Storefront", ID: "sf-build"},
-	{Label: "Start Admin Watcher", ID: "admin-watch-start"},
-	{Label: "Stop Admin Watcher", ID: "admin-watch-stop"},
-	{Label: "Start Storefront Watcher", ID: "sf-watch-start"},
-	{Label: "Stop Storefront Watcher", ID: "sf-watch-stop"},
-	{Label: "Toggle Logs Tab", Shortcut: "2", ID: "tab-logs"},
-	{Label: "Toggle General Tab", Shortcut: "1", ID: "tab-general"},
-	{Label: "Toggle Config Tab", Shortcut: "3", ID: "tab-config"},
-	{Label: "Quit", Shortcut: "ctrl+c", ID: "quit"},
+// paletteState carries the current watcher states so the palette can show only
+// the relevant Start/Stop entry per watcher instead of both.
+type paletteState struct {
+	adminWatchActive bool
+	sfWatchActive    bool
+}
+
+// buildPaletteCommands returns the command list, collapsing each watcher's
+// Start/Stop pair into whichever action applies for its current state.
+func buildPaletteCommands(state paletteState) []paletteCommand {
+	cmds := []paletteCommand{
+		{Label: "Open Storefront", ID: "open-shop"},
+		{Label: "Open Admin", ID: "open-admin"},
+		{Label: "Clear Cache", ID: "cache-clear"},
+		{Label: "Build Administration", ID: "admin-build"},
+		{Label: "Build Storefront", ID: "sf-build"},
+	}
+
+	if state.adminWatchActive {
+		cmds = append(cmds, paletteCommand{Label: "Stop Admin Watcher", ID: "admin-watch-stop"})
+	} else {
+		cmds = append(cmds, paletteCommand{Label: "Start Admin Watcher", ID: "admin-watch-start"})
+	}
+
+	if state.sfWatchActive {
+		cmds = append(cmds, paletteCommand{Label: "Stop Storefront Watcher", ID: "sf-watch-stop"})
+	} else {
+		cmds = append(cmds, paletteCommand{Label: "Start Storefront Watcher", ID: "sf-watch-start"})
+	}
+
+	cmds = append(cmds, paletteCommand{Label: "Quit", ID: "quit"})
+	return cmds
 }
 
 type paletteResultMsg struct{ ID string }
@@ -38,16 +56,17 @@ type commandPalette struct {
 	filter   textinput.Model
 	cursor   int
 	filtered []int
+	commands []paletteCommand
 }
 
-func newCommandPalette() *commandPalette {
+func newCommandPalette(state paletteState) *commandPalette {
 	ti := textinput.New()
 	ti.Prompt = lipgloss.NewStyle().Foreground(tui.BrandColor).Render("> ")
 	ti.Placeholder = "Type to filter"
 	ti.CharLimit = 64
 	ti.Focus()
 
-	cp := &commandPalette{filter: ti}
+	cp := &commandPalette{filter: ti, commands: buildPaletteCommands(state)}
 	cp.applyFilter()
 	return cp
 }
@@ -55,7 +74,7 @@ func newCommandPalette() *commandPalette {
 func (cp *commandPalette) applyFilter() {
 	query := strings.ToLower(cp.filter.Value())
 	cp.filtered = nil
-	for i, cmd := range paletteCommands {
+	for i, cmd := range cp.commands {
 		if query == "" || strings.Contains(strings.ToLower(cmd.Label), query) {
 			cp.filtered = append(cp.filtered, i)
 		}
@@ -69,7 +88,7 @@ func (cp *commandPalette) selectedID() string {
 	if len(cp.filtered) == 0 {
 		return ""
 	}
-	return paletteCommands[cp.filtered[cp.cursor]].ID
+	return cp.commands[cp.filtered[cp.cursor]].ID
 }
 
 func (cp *commandPalette) Update(msg tea.Msg) (Modal, tea.Cmd) {
@@ -127,7 +146,7 @@ func (cp *commandPalette) View(width, height int) string {
 		Background(tui.SelectedBgColor)
 
 	for i, idx := range cp.filtered {
-		cmd := paletteCommands[idx]
+		cmd := cp.commands[idx]
 		rowStyle, scStyle := normalStyle, shortcutStyle
 		if i == cp.cursor {
 			rowStyle, scStyle = selectedStyle, selectedShortcutStyle

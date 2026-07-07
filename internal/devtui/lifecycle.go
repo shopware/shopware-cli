@@ -3,10 +3,10 @@ package devtui
 import (
 	"strings"
 
-	"charm.land/bubbles/v2/textinput"
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/shopware/shopware-cli/internal/shop"
+	"github.com/shopware/shopware-cli/internal/tracking"
 )
 
 func (m Model) updateLifecycle(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -47,6 +47,9 @@ func (m Model) updateLifecycle(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case dockerStartedMsg:
+		if tags, ok := m.telemetry.dockerStartTags(msg.err); ok {
+			trackEvent(tracking.EventDevDockerStart, tags)
+		}
 		if msg.err != nil {
 			m.dockerShowLogs = true
 			m.overlayLines = append(m.overlayLines, errorStyle.Render("Failed: "+msg.err.Error()))
@@ -66,22 +69,20 @@ func (m Model) updateLifecycle(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.phase = phaseInstallPrompt
 		m.overlayLines = nil
 
-		usernameInput := textinput.New()
-		usernameInput.Placeholder = defaultUsername
-		usernameInput.Prompt = "Username: "
-		usernameInput.CharLimit = 50
-
-		passwordInput := textinput.New()
-		passwordInput.Placeholder = "shopware"
-		passwordInput.Prompt = "Password: "
-		passwordInput.CharLimit = 50
-		passwordInput.EchoMode = textinput.EchoPassword
-
-		m.install = installWizard{step: installStepAsk, confirmYes: true, username: usernameInput, password: passwordInput}
+		m.install = installWizard{
+			credentialStep: newInstallCredentialStep(),
+			step:           installStepAsk,
+			confirmYes:     true,
+		}
 		return m, nil
 
 	case shopwareInstallDoneMsg:
 		if msg.err != nil {
+			if m.telemetry.installOnce() {
+				tags := m.telemetry.installTags(tracking.ResultFailure, m.install)
+				tags[tracking.TagFailedStep] = installFailedStep(m.installProg.currentStep)
+				trackEvent(tracking.EventDevInstall, tags)
+			}
 			m.installProg.showLogs = true
 			m.overlayLines = append(m.overlayLines, "", errorStyle.Render("Installation failed: "+msg.err.Error()))
 			m.overlayLines = append(m.overlayLines, "", helpStyle.Render("Press q to exit"))
@@ -89,6 +90,9 @@ func (m Model) updateLifecycle(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.installProg.done = true
 		m.installProg.currentStep = len(installStepPatterns)
+		if m.telemetry.installOnce() {
+			trackEvent(tracking.EventDevInstall, m.telemetry.installTags(tracking.ResultSuccess, m.install))
+		}
 
 		username := m.install.username.Value()
 		password := m.install.password.Value()
@@ -100,8 +104,8 @@ func (m Model) updateLifecycle(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.envConfig.AdminApi = adminApi
 		_ = shop.WriteConfig(m.config, m.projectRoot)
 
-		m.general.username = username
-		m.general.password = password
+		m.overview.username = username
+		m.overview.password = password
 
 		m.phase = phaseDashboard
 		m.overlayLines = nil

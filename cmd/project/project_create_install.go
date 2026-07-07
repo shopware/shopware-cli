@@ -110,6 +110,8 @@ func runComposerInstall(ctx context.Context, projectFolder string, useDocker boo
 			"-v", fmt.Sprintf("%s:/app", absProjectFolder),
 			"-w", "/app"}
 
+		dockerArgs = append(dockerArgs, system.DockerRunUserArgs(absProjectFolder)...)
+
 		if system.IsDockerMountable() {
 			homeDir, err := os.UserHomeDir()
 			if err == nil {

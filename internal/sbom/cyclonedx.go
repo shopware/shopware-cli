@@ -11,8 +11,9 @@ import (
 	"sync"
 	"time"
 
+	"github.com/shyim/go-spdx"
+
 	"github.com/shopware/shopware-cli/internal/packagist"
-	"github.com/shopware/shopware-cli/internal/spdx"
 )
 
 const (
