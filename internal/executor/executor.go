@@ -10,6 +10,8 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/go-sql-driver/mysql"
+
 	adminSdk "github.com/shopware/shopware-cli/internal/admin-api"
 	"github.com/shopware/shopware-cli/internal/shop"
 	"github.com/shopware/shopware-cli/logging"
@@ -37,6 +39,10 @@ type Executor interface {
 	StopEnvironment(ctx context.Context) error
 	EnvironmentStatus(ctx context.Context) (bool, error)
 	AdminAPIClient(ctx context.Context) (*adminSdk.Client, error)
+	// DatabaseConnection returns the MySQL connection config of the
+	// environment's database. Remote executors route the returned config
+	// through their own transport, so it is usable from the local machine.
+	DatabaseConnection(ctx context.Context) (*mysql.Config, error)
 }
 
 func adminAPIClient(ctx context.Context, cfg *shop.Config, envCfg *shop.EnvironmentConfig) (*adminSdk.Client, error) {

@@ -5,7 +5,9 @@
 package sshcmd
 
 import (
+	"bytes"
 	"context"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -122,6 +124,21 @@ func Build(ctx context.Context, cfg *shop.EnvironmentSSH, remoteCommand string, 
 	}
 
 	return exec.CommandContext(ctx, "ssh", args...)
+}
+
+// Output runs a command on the host and returns its stdout.
+func Output(ctx context.Context, cfg *shop.EnvironmentSSH, remoteCommand string) (string, error) {
+	cmd := Build(ctx, cfg, remoteCommand)
+
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+
+	output, err := cmd.Output()
+	if err != nil {
+		return "", fmt.Errorf("remote command %q failed: %w\n%s", remoteCommand, err, bytes.TrimSpace(stderr.Bytes()))
+	}
+
+	return string(output), nil
 }
 
 func expandHome(path string) string {

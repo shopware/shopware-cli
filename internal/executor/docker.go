@@ -8,6 +8,8 @@ import (
 	"strings"
 	"syscall"
 
+	"github.com/go-sql-driver/mysql"
+
 	adminSdk "github.com/shopware/shopware-cli/internal/admin-api"
 	"github.com/shopware/shopware-cli/internal/shop"
 	"github.com/shopware/shopware-cli/internal/system"
@@ -102,6 +104,10 @@ func (d *DockerExecutor) WithRelDir(relDir string) Executor {
 
 func (d *DockerExecutor) AdminAPIClient(ctx context.Context) (*adminSdk.Client, error) {
 	return adminAPIClient(ctx, d.shopCfg, d.envCfg)
+}
+
+func (d *DockerExecutor) DatabaseConnection(ctx context.Context) (*mysql.Config, error) {
+	return localDatabaseConnection(ctx, d.projectRoot)
 }
 
 func (d *DockerExecutor) containerWorkdir() string {
