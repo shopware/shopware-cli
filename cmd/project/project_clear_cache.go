@@ -7,7 +7,6 @@ import (
 	"github.com/spf13/cobra"
 
 	adminSdk "github.com/shopware/shopware-cli/internal/admin-api"
-	"github.com/shopware/shopware-cli/internal/executor"
 	"github.com/shopware/shopware-cli/internal/shop"
 	"github.com/shopware/shopware-cli/logging"
 )
@@ -23,21 +22,25 @@ var projectClearCacheCmd = &cobra.Command{
 			return err
 		}
 
+		// with a selected environment the executor decides how and where
+		// cache:clear runs (local, docker, ssh, ...)
 		if environmentName != "" {
-			cmdExecutor, err := resolveExecutor(cmd, "")
+			// the project root is only needed by local executors, remote
+			// environments work from anywhere
+			projectRoot, _ := findClosestShopwareProject()
+
+			cmdExecutor, err := resolveExecutor(cmd, projectRoot)
 			if err != nil {
 				return err
 			}
 
-			if cmdExecutor.Type() == executor.TypeSSH {
-				logging.FromContext(cmd.Context()).Infof("Clearing cache on remote environment %s", environmentName)
+			logging.FromContext(cmd.Context()).Infof("Clearing cache on environment %s", environmentName)
 
-				p := cmdExecutor.ConsoleCommand(cmd.Context(), "cache:clear")
-				p.Cmd.Stdout = cmd.OutOrStdout()
-				p.Cmd.Stderr = cmd.ErrOrStderr()
+			p := cmdExecutor.ConsoleCommand(cmd.Context(), "cache:clear")
+			p.Cmd.Stdout = cmd.OutOrStdout()
+			p.Cmd.Stderr = cmd.ErrOrStderr()
 
-				return p.Run()
-			}
+			return p.Run()
 		}
 
 		if cfg.AdminApi == nil {
