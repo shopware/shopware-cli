@@ -53,7 +53,7 @@ var projectProxyUpCmd = &cobra.Command{
 			return err
 		}
 
-		certInfo, err := proxy.EnsureCertificate(ctx, dir, proxy.CertHosts(settings.Domain, settings.Hosts))
+		certInfo, err := proxy.EnsureCertificate(dir, proxy.CertHosts(settings.Domain, settings.Hosts))
 		if err != nil {
 			return err
 		}
@@ -73,10 +73,10 @@ var projectProxyUpCmd = &cobra.Command{
 		logger.Infof("Proxy is running, instances will be reachable at https://<name>.%s%s", settings.Domain, httpsPortSuffix(settings))
 		logger.Infof("Register a project by running \"shopware-cli project proxy add\" inside the project")
 
-		if certInfo.Mkcert {
-			logger.Infof("Certificates are issued by your mkcert root CA. If you never ran \"mkcert -install\", run \"shopware-cli project proxy trust\" once")
+		if certInfo.CACreated {
+			logger.Infof("A new mkcert root CA was created at %s. Run \"shopware-cli project proxy trust\" once so browsers accept the HTTPS certificates", certInfo.CAPath)
 		} else {
-			logger.Infof("Run \"shopware-cli project proxy trust\" once so browsers accept the HTTPS certificates (or install mkcert to reuse its CA)")
+			logger.Infof("Certificates are issued by the mkcert root CA at %s. If it is not trusted yet, run \"shopware-cli project proxy trust\" once", certInfo.CAPath)
 		}
 
 		return nil
@@ -198,7 +198,7 @@ var projectProxyAddCmd = &cobra.Command{
 			}
 		}
 
-		certInfo, err := proxy.EnsureCertificate(ctx, dir, proxy.CertHosts(settings.Domain, settings.Hosts))
+		certInfo, err := proxy.EnsureCertificate(dir, proxy.CertHosts(settings.Domain, settings.Hosts))
 		if err != nil {
 			return err
 		}
@@ -248,14 +248,14 @@ var projectProxyRemoveCmd = &cobra.Command{
 
 var projectProxyTrustCmd = &cobra.Command{
 	Use:   "trust",
-	Short: "Install the local certificate authority into the trust stores",
+	Short: "Install the mkcert root CA into the trust stores",
 	RunE: func(cmd *cobra.Command, _ []string) error {
-		dir, err := proxy.Dir()
+		caPath, err := proxy.CACertPath()
 		if err != nil {
 			return err
 		}
 
-		summary, err := proxy.InstallTrust(cmd.Context(), dir)
+		summary, err := proxy.InstallTrust(cmd.Context(), caPath)
 		if err != nil {
 			return err
 		}

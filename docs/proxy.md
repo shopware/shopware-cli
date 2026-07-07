@@ -15,12 +15,13 @@ HTTPS that works for payment provider testing.
 - Hostnames use [sslip.io](https://sslip.io): any `<name>.127.0.0.1.sslip.io`
   resolves to `127.0.0.1` on every OS without touching `/etc/hosts` or local
   DNS. A custom base domain can be configured with `proxy up --domain`.
-- Certificates: when [mkcert](https://github.com/FiloSottile/mkcert) is
-  installed, the wildcard certificate is issued by your existing mkcert root
-  CA — if you ever ran `mkcert -install`, HTTPS is trusted immediately with no
-  extra prompts. Without mkcert, shopware-cli generates its own local CA which
-  you trust once via `proxy trust` (set `SHOPWARE_CLI_PROXY_DISABLE_MKCERT=1`
-  to force this even with mkcert installed).
+- Certificates are issued by the [mkcert](https://github.com/FiloSottile/mkcert)
+  root CA: shopware-cli embeds mkcert's CA code (`internal/mkcert`, BSD-3) and
+  loads — or creates — the CA in mkcert's standard `CAROOT` location. If you
+  ever ran `mkcert -install`, HTTPS is trusted immediately with no extra
+  prompts; otherwise run `proxy trust` once. The CA is fully shared with the
+  mkcert tool: certificates issued by either are interchangeable, and the
+  `$CAROOT` environment variable is honored.
 - Per project, a small `docker-compose.override.yml` attaches the `web`
   service to the proxy network and sets the Traefik routing labels. `APP_URL`
   in `.env.local` and `url` in `.shopware-project.yml` are updated to match.

@@ -1,81 +1,162 @@
 package proxy
 
 import (
-	"context"
 	"crypto/x509"
+	"encoding/pem"
+	"fmt"
+	"os"
+	"path/filepath"
+	"slices"
+	"strings"
+	"time"
+
+	"github.com/shopware/shopware-cli/internal/mkcert"
 )
 
-// CertInfo describes the certificate the proxy serves and which CA issued it.
+const (
+	serverCertFile = "cert.pem"
+	serverKeyFile  = "key.pem"
+
+	// renewBefore triggers regeneration when the server certificate is close to expiry.
+	renewBefore = 30 * 24 * time.Hour
+)
+
+// ServerCertPath returns the path of the server certificate used by Traefik.
+func ServerCertPath(dir string) string {
+	return filepath.Join(dir, "traefik", "certs", serverCertFile)
+}
+
+// ServerKeyPath returns the path of the server certificate key used by Traefik.
+func ServerKeyPath(dir string) string {
+	return filepath.Join(dir, "traefik", "certs", serverKeyFile)
+}
+
+// CertInfo describes the certificate the proxy serves.
 type CertInfo struct {
-	// CAPath is the root CA certificate the server certificate chains to.
+	// CAPath is the mkcert root CA certificate the server certificate chains to.
 	CAPath string
 	// Changed is true when the server certificate was (re-)generated.
 	Changed bool
-	// Mkcert is true when the certificate was issued by the mkcert root CA.
-	Mkcert bool
+	// CACreated is true when a new root CA was created (it is not trusted yet).
+	CACreated bool
 }
 
-// EnsureCertificate makes sure a server certificate covering all hosts exists.
-// When mkcert is installed its (usually already trusted) root CA is reused,
-// otherwise a shopware-cli owned local CA is created.
-func EnsureCertificate(ctx context.Context, dir string, hosts []string) (CertInfo, error) {
-	if MkcertAvailable() {
-		caPath, err := MkcertCAPath(ctx)
-		if err != nil {
-			return CertInfo{}, err
-		}
-
-		if fileExists(caPath) && certCovers(ServerCertPath(dir), hosts) && certIssuedBy(ServerCertPath(dir), caPath) && fileExists(ServerKeyPath(dir)) {
-			return CertInfo{CAPath: caPath, Mkcert: true}, nil
-		}
-
-		if err := generateWithMkcert(ctx, dir, hosts); err != nil {
-			return CertInfo{}, err
-		}
-
-		// mkcert creates its root CA on first use, resolve the path again.
-		caPath, err = MkcertCAPath(ctx)
-		if err != nil {
-			return CertInfo{}, err
-		}
-
-		return CertInfo{CAPath: caPath, Changed: true, Mkcert: true}, nil
-	}
-
-	if _, err := EnsureCA(dir); err != nil {
-		return CertInfo{}, err
-	}
-
-	changed, err := EnsureServerCert(dir, hosts)
+// EnsureCertificate makes sure a server certificate covering all hosts
+// exists. Certificates are issued by the mkcert root CA in mkcert's CAROOT
+// (created when missing), so they are trusted as soon as the user ran
+// "mkcert -install" or "shopware-cli project proxy trust" once.
+func EnsureCertificate(dir string, hosts []string) (CertInfo, error) {
+	ca, caCreated, err := mkcert.LoadOrCreateCA()
 	if err != nil {
 		return CertInfo{}, err
 	}
 
-	return CertInfo{CAPath: CACertPath(dir), Changed: changed}, nil
+	info := CertInfo{CAPath: ca.CertPath(), CACreated: caCreated}
+
+	if certCovers(ServerCertPath(dir), hosts) && fileExists(ServerKeyPath(dir)) && certIssuedBy(ServerCertPath(dir), ca.Cert) {
+		return info, nil
+	}
+
+	if !ca.HasKey() {
+		return CertInfo{}, fmt.Errorf("the CA in %s has no private key (rootCA-key.pem), certificates cannot be issued", filepath.Dir(ca.CertPath()))
+	}
+
+	if err := os.MkdirAll(filepath.Dir(ServerCertPath(dir)), 0o700); err != nil {
+		return CertInfo{}, err
+	}
+
+	if err := ca.MakeCert(hosts, ServerCertPath(dir), ServerKeyPath(dir)); err != nil {
+		return CertInfo{}, err
+	}
+
+	info.Changed = true
+
+	return info, nil
 }
 
-// certIssuedBy reports whether the certificate at certPath is signed by the
-// CA certificate at caPath.
-func certIssuedBy(certPath, caPath string) bool {
-	certDer, err := readPem(certPath, "CERTIFICATE")
+// CACertPath loads (or creates) the mkcert root CA and returns the path of
+// its certificate.
+func CACertPath() (string, error) {
+	ca, _, err := mkcert.LoadOrCreateCA()
+	if err != nil {
+		return "", err
+	}
+
+	return ca.CertPath(), nil
+}
+
+// CertHosts declares the SANs needed for a base domain plus explicitly
+// registered hosts. The wildcard covers one subdomain level, which matches
+// <project>.<domain>.
+func CertHosts(domain string, extraHosts []string) []string {
+	hosts := []string{domain, "*." + domain}
+
+	for _, host := range extraHosts {
+		if host == domain || host == "*."+domain || matchesWildcard(host, domain) {
+			continue
+		}
+
+		if !slices.Contains(hosts, host) {
+			hosts = append(hosts, host)
+		}
+	}
+
+	return hosts
+}
+
+func matchesWildcard(host, domain string) bool {
+	sub, found := strings.CutSuffix(host, "."+domain)
+
+	return found && sub != "" && !strings.Contains(sub, ".")
+}
+
+// certCovers reports whether the certificate at certPath contains all hosts
+// as SANs and is not close to expiry.
+func certCovers(certPath string, hosts []string) bool {
+	cert, err := readCertificate(certPath)
 	if err != nil {
 		return false
 	}
 
-	cert, err := x509.ParseCertificate(certDer)
-	if err != nil {
+	if time.Now().Add(renewBefore).After(cert.NotAfter) {
 		return false
 	}
 
-	caDer, err := readPem(caPath, "CERTIFICATE")
-	if err != nil {
-		return false
+	for _, host := range hosts {
+		if !slices.Contains(cert.DNSNames, host) {
+			return false
+		}
 	}
 
-	caCert, err := x509.ParseCertificate(caDer)
+	return true
+}
+
+// certIssuedBy reports whether the certificate at certPath is signed by caCert.
+func certIssuedBy(certPath string, caCert *x509.Certificate) bool {
+	cert, err := readCertificate(certPath)
 	if err != nil {
 		return false
 	}
 
 	return cert.CheckSignatureFrom(caCert) == nil
+}
+
+func readCertificate(path string) (*x509.Certificate, error) {
+	content, err := os.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+
+	block, _ := pem.Decode(content)
+	if block == nil || block.Type != "CERTIFICATE" {
+		return nil, fmt.Errorf("%s does not contain a certificate", path)
+	}
+
+	return x509.ParseCertificate(block.Bytes)
+}
+
+func fileExists(path string) bool {
+	_, err := os.Stat(path)
+
+	return err == nil
 }
