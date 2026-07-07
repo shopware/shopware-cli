@@ -378,7 +378,7 @@ func TestInstanceModel_View_ShowsActiveSourceAndLive(t *testing.T) {
 
 	view := m.View()
 	assert.Contains(t, view, "varnish")
-	assert.Contains(t, view, "LIVE")
+	assert.Contains(t, view, "FOLLOWING")
 	assert.Contains(t, view, "mysql")
 }
 

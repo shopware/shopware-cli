@@ -293,7 +293,7 @@ func (m InstanceModel) renderSidebar() string {
 					lipgloss.Center,
 					item,
 					" ",
-					activeBadgeStyle.Render("LIVE"),
+					activeBadgeStyle.Render("FOLLOWING"),
 				)
 			}
 
