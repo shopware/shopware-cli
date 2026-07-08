@@ -73,11 +73,8 @@ func (w *logWriter) GetLastLines(n int) []string {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 
-	var res []string
-	if len(w.lines) > 0 {
-		res = make([]string, len(w.lines))
-		copy(res, w.lines)
-	}
+	res := make([]string, 0, len(w.lines)+1)
+	res = append(res, w.lines...)
 
 	if w.current.Len() > 0 {
 		res = append(res, w.current.String())
