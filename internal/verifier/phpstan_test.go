@@ -67,3 +67,38 @@ func TestPhpStan_isUselessDeprecation(t *testing.T) {
 		})
 	}
 }
+
+func TestIsPhpStanNoFilesOutput(t *testing.T) {
+	tests := []struct {
+		name   string
+		output string
+		want   bool
+	}{
+		{
+			name:   "phpstan 2.x error block",
+			output: "\n [ERROR] No files found to analyse.                                            \n\n",
+			want:   true,
+		},
+		{
+			name:   "phpstan 1.x note block",
+			output: "\n ! [NOTE] No files found to analyse.                                            \n\n",
+			want:   true,
+		},
+		{
+			name:   "regular json output",
+			output: `{"totals":{"errors":0,"file_errors":0},"files":{},"errors":[]}`,
+			want:   false,
+		},
+		{
+			name:   "empty output",
+			output: "",
+			want:   false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, isPhpStanNoFilesOutput(tt.output))
+		})
+	}
+}
