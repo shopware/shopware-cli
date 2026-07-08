@@ -3,6 +3,7 @@ package system
 import (
 	"context"
 	"fmt"
+	"os"
 	"os/exec"
 	"runtime"
 	"strings"
@@ -100,10 +101,27 @@ func CheckProjectDependencies(ctx context.Context, useDocker bool, phpConstraint
 	return missing
 }
 
+// ValidateProjectDependencies runs CheckProjectDependencies and, when
+// something is missing, prints the rendered explanation to stderr and returns
+// an error. action and dockerHint are passed through to
+// RenderMissingDependencies to phrase the help text for the calling command.
+func ValidateProjectDependencies(ctx context.Context, useDocker bool, phpConstraint PHPVersionChecker, action, dockerHint string) error {
+	missing := CheckProjectDependencies(ctx, useDocker, phpConstraint)
+	if len(missing) == 0 {
+		return nil
+	}
+
+	fmt.Fprintln(os.Stderr, RenderMissingDependencies(useDocker, missing, action, dockerHint))
+	return fmt.Errorf("missing required dependencies")
+}
+
 // RenderMissingDependencies returns a styled, bordered block describing the
 // missing dependencies and the two supported setup paths (Docker preferred,
-// PHP+Composer alternative).
-func RenderMissingDependencies(useDocker bool, missing []MissingDependency) string {
+// PHP+Composer alternative). action names what the user was trying to do
+// (e.g. "create a Shopware project"); dockerHint is an optional, already
+// styled line explaining how to switch to Docker (shown when Docker is
+// suggested but was not the chosen setup).
+func RenderMissingDependencies(useDocker bool, missing []MissingDependency, action, dockerHint string) string {
 	var b strings.Builder
 
 	b.WriteString(tui.RedText.Bold(true).Render("Missing Dependencies"))
@@ -132,18 +150,18 @@ func RenderMissingDependencies(useDocker bool, missing []MissingDependency) stri
 	case dockerOnlyMissing && missing[0].Reason == "not installed":
 		b.WriteString(tui.BoldText.Render("Install Docker and try again."))
 	case insideContainer:
-		b.WriteString(tui.BoldText.Render("To create a Shopware project from inside this container, install:"))
+		b.WriteString(tui.BoldText.Render(fmt.Sprintf("To %s from inside this container, install:", action)))
 		b.WriteString("\n\n")
 		b.WriteString("  " + arrow + " " + tui.BoldText.Render("PHP 8.2+ and Composer") + "\n")
 		b.WriteString("    PHP:      " + tui.BlueText.Render("https://www.php.net/downloads.php") + "\n")
 		b.WriteString("    Composer: " + tui.BlueText.Render("https://getcomposer.org/") + "\n")
 	default:
-		b.WriteString(tui.BoldText.Render("To create a Shopware project, install one of:"))
+		b.WriteString(tui.BoldText.Render(fmt.Sprintf("To %s, install one of:", action)))
 		b.WriteString("\n\n")
 		b.WriteString("  " + arrow + " " + tui.RecommendedText.Render("Docker") + " " + tui.DimText.Render("(recommended)") + "\n")
 		b.WriteString("    " + tui.BlueText.Render("https://docs.docker.com/get-docker/") + "\n")
-		if !useDocker {
-			b.WriteString("    Then re-run with " + tui.BoldText.Render("--docker") + "\n")
+		if !useDocker && dockerHint != "" {
+			b.WriteString("    " + dockerHint + "\n")
 		}
 		b.WriteString("\n")
 		b.WriteString("  " + arrow + " " + tui.BoldText.Render("PHP 8.2+ and Composer") + "\n")

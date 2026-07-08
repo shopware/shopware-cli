@@ -17,6 +17,7 @@ import (
 	dockerpkg "github.com/shopware/shopware-cli/internal/docker"
 	"github.com/shopware/shopware-cli/internal/executor"
 	"github.com/shopware/shopware-cli/internal/shop"
+	"github.com/shopware/shopware-cli/internal/system"
 	"github.com/shopware/shopware-cli/internal/tui"
 )
 
@@ -55,27 +56,9 @@ var projectDevCmd = &cobra.Command{
 			return runMigrationWizardTUI(projectRoot, cfg)
 		}
 
-		envCfg, err := cfg.ResolveEnvironment(environmentName)
+		env, err := newDevEnvironment(cmd, projectRoot, cfg)
 		if err != nil {
 			return err
-		}
-
-		exec, err := executor.New(projectRoot, envCfg, cfg)
-		if err != nil {
-			return err
-		}
-
-		if exec.Type() == executor.TypeDocker {
-			if err := dockerpkg.WriteComposeFile(projectRoot, dockerpkg.ComposeOptionsFromConfig(cfg)); err != nil {
-				return err
-			}
-		}
-
-		env := &devEnvironment{
-			projectRoot: projectRoot,
-			cfg:         cfg,
-			envCfg:      envCfg,
-			executor:    exec,
 		}
 
 		if !isatty.IsTerminal(os.Stdin.Fd()) {
@@ -161,6 +144,14 @@ func setupDevEnvironment(cmd *cobra.Command) (*devEnvironment, error) {
 		return nil, shop.ErrDevModeNotSupported
 	}
 
+	return newDevEnvironment(cmd, projectRoot, cfg)
+}
+
+// newDevEnvironment resolves the configured environment, verifies that the
+// system requirements for it are met (Docker running for Docker environments,
+// PHP and Composer for local ones) and prepares the executor. Shared by
+// `project dev` and its start/stop/status subcommands.
+func newDevEnvironment(cmd *cobra.Command, projectRoot string, cfg *shop.Config) (*devEnvironment, error) {
 	envCfg, err := cfg.ResolveEnvironment(environmentName)
 	if err != nil {
 		return nil, err
@@ -171,7 +162,13 @@ func setupDevEnvironment(cmd *cobra.Command) (*devEnvironment, error) {
 		return nil, err
 	}
 
-	if exec.Type() == executor.TypeDocker {
+	useDocker := exec.Type() == executor.TypeDocker
+	dockerHint := "Then set the environment " + tui.BoldText.Render("type") + " to " + tui.BoldText.Render("docker") + " in " + tui.BoldText.Render(".shopware-project.yml")
+	if err := system.ValidateProjectDependencies(cmd.Context(), useDocker, nil, "start the development environment", dockerHint); err != nil {
+		return nil, err
+	}
+
+	if useDocker {
 		if err := dockerpkg.WriteComposeFile(projectRoot, dockerpkg.ComposeOptionsFromConfig(cfg)); err != nil {
 			return nil, err
 		}
