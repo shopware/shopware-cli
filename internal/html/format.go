@@ -170,6 +170,90 @@ func isStructuredChild(n Node) bool {
 	return false
 }
 
+// whitespacePreservingTags lists elements whose rendered output depends on
+// the literal whitespace of their content (per HTML's white-space rules).
+// The formatter must emit their children byte-for-byte instead of
+// re-indenting or re-flowing them.
+var whitespacePreservingTags = map[string]bool{
+	"pre":      true,
+	"textarea": true,
+}
+
+// dumpVerbatim renders nodes without inserting or removing any whitespace.
+// Used for the contents of whitespace-preserving elements like <pre>, where
+// re-indenting would change what the browser displays. Nested elements are
+// emitted inline (attributes on one line) and their children recurse in
+// verbatim mode too.
+func dumpVerbatim(builder *strings.Builder, nodes NodeList) {
+	for _, node := range nodes {
+		switch n := node.(type) {
+		case *ElementNode:
+			builder.WriteString("<" + n.Tag)
+			for _, attr := range n.Attributes {
+				builder.WriteString(" ")
+				builder.WriteString(attr.Dump(0))
+			}
+			if n.SelfClosing {
+				builder.WriteString("/>")
+				continue
+			}
+			builder.WriteString(">")
+			dumpVerbatim(builder, n.Children)
+			if !n.Unclosed {
+				builder.WriteString("</" + n.Tag + ">")
+			}
+		case *TwigIfNode:
+			for i, br := range n.Branches {
+				builder.WriteString(openStmt(br.Trim.Left))
+				if i == 0 {
+					builder.WriteString(" if " + br.Condition + " ")
+				} else {
+					builder.WriteString(" elseif " + br.Condition + " ")
+				}
+				builder.WriteString(closeStmt(br.Trim.Right))
+				dumpVerbatim(builder, br.Body)
+			}
+			if len(n.ElseChildren) > 0 {
+				builder.WriteString(openStmt(n.ElseTrim.Left))
+				builder.WriteString(" else ")
+				builder.WriteString(closeStmt(n.ElseTrim.Right))
+				dumpVerbatim(builder, n.ElseChildren)
+			}
+			builder.WriteString(openStmt(n.EndTrim.Left))
+			builder.WriteString(" endif ")
+			builder.WriteString(closeStmt(n.EndTrim.Right))
+		case *TwigBlockNode:
+			builder.WriteString(openStmt(n.OpenTrim.Left))
+			builder.WriteString(" block " + n.Name + " ")
+			builder.WriteString(closeStmt(n.OpenTrim.Right))
+			dumpVerbatim(builder, n.Children)
+			builder.WriteString(openStmt(n.CloseTrim.Left))
+			builder.WriteString(" endblock ")
+			builder.WriteString(closeStmt(n.CloseTrim.Right))
+		case *TwigGenericBlockNode:
+			builder.WriteString(openStmt(n.OpenTrim.Left))
+			builder.WriteString(" " + n.Name)
+			if n.Args != "" {
+				builder.WriteString(" " + n.Args)
+			}
+			builder.WriteString(" ")
+			builder.WriteString(closeStmt(n.OpenTrim.Right))
+			dumpVerbatim(builder, n.Body)
+			if len(n.Else) > 0 {
+				builder.WriteString(openStmt(n.ElseTrim.Left))
+				builder.WriteString(" else ")
+				builder.WriteString(closeStmt(n.ElseTrim.Right))
+				dumpVerbatim(builder, n.Else)
+			}
+			builder.WriteString(openStmt(n.CloseTrim.Left))
+			builder.WriteString(" " + n.EndTag + " ")
+			builder.WriteString(closeStmt(n.CloseTrim.Right))
+		default:
+			builder.WriteString(node.Dump(0))
+		}
+	}
+}
+
 func isTemplateElement(node Node) bool {
 	if elem, ok := node.(*ElementNode); ok {
 		return elem.Tag == "template"
@@ -261,6 +345,16 @@ func (e *ElementNode) Dump(indent int) string {
 
 	// Handle children
 	if len(e.Children) > 0 {
+		// Whitespace-preserving elements (<pre>, <textarea>): emit the
+		// content byte-for-byte — any re-indentation would show up in the
+		// rendered page.
+		if whitespacePreservingTags[strings.ToLower(e.Tag)] {
+			dumpVerbatim(&builder, e.Children)
+			if !e.Unclosed {
+				builder.WriteString("</" + e.Tag + ">")
+			}
+			return builder.String()
+		}
 		// Preserve on p tag the formatting
 		if e.Tag == "p" {
 			hasLongTemplateExpression := false
