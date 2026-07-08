@@ -1,0 +1,13 @@
+<div>
+    <textarea name="foo">
+  some
+     spaced
+content</textarea>
+</div>
+-----
+<div>
+    <textarea name="foo">
+  some
+     spaced
+content</textarea>
+</div>
