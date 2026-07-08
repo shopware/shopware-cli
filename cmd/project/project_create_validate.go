@@ -29,8 +29,6 @@ func validateAndPreflight(ctx context.Context, opts *createOptions, releases []p
 
 	phpConstraint := packagist.PHPConstraintForShopwareVersion(releases, chosenVersion)
 
-	missingDeps := system.CheckProjectDependencies(ctx, opts.useDocker, phpConstraint)
-
 	validDeployments := map[string]bool{
 		packagist.DeploymentNone:         true,
 		packagist.DeploymentDeployer:     true,
@@ -50,9 +48,9 @@ func validateAndPreflight(ctx context.Context, opts *createOptions, releases []p
 		return "", nil, fmt.Errorf("invalid CI system: %s. Valid options: none, github, gitlab", opts.selectedCI)
 	}
 
-	if len(missingDeps) > 0 {
-		fmt.Fprintln(os.Stderr, system.RenderMissingDependencies(opts.useDocker, missingDeps))
-		return "", nil, fmt.Errorf("missing required dependencies")
+	dockerHint := "Then re-run with " + tui.BoldText.Render("--docker")
+	if err := system.ValidateProjectDependencies(ctx, opts.useDocker, phpConstraint, "create a Shopware project", dockerHint); err != nil {
+		return "", nil, err
 	}
 
 	if err := checkSecurityAdvisories(ctx, opts, chosenVersion); err != nil {
