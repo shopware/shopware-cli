@@ -1,14 +1,12 @@
 package project
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 
-	"charm.land/huh/v2/spinner"
 	"charm.land/lipgloss/v2"
 	"github.com/spf13/cobra"
 
@@ -154,24 +152,5 @@ func runComposerInstall(ctx context.Context, projectFolder string, useDocker boo
 		return cmdInstall.Run()
 	}
 
-	var stdErr bytes.Buffer
-	cmdInstall.Stderr = &stdErr
-
-	var runErr error
-
-	if err := spinner.New().Context(ctx).Title("Installing dependencies").Action(func() {
-		runErr = cmdInstall.Run()
-	}).Run(); err != nil {
-		return err
-	}
-
-	if runErr != nil {
-		if stdErr.Len() > 0 {
-			fmt.Fprint(os.Stderr, stdErr.String())
-		}
-
-		return runErr
-	}
-
-	return nil
+	return tui.RunSpinnerWithLogs(ctx, "Installing dependencies", cmdInstall)
 }
