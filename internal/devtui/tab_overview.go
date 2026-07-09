@@ -300,7 +300,7 @@ func (m OverviewModel) handleKey(msg tea.KeyPressMsg) (OverviewModel, tea.Cmd) {
 		return m, nil
 	}
 
-	switch msg.String() {
+	switch keyString(msg) {
 	case "up", "k":
 		if m.cursor > 0 {
 			m.cursor--

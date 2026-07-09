@@ -146,7 +146,7 @@ func (m InstanceModel) Update(msg tea.Msg) (InstanceModel, tea.Cmd) {
 		return m, nil
 
 	case tea.KeyPressMsg:
-		switch msg.String() {
+		switch keyString(msg) {
 		case keyUp, keyK:
 			m.cursor = m.neighborCursor(-1)
 			return m, nil

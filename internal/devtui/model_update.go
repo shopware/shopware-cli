@@ -30,7 +30,7 @@ func (m Model) updateKeyPress(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	}
 
 	if m.phase == phaseStarting || m.phase == phaseStopping {
-		switch msg.String() {
+		switch keyString(msg) {
 		case "l":
 			m.dockerShowLogs = !m.dockerShowLogs
 		case keyQ, keyCtrlC:
@@ -46,7 +46,7 @@ func (m Model) updateKeyPress(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	}
 
 	if m.phase == phaseInstalling {
-		switch msg.String() {
+		switch keyString(msg) {
 		case "l":
 			m.installProg.showLogs = !m.installProg.showLogs
 		case keyQ, keyCtrlC:
@@ -68,7 +68,7 @@ func (m Model) updateKeyPress(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			m.taskErr = nil
 			return m, nil
 		}
-		if msg.String() == keyQ || msg.String() == keyCtrlC {
+		if keyString(msg) == keyQ || keyString(msg) == keyCtrlC {
 			if tags, ok := m.telemetry.taskTags(tracking.ResultCancelled); ok {
 				trackEventNow(tracking.EventDevAction, tags)
 			}
@@ -81,7 +81,7 @@ func (m Model) updateKeyPress(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 }
 
 func (m Model) updateDashboardKeys(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
-	switch msg.String() {
+	switch keyString(msg) {
 	case "ctrl+p":
 		m.modal = newCommandPalette(paletteState{
 			adminWatchActive: m.overview.adminWatchRunning || m.overview.adminWatchStarting,
@@ -125,7 +125,7 @@ func (m Model) updateDashboardKeys(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 }
 
 func (m Model) updateConfigTab(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
-	if msg.String() == keyEnter {
+	if keyString(msg) == keyEnter {
 		if m.configTab.cursor == fieldSave && m.configTab.modified {
 			m.configTab.ApplyToConfig(m.config)
 			if err := shop.WriteConfig(m.config, m.projectRoot); err != nil {
@@ -261,13 +261,13 @@ func (m Model) updateMigrationWizard(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	// Enter on the welcome screen's "Quit" button exits the wizard from inside
 	// migrationWizard.update, so detect it here before the state advances.
 	welcomeQuit := m.migrationWizard.step == migrationStepWelcome &&
-		!m.migrationWizard.confirmYes && msg.String() == keyEnter
+		!m.migrationWizard.confirmYes && keyString(msg) == keyEnter
 
 	newGuide, cmd := m.migrationWizard.update(msg)
 	m.migrationWizard = newGuide
 
 	// Ctrl+C on any step quits the app
-	if welcomeQuit || msg.String() == keyCtrlC {
+	if welcomeQuit || keyString(msg) == keyCtrlC {
 		// The done screen already sent a completed/failed event for this run.
 		if m.migrationWizard.step != migrationStepDone {
 			trackEventNow(tracking.EventDevMigrationWizard, migrationWizardTags(tracking.ResultCancelled, m.migrationWizard))
@@ -277,7 +277,7 @@ func (m Model) updateMigrationWizard(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 
 	// User pressed Enter on the review step. confirmYes=true saves and
 	// continues, confirmYes=false picks the Quit button and exits the wizard.
-	if m.migrationWizard.step == migrationStepReview && msg.String() == keyEnter {
+	if m.migrationWizard.step == migrationStepReview && keyString(msg) == keyEnter {
 		if m.migrationWizard.confirmYes {
 			return m.saveMigrationWizard()
 		}
@@ -287,7 +287,7 @@ func (m Model) updateMigrationWizard(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 
 	// User pressed Enter on the done screen → start docker containers.
 	// If the previous save errored, stay on the done screen so the user can read it.
-	if m.migrationWizard.step == migrationStepDone && msg.String() == keyEnter && m.migrationWizard.err == nil {
+	if m.migrationWizard.step == migrationStepDone && keyString(msg) == keyEnter && m.migrationWizard.err == nil {
 		return m.startAfterMigrationWizard()
 	}
 
