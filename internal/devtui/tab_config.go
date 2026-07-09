@@ -210,7 +210,7 @@ func (m ConfigModel) Update(msg tea.Msg) (ConfigModel, tea.Cmd) {
 }
 
 func (m ConfigModel) HandleKey(msg tea.KeyPressMsg) (ConfigModel, tea.Cmd) {
-	switch msg.String() {
+	switch keyString(msg) {
 	case keyUp, keyK:
 		m.moveCursorUp()
 	case keyDown, keyJ:

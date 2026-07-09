@@ -103,7 +103,7 @@ func (sp *salesChannelPicker) Update(msg tea.Msg) (Modal, tea.Cmd) {
 		// any of esc/enter/q closes the picker so the user is never stuck
 		// waiting on a view with no obvious way out.
 		if sp.inner == nil {
-			if msg.String() == "esc" || msg.String() == keyEnter || msg.String() == keyQ {
+			if keyString(msg) == "esc" || keyString(msg) == keyEnter || keyString(msg) == keyQ {
 				return nil, emit(salesChannelPickerResultMsg{Cancelled: true})
 			}
 			return sp, nil

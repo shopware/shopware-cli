@@ -110,7 +110,7 @@ var installStepPatterns = []struct {
 }
 
 func (m Model) updateInstallPrompt(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
-	if k := msg.String(); k == keyQ || k == keyCtrlC {
+	if k := keyString(msg); k == keyQ || k == keyCtrlC {
 		if m.telemetry.installOnce() {
 			tags := m.telemetry.installTags(tracking.ResultCancelled, m.install)
 			tags[tracking.TagAbandonedAt] = installStepTagName(m.install.step)
@@ -134,7 +134,7 @@ func (m Model) updateInstallPrompt(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 }
 
 func (m Model) updateInstallStepAsk(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
-	switch msg.String() {
+	switch keyString(msg) {
 	case keyLeft, "h":
 		m.install.confirmYes = true
 	case keyRight, "l":
@@ -157,30 +157,30 @@ func (m Model) updateInstallStepAsk(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 }
 
 func (m Model) updateInstallStepLanguage(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
-	if msg.String() == keyEnter {
+	if keyString(msg) == keyEnter {
 		m.install.language = installLanguages[m.install.cursor].id
 		m.install.step = installStepCurrency
 		m.install.cursor = 0
 		return m, nil
 	}
-	m.install.cursor = moveCursor(m.install.cursor, msg.String(), len(installLanguages))
+	m.install.cursor = moveCursor(m.install.cursor, keyString(msg), len(installLanguages))
 	return m, nil
 }
 
 func (m Model) updateInstallStepCurrency(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
-	if msg.String() == keyEnter {
+	if keyString(msg) == keyEnter {
 		m.install.currency = installCurrencies[m.install.cursor]
 		m.install.step = installStepCredentials
 		m.install.username.SetValue(defaultUsername)
 		m.install.password.SetValue("shopware")
 		return m, m.install.focus(credFocusUsername)
 	}
-	m.install.cursor = moveCursor(m.install.cursor, msg.String(), len(installCurrencies))
+	m.install.cursor = moveCursor(m.install.cursor, keyString(msg), len(installCurrencies))
 	return m, nil
 }
 
 func (m Model) updateInstallStepCredentials(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
-	switch msg.String() {
+	switch keyString(msg) {
 	case keyEnter:
 		return m.handleInstallCredentialsEnter()
 	case keyTab, keyDown:

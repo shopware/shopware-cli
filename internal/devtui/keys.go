@@ -1,5 +1,11 @@
 package devtui
 
+import (
+	"strings"
+
+	tea "charm.land/bubbletea/v2"
+)
+
 const (
 	keyCtrlC    = "ctrl+c"
 	keyDown     = "down"
@@ -17,6 +23,16 @@ const (
 	keyLeft     = "left"
 	keyRight    = "right"
 )
+
+// keyString returns the string form of a key press, lower-cased. With Caps
+// Lock on, the terminal sends the shortcut's shifted form instead of the
+// plain one - e.g. pressing ctrl+c sends "ctrl+C" and ctrl+p sends "ctrl+P" -
+// which doesn't match our lowercase key constants ("ctrl+c", "ctrl+p", ...),
+// so the shortcut silently does nothing. Lower-casing here makes the match
+// work either way.
+func keyString(msg tea.KeyPressMsg) string {
+	return strings.ToLower(msg.String())
+}
 
 // moveCursor applies an up/down (or k/j) navigation key to a cursor over a
 // list of length count, clamping to [0, count-1]. Keys other than the four

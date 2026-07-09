@@ -126,7 +126,7 @@ func (sg *migrationWizard) update(msg tea.KeyPressMsg) (migrationWizard, tea.Cmd
 }
 
 func (sg *migrationWizard) updateWelcome(msg tea.KeyPressMsg) (migrationWizard, tea.Cmd) {
-	switch msg.String() {
+	switch keyString(msg) {
 	case keyLeft, "h":
 		sg.confirmYes = true
 	case keyRight, "l":
@@ -145,7 +145,7 @@ func (sg *migrationWizard) updateWelcome(msg tea.KeyPressMsg) (migrationWizard, 
 }
 
 func (sg *migrationWizard) updateAdminUser(msg tea.KeyPressMsg) (migrationWizard, tea.Cmd) {
-	switch msg.String() {
+	switch keyString(msg) {
 	case keyEnter:
 		return sg.handleAdminUserEnter()
 	case keyTab, keyDown:
@@ -176,16 +176,16 @@ func (sg *migrationWizard) handleAdminUserEnter() (migrationWizard, tea.Cmd) {
 }
 
 func (sg *migrationWizard) updateDockerPHP(msg tea.KeyPressMsg) (migrationWizard, tea.Cmd) {
-	if msg.String() == keyEnter {
+	if keyString(msg) == keyEnter {
 		sg.step = migrationStepReview
 		return *sg, nil
 	}
-	sg.phpCursor = moveCursor(sg.phpCursor, msg.String(), len(sg.phpVersions))
+	sg.phpCursor = moveCursor(sg.phpCursor, keyString(msg), len(sg.phpVersions))
 	return *sg, nil
 }
 
 func (sg *migrationWizard) updateReview(msg tea.KeyPressMsg) (migrationWizard, tea.Cmd) {
-	switch msg.String() {
+	switch keyString(msg) {
 	case keyLeft, "h":
 		sg.confirmYes = true
 	case keyRight, "l":
