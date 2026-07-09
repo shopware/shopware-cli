@@ -1,19 +1,15 @@
 ARG PHP_VERSION=8.3
-ARG NODE_VERSION=22
+ARG NODE_VERSION=24
 
-FROM node:${NODE_VERSION}-alpine AS node
+FROM ghcr.io/shopware/docker-dev:php${PHP_VERSION}-node${NODE_VERSION}-caddy
 
-FROM php:${PHP_VERSION}-cli-alpine
+# Switch to root for package installation
+USER root
 
-ARG NODE_VERSION
+# Install bun
+COPY --from=oven/bun:alpine /usr/local/bin/bun /usr/local/bin/bun
 
 LABEL org.opencontainers.image.source=https://github.com/shopware/shopware-cli
-
-COPY --from=composer/composer:2-bin /composer /usr/bin/composer
-COPY --from=mlocati/php-extension-installer:2 /usr/bin/install-php-extensions /usr/bin/install-php-extensions
-COPY --from=oven/bun:alpine /usr/local/bin/bun /usr/local/bin/bun
-COPY --link --from=node /usr/local/bin/node /usr/local/bin/node
-COPY --link --from=node /usr/local/lib/node_modules /usr/local/lib/node_modules
 
 RUN <<EOF
     set -euxo pipefail
@@ -30,36 +26,8 @@ RUN <<EOF
 
     ln -s /usr/local/bin/bun /usr/local/bin/bunx
 
-    ln -s /usr/local/lib/node_modules/npm/bin/npm-cli.js /usr/local/bin/npm
-    ln -s /usr/local/lib/node_modules/npm/bin/npx-cli.js /usr/local/bin/npx
-    ln -s /usr/local/lib/node_modules/corepack/dist/corepack.js /usr/local/bin/corepack
-
     node --version
     npm --version
-
-    INSTALLED_NODE_VERSION=$(node -e "console.log(process.versions.node.substring(0,2))")
-    if [ "$INSTALLED_NODE_VERSION" != "$NODE_VERSION" ]; then
-        echo "ERROR: Installed Node.js version ($INSTALLED_NODE_VERSION) does not match expected version ($NODE_VERSION)"
-        exit 1
-    fi
-
-    install-php-extensions \
-        bcmath \
-        gd \
-        intl \
-        pdo_mysql \
-        pcntl \
-        sockets \
-        bz2 \
-        gmp \
-        soap \
-        zip \
-        sodium \
-        redis \
-        amqp \
-        opcache
-
-    echo 'memory_limit=512M' > "$PHP_INI_DIR/conf.d/docker.ini"
 EOF
 
 COPY internal/verifier/js /opt/verifier/js
@@ -73,7 +41,12 @@ RUN <<EOF
 EOF
 
 ENV SHOPWARE_CLI_TOOLS_DIR=/opt/verifier
+ENV PHP_MEMORY_LIMIT=512M
 
 COPY scripts/entrypoint.sh /usr/local/bin/entrypoint.sh
+RUN chmod +x /usr/local/bin/entrypoint.sh
+
+# Switch back to www-data user
+USER www-data
 
 CMD ["sh"]
