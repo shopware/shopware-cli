@@ -17,12 +17,12 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
+	"github.com/shyim/go-composer"
 	endoflife "github.com/shyim/go-endoflife-api"
 
 	dockerpkg "github.com/shopware/shopware-cli/internal/docker"
 	"github.com/shopware/shopware-cli/internal/executor"
 	"github.com/shopware/shopware-cli/internal/extension"
-	"github.com/shopware/shopware-cli/internal/packagist"
 	"github.com/shopware/shopware-cli/internal/shop"
 	"github.com/shopware/shopware-cli/internal/system"
 	"github.com/shopware/shopware-cli/internal/tui"
@@ -958,7 +958,7 @@ func majorMinor(version string) string {
 }
 
 func detectShopwareVersion(projectRoot string) string {
-	lock, err := packagist.ReadComposerLock(filepath.Join(projectRoot, "composer.lock"))
+	lock, err := composer.ReadLock(filepath.Join(projectRoot, "composer.lock"))
 	if err != nil {
 		return ""
 	}

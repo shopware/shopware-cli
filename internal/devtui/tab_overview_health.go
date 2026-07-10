@@ -11,10 +11,11 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
+	"github.com/shyim/go-composer"
 
 	"github.com/shopware/shopware-cli/internal/envfile"
 	"github.com/shopware/shopware-cli/internal/executor"
-	"github.com/shopware/shopware-cli/internal/packagist"
+	"github.com/shopware/shopware-cli/internal/shop"
 	"github.com/shopware/shopware-cli/internal/symfony"
 	"github.com/shopware/shopware-cli/internal/tui"
 )
@@ -111,9 +112,9 @@ func runtimeHealthChecks(ctx context.Context, projectRoot string, exec executor.
 // phpVersionCheck compares the running PHP version against the `require.php`
 // constraint of the installed Shopware release from composer.lock.
 func phpVersionCheck(projectRoot, current string) healthCheck {
-	var constraint *packagist.PHPConstraint
-	if lock, err := packagist.ReadComposerLock(filepath.Join(projectRoot, "composer.lock")); err == nil {
-		constraint = lock.ShopwarePHPConstraint()
+	var constraint *shop.PHPConstraint
+	if lock, err := composer.ReadLock(filepath.Join(projectRoot, "composer.lock")); err == nil {
+		constraint = shop.ShopwarePHPConstraint(lock)
 	}
 
 	level := healthOK

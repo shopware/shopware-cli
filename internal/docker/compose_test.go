@@ -5,7 +5,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	"github.com/shopware/shopware-cli/internal/packagist"
+	"github.com/shyim/go-composer"
 )
 
 func TestProfilerNeedsCredentials(t *testing.T) {
@@ -36,8 +36,8 @@ func TestGenerateComposeFile(t *testing.T) {
 
 	t.Run("base only", func(t *testing.T) {
 		t.Parallel()
-		lock := &packagist.ComposerLock{
-			Packages: []packagist.ComposerLockPackage{
+		lock := &composer.Lock{
+			Packages: []composer.LockPackage{
 				{Name: "shopware/core", Version: "6.6.0.0"},
 			},
 		}
@@ -63,8 +63,8 @@ func TestGenerateComposeFile(t *testing.T) {
 
 	t.Run("with amqp", func(t *testing.T) {
 		t.Parallel()
-		lock := &packagist.ComposerLock{
-			Packages: []packagist.ComposerLockPackage{
+		lock := &composer.Lock{
+			Packages: []composer.LockPackage{
 				{Name: "shopware/core", Version: "6.6.0.0"},
 				{Name: "symfony/amqp-messenger", Version: "v7.0.0"},
 			},
@@ -85,8 +85,8 @@ func TestGenerateComposeFile(t *testing.T) {
 
 	t.Run("with elasticsearch", func(t *testing.T) {
 		t.Parallel()
-		lock := &packagist.ComposerLock{
-			Packages: []packagist.ComposerLockPackage{
+		lock := &composer.Lock{
+			Packages: []composer.LockPackage{
 				{Name: "shopware/core", Version: "6.6.0.0"},
 				{Name: "shopware/elasticsearch", Version: "6.6.0.0"},
 			},
@@ -107,8 +107,8 @@ func TestGenerateComposeFile(t *testing.T) {
 
 	t.Run("custom php version", func(t *testing.T) {
 		t.Parallel()
-		lock := &packagist.ComposerLock{
-			Packages: []packagist.ComposerLockPackage{
+		lock := &composer.Lock{
+			Packages: []composer.LockPackage{
 				{Name: "shopware/core", Version: "6.6.0.0"},
 			},
 		}
@@ -123,8 +123,8 @@ func TestGenerateComposeFile(t *testing.T) {
 
 	t.Run("with php profiler", func(t *testing.T) {
 		t.Parallel()
-		lock := &packagist.ComposerLock{
-			Packages: []packagist.ComposerLockPackage{
+		lock := &composer.Lock{
+			Packages: []composer.LockPackage{
 				{Name: "shopware/core", Version: "6.6.0.0"},
 			},
 		}
@@ -140,8 +140,8 @@ func TestGenerateComposeFile(t *testing.T) {
 
 	t.Run("with blackfire profiler and credentials", func(t *testing.T) {
 		t.Parallel()
-		lock := &packagist.ComposerLock{
-			Packages: []packagist.ComposerLockPackage{
+		lock := &composer.Lock{
+			Packages: []composer.LockPackage{
 				{Name: "shopware/core", Version: "6.6.0.0"},
 			},
 		}
@@ -165,8 +165,8 @@ func TestGenerateComposeFile(t *testing.T) {
 
 	t.Run("blackfire without credentials skips container", func(t *testing.T) {
 		t.Parallel()
-		lock := &packagist.ComposerLock{
-			Packages: []packagist.ComposerLockPackage{
+		lock := &composer.Lock{
+			Packages: []composer.LockPackage{
 				{Name: "shopware/core", Version: "6.6.0.0"},
 			},
 		}
@@ -182,8 +182,8 @@ func TestGenerateComposeFile(t *testing.T) {
 
 	t.Run("with tideways profiler and api key", func(t *testing.T) {
 		t.Parallel()
-		lock := &packagist.ComposerLock{
-			Packages: []packagist.ComposerLockPackage{
+		lock := &composer.Lock{
+			Packages: []composer.LockPackage{
 				{Name: "shopware/core", Version: "6.6.0.0"},
 			},
 		}
@@ -205,8 +205,8 @@ func TestGenerateComposeFile(t *testing.T) {
 
 	t.Run("tideways without api key skips container", func(t *testing.T) {
 		t.Parallel()
-		lock := &packagist.ComposerLock{
-			Packages: []packagist.ComposerLockPackage{
+		lock := &composer.Lock{
+			Packages: []composer.LockPackage{
 				{Name: "shopware/core", Version: "6.6.0.0"},
 			},
 		}
@@ -222,8 +222,8 @@ func TestGenerateComposeFile(t *testing.T) {
 
 	t.Run("without php profiler", func(t *testing.T) {
 		t.Parallel()
-		lock := &packagist.ComposerLock{
-			Packages: []packagist.ComposerLockPackage{
+		lock := &composer.Lock{
+			Packages: []composer.LockPackage{
 				{Name: "shopware/core", Version: "6.6.0.0"},
 			},
 		}
@@ -239,8 +239,8 @@ func TestGenerateComposeFile(t *testing.T) {
 
 	t.Run("without dedicated worker by default", func(t *testing.T) {
 		t.Parallel()
-		lock := &packagist.ComposerLock{
-			Packages: []packagist.ComposerLockPackage{
+		lock := &composer.Lock{
+			Packages: []composer.LockPackage{
 				{Name: "shopware/core", Version: "6.6.0.0"},
 			},
 		}
@@ -257,8 +257,8 @@ func TestGenerateComposeFile(t *testing.T) {
 
 	t.Run("with dedicated worker", func(t *testing.T) {
 		t.Parallel()
-		lock := &packagist.ComposerLock{
-			Packages: []packagist.ComposerLockPackage{
+		lock := &composer.Lock{
+			Packages: []composer.LockPackage{
 				{Name: "shopware/core", Version: "6.6.0.0"},
 				{Name: "symfony/amqp-messenger", Version: "v7.0.0"},
 			},
@@ -280,8 +280,8 @@ func TestGenerateComposeFile(t *testing.T) {
 
 	t.Run("with all optional services", func(t *testing.T) {
 		t.Parallel()
-		lock := &packagist.ComposerLock{
-			Packages: []packagist.ComposerLockPackage{
+		lock := &composer.Lock{
+			Packages: []composer.LockPackage{
 				{Name: "shopware/core", Version: "6.6.0.0"},
 				{Name: "symfony/amqp-messenger", Version: "v7.0.0"},
 				{Name: "shopware/elasticsearch", Version: "6.6.0.0"},
@@ -304,8 +304,8 @@ func TestGenerateComposeFile(t *testing.T) {
 
 	t.Run("emits user when set", func(t *testing.T) {
 		t.Parallel()
-		lock := &packagist.ComposerLock{
-			Packages: []packagist.ComposerLockPackage{
+		lock := &composer.Lock{
+			Packages: []composer.LockPackage{
 				{Name: "shopware/core", Version: "6.6.0.0"},
 			},
 		}
@@ -320,8 +320,8 @@ func TestGenerateComposeFile(t *testing.T) {
 
 	t.Run("no user key without User", func(t *testing.T) {
 		t.Parallel()
-		lock := &packagist.ComposerLock{
-			Packages: []packagist.ComposerLockPackage{
+		lock := &composer.Lock{
+			Packages: []composer.LockPackage{
 				{Name: "shopware/core", Version: "6.6.0.0"},
 			},
 		}

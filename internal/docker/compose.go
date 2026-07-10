@@ -5,9 +5,9 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/shyim/go-composer"
 	"gopkg.in/yaml.v3"
 
-	"github.com/shopware/shopware-cli/internal/packagist"
 	"github.com/shopware/shopware-cli/internal/shop"
 	"github.com/shopware/shopware-cli/internal/symfony"
 	"github.com/shopware/shopware-cli/internal/system"
@@ -103,7 +103,7 @@ func ComposeOptionsFromConfig(cfg *shop.Config) *ComposeOptions {
 	return opts
 }
 
-func GenerateComposeFile(lock *packagist.ComposerLock, opts *ComposeOptions) ([]byte, error) {
+func GenerateComposeFile(lock *composer.Lock, opts *ComposeOptions) ([]byte, error) {
 	hasAMQP := lock.GetPackage("symfony/amqp-messenger") != nil
 	hasElasticsearch := lock.GetPackage("shopware/elasticsearch") != nil
 
@@ -137,7 +137,7 @@ func WriteComposeFile(projectFolder string, opts *ComposeOptions) error {
 	}
 	opts.DedicatedWorker = !adminWorkerEnabled
 
-	lock, err := packagist.ReadComposerLock(filepath.Join(projectFolder, "composer.lock"))
+	lock, err := composer.ReadLock(filepath.Join(projectFolder, "composer.lock"))
 	if err != nil {
 		return fmt.Errorf("failed to read composer.lock: %w", err)
 	}

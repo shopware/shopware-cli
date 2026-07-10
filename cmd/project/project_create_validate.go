@@ -9,15 +9,16 @@ import (
 
 	"charm.land/huh/v2"
 	"charm.land/lipgloss/v2"
+	"github.com/shyim/go-composer/repository"
 	"github.com/shyim/go-version"
 
-	"github.com/shopware/shopware-cli/internal/packagist"
+	"github.com/shopware/shopware-cli/internal/shop"
 	"github.com/shopware/shopware-cli/internal/system"
 	"github.com/shopware/shopware-cli/internal/tui"
 	"github.com/shopware/shopware-cli/logging"
 )
 
-func validateAndPreflight(ctx context.Context, opts *createOptions, releases []packagist.ComposerPackageVersion, filteredVersions []*version.Version) (string, *packagist.PHPConstraint, error) {
+func validateAndPreflight(ctx context.Context, opts *createOptions, releases []repository.Version, filteredVersions []*version.Version) (string, *shop.PHPConstraint, error) {
 	if err := validateProjectName(opts.projectFolder); err != nil {
 		return "", nil, err
 	}
@@ -27,13 +28,13 @@ func validateAndPreflight(ctx context.Context, opts *createOptions, releases []p
 		return "", nil, fmt.Errorf("cannot find version %s", opts.selectedVersion)
 	}
 
-	phpConstraint := packagist.PHPConstraintForShopwareVersion(releases, chosenVersion)
+	phpConstraint := shop.PHPConstraintForShopwareVersion(releases, chosenVersion)
 
 	validDeployments := map[string]bool{
-		packagist.DeploymentNone:         true,
-		packagist.DeploymentDeployer:     true,
-		packagist.DeploymentPlatformSH:   true,
-		packagist.DeploymentShopwarePaaS: true,
+		shop.DeploymentNone:         true,
+		shop.DeploymentDeployer:     true,
+		shop.DeploymentPlatformSH:   true,
+		shop.DeploymentShopwarePaaS: true,
 	}
 	if !validDeployments[opts.selectedDeployment] {
 		return "", nil, fmt.Errorf("invalid deployment method: %s. Valid options: none, deployer, platformsh, shopware-paas", opts.selectedDeployment)
@@ -73,7 +74,7 @@ func validateAndPreflight(ctx context.Context, opts *createOptions, releases []p
 	}
 
 	// @todo: it's broken in paas deployments, the paas recipe configures Elasticsearch and it's difficult to do it only when elasticsearch is available.
-	if opts.selectedDeployment == packagist.DeploymentShopwarePaaS {
+	if opts.selectedDeployment == shop.DeploymentShopwarePaaS {
 		opts.withElasticsearch = true
 	}
 
@@ -81,12 +82,27 @@ func validateAndPreflight(ctx context.Context, opts *createOptions, releases []p
 }
 
 func checkSecurityAdvisories(ctx context.Context, opts *createOptions, chosenVersion string) error {
-	advisories, err := packagist.GetShopwareSecurityAdvisories(ctx)
+	advisories, err := repository.New(repository.PackagistURL, nil).GetSecurityAdvisories(ctx, []string{"shopware/core"})
 	if err != nil {
 		logging.FromContext(ctx).Warnf("Could not fetch security advisories: %v", err)
 	}
 
-	matchingAdvisories := packagist.FilterAdvisoriesForVersion(advisories, chosenVersion)
+	// affectedByConstraint reports whether the chosen version satisfies an
+	// advisory's affectedVersions branch. go-composer splits the OR/AND
+	// branches; go-version evaluates each one.
+	affectedByConstraint := func(constraint, ver string) bool {
+		v, err := version.NewVersion(strings.TrimPrefix(ver, "v"))
+		if err != nil {
+			return false
+		}
+		cs, err := version.NewConstraint(constraint)
+		if err != nil {
+			return false
+		}
+		return cs.Check(v)
+	}
+
+	matchingAdvisories := advisories.AffectingPackage("shopware/core", chosenVersion, affectedByConstraint)
 	if len(matchingAdvisories) == 0 {
 		return nil
 	}
@@ -145,7 +161,7 @@ func checkIncompatibilities(ctx context.Context, opts *createOptions) error {
 	return nil
 }
 
-func renderSecurityAdvisories(chosenVersion string, advisories []packagist.SecurityAdvisory) string {
+func renderSecurityAdvisories(chosenVersion string, advisories []repository.SecurityAdvisory) string {
 	var b strings.Builder
 
 	b.WriteString(tui.RedText.Bold(true).Render(fmt.Sprintf("Security Advisories for Shopware %s", chosenVersion)))
@@ -209,7 +225,7 @@ func resolveVersion(selectedVersion string, filteredVersions []*version.Version)
 	return ""
 }
 
-func filterInstallVersions(releases []packagist.ComposerPackageVersion) []*version.Version {
+func filterInstallVersions(releases []repository.Version) []*version.Version {
 	filteredVersions := make([]*version.Version, 0)
 	constraint, _ := version.NewConstraint(">=6.4.18.0")
 

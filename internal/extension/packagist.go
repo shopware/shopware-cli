@@ -5,20 +5,19 @@ import (
 	"fmt"
 	"sort"
 
+	"github.com/shyim/go-composer/repository"
 	"github.com/shyim/go-version"
-
-	"github.com/shopware/shopware-cli/internal/packagist"
 )
 
 func GetShopwareVersions(ctx context.Context) ([]string, error) {
-	packageVersions, err := packagist.GetShopwarePackageVersions(ctx)
+	pkg, err := repository.New(repository.PackagistURL, nil).GetPackage(ctx, "shopware/core")
 	if err != nil {
 		return nil, fmt.Errorf("get package versions: %w", err)
 	}
 
-	versions := make([]string, 0, len(packageVersions))
+	versions := make([]string, 0, len(pkg.Versions))
 
-	for _, packageVersion := range packageVersions {
+	for _, packageVersion := range pkg.Versions {
 		versions = append(versions, packageVersion.VersionNormalized)
 	}
 

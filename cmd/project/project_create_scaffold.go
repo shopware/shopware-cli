@@ -10,7 +10,7 @@ import (
 	"strings"
 	"text/template"
 
-	"github.com/shopware/shopware-cli/internal/packagist"
+	"github.com/shopware/shopware-cli/internal/shop"
 	"github.com/shopware/shopware-cli/internal/system"
 	"github.com/shopware/shopware-cli/internal/tracking"
 	"github.com/shopware/shopware-cli/logging"
@@ -48,7 +48,7 @@ func scaffoldProject(ctx context.Context, opts *createOptions, chosenVersion str
 
 	logging.FromContext(ctx).Infof("Setting up Shopware %s", chosenVersion)
 
-	composerJson, err := packagist.GenerateComposerJson(ctx, packagist.ComposerJsonOptions{
+	composerJson, err := shop.GenerateComposerJson(ctx, shop.ComposerJsonOptions{
 		Version:          chosenVersion,
 		RC:               strings.Contains(chosenVersion, "rc"),
 		UseElasticsearch: opts.withElasticsearch,
@@ -104,12 +104,12 @@ func scaffoldProject(ctx context.Context, opts *createOptions, chosenVersion str
 
 func setupDeployment(projectFolder, deploymentMethod string) error {
 	switch deploymentMethod {
-	case packagist.DeploymentDeployer:
+	case shop.DeploymentDeployer:
 		if err := os.WriteFile(filepath.Join(projectFolder, "deploy.php"), []byte(deployerTemplate), os.ModePerm); err != nil {
 			return err
 		}
 
-	case packagist.DeploymentShopwarePaaS:
+	case shop.DeploymentShopwarePaaS:
 		if err := os.WriteFile(filepath.Join(projectFolder, "application.yaml"), []byte(shopwarePaasAppTemplate), os.ModePerm); err != nil {
 			return err
 		}
@@ -129,7 +129,7 @@ func setupCI(ctx context.Context, projectFolder, ciSystem, deploymentMethod stri
 			return err
 		}
 		logging.FromContext(ctx).Infof("Created CI template %s", ciPath)
-		if deploymentMethod == packagist.DeploymentDeployer {
+		if deploymentMethod == shop.DeploymentDeployer {
 			deployPath := filepath.Join(".github", "workflows", "deploy.yml")
 			if err := os.WriteFile(filepath.Join(projectFolder, deployPath), []byte(githubDeployTemplate), os.ModePerm); err != nil {
 				return err
@@ -144,7 +144,7 @@ func setupCI(ctx context.Context, projectFolder, ciSystem, deploymentMethod stri
 		}
 
 		var buf bytes.Buffer
-		if err := tmpl.Execute(&buf, struct{ Deployer bool }{Deployer: deploymentMethod == packagist.DeploymentDeployer}); err != nil {
+		if err := tmpl.Execute(&buf, struct{ Deployer bool }{Deployer: deploymentMethod == shop.DeploymentDeployer}); err != nil {
 			return err
 		}
 

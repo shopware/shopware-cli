@@ -4,7 +4,8 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/shopware/shopware-cli/internal/packagist"
+	"github.com/shyim/go-composer"
+
 	"github.com/shopware/shopware-cli/internal/shop"
 )
 
@@ -64,19 +65,14 @@ func ensureDeploymentHelper(projectRoot string) (changed bool, err error) {
 		return false, statErr
 	}
 
-	cj, err := packagist.ReadComposerJson(composerPath)
+	cj, err := composer.ReadJson(composerPath)
 	if err != nil {
 		return false, err
 	}
 
-	if cj.HasPackage("shopware/deployment-helper") || cj.HasPackageDev("shopware/deployment-helper") {
+	if !cj.EnsurePackage("shopware/deployment-helper", "*") {
 		return false, nil
 	}
-
-	if cj.Require == nil {
-		cj.Require = packagist.ComposerPackageLink{}
-	}
-	cj.Require["shopware/deployment-helper"] = "*"
 
 	if err := cj.Save(); err != nil {
 		return false, err

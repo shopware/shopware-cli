@@ -10,7 +10,7 @@ import (
 	"github.com/shyim/go-version"
 	"github.com/spf13/cobra"
 
-	"github.com/shopware/shopware-cli/internal/packagist"
+	"github.com/shopware/shopware-cli/internal/shop"
 	"github.com/shopware/shopware-cli/internal/system"
 	"github.com/shopware/shopware-cli/internal/tui"
 )
@@ -40,10 +40,10 @@ func runCreateForm(cmd *cobra.Command, opts *createOptions, filteredVersions []*
 	}
 
 	deploymentOptions := []huh.Option[string]{
-		huh.NewOption("None", packagist.DeploymentNone),
-		huh.NewOption("PaaS powered by Shopware", packagist.DeploymentShopwarePaaS),
-		huh.NewOption("PaaS powered by Platform.sh", packagist.DeploymentPlatformSH),
-		huh.NewOption("Deployer (SSH-based)", packagist.DeploymentDeployer),
+		huh.NewOption("None", shop.DeploymentNone),
+		huh.NewOption("PaaS powered by Shopware", shop.DeploymentShopwarePaaS),
+		huh.NewOption("PaaS powered by Platform.sh", shop.DeploymentPlatformSH),
+		huh.NewOption("Deployer (SSH-based)", shop.DeploymentDeployer),
 	}
 
 	ciOptions := []huh.Option[string]{
@@ -179,7 +179,7 @@ func runCreateForm(cmd *cobra.Command, opts *createOptions, filteredVersions []*
 		}
 
 		if needsDeployment {
-			opts.selectedDeployment = packagist.DeploymentNone
+			opts.selectedDeployment = shop.DeploymentNone
 			formGroups = append(formGroups, huh.NewGroup(
 				huh.NewSelect[string]().
 					Title("Deployment Method").

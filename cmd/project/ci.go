@@ -10,6 +10,8 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/shyim/go-composer"
+	"github.com/shyim/go-composer/sbom"
 	"github.com/spf13/cobra"
 
 	"github.com/shopware/shopware-cli/internal/ci"
@@ -17,8 +19,6 @@ import (
 	"github.com/shopware/shopware-cli/internal/extension"
 	internalgit "github.com/shopware/shopware-cli/internal/git"
 	"github.com/shopware/shopware-cli/internal/mjml"
-	"github.com/shopware/shopware-cli/internal/packagist"
-	"github.com/shopware/shopware-cli/internal/sbom"
 	"github.com/shopware/shopware-cli/internal/shop"
 	"github.com/shopware/shopware-cli/internal/system"
 	"github.com/shopware/shopware-cli/internal/tui"
@@ -377,12 +377,12 @@ func generateProjectSBOM(ctx context.Context, root string) error {
 		return nil
 	}
 
-	lock, err := packagist.ReadComposerLock(lockPath)
+	lock, err := composer.ReadLock(lockPath)
 	if err != nil {
 		return fmt.Errorf("read composer.lock: %w", err)
 	}
 
-	projectComposer, err := packagist.ReadComposerJson(path.Join(root, "composer.json"))
+	projectComposer, err := composer.ReadJson(path.Join(root, "composer.json"))
 	appName := "shopware-project"
 	appVersion := ""
 	if err == nil && projectComposer != nil {
@@ -397,6 +397,8 @@ func generateProjectSBOM(ctx context.Context, root string) error {
 	bom, err := sbom.Generate(lock, sbom.Options{
 		ApplicationName:        appName,
 		ApplicationVersion:     appVersion,
+		ToolGroup:              "shopware",
+		ToolName:               "shopware-cli",
 		ToolVersion:            tui.AppVersion,
 		IncludeDevDependencies: false,
 	})
@@ -424,7 +426,7 @@ func generateProjectSBOM(ctx context.Context, root string) error {
 }
 
 func prepareComposerAuth(ctx context.Context, root string) (string, error) {
-	auth, err := packagist.ReadComposerAuth(path.Join(root, "auth.json"))
+	auth, err := shop.ReadComposerAuth(path.Join(root, "auth.json"))
 
 	if err != nil {
 		logging.FromContext(ctx).Warnf("Failed to read composer auth from env: %v", err)

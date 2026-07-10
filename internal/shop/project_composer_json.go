@@ -1,4 +1,4 @@
-package packagist
+package shop
 
 import (
 	"context"
@@ -8,7 +8,22 @@ import (
 	"net/http"
 	"regexp"
 	"strings"
+	"time"
+
+	"github.com/shopware/shopware-cli/logging"
 )
+
+// httpClient is the HTTP client used for the shopware/core Kernel.php lookup. It
+// has a 30-second timeout to prevent indefinite hangs and avoids the shared
+// http.DefaultClient which is not safe to override in tests.
+var httpClient = &http.Client{Timeout: 30 * time.Second}
+
+// closeResponseBody safely closes an HTTP response body, logging any error.
+func closeResponseBody(ctx context.Context, resp *http.Response) {
+	if err := resp.Body.Close(); err != nil {
+		logging.FromContext(ctx).Errorf("Cannot close response body: %v", err)
+	}
+}
 
 const (
 	DeploymentNone         = "none"
