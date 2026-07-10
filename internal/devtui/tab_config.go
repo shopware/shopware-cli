@@ -8,7 +8,6 @@ import (
 	"charm.land/lipgloss/v2"
 
 	dockerpkg "github.com/shopware/shopware-cli/internal/docker"
-	"github.com/shopware/shopware-cli/internal/packagist"
 	"github.com/shopware/shopware-cli/internal/shop"
 	"github.com/shopware/shopware-cli/internal/tui"
 )
@@ -35,7 +34,7 @@ const (
 )
 
 var (
-	phpVersions = packagist.SupportedPHPVersions
+	phpVersions = shop.SupportedPHPVersions
 	profilers   = dockerpkg.Profilers
 )
 

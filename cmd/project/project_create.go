@@ -5,9 +5,10 @@ import (
 	"path/filepath"
 	"regexp"
 
+	"github.com/shyim/go-composer/repository"
 	"github.com/spf13/cobra"
 
-	"github.com/shopware/shopware-cli/internal/packagist"
+	"github.com/shopware/shopware-cli/internal/shop"
 	"github.com/shopware/shopware-cli/internal/system"
 	"github.com/shopware/shopware-cli/internal/tui"
 )
@@ -88,11 +89,11 @@ var projectCreateCmd = &cobra.Command{
 		}
 
 		if len(args) == 1 {
-			releases, err := packagist.GetShopwarePackageVersions(cmd.Context())
+			pkg, err := repository.New(repository.PackagistURL, nil).GetPackage(cmd.Context(), "shopware/core")
 			if err != nil {
 				return []string{}, cobra.ShellCompDirectiveNoFileComp
 			}
-			filteredVersions := filterInstallVersions(releases)
+			filteredVersions := filterInstallVersions(pkg.Versions)
 			versions := make([]string, 0, len(filteredVersions)+1)
 			versions = append(versions, versionLatest)
 			for _, v := range filteredVersions {
@@ -120,10 +121,11 @@ var projectCreateCmd = &cobra.Command{
 			tui.PrintBanner()
 		}
 
-		releases, err := packagist.GetShopwarePackageVersions(cmd.Context())
+		pkg, err := repository.New(repository.PackagistURL, nil).GetPackage(cmd.Context(), "shopware/core")
 		if err != nil {
 			return err
 		}
+		releases := pkg.Versions
 		filteredVersions := filterInstallVersions(releases)
 
 		if opts.interactive {
@@ -199,7 +201,7 @@ func applyNonInteractiveDefaults(opts *createOptions) error {
 		opts.selectedVersion = versionLatest
 	}
 	if opts.selectedDeployment == "" {
-		opts.selectedDeployment = packagist.DeploymentNone
+		opts.selectedDeployment = shop.DeploymentNone
 	}
 	if opts.selectedCI == "" {
 		opts.selectedCI = ciNone

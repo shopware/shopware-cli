@@ -1,4 +1,4 @@
-package packagist
+package shop
 
 import (
 	"testing"

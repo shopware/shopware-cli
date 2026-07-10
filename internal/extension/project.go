@@ -12,10 +12,10 @@ import (
 	"regexp"
 	"strings"
 
+	gocomposer "github.com/shyim/go-composer"
 	"github.com/shyim/go-version"
 
 	"github.com/shopware/shopware-cli/internal/asset"
-	"github.com/shopware/shopware-cli/internal/packagist"
 	"github.com/shopware/shopware-cli/internal/shop"
 	"github.com/shopware/shopware-cli/logging"
 )
@@ -50,7 +50,7 @@ func GetShopwareProjectConstraint(project string) (*version.Constraints, error) 
 				return nil, err
 			}
 
-			lock, err := packagist.ReadComposerLock(path.Join(project, "composer.lock"))
+			lock, err := gocomposer.ReadLock(path.Join(project, "composer.lock"))
 			if err != nil {
 				return nil, err
 			}

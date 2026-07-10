@@ -11,13 +11,13 @@ import (
 	"charm.land/huh/v2"
 	"charm.land/lipgloss/v2"
 	"charm.land/lipgloss/v2/table"
+	"github.com/shyim/go-composer"
 	"github.com/shyim/go-version"
 	"github.com/spf13/cobra"
 
 	account_api "github.com/shopware/shopware-cli/internal/account-api"
 	adminSdk "github.com/shopware/shopware-cli/internal/admin-api"
 	"github.com/shopware/shopware-cli/internal/extension"
-	"github.com/shopware/shopware-cli/internal/packagist"
 	"github.com/shopware/shopware-cli/internal/shop"
 	"github.com/shopware/shopware-cli/internal/system"
 	"github.com/shopware/shopware-cli/internal/tracking"
@@ -187,7 +187,7 @@ func getLocalExtensions() (*version.Version, map[string]string, error) {
 		return nil, nil, err
 	}
 
-	composerLock, err := packagist.ReadComposerLock(path.Join(project, "composer.lock"))
+	composerLock, err := composer.ReadLock(path.Join(project, "composer.lock"))
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to read composer.lock: %w", err)
 	}

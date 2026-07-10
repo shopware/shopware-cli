@@ -47,8 +47,8 @@ func CheckIncompatibilities(useDocker bool, projectFolder string) []Incompatibil
 }
 
 // PHPVersionChecker is satisfied by anything that can verify a PHP version
-// string against a constraint (e.g. packagist.PHPConstraint). The interface
-// keeps the system package free of cyclic packagist imports.
+// string against a constraint (e.g. shop.PHPConstraint). The interface
+// keeps the system package free of cyclic imports.
 type PHPVersionChecker interface {
 	Check(phpVersion string) bool
 	String() string

@@ -7,8 +7,9 @@ import (
 
 	"charm.land/bubbles/v2/textinput"
 	tea "charm.land/bubbletea/v2"
+	"github.com/shyim/go-composer"
 
-	"github.com/shopware/shopware-cli/internal/packagist"
+	"github.com/shopware/shopware-cli/internal/shop"
 )
 
 type migrationStep int
@@ -52,15 +53,15 @@ type migrationWizardConfig struct {
 // the Shopware package declares no PHP requirement, all SupportedPHPVersions
 // are returned.
 func resolvePHPVersions(projectRoot string) (versions []string, defaultIdx int, constraint string) {
-	versions = append([]string(nil), packagist.SupportedPHPVersions...)
+	versions = append([]string(nil), shop.SupportedPHPVersions...)
 	defaultIdx = len(versions) - 1
 
-	lock, err := packagist.ReadComposerLock(filepath.Join(projectRoot, "composer.lock"))
+	lock, err := composer.ReadLock(filepath.Join(projectRoot, "composer.lock"))
 	if err != nil {
 		return versions, defaultIdx, ""
 	}
 
-	c := lock.ShopwarePHPConstraint()
+	c := shop.ShopwarePHPConstraint(lock)
 	if c == nil {
 		return versions, defaultIdx, ""
 	}

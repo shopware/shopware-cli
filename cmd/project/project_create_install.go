@@ -12,14 +12,13 @@ import (
 
 	dockerpkg "github.com/shopware/shopware-cli/internal/docker"
 	"github.com/shopware/shopware-cli/internal/git"
-	"github.com/shopware/shopware-cli/internal/packagist"
 	"github.com/shopware/shopware-cli/internal/shop"
 	"github.com/shopware/shopware-cli/internal/system"
 	"github.com/shopware/shopware-cli/internal/tui"
 	"github.com/shopware/shopware-cli/logging"
 )
 
-func installAndFinalize(cmd *cobra.Command, opts *createOptions, phpConstraint *packagist.PHPConstraint) error {
+func installAndFinalize(cmd *cobra.Command, opts *createOptions, phpConstraint *shop.PHPConstraint) error {
 	ctx := cmd.Context()
 
 	logging.FromContext(ctx).Infof("Installing dependencies")
@@ -120,7 +119,7 @@ func runComposerInstall(ctx context.Context, projectFolder string, useDocker boo
 		}
 
 		if phpVersion == "" {
-			phpVersion = packagist.SupportedPHPVersions[len(packagist.SupportedPHPVersions)-1]
+			phpVersion = shop.SupportedPHPVersions[len(shop.SupportedPHPVersions)-1]
 		}
 		dockerArgs = append(dockerArgs,
 			fmt.Sprintf("ghcr.io/shopware/docker-dev:php%s-node24-caddy", phpVersion),
