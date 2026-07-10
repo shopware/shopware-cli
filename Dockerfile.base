@@ -1,65 +1,33 @@
-FROM ghcr.io/shyim/wolfi-php/base:latest
 ARG PHP_VERSION=8.3
+ARG NODE_VERSION=24
+
+FROM ghcr.io/shopware/docker-dev:php${PHP_VERSION}-node${NODE_VERSION}-caddy
+
+# Switch to root for package installation
+USER root
+
+# Install bun
+COPY --from=oven/bun:alpine /usr/local/bin/bun /usr/local/bin/bun
 
 LABEL org.opencontainers.image.source=https://github.com/shopware/shopware-cli
-COPY --from=composer/composer:2-bin /composer /usr/bin/composer
 
 RUN <<EOF
     set -euxo pipefail
 
     apk add --no-cache \
         git \
-        nodejs-22 \
-        npm \
-        bun \
+        libstdc++ \
         gettext \
         openssh-client \
-        openssh-keyscan \
-        openssh-keygen \
-        openssh-keysign \
         rsync \
         patch \
         jq \
-        bash \
-        php-${PHP_VERSION} \
-        php-${PHP_VERSION}-fileinfo \
-        php-${PHP_VERSION}-openssl \
-        php-${PHP_VERSION}-ctype \
-        php-${PHP_VERSION}-curl \
-        php-${PHP_VERSION}-xml \
-        php-${PHP_VERSION}-dom \
-        php-${PHP_VERSION}-phar \
-        php-${PHP_VERSION}-simplexml \
-        php-${PHP_VERSION}-xmlreader \
-        php-${PHP_VERSION}-xmlwriter \
-        php-${PHP_VERSION}-bcmath \
-        php-${PHP_VERSION}-iconv \
-        php-${PHP_VERSION}-gd \
-        php-${PHP_VERSION}-intl \
-        php-${PHP_VERSION}-pdo \
-        php-${PHP_VERSION}-pdo_mysql \
-        php-${PHP_VERSION}-mysqlnd \
-        php-${PHP_VERSION}-mbstring \
-        php-${PHP_VERSION}-pcntl \
-        php-${PHP_VERSION}-sockets \
-        php-${PHP_VERSION}-bz2 \
-        php-${PHP_VERSION}-gmp \
-        php-${PHP_VERSION}-soap \
-        php-${PHP_VERSION}-zip \
-        php-${PHP_VERSION}-sodium \
-        php-${PHP_VERSION}-redis \
-        php-${PHP_VERSION}-amqp
+        bash
 
-    if [ "$(printf '%s\n' "8.5" "${PHP_VERSION}" | sort -V | head -n1)" != "8.5" ]; then
-        apk add --no-cache php-${PHP_VERSION}-opcache
-    fi
+    ln -s /usr/local/bin/bun /usr/local/bin/bunx
 
-    apk add --no-cache gettext
-    cp /usr/bin/envsubst /envsubst
-    apk del gettext
-    mv /envsubst /usr/bin/envsubst
-
-    echo 'memory_limit=512M' > /etc/php/conf.d/docker.ini
+    node --version
+    npm --version
 EOF
 
 COPY internal/verifier/js /opt/verifier/js
@@ -73,7 +41,12 @@ RUN <<EOF
 EOF
 
 ENV SHOPWARE_CLI_TOOLS_DIR=/opt/verifier
+ENV PHP_MEMORY_LIMIT=512M
 
 COPY scripts/entrypoint.sh /usr/local/bin/entrypoint.sh
+RUN chmod +x /usr/local/bin/entrypoint.sh
+
+# Switch back to www-data user
+USER www-data
 
 CMD ["sh"]

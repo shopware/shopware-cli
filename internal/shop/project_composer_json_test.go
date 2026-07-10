@@ -36,6 +36,29 @@ func TestGenerateComposerJson(t *testing.T) {
 		assert.NoError(t, err, "Generated JSON should be valid")
 	})
 
+	t.Run("contains shopware conflicts repository", func(t *testing.T) {
+		t.Parallel()
+		ctx := t.Context()
+		jsonStr, err := GenerateComposerJson(ctx, ComposerJsonOptions{Version: "6.4.18.0"})
+		assert.NoError(t, err)
+
+		var data struct {
+			Repositories []struct {
+				Type string `json:"type"`
+				URL  string `json:"url"`
+			} `json:"repositories"`
+		}
+		assert.NoError(t, json.Unmarshal([]byte(jsonStr), &data))
+
+		found := false
+		for _, repo := range data.Repositories {
+			if repo.Type == "composer" && repo.URL == "https://shopware.github.io/conflicts/" {
+				found = true
+			}
+		}
+		assert.True(t, found, "repositories should contain the shopware conflicts composer repository")
+	})
+
 	t.Run("with elasticsearch", func(t *testing.T) {
 		t.Parallel()
 		ctx := t.Context()
@@ -129,5 +152,22 @@ func TestGenerateComposerJson(t *testing.T) {
 		var data map[string]interface{}
 		err = json.Unmarshal([]byte(jsonStr), &data)
 		assert.NoError(t, err, "Generated JSON should be valid")
+	})
+
+	t.Run("allow-plugins includes php-http/discovery", func(t *testing.T) {
+		t.Parallel()
+		ctx := t.Context()
+		jsonStr, err := GenerateComposerJson(ctx, ComposerJsonOptions{Version: "6.4.18.0"})
+		assert.NoError(t, err)
+
+		var data struct {
+			Config struct {
+				AllowPlugins map[string]bool `json:"allow-plugins"`
+			} `json:"config"`
+		}
+		assert.NoError(t, json.Unmarshal([]byte(jsonStr), &data))
+		assert.True(t, data.Config.AllowPlugins["php-http/discovery"], "allow-plugins should include php-http/discovery")
+		assert.True(t, data.Config.AllowPlugins["symfony/flex"], "allow-plugins should include symfony/flex")
+		assert.True(t, data.Config.AllowPlugins["symfony/runtime"], "allow-plugins should include symfony/runtime")
 	})
 }

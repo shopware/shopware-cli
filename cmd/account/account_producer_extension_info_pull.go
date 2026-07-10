@@ -49,7 +49,6 @@ var accountCompanyProducerExtensionInfoPullCmd = &cobra.Command{
 		}
 
 		resourcesFolder := path.Join(zipExt.GetPath(), "src/Resources/store/")
-		categoryList := make([]string, 0)
 		availabilities := make([]string, 0)
 		localizations := make([]string, 0)
 		tagsDE := make([]string, 0)
@@ -78,15 +77,6 @@ var accountCompanyProducerExtensionInfoPullCmd = &cobra.Command{
 			err := downloadFileTo(cmd.Context(), storeExt.IconURL, path.Join(resourcesFolder, "icon.png"))
 			if err != nil {
 				return fmt.Errorf("cannot download file: %w", err)
-			}
-		}
-
-		if storeExt.Category != nil {
-			categoryList = append(categoryList, storeExt.Category.Name)
-		} else {
-			for _, category := range storeExt.Categories {
-				categoryList = append(categoryList, category.Name)
-				break
 			}
 		}
 
@@ -235,7 +225,6 @@ var accountCompanyProducerExtensionInfoPullCmd = &cobra.Command{
 		newCfg.Store.Localizations = &localizations
 		newCfg.Store.Description = extension.ConfigTranslated[string]{German: &germanDescription, English: &englishDescription}
 		newCfg.Store.InstallationManual = extension.ConfigTranslated[string]{German: &germanInstallationManual, English: &englishInstallationManual}
-		newCfg.Store.Categories = &categoryList
 		newCfg.Store.Tags = extension.ConfigTranslated[[]string]{German: &tagsDE, English: &tagsEN}
 		newCfg.Store.Videos = extension.ConfigTranslated[[]string]{German: &videosDE, English: &videosEN}
 		newCfg.Store.Highlights = extension.ConfigTranslated[[]string]{German: &highlightsDE, English: &highlightsEN}

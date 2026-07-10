@@ -107,21 +107,7 @@ var projectWorkerCmd = &cobra.Command{
 					p.Cmd.Env = append(os.Environ(), fmt.Sprintf("MESSENGER_CONSUMER_NAME=%s-%d", baseName, index))
 					p.Cmd.WaitDelay = time.Second
 					p.Cmd.Cancel = func() error {
-						if gracefulStopLimit > 0 {
-							if err := p.Cmd.Process.Signal(syscall.SIGTERM); err != nil {
-								return err
-							}
-
-							now := time.Now()
-
-							for time.Since(now) < time.Second*time.Duration(gracefulStopLimit) {
-								if isProcessStopped(p.Cmd.Process) {
-									return os.ErrProcessDone
-								}
-								time.Sleep(time.Millisecond * 250)
-							}
-						}
-						return p.Cmd.Process.Kill()
+						return gracefulStop(p.Cmd, gracefulStopLimit)
 					}
 
 					if err := p.Cmd.Run(); err != nil {
@@ -159,8 +145,4 @@ func cancelOnTermination(ctx context.Context, cancel context.CancelFunc) {
 		logging.FromContext(ctx).Infof("received signal %v\n", sig.String())
 		cancel()
 	}()
-}
-
-func isProcessStopped(p *os.Process) bool {
-	return errors.Is(p.Signal(syscall.Signal(0)), os.ErrProcessDone)
 }
