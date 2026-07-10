@@ -239,6 +239,13 @@ func filterInstallVersions(releases []repository.Version) []*version.Version {
 			continue
 		}
 
+		// Skip branch dev builds like "6.7.12.x-dev". These parse fine and
+		// satisfy the constraint, but they are not installable patch releases
+		// and should not be offered in the version picker.
+		if parsed.Prerelease() == "dev" {
+			continue
+		}
+
 		if constraint.Check(parsed) {
 			filteredVersions = append(filteredVersions, parsed)
 		}
