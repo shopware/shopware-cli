@@ -11,6 +11,7 @@ import (
 	"charm.land/huh/v2"
 	"charm.land/lipgloss/v2"
 	"charm.land/lipgloss/v2/table"
+	"github.com/shyim/go-composer"
 	"github.com/shyim/go-version"
 	"github.com/spf13/cobra"
 
@@ -21,7 +22,6 @@ import (
 	"github.com/shopware/shopware-cli/internal/system"
 	"github.com/shopware/shopware-cli/internal/tracking"
 	"github.com/shopware/shopware-cli/logging"
-	"github.com/shyim/go-composer"
 )
 
 var projectUpgradeCheckCmd = &cobra.Command{

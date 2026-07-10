@@ -6,10 +6,9 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/shyim/go-composer"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-
-	"github.com/shyim/go-composer"
 )
 
 func TestMigrateComposerJson(t *testing.T) {

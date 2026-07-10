@@ -3,9 +3,8 @@ package docker
 import (
 	"testing"
 
-	"github.com/stretchr/testify/assert"
-
 	"github.com/shyim/go-composer"
+	"github.com/stretchr/testify/assert"
 )
 
 func TestProfilerNeedsCredentials(t *testing.T) {
