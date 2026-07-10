@@ -121,15 +121,17 @@ func TestStopConfirm_HAndLKeysMoveSelection(t *testing.T) {
 	assert.Equal(t, stopConfirmStop, sc.selected, "'h' should move the selection back")
 }
 
-func TestStopConfirm_EscIsNoop(t *testing.T) {
-	// NOTE: stopConfirm.Update does not handle Esc — pressing it leaves the
-	// modal in place and emits no command. The model-level update layer is
-	// responsible for any global Esc handling.
+func TestStopConfirm_EscEmitsCancel(t *testing.T) {
 	sc := newStopConfirm()
+
 	next, cmd := sc.Update(tea.KeyPressMsg(tea.Key{Code: tea.KeyEsc}))
-	assert.Same(t, sc, next)
-	assert.Nil(t, cmd)
-	assert.Equal(t, stopConfirmStop, sc.selected, "esc must not mutate the selection")
+	assert.Nil(t, next, "esc should dismiss the modal")
+	assert.NotNil(t, cmd)
+
+	res, ok := cmd().(stopConfirmResultMsg)
+	assert.True(t, ok, "expected stopConfirmResultMsg, got %T", cmd())
+	assert.True(t, res.Cancel, "esc should emit a cancel result")
+	assert.False(t, res.Stop)
 }
 
 func TestStopConfirm_NonKeyMsgIsIgnored(t *testing.T) {

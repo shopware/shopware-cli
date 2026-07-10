@@ -48,6 +48,8 @@ func (sc *stopConfirm) Update(msg tea.Msg) (Modal, tea.Cmd) {
 		}
 	case keyTab:
 		sc.selected = (sc.selected + 1) % count
+	case keyEsc:
+		return nil, emit(stopConfirmResultMsg{Cancel: true})
 	case keyEnter:
 		switch sc.selected {
 		case stopConfirmCancel:
@@ -71,6 +73,7 @@ func (sc *stopConfirm) View(width, height int) string {
 	footerHint := tui.ShortcutBar(
 		tui.Shortcut{Key: "←/→", Label: "Select"},
 		tui.Shortcut{Key: "enter", Label: "Confirm"},
+		tui.Shortcut{Key: "esc", Label: "Cancel"},
 	)
 	return renderPhaseLayout(tui.RenderPhaseCard(card.String()), width, height, footerHint)
 }
