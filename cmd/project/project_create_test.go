@@ -5,11 +5,36 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/shyim/go-composer/repository"
 	"github.com/shyim/go-version"
 	"github.com/stretchr/testify/assert"
 
 	"github.com/shopware/shopware-cli/internal/shop"
 )
+
+func TestFilterInstallVersions(t *testing.T) {
+	t.Parallel()
+
+	releases := []repository.Version{
+		{Version: "6.7.12.x-dev"},
+		{Version: "6.7.12.1"},
+		{Version: "6.7.11.x-dev"},
+		{Version: "6.7.11.1"},
+		{Version: "dev-trunk"},
+		{Version: "6.3.0.0"},
+	}
+
+	filtered := filterInstallVersions(releases)
+
+	got := make([]string, 0, len(filtered))
+	for _, v := range filtered {
+		got = append(got, v.String())
+	}
+
+	// Branch dev builds (*.x-dev, dev-*) and versions below the minimum
+	// constraint are excluded; only installable stable releases remain.
+	assert.Equal(t, []string{"6.7.12.1", "6.7.11.1"}, got)
+}
 
 func TestResolveVersion(t *testing.T) {
 	t.Parallel()
