@@ -10,6 +10,7 @@ const (
 	keyCtrlC    = "ctrl+c"
 	keyDown     = "down"
 	keyEnter    = "enter"
+	keyEsc      = "esc"
 	keyUp       = "up"
 	keyTab      = "tab"
 	keyShiftTab = "shift+tab"
