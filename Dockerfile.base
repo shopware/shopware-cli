@@ -45,8 +45,4 @@ ENV PHP_MEMORY_LIMIT=512M
 
 COPY scripts/entrypoint.sh /usr/local/bin/entrypoint.sh
 RUN chmod +x /usr/local/bin/entrypoint.sh
-
-# Switch back to www-data user
-USER www-data
-
-CMD ["sh"]
+CMD [""]
