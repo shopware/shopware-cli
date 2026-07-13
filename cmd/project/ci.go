@@ -238,7 +238,7 @@ var projectCI = &cobra.Command{
 
 		warumupSection := ci.Default.Section(cmd.Context(), "Warming up container cache")
 
-		if err := runTransparentCommand(cmdExecutor.PHPCommand(cmd.Context(), "bin", "ci", "--version")); err != nil { //nolint: gosec
+		if err := runTransparentCommand(binCICommand(cmd.Context(), cmdExecutor, "--version")); err != nil { //nolint: gosec
 			return fmt.Errorf("failed to warmup container cache (php bin/ci --version): %w", err)
 		}
 
@@ -253,7 +253,7 @@ var projectCI = &cobra.Command{
 				}
 			}
 
-			if err := runTransparentCommand(cmdExecutor.PHPCommand(cmd.Context(), "bin", "ci", "asset:install")); err != nil { //nolint: gosec
+			if err := runTransparentCommand(binCICommand(cmd.Context(), cmdExecutor, "asset:install")); err != nil { //nolint: gosec
 				return fmt.Errorf("failed to install assets (php bin/ci asset:install): %w", err)
 			}
 		}
@@ -478,6 +478,10 @@ func runTransparentCommand(p *executor.Process) error {
 	p.Cmd.Env = append(os.Environ(), "APP_SECRET=b59a3a283700fde2162c0d4f2bcf2588c3e841ef1976cf042d8500c3f3152ec513f77453797387dc004ff399cce0d3663e4fec770e6f11aa4ccd2846854c3a9f", "LOCK_DSN=flock")
 
 	return p.Run()
+}
+
+func binCICommand(ctx context.Context, cmdExecutor executor.Executor, args ...string) *executor.Process {
+	return cmdExecutor.PHPCommand(ctx, append([]string{"bin/ci"}, args...)...)
 }
 
 func cleanupTcpdf(folder string, ctx context.Context) error {
