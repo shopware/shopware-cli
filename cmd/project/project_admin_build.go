@@ -83,8 +83,8 @@ func init() {
 	projectRootCmd.AddCommand(projectAdminBuildCmd)
 	projectAdminBuildCmd.PersistentFlags().Bool("skip-assets-install", false, "Skips the assets installation")
 	projectAdminBuildCmd.PersistentFlags().Bool("force-install-dependencies", false, "Force install NPM dependencies")
-	projectAdminBuildCmd.PersistentFlags().String("only-extensions", "", "Only build the given extensions (comma separated). Pass without a value (--only-extensions) to pick interactively")
-	projectAdminBuildCmd.PersistentFlags().Lookup("only-extensions").NoOptDefVal = " "
+	projectAdminBuildCmd.PersistentFlags().String("only-extensions", "", "Only build the given extensions (comma separated)")
+	projectAdminBuildCmd.PersistentFlags().Bool("select-extensions", false, "Select extensions interactively")
 	projectAdminBuildCmd.PersistentFlags().String("skip-extensions", "", "Skips the given extensions (comma separated)")
 	projectAdminBuildCmd.PersistentFlags().Bool("only-custom-static-extensions", false, "Only build extensions from custom/static-plugins directory")
 }

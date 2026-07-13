@@ -61,8 +61,8 @@ var projectAdminWatchCmd = &cobra.Command{
 
 func init() {
 	projectRootCmd.AddCommand(projectAdminWatchCmd)
-	projectAdminWatchCmd.PersistentFlags().String("only-extensions", "", "Only watch the given extensions (comma separated). Pass without a value (--only-extensions) to pick interactively")
-	projectAdminWatchCmd.PersistentFlags().Lookup("only-extensions").NoOptDefVal = " "
+	projectAdminWatchCmd.PersistentFlags().String("only-extensions", "", "Only watch the given extensions (comma separated)")
+	projectAdminWatchCmd.PersistentFlags().Bool("select-extensions", false, "Select extensions interactively")
 	projectAdminWatchCmd.PersistentFlags().String("skip-extensions", "", "Skips the given extensions (comma separated)")
 	projectAdminWatchCmd.PersistentFlags().Bool("only-custom-static-extensions", false, "Only build extensions from custom/static-plugins directory")
 }
