@@ -238,7 +238,7 @@ var projectCI = &cobra.Command{
 
 		warumupSection := ci.Default.Section(cmd.Context(), "Warming up container cache")
 
-		if err := runTransparentCommand(cmdExecutor.PHPCommand(cmd.Context(), "bin", "ci", "--version")); err != nil { //nolint: gosec
+		if err := runTransparentCommand(cmdExecutor.ConsoleCommand(executor.AllowBinCI(cmd.Context()), "--version")); err != nil {
 			return fmt.Errorf("failed to warmup container cache (php bin/ci --version): %w", err)
 		}
 
@@ -253,7 +253,7 @@ var projectCI = &cobra.Command{
 				}
 			}
 
-			if err := runTransparentCommand(cmdExecutor.PHPCommand(cmd.Context(), "bin", "ci", "asset:install")); err != nil { //nolint: gosec
+			if err := runTransparentCommand(cmdExecutor.ConsoleCommand(executor.AllowBinCI(cmd.Context()), "asset:install")); err != nil {
 				return fmt.Errorf("failed to install assets (php bin/ci asset:install): %w", err)
 			}
 		}
