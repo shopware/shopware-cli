@@ -6,6 +6,8 @@ import (
 	"os"
 	"os/exec"
 
+	"github.com/go-sql-driver/mysql"
+
 	adminSdk "github.com/shopware/shopware-cli/internal/admin-api"
 	"github.com/shopware/shopware-cli/internal/shop"
 )
@@ -70,6 +72,10 @@ func (l *LocalExecutor) WithRelDir(relDir string) Executor {
 
 func (l *LocalExecutor) AdminAPIClient(ctx context.Context) (*adminSdk.Client, error) {
 	return adminAPIClient(ctx, l.shopCfg, l.envCfg)
+}
+
+func (l *LocalExecutor) DatabaseConnection(ctx context.Context) (*mysql.Config, error) {
+	return localDatabaseConnection(ctx, l.projectRoot)
 }
 
 func (l *LocalExecutor) StartEnvironment(_ context.Context) error {
