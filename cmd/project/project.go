@@ -6,7 +6,10 @@ import (
 	"github.com/shopware/shopware-cli/internal/shop"
 )
 
-var projectConfigPath string
+var (
+	projectConfigPath string
+	environmentName   string
+)
 
 var projectRootCmd = &cobra.Command{
 	Use:   "project",
@@ -16,4 +19,5 @@ var projectRootCmd = &cobra.Command{
 func Register(rootCmd *cobra.Command) {
 	rootCmd.AddCommand(projectRootCmd)
 	projectRootCmd.PersistentFlags().StringVar(&projectConfigPath, "project-config", shop.DefaultConfigFileName(), "Path to config")
+	projectRootCmd.PersistentFlags().StringVarP(&environmentName, "env", "e", "", "Target environment name")
 }

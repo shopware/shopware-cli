@@ -1,0 +1,23 @@
+<p
+    v-for="error in errors"
+    :key="error.message"
+>
+    <!-- eslint-disable-next-line foo -->
+    <a href="#"></a>
+</p>
+-----
+<p
+    v-for="error in errors"
+    :key="error.message"
+>
+<!-- eslint-disable-next-line foo -->
+    <a href="#"></a>
+</p>
+-----
+<p
+    v-for="error in errors"
+    :key="error.message"
+>
+<!-- eslint-disable-next-line foo -->
+    <a href="#"></a>
+</p>

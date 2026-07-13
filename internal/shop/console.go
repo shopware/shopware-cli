@@ -5,9 +5,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"os/exec"
 	"path"
-
-	"github.com/shopware/shopware-cli/internal/phpexec"
 )
 
 type ConsoleResponse struct {
@@ -37,7 +36,10 @@ func (c ConsoleResponse) GetCommandOptions(name string) []string {
 	return nil
 }
 
-func GetConsoleCompletion(ctx context.Context, projectRoot string) (*ConsoleResponse, error) {
+// ConsoleCommandFunc avoids a circular dependency between shop and executor packages.
+type ConsoleCommandFunc func(ctx context.Context, args ...string) *exec.Cmd
+
+func GetConsoleCompletion(ctx context.Context, projectRoot string, consoleCommand ConsoleCommandFunc) (*ConsoleResponse, error) {
 	cachePath := path.Join(projectRoot, "var", "cache", "console_commands.json")
 
 	if _, err := os.Stat(cachePath); err == nil {
@@ -55,10 +57,10 @@ func GetConsoleCompletion(ctx context.Context, projectRoot string) (*ConsoleResp
 		return &resp, nil
 	}
 
-	consoleCommand := phpexec.ConsoleCommand(ctx, "list", "--format=json")
-	consoleCommand.Dir = projectRoot
+	cmd := consoleCommand(ctx, "list", "--format=json")
+	cmd.Dir = projectRoot
 
-	commandJson, err := consoleCommand.Output()
+	commandJson, err := cmd.Output()
 	if err != nil {
 		return nil, err
 	}

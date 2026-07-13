@@ -9,7 +9,7 @@ import (
 	"path"
 	"time"
 
-	"github.com/shopware/shopware-cli/internal/packagist"
+	"github.com/shopware/shopware-cli/internal/shop"
 	"github.com/shopware/shopware-cli/logging"
 )
 
@@ -17,7 +17,7 @@ func installComposerDeps(ctx context.Context, rootDir string, checkAgainst strin
 	suggets := getComposerSuggets(rootDir)
 
 	if _, err := os.Stat(path.Join(rootDir, "vendor")); os.IsNotExist(err) {
-		composerAuth, err := packagist.ReadComposerAuth(path.Join(rootDir, "auth.json"))
+		composerAuth, err := shop.ReadComposerAuth(path.Join(rootDir, "auth.json"))
 		if err != nil {
 			return fmt.Errorf("failed to read composer auth file: %w", err)
 		}

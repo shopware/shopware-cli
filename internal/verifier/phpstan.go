@@ -87,14 +87,25 @@ func (p PhpStan) Check(ctx context.Context, check *Check, config ToolConfig) err
 
 		log, _ := phpstan.Output()
 
+		// When all files of a source directory are excluded by excludePaths in a
+		// local phpstan.neon, PHPStan prints a plain text message instead of JSON.
+		if isPhpStanNoFilesOutput(string(log)) || isPhpStanNoFilesOutput(stderr.String()) {
+			continue
+		}
+
 		log = []byte(strings.ReplaceAll(string(log), "\"files\":[]", "\"files\":{}"))
 
 		var phpstanResult PhpStanOutput
 
 		if err := json.Unmarshal(log, &phpstanResult); err != nil {
+			errorOutput := stderr.String()
+			if strings.TrimSpace(errorOutput) == "" {
+				errorOutput = string(log)
+			}
+
 			check.AddResult(validation.CheckResult{
 				Path:       "phpstan.neon",
-				Message:    "failed to unmarshal phpstan output: " + stderr.String(),
+				Message:    "failed to unmarshal phpstan output: " + errorOutput,
 				Severity:   validation.SeverityError,
 				Line:       0,
 				Identifier: "phpstan/error",
@@ -132,6 +143,10 @@ func (p PhpStan) Check(ctx context.Context, check *Check, config ToolConfig) err
 	}
 
 	return nil
+}
+
+func isPhpStanNoFilesOutput(output string) bool {
+	return strings.Contains(output, "No files found to analyse")
 }
 
 func (p PhpStan) Fix(ctx context.Context, config ToolConfig) error {

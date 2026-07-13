@@ -1,0 +1,6 @@
+mailer:
+    dsn: smtp://localhost
+
+when@prod:
+    mailer:
+        dsn: smtp://prod-relay

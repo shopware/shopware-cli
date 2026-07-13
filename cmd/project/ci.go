@@ -10,16 +10,18 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/shyim/go-composer"
+	"github.com/shyim/go-composer/sbom"
 	"github.com/spf13/cobra"
 
 	"github.com/shopware/shopware-cli/internal/ci"
+	"github.com/shopware/shopware-cli/internal/executor"
 	"github.com/shopware/shopware-cli/internal/extension"
 	internalgit "github.com/shopware/shopware-cli/internal/git"
 	"github.com/shopware/shopware-cli/internal/mjml"
-	"github.com/shopware/shopware-cli/internal/packagist"
-	"github.com/shopware/shopware-cli/internal/phpexec"
 	"github.com/shopware/shopware-cli/internal/shop"
 	"github.com/shopware/shopware-cli/internal/system"
+	"github.com/shopware/shopware-cli/internal/tui"
 	"github.com/shopware/shopware-cli/logging"
 )
 
@@ -76,6 +78,13 @@ var projectCI = &cobra.Command{
 			return err
 		}
 
+		envCfg, err := shopCfg.ResolveEnvironment(environmentName)
+		if err != nil {
+			return err
+		}
+
+		cmdExecutor := executor.NewLocalWithConfig(args[0], envCfg, shopCfg)
+
 		cleanupPaths = append(cleanupPaths, shopCfg.Build.CleanupPaths...)
 
 		if shopCfg.Build.Hooks != nil && len(shopCfg.Build.Hooks.Pre) > 0 {
@@ -108,12 +117,11 @@ var projectCI = &cobra.Command{
 
 			composerInstallSection := ci.Default.Section(cmd.Context(), "Composer Installation")
 
-			composer := phpexec.ComposerCommand(cmd.Context(), composerFlags...)
-			composer.Dir = args[0]
-			composer.Stdin = os.Stdin
-			composer.Stdout = os.Stdout
-			composer.Stderr = os.Stderr
-			composer.Env = append(os.Environ(),
+			composer := cmdExecutor.ComposerCommand(cmd.Context(), composerFlags...)
+			composer.Cmd.Stdin = os.Stdin
+			composer.Cmd.Stdout = os.Stdout
+			composer.Cmd.Stderr = os.Stderr
+			composer.Cmd.Env = append(os.Environ(),
 				"COMPOSER_AUTH="+token,
 			)
 
@@ -130,6 +138,10 @@ var projectCI = &cobra.Command{
 			}
 		} else {
 			logging.FromContext(cmd.Context()).Infof("Skipping composer install")
+		}
+
+		if err := generateProjectSBOM(cmd.Context(), args[0]); err != nil {
+			return fmt.Errorf("failed to generate SBOM: %w", err)
 		}
 
 		if _, err := os.Stat(path.Join(args[0], "var", "cache")); err == nil {
@@ -161,6 +173,7 @@ var projectCI = &cobra.Command{
 			ForceExtensionBuild:          convertForceExtensionBuild(shopCfg.Build.ForceExtensionBuild),
 			ForceAdminBuild:              shopCfg.Build.ForceAdminBuild,
 			KeepNodeModules:              shopCfg.Build.KeepNodeModules,
+			Executor:                     cmdExecutor,
 		}
 
 		if shopCfg.Build.Hooks != nil && len(shopCfg.Build.Hooks.PreAssets) > 0 {
@@ -225,7 +238,7 @@ var projectCI = &cobra.Command{
 
 		warumupSection := ci.Default.Section(cmd.Context(), "Warming up container cache")
 
-		if err := runTransparentCommand(phpexec.PHPCommand(cmd.Context(), path.Join(args[0], "bin", "ci"), "--version")); err != nil { //nolint: gosec
+		if err := runTransparentCommand(cmdExecutor.PHPCommand(cmd.Context(), "bin", "ci", "--version")); err != nil { //nolint: gosec
 			return fmt.Errorf("failed to warmup container cache (php bin/ci --version): %w", err)
 		}
 
@@ -240,7 +253,7 @@ var projectCI = &cobra.Command{
 				}
 			}
 
-			if err := runTransparentCommand(phpexec.PHPCommand(cmd.Context(), path.Join(args[0], "bin", "ci"), "asset:install")); err != nil { //nolint: gosec
+			if err := runTransparentCommand(cmdExecutor.PHPCommand(cmd.Context(), "bin", "ci", "asset:install")); err != nil { //nolint: gosec
 				return fmt.Errorf("failed to install assets (php bin/ci asset:install): %w", err)
 			}
 		}
@@ -350,8 +363,70 @@ func createEmptySnippetFolder(root string) error {
 	return nil
 }
 
+// generateProjectSBOM reads composer.lock from the project root and writes a
+// CycloneDX SBOM JSON document to the configured path. When composer.lock is
+// absent (for example when composer install was skipped on a project without
+// PHP dependencies) the step is a no-op.
+func generateProjectSBOM(ctx context.Context, root string) error {
+	section := ci.Default.Section(ctx, "Generating SBOM")
+	defer section.End(ctx)
+
+	lockPath := path.Join(root, "composer.lock")
+	if _, err := os.Stat(lockPath); os.IsNotExist(err) {
+		logging.FromContext(ctx).Infof("Skipping SBOM generation: %s not found", lockPath)
+		return nil
+	}
+
+	lock, err := composer.ReadLock(lockPath)
+	if err != nil {
+		return fmt.Errorf("read composer.lock: %w", err)
+	}
+
+	projectComposer, err := composer.ReadJson(path.Join(root, "composer.json"))
+	appName := "shopware-project"
+	appVersion := ""
+	if err == nil && projectComposer != nil {
+		if projectComposer.Name != "" {
+			appName = projectComposer.Name
+		}
+		if projectComposer.Version != "" {
+			appVersion = projectComposer.Version
+		}
+	}
+
+	bom, err := sbom.Generate(lock, sbom.Options{
+		ApplicationName:        appName,
+		ApplicationVersion:     appVersion,
+		ToolGroup:              "shopware",
+		ToolName:               "shopware-cli",
+		ToolVersion:            tui.AppVersion,
+		IncludeDevDependencies: false,
+	})
+	if err != nil {
+		return err
+	}
+
+	data, err := sbom.Marshal(bom)
+	if err != nil {
+		return fmt.Errorf("marshal SBOM: %w", err)
+	}
+
+	outputPath := filepath.Join(root, "sbom.cdx.json")
+
+	if err := os.MkdirAll(filepath.Dir(outputPath), 0o755); err != nil {
+		return fmt.Errorf("create SBOM output directory: %w", err)
+	}
+
+	if err := os.WriteFile(outputPath, data, 0o644); err != nil {
+		return fmt.Errorf("write SBOM: %w", err)
+	}
+
+	logging.FromContext(ctx).Infof("Wrote SBOM with %d components to %s", len(bom.Components), outputPath)
+	return nil
+}
+
 func prepareComposerAuth(ctx context.Context, root string) (string, error) {
-	auth, err := packagist.ReadComposerAuth(path.Join(root, "auth.json"))
+	auth, err := shop.ReadComposerAuth(path.Join(root, "auth.json"))
 
 	if err != nil {
 		logging.FromContext(ctx).Warnf("Failed to read composer auth from env: %v", err)
@@ -396,19 +471,13 @@ func projectCISafetyCheck(ctx context.Context, root string, force bool, getenv f
 	return nil
 }
 
-func commandWithRoot(cmd *exec.Cmd, root string) *exec.Cmd {
-	cmd.Dir = root
+func runTransparentCommand(p *executor.Process) error {
+	p.Cmd.Stdin = os.Stdin
+	p.Cmd.Stdout = os.Stdout
+	p.Cmd.Stderr = os.Stderr
+	p.Cmd.Env = append(os.Environ(), "APP_SECRET=b59a3a283700fde2162c0d4f2bcf2588c3e841ef1976cf042d8500c3f3152ec513f77453797387dc004ff399cce0d3663e4fec770e6f11aa4ccd2846854c3a9f", "LOCK_DSN=flock")
 
-	return cmd
-}
-
-func runTransparentCommand(cmd *exec.Cmd) error {
-	cmd.Stdin = os.Stdin
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	cmd.Env = append(os.Environ(), "APP_SECRET=b59a3a283700fde2162c0d4f2bcf2588c3e841ef1976cf042d8500c3f3152ec513f77453797387dc004ff399cce0d3663e4fec770e6f11aa4ccd2846854c3a9f", "LOCK_DSN=flock")
-
-	return cmd.Run()
+	return p.Run()
 }
 
 func cleanupTcpdf(folder string, ctx context.Context) error {

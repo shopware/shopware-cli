@@ -6,10 +6,9 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/shyim/go-composer"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-
-	"github.com/shopware/shopware-cli/internal/packagist"
 )
 
 func TestMigrateComposerJson(t *testing.T) {
@@ -20,13 +19,13 @@ func TestMigrateComposerJson(t *testing.T) {
 		tempDir := t.TempDir()
 
 		// Create a test composer.json file
-		initialComposer := &packagist.ComposerJson{
+		initialComposer := &composer.Json{
 			Name: "shopware/project",
-			Require: packagist.ComposerPackageLink{
+			Require: composer.PackageLink{
 				"shopware/recovery": "1.0.0",
 				"php":               "^7.4",
 			},
-			RequireDev: packagist.ComposerPackageLink{
+			RequireDev: composer.PackageLink{
 				"some/dev-package": "^1.0",
 			},
 			Config: map[string]any{
@@ -37,7 +36,7 @@ func TestMigrateComposerJson(t *testing.T) {
 					"composer/package-versions-deprecated": true,
 				},
 			},
-			Repositories: packagist.ComposerJsonRepositories{},
+			Repositories: composer.Repositories{},
 			Scripts:      map[string]any{},
 			Extra:        map[string]any{},
 		}
@@ -53,7 +52,7 @@ func TestMigrateComposerJson(t *testing.T) {
 		require.NoError(t, err)
 
 		// Read and verify the migrated composer.json
-		migratedComposer, err := packagist.ReadComposerJson(composerFile)
+		migratedComposer, err := composer.ReadJson(composerFile)
 		require.NoError(t, err)
 
 		// Verify package removals
@@ -112,12 +111,12 @@ func TestMigrateComposerJson(t *testing.T) {
 		t.Parallel()
 		tempDir := t.TempDir()
 
-		initialComposer := &packagist.ComposerJson{
+		initialComposer := &composer.Json{
 			Name: "shopware/project",
-			Require: packagist.ComposerPackageLink{
+			Require: composer.PackageLink{
 				"shopware/core": "6.5.0.0",
 			},
-			Repositories: packagist.ComposerJsonRepositories{
+			Repositories: composer.Repositories{
 				{
 					Type: "composer",
 					URL:  "https://shopware.github.io/conflicts/",
@@ -137,7 +136,7 @@ func TestMigrateComposerJson(t *testing.T) {
 
 		require.NoError(t, MigrateComposerJson(tempDir))
 
-		migratedComposer, err := packagist.ReadComposerJson(composerFile)
+		migratedComposer, err := composer.ReadJson(composerFile)
 		require.NoError(t, err)
 
 		count := 0

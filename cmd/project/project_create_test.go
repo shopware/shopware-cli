@@ -5,11 +5,36 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/shyim/go-composer/repository"
 	"github.com/shyim/go-version"
 	"github.com/stretchr/testify/assert"
 
-	"github.com/shopware/shopware-cli/internal/packagist"
+	"github.com/shopware/shopware-cli/internal/shop"
 )
+
+func TestFilterInstallVersions(t *testing.T) {
+	t.Parallel()
+
+	releases := []repository.Version{
+		{Version: "6.7.12.x-dev"},
+		{Version: "6.7.12.1"},
+		{Version: "6.7.11.x-dev"},
+		{Version: "6.7.11.1"},
+		{Version: "dev-trunk"},
+		{Version: "6.3.0.0"},
+	}
+
+	filtered := filterInstallVersions(releases)
+
+	got := make([]string, 0, len(filtered))
+	for _, v := range filtered {
+		got = append(got, v.String())
+	}
+
+	// Branch dev builds (*.x-dev, dev-*) and versions below the minimum
+	// constraint are excluded; only installable stable releases remain.
+	assert.Equal(t, []string{"6.7.12.1", "6.7.11.1"}, got)
+}
 
 func TestResolveVersion(t *testing.T) {
 	t.Parallel()
@@ -117,6 +142,22 @@ func TestValidateProjectName(t *testing.T) {
 	}
 }
 
+func TestProjectCreateRejectsInvalidNameArgument(t *testing.T) {
+	// A name provided directly as an argument must be rejected up front,
+	// before the interactive form or any network call, the same way the
+	// interactive name prompt rejects it live.
+	invalidNames := []string{"myShop", "MyShop", "müller", "my shop"}
+
+	for _, name := range invalidNames {
+		t.Run(name, func(t *testing.T) {
+			projectCreateCmd.SetContext(t.Context())
+			err := projectCreateCmd.RunE(projectCreateCmd, []string{name})
+			assert.Error(t, err)
+			assert.Contains(t, err.Error(), "invalid project name")
+		})
+	}
+}
+
 func TestProjectNameFieldDescription(t *testing.T) {
 	t.Parallel()
 
@@ -151,7 +192,7 @@ func TestSetupDeployment(t *testing.T) {
 		t.Parallel()
 		tmpDir := t.TempDir()
 
-		err := setupDeployment(tmpDir, packagist.DeploymentNone)
+		err := setupDeployment(tmpDir, shop.DeploymentNone)
 		assert.NoError(t, err)
 
 		entries, err := os.ReadDir(tmpDir)
@@ -163,7 +204,7 @@ func TestSetupDeployment(t *testing.T) {
 		t.Parallel()
 		tmpDir := t.TempDir()
 
-		err := setupDeployment(tmpDir, packagist.DeploymentDeployer)
+		err := setupDeployment(tmpDir, shop.DeploymentDeployer)
 		assert.NoError(t, err)
 
 		assert.FileExists(t, filepath.Join(tmpDir, "deploy.php"))
@@ -176,7 +217,7 @@ func TestSetupDeployment(t *testing.T) {
 		t.Parallel()
 		tmpDir := t.TempDir()
 
-		err := setupDeployment(tmpDir, packagist.DeploymentShopwarePaaS)
+		err := setupDeployment(tmpDir, shop.DeploymentShopwarePaaS)
 		assert.NoError(t, err)
 
 		assert.FileExists(t, filepath.Join(tmpDir, "application.yaml"))
@@ -190,7 +231,7 @@ func TestSetupDeployment(t *testing.T) {
 		t.Parallel()
 		tmpDir := t.TempDir()
 
-		err := setupDeployment(tmpDir, packagist.DeploymentPlatformSH)
+		err := setupDeployment(tmpDir, shop.DeploymentPlatformSH)
 		assert.NoError(t, err)
 
 		entries, err := os.ReadDir(tmpDir)
@@ -205,7 +246,7 @@ func TestSetupCI(t *testing.T) {
 		t.Parallel()
 		tmpDir := t.TempDir()
 
-		err := setupCI(t.Context(), tmpDir, "none", packagist.DeploymentNone)
+		err := setupCI(t.Context(), tmpDir, "none", shop.DeploymentNone)
 		assert.NoError(t, err)
 
 		entries, err := os.ReadDir(tmpDir)
@@ -217,7 +258,7 @@ func TestSetupCI(t *testing.T) {
 		t.Parallel()
 		tmpDir := t.TempDir()
 
-		err := setupCI(t.Context(), tmpDir, "github", packagist.DeploymentNone)
+		err := setupCI(t.Context(), tmpDir, "github", shop.DeploymentNone)
 		assert.NoError(t, err)
 
 		assert.DirExists(t, filepath.Join(tmpDir, ".github", "workflows"))
@@ -229,7 +270,7 @@ func TestSetupCI(t *testing.T) {
 		t.Parallel()
 		tmpDir := t.TempDir()
 
-		err := setupCI(t.Context(), tmpDir, "github", packagist.DeploymentDeployer)
+		err := setupCI(t.Context(), tmpDir, "github", shop.DeploymentDeployer)
 		assert.NoError(t, err)
 
 		assert.FileExists(t, filepath.Join(tmpDir, ".github", "workflows", "ci.yml"))
@@ -240,7 +281,7 @@ func TestSetupCI(t *testing.T) {
 		t.Parallel()
 		tmpDir := t.TempDir()
 
-		err := setupCI(t.Context(), tmpDir, "gitlab", packagist.DeploymentNone)
+		err := setupCI(t.Context(), tmpDir, "gitlab", shop.DeploymentNone)
 		assert.NoError(t, err)
 
 		assert.FileExists(t, filepath.Join(tmpDir, ".gitlab-ci.yml"))
@@ -250,7 +291,7 @@ func TestSetupCI(t *testing.T) {
 		t.Parallel()
 		tmpDir := t.TempDir()
 
-		err := setupCI(t.Context(), tmpDir, "gitlab", packagist.DeploymentDeployer)
+		err := setupCI(t.Context(), tmpDir, "gitlab", shop.DeploymentDeployer)
 		assert.NoError(t, err)
 
 		content, err := os.ReadFile(filepath.Join(tmpDir, ".gitlab-ci.yml"))
@@ -262,18 +303,18 @@ func TestSetupCI(t *testing.T) {
 func TestValidDeploymentMethods(t *testing.T) {
 	t.Parallel()
 	validDeployments := map[string]bool{
-		packagist.DeploymentNone:         true,
-		packagist.DeploymentDeployer:     true,
-		packagist.DeploymentPlatformSH:   true,
-		packagist.DeploymentShopwarePaaS: true,
+		shop.DeploymentNone:         true,
+		shop.DeploymentDeployer:     true,
+		shop.DeploymentPlatformSH:   true,
+		shop.DeploymentShopwarePaaS: true,
 	}
 
 	t.Run("all deployment constants are valid", func(t *testing.T) {
 		t.Parallel()
-		assert.True(t, validDeployments[packagist.DeploymentNone])
-		assert.True(t, validDeployments[packagist.DeploymentDeployer])
-		assert.True(t, validDeployments[packagist.DeploymentPlatformSH])
-		assert.True(t, validDeployments[packagist.DeploymentShopwarePaaS])
+		assert.True(t, validDeployments[shop.DeploymentNone])
+		assert.True(t, validDeployments[shop.DeploymentDeployer])
+		assert.True(t, validDeployments[shop.DeploymentPlatformSH])
+		assert.True(t, validDeployments[shop.DeploymentShopwarePaaS])
 	})
 
 	t.Run("invalid deployment is rejected", func(t *testing.T) {

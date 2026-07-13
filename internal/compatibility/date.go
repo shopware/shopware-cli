@@ -10,7 +10,6 @@ const defaultCompatibilityDate = "2026-02-11"
 
 var now = time.Now
 
-// ValidateDate validates a compatibility date in YYYY-MM-DD format.
 func ValidateDate(value string) error {
 	if value == "" {
 		return nil
@@ -23,8 +22,6 @@ func ValidateDate(value string) error {
 	return nil
 }
 
-// IsAtLeast checks whether compatibilityDate is equal to or after requiredDate.
-// An empty compatibilityDate falls back to the default compatibility date.
 func IsAtLeast(compatibilityDate, requiredDate string) (bool, error) {
 	if compatibilityDate == "" {
 		compatibilityDate = DefaultDate()
@@ -41,6 +38,11 @@ func IsAtLeast(compatibilityDate, requiredDate string) (bool, error) {
 	}
 
 	return !currentDate.Before(minDate), nil
+}
+
+func IsBefore(compatibilityDate, requiredDate string) bool {
+	ok, _ := IsAtLeast(compatibilityDate, requiredDate)
+	return !ok
 }
 
 func parseDate(value string) (time.Time, error) {

@@ -11,13 +11,13 @@ import (
 	"charm.land/huh/v2"
 	"charm.land/lipgloss/v2"
 	"charm.land/lipgloss/v2/table"
+	"github.com/shyim/go-composer"
 	"github.com/shyim/go-version"
 	"github.com/spf13/cobra"
 
 	account_api "github.com/shopware/shopware-cli/internal/account-api"
 	adminSdk "github.com/shopware/shopware-cli/internal/admin-api"
 	"github.com/shopware/shopware-cli/internal/extension"
-	"github.com/shopware/shopware-cli/internal/packagist"
 	"github.com/shopware/shopware-cli/internal/shop"
 	"github.com/shopware/shopware-cli/internal/system"
 	"github.com/shopware/shopware-cli/internal/tracking"
@@ -167,10 +167,10 @@ var projectUpgradeCheckCmd = &cobra.Command{
 		}
 		trackCtx, trackCancel := context.WithTimeout(context.WithoutCancel(cmd.Context()), 300*time.Millisecond)
 		defer trackCancel()
-		tracking.Track(trackCtx, "project.upgrade_check", map[string]string{
-			"from_version":   shopwareVersion.String(),
-			"target_version": selectedVersion,
-			"has_blockers":   strconv.FormatBool(hasBlockers),
+		tracking.Track(trackCtx, tracking.EventProjectUpgradeCheck, map[string]string{
+			tracking.TagFromVersion:   shopwareVersion.String(),
+			tracking.TagTargetVersion: selectedVersion,
+			tracking.TagHasBlockers:   strconv.FormatBool(hasBlockers),
 		})
 
 		return nil
@@ -187,7 +187,7 @@ func getLocalExtensions() (*version.Version, map[string]string, error) {
 		return nil, nil, err
 	}
 
-	composerLock, err := packagist.ReadComposerLock(path.Join(project, "composer.lock"))
+	composerLock, err := composer.ReadLock(path.Join(project, "composer.lock"))
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to read composer.lock: %w", err)
 	}

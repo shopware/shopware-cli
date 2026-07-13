@@ -9,10 +9,12 @@ import (
 	"charm.land/huh/v2"
 	"charm.land/huh/v2/spinner"
 	"charm.land/lipgloss/v2"
+	"github.com/shyim/go-composer"
+	"github.com/shyim/go-composer/repository"
 	"github.com/spf13/cobra"
 
 	"github.com/shopware/shopware-cli/internal/extension"
-	"github.com/shopware/shopware-cli/internal/packagist"
+	"github.com/shopware/shopware-cli/internal/shop"
 	"github.com/shopware/shopware-cli/internal/system"
 	"github.com/shopware/shopware-cli/logging"
 )
@@ -26,7 +28,7 @@ var projectAutofixComposerCmd = &cobra.Command{
 			return err
 		}
 
-		rootComposerJson, err := packagist.ReadComposerJson(path.Join(project, "composer.json"))
+		rootComposerJson, err := composer.ReadJson(path.Join(project, "composer.json"))
 		if err != nil {
 			return err
 		}
@@ -54,7 +56,9 @@ var projectAutofixComposerCmd = &cobra.Command{
 			_ = spinner.New().Context(ctx).Title("Fetching packages").Run()
 		}()
 
-		packagistResponse, err := packagist.GetPackages(cmd.Context(), token)
+		const storeURL = "https://packages.shopware.com"
+		storeAuth := &composer.Auth{BearerAuth: map[string]string{storeURL: token}}
+		storePackages, err := repository.New(storeURL, storeAuth).GetPackages(cmd.Context())
 
 		cancel()
 
@@ -82,7 +86,8 @@ var projectAutofixComposerCmd = &cobra.Command{
 				return err
 			}
 
-			if !packagistResponse.HasPackage(extName) {
+			storeName := fmt.Sprintf("store.shopware.com/%s", strings.ToLower(extName))
+			if _, inStore := storePackages[storeName]; !inStore {
 				composerName, err := extension.GetComposerName()
 				if err != nil {
 					continue
@@ -117,13 +122,13 @@ var projectAutofixComposerCmd = &cobra.Command{
 		fmt.Println(" after deleting the directories.")
 
 		if !rootComposerJson.Repositories.HasRepository("https://packages.shopware.com") {
-			rootComposerJson.Repositories = append(rootComposerJson.Repositories, packagist.ComposerJsonRepository{
+			rootComposerJson.Repositories = append(rootComposerJson.Repositories, composer.Repository{
 				Type: "composer",
 				URL:  "https://packages.shopware.com",
 			})
 		}
 
-		auth, err := packagist.ReadComposerAuth(path.Join(project, "auth.json"))
+		auth, err := shop.ReadComposerAuth(path.Join(project, "auth.json"))
 		if err != nil {
 			return err
 		}

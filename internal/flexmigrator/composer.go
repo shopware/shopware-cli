@@ -3,11 +3,11 @@ package flexmigrator
 import (
 	"path"
 
-	"github.com/shopware/shopware-cli/internal/packagist"
+	"github.com/shyim/go-composer"
 )
 
 func MigrateComposerJson(project string) error {
-	composerJson, err := packagist.ReadComposerJson(path.Join(project, "composer.json"))
+	composerJson, err := composer.ReadJson(path.Join(project, "composer.json"))
 	if err != nil {
 		return err
 	}
@@ -23,7 +23,7 @@ func MigrateComposerJson(project string) error {
 		delete(composerJson.Require, "php")
 	}
 
-	composerJson.RequireDev = packagist.ComposerPackageLink{}
+	composerJson.RequireDev = composer.PackageLink{}
 	composerJson.RequireDev["shopware/dev-tools"] = "*"
 
 	if composerJson.HasConfig("platform") {
@@ -43,7 +43,7 @@ func MigrateComposerJson(project string) error {
 	}
 
 	if !composerJson.Repositories.HasRepository("custom/plugins/*") {
-		composerJson.Repositories = append(composerJson.Repositories, packagist.ComposerJsonRepository{
+		composerJson.Repositories = append(composerJson.Repositories, composer.Repository{
 			Type: "path",
 			URL:  "custom/plugins/*",
 			Options: map[string]any{
@@ -53,7 +53,7 @@ func MigrateComposerJson(project string) error {
 	}
 
 	if !composerJson.Repositories.HasRepository("custom/plugins/*/packages/*") {
-		composerJson.Repositories = append(composerJson.Repositories, packagist.ComposerJsonRepository{
+		composerJson.Repositories = append(composerJson.Repositories, composer.Repository{
 			Type: "path",
 			URL:  "custom/plugins/*/packages/*",
 			Options: map[string]any{
@@ -63,7 +63,7 @@ func MigrateComposerJson(project string) error {
 	}
 
 	if !composerJson.Repositories.HasRepository("https://shopware.github.io/conflicts/") {
-		composerJson.Repositories = append(composerJson.Repositories, packagist.ComposerJsonRepository{
+		composerJson.Repositories = append(composerJson.Repositories, composer.Repository{
 			Type: "composer",
 			URL:  "https://shopware.github.io/conflicts/",
 		})

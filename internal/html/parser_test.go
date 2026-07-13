@@ -118,7 +118,7 @@ func TestChangeElement(t *testing.T) {
 		n.Tag = "mt-select"
 		var newAttributes NodeList
 		for _, attr := range n.Attributes {
-			if attribute, ok := attr.(Attribute); ok {
+			if attribute, ok := attr.(*Attribute); ok {
 				if attribute.Key == "@update:value" {
 					attribute.Key = "@update:modelValue"
 				}

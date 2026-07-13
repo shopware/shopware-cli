@@ -1,20 +1,21 @@
 package extension
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
 	"os"
+	"os/exec"
 	"path"
 	"path/filepath"
 	"regexp"
 	"strings"
 
+	gocomposer "github.com/shyim/go-composer"
 	"github.com/shyim/go-version"
 
 	"github.com/shopware/shopware-cli/internal/asset"
-	"github.com/shopware/shopware-cli/internal/packagist"
-	"github.com/shopware/shopware-cli/internal/phpexec"
 	"github.com/shopware/shopware-cli/internal/shop"
 	"github.com/shopware/shopware-cli/logging"
 )
@@ -49,7 +50,7 @@ func GetShopwareProjectConstraint(project string) (*version.Constraints, error) 
 				return nil, err
 			}
 
-			lock, err := packagist.ReadComposerLock(path.Join(project, "composer.lock"))
+			lock, err := gocomposer.ReadLock(path.Join(project, "composer.lock"))
 			if err != nil {
 				return nil, err
 			}
@@ -180,14 +181,20 @@ func FindAssetSourcesOfProject(ctx context.Context, project string, shopCfg *sho
 	return sources
 }
 
-func DumpAndLoadAssetSourcesOfProject(ctx context.Context, project string, shopCfg *shop.Config) ([]asset.Source, error) {
-	dumpExec := phpexec.ConsoleCommand(ctx, "bundle:dump")
+type ConsoleCommandFunc func(ctx context.Context, args ...string) *exec.Cmd
+
+func DumpAndLoadAssetSourcesOfProject(ctx context.Context, project string, shopCfg *shop.Config, consoleCommand ConsoleCommandFunc) ([]asset.Source, error) {
+	dumpExec := consoleCommand(ctx, "bundle:dump")
 	dumpExec.Dir = project
-	dumpExec.Stdin = os.Stdin
-	dumpExec.Stdout = os.Stdout
-	dumpExec.Stderr = os.Stderr
+	// Capture output: bundle:dump's "Dumped plugin configuration." line corrupts the devtui render if inherited.
+	var dumpOutput bytes.Buffer
+	dumpExec.Stdout = &dumpOutput
+	dumpExec.Stderr = &dumpOutput
 
 	if err := dumpExec.Run(); err != nil {
+		if out := strings.TrimSpace(dumpOutput.String()); out != "" {
+			return nil, fmt.Errorf("could not bundle features: %w: %s", err, out)
+		}
 		return nil, fmt.Errorf("could not bundle features: %w", err)
 	}
 

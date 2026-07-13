@@ -5,8 +5,8 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/shopware/shopware-cli/internal/executor"
 	"github.com/shopware/shopware-cli/internal/extension"
-	"github.com/shopware/shopware-cli/internal/phpexec"
 	"github.com/shopware/shopware-cli/internal/shop"
 	"github.com/shopware/shopware-cli/logging"
 )
@@ -34,9 +34,14 @@ var projectStorefrontBuildCmd = &cobra.Command{
 			return err
 		}
 
+		cmdExecutor, err := resolveExecutor(cmd, projectRoot)
+		if err != nil {
+			return err
+		}
+
 		logging.FromContext(cmd.Context()).Infof("Looking for extensions to build assets in project")
 
-		if err := runTransparentCommand(commandWithRoot(phpexec.ConsoleCommand(phpexec.AllowBinCI(cmd.Context()), "feature:dump"), projectRoot)); err != nil {
+		if err := runTransparentCommand(cmdExecutor.ConsoleCommand(executor.AllowBinCI(cmd.Context()), "feature:dump")); err != nil {
 			return err
 		}
 
@@ -57,6 +62,7 @@ var projectStorefrontBuildCmd = &cobra.Command{
 			ShopwareRoot:      projectRoot,
 			ShopwareVersion:   shopwareConstraint,
 			NPMForceInstall:   forceInstall,
+			Executor:          cmdExecutor,
 		}
 
 		if err := extension.BuildAssetsForExtensions(cmd.Context(), sources, assetCfg); err != nil {
@@ -65,7 +71,7 @@ var projectStorefrontBuildCmd = &cobra.Command{
 
 		skipAssetsInstall, _ := cmd.PersistentFlags().GetBool("skip-assets-install")
 		if !skipAssetsInstall {
-			if err := runTransparentCommand(commandWithRoot(phpexec.ConsoleCommand(cmd.Context(), "assets:install"), projectRoot)); err != nil {
+			if err := runTransparentCommand(cmdExecutor.ConsoleCommand(cmd.Context(), "assets:install")); err != nil {
 				return err
 			}
 		}
@@ -75,7 +81,7 @@ var projectStorefrontBuildCmd = &cobra.Command{
 			return nil
 		}
 
-		return runTransparentCommand(commandWithRoot(phpexec.ConsoleCommand(phpexec.AllowBinCI(cmd.Context()), "theme:compile"), projectRoot))
+		return runTransparentCommand(cmdExecutor.ConsoleCommand(executor.AllowBinCI(cmd.Context()), "theme:compile"))
 	},
 }
 
@@ -84,7 +90,8 @@ func init() {
 	projectStorefrontBuildCmd.PersistentFlags().Bool("skip-assets-install", false, "Skips the assets installation")
 	projectStorefrontBuildCmd.PersistentFlags().Bool("skip-theme-compile", false, "Skip theme compilation")
 	projectStorefrontBuildCmd.PersistentFlags().Bool("force-install-dependencies", false, "Force install NPM dependencies")
-	projectStorefrontBuildCmd.PersistentFlags().String("only-extensions", "", "Only watch the given extensions (comma separated)")
+	projectStorefrontBuildCmd.PersistentFlags().String("only-extensions", "", "Only build the given extensions (comma separated). Pass without a value (--only-extensions) to pick interactively")
+	projectStorefrontBuildCmd.PersistentFlags().Lookup("only-extensions").NoOptDefVal = " "
 	projectStorefrontBuildCmd.PersistentFlags().String("skip-extensions", "", "Skips the given extensions (comma separated)")
 	projectStorefrontBuildCmd.PersistentFlags().Bool("only-custom-static-extensions", false, "Only build extensions from custom/static-plugins directory")
 }

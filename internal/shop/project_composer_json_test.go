@@ -1,0 +1,173 @@
+package shop
+
+import (
+	"encoding/json"
+	"testing"
+
+	"github.com/stretchr/testify/assert"
+)
+
+func TestGenerateComposerJson(t *testing.T) {
+	t.Parallel()
+
+	t.Run("without audit", func(t *testing.T) {
+		t.Parallel()
+		ctx := t.Context()
+		jsonStr, err := GenerateComposerJson(ctx, ComposerJsonOptions{Version: "6.4.18.0"})
+		assert.NoError(t, err)
+		assert.Contains(t, jsonStr, `"sort-packages": true`)
+		assert.NotContains(t, jsonStr, `"audit": {`)
+
+		var data map[string]interface{}
+		err = json.Unmarshal([]byte(jsonStr), &data)
+		assert.NoError(t, err, "Generated JSON should be valid")
+	})
+
+	t.Run("with audit disabled", func(t *testing.T) {
+		t.Parallel()
+		ctx := t.Context()
+		jsonStr, err := GenerateComposerJson(ctx, ComposerJsonOptions{Version: "6.4.18.0", NoAudit: true})
+		assert.NoError(t, err)
+		assert.Contains(t, jsonStr, `"sort-packages": true`)
+		assert.Contains(t, jsonStr, `"audit": {`)
+
+		var data map[string]interface{}
+		err = json.Unmarshal([]byte(jsonStr), &data)
+		assert.NoError(t, err, "Generated JSON should be valid")
+	})
+
+	t.Run("contains shopware conflicts repository", func(t *testing.T) {
+		t.Parallel()
+		ctx := t.Context()
+		jsonStr, err := GenerateComposerJson(ctx, ComposerJsonOptions{Version: "6.4.18.0"})
+		assert.NoError(t, err)
+
+		var data struct {
+			Repositories []struct {
+				Type string `json:"type"`
+				URL  string `json:"url"`
+			} `json:"repositories"`
+		}
+		assert.NoError(t, json.Unmarshal([]byte(jsonStr), &data))
+
+		found := false
+		for _, repo := range data.Repositories {
+			if repo.Type == "composer" && repo.URL == "https://shopware.github.io/conflicts/" {
+				found = true
+			}
+		}
+		assert.True(t, found, "repositories should contain the shopware conflicts composer repository")
+	})
+
+	t.Run("with elasticsearch", func(t *testing.T) {
+		t.Parallel()
+		ctx := t.Context()
+		jsonStr, err := GenerateComposerJson(ctx, ComposerJsonOptions{Version: "6.4.18.0", UseElasticsearch: true})
+		assert.NoError(t, err)
+		assert.Contains(t, jsonStr, `"shopware/elasticsearch"`)
+
+		var data map[string]interface{}
+		err = json.Unmarshal([]byte(jsonStr), &data)
+		assert.NoError(t, err, "Generated JSON should be valid")
+	})
+
+	t.Run("without elasticsearch", func(t *testing.T) {
+		t.Parallel()
+		ctx := t.Context()
+		jsonStr, err := GenerateComposerJson(ctx, ComposerJsonOptions{Version: "6.4.18.0", UseElasticsearch: false})
+		assert.NoError(t, err)
+		assert.NotContains(t, jsonStr, `"shopware/elasticsearch"`)
+
+		var data map[string]interface{}
+		err = json.Unmarshal([]byte(jsonStr), &data)
+		assert.NoError(t, err, "Generated JSON should be valid")
+	})
+
+	t.Run("with shopware paas deployment", func(t *testing.T) {
+		t.Parallel()
+		ctx := t.Context()
+		jsonStr, err := GenerateComposerJson(ctx, ComposerJsonOptions{Version: "6.4.18.0", DeploymentMethod: DeploymentShopwarePaaS})
+		assert.NoError(t, err)
+		assert.Contains(t, jsonStr, `"shopware/k8s-meta": "*"`)
+		assert.NotContains(t, jsonStr, `"shopware/paas-meta"`)
+		assert.Contains(t, jsonStr, `"platform": {`)
+		assert.Contains(t, jsonStr, `"ext-grpc": "1.44.0"`)
+		assert.Contains(t, jsonStr, `"ext-opentelemetry": "3.21.0"`)
+
+		var data map[string]interface{}
+		err = json.Unmarshal([]byte(jsonStr), &data)
+		assert.NoError(t, err, "Generated JSON should be valid")
+	})
+
+	t.Run("with platformsh deployment", func(t *testing.T) {
+		t.Parallel()
+		ctx := t.Context()
+		jsonStr, err := GenerateComposerJson(ctx, ComposerJsonOptions{Version: "6.4.18.0", DeploymentMethod: DeploymentPlatformSH})
+		assert.NoError(t, err)
+		assert.Contains(t, jsonStr, `"shopware/paas-meta": "*"`)
+		assert.NotContains(t, jsonStr, `"shopware/k8s-meta"`)
+		assert.NotContains(t, jsonStr, `"ext-grpc"`)
+		assert.NotContains(t, jsonStr, `"ext-opentelemetry"`)
+
+		var data map[string]interface{}
+		err = json.Unmarshal([]byte(jsonStr), &data)
+		assert.NoError(t, err, "Generated JSON should be valid")
+	})
+
+	t.Run("with deployer deployment", func(t *testing.T) {
+		t.Parallel()
+		ctx := t.Context()
+		jsonStr, err := GenerateComposerJson(ctx, ComposerJsonOptions{Version: "6.4.18.0", DeploymentMethod: DeploymentDeployer})
+		assert.NoError(t, err)
+		assert.Contains(t, jsonStr, `"deployer/deployer": "*"`)
+		assert.NotContains(t, jsonStr, `"shopware/paas-meta"`)
+		assert.NotContains(t, jsonStr, `"shopware/k8s-meta"`)
+		assert.NotContains(t, jsonStr, `"ext-grpc"`)
+		assert.NotContains(t, jsonStr, `"ext-opentelemetry"`)
+
+		var data map[string]interface{}
+		err = json.Unmarshal([]byte(jsonStr), &data)
+		assert.NoError(t, err, "Generated JSON should be valid")
+	})
+
+	t.Run("with amqp", func(t *testing.T) {
+		t.Parallel()
+		ctx := t.Context()
+		jsonStr, err := GenerateComposerJson(ctx, ComposerJsonOptions{Version: "6.4.18.0", UseAMQP: true})
+		assert.NoError(t, err)
+		assert.Contains(t, jsonStr, `"symfony/amqp-messenger": "*"`)
+
+		var data map[string]interface{}
+		err = json.Unmarshal([]byte(jsonStr), &data)
+		assert.NoError(t, err, "Generated JSON should be valid")
+	})
+
+	t.Run("without amqp", func(t *testing.T) {
+		t.Parallel()
+		ctx := t.Context()
+		jsonStr, err := GenerateComposerJson(ctx, ComposerJsonOptions{Version: "6.4.18.0", UseAMQP: false})
+		assert.NoError(t, err)
+		assert.NotContains(t, jsonStr, `"symfony/amqp-messenger"`)
+
+		var data map[string]interface{}
+		err = json.Unmarshal([]byte(jsonStr), &data)
+		assert.NoError(t, err, "Generated JSON should be valid")
+	})
+
+	t.Run("allow-plugins includes php-http/discovery", func(t *testing.T) {
+		t.Parallel()
+		ctx := t.Context()
+		jsonStr, err := GenerateComposerJson(ctx, ComposerJsonOptions{Version: "6.4.18.0"})
+		assert.NoError(t, err)
+
+		var data struct {
+			Config struct {
+				AllowPlugins map[string]bool `json:"allow-plugins"`
+			} `json:"config"`
+		}
+		assert.NoError(t, json.Unmarshal([]byte(jsonStr), &data))
+		assert.True(t, data.Config.AllowPlugins["php-http/discovery"], "allow-plugins should include php-http/discovery")
+		assert.True(t, data.Config.AllowPlugins["symfony/flex"], "allow-plugins should include symfony/flex")
+		assert.True(t, data.Config.AllowPlugins["symfony/runtime"], "allow-plugins should include symfony/runtime")
+	})
+}

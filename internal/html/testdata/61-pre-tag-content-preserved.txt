@@ -1,0 +1,26 @@
+{% block foo %}
+    <pre class="code">
+line1
+    indented line2
+
+        deeper
+</pre>
+{% endblock %}
+-----
+{% block foo %}
+<pre class="code">
+line1
+    indented line2
+
+        deeper
+</pre>
+{% endblock %}
+-----
+{% block foo %}
+    <pre class="code">
+line1
+    indented line2
+
+        deeper
+</pre>
+{% endblock %}

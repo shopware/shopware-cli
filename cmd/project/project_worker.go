@@ -15,7 +15,6 @@ import (
 	"github.com/spf13/cobra"
 	"golang.org/x/time/rate"
 
-	"github.com/shopware/shopware-cli/internal/phpexec"
 	"github.com/shopware/shopware-cli/internal/shop"
 	"github.com/shopware/shopware-cli/logging"
 )
@@ -36,6 +35,11 @@ var projectWorkerCmd = &cobra.Command{
 		messagesLimit, _ := cobraCmd.Flags().GetUint("limit")
 
 		if projectRoot, err = findClosestShopwareProject(); err != nil {
+			return err
+		}
+
+		cmdExecutor, err := resolveExecutor(cobraCmd, projectRoot)
+		if err != nil {
 			return err
 		}
 
@@ -97,17 +101,16 @@ var projectWorkerCmd = &cobra.Command{
 						continue
 					}
 
-					cmd := phpexec.ConsoleCommand(cancelCtx, consumeArgs...)
-					cmd.Dir = projectRoot
-					cmd.Stdout = os.Stdout
-					cmd.Stderr = os.Stderr
-					cmd.Env = append(os.Environ(), fmt.Sprintf("MESSENGER_CONSUMER_NAME=%s-%d", baseName, index))
-					cmd.WaitDelay = time.Second
-					cmd.Cancel = func() error {
-						return gracefulStop(cmd, gracefulStopLimit)
+					p := cmdExecutor.ConsoleCommand(cancelCtx, consumeArgs...)
+					p.Cmd.Stdout = os.Stdout
+					p.Cmd.Stderr = os.Stderr
+					p.Cmd.Env = append(os.Environ(), fmt.Sprintf("MESSENGER_CONSUMER_NAME=%s-%d", baseName, index))
+					p.Cmd.WaitDelay = time.Second
+					p.Cmd.Cancel = func() error {
+						return gracefulStop(p.Cmd, gracefulStopLimit)
 					}
 
-					if err := cmd.Run(); err != nil {
+					if err := p.Cmd.Run(); err != nil {
 						if errors.Is(err, context.Canceled) {
 							break
 						}

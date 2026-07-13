@@ -1,8 +1,7 @@
 package verifier
 
 import (
-	"net/http"
-	"net/http/httptest"
+	"context"
 	"os"
 	"path/filepath"
 	"testing"
@@ -10,34 +9,15 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-// mockPackagistTransport redirects all HTTP requests to a test server, preserving the path.
-type mockPackagistTransport struct {
-	server *httptest.Server
-}
-
-func (m *mockPackagistTransport) RoundTrip(req *http.Request) (*http.Response, error) {
-	newReq, err := http.NewRequestWithContext(req.Context(), req.Method, m.server.URL+req.URL.Path, req.Body)
-	if err != nil {
-		return nil, err
-	}
-	newReq.Header = req.Header
-	return m.server.Client().Transport.RoundTrip(newReq)
-}
-
-// mockPackagistAPI installs a fake packagist server for the duration of the test.
-// This is required because GetConfigFromProject calls determineVersionRange which
-// fetches Shopware versions from repo.packagist.org.
-func mockPackagistAPI(t *testing.T) {
+// stubShopwareVersions replaces the network-backed version lookup with a
+// fixed list, so GetConfigFromProject does not hit repo.packagist.org.
+func stubShopwareVersions(t *testing.T) {
 	t.Helper()
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"packages":{"shopware/core":[{"version_normalized":"6.6.0.0"}]}}`))
-	}))
-	t.Cleanup(server.Close)
-
-	original := http.DefaultClient
-	t.Cleanup(func() { http.DefaultClient = original })
-	http.DefaultClient = &http.Client{Transport: &mockPackagistTransport{server: server}}
+	original := getShopwareVersions
+	t.Cleanup(func() { getShopwareVersions = original })
+	getShopwareVersions = func(context.Context) ([]string, error) {
+		return []string{"6.6.0.0"}, nil
+	}
 }
 
 const testProjectYAMLSingleBundle = `compatibility_date: "2024-01-01"
@@ -47,7 +27,7 @@ build:
 `
 
 func TestGetConfigFromProjectYAMLBundles(t *testing.T) {
-	mockPackagistAPI(t)
+	stubShopwareVersions(t)
 	tmpDir := t.TempDir()
 
 	// Minimal composer.json with shopware/core requirement
@@ -71,7 +51,7 @@ func TestGetConfigFromProjectYAMLBundles(t *testing.T) {
 }
 
 func TestGetConfigFromProjectYAMLBundleStorefront(t *testing.T) {
-	mockPackagistAPI(t)
+	stubShopwareVersions(t)
 	tmpDir := t.TempDir()
 
 	assert.NoError(t, os.WriteFile(filepath.Join(tmpDir, "composer.json"), []byte(`{
@@ -93,7 +73,7 @@ func TestGetConfigFromProjectYAMLBundleStorefront(t *testing.T) {
 }
 
 func TestGetConfigFromProjectYAMLBundleDeduplication(t *testing.T) {
-	mockPackagistAPI(t)
+	stubShopwareVersions(t)
 	tmpDir := t.TempDir()
 
 	// composer.json declares the same bundle

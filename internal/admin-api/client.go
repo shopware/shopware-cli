@@ -28,6 +28,7 @@ type Client struct {
 	Info             *InfoService
 	ExtensionManager *ExtensionManagerService
 	CacheManager     *CacheManagerService
+	SalesChannel     *SalesChannelService
 }
 
 type ClientService struct {
@@ -41,6 +42,7 @@ func NewApiClient(ctx context.Context, shopUrl string, credentials OAuthCredenti
 	shopClient.Info = (*InfoService)(&shopClient.common)
 	shopClient.ExtensionManager = (*ExtensionManagerService)(&shopClient.common)
 	shopClient.CacheManager = (*CacheManagerService)(&shopClient.common)
+	shopClient.SalesChannel = (*SalesChannelService)(&shopClient.common)
 
 	if err := shopClient.authorize(ctx, shopUrl, credentials); err != nil {
 		return nil, err

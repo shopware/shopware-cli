@@ -11,8 +11,6 @@ import (
 	"github.com/shopware/shopware-cli/logging"
 )
 
-// IsPHPWasmCached checks whether a PHP WASM binary for the given version is already in the cache,
-// without triggering a network download. Returns true if the binary is available locally.
 func IsPHPWasmCached(phpVersion string) bool {
 	expectedFile := "php-" + phpVersion + ".wasm"
 	cacheKey := "wasm/php/" + expectedFile

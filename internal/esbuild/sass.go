@@ -21,8 +21,6 @@ var scssVariables []byte
 //go:embed static/mixins.scss
 var scssMixins []byte
 
-// IsDartSassAvailable checks whether dart-sass is available locally (on PATH or in cache),
-// without triggering a network download. Returns true if the binary is available.
 func IsDartSassAvailable() bool {
 	if _, err := exec.LookPath("dart-sass"); err == nil {
 		return true

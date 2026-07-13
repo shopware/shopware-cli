@@ -31,6 +31,9 @@ The goal of telemetry is to answer questions like:
   CI pipelines?
 - For key flows (project creation, upgrade checks), which configuration options
   are popular (e.g. which Shopware version, which CI provider, Docker yes/no)?
+- For the interactive development TUI (`project dev`): do the setup wizards
+  succeed or where do users abandon them, do Docker environments start
+  reliably, and which dashboard features (watchers, builds, tabs) are used?
 
 ## How we identify users
 
@@ -87,7 +90,8 @@ All events share a common envelope:
 | `timestamp` | RFC 3339 timestamp of when the event was sent                      |
 | `tags`      | Event-specific key/value pairs (all string values), described below|
 
-There are currently **three** tracked events.
+There are three command-level events, plus a set of events sent by the
+interactive development TUI (`shopware-cli project dev`).
 
 ### `shopware_cli.command` — every command run
 
@@ -134,6 +138,104 @@ how often blockers are encountered.
 | `from_version`   | The current Shopware version                     | `6.5.8`  |
 | `target_version` | The version the user wants to upgrade to         | `6.6.0`  |
 | `has_blockers`   | Whether any blocking incompatibilities were found| `true`   |
+
+## Development TUI events (`shopware-cli project dev`)
+
+The interactive development dashboard sends the events below so we can see
+where the setup flows lose users, whether Docker environments start reliably,
+and which dashboard features are actually used. As everywhere else: no URLs,
+no sales-channel or theme names, no credentials, and no free-text input are
+ever transmitted — only enumerated choices, outcomes, and durations.
+
+### `shopware_cli.project.dev.install` — first-run Shopware installation
+
+Sent when the "Shopware is not initialized yet" wizard reaches a terminal
+state. Choice tags are only present once the user made that choice (an event
+for a run cancelled on the language step carries no `language` tag).
+
+| Tag                  | Meaning                                                       | Example          |
+|----------------------|---------------------------------------------------------------|------------------|
+| `result`             | Outcome of the wizard                                         | `success` / `failure` / `cancelled` / `skipped` |
+| `abandoned_at`       | Step shown when the user quit (only for `cancelled`)          | `ask` / `language` / `currency` / `credentials` / `installing` |
+| `failed_step`        | Last install step that had started (only for `failure`)       | `system:install` |
+| `duration_ms`        | Install runtime, once the install actually started            | `84213`          |
+| `language`           | Selected default language                                     | `de-DE`          |
+| `currency`           | Selected default currency                                     | `EUR`            |
+| `custom_credentials` | Whether the default admin username/password were changed. The credentials themselves are **never** sent. | `false` |
+
+### `shopware_cli.project.dev.migration_wizard` — dev-environment setup wizard
+
+Sent when the wizard that migrates an existing project to the Docker dev
+environment reaches a terminal state. This replaces the earlier
+`shopware_cli.migration_wizard_completed` event, which only reported
+successful runs.
+
+| Tag                       | Meaning                                              | Example      |
+|---------------------------|------------------------------------------------------|--------------|
+| `result`                  | Outcome of the wizard                                | `completed` / `cancelled` / `failed` |
+| `abandoned_at`            | Step shown when the user quit (only for `cancelled`) | `welcome` / `admin_user` / `docker_php` / `review` |
+| `duration_ms`             | Time since the welcome screen was confirmed          | `45120`      |
+| `php_version`             | Selected PHP version (`completed` / `failed` only)   | `8.3`        |
+| `deployment_helper_added` | Whether composer.json was missing `shopware/deployment-helper` and it was added (`completed` only) | `true` |
+
+### `shopware_cli.project.dev.docker_start` — container startup
+
+Sent when a `docker compose up -d` run by the TUI finishes.
+
+| Tag           | Meaning                                                      | Example         |
+|---------------|--------------------------------------------------------------|-----------------|
+| `trigger`     | Why the containers were (re)started                          | `initial` / `config_change` |
+| `result`      | Outcome (`cancelled` when the user quit while waiting)       | `success` / `failure` / `cancelled` |
+| `duration_ms` | How long the startup took                                    | `12894`         |
+
+### `shopware_cli.project.dev.action` — dashboard actions
+
+Sent when a command-palette action runs. Instant actions (opening the shop or
+admin in the browser) carry only the action name; task actions also report
+their outcome and runtime.
+
+| Tag           | Meaning                                    | Example        |
+|---------------|--------------------------------------------|----------------|
+| `action`      | The invoked action                         | `open-shop` / `open-admin` / `cache-clear` / `admin-build` / `sf-build` |
+| `result`      | Task outcome (task actions only)           | `success` / `failure` / `cancelled` |
+| `duration_ms` | Task runtime (task actions only)           | `31022`        |
+
+### `shopware_cli.project.dev.watcher` — admin/storefront watchers
+
+Sent once per watcher run, when the watcher ends.
+
+| Tag           | Meaning                                                     | Example    |
+|---------------|-------------------------------------------------------------|------------|
+| `watcher`     | Which watcher ran                                           | `admin` / `storefront` |
+| `result`      | How the run ended: preparation failed, the dev-server process exited on its own, the user stopped it, or the TUI session ended | `prep_failed` / `crashed` / `user_stopped` / `session_end` |
+| `duration_ms` | How long the watcher ran                                    | `1830211`  |
+
+### `shopware_cli.project.dev.health` — setup health snapshot
+
+Sent once per session when the Overview tab's setup-health report first
+loads: one event per check. This tells us how common misconfigurations are in
+real projects — and which checks are worth turning into automatic fixes. Only
+the check's level is sent, never the underlying values.
+
+| Tag      | Meaning                                       | Example |
+|----------|-----------------------------------------------|---------|
+| `check`  | Which check ran (`php_version`, `memory_limit`, `admin_worker`, `flow_builder_log_level`) | `admin_worker` |
+| `result` | The check's level                             | `ok` / `warn` / `critical` |
+
+### `shopware_cli.project.dev.session` — dashboard session shape
+
+Sent when the user leaves the dashboard (the overall command duration is
+already covered by `shopware_cli.command`; this event adds what happened
+inside the TUI).
+
+| Tag             | Meaning                                            | Example                     |
+|-----------------|----------------------------------------------------|-----------------------------|
+| `executor`      | Environment the project runs in                    | `docker` / `local`          |
+| `duration_ms`   | TUI session length                                 | `1912734`                   |
+| `tabs_visited`  | Which tabs were opened (sorted, comma-separated)   | `config,instance,overview`  |
+| `actions`       | Number of palette actions invoked                  | `3`                         |
+| `watchers_used` | Which watchers were started (omitted if none)      | `admin,storefront`          |
+| `result`        | How the session ended: via the "stop containers?" dialog or a plain quit | `stop_containers` / `keep_running` / `quit` |
 
 ## What we explicitly do **not** collect
 
