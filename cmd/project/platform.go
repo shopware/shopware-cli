@@ -1,6 +1,7 @@
 package project
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -13,6 +14,7 @@ import (
 	"github.com/shopware/shopware-cli/internal/executor"
 	"github.com/shopware/shopware-cli/internal/extension"
 	"github.com/shopware/shopware-cli/internal/shop"
+	"github.com/shopware/shopware-cli/internal/system"
 	"github.com/shopware/shopware-cli/internal/tui"
 	"github.com/shopware/shopware-cli/logging"
 )
@@ -84,12 +86,15 @@ func filterAndGetSources(cmd *cobra.Command, projectRoot string, shopCfg *shop.C
 	}
 
 	onlyExtensions, _ := cmd.PersistentFlags().GetString("only-extensions")
+	selectExtensions, _ := cmd.PersistentFlags().GetBool("select-extensions")
 	skipExtensions, _ := cmd.PersistentFlags().GetString("skip-extensions")
 	onlyCustomStatic, _ := cmd.PersistentFlags().GetBool("only-custom-static-extensions")
 
-	// When --only-extensions is passed without a value, present an interactive
-	// multi-select picker instead of requiring the names upfront.
-	if cmd.PersistentFlags().Changed("only-extensions") && strings.TrimSpace(onlyExtensions) == "" {
+	if err := validateExtensionSelection(cmd.Context(), onlyExtensions, selectExtensions); err != nil {
+		return nil, err
+	}
+
+	if selectExtensions {
 		onlyExtensions, err = selectExtensionsInteractively(cmd, sources)
 		if err != nil {
 			return nil, err
@@ -165,6 +170,22 @@ func filterAndGetSources(cmd *cobra.Command, projectRoot string, shopCfg *shop.C
 	}
 
 	return sources, nil
+}
+
+func validateExtensionSelection(ctx context.Context, onlyExtensions string, selectExtensions bool) error {
+	if !selectExtensions {
+		return nil
+	}
+
+	if onlyExtensions != "" {
+		return fmt.Errorf("only one of --only-extensions and --select-extensions can be used")
+	}
+
+	if !system.IsInteractionEnabled(ctx) {
+		return fmt.Errorf("--select-extensions requires an interactive terminal; use --only-extensions with a comma-separated list instead")
+	}
+
+	return nil
 }
 
 // selectExtensionsInteractively presents a filterable multi-select picker of
