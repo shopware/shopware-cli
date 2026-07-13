@@ -9,7 +9,19 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/shopware/shopware-cli/internal/executor"
 )
+
+func TestBinCICommand(t *testing.T) {
+	cmdExecutor := executor.NewLocal("/project")
+
+	version := binCICommand(t.Context(), cmdExecutor, "--version")
+	assert.Equal(t, []string{"php", "bin/ci", "--version"}, version.Cmd.Args)
+
+	assetInstall := binCICommand(t.Context(), cmdExecutor, "asset:install")
+	assert.Equal(t, []string{"php", "bin/ci", "asset:install"}, assetInstall.Cmd.Args)
+}
 
 func TestGenerateProjectSBOM(t *testing.T) {
 	root := t.TempDir()
