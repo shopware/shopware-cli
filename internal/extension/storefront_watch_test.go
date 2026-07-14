@@ -71,7 +71,7 @@ func TestStorefrontThemeDumpArgs(t *testing.T) {
 }
 
 func TestRunStorefrontThemeDumpAttachesInput(t *testing.T) {
-	process := &executor.Process{Cmd: exec.Command(os.Args[0], "-test.run=^$")}
+	process := &executor.Process{Cmd: exec.CommandContext(t.Context(), os.Args[0], "-test.run=^$")}
 	exec := &storefrontWatchExecutor{process: process}
 	in := strings.NewReader("selected theme\n")
 	var out bytes.Buffer
