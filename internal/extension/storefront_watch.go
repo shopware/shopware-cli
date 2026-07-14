@@ -35,13 +35,7 @@ func PrepareStorefrontWatcher(ctx context.Context, projectRoot string, cmdExecut
 		return nil, err
 	}
 
-	dumpArgs := []string{"theme:dump"}
-	if opts.ThemeID != "" {
-		dumpArgs = append(dumpArgs, opts.ThemeID)
-		if opts.DomainURL != "" {
-			dumpArgs = append(dumpArgs, opts.DomainURL)
-		}
-	}
+	dumpArgs := storefrontThemeDumpArgs(opts)
 
 	logStep(out, "Dumping theme...")
 	if err := runStep(ctx, cmdExecutor, out, dumpArgs...); err != nil {
@@ -64,6 +58,22 @@ func PrepareStorefrontWatcher(ctx context.Context, projectRoot string, cmdExecut
 	})
 
 	return storefrontExecutor.NPMCommand(ctx, "run-script", "hot-proxy"), nil
+}
+
+func storefrontThemeDumpArgs(opts StorefrontWatcherOptions) []string {
+	args := []string{"theme:dump"}
+	if opts.ThemeID != "" {
+		args = append(args, opts.ThemeID)
+		if opts.DomainURL != "" {
+			args = append(args, opts.DomainURL)
+		}
+	} else {
+		// Preparation commands do not have stdin attached. Keep the legacy
+		// theme:dump behavior without prompting when multiple themes exist.
+		args = append(args, "--no-interaction")
+	}
+
+	return args
 }
 
 func themeCompileSupportsActiveOnly(projectRoot string) bool {
