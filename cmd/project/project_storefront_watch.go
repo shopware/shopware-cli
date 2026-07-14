@@ -58,7 +58,7 @@ var projectStorefrontWatchCmd = &cobra.Command{
 			}
 		}
 
-		watchProcess, err := extension.PrepareStorefrontWatcher(cmd.Context(), projectRoot, cmdExecutor, opts, os.Stdout)
+		watchProcess, err := extension.PrepareStorefrontWatcher(cmd.Context(), projectRoot, cmdExecutor, opts, cmd.InOrStdin(), os.Stdout)
 		if err != nil {
 			return err
 		}
