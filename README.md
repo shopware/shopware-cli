@@ -17,14 +17,17 @@ Shopware CLI is a command line companion for common Shopware account, project, a
 
 ## What it helps with
 
-Use this CLI when you want to manage Shopware accounts, build and validate extensions, automate project maintenance, or run everyday developer tasks without leaving the terminal.
+Use this CLI to create and set up Shopware projects, manage Shopware accounts, build and validate extensions, automate project maintenance, or run everyday developer tasks without leaving the terminal.
 
 ## Highlights
 
+- Installation, initialization, and migration wizards for creating new Shopware projects or moving existing projects into the local development setup
+- Integrated Docker-based local development environment with an interactive terminal user interface (TUI)
+- Daily development loop support from one place: start environments, run watchers, check logs, access database and mail tools
+- Project automation commands for config, cache, admin, storefront, and CI workflows
 - Account-related commands under `shopware-cli account`
 - Extension build, validation, formatting, changelog, and packaging helpers
-- Project automation commands for create, config, cache, admin, and CI workflows
-- Interactive terminal support, plus a non-interactive mode for scripts and CI
+- Non-interactive mode for scripts and CI
 
 ## Install
 
