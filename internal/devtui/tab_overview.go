@@ -589,7 +589,7 @@ func (m OverviewModel) startStorefrontWatch(opts extension.StorefrontWatcherOpti
 			return nil, fmt.Errorf("preparing plugins.json: %w", err)
 		}
 
-		watchProcess, err := extension.PrepareStorefrontWatcher(ctx, projectRoot, e, opts, out)
+		watchProcess, err := extension.PrepareStorefrontWatcher(ctx, projectRoot, e, opts, nil, out)
 		if err != nil {
 			return nil, fmt.Errorf("starting storefront watcher: %w", err)
 		}
