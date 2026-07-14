@@ -475,9 +475,20 @@ func runTransparentCommand(p *executor.Process) error {
 	p.Cmd.Stdin = os.Stdin
 	p.Cmd.Stdout = os.Stdout
 	p.Cmd.Stderr = os.Stderr
-	p.Cmd.Env = append(os.Environ(), "APP_SECRET=b59a3a283700fde2162c0d4f2bcf2588c3e841ef1976cf042d8500c3f3152ec513f77453797387dc004ff399cce0d3663e4fec770e6f11aa4ccd2846854c3a9f", "LOCK_DSN=flock")
+	applyTransparentEnv(p)
 
 	return p.Run()
+}
+
+// applyTransparentEnv appends the fixed development defaults without discarding
+// the environment the executor already set (e.g. PROJECT_ROOT for the watchers).
+// A command without its own env falls back to os.Environ().
+func applyTransparentEnv(p *executor.Process) {
+	if p.Cmd.Env == nil {
+		p.Cmd.Env = os.Environ()
+	}
+
+	p.Cmd.Env = append(p.Cmd.Env, "APP_SECRET=b59a3a283700fde2162c0d4f2bcf2588c3e841ef1976cf042d8500c3f3152ec513f77453797387dc004ff399cce0d3663e4fec770e6f11aa4ccd2846854c3a9f", "LOCK_DSN=flock")
 }
 
 func binCICommand(ctx context.Context, cmdExecutor executor.Executor, args ...string) *executor.Process {
