@@ -1,0 +1,49 @@
+schemaVersion: 2.0.0
+
+fileExistenceTests:
+  - name: entrypoint is executable
+    path: /usr/local/bin/entrypoint.sh
+    shouldExist: true
+    permissions: -rwxr-xr-x
+
+  - name: JavaScript verifier is installed
+    path: /opt/verifier/js
+    shouldExist: true
+
+  - name: PHP verifier is installed
+    path: /opt/verifier/php
+    shouldExist: true
+
+commandTests:
+  - name: empty PHP session save path is unset
+    command: env
+    args:
+      - PHP_SESSION_SAVE_PATH=
+      - /usr/local/bin/entrypoint.sh
+      - sh
+      - -c
+      - "if env | grep -q '^PHP_SESSION_SAVE_PATH='; then exit 1; fi; echo unset"
+    expectedOutput:
+      - (?m)^unset$
+
+  - name: configured PHP session save path is preserved
+    command: env
+    args:
+      - PHP_SESSION_SAVE_PATH=/tmp/sessions
+      - /usr/local/bin/entrypoint.sh
+      - sh
+      - -c
+      - "env | grep '^PHP_SESSION_SAVE_PATH=/tmp/sessions$'"
+    expectedOutput:
+      - (?m)^PHP_SESSION_SAVE_PATH=/tmp/sessions$
+
+metadataTest:
+  envVars:
+    - key: SHOPWARE_CLI_TOOLS_DIR
+      value: /opt/verifier
+    - key: PHP_MEMORY_LIMIT
+      value: 512M
+  labels:
+    - key: org.opencontainers.image.source
+      value: https://github.com/shopware/shopware-cli
+  cmd: []
