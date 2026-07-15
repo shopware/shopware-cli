@@ -45,4 +45,7 @@ ENV PHP_MEMORY_LIMIT=512M
 
 COPY scripts/entrypoint.sh /usr/local/bin/entrypoint.sh
 RUN chmod +x /usr/local/bin/entrypoint.sh
+
+# Chain docker-dev's /entrypoint (clears the APP_ENV sentinel) before ours
+ENTRYPOINT ["/entrypoint", "/usr/local/bin/entrypoint.sh"]
 CMD []
