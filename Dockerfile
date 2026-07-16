@@ -6,5 +6,5 @@ ARG TARGETPLATFORM
 
 COPY $TARGETPLATFORM/shopware-cli /usr/local/bin/
 
-ENTRYPOINT ["/usr/local/bin/shopware-cli"]
+ENTRYPOINT ["/entrypoint", "/usr/local/bin/entrypoint.sh", "/usr/local/bin/shopware-cli"]
 CMD ["--help"]

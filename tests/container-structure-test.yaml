@@ -37,7 +37,32 @@ commandTests:
     expectedOutput:
       - (?m)^PHP_SESSION_SAVE_PATH=/tmp/sessions$
 
+  - name: APP_ENV sentinel is cleared by the entrypoint chain
+    command: env
+    args:
+      - APP_ENV=xxxxxxx
+      - /entrypoint
+      - /usr/local/bin/entrypoint.sh
+      - sh
+      - -c
+      - "if env | grep -q '^APP_ENV='; then exit 1; fi; echo unset"
+    expectedOutput:
+      - (?m)^unset$
+
+  - name: configured APP_ENV is preserved by the entrypoint chain
+    command: env
+    args:
+      - APP_ENV=test
+      - /entrypoint
+      - /usr/local/bin/entrypoint.sh
+      - sh
+      - -c
+      - "env | grep '^APP_ENV=test$'"
+    expectedOutput:
+      - (?m)^APP_ENV=test$
+
 metadataTest:
+  entrypoint: ["/entrypoint", "/usr/local/bin/entrypoint.sh"]
   envVars:
     - key: SHOPWARE_CLI_TOOLS_DIR
       value: /opt/verifier
