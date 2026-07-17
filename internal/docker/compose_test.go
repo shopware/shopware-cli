@@ -301,6 +301,24 @@ func TestGenerateComposeFile(t *testing.T) {
 		assert.Contains(t, compose, "OPENSEARCH_URL")
 	})
 
+	t.Run("has no Traefik labels or shared network", func(t *testing.T) {
+		t.Parallel()
+		lock := &composer.Lock{
+			Packages: []composer.LockPackage{
+				{Name: "shopware/core", Version: "6.6.0.0"},
+			},
+		}
+
+		result, err := GenerateComposeFile(lock, nil)
+		assert.NoError(t, err)
+
+		compose := string(result)
+		assert.NotContains(t, compose, "traefik")
+		assert.NotContains(t, compose, "shopware-cli-proxy")
+		assert.Contains(t, compose, "8000:8000")
+		assert.Contains(t, compose, "9080:8080")
+	})
+
 	t.Run("emits user when set", func(t *testing.T) {
 		t.Parallel()
 		lock := &composer.Lock{

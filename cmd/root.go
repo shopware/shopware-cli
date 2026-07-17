@@ -82,7 +82,7 @@ func run(ctx context.Context) int {
 		})
 	}
 
-	if errors.Is(err, project.ErrEnvironmentDown) {
+	if errors.Is(err, project.ErrEnvironmentDown) || errors.Is(err, project.ErrProxyNotRegistered) {
 		// The command already printed a human-readable status; exit 1 without
 		// logging an error.
 		return 1

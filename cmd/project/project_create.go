@@ -3,7 +3,6 @@ package project
 import (
 	"fmt"
 	"path/filepath"
-	"regexp"
 
 	"github.com/shyim/go-composer/repository"
 	"github.com/spf13/cobra"
@@ -28,21 +27,13 @@ const (
 	projectNameRule = "only lowercase letters, digits, dashes (-) and underscores (_) are allowed, and it must start with a lowercase letter or digit"
 )
 
-// composeProjectNameRegexp matches names that are valid as a Docker Compose
-// project name. Docker Compose only allows lowercase letters, digits, dashes
-// and underscores, and the name must start with a lowercase letter or digit.
-// Anything else (uppercase letters, umlauts, spaces, dots, …) is rejected by
-// Docker Compose once the generated Docker setup runs from the project
-// directory, so we reject such project names up front.
-var composeProjectNameRegexp = regexp.MustCompile(`^[a-z0-9][a-z0-9_-]*$`)
-
 // validateProjectName ensures the project folder name can be used as a Docker
 // Compose project name. Only the final path element is relevant, as that is
 // what Docker Compose uses to derive the project name.
 func validateProjectName(name string) error {
 	base := filepath.Base(name)
 
-	if !composeProjectNameRegexp.MatchString(base) {
+	if err := system.ValidateDockerComposeName(base); err != nil {
 		return fmt.Errorf("invalid project name %q: %s, so it can be used as a Docker Compose project name", base, projectNameRule)
 	}
 

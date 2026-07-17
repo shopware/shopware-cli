@@ -361,6 +361,10 @@ func newNullNode() *yaml.Node {
 	return &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!null"}
 }
 
+func newBoolNode(v bool) *yaml.Node {
+	return &yaml.Node{Kind: yaml.ScalarNode, Value: fmt.Sprintf("%t", v), Tag: "!!bool"}
+}
+
 func addKeyValue(m *yaml.Node, key, value string) {
 	m.Content = append(m.Content,
 		&yaml.Node{Kind: yaml.ScalarNode, Value: key, Tag: "!!str"},
