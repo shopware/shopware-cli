@@ -3,16 +3,28 @@ package system
 import (
 	"context"
 	"fmt"
+	"os"
 	"os/exec"
 	"strings"
 
 	"github.com/shyim/go-version"
 )
 
+// resolvePHPBinary returns the PHP binary to use. It prefers the PHP_BINARY
+// environment variable, matching the convention runComposerInstall already
+// follows, and falls back to the "php" binary found in PATH.
+func resolvePHPBinary() (string, error) {
+	if phpBinary := os.Getenv("PHP_BINARY"); phpBinary != "" {
+		return phpBinary, nil
+	}
+
+	return exec.LookPath("php")
+}
+
 // GetInstalledPHPVersion checks the installed PHP version on the system.
 func GetInstalledPHPVersion(ctx context.Context) (string, error) {
 	// Check if PHP is installed
-	phpPath, err := exec.LookPath("php")
+	phpPath, err := resolvePHPBinary()
 	if err != nil {
 		return "", fmt.Errorf("PHP is not installed: %w", err)
 	}
@@ -37,7 +49,7 @@ func GetInstalledPHPVersion(ctx context.Context) (string, error) {
 
 // GetAvailablePHPExtensions returns the list of loaded PHP extensions by parsing `php -m` output.
 func GetAvailablePHPExtensions(ctx context.Context) ([]string, error) {
-	phpPath, err := exec.LookPath("php")
+	phpPath, err := resolvePHPBinary()
 	if err != nil {
 		return nil, fmt.Errorf("PHP is not installed: %w", err)
 	}

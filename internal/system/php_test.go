@@ -10,9 +10,26 @@ import (
 )
 
 func TestGetPHPVersionNotInstalled(t *testing.T) {
+	t.Setenv("PHP_BINARY", "")
 	t.Setenv("PATH", "")
 	_, err := GetInstalledPHPVersion(t.Context())
 	assert.ErrorContains(t, err, "PHP is not installed")
+}
+
+func TestGetPHPVersionPrefersPHPBinaryEnv(t *testing.T) {
+	pathDir := t.TempDir()
+	writeFakePHP(t, pathDir+"/php", "8.0.0")
+
+	binDir := t.TempDir()
+	phpBinary := binDir + "/php"
+	writeFakePHP(t, phpBinary, "8.2.0")
+
+	t.Setenv("PATH", pathDir)
+	t.Setenv("PHP_BINARY", phpBinary)
+
+	phpVersion, err := GetInstalledPHPVersion(t.Context())
+	assert.NoError(t, err)
+	assert.Equal(t, "8.2.0", phpVersion)
 }
 
 func TestGetPHPVersion(t *testing.T) {
@@ -42,6 +59,7 @@ func TestPHPVersionIsNotAtLeast(t *testing.T) {
 }
 
 func TestGetAvailablePHPExtensionsNotInstalled(t *testing.T) {
+	t.Setenv("PHP_BINARY", "")
 	t.Setenv("PATH", "")
 	_, err := GetAvailablePHPExtensions(t.Context())
 	assert.ErrorContains(t, err, "PHP is not installed")
@@ -59,6 +77,13 @@ func TestGetAvailablePHPExtensions(t *testing.T) {
 
 func setupFakePHP(t *testing.T, tmpDir string, version string) {
 	t.Helper()
+	t.Setenv("PHP_BINARY", "")
+	writeFakePHP(t, tmpDir+"/php", version)
+	t.Setenv("PATH", tmpDir)
+}
+
+func writeFakePHP(t *testing.T, path string, version string) {
+	t.Helper()
 	shPath, err := exec.LookPath("sh")
 	assert.NoError(t, err)
 
@@ -70,6 +95,5 @@ else
 fi
 `, shPath, version)
 
-	assert.NoError(t, os.WriteFile(tmpDir+"/php", []byte(script), 0755))
-	t.Setenv("PATH", tmpDir)
+	assert.NoError(t, os.WriteFile(path, []byte(script), 0755))
 }
