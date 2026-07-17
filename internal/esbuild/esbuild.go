@@ -9,14 +9,17 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/cespare/xxhash/v2"
 	"github.com/evanw/esbuild/pkg/api"
 )
 
 type AssetCompileResult struct {
-	Name       string
-	Entrypoint string
-	JsFile     string
-	CssFile    string
+	Name          string
+	Entrypoint    string
+	JsFile        string
+	CssFile       string
+	HashedJsFile  string
+	HashedCssFile string
 }
 
 type AssetCompileOptions struct {
@@ -146,7 +149,8 @@ func CompileExtensionAsset(ctx context.Context, options AssetCompileOptions) (*A
 		return nil, err
 	}
 
-	if err := writeBundlerResultToDisk(result, jsFile, cssFile); err != nil {
+	hashedJsRel, hashedCssRel, err := writeBundlerResultToDisk(result, options)
+	if err != nil {
 		return nil, err
 	}
 
@@ -157,10 +161,12 @@ func CompileExtensionAsset(ctx context.Context, options AssetCompileOptions) (*A
 	}
 
 	compileResult := AssetCompileResult{
-		Name:       options.Name,
-		Entrypoint: bundlerOptions.EntryPoints[0],
-		JsFile:     jsFile,
-		CssFile:    cssFile,
+		Name:          options.Name,
+		Entrypoint:    bundlerOptions.EntryPoints[0],
+		JsFile:        jsFile,
+		CssFile:       cssFile,
+		HashedJsFile:  hashedJsRel,
+		HashedCssFile: hashedCssRel,
 	}
 
 	return &compileResult, nil
@@ -181,26 +187,55 @@ func cleanupOutputFolder(options AssetCompileOptions) error {
 	return nil
 }
 
-func writeBundlerResultToDisk(result api.BuildResult, jsFile, cssFile string) error {
+func generateHashedFilename(relPath string, contents []byte) string {
+	hash := fmt.Sprintf("%08x", xxhash.Sum64(contents))[:8]
+	ext := filepath.Ext(relPath)
+	base := strings.TrimSuffix(relPath, ext)
+	return fmt.Sprintf("%s-%s%s", base, hash, ext)
+}
+
+func writeBundlerResultToDisk(result api.BuildResult, options AssetCompileOptions) (hashedJsRel, hashedCssRel string, err error) {
+	outputDir := filepath.Join(options.Path, options.OutputDir)
+
 	for _, file := range result.OutputFiles {
-		outFile := jsFile
+		relFile := options.OutputJSFile
+		if strings.HasSuffix(file.Path, ".css") {
+			relFile = options.OutputCSSFile
+		}
+
+		hashedRel := generateHashedFilename(relFile, file.Contents)
 
 		if strings.HasSuffix(file.Path, ".css") {
-			outFile = cssFile
+			hashedCssRel = hashedRel
+		} else {
+			hashedJsRel = hashedRel
 		}
 
-		outFolder := filepath.Dir(outFile)
-
-		if _, err := os.Stat(outFolder); os.IsNotExist(err) {
-			if err := os.MkdirAll(outFolder, 0o755); err != nil {
-				return err
-			}
+		// Write unhashed file for pre-6.7 backward compatibility
+		unhashedPath := filepath.Join(outputDir, relFile)
+		if err := writeOutputFile(unhashedPath, file.Contents); err != nil {
+			return "", "", err
 		}
 
-		if err := os.WriteFile(outFile, file.Contents, 0o644); err != nil {
+		// Write content-addressed hashed file for Shopware 6.7+
+		hashedPath := filepath.Join(outputDir, hashedRel)
+		if err := writeOutputFile(hashedPath, file.Contents); err != nil {
+			return "", "", err
+		}
+	}
+
+	return hashedJsRel, hashedCssRel, nil
+}
+
+func writeOutputFile(filePath string, contents []byte) error {
+	outFolder := filepath.Dir(filePath)
+
+	if _, err := os.Stat(outFolder); os.IsNotExist(err) {
+		if err := os.MkdirAll(outFolder, 0o755); err != nil {
 			return err
 		}
 	}
 
-	return nil
+	return os.WriteFile(filePath, contents, 0o644)
 }
+

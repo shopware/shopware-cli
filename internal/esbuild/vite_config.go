@@ -21,13 +21,19 @@ type ViteManifest struct {
 }
 
 func dumpViteManifest(options AssetCompileOptions, viteDir string) error {
+	cssList := []string{}
+	cssFile := filepath.Join(options.Path, options.OutputDir, options.OutputCSSFile)
+	if _, err := os.Stat(cssFile); err == nil {
+		cssList = []string{options.OutputCSSFile}
+	}
+
 	m := ViteManifest{
 		MainJs: ViteManifestFile{
 			File:    options.OutputJSFile,
 			Name:    ToKebabCase(options.Name),
 			Src:     "main.js",
 			IsEntry: true,
-			Css:     []string{options.OutputCSSFile},
+			Css:     cssList,
 		},
 	}
 
@@ -103,7 +109,21 @@ func dumpViteEntrypoint(options AssetCompileOptions, viteDir string) error {
 	return os.WriteFile(path.Join(viteDir, "entrypoints.json"), j, 0o644)
 }
 
-func DumpViteConfig(options AssetCompileOptions) error {
+func DumpViteConfig(options AssetCompileOptions, res ...*AssetCompileResult) error {
+	var compileResult *AssetCompileResult
+	if len(res) > 0 && res[0] != nil {
+		compileResult = res[0]
+	}
+
+	if compileResult != nil {
+		if compileResult.HashedJsFile != "" {
+			options.OutputJSFile = compileResult.HashedJsFile
+		}
+		if compileResult.HashedCssFile != "" {
+			options.OutputCSSFile = compileResult.HashedCssFile
+		}
+	}
+
 	viteDir := path.Join(path.Join(options.Path, options.OutputDir), ".vite")
 
 	if _, err := os.Stat(viteDir); os.IsNotExist(err) {
@@ -112,14 +132,16 @@ func DumpViteConfig(options AssetCompileOptions) error {
 		}
 	}
 
-	// Instead of throwing an error, just skip overwriting if the config exists
 	manifestPath := path.Join(viteDir, "manifest.json")
 	entrypointsPath := path.Join(viteDir, "entrypoints.json")
-	if _, err := os.Stat(manifestPath); err == nil {
-		return nil
-	}
-	if _, err := os.Stat(entrypointsPath); err == nil {
-		return nil
+
+	if compileResult == nil {
+		if _, err := os.Stat(manifestPath); err == nil {
+			return nil
+		}
+		if _, err := os.Stat(entrypointsPath); err == nil {
+			return nil
+		}
 	}
 
 	if err := dumpViteManifest(options, viteDir); err != nil {
@@ -128,3 +150,4 @@ func DumpViteConfig(options AssetCompileOptions) error {
 
 	return dumpViteEntrypoint(options, viteDir)
 }
+

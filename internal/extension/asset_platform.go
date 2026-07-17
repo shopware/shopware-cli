@@ -83,11 +83,12 @@ func BuildAssetsForExtensions(ctx context.Context, sources []asset.Source, asset
 			options := esbuild.NewAssetCompileOptionsAdmin(name, entry.BasePath)
 			options.DisableSass = entry.DisableSass
 
-			if _, err := esbuild.CompileExtensionAsset(ctx, options); err != nil {
+			res, err := esbuild.CompileExtensionAsset(ctx, options)
+			if err != nil {
 				return err
 			}
 
-			if err := esbuild.DumpViteConfig(options); err != nil {
+			if err := esbuild.DumpViteConfig(options, res); err != nil {
 				return err
 			}
 
