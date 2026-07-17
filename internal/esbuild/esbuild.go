@@ -9,7 +9,6 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/cespare/xxhash/v2"
 	"github.com/evanw/esbuild/pkg/api"
 )
 
@@ -109,8 +108,15 @@ func getEsbuildOptions(ctx context.Context, options AssetCompileOptions) (*api.B
 		MinifySyntax:      options.ProductionMode,
 		MinifyWhitespace:  options.ProductionMode,
 		MinifyIdentifiers: options.ProductionMode,
-		EntryPoints:       []string{entryPoint},
-		Outfile:           "extension.js",
+		EntryPointsAdvanced: []api.EntryPoint{
+			{
+				InputPath:  entryPoint,
+				OutputPath: ToKebabCase(options.Name),
+			},
+		},
+		Outdir:            ".",
+		EntryNames:        "[name]-[hash]",
+		AssetNames:        "[name]-[hash]",
 		Bundle:            true,
 		Write:             false,
 		LogLevel:          api.LogLevelWarning,
@@ -160,9 +166,11 @@ func CompileExtensionAsset(ctx context.Context, options AssetCompileOptions) (*A
 		}
 	}
 
+	entryPointPath := bundlerOptions.EntryPointsAdvanced[0].InputPath
+
 	compileResult := AssetCompileResult{
 		Name:          options.Name,
-		Entrypoint:    bundlerOptions.EntryPoints[0],
+		Entrypoint:    entryPointPath,
 		JsFile:        jsFile,
 		CssFile:       cssFile,
 		HashedJsFile:  hashedJsRel,
@@ -187,40 +195,41 @@ func cleanupOutputFolder(options AssetCompileOptions) error {
 	return nil
 }
 
-func generateHashedFilename(relPath string, contents []byte) string {
-	hash := fmt.Sprintf("%08x", xxhash.Sum64(contents))[:8]
-	ext := filepath.Ext(relPath)
-	base := strings.TrimSuffix(relPath, ext)
-	return fmt.Sprintf("%s-%s%s", base, hash, ext)
-}
-
 func writeBundlerResultToDisk(result api.BuildResult, options AssetCompileOptions) (hashedJsRel, hashedCssRel string, err error) {
 	outputDir := filepath.Join(options.Path, options.OutputDir)
 
 	for _, file := range result.OutputFiles {
-		relFile := options.OutputJSFile
-		if strings.HasSuffix(file.Path, ".css") {
-			relFile = options.OutputCSSFile
-		}
+		filename := filepath.Base(file.Path)
 
-		hashedRel := generateHashedFilename(relFile, file.Contents)
-
-		if strings.HasSuffix(file.Path, ".css") {
+		if strings.HasSuffix(filename, ".css") {
+			unhashedRel := options.OutputCSSFile
+			hashedRel := filepath.Join("css", filename)
 			hashedCssRel = hashedRel
+
+			// Write unhashed file for pre-6.7 backward compatibility
+			if err := writeOutputFile(filepath.Join(outputDir, unhashedRel), file.Contents); err != nil {
+				return "", "", err
+			}
+
+			// Write esbuild content-addressed hashed file for Shopware 6.7+
+			if err := writeOutputFile(filepath.Join(outputDir, hashedRel), file.Contents); err != nil {
+				return "", "", err
+			}
 		} else {
+			unhashedRel := options.OutputJSFile
+			jsDir := filepath.Dir(options.OutputJSFile)
+			hashedRel := filepath.Join(jsDir, filename)
 			hashedJsRel = hashedRel
-		}
 
-		// Write unhashed file for pre-6.7 backward compatibility
-		unhashedPath := filepath.Join(outputDir, relFile)
-		if err := writeOutputFile(unhashedPath, file.Contents); err != nil {
-			return "", "", err
-		}
+			// Write unhashed file for pre-6.7 backward compatibility
+			if err := writeOutputFile(filepath.Join(outputDir, unhashedRel), file.Contents); err != nil {
+				return "", "", err
+			}
 
-		// Write content-addressed hashed file for Shopware 6.7+
-		hashedPath := filepath.Join(outputDir, hashedRel)
-		if err := writeOutputFile(hashedPath, file.Contents); err != nil {
-			return "", "", err
+			// Write esbuild content-addressed hashed file for Shopware 6.7+
+			if err := writeOutputFile(filepath.Join(outputDir, hashedRel), file.Contents); err != nil {
+				return "", "", err
+			}
 		}
 	}
 
@@ -238,4 +247,5 @@ func writeOutputFile(filePath string, contents []byte) error {
 
 	return os.WriteFile(filePath, contents, 0o644)
 }
+
 
