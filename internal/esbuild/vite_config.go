@@ -150,4 +150,3 @@ func DumpViteConfig(options AssetCompileOptions, res ...*AssetCompileResult) err
 
 	return dumpViteEntrypoint(options, viteDir)
 }
-

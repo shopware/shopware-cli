@@ -291,4 +291,3 @@ func TestDumpViteConfigWithCompileResult(t *testing.T) {
 	assert.Equal(t, []string{"/bundles/testname/administration/js/test-name-12345678.js"}, entrypoints.EntryPoints["test-name"].Js)
 	assert.Equal(t, []string{"/bundles/testname/administration/css/test-name-87654321.css"}, entrypoints.EntryPoints["test-name"].Css)
 }
-

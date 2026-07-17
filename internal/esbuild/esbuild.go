@@ -114,14 +114,14 @@ func getEsbuildOptions(ctx context.Context, options AssetCompileOptions) (*api.B
 				OutputPath: ToKebabCase(options.Name),
 			},
 		},
-		Outdir:            ".",
-		EntryNames:        "[name]-[hash]",
-		AssetNames:        "[name]-[hash]",
-		Bundle:            true,
-		Write:             false,
-		LogLevel:          api.LogLevelWarning,
-		Plugins:           plugins,
-		Loader:            loader,
+		Outdir:     ".",
+		EntryNames: "[name]-[hash]",
+		AssetNames: "[name]-[hash]",
+		Bundle:     true,
+		Write:      false,
+		LogLevel:   api.LogLevelWarning,
+		Plugins:    plugins,
+		Loader:     loader,
 	}
 
 	return &bundlerOptions, nil
@@ -247,5 +247,3 @@ func writeOutputFile(filePath string, contents []byte) error {
 
 	return os.WriteFile(filePath, contents, 0o644)
 }
-
-
