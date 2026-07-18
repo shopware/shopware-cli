@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"path/filepath"
 	"sort"
 	"strings"
 
@@ -19,7 +20,19 @@ import (
 )
 
 func validateAndPreflight(ctx context.Context, opts *createOptions, releases []repository.Version, filteredVersions []*version.Version) (string, *shop.PHPConstraint, error) {
-	if err := validateProjectName(opts.projectFolder); err != nil {
+	projectFolder := opts.projectFolder
+	if projectFolder == "." {
+		cwd, err := os.Getwd()
+		if err != nil {
+			return "", nil, fmt.Errorf("could not determine current directory: %w", err)
+		}
+		projectFolder = cwd
+	}
+
+	if err := validateProjectName(filepath.Base(projectFolder)); err != nil {
+		if opts.projectFolder == "." {
+			return "", nil, fmt.Errorf("current directory name %q cannot be used as a project name: %w", filepath.Base(projectFolder), err)
+		}
 		return "", nil, err
 	}
 
@@ -62,14 +75,14 @@ func validateAndPreflight(ctx context.Context, opts *createOptions, releases []r
 		return "", nil, err
 	}
 
-	if _, err := os.Stat(opts.projectFolder); err == nil {
-		empty, err := system.IsDirEmpty(opts.projectFolder)
+	if _, err := os.Stat(projectFolder); err == nil {
+		empty, err := system.IsDirEmpty(projectFolder)
 		if err != nil {
 			return "", nil, err
 		}
 
 		if !empty {
-			return "", nil, fmt.Errorf("the folder %s exists already and is not empty", opts.projectFolder)
+			return "", nil, fmt.Errorf("the folder %s exists already and is not empty", projectFolder)
 		}
 	}
 
@@ -136,7 +149,16 @@ func checkSecurityAdvisories(ctx context.Context, opts *createOptions, chosenVer
 }
 
 func checkIncompatibilities(ctx context.Context, opts *createOptions) error {
-	incompatibilities := system.CheckIncompatibilities(opts.useDocker, opts.projectFolder)
+	projectFolder := opts.projectFolder
+	if projectFolder == "." {
+		cwd, err := os.Getwd()
+		if err != nil {
+			return fmt.Errorf("could not determine current directory: %w", err)
+		}
+		projectFolder = cwd
+	}
+
+	incompatibilities := system.CheckIncompatibilities(opts.useDocker, projectFolder)
 
 	for _, incompatibility := range incompatibilities {
 		if opts.interactive {

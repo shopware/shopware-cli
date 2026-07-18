@@ -80,7 +80,7 @@ func printCreateSummary(ctx context.Context, opts *createOptions) {
 		fmt.Println()
 		fmt.Println(sectionStyle.Render("Next steps"))
 		fmt.Println()
-		fmt.Printf("  %s  %s\n", tui.GreenText.Render("Start developing:"), cmdStyle.Render(fmt.Sprintf("cd %s && shopware-cli project dev", opts.projectFolder)))
+		fmt.Printf("  %s  %s\n", tui.GreenText.Render("Start developing:"), cmdStyle.Render("shopware-cli project dev"))
 		fmt.Println()
 		fmt.Println(sectionStyle.Render("Access your shop (after make setup)"))
 		fmt.Println()

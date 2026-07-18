@@ -2,6 +2,7 @@ package project
 
 import (
 	"fmt"
+	"os"
 	"path/filepath"
 	"regexp"
 
@@ -21,7 +22,7 @@ const (
 	ciGitLab = "gitlab"
 
 	// projectNameHelp is the help text shown under the project name input.
-	projectNameHelp = "The name of the project directory to create"
+	projectNameHelp = "The name of the project directory to create (leave empty to use the current directory)"
 	// projectNameRule describes which characters are allowed in a project name.
 	// It is shared between the up-front validation error and the live form hint
 	// so both stay in sync.
@@ -39,8 +40,13 @@ var composeProjectNameRegexp = regexp.MustCompile(`^[a-z0-9][a-z0-9_-]*$`)
 // validateProjectName ensures the project folder name can be used as a Docker
 // Compose project name. Only the final path element is relevant, as that is
 // what Docker Compose uses to derive the project name.
+// A dot (".") is accepted as a special value representing the current directory.
 func validateProjectName(name string) error {
 	base := filepath.Base(name)
+
+	if base == "" || base == "." {
+		return fmt.Errorf("invalid project name: %s", projectNameRule)
+	}
 
 	if !composeProjectNameRegexp.MatchString(base) {
 		return fmt.Errorf("invalid project name %q: %s, so it can be used as a Docker Compose project name", base, projectNameRule)
@@ -49,12 +55,23 @@ func validateProjectName(name string) error {
 	return nil
 }
 
+// currentProjectName returns the current working directory's base name for use
+// when the interactive project name prompt is left empty.
+func currentProjectName() (string, error) {
+	cwd, err := os.Getwd()
+	if err != nil {
+		return "", fmt.Errorf("could not determine current directory: %w", err)
+	}
+
+	return filepath.Base(cwd), nil
+}
+
 // projectNameFieldDescription returns the description shown under the project
 // name input in the interactive form. While the typed name is invalid it
 // returns the rule highlighted in red, validating the input live; otherwise it
 // returns the regular help text.
 func projectNameFieldDescription(name string) string {
-	if name != "" {
+	if name != "" && name != "." {
 		if err := validateProjectName(name); err != nil {
 			return tui.RedText.Render(projectNameRule)
 		}
@@ -111,7 +128,7 @@ var projectCreateCmd = &cobra.Command{
 		// prompt, which is where invalid names (e.g. wrong casing) are normally
 		// rejected live. Validate it up front so it is forbidden immediately
 		// instead of only after the rest of the form has been completed.
-		if opts.projectFolder != "" {
+		if opts.projectFolder != "" && opts.projectFolder != "." {
 			if err := validateProjectName(opts.projectFolder); err != nil {
 				return err
 			}
@@ -131,6 +148,18 @@ var projectCreateCmd = &cobra.Command{
 		if opts.interactive {
 			if err := runCreateForm(cmd, &opts, filteredVersions); err != nil {
 				return err
+			}
+			if opts.projectFolder == "" {
+				opts.projectFolder = "."
+			}
+			// Check the current directory name is valid as a project name before
+			// proceeding. The form itself allows empty/"." for the current directory.
+			projectName, err := currentProjectName()
+			if err != nil {
+				return err
+			}
+			if err := validateProjectName(projectName); err != nil {
+				return fmt.Errorf("current directory name %q cannot be used as a project name: %w", projectName, err)
 			}
 		} else {
 			if err := applyNonInteractiveDefaults(&opts); err != nil {

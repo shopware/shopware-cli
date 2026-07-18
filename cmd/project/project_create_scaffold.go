@@ -42,11 +42,32 @@ func scaffoldProject(ctx context.Context, opts *createOptions, chosenVersion str
 		tracking.TagInteractive:       fmt.Sprintf("%v", opts.interactive),
 	})
 
-	if err := os.MkdirAll(opts.projectFolder, os.ModePerm); err != nil {
+	projectFolder := opts.projectFolder
+	if projectFolder == "." {
+		cwd, err := os.Getwd()
+		if err != nil {
+			return fmt.Errorf("could not determine current directory: %w", err)
+		}
+		projectFolder = cwd
+	}
+
+	if err := os.MkdirAll(projectFolder, os.ModePerm); err != nil {
 		return err
 	}
 
-	logging.FromContext(ctx).Infof("Setting up Shopware %s", chosenVersion)
+	empty, err := system.IsDirEmpty(projectFolder)
+	if err != nil {
+		return err
+	}
+	if !empty {
+		return fmt.Errorf("the folder %s exists already and is not empty", projectFolder)
+	}
+
+	if opts.projectFolder != "." {
+		logging.FromContext(ctx).Infof("Setting up Shopware %s in %s", chosenVersion, opts.projectFolder)
+	} else {
+		logging.FromContext(ctx).Infof("Setting up Shopware %s in the current directory", chosenVersion)
+	}
 
 	composerJson, err := shop.GenerateComposerJson(ctx, shop.ComposerJsonOptions{
 		Version:          chosenVersion,
@@ -60,11 +81,11 @@ func scaffoldProject(ctx context.Context, opts *createOptions, chosenVersion str
 		return err
 	}
 
-	if err := os.WriteFile(filepath.Join(opts.projectFolder, "composer.json"), []byte(composerJson), os.ModePerm); err != nil {
+	if err := os.WriteFile(filepath.Join(projectFolder, "composer.json"), []byte(composerJson), os.ModePerm); err != nil {
 		return err
 	}
 
-	if err := os.WriteFile(filepath.Join(opts.projectFolder, ".env"), []byte(""), os.ModePerm); err != nil {
+	if err := os.WriteFile(filepath.Join(projectFolder, ".env"), []byte(""), os.ModePerm); err != nil {
 		return err
 	}
 
@@ -73,33 +94,33 @@ func scaffoldProject(ctx context.Context, opts *createOptions, chosenVersion str
 		envLocalContent += "APP_ENV=dev\n"
 	}
 
-	if err := os.WriteFile(filepath.Join(opts.projectFolder, ".env.local"), []byte(envLocalContent), os.ModePerm); err != nil {
+	if err := os.WriteFile(filepath.Join(projectFolder, ".env.local"), []byte(envLocalContent), os.ModePerm); err != nil {
 		return err
 	}
 
-	if err := os.WriteFile(filepath.Join(opts.projectFolder, ".gitignore"), []byte("/.idea\n/vendor"), os.ModePerm); err != nil {
+	if err := os.WriteFile(filepath.Join(projectFolder, ".gitignore"), []byte("/.idea\n/vendor"), os.ModePerm); err != nil {
 		return err
 	}
 
-	if err := os.MkdirAll(filepath.Join(opts.projectFolder, "custom", "plugins"), os.ModePerm); err != nil {
+	if err := os.MkdirAll(filepath.Join(projectFolder, "custom", "plugins"), os.ModePerm); err != nil {
 		return err
 	}
 
-	if err := os.MkdirAll(filepath.Join(opts.projectFolder, "custom", "static-plugins"), os.ModePerm); err != nil {
+	if err := os.MkdirAll(filepath.Join(projectFolder, "custom", "static-plugins"), os.ModePerm); err != nil {
 		return err
 	}
 
 	if !opts.useDocker && system.IsSymfonyCliInstalled() {
-		if err := os.WriteFile(filepath.Join(opts.projectFolder, "php.ini"), []byte("memory_limit=512M"), os.ModePerm); err != nil {
+		if err := os.WriteFile(filepath.Join(projectFolder, "php.ini"), []byte("memory_limit=512M"), os.ModePerm); err != nil {
 			return err
 		}
 	}
 
-	if err := setupDeployment(opts.projectFolder, opts.selectedDeployment); err != nil {
+	if err := setupDeployment(projectFolder, opts.selectedDeployment); err != nil {
 		return err
 	}
 
-	return setupCI(ctx, opts.projectFolder, opts.selectedCI, opts.selectedDeployment)
+	return setupCI(ctx, projectFolder, opts.selectedCI, opts.selectedDeployment)
 }
 
 func setupDeployment(projectFolder, deploymentMethod string) error {

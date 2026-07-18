@@ -3,7 +3,6 @@ package project
 import (
 	"fmt"
 	"os"
-	"slices"
 
 	"charm.land/huh/v2"
 	"charm.land/lipgloss/v2"
@@ -73,8 +72,17 @@ func runCreateForm(cmd *cobra.Command, opts *createOptions, filteredVersions []*
 
 	if !opts.useDocker {
 		extensions, err := system.GetAvailablePHPExtensions(cmd.Context())
-		if err == nil && !slices.Contains(extensions, "amqp") {
-			selectAMQP = tui.No
+		if err == nil {
+			available := false
+			for _, ext := range extensions {
+				if ext == "amqp" {
+					available = true
+					break
+				}
+			}
+			if !available {
+				selectAMQP = tui.No
+			}
 		}
 	}
 	selectedMinor := versionLatest
@@ -106,11 +114,11 @@ func runCreateForm(cmd *cobra.Command, opts *createOptions, filteredVersions []*
 					DescriptionFunc(func() string {
 						return projectNameFieldDescription(opts.projectFolder)
 					}, &opts.projectFolder).
-					Placeholder("my-shopware-project").
+					Placeholder("leave empty to use current directory").
 					Value(&opts.projectFolder).
 					Validate(func(s string) error {
-						if s == "" {
-							return fmt.Errorf("project name is required")
+						if s == "" || s == "." {
+							return nil
 						}
 						if err := validateProjectName(s); err != nil {
 							return err
