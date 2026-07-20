@@ -35,16 +35,27 @@ func BuildAssetsForExtensions(ctx context.Context, sources []asset.Source, asset
 		return nil
 	}
 
-	minVersion, err := lookupForMinMatchingVersion(ctx, assetConfig.ShopwareVersion)
-	if err != nil {
-		return err
+	var minVersion string
+	getMinVersion := func() (string, error) {
+		if minVersion != "" {
+			return minVersion, nil
+		}
+
+		var err error
+		minVersion, err = lookupForMinMatchingVersion(ctx, assetConfig.ShopwareVersion)
+		return minVersion, err
 	}
 
 	requiresShopwareSources := cfgs.RequiresShopwareRepository()
 
 	shopwareRoot := assetConfig.ShopwareRoot
 	if shopwareRoot == "" && requiresShopwareSources {
-		shopwareRoot, err = setupShopwareInTemp(ctx, minVersion)
+		mv, err := getMinVersion()
+		if err != nil {
+			return err
+		}
+
+		shopwareRoot, err = setupShopwareInTemp(ctx, mv)
 		if err != nil {
 			return err
 		}
@@ -196,7 +207,12 @@ func BuildAssetsForExtensions(ctx context.Context, sources []asset.Source, asset
 		for name, entry := range cfgs.FilterByStorefrontAndEsBuild(true) {
 			isNewLayout := false
 
-			if minVersion == DevVersionNumber || version.Must(version.NewVersion(minVersion)).GreaterThanOrEqual(version.Must(version.NewVersion("6.6.0.0"))) {
+			mv, err := getMinVersion()
+			if err != nil {
+				return err
+			}
+
+			if mv == DevVersionNumber || version.Must(version.NewVersion(mv)).GreaterThanOrEqual(version.Must(version.NewVersion("6.6.0.0"))) {
 				isNewLayout = true
 			}
 

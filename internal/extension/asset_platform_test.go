@@ -6,7 +6,6 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/shyim/go-version"
 	"github.com/stretchr/testify/assert"
 
 	"github.com/shopware/shopware-cli/internal/asset"
@@ -154,16 +153,12 @@ func TestBuildAssetsForExtensionsWithEsbuild(t *testing.T) {
 	assert.NoError(t, os.MkdirAll(filepath.Join(dir, "Resources", "app", "administration", "src"), 0o755))
 	assert.NoError(t, os.WriteFile(filepath.Join(dir, "Resources", "app", "administration", "src", "main.js"), []byte("console.log('test')"), 0o644))
 
-	vConstraint, err := version.NewConstraint("~6.6.0")
-	assert.NoError(t, err)
-
-	sources := []asset.Source{{Name: "FroshTools", Path: dir}}
+	sources := []asset.Source{{Name: "FroshTools", Path: dir, AdminEsbuildCompatible: true}}
 	assetCfg := AssetBuildConfig{
 		DisableStorefrontBuild: true,
-		ShopwareVersion:        &vConstraint,
 	}
 
-	err = BuildAssetsForExtensions(getTestContext(), sources, assetCfg)
+	err := BuildAssetsForExtensions(getTestContext(), sources, assetCfg)
 	assert.NoError(t, err)
 
 	viteDir := filepath.Join(dir, "Resources", "public", "administration", ".vite")
