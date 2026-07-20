@@ -49,7 +49,7 @@ func validateAndPreflight(ctx context.Context, opts *createOptions, releases []r
 		return "", nil, fmt.Errorf("invalid CI system: %s. Valid options: none, github, gitlab", opts.selectedCI)
 	}
 
-	dockerHint := "Then re-run with " + tui.BoldText.Render("--docker")
+	dockerHint := "re-run with " + tui.BoldText.Render("--docker")
 	if err := system.ValidateProjectDependencies(ctx, opts.useDocker, phpConstraint, "create a Shopware project", dockerHint); err != nil {
 		return "", nil, err
 	}
