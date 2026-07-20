@@ -115,12 +115,39 @@ func ValidateProjectDependencies(ctx context.Context, useDocker bool, phpConstra
 	return fmt.Errorf("missing required dependencies")
 }
 
-// RenderMissingDependencies returns a styled, bordered block describing the
-// missing dependencies and the two supported setup paths (Docker preferred,
-// PHP+Composer alternative). action names what the user was trying to do
-// (e.g. "create a Shopware project"); dockerHint is an optional, already
-// styled line explaining how to switch to Docker (shown when Docker is
-// suggested but was not the chosen setup).
+// phpDependencyConstraint returns the constraint text from a PHP-related
+// missing dependency (e.g. "8.2+" or "~8.2.0 || ~8.3.0") and whether one was
+// found.
+func phpDependencyConstraint(missing []MissingDependency) (string, bool) {
+	for _, m := range missing {
+		if strings.HasPrefix(m.Name, "PHP ") {
+			return strings.TrimPrefix(m.Name, "PHP "), true
+		}
+	}
+	return "", false
+}
+
+// composerDependency reports whether Composer is among the missing dependencies.
+func composerDependency(missing []MissingDependency) bool {
+	for _, m := range missing {
+		if m.Name == "Composer" {
+			return true
+		}
+	}
+	return false
+}
+
+// phpBinaryExample returns an illustrative PHP_BINARY value for the given
+// constraint (e.g. "PHP_BINARY=/usr/bin/php8.3").
+func phpBinaryExample(constraint string) string {
+	for _, v := range []string{"8.5", "8.4", "8.3", "8.2"} {
+		if strings.Contains(constraint, v) {
+			return "PHP_BINARY=/usr/bin/php" + v
+		}
+	}
+	return "PHP_BINARY=/usr/bin/php8.2"
+}
+
 func RenderMissingDependencies(useDocker bool, missing []MissingDependency, action, dockerHint string) string {
 	var b strings.Builder
 
@@ -156,17 +183,39 @@ func RenderMissingDependencies(useDocker bool, missing []MissingDependency, acti
 		b.WriteString("    PHP:      " + tui.BlueText.Render("https://www.php.net/downloads.php") + "\n")
 		b.WriteString("    Composer: " + tui.BlueText.Render("https://getcomposer.org/") + "\n")
 	default:
-		b.WriteString(tui.BoldText.Render(fmt.Sprintf("To %s, install one of:", action)))
+		phpConstraint, hasPHP := phpDependencyConstraint(missing)
+		composerMissing := composerDependency(missing)
+
+		b.WriteString(tui.BoldText.Render(fmt.Sprintf("To %s, either:", action)))
 		b.WriteString("\n\n")
-		b.WriteString("  " + arrow + " " + tui.RecommendedText.Render("Docker") + " " + tui.DimText.Render("(recommended)") + "\n")
-		b.WriteString("    " + tui.BlueText.Render("https://docs.docker.com/get-docker/") + "\n")
+		b.WriteString("  " + arrow + " " + tui.RecommendedText.Render("Docker") + " " + tui.DimText.Render("(recommended)") + ": ")
 		if !useDocker && dockerHint != "" {
-			b.WriteString("    " + dockerHint + "\n")
+			b.WriteString(dockerHint)
+		} else {
+			b.WriteString(tui.DimText.Render("re-run with " + tui.BoldText.Render("--docker")))
 		}
 		b.WriteString("\n")
-		b.WriteString("  " + arrow + " " + tui.BoldText.Render("PHP 8.2+ and Composer") + "\n")
-		b.WriteString("    PHP:      " + tui.BlueText.Render("https://www.php.net/downloads.php") + "\n")
-		b.WriteString("    Composer: " + tui.BlueText.Render("https://getcomposer.org/") + "\n")
+		b.WriteString("    " + tui.BlueText.Render("https://docs.docker.com/get-docker/") + "\n")
+		b.WriteString("\n")
+
+		if hasPHP {
+			var phpText string
+			if composerMissing {
+				phpText = fmt.Sprintf("Install PHP %s and Composer, or point PHP_BINARY at a matching PHP binary", phpConstraint)
+			} else {
+				phpText = fmt.Sprintf("Install a PHP version matching %s, or point PHP_BINARY at one", phpConstraint)
+			}
+			b.WriteString("  " + arrow + " " + tui.BoldText.Render(phpText) + "\n")
+			b.WriteString("    " + tui.DimText.Render("(e.g. "+phpBinaryExample(phpConstraint)+")") + "\n")
+			b.WriteString("    PHP:      " + tui.BlueText.Render("https://www.php.net/downloads.php") + "\n")
+			if composerMissing {
+				b.WriteString("    Composer: " + tui.BlueText.Render("https://getcomposer.org/") + "\n")
+			}
+		} else {
+			b.WriteString("  " + arrow + " " + tui.BoldText.Render("PHP 8.2+ and Composer") + "\n")
+			b.WriteString("    PHP:      " + tui.BlueText.Render("https://www.php.net/downloads.php") + "\n")
+			b.WriteString("    Composer: " + tui.BlueText.Render("https://getcomposer.org/") + "\n")
+		}
 	}
 
 	return lipgloss.NewStyle().
