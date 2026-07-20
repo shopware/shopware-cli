@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/shyim/go-version"
 	"github.com/stretchr/testify/assert"
 
 	"github.com/shopware/shopware-cli/internal/asset"
@@ -145,4 +146,27 @@ func TestSkipFilterOnAssetConfig(t *testing.T) {
 
 	assert.Len(t, filtered, 1)
 	assert.Contains(t, filtered, "FroshTest")
+}
+
+func TestBuildAssetsForExtensionsWithEsbuild(t *testing.T) {
+	dir := t.TempDir()
+
+	assert.NoError(t, os.MkdirAll(filepath.Join(dir, "Resources", "app", "administration", "src"), 0o755))
+	assert.NoError(t, os.WriteFile(filepath.Join(dir, "Resources", "app", "administration", "src", "main.js"), []byte("console.log('test')"), 0o644))
+
+	vConstraint, err := version.NewConstraint("~6.6.0")
+	assert.NoError(t, err)
+
+	sources := []asset.Source{{Name: "FroshTools", Path: dir}}
+	assetCfg := AssetBuildConfig{
+		DisableStorefrontBuild: true,
+		ShopwareVersion:        &vConstraint,
+	}
+
+	err = BuildAssetsForExtensions(getTestContext(), sources, assetCfg)
+	assert.NoError(t, err)
+
+	viteDir := filepath.Join(dir, "Resources", "public", "administration", ".vite")
+	_, err = os.Stat(filepath.Join(viteDir, "manifest.json"))
+	assert.NoError(t, err)
 }

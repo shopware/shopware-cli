@@ -93,6 +93,41 @@ func TestESBuildAdminWithSCSS(t *testing.T) {
 	assert.Contains(t, string(bytes), ".a .b")
 }
 
+func TestESBuildAdminWithCSS(t *testing.T) {
+	dir := t.TempDir()
+
+	adminDir := filepath.Join(dir, "Resources", "app", "administration", "src")
+	_ = os.MkdirAll(adminDir, 0o755)
+
+	_ = os.WriteFile(filepath.Join(adminDir, "main.js"), []byte("import './a.css'"), 0o644)
+	_ = os.WriteFile(filepath.Join(adminDir, "a.css"), []byte(".a { color: red; }"), 0o644)
+
+	options := NewAssetCompileOptionsAdmin("Bla", dir)
+	options.DisableSass = true
+	result, err := CompileExtensionAsset(getTestContext(), options)
+
+	assert.NoError(t, err)
+
+	compiledFilePathJS := filepath.Join(dir, "Resources", "public", "administration", "js", "bla.js")
+	_, err = os.Stat(compiledFilePathJS)
+	assert.NoError(t, err)
+
+	compiledFilePathCSS := filepath.Join(dir, "Resources", "public", "administration", "css", "bla.css")
+	_, err = os.Stat(compiledFilePathCSS)
+	assert.NoError(t, err)
+
+	assert.NotEmpty(t, result.HashedJsFile)
+	assert.NotEmpty(t, result.HashedCssFile)
+
+	hashedJSPath := filepath.Join(dir, "Resources", "public", "administration", result.HashedJsFile)
+	_, err = os.Stat(hashedJSPath)
+	assert.NoError(t, err)
+
+	hashedCSSPath := filepath.Join(dir, "Resources", "public", "administration", result.HashedCssFile)
+	_, err = os.Stat(hashedCSSPath)
+	assert.NoError(t, err)
+}
+
 func TestESBuildAdminTypeScript(t *testing.T) {
 	dir := t.TempDir()
 
