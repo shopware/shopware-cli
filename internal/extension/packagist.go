@@ -52,7 +52,7 @@ func getMinMatchingVersion(constraint *version.Constraints, versions []string) s
 	matchingVersions := make([]*version.Version, 0)
 
 	for _, v := range vs {
-		if constraint.Check(v) {
+		if constraint == nil || constraint.Check(v) {
 			matchingVersions = append(matchingVersions, v)
 		}
 	}

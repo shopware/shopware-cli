@@ -22,8 +22,15 @@ func TestDumpViteManifest(t *testing.T) {
 		OutputDir:     "dist",
 	}
 
+	// Create CSS file so it's included in the manifest
+	cssDir := filepath.Join(tempDir, "dist")
+	err := os.MkdirAll(cssDir, 0755)
+	assert.NoError(t, err)
+	err = os.WriteFile(filepath.Join(cssDir, "styles.css"), []byte(""), 0644)
+	assert.NoError(t, err)
+
 	// Call dumpViteManifest
-	err := dumpViteManifest(options, tempDir)
+	err = dumpViteManifest(options, tempDir)
 	assert.NoError(t, err)
 
 	// Verify that manifest.json is created
@@ -235,4 +242,102 @@ func TestDumpViteConfigCannotOverwrite(t *testing.T) {
 	newContent, err := os.ReadFile(manifestPath)
 	assert.NoError(t, err)
 	assert.Equal(t, initialContent, newContent)
+}
+
+func TestDumpViteConfigWithCompileResult(t *testing.T) {
+	tempDir := t.TempDir()
+
+	options := AssetCompileOptions{
+		OutputJSFile:  "js/test-name.js",
+		OutputCSSFile: "css/test-name.css",
+		Name:          "TestName",
+		Path:          tempDir,
+		OutputDir:     "dist",
+	}
+
+	result := &AssetCompileResult{
+		Name:          "TestName",
+		HashedJsFile:  "js/test-name-12345678.js",
+		HashedCssFile: "css/test-name-87654321.css",
+	}
+
+	cssDir := filepath.Join(tempDir, "dist", "css")
+	err := os.MkdirAll(cssDir, 0755)
+	assert.NoError(t, err)
+	err = os.WriteFile(filepath.Join(cssDir, "test-name-87654321.css"), []byte(""), 0644)
+	assert.NoError(t, err)
+
+	err = DumpViteConfig(options, result)
+	assert.NoError(t, err)
+
+	viteDir := filepath.Join(tempDir, "dist", ".vite")
+	manifestContent, err := os.ReadFile(filepath.Join(viteDir, "manifest.json"))
+	assert.NoError(t, err)
+
+	var manifest ViteManifest
+	err = json.Unmarshal(manifestContent, &manifest)
+	assert.NoError(t, err)
+
+	assert.Equal(t, "js/test-name-12345678.js", manifest.MainJs.File)
+	assert.Equal(t, []string{"css/test-name-87654321.css"}, manifest.MainJs.Css)
+
+	entrypointsContent, err := os.ReadFile(filepath.Join(viteDir, "entrypoints.json"))
+	assert.NoError(t, err)
+
+	var entrypoints ViteEntrypoints
+	err = json.Unmarshal(entrypointsContent, &entrypoints)
+	assert.NoError(t, err)
+
+	assert.Equal(t, []string{"/bundles/testname/administration/js/test-name-12345678.js"}, entrypoints.EntryPoints["test-name"].Js)
+	assert.Equal(t, []string{"/bundles/testname/administration/css/test-name-87654321.css"}, entrypoints.EntryPoints["test-name"].Css)
+}
+
+func TestDumpViteConfigWithNilCompileResult(t *testing.T) {
+	tempDir := t.TempDir()
+
+	options := AssetCompileOptions{
+		OutputJSFile:  "main.js",
+		OutputCSSFile: "styles.css",
+		Name:          "TestName",
+		Path:          tempDir,
+		OutputDir:     "dist",
+	}
+
+	err := DumpViteConfig(options, nil)
+	assert.NoError(t, err)
+
+	viteDir := filepath.Join(tempDir, "dist", ".vite")
+	_, err = os.Stat(filepath.Join(viteDir, "manifest.json"))
+	assert.NoError(t, err)
+}
+
+func TestDumpViteConfigWithJsOnlyCompileResult(t *testing.T) {
+	tempDir := t.TempDir()
+
+	options := AssetCompileOptions{
+		OutputJSFile:  "js/test-name.js",
+		OutputCSSFile: "css/test-name.css",
+		Name:          "TestName",
+		Path:          tempDir,
+		OutputDir:     "dist",
+	}
+
+	result := &AssetCompileResult{
+		Name:         "TestName",
+		HashedJsFile: "js/test-name-12345678.js",
+	}
+
+	err := DumpViteConfig(options, result)
+	assert.NoError(t, err)
+
+	viteDir := filepath.Join(tempDir, "dist", ".vite")
+	manifestContent, err := os.ReadFile(filepath.Join(viteDir, "manifest.json"))
+	assert.NoError(t, err)
+
+	var manifest ViteManifest
+	err = json.Unmarshal(manifestContent, &manifest)
+	assert.NoError(t, err)
+
+	assert.Equal(t, "js/test-name-12345678.js", manifest.MainJs.File)
+	assert.Empty(t, manifest.MainJs.Css)
 }

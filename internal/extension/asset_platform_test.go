@@ -146,3 +146,22 @@ func TestSkipFilterOnAssetConfig(t *testing.T) {
 	assert.Len(t, filtered, 1)
 	assert.Contains(t, filtered, "FroshTest")
 }
+
+func TestBuildAssetsForExtensionsWithEsbuild(t *testing.T) {
+	dir := t.TempDir()
+
+	assert.NoError(t, os.MkdirAll(filepath.Join(dir, "Resources", "app", "administration", "src"), 0o755))
+	assert.NoError(t, os.WriteFile(filepath.Join(dir, "Resources", "app", "administration", "src", "main.js"), []byte("console.log('test')"), 0o644))
+
+	sources := []asset.Source{{Name: "FroshTools", Path: dir, AdminEsbuildCompatible: true, DisableSass: true}}
+	assetCfg := AssetBuildConfig{
+		DisableStorefrontBuild: true,
+	}
+
+	err := BuildAssetsForExtensions(getTestContext(), sources, assetCfg)
+	assert.NoError(t, err)
+
+	viteDir := filepath.Join(dir, "Resources", "public", "administration", ".vite")
+	_, err = os.Stat(filepath.Join(viteDir, "manifest.json"))
+	assert.NoError(t, err)
+}

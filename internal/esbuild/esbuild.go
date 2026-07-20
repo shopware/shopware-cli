@@ -13,10 +13,12 @@ import (
 )
 
 type AssetCompileResult struct {
-	Name       string
-	Entrypoint string
-	JsFile     string
-	CssFile    string
+	Name          string
+	Entrypoint    string
+	JsFile        string
+	CssFile       string
+	HashedJsFile  string
+	HashedCssFile string
 }
 
 type AssetCompileOptions struct {
@@ -106,13 +108,20 @@ func getEsbuildOptions(ctx context.Context, options AssetCompileOptions) (*api.B
 		MinifySyntax:      options.ProductionMode,
 		MinifyWhitespace:  options.ProductionMode,
 		MinifyIdentifiers: options.ProductionMode,
-		EntryPoints:       []string{entryPoint},
-		Outfile:           "extension.js",
-		Bundle:            true,
-		Write:             false,
-		LogLevel:          api.LogLevelWarning,
-		Plugins:           plugins,
-		Loader:            loader,
+		EntryPointsAdvanced: []api.EntryPoint{
+			{
+				InputPath:  entryPoint,
+				OutputPath: ToKebabCase(options.Name),
+			},
+		},
+		Outdir:     ".",
+		EntryNames: "[name]-[hash]",
+		AssetNames: "[name]-[hash]",
+		Bundle:     true,
+		Write:      false,
+		LogLevel:   api.LogLevelWarning,
+		Plugins:    plugins,
+		Loader:     loader,
 	}
 
 	return &bundlerOptions, nil
@@ -146,7 +155,8 @@ func CompileExtensionAsset(ctx context.Context, options AssetCompileOptions) (*A
 		return nil, err
 	}
 
-	if err := writeBundlerResultToDisk(result, jsFile, cssFile); err != nil {
+	hashedJsRel, hashedCssRel, err := writeBundlerResultToDisk(result, options)
+	if err != nil {
 		return nil, err
 	}
 
@@ -156,11 +166,15 @@ func CompileExtensionAsset(ctx context.Context, options AssetCompileOptions) (*A
 		}
 	}
 
+	entryPointPath := bundlerOptions.EntryPointsAdvanced[0].InputPath
+
 	compileResult := AssetCompileResult{
-		Name:       options.Name,
-		Entrypoint: bundlerOptions.EntryPoints[0],
-		JsFile:     jsFile,
-		CssFile:    cssFile,
+		Name:          options.Name,
+		Entrypoint:    entryPointPath,
+		JsFile:        jsFile,
+		CssFile:       cssFile,
+		HashedJsFile:  hashedJsRel,
+		HashedCssFile: hashedCssRel,
 	}
 
 	return &compileResult, nil
@@ -181,26 +195,55 @@ func cleanupOutputFolder(options AssetCompileOptions) error {
 	return nil
 }
 
-func writeBundlerResultToDisk(result api.BuildResult, jsFile, cssFile string) error {
+func writeBundlerResultToDisk(result api.BuildResult, options AssetCompileOptions) (hashedJsRel, hashedCssRel string, err error) {
+	outputDir := filepath.Join(options.Path, options.OutputDir)
+
 	for _, file := range result.OutputFiles {
-		outFile := jsFile
+		filename := filepath.Base(file.Path)
 
-		if strings.HasSuffix(file.Path, ".css") {
-			outFile = cssFile
-		}
+		if strings.HasSuffix(filename, ".css") {
+			unhashedRel := options.OutputCSSFile
+			hashedRel := filepath.Join("css", filename)
+			hashedCssRel = hashedRel
 
-		outFolder := filepath.Dir(outFile)
+			// Write unhashed file for pre-6.7 backward compatibility
+			if err := writeOutputFile(filepath.Join(outputDir, unhashedRel), file.Contents); err != nil {
+				return "", "", err
+			}
 
-		if _, err := os.Stat(outFolder); os.IsNotExist(err) {
-			if err := os.MkdirAll(outFolder, 0o755); err != nil {
-				return err
+			// Write esbuild content-addressed hashed file for Shopware 6.7+
+			if err := writeOutputFile(filepath.Join(outputDir, hashedRel), file.Contents); err != nil {
+				return "", "", err
+			}
+		} else {
+			unhashedRel := options.OutputJSFile
+			jsDir := filepath.Dir(options.OutputJSFile)
+			hashedRel := filepath.Join(jsDir, filename)
+			hashedJsRel = hashedRel
+
+			// Write unhashed file for pre-6.7 backward compatibility
+			if err := writeOutputFile(filepath.Join(outputDir, unhashedRel), file.Contents); err != nil {
+				return "", "", err
+			}
+
+			// Write esbuild content-addressed hashed file for Shopware 6.7+
+			if err := writeOutputFile(filepath.Join(outputDir, hashedRel), file.Contents); err != nil {
+				return "", "", err
 			}
 		}
+	}
 
-		if err := os.WriteFile(outFile, file.Contents, 0o644); err != nil {
+	return hashedJsRel, hashedCssRel, nil
+}
+
+func writeOutputFile(filePath string, contents []byte) error {
+	outFolder := filepath.Dir(filePath)
+
+	if _, err := os.Stat(outFolder); os.IsNotExist(err) {
+		if err := os.MkdirAll(outFolder, 0o755); err != nil {
 			return err
 		}
 	}
 
-	return nil
+	return os.WriteFile(filePath, contents, 0o644)
 }
