@@ -39,7 +39,7 @@ func TestRunSpinnerWithLogsWithCancelledContext(t *testing.T) {
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
 
-	err := RunSpinnerWithLogs(ctx, "Installing dependencies", exec.Command("false"))
+	err := RunSpinnerWithLogs(ctx, "Installing dependencies", exec.CommandContext(ctx, "false"))
 
 	assert.ErrorContains(t, err, "error opening TTY")
 }
@@ -47,14 +47,14 @@ func TestRunSpinnerWithLogsWithCancelledContext(t *testing.T) {
 func TestRunSpinnerWithLogs(t *testing.T) {
 	t.Run("returns program errors", func(t *testing.T) {
 		wantErr := errors.New("renderer failed")
-		err := runSpinnerWithLogs(t.Context(), "Installing dependencies", exec.Command("false"), &bytes.Buffer{}, func(context.Context, tea.Model) error {
+		err := runSpinnerWithLogs(t.Context(), "Installing dependencies", exec.CommandContext(t.Context(), "false"), &bytes.Buffer{}, func(context.Context, tea.Model) error {
 			return wantErr
 		})
 		assert.ErrorIs(t, err, wantErr)
 	})
 
 	t.Run("returns cancellation", func(t *testing.T) {
-		err := runSpinnerWithLogs(t.Context(), "Installing dependencies", exec.Command("false"), &bytes.Buffer{}, func(_ context.Context, model tea.Model) error {
+		err := runSpinnerWithLogs(t.Context(), "Installing dependencies", exec.CommandContext(t.Context(), "false"), &bytes.Buffer{}, func(_ context.Context, model tea.Model) error {
 			model.(*installProgressModel).cancelled = true
 			return nil
 		})
@@ -64,7 +64,7 @@ func TestRunSpinnerWithLogs(t *testing.T) {
 	t.Run("prints command failures", func(t *testing.T) {
 		var output bytes.Buffer
 		wantErr := errors.New("exit status 1")
-		err := runSpinnerWithLogs(t.Context(), "Installing dependencies", exec.Command("false"), &output, func(_ context.Context, model tea.Model) error {
+		err := runSpinnerWithLogs(t.Context(), "Installing dependencies", exec.CommandContext(t.Context(), "false"), &output, func(_ context.Context, model tea.Model) error {
 			progress := model.(*installProgressModel)
 			_, err := progress.logWriter.Write([]byte("composer error\n"))
 			require.NoError(t, err)
@@ -76,7 +76,7 @@ func TestRunSpinnerWithLogs(t *testing.T) {
 	})
 
 	t.Run("returns success", func(t *testing.T) {
-		err := runSpinnerWithLogs(t.Context(), "Installing dependencies", exec.Command("false"), &bytes.Buffer{}, func(context.Context, tea.Model) error {
+		err := runSpinnerWithLogs(t.Context(), "Installing dependencies", exec.CommandContext(t.Context(), "false"), &bytes.Buffer{}, func(context.Context, tea.Model) error {
 			return nil
 		})
 		assert.NoError(t, err)
@@ -105,7 +105,7 @@ func TestLogWriterStoresAndTrimsLines(t *testing.T) {
 }
 
 func TestInstallProgressModelInitRunsCommand(t *testing.T) {
-	model := newProgressModel(exec.Command("false"))
+	model := newProgressModel(exec.CommandContext(t.Context(), "false"))
 
 	batch, ok := model.Init()().(tea.BatchMsg)
 	require.True(t, ok)
@@ -119,7 +119,7 @@ func TestInstallProgressModelInitRunsCommand(t *testing.T) {
 }
 
 func TestInstallProgressModelUpdate(t *testing.T) {
-	model := newProgressModel(exec.Command("false"))
+	model := newProgressModel(exec.CommandContext(t.Context(), "false"))
 
 	updated, cmd := model.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
 	assert.Same(t, model, updated)
@@ -148,7 +148,7 @@ func TestInstallProgressModelUpdate(t *testing.T) {
 
 func TestInstallProgressModelCancels(t *testing.T) {
 	ctx, cancel := context.WithCancel(t.Context())
-	model := newProgressModel(exec.Command("false"))
+	model := newProgressModel(exec.CommandContext(t.Context(), "false"))
 	model.cancel = cancel
 
 	_, cmd := model.Update(tea.KeyPressMsg(tea.Key{Code: 'c', Mod: tea.ModCtrl}))
