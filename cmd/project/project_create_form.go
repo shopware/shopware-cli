@@ -106,11 +106,11 @@ func runCreateForm(cmd *cobra.Command, opts *createOptions, filteredVersions []*
 					DescriptionFunc(func() string {
 						return projectNameFieldDescription(opts.projectFolder)
 					}, &opts.projectFolder).
-					Placeholder("my-shopware-project").
+					Placeholder("my-shopware-project (leave empty for current directory)").
 					Value(&opts.projectFolder).
 					Validate(func(s string) error {
 						if s == "" {
-							return fmt.Errorf("project name is required")
+							return nil
 						}
 						if err := validateProjectName(s); err != nil {
 							return err
@@ -238,6 +238,10 @@ func runCreateForm(cmd *cobra.Command, opts *createOptions, filteredVersions []*
 			opts.selectedVersion = versionLatest
 		}
 
+		if opts.projectFolder == "" {
+			opts.projectFolder = "."
+		}
+
 		if !cmd.PersistentFlags().Changed("docker") {
 			opts.useDocker = selectDocker == tui.Yes
 		}
@@ -254,7 +258,13 @@ func runCreateForm(cmd *cobra.Command, opts *createOptions, filteredVersions []*
 		fmt.Println()
 		fmt.Println(sectionStyle.Render("Summary"))
 		fmt.Println()
-		fmt.Printf("  %s %s\n", labelStyle.Render("Project name:"), opts.projectFolder)
+		projectDisplay := opts.projectFolder
+		if projectDisplay == "." {
+			if wd, err := os.Getwd(); err == nil {
+				projectDisplay = wd
+			}
+		}
+		fmt.Printf("  %s %s\n", labelStyle.Render("Project name:"), projectDisplay)
 		fmt.Printf("  %s %s\n", labelStyle.Render("Version:"), opts.selectedVersion)
 		fmt.Printf("  %s %s\n", labelStyle.Render("Deployment:"), opts.selectedDeployment)
 		fmt.Printf("  %s %s\n", labelStyle.Render("CI/CD:"), opts.selectedCI)

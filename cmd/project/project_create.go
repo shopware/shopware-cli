@@ -21,7 +21,7 @@ const (
 	ciGitLab = "gitlab"
 
 	// projectNameHelp is the help text shown under the project name input.
-	projectNameHelp = "The name of the project directory to create"
+	projectNameHelp = "The name of the project directory to create (leave empty to use the current directory)"
 	// projectNameRule describes which characters are allowed in a project name.
 	// It is shared between the up-front validation error and the live form hint
 	// so both stay in sync.
@@ -39,7 +39,12 @@ var composeProjectNameRegexp = regexp.MustCompile(`^[a-z0-9][a-z0-9_-]*$`)
 // validateProjectName ensures the project folder name can be used as a Docker
 // Compose project name. Only the final path element is relevant, as that is
 // what Docker Compose uses to derive the project name.
+// The special value "." (current directory) is always allowed.
 func validateProjectName(name string) error {
+	if name == "." {
+		return nil
+	}
+
 	base := filepath.Base(name)
 
 	if !composeProjectNameRegexp.MatchString(base) {
@@ -195,7 +200,7 @@ func parseCreateFlags(cmd *cobra.Command, args []string) createOptions {
 
 func applyNonInteractiveDefaults(opts *createOptions) error {
 	if opts.projectFolder == "" {
-		return fmt.Errorf("project name is required in non-interactive mode")
+		opts.projectFolder = "."
 	}
 	if opts.selectedVersion == "" {
 		opts.selectedVersion = versionLatest
