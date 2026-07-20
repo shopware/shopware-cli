@@ -65,8 +65,15 @@ func installAndFinalize(cmd *cobra.Command, opts *createOptions, phpConstraint *
 }
 
 func printCreateSummary(ctx context.Context, opts *createOptions) {
+	projectDisplay := opts.projectFolder
+	if projectDisplay == "." {
+		if wd, err := os.Getwd(); err == nil {
+			projectDisplay = wd
+		}
+	}
+
 	if !opts.interactive {
-		logging.FromContext(ctx).Infof("Project created successfully in %s", opts.projectFolder)
+		logging.FromContext(ctx).Infof("Project created successfully in %s", projectDisplay)
 		return
 	}
 
@@ -74,13 +81,17 @@ func printCreateSummary(ctx context.Context, opts *createOptions) {
 	sectionStyle := lipgloss.NewStyle().Bold(true).Underline(true)
 
 	fmt.Println()
-	fmt.Println(tui.GreenText.Render("✔ Setup complete in " + opts.projectFolder))
+	fmt.Println(tui.GreenText.Render("✔ Setup complete in " + projectDisplay))
 
 	if opts.useDocker {
 		fmt.Println()
 		fmt.Println(sectionStyle.Render("Next steps"))
 		fmt.Println()
-		fmt.Printf("  %s  %s\n", tui.GreenText.Render("Start developing:"), cmdStyle.Render(fmt.Sprintf("cd %s && shopware-cli project dev", opts.projectFolder)))
+		if opts.projectFolder == "." {
+			fmt.Printf("  %s  %s\n", tui.GreenText.Render("Start developing:"), cmdStyle.Render("shopware-cli project dev"))
+		} else {
+			fmt.Printf("  %s  %s\n", tui.GreenText.Render("Start developing:"), cmdStyle.Render(fmt.Sprintf("cd %s && shopware-cli project dev", opts.projectFolder)))
+		}
 		fmt.Println()
 		fmt.Println(sectionStyle.Render("Access your shop (after make setup)"))
 		fmt.Println()

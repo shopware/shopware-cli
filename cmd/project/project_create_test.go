@@ -103,6 +103,7 @@ func TestValidateProjectName(t *testing.T) {
 		"123shop",
 		"a",
 		"path/to/my-shop",
+		".",
 	}
 
 	for _, name := range validNames {
@@ -343,5 +344,33 @@ func TestValidCISystems(t *testing.T) {
 		t.Parallel()
 		assert.False(t, validCISystems["jenkins"])
 		assert.False(t, validCISystems[""])
+	})
+}
+
+func TestApplyNonInteractiveDefaults(t *testing.T) {
+	t.Parallel()
+
+	t.Run("empty project folder defaults to current directory", func(t *testing.T) {
+		t.Parallel()
+		opts := createOptions{}
+		err := applyNonInteractiveDefaults(&opts)
+		assert.NoError(t, err)
+		assert.Equal(t, ".", opts.projectFolder)
+	})
+
+	t.Run("dot project folder is kept", func(t *testing.T) {
+		t.Parallel()
+		opts := createOptions{projectFolder: "."}
+		err := applyNonInteractiveDefaults(&opts)
+		assert.NoError(t, err)
+		assert.Equal(t, ".", opts.projectFolder)
+	})
+
+	t.Run("named project folder is kept", func(t *testing.T) {
+		t.Parallel()
+		opts := createOptions{projectFolder: "my-shop"}
+		err := applyNonInteractiveDefaults(&opts)
+		assert.NoError(t, err)
+		assert.Equal(t, "my-shop", opts.projectFolder)
 	})
 }
