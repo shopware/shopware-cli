@@ -2,6 +2,9 @@ package tui
 
 import (
 	"context"
+	"fmt"
+	"io"
+	"os"
 	"os/exec"
 	"strings"
 	"sync"
@@ -13,6 +16,14 @@ import (
 
 // RunSpinnerWithLogs executes the given command while displaying a spinner and allowing the user to toggle logs with Ctrl+L.
 func RunSpinnerWithLogs(ctx context.Context, title string, cmd *exec.Cmd) error {
+	return runSpinnerWithLogs(ctx, title, cmd, os.Stderr, func(ctx context.Context, model tea.Model) error {
+		p := tea.NewProgram(model, tea.WithContext(ctx))
+		_, err := p.Run()
+		return err
+	})
+}
+
+func runSpinnerWithLogs(ctx context.Context, title string, cmd *exec.Cmd, output io.Writer, runProgram func(context.Context, tea.Model) error) error {
 	cmdCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
@@ -33,8 +44,7 @@ func RunSpinnerWithLogs(ctx context.Context, title string, cmd *exec.Cmd) error 
 		cancel:    cancel,
 	}
 
-	p := tea.NewProgram(model, tea.WithContext(cmdCtx))
-	if _, err := p.Run(); err != nil {
+	if err := runProgram(cmdCtx, model); err != nil {
 		return err
 	}
 
@@ -42,7 +52,21 @@ func RunSpinnerWithLogs(ctx context.Context, title string, cmd *exec.Cmd) error 
 		return context.Canceled
 	}
 
+	if model.err != nil {
+		// A tea.Quit message can stop the program before its final frame has
+		// reached the terminal. Print failures outside the renderer so command
+		// output is always available to the user.
+		writeFailureOutput(output, title, model.err, model.logWriter.GetLastLines(12))
+	}
+
 	return model.err
+}
+
+func writeFailureOutput(w io.Writer, title string, err error, lines []string) {
+	_, _ = fmt.Fprintf(w, "\n✗ %s\n\n  Command failed: %v\n", title, err)
+	for _, line := range lines {
+		_, _ = fmt.Fprintf(w, "  %s\n", line)
+	}
 }
 
 type logWriter struct {
