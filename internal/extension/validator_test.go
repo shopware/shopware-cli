@@ -100,6 +100,31 @@ func TestDescriptionLengthCountedInCharacters(t *testing.T) {
 	assert.Empty(t, check.Results)
 }
 
+func TestDescriptionTooLongReportsCharacterCount(t *testing.T) {
+	app := getAppForValidation()
+	multibyte := strings.Repeat("ä", 200)
+	app.manifest.Meta.Description = TranslatableString{
+		struct {
+			Value string "xml:\",chardata\""
+			Lang  string "xml:\"lang,attr,omitempty\""
+		}{multibyte, "de-DE"},
+		struct {
+			Value string "xml:\",chardata\""
+			Lang  string "xml:\"lang,attr,omitempty\""
+		}{multibyte, "en-GB"},
+	}
+
+	check := &testCheck{}
+
+	runDefaultValidate(app, check)
+
+	assert.Len(t, check.Results, 2)
+	for _, result := range check.Results {
+		assert.Equal(t, "metadata.description", result.Identifier)
+		assert.Contains(t, result.Message, "length of 200")
+	}
+}
+
 func TestIgnores(t *testing.T) {
 	check := &testCheck{}
 
