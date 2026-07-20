@@ -3,6 +3,7 @@ package extension
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -76,6 +77,27 @@ func TestLicenseValidate(t *testing.T) {
 	runDefaultValidate(app, check)
 
 	assert.False(t, len(check.Results) > 0)
+}
+
+func TestDescriptionLengthCountedInCharacters(t *testing.T) {
+	app := getAppForValidation()
+	multibyte := strings.Repeat("ä", 160)
+	app.manifest.Meta.Description = TranslatableString{
+		struct {
+			Value string "xml:\",chardata\""
+			Lang  string "xml:\"lang,attr,omitempty\""
+		}{multibyte, "de-DE"},
+		struct {
+			Value string "xml:\",chardata\""
+			Lang  string "xml:\"lang,attr,omitempty\""
+		}{multibyte, "en-GB"},
+	}
+
+	check := &testCheck{}
+
+	runDefaultValidate(app, check)
+
+	assert.Empty(t, check.Results)
 }
 
 func TestIgnores(t *testing.T) {

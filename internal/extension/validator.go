@@ -320,11 +320,11 @@ func runDefaultValidate(ext Extension, check validation.Check) {
 			})
 		}
 
-		if len(metaData.Description.English) < 150 || len(metaData.Description.English) > 185 {
+		if len([]rune(metaData.Description.English)) < 150 || len([]rune(metaData.Description.English)) > 185 {
 			check.AddResult(validation.CheckResult{
 				Path:       rootFile,
 				Identifier: "metadata.description",
-				Message:    fmt.Sprintf("in composer.json, the english description with length of %d should have a length from 150 up to 185 characters.", len(metaData.Description.English)),
+				Message:    fmt.Sprintf("in composer.json, the english description with length of %d should have a length from 150 up to 185 characters.", len([]rune(metaData.Description.English))),
 				Severity:   validation.SeverityError,
 			})
 		}
