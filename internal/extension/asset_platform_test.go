@@ -153,7 +153,7 @@ func TestBuildAssetsForExtensionsWithEsbuild(t *testing.T) {
 	assert.NoError(t, os.MkdirAll(filepath.Join(dir, "Resources", "app", "administration", "src"), 0o755))
 	assert.NoError(t, os.WriteFile(filepath.Join(dir, "Resources", "app", "administration", "src", "main.js"), []byte("console.log('test')"), 0o644))
 
-	sources := []asset.Source{{Name: "FroshTools", Path: dir, AdminEsbuildCompatible: true}}
+	sources := []asset.Source{{Name: "FroshTools", Path: dir, AdminEsbuildCompatible: true, DisableSass: true}}
 	assetCfg := AssetBuildConfig{
 		DisableStorefrontBuild: true,
 	}
