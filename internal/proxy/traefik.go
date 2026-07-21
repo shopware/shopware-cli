@@ -2,9 +2,11 @@ package proxy
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 )
 
@@ -193,6 +195,100 @@ func RestartTraefik(ctx context.Context) error {
 
 	_, err := runDocker(ctx, "restart", ContainerName)
 	return err
+}
+
+// ReconcileHostnames makes shop hostnames resolve to the shared proxy from
+// inside containers, by registering them as network aliases of the Traefik
+// container. Its purpose is self-reachability: a shop whose APP_URL is
+// https://shop1.shopware.local must be able to reach that URL from its own
+// containers (app registration callbacks, sitemap generation, self API
+// calls) and have it routed back to itself over TLS. Because all registered
+// hostnames are aliased on the one shared Traefik, shops can also reach each
+// other by hostname — a useful side effect, not the goal. Docker only accepts
+// aliases at connect time, so the container is re-attached; this is skipped
+// when the alias set is already correct, avoiding a needless network flap.
+func ReconcileHostnames(ctx context.Context, hostnames []string) error {
+	if !containerExists(ctx) {
+		return nil
+	}
+
+	current, err := sharedNetworkAliases(ctx)
+	if err != nil {
+		return err
+	}
+
+	// Compare only our managed aliases (hostnames always contain a dot),
+	// ignoring the container-ID alias Docker adds automatically, so an
+	// unchanged set is a no-op and a removed hostname is actually pruned.
+	if equalStringSets(hostnames, managedAliases(current)) {
+		return nil
+	}
+
+	if _, err := runDocker(ctx, "network", "disconnect", NetworkName, ContainerName); err != nil {
+		return err
+	}
+
+	args := []string{"network", "connect"}
+	for _, host := range hostnames {
+		args = append(args, "--alias", host)
+	}
+	args = append(args, NetworkName, ContainerName)
+
+	_, err = runDocker(ctx, args...)
+	return err
+}
+
+// sharedNetworkAliases returns the aliases the Traefik container currently
+// has on the shared network.
+func sharedNetworkAliases(ctx context.Context) ([]string, error) {
+	out, err := runDocker(ctx, "inspect", ContainerName, "--format",
+		fmt.Sprintf("{{json (index .NetworkSettings.Networks %q).Aliases}}", NetworkName))
+	if err != nil {
+		return nil, err
+	}
+
+	trimmed := strings.TrimSpace(out)
+	if trimmed == "" || trimmed == "null" {
+		return nil, nil
+	}
+
+	var aliases []string
+	if err := json.Unmarshal([]byte(trimmed), &aliases); err != nil {
+		return nil, fmt.Errorf("parsing network aliases: %w", err)
+	}
+
+	return aliases, nil
+}
+
+// managedAliases keeps only the aliases shopware-cli set (project
+// hostnames, which always contain a dot), dropping the short container-ID
+// alias Docker adds on its own.
+func managedAliases(aliases []string) []string {
+	var managed []string
+	for _, a := range aliases {
+		if strings.Contains(a, ".") {
+			managed = append(managed, a)
+		}
+	}
+
+	return managed
+}
+
+// equalStringSets reports whether a and b contain the same elements,
+// ignoring order and duplicates.
+func equalStringSets(a, b []string) bool {
+	return isSubset(a, b) && isSubset(b, a)
+}
+
+// isSubset reports whether every element of want is present in have.
+func isSubset(want, have []string) bool {
+	for _, w := range want {
+		if !slices.Contains(have, w) {
+			return false
+		}
+	}
+
+	return true
 }
 
 // StopTraefik stops and removes the shared Traefik container. It does not

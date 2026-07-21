@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"charm.land/huh/v2"
+	"charm.land/huh/v2/spinner"
 	"github.com/mattn/go-isatty"
 	"github.com/spf13/cobra"
 
@@ -135,6 +136,18 @@ Both steps are idempotent; run it again anytime to repair the setup.`,
 
 		return nil
 	},
+}
+
+// runStep runs a potentially slow action, showing a spinner with the given
+// title only when running interactively. Without a terminal (CI, piped
+// output) the bubbletea spinner cannot run and would skip the action, so the
+// action is executed directly instead.
+func runStep(ctx context.Context, title string, action func(context.Context) error) error {
+	if !system.IsInteractionEnabled(ctx) || !isatty.IsTerminal(os.Stdout.Fd()) {
+		return action(ctx)
+	}
+
+	return spinner.New().Title(title).Context(ctx).ActionWithErr(action).Run()
 }
 
 // printGuidance renders a multi-line help text: the first line as the red

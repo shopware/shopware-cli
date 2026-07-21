@@ -37,3 +37,21 @@ func TestWriteTraefikDynamicConfig(t *testing.T) {
 	assert.Contains(t, string(content), "proxy.custom.internal")
 	assert.Contains(t, string(content), containerConfigDir+"/certs/cert.pem")
 }
+
+func TestManagedAliases(t *testing.T) {
+	t.Parallel()
+
+	// Docker adds the short container-ID alias itself; only dotted hostnames
+	// are ours.
+	got := managedAliases([]string{"a1b2c3d4e5f6", "shop1.shopware.local", "shopware-cli-proxy", "shop2.shopware.local"})
+	assert.ElementsMatch(t, []string{"shop1.shopware.local", "shop2.shopware.local"}, got)
+}
+
+func TestEqualStringSets(t *testing.T) {
+	t.Parallel()
+
+	assert.True(t, equalStringSets(nil, nil))
+	assert.True(t, equalStringSets([]string{"a", "b"}, []string{"b", "a"}))
+	assert.False(t, equalStringSets([]string{"a"}, []string{"a", "b"}))
+	assert.False(t, equalStringSets([]string{"a", "b"}, []string{"a"}))
+}

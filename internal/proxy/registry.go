@@ -77,6 +77,16 @@ func (r *Registry) Remove(projectRoot string) bool {
 	return false
 }
 
+// Hostnames returns the hostname of every registered project.
+func (r Registry) Hostnames() []string {
+	hostnames := make([]string, 0, len(r.Projects))
+	for _, e := range r.Projects {
+		hostnames = append(hostnames, e.Hostname)
+	}
+
+	return hostnames
+}
+
 // Find returns the entry for projectRoot, if any.
 func (r Registry) Find(projectRoot string) (ProjectEntry, bool) {
 	for _, e := range r.Projects {

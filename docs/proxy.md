@@ -17,6 +17,8 @@ implementation (`internal/proxy/`, `cmd/project/project_proxy*.go`).
   machine.
 - HTTPS works out of the box: a local CA (mkcert-compatible) signs a wildcard
   certificate; `proxy setup` trusts it once per machine.
+- Shops can reach **each other** (and themselves) by hostname over HTTPS from
+  inside their containers — same names, same certificate, no host involved.
 - Everything `proxy up` changes is recorded and **restored exactly** by
   `proxy down`.
 
@@ -101,10 +103,11 @@ touches five things, records the old values, and `down` restores them exactly:
 
 | Change | Where | Restored by `down` |
 | --- | --- | --- |
-| Traefik labels, no ports, shared network | `compose.override.yaml` (generated, marker-guarded) | file deleted |
+| Traefik labels, no ports, shared network, CA mount | `compose.override.yaml` (generated, marker-guarded) | file deleted |
 | `APP_URL=https://<host>` | `.env.local` (one-line surgical edit) | previous value from registry |
 | Sales channel domain | database, via `bin/console sales-channel:replace:url` | previous value; for stopped shops via `docker compose run --rm` |
 | `url:` keys (top-level + environment) | `.shopware-project.yml` (comment-preserving YAML edit) | previous values; a previously absent key is removed again |
+| Traefik network aliases | shared Traefik container | reconciled to the remaining hostnames |
 | Registry entry | `<state dir>/registry.json` | entry removed |
 
 Why an **override file** instead of rewriting `compose.yaml`: the base file
@@ -142,6 +145,66 @@ port.)
   everything still works — browsers just show a click-through warning.
   Firefox can import the CA per-user without admin rights.
 
+## Reaching the shop from inside its own containers
+
+Everything above is about the **browser on the host** reaching a shop. But the
+shop's containers also call the shop's **own `APP_URL`** — a shop registering
+an app and receiving the confirmation callback, the sitemap generator fetching
+its own URL, the message queue worker running a flow action that hits the API.
+Once `APP_URL` is `https://shop1.shopware.local`, those calls originate *inside*
+a container and by default fail twice: the hostname does not resolve there
+(containers use Docker's own DNS, not the host's `/etc/resolver`), and even if
+it did, the container's trust store does not know the proxy CA.
+
+So the goal here is **self-reachability**: a container calling the shop's own
+URL is routed back to the shop over the exact URL and certificate the browser
+uses.
+
+```mermaid
+sequenceDiagram
+    participant A as shop1 container<br>(web / worker / scheduler)
+    participant DD as Docker DNS<br>(127.0.0.11)
+    participant T as Traefik<br>(shared container)
+    participant W as shop1 web container
+
+    Note over A,W: a shop1 container calls its own https://shop1.shopware.local
+    A->>DD: where is shop1.shopware.local?
+    DD-->>A: Traefik's IP<br>(registered as a network alias)
+    A->>T: TLS to shop1.shopware.local<br>(cert trusted via mounted CA)
+    T->>W: HTTP, routed by Host header
+    W-->>T: response
+    T-->>A: response
+```
+
+- **Resolution** — every registered hostname is added as a **network alias of
+  the shared Traefik container** (`ReconcileHostnames`). A shop container
+  resolving `shop1.shopware.local` via Docker's embedded resolver gets
+  Traefik's address and is routed by `Host` back to the shop, identical to
+  host-side traffic. Reconciled on `up`/`down`, only when the set actually
+  changed (no needless network flap).
+- **Trust** — the proxy CA is mounted read-only into the shop's containers and
+  `NODE_EXTRA_CA_CERTS` points at it, so Node code trusts the certificate
+  immediately.
+
+The web, worker and scheduler containers all join the shared network and carry
+the CA, so a self-call works whether it originates from a request, the queue
+worker, or a scheduled task.
+
+> **Nice side effect — cross-shop:** because all registered hostnames are
+> aliased on the one shared Traefik, a container in one shop can also reach
+> *another* registered shop by its hostname over the same TLS (e.g. one shop
+> acting as an app backend for another). This falls out of the design for
+> free; it is not the primary goal. A shop that is registered but not running
+> resolves to Traefik and gets a 404 (no live route) — the expected "not up"
+> signal, not a crash.
+
+> **Current boundary (PHP):** Node trust works today; PHP/curl reads the
+> system CA bundle, which only includes the mounted CA once the container runs
+> `update-ca-certificates` on it. That step lives in the `docker-dev` image,
+> so full PHP trust is a coordinated `docker-dev` change — the CA is already
+> mounted at the standard anchor path (`/usr/local/share/ca-certificates/`) so
+> it works the moment the image cooperates.
+
 ## Design decisions and their trade-offs
 
 | Decision | Why | Trade-off |
@@ -161,7 +224,7 @@ port.)
 | `~/Library/Application Support/shopware-cli/proxy/` (macOS) / `~/.config/shopware-cli/proxy/` (Linux) | `registry.json` (registered projects + remembered previous values), `settings.json` (domain), `dns.pid` / `dns.domain` / `dns.log` (daemon), `traefik/certs/` + `traefik/dynamic/` (server cert, watched Traefik config) |
 | mkcert CAROOT (e.g. `~/Library/Application Support/mkcert/`) | `rootCA.pem`, `rootCA-key.pem` — shared with mkcert |
 | `/etc/resolver/<domain>` or `/etc/systemd/resolved.conf.d/90-shopware-cli.conf` | OS split-DNS routing (sudo, written by `setup`, removed on domain change) |
-| Per project | `compose.override.yaml`, `APP_URL` in `.env.local`, `url:` in `.shopware-project.yml` — all reverted by `down` |
+| Per project | `compose.override.yaml` (incl. the read-only CA mount), `APP_URL` in `.env.local`, `url:` in `.shopware-project.yml` — all reverted by `down` |
 
 ## When something is wrong
 
@@ -183,3 +246,21 @@ Every failure mode the messages describe is unit-tested.
   `adminer.shop1…`); the raw ports (`3306`, SMTP `1025`, …) are not published
   in proxy mode — use `docker compose exec` or a temporary override for raw
   TCP access.
+- **In-container HTTPS trust is Node-only for now.** PHP/curl calls to a proxy
+  hostname need `update-ca-certificates` to run in the `docker-dev` image (see
+  "Reaching the shop from inside its own containers"); until then such calls
+  must trust the CA explicitly. Only the shop's **root** hostname is aliased
+  for in-container use — service subdomains (`mailer.…`) are host/browser-facing.
+- **Changing the admin-worker setting while a shop is proxied can orphan the
+  worker/scheduler containers.** `down` regenerates `compose.yaml` from the
+  current config; if the dedicated worker/scheduler no longer belong there,
+  `docker compose down` does not know to stop the already-running ones. It is
+  an edge (no normal flow flips that mid-lifecycle); `docker compose down
+  --remove-orphans` clears it.
+- **Dev watchers (`admin-watch`, `storefront-watch`) are not wired end-to-end.**
+  Traefik routes the subdomains and proxies websockets, but Vite's HMR client
+  URL and `allowedHosts` must point at the proxy hostname — that config lives
+  in `docker-dev` / the Vite setup, so it is a separate, cross-repo workstream.
+- **WSL2 is unaddressed.** Native Windows is a clean "not supported"; WSL2
+  (daemon in the distro, browser on the Windows side) would need extra
+  resolver wiring and is out of scope for now.
