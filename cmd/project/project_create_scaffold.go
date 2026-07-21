@@ -77,7 +77,7 @@ func scaffoldProject(ctx context.Context, opts *createOptions, chosenVersion str
 		return err
 	}
 
-	if err := os.WriteFile(filepath.Join(opts.projectFolder, ".gitignore"), []byte("/.idea\n/vendor"), os.ModePerm); err != nil {
+	if err := os.WriteFile(filepath.Join(opts.projectFolder, ".gitignore"), []byte("/.idea\n/.shopware-cli\n/vendor"), os.ModePerm); err != nil {
 		return err
 	}
 
