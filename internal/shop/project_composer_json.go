@@ -95,7 +95,7 @@ func GenerateComposerJson(ctx context.Context, opts ComposerJsonOptions) (string
 	require.set("symfony/flex", "~2")
 
 	allowPlugins := newOrderedMap()
-	allowPlugins.set("php-http/discovery", true)
+	allowPlugins.set("php-http/discovery", false)
 	allowPlugins.set("symfony/flex", true)
 	allowPlugins.set("symfony/runtime", true)
 

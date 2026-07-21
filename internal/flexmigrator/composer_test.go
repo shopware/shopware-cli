@@ -78,6 +78,9 @@ func TestMigrateComposerJson(t *testing.T) {
 		assert.Equal(t, true, runtimeEnabled)
 		_, hasDeprecatedPlugin := allowPlugins["composer/package-versions-deprecated"]
 		assert.False(t, hasDeprecatedPlugin)
+		phpHttpDiscovery, ok := allowPlugins["php-http/discovery"]
+		require.True(t, ok)
+		assert.Equal(t, false, phpHttpDiscovery)
 
 		// Verify symfony configuration
 		symfonyConfig, ok := migratedComposer.Extra["symfony"].(map[string]interface{})

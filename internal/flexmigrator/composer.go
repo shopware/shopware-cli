@@ -34,6 +34,14 @@ func MigrateComposerJson(project string) error {
 	composerJson.EnableComposerPlugin("symfony/runtime")
 	composerJson.RemoveComposerPlugin("composer/package-versions-deprecated")
 
+	// Disable php-http/discovery plugin to prevent auto-discovery
+	allowedPlugins, ok := composerJson.Config["allow-plugins"].(map[string]any)
+	if !ok {
+		allowedPlugins = map[string]any{}
+	}
+	allowedPlugins["php-http/discovery"] = false
+	composerJson.Config["allow-plugins"] = allowedPlugins
+
 	composerJson.Extra["symfony"] = map[string]any{
 		"allow-contrib": true,
 		"endpoint": []string{
