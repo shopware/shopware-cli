@@ -11,7 +11,6 @@ import (
 	"strings"
 	"time"
 
-	"charm.land/huh/v2/spinner"
 	"github.com/spf13/cobra"
 
 	dockerpkg "github.com/shopware/shopware-cli/internal/docker"
@@ -154,23 +153,19 @@ func (e *proxyEnvironment) up(cmd *cobra.Command) error {
 		return err
 	}
 
-	err = spinner.New().
-		Title("Starting shared proxy...").
-		Context(ctx).
-		ActionWithErr(func(ctx context.Context) error {
-			if err := proxy.EnsureTraefikRunning(ctx, e.baseDomain); err != nil {
-				return err
-			}
+	err = runStep(ctx, "Starting shared proxy...", func(ctx context.Context) error {
+		if err := proxy.EnsureTraefikRunning(ctx, e.baseDomain); err != nil {
+			return err
+		}
 
-			// A regenerated certificate (e.g. new project wildcard SANs) is
-			// only served after a restart.
-			if certInfo.Changed {
-				return proxy.RestartTraefik(ctx)
-			}
+		// A regenerated certificate (e.g. new project wildcard SANs) is
+		// only served after a restart.
+		if certInfo.Changed {
+			return proxy.RestartTraefik(ctx)
+		}
 
-			return nil
-		}).
-		Run()
+		return nil
+	})
 	if err != nil {
 		return fmt.Errorf("starting shared proxy: %w", err)
 	}
@@ -190,18 +185,15 @@ func (e *proxyEnvironment) up(cmd *cobra.Command) error {
 	if err := dockerpkg.WriteComposeOverride(e.projectRoot, &dockerpkg.ProxyOptions{
 		Hostname:    e.hostname,
 		NetworkName: proxy.NetworkName,
+		CAPath:      certInfo.CAPath,
 	}); err != nil {
 		return err
 	}
 
 	start := time.Now()
-	err = spinner.New().
-		Title("Starting development environment...").
-		Context(ctx).
-		ActionWithErr(func(ctx context.Context) error {
-			return e.executor.StartEnvironment(ctx)
-		}).
-		Run()
+	err = runStep(ctx, "Starting development environment...", func(ctx context.Context) error {
+		return e.executor.StartEnvironment(ctx)
+	})
 	if err != nil {
 		return fmt.Errorf("starting environment: %w", err)
 	}
@@ -233,6 +225,14 @@ func (e *proxyEnvironment) up(cmd *cobra.Command) error {
 	reg.Upsert(entry)
 	if err := reg.Save(); err != nil {
 		return err
+	}
+
+	// Make the shop reachable at its own hostname from inside its containers,
+	// so self-calls to APP_URL (app callbacks, sitemap, ...) resolve back to
+	// it over TLS; as a side effect every registered shop can reach the
+	// others too.
+	if err := proxy.ReconcileHostnames(ctx, reg.Hostnames()); err != nil {
+		fmt.Println(tui.RedText.Render("  Could not register in-container hostnames: " + err.Error()))
 	}
 
 	fmt.Println(tui.GreenText.Bold(true).Render(fmt.Sprintf("  ✓ Registered with the shared proxy in %s", elapsed)))
@@ -467,13 +467,9 @@ func (e *proxyEnvironment) down(ctx context.Context, hintTeardown bool) error {
 		return err
 	}
 
-	err = spinner.New().
-		Title(fmt.Sprintf("Stopping %s...", e.hostname)).
-		Context(ctx).
-		ActionWithErr(func(ctx context.Context) error {
-			return e.executor.StopEnvironment(ctx)
-		}).
-		Run()
+	err = runStep(ctx, fmt.Sprintf("Stopping %s...", e.hostname), func(ctx context.Context) error {
+		return e.executor.StopEnvironment(ctx)
+	})
 	if err != nil {
 		return fmt.Errorf("stopping environment: %w", err)
 	}
@@ -481,6 +477,11 @@ func (e *proxyEnvironment) down(ctx context.Context, hintTeardown bool) error {
 	if reg.Remove(e.canonicalRoot) {
 		if err := reg.Save(); err != nil {
 			return err
+		}
+
+		// Drop this hostname from the proxy's in-container aliases.
+		if err := proxy.ReconcileHostnames(ctx, reg.Hostnames()); err != nil {
+			fmt.Println(tui.RedText.Render("  Could not update in-container hostnames: " + err.Error()))
 		}
 	}
 
