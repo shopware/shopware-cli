@@ -1,6 +1,7 @@
 package extension
 
 import (
+	"context"
 	_ "embed"
 	"encoding/json"
 	"fmt"
@@ -338,6 +339,19 @@ var extensionAdminWatchCmd = &cobra.Command{
 
 			if len(esbuildMatch) > 0 {
 				if ext, ok := esbuildInstances[esbuildMatch[1]]; ok {
+					// esbuild emits content-hashed filenames ("[name]-[hash].js"), but the
+					// administration always requests the entrypoint under the stable
+					// "extension.js"/"extension.css" name. Resolve the current bundle from the
+					// build context and serve its contents directly.
+					switch esbuildMatch[2] {
+					case "extension.js":
+						ext.serveCurrentOutput(cmd.Context(), w, ".js", "application/javascript")
+						return
+					case "extension.css":
+						ext.serveCurrentOutput(cmd.Context(), w, ".css", "text/css")
+						return
+					}
+
 					req.URL = &url.URL{Scheme: "http", Host: fmt.Sprintf("%s:%d", ext.watchServer.Hosts[0], ext.watchServer.Port), Path: "/" + esbuildMatch[2]}
 					req.Host = req.URL.Host
 					req.RequestURI = req.URL.Path
@@ -403,4 +417,24 @@ type adminWatchExtension struct {
 	context     api.BuildContext
 	watchServer api.ServeResult
 	staticDir   string
+}
+
+// serveCurrentOutput resolves the content-hashed bundle emitted by esbuild and serves
+// it under the stable "extension.js"/"extension.css" URL the administration requests.
+// The suffix selects the JS or CSS output file from the current build result.
+func (e adminWatchExtension) serveCurrentOutput(ctx context.Context, w http.ResponseWriter, suffix, contentType string) {
+	result := e.context.Rebuild()
+
+	for _, file := range result.OutputFiles {
+		if strings.HasSuffix(file.Path, suffix) {
+			w.Header().Set("content-type", contentType)
+			if _, err := w.Write(file.Contents); err != nil {
+				logging.FromContext(ctx).Error(err)
+			}
+			return
+		}
+	}
+
+	logging.FromContext(ctx).Debugf("no %s bundle emitted for %s", suffix, e.assetName)
+	w.WriteHeader(http.StatusNotFound)
 }

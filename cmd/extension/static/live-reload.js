@@ -15,16 +15,18 @@ for (const bundleName of Object.keys(bundles)) {
     new EventSource(`/.shopware-cli/${bundle.name}/esbuild`).addEventListener('change', e => {
         const { added, removed, updated } = JSON.parse(e.data)
 
-        // patch the path of esbuild
-        updated[0] = `/.shopware-cli/${bundle.name}${updated[0]}`
+        // esbuild reports content-hashed filenames (e.g. "/my-plugin-XYZ.css") that no longer
+        // match the stable "extension.css" URL the bundle is served under, so hot-swap the CSS
+        // by its stable path whenever a single CSS file changed.
+        if (!added.length && !removed.length && updated.length === 1 && updated[0].endsWith('.css')) {
+            const cssPath = `/.shopware-cli/${bundle.name}/extension.css`
 
-        if (!added.length && !removed.length && updated.length === 1) {
             for (const link of document.getElementsByTagName("link")) {
                 const url = new URL(link.href)
 
-                if (url.host === location.host && url.pathname === updated[0]) {
+                if (url.host === location.host && url.pathname === cssPath) {
                     const next = link.cloneNode()
-                    next.href = updated[0] + '?' + Math.random().toString(36).slice(2)
+                    next.href = cssPath + '?' + Math.random().toString(36).slice(2)
                     next.onload = () => link.remove()
                     link.parentNode.insertBefore(next, link.nextSibling)
                     return
