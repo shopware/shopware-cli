@@ -24,6 +24,7 @@ import (
 	dockerpkg "github.com/shopware/shopware-cli/internal/docker"
 	"github.com/shopware/shopware-cli/internal/executor"
 	"github.com/shopware/shopware-cli/internal/extension"
+	"github.com/shopware/shopware-cli/internal/proxy"
 	"github.com/shopware/shopware-cli/internal/shop"
 	"github.com/shopware/shopware-cli/internal/system"
 	"github.com/shopware/shopware-cli/internal/tui"
@@ -50,6 +51,7 @@ type OverviewModel struct {
 	err                error
 	width              int
 	height             int
+	adminWatchURL      string
 	adminWatchRunning  bool
 	adminWatchStarting bool
 	sfWatchRunning     bool
@@ -236,9 +238,23 @@ func NewOverviewModel(envType, shopURL, username, password, projectRoot string, 
 		projectRoot:   projectRoot,
 		executor:      exec,
 		shopCfg:       shopCfg,
+		adminWatchURL: resolveAdminWatchURL(projectRoot),
 		loading:       true,
 		healthLoading: true,
 	}
+}
+
+// resolveAdminWatchURL returns the admin watcher's URL. When the project is
+// registered with the shared proxy, the Vite dev server is reachable through
+// it over HTTPS; otherwise it is the local dev-server port.
+func resolveAdminWatchURL(projectRoot string) string {
+	if reg, err := proxy.LoadRegistry(); err == nil {
+		if entry, found := reg.Find(proxy.CanonicalProjectRoot(projectRoot)); found {
+			return "https://admin-watch." + entry.Hostname
+		}
+	}
+
+	return "http://127.0.0.1:5173"
 }
 
 func (m OverviewModel) Init() tea.Cmd {
