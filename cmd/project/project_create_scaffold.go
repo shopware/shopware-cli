@@ -1,35 +1,13 @@
 package project
 
 import (
-	"bytes"
 	"context"
-	_ "embed"
 	"fmt"
-	"os"
-	"path/filepath"
-	"strings"
-	"text/template"
 
 	"github.com/shopware/shopware-cli/internal/shop"
 	"github.com/shopware/shopware-cli/internal/system"
 	"github.com/shopware/shopware-cli/internal/tracking"
-	"github.com/shopware/shopware-cli/logging"
 )
-
-//go:embed static/deploy.php
-var deployerTemplate string
-
-//go:embed static/github-ci.yml
-var githubCITemplate string
-
-//go:embed static/github-deploy.yml
-var githubDeployTemplate string
-
-//go:embed static/gitlab-ci.yml.tmpl
-var gitlabCITemplate string
-
-//go:embed static/shopware-paas-application.yaml
-var shopwarePaasAppTemplate string
 
 func scaffoldProject(ctx context.Context, opts *createOptions, chosenVersion string) error {
 	go tracking.Track(ctx, tracking.EventProjectCreate, map[string]string{
@@ -42,118 +20,21 @@ func scaffoldProject(ctx context.Context, opts *createOptions, chosenVersion str
 		tracking.TagInteractive:       fmt.Sprintf("%v", opts.interactive),
 	})
 
-	if err := os.MkdirAll(opts.projectFolder, os.ModePerm); err != nil {
-		return err
-	}
+	scaffold := newShopwareProjectScaffold(opts, chosenVersion)
+	scaffold.SymfonyCLIInstalled = !opts.useDocker && system.IsSymfonyCliInstalled()
 
-	logging.FromContext(ctx).Infof("Setting up Shopware %s", chosenVersion)
+	return scaffold.Scaffold(ctx)
+}
 
-	composerJson, err := shop.GenerateComposerJson(ctx, shop.ComposerJsonOptions{
+func newShopwareProjectScaffold(opts *createOptions, chosenVersion string) shop.ShopwareProjectScaffold {
+	return shop.ShopwareProjectScaffold{
+		ProjectFolder:    opts.projectFolder,
 		Version:          chosenVersion,
-		RC:               strings.Contains(chosenVersion, "rc"),
+		DeploymentMethod: opts.selectedDeployment,
+		CISystem:         opts.selectedCI,
+		UseDocker:        opts.useDocker,
 		UseElasticsearch: opts.withElasticsearch,
 		UseAMQP:          opts.withAMQP,
 		NoAudit:          opts.noAudit,
-		DeploymentMethod: opts.selectedDeployment,
-	})
-	if err != nil {
-		return err
 	}
-
-	if err := os.WriteFile(filepath.Join(opts.projectFolder, "composer.json"), []byte(composerJson), os.ModePerm); err != nil {
-		return err
-	}
-
-	if err := os.WriteFile(filepath.Join(opts.projectFolder, ".env"), []byte(""), os.ModePerm); err != nil {
-		return err
-	}
-
-	envLocalContent := ""
-	if opts.useDocker {
-		envLocalContent += "APP_ENV=dev\n"
-	}
-
-	if err := os.WriteFile(filepath.Join(opts.projectFolder, ".env.local"), []byte(envLocalContent), os.ModePerm); err != nil {
-		return err
-	}
-
-	if err := os.WriteFile(filepath.Join(opts.projectFolder, ".gitignore"), []byte("/.idea\n/.shopware-cli\n/vendor"), os.ModePerm); err != nil {
-		return err
-	}
-
-	if err := os.MkdirAll(filepath.Join(opts.projectFolder, "custom", "plugins"), os.ModePerm); err != nil {
-		return err
-	}
-
-	if err := os.MkdirAll(filepath.Join(opts.projectFolder, "custom", "static-plugins"), os.ModePerm); err != nil {
-		return err
-	}
-
-	if !opts.useDocker && system.IsSymfonyCliInstalled() {
-		if err := os.WriteFile(filepath.Join(opts.projectFolder, "php.ini"), []byte("memory_limit=512M"), os.ModePerm); err != nil {
-			return err
-		}
-	}
-
-	if err := setupDeployment(opts.projectFolder, opts.selectedDeployment); err != nil {
-		return err
-	}
-
-	return setupCI(ctx, opts.projectFolder, opts.selectedCI, opts.selectedDeployment)
-}
-
-func setupDeployment(projectFolder, deploymentMethod string) error {
-	switch deploymentMethod {
-	case shop.DeploymentDeployer:
-		if err := os.WriteFile(filepath.Join(projectFolder, "deploy.php"), []byte(deployerTemplate), os.ModePerm); err != nil {
-			return err
-		}
-
-	case shop.DeploymentShopwarePaaS:
-		if err := os.WriteFile(filepath.Join(projectFolder, "application.yaml"), []byte(shopwarePaasAppTemplate), os.ModePerm); err != nil {
-			return err
-		}
-	}
-
-	return nil
-}
-
-func setupCI(ctx context.Context, projectFolder, ciSystem, deploymentMethod string) error {
-	switch ciSystem {
-	case ciGitHub:
-		if err := os.MkdirAll(filepath.Join(projectFolder, ".github", "workflows"), os.ModePerm); err != nil {
-			return err
-		}
-		ciPath := filepath.Join(".github", "workflows", "ci.yml")
-		if err := os.WriteFile(filepath.Join(projectFolder, ciPath), []byte(githubCITemplate), os.ModePerm); err != nil {
-			return err
-		}
-		logging.FromContext(ctx).Infof("Created CI template %s", ciPath)
-		if deploymentMethod == shop.DeploymentDeployer {
-			deployPath := filepath.Join(".github", "workflows", "deploy.yml")
-			if err := os.WriteFile(filepath.Join(projectFolder, deployPath), []byte(githubDeployTemplate), os.ModePerm); err != nil {
-				return err
-			}
-			logging.FromContext(ctx).Infof("Created CI template %s", deployPath)
-		}
-
-	case ciGitLab:
-		tmpl, err := template.New("gitlab-ci").Parse(gitlabCITemplate)
-		if err != nil {
-			return err
-		}
-
-		var buf bytes.Buffer
-		if err := tmpl.Execute(&buf, struct{ Deployer bool }{Deployer: deploymentMethod == shop.DeploymentDeployer}); err != nil {
-			return err
-		}
-
-		ciPath := ".gitlab-ci.yml"
-		if err := os.WriteFile(filepath.Join(projectFolder, ciPath), buf.Bytes(), os.ModePerm); err != nil {
-			return err
-		}
-		logging.FromContext(ctx).Infof("Created CI template %s", ciPath)
-	}
-
-	return nil
 }
