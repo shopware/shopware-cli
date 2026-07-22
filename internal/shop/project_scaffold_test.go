@@ -44,7 +44,7 @@ func TestShopwareProjectScaffold(t *testing.T) {
 		assert.Contains(t, composerJSON, `"block-insecure": false`)
 		assert.Empty(t, readScaffoldFile(t, projectFolder, ".env"))
 		assert.Empty(t, readScaffoldFile(t, projectFolder, ".env.local"))
-		assert.Equal(t, "/.idea\n/vendor", readScaffoldFile(t, projectFolder, ".gitignore"))
+		assert.Equal(t, "/.idea\n/.shopware-cli\n/vendor", readScaffoldFile(t, projectFolder, ".gitignore"))
 		assert.Equal(t, "memory_limit=512M", readScaffoldFile(t, projectFolder, "php.ini"))
 	})
 

@@ -110,7 +110,7 @@ func (s *ShopwareProjectScaffold) Scaffold(ctx context.Context) error {
 		{path: "composer.json", content: composerJSON},
 		{path: ".env"},
 		{path: ".env.local", content: envLocalContent(s.UseDocker)},
-		{path: ".gitignore", content: "/.idea\n/vendor"},
+		{path: ".gitignore", content: "/.idea\n/.shopware-cli\n/vendor"},
 	}
 	for _, file := range files {
 		if err := os.WriteFile(filepath.Join(s.ProjectFolder, file.path), []byte(file.content), os.ModePerm); err != nil {
