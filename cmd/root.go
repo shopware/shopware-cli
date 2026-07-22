@@ -3,6 +3,7 @@ package cmd
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"os/signal"
 	"path"
@@ -13,6 +14,7 @@ import (
 	"syscall"
 	"time"
 
+	"charm.land/lipgloss/v2"
 	"github.com/mattn/go-isatty"
 	"github.com/spf13/cobra"
 
@@ -23,10 +25,12 @@ import (
 	"github.com/shopware/shopware-cli/internal/system"
 	"github.com/shopware/shopware-cli/internal/tracking"
 	"github.com/shopware/shopware-cli/internal/tui"
+	"github.com/shopware/shopware-cli/internal/update"
 	"github.com/shopware/shopware-cli/logging"
 )
 
 var version = "dev"
+var repo = "shopware/shopware-cli"
 
 var rootCmd = &cobra.Command{
 	Use:     "shopware-cli",
@@ -54,7 +58,19 @@ func run(ctx context.Context) int {
 	tui.AppVersion = version
 	accountApi.SetUserAgent("shopware-cli/" + version)
 	rootCmd.SetArgs(args)
-
+	
+	// Check for update in the background
+	updateCtx, updateCancel := context.WithTimeout(ctx, 300*time.Millisecond)
+	defer updateCancel()
+	updateMessageChan := make(chan *update.ReleaseInfo, 1)
+	go func() {
+		releaseInfo, err := checkForUpdate(updateCtx, repo)
+		if err != nil {
+			logging.FromContext(ctx).Debugf("checking for shopware cli update failed: %v", err)
+		}
+		updateMessageChan <- releaseInfo
+	}()
+	
 	start := time.Now()
 	err := rootCmd.ExecuteContext(ctx)
 
@@ -91,6 +107,21 @@ func run(ctx context.Context) int {
 	if err != nil {
 		logging.FromContext(ctx).Errorln(err)
 		return 1
+	}
+
+	// todo: do not notify homebrew users if the release was recent so they can update via brew update
+	// todo: hint on mac / linux to update via brew / apt (if installed via package manager?)
+	// todo: distinguish if tui or non-tui command was run and print the update message accordingly
+	// Wait for the update check to finish and print a message if an update is available
+	newRelease := <-updateMessageChan
+	if newRelease != nil {
+		// Print update message to stdout
+		updateMsg := fmt.Sprintf("⁺₊⋆ Update available! %s -> %s ⋆₊⁺", version, newRelease.Version)
+		renderedUpdateMsg := lipgloss.NewStyle().Bold(true).Foreground(tui.WarnColor).Render(updateMsg)
+		fmt.Fprintln(os.Stdout, renderedUpdateMsg)
+		
+		// Render the tui header with the update message
+		// tui.RenderHeaderWithUpdateMessage()
 	}
 
 	return 0
@@ -156,6 +187,15 @@ func commandNameFromBinaryPath(binaryPath string) string {
 	}
 
 	return binaryName
+}
+
+// checkForUpdate returns the latest release info if an update is available.
+func checkForUpdate(ctx context.Context, repo string) (*update.ReleaseInfo, error) {
+	if !update.ShouldCheckForUpdate(version) {
+		return nil, nil
+	}
+
+	return update.CheckForUpdate(ctx, repo, version)
 }
 
 func init() {
