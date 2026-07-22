@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/charmbracelet/x/term"
 	"github.com/go-sql-driver/mysql"
 	"github.com/klauspost/compress/zstd"
 	"github.com/spf13/cobra"
@@ -19,6 +20,7 @@ import (
 	"github.com/shopware/shopware-cli/internal/envfile"
 	"github.com/shopware/shopware-cli/internal/mysqldump"
 	"github.com/shopware/shopware-cli/internal/shop"
+	"github.com/shopware/shopware-cli/internal/system"
 	"github.com/shopware/shopware-cli/logging"
 )
 
@@ -26,6 +28,8 @@ const (
 	CompressionGzip = "gzip"
 	CompressionZstd = "zstd"
 )
+
+const passwordFlagPrompt = "__INTERACTIVE__"
 
 var projectDatabaseDumpCmd = &cobra.Command{
 	Use:   "dump",
@@ -176,8 +180,28 @@ func assembleConnectionURI(cmd *cobra.Command) (*mysql.Config, error) {
 		cfg.Passwd = ""
 	}
 
-	if password != "" {
-		cfg.Passwd = password
+	if cmd.Flags().Changed("password") {
+		if password == passwordFlagPrompt {
+			if !system.IsInteractionEnabled(cmd.Context()) {
+				return nil, fmt.Errorf("cannot prompt for password: interaction disabled")
+			}
+
+			if !term.IsTerminal(os.Stdin.Fd()) {
+				return nil, fmt.Errorf("cannot prompt for password: stdin is not a terminal")
+			}
+
+			fmt.Fprint(cmd.ErrOrStderr(), "Enter MySQL password: ") //nolint:errcheck // prompt output is best-effort, ReadPassword surfaces real terminal errors
+			pass, err := term.ReadPassword(os.Stdin.Fd())
+			fmt.Fprintln(cmd.ErrOrStderr()) //nolint:errcheck // trailing newline is best-effort
+
+			if err != nil {
+				return nil, fmt.Errorf("could not read password: %w", err)
+			}
+
+			cfg.Passwd = string(pass)
+		} else {
+			cfg.Passwd = password
+		}
 	}
 
 	return cfg, nil
@@ -233,6 +257,7 @@ func init() {
 	projectDatabaseDumpCmd.Flags().String("database", "", "database name")
 	projectDatabaseDumpCmd.Flags().StringP("username", "u", "", "mysql user")
 	projectDatabaseDumpCmd.Flags().StringP("password", "p", "", "mysql password")
+	projectDatabaseDumpCmd.Flags().Lookup("password").NoOptDefVal = passwordFlagPrompt
 	projectDatabaseDumpCmd.Flags().String("port", "", "mysql port")
 
 	projectDatabaseDumpCmd.Flags().String("output", "dump.sql", "file or - (for stdout)")
