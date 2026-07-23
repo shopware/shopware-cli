@@ -117,6 +117,26 @@ func TestShopwareProjectScaffold(t *testing.T) {
 	})
 }
 
+func TestWriteComposerJsonDisablesAuditBlocking(t *testing.T) {
+	t.Parallel()
+
+	projectFolder := t.TempDir()
+	scaffold := ShopwareProjectScaffold{
+		ProjectFolder: projectFolder,
+		Version:       "6.6.10.0",
+	}
+
+	require.NoError(t, scaffold.Scaffold(t.Context()))
+	assert.NotContains(t, readScaffoldFile(t, projectFolder, "composer.json"), `"block-insecure"`)
+
+	scaffold.NoAudit = true
+	require.NoError(t, scaffold.WriteComposerJson(t.Context()))
+
+	composerJSON := readScaffoldFile(t, projectFolder, "composer.json")
+	assert.Contains(t, composerJSON, `"block-insecure": false`)
+	assert.Contains(t, composerJSON, `"shopware/core": "6.6.10.0"`)
+}
+
 func TestSetupDeployment(t *testing.T) {
 	t.Parallel()
 

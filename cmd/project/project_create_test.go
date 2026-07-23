@@ -79,3 +79,36 @@ func TestApplyNonInteractiveDefaults(t *testing.T) {
 		assert.Equal(t, "my-shop", opts.projectFolder)
 	})
 }
+
+func TestIsComposerSecurityBlocked(t *testing.T) {
+	t.Parallel()
+
+	t.Run("detects packages blocked by security advisories", func(t *testing.T) {
+		t.Parallel()
+		output := `- shopware/core v6.7.12.1 requires dompdf/dompdf 3.1.4 -> found dompdf/dompdf[v3.1.4] but these were not loaded, because they are affected by security advisories ("PKSA-cv56-2228-pzqx")`
+		assert.True(t, isComposerSecurityBlocked(output))
+	})
+
+	t.Run("ignores regular resolution conflicts", func(t *testing.T) {
+		t.Parallel()
+		output := `- shopware/administration v6.7.6.0 requires shopware/core v6.7.6.0 -> found shopware/core[v6.7.6.0] but it conflicts with your root composer.json require (6.7.12.1).`
+		assert.False(t, isComposerSecurityBlocked(output))
+	})
+
+	t.Run("ignores empty output", func(t *testing.T) {
+		t.Parallel()
+		assert.False(t, isComposerSecurityBlocked(""))
+	})
+}
+
+func TestHandleSecurityBlockedInstallNonInteractive(t *testing.T) {
+	t.Parallel()
+
+	opts := createOptions{projectFolder: t.TempDir(), interactive: false}
+
+	err := handleSecurityBlockedInstall(t.Context(), &opts, "6.7.12.1")
+
+	assert.ErrorContains(t, err, "re-run with --no-audit")
+	assert.ErrorContains(t, err, "6.7.12.1")
+	assert.False(t, opts.noAudit)
+}
