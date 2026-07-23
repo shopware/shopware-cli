@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/shyim/go-spdx"
 
@@ -273,7 +274,7 @@ func runDefaultValidate(ext Extension, check validation.Check) {
 	})
 
 	metaData := ext.GetMetaData()
-	if len([]rune(metaData.Label.German)) == 0 {
+	if len(metaData.Label.German) == 0 {
 		check.AddResult(validation.CheckResult{
 			Path:       rootFile,
 			Identifier: "metadata.label",
@@ -293,7 +294,10 @@ func runDefaultValidate(ext Extension, check validation.Check) {
 
 	// Skip description validation for ShopwareBundle
 	if ext.GetType() != TypeShopwareBundle {
-		if len([]rune(metaData.Description.German)) == 0 {
+		germanDescriptionLength := utf8.RuneCountInString(metaData.Description.German)
+		englishDescriptionLength := utf8.RuneCountInString(metaData.Description.English)
+
+		if germanDescriptionLength == 0 {
 			check.AddResult(validation.CheckResult{
 				Path:       rootFile,
 				Identifier: "metadata.description",
@@ -302,7 +306,7 @@ func runDefaultValidate(ext Extension, check validation.Check) {
 			})
 		}
 
-		if len(metaData.Description.English) == 0 {
+		if englishDescriptionLength == 0 {
 			check.AddResult(validation.CheckResult{
 				Path:       rootFile,
 				Identifier: "metadata.description",
@@ -311,20 +315,20 @@ func runDefaultValidate(ext Extension, check validation.Check) {
 			})
 		}
 
-		if len([]rune(metaData.Description.German)) < 150 || len([]rune(metaData.Description.German)) > 185 {
+		if germanDescriptionLength < 150 || germanDescriptionLength > 185 {
 			check.AddResult(validation.CheckResult{
 				Path:       rootFile,
 				Identifier: "metadata.description",
-				Message:    fmt.Sprintf("in composer.json, the german description with length of %d should have a length from 150 up to 185 characters.", len([]rune(metaData.Description.German))),
+				Message:    fmt.Sprintf("in composer.json, the german description with length of %d should have a length from 150 up to 185 characters.", germanDescriptionLength),
 				Severity:   validation.SeverityError,
 			})
 		}
 
-		if len(metaData.Description.English) < 150 || len(metaData.Description.English) > 185 {
+		if englishDescriptionLength < 150 || englishDescriptionLength > 185 {
 			check.AddResult(validation.CheckResult{
 				Path:       rootFile,
 				Identifier: "metadata.description",
-				Message:    fmt.Sprintf("in composer.json, the english description with length of %d should have a length from 150 up to 185 characters.", len(metaData.Description.English)),
+				Message:    fmt.Sprintf("in composer.json, the english description with length of %d should have a length from 150 up to 185 characters.", englishDescriptionLength),
 				Severity:   validation.SeverityError,
 			})
 		}

@@ -34,7 +34,7 @@ func runCreateForm(cmd *cobra.Command, opts *createOptions, filteredVersions []*
 	}
 
 	minorOptions := make([]huh.Option[string], 0, len(minorGroups)+1)
-	minorOptions = append(minorOptions, huh.NewOption(versionLatest, versionLatest))
+	minorOptions = append(minorOptions, huh.NewOption(shop.VersionLatest, shop.VersionLatest))
 	for _, g := range minorGroups {
 		minorOptions = append(minorOptions, huh.NewOption(g.label, g.label))
 	}
@@ -47,9 +47,9 @@ func runCreateForm(cmd *cobra.Command, opts *createOptions, filteredVersions []*
 	}
 
 	ciOptions := []huh.Option[string]{
-		huh.NewOption("None", ciNone),
-		huh.NewOption("GitHub Actions", ciGitHub),
-		huh.NewOption("GitLab CI", ciGitLab),
+		huh.NewOption("None", shop.CINone),
+		huh.NewOption("GitHub Actions", shop.CIGitHub),
+		huh.NewOption("GitLab CI", shop.CIGitLab),
 	}
 
 	needsAdvanced := opts.selectedDeployment == "" || opts.selectedCI == "" ||
@@ -77,7 +77,7 @@ func runCreateForm(cmd *cobra.Command, opts *createOptions, filteredVersions []*
 			selectAMQP = tui.No
 		}
 	}
-	selectedMinor := versionLatest
+	selectedMinor := shop.VersionLatest
 
 	theme := huh.ThemeFunc(func(isDark bool) *huh.Styles {
 		s := huh.ThemeCharm(isDark)
@@ -111,19 +111,7 @@ func runCreateForm(cmd *cobra.Command, opts *createOptions, filteredVersions []*
 						if s == "" {
 							return nil
 						}
-						if err := validateProjectName(s); err != nil {
-							return err
-						}
-						if info, err := os.Stat(s); err == nil && info.IsDir() {
-							empty, err := system.IsDirEmpty(s)
-							if err != nil {
-								return err
-							}
-							if !empty {
-								return fmt.Errorf("folder already exists and is not empty")
-							}
-						}
-						return nil
+						return shop.ValidateProjectFolder(s)
 					}),
 			))
 		}
@@ -150,11 +138,11 @@ func runCreateForm(cmd *cobra.Command, opts *createOptions, filteredVersions []*
 							}
 							return out
 						}
-						return []huh.Option[string]{huh.NewOption(versionLatest, versionLatest)}
+						return []huh.Option[string]{huh.NewOption(shop.VersionLatest, shop.VersionLatest)}
 					}, &selectedMinor).
 					Value(&opts.selectedVersion),
 			).WithHideFunc(func() bool {
-				return selectedMinor == versionLatest
+				return selectedMinor == shop.VersionLatest
 			}))
 		}
 
@@ -189,7 +177,7 @@ func runCreateForm(cmd *cobra.Command, opts *createOptions, filteredVersions []*
 		}
 
 		if needsCI {
-			opts.selectedCI = ciNone
+			opts.selectedCI = shop.CINone
 			formGroups = append(formGroups, huh.NewGroup(
 				huh.NewSelect[string]().
 					Title("CI/CD System").
@@ -234,7 +222,7 @@ func runCreateForm(cmd *cobra.Command, opts *createOptions, filteredVersions []*
 		}
 
 		if opts.selectedVersion == "" {
-			opts.selectedVersion = versionLatest
+			opts.selectedVersion = shop.VersionLatest
 		}
 
 		if opts.projectFolder == "" {

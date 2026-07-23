@@ -17,6 +17,7 @@ type mockExtension struct {
 	extVersion *version.Version
 	config     *Config
 	rootDir    string
+	constraint *version.Constraints
 }
 
 func (m *mockExtension) GetName() (string, error) {
@@ -65,6 +66,9 @@ func (m *mockExtension) GetLicense() (string, error) {
 }
 
 func (m *mockExtension) GetShopwareVersionConstraint() (*version.Constraints, error) {
+	if m.constraint != nil {
+		return m.constraint, nil
+	}
 	c, err := version.NewConstraint(">= 6.5")
 	if err != nil {
 		return nil, err

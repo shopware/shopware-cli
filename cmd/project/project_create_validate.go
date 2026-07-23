@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"sort"
 	"strings"
 
 	"charm.land/huh/v2"
@@ -19,35 +18,21 @@ import (
 )
 
 func validateAndPreflight(ctx context.Context, opts *createOptions, releases []repository.Version, filteredVersions []*version.Version) (string, *shop.PHPConstraint, error) {
-	if err := validateProjectName(opts.projectFolder); err != nil {
+	chosenVersion, err := shop.ResolveInstallVersion(opts.selectedVersion, filteredVersions)
+	if err != nil {
 		return "", nil, err
-	}
-
-	chosenVersion := resolveVersion(opts.selectedVersion, filteredVersions)
-	if chosenVersion == "" {
-		return "", nil, fmt.Errorf("cannot find version %s", opts.selectedVersion)
 	}
 
 	phpConstraint := shop.PHPConstraintForShopwareVersion(releases, chosenVersion)
 
-	validDeployments := map[string]bool{
-		shop.DeploymentNone:         true,
-		shop.DeploymentDeployer:     true,
-		shop.DeploymentPlatformSH:   true,
-		shop.DeploymentShopwarePaaS: true,
+	scaffold := newShopwareProjectScaffold(opts, chosenVersion)
+	scaffold.Normalize()
+	if err := scaffold.Validate(); err != nil {
+		return "", nil, err
 	}
-	if !validDeployments[opts.selectedDeployment] {
-		return "", nil, fmt.Errorf("invalid deployment method: %s. Valid options: none, deployer, platformsh, shopware-paas", opts.selectedDeployment)
-	}
-
-	validCISystems := map[string]bool{
-		ciNone:   true,
-		ciGitHub: true,
-		ciGitLab: true,
-	}
-	if !validCISystems[opts.selectedCI] {
-		return "", nil, fmt.Errorf("invalid CI system: %s. Valid options: none, github, gitlab", opts.selectedCI)
-	}
+	opts.selectedDeployment = scaffold.DeploymentMethod
+	opts.selectedCI = scaffold.CISystem
+	opts.withElasticsearch = scaffold.UseElasticsearch
 
 	dockerHint := "re-run with " + tui.BoldText.Render("--docker")
 	if err := system.ValidateProjectDependencies(ctx, opts.useDocker, phpConstraint, "create a Shopware project", dockerHint); err != nil {
@@ -60,22 +45,6 @@ func validateAndPreflight(ctx context.Context, opts *createOptions, releases []r
 
 	if err := checkIncompatibilities(ctx, opts); err != nil {
 		return "", nil, err
-	}
-
-	if _, err := os.Stat(opts.projectFolder); err == nil {
-		empty, err := system.IsDirEmpty(opts.projectFolder)
-		if err != nil {
-			return "", nil, err
-		}
-
-		if !empty {
-			return "", nil, fmt.Errorf("the folder %s exists already and is not empty", opts.projectFolder)
-		}
-	}
-
-	// @todo: it's broken in paas deployments, the paas recipe configures Elasticsearch and it's difficult to do it only when elasticsearch is available.
-	if opts.selectedDeployment == shop.DeploymentShopwarePaaS {
-		opts.withElasticsearch = true
 	}
 
 	return chosenVersion, phpConstraint, nil
@@ -194,68 +163,4 @@ func pluralize(n int, singular, plural string) string {
 		return singular
 	}
 	return plural
-}
-
-func resolveVersion(selectedVersion string, filteredVersions []*version.Version) string {
-	if selectedVersion == versionLatest {
-		// pick the most recent stable (non-RC) version
-		for _, v := range filteredVersions {
-			vs := v.String()
-			if !strings.Contains(strings.ToLower(vs), "rc") {
-				return vs
-			}
-		}
-		// if no stable found, fall back to top entry
-		if len(filteredVersions) > 0 {
-			return filteredVersions[0].String()
-		}
-		return ""
-	}
-
-	if strings.HasPrefix(selectedVersion, "dev-") {
-		return selectedVersion
-	}
-
-	for _, release := range filteredVersions {
-		if release.String() == selectedVersion {
-			return release.String()
-		}
-	}
-
-	return ""
-}
-
-func filterInstallVersions(releases []repository.Version) []*version.Version {
-	filteredVersions := make([]*version.Version, 0)
-	constraint, _ := version.NewConstraint(">=6.4.18.0")
-
-	for _, release := range releases {
-		if strings.HasPrefix(release.Version, "dev-") {
-			continue
-		}
-
-		parsed, err := version.NewVersion(release.Version)
-		if err != nil {
-			continue
-		}
-
-		// Skip branch dev builds like "6.7.12.x-dev". These parse fine and
-		// satisfy the constraint, but they are not installable patch releases
-		// and should not be offered in the version picker.
-		if parsed.Prerelease() == "dev" {
-			continue
-		}
-
-		if constraint.Check(parsed) {
-			filteredVersions = append(filteredVersions, parsed)
-		}
-	}
-
-	sort.Sort(sort.Reverse(version.Collection(filteredVersions)))
-
-	for i, v := range filteredVersions {
-		filteredVersions[i], _ = version.NewVersion(strings.TrimPrefix(v.String(), "v"))
-	}
-
-	return filteredVersions
 }

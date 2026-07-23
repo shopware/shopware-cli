@@ -83,6 +83,30 @@ func TestRunSpinnerWithLogs(t *testing.T) {
 	})
 }
 
+func TestRunSpinnerWithLogsTeesPresetWriters(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+
+	cmd := exec.CommandContext(t.Context(), "sh", "-c", "echo out; echo err >&2")
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+
+	var logLines []string
+	err := runSpinnerWithLogs(t.Context(), "Installing dependencies", cmd, &bytes.Buffer{}, func(_ context.Context, model tea.Model) error {
+		progress := model.(*installProgressModel)
+		progress.err = progress.cmd.Run()
+		logLines = progress.logWriter.GetLastLines(10)
+		return nil
+	})
+	require.NoError(t, err)
+
+	// The caller's writers still receive the command output...
+	assert.Equal(t, "out\n", stdout.String())
+	assert.Equal(t, "err\n", stderr.String())
+
+	// ...and the spinner's log writer captures it for the live log view.
+	assert.ElementsMatch(t, []string{"out", "err"}, logLines)
+}
+
 func TestLogWriterStoresAndTrimsLines(t *testing.T) {
 	var writer logWriter
 

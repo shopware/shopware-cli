@@ -1,10 +1,6 @@
 package project
 
 import (
-	"fmt"
-	"path/filepath"
-	"regexp"
-
 	"github.com/shyim/go-composer/repository"
 	"github.com/spf13/cobra"
 
@@ -14,45 +10,9 @@ import (
 )
 
 const (
-	versionLatest = "latest"
-
-	ciNone   = "none"
-	ciGitHub = "github"
-	ciGitLab = "gitlab"
-
 	// projectNameHelp is the help text shown under the project name input.
 	projectNameHelp = "The name of the project directory to create (leave empty to use the current directory)"
-	// projectNameRule describes which characters are allowed in a project name.
-	// It is shared between the up-front validation error and the live form hint
-	// so both stay in sync.
-	projectNameRule = "only lowercase letters, digits, dashes (-) and underscores (_) are allowed, and it must start with a lowercase letter or digit"
 )
-
-// composeProjectNameRegexp matches names that are valid as a Docker Compose
-// project name. Docker Compose only allows lowercase letters, digits, dashes
-// and underscores, and the name must start with a lowercase letter or digit.
-// Anything else (uppercase letters, umlauts, spaces, dots, …) is rejected by
-// Docker Compose once the generated Docker setup runs from the project
-// directory, so we reject such project names up front.
-var composeProjectNameRegexp = regexp.MustCompile(`^[a-z0-9][a-z0-9_-]*$`)
-
-// validateProjectName ensures the project folder name can be used as a Docker
-// Compose project name. Only the final path element is relevant, as that is
-// what Docker Compose uses to derive the project name.
-// The special value "." (current directory) is always allowed.
-func validateProjectName(name string) error {
-	if name == "." {
-		return nil
-	}
-
-	base := filepath.Base(name)
-
-	if !composeProjectNameRegexp.MatchString(base) {
-		return fmt.Errorf("invalid project name %q: %s, so it can be used as a Docker Compose project name", base, projectNameRule)
-	}
-
-	return nil
-}
 
 // projectNameFieldDescription returns the description shown under the project
 // name input in the interactive form. While the typed name is invalid it
@@ -60,8 +20,8 @@ func validateProjectName(name string) error {
 // returns the regular help text.
 func projectNameFieldDescription(name string) string {
 	if name != "" {
-		if err := validateProjectName(name); err != nil {
-			return tui.RedText.Render(projectNameRule)
+		if err := shop.ValidateProjectName(name); err != nil {
+			return tui.RedText.Render(shop.ProjectNameRule)
 		}
 	}
 
@@ -98,9 +58,9 @@ var projectCreateCmd = &cobra.Command{
 			if err != nil {
 				return []string{}, cobra.ShellCompDirectiveNoFileComp
 			}
-			filteredVersions := filterInstallVersions(pkg.Versions)
+			filteredVersions := shop.FilterInstallVersions(pkg.Versions)
 			versions := make([]string, 0, len(filteredVersions)+1)
-			versions = append(versions, versionLatest)
+			versions = append(versions, shop.VersionLatest)
 			for _, v := range filteredVersions {
 				versions = append(versions, v.String())
 			}
@@ -117,7 +77,7 @@ var projectCreateCmd = &cobra.Command{
 		// rejected live. Validate it up front so it is forbidden immediately
 		// instead of only after the rest of the form has been completed.
 		if opts.projectFolder != "" {
-			if err := validateProjectName(opts.projectFolder); err != nil {
+			if err := shop.ValidateProjectName(opts.projectFolder); err != nil {
 				return err
 			}
 		}
@@ -131,7 +91,7 @@ var projectCreateCmd = &cobra.Command{
 			return err
 		}
 		releases := pkg.Versions
-		filteredVersions := filterInstallVersions(releases)
+		filteredVersions := shop.FilterInstallVersions(releases)
 
 		if opts.interactive {
 			if err := runCreateForm(cmd, &opts, filteredVersions); err != nil {
@@ -152,7 +112,7 @@ var projectCreateCmd = &cobra.Command{
 			return err
 		}
 
-		return installAndFinalize(cmd, &opts, phpConstraint)
+		return installAndFinalize(cmd, &opts, phpConstraint, chosenVersion)
 	},
 }
 
@@ -203,13 +163,13 @@ func applyNonInteractiveDefaults(opts *createOptions) error {
 		opts.projectFolder = "."
 	}
 	if opts.selectedVersion == "" {
-		opts.selectedVersion = versionLatest
+		opts.selectedVersion = shop.VersionLatest
 	}
 	if opts.selectedDeployment == "" {
 		opts.selectedDeployment = shop.DeploymentNone
 	}
 	if opts.selectedCI == "" {
-		opts.selectedCI = ciNone
+		opts.selectedCI = shop.CINone
 	}
 	if !opts.elasticsearchExplicit {
 		opts.withElasticsearch = true

@@ -135,7 +135,7 @@ var extensionZipCmd = &cobra.Command{
 				return fmt.Errorf("before hooks assets: %w", err)
 			}
 
-			shopwareConstraint, err := tempExt.GetShopwareVersionConstraint()
+			shopwareConstraint, err := extension.GetShopwareVersionConstraintForBuild(tempExt)
 			if err != nil {
 				return fmt.Errorf("get shopware version constraint: %w", err)
 			}

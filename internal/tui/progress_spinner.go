@@ -28,8 +28,16 @@ func runSpinnerWithLogs(ctx context.Context, title string, cmd *exec.Cmd, output
 	defer cancel()
 
 	var writer logWriter
-	cmd.Stdout = &writer
-	cmd.Stderr = &writer
+	if cmd.Stdout != nil {
+		cmd.Stdout = io.MultiWriter(cmd.Stdout, &writer)
+	} else {
+		cmd.Stdout = &writer
+	}
+	if cmd.Stderr != nil {
+		cmd.Stderr = io.MultiWriter(cmd.Stderr, &writer)
+	} else {
+		cmd.Stderr = &writer
+	}
 
 	s := NewBrandSpinner()
 
