@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/shyim/go-version"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -282,65 +283,110 @@ func TestUpdateMetaData_App(t *testing.T) {
 }
 
 func TestGetShopwareVersionConstraintFromComposer(t *testing.T) {
-	t.Run("uses config constraint when set", func(t *testing.T) {
-		config := &Config{
-			Build: ConfigBuild{
-				ShopwareVersionConstraint: "~6.5.0",
-			},
-		}
-
-		constraint, err := getShopwareVersionConstraintFromComposer(config, map[string]string{
-			"shopware/core": "~6.4.0",
-		})
-		require.NoError(t, err)
-		assert.NotNil(t, constraint)
-	})
-
-	t.Run("uses composer require when config not set", func(t *testing.T) {
-		config := &Config{}
-
-		constraint, err := getShopwareVersionConstraintFromComposer(config, map[string]string{
+	t.Run("uses composer require", func(t *testing.T) {
+		constraint, err := getShopwareVersionConstraintFromComposer(map[string]string{
 			"shopware/core": "~6.5.0",
 		})
 		require.NoError(t, err)
 		assert.NotNil(t, constraint)
+		assert.True(t, constraint.Check(version.Must(version.NewVersion("6.5.0.0"))))
+	})
+
+	t.Run("ignores the build override and always uses composer require", func(t *testing.T) {
+		// The build override must never leak into the reported compatibility constraint,
+		// otherwise account uploads would report the wrong compatible Shopware versions.
+		constraint, err := getShopwareVersionConstraintFromComposer(map[string]string{
+			"shopware/core": "~6.4.0",
+		})
+		require.NoError(t, err)
+		assert.NotNil(t, constraint)
+		assert.True(t, constraint.Check(version.Must(version.NewVersion("6.4.0.0"))))
 	})
 
 	t.Run("returns error when shopware/core not in require", func(t *testing.T) {
-		config := &Config{}
-
-		_, err := getShopwareVersionConstraintFromComposer(config, map[string]string{
+		_, err := getShopwareVersionConstraintFromComposer(map[string]string{
 			"php": ">=8.1",
 		})
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "shopware/core is required")
 	})
 
-	t.Run("handles nil config", func(t *testing.T) {
-		constraint, err := getShopwareVersionConstraintFromComposer(nil, map[string]string{
-			"shopware/core": "~6.5.0",
+	t.Run("returns error for invalid constraint in composer", func(t *testing.T) {
+		_, err := getShopwareVersionConstraintFromComposer(map[string]string{
+			"shopware/core": "invalid[constraint",
 		})
+		assert.Error(t, err)
+	})
+}
+
+func TestGetShopwareBuildVersionConstraint(t *testing.T) {
+	t.Run("returns constraint when build override is set", func(t *testing.T) {
+		config := &Config{
+			Build: ConfigBuild{
+				ShopwareVersionConstraint: "~6.5.0",
+			},
+		}
+
+		constraint, err := GetShopwareBuildVersionConstraint(config)
 		require.NoError(t, err)
-		assert.NotNil(t, constraint)
+		require.NotNil(t, constraint)
+		assert.True(t, constraint.Check(version.Must(version.NewVersion("6.5.0.0"))))
 	})
 
-	t.Run("returns error for invalid constraint in config", func(t *testing.T) {
+	t.Run("returns nil when build override is not set", func(t *testing.T) {
+		constraint, err := GetShopwareBuildVersionConstraint(&Config{})
+		require.NoError(t, err)
+		assert.Nil(t, constraint)
+	})
+
+	t.Run("handles nil config", func(t *testing.T) {
+		constraint, err := GetShopwareBuildVersionConstraint(nil)
+		require.NoError(t, err)
+		assert.Nil(t, constraint)
+	})
+
+	t.Run("returns error for invalid constraint", func(t *testing.T) {
 		config := &Config{
 			Build: ConfigBuild{
 				ShopwareVersionConstraint: "invalid[constraint",
 			},
 		}
 
-		_, err := getShopwareVersionConstraintFromComposer(config, map[string]string{})
+		_, err := GetShopwareBuildVersionConstraint(config)
 		assert.Error(t, err)
 	})
+}
 
-	t.Run("returns error for invalid constraint in composer", func(t *testing.T) {
-		config := &Config{}
+func mustConstraint(t *testing.T, s string) *version.Constraints {
+	t.Helper()
+	c, err := version.NewConstraint(s)
+	require.NoError(t, err)
+	return &c
+}
 
-		_, err := getShopwareVersionConstraintFromComposer(config, map[string]string{
-			"shopware/core": "invalid[constraint",
-		})
-		assert.Error(t, err)
+func TestGetShopwareVersionConstraintForBuild(t *testing.T) {
+	t.Run("uses build override when set", func(t *testing.T) {
+		ext := &mockExtension{
+			config:     &Config{Build: ConfigBuild{ShopwareVersionConstraint: "~6.5.0"}},
+			constraint: mustConstraint(t, "~6.4.0"),
+		}
+
+		constraint, err := GetShopwareVersionConstraintForBuild(ext)
+		require.NoError(t, err)
+		require.NotNil(t, constraint)
+		assert.True(t, constraint.Check(version.Must(version.NewVersion("6.5.0.0"))))
+		assert.False(t, constraint.Check(version.Must(version.NewVersion("6.4.0.0"))))
+	})
+
+	t.Run("falls back to compatibility constraint when no override", func(t *testing.T) {
+		ext := &mockExtension{
+			config:     &Config{},
+			constraint: mustConstraint(t, "~6.4.0"),
+		}
+
+		constraint, err := GetShopwareVersionConstraintForBuild(ext)
+		require.NoError(t, err)
+		require.NotNil(t, constraint)
+		assert.True(t, constraint.Check(version.Must(version.NewVersion("6.4.0.0"))))
 	})
 }

@@ -119,7 +119,7 @@ func (p ShopwareBundle) GetExtensionConfig() *Config {
 }
 
 func (p ShopwareBundle) GetShopwareVersionConstraint() (*version.Constraints, error) {
-	return getShopwareVersionConstraintFromComposer(p.config, p.Composer.Require)
+	return getShopwareVersionConstraintFromComposer(p.Composer.Require)
 }
 
 func (ShopwareBundle) GetType() string {
