@@ -9,16 +9,14 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
-	"strconv"
-	"strings"
 	"time"
 
-	"github.com/hashicorp/go-version" // used to compare semantic versions, which is more reliable than string comparison
 	"github.com/shopware/shopware-cli/internal/system"
+	"github.com/shyim/go-version"
 )
 
-// This regex matches git describe suffixes like "1.0.0-rc.1", "1.0.0-beta.2", "1.0.0-123-gabcdef12"
-var gitDescribeSuffixRE = regexp.MustCompile(`\d+-\d+-g[a-f0-9]{8}$`)
+// This regex matches git describe suffixes like "-123-gabcdef12".
+var gitDescribeSuffixRE = regexp.MustCompile(`-\d+-g[a-f0-9]{7,40}$`)
 
 const (
 	updateCheckInterval = 24 * time.Hour
@@ -181,13 +179,7 @@ func LoadUpdateCheckFromCache(ctx context.Context) (*UpdateCheck, error) {
 }
 
 func versionGreaterThan(v, w string) bool {
-	// Handle versions with git describe suffixes (e.g., "1.0.0-rc.1", "1.0.0-beta.2")
-	// Can happen if user builds the CLI locally
-	w = gitDescribeSuffixRE.ReplaceAllStringFunc(w, func(m string) string {
-		idx := strings.IndexRune(m, '-')
-		n, _ := strconv.Atoi(m[0:idx])
-		return fmt.Sprintf("%d-pre.0", n+1)
-	})
+	w = gitDescribeSuffixRE.ReplaceAllString(w, "")
 
 	vv, ve := version.NewVersion(v)
 	vw, we := version.NewVersion(w)

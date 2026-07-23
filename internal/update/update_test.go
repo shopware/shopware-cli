@@ -38,7 +38,7 @@ func TestCheckForUpdate(t *testing.T) {
 		},
 		{
 			name:           "current is prerelease",
-			currentVersion: "v1.0.0-pre.1",
+			currentVersion: "v1.0.0-rc.1",
 			latestVersion:  "v1.0.0",
 			latestURL:      "https://example.com/release",
 			expectsResult:  true,
@@ -73,7 +73,7 @@ func TestCheckForUpdate(t *testing.T) {
 		},
 		{
 			name:           "latest is older",
-			currentVersion: "v0.10.0-pre.1",
+			currentVersion: "v0.10.0-rc.1",
 			latestVersion:  "v0.9.0",
 			latestURL:      "https://example.com/release",
 			expectsResult:  false,
