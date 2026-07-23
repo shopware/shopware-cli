@@ -160,7 +160,7 @@ func GetShopwareBuildVersionConstraint(config *Config) (*version.Constraints, er
 		return &constraint, nil
 	}
 
-	return nil, nil
+	return nil, nil //nolint:nilnil // nil constraint signals "no build override configured", not an error
 }
 
 // GetShopwareVersionConstraintForBuild resolves the constraint that should be used when building
