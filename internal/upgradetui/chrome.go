@@ -49,8 +49,8 @@ func (m *Model) footerHint(width int) string {
 		)
 	case panelCheck:
 		return tui.ShortcutBarFit(fit,
-			tui.Shortcut{Key: "↑/↓", Label: "Select version"},
-			tui.Shortcut{Key: "enter", Label: "Continue"},
+			tui.Shortcut{Key: "↑/↓", Label: "Navigate"},
+			tui.Shortcut{Key: "enter", Label: "Select & continue"},
 			tui.Shortcut{Key: "r", Label: "Recheck"},
 		)
 	case panelPrepare:
@@ -61,7 +61,6 @@ func (m *Model) footerHint(width int) string {
 		return tui.ShortcutBarFit(fit,
 			tui.Shortcut{Key: "↑/↓", Label: "Scroll"},
 			tui.Shortcut{Key: "enter", Label: enterLabel},
-			tui.Shortcut{Key: "e", Label: "Full list"},
 			tui.Shortcut{Key: "r", Label: "Recheck"},
 			tui.Shortcut{Key: "esc", Label: "Back"},
 		)

@@ -97,18 +97,19 @@ func (m *Model) updateCheckKeys(msg tea.KeyPressMsg) (app.Content, tea.Cmd) {
 
 	switch key {
 	case "up", "k", "down", "j":
+		// The cursor is focus only; the selected version (◉) changes when a
+		// row is activated with Enter, never while navigating.
 		m.check.cursor = tui.MoveCursor(m.check.cursor, key, len(rows))
-		if row := rows[m.check.cursor]; row.option != nil {
-			m.check.chosen = row.option
-		}
 	case "r":
 		return m.recheck()
 	case "q", "esc":
 		return m, tea.Quit
 	case "enter":
-		if rows[m.check.cursor].option == nil {
+		row := rows[m.check.cursor]
+		if row.option == nil {
 			return m.openVersionPicker()
 		}
+		m.check.chosen = row.option
 		return m.continueToPrepare()
 	}
 	return m, nil
@@ -212,8 +213,14 @@ func (m *Model) viewCheckRight() string {
 		b.WriteString("\n")
 	default:
 		for i, row := range m.check.versionRows() {
+			// Exactly one row carries the ◉: the row whose version is the
+			// current target — the custom row when a picked version is not
+			// one of the quick choices.
 			marker := "○"
-			if row.option != nil && m.check.chosen != nil && row.option.Version.Equal(m.check.chosen.Version) {
+			switch {
+			case row.option != nil && m.check.chosen != nil && row.option.Version.Equal(m.check.chosen.Version):
+				marker = okStyle.Render("◉")
+			case row.option == nil && m.check.chosen != nil && !m.isQuickChoice(m.check.chosen):
 				marker = okStyle.Render("◉")
 			}
 			cursor := "  "

@@ -29,6 +29,8 @@ type prepareState struct {
 	compatDone   bool
 	phpReq       string
 	phpInstalled string
+	// reportPath is set once a failed resolution wrote its report file.
+	reportPath string
 
 	cursor int
 	scroll int
@@ -118,6 +120,18 @@ func (m *Model) updatePrepare(msg tea.Msg) (app.Content, tea.Cmd) {
 			m.prepare.resolve = &result
 		}
 		m.prepare.applyResolved()
+		// A failed resolution blocks the wizard here, so the report the user
+		// is pointed to must exist now — the review panel's export is
+		// unreachable in that state.
+		if m.prepare.resolve != nil && !m.prepare.resolve.OK {
+			return m, exportReportCmd(m.upgrader, m.reportData())
+		}
+		return m, nil
+
+	case reportWrittenMsg:
+		if msg.err == nil {
+			m.prepare.reportPath = msg.path
+		}
 		return m, nil
 
 	case compatDoneMsg:
@@ -174,9 +188,6 @@ func (m *Model) updatePrepareKeys(msg tea.KeyPressMsg) (app.Content, tea.Cmd) {
 		if m.prepare.ready() {
 			return m.beginReview()
 		}
-	case "e":
-		list := newExtensionList(m.prepare.results, m.targetLabel())
-		return m, m.host.PushOverlay(&list)
 	case "r":
 		return m.beginPrepare()
 	case "c":
@@ -229,9 +240,9 @@ func (m *Model) viewPrepare() (title, status, body string) {
 	case !m.prepare.ready() && m.prepare.blockers() > 0:
 		status = m.statusStrip(tui.VariantError, "BLOCKED",
 			fmt.Sprintf("Composer cannot resolve this upgrade — %d extensions need fixes.", m.prepare.blockers())) +
-			"\n" + m.statusStrip(tui.VariantInfo, "TODO", "Fix manually if needed, then recheck.")
+			"\n" + m.statusStrip(tui.VariantInfo, "TODO", "Fix manually if needed, then recheck."+m.reportHint())
 	case !m.prepare.ready():
-		status = m.statusStrip(tui.VariantError, "BLOCKED", "Composer cannot resolve this upgrade. Open the report for details.")
+		status = m.statusStrip(tui.VariantError, "BLOCKED", "Composer cannot resolve this upgrade. The conflict summary is below."+m.reportHint())
 	case m.prepare.blockers() > 0:
 		status = m.statusStrip(tui.VariantWarning, "REVIEW",
 			fmt.Sprintf("Composer resolved the upgrade, but %d extensions are flagged. Review them before continuing.", m.prepare.blockers()))
@@ -243,6 +254,15 @@ func (m *Model) viewPrepare() (title, status, body string) {
 	return title, status, body
 }
 
+// reportHint appends the report location to a status message once the failed
+// resolution wrote it.
+func (m *Model) reportHint() string {
+	if m.prepare.reportPath == "" {
+		return ""
+	}
+	return " Report: " + relativePath(m.opts.ProjectRoot, m.prepare.reportPath)
+}
+
 func (m *Model) viewPrepareLeft() string {
 	var b strings.Builder
 
@@ -250,6 +270,14 @@ func (m *Model) viewPrepareLeft() string {
 	b.WriteString("\n")
 	b.WriteString(m.renderSystemChecks())
 	b.WriteString("\n")
+
+	// A pure Composer conflict (no flagged extensions to act on) shows the
+	// solver's conflict summary where the queue would be — it names the exact
+	// packages and constraints that clash.
+	if m.prepare.resolve != nil && !m.prepare.resolve.OK && m.prepare.blockers() == 0 {
+		b.WriteString(m.viewResolveFailure())
+		return b.String()
+	}
 
 	b.WriteString(tui.BoldStyle.Render("Extension queue"))
 	b.WriteString("\n")
@@ -286,6 +314,34 @@ func (m *Model) viewPrepareLeft() string {
 	}
 	b.WriteString(table)
 
+	return b.String()
+}
+
+// viewResolveFailure renders the tail of Composer's output — the solver ends
+// with its "Problem 1: …" conflict summary, which is the actionable part.
+func (m *Model) viewResolveFailure() string {
+	var b strings.Builder
+	b.WriteString(tui.BoldStyle.Render("Composer conflict"))
+	b.WriteString("\n")
+
+	width := m.bodyWidth() * 3 / 5
+	visible := m.queueHeight() + 2
+
+	lines := strings.Split(strings.TrimRight(m.prepare.resolve.Report, "\n"), "\n")
+	if len(lines) > visible {
+		b.WriteString(tui.DimStyle.Render(fmt.Sprintf("… %d earlier output lines are in the report", len(lines)-visible)))
+		b.WriteString("\n")
+	}
+	for _, line := range tui.TailLines(lines, visible) {
+		b.WriteString(tui.Truncate(line, width))
+		b.WriteString("\n")
+	}
+
+	if m.prepare.reportPath != "" {
+		b.WriteString("\n")
+		b.WriteString(tui.DimStyle.Render("Full output: ") +
+			tui.StyledLink("file://"+m.prepare.reportPath, relativePath(m.opts.ProjectRoot, m.prepare.reportPath), tui.LinkStyle))
+	}
 	return b.String()
 }
 

@@ -191,8 +191,29 @@ func TestVersionPickerEscCloses(t *testing.T) {
 	require.NotNil(t, cmd)
 	w.SendCmd(cmd)
 	assert.False(t, w.App.OverlayOpen())
-	// Moving down passed over the "latest 6.6 patch" row, which selected it.
-	assert.Equal(t, "6.6.10.19", w.m.check.target().Version.String(), "closing without picking keeps the radio selection")
+	// Navigation and the dismissed picker never touched the selection.
+	require.NotNil(t, w.m.check.target())
+	assert.Equal(t, "6.7.11.0", w.m.check.target().Version.String(), "closing without picking keeps the previous selection")
+}
+
+func TestCheckPanelCursorDoesNotChangeSelection(t *testing.T) {
+	w := wizardAtCheck(t, false)
+
+	// Navigate across all rows: the ◉ stays on the recommended version until
+	// a row is activated with Enter.
+	w.Send(specialKey(tea.KeyDown), specialKey(tea.KeyDown))
+	require.NotNil(t, w.m.check.target())
+	assert.Equal(t, "6.7.11.0", w.m.check.target().Version.String())
+
+	content := w.view(t)
+	assert.Contains(t, content, "◉ 6.7.11.0")
+	assert.Contains(t, content, "> ○ Choose another supported version…")
+
+	// Enter on a version row selects it (and continues).
+	w.Send(specialKey(tea.KeyUp))
+	w.Send(specialKey(tea.KeyEnter))
+	assert.Equal(t, "6.6.10.19", w.m.check.target().Version.String())
+	assert.Equal(t, panelPrepare, w.m.panel)
 }
 
 // wizardAtPrepare returns a wizard on panel 3 with the given extension results.
@@ -310,6 +331,37 @@ func TestPreparePanelEnterDoesNotContinueWhenBlocked(t *testing.T) {
 	assert.Equal(t, panelPrepare, w.m.panel, "a focused but unready Continue button does nothing")
 }
 
+func TestPrepareResolveFailureShowsConflictInline(t *testing.T) {
+	w := wizardAtCheck(t, false)
+	w.Send(specialKey(tea.KeyEnter))
+	require.Equal(t, panelPrepare, w.m.panel)
+
+	gen := w.m.prepareGen
+	w.Send(envStatusMsg{gen: gen, running: true})
+	w.Send(packagistMsg{gen: gen, reachable: true})
+	w.Send(compatDoneMsg{gen: gen, results: []upgrade.ExtensionResult{okResult()}})
+	cmd := w.Send(resolveDoneMsg{gen: gen, result: upgrade.ResolveResult{
+		OK:     false,
+		Report: "Loading composer repositories\nProblem 1\n    - shopware/core 6.7.11.0 conflicts with swag/demo 2.0.0",
+	}})
+	w.Send(phpInfoMsg{gen: gen, requirement: ">=8.2", installed: "8.3.1"})
+
+	require.NotNil(t, cmd, "a failed resolution writes the report immediately")
+
+	// The solver's conflict summary replaces the extension queue.
+	content := w.view(t)
+	assert.Contains(t, content, "Composer conflict")
+	assert.Contains(t, content, "conflicts with swag/demo")
+	assert.NotContains(t, content, "Extension queue")
+
+	// Once the report is written, its location is surfaced too (the status
+	// strip may truncate the path to the frame width).
+	w.Send(reportWrittenMsg{path: "/projects/acme-shop/.shopware-cli/upgrade/report.md"})
+	content = w.view(t)
+	assert.Contains(t, content, "Report: .shopware-cli")
+	assert.Contains(t, content, "Full output: .shopware-cli/upgrade/report.md")
+}
+
 func TestPreparePanelBlocked(t *testing.T) {
 	// Flagged extensions AND a failed composer resolution: blocked.
 	w := wizardAtPrepare(t, []upgrade.ExtensionResult{blockedResult(), okResult()}, false)
@@ -407,29 +459,6 @@ func TestExtensionDetailVariants(t *testing.T) {
 		assert.Contains(t, content, tc.badge, "status %v renders its badge", tc.status)
 		assert.Contains(t, content, "User action")
 	}
-}
-
-func TestExtensionListOverlay(t *testing.T) {
-	w := wizardAtPrepare(t, []upgrade.ExtensionResult{blockedResult(), okResult()}, true)
-
-	w.Send(key('e'))
-	require.True(t, w.App.OverlayOpen())
-	content := w.view(t)
-	assert.Contains(t, content, "Extensions")
-	assert.Contains(t, content, "SwagDemo")
-	assert.Contains(t, content, "AcmeERPConnector")
-
-	// Enter drills into the detail overlay of the selected row.
-	w.Send(specialKey(tea.KeyEnter))
-	require.True(t, w.App.OverlayOpen())
-	assert.Contains(t, w.view(t), "Blocked extension")
-}
-
-func TestExtensionListCopyText(t *testing.T) {
-	list := newExtensionList([]upgrade.ExtensionResult{blockedResult(), okResult()}, "Target 6.7.11.0")
-	text := list.copyText()
-	assert.Contains(t, text, "AcmeERPConnector  3.2.0 -> none  blocked")
-	assert.Contains(t, text, "SwagDemo  2.0.0 -> 2.0.0  ok")
 }
 
 func TestReviewPanel(t *testing.T) {

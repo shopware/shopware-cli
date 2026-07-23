@@ -14,7 +14,7 @@ import (
 
 // reviewState backs panel 4: the last read-only look at what will change.
 type reviewState struct {
-	button    int // 0 Start upgrade, 1 Export report, 2 Back, 3 Cancel
+	button    int // 0 Start upgrade, 1 Export report
 	exported  string
 	exportErr error
 }
@@ -85,7 +85,7 @@ func (m *Model) updateReview(msg tea.Msg) (app.Content, tea.Cmd) {
 				m.review.button--
 			}
 		case "down", "j", "right", "tab":
-			if m.review.button < 3 {
+			if m.review.button < 1 {
 				m.review.button++
 			}
 		case "esc":
@@ -98,10 +98,6 @@ func (m *Model) updateReview(msg tea.Msg) (app.Content, tea.Cmd) {
 				return m.beginRun()
 			case 1:
 				return m, exportReportCmd(m.upgrader, m.reportData())
-			case 2:
-				return m.backToPrepare()
-			case 3:
-				return m, tea.Quit
 			}
 		}
 	}
@@ -181,7 +177,7 @@ func (m *Model) viewReview() (title, status, body string) {
 	right.WriteString(tui.DimStyle.Render("logs while the upgrade is running."))
 	right.WriteString("\n\n")
 	right.WriteString(m.buttonWrap(m.rightColumnWidth(m.bodyWidth()*11/20),
-		[]string{"Start upgrade", "Export report", "Back", "Cancel"}, m.review.button))
+		[]string{"Start upgrade", "Export report"}, m.review.button))
 
 	body = m.twoColumn(m.bodyWidth()*11/20, left.String(), right.String())
 	return title, status, body
