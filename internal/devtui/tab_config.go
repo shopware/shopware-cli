@@ -467,7 +467,7 @@ func (m ConfigModel) View(width, height int) string {
 	case m.restarting:
 		s.WriteString(warningBadgeStyle.Render("restarting docker…"))
 	case m.err != nil && m.cursor == fieldSave:
-		s.WriteString(activeBtnStyle.Render("Retry Save"))
+		s.WriteString(tui.ActiveButtonStyle.Render("Retry Save"))
 	case m.err != nil:
 		s.WriteString(warningBadgeStyle.Render("save failed"))
 		s.WriteString("  ")
@@ -477,7 +477,7 @@ func (m ConfigModel) View(width, height int) string {
 		s.WriteString("  ")
 		s.WriteString(helpStyle.Render("Docker restarted with new config."))
 	case m.modified && m.cursor == fieldSave:
-		s.WriteString(activeBtnStyle.Render("Save & Regenerate"))
+		s.WriteString(tui.ActiveButtonStyle.Render("Save & Regenerate"))
 	case m.modified:
 		s.WriteString(warningBadgeStyle.Render("unsaved changes"))
 		s.WriteString("  ")

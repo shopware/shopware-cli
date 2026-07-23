@@ -187,18 +187,18 @@ func (m Model) renderPhase(ctx app.Context) string {
 		card.WriteString(tui.DimStyle.Render(pctText))
 		card.WriteString("\n\n")
 
+		items := make([]tui.StepItem, len(installStepPatterns))
 		for i, sp := range installStepPatterns {
 			switch {
-			case i < m.installProg.currentStep:
-				card.WriteString(tui.StepDone(sp.label))
+			case i < m.installProg.currentStep || (i == m.installProg.currentStep && m.installProg.done):
+				items[i] = tui.StepItem{Label: sp.label, State: tui.StepStateDone}
 			case i == m.installProg.currentStep && !m.installProg.done:
-				card.WriteString(tui.StepActive(m.installProg.spinner.View(), sp.label))
-			case i == m.installProg.currentStep && m.installProg.done:
-				card.WriteString(tui.StepDone(sp.label))
+				items[i] = tui.StepItem{Label: sp.label, State: tui.StepStateActive, Indicator: m.installProg.spinner.View()}
 			default:
-				card.WriteString(tui.StepPending(tui.DimStyle.Render(sp.label)))
+				items[i] = tui.StepItem{Label: tui.DimStyle.Render(sp.label), State: tui.StepStatePending}
 			}
 		}
+		card.WriteString(tui.NewStepList(tui.StepListOptions{Steps: items}).Render())
 		content.WriteString(tui.RenderPhaseCard(strings.TrimRight(card.String(), "\n")))
 	case phaseDashboard, phaseTask, phaseMigrationWizard:
 		// Rendered by the outer View() dispatch, not here.

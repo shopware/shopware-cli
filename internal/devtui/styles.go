@@ -66,13 +66,7 @@ var (
 				Foreground(tui.TextColor).
 				Bold(true).
 				Padding(0, 0, 1)
-
-	activeBtnStyle = tui.ActiveButtonStyle
 )
-
-func renderConfirmButtons(yesLabel, noLabel string, yesActive bool) string {
-	return tui.ConfirmButtons(yesLabel, noLabel, yesActive)
-}
 
 func buildTabHeader(activeTab int, width int) string {
 	tabWidths := make([]int, len(tabNames))

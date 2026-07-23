@@ -193,7 +193,7 @@ func (m Model) renderInstallPrompt(b *strings.Builder) {
 		b.WriteString("\n")
 		b.WriteString(tui.DimStyle.Render("This project has not been set up yet. The installation\nwill create the database, run migrations and configure\nyour local development environment."))
 		b.WriteString("\n\n")
-		b.WriteString(renderConfirmButtons("Initialize now", "No, skip", m.install.confirmYes))
+		b.WriteString(tui.ConfirmButtons("Initialize now", "No, skip", m.install.confirmYes))
 
 	case installStepLanguage:
 		b.WriteString(tui.TextBadge("Step 1/3"))

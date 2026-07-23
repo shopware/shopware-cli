@@ -53,8 +53,8 @@ func (sg migrationWizard) viewWelcome() string {
 	b.WriteString(tui.BoldText.Render(".shopware-project.yml"))
 	b.WriteString(tui.DimStyle.Render("."))
 	b.WriteString("\n\n")
-	b.WriteString(renderConfirmButtons("Start setup", "Quit", sg.confirmYes))
-	b.WriteString("\n\n")
+	b.WriteString(tui.ConfirmButtons("Start setup", "Quit", sg.confirmYes))
+
 	return tui.RenderPhaseCardCowsay("Let me help you to set up Docker!", b.String())
 }
 
@@ -120,7 +120,7 @@ func (sg migrationWizard) viewReview() string {
 	b.WriteString("\n")
 
 	b.WriteString("\n")
-	b.WriteString(renderConfirmButtons("Save & start", "Quit", sg.confirmYes))
+	b.WriteString(tui.ConfirmButtons("Save & start", "Quit", sg.confirmYes))
 	b.WriteString("\n\n")
 
 	return tui.RenderPhaseCard(b.String())

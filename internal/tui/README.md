@@ -109,7 +109,7 @@ tui.NewCheckRow(tui.CheckRowOptions{
 ● PHP version                   8.1.2
 ```
 
-### StepList / StepDone·StepActive·StepPending — step checklists
+### StepList — step checklists
 
 ```go
 tui.NewStepList(tui.StepListOptions{Steps: []tui.StepItem{

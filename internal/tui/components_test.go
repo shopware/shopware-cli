@@ -187,11 +187,6 @@ func TestStepList(t *testing.T) {
 	assert.Contains(t, plain, "✓ done step")
 	assert.Contains(t, plain, "◐ active step")
 	assert.Contains(t, plain, "· pending step")
-
-	// Compat wrappers produce identical rows.
-	assert.Equal(t, StepDone("done step"), NewStepList(StepListOptions{Steps: []StepItem{{Label: "done step", State: StepStateDone}}}).Render())
-	assert.Equal(t, StepActive("◐", "active step"), NewStepList(StepListOptions{Steps: []StepItem{{Label: "active step", State: StepStateActive, Indicator: "◐"}}}).Render())
-	assert.Equal(t, StepPending("pending step"), NewStepList(StepListOptions{Steps: []StepItem{{Label: "pending step", State: StepStatePending}}}).Render())
 }
 
 func TestShortcutsFit(t *testing.T) {

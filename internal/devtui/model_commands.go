@@ -2,7 +2,6 @@ package devtui
 
 import (
 	"context"
-	"os/exec"
 	"strings"
 
 	"charm.land/bubbles/v2/progress"
@@ -103,7 +102,7 @@ func (m *Model) runShopwareInstall() tea.Cmd {
 		})
 		p := withEnv.PHPCommand(context.Background(), "vendor/bin/shopware-deployment-helper", "run")
 
-		err := streamCmdOutput(p.Cmd, ch, true)
+		err := tui.StreamCmdOutput(p.Cmd, ch, true)
 		return shopwareInstallDoneMsg{err: err}
 	}
 
@@ -125,16 +124,12 @@ func readFromChan(ch <-chan string) tea.Cmd {
 	)
 }
 
-func streamCmdOutput(cmd *exec.Cmd, ch chan<- string, useStdout bool) error {
-	return tui.StreamCmdOutput(cmd, ch, useStdout)
-}
-
 func runComposeCommand(ctx context.Context, projectRoot string, args []string, resultFn func(error) tea.Msg) (outChan <-chan string, outputCmd tea.Cmd, doneCmd tea.Cmd) {
 	lineChan := make(chan string, tui.StreamBufferSize)
 
 	doneCmd = func() tea.Msg {
 		cmd := composeCommand(ctx, projectRoot, args...)
-		return resultFn(streamCmdOutput(cmd, lineChan, false))
+		return resultFn(tui.StreamCmdOutput(cmd, lineChan, false))
 	}
 
 	return lineChan, readFromChan(lineChan), doneCmd

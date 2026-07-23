@@ -16,7 +16,7 @@ import (
 
 // shopwareConstraintPackages are checked (in order) to find an extension
 // release's Shopware version constraint.
-var shopwareConstraintPackages = []string{"shopware/core", "shopware/storefront", "shopware/administration"}
+var shopwareConstraintPackages = []string{"shopware/core", "shopware/storefront", "shopware/administration", "shopware/elasticsearch"}
 
 // CheckExtensions classifies every discovered extension against the target
 // Shopware version, combining Store compatibility metadata with the Composer
