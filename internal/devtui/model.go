@@ -221,7 +221,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case configRestartDoneMsg:
 		return m.handleConfigRestartDone(msg)
 
-	case watcherStartedMsg, watcherRunningMsg, stopWatcherRequestMsg,
+	case watcherStartedMsg, watcherRunningMsg, watcherProbeMsg, stopWatcherRequestMsg,
 		startStorefrontWatchRequestMsg, watcherStoppedMsg, logDoneMsg:
 		return m.updateWatcherMsg(msg)
 
@@ -277,14 +277,35 @@ func (m Model) updateWatcherMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.overview.adminWatchStarting = false
 			if msg.err == nil && exists {
 				m.overview.adminWatchRunning = true
+				m.overview.adminWatchReady = false
+				return m, probeWatcher(watcherAdmin, m.overview.adminWatchURL)
 			}
 		case watcherStorefront:
 			m.overview.sfWatchStarting = false
 			if msg.err == nil && exists {
 				m.overview.sfWatchRunning = true
+				m.overview.sfWatchReady = false
+				return m, probeWatcher(watcherStorefront, m.overview.sfWatchURL)
 			}
 		}
 		return m, nil
+
+	case watcherProbeMsg:
+		// Stop probing once the watcher is gone.
+		if _, exists := m.watchers[msg.name]; !exists {
+			return m, nil
+		}
+		switch msg.name {
+		case watcherAdmin:
+			m.overview.adminWatchReady = msg.ready
+		case watcherStorefront:
+			m.overview.sfWatchReady = msg.ready
+		}
+		if msg.ready {
+			return m, nil
+		}
+		// Not serving yet — keep polling until it is.
+		return m, probeWatcher(msg.name, msg.url)
 
 	case stopWatcherRequestMsg:
 		return m, m.stopWatcher(msg.name)
@@ -297,9 +318,11 @@ func (m Model) updateWatcherMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case watcherAdmin:
 			m.overview.adminWatchStarting = false
 			m.overview.adminWatchRunning = false
+			m.overview.adminWatchReady = false
 		case watcherStorefront:
 			m.overview.sfWatchStarting = false
 			m.overview.sfWatchRunning = false
+			m.overview.sfWatchReady = false
 		}
 		delete(m.watchers, msg.name)
 		if msg.err != nil {
@@ -311,8 +334,10 @@ func (m Model) updateWatcherMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		switch msg.source {
 		case watcherAdmin:
 			m.overview.adminWatchRunning = false
+			m.overview.adminWatchReady = false
 		case watcherStorefront:
 			m.overview.sfWatchRunning = false
+			m.overview.sfWatchReady = false
 		}
 		if tags, ok := m.telemetry.watcherEndTags(msg.source, watcherEndCrashed); ok {
 			trackEvent(tracking.EventDevWatcher, tags)

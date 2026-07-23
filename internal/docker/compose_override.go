@@ -50,12 +50,40 @@ type ProxyOptions struct {
 // referenced directly by NODE_EXTRA_CA_CERTS.
 const containerCAPath = "/usr/local/share/ca-certificates/shopware-cli-proxy.crt"
 
+const (
+	// storefrontProxyPort / storefrontAssetsPort are the two container ports the
+	// deprecated webpack hot-proxy watcher listens on: the HTML proxy and the
+	// asset+HMR server. They must match internal/extension/storefront_watch.go.
+	storefrontProxyPort  = 9998
+	storefrontAssetsPort = 8443
+	// storefrontAssetsEntrypoint is the dedicated Traefik entrypoint the asset
+	// server binds to, so it can share the storefront-watch hostname with the
+	// HTML proxy while listening on a different port. Must match the
+	// "sfassets" entrypoint defined in internal/proxy/traefik.go.
+	storefrontAssetsEntrypoint = "sfassets"
+)
+
 // proxyRoute describes one HTTP endpoint of a service that gets routed
 // through the shared proxy: its subdomain (empty means the project's root
 // hostname) and the container port it is served on.
 type proxyRoute struct {
 	subdomain     string
 	containerPort int
+	// entrypoint is the Traefik entrypoint this route binds to; empty means
+	// "websecure" (the shared HTTPS :443 port). The storefront asset/HMR server
+	// uses a dedicated entrypoint so it can share the storefront-watch hostname
+	// with the HTML proxy while listening on a different port.
+	entrypoint string
+	// nameSuffix disambiguates the Traefik router name when two routes share a
+	// subdomain (the storefront HTML proxy and its asset server). Empty falls
+	// back to the subdomain.
+	nameSuffix string
+	// pathPrefix, when set, narrows the route to requests under that path
+	// (Traefik prioritizes longer rules, so a Host+PathPrefix route wins over a
+	// bare Host route for matching requests). Used to serve /bundles/ static
+	// assets straight from the app, bypassing the hot-proxy — which drops their
+	// Content-Type and breaks ESM module scripts.
+	pathPrefix string
 }
 
 // hostname returns the full hostname for this route, e.g.
@@ -83,7 +111,15 @@ func GenerateComposeOverride(lock *composer.Lock, opts *ProxyOptions, background
 	web := overrideService(opts, "web",
 		proxyRoute{subdomain: "", containerPort: 8000},
 		proxyRoute{subdomain: "admin-watch", containerPort: 5173},
-		proxyRoute{subdomain: "storefront-watch", containerPort: 9998},
+		// The deprecated webpack storefront watcher runs two servers under one
+		// hostname: the HTML proxy on websecure and the asset+HMR server on the
+		// dedicated sfassets entrypoint.
+		proxyRoute{subdomain: "storefront-watch", containerPort: storefrontProxyPort},
+		proxyRoute{subdomain: "storefront-watch", containerPort: storefrontAssetsPort, entrypoint: storefrontAssetsEntrypoint, nameSuffix: "storefront-watch-assets"},
+		// /bundles/ (the ESM import-map modules) must come straight from the app
+		// so they keep their JS Content-Type; the hot-proxy drops it and the
+		// browser then rejects the module. Higher-priority than the route above.
+		proxyRoute{subdomain: "storefront-watch", pathPrefix: "/bundles/", containerPort: 8000, nameSuffix: "storefront-watch-bundles"},
 	)
 	// Traefik terminates TLS and forwards plain HTTP from a private container
 	// address; Shopware must trust its X-Forwarded-* headers or URL
@@ -157,13 +193,28 @@ func overrideService(opts *ProxyOptions, serviceName string, routes ...proxyRout
 	routerPrefix := strings.ReplaceAll(opts.Hostname, ".", "-") + "-" + serviceName
 
 	for _, route := range routes {
-		router := routerPrefix
-		if route.subdomain != "" && route.subdomain != serviceName {
-			router = router + "-" + route.subdomain
+		name := route.nameSuffix
+		if name == "" {
+			name = route.subdomain
 		}
 
-		addKeyValue(labels, fmt.Sprintf("traefik.http.routers.%s.rule", router), fmt.Sprintf("Host(`%s`)", opts.hostname(route)))
-		addKeyValue(labels, fmt.Sprintf("traefik.http.routers.%s.entrypoints", router), "websecure")
+		router := routerPrefix
+		if name != "" && name != serviceName {
+			router = router + "-" + name
+		}
+
+		entrypoint := route.entrypoint
+		if entrypoint == "" {
+			entrypoint = "websecure"
+		}
+
+		rule := fmt.Sprintf("Host(`%s`)", opts.hostname(route))
+		if route.pathPrefix != "" {
+			rule += fmt.Sprintf(" && PathPrefix(`%s`)", route.pathPrefix)
+		}
+
+		addKeyValue(labels, fmt.Sprintf("traefik.http.routers.%s.rule", router), rule)
+		addKeyValue(labels, fmt.Sprintf("traefik.http.routers.%s.entrypoints", router), entrypoint)
 		addKeyValue(labels, fmt.Sprintf("traefik.http.routers.%s.tls", router), "true")
 		addKeyValue(labels, fmt.Sprintf("traefik.http.routers.%s.service", router), router)
 		addKeyValue(labels, fmt.Sprintf("traefik.http.services.%s.loadbalancer.server.port", router), fmt.Sprintf("%d", route.containerPort))

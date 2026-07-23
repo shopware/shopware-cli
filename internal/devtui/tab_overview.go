@@ -3,11 +3,13 @@ package devtui
 import (
 	"bufio"
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"fmt"
 	"image/color"
 	"io"
 	"net"
+	"net/http"
 	"net/url"
 	"path/filepath"
 	"strconv"
@@ -51,10 +53,13 @@ type OverviewModel struct {
 	width              int
 	height             int
 	adminWatchURL      string
+	sfWatchURL         string
 	adminWatchRunning  bool
 	adminWatchStarting bool
+	adminWatchReady    bool
 	sfWatchRunning     bool
 	sfWatchStarting    bool
+	sfWatchReady       bool
 	shopwareVersion    string
 	securityEnd        time.Time
 	health             []healthCheck
@@ -169,6 +174,45 @@ type watcherRunningMsg struct {
 	err  error
 }
 
+// watcherProbeMsg carries the result of one readiness probe: ready is true
+// once the watcher's URL actually answers. The webpack storefront watcher only
+// binds its port after its first compile (a few seconds), during which the
+// proxy returns 502 — so the URL is held back until a probe succeeds.
+type watcherProbeMsg struct {
+	name  string
+	url   string
+	ready bool
+}
+
+// watcherProbeInterval is how often a starting watcher's URL is polled until
+// it serves.
+const watcherProbeInterval = 750 * time.Millisecond
+
+// watcherProbeClient probes a watcher's own URL. TLS verification is skipped
+// because the proxy serves a locally generated certificate the Go client does
+// not trust, and this is only a local readiness check.
+var watcherProbeClient = &http.Client{
+	Timeout: 3 * time.Second,
+	Transport: &http.Transport{
+		TLSClientConfig: &tls.Config{InsecureSkipVerify: true}, //nolint:gosec // local readiness probe against a self-signed dev cert
+	},
+}
+
+// probeWatcher polls url once after a short delay and reports whether the
+// watcher is serving yet, so the UI can hold back its URL until then.
+func probeWatcher(name, url string) tea.Cmd {
+	return tea.Tick(watcherProbeInterval, func(time.Time) tea.Msg {
+		ready := false
+		if req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, url, nil); err == nil {
+			if resp, err := watcherProbeClient.Do(req); err == nil {
+				_ = resp.Body.Close()
+				ready = resp.StatusCode < 500
+			}
+		}
+		return watcherProbeMsg{name: name, url: url, ready: ready}
+	})
+}
+
 type knownService struct {
 	Name       string
 	TargetPort int
@@ -236,22 +280,45 @@ func NewOverviewModel(envType, shopURL, username, password, projectRoot string, 
 		executor:      exec,
 		shopCfg:       shopCfg,
 		adminWatchURL: resolveAdminWatchURL(projectRoot),
+		sfWatchURL:    resolveStorefrontWatchURL(projectRoot),
 		loading:       true,
 		healthLoading: true,
 	}
 }
 
-// resolveAdminWatchURL returns the admin watcher's URL. When the project is
-// registered with the shared proxy, the Vite dev server is reachable through
-// it over HTTPS; otherwise it is the local dev-server port.
-func resolveAdminWatchURL(projectRoot string) string {
+// proxyHostname returns the shop's hostname when the project is registered
+// with the shared proxy, or "" otherwise.
+func proxyHostname(projectRoot string) string {
 	if reg, err := proxy.LoadRegistry(); err == nil {
 		if entry, found := reg.Find(proxy.CanonicalProjectRoot(projectRoot)); found {
-			return "https://admin-watch." + entry.Hostname
+			return entry.Hostname
 		}
 	}
 
+	return ""
+}
+
+// resolveAdminWatchURL returns the admin watcher's URL: the proxy hostname
+// when the project is proxied, otherwise the local dev-server port.
+func resolveAdminWatchURL(projectRoot string) string {
+	if host := proxyHostname(projectRoot); host != "" {
+		return "https://admin-watch." + host
+	}
+
 	return "http://127.0.0.1:5173"
+}
+
+// resolveStorefrontWatchURL returns the URL to open while the storefront
+// watcher runs. The (deprecated) webpack hot-proxy serves the shop with
+// hot-reload injected from its own front door: when proxied that is the
+// storefront-watch.<host> hostname routed through the shared proxy; without
+// the proxy it is the classic local hot-proxy port.
+func resolveStorefrontWatchURL(projectRoot string) string {
+	if host := proxyHostname(projectRoot); host != "" {
+		return "https://storefront-watch." + host
+	}
+
+	return "http://127.0.0.1:9998"
 }
 
 func (m OverviewModel) Init() tea.Cmd {
@@ -549,8 +616,8 @@ func (m OverviewModel) renderWatchers() string {
 	var s strings.Builder
 	s.WriteString(tui.TitleStyle.Render("Watchers"))
 	s.WriteString("\n")
-	s.WriteString(m.renderWatcherStatus("Admin", m.adminWatchRunning, m.adminWatchStarting, m.adminWatchURL, m.cursor == 0))
-	s.WriteString(m.renderWatcherStatus("Storefront", m.sfWatchRunning, m.sfWatchStarting, "http://127.0.0.1:9998", m.cursor == 1))
+	s.WriteString(m.renderWatcherStatus("Admin", m.adminWatchRunning, m.adminWatchStarting, m.adminWatchReady, m.adminWatchURL, m.cursor == 0))
+	s.WriteString(m.renderWatcherStatus("Storefront", m.sfWatchRunning, m.sfWatchStarting, m.sfWatchReady, m.sfWatchURL, m.cursor == 1))
 	return s.String()
 }
 
@@ -598,6 +665,12 @@ func (m OverviewModel) startStorefrontWatch(opts extension.StorefrontWatcherOpti
 	e := m.executor
 	projectRoot := m.projectRoot
 	shopCfg := m.shopCfg
+
+	// When proxied, route the webpack hot-proxy watcher through the shared
+	// proxy, matching the standalone `project storefront-watch` command.
+	if host := proxyHostname(projectRoot); host != "" {
+		opts.ProxyHostname = "storefront-watch." + host
+	}
 
 	return startWatcher(watcherStorefront, func(ctx context.Context, out io.Writer) (*executor.Process, error) {
 		logStep(out, "Preparing plugins.json...")
@@ -706,17 +779,23 @@ func startWatcher(name string, prepare func(ctx context.Context, out io.Writer) 
 	return tea.Batch(startedCmd, runningCmd)
 }
 
-func (m OverviewModel) renderWatcherStatus(label string, running, starting bool, url string, focused bool) string {
+func (m OverviewModel) renderWatcherStatus(label string, running, starting, ready bool, url string, focused bool) string {
+	// A watcher that has started but is not yet answering (e.g. the webpack
+	// storefront watcher during its first compile) stays in the "starting"
+	// state, so its URL is not shown until clicking it actually works.
+	serving := running && ready
+	warming := starting || (running && !ready)
+
 	var checkbox, status string
 	switch {
-	case running:
+	case serving:
 		if focused {
 			checkbox = lipgloss.NewStyle().Bold(true).Foreground(tui.BrandColor).Render("[x]")
 		} else {
 			checkbox = lipgloss.NewStyle().Render("[x]")
 		}
 		status = lipgloss.NewStyle().Bold(true).Render("running")
-	case starting:
+	case warming:
 		checkbox = lipgloss.NewStyle().Foreground(tui.BrandColor).Render("[~]")
 		status = lipgloss.NewStyle().Foreground(tui.BrandColor).Render("starting...")
 	default:
@@ -729,7 +808,7 @@ func (m OverviewModel) renderWatcherStatus(label string, running, starting bool,
 	}
 
 	row := fmt.Sprintf("  %s %s%s\n", checkbox, lipgloss.NewStyle().Width(14).Render(label), status)
-	if running && url != "" {
+	if serving && url != "" {
 		row += "      " + linkURL(url) + "\n"
 	}
 	return row
