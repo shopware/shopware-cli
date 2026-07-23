@@ -612,7 +612,7 @@ func logStep(out io.Writer, msg string) {
 // preparation rather than flipping to "running" instantly.
 func startWatcher(name string, prepare func(ctx context.Context, out io.Writer) (*executor.Process, error)) tea.Cmd {
 	handle := &watcherHandle{}
-	lines := make(chan string, streamBufferSize)
+	lines := make(chan string, tui.StreamBufferSize)
 	running := make(chan error, 1) // buffered so the goroutine never blocks
 
 	startedCmd := func() tea.Msg {

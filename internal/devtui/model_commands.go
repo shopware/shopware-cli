@@ -91,7 +91,7 @@ func (m *Model) runShopwareInstall() tea.Cmd {
 	username := m.install.Username()
 	password := m.install.Password()
 
-	ch := make(chan string, streamBufferSize)
+	ch := make(chan string, tui.StreamBufferSize)
 	m.dockerOutChan = ch
 
 	doneCmd := func() tea.Msg {
@@ -118,8 +118,6 @@ func (m *Model) readNextDockerOutput() tea.Cmd {
 	return readFromChan(ch)
 }
 
-const streamBufferSize = tui.StreamBufferSize
-
 func readFromChan(ch <-chan string) tea.Cmd {
 	return tui.ReadLineCmd(ch,
 		func(line string) tea.Msg { return dockerOutputLineMsg(line) },
@@ -132,7 +130,7 @@ func streamCmdOutput(cmd *exec.Cmd, ch chan<- string, useStdout bool) error {
 }
 
 func runComposeCommand(ctx context.Context, projectRoot string, args []string, resultFn func(error) tea.Msg) (outChan <-chan string, outputCmd tea.Cmd, doneCmd tea.Cmd) {
-	lineChan := make(chan string, streamBufferSize)
+	lineChan := make(chan string, tui.StreamBufferSize)
 
 	doneCmd = func() tea.Msg {
 		cmd := composeCommand(ctx, projectRoot, args...)
