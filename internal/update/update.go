@@ -33,9 +33,9 @@ type UpdateCheck struct {
 	LatestRelease ReleaseInfo `json:"latest_release"`
 }
 
-// CheckForUpdate checks whether an update exists for the Shopware CLI based on recency of last check within past 24 hours.
+// CheckForUpdate checks whether an update exists for the Shopware CLI based on recency of last check within the given updateCheckInterval.
 func CheckForUpdate(ctx context.Context, repo, buildVersion string) (*ReleaseInfo, error) {
-	// Get last UpdateCheck from cache and return if it was checked within the last 24 hours
+	// Get last UpdateCheck from cache and return if it was checked within the given updateCheckInterval
 	updateCheck, err := LoadUpdateCheckFromCache(ctx)
 	if err != nil {
 		return nil, err

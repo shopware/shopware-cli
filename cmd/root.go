@@ -116,9 +116,9 @@ func run(ctx context.Context) int {
 	newRelease := <-updateMessageChan
 	if newRelease != nil {
 		// Print update message to stdout
-		updateMsg := fmt.Sprintf("⁺₊⋆ Update available! %s -> %s ⋆₊⁺", version, newRelease.Version)
+		updateMsg := fmt.Sprintf("⁺₊⋆ Update available! %s → %s ⋆₊⁺", version, newRelease.Version)
 		renderedUpdateMsg := lipgloss.NewStyle().Bold(true).Foreground(tui.WarnColor).Render(updateMsg)
-		fmt.Fprintln(os.Stdout, renderedUpdateMsg)
+		fmt.Fprintln(os.Stderr, renderedUpdateMsg)
 		
 		// Render the tui header with the update message
 		// tui.RenderHeaderWithUpdateMessage()
