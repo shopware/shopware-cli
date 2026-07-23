@@ -76,27 +76,24 @@ func printCreateSummary(ctx context.Context, opts *createOptions) {
 		return
 	}
 
-	cmdStyle := tui.BoldText
-	sectionStyle := tui.SectionHeadingStyle
-
 	fmt.Println()
 	fmt.Println(tui.GreenText.Render("✔ Setup complete in " + projectDisplay))
 
 	if opts.useDocker {
 		fmt.Println()
-		fmt.Println(sectionStyle.Render("Next steps"))
+		fmt.Println(tui.SectionHeadingStyle.Render("Next steps"))
 		fmt.Println()
 		if opts.projectFolder == "." {
-			fmt.Printf("  %s  %s\n", tui.GreenText.Render("Start developing:"), cmdStyle.Render("shopware-cli project dev"))
+			fmt.Printf("  %s  %s\n", tui.GreenText.Render("Start developing:"), tui.BoldText.Render("shopware-cli project dev"))
 		} else {
-			fmt.Printf("  %s  %s\n", tui.GreenText.Render("Start developing:"), cmdStyle.Render(fmt.Sprintf("cd %s && shopware-cli project dev", opts.projectFolder)))
+			fmt.Printf("  %s  %s\n", tui.GreenText.Render("Start developing:"), tui.BoldText.Render(fmt.Sprintf("cd %s && shopware-cli project dev", opts.projectFolder)))
 		}
 		fmt.Println()
-		fmt.Println(sectionStyle.Render("Access your shop (after make setup)"))
+		fmt.Println(tui.SectionHeadingStyle.Render("Access your shop (after make setup)"))
 		fmt.Println()
-		fmt.Printf("  %s  %s\n", tui.GreenText.Render("Storefront:"), cmdStyle.Render("http://127.0.0.1:8000"))
-		fmt.Printf("  %s  %s\n", tui.GreenText.Render("Admin:"), cmdStyle.Render("http://127.0.0.1:8000/admin"))
-		fmt.Printf("  %s  %s\n", tui.GreenText.Render("Credentials:"), cmdStyle.Render("admin")+" / "+cmdStyle.Render("shopware"))
+		fmt.Printf("  %s  %s\n", tui.GreenText.Render("Storefront:"), tui.BoldText.Render("http://127.0.0.1:8000"))
+		fmt.Printf("  %s  %s\n", tui.GreenText.Render("Admin:"), tui.BoldText.Render("http://127.0.0.1:8000/admin"))
+		fmt.Printf("  %s  %s\n", tui.GreenText.Render("Credentials:"), tui.BoldText.Render("admin")+" / "+tui.BoldText.Render("shopware"))
 	}
 
 	fmt.Println()
