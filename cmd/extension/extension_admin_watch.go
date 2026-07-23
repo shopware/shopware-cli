@@ -1,8 +1,10 @@
 package extension
 
 import (
+	"context"
 	_ "embed"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -81,6 +83,11 @@ var extensionAdminWatchCmd = &cobra.Command{
 		}
 
 		esbuildInstances := make(map[string]adminWatchExtension)
+		defer func() {
+			for _, ext := range esbuildInstances {
+				ext.context.Dispose()
+			}
+		}()
 
 		for name, entry := range cfgs {
 			options := esbuild.NewAssetCompileOptionsAdmin(name, entry.BasePath)
@@ -360,12 +367,38 @@ var extensionAdminWatchCmd = &cobra.Command{
 			ReadHeaderTimeout: time.Second,
 		}
 		logging.FromContext(cmd.Context()).Infof("Admin Watcher started at %s%s/admin", browserUrl.String(), targetShopUrl.Path)
-		if err := s.ListenAndServe(); err != nil {
+
+		return serveAdminWatch(cmd.Context(), s)
+	},
+}
+
+func serveAdminWatch(ctx context.Context, server *http.Server) error {
+	serverErr := make(chan error, 1)
+	go func() {
+		serverErr <- server.ListenAndServe()
+	}()
+
+	select {
+	case err := <-serverErr:
+		if errors.Is(err, http.ErrServerClosed) {
+			return nil
+		}
+
+		return err
+	case <-ctx.Done():
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+
+		if err := server.Shutdown(shutdownCtx); err != nil {
+			return err
+		}
+
+		if err := <-serverErr; err != nil && !errors.Is(err, http.ErrServerClosed) {
 			return err
 		}
 
 		return nil
-	},
+	}
 }
 
 func init() {
