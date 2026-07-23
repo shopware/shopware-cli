@@ -19,6 +19,7 @@ import (
 	"github.com/shopware/shopware-cli/internal/mjml"
 	"github.com/shopware/shopware-cli/internal/shop"
 	"github.com/shopware/shopware-cli/internal/system"
+	"github.com/shopware/shopware-cli/internal/tui"
 	"github.com/shopware/shopware-cli/logging"
 )
 
@@ -368,9 +369,10 @@ func generateProjectSBOM(ctx context.Context, root string) error {
 	section := ci.Default.Section(ctx, "Generating SBOM")
 	defer section.End(ctx)
 
-	return writeProjectSBOM(ctx, root, projectSBOMOptions{
+	return shop.WriteProjectSBOM(ctx, root, shop.ProjectSBOMOptions{
 		// CI historically skips when lock is missing rather than failing the build.
 		SkipMissingLock: true,
+		ToolVersion:     tui.AppVersion,
 	})
 }
 
