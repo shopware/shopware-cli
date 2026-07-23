@@ -118,6 +118,7 @@ func getEsbuildOptions(ctx context.Context, options AssetCompileOptions) (*api.B
 		EntryNames: "[name]-[hash]",
 		AssetNames: "[name]-[hash]",
 		Bundle:     true,
+		Metafile:   true,
 		Write:      false,
 		LogLevel:   api.LogLevelWarning,
 		Plugins:    plugins,
@@ -132,10 +133,6 @@ func Context(ctx context.Context, options AssetCompileOptions) (api.BuildContext
 	if err != nil {
 		panic(err)
 	}
-
-	// The administration watcher uses the metafile to distinguish entrypoints
-	// from generated chunks when serving content-addressed build outputs.
-	bundlerOptions.Metafile = true
 
 	return api.Context(*bundlerOptions)
 }
@@ -201,11 +198,21 @@ func cleanupOutputFolder(options AssetCompileOptions) error {
 
 func writeBundlerResultToDisk(result api.BuildResult, options AssetCompileOptions) (hashedJsRel, hashedCssRel string, err error) {
 	outputDir := filepath.Join(options.Path, options.OutputDir)
+	entrypoints, err := findEntrypoints(result)
+	if err != nil {
+		return "", "", err
+	}
 
 	for _, file := range result.OutputFiles {
+		outputPath, err := servePath(file.Path)
+		if err != nil {
+			return "", "", err
+		}
+
 		filename := filepath.Base(file.Path)
 
-		if strings.HasSuffix(filename, ".css") {
+		switch outputPath {
+		case entrypoints.CSS:
 			unhashedRel := options.OutputCSSFile
 			hashedRel := filepath.Join("css", filename)
 			hashedCssRel = hashedRel
@@ -219,7 +226,7 @@ func writeBundlerResultToDisk(result api.BuildResult, options AssetCompileOption
 			if err := writeOutputFile(filepath.Join(outputDir, hashedRel), file.Contents); err != nil {
 				return "", "", err
 			}
-		} else {
+		case entrypoints.JavaScript:
 			unhashedRel := options.OutputJSFile
 			jsDir := filepath.Dir(options.OutputJSFile)
 			hashedRel := filepath.Join(jsDir, filename)
@@ -233,6 +240,20 @@ func writeBundlerResultToDisk(result api.BuildResult, options AssetCompileOption
 			// Write esbuild content-addressed hashed file for Shopware 6.7+
 			if err := writeOutputFile(filepath.Join(outputDir, hashedRel), file.Contents); err != nil {
 				return "", "", err
+			}
+		default:
+			relativeOutputPath := filepath.FromSlash(strings.TrimPrefix(outputPath, "/"))
+			jsOutputPath := filepath.Join(outputDir, filepath.Dir(options.OutputJSFile), relativeOutputPath)
+
+			if err := writeOutputFile(jsOutputPath, file.Contents); err != nil {
+				return "", "", err
+			}
+
+			if entrypoints.CSS != "" {
+				cssOutputPath := filepath.Join(outputDir, filepath.Dir(options.OutputCSSFile), relativeOutputPath)
+				if err := writeOutputFile(cssOutputPath, file.Contents); err != nil {
+					return "", "", err
+				}
 			}
 		}
 	}

@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"regexp"
 	"testing"
 
 	"github.com/evanw/esbuild/pkg/api"
@@ -18,8 +19,10 @@ func TestRebuildEntrypointsReturnsContentAddressedPaths(t *testing.T) {
 	dir := t.TempDir()
 	adminDir := filepath.Join(dir, "Resources", "app", "administration", "src")
 	require.NoError(t, os.MkdirAll(adminDir, 0o755))
-	require.NoError(t, os.WriteFile(filepath.Join(adminDir, "main.js"), []byte("import './style.css'; console.log('served-marker')"), 0o644))
-	require.NoError(t, os.WriteFile(filepath.Join(adminDir, "style.css"), []byte(".served-marker { color: red; }"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(adminDir, "main.js"), []byte("import picture from './picture.png'; import './style.css'; console.log('served-marker', picture)"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(adminDir, "style.css"), []byte(".served-marker { background-image: url('./picture.png'); }"), 0o644))
+	pictureContents := []byte("picture-contents")
+	require.NoError(t, os.WriteFile(filepath.Join(adminDir, "picture.png"), pictureContents, 0o644))
 
 	options := NewAssetCompileOptionsAdmin("MyPlugin", dir)
 	options.ProductionMode = false
@@ -40,6 +43,8 @@ func TestRebuildEntrypointsReturnsContentAddressedPaths(t *testing.T) {
 	assert.NotEqual(t, "/extension.js", entrypoints.JavaScript)
 	assert.NotEqual(t, "/extension.css", entrypoints.CSS)
 
+	servedBodies := map[string]string{}
+
 	for _, test := range []struct {
 		name   string
 		path   string
@@ -49,25 +54,20 @@ func TestRebuildEntrypointsReturnsContentAddressedPaths(t *testing.T) {
 		{name: "css", path: entrypoints.CSS, marker: ".served-marker"},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			request, err := http.NewRequestWithContext(
-				t.Context(),
-				http.MethodGet,
-				fmt.Sprintf("http://%s:%d%s", watchServer.Hosts[0], watchServer.Port, test.path),
-				nil,
-			)
-			require.NoError(t, err)
-
-			response, err := http.DefaultClient.Do(request)
-			require.NoError(t, err)
-
-			body, readErr := io.ReadAll(response.Body)
-			closeErr := response.Body.Close()
-			require.NoError(t, readErr)
-			require.NoError(t, closeErr)
-			assert.Equal(t, http.StatusOK, response.StatusCode)
-			assert.Contains(t, string(body), test.marker)
+			body := readServeOutput(t, watchServer, test.path)
+			servedBodies[test.name] = string(body)
+			assert.Contains(t, servedBodies[test.name], test.marker)
 		})
 	}
+
+	picturePathPattern := regexp.MustCompile(`\./picture-[A-Z0-9]+\.png`)
+	javaScriptPicturePath := picturePathPattern.FindString(servedBodies["javascript"])
+	cssPicturePath := picturePathPattern.FindString(servedBodies["css"])
+	require.NotEmpty(t, javaScriptPicturePath)
+	assert.Equal(t, javaScriptPicturePath, cssPicturePath)
+
+	servedPicture := readServeOutput(t, watchServer, javaScriptPicturePath[1:])
+	assert.Equal(t, pictureContents, servedPicture)
 }
 
 func TestFindEntrypointsUsesEntrypointInsteadOfChunk(t *testing.T) {
@@ -208,3 +208,26 @@ func (staticBuildContext) Serve(api.ServeOptions) (api.ServeResult, error) {
 func (staticBuildContext) Cancel() {}
 
 func (staticBuildContext) Dispose() {}
+
+func readServeOutput(t *testing.T, watchServer api.ServeResult, outputPath string) []byte {
+	t.Helper()
+
+	request, err := http.NewRequestWithContext(
+		t.Context(),
+		http.MethodGet,
+		fmt.Sprintf("http://%s:%d%s", watchServer.Hosts[0], watchServer.Port, outputPath),
+		nil,
+	)
+	require.NoError(t, err)
+
+	response, err := http.DefaultClient.Do(request)
+	require.NoError(t, err)
+
+	body, readErr := io.ReadAll(response.Body)
+	closeErr := response.Body.Close()
+	require.NoError(t, readErr)
+	require.NoError(t, closeErr)
+	assert.Equal(t, http.StatusOK, response.StatusCode)
+
+	return body
+}

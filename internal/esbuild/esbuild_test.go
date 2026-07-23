@@ -2,11 +2,15 @@ package esbuild
 
 import (
 	"context"
+	"encoding/json"
 	"os"
 	"path/filepath"
+	"regexp"
 	"testing"
 
+	"github.com/evanw/esbuild/pkg/api"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/shopware/shopware-cli/logging"
 )
@@ -126,6 +130,86 @@ func TestESBuildAdminWithCSS(t *testing.T) {
 	hashedCSSPath := filepath.Join(dir, "Resources", "public", "administration", result.HashedCssFile)
 	_, err = os.Stat(hashedCSSPath)
 	assert.NoError(t, err)
+}
+
+func TestESBuildAdminWithFileAsset(t *testing.T) {
+	dir := t.TempDir()
+
+	adminDir := filepath.Join(dir, "Resources", "app", "administration", "src")
+	require.NoError(t, os.MkdirAll(adminDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(adminDir, "main.js"), []byte("import picture from './picture.png'; import './style.css'; console.log(picture)"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(adminDir, "style.css"), []byte(".picture { background-image: url('./picture.png'); }"), 0o644))
+	pictureContents := []byte("picture-contents")
+	require.NoError(t, os.WriteFile(filepath.Join(adminDir, "picture.png"), pictureContents, 0o644))
+
+	options := NewAssetCompileOptionsAdmin("Bla", dir)
+	options.DisableSass = true
+	result, err := CompileExtensionAsset(getTestContext(), options)
+	require.NoError(t, err)
+
+	assert.Regexp(t, `^js/bla-[A-Z0-9]+\.js$`, filepath.ToSlash(result.HashedJsFile))
+	assert.Regexp(t, `^css/bla-[A-Z0-9]+\.css$`, filepath.ToSlash(result.HashedCssFile))
+
+	outputDir := filepath.Join(dir, "Resources", "public", "administration")
+	compiledJS, err := os.ReadFile(filepath.Join(outputDir, "js", "bla.js"))
+	require.NoError(t, err)
+	compiledCSS, err := os.ReadFile(filepath.Join(outputDir, "css", "bla.css"))
+	require.NoError(t, err)
+
+	picturePathPattern := regexp.MustCompile(`\./picture-[A-Z0-9]+\.png`)
+	javaScriptPicturePath := picturePathPattern.FindString(string(compiledJS))
+	cssPicturePath := picturePathPattern.FindString(string(compiledCSS))
+	require.NotEmpty(t, javaScriptPicturePath)
+	assert.Equal(t, javaScriptPicturePath, cssPicturePath)
+
+	for _, outputFolder := range []string{"js", "css"} {
+		writtenPicture, err := os.ReadFile(filepath.Join(outputDir, outputFolder, javaScriptPicturePath[2:]))
+		require.NoError(t, err)
+		assert.Equal(t, pictureContents, writtenPicture)
+	}
+}
+
+func TestWriteBundlerResultToDiskDoesNotTreatAssetAsEntrypoint(t *testing.T) {
+	entryPath, err := filepath.Abs("bla-ENTRY.js")
+	require.NoError(t, err)
+	picturePath, err := filepath.Abs("picture-ASSET.png")
+	require.NoError(t, err)
+
+	metafile, err := json.Marshal(watchMetafile{
+		Outputs: map[string]watchMetafileOutput{
+			"bla-ENTRY.js": {
+				EntryPoint: "Resources/app/administration/src/main.js",
+			},
+			"picture-ASSET.png": {},
+		},
+	})
+	require.NoError(t, err)
+
+	options := AssetCompileOptions{
+		Path:          t.TempDir(),
+		OutputDir:     "dist",
+		OutputJSFile:  "js/bla.js",
+		OutputCSSFile: "css/bla.css",
+	}
+	hashedJS, hashedCSS, err := writeBundlerResultToDisk(api.BuildResult{
+		Metafile: string(metafile),
+		OutputFiles: []api.OutputFile{
+			{Path: entryPath, Contents: []byte("entry")},
+			{Path: picturePath, Contents: []byte("picture")},
+		},
+	}, options)
+	require.NoError(t, err)
+
+	assert.Equal(t, filepath.FromSlash("js/bla-ENTRY.js"), hashedJS)
+	assert.Empty(t, hashedCSS)
+
+	stableEntry, err := os.ReadFile(filepath.Join(options.Path, options.OutputDir, options.OutputJSFile))
+	require.NoError(t, err)
+	assert.Equal(t, "entry", string(stableEntry))
+
+	writtenPicture, err := os.ReadFile(filepath.Join(options.Path, options.OutputDir, "js", "picture-ASSET.png"))
+	require.NoError(t, err)
+	assert.Equal(t, "picture", string(writtenPicture))
 }
 
 func TestESBuildAdminTypeScript(t *testing.T) {
