@@ -15,6 +15,7 @@ var overrideOpts = &ProxyOptions{
 	Hostname:    "my-shop.shopware.local",
 	NetworkName: "shopware-cli-proxy",
 	CAPath:      "/state/mkcert/rootCA.pem",
+	AppURL:      "https://my-shop.shopware.local",
 }
 
 func TestGenerateComposeOverride(t *testing.T) {
@@ -49,8 +50,17 @@ func TestGenerateComposeOverride(t *testing.T) {
 	assert.Contains(t, override, "websecure")
 	assert.Contains(t, override, "external: true")
 
+	// The deprecated storefront watcher gets a second router under the same
+	// hostname on the dedicated asset entrypoint (asset + HMR server).
+	assert.Contains(t, override, "sfassets")
+	assert.Contains(t, override, "storefront-watch-assets")
+
 	// TLS terminates at Traefik, so the web container must trust it.
 	assert.Contains(t, override, "TRUSTED_PROXIES")
+
+	// APP_URL is pinned on the container so PHP renders absolute URLs (import
+	// map, asset URLs) with the proxy hostname, not the stale image default.
+	assert.Contains(t, override, "APP_URL: https://my-shop.shopware.local")
 
 	// The CA is mounted into the web container and Node points at it, so the
 	// shop can call its own APP_URL over HTTPS.

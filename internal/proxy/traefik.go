@@ -25,8 +25,14 @@ const (
 	// configVersion is stamped on the container as a label; bumping it makes
 	// EnsureTraefikRunning recreate containers started by older CLI versions
 	// with incompatible flags or mounts.
-	configVersion      = "6"
+	configVersion      = "7"
 	configVersionLabel = "com.shopware-cli.proxy-config-version"
+
+	// StorefrontAssetsPort is the extra host port and Traefik entrypoint
+	// ("sfassets") exposed for the deprecated storefront webpack watcher's
+	// asset+HMR server. It is routed by hostname, so every shop shares this one
+	// port; the per-shop route lives in internal/docker/compose_override.go.
+	StorefrontAssetsPort = 8443
 )
 
 // PingHostname is the hostname of the proxy's own health endpoint under
@@ -158,6 +164,7 @@ func EnsureTraefikRunning(ctx context.Context, baseDomain string) error {
 		"--label", configVersionLabel+"="+configVersion,
 		"-p", "80:80",
 		"-p", "443:443",
+		"-p", fmt.Sprintf("%d:%d", StorefrontAssetsPort, StorefrontAssetsPort),
 		"-v", "/var/run/docker.sock:/var/run/docker.sock:ro",
 		"-v", filepath.Join(dir, "traefik")+":"+containerConfigDir+":ro",
 		TraefikImage,
@@ -173,6 +180,7 @@ func EnsureTraefikRunning(ctx context.Context, baseDomain string) error {
 		"--entrypoints.web.http.redirections.entrypoint.to=websecure",
 		"--entrypoints.web.http.redirections.entrypoint.scheme=https",
 		"--entrypoints.websecure.address=:443",
+		fmt.Sprintf("--entrypoints.sfassets.address=:%d", StorefrontAssetsPort),
 	)
 	return err
 }
