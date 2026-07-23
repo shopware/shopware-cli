@@ -124,6 +124,12 @@ func (s ExtStatus) BlocksUpgrade() bool {
 	return s == ExtBlocked || s == ExtMismatch
 }
 
+// NeedsAttention reports whether this finding requires the user's review —
+// everything except OK and routine update-available results.
+func (s ExtStatus) NeedsAttention() bool {
+	return s != ExtOK && s != ExtNeedsUpdate
+}
+
 // Rank orders statuses by severity for the extension queue (most severe first).
 func (s ExtStatus) Rank() int {
 	switch s {

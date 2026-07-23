@@ -27,10 +27,14 @@ type prepareState struct {
 	resolveErr   error
 	results      []upgrade.ExtensionResult
 	compatDone   bool
+	phpDone      bool
 	phpReq       string
 	phpInstalled string
-	// reportPath is set once a failed resolution wrote its report file.
-	reportPath string
+	// reportRequested marks that the failure report write was kicked off;
+	// reportPath or reportErr carry its outcome.
+	reportRequested bool
+	reportPath      string
+	reportErr       error
 
 	cursor int
 	scroll int
@@ -59,6 +63,19 @@ func (s prepareState) blockers() int {
 	n := 0
 	for _, r := range s.results {
 		if r.Status.BlocksUpgrade() {
+			n++
+		}
+	}
+	return n
+}
+
+// flagged counts extensions that need the user's attention — blocking,
+// deprecated, or manual-review findings. While any exist the queue stays
+// visible so they are not hidden behind other failure output.
+func (s prepareState) flagged() int {
+	n := 0
+	for _, r := range s.results {
+		if r.Status.NeedsAttention() {
 			n++
 		}
 	}
@@ -99,7 +116,7 @@ func (m *Model) updatePrepare(msg tea.Msg) (app.Content, tea.Cmd) {
 		running := msg.running
 		m.prepare.envRunning = &running
 		m.prepare.envErr = msg.err
-		return m, nil
+		return m, m.maybeWriteFailureReport()
 
 	case packagistMsg:
 		if msg.gen != m.prepare.gen {
@@ -107,7 +124,7 @@ func (m *Model) updatePrepare(msg tea.Msg) (app.Content, tea.Cmd) {
 		}
 		reachable := msg.reachable
 		m.prepare.packagist = &reachable
-		return m, nil
+		return m, m.maybeWriteFailureReport()
 
 	case resolveDoneMsg:
 		if msg.gen != m.prepare.gen {
@@ -120,17 +137,13 @@ func (m *Model) updatePrepare(msg tea.Msg) (app.Content, tea.Cmd) {
 			m.prepare.resolve = &result
 		}
 		m.prepare.applyResolved()
-		// A failed resolution blocks the wizard here, so the report the user
-		// is pointed to must exist now — the review panel's export is
-		// unreachable in that state.
-		if m.prepare.resolve != nil && !m.prepare.resolve.OK {
-			return m, exportReportCmd(m.upgrader, m.reportData())
-		}
-		return m, nil
+		return m, m.maybeWriteFailureReport()
 
 	case reportWrittenMsg:
-		if msg.err == nil {
-			m.prepare.reportPath = msg.path
+		m.prepare.reportPath = msg.path
+		m.prepare.reportErr = msg.err
+		if msg.err != nil {
+			m.prepare.reportPath = ""
 		}
 		return m, nil
 
@@ -143,20 +156,36 @@ func (m *Model) updatePrepare(msg tea.Msg) (app.Content, tea.Cmd) {
 		m.prepare.cursor = 0
 		m.prepare.scroll = 0
 		m.prepare.applyResolved()
-		return m, nil
+		return m, m.maybeWriteFailureReport()
 
 	case phpInfoMsg:
 		if msg.gen != m.prepare.gen {
 			return m, nil
 		}
+		m.prepare.phpDone = true
 		m.prepare.phpReq = msg.requirement
 		m.prepare.phpInstalled = msg.installed
-		return m, nil
+		return m, m.maybeWriteFailureReport()
 
 	case tea.KeyPressMsg:
 		return m.updatePrepareKeys(msg)
 	}
 	return m, nil
+}
+
+// maybeWriteFailureReport writes the failure report once every preparation
+// result has arrived and the resolution failed — the review panel's export is
+// unreachable in that state, and exporting earlier would snapshot incomplete
+// extension and PHP data.
+func (m *Model) maybeWriteFailureReport() tea.Cmd {
+	if m.prepare.reportRequested || m.prepare.loading() || !m.prepare.phpDone {
+		return nil
+	}
+	if m.prepare.resolve == nil || m.prepare.resolve.OK {
+		return nil
+	}
+	m.prepare.reportRequested = true
+	return exportReportCmd(m.upgrader, m.reportData())
 }
 
 func (m *Model) updatePrepareKeys(msg tea.KeyPressMsg) (app.Content, tea.Cmd) {
@@ -237,9 +266,9 @@ func (m *Model) viewPrepare() (title, status, body string) {
 	switch {
 	case m.prepare.loading():
 		status = m.statusStrip(tui.VariantInfo, "RUNNING", "Running preparation checks…")
-	case !m.prepare.ready() && m.prepare.blockers() > 0:
+	case !m.prepare.ready() && m.prepare.flagged() > 0:
 		status = m.statusStrip(tui.VariantError, "BLOCKED",
-			fmt.Sprintf("Composer cannot resolve this upgrade — %d extensions need fixes.", m.prepare.blockers())) +
+			fmt.Sprintf("Composer cannot resolve this upgrade — %d extensions need attention.", m.prepare.flagged())) +
 			"\n" + m.statusStrip(tui.VariantInfo, "TODO", "Fix manually if needed, then recheck."+m.reportHint())
 	case !m.prepare.ready():
 		status = m.statusStrip(tui.VariantError, "BLOCKED", "Composer cannot resolve this upgrade. The conflict summary is below."+m.reportHint())
@@ -254,13 +283,16 @@ func (m *Model) viewPrepare() (title, status, body string) {
 	return title, status, body
 }
 
-// reportHint appends the report location to a status message once the failed
-// resolution wrote it.
+// reportHint appends the failure report's location — or its write failure —
+// to a status message.
 func (m *Model) reportHint() string {
-	if m.prepare.reportPath == "" {
-		return ""
+	switch {
+	case m.prepare.reportPath != "":
+		return " Report: " + relativePath(m.opts.ProjectRoot, m.prepare.reportPath)
+	case m.prepare.reportErr != nil:
+		return " Report write failed: " + m.prepare.reportErr.Error()
 	}
-	return " Report: " + relativePath(m.opts.ProjectRoot, m.prepare.reportPath)
+	return ""
 }
 
 func (m *Model) viewPrepareLeft() string {
@@ -271,10 +303,11 @@ func (m *Model) viewPrepareLeft() string {
 	b.WriteString(m.renderSystemChecks())
 	b.WriteString("\n")
 
-	// A pure Composer conflict (no flagged extensions to act on) shows the
-	// solver's conflict summary where the queue would be — it names the exact
-	// packages and constraints that clash.
-	if m.prepare.resolve != nil && !m.prepare.resolve.OK && m.prepare.blockers() == 0 {
+	// A pure Composer conflict shows the solver's conflict summary where the
+	// queue would be — it names the exact packages and constraints that
+	// clash. Any flagged extension (blocking, deprecated, manual review)
+	// keeps the queue instead: those findings are only visible here.
+	if m.prepare.resolve != nil && !m.prepare.resolve.OK && m.prepare.flagged() == 0 {
 		b.WriteString(m.viewResolveFailure())
 		return b.String()
 	}
@@ -325,11 +358,18 @@ func (m *Model) viewResolveFailure() string {
 	b.WriteString("\n")
 
 	width := m.bodyWidth() * 3 / 5
-	visible := m.queueHeight() + 2
+	// The section must fit where the queue block would render (heading, hint,
+	// table header, plus queueHeight rows): heading + omission notice + tail
+	// + blank + report line. Budget the tail so the report link is never
+	// cropped off the frame — long failures need it the most.
+	visible := m.queueHeight() - 2
+	if visible < 3 {
+		visible = 3
+	}
 
 	lines := strings.Split(strings.TrimRight(m.prepare.resolve.Report, "\n"), "\n")
 	if len(lines) > visible {
-		b.WriteString(tui.DimStyle.Render(fmt.Sprintf("… %d earlier output lines are in the report", len(lines)-visible)))
+		b.WriteString(tui.DimStyle.Render(fmt.Sprintf("… %d earlier output lines omitted", len(lines)-visible)))
 		b.WriteString("\n")
 	}
 	for _, line := range tui.TailLines(lines, visible) {
@@ -337,10 +377,13 @@ func (m *Model) viewResolveFailure() string {
 		b.WriteString("\n")
 	}
 
-	if m.prepare.reportPath != "" {
-		b.WriteString("\n")
+	b.WriteString("\n")
+	switch {
+	case m.prepare.reportPath != "":
 		b.WriteString(tui.DimStyle.Render("Full output: ") +
 			tui.StyledLink("file://"+m.prepare.reportPath, relativePath(m.opts.ProjectRoot, m.prepare.reportPath), tui.LinkStyle))
+	case m.prepare.reportErr != nil:
+		b.WriteString(failStyle.Render(tui.Truncate("Could not write the report: "+m.prepare.reportErr.Error(), width)))
 	}
 	return b.String()
 }

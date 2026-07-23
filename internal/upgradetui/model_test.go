@@ -1,6 +1,7 @@
 package upgradetui
 
 import (
+	"errors"
 	"strings"
 	"testing"
 
@@ -344,9 +345,10 @@ func TestPrepareResolveFailureShowsConflictInline(t *testing.T) {
 		OK:     false,
 		Report: "Loading composer repositories\nProblem 1\n    - shopware/core 6.7.11.0 conflicts with swag/demo 2.0.0",
 	}})
-	w.Send(phpInfoMsg{gen: gen, requirement: ">=8.2", installed: "8.3.1"})
+	assert.Nil(t, cmd, "the report waits for the remaining preparation results")
 
-	require.NotNil(t, cmd, "a failed resolution writes the report immediately")
+	cmd = w.Send(phpInfoMsg{gen: gen, requirement: ">=8.2", installed: "8.3.1"})
+	require.NotNil(t, cmd, "once every result arrived, the failure report is written")
 
 	// The solver's conflict summary replaces the extension queue.
 	content := w.view(t)
@@ -362,13 +364,63 @@ func TestPrepareResolveFailureShowsConflictInline(t *testing.T) {
 	assert.Contains(t, content, "Full output: .shopware-cli/upgrade/report.md")
 }
 
+func TestPrepareResolveFailureLongOutputKeepsReportLink(t *testing.T) {
+	w := wizardAtCheck(t, false)
+	w.Send(specialKey(tea.KeyEnter))
+
+	gen := w.m.prepareGen
+	report := strings.TrimSuffix(strings.Repeat("conflict line\n", 100), "\n")
+	w.Send(envStatusMsg{gen: gen, running: true})
+	w.Send(packagistMsg{gen: gen, reachable: true})
+	w.Send(compatDoneMsg{gen: gen, results: nil})
+	w.Send(resolveDoneMsg{gen: gen, result: upgrade.ResolveResult{OK: false, Report: report}})
+	w.Send(phpInfoMsg{gen: gen, requirement: ">=8.2", installed: "8.3.1"})
+	w.Send(reportWrittenMsg{path: "/projects/acme-shop/.shopware-cli/upgrade/report.md"})
+
+	content := w.view(t)
+	assert.Contains(t, content, "earlier output lines omitted")
+	assert.Contains(t, content, "Full output: .shopware-cli/upgrade/report.md",
+		"the report link must survive output longer than the frame")
+}
+
+func TestPrepareResolveFailureSurfacesReportWriteError(t *testing.T) {
+	w := wizardAtCheck(t, false)
+	w.Send(specialKey(tea.KeyEnter))
+
+	gen := w.m.prepareGen
+	w.Send(envStatusMsg{gen: gen, running: true})
+	w.Send(packagistMsg{gen: gen, reachable: true})
+	w.Send(compatDoneMsg{gen: gen, results: nil})
+	w.Send(resolveDoneMsg{gen: gen, result: upgrade.ResolveResult{OK: false, Report: "Problem 1"}})
+	w.Send(phpInfoMsg{gen: gen, requirement: ">=8.2", installed: "8.3.1"})
+	w.Send(reportWrittenMsg{err: errors.New("permission denied")})
+
+	content := w.view(t)
+	assert.Contains(t, content, "Could not write the report: permission denied")
+	assert.NotContains(t, content, "Full output:")
+}
+
+func TestPrepareResolveFailureKeepsQueueForFlaggedExtensions(t *testing.T) {
+	deprecated := okResult()
+	deprecated.Status = upgrade.ExtDeprecated
+	w := wizardAtPrepare(t, []upgrade.ExtensionResult{deprecated}, false)
+
+	// Deprecated/review findings are only visible in the queue, so a failed
+	// resolution must not replace it with the conflict summary.
+	content := w.view(t)
+	assert.Contains(t, content, "Extension queue")
+	assert.Contains(t, content, "SwagDemo")
+	assert.NotContains(t, content, "Composer conflict")
+	assert.Contains(t, content, "1 extensions need attention")
+}
+
 func TestPreparePanelBlocked(t *testing.T) {
 	// Flagged extensions AND a failed composer resolution: blocked.
 	w := wizardAtPrepare(t, []upgrade.ExtensionResult{blockedResult(), okResult()}, false)
 
 	content := w.view(t)
 	assert.Contains(t, content, "BLOCKED")
-	assert.Contains(t, content, "1 extensions need fixes")
+	assert.Contains(t, content, "1 extensions need attention")
 	assert.Contains(t, content, "AcmeERPConnector")
 	assert.Contains(t, content, "3.2.0 -> none")
 
