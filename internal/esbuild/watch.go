@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
 	"path"
 	"path/filepath"
 	"strings"
@@ -72,7 +73,12 @@ func servePath(outputPath string) (string, error) {
 	cleanOutputPath := filepath.Clean(filepath.FromSlash(outputPath))
 
 	if filepath.IsAbs(cleanOutputPath) {
-		relativePath, err := filepath.Rel(".", cleanOutputPath)
+		workingDirectory, err := os.Getwd()
+		if err != nil {
+			return "", fmt.Errorf("cannot determine esbuild serve directory: %w", err)
+		}
+
+		relativePath, err := filepath.Rel(workingDirectory, cleanOutputPath)
 		if err != nil {
 			return "", fmt.Errorf("cannot resolve esbuild output path %q: %w", outputPath, err)
 		}

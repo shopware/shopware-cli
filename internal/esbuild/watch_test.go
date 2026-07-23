@@ -106,3 +106,105 @@ func TestFindEntrypointsAllowsMissingCSS(t *testing.T) {
 	assert.Equal(t, "/my-plugin-ENTRY.js", entrypoints.JavaScript)
 	assert.Empty(t, entrypoints.CSS)
 }
+
+func TestRebuildEntrypointsReturnsBuildError(t *testing.T) {
+	buildContext := staticBuildContext{
+		result: api.BuildResult{
+			Errors: []api.Message{{Text: "build failed"}},
+		},
+	}
+
+	_, err := RebuildEntrypoints(buildContext)
+
+	assert.EqualError(t, err, "build failed")
+}
+
+func TestFindEntrypointsReturnsMetadataErrors(t *testing.T) {
+	t.Run("malformed metafile", func(t *testing.T) {
+		_, err := findEntrypoints(api.BuildResult{Metafile: `{"outputs":`})
+
+		assert.ErrorContains(t, err, "cannot decode esbuild metafile")
+	})
+
+	t.Run("missing JavaScript entrypoint", func(t *testing.T) {
+		metafile, err := json.Marshal(watchMetafile{
+			Outputs: map[string]watchMetafileOutput{
+				"my-plugin.css": {},
+			},
+		})
+		require.NoError(t, err)
+
+		_, err = findEntrypoints(api.BuildResult{Metafile: string(metafile)})
+
+		assert.EqualError(t, err, "esbuild emitted no JavaScript entrypoint")
+	})
+
+	t.Run("JavaScript outside serve directory", func(t *testing.T) {
+		metafile, err := json.Marshal(watchMetafile{
+			Outputs: map[string]watchMetafileOutput{
+				"../my-plugin.js": {
+					EntryPoint: "Resources/app/administration/src/main.js",
+				},
+			},
+		})
+		require.NoError(t, err)
+
+		_, err = findEntrypoints(api.BuildResult{Metafile: string(metafile)})
+
+		assert.ErrorContains(t, err, "outside the serve directory")
+	})
+
+	t.Run("CSS outside serve directory", func(t *testing.T) {
+		metafile, err := json.Marshal(watchMetafile{
+			Outputs: map[string]watchMetafileOutput{
+				"my-plugin.js": {
+					EntryPoint: "Resources/app/administration/src/main.js",
+					CSSBundle:  "../my-plugin.css",
+				},
+			},
+		})
+		require.NoError(t, err)
+
+		_, err = findEntrypoints(api.BuildResult{Metafile: string(metafile)})
+
+		assert.ErrorContains(t, err, "outside the serve directory")
+	})
+}
+
+func TestServePath(t *testing.T) {
+	t.Run("absolute path in serve directory", func(t *testing.T) {
+		absolutePath, err := filepath.Abs(filepath.Join("chunks", "chunk.js"))
+		require.NoError(t, err)
+
+		resultPath, err := servePath(absolutePath)
+
+		require.NoError(t, err)
+		assert.Equal(t, "/chunks/chunk.js", resultPath)
+	})
+
+	t.Run("parent traversal", func(t *testing.T) {
+		_, err := servePath(filepath.Join("..", "chunk.js"))
+
+		assert.ErrorContains(t, err, "outside the serve directory")
+	})
+}
+
+type staticBuildContext struct {
+	result api.BuildResult
+}
+
+func (c staticBuildContext) Rebuild() api.BuildResult {
+	return c.result
+}
+
+func (staticBuildContext) Watch(api.WatchOptions) error {
+	return nil
+}
+
+func (staticBuildContext) Serve(api.ServeOptions) (api.ServeResult, error) {
+	return api.ServeResult{}, nil
+}
+
+func (staticBuildContext) Cancel() {}
+
+func (staticBuildContext) Dispose() {}
