@@ -11,12 +11,18 @@ import (
 
 	"github.com/shopware/shopware-cli/internal/executor"
 	"github.com/shopware/shopware-cli/internal/shop"
+	"github.com/shopware/shopware-cli/internal/tui"
+	"github.com/shopware/shopware-cli/internal/tui/app"
+	"github.com/shopware/shopware-cli/internal/tui/picker"
+	"github.com/shopware/shopware-cli/internal/tui/prompt"
 )
 
 // newTestModel returns a Model with the minimum fields populated to drive
-// dashboard-phase key dispatch tests without nil-deref panics.
+// dashboard-phase key dispatch tests without nil-deref panics. The model is
+// attached to an app shell so overlay pushes have a host; assert on open
+// overlays with topOverlay.
 func newTestModel() Model {
-	return Model{
+	m := Model{
 		phase:       phaseDashboard,
 		overview:    NewOverviewModel("local", "http://localhost:8000", "", "", "/tmp/project", nil, nil),
 		instance:    NewInstanceModel("/tmp/project", false),
@@ -25,6 +31,13 @@ func newTestModel() Model {
 		projectRoot: "/tmp/project",
 		config:      &shop.Config{},
 	}
+	m.host = app.New(app.Options{DisableDefaultKeys: true})
+	return m
+}
+
+// topOverlay returns the overlay the model pushed onto its shell, or nil.
+func topOverlay(m Model) app.Overlay {
+	return m.host.(*app.App).TopOverlay()
 }
 
 func keyRune(r rune) tea.KeyPressMsg {
@@ -148,23 +161,20 @@ func TestUpdateKeyPress_PhaseInstalling_QuitKey(t *testing.T) {
 func TestUpdateKeyPress_PhaseTask_DoneTransitionsToDashboard(t *testing.T) {
 	m := newTestModel()
 	m.phase = phaseTask
-	m.taskDone = true
-	m.taskErr = nil
-	m.overlayLines = []string{"some output"}
+	m.task = tui.NewTask("Building...")
+	m.task, _ = m.task.Update(tui.TaskDoneMsg{})
 
 	updated, cmd := m.Update(keyRune('x'))
 	assert.Nil(t, cmd)
 	um := updated.(Model)
 	assert.Equal(t, phaseDashboard, um.phase)
-	assert.False(t, um.taskDone)
-	assert.Nil(t, um.taskErr)
-	assert.Empty(t, um.overlayLines)
+	assert.False(t, um.task.Done(), "task state is reset on dismissal")
 }
 
 func TestUpdateKeyPress_PhaseTask_NotDoneQuitOnQ(t *testing.T) {
 	m := newTestModel()
 	m.phase = phaseTask
-	m.taskDone = false
+	m.task = tui.NewTask("Building...")
 
 	_, cmd := m.Update(keyRune('q'))
 	assert.NotNil(t, cmd)
@@ -175,7 +185,7 @@ func TestUpdateKeyPress_PhaseTask_NotDoneQuitOnQ(t *testing.T) {
 func TestUpdateKeyPress_PhaseTask_NotDoneOtherKeyIgnored(t *testing.T) {
 	m := newTestModel()
 	m.phase = phaseTask
-	m.taskDone = false
+	m.task = tui.NewTask("Building...")
 
 	updated, cmd := m.Update(keyRune('x'))
 	assert.Nil(t, cmd)
@@ -209,8 +219,7 @@ func TestUpdateDashboardKeys_CtrlPOpensPalette(t *testing.T) {
 
 	updated, cmd := m.Update(keyCtrl('p'))
 	um := updated.(Model)
-	assert.NotNil(t, um.modal)
-	_, ok := um.modal.(*commandPalette)
+	_, ok := topOverlay(um).(*commandPalette)
 	assert.True(t, ok)
 	assert.NotNil(t, cmd)
 }
@@ -268,10 +277,9 @@ func TestUpdateDashboardKeys_QuitDockerModeOpensConfirm(t *testing.T) {
 
 	updated, cmd := m.Update(keyRune('q'))
 	um := updated.(Model)
-	assert.NotNil(t, um.modal)
-	_, ok := um.modal.(*stopConfirm)
+	_, ok := topOverlay(um).(*prompt.Overlay)
 	assert.True(t, ok)
-	assert.Nil(t, cmd)
+	assert.Nil(t, cmd, "stop confirm has no init cmd")
 }
 
 func TestUpdateDashboardKeys_CtrlCDockerModeOpensConfirm(t *testing.T) {
@@ -280,7 +288,7 @@ func TestUpdateDashboardKeys_CtrlCDockerModeOpensConfirm(t *testing.T) {
 
 	updated, _ := m.Update(keyCtrl('c'))
 	um := updated.(Model)
-	_, ok := um.modal.(*stopConfirm)
+	_, ok := topOverlay(um).(*prompt.Overlay)
 	assert.True(t, ok)
 }
 
@@ -340,8 +348,7 @@ func TestUpdateConfigTab_EnterOnPickerFieldOpensModal(t *testing.T) {
 
 	updated, cmd := m.Update(keySpecial(tea.KeyEnter))
 	um := updated.(Model)
-	assert.NotNil(t, um.modal)
-	_, ok := um.modal.(*listPicker)
+	_, ok := topOverlay(um).(*picker.Overlay)
 	assert.True(t, ok)
 	assert.NotNil(t, cmd)
 }
@@ -375,8 +382,8 @@ func TestExecuteCommand_QuitDockerOpensStopConfirm(t *testing.T) {
 
 	updated, cmd := m.executeCommand("quit")
 	um := updated.(Model)
-	assert.Nil(t, cmd)
-	_, ok := um.modal.(*stopConfirm)
+	assert.Nil(t, cmd, "stop confirm has no init cmd")
+	_, ok := topOverlay(um).(*prompt.Overlay)
 	assert.True(t, ok)
 }
 
@@ -499,6 +506,7 @@ func TestMergeLocalProfilerSecrets_EmptySrcValuesDoNotOverwriteDst(t *testing.T)
 }
 
 func TestView_DoesNotPanicForEachPhase(t *testing.T) {
+	ctx := app.Context{Width: 120, Height: 40, MainHeight: 36}
 	phases := []phase{phaseDashboard, phaseStarting, phaseStopping, phaseInstallPrompt, phaseInstalling, phaseTask, phaseMigrationWizard}
 	for _, p := range phases {
 		m := newTestModel()
@@ -509,35 +517,39 @@ func TestView_DoesNotPanicForEachPhase(t *testing.T) {
 			m.migrationWizard = newMigrationWizard("")
 		}
 		if p == phaseStarting || p == phaseStopping {
-			m.dockerSpinner = newBrandSpinner()
+			m.dockerSpinner = tui.NewBrandSpinner()
 		}
 		if p == phaseInstalling {
-			m.installProg.spinner = newBrandSpinner()
+			m.installProg.spinner = tui.NewBrandSpinner()
 			m.installProg.progress = newInstallProgress()
 		}
 
 		assert.NotPanics(t, func() {
-			_ = m.View()
-		})
+			_ = m.View(ctx)
+			_ = m.chromeHeader(ctx)
+			_ = m.chromeFooter(ctx)
+		}, "phase %d", p)
 	}
 }
 
-func TestView_ZeroSizeReturnsEmpty(t *testing.T) {
+func TestView_ZeroSizeDoesNotPanic(t *testing.T) {
 	m := newTestModel()
-	m.width = 0
-	m.height = 0
-	v := m.View()
-	assert.NotNil(t, v)
+	assert.NotPanics(t, func() {
+		_ = m.View(app.Context{})
+	})
 }
 
-func TestView_ModalOverridesContent(t *testing.T) {
+func TestView_StopConfirmOverlayRenders(t *testing.T) {
 	m := newTestModel()
-	m.width = 120
-	m.height = 40
-	m.modal = newStopConfirm()
+	m.dockerMode = true
 
+	updated, _ := m.Update(keyCtrl('c'))
+	um := updated.(Model)
+
+	overlay := topOverlay(um)
+	assert.NotNil(t, overlay)
 	assert.NotPanics(t, func() {
-		_ = m.View()
+		_ = overlay.View(120, 40)
 	})
 }
 
@@ -627,10 +639,10 @@ func TestStartStorefrontWatchRequest_OpensPicker(t *testing.T) {
 	}
 	assert.False(t, m.overview.sfWatchStarting, "watcher must not be marked starting before the picker resolves")
 
-	// The parent handling that request opens the picker modal.
+	// The parent handling that request opens the picker overlay.
 	updated, _ = m.Update(startStorefrontWatchRequestMsg{})
 	m = updated.(Model)
-	_, ok := m.modal.(*salesChannelPicker)
+	_, ok := topOverlay(m).(*salesChannelPicker)
 	assert.True(t, ok, "parent must open the sales-channel picker on the request")
 }
 
@@ -649,21 +661,9 @@ func TestView_WindowTitlePerPhase(t *testing.T) {
 
 	for _, tc := range cases {
 		m := newTestModel()
-		m.width = 120
-		m.height = 40
+		m.projectRoot = "/tmp/project"
 		m.phase = tc.phase
-		if tc.phase == phaseMigrationWizard {
-			m.migrationWizard = newMigrationWizard("")
-		}
-		if tc.phase == phaseStarting || tc.phase == phaseStopping {
-			m.dockerSpinner = newBrandSpinner()
-		}
-		if tc.phase == phaseInstalling {
-			m.installProg.spinner = newBrandSpinner()
-			m.installProg.progress = newInstallProgress()
-		}
 
-		v := m.View()
-		assert.Equal(t, tc.wantTitle, v.WindowTitle, "phase %d", tc.phase)
+		assert.Equal(t, tc.wantTitle, m.windowTitle(), "phase %d", tc.phase)
 	}
 }

@@ -6,12 +6,12 @@ import (
 
 	"charm.land/bubbles/v2/progress"
 	"charm.land/bubbles/v2/spinner"
-	"charm.land/bubbles/v2/textinput"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 
 	"github.com/shopware/shopware-cli/internal/tracking"
 	"github.com/shopware/shopware-cli/internal/tui"
+	"github.com/shopware/shopware-cli/internal/tui/app"
 )
 
 // minAdminPasswordLength is the minimum admin password length enforced by the
@@ -62,7 +62,7 @@ var (
 )
 
 type installWizard struct {
-	credentialStep
+	tui.CredentialStep
 
 	step       installStep
 	cursor     int
@@ -74,19 +74,15 @@ type installWizard struct {
 // newInstallCredentialStep builds the install wizard's credential inputs. They
 // start empty (filled in later from the chosen defaults) and use labelled
 // prompts that match the install prompt layout.
-func newInstallCredentialStep() credentialStep {
-	username := textinput.New()
-	username.Placeholder = defaultUsername
-	username.Prompt = "Username: "
-	username.CharLimit = 50
-
-	password := textinput.New()
-	password.Placeholder = "shopware"
-	password.Prompt = "Password: "
-	password.CharLimit = 50
-	password.EchoMode = textinput.EchoPassword
-
-	return credentialStep{username: username, password: password}
+func newInstallCredentialStep() tui.CredentialStep {
+	return tui.NewCredentialStep(tui.CredentialStepOptions{
+		UsernamePlaceholder: defaultUsername,
+		UsernamePrompt:      "Username: ",
+		PasswordPlaceholder: "shopware",
+		PasswordPrompt:      "Password: ",
+		CharLimit:           50,
+		ValidatePassword:    validateAdminPassword,
+	})
 }
 
 type installProgress struct {
@@ -109,8 +105,8 @@ var installStepPatterns = []struct {
 	{"plugin:refresh", "Refreshing plugins"},
 }
 
-func (m Model) updateInstallPrompt(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
-	if k := keyString(msg); k == keyQ || k == keyCtrlC {
+func (m Model) updateInstallPrompt(msg tea.KeyPressMsg) (app.Content, tea.Cmd) {
+	if k := tui.KeyString(msg); k == "q" || k == tui.KeyCtrlC {
 		if m.telemetry.installOnce() {
 			tags := m.telemetry.installTags(tracking.ResultCancelled, m.install)
 			tags[tracking.TagAbandonedAt] = installStepTagName(m.install.step)
@@ -133,15 +129,10 @@ func (m Model) updateInstallPrompt(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-func (m Model) updateInstallStepAsk(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
-	switch keyString(msg) {
-	case keyLeft, "h":
-		m.install.confirmYes = true
-	case keyRight, "l":
-		m.install.confirmYes = false
-	case keyTab:
-		m.install.confirmYes = !m.install.confirmYes
-	case keyEnter:
+func (m Model) updateInstallStepAsk(msg tea.KeyPressMsg) (app.Content, tea.Cmd) {
+	key := tui.KeyString(msg)
+	m.install.confirmYes = tui.ConfirmNav(m.install.confirmYes, key)
+	if key == tui.KeyEnter {
 		if m.install.confirmYes {
 			m.install.step = installStepLanguage
 			m.install.cursor = 0
@@ -156,61 +147,39 @@ func (m Model) updateInstallStepAsk(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-func (m Model) updateInstallStepLanguage(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
-	if keyString(msg) == keyEnter {
+func (m Model) updateInstallStepLanguage(msg tea.KeyPressMsg) (app.Content, tea.Cmd) {
+	if tui.KeyString(msg) == tui.KeyEnter {
 		m.install.language = installLanguages[m.install.cursor].id
 		m.install.step = installStepCurrency
 		m.install.cursor = 0
 		return m, nil
 	}
-	m.install.cursor = moveCursor(m.install.cursor, keyString(msg), len(installLanguages))
+	m.install.cursor = tui.MoveCursor(m.install.cursor, tui.KeyString(msg), len(installLanguages))
 	return m, nil
 }
 
-func (m Model) updateInstallStepCurrency(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
-	if keyString(msg) == keyEnter {
+func (m Model) updateInstallStepCurrency(msg tea.KeyPressMsg) (app.Content, tea.Cmd) {
+	if tui.KeyString(msg) == tui.KeyEnter {
 		m.install.currency = installCurrencies[m.install.cursor]
 		m.install.step = installStepCredentials
-		m.install.username.SetValue(defaultUsername)
-		m.install.password.SetValue("shopware")
-		return m, m.install.focus(credFocusUsername)
+		m.install.SetUsername(defaultUsername)
+		m.install.SetPassword("shopware")
+		return m, m.install.Focus(tui.CredFocusUsername)
 	}
-	m.install.cursor = moveCursor(m.install.cursor, keyString(msg), len(installCurrencies))
+	m.install.cursor = tui.MoveCursor(m.install.cursor, tui.KeyString(msg), len(installCurrencies))
 	return m, nil
 }
 
-func (m Model) updateInstallStepCredentials(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
-	switch keyString(msg) {
-	case keyEnter:
-		return m.handleInstallCredentialsEnter()
-	case keyTab, keyDown:
-		return m, m.install.focus(m.install.credFocus + 1)
-	case keyShiftTab, keyUp:
-		return m, m.install.focus(m.install.credFocus - 1)
+func (m Model) updateInstallStepCredentials(msg tea.KeyPressMsg) (app.Content, tea.Cmd) {
+	cmd, submitted := m.install.HandleKey(msg)
+	if !submitted {
+		return m, cmd
 	}
-	return m, m.install.updateInput(msg)
-}
-
-func (m Model) handleInstallCredentialsEnter() (tea.Model, tea.Cmd) {
-	switch m.install.credFocus {
-	case credFocusUsername:
-		// Enter on the username field advances to the password field.
-		return m, m.install.focus(credFocusPassword)
-	case credFocusShowPassword:
-		m.install.toggleShowPassword()
-		return m, nil
-	case credFocusPassword:
-		// Enter on the password field submits; handled below.
-	}
-	if !m.install.validatePassword() {
-		return m, nil
-	}
-	m.install.blur()
 	m.telemetry.beginInstall()
 	m.phase = phaseInstalling
 	m.overlayLines = nil
 	m.installProg = installProgress{
-		spinner:  newBrandSpinner(),
+		spinner:  tui.NewBrandSpinner(),
 		progress: newInstallProgress(),
 	}
 	return m, tea.Batch(m.installProg.spinner.Tick, m.runShopwareInstall())
@@ -251,7 +220,7 @@ func (m Model) renderInstallPrompt(b *strings.Builder) {
 		b.WriteString("\n")
 		b.WriteString(tui.DimStyle.Render("The login for the Shopware admin panel and API."))
 		b.WriteString("\n\n")
-		m.install.render(b)
+		m.install.Render(b)
 		b.WriteString("\n\n")
 		b.WriteString(tui.DimStyle.Render("Used to create the Shopware admin user."))
 	}
@@ -270,16 +239,7 @@ func (m Model) installFooterHint() string {
 			tui.Shortcut{Key: "enter", Label: "Confirm"},
 		)
 	case installStepCredentials:
-		if m.install.credFocus == credFocusShowPassword {
-			return tui.ShortcutBar(
-				tui.Shortcut{Key: "↑/↓/tab", Label: "Navigate"},
-				tui.Shortcut{Key: "enter", Label: "Toggle"},
-			)
-		}
-		return tui.ShortcutBar(
-			tui.Shortcut{Key: "↑/↓/tab", Label: "Navigate"},
-			tui.Shortcut{Key: "enter", Label: "Install"},
-		)
+		return m.install.FooterHint("Install")
 	}
 	return ""
 }

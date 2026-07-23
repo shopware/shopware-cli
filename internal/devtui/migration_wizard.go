@@ -10,6 +10,7 @@ import (
 	"github.com/shyim/go-composer"
 
 	"github.com/shopware/shopware-cli/internal/shop"
+	"github.com/shopware/shopware-cli/internal/tui"
 )
 
 type migrationStep int
@@ -23,7 +24,7 @@ const (
 )
 
 type migrationWizard struct {
-	credentialStep
+	tui.CredentialStep
 
 	step                  migrationStep
 	phpVersions           []string // PHP versions compatible with the project
@@ -88,20 +89,26 @@ func newMigrationWizard(projectRoot string) migrationWizard {
 	phpVersions, phpCursor, _ := resolvePHPVersions(projectRoot)
 
 	return migrationWizard{
-		credentialStep: newCredentialStep("admin", "shopware"),
-		step:           migrationStepWelcome,
-		phpVersions:    phpVersions,
-		phpCursor:      phpCursor,
-		confirmYes:     true,
-		url:            urlInput,
+		CredentialStep: tui.NewCredentialStep(tui.CredentialStepOptions{
+			Username:            "admin",
+			Password:            "shopware",
+			UsernamePlaceholder: "admin",
+			PasswordPlaceholder: "shopware",
+			ValidatePassword:    validateAdminPassword,
+		}),
+		step:        migrationStepWelcome,
+		phpVersions: phpVersions,
+		phpCursor:   phpCursor,
+		confirmYes:  true,
+		url:         urlInput,
 	}
 }
 
 func (sg *migrationWizard) currentConfig() migrationWizardConfig {
 	return migrationWizardConfig{
 		url:        sg.url.Value(),
-		username:   sg.username.Value(),
-		password:   sg.password.Value(),
+		username:   sg.Username(),
+		password:   sg.Password(),
 		phpVersion: sg.phpVersions[sg.phpCursor],
 	}
 }
@@ -127,18 +134,12 @@ func (sg *migrationWizard) update(msg tea.KeyPressMsg) (migrationWizard, tea.Cmd
 }
 
 func (sg *migrationWizard) updateWelcome(msg tea.KeyPressMsg) (migrationWizard, tea.Cmd) {
-	switch keyString(msg) {
-	case keyLeft, "h":
-		sg.confirmYes = true
-	case keyRight, "l":
-		sg.confirmYes = false
-	case keyTab:
-		sg.confirmYes = !sg.confirmYes
-	case keyEnter:
+	sg.confirmYes = tui.ConfirmNav(sg.confirmYes, tui.KeyString(msg))
+	if tui.KeyString(msg) == tui.KeyEnter {
 		if sg.confirmYes {
 			sg.startedAt = time.Now()
 			sg.step = migrationStepAdminUser
-			return *sg, sg.focus(credFocusUsername)
+			return *sg, sg.Focus(tui.CredFocusUsername)
 		}
 		return *sg, tea.Quit
 	}
@@ -146,55 +147,24 @@ func (sg *migrationWizard) updateWelcome(msg tea.KeyPressMsg) (migrationWizard, 
 }
 
 func (sg *migrationWizard) updateAdminUser(msg tea.KeyPressMsg) (migrationWizard, tea.Cmd) {
-	switch keyString(msg) {
-	case keyEnter:
-		return sg.handleAdminUserEnter()
-	case keyTab, keyDown:
-		return *sg, sg.focus(sg.credFocus + 1)
-	case keyShiftTab, keyUp:
-		return *sg, sg.focus(sg.credFocus - 1)
+	cmd, submitted := sg.HandleKey(msg)
+	if submitted {
+		sg.step = migrationStepDockerPHP
 	}
-	return *sg, sg.updateInput(msg)
-}
-
-func (sg *migrationWizard) handleAdminUserEnter() (migrationWizard, tea.Cmd) {
-	switch sg.credFocus {
-	case credFocusUsername:
-		// Enter on the username field advances to the password field.
-		return *sg, sg.focus(credFocusPassword)
-	case credFocusShowPassword:
-		sg.toggleShowPassword()
-		return *sg, nil
-	case credFocusPassword:
-		// Enter on the password field submits; handled below.
-	}
-	if !sg.validatePassword() {
-		return *sg, nil
-	}
-	sg.blur()
-	sg.step = migrationStepDockerPHP
-	return *sg, nil
+	return *sg, cmd
 }
 
 func (sg *migrationWizard) updateDockerPHP(msg tea.KeyPressMsg) (migrationWizard, tea.Cmd) {
-	if keyString(msg) == keyEnter {
+	if tui.KeyString(msg) == tui.KeyEnter {
 		sg.step = migrationStepReview
 		return *sg, nil
 	}
-	sg.phpCursor = moveCursor(sg.phpCursor, keyString(msg), len(sg.phpVersions))
+	sg.phpCursor = tui.MoveCursor(sg.phpCursor, tui.KeyString(msg), len(sg.phpVersions))
 	return *sg, nil
 }
 
 func (sg *migrationWizard) updateReview(msg tea.KeyPressMsg) (migrationWizard, tea.Cmd) {
-	switch keyString(msg) {
-	case keyLeft, "h":
-		sg.confirmYes = true
-	case keyRight, "l":
-		sg.confirmYes = false
-	case keyTab:
-		sg.confirmYes = !sg.confirmYes
-	case keyEnter:
-		return *sg, nil // Handled by updateKeyPress to trigger write
-	}
+	// Enter is handled by updateKeyPress to trigger the write.
+	sg.confirmYes = tui.ConfirmNav(sg.confirmYes, tui.KeyString(msg))
 	return *sg, nil
 }

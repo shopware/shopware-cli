@@ -31,10 +31,7 @@ func runSpinnerWithLogs(ctx context.Context, title string, cmd *exec.Cmd, output
 	cmd.Stdout = &writer
 	cmd.Stderr = &writer
 
-	s := spinner.New(
-		spinner.WithSpinner(spinner.Dot),
-		spinner.WithStyle(lipgloss.NewStyle().Foreground(BrandColor)),
-	)
+	s := NewBrandSpinner()
 
 	model := &installProgressModel{
 		spinner:   s,
@@ -81,11 +78,8 @@ func (w *logWriter) Write(p []byte) (int, error) {
 
 	for _, b := range p {
 		if b == '\n' {
-			w.lines = append(w.lines, w.current.String())
+			w.lines = AppendTail(w.lines, 100, w.current.String())
 			w.current.Reset()
-			if len(w.lines) > 100 {
-				w.lines = w.lines[len(w.lines)-100:]
-			}
 		} else if b != '\r' {
 			w.current.WriteByte(b)
 		}
@@ -104,10 +98,7 @@ func (w *logWriter) GetLastLines(n int) []string {
 		res = append(res, w.current.String())
 	}
 
-	if len(res) <= n {
-		return res
-	}
-	return res[len(res)-n:]
+	return TailLines(res, n)
 }
 
 type installFinishedMsg struct {

@@ -6,6 +6,8 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	"github.com/shopware/shopware-cli/internal/shop"
+	"github.com/shopware/shopware-cli/internal/tui/picker"
+	"github.com/shopware/shopware-cli/internal/tui/textprompt"
 )
 
 func TestNewConfigModel_NilConfig(t *testing.T) {
@@ -159,12 +161,12 @@ func TestConfigModel_PickerForCursor_Select(t *testing.T) {
 	m.cursor = fieldPHPVersion
 
 	modal := m.PickerForCursor()
-	picker, ok := modal.(*listPicker)
+	pk, ok := modal.(*picker.Overlay)
 	assert.True(t, ok)
-	assert.Equal(t, fieldPHPVersion, picker.key)
-	assert.Len(t, picker.items, len(phpVersions))
-	values := make([]string, len(picker.items))
-	for i, it := range picker.items {
+	assert.Equal(t, fieldPHPVersion, pk.Key())
+	assert.Len(t, pk.Items(), len(phpVersions))
+	values := make([]string, len(pk.Items()))
+	for i, it := range pk.Items() {
 		values[i] = it.Value
 	}
 	assert.ElementsMatch(t, phpVersions, values)
@@ -175,11 +177,11 @@ func TestConfigModel_PickerForCursor_ProfilerFreePaidLabels(t *testing.T) {
 	m.cursor = fieldProfiler
 
 	modal := m.PickerForCursor()
-	picker, ok := modal.(*listPicker)
+	pk, ok := modal.(*picker.Overlay)
 	assert.True(t, ok)
 
-	details := make(map[string]string, len(picker.items))
-	for _, it := range picker.items {
+	details := make(map[string]string, len(pk.Items()))
+	for _, it := range pk.Items() {
 		details[it.Value] = it.Detail
 	}
 
@@ -198,9 +200,9 @@ func TestConfigModel_PickerForCursor_Text(t *testing.T) {
 	m.cursor = fieldBlackfireServerID
 
 	modal := m.PickerForCursor()
-	picker, ok := modal.(*textPicker)
+	tp, ok := modal.(*textprompt.Overlay)
 	assert.True(t, ok)
-	assert.Equal(t, "existing", picker.input.Value())
+	assert.Equal(t, "existing", tp.Value())
 }
 
 func TestConfigModel_ApplyPickerValue(t *testing.T) {
@@ -247,14 +249,14 @@ func TestConfigModel_EnvField_PickerOptionsDrivenByRegistry(t *testing.T) {
 	m.cursor = fieldAppEnv
 
 	modal := m.PickerForCursor()
-	picker, ok := modal.(*listPicker)
+	pk, ok := modal.(*picker.Overlay)
 	assert.True(t, ok)
-	assert.Equal(t, fieldAppEnv, picker.key)
+	assert.Equal(t, fieldAppEnv, pk.Key())
 
 	def, ok := envFieldByConfigField(fieldAppEnv)
 	assert.True(t, ok)
-	values := make([]string, len(picker.items))
-	for i, it := range picker.items {
+	values := make([]string, len(pk.Items()))
+	for i, it := range pk.Items() {
 		values[i] = it.Value
 	}
 	assert.ElementsMatch(t, def.choices, values)
@@ -309,12 +311,12 @@ func TestConfigModel_HTTPCache_PickerUsesFriendlyLabels(t *testing.T) {
 	m.cursor = fieldHTTPCache
 
 	modal := m.PickerForCursor()
-	picker, ok := modal.(*listPicker)
+	pk, ok := modal.(*picker.Overlay)
 	assert.True(t, ok)
 
-	labels := make([]string, len(picker.items))
-	values := make([]string, len(picker.items))
-	for i, it := range picker.items {
+	labels := make([]string, len(pk.Items()))
+	values := make([]string, len(pk.Items()))
+	for i, it := range pk.Items() {
 		labels[i] = it.Label
 		values[i] = it.Value
 	}

@@ -3,7 +3,6 @@ package devtui
 import (
 	"context"
 	"fmt"
-	"image/color"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -272,16 +271,16 @@ func flowBuilderLogLevelCheck(pc *symfony.ProjectConfig, env string) healthCheck
 	}
 }
 
-func (l healthLevel) color() color.Color {
+func (l healthLevel) dot() string {
 	switch l {
 	case healthWarn:
-		return tui.WarnColor
+		return tui.StateDot(tui.DotWarn)
 	case healthCritical:
-		return tui.ErrorColor
+		return tui.StateDot(tui.DotError)
 	case healthOK:
-		return tui.SuccessColor
+		return tui.StateDot(tui.DotOK)
 	default:
-		return tui.SuccessColor
+		return tui.StateDot(tui.DotOK)
 	}
 }
 
@@ -325,7 +324,7 @@ func (m OverviewModel) renderSetupHealth() string {
 			group = check.Group
 			s.WriteString("\n    " + tui.TitleStyle.Render(group) + "\n")
 		}
-		dot := lipgloss.NewStyle().Foreground(check.Level.color()).Render("●")
+		dot := check.Level.dot()
 		name := check.Name
 		if check.DocsURL != "" {
 			// The name links to the docs page explaining the recommendation.

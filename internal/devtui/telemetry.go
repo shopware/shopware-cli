@@ -162,7 +162,7 @@ func (t *telemetryState) installTags(result string, w installWizard) map[string]
 		tags[tracking.TagCurrency] = w.currency
 	}
 	if w.step == installStepCredentials || result == tracking.ResultSuccess || result == tracking.ResultFailure {
-		custom := w.username.Value() != defaultUsername || w.password.Value() != "shopware"
+		custom := w.Username() != defaultUsername || w.Password() != "shopware"
 		tags[tracking.TagCustomCredentials] = strconv.FormatBool(custom)
 	}
 	return tags

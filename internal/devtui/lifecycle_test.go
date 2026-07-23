@@ -5,11 +5,11 @@ import (
 	"strings"
 	"testing"
 
-	"charm.land/bubbles/v2/textinput"
 	tea "charm.land/bubbletea/v2"
 	"github.com/stretchr/testify/assert"
 
 	"github.com/shopware/shopware-cli/internal/shop"
+	"github.com/shopware/shopware-cli/internal/tui"
 )
 
 func newLifecycleModel(t *testing.T) Model {
@@ -147,18 +147,13 @@ func TestUpdateLifecycle_ShopwareNotInstalled_OpensInstallPrompt(t *testing.T) {
 
 	assert.Equal(t, installStepAsk, final.install.step)
 	assert.True(t, final.install.confirmYes)
-	assert.Equal(t, defaultUsername, final.install.username.Placeholder)
-	assert.Equal(t, "shopware", final.install.password.Placeholder)
-	assert.Equal(t, textinput.EchoPassword, final.install.password.EchoMode)
+	assert.True(t, final.install.PasswordMasked(), "password must start masked")
 }
 
 func TestUpdateLifecycle_ShopwareInstallDone_Success(t *testing.T) {
 	dir := t.TempDir()
 
-	usernameInput := textinput.New()
-	usernameInput.SetValue("myadmin")
-	passwordInput := textinput.New()
-	passwordInput.SetValue("supersecret")
+	creds := tui.NewCredentialStep(tui.CredentialStepOptions{Username: "myadmin", Password: "supersecret"})
 
 	m := Model{
 		phase:       phaseInstalling,
@@ -167,7 +162,7 @@ func TestUpdateLifecycle_ShopwareInstallDone_Success(t *testing.T) {
 		envConfig:   &shop.EnvironmentConfig{},
 		watchers:    make(map[string]*watcherHandle),
 		install: installWizard{
-			credentialStep: credentialStep{username: usernameInput, password: passwordInput},
+			CredentialStep: creds,
 			step:           installStepCredentials,
 		},
 		installProg: installProgress{progress: newInstallProgress()},
@@ -196,9 +191,6 @@ func TestUpdateLifecycle_ShopwareInstallDone_Success(t *testing.T) {
 }
 
 func TestUpdateLifecycle_ShopwareInstallDone_ErrorShowsLogs(t *testing.T) {
-	usernameInput := textinput.New()
-	passwordInput := textinput.New()
-
 	m := Model{
 		phase:       phaseInstalling,
 		projectRoot: t.TempDir(),
@@ -206,7 +198,7 @@ func TestUpdateLifecycle_ShopwareInstallDone_ErrorShowsLogs(t *testing.T) {
 		envConfig:   &shop.EnvironmentConfig{},
 		watchers:    make(map[string]*watcherHandle),
 		install: installWizard{
-			credentialStep: credentialStep{username: usernameInput, password: passwordInput},
+			CredentialStep: tui.NewCredentialStep(tui.CredentialStepOptions{}),
 		},
 		installProg: installProgress{progress: newInstallProgress()},
 	}

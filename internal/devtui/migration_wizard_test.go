@@ -6,11 +6,11 @@ import (
 	"testing"
 	"time"
 
-	"charm.land/bubbles/v2/textinput"
 	tea "charm.land/bubbletea/v2"
 	"github.com/stretchr/testify/assert"
 
 	"github.com/shopware/shopware-cli/internal/shop"
+	"github.com/shopware/shopware-cli/internal/tui"
 )
 
 func writeLockWithCore(t *testing.T, dir, phpRequire string) {
@@ -51,76 +51,76 @@ func TestResolvePHPVersions_NoMatchingVersionsFallsBackToAll(t *testing.T) {
 func TestMigrationWizardAdminUser_EnterOnUsernameFocusesPassword(t *testing.T) {
 	sg := newMigrationWizard("")
 	sg.step = migrationStepAdminUser
-	sg.credFocus = credFocusUsername
-	sg.username.Focus()
+	sg.Focus(tui.CredFocusUsername)
 
 	out, _ := sg.update(tea.KeyPressMsg(tea.Key{Code: tea.KeyEnter}))
 	assert.Equal(t, migrationStepAdminUser, out.step, "should stay on the admin account step")
-	assert.Equal(t, credFocusPassword, out.credFocus)
-	assert.True(t, out.password.Focused())
+	assert.Equal(t, tui.CredFocusPassword, out.FocusTarget())
+	assert.Equal(t, tui.CredFocusPassword, out.FocusTarget())
 }
 
 func TestMigrationWizardAdminUser_ShortPasswordBlocksAdvance(t *testing.T) {
 	sg := newMigrationWizard("")
 	sg.step = migrationStepAdminUser
-	sg.credFocus = credFocusPassword
-	sg.password.SetValue("shopwar")
+	sg.Focus(tui.CredFocusPassword)
+	sg.SetPassword("shopwar")
 
 	out, _ := sg.update(tea.KeyPressMsg(tea.Key{Code: tea.KeyEnter}))
 	assert.Equal(t, migrationStepAdminUser, out.step, "should stay on the admin account step")
-	assert.NotEmpty(t, out.passwordErr, "should set a validation error")
+	assert.NotEmpty(t, out.PasswordErr(), "should set a validation error")
 }
 
 func TestMigrationWizardAdminUser_ValidPasswordAdvances(t *testing.T) {
 	sg := newMigrationWizard("")
 	sg.step = migrationStepAdminUser
-	sg.credFocus = credFocusPassword
-	sg.password.SetValue("shopware")
+	sg.Focus(tui.CredFocusPassword)
+	sg.SetPassword("shopware")
 
 	out, _ := sg.update(tea.KeyPressMsg(tea.Key{Code: tea.KeyEnter}))
 	assert.Equal(t, migrationStepDockerPHP, out.step)
-	assert.Empty(t, out.passwordErr)
+	assert.Empty(t, out.PasswordErr())
 }
 
 func TestMigrationWizardAdminUser_TypingClearsError(t *testing.T) {
 	sg := newMigrationWizard("")
 	sg.step = migrationStepAdminUser
-	sg.credFocus = credFocusPassword
-	sg.passwordErr = "password must be at least 8 characters long"
+	sg.Focus(tui.CredFocusPassword)
+	sg.SetPassword("short")
+	sg, _ = sg.update(tea.KeyPressMsg(tea.Key{Code: tea.KeyEnter}))
+	assert.NotEmpty(t, sg.PasswordErr())
 
 	out, _ := sg.update(tea.KeyPressMsg(tea.Key{Code: 'x', Text: "x"}))
-	assert.Empty(t, out.passwordErr)
+	assert.Empty(t, out.PasswordErr())
 }
 
 func TestMigrationWizardAdminUser_TabNavigatesFocus(t *testing.T) {
 	sg := newMigrationWizard("")
 	sg.step = migrationStepAdminUser
-	sg.credFocus = credFocusUsername
+	sg.Focus(tui.CredFocusUsername)
 
 	sg, _ = sg.update(tea.KeyPressMsg(tea.Key{Code: tea.KeyTab}))
-	assert.Equal(t, credFocusPassword, sg.credFocus)
-	assert.True(t, sg.password.Focused())
+	assert.Equal(t, tui.CredFocusPassword, sg.FocusTarget())
+	assert.Equal(t, tui.CredFocusPassword, sg.FocusTarget())
 
 	sg, _ = sg.update(tea.KeyPressMsg(tea.Key{Code: tea.KeyTab}))
-	assert.Equal(t, credFocusShowPassword, sg.credFocus)
-	assert.False(t, sg.password.Focused())
+	assert.Equal(t, tui.CredFocusShowPassword, sg.FocusTarget())
 
 	// Tab past the checkbox stays on the checkbox.
 	sg, _ = sg.update(tea.KeyPressMsg(tea.Key{Code: tea.KeyTab}))
-	assert.Equal(t, credFocusShowPassword, sg.credFocus)
+	assert.Equal(t, tui.CredFocusShowPassword, sg.FocusTarget())
 }
 
 func TestMigrationWizardAdminUser_EnterOnCheckboxTogglesEcho(t *testing.T) {
 	sg := newMigrationWizard("")
 	sg.step = migrationStepAdminUser
-	sg.credFocus = credFocusShowPassword
+	sg.Focus(tui.CredFocusShowPassword)
 
 	sg, _ = sg.update(tea.KeyPressMsg(tea.Key{Code: tea.KeyEnter}))
-	assert.Equal(t, textinput.EchoNormal, sg.password.EchoMode)
+	assert.False(t, sg.PasswordMasked())
 	assert.Equal(t, migrationStepAdminUser, sg.step)
 
 	sg, _ = sg.update(tea.KeyPressMsg(tea.Key{Code: tea.KeyEnter}))
-	assert.Equal(t, textinput.EchoPassword, sg.password.EchoMode)
+	assert.True(t, sg.PasswordMasked())
 }
 
 func TestMigrationWizardReview_QuitButtonQuits(t *testing.T) {
@@ -288,8 +288,8 @@ func TestNewMigrationWizard(t *testing.T) {
 	assert.Equal(t, len(sg.phpVersions)-1, sg.phpCursor)
 	assert.True(t, sg.confirmYes)
 	assert.Equal(t, "http://127.0.0.1:8000", sg.url.Value())
-	assert.Equal(t, "admin", sg.username.Value())
-	assert.Equal(t, "shopware", sg.password.Value())
+	assert.Equal(t, "admin", sg.Username())
+	assert.Equal(t, "shopware", sg.Password())
 }
 
 func TestMigrationWizardCurrentConfig(t *testing.T) {
@@ -345,7 +345,7 @@ func TestMigrationWizardViewSteps(t *testing.T) {
 	assert.Contains(t, view, "Docker")
 
 	sg.step = migrationStepAdminUser
-	sg.username.Focus()
+	sg.Focus(tui.CredFocusUsername)
 	view = sg.viewContent()
 	assert.Contains(t, view, "Choose a username")
 	assert.Contains(t, view, "Choose a password")

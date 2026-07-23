@@ -8,6 +8,7 @@ import (
 	"charm.land/lipgloss/v2"
 
 	"github.com/shopware/shopware-cli/internal/tui"
+	"github.com/shopware/shopware-cli/internal/tui/app"
 )
 
 type paletteCommand struct {
@@ -71,6 +72,10 @@ func newCommandPalette(state paletteState) *commandPalette {
 	return cp
 }
 
+func (cp *commandPalette) Init() tea.Cmd { return textinput.Blink }
+
+func (cp *commandPalette) ID() string { return "palette" }
+
 func (cp *commandPalette) applyFilter() {
 	query := strings.ToLower(cp.filter.Value())
 	cp.filtered = nil
@@ -91,7 +96,7 @@ func (cp *commandPalette) selectedID() string {
 	return cp.commands[cp.filtered[cp.cursor]].ID
 }
 
-func (cp *commandPalette) Update(msg tea.Msg) (Modal, tea.Cmd) {
+func (cp *commandPalette) Update(msg tea.Msg) (app.Overlay, tea.Cmd) {
 	key, ok := msg.(tea.KeyPressMsg)
 	if !ok {
 		return cp, nil
@@ -99,19 +104,19 @@ func (cp *commandPalette) Update(msg tea.Msg) (Modal, tea.Cmd) {
 
 	switch key.String() {
 	case "esc", "ctrl+p":
-		return nil, emit(paletteResultMsg{})
-	case keyUp, keyK:
+		return nil, app.Emit(paletteResultMsg{})
+	case tui.KeyUp, "k":
 		if cp.cursor > 0 {
 			cp.cursor--
 		}
 		return cp, nil
-	case keyDown, keyJ:
+	case tui.KeyDown, "j":
 		if cp.cursor < len(cp.filtered)-1 {
 			cp.cursor++
 		}
 		return cp, nil
-	case keyEnter:
-		return nil, emit(paletteResultMsg{ID: cp.selectedID()})
+	case tui.KeyEnter:
+		return nil, app.Emit(paletteResultMsg{ID: cp.selectedID()})
 	}
 
 	var cmd tea.Cmd
@@ -175,15 +180,6 @@ func (cp *commandPalette) View(width, height int) string {
 	return centeredModal(b.String(), paletteWidth, width, height)
 }
 
-func emit(msg tea.Msg) tea.Cmd {
-	return func() tea.Msg { return msg }
-}
-
 func centeredModal(content string, modalWidth, width, height int) string {
-	box := lipgloss.NewStyle().
-		Border(lipgloss.RoundedBorder()).
-		BorderForeground(tui.BrandColor).
-		Padding(1, 2).
-		Width(modalWidth)
-	return lipgloss.Place(width, height, lipgloss.Center, lipgloss.Center, box.Render(content))
+	return tui.NewModal(tui.ModalOptions{MaxWidth: modalWidth, AreaWidth: width, AreaHeight: height}).Render(content)
 }

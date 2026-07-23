@@ -6,33 +6,14 @@ import (
 	"os/exec"
 
 	tea "charm.land/bubbletea/v2"
+
+	"github.com/shopware/shopware-cli/internal/tui"
 )
 
 func (m *Model) runTask(title string, taskFn func() (*exec.Cmd, error)) tea.Cmd {
 	m.phase = phaseTask
-	m.taskTitle = title
-	m.taskDone = false
-	m.taskErr = nil
-	m.overlayLines = nil
-	m.dockerSpinner = newBrandSpinner()
-
-	ch := make(chan string, streamBufferSize)
-	m.dockerOutChan = ch
-
-	doneCmd := func() tea.Msg {
-		cmd, err := taskFn()
-		if err != nil {
-			close(ch)
-			return taskDoneMsg{err: err}
-		}
-		err = streamCmdOutput(cmd, ch, true)
-		return taskDoneMsg{err: err}
-	}
-
-	// The spinner tick (kept last) keeps the header animated so long-running
-	// commands that emit no early output (e.g. webpack startup on "Build
-	// Administration") never look frozen.
-	return tea.Batch(readFromChan(ch), doneCmd, m.dockerSpinner.Tick)
+	m.task = tui.NewTask(title)
+	return m.task.Start(taskFn)
 }
 
 func (m *Model) runAdminBuild() tea.Cmd {

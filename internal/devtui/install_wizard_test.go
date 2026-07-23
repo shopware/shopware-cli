@@ -4,16 +4,17 @@ import (
 	"strings"
 	"testing"
 
-	"charm.land/bubbles/v2/textinput"
 	tea "charm.land/bubbletea/v2"
 	"github.com/stretchr/testify/assert"
+
+	"github.com/shopware/shopware-cli/internal/tui"
 )
 
 func newTestInstallModel() Model {
 	return Model{
 		phase: phaseInstallPrompt,
 		install: installWizard{
-			credentialStep: newInstallCredentialStep(),
+			CredentialStep: newInstallCredentialStep(),
 			step:           installStepAsk,
 			confirmYes:     true,
 		},
@@ -122,10 +123,9 @@ func TestInstallStepCurrency_UpDownAndEnter(t *testing.T) {
 	out := updated.(Model)
 	assert.Equal(t, "USD", out.install.currency)
 	assert.Equal(t, installStepCredentials, out.install.step)
-	assert.Equal(t, defaultUsername, out.install.username.Value())
-	assert.Equal(t, "shopware", out.install.password.Value())
-	assert.Equal(t, credFocusUsername, out.install.credFocus)
-	assert.True(t, out.install.username.Focused())
+	assert.Equal(t, defaultUsername, out.install.Username())
+	assert.Equal(t, "shopware", out.install.Password())
+	assert.Equal(t, tui.CredFocusUsername, out.install.FocusTarget())
 	assert.NotNil(t, cmd)
 }
 
@@ -141,129 +141,118 @@ func TestInstallStepCurrency_CursorClampedAtBounds(t *testing.T) {
 func TestInstallStepCredentials_EnterOnUsernameFocusesPassword(t *testing.T) {
 	m := newTestInstallModel()
 	m.install.step = installStepCredentials
-	m.install.credFocus = credFocusUsername
-	m.install.username.SetValue("custom-admin")
-	m.install.username.Focus()
+	m.install.Focus(tui.CredFocusUsername)
+	m.install.SetUsername("custom-admin")
 
 	updated, cmd := m.updateInstallPrompt(enterKey())
 	mm := updated.(Model)
 	assert.Equal(t, installStepCredentials, mm.install.step)
-	assert.Equal(t, credFocusPassword, mm.install.credFocus)
-	assert.False(t, mm.install.username.Focused())
-	assert.True(t, mm.install.password.Focused())
+	assert.Equal(t, tui.CredFocusPassword, mm.install.FocusTarget())
 	assert.NotNil(t, cmd)
 }
 
 func TestInstallStepCredentials_TypedKeysGoToUsername(t *testing.T) {
 	m := newTestInstallModel()
 	m.install.step = installStepCredentials
-	m.install.credFocus = credFocusUsername
-	m.install.username.SetValue("")
-	m.install.username.Focus()
+	m.install.Focus(tui.CredFocusUsername)
+	m.install.SetUsername("")
 
 	updated, _ := m.updateInstallPrompt(tea.KeyPressMsg(tea.Key{Code: 'x', Text: "x"}))
 	mm := updated.(Model)
 	assert.Equal(t, installStepCredentials, mm.install.step)
-	assert.Equal(t, "x", mm.install.username.Value())
+	assert.Equal(t, "x", mm.install.Username())
 }
 
 func TestInstallStepCredentials_TabFromUsernameFocusesPassword(t *testing.T) {
 	m := newTestInstallModel()
 	m.install.step = installStepCredentials
-	m.install.credFocus = credFocusUsername
+	m.install.Focus(tui.CredFocusUsername)
 
 	updated, _ := m.updateInstallPrompt(tea.KeyPressMsg(tea.Key{Code: tea.KeyTab}))
 	mm := updated.(Model)
-	assert.Equal(t, credFocusPassword, mm.install.credFocus)
-	assert.True(t, mm.install.password.Focused())
+	assert.Equal(t, tui.CredFocusPassword, mm.install.FocusTarget())
 }
 
 func TestInstallStepCredentials_TabFromPasswordFocusesCheckbox(t *testing.T) {
 	m := newTestInstallModel()
 	m.install.step = installStepCredentials
-	m.install.credFocus = credFocusPassword
-	m.install.password.Focus()
+	m.install.Focus(tui.CredFocusPassword)
 
 	updated, _ := m.updateInstallPrompt(tea.KeyPressMsg(tea.Key{Code: tea.KeyTab}))
 	mm := updated.(Model)
-	assert.Equal(t, credFocusShowPassword, mm.install.credFocus)
-	assert.False(t, mm.install.password.Focused())
+	assert.Equal(t, tui.CredFocusShowPassword, mm.install.FocusTarget())
 }
 
 func TestInstallStepCredentials_DownFromPasswordFocusesCheckbox(t *testing.T) {
 	m := newTestInstallModel()
 	m.install.step = installStepCredentials
-	m.install.credFocus = credFocusPassword
-	m.install.password.Focus()
+	m.install.Focus(tui.CredFocusPassword)
 
 	updated, _ := m.updateInstallPrompt(tea.KeyPressMsg(tea.Key{Code: tea.KeyDown}))
-	assert.Equal(t, credFocusShowPassword, updated.(Model).install.credFocus)
+	assert.Equal(t, tui.CredFocusShowPassword, updated.(Model).install.FocusTarget())
 }
 
 func TestInstallStepCredentials_ShiftTabFromCheckboxFocusesPassword(t *testing.T) {
 	m := newTestInstallModel()
 	m.install.step = installStepCredentials
-	m.install.credFocus = credFocusShowPassword
+	m.install.Focus(tui.CredFocusShowPassword)
 
 	updated, cmd := m.updateInstallPrompt(tea.KeyPressMsg(tea.Key{Code: tea.KeyTab, Mod: tea.ModShift}))
 	mm := updated.(Model)
-	assert.Equal(t, credFocusPassword, mm.install.credFocus)
-	assert.True(t, mm.install.password.Focused())
+	assert.Equal(t, tui.CredFocusPassword, mm.install.FocusTarget())
 	assert.NotNil(t, cmd)
 }
 
 func TestInstallStepCredentials_UpFromCheckboxFocusesPassword(t *testing.T) {
 	m := newTestInstallModel()
 	m.install.step = installStepCredentials
-	m.install.credFocus = credFocusShowPassword
+	m.install.Focus(tui.CredFocusShowPassword)
 
 	updated, _ := m.updateInstallPrompt(tea.KeyPressMsg(tea.Key{Code: tea.KeyUp}))
 	mm := updated.(Model)
-	assert.Equal(t, credFocusPassword, mm.install.credFocus)
-	assert.True(t, mm.install.password.Focused())
+	assert.Equal(t, tui.CredFocusPassword, mm.install.FocusTarget())
 }
 
 func TestInstallStepCredentials_NavigationClampsAtBounds(t *testing.T) {
 	m := newTestInstallModel()
 	m.install.step = installStepCredentials
-	m.install.credFocus = credFocusUsername
+	m.install.Focus(tui.CredFocusUsername)
 
 	// Up/shift-tab at the first element should stay on username.
 	updated, _ := m.updateInstallPrompt(tea.KeyPressMsg(tea.Key{Code: tea.KeyUp}))
-	assert.Equal(t, credFocusUsername, updated.(Model).install.credFocus)
+	assert.Equal(t, tui.CredFocusUsername, updated.(Model).install.FocusTarget())
 
 	// Tab past the checkbox should stay on the checkbox.
 	m2 := newTestInstallModel()
 	m2.install.step = installStepCredentials
-	m2.install.credFocus = credFocusShowPassword
+	m2.install.Focus(tui.CredFocusShowPassword)
 	updated, _ = m2.updateInstallPrompt(tea.KeyPressMsg(tea.Key{Code: tea.KeyTab}))
-	assert.Equal(t, credFocusShowPassword, updated.(Model).install.credFocus)
+	assert.Equal(t, tui.CredFocusShowPassword, updated.(Model).install.FocusTarget())
 }
 
 func TestInstallStepCredentials_EnterOnCheckboxTogglesEcho(t *testing.T) {
 	m := newTestInstallModel()
 	m.install.step = installStepCredentials
-	m.install.credFocus = credFocusShowPassword
-	m.install.password.EchoMode = textinput.EchoPassword
+	m.install.Focus(tui.CredFocusShowPassword)
 
 	updated, _ := m.updateInstallPrompt(enterKey())
 	mm := updated.(Model)
-	assert.Equal(t, textinput.EchoNormal, mm.install.password.EchoMode)
+	assert.False(t, mm.install.PasswordMasked())
 	assert.Equal(t, installStepCredentials, mm.install.step, "should stay on credentials step")
 
 	updated, _ = mm.updateInstallPrompt(enterKey())
-	assert.Equal(t, textinput.EchoPassword, updated.(Model).install.password.EchoMode)
+	assert.True(t, updated.(Model).install.PasswordMasked())
 }
 
 func TestInstallStepCredentials_CheckboxFocusedSwallowsTypedKeys(t *testing.T) {
 	m := newTestInstallModel()
 	m.install.step = installStepCredentials
-	m.install.credFocus = credFocusShowPassword
-	m.install.password.SetValue("orig")
+	m.install.Focus(tui.CredFocusShowPassword)
+	m.install.SetPassword("orig")
 
 	updated, cmd := m.updateInstallPrompt(tea.KeyPressMsg(tea.Key{Code: 'x', Text: "x"}))
 	mm := updated.(Model)
-	assert.Equal(t, "orig", mm.install.password.Value(), "checkbox-focused state must not forward typing to input")
+	assert.Equal(t, "orig", mm.install.Password(), "checkbox-focused state must not forward typing to input")
 	assert.Nil(t, cmd)
 }
 
@@ -279,47 +268,50 @@ func TestValidateAdminPassword(t *testing.T) {
 func TestInstallStepCredentials_EnterWithShortPasswordBlocks(t *testing.T) {
 	m := newTestInstallModel()
 	m.install.step = installStepCredentials
-	m.install.credFocus = credFocusPassword
-	m.install.password.SetValue("shopwar")
-	m.install.password.Focus()
+	m.install.Focus(tui.CredFocusPassword)
+	m.install.SetPassword("shopwar")
 
 	updated, cmd := m.updateInstallPrompt(enterKey())
 	mm := updated.(Model)
 	assert.Equal(t, installStepCredentials, mm.install.step, "should stay on the credentials step")
 	assert.Equal(t, phaseInstallPrompt, mm.phase, "should not start installing")
-	assert.NotEmpty(t, mm.install.passwordErr, "should set a validation error")
+	assert.NotEmpty(t, mm.install.PasswordErr(), "should set a validation error")
 	assert.Nil(t, cmd)
 }
 
 func TestInstallStepCredentials_EnterWithValidPasswordStartsInstall(t *testing.T) {
 	m := newTestInstallModel()
 	m.install.step = installStepCredentials
-	m.install.credFocus = credFocusPassword
-	m.install.password.SetValue("shopware")
-	m.install.password.Focus()
+	m.install.Focus(tui.CredFocusPassword)
+	m.install.SetPassword("shopware")
 
 	updated, cmd := m.updateInstallPrompt(enterKey())
 	mm := updated.(Model)
 	assert.Equal(t, phaseInstalling, mm.phase)
-	assert.Empty(t, mm.install.passwordErr)
+	assert.Empty(t, mm.install.PasswordErr())
 	assert.NotNil(t, cmd)
 }
 
 func TestInstallStepCredentials_TypingClearsError(t *testing.T) {
 	m := newTestInstallModel()
 	m.install.step = installStepCredentials
-	m.install.credFocus = credFocusPassword
-	m.install.passwordErr = "password must be at least 8 characters long"
-	m.install.password.Focus()
+	m.install.Focus(tui.CredFocusPassword)
+	m.install.SetPassword("short")
+	updated, _ := m.updateInstallPrompt(enterKey())
+	m = updated.(Model)
+	assert.NotEmpty(t, m.install.PasswordErr())
 
-	updated, _ := m.updateInstallPrompt(tea.KeyPressMsg(tea.Key{Code: 'x', Text: "x"}))
-	assert.Empty(t, updated.(Model).install.passwordErr)
+	updated, _ = m.updateInstallPrompt(tea.KeyPressMsg(tea.Key{Code: 'x', Text: "x"}))
+	assert.Empty(t, updated.(Model).install.PasswordErr())
 }
 
 func TestRenderInstallPrompt_PasswordErrorShown(t *testing.T) {
 	m := newTestInstallModel()
 	m.install.step = installStepCredentials
-	m.install.passwordErr = "password must be at least 8 characters long"
+	m.install.Focus(tui.CredFocusPassword)
+	m.install.SetPassword("short")
+	updated, _ := m.updateInstallPrompt(enterKey())
+	m = updated.(Model)
 
 	var b strings.Builder
 	m.renderInstallPrompt(&b)
@@ -365,11 +357,11 @@ func TestInstallFooterHint_PerStep(t *testing.T) {
 	assert.Contains(t, m.installFooterHint(), "Select")
 
 	m.install.step = installStepCredentials
-	m.install.credFocus = credFocusPassword
+	m.install.Focus(tui.CredFocusPassword)
 	assert.Contains(t, m.installFooterHint(), "Install")
 	assert.Contains(t, m.installFooterHint(), "Navigate")
 
-	m.install.credFocus = credFocusShowPassword
+	m.install.Focus(tui.CredFocusShowPassword)
 	assert.Contains(t, m.installFooterHint(), "Toggle")
 	assert.Contains(t, m.installFooterHint(), "Navigate")
 }

@@ -5,8 +5,6 @@ import (
 	"fmt"
 	"slices"
 
-	"charm.land/lipgloss/v2"
-	liplogtable "charm.land/lipgloss/v2/table"
 	"github.com/spf13/cobra"
 
 	account_api "github.com/shopware/shopware-cli/internal/account-api"
@@ -44,14 +42,7 @@ var accountCompanyProducerExtensionListCmd = &cobra.Command{
 			return cmp.Compare(a.Name, b.Name)
 		})
 
-		cellStyle := lipgloss.NewStyle().Padding(0, 1)
-
-		t := liplogtable.New().
-			Border(lipgloss.NormalBorder()).
-			StyleFunc(func(row, col int) lipgloss.Style {
-				return cellStyle
-			}).
-			Headers("Name", "Type", "Compatible with latest version", "Status")
+		var rows [][]string
 
 		lastProducerId := 0
 		for _, extension := range extensions {
@@ -61,7 +52,7 @@ var accountCompanyProducerExtensionListCmd = &cobra.Command{
 
 			if extension.Producer.Id != lastProducerId {
 				lastProducerId = extension.Producer.Id
-				t.Row(tui.BoldText.Render(extension.Producer.Name), "", "", "")
+				rows = append(rows, []string{tui.BoldText.Render(extension.Producer.Name), "", "", ""})
 			}
 
 			compatible := tui.RedText.Render("No")
@@ -79,15 +70,15 @@ var accountCompanyProducerExtensionListCmd = &cobra.Command{
 				status = tui.DimText.Render(extension.Status.Name)
 			}
 
-			t.Row(
-				"  "+extension.Name,
+			rows = append(rows, []string{
+				"  " + extension.Name,
 				tui.DimText.Render(extension.Generation.Description),
 				compatible,
 				status,
-			)
+			})
 		}
 
-		fmt.Println(t.Render())
+		tui.PrintTable([]string{"Name", "Type", "Compatible with latest version", "Status"}, rows)
 
 		return nil
 	},

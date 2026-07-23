@@ -93,7 +93,7 @@ func runCreateForm(cmd *cobra.Command, opts *createOptions, filteredVersions []*
 		return tui.RedText.Render("No")
 	}
 
-	sectionStyle := lipgloss.NewStyle().Bold(true).Underline(true)
+	sectionStyle := tui.SectionHeadingStyle
 	labelStyle := lipgloss.NewStyle().Width(20)
 
 	for {

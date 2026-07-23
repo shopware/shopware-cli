@@ -7,7 +7,6 @@ import (
 	"os/exec"
 	"path/filepath"
 
-	"charm.land/lipgloss/v2"
 	"github.com/spf13/cobra"
 
 	dockerpkg "github.com/shopware/shopware-cli/internal/docker"
@@ -77,8 +76,8 @@ func printCreateSummary(ctx context.Context, opts *createOptions) {
 		return
 	}
 
-	cmdStyle := lipgloss.NewStyle().Bold(true)
-	sectionStyle := lipgloss.NewStyle().Bold(true).Underline(true)
+	cmdStyle := tui.BoldText
+	sectionStyle := tui.SectionHeadingStyle
 
 	fmt.Println()
 	fmt.Println(tui.GreenText.Render("✔ Setup complete in " + projectDisplay))

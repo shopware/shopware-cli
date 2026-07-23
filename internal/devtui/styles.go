@@ -67,48 +67,11 @@ var (
 				Bold(true).
 				Padding(0, 0, 1)
 
-	activeBtnStyle = lipgloss.NewStyle().
-			Foreground(tui.OnBrandColor).
-			Background(tui.BrandColor).
-			Bold(true).
-			Padding(0, 2)
-
-	inactiveBtnStyle = lipgloss.NewStyle().
-				Foreground(tui.TextColor).
-				Background(tui.SubtleBgColor).
-				Padding(0, 2)
+	activeBtnStyle = tui.ActiveButtonStyle
 )
 
-func renderShowPasswordCheckbox(checked, focused bool) string {
-	box := "[ ]"
-	if checked {
-		box = "[x]"
-	}
-	style := lipgloss.NewStyle().Foreground(tui.MutedColor)
-	if focused {
-		style = lipgloss.NewStyle().Foreground(tui.BrandColor).Bold(true)
-	}
-	return style.Render(box + " Show password")
-}
-
 func renderConfirmButtons(yesLabel, noLabel string, yesActive bool) string {
-	active := 1
-	if yesActive {
-		active = 0
-	}
-	return renderButtonRow([]string{yesLabel, noLabel}, active)
-}
-
-func renderButtonRow(labels []string, active int) string {
-	buttons := make([]string, len(labels))
-	for i, label := range labels {
-		if i == active {
-			buttons[i] = activeBtnStyle.Render(label)
-		} else {
-			buttons[i] = inactiveBtnStyle.Render(label)
-		}
-	}
-	return strings.Join(buttons, "  ")
+	return tui.ConfirmButtons(yesLabel, noLabel, yesActive)
 }
 
 func buildTabHeader(activeTab int, width int) string {

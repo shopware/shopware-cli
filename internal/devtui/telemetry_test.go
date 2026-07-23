@@ -20,7 +20,7 @@ func TestMain(m *testing.M) {
 func TestInstallTagsOnlyIncludesMadeChoices(t *testing.T) {
 	tel := newTelemetryState(true)
 
-	w := installWizard{credentialStep: newInstallCredentialStep(), step: installStepLanguage}
+	w := installWizard{CredentialStep: newInstallCredentialStep(), step: installStepLanguage}
 	tags := tel.installTags("cancelled", w)
 
 	assert.Equal(t, "cancelled", tags["result"])
@@ -34,9 +34,9 @@ func TestInstallTagsNeverContainCredentialValues(t *testing.T) {
 	tel := newTelemetryState(true)
 	tel.beginInstall()
 
-	w := installWizard{credentialStep: newInstallCredentialStep(), step: installStepCredentials, language: "de-DE", currency: "EUR"}
-	w.username.SetValue("hidden-admin-name")
-	w.password.SetValue("super-secret-password")
+	w := installWizard{CredentialStep: newInstallCredentialStep(), step: installStepCredentials, language: "de-DE", currency: "EUR"}
+	w.SetUsername("hidden-admin-name")
+	w.SetPassword("super-secret-password")
 	tags := tel.installTags("success", w)
 
 	assert.Equal(t, "de-DE", tags["language"])
@@ -50,9 +50,9 @@ func TestInstallTagsNeverContainCredentialValues(t *testing.T) {
 }
 
 func TestInstallTagsDefaultCredentials(t *testing.T) {
-	w := installWizard{credentialStep: newInstallCredentialStep(), step: installStepCredentials}
-	w.username.SetValue("admin")
-	w.password.SetValue("shopware")
+	w := installWizard{CredentialStep: newInstallCredentialStep(), step: installStepCredentials}
+	w.SetUsername("admin")
+	w.SetPassword("shopware")
 
 	tags := (*telemetryState)(nil).installTags("failure", w)
 	assert.Equal(t, "false", tags["custom_credentials"])

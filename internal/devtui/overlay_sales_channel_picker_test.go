@@ -7,6 +7,8 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	adminSdk "github.com/shopware/shopware-cli/internal/admin-api"
+	"github.com/shopware/shopware-cli/internal/tui/app"
+	"github.com/shopware/shopware-cli/internal/tui/picker"
 )
 
 func TestSalesChannelPicker_ConfirmEmitsWatcherOpts(t *testing.T) {
@@ -23,7 +25,7 @@ func TestSalesChannelPicker_ConfirmEmitsWatcherOpts(t *testing.T) {
 	sp, ok := next.(*salesChannelPicker)
 	assert.True(t, ok)
 	assert.NotNil(t, sp.inner, "inner listPicker should be created after channels load")
-	assert.Len(t, sp.inner.items, 2)
+	assert.Equal(t, 2, sp.inner.Len())
 
 	innerNext, _ := sp.inner.Update(tea.KeyPressMsg(tea.Key{Code: tea.KeyDown}))
 	assert.Same(t, sp.inner, innerNext, "down arrow should not dismiss the inner picker")
@@ -33,8 +35,8 @@ func TestSalesChannelPicker_ConfirmEmitsWatcherOpts(t *testing.T) {
 	assert.NotNil(t, innerCmd)
 
 	innerMsg := innerCmd()
-	pr, ok := innerMsg.(pickerResultMsg)
-	assert.True(t, ok, "inner cmd should produce a pickerResultMsg, got %T", innerMsg)
+	pr, ok := innerMsg.(picker.ResultMsg)
+	assert.True(t, ok, "inner cmd should produce a picker.ResultMsg, got %T", innerMsg)
 	assert.False(t, pr.Cancelled)
 	assert.Equal(t, 1, pr.Index)
 	_, keyOK := pr.Key.(salesChannelPickerKey)
@@ -58,33 +60,32 @@ func TestModel_SalesChannelPicker_FullRoutingFlow(t *testing.T) {
 		overview: NewOverviewModel("local", "http://localhost:8000", "", "", "/tmp/project", nil, nil),
 		watchers: make(map[string]*watcherHandle),
 	}
+	shell := app.New(app.Options{DisableDefaultKeys: true})
+	m.host = shell
+	shell.SetContent(m)
 
 	sp := newSalesChannelPicker(nil)
-	m.modal = sp
+	_ = shell.PushOverlay(sp)
 
-	next, _ := sp.Update(salesChannelsLoadedMsg{
+	_, _ = shell.Update(salesChannelsLoadedMsg{
 		channels: []salesChannelEntry{
 			{id: "sc1", name: "Main", domain: "https://main.test", theme: &adminSdk.Theme{Id: "theme-main"}},
 		},
 	})
-	sp = next.(*salesChannelPicker)
-	m.modal = sp
 	assert.NotNil(t, sp.inner)
 
-	updated, cmd := m.Update(tea.KeyPressMsg(tea.Key{Code: tea.KeyEnter}))
-	m = updated.(Model)
+	_, cmd := shell.Update(tea.KeyPressMsg(tea.Key{Code: tea.KeyEnter}))
 	assert.NotNil(t, cmd, "enter on the inner picker should yield a cmd")
 
 	innerMsg := cmd()
-	pr, ok := innerMsg.(pickerResultMsg)
-	assert.True(t, ok, "expected pickerResultMsg, got %T", innerMsg)
+	pr, ok := innerMsg.(picker.ResultMsg)
+	assert.True(t, ok, "expected picker.ResultMsg, got %T", innerMsg)
 	_, keyOK := pr.Key.(salesChannelPickerKey)
 	assert.True(t, keyOK)
 
-	updated, cmd = m.Update(pr)
-	m = updated.(Model)
-	assert.Nil(t, m.modal, "modal should be dismissed after the inner result reaches the outer picker")
-	assert.NotNil(t, cmd, "outer pickerResultMsg handling should yield a cmd")
+	_, cmd = shell.Update(pr)
+	assert.False(t, shell.OverlayOpen(), "overlay should be dismissed after the inner result reaches the outer picker")
+	assert.NotNil(t, cmd, "outer picker.ResultMsg handling should yield a cmd")
 
 	outerMsg := cmd()
 	res, ok := outerMsg.(salesChannelPickerResultMsg)
@@ -92,9 +93,10 @@ func TestModel_SalesChannelPicker_FullRoutingFlow(t *testing.T) {
 	assert.False(t, res.Cancelled)
 	assert.Equal(t, "theme-main", res.Opts.ThemeID)
 
-	updated, _ = m.Update(res)
-	m = updated.(Model)
-	assert.True(t, m.overview.sfWatchStarting, "sfWatchStarting must be true after the picker confirms")
+	_, _ = shell.Update(res)
+	cur, ok := shell.Content().(Model)
+	assert.True(t, ok)
+	assert.True(t, cur.overview.sfWatchStarting, "sfWatchStarting must be true after the picker confirms")
 }
 
 func TestSalesChannelPicker_ExitWhileLoading(t *testing.T) {

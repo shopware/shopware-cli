@@ -8,7 +8,6 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
-	"text/tabwriter"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -116,14 +115,13 @@ func listLogFiles(logDir string) error {
 		return nil
 	}
 
-	w := tabwriter.NewWriter(os.Stdout, 0, 0, 3, ' ', 0)
-	_, _ = fmt.Fprintln(w, tui.BoldText.Render("File")+"\t"+tui.BoldText.Render("Size")+"\t"+tui.BoldText.Render("Modified"))
-
+	rows := make([][]string, 0, len(files))
 	for _, f := range files {
-		_, _ = fmt.Fprintf(w, "%s\t%s\t%s\n", f.name, formatSize(f.size), f.modTime.Format("2006-01-02 15:04:05"))
+		rows = append(rows, []string{f.name, formatSize(f.size), f.modTime.Format("2006-01-02 15:04:05")})
 	}
+	tui.PrintTable([]string{"File", "Size", "Modified"}, rows)
 
-	return w.Flush()
+	return nil
 }
 
 func formatSize(bytes int64) string {

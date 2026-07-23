@@ -8,7 +8,6 @@ import (
 
 	"charm.land/huh/v2"
 	"charm.land/huh/v2/spinner"
-	"charm.land/lipgloss/v2"
 	"github.com/shyim/go-composer"
 	"github.com/shyim/go-composer/repository"
 	"github.com/spf13/cobra"
@@ -16,6 +15,7 @@ import (
 	"github.com/shopware/shopware-cli/internal/extension"
 	"github.com/shopware/shopware-cli/internal/shop"
 	"github.com/shopware/shopware-cli/internal/system"
+	"github.com/shopware/shopware-cli/internal/tui"
 	"github.com/shopware/shopware-cli/logging"
 )
 
@@ -104,21 +104,19 @@ var projectAutofixComposerCmd = &cobra.Command{
 			deleteDirectories = append(deleteDirectories, extension.GetPath())
 		}
 
-		greenStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#04B575"))
-
 		if len(composerInstall) > 0 {
 			fmt.Println("You can install the existing plugins with the following command:")
-			fmt.Println(greenStyle.Render("composer require " + strings.Join(composerInstall, " ")))
+			fmt.Println(tui.GreenText.Render("composer require " + strings.Join(composerInstall, " ")))
 		}
 
 		if len(deleteDirectories) > 0 {
 			fmt.Println("and delete the following directories afterwards:")
-			fmt.Println(greenStyle.Render("rm -rf " + strings.Join(deleteDirectories, " ")))
+			fmt.Println(tui.GreenText.Render("rm -rf " + strings.Join(deleteDirectories, " ")))
 		}
 
 		fmt.Println("")
 		fmt.Print("Don't forget to run ")
-		fmt.Print(greenStyle.Render("bin/console plugin:refresh"))
+		fmt.Print(tui.GreenText.Render("bin/console plugin:refresh"))
 		fmt.Println(" after deleting the directories.")
 
 		if !rootComposerJson.Repositories.HasRepository("https://packages.shopware.com") {

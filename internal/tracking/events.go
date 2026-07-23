@@ -10,6 +10,9 @@ const (
 	EventProjectCreate = "project.create"
 	// EventProjectUpgradeCheck is sent when an upgrade compatibility check runs.
 	EventProjectUpgradeCheck = "project.upgrade_check"
+	// EventProjectUpgrade is sent when the interactive upgrade wizard finishes
+	// an upgrade run (internal/upgradetui).
+	EventProjectUpgrade = "project.upgrade"
 
 	// The project.dev.* events are sent by the interactive dev TUI (internal/devtui).
 	EventDevSession         = "project.dev.session"

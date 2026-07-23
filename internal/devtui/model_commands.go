@@ -1,27 +1,16 @@
 package devtui
 
 import (
-	"bufio"
 	"context"
-	"io"
 	"os/exec"
 	"strings"
 
 	"charm.land/bubbles/v2/progress"
-	"charm.land/bubbles/v2/spinner"
 	tea "charm.land/bubbletea/v2"
-	"charm.land/lipgloss/v2"
 
 	dockerpkg "github.com/shopware/shopware-cli/internal/docker"
 	"github.com/shopware/shopware-cli/internal/tui"
 )
-
-func newBrandSpinner() spinner.Model {
-	return spinner.New(
-		spinner.WithSpinner(spinner.Dot),
-		spinner.WithStyle(lipgloss.NewStyle().Foreground(tui.BrandColor)),
-	)
-}
 
 func newInstallProgress() progress.Model {
 	return progress.New(
@@ -99,8 +88,8 @@ func (m *Model) runShopwareInstall() tea.Cmd {
 	e := m.executor
 	language := m.install.language
 	currency := m.install.currency
-	username := m.install.username.Value()
-	password := m.install.password.Value()
+	username := m.install.Username()
+	password := m.install.Password()
 
 	ch := make(chan string, streamBufferSize)
 	m.dockerOutChan = ch
@@ -129,53 +118,17 @@ func (m *Model) readNextDockerOutput() tea.Cmd {
 	return readFromChan(ch)
 }
 
-const streamBufferSize = 50
+const streamBufferSize = tui.StreamBufferSize
 
 func readFromChan(ch <-chan string) tea.Cmd {
-	return func() tea.Msg {
-		line, ok := <-ch
-		if !ok {
-			return dockerOutputDoneMsg{}
-		}
-		return dockerOutputLineMsg(line)
-	}
+	return tui.ReadLineCmd(ch,
+		func(line string) tea.Msg { return dockerOutputLineMsg(line) },
+		dockerOutputDoneMsg{},
+	)
 }
 
 func streamCmdOutput(cmd *exec.Cmd, ch chan<- string, useStdout bool) error {
-	var pipe io.Reader
-	var err error
-	if useStdout {
-		pipe, err = cmd.StdoutPipe()
-		if err == nil {
-			cmd.Stderr = cmd.Stdout
-		}
-	} else {
-		pipe, err = cmd.StderrPipe()
-		if err == nil {
-			cmd.Stdout = cmd.Stderr
-		}
-	}
-	if err != nil {
-		close(ch)
-		return err
-	}
-
-	if err := cmd.Start(); err != nil {
-		close(ch)
-		return err
-	}
-
-	scanner := bufio.NewScanner(pipe)
-	for scanner.Scan() {
-		ch <- scanner.Text()
-	}
-	close(ch)
-
-	if err := scanner.Err(); err != nil {
-		_ = cmd.Wait()
-		return err
-	}
-	return cmd.Wait()
+	return tui.StreamCmdOutput(cmd, ch, useStdout)
 }
 
 func runComposeCommand(ctx context.Context, projectRoot string, args []string, resultFn func(error) tea.Msg) (outChan <-chan string, outputCmd tea.Cmd, doneCmd tea.Cmd) {

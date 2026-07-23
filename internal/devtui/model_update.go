@@ -4,7 +4,6 @@ import (
 	"context"
 	"time"
 
-	"charm.land/bubbles/v2/textinput"
 	tea "charm.land/bubbletea/v2"
 
 	dockerpkg "github.com/shopware/shopware-cli/internal/docker"
@@ -12,15 +11,11 @@ import (
 	"github.com/shopware/shopware-cli/internal/executor"
 	"github.com/shopware/shopware-cli/internal/shop"
 	"github.com/shopware/shopware-cli/internal/tracking"
+	"github.com/shopware/shopware-cli/internal/tui"
+	"github.com/shopware/shopware-cli/internal/tui/app"
 )
 
-func (m Model) updateKeyPress(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
-	if m.modal != nil {
-		next, cmd := m.modal.Update(msg)
-		m.modal = next
-		return m, cmd
-	}
-
+func (m Model) updateKeyPress(msg tea.KeyPressMsg) (app.Content, tea.Cmd) {
 	if m.phase == phaseMigrationWizard {
 		return m.updateMigrationWizard(msg)
 	}
@@ -30,10 +25,10 @@ func (m Model) updateKeyPress(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	}
 
 	if m.phase == phaseStarting || m.phase == phaseStopping {
-		switch keyString(msg) {
+		switch tui.KeyString(msg) {
 		case "l":
 			m.dockerShowLogs = !m.dockerShowLogs
-		case keyQ, keyCtrlC:
+		case "q", tui.KeyCtrlC:
 			if m.phase == phaseStarting {
 				if tags, ok := m.telemetry.dockerStartTags(nil); ok {
 					tags[tracking.TagResult] = tracking.ResultCancelled
@@ -46,10 +41,10 @@ func (m Model) updateKeyPress(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	}
 
 	if m.phase == phaseInstalling {
-		switch keyString(msg) {
+		switch tui.KeyString(msg) {
 		case "l":
 			m.installProg.showLogs = !m.installProg.showLogs
-		case keyQ, keyCtrlC:
+		case "q", tui.KeyCtrlC:
 			if m.telemetry.installOnce() {
 				tags := m.telemetry.installTags(tracking.ResultCancelled, m.install)
 				tags[tracking.TagAbandonedAt] = "installing"
@@ -61,14 +56,12 @@ func (m Model) updateKeyPress(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	}
 
 	if m.phase == phaseTask {
-		if m.taskDone {
+		if m.task.Done() {
 			m.phase = phaseDashboard
-			m.overlayLines = nil
-			m.taskDone = false
-			m.taskErr = nil
+			m.task = tui.Task{}
 			return m, nil
 		}
-		if keyString(msg) == keyQ || keyString(msg) == keyCtrlC {
+		if tui.KeyString(msg) == "q" || tui.KeyString(msg) == tui.KeyCtrlC {
 			if tags, ok := m.telemetry.taskTags(tracking.ResultCancelled); ok {
 				trackEventNow(tracking.EventDevAction, tags)
 			}
@@ -80,38 +73,36 @@ func (m Model) updateKeyPress(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	return m.updateDashboardKeys(msg)
 }
 
-func (m Model) updateDashboardKeys(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
-	switch keyString(msg) {
+func (m Model) updateDashboardKeys(msg tea.KeyPressMsg) (app.Content, tea.Cmd) {
+	switch tui.KeyString(msg) {
 	case "ctrl+p":
-		m.modal = newCommandPalette(paletteState{
+		return m, m.host.PushOverlay(newCommandPalette(paletteState{
 			adminWatchActive: m.overview.adminWatchRunning || m.overview.adminWatchStarting,
 			sfWatchActive:    m.overview.sfWatchRunning || m.overview.sfWatchStarting,
-		})
-		return m, textinput.Blink
-	case keyCtrlC, keyQ:
+		}))
+	case tui.KeyCtrlC, "q":
 		if m.dockerMode {
-			m.modal = newStopConfirm()
-			return m, nil
+			return m, m.host.PushOverlay(newStopConfirm())
 		}
 		m.shutdown()
 		return m, tea.Quit
-	case key1:
+	case "1":
 		m.activeTab = tabOverview
 		m.telemetry.markTab(m.activeTab)
 		return m, nil
-	case key2:
+	case "2":
 		m.activeTab = tabInstance
 		m.telemetry.markTab(m.activeTab)
 		return m, nil
-	case key3:
+	case "3":
 		m.activeTab = tabConfig
 		m.telemetry.markTab(m.activeTab)
 		return m, nil
-	case keyTab:
+	case tui.KeyTab:
 		m.activeTab = (m.activeTab + 1) % activeTab(len(tabNames))
 		m.telemetry.markTab(m.activeTab)
 		return m, nil
-	case keyShiftTab:
+	case tui.KeyShiftTab:
 		m.activeTab = (m.activeTab - 1 + activeTab(len(tabNames))) % activeTab(len(tabNames))
 		m.telemetry.markTab(m.activeTab)
 		return m, nil
@@ -124,8 +115,8 @@ func (m Model) updateDashboardKeys(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	return m.updateChildren(msg)
 }
 
-func (m Model) updateConfigTab(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
-	if keyString(msg) == keyEnter {
+func (m Model) updateConfigTab(msg tea.KeyPressMsg) (app.Content, tea.Cmd) {
+	if tui.KeyString(msg) == tui.KeyEnter {
 		if m.configTab.cursor == fieldSave && m.configTab.modified {
 			m.configTab.ApplyToConfig(m.config)
 			if err := shop.WriteConfig(m.config, m.projectRoot); err != nil {
@@ -159,8 +150,7 @@ func (m Model) updateConfigTab(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		if picker := m.configTab.PickerForCursor(); picker != nil {
-			m.modal = picker
-			return m, textinput.Blink
+			return m, m.host.PushOverlay(picker)
 		}
 		return m, nil
 	}
@@ -170,7 +160,7 @@ func (m Model) updateConfigTab(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	return m, cmd
 }
 
-func (m Model) executeCommand(id string) (tea.Model, tea.Cmd) {
+func (m Model) executeCommand(id string) (app.Content, tea.Cmd) {
 	switch id {
 	case "open-shop", "open-admin":
 		m.telemetry.countAction()
@@ -216,8 +206,7 @@ func (m Model) executeCommand(id string) (tea.Model, tea.Cmd) {
 		m.telemetry.markTab(m.activeTab)
 	case "quit":
 		if m.dockerMode {
-			m.modal = newStopConfirm()
-			return m, nil
+			return m, m.host.PushOverlay(newStopConfirm())
 		}
 		m.shutdown()
 		return m, tea.Quit
@@ -228,13 +217,11 @@ func (m Model) executeCommand(id string) (tea.Model, tea.Cmd) {
 // openSalesChannelPicker opens the sales-channel picker modal so the user can
 // resolve a storefront's theme/domain before the watcher starts. Used by both
 // the command palette and the Overview tab's storefront activation.
-func (m Model) openSalesChannelPicker() (tea.Model, tea.Cmd) {
+func (m Model) openSalesChannelPicker() (app.Content, tea.Cmd) {
 	if m.overview.sfWatchRunning || m.overview.sfWatchStarting {
 		return m, nil
 	}
-	picker := newSalesChannelPicker(m.executor)
-	m.modal = picker
-	return m, picker.Init()
+	return m, m.host.PushOverlay(newSalesChannelPicker(m.executor))
 }
 
 func (m *Model) stopWatcher(name string) tea.Cmd {
@@ -257,17 +244,17 @@ func (m *Model) stopWatcher(name string) tea.Cmd {
 	}
 }
 
-func (m Model) updateMigrationWizard(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+func (m Model) updateMigrationWizard(msg tea.KeyPressMsg) (app.Content, tea.Cmd) {
 	// Enter on the welcome screen's "Quit" button exits the wizard from inside
 	// migrationWizard.update, so detect it here before the state advances.
 	welcomeQuit := m.migrationWizard.step == migrationStepWelcome &&
-		!m.migrationWizard.confirmYes && keyString(msg) == keyEnter
+		!m.migrationWizard.confirmYes && tui.KeyString(msg) == tui.KeyEnter
 
 	newGuide, cmd := m.migrationWizard.update(msg)
 	m.migrationWizard = newGuide
 
 	// Ctrl+C on any step quits the app
-	if welcomeQuit || keyString(msg) == keyCtrlC {
+	if welcomeQuit || tui.KeyString(msg) == tui.KeyCtrlC {
 		// The done screen already sent a completed/failed event for this run.
 		if m.migrationWizard.step != migrationStepDone {
 			trackEventNow(tracking.EventDevMigrationWizard, migrationWizardTags(tracking.ResultCancelled, m.migrationWizard))
@@ -277,7 +264,7 @@ func (m Model) updateMigrationWizard(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 
 	// User pressed Enter on the review step. confirmYes=true saves and
 	// continues, confirmYes=false picks the Quit button and exits the wizard.
-	if m.migrationWizard.step == migrationStepReview && keyString(msg) == keyEnter {
+	if m.migrationWizard.step == migrationStepReview && tui.KeyString(msg) == tui.KeyEnter {
 		if m.migrationWizard.confirmYes {
 			return m.saveMigrationWizard()
 		}
@@ -287,14 +274,14 @@ func (m Model) updateMigrationWizard(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 
 	// User pressed Enter on the done screen → start docker containers.
 	// If the previous save errored, stay on the done screen so the user can read it.
-	if m.migrationWizard.step == migrationStepDone && keyString(msg) == keyEnter && m.migrationWizard.err == nil {
+	if m.migrationWizard.step == migrationStepDone && tui.KeyString(msg) == tui.KeyEnter && m.migrationWizard.err == nil {
 		return m.startAfterMigrationWizard()
 	}
 
 	return m, cmd
 }
 
-func (m Model) saveMigrationWizard() (tea.Model, tea.Cmd) {
+func (m Model) saveMigrationWizard() (app.Content, tea.Cmd) {
 	m.migrationWizard.applyToConfig(m.config)
 	if err := shop.WriteConfig(m.config, m.projectRoot); err != nil {
 		m.migrationWizard.err = err
@@ -342,7 +329,7 @@ func mergeLocalProfilerSecrets(dst, src *shop.Config) {
 	}
 }
 
-func (m Model) startAfterMigrationWizard() (tea.Model, tea.Cmd) {
+func (m Model) startAfterMigrationWizard() (app.Content, tea.Cmd) {
 	envCfg, err := m.config.ResolveEnvironment("")
 	if err != nil {
 		m.migrationWizard.err = err
@@ -367,7 +354,7 @@ func (m Model) startAfterMigrationWizard() (tea.Model, tea.Cmd) {
 	m.phase = phaseStarting
 	m.overlayLines = nil
 	m.dockerShowLogs = false
-	m.dockerSpinner = newBrandSpinner()
+	m.dockerSpinner = tui.NewBrandSpinner()
 
 	m.rebuildTabs()
 
