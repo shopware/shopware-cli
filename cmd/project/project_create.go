@@ -112,7 +112,7 @@ var projectCreateCmd = &cobra.Command{
 			return err
 		}
 
-		return installAndFinalize(cmd, &opts, phpConstraint)
+		return installAndFinalize(cmd, &opts, phpConstraint, chosenVersion)
 	},
 }
 

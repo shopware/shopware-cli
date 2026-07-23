@@ -91,15 +91,7 @@ func (s *ShopwareProjectScaffold) Scaffold(ctx context.Context) error {
 
 	logging.FromContext(ctx).Infof("Setting up Shopware %s", s.Version)
 
-	composerJSON, err := GenerateComposerJson(ctx, ComposerJsonOptions{
-		Version:          s.Version,
-		RC:               strings.Contains(s.Version, "rc"),
-		UseElasticsearch: s.UseElasticsearch,
-		UseAMQP:          s.UseAMQP,
-		NoAudit:          s.NoAudit,
-		DeploymentMethod: s.DeploymentMethod,
-	})
-	if err != nil {
+	if err := s.WriteComposerJson(ctx); err != nil {
 		return err
 	}
 
@@ -107,7 +99,6 @@ func (s *ShopwareProjectScaffold) Scaffold(ctx context.Context) error {
 		path    string
 		content string
 	}{
-		{path: "composer.json", content: composerJSON},
 		{path: ".env"},
 		{path: ".env.local", content: envLocalContent(s.UseDocker)},
 		{path: ".gitignore", content: "/.idea\n/.shopware-cli\n/vendor"},
@@ -138,6 +129,25 @@ func (s *ShopwareProjectScaffold) Scaffold(ctx context.Context) error {
 	}
 
 	return setupCI(ctx, s.ProjectFolder, s.CISystem, s.DeploymentMethod)
+}
+
+// WriteComposerJson (re)generates the project's composer.json from the
+// scaffold options, e.g. to disable composer's audit blocking after the
+// initial scaffold has been written.
+func (s *ShopwareProjectScaffold) WriteComposerJson(ctx context.Context) error {
+	composerJSON, err := GenerateComposerJson(ctx, ComposerJsonOptions{
+		Version:          s.Version,
+		RC:               strings.Contains(s.Version, "rc"),
+		UseElasticsearch: s.UseElasticsearch,
+		UseAMQP:          s.UseAMQP,
+		NoAudit:          s.NoAudit,
+		DeploymentMethod: s.DeploymentMethod,
+	})
+	if err != nil {
+		return err
+	}
+
+	return os.WriteFile(filepath.Join(s.ProjectFolder, "composer.json"), []byte(composerJSON), os.ModePerm)
 }
 
 func envLocalContent(useDocker bool) string {
