@@ -45,7 +45,7 @@ var extensionAssetBundleCmd = &cobra.Command{
 			}
 			assetCfg.ShopwareVersion = constraint
 		} else {
-			constraint, err := validatedExtensions[0].GetShopwareVersionConstraint()
+			constraint, err := extension.GetShopwareVersionConstraintForBuild(validatedExtensions[0])
 			if err != nil {
 				return fmt.Errorf("cannot get shopware version constraint: %w", err)
 			}

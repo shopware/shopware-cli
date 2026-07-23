@@ -137,7 +137,7 @@ func (p PlatformPlugin) GetExtensionConfig() *Config {
 }
 
 func (p PlatformPlugin) GetShopwareVersionConstraint() (*version.Constraints, error) {
-	return getShopwareVersionConstraintFromComposer(p.config, p.Composer.Require)
+	return getShopwareVersionConstraintFromComposer(p.Composer.Require)
 }
 
 func (PlatformPlugin) GetType() string {

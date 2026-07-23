@@ -38,7 +38,7 @@ func PrepareFolderForZipping(ctx context.Context, path string, ext Extension, ex
 		return fmt.Errorf(errorFormat, err)
 	}
 
-	minShopwareVersionConstraint, err := ext.GetShopwareVersionConstraint()
+	minShopwareVersionConstraint, err := GetShopwareVersionConstraintForBuild(ext)
 	if err != nil {
 		return fmt.Errorf(errorFormat, err)
 	}
