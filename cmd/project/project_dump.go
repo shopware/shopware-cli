@@ -29,6 +29,9 @@ const (
 	CompressionZstd = "zstd"
 )
 
+// passwordFlagPrompt is the sentinel value Cobra sets via NoOptDefVal when
+// --password/-p is passed without an argument. Any user with this literal
+// string as their password would need to use DATABASE_URL or an env file instead.
 const passwordFlagPrompt = "__INTERACTIVE__"
 
 var projectDatabaseDumpCmd = &cobra.Command{
@@ -256,7 +259,7 @@ func init() {
 	projectDatabaseDumpCmd.Flags().String("host", "", "hostname")
 	projectDatabaseDumpCmd.Flags().String("database", "", "database name")
 	projectDatabaseDumpCmd.Flags().StringP("username", "u", "", "mysql user")
-	projectDatabaseDumpCmd.Flags().StringP("password", "p", "", "mysql password")
+	projectDatabaseDumpCmd.Flags().StringP("password", "p", "", "mysql password (omit value to be prompted interactively)")
 	projectDatabaseDumpCmd.Flags().Lookup("password").NoOptDefVal = passwordFlagPrompt
 	projectDatabaseDumpCmd.Flags().String("port", "", "mysql port")
 
