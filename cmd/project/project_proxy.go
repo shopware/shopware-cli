@@ -182,10 +182,16 @@ func (e *proxyEnvironment) up(cmd *cobra.Command) error {
 		return err
 	}
 
+	// Pin APP_URL on the containers before they start, so PHP renders absolute
+	// URLs (e.g. the storefront import map) with the proxy hostname rather than
+	// the stale image default. .env.local is rewritten below too, but that only
+	// takes effect on the next recreate, so the container env is authoritative.
+	proxyURL := "https://" + e.hostname
 	if err := dockerpkg.WriteComposeOverride(e.projectRoot, &dockerpkg.ProxyOptions{
 		Hostname:    e.hostname,
 		NetworkName: proxy.NetworkName,
 		CAPath:      certInfo.CAPath,
+		AppURL:      proxyURL,
 	}); err != nil {
 		return err
 	}
@@ -209,9 +215,17 @@ func (e *proxyEnvironment) up(cmd *cobra.Command) error {
 		previousAppURL = current
 	}
 
-	proxyURL := "https://" + e.hostname
+	// Whether the shop's live URL actually changes decides if the storefront
+	// theme needs a recompile: it bakes absolute asset URLs (the JS import map)
+	// in at compile time, so only a changed URL requires paying that cost.
+	urlChanged := envfile.ReadEnvVar(e.envLocalPath(), "APP_URL") != proxyURL
+
 	if err := e.pointShopAt(ctx, []string{previousAppURL, "http://" + e.hostname}, proxyURL); err != nil {
 		fmt.Println(tui.RedText.Render("  Could not update the shop URL: " + err.Error()))
+	}
+
+	if urlChanged {
+		e.recompileTheme(ctx)
 	}
 
 	entry := proxy.ProjectEntry{
@@ -314,6 +328,21 @@ func (e *proxyEnvironment) envLocalPath() string {
 	return filepath.Join(e.projectRoot, ".env.local")
 }
 
+// proxyHostname returns the shop's proxy hostname if the project is
+// registered with the shared proxy, or "" otherwise.
+func proxyHostname(projectRoot string) string {
+	reg, err := proxy.LoadRegistry()
+	if err != nil {
+		return ""
+	}
+
+	if entry, found := reg.Find(proxy.CanonicalProjectRoot(projectRoot)); found {
+		return entry.Hostname
+	}
+
+	return ""
+}
+
 // switchProjectConfigURLs points the url keys in .shopware-project.yml at
 // the proxy — the dev TUI and the admin API client resolve the shop URL from
 // them — and returns the pre-proxy state for the registry, so down can
@@ -402,8 +431,7 @@ func (e *proxyEnvironment) pointShopAt(ctx context.Context, fromURLs []string, t
 			// installer seeds the domain from APP_URL), the domain was
 			// changed manually, or this candidate simply is not the current
 			// value; missing tables likewise mean a not-yet-installed shop.
-			outStr := string(output)
-			if strings.Contains(outStr, "No sales channels found") || strings.Contains(outStr, "doesn't exist") || strings.Contains(outStr, "Unknown database") {
+			if shopNotInstalled(string(output)) {
 				continue
 			}
 
@@ -412,6 +440,33 @@ func (e *proxyEnvironment) pointShopAt(ctx context.Context, fromURLs []string, t
 	}
 
 	return nil
+}
+
+// shopNotInstalled reports whether console output indicates the shop has no
+// installed database yet (no sales channels, missing tables/database), as
+// opposed to a real failure. Such shops are compiled/seeded by the installer
+// later, so URL-dependent steps can be skipped for them.
+func shopNotInstalled(output string) bool {
+	return strings.Contains(output, "No sales channels found") ||
+		strings.Contains(output, "doesn't exist") ||
+		strings.Contains(output, "Unknown database")
+}
+
+// recompileTheme rebuilds the storefront theme so the absolute asset URLs it
+// bakes in at compile time (notably the JS import map) match the shop's new
+// proxy URL. It is best-effort: a not-yet-installed shop has no theme to
+// compile (the installer does it later, with the correct URL), so that is
+// skipped quietly and only unexpected failures are surfaced without aborting.
+func (e *proxyEnvironment) recompileTheme(ctx context.Context) {
+	err := runStep(ctx, "Updating storefront theme for the new URL...", func(ctx context.Context) error {
+		if out, err := e.executor.ConsoleCommand(ctx, "theme:compile").CombinedOutput(); err != nil && !shopNotInstalled(string(out)) {
+			return fmt.Errorf("%w\n%s", err, out)
+		}
+		return nil
+	})
+	if err != nil {
+		fmt.Println(tui.RedText.Render("  Could not update the storefront theme (continuing): " + err.Error()))
+	}
 }
 
 // replaceSalesChannelURL runs the core sales-channel:replace:url command,
