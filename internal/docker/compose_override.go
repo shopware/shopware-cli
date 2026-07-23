@@ -35,6 +35,13 @@ type ProxyOptions struct {
 	// anchor) accepts the proxy's HTTPS certificates — needed when the shop
 	// calls its own APP_URL over HTTPS (and, as a side effect, a sibling's).
 	CAPath string
+	// AppURL, when set, pins APP_URL as a real container env var on the web and
+	// background services. It must be set here (not only in .env.local) because
+	// the container is created before proxy up rewrites .env.local, and a real
+	// env var reliably beats both the env_file and the image default — otherwise
+	// PHP renders absolute asset URLs (e.g. the storefront import map) with the
+	// stale image APP_URL.
+	AppURL string
 }
 
 // containerCAPath is where the proxy CA is mounted inside the shop's
@@ -84,6 +91,9 @@ func GenerateComposeOverride(lock *composer.Lock, opts *ProxyOptions, background
 	webEnv := newMappingNode()
 	addKeyValue(webEnv, "TRUSTED_PROXIES", "127.0.0.1,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16")
 	addKeyValue(webEnv, "SYMFONY_TRUSTED_PROXIES", "127.0.0.1,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16")
+	if opts.AppURL != "" {
+		addKeyValue(webEnv, "APP_URL", opts.AppURL)
+	}
 	mountCA(web, webEnv, opts.CAPath)
 	addKeyValueNode(web, "environment", webEnv)
 	addKeyValueNode(services, "web", web)
@@ -173,6 +183,9 @@ func attachedService(opts *ProxyOptions) *yaml.Node {
 	addKeyValueNode(svc, "networks", newSequenceNode("default", opts.NetworkName))
 
 	env := newMappingNode()
+	if opts.AppURL != "" {
+		addKeyValue(env, "APP_URL", opts.AppURL)
+	}
 	mountCA(svc, env, opts.CAPath)
 	if len(env.Content) > 0 {
 		addKeyValueNode(svc, "environment", env)
