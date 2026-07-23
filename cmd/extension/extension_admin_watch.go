@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/url"
 	"path"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"time"
@@ -309,9 +310,21 @@ var extensionAdminWatchCmd = &cobra.Command{
 				}
 
 				for _, ext := range esbuildInstances {
+					entrypoints, err := ext.currentEntrypoints()
+					if err != nil {
+						logging.FromContext(cmd.Context()).Errorf("cannot rebuild administration bundle for %s: %s", ext.assetName, err)
+						http.Error(w, "cannot rebuild administration bundle", http.StatusServiceUnavailable)
+						return
+					}
+
+					css := []string{}
+					if entrypoints.CSS != "" {
+						css = append(css, adminWatchOutputURL(browserUrl, ext.assetName, entrypoints.CSS))
+					}
+
 					bundleInfo.Bundles[ext.name] = adminBundlesInfoAsset{
-						Css:        []string{fmt.Sprintf("%s/.shopware-cli/%s/extension.css", browserUrl.String(), ext.assetName)},
-						Js:         []string{fmt.Sprintf("%s/.shopware-cli/%s/extension.js", browserUrl.String(), ext.assetName)},
+						Css:        css,
+						Js:         []string{adminWatchOutputURL(browserUrl, ext.assetName, entrypoints.JavaScript)},
 						LiveReload: true,
 						Name:       ext.assetName,
 					}
@@ -403,4 +416,88 @@ type adminWatchExtension struct {
 	context     api.BuildContext
 	watchServer api.ServeResult
 	staticDir   string
+}
+
+type adminWatchMetafile struct {
+	Outputs map[string]adminWatchMetafileOutput `json:"outputs"`
+}
+
+type adminWatchMetafileOutput struct {
+	EntryPoint string `json:"entryPoint"`
+	CSSBundle  string `json:"cssBundle"`
+}
+
+type adminWatchEntrypoints struct {
+	JavaScript string
+	CSS        string
+}
+
+func (e adminWatchExtension) currentEntrypoints() (adminWatchEntrypoints, error) {
+	result := e.context.Rebuild()
+
+	if len(result.Errors) > 0 {
+		return adminWatchEntrypoints{}, fmt.Errorf("%s", result.Errors[0].Text)
+	}
+
+	return findAdminWatchEntrypoints(result)
+}
+
+func findAdminWatchEntrypoints(result api.BuildResult) (adminWatchEntrypoints, error) {
+	var metafile adminWatchMetafile
+	if err := json.Unmarshal([]byte(result.Metafile), &metafile); err != nil {
+		return adminWatchEntrypoints{}, fmt.Errorf("cannot decode esbuild metafile: %w", err)
+	}
+
+	for candidatePath, candidate := range metafile.Outputs {
+		if candidate.EntryPoint == "" || path.Ext(candidatePath) != ".js" {
+			continue
+		}
+
+		javaScriptPath, err := adminWatchServePath(candidatePath)
+		if err != nil {
+			return adminWatchEntrypoints{}, err
+		}
+
+		cssPath := ""
+		if candidate.CSSBundle != "" {
+			cssPath, err = adminWatchServePath(candidate.CSSBundle)
+			if err != nil {
+				return adminWatchEntrypoints{}, err
+			}
+		}
+
+		return adminWatchEntrypoints{
+			JavaScript: javaScriptPath,
+			CSS:        cssPath,
+		}, nil
+	}
+
+	return adminWatchEntrypoints{}, fmt.Errorf("esbuild emitted no JavaScript entrypoint")
+}
+
+func adminWatchServePath(outputPath string) (string, error) {
+	cleanOutputPath := filepath.Clean(filepath.FromSlash(outputPath))
+
+	if filepath.IsAbs(cleanOutputPath) {
+		relativePath, err := filepath.Rel(".", cleanOutputPath)
+		if err != nil {
+			return "", fmt.Errorf("cannot resolve esbuild output path %q: %w", outputPath, err)
+		}
+		cleanOutputPath = relativePath
+	}
+
+	if cleanOutputPath == ".." || strings.HasPrefix(cleanOutputPath, ".."+string(filepath.Separator)) {
+		return "", fmt.Errorf("esbuild output path %q is outside the serve directory", outputPath)
+	}
+
+	return "/" + strings.TrimPrefix(filepath.ToSlash(cleanOutputPath), "/"), nil
+}
+
+func adminWatchOutputURL(browserURL *url.URL, assetName, outputPath string) string {
+	return fmt.Sprintf(
+		"%s/.shopware-cli/%s/%s",
+		strings.TrimSuffix(browserURL.String(), "/"),
+		assetName,
+		strings.TrimPrefix(outputPath, "/"),
+	)
 }

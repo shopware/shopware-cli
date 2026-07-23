@@ -133,6 +133,10 @@ func Context(ctx context.Context, options AssetCompileOptions) (api.BuildContext
 		panic(err)
 	}
 
+	// The administration watcher uses the metafile to distinguish entrypoints
+	// from generated chunks when serving content-addressed build outputs.
+	bundlerOptions.Metafile = true
+
 	return api.Context(*bundlerOptions)
 }
 
