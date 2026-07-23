@@ -61,6 +61,13 @@ shopware-cli extension --help
 shopware-cli project --help
 ```
 
+Generate a CycloneDX SBOM for a project without running the full CI build:
+
+```bash
+shopware-cli project sbom
+shopware-cli project sbom ./my-shop --format cyclonedx-json --output sbom.json
+```
+
 If you need CI-friendly behavior, disable prompts:
 
 ```bash
