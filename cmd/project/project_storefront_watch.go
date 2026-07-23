@@ -58,6 +58,12 @@ var projectStorefrontWatchCmd = &cobra.Command{
 			}
 		}
 
+		// When the shop is proxied, route the webpack hot-proxy watcher through
+		// the shared proxy at its storefront-watch hostname.
+		if host := proxyHostname(projectRoot); host != "" {
+			opts.ProxyHostname = "storefront-watch." + host
+		}
+
 		watchProcess, err := extension.PrepareStorefrontWatcher(cmd.Context(), projectRoot, cmdExecutor, opts, os.Stdout)
 		if err != nil {
 			return err

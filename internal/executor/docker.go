@@ -119,8 +119,14 @@ func (d *DockerExecutor) newProcess(cmd *exec.Cmd, innerArgs []string) *Process 
 	return &Process{
 		Cmd: cmd,
 		stop: func(ctx context.Context) error {
+			// Signal the whole in-container process tree rooted at the
+			// matched command, not just the top process. npm (and similar
+			// wrappers) spawn the actual long-running server — e.g. the Vite
+			// dev server — as a child that does not receive npm's signal, so
+			// signalling only the parent orphans it and it keeps holding its
+			// port. pkill matches by pattern and would miss those children.
 			killCmd := exec.CommandContext(ctx, "docker", "compose", "exec", "-T", "web",
-				"pkill", "-INT", "-f", pattern,
+				"sh", "-c", killTreeScript(pattern),
 			)
 			killCmd.Dir = projectRoot
 			_ = killCmd.Run()
@@ -132,6 +138,19 @@ func (d *DockerExecutor) newProcess(cmd *exec.Cmd, innerArgs []string) *Process 
 			return nil
 		},
 	}
+}
+
+// killTreeScript builds a POSIX-sh snippet that SIGINTs every process whose
+// command line matches pattern together with all of its descendants.
+func killTreeScript(pattern string) string {
+	return "kill_tree() { for c in $(pgrep -P \"$1\" 2>/dev/null); do kill_tree \"$c\"; done; kill -INT \"$1\" 2>/dev/null; }; " +
+		"for p in $(pgrep -f " + shellSingleQuote(pattern) + " 2>/dev/null); do kill_tree \"$p\"; done"
+}
+
+// shellSingleQuote wraps s in single quotes safely for embedding in an sh -c
+// script.
+func shellSingleQuote(s string) string {
+	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
 }
 
 func (d *DockerExecutor) StartEnvironment(ctx context.Context) error {
