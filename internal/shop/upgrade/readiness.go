@@ -34,12 +34,7 @@ func (u *ProjectUpgrader) RunReadinessChecks(ctx context.Context) Readiness {
 	r.Checks = append(r.Checks, checkGitClean(ctx, u.projectRoot))
 
 	r.Extensions = discoverExtensions(ctx, u.projectRoot)
-	r.Checks = append(r.Checks, ReadinessCheck{
-		ID:    "extensions",
-		Label: "Composer-managed extensions found",
-		Value: fmt.Sprintf("%d", r.ComposerManagedCount()),
-		State: StateOK,
-	})
+	r.Checks = append(r.Checks, checkExtensionsComposerManaged(r.Extensions))
 
 	r.Checks = append(r.Checks, checkDeploymentHelper(u.projectRoot))
 	r.Checks = append(r.Checks, u.checkTooling(ctx))
@@ -138,6 +133,38 @@ func checkDeploymentHelper(projectRoot string) ReadinessCheck {
 
 	check.State = StateOK
 	check.Value = "yes"
+	return check
+}
+
+// checkExtensionsComposerManaged enforces that every extension is managed
+// through Composer: the upgrade resolves and pins extension versions with
+// Composer, so extensions living outside vendor/ (e.g. custom/plugins) are
+// invisible to it and would silently stay on their current, possibly
+// incompatible release.
+func checkExtensionsComposerManaged(extensions []InstalledExtension) ReadinessCheck {
+	check := ReadinessCheck{
+		ID:       "extensions",
+		Label:    "Extensions managed through Composer",
+		Blocking: true,
+	}
+
+	var local []string
+	for _, ext := range extensions {
+		if !ext.ComposerManaged {
+			local = append(local, ext.Name)
+		}
+	}
+
+	if len(local) == 0 {
+		check.State = StateOK
+		check.Value = fmt.Sprintf("%d of %d", len(extensions), len(extensions))
+		return check
+	}
+
+	check.State = StateFail
+	check.Value = fmt.Sprintf("%d of %d", len(extensions)-len(local), len(extensions))
+	check.Detail = "Not managed through Composer: " + strings.Join(local, ", ") + "\n" +
+		"Run `shopware-cli project autofix composer-plugins` to migrate them."
 	return check
 }
 

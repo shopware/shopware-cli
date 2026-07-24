@@ -54,6 +54,15 @@ func headlessUpgrader(t *testing.T, dir, composerScript string) *ProjectUpgrader
 	return u
 }
 
+// setupComposerProject returns a project whose extensions are all
+// Composer-managed — the readiness gate requires that.
+func setupComposerProject(t *testing.T) string {
+	t.Helper()
+	dir := setupProject(t)
+	require.NoError(t, os.RemoveAll(filepath.Join(dir, "custom")))
+	return dir
+}
+
 func headlessCatalog() *Catalog {
 	return &Catalog{
 		Current: version.Must(version.NewVersion("6.6.10.3")),
@@ -94,7 +103,7 @@ func TestSelectTarget(t *testing.T) {
 
 func TestRunHeadlessRequiresTarget(t *testing.T) {
 	t.Setenv("DO_NOT_TRACK", "1")
-	dir := setupProject(t)
+	dir := setupComposerProject(t)
 	u := headlessUpgrader(t, dir, "true")
 
 	var out bytes.Buffer
@@ -107,7 +116,7 @@ func TestRunHeadlessRequiresTarget(t *testing.T) {
 
 func TestRunHeadlessDryRun(t *testing.T) {
 	t.Setenv("DO_NOT_TRACK", "1")
-	dir := setupProject(t)
+	dir := setupComposerProject(t)
 	before, err := os.ReadFile(filepath.Join(dir, "composer.json"))
 	require.NoError(t, err)
 
@@ -132,7 +141,7 @@ func TestRunHeadlessDryRun(t *testing.T) {
 
 func TestRunHeadlessSecurityBlockedNeedsOptIn(t *testing.T) {
 	t.Setenv("DO_NOT_TRACK", "1")
-	dir := setupProject(t)
+	dir := setupComposerProject(t)
 	u := headlessUpgrader(t, dir, "echo 'these were not loaded, because they are affected by security advisories'; exit 2")
 
 	var out bytes.Buffer
@@ -146,7 +155,7 @@ func TestRunHeadlessSecurityBlockedNeedsOptIn(t *testing.T) {
 
 func TestRunHeadlessExecutes(t *testing.T) {
 	t.Setenv("DO_NOT_TRACK", "1")
-	dir := setupProject(t)
+	dir := setupComposerProject(t)
 	u := headlessUpgrader(t, dir, "true")
 
 	var out bytes.Buffer
@@ -168,7 +177,7 @@ func TestRunHeadlessExecutes(t *testing.T) {
 
 func TestRunHeadlessFailingUpdateRollsBack(t *testing.T) {
 	t.Setenv("DO_NOT_TRACK", "1")
-	dir := setupProject(t)
+	dir := setupComposerProject(t)
 	before, err := os.ReadFile(filepath.Join(dir, "composer.json"))
 	require.NoError(t, err)
 

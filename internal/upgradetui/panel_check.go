@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 
 	"github.com/shopware/shopware-cli/internal/shop/upgrade"
 	"github.com/shopware/shopware-cli/internal/tui"
@@ -170,8 +171,17 @@ func (m *Model) viewCheckLeft() string {
 		}).Render())
 		b.WriteString("\n")
 		if check.Detail != "" && check.State != upgrade.StateOK {
-			b.WriteString(tui.DimStyle.Render("   " + check.Detail))
-			b.WriteString("\n")
+			// Wrap the detail to the column instead of letting the frame
+			// truncate it; details may span multiple lines.
+			detailWidth := m.bodyWidth()*11/20 - 3
+			if detailWidth < 20 {
+				detailWidth = 20
+			}
+			wrapped := lipgloss.NewStyle().Width(detailWidth).Render(check.Detail)
+			for line := range strings.SplitSeq(wrapped, "\n") {
+				b.WriteString(tui.DimStyle.Render("   " + line))
+				b.WriteString("\n")
+			}
 		}
 	}
 

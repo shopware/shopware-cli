@@ -96,14 +96,32 @@ func TestRunReadinessChecks(t *testing.T) {
 	dh := checkByID(t, r.Checks, "deployment-helper")
 	assert.Equal(t, StateOK, dh.State)
 
+	// The local plugin is not Composer-managed: the upgrade cannot resolve
+	// its version, so readiness blocks until it is required via Composer.
 	ext := checkByID(t, r.Checks, "extensions")
-	assert.Equal(t, "1", ext.Value, "only the vendor extension is composer-managed")
+	assert.Equal(t, StateFail, ext.State)
+	assert.Equal(t, "1 of 2", ext.Value)
+	assert.Contains(t, ext.Detail, "LocalPlugin")
+	assert.Contains(t, ext.Detail, "autofix composer-plugins")
+	assert.True(t, r.Blocked())
 
 	names := make(map[string]bool)
 	for _, e := range r.Extensions {
 		names[e.Name] = e.ComposerManaged
 	}
 	assert.Equal(t, map[string]bool{"Demo": true, "LocalPlugin": false}, names)
+}
+
+func TestReadinessAllExtensionsComposerManaged(t *testing.T) {
+	dir := setupProject(t)
+	require.NoError(t, os.RemoveAll(filepath.Join(dir, "custom")))
+
+	r := newTestUpgrader(t, dir).RunReadinessChecks(t.Context())
+
+	ext := checkByID(t, r.Checks, "extensions")
+	assert.Equal(t, StateOK, ext.State)
+	assert.Equal(t, "1 of 1", ext.Value)
+	assert.False(t, r.Blocked())
 }
 
 func TestReadinessMissingComposerLock(t *testing.T) {
@@ -133,6 +151,9 @@ func TestReadinessLockWithoutCore(t *testing.T) {
 
 func TestReadinessDeploymentHelperMissing(t *testing.T) {
 	dir := setupProject(t)
+	// Drop the local plugin so the extension gate does not block; this test
+	// only cares about the deployment-helper check.
+	require.NoError(t, os.RemoveAll(filepath.Join(dir, "custom")))
 	writeFile(t, filepath.Join(dir, "composer.json"), `{"require": {"shopware/core": "6.6.10.3"}}`)
 
 	r := newTestUpgrader(t, dir).RunReadinessChecks(t.Context())

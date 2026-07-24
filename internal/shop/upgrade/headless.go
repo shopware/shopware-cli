@@ -48,7 +48,9 @@ func (u *ProjectUpgrader) RunHeadless(ctx context.Context, opts HeadlessOptions)
 	for _, check := range readiness.Checks {
 		_, _ = fmt.Fprintf(out, "%s %s: %s\n", stateGlyph(check.State), check.Label, check.Value)
 		if check.Detail != "" && check.State != StateOK {
-			_, _ = fmt.Fprintln(out, "  "+tui.DimText.Render(check.Detail))
+			for line := range strings.SplitSeq(check.Detail, "\n") {
+				_, _ = fmt.Fprintln(out, "  "+tui.DimText.Render(line))
+			}
 		}
 	}
 	if readiness.Blocked() {
