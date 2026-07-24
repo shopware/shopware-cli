@@ -403,11 +403,11 @@ func serveAdminWatch(ctx context.Context, server *http.Server) error {
 
 		return err
 	case <-ctx.Done():
-		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 		defer cancel()
 
 		if err := server.Shutdown(shutdownCtx); err != nil {
-			return err
+			_ = server.Close()
 		}
 
 		if err := <-serverErr; err != nil && !errors.Is(err, http.ErrServerClosed) {
