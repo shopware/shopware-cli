@@ -7,6 +7,8 @@ on:
       - 'internal/shop/config_schema.json'
       - 'internal/extension/config_schema.json'
       - '.github/workflows/schema-pages.yml'
+  release:
+    types: [published]
   workflow_dispatch:
 
 permissions:
@@ -34,11 +36,27 @@ jobs:
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # ratchet:actions/checkout@v7.0.0
 
       - name: Assemble Pages site
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           mkdir -p _site
           cp internal/shop/config_schema.json _site/shopware-project-schema.json
           cp internal/extension/config_schema.json _site/shopware-extension-schema.json
-          cat > _site/index.html <<'EOF'
+
+          # Prefer the release that triggered this run; otherwise use the latest non-prerelease.
+          if [ "${{ github.event_name }}" = "release" ] && [ "${{ github.event.release.prerelease }}" != "true" ]; then
+            VERSION="${{ github.event.release.tag_name }}"
+          else
+            VERSION=$(gh api "repos/${{ github.repository }}/releases/latest" --jq .tag_name 2>/dev/null || true)
+          fi
+          VERSION="${VERSION#v}"
+          if [ -z "$VERSION" ]; then
+            VERSION="dev"
+          fi
+
+          jq -n --arg version "$VERSION" '{version: $version}' > _site/version.json
+
+          cat > _site/index.html <<EOF
           <!DOCTYPE html>
           <html lang="en">
           <head>
@@ -47,7 +65,9 @@ jobs:
           </head>
           <body>
             <h1>shopware-cli config schemas</h1>
+            <p>Latest release: <code>${VERSION}</code></p>
             <ul>
+              <li><a href="version.json">version.json</a> &mdash; latest CLI version</li>
               <li><a href="shopware-project-schema.json">shopware-project-schema.json</a> &mdash; schema for <code>.shopware-project.yml</code></li>
               <li><a href="shopware-extension-schema.json">shopware-extension-schema.json</a> &mdash; schema for <code>.shopware-extension.yml</code></li>
             </ul>
