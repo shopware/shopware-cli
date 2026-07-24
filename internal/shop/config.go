@@ -68,6 +68,28 @@ func (c *Config) ResolveEnvironment(name string) (*EnvironmentConfig, error) {
 	}, nil
 }
 
+// WithEnvironment returns a copy of the config whose URL and Admin API
+// credentials come from the named environment, falling back to the base
+// values for anything the environment does not override.
+func (c *Config) WithEnvironment(name string) (*Config, error) {
+	env, err := c.ResolveEnvironment(name)
+	if err != nil {
+		return nil, err
+	}
+
+	cfg := *c
+
+	if env.URL != "" {
+		cfg.URL = env.URL
+	}
+
+	if env.AdminApi != nil {
+		cfg.AdminApi = env.AdminApi
+	}
+
+	return &cfg, nil
+}
+
 func (c *Config) IsAdminAPIConfigured() bool {
 	if c.AdminApi == nil {
 		return false

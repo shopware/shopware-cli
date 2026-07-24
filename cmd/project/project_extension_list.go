@@ -22,7 +22,7 @@ var projectExtensionListCmd = &cobra.Command{
 
 		outputAsJson, _ := cmd.PersistentFlags().GetBool("json")
 
-		if cfg, err = shop.ReadConfig(cmd.Context(), projectConfigPath, true); err != nil {
+		if cfg, err = readConfigWithEnvironment(cmd, true); err != nil {
 			return err
 		}
 
