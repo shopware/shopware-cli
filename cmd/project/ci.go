@@ -10,8 +10,6 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/shyim/go-composer"
-	"github.com/shyim/go-composer/sbom"
 	"github.com/spf13/cobra"
 
 	"github.com/shopware/shopware-cli/internal/ci"
@@ -363,66 +361,19 @@ func createEmptySnippetFolder(root string) error {
 	return nil
 }
 
-// generateProjectSBOM reads composer.lock from the project root and writes a
-// CycloneDX SBOM JSON document to the configured path. When composer.lock is
-// absent (for example when composer install was skipped on a project without
-// PHP dependencies) the step is a no-op.
+// generateProjectSBOM writes a CycloneDX SBOM for the CI pipeline. When
+// composer.lock is absent (for example when composer install was skipped on a
+// project without PHP dependencies) the step is a no-op so the rest of project
+// ci can continue. Output path and format match the defaults of `project sbom`.
 func generateProjectSBOM(ctx context.Context, root string) error {
 	section := ci.Default.Section(ctx, "Generating SBOM")
 	defer section.End(ctx)
 
-	lockPath := path.Join(root, "composer.lock")
-	if _, err := os.Stat(lockPath); os.IsNotExist(err) {
-		logging.FromContext(ctx).Infof("Skipping SBOM generation: %s not found", lockPath)
-		return nil
-	}
-
-	lock, err := composer.ReadLock(lockPath)
-	if err != nil {
-		return fmt.Errorf("read composer.lock: %w", err)
-	}
-
-	projectComposer, err := composer.ReadJson(path.Join(root, "composer.json"))
-	appName := "shopware-project"
-	appVersion := ""
-	if err == nil && projectComposer != nil {
-		if projectComposer.Name != "" {
-			appName = projectComposer.Name
-		}
-		if projectComposer.Version != "" {
-			appVersion = projectComposer.Version
-		}
-	}
-
-	bom, err := sbom.Generate(lock, sbom.Options{
-		ApplicationName:        appName,
-		ApplicationVersion:     appVersion,
-		ToolGroup:              "shopware",
-		ToolName:               "shopware-cli",
-		ToolVersion:            tui.AppVersion,
-		IncludeDevDependencies: false,
+	return shop.WriteProjectSBOM(ctx, root, shop.ProjectSBOMOptions{
+		// CI historically skips when lock is missing rather than failing the build.
+		SkipMissingLock: true,
+		ToolVersion:     tui.AppVersion,
 	})
-	if err != nil {
-		return err
-	}
-
-	data, err := sbom.Marshal(bom)
-	if err != nil {
-		return fmt.Errorf("marshal SBOM: %w", err)
-	}
-
-	outputPath := filepath.Join(root, "sbom.cdx.json")
-
-	if err := os.MkdirAll(filepath.Dir(outputPath), 0o755); err != nil {
-		return fmt.Errorf("create SBOM output directory: %w", err)
-	}
-
-	if err := os.WriteFile(outputPath, data, 0o644); err != nil {
-		return fmt.Errorf("write SBOM: %w", err)
-	}
-
-	logging.FromContext(ctx).Infof("Wrote SBOM with %d components to %s", len(bom.Components), outputPath)
-	return nil
 }
 
 func prepareComposerAuth(ctx context.Context, root string) (string, error) {
