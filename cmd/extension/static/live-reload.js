@@ -31,12 +31,15 @@ for (const bundleName of Object.keys(bundles)) {
 
                 for (const link of document.getElementsByTagName("link")) {
                     const url = new URL(link.href)
-                    const previousPath = previousPaths.find(path => url.pathname.endsWith(path))
+                    const previousPath = previousPaths.find(path => {
+                        const pathIndex = url.pathname.indexOf(path)
+                        return pathIndex >= 0 && url.pathname.slice(pathIndex) === path
+                    })
 
                     if (url.host === location.host && previousPath) {
                         const next = link.cloneNode()
                         const nextUrl = new URL(link.href)
-                        const pathPrefix = url.pathname.slice(0, -previousPath.length)
+                        const pathPrefix = url.pathname.slice(0, url.pathname.indexOf(previousPath))
                         nextUrl.pathname = pathPrefix + nextPath
                         nextUrl.search = `?${Math.random().toString(36).slice(2)}`
                         next.href = nextUrl.toString()

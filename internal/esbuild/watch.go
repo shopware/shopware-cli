@@ -49,14 +49,14 @@ func findEntrypoints(result api.BuildResult) (Entrypoints, error) {
 
 		javaScriptPath, err := servePath(candidatePath)
 		if err != nil {
-			return Entrypoints{}, err
+			return Entrypoints{}, fmt.Errorf("cannot resolve JavaScript entrypoint %q: %w", candidatePath, err)
 		}
 
 		cssPath := ""
 		if candidate.CSSBundle != "" {
 			cssPath, err = servePath(candidate.CSSBundle)
 			if err != nil {
-				return Entrypoints{}, err
+				return Entrypoints{}, fmt.Errorf("cannot resolve CSS bundle %q: %w", candidate.CSSBundle, err)
 			}
 		}
 
