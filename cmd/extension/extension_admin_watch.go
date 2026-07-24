@@ -309,9 +309,21 @@ var extensionAdminWatchCmd = &cobra.Command{
 				}
 
 				for _, ext := range esbuildInstances {
+					entrypoints, err := esbuild.RebuildEntrypoints(ext.context)
+					if err != nil {
+						logging.FromContext(cmd.Context()).Errorf("cannot rebuild administration bundle for %s: %s", ext.assetName, err)
+						http.Error(w, "cannot rebuild administration bundle", http.StatusServiceUnavailable)
+						return
+					}
+
+					css := []string{}
+					if entrypoints.CSS != "" {
+						css = append(css, adminWatchOutputURL(browserUrl, ext.assetName, entrypoints.CSS))
+					}
+
 					bundleInfo.Bundles[ext.name] = adminBundlesInfoAsset{
-						Css:        []string{fmt.Sprintf("%s/.shopware-cli/%s/extension.css", browserUrl.String(), ext.assetName)},
-						Js:         []string{fmt.Sprintf("%s/.shopware-cli/%s/extension.js", browserUrl.String(), ext.assetName)},
+						Css:        css,
+						Js:         []string{adminWatchOutputURL(browserUrl, ext.assetName, entrypoints.JavaScript)},
 						LiveReload: true,
 						Name:       ext.assetName,
 					}
@@ -403,4 +415,13 @@ type adminWatchExtension struct {
 	context     api.BuildContext
 	watchServer api.ServeResult
 	staticDir   string
+}
+
+func adminWatchOutputURL(browserURL *url.URL, assetName, outputPath string) string {
+	return fmt.Sprintf(
+		"%s/.shopware-cli/%s/%s",
+		strings.TrimSuffix(browserURL.String(), "/"),
+		assetName,
+		strings.TrimPrefix(outputPath, "/"),
+	)
 }
