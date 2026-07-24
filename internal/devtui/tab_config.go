@@ -10,6 +10,9 @@ import (
 	dockerpkg "github.com/shopware/shopware-cli/internal/docker"
 	"github.com/shopware/shopware-cli/internal/shop"
 	"github.com/shopware/shopware-cli/internal/tui"
+	"github.com/shopware/shopware-cli/internal/tui/app"
+	"github.com/shopware/shopware-cli/internal/tui/picker"
+	"github.com/shopware/shopware-cli/internal/tui/textprompt"
 )
 
 type configField int
@@ -209,33 +212,33 @@ func (m ConfigModel) Update(msg tea.Msg) (ConfigModel, tea.Cmd) {
 }
 
 func (m ConfigModel) HandleKey(msg tea.KeyPressMsg) (ConfigModel, tea.Cmd) {
-	switch keyString(msg) {
-	case keyUp, keyK:
+	switch tui.KeyString(msg) {
+	case tui.KeyUp, "k":
 		m.moveCursorUp()
-	case keyDown, keyJ:
+	case tui.KeyDown, "j":
 		m.moveCursorDown()
 	}
 
 	return m, nil
 }
 
-func (m ConfigModel) PickerForCursor() Modal {
+func (m ConfigModel) PickerForCursor() app.Overlay {
 	if def, ok := envFieldByConfigField(m.cursor); ok {
-		items := make([]listPickerItem, len(def.choices))
+		items := make([]picker.Item, len(def.choices))
 		for i, v := range def.choices {
-			items[i] = listPickerItem{Label: def.choiceLabel(i), Value: v}
+			items[i] = picker.Item{Label: def.choiceLabel(i), Value: v}
 		}
-		return newListPicker(def.field, def.title, def.help, items, m.envSelections[def.key])
+		return picker.New(picker.Options{Key: def.field, Title: def.title, Help: def.help, Items: items, InitialIndex: m.envSelections[def.key]})
 	}
 	switch m.cursor { //nolint:exhaustive
 	case fieldPHPVersion:
-		items := make([]listPickerItem, len(phpVersions))
+		items := make([]picker.Item, len(phpVersions))
 		for i, v := range phpVersions {
-			items[i] = listPickerItem{Label: v, Value: v}
+			items[i] = picker.Item{Label: v, Value: v}
 		}
-		return newListPicker(fieldPHPVersion, "PHP Version", "", items, m.phpVersion)
+		return picker.New(picker.Options{Key: fieldPHPVersion, Title: "PHP Version", Items: items, InitialIndex: m.phpVersion})
 	case fieldProfiler:
-		items := make([]listPickerItem, len(profilers))
+		items := make([]picker.Item, len(profilers))
 		for i, p := range profilers {
 			label := p
 			detail := "free"
@@ -246,15 +249,15 @@ func (m ConfigModel) PickerForCursor() Modal {
 			case dockerpkg.ProfilerIsPaid(p):
 				detail = "paid"
 			}
-			items[i] = listPickerItem{Label: label, Detail: detail, Value: p}
+			items[i] = picker.Item{Label: label, Detail: detail, Value: p}
 		}
-		return newListPicker(fieldProfiler, "PHP Profiler", "", items, m.profiler)
+		return picker.New(picker.Options{Key: fieldProfiler, Title: "PHP Profiler", Items: items, InitialIndex: m.profiler})
 	case fieldBlackfireServerID:
-		return newTextPicker(fieldBlackfireServerID, "Blackfire Server ID", "Server ID for the Blackfire profiler", m.blackfireServerID.Value(), true)
+		return textprompt.New(textprompt.Options{Key: fieldBlackfireServerID, Title: "Blackfire Server ID", Help: "Server ID for the Blackfire profiler", Value: m.blackfireServerID.Value(), Secret: true})
 	case fieldBlackfireServerToken:
-		return newTextPicker(fieldBlackfireServerToken, "Blackfire Server Token", "Server token for the Blackfire profiler", m.blackfireServerToken.Value(), true)
+		return textprompt.New(textprompt.Options{Key: fieldBlackfireServerToken, Title: "Blackfire Server Token", Help: "Server token for the Blackfire profiler", Value: m.blackfireServerToken.Value(), Secret: true})
 	case fieldTidewaysAPIKey:
-		return newTextPicker(fieldTidewaysAPIKey, "Tideways API Key", "API key for Tideways", m.tidewaysAPIKey.Value(), true)
+		return textprompt.New(textprompt.Options{Key: fieldTidewaysAPIKey, Title: "Tideways API Key", Help: "API key for Tideways", Value: m.tidewaysAPIKey.Value(), Secret: true})
 	}
 	return nil
 }
@@ -464,7 +467,7 @@ func (m ConfigModel) View(width, height int) string {
 	case m.restarting:
 		s.WriteString(warningBadgeStyle.Render("restarting docker…"))
 	case m.err != nil && m.cursor == fieldSave:
-		s.WriteString(activeBtnStyle.Render("Retry Save"))
+		s.WriteString(tui.ActiveButtonStyle.Render("Retry Save"))
 	case m.err != nil:
 		s.WriteString(warningBadgeStyle.Render("save failed"))
 		s.WriteString("  ")
@@ -474,7 +477,7 @@ func (m ConfigModel) View(width, height int) string {
 		s.WriteString("  ")
 		s.WriteString(helpStyle.Render("Docker restarted with new config."))
 	case m.modified && m.cursor == fieldSave:
-		s.WriteString(activeBtnStyle.Render("Save & Regenerate"))
+		s.WriteString(tui.ActiveButtonStyle.Render("Save & Regenerate"))
 	case m.modified:
 		s.WriteString(warningBadgeStyle.Render("unsaved changes"))
 		s.WriteString("  ")

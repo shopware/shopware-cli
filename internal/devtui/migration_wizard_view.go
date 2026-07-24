@@ -53,8 +53,8 @@ func (sg migrationWizard) viewWelcome() string {
 	b.WriteString(tui.BoldText.Render(".shopware-project.yml"))
 	b.WriteString(tui.DimStyle.Render("."))
 	b.WriteString("\n\n")
-	b.WriteString(renderConfirmButtons("Start setup", "Quit", sg.confirmYes))
-	b.WriteString("\n\n")
+	b.WriteString(tui.ConfirmButtons("Start setup", "Quit", sg.confirmYes))
+
 	return tui.RenderPhaseCardCowsay("Let me help you to set up Docker!", b.String())
 }
 
@@ -64,7 +64,7 @@ func (sg migrationWizard) viewAdminUser() string {
 	b.WriteString("\n")
 	b.WriteString(tui.DimStyle.Render("The login for your local Shopware admin panel and API."))
 	b.WriteString("\n\n")
-	sg.render(&b)
+	sg.Render(&b)
 	b.WriteString("\n\n")
 	b.WriteString(tui.DimStyle.Render("Will be written to "))
 	b.WriteString(tui.BoldText.Render(".shopware-project.yml"))
@@ -120,7 +120,7 @@ func (sg migrationWizard) viewReview() string {
 	b.WriteString("\n")
 
 	b.WriteString("\n")
-	b.WriteString(renderConfirmButtons("Save & start", "Quit", sg.confirmYes))
+	b.WriteString(tui.ConfirmButtons("Save & start", "Quit", sg.confirmYes))
 	b.WriteString("\n\n")
 
 	return tui.RenderPhaseCard(b.String())
@@ -178,16 +178,7 @@ func (sg migrationWizard) footerHint() string {
 			tui.Shortcut{Key: "enter", Label: "Confirm"},
 		)
 	case migrationStepAdminUser:
-		if sg.credFocus == credFocusShowPassword {
-			return tui.ShortcutBar(
-				tui.Shortcut{Key: "↑/↓/tab", Label: "Navigate"},
-				tui.Shortcut{Key: "enter", Label: "Toggle"},
-			)
-		}
-		return tui.ShortcutBar(
-			tui.Shortcut{Key: "↑/↓/tab", Label: "Navigate"},
-			tui.Shortcut{Key: "enter", Label: "Continue"},
-		)
+		return sg.FooterHint("Continue")
 	case migrationStepDockerPHP:
 		return tui.ShortcutBar(
 			tui.Shortcut{Key: "↑/↓", Label: "Select"},

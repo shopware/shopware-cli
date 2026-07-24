@@ -68,6 +68,8 @@ func FilterMultiSelect(ctx context.Context, title, help string, items []FilterMu
 	return chosen, nil
 }
 
+const filterSelectPageSize = 10
+
 type filterMultiSelectModel struct {
 	title    string
 	help     string

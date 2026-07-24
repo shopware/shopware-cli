@@ -33,7 +33,11 @@ func PanelWidth() int {
 	return w
 }
 
+// Semantic colors used across shopware-cli TUI components, adapted to the
+// terminal's light or dark background at startup.
 var (
+	// BrandColor is the Shopware brand blue used for focus, selection
+	// markers, and primary buttons.
 	BrandColor   = lipgloss.Color("#076FFF")
 	SuccessColor = lipgloss.Color("#04B575")
 	MutedColor   = adaptiveMuted()
@@ -71,6 +75,37 @@ var (
 				Bold(true).
 				Foreground(BrandColor)
 )
+
+// Variant is a semantic color role used by feedback components such as
+// StatusStrip.
+type Variant int
+
+const (
+	VariantPrimary Variant = iota
+	VariantSuccess
+	VariantWarning
+	VariantError
+	VariantMuted
+	// VariantInfo renders informational accents (blue, same as Primary).
+	VariantInfo
+)
+
+// VariantColor maps a semantic variant to its color.
+func VariantColor(v Variant) color.Color {
+	switch v {
+	case VariantSuccess:
+		return SuccessColor
+	case VariantWarning:
+		return WarnColor
+	case VariantError:
+		return ErrorColor
+	case VariantMuted:
+		return MutedColor
+	case VariantPrimary, VariantInfo:
+		return BrandColor
+	}
+	return BrandColor
+}
 
 func adaptiveColor(dark, light string) color.Color {
 	if hasDarkBG {

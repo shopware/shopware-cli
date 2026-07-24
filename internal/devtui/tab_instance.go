@@ -146,19 +146,19 @@ func (m InstanceModel) Update(msg tea.Msg) (InstanceModel, tea.Cmd) {
 		return m, nil
 
 	case tea.KeyPressMsg:
-		switch keyString(msg) {
-		case keyUp, keyK:
+		switch tui.KeyString(msg) {
+		case tui.KeyUp, "k":
 			m.cursor = m.neighborCursor(-1)
 			return m, nil
-		case keyDown, keyJ:
+		case tui.KeyDown, "j":
 			m.cursor = m.neighborCursor(1)
 			return m, nil
-		case keyEnter:
+		case tui.KeyEnter:
 			if m.cursor != m.active && m.cursor < len(m.sources) {
 				return m, m.switchTo(m.cursor)
 			}
 			return m, nil
-		case keyF:
+		case "f":
 			m.follow = !m.follow
 			if m.follow {
 				m.viewport.GotoBottom()

@@ -12,6 +12,11 @@ import (
 	"github.com/shopware/shopware-cli/internal/executor"
 	"github.com/shopware/shopware-cli/internal/shop"
 	"github.com/shopware/shopware-cli/internal/tracking"
+	"github.com/shopware/shopware-cli/internal/tui"
+	"github.com/shopware/shopware-cli/internal/tui/app"
+	"github.com/shopware/shopware-cli/internal/tui/picker"
+	"github.com/shopware/shopware-cli/internal/tui/prompt"
+	"github.com/shopware/shopware-cli/internal/tui/textprompt"
 )
 
 type activeTab int
@@ -51,6 +56,7 @@ type Options struct {
 }
 
 type Model struct {
+	host            app.Host
 	activeTab       activeTab
 	overview        OverviewModel
 	instance        InstanceModel
@@ -59,7 +65,6 @@ type Model struct {
 	height          int
 	dockerMode      bool
 	phase           phase
-	modal           Modal
 	overlayLines    []string
 	projectRoot     string
 	executor        executor.Executor
@@ -70,9 +75,7 @@ type Model struct {
 	dockerShowLogs  bool
 	config          *shop.Config
 	envConfig       *shop.EnvironmentConfig
-	taskTitle       string
-	taskDone        bool
-	taskErr         error
+	task            tui.Task
 	watchers        map[string]*watcherHandle
 	migrationWizard migrationWizard
 	telemetry       *telemetryState
@@ -88,8 +91,6 @@ type dockerOutputDoneMsg struct{}
 type shopwareInstalledMsg struct{}
 type shopwareNotInstalledMsg struct{}
 type shopwareInstallDoneMsg struct{ err error }
-
-type taskDoneMsg struct{ err error }
 
 type configRestartDoneMsg struct{ err error }
 
@@ -147,6 +148,40 @@ func NewMigrationWizard(opts Options) Model {
 	return m
 }
 
+// NewApp hosts the dashboard model inside the application shell.
+func NewApp(opts Options) *app.App {
+	return newShell(New(opts))
+}
+
+// NewMigrationWizardApp hosts the migration-wizard model inside the shell.
+func NewMigrationWizardApp(opts Options) *app.App {
+	return newShell(NewMigrationWizard(opts))
+}
+
+// newShell wires a Model into the app host. Chrome and window title read the
+// current model back from the shell because Model is a value type — the copy
+// captured here goes stale after the first Update.
+func newShell(m Model) *app.App {
+	var shell *app.App
+	current := func() Model {
+		if cur, ok := shell.Content().(Model); ok {
+			return cur
+		}
+		return m
+	}
+	shell = app.New(app.Options{
+		Header:          func(ctx app.Context) string { return current().chromeHeader(ctx) },
+		Footer:          func(ctx app.Context) string { return current().chromeFooter(ctx) },
+		WindowTitleFunc: func(app.Context) string { return current().windowTitle() },
+		// Quit handling is phase-dependent (telemetry, stop-confirm modal) and
+		// stays in the model's key dispatch, so no default quit binding.
+		DisableDefaultKeys: true,
+	})
+	m.host = shell
+	shell.SetContent(m)
+	return shell
+}
+
 func (m Model) Init() tea.Cmd {
 	if m.phase == phaseMigrationWizard {
 		return nil
@@ -190,7 +225,7 @@ func (m *Model) startDashboard() tea.Cmd {
 	)
 }
 
-func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+func (m Model) Update(msg tea.Msg) (app.Content, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
@@ -205,18 +240,18 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		shopwareInstalledMsg, shopwareNotInstalledMsg, shopwareInstallDoneMsg:
 		return m.updateLifecycle(msg)
 
-	case taskDoneMsg:
-		m.taskDone = true
-		m.taskErr = msg.err
-		if tags, ok := m.telemetry.taskTags(resultTag(msg.err)); ok {
+	case tui.TaskLineMsg:
+		var cmd tea.Cmd
+		m.task, cmd = m.task.Update(msg)
+		return m, cmd
+
+	case tui.TaskDoneMsg:
+		var cmd tea.Cmd
+		m.task, cmd = m.task.Update(msg)
+		if tags, ok := m.telemetry.taskTags(resultTag(msg.Err)); ok {
 			trackEvent(tracking.EventDevAction, tags)
 		}
-		if msg.err != nil {
-			m.overlayLines = append(m.overlayLines, "", errorStyle.Render("Failed: "+msg.err.Error()))
-		} else {
-			m.overlayLines = append(m.overlayLines, "", helpStyle.Render("Done. Press any key to close."))
-		}
-		return m, nil
+		return m, cmd
 
 	case configRestartDoneMsg:
 		return m.handleConfigRestartDone(msg)
@@ -236,16 +271,19 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case paletteResultMsg:
 		return m.handlePaletteResult(msg)
 
-	case pickerResultMsg:
+	case picker.ResultMsg:
 		if _, ok := msg.Key.(salesChannelPickerKey); ok {
 			break
 		}
-		return m.handlePickerResult(msg)
+		return m.applyConfigPick(msg.Key, msg.Cancelled, msg.Value)
+
+	case textprompt.ResultMsg:
+		return m.applyConfigPick(msg.Key, msg.Cancelled, msg.Value)
 
 	case salesChannelPickerResultMsg:
 		return m.handleSalesChannelPickerResult(msg)
 
-	case stopConfirmResultMsg:
+	case prompt.ResultMsg:
 		return m.handleStopConfirmResult(msg)
 
 	case tea.KeyPressMsg:
@@ -258,7 +296,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 // updateWatcherMsg handles the watcher lifecycle messages: start, prep
 // done/failed, stop requests, stopped, and the log stream ending (the watcher
 // process exiting on its own).
-func (m Model) updateWatcherMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
+func (m Model) updateWatcherMsg(msg tea.Msg) (app.Content, tea.Cmd) {
 	switch msg := msg.(type) {
 	case watcherStartedMsg:
 		m.watchers[msg.name] = msg.handle
@@ -325,14 +363,8 @@ func (m Model) updateWatcherMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 // updateFallback handles non-key messages that aren't matched by Update's
-// message-type switch, routing them by modal state and lifecycle phase.
-func (m Model) updateFallback(msg tea.Msg) (tea.Model, tea.Cmd) {
-	if m.modal != nil {
-		next, cmd := m.modal.Update(msg)
-		m.modal = next
-		return m, cmd
-	}
-
+// message-type switch, routing them by lifecycle phase.
+func (m Model) updateFallback(msg tea.Msg) (app.Content, tea.Cmd) {
 	if m.phase == phaseInstalling {
 		switch msg := msg.(type) {
 		case spinner.TickMsg:
@@ -357,17 +389,9 @@ func (m Model) updateFallback(msg tea.Msg) (tea.Model, tea.Cmd) {
 	}
 
 	if m.phase == phaseTask {
-		// Keep ticking the header spinner while the task runs; stop once it's
-		// done so the final output stays static.
-		if msg, ok := msg.(spinner.TickMsg); ok {
-			if m.taskDone {
-				return m, nil
-			}
-			var cmd tea.Cmd
-			m.dockerSpinner, cmd = m.dockerSpinner.Update(msg)
-			return m, cmd
-		}
-		return m, nil
+		var cmd tea.Cmd
+		m.task, cmd = m.task.Update(msg)
+		return m, cmd
 	}
 
 	if m.phase != phaseDashboard {
@@ -377,27 +401,26 @@ func (m Model) updateFallback(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m.updateChildren(msg)
 }
 
-func (m Model) handlePaletteResult(msg paletteResultMsg) (tea.Model, tea.Cmd) {
-	m.modal = nil
+func (m Model) handlePaletteResult(msg paletteResultMsg) (app.Content, tea.Cmd) {
 	if msg.ID == "" {
 		return m, nil
 	}
 	return m.executeCommand(msg.ID)
 }
 
-func (m Model) handlePickerResult(msg pickerResultMsg) (tea.Model, tea.Cmd) {
-	m.modal = nil
-	if msg.Cancelled {
+// applyConfigPick handles a resolved picker or text prompt: config-tab field
+// keys apply the chosen value, everything else is ignored.
+func (m Model) applyConfigPick(key any, cancelled bool, value string) (app.Content, tea.Cmd) {
+	if cancelled {
 		return m, nil
 	}
-	if field, ok := msg.Key.(configField); ok {
-		m.configTab.ApplyPickerValue(field, msg.Value)
+	if field, ok := key.(configField); ok {
+		m.configTab.ApplyPickerValue(field, value)
 	}
 	return m, nil
 }
 
-func (m Model) handleSalesChannelPickerResult(msg salesChannelPickerResultMsg) (tea.Model, tea.Cmd) {
-	m.modal = nil
+func (m Model) handleSalesChannelPickerResult(msg salesChannelPickerResultMsg) (app.Content, tea.Cmd) {
 	if msg.Cancelled {
 		return m, nil
 	}
@@ -405,28 +428,28 @@ func (m Model) handleSalesChannelPickerResult(msg salesChannelPickerResultMsg) (
 	return m, m.overview.startStorefrontWatch(msg.Opts)
 }
 
-func (m Model) handleStopConfirmResult(msg stopConfirmResultMsg) (tea.Model, tea.Cmd) {
-	m.modal = nil
-	if msg.Cancel {
+func (m Model) handleStopConfirmResult(msg prompt.ResultMsg) (app.Content, tea.Cmd) {
+	if msg.ID != stopConfirmID || msg.Choice == "" || msg.Choice == stopConfirmCancel {
 		return m, nil
 	}
-	if msg.Stop {
+	stop := msg.Choice == stopConfirmStop
+	if stop {
 		m.telemetry.setExitChoice(exitStopContainers)
 	} else {
 		m.telemetry.setExitChoice(exitKeepRunning)
 	}
 	m.shutdown()
-	if msg.Stop {
+	if stop {
 		m.phase = phaseStopping
 		m.overlayLines = nil
 		m.dockerShowLogs = false
-		m.dockerSpinner = newBrandSpinner()
+		m.dockerSpinner = tui.NewBrandSpinner()
 		return m, tea.Batch(m.dockerSpinner.Tick, m.stopContainers())
 	}
 	return m, tea.Quit
 }
 
-func (m Model) updateChildren(msg tea.Msg) (tea.Model, tea.Cmd) {
+func (m Model) updateChildren(msg tea.Msg) (app.Content, tea.Cmd) {
 	// Key presses must only reach the active tab, otherwise a key meant for one
 	// tab (e.g. Enter to pick a log source) also triggers the hidden tabs'
 	// handlers. Non-key messages are broadcast so background updates reach every
@@ -472,7 +495,7 @@ func (m Model) updateChildren(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, tea.Batch(cmds...)
 }
 
-func (m Model) handleConfigRestartDone(msg configRestartDoneMsg) (tea.Model, tea.Cmd) {
+func (m Model) handleConfigRestartDone(msg configRestartDoneMsg) (app.Content, tea.Cmd) {
 	if tags, ok := m.telemetry.configRestartTags(msg.err); ok {
 		trackEvent(tracking.EventDevDockerStart, tags)
 	}

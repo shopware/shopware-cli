@@ -11,6 +11,8 @@ import (
 	"github.com/shopware/shopware-cli/internal/executor"
 	"github.com/shopware/shopware-cli/internal/extension"
 	"github.com/shopware/shopware-cli/internal/tui"
+	"github.com/shopware/shopware-cli/internal/tui/app"
+	"github.com/shopware/shopware-cli/internal/tui/picker"
 )
 
 type salesChannelPickerResultMsg struct {
@@ -37,12 +39,14 @@ type salesChannelPicker struct {
 	loading  bool
 	err      error
 	channels []salesChannelEntry
-	inner    *listPicker
+	inner    *picker.Overlay
 }
 
 func newSalesChannelPicker(exec executor.Executor) *salesChannelPicker {
 	return &salesChannelPicker{executor: exec, loading: true}
 }
+
+func (sp *salesChannelPicker) ID() string { return "sales-channel-picker" }
 
 func (sp *salesChannelPicker) Init() tea.Cmd {
 	exec := sp.executor
@@ -75,36 +79,39 @@ func (sp *salesChannelPicker) Init() tea.Cmd {
 	}
 }
 
-func (sp *salesChannelPicker) Update(msg tea.Msg) (Modal, tea.Cmd) {
+func (sp *salesChannelPicker) Update(msg tea.Msg) (app.Overlay, tea.Cmd) {
 	switch msg := msg.(type) {
 	case salesChannelsLoadedMsg:
 		sp.loading = false
 		sp.err = msg.err
 		sp.channels = msg.channels
 		if sp.err == nil && len(sp.channels) > 0 {
-			items := make([]listPickerItem, len(sp.channels))
+			items := make([]picker.Item, len(sp.channels))
 			for i, c := range sp.channels {
-				items[i] = listPickerItem{Label: c.name, Detail: c.domain, Value: c.id}
+				items[i] = picker.Item{Label: c.name, Detail: c.domain, Value: c.id}
 			}
-			sp.inner = newListPicker(salesChannelPickerKey{}, "Select Sales Channel",
-				"Pick the storefront the watcher should target. Its theme and domain are used when building storefront assets.",
-				items, 0)
+			sp.inner = picker.New(picker.Options{
+				Key:   salesChannelPickerKey{},
+				Title: "Select Sales Channel",
+				Help:  "Pick the storefront the watcher should target. Its theme and domain are used when building storefront assets.",
+				Items: items,
+			})
 		}
 		return sp, nil
 
-	case pickerResultMsg:
+	case picker.ResultMsg:
 		if _, ok := msg.Key.(salesChannelPickerKey); !ok {
 			return sp, nil
 		}
-		return nil, emit(sp.resultFor(msg))
+		return nil, app.Emit(sp.resultFor(msg))
 
 	case tea.KeyPressMsg:
 		// Before the channel list has loaded (loading / error / empty states),
 		// any of esc/enter/q closes the picker so the user is never stuck
 		// waiting on a view with no obvious way out.
 		if sp.inner == nil {
-			if keyString(msg) == "esc" || keyString(msg) == keyEnter || keyString(msg) == keyQ {
-				return nil, emit(salesChannelPickerResultMsg{Cancelled: true})
+			if tui.KeyString(msg) == "esc" || tui.KeyString(msg) == tui.KeyEnter || tui.KeyString(msg) == "q" {
+				return nil, app.Emit(salesChannelPickerResultMsg{Cancelled: true})
 			}
 			return sp, nil
 		}
@@ -124,7 +131,7 @@ func (sp *salesChannelPicker) Update(msg tea.Msg) (Modal, tea.Cmd) {
 
 // resultFor translates a list-picker result for this picker's key into the
 // sales-channel result, mapping the selected index back to watcher options.
-func (sp *salesChannelPicker) resultFor(msg pickerResultMsg) salesChannelPickerResultMsg {
+func (sp *salesChannelPicker) resultFor(msg picker.ResultMsg) salesChannelPickerResultMsg {
 	if msg.Cancelled {
 		return salesChannelPickerResultMsg{Cancelled: true}
 	}

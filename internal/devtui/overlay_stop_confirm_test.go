@@ -4,155 +4,74 @@ import (
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
+	"github.com/charmbracelet/x/ansi"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
+	"github.com/shopware/shopware-cli/internal/tui/prompt"
 )
 
-func TestNewStopConfirm_DefaultsToStop(t *testing.T) {
+// Button mechanics (arrows, tab, clamping) are covered by the prompt package
+// tests; here only devtui's stop-confirm contract is pinned: the choice IDs
+// the result handler dispatches on, and the default focus.
+
+func TestStopConfirm_DefaultConfirmsStop(t *testing.T) {
 	sc := newStopConfirm()
-	assert.NotNil(t, sc)
-	assert.Equal(t, stopConfirmStop, sc.selected, "default focus should be on 'Stop containers & quit'")
-}
-
-func TestStopConfirm_RightArrowAdvancesSelection(t *testing.T) {
-	sc := newStopConfirm()
-	next, cmd := sc.Update(tea.KeyPressMsg(tea.Key{Code: tea.KeyRight}))
-	assert.Same(t, sc, next)
-	assert.Nil(t, cmd)
-	assert.Equal(t, stopConfirmQuit, sc.selected)
-
-	next, _ = sc.Update(tea.KeyPressMsg(tea.Key{Code: tea.KeyRight}))
-	sc = next.(*stopConfirm)
-	assert.Equal(t, stopConfirmCancel, sc.selected)
-}
-
-func TestStopConfirm_RightArrowClampsAtLastOption(t *testing.T) {
-	sc := newStopConfirm()
-	sc.selected = stopConfirmCancel
-	next, _ := sc.Update(tea.KeyPressMsg(tea.Key{Code: tea.KeyRight}))
-	sc = next.(*stopConfirm)
-	assert.Equal(t, stopConfirmCancel, sc.selected, "right arrow must not move past the last option")
-}
-
-func TestStopConfirm_LeftArrowMovesBackAndClamps(t *testing.T) {
-	sc := newStopConfirm()
-	sc.selected = stopConfirmCancel
-	next, _ := sc.Update(tea.KeyPressMsg(tea.Key{Code: tea.KeyLeft}))
-	sc = next.(*stopConfirm)
-	assert.Equal(t, stopConfirmQuit, sc.selected)
-
-	next, _ = sc.Update(tea.KeyPressMsg(tea.Key{Code: tea.KeyLeft}))
-	sc = next.(*stopConfirm)
-	assert.Equal(t, stopConfirmStop, sc.selected)
-
-	next, _ = sc.Update(tea.KeyPressMsg(tea.Key{Code: tea.KeyLeft}))
-	sc = next.(*stopConfirm)
-	assert.Equal(t, stopConfirmStop, sc.selected, "left arrow must not move before the first option")
-}
-
-func TestStopConfirm_TabCyclesSelection(t *testing.T) {
-	sc := newStopConfirm()
-	assert.Equal(t, stopConfirmStop, sc.selected)
-
-	next, _ := sc.Update(tea.KeyPressMsg(tea.Key{Code: tea.KeyTab}))
-	sc = next.(*stopConfirm)
-	assert.Equal(t, stopConfirmQuit, sc.selected)
-
-	next, _ = sc.Update(tea.KeyPressMsg(tea.Key{Code: tea.KeyTab}))
-	sc = next.(*stopConfirm)
-	assert.Equal(t, stopConfirmCancel, sc.selected)
-
-	next, _ = sc.Update(tea.KeyPressMsg(tea.Key{Code: tea.KeyTab}))
-	sc = next.(*stopConfirm)
-	assert.Equal(t, stopConfirmStop, sc.selected, "tab should wrap back to the first option")
-}
-
-func TestStopConfirm_EnterOnStopEmitsStopTrue(t *testing.T) {
-	sc := newStopConfirm()
-	assert.Equal(t, stopConfirmStop, sc.selected)
 
 	next, cmd := sc.Update(tea.KeyPressMsg(tea.Key{Code: tea.KeyEnter}))
 	assert.Nil(t, next, "enter should dismiss the modal")
-	assert.NotNil(t, cmd)
+	require.NotNil(t, cmd)
 
-	res, ok := cmd().(stopConfirmResultMsg)
-	assert.True(t, ok, "expected stopConfirmResultMsg, got %T", cmd())
-	assert.True(t, res.Stop)
-	assert.False(t, res.Cancel)
+	res, ok := cmd().(prompt.ResultMsg)
+	require.True(t, ok, "expected prompt.ResultMsg, got %T", cmd())
+	assert.Equal(t, stopConfirmID, res.ID)
+	assert.Equal(t, stopConfirmStop, res.Choice, "default focus is 'Stop containers & quit'")
 }
 
-func TestStopConfirm_EnterOnQuitEmitsStopFalse(t *testing.T) {
-	sc := newStopConfirm()
-	sc.selected = stopConfirmQuit
-
-	next, cmd := sc.Update(tea.KeyPressMsg(tea.Key{Code: tea.KeyEnter}))
-	assert.Nil(t, next, "enter should dismiss even when the user quits")
-	assert.NotNil(t, cmd)
-
-	res, ok := cmd().(stopConfirmResultMsg)
-	assert.True(t, ok)
-	assert.False(t, res.Stop)
-	assert.False(t, res.Cancel)
-}
-
-func TestStopConfirm_EnterOnCancelEmitsCancel(t *testing.T) {
-	sc := newStopConfirm()
-	sc.selected = stopConfirmCancel
-
-	next, cmd := sc.Update(tea.KeyPressMsg(tea.Key{Code: tea.KeyEnter}))
-	assert.Nil(t, next, "enter should dismiss the modal")
-	assert.NotNil(t, cmd)
-
-	res, ok := cmd().(stopConfirmResultMsg)
-	assert.True(t, ok)
-	assert.True(t, res.Cancel, "selecting Cancel should emit a cancel result")
-	assert.False(t, res.Stop)
-}
-
-func TestStopConfirm_HAndLKeysMoveSelection(t *testing.T) {
-	sc := newStopConfirm()
-	sc.selected = stopConfirmStop
-
-	next, _ := sc.Update(tea.KeyPressMsg(tea.Key{Code: 'l', Text: "l"}))
-	sc = next.(*stopConfirm)
-	assert.Equal(t, stopConfirmQuit, sc.selected, "'l' should advance the selection")
-
-	next, _ = sc.Update(tea.KeyPressMsg(tea.Key{Code: 'h', Text: "h"}))
-	sc = next.(*stopConfirm)
-	assert.Equal(t, stopConfirmStop, sc.selected, "'h' should move the selection back")
-}
-
-func TestStopConfirm_EscEmitsCancel(t *testing.T) {
+func TestStopConfirm_EscDismissesWithoutChoice(t *testing.T) {
 	sc := newStopConfirm()
 
 	next, cmd := sc.Update(tea.KeyPressMsg(tea.Key{Code: tea.KeyEsc}))
-	assert.Nil(t, next, "esc should dismiss the modal")
+	assert.Nil(t, next)
+	require.NotNil(t, cmd)
+
+	res := cmd().(prompt.ResultMsg)
+	assert.Empty(t, res.Choice)
+}
+
+func TestStopConfirm_ViewRendersAllChoices(t *testing.T) {
+	sc := newStopConfirm()
+
+	view := ansi.Strip(sc.View(120, 40))
+	assert.Contains(t, view, "Leaving the workspace")
+	assert.Contains(t, view, "Stop containers & quit")
+	assert.Contains(t, view, "Quit, keep running")
+	assert.Contains(t, view, "Cancel")
+}
+
+func TestHandleStopConfirmResult_Choices(t *testing.T) {
+	// Cancel (or dismissal) keeps the dashboard running.
+	m := newTestModel()
+	updated, cmd := m.handleStopConfirmResult(prompt.ResultMsg{ID: stopConfirmID, Choice: stopConfirmCancel})
+	assert.Equal(t, phaseDashboard, updated.(Model).phase)
+	assert.Nil(t, cmd)
+
+	// Quit keeps containers running and exits.
+	m = newTestModel()
+	_, cmd = m.handleStopConfirmResult(prompt.ResultMsg{ID: stopConfirmID, Choice: stopConfirmQuit})
+	require.NotNil(t, cmd)
+	_, isQuit := cmd().(tea.QuitMsg)
+	assert.True(t, isQuit)
+
+	// Stop enters the stopping phase instead of quitting outright.
+	m = newTestModel()
+	updated, cmd = m.handleStopConfirmResult(prompt.ResultMsg{ID: stopConfirmID, Choice: stopConfirmStop})
+	assert.Equal(t, phaseStopping, updated.(Model).phase)
 	assert.NotNil(t, cmd)
 
-	res, ok := cmd().(stopConfirmResultMsg)
-	assert.True(t, ok, "expected stopConfirmResultMsg, got %T", cmd())
-	assert.True(t, res.Cancel, "esc should emit a cancel result")
-	assert.False(t, res.Stop)
-}
-
-func TestStopConfirm_NonKeyMsgIsIgnored(t *testing.T) {
-	sc := newStopConfirm()
-	next, cmd := sc.Update(struct{}{})
-	assert.Same(t, sc, next)
+	// Results from other prompts are ignored.
+	m = newTestModel()
+	updated, cmd = m.handleStopConfirmResult(prompt.ResultMsg{ID: "other", Choice: stopConfirmStop})
+	assert.Equal(t, phaseDashboard, updated.(Model).phase)
 	assert.Nil(t, cmd)
-}
-
-func TestStopConfirm_ViewRendersWithoutPanic(t *testing.T) {
-	sc := newStopConfirm()
-	assert.NotPanics(t, func() {
-		view := sc.View(120, 40)
-		assert.Contains(t, view, "Leaving the workspace")
-		assert.Contains(t, view, "Stop containers & quit")
-		assert.Contains(t, view, "Quit, keep running")
-		assert.Contains(t, view, "Cancel")
-	})
-
-	sc.selected = stopConfirmCancel
-	assert.NotPanics(t, func() {
-		_ = sc.View(120, 40)
-	})
 }

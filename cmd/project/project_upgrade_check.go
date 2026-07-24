@@ -9,8 +9,6 @@ import (
 	"time"
 
 	"charm.land/huh/v2"
-	"charm.land/lipgloss/v2"
-	"charm.land/lipgloss/v2/table"
 	"github.com/shyim/go-composer"
 	"github.com/shyim/go-version"
 	"github.com/spf13/cobra"
@@ -21,6 +19,7 @@ import (
 	"github.com/shopware/shopware-cli/internal/shop"
 	"github.com/shopware/shopware-cli/internal/system"
 	"github.com/shopware/shopware-cli/internal/tracking"
+	"github.com/shopware/shopware-cli/internal/tui"
 	"github.com/shopware/shopware-cli/logging"
 )
 
@@ -151,12 +150,11 @@ var projectUpgradeCheckCmd = &cobra.Command{
 			}
 		}
 
-		t := table.New().Border(lipgloss.NormalBorder()).Headers("Extension Name", "Compatible")
+		rows := make([][]string, 0, len(updates))
 		for _, update := range updates {
-			t.Row(update.Name, update.Status.Label)
+			rows = append(rows, []string{update.Name, update.Status.Label})
 		}
-
-		fmt.Println(t.Render())
+		tui.PrintTable([]string{"Extension Name", "Compatible"}, rows)
 
 		hasBlockers := false
 		for _, update := range updates {

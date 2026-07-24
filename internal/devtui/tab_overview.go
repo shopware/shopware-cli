@@ -300,7 +300,7 @@ func (m OverviewModel) handleKey(msg tea.KeyPressMsg) (OverviewModel, tea.Cmd) {
 		return m, nil
 	}
 
-	switch keyString(msg) {
+	switch tui.KeyString(msg) {
 	case "up", "k":
 		if m.cursor > 0 {
 			m.cursor--
@@ -360,15 +360,12 @@ func (m OverviewModel) View(width, height int) string {
 
 	leftWidth := usable - overviewRightColumnWidth - 3
 
-	left := lipgloss.NewStyle().Width(leftWidth).Render(m.renderProjectReport(leftWidth))
-	right := lipgloss.NewStyle().
-		Border(lipgloss.NormalBorder(), false, false, false, true).
-		BorderForeground(tui.BorderColor).
-		PaddingLeft(2).
-		Height(lipgloss.Height(left)).
-		Render(m.renderUserActions())
-
-	return lipgloss.JoinHorizontal(lipgloss.Top, left, right)
+	return tui.NewTwoColumn(tui.TwoColumnOptions{
+		Width:     usable,
+		LeftWidth: leftWidth,
+		Left:      m.renderProjectReport(leftWidth),
+		Right:     m.renderUserActions(),
+	}).Render()
 }
 
 // renderProjectReport renders the left column: the readonly project details
@@ -547,10 +544,10 @@ func (m OverviewModel) renderBackgroundProcesses() string {
 
 	var s strings.Builder
 	for _, proc := range m.background {
-		dot := lipgloss.NewStyle().Foreground(tui.SuccessColor).Render("●")
+		dot := tui.StateDot(tui.DotOK)
 		status := lipgloss.NewStyle().Foreground(tui.SuccessColor).Render("running")
 		if !proc.Running {
-			dot = tui.DimStyle.Render("●")
+			dot = tui.StateDot(tui.DotPending)
 			status = tui.DimStyle.Render("stopped")
 		}
 		fmt.Fprintf(&s, "  %s %s%s\n", dot, nameStyle.Render(proc.Name), status)
@@ -615,7 +612,7 @@ func logStep(out io.Writer, msg string) {
 // preparation rather than flipping to "running" instantly.
 func startWatcher(name string, prepare func(ctx context.Context, out io.Writer) (*executor.Process, error)) tea.Cmd {
 	handle := &watcherHandle{}
-	lines := make(chan string, streamBufferSize)
+	lines := make(chan string, tui.StreamBufferSize)
 	running := make(chan error, 1) // buffered so the goroutine never blocks
 
 	startedCmd := func() tea.Msg {

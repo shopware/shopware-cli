@@ -8,7 +8,6 @@ import (
 	"strings"
 	"time"
 
-	tea "charm.land/bubbletea/v2"
 	"charm.land/huh/v2/spinner"
 	"github.com/mattn/go-isatty"
 	"github.com/spf13/cobra"
@@ -117,15 +116,12 @@ func runMigrationWizardTUI(projectRoot string, cfg *shop.Config) error {
 		return err
 	}
 
-	m := devtui.NewMigrationWizard(devtui.Options{
+	_, err = devtui.NewMigrationWizardApp(devtui.Options{
 		ProjectRoot: projectRoot,
 		Config:      cfg,
 		EnvConfig:   envCfg,
 		Executor:    exec,
-	})
-
-	p := tea.NewProgram(m)
-	_, err = p.Run()
+	}).Run()
 	return err
 }
 
@@ -199,7 +195,7 @@ func (e *devEnvironment) start(cmd *cobra.Command) error {
 
 	elapsed := time.Since(start).Round(time.Millisecond)
 
-	fmt.Println(tui.GreenText.Bold(true).Render(fmt.Sprintf("  ✓ Development environment started in %s", elapsed)))
+	fmt.Println("  " + tui.SuccessLine(fmt.Sprintf("Development environment started in %s", elapsed)))
 	fmt.Println()
 
 	shopURL := e.cfg.URL
@@ -259,7 +255,7 @@ func (e *devEnvironment) stop(cmd *cobra.Command) error {
 
 	elapsed := time.Since(start).Round(time.Millisecond)
 
-	fmt.Println(tui.GreenText.Bold(true).Render(fmt.Sprintf("  ✓ Development environment stopped in %s", elapsed)))
+	fmt.Println("  " + tui.SuccessLine(fmt.Sprintf("Development environment stopped in %s", elapsed)))
 	fmt.Println()
 
 	return nil
@@ -275,24 +271,21 @@ func (e *devEnvironment) status(cmd *cobra.Command) error {
 	}
 
 	if running {
-		fmt.Println(tui.GreenText.Bold(true).Render("  ✓ Development environment is up"))
+		fmt.Println("  " + tui.SuccessLine("Development environment is up"))
 		return nil
 	}
 
-	fmt.Println(tui.RedText.Bold(true).Render("  ✗ Development environment is down"))
+	fmt.Println("  " + tui.FailLine("Development environment is down"))
 	return ErrEnvironmentDown
 }
 
 func (e *devEnvironment) runTUI() error {
-	m := devtui.New(devtui.Options{
+	_, err := devtui.NewApp(devtui.Options{
 		ProjectRoot: e.projectRoot,
 		Config:      e.cfg,
 		EnvConfig:   e.envCfg,
 		Executor:    e.executor,
-	})
-
-	p := tea.NewProgram(m)
-	_, err := p.Run()
+	}).Run()
 	return err
 }
 
