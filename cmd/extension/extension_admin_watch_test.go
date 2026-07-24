@@ -3,9 +3,11 @@ package extension
 import (
 	"context"
 	"net/http"
+	"net/url"
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -26,4 +28,15 @@ func TestServeAdminWatchStopsOnContextCancellation(t *testing.T) {
 	case <-time.After(time.Second):
 		t.Fatal("admin watch server did not stop after context cancellation")
 	}
+}
+
+func TestAdminWatchOutputURL(t *testing.T) {
+	browserURL, err := url.Parse("https://watch.example.test/base/")
+	require.NoError(t, err)
+
+	assert.Equal(
+		t,
+		"https://watch.example.test/base/.shopware-cli/my-plugin/my-plugin-ENTRY.js",
+		adminWatchOutputURL(browserURL, "my-plugin", "/my-plugin-ENTRY.js"),
+	)
 }
