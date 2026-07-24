@@ -386,6 +386,10 @@ var extensionAdminWatchCmd = &cobra.Command{
 }
 
 func serveAdminWatch(ctx context.Context, server *http.Server) error {
+	server.BaseContext = func(net.Listener) context.Context {
+		return ctx
+	}
+
 	serverErr := make(chan error, 1)
 	go func() {
 		serverErr <- server.ListenAndServe()
