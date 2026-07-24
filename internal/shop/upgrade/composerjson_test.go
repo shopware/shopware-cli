@@ -92,7 +92,7 @@ func TestLockNameFor(t *testing.T) {
 	assert.Equal(t, ".shopware-cli-upgrade-composer.lock", lockNameFor(upgradeManifestName))
 }
 
-func TestRewriteComposerJSONDisablesAuditBlock(t *testing.T) {
+func TestRewriteComposerJSONLeavesAuditConfigUntouched(t *testing.T) {
 	dir := t.TempDir()
 	writeFile(t, filepath.Join(dir, "composer.json"), `{
 		"name": "shopware/production",
@@ -105,29 +105,16 @@ func TestRewriteComposerJSONDisablesAuditBlock(t *testing.T) {
 
 	changes, err := u.RewriteComposerJSON("6.7.11.0", nil)
 	require.NoError(t, err)
-	assert.Contains(t, changes, "config.audit.block-insecure: false (continue despite security advisories)")
+	for _, change := range changes {
+		assert.NotContains(t, change, "audit")
+	}
 
 	content, err := os.ReadFile(filepath.Join(dir, "composer.json"))
 	require.NoError(t, err)
-	assert.Contains(t, string(content), `"block-insecure": false`)
-}
-
-func TestRenderUpgradeManifestDisablesAuditBlock(t *testing.T) {
-	dir := t.TempDir()
-	writeFile(t, filepath.Join(dir, "composer.json"), `{
-		"name": "shopware/production",
-		"require": {"shopware/core": "6.6.10.3"}
-	}`)
-	writeFile(t, filepath.Join(dir, "composer.lock"), testComposerLock)
-
-	u := newTestUpgrader(t, dir)
+	assert.NotContains(t, string(content), "block-insecure",
+		"the audit opt-out is passed as COMPOSER_NO_SECURITY_BLOCKING, never persisted")
 
 	manifest, err := u.renderUpgradeManifest("6.7.11.0")
 	require.NoError(t, err)
-	assert.NotContains(t, string(manifest), "block-insecure", "audit blocking stays untouched by default")
-
-	u.DisableAuditBlock()
-	manifest, err = u.renderUpgradeManifest("6.7.11.0")
-	require.NoError(t, err)
-	assert.Contains(t, string(manifest), `"block-insecure": false`)
+	assert.NotContains(t, string(manifest), "block-insecure")
 }

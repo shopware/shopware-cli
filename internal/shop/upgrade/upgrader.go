@@ -21,8 +21,10 @@ import (
 type ProjectUpgrader struct {
 	projectRoot string
 	executor    executor.Executor
-	// noAudit disables Composer's security-audit blocking for the preflight
-	// resolution and the upgrade itself (config.audit.block-insecure = false).
+	// noAudit runs Composer with security blocking disabled
+	// (COMPOSER_NO_SECURITY_BLOCKING, Composer >= 2.9.2) for the preflight
+	// resolution and the upgrade itself. The project's composer.json audit
+	// configuration stays untouched.
 	noAudit bool
 
 	shopwareVersions func(ctx context.Context) ([]string, error)
@@ -58,6 +60,21 @@ func (u *ProjectUpgrader) DisableAuditBlock() { u.noAudit = true }
 // AuditBlockDisabled reports whether the user chose to continue without
 // Composer's security-audit blocking.
 func (u *ProjectUpgrader) AuditBlockDisabled() bool { return u.noAudit }
+
+// composerEnv returns the environment for Composer invocations, adding
+// COMPOSER_NO_SECURITY_BLOCKING when the user opted out of audit blocking.
+// The variable is scoped to the commands the upgrade runs — the project's
+// composer.json stays untouched.
+func (u *ProjectUpgrader) composerEnv(extra map[string]string) map[string]string {
+	env := make(map[string]string, len(extra)+1)
+	for k, v := range extra {
+		env[k] = v
+	}
+	if u.noAudit {
+		env["COMPOSER_NO_SECURITY_BLOCKING"] = "1"
+	}
+	return env
+}
 
 // InstalledPHPVersion returns the PHP version of the environment the upgrade
 // runs in, or "" when it cannot be determined.

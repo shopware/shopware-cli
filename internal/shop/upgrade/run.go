@@ -124,6 +124,13 @@ func (u *ProjectUpgrader) Run(ctx context.Context, opts RunOptions) <-chan StepE
 }
 
 func (u *ProjectUpgrader) runSteps(ctx context.Context, opts RunOptions, emit func(StepEvent)) error {
+	// The deployment helper runs Composer internally, so the audit opt-out
+	// env applies to every step, not just the direct Composer invocations.
+	exec := u.executor
+	if env := u.composerEnv(nil); len(env) > 0 {
+		exec = exec.WithEnv(env)
+	}
+
 	steps := []struct {
 		id       StepID
 		nonFatal bool // a failure warns instead of aborting the upgrade
@@ -141,18 +148,18 @@ func (u *ProjectUpgrader) runSteps(ctx context.Context, opts RunOptions, emit fu
 			return nil
 		}},
 		{StepComposerUpdate, false, func(ctx context.Context, line func(string)) error {
-			return streamProcess(ctx, u.executor.ComposerCommand(ctx, "update", "--with-all-dependencies", "--no-interaction", "--no-progress"), line)
+			return streamProcess(ctx, exec.ComposerCommand(ctx, "update", "--with-all-dependencies", "--no-interaction", "--no-progress"), line)
 		}},
 		// symfony:recipes:install --force --reset reinstalls every Flex
 		// recipe for the new package versions, the same way the Shopware
 		// web-installer refreshes recipe-managed files. It is best effort:
 		// a failure downgrades to a warning instead of rolling back.
 		{StepRecipesInstall, true, func(ctx context.Context, line func(string)) error {
-			return streamProcess(ctx, u.executor.ComposerCommand(ctx,
+			return streamProcess(ctx, exec.ComposerCommand(ctx,
 				"symfony:recipes:install", "--force", "--reset", "--yes", "--no-interaction", "--no-ansi", "-v"), line)
 		}},
 		{StepDeploymentHelper, false, func(ctx context.Context, line func(string)) error {
-			return streamProcess(ctx, u.executor.PHPCommand(ctx, "vendor/bin/shopware-deployment-helper", "run"), line)
+			return streamProcess(ctx, exec.PHPCommand(ctx, "vendor/bin/shopware-deployment-helper", "run"), line)
 		}},
 		{StepWriteReport, false, func(_ context.Context, line func(string)) error {
 			path, err := u.WriteReport(opts.Report)

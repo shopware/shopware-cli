@@ -198,8 +198,8 @@ func newSecurityAuditPrompt() *prompt.Overlay {
 		ID:    securityAuditPromptID,
 		Title: "Dependencies are affected by known security advisories",
 		Message: "Composer refused to load packages affected by security advisories.\n" +
-			"Continuing disables Composer's audit blocking for this project\n" +
-			"(config.audit.block-insecure = false) so the upgrade can proceed.\n\n" +
+			"Continuing runs the upgrade with Composer's security blocking disabled\n" +
+			"(COMPOSER_NO_SECURITY_BLOCKING=1) — your composer.json stays untouched.\n\n" +
 			"We strongly recommend the Shopware 6 Security plugin, which backports\n" +
 			"security fixes to older versions:\n" +
 			"https://store.shopware.com/en/swag136939272659f/shopware-6-security-plugin.html",

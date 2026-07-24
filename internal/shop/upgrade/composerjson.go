@@ -63,21 +63,6 @@ func applyTargetConstraints(c *composer.Json, target string, extensionPackages [
 	return changes
 }
 
-// disableAuditBlock sets config.audit.block-insecure = false so Composer
-// (>= 2.9) loads packages affected by security advisories — the same setting
-// project creation writes when the user opts out of audit blocking.
-func disableAuditBlock(c *composer.Json) {
-	audit, _ := c.Config["audit"].(map[string]any)
-	if audit == nil {
-		audit = map[string]any{}
-	}
-	audit["block-insecure"] = false
-	if c.Config == nil {
-		c.Config = map[string]any{}
-	}
-	c.Config["audit"] = audit
-}
-
 // extensionPackages lists the Composer-managed Shopware extensions
 // (plugins, apps, bundles) recorded in composer.lock.
 func extensionPackages(projectRoot string) []string {
@@ -107,10 +92,6 @@ func (u *ProjectUpgrader) RewriteComposerJSON(target string, resolved map[string
 	}
 
 	changes := applyTargetConstraints(c, target, extensionPackages(u.projectRoot), resolved)
-	if u.noAudit {
-		disableAuditBlock(c)
-		changes = append(changes, "config.audit.block-insecure: false (continue despite security advisories)")
-	}
 	if err := c.Save(); err != nil {
 		return nil, err
 	}
@@ -128,9 +109,6 @@ func (u *ProjectUpgrader) renderUpgradeManifest(target string) ([]byte, error) {
 	}
 
 	applyTargetConstraints(c, target, extensionPackages(u.projectRoot), nil)
-	if u.noAudit {
-		disableAuditBlock(c)
-	}
 
 	out, err := json.MarshalIndent(c, "", "    ")
 	if err != nil {

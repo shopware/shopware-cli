@@ -84,7 +84,7 @@ func (u *ProjectUpgrader) CheckComposerResolvable(ctx context.Context, target st
 	// and Composer the actual upgrade will use (in-container for Docker
 	// environments). The manifest lives inside the project root, which is
 	// mounted there.
-	proc := u.executor.WithEnv(map[string]string{"COMPOSER": upgradeManifestName}).
+	proc := u.executor.WithEnv(u.composerEnv(map[string]string{"COMPOSER": upgradeManifestName})).
 		ComposerCommand(ctx, "update",
 			"--no-install", "--no-interaction", "--no-scripts", "--no-plugins", "--no-progress", "--no-ansi",
 			"--with-all-dependencies")

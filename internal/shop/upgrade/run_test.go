@@ -20,6 +20,9 @@ import (
 type fakeExecutor struct {
 	composer func(ctx context.Context, args ...string) *executor.Process
 	php      func(ctx context.Context, args ...string) *executor.Process
+	// env records the last WithEnv call so tests can assert the variables
+	// composer/php invocations run with.
+	env map[string]string
 }
 
 func shellProcess(ctx context.Context, script string) *executor.Process {
@@ -42,9 +45,12 @@ func (f *fakeExecutor) NPMCommand(ctx context.Context, args ...string) *executor
 	return shellProcess(ctx, "true")
 }
 
-func (f *fakeExecutor) NormalizePath(hostPath string) string            { return hostPath }
-func (f *fakeExecutor) Type() string                                    { return executor.TypeLocal }
-func (f *fakeExecutor) WithEnv(map[string]string) executor.Executor     { return f }
+func (f *fakeExecutor) NormalizePath(hostPath string) string { return hostPath }
+func (f *fakeExecutor) Type() string                         { return executor.TypeLocal }
+func (f *fakeExecutor) WithEnv(env map[string]string) executor.Executor {
+	f.env = env
+	return f
+}
 func (f *fakeExecutor) WithRelDir(string) executor.Executor             { return f }
 func (f *fakeExecutor) StartEnvironment(context.Context) error          { return nil }
 func (f *fakeExecutor) StopEnvironment(context.Context) error           { return nil }
@@ -234,4 +240,62 @@ func TestRunnerCancelledContext(t *testing.T) {
 	final := finalEvent(t, events)
 	assert.Equal(t, StateFail, final.State)
 	assert.ErrorIs(t, final.Err, context.Canceled)
+}
+
+func TestRunnerAppliesNoSecurityBlockingEnv(t *testing.T) {
+	dir := setupProject(t)
+	fake := &fakeExecutor{
+		composer: func(ctx context.Context, args ...string) *executor.Process {
+			return shellProcess(ctx, "true")
+		},
+		php: func(ctx context.Context, args ...string) *executor.Process {
+			return shellProcess(ctx, "true")
+		},
+	}
+	u := NewProjectUpgrader(dir, fake)
+	u.DisableAuditBlock()
+
+	events := collectEvents(t, u.Run(t.Context(), runnerOptions()))
+	require.Equal(t, StateOK, finalEvent(t, events).State)
+
+	assert.Equal(t, "1", fake.env["COMPOSER_NO_SECURITY_BLOCKING"],
+		"the audit opt-out runs Composer with security blocking disabled")
+}
+
+func TestRunnerWithoutOptOutKeepsSecurityBlocking(t *testing.T) {
+	dir := setupProject(t)
+	fake := &fakeExecutor{
+		composer: func(ctx context.Context, args ...string) *executor.Process {
+			return shellProcess(ctx, "true")
+		},
+		php: func(ctx context.Context, args ...string) *executor.Process {
+			return shellProcess(ctx, "true")
+		},
+	}
+	u := NewProjectUpgrader(dir, fake)
+
+	events := collectEvents(t, u.Run(t.Context(), runnerOptions()))
+	require.Equal(t, StateOK, finalEvent(t, events).State)
+
+	assert.NotContains(t, fake.env, "COMPOSER_NO_SECURITY_BLOCKING")
+}
+
+func TestCheckComposerResolvableNoAuditEnv(t *testing.T) {
+	dir := setupProject(t)
+	fake := &fakeExecutor{
+		composer: func(ctx context.Context, args ...string) *executor.Process {
+			return shellProcess(ctx, "true")
+		},
+		php: func(ctx context.Context, args ...string) *executor.Process {
+			return shellProcess(ctx, "true")
+		},
+	}
+	u := NewProjectUpgrader(dir, fake)
+	u.DisableAuditBlock()
+
+	_, err := u.CheckComposerResolvable(t.Context(), "6.7.11.0")
+	require.NoError(t, err)
+
+	assert.Equal(t, upgradeManifestName, fake.env["COMPOSER"])
+	assert.Equal(t, "1", fake.env["COMPOSER_NO_SECURITY_BLOCKING"])
 }

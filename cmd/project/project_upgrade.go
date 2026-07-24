@@ -1,25 +1,23 @@
 package project
 
 import (
-	"fmt"
 	"os"
 
-	"github.com/mattn/go-isatty"
 	"github.com/spf13/cobra"
 
 	"github.com/shopware/shopware-cli/internal/shop"
+	"github.com/shopware/shopware-cli/internal/shop/upgrade"
+	"github.com/shopware/shopware-cli/internal/system"
 	"github.com/shopware/shopware-cli/internal/upgradetui"
 )
 
 var projectUpgradeCmd = &cobra.Command{
 	Use:   "upgrade",
 	Short: "Upgrade Shopware to a newer version",
-	Long:  "Interactive wizard that guides you through a local Shopware upgrade: readiness checks, version selection, extension compatibility, and the guided execution. Use `project upgrade-check` for the non-interactive compatibility check.",
+	Long: "Guides you through a local Shopware upgrade: readiness checks, version selection, extension compatibility, and the guided execution.\n" +
+		"In a terminal this runs as an interactive wizard. With --no-interaction (or without a terminal, e.g. CI) the upgrade runs headless:\n" +
+		"--target is required there, --dry-run stops after the read-only preflight, and --no-audit continues when dependencies are blocked by security advisories.",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		if !isatty.IsTerminal(os.Stdin.Fd()) {
-			return fmt.Errorf("the upgrade wizard needs an interactive terminal; run `shopware-cli project upgrade-check` in scripts instead")
-		}
-
 		projectRoot, err := findClosestShopwareProject()
 		if err != nil {
 			return err
@@ -38,6 +36,19 @@ var projectUpgradeCmd = &cobra.Command{
 		exec, err := resolveExecutor(cmd, projectRoot)
 		if err != nil {
 			return err
+		}
+
+		if !system.IsInteractionEnabled(cmd.Context()) {
+			target, _ := cmd.Flags().GetString("target")
+			dryRun, _ := cmd.Flags().GetBool("dry-run")
+			noAudit, _ := cmd.Flags().GetBool("no-audit")
+
+			return upgrade.NewProjectUpgrader(projectRoot, exec).RunHeadless(cmd.Context(), upgrade.HeadlessOptions{
+				Target:  target,
+				DryRun:  dryRun,
+				NoAudit: noAudit,
+				Out:     os.Stdout,
+			})
 		}
 
 		envName := environmentName
@@ -61,4 +72,7 @@ var projectUpgradeCmd = &cobra.Command{
 
 func init() {
 	projectRootCmd.AddCommand(projectUpgradeCmd)
+	projectUpgradeCmd.Flags().String("target", "", "version to upgrade to (required with --no-interaction; also accepts 'recommended' or 'latest-patch')")
+	projectUpgradeCmd.Flags().Bool("dry-run", false, "non-interactive mode: stop after the read-only preflight without modifying the project")
+	projectUpgradeCmd.Flags().Bool("no-audit", false, "continue when dependencies are blocked by known security advisories")
 }
