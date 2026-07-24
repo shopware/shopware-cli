@@ -62,13 +62,16 @@ func (m *Model) reportData() upgrade.ReportData {
 
 // plannedChanges lists what the runner will do, for the review panel and report.
 func (m *Model) plannedChanges() []string {
-	return []string{
-		"update composer.json",
+	changes := []string{"update composer.json"}
+	if m.upgrader.AuditBlockDisabled() {
+		changes = append(changes, "disable composer audit blocking (security advisories accepted)")
+	}
+	return append(changes,
 		"composer update --with-all-dependencies",
 		"composer recipes:install --force --reset",
 		"update composer.lock",
 		"write .shopware-cli/upgrade/report.md",
-	}
+	)
 }
 
 func (m *Model) updateReview(msg tea.Msg) (app.Content, tea.Cmd) {

@@ -21,6 +21,9 @@ import (
 type ProjectUpgrader struct {
 	projectRoot string
 	executor    executor.Executor
+	// noAudit disables Composer's security-audit blocking for the preflight
+	// resolution and the upgrade itself (config.audit.block-insecure = false).
+	noAudit bool
 
 	shopwareVersions func(ctx context.Context) ([]string, error)
 	extensionUpdates func(ctx context.Context, current, future string, extensions []account_api.UpdateCheckExtension) ([]account_api.UpdateCheckExtensionCompatibility, error)
@@ -46,6 +49,15 @@ func NewProjectUpgrader(projectRoot string, exec executor.Executor) *ProjectUpgr
 		packagistPingURL: "https://repo.packagist.org/packages.json",
 	}
 }
+
+// DisableAuditBlock makes the preflight resolution and the upgrade run with
+// Composer's security-audit blocking disabled. The user opts into this after
+// being warned that dependencies are affected by security advisories.
+func (u *ProjectUpgrader) DisableAuditBlock() { u.noAudit = true }
+
+// AuditBlockDisabled reports whether the user chose to continue without
+// Composer's security-audit blocking.
+func (u *ProjectUpgrader) AuditBlockDisabled() bool { return u.noAudit }
 
 // InstalledPHPVersion returns the PHP version of the environment the upgrade
 // runs in, or "" when it cannot be determined.

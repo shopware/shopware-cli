@@ -41,6 +41,13 @@ type ResolveResult struct {
 	Changes []PackageChange
 }
 
+// SecurityBlocked reports whether the resolution failed because Composer
+// (>= 2.9 with audit blocking enabled) refused to load packages affected by
+// known security advisories.
+func (r ResolveResult) SecurityBlocked() bool {
+	return !r.OK && strings.Contains(r.Report, "affected by security advisories")
+}
+
 // ResolvedVersion returns the version a package resolves to, or "" when the
 // resolution does not change it.
 func (r ResolveResult) ResolvedVersion(pkg string) string {

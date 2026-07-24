@@ -84,3 +84,14 @@ func TestApplyResolvedVersions(t *testing.T) {
 	assert.Equal(t, "1.0.0", results[1].Available, "unchanged packages keep their version")
 	assert.Empty(t, results[2].Available, "local extensions stay untouched")
 }
+
+func TestResolveResultSecurityBlocked(t *testing.T) {
+	blocked := ResolveResult{OK: false, Report: `- shopware/core v6.7.12.1 requires dompdf/dompdf 3.1.4 -> found dompdf/dompdf[v3.1.4] but these were not loaded, because they are affected by security advisories ("PKSA-cv56-2228-pzqx")`}
+	assert.True(t, blocked.SecurityBlocked())
+
+	conflict := ResolveResult{OK: false, Report: "requires shopware/core v6.7.6.0 but it conflicts with your root composer.json require"}
+	assert.False(t, conflict.SecurityBlocked())
+
+	ok := ResolveResult{OK: true, Report: "affected by security advisories"}
+	assert.False(t, ok.SecurityBlocked(), "a successful resolution is never security-blocked")
+}

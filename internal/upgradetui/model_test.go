@@ -400,6 +400,65 @@ func TestPrepareResolveFailureSurfacesReportWriteError(t *testing.T) {
 	assert.NotContains(t, content, "Full output:")
 }
 
+func TestPrepareSecurityBlockedOpensConfirmPrompt(t *testing.T) {
+	w := wizardAtCheck(t, false)
+	w.Send(specialKey(tea.KeyEnter))
+	require.Equal(t, panelPrepare, w.m.panel)
+
+	gen := w.m.prepareGen
+	w.Send(resolveDoneMsg{gen: gen, result: upgrade.ResolveResult{
+		OK:     false,
+		Report: `found dompdf/dompdf[v3.1.4] but these were not loaded, because they are affected by security advisories ("PKSA-cv56-2228-pzqx")`,
+	}})
+
+	// The confirmation modal opens automatically.
+	require.True(t, w.App.OverlayOpen())
+	content := w.view(t)
+	assert.Contains(t, content, "security advisories")
+	assert.Contains(t, content, "Continue without security audit")
+	assert.Contains(t, content, "Shopware 6 Security plugin")
+
+	// Confirming disables audit blocking and restarts the preparation run.
+	w.Send(specialKey(tea.KeyLeft)) // move from the safe default (Cancel) to Continue
+	cmd := w.Send(specialKey(tea.KeyEnter))
+	require.NotNil(t, cmd)
+	w.Send(cmd()) // deliver the prompt result without running the prepare batch
+
+	assert.False(t, w.App.OverlayOpen())
+	assert.True(t, w.m.upgrader.AuditBlockDisabled())
+	assert.Equal(t, gen+1, w.m.prepareGen, "confirming starts a fresh preparation run")
+	assert.True(t, w.m.prepare.loading(), "the new run starts from scratch")
+}
+
+func TestPrepareSecurityBlockedCancelStaysBlocked(t *testing.T) {
+	w := wizardAtCheck(t, false)
+	w.Send(specialKey(tea.KeyEnter))
+
+	gen := w.m.prepareGen
+	w.Send(resolveDoneMsg{gen: gen, result: upgrade.ResolveResult{
+		OK:     false,
+		Report: "not loaded, because they are affected by security advisories",
+	}})
+	require.True(t, w.App.OverlayOpen())
+
+	// Enter on the default (Cancel) dismisses without disabling the audit.
+	cmd := w.Send(specialKey(tea.KeyEnter))
+	require.NotNil(t, cmd)
+	w.Send(cmd())
+
+	assert.False(t, w.App.OverlayOpen())
+	assert.False(t, w.m.upgrader.AuditBlockDisabled())
+	assert.Equal(t, gen, w.m.prepareGen, "cancel keeps the current run")
+
+	// Finish the remaining checks: the panel stays blocked with a tailored
+	// status; rechecking (r) would reopen the prompt.
+	w.Send(envStatusMsg{gen: gen, running: true})
+	w.Send(packagistMsg{gen: gen, reachable: true})
+	w.Send(compatDoneMsg{gen: gen, results: nil})
+	w.Send(phpInfoMsg{gen: gen, requirement: ">=8.2", installed: "8.3.1"})
+	assert.Contains(t, w.view(t), "Dependencies are blocked by security advisories")
+}
+
 func TestPrepareResolveFailureKeepsQueueForFlaggedExtensions(t *testing.T) {
 	deprecated := okResult()
 	deprecated.Status = upgrade.ExtDeprecated

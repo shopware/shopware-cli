@@ -10,6 +10,7 @@ import (
 	"github.com/shopware/shopware-cli/internal/shop/upgrade"
 	"github.com/shopware/shopware-cli/internal/tui"
 	"github.com/shopware/shopware-cli/internal/tui/app"
+	"github.com/shopware/shopware-cli/internal/tui/prompt"
 )
 
 // prepareState backs panel 3: system preparation checks and the extension
@@ -137,7 +138,21 @@ func (m *Model) updatePrepare(msg tea.Msg) (app.Content, tea.Cmd) {
 			m.prepare.resolve = &result
 		}
 		m.prepare.applyResolved()
-		return m, m.maybeWriteFailureReport()
+		cmds := []tea.Cmd{m.maybeWriteFailureReport()}
+		// Composer >= 2.9 refuses to load packages affected by security
+		// advisories, which would leave this check blocked with no way
+		// forward — offer to continue with audit blocking disabled.
+		if m.prepare.resolve != nil && m.prepare.resolve.SecurityBlocked() && !m.upgrader.AuditBlockDisabled() {
+			cmds = append(cmds, m.host.PushOverlay(newSecurityAuditPrompt()))
+		}
+		return m, tea.Batch(cmds...)
+
+	case prompt.ResultMsg:
+		if msg.ID != securityAuditPromptID || msg.Choice != "continue" {
+			return m, nil
+		}
+		m.upgrader.DisableAuditBlock()
+		return m.beginPrepare()
 
 	case reportWrittenMsg:
 		m.prepare.reportPath = msg.path
@@ -171,6 +186,30 @@ func (m *Model) updatePrepare(msg tea.Msg) (app.Content, tea.Cmd) {
 		return m.updatePrepareKeys(msg)
 	}
 	return m, nil
+}
+
+const securityAuditPromptID = "security-audit"
+
+// newSecurityAuditPrompt asks whether to proceed with Composer's audit
+// blocking disabled — mirroring project create's recovery when dependencies
+// are affected by known security advisories.
+func newSecurityAuditPrompt() *prompt.Overlay {
+	return prompt.New(prompt.Options{
+		ID:    securityAuditPromptID,
+		Title: "Dependencies are affected by known security advisories",
+		Message: "Composer refused to load packages affected by security advisories.\n" +
+			"Continuing disables Composer's audit blocking for this project\n" +
+			"(config.audit.block-insecure = false) so the upgrade can proceed.\n\n" +
+			"We strongly recommend the Shopware 6 Security plugin, which backports\n" +
+			"security fixes to older versions:\n" +
+			"https://store.shopware.com/en/swag136939272659f/shopware-6-security-plugin.html",
+		Danger:  true,
+		Default: 1,
+		Choices: []prompt.Choice{
+			{ID: "continue", Label: "Continue without security audit"},
+			{ID: "cancel", Label: "Cancel"},
+		},
+	})
 }
 
 // maybeWriteFailureReport writes the failure report once every preparation
@@ -271,7 +310,11 @@ func (m *Model) viewPrepare() (title, status, body string) {
 			fmt.Sprintf("Composer cannot resolve this upgrade — %d extensions need attention.", m.prepare.flagged())) +
 			"\n" + m.statusStrip(tui.VariantInfo, "TODO", "Fix manually if needed, then recheck."+m.reportHint())
 	case !m.prepare.ready():
-		status = m.statusStrip(tui.VariantError, "BLOCKED", "Composer cannot resolve this upgrade. The conflict summary is below."+m.reportHint())
+		message := "Composer cannot resolve this upgrade. The conflict summary is below."
+		if m.prepare.resolve != nil && m.prepare.resolve.SecurityBlocked() {
+			message = "Dependencies are blocked by security advisories. Recheck to decide again."
+		}
+		status = m.statusStrip(tui.VariantError, "BLOCKED", message+m.reportHint())
 	case m.prepare.blockers() > 0:
 		status = m.statusStrip(tui.VariantWarning, "REVIEW",
 			fmt.Sprintf("Composer resolved the upgrade, but %d extensions are flagged. Review them before continuing.", m.prepare.blockers()))
