@@ -14,12 +14,12 @@ for (const bundleName of Object.keys(bundles)) {
 
     new EventSource(`/.shopware-cli/${bundle.name}/esbuild`).addEventListener('change', e => {
         const { added, removed, updated } = JSON.parse(e.data)
-        const changed = [...added, ...removed, ...updated]
+        const allChangedFiles = [...added, ...removed, ...updated]
 
         // Content-addressed CSS changes are reported as one removed file and one
         // added file instead of an update. Swap the old hashed entrypoint for the
         // new one without reloading the whole administration.
-        if (changed.length && changed.every(file => file.endsWith('.css'))) {
+        if (allChangedFiles.length && allChangedFiles.every(file => file.endsWith('.css'))) {
             const watcherPath = `/.shopware-cli/${bundle.name}`
             const nextFile = added[0] ?? updated[0]
             const previousFiles = [...removed, ...updated]
