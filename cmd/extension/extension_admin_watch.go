@@ -20,6 +20,7 @@ import (
 	htmlprinter "github.com/shyim/go-htmlprinter"
 	"github.com/spf13/cobra"
 	"github.com/vulcand/oxy/v2/forward"
+	"go.uber.org/zap"
 	"golang.org/x/net/html"
 
 	"github.com/shopware/shopware-cli/internal/asset"
@@ -152,6 +153,12 @@ var extensionAdminWatchCmd = &cobra.Command{
 		}
 
 		fwd := forward.New(true)
+
+		proxyLog, err := zap.NewStdLogAt(logging.FromContext(cmd.Context()).Desugar(), zap.DebugLevel)
+		if err != nil {
+			return err
+		}
+		fwd.ErrorLog = proxyLog
 
 		redirect := http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 			logging.FromContext(cmd.Context()).Debugf("Got request %s %s", req.Method, req.URL.Path)
@@ -403,6 +410,8 @@ func serveAdminWatch(ctx context.Context, server *http.Server) error {
 
 		return err
 	case <-ctx.Done():
+		logging.FromContext(ctx).Infof("Stopping Admin Watcher")
+
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 		defer cancel()
 
