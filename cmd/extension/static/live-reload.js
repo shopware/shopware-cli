@@ -38,7 +38,7 @@ for (const bundleName of Object.keys(bundles)) {
                         const nextUrl = new URL(link.href)
                         const pathPrefix = url.pathname.slice(0, -previousPath.length)
                         nextUrl.pathname = pathPrefix + nextPath
-                        nextUrl.search = Math.random().toString(36).slice(2)
+                        nextUrl.search = `?${Math.random().toString(36).slice(2)}`
                         next.href = nextUrl.toString()
                         next.onload = () => link.remove()
                         link.parentNode.insertBefore(next, link.nextSibling)
