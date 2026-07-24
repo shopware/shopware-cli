@@ -51,19 +51,6 @@ var extensionZipCmd = &cobra.Command{
 			return fmt.Errorf("get name: %w", err)
 		}
 
-		// Clear previous zips
-		existingFiles, err := filepath.Glob(fmt.Sprintf("%s-*.zip", name))
-		if err != nil {
-			return err
-		}
-
-		for _, file := range existingFiles {
-			err = os.Remove(file)
-			if err != nil {
-				return fmt.Errorf("remove existing file: %w", err)
-			}
-		}
-
 		// Create temp dir
 		tempDir, err := os.MkdirTemp("", "extension")
 		if err != nil {
