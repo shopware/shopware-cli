@@ -10,8 +10,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/shyim/go-version"
 	"github.com/shyim/go-phplint"
+	"github.com/shyim/go-version"
 
 	"github.com/shopware/shopware-cli/internal/validation"
 	"github.com/shopware/shopware-cli/logging"
@@ -453,7 +453,11 @@ func validatePHPFiles(c context.Context, ext Extension, check validation.Check) 
 
 	for _, val := range ext.GetSourceDirs() {
 		_ = filepath.Walk(val, func(path string, info os.FileInfo, err error) error {
-			if err != nil || info.IsDir() || !strings.HasSuffix(path, ".php") {
+			if err != nil {
+				return err
+			}
+
+			if info.IsDir() || !strings.HasSuffix(path, ".php") {
 				return nil
 			}
 
