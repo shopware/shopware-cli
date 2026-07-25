@@ -17,9 +17,6 @@ env:
 
 jobs:
   build:
-    env:
-      SHOPWARE_CLI_DISABLE_WASM_CACHE: 1
-
     runs-on: ubuntu-latest
     steps:
       - name: Harden Runner

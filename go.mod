@@ -27,11 +27,11 @@ require (
 	github.com/shyim/go-composer v0.1.1
 	github.com/shyim/go-composer/sbom v0.1.1
 	github.com/shyim/go-endoflife-api v0.0.0-20260630085844-dc60358f29eb
+	github.com/shyim/go-phplint v0.2.0
 	github.com/shyim/go-spdx v0.0.0-20260602055701-a935a2772ac1
 	github.com/shyim/go-version v0.0.0-20250828113848-97ec77491b32
 	github.com/spf13/cobra v1.10.2
 	github.com/stretchr/testify v1.11.1
-	github.com/tetratelabs/wazero v1.12.0
 	github.com/tonistiigi/go-actions-cache v0.0.0-20260120203934-54bc28c26fd2
 	github.com/vulcand/oxy/v2 v2.2.0
 	github.com/wI2L/jsondiff v0.7.1
@@ -70,6 +70,8 @@ require (
 	github.com/rogpeppe/go-internal v1.14.1 // indirect
 	github.com/xo/terminfo v0.0.0-20220910002029-abceb7e1c41e // indirect
 	go.yaml.in/yaml/v4 v4.0.0-rc.2 // indirect
+	golang.org/x/mod v0.37.0 // indirect
+	golang.org/x/tools v0.47.0 // indirect
 )
 
 require (

@@ -11,8 +11,8 @@ import (
 	"strings"
 
 	"github.com/shyim/go-version"
+	"github.com/shyim/go-phplint"
 
-	"github.com/shopware/shopware-cli/internal/phplint"
 	"github.com/shopware/shopware-cli/internal/validation"
 	"github.com/shopware/shopware-cli/logging"
 )
@@ -399,8 +399,7 @@ func (p PlatformPlugin) Validate(c context.Context, check validation.Check) {
 	validatePHPFilesFn(c, p, check)
 }
 
-// validatePHPFilesFn can be overridden in tests to skip PHP file validation,
-// which would otherwise require network access to download the PHP wasm binary.
+// validatePHPFilesFn can be overridden in tests to skip PHP file validation.
 var validatePHPFilesFn = validatePHPFiles
 
 func validatePHPFiles(c context.Context, ext Extension, check validation.Check) {
@@ -441,27 +440,61 @@ func validatePHPFiles(c context.Context, ext Extension, check validation.Check) 
 		logging.FromContext(c).Infof("PHP 7.2 is not supported for PHP linting, using 7.3 now")
 	}
 
+	ver, err := phplint.ParseVersion(phpVersion)
+	if err != nil {
+		check.AddResult(validation.CheckResult{
+			Path:       "composer.json",
+			Identifier: "php.linter",
+			Message:    fmt.Sprintf("Could not parse php version: %s", err.Error()),
+			Severity:   validation.SeverityWarning,
+		})
+		return
+	}
+
 	for _, val := range ext.GetSourceDirs() {
-		phpErrors, err := phplint.LintFolder(c, phpVersion, val)
+		_ = filepath.Walk(val, func(path string, info os.FileInfo, err error) error {
+			if err != nil || info.IsDir() || !strings.HasSuffix(path, ".php") {
+				return nil
+			}
 
-		if err != nil {
-			check.AddResult(validation.CheckResult{
-				Path:       "composer.json",
-				Identifier: "php.linter",
-				Message:    fmt.Sprintf("Could not lint php files: %s", err.Error()),
-				Severity:   validation.SeverityWarning,
-			})
-			continue
-		}
+			relPath, err := filepath.Rel(val, path)
+			if err != nil {
+				relPath = path
+			}
 
-		for _, error := range phpErrors {
-			check.AddResult(validation.CheckResult{
-				Path:       error.File,
-				Identifier: "php.linter",
-				Message:    fmt.Sprintf("%s: %s", error.File, error.Message),
-				Severity:   validation.SeverityError,
-			})
-		}
+			content, err := os.ReadFile(path)
+			if err != nil {
+				check.AddResult(validation.CheckResult{
+					Path:       relPath,
+					Identifier: "php.linter",
+					Message:    fmt.Sprintf("Could not read php file: %s", err.Error()),
+					Severity:   validation.SeverityWarning,
+				})
+				return nil
+			}
+
+			diags, err := phplint.Lint(relPath, content, phplint.Options{PHPVersion: ver})
+			if err != nil {
+				check.AddResult(validation.CheckResult{
+					Path:       relPath,
+					Identifier: "php.linter",
+					Message:    fmt.Sprintf("Could not lint php file: %s", err.Error()),
+					Severity:   validation.SeverityWarning,
+				})
+				return nil
+			}
+
+			for _, diag := range diags {
+				check.AddResult(validation.CheckResult{
+					Path:       relPath,
+					Identifier: "php.linter",
+					Message:    fmt.Sprintf("%s: %s", relPath, diag.Message),
+					Severity:   validation.SeverityError,
+				})
+			}
+
+			return nil
+		})
 	}
 }
 
