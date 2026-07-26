@@ -15,6 +15,18 @@ import (
 	"github.com/shopware/shopware-cli/internal/tui/app"
 )
 
+// updatePaste routes terminal paste into whichever credential input has
+// focus; phases without a text input drop it.
+func (m Model) updatePaste(msg tea.PasteMsg) (app.Content, tea.Cmd) {
+	if m.phase == phaseMigrationWizard && m.migrationWizard.step == migrationStepAdminUser {
+		return m, m.migrationWizard.HandlePaste(msg)
+	}
+	if m.phase == phaseInstallPrompt && m.install.step == installStepCredentials {
+		return m, m.install.HandlePaste(msg)
+	}
+	return m, nil
+}
+
 func (m Model) updateKeyPress(msg tea.KeyPressMsg) (app.Content, tea.Cmd) {
 	if m.phase == phaseMigrationWizard {
 		return m.updateMigrationWizard(msg)

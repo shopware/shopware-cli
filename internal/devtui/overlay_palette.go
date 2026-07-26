@@ -99,7 +99,11 @@ func (cp *commandPalette) selectedID() string {
 func (cp *commandPalette) Update(msg tea.Msg) (app.Overlay, tea.Cmd) {
 	key, ok := msg.(tea.KeyPressMsg)
 	if !ok {
-		return cp, nil
+		// Forward non-key input (e.g. tea.PasteMsg) to the filter input.
+		var cmd tea.Cmd
+		cp.filter, cmd = cp.filter.Update(msg)
+		cp.applyFilter()
+		return cp, cmd
 	}
 
 	switch key.String() {

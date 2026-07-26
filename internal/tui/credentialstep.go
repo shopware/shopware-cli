@@ -154,8 +154,15 @@ func (c *CredentialStep) HandleKey(msg tea.KeyPressMsg) (cmd tea.Cmd, submitted 
 	return c.updateInput(msg), false
 }
 
-// updateInput routes a typed key to the focused input.
-func (c *CredentialStep) updateInput(msg tea.KeyPressMsg) tea.Cmd {
+// HandlePaste routes terminal (bracketed) paste into the focused input.
+// Embedding wizards must call this for tea.PasteMsg — paste does not arrive
+// as key presses, so HandleKey never sees it.
+func (c *CredentialStep) HandlePaste(msg tea.PasteMsg) tea.Cmd {
+	return c.updateInput(msg)
+}
+
+// updateInput routes a typed key or paste to the focused input.
+func (c *CredentialStep) updateInput(msg tea.Msg) tea.Cmd {
 	switch c.focus {
 	case CredFocusUsername:
 		var cmd tea.Cmd

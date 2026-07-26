@@ -105,6 +105,17 @@ func TestCredentialStep_TypingReachesFocusedInput(t *testing.T) {
 	assert.Equal(t, "a", c.Username())
 }
 
+func TestCredentialStep_PasteReachesFocusedInput(t *testing.T) {
+	c := NewCredentialStep(CredentialStepOptions{})
+	c.Focus(CredFocusUsername)
+	c.HandlePaste(tea.PasteMsg{Content: "pasted-user"})
+	assert.Equal(t, "pasted-user", c.Username())
+
+	c.Focus(CredFocusPassword)
+	c.HandlePaste(tea.PasteMsg{Content: "pasted-pass"})
+	assert.Equal(t, "pasted-pass", c.Password())
+}
+
 func TestCredentialStep_NilValidatorAcceptsAnything(t *testing.T) {
 	c := NewCredentialStep(CredentialStepOptions{})
 	c.Focus(CredFocusPassword)

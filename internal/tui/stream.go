@@ -2,6 +2,7 @@ package tui
 
 import (
 	"bufio"
+	"bytes"
 	"io"
 	"os/exec"
 
@@ -51,6 +52,41 @@ func StreamCmdOutput(cmd *exec.Cmd, ch chan<- string, useStdout bool) error {
 		return err
 	}
 	return cmd.Wait()
+}
+
+// LineWriter converts a byte stream into per-line emit calls — the io.Writer
+// side of streaming subprocess output.
+type LineWriter struct {
+	emit func(string)
+	buf  []byte
+}
+
+// NewLineWriter creates a line writer that calls emit for every full line.
+func NewLineWriter(emit func(string)) *LineWriter {
+	return &LineWriter{emit: emit}
+}
+
+// Write implements io.Writer.
+func (w *LineWriter) Write(p []byte) (int, error) {
+	w.buf = append(w.buf, p...)
+	for {
+		idx := bytes.IndexByte(w.buf, '\n')
+		if idx < 0 {
+			break
+		}
+		line := string(bytes.TrimRight(w.buf[:idx], "\r"))
+		w.buf = w.buf[idx+1:]
+		w.emit(line)
+	}
+	return len(p), nil
+}
+
+// Flush emits any trailing output that did not end in a newline.
+func (w *LineWriter) Flush() {
+	if len(w.buf) > 0 {
+		w.emit(string(w.buf))
+		w.buf = nil
+	}
 }
 
 // ReadLineCmd returns a tea.Cmd that reads the next line from ch and converts

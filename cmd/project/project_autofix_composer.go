@@ -1,146 +1,50 @@
 package project
 
 import (
-	"context"
-	"fmt"
-	"path"
-	"strings"
+	"os"
 
-	"charm.land/huh/v2"
-	"charm.land/huh/v2/spinner"
-	"github.com/shyim/go-composer"
-	"github.com/shyim/go-composer/repository"
 	"github.com/spf13/cobra"
 
-	"github.com/shopware/shopware-cli/internal/extension"
-	"github.com/shopware/shopware-cli/internal/shop"
+	"github.com/shopware/shopware-cli/internal/autofixtui"
+	"github.com/shopware/shopware-cli/internal/shop/pluginmigrate"
 	"github.com/shopware/shopware-cli/internal/system"
-	"github.com/shopware/shopware-cli/internal/tui"
-	"github.com/shopware/shopware-cli/logging"
 )
 
 var projectAutofixComposerCmd = &cobra.Command{
 	Use:   "composer-plugins",
-	Short: "Autofix plugins from custom/plugins to Composer",
+	Short: "Migrate extensions from custom/ to Composer management",
+	Long: "Migrates the extensions living in custom/ under Composer management: Shopware Store plugins are required from packages.shopware.com and their local copy removed, everything else is registered as a Composer path repository.\n" +
+		"In a terminal this runs as an interactive wizard. With --no-interaction (or without a terminal) the migration runs headless: set SHOPWARE_PACKAGIST_TOKEN to migrate Store plugins (otherwise everything becomes a path repository) and use --dry-run to preview the plan.",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		project, err := findClosestShopwareProject()
+		projectRoot, err := findClosestShopwareProject()
 		if err != nil {
 			return err
 		}
 
-		rootComposerJson, err := composer.ReadJson(path.Join(project, "composer.json"))
+		exec, err := resolveExecutor(cmd, projectRoot)
 		if err != nil {
 			return err
 		}
-
-		var token string
 
 		if !system.IsInteractionEnabled(cmd.Context()) {
-			return fmt.Errorf("this command requires interaction to enter the Shopware Packagist Token, but interaction is disabled")
-		}
+			dryRun, _ := cmd.Flags().GetBool("dry-run")
 
-		if err := huh.NewInput().
-			Title("Please enter the Shopware Packagist Token").
-			Value(&token).
-			Run(); err != nil {
-			return err
-		}
-
-		if token == "" {
-			return fmt.Errorf("token cannot be empty")
-		}
-
-		ctx, cancel := context.WithCancel(cmd.Context())
-
-		go func() {
-			_ = spinner.New().Context(ctx).Title("Fetching packages").Run()
-		}()
-
-		const storeURL = "https://packages.shopware.com"
-		storeAuth := &composer.Auth{BearerAuth: map[string]string{storeURL: token}}
-		storePackages, err := repository.New(storeURL, storeAuth).GetPackages(cmd.Context())
-
-		cancel()
-
-		if err != nil {
-			return err
-		}
-
-		extensions := extension.FindExtensionsFromProject(logging.DisableLogger(cmd.Context()), project, false)
-
-		composerInstall := []string{}
-		deleteDirectories := []string{}
-
-		for _, extension := range extensions {
-			if !strings.Contains(extension.GetPath(), "custom/plugins") {
-				continue
-			}
-
-			extName, err := extension.GetName()
-			if err != nil {
-				return err
-			}
-
-			extVersion, err := extension.GetVersion()
-			if err != nil {
-				return err
-			}
-
-			storeName := fmt.Sprintf("store.shopware.com/%s", strings.ToLower(extName))
-			if _, inStore := storePackages[storeName]; !inStore {
-				composerName, err := extension.GetComposerName()
-				if err != nil {
-					continue
-				}
-
-				if !rootComposerJson.HasPackage(composerName) {
-					composerInstall = append(composerInstall, composerName)
-				}
-
-				continue
-			}
-
-			composerInstall = append(composerInstall, fmt.Sprintf("store.shopware.com/%s:%s", strings.ToLower(extName), extVersion.String()))
-			deleteDirectories = append(deleteDirectories, extension.GetPath())
-		}
-
-		if len(composerInstall) > 0 {
-			fmt.Println("You can install the existing plugins with the following command:")
-			fmt.Println(tui.GreenText.Render("composer require " + strings.Join(composerInstall, " ")))
-		}
-
-		if len(deleteDirectories) > 0 {
-			fmt.Println("and delete the following directories afterwards:")
-			fmt.Println(tui.GreenText.Render("rm -rf " + strings.Join(deleteDirectories, " ")))
-		}
-
-		fmt.Println("")
-		fmt.Print("Don't forget to run ")
-		fmt.Print(tui.GreenText.Render("bin/console plugin:refresh"))
-		fmt.Println(" after deleting the directories.")
-
-		if !rootComposerJson.Repositories.HasRepository("https://packages.shopware.com") {
-			rootComposerJson.Repositories = append(rootComposerJson.Repositories, composer.Repository{
-				Type: "composer",
-				URL:  "https://packages.shopware.com",
+			return pluginmigrate.NewPluginMigrator(projectRoot, exec).RunHeadless(cmd.Context(), pluginmigrate.HeadlessOptions{
+				Token:  os.Getenv("SHOPWARE_PACKAGIST_TOKEN"),
+				DryRun: dryRun,
+				Out:    os.Stdout,
 			})
 		}
 
-		auth, err := shop.ReadComposerAuth(path.Join(project, "auth.json"))
-		if err != nil {
-			return err
-		}
-
-		auth.BearerAuth["packages.shopware.com"] = token
-
-		if err := auth.Save(); err != nil {
-			return err
-		}
-
-		return rootComposerJson.Save()
+		_, err = autofixtui.NewApp(autofixtui.Options{
+			ProjectRoot: projectRoot,
+			Executor:    exec,
+		}).Run()
+		return err
 	},
 }
 
 func init() {
 	projectAutofixCmd.AddCommand(projectAutofixComposerCmd)
+	projectAutofixComposerCmd.Flags().Bool("dry-run", false, "non-interactive mode: print the migration plan without modifying the project")
 }

@@ -103,7 +103,10 @@ func (o *Overlay) ID() string { return "text-prompt" }
 func (o *Overlay) Update(msg tea.Msg) (app.Overlay, tea.Cmd) {
 	key, ok := msg.(tea.KeyPressMsg)
 	if !ok {
-		return o, nil
+		// Forward non-key input (e.g. tea.PasteMsg) to the text input.
+		var cmd tea.Cmd
+		o.input, cmd = o.input.Update(msg)
+		return o, cmd
 	}
 	switch app.KeyString(key) {
 	case tui.KeyEsc:

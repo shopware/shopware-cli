@@ -288,6 +288,9 @@ func (m Model) Update(msg tea.Msg) (app.Content, tea.Cmd) {
 
 	case tea.KeyPressMsg:
 		return m.updateKeyPress(msg)
+
+	case tea.PasteMsg:
+		return m.updatePaste(msg)
 	}
 
 	return m.updateFallback(msg)

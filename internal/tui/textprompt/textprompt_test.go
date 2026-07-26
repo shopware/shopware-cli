@@ -65,9 +65,16 @@ func TestTextPrompt_NonSecretShowsValueInView(t *testing.T) {
 	assert.Contains(t, view, "Name")
 }
 
-func TestTextPrompt_NonKeyMsgIsIgnored(t *testing.T) {
+func TestTextPrompt_NonKeyMsgKeepsPromptOpen(t *testing.T) {
 	o := New(Options{Title: "Name", Value: "x"})
-	next, cmd := o.Update(struct{}{})
+	next, _ := o.Update(struct{}{})
 	assert.Same(t, o, next)
-	assert.Nil(t, cmd)
+	assert.Equal(t, "x", o.Value())
+}
+
+func TestTextPrompt_PasteInsertsIntoValue(t *testing.T) {
+	o := New(Options{Key: testKey{}, Title: "Token"})
+	next, _ := o.Update(tea.PasteMsg{Content: "pasted-secret"})
+	o = next.(*Overlay)
+	assert.Equal(t, "pasted-secret", o.Value())
 }

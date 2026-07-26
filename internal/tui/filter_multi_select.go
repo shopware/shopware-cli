@@ -135,6 +135,12 @@ func (m *filterMultiSelectModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.width = msg.Width
 		return m, nil
 
+	case tea.PasteMsg:
+		var cmd tea.Cmd
+		m.filter, cmd = m.filter.Update(msg)
+		m.applyFilter()
+		return m, cmd
+
 	case tea.KeyPressMsg:
 		switch msg.String() {
 		case "esc", "ctrl+c":
