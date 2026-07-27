@@ -21,12 +21,12 @@ func testExtension(name, generation, status string) account_api.Extension {
 
 func TestFilterProducerExtensions(t *testing.T) {
 	extensions := []account_api.Extension{
-		testExtension("PaymentPlugin", "plugin", "approved"),
-		testExtension("ShippingApp", "app", "instore"),
+		testExtension("PaymentPlugin", "platform", "approved"),
+		testExtension("ShippingApp", "apps", "instore"),
 		testExtension("Legacy", "classic", "approved"),
-		testExtension("Gone", "plugin", "deleted"),
-		testExtension("", "plugin", "approved"),
-		testExtension("ThemePlugin", "plugin", "incomplete"),
+		testExtension("Gone", "platform", "deleted"),
+		testExtension("", "platform", "approved"),
+		testExtension("ThemePlugin", "platform", "incomplete"),
 	}
 
 	t.Run("no type filter keeps plugins and apps", func(t *testing.T) {
@@ -46,12 +46,13 @@ func TestFilterProducerExtensions(t *testing.T) {
 }
 
 func TestIncludeProducerExtension(t *testing.T) {
-	assert.True(t, includeProducerExtension(testExtension("A", "plugin", "approved"), false, false))
+	assert.True(t, includeProducerExtension(testExtension("A", "platform", "approved"), false, false))
 	assert.False(t, includeProducerExtension(testExtension("A", "classic", "approved"), false, false))
-	assert.False(t, includeProducerExtension(testExtension("A", "plugin", "deleted"), false, false))
-	assert.False(t, includeProducerExtension(testExtension("", "plugin", "approved"), false, false))
-	assert.False(t, includeProducerExtension(testExtension("A", "app", "approved"), true, false))
-	assert.True(t, includeProducerExtension(testExtension("A", "app", "approved"), false, true))
+	assert.False(t, includeProducerExtension(testExtension("A", "platform", "deleted"), false, false))
+	assert.False(t, includeProducerExtension(testExtension("", "platform", "approved"), false, false))
+	assert.False(t, includeProducerExtension(testExtension("A", "apps", "approved"), true, false))
+	assert.True(t, includeProducerExtension(testExtension("A", "apps", "approved"), false, true))
+	assert.True(t, includeProducerExtension(testExtension("A", "platform", "approved"), true, false))
 }
 
 func extensionNames(extensions []account_api.Extension) []string {

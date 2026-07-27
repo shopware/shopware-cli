@@ -72,7 +72,8 @@ func init() {
 }
 
 // filterProducerExtensions removes deleted/classic/empty entries and optionally
-// keeps only plugins or apps (matched on Generation.Name).
+// keeps only plugins or apps. Account API generation names are "platform" (plugins)
+// and "apps" (apps).
 func filterProducerExtensions(extensions []account_api.Extension, pluginOnly, appOnly bool) []account_api.Extension {
 	filtered := make([]account_api.Extension, 0, len(extensions))
 	for _, extension := range extensions {
@@ -88,13 +89,21 @@ func includeProducerExtension(extension account_api.Extension, pluginOnly, appOn
 	if extension.Status.Name == "deleted" || extension.Name == "" || extension.Generation.Name == "classic" {
 		return false
 	}
-	if pluginOnly && extension.Generation.Name != "plugin" {
+	if pluginOnly && !isProducerPlugin(extension.Generation.Name) {
 		return false
 	}
-	if appOnly && extension.Generation.Name != "app" {
+	if appOnly && !isProducerApp(extension.Generation.Name) {
 		return false
 	}
 	return true
+}
+
+func isProducerPlugin(generation string) bool {
+	return generation == "platform"
+}
+
+func isProducerApp(generation string) bool {
+	return generation == "apps"
 }
 
 type producerExtensionListItem struct {
