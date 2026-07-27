@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sync"
 	"time"
 
 	"github.com/shopware/shopware-cli/internal/executor"
@@ -110,7 +111,7 @@ func (u *ProjectUpgrader) Run(ctx context.Context, opts RunOptions) <-chan StepE
 			return
 		}
 
-		if err := u.runSteps(ctx, opts, emit); err != nil {
+		if err := u.runSteps(ctx, &opts, emit); err != nil {
 			u.restore(emit)
 			u.writeFailureReport(opts.Report, err, emit)
 			emit(StepEvent{Step: StepFinished, State: StateFail, Err: err})
@@ -123,7 +124,7 @@ func (u *ProjectUpgrader) Run(ctx context.Context, opts RunOptions) <-chan StepE
 	return events
 }
 
-func (u *ProjectUpgrader) runSteps(ctx context.Context, opts RunOptions, emit func(StepEvent)) error {
+func (u *ProjectUpgrader) runSteps(ctx context.Context, opts *RunOptions, emit func(StepEvent)) error {
 	// The deployment helper runs Composer internally, so the audit opt-out
 	// env applies to every step, not just the direct Composer invocations.
 	exec := u.executor
@@ -245,6 +246,9 @@ func (u *ProjectUpgrader) backupDir() string {
 }
 
 func (u *ProjectUpgrader) backup() error {
+	if err := os.RemoveAll(u.backupDir()); err != nil {
+		return err
+	}
 	if err := os.MkdirAll(u.backupDir(), 0o755); err != nil {
 		return err
 	}
@@ -271,6 +275,14 @@ func (u *ProjectUpgrader) restore(emit func(StepEvent)) {
 		backup := filepath.Join(u.backupDir(), name)
 		content, err := os.ReadFile(backup)
 		if err != nil {
+			if os.IsNotExist(err) {
+				target := filepath.Join(u.projectRoot, name)
+				if removeErr := os.Remove(target); removeErr == nil {
+					emit(StepEvent{Step: StepFinished, State: StateRunning, Line: "Removed newly created " + name + "."})
+				} else if !os.IsNotExist(removeErr) {
+					emit(StepEvent{Step: StepFinished, State: StateRunning, Line: "Could not remove newly created " + name + ": " + removeErr.Error()})
+				}
+			}
 			continue
 		}
 
@@ -312,11 +324,15 @@ func stateName(s CheckState, err error) string {
 
 // lineWriter converts a byte stream into per-line emit calls.
 type lineWriter struct {
+	mu   sync.Mutex
 	emit func(string)
 	buf  []byte
 }
 
 func (w *lineWriter) Write(p []byte) (int, error) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+
 	w.buf = append(w.buf, p...)
 	for {
 		idx := bytes.IndexByte(w.buf, '\n')
@@ -332,6 +348,9 @@ func (w *lineWriter) Write(p []byte) (int, error) {
 
 // Flush emits any trailing output that did not end in a newline.
 func (w *lineWriter) Flush() {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+
 	if len(w.buf) > 0 {
 		w.emit(string(w.buf))
 		w.buf = nil

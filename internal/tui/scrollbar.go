@@ -28,13 +28,14 @@ func NewScrollbar(opts ScrollbarOptions) Scrollbar {
 // Render implements the component contract.
 func (s Scrollbar) Render() string {
 	total, visible, offset, height := s.opts.Total, s.opts.Visible, s.opts.Offset, s.opts.Height
-	if height < 3 || total <= visible {
+	if height < 3 || total <= 0 || visible <= 0 || total <= visible {
 		return ""
 	}
 
 	track := height - 2
 	thumbSize := max(1, track*visible/total)
 	maxOffset := total - visible
+	offset = max(0, min(offset, maxOffset))
 	thumbPos := 0
 	if maxOffset > 0 {
 		thumbPos = (track - thumbSize) * offset / maxOffset

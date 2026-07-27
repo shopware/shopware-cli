@@ -52,7 +52,7 @@ func (r ResolveResult) SecurityBlocked() bool {
 // resolution does not change it.
 func (r ResolveResult) ResolvedVersion(pkg string) string {
 	for _, change := range r.Changes {
-		if change.Name == pkg {
+		if strings.EqualFold(change.Name, pkg) {
 			return change.To
 		}
 	}
@@ -140,8 +140,11 @@ func lockVersions(path string) map[string]string {
 		return nil
 	}
 
-	versions := make(map[string]string, len(lock.Packages))
+	versions := make(map[string]string, len(lock.Packages)+len(lock.PackagesDev))
 	for _, pkg := range lock.Packages {
+		versions[pkg.Name] = strings.TrimPrefix(pkg.Version, "v")
+	}
+	for _, pkg := range lock.PackagesDev {
 		versions[pkg.Name] = strings.TrimPrefix(pkg.Version, "v")
 	}
 	return versions

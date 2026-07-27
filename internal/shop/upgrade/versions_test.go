@@ -73,6 +73,28 @@ func TestLoadCatalogWithoutSupportData(t *testing.T) {
 	assert.Empty(t, catalog.Options[0].SupportLeft())
 }
 
+func TestLoadCatalogBooleanSupportStates(t *testing.T) {
+	u := NewProjectUpgrader(t.TempDir(), nil)
+	u.shopwareVersions = func(context.Context) ([]string, error) {
+		return []string{"6.8.0.0", "6.9.0.0"}, nil
+	}
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`[
+			{"cycle": "6.9", "support": true, "eol": false},
+			{"cycle": "6.8", "support": false, "eol": true}
+		]`))
+	}))
+	defer server.Close()
+	u.endOfLifeURL = server.URL
+
+	catalog, err := u.LoadCatalog(t.Context(), version.Must(version.NewVersion("6.7.0.0")))
+	require.NoError(t, err)
+	require.Len(t, catalog.Options, 2)
+	assert.Equal(t, "active", catalog.Options[0].SupportType)
+	assert.Equal(t, "eol", catalog.Options[1].SupportType)
+}
+
 func TestSupportLeft(t *testing.T) {
 	now := time.Date(2026, 7, 20, 0, 0, 0, 0, time.UTC)
 
@@ -95,5 +117,7 @@ func TestIsMultiMajorJump(t *testing.T) {
 	assert.False(t, IsMultiMajorJump(v("6.6.10.3"), v("6.6.10.19")))
 	assert.False(t, IsMultiMajorJump(v("6.6.10.3"), v("6.7.11.0")))
 	assert.True(t, IsMultiMajorJump(v("6.5.8.0"), v("6.7.11.0")))
-	assert.True(t, IsMultiMajorJump(v("6.6.10.3"), v("7.0.0.0")))
+	assert.False(t, IsMultiMajorJump(v("6.6.10.3"), v("7.0.0.0")))
+	assert.True(t, IsMultiMajorJump(v("6.6.10.3"), v("8.0.0.0")))
+	assert.False(t, IsMultiMajorJump(v("7.0.0.0"), v("6.6.10.3")), "downgrades are not upgrade jumps")
 }

@@ -74,6 +74,15 @@ func TestCommandPalette_TypingFiltersList(t *testing.T) {
 	}
 }
 
+func TestCommandPalette_AllowsTypingVimNavigationLetters(t *testing.T) {
+	cp := newCommandPalette(paletteState{})
+	for _, r := range "jk" {
+		next, _ := cp.Update(tea.KeyPressMsg(tea.Key{Code: r, Text: string(r)}))
+		cp = next.(*commandPalette)
+	}
+	assert.Equal(t, "jk", cp.filter.Value())
+}
+
 func TestCommandPalette_TypingNoMatchYieldsEmptyFiltered(t *testing.T) {
 	cp := newCommandPalette(paletteState{})
 	for _, r := range "zzzzz" {

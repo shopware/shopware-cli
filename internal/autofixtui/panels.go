@@ -27,6 +27,9 @@ func (m *Model) updateWelcome(msg tea.Msg) (app.Content, tea.Cmd) {
 	case "q", "esc":
 		return m, tea.Quit
 	case "enter":
+		if !m.scanDone {
+			return m, nil
+		}
 		if !m.welcomeYes || len(m.scan) == 0 {
 			return m, tea.Quit
 		}
@@ -305,6 +308,9 @@ func (m *Model) updateRun(msg tea.Msg) (app.Content, tea.Cmd) {
 		return m, readRunEventCmd(m.run.events)
 
 	case runClosedMsg:
+		if m.run.cancel != nil {
+			m.run.cancel()
+		}
 		m.panel = panelDone
 		m.done = doneState{succeeded: m.run.succeeded, err: m.run.err}
 		return m, nil

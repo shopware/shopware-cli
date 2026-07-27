@@ -109,12 +109,12 @@ func (cp *commandPalette) Update(msg tea.Msg) (app.Overlay, tea.Cmd) {
 	switch key.String() {
 	case "esc", "ctrl+p":
 		return nil, app.Emit(paletteResultMsg{})
-	case tui.KeyUp, "k":
+	case tui.KeyUp:
 		if cp.cursor > 0 {
 			cp.cursor--
 		}
 		return cp, nil
-	case tui.KeyDown, "j":
+	case tui.KeyDown:
 		if cp.cursor < len(cp.filtered)-1 {
 			cp.cursor++
 		}

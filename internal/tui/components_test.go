@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
 	"github.com/stretchr/testify/assert"
@@ -89,6 +90,18 @@ func TestWizardFrameWithoutStatus(t *testing.T) {
 	assert.Equal(t, 2, strings.Count(ansi.Strip(frame), "├"), "only title and footer rules")
 }
 
+func TestWizardFrameClampsTinyDimensions(t *testing.T) {
+	frame := NewWizardFrame(WizardFrameOptions{
+		Width: 2, Height: 3, Title: "Title", Status: "status", Body: "body", Footer: "footer",
+	}).Render()
+
+	lines := strings.Split(frame, "\n")
+	assert.Len(t, lines, 3)
+	for _, line := range lines {
+		assert.Equal(t, 5, lipgloss.Width(line))
+	}
+}
+
 func TestScrollbar(t *testing.T) {
 	fits := NewScrollbar(ScrollbarOptions{Total: 5, Visible: 10, Offset: 0, Height: 8}).Render()
 	assert.Empty(t, fits, "no scrollbar when everything fits")
@@ -105,6 +118,16 @@ func TestScrollbar(t *testing.T) {
 	end := ansi.Strip(NewScrollbar(ScrollbarOptions{Total: 100, Visible: 10, Offset: 90, Height: 10}).Render())
 	endLines := strings.Split(end, "\n")
 	assert.Equal(t, "█", endLines[len(endLines)-2])
+
+	assert.Empty(t, NewScrollbar(ScrollbarOptions{Total: 0, Visible: -1, Height: 8}).Render())
+	assert.Equal(t,
+		NewScrollbar(ScrollbarOptions{Total: 100, Visible: 10, Offset: 0, Height: 10}).Render(),
+		NewScrollbar(ScrollbarOptions{Total: 100, Visible: 10, Offset: -100, Height: 10}).Render(),
+	)
+	assert.Equal(t,
+		NewScrollbar(ScrollbarOptions{Total: 100, Visible: 10, Offset: 90, Height: 10}).Render(),
+		NewScrollbar(ScrollbarOptions{Total: 100, Visible: 10, Offset: 1000, Height: 10}).Render(),
+	)
 }
 
 func TestButtonRow(t *testing.T) {
@@ -161,6 +184,20 @@ func TestModal(t *testing.T) {
 	// Narrow areas shrink the box below MaxWidth.
 	narrow := NewModal(ModalOptions{MaxWidth: 40, AreaWidth: 30, AreaHeight: 6})
 	assert.Equal(t, 26, narrow.Width())
+
+	assert.Contains(t, NewModal(ModalOptions{}).Render("before-size"), "before-size")
+}
+
+func TestCursorAndTextFitClampBoundaries(t *testing.T) {
+	assert.Equal(t, 0, MoveCursor(5, KeyDown, 0))
+	assert.Equal(t, 0, MoveCursor(-3, "other", 2))
+	assert.Equal(t, 1, MoveCursor(8, "other", 2))
+	assert.Equal(t, "abc", PadRight("abc", 3))
+}
+
+func TestReadLineCmdTreatsNilChannelAsDone(t *testing.T) {
+	cmd := ReadLineCmd(nil, func(string) tea.Msg { return "line" }, "done")
+	assert.Equal(t, "done", cmd())
 }
 
 func TestStateDotAndCheckRow(t *testing.T) {

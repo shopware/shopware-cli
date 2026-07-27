@@ -55,7 +55,9 @@ func (s *OverlayStack) Pop() {
 	if s == nil || len(s.stack) == 0 {
 		return
 	}
-	s.stack = s.stack[:len(s.stack)-1]
+	i := len(s.stack) - 1
+	s.stack[i] = nil
+	s.stack = s.stack[:i]
 }
 
 // Top returns the top overlay, or nil.
@@ -75,6 +77,7 @@ func (s *OverlayStack) Update(msg tea.Msg) (cmd tea.Cmd, closed bool) {
 	i := len(s.stack) - 1
 	next, c := s.stack[i].Update(msg)
 	if next == nil {
+		s.stack[i] = nil
 		s.stack = s.stack[:i]
 		return c, true
 	}

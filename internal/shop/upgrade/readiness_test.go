@@ -164,6 +164,15 @@ func TestReadinessDeploymentHelperMissing(t *testing.T) {
 	assert.False(t, r.Blocked())
 }
 
+func TestNilExecutorChecksFailGracefully(t *testing.T) {
+	u := NewProjectUpgrader(t.TempDir(), nil)
+
+	tooling := u.checkTooling(t.Context())
+	assert.Equal(t, StateFail, tooling.State)
+	assert.Equal(t, "Executor is not initialized", tooling.Detail)
+	assert.Empty(t, u.InstalledPHPVersion(t.Context()))
+}
+
 func TestCheckGitClean(t *testing.T) {
 	if _, err := exec.LookPath("git"); err != nil {
 		t.Skip("git not installed")

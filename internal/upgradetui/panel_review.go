@@ -74,7 +74,7 @@ func (m *Model) updateReview(msg tea.Msg) (app.Content, tea.Cmd) {
 
 	case tea.KeyPressMsg:
 		switch app.KeyString(msg) {
-		case "up", "k", "left":
+		case "up", "k", "left", "shift+tab", "backtab":
 			if m.review.button > 0 {
 				m.review.button--
 			}
@@ -105,7 +105,7 @@ func (m *Model) backToPrepare() (app.Content, tea.Cmd) {
 
 func (m *Model) viewReview() (title, status, body string) {
 	title = "Review upgrade plan and start"
-	status = m.statusStrip(tui.VariantInfo, "TODO", "Review what will change before the local upgrade starts.")
+	status = m.statusStrip(tui.VariantInfo, "REVIEW", "Review what will change before the local upgrade starts.")
 
 	var left strings.Builder
 	left.WriteString(tui.BoldStyle.Render("Planned project changes"))

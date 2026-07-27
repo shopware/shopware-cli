@@ -142,7 +142,7 @@ func (m *Model) buttonWrap(width int, labels []string, active int) string {
 // rightColumnWidth is the width of the user-action column for a given left
 // column width, matching the TwoColumn split.
 func (m *Model) rightColumnWidth(leftWidth int) int {
-	return m.bodyWidth() - leftWidth - 3
+	return max(0, m.bodyWidth()-leftWidth-3)
 }
 
 // contextLabel is the frame title bar's right side: project, environment, and

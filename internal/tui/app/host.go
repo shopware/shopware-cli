@@ -42,5 +42,9 @@ func (a *App) SwapContent(c Content) tea.Cmd {
 	if c == nil {
 		return nil
 	}
+	if a.width > 0 && a.height > 0 {
+		ctx := a.Context()
+		PropagateSize(c, ctx.Width, ctx.MainHeight)
+	}
 	return c.Init()
 }

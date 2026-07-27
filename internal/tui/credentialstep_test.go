@@ -139,6 +139,22 @@ func TestCredentialStep_Render(t *testing.T) {
 	assert.NotContains(t, out, "short", "masked password must not leak into the view")
 }
 
+func TestCredentialStep_CustomLabelsAndHint(t *testing.T) {
+	c := NewCredentialStep(CredentialStepOptions{
+		UsernameLabel: "API user",
+		PasswordLabel: "API secret",
+		PasswordHint:  "issued by the provider",
+	})
+
+	var b strings.Builder
+	c.Render(&b)
+	out := ansi.Strip(b.String())
+	assert.Contains(t, out, "API user")
+	assert.Contains(t, out, "API secret")
+	assert.Contains(t, out, "issued by the provider")
+	assert.NotContains(t, out, "Choose a username")
+}
+
 func TestCredentialStep_FooterHint(t *testing.T) {
 	c := testCreds()
 	c.Focus(CredFocusPassword)

@@ -87,6 +87,35 @@ func TestRewriteComposerJSONWithoutResolvedVersions(t *testing.T) {
 	assert.Contains(t, changes, "swag/demo: ^2.0 -> *", "without a resolved version the constraint falls back to *")
 }
 
+func TestRewriteComposerJSONDoesNotMoveRequireDevPackages(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, filepath.Join(dir, "composer.json"), `{
+		"name": "shopware/production",
+		"require-dev": {
+			"shopware/core": "6.6.10.3",
+			"swag/demo": "^2.0"
+		}
+	}`)
+	writeFile(t, filepath.Join(dir, "composer.lock"), testComposerLock)
+
+	changes, err := newTestUpgrader(t, dir).RewriteComposerJSON("6.7.11.0", map[string]string{"swag/demo": "2.1.3"})
+	require.NoError(t, err)
+	assert.Equal(t, []string{"shopware/deployment-helper: added"}, changes)
+
+	content, err := os.ReadFile(filepath.Join(dir, "composer.json"))
+	require.NoError(t, err)
+	var parsed struct {
+		Require    map[string]string `json:"require"`
+		RequireDev map[string]string `json:"require-dev"`
+	}
+	require.NoError(t, json.Unmarshal(content, &parsed))
+	assert.Equal(t, "6.6.10.3", parsed.RequireDev["shopware/core"])
+	assert.Equal(t, "^2.0", parsed.RequireDev["swag/demo"])
+	assert.NotContains(t, parsed.Require, "shopware/core")
+	assert.NotContains(t, parsed.Require, "swag/demo")
+	assert.Equal(t, "*", parsed.Require["shopware/deployment-helper"])
+}
+
 func TestLockNameFor(t *testing.T) {
 	assert.Equal(t, "composer.lock", lockNameFor("composer.json"))
 	assert.Equal(t, ".shopware-cli-upgrade-composer.lock", lockNameFor(upgradeManifestName))

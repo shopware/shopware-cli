@@ -134,6 +134,11 @@ func exportReportCmd(u *upgrade.ProjectUpgrader, data upgrade.ReportData) tea.Cm
 
 // readRunEventCmd pulls the next runner event; re-issue it after each event.
 func readRunEventCmd(events <-chan upgrade.StepEvent) tea.Cmd {
+	if events == nil {
+		return func() tea.Msg {
+			return runClosedMsg{}
+		}
+	}
 	return func() tea.Msg {
 		ev, ok := <-events
 		if !ok {

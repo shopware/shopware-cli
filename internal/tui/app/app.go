@@ -258,7 +258,7 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 // isInputMsg reports messages exclusively owned by an open overlay.
 func isInputMsg(msg tea.Msg) bool {
 	switch msg.(type) {
-	case tea.KeyMsg, tea.MouseMsg, tea.PasteMsg, tea.PasteStartMsg, tea.PasteEndMsg:
+	case tea.KeyPressMsg, tea.KeyReleaseMsg, tea.MouseMsg, tea.PasteMsg, tea.PasteStartMsg, tea.PasteEndMsg:
 		return true
 	default:
 		return false

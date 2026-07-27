@@ -1,8 +1,6 @@
 package project
 
 import (
-	"os"
-
 	"github.com/spf13/cobra"
 
 	"github.com/shopware/shopware-cli/internal/shop"
@@ -47,7 +45,7 @@ var projectUpgradeCmd = &cobra.Command{
 				Target:  target,
 				DryRun:  dryRun,
 				NoAudit: noAudit,
-				Out:     os.Stdout,
+				Out:     cmd.OutOrStdout(),
 			})
 		}
 

@@ -56,5 +56,8 @@ func (m Modal) Render(content string) string {
 		BorderForeground(BrandColor).
 		Padding(1, 2).
 		Width(m.Width())
+	if m.opts.AreaWidth <= 0 || m.opts.AreaHeight <= 0 {
+		return box.Render(content)
+	}
 	return lipgloss.Place(m.opts.AreaWidth, m.opts.AreaHeight, lipgloss.Center, lipgloss.Center, box.Render(content))
 }

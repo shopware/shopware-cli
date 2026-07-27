@@ -39,6 +39,9 @@ type HeadlessOptions struct {
 // and (unless DryRun) the guided execution with rollback on failure.
 func (u *ProjectUpgrader) RunHeadless(ctx context.Context, opts HeadlessOptions) error {
 	out := opts.Out
+	if out == nil {
+		out = io.Discard
+	}
 	if opts.NoAudit {
 		u.DisableAuditBlock()
 	}
@@ -144,12 +147,12 @@ func selectTarget(catalog *Catalog, target string) (*VersionOption, error) {
 	case "":
 		return nil, fmt.Errorf("--target is required in non-interactive mode; available versions:\n%s", availableTargets(catalog))
 	case TargetRecommended:
-		if catalog.Recommended < 0 {
+		if catalog.Recommended < 0 || catalog.Recommended >= len(catalog.Options) {
 			return nil, fmt.Errorf("no recommended version available")
 		}
 		return &catalog.Options[catalog.Recommended], nil
 	case TargetLatestPatch:
-		if catalog.LatestPatch < 0 {
+		if catalog.LatestPatch < 0 || catalog.LatestPatch >= len(catalog.Options) {
 			return nil, fmt.Errorf("no newer patch release of the current minor available")
 		}
 		return &catalog.Options[catalog.LatestPatch], nil
@@ -235,13 +238,13 @@ func (u *ProjectUpgrader) headlessReportData(ctx context.Context, readiness Read
 func (u *ProjectUpgrader) consumeRunEvents(out io.Writer, events <-chan StepEvent) error {
 	var runErr error
 	for ev := range events {
+		if ev.Step == StepFinished && ev.State == StateFail {
+			runErr = ev.Err
+		}
 		switch {
 		case ev.Line != "":
 			_, _ = fmt.Fprintln(out, "  "+ev.Line)
 		case ev.Step == StepFinished:
-			if ev.State == StateFail {
-				runErr = ev.Err
-			}
 		case ev.State == StateRunning:
 			_, _ = fmt.Fprintln(out, tui.BoldText.Render("▸ "+ev.Step.Label()))
 		case ev.State == StateOK:

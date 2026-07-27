@@ -178,6 +178,12 @@ func (u *ProjectUpgrader) checkTooling(ctx context.Context) ReadinessCheck {
 		Label:    "PHP and Composer available",
 		Blocking: true,
 	}
+	if u.executor == nil {
+		check.State = StateFail
+		check.Value = "no"
+		check.Detail = "Executor is not initialized"
+		return check
+	}
 
 	var missing []string
 	if err := u.executor.PHPCommand(ctx, "--version").Run(); err != nil {
@@ -205,7 +211,7 @@ func (u *ProjectUpgrader) checkTooling(ctx context.Context) ReadinessCheck {
 func discoverExtensions(ctx context.Context, projectRoot string) []InstalledExtension {
 	found := extension.FindExtensionsFromProject(logging.DisableLogger(ctx), projectRoot, false)
 
-	vendorDir := filepath.Join(projectRoot, "vendor") + string(filepath.Separator)
+	vendorDir := filepath.Clean(filepath.Join(projectRoot, "vendor"))
 
 	result := make([]InstalledExtension, 0, len(found))
 	for _, ext := range found {
@@ -221,12 +227,16 @@ func discoverExtensions(ctx context.Context, projectRoot string) []InstalledExte
 			ver = v.String()
 		}
 
+		rel, err := filepath.Rel(vendorDir, filepath.Clean(ext.GetPath()))
+		isManaged := err == nil && rel != "." && rel != ".." &&
+			!strings.HasPrefix(rel, ".."+string(filepath.Separator))
+
 		result = append(result, InstalledExtension{
 			Name:            name,
 			Package:         pkg,
 			Path:            ext.GetPath(),
 			Version:         ver,
-			ComposerManaged: strings.HasPrefix(ext.GetPath(), vendorDir),
+			ComposerManaged: isManaged,
 		})
 	}
 

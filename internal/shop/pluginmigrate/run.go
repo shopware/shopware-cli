@@ -87,6 +87,7 @@ func (m *PluginMigrator) Run(ctx context.Context, plan Plan, token string) <-cha
 
 	go func() {
 		defer close(events)
+		defer func() { _ = os.RemoveAll(m.backupDir()) }()
 
 		if err := m.backup(); err != nil {
 			events <- StepEvent{Step: StepFinished, State: StateFail, Err: fmt.Errorf("backup project files: %w", err)}
@@ -226,7 +227,10 @@ func (m *PluginMigrator) backupDir() string {
 }
 
 func (m *PluginMigrator) backup() error {
-	if err := os.MkdirAll(m.backupDir(), 0o755); err != nil {
+	if err := os.RemoveAll(m.backupDir()); err != nil {
+		return err
+	}
+	if err := os.MkdirAll(m.backupDir(), 0o700); err != nil {
 		return err
 	}
 
@@ -238,7 +242,7 @@ func (m *PluginMigrator) backup() error {
 			}
 			return err
 		}
-		if err := os.WriteFile(filepath.Join(m.backupDir(), name), content, 0o644); err != nil {
+		if err := os.WriteFile(filepath.Join(m.backupDir(), name), content, 0o600); err != nil {
 			return err
 		}
 	}
@@ -248,17 +252,30 @@ func (m *PluginMigrator) backup() error {
 // restore puts the backed-up files back after a failed run.
 func (m *PluginMigrator) restore(emit func(StepEvent)) {
 	for _, name := range backedUpFiles {
-		content, err := os.ReadFile(filepath.Join(m.backupDir(), name))
+		backup := filepath.Join(m.backupDir(), name)
+		target := filepath.Join(m.projectRoot, name)
+		content, err := os.ReadFile(backup)
 		if err != nil {
+			if os.IsNotExist(err) {
+				if removeErr := os.Remove(target); removeErr == nil {
+					emit(StepEvent{Step: StepFinished, State: StateRunning, Line: "Removed newly created " + name + "."})
+				} else if !os.IsNotExist(removeErr) {
+					emit(StepEvent{Step: StepFinished, State: StateRunning, Line: "Could not remove newly created " + name + ": " + removeErr.Error()})
+				}
+			}
 			continue
 		}
 
-		current, readErr := os.ReadFile(filepath.Join(m.projectRoot, name))
+		current, readErr := os.ReadFile(target)
 		if readErr == nil && bytes.Equal(current, content) {
 			continue
 		}
 
-		if err := os.WriteFile(filepath.Join(m.projectRoot, name), content, 0o644); err != nil {
+		mode := os.FileMode(0o644)
+		if name == "auth.json" {
+			mode = 0o600
+		}
+		if err := os.WriteFile(target, content, mode); err != nil {
 			emit(StepEvent{Step: StepFinished, State: StateRunning, Line: "Could not restore " + name + ": " + err.Error()})
 			continue
 		}

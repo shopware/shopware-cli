@@ -67,8 +67,22 @@ func TestResolvedVersion(t *testing.T) {
 	result := resolvedTestResult(t)
 
 	assert.Equal(t, "2.1.3", result.ResolvedVersion("swag/demo"))
+	assert.Equal(t, "2.1.3", result.ResolvedVersion("Swag/Demo"), "Composer package names are case-insensitive")
 	assert.Equal(t, "6.7.11.0", result.ResolvedVersion("shopware/core"))
 	assert.Empty(t, result.ResolvedVersion("vendor/untouched"))
+}
+
+func TestLockVersionsIncludesDevelopmentPackages(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "composer.lock")
+	writeFile(t, path, `{
+		"packages": [{"name": "shopware/core", "version": "v6.7.11.0"}],
+		"packages-dev": [{"name": "phpunit/phpunit", "version": "v11.5.0"}]
+	}`)
+
+	assert.Equal(t, map[string]string{
+		"shopware/core":   "6.7.11.0",
+		"phpunit/phpunit": "11.5.0",
+	}, lockVersions(path))
 }
 
 func TestApplyResolvedVersions(t *testing.T) {

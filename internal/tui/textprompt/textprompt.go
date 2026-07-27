@@ -122,12 +122,13 @@ func (o *Overlay) Update(msg tea.Msg) (app.Overlay, tea.Cmd) {
 // View implements app.Overlay.
 func (o *Overlay) View(width, height int) string {
 	modal := tui.NewModal(tui.ModalOptions{MaxWidth: o.maxWidth, AreaWidth: width, AreaHeight: height})
+	contentWidth := modal.ContentWidth()
 
 	var b strings.Builder
-	b.WriteString(lipgloss.NewStyle().Bold(true).Foreground(tui.BrandColor).Render(o.title))
+	b.WriteString(lipgloss.NewStyle().Bold(true).Foreground(tui.BrandColor).Width(contentWidth).Render(o.title))
 	b.WriteString("\n\n")
 	if o.help != "" {
-		b.WriteString(tui.DimStyle.Render(o.help))
+		b.WriteString(tui.DimStyle.Width(contentWidth).Render(o.help))
 		b.WriteString("\n\n")
 	}
 	b.WriteString(o.input.View())

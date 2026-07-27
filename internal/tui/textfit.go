@@ -33,7 +33,7 @@ func Truncate(s string, width int) string {
 // use Truncate first when a hard column limit is needed.
 func PadRight(s string, width int) string {
 	w := lipgloss.Width(s)
-	if w >= width {
+	if w > width {
 		return s + " "
 	}
 	return s + strings.Repeat(" ", width-w)

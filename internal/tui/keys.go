@@ -34,15 +34,20 @@ func KeyString(msg tea.KeyPressMsg) string {
 // list of length count, clamping to [0, count-1]. Keys other than the four
 // navigation keys leave the cursor unchanged.
 func MoveCursor(cursor int, key string, count int) int {
+	if count <= 0 {
+		return 0
+	}
 	switch key {
 	case KeyUp, "k":
-		if cursor > 0 {
-			return cursor - 1
-		}
+		cursor--
 	case KeyDown, "j":
-		if cursor < count-1 {
-			return cursor + 1
-		}
+		cursor++
+	}
+	if cursor < 0 {
+		return 0
+	}
+	if cursor >= count {
+		return count - 1
 	}
 	return cursor
 }

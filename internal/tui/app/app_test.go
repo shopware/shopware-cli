@@ -154,11 +154,15 @@ func TestAppContextMainHeight(t *testing.T) {
 
 func TestAppOverlayCapturesInput(t *testing.T) {
 	recorded := ""
+	releasesDelivered := 0
 	var self Content
 	self = ContentFunc{
 		OnUpdate: func(msg tea.Msg) (Content, tea.Cmd) {
 			if key, ok := msg.(tea.KeyPressMsg); ok {
 				recorded += KeyString(key)
+			}
+			if _, ok := msg.(tea.KeyReleaseMsg); ok {
+				releasesDelivered++
 			}
 			return self, nil
 		},
@@ -174,6 +178,8 @@ func TestAppOverlayCapturesInput(t *testing.T) {
 	h.Send(keyPress('x'))
 	assert.Empty(t, recorded, "keys go to the overlay, not content")
 	require.NotEmpty(t, overlay.seen)
+	h.Send(tea.KeyReleaseMsg(tea.Key{Code: 'x', Text: "x"}))
+	assert.Zero(t, releasesDelivered, "key releases are also owned by the overlay")
 
 	// Non-input messages reach both overlay and content.
 	type asyncMsg struct{}
@@ -201,4 +207,47 @@ func TestAppSwapContent(t *testing.T) {
 	_ = h.App.SwapContent(second)
 	assert.True(t, inited, "SwapContent runs Init")
 	assert.Contains(t, h.View(), "second")
+
+	sized := &sizeLeaf{}
+	_ = h.App.SwapContent(sized)
+	assert.Equal(t, 40, sized.w)
+	assert.Equal(t, 5, sized.h, "replacement content receives the current layout immediately")
+}
+
+func TestHarnessRunsInitCommandAndBoundsRecurringCommands(t *testing.T) {
+	type initMsg struct{}
+	type recurringMsg struct{}
+
+	initSeen := false
+	recurringSeen := 0
+	recurring := tea.Cmd(func() tea.Msg { return recurringMsg{} })
+
+	var content Content
+	content = ContentFunc{
+		OnInit: func() tea.Cmd { return Emit(initMsg{}) },
+		OnUpdate: func(msg tea.Msg) (Content, tea.Cmd) {
+			switch msg.(type) {
+			case initMsg:
+				initSeen = true
+				return content, recurring
+			case recurringMsg:
+				recurringSeen++
+				return content, recurring
+			default:
+				return content, nil
+			}
+		},
+	}
+
+	NewHarness(Options{Content: content}, 40, 10)
+	assert.True(t, initSeen)
+	assert.Positive(t, recurringSeen)
+	assert.LessOrEqual(t, recurringSeen, 100, "recurring commands are bounded")
+}
+
+func TestNilCommandRegistryRegisterIsSafe(t *testing.T) {
+	var registry *CommandRegistry
+	assert.NotPanics(t, func() {
+		registry.Register(Command{ID: "ignored"})
+	})
 }

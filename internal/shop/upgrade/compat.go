@@ -137,7 +137,7 @@ func classifyExtension(ctx context.Context, repos *repository.Set, target *versi
 			continue
 		}
 
-		if relVersion.String() == ext.Version {
+		if extVersion, err := version.NewVersion(strings.TrimPrefix(ext.Version, "v")); err == nil && relVersion.Equal(extVersion) {
 			installedCompatible = true
 		}
 		if lowestCompatible == nil || relVersion.LessThan(lowestCompatible) {

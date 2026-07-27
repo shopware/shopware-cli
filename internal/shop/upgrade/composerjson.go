@@ -30,28 +30,33 @@ func applyTargetConstraints(c *composer.Json, target string, extensionPackages [
 	var changes []string
 
 	for _, pkg := range shopwarePlatformPackages {
-		if !c.HasPackage(pkg) {
+		if c.Require == nil {
+			break
+		}
+		current, ok := c.Require[pkg]
+		if !ok || current == target {
 			continue
 		}
-		if c.Require[pkg] == target {
-			continue
-		}
-		changes = append(changes, fmt.Sprintf("%s: %s -> %s", pkg, c.Require[pkg], target))
+		changes = append(changes, fmt.Sprintf("%s: %s -> %s", pkg, current, target))
 		c.Require[pkg] = target
 	}
 
 	for _, pkg := range extensionPackages {
-		if !c.HasPackage(pkg) {
+		if c.Require == nil {
+			break
+		}
+		current, ok := c.Require[pkg]
+		if !ok {
 			continue
 		}
 		constraint := "*"
 		if to := resolved[pkg]; to != "" {
 			constraint = to
 		}
-		if c.Require[pkg] == constraint {
+		if current == constraint {
 			continue
 		}
-		changes = append(changes, fmt.Sprintf("%s: %s -> %s", pkg, c.Require[pkg], constraint))
+		changes = append(changes, fmt.Sprintf("%s: %s -> %s", pkg, current, constraint))
 		c.Require[pkg] = constraint
 	}
 

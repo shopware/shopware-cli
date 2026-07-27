@@ -123,7 +123,6 @@ func (m *Model) summaryCounts() string {
 	if len(m.plan.Extensions) == 0 {
 		return fmt.Sprintf("%d extensions in custom/", len(m.scan))
 	}
-	parts := []string{fmt.Sprintf("%d extensions in custom/ —", len(m.plan.Extensions))}
 	details := []string{}
 	if n := m.plan.Count(pluginmigrate.ActionStoreRequire); n > 0 {
 		details = append(details, fmt.Sprintf("%d on the Shopware Store", n))
@@ -137,5 +136,8 @@ func (m *Model) summaryCounts() string {
 	if n := m.plan.Count(pluginmigrate.ActionUnsupported); n > 0 {
 		details = append(details, fmt.Sprintf("%d unsupported", n))
 	}
-	return strings.Join(append(parts, strings.Join(details, ", ")), " ")
+	if len(details) == 0 {
+		return fmt.Sprintf("%d extensions in custom/", len(m.plan.Extensions))
+	}
+	return fmt.Sprintf("%d extensions in custom/ — %s", len(m.plan.Extensions), strings.Join(details, ", "))
 }

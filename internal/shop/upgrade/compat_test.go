@@ -83,7 +83,7 @@ func TestCheckExtensionsClassification(t *testing.T) {
 	}, nil)
 
 	extensions := []InstalledExtension{
-		{Name: "SwagOk", Package: "swag/ok", Version: "2.0.0", ComposerManaged: true},
+		{Name: "SwagOk", Package: "swag/ok", Version: "v2.0.0", ComposerManaged: true},
 		{Name: "SwagNeedsUpdate", Package: "swag/needs-update", Version: "8.3.1", ComposerManaged: true},
 		{Name: "SwagBlocked", Package: "swag/blocked", Version: "3.2.0", ComposerManaged: true},
 		{Name: "LocalPlugin", Package: "acme/local-plugin", Version: "1.0.0", ComposerManaged: false},

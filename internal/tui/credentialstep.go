@@ -29,6 +29,11 @@ type CredentialStepOptions struct {
 	// Prompts rendered in front of the inputs (default none).
 	UsernamePrompt string
 	PasswordPrompt string
+	// Labels rendered above the inputs and the optional hint beside the
+	// password label.
+	UsernameLabel string
+	PasswordLabel string
+	PasswordHint  string
 	// CharLimit bounds both inputs (default 64).
 	CharLimit int
 	// ValidatePassword rejects a password on submit; nil accepts anything.
@@ -40,11 +45,14 @@ type CredentialStepOptions struct {
 // steps. Embed it in a wizard and route the step's keys through HandleKey;
 // the wizard decides what a submit means.
 type CredentialStep struct {
-	username    textinput.Model
-	password    textinput.Model
-	focus       CredFocus
-	passwordErr string
-	validate    func(string) error
+	username      textinput.Model
+	password      textinput.Model
+	focus         CredFocus
+	passwordErr   string
+	validate      func(string) error
+	usernameLabel string
+	passwordLabel string
+	passwordHint  string
 }
 
 // NewCredentialStep builds the username/password inputs. The password starts
@@ -52,6 +60,15 @@ type CredentialStep struct {
 func NewCredentialStep(opts CredentialStepOptions) CredentialStep {
 	if opts.CharLimit <= 0 {
 		opts.CharLimit = 64
+	}
+	if opts.UsernameLabel == "" {
+		opts.UsernameLabel = "Choose a username"
+	}
+	if opts.PasswordLabel == "" {
+		opts.PasswordLabel = "Choose a password"
+	}
+	if opts.PasswordHint == "" {
+		opts.PasswordHint = "at least 8 characters"
 	}
 
 	username := textinput.New()
@@ -71,7 +88,14 @@ func NewCredentialStep(opts CredentialStepOptions) CredentialStep {
 		password.SetValue(opts.Password)
 	}
 
-	return CredentialStep{username: username, password: password, validate: opts.ValidatePassword}
+	return CredentialStep{
+		username:      username,
+		password:      password,
+		validate:      opts.ValidatePassword,
+		usernameLabel: opts.UsernameLabel,
+		passwordLabel: opts.PasswordLabel,
+		passwordHint:  opts.PasswordHint,
+	}
 }
 
 // Username returns the current username value.
@@ -112,11 +136,9 @@ func (c *CredentialStep) Focus(target CredFocus) tea.Cmd {
 	c.password.Blur()
 	switch target {
 	case CredFocusUsername:
-		c.username.Focus()
-		return textinput.Blink
+		return c.username.Focus()
 	case CredFocusPassword:
-		c.password.Focus()
-		return textinput.Blink
+		return c.password.Focus()
 	case CredFocusShowPassword:
 		// The checkbox has no text input to focus.
 	}
@@ -215,12 +237,14 @@ func (c CredentialStep) Render(b *strings.Builder) {
 	labelStyle := lipgloss.NewStyle().Foreground(TextColor)
 	errStyle := lipgloss.NewStyle().Foreground(ErrorColor)
 
-	b.WriteString(labelStyle.Render("Choose a username"))
+	b.WriteString(labelStyle.Render(c.usernameLabel))
 	b.WriteString("\n")
 	b.WriteString(c.username.View())
 	b.WriteString("\n\n")
-	b.WriteString(labelStyle.Render("Choose a password"))
-	b.WriteString(DimStyle.Render("  at least 8 characters"))
+	b.WriteString(labelStyle.Render(c.passwordLabel))
+	if c.passwordHint != "" {
+		b.WriteString(DimStyle.Render("  " + c.passwordHint))
+	}
 	b.WriteString("\n")
 	b.WriteString(c.password.View())
 	if c.passwordErr != "" {

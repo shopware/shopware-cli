@@ -174,6 +174,9 @@ func (m *PluginMigrator) Scan(ctx context.Context) []ScannedExtension {
 	// Extension paths come back symlink-resolved; resolve the root the same
 	// way so the prefix comparison holds (e.g. /var vs /private/var on macOS).
 	root := m.projectRoot
+	if abs, err := filepath.Abs(root); err == nil {
+		root = abs
+	}
 	if resolved, err := filepath.EvalSymlinks(root); err == nil {
 		root = resolved
 	}
@@ -182,6 +185,9 @@ func (m *PluginMigrator) Scan(ctx context.Context) []ScannedExtension {
 	var result []ScannedExtension
 	for _, ext := range found {
 		extPath := filepath.Clean(ext.GetPath())
+		if abs, err := filepath.Abs(extPath); err == nil {
+			extPath = abs
+		}
 		if resolved, err := filepath.EvalSymlinks(extPath); err == nil {
 			extPath = resolved
 		}

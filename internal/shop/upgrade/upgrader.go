@@ -79,6 +79,9 @@ func (u *ProjectUpgrader) composerEnv(extra map[string]string) map[string]string
 // InstalledPHPVersion returns the PHP version of the environment the upgrade
 // runs in, or "" when it cannot be determined.
 func (u *ProjectUpgrader) InstalledPHPVersion(ctx context.Context) string {
+	if u.executor == nil {
+		return ""
+	}
 	out, err := u.executor.PHPCommand(ctx, "-r", "echo PHP_VERSION;").Output()
 	if err != nil {
 		return ""

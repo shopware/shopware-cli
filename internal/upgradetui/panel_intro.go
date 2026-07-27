@@ -24,10 +24,10 @@ func (m *Model) updateIntro(msg tea.Msg) (app.Content, tea.Cmd) {
 	}
 
 	switch app.KeyString(key) {
-	case "left", "h":
+	case "left", "h", "shift+tab", "backtab":
 		m.intro.button = 0
 	case "right", "l", "tab":
-		m.intro.button = 1 - m.intro.button
+		m.intro.button = 1
 	case "enter":
 		if m.intro.button == 0 {
 			return m.beginChecks()

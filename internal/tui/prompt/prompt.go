@@ -114,6 +114,8 @@ func (o *Overlay) Update(msg tea.Msg) (app.Overlay, tea.Cmd) {
 		}
 	case tui.KeyTab:
 		o.selected = (o.selected + 1) % count
+	case tui.KeyShiftTab, "backtab":
+		o.selected = (o.selected - 1 + count) % count
 	case tui.KeyEsc:
 		return nil, app.Emit(ResultMsg{ID: o.id})
 	case tui.KeyEnter:

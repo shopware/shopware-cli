@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"io"
 	"os/exec"
+	"sync"
 
 	tea "charm.land/bubbletea/v2"
 )
@@ -42,6 +43,8 @@ func StreamCmdOutput(cmd *exec.Cmd, ch chan<- string, useStdout bool) error {
 	}
 
 	scanner := bufio.NewScanner(pipe)
+	buf := make([]byte, 64*1024)
+	scanner.Buffer(buf, 10*1024*1024)
 	for scanner.Scan() {
 		ch <- scanner.Text()
 	}
@@ -57,6 +60,7 @@ func StreamCmdOutput(cmd *exec.Cmd, ch chan<- string, useStdout bool) error {
 // LineWriter converts a byte stream into per-line emit calls — the io.Writer
 // side of streaming subprocess output.
 type LineWriter struct {
+	mu   sync.Mutex
 	emit func(string)
 	buf  []byte
 }
@@ -68,6 +72,9 @@ func NewLineWriter(emit func(string)) *LineWriter {
 
 // Write implements io.Writer.
 func (w *LineWriter) Write(p []byte) (int, error) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+
 	w.buf = append(w.buf, p...)
 	for {
 		idx := bytes.IndexByte(w.buf, '\n')
@@ -83,6 +90,9 @@ func (w *LineWriter) Write(p []byte) (int, error) {
 
 // Flush emits any trailing output that did not end in a newline.
 func (w *LineWriter) Flush() {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+
 	if len(w.buf) > 0 {
 		w.emit(string(w.buf))
 		w.buf = nil
@@ -94,6 +104,9 @@ func (w *LineWriter) Flush() {
 // Re-issue the command after each received line to keep the stream flowing.
 func ReadLineCmd(ch <-chan string, onLine func(string) tea.Msg, onDone tea.Msg) tea.Cmd {
 	return func() tea.Msg {
+		if ch == nil {
+			return onDone
+		}
 		line, ok := <-ch
 		if !ok {
 			return onDone

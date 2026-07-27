@@ -106,9 +106,39 @@ func TestIntroPanel(t *testing.T) {
 func TestIntroCancelQuits(t *testing.T) {
 	w := newTestWizard(t)
 	w.Send(specialKey(tea.KeyRight))
+	w.Send(specialKey(tea.KeyRight))
 	cmd := w.Send(specialKey(tea.KeyEnter))
 	require.NotNil(t, cmd)
 	assert.IsType(t, tea.QuitMsg{}, cmd(), "Cancel quits the program")
+}
+
+func TestIntroShiftTabMovesBackToBegin(t *testing.T) {
+	w := newTestWizard(t)
+	w.Send(specialKey(tea.KeyRight))
+	w.Send(tea.KeyPressMsg(tea.Key{Code: tea.KeyTab, Mod: tea.ModShift}))
+	assert.Equal(t, 0, w.m.intro.button)
+}
+
+func TestPrepareLoadingIncludesPHPInfo(t *testing.T) {
+	running, reachable := true, true
+	resolved := upgrade.ResolveResult{OK: true}
+	state := prepareState{
+		envRunning: &running,
+		packagist:  &reachable,
+		resolve:    &resolved,
+		compatDone: true,
+		phpDone:    false,
+	}
+
+	assert.True(t, state.loading())
+	state.phpDone = true
+	assert.False(t, state.loading())
+}
+
+func TestNarrowRightColumnAndNilRunEventsAreSafe(t *testing.T) {
+	w := newTestWizard(t)
+	assert.Zero(t, w.m.rightColumnWidth(1000))
+	assert.IsType(t, runClosedMsg{}, readRunEventCmd(nil)())
 }
 
 func TestCtrlCQuitsOutsideRunPanel(t *testing.T) {

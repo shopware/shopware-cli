@@ -3,6 +3,7 @@ package upgrade
 import (
 	"bytes"
 	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -99,6 +100,32 @@ func TestSelectTarget(t *testing.T) {
 	_, err = selectTarget(catalog, "6.5.0.0")
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "not a supported upgrade target")
+}
+
+func TestSelectTargetRejectsInvalidCatalogIndexes(t *testing.T) {
+	catalog := headlessCatalog()
+	catalog.Recommended = len(catalog.Options)
+	_, err := selectTarget(catalog, TargetRecommended)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "no recommended version")
+
+	catalog.LatestPatch = len(catalog.Options) + 1
+	_, err = selectTarget(catalog, TargetLatestPatch)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "no newer patch")
+}
+
+func TestConsumeRunEventsReturnsFailureThatAlsoHasOutput(t *testing.T) {
+	runErr := errors.New("upgrade failed")
+	events := make(chan StepEvent, 1)
+	events <- StepEvent{Step: StepFinished, State: StateFail, Line: "rollback detail", Err: runErr}
+	close(events)
+
+	var out bytes.Buffer
+	err := (&ProjectUpgrader{}).consumeRunEvents(&out, events)
+
+	assert.ErrorIs(t, err, runErr)
+	assert.Contains(t, out.String(), "rollback detail")
 }
 
 func TestRunHeadlessRequiresTarget(t *testing.T) {

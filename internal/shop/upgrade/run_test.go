@@ -181,6 +181,8 @@ func TestRunnerRestoresOnFailure(t *testing.T) {
 	require.NoError(t, err, "failed runs must still write a report")
 	assert.Contains(t, string(report), "failed and rolled back")
 	assert.Contains(t, string(report), "composer update")
+	assert.Contains(t, string(report), "shopware/core: 6.6.10.3 -> 6.7.11.0",
+		"failure reports retain changes planned before the failing step")
 
 	var restoreNote bool
 	for _, ev := range events {
@@ -189,6 +191,29 @@ func TestRunnerRestoresOnFailure(t *testing.T) {
 		}
 	}
 	assert.True(t, restoreNote, "user is told about the rollback")
+}
+
+func TestRunnerRollbackRemovesNewLockFile(t *testing.T) {
+	dir := setupProject(t)
+	lockPath := filepath.Join(dir, "composer.lock")
+	require.NoError(t, os.Remove(lockPath))
+
+	u := NewProjectUpgrader(dir, &fakeExecutor{
+		composer: func(ctx context.Context, _ ...string) *executor.Process {
+			if err := os.WriteFile(lockPath, []byte(`{"packages":[],"packages-dev":[]}`), 0o644); err != nil {
+				return shellProcess(ctx, "exit 3")
+			}
+			return shellProcess(ctx, "exit 2")
+		},
+		php: func(ctx context.Context, _ ...string) *executor.Process {
+			return shellProcess(ctx, "true")
+		},
+	})
+
+	events := collectEvents(t, u.Run(t.Context(), runnerOptions()))
+	assert.Equal(t, StateFail, finalEvent(t, events).State)
+	_, err := os.Stat(lockPath)
+	assert.True(t, os.IsNotExist(err), "rollback removes a lock file that did not exist before the run")
 }
 
 func TestRunnerRecipesInstallIsNonFatal(t *testing.T) {

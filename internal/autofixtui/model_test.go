@@ -69,6 +69,14 @@ func TestWelcomeShowsScannedExtensions(t *testing.T) {
 	assert.Contains(t, content, "Let's fix this")
 }
 
+func TestWelcomeIgnoresEnterUntilScanCompletes(t *testing.T) {
+	w := newTestWizard(t)
+	cmd := w.Send(specialKey(tea.KeyEnter))
+
+	assert.Nil(t, cmd)
+	assert.Equal(t, panelWelcome, w.m.panel)
+}
+
 func TestWelcomeNothingToDoQuits(t *testing.T) {
 	w := newTestWizard(t)
 	w.Send(scanDoneMsg{})
@@ -196,6 +204,26 @@ func TestRunPanelStreamsEventsAndFinishes(t *testing.T) {
 	content = w.view(t)
 	assert.Contains(t, content, "All plugins are Composer-managed now!")
 	assert.Contains(t, content, "Commit composer.json, composer.lock, and auth.json")
+}
+
+func TestRunCancellationGuardsAndReleasesCancelFunc(t *testing.T) {
+	w := newTestWizard(t)
+	w.m.panel = panelRun
+	w.m.run = runState{}
+	assert.NotPanics(t, func() { _ = w.m.handleQuit() })
+
+	cancelled := false
+	w.m.run.cancel = func() { cancelled = true }
+	w.Send(runClosedMsg{})
+	assert.True(t, cancelled)
+	assert.Equal(t, panelDone, w.m.panel)
+}
+
+func TestSummaryCountsOmitsDanglingSeparatorWithoutDetails(t *testing.T) {
+	m := &Model{plan: pluginmigrate.Plan{Extensions: []pluginmigrate.PlannedExtension{
+		{Kind: pluginmigrate.ActionKind(99)},
+	}}}
+	assert.Equal(t, "1 extensions in custom/", m.summaryCounts())
 }
 
 func TestDonePanelFailure(t *testing.T) {

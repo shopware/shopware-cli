@@ -39,15 +39,15 @@ func NewWizardFrame(opts WizardFrameOptions) WizardFrame {
 // Render implements the component contract.
 func (f WizardFrame) Render() string {
 	width, height := f.opts.Width, f.opts.Height
+	if height <= 0 {
+		return ""
+	}
 	// Clamp against tiny terminals: the borders alone need two columns, and
 	// width-2 must never go negative (strings.Repeat panics).
-	if width < 4 {
-		width = 4
+	if width < 5 {
+		width = 5
 	}
 	innerW := width - 4 // "│ " + " │"
-	if innerW < 1 {
-		innerW = 1
-	}
 
 	bc := lipgloss.NewStyle().Foreground(BorderColor)
 	top := bc.Render("╭" + strings.Repeat("─", width-2) + "╮")
@@ -95,6 +95,12 @@ func (f WizardFrame) Render() string {
 		for _, line := range footerLines {
 			rows = append(rows, row(line))
 		}
+	}
+	if len(rows) > height-1 {
+		rows = rows[:height-1]
+	}
+	for len(rows) < height-1 {
+		rows = append(rows, row(""))
 	}
 	rows = append(rows, bottom)
 

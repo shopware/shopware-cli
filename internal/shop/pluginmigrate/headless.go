@@ -24,6 +24,9 @@ type HeadlessOptions struct {
 // for --no-interaction runs and environments without a terminal.
 func (m *PluginMigrator) RunHeadless(ctx context.Context, opts HeadlessOptions) error {
 	out := opts.Out
+	if out == nil {
+		out = io.Discard
+	}
 
 	extensions := m.Scan(ctx)
 	if len(extensions) == 0 {
@@ -79,13 +82,13 @@ func printPlan(out io.Writer, plan Plan) {
 func consumeRunEvents(out io.Writer, events <-chan StepEvent) error {
 	var runErr error
 	for ev := range events {
+		if ev.Step == StepFinished && ev.State == StateFail {
+			runErr = ev.Err
+		}
 		switch {
 		case ev.Line != "":
 			_, _ = fmt.Fprintln(out, "  "+ev.Line)
 		case ev.Step == StepFinished:
-			if ev.State == StateFail {
-				runErr = ev.Err
-			}
 		case ev.State == StateRunning:
 			_, _ = fmt.Fprintln(out, tui.BoldText.Render("▸ "+ev.Step.Label()))
 		case ev.State == StateOK:

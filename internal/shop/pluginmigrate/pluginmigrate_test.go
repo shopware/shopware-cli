@@ -1,7 +1,9 @@
 package pluginmigrate
 
 import (
+	"bytes"
 	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -164,6 +166,20 @@ func TestScanFindsOnlyCustomExtensions(t *testing.T) {
 	assert.Equal(t, "3.1.0", scanned[1].Version)
 }
 
+func TestScanReturnsAbsolutePathsForRelativeProjectRoot(t *testing.T) {
+	dir := setupProject(t)
+	cwd, err := os.Getwd()
+	require.NoError(t, err)
+	relativeRoot, err := filepath.Rel(cwd, dir)
+	require.NoError(t, err)
+
+	scanned := NewPluginMigrator(relativeRoot, nil).Scan(t.Context())
+	require.NotEmpty(t, scanned)
+	for _, extension := range scanned {
+		assert.True(t, filepath.IsAbs(extension.Path), extension.Path)
+	}
+}
+
 func TestBuildPlanClassifiesExtensions(t *testing.T) {
 	dir := setupProject(t)
 	scanned := NewPluginMigrator(dir, nil).Scan(t.Context())
@@ -309,6 +325,8 @@ func TestRunMigratesProject(t *testing.T) {
 	assert.True(t, os.IsNotExist(err), "the Store-migrated directory is removed")
 	_, err = os.Stat(filepath.Join(dir, "custom", "plugins", "LocalPlugin"))
 	assert.NoError(t, err, "path-repository plugins keep their files")
+	_, err = os.Stat(m.backupDir())
+	assert.True(t, os.IsNotExist(err), "sensitive migration backups are removed after success")
 }
 
 func TestRunFailingRequireRollsBack(t *testing.T) {
@@ -334,6 +352,10 @@ func TestRunFailingRequireRollsBack(t *testing.T) {
 
 	_, err = os.Stat(filepath.Join(dir, "custom", "plugins", "StorePlugin"))
 	assert.NoError(t, err, "no directory is removed when the require failed")
+	_, err = os.Stat(filepath.Join(dir, "auth.json"))
+	assert.True(t, os.IsNotExist(err), "rollback removes auth.json when it did not exist before the run")
+	_, err = os.Stat(m.backupDir())
+	assert.True(t, os.IsNotExist(err), "sensitive migration backups are removed after failure")
 }
 
 func TestRunPluginRefreshFailureIsNonFatal(t *testing.T) {
@@ -347,4 +369,33 @@ func TestRunPluginRefreshFailureIsNonFatal(t *testing.T) {
 
 	events := collectEvents(t, m.Run(t.Context(), plan, ""))
 	assert.Equal(t, StateOK, finalEvent(t, events).State, "plugin:refresh failure does not abort")
+}
+
+func TestBackupRestrictsSensitiveFilePermissions(t *testing.T) {
+	dir := setupProject(t)
+	writeFile(t, filepath.Join(dir, "auth.json"), `{"bearer": {"packages.shopware.com": "secret"}}`)
+	m := NewPluginMigrator(dir, nil)
+	t.Cleanup(func() { _ = os.RemoveAll(m.backupDir()) })
+
+	require.NoError(t, m.backup())
+
+	info, err := os.Stat(filepath.Join(m.backupDir(), "auth.json"))
+	require.NoError(t, err)
+	assert.Equal(t, os.FileMode(0o600), info.Mode().Perm())
+	dirInfo, err := os.Stat(m.backupDir())
+	require.NoError(t, err)
+	assert.Equal(t, os.FileMode(0o700), dirInfo.Mode().Perm())
+}
+
+func TestConsumeRunEventsReturnsFailureThatAlsoHasOutput(t *testing.T) {
+	runErr := errors.New("migration failed")
+	events := make(chan StepEvent, 1)
+	events <- StepEvent{Step: StepFinished, State: StateFail, Line: "rollback detail", Err: runErr}
+	close(events)
+
+	var out bytes.Buffer
+	err := consumeRunEvents(&out, events)
+
+	assert.ErrorIs(t, err, runErr)
+	assert.Contains(t, out.String(), "rollback detail")
 }

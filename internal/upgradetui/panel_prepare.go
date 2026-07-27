@@ -85,7 +85,7 @@ func (s prepareState) flagged() int {
 
 // loading reports whether any preparation check is still running.
 func (s prepareState) loading() bool {
-	return s.envRunning == nil || s.packagist == nil || (s.resolve == nil && s.resolveErr == nil) || !s.compatDone
+	return s.envRunning == nil || s.packagist == nil || (s.resolve == nil && s.resolveErr == nil) || !s.compatDone || !s.phpDone
 }
 
 // applyResolved overwrites the metadata-derived target versions with the

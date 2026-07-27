@@ -111,6 +111,9 @@ func NewCommandRegistry() *CommandRegistry {
 // CmdQuit) overrides its behavior — that is how screens intercept quit to
 // cancel a running job instead of exiting.
 func (r *CommandRegistry) Register(c Command) {
+	if r == nil {
+		return
+	}
 	if r.cmds == nil {
 		r.cmds = map[string]Command{}
 	}
