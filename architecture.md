@@ -125,9 +125,7 @@ The CLI remembers past asset builds so it doesn't redo work that hasn't changed.
 
 None are broken, but some are slower.
 
-- **Critical:** PHP lint capped to two threads. A hardcoded `runtime.GOMAXPROCS(2)` limits PHP linting to 2 CPU threads no matter how many cores you have. `internal/phplint/lint.go:62` The wasm engine crashed at some point. so that why it's limited.
-  - **TODO:** Before taking action, find out whether this is a problem for users.
-  - **TODO:** Move https://github.com/shopwareArchive/php-cli-wasm-binaries/ out of archived, as we're actively using it.
+- **Resolved:** PHP linting uses `github.com/shyim/phplint-go` for pure Go linting without WASM or downloading binary dependencies.
 - **Medium:** The file-hashing pool uses eight workers instead of scaling to CPU. `internal/extension/asset_config.go:231`
 - **Medium:** Code checkers run in parallel with each other, but each one still processes its files one at a time. `internal/verifier/`
 - **Medium:** cache is local/CI-only. No shared backend a whole CI fleet can reuse. `internal/system/cache_*`
