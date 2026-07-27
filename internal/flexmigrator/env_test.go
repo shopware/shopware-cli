@@ -36,6 +36,26 @@ func TestMigrateEnv(t *testing.T) {
 		assert.Empty(t, string(envNewContent))
 	})
 
+	t.Run("preserves COMPOSE_PROJECT_NAME in new .env", func(t *testing.T) {
+		t.Parallel()
+		tempDir := t.TempDir()
+
+		envContent := []byte("APP_ENV=dev\nCOMPOSE_PROJECT_NAME=sw-shop-abcdef\nAPP_SECRET=test\n")
+		err := os.WriteFile(filepath.Join(tempDir, ".env"), envContent, 0o644)
+		require.NoError(t, err)
+
+		err = MigrateEnv(tempDir)
+		require.NoError(t, err)
+
+		envLocalContent, err := os.ReadFile(filepath.Join(tempDir, ".env.local"))
+		require.NoError(t, err)
+		assert.Equal(t, envContent, envLocalContent)
+
+		envNewContent, err := os.ReadFile(filepath.Join(tempDir, ".env"))
+		require.NoError(t, err)
+		assert.Equal(t, "COMPOSE_PROJECT_NAME=sw-shop-abcdef\n", string(envNewContent))
+	})
+
 	t.Run("no migration needed when .env.local exists", func(t *testing.T) {
 		t.Parallel()
 		// Create a temporary directory for the test
