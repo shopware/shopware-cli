@@ -46,10 +46,10 @@ jobs:
         run: shopware-cli project create shopware 6.5.7.3 --no-audit
 
       - name: Build asset of Plugin
-        run: shopware-cli extension zip plugin
+        run: shopware-cli extension package plugin
 
       - name: Build asset of Plugin without Git
-        run: shopware-cli extension zip plugin --disable-git --release
+        run: shopware-cli extension package plugin --disable-git --release
 
       - name: Validate Plugin
         run: shopware-cli extension validate FroshTools.zip

@@ -91,7 +91,7 @@ shopware-cli extension admin-watch
 shopware-cli extension validate
 
 # Create distribution package
-shopware-cli extension zip
+shopware-cli extension package
 ```
 
 ### Project Management
