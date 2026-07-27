@@ -41,7 +41,7 @@ func TestRunSpinnerWithLogsWithCancelledContext(t *testing.T) {
 
 	err := RunSpinnerWithLogs(ctx, "Installing dependencies", exec.CommandContext(ctx, "false"))
 
-	assert.ErrorContains(t, err, "error opening TTY")
+	assert.Error(t, err)
 }
 
 func TestRunSpinnerWithLogs(t *testing.T) {

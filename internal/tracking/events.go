@@ -11,10 +11,10 @@ const (
 	// EventProjectUpgradeCheck is sent when an upgrade compatibility check runs.
 	EventProjectUpgradeCheck = "project.upgrade_check"
 	// EventProjectUpgrade is sent when the interactive upgrade wizard finishes
-	// an upgrade run (internal/upgradetui).
+	// an upgrade run (internal/tui/upgrade).
 	EventProjectUpgrade = "project.upgrade"
 
-	// The project.dev.* events are sent by the interactive dev TUI (internal/devtui).
+	// The project.dev.* events are sent by the interactive dev TUI (internal/tui/dev).
 	EventDevSession         = "project.dev.session"
 	EventDevInstall         = "project.dev.install"
 	EventDevMigrationWizard = "project.dev.migration_wizard"

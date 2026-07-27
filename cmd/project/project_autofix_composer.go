@@ -5,9 +5,9 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/shopware/shopware-cli/internal/autofixtui"
 	"github.com/shopware/shopware-cli/internal/shop/pluginmigrate"
 	"github.com/shopware/shopware-cli/internal/system"
+	pluginmigratetui "github.com/shopware/shopware-cli/internal/tui/pluginmigrate"
 )
 
 var projectAutofixComposerCmd = &cobra.Command{
@@ -36,7 +36,7 @@ var projectAutofixComposerCmd = &cobra.Command{
 			})
 		}
 
-		_, err = autofixtui.NewApp(autofixtui.Options{
+		_, err = pluginmigratetui.NewApp(pluginmigratetui.Options{
 			ProjectRoot: projectRoot,
 			Executor:    exec,
 		}).Run()

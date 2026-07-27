@@ -6,7 +6,7 @@ import (
 	"github.com/shopware/shopware-cli/internal/shop"
 	"github.com/shopware/shopware-cli/internal/shop/upgrade"
 	"github.com/shopware/shopware-cli/internal/system"
-	"github.com/shopware/shopware-cli/internal/upgradetui"
+	upgradetui "github.com/shopware/shopware-cli/internal/tui/upgrade"
 )
 
 var projectUpgradeCmd = &cobra.Command{
