@@ -32,10 +32,7 @@ func GenerateComposeProjectName(projectFolder string) (string, error) {
 	if base == "" {
 		base = "shop"
 	}
-	// Compose names must start with a letter or digit.
-	if base[0] == '-' || base[0] == '_' {
-		base = "x" + base
-	}
+	// Note: the "sw-" prefix already satisfies ValidateProjectName's leading-character rule.
 
 	var suffix [3]byte
 	if _, err := rand.Read(suffix[:]); err != nil {
