@@ -80,6 +80,13 @@ type Producer struct {
 	IsPremiumExtensionPartner bool        `json:"isPremiumExtensionPartner"`
 }
 
+const (
+	// Extension generation names returned by the Account API.
+	ExtensionGenerationClassic  = "classic"
+	ExtensionGenerationPlatform = "platform" // Shopware 6 plugins
+	ExtensionGenerationApps     = "apps"     // Shopware apps
+)
+
 type ListExtensionCriteria struct {
 	Limit         int    `schema:"limit,omitempty"`
 	Offset        int    `schema:"offset,omitempty"`
