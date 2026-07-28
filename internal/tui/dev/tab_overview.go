@@ -61,12 +61,15 @@ type OverviewModel struct {
 	sfWatchRunning     bool
 	sfWatchStarting    bool
 	sfWatchReady       bool
-	shopwareVersion    string
-	adminWatchURL      string
-	securityEnd        time.Time
-	health             []healthCheck
-	healthLoading      bool
-	cursor             int // focus index: 0=Admin watcher, 1=Storefront watcher
+	// domainsSetupDone is whether the one-time machine setup (DNS + HTTPS
+	// trust, via `proxy setup`) is in place. Drives the Domains block's Setup
+	// status and whether the `s` action is offered.
+	domainsSetupDone bool
+	shopwareVersion  string
+	securityEnd      time.Time
+	health           []healthCheck
+	healthLoading    bool
+	cursor           int // focus index: 0=Admin watcher, 1=Storefront watcher
 }
 
 type DiscoveredService struct {
@@ -273,20 +276,36 @@ func deriveAdminURL(shopURL string) string {
 
 func NewOverviewModel(envType, shopURL, username, password, projectRoot string, exec executor.Executor, shopCfg *shop.Config) OverviewModel {
 	return OverviewModel{
-		envType:       envType,
-		shopURL:       shopURL,
-		adminURL:      deriveAdminURL(shopURL),
-		adminWatchURL: fmt.Sprintf("http://127.0.0.1:%d", extension.AdminDevServerPort(projectRoot)),
-		username:      username,
-		password:      password,
-		projectRoot:   projectRoot,
-		executor:      exec,
-		shopCfg:       shopCfg,
-		adminWatchURL: resolveAdminWatchURL(projectRoot),
-		sfWatchURL:    resolveStorefrontWatchURL(projectRoot),
-		loading:       true,
-		healthLoading: true,
+		envType:          envType,
+		shopURL:          shopURL,
+		adminURL:         deriveAdminURL(shopURL),
+		username:         username,
+		password:         password,
+		projectRoot:      projectRoot,
+		executor:         exec,
+		shopCfg:          shopCfg,
+		adminWatchURL:    resolveAdminWatchURL(projectRoot),
+		sfWatchURL:       resolveStorefrontWatchURL(projectRoot),
+		domainsSetupDone: overviewSetupDone(projectRoot),
+		loading:          true,
+		healthLoading:    true,
 	}
+}
+
+// overviewSetupDone reports whether the machine's one-time proxy setup (DNS +
+// HTTPS trust) is in place for a proxy project. Non-proxy projects report
+// false (the Domains block is not shown for them anyway).
+func overviewSetupDone(projectRoot string) bool {
+	if proxyHostname(projectRoot) == "" {
+		return false
+	}
+
+	baseDomain := proxy.DefaultDomain
+	if settings, err := proxy.LoadSettings(); err == nil {
+		baseDomain = settings.BaseDomain()
+	}
+
+	return proxy.CheckResolverConfigured(baseDomain).Configured
 }
 
 // proxyHostname returns the shop's hostname when the project is registered
@@ -348,6 +367,15 @@ type stopWatcherRequestMsg struct{ name string }
 // the storefront watcher, matching the command-palette flow.
 type startStorefrontWatchRequestMsg struct{}
 
+// runProxySetupRequestMsg flows from OverviewModel to Model so the parent can
+// run the interactive `proxy setup` (sudo) via tea.ExecProcess, which pauses
+// the whole program while the setup runs.
+type runProxySetupRequestMsg struct{}
+
+// proxySetupDoneMsg is emitted after the inline `proxy setup` finishes, so the
+// Domains status and setup-health checks can refresh.
+type proxySetupDoneMsg struct{}
+
 func (m OverviewModel) Update(msg tea.Msg) (OverviewModel, tea.Cmd) {
 	switch msg := msg.(type) {
 	case servicesLoadedMsg:
@@ -394,6 +422,12 @@ func (m OverviewModel) handleKey(msg tea.KeyPressMsg) (OverviewModel, tea.Cmd) {
 	case "down", "j":
 		if m.cursor < count-1 {
 			m.cursor++
+		}
+	case "s":
+		// Run the one-time machine setup (DNS + HTTPS trust) for a proxy
+		// project that has not been set up yet.
+		if proxyHostname(m.projectRoot) != "" && !m.domainsSetupDone {
+			return m, func() tea.Msg { return runProxySetupRequestMsg{} }
 		}
 	case "enter":
 		return m.activate()
@@ -479,7 +513,44 @@ func (m OverviewModel) renderUserActions() string {
 	var s strings.Builder
 	s.WriteString(tui.SectionTitleStyle.Render("User action"))
 	s.WriteString("\n\n")
+	if proxyHostname(m.projectRoot) != "" {
+		s.WriteString(m.renderDomains())
+		s.WriteString("\n")
+	}
 	s.WriteString(m.renderWatchers())
+	return s.String()
+}
+
+// renderDomains shows that the project is served at a stable local hostname
+// through the shared proxy, plus the one-time machine setup status (DNS +
+// trusted HTTPS). When the setup is still pending it offers the `s` action to
+// run it. Only rendered for proxy projects.
+func (m OverviewModel) renderDomains() string {
+	var s strings.Builder
+	s.WriteString(tui.TitleStyle.Render("Domains"))
+	s.WriteString("\n")
+
+	label := lipgloss.NewStyle().Width(16)
+
+	// Domains are on by definition for a proxy project.
+	fmt.Fprintf(&s, "  %s %s%s\n",
+		lipgloss.NewStyle().Render("[x]"),
+		label.Render("Domains"),
+		lipgloss.NewStyle().Foreground(tui.SuccessColor).Render("on"))
+
+	// One-time machine setup (DNS + trusted HTTPS). Actionable while pending.
+	if m.domainsSetupDone {
+		fmt.Fprintf(&s, "  %s %s%s\n",
+			lipgloss.NewStyle().Render("[x]"),
+			label.Render("Setup"),
+			lipgloss.NewStyle().Foreground(tui.SuccessColor).Render("completed"))
+	} else {
+		fmt.Fprintf(&s, "  %s %s%s\n",
+			lipgloss.NewStyle().Foreground(tui.BrandColor).Render("[ ]"),
+			label.Render("Setup (s)"),
+			tui.DimStyle.Render("needs sudo"))
+	}
+
 	return s.String()
 }
 
@@ -499,6 +570,10 @@ func (m OverviewModel) renderStacked(width int) string {
 		s.WriteString(m.renderBackgroundProcesses())
 	}
 	s.WriteString(divider)
+	if proxyHostname(m.projectRoot) != "" {
+		s.WriteString(m.renderDomains())
+		s.WriteString("\n")
+	}
 	s.WriteString(m.renderWatchers())
 	s.WriteString(divider)
 	s.WriteString(m.renderSetupHealth())
@@ -854,6 +929,11 @@ func discoverCompose(ctx context.Context, projectRoot string) (services []Discov
 		return nil, nil, 0, fmt.Errorf("docker compose ps: %w", err)
 	}
 
+	// In proxy mode a service publishes no host port; it is reached at its
+	// subdomain (e.g. adminer.<host>) instead. When the project is proxied,
+	// every routed service gets its proxy URL rather than a localhost port.
+	proxyHost := proxyHostname(projectRoot)
+
 	type containerInfo struct {
 		service    string
 		publishers map[int]int
@@ -891,7 +971,9 @@ func discoverCompose(ctx context.Context, projectRoot string) (services []Discov
 			}
 		}
 
-		if len(ports) > 0 {
+		// Proxied services have no published ports, so collect them regardless
+		// and resolve their URL below from the proxy hostname.
+		if len(ports) > 0 || proxyHost != "" {
 			containers = append(containers, containerInfo{
 				service:    container.Service,
 				publishers: ports,
@@ -909,14 +991,23 @@ func discoverCompose(ctx context.Context, projectRoot string) (services []Discov
 			continue
 		}
 
-		publishedPort, hasPort := c.publishers[known.TargetPort]
-		if !hasPort {
-			continue
+		var url string
+		switch {
+		case proxyHost != "":
+			// The compose override routes each service at a subdomain named
+			// after the service (adminer.<host>, mailer.<host>, ...).
+			url = fmt.Sprintf("https://%s.%s", c.service, proxyHost)
+		default:
+			publishedPort, hasPort := c.publishers[known.TargetPort]
+			if !hasPort {
+				continue
+			}
+			url = fmt.Sprintf("http://127.0.0.1:%d", publishedPort)
 		}
 
 		services = append(services, DiscoveredService{
 			Name:     known.Name,
-			URL:      fmt.Sprintf("http://127.0.0.1:%d", publishedPort),
+			URL:      url,
 			Username: known.Username,
 			Password: known.Password,
 		})
