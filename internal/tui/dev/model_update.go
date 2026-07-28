@@ -302,6 +302,14 @@ func (m Model) saveMigrationWizard() (app.Content, tea.Cmd) {
 		return m, nil
 	}
 
+	// Host-side Compose project name so Docker volumes stay unique for this tree.
+	if err := shop.EnsureComposeProjectName(m.projectRoot); err != nil {
+		m.migrationWizard.err = err
+		m.migrationWizard.step = migrationStepDone
+		trackEvent(tracking.EventDevMigrationWizard, migrationWizardTags(tracking.ResultFailed, m.migrationWizard))
+		return m, nil
+	}
+
 	changed, err := ensureDeploymentHelper(m.projectRoot)
 	if err != nil {
 		m.migrationWizard.err = err

@@ -1,10 +1,13 @@
 package extension
 
 import (
+	"context"
 	_ "embed"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/url"
 	"path"
@@ -17,6 +20,7 @@ import (
 	htmlprinter "github.com/shyim/go-htmlprinter"
 	"github.com/spf13/cobra"
 	"github.com/vulcand/oxy/v2/forward"
+	"go.uber.org/zap"
 	"golang.org/x/net/html"
 
 	"github.com/shopware/shopware-cli/internal/asset"
@@ -81,6 +85,11 @@ var extensionAdminWatchCmd = &cobra.Command{
 		}
 
 		esbuildInstances := make(map[string]adminWatchExtension)
+		defer func() {
+			for _, ext := range esbuildInstances {
+				ext.context.Dispose()
+			}
+		}()
 
 		for name, entry := range cfgs {
 			options := esbuild.NewAssetCompileOptionsAdmin(name, entry.BasePath)
@@ -144,6 +153,12 @@ var extensionAdminWatchCmd = &cobra.Command{
 		}
 
 		fwd := forward.New(true)
+
+		proxyLog, err := zap.NewStdLogAt(logging.FromContext(cmd.Context()).Desugar(), zap.DebugLevel)
+		if err != nil {
+			return err
+		}
+		fwd.ErrorLog = proxyLog
 
 		redirect := http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 			logging.FromContext(cmd.Context()).Debugf("Got request %s %s", req.Method, req.URL.Path)
@@ -309,9 +324,21 @@ var extensionAdminWatchCmd = &cobra.Command{
 				}
 
 				for _, ext := range esbuildInstances {
+					entrypoints, err := esbuild.RebuildEntrypoints(ext.context)
+					if err != nil {
+						logging.FromContext(cmd.Context()).Errorf("cannot rebuild administration bundle for %s: %s", ext.assetName, err)
+						http.Error(w, "cannot rebuild administration bundle", http.StatusServiceUnavailable)
+						return
+					}
+
+					css := []string{}
+					if entrypoints.CSS != "" {
+						css = append(css, adminWatchOutputURL(browserUrl, ext.assetName, entrypoints.CSS))
+					}
+
 					bundleInfo.Bundles[ext.name] = adminBundlesInfoAsset{
-						Css:        []string{fmt.Sprintf("%s/.shopware-cli/%s/extension.css", browserUrl.String(), ext.assetName)},
-						Js:         []string{fmt.Sprintf("%s/.shopware-cli/%s/extension.js", browserUrl.String(), ext.assetName)},
+						Css:        css,
+						Js:         []string{adminWatchOutputURL(browserUrl, ext.assetName, entrypoints.JavaScript)},
 						LiveReload: true,
 						Name:       ext.assetName,
 					}
@@ -360,12 +387,44 @@ var extensionAdminWatchCmd = &cobra.Command{
 			ReadHeaderTimeout: time.Second,
 		}
 		logging.FromContext(cmd.Context()).Infof("Admin Watcher started at %s%s/admin", browserUrl.String(), targetShopUrl.Path)
-		if err := s.ListenAndServe(); err != nil {
+
+		return serveAdminWatch(cmd.Context(), s)
+	},
+}
+
+func serveAdminWatch(ctx context.Context, server *http.Server) error {
+	server.BaseContext = func(net.Listener) context.Context {
+		return ctx
+	}
+
+	serverErr := make(chan error, 1)
+	go func() {
+		serverErr <- server.ListenAndServe()
+	}()
+
+	select {
+	case err := <-serverErr:
+		if errors.Is(err, http.ErrServerClosed) {
+			return nil
+		}
+
+		return err
+	case <-ctx.Done():
+		logging.FromContext(ctx).Infof("Stopping Admin Watcher")
+
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancel()
+
+		if err := server.Shutdown(shutdownCtx); err != nil {
+			_ = server.Close()
+		}
+
+		if err := <-serverErr; err != nil && !errors.Is(err, http.ErrServerClosed) {
 			return err
 		}
 
 		return nil
-	},
+	}
 }
 
 func init() {
@@ -403,4 +462,13 @@ type adminWatchExtension struct {
 	context     api.BuildContext
 	watchServer api.ServeResult
 	staticDir   string
+}
+
+func adminWatchOutputURL(browserURL *url.URL, assetName, outputPath string) string {
+	return fmt.Sprintf(
+		"%s/.shopware-cli/%s/%s",
+		strings.TrimSuffix(browserURL.String(), "/"),
+		assetName,
+		strings.TrimPrefix(outputPath, "/"),
+	)
 }
