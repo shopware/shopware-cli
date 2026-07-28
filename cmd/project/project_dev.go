@@ -53,25 +53,40 @@ func isProxyProjectForDomain(cfg *shop.Config, baseDomain string) bool {
 	return host == baseDomain || strings.HasSuffix(host, "."+baseDomain)
 }
 
-// maybeBootstrapProxy sets up the shared proxy for a proxy-mode project before
-// its development environment starts, so `project dev` serves it at its stable
-// hostname. It is a no-op for port-based projects.
-func maybeBootstrapProxy(cmd *cobra.Command, projectRoot string, cfg *shop.Config) error {
+// ensureProxyForDevProjectWithFallback sets up the shared proxy for a
+// proxy-mode project before its development environment starts, so
+// `project dev` serves it at its stable hostname. It never blocks: if the
+// shared proxy cannot start (e.g. its port is taken), it removes the proxy
+// override, points the user at a fix and reports that the shop falls back to a
+// local port. It is a no-op for port-based projects. Returns whether it fell
+// back to port mode.
+func ensureProxyForDevProjectWithFallback(cmd *cobra.Command, projectRoot string, cfg *shop.Config) (fellBack bool) {
 	if !isProxyProject(cfg) {
+		return false
+	}
+
+	ctx := cmd.Context()
+	err := func() error {
+		env, err := newProxyEnvironmentForRoot(ctx, projectRoot, projectConfigPath)
+		if err != nil {
+			return err
+		}
+		if err := runStep(ctx, "Preparing shared proxy...", env.bootstrapInfra); err != nil {
+			return err
+		}
+		env.ensureHostnameResolves(ctx)
 		return nil
-	}
-
-	env, err := newProxyEnvironmentForRoot(cmd.Context(), projectRoot, projectConfigPath)
+	}()
 	if err != nil {
-		return err
+		// Never block dev: drop back to fixed-port mode and tell the user how
+		// to diagnose the proxy.
+		_ = dockerpkg.RemoveComposeOverride(projectRoot)
+		fmt.Println(tui.RedText.Render("  Shared proxy unavailable: " + err.Error()))
+		fmt.Println(tui.DimText.Render("  Serving on a local port instead — run ") + tui.BoldText.Render("shopware-cli project proxy verify") + tui.DimText.Render(" to diagnose."))
+		return true
 	}
 
-	if err := runStep(cmd.Context(), "Preparing shared proxy...", env.bootstrapInfra); err != nil {
-		return fmt.Errorf("preparing shared proxy: %w", err)
-	}
-
-	env.ensureHostnameResolves(cmd.Context())
-	return nil
+	return false
 }
 
 // ErrEnvironmentDown is returned by the `project dev status` command when the
@@ -84,6 +99,9 @@ type devEnvironment struct {
 	cfg         *shop.Config
 	envCfg      *shop.EnvironmentConfig
 	executor    executor.Executor
+	// proxyFellBack is set when a proxy project could not start the shared
+	// proxy and was served on a local port instead, so URLs are shown for ports.
+	proxyFellBack bool
 }
 
 var projectDevCmd = &cobra.Command{
@@ -114,9 +132,7 @@ var projectDevCmd = &cobra.Command{
 			return err
 		}
 
-		if err := maybeBootstrapProxy(cmd, projectRoot, cfg); err != nil {
-			return err
-		}
+		env.proxyFellBack = ensureProxyForDevProjectWithFallback(cmd, projectRoot, cfg)
 
 		if !isatty.IsTerminal(os.Stdin.Fd()) {
 			return env.start(cmd)
@@ -135,9 +151,7 @@ var projectDevStartCmd = &cobra.Command{
 			return err
 		}
 
-		if err := maybeBootstrapProxy(cmd, env.projectRoot, env.cfg); err != nil {
-			return err
-		}
+		env.proxyFellBack = ensureProxyForDevProjectWithFallback(cmd, env.projectRoot, env.cfg)
 
 		return env.start(cmd)
 	},
@@ -274,6 +288,10 @@ func (e *devEnvironment) start(cmd *cobra.Command) error {
 	shopURL := e.cfg.URL
 	if e.envCfg.URL != "" {
 		shopURL = e.envCfg.URL
+	}
+	// After a proxy fallback the shop is on a local port, not its hostname.
+	if e.proxyFellBack {
+		shopURL = defaultShopURL
 	}
 
 	var services []dev.DiscoveredService
