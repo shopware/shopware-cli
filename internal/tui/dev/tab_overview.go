@@ -69,7 +69,12 @@ type OverviewModel struct {
 	securityEnd      time.Time
 	health           []healthCheck
 	healthLoading    bool
-	cursor           int // focus index: 0=Admin watcher, 1=Storefront watcher
+	// Instances: how many shops run behind the shared proxy and their total
+	// memory. Shown only for proxy projects.
+	instancesLoading  bool
+	instancesShops    int
+	instancesMemBytes int64
+	cursor            int // focus index: 0=Admin watcher, 1=Storefront watcher
 }
 
 type DiscoveredService struct {
@@ -287,6 +292,7 @@ func NewOverviewModel(envType, shopURL, username, password, projectRoot string, 
 		adminWatchURL:    resolveAdminWatchURL(projectRoot),
 		sfWatchURL:       resolveStorefrontWatchURL(projectRoot),
 		domainsSetupDone: overviewSetupDone(projectRoot),
+		instancesLoading: proxyHostname(projectRoot) != "",
 		loading:          true,
 		healthLoading:    true,
 	}
@@ -344,11 +350,54 @@ func resolveStorefrontWatchURL(projectRoot string) string {
 }
 
 func (m OverviewModel) Init() tea.Cmd {
-	return tea.Batch(
+	cmds := []tea.Cmd{
 		discoverServices(m.projectRoot),
 		loadShopwareVersion(m.projectRoot),
 		loadSetupHealth(m.projectRoot, m.executor),
-	)
+	}
+	if proxyHostname(m.projectRoot) != "" {
+		cmds = append(cmds, loadInstances())
+	}
+	return tea.Batch(cmds...)
+}
+
+// instancesLoadedMsg carries the shared-proxy instance stats (how many shops
+// run and their total memory), loaded asynchronously.
+type instancesLoadedMsg struct {
+	shops    int
+	memBytes int64
+}
+
+// instancesTickMsg triggers a periodic re-count of running proxy instances, so
+// the section reflects shops started or stopped from another terminal.
+type instancesTickMsg struct{}
+
+// instancesTimeout bounds the docker stats call so a slow daemon cannot leave
+// the Instances section spinning forever.
+const instancesTimeout = 10 * time.Second
+
+// instancesRefreshInterval is how often the Instances count is refreshed while
+// the overview is open.
+const instancesRefreshInterval = 5 * time.Second
+
+// instanceWarnThreshold is the number of running shops above which the
+// overview warns that memory may be getting tight.
+const instanceWarnThreshold = 20
+
+func loadInstances() tea.Cmd {
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(context.Background(), instancesTimeout)
+		defer cancel()
+		shops, memBytes, _ := proxy.InstanceStats(ctx)
+		return instancesLoadedMsg{shops: shops, memBytes: memBytes}
+	}
+}
+
+// scheduleInstancesRefresh waits one interval and then asks for another count.
+func scheduleInstancesRefresh() tea.Cmd {
+	return tea.Tick(instancesRefreshInterval, func(time.Time) tea.Msg {
+		return instancesTickMsg{}
+	})
 }
 
 func (m *OverviewModel) SetSize(width, height int) {
@@ -397,6 +446,13 @@ func (m OverviewModel) Update(msg tea.Msg) (OverviewModel, tea.Cmd) {
 	case setupHealthLoadedMsg:
 		m.healthLoading = false
 		m.health = msg.checks
+	case instancesLoadedMsg:
+		m.instancesLoading = false
+		m.instancesShops = msg.shops
+		m.instancesMemBytes = msg.memBytes
+		return m, scheduleInstancesRefresh()
+	case instancesTickMsg:
+		return m, loadInstances()
 	case tea.KeyPressMsg:
 		return m.handleKey(msg)
 	}
@@ -503,9 +559,51 @@ func (m OverviewModel) renderProjectReport(width int) string {
 		s.WriteString("\n")
 		s.WriteString(m.renderBackgroundProcesses())
 	}
+	if proxyHostname(m.projectRoot) != "" {
+		s.WriteString(divider)
+		s.WriteString(m.renderInstances())
+	}
 	s.WriteString(divider)
 	s.WriteString(m.renderSetupHealth())
 	return s.String()
+}
+
+// renderInstances shows how many shops run behind the shared proxy and their
+// total memory, warning when many are up. Only rendered for proxy projects.
+func (m OverviewModel) renderInstances() string {
+	var s strings.Builder
+	s.WriteString(tui.TitleStyle.Render("Instances"))
+	s.WriteString("\n")
+
+	if m.instancesLoading {
+		s.WriteString("  " + helpStyle.Render("counting...") + "\n")
+		return s.String()
+	}
+
+	line := fmt.Sprintf("%d running", m.instancesShops)
+	if m.instancesMemBytes > 0 {
+		line += " · " + formatBytes(m.instancesMemBytes)
+	}
+	s.WriteString("  " + line + "\n")
+
+	if m.instancesShops >= instanceWarnThreshold {
+		s.WriteString("  " + lipgloss.NewStyle().Foreground(tui.WarnColor).Render("Many shops running at once — this can exhaust memory.") + "\n")
+	}
+	return s.String()
+}
+
+// formatBytes renders a byte count as a human-readable size (e.g. "1.9 GB").
+func formatBytes(b int64) string {
+	const unit = 1024
+	if b < unit {
+		return fmt.Sprintf("%d B", b)
+	}
+	div, exp := int64(unit), 0
+	for n := b / unit; n >= unit; n /= unit {
+		div *= unit
+		exp++
+	}
+	return fmt.Sprintf("%.1f %cB", float64(b)/float64(div), "KMGTPE"[exp])
 }
 
 // renderUserActions renders the right column: everything the user can act on.
@@ -568,6 +666,10 @@ func (m OverviewModel) renderStacked(width int) string {
 		s.WriteString(tui.TitleStyle.Render("Background processing"))
 		s.WriteString("\n")
 		s.WriteString(m.renderBackgroundProcesses())
+	}
+	if proxyHostname(m.projectRoot) != "" {
+		s.WriteString(divider)
+		s.WriteString(m.renderInstances())
 	}
 	s.WriteString(divider)
 	if proxyHostname(m.projectRoot) != "" {
