@@ -31,6 +31,21 @@ implementation (`internal/proxy/`, `cmd/project/project_proxy*.go`).
 | `proxy verify` | Bottom-up health check of the whole chain, with fix hints |
 | `proxy teardown` | `down` for every registered project, then stop shared infra (confirmable, `--force`) |
 
+## Two ways a project uses the proxy
+
+- **New projects** — pick **"Local domains: Yes"** in `project create` (or pass
+  `--local-domain`). That writes the hostname into `.shopware-project.yml`, and
+  `project dev` then brings the shop up through the proxy automatically — no
+  `proxy up` needed. Run `proxy setup` once per machine first (DNS + trust).
+- **Existing port-based projects** — `proxy up` opts them in on demand (switching
+  their URL to the hostname and remembering the old one), and `proxy down`
+  reverts them exactly.
+
+A project created with a local domain *is* a proxy project by identity, so
+`proxy down` there has no port mode to return to — it just stops and
+deregisters the shop (a later `project dev` re-bootstraps it). The exact-restore
+behavior below applies to the opt-in (`proxy up`) case.
+
 ## The problem
 
 The standard dev environment publishes fixed host ports (`8000`, `9080`,
@@ -96,6 +111,10 @@ Writing that config is the one operation that needs sudo, done once by
 > path browsers use), not through `net.LookupHost`.
 
 ## What `proxy up` changes — and how `down` undoes it
+
+This is the **opt-in** flow (`proxy up` on a port-based project); a project born
+with a local domain skips the URL rewrites since the hostname is already its
+configured URL.
 
 A registered shop must not only be *reachable* under its hostname, it must
 *believe* in it (Shopware rejects unknown domains with a 400 page). So `up`
