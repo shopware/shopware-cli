@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/url"
 	"os"
 	"strings"
 	"time"
@@ -19,6 +20,59 @@ import (
 	"github.com/shopware/shopware-cli/internal/tui"
 	"github.com/shopware/shopware-cli/internal/tui/dev"
 )
+
+// isProxyProject reports whether the project is configured to be served at a
+// stable hostname under the shared proxy's base domain (as opposed to a fixed
+// localhost port). This is the signal `project create --local-domain` writes
+// into .shopware-project.yml, and what makes `project dev` bootstrap the proxy.
+func isProxyProject(cfg *shop.Config) bool {
+	return isProxyProjectForDomain(cfg, proxyBaseDomain())
+}
+
+// isProxyProjectForDomain is the pure core of isProxyProject with the base
+// domain passed in, so it can be tested without depending on stored settings.
+func isProxyProjectForDomain(cfg *shop.Config, baseDomain string) bool {
+	if cfg == nil {
+		return false
+	}
+
+	effective := cfg.URL
+	if envCfg, err := cfg.ResolveEnvironment(environmentName); err == nil && envCfg.URL != "" {
+		effective = envCfg.URL
+	}
+	if effective == "" {
+		return false
+	}
+
+	parsed, err := url.Parse(effective)
+	if err != nil {
+		return false
+	}
+
+	host := parsed.Hostname()
+	return host == baseDomain || strings.HasSuffix(host, "."+baseDomain)
+}
+
+// maybeBootstrapProxy sets up the shared proxy for a proxy-mode project before
+// its development environment starts, so `project dev` serves it at its stable
+// hostname. It is a no-op for port-based projects.
+func maybeBootstrapProxy(cmd *cobra.Command, projectRoot string, cfg *shop.Config) error {
+	if !isProxyProject(cfg) {
+		return nil
+	}
+
+	env, err := newProxyEnvironmentForRoot(cmd.Context(), projectRoot, projectConfigPath)
+	if err != nil {
+		return err
+	}
+
+	if err := runStep(cmd.Context(), "Preparing shared proxy...", env.bootstrapInfra); err != nil {
+		return fmt.Errorf("preparing shared proxy: %w", err)
+	}
+
+	env.ensureHostnameResolves(cmd.Context())
+	return nil
+}
 
 // ErrEnvironmentDown is returned by the `project dev status` command when the
 // development environment is not running. It causes the CLI to exit with code 1
@@ -60,6 +114,10 @@ var projectDevCmd = &cobra.Command{
 			return err
 		}
 
+		if err := maybeBootstrapProxy(cmd, projectRoot, cfg); err != nil {
+			return err
+		}
+
 		if !isatty.IsTerminal(os.Stdin.Fd()) {
 			return env.start(cmd)
 		}
@@ -74,6 +132,10 @@ var projectDevStartCmd = &cobra.Command{
 	RunE: func(cmd *cobra.Command, args []string) error {
 		env, err := setupDevEnvironment(cmd)
 		if err != nil {
+			return err
+		}
+
+		if err := maybeBootstrapProxy(cmd, env.projectRoot, env.cfg); err != nil {
 			return err
 		}
 

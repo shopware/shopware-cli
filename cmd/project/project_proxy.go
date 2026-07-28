@@ -46,8 +46,13 @@ var projectProxyCmd = &cobra.Command{
 	Use:   "proxy",
 	Short: "Reach local instances via stable hostnames instead of ports",
 	Long: `Manages a shared local reverse proxy (Traefik) that routes stable per-project
-hostnames like http://my-shop.shopware.local to your local Shopware instances.
-This allows running multiple instances in parallel without juggling ports.`,
+hostnames like https://my-shop.shopware.local to your local Shopware instances,
+so any number of shops run in parallel without juggling ports.
+
+New projects can opt in at creation with "project create --local-domain"; their
+"project dev" then serves them through the proxy automatically, no "proxy up"
+needed. Use "proxy up" to opt an existing port-based project in, and "proxy
+down" to revert it. Run "proxy setup" once per machine first (DNS + trust).`,
 }
 
 var projectProxyUpCmd = &cobra.Command{
@@ -140,61 +145,25 @@ func (e *proxyEnvironment) up(cmd *cobra.Command) error {
 		return err
 	}
 
-	if other, found := reg.FindByHostname(e.hostname, e.canonicalRoot); found {
-		return fmt.Errorf("hostname %s is already registered to %s, set a different \"url\" in %s to disambiguate", e.hostname, other.ProjectRoot, projectConfigPath)
-	}
-
-	if err := proxy.EnsureComposeSupportsReset(ctx); err != nil {
-		return err
-	}
-
-	certInfo, err := e.ensureCertificate(reg)
-	if err != nil {
-		return err
-	}
-
+	var certInfo proxy.CertInfo
 	err = runStep(ctx, "Starting shared proxy...", func(ctx context.Context) error {
-		if err := proxy.EnsureTraefikRunning(ctx, e.baseDomain); err != nil {
-			return err
-		}
-
-		// A regenerated certificate (e.g. new project wildcard SANs) is
-		// only served after a restart.
-		if certInfo.Changed {
-			return proxy.RestartTraefik(ctx)
-		}
-
-		return nil
+		var infraErr error
+		certInfo, infraErr = e.prepareProxyInfra(ctx, reg)
+		return infraErr
 	})
 	if err != nil {
-		return fmt.Errorf("starting shared proxy: %w", err)
+		return err
 	}
 
-	if err := proxy.EnsureDNSServerRunning(e.baseDomain); err != nil {
-		return fmt.Errorf("starting DNS server: %w", err)
-	}
-
-	// The base compose.yaml stays in fixed-port mode; proxy mode is a
-	// separate override file docker compose merges automatically. This keeps
-	// `project dev` and manual `docker compose` invocations working in both
-	// modes without knowing about the proxy.
+	// The base compose.yaml stays in fixed-port mode; proxy mode is the
+	// separate override (written by prepareProxyInfra) that docker compose
+	// merges automatically, so `project dev` and manual `docker compose` keep
+	// working in both modes without knowing about the proxy.
 	if err := dockerpkg.WriteComposeFile(e.projectRoot, dockerpkg.ComposeOptionsFromConfig(e.cfg)); err != nil {
 		return err
 	}
 
-	// Pin APP_URL on the containers before they start, so PHP renders absolute
-	// URLs (e.g. the storefront import map) with the proxy hostname rather than
-	// the stale image default. .env.local is rewritten below too, but that only
-	// takes effect on the next recreate, so the container env is authoritative.
 	proxyURL := "https://" + e.hostname
-	if err := dockerpkg.WriteComposeOverride(e.projectRoot, &dockerpkg.ProxyOptions{
-		Hostname:    e.hostname,
-		NetworkName: proxy.NetworkName,
-		CAPath:      certInfo.CAPath,
-		AppURL:      proxyURL,
-	}); err != nil {
-		return err
-	}
 
 	start := time.Now()
 	err = runStep(ctx, "Starting development environment...", func(ctx context.Context) error {
@@ -264,6 +233,89 @@ func (e *proxyEnvironment) up(cmd *cobra.Command) error {
 		fmt.Println(tui.DimText.Render("  A local certificate authority was created. Run ") + tui.BoldText.Render("shopware-cli project proxy setup") + tui.DimText.Render(" once so browsers trust it (needs sudo)."))
 		fmt.Println()
 	}
+
+	return nil
+}
+
+// prepareProxyInfra brings up everything the shared proxy needs before a
+// project's containers start: it checks the hostname is free, verifies compose
+// supports resets, ensures the certificate, the shared Traefik container and
+// the DNS daemon, and writes the compose override with APP_URL pinned (so PHP
+// renders absolute URLs — e.g. the storefront import map — with the proxy
+// hostname, not the stale image default). It returns the certificate info so
+// callers can react to a freshly created CA. It neither starts nor registers
+// the project: up() and a proxy-mode `project dev` layer their own
+// start/registration on top. Safe to call repeatedly.
+func (e *proxyEnvironment) prepareProxyInfra(ctx context.Context, reg proxy.Registry) (proxy.CertInfo, error) {
+	if other, found := reg.FindByHostname(e.hostname, e.canonicalRoot); found {
+		return proxy.CertInfo{}, fmt.Errorf("hostname %s is already registered to %s, set a different \"url\" in %s to disambiguate", e.hostname, other.ProjectRoot, projectConfigPath)
+	}
+
+	if err := proxy.EnsureComposeSupportsReset(ctx); err != nil {
+		return proxy.CertInfo{}, err
+	}
+
+	certInfo, err := e.ensureCertificate(reg)
+	if err != nil {
+		return proxy.CertInfo{}, err
+	}
+
+	if err := proxy.EnsureTraefikRunning(ctx, e.baseDomain); err != nil {
+		return proxy.CertInfo{}, err
+	}
+	// A regenerated certificate (e.g. new project wildcard SANs) is only served
+	// after a restart.
+	if certInfo.Changed {
+		if err := proxy.RestartTraefik(ctx); err != nil {
+			return proxy.CertInfo{}, err
+		}
+	}
+
+	if err := proxy.EnsureDNSServerRunning(e.baseDomain); err != nil {
+		return proxy.CertInfo{}, fmt.Errorf("starting DNS server: %w", err)
+	}
+
+	if err := dockerpkg.WriteComposeOverride(e.projectRoot, &dockerpkg.ProxyOptions{
+		Hostname:    e.hostname,
+		NetworkName: proxy.NetworkName,
+		CAPath:      certInfo.CAPath,
+		AppURL:      "https://" + e.hostname,
+	}); err != nil {
+		return proxy.CertInfo{}, err
+	}
+
+	return certInfo, nil
+}
+
+// bootstrapInfra sets up the shared proxy for this project and registers it,
+// without starting or installing the shop — a proxy-mode `project dev` starts
+// the environment and installs the shop itself (the pinned APP_URL makes the
+// install use the proxy hostname). Safe to call repeatedly.
+func (e *proxyEnvironment) bootstrapInfra(ctx context.Context) error {
+	reg, err := proxy.LoadRegistry()
+	if err != nil {
+		return err
+	}
+
+	if _, err := e.prepareProxyInfra(ctx, reg); err != nil {
+		return err
+	}
+
+	// No PreviousAppURL/PreviousConfig: a project bootstrapped this way is a
+	// proxy project by identity (its configured url is the hostname), so
+	// `proxy down` must not later "restore" it to a port mode it never had.
+	reg.Upsert(proxy.ProjectEntry{
+		ProjectRoot:  e.canonicalRoot,
+		Hostname:     e.hostname,
+		RegisteredAt: time.Now(),
+	})
+	if err := reg.Save(); err != nil {
+		return err
+	}
+
+	// Best-effort: makes the shop reachable at its own hostname from inside its
+	// containers. Traefik is up by now.
+	_ = proxy.ReconcileHostnames(ctx, reg.Hostnames())
 
 	return nil
 }
@@ -493,16 +545,18 @@ func (e *proxyEnvironment) down(ctx context.Context, hintTeardown bool) error {
 		return err
 	}
 
-	// Point the shop back at its previous URL while the database is still
-	// running.
-	restoreURL := defaultShopURL
 	entry, registered := reg.Find(e.canonicalRoot)
+
+	// Only revert the shop's URLs when there is a genuine pre-proxy state to
+	// return to — a port project that opted in via `proxy up`. A project
+	// created with local domains has no port mode to restore (its identity is
+	// the proxy hostname), so its URLs are left as they are; a later
+	// `project dev` simply re-bootstraps the proxy.
 	if registered && entry.PreviousAppURL != "" {
-		restoreURL = entry.PreviousAppURL
-	}
-	if err := e.pointShopAt(ctx, []string{"https://" + e.hostname, "http://" + e.hostname}, restoreURL); err != nil {
-		fmt.Println(tui.RedText.Render("  Could not restore the sales channel domain: " + err.Error()))
-		fmt.Println(tui.DimText.Render("  Restore it manually once the shop runs: ") + tui.BoldText.Render(fmt.Sprintf("shopware-cli project console sales-channel:replace:url https://%s %s", e.hostname, restoreURL)))
+		if err := e.pointShopAt(ctx, []string{"https://" + e.hostname, "http://" + e.hostname}, entry.PreviousAppURL); err != nil {
+			fmt.Println(tui.RedText.Render("  Could not restore the sales channel domain: " + err.Error()))
+			fmt.Println(tui.DimText.Render("  Restore it manually once the shop runs: ") + tui.BoldText.Render(fmt.Sprintf("shopware-cli project console sales-channel:replace:url https://%s %s", e.hostname, entry.PreviousAppURL)))
+		}
 	}
 
 	// Restore the url keys in .shopware-project.yml to their pre-proxy state.
