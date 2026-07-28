@@ -2,6 +2,8 @@ package dev
 
 import (
 	"context"
+	"os"
+	"os/exec"
 	"time"
 
 	"charm.land/bubbles/v2/progress"
@@ -272,6 +274,16 @@ func (m Model) updateContent(msg tea.Msg) (app.Content, tea.Cmd) {
 	case configRestartDoneMsg:
 		return m.handleConfigRestartDone(msg)
 
+	case runProxySetupRequestMsg:
+		return m.runProxySetup()
+
+	case proxySetupDoneMsg:
+		// The program resumes after the interactive setup; refresh the Domains
+		// status and the setup-health checks it affects.
+		m.overview.domainsSetupDone = overviewSetupDone(m.projectRoot)
+		m.overview.healthLoading = true
+		return m, loadSetupHealth(m.projectRoot, m.executor)
+
 	case watcherStartedMsg, watcherRunningMsg, watcherProbeMsg, stopWatcherRequestMsg,
 		startStorefrontWatchRequestMsg, watcherStoppedMsg, logDoneMsg:
 		return m.updateWatcherMsg(msg)
@@ -404,6 +416,23 @@ func (m Model) updateWatcherMsg(msg tea.Msg) (app.Content, tea.Cmd) {
 	}
 
 	return m, nil
+}
+
+// runProxySetup runs `project proxy setup` as an interactive subprocess (it
+// needs sudo), pausing the TUI via tea.ExecProcess while it runs and resuming
+// afterwards.
+func (m Model) runProxySetup() (tea.Model, tea.Cmd) {
+	bin, err := os.Executable()
+	if err != nil {
+		bin = "shopware-cli"
+	}
+
+	c := exec.CommandContext(context.Background(), bin, "project", "proxy", "setup")
+	c.Dir = m.projectRoot
+
+	return m, tea.ExecProcess(c, func(error) tea.Msg {
+		return proxySetupDoneMsg{}
+	})
 }
 
 // updateFallback handles non-key messages that aren't matched by Update's
