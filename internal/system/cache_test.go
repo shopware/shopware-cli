@@ -4,6 +4,8 @@ import (
 	"archive/tar"
 	"bytes"
 	"compress/gzip"
+	"errors"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -419,4 +421,18 @@ func createTestTarGz(t *testing.T, sourceDir string) []byte {
 	require.NoError(t, gzipWriter.Close())
 
 	return buf.Bytes()
+}
+
+func TestIsCacheAlreadyExists(t *testing.T) {
+	t.Parallel()
+
+	assert.False(t, isCacheAlreadyExists(nil))
+	assert.False(t, isCacheAlreadyExists(errors.New("network timeout")))
+	assert.False(t, isCacheAlreadyExists(ErrCacheNotFound))
+
+	assert.True(t, isCacheAlreadyExists(os.ErrExist))
+	assert.True(t, isCacheAlreadyExists(fmt.Errorf("wrap: %w", os.ErrExist)))
+	assert.True(t, isCacheAlreadyExists(errors.New("failed to save folder to GitHub Actions cache: already_exists")))
+	assert.True(t, isCacheAlreadyExists(errors.New("ArtifactCacheItemAlreadyExistsException")))
+	assert.True(t, isCacheAlreadyExists(errors.New("CacheAlreadyExists")))
 }

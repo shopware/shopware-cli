@@ -6,6 +6,7 @@ import (
 	"compress/gzip"
 	"context"
 	"crypto/sha256"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -78,6 +79,12 @@ func (c *GitHubActionsCache) Set(ctx context.Context, key string, data io.Reader
 
 	err = c.client.Save(ctx, cacheKey, blob)
 	if err != nil {
+		// GHA cache keys are immutable; a concurrent or prior store of the same
+		// key returns already_exists. The entry is already available — treat as OK.
+		if isCacheAlreadyExists(err) {
+			return nil
+		}
+
 		return fmt.Errorf("failed to save to GitHub Actions cache: %w", err)
 	}
 
@@ -199,6 +206,12 @@ func (c *GitHubActionsCache) StoreFolderCache(ctx context.Context, key string, f
 	// Store the archive in cache
 	blob := actionscache.NewBlob(buf.Bytes())
 	if err := c.client.Save(ctx, cacheKey, blob); err != nil {
+		// Same key may already be present (race between jobs/workers, or a
+		// previous successful save). That is not a packaging failure.
+		if isCacheAlreadyExists(err) {
+			return nil
+		}
+
 		return fmt.Errorf("failed to save folder to GitHub Actions cache: %w", err)
 	}
 
@@ -390,4 +403,23 @@ func (c *GitHubActionsCache) getCacheKey(key string) string {
 	cacheKey = strings.ReplaceAll(cacheKey, "\\", "-")
 
 	return cacheKey
+}
+
+// isCacheAlreadyExists reports whether err means the cache entry is already
+// present. go-actions-cache maps that to os.ErrExist / "already_exists" /
+// "*AlreadyExists*" TypeKeys. Callers should treat this as success: GHA keys
+// are write-once, so the payload is already cached under that key.
+func isCacheAlreadyExists(err error) bool {
+	if err == nil {
+		return false
+	}
+
+	if errors.Is(err, os.ErrExist) {
+		return true
+	}
+
+	msg := strings.ToLower(err.Error())
+
+	return strings.Contains(msg, "already_exists") ||
+		strings.Contains(msg, "alreadyexists")
 }

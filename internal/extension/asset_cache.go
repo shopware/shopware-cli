@@ -120,15 +120,17 @@ func storeAssetCache(ctx context.Context, source *ExtensionAssetConfigEntry, ass
 
 	logging.FromContext(ctx).Debugf("Trying to store cache to key %s", cacheKey)
 
+	// Asset cache writes are best-effort. Failures (including GHA already_exists
+	// races) must not fail packaging/zip — the build artifacts are already on disk.
 	if source.Administration.EntryFilePath != nil {
 		if err := system.GetDefaultCache().StoreFolderCache(ctx, cacheKey+"-administration", source.GetOutputAdminPath()); err != nil {
-			return err
+			logging.FromContext(ctx).Warnf("could not store administration asset cache for %s: %v", source.TechnicalName, err)
 		}
 	}
 
 	if source.Storefront.EntryFilePath != nil {
 		if err := system.GetDefaultCache().StoreFolderCache(ctx, cacheKey+"-storefront", source.GetOutputStorefrontPath()); err != nil {
-			return err
+			logging.FromContext(ctx).Warnf("could not store storefront asset cache for %s: %v", source.TechnicalName, err)
 		}
 	}
 
@@ -137,7 +139,7 @@ func storeAssetCache(ctx context.Context, source *ExtensionAssetConfigEntry, ass
 		suffix := hashCacheKeySuffix(cachePath.Path)
 
 		if err := system.GetDefaultCache().StoreFolderCache(ctx, cacheKey+"-"+suffix, outputPath); err != nil {
-			return fmt.Errorf("additional_caches path %q for extension %s: %w", cachePath.Path, source.TechnicalName, err)
+			logging.FromContext(ctx).Warnf("could not store additional asset cache %q for %s: %v", cachePath.Path, source.TechnicalName, err)
 		}
 	}
 
