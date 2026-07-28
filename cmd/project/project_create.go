@@ -1,9 +1,14 @@
 package project
 
 import (
+	"fmt"
+	"path/filepath"
+	"strings"
+
 	"github.com/shyim/go-composer/repository"
 	"github.com/spf13/cobra"
 
+	"github.com/shopware/shopware-cli/internal/proxy"
 	"github.com/shopware/shopware-cli/internal/shop"
 	"github.com/shopware/shopware-cli/internal/system"
 	"github.com/shopware/shopware-cli/internal/tui"
@@ -46,6 +51,14 @@ type createOptions struct {
 	withElasticsearch bool
 	withAMQP          bool
 	noAudit           bool
+	// useLocalDomain serves the shop at a stable hostname
+	// (<name>.<baseDomain>) through the shared proxy instead of a fixed port.
+	// Only meaningful with Docker.
+	useLocalDomain bool
+	// setupProxyNow runs the one-time machine setup (DNS + HTTPS trust, needs
+	// sudo) inline during create, so the local domain works immediately. Set
+	// only when the user opts in and the machine is not configured yet.
+	setupProxyNow bool
 
 	interactive           bool
 	elasticsearchExplicit bool
@@ -64,6 +77,23 @@ func (o *createOptions) clearPHP() {
 	if !o.phpVersionExplicit {
 		o.phpVersion = ""
 	}
+}
+
+// localDomainHostname returns the stable proxy hostname for a project name,
+// e.g. "my-shop.shopware.local". Underscores (valid in a project name but not
+// in a hostname) become dashes.
+func localDomainHostname(name, baseDomain string) string {
+	label := strings.ReplaceAll(filepath.Base(name), "_", "-")
+	return label + "." + baseDomain
+}
+
+// proxyBaseDomain returns the machine-wide proxy base domain, falling back to
+// the default when no settings are stored yet.
+func proxyBaseDomain() string {
+	if s, err := proxy.LoadSettings(); err == nil {
+		return s.BaseDomain()
+	}
+	return proxy.DefaultDomain
 }
 
 var projectCreateCmd = &cobra.Command{
@@ -136,6 +166,16 @@ var projectCreateCmd = &cobra.Command{
 			return err
 		}
 
+		// Do the one-time machine setup up front (while the user is still at the
+		// keyboard for the sudo prompt), before the long composer install. It is
+		// best-effort: a blocked/declined sudo just means the domain resolves
+		// once the user runs `project proxy setup` later.
+		if opts.setupProxyNow {
+			fmt.Println()
+			fmt.Println(tui.BoldText.Render("Setting up local domains (one-time, needs sudo)"))
+			_ = runInlineProxySetup(cmd.Context(), proxyBaseDomain())
+		}
+
 		if err := scaffoldProject(cmd.Context(), &opts, chosenVersion); err != nil {
 			return err
 		}
@@ -150,6 +190,7 @@ func parseCreateFlags(cmd *cobra.Command, args []string) createOptions {
 	withAMQP, _ := cmd.PersistentFlags().GetBool("with-amqp")
 	noAudit, _ := cmd.PersistentFlags().GetBool("no-audit")
 	initGit, _ := cmd.PersistentFlags().GetBool("git")
+	localDomain, _ := cmd.PersistentFlags().GetBool("local-domain")
 	versionFlag, _ := cmd.PersistentFlags().GetString("version")
 	deploymentMethod, _ := cmd.PersistentFlags().GetString("deployment")
 	ciSystem, _ := cmd.PersistentFlags().GetString("ci")
@@ -169,6 +210,7 @@ func parseCreateFlags(cmd *cobra.Command, args []string) createOptions {
 		withAMQP:              withAMQP,
 		noAudit:               noAudit,
 		initGit:               initGit,
+		useLocalDomain:        localDomain,
 		selectedVersion:       versionFlag,
 		selectedDeployment:    deploymentMethod,
 		selectedCI:            ciSystem,
@@ -217,6 +259,7 @@ func init() {
 	projectCreateCmd.PersistentFlags().Bool("with-amqp", false, "Include AMQP queue support (symfony/amqp-messenger)")
 	projectCreateCmd.PersistentFlags().Bool("no-audit", false, "Disable composer audit blocking insecure packages")
 	projectCreateCmd.PersistentFlags().Bool("git", false, "Initialize a Git repository")
+	projectCreateCmd.PersistentFlags().Bool("local-domain", false, "Serve the shop at a stable local hostname (<name>.shopware.local) via the shared proxy instead of a port (requires Docker)")
 	projectCreateCmd.PersistentFlags().String("version", "", "Shopware version to install (e.g., 6.6.0.0, latest)")
 	projectCreateCmd.PersistentFlags().String("deployment", "", "Deployment method: none, deployer, platformsh, shopware-paas")
 	projectCreateCmd.PersistentFlags().String("ci", "", "CI/CD system: none, github, gitlab")

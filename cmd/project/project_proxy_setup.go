@@ -138,6 +138,50 @@ Both steps are idempotent; run it again anytime to repair the setup.`,
 	},
 }
 
+// runInlineProxySetup performs the one-time, sudo-requiring machine setup —
+// pointing the OS resolver at the embedded DNS server for baseDomain and
+// installing the proxy CA into the trust stores — as offered inline by
+// `project create` when a user opts into local domains. It is the core of the
+// `proxy setup` command without the domain-change and verification machinery
+// (a later `project dev` starts Traefik and serves the shop). It prints its own
+// progress and guidance; the returned error only signals that a step was
+// blocked, so the caller can fall back to a "run proxy setup later" hint.
+func runInlineProxySetup(ctx context.Context, baseDomain string) error {
+	if status := proxy.CheckResolverConfigured(baseDomain); status.Configured {
+		fmt.Println(tui.GreenText.Bold(true).Render("  ✓ DNS is already configured"))
+	} else if err := proxy.ConfigureResolver(ctx, baseDomain); err != nil {
+		if errors.Is(err, proxy.ErrNoSystemdResolved) {
+			// No automatic path, but the CA trust below is still worth doing.
+			printGuidance(proxy.NoSystemdResolvedGuidance(baseDomain))
+		} else {
+			printGuidance(proxy.ResolverBlockedGuidance(baseDomain))
+			return err
+		}
+	} else {
+		fmt.Println(tui.GreenText.Bold(true).Render("  ✓ DNS configured"))
+		fmt.Println(tui.DimText.Render("  Every *." + baseDomain + " hostname now resolves to 127.0.0.1."))
+	}
+
+	if err := proxy.EnsureDNSServerRunning(baseDomain); err != nil {
+		return fmt.Errorf("starting DNS server: %w", err)
+	}
+
+	caPath, err := proxy.CACertPath()
+	if err != nil {
+		return fmt.Errorf("preparing certificate authority: %w", err)
+	}
+
+	summary, err := proxy.InstallTrust(ctx, caPath)
+	if err != nil {
+		printGuidance(proxy.TrustBlockedGuidance(caPath))
+		return err
+	}
+	fmt.Println(tui.GreenText.Bold(true).Render("  ✓ HTTPS certificates are trusted"))
+	fmt.Println(tui.DimText.Render("  " + summary))
+
+	return nil
+}
+
 // runStep runs a potentially slow action, showing a spinner with the given
 // title only when running interactively. Without a terminal (CI, piped
 // output) the bubbletea spinner cannot run and would skip the action, so the
