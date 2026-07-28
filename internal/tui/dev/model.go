@@ -421,7 +421,7 @@ func (m Model) updateWatcherMsg(msg tea.Msg) (app.Content, tea.Cmd) {
 // runProxySetup runs `project proxy setup` as an interactive subprocess (it
 // needs sudo), pausing the TUI via tea.ExecProcess while it runs and resuming
 // afterwards.
-func (m Model) runProxySetup() (tea.Model, tea.Cmd) {
+func (m Model) runProxySetup() (app.Content, tea.Cmd) {
 	bin, err := os.Executable()
 	if err != nil {
 		bin = "shopware-cli"
