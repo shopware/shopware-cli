@@ -1,7 +1,6 @@
 package project
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"net/url"
@@ -9,7 +8,6 @@ import (
 	"strings"
 	"time"
 
-	"charm.land/huh/v2/spinner"
 	"github.com/mattn/go-isatty"
 	"github.com/spf13/cobra"
 
@@ -268,15 +266,10 @@ func newDevEnvironment(cmd *cobra.Command, projectRoot string, cfg *shop.Config)
 func (e *devEnvironment) start(cmd *cobra.Command) error {
 	start := time.Now()
 
-	err := spinner.New().
-		Title("Starting development environment...").
-		Context(cmd.Context()).
-		ActionWithErr(func(ctx context.Context) error {
-			return e.executor.StartEnvironment(ctx)
-		}).
-		Run()
-
-	if err != nil {
+	// runStep falls back to running the action directly without a spinner when
+	// there is no interactive terminal, so `project dev start` also works
+	// headless (e.g. an agent, CI, or a pipe with no /dev/tty).
+	if err := runStep(cmd.Context(), "Starting development environment...", e.executor.StartEnvironment); err != nil {
 		return fmt.Errorf("starting environment: %w", err)
 	}
 
@@ -332,15 +325,7 @@ func (e *devEnvironment) start(cmd *cobra.Command) error {
 func (e *devEnvironment) stop(cmd *cobra.Command) error {
 	start := time.Now()
 
-	err := spinner.New().
-		Title("Stopping development environment...").
-		Context(cmd.Context()).
-		ActionWithErr(func(ctx context.Context) error {
-			return e.executor.StopEnvironment(ctx)
-		}).
-		Run()
-
-	if err != nil {
+	if err := runStep(cmd.Context(), "Stopping development environment...", e.executor.StopEnvironment); err != nil {
 		return fmt.Errorf("stopping environment: %w", err)
 	}
 
