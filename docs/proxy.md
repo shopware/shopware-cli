@@ -46,6 +46,20 @@ A project created with a local domain *is* a proxy project by identity, so
 deregisters the shop (a later `project dev` re-bootstraps it). The exact-restore
 behavior below applies to the opt-in (`proxy up`) case.
 
+## `proxy setup` is the only sudo — agents need none
+
+`proxy setup` is the single moment that needs `sudo`: it points the OS resolver
+at the embedded DNS server *and* installs the CA into the trust stores. Both
+need root, and they run together in one ceremony, so a set-up machine always
+serves **trusted HTTPS** — there is deliberately no "domains but no HTTPS"
+half-state to opt into.
+
+Everything else needs no root. Once a human has run `proxy setup` once on a
+machine, `project create`, `project dev` (which bootstraps the proxy
+automatically for a local-domain project) and `proxy up` all run **without
+`sudo`**. So an agent on an already-set-up machine can bring any shop up at its
+stable `https://…` hostname entirely on its own.
+
 ## The problem
 
 The standard dev environment publishes fixed host ports (`8000`, `9080`,
