@@ -6,8 +6,6 @@ import (
 	"fmt"
 	"slices"
 
-	"charm.land/lipgloss/v2"
-	liplogtable "charm.land/lipgloss/v2/table"
 	"github.com/spf13/cobra"
 
 	account_api "github.com/shopware/shopware-cli/internal/account-api"
@@ -127,20 +125,13 @@ func printProducerExtensionsJSON(extensions []account_api.Extension) error {
 }
 
 func printProducerExtensionsTable(extensions []account_api.Extension) error {
-	cellStyle := lipgloss.NewStyle().Padding(0, 1)
-
-	t := liplogtable.New().
-		Border(lipgloss.NormalBorder()).
-		StyleFunc(func(row, col int) lipgloss.Style {
-			return cellStyle
-		}).
-		Headers("Name", "Type", "Compatible with latest version", "Status")
+	var rows [][]string
 
 	lastProducerId := 0
 	for _, extension := range extensions {
 		if extension.Producer.Id != lastProducerId {
 			lastProducerId = extension.Producer.Id
-			t.Row(tui.BoldText.Render(extension.Producer.Name), "", "", "")
+			rows = append(rows, []string{tui.BoldText.Render(extension.Producer.Name), "", "", ""})
 		}
 
 		compatible := tui.RedText.Render("No")
@@ -158,14 +149,15 @@ func printProducerExtensionsTable(extensions []account_api.Extension) error {
 			status = tui.DimText.Render(extension.Status.Name)
 		}
 
-		t.Row(
-			"  "+extension.Name,
+		rows = append(rows, []string{
+			"  " + extension.Name,
 			tui.DimText.Render(extension.Generation.Description),
 			compatible,
 			status,
-		)
+		})
 	}
 
-	fmt.Println(t.Render())
+	tui.PrintTable([]string{"Name", "Type", "Compatible with latest version", "Status"}, rows)
+
 	return nil
 }

@@ -139,6 +139,18 @@ how often blockers are encountered.
 | `target_version` | The version the user wants to upgrade to         | `6.6.0`  |
 | `has_blockers`   | Whether any blocking incompatibilities were found| `true`   |
 
+### `shopware_cli.project.upgrade` — interactive upgrade wizard run
+
+Sent when the upgrade wizard (`shopware-cli project upgrade`) finishes
+executing an upgrade, successfully or not. Helps us understand which upgrade
+paths succeed and where guided upgrades fail.
+
+| Tag              | Meaning                                   | Example    |
+|------------------|-------------------------------------------|------------|
+| `from_version`   | The Shopware version before the upgrade   | `6.6.10.3` |
+| `target_version` | The version the wizard upgraded to        | `6.7.11.0` |
+| `result`         | Outcome of the upgrade run                | `success` / `failure` |
+
 ## Development TUI events (`shopware-cli project dev`)
 
 The interactive development dashboard sends the events below so we can see

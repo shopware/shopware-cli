@@ -93,7 +93,6 @@ func runCreateForm(cmd *cobra.Command, opts *createOptions, filteredVersions []*
 		return tui.RedText.Render("No")
 	}
 
-	sectionStyle := lipgloss.NewStyle().Bold(true).Underline(true)
 	labelStyle := lipgloss.NewStyle().Width(20)
 
 	for {
@@ -244,7 +243,7 @@ func runCreateForm(cmd *cobra.Command, opts *createOptions, filteredVersions []*
 		}
 
 		fmt.Println()
-		fmt.Println(sectionStyle.Render("Summary"))
+		fmt.Println(tui.SectionHeadingStyle.Render("Summary"))
 		fmt.Println()
 		projectDisplay := opts.projectFolder
 		if projectDisplay == "." {

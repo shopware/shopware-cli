@@ -68,6 +68,8 @@ func FilterMultiSelect(ctx context.Context, title, help string, items []FilterMu
 	return chosen, nil
 }
 
+const filterSelectPageSize = 10
+
 type filterMultiSelectModel struct {
 	title    string
 	help     string
@@ -132,6 +134,12 @@ func (m *filterMultiSelectModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		return m, nil
+
+	case tea.PasteMsg:
+		var cmd tea.Cmd
+		m.filter, cmd = m.filter.Update(msg)
+		m.applyFilter()
+		return m, cmd
 
 	case tea.KeyPressMsg:
 		switch msg.String() {

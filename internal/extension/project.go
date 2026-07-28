@@ -186,7 +186,7 @@ type ConsoleCommandFunc func(ctx context.Context, args ...string) *exec.Cmd
 func DumpAndLoadAssetSourcesOfProject(ctx context.Context, project string, shopCfg *shop.Config, consoleCommand ConsoleCommandFunc) ([]asset.Source, error) {
 	dumpExec := consoleCommand(ctx, "bundle:dump")
 	dumpExec.Dir = project
-	// Capture output: bundle:dump's "Dumped plugin configuration." line corrupts the devtui render if inherited.
+	// Capture output: bundle:dump's "Dumped plugin configuration." line corrupts the dev TUI render if inherited.
 	var dumpOutput bytes.Buffer
 	dumpExec.Stdout = &dumpOutput
 	dumpExec.Stderr = &dumpOutput
