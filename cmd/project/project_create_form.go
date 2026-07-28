@@ -12,6 +12,7 @@ import (
 	"github.com/shyim/go-version"
 	"github.com/spf13/cobra"
 
+	"github.com/shopware/shopware-cli/internal/proxy"
 	"github.com/shopware/shopware-cli/internal/shop"
 	"github.com/shopware/shopware-cli/internal/system"
 	"github.com/shopware/shopware-cli/internal/tui"
@@ -71,6 +72,14 @@ func runCreateForm(cmd *cobra.Command, opts *createOptions, releases []repositor
 	selectGit := tui.Yes
 	selectElasticsearch := tui.No
 	selectAMQP := tui.Yes
+
+	baseDomain := proxyBaseDomain()
+	// Default to the stable hostname (recommended); only applies with Docker.
+	selectLocalDomain := true
+	// Whether this machine already resolves the proxy domain. When it does, the
+	// one-time sudo setup is already done, so we never ask for it again.
+	machineSetupDone := proxy.CheckResolverConfigured(baseDomain).Configured
+	selectSetupNow := tui.Yes
 
 	if !system.IsGitInstalled() {
 		selectGit = tui.No
@@ -194,6 +203,52 @@ func runCreateForm(cmd *cobra.Command, opts *createOptions, releases []repositor
 					Description("Use Docker to run Shopware locally").
 					Value(&selectDocker),
 			))
+		}
+
+		if !cmd.PersistentFlags().Changed("local-domain") {
+			formGroups = append(formGroups, huh.NewGroup(
+				huh.NewSelect[bool]().
+					Title("Local domains").
+					Description("Reach this shop at a stable hostname instead of a changing port").
+					OptionsFunc(func() []huh.Option[bool] {
+						host := localDomainHostname(opts.projectFolder, baseDomain)
+						return []huh.Option[bool]{
+							huh.NewOption("Yes (recommended) — https://"+host, true),
+							huh.NewOption("No — use a port (http://localhost:8000)", false),
+						}
+					}, &opts.projectFolder).
+					Value(&selectLocalDomain),
+				// The shared proxy is Docker-only, so this choice is irrelevant
+				// without Docker (respecting a --docker flag override).
+			).WithHideFunc(func() bool {
+				if cmd.PersistentFlags().Changed("docker") {
+					return !opts.useDocker
+				}
+				return selectDocker != tui.Yes
+			}))
+
+			// Offer the one-time machine setup inline, but only when it is
+			// actually needed: local domains chosen, Docker on, and the machine
+			// not configured yet. Every later project skips this automatically.
+			formGroups = append(formGroups, huh.NewGroup(
+				tui.NewYesNo().
+					Title("Set up local domains on this machine now?").
+					Description("One-time sudo: makes *."+baseDomain+" resolve and trusts its HTTPS certificate. Skip to run `shopware-cli project proxy setup` later.").
+					Value(&selectSetupNow),
+			).WithHideFunc(func() bool {
+				if machineSetupDone {
+					return true
+				}
+				dockerOn := selectDocker == tui.Yes
+				if cmd.PersistentFlags().Changed("docker") {
+					dockerOn = opts.useDocker
+				}
+				localOn := selectLocalDomain
+				if cmd.PersistentFlags().Changed("local-domain") {
+					localOn = opts.useLocalDomain
+				}
+				return !dockerOn || !localOn
+			}))
 		}
 
 		selectAdvanced := tui.No
@@ -329,6 +384,12 @@ func runCreateForm(cmd *cobra.Command, opts *createOptions, releases []repositor
 		if !cmd.PersistentFlags().Changed("docker") {
 			opts.useDocker = selectDocker == tui.Yes
 		}
+		if !cmd.PersistentFlags().Changed("local-domain") {
+			// Local domains need the shared proxy, which is Docker-only.
+			opts.useLocalDomain = opts.useDocker && selectLocalDomain
+		}
+		// Offer to run the one-time machine setup inline, only when needed.
+		opts.setupProxyNow = opts.useLocalDomain && !machineSetupDone && selectSetupNow == tui.Yes
 		if !cmd.PersistentFlags().Changed("git") {
 			opts.initGit = selectGit == tui.Yes
 		}
@@ -383,6 +444,13 @@ func runCreateForm(cmd *cobra.Command, opts *createOptions, releases []repositor
 				phpDisplay += " (" + opts.phpBinary + ")"
 			}
 			fmt.Printf("  %s %s\n", labelStyle.Render("PHP:"), phpDisplay)
+		}
+		if opts.useDocker {
+			localDomainValue := onOff(opts.useLocalDomain)
+			if opts.useLocalDomain {
+				localDomainValue = tui.GreenText.Render("https://" + localDomainHostname(opts.projectFolder, baseDomain))
+			}
+			fmt.Printf("  %s %s\n", labelStyle.Render("Local domain:"), localDomainValue)
 		}
 		fmt.Printf("  %s %s\n", labelStyle.Render("Git Repository:"), onOff(opts.initGit))
 		fmt.Printf("  %s %s\n", labelStyle.Render("OpenSearch:"), onOff(opts.withElasticsearch))
