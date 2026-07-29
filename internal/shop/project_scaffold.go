@@ -95,11 +95,16 @@ func (s *ShopwareProjectScaffold) Scaffold(ctx context.Context) error {
 		return err
 	}
 
+	envContent, err := EnvFileContent(s.UseDocker, s.ProjectFolder)
+	if err != nil {
+		return err
+	}
+
 	files := []struct {
 		path    string
 		content string
 	}{
-		{path: ".env"},
+		{path: ".env", content: envContent},
 		{path: ".env.local", content: envLocalContent(s.UseDocker)},
 		{path: ".gitignore", content: "/.idea\n/.shopware-cli\n/vendor"},
 	}

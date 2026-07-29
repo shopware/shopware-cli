@@ -3,6 +3,7 @@ package shop
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -51,7 +52,7 @@ func TestShopwareProjectScaffold(t *testing.T) {
 	t.Run("configures Docker without Symfony CLI php.ini", func(t *testing.T) {
 		t.Parallel()
 
-		projectFolder := t.TempDir()
+		projectFolder := filepath.Join(t.TempDir(), "demo-shop")
 		scaffold := ShopwareProjectScaffold{
 			ProjectFolder:       projectFolder,
 			Version:             "6.6.10.0",
@@ -65,6 +66,36 @@ func TestShopwareProjectScaffold(t *testing.T) {
 
 		assert.Equal(t, "APP_ENV=dev\n", readScaffoldFile(t, projectFolder, ".env.local"))
 		assert.NoFileExists(t, filepath.Join(projectFolder, "php.ini"))
+
+		envContent := readScaffoldFile(t, projectFolder, ".env")
+		assert.True(t, strings.HasPrefix(envContent, ComposeProjectNameEnvKey+"=sw-demo-shop-"), "got %q", envContent)
+		assert.True(t, strings.HasSuffix(envContent, "\n"))
+		name := strings.TrimPrefix(strings.TrimSpace(envContent), ComposeProjectNameEnvKey+"=")
+		assert.NoError(t, ValidateProjectName(name))
+
+		// Two docker scaffolds with the same basename get different compose names.
+		projectFolder2 := filepath.Join(t.TempDir(), "demo-shop")
+		scaffold2 := scaffold
+		scaffold2.ProjectFolder = projectFolder2
+		require.NoError(t, scaffold2.Scaffold(t.Context()))
+		env2 := readScaffoldFile(t, projectFolder2, ".env")
+		assert.NotEqual(t, envContent, env2)
+	})
+
+	t.Run("non-docker leaves .env empty without compose project name", func(t *testing.T) {
+		t.Parallel()
+
+		projectFolder := filepath.Join(t.TempDir(), "plain-shop")
+		scaffold := ShopwareProjectScaffold{
+			ProjectFolder:    projectFolder,
+			Version:          "6.6.10.0",
+			DeploymentMethod: DeploymentNone,
+			CISystem:         CINone,
+			UseDocker:        false,
+		}
+		require.NoError(t, scaffold.Scaffold(t.Context()))
+		assert.Empty(t, readScaffoldFile(t, projectFolder, ".env"))
+		assert.NotContains(t, readScaffoldFile(t, projectFolder, ".env"), ComposeProjectNameEnvKey)
 	})
 
 	t.Run("creates the selected deployment and CI files", func(t *testing.T) {

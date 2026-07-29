@@ -1,6 +1,6 @@
-# CLAUDE.md
+# AGENTS.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+This file provides guidance to AI coding agents when working with code in this repository.
 
 ## Development Commands
 
@@ -91,7 +91,7 @@ shopware-cli extension admin-watch
 shopware-cli extension validate
 
 # Create distribution package
-shopware-cli extension zip
+shopware-cli extension package
 ```
 
 ### Project Management
