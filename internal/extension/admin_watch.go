@@ -2,6 +2,7 @@ package extension
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"os"
@@ -19,20 +20,39 @@ const (
 )
 
 // AdminDevServerPort returns the port of the dev server that
-// PrepareAdminWatcher's `npm run dev` starts. The port is chosen by the
-// platform's own build setup, so it is detected from the Administration app
-// rather than inferred from a version: a Vite config (Shopware 6.7+) serves on
-// 5173, a webpack config (older versions) on 8080.
+// PrepareAdminWatcher's `npm run dev` starts, mirroring how the platform's
+// own dev script picks its tooling: Shopware 6.7+ ships Vite only (5173),
+// while 6.6 ships both and decides at runtime via the ADMIN_VITE feature flag
+// in var/config_js_features.json, defaulting to webpack-dev-server (8080).
 func AdminDevServerPort(projectRoot string) int {
 	adminApp := PlatformPath(projectRoot, "Administration", "Resources/app/administration")
-	if matches, _ := filepath.Glob(filepath.Join(adminApp, "vite.config.*")); len(matches) > 0 {
+	if _, err := os.Stat(filepath.Join(adminApp, "webpack.config.js")); err != nil {
+		// Without a webpack config (6.7+, or platform not installed yet)
+		// `npm run dev` can only start Vite.
 		return AdminVitePort
 	}
-	if _, err := os.Stat(filepath.Join(adminApp, "webpack.config.js")); err == nil {
-		return AdminWebpackPort
+	if adminViteFeatureEnabled(projectRoot) {
+		return AdminVitePort
 	}
-	// Neither found (e.g. platform not installed yet): assume current tooling.
-	return AdminVitePort
+	return AdminWebpackPort
+}
+
+// adminViteFeatureEnabled reads the ADMIN_VITE flag the way 6.6's dev script
+// does (`jq -r '.ADMIN_VITE' var/config_js_features.json`): only an explicit
+// true switches to Vite — a missing file or key means webpack.
+func adminViteFeatureEnabled(projectRoot string) bool {
+	content, err := os.ReadFile(filepath.Join(projectRoot, "var", "config_js_features.json"))
+	if err != nil {
+		return false
+	}
+
+	var flags map[string]any
+	if err := json.Unmarshal(content, &flags); err != nil {
+		return false
+	}
+
+	enabled, _ := flags["ADMIN_VITE"].(bool)
+	return enabled
 }
 
 // PrepareAdminWatcher runs the admin watcher preparation steps and returns the
