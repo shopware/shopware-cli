@@ -1,6 +1,7 @@
 package docker
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -76,6 +77,38 @@ func TestGenerateComposeOverride(t *testing.T) {
 
 	// The override only modifies services, it must not define images.
 	assert.NotContains(t, override, "image:")
+}
+
+func TestAdminWatchContainerPort(t *testing.T) {
+	t.Parallel()
+
+	lockWith := func(coreVersion string) *composer.Lock {
+		return &composer.Lock{Packages: []composer.LockPackage{{Name: "shopware/core", Version: coreVersion}}}
+	}
+
+	// Vite from 6.7 on, webpack-dev-server before.
+	assert.Equal(t, adminWatchWebpackPort, adminWatchContainerPort(lockWith("6.6.10.2")))
+	assert.Equal(t, adminWatchVitePort, adminWatchContainerPort(lockWith("6.7.0.0")))
+	assert.Equal(t, adminWatchVitePort, adminWatchContainerPort(lockWith("v6.7.12.2")))
+	// Unknown / unparseable versions default to Vite (current releases).
+	assert.Equal(t, adminWatchVitePort, adminWatchContainerPort(&composer.Lock{}))
+	assert.Equal(t, adminWatchVitePort, adminWatchContainerPort(lockWith("dev-trunk")))
+}
+
+func TestGenerateComposeOverrideRoutesAdminWatchByStack(t *testing.T) {
+	t.Parallel()
+
+	// Tie the port to the admin-watch router specifically (adminer is also 8080).
+	webpackLabel := fmt.Sprintf("-admin-watch.loadbalancer.server.port: \"%d\"", adminWatchWebpackPort)
+	viteLabel := fmt.Sprintf("-admin-watch.loadbalancer.server.port: \"%d\"", adminWatchVitePort)
+
+	sw66, err := GenerateComposeOverride(&composer.Lock{Packages: []composer.LockPackage{{Name: "shopware/core", Version: "6.6.10.2"}}}, overrideOpts, nil)
+	require.NoError(t, err)
+	assert.Contains(t, string(sw66), webpackLabel)
+
+	sw67, err := GenerateComposeOverride(&composer.Lock{Packages: []composer.LockPackage{{Name: "shopware/core", Version: "6.7.0.0"}}}, overrideOpts, nil)
+	require.NoError(t, err)
+	assert.Contains(t, string(sw67), viteLabel)
 }
 
 func TestGenerateComposeOverrideWithoutCA(t *testing.T) {

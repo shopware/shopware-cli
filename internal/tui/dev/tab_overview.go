@@ -22,6 +22,7 @@ import (
 	"charm.land/lipgloss/v2"
 	"github.com/shyim/go-composer"
 	endoflife "github.com/shyim/go-endoflife-api"
+	"github.com/shyim/go-version"
 
 	dockerpkg "github.com/shopware/shopware-cli/internal/docker"
 	"github.com/shopware/shopware-cli/internal/executor"
@@ -356,7 +357,19 @@ func resolveAdminWatchURL(projectRoot string) string {
 		return "https://admin-watch." + host
 	}
 
-	return "http://127.0.0.1:5173"
+	return fmt.Sprintf("http://127.0.0.1:%d", adminWatchLocalPort(projectRoot))
+}
+
+// adminWatchLocalPort returns the host port the admin watcher's dev server is
+// published on: Vite (5173) on Shopware 6.7+, webpack-dev-server (8080) before.
+// It defaults to Vite for unknown or unparseable versions.
+func adminWatchLocalPort(projectRoot string) int {
+	const vitePort, webpackPort = 5173, 8080
+	if v, err := version.NewVersion(detectShopwareVersion(projectRoot)); err == nil &&
+		v.LessThan(version.Must(version.NewVersion("6.7.0.0"))) {
+		return webpackPort
+	}
+	return vitePort
 }
 
 // resolveStorefrontWatchURL returns the URL to open while the storefront
