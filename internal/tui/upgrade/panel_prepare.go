@@ -95,6 +95,17 @@ func (s prepareState) resolveFailed() bool {
 	return s.resolveErr != nil || (s.resolve != nil && !s.resolve.OK)
 }
 
+// deploymentHelperMissing reports whether the upgrade will add
+// shopware/deployment-helper to composer.json, per the readiness check.
+func (m *Model) deploymentHelperMissing() bool {
+	for _, check := range m.check.readiness.Checks {
+		if check.ID == "deployment-helper" {
+			return check.State != backend.StateOK
+		}
+	}
+	return false
+}
+
 // applyResolved overwrites the metadata-derived target versions with the
 // exact releases the composer dry run picked, once both checks finished.
 func (s *prepareState) applyResolved() {
@@ -521,12 +532,14 @@ func (m *Model) renderSystemChecks() string {
 
 func (m *Model) viewPrepareRight() string {
 	var b strings.Builder
-	b.WriteString(tui.BoldStyle.Render("Deployment Helper workflow"))
-	b.WriteString("\n\n")
-	b.WriteString(tui.DimStyle.Render("  • ") + tui.LabelStyle.Render("add shopware/deployment-helper"))
-	b.WriteString("\n")
-	b.WriteString(tui.LabelStyle.Render("    if missing"))
-	b.WriteString("\n\n\n")
+	if m.deploymentHelperMissing() {
+		b.WriteString(tui.BoldStyle.Render("Deployment Helper workflow"))
+		b.WriteString("\n\n")
+		b.WriteString(tui.DimStyle.Render("  • ") + tui.LabelStyle.Render("add shopware/deployment-helper"))
+		b.WriteString("\n")
+		b.WriteString(tui.LabelStyle.Render("    to composer.json"))
+		b.WriteString("\n\n\n")
+	}
 	b.WriteString(userActionStyle.Render("User action"))
 	b.WriteString("\n")
 	b.WriteString(tui.LabelStyle.Render("Open an extension detail popup to"))

@@ -315,6 +315,17 @@ func TestPreparePanelReady(t *testing.T) {
 	assert.Equal(t, panelReview, w.m.panel, "continue is allowed when ready")
 }
 
+func TestPreparePanelDeploymentHelperHintOnlyWhenMissing(t *testing.T) {
+	w := wizardAtPrepare(t, []backend.ExtensionResult{okResult()}, true)
+	assert.NotContains(t, w.view(t), "add shopware/deployment-helper",
+		"no hint when the helper is already required")
+
+	w.m.check.readiness.Checks = append(w.m.check.readiness.Checks, backend.ReadinessCheck{
+		ID: "deployment-helper", Label: "Deployment Helper workflow ready", Value: "no", State: backend.StateWarn,
+	})
+	assert.Contains(t, w.view(t), "add shopware/deployment-helper")
+}
+
 func TestPreparePanelEnterOnContinueButton(t *testing.T) {
 	w := wizardAtPrepare(t, []backend.ExtensionResult{okResult()}, true)
 
