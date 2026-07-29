@@ -13,11 +13,17 @@ const taskLogKeep = 400
 // TaskLineMsg carries one line of a running task's output.
 type TaskLineMsg struct{ Line string }
 
-// TaskDoneMsg is delivered when a task's command has finished.
+// TaskDoneMsg is delivered when a task's command has finished and its output
+// has been fully drained.
 type TaskDoneMsg struct{ Err error }
 
-// taskStreamClosedMsg signals that the output channel drained; the final
-// TaskDoneMsg arrives from the runner itself.
+// taskExitMsg carries the command's exit result. The public TaskDoneMsg is
+// only emitted once the output stream has also drained — the exit result
+// usually arrives while buffered lines are still queued in the channel, and
+// finishing early would truncate the visible log.
+type taskExitMsg struct{ err error }
+
+// taskStreamClosedMsg signals that the output channel drained.
 type taskStreamClosedMsg struct{}
 
 // Task runs one command in the background and accumulates its streamed
@@ -30,6 +36,8 @@ type Task struct {
 	spinner spinner.Model
 	lines   []string
 	ch      <-chan string
+	exited  bool
+	drained bool
 	done    bool
 	err     error
 }
@@ -44,6 +52,8 @@ func NewTask(title string) Task {
 // the spinner ticking; completion arrives as a TaskDoneMsg.
 func (t *Task) Start(factory func() (*exec.Cmd, error)) tea.Cmd {
 	t.lines = nil
+	t.exited = false
+	t.drained = false
 	t.done = false
 	t.err = nil
 
@@ -54,9 +64,9 @@ func (t *Task) Start(factory func() (*exec.Cmd, error)) tea.Cmd {
 		cmd, err := factory()
 		if err != nil {
 			close(ch)
-			return TaskDoneMsg{Err: err}
+			return taskExitMsg{err: err}
 		}
-		return TaskDoneMsg{Err: StreamCmdOutput(cmd, ch, true)}
+		return taskExitMsg{err: StreamCmdOutput(cmd, ch, true)}
 	}
 
 	// The spinner tick (kept last) keeps the title animated so long-running
@@ -64,8 +74,19 @@ func (t *Task) Start(factory func() (*exec.Cmd, error)) tea.Cmd {
 	return tea.Batch(t.readLine(), run, t.spinner.Tick)
 }
 
-func (t *Task) readLine() tea.Cmd {
+func (t Task) readLine() tea.Cmd {
 	return ReadLineCmd(t.ch, func(line string) tea.Msg { return TaskLineMsg{Line: line} }, taskStreamClosedMsg{})
+}
+
+// finish emits TaskDoneMsg once both the exit result arrived and the output
+// stream drained, whichever came last.
+func (t *Task) finish() tea.Cmd {
+	if !t.exited || !t.drained || t.done {
+		return nil
+	}
+	t.done = true
+	err := t.err
+	return func() tea.Msg { return TaskDoneMsg{Err: err} }
 }
 
 // Update handles the task's stream, completion, and spinner messages.
@@ -76,9 +97,17 @@ func (t Task) Update(msg tea.Msg) (Task, tea.Cmd) {
 		return t, t.readLine()
 
 	case taskStreamClosedMsg:
-		return t, nil
+		t.drained = true
+		return t, t.finish()
+
+	case taskExitMsg:
+		t.exited = true
+		t.err = msg.err
+		return t, t.finish()
 
 	case TaskDoneMsg:
+		// Normally self-emitted by finish (a no-op then); also accepted from
+		// the embedding model to force the final state.
 		t.done = true
 		t.err = msg.Err
 		return t, nil

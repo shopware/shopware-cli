@@ -51,6 +51,10 @@ func (u *ProjectUpgrader) CheckExtensions(ctx context.Context, current, target *
 // loadStoreStatus queries the Shopware Store update check. Store metadata is
 // advisory, so failures degrade to an empty map instead of erroring.
 func (u *ProjectUpgrader) loadStoreStatus(ctx context.Context, current, target *version.Version, extensions []InstalledExtension) map[string]account_api.UpdateCheckExtensionCompatibility {
+	if current == nil || target == nil {
+		return nil
+	}
+
 	toCheck := make([]account_api.UpdateCheckExtension, 0, len(extensions))
 	for _, ext := range extensions {
 		if !ext.ComposerManaged {
@@ -90,10 +94,12 @@ func (u *ProjectUpgrader) projectRepositories(ctx context.Context) *repository.S
 	}
 
 	auth, err := composer.ReadAuth(filepath.Join(u.projectRoot, "auth.json"))
-	if err == nil {
-		if mergeErr := auth.MergeEnv(); mergeErr != nil {
-			logging.FromContext(ctx).Debugf("merge COMPOSER_AUTH: %v", mergeErr)
-		}
+	if err != nil {
+		// An unreadable auth.json must not drop COMPOSER_AUTH credentials.
+		auth = &composer.Auth{}
+	}
+	if mergeErr := auth.MergeEnv(); mergeErr != nil {
+		logging.FromContext(ctx).Debugf("merge COMPOSER_AUTH: %v", mergeErr)
 	}
 
 	return u.repositories(composerJSON, auth)

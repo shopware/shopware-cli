@@ -35,6 +35,11 @@ func (m *Model) footerView(ctx app.Context) string {
 // footerHint returns the active panel's shortcut bar.
 func (m *Model) footerHint(width int) string {
 	fit := width - 20 // room for the exit badge
+	if fit <= 0 {
+		// ShortcutBarFit treats a non-positive max as unconstrained; a
+		// terminal this narrow gets no hint instead of an overflowing one.
+		return ""
+	}
 	switch m.panel {
 	case panelIntro:
 		return tui.ShortcutBarFit(fit,

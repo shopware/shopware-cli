@@ -22,7 +22,10 @@ func Truncate(s string, width int) string {
 	if lipgloss.Width(s) <= width {
 		return s
 	}
-	if width <= 1 {
+	if width <= 0 {
+		return ""
+	}
+	if width == 1 {
 		return "…"
 	}
 	return ansi.Truncate(s, width, "…")
@@ -60,7 +63,7 @@ func JoinColumns(left, right string, gap int) string {
 		if i < len(rightLines) {
 			r = rightLines[i]
 		}
-		b.WriteString(l + strings.Repeat(" ", width-lipgloss.Width(l)+gap) + r)
+		b.WriteString(l + strings.Repeat(" ", max(width-lipgloss.Width(l)+gap, 0)) + r)
 		if i < rows-1 {
 			b.WriteString("\n")
 		}

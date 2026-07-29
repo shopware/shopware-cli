@@ -57,8 +57,8 @@ func TestTaskStart_FactoryErrorEmitsDoneMsg(t *testing.T) {
 		select {
 		case msg := <-results:
 			switch v := msg.(type) {
-			case TaskDoneMsg:
-				got["done"] = v
+			case taskExitMsg:
+				got["exit"] = v
 			case taskStreamClosedMsg:
 				got["stream-closed"] = v
 			}
@@ -67,11 +67,23 @@ func TestTaskStart_FactoryErrorEmitsDoneMsg(t *testing.T) {
 		}
 	}
 
-	done, ok := got["done"].(TaskDoneMsg)
-	require.True(t, ok, "expected TaskDoneMsg from one of the batched cmds")
-	assert.Same(t, wantErr, done.Err)
+	exit, ok := got["exit"].(taskExitMsg)
+	require.True(t, ok, "expected taskExitMsg from one of the batched cmds")
+	assert.Same(t, wantErr, exit.err)
 	_, hasClosed := got["stream-closed"]
-	assert.True(t, hasClosed, "expected the stream-closed msg from the reader cmd")
+	require.True(t, hasClosed, "expected the stream-closed msg from the reader cmd")
+
+	// TaskDoneMsg is only emitted once both the exit result arrived and the
+	// stream drained — regardless of the order the two messages land in.
+	task, cmd = task.Update(got["exit"])
+	assert.Nil(t, cmd, "no TaskDoneMsg before the stream drained")
+	assert.False(t, task.Done())
+	task, cmd = task.Update(got["stream-closed"])
+	require.NotNil(t, cmd)
+	done, ok := cmd().(TaskDoneMsg)
+	require.True(t, ok, "expected the emitted TaskDoneMsg")
+	assert.Same(t, wantErr, done.Err)
+	assert.True(t, task.Done())
 
 	// The spinner tick is the last batched cmd so long-running commands with
 	// no early output never look frozen.
@@ -99,15 +111,20 @@ func TestTask_StreamsLinesAndCompletes(t *testing.T) {
 	deadline := time.Now().Add(5 * time.Second)
 	for read != nil && time.Now().Before(deadline) {
 		msg := read()
+		var cmd tea.Cmd
+		task, cmd = task.Update(msg)
 		if _, closed := msg.(taskStreamClosedMsg); closed {
 			break
 		}
-		task, read = task.Update(msg)
+		read = cmd
 	}
 
 	select {
 	case msg := <-runnerDone:
-		task, _ = task.Update(msg)
+		var cmd tea.Cmd
+		task, cmd = task.Update(msg)
+		require.NotNil(t, cmd, "exit + drained stream must emit TaskDoneMsg")
+		assert.IsType(t, TaskDoneMsg{}, cmd())
 	case <-time.After(5 * time.Second):
 		t.Fatal("timed out waiting for the runner")
 	}
@@ -129,7 +146,8 @@ func TestTask_StatusTitleAndSpinnerStopWhenDone(t *testing.T) {
 	task := NewTask("Building...")
 	assert.NotEqual(t, "Building...", task.StatusTitle(), "running tasks carry the spinner prefix")
 
-	task, _ = task.Update(TaskDoneMsg{})
+	task, _ = task.Update(taskExitMsg{})
+	task, _ = task.Update(taskStreamClosedMsg{})
 	assert.Equal(t, "Building...", task.StatusTitle())
 
 	_, cmd := task.Update(spinner.TickMsg{})

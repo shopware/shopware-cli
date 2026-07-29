@@ -151,8 +151,11 @@ func (l FilterList) View(width int) string {
 			rowStyle, dStyle = selectedStyle, selectedDetailStyle
 		}
 		if item.Detail != "" {
+			// Render label and detail as separate styled segments: nesting a
+			// styled detail inside the width-padded row style would reset the
+			// selection background before the trailing padding.
 			gap := max(width-lipgloss.Width(item.Label)-lipgloss.Width(item.Detail), 1)
-			b.WriteString(rowStyle.Render(item.Label + strings.Repeat(" ", gap) + dStyle.Render(item.Detail)))
+			b.WriteString(rowStyle.UnsetWidth().Render(item.Label+strings.Repeat(" ", gap)) + dStyle.Render(item.Detail))
 		} else {
 			b.WriteString(rowStyle.Render(item.Label))
 		}
@@ -173,7 +176,9 @@ func (l FilterList) View(width int) string {
 
 func (l *FilterList) applyFilter() {
 	query := strings.ToLower(l.filter.Value())
-	l.filtered = l.filtered[:0]
+	// A fresh slice, not filtered[:0]: FilterList is copied by value, so
+	// reusing the backing array would corrupt other copies of the list.
+	l.filtered = make([]int, 0, len(l.opts.Items))
 	for i, item := range l.opts.Items {
 		if query == "" ||
 			strings.Contains(strings.ToLower(item.Label), query) ||

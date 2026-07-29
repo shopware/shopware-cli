@@ -175,15 +175,12 @@ func supportLeft(until, now time.Time) string {
 		return ""
 	}
 
+	// Count months from the original date each iteration: chaining AddDate
+	// drifts at month ends (Jan 31 + 1 month normalizes to Mar 3, anchoring
+	// every following step to day 3 and undercounting).
 	months := 0
-	cursor := now
-	for {
-		next := cursor.AddDate(0, 1, 0)
-		if next.After(until) {
-			break
-		}
+	for !now.AddDate(0, months+1, 0).After(until) {
 		months++
-		cursor = next
 	}
 
 	years := months / 12

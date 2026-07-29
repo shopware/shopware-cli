@@ -88,6 +88,13 @@ func (s prepareState) loading() bool {
 	return s.envRunning == nil || s.packagist == nil || (s.resolve == nil && s.resolveErr == nil) || !s.compatDone || !s.phpDone
 }
 
+// resolveFailed reports whether the Composer dry run ended without a usable
+// resolution — either the solver found conflicts or the command itself failed
+// to run.
+func (s prepareState) resolveFailed() bool {
+	return s.resolveErr != nil || (s.resolve != nil && !s.resolve.OK)
+}
+
 // applyResolved overwrites the metadata-derived target versions with the
 // exact releases the composer dry run picked, once both checks finished.
 func (s *prepareState) applyResolved() {
@@ -220,7 +227,7 @@ func (m *Model) maybeWriteFailureReport() tea.Cmd {
 	if m.prepare.reportRequested || m.prepare.loading() || !m.prepare.phpDone {
 		return nil
 	}
-	if m.prepare.resolve == nil || m.prepare.resolve.OK {
+	if !m.prepare.resolveFailed() {
 		return nil
 	}
 	m.prepare.reportRequested = true
@@ -350,7 +357,7 @@ func (m *Model) viewPrepareLeft() string {
 	// queue would be — it names the exact packages and constraints that
 	// clash. Any flagged extension (blocking, deprecated, manual review)
 	// keeps the queue instead: those findings are only visible here.
-	if m.prepare.resolve != nil && !m.prepare.resolve.OK && m.prepare.flagged() == 0 {
+	if m.prepare.resolveFailed() && m.prepare.flagged() == 0 {
 		b.WriteString(m.viewResolveFailure())
 		return b.String()
 	}
@@ -410,7 +417,16 @@ func (m *Model) viewResolveFailure() string {
 		visible = 3
 	}
 
-	lines := strings.Split(strings.TrimRight(m.prepare.resolve.Report, "\n"), "\n")
+	// The dry run either produced solver output or failed to run at all — in
+	// the latter case the error itself is the report.
+	report := ""
+	if m.prepare.resolve != nil {
+		report = m.prepare.resolve.Report
+	} else if m.prepare.resolveErr != nil {
+		report = m.prepare.resolveErr.Error()
+	}
+
+	lines := strings.Split(strings.TrimRight(report, "\n"), "\n")
 	if len(lines) > visible {
 		b.WriteString(tui.DimStyle.Render(fmt.Sprintf("… %d earlier output lines omitted", len(lines)-visible)))
 		b.WriteString("\n")

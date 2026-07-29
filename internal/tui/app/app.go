@@ -149,8 +149,16 @@ func (a *App) TopOverlay() Overlay { return a.overlays.Top() }
 // Content returns the current content.
 func (a *App) Content() Content { return a.content }
 
-// SetContent replaces the main content without initializing it.
-func (a *App) SetContent(c Content) { a.content = c }
+// SetContent replaces the main content without initializing it. When the
+// terminal size is already known the new content is sized immediately —
+// otherwise it would render unsized until the next resize event.
+func (a *App) SetContent(c Content) {
+	a.content = c
+	if c != nil && a.width > 0 && a.height > 0 {
+		ctx := a.Context()
+		PropagateSize(c, ctx.Width, ctx.MainHeight)
+	}
+}
 
 // RegisterCommand adds a command and optional key binding. Registering with a
 // built-in ID (e.g. CmdQuit) replaces the built-in behavior.
@@ -173,6 +181,13 @@ func (a *App) RunCommand(id string) tea.Cmd {
 // Context builds the current frame context.
 func (a *App) Context() Context {
 	header, footer := a.chrome()
+	return a.contextFor(header, footer)
+}
+
+// contextFor builds the frame context from already-rendered chrome, so
+// callers that need the chrome strings themselves (View) evaluate the header
+// and footer functions only once per frame.
+func (a *App) contextFor(header, footer string) Context {
 	r := ComputeRegion(max(a.width, 1), max(a.height, 1), header, footer)
 	return Context{
 		Width:       a.width,
@@ -271,14 +286,16 @@ func (a *App) View() tea.View {
 		return tea.NewView("")
 	}
 
-	ctx := a.Context()
+	// Render the chrome once per frame; Context() would evaluate the header
+	// and footer functions a second time.
 	w, h := max(a.width, 1), max(a.height, 1)
+	header, footer := a.chrome()
+	ctx := a.contextFor(header, footer)
 
 	var body string
 	if a.overlays.Open() && a.fullOverlay {
 		body = a.overlays.View(w, h)
 	} else {
-		header, footer := a.chrome()
 		main := ""
 		switch {
 		case a.overlays.Open():

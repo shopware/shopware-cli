@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -166,7 +167,7 @@ func (m *Model) viewDoneRight() string {
 		}
 	}
 	for i, step := range steps {
-		b.WriteString(tui.DimStyle.Render("  "+string(rune('1'+i))+". ") + tui.LabelStyle.Render(step) + "\n")
+		b.WriteString(tui.DimStyle.Render("  "+strconv.Itoa(i+1)+". ") + tui.LabelStyle.Render(step) + "\n")
 	}
 
 	b.WriteString("\n")

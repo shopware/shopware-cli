@@ -130,7 +130,11 @@ func (m *Model) viewReview() (title, status, body string) {
 	}
 	left.WriteString(fmt.Sprintf("  %-28s", fmt.Sprintf("%d compatible extensions", okCount)) + okStyle.Render("ok") + "\n")
 	left.WriteString(fmt.Sprintf("  %-28s", fmt.Sprintf("%d extensions to review", reviewCount)) + okStyle.Render("reports ready") + "\n")
-	left.WriteString(fmt.Sprintf("  %-28s", fmt.Sprintf("%d blocking extensions", blockedCount)) + okStyle.Render("ready") + "\n")
+	blockedStatus := okStyle.Render("none")
+	if blockedCount > 0 {
+		blockedStatus = warnStyle.Render("review advised")
+	}
+	left.WriteString(fmt.Sprintf("  %-28s", fmt.Sprintf("%d blocking extensions", blockedCount)) + blockedStatus + "\n")
 	left.WriteString("\n")
 
 	left.WriteString(tui.BoldStyle.Render("Why these files change"))

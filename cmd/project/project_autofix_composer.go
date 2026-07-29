@@ -32,7 +32,7 @@ var projectAutofixComposerCmd = &cobra.Command{
 			return pluginmigrate.NewPluginMigrator(projectRoot, exec).RunHeadless(cmd.Context(), pluginmigrate.HeadlessOptions{
 				Token:  os.Getenv("SHOPWARE_PACKAGIST_TOKEN"),
 				DryRun: dryRun,
-				Out:    os.Stdout,
+				Out:    cmd.OutOrStdout(),
 			})
 		}
 

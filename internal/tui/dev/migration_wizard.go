@@ -139,7 +139,9 @@ func (sg *migrationWizard) updateWelcome(msg tea.KeyPressMsg) (migrationWizard, 
 		if sg.confirmYes {
 			sg.startedAt = time.Now()
 			sg.step = migrationStepAdminUser
-			return *sg, sg.Focus(tui.CredFocusUsername)
+			// Focus must run before *sg is copied into the return value.
+			cmd := sg.Focus(tui.CredFocusUsername)
+			return *sg, cmd
 		}
 		return *sg, tea.Quit
 	}

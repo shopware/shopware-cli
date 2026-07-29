@@ -229,8 +229,11 @@ func (m *filterMultiSelectModel) render() string {
 		}
 		label := check + item.Label
 		if item.Detail != "" {
+			// Render label and detail as separate styled segments: nesting a
+			// styled detail inside the width-padded row style would reset the
+			// selection background before the trailing padding.
 			gap := max(innerWidth-lipgloss.Width(label)-lipgloss.Width(item.Detail), 1)
-			b.WriteString(rowStyle.Render(label + strings.Repeat(" ", gap) + dStyle.Render(item.Detail)))
+			b.WriteString(rowStyle.UnsetWidth().Render(label+strings.Repeat(" ", gap)) + dStyle.Render(item.Detail))
 		} else {
 			b.WriteString(rowStyle.Render(label))
 		}

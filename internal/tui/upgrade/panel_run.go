@@ -82,6 +82,8 @@ func (m *Model) updateRun(msg tea.Msg) (app.Content, tea.Cmd) {
 		return m, readRunEventCmd(m.run.events)
 
 	case runClosedMsg:
+		// The runner is finished; release the context created in beginRun.
+		m.run.cancel()
 		return m.beginDone()
 
 	case tea.KeyPressMsg:

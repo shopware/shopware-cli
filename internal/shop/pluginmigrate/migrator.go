@@ -148,9 +148,11 @@ func (m *PluginMigrator) projectRepositories() *repository.Set {
 	}
 
 	auth, err := composer.ReadAuth(filepath.Join(m.projectRoot, "auth.json"))
-	if err == nil {
-		_ = auth.MergeEnv()
+	if err != nil {
+		// An unreadable auth.json must not drop COMPOSER_AUTH credentials.
+		auth = &composer.Auth{}
 	}
+	_ = auth.MergeEnv()
 
 	return repository.FromComposer(composerJSON, auth, true)
 }
@@ -180,7 +182,7 @@ func (m *PluginMigrator) Scan(ctx context.Context) []ScannedExtension {
 	if resolved, err := filepath.EvalSymlinks(root); err == nil {
 		root = resolved
 	}
-	customDir := filepath.Join(root, "custom") + string(filepath.Separator)
+	customDir := filepath.Join(root, "custom")
 
 	var result []ScannedExtension
 	for _, ext := range found {
@@ -191,7 +193,8 @@ func (m *PluginMigrator) Scan(ctx context.Context) []ScannedExtension {
 		if resolved, err := filepath.EvalSymlinks(extPath); err == nil {
 			extPath = resolved
 		}
-		if !strings.HasPrefix(extPath, customDir) {
+		rel, err := filepath.Rel(customDir, extPath)
+		if err != nil || rel == "." || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
 			continue
 		}
 
@@ -201,11 +204,9 @@ func (m *PluginMigrator) Scan(ctx context.Context) []ScannedExtension {
 		}
 
 		scanned := ScannedExtension{
-			Name: name,
-			Path: extPath,
-		}
-		if rel, err := filepath.Rel(root, extPath); err == nil {
-			scanned.RelPath = filepath.ToSlash(rel)
+			Name:    name,
+			Path:    extPath,
+			RelPath: filepath.ToSlash(filepath.Join("custom", rel)),
 		}
 		if composerName, err := ext.GetComposerName(); err == nil {
 			scanned.ComposerName = composerName
