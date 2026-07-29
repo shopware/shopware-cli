@@ -61,6 +61,12 @@ type OverviewModel struct {
 	sfWatchRunning     bool
 	sfWatchStarting    bool
 	sfWatchReady       bool
+	// proxyHost is the project's proxy hostname (empty for a non-proxy
+	// project), resolved once at construction. Cached because the proxy-ness of
+	// a project is fixed for the session and View runs on every frame — calling
+	// proxyHostname() (which reads registry.json and resolves symlinks) per
+	// render would block the render loop.
+	proxyHost string
 	// domainsSetupDone is whether the one-time machine setup (DNS + HTTPS
 	// trust, via `proxy setup`) is in place. Drives the Domains block's Setup
 	// status and whether the `s` action is offered.
@@ -291,6 +297,7 @@ func NewOverviewModel(envType, shopURL, username, password, projectRoot string, 
 		shopCfg:          shopCfg,
 		adminWatchURL:    resolveAdminWatchURL(projectRoot),
 		sfWatchURL:       resolveStorefrontWatchURL(projectRoot),
+		proxyHost:        proxyHostname(projectRoot),
 		domainsSetupDone: overviewSetupDone(projectRoot),
 		instancesLoading: proxyHostname(projectRoot) != "",
 		loading:          true,
@@ -355,7 +362,7 @@ func (m OverviewModel) Init() tea.Cmd {
 		loadShopwareVersion(m.projectRoot),
 		loadSetupHealth(m.projectRoot, m.executor),
 	}
-	if proxyHostname(m.projectRoot) != "" {
+	if m.proxyHost != "" {
 		cmds = append(cmds, loadInstances())
 	}
 	return tea.Batch(cmds...)
@@ -482,7 +489,7 @@ func (m OverviewModel) handleKey(msg tea.KeyPressMsg) (OverviewModel, tea.Cmd) {
 	case "s":
 		// Run the one-time machine setup (DNS + HTTPS trust) for a proxy
 		// project that has not been set up yet.
-		if proxyHostname(m.projectRoot) != "" && !m.domainsSetupDone {
+		if m.proxyHost != "" && !m.domainsSetupDone {
 			return m, func() tea.Msg { return runProxySetupRequestMsg{} }
 		}
 	case "enter":
@@ -559,7 +566,7 @@ func (m OverviewModel) renderProjectReport(width int) string {
 		s.WriteString("\n")
 		s.WriteString(m.renderBackgroundProcesses())
 	}
-	if proxyHostname(m.projectRoot) != "" {
+	if m.proxyHost != "" {
 		s.WriteString(divider)
 		s.WriteString(m.renderInstances())
 	}
@@ -611,7 +618,7 @@ func (m OverviewModel) renderUserActions() string {
 	var s strings.Builder
 	s.WriteString(tui.SectionTitleStyle.Render("User action"))
 	s.WriteString("\n\n")
-	if proxyHostname(m.projectRoot) != "" {
+	if m.proxyHost != "" {
 		s.WriteString(m.renderDomains())
 		s.WriteString("\n")
 	}
@@ -667,12 +674,12 @@ func (m OverviewModel) renderStacked(width int) string {
 		s.WriteString("\n")
 		s.WriteString(m.renderBackgroundProcesses())
 	}
-	if proxyHostname(m.projectRoot) != "" {
+	if m.proxyHost != "" {
 		s.WriteString(divider)
 		s.WriteString(m.renderInstances())
 	}
 	s.WriteString(divider)
-	if proxyHostname(m.projectRoot) != "" {
+	if m.proxyHost != "" {
 		s.WriteString(m.renderDomains())
 		s.WriteString("\n")
 	}

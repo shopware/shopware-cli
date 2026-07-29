@@ -96,6 +96,18 @@ func proxyBaseDomain() string {
 	return proxy.DefaultDomain
 }
 
+// resolveLocalDomainChoice derives the final local-domain settings from the
+// individual inputs. Local domains require Docker, so useLocalDomain is always
+// gated on useDocker regardless of how the choice was made (interactive or the
+// --local-domain flag). setupProxyNow — which triggers the one-time sudo setup
+// inline — is only ever true when the choice came from the interactive prompt
+// (promptShown), so passing --local-domain never runs sudo without asking.
+func resolveLocalDomainChoice(useDocker, wantLocalDomain, promptShown, machineSetupDone, setupNowAnswer bool) (useLocalDomain, setupProxyNow bool) {
+	useLocalDomain = useDocker && wantLocalDomain
+	setupProxyNow = useLocalDomain && promptShown && !machineSetupDone && setupNowAnswer
+	return useLocalDomain, setupProxyNow
+}
+
 var projectCreateCmd = &cobra.Command{
 	Use:   "create [name] [version]",
 	Short: "Create a new Shopware 6 project",
@@ -247,6 +259,10 @@ func applyNonInteractiveDefaults(opts *createOptions) error {
 	if !opts.elasticsearchExplicit {
 		opts.withElasticsearch = true
 	}
+	// Local domains need Docker; drop the flag if Docker is off. Never run the
+	// one-time sudo setup non-interactively.
+	opts.useLocalDomain = opts.useDocker && opts.useLocalDomain
+	opts.setupProxyNow = false
 	return nil
 }
 

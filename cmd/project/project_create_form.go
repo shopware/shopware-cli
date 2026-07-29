@@ -211,7 +211,10 @@ func runCreateForm(cmd *cobra.Command, opts *createOptions, releases []repositor
 					Title("Local domains").
 					Description("Reach this shop at a stable hostname instead of a changing port").
 					OptionsFunc(func() []huh.Option[bool] {
-						host := localDomainHostname(opts.projectFolder, baseDomain)
+						host := "<name>." + baseDomain
+						if opts.projectFolder != "" {
+							host = localDomainHostname(opts.projectFolder, baseDomain)
+						}
 						return []huh.Option[bool]{
 							huh.NewOption("Yes (recommended) — https://"+host, true),
 							huh.NewOption("No — use a port (http://localhost:8000)", false),
@@ -384,12 +387,17 @@ func runCreateForm(cmd *cobra.Command, opts *createOptions, releases []repositor
 		if !cmd.PersistentFlags().Changed("docker") {
 			opts.useDocker = selectDocker == tui.Yes
 		}
-		if !cmd.PersistentFlags().Changed("local-domain") {
-			// Local domains need the shared proxy, which is Docker-only.
-			opts.useLocalDomain = opts.useDocker && selectLocalDomain
+		// The local-domain choice comes from the --local-domain flag when set,
+		// otherwise from the prompt. The one-time setup is only offered inline
+		// when we actually prompted for it (not via the flag), so the flag never
+		// triggers an unprompted sudo.
+		localFlagChanged := cmd.PersistentFlags().Changed("local-domain")
+		wantLocalDomain := opts.useLocalDomain
+		if !localFlagChanged {
+			wantLocalDomain = selectLocalDomain
 		}
-		// Offer to run the one-time machine setup inline, only when needed.
-		opts.setupProxyNow = opts.useLocalDomain && !machineSetupDone && selectSetupNow == tui.Yes
+		opts.useLocalDomain, opts.setupProxyNow = resolveLocalDomainChoice(
+			opts.useDocker, wantLocalDomain, !localFlagChanged, machineSetupDone, selectSetupNow == tui.Yes)
 		if !cmd.PersistentFlags().Changed("git") {
 			opts.initGit = selectGit == tui.Yes
 		}
