@@ -105,10 +105,16 @@ func (u *ProjectUpgrader) Run(ctx context.Context, opts RunOptions) <-chan StepE
 			}
 			// Never block on a consumer that stopped reading (e.g. the TUI
 			// exited mid-run) — rollback and the failure report must still
-			// complete, and the goroutine must not leak.
+			// complete, and the goroutine must not leak. The non-blocking
+			// attempt comes first: with a cancelled context a bare two-way
+			// select would randomly drop events that still fit the buffer.
 			select {
 			case events <- ev:
-			case <-ctx.Done():
+			default:
+				select {
+				case events <- ev:
+				case <-ctx.Done():
+				}
 			}
 		}
 
