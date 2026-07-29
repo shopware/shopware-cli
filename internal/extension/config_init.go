@@ -13,8 +13,7 @@ const (
 	ConfigFileNameAlt = ".shopware-extension.yaml"
 
 	// ConfigSchemaURL is the JSON Schema URL used by the YAML language server.
-	// Sourced from the shopware-cli repository (same file as `extension config-schema`).
-	ConfigSchemaURL = "https://raw.githubusercontent.com/shopware/shopware-cli/main/internal/extension/config_schema.json"
+	ConfigSchemaURL = "https://shopware.github.io/shopware-cli/shopware-extension-schema.json"
 )
 
 // EmptyConfigFile is the default content written by `extension config init`.
