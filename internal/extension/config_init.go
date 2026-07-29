@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+
+	"github.com/shopware/shopware-cli/internal/compatibility"
 )
 
 const (
@@ -16,10 +18,16 @@ const (
 	ConfigSchemaURL = "https://shopware.github.io/shopware-cli/shopware-extension-schema.json"
 )
 
-// EmptyConfigFile is the default content written by `extension config init`.
-// Everything in .shopware-extension.yml is optional; the schema comment enables
-// editor completion/validation via yaml-language-server.
-const EmptyConfigFile = "# yaml-language-server: $schema=" + ConfigSchemaURL + "\n"
+// EmptyConfigFile returns the default content written by `extension config init`:
+// yaml-language-server schema comment plus today's compatibility_date.
+// All other keys remain optional.
+func EmptyConfigFile() string {
+	return fmt.Sprintf(
+		"# yaml-language-server: $schema=%s\ncompatibility_date: %s\n",
+		ConfigSchemaURL,
+		compatibility.TodayDate(),
+	)
+}
 
 // ConfigPath returns the path of an existing config file, or "" if none.
 func ConfigPath(dir string) string {
@@ -38,8 +46,8 @@ func ConfigExists(dir string) bool {
 	return ConfigPath(dir) != ""
 }
 
-// InitConfig writes an empty .shopware-extension.yml with only the YAML language
-// server schema comment. All config keys are optional.
+// InitConfig writes a minimal .shopware-extension.yml with the YAML language
+// server schema comment and today's compatibility_date. All other keys are optional.
 //
 // If a config already exists and force is false, an error is returned.
 // Returns the path of the written file.
@@ -53,7 +61,7 @@ func InitConfig(dir string, force bool) (string, error) {
 	}
 
 	path := filepath.Join(dir, ConfigFileName)
-	if err := os.WriteFile(path, []byte(EmptyConfigFile), 0o644); err != nil {
+	if err := os.WriteFile(path, []byte(EmptyConfigFile()), 0o644); err != nil {
 		return "", fmt.Errorf("write %s: %w", path, err)
 	}
 

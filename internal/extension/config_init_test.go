@@ -4,12 +4,15 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/shopware/shopware-cli/internal/compatibility"
 )
 
-func TestInitConfigWritesSchemaCommentOnly(t *testing.T) {
+func TestInitConfigWritesSchemaCommentAndToday(t *testing.T) {
 	dir := t.TempDir()
 
 	path, err := InitConfig(dir, false)
@@ -18,12 +21,21 @@ func TestInitConfigWritesSchemaCommentOnly(t *testing.T) {
 
 	raw, err := os.ReadFile(path)
 	require.NoError(t, err)
-	assert.Equal(t, EmptyConfigFile, string(raw))
-	assert.Contains(t, string(raw), "yaml-language-server: $schema=")
-	assert.Contains(t, string(raw), ConfigSchemaURL)
-	// Empty body — no forced keys.
-	assert.NotContains(t, string(raw), "compatibility_date:")
-	assert.NotContains(t, string(raw), "build:")
+	content := string(raw)
+
+	assert.Contains(t, content, "yaml-language-server: $schema=")
+	assert.Contains(t, content, ConfigSchemaURL)
+	assert.Contains(t, content, "compatibility_date: "+compatibility.TodayDate())
+	// No forced build/store scaffolding.
+	assert.NotContains(t, content, "build:")
+	assert.NotContains(t, content, "store:")
+}
+
+func TestEmptyConfigFileUsesTodayDate(t *testing.T) {
+	// Freeze "now" via compatibility.TodayDate (uses package clock).
+	// TodayDate is time.Now-based; just assert format matches YYYY-MM-DD.
+	today := time.Now().Format("2006-01-02")
+	assert.Contains(t, EmptyConfigFile(), "compatibility_date: "+today)
 }
 
 func TestInitConfigRefusesOverwriteWithoutForce(t *testing.T) {

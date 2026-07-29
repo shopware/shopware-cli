@@ -14,11 +14,11 @@ import (
 
 var extensionConfigInitCmd = &cobra.Command{
 	Use:   "init [path]",
-	Short: "Create an empty .shopware-extension.yml",
-	Long: `Create an empty .shopware-extension.yml for an extension checkout.
+	Short: "Create a minimal .shopware-extension.yml",
+	Long: `Create a minimal .shopware-extension.yml for an extension checkout.
 
-All configuration keys are optional. The file only contains a yaml-language-server
-schema comment so editors can offer completion and validation. Add keys as needed
+Writes the yaml-language-server schema comment and today's compatibility_date.
+All other configuration keys are optional — add what you need
 (see: shopware-cli extension config-schema).
 
 Examples:
