@@ -179,10 +179,7 @@ func (m *Model) viewCheckLeft() string {
 		if check.Detail != "" && check.State != backend.StateOK {
 			// Wrap the detail to the column instead of letting the frame
 			// truncate it; details may span multiple lines.
-			detailWidth := m.bodyWidth()*11/20 - 3
-			if detailWidth < 20 {
-				detailWidth = 20
-			}
+			detailWidth := max(m.bodyWidth()*11/20-3, 20)
 			wrapped := lipgloss.NewStyle().Width(detailWidth).Render(check.Detail)
 			for line := range strings.SplitSeq(wrapped, "\n") {
 				b.WriteString(tui.DimStyle.Render("   " + line))
@@ -245,16 +242,25 @@ func (m *Model) viewCheckRight() string {
 			}
 
 			if row.option == nil {
-				b.WriteString(cursor + marker + " " + tui.LabelStyle.Render(row.label))
+				b.WriteString(cursor)
+				b.WriteString(marker)
+				b.WriteString(" ")
+				b.WriteString(tui.LabelStyle.Render(row.label))
 				if m.check.chosen != nil && !m.isQuickChoice(m.check.chosen) {
-					b.WriteString(" " + tui.BoldStyle.Render(m.check.chosen.Version.String()))
+					b.WriteString(" ")
+					b.WriteString(tui.BoldStyle.Render(m.check.chosen.Version.String()))
 				}
 				b.WriteString("\n")
 				continue
 			}
 
 			link := tui.StyledLink(row.option.ReleaseNotesURL, row.label, tui.LinkStyle)
-			b.WriteString(cursor + marker + " " + link + "   " + tui.LabelStyle.Render(row.hint))
+			b.WriteString(cursor)
+			b.WriteString(marker)
+			b.WriteString(" ")
+			b.WriteString(link)
+			b.WriteString("   ")
+			b.WriteString(tui.LabelStyle.Render(row.hint))
 			b.WriteString("\n")
 			if detail := supportDetail(*row.option); detail != "" {
 				b.WriteString(tui.DimStyle.Render("       " + detail))

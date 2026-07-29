@@ -54,6 +54,7 @@ func (s Scrollbar) Render() string {
 			b.WriteString(dim.Render("┆"))
 		}
 	}
-	b.WriteString("\n" + dim.Render("↓"))
+	b.WriteString("\n")
+	b.WriteString(dim.Render("↓"))
 	return b.String()
 }

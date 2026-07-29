@@ -175,15 +175,22 @@ func (m *installProgressModel) View() tea.View {
 
 	if m.done {
 		if m.err != nil {
-			b.WriteString(lipgloss.NewStyle().Foreground(lipgloss.Color("#FF4D4D")).Bold(true).Render("✗") + " " + titleStyle.Render(m.title) + "\n\n")
+			b.WriteString(lipgloss.NewStyle().Foreground(lipgloss.Color("#FF4D4D")).Bold(true).Render("✗"))
+			b.WriteString(" ")
+			b.WriteString(titleStyle.Render(m.title))
+			b.WriteString("\n\n")
 
 			lines := m.logWriter.GetLastLines(12)
 			logStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#FF4D4D")).PaddingLeft(2)
 			for _, line := range lines {
-				b.WriteString(logStyle.Render(line) + "\n")
+				b.WriteString(logStyle.Render(line))
+				b.WriteString("\n")
 			}
 		} else {
-			b.WriteString(lipgloss.NewStyle().Foreground(lipgloss.Color("#04B575")).Bold(true).Render("✔") + " " + titleStyle.Render(m.title) + "\n")
+			b.WriteString(lipgloss.NewStyle().Foreground(lipgloss.Color("#04B575")).Bold(true).Render("✔"))
+			b.WriteString(" ")
+			b.WriteString(titleStyle.Render(m.title))
+			b.WriteString("\n")
 		}
 		return tea.NewView(b.String())
 	}
@@ -195,7 +202,11 @@ func (m *installProgressModel) View() tea.View {
 		hint = lipgloss.NewStyle().Foreground(lipgloss.Color("#666666")).Render(" (Ctrl+L to see live log)")
 	}
 
-	b.WriteString(spinnerStr + " " + titleStyle.Render(m.title) + hint + "\n")
+	b.WriteString(spinnerStr)
+	b.WriteString(" ")
+	b.WriteString(titleStyle.Render(m.title))
+	b.WriteString(hint)
+	b.WriteString("\n")
 
 	if m.showLogs {
 		b.WriteString("\n")

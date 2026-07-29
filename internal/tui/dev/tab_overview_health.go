@@ -296,10 +296,14 @@ func (m OverviewModel) renderSetupHealth() string {
 
 	switch {
 	case m.healthLoading:
-		s.WriteString("  " + tui.StatusBadge("checking", tui.BrandColor) + "\n")
+		s.WriteString("  ")
+		s.WriteString(tui.StatusBadge("checking", tui.BrandColor))
+		s.WriteString("\n")
 		return s.String()
 	case len(m.health) == 0:
-		s.WriteString("  " + helpStyle.Render("No setup checks available.") + "\n")
+		s.WriteString("  ")
+		s.WriteString(helpStyle.Render("No setup checks available."))
+		s.WriteString("\n")
 		return s.String()
 	}
 
@@ -322,7 +326,9 @@ func (m OverviewModel) renderSetupHealth() string {
 	for _, check := range m.health {
 		if check.Group != group {
 			group = check.Group
-			s.WriteString("\n    " + tui.TitleStyle.Render(group) + "\n")
+			s.WriteString("\n    ")
+			s.WriteString(tui.TitleStyle.Render(group))
+			s.WriteString("\n")
 		}
 		dot := check.Level.dot()
 		name := check.Name

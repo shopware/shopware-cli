@@ -121,8 +121,8 @@ func ValidateProjectDependencies(ctx context.Context, useDocker bool, phpConstra
 // found.
 func phpDependencyConstraint(missing []MissingDependency) (string, bool) {
 	for _, m := range missing {
-		if strings.HasPrefix(m.Name, "PHP ") {
-			return strings.TrimPrefix(m.Name, "PHP "), true
+		if after, ok := strings.CutPrefix(m.Name, "PHP "); ok {
+			return after, true
 		}
 	}
 	return "", false
@@ -180,23 +180,39 @@ func RenderMissingDependencies(useDocker bool, missing []MissingDependency, acti
 	case insideContainer:
 		b.WriteString(tui.BoldText.Render(fmt.Sprintf("To %s from inside this container, install:", action)))
 		b.WriteString("\n\n")
-		b.WriteString("  " + arrow + " " + tui.BoldText.Render("PHP 8.2+ and Composer") + "\n")
-		b.WriteString("    PHP:      " + tui.BlueText.Render("https://www.php.net/downloads.php") + "\n")
-		b.WriteString("    Composer: " + tui.BlueText.Render("https://getcomposer.org/") + "\n")
+		b.WriteString("  ")
+		b.WriteString(arrow)
+		b.WriteString(" ")
+		b.WriteString(tui.BoldText.Render("PHP 8.2+ and Composer"))
+		b.WriteString("\n")
+		b.WriteString("    PHP:      ")
+		b.WriteString(tui.BlueText.Render("https://www.php.net/downloads.php"))
+		b.WriteString("\n")
+		b.WriteString("    Composer: ")
+		b.WriteString(tui.BlueText.Render("https://getcomposer.org/"))
+		b.WriteString("\n")
 	default:
 		phpConstraint, hasPHP := phpDependencyConstraint(missing)
 		composerMissing := composerDependency(missing)
 
 		b.WriteString(tui.BoldText.Render(fmt.Sprintf("To %s, either:", action)))
 		b.WriteString("\n\n")
-		b.WriteString("  " + arrow + " " + tui.RecommendedText.Render("Docker") + " " + tui.DimText.Render("(recommended)") + ": ")
+		b.WriteString("  ")
+		b.WriteString(arrow)
+		b.WriteString(" ")
+		b.WriteString(tui.RecommendedText.Render("Docker"))
+		b.WriteString(" ")
+		b.WriteString(tui.DimText.Render("(recommended)"))
+		b.WriteString(": ")
 		if !useDocker && dockerHint != "" {
 			b.WriteString(dockerHint)
 		} else {
 			b.WriteString(tui.DimText.Render("re-run with " + tui.BoldText.Render("--docker")))
 		}
 		b.WriteString("\n")
-		b.WriteString("    " + tui.BlueText.Render("https://docs.docker.com/get-docker/") + "\n")
+		b.WriteString("    ")
+		b.WriteString(tui.BlueText.Render("https://docs.docker.com/get-docker/"))
+		b.WriteString("\n")
 		b.WriteString("\n")
 
 		if hasPHP {
@@ -206,16 +222,34 @@ func RenderMissingDependencies(useDocker bool, missing []MissingDependency, acti
 			} else {
 				phpText = fmt.Sprintf("Install a PHP version matching %s, or point PHP_BINARY at one", phpConstraint)
 			}
-			b.WriteString("  " + arrow + " " + tui.BoldText.Render(phpText) + "\n")
-			b.WriteString("    " + tui.DimText.Render("(e.g. "+phpBinaryExample(phpConstraint)+")") + "\n")
-			b.WriteString("    PHP:      " + tui.BlueText.Render("https://www.php.net/downloads.php") + "\n")
+			b.WriteString("  ")
+			b.WriteString(arrow)
+			b.WriteString(" ")
+			b.WriteString(tui.BoldText.Render(phpText))
+			b.WriteString("\n")
+			b.WriteString("    ")
+			b.WriteString(tui.DimText.Render("(e.g. " + phpBinaryExample(phpConstraint) + ")"))
+			b.WriteString("\n")
+			b.WriteString("    PHP:      ")
+			b.WriteString(tui.BlueText.Render("https://www.php.net/downloads.php"))
+			b.WriteString("\n")
 			if composerMissing {
-				b.WriteString("    Composer: " + tui.BlueText.Render("https://getcomposer.org/") + "\n")
+				b.WriteString("    Composer: ")
+				b.WriteString(tui.BlueText.Render("https://getcomposer.org/"))
+				b.WriteString("\n")
 			}
 		} else {
-			b.WriteString("  " + arrow + " " + tui.BoldText.Render("PHP 8.2+ and Composer") + "\n")
-			b.WriteString("    PHP:      " + tui.BlueText.Render("https://www.php.net/downloads.php") + "\n")
-			b.WriteString("    Composer: " + tui.BlueText.Render("https://getcomposer.org/") + "\n")
+			b.WriteString("  ")
+			b.WriteString(arrow)
+			b.WriteString(" ")
+			b.WriteString(tui.BoldText.Render("PHP 8.2+ and Composer"))
+			b.WriteString("\n")
+			b.WriteString("    PHP:      ")
+			b.WriteString(tui.BlueText.Render("https://www.php.net/downloads.php"))
+			b.WriteString("\n")
+			b.WriteString("    Composer: ")
+			b.WriteString(tui.BlueText.Render("https://getcomposer.org/"))
+			b.WriteString("\n")
 		}
 	}
 

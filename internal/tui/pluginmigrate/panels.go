@@ -62,7 +62,11 @@ func (m *Model) viewWelcome() string {
 			if version == "" {
 				version = "unknown version"
 			}
-			b.WriteString("  • " + tui.LabelStyle.Render(ext.Name) + " " + tui.DimStyle.Render(version) + "\n")
+			b.WriteString("  • ")
+			b.WriteString(tui.LabelStyle.Render(ext.Name))
+			b.WriteString(" ")
+			b.WriteString(tui.DimStyle.Render(version))
+			b.WriteString("\n")
 		}
 		b.WriteString("\n")
 		b.WriteString(tui.DimStyle.Render("Store plugins get required from packages.shopware.com; local plugins"))
@@ -165,9 +169,9 @@ func (m *Model) viewToken() (title, status, body string) {
 	b.WriteString("\n")
 	b.WriteString(tui.LabelStyle.Render("packages.shopware.com and keep receiving updates through Composer."))
 	b.WriteString("\n\n")
-	b.WriteString(tui.DimStyle.Render("Get yours at ") +
-		tui.StyledLink("https://account.shopware.com", "account.shopware.com", tui.LinkStyle) +
-		tui.DimStyle.Render(" → Merchant area → Shops → Packagist."))
+	b.WriteString(tui.DimStyle.Render("Get yours at "))
+	b.WriteString(tui.StyledLink("https://account.shopware.com", "account.shopware.com", tui.LinkStyle))
+	b.WriteString(tui.DimStyle.Render(" → Merchant area → Shops → Packagist."))
 	b.WriteString("\n\n")
 	b.WriteString(m.tokenInput.View())
 	b.WriteString("\n\n")
@@ -243,16 +247,20 @@ func (m *Model) viewReview() (title, status, body string) {
 	b.WriteString(tui.BoldStyle.Render("Configuration changes"))
 	b.WriteString("\n")
 	if m.plan.AddStoreRepository {
-		b.WriteString(tui.DimStyle.Render("  • add Composer repository "+migrate.StoreRepositoryURL) + "\n")
+		b.WriteString(tui.DimStyle.Render("  • add Composer repository " + migrate.StoreRepositoryURL))
+		b.WriteString("\n")
 	}
 	for _, path := range m.plan.PathRepositories() {
-		b.WriteString(tui.DimStyle.Render("  • add path repository "+path) + "\n")
+		b.WriteString(tui.DimStyle.Render("  • add path repository " + path))
+		b.WriteString("\n")
 	}
 	if m.token != "" {
-		b.WriteString(tui.DimStyle.Render("  • store the Packagist token in auth.json") + "\n")
+		b.WriteString(tui.DimStyle.Render("  • store the Packagist token in auth.json"))
+		b.WriteString("\n")
 	}
 	if len(m.plan.RemoveDirs()) > 0 {
-		b.WriteString(tui.DimStyle.Render(fmt.Sprintf("  • remove %d migrated directories after the require succeeded", len(m.plan.RemoveDirs()))) + "\n")
+		b.WriteString(tui.DimStyle.Render(fmt.Sprintf("  • remove %d migrated directories after the require succeeded", len(m.plan.RemoveDirs()))))
+		b.WriteString("\n")
 	}
 	b.WriteString("\n")
 
@@ -345,10 +353,7 @@ func (m *Model) viewRun() (title, status, body string) {
 	b.WriteString(tui.NewStepList(tui.StepListOptions{Steps: items}).Render())
 	b.WriteString("\n")
 
-	visible := m.frameHeight() - len(migrate.RunSteps) - 8
-	if visible < 3 {
-		visible = 3
-	}
+	visible := max(m.frameHeight()-len(migrate.RunSteps)-8, 3)
 	for _, line := range tui.TailLines(m.run.log, visible) {
 		b.WriteString(tui.DimStyle.Render(tui.Truncate(line, m.bodyWidth())))
 		b.WriteString("\n")
@@ -376,17 +381,24 @@ func (m *Model) viewDone() string {
 		b.WriteString(tui.BoldStyle.Render("All extensions are now managed through Composer."))
 		b.WriteString("\n\n")
 		if n := m.plan.Count(migrate.ActionStoreRequire); n > 0 {
-			b.WriteString(okStyle.Render("✓") + tui.LabelStyle.Render(fmt.Sprintf(" %d plugins now come from the Shopware Store", n)) + "\n")
+			b.WriteString(okStyle.Render("✓"))
+			b.WriteString(tui.LabelStyle.Render(fmt.Sprintf(" %d plugins now come from the Shopware Store", n)))
+			b.WriteString("\n")
 		}
 		if n := m.plan.Count(migrate.ActionPathRepository); n > 0 {
-			b.WriteString(okStyle.Render("✓") + tui.LabelStyle.Render(fmt.Sprintf(" %d local plugins are path repositories", n)) + "\n")
+			b.WriteString(okStyle.Render("✓"))
+			b.WriteString(tui.LabelStyle.Render(fmt.Sprintf(" %d local plugins are path repositories", n)))
+			b.WriteString("\n")
 		}
 		b.WriteString("\n")
 		b.WriteString(tui.BoldStyle.Render("Next steps"))
 		b.WriteString("\n")
-		b.WriteString(tui.DimStyle.Render("  1. Verify the shop still works") + "\n")
-		b.WriteString(tui.DimStyle.Render("  2. Commit composer.json, composer.lock, and auth.json") + "\n")
-		b.WriteString(tui.DimStyle.Render("  3. `project upgrade` can now resolve every extension") + "\n")
+		b.WriteString(tui.DimStyle.Render("  1. Verify the shop still works"))
+		b.WriteString("\n")
+		b.WriteString(tui.DimStyle.Render("  2. Commit composer.json, composer.lock, and auth.json"))
+		b.WriteString("\n")
+		b.WriteString(tui.DimStyle.Render("  3. `project upgrade` can now resolve every extension"))
+		b.WriteString("\n")
 		b.WriteString("\n")
 		b.WriteString(tui.NewButtonRow(tui.ButtonRowOptions{Labels: []string{"Close"}, Active: 0}).Render())
 		return tui.RenderPhaseCardCowsay("All plugins are Composer-managed now!", b.String())

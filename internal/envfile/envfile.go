@@ -198,7 +198,9 @@ func replaceEnvLine(content []byte, key, value string) ([]byte, bool) {
 
 		trimmed := strings.TrimLeft(line, " \t")
 		if !replaced && strings.HasPrefix(trimmed, key+"=") {
-			out.WriteString(key + "=" + value)
+			out.WriteString(key)
+			out.WriteString("=")
+			out.WriteString(value)
 			replaced = true
 			continue
 		}

@@ -514,12 +514,18 @@ func (m OverviewModel) renderAccess() string {
 
 	switch {
 	case m.loading:
-		s.WriteString("  " + helpStyle.Render("Scanning for further local services...") + "\n")
+		s.WriteString("  ")
+		s.WriteString(helpStyle.Render("Scanning for further local services..."))
+		s.WriteString("\n")
 	case m.err != nil:
-		s.WriteString("  " + errorStyle.Render(m.err.Error()) + "\n")
+		s.WriteString("  ")
+		s.WriteString(errorStyle.Render(m.err.Error()))
+		s.WriteString("\n")
 	}
 	if m.username == "" && m.password == "" {
-		s.WriteString("  " + helpStyle.Render("Admin credentials will appear here once Shopware is installed.") + "\n")
+		s.WriteString("  ")
+		s.WriteString(helpStyle.Render("Admin credentials will appear here once Shopware is installed."))
+		s.WriteString("\n")
 	}
 
 	return s.String()

@@ -126,14 +126,17 @@ func (m *Model) viewRunProgress() string {
 		if !seen {
 			state = backend.StatePending
 		}
-		b.WriteString(stateDot(state) + " " + tui.LabelStyle.Render(id.Label()))
+		b.WriteString(stateDot(state))
+		b.WriteString(" ")
+		b.WriteString(tui.LabelStyle.Render(id.Label()))
 		b.WriteString("\n")
 		if err := m.run.stepErrs[id]; err != nil {
 			style := failStyle
 			if state == backend.StateWarn {
 				style = warnStyle
 			}
-			b.WriteString("   " + style.Render(tui.Truncate(err.Error(), 60)))
+			b.WriteString("   ")
+			b.WriteString(style.Render(tui.Truncate(err.Error(), 60)))
 			b.WriteString("\n")
 		}
 	}

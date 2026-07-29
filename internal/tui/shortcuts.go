@@ -56,7 +56,8 @@ func (s Shortcuts) bar(separator string) string {
 	result := s.badge(s.opts.Items[0])
 	var resultSb55 strings.Builder
 	for _, item := range s.opts.Items[1:] {
-		resultSb55.WriteString(sep + s.badge(item))
+		resultSb55.WriteString(sep)
+		resultSb55.WriteString(s.badge(item))
 	}
 	result += resultSb55.String()
 	return result

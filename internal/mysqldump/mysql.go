@@ -526,7 +526,7 @@ func (d *Dumper) dumpTableData(ctx context.Context, w io.Writer, table string) e
 	}
 
 	values := make([]*sql.RawBytes, len(columns))
-	scanArgs := make([]interface{}, len(values))
+	scanArgs := make([]any, len(values))
 	for i := range values {
 		scanArgs[i] = &values[i]
 	}
@@ -591,7 +591,8 @@ func (d *Dumper) generateInsertStatement(cols []string, table string) string {
 	s := fmt.Sprintf("INSERT INTO `%s` (", table)
 	var sSb592 strings.Builder
 	for _, col := range cols {
-		sSb592.WriteString(col + ", ")
+		sSb592.WriteString(col)
+		sSb592.WriteString(", ")
 	}
 	s += sSb592.String()
 

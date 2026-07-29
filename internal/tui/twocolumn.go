@@ -49,7 +49,9 @@ func (c TwoColumn) Render() string {
 			r = rightLines[i]
 		}
 		b.WriteString(padToWidth(l, leftWidth))
-		b.WriteString(" " + divider + " ")
+		b.WriteString(" ")
+		b.WriteString(divider)
+		b.WriteString(" ")
 		b.WriteString(padToWidth(r, rightWidth))
 		if i < rows-1 {
 			b.WriteString("\n")

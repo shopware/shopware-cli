@@ -330,10 +330,7 @@ func (m *Model) clampPrepareScroll() {
 	visible := m.queueHeight()
 	// The cursor position past the last row focuses the Continue button and
 	// does not scroll the queue.
-	row := min(m.prepare.cursor, len(m.prepare.results)-1)
-	if row < 0 {
-		row = 0
-	}
+	row := max(min(m.prepare.cursor, len(m.prepare.results)-1), 0)
 	if row < m.prepare.scroll {
 		m.prepare.scroll = row
 	}
@@ -416,7 +413,8 @@ func (m *Model) viewPrepareLeft() string {
 	}
 
 	nameW, versionW := 26, 20
-	b.WriteString("    " + tui.BoldStyle.Render(tui.PadRight("Name", nameW)+tui.PadRight("Current -> target", versionW)+"Result"))
+	b.WriteString("    ")
+	b.WriteString(tui.BoldStyle.Render(tui.PadRight("Name", nameW) + tui.PadRight("Current -> target", versionW) + "Result"))
 	b.WriteString("\n")
 
 	visible := m.queueHeight()
@@ -451,10 +449,7 @@ func (m *Model) viewResolveFailure() string {
 	// table header, plus queueHeight rows): heading + omission notice + tail
 	// + blank + report line. Budget the tail so the report link is never
 	// cropped off the frame — long failures need it the most.
-	visible := m.queueHeight() - 2
-	if visible < 3 {
-		visible = 3
-	}
+	visible := max(m.queueHeight()-2, 3)
 
 	// The dry run either produced solver output or failed to run at all — in
 	// the latter case the error itself is the report.
@@ -478,8 +473,8 @@ func (m *Model) viewResolveFailure() string {
 	b.WriteString("\n")
 	switch {
 	case m.prepare.reportPath != "":
-		b.WriteString(tui.DimStyle.Render("Full output: ") +
-			tui.StyledLink("file://"+m.prepare.reportPath, relativePath(m.opts.ProjectRoot, m.prepare.reportPath), tui.LinkStyle))
+		b.WriteString(tui.DimStyle.Render("Full output: "))
+		b.WriteString(tui.StyledLink("file://"+m.prepare.reportPath, relativePath(m.opts.ProjectRoot, m.prepare.reportPath), tui.LinkStyle))
 	case m.prepare.reportErr != nil:
 		b.WriteString(failStyle.Render(tui.Truncate("Could not write the report: "+m.prepare.reportErr.Error(), width)))
 	}
@@ -563,7 +558,8 @@ func (m *Model) viewPrepareRight() string {
 	if m.deploymentHelperMissing() {
 		b.WriteString(tui.BoldStyle.Render("Deployment Helper workflow"))
 		b.WriteString("\n\n")
-		b.WriteString(tui.DimStyle.Render("  • ") + tui.LabelStyle.Render("add shopware/deployment-helper"))
+		b.WriteString(tui.DimStyle.Render("  • "))
+		b.WriteString(tui.LabelStyle.Render("add shopware/deployment-helper"))
 		b.WriteString("\n")
 		b.WriteString(tui.LabelStyle.Render("    to composer.json"))
 		b.WriteString("\n\n\n")
@@ -590,7 +586,8 @@ func (m *Model) viewPrepareRight() string {
 			active = 0
 		}
 	}
-	b.WriteString(cursor + m.buttonRow([]string{"Continue"}, active))
+	b.WriteString(cursor)
+	b.WriteString(m.buttonRow([]string{"Continue"}, active))
 	return b.String()
 }
 

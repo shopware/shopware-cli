@@ -155,7 +155,8 @@ func (l FilterList) View(width int) string {
 			// styled detail inside the width-padded row style would reset the
 			// selection background before the trailing padding.
 			gap := max(width-lipgloss.Width(item.Label)-lipgloss.Width(item.Detail), 1)
-			b.WriteString(rowStyle.UnsetWidth().Render(item.Label+strings.Repeat(" ", gap)) + dStyle.Render(item.Detail))
+			b.WriteString(rowStyle.UnsetWidth().Render(item.Label + strings.Repeat(" ", gap)))
+			b.WriteString(dStyle.Render(item.Detail))
 		} else {
 			b.WriteString(rowStyle.Render(item.Label))
 		}

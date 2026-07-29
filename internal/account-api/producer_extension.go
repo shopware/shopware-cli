@@ -429,7 +429,8 @@ func (review BinaryReviewResult) GetSummary() string {
 		}
 
 		fmt.Fprintf(&messageSb424, "=== %s ===\n", result.SubCheck)
-		messageSb424.WriteString(p.Sanitize(result.Message) + "\n\n")
+		messageSb424.WriteString(p.Sanitize(result.Message))
+		messageSb424.WriteString("\n\n")
 	}
 	message += messageSb424.String()
 
