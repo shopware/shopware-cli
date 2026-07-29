@@ -374,8 +374,6 @@ func (m OverviewModel) renderProjectReport(width int) string {
 	divider := tui.SectionDivider(width)
 
 	var s strings.Builder
-	s.WriteString(helpStyle.Render("Project details and readonly setup report."))
-	s.WriteString("\n\n")
 	s.WriteString(m.renderShopSection())
 	s.WriteString(divider)
 	s.WriteString(m.renderAccess())
@@ -405,8 +403,6 @@ func (m OverviewModel) renderStacked(width int) string {
 	divider := tui.SectionDivider(width)
 
 	var s strings.Builder
-	s.WriteString(helpStyle.Render("Project details and readonly setup report."))
-	s.WriteString("\n\n")
 	s.WriteString(m.renderShopSection())
 	s.WriteString(divider)
 	s.WriteString(m.renderAccess())
