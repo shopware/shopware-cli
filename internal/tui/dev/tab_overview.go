@@ -275,6 +275,22 @@ func linkURL(url string) string {
 	return tui.RenderStyledLink(url)
 }
 
+// watchLinkLabel returns a compact display label for a watcher URL, kept short
+// enough for the narrow "User action" column while the full URL stays the click
+// target. For proxy hostnames it is the leading label ("storefront-watch"); for
+// plain local URLs it is host:port, where the port is the distinguishing part.
+func watchLinkLabel(rawURL string) string {
+	u, err := url.Parse(rawURL)
+	if err != nil || u.Host == "" {
+		return rawURL
+	}
+	host := u.Hostname()
+	if label, _, found := strings.Cut(host, "."); found && net.ParseIP(host) == nil {
+		return label
+	}
+	return u.Host
+}
+
 // deriveAdminURL returns the admin URL for the given shop URL by appending the
 // "admin" path segment.
 func deriveAdminURL(shopURL string) string {
@@ -995,7 +1011,7 @@ func (m OverviewModel) renderWatcherStatus(label string, running, starting, read
 
 	row := fmt.Sprintf("  %s %s%s\n", checkbox, lipgloss.NewStyle().Width(14).Render(label), status)
 	if serving && url != "" {
-		row += "      " + linkURL(url) + "\n"
+		row += "      " + tui.StyledLink(url, watchLinkLabel(url)+" ↗", tui.LinkStyle) + "\n"
 	}
 	return row
 }
