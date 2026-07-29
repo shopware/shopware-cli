@@ -183,6 +183,12 @@ func (e *proxyEnvironment) up(cmd *cobra.Command) error {
 	} else if current := envfile.ReadEnvVar(e.envLocalPath(), "APP_URL"); current != "" {
 		previousAppURL = current
 	}
+	// Never record the proxy URL itself as the pre-proxy state (e.g. a
+	// born-proxy project whose .env.local already points at the hostname); that
+	// would make "proxy down" try to restore to the proxy URL.
+	if previousAppURL == proxyURL {
+		previousAppURL = defaultShopURL
+	}
 
 	// Whether the shop's live URL actually changes decides if the storefront
 	// theme needs a recompile: it bakes absolute asset URLs (the JS import map)
@@ -301,14 +307,23 @@ func (e *proxyEnvironment) bootstrapInfra(ctx context.Context) error {
 		return err
 	}
 
-	// No PreviousAppURL/PreviousConfig: a project bootstrapped this way is a
-	// proxy project by identity (its configured url is the hostname), so
-	// `proxy down` must not later "restore" it to a port mode it never had.
-	reg.Upsert(proxy.ProjectEntry{
+	// A born-proxy project has no PreviousAppURL/PreviousConfig (its configured
+	// url is the hostname, so `proxy down` must not "restore" a port mode it
+	// never had). But bootstrapInfra also runs on every `project dev` of a
+	// project that opted in via `proxy up`, so it must PRESERVE that entry's
+	// recorded restore state instead of overwriting it — otherwise a later
+	// `proxy down` could no longer revert it.
+	entry := proxy.ProjectEntry{
 		ProjectRoot:  e.canonicalRoot,
 		Hostname:     e.hostname,
 		RegisteredAt: time.Now(),
-	})
+	}
+	if existing, found := reg.Find(e.canonicalRoot); found {
+		entry.PreviousAppURL = existing.PreviousAppURL
+		entry.PreviousConfig = existing.PreviousConfig
+		entry.RegisteredAt = existing.RegisteredAt
+	}
+	reg.Upsert(entry)
 	if err := reg.Save(); err != nil {
 		return err
 	}
@@ -546,6 +561,19 @@ func (e *proxyEnvironment) down(ctx context.Context, hintTeardown bool) error {
 	}
 
 	entry, registered := reg.Find(e.canonicalRoot)
+
+	if !registered {
+		// Nothing was registered for this project, so there is nothing to
+		// deregister and no reason to stop its environment. Still remove an
+		// orphaned proxy override if one is present (a partially-failed `up`),
+		// then report honestly instead of claiming a deregistration.
+		if err := dockerpkg.RemoveComposeOverride(e.projectRoot); err != nil {
+			return err
+		}
+		fmt.Println(tui.DimText.Render("  ") + tui.BoldText.Render(e.hostname) + tui.DimText.Render(" is not registered with the shared proxy — nothing to deregister."))
+		fmt.Println()
+		return nil
+	}
 
 	// Only revert the shop's URLs when there is a genuine pre-proxy state to
 	// return to — a port project that opted in via `proxy up`. A project

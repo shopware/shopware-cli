@@ -55,7 +55,15 @@ type Options struct {
 	Config      *shop.Config
 	EnvConfig   *shop.EnvironmentConfig
 	Executor    executor.Executor
+	// ProxyFellBack is set when a proxy project could not start the shared
+	// proxy and dev fell back to fixed host ports. The shop is then reachable
+	// at the local port URL, not the (now unrouted) proxy hostname in Config.
+	ProxyFellBack bool
 }
+
+// fallbackShopURL is the URL a proxy project is reachable at once dev falls
+// back to fixed host ports; it matches project dev's own default.
+const fallbackShopURL = "http://127.0.0.1:8000"
 
 type Model struct {
 	host            app.Host
@@ -82,6 +90,7 @@ type Model struct {
 	watchers        map[string]*watcherHandle
 	migrationWizard migrationWizard
 	telemetry       *telemetryState
+	proxyFellBack   bool
 }
 
 type dockerAlreadyRunningMsg struct{}
@@ -99,15 +108,16 @@ type configRestartDoneMsg struct{ err error }
 
 func New(opts Options) Model {
 	m := Model{
-		header:      tui.NewHeader(),
-		activeTab:   tabOverview,
-		dockerMode:  opts.Executor.Type() == executor.TypeDocker,
-		projectRoot: opts.ProjectRoot,
-		executor:    opts.Executor,
-		config:      opts.Config,
-		envConfig:   opts.EnvConfig,
-		watchers:    make(map[string]*watcherHandle),
-		telemetry:   newTelemetryState(opts.Executor.Type() == executor.TypeDocker),
+		header:        tui.NewHeader(),
+		activeTab:     tabOverview,
+		dockerMode:    opts.Executor.Type() == executor.TypeDocker,
+		projectRoot:   opts.ProjectRoot,
+		executor:      opts.Executor,
+		config:        opts.Config,
+		envConfig:     opts.EnvConfig,
+		watchers:      make(map[string]*watcherHandle),
+		telemetry:     newTelemetryState(opts.Executor.Type() == executor.TypeDocker),
+		proxyFellBack: opts.ProxyFellBack,
 	}
 	m.rebuildTabs()
 	return m
@@ -126,6 +136,10 @@ func (m *Model) rebuildTabs() {
 	shopURL := m.config.URL
 	if m.envConfig.URL != "" {
 		shopURL = m.envConfig.URL
+	}
+	if m.proxyFellBack {
+		// The proxy hostname no longer routes; the shop is on a local port.
+		shopURL = fallbackShopURL
 	}
 
 	var username, password string
@@ -287,6 +301,13 @@ func (m Model) updateContent(msg tea.Msg) (app.Content, tea.Cmd) {
 	case watcherStartedMsg, watcherRunningMsg, watcherProbeMsg, stopWatcherRequestMsg,
 		startStorefrontWatchRequestMsg, watcherStoppedMsg, logDoneMsg:
 		return m.updateWatcherMsg(msg)
+
+	case instancesLoadedMsg, instancesTickMsg:
+		// Route to the overview directly so the self-scheduling refresh loop
+		// keeps ticking even during non-dashboard phases (a running task,
+		// starting/stopping); updateFallback would otherwise drop these and the
+		// loop would stop for the rest of the session.
+		return m.updateChildren(msg)
 
 	case setupHealthLoadedMsg:
 		if len(msg.checks) > 0 && m.telemetry.healthOnce() {

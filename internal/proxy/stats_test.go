@@ -32,16 +32,3 @@ func TestParseDockerMemUsage(t *testing.T) {
 		}
 	}
 }
-
-func TestContainerBelongsToProject(t *testing.T) {
-	t.Parallel()
-
-	projects := map[string]bool{"shop7": true, "my-shop": true}
-
-	assert.True(t, containerBelongsToProject("shop7-web-1", projects))
-	assert.True(t, containerBelongsToProject("shop7-database-1", projects))
-	assert.True(t, containerBelongsToProject("my-shop-adminer-1", projects))
-	// A longer project name must not match on a shorter prefix.
-	assert.False(t, containerBelongsToProject("shop70-web-1", projects))
-	assert.False(t, containerBelongsToProject("other-web-1", projects))
-}

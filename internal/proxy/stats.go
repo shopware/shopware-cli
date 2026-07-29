@@ -8,23 +8,38 @@ import (
 
 // InstanceStats reports how many shops are currently running behind the shared
 // proxy and the total memory their containers use. It is a rough resource
-// indicator for the overview: shops are counted as the distinct docker compose
-// projects among the containers attached to the shared proxy network, and
-// memory is summed across every container belonging to those projects
-// (including ones not on the proxy network, e.g. the database).
+// indicator for the overview. A shop is a docker compose project that has at
+// least one container attached to the shared proxy network; memory is summed
+// across every running container of those projects (including ones not on the
+// proxy network, e.g. the database), matched by compose project rather than by
+// name prefix so unrelated containers are never counted.
 func InstanceStats(ctx context.Context) (shops int, memBytes int64, err error) {
-	out, err := runDocker(ctx, "ps", "--filter", "network="+NetworkName, "--format", `{{.Label "com.docker.compose.project"}}`)
+	// One pass over running containers: their name, compose project and the
+	// networks they are on.
+	out, err := runDocker(ctx, "ps", "--format", "{{.Names}}\t{{.Label \"com.docker.compose.project\"}}\t{{.Networks}}")
 	if err != nil {
 		return 0, 0, err
 	}
 
-	projects := map[string]bool{}
-	for _, p := range strings.Split(strings.TrimSpace(out), "\n") {
-		if p = strings.TrimSpace(p); p != "" {
-			projects[p] = true
+	projectOf := map[string]string{} // container name -> compose project
+	proxyProjects := map[string]bool{}
+	for _, line := range strings.Split(strings.TrimSpace(out), "\n") {
+		fields := strings.SplitN(line, "\t", 3)
+		if len(fields) != 3 {
+			continue
+		}
+		name, project, networks := fields[0], fields[1], fields[2]
+		if project == "" {
+			continue
+		}
+		projectOf[name] = project
+		for _, n := range strings.Split(networks, ",") {
+			if strings.TrimSpace(n) == NetworkName {
+				proxyProjects[project] = true
+			}
 		}
 	}
-	if len(projects) == 0 {
+	if len(proxyProjects) == 0 {
 		return 0, 0, nil
 	}
 
@@ -33,7 +48,7 @@ func InstanceStats(ctx context.Context) (shops int, memBytes int64, err error) {
 	if stats, statsErr := runDocker(ctx, "stats", "--no-stream", "--format", "{{.Name}}\t{{.MemUsage}}"); statsErr == nil {
 		for _, line := range strings.Split(strings.TrimSpace(stats), "\n") {
 			name, usage, ok := strings.Cut(line, "\t")
-			if !ok || !containerBelongsToProject(name, projects) {
+			if !ok || !proxyProjects[projectOf[name]] {
 				continue
 			}
 			if b, ok := parseDockerMemUsage(usage); ok {
@@ -42,19 +57,7 @@ func InstanceStats(ctx context.Context) (shops int, memBytes int64, err error) {
 		}
 	}
 
-	return len(projects), memBytes, nil
-}
-
-// containerBelongsToProject reports whether a compose container name (e.g.
-// "my-shop-web-1") belongs to one of the given compose projects. The trailing
-// dash guards against a prefix collision (e.g. "my-shop" vs "my-shop-2").
-func containerBelongsToProject(containerName string, projects map[string]bool) bool {
-	for project := range projects {
-		if strings.HasPrefix(containerName, project+"-") {
-			return true
-		}
-	}
-	return false
+	return len(proxyProjects), memBytes, nil
 }
 
 // parseDockerMemUsage parses the used side of a docker stats MemUsage value

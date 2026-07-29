@@ -357,10 +357,11 @@ func (e *devEnvironment) status(cmd *cobra.Command) error {
 
 func (e *devEnvironment) runTUI() error {
 	_, err := dev.NewApp(dev.Options{
-		ProjectRoot: e.projectRoot,
-		Config:      e.cfg,
-		EnvConfig:   e.envCfg,
-		Executor:    e.executor,
+		ProjectRoot:   e.projectRoot,
+		Config:        e.cfg,
+		EnvConfig:     e.envCfg,
+		Executor:      e.executor,
+		ProxyFellBack: e.proxyFellBack,
 	}).Run()
 	return err
 }
