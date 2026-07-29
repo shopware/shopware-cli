@@ -3,7 +3,6 @@ package extension
 import (
 	"fmt"
 	"path/filepath"
-	"strings"
 
 	"charm.land/huh/v2"
 	"github.com/spf13/cobra"
@@ -19,17 +18,19 @@ var extensionConfigInitCmd = &cobra.Command{
 	Long: `Initialize CLI configuration for an existing Shopware extension checkout.
 
 Creates .shopware-extension.yml used by validation, packaging, and build workflows.
+The extension type (app vs plugin) is always detected from the checkout
+(manifest.xml / composer.json) — it cannot be overridden.
 
 Examples:
-  # Auto-detect type from manifest.xml / composer.json (interactive prompts when TTY)
+  # Interactive prompts for optional store metadata when TTY
   shopware-cli extension config init
 
   # Non-interactive
-  shopware-cli extension config init --type plugin -n
-  shopware-cli extension config init ./my-app --type app --name "My App" -n
+  shopware-cli extension config init -n
+  shopware-cli extension config init ./my-app --name "My App" -n
 
   # Overwrite existing config
-  shopware-cli extension config init --type plugin --force -n
+  shopware-cli extension config init --force -n
 `,
 	Args: cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
@@ -42,12 +43,17 @@ Examples:
 			return err
 		}
 
-		extType, _ := cmd.Flags().GetString("type")
 		name, _ := cmd.Flags().GetString("name")
 		description, _ := cmd.Flags().GetString("description")
 		maintainer, _ := cmd.Flags().GetString("maintainer")
 		force, _ := cmd.Flags().GetBool("force")
 		interactiveFlag, _ := cmd.Flags().GetBool("interactive")
+
+		// Type always comes from the checkout — flag was rejected in review.
+		extType, err := extension.DetectInitType(abs)
+		if err != nil {
+			return err
+		}
 
 		interactive := system.IsInteractionEnabled(cmd.Context())
 		if interactiveFlag {
@@ -57,18 +63,8 @@ Examples:
 			interactive = true
 		}
 
-		// Non-interactive: --type is required unless we can detect from disk.
-		if !interactive && strings.TrimSpace(extType) == "" {
-			if detected, detErr := extension.DetectInitType(abs); detErr == nil {
-				extType = detected
-			} else {
-				return fmt.Errorf("--type is required in non-interactive mode (app or plugin): %w", detErr)
-			}
-		}
-
-		// Interactive: fill missing fields via prompts.
 		if interactive {
-			if err := askExtensionConfigInit(abs, &extType, &name, &description, &maintainer, &force); err != nil {
+			if err := askExtensionConfigInit(abs, &name, &description, &maintainer, &force); err != nil {
 				return err
 			}
 		}
@@ -84,20 +80,13 @@ Examples:
 			return err
 		}
 
-		logging.FromContext(cmd.Context()).Infof("Created %s", path)
+		logging.FromContext(cmd.Context()).Infof("Created %s (type %s)", path, extType)
 
 		return nil
 	},
 }
 
-func askExtensionConfigInit(abs string, extType, name, description, maintainer *string, force *bool) error {
-	// Seed type from detection when empty.
-	if strings.TrimSpace(*extType) == "" {
-		if detected, err := extension.DetectInitType(abs); err == nil {
-			*extType = detected
-		}
-	}
-
+func askExtensionConfigInit(abs string, name, description, maintainer *string, force *bool) error {
 	existing := extension.ConfigPath(abs)
 	if existing != "" && !*force {
 		overwrite := false
@@ -117,20 +106,8 @@ func askExtensionConfigInit(abs string, extType, name, description, maintainer *
 		*force = true
 	}
 
-	typeValue := strings.ToLower(strings.TrimSpace(*extType))
-	if typeValue != extension.InitTypeApp && typeValue != extension.InitTypePlugin {
-		typeValue = extension.InitTypePlugin
-	}
-
 	form := huh.NewForm(
 		huh.NewGroup(
-			huh.NewSelect[string]().
-				Title("Extension type").
-				Options(
-					huh.NewOption("plugin (composer.json / shopware-platform-plugin)", extension.InitTypePlugin),
-					huh.NewOption("app (manifest.xml)", extension.InitTypeApp),
-				).
-				Value(&typeValue),
 			huh.NewInput().
 				Title("Name (store meta title, optional)").
 				Value(name),
@@ -143,19 +120,12 @@ func askExtensionConfigInit(abs string, extType, name, description, maintainer *
 		),
 	)
 
-	if err := form.Run(); err != nil {
-		return err
-	}
-
-	*extType = typeValue
-
-	return nil
+	return form.Run()
 }
 
 func init() {
 	extensionConfigCmd.AddCommand(extensionConfigInitCmd)
 
-	extensionConfigInitCmd.Flags().String("type", "", "Extension type: app or plugin (required when non-interactive and type cannot be detected)")
 	extensionConfigInitCmd.Flags().String("name", "", "Optional store meta title (en)")
 	extensionConfigInitCmd.Flags().String("description", "", "Optional store description (en)")
 	extensionConfigInitCmd.Flags().String("maintainer", "", "Optional maintainer note (YAML comment)")

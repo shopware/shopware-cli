@@ -17,14 +17,14 @@ const (
 	// ConfigFileNameAlt is accepted when reading existing configs.
 	ConfigFileNameAlt = ".shopware-extension.yaml"
 
-	// InitTypeApp and InitTypePlugin are the --type values for config init.
+	// InitTypeApp and InitTypePlugin are detected extension kinds for config init.
 	InitTypeApp    = TypePlatformApp
 	InitTypePlugin = TypePlatformPlugin
 )
 
 // InitConfigOptions controls generation of a new .shopware-extension.yml.
 type InitConfigOptions struct {
-	// Type is "app" or "plugin" (required for non-interactive use).
+	// Type is "app" or "plugin" (from DetectInitType / checkout layout).
 	Type string
 	// Name is an optional store meta title (en).
 	Name string
