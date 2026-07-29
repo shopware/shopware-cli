@@ -31,6 +31,11 @@ type prepareState struct {
 	phpDone      bool
 	phpReq       string
 	phpInstalled string
+	// changelogs are the Store release notes of the planned extension
+	// updates, fetched once compatibility and resolution finished; they are
+	// advisory and only enrich the exported report.
+	changelogs          []backend.ExtensionChangelog
+	changelogsRequested bool
 	// reportRequested marks that the failure report write was kicked off;
 	// reportPath or reportErr carry its outcome.
 	reportRequested bool
@@ -95,6 +100,22 @@ func (s prepareState) resolveFailed() bool {
 	return s.resolveErr != nil || (s.resolve != nil && !s.resolve.OK)
 }
 
+// maybeLoadChangelogs fetches the Store changelogs of the planned extension
+// updates once — after both the compatibility check and the Composer
+// resolution finished, so the update targets are final.
+func (m *Model) maybeLoadChangelogs() tea.Cmd {
+	resolutionDone := m.prepare.resolve != nil || m.prepare.resolveErr != nil
+	if m.prepare.changelogsRequested || !m.prepare.compatDone || !resolutionDone {
+		return nil
+	}
+	target := m.check.target()
+	if target == nil {
+		return nil
+	}
+	m.prepare.changelogsRequested = true
+	return changelogsCmd(m.upgrader, target.Version.String(), m.prepare.results, m.prepare.gen)
+}
+
 // deploymentHelperMissing reports whether the upgrade will add
 // shopware/deployment-helper to composer.json, per the readiness check.
 func (m *Model) deploymentHelperMissing() bool {
@@ -156,7 +177,7 @@ func (m *Model) updatePrepare(msg tea.Msg) (app.Content, tea.Cmd) {
 			m.prepare.resolve = &result
 		}
 		m.prepare.applyResolved()
-		cmds := []tea.Cmd{m.maybeWriteFailureReport()}
+		cmds := []tea.Cmd{m.maybeWriteFailureReport(), m.maybeLoadChangelogs()}
 		// Composer >= 2.9 refuses to load packages affected by security
 		// advisories, which would leave this check blocked with no way
 		// forward — offer to continue with audit blocking disabled.
@@ -189,7 +210,7 @@ func (m *Model) updatePrepare(msg tea.Msg) (app.Content, tea.Cmd) {
 		m.prepare.cursor = 0
 		m.prepare.scroll = 0
 		m.prepare.applyResolved()
-		return m, m.maybeWriteFailureReport()
+		return m, tea.Batch(m.maybeWriteFailureReport(), m.maybeLoadChangelogs())
 
 	case phpInfoMsg:
 		if msg.gen != m.prepare.gen {
@@ -199,6 +220,13 @@ func (m *Model) updatePrepare(msg tea.Msg) (app.Content, tea.Cmd) {
 		m.prepare.phpReq = msg.requirement
 		m.prepare.phpInstalled = msg.installed
 		return m, m.maybeWriteFailureReport()
+
+	case changelogsMsg:
+		if msg.gen != m.prepare.gen {
+			return m, nil
+		}
+		m.prepare.changelogs = msg.changelogs
+		return m, nil
 
 	case tea.KeyPressMsg:
 		return m.updatePrepareKeys(msg)

@@ -3,6 +3,7 @@ package upgrade
 import (
 	"context"
 	"errors"
+	"slices"
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/shyim/go-version"
@@ -46,6 +47,13 @@ type resolveDoneMsg struct {
 type compatDoneMsg struct {
 	gen     int
 	results []backend.ExtensionResult
+}
+
+// changelogsMsg carries the Store release notes of the planned extension
+// updates for the report.
+type changelogsMsg struct {
+	gen        int
+	changelogs []backend.ExtensionChangelog
 }
 
 type phpInfoMsg struct {
@@ -111,6 +119,14 @@ func resolveCmd(u *backend.ProjectUpgrader, target string, gen int) tea.Cmd {
 func compatCmd(u *backend.ProjectUpgrader, current, target *version.Version, extensions []backend.InstalledExtension, gen int) tea.Cmd {
 	return func() tea.Msg {
 		return compatDoneMsg{gen: gen, results: u.CheckExtensions(context.Background(), current, target, extensions)}
+	}
+}
+
+func changelogsCmd(u *backend.ProjectUpgrader, target string, results []backend.ExtensionResult, gen int) tea.Cmd {
+	// The command goroutine must not share the slice the panel keeps updating.
+	results = slices.Clone(results)
+	return func() tea.Msg {
+		return changelogsMsg{gen: gen, changelogs: u.LoadExtensionChangelogs(context.Background(), target, results)}
 	}
 }
 

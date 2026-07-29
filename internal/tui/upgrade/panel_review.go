@@ -57,6 +57,7 @@ func (m *Model) reportData() backend.ReportData {
 		PHPInstalled:    m.prepare.phpInstalled,
 		ComposerReport:  composerReport,
 		ResolvedChanges: resolvedChanges,
+		Changelogs:      m.prepare.changelogs,
 	}
 }
 

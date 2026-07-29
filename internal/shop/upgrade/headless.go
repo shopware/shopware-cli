@@ -232,6 +232,7 @@ func (u *ProjectUpgrader) headlessReportData(ctx context.Context, readiness Read
 		PHPInstalled:    u.InstalledPHPVersion(ctx),
 		ComposerReport:  composerReport,
 		ResolvedChanges: resolve.Changes,
+		Changelogs:      u.LoadExtensionChangelogs(ctx, target.Version.String(), results),
 	}
 }
 

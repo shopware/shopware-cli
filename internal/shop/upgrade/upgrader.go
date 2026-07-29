@@ -29,6 +29,7 @@ type ProjectUpgrader struct {
 
 	shopwareVersions func(ctx context.Context) ([]string, error)
 	extensionUpdates func(ctx context.Context, current, future string, extensions []account_api.UpdateCheckExtension) ([]account_api.UpdateCheckExtensionCompatibility, error)
+	storePlugins     func(ctx context.Context, locale, shopwareVersion string, names []string) ([]account_api.StorePlugin, error)
 	repositories     func(*composer.Json, *composer.Auth) *repository.Set
 	endOfLifeURL     string
 	packagistPingURL string
@@ -44,6 +45,7 @@ func NewProjectUpgrader(projectRoot string, exec executor.Executor) *ProjectUpgr
 
 		shopwareVersions: extension.GetShopwareVersions,
 		extensionUpdates: account_api.GetFutureExtensionUpdates,
+		storePlugins:     account_api.GetStorePluginsByName,
 		repositories: func(c *composer.Json, auth *composer.Auth) *repository.Set {
 			return repository.FromComposer(c, auth, true)
 		},

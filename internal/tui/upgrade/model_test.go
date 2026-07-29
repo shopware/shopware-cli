@@ -382,13 +382,13 @@ func TestPrepareResolveFailureShowsConflictInline(t *testing.T) {
 	w.Send(envStatusMsg{gen: gen, running: true})
 	w.Send(packagistMsg{gen: gen, reachable: true})
 	w.Send(compatDoneMsg{gen: gen, results: []backend.ExtensionResult{okResult()}})
-	cmd := w.Send(resolveDoneMsg{gen: gen, result: backend.ResolveResult{
+	w.Send(resolveDoneMsg{gen: gen, result: backend.ResolveResult{
 		OK:     false,
 		Report: "Loading composer repositories\nProblem 1\n    - shopware/core 6.7.11.0 conflicts with swag/demo 2.0.0",
 	}})
-	assert.Nil(t, cmd, "the report waits for the remaining preparation results")
+	assert.False(t, w.m.prepare.reportRequested, "the report waits for the remaining preparation results")
 
-	cmd = w.Send(phpInfoMsg{gen: gen, requirement: ">=8.2", installed: "8.3.1"})
+	cmd := w.Send(phpInfoMsg{gen: gen, requirement: ">=8.2", installed: "8.3.1"})
 	require.NotNil(t, cmd, "once every result arrived, the failure report is written")
 
 	// The solver's conflict summary replaces the extension queue.
@@ -632,6 +632,26 @@ func TestReviewPanel(t *testing.T) {
 	assert.Equal(t, "6.7.11.0", data.Target)
 	assert.Equal(t, ">=8.2", data.PHPRequirement)
 	assert.Empty(t, data.ComposerReport, "no composer report when resolution succeeded")
+}
+
+func TestPrepareLoadsChangelogsIntoReport(t *testing.T) {
+	w := wizardAtPrepare(t, []backend.ExtensionResult{okResult()}, true)
+	assert.True(t, w.m.prepare.changelogsRequested,
+		"changelog fetch starts once compatibility and resolution finished")
+
+	changelogs := []backend.ExtensionChangelog{{
+		Extension: "SwagDemo", From: "2.0.0", To: "2.1.0",
+		Entries: []backend.ChangelogEntry{{Version: "2.1.0", Date: "2026-03-01", Text: "Fixes"}},
+	}}
+	w.Send(changelogsMsg{gen: w.m.prepareGen, changelogs: changelogs})
+
+	assert.Equal(t, changelogs, w.m.reportData().Changelogs)
+}
+
+func TestPrepareDropsStaleChangelogs(t *testing.T) {
+	w := wizardAtPrepare(t, []backend.ExtensionResult{okResult()}, true)
+	w.Send(changelogsMsg{gen: w.m.prepareGen - 1, changelogs: []backend.ExtensionChangelog{{Extension: "Old"}}})
+	assert.Empty(t, w.m.reportData().Changelogs)
 }
 
 func TestReviewBackReturnsToPrepare(t *testing.T) {

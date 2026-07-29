@@ -37,6 +37,9 @@ type ReportData struct {
 	ComposerReport string
 	// ResolvedChanges are the lock-file operations the dry run predicted.
 	ResolvedChanges []PackageChange
+	// Changelogs are the Store release notes of the extension updates the
+	// upgrade applies.
+	Changelogs []ExtensionChangelog
 	// Failed marks a report written for an upgrade that was rolled back;
 	// Error carries the failing step's message.
 	Failed bool
@@ -109,6 +112,8 @@ func renderReport(data ReportData) string {
 		return s == ExtOK
 	})
 
+	writeChangelogs(&b, data.Changelogs)
+
 	if len(data.ResolvedChanges) > 0 {
 		b.WriteString("## Resolved package changes\n\n")
 		b.WriteString("| Package | From | To | Operation |\n|---|---|---|---|\n")
@@ -163,6 +168,28 @@ func writeExtensionGroup(b *strings.Builder, title string, extensions []Extensio
 			e.Extension.Name, pkg, e.Extension.Version, available, e.Status.Label(), e.Detail)
 	}
 	b.WriteString("\n")
+}
+
+func writeChangelogs(b *strings.Builder, changelogs []ExtensionChangelog) {
+	if len(changelogs) == 0 {
+		return
+	}
+
+	b.WriteString("## Extension update changelogs\n\n")
+	for _, cl := range changelogs {
+		fmt.Fprintf(b, "### %s (%s → %s)\n\n", cl.Extension, cl.From, cl.To)
+		for _, entry := range cl.Entries {
+			heading := entry.Version
+			if entry.Date != "" {
+				heading += " — " + entry.Date
+			}
+			fmt.Fprintf(b, "**%s**\n\n", heading)
+			if entry.Text != "" {
+				b.WriteString(entry.Text)
+				b.WriteString("\n\n")
+			}
+		}
+	}
 }
 
 func stateMarker(s CheckState) string {
