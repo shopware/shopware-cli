@@ -1,9 +1,12 @@
 package project
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestResolveLocalDomainChoice(t *testing.T) {
@@ -39,4 +42,24 @@ func TestShopNotInstalled(t *testing.T) {
 	assert.True(t, shopNotInstalled("Unknown database 'shopware'"))
 	assert.False(t, shopNotInstalled("some unrelated failure"))
 	assert.False(t, shopNotInstalled(""))
+}
+
+func TestProjectHasReplaceURLCommand(t *testing.T) {
+	t.Parallel()
+
+	writeLock := func(t *testing.T, coreVersion string) string {
+		t.Helper()
+		dir := t.TempDir()
+		lock := `{"packages":[{"name":"shopware/core","version":"` + coreVersion + `"}]}`
+		require.NoError(t, os.WriteFile(filepath.Join(dir, "composer.lock"), []byte(lock), 0o644))
+		return dir
+	}
+
+	// sales-channel:replace:url exists from 6.7 on.
+	assert.False(t, projectHasReplaceURLCommand(writeLock(t, "6.6.10.21")))
+	assert.True(t, projectHasReplaceURLCommand(writeLock(t, "6.7.0.0")))
+	assert.True(t, projectHasReplaceURLCommand(writeLock(t, "v6.7.12.2")))
+	// Unknown / unparseable versions and a missing lock default to current (6.7+).
+	assert.True(t, projectHasReplaceURLCommand(writeLock(t, "dev-trunk")))
+	assert.True(t, projectHasReplaceURLCommand(t.TempDir()))
 }

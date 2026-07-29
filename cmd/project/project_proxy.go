@@ -11,6 +11,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/shyim/go-composer"
+	"github.com/shyim/go-version"
 	"github.com/spf13/cobra"
 
 	dockerpkg "github.com/shopware/shopware-cli/internal/docker"
@@ -536,11 +538,18 @@ func (e *proxyEnvironment) recompileTheme(ctx context.Context) {
 	}
 }
 
-// replaceSalesChannelURL runs the core sales-channel:replace:url command,
-// either in the running web container or, when the project is stopped, in a
-// temporary one (viaRun) whose database dependency docker compose starts and
-// the caller's environment stop cleans up again.
+// replaceSalesChannelURL repoints the sales channel domain from fromURL to
+// toURL. Shopware 6.7+ has the core sales-channel:replace:url command, run in
+// the running web container or, when the project is stopped, in a temporary one
+// (viaRun) whose database dependency docker compose starts. Shopware 6.6 and
+// earlier have no clean equivalent (replace:url is absent and update:domain
+// keeps the old scheme and port), so the domain row is rewritten with a direct
+// SQL UPDATE in the database container instead.
 func (e *proxyEnvironment) replaceSalesChannelURL(ctx context.Context, fromURL, toURL string, viaRun bool) ([]byte, error) {
+	if !projectHasReplaceURLCommand(e.projectRoot) {
+		return e.repointSalesChannelViaSQL(ctx, fromURL, toURL, viaRun)
+	}
+
 	if !viaRun {
 		return e.executor.ConsoleCommand(ctx, "sales-channel:replace:url", fromURL, toURL).CombinedOutput()
 	}
@@ -549,6 +558,62 @@ func (e *proxyEnvironment) replaceSalesChannelURL(ctx context.Context, fromURL, 
 	cmd.Dir = e.projectRoot
 
 	return cmd.CombinedOutput()
+}
+
+// proxyDBService is the database service name defined by
+// internal/docker/compose.go (with root/root credentials and the "shopware"
+// database), used for the 6.6 SQL fallback in replaceSalesChannelURL.
+const proxyDBService = "database"
+
+// repointSalesChannelViaSQL rewrites the sales channel domain URL directly in
+// the database, the only reliable way on Shopware 6.6 (see
+// replaceSalesChannelURL). It targets the running database container; a stopped
+// stack (viaRun) has no server to talk to, so it is skipped quietly like a
+// not-yet-installed shop.
+func (e *proxyEnvironment) repointSalesChannelViaSQL(ctx context.Context, fromURL, toURL string, viaRun bool) ([]byte, error) {
+	if viaRun {
+		return nil, nil
+	}
+
+	// fromURL/toURL are controlled values (the proxy hostname and the previous
+	// URL), but double any single quote defensively so a value can never break
+	// out of the SQL string literal.
+	esc := func(s string) string { return strings.ReplaceAll(s, "'", "''") }
+	query := fmt.Sprintf("UPDATE sales_channel_domain SET url = '%s' WHERE url = '%s';", esc(toURL), esc(fromURL))
+
+	cmd := exec.CommandContext(ctx, "docker", "compose", "exec", "-T", proxyDBService, "mariadb", "-uroot", "-proot", "shopware", "-e", query)
+	cmd.Dir = e.projectRoot
+
+	return cmd.CombinedOutput()
+}
+
+// replaceURLCommandMinVersion is the first Shopware release with the
+// sales-channel:replace:url console command.
+const replaceURLCommandMinVersion = "6.7.0.0"
+
+// projectHasReplaceURLCommand reports whether the project's Shopware version
+// ships sales-channel:replace:url (6.7+). Unknown or unparseable versions are
+// treated as current (6.7+).
+func projectHasReplaceURLCommand(projectRoot string) bool {
+	lock, err := composer.ReadLock(filepath.Join(projectRoot, "composer.lock"))
+	if err != nil {
+		return true
+	}
+
+	floor := version.Must(version.NewVersion(replaceURLCommandMinVersion))
+	for _, name := range []string{"shopware/core", "shopware/platform"} {
+		pkg := lock.GetPackage(name)
+		if pkg == nil {
+			continue
+		}
+		v, err := version.NewVersion(strings.TrimPrefix(pkg.Version, "v"))
+		if err != nil {
+			return true
+		}
+		return v.GreaterThanOrEqual(floor)
+	}
+
+	return true
 }
 
 // down deregisters the project and stops it. hintTeardown controls whether
@@ -583,7 +648,11 @@ func (e *proxyEnvironment) down(ctx context.Context, hintTeardown bool) error {
 	if registered && entry.PreviousAppURL != "" {
 		if err := e.pointShopAt(ctx, []string{"https://" + e.hostname, "http://" + e.hostname}, entry.PreviousAppURL); err != nil {
 			fmt.Println(tui.RedText.Render("  Could not restore the sales channel domain: " + err.Error()))
-			fmt.Println(tui.DimText.Render("  Restore it manually once the shop runs: ") + tui.BoldText.Render(fmt.Sprintf("shopware-cli project console sales-channel:replace:url https://%s %s", e.hostname, entry.PreviousAppURL)))
+			if projectHasReplaceURLCommand(e.projectRoot) {
+				fmt.Println(tui.DimText.Render("  Restore it manually once the shop runs: ") + tui.BoldText.Render(fmt.Sprintf("shopware-cli project console sales-channel:replace:url https://%s %s", e.hostname, entry.PreviousAppURL)))
+			} else {
+				fmt.Println(tui.DimText.Render("  Restore the sales channel domain to ") + tui.BoldText.Render(entry.PreviousAppURL) + tui.DimText.Render(" once the shop runs."))
+			}
 		}
 	}
 
