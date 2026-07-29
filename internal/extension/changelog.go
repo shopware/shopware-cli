@@ -1,6 +1,7 @@
 package extension
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -10,7 +11,7 @@ import (
 )
 
 func parseMarkdownChangelogInPath(path string) (map[string]map[string]string, error) {
-	files, err := filepath.Glob(fmt.Sprintf("%s/CHANGELOG*.md", path))
+	files, err := filepath.Glob(path + "/CHANGELOG*.md")
 	if err != nil {
 		return nil, err
 	}
@@ -89,7 +90,7 @@ func parseExtensionMarkdownChangelog(ext Extension) (*ExtensionChangelog, error)
 
 	changelogEnVersion, ok := changelogEn[v.String()]
 	if !ok {
-		return nil, fmt.Errorf("english changelog is missing")
+		return nil, errors.New("english changelog is missing")
 	}
 
 	changelogDe, ok := changelogs["de-DE"]

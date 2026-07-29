@@ -7,6 +7,7 @@ import (
 	"crypto/x509/pkix"
 	"encoding/base64"
 	"encoding/pem"
+	"errors"
 	"fmt"
 	"math/big"
 	"os"
@@ -36,7 +37,7 @@ var projectNewJWTCmd = &cobra.Command{
 		}
 
 		if len(args) == 0 {
-			return fmt.Errorf("project root path is required, please pass a path to the project root")
+			return errors.New("project root path is required, please pass a path to the project root")
 		}
 
 		projectRoot := args[0]

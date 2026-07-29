@@ -26,16 +26,16 @@ const (
 )
 
 func GetExtensionByFolder(ctx context.Context, path string) (Extension, error) {
-	if _, err := os.Stat(fmt.Sprintf("%s/plugin.xml", path)); err == nil {
-		return nil, fmt.Errorf("shopware 5 is not supported. Please use https://github.com/FriendsOfShopware/FroshPluginUploader instead")
+	if _, err := os.Stat(path + "/plugin.xml"); err == nil {
+		return nil, errors.New("shopware 5 is not supported. Please use https://github.com/FriendsOfShopware/FroshPluginUploader instead")
 	}
 
-	if _, err := os.Stat(fmt.Sprintf("%s/manifest.xml", path)); err == nil {
+	if _, err := os.Stat(path + "/manifest.xml"); err == nil {
 		return newApp(ctx, path)
 	}
 
-	if _, err := os.Stat(fmt.Sprintf("%s/composer.json", path)); err != nil {
-		return nil, fmt.Errorf("unknown extension type")
+	if _, err := os.Stat(path + "/composer.json"); err != nil {
+		return nil, errors.New("unknown extension type")
 	}
 
 	var ext Extension
@@ -76,7 +76,7 @@ func GetExtensionByZip(ctx context.Context, filePath string) (Extension, error) 
 	fileName := file.File[0].Name
 
 	if strings.Contains(fileName, "..") {
-		return nil, fmt.Errorf("invalid zip file")
+		return nil, errors.New("invalid zip file")
 	}
 
 	extName := strings.Split(fileName, "/")[0]
@@ -134,7 +134,7 @@ type Extension interface {
 func getShopwareVersionConstraintFromComposer(composerRequire map[string]string) (*version.Constraints, error) {
 	shopwareConstraintString, ok := composerRequire["shopware/core"]
 	if !ok {
-		return nil, fmt.Errorf("require.shopware/core is required")
+		return nil, errors.New("require.shopware/core is required")
 	}
 
 	shopwareConstraint, err := version.NewConstraint(shopwareConstraintString)

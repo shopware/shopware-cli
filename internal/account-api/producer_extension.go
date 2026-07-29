@@ -14,6 +14,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/microcosm-cc/bluemonday"
 	"github.com/shyim/go-version"
@@ -421,14 +422,16 @@ func (review BinaryReviewResult) GetSummary() string {
 
 	p := bluemonday.NewPolicy()
 
+	var messageSb424 strings.Builder
 	for _, result := range review.SubCheckResults {
 		if result.Passed && !result.HasWarnings {
 			continue
 		}
 
-		message += fmt.Sprintf("=== %s ===\n", result.SubCheck)
-		message += fmt.Sprintf("%s\n\n", p.Sanitize(result.Message))
+		fmt.Fprintf(&messageSb424, "=== %s ===\n", result.SubCheck)
+		messageSb424.WriteString(p.Sanitize(result.Message) + "\n\n")
 	}
+	message += messageSb424.String()
 
 	return message
 }

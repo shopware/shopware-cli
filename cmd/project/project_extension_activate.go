@@ -1,7 +1,7 @@
 package project
 
 import (
-	"fmt"
+	"errors"
 
 	"github.com/spf13/cobra"
 
@@ -66,7 +66,7 @@ var projectExtensionActivateCmd = &cobra.Command{
 		}
 
 		if failed {
-			return fmt.Errorf("activation failed")
+			return errors.New("activation failed")
 		}
 
 		return nil

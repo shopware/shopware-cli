@@ -83,7 +83,7 @@ func IsPHPVersionAtLeast(ctx context.Context, requiredVersion string) (bool, err
 		return false, fmt.Errorf("failed to parse installed PHP version: %w", err)
 	}
 
-	constraint, err := version.NewConstraint(fmt.Sprintf(">= %s", requiredVersion))
+	constraint, err := version.NewConstraint(">= " + requiredVersion)
 	if err != nil {
 		return false, fmt.Errorf("failed to parse required PHP version constraint: %w", err)
 	}

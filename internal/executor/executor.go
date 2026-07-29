@@ -3,7 +3,6 @@ package executor
 import (
 	"context"
 	"errors"
-	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -40,7 +39,7 @@ type Executor interface {
 
 func adminAPIClient(ctx context.Context, cfg *shop.Config, envCfg *shop.EnvironmentConfig) (*adminSdk.Client, error) {
 	if cfg == nil {
-		return nil, fmt.Errorf("admin api requires a shop configuration")
+		return nil, errors.New("admin api requires a shop configuration")
 	}
 
 	effective := *cfg

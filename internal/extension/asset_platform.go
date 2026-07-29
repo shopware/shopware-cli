@@ -347,7 +347,7 @@ func BuildAssetsForExtensions(ctx context.Context, sources []asset.Source, asset
 }
 
 func prepareShopwareForAsset(shopwareRoot string, cfgs ExtensionAssetConfig, assetConfig AssetBuildConfig) error {
-	varFolder := fmt.Sprintf("%s/var", shopwareRoot)
+	varFolder := shopwareRoot + "/var"
 	if _, err := os.Stat(varFolder); os.IsNotExist(err) {
 		err := os.Mkdir(varFolder, 0o755)
 		if err != nil {
@@ -376,11 +376,11 @@ func prepareShopwareForAsset(shopwareRoot string, cfgs ExtensionAssetConfig, ass
 		return fmt.Errorf("prepareShopwareForAsset: %w", err)
 	}
 
-	if err = os.WriteFile(fmt.Sprintf("%s/var/plugins.json", shopwareRoot), pluginJson, os.ModePerm); err != nil {
+	if err = os.WriteFile(shopwareRoot+"/var/plugins.json", pluginJson, os.ModePerm); err != nil {
 		return fmt.Errorf("prepareShopwareForAsset: %w", err)
 	}
 
-	err = os.WriteFile(fmt.Sprintf("%s/var/features.json", shopwareRoot), []byte("{}"), 0o644)
+	err = os.WriteFile(shopwareRoot+"/var/features.json", []byte("{}"), 0o644)
 	if err != nil {
 		return fmt.Errorf("prepareShopwareForAsset: %w", err)
 	}

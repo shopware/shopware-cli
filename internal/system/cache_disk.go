@@ -3,6 +3,7 @@ package system
 import (
 	"context"
 	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"io"
 	"os"
@@ -171,7 +172,7 @@ func (c *DiskCache) Close() error {
 func (c *DiskCache) getFilePath(key string) string {
 	// Hash the key to create a safe filename
 	hash := sha256.Sum256([]byte(key))
-	filename := fmt.Sprintf("%x", hash)
+	filename := hex.EncodeToString(hash[:])
 
 	// Use the first two characters as subdirectory for better distribution
 	subdir := filename[:2]
@@ -183,7 +184,7 @@ func (c *DiskCache) getFilePath(key string) string {
 func (c *DiskCache) getFolderPath(key string) string {
 	// Hash the key to create a safe folder name
 	hash := sha256.Sum256([]byte(key))
-	foldername := fmt.Sprintf("%x", hash)
+	foldername := hex.EncodeToString(hash[:])
 
 	// Use the first two characters as subdirectory for better distribution
 	subdir := foldername[:2]

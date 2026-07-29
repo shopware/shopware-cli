@@ -95,7 +95,7 @@ If a file is not found locally, it proxies the request to the upstream server.`,
 		}
 
 		if upstreamURL == "" {
-			return fmt.Errorf("upstream URL must be provided either via --url flag or in .shopware-project.yml")
+			return errors.New("upstream URL must be provided either via --url flag or in .shopware-project.yml")
 		}
 
 		// Parse upstream URL
@@ -217,7 +217,7 @@ If a file is not found locally, it proxies the request to the upstream server.`,
 		})
 
 		// Prepare server address
-		addr := fmt.Sprintf(":%s", imageProxyPort)
+		addr := ":" + imageProxyPort
 
 		// Setup config file management if not skipped
 		var cleanup func()
@@ -232,7 +232,7 @@ If a file is not found locally, it proxies the request to the upstream server.`,
 			}
 
 			// Determine the URL to use in Shopware config
-			configURL := fmt.Sprintf("http://localhost:%s", imageProxyPort)
+			configURL := "http://localhost:" + imageProxyPort
 			if imageProxyExternalURL != "" {
 				configURL = strings.TrimSuffix(imageProxyExternalURL, "/")
 			}

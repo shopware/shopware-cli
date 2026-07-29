@@ -30,7 +30,7 @@ func installComposerDeps(ctx context.Context, rootDir string, checkAgainst strin
 		if len(suggets) > 0 {
 			additionalParams := []string{"require", "--prefer-dist", "--no-interaction", "--no-progress", "--no-plugins", "--no-scripts", "--ignore-platform-reqs"}
 			for _, suggest := range suggets {
-				additionalParams = append(additionalParams, fmt.Sprintf("%s:*", suggest))
+				additionalParams = append(additionalParams, suggest+":*")
 			}
 
 			composerInstall := exec.CommandContext(ctx, "composer", additionalParams...)

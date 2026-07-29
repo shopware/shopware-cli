@@ -4,6 +4,7 @@ import (
 	"compress/gzip"
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -186,11 +187,11 @@ func assembleConnectionURI(cmd *cobra.Command) (*mysql.Config, error) {
 	if cmd.Flags().Changed("password") {
 		if password == passwordFlagPrompt {
 			if !system.IsInteractionEnabled(cmd.Context()) {
-				return nil, fmt.Errorf("cannot prompt for password: interaction disabled")
+				return nil, errors.New("cannot prompt for password: interaction disabled")
 			}
 
 			if !term.IsTerminal(os.Stdin.Fd()) {
-				return nil, fmt.Errorf("cannot prompt for password: stdin is not a terminal")
+				return nil, errors.New("cannot prompt for password: stdin is not a terminal")
 			}
 
 			fmt.Fprint(cmd.ErrOrStderr(), "Enter MySQL password: ") //nolint:errcheck // prompt output is best-effort, ReadPassword surfaces real terminal errors

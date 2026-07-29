@@ -148,7 +148,7 @@ func addComposerReplacements(composer map[string]interface{}, minVersion string)
 	}
 
 	for _, component := range components {
-		packageName := fmt.Sprintf("shopware/%s", component)
+		packageName := "shopware/" + component
 
 		if _, ok := require.(map[string]interface{})[packageName]; ok {
 			composerFile, err := composerInfo.Open(fmt.Sprintf("%s/%s.json", minVersion, component))

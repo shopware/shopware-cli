@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"image/color"
 	"io"
@@ -646,7 +647,7 @@ func startWatcher(name string, prepare func(ctx context.Context, out io.Writer) 
 				stopCtx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 				_ = process.Stop(stopCtx)
 				cancel()
-				running <- fmt.Errorf("watcher stopped")
+				running <- errors.New("watcher stopped")
 				return
 			}
 

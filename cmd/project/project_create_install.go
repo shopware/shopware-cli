@@ -3,6 +3,7 @@ package project
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -140,7 +141,7 @@ func handleSecurityBlockedInstall(ctx context.Context, opts *createOptions, chos
 	}
 
 	if continueAnyway == tui.No {
-		return fmt.Errorf("project creation cancelled")
+		return errors.New("project creation cancelled")
 	}
 
 	opts.noAudit = true
@@ -165,7 +166,7 @@ func runComposerInstall(ctx context.Context, projectFolder string, useDocker boo
 		dockerArgs := []string{"run",
 			"--rm",
 			"--pull=always",
-			"-v", fmt.Sprintf("%s:/app", absProjectFolder),
+			"-v", absProjectFolder + ":/app",
 			"-w", "/app"}
 
 		dockerArgs = append(dockerArgs, system.DockerRunUserArgs(absProjectFolder)...)
@@ -175,7 +176,7 @@ func runComposerInstall(ctx context.Context, projectFolder string, useDocker boo
 			if err == nil {
 				composerDir := filepath.Join(homeDir, ".composer")
 				_ = os.MkdirAll(composerDir, 0o755)
-				dockerArgs = append(dockerArgs, "-v", fmt.Sprintf("%s:/tmp/composer/", composerDir))
+				dockerArgs = append(dockerArgs, "-v", composerDir+":/tmp/composer/")
 			}
 		}
 

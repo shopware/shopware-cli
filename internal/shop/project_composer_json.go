@@ -3,6 +3,7 @@ package shop
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -248,7 +249,7 @@ func getLatestFallbackVersion(ctx context.Context, branch string) (string, error
 	matches := kernelFallbackRegExp.FindSubmatch(content)
 
 	if len(matches) < 2 {
-		return "", fmt.Errorf("could not determine shopware version")
+		return "", errors.New("could not determine shopware version")
 	}
 
 	return string(matches[1]), nil

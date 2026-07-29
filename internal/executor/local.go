@@ -88,7 +88,7 @@ func applyLocalEnv(projectRoot string, env map[string]string, cmd *exec.Cmd) {
 	cmd.Env = os.Environ()
 
 	if projectRoot != "" {
-		cmd.Env = append(cmd.Env, fmt.Sprintf("PROJECT_ROOT=%s", projectRoot))
+		cmd.Env = append(cmd.Env, "PROJECT_ROOT="+projectRoot)
 	}
 
 	for k, v := range env {

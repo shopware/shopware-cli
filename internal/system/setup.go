@@ -2,6 +2,7 @@ package system
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -81,14 +82,14 @@ func CheckProjectDependencies(ctx context.Context, useDocker bool, phpConstraint
 		missing = append(missing, MissingDependency{Name: "PHP 8.2+", Reason: "not installed"})
 	case !phpOk:
 		installed, _ := GetInstalledPHPVersion(ctx)
-		missing = append(missing, MissingDependency{Name: "PHP 8.2+", Reason: fmt.Sprintf("found PHP %s", strings.TrimSpace(installed))})
+		missing = append(missing, MissingDependency{Name: "PHP 8.2+", Reason: "found PHP " + strings.TrimSpace(installed)})
 	default:
 		if phpConstraint != nil {
 			installed, _ := GetInstalledPHPVersion(ctx)
 			if installed != "" && !phpConstraint.Check(installed) {
 				missing = append(missing, MissingDependency{
 					Name:   fmt.Sprintf("PHP %s", phpConstraint),
-					Reason: fmt.Sprintf("found PHP %s", strings.TrimSpace(installed)),
+					Reason: "found PHP " + strings.TrimSpace(installed),
 				})
 			}
 		}
@@ -112,7 +113,7 @@ func ValidateProjectDependencies(ctx context.Context, useDocker bool, phpConstra
 	}
 
 	fmt.Fprintln(os.Stderr, RenderMissingDependencies(useDocker, missing, action, dockerHint))
-	return fmt.Errorf("missing required dependencies")
+	return errors.New("missing required dependencies")
 }
 
 // phpDependencyConstraint returns the constraint text from a PHP-related

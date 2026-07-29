@@ -1,6 +1,7 @@
 package executor
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -21,7 +22,7 @@ func New(projectRoot string, cfg *shop.EnvironmentConfig, shopCfg *shop.Config) 
 	case TypeSymfonyCLI:
 		path := pathToSymfonyCLI()
 		if path == "" {
-			return nil, fmt.Errorf("symfony CLI not found in PATH")
+			return nil, errors.New("symfony CLI not found in PATH")
 		}
 		return &SymfonyCLIExecutor{BinaryPath: path, projectRoot: projectRoot, shopCfg: shopCfg, envCfg: cfg}, nil
 	case TypeDocker:

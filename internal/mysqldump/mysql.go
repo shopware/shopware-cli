@@ -589,9 +589,11 @@ func (d *Dumper) getProperEscapedValue(col *sql.RawBytes, table, columnName stri
 
 func (d *Dumper) generateInsertStatement(cols []string, table string) string {
 	s := fmt.Sprintf("INSERT INTO `%s` (", table)
+	var sSb592 strings.Builder
 	for _, col := range cols {
-		s += fmt.Sprintf("%s, ", col)
+		sSb592.WriteString(col + ", ")
 	}
+	s += sSb592.String()
 
 	return s[:len(s)-2] + ") VALUES"
 }

@@ -3,7 +3,6 @@ package shop
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"os"
 	"os/exec"
 	"path"
@@ -27,7 +26,7 @@ func (c ConsoleResponse) GetCommandOptions(name string) []string {
 		if !command.Hidden && command.Name == name {
 			options := make([]string, 0)
 			for optionName := range command.Definition.Options {
-				options = append(options, fmt.Sprintf("--%s", optionName))
+				options = append(options, "--"+optionName)
 			}
 
 			return options

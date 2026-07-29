@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"context"
 	_ "embed"
-	"fmt"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -68,7 +68,7 @@ func (s ShopwareProjectScaffold) Validate() error {
 		return err
 	}
 	if s.Version == "" {
-		return fmt.Errorf("project version must not be empty")
+		return errors.New("project version must not be empty")
 	}
 	if err := ValidateDeploymentMethod(s.DeploymentMethod); err != nil {
 		return err

@@ -2,6 +2,7 @@ package upgrade
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"path/filepath"
@@ -57,7 +58,7 @@ func (u *ProjectUpgrader) RunHeadless(ctx context.Context, opts HeadlessOptions)
 		}
 	}
 	if readiness.Blocked() {
-		return fmt.Errorf("the project is not ready to upgrade; fix the failing checks above")
+		return errors.New("the project is not ready to upgrade; fix the failing checks above")
 	}
 
 	catalog, err := u.LoadCatalog(ctx, readiness.CurrentVersion)
@@ -148,12 +149,12 @@ func selectTarget(catalog *Catalog, target string) (*VersionOption, error) {
 		return nil, fmt.Errorf("--target is required in non-interactive mode; available versions:\n%s", availableTargets(catalog))
 	case TargetRecommended:
 		if catalog.Recommended < 0 || catalog.Recommended >= len(catalog.Options) {
-			return nil, fmt.Errorf("no recommended version available")
+			return nil, errors.New("no recommended version available")
 		}
 		return &catalog.Options[catalog.Recommended], nil
 	case TargetLatestPatch:
 		if catalog.LatestPatch < 0 || catalog.LatestPatch >= len(catalog.Options) {
-			return nil, fmt.Errorf("no newer patch release of the current minor available")
+			return nil, errors.New("no newer patch release of the current minor available")
 		}
 		return &catalog.Options[catalog.LatestPatch], nil
 	}
