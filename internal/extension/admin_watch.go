@@ -11,6 +11,30 @@ import (
 	"github.com/shopware/shopware-cli/internal/npm"
 )
 
+// Default ports of the administration dev server, chosen by the platform's
+// build tooling.
+const (
+	AdminVitePort    = 5173
+	AdminWebpackPort = 8080
+)
+
+// AdminDevServerPort returns the port of the dev server that
+// PrepareAdminWatcher's `npm run dev` starts. The port is chosen by the
+// platform's own build setup, so it is detected from the Administration app
+// rather than inferred from a version: a Vite config (Shopware 6.7+) serves on
+// 5173, a webpack config (older versions) on 8080.
+func AdminDevServerPort(projectRoot string) int {
+	adminApp := PlatformPath(projectRoot, "Administration", "Resources/app/administration")
+	if matches, _ := filepath.Glob(filepath.Join(adminApp, "vite.config.*")); len(matches) > 0 {
+		return AdminVitePort
+	}
+	if _, err := os.Stat(filepath.Join(adminApp, "webpack.config.js")); err == nil {
+		return AdminWebpackPort
+	}
+	// Neither found (e.g. platform not installed yet): assume current tooling.
+	return AdminVitePort
+}
+
 // PrepareAdminWatcher runs the admin watcher preparation steps and returns the
 // dev server process. When out is non-nil, the output of every preparation step
 // (feature:dump, npm install, schema generation) is streamed to it so the steps

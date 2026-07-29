@@ -55,6 +55,7 @@ type OverviewModel struct {
 	sfWatchRunning     bool
 	sfWatchStarting    bool
 	shopwareVersion    string
+	adminWatchURL      string
 	securityEnd        time.Time
 	health             []healthCheck
 	healthLoading      bool
@@ -229,6 +230,7 @@ func NewOverviewModel(envType, shopURL, username, password, projectRoot string, 
 		envType:       envType,
 		shopURL:       shopURL,
 		adminURL:      deriveAdminURL(shopURL),
+		adminWatchURL: fmt.Sprintf("http://127.0.0.1:%d", extension.AdminDevServerPort(projectRoot)),
 		username:      username,
 		password:      password,
 		projectRoot:   projectRoot,
@@ -527,7 +529,7 @@ func (m OverviewModel) renderWatchers() string {
 	var s strings.Builder
 	s.WriteString(tui.TitleStyle.Render("Watchers"))
 	s.WriteString("\n")
-	s.WriteString(m.renderWatcherStatus("Admin", m.adminWatchRunning, m.adminWatchStarting, "http://127.0.0.1:5173", m.cursor == 0))
+	s.WriteString(m.renderWatcherStatus("Admin", m.adminWatchRunning, m.adminWatchStarting, m.adminWatchURL, m.cursor == 0))
 	s.WriteString(m.renderWatcherStatus("Storefront", m.sfWatchRunning, m.sfWatchStarting, "http://127.0.0.1:9998", m.cursor == 1))
 	return s.String()
 }
