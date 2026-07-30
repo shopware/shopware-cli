@@ -242,7 +242,39 @@ func (e *proxyEnvironment) up(cmd *cobra.Command) error {
 		fmt.Println()
 	}
 
+	maybePrintWSLWindowsAccess(proxyBrowserHostnames(e.projectRoot, e.hostname))
+
 	return nil
+}
+
+// proxyBrowserHostnames returns the shop's proxy hostnames (root + routed
+// subdomains) for the WSL Windows hosts line, reading the optional AMQP and
+// Elasticsearch services from the project's composer.lock.
+func proxyBrowserHostnames(projectRoot, hostname string) []string {
+	hasAMQP, hasElasticsearch := false, false
+	if lock, err := composer.ReadLock(filepath.Join(projectRoot, "composer.lock")); err == nil {
+		hasAMQP = lock.GetPackage("symfony/amqp-messenger") != nil
+		hasElasticsearch = lock.GetPackage("shopware/elasticsearch") != nil
+	}
+	return proxy.ProxyHostnames(hostname, hasAMQP, hasElasticsearch)
+}
+
+// maybePrintWSLWindowsAccess prints the one-time Windows-side steps (import the
+// CA, add the hosts entries) needed to reach proxy shops from a browser on
+// Windows, but only when running under WSL — the machine setup configures just
+// the Linux side. hostnames may be nil (e.g. `proxy setup` run outside a
+// project), in which case the guidance points at `proxy up` for the exact line.
+func maybePrintWSLWindowsAccess(hostnames []string) {
+	if !system.IsWSL() {
+		return
+	}
+
+	caPath, err := proxy.CACertPath()
+	if err != nil {
+		return
+	}
+
+	printWSLGuidance(proxy.WSLWindowsAccessGuidance(caPath, hostnames))
 }
 
 // prepareProxyInfra brings up everything the shared proxy needs before a

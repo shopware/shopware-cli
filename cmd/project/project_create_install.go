@@ -143,6 +143,11 @@ func printCreateSummary(ctx context.Context, opts *createOptions) {
 		fmt.Printf("  %s  %s\n", tui.GreenText.Render("Storefront:"), tui.BoldText.Render(shopURL))
 		fmt.Printf("  %s  %s\n", tui.GreenText.Render("Admin:"), tui.BoldText.Render(shopURL+"/admin"))
 		fmt.Printf("  %s  %s\n", tui.GreenText.Render("Credentials:"), tui.BoldText.Render("admin")+" / "+tui.BoldText.Render("shopware"))
+
+		if opts.useLocalDomain {
+			hostname := localDomainHostname(opts.projectFolder, proxyBaseDomain())
+			maybePrintWSLWindowsAccess(proxyBrowserHostnames(opts.projectFolder, hostname))
+		}
 	}
 
 	fmt.Println()

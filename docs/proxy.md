@@ -268,6 +268,72 @@ first broken layer with a plain-language hint (including what to ask an IT
 team when sudo is blocked, and likely causes such as VPN DNS interception).
 Every failure mode the messages describe is unit-tested.
 
+## Running under WSL2
+
+shopware-cli runs inside the WSL distro, but your **browser runs on Windows** — a
+different OS with its own DNS resolver and its own certificate trust store. The
+proxy setup only configures the Linux side, so two things need manual, one-time
+attention. The CLI detects WSL and prints the exact copy-pasteable commands at the
+end of `proxy setup`, `proxy up` and `project create`; this section explains why.
+
+### 1. DNS inside WSL
+
+`proxy setup` writes the systemd-resolved drop-in as on any Linux. But WSL by
+default **regenerates `/etc/resolv.conf`** on every start, pointing it at the WSL
+NAT gateway (`172.x`) instead of systemd-resolved's stub (`127.0.0.53`) — so the
+drop-in is never consulted and `*.shopware.local` does not resolve even inside
+WSL. Fix it once:
+
+```ini
+# /etc/wsl.conf
+[boot]
+systemd=true
+
+[network]
+generateResolvConf=false
+```
+
+```bash
+sudo ln -sf /run/systemd/resolve/stub-resolv.conf /etc/resolv.conf
+```
+
+Then, from **Windows** PowerShell, `wsl --shutdown` and reopen WSL. Now
+`/etc/resolv.conf` points at `127.0.0.53`, systemd-resolved answers, and the
+drop-in routes `*.shopware.local` to the embedded DNS server. (If WSL's own
+internet DNS breaks afterwards, give resolved an upstream:
+`sudo resolvectl dns eth0 <gateway-ip>`.)
+
+### 2. Reaching the shop from the Windows browser
+
+Windows does not use WSL's resolver or trust store, so a browser on Windows needs
+two things the CLI cannot do from inside the subsystem (it prints them via
+`WSLWindowsAccessGuidance`):
+
+- **Trust the CA.** In WSL, copy the CA out to Windows:
+  ```bash
+  cp ~/.local/share/mkcert/rootCA.pem /mnt/c/Users/Public/shopware-cli-rootCA.pem
+  ```
+  Then, in a Windows terminal opened **as Administrator**, import it:
+  ```
+  certutil -addstore -f ROOT C:\Users\Public\shopware-cli-rootCA.pem
+  ```
+  `~/.local/share/mkcert/rootCA.pem` is the default CA location; if you set
+  `CAROOT`, use that directory instead (the CLI prints the exact path). `C:\Users\Public`
+  is world-accessible so the commands carry no username. Chrome and Edge use the
+  Windows store; Firefox needs its own import or
+  `security.enterprise_roots.enabled = true`. Restart the browser after.
+- **Resolve the hostnames.** Windows has no split-DNS to the embedded server, so
+  add the shop's hostnames to the Windows hosts file (no wildcards, so every
+  subdomain sits on one line), editing it **as Administrator**:
+  ```
+  # C:\Windows\System32\drivers\etc\hosts
+  127.0.0.1 shop1.shopware.local admin-watch.shop1.shopware.local storefront-watch.shop1.shopware.local adminer.shop1.shopware.local mailer.shop1.shopware.local
+  ```
+  `proxy up` prints this exact line for the current shop, including any
+  `lavinmq`/`opensearch` subdomains the project uses.
+
+The CA import is one-time per machine; the hosts line is per shop.
+
 ## Known limitations
 
 - **Windows is not supported** (stubs return a clear error; the CLI itself
@@ -294,6 +360,8 @@ Every failure mode the messages describe is unit-tested.
   Traefik routes the subdomains and proxies websockets, but Vite's HMR client
   URL and `allowedHosts` must point at the proxy hostname — that config lives
   in `docker-dev` / the Vite setup, so it is a separate, cross-repo workstream.
-- **WSL2 is unaddressed.** Native Windows is a clean "not supported"; WSL2
-  (daemon in the distro, browser on the Windows side) would need extra
-  resolver wiring and is out of scope for now.
+- **WSL2 needs manual Windows-side steps.** Native Windows is a clean "not
+  supported". WSL2 works, but because the daemon runs in the distro and the
+  browser runs on Windows, it needs one-time manual wiring: disabling WSL's
+  resolv.conf regeneration, and adding the CA and hostnames on the Windows side.
+  The CLI detects WSL and prints the exact steps — see "Running under WSL2".

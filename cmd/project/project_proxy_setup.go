@@ -134,8 +134,34 @@ Both steps are idempotent; run it again anytime to repair the setup.`,
 			return ErrProxyVerificationFailed
 		}
 
+		// Under WSL the setup only touched the Linux side; reaching shops from a
+		// Windows browser needs manual steps. Use the current project's hostnames
+		// when setup is run inside one, otherwise a generic pointer.
+		maybePrintWSLWindowsAccess(setupProjectHostnames(ctx))
+
 		return nil
 	},
+}
+
+// setupProjectHostnames returns the proxy hostnames of the project in the
+// current directory for the WSL guidance, or nil when `proxy setup` is not run
+// inside a project (it is a machine-wide command).
+func setupProjectHostnames(ctx context.Context) []string {
+	if !system.IsWSL() {
+		return nil
+	}
+
+	projectRoot, err := findClosestShopwareProject()
+	if err != nil {
+		return nil
+	}
+
+	env, err := newProxyEnvironmentForRoot(ctx, projectRoot, filepath.Join(projectRoot, ".shopware-project.yml"))
+	if err != nil {
+		return nil
+	}
+
+	return proxyBrowserHostnames(projectRoot, env.hostname)
 }
 
 // runInlineProxySetup performs the one-time, sudo-requiring machine setup —
@@ -205,6 +231,20 @@ func printGuidance(guidance string) {
 			fmt.Println(tui.DimText.Render("  " + line))
 		}
 	}
+}
+
+// printWSLGuidance renders informational (non-error) WSL guidance: a bold
+// headline followed by dimmed body and commands, framed by blank lines.
+func printWSLGuidance(guidance string) {
+	fmt.Println()
+	for i, line := range strings.Split(strings.TrimRight(guidance, "\n"), "\n") {
+		if i == 0 {
+			fmt.Println(tui.BoldText.Render("  " + line))
+		} else {
+			fmt.Println(tui.DimText.Render("  " + line))
+		}
+	}
+	fmt.Println()
 }
 
 // domainChange is a validated but not yet persisted --domain override. It is
