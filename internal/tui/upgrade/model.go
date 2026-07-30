@@ -11,6 +11,7 @@ import (
 
 	"github.com/shopware/shopware-cli/internal/executor"
 	backend "github.com/shopware/shopware-cli/internal/shop/upgrade"
+	"github.com/shopware/shopware-cli/internal/tui"
 	"github.com/shopware/shopware-cli/internal/tui/app"
 )
 
@@ -38,6 +39,7 @@ type Model struct {
 	opts     Options
 	host     app.Host
 	upgrader *backend.ProjectUpgrader
+	header   tui.Header
 
 	width      int
 	mainHeight int
@@ -60,6 +62,7 @@ func New(opts Options) *Model {
 	return &Model{
 		opts:     opts,
 		upgrader: backend.NewProjectUpgrader(opts.ProjectRoot, opts.Executor),
+		header:   tui.NewHeader(),
 		panel:    panelIntro,
 		intro:    newIntroState(),
 		check:    newCheckState(),
@@ -96,7 +99,7 @@ func newAppWithModel(opts Options) (*app.App, *Model) {
 }
 
 func (m *Model) Init() tea.Cmd {
-	return nil
+	return m.header.Init()
 }
 
 // handleQuit implements the quit-key behavior: during a running upgrade,
@@ -110,6 +113,15 @@ func (m *Model) handleQuit() tea.Cmd {
 }
 
 func (m *Model) Update(msg tea.Msg) (app.Content, tea.Cmd) {
+	var headerCmd tea.Cmd
+	m.header, headerCmd = m.header.Update(msg)
+
+	content, cmd := m.updatePanel(msg)
+	return content, tea.Batch(headerCmd, cmd)
+}
+
+// updatePanel routes a message to the active panel.
+func (m *Model) updatePanel(msg tea.Msg) (app.Content, tea.Cmd) {
 	if msg, ok := msg.(tea.WindowSizeMsg); ok {
 		m.width = msg.Width
 		m.mainHeight = msg.Height - chromeRows

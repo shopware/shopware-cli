@@ -39,9 +39,9 @@ func (m Model) windowTitle() string {
 // branding line everywhere else.
 func (m Model) chromeHeader(ctx app.Context) string {
 	if m.phase == phaseDashboard {
-		return buildTabHeader(int(m.activeTab), ctx.Width)
+		return buildTabHeader(m.header, int(m.activeTab), ctx.Width)
 	}
-	return tui.BrandingHeader(ctx.Width)
+	return m.header.View(ctx.Width)
 }
 
 // chromeFooter renders the shell footer: tab-specific shortcuts on the

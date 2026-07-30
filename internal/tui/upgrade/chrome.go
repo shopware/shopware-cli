@@ -14,7 +14,7 @@ const chromeRows = 2
 
 // headerView renders the shared branding header as host chrome.
 func (m *Model) headerView(ctx app.Context) string {
-	return tui.BrandingHeader(ctx.Width)
+	return m.header.View(ctx.Width)
 }
 
 // footerView renders the shared phase footer: the active panel's shortcuts

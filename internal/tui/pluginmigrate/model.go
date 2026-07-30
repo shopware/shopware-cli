@@ -41,6 +41,7 @@ type Model struct {
 	opts     Options
 	host     app.Host
 	migrator *migrate.PluginMigrator
+	header   tui.Header
 
 	width      int
 	mainHeight int
@@ -78,6 +79,7 @@ func New(opts Options) *Model {
 	return &Model{
 		opts:       opts,
 		migrator:   migrate.NewPluginMigrator(opts.ProjectRoot, opts.Executor),
+		header:     tui.NewHeader(),
 		panel:      panelWelcome,
 		welcomeYes: true,
 		tokenInput: ti,
@@ -113,7 +115,7 @@ func newAppWithModel(opts Options) (*app.App, *Model) {
 }
 
 func (m *Model) Init() tea.Cmd {
-	return scanCmd(m.migrator)
+	return tea.Batch(m.header.Init(), scanCmd(m.migrator))
 }
 
 // handleQuit implements the quit-key behavior: during a running migration,
@@ -129,6 +131,15 @@ func (m *Model) handleQuit() tea.Cmd {
 }
 
 func (m *Model) Update(msg tea.Msg) (app.Content, tea.Cmd) {
+	var headerCmd tea.Cmd
+	m.header, headerCmd = m.header.Update(msg)
+
+	content, cmd := m.updatePanel(msg)
+	return content, tea.Batch(headerCmd, cmd)
+}
+
+// updatePanel routes a message to the active panel.
+func (m *Model) updatePanel(msg tea.Msg) (app.Content, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.width = msg.Width

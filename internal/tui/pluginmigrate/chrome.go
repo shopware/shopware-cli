@@ -15,7 +15,7 @@ import (
 const chromeRows = 2
 
 func (m *Model) headerView(ctx app.Context) string {
-	return tui.BrandingHeader(ctx.Width)
+	return m.header.View(ctx.Width)
 }
 
 func (m *Model) windowTitle(app.Context) string {
