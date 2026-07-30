@@ -314,7 +314,7 @@ var projectCI = &cobra.Command{
 			deleteAssetsSection.End(cmd.Context())
 		}
 
-		if !shopCfg.Build.DisableChecksum {
+		if !shopCfg.Build.DisableChecksums {
 			checksumSection := ci.Default.Section(cmd.Context(), "Generating extension checksums")
 
 			extensions := extension.FindExtensionsFromProject(cmd.Context(), args[0], false)
@@ -322,7 +322,7 @@ var projectCI = &cobra.Command{
 			for _, ext := range extensions {
 				extPath := ext.GetPath()
 
-				if shopCfg.Build.KeepExistingChecksum {
+				if shopCfg.Build.KeepExistingChecksums {
 					if _, err := os.Stat(path.Join(extPath, "checksum.json")); err == nil {
 						logging.FromContext(cmd.Context()).Infof("Keeping existing checksum.json for %s", extPath)
 						continue
