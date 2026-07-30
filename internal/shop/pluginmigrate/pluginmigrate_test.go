@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/charmbracelet/x/ansi"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -398,4 +399,107 @@ func TestConsumeRunEventsReturnsFailureThatAlsoHasOutput(t *testing.T) {
 
 	assert.ErrorIs(t, err, runErr)
 	assert.Contains(t, out.String(), "rollback detail")
+}
+
+// headlessMigrator returns a migrator with all network seams stubbed.
+func headlessMigrator(dir string, exec executor.Executor, store map[string]struct{}, storeErr error) *PluginMigrator {
+	m := NewPluginMigrator(dir, exec)
+	m.storePackageNames = func(context.Context, string) (map[string]struct{}, error) {
+		return store, storeErr
+	}
+	m.publishedVersions = func(context.Context, []string) map[string][]string {
+		return nil
+	}
+	return m
+}
+
+func TestRunHeadlessNothingToDo(t *testing.T) {
+	dir := setupProject(t)
+	require.NoError(t, os.RemoveAll(filepath.Join(dir, "custom")))
+	m := headlessMigrator(dir, trueExecutor(), nil, nil)
+
+	var out bytes.Buffer
+	require.NoError(t, m.RunHeadless(t.Context(), HeadlessOptions{Out: &out}))
+	assert.Contains(t, ansi.Strip(out.String()), "already managed through Composer")
+}
+
+func TestRunHeadlessInvalidToken(t *testing.T) {
+	dir := setupProject(t)
+	m := headlessMigrator(dir, trueExecutor(), nil, errors.New("401 unauthorized"))
+
+	var out bytes.Buffer
+	err := m.RunHeadless(t.Context(), HeadlessOptions{Token: "bad", Out: &out})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "SHOPWARE_PACKAGIST_TOKEN")
+}
+
+func TestRunHeadlessDryRun(t *testing.T) {
+	dir := setupProject(t)
+	before, err := os.ReadFile(filepath.Join(dir, "composer.json"))
+	require.NoError(t, err)
+	m := headlessMigrator(dir, trueExecutor(), storeSet(), nil)
+
+	var out bytes.Buffer
+	require.NoError(t, m.RunHeadless(t.Context(), HeadlessOptions{Token: "tok", DryRun: true, Out: &out}))
+
+	content := ansi.Strip(out.String())
+	assert.Contains(t, content, "StorePlugin")
+	assert.Contains(t, content, "require from Shopware Store")
+	assert.Contains(t, content, "LocalPlugin")
+	assert.Contains(t, content, "manage via path repository")
+	assert.Contains(t, content, "Dry run — nothing was modified.")
+
+	after, err := os.ReadFile(filepath.Join(dir, "composer.json"))
+	require.NoError(t, err)
+	assert.Equal(t, string(before), string(after))
+}
+
+func TestRunHeadlessWithoutTokenExecutes(t *testing.T) {
+	dir := setupProject(t)
+	m := headlessMigrator(dir, trueExecutor(), nil, nil)
+
+	var out bytes.Buffer
+	require.NoError(t, m.RunHeadless(t.Context(), HeadlessOptions{Out: &out}))
+
+	content := ansi.Strip(out.String())
+	assert.Contains(t, content, "No SHOPWARE_PACKAGIST_TOKEN set")
+	assert.Contains(t, content, "All extensions are now managed through Composer.")
+
+	composerJSON, err := os.ReadFile(filepath.Join(dir, "composer.json"))
+	require.NoError(t, err)
+	assert.Contains(t, string(composerJSON), "custom/plugins/LocalPlugin")
+	assert.Contains(t, string(composerJSON), "custom/plugins/StorePlugin")
+}
+
+func TestRunHeadlessFailingRequireReportsRestore(t *testing.T) {
+	dir := setupProject(t)
+	exec := trueExecutor()
+	exec.composer = func(ctx context.Context, _ ...string) *executor.Process {
+		return shellProcess(ctx, "echo boom >&2; exit 2")
+	}
+	m := headlessMigrator(dir, exec, nil, nil)
+
+	var out bytes.Buffer
+	err := m.RunHeadless(t.Context(), HeadlessOptions{Out: &out})
+	require.Error(t, err)
+	assert.Contains(t, ansi.Strip(out.String()), "were restored")
+}
+
+func TestRunHeadlessNothingActionable(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, filepath.Join(dir, "composer.json"), `{"require": {"shopware/core": "6.6.10.3"}}`)
+	// An extension without a composer package name cannot be migrated.
+	writeFile(t, filepath.Join(dir, "custom", "plugins", "Broken", "composer.json"), `{
+		"type": "shopware-platform-plugin",
+		"version": "1.0.0",
+		"require": {"shopware/core": "~6.6.0"},
+		"extra": {"shopware-plugin-class": "Broken\\Broken", "label": {"en-GB": "Broken"}},
+		"autoload": {"psr-4": {"Broken\\": "src/"}}
+	}`)
+	m := headlessMigrator(dir, trueExecutor(), nil, nil)
+
+	var out bytes.Buffer
+	err := m.RunHeadless(t.Context(), HeadlessOptions{Out: &out})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "none of the extensions can be migrated automatically")
 }

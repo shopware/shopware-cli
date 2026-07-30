@@ -251,3 +251,49 @@ func TestNilCommandRegistryRegisterIsSafe(t *testing.T) {
 		registry.Register(Command{ID: "ignored"})
 	})
 }
+
+func TestSetContentSizesImmediately(t *testing.T) {
+	a := New(Options{})
+	a.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
+
+	leaf := &sizeLeaf{}
+	a.SetContent(leaf)
+
+	assert.Equal(t, 80, leaf.w, "content set after the first resize is sized without waiting for the next one")
+	assert.Equal(t, 24, leaf.h)
+	assert.Same(t, leaf, a.Content())
+}
+
+func TestSetContentBeforeSizeIsDeferred(t *testing.T) {
+	a := New(Options{})
+	leaf := &sizeLeaf{}
+	a.SetContent(leaf)
+	assert.Zero(t, leaf.w, "no size known yet")
+
+	a.Update(tea.WindowSizeMsg{Width: 60, Height: 20})
+	assert.Equal(t, 60, leaf.w, "the resize sizes the deferred content")
+}
+
+func TestOverlayStackAccessors(t *testing.T) {
+	a := New(Options{})
+	assert.Nil(t, a.TopOverlay())
+
+	o := &testOverlay{}
+	cmd := a.PushOverlay(o)
+	if cmd != nil {
+		cmd()
+	}
+	assert.Same(t, Overlay(o), a.TopOverlay())
+	assert.True(t, a.OverlayOpen())
+
+	a.PopOverlay()
+	assert.Nil(t, a.TopOverlay())
+	assert.False(t, a.OverlayOpen())
+}
+
+func TestStatusRoundTrip(t *testing.T) {
+	a := New(Options{})
+	assert.Empty(t, a.Status())
+	a.SetStatus("busy")
+	assert.Equal(t, "busy", a.Status())
+}

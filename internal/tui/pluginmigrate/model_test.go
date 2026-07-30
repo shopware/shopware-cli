@@ -240,3 +240,70 @@ func TestDonePanelFailure(t *testing.T) {
 	require.NotNil(t, cmd)
 	assert.IsType(t, tea.QuitMsg{}, cmd())
 }
+
+// wizardAtReview drives the wizard to the review panel with a path-repo plan.
+func wizardAtReview(t *testing.T) *wizard {
+	t.Helper()
+	w := wizardAtToken(t)
+	w.Send(specialKey(tea.KeyDown))
+	w.Send(specialKey(tea.KeyEnter))
+	w.Send(availabilityMsg{token: ""})
+	require.Equal(t, panelReview, w.m.panel)
+	return w
+}
+
+func TestReviewCancelQuits(t *testing.T) {
+	w := wizardAtReview(t)
+
+	// Right focuses Cancel; enter on it quits without touching anything.
+	w.Send(specialKey(tea.KeyRight))
+	cmd := w.Send(specialKey(tea.KeyEnter))
+	require.NotNil(t, cmd)
+	assert.IsType(t, tea.QuitMsg{}, cmd())
+}
+
+func TestReviewEscReturnsToToken(t *testing.T) {
+	w := wizardAtReview(t)
+	w.Send(specialKey(tea.KeyEscape))
+	assert.Equal(t, panelToken, w.m.panel)
+}
+
+func TestReviewApplyRunsMigrationToDone(t *testing.T) {
+	w := wizardAtReview(t)
+
+	// Apply starts the real runner. The wizard's project root does not
+	// exist, so the runner fails at the backup step and rolls back — the
+	// wizard must still land on the failure done panel via the event stream.
+	cmd := w.Send(specialKey(tea.KeyEnter))
+	require.Equal(t, panelRun, w.m.panel)
+	require.NotNil(t, w.m.run.events)
+
+	for cmd != nil && w.m.panel == panelRun {
+		cmd = w.Send(cmd())
+	}
+
+	require.Equal(t, panelDone, w.m.panel)
+	assert.False(t, w.m.done.succeeded)
+	assert.Contains(t, w.view(t), "The migration did not complete.")
+}
+
+func TestReadRunEventCmdGuards(t *testing.T) {
+	assert.Equal(t, runClosedMsg{}, readRunEventCmd(nil)(), "nil channel must not block")
+
+	ch := make(chan migrate.StepEvent, 1)
+	ch <- migrate.StepEvent{Step: migrate.StepComposerRequire, State: migrate.StateRunning}
+	close(ch)
+	assert.Equal(t, runEventMsg(migrate.StepEvent{Step: migrate.StepComposerRequire, State: migrate.StateRunning}), readRunEventCmd(ch)())
+	assert.Equal(t, runClosedMsg{}, readRunEventCmd(ch)(), "closed channel ends the stream")
+}
+
+func TestDonePanelSuccessQuits(t *testing.T) {
+	w := newTestWizard(t)
+	w.m.panel = panelDone
+	w.m.done = doneState{succeeded: true}
+
+	assert.Contains(t, w.view(t), "All plugins are Composer-managed now!")
+	cmd := w.Send(specialKey(tea.KeyEnter))
+	require.NotNil(t, cmd)
+	assert.IsType(t, tea.QuitMsg{}, cmd())
+}
