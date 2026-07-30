@@ -127,6 +127,10 @@
           "type": "boolean",
           "description": "When enabled, the storefront build will be skipped"
         },
+        "disable_checksum": {
+          "type": "boolean",
+          "description": "When enabled, the checksum.json generation for extensions will be skipped"
+        },
         "force_extension_build": {
           "items": {
             "$ref": "#/$defs/ConfigBuildExtension"
