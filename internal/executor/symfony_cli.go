@@ -4,6 +4,8 @@ import (
 	"context"
 	"os/exec"
 
+	"github.com/go-sql-driver/mysql"
+
 	adminSdk "github.com/shopware/shopware-cli/internal/admin-api"
 	"github.com/shopware/shopware-cli/internal/shop"
 )
@@ -73,6 +75,10 @@ func (s *SymfonyCLIExecutor) WithRelDir(relDir string) Executor {
 
 func (s *SymfonyCLIExecutor) AdminAPIClient(ctx context.Context) (*adminSdk.Client, error) {
 	return adminAPIClient(ctx, s.shopCfg, s.envCfg)
+}
+
+func (s *SymfonyCLIExecutor) DatabaseConnection(ctx context.Context) (*mysql.Config, error) {
+	return localDatabaseConnection(ctx, s.projectRoot)
 }
 
 func (s *SymfonyCLIExecutor) StartEnvironment(_ context.Context) error {

@@ -684,3 +684,99 @@ func TestConfigBuildMJMLResolveIncludePaths(t *testing.T) {
 		assert.Equal(t, want, got)
 	})
 }
+
+func TestReadConfigSSHEnvironment(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, ".shopware-project.yml")
+	content := []byte(`
+url: https://example.com
+environments:
+  production:
+    type: ssh
+    url: https://shop.example.com
+    ssh:
+      host: shop.example.com
+      port: 2222
+      user: deploy
+      identity_file: ~/.ssh/id_ed25519
+      deployment:
+        path: /var/www/shopware
+        keep_releases: 3
+        shared_dirs:
+          - files
+          - public/media
+        shared_files:
+          - .env
+        hooks:
+          build:
+            - shopware-cli project ci .
+          pre_switch:
+            - vendor/bin/shopware-deployment-helper run
+          post_switch:
+            - php bin/console cache:pool:clear cache.http
+`)
+
+	assert.NoError(t, os.WriteFile(configPath, content, 0o644))
+
+	cfg, err := ReadConfig(t.Context(), configPath, false)
+	assert.NoError(t, err)
+
+	env, err := cfg.ResolveEnvironment("production")
+	assert.NoError(t, err)
+
+	assert.Equal(t, "ssh", env.Type)
+	assert.NotNil(t, env.SSH)
+	assert.Equal(t, "shop.example.com", env.SSH.Host)
+	assert.Equal(t, 2222, env.SSH.Port)
+	assert.Equal(t, "deploy", env.SSH.User)
+	assert.Equal(t, "~/.ssh/id_ed25519", env.SSH.IdentityFile)
+
+	assert.NotNil(t, env.SSH.Deployment)
+	assert.Equal(t, "/var/www/shopware", env.SSH.Deployment.Path)
+	assert.Equal(t, 3, env.SSH.Deployment.KeepReleases)
+	assert.ElementsMatch(t, []string{"files", "public/media"}, env.SSH.Deployment.SharedDirs)
+	assert.ElementsMatch(t, []string{".env"}, env.SSH.Deployment.SharedFiles)
+	assert.Equal(t, []string{"shopware-cli project ci ."}, env.SSH.Deployment.Hooks.Build)
+	assert.Equal(t, []string{"vendor/bin/shopware-deployment-helper run"}, env.SSH.Deployment.Hooks.PreSwitch)
+	assert.Equal(t, []string{"php bin/console cache:pool:clear cache.http"}, env.SSH.Deployment.Hooks.PostSwitch)
+}
+
+func TestEnvironmentSSHAllHosts(t *testing.T) {
+	ssh := &EnvironmentSSH{
+		Host:         "web1.example.com",
+		Port:         2222,
+		User:         "deploy",
+		IdentityFile: "~/.ssh/id_ed25519",
+		Hosts: []EnvironmentSSHHost{
+			{Host: "web2.example.com"},
+			{Host: "web3.example.com", Port: 22, User: "other"},
+		},
+	}
+
+	hosts := ssh.AllHosts()
+
+	assert.Len(t, hosts, 3)
+
+	assert.Equal(t, "web1.example.com", hosts[0].Host)
+	assert.Empty(t, hosts[0].Hosts)
+
+	// inherited settings
+	assert.Equal(t, "web2.example.com", hosts[1].Host)
+	assert.Equal(t, 2222, hosts[1].Port)
+	assert.Equal(t, "deploy", hosts[1].User)
+	assert.Equal(t, "~/.ssh/id_ed25519", hosts[1].IdentityFile)
+
+	// per-host overrides
+	assert.Equal(t, "web3.example.com", hosts[2].Host)
+	assert.Equal(t, 22, hosts[2].Port)
+	assert.Equal(t, "other", hosts[2].User)
+	assert.Equal(t, "~/.ssh/id_ed25519", hosts[2].IdentityFile)
+}
+
+func TestEnvironmentSSHAllHostsSingle(t *testing.T) {
+	ssh := &EnvironmentSSH{Host: "web1.example.com", User: "deploy"}
+
+	hosts := ssh.AllHosts()
+	assert.Len(t, hosts, 1)
+	assert.Equal(t, "web1.example.com", hosts[0].Host)
+}

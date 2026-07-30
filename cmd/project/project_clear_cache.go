@@ -22,6 +22,27 @@ var projectClearCacheCmd = &cobra.Command{
 			return err
 		}
 
+		// with a selected environment the executor decides how and where
+		// cache:clear runs (local, docker, ssh, ...)
+		if environmentName != "" {
+			// the project root is only needed by local executors, remote
+			// environments work from anywhere
+			projectRoot, _ := findClosestShopwareProject()
+
+			cmdExecutor, err := resolveExecutor(cmd, projectRoot)
+			if err != nil {
+				return err
+			}
+
+			logging.FromContext(cmd.Context()).Infof("Clearing cache on environment %s", environmentName)
+
+			p := cmdExecutor.ConsoleCommand(cmd.Context(), "cache:clear")
+			p.Cmd.Stdout = cmd.OutOrStdout()
+			p.Cmd.Stderr = cmd.ErrOrStderr()
+
+			return p.Run()
+		}
+
 		if cfg.AdminApi == nil {
 			logging.FromContext(cmd.Context()).Infof("Clearing cache localy")
 

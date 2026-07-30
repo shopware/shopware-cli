@@ -2,25 +2,18 @@ package project
 
 import (
 	"compress/gzip"
-	"context"
 	"database/sql"
 	"fmt"
 	"io"
-	"net"
-	"net/url"
 	"os"
 	"strings"
-	"time"
 
-	"github.com/charmbracelet/x/term"
 	"github.com/go-sql-driver/mysql"
 	"github.com/klauspost/compress/zstd"
 	"github.com/spf13/cobra"
 
-	"github.com/shopware/shopware-cli/internal/envfile"
 	"github.com/shopware/shopware-cli/internal/mysqldump"
 	"github.com/shopware/shopware-cli/internal/shop"
-	"github.com/shopware/shopware-cli/internal/system"
 	"github.com/shopware/shopware-cli/logging"
 )
 
@@ -28,11 +21,6 @@ const (
 	CompressionGzip = "gzip"
 	CompressionZstd = "zstd"
 )
-
-// passwordFlagPrompt is the sentinel value Cobra sets via NoOptDefVal when
-// --password/-p is passed without an argument. Any user with this literal
-// string as their password would need to use DATABASE_URL or an env file instead.
-const passwordFlagPrompt = "__INTERACTIVE__"
 
 var projectDatabaseDumpCmd = &cobra.Command{
 	Use:   "dump",
@@ -56,6 +44,9 @@ var projectDatabaseDumpCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
+		defer func() {
+			_ = db.Close()
+		}()
 
 		dumper := mysqldump.NewMySQLDumper(db)
 		dumper.LockTables = !skipLockTables
@@ -142,22 +133,18 @@ var projectDatabaseDumpCmd = &cobra.Command{
 }
 
 func assembleConnectionURI(cmd *cobra.Command) (*mysql.Config, error) {
-	cfg := &mysql.Config{
-		Loc:                  time.UTC,
-		Net:                  "tcp",
-		ParseTime:            false,
-		AllowNativePasswords: true,
-		CheckConnLiveness:    true,
-		User:                 "root",
-		Passwd:               "root",
-		Addr:                 "127.0.0.1:3306",
-		DBName:               "shopware",
+	// the executor decides where the database lives and how to reach it
+	// (local, docker, or through the ssh connection of a remote environment)
+	projectRoot, _ := findClosestShopwareProject()
+
+	cmdExecutor, err := resolveExecutor(cmd, projectRoot)
+	if err != nil {
+		return nil, err
 	}
 
-	if projectRoot, err := findClosestShopwareProject(); err == nil {
-		if err := loadDatabaseURLIntoConnection(cmd.Context(), projectRoot, cfg); err != nil {
-			return nil, err
-		}
+	cfg, err := cmdExecutor.DatabaseConnection(cmd.Context())
+	if err != nil {
+		return nil, err
 	}
 
 	host, _ := cmd.Flags().GetString("host")
@@ -183,75 +170,11 @@ func assembleConnectionURI(cmd *cobra.Command) (*mysql.Config, error) {
 		cfg.Passwd = ""
 	}
 
-	if cmd.Flags().Changed("password") {
-		if password == passwordFlagPrompt {
-			if !system.IsInteractionEnabled(cmd.Context()) {
-				return nil, fmt.Errorf("cannot prompt for password: interaction disabled")
-			}
-
-			if !term.IsTerminal(os.Stdin.Fd()) {
-				return nil, fmt.Errorf("cannot prompt for password: stdin is not a terminal")
-			}
-
-			fmt.Fprint(cmd.ErrOrStderr(), "Enter MySQL password: ") //nolint:errcheck // prompt output is best-effort, ReadPassword surfaces real terminal errors
-			pass, err := term.ReadPassword(os.Stdin.Fd())
-			fmt.Fprintln(cmd.ErrOrStderr()) //nolint:errcheck // trailing newline is best-effort
-
-			if err != nil {
-				return nil, fmt.Errorf("could not read password: %w", err)
-			}
-
-			cfg.Passwd = string(pass)
-		} else {
-			cfg.Passwd = password
-		}
+	if password != "" {
+		cfg.Passwd = password
 	}
 
 	return cfg, nil
-}
-
-func loadDatabaseURLIntoConnection(ctx context.Context, projectRoot string, cfg *mysql.Config) error {
-	if err := envfile.LoadSymfonyEnvFile(projectRoot); err != nil {
-		return err
-	}
-
-	databaseUrl := os.Getenv("DATABASE_URL")
-
-	if databaseUrl == "" {
-		return nil
-	}
-
-	logging.FromContext(ctx).Info("Using DATABASE_URL env as default connection string. options can override specific parts (--username=foo)")
-
-	parsedUri, err := url.Parse(databaseUrl)
-	if err != nil {
-		return fmt.Errorf("could not parse DATABASE_URL: %w", err)
-	}
-
-	if parsedUri.User != nil {
-		cfg.User = parsedUri.User.Username()
-
-		if password, ok := parsedUri.User.Password(); ok {
-			cfg.Passwd = password
-		} else {
-			// Reset password if it is not set
-			cfg.Passwd = ""
-		}
-	}
-
-	if parsedUri.Host != "" {
-		cfg.Addr = parsedUri.Host
-
-		if parsedUri.Port() == "" {
-			cfg.Addr = net.JoinHostPort(parsedUri.Host, "3306")
-		}
-	}
-
-	if parsedUri.Path != "" {
-		cfg.DBName = strings.Trim(parsedUri.Path, "/")
-	}
-
-	return nil
 }
 
 func init() {
@@ -259,8 +182,7 @@ func init() {
 	projectDatabaseDumpCmd.Flags().String("host", "", "hostname")
 	projectDatabaseDumpCmd.Flags().String("database", "", "database name")
 	projectDatabaseDumpCmd.Flags().StringP("username", "u", "", "mysql user")
-	projectDatabaseDumpCmd.Flags().StringP("password", "p", "", "mysql password (omit value to be prompted interactively)")
-	projectDatabaseDumpCmd.Flags().Lookup("password").NoOptDefVal = passwordFlagPrompt
+	projectDatabaseDumpCmd.Flags().StringP("password", "p", "", "mysql password")
 	projectDatabaseDumpCmd.Flags().String("port", "", "mysql port")
 
 	projectDatabaseDumpCmd.Flags().String("output", "dump.sql", "file or - (for stdout)")
