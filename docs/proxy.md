@@ -278,30 +278,32 @@ end of `proxy setup`, `proxy up` and `project create`; this section explains why
 
 ### 1. DNS inside WSL
 
-`proxy setup` writes the systemd-resolved drop-in as on any Linux. But WSL by
-default **regenerates `/etc/resolv.conf`** on every start, pointing it at the WSL
-NAT gateway (`172.x`) instead of systemd-resolved's stub (`127.0.0.53`) — so the
-drop-in is never consulted and `*.shopware.local` does not resolve even inside
-WSL. Fix it once:
+`proxy setup` writes the systemd-resolved drop-in as on any Linux, and
+systemd-resolved answers `*.shopware.local` correctly (check with
+`resolvectl query test.shopware.local`). But **`getent` — the path `proxy verify`
+and browsers use — does not ask resolved**: WSL keeps `/etc/resolv.conf` pointing
+at the WSL NAT gateway (`172.x`), and the default `nsswitch.conf` sends `getent`
+straight there, bypassing resolved. So `*.shopware.local` fails to resolve even
+though resolved knows it.
 
-```ini
-# /etc/wsl.conf
-[boot]
-systemd=true
-
-[network]
-generateResolvConf=false
-```
+The fix is to add resolved to `nsswitch.conf` **as a fallback** — *after* `dns`,
+never before it. On WSL resolved only knows `*.shopware.local` (it has no
+internet upstream of its own), so putting it first would break internet DNS; as
+a fallback it is only consulted for names the gateway cannot resolve:
 
 ```bash
-sudo ln -sf /run/systemd/resolve/stub-resolv.conf /etc/resolv.conf
+sudo apt-get install -y libnss-resolve
+sudo sed -i -E '/^hosts:/d' /etc/nsswitch.conf
+echo 'hosts: files dns resolve' | sudo tee -a /etc/nsswitch.conf
 ```
 
-Then, from **Windows** PowerShell, `wsl --shutdown` and reopen WSL. Now
-`/etc/resolv.conf` points at `127.0.0.53`, systemd-resolved answers, and the
-drop-in routes `*.shopware.local` to the embedded DNS server. (If WSL's own
-internet DNS breaks afterwards, give resolved an upstream:
-`sudo resolvectl dns eth0 <gateway-ip>`.)
+Verify: `getent hosts test.shopware.local` returns `127.0.0.1`, and
+`getent hosts one.one.one.one` still resolves (internet intact).
+
+> Do **not** symlink `/etc/resolv.conf` to systemd-resolved's stub on WSL: with no
+> internet upstream on the link, resolved would `NXDOMAIN` every non-`.shopware.local`
+> name and break DNS. Leaving `resolv.conf` at the `172.x` gateway and adding the
+> nsswitch fallback keeps both working.
 
 ### 2. Reaching the shop from the Windows browser
 

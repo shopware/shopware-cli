@@ -14,6 +14,8 @@ import (
 	"time"
 
 	"golang.org/x/net/dns/dnsmessage"
+
+	"github.com/shopware/shopware-cli/internal/system"
 )
 
 // CheckResult is the outcome of one verification step.
@@ -99,6 +101,12 @@ func osResolutionHint(baseDomain string, wildcardSupported bool) string {
 		return "This check can never pass here. " + NoSystemdResolvedGuidance(baseDomain)
 	}
 
+	// On WSL systemd-resolved answers, but getent bypasses it — a distinct,
+	// known cause with its own fix, so the generic VPN/setup list would mislead.
+	if system.IsWSL() {
+		return WSLResolverGuidance()
+	}
+
 	lines := []string{
 		"The DNS server works, but your system is not asking it. Likely causes:",
 		"1. The one-time setup was never done on this machine",
@@ -117,6 +125,26 @@ func osResolutionHint(baseDomain string, wildcardSupported bool) string {
 	}
 
 	return strings.Join(lines, "\n")
+}
+
+// WSLResolverGuidance explains why OS resolution fails under WSL even though
+// systemd-resolved answers — getent does not consult resolved — and how to fix
+// it: add resolved to nsswitch as a fallback *after* dns. It must be last,
+// because on WSL resolved only knows the proxy domain (no internet upstream), so
+// putting it first would break internet DNS.
+func WSLResolverGuidance() string {
+	return strings.Join([]string{
+		"Running under WSL: systemd-resolved answers, but getent (what this check and",
+		"browsers use) does not ask it. Add resolved as a fallback in nsswitch — after",
+		"\"dns\", never before it, so internet DNS keeps using the Windows gateway:",
+		"",
+		"  sudo apt-get install -y libnss-resolve",
+		"  sudo sed -i -E '/^hosts:/d' /etc/nsswitch.conf",
+		"  echo 'hosts: files dns resolve' | sudo tee -a /etc/nsswitch.conf",
+		"",
+		"Then run \"shopware-cli project proxy verify\" again. Verify internet still",
+		"resolves with: getent hosts one.one.one.one",
+	}, "\n")
 }
 
 // randomProbeHostname returns a hostname under baseDomain that no cache has
