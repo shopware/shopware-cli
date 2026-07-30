@@ -322,6 +322,13 @@ var projectCI = &cobra.Command{
 			for _, ext := range extensions {
 				extPath := ext.GetPath()
 
+				if shopCfg.Build.KeepExistingChecksum {
+					if _, err := os.Stat(path.Join(extPath, "checksum.json")); err == nil {
+						logging.FromContext(cmd.Context()).Infof("Keeping existing checksum.json for %s", extPath)
+						continue
+					}
+				}
+
 				if err := extension.GenerateChecksumJSON(cmd.Context(), extPath, ext); err != nil {
 					logging.FromContext(cmd.Context()).Warnf("Failed to generate checksum for %s: %v", extPath, err)
 				}

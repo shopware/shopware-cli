@@ -131,6 +131,10 @@
           "type": "boolean",
           "description": "When enabled, the checksum.json generation for extensions will be skipped"
         },
+        "keep_existing_checksum": {
+          "type": "boolean",
+          "description": "When enabled, an already existing checksum.json in an extension will be kept instead of being overwritten"
+        },
         "force_extension_build": {
           "items": {
             "$ref": "#/$defs/ConfigBuildExtension"

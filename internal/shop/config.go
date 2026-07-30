@@ -107,6 +107,8 @@ type ConfigBuild struct {
 	DisableStorefrontBuild bool `yaml:"disable_storefront_build,omitempty"`
 	// When enabled, the checksum.json generation for extensions will be skipped
 	DisableChecksum bool `yaml:"disable_checksum,omitempty"`
+	// When enabled, an already existing checksum.json in an extension will be kept instead of being overwritten
+	KeepExistingChecksum bool `yaml:"keep_existing_checksum,omitempty"`
 	// Extensions to force build for, even if they have compiled files
 	ForceExtensionBuild []ConfigBuildExtension `yaml:"force_extension_build,omitempty"`
 	// When enabled, the shopware admin will be built
