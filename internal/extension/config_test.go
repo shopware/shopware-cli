@@ -185,6 +185,44 @@ func TestConfigStore_IsInGermanStore(t *testing.T) {
 	})
 }
 
+func TestConfigStoreDemoShopsDecode(t *testing.T) {
+	cfg := `
+store:
+  demo_shops:
+    - type: frontend
+      link: https://demo.example.com
+      localization: de_DE
+      login_name: demo
+      login_password: secret
+    - type: backend
+      link: https://demo.example.com/admin
+      localization: en_GB
+`
+
+	tmpDir := t.TempDir()
+
+	assert.NoError(t, os.WriteFile(filepath.Join(tmpDir, ".shopware-extension.yaml"), []byte(cfg), 0o644))
+
+	ext, err := readExtensionConfig(t.Context(), tmpDir)
+	require.NoError(t, err)
+	require.NotNil(t, ext.Store.DemoShops)
+
+	assert.Equal(t, []ConfigStoreDemoShop{
+		{
+			Type:          "frontend",
+			Link:          "https://demo.example.com",
+			Localization:  "de_DE",
+			LoginName:     "demo",
+			LoginPassword: "secret",
+		},
+		{
+			Type:         "backend",
+			Link:         "https://demo.example.com/admin",
+			Localization: "en_GB",
+		},
+	}, *ext.Store.DemoShops)
+}
+
 func TestReadExtensionConfig(t *testing.T) {
 	t.Run("returns default config when no file exists", func(t *testing.T) {
 		tmpDir := t.TempDir()
