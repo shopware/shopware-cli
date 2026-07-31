@@ -88,6 +88,18 @@ var accountCompanyProducerExtensionInfoPullCmd = &cobra.Command{
 			availabilities = append(availabilities, a.Name)
 		}
 
+		demoShops := make([]extension.ConfigStoreDemoShop, 0)
+
+		for _, demo := range storeExt.Demos {
+			demoShops = append(demoShops, extension.ConfigStoreDemoShop{
+				Type:          demo.Type.Name,
+				Link:          demo.Link,
+				Localization:  demo.Localization.Name,
+				LoginName:     demo.LoginName,
+				LoginPassword: demo.LoginPassword,
+			})
+		}
+
 		storeImages, err := p.GetExtensionImages(cmd.Context(), storeExt.Id)
 		if err != nil {
 			return fmt.Errorf("cannot get extension images: %w", err)
@@ -232,6 +244,7 @@ var accountCompanyProducerExtensionInfoPullCmd = &cobra.Command{
 		newCfg.Store.Faq = extension.ConfigTranslated[[]extension.ConfigStoreFaq]{German: &faqDE, English: &faqEN}
 		newCfg.Store.MetaTitle = extension.ConfigTranslated[string]{German: &germanMetaTitle, English: &englishMetaTitle}
 		newCfg.Store.MetaDescription = extension.ConfigTranslated[string]{German: &germanMetaDescription, English: &englishMetaDescription}
+		newCfg.Store.DemoShops = &demoShops
 		newCfg.Store.Images = nil
 
 		if len(storeImages) > 0 {

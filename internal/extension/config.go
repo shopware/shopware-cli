@@ -152,6 +152,21 @@ type ConfigStore struct {
 	Images *[]ConfigStoreImage `yaml:"images,omitempty"`
 	// Specifies the directory where the images are located.
 	ImageDirectory *string `yaml:"image_directory,omitempty"`
+	// Specifies the demo shops of the extension in the store.
+	DemoShops *[]ConfigStoreDemoShop `yaml:"demo_shops,omitempty"`
+}
+
+type ConfigStoreDemoShop struct {
+	// Specifies the type of the demo shop.
+	Type string `yaml:"type" jsonschema:"enum=frontend,enum=backend"`
+	// Specifies the URL to the demo shop.
+	Link string `yaml:"link"`
+	// Specifies the language of the demo shop.
+	Localization string `yaml:"localization" jsonschema:"enum=de_DE,enum=en_GB"`
+	// Specifies the login name to access the demo shop.
+	LoginName string `yaml:"login_name,omitempty"`
+	// Specifies the login password to access the demo shop.
+	LoginPassword string `yaml:"login_password,omitempty"`
 }
 
 type Translatable interface {
