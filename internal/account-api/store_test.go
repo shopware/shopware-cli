@@ -75,5 +75,8 @@ func TestNormalizeStoreLink(t *testing.T) {
 	assert.Equal(t, "https://store.shopware.com/a", normalizeStoreLink("http://store.shopware.com:80/a"))
 	assert.Equal(t, "https://store.shopware.com/a", normalizeStoreLink("https://store.shopware.com:443/a"))
 	assert.Equal(t, "https://store.shopware.com/a", normalizeStoreLink("http://store.shopware.com/a"))
+	assert.Equal(t, "https://store.shopware.com", normalizeStoreLink("http://store.shopware.com:80"))
 	assert.Equal(t, "https://example.com/a", normalizeStoreLink("https://example.com/a"))
+	assert.Equal(t, "http://store.shopware.com:8080/a", normalizeStoreLink("http://store.shopware.com:8080/a"),
+		"custom ports are not default-port URLs and must pass through untouched")
 }

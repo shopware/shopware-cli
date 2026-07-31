@@ -7,7 +7,6 @@ import (
 	"io"
 	"net/http"
 	"net/url"
-	"strings"
 
 	"github.com/shopware/shopware-cli/logging"
 )
@@ -169,16 +168,17 @@ func (r *rawStorePlugin) toStorePlugin() StorePlugin {
 
 // normalizeStoreLink rewrites the explicit-port store URLs the API returns
 // (e.g. http://store.shopware.com:80/... or https://store.shopware.com:443/...)
-// to a clean https URL.
+// to a clean https URL. Links to other hosts or with custom ports pass
+// through untouched.
 func normalizeStoreLink(link string) string {
-	for _, rep := range []struct{ from, to string }{
-		{"http://store.shopware.com:80", "https://store.shopware.com"},
-		{"https://store.shopware.com:443", "https://store.shopware.com"},
-		{"http://store.shopware.com", "https://store.shopware.com"},
-	} {
-		if strings.HasPrefix(link, rep.from) {
-			return rep.to + strings.TrimPrefix(link, rep.from)
-		}
+	u, err := url.Parse(link)
+	if err != nil || u.Hostname() != "store.shopware.com" {
+		return link
 	}
-	return link
+	if port := u.Port(); port != "" && port != "80" && port != "443" {
+		return link
+	}
+	u.Scheme = "https"
+	u.Host = u.Hostname()
+	return u.String()
 }

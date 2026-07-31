@@ -78,15 +78,17 @@ func (t Task) readLine() tea.Cmd {
 	return ReadLineCmd(t.ch, func(line string) tea.Msg { return TaskLineMsg{Line: line} }, taskStreamClosedMsg{})
 }
 
-// finish emits TaskDoneMsg once both the exit result arrived and the output
-// stream drained, whichever came last.
-func (t *Task) finish() tea.Cmd {
+// finish marks the task done and emits TaskDoneMsg once both the exit result
+// arrived and the output stream drained, whichever came last. It returns the
+// updated task: mutating through a pointer inside a return statement would
+// copy the value before the mutation (unspecified evaluation order).
+func (t Task) finish() (Task, tea.Cmd) {
 	if !t.exited || !t.drained || t.done {
-		return nil
+		return t, nil
 	}
 	t.done = true
 	err := t.err
-	return func() tea.Msg { return TaskDoneMsg{Err: err} }
+	return t, func() tea.Msg { return TaskDoneMsg{Err: err} }
 }
 
 // Update handles the task's stream, completion, and spinner messages.
@@ -98,12 +100,12 @@ func (t Task) Update(msg tea.Msg) (Task, tea.Cmd) {
 
 	case taskStreamClosedMsg:
 		t.drained = true
-		return t, t.finish()
+		return t.finish()
 
 	case taskExitMsg:
 		t.exited = true
 		t.err = msg.err
-		return t, t.finish()
+		return t.finish()
 
 	case TaskDoneMsg:
 		// Normally self-emitted by finish (a no-op then); also accepted from
