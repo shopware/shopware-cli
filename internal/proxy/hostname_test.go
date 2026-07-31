@@ -21,6 +21,15 @@ func TestProjectHostname(t *testing.T) {
 		assert.Equal(t, "my-shop.shopware.local", hostname)
 	})
 
+	t.Run("maps underscores in the directory name to dashes for a valid dns label", func(t *testing.T) {
+		t.Parallel()
+
+		root := filepath.Join(t.TempDir(), "my_shop")
+		hostname, err := ProjectHostname(root, &shop.Config{}, "shopware.local")
+		assert.NoError(t, err)
+		assert.Equal(t, "my-shop.shopware.local", hostname)
+	})
+
 	t.Run("rejects a directory name that is not a valid dns label", func(t *testing.T) {
 		t.Parallel()
 
