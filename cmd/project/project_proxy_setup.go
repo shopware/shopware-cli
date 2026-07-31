@@ -378,10 +378,12 @@ func confirmTeardown(cmd *cobra.Command, reg proxy.Registry) (bool, error) {
 	}
 
 	var confirmed bool
-	if err := huh.NewConfirm().
-		Title("Proceed with the teardown?").
-		Value(&confirmed).
-		Run(); err != nil {
+	form := huh.NewForm(huh.NewGroup(
+		huh.NewConfirm().
+			Title("Proceed with the teardown?").
+			Value(&confirmed),
+	)).WithTheme(tui.ShopwareTheme())
+	if err := form.Run(); err != nil {
 		return false, err
 	}
 
