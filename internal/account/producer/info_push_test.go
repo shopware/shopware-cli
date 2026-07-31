@@ -1,6 +1,8 @@
-package account
+package producer
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -128,4 +130,85 @@ func TestUpdateStoreInfoClearsDemos(t *testing.T) {
 
 	require.NoError(t, updateStoreInfo(ext, nil, cfg, demoGeneralInfo()))
 	assert.Empty(t, ext.Demos)
+}
+
+func TestPushStoreInfoWithoutConfig(t *testing.T) {
+	storeExt := &accountApi.Extension{}
+	storeExt.Id = 7
+
+	api := &fakeStoreInfoPushAPI{
+		extension:   storeExt,
+		generalInfo: demoGeneralInfo(),
+	}
+
+	zipExt := &fakeExtension{
+		name: "AcmePlugin",
+		metadata: &extension.ExtensionMetadata{
+			Label:       extension.ExtensionTranslated{German: "Acme DE", English: "Acme EN"},
+			Description: extension.ExtensionTranslated{German: "Beschreibung", English: "Description"},
+		},
+	}
+
+	require.NoError(t, PushStoreInfo(t.Context(), api, zipExt))
+
+	assert.Same(t, storeExt, api.updatedExtension)
+	assert.Empty(t, api.updatedIconPath)
+}
+
+func TestPushStoreInfoUpdatesIcon(t *testing.T) {
+	storeExt := &accountApi.Extension{}
+	storeExt.Id = 7
+
+	api := &fakeStoreInfoPushAPI{
+		extension:   storeExt,
+		generalInfo: demoGeneralInfo(),
+	}
+
+	icon := "src/Resources/store/icon.png"
+	cfg := &extension.Config{}
+	cfg.Store.Icon = &icon
+
+	zipExt := &fakeExtension{
+		name:     "AcmePlugin",
+		path:     "/tmp/AcmePlugin",
+		metadata: &extension.ExtensionMetadata{},
+		config:   cfg,
+	}
+
+	require.NoError(t, PushStoreInfo(t.Context(), api, zipExt))
+
+	assert.Equal(t, "/tmp/AcmePlugin/src/Resources/store/icon.png", api.updatedIconPath)
+	assert.Same(t, storeExt, api.updatedExtension)
+}
+
+func TestParseInlineablePath(t *testing.T) {
+	t.Run("plain text is passed through", func(t *testing.T) {
+		result, err := parseInlineablePath("Just a description", "/does/not/matter")
+		require.NoError(t, err)
+		assert.Equal(t, "Just a description", result)
+	})
+
+	t.Run("file reference is inlined", func(t *testing.T) {
+		dir := t.TempDir()
+		require.NoError(t, os.WriteFile(filepath.Join(dir, "description.html"), []byte("<p>Hello</p>"), 0o644))
+
+		result, err := parseInlineablePath("file:description.html", dir)
+		require.NoError(t, err)
+		assert.Equal(t, "<p>Hello</p>", result)
+	})
+
+	t.Run("markdown file is converted to html", func(t *testing.T) {
+		dir := t.TempDir()
+		require.NoError(t, os.WriteFile(filepath.Join(dir, "description.md"), []byte("# Hello"), 0o644))
+
+		result, err := parseInlineablePath("file:description.md", dir)
+		require.NoError(t, err)
+		assert.Contains(t, result, "Hello")
+		assert.Contains(t, result, `class="h1"`)
+	})
+
+	t.Run("missing file returns error", func(t *testing.T) {
+		_, err := parseInlineablePath("file:missing.html", t.TempDir())
+		require.Error(t, err)
+	})
 }

@@ -1,0 +1,334 @@
+package producer
+
+import (
+	"context"
+	"fmt"
+	"io"
+	"net/http"
+	"os"
+	"path"
+	"strings"
+
+	"gopkg.in/yaml.v3"
+
+	accountApi "github.com/shopware/shopware-cli/internal/account-api"
+	"github.com/shopware/shopware-cli/internal/extension"
+	"github.com/shopware/shopware-cli/logging"
+)
+
+// PullOptions configures PullStoreInfo.
+type PullOptions struct {
+	// HTTPClient is used to download icons and images. Defaults to
+	// http.DefaultClient.
+	HTTPClient *http.Client
+}
+
+// PullStoreInfo generates the local store configuration of the given
+// extension from the data in the account.
+func PullStoreInfo(ctx context.Context, api StoreInfoPullAPI, zipExt extension.Extension, opts PullOptions) error { //nolint:gocyclo
+	httpClient := opts.HTTPClient
+	if httpClient == nil {
+		httpClient = http.DefaultClient
+	}
+
+	zipName, err := zipExt.GetName()
+	if err != nil {
+		return fmt.Errorf("cannot get extension name: %w", err)
+	}
+
+	storeExt, err := api.GetExtensionByName(ctx, zipName)
+	if err != nil {
+		return fmt.Errorf("cannot get store extension: %w", err)
+	}
+
+	resourcesFolder := path.Join(zipExt.GetPath(), "src/Resources/store/")
+	availabilities := make([]string, 0)
+	localizations := make([]string, 0)
+	tagsDE := make([]string, 0)
+	tagsEN := make([]string, 0)
+	videosDE := make([]string, 0)
+	videosEN := make([]string, 0)
+	highlightsDE := make([]string, 0)
+	highlightsEN := make([]string, 0)
+	featuresDE := make([]string, 0)
+	featuresEN := make([]string, 0)
+	faqDE := make([]extension.ConfigStoreFaq, 0)
+	faqEN := make([]extension.ConfigStoreFaq, 0)
+
+	if _, err := os.Stat(resourcesFolder); os.IsNotExist(err) {
+		err = os.MkdirAll(resourcesFolder, 0o755)
+		if err != nil {
+			return fmt.Errorf("cannot create file: %w", err)
+		}
+	}
+
+	var iconConfigPath *string
+
+	if len(storeExt.IconURL) > 0 {
+		icon := "src/Resources/store/icon.png"
+		iconConfigPath = &icon
+		err := downloadFileTo(ctx, httpClient, storeExt.IconURL, path.Join(resourcesFolder, "icon.png"))
+		if err != nil {
+			return fmt.Errorf("cannot download file: %w", err)
+		}
+	}
+
+	for _, localization := range storeExt.Localizations {
+		localizations = append(localizations, localization.Name)
+	}
+
+	for _, a := range storeExt.StoreAvailabilities {
+		availabilities = append(availabilities, a.Name)
+	}
+
+	demoShops := make([]extension.ConfigStoreDemoShop, 0)
+
+	for _, demo := range storeExt.Demos {
+		demoShops = append(demoShops, extension.ConfigStoreDemoShop{
+			Type:          demo.Type.Name,
+			Link:          demo.Link,
+			Localization:  demo.Localization.Name,
+			LoginName:     demo.LoginName,
+			LoginPassword: demo.LoginPassword,
+		})
+	}
+
+	storeImages, err := api.GetExtensionImages(ctx, storeExt.Id)
+	if err != nil {
+		return fmt.Errorf("cannot get extension images: %w", err)
+	}
+
+	if len(storeImages) > 0 {
+		imagesDir := path.Join(zipExt.GetPath(), "src/Resources/store/images/")
+
+		if err := writeImages(ctx, httpClient, imagesDir, 0, storeImages); err != nil {
+			return fmt.Errorf("cannot write images: %w", err)
+		}
+
+		if err := writeImages(ctx, httpClient, imagesDir, 1, storeImages); err != nil {
+			return fmt.Errorf("cannot write images: %w", err)
+		}
+	}
+
+	germanDescription := ""
+	englishDescription := ""
+	germanInstallationManual := ""
+	englishInstallationManual := ""
+	germanMetaTitle := ""
+	englishMetaTitle := ""
+	germanMetaDescription := ""
+	englishMetaDescription := ""
+	germanLabel := ""
+	englishLabel := ""
+	germanShortDescription := ""
+	englishShortDescription := ""
+
+	for _, info := range storeExt.Infos {
+		language := info.Locale.Name[0:2]
+
+		if language == "de" {
+			germanLabel = info.Name
+			germanShortDescription = info.ShortDescription
+			germanDescription = "file:src/Resources/store/description.de.html"
+			germanInstallationManual = "file:src/Resources/store/installation_manual.de.html"
+			germanMetaTitle = info.MetaTitle
+			germanMetaDescription = info.MetaDescription
+
+			if err := os.WriteFile(path.Join(zipExt.GetPath(), germanDescription[5:]), []byte(info.Description), 0o644); err != nil {
+				return fmt.Errorf("cannot write file: %w", err)
+			}
+
+			if err := os.WriteFile(path.Join(zipExt.GetPath(), germanInstallationManual[5:]), []byte(info.InstallationManual), 0o644); err != nil {
+				return fmt.Errorf("cannot write file: %w", err)
+			}
+
+			for _, element := range info.Tags {
+				tagsDE = append(tagsDE, element.Name)
+			}
+
+			for _, element := range info.Videos {
+				videosDE = append(videosDE, element.URL)
+			}
+
+			if info.Highlights != "" {
+				highlightsDE = append(highlightsDE, strings.Split(info.Highlights, "\n")...)
+			}
+			if info.Features != "" {
+				featuresDE = append(featuresDE, strings.Split(info.Features, "\n")...)
+			}
+
+			for _, element := range info.Faqs {
+				faqDE = append(faqDE, extension.ConfigStoreFaq{Question: element.Question, Answer: element.Answer, Position: element.Position})
+			}
+		} else {
+			englishLabel = info.Name
+			englishShortDescription = info.ShortDescription
+			englishDescription = "file:src/Resources/store/description.en.html"
+			englishInstallationManual = "file:src/Resources/store/installation_manual.en.html"
+			englishMetaTitle = info.MetaTitle
+			englishMetaDescription = info.MetaDescription
+
+			if err := os.WriteFile(path.Join(zipExt.GetPath(), englishDescription[5:]), []byte(info.Description), 0o644); err != nil {
+				return fmt.Errorf("cannot write file: %w", err)
+			}
+
+			if err := os.WriteFile(path.Join(zipExt.GetPath(), englishInstallationManual[5:]), []byte(info.InstallationManual), 0o644); err != nil {
+				return fmt.Errorf("cannot write file: %w", err)
+			}
+
+			for _, element := range info.Tags {
+				tagsEN = append(tagsEN, element.Name)
+			}
+
+			for _, element := range info.Videos {
+				videosEN = append(videosEN, element.URL)
+			}
+
+			if info.Highlights != "" {
+				highlightsEN = append(highlightsEN, strings.Split(info.Highlights, "\n")...)
+			}
+
+			if info.Features != "" {
+				featuresEN = append(featuresEN, strings.Split(info.Features, "\n")...)
+			}
+
+			for _, element := range info.Faqs {
+				faqEN = append(faqEN, extension.ConfigStoreFaq{Question: element.Question, Answer: element.Answer, Position: element.Position})
+			}
+		}
+	}
+
+	if germanLabel != "" || englishLabel != "" || germanShortDescription != "" || englishShortDescription != "" {
+		err = zipExt.UpdateMetaData(&extension.ExtensionMetadata{
+			Label: extension.ExtensionTranslated{
+				German:  germanLabel,
+				English: englishLabel,
+			},
+			Description: extension.ExtensionTranslated{
+				German:  germanShortDescription,
+				English: englishShortDescription,
+			},
+		})
+		if err != nil {
+			return fmt.Errorf("cannot update extension metadata: %w", err)
+		}
+	}
+
+	extType := "extension"
+
+	if storeExt.ProductType != nil {
+		extType = storeExt.ProductType.Name
+	}
+
+	newCfg := zipExt.GetExtensionConfig()
+
+	newCfg.Store.Icon = iconConfigPath
+	newCfg.Store.DefaultLocale = &storeExt.StandardLocale.Name
+	newCfg.Store.Type = &extType
+	newCfg.Store.AutomaticBugfixVersionCompatibility = &storeExt.AutomaticBugfixVersionCompatibility
+	newCfg.Store.Availabilities = &availabilities
+	newCfg.Store.Localizations = &localizations
+	newCfg.Store.Description = extension.ConfigTranslated[string]{German: &germanDescription, English: &englishDescription}
+	newCfg.Store.InstallationManual = extension.ConfigTranslated[string]{German: &germanInstallationManual, English: &englishInstallationManual}
+	newCfg.Store.Tags = extension.ConfigTranslated[[]string]{German: &tagsDE, English: &tagsEN}
+	newCfg.Store.Videos = extension.ConfigTranslated[[]string]{German: &videosDE, English: &videosEN}
+	newCfg.Store.Highlights = extension.ConfigTranslated[[]string]{German: &highlightsDE, English: &highlightsEN}
+	newCfg.Store.Features = extension.ConfigTranslated[[]string]{German: &featuresDE, English: &featuresEN}
+	newCfg.Store.Faq = extension.ConfigTranslated[[]extension.ConfigStoreFaq]{German: &faqDE, English: &faqEN}
+	newCfg.Store.MetaTitle = extension.ConfigTranslated[string]{German: &germanMetaTitle, English: &englishMetaTitle}
+	newCfg.Store.MetaDescription = extension.ConfigTranslated[string]{German: &germanMetaDescription, English: &englishMetaDescription}
+	newCfg.Store.DemoShops = &demoShops
+	newCfg.Store.Images = nil
+
+	if len(storeImages) > 0 {
+		imageDir := "src/Resources/store/images"
+		newCfg.Store.ImageDirectory = &imageDir
+	}
+
+	content, err := yaml.Marshal(newCfg)
+	if err != nil {
+		return fmt.Errorf("cannot encode yaml: %w", err)
+	}
+
+	extCfgFile := fmt.Sprintf("%s/%s", zipExt.GetPath(), newCfg.FileName)
+	err = os.WriteFile(extCfgFile, content, 0o644)
+	if err != nil {
+		return fmt.Errorf("cannot save file: %w", err)
+	}
+
+	logging.FromContext(ctx).Infof("Files has been written to the given extension folder")
+
+	return nil
+}
+
+func downloadFileTo(ctx context.Context, client *http.Client, url string, target string) error {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, http.NoBody)
+	if err != nil {
+		return fmt.Errorf("create request: %w", err)
+	}
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return fmt.Errorf("download file: %w", err)
+	}
+
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			logging.FromContext(ctx).Errorf("downloadFileTo: %v", err)
+		}
+	}()
+
+	content, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return fmt.Errorf("read file body: %w", err)
+	}
+
+	err = os.WriteFile(target, content, 0o644)
+	if err != nil {
+		return fmt.Errorf("write to file: %w", err)
+	}
+
+	return nil
+}
+
+func writeImages(ctx context.Context, client *http.Client, imagePath string, index int, storeImages []*accountApi.ExtensionImage) error {
+	imageMap := make(map[int]string)
+
+	for _, image := range storeImages {
+		if image.Details[index].Activated {
+			priority := image.Priority
+
+			if _, ok := imageMap[priority]; !ok {
+				imageMap[priority] = image.RemoteLink
+			} else {
+				for {
+					priority++
+					if _, ok := imageMap[priority]; !ok {
+						imageMap[priority] = image.RemoteLink
+						break
+					}
+				}
+			}
+		}
+	}
+
+	if index == 0 {
+		imagePath = path.Join(imagePath, "de")
+	} else {
+		imagePath = path.Join(imagePath, "en")
+	}
+
+	if _, err := os.Stat(imagePath); os.IsNotExist(err) {
+		if err := os.MkdirAll(imagePath, 0o755); err != nil {
+			return err
+		}
+	}
+
+	for priority, link := range imageMap {
+		if err := downloadFileTo(ctx, client, link, path.Join(imagePath, fmt.Sprintf("%d.png", priority))); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
