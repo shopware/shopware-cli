@@ -55,12 +55,19 @@ type PHPVersionChecker interface {
 }
 
 // CheckProjectDependencies returns the dependencies required to set up a
-// Shopware project that are not currently available. When useDocker is true
-// and we are not already inside a container, only Docker is required;
-// otherwise PHP 8.2+ and Composer must be present locally (matching the
-// fallback in runComposerInstall). If phpConstraint is non-nil and the local
-// PHP does not satisfy it, that mismatch is reported as well.
+// Shopware project that are not currently available.
 func CheckProjectDependencies(ctx context.Context, useDocker bool, phpConstraint PHPVersionChecker) []MissingDependency {
+	return checkProjectDependencies(ctx, useDocker, phpConstraint, true)
+}
+
+// CheckProjectCreationDependencies returns dependencies required for project
+// creation. Composer is optional because project create can bootstrap it
+// temporarily when it is unavailable on PATH.
+func CheckProjectCreationDependencies(ctx context.Context, useDocker bool, phpConstraint PHPVersionChecker) []MissingDependency {
+	return checkProjectDependencies(ctx, useDocker, phpConstraint, false)
+}
+
+func checkProjectDependencies(ctx context.Context, useDocker bool, phpConstraint PHPVersionChecker, requireComposer bool) []MissingDependency {
 	var missing []MissingDependency
 
 	if useDocker && !IsInsideContainer() {
@@ -94,8 +101,10 @@ func CheckProjectDependencies(ctx context.Context, useDocker bool, phpConstraint
 		}
 	}
 
-	if _, err := exec.LookPath("composer"); err != nil {
-		missing = append(missing, MissingDependency{Name: "Composer", Reason: "not installed"})
+	if requireComposer {
+		if _, err := exec.LookPath("composer"); err != nil {
+			missing = append(missing, MissingDependency{Name: "Composer", Reason: "not installed"})
+		}
 	}
 
 	return missing
@@ -107,6 +116,17 @@ func CheckProjectDependencies(ctx context.Context, useDocker bool, phpConstraint
 // RenderMissingDependencies to phrase the help text for the calling command.
 func ValidateProjectDependencies(ctx context.Context, useDocker bool, phpConstraint PHPVersionChecker, action, dockerHint string) error {
 	missing := CheckProjectDependencies(ctx, useDocker, phpConstraint)
+	return validateProjectDependencies(useDocker, missing, action, dockerHint)
+}
+
+// ValidateProjectCreationDependencies validates dependencies that cannot be
+// bootstrapped while creating a project.
+func ValidateProjectCreationDependencies(ctx context.Context, useDocker bool, phpConstraint PHPVersionChecker, action, dockerHint string) error {
+	missing := CheckProjectCreationDependencies(ctx, useDocker, phpConstraint)
+	return validateProjectDependencies(useDocker, missing, action, dockerHint)
+}
+
+func validateProjectDependencies(useDocker bool, missing []MissingDependency, action, dockerHint string) error {
 	if len(missing) == 0 {
 		return nil
 	}

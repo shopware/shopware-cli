@@ -35,7 +35,20 @@ func installAndFinalize(cmd *cobra.Command, opts *createOptions, phpConstraint *
 		logging.FromContext(ctx).Infof("Using PHP %s for composer install", composerInstallPHP)
 	}
 
-	if output, err := runComposerInstall(ctx, opts.projectFolder, opts.useDocker, showSpinner, composerInstallPHP); err != nil {
+	var composer *system.Composer
+	if !opts.useDocker {
+		var err error
+		composer, err = system.NewComposerResolver().Resolve(ctx)
+		if err != nil {
+			return err
+		}
+		defer composer.Cleanup()
+		if composer.Temporary {
+			logging.FromContext(ctx).Infof("Composer was not found on PATH; using a temporary Composer download for this command.")
+		}
+	}
+
+	if output, err := runComposerInstall(ctx, opts.projectFolder, opts.useDocker, showSpinner, composerInstallPHP, composer); err != nil {
 		if !isComposerSecurityBlocked(output) || opts.noAudit {
 			return err
 		}
@@ -44,7 +57,7 @@ func installAndFinalize(cmd *cobra.Command, opts *createOptions, phpConstraint *
 			return err
 		}
 
-		if _, err := runComposerInstall(ctx, opts.projectFolder, opts.useDocker, showSpinner, composerInstallPHP); err != nil {
+		if _, err := runComposerInstall(ctx, opts.projectFolder, opts.useDocker, showSpinner, composerInstallPHP, composer); err != nil {
 			return err
 		}
 	}
@@ -157,7 +170,7 @@ func handleSecurityBlockedInstall(ctx context.Context, opts *createOptions, chos
 	return nil
 }
 
-func runComposerInstall(ctx context.Context, projectFolder string, useDocker bool, showSpinner bool, phpVersion string) (string, error) {
+func runComposerInstall(ctx context.Context, projectFolder string, useDocker bool, showSpinner bool, phpVersion string, composer *system.Composer) (string, error) {
 	var cmdInstall *exec.Cmd
 
 	if useDocker && !system.IsInsideContainer() {
@@ -192,19 +205,11 @@ func runComposerInstall(ctx context.Context, projectFolder string, useDocker boo
 
 		cmdInstall = exec.CommandContext(ctx, "docker", dockerArgs...)
 	} else {
-		composerBinary, err := exec.LookPath("composer")
-		if err != nil {
-			return "", err
+		if composer == nil {
+			return "", fmt.Errorf("Composer has not been resolved")
 		}
 
-		phpBinary := os.Getenv("PHP_BINARY")
-
-		if phpBinary != "" {
-			cmdInstall = exec.CommandContext(ctx, phpBinary, composerBinary, "install", "--no-interaction")
-		} else {
-			cmdInstall = exec.CommandContext(ctx, "composer", "install", "--no-interaction")
-		}
-
+		cmdInstall = composer.Command(ctx, "install", "--no-interaction")
 		cmdInstall.Dir = projectFolder
 	}
 

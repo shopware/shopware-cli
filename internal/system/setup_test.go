@@ -1,10 +1,23 @@
 package system
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
+
+func TestCheckProjectCreationDependenciesAllowsMissingComposer(t *testing.T) {
+	php := filepath.Join(t.TempDir(), "php")
+	require.NoError(t, os.WriteFile(php, []byte("#!/bin/sh\necho 'PHP 8.3.0 (cli)'\n"), 0o700))
+	t.Setenv("PHP_BINARY", php)
+	t.Setenv("PATH", t.TempDir())
+
+	assert.Empty(t, CheckProjectCreationDependencies(t.Context(), false, nil))
+	assert.Equal(t, []MissingDependency{{Name: "Composer", Reason: "not installed"}}, CheckProjectDependencies(t.Context(), false, nil))
+}
 
 func TestCheckIncompatibilities(t *testing.T) {
 	t.Run("no incompatibilities on non-darwin", func(t *testing.T) {
