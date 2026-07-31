@@ -354,6 +354,13 @@
           "$ref": "#/$defs/ConfigTranslated[string]",
           "description": "Installation manual of the extension in store."
         },
+        "demo_shops": {
+          "items": {
+            "$ref": "#/$defs/ConfigStoreDemoShop"
+          },
+          "type": "array",
+          "description": "Specifies demo shops for the extension."
+        },
         "tags": {
           "$ref": "#/$defs/ConfigTranslated[[]string]",
           "description": "Specifies the tags of the extension."
@@ -384,6 +391,27 @@
         "image_directory": {
           "type": "string",
           "description": "Specifies the directory where the images are located."
+        }
+      },
+      "additionalProperties": false,
+      "type": "object"
+    },
+    "ConfigStoreDemoShop": {
+      "properties": {
+        "language": {
+          "type": "string"
+        },
+        "storefront_url": {
+          "type": "string"
+        },
+        "storefront_login": {
+          "type": "string"
+        },
+        "administration_url": {
+          "type": "string"
+        },
+        "administration_login": {
+          "type": "string"
         }
       },
       "additionalProperties": false,

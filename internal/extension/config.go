@@ -138,6 +138,8 @@ type ConfigStore struct {
 	Description ConfigTranslated[string] `yaml:"description"`
 	// Installation manual of the extension in store.
 	InstallationManual ConfigTranslated[string] `yaml:"installation_manual"`
+	// Specifies demo shops for the extension.
+	DemoShops []ConfigStoreDemoShop `yaml:"demo_shops,omitempty"`
 	// Specifies the tags of the extension.
 	Tags ConfigTranslated[[]string] `yaml:"tags,omitempty"`
 	// Specifies the links of YouTube-Videos to show or describe the extension.
@@ -167,6 +169,14 @@ type ConfigStoreFaq struct {
 	Question string `yaml:"question"`
 	Answer   string `yaml:"answer"`
 	Position int    `yaml:"position"`
+}
+
+type ConfigStoreDemoShop struct {
+	Language            string `yaml:"language"`
+	StorefrontURL       string `yaml:"storefront_url"`
+	StorefrontLogin     string `yaml:"storefront_login"`
+	AdministrationURL   string `yaml:"administration_url"`
+	AdministrationLogin string `yaml:"administration_login"`
 }
 
 type ConfigStoreImage struct {

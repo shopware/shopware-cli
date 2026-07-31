@@ -218,6 +218,44 @@ build:
 		assert.Equal(t, ".shopware-extension.yml", config.FileName)
 	})
 
+	t.Run("reads demo shops for each language", func(t *testing.T) {
+		tmpDir := t.TempDir()
+
+		configContent := `
+store:
+  demo_shops:
+    - language: de_DE
+      storefront_url: https://demo-de.example.com
+      storefront_login: customer@example.com
+      administration_url: https://demo-de.example.com/admin
+      administration_login: admin@example.com
+    - language: en_GB
+      storefront_url: https://demo-en.example.com
+      storefront_login: customer@example.com
+      administration_url: https://demo-en.example.com/admin
+      administration_login: admin@example.com
+`
+		require.NoError(t, os.WriteFile(filepath.Join(tmpDir, ".shopware-extension.yml"), []byte(configContent), 0o644))
+
+		config, err := readExtensionConfig(t.Context(), tmpDir)
+		require.NoError(t, err)
+		require.Len(t, config.Store.DemoShops, 2)
+		assert.Equal(t, ConfigStoreDemoShop{
+			Language:            "de_DE",
+			StorefrontURL:       "https://demo-de.example.com",
+			StorefrontLogin:     "customer@example.com",
+			AdministrationURL:   "https://demo-de.example.com/admin",
+			AdministrationLogin: "admin@example.com",
+		}, config.Store.DemoShops[0])
+		assert.Equal(t, ConfigStoreDemoShop{
+			Language:            "en_GB",
+			StorefrontURL:       "https://demo-en.example.com",
+			StorefrontLogin:     "customer@example.com",
+			AdministrationURL:   "https://demo-en.example.com/admin",
+			AdministrationLogin: "admin@example.com",
+		}, config.Store.DemoShops[1])
+	})
+
 	t.Run("prefers .yml over .yaml", func(t *testing.T) {
 		tmpDir := t.TempDir()
 
