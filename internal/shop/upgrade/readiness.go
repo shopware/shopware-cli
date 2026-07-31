@@ -31,7 +31,17 @@ func (u *ProjectUpgrader) RunReadinessChecks(ctx context.Context) Readiness {
 	})
 
 	r.Checks = append(r.Checks, r.checkComposerLock(u.projectRoot))
-	r.Checks = append(r.Checks, checkGitClean(ctx, u.projectRoot))
+	if u.skipGitCheck {
+		r.Checks = append(r.Checks, ReadinessCheck{
+			ID:     "git-clean",
+			Label:  "Git working tree clean",
+			State:  StateWarn,
+			Value:  "skipped",
+			Detail: "--disable-git: local changes will mix with the upgrade's and only composer.json/composer.lock are restored on rollback.",
+		})
+	} else {
+		r.Checks = append(r.Checks, checkGitClean(ctx, u.projectRoot))
+	}
 
 	r.Extensions = discoverExtensions(ctx, u.projectRoot)
 	r.Checks = append(r.Checks, checkExtensionsComposerManaged(r.Extensions))

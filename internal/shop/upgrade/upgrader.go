@@ -26,6 +26,8 @@ type ProjectUpgrader struct {
 	// resolution and the upgrade itself. The project's composer.json audit
 	// configuration stays untouched.
 	noAudit bool
+	// skipGitCheck skips the git working-tree readiness check (--disable-git).
+	skipGitCheck bool
 
 	shopwareVersions func(ctx context.Context) ([]string, error)
 	extensionUpdates func(ctx context.Context, current, future string, extensions []account_api.UpdateCheckExtension) ([]account_api.UpdateCheckExtensionCompatibility, error)
@@ -51,6 +53,12 @@ func NewProjectUpgrader(projectRoot string, exec executor.Executor) *ProjectUpgr
 		packagistPingURL: "https://repo.packagist.org/packages.json",
 	}
 }
+
+// DisableGitCheck skips the git working-tree readiness check (--disable-git).
+// The readiness list still shows the check as skipped: the rollback only
+// restores composer.json and composer.lock, so uncommitted local changes mix
+// with the upgrade's — the user opted into that risk explicitly.
+func (u *ProjectUpgrader) DisableGitCheck() { u.skipGitCheck = true }
 
 // DisableAuditBlock makes the preflight resolution and the upgrade run with
 // Composer's security-audit blocking disabled. The user opts into this after

@@ -14,7 +14,8 @@ var projectUpgradeCmd = &cobra.Command{
 	Short: "Upgrade Shopware to a newer version",
 	Long: "Guides you through a local Shopware upgrade: readiness checks, version selection, extension compatibility, and the guided execution.\n" +
 		"In a terminal this runs as an interactive wizard. With --no-interaction (or without a terminal, e.g. CI) the upgrade runs headless:\n" +
-		"--target is required there, --dry-run stops after the read-only preflight, and --no-audit continues when dependencies are blocked by security advisories.",
+		"--target is required there, --dry-run stops after the read-only preflight, and --no-audit continues when dependencies are blocked by security advisories.\n" +
+		"--disable-git skips the git working-tree check; note that the rollback only restores composer.json and composer.lock, so local changes mix with the upgrade's.",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		projectRoot, err := findClosestShopwareProject()
 		if err != nil {
@@ -36,12 +37,18 @@ var projectUpgradeCmd = &cobra.Command{
 			return err
 		}
 
+		disableGit, _ := cmd.Flags().GetBool("disable-git")
+
 		if !system.IsInteractionEnabled(cmd.Context()) {
 			target, _ := cmd.Flags().GetString("target")
 			dryRun, _ := cmd.Flags().GetBool("dry-run")
 			noAudit, _ := cmd.Flags().GetBool("no-audit")
 
-			return upgrade.NewProjectUpgrader(projectRoot, exec).RunHeadless(cmd.Context(), upgrade.HeadlessOptions{
+			u := upgrade.NewProjectUpgrader(projectRoot, exec)
+			if disableGit {
+				u.DisableGitCheck()
+			}
+			return u.RunHeadless(cmd.Context(), upgrade.HeadlessOptions{
 				Target:  target,
 				DryRun:  dryRun,
 				NoAudit: noAudit,
@@ -58,9 +65,10 @@ var projectUpgradeCmd = &cobra.Command{
 		}
 
 		shell := upgradetui.NewApp(upgradetui.Options{
-			ProjectRoot: projectRoot,
-			EnvName:     envName,
-			Executor:    exec,
+			ProjectRoot:     projectRoot,
+			EnvName:         envName,
+			Executor:        exec,
+			DisableGitCheck: disableGit,
 		})
 
 		_, err = shell.Run()
@@ -73,4 +81,5 @@ func init() {
 	projectUpgradeCmd.Flags().String("target", "", "version to upgrade to (required with --no-interaction; also accepts 'recommended' or 'latest-patch')")
 	projectUpgradeCmd.Flags().Bool("dry-run", false, "non-interactive mode: stop after the read-only preflight without modifying the project")
 	projectUpgradeCmd.Flags().Bool("no-audit", false, "continue when dependencies are blocked by known security advisories")
+	projectUpgradeCmd.Flags().Bool("disable-git", false, "skip the git working-tree check (local changes will mix with the upgrade's changes)")
 }

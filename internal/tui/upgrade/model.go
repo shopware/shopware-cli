@@ -31,6 +31,9 @@ type Options struct {
 	// EnvName is the label shown in the header, e.g. "local".
 	EnvName  string
 	Executor executor.Executor
+	// DisableGitCheck skips the git working-tree readiness check
+	// (--disable-git).
+	DisableGitCheck bool
 }
 
 // Model is the wizard screen hosted by the app shell.
@@ -57,9 +60,13 @@ type Model struct {
 
 // New creates the wizard model starting at the intro panel.
 func New(opts Options) *Model {
+	upgrader := backend.NewProjectUpgrader(opts.ProjectRoot, opts.Executor)
+	if opts.DisableGitCheck {
+		upgrader.DisableGitCheck()
+	}
 	return &Model{
 		opts:     opts,
-		upgrader: backend.NewProjectUpgrader(opts.ProjectRoot, opts.Executor),
+		upgrader: upgrader,
 		panel:    panelIntro,
 		intro:    newIntroState(),
 		check:    newCheckState(),

@@ -209,3 +209,34 @@ func TestCheckGitClean(t *testing.T) {
 	check = checkGitClean(t.Context(), dir)
 	assert.Equal(t, StateOK, check.State)
 }
+
+func TestReadinessDisableGitCheck(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git not installed")
+	}
+
+	// A dirty repository blocks by default...
+	dir := setupProject(t)
+	require.NoError(t, os.RemoveAll(filepath.Join(dir, "custom")))
+	runGit := func(args ...string) {
+		cmd := exec.CommandContext(t.Context(), "git", append([]string{"-C", dir}, args...)...)
+		cmd.Env = append(os.Environ(), "GIT_CONFIG_GLOBAL=/dev/null", "GIT_CONFIG_SYSTEM=/dev/null")
+		out, err := cmd.CombinedOutput()
+		require.NoError(t, err, string(out))
+	}
+	runGit("init")
+
+	u := newTestUpgrader(t, dir)
+	r := u.RunReadinessChecks(t.Context())
+	assert.Equal(t, StateFail, checkByID(t, r.Checks, "git-clean").State)
+	assert.True(t, r.Blocked())
+
+	// ...--disable-git downgrades it to a visible, non-blocking skip.
+	u.DisableGitCheck()
+	r = u.RunReadinessChecks(t.Context())
+	git := checkByID(t, r.Checks, "git-clean")
+	assert.Equal(t, StateWarn, git.State)
+	assert.Equal(t, "skipped", git.Value)
+	assert.False(t, git.Failed())
+	assert.False(t, r.Blocked())
+}
