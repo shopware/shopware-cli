@@ -11,7 +11,9 @@ import (
 var ComposeProjectNameRegexp = regexp.MustCompile(`^[a-z0-9][a-z0-9_-]*$`)
 
 // ValidateDockerComposeName reports whether name can be used as a Docker
-// Compose project name (and, by the same charset rule, as a DNS label).
+// Compose project name. The charset also permits underscores, which are not
+// valid in a DNS label — callers deriving a hostname from the name must map
+// them to dashes first (see proxy.ProjectHostname).
 func ValidateDockerComposeName(name string) error {
 	if !ComposeProjectNameRegexp.MatchString(name) {
 		return fmt.Errorf("invalid name %q: only lowercase letters, digits, dashes (-) and underscores (_) are allowed, and it must start with a lowercase letter or digit", name)

@@ -32,6 +32,17 @@ type CheckResult struct {
 // failure, since later layers depend on earlier ones. It never mutates any
 // state, so it is safe to run at any time.
 func Verify(ctx context.Context, baseDomain string) []CheckResult {
+	// The shared proxy needs the embedded DNS daemon and OS resolver wiring,
+	// neither of which is supported natively on Windows; running the checks there
+	// only produces a misleading "run setup" timeout, so stop with a clear result.
+	if runtime.GOOS == "windows" {
+		return []CheckResult{{
+			Name: "Proxy is supported on macOS and Linux",
+			Err:  errors.New("the shared proxy is not supported natively on Windows"),
+			Hint: "Run shopware-cli inside WSL2 to use the proxy (see docs/proxy.md).",
+		}}
+	}
+
 	probe := randomProbeHostname(baseDomain)
 
 	checks := []struct {

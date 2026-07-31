@@ -5,6 +5,7 @@ import (
 	"net"
 	"net/url"
 	"path/filepath"
+	"strings"
 
 	"github.com/shopware/shopware-cli/internal/shop"
 	"github.com/shopware/shopware-cli/internal/system"
@@ -28,9 +29,12 @@ func ProjectHostname(projectRoot string, cfg *shop.Config, baseDomain string) (s
 		}
 	}
 
-	name := filepath.Base(projectRoot)
+	// Docker Compose project names allow underscores, but DNS labels do not, so
+	// map them to dashes (matching localDomainHostname in project create) before
+	// validating and using the name as a hostname label.
+	name := strings.ReplaceAll(filepath.Base(projectRoot), "_", "-")
 	if err := system.ValidateDockerComposeName(name); err != nil {
-		return "", fmt.Errorf("cannot derive a hostname from directory name %q: %w", name, err)
+		return "", fmt.Errorf("cannot derive a hostname from directory name %q: %w", filepath.Base(projectRoot), err)
 	}
 
 	return fmt.Sprintf("%s.%s", name, baseDomain), nil
