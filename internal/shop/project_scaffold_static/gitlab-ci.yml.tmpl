@@ -9,7 +9,7 @@ include:
     inputs:
       php_version: "8.4"
 {{- if .Deployer }}
-  - component: gitlab.com/shopware/ci-components/project-deploy@main
+  - component: gitlab.com/shopware/ci-components/project-deployer@main
     inputs:
       php_version: "8.4"
 {{- end }}
