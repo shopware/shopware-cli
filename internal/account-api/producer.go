@@ -295,22 +295,7 @@ type Extension struct {
 		Name        string `json:"name"`
 		Description string `json:"description"`
 	} `json:"license"`
-	Infos []*struct {
-		Id                 int          `json:"id"`
-		Locale             Locale       `json:"locale"`
-		Name               string       `json:"name"`
-		Description        string       `json:"description"`
-		InstallationManual string       `json:"installationManual"`
-		ShortDescription   string       `json:"shortDescription"`
-		Highlights         string       `json:"highlights"`
-		Features           string       `json:"features"`
-		MetaTitle          string       `json:"metaTitle"`
-		MetaDescription    string       `json:"metaDescription"`
-		Tags               []StoreTag   `json:"tags"`
-		Videos             []StoreVideo `json:"videos"`
-		Faqs               []StoreFaq   `json:"faqs"`
-		SupportInfo        interface{}  `json:"supportInfo"`
-	} `json:"infos"`
+	Infos               []*ExtensionInfo   `json:"infos"`
 	PriceModels         []interface{}      `json:"priceModels"`
 	Variants            []interface{}      `json:"variants"`
 	StoreAvailabilities []StoreAvailablity `json:"storeAvailabilities"`
@@ -459,6 +444,23 @@ type StoreTag struct {
 
 type StoreVideo struct {
 	URL string `json:"url"`
+}
+
+type ExtensionInfo struct {
+	Id                 int          `json:"id"`
+	Locale             Locale       `json:"locale"`
+	Name               string       `json:"name"`
+	Description        string       `json:"description"`
+	InstallationManual string       `json:"installationManual"`
+	ShortDescription   string       `json:"shortDescription"`
+	Highlights         string       `json:"highlights"`
+	Features           string       `json:"features"`
+	MetaTitle          string       `json:"metaTitle"`
+	MetaDescription    string       `json:"metaDescription"`
+	Tags               []StoreTag   `json:"tags"`
+	Videos             []StoreVideo `json:"videos"`
+	Faqs               []StoreFaq   `json:"faqs"`
+	SupportInfo        interface{}  `json:"supportInfo"`
 }
 
 type StoreProductType struct {
