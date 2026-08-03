@@ -1,6 +1,7 @@
 package shop
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -64,5 +65,27 @@ func TestPHPConstraintCheck(t *testing.T) {
 
 	t.Run("invalid php version returns false", func(t *testing.T) {
 		assert.False(t, NewPHPConstraint("^8.2").Check("not-a-version"))
+	})
+}
+
+func TestValidatePHPVersion(t *testing.T) {
+	for _, supported := range SupportedPHPVersions {
+		assert.NoError(t, ValidatePHPVersion(supported))
+	}
+
+	t.Run("an unsupported series is rejected", func(t *testing.T) {
+		err := ValidatePHPVersion("8.0")
+		assert.ErrorContains(t, err, "8.0")
+		assert.ErrorContains(t, err, strings.Join(SupportedPHPVersions, ", "))
+	})
+
+	t.Run("a patch level is rejected", func(t *testing.T) {
+		// The value doubles as a Docker image tag and a config pin, so it must be
+		// the major.minor series.
+		assert.Error(t, ValidatePHPVersion("8.3.19"))
+	})
+
+	t.Run("an empty version is rejected", func(t *testing.T) {
+		assert.Error(t, ValidatePHPVersion(""))
 	})
 }

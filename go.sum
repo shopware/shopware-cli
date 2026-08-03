@@ -158,6 +158,8 @@ github.com/shyim/go-endoflife-api v0.0.0-20260630085844-dc60358f29eb h1:UV4IY3kU
 github.com/shyim/go-endoflife-api v0.0.0-20260630085844-dc60358f29eb/go.mod h1:A2eEOvzM8FuskmCqDmosSgoGGGw4BFIvvW9njuJfFfk=
 github.com/shyim/go-htmlprinter v0.0.0-20250417052954-e3e325d9ba3f h1:b7RObIj6TnesTadmtJ9pidOTxW72lODQcvwrLaje6/g=
 github.com/shyim/go-htmlprinter v0.0.0-20250417052954-e3e325d9ba3f/go.mod h1:UZ9KS4PRWtcsdL8IqdeXQK+L+L1tDqe6+lfmq9b12eo=
+github.com/shyim/go-php-discover v0.0.0-20260802092855-da3bc85f491c h1:4u/ATdQ4wCgIpQ2KJVC+iJXeB92kP6dI30CDZMSRJJI=
+github.com/shyim/go-php-discover v0.0.0-20260802092855-da3bc85f491c/go.mod h1:AGw/+zOkH6mNkBiTO4+2zCZvdMgd3oFyRLmxIMXQPGw=
 github.com/shyim/go-phplint v0.2.1 h1:raCPLnqTvZK+FmUuW7YhpD6XFtium3Jh0KwUkb2O++g=
 github.com/shyim/go-phplint v0.2.1/go.mod h1:EFbIzL9UZ0DKJwt9SbYUr2thlbK1BHiiaLGyue5XjcM=
 github.com/shyim/go-spdx v0.0.0-20260602055701-a935a2772ac1 h1:oD4MMCeWHSuvvLv2iXOKVMZRvJyn+r3xwIMU2BFttDo=
