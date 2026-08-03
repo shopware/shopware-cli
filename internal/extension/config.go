@@ -191,8 +191,19 @@ type ConfigStoreImage struct {
 	Activate ConfigStoreImageActivate `yaml:"activate"`
 	// Specifies whether the image is a preview in the language.
 	Preview ConfigStoreImagePreview `yaml:"preview"`
-	// Specifies the order of the image ascending the given priority.
-	Priority int `yaml:"priority"`
+	// Position of the image in the store gallery. Images are sorted ascending; the lowest value is shown first.
+	Position int `yaml:"position"`
+	// Deprecated: use Position instead.
+	Priority int `yaml:"priority,omitempty" jsonschema_extras:"deprecated=true"`
+}
+
+// GetPosition returns the configured image position, falling back to the deprecated priority.
+func (i ConfigStoreImage) GetPosition() int {
+	if i.Position != 0 {
+		return i.Position
+	}
+
+	return i.Priority
 }
 
 type ConfigStoreImageActivate struct {

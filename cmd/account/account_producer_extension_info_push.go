@@ -118,7 +118,7 @@ var accountCompanyProducerExtensionInfoPushCmd = &cobra.Command{
 							return fmt.Errorf("cannot upload image %s to extension: %w", configImage.File, err)
 						}
 
-						apiImage.Priority = configImage.Priority
+						apiImage.Priority = configImage.GetPosition()
 						apiImage.Details[0].Activated = configImage.Activate.German
 						apiImage.Details[0].Preview = configImage.Preview.German
 
