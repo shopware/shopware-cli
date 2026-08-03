@@ -27,10 +27,17 @@ var ErrEnvironmentDown = errors.New("development environment is down")
 
 type devEnvironment struct {
 	projectRoot string
+	configPath  string
 	cfg         *shop.Config
 	envCfg      *shop.EnvironmentConfig
 	executor    executor.Executor
 }
+
+// Values for the --on-port-conflict flag.
+const (
+	portConflictModeFail   = "fail"
+	portConflictModeRandom = "random"
+)
 
 var projectDevCmd = &cobra.Command{
 	Use:   "dev",
@@ -118,6 +125,7 @@ func runMigrationWizardTUI(projectRoot string, cfg *shop.Config) error {
 
 	_, err = dev.NewMigrationWizardApp(dev.Options{
 		ProjectRoot: projectRoot,
+		ConfigPath:  projectConfigPath,
 		Config:      cfg,
 		EnvConfig:   envCfg,
 		Executor:    exec,
@@ -172,16 +180,85 @@ func newDevEnvironment(cmd *cobra.Command, projectRoot string, cfg *shop.Config)
 
 	return &devEnvironment{
 		projectRoot: projectRoot,
+		configPath:  projectConfigPath,
 		cfg:         cfg,
 		envCfg:      envCfg,
 		executor:    exec,
 	}, nil
 }
 
+func (e *devEnvironment) dockerPorts() shop.ConfigDockerPorts {
+	if e.cfg == nil || e.cfg.Docker == nil {
+		return nil
+	}
+	return e.cfg.Docker.Ports
+}
+
+// resolvePortConflicts probes the host ports the compose file will publish.
+// Conflicting ports either abort the start with a descriptive error (fail) or
+// are remapped to random free ports (random), persisted to the local config
+// override so future runs reuse them.
+func (e *devEnvironment) resolvePortConflicts(ctx context.Context, mode string) error {
+	if e.executor.Type() != executor.TypeDocker {
+		return nil
+	}
+
+	conflicts, err := dockerpkg.FindPortConflicts(ctx, e.projectRoot, e.dockerPorts())
+	if err != nil || len(conflicts) == 0 {
+		return err
+	}
+
+	if mode != portConflictModeRandom {
+		var lines []string
+		for _, conflict := range conflicts {
+			lines = append(lines, fmt.Sprintf("  %s (%s): port %d is already in use", conflict.Definition.Label, conflict.Definition.Key, conflict.HostPort))
+		}
+		return fmt.Errorf("cannot start the development environment, host ports are already in use:\n%s\nrerun with --on-port-conflict=random to switch them to free ports, or set docker.ports in %s", strings.Join(lines, "\n"), projectConfigPath)
+	}
+
+	overrides, err := dockerpkg.AllocateRandomPorts(ctx, conflicts)
+	if err != nil {
+		return err
+	}
+
+	if err := shop.UpdateLocalDockerPorts(e.configPath, overrides); err != nil {
+		return err
+	}
+
+	e.cfg.SetDockerPortOverrides(overrides)
+
+	if err := dockerpkg.WriteComposeFile(e.projectRoot, dockerpkg.ComposeOptionsFromConfig(e.cfg)); err != nil {
+		return err
+	}
+
+	for _, conflict := range conflicts {
+		fmt.Println("  " + tui.DimText.Render(fmt.Sprintf("%s: port %d is in use, switched to %d", conflict.Definition.Label, conflict.HostPort, overrides[conflict.Definition.Key])))
+	}
+	fmt.Println("  " + tui.DimText.Render("Saved the new ports to "+shop.LocalConfigFileName(e.configPath)))
+	fmt.Println()
+
+	return nil
+}
+
 func (e *devEnvironment) start(cmd *cobra.Command) error {
+	mode, err := cmd.Flags().GetString("on-port-conflict")
+	if err != nil {
+		return err
+	}
+	if mode != portConflictModeFail && mode != portConflictModeRandom {
+		return fmt.Errorf("invalid value %q for --on-port-conflict, must be %q or %q", mode, portConflictModeFail, portConflictModeRandom)
+	}
+
+	// Errors past flag validation are runtime failures, not usage mistakes.
+	cmd.SilenceUsage = true
+
+	if err := e.resolvePortConflicts(cmd.Context(), mode); err != nil {
+		return err
+	}
+
 	start := time.Now()
 
-	err := spinner.New().
+	err = spinner.New().
 		Title("Starting development environment...").
 		Context(cmd.Context()).
 		ActionWithErr(func(ctx context.Context) error {
@@ -282,6 +359,7 @@ func (e *devEnvironment) status(cmd *cobra.Command) error {
 func (e *devEnvironment) runTUI() error {
 	_, err := dev.NewApp(dev.Options{
 		ProjectRoot: e.projectRoot,
+		ConfigPath:  e.configPath,
 		Config:      e.cfg,
 		EnvConfig:   e.envCfg,
 		Executor:    e.executor,
@@ -294,4 +372,5 @@ func init() {
 	projectDevCmd.AddCommand(projectDevStartCmd)
 	projectDevCmd.AddCommand(projectDevStopCmd)
 	projectDevCmd.AddCommand(projectDevStatusCmd)
+	projectDevCmd.PersistentFlags().String("on-port-conflict", portConflictModeFail, "What to do when host ports are already in use: fail or random. Applies when starting non-interactively; the dashboard asks instead.")
 }

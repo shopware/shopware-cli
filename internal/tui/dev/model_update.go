@@ -67,6 +67,15 @@ func (m Model) updateKeyPress(msg tea.KeyPressMsg) (app.Content, tea.Cmd) {
 		return m, nil
 	}
 
+	if m.phase == phasePortConflict {
+		// The pushed overlay handles the choice; this only covers the state
+		// after the prompt was dismissed with esc.
+		if tui.KeyString(msg) == "q" || tui.KeyString(msg) == tui.KeyCtrlC {
+			return m, tea.Quit
+		}
+		return m, nil
+	}
+
 	if m.phase == phaseTask {
 		if m.task.Done() {
 			m.phase = phaseDashboard
@@ -137,7 +146,7 @@ func (m Model) updateConfigTab(msg tea.KeyPressMsg) (app.Content, tea.Cmd) {
 				return m, nil
 			}
 			if localCfg := m.configTab.LocalConfig(); localCfg != nil {
-				if err := shop.WriteLocalConfig(localCfg, m.projectRoot); err != nil {
+				if err := shop.UpdateLocalDockerPHP(m.configPath, localCfg.Docker.PHP); err != nil {
 					m.configTab.err = err
 					m.configTab.saved = false
 					return m, nil
@@ -378,5 +387,5 @@ func (m Model) startAfterMigrationWizard() (app.Content, tea.Cmd) {
 
 	m.rebuildTabs()
 
-	return m, tea.Batch(m.dockerSpinner.Tick, m.startContainers())
+	return m, tea.Batch(m.dockerSpinner.Tick, checkPortsThenStart(m.projectRoot, m.dockerPorts()))
 }

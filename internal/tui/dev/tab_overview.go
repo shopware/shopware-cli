@@ -527,11 +527,25 @@ func (m OverviewModel) renderAccess() string {
 }
 
 func (m OverviewModel) renderWatchers() string {
+	var ports shop.ConfigDockerPorts
+	if m.shopCfg != nil && m.shopCfg.Docker != nil {
+		ports = m.shopCfg.Docker.Ports
+	}
+	// A disabled port (HostPort 0) is not reachable from the host, so no URL.
+	watcherURL := func(key string) string {
+		if port := dockerpkg.HostPort(ports, key); port > 0 {
+			return fmt.Sprintf("http://127.0.0.1:%d", port)
+		}
+		return ""
+	}
+	adminURL := watcherURL(shop.DockerPortAdminWatcher)
+	storefrontURL := watcherURL(shop.DockerPortStorefrontWatcher)
+
 	var s strings.Builder
 	s.WriteString(tui.TitleStyle.Render("Watchers"))
 	s.WriteString("\n")
-	s.WriteString(m.renderWatcherStatus("Admin", m.adminWatchRunning, m.adminWatchStarting, "http://127.0.0.1:5173", m.cursor == 0))
-	s.WriteString(m.renderWatcherStatus("Storefront", m.sfWatchRunning, m.sfWatchStarting, "http://127.0.0.1:9998", m.cursor == 1))
+	s.WriteString(m.renderWatcherStatus("Admin", m.adminWatchRunning, m.adminWatchStarting, adminURL, m.cursor == 0))
+	s.WriteString(m.renderWatcherStatus("Storefront", m.sfWatchRunning, m.sfWatchStarting, storefrontURL, m.cursor == 1))
 	return s.String()
 }
 

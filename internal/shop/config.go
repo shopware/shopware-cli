@@ -570,6 +570,8 @@ type ConfigValidationIgnoreExtension struct {
 type ConfigDocker struct {
 	// PHP configuration for the Docker dev image
 	PHP *ConfigDockerPHP `yaml:"php,omitempty"`
+	// Host port overrides for the Docker dev environment. Container ports are fixed.
+	Ports ConfigDockerPorts `yaml:"ports,omitempty"`
 }
 
 type ConfigDockerPHP struct {
@@ -669,6 +671,16 @@ func NewConfig() *Config {
 }
 
 func WriteConfig(cfg *Config, dir string) error {
+	if cfg.Docker != nil && cfg.Docker.Ports != nil {
+		// Port overrides are machine-specific and live in the local override
+		// file — keep them out of the committed configuration.
+		cfgCopy := *cfg
+		dockerCopy := *cfg.Docker
+		dockerCopy.Ports = nil
+		cfgCopy.Docker = &dockerCopy
+		cfg = &cfgCopy
+	}
+
 	data, err := yaml.Marshal(cfg)
 	if err != nil {
 		return fmt.Errorf("failed to marshal shop configuration: %w", err)
@@ -683,24 +695,6 @@ func WriteConfig(cfg *Config, dir string) error {
 	return nil
 }
 
-// WriteLocalConfig writes a partial configuration to .shopware-project.local.yml.
-// This file is deep-merged on top of the main config at read time and is intended
-// for credentials and other values that should not be committed to version control.
-func WriteLocalConfig(cfg *Config, dir string) error {
-	data, err := yaml.Marshal(cfg)
-	if err != nil {
-		return fmt.Errorf("failed to marshal local shop configuration: %w", err)
-	}
-
-	filePath := filepath.Join(dir, ".shopware-project.local.yml")
-
-	if err := os.WriteFile(filePath, data, 0o600); err != nil {
-		return fmt.Errorf("failed to write local shop configuration to %s: %w", filePath, err)
-	}
-
-	return nil
-}
-
 func ReadConfig(ctx context.Context, fileName string, allowFallback bool) (*Config, error) {
 	config := &Config{foundConfig: false}
 
@@ -708,6 +702,25 @@ func ReadConfig(ctx context.Context, fileName string, allowFallback bool) (*Conf
 
 	if os.IsNotExist(err) {
 		if allowFallback {
+			// Even without a base config, a local override file (e.g. persisted
+			// docker port overrides) must still apply.
+			localFile := localConfigFileName(fileName)
+			if _, localErr := os.Stat(localFile); localErr == nil {
+				mergedMap, mergeErr := mergeLocalConfig(map[string]any{}, localFile)
+				if mergeErr != nil {
+					return nil, fmt.Errorf("ReadConfig(%s): %v", fileName, mergeErr)
+				}
+
+				mergedYAML, mergeErr := marshalMap(mergedMap)
+				if mergeErr != nil {
+					return nil, fmt.Errorf("ReadConfig(%s): %v", fileName, mergeErr)
+				}
+
+				if mergeErr := yaml.Unmarshal(mergedYAML, &config); mergeErr != nil {
+					return nil, fmt.Errorf("ReadConfig(%s): %v", fileName, mergeErr)
+				}
+			}
+
 			return fillEmptyConfig(config), nil
 		}
 

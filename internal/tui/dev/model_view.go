@@ -31,6 +31,8 @@ func (m Model) windowTitle() string {
 		return ""
 	case phaseMigrationWizard:
 		return dir + "Setup"
+	case phasePortConflict:
+		return dir + "Port conflict"
 	}
 	return dir + "shopware-cli"
 }
@@ -61,7 +63,7 @@ func (m Model) phaseFooterHint() string {
 		return m.installFooterHint()
 	case phaseMigrationWizard:
 		return m.migrationWizard.footerHint()
-	case phaseDashboard, phaseTask:
+	case phaseDashboard, phaseTask, phasePortConflict:
 		return ""
 	}
 	return ""
@@ -77,7 +79,7 @@ func (m Model) View(ctx app.Context) string {
 	switch m.phase {
 	case phaseDashboard:
 		return m.renderDashboard(ctx)
-	case phaseStarting, phaseStopping, phaseInstallPrompt, phaseInstalling:
+	case phaseStarting, phaseStopping, phaseInstallPrompt, phaseInstalling, phasePortConflict:
 		return m.renderPhase(ctx)
 	case phaseTask:
 		return m.renderTask(ctx)
@@ -199,6 +201,16 @@ func (m Model) renderPhase(ctx app.Context) string {
 			}
 		}
 		card.WriteString(tui.NewStepList(tui.StepListOptions{Steps: items}).Render())
+		content.WriteString(tui.RenderPhaseCard(strings.TrimRight(card.String(), "\n")))
+	case phasePortConflict:
+		var card strings.Builder
+		card.WriteString(errorStyle.Render("Ports already in use"))
+		card.WriteString("\n\n")
+		for _, conflict := range m.portConflicts {
+			fmt.Fprintf(&card, "%s: port %d\n", conflict.Definition.Label, conflict.HostPort)
+		}
+		card.WriteString("\n")
+		card.WriteString(helpStyle.Render("Press q to exit"))
 		content.WriteString(tui.RenderPhaseCard(strings.TrimRight(card.String(), "\n")))
 	case phaseDashboard, phaseTask, phaseMigrationWizard:
 		// Rendered by the outer View() dispatch, not here.
