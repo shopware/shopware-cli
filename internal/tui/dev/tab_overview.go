@@ -661,28 +661,21 @@ func (m OverviewModel) renderUserActions() string {
 // run it. Only rendered for proxy projects.
 func (m OverviewModel) renderDomains() string {
 	var s strings.Builder
-	s.WriteString(tui.TitleStyle.Render("Domains"))
+	s.WriteString(tui.TitleStyle.Render("Local domains enabled"))
 	s.WriteString("\n")
 
-	label := lipgloss.NewStyle().Width(16)
-
-	// Domains are on by definition for a proxy project.
-	fmt.Fprintf(&s, "  %s %s%s\n",
-		lipgloss.NewStyle().Render("[x]"),
-		label.Render("Domains"),
-		lipgloss.NewStyle().Foreground(tui.SuccessColor).Render("on"))
-
-	// One-time machine setup (DNS + trusted HTTPS). Actionable while pending.
+	// The DNS resolver and the trusted certificate both come from the one-time
+	// `proxy setup`, tracked by a single flag; the checkbox alone carries the
+	// state. While pending, the `s` action runs the setup.
 	if m.domainsSetupDone {
-		fmt.Fprintf(&s, "  %s %s%s\n",
-			lipgloss.NewStyle().Render("[x]"),
-			label.Render("Setup"),
-			lipgloss.NewStyle().Foreground(tui.SuccessColor).Render("completed"))
+		checked := lipgloss.NewStyle().Render("[x]")
+		fmt.Fprintf(&s, "  %s %s\n", checked, "Default domains configured")
+		fmt.Fprintf(&s, "  %s %s\n", checked, "Local certificate trusted")
 	} else {
-		fmt.Fprintf(&s, "  %s %s%s\n",
-			lipgloss.NewStyle().Foreground(tui.BrandColor).Render("[ ]"),
-			label.Render("Setup (s)"),
-			tui.DimStyle.Render("needs sudo"))
+		unchecked := lipgloss.NewStyle().Foreground(tui.BrandColor).Render("[ ]")
+		fmt.Fprintf(&s, "  %s %s\n", unchecked, "Default domains configured")
+		fmt.Fprintf(&s, "  %s %s\n", unchecked, "Local certificate trusted")
+		fmt.Fprintf(&s, "  %s\n", tui.DimStyle.Render("press s to set up (needs sudo)"))
 	}
 
 	return s.String()
