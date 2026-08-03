@@ -314,19 +314,28 @@ var projectCI = &cobra.Command{
 			deleteAssetsSection.End(cmd.Context())
 		}
 
-		checksumSection := ci.Default.Section(cmd.Context(), "Generating extension checksums")
+		if !shopCfg.Build.DisableChecksums {
+			checksumSection := ci.Default.Section(cmd.Context(), "Generating extension checksums")
 
-		extensions := extension.FindExtensionsFromProject(cmd.Context(), args[0], false)
+			extensions := extension.FindExtensionsFromProject(cmd.Context(), args[0], false)
 
-		for _, ext := range extensions {
-			extPath := ext.GetPath()
+			for _, ext := range extensions {
+				extPath := ext.GetPath()
 
-			if err := extension.GenerateChecksumJSON(cmd.Context(), extPath, ext); err != nil {
-				logging.FromContext(cmd.Context()).Warnf("Failed to generate checksum for %s: %v", extPath, err)
+				if shopCfg.Build.KeepExistingChecksums {
+					if _, err := os.Stat(path.Join(extPath, "checksum.json")); err == nil {
+						logging.FromContext(cmd.Context()).Infof("Keeping existing checksum.json for %s", extPath)
+						continue
+					}
+				}
+
+				if err := extension.GenerateChecksumJSON(cmd.Context(), extPath, ext); err != nil {
+					logging.FromContext(cmd.Context()).Warnf("Failed to generate checksum for %s: %v", extPath, err)
+				}
 			}
-		}
 
-		checksumSection.End(cmd.Context())
+			checksumSection.End(cmd.Context())
+		}
 
 		if shopCfg.Build.Hooks != nil && len(shopCfg.Build.Hooks.Post) > 0 {
 			if err := executeCIHooks(cmd.Context(), "Running post hooks", shopCfg.Build.Hooks.Post, args[0]); err != nil {

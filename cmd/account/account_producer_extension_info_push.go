@@ -118,7 +118,7 @@ var accountCompanyProducerExtensionInfoPushCmd = &cobra.Command{
 							return fmt.Errorf("cannot upload image %s to extension: %w", configImage.File, err)
 						}
 
-						apiImage.Priority = configImage.Priority
+						apiImage.Priority = configImage.GetPosition()
 						apiImage.Details[0].Activated = configImage.Activate.German
 						apiImage.Details[0].Preview = configImage.Preview.German
 
@@ -194,6 +194,15 @@ func updateStoreInfo(ext *accountApi.Extension, zipExt extension.Extension, cfg 
 		ext.AutomaticBugfixVersionCompatibility = *cfg.Store.AutomaticBugfixVersionCompatibility
 	}
 
+	if cfg.Store.DemoShops != nil {
+		newDemos, err := buildExtensionDemos(*cfg.Store.DemoShops, info)
+		if err != nil {
+			return err
+		}
+
+		ext.Demos = newDemos
+	}
+
 	for _, info := range ext.Infos {
 		language := info.Locale.Name[0:2]
 
@@ -267,6 +276,65 @@ func updateStoreInfo(ext *accountApi.Extension, zipExt extension.Extension, cfg 
 	}
 
 	return nil
+}
+
+// buildExtensionDemos maps the configured demo shops to the API representation. The type and the
+// localization are only known by name in the configuration, so both are resolved against the
+// general information of the account API.
+func buildExtensionDemos(configDemos []extension.ConfigStoreDemoShop, info *accountApi.ExtensionGeneralInformation) ([]accountApi.ExtensionDemo, error) {
+	newDemos := make([]accountApi.ExtensionDemo, 0)
+
+	for _, configDemo := range configDemos {
+		demoType, err := findDemoType(configDemo.Type, info.DemoTypes)
+		if err != nil {
+			return nil, err
+		}
+
+		localization, err := findLocale(configDemo.Localization, info.Locales)
+		if err != nil {
+			return nil, err
+		}
+
+		newDemos = append(newDemos, accountApi.ExtensionDemo{
+			Type:          *demoType,
+			Link:          configDemo.Link,
+			Localization:  *localization,
+			LoginName:     configDemo.LoginName,
+			LoginPassword: configDemo.LoginPassword,
+		})
+	}
+
+	return newDemos, nil
+}
+
+func findDemoType(name string, demoTypes []accountApi.StoreDemoType) (*accountApi.StoreDemoType, error) {
+	for i, demoType := range demoTypes {
+		if demoType.Name == name {
+			return &demoTypes[i], nil
+		}
+	}
+
+	possible := make([]string, 0, len(demoTypes))
+	for _, demoType := range demoTypes {
+		possible = append(possible, demoType.Name)
+	}
+
+	return nil, fmt.Errorf("unknown demo shop type %q, possible values are: %s", name, strings.Join(possible, ", "))
+}
+
+func findLocale(name string, locales []accountApi.Locale) (*accountApi.Locale, error) {
+	for i, locale := range locales {
+		if locale.Name == name {
+			return &locales[i], nil
+		}
+	}
+
+	possible := make([]string, 0, len(locales))
+	for _, locale := range locales {
+		possible = append(possible, locale.Name)
+	}
+
+	return nil, fmt.Errorf("unknown demo shop localization %q, possible values are: %s", name, strings.Join(possible, ", "))
 }
 
 func getTranslation[T extension.Translatable](language string, config extension.ConfigTranslated[T]) *T {
