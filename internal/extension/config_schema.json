@@ -459,9 +459,14 @@
           "$ref": "#/$defs/ConfigStoreImagePreview",
           "description": "Specifies whether the image is a preview in the language."
         },
+        "position": {
+          "type": "integer",
+          "description": "Position of the image in the store gallery. Images are sorted ascending; the lowest value is shown first."
+        },
         "priority": {
           "type": "integer",
-          "description": "Specifies the order of the image ascending the given priority."
+          "description": "Deprecated: use Position instead.",
+          "deprecated": true
         }
       },
       "additionalProperties": false,
