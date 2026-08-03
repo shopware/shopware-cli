@@ -40,6 +40,23 @@ func TestDownloadFileTo(t *testing.T) {
 	assert.Equal(t, "icon-content", string(content))
 }
 
+func TestDownloadFileToRejectsNon200(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+		_, _ = w.Write([]byte("error page"))
+	}))
+	defer server.Close()
+
+	target := filepath.Join(t.TempDir(), "icon.png")
+	err := downloadFileTo(t.Context(), server.Client(), server.URL, target)
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "unexpected status 404")
+
+	_, statErr := os.Stat(target)
+	assert.True(t, os.IsNotExist(statErr))
+}
+
 func TestWriteImages(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_, _ = w.Write([]byte("img:" + r.URL.Path))
@@ -81,6 +98,23 @@ func TestWriteImagesSkipsInactive(t *testing.T) {
 
 	imageDir := t.TempDir()
 	require.NoError(t, writeImages(t.Context(), server.Client(), imageDir, 0, images))
+
+	deEntries, err := os.ReadDir(filepath.Join(imageDir, "de"))
+	require.NoError(t, err)
+	assert.Empty(t, deEntries)
+}
+
+func TestWriteImagesSkipsMalformedDetails(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte("content"))
+	}))
+	defer server.Close()
+
+	var image ExtensionImage
+	require.NoError(t, json.Unmarshal([]byte(`{"remoteLink":"`+server.URL+`/a.png","priority":1,"details":[]}`), &image))
+
+	imageDir := t.TempDir()
+	require.NoError(t, writeImages(t.Context(), server.Client(), imageDir, 0, []*ExtensionImage{&image}))
 
 	deEntries, err := os.ReadDir(filepath.Join(imageDir, "de"))
 	require.NoError(t, err)

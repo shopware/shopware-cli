@@ -267,6 +267,10 @@ func downloadFileTo(ctx context.Context, client *http.Client, url string, target
 		}
 	}()
 
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("download file: unexpected status %d for %s", resp.StatusCode, url)
+	}
+
 	content, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return fmt.Errorf("read file body: %w", err)
@@ -284,6 +288,10 @@ func writeImages(ctx context.Context, client *http.Client, imagePath string, ind
 	imageMap := make(map[int]string)
 
 	for _, image := range storeImages {
+		if index >= len(image.Details) {
+			continue
+		}
+
 		if image.Details[index].Activated {
 			priority := image.Priority
 

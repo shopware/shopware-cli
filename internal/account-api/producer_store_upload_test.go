@@ -86,3 +86,38 @@ func TestWaitForCodeReviewResultGivesUpAfterMaxTries(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, 10, calls)
 }
+
+func TestWaitForCodeReviewResultShrinkingListDoesNotPanic(t *testing.T) {
+	producer := &fakeProducer{
+		getBinaryReviewResultsFn: func(_ context.Context, _, _ int) ([]BinaryReviewResult, error) {
+			// transient glitch: fewer reviews than before
+			return nil, nil
+		},
+	}
+
+	err := waitForCodeReviewResult(t.Context(), producer, 1, 1, 3, noopSleep)
+
+	require.NoError(t, err)
+}
+
+func TestWaitForCodeReviewResultContextCancelled(t *testing.T) {
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+
+	err := waitForCodeReviewResult(ctx, &fakeProducer{}, 1, 1, 0, noopSleep)
+
+	require.ErrorIs(t, err, context.Canceled)
+}
+
+func TestSleepWithContextCancelled(t *testing.T) {
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+
+	err := sleepWithContext(ctx, time.Sleep, time.Hour)
+
+	require.ErrorIs(t, err, context.Canceled)
+}
+
+func TestSleepWithContextCompletes(t *testing.T) {
+	require.NoError(t, sleepWithContext(t.Context(), func(time.Duration) {}, time.Hour))
+}

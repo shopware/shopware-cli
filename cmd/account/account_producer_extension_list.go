@@ -1,8 +1,6 @@
 package account
 
 import (
-	"os"
-
 	"github.com/spf13/cobra"
 
 	account_api "github.com/shopware/shopware-cli/internal/account-api"
@@ -26,11 +24,12 @@ var accountCompanyProducerExtensionListCmd = &cobra.Command{
 			return err
 		}
 
+		out := cmd.OutOrStdout()
 		if listExtensionJSON {
-			return account_api.WriteExtensionsJSON(os.Stdout, extensions)
+			return account_api.WriteExtensionsJSON(out, extensions)
 		}
 
-		return account_api.WriteExtensionsTable(os.Stdout, extensions)
+		return account_api.WriteExtensionsTable(out, extensions)
 	},
 }
 

@@ -177,7 +177,9 @@ func waitForCodeReviewResult(ctx context.Context, producer ProducerAPI, extensio
 	logging.FromContext(ctx).Infof("Waiting for code review result")
 	logging.FromContext(ctx).Debugf("Initial wait of 10 seconds before first poll")
 
-	sleep(10 * time.Second)
+	if err := sleepWithContext(ctx, sleep, 10*time.Second); err != nil {
+		return err
+	}
 
 	maxTries := 10
 	tried := 0
@@ -192,8 +194,8 @@ func waitForCodeReviewResult(ctx context.Context, producer ProducerAPI, extensio
 
 		logging.FromContext(ctx).Debugf("Current review count: %d, previous count: %d", len(reviews), previousReviewCount)
 
-		// Review has been updated
-		if len(reviews) != previousReviewCount {
+		// A new review entry has been added
+		if len(reviews) > previousReviewCount {
 			lastReview := reviews[len(reviews)-1]
 			logging.FromContext(ctx).Debugf("Review has been updated, checking status")
 
@@ -219,7 +221,9 @@ func waitForCodeReviewResult(ctx context.Context, producer ProducerAPI, extensio
 			logging.FromContext(ctx).Debugf("No new reviews yet, waiting...")
 		}
 
-		sleep(15 * time.Second)
+		if err := sleepWithContext(ctx, sleep, 15*time.Second); err != nil {
+			return err
+		}
 		tried++
 
 		if maxTries == tried {
@@ -227,5 +231,22 @@ func waitForCodeReviewResult(ctx context.Context, producer ProducerAPI, extensio
 			logging.FromContext(ctx).Debugf("Reached maximum retry attempts (%d)", maxTries)
 			return nil
 		}
+	}
+}
+
+// sleepWithContext sleeps for the given duration but returns early with the context error when
+// the context is cancelled, so callers shut down promptly on CLI cancel/timeout.
+func sleepWithContext(ctx context.Context, sleep func(time.Duration), d time.Duration) error {
+	done := make(chan struct{})
+	go func() {
+		sleep(d)
+		close(done)
+	}()
+
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-done:
+		return nil
 	}
 }

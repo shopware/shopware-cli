@@ -33,9 +33,20 @@ func ListProducerExtensions(ctx context.Context, producer ProducerAPI, opts List
 		criteria.OrderSequence = "asc"
 	}
 
-	extensions, err := producer.Extensions(ctx, &criteria)
-	if err != nil {
-		return nil, err
+	// Fetch all pages; a producer with more than one page of extensions would otherwise be
+	// listed incompletely.
+	extensions := make([]Extension, 0)
+	for criteria.Offset = 0; ; criteria.Offset += criteria.Limit {
+		page, err := producer.Extensions(ctx, &criteria)
+		if err != nil {
+			return nil, err
+		}
+
+		extensions = append(extensions, page...)
+
+		if len(page) < criteria.Limit {
+			break
+		}
 	}
 
 	extensions = FilterExtensions(extensions, opts.PluginOnly, opts.AppOnly)

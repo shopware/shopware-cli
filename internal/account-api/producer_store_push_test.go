@@ -1,6 +1,7 @@
 package account_api
 
 import (
+	"context"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -196,4 +197,52 @@ func TestParseInlineablePathMissingFile(t *testing.T) {
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "error reading file")
+}
+
+func TestLanguageFromLocale(t *testing.T) {
+	assert.Equal(t, "de", languageFromLocale("de_DE"))
+	assert.Equal(t, "en", languageFromLocale("en_GB"))
+	assert.Equal(t, "", languageFromLocale(""))
+	assert.Equal(t, "", languageFromLocale("d"))
+	assert.Equal(t, "", languageFromLocale("fr_FR"))
+}
+
+func TestUploadImagesByDirectory(t *testing.T) {
+	dir := t.TempDir()
+	deDir := filepath.Join(dir, "de")
+	require.NoError(t, os.MkdirAll(deDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(deDir, "1-first.png"), []byte("x"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(deDir, "2-second.png"), []byte("x"), 0o644))
+	// invalid names and directories must not be uploaded
+	require.NoError(t, os.WriteFile(filepath.Join(deDir, ".DS_Store"), []byte("x"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(deDir, "README"), []byte("x"), 0o644))
+	require.NoError(t, os.MkdirAll(filepath.Join(deDir, "subdir"), 0o755))
+
+	var uploaded []string
+	var updated []*ExtensionImage
+	producer := &fakeProducer{
+		addExtensionImageFn: func(_ context.Context, _ int, file string) (*ExtensionImage, error) {
+			uploaded = append(uploaded, filepath.Base(file))
+			return testStoreImage(t, 0, false, false, ""), nil
+		},
+		updateExtensionImageFn: func(_ context.Context, _ int, image *ExtensionImage) error {
+			updated = append(updated, image)
+			return nil
+		},
+	}
+
+	require.NoError(t, uploadImagesByDirectory(t.Context(), producer, 1, dir, 0))
+
+	assert.ElementsMatch(t, []string{"1-first.png", "2-second.png"}, uploaded)
+	require.Len(t, updated, 2)
+	assert.Equal(t, 1, updated[0].Priority)
+	assert.Equal(t, 2, updated[1].Priority)
+	assert.True(t, updated[0].Details[0].Activated)
+	// preview is attached to the last valid file only
+	assert.False(t, updated[0].Details[0].Preview)
+	assert.True(t, updated[1].Details[0].Preview)
+}
+
+func TestUploadImagesByDirectoryMissingFolder(t *testing.T) {
+	require.NoError(t, uploadImagesByDirectory(t.Context(), &fakeProducer{}, 1, t.TempDir(), 0))
 }

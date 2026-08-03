@@ -31,9 +31,7 @@ func PushExtensionStoreInfo(ctx context.Context, producer ProducerAPI, zipExt ex
 	metadata := zipExt.GetMetaData()
 
 	for _, info := range storeExt.Infos {
-		language := info.Locale.Name[0:2]
-
-		if language == "de" {
+		if strings.HasPrefix(info.Locale.Name, "de") {
 			info.Name = metadata.Label.German
 			info.ShortDescription = metadata.Description.German
 		} else {
@@ -166,7 +164,7 @@ func updateStoreInfo(ext *Extension, zipExt extension.Extension, cfg *extension.
 	}
 
 	for _, info := range ext.Infos {
-		language := info.Locale.Name[0:2]
+		language := languageFromLocale(info.Locale.Name)
 
 		applyTranslated(language, cfg.Store.Tags, func(tags []string) {
 			info.Tags = mapSlice(tags, func(tag string) StoreTag { return StoreTag{Name: tag} })
@@ -288,6 +286,19 @@ func getTranslation[T any](language string, config extension.ConfigTranslated[T]
 	return nil
 }
 
+// languageFromLocale extracts the language code from a locale name like "de_DE" without assuming
+// a minimum length.
+func languageFromLocale(localeName string) string {
+	switch {
+	case strings.HasPrefix(localeName, "de"):
+		return "de"
+	case strings.HasPrefix(localeName, "en"):
+		return "en"
+	}
+
+	return ""
+}
+
 // applyTranslated calls set with the configured value of the given language if one exists.
 func applyTranslated[T any](language string, config extension.ConfigTranslated[T], set func(T)) {
 	if value := getTranslation(language, config); value != nil {
@@ -340,39 +351,43 @@ func uploadImagesByDirectory(ctx context.Context, producer ProducerAPI, extensio
 		directory = path.Join(directory, "en")
 	}
 
-	images, err := os.ReadDir(directory)
+	entries, err := os.ReadDir(directory)
 	// When folder does not exists, skip
 	if err != nil {
 		return nil //nolint:nilerr
 	}
 
-	imagesLen := len(images) - 1
 	re := regexp.MustCompile(`^(\d+)([_-][a-zA-Z0-9-_]+)?$`)
 
-	for i, image := range images {
-		if image.IsDir() {
+	// Only upload files matching the name pattern, so no orphaned images are left behind on the
+	// remote and the preview flag is attached to the last valid image.
+	files := make([]os.DirEntry, 0, len(entries))
+	for _, entry := range entries {
+		if entry.IsDir() {
 			continue
 		}
 
-		fileName := image.Name()
-		fileName = strings.TrimSuffix(fileName, filepath.Ext(fileName))
-
-		apiImage, err := producer.AddExtensionImage(ctx, extensionId, path.Join(directory, image.Name()))
-		if err != nil {
-			return fmt.Errorf("cannot upload image %s to extension: %w", image.Name(), err)
+		baseName := strings.TrimSuffix(entry.Name(), filepath.Ext(entry.Name()))
+		if re.MatchString(baseName) {
+			files = append(files, entry)
+		} else {
+			logging.FromContext(ctx).Warnf("Invalid image name %s, skipping", entry.Name())
 		}
+	}
 
-		matches := re.FindStringSubmatch(fileName)
-
-		if matches == nil {
-			logging.FromContext(ctx).Warnf("Invalid image name %s, skipping", image.Name())
-			continue
-		}
+	for i, image := range files {
+		baseName := strings.TrimSuffix(image.Name(), filepath.Ext(image.Name()))
+		matches := re.FindStringSubmatch(baseName)
 
 		priority, err := strconv.Atoi(matches[1])
 		if err != nil {
 			logging.FromContext(ctx).Warnf("Unexpected error: \"%s\", skipping", err)
 			continue
+		}
+
+		apiImage, err := producer.AddExtensionImage(ctx, extensionId, path.Join(directory, image.Name()))
+		if err != nil {
+			return fmt.Errorf("cannot upload image %s to extension: %w", image.Name(), err)
 		}
 
 		apiImage.Priority = priority
@@ -383,10 +398,10 @@ func uploadImagesByDirectory(ctx context.Context, producer ProducerAPI, extensio
 
 		if index == 0 {
 			apiImage.Details[0].Activated = true
-			apiImage.Details[0].Preview = imagesLen-i == 0
+			apiImage.Details[0].Preview = i == len(files)-1
 		} else {
 			apiImage.Details[1].Activated = true
-			apiImage.Details[1].Preview = imagesLen-i == 0
+			apiImage.Details[1].Preview = i == len(files)-1
 		}
 
 		if err := producer.UpdateExtensionImage(ctx, extensionId, apiImage); err != nil {

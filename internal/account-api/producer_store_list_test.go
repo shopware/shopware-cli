@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -87,6 +88,34 @@ func TestListProducerExtensions(t *testing.T) {
 	assert.Equal(t, "asc", gotCriteria.OrderSequence)
 	// filtered and sorted by producer name, then extension name
 	assert.Equal(t, []string{"Alpha", "Zebra"}, extensionNames(extensions))
+}
+
+func TestListProducerExtensionsPaginates(t *testing.T) {
+	fullPage := make([]Extension, 0, 100)
+	for i := range 100 {
+		fullPage = append(fullPage, testExtension(fmt.Sprintf("Ext%03d", i), ExtensionGenerationPlatform, "approved"))
+	}
+
+	var offsets []int
+	producer := &fakeProducer{
+		extensionsFn: func(_ context.Context, criteria *ListExtensionCriteria) ([]Extension, error) {
+			offsets = append(offsets, criteria.Offset)
+			switch criteria.Offset {
+			case 0:
+				return fullPage, nil
+			case 100:
+				return fullPage[:30], nil
+			default:
+				return nil, nil
+			}
+		},
+	}
+
+	extensions, err := ListProducerExtensions(t.Context(), producer, ListExtensionOptions{})
+
+	require.NoError(t, err)
+	assert.Len(t, extensions, 130)
+	assert.Equal(t, []int{0, 100}, offsets)
 }
 
 func TestWriteExtensionsJSON(t *testing.T) {
