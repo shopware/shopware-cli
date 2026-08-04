@@ -44,14 +44,7 @@ tools:
     allowed-repos: [shopware/shopware-cli, shopware/docs]
 safe-outputs:
   id-token: write
-  github-token: ${{ steps.sts-cli.outputs.token }}
   steps:
-    - name: Gather CLI token
-      id: sts-cli
-      uses: octo-sts/action@f603d3be9d8dd9871a265776e625a27b00effe05 # ratchet:octo-sts/action@v1.1.1
-      with:
-        scope: shopware/shopware-cli
-        identity: swcli
     - name: Gather documentation token
       id: sts-docs
       uses: octo-sts/action@f603d3be9d8dd9871a265776e625a27b00effe05 # ratchet:octo-sts/action@v1.1.1
@@ -77,7 +70,6 @@ safe-outputs:
     target: "*"
     hide-older-comments: true
     footer: false
-    github-token: ${{ steps.sts-cli.outputs.token }}
 ---
 
 # PR documentation check
