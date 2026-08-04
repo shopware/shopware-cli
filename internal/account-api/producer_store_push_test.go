@@ -246,3 +246,198 @@ func TestUploadImagesByDirectory(t *testing.T) {
 func TestUploadImagesByDirectoryMissingFolder(t *testing.T) {
 	require.NoError(t, uploadImagesByDirectory(t.Context(), &fakeProducer{}, 1, t.TempDir(), 0))
 }
+
+func TestPushExtensionStoreInfo(t *testing.T) {
+	extDir := t.TempDir()
+	iconPath := "src/Resources/store/icon.png"
+	require.NoError(t, os.MkdirAll(filepath.Join(extDir, "src/Resources/store"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(extDir, iconPath), []byte("icon"), 0o644))
+
+	imageDir := "src/Resources/store/images"
+	require.NoError(t, os.MkdirAll(filepath.Join(extDir, imageDir, "de"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(extDir, imageDir, "de", "1-first.png"), []byte("img"), 0o644))
+	require.NoError(t, os.MkdirAll(filepath.Join(extDir, imageDir, "en"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(extDir, imageDir, "en", "1-first.png"), []byte("img"), 0o644))
+
+	var storeExt Extension
+	require.NoError(t, json.Unmarshal([]byte(`{"id":7,"infos":[{"locale":{"name":"de_DE"}},{"locale":{"name":"en_GB"}}]}`), &storeExt))
+
+	var updatedExtension *Extension
+	var iconUpdated bool
+	var deletedImageIds []int
+	var addedImages int
+
+	producer := &fakeProducer{
+		getExtensionByNameFn: func(_ context.Context, name string) (*Extension, error) {
+			assert.Equal(t, "TestPlugin", name)
+			return &storeExt, nil
+		},
+		getExtensionGeneralInfoFn: func(_ context.Context) (*ExtensionGeneralInformation, error) {
+			return demoGeneralInfo(), nil
+		},
+		updateExtensionIconFn: func(_ context.Context, extensionId int, path string) error {
+			assert.Equal(t, 7, extensionId)
+			assert.Contains(t, path, iconPath)
+			iconUpdated = true
+			return nil
+		},
+		getExtensionImagesFn: func(_ context.Context, _ int) ([]*ExtensionImage, error) {
+			return []*ExtensionImage{{Id: 99}}, nil
+		},
+		deleteExtensionImagesFn: func(_ context.Context, _, imageId int) error {
+			deletedImageIds = append(deletedImageIds, imageId)
+			return nil
+		},
+		addExtensionImageFn: func(_ context.Context, _ int, _ string) (*ExtensionImage, error) {
+			addedImages++
+			return testStoreImage(t, 0, false, false, ""), nil
+		},
+		updateExtensionImageFn: func(_ context.Context, _ int, _ *ExtensionImage) error {
+			return nil
+		},
+		updateExtensionFn: func(_ context.Context, extension *Extension) error {
+			updatedExtension = extension
+			return nil
+		},
+	}
+
+	cfg := &extension.Config{FileName: ".shopware-extension.yml"}
+	cfg.Store.Icon = &iconPath
+	cfg.Store.ImageDirectory = &imageDir
+
+	zipExt := &fakeExtension{
+		name:   "TestPlugin",
+		path:   extDir,
+		config: cfg,
+		metadata: &extension.ExtensionMetadata{
+			Label:       extension.ExtensionTranslated{German: "DE", English: "EN"},
+			Description: extension.ExtensionTranslated{German: "DEsc", English: "ENsc"},
+		},
+	}
+
+	require.NoError(t, PushExtensionStoreInfo(t.Context(), producer, zipExt))
+
+	assert.True(t, iconUpdated)
+	assert.Equal(t, []int{99}, deletedImageIds)
+	assert.Equal(t, 2, addedImages)
+	require.NotNil(t, updatedExtension)
+	assert.Equal(t, "DE", updatedExtension.Infos[0].Name)
+	assert.Equal(t, "EN", updatedExtension.Infos[1].Name)
+}
+
+func TestPushExtensionStoreInfoNameError(t *testing.T) {
+	err := PushExtensionStoreInfo(t.Context(), &fakeProducer{}, &errorNameExtension{})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "cannot get name")
+}
+
+func TestPushExtensionStoreInfoManualImages(t *testing.T) {
+	extDir := t.TempDir()
+	imgFile := "src/Resources/store/manual.png"
+	require.NoError(t, os.MkdirAll(filepath.Join(extDir, "src/Resources/store"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(extDir, imgFile), []byte("img"), 0o644))
+
+	var storeExt Extension
+	require.NoError(t, json.Unmarshal([]byte(`{"id":7,"infos":[{"locale":{"name":"de_DE"}},{"locale":{"name":"en_GB"}}]}`), &storeExt))
+
+	var updated *ExtensionImage
+	producer := &fakeProducer{
+		getExtensionByNameFn: func(_ context.Context, _ string) (*Extension, error) {
+			return &storeExt, nil
+		},
+		getExtensionGeneralInfoFn: func(_ context.Context) (*ExtensionGeneralInformation, error) {
+			return demoGeneralInfo(), nil
+		},
+		getExtensionImagesFn: func(_ context.Context, _ int) ([]*ExtensionImage, error) {
+			return nil, nil
+		},
+		addExtensionImageFn: func(_ context.Context, _ int, file string) (*ExtensionImage, error) {
+			assert.Contains(t, file, imgFile)
+			return testStoreImage(t, 0, false, false, ""), nil
+		},
+		updateExtensionImageFn: func(_ context.Context, _ int, image *ExtensionImage) error {
+			updated = image
+			return nil
+		},
+		updateExtensionFn: func(_ context.Context, _ *Extension) error { return nil },
+	}
+
+	cfg := &extension.Config{}
+	cfg.Store.Images = &[]extension.ConfigStoreImage{
+		{
+			File:     imgFile,
+			Activate: extension.ConfigStoreImageActivate{German: true, English: false},
+			Preview:  extension.ConfigStoreImagePreview{German: true, English: false},
+		},
+	}
+
+	require.NoError(t, PushExtensionStoreInfo(t.Context(), producer, &fakeExtension{
+		name:     "TestPlugin",
+		path:     extDir,
+		config:   cfg,
+		metadata: &extension.ExtensionMetadata{},
+	}))
+
+	require.NotNil(t, updated)
+	assert.True(t, updated.Details[0].Activated)
+	assert.True(t, updated.Details[0].Preview)
+	assert.False(t, updated.Details[1].Activated)
+}
+
+func TestUpdateStoreInfoAppliesStoreFields(t *testing.T) {
+	dir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "desc.de.html"), []byte("<p>de</p>"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "manual.en.html"), []byte("<p>en</p>"), 0o644))
+
+	var ext Extension
+	require.NoError(t, json.Unmarshal([]byte(`{"infos":[{"locale":{"name":"de_DE"}},{"locale":{"name":"en_GB"}}]}`), &ext))
+
+	defaultLocale := "de_DE"
+	productType := "extension"
+	auto := true
+	localizations := []string{"de_DE", "en_GB"}
+	availabilities := []string{"global"}
+	deDesc := "file:desc.de.html"
+	enManual := "file:manual.en.html"
+	deHighlights := []string{"h1"}
+	enFeatures := []string{"f1"}
+	deFaqs := []extension.ConfigStoreFaq{{Question: "Q", Answer: "A", Position: 1}}
+	deVideos := []string{"https://v"}
+	deMetaDesc := "meta-de"
+
+	info := demoGeneralInfo()
+	info.StoreAvailabilities = []StoreAvailablity{{Id: 1, Name: "global"}, {Id: 2, Name: "eu"}}
+	info.ProductTypes = []StoreProductType{{Id: 3, Name: "extension"}}
+
+	cfg := &extension.Config{}
+	cfg.Store.DefaultLocale = &defaultLocale
+	cfg.Store.Localizations = &localizations
+	cfg.Store.Availabilities = &availabilities
+	cfg.Store.Type = &productType
+	cfg.Store.AutomaticBugfixVersionCompatibility = &auto
+	cfg.Store.Description = extension.ConfigTranslated[string]{German: &deDesc}
+	cfg.Store.InstallationManual = extension.ConfigTranslated[string]{English: &enManual}
+	cfg.Store.Highlights = extension.ConfigTranslated[[]string]{German: &deHighlights}
+	cfg.Store.Features = extension.ConfigTranslated[[]string]{English: &enFeatures}
+	cfg.Store.Faq = extension.ConfigTranslated[[]extension.ConfigStoreFaq]{German: &deFaqs}
+	cfg.Store.Videos = extension.ConfigTranslated[[]string]{German: &deVideos}
+	cfg.Store.MetaDescription = extension.ConfigTranslated[string]{German: &deMetaDesc}
+
+	zipExt := &fakeExtension{path: dir}
+	require.NoError(t, updateStoreInfo(&ext, zipExt, cfg, info))
+
+	assert.Equal(t, "de_DE", ext.StandardLocale.Name)
+	assert.Equal(t, []Locale{{Name: "de_DE"}, {Name: "en_GB"}}, ext.Localizations)
+	require.Len(t, ext.StoreAvailabilities, 1)
+	assert.Equal(t, "global", ext.StoreAvailabilities[0].Name)
+	require.NotNil(t, ext.ProductType)
+	assert.Equal(t, "extension", ext.ProductType.Name)
+	assert.True(t, ext.AutomaticBugfixVersionCompatibility)
+	assert.Equal(t, "<p>de</p>", ext.Infos[0].Description)
+	assert.Equal(t, "<p>en</p>", ext.Infos[1].InstallationManual)
+	assert.Equal(t, "h1", ext.Infos[0].Highlights)
+	assert.Equal(t, "f1", ext.Infos[1].Features)
+	require.Len(t, ext.Infos[0].Faqs, 1)
+	assert.Equal(t, []StoreVideo{{URL: "https://v"}}, ext.Infos[0].Videos)
+	assert.Equal(t, "meta-de", ext.Infos[0].MetaDescription)
+}
