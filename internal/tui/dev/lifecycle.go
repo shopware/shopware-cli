@@ -112,6 +112,20 @@ func (m Model) updateLifecycle(msg tea.Msg) (app.Content, tea.Cmd) {
 
 	case dockerStoppedMsg:
 		return m, tea.Quit
+
+	case portConflictMsg:
+		m.phase = phasePortConflict
+		m.portConflicts = msg.conflicts
+		return m, m.host.PushOverlay(newPortConflictPrompt(msg.conflicts))
+
+	case portFixDoneMsg:
+		if msg.err != nil {
+			m.dockerShowLogs = true
+			m.overlayLines = append(m.overlayLines, errorStyle.Render("Failed: "+msg.err.Error()))
+			m.overlayLines = append(m.overlayLines, "", helpStyle.Render("Press q to exit"))
+			return m, nil
+		}
+		return m, m.startContainers()
 	}
 
 	return m, nil

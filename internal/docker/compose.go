@@ -79,6 +79,41 @@ type ComposeOptions struct {
 	// disabled (shopware.admin_worker.enable_admin_worker: false), because
 	// the message queue is then no longer dispatched from the browser.
 	DedicatedWorker bool
+	// Ports overrides the host ports the services are published on.
+	Ports shop.ConfigDockerPorts
+}
+
+// portBindings renders the "host:container" publish entries for the given
+// docker.ports keys, honoring host-port overrides and skipping ports that are
+// disabled (configured as false).
+func (o *ComposeOptions) portBindings(keys ...string) []string {
+	var ports shop.ConfigDockerPorts
+	if o != nil {
+		ports = o.Ports
+	}
+
+	bindings := make([]string, 0, len(keys))
+	for _, key := range keys {
+		for _, def := range PortDefinitions {
+			if def.Key != key {
+				continue
+			}
+			if hostPort := HostPort(ports, key); hostPort > 0 {
+				bindings = append(bindings, fmt.Sprintf("%d:%d", hostPort, def.Target))
+			}
+			break
+		}
+	}
+
+	return bindings
+}
+
+// addPorts adds a ports section to the service for the given docker.ports
+// keys; a service whose ports are all disabled gets no ports key at all.
+func addPorts(service *yaml.Node, opts *ComposeOptions, keys ...string) {
+	if bindings := opts.portBindings(keys...); len(bindings) > 0 {
+		addKeyValueNode(service, "ports", newSequenceNode(bindings...))
+	}
 }
 
 func (o *ComposeOptions) phpVersion() string {
@@ -100,6 +135,7 @@ func ComposeOptionsFromConfig(cfg *shop.Config) *ComposeOptions {
 		opts.BlackfireServerToken = cfg.Docker.PHP.BlackfireServerToken
 		opts.TidewaysAPIKey = cfg.Docker.PHP.TidewaysAPIKey
 	}
+	opts.Ports = cfg.Docker.Ports
 	return opts
 }
 
@@ -192,9 +228,14 @@ func buildCompose(hasAMQP, hasElasticsearch bool, opts *ComposeOptions) yaml.Nod
 	if opts != nil && opts.User != "" {
 		addKeyValue(web, "user", opts.User)
 	}
-	addKeyValueNode(web, "ports", newSequenceNode(
-		"8000:8000", "8080:8080", "9999:9999", "9998:9998", "5173:5173", "5773:5773",
-	))
+	addPorts(web, opts,
+		shop.DockerPortWeb,
+		shop.DockerPortWebAlt,
+		shop.DockerPortStorefrontWatcherAssets,
+		shop.DockerPortStorefrontWatcher,
+		shop.DockerPortAdminWatcher,
+		shop.DockerPortAdminWatcherHMR,
+	)
 	addKeyValueNode(web, "env_file", newSequenceNode(".env.local"))
 	addKeyValueNode(web, "environment", webEnv)
 	addKeyValueNode(web, "volumes", newSequenceNode(".:/var/www/html"))
@@ -244,7 +285,7 @@ func buildCompose(hasAMQP, hasElasticsearch bool, opts *ComposeOptions) yaml.Nod
 	addKeyValue(adminer, "stop_signal", "SIGKILL")
 	addKeyValueNode(adminer, "depends_on", newSequenceNode("database"))
 	addKeyValueNode(adminer, "environment", adminerEnv)
-	addKeyValueNode(adminer, "ports", newSequenceNode("9080:8080"))
+	addPorts(adminer, opts, shop.DockerPortAdminer)
 
 	mailerEnv := newMappingNode()
 	addKeyValue(mailerEnv, "MP_SMTP_AUTH_ACCEPT_ANY", "1")
@@ -252,7 +293,7 @@ func buildCompose(hasAMQP, hasElasticsearch bool, opts *ComposeOptions) yaml.Nod
 
 	mailer := newMappingNode()
 	addKeyValue(mailer, "image", "axllent/mailpit")
-	addKeyValueNode(mailer, "ports", newSequenceNode("1025:1025", "8025:8025"))
+	addPorts(mailer, opts, shop.DockerPortMailerSMTP, shop.DockerPortMailerWeb)
 	addKeyValueNode(mailer, "environment", mailerEnv)
 
 	services := newMappingNode()
@@ -277,7 +318,7 @@ func buildCompose(hasAMQP, hasElasticsearch bool, opts *ComposeOptions) yaml.Nod
 	if hasAMQP {
 		lavinmq := newMappingNode()
 		addKeyValue(lavinmq, "image", "cloudamqp/lavinmq")
-		addKeyValueNode(lavinmq, "ports", newSequenceNode("15672:15672", "5672:5672"))
+		addPorts(lavinmq, opts, shop.DockerPortAMQPManagement, shop.DockerPortAMQP)
 		addKeyValueNode(lavinmq, "volumes", newSequenceNode("lavinmq-data:/var/lib/lavinmq:rw"))
 		addKeyValueNode(services, "lavinmq", lavinmq)
 		addKeyValueNode(volumes, "lavinmq-data", newNullNode())
@@ -292,7 +333,7 @@ func buildCompose(hasAMQP, hasElasticsearch bool, opts *ComposeOptions) yaml.Nod
 		opensearch := newMappingNode()
 		addKeyValue(opensearch, "image", "opensearchproject/opensearch:2")
 		addKeyValueNode(opensearch, "environment", osEnv)
-		addKeyValueNode(opensearch, "ports", newSequenceNode("9200:9200"))
+		addPorts(opensearch, opts, shop.DockerPortElasticsearch)
 		addKeyValueNode(opensearch, "volumes", newSequenceNode("opensearch-data:/usr/share/opensearch/data"))
 		addKeyValueNode(services, "opensearch", opensearch)
 		addKeyValueNode(volumes, "opensearch-data", newNullNode())

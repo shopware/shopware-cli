@@ -8,6 +8,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	dockerpkg "github.com/shopware/shopware-cli/internal/docker"
+	"github.com/shopware/shopware-cli/internal/shop"
 	"github.com/shopware/shopware-cli/internal/tui"
 )
 
@@ -19,11 +20,11 @@ func newInstallProgress() progress.Model {
 	)
 }
 
-func checkContainersRunning(projectRoot string) tea.Cmd {
+func checkContainersRunning(projectRoot string, ports shop.ConfigDockerPorts) tea.Cmd {
 	return func() tea.Msg {
 		running := composeServiceSet(projectRoot, "ps", "--services", "--status=running")
 		if len(running) == 0 {
-			return dockerNeedStartMsg{}
+			return needStartMsg(projectRoot, ports)
 		}
 
 		// Treat the stack as already up only when every service the compose
@@ -33,11 +34,32 @@ func checkContainersRunning(projectRoot string) tea.Cmd {
 		// `up -d` reconcile the newcomers instead of jumping to the dashboard.
 		defined := composeServiceSet(projectRoot, "config", "--services")
 		if !allRunning(defined, running) {
-			return dockerNeedStartMsg{}
+			return needStartMsg(projectRoot, ports)
 		}
 
 		return dockerAlreadyRunningMsg{}
 	}
+}
+
+// checkPortsThenStart probes for host-port conflicts and requests a container
+// start when none are found.
+func checkPortsThenStart(projectRoot string, ports shop.ConfigDockerPorts) tea.Cmd {
+	return func() tea.Msg {
+		return needStartMsg(projectRoot, ports)
+	}
+}
+
+// needStartMsg probes the host ports the compose file will publish before a
+// container start. Ports held by the project's own (partially) running stack
+// are not conflicts; probe errors are ignored so `docker compose up` surfaces
+// real failures itself.
+func needStartMsg(projectRoot string, ports shop.ConfigDockerPorts) tea.Msg {
+	conflicts, err := dockerpkg.FindPortConflicts(context.Background(), projectRoot, ports)
+	if err == nil && len(conflicts) > 0 {
+		return portConflictMsg{conflicts: conflicts}
+	}
+
+	return dockerNeedStartMsg{}
 }
 
 // allRunning reports whether every service in defined is present in running.
@@ -145,6 +167,34 @@ func (m *Model) startContainers() tea.Cmd {
 	)
 	m.dockerOutChan = ch
 	return tea.Batch(outputCmd, doneCmd)
+}
+
+// fixPortConflicts allocates a random free host port for every conflicting
+// port, persists the overrides to the local config override file and rewrites
+// compose.yaml before the containers are started.
+func (m *Model) fixPortConflicts() tea.Cmd {
+	conflicts := m.portConflicts
+	cfg := m.config
+	projectRoot := m.projectRoot
+	configPath := m.configPath
+	return func() tea.Msg {
+		overrides, err := dockerpkg.AllocateRandomPorts(context.Background(), conflicts)
+		if err != nil {
+			return portFixDoneMsg{err: err}
+		}
+
+		if err := shop.UpdateLocalDockerPorts(configPath, overrides); err != nil {
+			return portFixDoneMsg{err: err}
+		}
+
+		cfg.SetDockerPortOverrides(overrides)
+
+		if err := dockerpkg.WriteComposeFile(projectRoot, dockerpkg.ComposeOptionsFromConfig(cfg)); err != nil {
+			return portFixDoneMsg{err: err}
+		}
+
+		return portFixDoneMsg{}
+	}
 }
 
 func (m *Model) restartContainersForConfig() tea.Cmd {
