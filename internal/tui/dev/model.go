@@ -9,6 +9,7 @@ import (
 	"charm.land/bubbles/v2/progress"
 	"charm.land/bubbles/v2/spinner"
 	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 
 	"github.com/shopware/shopware-cli/internal/envfile"
 	"github.com/shopware/shopware-cli/internal/executor"
@@ -191,6 +192,9 @@ func newShell(m Model) *app.App {
 		Header:          func(ctx app.Context) string { return current().chromeHeader(ctx) },
 		Footer:          func(ctx app.Context) string { return current().chromeFooter(ctx) },
 		WindowTitleFunc: func(app.Context) string { return current().windowTitle() },
+		// Enable mouse reporting so the overview scrolls with the wheel/trackpad
+		// and the instance-log viewport reacts to the wheel.
+		Mouse: true,
 		// Quit handling is phase-dependent (telemetry, stop-confirm modal) and
 		// stays in the model's key dispatch, so no default quit binding.
 		DisableDefaultKeys: true,
@@ -262,7 +266,15 @@ func (m Model) updateContent(msg tea.Msg) (app.Content, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
-		m.overview.SetSize(m.width, m.height-4)
+		// The overview is scrollable, so it must know the real visible content
+		// area: full height minus the dashboard's header/footer chrome and the
+		// content box's border+padding (3), mirroring the app shell's layout.
+		// The dashboard chrome is measured explicitly (not via the phase-aware
+		// chrome*, which differs during startup phases) so the size is correct
+		// even when the only WindowSizeMsg arrives before the dashboard shows.
+		hdr := lipgloss.Height(buildTabHeader(m.header, int(m.activeTab), msg.Width))
+		ftr := lipgloss.Height(m.renderDashboardFooter(msg.Width))
+		m.overview.SetSize(m.width, max(1, msg.Height-hdr-ftr-3))
 		m.instance.SetSize(m.width, m.height-4)
 		m.configTab.SetSize(m.width, m.height-4)
 		return m, nil
@@ -544,11 +556,13 @@ func (m Model) handleStopConfirmResult(msg prompt.ResultMsg) (app.Content, tea.C
 }
 
 func (m Model) updateChildren(msg tea.Msg) (app.Content, tea.Cmd) {
-	// Key presses must only reach the active tab, otherwise a key meant for one
-	// tab (e.g. Enter to pick a log source) also triggers the hidden tabs'
-	// handlers. Non-key messages are broadcast so background updates reach every
-	// child regardless of which tab is focused.
-	if _, isKey := msg.(tea.KeyPressMsg); isKey {
+	// Key presses and mouse input must only reach the active tab, otherwise input
+	// meant for one tab (e.g. Enter to pick a log source, or a wheel scroll) also
+	// triggers the hidden tabs' handlers. Other messages are broadcast so
+	// background updates reach every child regardless of which tab is focused.
+	_, isKey := msg.(tea.KeyPressMsg)
+	_, isMouse := msg.(tea.MouseMsg)
+	if isKey || isMouse {
 		switch m.activeTab {
 		case tabOverview:
 			newOverview, cmd := m.overview.Update(msg)

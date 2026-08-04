@@ -83,7 +83,16 @@ type OverviewModel struct {
 	instances            []proxy.InstanceInfo
 	instancesCombinedMem int64
 	cursor               int // watcher focus index: 0=Admin, 1=Storefront (↑/↓ move it)
+	// scrollY is the vertical scroll offset (in lines) into the rendered report,
+	// so the overview can be paged when it is taller than the viewport. The mouse
+	// wheel (and pgup/pgdn/home/end) drive the scroll; the arrow keys stay bound
+	// to watcher focus.
+	scrollY int
 }
+
+// overviewBottomPadding is the blank space kept below the report so the last
+// line is not flush against the viewport edge when scrolled to the bottom.
+const overviewBottomPadding = 1
 
 type DiscoveredService struct {
 	Name     string
@@ -486,6 +495,8 @@ func (m OverviewModel) Update(msg tea.Msg) (OverviewModel, tea.Cmd) {
 		return m, scheduleInstancesRefresh()
 	case instancesTickMsg:
 		return m, loadInstances()
+	case tea.MouseWheelMsg:
+		return m.handleWheel(msg), nil
 	case tea.KeyPressMsg:
 		return m.handleKey(msg)
 	}
@@ -498,7 +509,9 @@ func (m OverviewModel) focusCount() int {
 }
 
 // handleKey handles the overview's keyboard input: ↑/↓ move the watcher focus
-// and enter activates the focused watcher.
+// (enter activates it), while pgup/pgdn/home/end scroll the report. Plain scroll
+// is primarily done with the mouse wheel (see Update), keeping the arrow keys
+// free for watcher focus.
 func (m OverviewModel) handleKey(msg tea.KeyPressMsg) (OverviewModel, tea.Cmd) {
 	count := m.focusCount()
 
@@ -511,6 +524,14 @@ func (m OverviewModel) handleKey(msg tea.KeyPressMsg) (OverviewModel, tea.Cmd) {
 		if m.cursor < count-1 {
 			m.cursor++
 		}
+	case "pgdown", "pgdn":
+		m.scrollY = clampScroll(m.scrollY+m.pageStep(), m.maxScroll())
+	case "pgup":
+		m.scrollY = clampScroll(m.scrollY-m.pageStep(), m.maxScroll())
+	case "home":
+		m.scrollY = 0
+	case "end":
+		m.scrollY = m.maxScroll()
 	case "s":
 		// Run the one-time machine setup (DNS + HTTPS trust) for a proxy
 		// project that has not been set up yet.
@@ -521,6 +542,27 @@ func (m OverviewModel) handleKey(msg tea.KeyPressMsg) (OverviewModel, tea.Cmd) {
 		return m.activate()
 	}
 	return m, nil
+}
+
+// mouseWheelStep is how many lines one mouse-wheel notch scrolls the report.
+const mouseWheelStep = 3
+
+// handleWheel scrolls the report in response to the mouse wheel, so the overview
+// is scrollable without stealing the arrow keys from watcher focus.
+func (m OverviewModel) handleWheel(msg tea.MouseWheelMsg) OverviewModel {
+	switch msg.Button {
+	case tea.MouseWheelUp:
+		m.scrollY = clampScroll(m.scrollY-mouseWheelStep, m.maxScroll())
+	case tea.MouseWheelDown:
+		m.scrollY = clampScroll(m.scrollY+mouseWheelStep, m.maxScroll())
+	}
+	return m
+}
+
+// pageStep is how many lines pgup/pgdn scroll: nearly a full viewport, keeping
+// a couple of lines of overlap for orientation.
+func (m OverviewModel) pageStep() int {
+	return max(1, m.height-2)
 }
 
 func (m OverviewModel) activate() (OverviewModel, tea.Cmd) {
@@ -561,6 +603,23 @@ const overviewTwoColumnMinWidth = 110
 const overviewRightColumnWidth = 32
 
 func (m OverviewModel) View(width, height int) string {
+	content := m.renderContent(width) + strings.Repeat("\n", overviewBottomPadding)
+
+	lines := strings.Split(content, "\n")
+	if height <= 0 || len(lines) <= height {
+		return content
+	}
+
+	// Show a height-tall window into the report, offset by the (clamped) scroll
+	// position, so a report taller than the viewport can be paged instead of
+	// being cut off at the bottom.
+	offset := clampScroll(m.scrollY, len(lines)-height)
+	return strings.Join(lines[offset:offset+height], "\n")
+}
+
+// renderContent builds the full overview report (two-column when wide enough,
+// stacked otherwise), independent of scrolling.
+func (m OverviewModel) renderContent(width int) string {
 	usable := width - 8
 	if width < overviewTwoColumnMinWidth {
 		return m.renderStacked(usable)
@@ -574,6 +633,32 @@ func (m OverviewModel) View(width, height int) string {
 		Left:      m.renderProjectReport(leftWidth),
 		Right:     m.renderUserActions(),
 	}).Render()
+}
+
+// contentHeight returns the number of lines the report currently renders to,
+// including the bottom padding, so scrolling can be clamped to it.
+func (m OverviewModel) contentHeight() int {
+	return len(strings.Split(m.renderContent(m.width), "\n")) + overviewBottomPadding
+}
+
+// maxScroll is the largest valid scroll offset for the current content and
+// viewport height (0 when everything fits).
+func (m OverviewModel) maxScroll() int {
+	return max(0, m.contentHeight()-m.height)
+}
+
+// clampScroll bounds a scroll offset to [0, maxOffset].
+func clampScroll(v, maxOffset int) int {
+	if maxOffset < 0 {
+		maxOffset = 0
+	}
+	if v < 0 {
+		return 0
+	}
+	if v > maxOffset {
+		return maxOffset
+	}
+	return v
 }
 
 // renderProjectReport renders the left column: the readonly project details
