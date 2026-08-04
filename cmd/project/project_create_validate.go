@@ -34,8 +34,18 @@ func validateAndPreflight(ctx context.Context, opts *createOptions, releases []r
 	opts.selectedCI = scaffold.CISystem
 	opts.withElasticsearch = scaffold.UseElasticsearch
 
+	if opts.useDocker {
+		// Docker takes its PHP from the image, so there is no local executable to
+		// resolve, only the requested version to check.
+		if opts.phpVersionExplicit && phpConstraint != nil && !phpConstraint.Check(opts.phpVersion+".0") {
+			return "", nil, fmt.Errorf("the requested PHP %s does not satisfy the PHP constraint %s of the selected Shopware version; pass --php-version with a matching version", opts.phpVersion, phpConstraint)
+		}
+	} else if err := resolveLocalPHP(ctx, opts, phpConstraint); err != nil {
+		return "", nil, err
+	}
+
 	dockerHint := "re-run with " + tui.BoldText.Render("--docker")
-	if err := system.ValidateProjectDependencies(ctx, opts.useDocker, phpConstraint, "create a Shopware project", dockerHint); err != nil {
+	if err := system.ValidateProjectDependencies(ctx, opts.useDocker, phpConstraint, "create a Shopware project", dockerHint, opts.phpBinary); err != nil {
 		return "", nil, err
 	}
 

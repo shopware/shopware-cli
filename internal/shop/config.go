@@ -30,13 +30,15 @@ type Config struct {
 	// The URL of the Shopware instance
 	URL string `yaml:"url"`
 	// Controls date-based compatibility behavior, formatted as YYYY-MM-DD.
-	CompatibilityDate string            `yaml:"compatibility_date,omitempty" jsonschema:"format=date"`
-	Build             *ConfigBuild      `yaml:"build,omitempty"`
-	AdminApi          *ConfigAdminApi   `yaml:"admin_api,omitempty"`
-	ConfigDump        *ConfigDump       `yaml:"dump,omitempty"`
-	ConfigDeployment  *ConfigDeployment `yaml:"deployment,omitempty"`
-	Validation        *ConfigValidation `yaml:"validation,omitempty"`
-	ImageProxy        *ConfigImageProxy `yaml:"image_proxy,omitempty"`
+	CompatibilityDate string `yaml:"compatibility_date,omitempty" jsonschema:"format=date"`
+	// PHP version (e.g. "8.3") used for local PHP and Composer commands of this project. Written by "project create" for non-Docker projects. The matching PHP is looked up on the machine running the command, so the value stays portable across machines; it takes precedence over the php found in PATH, while the PHP_BINARY environment variable overrides it.
+	PHPVersion       string            `yaml:"php_version,omitempty"`
+	Build            *ConfigBuild      `yaml:"build,omitempty"`
+	AdminApi         *ConfigAdminApi   `yaml:"admin_api,omitempty"`
+	ConfigDump       *ConfigDump       `yaml:"dump,omitempty"`
+	ConfigDeployment *ConfigDeployment `yaml:"deployment,omitempty"`
+	Validation       *ConfigValidation `yaml:"validation,omitempty"`
+	ImageProxy       *ConfigImageProxy `yaml:"image_proxy,omitempty"`
 	// Docker dev environment configuration
 	Docker *ConfigDocker `yaml:"docker,omitempty"`
 	// Named environments for multi-environment management
