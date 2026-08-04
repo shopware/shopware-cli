@@ -76,12 +76,13 @@ type OverviewModel struct {
 	securityEnd      time.Time
 	health           []healthCheck
 	healthLoading    bool
-	// Instances: how many shops run behind the shared proxy and their total
-	// memory. Shown only for proxy projects.
-	instancesLoading  bool
-	instancesShops    int
-	instancesMemBytes int64
-	cursor            int // focus index: 0=Admin watcher, 1=Storefront watcher
+	// Instances: the projects registered with the shared proxy, with per-instance
+	// status/memory/uptime and their combined memory. Shown only for proxy
+	// projects, under Setup health.
+	instancesLoading     bool
+	instances            []proxy.InstanceInfo
+	instancesCombinedMem int64
+	cursor               int // watcher focus index: 0=Admin, 1=Storefront (↑/↓ move it)
 }
 
 type DiscoveredService struct {
@@ -397,11 +398,11 @@ func (m OverviewModel) Init() tea.Cmd {
 	return tea.Batch(cmds...)
 }
 
-// instancesLoadedMsg carries the shared-proxy instance stats (how many shops
-// run and their total memory), loaded asynchronously.
+// instancesLoadedMsg carries the shared-proxy instance stats (per-instance
+// status/memory/uptime plus combined memory), loaded asynchronously.
 type instancesLoadedMsg struct {
-	shops    int
-	memBytes int64
+	instances   []proxy.InstanceInfo
+	combinedMem int64
 }
 
 // instancesTickMsg triggers a periodic re-count of running proxy instances, so
@@ -416,16 +417,12 @@ const instancesTimeout = 10 * time.Second
 // the overview is open.
 const instancesRefreshInterval = 5 * time.Second
 
-// instanceWarnThreshold is the number of running shops above which the
-// overview warns that memory may be getting tight.
-const instanceWarnThreshold = 20
-
 func loadInstances() tea.Cmd {
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(context.Background(), instancesTimeout)
 		defer cancel()
-		shops, memBytes, _ := proxy.InstanceStats(ctx)
-		return instancesLoadedMsg{shops: shops, memBytes: memBytes}
+		instances, combinedMem, _ := proxy.InstanceStats(ctx)
+		return instancesLoadedMsg{instances: instances, combinedMem: combinedMem}
 	}
 }
 
@@ -484,8 +481,8 @@ func (m OverviewModel) Update(msg tea.Msg) (OverviewModel, tea.Cmd) {
 		m.health = msg.checks
 	case instancesLoadedMsg:
 		m.instancesLoading = false
-		m.instancesShops = msg.shops
-		m.instancesMemBytes = msg.memBytes
+		m.instances = msg.instances
+		m.instancesCombinedMem = msg.combinedMem
 		return m, scheduleInstancesRefresh()
 	case instancesTickMsg:
 		return m, loadInstances()
@@ -500,11 +497,10 @@ func (m OverviewModel) focusCount() int {
 	return 2
 }
 
+// handleKey handles the overview's keyboard input: ↑/↓ move the watcher focus
+// and enter activates the focused watcher.
 func (m OverviewModel) handleKey(msg tea.KeyPressMsg) (OverviewModel, tea.Cmd) {
 	count := m.focusCount()
-	if count == 0 {
-		return m, nil
-	}
 
 	switch tui.KeyString(msg) {
 	case "up", "k":
@@ -595,37 +591,112 @@ func (m OverviewModel) renderProjectReport(width int) string {
 		s.WriteString("\n")
 		s.WriteString(m.renderBackgroundProcesses())
 	}
+	s.WriteString(divider)
+	s.WriteString(m.renderSetupHealth())
 	if m.proxyHost != "" {
 		s.WriteString(divider)
 		s.WriteString(m.renderInstances())
 	}
-	s.WriteString(divider)
-	s.WriteString(m.renderSetupHealth())
 	return s.String()
 }
 
-// renderInstances shows how many shops run behind the shared proxy and their
-// total memory, warning when many are up. Only rendered for proxy projects.
+// renderInstances lists the projects registered with the shared proxy as a
+// small table (project + url, status, memory, uptime) with a running-count and
+// combined-memory summary. Only rendered for proxy projects.
 func (m OverviewModel) renderInstances() string {
 	var s strings.Builder
-	s.WriteString(tui.TitleStyle.Render("Instances"))
+	s.WriteString(tui.TitleStyle.Render("Proxy instances"))
 	s.WriteString("\n")
+	s.WriteString(helpStyle.Render("Projects registered with the local proxy. Each instance is isolated."))
+	s.WriteString("\n\n")
 
 	if m.instancesLoading {
-		s.WriteString("  " + helpStyle.Render("counting...") + "\n")
+		s.WriteString("  " + helpStyle.Render("loading...") + "\n")
+		return s.String()
+	}
+	if len(m.instances) == 0 {
+		s.WriteString("  " + helpStyle.Render("No projects registered yet.") + "\n")
 		return s.String()
 	}
 
-	line := fmt.Sprintf("%d running", m.instancesShops)
-	if m.instancesMemBytes > 0 {
-		line += " · " + formatBytes(m.instancesMemBytes)
+	running := 0
+	for _, in := range m.instances {
+		if in.Running {
+			running++
+		}
 	}
-	s.WriteString("  " + line + "\n")
 
-	if m.instancesShops >= instanceWarnThreshold {
-		s.WriteString("  " + lipgloss.NewStyle().Foreground(tui.WarnColor).Render("Many shops running at once — this can exhaust memory.") + "\n")
+	greenDot := lipgloss.NewStyle().Foreground(tui.SuccessColor).Render("●")
+	summary := fmt.Sprintf("%s %s", greenDot, tui.BoldText.Render(fmt.Sprintf("%d running", running)))
+	if m.instancesCombinedMem > 0 {
+		summary += tui.DimText.Render("  ·  Combined memory (approx.): ") + tui.BoldText.Render("~"+formatBytes(m.instancesCombinedMem))
 	}
+	s.WriteString("  " + summary + "\n\n")
+
+	nameWidth := lipgloss.Width("Project")
+	for _, in := range m.instances {
+		nameWidth = max(nameWidth, lipgloss.Width(in.Name))
+	}
+	nameStyle := lipgloss.NewStyle().Width(nameWidth + 2)
+	statusStyle := lipgloss.NewStyle().Width(10)
+	memStyle := lipgloss.NewStyle().Width(11)
+
+	dim := tui.DimStyle
+	s.WriteString("  " + lipgloss.NewStyle().Width(2).Render("") +
+		nameStyle.Render(dim.Render("Project")) +
+		statusStyle.Render(dim.Render("Status")) +
+		memStyle.Render(dim.Render("Memory")) +
+		dim.Render("Uptime") + "\n")
+
+	for i, in := range m.instances {
+		// A blank line between instances keeps the two-line rows (name + url)
+		// from running together.
+		if i > 0 {
+			s.WriteString("\n")
+		}
+
+		dot := greenDot
+		status := lipgloss.NewStyle().Foreground(tui.SuccessColor).Render("running")
+		mem := formatBytes(in.MemBytes)
+		uptime := formatUptime(in.Uptime)
+		if !in.Running {
+			dot = tui.DimStyle.Render("●")
+			status = tui.DimStyle.Render("stopped")
+			mem = tui.DimStyle.Render("—")
+			uptime = tui.DimStyle.Render("—")
+		}
+
+		fmt.Fprintf(&s, "  %s %s%s%s%s\n",
+			dot, nameStyle.Render(in.Name), statusStyle.Render(status), memStyle.Render(mem), uptime)
+		if in.URL != "" {
+			s.WriteString("    " + linkURL(in.URL) + "\n")
+		}
+	}
+
+	s.WriteString("\n  " + helpStyle.Render("Memory is approximate — reported per proxy process; per-project usage is estimated.") + "\n")
 	return s.String()
+}
+
+// formatUptime renders a duration as a compact uptime like "1h 24m" (or "3d 2h",
+// "45m"). Non-positive durations render as an em dash.
+func formatUptime(d time.Duration) string {
+	if d <= 0 {
+		return "—"
+	}
+
+	d = d.Round(time.Minute)
+	days := int(d.Hours()) / 24
+	hours := int(d.Hours()) % 24
+	minutes := int(d.Minutes()) % 60
+
+	switch {
+	case days > 0:
+		return fmt.Sprintf("%dd %dh", days, hours)
+	case hours > 0:
+		return fmt.Sprintf("%dh %dm", hours, minutes)
+	default:
+		return fmt.Sprintf("%dm", minutes)
+	}
 }
 
 // formatBytes renders a byte count as a human-readable size (e.g. "1.9 GB").
@@ -665,16 +736,20 @@ func (m OverviewModel) renderDomains() string {
 	s.WriteString("\n")
 
 	// The DNS resolver and the trusted certificate both come from the one-time
-	// `proxy setup`, tracked by a single flag; the checkbox alone carries the
-	// state. While pending, the `s` action runs the setup.
-	if m.domainsSetupDone {
-		checked := lipgloss.NewStyle().Render("[x]")
-		fmt.Fprintf(&s, "  %s %s\n", checked, "Default domains configured")
-		fmt.Fprintf(&s, "  %s %s\n", checked, "Local certificate trusted")
-	} else {
-		unchecked := lipgloss.NewStyle().Foreground(tui.BrandColor).Render("[ ]")
-		fmt.Fprintf(&s, "  %s %s\n", unchecked, "Default domains configured")
-		fmt.Fprintf(&s, "  %s %s\n", unchecked, "Local certificate trusted")
+	// `proxy setup`, tracked by a single flag. When done the row shows a green
+	// checkmark; while pending the whole row is dimmed with an empty checkbox, so
+	// it never reads as already configured. The `s` action runs the setup.
+	rows := []string{"Default domains configured", "Local certificate trusted"}
+	for _, label := range rows {
+		if m.domainsSetupDone {
+			check := lipgloss.NewStyle().Foreground(tui.SuccessColor).Render("x")
+			fmt.Fprintf(&s, "  [%s] %s\n", check, label)
+		} else {
+			fmt.Fprintf(&s, "  %s %s\n", tui.DimStyle.Render("[ ]"), tui.DimStyle.Render(label))
+		}
+	}
+
+	if !m.domainsSetupDone {
 		fmt.Fprintf(&s, "  %s\n", tui.DimStyle.Render("press s to set up (needs sudo)"))
 	}
 
@@ -696,10 +771,6 @@ func (m OverviewModel) renderStacked(width int) string {
 		s.WriteString("\n")
 		s.WriteString(m.renderBackgroundProcesses())
 	}
-	if m.proxyHost != "" {
-		s.WriteString(divider)
-		s.WriteString(m.renderInstances())
-	}
 	s.WriteString(divider)
 	if m.proxyHost != "" {
 		s.WriteString(m.renderDomains())
@@ -708,6 +779,10 @@ func (m OverviewModel) renderStacked(width int) string {
 	s.WriteString(m.renderWatchers())
 	s.WriteString(divider)
 	s.WriteString(m.renderSetupHealth())
+	if m.proxyHost != "" {
+		s.WriteString(divider)
+		s.WriteString(m.renderInstances())
+	}
 	return s.String()
 }
 
