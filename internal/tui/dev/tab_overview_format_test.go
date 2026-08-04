@@ -2,6 +2,7 @@ package dev
 
 import (
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 )
@@ -27,4 +28,14 @@ func TestWatchLinkLabel(t *testing.T) {
 	assert.Equal(t, "localhost:5173", watchLinkLabel("http://localhost:5173"))
 	// Garbage falls back to the raw string.
 	assert.Equal(t, "", watchLinkLabel(""))
+}
+
+func TestFormatUptime(t *testing.T) {
+	t.Parallel()
+
+	assert.Equal(t, "—", formatUptime(0))
+	assert.Equal(t, "45m", formatUptime(45*time.Minute))
+	assert.Equal(t, "1h 24m", formatUptime(time.Hour+24*time.Minute))
+	assert.Equal(t, "2h 0m", formatUptime(2*time.Hour))
+	assert.Equal(t, "3d 2h", formatUptime(3*24*time.Hour+2*time.Hour+30*time.Minute))
 }

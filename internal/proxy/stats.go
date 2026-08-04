@@ -2,62 +2,160 @@ package proxy
 
 import (
 	"context"
+	"os"
+	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
+	"time"
+
+	"github.com/shopware/shopware-cli/internal/shop"
 )
 
-// InstanceStats reports how many shops are currently running behind the shared
-// proxy and the total memory their containers use. It is a rough resource
-// indicator for the overview. A shop is a docker compose project that has at
-// least one container attached to the shared proxy network; memory is summed
-// across every running container of those projects (including ones not on the
-// proxy network, e.g. the database), matched by compose project rather than by
-// name prefix so unrelated containers are never counted.
-func InstanceStats(ctx context.Context) (shops int, memBytes int64, err error) {
-	// One pass over running containers: their name, compose project and the
-	// networks they are on.
-	out, err := runDocker(ctx, "ps", "--format", "{{.Names}}\t{{.Label \"com.docker.compose.project\"}}\t{{.Networks}}")
+// InstanceInfo describes one project registered with the shared proxy: whether
+// it is currently running and, for running instances, its approximate memory
+// use and uptime.
+type InstanceInfo struct {
+	Name     string // friendly project name (the project directory basename)
+	URL      string // https://<hostname>
+	Running  bool
+	MemBytes int64         // 0 when not running
+	Uptime   time.Duration // 0 when not running
+}
+
+// InstanceStats reports every project registered with the shared proxy. Running
+// instances come first (then stopped ones, in registry order), each carrying an
+// approximate memory total and uptime while running. combinedMem is the summed
+// memory of the running instances. Memory and uptime are best-effort — a docker
+// stats/inspect error yields a partial result rather than failing the overview.
+func InstanceStats(ctx context.Context) (instances []InstanceInfo, combinedMem int64, err error) {
+	reg, err := LoadRegistry()
 	if err != nil {
-		return 0, 0, err
+		return nil, 0, err
+	}
+	if len(reg.Projects) == 0 {
+		return nil, 0, nil
 	}
 
-	projectOf := map[string]string{} // container name -> compose project
-	proxyProjects := map[string]bool{}
-	for _, line := range strings.Split(strings.TrimSpace(out), "\n") {
+	// Running containers: their name, compose project, and id (for inspect).
+	psOut, err := runDocker(ctx, "ps", "--format", "{{.ID}}\t{{.Names}}\t{{.Label \"com.docker.compose.project\"}}")
+	if err != nil {
+		return nil, 0, err
+	}
+
+	projectOfContainer := map[string]string{} // container name -> compose project
+	runningProjects := map[string]bool{}
+	var runningIDs []string
+	for _, line := range strings.Split(strings.TrimSpace(psOut), "\n") {
 		fields := strings.SplitN(line, "\t", 3)
-		if len(fields) != 3 {
+		if len(fields) != 3 || fields[2] == "" {
 			continue
 		}
-		name, project, networks := fields[0], fields[1], fields[2]
-		if project == "" {
+		id, name, project := fields[0], fields[1], fields[2]
+		runningIDs = append(runningIDs, id)
+		projectOfContainer[name] = project
+		runningProjects[project] = true
+	}
+
+	memByProject := memoryByProject(ctx, projectOfContainer)
+	startByProject := earliestStartByProject(ctx, runningIDs)
+
+	now := time.Now()
+	for _, entry := range reg.Projects {
+		project := composeProjectName(entry.ProjectRoot)
+		info := InstanceInfo{
+			Name: filepath.Base(entry.ProjectRoot),
+			URL:  "https://" + entry.Hostname,
+		}
+		if runningProjects[project] {
+			info.Running = true
+			info.MemBytes = memByProject[project]
+			if start, ok := startByProject[project]; ok {
+				info.Uptime = now.Sub(start)
+			}
+			combinedMem += info.MemBytes
+		}
+		instances = append(instances, info)
+	}
+
+	// Running first, then stopped; SliceStable keeps registry order within groups.
+	sort.SliceStable(instances, func(i, j int) bool {
+		return instances[i].Running && !instances[j].Running
+	})
+
+	return instances, combinedMem, nil
+}
+
+// composeProjectName resolves the Docker Compose project name for a project.
+// Docker projects created by `project create` carry a unique COMPOSE_PROJECT_NAME
+// (sw-<name>-<hash>) in .env; older projects fall back to Compose's default of
+// the sanitized directory basename.
+func composeProjectName(projectRoot string) string {
+	if content, readErr := os.ReadFile(filepath.Join(projectRoot, ".env")); readErr == nil {
+		if name := shop.ExtractComposeProjectName(content); name != "" {
+			return name
+		}
+	}
+
+	return strings.ToLower(filepath.Base(projectRoot))
+}
+
+// memoryByProject sums each running container's memory into its compose project.
+// It is best-effort: a docker stats error yields an empty map.
+func memoryByProject(ctx context.Context, projectOfContainer map[string]string) map[string]int64 {
+	byProject := map[string]int64{}
+
+	out, err := runDocker(ctx, "stats", "--no-stream", "--format", "{{.Name}}\t{{.MemUsage}}")
+	if err != nil {
+		return byProject
+	}
+
+	for _, line := range strings.Split(strings.TrimSpace(out), "\n") {
+		name, usage, ok := strings.Cut(line, "\t")
+		if !ok {
 			continue
 		}
-		projectOf[name] = project
-		for _, n := range strings.Split(networks, ",") {
-			if strings.TrimSpace(n) == NetworkName {
-				proxyProjects[project] = true
-			}
+		project, ok := projectOfContainer[name]
+		if !ok {
+			continue
 		}
-	}
-	if len(proxyProjects) == 0 {
-		return 0, 0, nil
-	}
-
-	// Memory is best-effort: the count alone is still useful if stats fail, so
-	// a stats error is deliberately ignored.
-	if stats, statsErr := runDocker(ctx, "stats", "--no-stream", "--format", "{{.Name}}\t{{.MemUsage}}"); statsErr == nil {
-		for _, line := range strings.Split(strings.TrimSpace(stats), "\n") {
-			name, usage, ok := strings.Cut(line, "\t")
-			if !ok || !proxyProjects[projectOf[name]] {
-				continue
-			}
-			if b, ok := parseDockerMemUsage(usage); ok {
-				memBytes += b
-			}
+		if b, ok := parseDockerMemUsage(usage); ok {
+			byProject[project] += b
 		}
 	}
 
-	return len(proxyProjects), memBytes, nil
+	return byProject
+}
+
+// earliestStartByProject returns, per compose project, the start time of its
+// oldest running container — the project's uptime anchor. Best-effort.
+func earliestStartByProject(ctx context.Context, containerIDs []string) map[string]time.Time {
+	starts := map[string]time.Time{}
+	if len(containerIDs) == 0 {
+		return starts
+	}
+
+	args := append([]string{"inspect", "--format", "{{index .Config.Labels \"com.docker.compose.project\"}}\t{{.State.StartedAt}}"}, containerIDs...)
+	out, err := runDocker(ctx, args...)
+	if err != nil {
+		return starts
+	}
+
+	for _, line := range strings.Split(strings.TrimSpace(out), "\n") {
+		project, ts, ok := strings.Cut(line, "\t")
+		if !ok || project == "" {
+			continue
+		}
+		started, err := time.Parse(time.RFC3339Nano, strings.TrimSpace(ts))
+		if err != nil {
+			continue
+		}
+		if cur, ok := starts[project]; !ok || started.Before(cur) {
+			starts[project] = started
+		}
+	}
+
+	return starts
 }
 
 // parseDockerMemUsage parses the used side of a docker stats MemUsage value
