@@ -75,11 +75,11 @@ func TestProducerEndpointExtensions(t *testing.T) {
 
 func TestGetExtensionByNameAndId(t *testing.T) {
 	client := testClient(t, func(w http.ResponseWriter, r *http.Request) {
-		switch {
-		case r.URL.Path == "/plugins":
+		switch r.URL.Path {
+		case "/plugins":
 			assert.Equal(t, "paypal", r.URL.Query().Get("search"))
 			_ = json.NewEncoder(w).Encode([]Extension{{Id: 5, Name: "PayPal"}})
-		case r.URL.Path == "/plugins/5":
+		case "/plugins/5":
 			_ = json.NewEncoder(w).Encode(Extension{Id: 5, Name: "PayPal", Code: "pp"})
 		default:
 			http.NotFound(w, r)
