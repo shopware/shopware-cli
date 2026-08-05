@@ -169,11 +169,7 @@ type ConfigStoreDemoShop struct {
 	LoginPassword string `yaml:"login_password,omitempty"`
 }
 
-type Translatable interface {
-	string | []string | []ConfigStoreFaq
-}
-
-type ConfigTranslated[T Translatable] struct {
+type ConfigTranslated[T any] struct {
 	German  *T `yaml:"de,omitempty"`
 	English *T `yaml:"en,omitempty"`
 }
