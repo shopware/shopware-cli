@@ -164,12 +164,12 @@ func TestRunWorkers(t *testing.T) {
 		var mu sync.Mutex
 		counts := map[string]int{}
 
-		start := func(_ context.Context, job WorkerJob) (*exec.Cmd, error) {
+		start := func(ctx context.Context, job WorkerJob) (*exec.Cmd, error) {
 			mu.Lock()
 			counts[job.ConsumerName]++
 			mu.Unlock()
 
-			return exec.Command("true"), nil
+			return exec.CommandContext(ctx, "true"), nil
 		}
 
 		ctx, cancel := context.WithTimeout(t.Context(), 500*time.Millisecond)
