@@ -44,6 +44,42 @@ include:
 	assert.NotNil(t, config.ConfigDump.Where)
 }
 
+func TestConfigPHPVersionRoundTrip(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	cfg := NewConfig()
+	cfg.PHPVersion = "8.3"
+
+	assert.NoError(t, WriteConfig(cfg, tmpDir))
+
+	// A portable version, not a machine-specific executable path.
+	written, err := os.ReadFile(filepath.Join(tmpDir, ".shopware-project.yml"))
+	assert.NoError(t, err)
+	assert.Contains(t, string(written), `php_version: "8.3"`)
+	assert.NotContains(t, string(written), "/bin/php")
+
+	read, err := ReadConfig(t.Context(), filepath.Join(tmpDir, ".shopware-project.yml"), false)
+	assert.NoError(t, err)
+	assert.Equal(t, "8.3", read.PHPVersion)
+}
+
+func TestConfigWithoutPHPVersionStaysBackwardCompatible(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// A config written before php_version existed must read fine and must not
+	// gain the field on re-write.
+	cfg := NewConfig()
+	assert.NoError(t, WriteConfig(cfg, tmpDir))
+
+	read, err := ReadConfig(t.Context(), filepath.Join(tmpDir, ".shopware-project.yml"), false)
+	assert.NoError(t, err)
+	assert.Empty(t, read.PHPVersion)
+
+	written, err := os.ReadFile(filepath.Join(tmpDir, ".shopware-project.yml"))
+	assert.NoError(t, err)
+	assert.NotContains(t, string(written), "php_version")
+}
+
 func TestReadConfigCompatibilityDateValidation(t *testing.T) {
 	tmpDir := t.TempDir()
 	configPath := filepath.Join(tmpDir, ".shopware-project.yml")
@@ -393,6 +429,50 @@ build:
 	assert.Equal(t, "", cfg.Build.Bundles[0].Name)
 	assert.Equal(t, "src/OtherBundle", cfg.Build.Bundles[1].Path)
 	assert.Equal(t, "CustomName", cfg.Build.Bundles[1].Name)
+}
+
+func TestReadConfigDisableChecksums(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, ".shopware-project.yml")
+	content := []byte(`
+compatibility_date: "2024-01-01"
+build:
+  disable_checksums: true
+`)
+	assert.NoError(t, os.WriteFile(configPath, content, 0o644))
+
+	cfg, err := ReadConfig(t.Context(), configPath, false)
+	assert.NoError(t, err)
+	assert.True(t, cfg.Build.DisableChecksums)
+}
+
+func TestReadConfigDisableChecksumDefaultsFalse(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, ".shopware-project.yml")
+	content := []byte(`
+compatibility_date: "2024-01-01"
+build: {}
+`)
+	assert.NoError(t, os.WriteFile(configPath, content, 0o644))
+
+	cfg, err := ReadConfig(t.Context(), configPath, false)
+	assert.NoError(t, err)
+	assert.False(t, cfg.Build.DisableChecksums)
+}
+
+func TestReadConfigKeepExistingChecksums(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, ".shopware-project.yml")
+	content := []byte(`
+compatibility_date: "2024-01-01"
+build:
+  keep_existing_checksums: true
+`)
+	assert.NoError(t, os.WriteFile(configPath, content, 0o644))
+
+	cfg, err := ReadConfig(t.Context(), configPath, false)
+	assert.NoError(t, err)
+	assert.True(t, cfg.Build.KeepExistingChecksums)
 }
 
 func TestConfigDump_NormalizeFakerExpressions(t *testing.T) {

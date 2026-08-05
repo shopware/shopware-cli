@@ -1,12 +1,18 @@
 package executor
 
 import (
+	"context"
+	"fmt"
+	"os"
+	osexec "os/exec"
+	"path/filepath"
 	"runtime"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 
 	"github.com/shopware/shopware-cli/internal/shop"
+	"github.com/shopware/shopware-cli/internal/system"
 )
 
 func TestNewLocalExecutor(t *testing.T) {
@@ -46,6 +52,7 @@ func TestNewUnsupportedType(t *testing.T) {
 }
 
 func TestLocalExecutorConsoleCommand(t *testing.T) {
+	t.Setenv("PHP_BINARY", "")
 	exec := &LocalExecutor{projectRoot: "/project"}
 
 	p := exec.ConsoleCommand(t.Context(), "cache:clear")
@@ -54,6 +61,8 @@ func TestLocalExecutorConsoleCommand(t *testing.T) {
 }
 
 func TestLocalExecutorComposerCommand(t *testing.T) {
+	t.Setenv("PHP_BINARY", "")
+	stubComposer(t, "/usr/local/bin/composer", false, nil)
 	exec := &LocalExecutor{projectRoot: "/project"}
 
 	p := exec.ComposerCommand(t.Context(), "install")
@@ -62,11 +71,159 @@ func TestLocalExecutorComposerCommand(t *testing.T) {
 }
 
 func TestLocalExecutorPHPCommand(t *testing.T) {
+	t.Setenv("PHP_BINARY", "")
 	exec := &LocalExecutor{projectRoot: "/project"}
 
 	p := exec.PHPCommand(t.Context(), "-v")
 	assert.Equal(t, []string{"php", "-v"}, p.Cmd.Args)
 	assert.Equal(t, "/project", p.Cmd.Dir)
+}
+
+// writeFakePHPBinary creates an executable reporting the given PHP version.
+func writeFakePHPBinary(t *testing.T, path string, version string) {
+	t.Helper()
+	shPath, err := osexec.LookPath("sh")
+	assert.NoError(t, err)
+
+	script := fmt.Sprintf("#!%s\necho PHP %s\n", shPath, version)
+	assert.NoError(t, os.WriteFile(path, []byte(script), 0o755))
+}
+
+// stubComposer resolves Composer to the given path, so tests neither depend on
+// a Composer installation nor trigger a real PHAR download.
+func stubComposer(t *testing.T, path string, isPhar bool, err error) {
+	t.Helper()
+	original := resolveComposer
+	resolveComposer = func(context.Context) (string, bool, error) {
+		return path, isPhar, err
+	}
+	t.Cleanup(func() { resolveComposer = original })
+}
+
+// stubPinnedPHP resolves a php_version to the given binary, keeping PHP_BINARY's
+// real precedence over the pin.
+func stubPinnedPHP(t *testing.T, binary string, err error) {
+	t.Helper()
+	original := resolveProjectPHPBinary
+	resolveProjectPHPBinary = func(_ context.Context, pin string) (string, error) {
+		if env := os.Getenv("PHP_BINARY"); env != "" {
+			return env, nil
+		}
+		if pin == "" {
+			return "", nil
+		}
+		return binary, err
+	}
+	t.Cleanup(func() { resolveProjectPHPBinary = original })
+}
+
+func TestLocalExecutorUsesProjectPHPVersion(t *testing.T) {
+	t.Setenv("PHP_BINARY", "")
+	stubPinnedPHP(t, "/opt/homebrew/opt/php@8.3/bin/php", nil)
+	exec := &LocalExecutor{projectRoot: "/project", shopCfg: &shop.Config{PHPVersion: "8.3"}}
+
+	p := exec.ConsoleCommand(t.Context(), "cache:clear")
+	assert.Equal(t, []string{"/opt/homebrew/opt/php@8.3/bin/php", "bin/console", "cache:clear"}, p.Cmd.Args)
+
+	p = exec.PHPCommand(t.Context(), "-v")
+	assert.Equal(t, []string{"/opt/homebrew/opt/php@8.3/bin/php", "-v"}, p.Cmd.Args)
+}
+
+func TestLocalExecutorPHPBinaryEnvOverridesProjectPHPVersion(t *testing.T) {
+	t.Setenv("PHP_BINARY", "/env/php")
+	stubPinnedPHP(t, "/opt/homebrew/opt/php@8.3/bin/php", nil)
+	exec := &LocalExecutor{projectRoot: "/project", shopCfg: &shop.Config{PHPVersion: "8.3"}}
+
+	p := exec.ConsoleCommand(t.Context(), "cache:clear")
+	assert.Equal(t, []string{"/env/php", "bin/console", "cache:clear"}, p.Cmd.Args)
+
+	p = exec.PHPCommand(t.Context(), "-v")
+	assert.Equal(t, []string{"/env/php", "-v"}, p.Cmd.Args)
+}
+
+func TestLocalExecutorReportsUnresolvablePHPVersion(t *testing.T) {
+	t.Setenv("PHP_BINARY", "")
+	notFound := &system.PHPVersionNotFoundError{Pin: "8.3"}
+	stubPinnedPHP(t, "", notFound)
+	exec := &LocalExecutor{projectRoot: "/project", shopCfg: &shop.Config{PHPVersion: "8.3"}}
+
+	// The error is carried by the command so it surfaces when it runs.
+	for name, p := range map[string]*Process{
+		"console":  exec.ConsoleCommand(t.Context(), "cache:clear"),
+		"php":      exec.PHPCommand(t.Context(), "-v"),
+		"composer": exec.ComposerCommand(t.Context(), "install"),
+	} {
+		t.Run(name, func(t *testing.T) {
+			assert.ErrorIs(t, p.Cmd.Err, notFound)
+			assert.ErrorIs(t, p.Run(), notFound)
+		})
+	}
+}
+
+func TestLocalExecutorFallsBackToPHPBinaryEnv(t *testing.T) {
+	dir := t.TempDir()
+	writeFakePHPBinary(t, filepath.Join(dir, "php"), "8.3.19")
+	t.Setenv("PHP_BINARY", filepath.Join(dir, "php"))
+	exec := &LocalExecutor{projectRoot: "/project", shopCfg: &shop.Config{}}
+
+	p := exec.PHPCommand(t.Context(), "-v")
+	resolved, err := filepath.EvalSymlinks(filepath.Join(dir, "php"))
+	assert.NoError(t, err)
+	assert.Equal(t, []string{resolved, "-v"}, p.Cmd.Args)
+}
+
+func TestLocalExecutorRejectsUnusablePHPBinaryEnv(t *testing.T) {
+	t.Setenv("PHP_BINARY", "/does/not/exist/php")
+	exec := &LocalExecutor{projectRoot: "/project", shopCfg: &shop.Config{}}
+
+	p := exec.PHPCommand(t.Context(), "-v")
+	assert.ErrorContains(t, p.Cmd.Err, "PHP_BINARY is set but unusable")
+	assert.ErrorContains(t, p.Run(), "PHP_BINARY is set but unusable")
+}
+
+func TestLocalExecutorComposerRunsThroughSelectedPHP(t *testing.T) {
+	binDir := t.TempDir()
+	composerPath := filepath.Join(binDir, "composer")
+	assert.NoError(t, os.WriteFile(composerPath, []byte("#!/bin/sh\n"), 0o755))
+	t.Setenv("PATH", binDir)
+	t.Setenv("PHP_BINARY", "")
+
+	stubPinnedPHP(t, "/custom/php", nil)
+	exec := &LocalExecutor{projectRoot: "/project", shopCfg: &shop.Config{PHPVersion: "8.3"}}
+
+	p := exec.ComposerCommand(t.Context(), "install")
+	assert.Equal(t, []string{"/custom/php", composerPath, "install"}, p.Cmd.Args)
+}
+
+func TestLocalExecutorComposerUsesDownloadedPharWithoutComposerInPath(t *testing.T) {
+	t.Setenv("PHP_BINARY", "")
+	stubComposer(t, "/cache/shopware-cli/composer.phar", true, nil)
+
+	t.Run("with pinned php", func(t *testing.T) {
+		stubPinnedPHP(t, "/custom/php", nil)
+		exec := &LocalExecutor{projectRoot: "/project", shopCfg: &shop.Config{PHPVersion: "8.3"}}
+
+		p := exec.ComposerCommand(t.Context(), "install")
+		assert.Equal(t, []string{"/custom/php", "/cache/shopware-cli/composer.phar", "install"}, p.Cmd.Args)
+	})
+
+	t.Run("with default php", func(t *testing.T) {
+		exec := &LocalExecutor{projectRoot: "/project"}
+
+		p := exec.ComposerCommand(t.Context(), "install")
+		assert.Equal(t, []string{"php", "/cache/shopware-cli/composer.phar", "install"}, p.Cmd.Args)
+	})
+}
+
+func TestLocalExecutorComposerReportsFailedDownload(t *testing.T) {
+	t.Setenv("PHP_BINARY", "")
+	downloadErr := fmt.Errorf("cannot download composer: connection refused")
+	stubComposer(t, "", false, downloadErr)
+	exec := &LocalExecutor{projectRoot: "/project"}
+
+	p := exec.ComposerCommand(t.Context(), "install")
+	assert.ErrorIs(t, p.Cmd.Err, downloadErr)
+	assert.ErrorIs(t, p.Run(), downloadErr)
 }
 
 func TestSymfonyCLIExecutorConsoleCommand(t *testing.T) {

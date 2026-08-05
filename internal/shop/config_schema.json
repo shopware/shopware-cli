@@ -20,6 +20,10 @@
           "format": "date",
           "description": "Controls date-based compatibility behavior, formatted as YYYY-MM-DD."
         },
+        "php_version": {
+          "type": "string",
+          "description": "PHP version (e.g. \"8.3\") used for local PHP and Composer commands of this project. Written by \"project create\" for non-Docker projects. The matching PHP is looked up on the machine running the command, so the value stays portable across machines; it takes precedence over the php found in PATH, while the PHP_BINARY environment variable overrides it."
+        },
         "build": {
           "$ref": "#/$defs/ConfigBuild"
         },
@@ -126,6 +130,14 @@
         "disable_storefront_build": {
           "type": "boolean",
           "description": "When enabled, the storefront build will be skipped"
+        },
+        "disable_checksums": {
+          "type": "boolean",
+          "description": "When enabled, the checksum.json generation for extensions will be skipped"
+        },
+        "keep_existing_checksums": {
+          "type": "boolean",
+          "description": "When enabled, an already existing checksum.json in an extension will be kept instead of being overwritten"
         },
         "force_extension_build": {
           "items": {

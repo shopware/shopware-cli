@@ -153,6 +153,21 @@ type ConfigStore struct {
 	Images *[]ConfigStoreImage `yaml:"images,omitempty"`
 	// Specifies the directory where the images are located.
 	ImageDirectory *string `yaml:"image_directory,omitempty"`
+	// Specifies the demo shops of the extension in the store.
+	DemoShops *[]ConfigStoreDemoShop `yaml:"demo_shops,omitempty"`
+}
+
+type ConfigStoreDemoShop struct {
+	// Specifies the type of the demo shop.
+	Type string `yaml:"type" jsonschema:"enum=frontend,enum=backend"`
+	// Specifies the URL to the demo shop.
+	Link string `yaml:"link"`
+	// Specifies the language of the demo shop.
+	Localization string `yaml:"localization" jsonschema:"enum=de_DE,enum=en_GB"`
+	// Specifies the login name to access the demo shop.
+	LoginName string `yaml:"login_name,omitempty"`
+	// Specifies the login password to access the demo shop.
+	LoginPassword string `yaml:"login_password,omitempty"`
 }
 
 type Translatable interface {
@@ -177,8 +192,19 @@ type ConfigStoreImage struct {
 	Activate ConfigStoreImageActivate `yaml:"activate"`
 	// Specifies whether the image is a preview in the language.
 	Preview ConfigStoreImagePreview `yaml:"preview"`
-	// Specifies the order of the image ascending the given priority.
-	Priority int `yaml:"priority"`
+	// Position of the image in the store gallery. Images are sorted ascending; the lowest value is shown first.
+	Position int `yaml:"position"`
+	// Deprecated: use Position instead.
+	Priority int `yaml:"priority,omitempty" jsonschema_extras:"deprecated=true"`
+}
+
+// GetPosition returns the configured image position, falling back to the deprecated priority.
+func (i ConfigStoreImage) GetPosition() int {
+	if i.Position != 0 {
+		return i.Position
+	}
+
+	return i.Priority
 }
 
 type ConfigStoreImageActivate struct {

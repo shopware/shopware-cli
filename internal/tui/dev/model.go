@@ -57,6 +57,7 @@ type Options struct {
 
 type Model struct {
 	host            app.Host
+	header          tui.Header
 	activeTab       activeTab
 	overview        OverviewModel
 	instance        InstanceModel
@@ -96,6 +97,7 @@ type configRestartDoneMsg struct{ err error }
 
 func New(opts Options) Model {
 	m := Model{
+		header:      tui.NewHeader(),
 		activeTab:   tabOverview,
 		dockerMode:  opts.Executor.Type() == executor.TypeDocker,
 		projectRoot: opts.ProjectRoot,
@@ -183,6 +185,11 @@ func newShell(m Model) *app.App {
 }
 
 func (m Model) Init() tea.Cmd {
+	return tea.Batch(m.header.Init(), m.initPhase())
+}
+
+// initPhase returns the startup command for the model's initial phase.
+func (m Model) initPhase() tea.Cmd {
 	if m.phase == phaseMigrationWizard {
 		return nil
 	}
@@ -226,6 +233,15 @@ func (m *Model) startDashboard() tea.Cmd {
 }
 
 func (m Model) Update(msg tea.Msg) (app.Content, tea.Cmd) {
+	var headerCmd tea.Cmd
+	m.header, headerCmd = m.header.Update(msg)
+
+	content, cmd := m.updateContent(msg)
+	return content, tea.Batch(headerCmd, cmd)
+}
+
+// updateContent routes a message by type and lifecycle phase.
+func (m Model) updateContent(msg tea.Msg) (app.Content, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.width = msg.Width

@@ -31,13 +31,15 @@ type Config struct {
 	// The URL of the Shopware instance
 	URL string `yaml:"url"`
 	// Controls date-based compatibility behavior, formatted as YYYY-MM-DD.
-	CompatibilityDate string            `yaml:"compatibility_date,omitempty" jsonschema:"format=date"`
-	Build             *ConfigBuild      `yaml:"build,omitempty"`
-	AdminApi          *ConfigAdminApi   `yaml:"admin_api,omitempty"`
-	ConfigDump        *ConfigDump       `yaml:"dump,omitempty"`
-	ConfigDeployment  *ConfigDeployment `yaml:"deployment,omitempty"`
-	Validation        *ConfigValidation `yaml:"validation,omitempty"`
-	ImageProxy        *ConfigImageProxy `yaml:"image_proxy,omitempty"`
+	CompatibilityDate string `yaml:"compatibility_date,omitempty" jsonschema:"format=date"`
+	// PHP version (e.g. "8.3") used for local PHP and Composer commands of this project. Written by "project create" for non-Docker projects. The matching PHP is looked up on the machine running the command, so the value stays portable across machines; it takes precedence over the php found in PATH, while the PHP_BINARY environment variable overrides it.
+	PHPVersion       string            `yaml:"php_version,omitempty"`
+	Build            *ConfigBuild      `yaml:"build,omitempty"`
+	AdminApi         *ConfigAdminApi   `yaml:"admin_api,omitempty"`
+	ConfigDump       *ConfigDump       `yaml:"dump,omitempty"`
+	ConfigDeployment *ConfigDeployment `yaml:"deployment,omitempty"`
+	Validation       *ConfigValidation `yaml:"validation,omitempty"`
+	ImageProxy       *ConfigImageProxy `yaml:"image_proxy,omitempty"`
 	// Docker dev environment configuration
 	Docker *ConfigDocker `yaml:"docker,omitempty"`
 	// Named environments for multi-environment management
@@ -106,6 +108,10 @@ type ConfigBuild struct {
 	ExcludeExtensions []string `yaml:"exclude_extensions,omitempty"`
 	// When enabled, the storefront build will be skipped
 	DisableStorefrontBuild bool `yaml:"disable_storefront_build,omitempty"`
+	// When enabled, the checksum.json generation for extensions will be skipped
+	DisableChecksums bool `yaml:"disable_checksums,omitempty"`
+	// When enabled, an already existing checksum.json in an extension will be kept instead of being overwritten
+	KeepExistingChecksums bool `yaml:"keep_existing_checksums,omitempty"`
 	// Extensions to force build for, even if they have compiled files
 	ForceExtensionBuild []ConfigBuildExtension `yaml:"force_extension_build,omitempty"`
 	// When enabled, the shopware admin will be built

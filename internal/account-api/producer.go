@@ -331,7 +331,7 @@ type Extension struct {
 	IconPath                            string            `json:"iconPath"`
 	IconIsSet                           bool              `json:"iconIsSet"`
 	ExamplePageUrl                      string            `json:"examplePageUrl"`
-	Demos                               []interface{}     `json:"demos"`
+	Demos                               []ExtensionDemo   `json:"demos"`
 	Localizations                       []Locale          `json:"localizations"`
 	LatestBinary                        interface{}       `json:"latestBinary"`
 	MigrationSupport                    bool              `json:"migrationSupport"`
@@ -474,6 +474,21 @@ type StoreFaq struct {
 	Position int    `json:"position"`
 }
 
+type StoreDemoType struct {
+	Id          int    `json:"id"`
+	Name        string `json:"name"`
+	Description string `json:"description"`
+}
+
+type ExtensionDemo struct {
+	Id            int           `json:"id,omitempty"`
+	Type          StoreDemoType `json:"type"`
+	Link          string        `json:"link"`
+	Localization  Locale        `json:"localization"`
+	LoginName     string        `json:"loginName"`
+	LoginPassword string        `json:"loginPassword"`
+}
+
 type ExtensionGeneralInformation struct {
 	Categories       []StoreCategory `json:"categories"`
 	FutureCategories []StoreCategory `json:"futureCategories"`
@@ -512,7 +527,7 @@ type ExtensionGeneralInformation struct {
 	StoreAvailabilities  []StoreAvailablity  `json:"storeAvailabilities"`
 	PriceModels          []interface{}       `json:"priceModels"`
 	SoftwareVersions     SoftwareVersionList `json:"softwareVersions"`
-	DemoTypes            interface{}         `json:"demoTypes"`
+	DemoTypes            []StoreDemoType     `json:"demoTypes"`
 	Localizations        []Locale            `json:"localizations"`
 	ProductTypes         []StoreProductType  `json:"productTypes"`
 	ReleaseRequestStatus interface{}         `json:"releaseRequestStatus"`

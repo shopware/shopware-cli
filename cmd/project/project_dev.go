@@ -160,7 +160,18 @@ func newDevEnvironment(cmd *cobra.Command, projectRoot string, cfg *shop.Config)
 
 	useDocker := exec.Type() == executor.TypeDocker
 	dockerHint := "set the environment " + tui.BoldText.Render("type") + " to " + tui.BoldText.Render("docker") + " in " + tui.BoldText.Render(".shopware-project.yml")
-	if err := system.ValidateProjectDependencies(cmd.Context(), useDocker, nil, "start the development environment", dockerHint); err != nil {
+
+	// Docker gets its PHP from the image. Must use the same precedence as the
+	// executor, or the dependencies of a different PHP would be validated.
+	var phpBinary string
+	if !useDocker {
+		phpBinary, err = system.ResolveProjectPHPBinary(cmd.Context(), cfg.PHPVersion)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	if err := system.ValidateProjectDependencies(cmd.Context(), useDocker, nil, "start the development environment", dockerHint, phpBinary); err != nil {
 		return nil, err
 	}
 

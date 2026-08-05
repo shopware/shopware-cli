@@ -68,7 +68,7 @@ var (
 				Padding(0, 0, 1)
 )
 
-func buildTabHeader(activeTab int, width int) string {
+func buildTabHeader(header tui.Header, activeTab int, width int) string {
 	tabWidths := make([]int, len(tabNames))
 	for i, name := range tabNames {
 		tabWidths[i] = 8 + len(name)
@@ -127,13 +127,7 @@ func buildTabHeader(activeTab int, width int) string {
 	}
 	r2.WriteString(bdr("│"))
 
-	branding := tui.BrandingLine()
-	fill := width - tabAreaWidth - tui.BrandingLineWidth()
-	if fill < 0 {
-		fill = 0
-	}
-	r2.WriteString(strings.Repeat(" ", fill))
-	r2.WriteString(branding)
+	r2.WriteString(header.View(width - tabAreaWidth))
 
 	var r3 strings.Builder
 	if activeTab == 0 {

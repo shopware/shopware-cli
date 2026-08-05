@@ -46,15 +46,17 @@ jobs:
           # Prefer the release that triggered this run; otherwise use the latest non-prerelease.
           if [ "${{ github.event_name }}" = "release" ] && [ "${{ github.event.release.prerelease }}" != "true" ]; then
             VERSION="${{ github.event.release.tag_name }}"
+            RELEASE_TIME="${{ github.event.release.published_at }}"
           else
             VERSION=$(gh api "repos/${{ github.repository }}/releases/latest" --jq .tag_name 2>/dev/null || true)
+            RELEASE_TIME=$(gh api "repos/${{ github.repository }}/releases/latest" --jq .published_at 2>/dev/null || true)
           fi
           VERSION="${VERSION#v}"
           if [ -z "$VERSION" ]; then
             VERSION="dev"
           fi
 
-          jq -n --arg version "$VERSION" '{version: $version}' > _site/version.json
+          jq -n --arg version "$VERSION" --arg release_time "$RELEASE_TIME" '{version: $version, release_time: $release_time}' > _site/version.json
 
           cat > _site/index.html <<EOF
           <!DOCTYPE html>
