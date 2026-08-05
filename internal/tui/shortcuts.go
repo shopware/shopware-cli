@@ -1,6 +1,8 @@
 package tui
 
 import (
+	"strings"
+
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
 )
@@ -51,11 +53,14 @@ func (s Shortcuts) bar(separator string) string {
 	}
 
 	sep := lipgloss.NewStyle().Foreground(BorderColor).Render(separator)
-	result := s.badge(s.opts.Items[0])
+
+	var b strings.Builder
+	b.WriteString(s.badge(s.opts.Items[0]))
 	for _, item := range s.opts.Items[1:] {
-		result += sep + s.badge(item)
+		b.WriteString(sep)
+		b.WriteString(s.badge(item))
 	}
-	return result
+	return b.String()
 }
 
 func (s Shortcuts) badge(item Shortcut) string {

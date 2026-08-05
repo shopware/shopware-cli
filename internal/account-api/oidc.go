@@ -29,6 +29,9 @@ func getOIDCClientID() string {
 }
 
 func getApiUrl() string {
+	if v := os.Getenv("SHOPWARE_CLI_API_ENDPOINT"); v != "" {
+		return v
+	}
 	if isStaging() {
 		return "https://next-api.shopware.com"
 	}

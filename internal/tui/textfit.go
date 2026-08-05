@@ -9,10 +9,7 @@ import (
 
 // SpreadRow places left and right on one row, padding the middle with spaces.
 func SpreadRow(width int, left, right string) string {
-	fill := width - lipgloss.Width(left) - lipgloss.Width(right)
-	if fill < 1 {
-		fill = 1
-	}
+	fill := max(width-lipgloss.Width(left)-lipgloss.Width(right), 1)
 	return left + strings.Repeat(" ", fill) + right
 }
 
@@ -22,7 +19,10 @@ func Truncate(s string, width int) string {
 	if lipgloss.Width(s) <= width {
 		return s
 	}
-	if width <= 1 {
+	if width <= 0 {
+		return ""
+	}
+	if width == 1 {
 		return "…"
 	}
 	return ansi.Truncate(s, width, "…")
@@ -60,7 +60,9 @@ func JoinColumns(left, right string, gap int) string {
 		if i < len(rightLines) {
 			r = rightLines[i]
 		}
-		b.WriteString(l + strings.Repeat(" ", width-lipgloss.Width(l)+gap) + r)
+		b.WriteString(l)
+		b.WriteString(strings.Repeat(" ", max(width-lipgloss.Width(l)+gap, 0)))
+		b.WriteString(r)
 		if i < rows-1 {
 			b.WriteString("\n")
 		}

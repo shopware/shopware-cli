@@ -2,7 +2,7 @@ package project
 
 import (
 	"context"
-	"fmt"
+	"strconv"
 
 	"github.com/shopware/shopware-cli/internal/shop"
 	"github.com/shopware/shopware-cli/internal/system"
@@ -14,10 +14,10 @@ func scaffoldProject(ctx context.Context, opts *createOptions, chosenVersion str
 		tracking.TagVersion:           opts.selectedVersion,
 		tracking.TagDeployment:        opts.selectedDeployment,
 		tracking.TagCI:                opts.selectedCI,
-		tracking.TagDocker:            fmt.Sprintf("%v", opts.useDocker),
-		tracking.TagWithElasticsearch: fmt.Sprintf("%v", opts.withElasticsearch),
-		tracking.TagWithAMQP:          fmt.Sprintf("%v", opts.withAMQP),
-		tracking.TagInteractive:       fmt.Sprintf("%v", opts.interactive),
+		tracking.TagDocker:            strconv.FormatBool(opts.useDocker),
+		tracking.TagWithElasticsearch: strconv.FormatBool(opts.withElasticsearch),
+		tracking.TagWithAMQP:          strconv.FormatBool(opts.withAMQP),
+		tracking.TagInteractive:       strconv.FormatBool(opts.interactive),
 	})
 
 	scaffold := newShopwareProjectScaffold(opts, chosenVersion)

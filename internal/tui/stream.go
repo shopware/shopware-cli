@@ -72,17 +72,23 @@ func NewLineWriter(emit func(string)) *LineWriter {
 
 // Write implements io.Writer.
 func (w *LineWriter) Write(p []byte) (int, error) {
-	w.mu.Lock()
-	defer w.mu.Unlock()
+	var lines []string
 
+	w.mu.Lock()
 	w.buf = append(w.buf, p...)
 	for {
 		idx := bytes.IndexByte(w.buf, '\n')
 		if idx < 0 {
 			break
 		}
-		line := string(bytes.TrimRight(w.buf[:idx], "\r"))
+		lines = append(lines, string(bytes.TrimRight(w.buf[:idx], "\r")))
 		w.buf = w.buf[idx+1:]
+	}
+	w.mu.Unlock()
+
+	// Emit outside the lock: a blocking emit (channel backpressure) must not
+	// hold up concurrent writers or Flush.
+	for _, line := range lines {
 		w.emit(line)
 	}
 	return len(p), nil
@@ -91,11 +97,12 @@ func (w *LineWriter) Write(p []byte) (int, error) {
 // Flush emits any trailing output that did not end in a newline.
 func (w *LineWriter) Flush() {
 	w.mu.Lock()
-	defer w.mu.Unlock()
+	rest := string(w.buf)
+	w.buf = nil
+	w.mu.Unlock()
 
-	if len(w.buf) > 0 {
-		w.emit(string(w.buf))
-		w.buf = nil
+	if rest != "" {
+		w.emit(rest)
 	}
 }
 

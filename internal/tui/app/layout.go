@@ -58,7 +58,9 @@ func Frame(width, height int, header, main, footer string) string {
 	if r.Header > 0 {
 		parts = append(parts, fitHeight(header, r.Header, r.Width))
 	}
-	parts = append(parts, fitHeight(main, r.Main, r.Width))
+	if r.Main > 0 {
+		parts = append(parts, fitHeight(main, r.Main, r.Width))
+	}
 	if r.Footer > 0 {
 		parts = append(parts, fitHeight(footer, r.Footer, r.Width))
 	}

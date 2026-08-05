@@ -51,7 +51,8 @@ func (m *Model) viewIntro() (title, status, body string) {
 	title = "Upgrade Shopware to a newer version"
 
 	var left strings.Builder
-	left.WriteString(tui.LabelStyle.Render("This wizard will guide you through a ") + tui.BoldStyle.Render("local"))
+	left.WriteString(tui.LabelStyle.Render("This wizard will guide you through a "))
+	left.WriteString(tui.BoldStyle.Render("local"))
 	left.WriteString("\n")
 	left.WriteString(tui.LabelStyle.Render("Shopware upgrade:"))
 	left.WriteString("\n\n")
@@ -63,27 +64,39 @@ func (m *Model) viewIntro() (title, status, body string) {
 		"Run Deployment Helper",
 	}
 	for i, step := range steps {
-		left.WriteString(tui.DimStyle.Render("  "+string(rune('1'+i))+".  ") + tui.LabelStyle.Render(step) + "\n")
+		left.WriteString(tui.DimStyle.Render("  " + string(rune('1'+i)) + ".  "))
+		left.WriteString(tui.LabelStyle.Render(step))
+		left.WriteString("\n")
 	}
 	left.WriteString("\n\n")
 	left.WriteString(tui.BoldStyle.Render("Before files change"))
 	left.WriteString("\n")
 	left.WriteString(tui.DimStyle.Render("You will review the upgrade plan before the"))
 	left.WriteString("\n")
-	left.WriteString(tui.DimStyle.Render("wizard applies it ") + tui.BoldStyle.Render("locally") + tui.DimStyle.Render("."))
+	left.WriteString(tui.DimStyle.Render("wizard applies it "))
+	left.WriteString(tui.BoldStyle.Render("locally"))
+	left.WriteString(tui.DimStyle.Render("."))
 	left.WriteString("\n\n")
 	left.WriteString(tui.DimStyle.Render("We do not check custom project extensions."))
 
 	var right strings.Builder
 	right.WriteString(tui.LabelStyle.Render("After the wizard finishes:"))
 	right.WriteString("\n\n")
-	right.WriteString(tui.DimStyle.Render("  • ") + tui.LabelStyle.Render("test the shop ") + tui.BoldStyle.Render("locally") + "\n")
-	right.WriteString(tui.DimStyle.Render("  • ") + tui.LabelStyle.Render("commit the changed files") + "\n")
-	right.WriteString(tui.DimStyle.Render("  • ") + tui.LabelStyle.Render("deploy through your normal process") + "\n")
+	right.WriteString(tui.DimStyle.Render("  • "))
+	right.WriteString(tui.LabelStyle.Render("test the shop "))
+	right.WriteString(tui.BoldStyle.Render("locally"))
+	right.WriteString("\n")
+	right.WriteString(tui.DimStyle.Render("  • "))
+	right.WriteString(tui.LabelStyle.Render("commit the changed files"))
+	right.WriteString("\n")
+	right.WriteString(tui.DimStyle.Render("  • "))
+	right.WriteString(tui.LabelStyle.Render("deploy through your normal process"))
+	right.WriteString("\n")
 	right.WriteString("\n\n")
 	right.WriteString(userActionStyle.Render("User action"))
 	right.WriteString("\n\n")
-	right.WriteString(tui.BoldStyle.Render("Begin upgrade") + tui.LabelStyle.Render(" starts the guided checks"))
+	right.WriteString(tui.BoldStyle.Render("Begin upgrade"))
+	right.WriteString(tui.LabelStyle.Render(" starts the guided checks"))
 	right.WriteString("\n")
 	right.WriteString(tui.LabelStyle.Render("and version selection."))
 	right.WriteString("\n\n")

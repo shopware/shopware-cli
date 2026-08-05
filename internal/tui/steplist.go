@@ -2,6 +2,8 @@ package tui
 
 import (
 	"strings"
+
+	"charm.land/lipgloss/v2"
 )
 
 // StepState is the display state of one StepItem.
@@ -55,7 +57,8 @@ func (l StepList) renderStep(step StepItem) string {
 		case StepStatePending:
 			indicator = DimStyle.Render("·")
 		case StepStateActive:
-			indicator = ""
+			// Default when the caller provides no spinner frame as Indicator.
+			indicator = lipgloss.NewStyle().Foreground(BrandColor).Render("◐")
 		}
 	}
 	return fixedIndicator(indicator) + step.Label + "\n"

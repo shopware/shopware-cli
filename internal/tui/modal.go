@@ -28,9 +28,14 @@ func NewModal(opts ModalOptions) Modal {
 
 // Width returns the modal box width.
 func (m Modal) Width() int {
-	width := m.opts.AreaWidth - 4
-	if m.opts.MaxWidth > 0 && width > m.opts.MaxWidth {
-		width = m.opts.MaxWidth
+	// Without a known area (e.g. before the first resize) fall back to
+	// MaxWidth instead of collapsing to the 1-column minimum.
+	width := m.opts.MaxWidth
+	if m.opts.AreaWidth > 0 {
+		areaCap := m.opts.AreaWidth - 4
+		if width <= 0 || areaCap < width {
+			width = areaCap
+		}
 	}
 	if width < 1 {
 		width = 1

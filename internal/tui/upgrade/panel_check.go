@@ -46,11 +46,11 @@ type versionRow struct {
 func (s checkState) versionRows() []versionRow {
 	var rows []versionRow
 	if s.catalog != nil {
-		if s.catalog.Recommended >= 0 {
+		if s.catalog.Recommended >= 0 && s.catalog.Recommended < len(s.catalog.Options) {
 			opt := &s.catalog.Options[s.catalog.Recommended]
 			rows = append(rows, versionRow{option: opt, label: opt.Version.String(), hint: "recommended"})
 		}
-		if s.catalog.LatestPatch >= 0 && s.catalog.LatestPatch != s.catalog.Recommended {
+		if s.catalog.LatestPatch >= 0 && s.catalog.LatestPatch < len(s.catalog.Options) && s.catalog.LatestPatch != s.catalog.Recommended {
 			opt := &s.catalog.Options[s.catalog.LatestPatch]
 			rows = append(rows, versionRow{option: opt, label: opt.Version.String(), hint: opt.Tag})
 		}
@@ -69,13 +69,16 @@ func (m *Model) updateCheck(msg tea.Msg) (app.Content, tea.Cmd) {
 	case catalogLoadedMsg:
 		m.check.catalog = msg.catalog
 		m.check.catalogErr = msg.err
-		if msg.err == nil && msg.catalog != nil && msg.catalog.Recommended >= 0 {
+		if msg.err == nil && msg.catalog != nil && msg.catalog.Recommended >= 0 && msg.catalog.Recommended < len(msg.catalog.Options) {
 			m.check.chosen = &msg.catalog.Options[msg.catalog.Recommended]
 		}
 		return m, nil
 
 	case picker.ResultMsg:
 		if _, ok := msg.Key.(versionPickerKey); ok && !msg.Cancelled {
+			if m.check.catalog == nil || msg.Index < 0 || msg.Index >= len(m.check.catalog.Options) {
+				return m, nil
+			}
 			option := m.check.catalog.Options[msg.Index]
 			m.check.chosen = &option
 			// The picker's confirm is the selection: continue directly instead
@@ -106,6 +109,9 @@ func (m *Model) updateCheckKeys(msg tea.KeyPressMsg) (app.Content, tea.Cmd) {
 	case "q", "esc":
 		return m, tea.Quit
 	case "enter":
+		if m.check.cursor < 0 || m.check.cursor >= len(rows) {
+			return m, nil
+		}
 		row := rows[m.check.cursor]
 		if row.option == nil {
 			return m.openVersionPicker()
@@ -173,10 +179,7 @@ func (m *Model) viewCheckLeft() string {
 		if check.Detail != "" && check.State != backend.StateOK {
 			// Wrap the detail to the column instead of letting the frame
 			// truncate it; details may span multiple lines.
-			detailWidth := m.bodyWidth()*11/20 - 3
-			if detailWidth < 20 {
-				detailWidth = 20
-			}
+			detailWidth := max(m.bodyWidth()*11/20-3, 20)
 			wrapped := lipgloss.NewStyle().Width(detailWidth).Render(check.Detail)
 			for line := range strings.SplitSeq(wrapped, "\n") {
 				b.WriteString(tui.DimStyle.Render("   " + line))
@@ -239,16 +242,25 @@ func (m *Model) viewCheckRight() string {
 			}
 
 			if row.option == nil {
-				b.WriteString(cursor + marker + " " + tui.LabelStyle.Render(row.label))
+				b.WriteString(cursor)
+				b.WriteString(marker)
+				b.WriteString(" ")
+				b.WriteString(tui.LabelStyle.Render(row.label))
 				if m.check.chosen != nil && !m.isQuickChoice(m.check.chosen) {
-					b.WriteString(" " + tui.BoldStyle.Render(m.check.chosen.Version.String()))
+					b.WriteString(" ")
+					b.WriteString(tui.BoldStyle.Render(m.check.chosen.Version.String()))
 				}
 				b.WriteString("\n")
 				continue
 			}
 
 			link := tui.StyledLink(row.option.ReleaseNotesURL, row.label, tui.LinkStyle)
-			b.WriteString(cursor + marker + " " + link + "   " + tui.LabelStyle.Render(row.hint))
+			b.WriteString(cursor)
+			b.WriteString(marker)
+			b.WriteString(" ")
+			b.WriteString(link)
+			b.WriteString("   ")
+			b.WriteString(tui.LabelStyle.Render(row.hint))
 			b.WriteString("\n")
 			if detail := supportDetail(*row.option); detail != "" {
 				b.WriteString(tui.DimStyle.Render("       " + detail))

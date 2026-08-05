@@ -1,6 +1,7 @@
 package project
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path"
@@ -35,11 +36,11 @@ var projectAutofixFlexCmd = &cobra.Command{
 		}
 
 		if !confirmed {
-			return fmt.Errorf("autofix cancelled")
+			return errors.New("autofix cancelled")
 		}
 
 		if _, err := os.Stat(path.Join(project, "symfony.lock")); err == nil {
-			return fmt.Errorf("symfony.lock already exists, is that project already migrated to Symfony Flex?")
+			return errors.New("symfony.lock already exists, is that project already migrated to Symfony Flex?")
 		}
 
 		if err := flexmigrator.MigrateComposerJson(project); err != nil {

@@ -66,7 +66,7 @@ func findEntrypoints(result api.BuildResult) (Entrypoints, error) {
 		}, nil
 	}
 
-	return Entrypoints{}, fmt.Errorf("esbuild emitted no JavaScript entrypoint")
+	return Entrypoints{}, errors.New("esbuild emitted no JavaScript entrypoint")
 }
 
 func servePath(outputPath string) (string, error) {

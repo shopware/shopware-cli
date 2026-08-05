@@ -5,7 +5,6 @@ import (
 	"context"
 	_ "embed"
 	"encoding/json"
-	"fmt"
 	"os"
 	"os/exec"
 	"path"
@@ -79,7 +78,7 @@ func (p PhpStan) Check(ctx context.Context, check *Check, config ToolConfig) err
 		}
 
 		phpstan := exec.CommandContext(ctx, "php", phpstanArguments...)
-		phpstan.Env = append(os.Environ(), fmt.Sprintf("PHP_DIR=%s", path.Join(config.ToolDirectory, "php")))
+		phpstan.Env = append(os.Environ(), "PHP_DIR="+path.Join(config.ToolDirectory, "php"))
 		phpstan.Dir = config.RootDir
 
 		var stderr bytes.Buffer
@@ -135,7 +134,7 @@ func (p PhpStan) Check(ctx context.Context, check *Check, config ToolConfig) err
 					Line:       message.Line,
 					Message:    message.Message,
 					Severity:   validation.SeverityError,
-					Identifier: fmt.Sprintf("phpstan/%s", message.Identifier),
+					Identifier: "phpstan/" + message.Identifier,
 					Tip:        message.Tip,
 				})
 			}

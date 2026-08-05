@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -97,10 +98,13 @@ func (m *Model) viewDoneLeft() string {
 		if m.check.readiness.CurrentVersion != nil {
 			current = m.check.readiness.CurrentVersion.String()
 		}
-		b.WriteString(stateDot(backend.StateOK) + " " + tui.LabelStyle.Render("Shopware packages updated"))
+		b.WriteString(stateDot(backend.StateOK))
+		b.WriteString(" ")
+		b.WriteString(tui.LabelStyle.Render("Shopware packages updated"))
 		b.WriteString("\n")
 		if t := m.check.target(); t != nil {
-			b.WriteString(tui.DimStyle.Render("   "+current+" -> "+t.Version.String()) + "\n")
+			b.WriteString(tui.DimStyle.Render("   " + current + " -> " + t.Version.String()))
+			b.WriteString("\n")
 		}
 		for _, line := range []string{
 			"composer.json updated",
@@ -108,12 +112,19 @@ func (m *Model) viewDoneLeft() string {
 			"Deployment Helper completed",
 			"Composer-managed extensions checked",
 		} {
-			b.WriteString(stateDot(backend.StateOK) + " " + tui.LabelStyle.Render(line) + "\n")
+			b.WriteString(stateDot(backend.StateOK))
+			b.WriteString(" ")
+			b.WriteString(tui.LabelStyle.Render(line))
+			b.WriteString("\n")
 		}
 	} else {
-		b.WriteString(stateDot(backend.StateFail) + " " + tui.LabelStyle.Render("The upgrade did not complete"))
+		b.WriteString(stateDot(backend.StateFail))
+		b.WriteString(" ")
+		b.WriteString(tui.LabelStyle.Render("The upgrade did not complete"))
 		b.WriteString("\n")
-		b.WriteString(stateDot(backend.StateOK) + " " + tui.LabelStyle.Render("composer.json and composer.lock were restored"))
+		b.WriteString(stateDot(backend.StateOK))
+		b.WriteString(" ")
+		b.WriteString(tui.LabelStyle.Render("composer.json and composer.lock were restored"))
 		b.WriteString("\n")
 		if m.done.err != nil {
 			b.WriteString("\n")
@@ -130,11 +141,15 @@ func (m *Model) viewDoneLeft() string {
 	// what actually exists.
 	reportPath := m.upgrader.ReportPath()
 	if _, err := os.Stat(reportPath); err == nil {
-		b.WriteString(tui.DimStyle.Render("  • ") + tui.StyledLink("file://"+reportPath, relativePath(m.opts.ProjectRoot, reportPath), tui.LinkStyle) + "\n")
+		b.WriteString(tui.DimStyle.Render("  • "))
+		b.WriteString(tui.StyledLink("file://"+reportPath, relativePath(m.opts.ProjectRoot, reportPath), tui.LinkStyle))
+		b.WriteString("\n")
 	}
 	logPath := m.upgrader.LogPath()
 	if _, err := os.Stat(logPath); err == nil {
-		b.WriteString(tui.DimStyle.Render("  • ") + tui.StyledLink("file://"+logPath, relativePath(m.opts.ProjectRoot, logPath), tui.LinkStyle) + "\n")
+		b.WriteString(tui.DimStyle.Render("  • "))
+		b.WriteString(tui.StyledLink("file://"+logPath, relativePath(m.opts.ProjectRoot, logPath), tui.LinkStyle))
+		b.WriteString("\n")
 	}
 
 	return b.String()
@@ -166,7 +181,9 @@ func (m *Model) viewDoneRight() string {
 		}
 	}
 	for i, step := range steps {
-		b.WriteString(tui.DimStyle.Render("  "+string(rune('1'+i))+". ") + tui.LabelStyle.Render(step) + "\n")
+		b.WriteString(tui.DimStyle.Render("  " + strconv.Itoa(i+1) + ". "))
+		b.WriteString(tui.LabelStyle.Render(step))
+		b.WriteString("\n")
 	}
 
 	b.WriteString("\n")

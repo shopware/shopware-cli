@@ -107,7 +107,7 @@ func phpVersionAtLeast(installedVersion, requiredVersion string) bool {
 		return false
 	}
 
-	constraint, err := version.NewConstraint(fmt.Sprintf(">= %s", requiredVersion))
+	constraint, err := version.NewConstraint(">= " + requiredVersion)
 	if err != nil {
 		return false
 	}

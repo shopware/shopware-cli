@@ -191,7 +191,7 @@ var extensionPackageCmd = &cobra.Command{
 		if len(fileName) == 0 {
 			fileName = fmt.Sprintf("%s-%s.zip", name, tag)
 			if len(tag) == 0 {
-				fileName = fmt.Sprintf("%s.zip", name)
+				fileName = name + ".zip"
 			}
 		}
 
@@ -247,8 +247,8 @@ func getStringOnStringError(val string, _ error) string {
 
 func executeHooks(ctx context.Context, ext extension.Extension, hooks []string, extDir string) error {
 	env := []string{
-		fmt.Sprintf("EXTENSION_DIR=%s", extDir),
-		fmt.Sprintf("ORIGINAL_EXTENSION_DIR=%s", ext.GetPath()),
+		"EXTENSION_DIR=" + extDir,
+		"ORIGINAL_EXTENSION_DIR=" + ext.GetPath(),
 	}
 
 	for _, hook := range hooks {

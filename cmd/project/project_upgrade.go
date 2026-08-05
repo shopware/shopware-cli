@@ -21,16 +21,6 @@ var projectUpgradeCmd = &cobra.Command{
 			return err
 		}
 
-		cfg, err := shop.ReadConfig(cmd.Context(), projectConfigPath, true)
-		if err != nil {
-			return err
-		}
-
-		envCfg, err := cfg.ResolveEnvironment(environmentName)
-		if err != nil {
-			return err
-		}
-
 		exec, err := resolveExecutor(cmd, projectRoot)
 		if err != nil {
 			return err
@@ -47,6 +37,16 @@ var projectUpgradeCmd = &cobra.Command{
 				NoAudit: noAudit,
 				Out:     cmd.OutOrStdout(),
 			})
+		}
+
+		cfg, err := shop.ReadConfig(cmd.Context(), projectConfigPath, true)
+		if err != nil {
+			return err
+		}
+
+		envCfg, err := cfg.ResolveEnvironment(environmentName)
+		if err != nil {
+			return err
 		}
 
 		envName := environmentName

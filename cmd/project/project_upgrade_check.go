@@ -2,6 +2,7 @@ package project
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"path"
 	"strconv"
@@ -114,7 +115,7 @@ var projectUpgradeCheckCmd = &cobra.Command{
 		}
 
 		if selectedVersion == "" {
-			return fmt.Errorf("no version selected")
+			return errors.New("no version selected")
 		}
 
 		extensionNames := make([]account_api.UpdateCheckExtension, 0)
@@ -193,7 +194,7 @@ func getLocalExtensions() (*version.Version, map[string]string, error) {
 	corePackage := composerLock.GetPackage("shopware/core")
 
 	if corePackage == nil {
-		return nil, nil, fmt.Errorf("shopware/core package not found in composer.lock")
+		return nil, nil, errors.New("shopware/core package not found in composer.lock")
 	}
 
 	currentVersion, err := version.NewVersion(strings.TrimPrefix(corePackage.Version, "v"))

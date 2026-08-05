@@ -2,6 +2,7 @@ package project
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"strings"
@@ -100,7 +101,7 @@ func checkSecurityAdvisories(ctx context.Context, opts *createOptions, chosenVer
 		}
 
 		if continueAnyway == tui.No {
-			return fmt.Errorf("project creation cancelled")
+			return errors.New("project creation cancelled")
 		}
 
 		opts.noAudit = true
@@ -123,14 +124,14 @@ func checkIncompatibilities(ctx context.Context, opts *createOptions) error {
 			if err := huh.NewForm(huh.NewGroup(
 				tui.NewYesNo().
 					Title(incompatibility.Title).
-					Description(fmt.Sprintf("%s. Do you want to continue anyway?", incompatibility.Description)).
+					Description(incompatibility.Description + ". Do you want to continue anyway?").
 					Value(&continueAnyway),
 			)).Run(); err != nil {
 				return err
 			}
 
 			if continueAnyway == tui.No {
-				return fmt.Errorf("project creation cancelled")
+				return errors.New("project creation cancelled")
 			}
 		} else {
 			logging.FromContext(ctx).Warnf("%s. %s", incompatibility.Title, incompatibility.Description)
@@ -143,7 +144,7 @@ func checkIncompatibilities(ctx context.Context, opts *createOptions) error {
 func renderSecurityAdvisories(chosenVersion string, advisories []repository.SecurityAdvisory) string {
 	var b strings.Builder
 
-	b.WriteString(tui.RedText.Bold(true).Render(fmt.Sprintf("Security Advisories for Shopware %s", chosenVersion)))
+	b.WriteString(tui.RedText.Bold(true).Render("Security Advisories for Shopware " + chosenVersion))
 	b.WriteString("\n\n")
 
 	warn := tui.YellowText.Render("⚠")

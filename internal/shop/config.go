@@ -2,6 +2,7 @@ package shop
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path"
@@ -477,7 +478,7 @@ func (h *ConfigDeploymentHook) UnmarshalYAML(value *yaml.Node) error {
 		return nil
 	}
 
-	return fmt.Errorf("invalid hook: expected a script string or a list of steps")
+	return errors.New("invalid hook: expected a script string or a list of steps")
 }
 
 func (ConfigDeploymentHook) JSONSchema() *jsonschema.Schema {

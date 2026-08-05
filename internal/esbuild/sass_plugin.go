@@ -2,7 +2,6 @@ package esbuild
 
 import (
 	"context"
-	"fmt"
 	"os"
 	"path/filepath"
 
@@ -39,7 +38,7 @@ func newScssPlugin(ctx context.Context) api.Plugin {
 
 					execute, err := start.Execute(godartsass.Args{
 						Source:          string(content),
-						URL:             fmt.Sprintf("file://%s", args.Path),
+						URL:             "file://" + args.Path,
 						EnableSourceMap: true,
 						IncludePaths: []string{
 							filepath.Dir(args.Path),

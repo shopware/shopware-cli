@@ -14,6 +14,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/microcosm-cc/bluemonday"
 	"github.com/shyim/go-version"
@@ -417,20 +418,20 @@ func (review BinaryReviewResult) IsPending() bool {
 }
 
 func (review BinaryReviewResult) GetSummary() string {
-	message := ""
-
 	p := bluemonday.NewPolicy()
 
+	var message strings.Builder
 	for _, result := range review.SubCheckResults {
 		if result.Passed && !result.HasWarnings {
 			continue
 		}
 
-		message += fmt.Sprintf("=== %s ===\n", result.SubCheck)
-		message += fmt.Sprintf("%s\n\n", p.Sanitize(result.Message))
+		fmt.Fprintf(&message, "=== %s ===\n", result.SubCheck)
+		message.WriteString(p.Sanitize(result.Message))
+		message.WriteString("\n\n")
 	}
 
-	return message
+	return message.String()
 }
 
 func (list SoftwareVersionList) FilterOnVersion(constriant *version.Constraints) SoftwareVersionList {

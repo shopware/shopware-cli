@@ -31,6 +31,11 @@ type prepareState struct {
 	phpDone      bool
 	phpReq       string
 	phpInstalled string
+	// changelogs are the Store release notes of the planned extension
+	// updates, fetched once compatibility and resolution finished; they are
+	// advisory and only enrich the exported report.
+	changelogs          []backend.ExtensionChangelog
+	changelogsRequested bool
 	// reportRequested marks that the failure report write was kicked off;
 	// reportPath or reportErr carry its outcome.
 	reportRequested bool
@@ -88,6 +93,40 @@ func (s prepareState) loading() bool {
 	return s.envRunning == nil || s.packagist == nil || (s.resolve == nil && s.resolveErr == nil) || !s.compatDone || !s.phpDone
 }
 
+// resolveFailed reports whether the Composer dry run ended without a usable
+// resolution — either the solver found conflicts or the command itself failed
+// to run.
+func (s prepareState) resolveFailed() bool {
+	return s.resolveErr != nil || (s.resolve != nil && !s.resolve.OK)
+}
+
+// maybeLoadChangelogs fetches the Store changelogs of the planned extension
+// updates once — after both the compatibility check and the Composer
+// resolution finished, so the update targets are final.
+func (m *Model) maybeLoadChangelogs() tea.Cmd {
+	resolutionDone := m.prepare.resolve != nil || m.prepare.resolveErr != nil
+	if m.prepare.changelogsRequested || !m.prepare.compatDone || !resolutionDone {
+		return nil
+	}
+	target := m.check.target()
+	if target == nil {
+		return nil
+	}
+	m.prepare.changelogsRequested = true
+	return changelogsCmd(m.upgrader, target.Version.String(), m.prepare.results, m.prepare.gen)
+}
+
+// deploymentHelperMissing reports whether the upgrade will add
+// shopware/deployment-helper to composer.json, per the readiness check.
+func (m *Model) deploymentHelperMissing() bool {
+	for _, check := range m.check.readiness.Checks {
+		if check.ID == "deployment-helper" {
+			return check.State != backend.StateOK
+		}
+	}
+	return false
+}
+
 // applyResolved overwrites the metadata-derived target versions with the
 // exact releases the composer dry run picked, once both checks finished.
 func (s *prepareState) applyResolved() {
@@ -138,7 +177,7 @@ func (m *Model) updatePrepare(msg tea.Msg) (app.Content, tea.Cmd) {
 			m.prepare.resolve = &result
 		}
 		m.prepare.applyResolved()
-		cmds := []tea.Cmd{m.maybeWriteFailureReport()}
+		cmds := []tea.Cmd{m.maybeWriteFailureReport(), m.maybeLoadChangelogs()}
 		// Composer >= 2.9 refuses to load packages affected by security
 		// advisories, which would leave this check blocked with no way
 		// forward — offer to continue with audit blocking disabled.
@@ -171,7 +210,7 @@ func (m *Model) updatePrepare(msg tea.Msg) (app.Content, tea.Cmd) {
 		m.prepare.cursor = 0
 		m.prepare.scroll = 0
 		m.prepare.applyResolved()
-		return m, m.maybeWriteFailureReport()
+		return m, tea.Batch(m.maybeWriteFailureReport(), m.maybeLoadChangelogs())
 
 	case phpInfoMsg:
 		if msg.gen != m.prepare.gen {
@@ -181,6 +220,13 @@ func (m *Model) updatePrepare(msg tea.Msg) (app.Content, tea.Cmd) {
 		m.prepare.phpReq = msg.requirement
 		m.prepare.phpInstalled = msg.installed
 		return m, m.maybeWriteFailureReport()
+
+	case changelogsMsg:
+		if msg.gen != m.prepare.gen {
+			return m, nil
+		}
+		m.prepare.changelogs = msg.changelogs
+		return m, nil
 
 	case tea.KeyPressMsg:
 		return m.updatePrepareKeys(msg)
@@ -220,7 +266,7 @@ func (m *Model) maybeWriteFailureReport() tea.Cmd {
 	if m.prepare.reportRequested || m.prepare.loading() || !m.prepare.phpDone {
 		return nil
 	}
-	if m.prepare.resolve == nil || m.prepare.resolve.OK {
+	if !m.prepare.resolveFailed() {
 		return nil
 	}
 	m.prepare.reportRequested = true
@@ -284,10 +330,7 @@ func (m *Model) clampPrepareScroll() {
 	visible := m.queueHeight()
 	// The cursor position past the last row focuses the Continue button and
 	// does not scroll the queue.
-	row := min(m.prepare.cursor, len(m.prepare.results)-1)
-	if row < 0 {
-		row = 0
-	}
+	row := max(min(m.prepare.cursor, len(m.prepare.results)-1), 0)
 	if row < m.prepare.scroll {
 		m.prepare.scroll = row
 	}
@@ -350,7 +393,7 @@ func (m *Model) viewPrepareLeft() string {
 	// queue would be — it names the exact packages and constraints that
 	// clash. Any flagged extension (blocking, deprecated, manual review)
 	// keeps the queue instead: those findings are only visible here.
-	if m.prepare.resolve != nil && !m.prepare.resolve.OK && m.prepare.flagged() == 0 {
+	if m.prepare.resolveFailed() && m.prepare.flagged() == 0 {
 		b.WriteString(m.viewResolveFailure())
 		return b.String()
 	}
@@ -370,7 +413,8 @@ func (m *Model) viewPrepareLeft() string {
 	}
 
 	nameW, versionW := 26, 20
-	b.WriteString("    " + tui.BoldStyle.Render(tui.PadRight("Name", nameW)+tui.PadRight("Current -> target", versionW)+"Result"))
+	b.WriteString("    ")
+	b.WriteString(tui.BoldStyle.Render(tui.PadRight("Name", nameW) + tui.PadRight("Current -> target", versionW) + "Result"))
 	b.WriteString("\n")
 
 	visible := m.queueHeight()
@@ -405,12 +449,18 @@ func (m *Model) viewResolveFailure() string {
 	// table header, plus queueHeight rows): heading + omission notice + tail
 	// + blank + report line. Budget the tail so the report link is never
 	// cropped off the frame — long failures need it the most.
-	visible := m.queueHeight() - 2
-	if visible < 3 {
-		visible = 3
+	visible := max(m.queueHeight()-2, 3)
+
+	// The dry run either produced solver output or failed to run at all — in
+	// the latter case the error itself is the report.
+	report := ""
+	if m.prepare.resolve != nil {
+		report = m.prepare.resolve.Report
+	} else if m.prepare.resolveErr != nil {
+		report = m.prepare.resolveErr.Error()
 	}
 
-	lines := strings.Split(strings.TrimRight(m.prepare.resolve.Report, "\n"), "\n")
+	lines := strings.Split(strings.TrimRight(report, "\n"), "\n")
 	if len(lines) > visible {
 		b.WriteString(tui.DimStyle.Render(fmt.Sprintf("… %d earlier output lines omitted", len(lines)-visible)))
 		b.WriteString("\n")
@@ -423,8 +473,8 @@ func (m *Model) viewResolveFailure() string {
 	b.WriteString("\n")
 	switch {
 	case m.prepare.reportPath != "":
-		b.WriteString(tui.DimStyle.Render("Full output: ") +
-			tui.StyledLink("file://"+m.prepare.reportPath, relativePath(m.opts.ProjectRoot, m.prepare.reportPath), tui.LinkStyle))
+		b.WriteString(tui.DimStyle.Render("Full output: "))
+		b.WriteString(tui.StyledLink("file://"+m.prepare.reportPath, relativePath(m.opts.ProjectRoot, m.prepare.reportPath), tui.LinkStyle))
 	case m.prepare.reportErr != nil:
 		b.WriteString(failStyle.Render(tui.Truncate("Could not write the report: "+m.prepare.reportErr.Error(), width)))
 	}
@@ -505,12 +555,15 @@ func (m *Model) renderSystemChecks() string {
 
 func (m *Model) viewPrepareRight() string {
 	var b strings.Builder
-	b.WriteString(tui.BoldStyle.Render("Deployment Helper workflow"))
-	b.WriteString("\n\n")
-	b.WriteString(tui.DimStyle.Render("  • ") + tui.LabelStyle.Render("add shopware/deployment-helper"))
-	b.WriteString("\n")
-	b.WriteString(tui.LabelStyle.Render("    if missing"))
-	b.WriteString("\n\n\n")
+	if m.deploymentHelperMissing() {
+		b.WriteString(tui.BoldStyle.Render("Deployment Helper workflow"))
+		b.WriteString("\n\n")
+		b.WriteString(tui.DimStyle.Render("  • "))
+		b.WriteString(tui.LabelStyle.Render("add shopware/deployment-helper"))
+		b.WriteString("\n")
+		b.WriteString(tui.LabelStyle.Render("    to composer.json"))
+		b.WriteString("\n\n\n")
+	}
 	b.WriteString(userActionStyle.Render("User action"))
 	b.WriteString("\n")
 	b.WriteString(tui.LabelStyle.Render("Open an extension detail popup to"))
@@ -533,7 +586,8 @@ func (m *Model) viewPrepareRight() string {
 			active = 0
 		}
 	}
-	b.WriteString(cursor + m.buttonRow([]string{"Continue"}, active))
+	b.WriteString(cursor)
+	b.WriteString(m.buttonRow([]string{"Continue"}, active))
 	return b.String()
 }
 

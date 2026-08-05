@@ -120,19 +120,22 @@ func (d *extensionDetail) viewLeft() string {
 	if r.Extension.Package != "" {
 		b.WriteString(tui.BoldStyle.Render("Package"))
 		b.WriteString("\n")
-		b.WriteString("  " + tui.LabelStyle.Render(r.Extension.Package))
+		b.WriteString("  ")
+		b.WriteString(tui.LabelStyle.Render(r.Extension.Package))
 		b.WriteString("\n\n")
 	}
 	if r.Extension.Path != "" && !r.Extension.ComposerManaged {
 		b.WriteString(tui.BoldStyle.Render("Path"))
 		b.WriteString("\n")
-		b.WriteString("  " + tui.DimStyle.Render(r.Extension.Path))
+		b.WriteString("  ")
+		b.WriteString(tui.DimStyle.Render(r.Extension.Path))
 		b.WriteString("\n\n")
 	}
 	if r.StoreLabel != "" {
 		b.WriteString(tui.BoldStyle.Render("Store"))
 		b.WriteString("\n")
-		b.WriteString("  " + tui.DimStyle.Render(r.StoreLabel))
+		b.WriteString("  ")
+		b.WriteString(tui.DimStyle.Render(r.StoreLabel))
 		b.WriteString("\n")
 	}
 
@@ -146,7 +149,9 @@ func (d *extensionDetail) viewRight() string {
 	b.WriteString("\n\n")
 
 	bullet := func(s string) {
-		b.WriteString(tui.DimStyle.Render("• ") + tui.LabelStyle.Render(s) + "\n\n")
+		b.WriteString(tui.DimStyle.Render("• "))
+		b.WriteString(tui.LabelStyle.Render(s))
+		b.WriteString("\n\n")
 	}
 
 	switch r.Status {

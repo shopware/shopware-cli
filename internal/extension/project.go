@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -40,7 +41,7 @@ func GetShopwareProjectConstraint(project string) (*version.Constraints, error) 
 			return v, nil
 		}
 
-		return nil, fmt.Errorf("missing shopware/core requirement in composer.json")
+		return nil, errors.New("missing shopware/core requirement in composer.json")
 	}
 
 	c, err := version.NewConstraint(constraint)
@@ -80,13 +81,13 @@ func getProjectConstraintFromKernel(project string) (*version.Constraints, error
 
 	kernel, err := os.ReadFile(kernelPath)
 	if err != nil {
-		return nil, fmt.Errorf("could not determine shopware version")
+		return nil, errors.New("could not determine shopware version")
 	}
 
 	matches := kernelFallbackRegExp.FindSubmatch(kernel)
 
 	if len(matches) < 2 {
-		return nil, fmt.Errorf("could not determine shopware version")
+		return nil, errors.New("could not determine shopware version")
 	}
 
 	v, err := version.NewConstraint(fmt.Sprintf("~%s.0", string(matches[1])))

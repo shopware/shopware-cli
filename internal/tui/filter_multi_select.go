@@ -212,10 +212,7 @@ func (m *filterMultiSelectModel) render() string {
 		Foreground(MutedColor).
 		Background(SelectedBgColor)
 
-	end := m.scroll + m.pageSize
-	if end > len(m.filtered) {
-		end = len(m.filtered)
-	}
+	end := min(m.scroll+m.pageSize, len(m.filtered))
 	for i := m.scroll; i < end; i++ {
 		idx := m.filtered[i]
 		item := m.items[idx]
@@ -229,8 +226,12 @@ func (m *filterMultiSelectModel) render() string {
 		}
 		label := check + item.Label
 		if item.Detail != "" {
+			// Render label and detail as separate styled segments: nesting a
+			// styled detail inside the width-padded row style would reset the
+			// selection background before the trailing padding.
 			gap := max(innerWidth-lipgloss.Width(label)-lipgloss.Width(item.Detail), 1)
-			b.WriteString(rowStyle.Render(label + strings.Repeat(" ", gap) + dStyle.Render(item.Detail)))
+			b.WriteString(rowStyle.UnsetWidth().Render(label + strings.Repeat(" ", gap)))
+			b.WriteString(dStyle.Render(item.Detail))
 		} else {
 			b.WriteString(rowStyle.Render(label))
 		}

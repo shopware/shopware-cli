@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"image/color"
 	"io"
@@ -54,6 +55,7 @@ type OverviewModel struct {
 	sfWatchRunning     bool
 	sfWatchStarting    bool
 	shopwareVersion    string
+	adminWatchURL      string
 	securityEnd        time.Time
 	health             []healthCheck
 	healthLoading      bool
@@ -228,6 +230,7 @@ func NewOverviewModel(envType, shopURL, username, password, projectRoot string, 
 		envType:       envType,
 		shopURL:       shopURL,
 		adminURL:      deriveAdminURL(shopURL),
+		adminWatchURL: fmt.Sprintf("http://127.0.0.1:%d", extension.AdminDevServerPort(projectRoot)),
 		username:      username,
 		password:      password,
 		projectRoot:   projectRoot,
@@ -374,8 +377,6 @@ func (m OverviewModel) renderProjectReport(width int) string {
 	divider := tui.SectionDivider(width)
 
 	var s strings.Builder
-	s.WriteString(helpStyle.Render("Project details and readonly setup report."))
-	s.WriteString("\n\n")
 	s.WriteString(m.renderShopSection())
 	s.WriteString(divider)
 	s.WriteString(m.renderAccess())
@@ -405,8 +406,6 @@ func (m OverviewModel) renderStacked(width int) string {
 	divider := tui.SectionDivider(width)
 
 	var s strings.Builder
-	s.WriteString(helpStyle.Render("Project details and readonly setup report."))
-	s.WriteString("\n\n")
 	s.WriteString(m.renderShopSection())
 	s.WriteString(divider)
 	s.WriteString(m.renderAccess())
@@ -515,12 +514,18 @@ func (m OverviewModel) renderAccess() string {
 
 	switch {
 	case m.loading:
-		s.WriteString("  " + helpStyle.Render("Scanning for further local services...") + "\n")
+		s.WriteString("  ")
+		s.WriteString(helpStyle.Render("Scanning for further local services..."))
+		s.WriteString("\n")
 	case m.err != nil:
-		s.WriteString("  " + errorStyle.Render(m.err.Error()) + "\n")
+		s.WriteString("  ")
+		s.WriteString(errorStyle.Render(m.err.Error()))
+		s.WriteString("\n")
 	}
 	if m.username == "" && m.password == "" {
-		s.WriteString("  " + helpStyle.Render("Admin credentials will appear here once Shopware is installed.") + "\n")
+		s.WriteString("  ")
+		s.WriteString(helpStyle.Render("Admin credentials will appear here once Shopware is installed."))
+		s.WriteString("\n")
 	}
 
 	return s.String()
@@ -530,7 +535,7 @@ func (m OverviewModel) renderWatchers() string {
 	var s strings.Builder
 	s.WriteString(tui.TitleStyle.Render("Watchers"))
 	s.WriteString("\n")
-	s.WriteString(m.renderWatcherStatus("Admin", m.adminWatchRunning, m.adminWatchStarting, "http://127.0.0.1:5173", m.cursor == 0))
+	s.WriteString(m.renderWatcherStatus("Admin", m.adminWatchRunning, m.adminWatchStarting, m.adminWatchURL, m.cursor == 0))
 	s.WriteString(m.renderWatcherStatus("Storefront", m.sfWatchRunning, m.sfWatchStarting, "http://127.0.0.1:9998", m.cursor == 1))
 	return s.String()
 }
@@ -650,7 +655,7 @@ func startWatcher(name string, prepare func(ctx context.Context, out io.Writer) 
 				stopCtx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 				_ = process.Stop(stopCtx)
 				cancel()
-				running <- fmt.Errorf("watcher stopped")
+				running <- errors.New("watcher stopped")
 				return
 			}
 

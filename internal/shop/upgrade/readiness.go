@@ -124,7 +124,7 @@ func checkDeploymentHelper(projectRoot string) ReadinessCheck {
 		return check
 	}
 
-	if _, ok := composerJSON.Require[deploymentHelperPackage]; !ok {
+	if !composerJSON.HasPackage(deploymentHelperPackage) && !composerJSON.HasPackageDev(deploymentHelperPackage) {
 		check.State = StateWarn
 		check.Value = "no"
 		check.Detail = "shopware/deployment-helper is not required; the wizard adds it during the upgrade."

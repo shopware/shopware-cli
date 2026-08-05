@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"slices"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 
@@ -318,7 +319,7 @@ func (e *ExtensionAssetConfigEntry) GetContentHash() (string, error) {
 		}
 	}
 
-	e.sumOfFiles = fmt.Sprintf("%x", hasher.Sum64())
+	e.sumOfFiles = strconv.FormatUint(hasher.Sum64(), 16)
 	return e.sumOfFiles, nil
 }
 

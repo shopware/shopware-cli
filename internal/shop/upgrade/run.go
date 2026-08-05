@@ -6,10 +6,10 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"sync"
 	"time"
 
 	"github.com/shopware/shopware-cli/internal/executor"
+	"github.com/shopware/shopware-cli/internal/tui"
 )
 
 // StepID identifies one step of the upgrade execution (panel 5's checklist).
@@ -103,7 +103,19 @@ func (u *ProjectUpgrader) Run(ctx context.Context, opts RunOptions) <-chan StepE
 			} else if ev.State != StateRunning {
 				_, _ = fmt.Fprintf(logFile, "== %s: %s\n", ev.Step.Label(), stateName(ev.State, ev.Err))
 			}
-			events <- ev
+			// Never block on a consumer that stopped reading (e.g. the TUI
+			// exited mid-run) — rollback and the failure report must still
+			// complete, and the goroutine must not leak. The non-blocking
+			// attempt comes first: with a cancelled context a bare two-way
+			// select would randomly drop events that still fit the buffer.
+			select {
+			case events <- ev:
+			default:
+				select {
+				case events <- ev:
+				case <-ctx.Done():
+				}
+			}
 		}
 
 		if err := u.backup(); err != nil {
@@ -203,7 +215,7 @@ func (u *ProjectUpgrader) runSteps(ctx context.Context, opts *RunOptions, emit f
 // while Stop signals the actual process inside the container — otherwise
 // Composer keeps running there and races the rollback that follows.
 func streamProcess(ctx context.Context, p *executor.Process, line func(string)) error {
-	w := &lineWriter{emit: line}
+	w := tui.NewLineWriter(line)
 	err := p.RunWithOutput(w)
 	w.Flush()
 
@@ -320,39 +332,4 @@ func stateName(s CheckState, err error) string {
 		return "pending"
 	}
 	return "unknown"
-}
-
-// lineWriter converts a byte stream into per-line emit calls.
-type lineWriter struct {
-	mu   sync.Mutex
-	emit func(string)
-	buf  []byte
-}
-
-func (w *lineWriter) Write(p []byte) (int, error) {
-	w.mu.Lock()
-	defer w.mu.Unlock()
-
-	w.buf = append(w.buf, p...)
-	for {
-		idx := bytes.IndexByte(w.buf, '\n')
-		if idx < 0 {
-			break
-		}
-		line := string(bytes.TrimRight(w.buf[:idx], "\r"))
-		w.buf = w.buf[idx+1:]
-		w.emit(line)
-	}
-	return len(p), nil
-}
-
-// Flush emits any trailing output that did not end in a newline.
-func (w *lineWriter) Flush() {
-	w.mu.Lock()
-	defer w.mu.Unlock()
-
-	if len(w.buf) > 0 {
-		w.emit(string(w.buf))
-		w.buf = nil
-	}
 }

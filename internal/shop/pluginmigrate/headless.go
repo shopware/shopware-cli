@@ -2,6 +2,7 @@ package pluginmigrate
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 
@@ -46,7 +47,7 @@ func (m *PluginMigrator) RunHeadless(ctx context.Context, opts HeadlessOptions) 
 	printPlan(out, plan)
 
 	if !plan.Actionable() {
-		return fmt.Errorf("none of the extensions can be migrated automatically; add a composer.json with a package name to each")
+		return errors.New("none of the extensions can be migrated automatically; add a composer.json with a package name to each")
 	}
 
 	if opts.DryRun {

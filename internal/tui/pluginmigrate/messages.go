@@ -43,6 +43,11 @@ func fetchAvailabilityCmd(m *migrate.PluginMigrator, token string, extensions []
 // readRunEventCmd pulls the next runner event; re-issue it after each event.
 func readRunEventCmd(events <-chan migrate.StepEvent) tea.Cmd {
 	return func() tea.Msg {
+		// Receiving from a nil channel blocks forever and would leak the
+		// Bubble Tea command goroutine.
+		if events == nil {
+			return runClosedMsg{}
+		}
 		ev, ok := <-events
 		if !ok {
 			return runClosedMsg{}

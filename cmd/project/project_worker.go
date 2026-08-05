@@ -63,8 +63,8 @@ var projectWorkerCmd = &cobra.Command{
 
 		consumeArgs := []string{
 			"messenger:consume",
-			fmt.Sprintf("--memory-limit=%s", memoryLimit),
-			fmt.Sprintf("--time-limit=%s", timeLimit),
+			"--memory-limit=" + memoryLimit,
+			"--time-limit=" + timeLimit,
 			"--failure-limit=5",
 		}
 

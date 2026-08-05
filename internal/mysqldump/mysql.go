@@ -526,7 +526,7 @@ func (d *Dumper) dumpTableData(ctx context.Context, w io.Writer, table string) e
 	}
 
 	values := make([]*sql.RawBytes, len(columns))
-	scanArgs := make([]interface{}, len(values))
+	scanArgs := make([]any, len(values))
 	for i := range values {
 		scanArgs[i] = &values[i]
 	}
@@ -588,12 +588,7 @@ func (d *Dumper) getProperEscapedValue(col *sql.RawBytes, table, columnName stri
 }
 
 func (d *Dumper) generateInsertStatement(cols []string, table string) string {
-	s := fmt.Sprintf("INSERT INTO `%s` (", table)
-	for _, col := range cols {
-		s += fmt.Sprintf("%s, ", col)
-	}
-
-	return s[:len(s)-2] + ") VALUES"
+	return fmt.Sprintf("INSERT INTO `%s` (%s) VALUES", table, strings.Join(cols, ", "))
 }
 
 func (d *Dumper) getTableHeader(ctx context.Context, table string) (str string, count uint64, err error) {

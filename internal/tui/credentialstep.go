@@ -172,6 +172,11 @@ func (c *CredentialStep) HandleKey(msg tea.KeyPressMsg) (cmd tea.Cmd, submitted 
 		return c.Focus(c.focus + 1), false
 	case KeyShiftTab, KeyUp:
 		return c.Focus(c.focus - 1), false
+	case "space", " ":
+		if c.focus == CredFocusShowPassword {
+			c.ToggleShowPassword()
+			return nil, false
+		}
 	}
 	return c.updateInput(msg), false
 }

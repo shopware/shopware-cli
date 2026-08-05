@@ -60,7 +60,7 @@ func applyTargetConstraints(c *composer.Json, target string, extensionPackages [
 		c.Require[pkg] = constraint
 	}
 
-	if !c.HasPackage(deploymentHelperPackage) {
+	if !c.HasPackage(deploymentHelperPackage) && !c.HasPackageDev(deploymentHelperPackage) {
 		c.AddPackage(deploymentHelperPackage, "*")
 		changes = append(changes, deploymentHelperPackage+": added")
 	}
@@ -70,10 +70,10 @@ func applyTargetConstraints(c *composer.Json, target string, extensionPackages [
 
 // extensionPackages lists the Composer-managed Shopware extensions
 // (plugins, apps, bundles) recorded in composer.lock.
-func extensionPackages(projectRoot string) []string {
+func extensionPackages(projectRoot string) ([]string, error) {
 	lock, err := composer.ReadLock(filepath.Join(projectRoot, "composer.lock"))
 	if err != nil {
-		return nil
+		return nil, fmt.Errorf("read composer.lock: %w", err)
 	}
 
 	var packages []string
@@ -83,7 +83,7 @@ func extensionPackages(projectRoot string) []string {
 			packages = append(packages, pkg.Name)
 		}
 	}
-	return packages
+	return packages, nil
 }
 
 // RewriteComposerJSON applies the target constraints to the project's real
@@ -96,7 +96,12 @@ func (u *ProjectUpgrader) RewriteComposerJSON(target string, resolved map[string
 		return nil, err
 	}
 
-	changes := applyTargetConstraints(c, target, extensionPackages(u.projectRoot), resolved)
+	extensions, err := extensionPackages(u.projectRoot)
+	if err != nil {
+		return nil, err
+	}
+
+	changes := applyTargetConstraints(c, target, extensions, resolved)
 	if err := c.Save(); err != nil {
 		return nil, err
 	}
@@ -113,7 +118,11 @@ func (u *ProjectUpgrader) renderUpgradeManifest(target string) ([]byte, error) {
 		return nil, err
 	}
 
-	applyTargetConstraints(c, target, extensionPackages(u.projectRoot), nil)
+	extensions, err := extensionPackages(u.projectRoot)
+	if err != nil {
+		return nil, err
+	}
+	applyTargetConstraints(c, target, extensions, nil)
 
 	out, err := json.MarshalIndent(c, "", "    ")
 	if err != nil {

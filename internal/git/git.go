@@ -174,17 +174,17 @@ func GetPublicVCSURL(ctx context.Context, repo string) (string, error) {
 	case strings.HasPrefix(origin, "https://github.com/"):
 		origin = strings.TrimSuffix(origin, ".git")
 
-		return fmt.Sprintf("%s/commit", origin), nil
+		return origin + "/commit", nil
 	case strings.HasPrefix(origin, "git@github.com:"):
 		origin = origin[15:]
 		origin = strings.TrimSuffix(origin, ".git")
 
 		return fmt.Sprintf("https://github.com/%s/commit", origin), nil
 	case os.Getenv("CI_PROJECT_URL") != "":
-		return fmt.Sprintf("%s/-/commit", os.Getenv("CI_PROJECT_URL")), nil
+		return os.Getenv("CI_PROJECT_URL") + "/-/commit", nil
 	}
 
-	return "", fmt.Errorf("unsupported vcs provider")
+	return "", errors.New("unsupported vcs provider")
 }
 
 func unshallowRepository(ctx context.Context, repo string) error {

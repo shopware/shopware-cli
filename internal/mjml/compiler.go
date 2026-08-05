@@ -61,7 +61,7 @@ func Compile(ctx context.Context, mjmlPath string, opts CompileOptions) (string,
 		if err != nil {
 			return "", fmt.Errorf("failed to encode mjml include paths: %w", err)
 		}
-		args = append(args, fmt.Sprintf("--config.includePath=%s", string(encoded)))
+		args = append(args, "--config.includePath="+string(encoded))
 	}
 
 	cmd := exec.CommandContext(ctx, "npx", args...)

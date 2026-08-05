@@ -1,6 +1,7 @@
 package project
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -22,7 +23,7 @@ var projectFixCmd = &cobra.Command{
 		gitPath := filepath.Join(args[0], ".git")
 		if !allowNonGit {
 			if stat, err := os.Stat(gitPath); err != nil || !stat.IsDir() {
-				return fmt.Errorf("provided folder is not a git repository. Use --allow-non-git flag to run anyway")
+				return errors.New("provided folder is not a git repository. Use --allow-non-git flag to run anyway")
 			}
 		}
 

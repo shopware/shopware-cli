@@ -30,12 +30,10 @@ func NewTwoColumn(opts TwoColumnOptions) TwoColumn {
 
 // Render implements the component contract.
 func (c TwoColumn) Render() string {
-	rightWidth := c.opts.Width - c.opts.LeftWidth - 3
-	if rightWidth < 0 {
-		rightWidth = 0
-	}
+	leftWidth := max(c.opts.LeftWidth, 0)
+	rightWidth := max(c.opts.Width-leftWidth-3, 0)
 
-	leftLines := splitToWidth(c.opts.Left, c.opts.LeftWidth)
+	leftLines := splitToWidth(c.opts.Left, leftWidth)
 	rightLines := splitToWidth(c.opts.Right, rightWidth)
 
 	rows := max(len(leftLines), len(rightLines))
@@ -50,8 +48,10 @@ func (c TwoColumn) Render() string {
 		if i < len(rightLines) {
 			r = rightLines[i]
 		}
-		b.WriteString(padToWidth(l, c.opts.LeftWidth))
-		b.WriteString(" " + divider + " ")
+		b.WriteString(padToWidth(l, leftWidth))
+		b.WriteString(" ")
+		b.WriteString(divider)
+		b.WriteString(" ")
 		b.WriteString(padToWidth(r, rightWidth))
 		if i < rows-1 {
 			b.WriteString("\n")

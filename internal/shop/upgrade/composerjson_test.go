@@ -59,6 +59,7 @@ func TestRenderUpgradeManifestLeavesProjectUntouched(t *testing.T) {
 		"require": {"shopware/core": "6.6.10.3", "shopware/deployment-helper": "*"}
 	}`
 	writeFile(t, filepath.Join(dir, "composer.json"), original)
+	writeFile(t, filepath.Join(dir, "composer.lock"), `{"packages": [], "packages-dev": []}`)
 
 	manifest, err := newTestUpgrader(t, dir).renderUpgradeManifest("6.7.11.0")
 	require.NoError(t, err)

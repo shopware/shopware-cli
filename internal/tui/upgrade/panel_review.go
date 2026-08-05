@@ -57,6 +57,7 @@ func (m *Model) reportData() backend.ReportData {
 		PHPInstalled:    m.prepare.phpInstalled,
 		ComposerReport:  composerReport,
 		ResolvedChanges: resolvedChanges,
+		Changelogs:      m.prepare.changelogs,
 	}
 }
 
@@ -111,7 +112,9 @@ func (m *Model) viewReview() (title, status, body string) {
 	left.WriteString(tui.BoldStyle.Render("Planned project changes"))
 	left.WriteString("\n\n")
 	for _, change := range m.plannedChanges() {
-		left.WriteString(tui.DimStyle.Render("  • ") + tui.LabelStyle.Render(change) + "\n")
+		left.WriteString(tui.DimStyle.Render("  • "))
+		left.WriteString(tui.LabelStyle.Render(change))
+		left.WriteString("\n")
 	}
 	left.WriteString("\n")
 
@@ -128,9 +131,19 @@ func (m *Model) viewReview() (title, status, body string) {
 			reviewCount++
 		}
 	}
-	left.WriteString(fmt.Sprintf("  %-28s", fmt.Sprintf("%d compatible extensions", okCount)) + okStyle.Render("ok") + "\n")
-	left.WriteString(fmt.Sprintf("  %-28s", fmt.Sprintf("%d extensions to review", reviewCount)) + okStyle.Render("reports ready") + "\n")
-	left.WriteString(fmt.Sprintf("  %-28s", fmt.Sprintf("%d blocking extensions", blockedCount)) + okStyle.Render("ready") + "\n")
+	fmt.Fprintf(&left, "  %-28s", fmt.Sprintf("%d compatible extensions", okCount))
+	left.WriteString(okStyle.Render("ok"))
+	left.WriteString("\n")
+	fmt.Fprintf(&left, "  %-28s", fmt.Sprintf("%d extensions to review", reviewCount))
+	left.WriteString(okStyle.Render("reports ready"))
+	left.WriteString("\n")
+	blockedStatus := okStyle.Render("none")
+	if blockedCount > 0 {
+		blockedStatus = warnStyle.Render("review advised")
+	}
+	fmt.Fprintf(&left, "  %-28s", fmt.Sprintf("%d blocking extensions", blockedCount))
+	left.WriteString(blockedStatus)
+	left.WriteString("\n")
 	left.WriteString("\n")
 
 	left.WriteString(tui.BoldStyle.Render("Why these files change"))
@@ -153,12 +166,18 @@ func (m *Model) viewReview() (title, status, body string) {
 	var right strings.Builder
 	right.WriteString(tui.BoldStyle.Render("Deployment Helper workflow"))
 	right.WriteString("\n\n")
-	right.WriteString(tui.DimStyle.Render("  • ") + tui.LabelStyle.Render("run Shopware update lifecycle") + "\n")
-	right.WriteString(tui.DimStyle.Render("  • ") + tui.LabelStyle.Render("update extension state where supported") + "\n")
+	right.WriteString(tui.DimStyle.Render("  • "))
+	right.WriteString(tui.LabelStyle.Render("run Shopware update lifecycle"))
+	right.WriteString("\n")
+	right.WriteString(tui.DimStyle.Render("  • "))
+	right.WriteString(tui.LabelStyle.Render("update extension state where supported"))
+	right.WriteString("\n")
 	right.WriteString("\n\n")
 	right.WriteString(userActionStyle.Render("User action"))
 	right.WriteString("\n")
-	right.WriteString(tui.LabelStyle.Render("Press ") + tui.BoldStyle.Render("Start upgrade") + tui.LabelStyle.Render(" to apply the plan"))
+	right.WriteString(tui.LabelStyle.Render("Press "))
+	right.WriteString(tui.BoldStyle.Render("Start upgrade"))
+	right.WriteString(tui.LabelStyle.Render(" to apply the plan"))
 	right.WriteString("\n")
 	right.WriteString(tui.LabelStyle.Render("locally, then run Composer and"))
 	right.WriteString("\n")

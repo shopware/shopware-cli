@@ -164,13 +164,13 @@ func (m Model) renderPhase(ctx app.Context) string {
 		if m.dockerShowLogs {
 			return m.renderDockerLogs("Starting Docker containers...", ctx.Width, ctx.MainHeight)
 		}
-		cardContent := fmt.Sprintf("%s Starting Docker containers...", m.dockerSpinner.View())
+		cardContent := m.dockerSpinner.View() + " Starting Docker containers..."
 		content.WriteString(tui.RenderPhaseCard(cardContent))
 	case phaseStopping:
 		if m.dockerShowLogs {
 			return m.renderDockerLogs("Stopping Docker containers...", ctx.Width, ctx.MainHeight)
 		}
-		cardContent := fmt.Sprintf("%s Stopping Docker containers...", m.dockerSpinner.View())
+		cardContent := m.dockerSpinner.View() + " Stopping Docker containers..."
 		content.WriteString(tui.RenderPhaseCard(cardContent))
 	case phaseInstallPrompt:
 		var card strings.Builder

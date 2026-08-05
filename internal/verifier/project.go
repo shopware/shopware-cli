@@ -3,6 +3,7 @@ package verifier
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path"
@@ -72,7 +73,7 @@ func getShopwareConstraint(root string) (*version.Constraints, error) {
 	}
 
 	if composerJsonData.Require.Shopware == "" {
-		return nil, fmt.Errorf("shopware/core is not required")
+		return nil, errors.New("shopware/core is not required")
 	}
 
 	cst, err := version.NewConstraint(composerJsonData.Require.Shopware)

@@ -238,7 +238,7 @@ func runDefaultValidate(ext Extension, check validation.Check) {
 			check.AddResult(validation.CheckResult{
 				Path:       rootFile,
 				Identifier: "metadata.license",
-				Message:    fmt.Sprintf("Could not read the license of the extension: %s", err.Error()),
+				Message:    "Could not read the license of the extension: " + err.Error(),
 				Severity:   validation.SeverityError,
 			})
 		} else if strings.TrimSpace(strings.ToLower(license)) != "proprietary" {
@@ -247,7 +247,7 @@ func runDefaultValidate(ext Extension, check validation.Check) {
 				check.AddResult(validation.CheckResult{
 					Path:       rootFile,
 					Identifier: "metadata.license",
-					Message:    fmt.Sprintf("Could not load the SPDX license list: %s", err.Error()),
+					Message:    "Could not load the SPDX license list: " + err.Error(),
 					Severity:   validation.SeverityWarning,
 				})
 			} else {
@@ -256,7 +256,7 @@ func runDefaultValidate(ext Extension, check validation.Check) {
 					check.AddResult(validation.CheckResult{
 						Path:       rootFile,
 						Identifier: "metadata.license",
-						Message:    fmt.Sprintf("Could not validate the license: %s", err.Error()),
+						Message:    "Could not validate the license: " + err.Error(),
 						Severity:   validation.SeverityError,
 					})
 				} else if !valid {

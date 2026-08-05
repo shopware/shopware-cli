@@ -52,6 +52,9 @@ func headlessUpgrader(t *testing.T, dir, composerScript string) *ProjectUpgrader
 	u.extensionUpdates = func(context.Context, string, string, []account_api.UpdateCheckExtension) ([]account_api.UpdateCheckExtensionCompatibility, error) {
 		return nil, nil
 	}
+	u.storePlugins = func(context.Context, string, string, []string) ([]account_api.StorePlugin, error) {
+		return nil, nil
+	}
 	return u
 }
 

@@ -7,6 +7,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 
@@ -166,7 +167,7 @@ func printLastLines(path string, n int) error {
 }
 
 func tailFollow(cmd *cobra.Command, path string, n int) error {
-	tailCmd := exec.CommandContext(cmd.Context(), "tail", "-n", fmt.Sprintf("%d", n), "-f", path)
+	tailCmd := exec.CommandContext(cmd.Context(), "tail", "-n", strconv.Itoa(n), "-f", path)
 	tailCmd.Stdout = cmd.OutOrStdout()
 	tailCmd.Stderr = cmd.ErrOrStderr()
 

@@ -236,7 +236,7 @@ var projectExtensionUploadCmd = &cobra.Command{
 
 func increaseExtensionVersion(ctx context.Context, ext extension.Extension) error {
 	if ext.GetType() == "app" {
-		manifestPath := fmt.Sprintf("%s/manifest.xml", ext.GetPath())
+		manifestPath := ext.GetPath() + "/manifest.xml"
 		file, err := os.Open(manifestPath)
 		if err != nil {
 			return fmt.Errorf("cannot read manifest file: %w", err)
@@ -304,7 +304,7 @@ func increaseExtensionVersion(ctx context.Context, ext extension.Extension) erro
 		return nil
 	}
 
-	composerJsonPath := fmt.Sprintf("%s/composer.json", ext.GetPath())
+	composerJsonPath := ext.GetPath() + "/composer.json"
 
 	composerJsonContent, err := os.ReadFile(composerJsonPath)
 	if err != nil {
