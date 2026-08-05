@@ -2,6 +2,7 @@ package executor
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	osexec "os/exec"
@@ -217,7 +218,7 @@ func TestLocalExecutorComposerUsesDownloadedPharWithoutComposerInPath(t *testing
 
 func TestLocalExecutorComposerReportsFailedDownload(t *testing.T) {
 	t.Setenv("PHP_BINARY", "")
-	downloadErr := fmt.Errorf("cannot download composer: connection refused")
+	downloadErr := errors.New("cannot download composer: connection refused")
 	stubComposer(t, "", false, downloadErr)
 	exec := &LocalExecutor{projectRoot: "/project"}
 
