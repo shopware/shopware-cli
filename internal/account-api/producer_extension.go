@@ -418,23 +418,20 @@ func (review BinaryReviewResult) IsPending() bool {
 }
 
 func (review BinaryReviewResult) GetSummary() string {
-	message := ""
-
 	p := bluemonday.NewPolicy()
 
-	var messageSb424 strings.Builder
+	var message strings.Builder
 	for _, result := range review.SubCheckResults {
 		if result.Passed && !result.HasWarnings {
 			continue
 		}
 
-		fmt.Fprintf(&messageSb424, "=== %s ===\n", result.SubCheck)
-		messageSb424.WriteString(p.Sanitize(result.Message))
-		messageSb424.WriteString("\n\n")
+		fmt.Fprintf(&message, "=== %s ===\n", result.SubCheck)
+		message.WriteString(p.Sanitize(result.Message))
+		message.WriteString("\n\n")
 	}
-	message += messageSb424.String()
 
-	return message
+	return message.String()
 }
 
 func (list SoftwareVersionList) FilterOnVersion(constriant *version.Constraints) SoftwareVersionList {

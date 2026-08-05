@@ -53,14 +53,14 @@ func (s Shortcuts) bar(separator string) string {
 	}
 
 	sep := lipgloss.NewStyle().Foreground(BorderColor).Render(separator)
-	result := s.badge(s.opts.Items[0])
-	var resultSb55 strings.Builder
+
+	var b strings.Builder
+	b.WriteString(s.badge(s.opts.Items[0]))
 	for _, item := range s.opts.Items[1:] {
-		resultSb55.WriteString(sep)
-		resultSb55.WriteString(s.badge(item))
+		b.WriteString(sep)
+		b.WriteString(s.badge(item))
 	}
-	result += resultSb55.String()
-	return result
+	return b.String()
 }
 
 func (s Shortcuts) badge(item Shortcut) string {
