@@ -1,9 +1,14 @@
 package shop
 
 import (
+	"context"
 	"fmt"
 	"os"
+	"os/exec"
+	"runtime"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -53,6 +58,7 @@ func TestParseWorkerSpec(t *testing.T) {
 		{name: "zero count", spec: "async:0", wantErr: true},
 		{name: "negative count", spec: "async:-1", wantErr: true},
 		{name: "too many separators", spec: "async:5:2", wantErr: true},
+		{name: "duplicate queue", spec: "async:1,async:2", wantErr: true},
 	}
 
 	for _, tt := range tests {
@@ -138,5 +144,77 @@ func TestPlanWorkers(t *testing.T) {
 	t.Run("invalid spec", func(t *testing.T) {
 		_, err := PlanWorkers("async:0", 1, nil)
 		require.Error(t, err)
+	})
+}
+
+func TestRunWorkers(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("requires the true binary")
+	}
+
+	t.Run("no jobs", func(t *testing.T) {
+		require.Error(t, RunWorkers(t.Context(), nil, nil))
+	})
+
+	t.Run("jobs restart independently", func(t *testing.T) {
+		oldInterval := workerRestartInterval
+		workerRestartInterval = 10 * time.Millisecond
+		t.Cleanup(func() { workerRestartInterval = oldInterval })
+
+		var mu sync.Mutex
+		counts := map[string]int{}
+
+		start := func(_ context.Context, job WorkerJob) (*exec.Cmd, error) {
+			mu.Lock()
+			counts[job.ConsumerName]++
+			mu.Unlock()
+
+			return exec.Command("true"), nil
+		}
+
+		ctx, cancel := context.WithTimeout(t.Context(), 500*time.Millisecond)
+		defer cancel()
+
+		jobs := []WorkerJob{
+			{Queues: []string{"async"}, ConsumerName: "async"},
+			{Queues: []string{"mail"}, ConsumerName: "mail"},
+		}
+
+		require.NoError(t, RunWorkers(ctx, jobs, start))
+
+		mu.Lock()
+		defer mu.Unlock()
+
+		// With a per-job limiter each slot restarts once per interval (~50
+		// times in the window). A shared limiter would only manage ~25 per
+		// job, so this also guards against regression to a shared bucket.
+		assert.GreaterOrEqual(t, counts["async"], 35)
+		assert.GreaterOrEqual(t, counts["mail"], 35)
+	})
+
+	t.Run("start errors are retried", func(t *testing.T) {
+		oldInterval := workerRestartInterval
+		workerRestartInterval = 10 * time.Millisecond
+		t.Cleanup(func() { workerRestartInterval = oldInterval })
+
+		var mu sync.Mutex
+		attempts := 0
+
+		start := func(_ context.Context, _ WorkerJob) (*exec.Cmd, error) {
+			mu.Lock()
+			attempts++
+			mu.Unlock()
+
+			return nil, fmt.Errorf("boom")
+		}
+
+		ctx, cancel := context.WithTimeout(t.Context(), 200*time.Millisecond)
+		defer cancel()
+
+		require.NoError(t, RunWorkers(ctx, []WorkerJob{{Queues: []string{"async"}, ConsumerName: "async"}}, start))
+
+		mu.Lock()
+		defer mu.Unlock()
+		assert.GreaterOrEqual(t, attempts, 2)
 	})
 }

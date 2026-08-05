@@ -46,6 +46,7 @@ type StartWorkerFunc func(ctx context.Context, job WorkerJob) (*exec.Cmd, error)
 func ParseWorkerSpec(spec string) ([]WorkerQueue, error) {
 	entries := strings.Split(spec, ",")
 	queues := make([]WorkerQueue, 0, len(entries))
+	seen := make(map[string]struct{}, len(entries))
 
 	for _, entry := range entries {
 		entry = strings.TrimSpace(entry)
@@ -75,6 +76,11 @@ func ParseWorkerSpec(spec string) ([]WorkerQueue, error) {
 		if count < 1 {
 			return nil, fmt.Errorf("worker spec entry %q count must be at least 1", entry)
 		}
+
+		if _, ok := seen[name]; ok {
+			return nil, fmt.Errorf("worker spec contains duplicate queue %q", name)
+		}
+		seen[name] = struct{}{}
 
 		queues = append(queues, WorkerQueue{Name: name, Count: count})
 	}
@@ -160,16 +166,17 @@ func PlanWorkers(spec string, amount int, defaultQueues []string) ([]WorkerJob, 
 	return jobs, nil
 }
 
+// workerRestartInterval throttles consumer restarts per worker slot.
+var workerRestartInterval = 10 * time.Second
+
 // RunWorkers supervises one restart-loop goroutine per job. Crashed consumers
-// are restarted, throttled by a rate limiter of one start per 10 seconds per
-// available worker slot. It blocks until the context is cancelled and all
-// consumers have stopped.
+// are restarted, throttled by a per-job rate limiter of one start per 10
+// seconds. It blocks until the context is cancelled and all consumers have
+// stopped.
 func RunWorkers(ctx context.Context, jobs []WorkerJob, start StartWorkerFunc) error {
 	if len(jobs) == 0 {
 		return errors.New("no worker jobs to run")
 	}
-
-	workerRatelimit := rate.NewLimiter(rate.Every(10*time.Second), len(jobs))
 
 	var wg sync.WaitGroup
 	for _, job := range jobs {
@@ -178,8 +185,13 @@ func RunWorkers(ctx context.Context, jobs []WorkerJob, start StartWorkerFunc) er
 		go func(ctx context.Context, job WorkerJob) {
 			defer wg.Done()
 
+			workerRatelimit := rate.NewLimiter(rate.Every(workerRestartInterval), 1)
+
 			for ctx.Err() == nil {
 				if err := workerRatelimit.Wait(ctx); err != nil {
+					if ctx.Err() != nil {
+						break
+					}
 					logging.FromContext(ctx).Error(err)
 					continue
 				}
