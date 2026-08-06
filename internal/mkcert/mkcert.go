@@ -23,6 +23,7 @@ import (
 	"crypto/x509/pkix"
 	"encoding/asn1"
 	"encoding/pem"
+	"errors"
 	"fmt"
 	"math/big"
 	"net"
@@ -115,7 +116,7 @@ func (c *CA) HasKey() bool {
 func LoadOrCreateCA() (*CA, bool, error) {
 	root := CAROOT()
 	if root == "" {
-		return nil, false, fmt.Errorf("failed to find the default CA location, set the CAROOT environment variable")
+		return nil, false, errors.New("failed to find the default CA location, set the CAROOT environment variable")
 	}
 
 	if err := os.MkdirAll(root, 0o755); err != nil {
@@ -138,7 +139,7 @@ func LoadOrCreateCA() (*CA, bool, error) {
 	}
 	certDERBlock, _ := pem.Decode(certPEMBlock)
 	if certDERBlock == nil || certDERBlock.Type != "CERTIFICATE" {
-		return nil, false, fmt.Errorf("failed to read the CA certificate: unexpected content")
+		return nil, false, errors.New("failed to read the CA certificate: unexpected content")
 	}
 	ca.Cert, err = x509.ParseCertificate(certDERBlock.Bytes)
 	if err != nil {
@@ -155,7 +156,7 @@ func LoadOrCreateCA() (*CA, bool, error) {
 	}
 	keyDERBlock, _ := pem.Decode(keyPEMBlock)
 	if keyDERBlock == nil || keyDERBlock.Type != "PRIVATE KEY" {
-		return nil, false, fmt.Errorf("failed to read the CA key: unexpected content")
+		return nil, false, errors.New("failed to read the CA key: unexpected content")
 	}
 	ca.key, err = x509.ParsePKCS8PrivateKey(keyDERBlock.Bytes)
 	if err != nil {

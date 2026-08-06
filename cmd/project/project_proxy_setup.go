@@ -374,7 +374,7 @@ func confirmTeardown(cmd *cobra.Command, reg proxy.Registry) (bool, error) {
 	}
 
 	if !system.IsInteractionEnabled(cmd.Context()) || !isatty.IsTerminal(os.Stdin.Fd()) {
-		return false, fmt.Errorf("teardown affects every registered project, run it with --force in non-interactive environments")
+		return false, errors.New("teardown affects every registered project, run it with --force in non-interactive environments")
 	}
 
 	var confirmed bool
