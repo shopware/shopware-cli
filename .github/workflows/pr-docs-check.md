@@ -20,21 +20,21 @@ checkout:
   - repository: shopware/docs
     path: docs
     current: true
-    github-token: ${{ steps.sts-docs.outputs.token }}
+    github-token: ${{ steps.docs-app-token.outputs.token }}
 permissions:
   contents: read
   pull-requests: read
   issues: read
   copilot-requests: write
-  id-token: write
 pre-steps:
-  - name: Gather documentation token
-    id: sts-docs
-    uses: octo-sts/action@f603d3be9d8dd9871a265776e625a27b00effe05 # ratchet:octo-sts/action@v1.1.1
+  - name: Generate documentation App token
+    id: docs-app-token
+    uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
     with:
-      scope: shopware/docs
-      identity: swcli
-      token: ${{ github.token }}
+      client-id: ${{ vars.DOCS_BOT_APP_CLIENT_ID }}
+      private-key: ${{ secrets.DOCS_BOT_APP_PRIVATE_KEY }}
+      owner: shopware
+      repositories: docs
 network:
   allowed: [defaults, github]
 tools:
@@ -44,15 +44,11 @@ tools:
     min-integrity: approved
     allowed-repos: [shopware/shopware-cli, shopware/docs]
 safe-outputs:
-  id-token: write
-  steps:
-    - name: Gather documentation token
-      id: sts-docs
-      uses: octo-sts/action@f603d3be9d8dd9871a265776e625a27b00effe05 # ratchet:octo-sts/action@v1.1.1
-      with:
-        scope: shopware/docs
-        identity: swcli
-        token: ${{ github.token }}
+  github-app:
+    client-id: ${{ vars.DOCS_BOT_APP_CLIENT_ID }}
+    private-key: ${{ secrets.DOCS_BOT_APP_PRIVATE_KEY }}
+    owner: shopware
+    repositories: [docs]
   create-pull-request:
     title-prefix: "[docs] "
     draft: true
@@ -66,12 +62,12 @@ safe-outputs:
       - ".github/**"
     protected-files: blocked
     fallback-as-issue: true
-    github-token: ${{ steps.sts-docs.outputs.token }}
   add-comment:
     target-repo: shopware/shopware-cli
     target: "*"
     hide-older-comments: true
     footer: false
+    github-token: ${{ secrets.GITHUB_TOKEN }}
 ---
 
 # PR documentation check
