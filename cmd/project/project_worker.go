@@ -2,30 +2,34 @@ package project
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"os"
+	"os/exec"
 	"os/signal"
 	"strconv"
 	"strings"
-	"sync"
 	"syscall"
 	"time"
 
 	"github.com/spf13/cobra"
-	"golang.org/x/time/rate"
 
 	"github.com/shopware/shopware-cli/internal/shop"
 	"github.com/shopware/shopware-cli/logging"
 )
 
 var projectWorkerCmd = &cobra.Command{
-	Use:   "worker [amount]",
+	Use:   "worker [amount | queue-spec]",
 	Short: "Run multiple Symfony worker in background.",
+	Long: `Run multiple Symfony messenger consumers in background.
+
+The first argument is either a worker amount (e.g. "5") or a queue spec
+(e.g. "async:5,mail:5") which starts the given amount of consumers per
+queue. The count per queue is optional and defaults to 1.`,
 	RunE: func(cobraCmd *cobra.Command, args []string) error {
 		var projectRoot string
 		var err error
 		workerAmount := 1
+		workerSpec := ""
 
 		isVerbose, _ := cobraCmd.Flags().GetBool("verbose")
 		queuesToConsume, _ := cobraCmd.Flags().GetString("queue")
@@ -44,10 +48,16 @@ var projectWorkerCmd = &cobra.Command{
 		}
 
 		if len(args) > 0 {
-			workerAmount, err = strconv.Atoi(args[0])
-			if err != nil {
-				return err
+			if amount, convErr := strconv.Atoi(args[0]); convErr == nil {
+				workerAmount = amount
+			} else {
+				workerSpec = args[0]
+				workerAmount = 0
 			}
+		}
+
+		if workerSpec != "" && queuesToConsume != "" {
+			return fmt.Errorf("--queue cannot be combined with a queue spec argument")
 		}
 
 		if memoryLimit == "" {
@@ -58,71 +68,45 @@ var projectWorkerCmd = &cobra.Command{
 			timeLimit = "120"
 		}
 
+		var defaultQueues []string
+		if workerSpec == "" {
+			if queuesToConsume != "" {
+				defaultQueues = strings.Split(queuesToConsume, ",")
+			} else {
+				defaultQueues = shop.DefaultWorkerQueues(projectRoot)
+			}
+		}
+
+		jobs, err := shop.PlanWorkers(workerSpec, workerAmount, defaultQueues)
+		if err != nil {
+			return err
+		}
+
+		consumeConfig := shop.WorkerConfig{
+			MemoryLimit:   memoryLimit,
+			TimeLimit:     timeLimit,
+			FailureLimit:  5,
+			MessagesLimit: messagesLimit,
+			Verbose:       isVerbose,
+		}
+
 		cancelCtx, cancel := context.WithCancel(cobraCmd.Context())
 		cancelOnTermination(cancelCtx, cancel)
 
-		consumeArgs := []string{
-			"messenger:consume",
-			fmt.Sprintf("--memory-limit=%s", memoryLimit),
-			fmt.Sprintf("--time-limit=%s", timeLimit),
-			"--failure-limit=5",
-		}
-
-		if messagesLimit > 0 {
-			consumeArgs = append(consumeArgs, fmt.Sprintf("--limit=%d", messagesLimit))
-		}
-
-		if queuesToConsume == "" {
-			if is, _ := shop.IsShopwareVersion(projectRoot, ">=6.5.7"); is {
-				consumeArgs = append(consumeArgs, "async", "failed", "low_priority")
-			} else if is, _ := shop.IsShopwareVersion(projectRoot, ">=6.5"); is {
-				consumeArgs = append(consumeArgs, "async", "failed")
+		startWorker := func(ctx context.Context, job shop.WorkerJob) (*exec.Cmd, error) {
+			p := cmdExecutor.ConsoleCommand(ctx, consumeConfig.ConsumeArgs(job.Queues)...)
+			p.Cmd.Stdout = os.Stdout
+			p.Cmd.Stderr = os.Stderr
+			p.Cmd.Env = append(os.Environ(), fmt.Sprintf("MESSENGER_CONSUMER_NAME=%s", job.ConsumerName))
+			p.Cmd.WaitDelay = time.Second
+			p.Cmd.Cancel = func() error {
+				return gracefulStop(p.Cmd, gracefulStopLimit)
 			}
-		} else {
-			consumeArgs = append(consumeArgs, strings.Split(queuesToConsume, ",")...)
+
+			return p.Cmd, nil
 		}
 
-		if isVerbose {
-			consumeArgs = append(consumeArgs, "-vvv")
-		}
-
-		baseName := fmt.Sprintf("shopware-cli-%d", os.Getpid())
-		workerRatelimit := rate.NewLimiter(rate.Every(10*time.Second), workerAmount)
-
-		var wg sync.WaitGroup
-		for a := 0; a < workerAmount; a++ {
-			wg.Add(1)
-			go func(ctx context.Context, index int) {
-				defer wg.Done()
-
-				for ctx.Err() == nil {
-					if err = workerRatelimit.Wait(ctx); err != nil {
-						logging.FromContext(ctx).Error(err)
-						continue
-					}
-
-					p := cmdExecutor.ConsoleCommand(cancelCtx, consumeArgs...)
-					p.Cmd.Stdout = os.Stdout
-					p.Cmd.Stderr = os.Stderr
-					p.Cmd.Env = append(os.Environ(), fmt.Sprintf("MESSENGER_CONSUMER_NAME=%s-%d", baseName, index))
-					p.Cmd.WaitDelay = time.Second
-					p.Cmd.Cancel = func() error {
-						return gracefulStop(p.Cmd, gracefulStopLimit)
-					}
-
-					if err := p.Cmd.Run(); err != nil {
-						if errors.Is(err, context.Canceled) {
-							break
-						}
-						logging.FromContext(ctx).Error(err)
-					}
-				}
-			}(cancelCtx, a)
-		}
-
-		wg.Wait()
-
-		return nil
+		return shop.RunWorkers(cancelCtx, jobs, startWorker)
 	},
 }
 
