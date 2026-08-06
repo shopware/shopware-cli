@@ -34,6 +34,7 @@ pre-steps:
     with:
       scope: shopware/docs
       identity: swcli
+      token: ${{ github.token }}
 network:
   allowed: [defaults, github]
 tools:
@@ -51,6 +52,7 @@ safe-outputs:
       with:
         scope: shopware/docs
         identity: swcli
+        token: ${{ github.token }}
   create-pull-request:
     title-prefix: "[docs] "
     draft: true
