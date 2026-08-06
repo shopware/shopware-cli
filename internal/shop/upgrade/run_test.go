@@ -246,6 +246,37 @@ func TestRunnerRecipesInstallIsNonFatal(t *testing.T) {
 	assert.Contains(t, string(content), `"shopware/core": "6.7.11.0"`, "no rollback happened")
 }
 
+func TestRunnerRestoresComposeProjectNameAfterRecipesReset(t *testing.T) {
+	dir := setupProject(t)
+	envPath := filepath.Join(dir, ".env")
+	require.NoError(t, os.WriteFile(envPath, []byte("COMPOSE_PROJECT_NAME=sw-shop-abc123\nAPP_ENV=prod\n"), 0o644))
+
+	u := NewProjectUpgrader(dir, &fakeExecutor{
+		composer: func(ctx context.Context, args ...string) *executor.Process {
+			if args[0] == "symfony:recipes:install" {
+				// The recipe reset replaces .env with the template, dropping
+				// the host-side compose project name.
+				if err := os.WriteFile(envPath, []byte("APP_ENV=prod\n"), 0o644); err != nil {
+					return shellProcess(ctx, "exit 3")
+				}
+			}
+			return shellProcess(ctx, "true")
+		},
+		php: func(ctx context.Context, _ ...string) *executor.Process {
+			return shellProcess(ctx, "true")
+		},
+	})
+
+	events := collectEvents(t, u.Run(t.Context(), runnerOptions()))
+	require.Equal(t, StateOK, finalEvent(t, events).State)
+
+	content, err := os.ReadFile(envPath)
+	require.NoError(t, err)
+	assert.Contains(t, string(content), "APP_ENV=prod", "the recipe-reset .env is kept")
+	assert.Contains(t, string(content), "COMPOSE_PROJECT_NAME=sw-shop-abc123",
+		"the compose project name is re-added so later steps and commands still reach the containers")
+}
+
 func TestRunnerCancelledContext(t *testing.T) {
 	dir := setupProject(t)
 	ctx, cancel := context.WithCancel(t.Context())

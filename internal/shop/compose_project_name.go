@@ -63,6 +63,16 @@ func EnvFileContent(useDocker bool, projectFolder string) (string, error) {
 	return ComposeProjectNameEnvKey + "=" + name + "\n", nil
 }
 
+// ReadComposeProjectName returns the COMPOSE_PROJECT_NAME configured in the
+// project's .env, or "" when the file or the key is missing.
+func ReadComposeProjectName(projectRoot string) string {
+	content, err := os.ReadFile(filepath.Join(projectRoot, ".env"))
+	if err != nil {
+		return ""
+	}
+	return ExtractComposeProjectName(content)
+}
+
 // ExtractComposeProjectName returns the COMPOSE_PROJECT_NAME value from raw
 // dotenv content, or "" when unset.
 func ExtractComposeProjectName(envContent []byte) string {
@@ -87,6 +97,23 @@ func ExtractComposeProjectName(envContent []byte) string {
 // when it is not already set. Existing values are left untouched (no silent
 // volume disconnect for established stacks). The file is created when missing.
 func EnsureComposeProjectName(projectRoot string) error {
+	name, err := GenerateComposeProjectName(projectRoot)
+	if err != nil {
+		return err
+	}
+	return RestoreComposeProjectName(projectRoot, name)
+}
+
+// RestoreComposeProjectName re-adds a known COMPOSE_PROJECT_NAME to the
+// project .env when the key was lost — e.g. after `composer recipes:install
+// --force --reset` replaced .env with the recipe template. A present value is
+// left untouched, an empty name is a no-op, and the file is created when
+// missing.
+func RestoreComposeProjectName(projectRoot, name string) error {
+	if name == "" {
+		return nil
+	}
+
 	envPath := filepath.Join(projectRoot, ".env")
 	existing, err := os.ReadFile(envPath)
 	if err != nil && !os.IsNotExist(err) {
@@ -95,11 +122,6 @@ func EnsureComposeProjectName(projectRoot string) error {
 
 	if ExtractComposeProjectName(existing) != "" {
 		return nil
-	}
-
-	name, err := GenerateComposeProjectName(projectRoot)
-	if err != nil {
-		return err
 	}
 
 	content := existing

@@ -98,3 +98,53 @@ func TestEnsureComposeProjectName(t *testing.T) {
 		assert.Contains(t, string(content), ComposeProjectNameEnvKey+"=")
 	})
 }
+
+func TestReadComposeProjectName(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	assert.Empty(t, ReadComposeProjectName(dir), "missing .env reads as unset")
+
+	require.NoError(t, os.WriteFile(filepath.Join(dir, ".env"), []byte("APP_ENV=dev\nCOMPOSE_PROJECT_NAME=sw-shop-abc123\n"), 0o644))
+	assert.Equal(t, "sw-shop-abc123", ReadComposeProjectName(dir))
+}
+
+func TestRestoreComposeProjectName(t *testing.T) {
+	t.Parallel()
+
+	t.Run("re-adds a lost name", func(t *testing.T) {
+		t.Parallel()
+		dir := t.TempDir()
+		// A recipe reset replaced .env and dropped the key.
+		require.NoError(t, os.WriteFile(filepath.Join(dir, ".env"), []byte("APP_ENV=prod\n"), 0o644))
+
+		require.NoError(t, RestoreComposeProjectName(dir, "sw-shop-abc123"))
+
+		content, err := os.ReadFile(filepath.Join(dir, ".env"))
+		require.NoError(t, err)
+		assert.Contains(t, string(content), "APP_ENV=prod")
+		assert.Equal(t, "sw-shop-abc123", ExtractComposeProjectName(content))
+	})
+
+	t.Run("empty name is a no-op", func(t *testing.T) {
+		t.Parallel()
+		dir := t.TempDir()
+
+		require.NoError(t, RestoreComposeProjectName(dir, ""))
+
+		_, err := os.Stat(filepath.Join(dir, ".env"))
+		assert.True(t, os.IsNotExist(err), "no .env is created for projects without a compose project name")
+	})
+
+	t.Run("present value stays untouched", func(t *testing.T) {
+		t.Parallel()
+		dir := t.TempDir()
+		require.NoError(t, os.WriteFile(filepath.Join(dir, ".env"), []byte("COMPOSE_PROJECT_NAME=sw-keep-ffffff\n"), 0o644))
+
+		require.NoError(t, RestoreComposeProjectName(dir, "sw-other-000000"))
+
+		content, err := os.ReadFile(filepath.Join(dir, ".env"))
+		require.NoError(t, err)
+		assert.Equal(t, "sw-keep-ffffff", ExtractComposeProjectName(content))
+	})
+}

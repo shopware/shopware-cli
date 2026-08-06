@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/shopware/shopware-cli/internal/executor"
+	"github.com/shopware/shopware-cli/internal/shop"
 	"github.com/shopware/shopware-cli/internal/tui"
 )
 
@@ -168,8 +169,17 @@ func (u *ProjectUpgrader) runSteps(ctx context.Context, opts *RunOptions, emit f
 		// web-installer refreshes recipe-managed files. It is best effort:
 		// a failure downgrades to a warning instead of rolling back.
 		{StepRecipesInstall, true, func(ctx context.Context, line func(string)) error {
-			return streamProcess(ctx, exec.ComposerCommand(ctx,
+			// The reset replaces .env with the recipe template, which drops
+			// the host-side COMPOSE_PROJECT_NAME — Docker environments would
+			// lose their running containers for the remaining steps and every
+			// later shopware-cli command. Re-add it once the recipes ran.
+			composeName := shop.ReadComposeProjectName(u.projectRoot)
+			err := streamProcess(ctx, exec.ComposerCommand(ctx,
 				"symfony:recipes:install", "--force", "--reset", "--yes", "--no-interaction", "--no-ansi", "-v"), line)
+			if restoreErr := shop.RestoreComposeProjectName(u.projectRoot, composeName); restoreErr != nil {
+				line("Could not restore " + shop.ComposeProjectNameEnvKey + " in .env: " + restoreErr.Error())
+			}
+			return err
 		}},
 		{StepDeploymentHelper, false, func(ctx context.Context, line func(string)) error {
 			return streamProcess(ctx, exec.PHPCommand(ctx, "vendor/bin/shopware-deployment-helper", "run"), line)
