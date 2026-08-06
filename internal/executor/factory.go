@@ -26,7 +26,16 @@ func New(projectRoot string, cfg *shop.EnvironmentConfig, shopCfg *shop.Config) 
 		}
 		return &SymfonyCLIExecutor{BinaryPath: path, projectRoot: projectRoot, shopCfg: shopCfg, envCfg: cfg}, nil
 	case TypeDocker:
-		return &DockerExecutor{projectRoot: projectRoot, shopCfg: shopCfg, envCfg: cfg}, nil
+		// Snapshot the Compose project name from .env now — Compose re-reads
+		// .env per command, so a later rewrite of that file must not detach
+		// the executor from the containers it started with. A process-level
+		// COMPOSE_PROJECT_NAME outranks .env in Compose's own precedence and
+		// is inherited by every docker invocation, so it stays authoritative.
+		composeProjectName := ""
+		if os.Getenv(shop.ComposeProjectNameEnvKey) == "" {
+			composeProjectName = shop.ReadComposeProjectName(projectRoot)
+		}
+		return &DockerExecutor{projectRoot: projectRoot, shopCfg: shopCfg, envCfg: cfg, composeProjectName: composeProjectName}, nil
 	default:
 		return nil, fmt.Errorf("unsupported environment type: %s", cfg.Type)
 	}

@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/shopware/shopware-cli/internal/shop"
 	"github.com/shopware/shopware-cli/internal/system"
@@ -288,6 +289,80 @@ func TestDockerExecutorPHPCommand(t *testing.T) {
 	assert.Contains(t, p.Cmd.Args, "web")
 	assert.Contains(t, p.Cmd.Args, "php")
 	assert.Contains(t, p.Cmd.Args, "-v")
+}
+
+// composeProjectArgIndex returns the index of the "-p" flag in args, or -1.
+func composeProjectArgIndex(args []string) int {
+	for i, arg := range args {
+		if arg == "-p" {
+			return i
+		}
+	}
+	return -1
+}
+
+func TestDockerExecutorPinsComposeProjectName(t *testing.T) {
+	exec := &DockerExecutor{projectRoot: "/project", composeProjectName: "sw-shop-abc123"}
+
+	for _, p := range []*Process{
+		exec.ConsoleCommand(t.Context(), "cache:clear"),
+		exec.ComposerCommand(t.Context(), "install"),
+		exec.PHPCommand(t.Context(), "-v"),
+		exec.NPMCommand(t.Context(), "run", "dev"),
+	} {
+		i := composeProjectArgIndex(p.Cmd.Args)
+		require.Greater(t, i, 0, "compose invocation carries -p: %v", p.Cmd.Args)
+		assert.Equal(t, "compose", p.Cmd.Args[i-1], "-p directly follows compose")
+		assert.Equal(t, "sw-shop-abc123", p.Cmd.Args[i+1])
+	}
+
+	// The pin survives the executor's copy-on-write helpers.
+	for _, derived := range []Executor{
+		exec.WithEnv(map[string]string{"FOO": "bar"}),
+		exec.WithRelDir("custom/plugins"),
+	} {
+		p := derived.PHPCommand(t.Context(), "-v")
+		i := composeProjectArgIndex(p.Cmd.Args)
+		require.Greater(t, i, 0)
+		assert.Equal(t, "sw-shop-abc123", p.Cmd.Args[i+1])
+	}
+}
+
+func TestDockerExecutorWithoutComposeProjectName(t *testing.T) {
+	exec := &DockerExecutor{projectRoot: "/project"}
+
+	p := exec.PHPCommand(t.Context(), "-v")
+	assert.Equal(t, -1, composeProjectArgIndex(p.Cmd.Args), "no -p flag without a configured project name")
+}
+
+func TestNewDockerExecutorReadsComposeProjectName(t *testing.T) {
+	dir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(dir, ".env"), []byte("COMPOSE_PROJECT_NAME=sw-shop-abc123\n"), 0o644))
+
+	t.Run("snapshots the .env value at construction", func(t *testing.T) {
+		t.Setenv(shop.ComposeProjectNameEnvKey, "")
+		exec, err := New(dir, &shop.EnvironmentConfig{Type: "docker"}, &shop.Config{})
+		require.NoError(t, err)
+
+		// A later .env rewrite (e.g. a Flex recipe reset mid-upgrade) must not
+		// detach the executor from the containers it started with.
+		require.NoError(t, os.WriteFile(filepath.Join(dir, ".env"), []byte("APP_ENV=prod\n"), 0o644))
+
+		p := exec.PHPCommand(t.Context(), "-v")
+		i := composeProjectArgIndex(p.Cmd.Args)
+		require.Greater(t, i, 0)
+		assert.Equal(t, "sw-shop-abc123", p.Cmd.Args[i+1])
+	})
+
+	t.Run("a process-level COMPOSE_PROJECT_NAME stays authoritative", func(t *testing.T) {
+		t.Setenv(shop.ComposeProjectNameEnvKey, "from-shell")
+		exec, err := New(dir, &shop.EnvironmentConfig{Type: "docker"}, &shop.Config{})
+		require.NoError(t, err)
+
+		p := exec.PHPCommand(t.Context(), "-v")
+		assert.Equal(t, -1, composeProjectArgIndex(p.Cmd.Args),
+			"the inherited environment variable already outranks .env for every docker invocation")
+	})
 }
 
 func TestConsoleCommandNameDefault(t *testing.T) {
