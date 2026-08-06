@@ -20,21 +20,16 @@ checkout:
   - repository: shopware/docs
     path: docs
     current: true
-    github-token: ${{ steps.docs-app-token.outputs.token }}
+    github-app:
+      client-id: ${{ vars.DOCS_BOT_APP_CLIENT_ID }}
+      private-key: ${{ secrets.DOCS_BOT_APP_PRIVATE_KEY }}
+      owner: shopware
+      repositories: [docs]
 permissions:
   contents: read
   pull-requests: read
   issues: read
   copilot-requests: write
-pre-steps:
-  - name: Generate documentation App token
-    id: docs-app-token
-    uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
-    with:
-      client-id: ${{ vars.DOCS_BOT_APP_CLIENT_ID }}
-      private-key: ${{ secrets.DOCS_BOT_APP_PRIVATE_KEY }}
-      owner: shopware
-      repositories: docs
 network:
   allowed: [defaults, github]
 tools:
