@@ -20,9 +20,109 @@ import (
 )
 
 type EnvironmentConfig struct {
-	Type     string          `yaml:"type" jsonschema:"enum=local,enum=docker"`
+	Type     string          `yaml:"type" jsonschema:"enum=local,enum=docker,enum=ssh"`
 	URL      string          `yaml:"url,omitempty"`
 	AdminApi *ConfigAdminApi `yaml:"admin_api,omitempty"`
+	// SSH connection and deployment settings, used when type is "ssh"
+	SSH *EnvironmentSSH `yaml:"ssh,omitempty"`
+}
+
+// EnvironmentSSH holds the SSH connection settings of an environment.
+// It describes the primary host; additional hosts for multi-server setups can
+// be listed under hosts and inherit all unset settings from this block.
+type EnvironmentSSH struct {
+	// Hostname or IP address of the server
+	Host string `yaml:"host" jsonschema:"required"`
+	// Additional hosts for multi-server deployments. Each entry inherits unset settings (port, user, authentication) from this block
+	Hosts []EnvironmentSSHHost `yaml:"hosts,omitempty"`
+	// SSH port, defaults to 22
+	Port int `yaml:"port,omitempty"`
+	// User to connect as
+	User string `yaml:"user,omitempty"`
+	// Password for password based authentication. Requires sshpass for non-interactive use; prefer key based authentication (consider using ${ENV_VAR} substitution instead of a plain value)
+	Password string `yaml:"password,omitempty"`
+	// Path to the private key used for authentication. When empty, the SSH agent and the default keys of the ssh client are used. Encrypted keys are handled by the SSH agent or an interactive passphrase prompt
+	IdentityFile string `yaml:"identity_file,omitempty"`
+	// Path to the known_hosts file used for host key verification, defaults to the ssh client behavior (~/.ssh/known_hosts)
+	KnownHostsFile string `yaml:"known_hosts_file,omitempty"`
+	// When enabled, the host key of the server is not verified (insecure)
+	InsecureIgnoreHostKey bool `yaml:"insecure_ignore_host_key,omitempty"`
+	// Reuse one SSH connection for consecutive remote commands (OpenSSH ControlMaster). Enabled by default except on Windows; set to false to leave connection sharing to your own ssh_config
+	ControlMaster *bool `yaml:"control_master,omitempty"`
+	// Deployment settings for this environment
+	Deployment *EnvironmentDeployment `yaml:"deployment,omitempty"`
+}
+
+// EnvironmentSSHHost is an additional host of a multi-server environment.
+// Unset settings are inherited from the surrounding EnvironmentSSH block.
+type EnvironmentSSHHost struct {
+	// Hostname or IP address of the server
+	Host string `yaml:"host" jsonschema:"required"`
+	// SSH port, inherited from the ssh block when empty
+	Port int `yaml:"port,omitempty"`
+	// User to connect as, inherited from the ssh block when empty
+	User string `yaml:"user,omitempty"`
+	// Password for password based authentication, inherited from the ssh block when empty
+	Password string `yaml:"password,omitempty"`
+	// Path to the private key used for authentication, inherited from the ssh block when empty
+	IdentityFile string `yaml:"identity_file,omitempty"`
+}
+
+// AllHosts returns the primary host and all additional hosts with the
+// inherited settings resolved.
+func (s *EnvironmentSSH) AllHosts() []EnvironmentSSH {
+	primary := *s
+	primary.Hosts = nil
+
+	hosts := []EnvironmentSSH{primary}
+
+	for _, h := range s.Hosts {
+		merged := primary
+		merged.Host = h.Host
+
+		if h.Port != 0 {
+			merged.Port = h.Port
+		}
+		if h.User != "" {
+			merged.User = h.User
+		}
+		if h.Password != "" {
+			merged.Password = h.Password
+		}
+		if h.IdentityFile != "" {
+			merged.IdentityFile = h.IdentityFile
+		}
+
+		hosts = append(hosts, merged)
+	}
+
+	return hosts
+}
+
+// EnvironmentDeployment holds the deployment settings of a remote environment.
+type EnvironmentDeployment struct {
+	// Absolute path on the server where the project is deployed to (contains releases/, shared/ and the current symlink)
+	Path string `yaml:"path" jsonschema:"required"`
+	// Amount of releases to keep on the server, defaults to 5
+	KeepReleases int `yaml:"keep_releases,omitempty"`
+	// Files shared between releases, defaults to .env and install.lock
+	SharedFiles []string `yaml:"shared_files,omitempty"`
+	// Directories shared between releases, defaults to files, public/media, public/thumbnail, public/sitemap and var/log
+	SharedDirs []string `yaml:"shared_dirs,omitempty"`
+	// Additional paths that are not uploaded to the server (on top of the built-in defaults like .git and node_modules)
+	Exclude []string `yaml:"exclude,omitempty"`
+	// Hooks executed during the deployment
+	Hooks EnvironmentDeploymentHooks `yaml:"hooks,omitempty"`
+}
+
+// EnvironmentDeploymentHooks defines commands executed during a deployment.
+type EnvironmentDeploymentHooks struct {
+	// Commands executed locally in the project root before the upload (e.g. shopware-cli project ci .)
+	Build []string `yaml:"build,omitempty"`
+	// Commands executed on the server inside the new release before the current symlink is switched. Defaults to running the Shopware Deployment Helper when present
+	PreSwitch []string `yaml:"pre_switch,omitempty"`
+	// Commands executed on the server inside the new release after the current symlink was switched
+	PostSwitch []string `yaml:"post_switch,omitempty"`
 }
 
 type Config struct {
