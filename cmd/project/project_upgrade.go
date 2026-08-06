@@ -58,9 +58,10 @@ var projectUpgradeCmd = &cobra.Command{
 		}
 
 		shell := upgradetui.NewApp(upgradetui.Options{
-			ProjectRoot: projectRoot,
-			EnvName:     envName,
-			Executor:    exec,
+			ProjectRoot:   projectRoot,
+			EnvName:       envName,
+			Executor:      exec,
+			BackgroundCmd: updateBackgroundCmd(cmd.Context()),
 		})
 
 		_, err = shell.Run()

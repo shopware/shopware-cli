@@ -32,16 +32,18 @@ const (
 
 // Options wire the wizard to a project.
 type Options struct {
-	ProjectRoot string
-	Executor    executor.Executor
+	ProjectRoot   string
+	Executor      executor.Executor
+	BackgroundCmd tea.Cmd
 }
 
 // Model is the wizard screen hosted by the app shell.
 type Model struct {
-	opts     Options
-	host     app.Host
-	migrator *migrate.PluginMigrator
-	header   tui.Header
+	opts          Options
+	host          app.Host
+	migrator      *migrate.PluginMigrator
+	header        tui.Header
+	backgroundCmd tea.Cmd
 
 	width      int
 	mainHeight int
@@ -77,12 +79,13 @@ func New(opts Options) *Model {
 	ti.Prompt = lipgloss.NewStyle().Foreground(tui.BrandColor).Render("> ")
 
 	return &Model{
-		opts:       opts,
-		migrator:   migrate.NewPluginMigrator(opts.ProjectRoot, opts.Executor),
-		header:     tui.NewHeader(),
-		panel:      panelWelcome,
-		welcomeYes: true,
-		tokenInput: ti,
+		opts:          opts,
+		migrator:      migrate.NewPluginMigrator(opts.ProjectRoot, opts.Executor),
+		header:        tui.NewHeader(),
+		backgroundCmd: opts.BackgroundCmd,
+		panel:         panelWelcome,
+		welcomeYes:    true,
+		tokenInput:    ti,
 	}
 }
 
@@ -99,6 +102,7 @@ func newAppWithModel(opts Options) (*app.App, *Model) {
 
 	shell := app.New(app.Options{
 		Content:           m,
+		BackgroundCmd:     m.backgroundCmd,
 		Header:            m.headerView,
 		Footer:            m.footerView,
 		WindowTitleFunc:   m.windowTitle,

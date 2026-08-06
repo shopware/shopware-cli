@@ -49,15 +49,17 @@ const (
 )
 
 type Options struct {
-	ProjectRoot string
-	Config      *shop.Config
-	EnvConfig   *shop.EnvironmentConfig
-	Executor    executor.Executor
+	ProjectRoot   string
+	Config        *shop.Config
+	EnvConfig     *shop.EnvironmentConfig
+	Executor      executor.Executor
+	BackgroundCmd tea.Cmd
 }
 
 type Model struct {
 	host            app.Host
 	header          tui.Header
+	backgroundCmd   tea.Cmd
 	activeTab       activeTab
 	overview        OverviewModel
 	instance        InstanceModel
@@ -97,15 +99,16 @@ type configRestartDoneMsg struct{ err error }
 
 func New(opts Options) Model {
 	m := Model{
-		header:      tui.NewHeader(),
-		activeTab:   tabOverview,
-		dockerMode:  opts.Executor.Type() == executor.TypeDocker,
-		projectRoot: opts.ProjectRoot,
-		executor:    opts.Executor,
-		config:      opts.Config,
-		envConfig:   opts.EnvConfig,
-		watchers:    make(map[string]*watcherHandle),
-		telemetry:   newTelemetryState(opts.Executor.Type() == executor.TypeDocker),
+		header:        tui.NewHeader(),
+		backgroundCmd: opts.BackgroundCmd,
+		activeTab:     tabOverview,
+		dockerMode:    opts.Executor.Type() == executor.TypeDocker,
+		projectRoot:   opts.ProjectRoot,
+		executor:      opts.Executor,
+		config:        opts.Config,
+		envConfig:     opts.EnvConfig,
+		watchers:      make(map[string]*watcherHandle),
+		telemetry:     newTelemetryState(opts.Executor.Type() == executor.TypeDocker),
 	}
 	m.rebuildTabs()
 	return m
@@ -172,6 +175,7 @@ func newShell(m Model) *app.App {
 		return m
 	}
 	shell = app.New(app.Options{
+		BackgroundCmd:   m.backgroundCmd,
 		Header:          func(ctx app.Context) string { return current().chromeHeader(ctx) },
 		Footer:          func(ctx app.Context) string { return current().chromeFooter(ctx) },
 		WindowTitleFunc: func(app.Context) string { return current().windowTitle() },

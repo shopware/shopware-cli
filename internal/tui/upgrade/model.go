@@ -30,16 +30,18 @@ const (
 type Options struct {
 	ProjectRoot string
 	// EnvName is the label shown in the header, e.g. "local".
-	EnvName  string
-	Executor executor.Executor
+	EnvName       string
+	Executor      executor.Executor
+	BackgroundCmd tea.Cmd
 }
 
 // Model is the wizard screen hosted by the app shell.
 type Model struct {
-	opts     Options
-	host     app.Host
-	upgrader *backend.ProjectUpgrader
-	header   tui.Header
+	opts          Options
+	host          app.Host
+	upgrader      *backend.ProjectUpgrader
+	header        tui.Header
+	backgroundCmd tea.Cmd
 
 	width      int
 	mainHeight int
@@ -60,12 +62,13 @@ type Model struct {
 // New creates the wizard model starting at the intro panel.
 func New(opts Options) *Model {
 	return &Model{
-		opts:     opts,
-		upgrader: backend.NewProjectUpgrader(opts.ProjectRoot, opts.Executor),
-		header:   tui.NewHeader(),
-		panel:    panelIntro,
-		intro:    newIntroState(),
-		check:    newCheckState(),
+		opts:          opts,
+		upgrader:      backend.NewProjectUpgrader(opts.ProjectRoot, opts.Executor),
+		header:        tui.NewHeader(),
+		backgroundCmd: opts.BackgroundCmd,
+		panel:         panelIntro,
+		intro:         newIntroState(),
+		check:         newCheckState(),
 	}
 }
 
@@ -83,6 +86,7 @@ func newAppWithModel(opts Options) (*app.App, *Model) {
 
 	shell := app.New(app.Options{
 		Content:           m,
+		BackgroundCmd:     m.backgroundCmd,
 		Header:            m.headerView,
 		Footer:            m.footerView,
 		WindowTitleFunc:   m.windowTitle,

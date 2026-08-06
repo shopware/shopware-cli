@@ -27,10 +27,15 @@ type Header struct {
 	// terminal columns.
 	branding string
 	width    int
+	update   string
 }
 
 // NewHeader creates the shared branding header.
 func NewHeader() Header {
+	return Header{}.withUpdate("")
+}
+
+func (h Header) withUpdate(updateVersion string) Header {
 	icon := lipgloss.NewStyle().Foreground(BrandColor).Render("●")
 	title := lipgloss.NewStyle().Bold(true).Foreground(TextColor).Render(appTitle)
 	version := DimStyle.Render(AppVersion)
@@ -41,8 +46,12 @@ func NewHeader() Header {
 
 	sep := DimStyle.Render(" · ")
 
-	branding := icon + " " + title + " " + version + sep + docsLink + sep + ghLink
-	return Header{branding: branding, width: lipgloss.Width(branding)}
+	updateHint := ""
+	if updateVersion != "" {
+		updateHint = sep + lipgloss.NewStyle().Bold(true).Foreground(WarnColor).Render("Update available: "+updateVersion)
+	}
+	branding := icon + " " + title + " " + version + updateHint + sep + docsLink + sep + ghLink
+	return Header{branding: branding, width: lipgloss.Width(branding), update: updateVersion}
 }
 
 // Init implements the component contract; the header has no startup work.
@@ -50,9 +59,13 @@ func (h Header) Init() tea.Cmd {
 	return nil
 }
 
-// Update implements the component contract; the header holds no
-// message-driven state yet.
-func (h Header) Update(tea.Msg) (Header, tea.Cmd) {
+// Update implements the component contract and accepts late update results.
+func (h Header) Update(msg tea.Msg) (Header, tea.Cmd) {
+	if msg, ok := msg.(UpdateAvailableMsg); ok && msg.Version != "" && h.update == "" {
+		if msg.MarkRendered == nil || msg.MarkRendered() {
+			return h.withUpdate(msg.Version), nil
+		}
+	}
 	return h, nil
 }
 
