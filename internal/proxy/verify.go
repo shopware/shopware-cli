@@ -56,7 +56,7 @@ func Verify(ctx context.Context, baseDomain string) []CheckResult {
 			hint: "Start Docker and run \"shopware-cli project proxy verify\" again",
 		},
 		{
-			name: fmt.Sprintf("DNS server answers *.%s", baseDomain),
+			name: "DNS server answers *." + baseDomain,
 			run: func(ctx context.Context) error {
 				return checkDNSDaemon(ctx, probe)
 			},

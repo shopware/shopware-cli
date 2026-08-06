@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"github.com/shyim/go-composer"
@@ -249,7 +250,7 @@ func overrideService(opts *ProxyOptions, serviceName string, routes ...proxyRout
 		addKeyValue(labels, fmt.Sprintf("traefik.http.routers.%s.entrypoints", router), entrypoint)
 		addKeyValue(labels, fmt.Sprintf("traefik.http.routers.%s.tls", router), "true")
 		addKeyValue(labels, fmt.Sprintf("traefik.http.routers.%s.service", router), router)
-		addKeyValue(labels, fmt.Sprintf("traefik.http.services.%s.loadbalancer.server.port", router), fmt.Sprintf("%d", route.containerPort))
+		addKeyValue(labels, fmt.Sprintf("traefik.http.services.%s.loadbalancer.server.port", router), strconv.Itoa(route.containerPort))
 	}
 
 	addKeyValueNode(svc, "labels", labels)

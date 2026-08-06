@@ -2,6 +2,7 @@ package proxy
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -73,7 +74,7 @@ var dnsLabelPattern = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]*[a-z0-9])?$`)
 // the proxy's base domain (e.g. "shopware.local" or "dev.internal").
 func ValidateDomain(domain string) error {
 	if domain == "" {
-		return fmt.Errorf("domain must not be empty")
+		return errors.New("domain must not be empty")
 	}
 
 	if strings.Contains(domain, "://") || strings.Contains(domain, "/") {

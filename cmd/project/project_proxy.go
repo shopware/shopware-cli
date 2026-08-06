@@ -729,7 +729,7 @@ func (e *proxyEnvironment) down(ctx context.Context, hintTeardown bool) error {
 		fmt.Println(tui.DimText.Render("  You can now remove the line for ") + tui.BoldText.Render(e.hostname) + tui.DimText.Render(" from /etc/hosts."))
 	}
 
-	fmt.Println(tui.GreenText.Bold(true).Render(fmt.Sprintf("  ✓ Deregistered %s", e.hostname)) + tui.DimText.Render("  "+e.projectRoot))
+	fmt.Println(tui.GreenText.Bold(true).Render("  ✓ Deregistered "+e.hostname) + tui.DimText.Render("  "+e.projectRoot))
 	fmt.Println()
 
 	if hintTeardown && len(reg.Projects) == 0 {
