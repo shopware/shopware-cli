@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 
 	"github.com/shyim/go-composer"
 	"gopkg.in/yaml.v3"
@@ -359,6 +360,10 @@ func newSequenceNode(values ...string) *yaml.Node {
 
 func newNullNode() *yaml.Node {
 	return &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!null"}
+}
+
+func newBoolNode(v bool) *yaml.Node {
+	return &yaml.Node{Kind: yaml.ScalarNode, Value: strconv.FormatBool(v), Tag: "!!bool"}
 }
 
 func addKeyValue(m *yaml.Node, key, value string) {
