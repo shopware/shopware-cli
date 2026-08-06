@@ -218,6 +218,9 @@ func buildCompose(hasAMQP, hasElasticsearch bool, opts *ComposeOptions) yaml.Nod
 
 	database := newMappingNode()
 	addKeyValue(database, "image", "mariadb:11.8")
+	// Publish the database on a random loopback port so host-side tools
+	// (e.g. `shopware-cli project sql`) can reach it without port conflicts.
+	addKeyValueNode(database, "ports", newSequenceNode("127.0.0.1::3306"))
 	addKeyValueNode(database, "environment", dbEnv)
 	addKeyValueNode(database, "volumes", newSequenceNode("db-data:/var/lib/mysql:rw"))
 	addKeyValueNode(database, "command", newSequenceNode(

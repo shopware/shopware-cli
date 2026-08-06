@@ -35,6 +35,9 @@ type Executor interface {
 	StopEnvironment(ctx context.Context) error
 	EnvironmentStatus(ctx context.Context) (bool, error)
 	AdminAPIClient(ctx context.Context) (*adminSdk.Client, error)
+	// DatabaseConnection returns credentials to reach the project database
+	// from the host machine.
+	DatabaseConnection(ctx context.Context) (*DatabaseConnection, error)
 }
 
 func adminAPIClient(ctx context.Context, cfg *shop.Config, envCfg *shop.EnvironmentConfig) (*adminSdk.Client, error) {

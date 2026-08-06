@@ -3,6 +3,7 @@ package executor
 import (
 	"context"
 	"fmt"
+	"net"
 	"os/exec"
 	"path/filepath"
 	"strings"
@@ -102,6 +103,87 @@ func (d *DockerExecutor) WithRelDir(relDir string) Executor {
 
 func (d *DockerExecutor) AdminAPIClient(ctx context.Context) (*adminSdk.Client, error) {
 	return adminAPIClient(ctx, d.shopCfg, d.envCfg)
+}
+
+// DatabaseConnection resolves the database credentials as seen inside the
+// compose network and translates the service host to the port published on
+// the host machine.
+func (d *DockerExecutor) DatabaseConnection(ctx context.Context) (*DatabaseConnection, error) {
+	conn := defaultDatabaseConnection()
+	conn.Host = "database"
+
+	databaseURL := d.env["DATABASE_URL"]
+
+	if databaseURL == "" {
+		cmd := exec.CommandContext(ctx, "docker", "compose", "exec", "-T", "web", "printenv", "DATABASE_URL")
+		cmd.Dir = d.projectRoot
+		logCmd(ctx, cmd)
+
+		var stdout, stderr strings.Builder
+		cmd.Stdout = &stdout
+		cmd.Stderr = &stderr
+
+		if err := cmd.Run(); err != nil {
+			return nil, fmt.Errorf("could not read DATABASE_URL from the web container, is the environment running?: %w\n%s", err, stderr.String())
+		}
+
+		databaseURL = strings.TrimSpace(stdout.String())
+	}
+
+	if databaseURL != "" {
+		if err := applyDatabaseURL(conn, databaseURL); err != nil {
+			return nil, err
+		}
+	}
+
+	// The host part of DATABASE_URL is only resolvable inside the compose
+	// network when it names a compose service. Swap it for the address the
+	// port is published on.
+	if err := d.resolvePublishedPort(ctx, conn); err != nil {
+		return nil, err
+	}
+
+	return conn, nil
+}
+
+// resolvePublishedPort rewrites conn's address to the host-published mapping
+// of the compose service it points at. When the host is not a compose service
+// (external database), the address is kept untouched.
+func (d *DockerExecutor) resolvePublishedPort(ctx context.Context, conn *DatabaseConnection) error {
+	cmd := exec.CommandContext(ctx, "docker", "compose", "port", conn.Host, conn.Port)
+	cmd.Dir = d.projectRoot
+	logCmd(ctx, cmd)
+
+	var stdout, stderr strings.Builder
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+
+	if err := cmd.Run(); err != nil {
+		if strings.Contains(stderr.String(), "no such service") {
+			return nil
+		}
+
+		return fmt.Errorf("could not resolve published port of service %q: %w\n%s", conn.Host, err, stderr.String())
+	}
+
+	published := strings.TrimSpace(stdout.String())
+	if line, _, found := strings.Cut(published, "\n"); found {
+		published = strings.TrimSpace(line)
+	}
+
+	host, port, err := net.SplitHostPort(published)
+	if err != nil || port == "0" {
+		return fmt.Errorf("service %q does not publish port %s to the host, regenerate the compose file by restarting the environment (shopware-cli project dev)", conn.Host, conn.Port)
+	}
+
+	if host == "0.0.0.0" || host == "::" || host == "" {
+		host = "127.0.0.1"
+	}
+
+	conn.Host = host
+	conn.Port = port
+
+	return nil
 }
 
 func (d *DockerExecutor) containerWorkdir() string {

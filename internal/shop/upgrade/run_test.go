@@ -51,8 +51,12 @@ func (f *fakeExecutor) WithEnv(env map[string]string) executor.Executor {
 	f.env = env
 	return f
 }
-func (f *fakeExecutor) WithRelDir(string) executor.Executor             { return f }
-func (f *fakeExecutor) StartEnvironment(context.Context) error          { return nil }
+func (f *fakeExecutor) WithRelDir(string) executor.Executor    { return f }
+func (f *fakeExecutor) StartEnvironment(context.Context) error { return nil }
+
+func (f *fakeExecutor) DatabaseConnection(context.Context) (*executor.DatabaseConnection, error) {
+	return nil, executor.ErrNotSupported
+}
 func (f *fakeExecutor) StopEnvironment(context.Context) error           { return nil }
 func (f *fakeExecutor) EnvironmentStatus(context.Context) (bool, error) { return true, nil }
 func (f *fakeExecutor) AdminAPIClient(context.Context) (*adminSdk.Client, error) {
