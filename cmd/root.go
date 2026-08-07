@@ -3,6 +3,8 @@ package cmd
 import (
 	"context"
 	"errors"
+	"fmt"
+	"net/http"
 	"os"
 	"os/signal"
 	"path"
@@ -23,6 +25,7 @@ import (
 	"github.com/shopware/shopware-cli/internal/system"
 	"github.com/shopware/shopware-cli/internal/tracking"
 	"github.com/shopware/shopware-cli/internal/tui"
+	"github.com/shopware/shopware-cli/internal/update"
 	"github.com/shopware/shopware-cli/logging"
 )
 
@@ -55,6 +58,19 @@ func run(ctx context.Context) int {
 	accountApi.SetUserAgent("shopware-cli/" + version)
 	rootCmd.SetArgs(args)
 
+	// Check for update in the background
+	updateCtx, updateCancel := context.WithTimeout(ctx, 900*time.Millisecond)
+	defer updateCancel()
+	updateChan := make(chan *update.ReleaseInfo, 1)
+
+	go func() {
+		releaseInfo, err := checkForUpdate(updateCtx, args)
+		if err != nil && !errors.Is(err, update.ErrNoUpdateAvailable) {
+			logging.FromContext(ctx).Debugf("checking for shopware cli update failed: %v", err)
+		}
+		updateChan <- releaseInfo
+	}()
+
 	start := time.Now()
 	err := rootCmd.ExecuteContext(ctx)
 
@@ -80,6 +96,18 @@ func run(ctx context.Context) int {
 			tracking.TagOS:          runtime.GOOS,
 			tracking.TagIsTUI:       strconv.FormatBool(system.IsInteractionEnabled(ctx)),
 		})
+	}
+
+	// Wait for the update check to finish and print a message to stderr if an update is available
+	newRelease := <-updateChan
+	if newRelease != nil {
+		binaryPath, err := os.Executable()
+		if err != nil {
+			logging.FromContext(ctx).Debugf("could not determine binary path: %v", err)
+		}
+		if shouldNotify(newRelease, binaryPath) {
+			fmt.Fprintln(os.Stderr, update.RenderUpdateNotification(newRelease.Version, version))
+		}
 	}
 
 	if errors.Is(err, project.ErrEnvironmentDown) {
@@ -158,6 +186,22 @@ func commandNameFromBinaryPath(binaryPath string) string {
 	return binaryName
 }
 
+// checkForUpdate returns the latest release info if an update is available.
+func checkForUpdate(ctx context.Context, args []string) (*update.ReleaseInfo, error) {
+	if !update.ShouldCheckForUpdate(version, args) {
+		return nil, update.ErrNoUpdateAvailable
+	}
+	return update.CheckForUpdate(ctx, version, &http.Client{Timeout: 5 * time.Second})
+}
+
+// shouldNotify returns false for Homebrew users if the new version is not yet available in Homebrew
+func shouldNotify(release *update.ReleaseInfo, binaryPath string) bool {
+	if update.IsUnderHomebrew(binaryPath) && release.IsRecent() {
+		return false
+	}
+	return true
+}
+
 func init() {
 	rootCmd.SilenceErrors = true
 
@@ -167,6 +211,7 @@ func init() {
 
 	rootCmd.PersistentFlags().Bool("verbose", false, "show debug output")
 	rootCmd.PersistentFlags().BoolP("no-interaction", "n", false, "do not ask any interactive questions")
+	rootCmd.PersistentFlags().Bool("no-update-hint", false, "do not show update notifications")
 
 	project.Register(rootCmd)
 	extension.Register(rootCmd)
