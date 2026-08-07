@@ -165,6 +165,61 @@ func TestResolveEnvironment(t *testing.T) {
 	})
 }
 
+func TestWithEnvironment(t *testing.T) {
+	baseConfig := func() *Config {
+		return &Config{
+			URL:      "https://myshop.com",
+			AdminApi: &ConfigAdminApi{Username: "admin", Password: "shopware"},
+			Environments: map[string]*EnvironmentConfig{
+				"staging": {
+					Type:     "local",
+					URL:      "https://staging.example.com",
+					AdminApi: &ConfigAdminApi{ClientId: "staging-id", ClientSecret: "staging-secret"},
+				},
+				"bare": {Type: "local"},
+			},
+		}
+	}
+
+	t.Run("named environment overrides url and admin api", func(t *testing.T) {
+		cfg, err := baseConfig().WithEnvironment("staging")
+		assert.NoError(t, err)
+		assert.Equal(t, "https://staging.example.com", cfg.URL)
+		assert.Equal(t, "staging-id", cfg.AdminApi.ClientId)
+	})
+
+	t.Run("environment without overrides keeps base values", func(t *testing.T) {
+		cfg, err := baseConfig().WithEnvironment("bare")
+		assert.NoError(t, err)
+		assert.Equal(t, "https://myshop.com", cfg.URL)
+		assert.Equal(t, "admin", cfg.AdminApi.Username)
+	})
+
+	t.Run("error on unknown environment", func(t *testing.T) {
+		_, err := baseConfig().WithEnvironment("production")
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), `environment "production" not found`)
+	})
+
+	t.Run("no name and no environments keeps config unchanged", func(t *testing.T) {
+		cfg := &Config{URL: "https://myshop.com", AdminApi: &ConfigAdminApi{Username: "admin"}}
+
+		resolved, err := cfg.WithEnvironment("")
+		assert.NoError(t, err)
+		assert.Equal(t, "https://myshop.com", resolved.URL)
+		assert.Equal(t, "admin", resolved.AdminApi.Username)
+	})
+
+	t.Run("does not mutate the original config", func(t *testing.T) {
+		cfg := baseConfig()
+
+		_, err := cfg.WithEnvironment("staging")
+		assert.NoError(t, err)
+		assert.Equal(t, "https://myshop.com", cfg.URL)
+		assert.Equal(t, "admin", cfg.AdminApi.Username)
+	})
+}
+
 func TestReadConfigWithEnvironments(t *testing.T) {
 	tmpDir := t.TempDir()
 	configPath := filepath.Join(tmpDir, ".shopware-project.yml")

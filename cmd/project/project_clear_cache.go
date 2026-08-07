@@ -18,7 +18,7 @@ var projectClearCacheCmd = &cobra.Command{
 		var cfg *shop.Config
 		var err error
 
-		if cfg, err = shop.ReadConfig(cmd.Context(), projectConfigPath, false); err != nil {
+		if cfg, err = readConfigWithEnvironment(cmd, false); err != nil {
 			return err
 		}
 
