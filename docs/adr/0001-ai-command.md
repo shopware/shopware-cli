@@ -23,7 +23,7 @@ The CLI would act as the front door, not as the runtime. It would not host MCP s
 
 ### Ownership and maintenance
 
-Being listed means that the CLI team has accepted the integration into the Shopware directory. It does not mean that the CLI team has taken over its operation or subject-matter support. The CLI team may deprecate or remove an entry when it becomes unavailable, unsafe, misleading, incompatible, or clearly unmaintained. Removal from the directory must not silently uninstall an existing integration from users' projects. Existing installations can instead be shown as deprecated or no longer available.
+Being listed means that the CLI team has accepted the integration into the Shopware directory. It does not mean that the CLI team has taken over its operation or subject-matter support. The CLI team may deprecate or remove an entry when it becomes unavailable, unsafe, misleading, incompatible, or clearly unmaintained. Removal from the directory must not silently uninstall an existing integration from users' projects. Existing installations can instead be shown as deprecated or no longer available. When an active directory entry is removed, tombstone metadata (including lifecycle status, removal reason, and replacement information) must be retained in the manifest so that existing installations remain discoverable. Removing an active directory entry must not remove the corresponding tombstone metadata from later CLI releases.
 
 The CLI team owns the `ai` command, the directory format, supported client adapters, safe configuration changes, the bundled CLI skill; and reviewing, presenting, deprecating, and removing directory entries.
 
@@ -59,12 +59,14 @@ For now, we do not plan on a new registry service or central platform. Instead, 
 
 - stable name;
 - short (75 characters or less) public description;
-- integration type (MCP Server, skill, agent);
+- integration type (MCP Server, skill);
 - installation or connection details;
 - public documentation link;
 - compatibility requirements;
 - current lifecycle status;
 - an internal maintainer-team contact (GitHub team name, added to a file maintained in the CLI repository).
+
+Additional integration types such as "agent" may be added once their delivery target, adapter, versioning requirements, and safety rules are defined.
 
 The internal contact is used by the CLI team when an entry needs attention. The contribution process should remain lightweight. It exists to ensure that an entry:
 
@@ -88,10 +90,10 @@ Writing commands must:
 - support `--dry-run`;
 - show the target file and the exact planned change;
 - require an explicit client when the destination is ambiguous in non-interactive use;
-- avoid writing secret values;
+- structurally redact sensitive keys and values (OAuth tokens, client secrets, connection credentials) in all output, including dry-run previews, diffs, and written files, while preserving the exact planned-change structure for non-sensitive data;
 - report every file they change;
 - remove only configuration previously created by `shopware-cli`;
-- support stable machine-readable output.
+- support stable machine-readable output: JSON format on stdout, versioned schema, errors on stderr with structured JSON error shape, and consistent exit-code semantics (0 for success, non-zero for failure).
 
 For remote services using OAuth, login and token storage remain the responsibility of the AI client and the remote service. The CLI writes only the connection information.
 
@@ -116,7 +118,7 @@ Compatibility information is supplied and maintained by the team responsible for
 
 Separately maintained skills are published and versioned by their owning team.
 
-The CLI installs the latest available release by default and records the tag or immutable revision that was installed as the current version. This allows the CLI to report what is installed and, later, determine whether an update is available.
+The CLI resolves and installs the latest compatible release by default (not just the latest available release) and records the tag or immutable revision that was installed as the current version. This allows the CLI to report what is installed and, later, determine whether an update is available. Version precedence is deterministic (semantic versioning order); pre-releases are excluded unless explicitly requested; unknown compatibility is treated as incompatible; and installation must fail with a clear error when no compatible release is available.
 
 The owning team is responsible for:
 
