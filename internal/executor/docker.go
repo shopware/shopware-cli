@@ -19,6 +19,22 @@ type DockerExecutor struct {
 	relDir      string
 	shopCfg     *shop.Config
 	envCfg      *shop.EnvironmentConfig
+	// composeProjectName pins the Compose project (-p) for every invocation.
+	// It is resolved from the project .env once at construction: Compose
+	// re-reads .env per command, so a mid-run rewrite of that file (e.g.
+	// `composer recipes:install --force --reset` during an upgrade) would
+	// otherwise silently disconnect running containers.
+	composeProjectName string
+}
+
+// composeArgs starts a docker argument list for a compose subcommand, pinning
+// the project name when one is known.
+func (d *DockerExecutor) composeArgs(sub ...string) []string {
+	args := []string{"compose"}
+	if d.composeProjectName != "" {
+		args = append(args, "-p", d.composeProjectName)
+	}
+	return append(args, sub...)
 }
 
 func (d *DockerExecutor) ConsoleCommand(ctx context.Context, args ...string) *Process {
@@ -93,11 +109,11 @@ func (d *DockerExecutor) WithEnv(env map[string]string) Executor {
 		}
 	}
 
-	return &DockerExecutor{env: mergeEnv(d.env, env), projectRoot: d.projectRoot, relDir: d.relDir, shopCfg: d.shopCfg, envCfg: d.envCfg}
+	return &DockerExecutor{env: mergeEnv(d.env, env), projectRoot: d.projectRoot, relDir: d.relDir, shopCfg: d.shopCfg, envCfg: d.envCfg, composeProjectName: d.composeProjectName}
 }
 
 func (d *DockerExecutor) WithRelDir(relDir string) Executor {
-	return &DockerExecutor{env: d.env, projectRoot: d.projectRoot, relDir: relDir, shopCfg: d.shopCfg, envCfg: d.envCfg}
+	return &DockerExecutor{env: d.env, projectRoot: d.projectRoot, relDir: relDir, shopCfg: d.shopCfg, envCfg: d.envCfg, composeProjectName: d.composeProjectName}
 }
 
 func (d *DockerExecutor) AdminAPIClient(ctx context.Context) (*adminSdk.Client, error) {
@@ -116,12 +132,12 @@ func (d *DockerExecutor) newProcess(cmd *exec.Cmd, innerArgs []string) *Process 
 	projectRoot := d.projectRoot
 	pattern := strings.Join(innerArgs, " ")
 
+	killArgs := append(d.composeArgs("exec", "-T", "web"), "pkill", "-INT", "-f", pattern)
+
 	return &Process{
 		Cmd: cmd,
 		stop: func(ctx context.Context) error {
-			killCmd := exec.CommandContext(ctx, "docker", "compose", "exec", "-T", "web",
-				"pkill", "-INT", "-f", pattern,
-			)
+			killCmd := exec.CommandContext(ctx, "docker", killArgs...)
 			killCmd.Dir = projectRoot
 			_ = killCmd.Run()
 
@@ -135,7 +151,7 @@ func (d *DockerExecutor) newProcess(cmd *exec.Cmd, innerArgs []string) *Process 
 }
 
 func (d *DockerExecutor) StartEnvironment(ctx context.Context) error {
-	cmd := exec.CommandContext(ctx, "docker", "compose", "up", "-d")
+	cmd := exec.CommandContext(ctx, "docker", d.composeArgs("up", "-d")...)
 	cmd.Dir = d.projectRoot
 
 	output, err := cmd.CombinedOutput()
@@ -147,7 +163,7 @@ func (d *DockerExecutor) StartEnvironment(ctx context.Context) error {
 }
 
 func (d *DockerExecutor) StopEnvironment(ctx context.Context) error {
-	cmd := exec.CommandContext(ctx, "docker", "compose", "down")
+	cmd := exec.CommandContext(ctx, "docker", d.composeArgs("down")...)
 	cmd.Dir = d.projectRoot
 
 	output, err := cmd.CombinedOutput()
@@ -159,7 +175,7 @@ func (d *DockerExecutor) StopEnvironment(ctx context.Context) error {
 }
 
 func (d *DockerExecutor) EnvironmentStatus(ctx context.Context) (bool, error) {
-	cmd := exec.CommandContext(ctx, "docker", "compose", "ps", "--status=running", "-q")
+	cmd := exec.CommandContext(ctx, "docker", d.composeArgs("ps", "--status=running", "-q")...)
 	cmd.Dir = d.projectRoot
 
 	output, err := cmd.Output()
@@ -171,7 +187,7 @@ func (d *DockerExecutor) EnvironmentStatus(ctx context.Context) (bool, error) {
 }
 
 func (d *DockerExecutor) baseArgs() []string {
-	args := []string{"compose", "exec"}
+	args := d.composeArgs("exec")
 
 	args = append(args, "-T")
 
