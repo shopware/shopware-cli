@@ -166,9 +166,8 @@ func (e *proxyEnvironment) up(cmd *cobra.Command) error {
 		previousAppURL = defaultShopURL
 	}
 
-	// Whether the shop's live URL actually changes decides if the storefront
-	// theme needs a recompile: it bakes absolute asset URLs (the JS import map)
-	// in at compile time, so only a changed URL requires paying that cost.
+	// Only a real URL change needs the (costly) theme recompile below, so
+	// compare the current APP_URL against the target before overwriting it.
 	urlChanged := envfile.ReadEnvVar(e.envLocalPath(), "APP_URL") != proxyURL
 
 	if err := e.pointShopAt(ctx, []string{previousAppURL, "http://" + e.hostname}, proxyURL); err != nil {
@@ -532,6 +531,17 @@ func shopNotInstalled(output string) bool {
 // proxy URL. It is best-effort: a not-yet-installed shop has no theme to
 // compile (the installer does it later, with the correct URL), so that is
 // skipped quietly and only unexpected failures are surfaced without aborting.
+// recompileTheme re-runs theme:compile after the shop's URL changed. It is
+// needed because the storefront's ES module import map (Shopware 6.7+) is built
+// at compile time and stored verbatim in theme_runtime_config, not resolved per
+// request: ThemeCompiler builds each entry with the "asset" package
+// (FallbackUrlPackage), whose URL falls back to the absolute APP_URL when there
+// is no request — and theme:compile runs on the CLI, so it always bakes the
+// absolute APP_URL. Switching the shop to its proxy hostname therefore leaves
+// the stored map pointing at the old host until the theme is recompiled, and
+// the browser fails to load the shopware core module from the stale URL.
+// (Assets rendered via asset() in Twig are request-relative and unaffected;
+// only the compiled-and-stored import map is.)
 func (e *proxyEnvironment) recompileTheme(ctx context.Context) {
 	err := runStep(ctx, "Updating storefront theme for the new URL...", func(ctx context.Context) error {
 		if out, err := e.executor.ConsoleCommand(ctx, "theme:compile").CombinedOutput(); err != nil && !shopNotInstalled(string(out)) {
