@@ -1,7 +1,6 @@
 package docker
 
 import (
-	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -13,10 +12,11 @@ import (
 )
 
 var overrideOpts = &ProxyOptions{
-	Hostname:    "my-shop.shopware.local",
-	NetworkName: "shopware-cli-proxy",
-	CAPath:      "/state/mkcert/rootCA.pem",
-	AppURL:      "https://my-shop.shopware.local",
+	Hostname:       "my-shop.shopware.local",
+	NetworkName:    "shopware-cli-proxy",
+	CAPath:         "/state/mkcert/rootCA.pem",
+	AppURL:         "https://my-shop.shopware.local",
+	AdminWatchPort: 5173,
 }
 
 func TestGenerateComposeOverride(t *testing.T) {
@@ -79,36 +79,23 @@ func TestGenerateComposeOverride(t *testing.T) {
 	assert.NotContains(t, override, "image:")
 }
 
-func TestAdminWatchContainerPort(t *testing.T) {
+func TestGenerateComposeOverrideRoutesAdminWatchToConfiguredPort(t *testing.T) {
 	t.Parallel()
 
-	lockWith := func(coreVersion string) *composer.Lock {
-		return &composer.Lock{Packages: []composer.LockPackage{{Name: "shopware/core", Version: coreVersion}}}
-	}
+	// The admin-watch dev-server port is decided by the caller (via
+	// extension.AdminDevServerPort, which reads the ADMIN_VITE flag) and passed
+	// in through ProxyOptions; the override just wires it into the router's
+	// loadbalancer port. Tie the assertion to the admin-watch router
+	// specifically, since adminer also listens on 8080.
+	lock := &composer.Lock{Packages: []composer.LockPackage{{Name: "shopware/core", Version: "6.6.10.2"}}}
 
-	// Vite from 6.7 on, webpack-dev-server before.
-	assert.Equal(t, adminWatchWebpackPort, adminWatchContainerPort(lockWith("6.6.10.2")))
-	assert.Equal(t, adminWatchVitePort, adminWatchContainerPort(lockWith("6.7.0.0")))
-	assert.Equal(t, adminWatchVitePort, adminWatchContainerPort(lockWith("v6.7.12.2")))
-	// Unknown / unparseable versions default to Vite (current releases).
-	assert.Equal(t, adminWatchVitePort, adminWatchContainerPort(&composer.Lock{}))
-	assert.Equal(t, adminWatchVitePort, adminWatchContainerPort(lockWith("dev-trunk")))
-}
-
-func TestGenerateComposeOverrideRoutesAdminWatchByStack(t *testing.T) {
-	t.Parallel()
-
-	// Tie the port to the admin-watch router specifically (adminer is also 8080).
-	webpackLabel := fmt.Sprintf("-admin-watch.loadbalancer.server.port: \"%d\"", adminWatchWebpackPort)
-	viteLabel := fmt.Sprintf("-admin-watch.loadbalancer.server.port: \"%d\"", adminWatchVitePort)
-
-	sw66, err := GenerateComposeOverride(&composer.Lock{Packages: []composer.LockPackage{{Name: "shopware/core", Version: "6.6.10.2"}}}, overrideOpts, nil)
+	webpack, err := GenerateComposeOverride(lock, &ProxyOptions{Hostname: "my-shop.shopware.local", NetworkName: "shopware-cli-proxy", AdminWatchPort: 8080}, nil)
 	require.NoError(t, err)
-	assert.Contains(t, string(sw66), webpackLabel)
+	assert.Contains(t, string(webpack), "-admin-watch.loadbalancer.server.port: \"8080\"")
 
-	sw67, err := GenerateComposeOverride(&composer.Lock{Packages: []composer.LockPackage{{Name: "shopware/core", Version: "6.7.0.0"}}}, overrideOpts, nil)
+	vite, err := GenerateComposeOverride(lock, &ProxyOptions{Hostname: "my-shop.shopware.local", NetworkName: "shopware-cli-proxy", AdminWatchPort: 5173}, nil)
 	require.NoError(t, err)
-	assert.Contains(t, string(sw67), viteLabel)
+	assert.Contains(t, string(vite), "-admin-watch.loadbalancer.server.port: \"5173\"")
 }
 
 func TestGenerateComposeOverrideWithoutCA(t *testing.T) {

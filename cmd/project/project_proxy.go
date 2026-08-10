@@ -18,6 +18,7 @@ import (
 	dockerpkg "github.com/shopware/shopware-cli/internal/docker"
 	"github.com/shopware/shopware-cli/internal/envfile"
 	"github.com/shopware/shopware-cli/internal/executor"
+	"github.com/shopware/shopware-cli/internal/extension"
 	"github.com/shopware/shopware-cli/internal/proxy"
 	"github.com/shopware/shopware-cli/internal/shop"
 	"github.com/shopware/shopware-cli/internal/system"
@@ -289,10 +290,11 @@ func (e *proxyEnvironment) prepareProxyInfra(ctx context.Context, reg proxy.Regi
 	}
 
 	if err := dockerpkg.WriteComposeOverride(e.projectRoot, &dockerpkg.ProxyOptions{
-		Hostname:    e.hostname,
-		NetworkName: proxy.NetworkName,
-		CAPath:      certInfo.CAPath,
-		AppURL:      "https://" + e.hostname,
+		Hostname:       e.hostname,
+		NetworkName:    proxy.NetworkName,
+		CAPath:         certInfo.CAPath,
+		AppURL:         "https://" + e.hostname,
+		AdminWatchPort: extension.AdminDevServerPort(e.projectRoot),
 	}); err != nil {
 		return proxy.CertInfo{}, err
 	}

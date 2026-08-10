@@ -8,7 +8,6 @@ import (
 	"strings"
 
 	"github.com/shyim/go-composer"
-	"github.com/shyim/go-version"
 	"gopkg.in/yaml.v3"
 
 	"github.com/shopware/shopware-cli/internal/symfony"
@@ -44,6 +43,12 @@ type ProxyOptions struct {
 	// PHP renders absolute asset URLs (e.g. the storefront import map) with the
 	// stale image APP_URL.
 	AppURL string
+	// AdminWatchPort is the container port the admin watcher's dev server binds:
+	// Vite (5173) on Shopware 6.7+, webpack-dev-server (8080) before, decided by
+	// the ADMIN_VITE feature flag. The caller computes it (via
+	// extension.AdminDevServerPort) and passes it in, so this package needs no
+	// Shopware-version logic of its own.
+	AdminWatchPort int
 }
 
 // containerCAPath is where the proxy CA is mounted inside the shop's
@@ -88,37 +93,6 @@ type proxyRoute struct {
 	pathPrefix string
 }
 
-// adminWatchViteMinVersion is the first Shopware release whose admin watcher is
-// Vite; before it the watcher is webpack-dev-server on a different port.
-const adminWatchViteMinVersion = "6.7.0.0"
-
-const (
-	// adminWatchVitePort / adminWatchWebpackPort are the container ports the
-	// admin watcher's dev server listens on: Vite on Shopware 6.7+, webpack-dev-
-	// server before. The docker-dev image publishes both in fixed-port mode, but
-	// a single proxy route must target the one this Shopware version uses.
-	adminWatchVitePort    = 5173
-	adminWatchWebpackPort = 8080
-)
-
-// adminWatchContainerPort returns the container port to route admin-watch to,
-// picked from the project's Shopware version. It defaults to Vite for unknown
-// or unparseable versions, matching current (6.7+) projects.
-func adminWatchContainerPort(lock *composer.Lock) int {
-	viteFloor := version.Must(version.NewVersion(adminWatchViteMinVersion))
-	for _, name := range []string{"shopware/core", "shopware/platform"} {
-		pkg := lock.GetPackage(name)
-		if pkg == nil {
-			continue
-		}
-		if v, err := version.NewVersion(strings.TrimPrefix(pkg.Version, "v")); err == nil && v.LessThan(viteFloor) {
-			return adminWatchWebpackPort
-		}
-		break
-	}
-	return adminWatchVitePort
-}
-
 // hostname returns the full hostname for this route, e.g.
 // "admin-watch.my-shop.shopware.local" or, for the root route,
 // "my-shop.shopware.local".
@@ -143,7 +117,7 @@ func GenerateComposeOverride(lock *composer.Lock, opts *ProxyOptions, background
 
 	web := overrideService(opts, "web",
 		proxyRoute{subdomain: "", containerPort: 8000},
-		proxyRoute{subdomain: "admin-watch", containerPort: adminWatchContainerPort(lock)},
+		proxyRoute{subdomain: "admin-watch", containerPort: opts.AdminWatchPort},
 		// The deprecated webpack storefront watcher runs two servers under one
 		// hostname: the HTML proxy on websecure and the asset+HMR server on the
 		// dedicated sfassets entrypoint.
