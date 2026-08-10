@@ -12,9 +12,9 @@ implementation (`internal/proxy/`, `cmd/project/project_proxy*.go`).
   `~/Playground/shop1` → `https://shop1.shopware.local`.
 - One shared **Traefik** container routes by hostname, so shop containers
   publish **no host ports at all** — port conflicts disappear by construction.
-- A tiny **DNS server embedded in the shopware-cli binary** answers
-  `*.shopware.local → 127.0.0.1`. Nothing is installed, no query leaves the
-  machine.
+- A small **DNS container (CoreDNS)** answers `*.shopware.local → 127.0.0.1`.
+  It runs the same way as the shared Traefik container — no DNS-server code to
+  maintain — and no query leaves the machine.
 - HTTPS works out of the box: a local CA (mkcert-compatible) signs a wildcard
   certificate; `proxy setup` trusts it once per machine.
 - Shops can reach **each other** (and themselves) by hostname over HTTPS from
@@ -49,10 +49,17 @@ behavior below applies to the opt-in (`proxy up`) case.
 ## `proxy setup` is the only sudo — agents need none
 
 `proxy setup` is the single moment that needs `sudo`: it points the OS resolver
-at the embedded DNS server *and* installs the CA into the trust stores. Both
-need root, and they run together in one ceremony, so a set-up machine always
-serves **trusted HTTPS** — there is deliberately no "domains but no HTTPS"
-half-state to opt into.
+at the DNS container *and* installs the CA into the trust stores. Both need
+root, and they run together in one ceremony, so a set-up machine always serves
+**trusted HTTPS** — there is deliberately no "domains but no HTTPS" half-state
+to opt into.
+
+Because these are the only steps that touch the system, `proxy setup` (and the
+inline setup offered by `project create`) asks first: it explains the two
+changes and lets you pick **"set it up for me"** (it runs the `sudo` commands)
+or **"I'll do it myself"** (it prints the exact resolver file and trust command
+to run by hand). Non-interactively it never runs `sudo` unprompted — it prints
+the steps and continues.
 
 Everything else needs no root. Once a human has run `proxy setup` once on a
 machine, `project create`, `project dev` (which bootstraps the proxy
@@ -74,7 +81,7 @@ solved: something must *resolve* the hostnames (DNS), and something must
 sequenceDiagram
     participant B as Browser
     participant OS as OS resolver
-    participant D as Embedded DNS<br>(shopware-cli daemon,<br>127.0.0.1:53535)
+    participant D as DNS container<br>(CoreDNS,<br>127.0.0.1:53535)
     participant T as Traefik<br>(shared container, :80/:443)
     participant W as shop1 web container
 
@@ -93,7 +100,7 @@ sequenceDiagram
 
 Two deliberately separated responsibilities:
 
-- **DNS is dumb.** The embedded server answers `127.0.0.1` for *anything*
+- **DNS is dumb.** The DNS container answers `127.0.0.1` for *anything*
   under the domain (wildcard) — it knows nothing about shops. That is why a
   new shop needs zero DNS changes.
 - **Traefik is smart.** It watches the Docker socket and picks up routing
@@ -102,13 +109,14 @@ Two deliberately separated responsibilities:
 
 ### The DNS part in detail
 
-The DNS server is ~180 lines of Go on `golang.org/x/net/dns/dnsmessage`
-(`internal/proxy/dns.go`): A queries in the zone → `127.0.0.1`, AAAA → empty
-NOERROR (prevents IPv6 fallback delays), anything else → NXDOMAIN. It listens
-on UDP `127.0.0.1:53535` — a high port, so it needs no root. `proxy up`
-spawns it as a detached background process (re-executing the binary with a
-hidden `internal-dns-serve` subcommand) and tracks it via a PID file; after a
-reboot the next `up` just respawns it.
+DNS is served by a **CoreDNS container** (`internal/proxy/dns_container.go`),
+run the same way as the shared Traefik container so there is no DNS-server code
+to maintain — only a one-zone Corefile: A queries in the zone → `127.0.0.1`,
+AAAA → empty NOERROR (prevents IPv6 fallback delays). It publishes UDP+TCP on
+`127.0.0.1:53535` only — a high port bound to loopback, reachable from the host
+but nothing else. `proxy up` starts it idempotently (like Traefik) with
+`--restart unless-stopped`, so it comes back on its own after a reboot; a
+container built for an older config or a different domain is recreated.
 
 The OS is told to use it for exactly one domain (split DNS):
 
@@ -254,7 +262,7 @@ worker, or a scheduled task.
 
 | Location | Content |
 | --- | --- |
-| `~/Library/Application Support/shopware-cli/proxy/` (macOS) / `~/.config/shopware-cli/proxy/` (Linux) | `registry.json` (registered projects + remembered previous values), `settings.json` (domain), `dns.pid` / `dns.domain` / `dns.log` (daemon), `traefik/certs/` + `traefik/dynamic/` (server cert, watched Traefik config) |
+| `~/Library/Application Support/shopware-cli/proxy/` (macOS) / `~/.config/shopware-cli/proxy/` (Linux) | `registry.json` (registered projects + remembered previous values), `settings.json` (domain), `dns/Corefile` (CoreDNS zone config), `traefik/certs/` + `traefik/dynamic/` (server cert, watched Traefik config) |
 | mkcert CAROOT (e.g. `~/Library/Application Support/mkcert/`) | `rootCA.pem`, `rootCA-key.pem` — shared with mkcert |
 | `/etc/resolver/<domain>` or `/etc/systemd/resolved.conf.d/90-shopware-cli.conf` | OS split-DNS routing (sudo, written by `setup`, removed on domain change) |
 | Per project | `compose.override.yaml` (incl. the read-only CA mount), `APP_URL` in `.env.local`, `url:` in `.shopware-project.yml` — all reverted by `down` |
@@ -262,7 +270,7 @@ worker, or a scheduled task.
 ## When something is wrong
 
 Run `shopware-cli project proxy verify`. It checks the chain bottom-up —
-Docker → embedded DNS answers → **OS actually routes to it** → Traefik on
+Docker → DNS container answers → **OS actually routes to it** → Traefik on
 :443 → trusted HTTPS against `https://proxy.<domain>/ping` — and stops at the
 first broken layer with a plain-language hint (including what to ask an IT
 team when sudo is blocked, and likely causes such as VPN DNS interception).

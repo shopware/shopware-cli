@@ -11,7 +11,7 @@ import (
 )
 
 // SupportsWildcardDNS reports whether this system can resolve the whole
-// proxy domain via the embedded DNS server. Always true on macOS thanks to
+// proxy domain via the shared DNS container. Always true on macOS thanks to
 // /etc/resolver.
 func SupportsWildcardDNS(ctx context.Context) bool {
 	return true
@@ -24,7 +24,7 @@ func resolverFilePath(baseDomain string) string {
 }
 
 // CheckResolverConfigured reports whether the macOS resolver file for the
-// proxy domain exists and points at the embedded DNS server's port.
+// proxy domain exists and points at the shared DNS container's port.
 func CheckResolverConfigured(baseDomain string) ResolverStatus {
 	path := resolverFilePath(baseDomain)
 
@@ -62,6 +62,18 @@ func ConfigureResolver(ctx context.Context, baseDomain string) error {
 	}
 
 	return nil
+}
+
+// ResolverManualInstructions returns the exact steps to point the OS resolver
+// at the DNS server by hand, for users who choose to do the resolver setup
+// themselves instead of letting the CLI run sudo.
+func ResolverManualInstructions(baseDomain string) string {
+	return strings.Join([]string{
+		"Create the file " + resolverFilePath(baseDomain) + " (needs sudo) with this content:",
+		"",
+		"    nameserver 127.0.0.1",
+		fmt.Sprintf("    port %d", DNSPort),
+	}, "\n")
 }
 
 // ResolverBlockedGuidance explains, in plain words, what to do when the

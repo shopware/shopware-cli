@@ -280,7 +280,7 @@ func maybePrintWSLWindowsAccess(hostnames []string) {
 // prepareProxyInfra brings up everything the shared proxy needs before a
 // project's containers start: it checks the hostname is free, verifies compose
 // supports resets, ensures the certificate, the shared Traefik container and
-// the DNS daemon, and writes the compose override with APP_URL pinned (so PHP
+// the DNS container, and writes the compose override with APP_URL pinned (so PHP
 // renders absolute URLs — e.g. the storefront import map — with the proxy
 // hostname, not the stale image default). It returns the certificate info so
 // callers can react to a freshly created CA. It neither starts nor registers
@@ -311,7 +311,7 @@ func (e *proxyEnvironment) prepareProxyInfra(ctx context.Context, reg proxy.Regi
 		}
 	}
 
-	if err := proxy.EnsureDNSServerRunning(e.baseDomain); err != nil {
+	if err := proxy.EnsureDNSContainerRunning(ctx, e.baseDomain); err != nil {
 		return proxy.CertInfo{}, fmt.Errorf("starting DNS server: %w", err)
 	}
 

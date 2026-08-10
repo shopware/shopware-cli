@@ -27,7 +27,7 @@ ceremony:
 
   - configures the operating system to resolve every hostname under the proxy
     domain (default ` + proxy.DefaultDomain + `, changeable with --domain) to
-    127.0.0.1 via a small DNS server embedded in shopware-cli
+    127.0.0.1 via a small DNS server (CoreDNS) run in a container
   - creates the local certificate authority (shared with mkcert) and installs
     it into the system and browser trust stores, so the HTTPS certificates the
     proxy serves are trusted
@@ -47,66 +47,60 @@ Both steps are idempotent; run it again anytime to repair the setup.`,
 		}
 		fmt.Println()
 
-		// DNS resolution for *.<domain>. The resolver is configured before
-		// anything else is touched: when this fails (blocked sudo), a
-		// pending domain change is simply not committed and the machine
-		// keeps its previous, working domain.
-		if status := proxy.CheckResolverConfigured(baseDomain); status.Configured {
-			fmt.Println(tui.GreenText.Bold(true).Render("  ✓ DNS is already configured"))
-			fmt.Println(tui.DimText.Render("  " + status.Detail))
-		} else if err := proxy.ConfigureResolver(ctx, baseDomain); err != nil {
-			if errors.Is(err, proxy.ErrNoSystemdResolved) {
-				printGuidance(proxy.NoSystemdResolvedGuidance(baseDomain))
-			} else {
-				printGuidance(proxy.ResolverBlockedGuidance(baseDomain))
-				if change != nil {
-					fmt.Println()
-					fmt.Println(tui.DimText.Render("  The proxy domain was not changed, it is still ") + tui.BoldText.Render(change.previous))
-				}
-				return err
-			}
-		} else {
-			fmt.Println(tui.GreenText.Bold(true).Render("  ✓ DNS configured"))
-			fmt.Println(tui.DimText.Render("  Every *." + baseDomain + " hostname now resolves to 127.0.0.1."))
-		}
+		skipTrust, _ := cmd.Flags().GetBool("skip-trust")
 
-		if err := proxy.EnsureDNSServerRunning(baseDomain); err != nil {
-			return fmt.Errorf("starting DNS server: %w", err)
-		}
-
-		if change != nil {
-			if err := change.commit(ctx); err != nil {
-				return err
-			}
-		}
-		fmt.Println()
-
-		// HTTPS trust.
 		caPath, err := proxy.CACertPath()
 		if err != nil {
 			return fmt.Errorf("preparing certificate authority: %w", err)
 		}
 
-		if skipTrust, _ := cmd.Flags().GetBool("skip-trust"); skipTrust {
-			fmt.Println(tui.DimText.Render("  Skipping trust store installation (--skip-trust)."))
-			fmt.Println(tui.DimText.Render("  Browsers will show a security warning for the proxy's HTTPS pages (you can click through it)."))
-			fmt.Println(tui.DimText.Render("  To get rid of the warning later, run this command (or ask your IT team to):"))
-			fmt.Println(tui.DimText.Render("    " + proxy.TrustInstructions(caPath)))
-			fmt.Println(tui.DimText.Render("  Firefox users can instead import the certificate without administrator rights:"))
-			fmt.Println(tui.DimText.Render("    Settings > Privacy & Security > Certificates > View Certificates > Import: " + caPath))
-		} else {
-			summary, err := proxy.InstallTrust(ctx, caPath)
-			if err != nil {
-				printGuidance(proxy.TrustBlockedGuidance(caPath))
+		// The two system-touching steps — pointing the OS resolver at the DNS
+		// server and trusting the local CA — both need sudo/admin, so they
+		// share one choice: let shopware-cli do it, or print the steps for the
+		// user to run.
+		automatic, err := chooseAutomaticSetup(ctx, baseDomain, !skipTrust)
+		if err != nil {
+			return err
+		}
+
+		if automatic {
+			// Configure the resolver before anything else is touched: when this
+			// fails (blocked sudo), a pending domain change is not committed and
+			// the machine keeps its previous, working domain.
+			if err := configureResolverAutomatically(ctx, baseDomain, change); err != nil {
 				return err
 			}
+		} else {
+			printManualSetup(proxy.ManualSetupInstructions(baseDomain, caPath, !skipTrust))
+		}
 
-			fmt.Println(tui.GreenText.Bold(true).Render("  ✓ HTTPS certificates are trusted"))
-			fmt.Println(tui.DimText.Render("  " + summary))
+		// The DNS responder, certificate and Traefik run in containers and need
+		// no elevated rights, so they come up the same way in both modes.
+		if err := proxy.EnsureDNSContainerRunning(ctx, baseDomain); err != nil {
+			return fmt.Errorf("starting DNS server: %w", err)
+		}
+
+		if change != nil {
+			if automatic {
+				if err := change.commit(ctx); err != nil {
+					return err
+				}
+			} else if err := change.persist(); err != nil {
+				return err
+			} else {
+				fmt.Println(tui.DimText.Render("  Proxy domain set to ") + tui.BoldText.Render(change.requested))
+			}
 		}
 		fmt.Println()
 
-		// Start the shared infrastructure and prove the whole chain works.
+		if automatic {
+			if err := installTrustAutomatically(ctx, caPath, skipTrust); err != nil {
+				return err
+			}
+			fmt.Println()
+		}
+
+		// Start the shared infrastructure.
 		dir, err := proxy.StateDir()
 		if err != nil {
 			return err
@@ -129,9 +123,16 @@ Both steps are idempotent; run it again anytime to repair the setup.`,
 			}
 		}
 
-		fmt.Println(tui.BoldText.Render("  Verifying the setup:"))
-		if !runProxyVerification(ctx, baseDomain) {
-			return ErrProxyVerificationFailed
+		// In automatic mode the whole chain should already work, so prove it. In
+		// manual mode the user still has to run the printed steps, so a strict
+		// check would fail — point them at `proxy verify` for afterwards instead.
+		if automatic {
+			fmt.Println(tui.BoldText.Render("  Verifying the setup:"))
+			if !runProxyVerification(ctx, baseDomain) {
+				return ErrProxyVerificationFailed
+			}
+		} else {
+			fmt.Println(tui.DimText.Render("  Once you have run the steps above, verify with ") + tui.BoldText.Render("shopware-cli project proxy verify"))
 		}
 
 		// Under WSL the setup only touched the Linux side; reaching shops from a
@@ -165,7 +166,7 @@ func setupProjectHostnames(ctx context.Context) []string {
 }
 
 // runInlineProxySetup performs the one-time, sudo-requiring machine setup —
-// pointing the OS resolver at the embedded DNS server for baseDomain and
+// pointing the OS resolver at the shared DNS container for baseDomain and
 // installing the proxy CA into the trust stores — as offered inline by
 // `project create` when a user opts into local domains. It is the core of the
 // `proxy setup` command without the domain-change and verification machinery
@@ -173,28 +174,113 @@ func setupProjectHostnames(ctx context.Context) []string {
 // progress and guidance; the returned error only signals that a step was
 // blocked, so the caller can fall back to a "run proxy setup later" hint.
 func runInlineProxySetup(ctx context.Context, baseDomain string) error {
-	if status := proxy.CheckResolverConfigured(baseDomain); status.Configured {
-		fmt.Println(tui.GreenText.Bold(true).Render("  ✓ DNS is already configured"))
-	} else if err := proxy.ConfigureResolver(ctx, baseDomain); err != nil {
-		if errors.Is(err, proxy.ErrNoSystemdResolved) {
-			// No automatic path, but the CA trust below is still worth doing.
-			printGuidance(proxy.NoSystemdResolvedGuidance(baseDomain))
-		} else {
-			printGuidance(proxy.ResolverBlockedGuidance(baseDomain))
-			return err
-		}
-	} else {
-		fmt.Println(tui.GreenText.Bold(true).Render("  ✓ DNS configured"))
-		fmt.Println(tui.DimText.Render("  Every *." + baseDomain + " hostname now resolves to 127.0.0.1."))
-	}
-
-	if err := proxy.EnsureDNSServerRunning(baseDomain); err != nil {
-		return fmt.Errorf("starting DNS server: %w", err)
-	}
-
 	caPath, err := proxy.CACertPath()
 	if err != nil {
 		return fmt.Errorf("preparing certificate authority: %w", err)
+	}
+
+	automatic, err := chooseAutomaticSetup(ctx, baseDomain, true)
+	if err != nil {
+		return err
+	}
+
+	if !automatic {
+		printManualSetup(proxy.ManualSetupInstructions(baseDomain, caPath, true))
+		// The DNS responder still starts (no sudo); the shop's `project dev`
+		// brings up Traefik and the certificate afterwards.
+		if err := proxy.EnsureDNSContainerRunning(ctx, baseDomain); err != nil {
+			return fmt.Errorf("starting DNS server: %w", err)
+		}
+		return nil
+	}
+
+	if err := configureResolverAutomatically(ctx, baseDomain, nil); err != nil {
+		return err
+	}
+
+	if err := proxy.EnsureDNSContainerRunning(ctx, baseDomain); err != nil {
+		return fmt.Errorf("starting DNS server: %w", err)
+	}
+
+	return installTrustAutomatically(ctx, caPath, false)
+}
+
+// chooseAutomaticSetup explains the one-time system changes (OS resolver + CA
+// trust) and asks whether shopware-cli should apply them itself (needs
+// sudo/admin) or just print the steps. Non-interactively it never runs sudo
+// unprompted: it returns false so agents and CI get the instructions instead.
+func chooseAutomaticSetup(ctx context.Context, baseDomain string, includeTrust bool) (bool, error) {
+	fmt.Println(tui.BoldText.Render("  Reaching your shops at trusted HTTPS hostnames needs a one-time change to this machine:"))
+	fmt.Println(tui.DimText.Render("    - resolve *." + baseDomain + " to 127.0.0.1 (writes an OS resolver file, needs sudo)"))
+	if includeTrust {
+		fmt.Println(tui.DimText.Render("    - trust the local HTTPS certificate (installs a local CA, needs sudo)"))
+	}
+	fmt.Println()
+
+	if !system.IsInteractionEnabled(ctx) || !isatty.IsTerminal(os.Stdin.Fd()) {
+		// Never sudo without being asked: fall back to printing the steps.
+		return false, nil
+	}
+
+	doItForMe := true
+	form := huh.NewForm(huh.NewGroup(
+		huh.NewSelect[bool]().
+			Title("How should this be set up?").
+			Options(
+				huh.NewOption("Set it up for me (you may be asked for your password)", true),
+				huh.NewOption("I'll do it myself (show me the steps)", false),
+			).
+			Value(&doItForMe),
+	)).WithTheme(tui.ShopwareTheme())
+	if err := form.Run(); err != nil {
+		return false, err
+	}
+
+	return doItForMe, nil
+}
+
+// configureResolverAutomatically points the OS resolver at the DNS server via
+// sudo, printing progress and guidance. A missing systemd-resolved is not
+// fatal (the shop still works once the user adds a manual entry); a blocked
+// sudo is returned so the caller stops.
+func configureResolverAutomatically(ctx context.Context, baseDomain string, change *domainChange) error {
+	if status := proxy.CheckResolverConfigured(baseDomain); status.Configured {
+		fmt.Println(tui.GreenText.Bold(true).Render("  ✓ DNS is already configured"))
+		fmt.Println(tui.DimText.Render("  " + status.Detail))
+		return nil
+	}
+
+	if err := proxy.ConfigureResolver(ctx, baseDomain); err != nil {
+		if errors.Is(err, proxy.ErrNoSystemdResolved) {
+			printGuidance(proxy.NoSystemdResolvedGuidance(baseDomain))
+			return nil
+		}
+
+		printGuidance(proxy.ResolverBlockedGuidance(baseDomain))
+		if change != nil {
+			fmt.Println()
+			fmt.Println(tui.DimText.Render("  The proxy domain was not changed, it is still ") + tui.BoldText.Render(change.previous))
+		}
+		return err
+	}
+
+	fmt.Println(tui.GreenText.Bold(true).Render("  ✓ DNS configured"))
+	fmt.Println(tui.DimText.Render("  Every *." + baseDomain + " hostname now resolves to 127.0.0.1."))
+	return nil
+}
+
+// installTrustAutomatically installs the local CA into the trust stores, or
+// prints the manual command and the browser-warning caveat when trust is
+// skipped with --skip-trust.
+func installTrustAutomatically(ctx context.Context, caPath string, skipTrust bool) error {
+	if skipTrust {
+		fmt.Println(tui.DimText.Render("  Skipping trust store installation (--skip-trust)."))
+		fmt.Println(tui.DimText.Render("  Browsers will show a security warning for the proxy's HTTPS pages (you can click through it)."))
+		fmt.Println(tui.DimText.Render("  To get rid of the warning later, run this command (or ask your IT team to):"))
+		fmt.Println(tui.DimText.Render("    " + proxy.TrustInstructions(caPath)))
+		fmt.Println(tui.DimText.Render("  Firefox users can instead import the certificate without administrator rights:"))
+		fmt.Println(tui.DimText.Render("    Settings > Privacy & Security > Certificates > View Certificates > Import: " + caPath))
+		return nil
 	}
 
 	summary, err := proxy.InstallTrust(ctx, caPath)
@@ -202,10 +288,21 @@ func runInlineProxySetup(ctx context.Context, baseDomain string) error {
 		printGuidance(proxy.TrustBlockedGuidance(caPath))
 		return err
 	}
+
 	fmt.Println(tui.GreenText.Bold(true).Render("  ✓ HTTPS certificates are trusted"))
 	fmt.Println(tui.DimText.Render("  " + summary))
-
 	return nil
+}
+
+// printManualSetup renders the do-it-yourself steps with a neutral (non-error)
+// bold headline and dimmed body.
+func printManualSetup(instructions string) {
+	fmt.Println(tui.BoldText.Render("  Set it up yourself with these steps:"))
+	fmt.Println()
+	for _, line := range strings.Split(instructions, "\n") {
+		fmt.Println(tui.DimText.Render("  " + line))
+	}
+	fmt.Println()
 }
 
 // runStep runs a potentially slow action, showing a spinner with the given
@@ -253,6 +350,12 @@ func printWSLGuidance(guidance string) {
 type domainChange struct {
 	previous  string
 	requested string
+}
+
+// persist saves the new domain machine-wide without touching the OS resolver,
+// used in manual mode where the user applies the resolver change themselves.
+func (c *domainChange) persist() error {
+	return proxy.SaveSettings(proxy.Settings{Domain: c.requested})
 }
 
 // commit persists the new domain and removes the previous domain's resolver
@@ -310,7 +413,7 @@ var projectProxyTeardownCmd = &cobra.Command{
 	Short:        "Deregister every project and stop the shared proxy and DNS server",
 	Long: `Runs "project proxy down" for every registered project (stopping it and
 restoring its previous URL), then stops the shared Traefik container and the
-embedded DNS server. The one-time OS setup (DNS resolver, trusted CA) is kept.`,
+shared DNS container. The one-time OS setup (DNS resolver, trusted CA) is kept.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		ctx := cmd.Context()
 
@@ -339,7 +442,7 @@ embedded DNS server. The one-time OS setup (DNS resolver, trusted CA) is kept.`,
 			return err
 		}
 
-		if err := proxy.StopDNSServer(); err != nil {
+		if err := proxy.StopDNSContainer(ctx); err != nil {
 			return err
 		}
 

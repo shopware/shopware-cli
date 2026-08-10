@@ -6,8 +6,8 @@ import (
 )
 
 // StateDir returns the directory shopware-cli uses to keep proxy state: the
-// project registry, the DNS daemon's PID file and its log. It is created if
-// it does not exist yet.
+// project registry, settings, the CoreDNS Corefile and the Traefik config. It
+// is created if it does not exist yet.
 func StateDir() (string, error) {
 	configDir, err := os.UserConfigDir()
 	if err != nil {

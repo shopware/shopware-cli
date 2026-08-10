@@ -6,125 +6,27 @@ import (
 	"encoding/binary"
 	"fmt"
 	"net"
-	"strings"
 	"time"
 
 	"golang.org/x/net/dns/dnsmessage"
 )
 
-// DNSPort is the fixed local port the embedded DNS server listens on. A high
-// port is used so the daemon does not need elevated privileges; the OS
+// DNSPort is the fixed local port the shared DNS container publishes on
+// 127.0.0.1. A high port is used so nothing needs elevated privileges; the OS
 // resolver configuration points at it explicitly.
 const DNSPort = 53535
 
-// dnsTTL is deliberately short so teardown or config changes propagate
-// quickly to resolvers and browsers.
+// dnsTTL is deliberately short so teardown or a domain change propagates
+// quickly to resolvers and browsers. It is baked into the CoreDNS Corefile.
 const dnsTTL = 5
 
 // maxDNSMessageSize is the classic UDP DNS message limit; our queries and
 // single-record answers fit comfortably.
 const maxDNSMessageSize = 512
 
-// RunDNSServer blocks, answering every A query under baseDomain with
-// 127.0.0.1 on UDP 127.0.0.1:<dnsPort>. AAAA queries under the domain get an
-// empty NOERROR answer (avoiding IPv6 fallback delays in browsers); anything
-// outside the domain gets NXDOMAIN. It is intended to run inside the
-// detached "project proxy internal-dns-serve" child process.
-func RunDNSServer(ctx context.Context, dnsPort int, baseDomain string) error {
-	conn, err := net.ListenUDP("udp", &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: dnsPort})
-	if err != nil {
-		return err
-	}
-
-	go func() {
-		<-ctx.Done()
-		_ = conn.Close()
-	}()
-
-	domain := strings.ToLower(baseDomain)
-	buf := make([]byte, maxDNSMessageSize)
-
-	// Queries are answered sequentially: every answer is computed from two
-	// string comparisons, so there is nothing to gain from concurrency.
-	for {
-		n, addr, err := conn.ReadFromUDP(buf)
-		if err != nil {
-			if ctx.Err() != nil {
-				return nil //nolint:nilerr // the read failed because ctx closed the socket: clean shutdown
-			}
-
-			return err
-		}
-
-		if resp := buildDNSResponse(buf[:n], domain); resp != nil {
-			_, _ = conn.WriteToUDP(resp, addr)
-		}
-	}
-}
-
-// buildDNSResponse answers a single DNS query according to the zone rules.
-// Malformed packets yield nil (dropped, like any DNS server would).
-func buildDNSResponse(query []byte, domain string) []byte {
-	var parser dnsmessage.Parser
-
-	header, err := parser.Start(query)
-	if err != nil || header.Response {
-		return nil
-	}
-
-	question, err := parser.Question()
-	if err != nil {
-		return nil
-	}
-
-	name := strings.ToLower(strings.TrimSuffix(question.Name.String(), "."))
-	inZone := name == domain || strings.HasSuffix(name, "."+domain)
-
-	respHeader := dnsmessage.Header{
-		ID:               header.ID,
-		Response:         true,
-		Authoritative:    true,
-		RecursionDesired: header.RecursionDesired,
-	}
-	if !inZone {
-		respHeader.RCode = dnsmessage.RCodeNameError
-	}
-
-	builder := dnsmessage.NewBuilder(make([]byte, 0, maxDNSMessageSize), respHeader)
-	builder.EnableCompression()
-
-	if err := builder.StartQuestions(); err != nil {
-		return nil
-	}
-	if err := builder.Question(question); err != nil {
-		return nil
-	}
-
-	if inZone && question.Type == dnsmessage.TypeA && question.Class == dnsmessage.ClassINET {
-		if err := builder.StartAnswers(); err != nil {
-			return nil
-		}
-
-		err := builder.AResource(
-			dnsmessage.ResourceHeader{Name: question.Name, Type: dnsmessage.TypeA, Class: dnsmessage.ClassINET, TTL: dnsTTL},
-			dnsmessage.AResource{A: [4]byte{127, 0, 0, 1}},
-		)
-		if err != nil {
-			return nil
-		}
-	}
-
-	out, err := builder.Finish()
-	if err != nil {
-		return nil
-	}
-
-	return out
-}
-
 // queryDNS sends a single question to the DNS server at addr and returns the
-// parsed response. It is used by `proxy verify` (and the tests) to probe the
-// embedded server directly.
+// parsed response. It is used by `proxy verify` to probe the shared DNS
+// container directly, bypassing the OS resolver.
 func queryDNS(ctx context.Context, addr, name string, qtype dnsmessage.Type, timeout time.Duration) (dnsmessage.Message, error) {
 	var id [2]byte
 	_, _ = rand.Read(id[:])

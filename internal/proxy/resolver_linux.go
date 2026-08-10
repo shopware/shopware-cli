@@ -13,7 +13,7 @@ import (
 const resolvedDropInPath = "/etc/systemd/resolved.conf.d/90-shopware-cli.conf"
 
 // SupportsWildcardDNS reports whether this system can resolve the whole
-// proxy domain via the embedded DNS server, which requires systemd-resolved
+// proxy domain via the shared DNS container, which requires systemd-resolved
 // on Linux. Without it, per-project /etc/hosts entries are the fallback.
 func SupportsWildcardDNS(ctx context.Context) bool {
 	return hasSystemdResolved(ctx)
@@ -31,7 +31,7 @@ func hasSystemdResolved(ctx context.Context) bool {
 }
 
 // CheckResolverConfigured reports whether systemd-resolved routes the proxy
-// domain to the embedded DNS server.
+// domain to the shared DNS container.
 func CheckResolverConfigured(baseDomain string) ResolverStatus {
 	content, err := os.ReadFile(resolvedDropInPath)
 	if err != nil {
@@ -46,7 +46,7 @@ func CheckResolverConfigured(baseDomain string) ResolverStatus {
 }
 
 // ConfigureResolver wires systemd-resolved split-DNS routing for the proxy
-// domain to the embedded DNS server via sudo. On systems without
+// domain to the shared DNS container via sudo. On systems without
 // systemd-resolved it returns ErrNoSystemdResolved; callers fall back to
 // per-project /etc/hosts entries.
 func ConfigureResolver(ctx context.Context, baseDomain string) error {
@@ -80,6 +80,26 @@ func ConfigureResolver(ctx context.Context, baseDomain string) error {
 	}
 
 	return nil
+}
+
+// ResolverManualInstructions returns the exact steps to route the proxy domain
+// to the DNS server by hand, for users who choose to do the resolver setup
+// themselves instead of letting the CLI run sudo. Without systemd-resolved
+// there is no machine-wide resolver to configure, so it explains that instead.
+func ResolverManualInstructions(baseDomain string) string {
+	if !hasSystemdResolved(context.Background()) {
+		return NoSystemdResolvedGuidance(baseDomain)
+	}
+
+	content := fmt.Sprintf("[Resolve]\nDNS=127.0.0.1:%d\nDomains=~%s\n", DNSPort, baseDomain)
+
+	return strings.Join([]string{
+		"Create the file " + resolvedDropInPath + " (needs sudo) with this content:",
+		"",
+		indentLines(content, "    "),
+		"",
+		"Then run: sudo systemctl reload-or-restart systemd-resolved",
+	}, "\n")
 }
 
 // ResolverBlockedGuidance explains, in plain words, what to do when the

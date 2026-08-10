@@ -32,7 +32,7 @@ type CheckResult struct {
 // failure, since later layers depend on earlier ones. It never mutates any
 // state, so it is safe to run at any time.
 func Verify(ctx context.Context, baseDomain string) []CheckResult {
-	// The shared proxy needs the embedded DNS daemon and OS resolver wiring,
+	// The shared proxy needs the shared DNS container and OS resolver wiring,
 	// neither of which is supported natively on Windows; running the checks there
 	// only produces a misleading "run setup" timeout, so stop with a clear result.
 	if runtime.GOOS == "windows" {
@@ -58,7 +58,7 @@ func Verify(ctx context.Context, baseDomain string) []CheckResult {
 		{
 			name: "DNS server answers *." + baseDomain,
 			run: func(ctx context.Context) error {
-				return checkDNSDaemon(ctx, probe)
+				return checkDNSContainer(ctx, probe)
 			},
 			hint: "Run \"shopware-cli project proxy setup\" (or \"proxy up\" in a shop) to start it",
 		},
@@ -172,9 +172,9 @@ func checkDocker(ctx context.Context) error {
 	return err
 }
 
-// checkDNSDaemon queries the embedded DNS server directly, bypassing the OS
-// resolver, to isolate daemon problems from resolver-configuration problems.
-func checkDNSDaemon(ctx context.Context, probe string) error {
+// checkDNSContainer queries the shared DNS container directly, bypassing the
+// OS resolver, to isolate DNS problems from resolver-configuration problems.
+func checkDNSContainer(ctx context.Context, probe string) error {
 	resp, err := queryDNS(ctx, fmt.Sprintf("127.0.0.1:%d", DNSPort), probe, dnsmessage.TypeA, 2*time.Second)
 	if err != nil {
 		return fmt.Errorf("the DNS server on 127.0.0.1:%d did not answer: %w", DNSPort, err)
