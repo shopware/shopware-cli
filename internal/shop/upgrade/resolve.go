@@ -177,15 +177,49 @@ func (r ResolveResult) VersionMap() map[string]string {
 
 // ApplyResolvedVersions overwrites each extension's Available version with
 // the exact release the resolution picked, where one was found.
+//
+// A successful resolution also overrides metadata-derived blockers: the
+// solver found an installable set that contains every root-required
+// extension, so an extension it updated — or silently kept at the installed
+// release — is proven compatible no matter what the repository metadata
+// claimed.
 func ApplyResolvedVersions(results []ExtensionResult, resolve ResolveResult) {
 	for i := range results {
-		if results[i].Extension.Package == "" {
+		res := &results[i]
+		if res.Extension.Package == "" {
 			continue
 		}
-		if to := resolve.ResolvedVersion(results[i].Extension.Package); to != "" {
-			results[i].Available = to
+
+		to := resolve.ResolvedVersion(res.Extension.Package)
+		if to != "" {
+			res.Available = to
+		}
+
+		if !resolve.OK || !res.Status.BlocksUpgrade() {
+			continue
+		}
+		if to == "" || sameRelease(to, res.Extension.Version) {
+			// Absent from the lock diff means the solver kept the installed
+			// release (root requirements cannot be dropped).
+			res.Status = ExtOK
+			res.Available = res.Extension.Version
+			res.Detail = "Composer resolved the upgrade with the installed release; the repository's compatibility metadata was wrong or incomplete."
+		} else {
+			res.Status = ExtNeedsUpdate
+			res.Detail = "Composer resolved the upgrade with this release; the repository's compatibility metadata was wrong or incomplete."
 		}
 	}
+}
+
+// sameRelease compares two version strings, tolerating v-prefix and segment
+// padding differences (v1.2.0 == 1.2.0.0).
+func sameRelease(a, b string) bool {
+	va, errA := version.NewVersion(strings.TrimPrefix(a, "v"))
+	vb, errB := version.NewVersion(strings.TrimPrefix(b, "v"))
+	if errA != nil || errB != nil {
+		return a == b
+	}
+	return va.Equal(vb)
 }
 
 // lockNameFor maps a Composer manifest file name to its lock file name, the

@@ -127,11 +127,16 @@ func classifyExtension(ctx context.Context, repos *repository.Set, target *versi
 	}
 
 	installedCompatible := false
+	sawConstraint := false
 	var lowestCompatible *version.Version
 
 	for _, rel := range pkg.Versions {
 		constraint := shopwareConstraintOf(rel)
-		if constraint == nil || !constraint.Check(target) {
+		if constraint == nil {
+			continue
+		}
+		sawConstraint = true
+		if !constraint.Check(target) {
 			continue
 		}
 
@@ -160,6 +165,12 @@ func classifyExtension(ctx context.Context, repos *repository.Set, target *versi
 		res.Status = ExtNeedsUpdate
 		res.Available = lowestCompatible.String()
 		res.Detail = "A compatible Composer release is available; the upgrade updates the extension automatically."
+	case !sawConstraint:
+		// No release declares a Shopware constraint (some repositories strip
+		// require metadata) — that is "unknown", not "incompatible". The
+		// Composer dry run remains the authoritative gate.
+		res.Status = ExtReview
+		res.Detail = "The repository metadata does not declare Shopware compatibility; the Composer resolution check decides."
 	default:
 		res.Status = ExtBlocked
 		res.Detail = "No released version of this extension is compatible with the selected Shopware version."

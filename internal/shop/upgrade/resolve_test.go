@@ -109,3 +109,33 @@ func TestResolveResultSecurityBlocked(t *testing.T) {
 	ok := ResolveResult{OK: true, Report: "affected by security advisories"}
 	assert.False(t, ok.SecurityBlocked(), "a successful resolution is never security-blocked")
 }
+
+func TestApplyResolvedVersionsOverridesMetadataBlockers(t *testing.T) {
+	resolve := resolvedTestResult(t)
+	require.True(t, resolve.OK)
+
+	results := []ExtensionResult{
+		// Not in the lock diff: the solver kept the installed release.
+		{Extension: InstalledExtension{Name: "FroshTools", Package: "frosh/tools", Version: "3.12.0"}, Status: ExtBlocked},
+		// In the diff: the solver picked a newer release.
+		{Extension: InstalledExtension{Name: "SwagDemo", Package: "swag/demo", Version: "2.0.0"}, Status: ExtMismatch},
+	}
+	ApplyResolvedVersions(results, resolve)
+
+	assert.Equal(t, ExtOK, results[0].Status, "a successful resolve disproves the metadata blocker")
+	assert.Equal(t, "3.12.0", results[0].Available)
+	assert.Contains(t, results[0].Detail, "installed release")
+
+	assert.Equal(t, ExtNeedsUpdate, results[1].Status)
+	assert.Equal(t, "2.1.3", results[1].Available)
+}
+
+func TestApplyResolvedVersionsKeepsBlockersOnFailedResolve(t *testing.T) {
+	results := []ExtensionResult{
+		{Extension: InstalledExtension{Name: "SwagBlocked", Package: "swag/blocked", Version: "3.2.0"}, Status: ExtBlocked, Detail: "original"},
+	}
+	ApplyResolvedVersions(results, ResolveResult{OK: false})
+
+	assert.Equal(t, ExtBlocked, results[0].Status, "a failed resolve proves nothing")
+	assert.Equal(t, "original", results[0].Detail)
+}

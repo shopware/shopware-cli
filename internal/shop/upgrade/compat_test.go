@@ -199,3 +199,38 @@ func TestTargetPHPRequirement(t *testing.T) {
 	assert.Equal(t, ">=8.2", u.TargetPHPRequirement(t.Context(), target))
 	assert.Empty(t, u.TargetPHPRequirement(t.Context(), version.Must(version.NewVersion("6.9.0.0"))))
 }
+
+func TestClassifyExtensionWithoutConstraintMetadataIsReviewNotBlocked(t *testing.T) {
+	dir := setupProject(t)
+	current, target := compatVersions(t)
+
+	// Some repositories (e.g. the Store packagist) strip require metadata
+	// entirely — that must read as "unknown", not "incompatible".
+	u := compatUpgrader(t, dir, fakeProvider{
+		"frosh/tools": {Name: "frosh/tools", Versions: []repository.Version{
+			release("frosh/tools", "3.12.0", ""),
+			release("frosh/tools", "3.11.0", ""),
+		}},
+		"swag/blocked": {Name: "swag/blocked", Versions: []repository.Version{
+			release("swag/blocked", "3.2.0", "~6.6.0"),
+		}},
+	}, nil, nil)
+
+	results := u.CheckExtensions(t.Context(), current, target, []InstalledExtension{
+		{Name: "FroshTools", Package: "frosh/tools", Version: "3.12.0", ComposerManaged: true},
+		{Name: "SwagBlocked", Package: "swag/blocked", Version: "3.2.0", ComposerManaged: true},
+	})
+	require.Len(t, results, 2)
+
+	byName := make(map[string]ExtensionResult)
+	for _, r := range results {
+		byName[r.Extension.Name] = r
+	}
+
+	unknown := byName["FroshTools"]
+	assert.Equal(t, ExtReview, unknown.Status, "missing constraints must not block")
+	assert.Contains(t, unknown.Detail, "does not declare Shopware compatibility")
+
+	blocked := byName["SwagBlocked"]
+	assert.Equal(t, ExtBlocked, blocked.Status, "known constraints excluding the target still block")
+}
