@@ -73,7 +73,7 @@ func runCreateForm(cmd *cobra.Command, opts *createOptions, releases []repositor
 	selectElasticsearch := tui.No
 	selectAMQP := tui.Yes
 
-	baseDomain := proxyBaseDomain()
+	baseDomain := proxy.BaseDomain()
 	// Default to the stable hostname (recommended); only applies with Docker.
 	selectLocalDomain := true
 	// Whether this machine already resolves the proxy domain. When it does, the
@@ -213,7 +213,7 @@ func runCreateForm(cmd *cobra.Command, opts *createOptions, releases []repositor
 					OptionsFunc(func() []huh.Option[bool] {
 						host := "<name>." + baseDomain
 						if opts.projectFolder != "" {
-							host = localDomainHostname(opts.projectFolder, baseDomain)
+							host = proxy.LocalDomainHostname(opts.projectFolder, baseDomain)
 						}
 						return []huh.Option[bool]{
 							huh.NewOption("Yes (recommended) — https://"+host, true),
@@ -456,7 +456,7 @@ func runCreateForm(cmd *cobra.Command, opts *createOptions, releases []repositor
 		if opts.useDocker {
 			localDomainValue := onOff(opts.useLocalDomain)
 			if opts.useLocalDomain {
-				localDomainValue = tui.GreenText.Render("https://" + localDomainHostname(opts.projectFolder, baseDomain))
+				localDomainValue = tui.GreenText.Render("https://" + proxy.LocalDomainHostname(opts.projectFolder, baseDomain))
 			}
 			fmt.Printf("  %s %s\n", labelStyle.Render("Local domain:"), localDomainValue)
 		}

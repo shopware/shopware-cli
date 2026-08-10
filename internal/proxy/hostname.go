@@ -30,12 +30,30 @@ func ProjectHostname(projectRoot string, cfg *shop.Config, baseDomain string) (s
 	}
 
 	// Docker Compose project names allow underscores, but DNS labels do not, so
-	// map them to dashes (matching localDomainHostname in project create) before
-	// validating and using the name as a hostname label.
+	// map them to dashes (matching LocalDomainHostname) before validating and
+	// using the name as a hostname label.
 	name := strings.ReplaceAll(filepath.Base(projectRoot), "_", "-")
 	if err := system.ValidateDockerComposeName(name); err != nil {
 		return "", fmt.Errorf("cannot derive a hostname from directory name %q: %w", filepath.Base(projectRoot), err)
 	}
 
 	return fmt.Sprintf("%s.%s", name, baseDomain), nil
+}
+
+// LocalDomainHostname returns the stable proxy hostname for a project name,
+// e.g. "my-shop.shopware.local". Underscores (valid in a project name but not
+// in a DNS label) become dashes.
+func LocalDomainHostname(name, baseDomain string) string {
+	label := strings.ReplaceAll(filepath.Base(name), "_", "-")
+	return label + "." + baseDomain
+}
+
+// BaseDomain returns the machine-wide proxy base domain from settings, falling
+// back to the default when no settings are stored yet.
+func BaseDomain() string {
+	if s, err := LoadSettings(); err == nil {
+		return s.BaseDomain()
+	}
+
+	return DefaultDomain
 }

@@ -8,18 +8,6 @@ import (
 	"github.com/shopware/shopware-cli/internal/shop"
 )
 
-func TestLocalDomainHostname(t *testing.T) {
-	t.Parallel()
-
-	assert.Equal(t, "my-shop.shopware.local", localDomainHostname("my-shop", "shopware.local"))
-	// Only the final path element matters.
-	assert.Equal(t, "my-shop.shopware.local", localDomainHostname("/tmp/projects/my-shop", "shopware.local"))
-	// Underscores are valid in a project name but not a hostname → dashes.
-	assert.Equal(t, "my-shop.shopware.local", localDomainHostname("my_shop", "shopware.local"))
-	// Custom base domain is respected.
-	assert.Equal(t, "my-shop.dev.internal", localDomainHostname("my-shop", "dev.internal"))
-}
-
 func TestIsProxyProjectForDomain(t *testing.T) {
 	t.Parallel()
 

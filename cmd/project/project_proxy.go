@@ -125,7 +125,7 @@ func (e *proxyEnvironment) up(cmd *cobra.Command) error {
 	var certInfo proxy.CertInfo
 	err = runStep(ctx, "Starting shared proxy...", func(ctx context.Context) error {
 		var infraErr error
-		certInfo, infraErr = e.prepareProxyInfra(ctx, reg)
+		certInfo, infraErr = proxy.PrepareInfra(ctx, e.infraParams(), reg)
 		return infraErr
 	})
 	if err != nil {
@@ -133,7 +133,7 @@ func (e *proxyEnvironment) up(cmd *cobra.Command) error {
 	}
 
 	// The base compose.yaml stays in fixed-port mode; proxy mode is the
-	// separate override (written by prepareProxyInfra) that docker compose
+	// separate override (written by proxy.PrepareInfra) that docker compose
 	// merges automatically, so `project dev` and manual `docker compose` keep
 	// working in both modes without knowing about the proxy.
 	if err := dockerpkg.WriteComposeFile(e.projectRoot, dockerpkg.ComposeOptionsFromConfig(e.cfg)); err != nil {
@@ -251,55 +251,19 @@ func maybePrintWSLWindowsAccess(hostnames []string) {
 	printWSLGuidance(proxy.WSLWindowsAccessGuidance(caPath, hostnames))
 }
 
-// prepareProxyInfra brings up everything the shared proxy needs before a
-// project's containers start: it checks the hostname is free, verifies compose
-// supports resets, ensures the certificate, the shared Traefik container and
-// the DNS container, and writes the compose override with APP_URL pinned (so PHP
-// renders absolute URLs — e.g. the storefront import map — with the proxy
-// hostname, not the stale image default). It returns the certificate info so
-// callers can react to a freshly created CA. It neither starts nor registers
-// the project: up() and a proxy-mode `project dev` layer their own
-// start/registration on top. Safe to call repeatedly.
-func (e *proxyEnvironment) prepareProxyInfra(ctx context.Context, reg proxy.Registry) (proxy.CertInfo, error) {
-	if other, found := reg.FindByHostname(e.hostname, e.canonicalRoot); found {
-		return proxy.CertInfo{}, fmt.Errorf("hostname %s is already registered to %s, set a different \"url\" in %s to disambiguate", e.hostname, other.ProjectRoot, projectConfigPath)
-	}
-
-	if err := proxy.EnsureComposeSupportsReset(ctx); err != nil {
-		return proxy.CertInfo{}, err
-	}
-
-	certInfo, err := e.ensureCertificate(reg)
-	if err != nil {
-		return proxy.CertInfo{}, err
-	}
-
-	if err := proxy.EnsureTraefikRunning(ctx, e.baseDomain); err != nil {
-		return proxy.CertInfo{}, err
-	}
-	// A regenerated certificate (e.g. new project wildcard SANs) is only served
-	// after a restart.
-	if certInfo.Changed {
-		if err := proxy.RestartTraefik(ctx); err != nil {
-			return proxy.CertInfo{}, err
-		}
-	}
-
-	if err := proxy.EnsureDNSContainerRunning(ctx, e.baseDomain); err != nil {
-		return proxy.CertInfo{}, fmt.Errorf("starting DNS server: %w", err)
-	}
-
-	if err := dockerpkg.WriteComposeOverride(e.projectRoot, &dockerpkg.ProxyOptions{
+// infraParams gathers the inputs proxy.PrepareInfra needs, resolving the
+// admin-watch dev-server port here (where the project root and extension
+// package are available) so the proxy package stays free of Shopware-version
+// logic.
+func (e *proxyEnvironment) infraParams() proxy.InfraParams {
+	return proxy.InfraParams{
+		ProjectRoot:    e.projectRoot,
+		CanonicalRoot:  e.canonicalRoot,
 		Hostname:       e.hostname,
-		NetworkName:    proxy.NetworkName,
-		CAPath:         certInfo.CAPath,
-		AppURL:         "https://" + e.hostname,
+		BaseDomain:     e.baseDomain,
+		ConfigPath:     e.configPath,
 		AdminWatchPort: extension.AdminDevServerPort(e.projectRoot),
-	}); err != nil {
-		return proxy.CertInfo{}, err
 	}
-
-	return certInfo, nil
 }
 
 // bootstrapInfra sets up the shared proxy for this project and registers it,
@@ -312,7 +276,7 @@ func (e *proxyEnvironment) bootstrapInfra(ctx context.Context) error {
 		return err
 	}
 
-	if _, err := e.prepareProxyInfra(ctx, reg); err != nil {
+	if _, err := proxy.PrepareInfra(ctx, e.infraParams(), reg); err != nil {
 		return err
 	}
 
@@ -456,24 +420,6 @@ func previousConfigState(reg proxy.Registry, canonicalRoot string) (*proxy.Confi
 	}
 
 	return nil, false
-}
-
-// ensureCertificate makes sure the shared server certificate covers this
-// project and every other registered one. TLS wildcards only match a single
-// label, so each project contributes "*.<hostname>" for its service
-// subdomains (mailer.<hostname>, adminer.<hostname>, ...).
-func (e *proxyEnvironment) ensureCertificate(reg proxy.Registry) (proxy.CertInfo, error) {
-	extraHosts := []string{e.hostname, "*." + e.hostname}
-	for _, p := range reg.Projects {
-		extraHosts = append(extraHosts, p.Hostname, "*."+p.Hostname)
-	}
-
-	dir, err := proxy.StateDir()
-	if err != nil {
-		return proxy.CertInfo{}, err
-	}
-
-	return proxy.EnsureCertificate(dir, proxy.CertHosts(e.baseDomain, extraHosts))
 }
 
 // pointShopAt switches the shop to toURL: APP_URL in .env.local and, for

@@ -87,7 +87,7 @@ func installAndFinalize(cmd *cobra.Command, opts *createOptions, phpConstraint *
 	// port. The top-level url drives proxy hostname derivation; the environment
 	// url is what `project dev` shows and installs with.
 	if opts.useDocker && opts.useLocalDomain {
-		url := "https://" + localDomainHostname(opts.projectFolder, proxyBaseDomain())
+		url := "https://" + proxy.LocalDomainHostname(opts.projectFolder, proxy.BaseDomain())
 		shopCfg.URL = url
 		if env := shopCfg.Environments["local"]; env != nil {
 			env.URL = url
@@ -121,7 +121,7 @@ func printCreateSummary(ctx context.Context, opts *createOptions) {
 	if opts.useDocker {
 		shopURL := "http://127.0.0.1:8000"
 		if opts.useLocalDomain {
-			shopURL = "https://" + localDomainHostname(opts.projectFolder, proxyBaseDomain())
+			shopURL = "https://" + proxy.LocalDomainHostname(opts.projectFolder, proxy.BaseDomain())
 		}
 
 		fmt.Println()
@@ -132,7 +132,7 @@ func printCreateSummary(ctx context.Context, opts *createOptions) {
 		} else {
 			fmt.Printf("  %s  %s\n", tui.GreenText.Render("Start developing:"), tui.BoldText.Render(fmt.Sprintf("cd %s && shopware-cli project dev", opts.projectFolder)))
 		}
-		if opts.useLocalDomain && !proxy.CheckResolverConfigured(proxyBaseDomain()).Configured {
+		if opts.useLocalDomain && !proxy.CheckResolverConfigured(proxy.BaseDomain()).Configured {
 			fmt.Println()
 			fmt.Println(tui.DimText.Render("  First time on this machine? Run ") + tui.BoldText.Render("shopware-cli project proxy setup") + tui.DimText.Render(" once (needs sudo)"))
 			fmt.Println(tui.DimText.Render("  so the local domain resolves and its certificate is trusted."))
@@ -145,7 +145,7 @@ func printCreateSummary(ctx context.Context, opts *createOptions) {
 		fmt.Printf("  %s  %s\n", tui.GreenText.Render("Credentials:"), tui.BoldText.Render("admin")+" / "+tui.BoldText.Render("shopware"))
 
 		if opts.useLocalDomain {
-			hostname := localDomainHostname(opts.projectFolder, proxyBaseDomain())
+			hostname := proxy.LocalDomainHostname(opts.projectFolder, proxy.BaseDomain())
 			maybePrintWSLWindowsAccess(proxyBrowserHostnames(opts.projectFolder, hostname))
 		}
 	}

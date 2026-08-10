@@ -9,6 +9,18 @@ import (
 	"github.com/shopware/shopware-cli/internal/shop"
 )
 
+func TestLocalDomainHostname(t *testing.T) {
+	t.Parallel()
+
+	assert.Equal(t, "my-shop.shopware.local", LocalDomainHostname("my-shop", "shopware.local"))
+	// Only the final path element matters.
+	assert.Equal(t, "my-shop.shopware.local", LocalDomainHostname("/tmp/projects/my-shop", "shopware.local"))
+	// Underscores are valid in a project name but not a hostname → dashes.
+	assert.Equal(t, "my-shop.shopware.local", LocalDomainHostname("my_shop", "shopware.local"))
+	// Custom base domain is respected.
+	assert.Equal(t, "my-shop.dev.internal", LocalDomainHostname("my-shop", "dev.internal"))
+}
+
 func TestProjectHostname(t *testing.T) {
 	t.Parallel()
 

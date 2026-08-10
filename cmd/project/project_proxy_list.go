@@ -8,6 +8,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	dockerpkg "github.com/shopware/shopware-cli/internal/docker"
 	"github.com/shopware/shopware-cli/internal/proxy"
 	"github.com/shopware/shopware-cli/internal/tui"
 )
@@ -110,15 +111,6 @@ type serviceLink struct {
 	url   string
 }
 
-// proxiedServiceLabels maps compose service names to the label shown for
-// their subdomain link. Only services with a web UI are listed.
-var proxiedServiceLabels = map[string]string{
-	"adminer":    "Adminer",
-	"mailer":     "Mailpit",
-	"lavinmq":    "Queue",
-	"opensearch": "Search",
-}
-
 // projectLinks builds the links for a running project: the shop and admin on
 // the project hostname, plus one subdomain link per running service with a
 // web UI.
@@ -129,7 +121,7 @@ func projectLinks(entry proxy.ProjectEntry, instances []proxy.Instance) []servic
 	}
 
 	for _, service := range runningServices(entry, instances) {
-		if label, ok := proxiedServiceLabels[service]; ok {
+		if label, ok := dockerpkg.ProxiedServiceLabels[service]; ok {
 			links = append(links, serviceLink{label: label, url: fmt.Sprintf("https://%s.%s", service, entry.Hostname)})
 		}
 	}

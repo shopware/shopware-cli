@@ -93,6 +93,17 @@ type proxyRoute struct {
 	pathPrefix string
 }
 
+// ProxiedServiceLabels maps compose service names to the human-readable label
+// shown for their proxied subdomain link (e.g. in `project proxy list`). Only
+// services with a web UI are listed; it lives here next to the routing that
+// exposes those subdomains.
+var ProxiedServiceLabels = map[string]string{
+	"adminer":    "Adminer",
+	"mailer":     "Mailpit",
+	"lavinmq":    "Queue",
+	"opensearch": "Search",
+}
+
 // hostname returns the full hostname for this route, e.g.
 // "admin-watch.my-shop.shopware.local" or, for the root route,
 // "my-shop.shopware.local".

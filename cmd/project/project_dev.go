@@ -13,6 +13,7 @@ import (
 
 	dockerpkg "github.com/shopware/shopware-cli/internal/docker"
 	"github.com/shopware/shopware-cli/internal/executor"
+	"github.com/shopware/shopware-cli/internal/proxy"
 	"github.com/shopware/shopware-cli/internal/shop"
 	"github.com/shopware/shopware-cli/internal/system"
 	"github.com/shopware/shopware-cli/internal/tui"
@@ -24,7 +25,7 @@ import (
 // localhost port). This is the signal `project create --local-domain` writes
 // into .shopware-project.yml, and what makes `project dev` bootstrap the proxy.
 func isProxyProject(cfg *shop.Config) bool {
-	return isProxyProjectForDomain(cfg, proxyBaseDomain())
+	return isProxyProjectForDomain(cfg, proxy.BaseDomain())
 }
 
 // isProxyProjectForDomain is the pure core of isProxyProject with the base

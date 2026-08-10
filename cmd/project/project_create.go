@@ -2,8 +2,6 @@ package project
 
 import (
 	"fmt"
-	"path/filepath"
-	"strings"
 
 	"github.com/shyim/go-composer/repository"
 	"github.com/spf13/cobra"
@@ -77,23 +75,6 @@ func (o *createOptions) clearPHP() {
 	if !o.phpVersionExplicit {
 		o.phpVersion = ""
 	}
-}
-
-// localDomainHostname returns the stable proxy hostname for a project name,
-// e.g. "my-shop.shopware.local". Underscores (valid in a project name but not
-// in a hostname) become dashes.
-func localDomainHostname(name, baseDomain string) string {
-	label := strings.ReplaceAll(filepath.Base(name), "_", "-")
-	return label + "." + baseDomain
-}
-
-// proxyBaseDomain returns the machine-wide proxy base domain, falling back to
-// the default when no settings are stored yet.
-func proxyBaseDomain() string {
-	if s, err := proxy.LoadSettings(); err == nil {
-		return s.BaseDomain()
-	}
-	return proxy.DefaultDomain
 }
 
 // resolveLocalDomainChoice derives the final local-domain settings from the
@@ -185,7 +166,7 @@ var projectCreateCmd = &cobra.Command{
 		if opts.setupProxyNow {
 			fmt.Println()
 			fmt.Println(tui.BoldText.Render("Setting up local domains (one-time, needs sudo)"))
-			_ = runInlineProxySetup(cmd.Context(), proxyBaseDomain())
+			_ = runInlineProxySetup(cmd.Context(), proxy.BaseDomain())
 		}
 
 		if err := scaffoldProject(cmd.Context(), &opts, chosenVersion); err != nil {
