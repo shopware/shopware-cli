@@ -332,7 +332,7 @@ two things the CLI cannot do from inside the subsystem (it prints them via
   is world-accessible so the commands carry no username. Chrome and Edge use the
   Windows store; Firefox needs its own import or
   `security.enterprise_roots.enabled = true`. Restart the browser after.
-- **Resolve the hostnames.** Windows has no split-DNS to the embedded server, so
+- **Resolve the hostnames.** Windows has no split-DNS to the DNS container, so
   add the shop's hostnames to the Windows hosts file (no wildcards, so every
   subdomain sits on one line), editing it **as Administrator**:
   ```
@@ -346,8 +346,11 @@ The CA import is one-time per machine; the hosts line is per shop.
 
 ## Known limitations
 
-- **Windows is not supported** (stubs return a clear error; the CLI itself
-  still compiles and works there).
+- **Native Windows is not supported** — the proxy's DNS and resolver wiring are
+  macOS/Linux only (the Windows stubs return a clear error, and the rest of the
+  CLI still compiles and runs there). On Windows, run it **inside WSL2**: the CLI
+  sets up the Linux side automatically, and the two manual steps above let a
+  browser on Windows reach the shops.
 - Requires the Docker-based dev environment and **Docker Compose ≥ 2.24**.
 - One `sudo` interaction per machine (`proxy setup`); on corporate machines
   with blocked sudo the CLI prints exact hand-over instructions for IT.

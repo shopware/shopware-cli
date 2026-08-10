@@ -56,10 +56,10 @@ type Options struct {
 	Config      *shop.Config
 	EnvConfig   *shop.EnvironmentConfig
 	Executor    executor.Executor
-	// ProxyFellBack is set when a proxy project could not start the shared
+	// ProxyFallback is set when a proxy project could not start the shared
 	// proxy and dev fell back to fixed host ports. The shop is then reachable
 	// at the local port URL, not the (now unrouted) proxy hostname in Config.
-	ProxyFellBack bool
+	ProxyFallback bool
 }
 
 // fallbackShopURL is the URL a proxy project is reachable at once dev falls
@@ -91,7 +91,7 @@ type Model struct {
 	watchers        map[string]*watcherHandle
 	migrationWizard migrationWizard
 	telemetry       *telemetryState
-	proxyFellBack   bool
+	proxyFallback   bool
 }
 
 type dockerAlreadyRunningMsg struct{}
@@ -118,7 +118,7 @@ func New(opts Options) Model {
 		envConfig:     opts.EnvConfig,
 		watchers:      make(map[string]*watcherHandle),
 		telemetry:     newTelemetryState(opts.Executor.Type() == executor.TypeDocker),
-		proxyFellBack: opts.ProxyFellBack,
+		proxyFallback: opts.ProxyFallback,
 	}
 	m.rebuildTabs()
 	return m
@@ -138,7 +138,7 @@ func (m *Model) rebuildTabs() {
 	if m.envConfig.URL != "" {
 		shopURL = m.envConfig.URL
 	}
-	if m.proxyFellBack {
+	if m.proxyFallback {
 		// The proxy hostname no longer routes; the shop is on a local port.
 		shopURL = fallbackShopURL
 	}

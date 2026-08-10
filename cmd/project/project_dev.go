@@ -58,7 +58,7 @@ func isProxyProjectForDomain(cfg *shop.Config, baseDomain string) bool {
 // override, points the user at a fix and reports that the shop falls back to a
 // local port. It is a no-op for port-based projects. Returns whether it fell
 // back to port mode.
-func ensureProxyForDevProjectWithFallback(cmd *cobra.Command, projectRoot string, cfg *shop.Config) (fellBack bool) {
+func ensureProxyForDevProjectWithFallback(cmd *cobra.Command, projectRoot string, cfg *shop.Config) (fallback bool) {
 	if !isProxyProject(cfg) {
 		return false
 	}
@@ -97,9 +97,9 @@ type devEnvironment struct {
 	cfg         *shop.Config
 	envCfg      *shop.EnvironmentConfig
 	executor    executor.Executor
-	// proxyFellBack is set when a proxy project could not start the shared
+	// proxyFallback is set when a proxy project could not start the shared
 	// proxy and was served on a local port instead, so URLs are shown for ports.
-	proxyFellBack bool
+	proxyFallback bool
 }
 
 var projectDevCmd = &cobra.Command{
@@ -130,7 +130,7 @@ var projectDevCmd = &cobra.Command{
 			return err
 		}
 
-		env.proxyFellBack = ensureProxyForDevProjectWithFallback(cmd, projectRoot, cfg)
+		env.proxyFallback = ensureProxyForDevProjectWithFallback(cmd, projectRoot, cfg)
 
 		if !isatty.IsTerminal(os.Stdin.Fd()) {
 			return env.start(cmd)
@@ -149,7 +149,7 @@ var projectDevStartCmd = &cobra.Command{
 			return err
 		}
 
-		env.proxyFellBack = ensureProxyForDevProjectWithFallback(cmd, env.projectRoot, env.cfg)
+		env.proxyFallback = ensureProxyForDevProjectWithFallback(cmd, env.projectRoot, env.cfg)
 
 		return env.start(cmd)
 	},
@@ -283,7 +283,7 @@ func (e *devEnvironment) start(cmd *cobra.Command) error {
 		shopURL = e.envCfg.URL
 	}
 	// After a proxy fallback the shop is on a local port, not its hostname.
-	if e.proxyFellBack {
+	if e.proxyFallback {
 		shopURL = defaultShopURL
 	}
 
@@ -361,7 +361,7 @@ func (e *devEnvironment) runTUI() error {
 		Config:        e.cfg,
 		EnvConfig:     e.envCfg,
 		Executor:      e.executor,
-		ProxyFellBack: e.proxyFellBack,
+		ProxyFallback: e.proxyFallback,
 	}).Run()
 	return err
 }

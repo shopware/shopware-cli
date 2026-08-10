@@ -57,32 +57,6 @@ needed. Use "proxy up" to opt an existing port-based project in, and "proxy
 down" to revert it. Run "proxy setup" once per machine first (DNS + trust).`,
 }
 
-var projectProxyUpCmd = &cobra.Command{
-	Use:   "up",
-	Short: "Register the current project with the shared proxy and start it",
-	RunE: func(cmd *cobra.Command, args []string) error {
-		env, err := newProxyEnvironment(cmd)
-		if err != nil {
-			return err
-		}
-
-		return env.up(cmd)
-	},
-}
-
-var projectProxyDownCmd = &cobra.Command{
-	Use:   "down",
-	Short: "Deregister the current project from the shared proxy and stop it",
-	RunE: func(cmd *cobra.Command, args []string) error {
-		env, err := newProxyEnvironment(cmd)
-		if err != nil {
-			return err
-		}
-
-		return env.down(cmd.Context(), true)
-	},
-}
-
 // newProxyEnvironment resolves the current project, its hostname and its
 // Docker executor. It requires Docker, since the shared proxy is Docker-only.
 func newProxyEnvironment(cmd *cobra.Command) (*proxyEnvironment, error) {
@@ -742,6 +716,4 @@ func (e *proxyEnvironment) down(ctx context.Context, hintTeardown bool) error {
 
 func init() {
 	projectRootCmd.AddCommand(projectProxyCmd)
-	projectProxyCmd.AddCommand(projectProxyUpCmd)
-	projectProxyCmd.AddCommand(projectProxyDownCmd)
 }
