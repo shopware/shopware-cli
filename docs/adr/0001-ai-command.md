@@ -15,7 +15,7 @@ The CLI would:
 
 1. Show the Shopware AI integrations it knows about.
 2. Briefly explain what each integration is for and how it is delivered.
-3. Configure or install it in a supported AI client.
+3. For skills, use existing ecosystem and conventions like skills.sh for installation.
 
 The CLI would act as the front door, not as the runtime. It would not host MCP servers, run agents, perform authentication, monitor availability, or take over maintenance of the integrations it exposes.
 
