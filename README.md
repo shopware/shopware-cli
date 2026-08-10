@@ -82,6 +82,18 @@ shopware-cli --no-interaction <command>
 - `scripts/`: repository helper scripts
 - `env-bridge/`: environment bridge helper entrypoint
 
+## Official Agent Skills
+
+Shopware CLI maintainers provide official Agent Skills in this repository's `skills/` folder. These skills teach compatible AI coding agents how to use Shopware CLI workflows safely and correctly. 
+
+Install them with:
+
+```bash
+npx skills add shopware/shopware-cli
+```
+
+Available skills are `shopware-cli` and `shopware-cli-docker`.
+
 ## Documentation
 
 - Official docs: <https://developer.shopware.com/docs/products/cli/>
