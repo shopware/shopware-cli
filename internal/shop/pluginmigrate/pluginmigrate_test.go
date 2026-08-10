@@ -46,11 +46,14 @@ func (f *fakeExecutor) NPMCommand(ctx context.Context, args ...string) *executor
 	return shellProcess(ctx, "true")
 }
 
-func (f *fakeExecutor) NormalizePath(hostPath string) string            { return hostPath }
-func (f *fakeExecutor) Type() string                                    { return executor.TypeLocal }
-func (f *fakeExecutor) WithEnv(map[string]string) executor.Executor     { return f }
-func (f *fakeExecutor) WithRelDir(string) executor.Executor             { return f }
-func (f *fakeExecutor) StartEnvironment(context.Context) error          { return nil }
+func (f *fakeExecutor) NormalizePath(hostPath string) string        { return hostPath }
+func (f *fakeExecutor) Type() string                                { return executor.TypeLocal }
+func (f *fakeExecutor) WithEnv(map[string]string) executor.Executor { return f }
+func (f *fakeExecutor) WithRelDir(string) executor.Executor         { return f }
+func (f *fakeExecutor) StartEnvironment(context.Context) error      { return nil }
+func (f *fakeExecutor) DatabaseConnection(context.Context) (*executor.DatabaseConnection, error) {
+	return nil, executor.ErrNotSupported
+}
 func (f *fakeExecutor) StopEnvironment(context.Context) error           { return nil }
 func (f *fakeExecutor) EnvironmentStatus(context.Context) (bool, error) { return true, nil }
 func (f *fakeExecutor) AdminAPIClient(context.Context) (*adminSdk.Client, error) {
