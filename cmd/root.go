@@ -6,8 +6,10 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"os/exec"
 	"os/signal"
 	"path"
+	"path/filepath"
 	"runtime"
 	"slices"
 	"strconv"
@@ -196,10 +198,35 @@ func checkForUpdate(ctx context.Context, args []string) (*update.ReleaseInfo, er
 
 // shouldNotify returns false for Homebrew users if the new version is not yet available in Homebrew
 func shouldNotify(release *update.ReleaseInfo, binaryPath string) bool {
-	if update.IsUnderHomebrew(binaryPath) && release.IsRecent() {
+	if isUnderHomebrew(binaryPath) && release.IsRecent() {
 		return false
 	}
 	return true
+}
+
+// Check whether the gh binary was found under the Homebrew prefix
+func isUnderHomebrew(ghBinary string) bool {
+	brewExe, err := lookPath("brew")
+	if err != nil {
+		return false
+	}
+
+	brewPrefixBytes, err := exec.CommandContext(context.Background(), brewExe, "--prefix").Output()
+	if err != nil {
+		return false
+	}
+
+	brewBinPrefix := filepath.Join(strings.TrimSpace(string(brewPrefixBytes)), "bin") + string(filepath.Separator)
+	return strings.HasPrefix(ghBinary, brewBinPrefix)
+}
+
+// lookPath allows safe execution of the LookPath function, handling the ErrDot case.
+func lookPath(file string) (string, error) {
+	path, err := exec.LookPath(file)
+	if errors.Is(err, exec.ErrDot) {
+		return path, nil
+	}
+	return path, err
 }
 
 func init() {

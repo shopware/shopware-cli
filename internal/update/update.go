@@ -5,13 +5,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"net/http"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"regexp"
-	"runtime"
 	"strings"
 	"time"
 
@@ -23,11 +20,14 @@ import (
 )
 
 const (
+	// updateCheckInterval is the minimum duration between update checks.
 	updateCheckInterval = 24 * time.Hour
 
 	// This is the primary source of truth for the latest release information, as it is maintained and updated with each new release.
-	latestReleaseURL        = "https://shopware.github.io/shopware-cli/version.json"
-	repositoryURL           = "https://github.com/shopware/shopware-cli"
+	latestReleaseURL = "https://shopware.github.io/shopware-cli/version.json"
+	repositoryURL    = "https://github.com/shopware/shopware-cli"
+
+	// noUpdateNotificationEnv can be set to "true" by the user to disable update notifications.
 	noUpdateNotificationEnv = "SHOPWARE_CLI_NO_UPDATE_NOTIFICATION"
 )
 
@@ -50,20 +50,14 @@ func (r ReleaseInfo) IsRecent() bool {
 
 // CheckForUpdate checks if a newer version is available, if the last check is more than 24 hours ago, and returns the fetched release information if so.
 func CheckForUpdate(ctx context.Context, buildVersion string, client *http.Client) (*ReleaseInfo, error) {
-	// Load cached release info.
+	// Load cached release info; continue if no cache file exists yet.
 	cachedReleaseInfo, err := LoadReleaseInfoFromCache()
 	if err != nil && !errors.Is(err, ErrNoCacheFile) {
 		return nil, err
 	}
-	// Early return if latest release info was fetched within the given releaseFetchInterval.
+	// Early return if cached release info was fetched within the given releaseFetchInterval.
 	if cachedReleaseInfo != nil {
-		lastCheck := cachedReleaseInfo.FetchedAt
-		if lastCheck.IsZero() {
-			// Backward compatibility for old cache entries.
-			lastCheck = cachedReleaseInfo.PublishedAt
-		}
-
-		if !lastCheck.IsZero() && time.Since(lastCheck) < updateCheckInterval {
+		if time.Since(cachedReleaseInfo.FetchedAt) < updateCheckInterval {
 			return nil, ErrNoUpdateAvailable
 		}
 	}
@@ -92,6 +86,7 @@ func CheckForUpdate(ctx context.Context, buildVersion string, client *http.Clien
 func RenderUpdateNotification(latestVersion string, buildVersion string) string {
 	warnBoldStyle := lipgloss.NewStyle().Bold(true).Foreground(tui.WarnColor)
 	boldStyle := lipgloss.NewStyle().Bold(true).Foreground(tui.TextColor)
+	linkStyle := lipgloss.NewStyle().Foreground(tui.TextColor).Underline(true)
 
 	firstLine := strings.Join([]string{
 		warnBoldStyle.Render("⁺₊⋆"),
@@ -102,21 +97,18 @@ func RenderUpdateNotification(latestVersion string, buildVersion string) string 
 		warnBoldStyle.Render("⋆₊⁺"),
 	}, " ")
 
-	updateInstruction := getUpdateInstruction()
-	if updateInstruction == "" {
-		updateInstruction = defaultUpdateInstruction()
-	}
-
+	updateInstruction := "Visit " + tui.StyledLink(repositoryURL, repositoryURL, linkStyle) + " to view installation options."
 	secondLine := lipgloss.NewStyle().Foreground(tui.TextColor).Render(updateInstruction)
+
 	notificationContent := firstLine + "\n" + secondLine
 
-	renderedUpdateNotification := lipgloss.NewStyle().
+	renderedNotificationContent := lipgloss.NewStyle().
 		Border(lipgloss.NormalBorder()).
 		BorderForeground(tui.BorderColor).
 		Padding(0, 1).
 		Render(notificationContent)
 
-	return renderedUpdateNotification
+	return renderedNotificationContent
 }
 
 // ShouldCheckForUpdate decides whether the CLI checks for updates based on user preferences and execution context.
@@ -129,7 +121,7 @@ func ShouldCheckForUpdate(version string, args []string) bool {
 		}
 	}
 
-	if os.Getenv(noUpdateNotificationEnv) == "1" || os.Getenv(noUpdateNotificationEnv) == "true" {
+	if os.Getenv(noUpdateNotificationEnv) == "true" {
 		return false
 	}
 
@@ -137,11 +129,7 @@ func ShouldCheckForUpdate(version string, args []string) bool {
 		return false
 	}
 
-	if IsCI() {
-		return false
-	}
-
-	if IsGitHubActions() {
+	if system.IsCIEnvironment(os.Getenv) {
 		return false
 	}
 
@@ -190,44 +178,8 @@ func SaveReleaseInfoToCache(info *ReleaseInfo) error {
 	return nil
 }
 
-// IsCI determines if the current execution context is within a known CI/CD system.
-// This is based on https://github.com/watson/ci-info/blob/HEAD/index.js.
-func IsCI() bool {
-	return os.Getenv("CI") != "" || // GitHub Actions, Travis CI, CircleCI, Cirrus CI, GitLab CI, AppVeyor, CodeShip, dsari
-		os.Getenv("BUILD_NUMBER") != "" || // Jenkins, TeamCity
-		os.Getenv("RUN_ID") != "" // TaskCluster, dsari
-}
-
-// IsGitHubActions determines if the current execution context is within GitHub Actions.
-// GitHub Actions sets the GITHUB_ACTIONS environment variable to "true" for all steps.
-// See https://docs.github.com/en/actions/learn-github-actions/variables#default-environment-variables.
-func IsGitHubActions() bool {
-	return os.Getenv("GITHUB_ACTIONS") == "true"
-}
-
-func getUpdateInstruction() string {
-	binaryPath, err := os.Executable()
-	if err != nil {
-		return ""
-	}
-
-	switch InstallationContext(binaryPath) {
-	case "brew":
-		return "Update via `brew update && brew upgrade shopware-cli`"
-	case "apt":
-		return "Update via `sudo apt update && sudo apt upgrade shopware-cli`"
-	default:
-		return ""
-	}
-}
-
-func defaultUpdateInstruction() string {
-	linkStyle := lipgloss.NewStyle().Foreground(tui.TextColor).Underline(true)
-	return "Visit " + tui.StyledLink(repositoryURL, repositoryURL, linkStyle) + " to view installation options."
-}
-
 // fetchLatestReleaseInfoFromGitHubPages fetches the latest release information from the version.json file hosted on GitHub Pages.
-func fetchLatestReleaseInfoFromGitHubPages(ctx context.Context, client *http.Client) (*ReleaseInfo, error) {
+func fetchLatestReleaseInfoFromGitHubPages(ctx context.Context, client *http.Client) (releaseInfo *ReleaseInfo, err error) {
 	req, err := http.NewRequestWithContext(ctx, "GET", latestReleaseURL, nil)
 	if err != nil {
 		return nil, err
@@ -238,16 +190,21 @@ func fetchLatestReleaseInfoFromGitHubPages(ctx context.Context, client *http.Cli
 	}
 
 	defer func() {
-		_, _ = io.Copy(io.Discard, res.Body)
-		_ = res.Body.Close()
+		if closeErr := res.Body.Close(); err == nil && closeErr != nil {
+			releaseInfo = nil
+			err = closeErr
+		}
 	}()
+
 	if res.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("unexpected HTTP %d", res.StatusCode)
 	}
-	dec := json.NewDecoder(res.Body)
 
 	var latestRelease ReleaseInfo
-	if err := dec.Decode(&latestRelease); err != nil {
+
+	dec := json.NewDecoder(res.Body)
+	err = dec.Decode(&latestRelease)
+	if err != nil {
 		return nil, err
 	}
 
@@ -256,6 +213,7 @@ func fetchLatestReleaseInfoFromGitHubPages(ctx context.Context, client *http.Cli
 	return &latestRelease, nil
 }
 
+// versionGreaterThan compares two semantic version strings and returns true if v is greater than w.
 func versionGreaterThan(v, w string) bool {
 	w = gitDescribeSuffixRE.ReplaceAllString(w, "")
 
@@ -267,64 +225,4 @@ func versionGreaterThan(v, w string) bool {
 
 func getUpdateCheckCacheFilePath() string {
 	return filepath.Join(system.GetShopwareCliCacheDir(), "update-check-info.json")
-}
-
-// InstallationContext reports the install/update channel for a binary path.
-func InstallationContext(binaryPath string) string {
-	if binaryPath != "" && IsUnderHomebrew(binaryPath) {
-		return "brew"
-	}
-
-	if runtime.GOOS == "linux" && isUnderApt(binaryPath) {
-		return "apt"
-	}
-
-	return "other"
-}
-
-// IsUnderHomebrew reports whether the binary resides in the active Homebrew prefix.
-func IsUnderHomebrew(binaryPath string) bool {
-	brewExe, err := lookPath("brew")
-	if err != nil {
-		return false
-	}
-
-	brewPrefixBytes, err := exec.CommandContext(context.Background(), brewExe, "--prefix").Output()
-	if err != nil {
-		return false
-	}
-
-	brewBinPrefix := filepath.Join(strings.TrimSpace(string(brewPrefixBytes)), "bin") + string(filepath.Separator)
-
-	return strings.HasPrefix(binaryPath, brewBinPrefix)
-}
-
-func isUnderApt(binaryPath string) bool {
-	if binaryPath == "" {
-		return false
-	}
-
-	dpkgQuery, err := lookPath("dpkg-query")
-	if err != nil {
-		return false
-	}
-
-	// Checking package ownership avoids classifying every manually installed
-	// binary on a Debian-based system as an apt installation.
-	resolvedPath, err := filepath.EvalSymlinks(binaryPath)
-	if err == nil {
-		binaryPath = resolvedPath
-	}
-
-	cmd := exec.CommandContext(context.Background(), dpkgQuery, "--search", binaryPath)
-	return cmd.Run() == nil
-}
-
-// lookPath allows safe execution of the LookPath function, handling the ErrDot case.
-func lookPath(file string) (string, error) {
-	path, err := exec.LookPath(file)
-	if errors.Is(err, exec.ErrDot) {
-		return path, nil
-	}
-	return path, err
 }

@@ -6,7 +6,6 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -24,7 +23,7 @@ func (f roundTripperFunc) RoundTrip(req *http.Request) (*http.Response, error) {
 func newVersionResponseClient(latestVersion string, requestCount *int) *http.Client {
 	return &http.Client{
 		Transport: roundTripperFunc(func(req *http.Request) (*http.Response, error) {
-			*requestCount++
+			(*requestCount)++
 
 			body := fmt.Sprintf(`{"version":"%s"}`, latestVersion)
 
@@ -161,20 +160,30 @@ func TestLoadUpdateCheckFromCacheWhenMissing(t *testing.T) {
 	assert.Nil(t, actual)
 }
 
+func TestRenderUpdateNotificationContainsReleaseInformation(t *testing.T) {
+	rendered := RenderUpdateNotification("v2.0.0", "v1.0.0")
+
+	assert.Contains(t, rendered, "Update available!")
+	assert.Contains(t, rendered, "v1.0.0")
+	assert.Contains(t, rendered, "v2.0.0")
+	assert.Contains(t, rendered, repositoryURL)
+}
+
 func TestShouldCheckForUpdate(t *testing.T) {
 	tests := []struct {
 		name     string
 		version  string
+		args     []string
 		env      map[string]string
 		expected bool
 	}{
 		{
-			name:    "disabled via legacy env var",
+			name:    "unsupported environment value does not disable notifications",
 			version: "v1.0.0",
 			env: map[string]string{
 				"SHOPWARE_CLI_NO_UPDATE_NOTIFICATION": "1",
 			},
-			expected: false,
+			expected: true,
 		},
 		{
 			name:    "disabled via true env value",
@@ -193,23 +202,7 @@ func TestShouldCheckForUpdate(t *testing.T) {
 			name:    "disabled in generic ci",
 			version: "v1.0.0",
 			env: map[string]string{
-				"CI": "1",
-			},
-			expected: false,
-		},
-		{
-			name:    "disabled in build-number ci",
-			version: "v1.0.0",
-			env: map[string]string{
-				"BUILD_NUMBER": "123",
-			},
-			expected: false,
-		},
-		{
-			name:    "disabled in run-id ci",
-			version: "v1.0.0",
-			env: map[string]string{
-				"RUN_ID": "123",
+				"CI": "true",
 			},
 			expected: false,
 		},
@@ -219,6 +212,18 @@ func TestShouldCheckForUpdate(t *testing.T) {
 			env: map[string]string{
 				"GITHUB_ACTIONS": "true",
 			},
+			expected: false,
+		},
+		{
+			name:     "disabled via long command-line flag",
+			version:  "v1.0.0",
+			args:     []string{"--no-update-hint"},
+			expected: false,
+		},
+		{
+			name:     "disabled via short command-line flag",
+			version:  "v1.0.0",
+			args:     []string{"-n"},
 			expected: false,
 		},
 		{
@@ -232,66 +237,22 @@ func TestShouldCheckForUpdate(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Setenv("SHOPWARE_CLI_CACHE_DIR", t.TempDir())
 			t.Setenv("CI", "")
-			t.Setenv("BUILD_NUMBER", "")
-			t.Setenv("RUN_ID", "")
 			t.Setenv("GITHUB_ACTIONS", "")
+			t.Setenv("GITLAB_CI", "")
+			t.Setenv("JENKINS_URL", "")
+			t.Setenv("BUILDKITE", "")
+			t.Setenv("CIRCLECI", "")
+			t.Setenv("DRONE", "")
+			t.Setenv("TEAMCITY_VERSION", "")
+			t.Setenv("TF_BUILD", "")
 			t.Setenv("SHOPWARE_CLI_NO_UPDATE_NOTIFICATION", "")
-			t.Setenv("SHOPWARE_CLI_DISABLE_VERSION_CHECK", "")
-
 			for k, v := range tt.env {
 				t.Setenv(k, v)
 			}
 
-			assert.Equal(t, tt.expected, ShouldCheckForUpdate(tt.version, []string{}))
+			assert.Equal(t, tt.expected, ShouldCheckForUpdate(tt.version, tt.args))
 		})
 	}
-}
-
-func TestInstallationContextDetectsHomebrew(t *testing.T) {
-	workspace := t.TempDir()
-	brewPrefix := filepath.Join(workspace, "homebrew")
-	brewBinDir := filepath.Join(brewPrefix, "bin")
-	require.NoError(t, os.MkdirAll(brewBinDir, 0o755))
-
-	brewScriptDir := filepath.Join(workspace, "tools")
-	require.NoError(t, os.MkdirAll(brewScriptDir, 0o755))
-	brewScriptPath := filepath.Join(brewScriptDir, "brew")
-	require.NoError(t, os.WriteFile(brewScriptPath, []byte("#!/bin/sh\nprintf '%s\\n' \""+brewPrefix+"\"\n"), 0o755))
-
-	t.Setenv("PATH", brewScriptDir)
-
-	assert.Equal(t, "brew", InstallationContext(filepath.Join(brewBinDir, "shopware-cli")))
-}
-
-func TestInstallationContextDetectsApt(t *testing.T) {
-	if runtime.GOOS != "linux" {
-		t.Skip("apt detection only applies on Linux")
-	}
-
-	workspace := t.TempDir()
-	aptScriptDir := filepath.Join(workspace, "tools")
-	require.NoError(t, os.MkdirAll(aptScriptDir, 0o755))
-	dpkgQuery := filepath.Join(aptScriptDir, "dpkg-query")
-	require.NoError(t, os.WriteFile(dpkgQuery, []byte("#!/bin/sh\nexit 0\n"), 0o755))
-
-	t.Setenv("PATH", aptScriptDir)
-
-	assert.Equal(t, "apt", InstallationContext(filepath.Join(workspace, "bin", "shopware-cli")))
-}
-
-func TestInstallationContextDoesNotAssumeAptForUnmanagedBinary(t *testing.T) {
-	if runtime.GOOS != "linux" {
-		t.Skip("apt detection only applies on Linux")
-	}
-
-	workspace := t.TempDir()
-	dpkgQueryDir := filepath.Join(workspace, "tools")
-	require.NoError(t, os.MkdirAll(dpkgQueryDir, 0o755))
-	require.NoError(t, os.WriteFile(filepath.Join(dpkgQueryDir, "dpkg-query"), []byte("#!/bin/sh\nexit 1\n"), 0o755))
-
-	t.Setenv("PATH", dpkgQueryDir)
-
-	assert.Equal(t, "other", InstallationContext(filepath.Join(workspace, "bin", "shopware-cli")))
 }
 
 func TestVersionGreaterThan(t *testing.T) {
@@ -340,7 +301,7 @@ func TestVersionGreaterThan(t *testing.T) {
 	}
 }
 
-func TestUpdateHintRespectsConfiguredInterval(t *testing.T) {
+func TestCheckForUpdateHonorsCacheInterval(t *testing.T) {
 	t.Setenv("SHOPWARE_CLI_CACHE_DIR", t.TempDir())
 
 	requestCount := 0
