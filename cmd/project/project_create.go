@@ -179,7 +179,7 @@ func applyNonInteractiveDefaults(opts *createOptions) error {
 
 func init() {
 	projectRootCmd.AddCommand(projectCreateCmd)
-	projectCreateCmd.PersistentFlags().Bool("docker", false, "Use Docker to run Composer instead of local installation")
+	projectCreateCmd.PersistentFlags().Bool("docker", false, "Use Docker for local setup")
 	projectCreateCmd.PersistentFlags().Bool("with-elasticsearch", false, "Include Elasticsearch/OpenSearch support")
 	projectCreateCmd.PersistentFlags().Bool("without-elasticsearch", false, "Remove Elasticsearch from the installation")
 	_ = projectCreateCmd.PersistentFlags().MarkDeprecated("without-elasticsearch", "use --with-elasticsearch instead")
