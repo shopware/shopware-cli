@@ -190,25 +190,42 @@ func ApplyResolvedVersions(results []ExtensionResult, resolve ResolveResult) {
 			continue
 		}
 
-		to := resolve.ResolvedVersion(res.Extension.Package)
-		if to != "" {
-			res.Available = to
+		change, inDiff := resolve.packageChange(res.Extension.Package)
+		if inDiff && change.To != "" {
+			res.Available = change.To
 		}
 
 		if !resolve.OK || !res.Status.BlocksUpgrade() {
 			continue
 		}
-		if to == "" || sameRelease(to, res.Extension.Version) {
+		switch {
+		case inDiff && change.Op == "remove":
+			// Transitively installed extensions can be dropped by the solver;
+			// that is not compatibility — the extension simply disappears.
+			res.Available = ""
+			res.Detail = "The Composer resolution removes this package — it would no longer be installed after the upgrade."
+		case !inDiff || sameRelease(change.To, res.Extension.Version):
 			// Absent from the lock diff means the solver kept the installed
-			// release (root requirements cannot be dropped).
+			// release.
 			res.Status = ExtOK
 			res.Available = res.Extension.Version
 			res.Detail = "Composer resolved the upgrade with the installed release; the repository's compatibility metadata was wrong or incomplete."
-		} else {
+		default:
 			res.Status = ExtNeedsUpdate
 			res.Detail = "Composer resolved the upgrade with this release; the repository's compatibility metadata was wrong or incomplete."
 		}
 	}
+}
+
+// packageChange returns the lock-diff entry for a package, if any. Composer
+// package names are case-insensitive.
+func (r ResolveResult) packageChange(pkg string) (PackageChange, bool) {
+	for _, change := range r.Changes {
+		if strings.EqualFold(change.Name, pkg) {
+			return change, true
+		}
+	}
+	return PackageChange{}, false
 }
 
 // sameRelease compares two version strings, tolerating v-prefix and segment

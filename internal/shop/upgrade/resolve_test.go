@@ -130,6 +130,21 @@ func TestApplyResolvedVersionsOverridesMetadataBlockers(t *testing.T) {
 	assert.Equal(t, "2.1.3", results[1].Available)
 }
 
+func TestApplyResolvedVersionsRemovedPackageStaysBlocked(t *testing.T) {
+	// A transitively installed extension can be dropped by the solver; that
+	// must not read as "kept at the installed release".
+	results := []ExtensionResult{
+		{Extension: InstalledExtension{Name: "SwagGone", Package: "swag/gone", Version: "1.0.0"}, Status: ExtBlocked, Available: "x"},
+	}
+	ApplyResolvedVersions(results, ResolveResult{OK: true, Changes: []PackageChange{
+		{Name: "swag/gone", From: "1.0.0", Op: "remove"},
+	}})
+
+	assert.Equal(t, ExtBlocked, results[0].Status, "a removal is not compatibility")
+	assert.Empty(t, results[0].Available)
+	assert.Contains(t, results[0].Detail, "removes this package")
+}
+
 func TestApplyResolvedVersionsKeepsBlockersOnFailedResolve(t *testing.T) {
 	results := []ExtensionResult{
 		{Extension: InstalledExtension{Name: "SwagBlocked", Package: "swag/blocked", Version: "3.2.0"}, Status: ExtBlocked, Detail: "original"},
