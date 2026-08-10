@@ -3,7 +3,6 @@ package project
 import (
 	"errors"
 	"fmt"
-	"net/url"
 	"os"
 	"strings"
 	"time"
@@ -20,47 +19,15 @@ import (
 	"github.com/shopware/shopware-cli/internal/tui/dev"
 )
 
-// isProxyProject reports whether the project is configured to be served at a
-// stable hostname under the shared proxy's base domain (as opposed to a fixed
-// localhost port). This is the signal `project create --local-domain` writes
-// into .shopware-project.yml, and what makes `project dev` bootstrap the proxy.
-func isProxyProject(cfg *shop.Config) bool {
-	return isProxyProjectForDomain(cfg, proxy.BaseDomain())
-}
-
-// isProxyProjectForDomain is the pure core of isProxyProject with the base
-// domain passed in, so it can be tested without depending on stored settings.
-func isProxyProjectForDomain(cfg *shop.Config, baseDomain string) bool {
-	if cfg == nil {
-		return false
-	}
-
-	effective := cfg.URL
-	if envCfg, err := cfg.ResolveEnvironment(environmentName); err == nil && envCfg.URL != "" {
-		effective = envCfg.URL
-	}
-	if effective == "" {
-		return false
-	}
-
-	parsed, err := url.Parse(effective)
-	if err != nil {
-		return false
-	}
-
-	host := parsed.Hostname()
-	return host == baseDomain || strings.HasSuffix(host, "."+baseDomain)
-}
-
 // ensureProxyForDevProjectWithFallback sets up the shared proxy for a
 // proxy-mode project before its development environment starts, so
 // `project dev` serves it at its stable hostname. It never blocks: if the
-// shared proxy cannot start (e.g. its port is taken), it removes the proxy
-// override, points the user at a fix and reports that the shop falls back to a
-// local port. It is a no-op for port-based projects. Returns whether it fell
-// back to port mode.
+// shared proxy cannot start (e.g. its port is taken), it regenerates the
+// compose file in plain fixed-port mode, points the user at a fix and reports
+// that the shop falls back to a local port. It is a no-op for port-based
+// projects. Returns whether it fell back to port mode.
 func ensureProxyForDevProjectWithFallback(cmd *cobra.Command, projectRoot string, cfg *shop.Config) (fallback bool) {
-	if !isProxyProject(cfg) {
+	if !proxy.IsProxyProject(cfg) {
 		return false
 	}
 
@@ -77,9 +44,10 @@ func ensureProxyForDevProjectWithFallback(cmd *cobra.Command, projectRoot string
 		return nil
 	}()
 	if err != nil {
-		// Never block dev: drop back to fixed-port mode and tell the user how
-		// to diagnose the proxy.
-		_ = dockerpkg.RemoveComposeOverride(projectRoot)
+		// Never block dev: regenerate the compose file in fixed-port mode
+		// (newDevEnvironment wrote it in proxy mode) and tell the user how to
+		// diagnose the proxy.
+		_ = dockerpkg.WriteComposeFile(projectRoot, dockerpkg.ComposeOptionsFromConfig(cfg))
 		fmt.Println(tui.RedText.Render("  Shared proxy unavailable: " + err.Error()))
 		fmt.Println(tui.DimText.Render("  Serving on a local port instead — run ") + tui.BoldText.Render("shopware-cli project proxy verify") + tui.DimText.Render(" to diagnose."))
 		return true
@@ -251,7 +219,10 @@ func newDevEnvironment(cmd *cobra.Command, projectRoot string, cfg *shop.Config)
 	}
 
 	if useDocker {
-		if err := dockerpkg.WriteComposeFile(projectRoot, dockerpkg.ComposeOptionsFromConfig(cfg)); err != nil {
+		// Proxy-aware: a project configured for a local domain gets a proxy-mode
+		// compose file, a port-based one the plain fixed-port file. A failed
+		// proxy bootstrap later reverts it to plain (see the fallback above).
+		if err := proxy.WriteComposeFile(projectRoot, cfg); err != nil {
 			return nil, err
 		}
 	}

@@ -80,6 +80,11 @@ type ComposeOptions struct {
 	// disabled (shopware.admin_worker.enable_admin_worker: false), because
 	// the message queue is then no longer dispatched from the browser.
 	DedicatedWorker bool
+	// Proxy, when set, generates the compose file in shared-proxy mode: the
+	// routed services publish no host ports and instead join the proxy network
+	// with Traefik routing labels. Nil (the default) keeps fixed-port mode.
+	// Callers populate it via proxy.ComposeProxyOptions for proxy projects.
+	Proxy *ProxyOptions
 }
 
 func (o *ComposeOptions) phpVersion() string {
@@ -87,6 +92,15 @@ func (o *ComposeOptions) phpVersion() string {
 		return o.PHPVersion
 	}
 	return "8.3"
+}
+
+// proxy returns the proxy options, or nil when not in proxy mode (also for a
+// nil receiver), so buildCompose can branch on a single nil-safe accessor.
+func (o *ComposeOptions) proxy() *ProxyOptions {
+	if o == nil {
+		return nil
+	}
+	return o.Proxy
 }
 
 func ComposeOptionsFromConfig(cfg *shop.Config) *ComposeOptions {
@@ -152,12 +166,36 @@ func WriteComposeFile(projectFolder string, opts *ComposeOptions) error {
 }
 
 func buildCompose(hasAMQP, hasElasticsearch bool, opts *ComposeOptions) yaml.Node {
+	px := opts.proxy()
+
 	webEnv := newMappingNode()
 	addKeyValue(webEnv, "HOST", "0.0.0.0")
 	addKeyValue(webEnv, "DATABASE_URL", "mysql://root:root@database/shopware")
 	addKeyValue(webEnv, "MAILER_DSN", "smtp://mailer:1025")
-	addKeyValue(webEnv, "TRUSTED_PROXIES", "REMOTE_ADDR")
-	addKeyValue(webEnv, "SYMFONY_TRUSTED_PROXIES", "REMOTE_ADDR")
+
+	// In proxy mode Traefik terminates TLS and forwards plain HTTP from a
+	// private container address, so Shopware must trust its X-Forwarded-*
+	// headers (private ranges) or URL generation and redirects fall back to
+	// http. Fixed-port mode only ever sees the local remote address.
+	trustedProxies := "REMOTE_ADDR"
+	if px != nil {
+		trustedProxies = "127.0.0.1,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16"
+	}
+	addKeyValue(webEnv, "TRUSTED_PROXIES", trustedProxies)
+	addKeyValue(webEnv, "SYMFONY_TRUSTED_PROXIES", trustedProxies)
+
+	if px != nil {
+		// Pin APP_URL as a real container env var (not only .env.local) so PHP
+		// renders absolute URLs — e.g. the storefront import map — with the
+		// proxy hostname, and point Node at the mounted CA so self-calls over
+		// TLS are trusted.
+		if px.AppURL != "" {
+			addKeyValue(webEnv, "APP_URL", px.AppURL)
+		}
+		if px.CAPath != "" {
+			addKeyValue(webEnv, "NODE_EXTRA_CA_CERTS", containerCAPath)
+		}
+	}
 
 	if hasAMQP {
 		addKeyValue(webEnv, "MESSENGER_TRANSPORT_DSN", "amqp://guest:guest@lavinmq:5672")
@@ -193,13 +231,13 @@ func buildCompose(hasAMQP, hasElasticsearch bool, opts *ComposeOptions) yaml.Nod
 	if opts != nil && opts.User != "" {
 		addKeyValue(web, "user", opts.User)
 	}
-	addKeyValueNode(web, "ports", newSequenceNode(
-		"8000:8000", "8080:8080", "9999:9999", "9998:9998", "5173:5173", "5773:5773",
-	))
 	addKeyValueNode(web, "env_file", newSequenceNode(".env.local"))
 	addKeyValueNode(web, "environment", webEnv)
-	addKeyValueNode(web, "volumes", newSequenceNode(".:/var/www/html"))
+	addKeyValueNode(web, "volumes", proxyVolumes(px, ".:/var/www/html"))
 	addKeyValueNode(web, "depends_on", webDependsOn)
+	publishOrRoute(web, px, "web",
+		[]string{"8000:8000", "8080:8080", "9999:9999", "9998:9998", "5173:5173", "5773:5773"},
+		webProxyRoutes(px)...)
 
 	dbEnv := newMappingNode()
 	addKeyValue(dbEnv, "MARIADB_DATABASE", "shopware")
@@ -248,7 +286,7 @@ func buildCompose(hasAMQP, hasElasticsearch bool, opts *ComposeOptions) yaml.Nod
 	addKeyValue(adminer, "stop_signal", "SIGKILL")
 	addKeyValueNode(adminer, "depends_on", newSequenceNode("database"))
 	addKeyValueNode(adminer, "environment", adminerEnv)
-	addKeyValueNode(adminer, "ports", newSequenceNode("9080:8080"))
+	publishOrRoute(adminer, px, "adminer", []string{"9080:8080"}, proxyRoute{subdomain: "adminer", containerPort: 8080})
 
 	mailerEnv := newMappingNode()
 	addKeyValue(mailerEnv, "MP_SMTP_AUTH_ACCEPT_ANY", "1")
@@ -256,7 +294,9 @@ func buildCompose(hasAMQP, hasElasticsearch bool, opts *ComposeOptions) yaml.Nod
 
 	mailer := newMappingNode()
 	addKeyValue(mailer, "image", "axllent/mailpit")
-	addKeyValueNode(mailer, "ports", newSequenceNode("1025:1025", "8025:8025"))
+	// Only the web UI (8025) is routed in proxy mode; SMTP (1025) stays internal
+	// to the compose network, reachable by other services as mailer:1025.
+	publishOrRoute(mailer, px, "mailer", []string{"1025:1025", "8025:8025"}, proxyRoute{subdomain: "mailer", containerPort: 8025})
 	addKeyValueNode(mailer, "environment", mailerEnv)
 
 	services := newMappingNode()
@@ -281,7 +321,9 @@ func buildCompose(hasAMQP, hasElasticsearch bool, opts *ComposeOptions) yaml.Nod
 	if hasAMQP {
 		lavinmq := newMappingNode()
 		addKeyValue(lavinmq, "image", "cloudamqp/lavinmq")
-		addKeyValueNode(lavinmq, "ports", newSequenceNode("15672:15672", "5672:5672"))
+		// Only the management UI (15672) is routed in proxy mode; AMQP (5672)
+		// stays internal, reachable as lavinmq:5672.
+		publishOrRoute(lavinmq, px, "lavinmq", []string{"15672:15672", "5672:5672"}, proxyRoute{subdomain: "lavinmq", containerPort: 15672})
 		addKeyValueNode(lavinmq, "volumes", newSequenceNode("lavinmq-data:/var/lib/lavinmq:rw"))
 		addKeyValueNode(services, "lavinmq", lavinmq)
 		addKeyValueNode(volumes, "lavinmq-data", newNullNode())
@@ -296,7 +338,7 @@ func buildCompose(hasAMQP, hasElasticsearch bool, opts *ComposeOptions) yaml.Nod
 		opensearch := newMappingNode()
 		addKeyValue(opensearch, "image", "opensearchproject/opensearch:2")
 		addKeyValueNode(opensearch, "environment", osEnv)
-		addKeyValueNode(opensearch, "ports", newSequenceNode("9200:9200"))
+		publishOrRoute(opensearch, px, "opensearch", []string{"9200:9200"}, proxyRoute{subdomain: "opensearch", containerPort: 9200})
 		addKeyValueNode(opensearch, "volumes", newSequenceNode("opensearch-data:/usr/share/opensearch/data"))
 		addKeyValueNode(services, "opensearch", opensearch)
 		addKeyValueNode(volumes, "opensearch-data", newNullNode())
@@ -323,6 +365,17 @@ func buildCompose(hasAMQP, hasElasticsearch bool, opts *ComposeOptions) yaml.Nod
 	addKeyValueNode(root, "services", services)
 	addKeyValueNode(root, "volumes", volumes)
 
+	// In proxy mode every routed service joins the shared external network
+	// Traefik also runs on, declared here so compose does not try to create it.
+	if px != nil {
+		externalNetwork := newMappingNode()
+		addKeyValueNode(externalNetwork, "external", newBoolNode(true))
+
+		networks := newMappingNode()
+		addKeyValueNode(networks, px.NetworkName, externalNetwork)
+		addKeyValueNode(root, "networks", networks)
+	}
+
 	return yaml.Node{
 		Kind:    yaml.DocumentNode,
 		Content: []*yaml.Node{root},
@@ -342,9 +395,16 @@ func consoleService(opts *ComposeOptions, webEnv, webDependsOn *yaml.Node, conso
 	addKeyValueNode(svc, "command", newSequenceNode(append([]string{"php", "bin/console"}, consoleArgs...)...))
 	addKeyValueNode(svc, "env_file", newSequenceNode(".env.local"))
 	addKeyValueNode(svc, "environment", webEnv)
-	addKeyValueNode(svc, "volumes", newSequenceNode(".:/var/www/html"))
+	addKeyValueNode(svc, "volumes", proxyVolumes(opts.proxy(), ".:/var/www/html"))
 	addKeyValueNode(svc, "depends_on", webDependsOn)
 	addKeyValueNode(svc, "restart", &yaml.Node{Kind: yaml.ScalarNode, Value: "unless-stopped", Tag: "!!str"})
+
+	// The console processes (worker, scheduler) reach the shop's own APP_URL
+	// over TLS, so in proxy mode they join the proxy network (the CA and
+	// APP_URL env come from the shared webEnv). They publish no HTTP route.
+	if px := opts.proxy(); px != nil {
+		addKeyValueNode(svc, "networks", newSequenceNode("default", px.NetworkName))
+	}
 
 	return svc
 }

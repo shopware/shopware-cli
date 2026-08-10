@@ -3,42 +3,35 @@ package proxy
 import (
 	"context"
 	"fmt"
+	"net/url"
+	"strings"
 
 	"github.com/shopware/shopware-cli/internal/docker"
+	"github.com/shopware/shopware-cli/internal/extension"
+	"github.com/shopware/shopware-cli/internal/shop"
 )
 
 // InfraParams carries the project-specific inputs PrepareInfra needs. The
-// caller resolves them and computes AdminWatchPort (via
-// extension.AdminDevServerPort), so this package needs no Shopware-version or
-// admin-watch logic of its own.
+// caller resolves them from the project config and machine settings.
 type InfraParams struct {
-	ProjectRoot   string
 	CanonicalRoot string
 	Hostname      string
 	BaseDomain    string
 	// ConfigPath names the project config file; used only in the hostname
 	// collision hint.
 	ConfigPath string
-	// AdminWatchPort is the container port the admin watcher's dev server binds.
-	AdminWatchPort int
 }
 
-// PrepareInfra brings up everything the shared proxy needs before a project's
-// containers start: it checks the hostname is free, verifies docker compose
-// supports resets, ensures the server certificate, the shared Traefik container
-// and the DNS container, and writes the compose override with APP_URL pinned
-// (so PHP renders absolute URLs — e.g. the storefront import map — with the
-// proxy hostname, not the stale image default). It returns the certificate info
-// so callers can react to a freshly created CA. It neither starts nor registers
-// the project: the caller layers start/registration on top. Safe to call
+// PrepareInfra brings up the shared infrastructure a proxy project needs before
+// its containers start: it checks the hostname is free, ensures the server
+// certificate, the shared Traefik container and the DNS container. It does not
+// write the project's compose file (WriteComposeFile does, in proxy mode) nor
+// register the project — the caller layers that on top. It returns the
+// certificate info so callers can react to a freshly created CA. Safe to call
 // repeatedly.
 func PrepareInfra(ctx context.Context, p InfraParams, reg Registry) (CertInfo, error) {
 	if other, found := reg.FindByHostname(p.Hostname, p.CanonicalRoot); found {
 		return CertInfo{}, fmt.Errorf("hostname %s is already registered to %s, set a different \"url\" in %s to disambiguate", p.Hostname, other.ProjectRoot, p.ConfigPath)
-	}
-
-	if err := docker.EnsureComposeSupportsReset(ctx); err != nil {
-		return CertInfo{}, err
 	}
 
 	certInfo, err := ensureCertificate(p.Hostname, p.BaseDomain, reg)
@@ -61,16 +54,6 @@ func PrepareInfra(ctx context.Context, p InfraParams, reg Registry) (CertInfo, e
 		return CertInfo{}, fmt.Errorf("starting DNS server: %w", err)
 	}
 
-	if err := docker.WriteComposeOverride(p.ProjectRoot, &docker.ProxyOptions{
-		Hostname:       p.Hostname,
-		NetworkName:    NetworkName,
-		CAPath:         certInfo.CAPath,
-		AppURL:         "https://" + p.Hostname,
-		AdminWatchPort: p.AdminWatchPort,
-	}); err != nil {
-		return CertInfo{}, err
-	}
-
 	return certInfo, nil
 }
 
@@ -89,4 +72,89 @@ func ensureCertificate(hostname, baseDomain string, reg Registry) (CertInfo, err
 	}
 
 	return EnsureCertificate(dir, CertHosts(baseDomain, extraHosts))
+}
+
+// WriteComposeFile writes the project's compose.yaml, generating it in shared-
+// proxy mode when the project's config points at a hostname under the proxy
+// base domain, and in plain fixed-port mode otherwise. It is the single proxy-
+// aware entry point every generic caller (project dev, the dev TUI) uses, so
+// regenerating the compose file can never silently drop a project out of proxy
+// mode. Proxy up/down, which toggle the mode explicitly, build the options
+// themselves instead.
+func WriteComposeFile(projectRoot string, cfg *shop.Config) error {
+	opts := docker.ComposeOptionsFromConfig(cfg)
+
+	if p, ok := ComposeProxyOptions(projectRoot, cfg); ok {
+		if opts == nil {
+			opts = &docker.ComposeOptions{}
+		}
+		opts.Proxy = p
+	}
+
+	return docker.WriteComposeFile(projectRoot, opts)
+}
+
+// ComposeProxyOptions returns the docker proxy options for a project when it is
+// a proxy project (its configured URL is a hostname under the proxy base
+// domain), deriving everything deterministically from the config and machine
+// settings — hostname, shared network, root CA path, APP_URL and the admin
+// watcher's dev-server port. The second result is false for port-based
+// projects.
+func ComposeProxyOptions(projectRoot string, cfg *shop.Config) (*docker.ProxyOptions, bool) {
+	baseDomain := BaseDomain()
+	if !IsProxyProjectForDomain(cfg, baseDomain) {
+		return nil, false
+	}
+
+	hostname, err := ProjectHostname(projectRoot, cfg, baseDomain)
+	if err != nil {
+		return nil, false
+	}
+
+	// Best-effort: an unavailable CA just means no CA mount (self-calls over
+	// TLS would not be trusted, but the shop still serves).
+	caPath, _ := CACertPath()
+
+	return &docker.ProxyOptions{
+		Hostname:       hostname,
+		NetworkName:    NetworkName,
+		CAPath:         caPath,
+		AppURL:         "https://" + hostname,
+		AdminWatchPort: extension.AdminDevServerPort(projectRoot),
+	}, true
+}
+
+// IsProxyProject reports whether the project is configured to be served at a
+// stable hostname under the shared proxy's base domain (the signal
+// `project create --local-domain` and `proxy up` write into
+// .shopware-project.yml), as opposed to a fixed localhost port.
+func IsProxyProject(cfg *shop.Config) bool {
+	return IsProxyProjectForDomain(cfg, BaseDomain())
+}
+
+// IsProxyProjectForDomain is the pure core of IsProxyProject with the base
+// domain passed in, so it can be tested without depending on stored settings.
+func IsProxyProjectForDomain(cfg *shop.Config, baseDomain string) bool {
+	if cfg == nil {
+		return false
+	}
+
+	// The local environment's url overrides the top-level one in the executor,
+	// so honor the same precedence when detecting proxy mode.
+	effective := cfg.URL
+	if env, ok := cfg.Environments["local"]; ok && env != nil && env.URL != "" {
+		effective = env.URL
+	}
+
+	if effective == "" {
+		return false
+	}
+
+	parsed, err := url.Parse(effective)
+	if err != nil {
+		return false
+	}
+
+	host := parsed.Hostname()
+	return host == baseDomain || strings.HasSuffix(host, "."+baseDomain)
 }
