@@ -1,6 +1,7 @@
 package docker
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -147,7 +148,26 @@ func WriteComposeFile(projectFolder string, opts *ComposeOptions) error {
 		return fmt.Errorf("failed to generate compose.yaml: %w", err)
 	}
 
+	if err := ensureEnvLocalFile(projectFolder); err != nil {
+		return err
+	}
+
 	return os.WriteFile(filepath.Join(projectFolder, "compose.yaml"), composeBytes, 0o644)
+}
+
+// ensureEnvLocalFile creates .env.local when it is missing. The generated
+// compose file declares it as env_file for every PHP service, and Compose
+// refuses to start when a declared env file does not exist — which is the
+// state of every fresh clone, since .env.local is gitignored.
+func ensureEnvLocalFile(projectFolder string) error {
+	envLocalPath := filepath.Join(projectFolder, ".env.local")
+	if _, err := os.Stat(envLocalPath); err == nil {
+		return nil
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return err
+	}
+
+	return os.WriteFile(envLocalPath, []byte(shop.EnvLocalDockerContent), 0o644)
 }
 
 func buildCompose(hasAMQP, hasElasticsearch bool, opts *ComposeOptions) yaml.Node {
