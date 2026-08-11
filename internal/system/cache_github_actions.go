@@ -18,9 +18,17 @@ import (
 	actionscache "github.com/tonistiigi/go-actions-cache"
 )
 
+// actionsCacheClient is the subset of the GitHub Actions cache client used by
+// GitHubActionsCache. It exists so the save/load behaviour can be tested without
+// talking to the real API.
+type actionsCacheClient interface {
+	Load(ctx context.Context, keys ...string) (*actionscache.Entry, error)
+	Save(ctx context.Context, key string, b actionscache.Blob) error
+}
+
 // GitHubActionsCache implements Cache interface using GitHub Actions cache
 type GitHubActionsCache struct {
-	client    *actionscache.Cache
+	client    actionsCacheClient
 	prefix    string
 	tempFiles []string
 	mu        sync.Mutex
@@ -80,6 +88,11 @@ func (c *GitHubActionsCache) Set(ctx context.Context, key string, data io.Reader
 
 	err = c.client.Save(ctx, cacheKey, blob)
 	if err != nil {
+		// Another job stored the same key first, the content is identical so this is not an error
+		if errors.Is(err, os.ErrExist) {
+			return nil
+		}
+
 		return fmt.Errorf("failed to save to GitHub Actions cache: %w", err)
 	}
 
@@ -201,6 +214,11 @@ func (c *GitHubActionsCache) StoreFolderCache(ctx context.Context, key string, f
 	// Store the archive in cache
 	blob := actionscache.NewBlob(buf.Bytes())
 	if err := c.client.Save(ctx, cacheKey, blob); err != nil {
+		// Another job stored the same key first, the content is identical so this is not an error
+		if errors.Is(err, os.ErrExist) {
+			return nil
+		}
+
 		return fmt.Errorf("failed to save folder to GitHub Actions cache: %w", err)
 	}
 

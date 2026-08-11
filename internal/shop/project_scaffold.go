@@ -155,9 +155,14 @@ func (s *ShopwareProjectScaffold) WriteComposerJson(ctx context.Context) error {
 	return os.WriteFile(filepath.Join(s.ProjectFolder, "composer.json"), []byte(composerJSON), os.ModePerm)
 }
 
+// EnvLocalDockerContent is the initial .env.local of a Docker project. It is
+// what switches the containers into the dev environment: the committed .env
+// says APP_ENV=prod and the docker-dev image sets no environment of its own.
+const EnvLocalDockerContent = "APP_ENV=dev\n"
+
 func envLocalContent(useDocker bool) string {
 	if useDocker {
-		return "APP_ENV=dev\n"
+		return EnvLocalDockerContent
 	}
 
 	return ""
