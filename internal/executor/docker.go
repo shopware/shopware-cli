@@ -240,8 +240,11 @@ func (d *DockerExecutor) newProcess(cmd *exec.Cmd, innerArgs []string) *Process 
 // killTreeScript builds a POSIX-sh snippet that SIGINTs every process whose
 // command line matches pattern together with all of its descendants.
 func killTreeScript(pattern string) string {
+	// pgrep -f matches against the whole command line, so this very `sh -c`
+	// script (which embeds the pattern) matches itself; skip our own PID ($$),
+	// or kill_tree would terminate the cleanup shell before the real targets.
 	return "kill_tree() { for c in $(pgrep -P \"$1\" 2>/dev/null); do kill_tree \"$c\"; done; kill -INT \"$1\" 2>/dev/null; }; " +
-		"for p in $(pgrep -f " + shellSingleQuote(pattern) + " 2>/dev/null); do kill_tree \"$p\"; done"
+		"for p in $(pgrep -f " + shellSingleQuote(pattern) + " 2>/dev/null); do [ \"$p\" = \"$$\" ] && continue; kill_tree \"$p\"; done"
 }
 
 // shellSingleQuote wraps s in single quotes safely for embedding in an sh -c

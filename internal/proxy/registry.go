@@ -111,7 +111,9 @@ func (r Registry) FindByHostname(hostname, exceptProjectRoot string) (ProjectEnt
 	return ProjectEntry{}, false
 }
 
-// Save writes the registry back to the shared state directory.
+// Save writes the registry back to the shared state directory atomically: it
+// writes a temp file in the same directory and renames it over the target, so a
+// crash or a concurrent reader never sees a half-written registry.
 func (r Registry) Save() error {
 	dir, err := StateDir()
 	if err != nil {
@@ -123,5 +125,24 @@ func (r Registry) Save() error {
 		return err
 	}
 
-	return os.WriteFile(filepath.Join(dir, registryFileName), data, 0o600)
+	tmp, err := os.CreateTemp(dir, registryFileName+".*.tmp")
+	if err != nil {
+		return err
+	}
+	tmpPath := tmp.Name()
+	defer func() { _ = os.Remove(tmpPath) }() // no-op once renamed
+
+	if _, err := tmp.Write(data); err != nil {
+		_ = tmp.Close()
+		return err
+	}
+	if err := tmp.Chmod(0o600); err != nil {
+		_ = tmp.Close()
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		return err
+	}
+
+	return os.Rename(tmpPath, filepath.Join(dir, registryFileName))
 }

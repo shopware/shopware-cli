@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net"
 	"net/url"
+	"os"
 	"path/filepath"
 	"strings"
 
@@ -41,10 +42,20 @@ func ProjectHostname(projectRoot string, cfg *shop.Config, baseDomain string) (s
 }
 
 // LocalDomainHostname returns the stable proxy hostname for a project name,
-// e.g. "my-shop.shopware.local". Underscores (valid in a project name but not
-// in a DNS label) become dashes.
+// e.g. "my-shop.shopware.local". The current directory ("" or ".") resolves to
+// the working directory's name so it never yields a malformed "..<domain>"
+// hostname. Underscores (valid in a project name but not a DNS label) become
+// dashes and the label is lowercased, matching Docker/DNS.
 func LocalDomainHostname(name, baseDomain string) string {
-	label := strings.ReplaceAll(filepath.Base(name), "_", "-")
+	label := filepath.Base(name)
+	if label == "." || label == "" || label == string(filepath.Separator) {
+		if wd, err := os.Getwd(); err == nil {
+			label = filepath.Base(wd)
+		}
+	}
+
+	label = strings.ToLower(strings.ReplaceAll(label, "_", "-"))
+
 	return label + "." + baseDomain
 }
 

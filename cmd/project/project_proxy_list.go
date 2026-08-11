@@ -2,7 +2,6 @@ package project
 
 import (
 	"fmt"
-	"path/filepath"
 	"slices"
 	"strings"
 
@@ -132,7 +131,7 @@ func projectLinks(entry proxy.ProjectEntry, instances []proxy.Instance) []servic
 // runningServices extracts the compose service names of entry's running
 // containers, which are named <project>-<service>-<index>.
 func runningServices(entry proxy.ProjectEntry, instances []proxy.Instance) []string {
-	prefix := filepath.Base(entry.ProjectRoot) + "-"
+	prefix := proxy.ComposeProjectName(entry.ProjectRoot) + "-"
 
 	var services []string
 	for _, inst := range instances {
@@ -152,10 +151,10 @@ func runningServices(entry proxy.ProjectEntry, instances []proxy.Instance) []str
 }
 
 // projectIsRunning reports whether any running container belongs to entry's
-// project, matched by the compose project name Docker Compose derives from
-// the project directory's basename.
+// project, matched by its Docker Compose project name (the unique
+// COMPOSE_PROJECT_NAME `project create` writes, or Compose's sanitized default).
 func projectIsRunning(entry proxy.ProjectEntry, instances []proxy.Instance) bool {
-	prefix := filepath.Base(entry.ProjectRoot) + "-"
+	prefix := proxy.ComposeProjectName(entry.ProjectRoot) + "-"
 	for _, inst := range instances {
 		if strings.HasPrefix(inst.Container, prefix) {
 			return true

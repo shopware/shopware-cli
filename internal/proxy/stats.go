@@ -62,7 +62,7 @@ func InstanceStats(ctx context.Context) (instances []InstanceInfo, combinedMem i
 
 	now := time.Now()
 	for _, entry := range reg.Projects {
-		project := composeProjectName(entry.ProjectRoot)
+		project := ComposeProjectName(entry.ProjectRoot)
 		info := InstanceInfo{
 			Name: filepath.Base(entry.ProjectRoot),
 			URL:  "https://" + entry.Hostname,
@@ -86,11 +86,11 @@ func InstanceStats(ctx context.Context) (instances []InstanceInfo, combinedMem i
 	return instances, combinedMem, nil
 }
 
-// composeProjectName resolves the Docker Compose project name for a project.
+// ComposeProjectName resolves the Docker Compose project name for a project.
 // Docker projects created by `project create` carry a unique COMPOSE_PROJECT_NAME
 // (sw-<name>-<hash>) in .env; older projects fall back to Compose's default of
 // the sanitized directory basename.
-func composeProjectName(projectRoot string) string {
+func ComposeProjectName(projectRoot string) string {
 	if content, readErr := os.ReadFile(filepath.Join(projectRoot, ".env")); readErr == nil {
 		if name := shop.ExtractComposeProjectName(content); name != "" {
 			return name

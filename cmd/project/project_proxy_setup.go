@@ -41,6 +41,13 @@ Both steps are idempotent; run it again anytime to repair the setup.`,
 			return err
 		}
 
+		// Defense-in-depth: --domain is validated when set, but the stored value
+		// flows straight into root-privileged resolver writes, so re-validate it
+		// before touching the system.
+		if err := proxy.ValidateDomain(baseDomain); err != nil {
+			return fmt.Errorf("invalid proxy domain %q: %w", baseDomain, err)
+		}
+
 		fmt.Println(tui.DimText.Render("  Proxy domain: ") + tui.BoldText.Render(baseDomain))
 		if baseDomain != proxy.DefaultDomain {
 			fmt.Println(tui.DimText.Render("  This custom domain is stored machine-wide. Reset it with --domain " + proxy.DefaultDomain))
@@ -174,6 +181,12 @@ func setupProjectHostnames(ctx context.Context) []string {
 // progress and guidance; the returned error only signals that a step was
 // blocked, so the caller can fall back to a "run proxy setup later" hint.
 func runInlineProxySetup(ctx context.Context, baseDomain string) error {
+	// Defense-in-depth: the stored domain flows into root-privileged resolver
+	// writes, so validate it before touching the system.
+	if err := proxy.ValidateDomain(baseDomain); err != nil {
+		return fmt.Errorf("invalid proxy domain %q: %w", baseDomain, err)
+	}
+
 	caPath, err := proxy.CACertPath()
 	if err != nil {
 		return fmt.Errorf("preparing certificate authority: %w", err)

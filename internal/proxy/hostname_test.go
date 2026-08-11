@@ -17,8 +17,13 @@ func TestLocalDomainHostname(t *testing.T) {
 	assert.Equal(t, "my-shop.shopware.local", LocalDomainHostname("/tmp/projects/my-shop", "shopware.local"))
 	// Underscores are valid in a project name but not a hostname → dashes.
 	assert.Equal(t, "my-shop.shopware.local", LocalDomainHostname("my_shop", "shopware.local"))
+	// The label is lowercased, matching Docker/DNS.
+	assert.Equal(t, "my-shop.shopware.local", LocalDomainHostname("My-Shop", "shopware.local"))
 	// Custom base domain is respected.
 	assert.Equal(t, "my-shop.dev.internal", LocalDomainHostname("my-shop", "dev.internal"))
+	// The current directory resolves to a real name, never a malformed "..".
+	assert.NotContains(t, LocalDomainHostname(".", "shopware.local"), "..")
+	assert.NotContains(t, LocalDomainHostname("", "shopware.local"), "..")
 }
 
 func TestProjectHostname(t *testing.T) {

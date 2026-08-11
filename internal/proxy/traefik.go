@@ -236,14 +236,26 @@ func ReconcileHostnames(ctx context.Context, hostnames []string) error {
 		return err
 	}
 
+	if _, err := runDocker(ctx, connectArgs(hostnames)...); err != nil {
+		// Reconnecting with the new aliases failed; restore the previous aliases
+		// so Traefik is not left detached from the shared network (which would
+		// take every proxied shop offline). Best-effort.
+		_, _ = runDocker(ctx, connectArgs(managedAliases(current))...)
+		return err
+	}
+
+	return nil
+}
+
+// connectArgs builds the `docker network connect` arguments attaching the
+// Traefik container to the shared network with the given hostname aliases.
+func connectArgs(hostnames []string) []string {
 	args := []string{"network", "connect"}
 	for _, host := range hostnames {
 		args = append(args, "--alias", host)
 	}
-	args = append(args, NetworkName, ContainerName)
 
-	_, err = runDocker(ctx, args...)
-	return err
+	return append(args, NetworkName, ContainerName)
 }
 
 // sharedNetworkAliases returns the aliases the Traefik container currently
