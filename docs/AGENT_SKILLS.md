@@ -131,18 +131,8 @@ They are distributed through the Agent Skills ecosystem directly from the
 copies of the skills.
 
 After merging changes to the default branch, verify public discovery:
+After merging changes to the default branch, verify public discovery:
 
-```bash
-npx skills add shopware/shopware-cli --list
-```
-
-### Installation
-
-Install the official Shopware CLI skills with:
-
-```bash
-npx skills add shopware/shopware-cli
-```
 
 Install specific skills with:
 
