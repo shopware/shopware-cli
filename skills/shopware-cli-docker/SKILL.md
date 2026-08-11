@@ -133,7 +133,7 @@ First check whether Shopware CLI already exposes the intended workflow.
 
 If no CLI abstraction exists:
 
-1. confirm this using `shopware-cli ... --help`;
+1. confirm this using the relevant command group's `--help`;
 2. determine the configured Docker service and working directory;
 3. run the low-level tool in the correct project environment;
 4. avoid hard-coding paths and service names when they can be discovered.
