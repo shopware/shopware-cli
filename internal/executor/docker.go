@@ -244,8 +244,13 @@ func (d *DockerExecutor) StartEnvironment(ctx context.Context) error {
 	return nil
 }
 
-func (d *DockerExecutor) StopEnvironment(ctx context.Context) error {
-	cmd := exec.CommandContext(ctx, "docker", d.composeArgs("down")...)
+func (d *DockerExecutor) StopEnvironment(ctx context.Context, opts StopOptions) error {
+	downArgs := d.composeArgs("down")
+	if opts.RemoveVolumes {
+		downArgs = append(downArgs, "--volumes")
+	}
+
+	cmd := exec.CommandContext(ctx, "docker", downArgs...)
 	cmd.Dir = d.projectRoot
 
 	output, err := cmd.CombinedOutput()

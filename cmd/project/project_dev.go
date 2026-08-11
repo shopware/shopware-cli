@@ -90,7 +90,9 @@ var projectDevStopCmd = &cobra.Command{
 			return err
 		}
 
-		return env.stop(cmd)
+		removeVolumes, _ := cmd.Flags().GetBool("remove-data")
+
+		return env.stop(cmd, executor.StopOptions{RemoveVolumes: removeVolumes})
 	},
 }
 
@@ -249,14 +251,19 @@ func (e *devEnvironment) start(cmd *cobra.Command) error {
 	return nil
 }
 
-func (e *devEnvironment) stop(cmd *cobra.Command) error {
+func (e *devEnvironment) stop(cmd *cobra.Command, opts executor.StopOptions) error {
 	start := time.Now()
 
+	title := "Stopping development environment..."
+	if opts.RemoveVolumes {
+		title = "Stopping development environment and removing data..."
+	}
+
 	err := spinner.New().
-		Title("Stopping development environment...").
+		Title(title).
 		Context(cmd.Context()).
 		ActionWithErr(func(ctx context.Context) error {
-			return e.executor.StopEnvironment(ctx)
+			return e.executor.StopEnvironment(ctx, opts)
 		}).
 		Run()
 
@@ -305,4 +312,6 @@ func init() {
 	projectDevCmd.AddCommand(projectDevStartCmd)
 	projectDevCmd.AddCommand(projectDevStopCmd)
 	projectDevCmd.AddCommand(projectDevStatusCmd)
+
+	projectDevStopCmd.Flags().Bool("remove-data", false, "Also remove the named volumes declared in the compose file, deleting all data stored in them")
 }
