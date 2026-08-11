@@ -1,4 +1,4 @@
-package proxy
+package shop
 
 import (
 	"os"
@@ -37,7 +37,7 @@ func TestProjectConfigURLRoundTrip(t *testing.T) {
 
 	path := writeTestConfig(t, testProjectConfig)
 
-	state, err := ReadProjectConfigURLs(path, "")
+	state, err := ReadProjectURLState(path, "")
 	require.NoError(t, err)
 	assert.True(t, state.HasFile)
 	assert.True(t, state.HasRoot)
@@ -45,7 +45,7 @@ func TestProjectConfigURLRoundTrip(t *testing.T) {
 	assert.True(t, state.HasEnv)
 	assert.Equal(t, "http://127.0.0.1:8000", state.EnvURL)
 
-	require.NoError(t, SetProjectConfigURLs(path, "", "https://my-shop.shopware.local"))
+	require.NoError(t, SetProjectURL(path, "", "https://my-shop.shopware.local"))
 
 	updated, err := os.ReadFile(path)
 	require.NoError(t, err)
@@ -55,7 +55,7 @@ func TestProjectConfigURLRoundTrip(t *testing.T) {
 	assert.Contains(t, string(updated), "# keep me")
 	assert.Contains(t, string(updated), "password: shopware")
 
-	require.NoError(t, RestoreProjectConfigURLs(path, "", state))
+	require.NoError(t, RestoreProjectURL(path, "", state))
 
 	restored, err := os.ReadFile(path)
 	require.NoError(t, err)
@@ -68,28 +68,28 @@ func TestProjectConfigURLAbsentKeysAreRemovedOnRestore(t *testing.T) {
 
 	path := writeTestConfig(t, "compatibility_date: \"2026-07-15\"\n")
 
-	state, err := ReadProjectConfigURLs(path, "")
+	state, err := ReadProjectURLState(path, "")
 	require.NoError(t, err)
 	assert.True(t, state.HasFile)
 	assert.False(t, state.HasRoot)
 	assert.False(t, state.HasEnv)
 
-	require.NoError(t, SetProjectConfigURLs(path, "", "https://my-shop.shopware.local"))
+	require.NoError(t, SetProjectURL(path, "", "https://my-shop.shopware.local"))
 	updated, _ := os.ReadFile(path)
 	assert.Contains(t, string(updated), "url: https://my-shop.shopware.local")
 	// No environments section existed, none is invented.
 	assert.NotContains(t, string(updated), "environments")
 
-	require.NoError(t, RestoreProjectConfigURLs(path, "", state))
+	require.NoError(t, RestoreProjectURL(path, "", state))
 	restored, _ := os.ReadFile(path)
 	assert.NotContains(t, string(restored), "url:")
 	assert.Contains(t, string(restored), "compatibility_date")
 }
 
-func TestReadProjectConfigURLsMissingFile(t *testing.T) {
+func TestReadProjectURLStateMissingFile(t *testing.T) {
 	t.Parallel()
 
-	state, err := ReadProjectConfigURLs(filepath.Join(t.TempDir(), "nope.yml"), "")
+	state, err := ReadProjectURLState(filepath.Join(t.TempDir(), "nope.yml"), "")
 	require.NoError(t, err)
 	assert.False(t, state.HasFile)
 }

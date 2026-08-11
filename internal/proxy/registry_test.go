@@ -4,6 +4,8 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+
+	"github.com/shopware/shopware-cli/internal/shop"
 )
 
 // withTempStateDir redirects StateDir to a temp directory for the duration
@@ -89,7 +91,7 @@ func TestRegistryRoundTripKeepsPreviousConfig(t *testing.T) {
 		ProjectRoot:    "/shops/one",
 		Hostname:       "one.shopware.local",
 		PreviousAppURL: "http://127.0.0.1:8000",
-		PreviousConfig: &ConfigURLState{RootURL: "http://127.0.0.1:8000", HasRoot: true},
+		PreviousConfig: &shop.ConfigURLState{RootURL: "http://127.0.0.1:8000", HasRoot: true},
 	})
 	assert.NoError(t, reg.Save())
 

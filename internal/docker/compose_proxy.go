@@ -188,14 +188,15 @@ func addProxyRouting(svc *yaml.Node, p *ProxyOptions, serviceName string, routes
 	addKeyValueNode(svc, "labels", labels)
 }
 
-// proxyVolumes builds a service's volume list from base mounts, plus the
+// addVolumes attaches a service's volume list built from base mounts, plus the
 // read-only proxy CA mount when in proxy mode with a CA path — so code in the
 // container trusts the proxy's HTTPS certificates for self-calls to APP_URL.
-func proxyVolumes(p *ProxyOptions, base ...string) *yaml.Node {
+// Mirrors publishOrRoute, keeping the proxy-specific mount out of buildCompose.
+func addVolumes(svc *yaml.Node, p *ProxyOptions, base ...string) {
 	vols := newSequenceNode(base...)
 	if p != nil && p.CAPath != "" {
 		vols.Content = append(vols.Content, &yaml.Node{Kind: yaml.ScalarNode, Value: p.CAPath + ":" + containerCAPath + ":ro", Tag: "!!str"})
 	}
 
-	return vols
+	addKeyValueNode(svc, "volumes", vols)
 }

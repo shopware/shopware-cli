@@ -19,21 +19,20 @@ import (
 	"github.com/shopware/shopware-cli/internal/tui/dev"
 )
 
-// ensureProxyForDevProjectWithFallback sets up the shared proxy for a
-// proxy-mode project before its development environment starts, so
-// `project dev` serves it at its stable hostname. It never blocks: if the
-// shared proxy cannot start (e.g. its port is taken), it regenerates the
-// compose file in plain fixed-port mode, points the user at a fix and reports
-// that the shop falls back to a local port. It is a no-op for port-based
-// projects. Returns whether it fell back to port mode.
-func ensureProxyForDevProjectWithFallback(cmd *cobra.Command, projectRoot string, cfg *shop.Config) (fallback bool) {
-	if !proxy.IsProxyProject(cfg) {
-		return false
+// bootstrapProxyFallback sets up the shared proxy for a proxy-mode project
+// before its development environment starts, so `project dev` serves it at its
+// stable hostname, and records the outcome in e.proxyFallback. It never blocks:
+// if the shared proxy cannot start (e.g. its port is taken), it regenerates the
+// compose file in plain fixed-port mode, points the user at a fix and marks the
+// shop as fallen back to a local port. It is a no-op for port-based projects.
+func (e *devEnvironment) bootstrapProxyFallback(cmd *cobra.Command) {
+	if !proxy.IsProxyProject(e.cfg) {
+		return
 	}
 
 	ctx := cmd.Context()
 	err := func() error {
-		env, err := newProxyEnvironmentForRoot(ctx, projectRoot, projectConfigPath)
+		env, err := newProxyEnvironmentForRoot(ctx, e.projectRoot, projectConfigPath)
 		if err != nil {
 			return err
 		}
@@ -47,13 +46,11 @@ func ensureProxyForDevProjectWithFallback(cmd *cobra.Command, projectRoot string
 		// Never block dev: regenerate the compose file in fixed-port mode
 		// (newDevEnvironment wrote it in proxy mode) and tell the user how to
 		// diagnose the proxy.
-		_ = dockerpkg.WriteComposeFile(projectRoot, dockerpkg.ComposeOptionsFromConfig(cfg))
+		_ = dockerpkg.WriteComposeFile(e.projectRoot, dockerpkg.ComposeOptionsFromConfig(e.cfg))
 		fmt.Println(tui.RedText.Render("  Shared proxy unavailable: " + err.Error()))
 		fmt.Println(tui.DimText.Render("  Serving on a local port instead — run ") + tui.BoldText.Render("shopware-cli project proxy verify") + tui.DimText.Render(" to diagnose."))
-		return true
+		e.proxyFallback = true
 	}
-
-	return false
 }
 
 // ErrEnvironmentDown is returned by the `project dev status` command when the
@@ -99,7 +96,7 @@ var projectDevCmd = &cobra.Command{
 			return err
 		}
 
-		env.proxyFallback = ensureProxyForDevProjectWithFallback(cmd, projectRoot, cfg)
+		env.bootstrapProxyFallback(cmd)
 
 		if !isatty.IsTerminal(os.Stdin.Fd()) {
 			return env.start(cmd)
@@ -118,7 +115,7 @@ var projectDevStartCmd = &cobra.Command{
 			return err
 		}
 
-		env.proxyFallback = ensureProxyForDevProjectWithFallback(cmd, env.projectRoot, env.cfg)
+		env.bootstrapProxyFallback(cmd)
 
 		return env.start(cmd)
 	},

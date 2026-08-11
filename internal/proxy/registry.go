@@ -5,6 +5,8 @@ import (
 	"os"
 	"path/filepath"
 	"time"
+
+	"github.com/shopware/shopware-cli/internal/shop"
 )
 
 // ProjectEntry is one project registered with the shared proxy.
@@ -19,7 +21,7 @@ type ProjectEntry struct {
 	PreviousAppURL string `json:"previous_app_url,omitempty"`
 	// PreviousConfig captures the url keys of .shopware-project.yml before
 	// registration rewrote them; nil means the file was not touched.
-	PreviousConfig *ConfigURLState `json:"previous_config,omitempty"`
+	PreviousConfig *shop.ConfigURLState `json:"previous_config,omitempty"`
 }
 
 // Registry is the local record of projects registered with the shared proxy.

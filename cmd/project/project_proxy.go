@@ -402,10 +402,10 @@ func proxyHostname(projectRoot string) string {
 // them — and returns the pre-proxy state for the registry, so down can
 // restore the file exactly. On re-registration the state remembered by the
 // first registration is kept. Projects without a config file return nil.
-func (e *proxyEnvironment) switchProjectConfigURLs(reg proxy.Registry, proxyURL string) *proxy.ConfigURLState {
+func (e *proxyEnvironment) switchProjectConfigURLs(reg proxy.Registry, proxyURL string) *shop.ConfigURLState {
 	previous, alreadyManaged := previousConfigState(reg, e.canonicalRoot)
 	if !alreadyManaged {
-		state, err := proxy.ReadProjectConfigURLs(e.configPath, environmentName)
+		state, err := shop.ReadProjectURLState(e.configPath, environmentName)
 		if err != nil {
 			fmt.Println(tui.RedText.Render("  Could not read the project config: " + err.Error()))
 			return nil
@@ -416,7 +416,7 @@ func (e *proxyEnvironment) switchProjectConfigURLs(reg proxy.Registry, proxyURL 
 		previous = &state
 	}
 
-	if err := proxy.SetProjectConfigURLs(e.configPath, environmentName, proxyURL); err != nil {
+	if err := shop.SetProjectURL(e.configPath, environmentName, proxyURL); err != nil {
 		fmt.Println(tui.RedText.Render("  Could not update the url in the project config: " + err.Error()))
 		if !alreadyManaged {
 			return nil
@@ -428,7 +428,7 @@ func (e *proxyEnvironment) switchProjectConfigURLs(reg proxy.Registry, proxyURL 
 
 // previousConfigState returns the config state remembered by an existing
 // registration, if any.
-func previousConfigState(reg proxy.Registry, canonicalRoot string) (*proxy.ConfigURLState, bool) {
+func previousConfigState(reg proxy.Registry, canonicalRoot string) (*shop.ConfigURLState, bool) {
 	if old, found := reg.Find(canonicalRoot); found && old.PreviousConfig != nil {
 		return old.PreviousConfig, true
 	}
@@ -563,7 +563,7 @@ func (e *proxyEnvironment) down(ctx context.Context, hintTeardown bool) error {
 
 	// Restore the url keys in .shopware-project.yml to their pre-proxy state.
 	if registered && entry.PreviousConfig != nil {
-		if err := proxy.RestoreProjectConfigURLs(e.configPath, environmentName, *entry.PreviousConfig); err != nil {
+		if err := shop.RestoreProjectURL(e.configPath, environmentName, *entry.PreviousConfig); err != nil {
 			fmt.Println(tui.RedText.Render("  Could not restore the url in the project config: " + err.Error()))
 		}
 	}

@@ -233,7 +233,7 @@ func buildCompose(hasAMQP, hasElasticsearch bool, opts *ComposeOptions) yaml.Nod
 	}
 	addKeyValueNode(web, "env_file", newSequenceNode(".env.local"))
 	addKeyValueNode(web, "environment", webEnv)
-	addKeyValueNode(web, "volumes", proxyVolumes(px, ".:/var/www/html"))
+	addVolumes(web, px, ".:/var/www/html")
 	addKeyValueNode(web, "depends_on", webDependsOn)
 	publishOrRoute(web, px, "web",
 		[]string{"8000:8000", "8080:8080", "9999:9999", "9998:9998", "5173:5173", "5773:5773"},
@@ -395,7 +395,7 @@ func consoleService(opts *ComposeOptions, webEnv, webDependsOn *yaml.Node, conso
 	addKeyValueNode(svc, "command", newSequenceNode(append([]string{"php", "bin/console"}, consoleArgs...)...))
 	addKeyValueNode(svc, "env_file", newSequenceNode(".env.local"))
 	addKeyValueNode(svc, "environment", webEnv)
-	addKeyValueNode(svc, "volumes", proxyVolumes(opts.proxy(), ".:/var/www/html"))
+	addVolumes(svc, opts.proxy(), ".:/var/www/html")
 	addKeyValueNode(svc, "depends_on", webDependsOn)
 	addKeyValueNode(svc, "restart", &yaml.Node{Kind: yaml.ScalarNode, Value: "unless-stopped", Tag: "!!str"})
 
