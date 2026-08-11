@@ -188,7 +188,7 @@ When Docker-backed execution fails:
 
 1. Run `shopware-cli project dev status`.
 2. Inspect the relevant Shopware CLI command's `--help`.
-3. Retry with `--verbose` when useful.
+3. For Shopware CLI debug output, place `--verbose` before the command group, for example `shopware-cli --verbose project console <command>`.
 4. Verify the selected environment in project configuration.
 5. Inspect Docker directly only after establishing how Shopware CLI attempted to execute the operation.
 
