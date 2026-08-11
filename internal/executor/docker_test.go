@@ -1,0 +1,95 @@
+package executor
+
+import (
+	"fmt"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"runtime"
+	"strings"
+	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+)
+
+// writeRecordingDocker installs a docker stub on PATH that records every
+// argument it is invoked with, one per line, into argsFile.
+func writeRecordingDocker(t *testing.T, argsFile string) {
+	t.Helper()
+
+	if runtime.GOOS == "windows" {
+		t.Skip("fake docker binary requires a POSIX shell")
+	}
+
+	shPath, err := exec.LookPath("sh")
+	require.NoError(t, err)
+
+	script := fmt.Sprintf("#!%s\nprintf '%%s\\n' \"$@\" > %q\n", shPath, argsFile)
+
+	dir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "docker"), []byte(script), 0o755))
+	t.Setenv("PATH", dir)
+}
+
+// recordedArgs reads the arguments captured by writeRecordingDocker.
+func recordedArgs(t *testing.T, argsFile string) []string {
+	t.Helper()
+
+	data, err := os.ReadFile(argsFile)
+	require.NoError(t, err)
+
+	var args []string
+	for _, line := range strings.Split(strings.TrimSpace(string(data)), "\n") {
+		if line != "" {
+			args = append(args, line)
+		}
+	}
+
+	return args
+}
+
+func TestDockerStopEnvironment(t *testing.T) {
+	tests := []struct {
+		name        string
+		opts        StopOptions
+		projectName string
+		want        []string
+	}{
+		{
+			name: "plain down",
+			opts: StopOptions{},
+			want: []string{"compose", "down"},
+		},
+		{
+			name: "down removes volumes",
+			opts: StopOptions{RemoveVolumes: true},
+			want: []string{"compose", "down", "--volumes"},
+		},
+		{
+			name:        "pinned project keeps -p before down",
+			projectName: "sw-shop-abc123",
+			opts:        StopOptions{},
+			want:        []string{"compose", "-p", "sw-shop-abc123", "down"},
+		},
+		{
+			name:        "pinned project with volumes",
+			projectName: "sw-shop-abc123",
+			opts:        StopOptions{RemoveVolumes: true},
+			want:        []string{"compose", "-p", "sw-shop-abc123", "down", "--volumes"},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			argsFile := filepath.Join(t.TempDir(), "args.txt")
+			writeRecordingDocker(t, argsFile)
+
+			dockerExec := &DockerExecutor{projectRoot: t.TempDir(), composeProjectName: tc.projectName}
+
+			require.NoError(t, dockerExec.StopEnvironment(t.Context(), tc.opts))
+
+			assert.Equal(t, tc.want, recordedArgs(t, argsFile))
+		})
+	}
+}
