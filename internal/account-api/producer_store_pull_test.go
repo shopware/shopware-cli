@@ -3,6 +3,7 @@ package account_api
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -279,5 +280,5 @@ type errorNameExtension struct {
 }
 
 func (e *errorNameExtension) GetName() (string, error) {
-	return "", fmt.Errorf("name missing")
+	return "", errors.New("name missing")
 }

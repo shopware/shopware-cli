@@ -2,7 +2,7 @@ package project
 
 import (
 	"context"
-	"fmt"
+	"errors"
 	"os"
 	"os/exec"
 	"os/signal"
@@ -57,7 +57,7 @@ queue. The count per queue is optional and defaults to 1.`,
 		}
 
 		if workerSpec != "" && queuesToConsume != "" {
-			return fmt.Errorf("--queue cannot be combined with a queue spec argument")
+			return errors.New("--queue cannot be combined with a queue spec argument")
 		}
 
 		if memoryLimit == "" {
@@ -97,7 +97,7 @@ queue. The count per queue is optional and defaults to 1.`,
 			p := cmdExecutor.ConsoleCommand(ctx, consumeConfig.ConsumeArgs(job.Queues)...)
 			p.Cmd.Stdout = os.Stdout
 			p.Cmd.Stderr = os.Stderr
-			p.Cmd.Env = append(os.Environ(), fmt.Sprintf("MESSENGER_CONSUMER_NAME=%s", job.ConsumerName))
+			p.Cmd.Env = append(os.Environ(), "MESSENGER_CONSUMER_NAME="+job.ConsumerName)
 			p.Cmd.WaitDelay = time.Second
 			p.Cmd.Cancel = func() error {
 				return gracefulStop(p.Cmd, gracefulStopLimit)
