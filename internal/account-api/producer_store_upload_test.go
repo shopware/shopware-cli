@@ -2,7 +2,7 @@ package account_api
 
 import (
 	"context"
-	"fmt"
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -318,7 +318,7 @@ func TestUploadExtensionSkipsPublishedBinary(t *testing.T) {
 			return nil
 		},
 		updateExtensionBinaryFileFn: func(_ context.Context, _, _, _ int, _ string) error {
-			return fmt.Errorf("BinariesException-40: already published")
+			return errors.New("BinariesException-40: already published")
 		},
 	}
 
