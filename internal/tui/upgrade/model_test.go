@@ -549,10 +549,27 @@ func TestPreparePanelShowsResolvedVersions(t *testing.T) {
 	assert.Contains(t, content, "2.0.0 -> 2.1.3", "queue shows the version composer resolved to")
 }
 
-func TestPreparePanelFlaggedButResolvable(t *testing.T) {
-	// Store metadata flags an extension, but composer resolves the upgrade
-	// with extensions passed as "*": the solver's verdict wins.
+func TestPreparePanelBlockerDisprovenByResolve(t *testing.T) {
+	// Repository metadata flags an extension as blocked, but composer resolves
+	// the upgrade with extensions passed as "*": the solver's verdict wins and
+	// the stale blocker is downgraded to ok instead of scaring the user.
 	w := wizardAtPrepare(t, []backend.ExtensionResult{blockedResult(), okResult()}, true)
+
+	content := w.view(t)
+	assert.Contains(t, content, "READY")
+	assert.NotContains(t, content, "BLOCKED")
+
+	w.Send(key('c'))
+	assert.Equal(t, panelReview, w.m.panel)
+}
+
+func TestPreparePanelFlaggedButResolvable(t *testing.T) {
+	// A non-blocking flag (manual review) survives a successful resolve — the
+	// user should still look at it, it just does not block.
+	review := blockedResult()
+	review.Status = backend.ExtReview
+	review.Detail = "Local extension — review it manually."
+	w := wizardAtPrepare(t, []backend.ExtensionResult{review, okResult()}, true)
 
 	content := w.view(t)
 	assert.Contains(t, content, "REVIEW")
@@ -575,7 +592,9 @@ func TestPreparePanelComposerBlocked(t *testing.T) {
 }
 
 func TestExtensionDetailOverlay(t *testing.T) {
-	w := wizardAtPrepare(t, []backend.ExtensionResult{blockedResult(), okResult()}, true)
+	// A failed resolve keeps the metadata blocker (a successful one would
+	// disprove and downgrade it).
+	w := wizardAtPrepare(t, []backend.ExtensionResult{blockedResult(), okResult()}, false)
 
 	w.Send(specialKey(tea.KeyEnter))
 	require.True(t, w.App.OverlayOpen())
