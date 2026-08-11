@@ -24,10 +24,10 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Validate shopware-cli skill
-        run: pipx run --spec "git+https://github.com/agentskills/agentskills.git#subdirectory=skills-ref" skills-ref validate ./skills/shopware-cli
+        run: pipx run --spec "git+https://github.com/agentskills/agentskills.git@69ef37e9424c0a7ea9dd2293b559e43ec8176379#subdirectory=skills-ref" skills-ref validate ./skills/shopware-cli
 
       - name: Validate shopware-cli-docker skill
-        run: pipx run --spec "git+https://github.com/agentskills/agentskills.git#subdirectory=skills-ref" skills-ref validate ./skills/shopware-cli-docker
+        run: pipx run --spec "git+https://github.com/agentskills/agentskills.git@69ef37e9424c0a7ea9dd2293b559e43ec8176379#subdirectory=skills-ref" skills-ref validate ./skills/shopware-cli-docker
 
       - name: Verify skills discovery
         run: npx --yes skills@1.5.18 add . --list
