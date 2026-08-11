@@ -1,0 +1,35 @@
+name: Agent Skills
+
+on:
+  pull_request:
+    paths:
+      - "skills/**"
+      - "docs/AGENT_SKILLS.md"
+      - "README.md"
+      - ".github/workflows/agent-skills.yml"
+  push:
+    branches:
+      - main
+    paths:
+      - "skills/**"
+      - ".github/workflows/agent-skills.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Validate shopware-cli skill
+        run: pipx run --spec "git+https://github.com/agentskills/agentskills.git#subdirectory=skills-ref" skills-ref validate ./skills/shopware-cli
+
+      - name: Validate shopware-cli-docker skill
+        run: pipx run --spec "git+https://github.com/agentskills/agentskills.git#subdirectory=skills-ref" skills-ref validate ./skills/shopware-cli-docker
+
+      - name: Verify skills discovery
+        run: npx --yes skills@1.5.18 add . --list

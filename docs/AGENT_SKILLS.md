@@ -131,15 +131,9 @@ They are distributed through the Agent Skills ecosystem directly from the
 copies of the skills.
 
 After merging changes to the default branch, verify public discovery:
-After merging changes to the default branch, verify public discovery:
-
-
-Install specific skills with:
 
 ```bash
-npx skills add shopware/shopware-cli \
-  --skill shopware-cli \
-  --skill shopware-cli-docker
+npx skills add shopware/shopware-cli --list
 ```
 
 The `skills` CLI is responsible for installing the canonical skills for
