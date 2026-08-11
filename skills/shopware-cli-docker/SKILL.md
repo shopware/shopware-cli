@@ -1,6 +1,6 @@
 ---
 name: shopware-cli-docker
-description: Use Shopware CLI correctly in Docker-backed Shopware projects. Use when running Symfony commands, working with project services or databases, starting or stopping the development environment, troubleshooting Docker execution, or deciding whether a command belongs on the host or inside the project environment.
+description: Use when working on Docker-backed Shopware projects and needing to run Shopware or Symfony CLI commands, interact with project services or databases, start or stop the development environment, troubleshoot Docker execution, or determine whether a command should run on the host or inside the project container.
 ---
 
 # Shopware CLI with Docker
