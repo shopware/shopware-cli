@@ -134,6 +134,7 @@ After merging changes to the default branch, verify public discovery:
 
 ```bash
 npx skills add shopware/shopware-cli --list
+```
 
 ### Installation
 
