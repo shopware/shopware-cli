@@ -63,6 +63,22 @@ func TestMySQLFlushTable(t *testing.T) {
 	assert.Nil(t, err)
 }
 
+func TestDumpTableDataDirectSkipsLockingForLimitFilteredTables(t *testing.T) {
+	db, mock := getDB(t)
+	dumper := getInternalMySQLInstance(db)
+	dumper.LockTables = true
+	dumper.limitWhere = map[string]string{"table": "`id` IN (SELECT 1)"}
+
+	// No FLUSH TABLES expectation: the limit condition contains a subquery,
+	// so locking must be skipped and the count query is the first statement.
+	mock.ExpectQuery("SELECT COUNT\\(\\*\\) FROM `table` WHERE `id` IN \\(SELECT 1\\)").
+		WillReturnRows(sqlmock.NewRows([]string{"c"}).AddRow(0))
+
+	var buf bytes.Buffer
+	assert.NoError(t, dumper.dumpTableDataDirect(t.Context(), &buf, "table"))
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
 func TestMySQLUnlockTables(t *testing.T) {
 	db, mock := getDB(t)
 	dumper := getInternalMySQLInstance(db)

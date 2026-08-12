@@ -94,6 +94,10 @@ func (d *Dumper) computeLimitFilters(ctx context.Context) error {
 		}
 	}
 
+	if d.LockTables && len(d.limitWhere) > 0 {
+		logging.FromContext(ctx).Infof("Skipping table locks for %d tables filtered by row limits, as their dump queries reference other tables", len(d.limitWhere))
+	}
+
 	return nil
 }
 

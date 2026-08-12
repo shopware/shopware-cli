@@ -304,7 +304,12 @@ func (d *Dumper) dumpTableDataDirect(ctx context.Context, w io.Writer, table str
 	var tmp string
 	var err error
 
-	if d.LockTables {
+	// Row-limit conditions contain subqueries on other tables (or the table
+	// itself), which MySQL rejects with ER_TABLE_NOT_LOCKED while the table
+	// is locked via FLUSH TABLES ... WITH READ LOCK.
+	lockTable := d.LockTables && !d.hasLimitFilter(table)
+
+	if lockTable {
 		_, err = d.mysqlFlushTable(ctx, table)
 		if err != nil {
 			return err
@@ -336,13 +341,20 @@ func (d *Dumper) dumpTableDataDirect(ctx context.Context, w io.Writer, table str
 		}
 	}
 
-	if d.LockTables {
+	if lockTable {
 		if _, dErr := d.mysqlUnlockTables(ctx); dErr != nil {
 			return dErr
 		}
 	}
 
 	return nil
+}
+
+// hasLimitFilter reports whether the data queries of the table carry a
+// row-limit condition computed from LimitMap.
+func (d *Dumper) hasLimitFilter(table string) bool {
+	_, ok := d.limitWhere[strings.ToLower(table)]
+	return ok
 }
 
 func (d *Dumper) dumpTableDataToWriter(ctx context.Context, w io.Writer, table string) error {
