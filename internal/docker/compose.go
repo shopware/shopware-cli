@@ -184,17 +184,13 @@ func buildCompose(hasAMQP, hasElasticsearch bool, opts *ComposeOptions) yaml.Nod
 	addKeyValue(webEnv, "TRUSTED_PROXIES", trustedProxies)
 	addKeyValue(webEnv, "SYMFONY_TRUSTED_PROXIES", trustedProxies)
 
-	if px != nil {
-		// Pin APP_URL as a real container env var (not only .env.local) so PHP
-		// renders absolute URLs — e.g. the storefront import map — with the
-		// proxy hostname, and point Node at the mounted CA so self-calls over
-		// TLS are trusted.
-		if px.AppURL != "" {
-			addKeyValue(webEnv, "APP_URL", px.AppURL)
-		}
-		if px.CAPath != "" {
-			addKeyValue(webEnv, "NODE_EXTRA_CA_CERTS", containerCAPath)
-		}
+	if px != nil && px.CAPath != "" {
+		// APP_URL is not pinned here: proxy up writes it into .env.local before
+		// the container starts, keeping .env.local the single, editable source of
+		// truth (a real env var would silently win over the file and confuse
+		// anyone editing it). Point Node at the mounted CA so self-calls over TLS
+		// are trusted.
+		addKeyValue(webEnv, "NODE_EXTRA_CA_CERTS", containerCAPath)
 	}
 
 	if hasAMQP {

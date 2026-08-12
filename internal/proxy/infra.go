@@ -119,7 +119,6 @@ func ComposeProxyOptions(projectRoot string, cfg *shop.Config) (*docker.ProxyOpt
 		Hostname:       hostname,
 		NetworkName:    NetworkName,
 		CAPath:         caPath,
-		AppURL:         "https://" + hostname,
 		AdminWatchPort: extension.AdminDevServerPort(projectRoot),
 	}, true
 }

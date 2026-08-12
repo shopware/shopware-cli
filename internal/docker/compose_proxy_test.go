@@ -14,7 +14,6 @@ func proxyComposeOptions() *ComposeOptions {
 			Hostname:       "my-shop.shopware.local",
 			NetworkName:    "shopware-cli-proxy",
 			CAPath:         "/state/mkcert/rootCA.pem",
-			AppURL:         "https://my-shop.shopware.local",
 			AdminWatchPort: 5173,
 		},
 	}
@@ -66,9 +65,9 @@ func TestGenerateComposeFileProxyMode(t *testing.T) {
 	// TLS terminates at Traefik, so the web container must trust its headers.
 	assert.Contains(t, out, "127.0.0.1,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16")
 
-	// APP_URL is pinned on the container so PHP renders absolute URLs (import
-	// map, asset URLs) with the proxy hostname, not the stale image default.
-	assert.Contains(t, out, "APP_URL: https://my-shop.shopware.local")
+	// APP_URL is NOT pinned as a container env var; proxy up writes it into
+	// .env.local before the container starts, keeping the file authoritative.
+	assert.NotContains(t, out, "APP_URL:")
 
 	// The CA is mounted into the web container and Node points at it, so the
 	// shop can call its own APP_URL over HTTPS.

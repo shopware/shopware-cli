@@ -24,13 +24,6 @@ type ProxyOptions struct {
 	// anchor) accepts the proxy's HTTPS certificates — needed when the shop
 	// calls its own APP_URL over HTTPS (and, as a side effect, a sibling's).
 	CAPath string
-	// AppURL, when set, pins APP_URL as a real container env var on the web and
-	// background services. It must be set here (not only in .env.local) because
-	// the container is created before proxy up rewrites .env.local, and a real
-	// env var reliably beats both the env_file and the image default — otherwise
-	// PHP renders absolute asset URLs (e.g. the storefront import map) with the
-	// stale image APP_URL.
-	AppURL string
 	// AdminWatchPort is the container port the admin watcher's dev server binds:
 	// Vite (5173) on Shopware 6.7+, webpack-dev-server (8080) before, decided by
 	// the ADMIN_VITE feature flag. The caller computes it (via

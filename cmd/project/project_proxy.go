@@ -131,25 +131,16 @@ func (e *proxyEnvironment) up(cmd *cobra.Command) error {
 	}
 
 	// Regenerate compose.yaml in proxy mode (no host ports, shared network,
-	// Traefik labels, CA mount, pinned APP_URL) before starting the containers.
+	// Traefik labels, combined CA bundle mounted) before starting the containers.
 	if err := dockerpkg.WriteComposeFile(e.projectRoot, e.composeOptions()); err != nil {
 		return err
 	}
 
 	proxyURL := "https://" + e.hostname
 
-	start := time.Now()
-	err = runStep(ctx, "Starting development environment...", func(ctx context.Context) error {
-		return e.executor.StartEnvironment(ctx)
-	})
-	if err != nil {
-		return fmt.Errorf("starting environment: %w", err)
-	}
-	elapsed := time.Since(start).Round(time.Millisecond)
-
-	// Point the application at its proxy hostname: APP_URL for env-driven
-	// code paths and installs, the sales channel domain for installed shops.
-	// Remember the previous APP_URL so "proxy down" can restore it.
+	// Capture the pre-proxy APP_URL (so "proxy down" can restore it) and whether
+	// the URL actually changes (only then is the costly theme recompile needed).
+	// Both read .env.local before it is rewritten just below.
 	previousAppURL := defaultShopURL
 	if entry, found := reg.Find(e.canonicalRoot); found && entry.PreviousAppURL != "" {
 		previousAppURL = entry.PreviousAppURL
@@ -162,12 +153,27 @@ func (e *proxyEnvironment) up(cmd *cobra.Command) error {
 	if previousAppURL == proxyURL {
 		previousAppURL = defaultShopURL
 	}
-
-	// Only a real URL change needs the (costly) theme recompile below, so
-	// compare the current APP_URL against the target before overwriting it.
 	urlChanged := envfile.ReadEnvVar(e.envLocalPath(), "APP_URL") != proxyURL
 
-	if err := e.pointShopAt(ctx, []string{previousAppURL, "http://" + e.hostname}, proxyURL); err != nil {
+	// Point .env.local at the proxy hostname before the container starts, so it
+	// boots on the right APP_URL. .env.local stays the single, editable source
+	// of truth — no pinned env var silently overriding it.
+	if err := envfile.UpsertEnvVar(e.envLocalPath(), "APP_URL", proxyURL); err != nil {
+		return fmt.Errorf("setting APP_URL in .env.local: %w", err)
+	}
+
+	start := time.Now()
+	err = runStep(ctx, "Starting development environment...", func(ctx context.Context) error {
+		return e.executor.StartEnvironment(ctx)
+	})
+	if err != nil {
+		return fmt.Errorf("starting environment: %w", err)
+	}
+	elapsed := time.Since(start).Round(time.Millisecond)
+
+	// Repoint the sales channel domain to the proxy hostname; needs the running
+	// database, so it happens after the environment is up.
+	if err := e.repointSalesChannel(ctx, []string{previousAppURL, "http://" + e.hostname}, proxyURL); err != nil {
 		fmt.Println(tui.RedText.Render("  Could not update the shop URL: " + err.Error()))
 	}
 
@@ -259,9 +265,10 @@ func (e *proxyEnvironment) infraParams() proxy.InfraParams {
 
 // composeOptions returns the compose options for this project in proxy mode
 // (no host ports, joined to the shared proxy network with Traefik labels, CA
-// mounted, APP_URL pinned). up and dev-bootstrap use it to (re)generate
-// compose.yaml directly, since they know the project is proxied even before
-// its config records the hostname.
+// mounted). up and dev-bootstrap use it to (re)generate compose.yaml directly,
+// since they know the project is proxied even before its config records the
+// hostname. APP_URL is not set here — proxy up writes it into .env.local before
+// the container starts, keeping the file the single source of truth.
 func (e *proxyEnvironment) composeOptions() *dockerpkg.ComposeOptions {
 	opts := dockerpkg.ComposeOptionsFromConfig(e.cfg)
 	if opts == nil {
@@ -273,7 +280,6 @@ func (e *proxyEnvironment) composeOptions() *dockerpkg.ComposeOptions {
 		Hostname:       e.hostname,
 		NetworkName:    proxy.NetworkName,
 		CAPath:         caPath,
-		AppURL:         "https://" + e.hostname,
 		AdminWatchPort: extension.AdminDevServerPort(e.projectRoot),
 	}
 
@@ -282,8 +288,8 @@ func (e *proxyEnvironment) composeOptions() *dockerpkg.ComposeOptions {
 
 // bootstrapInfra sets up the shared proxy for this project and registers it,
 // without starting or installing the shop — a proxy-mode `project dev` starts
-// the environment and installs the shop itself (the pinned APP_URL makes the
-// install use the proxy hostname). Safe to call repeatedly.
+// the environment and installs the shop itself. It seeds APP_URL in .env.local
+// so that install uses the proxy hostname. Safe to call repeatedly.
 func (e *proxyEnvironment) bootstrapInfra(ctx context.Context) error {
 	reg, err := proxy.LoadRegistry()
 	if err != nil {
@@ -292,6 +298,16 @@ func (e *proxyEnvironment) bootstrapInfra(ctx context.Context) error {
 
 	if _, err := proxy.PrepareInfra(ctx, e.infraParams(), reg); err != nil {
 		return err
+	}
+
+	// Seed APP_URL before the container starts so it boots on the proxy hostname
+	// (.env.local is the single source of truth now that APP_URL is not pinned as
+	// a container env var). Only when unset, so a value the user edited by hand
+	// is left untouched.
+	if envfile.ReadEnvVar(e.envLocalPath(), "APP_URL") == "" {
+		if err := envfile.UpsertEnvVar(e.envLocalPath(), "APP_URL", "https://"+e.hostname); err != nil {
+			return fmt.Errorf("setting APP_URL in .env.local: %w", err)
+		}
 	}
 
 	// A born-proxy project has no PreviousAppURL/PreviousConfig (its configured
@@ -436,16 +452,12 @@ func previousConfigState(reg proxy.Registry, canonicalRoot string) (*shop.Config
 	return nil, false
 }
 
-// pointShopAt switches the shop to toURL: APP_URL in .env.local and, for
-// installed shops, the sales channel domain via the core
-// sales-channel:replace:url console command. Every URL in fromURLs is tried,
-// since the domain may still carry an older value (e.g. the http:// variant
-// of the proxy hostname from a previous registration).
-func (e *proxyEnvironment) pointShopAt(ctx context.Context, fromURLs []string, toURL string) error {
-	if err := envfile.UpsertEnvVar(e.envLocalPath(), "APP_URL", toURL); err != nil {
-		return err
-	}
-
+// repointSalesChannel updates an installed shop's sales channel domain to
+// toURL. Every URL in fromURLs is tried, since the domain may still carry an
+// older value (e.g. the http:// variant of the proxy hostname from a previous
+// registration). APP_URL in .env.local is set separately, before the container
+// starts.
+func (e *proxyEnvironment) repointSalesChannel(ctx context.Context, fromURLs []string, toURL string) error {
 	// Repoint the sales channel domain with one direct UPDATE, which works on
 	// every Shopware version (the sales-channel:replace:url console command is
 	// 6.7+ only). The database is only reachable while the stack runs; when it
@@ -555,7 +567,10 @@ func (e *proxyEnvironment) down(ctx context.Context, hintTeardown bool) error {
 	// the proxy hostname), so its URLs are left as they are; a later
 	// `project dev` simply re-bootstraps the proxy.
 	if registered && entry.PreviousAppURL != "" {
-		if err := e.pointShopAt(ctx, []string{"https://" + e.hostname, "http://" + e.hostname}, entry.PreviousAppURL); err != nil {
+		if err := envfile.UpsertEnvVar(e.envLocalPath(), "APP_URL", entry.PreviousAppURL); err != nil {
+			fmt.Println(tui.RedText.Render("  Could not restore APP_URL in .env.local: " + err.Error()))
+		}
+		if err := e.repointSalesChannel(ctx, []string{"https://" + e.hostname, "http://" + e.hostname}, entry.PreviousAppURL); err != nil {
 			fmt.Println(tui.RedText.Render("  Could not restore the sales channel domain: " + err.Error()))
 			fmt.Println(tui.DimText.Render("  Restore the sales channel domain to ") + tui.BoldText.Render(entry.PreviousAppURL) + tui.DimText.Render(" once the shop runs."))
 		}
