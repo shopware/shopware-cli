@@ -26,8 +26,13 @@ type Dumper struct {
 	// NoData contains list of tables to dump structure only (no data), supports glob wildcards (e.g. "cart*")
 	NoData []string
 	// Ignore contains list of tables to skip entirely, supports glob wildcards (e.g. "cart*")
-	Ignore    []string
-	filterMap map[string]string
+	Ignore []string
+	// LimitMap contains row limits per table (table -> limit). Tables referencing
+	// a limited table via foreign keys are filtered automatically.
+	LimitMap map[string]TableLimit
+	// limitWhere contains the WHERE conditions computed from LimitMap
+	limitWhere map[string]string
+	filterMap  map[string]string
 	// LockTables controls whether to lock tables during dump (default: true)
 	LockTables bool
 	// Quick enables quick mode for mysqldump (default: false)
@@ -91,6 +96,10 @@ func (d *Dumper) Dump(ctx context.Context, w io.Writer) error {
 	}
 
 	if err := d.prefetchAllSchemas(ctx, tablesToDump); err != nil {
+		return err
+	}
+
+	if err := d.computeLimitFilters(ctx); err != nil {
 		return err
 	}
 
@@ -633,10 +642,27 @@ func (d *Dumper) getSelectQueryFor(ctx context.Context, table string) (cols []st
 		return cols, "", err
 	}
 	query = fmt.Sprintf("SELECT %s FROM `%s`", strings.Join(cols, ", "), table)
-	if where, ok := d.WhereMap[strings.ToLower(table)]; ok {
+	if where := d.effectiveWhere(table); where != "" {
 		query = fmt.Sprintf("%s WHERE %s", query, where)
 	}
 	return
+}
+
+// effectiveWhere combines the user-configured WHERE clause with the condition
+// computed from the row limits for the given table.
+func (d *Dumper) effectiveWhere(table string) string {
+	table = strings.ToLower(table)
+	userWhere := d.WhereMap[table]
+	limitWhere := d.limitWhere[table]
+
+	switch {
+	case userWhere != "" && limitWhere != "":
+		return fmt.Sprintf("(%s) AND %s", userWhere, limitWhere)
+	case userWhere != "":
+		return userWhere
+	default:
+		return limitWhere
+	}
 }
 
 func (d *Dumper) getLockTableWriteStatement(table string) string {
@@ -686,7 +712,7 @@ func (d *Dumper) getColumnsForSelect(ctx context.Context, table string, consider
 
 func (d *Dumper) rowCount(ctx context.Context, table string) (count uint64, err error) {
 	query := fmt.Sprintf("SELECT COUNT(*) FROM `%s`", table)
-	if where, ok := d.WhereMap[strings.ToLower(table)]; ok {
+	if where := d.effectiveWhere(table); where != "" {
 		query = fmt.Sprintf("%s WHERE %s", query, where)
 	}
 	row := d.useTransactionOrDBQueryRow(ctx, query)

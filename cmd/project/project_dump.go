@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strconv"
 	"strings"
 
 	"github.com/charmbracelet/x/term"
@@ -48,6 +49,7 @@ var projectDatabaseDumpCmd = &cobra.Command{
 		quick, _ := cmd.Flags().GetBool("quick")
 		parallel, _ := cmd.Flags().GetInt("parallel")
 		insertIntoLimit, _ := cmd.Flags().GetInt("insert-into-limit")
+		limits, _ := cmd.Flags().GetStringArray("limit")
 
 		db, err := sql.Open("mysql", mysqlConfig.FormatDSN())
 		if err != nil {
@@ -77,12 +79,39 @@ var projectDatabaseDumpCmd = &cobra.Command{
 			projectCfg.ConfigDump.EnableAnonymization()
 		}
 
+		for _, limit := range limits {
+			table, rows, ok := strings.Cut(limit, "=")
+			if !ok {
+				return fmt.Errorf("invalid --limit %q, expected format table=rows (e.g. order=100)", limit)
+			}
+
+			rowCount, err := strconv.Atoi(rows)
+			if err != nil || rowCount < 1 {
+				return fmt.Errorf("invalid --limit %q, rows must be a positive number", limit)
+			}
+
+			if projectCfg.ConfigDump.Limit == nil {
+				projectCfg.ConfigDump.Limit = make(map[string]shop.ConfigDumpLimit)
+			}
+
+			cfgLimit := projectCfg.ConfigDump.Limit[table]
+			cfgLimit.Rows = rowCount
+			projectCfg.ConfigDump.Limit[table] = cfgLimit
+		}
+
 		projectCfg.ConfigDump.NormalizeFakerExpressions()
 
 		dumper.SelectMap = projectCfg.ConfigDump.Rewrite
 		dumper.WhereMap = projectCfg.ConfigDump.Where
 		dumper.NoData = projectCfg.ConfigDump.NoData
 		dumper.Ignore = projectCfg.ConfigDump.Ignore
+
+		if len(projectCfg.ConfigDump.Limit) > 0 {
+			dumper.LimitMap = make(map[string]mysqldump.TableLimit, len(projectCfg.ConfigDump.Limit))
+			for table, limit := range projectCfg.ConfigDump.Limit {
+				dumper.LimitMap[table] = mysqldump.TableLimit{Rows: limit.Rows, OrderBy: limit.OrderBy}
+			}
+		}
 
 		var w io.Writer
 		if output == "-" {
@@ -222,4 +251,5 @@ func init() {
 	projectDatabaseDumpCmd.Flags().Bool("quick", false, "Use quick option for mysqldump")
 	projectDatabaseDumpCmd.Flags().Int("parallel", 0, "Number of tables to dump concurrently (0 = disabled)")
 	projectDatabaseDumpCmd.Flags().Int("insert-into-limit", 0, "Limit the number of rows per INSERT statement (0 = auto, takes priority over --quick when set)")
+	projectDatabaseDumpCmd.Flags().StringArray("limit", nil, "Limit the rows of a table (e.g. order=100 dumps only the 100 newest orders). Tables referencing the limited table are filtered automatically. Can be specified multiple times")
 }

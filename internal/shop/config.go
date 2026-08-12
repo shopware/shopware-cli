@@ -248,6 +248,16 @@ type ConfigDump struct {
 	Ignore []string `yaml:"ignore,omitempty"`
 	// Add an where condition to that table, schema is table name as key, and where statement as value
 	Where map[string]string `yaml:"where,omitempty"`
+	// Limit the amount of exported rows of a table, schema is table name as key. All tables referencing the limited table via foreign keys (also transitively) are filtered automatically, so they only contain rows belonging to the kept rows
+	Limit map[string]ConfigDumpLimit `yaml:"limit,omitempty"`
+}
+
+// ConfigDumpLimit restricts how many rows of a table are exported.
+type ConfigDumpLimit struct {
+	// Maximum amount of rows to export for this table
+	Rows int `yaml:"rows" jsonschema:"required,minimum=1"`
+	// SQL ORDER BY clause deciding which rows are kept (e.g. "created_at DESC" for the newest rows). Defaults to "created_at DESC" when the table has a created_at column
+	OrderBy string `yaml:"order_by,omitempty"`
 }
 
 // EnableClean adds default tables that should be excluded from data dump in clean mode
