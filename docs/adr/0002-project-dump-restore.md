@@ -37,3 +37,67 @@ This workflow is for transferring shop data. Production backup, disaster recover
 - The transfer format should remain compatible with future PaaS import and export workflows where practical.
 - Partial transfers, optional compression, and non-local storage can be added without introducing a separate data model.
 - Work to define the migration path from/into Shopware PaaS/SaaS hosting is ongoing and supported by this ADR.
+
+## Possible archive and manifest formats
+
+The following examples are illustrative and subject to validation against PaaS/SaaS interoperability requirements.
+
+Potential archive structure:
+
+```
+manifest.json
+database.sql          # database.backup_type = "sql"
+database/             # database.backup_type = "mysql-shell"
+  ...                 # complete, opaque MySQL Shell dump
+public.tar.gz          # optional
+private.tar.gz         # optional
+```
+
+Potential manifest structure:
+
+```
+{
+  "format_version": 1,
+  "created_at": "2026-08-11T12:00:00Z",
+  "tool": {
+    "name": "shopware-cli",
+    "version": "0.9.0"
+  },
+  "source": {
+    "shopware_version": "6.7.1.0",
+    "database": {
+      "vendor": "mysql",
+      "version": "8.4.6"
+    }
+  },
+  "database": {
+    "backup_type": "sql",
+    "path": "database.sql"
+  },
+  "filesystems": {
+    "public": {
+      "path": "public.tar.gz"
+    },
+    "private": {
+      "path": "private.tar.gz"
+    }
+  },
+  "files": [
+    {
+      "path": "database.sql",
+      "size": 123456789,
+      "sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+    },
+    {
+      "path": "public.tar.gz",
+      "size": 23456789,
+      "sha256": "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789"
+    },
+    {
+      "path": "private.tar.gz",
+      "size": 3456789,
+      "sha256": "123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0"
+    }
+  ]
+}
+```
