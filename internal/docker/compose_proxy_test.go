@@ -13,7 +13,7 @@ func proxyComposeOptions() *ComposeOptions {
 		Proxy: &ProxyOptions{
 			Hostname:       "my-shop.shopware.local",
 			NetworkName:    "shopware-cli-proxy",
-			CAPath:         "/state/mkcert/rootCA.pem",
+			CABundlePath:   "/state/proxy/ca-bundles/abcd1234.crt",
 			AdminWatchPort: 5173,
 		},
 	}
@@ -69,9 +69,10 @@ func TestGenerateComposeFileProxyMode(t *testing.T) {
 	// .env.local before the container starts, keeping the file authoritative.
 	assert.NotContains(t, out, "APP_URL:")
 
-	// The CA is mounted into the web container and Node points at it, so the
-	// shop can call its own APP_URL over HTTPS.
-	assert.Contains(t, out, "/state/mkcert/rootCA.pem:/usr/local/share/ca-certificates/shopware-cli-proxy.crt:ro")
+	// The combined CA bundle is mounted over the system trust store and Node
+	// points at it, so PHP/curl/Node trust the proxy when the shop calls its own
+	// APP_URL over HTTPS.
+	assert.Contains(t, out, "/state/proxy/ca-bundles/abcd1234.crt:/etc/ssl/certs/ca-certificates.crt:ro")
 	assert.Contains(t, out, "NODE_EXTRA_CA_CERTS")
 
 	// worker/scheduler join the shared network + carry the CA (via the shared

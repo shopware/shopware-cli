@@ -18,12 +18,14 @@ type ProxyOptions struct {
 	Hostname string
 	// NetworkName is the external Docker network shared with Traefik.
 	NetworkName string
-	// CAPath is the host path of the proxy's root CA certificate. When set,
-	// it is mounted read-only into the shop's containers so code running
-	// there (Node via NODE_EXTRA_CA_CERTS, and PHP once the image trusts the
-	// anchor) accepts the proxy's HTTPS certificates — needed when the shop
-	// calls its own APP_URL over HTTPS (and, as a side effect, a sibling's).
-	CAPath string
+	// CABundlePath is the host path of a CA bundle that combines the image's
+	// system CAs with the proxy's root CA. When set, it is mounted read-only
+	// over the container's system trust store so everything there — PHP, curl
+	// (e.g. Shopware's own APP_URL reachability self-call) and Node — trusts the
+	// proxy's HTTPS certificates while still trusting the public internet.
+	// Mounting the bare CA under /usr/local/share/ca-certificates is not enough:
+	// the image runs as www-data and never runs update-ca-certificates.
+	CABundlePath string
 	// AdminWatchPort is the container port the admin watcher's dev server binds:
 	// Vite (5173) on Shopware 6.7+, webpack-dev-server (8080) before, decided by
 	// the ADMIN_VITE feature flag. The caller computes it (via
@@ -32,11 +34,11 @@ type ProxyOptions struct {
 	AdminWatchPort int
 }
 
-// containerCAPath is where the proxy CA is mounted inside the shop's
-// containers. /usr/local/share/ca-certificates is the standard anchor
-// directory picked up by update-ca-certificates, and the file is also
-// referenced directly by NODE_EXTRA_CA_CERTS.
-const containerCAPath = "/usr/local/share/ca-certificates/shopware-cli-proxy.crt"
+// containerCABundlePath is where the combined CA bundle is mounted inside the
+// shop's containers: straight over the system trust store, so openssl, curl and
+// PHP pick it up with no update-ca-certificates step (which the www-data image
+// user could not run anyway). NODE_EXTRA_CA_CERTS points Node at the same file.
+const containerCABundlePath = "/etc/ssl/certs/ca-certificates.crt"
 
 const (
 	// storefrontProxyPort / storefrontAssetsPort are the two container ports the
@@ -182,13 +184,14 @@ func addProxyRouting(svc *yaml.Node, p *ProxyOptions, serviceName string, routes
 }
 
 // addVolumes attaches a service's volume list built from base mounts, plus the
-// read-only proxy CA mount when in proxy mode with a CA path — so code in the
-// container trusts the proxy's HTTPS certificates for self-calls to APP_URL.
+// read-only combined CA bundle mounted over the system trust store when in
+// proxy mode — so code in the container (PHP, curl, Node) trusts the proxy's
+// HTTPS certificates for self-calls to APP_URL while still trusting public CAs.
 // Mirrors publishOrRoute, keeping the proxy-specific mount out of buildCompose.
 func addVolumes(svc *yaml.Node, p *ProxyOptions, base ...string) {
 	vols := newSequenceNode(base...)
-	if p != nil && p.CAPath != "" {
-		vols.Content = append(vols.Content, &yaml.Node{Kind: yaml.ScalarNode, Value: p.CAPath + ":" + containerCAPath + ":ro", Tag: "!!str"})
+	if p != nil && p.CABundlePath != "" {
+		vols.Content = append(vols.Content, &yaml.Node{Kind: yaml.ScalarNode, Value: p.CABundlePath + ":" + containerCABundlePath + ":ro", Tag: "!!str"})
 	}
 
 	addKeyValueNode(svc, "volumes", vols)

@@ -103,6 +103,14 @@ func (o *ComposeOptions) proxy() *ProxyOptions {
 	return o.Proxy
 }
 
+// WebImage returns the docker-dev image the web and console services run,
+// derived from the configured PHP version and the pinned Node version. Callers
+// outside this package (the proxy CA-bundle builder) need the exact tag to
+// operate on the same image the shop will run.
+func WebImage(opts *ComposeOptions) string {
+	return fmt.Sprintf("ghcr.io/shopware/docker-dev:php%s-node%s-caddy", opts.phpVersion(), nodeVersion)
+}
+
 func ComposeOptionsFromConfig(cfg *shop.Config) *ComposeOptions {
 	if cfg == nil || cfg.Docker == nil {
 		return nil
@@ -184,13 +192,14 @@ func buildCompose(hasAMQP, hasElasticsearch bool, opts *ComposeOptions) yaml.Nod
 	addKeyValue(webEnv, "TRUSTED_PROXIES", trustedProxies)
 	addKeyValue(webEnv, "SYMFONY_TRUSTED_PROXIES", trustedProxies)
 
-	if px != nil && px.CAPath != "" {
+	if px != nil && px.CABundlePath != "" {
 		// APP_URL is not pinned here: proxy up writes it into .env.local before
 		// the container starts, keeping .env.local the single, editable source of
 		// truth (a real env var would silently win over the file and confuse
-		// anyone editing it). Point Node at the mounted CA so self-calls over TLS
-		// are trusted.
-		addKeyValue(webEnv, "NODE_EXTRA_CA_CERTS", containerCAPath)
+		// anyone editing it). Point Node at the mounted CA bundle so its own
+		// self-calls over TLS are trusted (PHP/curl trust it via the same bundle
+		// mounted over the system trust store — see addVolumes).
+		addKeyValue(webEnv, "NODE_EXTRA_CA_CERTS", containerCABundlePath)
 	}
 
 	if hasAMQP {
@@ -223,7 +232,7 @@ func buildCompose(hasAMQP, hasElasticsearch bool, opts *ComposeOptions) yaml.Nod
 	}
 
 	web := newMappingNode()
-	addKeyValue(web, "image", fmt.Sprintf("ghcr.io/shopware/docker-dev:php%s-node%s-caddy", opts.phpVersion(), nodeVersion))
+	addKeyValue(web, "image", WebImage(opts))
 	if opts != nil && opts.User != "" {
 		addKeyValue(web, "user", opts.User)
 	}
@@ -384,7 +393,7 @@ func buildCompose(hasAMQP, hasElasticsearch bool, opts *ComposeOptions) yaml.Nod
 // disabled.
 func consoleService(opts *ComposeOptions, webEnv, webDependsOn *yaml.Node, consoleArgs ...string) *yaml.Node {
 	svc := newMappingNode()
-	addKeyValue(svc, "image", fmt.Sprintf("ghcr.io/shopware/docker-dev:php%s-node%s-caddy", opts.phpVersion(), nodeVersion))
+	addKeyValue(svc, "image", WebImage(opts))
 	if opts.User != "" {
 		addKeyValue(svc, "user", opts.User)
 	}

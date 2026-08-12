@@ -20,6 +20,9 @@ type InfraParams struct {
 	// ConfigPath names the project config file; used only in the hostname
 	// collision hint.
 	ConfigPath string
+	// Image is the docker-dev image the shop's containers run. PrepareInfra
+	// reads its system CA bundle to build the combined trust bundle.
+	Image string
 }
 
 // PrepareInfra brings up the shared infrastructure a proxy project needs before
@@ -37,6 +40,13 @@ func PrepareInfra(ctx context.Context, p InfraParams, reg Registry) (CertInfo, e
 	certInfo, err := ensureCertificate(p.Hostname, p.BaseDomain, reg)
 	if err != nil {
 		return CertInfo{}, err
+	}
+
+	// Build the combined CA bundle the shop's containers mount over their system
+	// trust store, so PHP/curl/Node trust the proxy's HTTPS certificates. Done
+	// before the containers start, so the mount target always exists.
+	if _, err := EnsureContainerCABundle(ctx, p.Image, certInfo.CAPath); err != nil {
+		return CertInfo{}, fmt.Errorf("building container CA bundle: %w", err)
 	}
 
 	if err := EnsureTraefikRunning(ctx, p.BaseDomain); err != nil {
@@ -111,14 +121,16 @@ func ComposeProxyOptions(projectRoot string, cfg *shop.Config) (*docker.ProxyOpt
 		return nil, false
 	}
 
-	// Best-effort: an unavailable CA just means no CA mount (self-calls over
-	// TLS would not be trusted, but the shop still serves).
-	caPath, _ := CACertPath()
+	// Reference the deterministic bundle path; the file itself is written by
+	// PrepareInfra before the containers start. Best-effort: if the state dir is
+	// unavailable the mount is simply dropped (the shop still serves, only its
+	// own TLS self-calls would be untrusted).
+	bundlePath, _ := ContainerCABundlePath(docker.WebImage(docker.ComposeOptionsFromConfig(cfg)))
 
 	return &docker.ProxyOptions{
 		Hostname:       hostname,
 		NetworkName:    NetworkName,
-		CAPath:         caPath,
+		CABundlePath:   bundlePath,
 		AdminWatchPort: extension.AdminDevServerPort(projectRoot),
 	}, true
 }

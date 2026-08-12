@@ -260,26 +260,28 @@ func (e *proxyEnvironment) infraParams() proxy.InfraParams {
 		Hostname:      e.hostname,
 		BaseDomain:    e.baseDomain,
 		ConfigPath:    e.configPath,
+		Image:         dockerpkg.WebImage(dockerpkg.ComposeOptionsFromConfig(e.cfg)),
 	}
 }
 
 // composeOptions returns the compose options for this project in proxy mode
-// (no host ports, joined to the shared proxy network with Traefik labels, CA
-// mounted). up and dev-bootstrap use it to (re)generate compose.yaml directly,
-// since they know the project is proxied even before its config records the
-// hostname. APP_URL is not set here — proxy up writes it into .env.local before
-// the container starts, keeping the file the single source of truth.
+// (no host ports, joined to the shared proxy network with Traefik labels, the
+// combined CA bundle mounted). up and dev-bootstrap use it to (re)generate
+// compose.yaml directly, since they know the project is proxied even before its
+// config records the hostname. APP_URL is not set here — proxy up writes it into
+// .env.local before the container starts, keeping the file the single source of
+// truth.
 func (e *proxyEnvironment) composeOptions() *dockerpkg.ComposeOptions {
 	opts := dockerpkg.ComposeOptionsFromConfig(e.cfg)
 	if opts == nil {
 		opts = &dockerpkg.ComposeOptions{}
 	}
 
-	caPath, _ := proxy.CACertPath()
+	bundlePath, _ := proxy.ContainerCABundlePath(dockerpkg.WebImage(opts))
 	opts.Proxy = &dockerpkg.ProxyOptions{
 		Hostname:       e.hostname,
 		NetworkName:    proxy.NetworkName,
-		CAPath:         caPath,
+		CABundlePath:   bundlePath,
 		AdminWatchPort: extension.AdminDevServerPort(e.projectRoot),
 	}
 

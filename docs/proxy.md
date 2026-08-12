@@ -229,13 +229,18 @@ sequenceDiagram
   Traefik's address and is routed by `Host` back to the shop, identical to
   host-side traffic. Reconciled on `up`/`down`, only when the set actually
   changed (no needless network flap).
-- **Trust** — the proxy CA is mounted read-only into the shop's containers and
-  `NODE_EXTRA_CA_CERTS` points at it, so Node code trusts the certificate
-  immediately.
+- **Trust** — a combined CA bundle (the image's own public CAs plus the proxy
+  CA) is mounted read-only **over the container's system trust store**
+  (`/etc/ssl/certs/ca-certificates.crt`), so PHP, curl and — via
+  `NODE_EXTRA_CA_CERTS` — Node all trust the proxy certificate immediately,
+  while still trusting the public internet. Mounting the bare CA under
+  `/usr/local/share/ca-certificates/` would not work: the image runs as
+  `www-data` and never runs `update-ca-certificates`.
 
 The web, worker and scheduler containers all join the shared network and carry
-the CA, so a self-call works whether it originates from a request, the queue
-worker, or a scheduled task.
+the bundle, so a self-call works whether it originates from a request, the queue
+worker, or a scheduled task — including Shopware's own `APP_URL` reachability
+check, which curls the shop over HTTPS.
 
 > **Nice side effect — cross-shop:** because all registered hostnames are
 > aliased on the one shared Traefik, a container in one shop can also reach
@@ -244,13 +249,6 @@ worker, or a scheduled task.
 > free; it is not the primary goal. A shop that is registered but not running
 > resolves to Traefik and gets a 404 (no live route) — the expected "not up"
 > signal, not a crash.
-
-> **Current boundary (PHP):** Node trust works today; PHP/curl reads the
-> system CA bundle, which only includes the mounted CA once the container runs
-> `update-ca-certificates` on it. That step lives in the `docker-dev` image,
-> so full PHP trust is a coordinated `docker-dev` change — the CA is already
-> mounted at the standard anchor path (`/usr/local/share/ca-certificates/`) so
-> it works the moment the image cooperates.
 
 ## Design decisions and their trade-offs
 
@@ -365,11 +363,8 @@ The CA import is one-time per machine; the hosts line is per shop.
   `adminer.shop1…`); their raw ports (management/UI) are not published in proxy
   mode — use `docker compose exec` for direct access. The database is the
   exception: it keeps a random published loopback port in both modes.
-- **In-container HTTPS trust is Node-only for now.** PHP/curl calls to a proxy
-  hostname need `update-ca-certificates` to run in the `docker-dev` image (see
-  "Reaching the shop from inside its own containers"); until then such calls
-  must trust the CA explicitly. Only the shop's **root** hostname is aliased
-  for in-container use — service subdomains (`mailer.…`) are host/browser-facing.
+- Only the shop's **root** hostname is aliased for in-container use — service
+  subdomains (`mailer.…`) are host/browser-facing.
 - **Changing the admin-worker setting while a shop is proxied can orphan the
   worker/scheduler containers.** `down` regenerates `compose.yaml` from the
   current config; if the dedicated worker/scheduler no longer belong there,
