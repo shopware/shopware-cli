@@ -1,30 +1,18 @@
 package project
 
 import (
-	"compress/gzip"
-	"database/sql"
 	"errors"
 	"fmt"
-	"io"
 	"os"
-	"strconv"
-	"strings"
 
 	"github.com/charmbracelet/x/term"
 	"github.com/go-sql-driver/mysql"
-	"github.com/klauspost/compress/zstd"
 	"github.com/spf13/cobra"
 
 	"github.com/shopware/shopware-cli/internal/executor"
 	"github.com/shopware/shopware-cli/internal/mysqldump"
 	"github.com/shopware/shopware-cli/internal/shop"
 	"github.com/shopware/shopware-cli/internal/system"
-	"github.com/shopware/shopware-cli/logging"
-)
-
-const (
-	CompressionGzip = "gzip"
-	CompressionZstd = "zstd"
 )
 
 // passwordFlagPrompt is the sentinel value Cobra sets via NoOptDefVal when
@@ -41,123 +29,37 @@ var projectDatabaseDumpCmd = &cobra.Command{
 			return err
 		}
 
+		compressionFlag, _ := cmd.Flags().GetString("compression")
+		compression, err := mysqldump.ParseCompression(compressionFlag)
+		if err != nil {
+			return err
+		}
+
+		projectCfg, err := shop.ReadConfig(cmd.Context(), projectConfigPath, true)
+		if err != nil {
+			return err
+		}
+
 		output, _ := cmd.Flags().GetString("output")
 		clean, _ := cmd.Flags().GetBool("clean")
 		skipLockTables, _ := cmd.Flags().GetBool("skip-lock-tables")
 		anonymize, _ := cmd.Flags().GetBool("anonymize")
-		compression, _ := cmd.Flags().GetString("compression")
 		quick, _ := cmd.Flags().GetBool("quick")
 		parallel, _ := cmd.Flags().GetInt("parallel")
 		insertIntoLimit, _ := cmd.Flags().GetInt("insert-into-limit")
 		limits, _ := cmd.Flags().GetStringArray("limit")
 
-		db, err := sql.Open("mysql", mysqlConfig.FormatDSN())
-		if err != nil {
-			return err
-		}
-
-		dumper := mysqldump.NewMySQLDumper(db)
-		dumper.LockTables = !skipLockTables
-		dumper.Quick = quick
-		dumper.Parallel = parallel
-		dumper.InsertIntoLimit = insertIntoLimit
-
-		var projectCfg *shop.Config
-		if projectCfg, err = shop.ReadConfig(cmd.Context(), projectConfigPath, true); err != nil {
-			return err
-		}
-
-		if projectCfg.ConfigDump == nil {
-			projectCfg.ConfigDump = &shop.ConfigDump{}
-		}
-
-		if clean {
-			projectCfg.ConfigDump.EnableClean()
-		}
-
-		if anonymize {
-			projectCfg.ConfigDump.EnableAnonymization()
-		}
-
-		if len(limits) > 0 && projectCfg.ConfigDump.Limit == nil {
-			projectCfg.ConfigDump.Limit = make(map[string]mysqldump.TableLimit)
-		}
-
-		for _, limit := range limits {
-			table, rows, ok := strings.Cut(limit, "=")
-			if !ok {
-				return fmt.Errorf("invalid --limit %q, expected format table=rows (e.g. order=100)", limit)
-			}
-
-			rowCount, err := strconv.Atoi(rows)
-			if err != nil || rowCount < 1 {
-				return fmt.Errorf("invalid --limit %q, rows must be a positive number", limit)
-			}
-
-			cfgLimit := projectCfg.ConfigDump.Limit[table]
-			cfgLimit.Rows = rowCount
-			projectCfg.ConfigDump.Limit[table] = cfgLimit
-		}
-
-		projectCfg.ConfigDump.NormalizeFakerExpressions()
-
-		dumper.SelectMap = projectCfg.ConfigDump.Rewrite
-		dumper.WhereMap = projectCfg.ConfigDump.Where
-		dumper.NoData = projectCfg.ConfigDump.NoData
-		dumper.Ignore = projectCfg.ConfigDump.Ignore
-		dumper.LimitMap = projectCfg.ConfigDump.Limit
-
-		var w io.Writer
-		if output == "-" {
-			w = os.Stdout
-		} else {
-			if compression == CompressionGzip {
-				output += ".gz"
-			}
-
-			if compression == CompressionZstd {
-				output += ".zst"
-			}
-
-			if w, err = os.Create(output); err != nil {
-				return err
-			}
-		}
-
-		if compression == CompressionGzip {
-			w = gzip.NewWriter(w)
-		}
-
-		if compression == CompressionZstd {
-			w, err = zstd.NewWriter(w, zstd.WithEncoderLevel(zstd.SpeedBestCompression))
-			if err != nil {
-				return err
-			}
-		}
-
-		if err = dumper.Dump(cmd.Context(), w); err != nil {
-			if strings.Contains(err.Error(), "the RELOAD or FLUSH_TABLES privilege") {
-				return fmt.Errorf("%s, you maybe want to disable locking with --skip-lock-tables", err.Error())
-			}
-
-			return err
-		}
-
-		if compression == CompressionZstd {
-			if err = w.(*zstd.Encoder).Close(); err != nil {
-				return err
-			}
-		}
-
-		if compression == CompressionGzip {
-			if err = w.(*gzip.Writer).Close(); err != nil {
-				return err
-			}
-		}
-
-		logging.FromContext(cmd.Context()).Infof("Successfully created the dump %s", output)
-
-		return nil
+		return shop.DumpDatabase(cmd.Context(), mysqlConfig, projectCfg.ConfigDump, shop.DumpDatabaseOptions{
+			Output:          output,
+			Compression:     compression,
+			Clean:           clean,
+			Anonymize:       anonymize,
+			SkipLockTables:  skipLockTables,
+			Quick:           quick,
+			Parallel:        parallel,
+			InsertIntoLimit: insertIntoLimit,
+			LimitOverrides:  limits,
+		})
 	},
 }
 
