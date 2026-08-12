@@ -26,6 +26,11 @@ type CheckResult struct {
 	Err error
 	// Hint tells the user how to fix a failed check.
 	Hint string
+	// Pending marks a failure that only means "this layer is not running yet"
+	// (the shared DNS or Traefik container), as opposed to something being
+	// broken. Callers render it as a calm "not started yet" rather than an error,
+	// so a torn-down machine does not look faulty.
+	Pending bool
 }
 
 // Verify runs the proxy health checks bottom-up and stops at the first
@@ -46,9 +51,10 @@ func Verify(ctx context.Context, baseDomain string) []CheckResult {
 	probe := randomProbeHostname(baseDomain)
 
 	checks := []struct {
-		name string
-		run  func(context.Context) error
-		hint string
+		name    string
+		run     func(context.Context) error
+		hint    string
+		pending bool
 	}{
 		{
 			name: "Docker is running",
@@ -60,7 +66,8 @@ func Verify(ctx context.Context, baseDomain string) []CheckResult {
 			run: func(ctx context.Context) error {
 				return checkDNSContainer(ctx, probe)
 			},
-			hint: "Run \"shopware-cli project proxy setup\" (or \"proxy up\" in a shop) to start it",
+			hint:    "Run \"shopware-cli project proxy setup\" (or \"proxy up\" in a shop) to start it",
+			pending: true,
 		},
 		{
 			name: fmt.Sprintf("OS resolves *.%s to 127.0.0.1", baseDomain),
@@ -70,9 +77,10 @@ func Verify(ctx context.Context, baseDomain string) []CheckResult {
 			hint: osResolutionHint(baseDomain, SupportsWildcardDNS(ctx)),
 		},
 		{
-			name: "Shared proxy is running on port 443",
-			run:  checkTraefik,
-			hint: "Run \"shopware-cli project proxy up\" in a shop to start it; another local web server may also occupy port 80/443",
+			name:    "Shared proxy is running on port 443",
+			run:     checkTraefik,
+			hint:    "Run \"shopware-cli project proxy up\" in a shop to start it; another local web server may also occupy port 80/443",
+			pending: true,
 		},
 		{
 			name: fmt.Sprintf("HTTPS works and is trusted (https://%s/ping)", PingHostname(baseDomain)),
@@ -90,6 +98,7 @@ func Verify(ctx context.Context, baseDomain string) []CheckResult {
 		result := CheckResult{Name: check.name, Err: err}
 		if err != nil {
 			result.Hint = check.hint
+			result.Pending = check.pending
 		}
 
 		results = append(results, result)

@@ -115,6 +115,18 @@ func newProxyEnvironmentForRoot(ctx context.Context, projectRoot, configPath str
 func (e *proxyEnvironment) up(cmd *cobra.Command) error {
 	ctx := cmd.Context()
 
+	// The shared proxy is Docker-only: it starts the compose containers, connects
+	// to the shop's database and rewrites its compose file. Refuse early — before
+	// starting any shared infra or touching the project — when this project is not
+	// a shopware-cli Docker dev environment. Otherwise a shop managed another way
+	// (a custom docker-compose, `make up`, no project config) would fail deep in
+	// the flow with an opaque "operation not supported" after the proxy already
+	// started, and its compose file would be overwritten to point at a fresh,
+	// empty database.
+	if _, ok := e.executor.(*executor.DockerExecutor); !ok {
+		return fmt.Errorf("project proxy needs a shopware-cli Docker dev environment, but this project is not using one (its environment type is not \"docker\").\nIt manages the dev containers itself, so it can't run against a shop started another way (e.g. a custom docker-compose or \"make up\").\nCreate the shop with \"shopware-cli project create\", or point %s at a docker environment", e.configPath)
+	}
+
 	reg, err := proxy.LoadRegistry()
 	if err != nil {
 		return err

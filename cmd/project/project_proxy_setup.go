@@ -135,7 +135,9 @@ Both steps are idempotent; run it again anytime to repair the setup.`,
 		// check would fail — point them at `proxy verify` for afterwards instead.
 		if automatic {
 			fmt.Println(tui.BoldText.Render("  Verifying the setup:"))
-			if !runProxyVerification(ctx, baseDomain) {
+			// setup just started the DNS and Traefik containers, so here anything
+			// short of fully ready (including "not started yet") is a real failure.
+			if ready, _ := runProxyVerification(ctx, baseDomain); !ready {
 				return ErrProxyVerificationFailed
 			}
 		} else {

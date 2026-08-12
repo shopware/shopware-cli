@@ -32,7 +32,10 @@ failing layer is reported with a hint how to fix it.`,
 			return err
 		}
 
-		if !runProxyVerification(cmd.Context(), settings.BaseDomain()) {
+		ready, notStarted := runProxyVerification(cmd.Context(), settings.BaseDomain())
+		// "Not started yet" is not a fault — the machine may simply be set up but
+		// idle (e.g. after a teardown). Only a real broken layer exits non-zero.
+		if !ready && !notStarted {
 			return ErrProxyVerificationFailed
 		}
 
@@ -40,22 +43,32 @@ failing layer is reported with a hint how to fix it.`,
 	},
 }
 
-// runProxyVerification prints the outcome of every proxy health check and
-// reports whether all of them passed. Shared by `proxy verify` and the final
-// step of `proxy setup`.
-func runProxyVerification(ctx context.Context, baseDomain string) bool {
+// runProxyVerification prints the outcome of every proxy health check. It
+// returns ready (every check passed) and notStarted (the only failures are
+// layers that are simply not running yet — the shared DNS or Traefik container,
+// e.g. before the first `proxy up` or after a `teardown`), so callers can tell a
+// broken setup from an idle one. Shared by `proxy verify` and the final step of
+// `proxy setup`.
+func runProxyVerification(ctx context.Context, baseDomain string) (ready, notStarted bool) {
 	results := proxy.Verify(ctx, baseDomain)
 
-	ok := true
+	ready = true
+	onlyPending := true
 	for _, result := range results {
 		if result.Err == nil {
 			fmt.Println(tui.GreenText.Render("  ✓ ") + result.Name)
 			continue
 		}
 
-		ok = false
-		fmt.Println(tui.RedText.Render("  ✗ ") + result.Name)
-		fmt.Println(tui.DimText.Render("    " + result.Err.Error()))
+		ready = false
+		if result.Pending {
+			// Calm marker: this layer just is not running yet, nothing is broken.
+			fmt.Println(tui.DimText.Render("  ○ ") + result.Name + tui.DimText.Render("  (not started yet)"))
+		} else {
+			onlyPending = false
+			fmt.Println(tui.RedText.Render("  ✗ ") + result.Name)
+			fmt.Println(tui.DimText.Render("    " + result.Err.Error()))
+		}
 
 		for i, line := range strings.Split(result.Hint, "\n") {
 			if i == 0 {
@@ -66,12 +79,18 @@ func runProxyVerification(ctx context.Context, baseDomain string) bool {
 		}
 	}
 
-	if ok {
-		fmt.Println()
+	notStarted = !ready && onlyPending
+
+	fmt.Println()
+	switch {
+	case ready:
 		fmt.Println(tui.GreenText.Bold(true).Render("  ✓ This machine is ready, run \"shopware-cli project proxy up\" in any shop"))
+	case notStarted:
+		fmt.Println(tui.BoldText.Render("  The shared proxy isn't running yet — nothing is wrong."))
+		fmt.Println(tui.DimText.Render("  Run ") + tui.BoldText.Render("shopware-cli project proxy up") + tui.DimText.Render(" in a shop to start it (or ") + tui.BoldText.Render("proxy setup") + tui.DimText.Render(" for first-time machine setup)."))
 	}
 
-	return ok
+	return ready, notStarted
 }
 
 func init() {
