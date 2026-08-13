@@ -20,8 +20,9 @@ import (
 )
 
 const (
-	// updateCheckInterval is the minimum duration between update checks.
-	updateCheckInterval = 24 * time.Hour
+	// releaseFetchInterval is the minimum duration between update checks.
+	releaseFetchInterval = 24 * time.Hour
+	notificationInterval = 24 * time.Hour
 
 	// This is the primary source of truth for the latest release information, as it is maintained and updated with each new release.
 	latestReleaseURL = "https://shopware.github.io/shopware-cli/version.json"
@@ -33,7 +34,6 @@ const (
 
 // This regex matches git describe suffixes like "-123-gabcdef12".
 var gitDescribeSuffixRE = regexp.MustCompile(`-\d+-g[a-f0-9]{7,40}$`)
-
 var ErrNoUpdateAvailable = errors.New("no update available")
 var ErrNoCacheFile = errors.New("no update cache file")
 
@@ -43,34 +43,23 @@ type ReleaseInfo struct {
 	FetchedAt   time.Time `json:"fetched_at"`
 }
 
+type UpdateNotification struct {
+	LastPrintedAt time.Time `json:"last_printed_at"`
+	LastVersion   string    `json:"last_version"`
+}
+
 // IsRecent checks if the release was published within the last 24 hours.
 func (r ReleaseInfo) IsRecent() bool {
 	return !r.PublishedAt.IsZero() && time.Since(r.PublishedAt) < 24*time.Hour
 }
 
+func (r ReleaseInfo) IsFetchedWithin(interval time.Duration) bool {
+	return !r.FetchedAt.IsZero() && time.Since(r.FetchedAt) < interval
+}
+
 // CheckForUpdate checks if a newer version is available, if the last check is more than 24 hours ago, and returns the fetched release information if so.
 func CheckForUpdate(ctx context.Context, buildVersion string, client *http.Client) (*ReleaseInfo, error) {
-	// Load cached release info; continue if no cache file exists yet.
-	cachedReleaseInfo, err := LoadReleaseInfoFromCache()
-	if err != nil && !errors.Is(err, ErrNoCacheFile) {
-		return nil, err
-	}
-	// Early return if cached release info was fetched within the given releaseFetchInterval.
-	if cachedReleaseInfo != nil {
-		if time.Since(cachedReleaseInfo.FetchedAt) < updateCheckInterval {
-			return nil, ErrNoUpdateAvailable
-		}
-	}
-
-	// Fetch latest release info.
-	latestReleaseInfo, err := fetchLatestReleaseInfoFromGitHubPages(ctx, client)
-	if latestReleaseInfo == nil || err != nil {
-		return nil, err
-	}
-
-	// Save timestamp + fetched release info to cache.
-	latestReleaseInfo.FetchedAt = time.Now()
-	err = SaveReleaseInfoToCache(latestReleaseInfo)
+	latestReleaseInfo, err := getReleaseInformation(ctx, client)
 	if err != nil {
 		return nil, err
 	}
@@ -81,6 +70,64 @@ func CheckForUpdate(ctx context.Context, buildVersion string, client *http.Clien
 	}
 
 	return nil, ErrNoUpdateAvailable
+}
+
+// ShouldPrintUpdateHint reports whether the CLI notification for version may
+// be printed. The TUI hint is intentionally not governed by this function.
+func ShouldPrintUpdateHint(version string) bool {
+	notification, err := loadUpdateNotificationFromCache()
+	if err != nil && !errors.Is(err, ErrNoCacheFile) {
+		return false
+	}
+
+	if notification != nil &&
+		!notification.LastPrintedAt.IsZero() &&
+		time.Since(notification.LastPrintedAt) < notificationInterval &&
+		(notification.LastVersion == "" || notification.LastVersion == version) {
+		return false
+	}
+
+	return true
+}
+
+// MarkUpdateNotificationPrinted records that the detailed CLI notification
+// was actually shown to the user.
+func MarkUpdateNotificationPrinted(version string) error {
+	return saveUpdateNotificationToCache(&UpdateNotification{
+		LastPrintedAt: time.Now(),
+		LastVersion:   version,
+	})
+}
+
+func getReleaseInformation(ctx context.Context, client *http.Client) (*ReleaseInfo, error) {
+	// Load cached release info
+	cachedReleaseInfo, err := loadReleaseInfoFromCache()
+	if err != nil && !errors.Is(err, ErrNoCacheFile) {
+		return nil, err
+	}
+
+	// fetch latest release info if no cached release info is available or if the cached release info is not recent.
+	if errors.Is(err, ErrNoCacheFile) || !cachedReleaseInfo.IsFetchedWithin(releaseFetchInterval) {
+		if client == nil {
+			client = &http.Client{Timeout: 5 * time.Second}
+		}
+
+		fetchedReleaseInfo, err := fetchLatestReleaseInfoFromGitHubPages(ctx, client)
+		if err != nil {
+			return nil, err
+		}
+
+		// Save timestamp + fetched release info to cache.
+		fetchedReleaseInfo.FetchedAt = time.Now()
+		err = saveReleaseInfoToCache(fetchedReleaseInfo)
+		if err != nil {
+			return nil, err
+		}
+
+		return fetchedReleaseInfo, nil
+	}
+
+	return cachedReleaseInfo, nil
 }
 
 func RenderUpdateNotification(latestVersion string, buildVersion string) string {
@@ -136,7 +183,7 @@ func ShouldCheckForUpdate(version string, args []string) bool {
 	return true
 }
 
-func LoadReleaseInfoFromCache() (*ReleaseInfo, error) {
+func loadReleaseInfoFromCache() (*ReleaseInfo, error) {
 	cacheFilePath := getUpdateCheckCacheFilePath()
 
 	if _, err := os.Stat(cacheFilePath); os.IsNotExist(err) {
@@ -157,7 +204,7 @@ func LoadReleaseInfoFromCache() (*ReleaseInfo, error) {
 	return &info, nil
 }
 
-func SaveReleaseInfoToCache(info *ReleaseInfo) error {
+func saveReleaseInfoToCache(info *ReleaseInfo) error {
 	cacheFilePath := getUpdateCheckCacheFilePath()
 
 	content, err := json.Marshal(info)
@@ -225,4 +272,50 @@ func versionGreaterThan(v, w string) bool {
 
 func getUpdateCheckCacheFilePath() string {
 	return filepath.Join(system.GetShopwareCliCacheDir(), "update-check-info.json")
+}
+
+func getUpdateNotificationCacheFilePath() string {
+	return filepath.Join(system.GetShopwareCliCacheDir(), "update-notification.json")
+}
+
+func loadUpdateNotificationFromCache() (*UpdateNotification, error) {
+	cacheFilePath := getUpdateNotificationCacheFilePath()
+
+	if _, err := os.Stat(cacheFilePath); os.IsNotExist(err) {
+		return nil, ErrNoCacheFile
+	}
+
+	content, err := os.ReadFile(cacheFilePath)
+	if err != nil {
+		return nil, err
+	}
+
+	var notification UpdateNotification
+	err = json.Unmarshal(content, &notification)
+	if err != nil {
+		return nil, err
+	}
+
+	return &notification, nil
+}
+
+func saveUpdateNotificationToCache(notification *UpdateNotification) error {
+	cacheFilePath := getUpdateNotificationCacheFilePath()
+
+	content, err := json.Marshal(notification)
+	if err != nil {
+		return err
+	}
+
+	cacheDir := filepath.Dir(cacheFilePath)
+	if err := os.MkdirAll(cacheDir, 0o750); err != nil {
+		return err
+	}
+
+	err = os.WriteFile(cacheFilePath, content, 0o644)
+	if err != nil {
+		return err
+	}
+
+	return nil
 }

@@ -58,6 +58,7 @@ type Options struct {
 type Model struct {
 	host            app.Host
 	header          tui.Header
+	backgroundCmd   tea.Cmd
 	activeTab       activeTab
 	overview        OverviewModel
 	instance        InstanceModel
@@ -178,6 +179,7 @@ func newShell(m Model) *app.App {
 		// Quit handling is phase-dependent (telemetry, stop-confirm modal) and
 		// stays in the model's key dispatch, so no default quit binding.
 		DisableDefaultKeys: true,
+		BackgroundCmd:      m.backgroundCmd,
 	})
 	m.host = shell
 	shell.SetContent(m)

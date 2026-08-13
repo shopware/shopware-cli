@@ -113,9 +113,9 @@ func TestCheckForUpdate(t *testing.T) {
 func TestCheckForUpdateSkipsNetworkWhenCacheIsRecent(t *testing.T) {
 	t.Setenv("SHOPWARE_CLI_CACHE_DIR", t.TempDir())
 
-	err := SaveReleaseInfoToCache(&ReleaseInfo{
+	err := saveReleaseInfoToCache(&ReleaseInfo{
 		Version:   "v9.9.9",
-		FetchedAt: time.Now().Add(-(updateCheckInterval / 2)),
+		FetchedAt: time.Now().Add(-(releaseFetchInterval / 2)),
 	})
 	require.NoError(t, err)
 
@@ -123,8 +123,8 @@ func TestCheckForUpdateSkipsNetworkWhenCacheIsRecent(t *testing.T) {
 	client := newVersionResponseClient("v9.9.9", &requestCount)
 
 	rel, checkErr := CheckForUpdate(t.Context(), "v1.0.0", client)
-	require.ErrorIs(t, checkErr, ErrNoUpdateAvailable)
-	assert.Nil(t, rel)
+	require.NoError(t, checkErr)
+	assert.Equal(t, "v9.9.9", rel.Version)
 	assert.Equal(t, 0, requestCount)
 }
 
@@ -137,14 +137,14 @@ func TestSaveAndLoadUpdateCheckFromCache(t *testing.T) {
 		FetchedAt:   time.Date(2026, 7, 23, 12, 0, 0, 0, time.UTC),
 	}
 
-	err := SaveReleaseInfoToCache(expected)
+	err := saveReleaseInfoToCache(expected)
 	require.NoError(t, err)
 
 	cacheFilePath := filepath.Join(os.Getenv("SHOPWARE_CLI_CACHE_DIR"), "update-check-info.json")
 	_, statErr := os.Stat(cacheFilePath)
 	require.NoError(t, statErr)
 
-	actual, err := LoadReleaseInfoFromCache()
+	actual, err := loadReleaseInfoFromCache()
 	require.NoError(t, err)
 	require.NotNil(t, actual)
 	assert.Equal(t, expected.Version, actual.Version)
@@ -155,7 +155,7 @@ func TestSaveAndLoadUpdateCheckFromCache(t *testing.T) {
 func TestLoadUpdateCheckFromCacheWhenMissing(t *testing.T) {
 	t.Setenv("SHOPWARE_CLI_CACHE_DIR", t.TempDir())
 
-	actual, err := LoadReleaseInfoFromCache()
+	actual, err := loadReleaseInfoFromCache()
 	require.ErrorIs(t, err, ErrNoCacheFile)
 	assert.Nil(t, actual)
 }
@@ -313,12 +313,13 @@ func TestCheckForUpdateHonorsCacheInterval(t *testing.T) {
 	assert.Equal(t, "v9.9.9", first.Version)
 
 	second, err := CheckForUpdate(t.Context(), "v0.1.0", client)
-	require.ErrorIs(t, err, ErrNoUpdateAvailable)
-	assert.Nil(t, second)
+	require.NoError(t, err)
+	assert.Equal(t, "v9.9.9", second.Version)
+	assert.Equal(t, 1, requestCount)
 
-	err = SaveReleaseInfoToCache(&ReleaseInfo{
+	err = saveReleaseInfoToCache(&ReleaseInfo{
 		Version:   "v9.9.9",
-		FetchedAt: time.Now().Add(-(updateCheckInterval + time.Second)),
+		FetchedAt: time.Now().Add(-(releaseFetchInterval + time.Second)),
 	})
 	require.NoError(t, err)
 
@@ -328,4 +329,13 @@ func TestCheckForUpdateHonorsCacheInterval(t *testing.T) {
 	assert.Equal(t, "v9.9.9", third.Version)
 
 	assert.Equal(t, 2, requestCount)
+}
+
+func TestUpdateNotificationIntervalIsPerVersion(t *testing.T) {
+	t.Setenv("SHOPWARE_CLI_CACHE_DIR", t.TempDir())
+
+	assert.True(t, ShouldPrintUpdateHint("v2.0.0"))
+	require.NoError(t, MarkUpdateNotificationPrinted("v2.0.0"))
+	assert.False(t, ShouldPrintUpdateHint("v2.0.0"))
+	assert.True(t, ShouldPrintUpdateHint("v3.0.0"))
 }

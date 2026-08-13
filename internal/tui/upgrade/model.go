@@ -30,8 +30,9 @@ const (
 type Options struct {
 	ProjectRoot string
 	// EnvName is the label shown in the header, e.g. "local".
-	EnvName  string
-	Executor executor.Executor
+	EnvName       string
+	Executor      executor.Executor
+	BackgroundCmd tea.Cmd
 }
 
 // Model is the wizard screen hosted by the app shell.
@@ -83,6 +84,7 @@ func newAppWithModel(opts Options) (*app.App, *Model) {
 
 	shell := app.New(app.Options{
 		Content:           m,
+		BackgroundCmd:     opts.BackgroundCmd,
 		Header:            m.headerView,
 		Footer:            m.footerView,
 		WindowTitleFunc:   m.windowTitle,

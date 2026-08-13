@@ -31,7 +31,7 @@ import (
 	"github.com/shopware/shopware-cli/logging"
 )
 
-var version = "dev"
+var version = "0.1.0"
 
 var rootCmd = &cobra.Command{
 	Use:     "shopware-cli",
@@ -60,17 +60,19 @@ func run(ctx context.Context) int {
 	accountApi.SetUserAgent("shopware-cli/" + version)
 	rootCmd.SetArgs(args)
 
-	// Check for update in the background
+	// Check for update in the background and share the result with interactive
+	// TUIs through the command context.
 	updateCtx, updateCancel := context.WithTimeout(ctx, 900*time.Millisecond)
 	defer updateCancel()
-	updateChan := make(chan *update.ReleaseInfo, 1)
+	updateHandle := update.NewCheckHandle()
+	ctx = update.WithHandle(ctx, updateHandle)
 
 	go func() {
 		releaseInfo, err := checkForUpdate(updateCtx, args)
 		if err != nil && !errors.Is(err, update.ErrNoUpdateAvailable) {
 			logging.FromContext(ctx).Debugf("checking for shopware cli update failed: %v", err)
 		}
-		updateChan <- releaseInfo
+		updateHandle.Complete(update.CheckResult{Release: releaseInfo, Err: err})
 	}()
 
 	start := time.Now()
@@ -100,15 +102,20 @@ func run(ctx context.Context) int {
 		})
 	}
 
-	// Wait for the update check to finish and print a message to stderr if an update is available
-	newRelease := <-updateChan
+	// Always print the command-line notification, even when an interactive TUI
+	// has already displayed its compact header hint.
+	updateResult := updateHandle.Wait(ctx)
+	newRelease := updateResult.Release
 	if newRelease != nil {
 		binaryPath, err := os.Executable()
 		if err != nil {
 			logging.FromContext(ctx).Debugf("could not determine binary path: %v", err)
 		}
-		if shouldNotify(newRelease, binaryPath) {
+		if shouldNotify(newRelease, binaryPath) && update.ShouldPrintUpdateHint(newRelease.Version) {
 			fmt.Fprintln(os.Stderr, update.RenderUpdateNotification(newRelease.Version, version))
+			if err := update.MarkUpdateNotificationPrinted(newRelease.Version); err != nil {
+				logging.FromContext(ctx).Debugf("could not save update notification timestamp: %v", err)
+			}
 		}
 	}
 
