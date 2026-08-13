@@ -23,14 +23,22 @@ var AppVersion = "dev"
 // be added here without rewiring the hosts.
 type Header struct {
 	// branding is the styled "● Shopware CLI v1.0.0 · Documentation · GitHub"
-	// line, rendered once at construction; width is its visual width in
-	// terminal columns.
-	branding string
-	width    int
+	// line, rendered once at construction.
+	branding        string
+	width           int
+	showUpdateHint bool
 }
+
+// UpdateAvailableMsg is sent by the parent TUI model when the asynchronous
+// update check finds a newer CLI version.
+type UpdateAvailableMsg struct {}
 
 // NewHeader creates the shared branding header.
 func NewHeader() Header {
+	return Header{}.withUpdateHint(false)
+}
+
+func (h Header) withUpdateHint(showUpdateHint bool) Header {
 	icon := lipgloss.NewStyle().Foreground(BrandColor).Render("●")
 	title := lipgloss.NewStyle().Bold(true).Foreground(TextColor).Render(appTitle)
 	version := DimStyle.Render(AppVersion)
@@ -41,8 +49,13 @@ func NewHeader() Header {
 
 	sep := DimStyle.Render(" · ")
 
-	branding := icon + " " + title + " " + version + sep + docsLink + sep + ghLink
-	return Header{branding: branding, width: lipgloss.Width(branding)}
+	updateHint := ""
+	if showUpdateHint {
+		updateHint = " " + lipgloss.NewStyle().Background(WarnColor).Foreground(lipgloss.Black).Render(" Update available ")
+	}
+
+	branding := icon + " " + title + " " + version + updateHint + sep + docsLink + sep + ghLink
+	return Header{branding: branding, width: lipgloss.Width(branding), showUpdateHint: showUpdateHint}
 }
 
 // Init implements the component contract; the header has no startup work.
@@ -50,9 +63,12 @@ func (h Header) Init() tea.Cmd {
 	return nil
 }
 
-// Update implements the component contract; the header holds no
-// message-driven state yet.
-func (h Header) Update(tea.Msg) (Header, tea.Cmd) {
+// Update applies an update result received by the parent TUI model.
+func (h Header) Update(msg tea.Msg) (Header, tea.Cmd) {
+	if _, ok := msg.(UpdateAvailableMsg); ok && !h.showUpdateHint {
+		return h.withUpdateHint(true), nil
+	}
+
 	return h, nil
 }
 

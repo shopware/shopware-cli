@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	tea "charm.land/bubbletea/v2"
 	"charm.land/huh/v2/spinner"
 	"github.com/mattn/go-isatty"
 	"github.com/spf13/cobra"
@@ -26,10 +27,11 @@ import (
 var ErrEnvironmentDown = errors.New("development environment is down")
 
 type devEnvironment struct {
-	projectRoot string
-	cfg         *shop.Config
-	envCfg      *shop.EnvironmentConfig
-	executor    executor.Executor
+	projectRoot   string
+	cfg           *shop.Config
+	envCfg        *shop.EnvironmentConfig
+	executor      executor.Executor
+	backgroundCmd tea.Cmd
 }
 
 var projectDevCmd = &cobra.Command{
@@ -52,7 +54,7 @@ var projectDevCmd = &cobra.Command{
 			if !isatty.IsTerminal(os.Stdin.Fd()) {
 				return shop.ErrDevModeNotSupported
 			}
-			return runMigrationWizardTUI(projectRoot, cfg)
+			return runMigrationWizardTUI(projectRoot, cfg, updateBackgroundCmd(cmd.Context()))
 		}
 
 		env, err := newDevEnvironment(cmd, projectRoot, cfg)
@@ -109,7 +111,7 @@ var projectDevStatusCmd = &cobra.Command{
 	},
 }
 
-func runMigrationWizardTUI(projectRoot string, cfg *shop.Config) error {
+func runMigrationWizardTUI(projectRoot string, cfg *shop.Config, backgroundCmd tea.Cmd) error {
 	envCfg := &shop.EnvironmentConfig{Type: "docker", URL: "http://127.0.0.1:8000"}
 	exec, err := executor.New(projectRoot, envCfg, cfg)
 	if err != nil {
@@ -117,10 +119,11 @@ func runMigrationWizardTUI(projectRoot string, cfg *shop.Config) error {
 	}
 
 	_, err = dev.NewMigrationWizardApp(dev.Options{
-		ProjectRoot: projectRoot,
-		Config:      cfg,
-		EnvConfig:   envCfg,
-		Executor:    exec,
+		ProjectRoot:   projectRoot,
+		Config:        cfg,
+		EnvConfig:     envCfg,
+		Executor:      exec,
+		BackgroundCmd: backgroundCmd,
 	}).Run()
 	return err
 }
@@ -182,10 +185,11 @@ func newDevEnvironment(cmd *cobra.Command, projectRoot string, cfg *shop.Config)
 	}
 
 	return &devEnvironment{
-		projectRoot: projectRoot,
-		cfg:         cfg,
-		envCfg:      envCfg,
-		executor:    exec,
+		projectRoot:   projectRoot,
+		cfg:           cfg,
+		envCfg:        envCfg,
+		executor:      exec,
+		backgroundCmd: updateBackgroundCmd(cmd.Context()),
 	}, nil
 }
 
@@ -292,10 +296,11 @@ func (e *devEnvironment) status(cmd *cobra.Command) error {
 
 func (e *devEnvironment) runTUI() error {
 	_, err := dev.NewApp(dev.Options{
-		ProjectRoot: e.projectRoot,
-		Config:      e.cfg,
-		EnvConfig:   e.envCfg,
-		Executor:    e.executor,
+		ProjectRoot:   e.projectRoot,
+		Config:        e.cfg,
+		EnvConfig:     e.envCfg,
+		Executor:      e.executor,
+		BackgroundCmd: e.backgroundCmd,
 	}).Run()
 	return err
 }

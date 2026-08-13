@@ -49,15 +49,17 @@ const (
 )
 
 type Options struct {
-	ProjectRoot string
-	Config      *shop.Config
-	EnvConfig   *shop.EnvironmentConfig
-	Executor    executor.Executor
+	ProjectRoot   string
+	Config        *shop.Config
+	EnvConfig     *shop.EnvironmentConfig
+	Executor      executor.Executor
+	BackgroundCmd tea.Cmd
 }
 
 type Model struct {
 	host            app.Host
 	header          tui.Header
+	backgroundCmd   tea.Cmd
 	activeTab       activeTab
 	overview        OverviewModel
 	instance        InstanceModel
@@ -97,15 +99,16 @@ type configRestartDoneMsg struct{ err error }
 
 func New(opts Options) Model {
 	m := Model{
-		header:      tui.NewHeader(),
-		activeTab:   tabOverview,
-		dockerMode:  opts.Executor.Type() == executor.TypeDocker,
-		projectRoot: opts.ProjectRoot,
-		executor:    opts.Executor,
-		config:      opts.Config,
-		envConfig:   opts.EnvConfig,
-		watchers:    make(map[string]*watcherHandle),
-		telemetry:   newTelemetryState(opts.Executor.Type() == executor.TypeDocker),
+		header:        tui.NewHeader(),
+		activeTab:     tabOverview,
+		dockerMode:    opts.Executor.Type() == executor.TypeDocker,
+		projectRoot:   opts.ProjectRoot,
+		executor:      opts.Executor,
+		config:        opts.Config,
+		envConfig:     opts.EnvConfig,
+		watchers:      make(map[string]*watcherHandle),
+		telemetry:     newTelemetryState(opts.Executor.Type() == executor.TypeDocker),
+		backgroundCmd: opts.BackgroundCmd,
 	}
 	m.rebuildTabs()
 	return m
@@ -178,6 +181,7 @@ func newShell(m Model) *app.App {
 		// Quit handling is phase-dependent (telemetry, stop-confirm modal) and
 		// stays in the model's key dispatch, so no default quit binding.
 		DisableDefaultKeys: true,
+		BackgroundCmd:      m.backgroundCmd,
 	})
 	m.host = shell
 	shell.SetContent(m)

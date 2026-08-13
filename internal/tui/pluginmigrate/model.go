@@ -32,8 +32,9 @@ const (
 
 // Options wire the wizard to a project.
 type Options struct {
-	ProjectRoot string
-	Executor    executor.Executor
+	ProjectRoot   string
+	Executor      executor.Executor
+	BackgroundCmd tea.Cmd
 }
 
 // Model is the wizard screen hosted by the app shell.
@@ -99,6 +100,7 @@ func newAppWithModel(opts Options) (*app.App, *Model) {
 
 	shell := app.New(app.Options{
 		Content:           m,
+		BackgroundCmd:     opts.BackgroundCmd,
 		Header:            m.headerView,
 		Footer:            m.footerView,
 		WindowTitleFunc:   m.windowTitle,

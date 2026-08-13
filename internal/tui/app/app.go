@@ -18,6 +18,9 @@ import (
 type Options struct {
 	// Content is the main screen (required for a useful app).
 	Content Content
+	// BackgroundCmd runs once at startup and delivers its result to the app
+	// and hosted content as a Bubble Tea message.
+	BackgroundCmd tea.Cmd
 	// Header renders above the main content each frame (optional).
 	Header func(ctx Context) string
 	// Footer renders below the main content each frame (optional).
@@ -50,13 +53,14 @@ type App struct {
 	width  int
 	height int
 
-	headerFn    func(Context) string
-	footerFn    func(Context) string
-	windowTitle string
-	titleFn     func(Context) string
-	fullOverlay bool
-	altScreen   bool
-	mouse       bool
+	headerFn      func(Context) string
+	footerFn      func(Context) string
+	windowTitle   string
+	titleFn       func(Context) string
+	fullOverlay   bool
+	altScreen     bool
+	mouse         bool
+	backgroundCmd tea.Cmd
 
 	overlays OverlayStack
 	keys     KeyMap
@@ -78,15 +82,16 @@ func New(opts Options) *App {
 	}
 
 	a := &App{
-		content:     opts.Content,
-		headerFn:    opts.Header,
-		footerFn:    opts.Footer,
-		windowTitle: opts.WindowTitle,
-		titleFn:     opts.WindowTitleFunc,
-		fullOverlay: fullOverlay,
-		altScreen:   alt,
-		mouse:       opts.Mouse,
-		commands:    NewCommandRegistry(),
+		content:       opts.Content,
+		headerFn:      opts.Header,
+		footerFn:      opts.Footer,
+		windowTitle:   opts.WindowTitle,
+		titleFn:       opts.WindowTitleFunc,
+		fullOverlay:   fullOverlay,
+		altScreen:     alt,
+		mouse:         opts.Mouse,
+		backgroundCmd: opts.BackgroundCmd,
+		commands:      NewCommandRegistry(),
 	}
 
 	if !opts.DisableDefaultKeys {
@@ -215,10 +220,11 @@ func (a *App) chrome() (header, footer string) {
 
 // Init implements tea.Model.
 func (a *App) Init() tea.Cmd {
-	if a.content == nil {
-		return nil
+	var contentCmd tea.Cmd
+	if a.content != nil {
+		contentCmd = a.content.Init()
 	}
-	return a.content.Init()
+	return tea.Batch(contentCmd, a.backgroundCmd)
 }
 
 // Update implements tea.Model.
