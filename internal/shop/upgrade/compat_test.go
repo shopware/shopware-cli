@@ -45,6 +45,9 @@ func compatUpgrader(t *testing.T, dir string, provider fakeProvider, store []acc
 	u.extensionUpdates = func(context.Context, string, string, []account_api.UpdateCheckExtension) ([]account_api.UpdateCheckExtensionCompatibility, error) {
 		return store, storeErr
 	}
+	u.storePlugins = func(context.Context, string, string, []string) ([]account_api.StorePlugin, error) {
+		return nil, nil
+	}
 	return u
 }
 
@@ -198,6 +201,43 @@ func TestTargetPHPRequirement(t *testing.T) {
 
 	assert.Equal(t, ">=8.2", u.TargetPHPRequirement(t.Context(), target))
 	assert.Empty(t, u.TargetPHPRequirement(t.Context(), version.Must(version.NewVersion("6.9.0.0"))))
+}
+
+func TestCheckExtensionsPrefersStoreListingOverPackagist(t *testing.T) {
+	dir := setupProject(t)
+	current, target := compatVersions(t)
+
+	u := compatUpgrader(t, dir, fakeProvider{
+		"swag/demo": {Name: "swag/demo", Versions: []repository.Version{
+			release("swag/demo", "2.0.0", "~6.6.0 || ~6.7.0"),
+		}},
+		"vendor/private": {Name: "vendor/private", Versions: []repository.Version{
+			release("vendor/private", "1.0.0", "~6.6.0 || ~6.7.0"),
+		}},
+	}, nil, nil)
+	u.storePlugins = func(_ context.Context, locale, shopwareVersion string, names []string) ([]account_api.StorePlugin, error) {
+		assert.Equal(t, "en_GB", locale)
+		assert.Equal(t, "6.7.11.0", shopwareVersion)
+		assert.ElementsMatch(t, []string{"SwagDemo", "PrivateExt"}, names)
+		return []account_api.StorePlugin{{
+			Name:      "SwagDemo",
+			StoreLink: "https://store.shopware.com/swag-demo.html",
+		}}, nil
+	}
+
+	results := u.CheckExtensions(t.Context(), current, target, []InstalledExtension{
+		{Name: "SwagDemo", Package: "swag/demo", Version: "2.0.0", ComposerManaged: true},
+		{Name: "PrivateExt", Package: "vendor/private", Version: "1.0.0", ComposerManaged: true},
+	})
+	require.Len(t, results, 2)
+
+	byName := make(map[string]ExtensionResult)
+	for _, r := range results {
+		byName[r.Extension.Name] = r
+	}
+
+	assert.Equal(t, "https://store.shopware.com/swag-demo.html", byName["SwagDemo"].ChangelogURL)
+	assert.Empty(t, byName["PrivateExt"].ChangelogURL, "extensions unknown to the Store keep the repository fallback")
 }
 
 func TestClassifyExtensionWithoutConstraintMetadataIsReviewNotBlocked(t *testing.T) {

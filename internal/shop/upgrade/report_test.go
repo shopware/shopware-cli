@@ -27,6 +27,7 @@ func TestWriteReport(t *testing.T) {
 		Extensions: []ExtensionResult{
 			{Extension: InstalledExtension{Name: "SwagOk", Package: "swag/ok", Version: "2.0.0"}, Status: ExtOK, Available: "2.0.0"},
 			{Extension: InstalledExtension{Name: "LocalPlugin", Version: "1.0.0"}, Status: ExtReview, Detail: "Local extension"},
+			{Extension: InstalledExtension{Name: "SwagUpdate", Package: "swag/update", Version: "1.0.0"}, Status: ExtNeedsUpdate, Available: "1.2.0", Detail: "Composer resolution determined the final compatibility result."},
 			{Extension: InstalledExtension{Name: "AcmeBlocked", Package: "acme/blocked", Version: "3.0.0"}, Status: ExtBlocked, Detail: "No compatible release"},
 		},
 		ComposerReport: "Your requirements could not be resolved.",
@@ -50,8 +51,11 @@ func TestWriteReport(t *testing.T) {
 
 	assert.Contains(t, report, "## Extensions: Blocked (1)")
 	assert.Contains(t, report, "## Extensions: Needs review (1)")
+	assert.Contains(t, report, "## Extensions: Needs update (1)")
 	assert.Contains(t, report, "## Extensions: OK (1)")
+	assert.Contains(t, report, "| SwagUpdate | swag/update | 1.0.0 | 1.2.0 | needs update | Composer resolution determined the final compatibility result. |")
 	assert.Less(t, indexOf(report, "AcmeBlocked"), indexOf(report, "LocalPlugin"), "blocked group is listed first")
+	assert.Less(t, indexOf(report, "LocalPlugin"), indexOf(report, "SwagUpdate"), "review group is listed before automatic updates")
 
 	assert.Contains(t, report, "Your requirements could not be resolved.")
 
@@ -85,5 +89,7 @@ func TestWriteReportSkipsEmptyGroups(t *testing.T) {
 	content, err := os.ReadFile(path)
 	require.NoError(t, err)
 	assert.NotContains(t, string(content), "Blocked")
+	assert.NotContains(t, string(content), "Needs review")
+	assert.NotContains(t, string(content), "Needs update")
 	assert.NotContains(t, string(content), "Composer resolution report")
 }

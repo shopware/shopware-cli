@@ -632,6 +632,23 @@ func TestExtensionDetailVariants(t *testing.T) {
 	}
 }
 
+func TestExtensionDetailPrefersStoreListingLink(t *testing.T) {
+	result := okResult()
+	result.ChangelogURL = "https://store.shopware.com/swag-demo.html"
+	store := newExtensionDetail(result, "Target 6.7.11.0")
+	content := ansi.Strip(store.View(110, 34))
+	assert.Contains(t, content, "View in Store")
+	assert.Contains(t, content, "Open the Shopware Store listing")
+	assert.NotContains(t, content, "View changelog")
+
+	result.ChangelogURL = "https://packagist.org/packages/swag/demo"
+	packagist := newExtensionDetail(result, "Target 6.7.11.0")
+	content = ansi.Strip(packagist.View(110, 34))
+	assert.Contains(t, content, "View changelog")
+	assert.Contains(t, content, "Open release notes in browser")
+	assert.NotContains(t, content, "View in Store")
+}
+
 func TestReviewPanel(t *testing.T) {
 	w := wizardAtPrepare(t, []backend.ExtensionResult{okResult()}, true)
 	w.Send(key('c'))
@@ -660,11 +677,13 @@ func TestPrepareLoadsChangelogsIntoReport(t *testing.T) {
 
 	changelogs := []backend.ExtensionChangelog{{
 		Extension: "SwagDemo", From: "2.0.0", To: "2.1.0",
-		Entries: []backend.ChangelogEntry{{Version: "2.1.0", Date: "2026-03-01", Text: "Fixes"}},
+		StoreLink: "https://store.shopware.com/swag-demo.html",
+		Entries:   []backend.ChangelogEntry{{Version: "2.1.0", Date: "2026-03-01", Text: "Fixes"}},
 	}}
 	w.Send(changelogsMsg{gen: w.m.prepareGen, changelogs: changelogs})
 
 	assert.Equal(t, changelogs, w.m.reportData().Changelogs)
+	assert.Equal(t, "https://store.shopware.com/swag-demo.html", w.m.prepare.results[0].ChangelogURL)
 }
 
 func TestPrepareDropsStaleChangelogs(t *testing.T) {
