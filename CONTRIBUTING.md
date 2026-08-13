@@ -44,6 +44,40 @@ golangci-lint run ./...
 
 Add or update tests for bug fixes and new behavior.
 
+### Using mise
+
+This repository includes a `mise.toml` file for managing the recommended Go
+and golangci-lint versions and for providing convenient development tasks.
+
+After installing mise, set up the project tools with:
+
+```sh
+mise install
+```
+
+You can then run the complete local check suite with:
+
+```sh
+mise run check
+```
+
+Individual tasks are also available:
+
+```sh
+mise run format       # Format Go source files
+mise run format-check # Check formatting without changing files
+mise run build        # Build the shopware-cli binary
+mise run build-all    # Build all Go packages
+mise run test         # Run the network-isolated test suite
+mise run test-unit    # Run Go tests without the sandbox wrapper
+mise run vet          # Run go vet
+mise run lint         # Run golangci-lint
+```
+
+For machine-specific settings, create `mise.local.toml`. This file is ignored
+by Git and should not contain secrets that belong in a dedicated secret
+manager.
+
 ## Reviews
 
 Maintainers may ask for changes, suggest a different direction, or decline a PR if the approach was not discussed beforehand. That is not personal; it is how we keep the project consistent and sustainable.
