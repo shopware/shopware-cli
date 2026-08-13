@@ -106,7 +106,10 @@ func renderReport(data ReportData) string {
 		return s.BlocksUpgrade()
 	})
 	writeExtensionGroup(&b, "Needs review", data.Extensions, func(s ExtStatus) bool {
-		return !s.BlocksUpgrade() && s != ExtOK
+		return s.NeedsAttention() && !s.BlocksUpgrade()
+	})
+	writeExtensionGroup(&b, "Needs update", data.Extensions, func(s ExtStatus) bool {
+		return s == ExtNeedsUpdate
 	})
 	writeExtensionGroup(&b, "OK", data.Extensions, func(s ExtStatus) bool {
 		return s == ExtOK
@@ -177,7 +180,11 @@ func writeChangelogs(b *strings.Builder, changelogs []ExtensionChangelog) {
 
 	b.WriteString("## Extension update changelogs\n\n")
 	for _, cl := range changelogs {
-		fmt.Fprintf(b, "### %s (%s → %s)\n\n", cl.Extension, cl.From, cl.To)
+		if cl.StoreLink != "" {
+			fmt.Fprintf(b, "### [%s](%s) (%s → %s)\n\n", cl.Extension, cl.StoreLink, cl.From, cl.To)
+		} else {
+			fmt.Fprintf(b, "### %s (%s → %s)\n\n", cl.Extension, cl.From, cl.To)
+		}
 		for _, entry := range cl.Entries {
 			heading := entry.Version
 			if entry.Date != "" {

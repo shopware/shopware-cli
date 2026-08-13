@@ -209,10 +209,10 @@ func ApplyResolvedVersions(results []ExtensionResult, resolve ResolveResult) {
 			// release.
 			res.Status = ExtOK
 			res.Available = res.Extension.Version
-			res.Detail = "Composer resolved the upgrade with the installed release; the repository's compatibility metadata was wrong or incomplete."
+			res.Detail = "Composer resolution determined the final compatibility result; the installed release stays."
 		default:
 			res.Status = ExtNeedsUpdate
-			res.Detail = "Composer resolved the upgrade with this release; the repository's compatibility metadata was wrong or incomplete."
+			res.Detail = "Composer resolution determined the final compatibility result."
 		}
 	}
 }

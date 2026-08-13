@@ -24,6 +24,7 @@ var shopwareConstraintPackages = []string{"shopware/core", "shopware/storefront"
 // ordered most severe first.
 func (u *ProjectUpgrader) CheckExtensions(ctx context.Context, current, target *version.Version, extensions []InstalledExtension) []ExtensionResult {
 	storeStatus := u.loadStoreStatus(ctx, current, target, extensions)
+	storePlugins := u.loadStorePlugins(ctx, target, extensions)
 	repos := u.projectRepositories(ctx)
 
 	results := make([]ExtensionResult, 0, len(extensions))
@@ -34,6 +35,9 @@ func (u *ProjectUpgrader) CheckExtensions(ctx context.Context, current, target *
 			applyStoreStatus(&res, store)
 		} else if ext.ComposerManaged {
 			res.StoreLabel = "Not available in Store"
+		}
+		if plugin, ok := storePlugins[ext.Name]; ok && plugin.StoreLink != "" {
+			res.ChangelogURL = plugin.StoreLink
 		}
 		results = append(results, res)
 	}
@@ -79,6 +83,36 @@ func (u *ProjectUpgrader) loadStoreStatus(ctx context.Context, current, target *
 	byName := make(map[string]account_api.UpdateCheckExtensionCompatibility, len(updates))
 	for _, u := range updates {
 		byName[u.Name] = u
+	}
+	return byName
+}
+
+// loadStorePlugins fetches Store listings (including the storefront URL) for
+// Composer-managed extensions. Failures degrade to an empty map.
+func (u *ProjectUpgrader) loadStorePlugins(ctx context.Context, target *version.Version, extensions []InstalledExtension) map[string]account_api.StorePlugin {
+	if target == nil {
+		return nil
+	}
+
+	names := make([]string, 0, len(extensions))
+	for _, ext := range extensions {
+		if ext.ComposerManaged {
+			names = append(names, ext.Name)
+		}
+	}
+	if len(names) == 0 {
+		return nil
+	}
+
+	plugins, err := u.storePlugins(ctx, "en_GB", target.String(), names)
+	if err != nil {
+		logging.FromContext(ctx).Debugf("store plugin lookup failed: %v", err)
+		return nil
+	}
+
+	byName := make(map[string]account_api.StorePlugin, len(plugins))
+	for _, plugin := range plugins {
+		byName[plugin.Name] = plugin
 	}
 	return byName
 }
@@ -235,7 +269,7 @@ func (u *ProjectUpgrader) TargetPHPRequirement(ctx context.Context, target *vers
 }
 
 // changelogURL points at the package page of the repository that provides the
-// extension, where its release notes live.
+// extension. Prefer the Shopware Store listing when CheckExtensions has one.
 func changelogURL(repoURL, pkg string) string {
 	if strings.Contains(repoURL, "packagist.org") {
 		return "https://packagist.org/packages/" + pkg

@@ -181,9 +181,13 @@ func (d *extensionDetail) viewRight() string {
 	}
 
 	if r.ChangelogURL != "" {
-		b.WriteString(tui.StyledLink(r.ChangelogURL, "View changelog →", tui.LinkStyle))
+		label, hint := "View changelog →", "Open release notes in browser"
+		if strings.Contains(r.ChangelogURL, "store.shopware.com") {
+			label, hint = "View in Store →", "Open the Shopware Store listing"
+		}
+		b.WriteString(tui.StyledLink(r.ChangelogURL, label, tui.LinkStyle))
 		b.WriteString("\n")
-		b.WriteString(tui.DimStyle.Render("Open release notes in browser"))
+		b.WriteString(tui.DimStyle.Render(hint))
 		b.WriteString("\n")
 	}
 

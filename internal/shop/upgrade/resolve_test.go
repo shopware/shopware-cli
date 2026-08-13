@@ -125,9 +125,12 @@ func TestApplyResolvedVersionsOverridesMetadataBlockers(t *testing.T) {
 	assert.Equal(t, ExtOK, results[0].Status, "a successful resolve disproves the metadata blocker")
 	assert.Equal(t, "3.12.0", results[0].Available)
 	assert.Contains(t, results[0].Detail, "installed release")
+	assert.Contains(t, results[0].Detail, "Composer resolution determined the final compatibility result")
+	assert.NotContains(t, results[0].Detail, "wrong or incomplete")
 
 	assert.Equal(t, ExtNeedsUpdate, results[1].Status)
 	assert.Equal(t, "2.1.3", results[1].Available)
+	assert.Equal(t, "Composer resolution determined the final compatibility result.", results[1].Detail)
 }
 
 func TestApplyResolvedVersionsRemovedPackageStaysBlocked(t *testing.T) {

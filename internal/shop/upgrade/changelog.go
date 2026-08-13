@@ -20,6 +20,9 @@ type ExtensionChangelog struct {
 	// From is the installed version, To the update's target version.
 	From string
 	To   string
+	// StoreLink is the Shopware Store listing URL when the Store knows the
+	// extension, "" otherwise.
+	StoreLink string
 	// Entries are ordered newest first.
 	Entries []ChangelogEntry
 }
@@ -74,6 +77,7 @@ func (u *ProjectUpgrader) LoadExtensionChangelogs(ctx context.Context, target st
 			Extension: plugin.Name,
 			From:      win.from.String(),
 			To:        win.to.String(),
+			StoreLink: plugin.StoreLink,
 		}
 		for _, entry := range plugin.Changelogs {
 			v, err := version.NewVersion(entry.Version)
@@ -102,7 +106,27 @@ func (u *ProjectUpgrader) LoadExtensionChangelogs(ctx context.Context, target st
 	}
 
 	sort.Slice(changelogs, func(i, j int) bool { return changelogs[i].Extension < changelogs[j].Extension })
+	ApplyStoreLinks(results, changelogs)
 	return changelogs
+}
+
+// ApplyStoreLinks overwrites each matching extension's changelog URL with the
+// Store listing when the Store returned one, replacing the Packagist fallback.
+func ApplyStoreLinks(results []ExtensionResult, changelogs []ExtensionChangelog) {
+	links := make(map[string]string, len(changelogs))
+	for _, cl := range changelogs {
+		if cl.StoreLink != "" {
+			links[cl.Extension] = cl.StoreLink
+		}
+	}
+	if len(links) == 0 {
+		return
+	}
+	for i := range results {
+		if link := links[results[i].Extension.Name]; link != "" {
+			results[i].ChangelogURL = link
+		}
+	}
 }
 
 // changelogDate reduces the Store's timestamp ("2026-01-15 00:00:00.000000")

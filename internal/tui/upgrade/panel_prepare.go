@@ -226,6 +226,7 @@ func (m *Model) updatePrepare(msg tea.Msg) (app.Content, tea.Cmd) {
 			return m, nil
 		}
 		m.prepare.changelogs = msg.changelogs
+		backend.ApplyStoreLinks(m.prepare.results, msg.changelogs)
 		return m, nil
 
 	case tea.KeyPressMsg:
