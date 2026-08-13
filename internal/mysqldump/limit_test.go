@@ -208,6 +208,99 @@ func TestLimitUnknownTableIsIgnored(t *testing.T) {
 	assert.Empty(t, dumper.limitWhere)
 }
 
+func TestLimitRejectsOverlappingTables(t *testing.T) {
+	t.Run("child of a limited table", func(t *testing.T) {
+		dumper := orderGraphDumper()
+		dumper.LimitMap = map[string]TableLimit{
+			"order":           {Rows: 100},
+			"order_line_item": {Rows: 50},
+		}
+
+		err := dumper.computeLimitFilters(t.Context())
+		assert.ErrorContains(t, err, "cannot limit table order_line_item")
+		assert.ErrorContains(t, err, "limiting table order already filters order_line_item")
+	})
+
+	t.Run("transitive child of a limited table", func(t *testing.T) {
+		dumper := orderGraphDumper()
+		dumper.LimitMap = map[string]TableLimit{
+			"order":                   {Rows: 100},
+			"order_delivery_position": {Rows: 10},
+		}
+
+		err := dumper.computeLimitFilters(t.Context())
+		assert.ErrorContains(t, err, "cannot limit table order_delivery_position")
+		assert.ErrorContains(t, err, "limiting table order already filters order_delivery_position")
+	})
+
+	t.Run("parent and child limited independently", func(t *testing.T) {
+		dumper := limitTestDumper(
+			&TableSchema{
+				Name:       "customer",
+				PrimaryKey: []string{"id"},
+				Columns:    notNullColumns("id", "created_at"),
+			},
+			&TableSchema{
+				Name:       "order",
+				PrimaryKey: []string{"id"},
+				Columns:    notNullColumns("id", "customer_id", "created_at"),
+				ForeignKeys: []ForeignKeySchema{
+					{Name: "fk.order.customer_id", Columns: []string{"customer_id"}, ReferencedTable: "customer", ReferencedColumns: []string{"id"}},
+				},
+			},
+		)
+		dumper.LimitMap = map[string]TableLimit{
+			"order":    {Rows: 100},
+			"customer": {Rows: 50},
+		}
+
+		err := dumper.computeLimitFilters(t.Context())
+		assert.ErrorContains(t, err, "cannot limit table order")
+		assert.ErrorContains(t, err, "limiting table customer already filters order")
+	})
+
+	t.Run("foreign key cycle", func(t *testing.T) {
+		dumper := limitTestDumper(
+			&TableSchema{
+				Name:       "a",
+				PrimaryKey: []string{"id"},
+				Columns:    notNullColumns("id", "b_id"),
+				ForeignKeys: []ForeignKeySchema{
+					{Name: "fk.a.b_id", Columns: []string{"b_id"}, ReferencedTable: "b", ReferencedColumns: []string{"id"}},
+				},
+			},
+			&TableSchema{
+				Name:       "b",
+				PrimaryKey: []string{"id"},
+				Columns:    notNullColumns("id", "a_id"),
+				ForeignKeys: []ForeignKeySchema{
+					{Name: "fk.b.a_id", Columns: []string{"a_id"}, ReferencedTable: "a", ReferencedColumns: []string{"id"}},
+				},
+			},
+		)
+		dumper.LimitMap = map[string]TableLimit{
+			"a": {Rows: 10},
+			"b": {Rows: 10},
+		}
+
+		err := dumper.computeLimitFilters(t.Context())
+		assert.ErrorContains(t, err, "cannot limit table b")
+		assert.ErrorContains(t, err, "limiting table a already filters b")
+	})
+}
+
+func TestLimitAllowsUnrelatedTables(t *testing.T) {
+	dumper := orderGraphDumper()
+	dumper.LimitMap = map[string]TableLimit{
+		"order":   {Rows: 100},
+		"product": {Rows: 50},
+	}
+
+	assert.NoError(t, dumper.computeLimitFilters(t.Context()))
+	assert.Contains(t, dumper.limitWhere, "order")
+	assert.Contains(t, dumper.limitWhere, "product")
+}
+
 func TestLimitValidation(t *testing.T) {
 	dumper := limitTestDumper(&TableSchema{
 		Name:       "order",

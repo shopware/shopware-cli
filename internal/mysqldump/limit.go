@@ -70,6 +70,10 @@ func (d *Dumper) computeLimitFilters(ctx context.Context) error {
 		return nil
 	}
 
+	if err := rejectOverlappingLimits(schemas, limits); err != nil {
+		return err
+	}
+
 	resolver := &limitResolver{
 		whereMap:  d.WhereMap,
 		schemas:   schemas,
@@ -120,17 +124,47 @@ func (r *limitResolver) markAffectedTables() {
 		r.affected[table] = true
 	}
 
+	markReferencingTables(r.schemas, r.affected)
+}
+
+// rejectOverlappingLimits forbids independently limiting a table that is already
+// filtered by another limit (directly or transitively via foreign keys).
+// Example: --limit order=100 already keeps only order_address rows of those
+// orders, so --limit order_address=50 would pick an unrelated set and is rejected.
+func rejectOverlappingLimits(schemas map[string]*TableSchema, limits map[string]TableLimit) error {
+	if len(limits) < 2 {
+		return nil
+	}
+
+	limited := slices.Sorted(maps.Keys(limits))
+	for _, parent := range limited {
+		filtered := map[string]bool{parent: true}
+		markReferencingTables(schemas, filtered)
+
+		for _, child := range limited {
+			if child != parent && filtered[child] {
+				return fmt.Errorf("cannot limit table %s: limiting table %s already filters %s via foreign keys", child, parent, child)
+			}
+		}
+	}
+
+	return nil
+}
+
+// markReferencingTables adds every table that references a table already in
+// affected, walking foreign keys until the set stops growing.
+func markReferencingTables(schemas map[string]*TableSchema, affected map[string]bool) {
 	for changed := true; changed; {
 		changed = false
-		for name, schema := range r.schemas {
-			if r.affected[name] {
+		for name, schema := range schemas {
+			if affected[name] {
 				continue
 			}
 
 			for _, fk := range schema.ForeignKeys {
 				referenced := strings.ToLower(fk.ReferencedTable)
-				if referenced != name && r.affected[referenced] {
-					r.affected[name] = true
+				if referenced != name && affected[referenced] {
+					affected[name] = true
 					changed = true
 					break
 				}

@@ -248,7 +248,7 @@ type ConfigDump struct {
 	Ignore []string `yaml:"ignore,omitempty"`
 	// Add an where condition to that table, schema is table name as key, and where statement as value
 	Where map[string]string `yaml:"where,omitempty"`
-	// Limit the amount of exported rows of a table, schema is table name as key. All tables referencing the limited table via foreign keys (also transitively) are filtered automatically, so they only contain rows belonging to the kept rows
+	// Limit the amount of exported rows of a table, schema is table name as key. All tables referencing the limited table via foreign keys (also transitively) are filtered automatically, so they only contain rows belonging to the kept rows. A second limit on a table that is already filtered this way is rejected
 	Limit map[string]ConfigDumpLimit `yaml:"limit,omitempty"`
 }
 
