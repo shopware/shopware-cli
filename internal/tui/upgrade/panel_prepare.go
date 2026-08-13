@@ -226,6 +226,7 @@ func (m *Model) updatePrepare(msg tea.Msg) (app.Content, tea.Cmd) {
 			return m, nil
 		}
 		m.prepare.changelogs = msg.changelogs
+		backend.ApplyStoreLinks(m.prepare.results, msg.changelogs)
 		return m, nil
 
 	case tea.KeyPressMsg:
@@ -358,9 +359,9 @@ func (m *Model) viewPrepare() (title, status, body string) {
 			message = "Dependencies are blocked by security advisories. Recheck to decide again."
 		}
 		status = m.statusStrip(tui.VariantError, "BLOCKED", message+m.reportHint())
-	case m.prepare.blockers() > 0:
+	case m.prepare.flagged() > 0:
 		status = m.statusStrip(tui.VariantWarning, "REVIEW",
-			fmt.Sprintf("Composer resolved the upgrade, but %d extensions are flagged. Review them before continuing.", m.prepare.blockers()))
+			fmt.Sprintf("Composer resolved the upgrade, but %d extensions are flagged. Review them before continuing.", m.prepare.flagged()))
 	default:
 		status = m.statusStrip(tui.VariantSuccess, "READY", "All checks passed. Continue to review the upgrade plan.")
 	}

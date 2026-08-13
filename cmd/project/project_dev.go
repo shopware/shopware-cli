@@ -1,12 +1,14 @@
 package project
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"os"
 	"strings"
 	"time"
 
+	"charm.land/huh/v2/spinner"
 	"github.com/mattn/go-isatty"
 	"github.com/spf13/cobra"
 
@@ -130,7 +132,9 @@ var projectDevStopCmd = &cobra.Command{
 			return err
 		}
 
-		return env.stop(cmd)
+		removeVolumes, _ := cmd.Flags().GetBool("remove-data")
+
+		return env.stop(cmd, executor.StopOptions{RemoveVolumes: removeVolumes})
 	},
 }
 
@@ -291,10 +295,23 @@ func (e *devEnvironment) start(cmd *cobra.Command) error {
 	return nil
 }
 
-func (e *devEnvironment) stop(cmd *cobra.Command) error {
+func (e *devEnvironment) stop(cmd *cobra.Command, opts executor.StopOptions) error {
 	start := time.Now()
 
-	if err := runStep(cmd.Context(), "Stopping development environment...", e.executor.StopEnvironment); err != nil {
+	title := "Stopping development environment..."
+	if opts.RemoveVolumes {
+		title = "Stopping development environment and removing data..."
+	}
+
+	err := spinner.New().
+		Title(title).
+		Context(cmd.Context()).
+		ActionWithErr(func(ctx context.Context) error {
+			return e.executor.StopEnvironment(ctx, opts)
+		}).
+		Run()
+
+	if err != nil {
 		return fmt.Errorf("stopping environment: %w", err)
 	}
 
@@ -340,4 +357,6 @@ func init() {
 	projectDevCmd.AddCommand(projectDevStartCmd)
 	projectDevCmd.AddCommand(projectDevStopCmd)
 	projectDevCmd.AddCommand(projectDevStatusCmd)
+
+	projectDevStopCmd.Flags().Bool("remove-data", false, "Also remove the named volumes declared in the compose file, deleting all data stored in them")
 }

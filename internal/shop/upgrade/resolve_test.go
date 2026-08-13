@@ -109,3 +109,51 @@ func TestResolveResultSecurityBlocked(t *testing.T) {
 	ok := ResolveResult{OK: true, Report: "affected by security advisories"}
 	assert.False(t, ok.SecurityBlocked(), "a successful resolution is never security-blocked")
 }
+
+func TestApplyResolvedVersionsOverridesMetadataBlockers(t *testing.T) {
+	resolve := resolvedTestResult(t)
+	require.True(t, resolve.OK)
+
+	results := []ExtensionResult{
+		// Not in the lock diff: the solver kept the installed release.
+		{Extension: InstalledExtension{Name: "FroshTools", Package: "frosh/tools", Version: "3.12.0"}, Status: ExtBlocked},
+		// In the diff: the solver picked a newer release.
+		{Extension: InstalledExtension{Name: "SwagDemo", Package: "swag/demo", Version: "2.0.0"}, Status: ExtMismatch},
+	}
+	ApplyResolvedVersions(results, resolve)
+
+	assert.Equal(t, ExtOK, results[0].Status, "a successful resolve disproves the metadata blocker")
+	assert.Equal(t, "3.12.0", results[0].Available)
+	assert.Contains(t, results[0].Detail, "installed release")
+	assert.Contains(t, results[0].Detail, "Composer resolution determined the final compatibility result")
+	assert.NotContains(t, results[0].Detail, "wrong or incomplete")
+
+	assert.Equal(t, ExtNeedsUpdate, results[1].Status)
+	assert.Equal(t, "2.1.3", results[1].Available)
+	assert.Equal(t, "Composer resolution determined the final compatibility result.", results[1].Detail)
+}
+
+func TestApplyResolvedVersionsRemovedPackageStaysBlocked(t *testing.T) {
+	// A transitively installed extension can be dropped by the solver; that
+	// must not read as "kept at the installed release".
+	results := []ExtensionResult{
+		{Extension: InstalledExtension{Name: "SwagGone", Package: "swag/gone", Version: "1.0.0"}, Status: ExtBlocked, Available: "x"},
+	}
+	ApplyResolvedVersions(results, ResolveResult{OK: true, Changes: []PackageChange{
+		{Name: "swag/gone", From: "1.0.0", Op: "remove"},
+	}})
+
+	assert.Equal(t, ExtBlocked, results[0].Status, "a removal is not compatibility")
+	assert.Empty(t, results[0].Available)
+	assert.Contains(t, results[0].Detail, "removes this package")
+}
+
+func TestApplyResolvedVersionsKeepsBlockersOnFailedResolve(t *testing.T) {
+	results := []ExtensionResult{
+		{Extension: InstalledExtension{Name: "SwagBlocked", Package: "swag/blocked", Version: "3.2.0"}, Status: ExtBlocked, Detail: "original"},
+	}
+	ApplyResolvedVersions(results, ResolveResult{OK: false})
+
+	assert.Equal(t, ExtBlocked, results[0].Status, "a failed resolve proves nothing")
+	assert.Equal(t, "original", results[0].Detail)
+}

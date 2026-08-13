@@ -549,10 +549,27 @@ func TestPreparePanelShowsResolvedVersions(t *testing.T) {
 	assert.Contains(t, content, "2.0.0 -> 2.1.3", "queue shows the version composer resolved to")
 }
 
-func TestPreparePanelFlaggedButResolvable(t *testing.T) {
-	// Store metadata flags an extension, but composer resolves the upgrade
-	// with extensions passed as "*": the solver's verdict wins.
+func TestPreparePanelBlockerDisprovenByResolve(t *testing.T) {
+	// Repository metadata flags an extension as blocked, but composer resolves
+	// the upgrade with extensions passed as "*": the solver's verdict wins and
+	// the stale blocker is downgraded to ok instead of scaring the user.
 	w := wizardAtPrepare(t, []backend.ExtensionResult{blockedResult(), okResult()}, true)
+
+	content := w.view(t)
+	assert.Contains(t, content, "READY")
+	assert.NotContains(t, content, "BLOCKED")
+
+	w.Send(key('c'))
+	assert.Equal(t, panelReview, w.m.panel)
+}
+
+func TestPreparePanelFlaggedButResolvable(t *testing.T) {
+	// A non-blocking flag (manual review) survives a successful resolve — the
+	// user should still look at it, it just does not block.
+	review := blockedResult()
+	review.Status = backend.ExtReview
+	review.Detail = "Local extension — review it manually."
+	w := wizardAtPrepare(t, []backend.ExtensionResult{review, okResult()}, true)
 
 	content := w.view(t)
 	assert.Contains(t, content, "REVIEW")
@@ -575,7 +592,9 @@ func TestPreparePanelComposerBlocked(t *testing.T) {
 }
 
 func TestExtensionDetailOverlay(t *testing.T) {
-	w := wizardAtPrepare(t, []backend.ExtensionResult{blockedResult(), okResult()}, true)
+	// A failed resolve keeps the metadata blocker (a successful one would
+	// disprove and downgrade it).
+	w := wizardAtPrepare(t, []backend.ExtensionResult{blockedResult(), okResult()}, false)
 
 	w.Send(specialKey(tea.KeyEnter))
 	require.True(t, w.App.OverlayOpen())
@@ -613,6 +632,23 @@ func TestExtensionDetailVariants(t *testing.T) {
 	}
 }
 
+func TestExtensionDetailPrefersStoreListingLink(t *testing.T) {
+	result := okResult()
+	result.ChangelogURL = "https://store.shopware.com/swag-demo.html"
+	store := newExtensionDetail(result, "Target 6.7.11.0")
+	content := ansi.Strip(store.View(110, 34))
+	assert.Contains(t, content, "View in Store")
+	assert.Contains(t, content, "Open the Shopware Store listing")
+	assert.NotContains(t, content, "View changelog")
+
+	result.ChangelogURL = "https://packagist.org/packages/swag/demo"
+	packagist := newExtensionDetail(result, "Target 6.7.11.0")
+	content = ansi.Strip(packagist.View(110, 34))
+	assert.Contains(t, content, "View changelog")
+	assert.Contains(t, content, "Open release notes in browser")
+	assert.NotContains(t, content, "View in Store")
+}
+
 func TestReviewPanel(t *testing.T) {
 	w := wizardAtPrepare(t, []backend.ExtensionResult{okResult()}, true)
 	w.Send(key('c'))
@@ -641,11 +677,13 @@ func TestPrepareLoadsChangelogsIntoReport(t *testing.T) {
 
 	changelogs := []backend.ExtensionChangelog{{
 		Extension: "SwagDemo", From: "2.0.0", To: "2.1.0",
-		Entries: []backend.ChangelogEntry{{Version: "2.1.0", Date: "2026-03-01", Text: "Fixes"}},
+		StoreLink: "https://store.shopware.com/swag-demo.html",
+		Entries:   []backend.ChangelogEntry{{Version: "2.1.0", Date: "2026-03-01", Text: "Fixes"}},
 	}}
 	w.Send(changelogsMsg{gen: w.m.prepareGen, changelogs: changelogs})
 
 	assert.Equal(t, changelogs, w.m.reportData().Changelogs)
+	assert.Equal(t, "https://store.shopware.com/swag-demo.html", w.m.prepare.results[0].ChangelogURL)
 }
 
 func TestPrepareDropsStaleChangelogs(t *testing.T) {

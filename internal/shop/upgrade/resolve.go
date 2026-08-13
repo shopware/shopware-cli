@@ -177,15 +177,66 @@ func (r ResolveResult) VersionMap() map[string]string {
 
 // ApplyResolvedVersions overwrites each extension's Available version with
 // the exact release the resolution picked, where one was found.
+//
+// A successful resolution also overrides metadata-derived blockers: the
+// solver found an installable set that contains every root-required
+// extension, so an extension it updated — or silently kept at the installed
+// release — is proven compatible no matter what the repository metadata
+// claimed.
 func ApplyResolvedVersions(results []ExtensionResult, resolve ResolveResult) {
 	for i := range results {
-		if results[i].Extension.Package == "" {
+		res := &results[i]
+		if res.Extension.Package == "" {
 			continue
 		}
-		if to := resolve.ResolvedVersion(results[i].Extension.Package); to != "" {
-			results[i].Available = to
+
+		change, inDiff := resolve.packageChange(res.Extension.Package)
+		if inDiff && change.To != "" {
+			res.Available = change.To
+		}
+
+		if !resolve.OK || !res.Status.BlocksUpgrade() {
+			continue
+		}
+		switch {
+		case inDiff && change.Op == "remove":
+			// Transitively installed extensions can be dropped by the solver;
+			// that is not compatibility — the extension simply disappears.
+			res.Available = ""
+			res.Detail = "The Composer resolution removes this package — it would no longer be installed after the upgrade."
+		case !inDiff || sameRelease(change.To, res.Extension.Version):
+			// Absent from the lock diff means the solver kept the installed
+			// release.
+			res.Status = ExtOK
+			res.Available = res.Extension.Version
+			res.Detail = "Composer resolution determined the final compatibility result; the installed release stays."
+		default:
+			res.Status = ExtNeedsUpdate
+			res.Detail = "Composer resolution determined the final compatibility result."
 		}
 	}
+}
+
+// packageChange returns the lock-diff entry for a package, if any. Composer
+// package names are case-insensitive.
+func (r ResolveResult) packageChange(pkg string) (PackageChange, bool) {
+	for _, change := range r.Changes {
+		if strings.EqualFold(change.Name, pkg) {
+			return change, true
+		}
+	}
+	return PackageChange{}, false
+}
+
+// sameRelease compares two version strings, tolerating v-prefix and segment
+// padding differences (v1.2.0 == 1.2.0.0).
+func sameRelease(a, b string) bool {
+	va, errA := version.NewVersion(strings.TrimPrefix(a, "v"))
+	vb, errB := version.NewVersion(strings.TrimPrefix(b, "v"))
+	if errA != nil || errB != nil {
+		return a == b
+	}
+	return va.Equal(vb)
 }
 
 // lockNameFor maps a Composer manifest file name to its lock file name, the

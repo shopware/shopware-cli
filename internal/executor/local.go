@@ -147,7 +147,7 @@ func (l *LocalExecutor) StartEnvironment(_ context.Context) error {
 	return ErrNotSupported
 }
 
-func (l *LocalExecutor) StopEnvironment(_ context.Context) error {
+func (l *LocalExecutor) StopEnvironment(_ context.Context, _ StopOptions) error {
 	return ErrNotSupported
 }
 

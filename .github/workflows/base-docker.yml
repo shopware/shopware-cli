@@ -72,7 +72,7 @@ jobs:
     strategy:
       matrix:
         php-version: ["8.5", "8.4", "8.3", "8.2"]
-    uses: docker/github-builder/.github/workflows/build.yml@27ade872c1e2296e62ef15ab3b10d37665e57cf7 # ratchet:docker/github-builder/.github/workflows/build.yml@v1
+    uses: docker/github-builder/.github/workflows/build.yml@a492c6d04fd3315f67230809b44d60cc0acd50b3 # ratchet:docker/github-builder/.github/workflows/build.yml@v1
     permissions:
       contents: read
       id-token: write

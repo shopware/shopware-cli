@@ -604,7 +604,7 @@ func (e *proxyEnvironment) down(ctx context.Context, hintTeardown bool) error {
 	}
 
 	err = runStep(ctx, fmt.Sprintf("Stopping %s...", e.hostname), func(ctx context.Context) error {
-		return e.executor.StopEnvironment(ctx)
+		return e.executor.StopEnvironment(ctx, executor.StopOptions{})
 	})
 	if err != nil {
 		return fmt.Errorf("stopping environment: %w", err)

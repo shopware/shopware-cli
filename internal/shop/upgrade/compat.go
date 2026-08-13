@@ -24,6 +24,7 @@ var shopwareConstraintPackages = []string{"shopware/core", "shopware/storefront"
 // ordered most severe first.
 func (u *ProjectUpgrader) CheckExtensions(ctx context.Context, current, target *version.Version, extensions []InstalledExtension) []ExtensionResult {
 	storeStatus := u.loadStoreStatus(ctx, current, target, extensions)
+	storePlugins := u.loadStorePlugins(ctx, target, extensions)
 	repos := u.projectRepositories(ctx)
 
 	results := make([]ExtensionResult, 0, len(extensions))
@@ -34,6 +35,9 @@ func (u *ProjectUpgrader) CheckExtensions(ctx context.Context, current, target *
 			applyStoreStatus(&res, store)
 		} else if ext.ComposerManaged {
 			res.StoreLabel = "Not available in Store"
+		}
+		if plugin, ok := storePlugins[ext.Name]; ok && plugin.StoreLink != "" {
+			res.ChangelogURL = plugin.StoreLink
 		}
 		results = append(results, res)
 	}
@@ -83,6 +87,36 @@ func (u *ProjectUpgrader) loadStoreStatus(ctx context.Context, current, target *
 	return byName
 }
 
+// loadStorePlugins fetches Store listings (including the storefront URL) for
+// Composer-managed extensions. Failures degrade to an empty map.
+func (u *ProjectUpgrader) loadStorePlugins(ctx context.Context, target *version.Version, extensions []InstalledExtension) map[string]account_api.StorePlugin {
+	if target == nil {
+		return nil
+	}
+
+	names := make([]string, 0, len(extensions))
+	for _, ext := range extensions {
+		if ext.ComposerManaged {
+			names = append(names, ext.Name)
+		}
+	}
+	if len(names) == 0 {
+		return nil
+	}
+
+	plugins, err := u.storePlugins(ctx, "en_GB", target.String(), names)
+	if err != nil {
+		logging.FromContext(ctx).Debugf("store plugin lookup failed: %v", err)
+		return nil
+	}
+
+	byName := make(map[string]account_api.StorePlugin, len(plugins))
+	for _, plugin := range plugins {
+		byName[plugin.Name] = plugin
+	}
+	return byName
+}
+
 // projectRepositories builds the Composer repository set the project itself
 // uses (packagist + any configured private repositories with auth.json
 // credentials), so release lookups see the same packages Composer does.
@@ -127,11 +161,16 @@ func classifyExtension(ctx context.Context, repos *repository.Set, target *versi
 	}
 
 	installedCompatible := false
+	sawConstraint := false
 	var lowestCompatible *version.Version
 
 	for _, rel := range pkg.Versions {
 		constraint := shopwareConstraintOf(rel)
-		if constraint == nil || !constraint.Check(target) {
+		if constraint == nil {
+			continue
+		}
+		sawConstraint = true
+		if !constraint.Check(target) {
 			continue
 		}
 
@@ -160,6 +199,12 @@ func classifyExtension(ctx context.Context, repos *repository.Set, target *versi
 		res.Status = ExtNeedsUpdate
 		res.Available = lowestCompatible.String()
 		res.Detail = "A compatible Composer release is available; the upgrade updates the extension automatically."
+	case !sawConstraint:
+		// No release declares a Shopware constraint (some repositories strip
+		// require metadata) — that is "unknown", not "incompatible". The
+		// Composer dry run remains the authoritative gate.
+		res.Status = ExtReview
+		res.Detail = "The repository metadata does not declare Shopware compatibility; the Composer resolution check decides."
 	default:
 		res.Status = ExtBlocked
 		res.Detail = "No released version of this extension is compatible with the selected Shopware version."
@@ -224,7 +269,7 @@ func (u *ProjectUpgrader) TargetPHPRequirement(ctx context.Context, target *vers
 }
 
 // changelogURL points at the package page of the repository that provides the
-// extension, where its release notes live.
+// extension. Prefer the Shopware Store listing when CheckExtensions has one.
 func changelogURL(repoURL, pkg string) string {
 	if strings.Contains(repoURL, "packagist.org") {
 		return "https://packagist.org/packages/" + pkg

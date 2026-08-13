@@ -1,10 +1,13 @@
 package docker
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/shyim/go-composer"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestProfilerNeedsCredentials(t *testing.T) {
@@ -28,6 +31,42 @@ func TestProfilerIsPaid(t *testing.T) {
 	assert.False(t, ProfilerIsPaid(ProfilerSpx))
 	assert.True(t, ProfilerIsPaid(ProfilerBlackfire))
 	assert.True(t, ProfilerIsPaid(ProfilerTideways))
+}
+
+func TestWriteComposeFileEnvLocal(t *testing.T) {
+	t.Parallel()
+
+	setupProject := func(t *testing.T) string {
+		t.Helper()
+		dir := t.TempDir()
+		lock := `{"packages": [{"name": "shopware/core", "version": "6.6.0.0"}], "packages-dev": []}`
+		require.NoError(t, os.WriteFile(filepath.Join(dir, "composer.lock"), []byte(lock), 0o644))
+		return dir
+	}
+
+	t.Run("creates missing env.local", func(t *testing.T) {
+		t.Parallel()
+		dir := setupProject(t)
+
+		require.NoError(t, WriteComposeFile(dir, nil))
+
+		content, err := os.ReadFile(filepath.Join(dir, ".env.local"))
+		require.NoError(t, err)
+		assert.Equal(t, "APP_ENV=dev\n", string(content))
+	})
+
+	t.Run("keeps existing env.local untouched", func(t *testing.T) {
+		t.Parallel()
+		dir := setupProject(t)
+		existing := "APP_ENV=prod\nAPP_SECRET=abc\n"
+		require.NoError(t, os.WriteFile(filepath.Join(dir, ".env.local"), []byte(existing), 0o644))
+
+		require.NoError(t, WriteComposeFile(dir, nil))
+
+		content, err := os.ReadFile(filepath.Join(dir, ".env.local"))
+		require.NoError(t, err)
+		assert.Equal(t, existing, string(content))
+	})
 }
 
 func TestGenerateComposeFile(t *testing.T) {

@@ -34,7 +34,8 @@ func TestLoadExtensionChangelogs(t *testing.T) {
 		gotVersion = shopwareVersion
 		gotNames = names
 		return []account_api.StorePlugin{{
-			Name: "SwagDemo",
+			Name:      "SwagDemo",
+			StoreLink: "https://store.shopware.com/swag-demo.html",
 			Changelogs: []account_api.StoreChangelog{
 				storeChangelog("2.5.0", "2026-06-01 00:00:00.000000", "too new"),
 				storeChangelog("2.1.0", "2026-03-01 00:00:00.000000", "<p>Adds <b>things</b></p><ul><li>one</li><li>two &amp; three</li></ul>"),
@@ -60,6 +61,9 @@ func TestLoadExtensionChangelogs(t *testing.T) {
 	assert.Equal(t, "SwagDemo", cl.Extension)
 	assert.Equal(t, "1.0.0", cl.From)
 	assert.Equal(t, "2.1.0", cl.To)
+	assert.Equal(t, "https://store.shopware.com/swag-demo.html", cl.StoreLink)
+	assert.Equal(t, "https://store.shopware.com/swag-demo.html", results[0].ChangelogURL,
+		"Store listing replaces the Packagist fallback when the Store has the extension")
 
 	require.Len(t, cl.Entries, 2, "entries outside (installed, available] are dropped")
 	assert.Equal(t, "2.1.0", cl.Entries[0].Version, "newest first")
@@ -102,13 +106,14 @@ func TestReportIncludesChangelogs(t *testing.T) {
 			Extension: "SwagDemo",
 			From:      "1.0.0",
 			To:        "2.0.0",
+			StoreLink: "https://store.shopware.com/swag-demo.html",
 			Entries: []ChangelogEntry{
 				{Version: "2.0.0", Date: "2026-01-15", Text: "Major rework"},
 			},
 		}},
 	})
 	assert.Contains(t, report, "## Extension update changelogs")
-	assert.Contains(t, report, "### SwagDemo (1.0.0 → 2.0.0)")
+	assert.Contains(t, report, "### [SwagDemo](https://store.shopware.com/swag-demo.html) (1.0.0 → 2.0.0)")
 	assert.Contains(t, report, "**2.0.0 — 2026-01-15**")
 	assert.Contains(t, report, "Major rework")
 }

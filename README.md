@@ -74,6 +74,24 @@ If you need CI-friendly behavior, disable prompts:
 shopware-cli --no-interaction <command>
 ```
 
+Silence update notifications for a single command:
+
+```bash
+shopware-cli --no-update-hint
+```
+
+## Configuration
+
+### Disable update notifications
+
+To disable update notifications for the current shell session, set:
+
+```bash
+export SHOPWARE_CLI_NO_UPDATE_NOTIFICATION=true
+```
+
+To make the setting **persistent**, add the export command to your shell profile, such as `~/.bashrc` or `~/.zshrc`.
+
 ## Repository Layout
 
 - `cmd/`: Cobra command groups for account, extension, and project workflows
@@ -81,6 +99,18 @@ shopware-cli --no-interaction <command>
 - `.github/`: automation and workflow definitions
 - `scripts/`: repository helper scripts
 - `env-bridge/`: environment bridge helper entrypoint
+
+## Official Agent Skills
+
+Shopware CLI maintainers provide official Agent Skills in this repository's `skills/` folder. These skills teach compatible AI coding agents how to use Shopware CLI workflows safely and correctly. 
+
+Install them with:
+
+```bash
+npx skills add shopware/shopware-cli
+```
+
+Available skills are `shopware-cli` and `shopware-cli-docker`.
 
 ## Documentation
 

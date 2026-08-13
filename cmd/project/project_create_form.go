@@ -200,7 +200,7 @@ func runCreateForm(cmd *cobra.Command, opts *createOptions, releases []repositor
 			formGroups = append(formGroups, huh.NewGroup(
 				tui.NewYesNo().
 					Title("Docker").
-					Description("Use Docker to run Shopware locally").
+					Description("Use Docker for local setup.").
 					Value(&selectDocker),
 			))
 		}

@@ -180,7 +180,8 @@ type ExtensionResult struct {
 	StoreLabel string
 	// Replacement names a successor extension when Status is ExtDeprecated.
 	Replacement string
-	// ChangelogURL points at the release notes of the providing repository.
+	// ChangelogURL points at the Shopware Store listing when the extension
+	// is known there, otherwise at the providing Composer repository page.
 	ChangelogURL string
 	// Detail is a one-line explanation shown in the detail overlay.
 	Detail string

@@ -54,8 +54,8 @@ func (f *fakeExecutor) StartEnvironment(context.Context) error      { return nil
 func (f *fakeExecutor) DatabaseConnection(context.Context) (*executor.DatabaseConnection, error) {
 	return nil, executor.ErrNotSupported
 }
-func (f *fakeExecutor) StopEnvironment(context.Context) error           { return nil }
-func (f *fakeExecutor) EnvironmentStatus(context.Context) (bool, error) { return true, nil }
+func (f *fakeExecutor) StopEnvironment(context.Context, executor.StopOptions) error { return nil }
+func (f *fakeExecutor) EnvironmentStatus(context.Context) (bool, error)             { return true, nil }
 func (f *fakeExecutor) AdminAPIClient(context.Context) (*adminSdk.Client, error) {
 	return nil, executor.ErrNotSupported
 }
