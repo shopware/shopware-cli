@@ -15,7 +15,7 @@ const (
 
 // AppVersion is the CLI version displayed in headers and branding lines.
 // It is set from cmd/root.go at startup.
-var AppVersion = "dev"
+var AppVersion = "0.1.0"
 
 // Header is the branding header row the dev dashboard, the upgrade wizard,
 // and the plugin-migrate wizard render as shell chrome. It follows the Bubble
@@ -24,14 +24,14 @@ var AppVersion = "dev"
 type Header struct {
 	// branding is the styled "● Shopware CLI v1.0.0 · Documentation · GitHub"
 	// line, rendered once at construction.
-	branding        string
-	width           int
+	branding       string
+	width          int
 	showUpdateHint bool
 }
 
 // UpdateAvailableMsg is sent by the parent TUI model when the asynchronous
 // update check finds a newer CLI version.
-type UpdateAvailableMsg struct {}
+type UpdateAvailableMsg struct{}
 
 // NewHeader creates the shared branding header.
 func NewHeader() Header {
@@ -51,7 +51,7 @@ func (h Header) withUpdateHint(showUpdateHint bool) Header {
 
 	updateHint := ""
 	if showUpdateHint {
-		updateHint = " " + lipgloss.NewStyle().Background(WarnColor).Foreground(lipgloss.Black).Render(" Update available ")
+		updateHint = " " + lipgloss.NewStyle().Foreground(WarnColor).Render(" ⁺₊⋆ Update available ⋆₊⁺ ")
 	}
 
 	branding := icon + " " + title + " " + version + updateHint + sep + docsLink + sep + ghLink

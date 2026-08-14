@@ -4,7 +4,6 @@ import (
 	"context"
 	"testing"
 
-	tea "charm.land/bubbletea/v2"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -26,7 +25,7 @@ func TestNewUpdateCheckCmdReturnsUpdateMessage(t *testing.T) {
 func TestNewUpdateCheckCmdReturnsNoMessageWhenUnavailable(t *testing.T) {
 	cmd := NewUpdateCheckCmd(func(context.Context) bool { return false })
 
-	var msg tea.Msg = cmd()
+	msg := cmd()
 
 	assert.Nil(t, msg)
 }

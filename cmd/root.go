@@ -102,8 +102,6 @@ func run(ctx context.Context) int {
 		})
 	}
 
-	// Always print the command-line notification, even when an interactive TUI
-	// has already displayed its compact header hint.
 	updateResult := updateHandle.Wait(ctx)
 	newRelease := updateResult.Release
 	if newRelease != nil {
@@ -111,9 +109,9 @@ func run(ctx context.Context) int {
 		if err != nil {
 			logging.FromContext(ctx).Debugf("could not determine binary path: %v", err)
 		}
-		if shouldNotify(newRelease, binaryPath) && update.ShouldPrintUpdateHint(newRelease.Version) {
+		if shouldNotify(newRelease, binaryPath) && update.ShouldPrintUpdateHint() {
 			fmt.Fprintln(os.Stderr, update.RenderUpdateNotification(newRelease.Version, version))
-			if err := update.MarkUpdateNotificationPrinted(newRelease.Version); err != nil {
+			if err := update.MarkUpdateNotificationPrinted(); err != nil {
 				logging.FromContext(ctx).Debugf("could not save update notification timestamp: %v", err)
 			}
 		}

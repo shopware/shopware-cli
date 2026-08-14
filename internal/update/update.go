@@ -22,9 +22,10 @@ import (
 const (
 	// releaseFetchInterval is the minimum duration between update checks.
 	releaseFetchInterval = 24 * time.Hour
+	// notificationInterval is the minimum duration between CLI notifications.
 	notificationInterval = 24 * time.Hour
 
-	// This is the primary source of truth for the latest release information, as it is maintained and updated with each new release.
+	// latestReleaseURL is the primary source of truth for the latest release information, as it is maintained and updated with each new release.
 	latestReleaseURL = "https://shopware.github.io/shopware-cli/version.json"
 	repositoryURL    = "https://github.com/shopware/shopware-cli"
 
@@ -45,7 +46,6 @@ type ReleaseInfo struct {
 
 type UpdateNotification struct {
 	LastPrintedAt time.Time `json:"last_printed_at"`
-	LastVersion   string    `json:"last_version"`
 }
 
 // IsRecent checks if the release was published within the last 24 hours.
@@ -57,7 +57,7 @@ func (r ReleaseInfo) IsFetchedWithin(interval time.Duration) bool {
 	return !r.FetchedAt.IsZero() && time.Since(r.FetchedAt) < interval
 }
 
-// CheckForUpdate checks if a newer version is available, if the last check is more than 24 hours ago, and returns the fetched release information if so.
+// CheckForUpdate checks if a newer version is available. Returns the release information or ErrNoUpdateAvailable.
 func CheckForUpdate(ctx context.Context, buildVersion string, client *http.Client) (*ReleaseInfo, error) {
 	latestReleaseInfo, err := getReleaseInformation(ctx, client)
 	if err != nil {
@@ -72,33 +72,31 @@ func CheckForUpdate(ctx context.Context, buildVersion string, client *http.Clien
 	return nil, ErrNoUpdateAvailable
 }
 
-// ShouldPrintUpdateHint reports whether the CLI notification for version may
-// be printed. The TUI hint is intentionally not governed by this function.
-func ShouldPrintUpdateHint(version string) bool {
+// ShouldPrintUpdateHint reports whether the CLI notification may be printed after command execution.
+func ShouldPrintUpdateHint() bool {
 	notification, err := loadUpdateNotificationFromCache()
 	if err != nil && !errors.Is(err, ErrNoCacheFile) {
 		return false
 	}
 
+	// If the notification was printed within the last 24 hours, do not print it again.
 	if notification != nil &&
 		!notification.LastPrintedAt.IsZero() &&
-		time.Since(notification.LastPrintedAt) < notificationInterval &&
-		(notification.LastVersion == "" || notification.LastVersion == version) {
+		time.Since(notification.LastPrintedAt) < notificationInterval {
 		return false
 	}
 
 	return true
 }
 
-// MarkUpdateNotificationPrinted records that the detailed CLI notification
-// was actually shown to the user.
-func MarkUpdateNotificationPrinted(version string) error {
+// MarkUpdateNotificationPrinted records that the detailed CLI notification was actually shown to the user.
+func MarkUpdateNotificationPrinted() error {
 	return saveUpdateNotificationToCache(&UpdateNotification{
 		LastPrintedAt: time.Now(),
-		LastVersion:   version,
 	})
 }
 
+// getReleaseInformation retrieves the latest release information, either from cache or by fetching it.
 func getReleaseInformation(ctx context.Context, client *http.Client) (*ReleaseInfo, error) {
 	// Load cached release info
 	cachedReleaseInfo, err := loadReleaseInfoFromCache()
