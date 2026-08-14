@@ -19,7 +19,7 @@ Portable shop-data packages are a new pair of commands:
 - `project export` writes a tar archive.
 - `project import` reads that tar archive.
 
-Export and import operate on independently selectable components: database, public files, and private files. Public and private file data is optional on both sides: an archive does not have to include them, and `project import` does not have to apply them even when they are present.
+Export and import operate on independently selectable components: database, public files, and private files. An archive does not have to include public or private files. `project import` applies every component that is present. Skipping public or private files is opt-out (`--skip-public`, `--skip-private`).
 
 The archive is the interchange unit. Its layout should match the format expected by Shopware hosting where applicable and practical, so a CLI export can be accepted by a future hosted import without conversion, and a hosted export can be imported by the CLI.
 
@@ -32,36 +32,36 @@ This workflow is for transferring shop data. Production backup, disaster recover
 `project export` writes one tar (optionally wrapped with gzip or zstd). Inside:
 
 ```text
-manifest.json
-database.sql          # database.backup_type = "sql"
-database/             # database.backup_type = "mysql-shell"
-  ...                 # complete, opaque MySQL Shell dump
+metadata.json
+database.sql          # SQL dump
+database/             # complete, opaque MySQL Shell dump
+  ...
 public.tar.gz         # optional
 private.tar.gz        # optional
 ```
 
-A package includes only the selected components. `database.sql` and `database/` are alternatives, not both present.
+Components are detected from those fixed names. `metadata.json` does not repeat paths or backup types.
+
+`database.sql` and `database/` are alternatives. If both are present, import fails. A missing `public.tar.gz` or `private.tar.gz` means that filesystem is not in the package.
 
 The first CLI export writes `database.sql` using the existing SQL dumper, including `--clean` / `--anonymize` and `ConfigDump` rewrite, where, ignore, and no-data rules. The CLI will not produce MySQL Shell dumps in the first implementation.
 
-`project import` consumes the tar. For the database component it accepts either `backup_type`:
+`project import` consumes the tar and picks the database payload from the layout:
 
-- `"sql"` — the SQL file is applied to the project database.
-- `"mysql-shell"` — the directory is loaded as MySQL Shell left it. Any directory that MySQL Shell's load utility can consume (`util.dumpInstance` or `util.dumpSchemas` output) is accepted. The CLI does not re-encode MySQL Shell internals.
+- `database.sql` — applied to the project database.
+- `database/` — loaded as MySQL Shell left it. Any directory that MySQL Shell's load utility can consume (`util.dumpInstance` or `util.dumpSchemas` output) is accepted. The CLI does not re-encode MySQL Shell internals.
 
-Public and private files are optional tar archives of the corresponding Shopware filesystems, not of the project source tree. Export includes a filesystem only when that component is selected. Import applies a filesystem only when that component is selected and present in the archive; a missing `public.tar.gz` or `private.tar.gz` is valid. When they are applied, export reads them and import writes them through the project's existing Flysystem configuration in `config/packages` (`shopware.filesystem.public` and `shopware.filesystem.private`). Only the `local` and `amazon-s3` adapters are supported. Any other adapter is rejected with a clear error.
+Public and private files are optional tar archives of the corresponding Shopware filesystems, not of the project source tree. Export includes a filesystem only when that component is selected. Import applies `public.tar.gz` and `private.tar.gz` when they are present, unless the matching `--skip-public` or `--skip-private` flag is set. A missing file is valid and is not an error. When they are applied, export reads them and import writes them through the project's existing Flysystem configuration in `config/packages` (`shopware.filesystem.public` and `shopware.filesystem.private`). Only the `local` and `amazon-s3` adapters are supported. Any other adapter is rejected with a clear error.
 
 `--anonymize` and `ConfigDump` rules apply only to the SQL dumper. They do not sanitize public or private files. File components are transferred as stored. Private files can include invoices, documents, and other sensitive shop data; that is expected and must be documented.
 
-### Manifest
+### metadata.json
 
-`manifest.json` describes the package. Required fields for `format_version` 1:
+`metadata.json` describes the package, not the file layout. Required fields for `format_version` 1:
 
 - `format_version` (integer, currently `1`)
 - `created_at` (RFC 3339 timestamp)
 - `source` (`shopware_version`, and `database.vendor` / `database.version` when a database component is present)
-- at least one of `database` or `filesystems`
-- `files`: array of `{path, size, sha256}` for every payload file except the manifest itself
 
 ```json
 {
@@ -73,47 +73,16 @@ Public and private files are optional tar archives of the corresponding Shopware
       "vendor": "mysql",
       "version": "8.4.6"
     }
-  },
-  "database": {
-    "backup_type": "sql",
-    "path": "database.sql"
-  },
-  "filesystems": {
-    "public": {
-      "path": "public.tar.gz"
-    },
-    "private": {
-      "path": "private.tar.gz"
-    }
-  },
-  "files": [
-    {
-      "path": "database.sql",
-      "size": 123456789,
-      "sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
-    },
-    {
-      "path": "public.tar.gz",
-      "size": 23456789,
-      "sha256": "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789"
-    },
-    {
-      "path": "private.tar.gz",
-      "size": 3456789,
-      "sha256": "123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0"
-    }
-  ]
+  }
 }
 ```
 
 Validation rules:
 
-- Import rejects an unknown `format_version` with a clear error. It does not attempt partial interpretation.
+- Import rejects a missing `metadata.json` or an unknown `format_version` with a clear error. It does not attempt partial interpretation.
 - Import ignores unknown fields (forward compatible).
-- `files[].path` must match the component paths declared in `database` / `filesystems`.
-- Import verifies each `files[]` entry's size and SHA-256 before applying that component.
-- A missing `filesystems.public` or `filesystems.private` key means that component is not in the package.
-- `database.backup_type` is `"sql"` or `"mysql-shell"`.
+- The archive must contain at least one of `database.sql`, `database/`, `public.tar.gz`, or `private.tar.gz`.
+- If both `database.sql` and `database/` are present, import fails.
 
 Field names and additional hosting-specific metadata may still be aligned with PaaS/SaaS before the first implementation. Adding fields is allowed; removing or renaming a required `format_version` 1 field requires a new `format_version`.
 
