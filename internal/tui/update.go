@@ -8,14 +8,13 @@ import (
 
 // NewUpdateCheckCmd waits for an externally-owned update result and converts
 // it into a message understood by Header.Update.
-func NewUpdateCheckCmd(wait func(context.Context) (bool, error)) tea.Cmd {
+func NewUpdateCheckCmd(wait func(context.Context) bool) tea.Cmd {
 	if wait == nil {
 		return nil
 	}
 
 	return func() tea.Msg {
-		available, err := wait(context.Background())
-		if err != nil || !available {
+		if !wait(context.Background()) {
 			return nil
 		}
 

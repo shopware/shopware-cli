@@ -31,7 +31,7 @@ import (
 	"github.com/shopware/shopware-cli/logging"
 )
 
-var version = "0.1.0"
+var version = "dev"
 
 var rootCmd = &cobra.Command{
 	Use:     "shopware-cli",

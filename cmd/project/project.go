@@ -17,9 +17,9 @@ func updateBackgroundCmd(ctx context.Context) tea.Cmd {
 		return nil
 	}
 
-	return tui.NewUpdateCheckCmd(func(waitCtx context.Context) (bool, error) {
+	return tui.NewUpdateCheckCmd(func(waitCtx context.Context) bool {
 		result := handle.Wait(waitCtx)
-		return result.Release != nil, result.Err
+		return result.Release != nil
 	})
 }
 

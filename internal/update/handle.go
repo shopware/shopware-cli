@@ -14,7 +14,6 @@ type CheckResult struct {
 type CheckHandle struct {
 	done   chan struct{}
 	once   sync.Once
-	mu     sync.RWMutex
 	result CheckResult
 }
 
@@ -26,9 +25,7 @@ func NewCheckHandle() *CheckHandle {
 
 func (h *CheckHandle) Complete(result CheckResult) {
 	h.once.Do(func() {
-		h.mu.Lock()
 		h.result = result
-		h.mu.Unlock()
 		close(h.done)
 	})
 }
@@ -36,8 +33,6 @@ func (h *CheckHandle) Complete(result CheckResult) {
 func (h *CheckHandle) Wait(ctx context.Context) CheckResult {
 	select {
 	case <-h.done:
-		h.mu.RLock()
-		defer h.mu.RUnlock()
 		return h.result
 	case <-ctx.Done():
 		return CheckResult{Err: ctx.Err()}
