@@ -8,7 +8,8 @@
 go = "1.26.4"
 
 # Pin the linter so local results do not change when a new release is published.
-# Update this together with the CI configuration when upgrading golangci-lint.
+# CI currently uses a floating golangci-lint version
+# update this if you need to match a specific CI version.
 golangci-lint = "2.12.0"
 
 [env]
@@ -17,7 +18,7 @@ GOTOOLCHAIN = "local"
 
 [tasks.format]
 description = "Format Go source files"
-run = "go fmt ./..."
+run = "golangci-lint fmt ./..."
 
 [tasks.format-check]
 description = "Check that Go source files are formatted"
@@ -26,10 +27,6 @@ run = "test -z \"$(gofmt -l .)\""
 [tasks.build]
 description = "Build the shopware-cli binary"
 run = "go build -o shopware-cli ."
-
-[tasks.build-all]
-description = "Build all Go packages"
-run = "go build -v ./..."
 
 [tasks.test]
 description = "Run the network-isolated test suite"
@@ -49,4 +46,4 @@ run = "golangci-lint run ./... --timeout 4m"
 
 [tasks.check]
 description = "Run formatting, build, tests, vet, and lint checks"
-depends = ["format-check", "build-all", "test", "vet", "lint"]
+depends = ["format-check", "build", "test", "vet", "lint"]
