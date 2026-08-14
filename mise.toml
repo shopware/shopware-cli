@@ -22,7 +22,7 @@ run = "golangci-lint fmt ./..."
 
 [tasks.format-check]
 description = "Check that Go source files are formatted"
-run = "test -z \"$(gofmt -l .)\""
+run = "golangci-lint fmt --diff ./..."
 
 [tasks.build]
 description = "Build the shopware-cli binary"

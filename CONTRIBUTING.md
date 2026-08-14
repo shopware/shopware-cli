@@ -65,7 +65,7 @@ Individual tasks are also available:
 
 ```sh
 mise run format       # Format Go source files
-mise run format-check # Check formatting without changing files
+mise run format-check # Check Go formatting (gofmt and gci) without changing files
 mise run build        # Build the shopware-cli binary
 mise run test         # Run the network-isolated test suite (Linux/macOS only)
 mise run test-unit    # Run Go tests without the sandbox wrapper (works everywhere)
