@@ -1,6 +1,7 @@
 package update
 
 import (
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -338,4 +339,43 @@ func TestUpdateNotificationIntervalIsPerVersion(t *testing.T) {
 	require.NoError(t, MarkUpdateNotificationPrinted("v2.0.0"))
 	assert.False(t, ShouldPrintUpdateHint("v2.0.0"))
 	assert.True(t, ShouldPrintUpdateHint("v3.0.0"))
+}
+
+func TestMarkUpdateNotificationPrintedPersistsNotification(t *testing.T) {
+	t.Setenv("SHOPWARE_CLI_CACHE_DIR", t.TempDir())
+
+	before := time.Now()
+	require.NoError(t, MarkUpdateNotificationPrinted("v2.0.0"))
+	after := time.Now()
+
+	content, err := os.ReadFile(filepath.Join(os.Getenv("SHOPWARE_CLI_CACHE_DIR"), "update-notification.json"))
+	require.NoError(t, err)
+
+	var notification UpdateNotification
+	require.NoError(t, json.Unmarshal(content, &notification))
+	assert.Equal(t, "v2.0.0", notification.LastVersion)
+	assert.False(t, notification.LastPrintedAt.Before(before))
+	assert.False(t, notification.LastPrintedAt.After(after))
+}
+
+func TestShouldPrintUpdateHintAfterNotificationInterval(t *testing.T) {
+	t.Setenv("SHOPWARE_CLI_CACHE_DIR", t.TempDir())
+
+	err := saveUpdateNotificationToCache(&UpdateNotification{
+		LastVersion:   "v2.0.0",
+		LastPrintedAt: time.Now().Add(-(notificationInterval + time.Second)),
+	})
+	require.NoError(t, err)
+
+	assert.True(t, ShouldPrintUpdateHint("v2.0.0"))
+}
+
+func TestShouldPrintUpdateHintRejectsInvalidNotificationCache(t *testing.T) {
+	t.Setenv("SHOPWARE_CLI_CACHE_DIR", t.TempDir())
+
+	cachePath := filepath.Join(os.Getenv("SHOPWARE_CLI_CACHE_DIR"), "update-notification.json")
+	require.NoError(t, os.MkdirAll(filepath.Dir(cachePath), 0o750))
+	require.NoError(t, os.WriteFile(cachePath, []byte("not json"), 0o644))
+
+	assert.False(t, ShouldPrintUpdateHint("v2.0.0"))
 }
