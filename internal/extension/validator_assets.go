@@ -47,7 +47,7 @@ func validateAssetByResourceDir(check validation.Check, resourceDir string) {
 		})
 	}
 
-	if foundStorefrontDistFiles != nil && foundStorefrontEntrypoint {
+	if foundStorefrontDistFiles == nil && !foundStorefrontEntrypoint {
 		check.AddResult(validation.CheckResult{
 			Path:       resourceDir,
 			Identifier: "assets.storefront.sources_missing",
@@ -56,7 +56,7 @@ func validateAssetByResourceDir(check validation.Check, resourceDir string) {
 		})
 	}
 
-	if foundStorefrontDistFiles == nil && !foundStorefrontEntrypoint {
+	if foundStorefrontDistFiles != nil && foundStorefrontEntrypoint {
 		check.AddResult(validation.CheckResult{
 			Path:       resourceDir,
 			Identifier: "assets.storefront.build_missing",
