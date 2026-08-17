@@ -32,7 +32,13 @@ type Dumper struct {
 	LimitMap map[string]TableLimit
 	// limitWhere contains the WHERE conditions computed from LimitMap
 	limitWhere map[string]string
-	filterMap  map[string]string
+	// limitResolver holds the planned row-limit filters between computeLimitFilters
+	// and the staging table setup.
+	limitResolver *limitResolver
+	// limitStagingTables maps a limited table to the staging table holding its
+	// frozen kept-set, so the set stays identical across all referencing queries.
+	limitStagingTables map[string]string
+	filterMap          map[string]string
 	// LockTables controls whether to lock tables during dump (default: true)
 	LockTables bool
 	// Quick enables quick mode for mysqldump (default: false)
@@ -102,6 +108,13 @@ func (d *Dumper) Dump(ctx context.Context, w io.Writer) error {
 	if err := d.computeLimitFilters(ctx); err != nil {
 		return err
 	}
+
+	d.createLimitStagingTables(ctx)
+	defer func() {
+		if len(d.limitStagingTables) > 0 {
+			d.dropLimitStagingTables(context.WithoutCancel(ctx), d.limitStagingTables)
+		}
+	}()
 
 	if _, err = fmt.Fprintln(w, dump); err != nil {
 		return err

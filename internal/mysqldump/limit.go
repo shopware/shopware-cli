@@ -2,6 +2,8 @@ package mysqldump
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"fmt"
 	"maps"
 	"slices"
@@ -9,6 +11,17 @@ import (
 
 	"github.com/shopware/shopware-cli/logging"
 )
+
+// randomTableSuffix returns a short random hex suffix used to make staging table
+// names unique, so concurrent dumps of the same database do not collide.
+func randomTableSuffix() (string, error) {
+	buf := make([]byte, 4)
+	if _, err := rand.Read(buf); err != nil {
+		return "", err
+	}
+
+	return hex.EncodeToString(buf), nil
+}
 
 // TableLimit restricts how many rows of a table are dumped. All tables
 // referencing the limited table via foreign keys (directly or transitively)
@@ -76,34 +89,118 @@ func (d *Dumper) computeLimitFilters(ctx context.Context) error {
 	}
 
 	resolver := &limitResolver{
-		whereMap:  d.WhereMap,
-		schemas:   schemas,
-		limits:    limits,
-		affected:  make(map[string]bool),
-		memo:      make(map[string]string),
-		resolving: make(map[string]bool),
+		whereMap:      d.WhereMap,
+		schemas:       schemas,
+		limits:        limits,
+		affected:      make(map[string]bool),
+		memo:          make(map[string]string),
+		resolving:     make(map[string]bool),
+		stagingTables: make(map[string]string),
 	}
 	resolver.markAffectedTables()
 
-	d.limitWhere = make(map[string]string)
-
-	for _, table := range slices.Sorted(maps.Keys(resolver.affected)) {
-		if _, isLimited := limits[table]; isLimited {
-			primaryKey := schemas[table].PrimaryKey
-			d.limitWhere[table] = fmt.Sprintf("%s IN (%s)", columnTuple(primaryKey), resolver.keptRowsQuery(table, primaryKey))
-			continue
-		}
-
-		if condition := resolver.conditionFor(table); condition != "" {
-			d.limitWhere[table] = condition
-		}
-	}
+	d.limitResolver = resolver
+	d.finalizeLimitWhere()
 
 	if d.LockTables && len(d.limitWhere) > 0 {
 		logging.FromContext(ctx).Infof("Skipping table locks for %d tables filtered by row limits, as their dump queries reference other tables", len(d.limitWhere))
 	}
 
 	return nil
+}
+
+// finalizeLimitWhere (re)builds the per-table WHERE conditions from the resolver.
+// It is called once after planning and again after staging tables are created, so
+// the conditions pick up the frozen staging tables when they exist.
+func (d *Dumper) finalizeLimitWhere() {
+	r := d.limitResolver
+	r.memo = make(map[string]string)
+
+	d.limitWhere = make(map[string]string)
+	for _, table := range slices.Sorted(maps.Keys(r.affected)) {
+		if _, isLimited := r.limits[table]; isLimited {
+			primaryKey := r.schemas[table].PrimaryKey
+			d.limitWhere[table] = fmt.Sprintf("%s IN (%s)", columnTuple(primaryKey), r.keptRowsQuery(table, primaryKey))
+			continue
+		}
+
+		if condition := r.conditionFor(table); condition != "" {
+			d.limitWhere[table] = condition
+		}
+	}
+}
+
+// createLimitStagingTables freezes each limited table's kept-set into a staging
+// table, so every query that references it (the limited table itself and all
+// tables filtered against it, possibly on parallel connections) reads the exact
+// same rows. Without this, the LIMIT query is re-evaluated per referencing table
+// and a non-total ORDER BY (e.g. ties on created_at) could yield different rows
+// each time, leaving dangling foreign keys in the dump.
+//
+// It requires privileges to create tables. When that fails, it logs a warning
+// and leaves the inline-subquery filters in place, which still produce a
+// self-consistent dump on a quiescent database.
+func (d *Dumper) createLimitStagingTables(ctx context.Context) {
+	if d.limitResolver == nil || len(d.limitResolver.limits) == 0 {
+		return
+	}
+
+	suffix, err := randomTableSuffix()
+	if err != nil {
+		logging.FromContext(ctx).Warnf("Cannot create staging tables for row limits, falling back to inline filters: %s", err)
+		return
+	}
+
+	staging := make(map[string]string, len(d.limitResolver.limits))
+	for _, table := range slices.Sorted(maps.Keys(d.limitResolver.limits)) {
+		stagingName := stagingTableName(table, suffix)
+		populate := d.limitResolver.keptRowsPopulateQuery(table, d.limitResolver.schemas[table].PrimaryKey)
+
+		dropQuery := fmt.Sprintf("DROP TABLE IF EXISTS `%s`", stagingName)
+		if _, err := d.useTransactionOrDBExec(ctx, dropQuery); err != nil {
+			logging.FromContext(ctx).Warnf("Cannot create staging table for row limit on %s, falling back to inline filters: %s", table, err)
+			d.dropLimitStagingTables(ctx, staging)
+			return
+		}
+
+		createQuery := fmt.Sprintf("CREATE TABLE `%s` AS %s", stagingName, populate)
+		if _, err := d.useTransactionOrDBExec(ctx, createQuery); err != nil {
+			logging.FromContext(ctx).Warnf("Cannot create staging table for row limit on %s, falling back to inline filters: %s", table, err)
+			d.dropLimitStagingTables(ctx, staging)
+			return
+		}
+
+		staging[table] = stagingName
+	}
+
+	d.limitStagingTables = staging
+	d.limitResolver.stagingTables = staging
+	d.finalizeLimitWhere()
+
+	logging.FromContext(ctx).Infof("Froze the kept rows of %d limited table(s) into staging tables for a consistent dump", len(staging))
+}
+
+// dropLimitStagingTables removes the given staging tables. It is safe to call
+// with the tracked set (on cleanup) or a partial set (on a failed setup).
+func (d *Dumper) dropLimitStagingTables(ctx context.Context, staging map[string]string) {
+	for _, stagingName := range staging {
+		if _, err := d.useTransactionOrDBExec(ctx, fmt.Sprintf("DROP TABLE IF EXISTS `%s`", stagingName)); err != nil {
+			logging.FromContext(ctx).Warnf("Cannot drop staging table %s, please remove it manually: %s", stagingName, err)
+		}
+	}
+}
+
+// stagingTableName builds a staging table name for a limited table, keeping it
+// within MySQL's 64 character identifier limit.
+func stagingTableName(table, suffix string) string {
+	const prefix = "_sw_cli_kept_"
+
+	maxTableLen := 64 - len(prefix) - len(suffix) - 1
+	if len(table) > maxTableLen {
+		table = table[:maxTableLen]
+	}
+
+	return fmt.Sprintf("%s%s_%s", prefix, table, suffix)
 }
 
 type limitResolver struct {
@@ -118,6 +215,11 @@ type limitResolver struct {
 	// currently being resolved are skipped, which keeps a superset of the
 	// strictly attached rows instead of recursing forever.
 	resolving map[string]bool
+	// stagingTables maps a limited table to the staging table holding its frozen
+	// kept-set. When set, kept-row lookups read from the staging table instead of
+	// re-evaluating the LIMIT query, so the set stays identical across the many
+	// queries (and parallel connections) that reference it.
+	stagingTables map[string]string
 }
 
 func (r *limitResolver) markAffectedTables() {
@@ -222,15 +324,13 @@ func (r *limitResolver) keptRowsQuery(table string, columns []string) string {
 	tableName := r.schemas[table].Name
 
 	if _, isLimited := r.limits[table]; isLimited {
-		// A self-referencing limited table (e.g. product.parent_id -> product.id)
-		// must keep the ancestors of every kept row, otherwise a kept variant
-		// would reference a parent excluded by the LIMIT and break the foreign
-		// key on import. A recursive CTE seeded by the LIMIT walks the parents.
-		if selfRefs := r.selfReferences(table); len(selfRefs) != 0 {
-			return r.selfReferenceClosureQuery(table, columns, selfRefs)
+		// When the kept-set has been frozen into a staging table, read from it so
+		// every reference sees the identical rows.
+		if staging, ok := r.stagingTables[table]; ok {
+			return fmt.Sprintf("SELECT %s FROM `%s`", quotedColumns, staging)
 		}
 
-		return fmt.Sprintf("SELECT %s FROM (%s) %s", quotedColumns, r.limitSeedQuery(table, columns), limitDerivedTableAlias)
+		return r.keptRowsPopulateQuery(table, columns)
 	}
 
 	query := fmt.Sprintf("SELECT %s FROM `%s`", quotedColumns, tableName)
@@ -247,6 +347,22 @@ func (r *limitResolver) keptRowsQuery(table string, columns []string) string {
 	}
 
 	return query
+}
+
+// keptRowsPopulateQuery returns the SELECT that computes the kept-set of a
+// limited table from the live data: the LIMIT rows, plus their ancestors when
+// the table references itself. It is used both to populate the staging table and
+// as the inline fallback when no staging table could be created.
+func (r *limitResolver) keptRowsPopulateQuery(table string, columns []string) string {
+	// A self-referencing limited table (e.g. product.parent_id -> product.id)
+	// must keep the ancestors of every kept row, otherwise a kept variant would
+	// reference a parent excluded by the LIMIT and break the foreign key on
+	// import. A recursive CTE seeded by the LIMIT walks the parents.
+	if selfRefs := r.selfReferences(table); len(selfRefs) != 0 {
+		return r.selfReferenceClosureQuery(table, columns, selfRefs)
+	}
+
+	return fmt.Sprintf("SELECT %s FROM (%s) %s", quoteColumns(columns), r.limitSeedQuery(table, columns), limitDerivedTableAlias)
 }
 
 // limitSeedQuery returns the plain "SELECT columns FROM table [WHERE] [ORDER BY]

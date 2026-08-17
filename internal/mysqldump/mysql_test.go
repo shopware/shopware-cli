@@ -1224,3 +1224,86 @@ func Test_mySQL_parallelCanBeEnabled(t *testing.T) {
 
 	assert.Equal(t, 4, dumper.Parallel, "Parallel should be configurable")
 }
+
+func stagingDumper(t *testing.T) (*Dumper, sqlmock.Sqlmock) {
+	t.Helper()
+	db, mock := getDB(t)
+	dumper := NewMySQLDumper(db)
+	dumper.schemaCache = map[string]*TableSchema{
+		"product": {
+			Name:       "product",
+			PrimaryKey: []string{"id"},
+			Columns:    notNullColumns("id", "created_at"),
+		},
+		"order_line_item": {
+			Name:       "order_line_item",
+			PrimaryKey: []string{"id"},
+			Columns:    []ColumnSchema{{Name: "id"}, {Name: "product_id", Nullable: true}},
+			ForeignKeys: []ForeignKeySchema{
+				{Name: "fk.oli.product", Columns: []string{"product_id"}, ReferencedTable: "product", ReferencedColumns: []string{"id"}},
+			},
+		},
+	}
+	dumper.LimitMap = map[string]TableLimit{"product": {Rows: 100}}
+	return dumper, mock
+}
+
+func TestLimitStagingTableFreezesKeptRows(t *testing.T) {
+	dumper, mock := stagingDumper(t)
+
+	assert.NoError(t, dumper.computeLimitFilters(t.Context()))
+
+	mock.ExpectExec("DROP TABLE IF EXISTS `_sw_cli_kept_product_[0-9a-f]+`").WillReturnResult(sqlmock.NewResult(0, 0))
+	mock.ExpectExec("CREATE TABLE `_sw_cli_kept_product_[0-9a-f]+` AS SELECT `id` FROM \\(SELECT `id` FROM `product` ORDER BY `created_at` DESC LIMIT 100\\)").
+		WillReturnResult(sqlmock.NewResult(0, 100))
+
+	dumper.createLimitStagingTables(t.Context())
+	assert.NoError(t, mock.ExpectationsWereMet())
+
+	staging := dumper.limitStagingTables["product"]
+	assert.NotEmpty(t, staging)
+
+	// Every filter now reads the frozen staging table instead of re-running LIMIT.
+	assert.Equal(t, "`id` IN (SELECT `id` FROM `"+staging+"`)", dumper.limitWhere["product"])
+	assert.Equal(t, "(`product_id` IS NULL OR `product_id` IN (SELECT `id` FROM `"+staging+"`))", dumper.limitWhere["order_line_item"])
+}
+
+func TestLimitStagingTableDropRemovesTable(t *testing.T) {
+	dumper, mock := stagingDumper(t)
+	assert.NoError(t, dumper.computeLimitFilters(t.Context()))
+
+	mock.ExpectExec("DROP TABLE IF EXISTS `_sw_cli_kept_product_[0-9a-f]+`").WillReturnResult(sqlmock.NewResult(0, 0))
+	mock.ExpectExec("CREATE TABLE `_sw_cli_kept_product_[0-9a-f]+` AS ").WillReturnResult(sqlmock.NewResult(0, 100))
+	dumper.createLimitStagingTables(t.Context())
+
+	mock.ExpectExec("DROP TABLE IF EXISTS `_sw_cli_kept_product_[0-9a-f]+`").WillReturnResult(sqlmock.NewResult(0, 0))
+	dumper.dropLimitStagingTables(t.Context(), dumper.limitStagingTables)
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestLimitStagingFallsBackToInlineWhenCreateFails(t *testing.T) {
+	dumper, mock := stagingDumper(t)
+	assert.NoError(t, dumper.computeLimitFilters(t.Context()))
+
+	inlineProduct := dumper.limitWhere["product"]
+	inlineChild := dumper.limitWhere["order_line_item"]
+
+	mock.ExpectExec("DROP TABLE IF EXISTS `_sw_cli_kept_product_[0-9a-f]+`").WillReturnResult(sqlmock.NewResult(0, 0))
+	mock.ExpectExec("CREATE TABLE `_sw_cli_kept_product_[0-9a-f]+` AS ").WillReturnError(errors.New("CREATE command denied"))
+
+	dumper.createLimitStagingTables(t.Context())
+	assert.NoError(t, mock.ExpectationsWereMet())
+
+	// No staging tables tracked, filters unchanged from the inline planning.
+	assert.Empty(t, dumper.limitStagingTables)
+	assert.Equal(t, inlineProduct, dumper.limitWhere["product"])
+	assert.Equal(t, inlineChild, dumper.limitWhere["order_line_item"])
+}
+
+func TestStagingTableNameStaysWithinIdentifierLimit(t *testing.T) {
+	longTable := strings.Repeat("a", 100)
+	name := stagingTableName(longTable, "deadbeef")
+	assert.LessOrEqual(t, len(name), 64)
+	assert.True(t, strings.HasPrefix(name, "_sw_cli_kept_"))
+	assert.True(t, strings.HasSuffix(name, "_deadbeef"))
+}
