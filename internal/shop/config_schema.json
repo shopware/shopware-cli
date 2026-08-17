@@ -559,7 +559,7 @@
         },
         "limit": {
           "additionalProperties": {
-            "$ref": "#/$defs/ConfigDumpLimit"
+            "$ref": "#/$defs/TableLimit"
           },
           "type": "object",
           "description": "Limit the amount of exported rows of a table, schema is table name as key. All tables referencing the limited table via foreign keys (also transitively) are filtered automatically, so they only contain rows belonging to the kept rows. A second limit on a table that is already filtered this way is rejected"
@@ -567,25 +567,6 @@
       },
       "additionalProperties": false,
       "type": "object"
-    },
-    "ConfigDumpLimit": {
-      "properties": {
-        "rows": {
-          "type": "integer",
-          "minimum": 1,
-          "description": "Maximum amount of rows to export for this table"
-        },
-        "order_by": {
-          "type": "string",
-          "description": "SQL ORDER BY clause deciding which rows are kept (e.g. \"created_at DESC\" for the newest rows). Defaults to \"created_at DESC\" when the table has a created_at column"
-        }
-      },
-      "additionalProperties": false,
-      "type": "object",
-      "required": [
-        "rows"
-      ],
-      "description": "ConfigDumpLimit restricts how many rows of a table are exported."
     },
     "ConfigImageProxy": {
       "properties": {
@@ -686,6 +667,25 @@
       },
       "additionalProperties": false,
       "type": "object"
+    },
+    "TableLimit": {
+      "properties": {
+        "rows": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Maximum amount of rows to export for this table"
+        },
+        "order_by": {
+          "type": "string",
+          "description": "SQL ORDER BY clause deciding which rows are kept (e.g. \"created_at DESC\" for the newest rows). Defaults to \"created_at DESC\" when the table has a created_at column"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "required": [
+        "rows"
+      ],
+      "description": "TableLimit restricts how many rows of a table are dumped."
     }
   }
 }

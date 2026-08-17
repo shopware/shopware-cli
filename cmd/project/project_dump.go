@@ -80,7 +80,7 @@ var projectDatabaseDumpCmd = &cobra.Command{
 		}
 
 		if len(limits) > 0 && projectCfg.ConfigDump.Limit == nil {
-			projectCfg.ConfigDump.Limit = make(map[string]shop.ConfigDumpLimit)
+			projectCfg.ConfigDump.Limit = make(map[string]mysqldump.TableLimit)
 		}
 
 		for _, limit := range limits {
@@ -105,13 +105,7 @@ var projectDatabaseDumpCmd = &cobra.Command{
 		dumper.WhereMap = projectCfg.ConfigDump.Where
 		dumper.NoData = projectCfg.ConfigDump.NoData
 		dumper.Ignore = projectCfg.ConfigDump.Ignore
-
-		if len(projectCfg.ConfigDump.Limit) > 0 {
-			dumper.LimitMap = make(map[string]mysqldump.TableLimit, len(projectCfg.ConfigDump.Limit))
-			for table, limit := range projectCfg.ConfigDump.Limit {
-				dumper.LimitMap[table] = mysqldump.TableLimit{Rows: limit.Rows, OrderBy: limit.OrderBy}
-			}
-		}
+		dumper.LimitMap = projectCfg.ConfigDump.Limit
 
 		var w io.Writer
 		if output == "-" {

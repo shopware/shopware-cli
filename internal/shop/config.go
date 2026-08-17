@@ -16,6 +16,7 @@ import (
 	"gopkg.in/yaml.v3"
 
 	"github.com/shopware/shopware-cli/internal/compatibility"
+	"github.com/shopware/shopware-cli/internal/mysqldump"
 	"github.com/shopware/shopware-cli/internal/system"
 	"github.com/shopware/shopware-cli/logging"
 )
@@ -249,15 +250,7 @@ type ConfigDump struct {
 	// Add an where condition to that table, schema is table name as key, and where statement as value
 	Where map[string]string `yaml:"where,omitempty"`
 	// Limit the amount of exported rows of a table, schema is table name as key. All tables referencing the limited table via foreign keys (also transitively) are filtered automatically, so they only contain rows belonging to the kept rows. A second limit on a table that is already filtered this way is rejected
-	Limit map[string]ConfigDumpLimit `yaml:"limit,omitempty"`
-}
-
-// ConfigDumpLimit restricts how many rows of a table are exported.
-type ConfigDumpLimit struct {
-	// Maximum amount of rows to export for this table
-	Rows int `yaml:"rows" jsonschema:"required,minimum=1"`
-	// SQL ORDER BY clause deciding which rows are kept (e.g. "created_at DESC" for the newest rows). Defaults to "created_at DESC" when the table has a created_at column
-	OrderBy string `yaml:"order_by,omitempty"`
+	Limit map[string]mysqldump.TableLimit `yaml:"limit,omitempty"`
 }
 
 // EnableClean adds default tables that should be excluded from data dump in clean mode

@@ -13,14 +13,12 @@ import (
 // TableLimit restricts how many rows of a table are dumped. All tables
 // referencing the limited table via foreign keys (directly or transitively)
 // are filtered automatically so they only contain rows attached to the kept
-// rows.
+// rows. A second limit on a table that is already filtered this way is rejected.
 type TableLimit struct {
-	// Rows is the maximum number of rows to dump.
-	Rows int
-	// OrderBy decides which rows are kept (e.g. "`created_at` DESC" for the
-	// latest rows). When empty and the table has a created_at column,
-	// "`created_at` DESC" is used.
-	OrderBy string
+	// Maximum amount of rows to export for this table
+	Rows int `yaml:"rows" jsonschema:"required,minimum=1"`
+	// SQL ORDER BY clause deciding which rows are kept (e.g. "created_at DESC" for the newest rows). Defaults to "created_at DESC" when the table has a created_at column
+	OrderBy string `yaml:"order_by,omitempty"`
 }
 
 // limitDerivedTableAlias names the derived table wrapping the LIMIT query, as
