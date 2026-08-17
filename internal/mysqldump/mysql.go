@@ -664,16 +664,26 @@ func (d *Dumper) getSelectQueryFor(ctx context.Context, table string) (cols []st
 // computed from the row limits for the given table.
 func (d *Dumper) effectiveWhere(table string) string {
 	table = strings.ToLower(table)
-	userWhere := d.WhereMap[table]
-	limitWhere := d.limitWhere[table]
 
-	switch {
-	case userWhere != "" && limitWhere != "":
-		return fmt.Sprintf("(%s) AND %s", userWhere, limitWhere)
-	case userWhere != "":
-		return userWhere
+	var conditions []string
+	if userWhere := d.WhereMap[table]; userWhere != "" {
+		conditions = append(conditions, userWhere)
+	}
+	if limitWhere := d.limitWhere[table]; limitWhere != "" {
+		conditions = append(conditions, limitWhere)
+	}
+
+	switch len(conditions) {
+	case 0:
+		return ""
+	case 1:
+		return conditions[0]
 	default:
-		return limitWhere
+		quoted := make([]string, len(conditions))
+		for i, condition := range conditions {
+			quoted[i] = "(" + condition + ")"
+		}
+		return strings.Join(quoted, " AND ")
 	}
 }
 

@@ -323,7 +323,7 @@ func TestEffectiveWhereCombinesUserAndLimitConditions(t *testing.T) {
 	dumper.WhereMap = map[string]string{"t": "a = 1"}
 	dumper.limitWhere = map[string]string{"t": "`b` IN (SELECT 1)", "u": "`c` IN (SELECT 2)"}
 
-	assert.Equal(t, "(a = 1) AND `b` IN (SELECT 1)", dumper.effectiveWhere("T"))
+	assert.Equal(t, "(a = 1) AND (`b` IN (SELECT 1))", dumper.effectiveWhere("T"))
 	assert.Equal(t, "`c` IN (SELECT 2)", dumper.effectiveWhere("u"))
 	assert.Equal(t, "", dumper.effectiveWhere("other"))
 }

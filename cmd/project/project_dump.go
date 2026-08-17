@@ -79,6 +79,10 @@ var projectDatabaseDumpCmd = &cobra.Command{
 			projectCfg.ConfigDump.EnableAnonymization()
 		}
 
+		if len(limits) > 0 && projectCfg.ConfigDump.Limit == nil {
+			projectCfg.ConfigDump.Limit = make(map[string]shop.ConfigDumpLimit)
+		}
+
 		for _, limit := range limits {
 			table, rows, ok := strings.Cut(limit, "=")
 			if !ok {
@@ -88,10 +92,6 @@ var projectDatabaseDumpCmd = &cobra.Command{
 			rowCount, err := strconv.Atoi(rows)
 			if err != nil || rowCount < 1 {
 				return fmt.Errorf("invalid --limit %q, rows must be a positive number", limit)
-			}
-
-			if projectCfg.ConfigDump.Limit == nil {
-				projectCfg.ConfigDump.Limit = make(map[string]shop.ConfigDumpLimit)
 			}
 
 			cfgLimit := projectCfg.ConfigDump.Limit[table]
