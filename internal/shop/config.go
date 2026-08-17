@@ -68,9 +68,7 @@ func (c *Config) ResolveEnvironment(name string) (*EnvironmentConfig, error) {
 	}, nil
 }
 
-// WithEnvironment returns a copy of the config whose URL and Admin API
-// credentials come from the named environment, falling back to the base
-// values for anything the environment does not override.
+// WithEnvironment returns a copy of the config with URL and Admin API credentials from the named environment, keeping base values it does not override.
 func (c *Config) WithEnvironment(name string) (*Config, error) {
 	env, err := c.ResolveEnvironment(name)
 	if err != nil {

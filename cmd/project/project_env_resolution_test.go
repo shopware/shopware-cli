@@ -10,8 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// writeMinimalPlugin creates a minimal platform plugin the upload command can
-// load, so its RunE reaches the environment-resolution step.
+// writeMinimalPlugin creates a minimal platform plugin so the upload command reaches the environment-resolution step.
 func writeMinimalPlugin(t *testing.T) string {
 	t.Helper()
 
@@ -38,8 +37,6 @@ func writeMinimalPlugin(t *testing.T) string {
 	return dir
 }
 
-// TestReadConfigWithEnvironmentPropagatesConfigError ensures a config-read
-// failure is surfaced rather than swallowed by the environment resolution.
 func TestReadConfigWithEnvironmentPropagatesConfigError(t *testing.T) {
 	previousConfigPath := projectConfigPath
 	previousEnvironmentName := environmentName
@@ -59,9 +56,7 @@ func TestReadConfigWithEnvironmentPropagatesConfigError(t *testing.T) {
 	assert.Contains(t, err.Error(), "cannot find project configuration file")
 }
 
-// TestNoEnvFlagKeepsBaseConfig ensures that without -e the base url and
-// credentials are used even when an environments.local entry exists, so the
-// fix does not silently retarget existing setups.
+// Without -e the base config must stay in effect even when environments.local exists.
 func TestNoEnvFlagKeepsBaseConfig(t *testing.T) {
 	configPath := filepath.Join(t.TempDir(), ".shopware-project.yml")
 	require.NoError(t, os.WriteFile(configPath, []byte(`
@@ -92,9 +87,7 @@ environments:
 	assert.NotContains(t, err.Error(), "127.0.0.1:7", "environments.local must not silently retarget commands")
 }
 
-// TestAdminAPICommandsResolveEnvironment verifies every project command that
-// talks to a shop honors the -e/--env flag: an unknown environment is rejected,
-// and a known environment's URL is the one contacted.
+// Every Admin API command must reject an unknown environment and contact the selected environment's URL.
 func TestAdminAPICommandsResolveEnvironment(t *testing.T) {
 	pluginDir := writeMinimalPlugin(t)
 
