@@ -6,9 +6,9 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
+	dockerpkg "github.com/shopware/shopware-cli/internal/docker"
 	"github.com/shopware/shopware-cli/internal/envfile"
 	"github.com/shopware/shopware-cli/internal/executor"
-	"github.com/shopware/shopware-cli/internal/proxy"
 	"github.com/shopware/shopware-cli/internal/shop"
 	"github.com/shopware/shopware-cli/internal/tracking"
 	"github.com/shopware/shopware-cli/internal/tui"
@@ -365,7 +365,7 @@ func (m Model) startAfterMigrationWizard() (app.Content, tea.Cmd) {
 	m.executor = exec
 
 	if m.executor.Type() == executor.TypeDocker {
-		if err := proxy.WriteComposeFile(m.projectRoot, m.config); err != nil {
+		if err := dockerpkg.WriteComposeFile(m.projectRoot, dockerpkg.ComposeOptionsFromConfig(m.config)); err != nil {
 			m.migrationWizard.err = err
 			return m, nil
 		}

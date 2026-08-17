@@ -7,7 +7,7 @@ import (
 	"charm.land/bubbles/v2/progress"
 	tea "charm.land/bubbletea/v2"
 
-	"github.com/shopware/shopware-cli/internal/proxy"
+	dockerpkg "github.com/shopware/shopware-cli/internal/docker"
 	"github.com/shopware/shopware-cli/internal/tui"
 )
 
@@ -152,7 +152,7 @@ func (m *Model) restartContainersForConfig() tea.Cmd {
 	projectRoot := m.projectRoot
 	cfg := m.config
 	return func() tea.Msg {
-		if err := proxy.WriteComposeFile(projectRoot, cfg); err != nil {
+		if err := dockerpkg.WriteComposeFile(projectRoot, dockerpkg.ComposeOptionsFromConfig(cfg)); err != nil {
 			return configRestartDoneMsg{err: err}
 		}
 		cmd := composeCommand(context.Background(), projectRoot, "up", "-d")
