@@ -4,6 +4,7 @@
 dist/
 /completions
 /local
+/bin
 /.shopware-cli
 /.shopware-project.yml
 /.shopware-project.yaml
