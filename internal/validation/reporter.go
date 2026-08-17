@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"encoding/xml"
+	"errors"
 	"fmt"
 	"os"
 	"sort"
@@ -53,7 +54,7 @@ func DoCheckReport(result Check, reportingFormat string) error {
 	}
 
 	if result.HasErrors() {
-		return fmt.Errorf("found errors")
+		return errors.New("found errors")
 	}
 
 	return nil

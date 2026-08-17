@@ -3,6 +3,7 @@ package extension
 import (
 	"context"
 	"encoding/xml"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -37,11 +38,11 @@ func (a App) GetResourcesDirs() []string {
 }
 
 func (a App) GetComposerName() (string, error) {
-	return "", fmt.Errorf("app does not have a composer name")
+	return "", errors.New("app does not have a composer name")
 }
 
 func newApp(ctx context.Context, path string) (*App, error) {
-	appFileName := fmt.Sprintf("%s/manifest.xml", path)
+	appFileName := path + "/manifest.xml"
 
 	if _, err := os.Stat(appFileName); err != nil {
 		return nil, err
@@ -145,7 +146,7 @@ func (a App) GetMetaData() *ExtensionMetadata {
 }
 
 func (a App) UpdateMetaData(metadata *ExtensionMetadata) error {
-	manifestFile := fmt.Sprintf("%s/manifest.xml", a.path)
+	manifestFile := a.path + "/manifest.xml"
 
 	manifestBytes, err := os.ReadFile(manifestFile)
 	if err != nil {
@@ -159,7 +160,7 @@ func (a App) UpdateMetaData(metadata *ExtensionMetadata) error {
 
 	meta := manifest.Root().Find("meta")
 	if meta == nil {
-		return fmt.Errorf("could not update manifest.xml: meta element not found")
+		return errors.New("could not update manifest.xml: meta element not found")
 	}
 
 	updateTranslatableXMLElement(meta, "label", metadata.Label)

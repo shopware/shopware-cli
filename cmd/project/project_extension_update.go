@@ -1,7 +1,7 @@
 package project
 
 import (
-	"fmt"
+	"errors"
 
 	"github.com/spf13/cobra"
 
@@ -85,7 +85,7 @@ var projectExtensionUpdateCmd = &cobra.Command{
 		}
 
 		if failed {
-			return fmt.Errorf("update failed")
+			return errors.New("update failed")
 		}
 
 		return nil

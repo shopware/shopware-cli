@@ -19,7 +19,7 @@ func (a *Attribute) Dump(indent int) string {
 	var builder strings.Builder
 	indentStr := indentConfig.GetIndent()
 
-	for i := 0; i < indent; i++ {
+	for range indent {
 		builder.WriteString(indentStr)
 	}
 
@@ -188,7 +188,8 @@ func dumpVerbatim(builder *strings.Builder, nodes NodeList) {
 	for _, node := range nodes {
 		switch n := node.(type) {
 		case *ElementNode:
-			builder.WriteString("<" + n.Tag)
+			builder.WriteString("<")
+			builder.WriteString(n.Tag)
 			for _, attr := range n.Attributes {
 				builder.WriteString(" ")
 				builder.WriteString(attr.Dump(0))
@@ -200,15 +201,21 @@ func dumpVerbatim(builder *strings.Builder, nodes NodeList) {
 			builder.WriteString(">")
 			dumpVerbatim(builder, n.Children)
 			if !n.Unclosed {
-				builder.WriteString("</" + n.Tag + ">")
+				builder.WriteString("</")
+				builder.WriteString(n.Tag)
+				builder.WriteString(">")
 			}
 		case *TwigIfNode:
 			for i, br := range n.Branches {
 				builder.WriteString(openStmt(br.Trim.Left))
 				if i == 0 {
-					builder.WriteString(" if " + br.Condition + " ")
+					builder.WriteString(" if ")
+					builder.WriteString(br.Condition)
+					builder.WriteString(" ")
 				} else {
-					builder.WriteString(" elseif " + br.Condition + " ")
+					builder.WriteString(" elseif ")
+					builder.WriteString(br.Condition)
+					builder.WriteString(" ")
 				}
 				builder.WriteString(closeStmt(br.Trim.Right))
 				dumpVerbatim(builder, br.Body)
@@ -224,7 +231,9 @@ func dumpVerbatim(builder *strings.Builder, nodes NodeList) {
 			builder.WriteString(closeStmt(n.EndTrim.Right))
 		case *TwigBlockNode:
 			builder.WriteString(openStmt(n.OpenTrim.Left))
-			builder.WriteString(" block " + n.Name + " ")
+			builder.WriteString(" block ")
+			builder.WriteString(n.Name)
+			builder.WriteString(" ")
 			builder.WriteString(closeStmt(n.OpenTrim.Right))
 			dumpVerbatim(builder, n.Children)
 			builder.WriteString(openStmt(n.CloseTrim.Left))
@@ -232,9 +241,11 @@ func dumpVerbatim(builder *strings.Builder, nodes NodeList) {
 			builder.WriteString(closeStmt(n.CloseTrim.Right))
 		case *TwigGenericBlockNode:
 			builder.WriteString(openStmt(n.OpenTrim.Left))
-			builder.WriteString(" " + n.Name)
+			builder.WriteString(" ")
+			builder.WriteString(n.Name)
 			if n.Args != "" {
-				builder.WriteString(" " + n.Args)
+				builder.WriteString(" ")
+				builder.WriteString(n.Args)
 			}
 			builder.WriteString(" ")
 			builder.WriteString(closeStmt(n.OpenTrim.Right))
@@ -246,7 +257,9 @@ func dumpVerbatim(builder *strings.Builder, nodes NodeList) {
 				dumpVerbatim(builder, n.Else)
 			}
 			builder.WriteString(openStmt(n.CloseTrim.Left))
-			builder.WriteString(" " + n.EndTag + " ")
+			builder.WriteString(" ")
+			builder.WriteString(n.EndTag)
+			builder.WriteString(" ")
 			builder.WriteString(closeStmt(n.CloseTrim.Right))
 		default:
 			builder.WriteString(node.Dump(0))
@@ -272,11 +285,13 @@ func (r *RawNode) Dump(indent int) string {
 func (c *CommentNode) Dump(indent int) string {
 	var builder strings.Builder
 	indentStr := indentConfig.GetIndent()
-	for i := 0; i < indent; i++ {
+	for range indent {
 		builder.WriteString(indentStr)
 	}
 
-	builder.WriteString("<!-- " + c.Text + " -->")
+	builder.WriteString("<!-- ")
+	builder.WriteString(c.Text)
+	builder.WriteString(" -->")
 
 	return builder.String()
 }
@@ -293,11 +308,12 @@ func (e *ElementNode) Dump(indent int) string {
 	indentStr := indentConfig.GetIndent()
 
 	// Add initial indentation
-	for i := 0; i < indent; i++ {
+	for range indent {
 		builder.WriteString(indentStr)
 	}
 
-	builder.WriteString("<" + e.Tag)
+	builder.WriteString("<")
+	builder.WriteString(e.Tag)
 
 	attributesDidNewLine := false
 
@@ -330,7 +346,7 @@ func (e *ElementNode) Dump(indent int) string {
 	}
 
 	if attributesDidNewLine {
-		for i := 0; i < indent; i++ {
+		for range indent {
 			builder.WriteString(indentStr)
 		}
 	}
@@ -351,7 +367,9 @@ func (e *ElementNode) Dump(indent int) string {
 		if whitespacePreservingTags[strings.ToLower(e.Tag)] {
 			dumpVerbatim(&builder, e.Children)
 			if !e.Unclosed {
-				builder.WriteString("</" + e.Tag + ">")
+				builder.WriteString("</")
+				builder.WriteString(e.Tag)
+				builder.WriteString(">")
 			}
 			return builder.String()
 		}
@@ -374,20 +392,22 @@ func (e *ElementNode) Dump(indent int) string {
 						for j := 0; j < indent+1; j++ {
 							builder.WriteString(indentStr)
 						}
-						builder.WriteString(child.Dump(indent+1) + "\n")
+						builder.WriteString(child.Dump(indent + 1))
+						builder.WriteString("\n")
 					} else if raw, ok := child.(*RawNode); ok {
 						trimmed := strings.TrimSpace(raw.Text)
 						if trimmed != "" {
 							for j := 0; j < indent+1; j++ {
 								builder.WriteString(indentStr)
 							}
-							builder.WriteString(trimmed + "\n")
+							builder.WriteString(trimmed)
+							builder.WriteString("\n")
 						}
 					} else {
 						builder.WriteString(child.Dump(indent + 1))
 					}
 				}
-				for i := 0; i < indent; i++ {
+				for range indent {
 					builder.WriteString(indentStr)
 				}
 			} else {
@@ -481,20 +501,22 @@ func (e *ElementNode) Dump(indent int) string {
 							for j := 0; j < indent+1; j++ {
 								builder.WriteString(indentStr)
 							}
-							builder.WriteString(child.Dump(indent+1) + "\n")
+							builder.WriteString(child.Dump(indent + 1))
+							builder.WriteString("\n")
 						} else if raw, ok := child.(*RawNode); ok {
 							trimmed := strings.TrimSpace(raw.Text)
 							if trimmed != "" {
 								for j := 0; j < indent+1; j++ {
 									builder.WriteString(indentStr)
 								}
-								builder.WriteString(trimmed + "\n")
+								builder.WriteString(trimmed)
+								builder.WriteString("\n")
 							}
 						} else {
 							builder.WriteString(child.Dump(indent + 1))
 						}
 					}
-					for i := 0; i < indent; i++ {
+					for range indent {
 						builder.WriteString(indentStr)
 					}
 				} else {
@@ -569,7 +591,7 @@ func (e *ElementNode) Dump(indent int) string {
 					}
 				}
 				builder.WriteString("\n")
-				for i := 0; i < indent; i++ {
+				for range indent {
 					builder.WriteString(indentStr)
 				}
 			}
@@ -577,7 +599,9 @@ func (e *ElementNode) Dump(indent int) string {
 	}
 
 	if !e.Unclosed {
-		builder.WriteString("</" + e.Tag + ">")
+		builder.WriteString("</")
+		builder.WriteString(e.Tag)
+		builder.WriteString(">")
 	}
 	return builder.String()
 }
@@ -585,11 +609,13 @@ func (e *ElementNode) Dump(indent int) string {
 func (t *TwigBlockNode) Dump(indent int) string {
 	var builder strings.Builder
 	indentStr := indentConfig.GetIndent()
-	for i := 0; i < indent; i++ {
+	for range indent {
 		builder.WriteString(indentStr)
 	}
 	builder.WriteString(openStmt(t.OpenTrim.Left))
-	builder.WriteString(" block " + t.Name + " ")
+	builder.WriteString(" block ")
+	builder.WriteString(t.Name)
+	builder.WriteString(" ")
 	builder.WriteString(closeStmt(t.OpenTrim.Right))
 
 	// Inline content: all children are text or short expressions (no nested
@@ -703,10 +729,12 @@ func (t *TwigIfNode) Dump(indent int) string {
 		writeIndent(indent)
 		builder.WriteString(openStmt(br.Trim.Left))
 		if i == 0 {
-			builder.WriteString(" if " + br.Condition + " ")
+			builder.WriteString(" if ")
 		} else {
-			builder.WriteString(" elseif " + br.Condition + " ")
+			builder.WriteString(" elseif ")
 		}
+		builder.WriteString(br.Condition)
+		builder.WriteString(" ")
 		builder.WriteString(closeStmt(br.Trim.Right))
 		writeIfBranchBody(&builder, br.Body, indent, indentStr)
 	}

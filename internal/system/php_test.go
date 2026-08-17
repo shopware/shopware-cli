@@ -97,3 +97,27 @@ fi
 
 	assert.NoError(t, os.WriteFile(path, []byte(script), 0755))
 }
+
+// writeFakePHPWithStartupWarning emits a startup warning before the banner, as
+// PHP does when php.ini references a missing extension.
+func writeFakePHPWithStartupWarning(t *testing.T, path string, version string) {
+	t.Helper()
+	shPath, err := exec.LookPath("sh")
+	assert.NoError(t, err)
+
+	script := fmt.Sprintf(`#!%s
+echo "Warning: PHP Startup: Unable to load dynamic library 'gone.so'"
+echo PHP %s
+`, shPath, version)
+
+	assert.NoError(t, os.WriteFile(path, []byte(script), 0o755))
+}
+
+func TestGetPHPVersionOfBinaryIgnoresStartupWarnings(t *testing.T) {
+	dir := t.TempDir()
+	writeFakePHPWithStartupWarning(t, dir+"/php", "8.5.9")
+
+	phpVersion, err := GetPHPVersionOfBinary(t.Context(), dir+"/php")
+	assert.NoError(t, err)
+	assert.Equal(t, "8.5.9", phpVersion)
+}

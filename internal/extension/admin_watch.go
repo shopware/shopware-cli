@@ -2,6 +2,7 @@ package extension
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"os"
@@ -10,6 +11,49 @@ import (
 	"github.com/shopware/shopware-cli/internal/executor"
 	"github.com/shopware/shopware-cli/internal/npm"
 )
+
+// Default ports of the administration dev server, chosen by the platform's
+// build tooling.
+const (
+	AdminVitePort    = 5173
+	AdminWebpackPort = 8080
+)
+
+// AdminDevServerPort returns the port of the dev server that
+// PrepareAdminWatcher's `npm run dev` starts, mirroring how the platform's
+// own dev script picks its tooling: Shopware 6.7+ ships Vite only (5173),
+// while 6.6 ships both and decides at runtime via the ADMIN_VITE feature flag
+// in var/config_js_features.json, defaulting to webpack-dev-server (8080).
+func AdminDevServerPort(projectRoot string) int {
+	adminApp := PlatformPath(projectRoot, "Administration", "Resources/app/administration")
+	if _, err := os.Stat(filepath.Join(adminApp, "webpack.config.js")); err != nil {
+		// Without a webpack config (6.7+, or platform not installed yet)
+		// `npm run dev` can only start Vite.
+		return AdminVitePort
+	}
+	if adminViteFeatureEnabled(projectRoot) {
+		return AdminVitePort
+	}
+	return AdminWebpackPort
+}
+
+// adminViteFeatureEnabled reads the ADMIN_VITE flag the way 6.6's dev script
+// does (`jq -r '.ADMIN_VITE' var/config_js_features.json`): only an explicit
+// true switches to Vite — a missing file or key means webpack.
+func adminViteFeatureEnabled(projectRoot string) bool {
+	content, err := os.ReadFile(filepath.Join(projectRoot, "var", "config_js_features.json"))
+	if err != nil {
+		return false
+	}
+
+	var flags map[string]any
+	if err := json.Unmarshal(content, &flags); err != nil {
+		return false
+	}
+
+	enabled, _ := flags["ADMIN_VITE"].(bool)
+	return enabled
+}
 
 // PrepareAdminWatcher runs the admin watcher preparation steps and returns the
 // dev server process. When out is non-nil, the output of every preparation step

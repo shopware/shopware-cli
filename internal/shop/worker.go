@@ -104,8 +104,8 @@ func DefaultWorkerQueues(projectRoot string) []string {
 func (c WorkerConfig) ConsumeArgs(queues []string) []string {
 	args := []string{
 		"messenger:consume",
-		fmt.Sprintf("--memory-limit=%s", c.MemoryLimit),
-		fmt.Sprintf("--time-limit=%s", c.TimeLimit),
+		"--memory-limit=" + c.MemoryLimit,
+		"--time-limit=" + c.TimeLimit,
 		fmt.Sprintf("--failure-limit=%d", c.FailureLimit),
 	}
 
@@ -129,7 +129,7 @@ func PlanWorkers(spec string, amount int, defaultQueues []string) ([]WorkerJob, 
 
 	if spec == "" {
 		if amount < 1 {
-			return nil, fmt.Errorf("worker amount must be at least 1")
+			return nil, errors.New("worker amount must be at least 1")
 		}
 
 		jobs := make([]WorkerJob, 0, amount)

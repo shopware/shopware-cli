@@ -3,7 +3,6 @@ package executor
 import (
 	"context"
 	"errors"
-	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -23,6 +22,13 @@ const (
 	TypeSymfonyCLI = "symfony-cli"
 )
 
+// StopOptions configures how the development environment is stopped.
+type StopOptions struct {
+	// RemoveVolumes also removes the named volumes declared in the compose
+	// file, deleting all data stored in them.
+	RemoveVolumes bool
+}
+
 type Executor interface {
 	ConsoleCommand(ctx context.Context, args ...string) *Process
 	ComposerCommand(ctx context.Context, args ...string) *Process
@@ -33,14 +39,17 @@ type Executor interface {
 	WithEnv(env map[string]string) Executor
 	WithRelDir(relDir string) Executor
 	StartEnvironment(ctx context.Context) error
-	StopEnvironment(ctx context.Context) error
+	StopEnvironment(ctx context.Context, opts StopOptions) error
 	EnvironmentStatus(ctx context.Context) (bool, error)
 	AdminAPIClient(ctx context.Context) (*adminSdk.Client, error)
+	// DatabaseConnection returns credentials to reach the project database
+	// from the host machine.
+	DatabaseConnection(ctx context.Context) (*DatabaseConnection, error)
 }
 
 func adminAPIClient(ctx context.Context, cfg *shop.Config, envCfg *shop.EnvironmentConfig) (*adminSdk.Client, error) {
 	if cfg == nil {
-		return nil, fmt.Errorf("admin api requires a shop configuration")
+		return nil, errors.New("admin api requires a shop configuration")
 	}
 
 	effective := *cfg

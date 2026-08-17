@@ -3,6 +3,7 @@ package extension
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -19,7 +20,7 @@ type ShopwareBundle struct {
 }
 
 func newShopwareBundle(ctx context.Context, path string) (*ShopwareBundle, error) {
-	composerJsonFile := fmt.Sprintf("%s/composer.json", path)
+	composerJsonFile := path + "/composer.json"
 	if _, err := os.Stat(composerJsonFile); err != nil {
 		return nil, err
 	}
@@ -36,11 +37,11 @@ func newShopwareBundle(ctx context.Context, path string) (*ShopwareBundle, error
 	}
 
 	if composerJson.Type != "shopware-bundle" {
-		return nil, fmt.Errorf("newShopwareBundle: composer.json type is not shopware-bundle")
+		return nil, errors.New("newShopwareBundle: composer.json type is not shopware-bundle")
 	}
 
 	if composerJson.Extra.BundleName == "" {
-		return nil, fmt.Errorf("composer.json does not contain shopware-bundle-name in extra")
+		return nil, errors.New("composer.json does not contain shopware-bundle-name in extra")
 	}
 
 	cfg, err := readExtensionConfig(ctx, path)

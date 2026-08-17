@@ -2,6 +2,7 @@ package symfony
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -29,7 +30,7 @@ func ConvertContainerToYAML(container *Container) ([]byte, error) {
 
 	for _, when := range container.When {
 		if when.Env == "" {
-			return nil, fmt.Errorf("<when> requires an env attribute")
+			return nil, errors.New("<when> requires an env attribute")
 		}
 
 		if err := unknownElementError("when", when.Unknown); err != nil {
@@ -113,7 +114,7 @@ func importsToNode(imports *xmlImports) (*yaml.Node, error) {
 		}
 
 		if imp.Resource == "" {
-			return nil, fmt.Errorf("<import> requires a resource attribute")
+			return nil, errors.New("<import> requires a resource attribute")
 		}
 
 		entry := newMapping()
@@ -143,7 +144,7 @@ func parametersToNode(parameters *xmlParameters) (*yaml.Node, error) {
 
 	for _, parameter := range parameters.Parameters {
 		if parameter.Key == "" {
-			return nil, fmt.Errorf("<parameter> requires a key attribute")
+			return nil, errors.New("<parameter> requires a key attribute")
 		}
 
 		value, err := parameterValueToNode(parameter)
@@ -214,7 +215,7 @@ func parameterCollectionToNode(children []xmlParameter) (*yaml.Node, error) {
 
 	for _, child := range children {
 		if child.Key == "" {
-			return nil, fmt.Errorf("collection mixes keyed and unkeyed <parameter> elements")
+			return nil, errors.New("collection mixes keyed and unkeyed <parameter> elements")
 		}
 
 		value, err := parameterValueToNode(child)
@@ -232,7 +233,7 @@ func servicesToNode(services *xmlServices) (*yaml.Node, error) {
 	mapping := newMapping()
 
 	if len(services.Defaults) > 1 {
-		return nil, fmt.Errorf("multiple <defaults> elements are not supported")
+		return nil, errors.New("multiple <defaults> elements are not supported")
 	}
 
 	if len(services.Defaults) == 1 {
@@ -255,7 +256,7 @@ func servicesToNode(services *xmlServices) (*yaml.Node, error) {
 		}
 
 		if item.Service.ID == "" {
-			return nil, fmt.Errorf("<instanceof> requires an id attribute")
+			return nil, errors.New("<instanceof> requires an id attribute")
 		}
 
 		if item.Service.Class != "" {
@@ -364,7 +365,7 @@ func defaultsToNode(defaults xmlDefaults) (*yaml.Node, error) {
 
 func serviceToNode(service *xmlService) (string, *yaml.Node, error) {
 	if service.ID == "" {
-		return "", nil, fmt.Errorf("<service> requires an id attribute")
+		return "", nil, errors.New("<service> requires an id attribute")
 	}
 
 	if err := rejectPrototypeFields(service, fmt.Sprintf("service %q", service.ID)); err != nil {
@@ -400,7 +401,7 @@ func aliasToNode(service *xmlService) (*yaml.Node, error) {
 	}
 
 	if hasDefinitionConfig(service) {
-		return nil, fmt.Errorf("aliases only support the public attribute and <deprecated>")
+		return nil, errors.New("aliases only support the public attribute and <deprecated>")
 	}
 
 	if service.Public == "" && service.Deprecated == nil {
@@ -455,7 +456,7 @@ func hasDefinitionConfig(service *xmlService) bool {
 
 func prototypeToNode(prototype *xmlService) (string, *yaml.Node, error) {
 	if prototype.Namespace == "" {
-		return "", nil, fmt.Errorf("<prototype> requires a namespace attribute")
+		return "", nil, errors.New("<prototype> requires a namespace attribute")
 	}
 
 	if prototype.Resource == "" {
@@ -570,7 +571,7 @@ func appendServiceAttributes(mapping *yaml.Node, service *xmlService, omitClass 
 func appendDecoration(mapping *yaml.Node, service *xmlService) error {
 	if service.Decorates == "" {
 		if service.DecorationInnerName != "" || service.DecorationPriority != "" || service.DecorationOnInvalid != "" {
-			return fmt.Errorf("decoration attributes require the decorates attribute")
+			return errors.New("decoration attributes require the decorates attribute")
 		}
 
 		return nil
@@ -806,11 +807,11 @@ func argumentValueToNode(argument xmlArgument) (*yaml.Node, error) {
 	}
 
 	if len(argument.InlineServices) > 0 && argument.Type != "service" {
-		return nil, fmt.Errorf("inline <service> elements require type=\"service\"")
+		return nil, errors.New("inline <service> elements require type=\"service\"")
 	}
 
 	if len(argument.Excludes) > 0 && argument.Type != "tagged" && argument.Type != "tagged_iterator" && argument.Type != "tagged_locator" {
-		return nil, fmt.Errorf("<exclude> elements are only supported on tagged iterator arguments")
+		return nil, errors.New("<exclude> elements are only supported on tagged iterator arguments")
 	}
 
 	switch argument.Type {
@@ -824,7 +825,7 @@ func argumentValueToNode(argument xmlArgument) (*yaml.Node, error) {
 		return argumentsToNode(argument.Children, false)
 	case "service":
 		if len(argument.InlineServices) > 1 {
-			return nil, fmt.Errorf("only one inline <service> is supported per argument")
+			return nil, errors.New("only one inline <service> is supported per argument")
 		}
 
 		if len(argument.InlineServices) == 1 {
@@ -832,7 +833,7 @@ func argumentValueToNode(argument xmlArgument) (*yaml.Node, error) {
 		}
 
 		if argument.ID == "" {
-			return nil, fmt.Errorf("argument type=\"service\" requires an id attribute")
+			return nil, errors.New("argument type=\"service\" requires an id attribute")
 		}
 
 		return referenceNode(argument.ID, argument.OnInvalid)
@@ -934,11 +935,11 @@ func taggedIteratorToNode(argument xmlArgument) (*yaml.Node, error) {
 
 func inlineServiceToNode(service xmlService) (*yaml.Node, error) {
 	if service.ID != "" || service.Alias != "" {
-		return nil, fmt.Errorf("inline services do not support id or alias attributes")
+		return nil, errors.New("inline services do not support id or alias attributes")
 	}
 
 	if service.Class == "" {
-		return nil, fmt.Errorf("inline services require a class attribute")
+		return nil, errors.New("inline services require a class attribute")
 	}
 
 	if err := rejectPrototypeFields(&service, "inline service"); err != nil {
@@ -966,7 +967,7 @@ func referenceNode(id string, onInvalid string) (*yaml.Node, error) {
 		// "@?" means ignore, which removes method calls and collection
 		// entries instead of passing null for them, so the null strategy
 		// cannot be expressed in YAML.
-		return nil, fmt.Errorf(`on-invalid="null" is not supported by the YAML format, change it to on-invalid="ignore" first if dropping the dependency is acceptable`)
+		return nil, errors.New(`on-invalid="null" is not supported by the YAML format, change it to on-invalid="ignore" first if dropping the dependency is acceptable`)
 	case "ignore_uninitialized":
 		prefix = "@!"
 	default:
@@ -981,7 +982,7 @@ func propertiesToNode(properties []xmlProperty) (*yaml.Node, error) {
 
 	for _, property := range properties {
 		if property.Name == "" {
-			return nil, fmt.Errorf("<property> requires a name attribute")
+			return nil, errors.New("<property> requires a name attribute")
 		}
 
 		node, err := argumentValueToNode(property.xmlArgument)
@@ -1000,7 +1001,7 @@ func bindsToNode(binds []xmlArgument) (*yaml.Node, error) {
 
 	for _, bind := range binds {
 		if bind.Key == "" {
-			return nil, fmt.Errorf("<bind> requires a key attribute")
+			return nil, errors.New("<bind> requires a key attribute")
 		}
 
 		key := bind.Key
@@ -1030,7 +1031,7 @@ func callsToNode(calls []xmlCall) (*yaml.Node, error) {
 		}
 
 		if call.Method == "" {
-			return nil, fmt.Errorf("<call> requires a method attribute")
+			return nil, errors.New("<call> requires a method attribute")
 		}
 
 		entry := newSequence()
@@ -1080,7 +1081,7 @@ func tagToNode(tag xmlTag) (*yaml.Node, error) {
 	}
 
 	if name == "" {
-		return nil, fmt.Errorf("<tag> requires a name")
+		return nil, errors.New("<tag> requires a name")
 	}
 
 	if len(tag.OtherAttrs) == 0 && len(tag.Attributes) == 0 {
@@ -1109,7 +1110,7 @@ func tagToNode(tag xmlTag) (*yaml.Node, error) {
 
 func tagAttributeToNode(attribute xmlTagAttribute) (*yaml.Node, error) {
 	if attribute.Name == "" {
-		return nil, fmt.Errorf("tag <attribute> requires a name attribute")
+		return nil, errors.New("tag <attribute> requires a name attribute")
 	}
 
 	if len(attribute.Children) == 0 {

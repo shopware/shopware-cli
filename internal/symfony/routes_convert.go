@@ -2,6 +2,7 @@ package symfony
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"path/filepath"
 	"regexp"
@@ -74,11 +75,11 @@ func appendRouteItems(target *yaml.Node, items []xmlRouteItem, usedKeys map[stri
 			mapPut(target, routeImportKey(item.Import.Resource, usedKeys), node)
 		case "when":
 			if !allowWhen {
-				return fmt.Errorf("<when> elements cannot be nested")
+				return errors.New("<when> elements cannot be nested")
 			}
 
 			if item.When.Env == "" {
-				return fmt.Errorf("<when> requires an env attribute")
+				return errors.New("<when> requires an env attribute")
 			}
 
 			key := "when@" + item.When.Env
@@ -145,7 +146,7 @@ func routeImportKey(resource string, usedKeys map[string]bool) string {
 
 func routeToNode(route *xmlRoute) (string, *yaml.Node, error) {
 	if route.ID == "" {
-		return "", nil, fmt.Errorf("<route> requires an id attribute")
+		return "", nil, errors.New("<route> requires an id attribute")
 	}
 
 	node, err := buildRouteNode(route)
@@ -169,7 +170,7 @@ func buildRouteNode(route *xmlRoute) (*yaml.Node, error) {
 
 	switch {
 	case route.Path != "" && len(route.Paths) > 0:
-		return nil, fmt.Errorf("must not have both a path attribute and <path> child elements")
+		return nil, errors.New("must not have both a path attribute and <path> child elements")
 	case route.Path != "":
 		mapPut(mapping, "path", newString(route.Path))
 	case len(route.Paths) > 0:
@@ -180,13 +181,13 @@ func buildRouteNode(route *xmlRoute) (*yaml.Node, error) {
 
 		mapPut(mapping, "path", node)
 	default:
-		return nil, fmt.Errorf("requires a path attribute or <path> child elements")
+		return nil, errors.New("requires a path attribute or <path> child elements")
 	}
 
 	if route.Controller != "" {
 		for _, def := range route.Defaults {
 			if def.Key == "_controller" {
-				return nil, fmt.Errorf("must not specify both the controller attribute and the _controller default")
+				return nil, errors.New("must not specify both the controller attribute and the _controller default")
 			}
 		}
 
@@ -226,7 +227,7 @@ func routeImportToNode(imp *xmlRouteImport) (*yaml.Node, error) {
 	}
 
 	if imp.Resource == "" {
-		return nil, fmt.Errorf("<import> requires a resource attribute")
+		return nil, errors.New("<import> requires a resource attribute")
 	}
 
 	mapping := newMapping()
@@ -314,7 +315,7 @@ type sharedRouteConfig struct {
 func appendSharedRouteConfig(mapping *yaml.Node, config sharedRouteConfig) error {
 	switch {
 	case config.host != "" && len(config.hosts) > 0:
-		return fmt.Errorf("must not have both a host attribute and <host> child elements")
+		return errors.New("must not have both a host attribute and <host> child elements")
 	case config.host != "":
 		mapPut(mapping, "host", newString(config.host))
 	case len(config.hosts) > 0:
@@ -433,7 +434,7 @@ func routeDefaultsToNode(defaults []xmlRouteDefault) (*yaml.Node, error) {
 
 	for _, def := range defaults {
 		if def.Key == "" {
-			return nil, fmt.Errorf("<default> requires a key attribute")
+			return nil, errors.New("<default> requires a key attribute")
 		}
 
 		node, err := routeDefaultToNode(def)
@@ -453,7 +454,7 @@ func routeDefaultToNode(def xmlRouteDefault) (*yaml.Node, error) {
 	}
 
 	if len(def.Typed) > 1 {
-		return nil, fmt.Errorf("only one typed value element is allowed")
+		return nil, errors.New("only one typed value element is allowed")
 	}
 
 	if len(def.Typed) == 1 {
@@ -506,7 +507,7 @@ func typedValueToNode(value xmlTypedValue) (*yaml.Node, error) {
 		mapping := newMapping()
 		for _, child := range value.Children {
 			if child.Key == "" {
-				return nil, fmt.Errorf("<map> entries require a key attribute")
+				return nil, errors.New("<map> entries require a key attribute")
 			}
 
 			node, err := typedValueToNode(child)

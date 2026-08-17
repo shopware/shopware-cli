@@ -45,7 +45,7 @@ func IsNodeVersionAtLeast(ctx context.Context, requiredVersion string) (bool, er
 		return false, fmt.Errorf("failed to parse installed Node.js version: %w", err)
 	}
 
-	constraint, err := version.NewConstraint(fmt.Sprintf(">= %s", requiredVersion))
+	constraint, err := version.NewConstraint(">= " + requiredVersion)
 	if err != nil {
 		return false, fmt.Errorf("failed to parse required Node.js version constraint: %w", err)
 	}

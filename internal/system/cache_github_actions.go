@@ -6,6 +6,7 @@ import (
 	"compress/gzip"
 	"context"
 	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
@@ -41,7 +42,7 @@ func NewGitHubActionsCache(prefix string) (*GitHubActionsCache, error) {
 	}
 
 	if client == nil {
-		return nil, fmt.Errorf("GitHub Actions cache client is not available")
+		return nil, errors.New("GitHub Actions cache client is not available")
 	}
 
 	return &GitHubActionsCache{
@@ -399,7 +400,7 @@ func (c *GitHubActionsCache) Close() error {
 func (c *GitHubActionsCache) getCacheKey(key string) string {
 	// GitHub Actions cache keys have restrictions, so we hash the key
 	hash := sha256.Sum256([]byte(key))
-	hashStr := fmt.Sprintf("%x", hash)
+	hashStr := hex.EncodeToString(hash[:])
 
 	// Combine prefix with hash, ensuring valid characters
 	cacheKey := fmt.Sprintf("%s-%s", c.prefix, hashStr)

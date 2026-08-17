@@ -3,43 +3,42 @@ package tui
 import (
 	"testing"
 
-	"charm.land/bubbles/v2/textinput"
 	tea "charm.land/bubbletea/v2"
 	"github.com/stretchr/testify/assert"
 )
 
-func newTestModel(items []FilterSelectItem) *filterSelectModel {
-	ti := textinput.New()
-	ti.Focus()
-	m := &filterSelectModel{items: items, filter: ti, pageSize: 10}
-	m.applyFilter()
+func newTestFilterSelect(items []FilterSelectItem) *filterSelectModel {
+	filterItems := make([]FilterItem, len(items))
+	for i, item := range items {
+		filterItems[i] = FilterItem(item)
+	}
+	m := &filterSelectModel{list: NewFilterList(FilterListOptions{Items: filterItems})}
+	m.Init()
 	return m
 }
 
+func typeQuery(m *filterSelectModel, query string) {
+	for _, r := range query {
+		_, _ = m.Update(tea.KeyPressMsg(tea.Key{Code: r, Text: string(r)}))
+	}
+}
+
 func TestFilterSelect_FilterMatchesLabelAndDetail(t *testing.T) {
-	m := newTestModel([]FilterSelectItem{
+	m := newTestFilterSelect([]FilterSelectItem{
 		{Label: "Main Store", Detail: "https://main.test", Value: "1"},
 		{Label: "EU Outlet", Detail: "https://eu.example.test", Value: "2"},
 		{Label: "Demo", Detail: "https://demo.test", Value: "3"},
 	})
 
-	m.filter.SetValue("example")
-	m.applyFilter()
-	assert.Len(t, m.filtered, 1, "filter should match Detail (URL)")
-	assert.Equal(t, 1, m.filtered[0])
-
-	m.filter.SetValue("demo")
-	m.applyFilter()
-	assert.Len(t, m.filtered, 1, "filter should match Label")
-	assert.Equal(t, 2, m.filtered[0])
-
-	m.filter.SetValue("")
-	m.applyFilter()
-	assert.Len(t, m.filtered, 3, "empty filter keeps all items")
+	typeQuery(m, "example")
+	assert.Equal(t, 1, m.list.Len(), "filter should match Detail (URL)")
+	_, index, ok := m.list.Selected()
+	assert.True(t, ok)
+	assert.Equal(t, 1, index)
 }
 
 func TestFilterSelect_EnterPicksHighlighted(t *testing.T) {
-	m := newTestModel([]FilterSelectItem{
+	m := newTestFilterSelect([]FilterSelectItem{
 		{Label: "A", Value: "a"},
 		{Label: "B", Value: "b"},
 		{Label: "C", Value: "c"},
@@ -54,24 +53,18 @@ func TestFilterSelect_EnterPicksHighlighted(t *testing.T) {
 }
 
 func TestFilterSelect_EscCancels(t *testing.T) {
-	m := newTestModel([]FilterSelectItem{{Label: "Only", Value: "only"}})
+	m := newTestFilterSelect([]FilterSelectItem{{Label: "Only", Value: "only"}})
 
 	_, cmd := m.Update(tea.KeyPressMsg(tea.Key{Code: tea.KeyEsc}))
 	assert.NotNil(t, cmd)
 	assert.True(t, m.cancelled)
 }
 
-func TestFilterSelect_WindowingClampsScroll(t *testing.T) {
-	items := make([]FilterSelectItem, 25)
-	for i := range items {
-		items[i] = FilterSelectItem{Label: string(rune('a' + i)), Value: string(rune('a' + i))}
-	}
-	m := newTestModel(items)
-	m.pageSize = 5
+func TestFilterSelect_EnterWithoutMatchCancels(t *testing.T) {
+	m := newTestFilterSelect([]FilterSelectItem{{Label: "Only", Value: "only"}})
 
-	for range 7 {
-		_, _ = m.Update(tea.KeyPressMsg(tea.Key{Code: tea.KeyDown}))
-	}
-	assert.Equal(t, 7, m.cursor)
-	assert.Equal(t, 3, m.scroll, "scroll should follow cursor past the page")
+	typeQuery(m, "zzz")
+	_, cmd := m.Update(tea.KeyPressMsg(tea.Key{Code: tea.KeyEnter}))
+	assert.NotNil(t, cmd)
+	assert.True(t, m.cancelled)
 }

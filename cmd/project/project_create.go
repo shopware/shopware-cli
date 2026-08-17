@@ -33,15 +33,37 @@ type createOptions struct {
 	selectedVersion    string
 	selectedDeployment string
 	selectedCI         string
-	useDocker          bool
-	initGit            bool
-	withElasticsearch  bool
-	withAMQP           bool
-	noAudit            bool
+	// phpVersion is the major.minor PHP series the project uses: the Docker image
+	// tag for Docker projects, the local PHP lookup otherwise. Persisted as-is.
+	phpVersion string
+	// phpVersionExplicit records that --php-version was passed, so the creation
+	// form does not ask again.
+	phpVersionExplicit bool
+	// phpBinary is the local executable phpVersion resolved to; never persisted.
+	phpBinary         string
+	useDocker         bool
+	initGit           bool
+	withElasticsearch bool
+	withAMQP          bool
+	noAudit           bool
 
 	interactive           bool
 	elasticsearchExplicit bool
 	isVerbose             bool
+}
+
+func (o *createOptions) setPHP(installation system.PHPInstallation) {
+	o.phpBinary = installation.Binary
+	o.phpVersion = system.PHPVersionPin(installation.Version)
+}
+
+// clearPHP drops a resolved local PHP, e.g. when the form switches to Docker. An
+// explicit --php-version is kept, since it applies to Docker projects too.
+func (o *createOptions) clearPHP() {
+	o.phpBinary = ""
+	if !o.phpVersionExplicit {
+		o.phpVersion = ""
+	}
 }
 
 var projectCreateCmd = &cobra.Command{
@@ -72,6 +94,12 @@ var projectCreateCmd = &cobra.Command{
 	RunE: func(cmd *cobra.Command, args []string) error {
 		opts := parseCreateFlags(cmd, args)
 
+		if opts.phpVersionExplicit {
+			if err := shop.ValidatePHPVersion(opts.phpVersion); err != nil {
+				return err
+			}
+		}
+
 		// A name passed directly as an argument skips the interactive name
 		// prompt, which is where invalid names (e.g. wrong casing) are normally
 		// rejected live. Validate it up front so it is forbidden immediately
@@ -94,7 +122,7 @@ var projectCreateCmd = &cobra.Command{
 		filteredVersions := shop.FilterInstallVersions(releases)
 
 		if opts.interactive {
-			if err := runCreateForm(cmd, &opts, filteredVersions); err != nil {
+			if err := runCreateForm(cmd, &opts, releases, filteredVersions); err != nil {
 				return err
 			}
 		} else {
@@ -125,6 +153,7 @@ func parseCreateFlags(cmd *cobra.Command, args []string) createOptions {
 	versionFlag, _ := cmd.PersistentFlags().GetString("version")
 	deploymentMethod, _ := cmd.PersistentFlags().GetString("deployment")
 	ciSystem, _ := cmd.PersistentFlags().GetString("ci")
+	phpVersion, _ := cmd.PersistentFlags().GetString("php-version")
 
 	if cmd.PersistentFlags().Changed("without-elasticsearch") {
 		withoutElasticsearch, _ := cmd.PersistentFlags().GetBool("without-elasticsearch")
@@ -143,6 +172,8 @@ func parseCreateFlags(cmd *cobra.Command, args []string) createOptions {
 		selectedVersion:       versionFlag,
 		selectedDeployment:    deploymentMethod,
 		selectedCI:            ciSystem,
+		phpVersion:            phpVersion,
+		phpVersionExplicit:    cmd.PersistentFlags().Changed("php-version"),
 		interactive:           system.IsInteractionEnabled(cmd.Context()),
 		elasticsearchExplicit: elasticsearchExplicit,
 		isVerbose:             isVerbose,
@@ -189,4 +220,8 @@ func init() {
 	projectCreateCmd.PersistentFlags().String("version", "", "Shopware version to install (e.g., 6.6.0.0, latest)")
 	projectCreateCmd.PersistentFlags().String("deployment", "", "Deployment method: none, deployer, platformsh, shopware-paas")
 	projectCreateCmd.PersistentFlags().String("ci", "", "CI/CD system: none, github, gitlab")
+	projectCreateCmd.PersistentFlags().String("php-version", "", "PHP version to use (e.g. 8.3); selects the local PHP for local projects and the image tag for --docker projects")
+	_ = projectCreateCmd.RegisterFlagCompletionFunc("php-version", func(*cobra.Command, []string, string) ([]string, cobra.ShellCompDirective) {
+		return shop.SupportedPHPVersions, cobra.ShellCompDirectiveNoFileComp
+	})
 }

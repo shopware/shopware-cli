@@ -1,12 +1,14 @@
 package project
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"slices"
 
 	"charm.land/huh/v2"
 	"charm.land/lipgloss/v2"
+	"github.com/shyim/go-composer/repository"
 	"github.com/shyim/go-version"
 	"github.com/spf13/cobra"
 
@@ -15,7 +17,7 @@ import (
 	"github.com/shopware/shopware-cli/internal/tui"
 )
 
-func runCreateForm(cmd *cobra.Command, opts *createOptions, filteredVersions []*version.Version) error { //nolint:gocyclo
+func runCreateForm(cmd *cobra.Command, opts *createOptions, releases []repository.Version, filteredVersions []*version.Version) error { //nolint:gocyclo
 	type minorGroup struct {
 		label    string
 		versions []string
@@ -52,15 +54,18 @@ func runCreateForm(cmd *cobra.Command, opts *createOptions, filteredVersions []*
 		huh.NewOption("GitLab CI", shop.CIGitLab),
 	}
 
-	needsAdvanced := opts.selectedDeployment == "" || opts.selectedCI == "" ||
-		!cmd.PersistentFlags().Changed("git") ||
-		!cmd.PersistentFlags().Changed("with-amqp") ||
-		!opts.elasticsearchExplicit
-
 	needsProjectFolder := opts.projectFolder == ""
 	needsVersion := opts.selectedVersion == ""
 	needsDeployment := opts.selectedDeployment == ""
 	needsCI := opts.selectedCI == ""
+	// An explicit --php-version is authoritative and validated later, so the form
+	// must not offer a competing choice.
+	needsPHPVersion := !opts.phpVersionExplicit
+
+	needsAdvanced := needsDeployment || needsCI || needsPHPVersion ||
+		!cmd.PersistentFlags().Changed("git") ||
+		!cmd.PersistentFlags().Changed("with-amqp") ||
+		!opts.elasticsearchExplicit
 
 	selectDocker := tui.Yes
 	selectGit := tui.Yes
@@ -79,6 +84,42 @@ func runCreateForm(cmd *cobra.Command, opts *createOptions, filteredVersions []*
 	}
 	selectedMinor := shop.VersionLatest
 
+	// Docker may come from the --docker flag or from the in-form question, and
+	// the PHP selection depends on the answer either way.
+	dockerSelected := func() bool {
+		if cmd.PersistentFlags().Changed("docker") {
+			return opts.useDocker
+		}
+		return selectDocker == tui.Yes
+	}
+
+	// The patch-version group stays hidden for "latest" and leaves
+	// opts.selectedVersion empty, which is only defaulted after the form ran.
+	effectiveVersion := func() string {
+		if opts.selectedVersion != "" {
+			return opts.selectedVersion
+		}
+		return shop.VersionLatest
+	}
+
+	// Discovery spawns a subprocess per candidate, so it runs at most once; only
+	// the constraint filtering is redone when the Shopware version changes. Docker
+	// projects never reach it: their PHP comes from the image, not this machine.
+	var phpInstallations []system.PHPInstallation
+	phpDiscovered := false
+	compatiblePHPForSelection := func() []system.PHPInstallation {
+		if !phpDiscovered {
+			phpInstallations = discoverPHPInstallations(cmd.Context())
+			phpDiscovered = true
+		}
+		return filterCompatiblePHPFor(phpInstallations, releases, effectiveVersion(), filteredVersions)
+	}
+
+	// Docker image tags the selected Shopware release supports.
+	dockerPHPForSelection := func() []string {
+		return phpConstraintFor(releases, effectiveVersion(), filteredVersions).SupportedVersions()
+	}
+
 	theme := huh.ThemeFunc(func(isDark bool) *huh.Styles {
 		s := huh.ThemeCharm(isDark)
 		s.Focused.Title = s.Focused.Title.Foreground(tui.BlueColor)
@@ -93,7 +134,6 @@ func runCreateForm(cmd *cobra.Command, opts *createOptions, filteredVersions []*
 		return tui.RedText.Render("No")
 	}
 
-	sectionStyle := lipgloss.NewStyle().Bold(true).Underline(true)
 	labelStyle := lipgloss.NewStyle().Width(20)
 
 	for {
@@ -161,9 +201,65 @@ func runCreateForm(cmd *cobra.Command, opts *createOptions, filteredVersions []*
 			formGroups = append(formGroups, huh.NewGroup(
 				tui.NewYesNo().
 					Title("Do you want to further customize the project creation?").
-					Description("Configure deployment, CI/CD, and optional features").
+					Description("Configure PHP, deployment, CI/CD, and optional features").
 					Value(&selectAdvanced),
 			))
+		}
+
+		// A local project selects an executable installed on this machine; a Docker
+		// project selects an image tag. phpGroupShown must not depend on OptionsFunc
+		// having run: huh evaluates WithHideFunc during navigation, while OptionsFunc
+		// is dispatched asynchronously, so deciding visibility from its options hides
+		// the group forever.
+		var selectedPHP string
+		phpCandidates := func() int {
+			if dockerSelected() {
+				return len(dockerPHPForSelection())
+			}
+			return len(compatiblePHPForSelection())
+		}
+		phpGroupShown := func() bool {
+			return selectAdvanced == tui.Yes && shouldPromptPHPSelection(phpCandidates())
+		}
+
+		if needsPHPVersion {
+			formGroups = append(formGroups, huh.NewGroup(
+				huh.NewSelect[string]().
+					TitleFunc(func() string {
+						if dockerSelected() {
+							return "PHP Version"
+						}
+						return "PHP Executable"
+					}, &selectDocker).
+					DescriptionFunc(func() string {
+						if dockerSelected() {
+							return "Select the PHP version of the Docker image (persisted as docker.php.version in .shopware-project.yml)"
+						}
+						return "Select the PHP used to create and run this project (its version is persisted as php_version in .shopware-project.yml)"
+					}, &selectDocker).
+					Height(10).
+					OptionsFunc(func() []huh.Option[string] {
+						if dockerSelected() {
+							versions := dockerPHPForSelection()
+							if !slices.Contains(versions, selectedPHP) {
+								selectedPHP = highestOrEmpty(versions)
+							}
+							return phpVersionOptions(versions)
+						}
+
+						compatible := compatiblePHPForSelection()
+						// Keep the selection valid when changing the Shopware
+						// version narrows the compatible set.
+						if system.FindPHPByBinary(compatible, selectedPHP) == nil {
+							selectedPHP = ""
+							if preferred := system.PreferredPHPInstallation(compatible); preferred != nil {
+								selectedPHP = preferred.Binary
+							}
+						}
+						return phpInstallationOptions(compatible)
+					}, []*string{&selectDocker, &opts.selectedVersion}).
+					Value(&selectedPHP),
+			).WithHideFunc(func() bool { return !phpGroupShown() }))
 		}
 
 		if needsDeployment {
@@ -242,9 +338,33 @@ func runCreateForm(cmd *cobra.Command, opts *createOptions, filteredVersions []*
 		if !cmd.PersistentFlags().Changed("with-amqp") {
 			opts.withAMQP = selectAMQP == tui.Yes
 		}
+		if needsPHPVersion {
+			// Reset on every round so switching to Docker (or restarting the
+			// form) does not keep a stale selection from a previous pass.
+			opts.clearPHP()
+			switch {
+			case opts.useDocker:
+				// Only a version, since the PHP comes from the image. Left empty
+				// when unanswered: installAndFinalize then picks the highest the
+				// release supports.
+				if phpGroupShown() {
+					opts.phpVersion = selectedPHP
+				}
+			case phpGroupShown():
+				if selected := system.FindPHPByBinary(compatiblePHPForSelection(), selectedPHP); selected != nil {
+					opts.setPHP(*selected)
+				}
+			default:
+				// Nothing was asked (at most one compatible install), but resolve
+				// it anyway so the summary shows the PHP that will be used.
+				if preferred := system.PreferredPHPInstallation(compatiblePHPForSelection()); preferred != nil {
+					opts.setPHP(*preferred)
+				}
+			}
+		}
 
 		fmt.Println()
-		fmt.Println(sectionStyle.Render("Summary"))
+		fmt.Println(tui.SectionHeadingStyle.Render("Summary"))
 		fmt.Println()
 		projectDisplay := opts.projectFolder
 		if projectDisplay == "." {
@@ -257,6 +377,13 @@ func runCreateForm(cmd *cobra.Command, opts *createOptions, filteredVersions []*
 		fmt.Printf("  %s %s\n", labelStyle.Render("Deployment:"), opts.selectedDeployment)
 		fmt.Printf("  %s %s\n", labelStyle.Render("CI/CD:"), opts.selectedCI)
 		fmt.Printf("  %s %s\n", labelStyle.Render("Docker:"), onOff(opts.useDocker))
+		if opts.phpVersion != "" {
+			phpDisplay := opts.phpVersion
+			if opts.phpBinary != "" {
+				phpDisplay += " (" + opts.phpBinary + ")"
+			}
+			fmt.Printf("  %s %s\n", labelStyle.Render("PHP:"), phpDisplay)
+		}
 		fmt.Printf("  %s %s\n", labelStyle.Render("Git Repository:"), onOff(opts.initGit))
 		fmt.Printf("  %s %s\n", labelStyle.Render("OpenSearch:"), onOff(opts.withElasticsearch))
 		fmt.Printf("  %s %s\n", labelStyle.Render("AMQP:"), onOff(opts.withAMQP))
@@ -283,7 +410,7 @@ func runCreateForm(cmd *cobra.Command, opts *createOptions, filteredVersions []*
 		}
 
 		if selectConfirm == "cancel" {
-			return fmt.Errorf("project creation cancelled")
+			return errors.New("project creation cancelled")
 		}
 	}
 }

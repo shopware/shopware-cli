@@ -8,17 +8,16 @@ import (
 	"strings"
 	"time"
 
-	tea "charm.land/bubbletea/v2"
 	"charm.land/huh/v2/spinner"
 	"github.com/mattn/go-isatty"
 	"github.com/spf13/cobra"
 
-	"github.com/shopware/shopware-cli/internal/devtui"
 	dockerpkg "github.com/shopware/shopware-cli/internal/docker"
 	"github.com/shopware/shopware-cli/internal/executor"
 	"github.com/shopware/shopware-cli/internal/shop"
 	"github.com/shopware/shopware-cli/internal/system"
 	"github.com/shopware/shopware-cli/internal/tui"
+	"github.com/shopware/shopware-cli/internal/tui/dev"
 )
 
 // ErrEnvironmentDown is returned by the `project dev status` command when the
@@ -91,7 +90,9 @@ var projectDevStopCmd = &cobra.Command{
 			return err
 		}
 
-		return env.stop(cmd)
+		removeVolumes, _ := cmd.Flags().GetBool("remove-data")
+
+		return env.stop(cmd, executor.StopOptions{RemoveVolumes: removeVolumes})
 	},
 }
 
@@ -117,15 +118,12 @@ func runMigrationWizardTUI(projectRoot string, cfg *shop.Config) error {
 		return err
 	}
 
-	m := devtui.NewMigrationWizard(devtui.Options{
+	_, err = dev.NewMigrationWizardApp(dev.Options{
 		ProjectRoot: projectRoot,
 		Config:      cfg,
 		EnvConfig:   envCfg,
 		Executor:    exec,
-	})
-
-	p := tea.NewProgram(m)
-	_, err = p.Run()
+	}).Run()
 	return err
 }
 
@@ -164,7 +162,18 @@ func newDevEnvironment(cmd *cobra.Command, projectRoot string, cfg *shop.Config)
 
 	useDocker := exec.Type() == executor.TypeDocker
 	dockerHint := "set the environment " + tui.BoldText.Render("type") + " to " + tui.BoldText.Render("docker") + " in " + tui.BoldText.Render(".shopware-project.yml")
-	if err := system.ValidateProjectDependencies(cmd.Context(), useDocker, nil, "start the development environment", dockerHint); err != nil {
+
+	// Docker gets its PHP from the image. Must use the same precedence as the
+	// executor, or the dependencies of a different PHP would be validated.
+	var phpBinary string
+	if !useDocker {
+		phpBinary, err = system.ResolveProjectPHPBinary(cmd.Context(), cfg.PHPVersion)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	if err := system.ValidateProjectDependencies(cmd.Context(), useDocker, nil, "start the development environment", dockerHint, phpBinary); err != nil {
 		return nil, err
 	}
 
@@ -199,7 +208,7 @@ func (e *devEnvironment) start(cmd *cobra.Command) error {
 
 	elapsed := time.Since(start).Round(time.Millisecond)
 
-	fmt.Println(tui.GreenText.Bold(true).Render(fmt.Sprintf("  ✓ Development environment started in %s", elapsed)))
+	fmt.Println("  " + tui.SuccessLine(fmt.Sprintf("Development environment started in %s", elapsed)))
 	fmt.Println()
 
 	shopURL := e.cfg.URL
@@ -207,11 +216,11 @@ func (e *devEnvironment) start(cmd *cobra.Command) error {
 		shopURL = e.envCfg.URL
 	}
 
-	var services []devtui.DiscoveredService
+	var services []dev.DiscoveredService
 	if e.executor.Type() == executor.TypeDocker {
 		var webPort int
-		services, webPort, _ = devtui.DiscoverComposeServices(cmd.Context(), e.projectRoot)
-		shopURL = devtui.ResolveShopURL(shopURL, webPort)
+		services, webPort, _ = dev.DiscoverComposeServices(cmd.Context(), e.projectRoot)
+		shopURL = dev.ResolveShopURL(shopURL, webPort)
 	}
 
 	if shopURL != "" {
@@ -242,14 +251,19 @@ func (e *devEnvironment) start(cmd *cobra.Command) error {
 	return nil
 }
 
-func (e *devEnvironment) stop(cmd *cobra.Command) error {
+func (e *devEnvironment) stop(cmd *cobra.Command, opts executor.StopOptions) error {
 	start := time.Now()
 
+	title := "Stopping development environment..."
+	if opts.RemoveVolumes {
+		title = "Stopping development environment and removing data..."
+	}
+
 	err := spinner.New().
-		Title("Stopping development environment...").
+		Title(title).
 		Context(cmd.Context()).
 		ActionWithErr(func(ctx context.Context) error {
-			return e.executor.StopEnvironment(ctx)
+			return e.executor.StopEnvironment(ctx, opts)
 		}).
 		Run()
 
@@ -259,7 +273,7 @@ func (e *devEnvironment) stop(cmd *cobra.Command) error {
 
 	elapsed := time.Since(start).Round(time.Millisecond)
 
-	fmt.Println(tui.GreenText.Bold(true).Render(fmt.Sprintf("  ✓ Development environment stopped in %s", elapsed)))
+	fmt.Println("  " + tui.SuccessLine(fmt.Sprintf("Development environment stopped in %s", elapsed)))
 	fmt.Println()
 
 	return nil
@@ -275,24 +289,21 @@ func (e *devEnvironment) status(cmd *cobra.Command) error {
 	}
 
 	if running {
-		fmt.Println(tui.GreenText.Bold(true).Render("  ✓ Development environment is up"))
+		fmt.Println("  " + tui.SuccessLine("Development environment is up"))
 		return nil
 	}
 
-	fmt.Println(tui.RedText.Bold(true).Render("  ✗ Development environment is down"))
+	fmt.Println("  " + tui.FailLine("Development environment is down"))
 	return ErrEnvironmentDown
 }
 
 func (e *devEnvironment) runTUI() error {
-	m := devtui.New(devtui.Options{
+	_, err := dev.NewApp(dev.Options{
 		ProjectRoot: e.projectRoot,
 		Config:      e.cfg,
 		EnvConfig:   e.envCfg,
 		Executor:    e.executor,
-	})
-
-	p := tea.NewProgram(m)
-	_, err := p.Run()
+	}).Run()
 	return err
 }
 
@@ -301,4 +312,6 @@ func init() {
 	projectDevCmd.AddCommand(projectDevStartCmd)
 	projectDevCmd.AddCommand(projectDevStopCmd)
 	projectDevCmd.AddCommand(projectDevStatusCmd)
+
+	projectDevStopCmd.Flags().Bool("remove-data", false, "Also remove the named volumes declared in the compose file, deleting all data stored in them")
 }

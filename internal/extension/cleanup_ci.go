@@ -185,7 +185,7 @@ func CleanupJavaScriptSourceMaps(folder string) error {
 			return fmt.Errorf("could not open file %s: %w", expectedJsFile, readErr)
 		}
 
-		expectedSourceMapComment := fmt.Sprintf("//# sourceMappingURL=%s", filepath.Base(path))
+		expectedSourceMapComment := "//# sourceMappingURL=" + filepath.Base(path)
 
 		overwrittenContent := strings.ReplaceAll(string(content), expectedSourceMapComment, "")
 

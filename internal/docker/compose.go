@@ -22,12 +22,12 @@ var backgroundProcessLimits = []string{"--time-limit=300", "--memory-limit=512M"
 
 // BackgroundService describes a long-running console process added to the dev
 // compose file when Shopware's admin worker is disabled. It is the single source
-// of truth for both compose generation (name + command) and the devtui overview
+// of truth for both compose generation (name + command) and the dev TUI overview
 // (name + Label), so the two never drift apart.
 type BackgroundService struct {
 	// Name is the compose service name.
 	Name string
-	// Label is the human-readable name shown in the devtui overview.
+	// Label is the human-readable name shown in the dev TUI overview.
 	Label   string
 	command []string
 }
@@ -238,6 +238,9 @@ func buildCompose(hasAMQP, hasElasticsearch bool, opts *ComposeOptions) yaml.Nod
 
 	database := newMappingNode()
 	addKeyValue(database, "image", "mariadb:11.8")
+	// Publish the database on a random loopback port so host-side tools
+	// (e.g. `shopware-cli project sql`) can reach it without port conflicts.
+	addKeyValueNode(database, "ports", newSequenceNode("127.0.0.1::3306"))
 	addKeyValueNode(database, "environment", dbEnv)
 	addKeyValueNode(database, "volumes", newSequenceNode("db-data:/var/lib/mysql:rw"))
 	addKeyValueNode(database, "command", newSequenceNode(

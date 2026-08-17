@@ -1,6 +1,7 @@
 package symfony
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -236,7 +237,7 @@ func (pc *ProjectConfig) GetConfigValue(environment, path string) (any, bool, er
 func getConfigValue(cfg map[string]any, path string) (any, bool, error) {
 	segments := splitPath(path)
 	if len(segments) == 0 {
-		return nil, false, fmt.Errorf("empty config path")
+		return nil, false, errors.New("empty config path")
 	}
 
 	var current any = cfg

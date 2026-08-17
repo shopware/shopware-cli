@@ -75,11 +75,15 @@ func (s *SymfonyCLIExecutor) AdminAPIClient(ctx context.Context) (*adminSdk.Clie
 	return adminAPIClient(ctx, s.shopCfg, s.envCfg)
 }
 
+func (s *SymfonyCLIExecutor) DatabaseConnection(_ context.Context) (*DatabaseConnection, error) {
+	return databaseConnectionFromEnv(s.projectRoot, s.env)
+}
+
 func (s *SymfonyCLIExecutor) StartEnvironment(_ context.Context) error {
 	return ErrNotSupported
 }
 
-func (s *SymfonyCLIExecutor) StopEnvironment(_ context.Context) error {
+func (s *SymfonyCLIExecutor) StopEnvironment(_ context.Context, _ StopOptions) error {
 	return ErrNotSupported
 }
 

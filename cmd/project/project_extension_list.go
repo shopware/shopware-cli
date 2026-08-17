@@ -4,12 +4,11 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"charm.land/lipgloss/v2"
-	liplogtable "charm.land/lipgloss/v2/table"
 	"github.com/spf13/cobra"
 
 	adminSdk "github.com/shopware/shopware-cli/internal/admin-api"
 	"github.com/shopware/shopware-cli/internal/shop"
+	"github.com/shopware/shopware-cli/internal/tui"
 )
 
 var projectExtensionListCmd = &cobra.Command{
@@ -51,15 +50,11 @@ var projectExtensionListCmd = &cobra.Command{
 			return nil
 		}
 
-		t := liplogtable.New().
-			Border(lipgloss.NormalBorder()).
-			Headers("Name", "Version", "Status")
-
+		rows := make([][]string, 0, len(extensions))
 		for _, extension := range extensions {
-			t.Row(extension.Name, extension.Version, extension.Status())
+			rows = append(rows, []string{extension.Name, extension.Version, extension.Status()})
 		}
-
-		fmt.Println(t.Render())
+		tui.PrintTable([]string{"Name", "Version", "Status"}, rows)
 
 		return nil
 	},

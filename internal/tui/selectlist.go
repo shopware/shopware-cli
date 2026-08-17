@@ -44,13 +44,7 @@ func RenderSelectListWindowed(title, description string, options []SelectOption,
 	start, end := 0, len(options)
 	if windowed {
 		// Keep the cursor inside the [start, end) window.
-		start = cursor - maxVisible/2
-		if start < 0 {
-			start = 0
-		}
-		if start > len(options)-maxVisible {
-			start = len(options) - maxVisible
-		}
+		start = min(max(cursor-maxVisible/2, 0), len(options)-maxVisible)
 		end = start + maxVisible
 	}
 
@@ -61,9 +55,12 @@ func RenderSelectListWindowed(title, description string, options []SelectOption,
 			detail = " " + DimStyle.Render("("+opt.Detail+")")
 		}
 		if i == cursor {
-			s.WriteString(selectorStyle.Render("● ") + selectedStyle.Render(opt.Label) + detail)
+			s.WriteString(selectorStyle.Render("● "))
+			s.WriteString(selectedStyle.Render(opt.Label))
+			s.WriteString(detail)
 		} else {
-			s.WriteString("  " + FormatLabel(opt.Label, opt.Detail))
+			s.WriteString("  ")
+			s.WriteString(FormatLabel(opt.Label, opt.Detail))
 		}
 		s.WriteString("\n")
 	}

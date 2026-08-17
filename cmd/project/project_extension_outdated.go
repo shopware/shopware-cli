@@ -4,12 +4,11 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"charm.land/lipgloss/v2"
-	liplogtable "charm.land/lipgloss/v2/table"
 	"github.com/spf13/cobra"
 
 	adminSdk "github.com/shopware/shopware-cli/internal/admin-api"
 	"github.com/shopware/shopware-cli/internal/shop"
+	"github.com/shopware/shopware-cli/internal/tui"
 	"github.com/shopware/shopware-cli/logging"
 )
 
@@ -58,15 +57,11 @@ var projectExtensionOutdatedCmd = &cobra.Command{
 			return nil
 		}
 
-		t := liplogtable.New().
-			Border(lipgloss.NormalBorder()).
-			Headers("Name", "Current Version", "Latest Version", "Update Source")
-
+		rows := make([][]string, 0, len(extensions))
 		for _, extension := range extensions {
-			t.Row(extension.Name, extension.Version, extension.LatestVersion, extension.UpdateSource)
+			rows = append(rows, []string{extension.Name, extension.Version, extension.LatestVersion, extension.UpdateSource})
 		}
-
-		fmt.Println(t.Render())
+		tui.PrintTable([]string{"Name", "Current Version", "Latest Version", "Update Source"}, rows)
 
 		return fmt.Errorf("there are %d outdated extensions", len(extensions))
 	},

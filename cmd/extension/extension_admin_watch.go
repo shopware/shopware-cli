@@ -77,7 +77,7 @@ var extensionAdminWatchCmd = &cobra.Command{
 		cfgs := extension.BuildAssetConfigFromExtensions(cmd.Context(), sources, extension.AssetBuildConfig{}).FilterByAdmin()
 
 		if len(cfgs) == 0 {
-			return fmt.Errorf("found nothing to compile")
+			return errors.New("found nothing to compile")
 		}
 
 		if _, err := extension.InstallNodeModulesOfConfigs(cmd.Context(), cfgs, extension.AssetBuildConfig{}); err != nil {
@@ -125,7 +125,7 @@ var extensionAdminWatchCmd = &cobra.Command{
 		listenSplit := strings.Split(adminWatchListen, ":")
 
 		if len(listenSplit) != 2 {
-			return fmt.Errorf("listen should contain a colon")
+			return errors.New("listen should contain a colon")
 		}
 
 		if len(adminWatchURL) == 0 {
@@ -184,7 +184,7 @@ var extensionAdminWatchCmd = &cobra.Command{
 
 			// Modify admin url index page to load anything from our watcher
 			if req.URL.Path == targetShopUrl.Path+"/admin" {
-				resp, err := http.Get(fmt.Sprintf("%s/admin", targetShopUrl.Scheme+schemeHostSeparator+targetShopUrl.Host))
+				resp, err := http.Get(targetShopUrl.Scheme + schemeHostSeparator + targetShopUrl.Host + "/admin")
 				if err != nil {
 					logging.FromContext(cmd.Context()).Errorf("proxy failed %v", err)
 					w.WriteHeader(http.StatusInternalServerError)

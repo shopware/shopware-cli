@@ -3,6 +3,7 @@ package shop
 import (
 	"context"
 	"crypto/tls"
+	"errors"
 	"fmt"
 	"net/http"
 	"os"
@@ -24,7 +25,7 @@ func newShopCredentials(config *Config) (adminSdk.OAuthCredentials, error) {
 	}
 
 	if config.AdminApi == nil {
-		return nil, fmt.Errorf("admin-api is not enabled in config")
+		return nil, errors.New("admin-api is not enabled in config")
 	}
 
 	if config.AdminApi.Username != "" {

@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"net"
 	"net/http"
@@ -28,8 +29,8 @@ func InteractiveLogin(ctx context.Context) (*oauth2.Token, error) {
 	client := &oauth2.Config{
 		ClientID: getOIDCClientID(),
 		Endpoint: oauth2.Endpoint{
-			AuthURL:   fmt.Sprintf("%s/oauth2/auth", getOIDCEndpoint()),
-			TokenURL:  fmt.Sprintf("%s/oauth2/token", getOIDCEndpoint()),
+			AuthURL:   getOIDCEndpoint() + "/oauth2/auth",
+			TokenURL:  getOIDCEndpoint() + "/oauth2/token",
 			AuthStyle: oauth2.AuthStyleInParams,
 		},
 	}
@@ -74,7 +75,7 @@ func InteractiveLogin(ctx context.Context) (*oauth2.Token, error) {
 				}
 				code := r.Form.Get("code")
 				if code == "" {
-					result <- callbackResult{err: fmt.Errorf("missing code")}
+					result <- callbackResult{err: errors.New("missing code")}
 					return
 				}
 				t, err := client.Exchange(
@@ -103,7 +104,7 @@ func InteractiveLogin(ctx context.Context) (*oauth2.Token, error) {
 	)
 
 	fmt.Println(tui.BoldText.Render("  Press Enter to open the login page in your browser..."))
-	fmt.Println(tui.DimText.Render(fmt.Sprintf("  URL: %s", u)))
+	fmt.Println(tui.DimText.Render("  URL: " + u))
 	fmt.Println()
 
 	enterPressed := make(chan struct{})

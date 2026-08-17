@@ -5,20 +5,12 @@ import (
 	"os"
 	"path/filepath"
 
-	"charm.land/lipgloss/v2"
-	liplogtable "charm.land/lipgloss/v2/table"
 	"github.com/spf13/cobra"
 
 	"github.com/shopware/shopware-cli/internal/extension"
 	"github.com/shopware/shopware-cli/internal/shop"
 	"github.com/shopware/shopware-cli/internal/tui"
 	"github.com/shopware/shopware-cli/logging"
-)
-
-var (
-	doctorSectionStyle = lipgloss.NewStyle().Bold(true).Underline(true)
-	doctorCheckOK      = tui.GreenText.Render("✓")
-	doctorCheckWarn    = tui.SecondaryText.Render("⚠")
 )
 
 var projectDoctor = &cobra.Command{
@@ -40,7 +32,7 @@ var projectDoctor = &cobra.Command{
 			}
 		}
 
-		fmt.Println(doctorSectionStyle.Render("Project"))
+		fmt.Println(tui.SectionHeadingStyle.Render("Project"))
 		fmt.Println()
 
 		shopCfg, err := shop.ReadConfig(cmd.Context(), projectConfigPath, true)
@@ -49,9 +41,9 @@ var projectDoctor = &cobra.Command{
 		}
 
 		if shopCfg.IsFallback() {
-			fmt.Printf("%s Project config: %s\n", doctorCheckWarn, tui.SecondaryText.Render("not found, using fallback"))
+			fmt.Printf("%s Project config: %s\n", tui.CheckWarn, tui.SecondaryText.Render("not found, using fallback"))
 		} else {
-			fmt.Printf("%s Project config: %s\n", doctorCheckOK, tui.GreenText.Render(shop.DefaultConfigFileName()))
+			fmt.Printf("%s Project config: %s\n", tui.CheckOK, tui.GreenText.Render(shop.DefaultConfigFileName()))
 		}
 
 		shopwareConstraint, err := extension.GetShopwareProjectConstraint(projectDir)
@@ -59,32 +51,28 @@ var projectDoctor = &cobra.Command{
 			return err
 		}
 
-		fmt.Printf("%s Shopware version: %s\n", doctorCheckOK, tui.GreenText.Render(shopwareConstraint.String()))
+		fmt.Printf("%s Shopware version: %s\n", tui.CheckOK, tui.GreenText.Render(shopwareConstraint.String()))
 
 		fmt.Println()
-		fmt.Println(doctorSectionStyle.Render("Detected Extensions & Bundles"))
+		fmt.Println(tui.SectionHeadingStyle.Render("Detected Extensions & Bundles"))
 		fmt.Println()
 
 		sources := extension.FindAssetSourcesOfProject(logging.DisableLogger(cmd.Context()), projectDir, shopCfg)
 
 		if len(sources) == 0 {
-			fmt.Printf("%s No extensions or bundles detected\n", doctorCheckWarn)
+			fmt.Printf("%s No extensions or bundles detected\n", tui.CheckWarn)
 			return nil
 		}
 
-		t := liplogtable.New().
-			Border(lipgloss.NormalBorder()).
-			Headers("Name", "Path")
-
+		rows := make([][]string, 0, len(sources))
 		for _, source := range sources {
 			relPath, err := filepath.Rel(projectDir, source.Path)
 			if err != nil {
 				relPath = source.Path
 			}
-			t.Row(source.Name, relPath)
+			rows = append(rows, []string{source.Name, relPath})
 		}
-
-		fmt.Println(t.Render())
+		tui.PrintTable([]string{"Name", "Path"}, rows)
 
 		return nil
 	},
