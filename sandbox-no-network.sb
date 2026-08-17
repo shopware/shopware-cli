@@ -1,5 +1,9 @@
 (version 1)
 (allow default)
-(allow network*)
-(deny network-outbound (remote tcp "*:80"))
-(deny network-outbound (remote tcp "*:443"))
+
+; Seatbelt stand-in for Linux `unshare --net` (loopback only):
+; httptest and other 127.0.0.1 servers keep working, but nothing can
+; reach the outside. Unix sockets are left denied so mDNSResponder
+; cannot resolve external names on the process's behalf.
+(deny network-outbound)
+(allow network-outbound (remote ip "localhost:*"))
