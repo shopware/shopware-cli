@@ -2,6 +2,7 @@ package project
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"strings"
@@ -98,7 +99,7 @@ func resolveStorefrontWatcherOptions(ctx context.Context, cmdExecutor executor.E
 	}
 
 	if len(channels) == 0 {
-		return extension.StorefrontWatcherOptions{}, fmt.Errorf("no storefront sales channels found")
+		return extension.StorefrontWatcherOptions{}, errors.New("no storefront sales channels found")
 	}
 
 	var picked *adminSdk.SalesChannel
@@ -137,7 +138,7 @@ func resolveStorefrontWatcherOptions(ctx context.Context, cmdExecutor executor.E
 			}
 		}
 		if picked == nil {
-			return extension.StorefrontWatcherOptions{}, fmt.Errorf("no sales channel selected")
+			return extension.StorefrontWatcherOptions{}, errors.New("no sales channel selected")
 		}
 	}
 

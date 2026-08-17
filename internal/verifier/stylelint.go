@@ -63,7 +63,7 @@ func (s StyleLint) Check(ctx context.Context, check *Check, config ToolConfig) e
 				"--ignore-pattern", "dist/**",
 				"--ignore-pattern", ".tmp/**",
 				"--ignore-pattern", "vendor/**",
-				fmt.Sprintf("%s/**/*.scss", p),
+				p+"/**/*.scss",
 			)
 			stylelint.Dir = p
 
@@ -84,7 +84,7 @@ func (s StyleLint) Check(ctx context.Context, check *Check, config ToolConfig) e
 						Line:       msg.Line,
 						Message:    msg.Text,
 						Severity:   msg.Severity,
-						Identifier: fmt.Sprintf("stylelint/%s", msg.Rule),
+						Identifier: "stylelint/" + msg.Rule,
 					})
 				}
 
@@ -94,7 +94,7 @@ func (s StyleLint) Check(ctx context.Context, check *Check, config ToolConfig) e
 						Line:       msg.Line,
 						Message:    msg.Text,
 						Severity:   msg.Severity,
-						Identifier: fmt.Sprintf("stylelint/%s", msg.Rule),
+						Identifier: "stylelint/" + msg.Rule,
 					})
 				}
 			}

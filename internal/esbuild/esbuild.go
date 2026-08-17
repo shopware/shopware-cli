@@ -3,6 +3,7 @@ package esbuild
 import (
 	"context"
 	_ "embed"
+	"errors"
 	"fmt"
 	"os"
 	"path"
@@ -149,7 +150,7 @@ func CompileExtensionAsset(ctx context.Context, options AssetCompileOptions) (*A
 	result := api.Build(*bundlerOptions)
 
 	if len(result.Errors) > 0 {
-		return nil, fmt.Errorf("initial compile failed")
+		return nil, errors.New("initial compile failed")
 	}
 
 	if err := cleanupOutputFolder(options); err != nil {

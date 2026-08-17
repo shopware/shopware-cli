@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -19,7 +20,7 @@ type ProducerEndpoint struct {
 }
 
 func (c *Client) Producer(ctx context.Context) (*ProducerEndpoint, error) {
-	r, err := c.NewAuthenticatedRequest(ctx, http.MethodGet, fmt.Sprintf("%s/integrations/shopwarecli/producers", getApiUrl()), nil)
+	r, err := c.NewAuthenticatedRequest(ctx, http.MethodGet, getApiUrl()+"/integrations/shopwarecli/producers", nil)
 	if err != nil {
 		return nil, err
 	}
@@ -35,7 +36,7 @@ func (c *Client) Producer(ctx context.Context) (*ProducerEndpoint, error) {
 	}
 
 	if len(producers) == 0 {
-		return nil, fmt.Errorf("producer.profile: no producer found for current user")
+		return nil, errors.New("producer.profile: no producer found for current user")
 	}
 
 	return &ProducerEndpoint{producers: producers, c: c}, nil
@@ -535,7 +536,7 @@ type ExtensionGeneralInformation struct {
 }
 
 func (e ProducerEndpoint) GetExtensionGeneralInfo(ctx context.Context) (*ExtensionGeneralInformation, error) {
-	r, err := e.c.NewAuthenticatedRequest(ctx, http.MethodGet, fmt.Sprintf("%s/pluginstatics/all", getApiUrl()), nil)
+	r, err := e.c.NewAuthenticatedRequest(ctx, http.MethodGet, getApiUrl()+"/pluginstatics/all", nil)
 	if err != nil {
 		return nil, fmt.Errorf("GetExtensionGeneralInfo: %v", err)
 	}

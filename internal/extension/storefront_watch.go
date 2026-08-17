@@ -2,7 +2,7 @@ package extension
 
 import (
 	"context"
-	"fmt"
+	"errors"
 	"io"
 	"os"
 	"strings"
@@ -73,7 +73,7 @@ func storefrontThemeDumpArgs(ctx context.Context, opts StorefrontWatcherOptions)
 			args = append(args, opts.DomainURL)
 		}
 	} else if !system.IsInteractionEnabled(ctx) {
-		return nil, fmt.Errorf("theme selection requires interaction; pass --sales-channel <id> when using --no-interaction")
+		return nil, errors.New("theme selection requires interaction; pass --sales-channel <id> when using --no-interaction")
 	}
 
 	return args, nil

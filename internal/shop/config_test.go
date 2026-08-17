@@ -45,6 +45,42 @@ include:
 	assert.NotNil(t, config.ConfigDump.Where)
 }
 
+func TestConfigPHPVersionRoundTrip(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	cfg := NewConfig()
+	cfg.PHPVersion = "8.3"
+
+	assert.NoError(t, WriteConfig(cfg, tmpDir))
+
+	// A portable version, not a machine-specific executable path.
+	written, err := os.ReadFile(filepath.Join(tmpDir, ".shopware-project.yml"))
+	assert.NoError(t, err)
+	assert.Contains(t, string(written), `php_version: "8.3"`)
+	assert.NotContains(t, string(written), "/bin/php")
+
+	read, err := ReadConfig(t.Context(), filepath.Join(tmpDir, ".shopware-project.yml"), false)
+	assert.NoError(t, err)
+	assert.Equal(t, "8.3", read.PHPVersion)
+}
+
+func TestConfigWithoutPHPVersionStaysBackwardCompatible(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// A config written before php_version existed must read fine and must not
+	// gain the field on re-write.
+	cfg := NewConfig()
+	assert.NoError(t, WriteConfig(cfg, tmpDir))
+
+	read, err := ReadConfig(t.Context(), filepath.Join(tmpDir, ".shopware-project.yml"), false)
+	assert.NoError(t, err)
+	assert.Empty(t, read.PHPVersion)
+
+	written, err := os.ReadFile(filepath.Join(tmpDir, ".shopware-project.yml"))
+	assert.NoError(t, err)
+	assert.NotContains(t, string(written), "php_version")
+}
+
 func TestReadConfigCompatibilityDateValidation(t *testing.T) {
 	tmpDir := t.TempDir()
 	configPath := filepath.Join(tmpDir, ".shopware-project.yml")

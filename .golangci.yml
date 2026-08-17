@@ -39,6 +39,7 @@ linters:
     - gocheckcompilerdirectives
     - godox
     - nilnil
+    - perfsprint
   exclusions:
     rules:
       - path: cmd\/*

@@ -14,6 +14,19 @@ import (
 // ordered from lowest to highest.
 var SupportedPHPVersions = []string{"8.2", "8.3", "8.4", "8.5"}
 
+// ValidatePHPVersion checks that a user-supplied PHP version is a supported
+// major.minor series. Requiring the series (rather than a patch level) keeps the
+// value usable as both a Docker image tag and a portable config pin.
+func ValidatePHPVersion(phpVersion string) error {
+	for _, supported := range SupportedPHPVersions {
+		if phpVersion == supported {
+			return nil
+		}
+	}
+
+	return fmt.Errorf("unsupported PHP version %q; supported versions are %s", phpVersion, strings.Join(SupportedPHPVersions, ", "))
+}
+
 // PHPConstraint represents one or more composer-style `php` constraints (e.g. "^8.2"
 // or "~8.2.0 || ~8.3.0"). A nil receiver is treated as "no constraint" and matches
 // any supported PHP version.

@@ -1,6 +1,7 @@
 package project
 
 import (
+	"errors"
 	"fmt"
 	"net/url"
 	"path"
@@ -26,7 +27,7 @@ var projectAdminApiCmd = &cobra.Command{
 		}
 
 		if cfg.AdminApi == nil {
-			return fmt.Errorf("admin api is not activated in the config")
+			return errors.New("admin api is not activated in the config")
 		}
 
 		client, err := shop.NewShopClient(cobraCmd.Context(), cfg)
@@ -47,7 +48,7 @@ var projectAdminApiCmd = &cobra.Command{
 		}
 
 		if len(args) < 2 {
-			return fmt.Errorf("command needs 2 arguments")
+			return errors.New("command needs 2 arguments")
 		}
 
 		shopURL, err := url.Parse(cfg.URL)

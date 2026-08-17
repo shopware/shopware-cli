@@ -3,6 +3,7 @@ package project
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -423,7 +424,7 @@ func projectCISafetyCheck(ctx context.Context, root string, force bool, getenv f
 	}
 
 	if dirty {
-		return fmt.Errorf("project ci removes source files and creates build stubs; refusing to run outside CI with a dirty git working tree. Commit, stash, or clean local changes, or pass --force if you intentionally want to run it")
+		return errors.New("project ci removes source files and creates build stubs; refusing to run outside CI with a dirty git working tree. Commit, stash, or clean local changes, or pass --force if you intentionally want to run it")
 	}
 
 	logging.FromContext(ctx).Warnf("Running project ci outside a CI environment; this command removes source files and should usually only be used in CI")
@@ -504,7 +505,7 @@ func executeCIHooks(ctx context.Context, sectionName string, hooks []string, roo
 		hookCmd.Stdout = os.Stdout
 		hookCmd.Stderr = os.Stderr
 		hookCmd.Dir = root
-		hookCmd.Env = append(os.Environ(), fmt.Sprintf("PROJECT_ROOT=%s", root))
+		hookCmd.Env = append(os.Environ(), "PROJECT_ROOT="+root)
 
 		if err := hookCmd.Run(); err != nil {
 			return fmt.Errorf("hook failed (%s): %w", hook, err)

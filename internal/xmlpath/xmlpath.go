@@ -3,7 +3,7 @@ package xmlpath
 import (
 	"bytes"
 	"encoding/xml"
-	"fmt"
+	"errors"
 	"io"
 	"strings"
 )
@@ -48,7 +48,7 @@ func Parse(data []byte) (*Document, error) {
 		switch t := tok.(type) {
 		case xml.StartElement:
 			if doc.root != nil {
-				return nil, fmt.Errorf("multiple root elements found")
+				return nil, errors.New("multiple root elements found")
 			}
 			element, err := parseElement(decoder, t, namespaces)
 			if err != nil {
@@ -64,7 +64,7 @@ func Parse(data []byte) (*Document, error) {
 	}
 
 	if doc.root == nil {
-		return nil, fmt.Errorf("root element not found")
+		return nil, errors.New("root element not found")
 	}
 
 	return doc, nil

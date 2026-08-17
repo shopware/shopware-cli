@@ -1,7 +1,7 @@
 package project
 
 import (
-	"fmt"
+	"errors"
 
 	"github.com/spf13/cobra"
 
@@ -74,7 +74,7 @@ var projectExtensionDeleteCmd = &cobra.Command{
 		}
 
 		if failed {
-			return fmt.Errorf("remove failed")
+			return errors.New("remove failed")
 		}
 
 		return nil

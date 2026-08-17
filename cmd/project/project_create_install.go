@@ -3,6 +3,7 @@ package project
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -11,7 +12,6 @@ import (
 	"strings"
 
 	"charm.land/huh/v2"
-	"charm.land/lipgloss/v2"
 	"github.com/spf13/cobra"
 
 	dockerpkg "github.com/shopware/shopware-cli/internal/docker"
@@ -31,11 +31,19 @@ func installAndFinalize(cmd *cobra.Command, opts *createOptions, phpConstraint *
 
 	composerInstallPHP := ""
 	if opts.useDocker {
-		composerInstallPHP = phpConstraint.HighestSupported()
+		// An explicitly requested version wins; otherwise pick the newest PHP the
+		// selected Shopware release supports.
+		composerInstallPHP = opts.phpVersion
+		if composerInstallPHP == "" {
+			composerInstallPHP = phpConstraint.HighestSupported()
+			opts.phpVersion = composerInstallPHP
+		}
 		logging.FromContext(ctx).Infof("Using PHP %s for composer install", composerInstallPHP)
+	} else if opts.phpBinary != "" {
+		logging.FromContext(ctx).Infof("Using PHP %s (%s) for composer install", opts.phpVersion, opts.phpBinary)
 	}
 
-	if output, err := runComposerInstall(ctx, opts.projectFolder, opts.useDocker, showSpinner, composerInstallPHP); err != nil {
+	if output, err := runComposerInstall(ctx, opts.projectFolder, opts.useDocker, showSpinner, composerInstallPHP, opts.phpBinary); err != nil {
 		if !isComposerSecurityBlocked(output) || opts.noAudit {
 			return err
 		}
@@ -44,7 +52,7 @@ func installAndFinalize(cmd *cobra.Command, opts *createOptions, phpConstraint *
 			return err
 		}
 
-		if _, err := runComposerInstall(ctx, opts.projectFolder, opts.useDocker, showSpinner, composerInstallPHP); err != nil {
+		if _, err := runComposerInstall(ctx, opts.projectFolder, opts.useDocker, showSpinner, composerInstallPHP, opts.phpBinary); err != nil {
 			return err
 		}
 	}
@@ -68,6 +76,10 @@ func installAndFinalize(cmd *cobra.Command, opts *createOptions, phpConstraint *
 		shopCfg.Docker = &shop.ConfigDocker{
 			PHP: &shop.ConfigDockerPHP{Version: composerInstallPHP},
 		}
+	} else if opts.phpVersion != "" {
+		// The version, not the executable path: the same PHP lives elsewhere on
+		// other machines, so later commands look it up locally.
+		shopCfg.PHPVersion = opts.phpVersion
 	}
 
 	if err := shop.WriteConfig(shopCfg, opts.projectFolder); err != nil {
@@ -91,27 +103,24 @@ func printCreateSummary(ctx context.Context, opts *createOptions) {
 		return
 	}
 
-	cmdStyle := lipgloss.NewStyle().Bold(true)
-	sectionStyle := lipgloss.NewStyle().Bold(true).Underline(true)
-
 	fmt.Println()
 	fmt.Println(tui.GreenText.Render("✔ Setup complete in " + projectDisplay))
 
 	if opts.useDocker {
 		fmt.Println()
-		fmt.Println(sectionStyle.Render("Next steps"))
+		fmt.Println(tui.SectionHeadingStyle.Render("Next steps"))
 		fmt.Println()
 		if opts.projectFolder == "." {
-			fmt.Printf("  %s  %s\n", tui.GreenText.Render("Start developing:"), cmdStyle.Render("shopware-cli project dev"))
+			fmt.Printf("  %s  %s\n", tui.GreenText.Render("Start developing:"), tui.BoldText.Render("shopware-cli project dev"))
 		} else {
-			fmt.Printf("  %s  %s\n", tui.GreenText.Render("Start developing:"), cmdStyle.Render(fmt.Sprintf("cd %s && shopware-cli project dev", opts.projectFolder)))
+			fmt.Printf("  %s  %s\n", tui.GreenText.Render("Start developing:"), tui.BoldText.Render(fmt.Sprintf("cd %s && shopware-cli project dev", opts.projectFolder)))
 		}
 		fmt.Println()
-		fmt.Println(sectionStyle.Render("Access your shop (after make setup)"))
+		fmt.Println(tui.SectionHeadingStyle.Render("Access your shop (after make setup)"))
 		fmt.Println()
-		fmt.Printf("  %s  %s\n", tui.GreenText.Render("Storefront:"), cmdStyle.Render("http://127.0.0.1:8000"))
-		fmt.Printf("  %s  %s\n", tui.GreenText.Render("Admin:"), cmdStyle.Render("http://127.0.0.1:8000/admin"))
-		fmt.Printf("  %s  %s\n", tui.GreenText.Render("Credentials:"), cmdStyle.Render("admin")+" / "+cmdStyle.Render("shopware"))
+		fmt.Printf("  %s  %s\n", tui.GreenText.Render("Storefront:"), tui.BoldText.Render("http://127.0.0.1:8000"))
+		fmt.Printf("  %s  %s\n", tui.GreenText.Render("Admin:"), tui.BoldText.Render("http://127.0.0.1:8000/admin"))
+		fmt.Printf("  %s  %s\n", tui.GreenText.Render("Credentials:"), tui.BoldText.Render("admin")+" / "+tui.BoldText.Render("shopware"))
 	}
 
 	fmt.Println()
@@ -144,7 +153,7 @@ func handleSecurityBlockedInstall(ctx context.Context, opts *createOptions, chos
 	}
 
 	if continueAnyway == tui.No {
-		return fmt.Errorf("project creation cancelled")
+		return errors.New("project creation cancelled")
 	}
 
 	opts.noAudit = true
@@ -157,7 +166,12 @@ func handleSecurityBlockedInstall(ctx context.Context, opts *createOptions, chos
 	return nil
 }
 
-func runComposerInstall(ctx context.Context, projectFolder string, useDocker bool, showSpinner bool, phpVersion string) (string, error) {
+// runComposerInstall installs the project dependencies. phpVersion selects the
+// Docker image PHP version for Docker installs; phpBinary selects the local
+// PHP executable for non-Docker installs (falling back to PHP_BINARY and the
+// plain composer binary when empty). When Composer is not installed, a copy
+// of the Composer PHAR is downloaded and used instead.
+func runComposerInstall(ctx context.Context, projectFolder string, useDocker bool, showSpinner bool, phpVersion string, phpBinary string) (string, error) {
 	var cmdInstall *exec.Cmd
 
 	if useDocker && !system.IsInsideContainer() {
@@ -169,7 +183,7 @@ func runComposerInstall(ctx context.Context, projectFolder string, useDocker boo
 		dockerArgs := []string{"run",
 			"--rm",
 			"--pull=always",
-			"-v", fmt.Sprintf("%s:/app", absProjectFolder),
+			"-v", absProjectFolder + ":/app",
 			"-w", "/app"}
 
 		dockerArgs = append(dockerArgs, system.DockerRunUserArgs(absProjectFolder)...)
@@ -179,7 +193,7 @@ func runComposerInstall(ctx context.Context, projectFolder string, useDocker boo
 			if err == nil {
 				composerDir := filepath.Join(homeDir, ".composer")
 				_ = os.MkdirAll(composerDir, 0o755)
-				dockerArgs = append(dockerArgs, "-v", fmt.Sprintf("%s:/tmp/composer/", composerDir))
+				dockerArgs = append(dockerArgs, "-v", composerDir+":/tmp/composer/")
 			}
 		}
 
@@ -192,16 +206,21 @@ func runComposerInstall(ctx context.Context, projectFolder string, useDocker boo
 
 		cmdInstall = exec.CommandContext(ctx, "docker", dockerArgs...)
 	} else {
-		composerBinary, err := exec.LookPath("composer")
+		composerBinary, isPhar, err := system.ResolveComposer(ctx)
 		if err != nil {
 			return "", err
 		}
 
-		phpBinary := os.Getenv("PHP_BINARY")
+		if phpBinary == "" {
+			phpBinary = os.Getenv("PHP_BINARY")
+		}
 
-		if phpBinary != "" {
+		switch {
+		case phpBinary != "":
 			cmdInstall = exec.CommandContext(ctx, phpBinary, composerBinary, "install", "--no-interaction")
-		} else {
+		case isPhar:
+			cmdInstall = exec.CommandContext(ctx, "php", composerBinary, "install", "--no-interaction")
+		default:
 			cmdInstall = exec.CommandContext(ctx, "composer", "install", "--no-interaction")
 		}
 

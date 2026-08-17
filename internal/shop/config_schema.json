@@ -20,6 +20,10 @@
           "format": "date",
           "description": "Controls date-based compatibility behavior, formatted as YYYY-MM-DD."
         },
+        "php_version": {
+          "type": "string",
+          "description": "PHP version (e.g. \"8.3\") used for local PHP and Composer commands of this project. Written by \"project create\" for non-Docker projects. The matching PHP is looked up on the machine running the command, so the value stays portable across machines; it takes precedence over the php found in PATH, while the PHP_BINARY environment variable overrides it."
+        },
         "build": {
           "$ref": "#/$defs/ConfigBuild"
         },

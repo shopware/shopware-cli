@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -28,7 +29,7 @@ func NewApi(ctx context.Context) (*Client, error) {
 
 	if clientID != "" || clientSecret != "" {
 		if clientID == "" || clientSecret == "" {
-			return nil, fmt.Errorf("both SHOPWARE_CLI_ACCOUNT_CLIENT_ID and SHOPWARE_CLI_ACCOUNT_CLIENT_SECRET must be set")
+			return nil, errors.New("both SHOPWARE_CLI_ACCOUNT_CLIENT_ID and SHOPWARE_CLI_ACCOUNT_CLIENT_SECRET must be set")
 		}
 		return loginWithClientCredentials(ctx, clientID, clientSecret)
 	}
@@ -61,7 +62,7 @@ func loginWithClientCredentials(ctx context.Context, clientID, clientSecret stri
 	conf := &clientcredentials.Config{
 		ClientID:     clientID,
 		ClientSecret: clientSecret,
-		TokenURL:     fmt.Sprintf("%s/oauth2/token", getOIDCEndpoint()),
+		TokenURL:     getOIDCEndpoint() + "/oauth2/token",
 		Scopes:       []string{ClientCredentialsScopes},
 		AuthStyle:    oauth2.AuthStyleInParams,
 	}
@@ -119,7 +120,7 @@ func loginWithCredentials(ctx context.Context, email, password string) (*Client,
 			return nil, fmt.Errorf("login failed: %s", apiErr.Detail)
 		}
 
-		return nil, fmt.Errorf("login failed. Check your credentials")
+		return nil, errors.New("login failed. Check your credentials")
 	}
 
 	var tokenResp legacyToken

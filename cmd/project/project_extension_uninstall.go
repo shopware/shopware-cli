@@ -1,7 +1,7 @@
 package project
 
 import (
-	"fmt"
+	"errors"
 
 	"github.com/spf13/cobra"
 
@@ -68,7 +68,7 @@ var projectExtensionUninstallCmd = &cobra.Command{
 		}
 
 		if failed {
-			return fmt.Errorf("uninstall failed")
+			return errors.New("uninstall failed")
 		}
 
 		return nil

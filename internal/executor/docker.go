@@ -3,6 +3,7 @@ package executor
 import (
 	"context"
 	"fmt"
+	"net"
 	"os/exec"
 	"path/filepath"
 	"strings"
@@ -19,6 +20,22 @@ type DockerExecutor struct {
 	relDir      string
 	shopCfg     *shop.Config
 	envCfg      *shop.EnvironmentConfig
+	// composeProjectName pins the Compose project (-p) for every invocation.
+	// It is resolved from the project .env once at construction: Compose
+	// re-reads .env per command, so a mid-run rewrite of that file (e.g.
+	// `composer recipes:install --force --reset` during an upgrade) would
+	// otherwise silently disconnect running containers.
+	composeProjectName string
+}
+
+// composeArgs starts a docker argument list for a compose subcommand, pinning
+// the project name when one is known.
+func (d *DockerExecutor) composeArgs(sub ...string) []string {
+	args := []string{"compose"}
+	if d.composeProjectName != "" {
+		args = append(args, "-p", d.composeProjectName)
+	}
+	return append(args, sub...)
 }
 
 func (d *DockerExecutor) ConsoleCommand(ctx context.Context, args ...string) *Process {
@@ -93,15 +110,96 @@ func (d *DockerExecutor) WithEnv(env map[string]string) Executor {
 		}
 	}
 
-	return &DockerExecutor{env: mergeEnv(d.env, env), projectRoot: d.projectRoot, relDir: d.relDir, shopCfg: d.shopCfg, envCfg: d.envCfg}
+	return &DockerExecutor{env: mergeEnv(d.env, env), projectRoot: d.projectRoot, relDir: d.relDir, shopCfg: d.shopCfg, envCfg: d.envCfg, composeProjectName: d.composeProjectName}
 }
 
 func (d *DockerExecutor) WithRelDir(relDir string) Executor {
-	return &DockerExecutor{env: d.env, projectRoot: d.projectRoot, relDir: relDir, shopCfg: d.shopCfg, envCfg: d.envCfg}
+	return &DockerExecutor{env: d.env, projectRoot: d.projectRoot, relDir: relDir, shopCfg: d.shopCfg, envCfg: d.envCfg, composeProjectName: d.composeProjectName}
 }
 
 func (d *DockerExecutor) AdminAPIClient(ctx context.Context) (*adminSdk.Client, error) {
 	return adminAPIClient(ctx, d.shopCfg, d.envCfg)
+}
+
+// DatabaseConnection resolves the database credentials as seen inside the
+// compose network and translates the service host to the port published on
+// the host machine.
+func (d *DockerExecutor) DatabaseConnection(ctx context.Context) (*DatabaseConnection, error) {
+	conn := defaultDatabaseConnection()
+	conn.Host = "database"
+
+	databaseURL := d.env["DATABASE_URL"]
+
+	if databaseURL == "" {
+		cmd := exec.CommandContext(ctx, "docker", "compose", "exec", "-T", "web", "printenv", "DATABASE_URL")
+		cmd.Dir = d.projectRoot
+		logCmd(ctx, cmd)
+
+		var stdout, stderr strings.Builder
+		cmd.Stdout = &stdout
+		cmd.Stderr = &stderr
+
+		if err := cmd.Run(); err != nil {
+			return nil, fmt.Errorf("could not read DATABASE_URL from the web container, is the environment running?: %w\n%s", err, stderr.String())
+		}
+
+		databaseURL = strings.TrimSpace(stdout.String())
+	}
+
+	if databaseURL != "" {
+		if err := applyDatabaseURL(conn, databaseURL); err != nil {
+			return nil, err
+		}
+	}
+
+	// The host part of DATABASE_URL is only resolvable inside the compose
+	// network when it names a compose service. Swap it for the address the
+	// port is published on.
+	if err := d.resolvePublishedPort(ctx, conn); err != nil {
+		return nil, err
+	}
+
+	return conn, nil
+}
+
+// resolvePublishedPort rewrites conn's address to the host-published mapping
+// of the compose service it points at. When the host is not a compose service
+// (external database), the address is kept untouched.
+func (d *DockerExecutor) resolvePublishedPort(ctx context.Context, conn *DatabaseConnection) error {
+	cmd := exec.CommandContext(ctx, "docker", "compose", "port", conn.Host, conn.Port)
+	cmd.Dir = d.projectRoot
+	logCmd(ctx, cmd)
+
+	var stdout, stderr strings.Builder
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+
+	if err := cmd.Run(); err != nil {
+		if strings.Contains(stderr.String(), "no such service") {
+			return nil
+		}
+
+		return fmt.Errorf("could not resolve published port of service %q: %w\n%s", conn.Host, err, stderr.String())
+	}
+
+	published := strings.TrimSpace(stdout.String())
+	if line, _, found := strings.Cut(published, "\n"); found {
+		published = strings.TrimSpace(line)
+	}
+
+	host, port, err := net.SplitHostPort(published)
+	if err != nil || port == "0" {
+		return fmt.Errorf("service %q does not publish port %s to the host, regenerate the compose file by restarting the environment (shopware-cli project dev)", conn.Host, conn.Port)
+	}
+
+	if host == "0.0.0.0" || host == "::" || host == "" {
+		host = "127.0.0.1"
+	}
+
+	conn.Host = host
+	conn.Port = port
+
+	return nil
 }
 
 func (d *DockerExecutor) containerWorkdir() string {
@@ -116,12 +214,12 @@ func (d *DockerExecutor) newProcess(cmd *exec.Cmd, innerArgs []string) *Process 
 	projectRoot := d.projectRoot
 	pattern := strings.Join(innerArgs, " ")
 
+	killArgs := append(d.composeArgs("exec", "-T", "web"), "pkill", "-INT", "-f", pattern)
+
 	return &Process{
 		Cmd: cmd,
 		stop: func(ctx context.Context) error {
-			killCmd := exec.CommandContext(ctx, "docker", "compose", "exec", "-T", "web",
-				"pkill", "-INT", "-f", pattern,
-			)
+			killCmd := exec.CommandContext(ctx, "docker", killArgs...)
 			killCmd.Dir = projectRoot
 			_ = killCmd.Run()
 
@@ -135,7 +233,7 @@ func (d *DockerExecutor) newProcess(cmd *exec.Cmd, innerArgs []string) *Process 
 }
 
 func (d *DockerExecutor) StartEnvironment(ctx context.Context) error {
-	cmd := exec.CommandContext(ctx, "docker", "compose", "up", "-d")
+	cmd := exec.CommandContext(ctx, "docker", d.composeArgs("up", "-d")...)
 	cmd.Dir = d.projectRoot
 
 	output, err := cmd.CombinedOutput()
@@ -146,8 +244,13 @@ func (d *DockerExecutor) StartEnvironment(ctx context.Context) error {
 	return nil
 }
 
-func (d *DockerExecutor) StopEnvironment(ctx context.Context) error {
-	cmd := exec.CommandContext(ctx, "docker", "compose", "down")
+func (d *DockerExecutor) StopEnvironment(ctx context.Context, opts StopOptions) error {
+	downArgs := d.composeArgs("down")
+	if opts.RemoveVolumes {
+		downArgs = append(downArgs, "--volumes")
+	}
+
+	cmd := exec.CommandContext(ctx, "docker", downArgs...)
 	cmd.Dir = d.projectRoot
 
 	output, err := cmd.CombinedOutput()
@@ -159,7 +262,7 @@ func (d *DockerExecutor) StopEnvironment(ctx context.Context) error {
 }
 
 func (d *DockerExecutor) EnvironmentStatus(ctx context.Context) (bool, error) {
-	cmd := exec.CommandContext(ctx, "docker", "compose", "ps", "--status=running", "-q")
+	cmd := exec.CommandContext(ctx, "docker", d.composeArgs("ps", "--status=running", "-q")...)
 	cmd.Dir = d.projectRoot
 
 	output, err := cmd.Output()
@@ -171,7 +274,7 @@ func (d *DockerExecutor) EnvironmentStatus(ctx context.Context) (bool, error) {
 }
 
 func (d *DockerExecutor) baseArgs() []string {
-	args := []string{"compose", "exec"}
+	args := d.composeArgs("exec")
 
 	args = append(args, "-T")
 

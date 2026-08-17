@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -40,7 +41,7 @@ func GetShopwareProjectConstraint(project string) (*version.Constraints, error) 
 			return v, nil
 		}
 
-		return nil, fmt.Errorf("missing shopware/core requirement in composer.json")
+		return nil, errors.New("missing shopware/core requirement in composer.json")
 	}
 
 	c, err := version.NewConstraint(constraint)
@@ -80,13 +81,13 @@ func getProjectConstraintFromKernel(project string) (*version.Constraints, error
 
 	kernel, err := os.ReadFile(kernelPath)
 	if err != nil {
-		return nil, fmt.Errorf("could not determine shopware version")
+		return nil, errors.New("could not determine shopware version")
 	}
 
 	matches := kernelFallbackRegExp.FindSubmatch(kernel)
 
 	if len(matches) < 2 {
-		return nil, fmt.Errorf("could not determine shopware version")
+		return nil, errors.New("could not determine shopware version")
 	}
 
 	v, err := version.NewConstraint(fmt.Sprintf("~%s.0", string(matches[1])))
@@ -186,7 +187,7 @@ type ConsoleCommandFunc func(ctx context.Context, args ...string) *exec.Cmd
 func DumpAndLoadAssetSourcesOfProject(ctx context.Context, project string, shopCfg *shop.Config, consoleCommand ConsoleCommandFunc) ([]asset.Source, error) {
 	dumpExec := consoleCommand(ctx, "bundle:dump")
 	dumpExec.Dir = project
-	// Capture output: bundle:dump's "Dumped plugin configuration." line corrupts the devtui render if inherited.
+	// Capture output: bundle:dump's "Dumped plugin configuration." line corrupts the dev TUI render if inherited.
 	var dumpOutput bytes.Buffer
 	dumpExec.Stdout = &dumpOutput
 	dumpExec.Stderr = &dumpOutput

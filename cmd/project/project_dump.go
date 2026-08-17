@@ -2,22 +2,19 @@ package project
 
 import (
 	"compress/gzip"
-	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"io"
-	"net"
-	"net/url"
 	"os"
 	"strings"
-	"time"
 
 	"github.com/charmbracelet/x/term"
 	"github.com/go-sql-driver/mysql"
 	"github.com/klauspost/compress/zstd"
 	"github.com/spf13/cobra"
 
-	"github.com/shopware/shopware-cli/internal/envfile"
+	"github.com/shopware/shopware-cli/internal/executor"
 	"github.com/shopware/shopware-cli/internal/mysqldump"
 	"github.com/shopware/shopware-cli/internal/shop"
 	"github.com/shopware/shopware-cli/internal/system"
@@ -142,22 +139,9 @@ var projectDatabaseDumpCmd = &cobra.Command{
 }
 
 func assembleConnectionURI(cmd *cobra.Command) (*mysql.Config, error) {
-	cfg := &mysql.Config{
-		Loc:                  time.UTC,
-		Net:                  "tcp",
-		ParseTime:            false,
-		AllowNativePasswords: true,
-		CheckConnLiveness:    true,
-		User:                 "root",
-		Passwd:               "root",
-		Addr:                 "127.0.0.1:3306",
-		DBName:               "shopware",
-	}
-
-	if projectRoot, err := findClosestShopwareProject(); err == nil {
-		if err := loadDatabaseURLIntoConnection(cmd.Context(), projectRoot, cfg); err != nil {
-			return nil, err
-		}
+	dbConn, err := resolveDumpDatabaseConnection(cmd)
+	if err != nil {
+		return nil, err
 	}
 
 	host, _ := cmd.Flags().GetString("host")
@@ -167,30 +151,30 @@ func assembleConnectionURI(cmd *cobra.Command) (*mysql.Config, error) {
 	db, _ := cmd.Flags().GetString("database")
 
 	if host != "" {
-		if port != "" {
-			cfg.Addr = fmt.Sprintf("%s:%s", host, port)
-		} else {
-			cfg.Addr = host
-		}
+		dbConn.Host = host
+	}
+
+	if port != "" {
+		dbConn.Port = port
 	}
 
 	if db != "" {
-		cfg.DBName = db
+		dbConn.Database = db
 	}
 
 	if username != "" {
-		cfg.User = username
-		cfg.Passwd = ""
+		dbConn.Username = username
+		dbConn.Password = ""
 	}
 
 	if cmd.Flags().Changed("password") {
 		if password == passwordFlagPrompt {
 			if !system.IsInteractionEnabled(cmd.Context()) {
-				return nil, fmt.Errorf("cannot prompt for password: interaction disabled")
+				return nil, errors.New("cannot prompt for password: interaction disabled")
 			}
 
 			if !term.IsTerminal(os.Stdin.Fd()) {
-				return nil, fmt.Errorf("cannot prompt for password: stdin is not a terminal")
+				return nil, errors.New("cannot prompt for password: stdin is not a terminal")
 			}
 
 			fmt.Fprint(cmd.ErrOrStderr(), "Enter MySQL password: ") //nolint:errcheck // prompt output is best-effort, ReadPassword surfaces real terminal errors
@@ -201,57 +185,24 @@ func assembleConnectionURI(cmd *cobra.Command) (*mysql.Config, error) {
 				return nil, fmt.Errorf("could not read password: %w", err)
 			}
 
-			cfg.Passwd = string(pass)
+			dbConn.Password = string(pass)
 		} else {
-			cfg.Passwd = password
+			dbConn.Password = password
 		}
 	}
 
-	return cfg, nil
+	return dbConn.MySQLConfig(), nil
 }
 
-func loadDatabaseURLIntoConnection(ctx context.Context, projectRoot string, cfg *mysql.Config) error {
-	if err := envfile.LoadSymfonyEnvFile(projectRoot); err != nil {
-		return err
+// resolveDumpDatabaseConnection resolves credentials like the other database
+// commands, but keeps dump usable outside a Shopware project: there the
+// process environment and the connection flags are all that is needed.
+func resolveDumpDatabaseConnection(cmd *cobra.Command) (*executor.DatabaseConnection, error) {
+	if _, err := findClosestShopwareProject(); err != nil {
+		return executor.NewLocal("").DatabaseConnection(cmd.Context())
 	}
 
-	databaseUrl := os.Getenv("DATABASE_URL")
-
-	if databaseUrl == "" {
-		return nil
-	}
-
-	logging.FromContext(ctx).Info("Using DATABASE_URL env as default connection string. options can override specific parts (--username=foo)")
-
-	parsedUri, err := url.Parse(databaseUrl)
-	if err != nil {
-		return fmt.Errorf("could not parse DATABASE_URL: %w", err)
-	}
-
-	if parsedUri.User != nil {
-		cfg.User = parsedUri.User.Username()
-
-		if password, ok := parsedUri.User.Password(); ok {
-			cfg.Passwd = password
-		} else {
-			// Reset password if it is not set
-			cfg.Passwd = ""
-		}
-	}
-
-	if parsedUri.Host != "" {
-		cfg.Addr = parsedUri.Host
-
-		if parsedUri.Port() == "" {
-			cfg.Addr = net.JoinHostPort(parsedUri.Host, "3306")
-		}
-	}
-
-	if parsedUri.Path != "" {
-		cfg.DBName = strings.Trim(parsedUri.Path, "/")
-	}
-
-	return nil
+	return resolveProjectDatabaseConnection(cmd)
 }
 
 func init() {

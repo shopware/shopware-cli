@@ -72,7 +72,7 @@ func (a AdminTwigLinter) Check(ctx context.Context, check *Check, config ToolCon
 						Path:       relPath,
 						Line:       0,
 						Severity:   message.Severity,
-						Identifier: fmt.Sprintf("admintwiglinter/%s", message.Identifier),
+						Identifier: "admintwiglinter/" + message.Identifier,
 					})
 				}
 			}

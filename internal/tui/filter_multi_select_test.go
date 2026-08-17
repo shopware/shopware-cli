@@ -38,6 +38,18 @@ func TestFilterMultiSelect_FilterMatchesLabelAndDetail(t *testing.T) {
 	assert.Len(t, m.filtered, 3, "empty filter keeps all items")
 }
 
+func TestFilterMultiSelect_PasteFiltersList(t *testing.T) {
+	m := newTestMultiModel([]FilterMultiSelectItem{
+		{Label: "MyPlugin", Value: "MyPlugin"},
+		{Label: "Swag", Value: "Swag"},
+	})
+
+	next, _ := m.Update(tea.PasteMsg{Content: "swag"})
+	m = next.(*filterMultiSelectModel)
+	assert.Equal(t, "swag", m.filter.Value())
+	assert.Len(t, m.filtered, 1)
+}
+
 func TestFilterMultiSelect_SpaceTogglesSelection(t *testing.T) {
 	m := newTestMultiModel([]FilterMultiSelectItem{
 		{Label: "A", Value: "a"},

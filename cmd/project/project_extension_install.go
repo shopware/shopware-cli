@@ -1,7 +1,7 @@
 package project
 
 import (
-	"fmt"
+	"errors"
 
 	"github.com/spf13/cobra"
 
@@ -70,7 +70,7 @@ var projectExtensionInstallCmd = &cobra.Command{
 		}
 
 		if failed {
-			return fmt.Errorf("install failed")
+			return errors.New("install failed")
 		}
 
 		return nil

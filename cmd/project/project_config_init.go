@@ -1,7 +1,7 @@
 package project
 
 import (
-	"fmt"
+	"errors"
 
 	"charm.land/huh/v2"
 	"github.com/spf13/cobra"
@@ -17,7 +17,7 @@ var projectConfigInitCmd = &cobra.Command{
 	Short: "Creates a new project config in current dir",
 	RunE: func(cmd *cobra.Command, _ []string) error {
 		if !system.IsInteractionEnabled(cmd.Context()) {
-			return fmt.Errorf("this command requires interaction, but interaction is disabled")
+			return errors.New("this command requires interaction, but interaction is disabled")
 		}
 
 		config := &shop.Config{
@@ -117,7 +117,7 @@ func init() {
 
 func emptyValidator(s string) error {
 	if len(s) == 0 {
-		return fmt.Errorf("this cannot be empty")
+		return errors.New("this cannot be empty")
 	}
 
 	return nil

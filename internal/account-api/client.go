@@ -3,6 +3,7 @@ package account_api
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -128,7 +129,7 @@ func createApiFromTokenCache(ctx context.Context) (*Client, error) {
 	logging.FromContext(ctx).Debugf("Using token cache from %s", tokenFilePath)
 
 	if !client.isTokenValid() {
-		return nil, fmt.Errorf("token is expired")
+		return nil, errors.New("token is expired")
 	}
 
 	return client, nil

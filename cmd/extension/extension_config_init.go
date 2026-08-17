@@ -1,7 +1,7 @@
 package extension
 
 import (
-	"fmt"
+	"errors"
 	"path/filepath"
 
 	"charm.land/huh/v2"
@@ -44,7 +44,7 @@ Examples:
 			form := huh.NewForm(
 				huh.NewGroup(
 					huh.NewConfirm().
-						Title(fmt.Sprintf("%s already exists. Overwrite?", extension.ConfigFileName)).
+						Title(extension.ConfigFileName + " already exists. Overwrite?").
 						Value(&overwrite),
 				),
 			)
@@ -52,7 +52,7 @@ Examples:
 				return err
 			}
 			if !overwrite {
-				return fmt.Errorf("aborted: config already exists (pass --force to overwrite)")
+				return errors.New("aborted: config already exists (pass --force to overwrite)")
 			}
 			force = true
 		}

@@ -56,7 +56,7 @@ func (p PlatformPlugin) GetResourcesDirs() []string {
 }
 
 func newPlatformPlugin(ctx context.Context, path string) (*PlatformPlugin, error) {
-	composerJsonFile := fmt.Sprintf("%s/composer.json", path)
+	composerJsonFile := path + "/composer.json"
 	if _, err := os.Stat(composerJsonFile); err != nil {
 		return nil, err
 	}
@@ -120,7 +120,7 @@ type platformComposerJsonExtra struct {
 
 func (p PlatformPlugin) GetName() (string, error) {
 	if p.Composer.Extra.ShopwarePluginClass == "" {
-		return "", fmt.Errorf("extension name is empty")
+		return "", errors.New("extension name is empty")
 	}
 
 	parts := strings.Split(p.Composer.Extra.ShopwarePluginClass, "\\")
@@ -175,7 +175,7 @@ func (p PlatformPlugin) GetMetaData() *ExtensionMetadata {
 }
 
 func (p PlatformPlugin) UpdateMetaData(metadata *ExtensionMetadata) error {
-	composerJsonFile := fmt.Sprintf("%s/composer.json", p.path)
+	composerJsonFile := p.path + "/composer.json"
 
 	composerJson, err := os.ReadFile(composerJsonFile)
 	if err != nil {
@@ -408,7 +408,7 @@ func validatePHPFiles(c context.Context, ext Extension, check validation.Check) 
 		check.AddResult(validation.CheckResult{
 			Path:       "composer.json",
 			Identifier: "php.linter",
-			Message:    fmt.Sprintf("Could not parse shopware version constraint: %s", err.Error()),
+			Message:    "Could not parse shopware version constraint: " + err.Error(),
 			Severity:   validation.SeverityError,
 		})
 		return
@@ -428,7 +428,7 @@ func validatePHPFiles(c context.Context, ext Extension, check validation.Check) 
 			check.AddResult(validation.CheckResult{
 				Path:       "composer.json",
 				Identifier: "php.linter",
-				Message:    fmt.Sprintf("Could not find min php version for plugin: %s", err.Error()),
+				Message:    "Could not find min php version for plugin: " + err.Error(),
 				Severity:   validation.SeverityWarning,
 			})
 			return
@@ -445,7 +445,7 @@ func validatePHPFiles(c context.Context, ext Extension, check validation.Check) 
 		check.AddResult(validation.CheckResult{
 			Path:       "composer.json",
 			Identifier: "php.linter",
-			Message:    fmt.Sprintf("Could not parse php version: %s", err.Error()),
+			Message:    "Could not parse php version: " + err.Error(),
 			Severity:   validation.SeverityWarning,
 		})
 		return
@@ -471,10 +471,11 @@ func validatePHPFiles(c context.Context, ext Extension, check validation.Check) 
 				check.AddResult(validation.CheckResult{
 					Path:       relPath,
 					Identifier: "php.linter",
-					Message:    fmt.Sprintf("Could not read php file: %s", err.Error()),
+					Message:    "Could not read php file: " + err.Error(),
 					Severity:   validation.SeverityWarning,
 				})
-				return nil
+				// The unreadable file is reported as a warning; the walk goes on.
+				return nil //nolint:nilerr
 			}
 
 			diags, err := phplint.Lint(relPath, content, phplint.Options{PHPVersion: ver})
@@ -482,10 +483,11 @@ func validatePHPFiles(c context.Context, ext Extension, check validation.Check) 
 				check.AddResult(validation.CheckResult{
 					Path:       relPath,
 					Identifier: "php.linter",
-					Message:    fmt.Sprintf("Could not lint php file: %s", err.Error()),
+					Message:    "Could not lint php file: " + err.Error(),
 					Severity:   validation.SeverityWarning,
 				})
-				return nil
+				// The unlintable file is reported as a warning; the walk goes on.
+				return nil //nolint:nilerr
 			}
 
 			for _, diag := range diags {

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"path"
 	"slices"
+	"strconv"
 
 	"github.com/cespare/xxhash/v2"
 	"golang.org/x/sync/errgroup"
@@ -15,7 +16,7 @@ import (
 )
 
 func hashCacheKeySuffix(p string) string {
-	return fmt.Sprintf("%x", xxhash.Sum64String(p))
+	return strconv.FormatUint(xxhash.Sum64String(p), 16)
 }
 
 func restoreAssetCaches(ctx context.Context, sources ExtensionAssetConfig, assetCfg AssetBuildConfig) error {

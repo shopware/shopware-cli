@@ -2,6 +2,7 @@ package symfony
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -30,7 +31,7 @@ import (
 func (pc *ProjectConfig) SetConfigValue(environment string, path string, value any) error {
 	segments := splitPath(path)
 	if len(segments) == 0 {
-		return fmt.Errorf("empty config path")
+		return errors.New("empty config path")
 	}
 
 	target := pc.resolveWriteTarget(environment, segments)

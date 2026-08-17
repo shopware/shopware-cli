@@ -1,7 +1,6 @@
 package project
 
 import (
-	"fmt"
 	"os"
 
 	"github.com/spf13/cobra"
@@ -30,7 +29,7 @@ var projectClearCacheCmd = &cobra.Command{
 				return err
 			}
 
-			return os.RemoveAll(fmt.Sprintf("%s/var/cache", projectRoot))
+			return os.RemoveAll(projectRoot + "/var/cache")
 		}
 
 		logging.FromContext(cmd.Context()).Infof("Clearing cache using admin-api")

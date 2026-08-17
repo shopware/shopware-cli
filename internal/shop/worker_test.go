@@ -2,6 +2,7 @@ package shop
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -205,7 +206,7 @@ func TestRunWorkers(t *testing.T) {
 			attempts++
 			mu.Unlock()
 
-			return nil, fmt.Errorf("boom")
+			return nil, errors.New("boom")
 		}
 
 		ctx, cancel := context.WithTimeout(t.Context(), 200*time.Millisecond)

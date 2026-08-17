@@ -91,6 +91,7 @@ func TestGenerateComposeFile(t *testing.T) {
 		assert.Contains(t, compose, "db-data:")
 		assert.Contains(t, compose, "ghcr.io/shopware/docker-dev:php8.3-node24-caddy")
 		assert.Contains(t, compose, "mariadb:11.8")
+		assert.Contains(t, compose, "127.0.0.1::3306")
 		assert.Contains(t, compose, "mailpit")
 		assert.NotContains(t, compose, "lavinmq")
 		assert.NotContains(t, compose, "opensearch")

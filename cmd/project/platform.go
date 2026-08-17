@@ -2,7 +2,7 @@ package project
 
 import (
 	"context"
-	"fmt"
+	"errors"
 	"os"
 	"path/filepath"
 	"slices"
@@ -35,8 +35,8 @@ func findClosestShopwareProject() (string, error) {
 
 	for {
 		files := []string{
-			fmt.Sprintf("%s/composer.json", currentDir),
-			fmt.Sprintf("%s/composer.lock", currentDir),
+			currentDir + "/composer.json",
+			currentDir + "/composer.lock",
 		}
 
 		for _, file := range files {
@@ -48,7 +48,7 @@ func findClosestShopwareProject() (string, error) {
 				contentString := string(content)
 
 				if strings.Contains(contentString, "shopware/core") {
-					if _, err := os.Stat(fmt.Sprintf("%s/bin/console", currentDir)); err == nil {
+					if _, err := os.Stat(currentDir + "/bin/console"); err == nil {
 						return currentDir, nil
 					}
 				}
@@ -62,7 +62,7 @@ func findClosestShopwareProject() (string, error) {
 		}
 	}
 
-	return "", fmt.Errorf("cannot find Shopware project in current directory")
+	return "", errors.New("cannot find Shopware project in current directory")
 }
 
 func filterAndWritePluginJson(cmd *cobra.Command, projectRoot string, shopCfg *shop.Config, cmdExecutor executor.Executor) error {
@@ -102,7 +102,7 @@ func filterAndGetSources(cmd *cobra.Command, projectRoot string, shopCfg *shop.C
 	}
 
 	if onlyExtensions != "" && skipExtensions != "" {
-		return nil, fmt.Errorf("only-extensions and skip-extensions cannot be used together")
+		return nil, errors.New("only-extensions and skip-extensions cannot be used together")
 	}
 
 	logger := logging.FromContext(cmd.Context())
@@ -178,11 +178,11 @@ func validateExtensionSelection(ctx context.Context, onlyExtensions string, sele
 	}
 
 	if onlyExtensions != "" {
-		return fmt.Errorf("only one of --only-extensions and --select-extensions can be used")
+		return errors.New("only one of --only-extensions and --select-extensions can be used")
 	}
 
 	if !system.IsInteractionEnabled(ctx) {
-		return fmt.Errorf("--select-extensions requires an interactive terminal; use --only-extensions with a comma-separated list instead")
+		return errors.New("--select-extensions requires an interactive terminal; use --only-extensions with a comma-separated list instead")
 	}
 
 	return nil
@@ -202,7 +202,7 @@ func selectExtensionsInteractively(cmd *cobra.Command, sources []asset.Source) (
 	}
 
 	if len(items) == 0 {
-		return "", fmt.Errorf("no extensions available to select")
+		return "", errors.New("no extensions available to select")
 	}
 
 	selected, err := tui.FilterMultiSelect(cmd.Context(),
@@ -214,7 +214,7 @@ func selectExtensionsInteractively(cmd *cobra.Command, sources []asset.Source) (
 	}
 
 	if len(selected) == 0 {
-		return "", fmt.Errorf("no extensions selected")
+		return "", errors.New("no extensions selected")
 	}
 
 	return strings.Join(selected, ","), nil
