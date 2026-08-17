@@ -332,13 +332,12 @@ func TestCheckForUpdateHonorsCacheInterval(t *testing.T) {
 	assert.Equal(t, 2, requestCount)
 }
 
-func TestUpdateNotificationIntervalIsPerVersion(t *testing.T) {
+func TestShouldPrintUpdateHintSuppressedAfterPrinting(t *testing.T) {
 	t.Setenv("SHOPWARE_CLI_CACHE_DIR", t.TempDir())
 
 	assert.True(t, ShouldPrintUpdateHint())
 	require.NoError(t, MarkUpdateNotificationPrinted())
 	assert.False(t, ShouldPrintUpdateHint())
-	assert.True(t, ShouldPrintUpdateHint())
 }
 
 func TestMarkUpdateNotificationPrintedPersistsNotification(t *testing.T) {

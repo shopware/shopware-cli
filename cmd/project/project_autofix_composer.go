@@ -37,9 +37,8 @@ var projectAutofixComposerCmd = &cobra.Command{
 		}
 
 		_, err = pluginmigratetui.NewApp(pluginmigratetui.Options{
-			ProjectRoot:   projectRoot,
-			Executor:      exec,
-			BackgroundCmd: updateBackgroundCmd(cmd.Context()),
+			ProjectRoot: projectRoot,
+			Executor:    exec,
 		}).Run()
 		return err
 	},

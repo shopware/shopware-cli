@@ -106,10 +106,6 @@ func getReleaseInformation(ctx context.Context, client *http.Client) (*ReleaseIn
 
 	// fetch latest release info if no cached release info is available or if the cached release info is not recent.
 	if errors.Is(err, ErrNoCacheFile) || !cachedReleaseInfo.IsFetchedWithin(releaseFetchInterval) {
-		if client == nil {
-			client = &http.Client{Timeout: 5 * time.Second}
-		}
-
 		fetchedReleaseInfo, err := fetchLatestReleaseInfoFromGitHubPages(ctx, client)
 		if err != nil {
 			return nil, err

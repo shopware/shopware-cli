@@ -1,27 +1,10 @@
 package project
 
 import (
-	"context"
-
-	tea "charm.land/bubbletea/v2"
 	"github.com/spf13/cobra"
 
 	"github.com/shopware/shopware-cli/internal/shop"
-	"github.com/shopware/shopware-cli/internal/tui"
-	"github.com/shopware/shopware-cli/internal/update"
 )
-
-func updateBackgroundCmd(ctx context.Context) tea.Cmd {
-	handle := update.HandleFromContext(ctx)
-	if handle == nil {
-		return nil
-	}
-
-	return tui.NewUpdateCheckCmd(func(waitCtx context.Context) bool {
-		result := handle.Wait(waitCtx)
-		return result.Release != nil
-	})
-}
 
 var (
 	projectConfigPath string

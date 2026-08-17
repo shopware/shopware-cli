@@ -17,8 +17,6 @@ type CheckHandle struct {
 	result CheckResult
 }
 
-type contextKey struct{}
-
 func NewCheckHandle() *CheckHandle {
 	return &CheckHandle{done: make(chan struct{})}
 }
@@ -37,13 +35,4 @@ func (h *CheckHandle) Wait(ctx context.Context) CheckResult {
 	case <-ctx.Done():
 		return CheckResult{Err: ctx.Err()}
 	}
-}
-
-func WithHandle(ctx context.Context, handle *CheckHandle) context.Context {
-	return context.WithValue(ctx, contextKey{}, handle)
-}
-
-func HandleFromContext(ctx context.Context) *CheckHandle {
-	handle, _ := ctx.Value(contextKey{}).(*CheckHandle)
-	return handle
 }

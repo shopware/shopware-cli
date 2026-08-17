@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"context"
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
@@ -15,7 +16,13 @@ const (
 
 // AppVersion is the CLI version displayed in headers and branding lines.
 // It is set from cmd/root.go at startup.
-var AppVersion = "0.1.0"
+var AppVersion = "dev"
+
+// UpdateAvailable blocks until the background update check finishes and
+// reports whether a newer, installable release exists. It is set from
+// cmd/root.go at startup, like AppVersion; when nil, the header skips the
+// update hint entirely.
+var UpdateAvailable func(context.Context) bool
 
 // Header is the branding header row the dev dashboard, the upgrade wizard,
 // and the plugin-migrate wizard render as shell chrome. It follows the Bubble
@@ -29,8 +36,8 @@ type Header struct {
 	showUpdateHint bool
 }
 
-// UpdateAvailableMsg is sent by the parent TUI model when the asynchronous
-// update check finds a newer CLI version.
+// UpdateAvailableMsg is delivered when the asynchronous update check finds a
+// newer CLI version. Hosts forward it to Header.Update like any other message.
 type UpdateAvailableMsg struct{}
 
 // NewHeader creates the shared branding header.
@@ -58,9 +65,10 @@ func (h Header) withUpdateHint(showUpdateHint bool) Header {
 	return Header{branding: branding, width: lipgloss.Width(branding), showUpdateHint: showUpdateHint}
 }
 
-// Init implements the component contract; the header has no startup work.
+// Init starts the update-hint wait; every host that renders the header gets
+// the hint without extra wiring. Returns nil when no check is configured.
 func (h Header) Init() tea.Cmd {
-	return nil
+	return NewUpdateCheckCmd(UpdateAvailable)
 }
 
 // Update applies an update result received by the parent TUI model.

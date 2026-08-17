@@ -8,7 +8,6 @@ import (
 	"strings"
 	"time"
 
-	tea "charm.land/bubbletea/v2"
 	"charm.land/huh/v2/spinner"
 	"github.com/mattn/go-isatty"
 	"github.com/spf13/cobra"
@@ -53,7 +52,7 @@ var projectDevCmd = &cobra.Command{
 			if !isatty.IsTerminal(os.Stdin.Fd()) {
 				return shop.ErrDevModeNotSupported
 			}
-			return runMigrationWizardTUI(projectRoot, cfg, updateBackgroundCmd(cmd.Context()))
+			return runMigrationWizardTUI(projectRoot, cfg)
 		}
 
 		env, err := newDevEnvironment(cmd, projectRoot, cfg)
@@ -112,7 +111,7 @@ var projectDevStatusCmd = &cobra.Command{
 	},
 }
 
-func runMigrationWizardTUI(projectRoot string, cfg *shop.Config, backgroundCmd tea.Cmd) error {
+func runMigrationWizardTUI(projectRoot string, cfg *shop.Config) error {
 	envCfg := &shop.EnvironmentConfig{Type: "docker", URL: "http://127.0.0.1:8000"}
 	exec, err := executor.New(projectRoot, envCfg, cfg)
 	if err != nil {
@@ -120,11 +119,10 @@ func runMigrationWizardTUI(projectRoot string, cfg *shop.Config, backgroundCmd t
 	}
 
 	_, err = dev.NewMigrationWizardApp(dev.Options{
-		ProjectRoot:   projectRoot,
-		Config:        cfg,
-		EnvConfig:     envCfg,
-		Executor:      exec,
-		BackgroundCmd: backgroundCmd,
+		ProjectRoot: projectRoot,
+		Config:      cfg,
+		EnvConfig:   envCfg,
+		Executor:    exec,
 	}).Run()
 	return err
 }
@@ -186,11 +184,10 @@ func newDevEnvironment(cmd *cobra.Command, projectRoot string, cfg *shop.Config)
 	}
 
 	return &devEnvironment{
-		projectRoot:   projectRoot,
-		cfg:           cfg,
-		envCfg:        envCfg,
-		executor:      exec,
-		backgroundCmd: updateBackgroundCmd(cmd.Context()),
+		projectRoot: projectRoot,
+		cfg:         cfg,
+		envCfg:      envCfg,
+		executor:    exec,
 	}, nil
 }
 

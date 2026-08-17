@@ -60,12 +60,19 @@ func run(ctx context.Context) int {
 	accountApi.SetUserAgent("shopware-cli/" + version)
 	rootCmd.SetArgs(args)
 
-	// Check for update in the background and share the result with interactive
-	// TUIs through the command context.
+	// Check for update in the background. Interactive TUIs consume the same
+	// result through the shared header's update hint.
 	updateCtx, updateCancel := context.WithTimeout(ctx, 900*time.Millisecond)
 	defer updateCancel()
 	updateHandle := update.NewCheckHandle()
-	ctx = update.WithHandle(ctx, updateHandle)
+	tui.UpdateAvailable = func(waitCtx context.Context) bool {
+		result := updateHandle.Wait(waitCtx)
+		if result.Release == nil {
+			return false
+		}
+		binaryPath, _ := os.Executable()
+		return shouldNotify(result.Release, binaryPath)
+	}
 
 	go func() {
 		releaseInfo, err := checkForUpdate(updateCtx, args)
