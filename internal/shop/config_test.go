@@ -169,7 +169,7 @@ func TestResolveEnvironment(t *testing.T) {
 		cfg := &Config{Environments: map[string]*EnvironmentConfig{"staging": nil}}
 
 		_, err := cfg.ResolveEnvironment("staging")
-		assert.Error(t, err)
+		require.Error(t, err)
 		assert.Contains(t, err.Error(), `environment "staging" has no configuration`)
 	})
 
@@ -218,7 +218,7 @@ func TestWithEnvironment(t *testing.T) {
 
 	t.Run("error on unknown environment", func(t *testing.T) {
 		_, err := baseConfig().WithEnvironment("production")
-		assert.Error(t, err)
+		require.Error(t, err)
 		assert.Contains(t, err.Error(), `environment "production" not found`)
 	})
 
@@ -229,7 +229,7 @@ func TestWithEnvironment(t *testing.T) {
 		}
 
 		_, err := cfg.WithEnvironment("staging")
-		assert.Error(t, err)
+		require.Error(t, err)
 		assert.Contains(t, err.Error(), `environment "staging" has no configuration`)
 	})
 
