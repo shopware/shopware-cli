@@ -55,6 +55,16 @@ Public and private files are optional tar archives of the corresponding Shopware
 
 `--anonymize` and `ConfigDump` rules apply only to the SQL dumper. They do not sanitize public or private files. File components are transferred as stored. Private files can include invoices, documents, and other sensitive shop data; that is expected and must be documented.
 
+### Import safety
+
+Import replaces the selected target components. That includes shop credentials in the database, such as the admin password. It must not do this quietly.
+
+Before any write, `project import` prints what it is about to apply: the archive, `source`, and each selected component. `--dry-run` does that inspection and print, then exits without writing.
+
+If the target is not empty, import refuses unless `--force` is set. A target is not empty when a selected database already has Shopware tables, or a selected filesystem already has objects. `--force` is required for both interactive and non-interactive use; a confirmation prompt is not a substitute.
+
+Import only writes the selected package components. Follow-up work on the running shop is out of scope and must be triggered by the user: Elasticsearch or OpenSearch indexing, cache warmup, message queue catch-up, theme compile, and similar.
+
 ### metadata.json
 
 `metadata.json` describes the package, not the file layout. Required fields for `format_version` 1:
@@ -96,6 +106,8 @@ The first implementation writes and reads that tar on the local filesystem. Wher
 
 - `project dump` remains the database-only SQL command. Existing scripts keep working.
 - `project export` / `project import` are the portable shop-data commands.
+- Import prints the planned apply, supports `--dry-run`, and refuses a non-empty target unless `--force` is set.
+- Post-import shop tasks such as search indexing stay with the user.
 - Public and private files travel with the database in one archive, using the project's Flysystem config (`local` and `amazon-s3` only).
 - Hosted MySQL Shell dumps can be imported when they arrive in this package layout, without replacing the CLI SQL dumper.
 - SQL-only restore of a raw `dump.sql` is not `project import`. That remains a separate concern.
