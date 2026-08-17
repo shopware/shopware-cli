@@ -1257,7 +1257,7 @@ func TestLimitStagingTableFreezesKeptRows(t *testing.T) {
 	mock.ExpectExec("CREATE TABLE `_sw_cli_kept_product_[0-9a-f]+` AS SELECT `id` FROM \\(SELECT `id` FROM `product` ORDER BY `created_at` DESC LIMIT 100\\)").
 		WillReturnResult(sqlmock.NewResult(0, 100))
 
-	dumper.createLimitStagingTables(t.Context())
+	assert.NoError(t, dumper.createLimitStagingTables(t.Context()))
 	assert.NoError(t, mock.ExpectationsWereMet())
 
 	staging := dumper.limitStagingTables["product"]
@@ -1274,30 +1274,27 @@ func TestLimitStagingTableDropRemovesTable(t *testing.T) {
 
 	mock.ExpectExec("DROP TABLE IF EXISTS `_sw_cli_kept_product_[0-9a-f]+`").WillReturnResult(sqlmock.NewResult(0, 0))
 	mock.ExpectExec("CREATE TABLE `_sw_cli_kept_product_[0-9a-f]+` AS ").WillReturnResult(sqlmock.NewResult(0, 100))
-	dumper.createLimitStagingTables(t.Context())
+	assert.NoError(t, dumper.createLimitStagingTables(t.Context()))
 
 	mock.ExpectExec("DROP TABLE IF EXISTS `_sw_cli_kept_product_[0-9a-f]+`").WillReturnResult(sqlmock.NewResult(0, 0))
 	dumper.dropLimitStagingTables(t.Context(), dumper.limitStagingTables)
 	assert.NoError(t, mock.ExpectationsWereMet())
 }
 
-func TestLimitStagingFallsBackToInlineWhenCreateFails(t *testing.T) {
+func TestLimitStagingFailsHardWhenCreateDenied(t *testing.T) {
 	dumper, mock := stagingDumper(t)
 	assert.NoError(t, dumper.computeLimitFilters(t.Context()))
-
-	inlineProduct := dumper.limitWhere["product"]
-	inlineChild := dumper.limitWhere["order_line_item"]
 
 	mock.ExpectExec("DROP TABLE IF EXISTS `_sw_cli_kept_product_[0-9a-f]+`").WillReturnResult(sqlmock.NewResult(0, 0))
 	mock.ExpectExec("CREATE TABLE `_sw_cli_kept_product_[0-9a-f]+` AS ").WillReturnError(errors.New("CREATE command denied"))
 
-	dumper.createLimitStagingTables(t.Context())
+	err := dumper.createLimitStagingTables(t.Context())
+	assert.ErrorContains(t, err, "cannot create staging table for row limit on product")
+	assert.ErrorContains(t, err, "CREATE and DROP privileges are required to use --limit")
 	assert.NoError(t, mock.ExpectationsWereMet())
 
-	// No staging tables tracked, filters unchanged from the inline planning.
+	// No staging tables are left tracked when setup fails.
 	assert.Empty(t, dumper.limitStagingTables)
-	assert.Equal(t, inlineProduct, dumper.limitWhere["product"])
-	assert.Equal(t, inlineChild, dumper.limitWhere["order_line_item"])
 }
 
 func TestStagingTableNameStaysWithinIdentifierLimit(t *testing.T) {

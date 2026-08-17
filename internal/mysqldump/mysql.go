@@ -109,7 +109,9 @@ func (d *Dumper) Dump(ctx context.Context, w io.Writer) error {
 		return err
 	}
 
-	d.createLimitStagingTables(ctx)
+	if err := d.createLimitStagingTables(ctx); err != nil {
+		return err
+	}
 	defer func() {
 		if len(d.limitStagingTables) > 0 {
 			d.dropLimitStagingTables(context.WithoutCancel(ctx), d.limitStagingTables)

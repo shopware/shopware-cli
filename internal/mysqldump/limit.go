@@ -137,18 +137,18 @@ func (d *Dumper) finalizeLimitWhere() {
 // and a non-total ORDER BY (e.g. ties on created_at) could yield different rows
 // each time, leaving dangling foreign keys in the dump.
 //
-// It requires privileges to create tables. When that fails, it logs a warning
-// and leaves the inline-subquery filters in place, which still produce a
-// self-consistent dump on a quiescent database.
-func (d *Dumper) createLimitStagingTables(ctx context.Context) {
+// Creating the staging tables requires privileges to create tables. Because a
+// consistent kept-set cannot be guaranteed without them, --limit hard-fails when
+// the staging tables cannot be created instead of silently producing a dump that
+// may not import.
+func (d *Dumper) createLimitStagingTables(ctx context.Context) error {
 	if d.limitResolver == nil || len(d.limitResolver.limits) == 0 {
-		return
+		return nil
 	}
 
 	suffix, err := randomTableSuffix()
 	if err != nil {
-		logging.FromContext(ctx).Warnf("Cannot create staging tables for row limits, falling back to inline filters: %s", err)
-		return
+		return fmt.Errorf("cannot create staging tables for row limits: %w", err)
 	}
 
 	staging := make(map[string]string, len(d.limitResolver.limits))
@@ -158,16 +158,14 @@ func (d *Dumper) createLimitStagingTables(ctx context.Context) {
 
 		dropQuery := fmt.Sprintf("DROP TABLE IF EXISTS `%s`", stagingName)
 		if _, err := d.useTransactionOrDBExec(ctx, dropQuery); err != nil {
-			logging.FromContext(ctx).Warnf("Cannot create staging table for row limit on %s, falling back to inline filters: %s", table, err)
 			d.dropLimitStagingTables(ctx, staging)
-			return
+			return fmt.Errorf("cannot create staging table for row limit on %s (the CREATE and DROP privileges are required to use --limit): %w", table, err)
 		}
 
 		createQuery := fmt.Sprintf("CREATE TABLE `%s` AS %s", stagingName, populate)
 		if _, err := d.useTransactionOrDBExec(ctx, createQuery); err != nil {
-			logging.FromContext(ctx).Warnf("Cannot create staging table for row limit on %s, falling back to inline filters: %s", table, err)
 			d.dropLimitStagingTables(ctx, staging)
-			return
+			return fmt.Errorf("cannot create staging table for row limit on %s (the CREATE and DROP privileges are required to use --limit): %w", table, err)
 		}
 
 		staging[table] = stagingName
@@ -178,6 +176,8 @@ func (d *Dumper) createLimitStagingTables(ctx context.Context) {
 	d.finalizeLimitWhere()
 
 	logging.FromContext(ctx).Infof("Froze the kept rows of %d limited table(s) into staging tables for a consistent dump", len(staging))
+
+	return nil
 }
 
 // dropLimitStagingTables removes the given staging tables. It is safe to call
