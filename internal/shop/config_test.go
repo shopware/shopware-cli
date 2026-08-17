@@ -450,6 +450,50 @@ build:
 	assert.Equal(t, "CustomName", cfg.Build.Bundles[1].Name)
 }
 
+func TestReadConfigDisableChecksums(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, ".shopware-project.yml")
+	content := []byte(`
+compatibility_date: "2024-01-01"
+build:
+  disable_checksums: true
+`)
+	assert.NoError(t, os.WriteFile(configPath, content, 0o644))
+
+	cfg, err := ReadConfig(t.Context(), configPath, false)
+	assert.NoError(t, err)
+	assert.True(t, cfg.Build.DisableChecksums)
+}
+
+func TestReadConfigDisableChecksumDefaultsFalse(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, ".shopware-project.yml")
+	content := []byte(`
+compatibility_date: "2024-01-01"
+build: {}
+`)
+	assert.NoError(t, os.WriteFile(configPath, content, 0o644))
+
+	cfg, err := ReadConfig(t.Context(), configPath, false)
+	assert.NoError(t, err)
+	assert.False(t, cfg.Build.DisableChecksums)
+}
+
+func TestReadConfigKeepExistingChecksums(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, ".shopware-project.yml")
+	content := []byte(`
+compatibility_date: "2024-01-01"
+build:
+  keep_existing_checksums: true
+`)
+	assert.NoError(t, os.WriteFile(configPath, content, 0o644))
+
+	cfg, err := ReadConfig(t.Context(), configPath, false)
+	assert.NoError(t, err)
+	assert.True(t, cfg.Build.KeepExistingChecksums)
+}
+
 func TestConfigDump_NormalizeFakerExpressions(t *testing.T) {
 	t.Run("wraps bare faker expressions with delimiters", func(t *testing.T) {
 		config := &ConfigDump{

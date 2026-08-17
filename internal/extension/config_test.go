@@ -1,6 +1,7 @@
 package extension
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"testing"
@@ -183,6 +184,80 @@ func TestConfigStore_IsInGermanStore(t *testing.T) {
 
 		assert.False(t, store.IsInGermanStore())
 	})
+}
+
+func TestConfigStoreDemoShopsDecode(t *testing.T) {
+	cfg := `
+store:
+  demo_shops:
+    - type: frontend
+      link: https://demo.example.com
+      localization: de_DE
+      login_name: demo
+      login_password: secret
+    - type: backend
+      link: https://demo.example.com/admin
+      localization: en_GB
+`
+
+	tmpDir := t.TempDir()
+
+	assert.NoError(t, os.WriteFile(filepath.Join(tmpDir, ".shopware-extension.yaml"), []byte(cfg), 0o644))
+
+	ext, err := readExtensionConfig(t.Context(), tmpDir)
+	require.NoError(t, err)
+	require.NotNil(t, ext.Store.DemoShops)
+
+	assert.Equal(t, []ConfigStoreDemoShop{
+		{
+			Type:          "frontend",
+			Link:          "https://demo.example.com",
+			Localization:  "de_DE",
+			LoginName:     "demo",
+			LoginPassword: "secret",
+		},
+		{
+			Type:         "backend",
+			Link:         "https://demo.example.com/admin",
+			Localization: "en_GB",
+		},
+	}, *ext.Store.DemoShops)
+}
+
+func TestConfigStoreImagesDecode(t *testing.T) {
+	cfg := `
+store:
+  images:
+    - file: cover.png
+      position: 1
+    - file: legacy.png
+      priority: 7
+`
+
+	tmpDir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(tmpDir, ".shopware-extension.yaml"), []byte(cfg), 0o644))
+
+	ext, err := readExtensionConfig(t.Context(), tmpDir)
+	require.NoError(t, err)
+	require.NotNil(t, ext.Store.Images)
+	require.Len(t, *ext.Store.Images, 2)
+
+	assert.Equal(t, 1, (*ext.Store.Images)[0].GetPosition())
+	assert.Equal(t, 7, (*ext.Store.Images)[1].GetPosition())
+}
+
+func TestConfigSchemaMarksStoreImagePriorityDeprecated(t *testing.T) {
+	var schema struct {
+		Definitions map[string]struct {
+			Properties map[string]struct {
+				Deprecated bool `json:"deprecated"`
+			} `json:"properties"`
+		} `json:"$defs"`
+	}
+
+	require.NoError(t, json.Unmarshal(ConfigSchema(), &schema))
+	assert.Contains(t, schema.Definitions["ConfigStoreImage"].Properties, "position")
+	assert.True(t, schema.Definitions["ConfigStoreImage"].Properties["priority"].Deprecated)
 }
 
 func TestReadExtensionConfig(t *testing.T) {

@@ -384,6 +384,47 @@
         "image_directory": {
           "type": "string",
           "description": "Specifies the directory where the images are located."
+        },
+        "demo_shops": {
+          "items": {
+            "$ref": "#/$defs/ConfigStoreDemoShop"
+          },
+          "type": "array",
+          "description": "Specifies the demo shops of the extension in the store."
+        }
+      },
+      "additionalProperties": false,
+      "type": "object"
+    },
+    "ConfigStoreDemoShop": {
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": [
+            "frontend",
+            "backend"
+          ],
+          "description": "Specifies the type of the demo shop."
+        },
+        "link": {
+          "type": "string",
+          "description": "Specifies the URL to the demo shop."
+        },
+        "localization": {
+          "type": "string",
+          "enum": [
+            "de_DE",
+            "en_GB"
+          ],
+          "description": "Specifies the language of the demo shop."
+        },
+        "login_name": {
+          "type": "string",
+          "description": "Specifies the login name to access the demo shop."
+        },
+        "login_password": {
+          "type": "string",
+          "description": "Specifies the login password to access the demo shop."
         }
       },
       "additionalProperties": false,
@@ -418,9 +459,14 @@
           "$ref": "#/$defs/ConfigStoreImagePreview",
           "description": "Specifies whether the image is a preview in the language."
         },
+        "position": {
+          "type": "integer",
+          "description": "Position of the image in the store gallery. Images are sorted ascending; the lowest value is shown first."
+        },
         "priority": {
           "type": "integer",
-          "description": "Specifies the order of the image ascending the given priority."
+          "description": "Deprecated: use Position instead.",
+          "deprecated": true
         }
       },
       "additionalProperties": false,

@@ -10,12 +10,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@bf7454d06d71f1098171f2acdf0cd4708d7b5920 # ratchet:step-security/harden-runner@v2.20.0
+        uses: step-security/harden-runner@b09bb98e06d4d774595224525879c09bc6e98c40 # ratchet:step-security/harden-runner@v2.20.1
         with:
           egress-policy: audit
 
       - name: Checkout Repository
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # ratchet:actions/checkout@v7.0.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # ratchet:actions/checkout@v7.0.1
 
       - name: Set up Go
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # ratchet:actions/setup-go@v7.0.0
@@ -36,7 +36,7 @@ jobs:
         run: mv shopware-cli /usr/local/bin/
 
       - name: Checkout Plugin
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # ratchet:actions/checkout@v7.0.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # ratchet:actions/checkout@v7.0.1
         with:
           repository: 'FriendsOfShopware/FroshTools'
           ref: '75e2013752fd4db7535e4b72b3e3e8d57e531002'
@@ -46,10 +46,10 @@ jobs:
         run: shopware-cli project create shopware 6.5.7.3 --no-audit
 
       - name: Build asset of Plugin
-        run: shopware-cli extension zip plugin
+        run: shopware-cli extension package plugin
 
       - name: Build asset of Plugin without Git
-        run: shopware-cli extension zip plugin --disable-git --release
+        run: shopware-cli extension package plugin --disable-git --release
 
       - name: Validate Plugin
         run: shopware-cli extension validate FroshTools.zip

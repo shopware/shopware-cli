@@ -294,7 +294,7 @@ func (e *ExtensionAssetConfigEntry) GetContentHash() (string, error) {
 	for _, file := range files {
 		// Write the BasePath-relative file path so the hash stays stable
 		// regardless of where the extension is located on disk (e.g. the
-		// temp directory used by `extension zip`).
+		// temp directory used by `extension package`).
 		if _, err := hasher.Write([]byte(e.relPath(file))); err != nil {
 			return "", err
 		}
@@ -440,7 +440,7 @@ func (e *ExtensionAssetConfigEntry) hashSingleFile(filePath string) (uint64, err
 // relPath returns the given path relative to the extension BasePath. It is used
 // when folding file paths into the content hash so the resulting cache key is
 // independent of the absolute extension location (e.g. the temp directory used
-// by `extension zip`). It falls back to the input path if it cannot be made
+// by `extension package`). It falls back to the input path if it cannot be made
 // relative.
 func (e *ExtensionAssetConfigEntry) relPath(p string) string {
 	rel, err := filepath.Rel(filepath.Clean(e.BasePath), p)

@@ -1,6 +1,7 @@
 # Shopware CLI
 
 [![Hosted By: Cloudsmith](https://img.shields.io/badge/OSS%20hosting%20by-cloudsmith-blue?logo=cloudsmith&style=flat-square)](https://cloudsmith.com)
+[![skills.sh](https://skills.sh/b/shopware/shopware-cli)](https://skills.sh/shopware/shopware-cli)
 
 Shopware CLI is a command line companion for common Shopware account, project, and extension workflows.
 
@@ -81,6 +82,18 @@ shopware-cli --no-interaction <command>
 - `.github/`: automation and workflow definitions
 - `scripts/`: repository helper scripts
 - `env-bridge/`: environment bridge helper entrypoint
+
+## Official Agent Skills
+
+Shopware CLI maintainers provide official Agent Skills in this repository's `skills/` folder. These skills teach compatible AI coding agents how to use Shopware CLI workflows safely and correctly. 
+
+Install them with:
+
+```bash
+npx skills add shopware/shopware-cli
+```
+
+Available skills are `shopware-cli` and `shopware-cli-docker`.
 
 ## Documentation
 

@@ -7,6 +7,8 @@ on:
       - 'internal/shop/config_schema.json'
       - 'internal/extension/config_schema.json'
       - '.github/workflows/schema-pages.yml'
+  release:
+    types: [published]
   workflow_dispatch:
 
 permissions:
@@ -26,19 +28,37 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@bf7454d06d71f1098171f2acdf0cd4708d7b5920 # ratchet:step-security/harden-runner@v2.20.0
+        uses: step-security/harden-runner@b09bb98e06d4d774595224525879c09bc6e98c40 # ratchet:step-security/harden-runner@v2.20.1
         with:
           egress-policy: audit
 
       - name: Checkout Repository
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # ratchet:actions/checkout@v7.0.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # ratchet:actions/checkout@v7.0.1
 
       - name: Assemble Pages site
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           mkdir -p _site
           cp internal/shop/config_schema.json _site/shopware-project-schema.json
           cp internal/extension/config_schema.json _site/shopware-extension-schema.json
-          cat > _site/index.html <<'EOF'
+
+          # Prefer the release that triggered this run; otherwise use the latest non-prerelease.
+          if [ "${{ github.event_name }}" = "release" ] && [ "${{ github.event.release.prerelease }}" != "true" ]; then
+            VERSION="${{ github.event.release.tag_name }}"
+            RELEASE_TIME="${{ github.event.release.published_at }}"
+          else
+            VERSION=$(gh api "repos/${{ github.repository }}/releases/latest" --jq .tag_name 2>/dev/null || true)
+            RELEASE_TIME=$(gh api "repos/${{ github.repository }}/releases/latest" --jq .published_at 2>/dev/null || true)
+          fi
+          VERSION="${VERSION#v}"
+          if [ -z "$VERSION" ]; then
+            VERSION="dev"
+          fi
+
+          jq -n --arg version "$VERSION" --arg release_time "$RELEASE_TIME" '{version: $version, release_time: $release_time}' > _site/version.json
+
+          cat > _site/index.html <<EOF
           <!DOCTYPE html>
           <html lang="en">
           <head>
@@ -47,7 +67,9 @@ jobs:
           </head>
           <body>
             <h1>shopware-cli config schemas</h1>
+            <p>Latest release: <code>${VERSION}</code></p>
             <ul>
+              <li><a href="version.json">version.json</a> &mdash; latest CLI version</li>
               <li><a href="shopware-project-schema.json">shopware-project-schema.json</a> &mdash; schema for <code>.shopware-project.yml</code></li>
               <li><a href="shopware-extension-schema.json">shopware-extension-schema.json</a> &mdash; schema for <code>.shopware-extension.yml</code></li>
             </ul>

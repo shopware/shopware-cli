@@ -41,7 +41,7 @@ func TestGetContentHash_AdditionalCaches(t *testing.T) {
 }
 
 func TestGetContentHash_StableAcrossBasePaths(t *testing.T) {
-	// `extension zip` copies the extension into a fresh temp dir on every run,
+	// `extension package` copies the extension into a fresh temp dir on every run,
 	// so the content hash must not depend on the absolute BasePath, otherwise
 	// the cache key changes every run and never hits.
 	build := func(t *testing.T) string {

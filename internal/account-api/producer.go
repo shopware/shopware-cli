@@ -80,6 +80,13 @@ type Producer struct {
 	IsPremiumExtensionPartner bool        `json:"isPremiumExtensionPartner"`
 }
 
+const (
+	// Extension generation names returned by the Account API.
+	ExtensionGenerationClassic  = "classic"
+	ExtensionGenerationPlatform = "platform" // Shopware 6 plugins
+	ExtensionGenerationApps     = "apps"     // Shopware apps
+)
+
 type ListExtensionCriteria struct {
 	Limit         int    `schema:"limit,omitempty"`
 	Offset        int    `schema:"offset,omitempty"`
@@ -288,22 +295,7 @@ type Extension struct {
 		Name        string `json:"name"`
 		Description string `json:"description"`
 	} `json:"license"`
-	Infos []*struct {
-		Id                 int          `json:"id"`
-		Locale             Locale       `json:"locale"`
-		Name               string       `json:"name"`
-		Description        string       `json:"description"`
-		InstallationManual string       `json:"installationManual"`
-		ShortDescription   string       `json:"shortDescription"`
-		Highlights         string       `json:"highlights"`
-		Features           string       `json:"features"`
-		MetaTitle          string       `json:"metaTitle"`
-		MetaDescription    string       `json:"metaDescription"`
-		Tags               []StoreTag   `json:"tags"`
-		Videos             []StoreVideo `json:"videos"`
-		Faqs               []StoreFaq   `json:"faqs"`
-		SupportInfo        interface{}  `json:"supportInfo"`
-	} `json:"infos"`
+	Infos               []*ExtensionInfo   `json:"infos"`
 	PriceModels         []interface{}      `json:"priceModels"`
 	Variants            []interface{}      `json:"variants"`
 	StoreAvailabilities []StoreAvailablity `json:"storeAvailabilities"`
@@ -323,7 +315,7 @@ type Extension struct {
 	IconPath                            string            `json:"iconPath"`
 	IconIsSet                           bool              `json:"iconIsSet"`
 	ExamplePageUrl                      string            `json:"examplePageUrl"`
-	Demos                               []interface{}     `json:"demos"`
+	Demos                               []ExtensionDemo   `json:"demos"`
 	Localizations                       []Locale          `json:"localizations"`
 	LatestBinary                        interface{}       `json:"latestBinary"`
 	MigrationSupport                    bool              `json:"migrationSupport"`
@@ -454,6 +446,23 @@ type StoreVideo struct {
 	URL string `json:"url"`
 }
 
+type ExtensionInfo struct {
+	Id                 int          `json:"id"`
+	Locale             Locale       `json:"locale"`
+	Name               string       `json:"name"`
+	Description        string       `json:"description"`
+	InstallationManual string       `json:"installationManual"`
+	ShortDescription   string       `json:"shortDescription"`
+	Highlights         string       `json:"highlights"`
+	Features           string       `json:"features"`
+	MetaTitle          string       `json:"metaTitle"`
+	MetaDescription    string       `json:"metaDescription"`
+	Tags               []StoreTag   `json:"tags"`
+	Videos             []StoreVideo `json:"videos"`
+	Faqs               []StoreFaq   `json:"faqs"`
+	SupportInfo        interface{}  `json:"supportInfo"`
+}
+
 type StoreProductType struct {
 	Id          int    `json:"id"`
 	Name        string `json:"name"`
@@ -464,6 +473,21 @@ type StoreFaq struct {
 	Question string `json:"question"`
 	Answer   string `json:"answer"`
 	Position int    `json:"position"`
+}
+
+type StoreDemoType struct {
+	Id          int    `json:"id"`
+	Name        string `json:"name"`
+	Description string `json:"description"`
+}
+
+type ExtensionDemo struct {
+	Id            int           `json:"id,omitempty"`
+	Type          StoreDemoType `json:"type"`
+	Link          string        `json:"link"`
+	Localization  Locale        `json:"localization"`
+	LoginName     string        `json:"loginName"`
+	LoginPassword string        `json:"loginPassword"`
 }
 
 type ExtensionGeneralInformation struct {
@@ -504,7 +528,7 @@ type ExtensionGeneralInformation struct {
 	StoreAvailabilities  []StoreAvailablity  `json:"storeAvailabilities"`
 	PriceModels          []interface{}       `json:"priceModels"`
 	SoftwareVersions     SoftwareVersionList `json:"softwareVersions"`
-	DemoTypes            interface{}         `json:"demoTypes"`
+	DemoTypes            []StoreDemoType     `json:"demoTypes"`
 	Localizations        []Locale            `json:"localizations"`
 	ProductTypes         []StoreProductType  `json:"productTypes"`
 	ReleaseRequestStatus interface{}         `json:"releaseRequestStatus"`

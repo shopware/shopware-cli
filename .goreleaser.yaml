@@ -274,7 +274,6 @@ notarize:
       sign:
         certificate: "{{.Env.APPLE_CODE_SIGNING_KEY}}"
         password: "{{.Env.APPLE_CODE_SIGNING_KEY_PASSWORD}}"
-        entitlements: "./entitlements.xml"
       notarize:
         issuer_id: "{{.Env.APPLE_APP_STORE_CONNECT_ISSUER}}"
         key_id: "{{.Env.APPLE_APP_STORE_CONNECT_KEY_ID}}"

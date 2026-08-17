@@ -2,16 +2,17 @@ package project
 
 import (
 	"bytes"
+	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
 	"os"
-	"os/signal"
 	"path/filepath"
 	"strings"
-	"syscall"
+	"time"
 
 	"github.com/NYTimes/gziphandler"
 	"github.com/spf13/cobra"
@@ -252,7 +253,7 @@ If a file is not found locally, it proxies the request to the upstream server.`,
 
 			logging.FromContext(cmd.Context()).Infof("Created Shopware config: %s (URL: %s)", configFile, configURL)
 
-			// Setup cleanup handler
+			// Setup cleanup handler (runs on context cancellation and normal return)
 			cleanup = func() {
 				if err := os.Remove(configFile); err != nil && !os.IsNotExist(err) {
 					logging.FromContext(cmd.Context()).Errorf("Failed to remove config file: %v", err)
@@ -260,20 +261,6 @@ If a file is not found locally, it proxies the request to the upstream server.`,
 					logging.FromContext(cmd.Context()).Infof("Removed Shopware config: %s", configFile)
 				}
 			}
-
-			// Handle interrupt signals
-			sigChan := make(chan os.Signal, 1)
-			signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
-
-			go func() {
-				<-sigChan
-				if cleanup != nil {
-					cleanup()
-				}
-				os.Exit(0)
-			}()
-
-			// Ensure cleanup on normal exit
 			defer cleanup()
 		} else {
 			logging.FromContext(cmd.Context()).Infof("Skipping Shopware config file creation")
@@ -305,11 +292,39 @@ If a file is not found locally, it proxies the request to the upstream server.`,
 		)
 
 		server := &http.Server{
-			Addr:    addr,
-			Handler: gzipWrapper(handler),
+			Addr:              addr,
+			Handler:           gzipWrapper(handler),
+			ReadHeaderTimeout: time.Second,
 		}
 
-		return server.ListenAndServe()
+		// ListenAndServe blocks and does not observe context cancellation from
+		// signal.NotifyContext in root. Run it in a goroutine so Ctrl+C/SIGTERM
+		// can shut the server down and run deferred cleanup.
+		errCh := make(chan error, 1)
+		go func() {
+			errCh <- server.ListenAndServe()
+		}()
+
+		select {
+		case err := <-errCh:
+			if err != nil && !errors.Is(err, http.ErrServerClosed) {
+				return err
+			}
+		case <-cmd.Context().Done():
+			logging.FromContext(cmd.Context()).Infof("Shutting down image proxy...")
+
+			shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			if err := server.Shutdown(shutdownCtx); err != nil {
+				logging.FromContext(cmd.Context()).Errorf("server shutdown: %v", err)
+				_ = server.Close()
+			}
+			cancel()
+
+			// Drain ListenAndServe result (http.ErrServerClosed is expected).
+			<-errCh
+		}
+
+		return nil
 	},
 }
 

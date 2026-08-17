@@ -26,8 +26,8 @@ fi
 export GOFLAGS="${GOFLAGS:-} -mod=readonly"
 export GOPROXY=off
 
-# Tells tests that depend on real external downloads (e.g. fetching PHP wasm
-# binaries or dart-sass) to skip themselves instead of failing on DNS.
+# Tells tests that depend on real external downloads (e.g. fetching dart-sass)
+# to skip themselves instead of failing on DNS.
 export SHOPWARE_CLI_NO_NETWORK=1
 
 COVER_FLAGS=()
@@ -41,7 +41,7 @@ case "$(uname -s)" in
             echo "error: sandbox-exec not found" >&2
             exit 1
         fi
-        sandbox-exec -f "$REPO_DIR/sandbox-no-network.sb" go test "${COVER_FLAGS[@]}" "$@"
+        sandbox-exec -f "$REPO_DIR/sandbox-no-network.sb" go test ${COVER_FLAGS+"${COVER_FLAGS[@]}"} "$@"
         ;;
     Linux)
         if ! command -v unshare >/dev/null 2>&1; then
@@ -61,7 +61,7 @@ case "$(uname -s)" in
                 exit 1
             fi
             exec go test "$@"
-        ' bash "${COVER_FLAGS[@]}" "$@"
+        ' bash ${COVER_FLAGS+"${COVER_FLAGS[@]}"} "$@"
         ;;
     *)
         echo "error: unsupported OS: $(uname -s)" >&2
