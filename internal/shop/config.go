@@ -54,10 +54,13 @@ func (c *Config) ResolveEnvironment(name string) (*EnvironmentConfig, error) {
 		if !ok {
 			return nil, fmt.Errorf("environment %q not found in config", name)
 		}
+		if env == nil {
+			return nil, fmt.Errorf("environment %q has no configuration", name)
+		}
 		return env, nil
 	}
 
-	if env, ok := c.Environments["local"]; ok {
+	if env, ok := c.Environments["local"]; ok && env != nil {
 		return env, nil
 	}
 

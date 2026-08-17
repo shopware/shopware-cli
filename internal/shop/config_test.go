@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/shopware/shopware-cli/internal/compatibility"
 )
@@ -163,6 +164,26 @@ func TestResolveEnvironment(t *testing.T) {
 		_, err := cfg.ResolveEnvironment("staging")
 		assert.Error(t, err)
 	})
+
+	t.Run("error on named environment entry without configuration", func(t *testing.T) {
+		cfg := &Config{Environments: map[string]*EnvironmentConfig{"staging": nil}}
+
+		_, err := cfg.ResolveEnvironment("staging")
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), `environment "staging" has no configuration`)
+	})
+
+	t.Run("local entry without configuration falls back to top-level", func(t *testing.T) {
+		cfg := &Config{
+			URL:          "https://myshop.com",
+			Environments: map[string]*EnvironmentConfig{"local": nil},
+		}
+
+		env, err := cfg.ResolveEnvironment("")
+		require.NoError(t, err)
+		assert.Equal(t, "local", env.Type)
+		assert.Equal(t, "https://myshop.com", env.URL)
+	})
 }
 
 func TestWithEnvironment(t *testing.T) {
@@ -183,14 +204,14 @@ func TestWithEnvironment(t *testing.T) {
 
 	t.Run("named environment overrides url and admin api", func(t *testing.T) {
 		cfg, err := baseConfig().WithEnvironment("staging")
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.Equal(t, "https://staging.example.com", cfg.URL)
 		assert.Equal(t, "staging-id", cfg.AdminApi.ClientId)
 	})
 
 	t.Run("environment without overrides keeps base values", func(t *testing.T) {
 		cfg, err := baseConfig().WithEnvironment("bare")
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.Equal(t, "https://myshop.com", cfg.URL)
 		assert.Equal(t, "admin", cfg.AdminApi.Username)
 	})
@@ -201,11 +222,22 @@ func TestWithEnvironment(t *testing.T) {
 		assert.Contains(t, err.Error(), `environment "production" not found`)
 	})
 
+	t.Run("error on environment entry without configuration", func(t *testing.T) {
+		cfg := &Config{
+			URL:          "https://myshop.com",
+			Environments: map[string]*EnvironmentConfig{"staging": nil},
+		}
+
+		_, err := cfg.WithEnvironment("staging")
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), `environment "staging" has no configuration`)
+	})
+
 	t.Run("no name and no environments keeps config unchanged", func(t *testing.T) {
 		cfg := &Config{URL: "https://myshop.com", AdminApi: &ConfigAdminApi{Username: "admin"}}
 
 		resolved, err := cfg.WithEnvironment("")
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.Equal(t, "https://myshop.com", resolved.URL)
 		assert.Equal(t, "admin", resolved.AdminApi.Username)
 	})
