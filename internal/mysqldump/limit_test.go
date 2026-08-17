@@ -162,6 +162,94 @@ func TestLimitIncludesChildWhereInCascade(t *testing.T) {
 		dumper.limitWhere["order_delivery_position"])
 }
 
+func selfReferencingProductDumper() *Dumper {
+	return limitTestDumper(
+		&TableSchema{
+			Name:       "product",
+			PrimaryKey: []string{"id", "version_id"},
+			Columns: []ColumnSchema{
+				{Name: "id"}, {Name: "version_id"},
+				{Name: "parent_id", Nullable: true}, {Name: "parent_version_id", Nullable: true},
+				{Name: "created_at"},
+			},
+			ForeignKeys: []ForeignKeySchema{
+				{Name: "fk.product.parent", Columns: []string{"parent_id", "parent_version_id"}, ReferencedTable: "product", ReferencedColumns: []string{"id", "version_id"}},
+			},
+		},
+		&TableSchema{
+			Name:       "order_line_item",
+			PrimaryKey: []string{"id"},
+			Columns:    []ColumnSchema{{Name: "id"}, {Name: "product_id", Nullable: true}, {Name: "product_version_id", Nullable: true}},
+			ForeignKeys: []ForeignKeySchema{
+				{Name: "fk.oli.product", Columns: []string{"product_id", "product_version_id"}, ReferencedTable: "product", ReferencedColumns: []string{"id", "version_id"}},
+			},
+		},
+	)
+}
+
+func TestLimitClosesSelfReferencingTableOverParents(t *testing.T) {
+	dumper := selfReferencingProductDumper()
+	dumper.LimitMap = map[string]TableLimit{"product": {Rows: 500}}
+
+	assert.NoError(t, dumper.computeLimitFilters(t.Context()))
+
+	keptProducts := "WITH RECURSIVE `_sw_cli_kept` (`id`, `version_id`) AS (" +
+		"SELECT `id`, `version_id` FROM (SELECT `id`, `version_id` FROM `product` ORDER BY `created_at` DESC LIMIT 500) `_sw_cli_limit`" +
+		" UNION " +
+		"SELECT `_sw_parent`.`id`, `_sw_parent`.`version_id` FROM `product` `_sw_child`" +
+		" JOIN `_sw_cli_kept` ON `_sw_child`.`id` = `_sw_cli_kept`.`id` AND `_sw_child`.`version_id` = `_sw_cli_kept`.`version_id`" +
+		" JOIN `product` `_sw_parent` ON `_sw_parent`.`id` = `_sw_child`.`parent_id` AND `_sw_parent`.`version_id` = `_sw_child`.`parent_version_id`" +
+		") SELECT `id`, `version_id` FROM `_sw_cli_kept`"
+
+	// The limited product table keeps the LIMIT rows plus all their ancestors.
+	assert.Equal(t, "(`id`, `version_id`) IN ("+keptProducts+")", dumper.limitWhere["product"])
+
+	// A table referencing product is filtered against the same closed set, so a
+	// kept line item always finds its product and that product finds its parent.
+	assert.Equal(t,
+		"(`product_id` IS NULL OR `product_version_id` IS NULL OR (`product_id`, `product_version_id`) IN ("+keptProducts+"))",
+		dumper.limitWhere["order_line_item"])
+}
+
+func TestLimitClosesSelfReferencingTableWithSingleColumnKey(t *testing.T) {
+	dumper := limitTestDumper(&TableSchema{
+		Name:       "category",
+		PrimaryKey: []string{"id"},
+		Columns: []ColumnSchema{
+			{Name: "id"}, {Name: "parent_id", Nullable: true}, {Name: "created_at"},
+		},
+		ForeignKeys: []ForeignKeySchema{
+			{Name: "fk.category.parent", Columns: []string{"parent_id"}, ReferencedTable: "category", ReferencedColumns: []string{"id"}},
+		},
+	})
+	dumper.LimitMap = map[string]TableLimit{"category": {Rows: 20}}
+
+	assert.NoError(t, dumper.computeLimitFilters(t.Context()))
+
+	keptCategories := "WITH RECURSIVE `_sw_cli_kept` (`id`) AS (" +
+		"SELECT `id` FROM (SELECT `id` FROM `category` ORDER BY `created_at` DESC LIMIT 20) `_sw_cli_limit`" +
+		" UNION " +
+		"SELECT `_sw_parent`.`id` FROM `category` `_sw_child`" +
+		" JOIN `_sw_cli_kept` ON `_sw_child`.`id` = `_sw_cli_kept`.`id`" +
+		" JOIN `category` `_sw_parent` ON `_sw_parent`.`id` = `_sw_child`.`parent_id`" +
+		") SELECT `id` FROM `_sw_cli_kept`"
+
+	assert.Equal(t, "`id` IN ("+keptCategories+")", dumper.limitWhere["category"])
+}
+
+func TestLimitClosureRespectsWhereMap(t *testing.T) {
+	dumper := selfReferencingProductDumper()
+	dumper.WhereMap = map[string]string{"product": "active = 1"}
+	dumper.LimitMap = map[string]TableLimit{"product": {Rows: 10}}
+
+	assert.NoError(t, dumper.computeLimitFilters(t.Context()))
+
+	// The user WHERE only constrains the LIMIT seed; ancestors are still pulled
+	// in unconditionally so the kept set stays closed under the self-reference.
+	assert.Contains(t, dumper.limitWhere["product"],
+		"SELECT `id`, `version_id` FROM `product` WHERE active = 1 ORDER BY `created_at` DESC LIMIT 10")
+}
+
 func TestLimitTerminatesOnForeignKeyCycles(t *testing.T) {
 	dumper := limitTestDumper(
 		&TableSchema{

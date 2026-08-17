@@ -14,6 +14,9 @@ import (
 // referencing the limited table via foreign keys (directly or transitively)
 // are filtered automatically so they only contain rows attached to the kept
 // rows. A second limit on a table that is already filtered this way is rejected.
+// When the limited table references itself (e.g. product.parent_id), the
+// ancestors of the kept rows are dumped too, so the export may hold slightly
+// more than Rows rows but stays importable with foreign key checks enabled.
 type TableLimit struct {
 	// Maximum amount of rows to export for this table
 	Rows int `yaml:"rows" jsonschema:"required,minimum=1"`
@@ -218,17 +221,16 @@ func (r *limitResolver) keptRowsQuery(table string, columns []string) string {
 	quotedColumns := quoteColumns(columns)
 	tableName := r.schemas[table].Name
 
-	if limit, isLimited := r.limits[table]; isLimited {
-		query := fmt.Sprintf("SELECT %s FROM `%s`", quotedColumns, tableName)
-		if where := r.whereMap[table]; where != "" {
-			query += " WHERE " + where
+	if _, isLimited := r.limits[table]; isLimited {
+		// A self-referencing limited table (e.g. product.parent_id -> product.id)
+		// must keep the ancestors of every kept row, otherwise a kept variant
+		// would reference a parent excluded by the LIMIT and break the foreign
+		// key on import. A recursive CTE seeded by the LIMIT walks the parents.
+		if selfRefs := r.selfReferences(table); len(selfRefs) != 0 {
+			return r.selfReferenceClosureQuery(table, columns, selfRefs)
 		}
-		if limit.OrderBy != "" {
-			query += " ORDER BY " + limit.OrderBy
-		}
-		query += fmt.Sprintf(" LIMIT %d", limit.Rows)
 
-		return fmt.Sprintf("SELECT %s FROM (%s) %s", quotedColumns, query, limitDerivedTableAlias)
+		return fmt.Sprintf("SELECT %s FROM (%s) %s", quotedColumns, r.limitSeedQuery(table, columns), limitDerivedTableAlias)
 	}
 
 	query := fmt.Sprintf("SELECT %s FROM `%s`", quotedColumns, tableName)
@@ -245,6 +247,109 @@ func (r *limitResolver) keptRowsQuery(table string, columns []string) string {
 	}
 
 	return query
+}
+
+// limitSeedQuery returns the plain "SELECT columns FROM table [WHERE] [ORDER BY]
+// LIMIT n" query selecting the rows kept by the limit of the given table.
+func (r *limitResolver) limitSeedQuery(table string, columns []string) string {
+	limit := r.limits[table]
+
+	query := fmt.Sprintf("SELECT %s FROM `%s`", quoteColumns(columns), r.schemas[table].Name)
+	if where := r.whereMap[table]; where != "" {
+		query += " WHERE " + where
+	}
+	if limit.OrderBy != "" {
+		query += " ORDER BY " + limit.OrderBy
+	}
+	query += fmt.Sprintf(" LIMIT %d", limit.Rows)
+
+	return query
+}
+
+// selfReferences returns the foreign keys of the given table that point back at
+// the same table (e.g. product.parent_id -> product.id).
+func (r *limitResolver) selfReferences(table string) []ForeignKeySchema {
+	var selfRefs []ForeignKeySchema
+	for _, fk := range r.schemas[table].ForeignKeys {
+		if strings.EqualFold(fk.ReferencedTable, table) {
+			selfRefs = append(selfRefs, fk)
+		}
+	}
+
+	return selfRefs
+}
+
+// selfReferenceCTEAlias names the recursive CTE that closes a limited table over
+// its self-references.
+const selfReferenceCTEAlias = "`_sw_cli_kept`"
+
+// selfReferenceClosureQuery returns a SELECT yielding the given columns of all
+// rows kept for a limited, self-referencing table: the rows selected by the
+// LIMIT plus, recursively, the parent rows they reference through selfRefs. The
+// recursive CTE guarantees the kept set is closed under the self-references, so
+// the dump imports without dangling foreign keys.
+func (r *limitResolver) selfReferenceClosureQuery(table string, columns []string, selfRefs []ForeignKeySchema) string {
+	primaryKey := r.schemas[table].PrimaryKey
+	tableName := r.schemas[table].Name
+	pkColumns := quoteColumns(primaryKey)
+
+	// Each recursive term walks one self-reference upwards: it joins the kept
+	// rows back to the base table to recover their foreign key columns, then
+	// joins to the referenced parent rows and keeps their primary keys.
+	const childAlias, parentAlias = "`_sw_child`", "`_sw_parent`"
+	recursiveTerms := make([]string, 0, len(selfRefs))
+	for _, fk := range selfRefs {
+		keptJoin := make([]string, len(primaryKey))
+		for i, column := range primaryKey {
+			keptJoin[i] = fmt.Sprintf("%s.`%s` = %s.`%s`", childAlias, column, selfReferenceCTEAlias, column)
+		}
+
+		parentJoin := make([]string, len(fk.Columns))
+		for i, column := range fk.Columns {
+			parentJoin[i] = fmt.Sprintf("%s.`%s` = %s.`%s`", parentAlias, fk.ReferencedColumns[i], childAlias, column)
+		}
+
+		recursiveTerms = append(recursiveTerms, fmt.Sprintf(
+			"SELECT %s FROM `%s` %s JOIN %s ON %s JOIN `%s` %s ON %s",
+			prefixColumns(parentAlias, primaryKey),
+			tableName, childAlias,
+			selfReferenceCTEAlias, strings.Join(keptJoin, " AND "),
+			tableName, parentAlias, strings.Join(parentJoin, " AND "),
+		))
+	}
+
+	seed := fmt.Sprintf("SELECT %s FROM (%s) %s", pkColumns, r.limitSeedQuery(table, primaryKey), limitDerivedTableAlias)
+
+	// The CTE carries only the primary key of the kept rows. When the caller
+	// wants exactly the primary key (the common case) it is selected directly;
+	// otherwise the requested columns are fetched by joining the kept keys back
+	// to the base table, which also covers foreign keys referencing non-primary
+	// key columns.
+	projection := fmt.Sprintf("%s FROM %s", quoteColumns(columns), selfReferenceCTEAlias)
+	if !slices.Equal(columns, primaryKey) {
+		keptJoin := make([]string, len(primaryKey))
+		for i, column := range primaryKey {
+			keptJoin[i] = fmt.Sprintf("`%s`.`%s` = %s.`%s`", tableName, column, selfReferenceCTEAlias, column)
+		}
+
+		projection = fmt.Sprintf("%s FROM `%s` JOIN %s ON %s", prefixColumns("`"+tableName+"`", columns), tableName, selfReferenceCTEAlias, strings.Join(keptJoin, " AND "))
+	}
+
+	return fmt.Sprintf(
+		"WITH RECURSIVE %s (%s) AS (%s UNION %s) SELECT %s",
+		selfReferenceCTEAlias, pkColumns, seed, strings.Join(recursiveTerms, " UNION "), projection,
+	)
+}
+
+// prefixColumns quotes each column and prefixes it with the given already-quoted
+// table reference, e.g. `_sw_parent`.`id`, `_sw_parent`.`version_id`.
+func prefixColumns(tableRef string, columns []string) string {
+	prefixed := make([]string, len(columns))
+	for i, column := range columns {
+		prefixed[i] = fmt.Sprintf("%s.`%s`", tableRef, column)
+	}
+
+	return strings.Join(prefixed, ", ")
 }
 
 func (r *limitResolver) nullableColumns(table string, columns []string) []string {
