@@ -103,7 +103,7 @@ func (m Model) renderDashboard(ctx app.Context) string {
 	var content string
 	switch m.activeTab {
 	case tabOverview:
-		content = m.overview.View(ctx.Width, contentH)
+		content = m.overview.View(ctx.Width, boxHeight)
 	case tabInstance:
 		m.instance.SetSize(contentW, contentH)
 		content = m.instance.View()
