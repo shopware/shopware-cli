@@ -28,7 +28,7 @@ require (
 	github.com/shyim/go-composer/sbom v0.1.1
 	github.com/shyim/go-endoflife-api v0.0.0-20260630085844-dc60358f29eb
 	github.com/shyim/go-php-discover v0.0.0-20260802092855-da3bc85f491c
-	github.com/shyim/go-phplint v0.2.3
+	github.com/shyim/go-phplint v0.2.4
 	github.com/shyim/go-spdx v0.0.0-20260602055701-a935a2772ac1
 	github.com/shyim/go-version v0.0.0-20250828113848-97ec77491b32
 	github.com/spf13/cobra v1.10.2
