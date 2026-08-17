@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "d8a4eac97b30d8054cc1b3b1664e6d94",
+    "content-hash": "ce3ff28cc313b76152150df8a1bdfd09",
     "packages": [
         {
             "name": "clue/ndjson-react",
@@ -573,29 +573,30 @@
         },
         {
             "name": "frosh/shopware-rector",
-            "version": "0.5.11",
+            "version": "0.6.0",
             "source": {
                 "type": "git",
                 "url": "https://github.com/FriendsOfShopware/shopware-rector.git",
-                "reference": "8cae3156e421142bcd0dc75fe3ae904c080d6cb7"
+                "reference": "4bce0ab04d0456b1350883f327a9f0b8f8e7cc9a"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/FriendsOfShopware/shopware-rector/zipball/8cae3156e421142bcd0dc75fe3ae904c080d6cb7",
-                "reference": "8cae3156e421142bcd0dc75fe3ae904c080d6cb7",
+                "url": "https://api.github.com/repos/FriendsOfShopware/shopware-rector/zipball/4bce0ab04d0456b1350883f327a9f0b8f8e7cc9a",
+                "reference": "4bce0ab04d0456b1350883f327a9f0b8f8e7cc9a",
                 "shasum": ""
             },
             "require": {
-                "php": "^8.1",
-                "rector/rector": "~2.0",
+                "php": "^8.2",
+                "rector/rector": "^2.6.2",
                 "webmozart/assert": "^1 || ^2"
             },
             "conflict": {
-                "rector/rector": "<2.0"
+                "rector/rector": "<2.6.2"
             },
             "require-dev": {
-                "friendsofphp/php-cs-fixer": "^3.57",
-                "phpunit/phpunit": "^9.5",
+                "friendsofphp/php-cs-fixer": "^3.95",
+                "phpstan/phpstan": "^2.0",
+                "phpunit/phpunit": "^11.5",
                 "symplify/easy-coding-standard": "~11.2"
             },
             "type": "rector-extension",
@@ -618,9 +619,9 @@
             "description": "Shopware specific Rector",
             "support": {
                 "issues": "https://github.com/FriendsOfShopware/shopware-rector/issues",
-                "source": "https://github.com/FriendsOfShopware/shopware-rector/tree/0.5.11"
+                "source": "https://github.com/FriendsOfShopware/shopware-rector/tree/0.6.0"
             },
-            "time": "2026-08-05T09:57:16+00:00"
+            "time": "2026-08-13T08:13:54+00:00"
         },
         {
             "name": "phpstan/extension-installer",
@@ -1540,16 +1541,16 @@
         },
         {
             "name": "rector/rector",
-            "version": "2.6.1",
+            "version": "2.6.2",
             "source": {
                 "type": "git",
                 "url": "https://github.com/rectorphp/rector.git",
-                "reference": "b8e68f058bca43e01a2e1caa51ef022d6551ed95"
+                "reference": "03cd615cdd5648abb5f10ff3a684fdb976687190"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/rectorphp/rector/zipball/b8e68f058bca43e01a2e1caa51ef022d6551ed95",
-                "reference": "b8e68f058bca43e01a2e1caa51ef022d6551ed95",
+                "url": "https://api.github.com/repos/rectorphp/rector/zipball/03cd615cdd5648abb5f10ff3a684fdb976687190",
+                "reference": "03cd615cdd5648abb5f10ff3a684fdb976687190",
                 "shasum": ""
             },
             "require": {
@@ -1588,7 +1589,7 @@
             ],
             "support": {
                 "issues": "https://github.com/rectorphp/rector/issues",
-                "source": "https://github.com/rectorphp/rector/tree/2.6.1"
+                "source": "https://github.com/rectorphp/rector/tree/2.6.2"
             },
             "funding": [
                 {
@@ -1596,7 +1597,7 @@
                     "type": "github"
                 }
             ],
-            "time": "2026-08-03T17:30:34+00:00"
+            "time": "2026-08-12T06:23:05+00:00"
         },
         {
             "name": "sebastian/diff",
