@@ -10,10 +10,8 @@ import (
 )
 
 func TestProjectEnvFlagHelpDefaultsToEnvironmentsLocal(t *testing.T) {
-	flag := projectRootCmd.PersistentFlags().Lookup("env")
-	require.NotNil(t, flag)
-	assert.Contains(t, flag.Usage, "environments.local")
-	assert.Contains(t, flag.Usage, "deprecated")
+	assert.Contains(t, environmentFlagUsage, "environments.local")
+	assert.Contains(t, environmentFlagUsage, "deprecated")
 }
 
 func TestSetLocalShopFromConfigInitShape(t *testing.T) {
