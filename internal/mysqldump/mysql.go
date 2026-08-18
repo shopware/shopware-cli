@@ -36,7 +36,7 @@ type Dumper struct {
 	// and the staging table setup.
 	limitResolver *limitResolver
 	// limitStagingTables maps a limited table to the staging table holding its
-	// frozen kept-set, so the set stays identical across all referencing queries.
+	// frozen kept-set
 	limitStagingTables map[string]string
 	filterMap          map[string]string
 	// LockTables controls whether to lock tables during dump (default: true)
@@ -113,9 +113,7 @@ func (d *Dumper) Dump(ctx context.Context, w io.Writer) error {
 		return err
 	}
 	defer func() {
-		if len(d.limitStagingTables) > 0 {
-			d.dropLimitStagingTables(context.WithoutCancel(ctx), d.limitStagingTables)
-		}
+		d.dropLimitStagingTables(context.WithoutCancel(ctx), d.limitStagingTables)
 	}()
 
 	if _, err = fmt.Fprintln(w, dump); err != nil {
@@ -365,8 +363,7 @@ func (d *Dumper) dumpTableDataDirect(ctx context.Context, w io.Writer, table str
 	return nil
 }
 
-// hasLimitFilter reports whether the data queries of the table carry a
-// row-limit condition computed from LimitMap.
+// hasLimitFilter reports whether the queries of the table carry a row-limit condition.
 func (d *Dumper) hasLimitFilter(table string) bool {
 	_, ok := d.limitWhere[strings.ToLower(table)]
 	return ok
@@ -680,26 +677,19 @@ func (d *Dumper) getSelectQueryFor(ctx context.Context, table string) (cols []st
 func (d *Dumper) effectiveWhere(table string) string {
 	table = strings.ToLower(table)
 
-	var conditions []string
-	if userWhere := d.WhereMap[table]; userWhere != "" {
-		conditions = append(conditions, userWhere)
-	}
-	if limitWhere := d.limitWhere[table]; limitWhere != "" {
-		conditions = append(conditions, limitWhere)
+	conditions := make([]string, 0, 2)
+	for _, condition := range []string{d.WhereMap[table], d.limitWhere[table]} {
+		if condition != "" {
+			conditions = append(conditions, condition)
+		}
 	}
 
-	switch len(conditions) {
-	case 0:
-		return ""
-	case 1:
-		return conditions[0]
-	default:
-		quoted := make([]string, len(conditions))
-		for i, condition := range conditions {
-			quoted[i] = "(" + condition + ")"
-		}
-		return strings.Join(quoted, " AND ")
+	// Only a combination needs parentheses to keep the precedence of each part.
+	if len(conditions) < 2 {
+		return strings.Join(conditions, " AND ")
 	}
+
+	return "(" + strings.Join(conditions, ") AND (") + ")"
 }
 
 func (d *Dumper) getLockTableWriteStatement(table string) string {

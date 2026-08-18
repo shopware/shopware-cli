@@ -12,7 +12,7 @@ import (
 	"github.com/shopware/shopware-cli/logging"
 )
 
-// randomTableSuffix returns a short random hex suffix used to make staging table
+// randomTableSuffix returns a short random hex suffix keeping staging table
 // names unique, so concurrent dumps of the same database do not collide.
 func randomTableSuffix() (string, error) {
 	buf := make([]byte, 4)
@@ -54,6 +54,9 @@ func (d *Dumper) computeLimitFilters(ctx context.Context) error {
 		schemas[strings.ToLower(name)] = schema
 	}
 
+	// Normalized copy instead of an in-place edit of d.LimitMap: the keys are
+	// lower-cased, unknown tables are dropped and OrderBy gets a default, and
+	// d.LimitMap is the caller-owned configuration map that must stay untouched.
 	limits := make(map[string]TableLimit, len(d.LimitMap))
 	for table, limit := range d.LimitMap {
 		table = strings.ToLower(table)
@@ -131,16 +134,11 @@ func (d *Dumper) finalizeLimitWhere() {
 }
 
 // createLimitStagingTables freezes each limited table's kept-set into a staging
-// table, so every query that references it (the limited table itself and all
-// tables filtered against it, possibly on parallel connections) reads the exact
-// same rows. Without this, the LIMIT query is re-evaluated per referencing table
-// and a non-total ORDER BY (e.g. ties on created_at) could yield different rows
-// each time, leaving dangling foreign keys in the dump.
-//
-// Creating the staging tables requires privileges to create tables. Because a
-// consistent kept-set cannot be guaranteed without them, --limit hard-fails when
-// the staging tables cannot be created instead of silently producing a dump that
-// may not import.
+// table, so every query referencing it reads the same rows. Without this, the
+// LIMIT query is re-evaluated per referencing table and a non-total ORDER BY
+// (e.g. ties on created_at) leaves dangling foreign keys in the dump. As that
+// cannot be guaranteed without the CREATE privilege, a limit hard-fails here
+// instead of producing a dump that may not import.
 func (d *Dumper) createLimitStagingTables(ctx context.Context) error {
 	if d.limitResolver == nil || len(d.limitResolver.limits) == 0 {
 		return nil
@@ -180,8 +178,7 @@ func (d *Dumper) createLimitStagingTables(ctx context.Context) error {
 	return nil
 }
 
-// dropLimitStagingTables removes the given staging tables. It is safe to call
-// with the tracked set (on cleanup) or a partial set (on a failed setup).
+// dropLimitStagingTables removes the given staging tables.
 func (d *Dumper) dropLimitStagingTables(ctx context.Context, staging map[string]string) {
 	for _, stagingName := range staging {
 		if _, err := d.useTransactionOrDBExec(ctx, fmt.Sprintf("DROP TABLE IF EXISTS `%s`", stagingName)); err != nil {
@@ -216,9 +213,7 @@ type limitResolver struct {
 	// strictly attached rows instead of recursing forever.
 	resolving map[string]bool
 	// stagingTables maps a limited table to the staging table holding its frozen
-	// kept-set. When set, kept-row lookups read from the staging table instead of
-	// re-evaluating the LIMIT query, so the set stays identical across the many
-	// queries (and parallel connections) that reference it.
+	// kept-set, which kept-row lookups read instead of re-running the LIMIT query.
 	stagingTables map[string]string
 }
 
@@ -324,8 +319,6 @@ func (r *limitResolver) keptRowsQuery(table string, columns []string) string {
 	tableName := r.schemas[table].Name
 
 	if _, isLimited := r.limits[table]; isLimited {
-		// When the kept-set has been frozen into a staging table, read from it so
-		// every reference sees the identical rows.
 		if staging, ok := r.stagingTables[table]; ok {
 			return fmt.Sprintf("SELECT %s FROM `%s`", quotedColumns, staging)
 		}
@@ -351,13 +344,9 @@ func (r *limitResolver) keptRowsQuery(table string, columns []string) string {
 
 // keptRowsPopulateQuery returns the SELECT that computes the kept-set of a
 // limited table from the live data: the LIMIT rows, plus their ancestors when
-// the table references itself. It is used both to populate the staging table and
-// as the inline fallback when no staging table could be created.
+// the table references itself. It populates the staging table and is used for
+// the conditions built before the staging tables exist.
 func (r *limitResolver) keptRowsPopulateQuery(table string, columns []string) string {
-	// A self-referencing limited table (e.g. product.parent_id -> product.id)
-	// must keep the ancestors of every kept row, otherwise a kept variant would
-	// reference a parent excluded by the LIMIT and break the foreign key on
-	// import. A recursive CTE seeded by the LIMIT walks the parents.
 	if selfRefs := r.selfReferences(table); len(selfRefs) != 0 {
 		return r.selfReferenceClosureQuery(table, columns, selfRefs)
 	}
@@ -436,11 +425,8 @@ func (r *limitResolver) selfReferenceClosureQuery(table string, columns []string
 
 	seed := fmt.Sprintf("SELECT %s FROM (%s) %s", pkColumns, r.limitSeedQuery(table, primaryKey), limitDerivedTableAlias)
 
-	// The CTE carries only the primary key of the kept rows. When the caller
-	// wants exactly the primary key (the common case) it is selected directly;
-	// otherwise the requested columns are fetched by joining the kept keys back
-	// to the base table, which also covers foreign keys referencing non-primary
-	// key columns.
+	// The CTE carries only the primary key, so other columns (foreign keys
+	// referencing non-primary key columns) are joined back from the base table.
 	projection := fmt.Sprintf("%s FROM %s", quoteColumns(columns), selfReferenceCTEAlias)
 	if !slices.Equal(columns, primaryKey) {
 		keptJoin := make([]string, len(primaryKey))
