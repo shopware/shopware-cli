@@ -13,7 +13,7 @@
         },
         "url": {
           "type": "string",
-          "description": "Deprecated: shop URL belongs under environments. Empty -e uses environments.local. Top-level url is still read during the deprecation window."
+          "description": "Shop URL. Prefer environments.local.url or another named environment; the top-level url key is still read during the deprecation window."
         },
         "compatibility_date": {
           "type": "string",
@@ -29,7 +29,7 @@
         },
         "admin_api": {
           "$ref": "#/$defs/ConfigAdminApi",
-          "description": "Deprecated: Admin API credentials belong under environments. Empty -e uses environments.local. Top-level admin_api is still read during the deprecation window."
+          "description": "Admin API credentials. Prefer environments.local.admin_api or another named environment; the top-level admin_api key is still read during the deprecation window."
         },
         "dump": {
           "$ref": "#/$defs/ConfigDump"
