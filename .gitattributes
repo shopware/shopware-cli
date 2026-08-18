@@ -1,3 +1,5 @@
 *.tpl eol=lf
 *.go eol=lf
 *.json eol=lf
+
+.github/workflows/*.lock.yml linguist-generated=true
