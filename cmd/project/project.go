@@ -19,5 +19,5 @@ var projectRootCmd = &cobra.Command{
 func Register(rootCmd *cobra.Command) {
 	rootCmd.AddCommand(projectRootCmd)
 	projectRootCmd.PersistentFlags().StringVar(&projectConfigPath, "project-config", shop.DefaultConfigFileName(), "Path to config")
-	projectRootCmd.PersistentFlags().StringVarP(&environmentName, "env", "e", "", "Target environment name")
+	projectRootCmd.PersistentFlags().StringVarP(&environmentName, "env", "e", "", "Environment to target (defaults to top-level url/admin_api, or environments.local if those are unset)")
 }

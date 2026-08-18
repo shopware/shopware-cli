@@ -22,7 +22,7 @@ var projectAdminWatchCmd = &cobra.Command{
 
 		if len(args) == 1 {
 			projectRoot = args[0]
-		} else if projectRoot, err = findClosestShopwareProject(); err != nil {
+		} else if projectRoot, err = findClosestShopwareProject(false); err != nil {
 			return err
 		}
 

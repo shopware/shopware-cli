@@ -78,7 +78,7 @@ var projectImageProxyCmd = &cobra.Command{
 	Long: `Start an HTTP server that serves files from the public folder of the closest Shopware project.
 If a file is not found locally, it proxies the request to the upstream server.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		path, err := findClosestShopwareProject()
+		path, err := findClosestShopwareProject(false)
 		if err != nil {
 			return err
 		}

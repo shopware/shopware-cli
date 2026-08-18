@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/shopware/shopware-cli/internal/compatibility"
 )
@@ -168,6 +169,22 @@ func TestResolveEnvironment(t *testing.T) {
 		assert.Equal(t, "http://localhost:8000", env.URL)
 	})
 
+	t.Run("empty name keeps top-level when environments.local also exists", func(t *testing.T) {
+		cfg := &Config{
+			URL:      "https://myshop.com",
+			AdminApi: &ConfigAdminApi{Username: "admin"},
+			Environments: map[string]*EnvironmentConfig{
+				"local": {Type: "docker", URL: "http://localhost:8000"},
+			},
+		}
+
+		env, err := cfg.ResolveEnvironment("")
+		require.NoError(t, err)
+		assert.Equal(t, "local", env.Type)
+		assert.Equal(t, "https://myshop.com", env.URL)
+		assert.Equal(t, "admin", env.AdminApi.Username)
+	})
+
 	t.Run("synthesizes from top-level when no environments configured", func(t *testing.T) {
 		cfg := &Config{
 			URL: "https://myshop.com",
@@ -198,6 +215,126 @@ func TestResolveEnvironment(t *testing.T) {
 
 		_, err := cfg.ResolveEnvironment("staging")
 		assert.Error(t, err)
+	})
+
+	t.Run("error on named environment entry without configuration", func(t *testing.T) {
+		cfg := &Config{Environments: map[string]*EnvironmentConfig{"staging": nil}}
+
+		_, err := cfg.ResolveEnvironment("staging")
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), `environment "staging" has no configuration`)
+	})
+
+	t.Run("local entry without configuration falls back to top-level", func(t *testing.T) {
+		cfg := &Config{
+			URL:          "https://myshop.com",
+			Environments: map[string]*EnvironmentConfig{"local": nil},
+		}
+
+		env, err := cfg.ResolveEnvironment("")
+		require.NoError(t, err)
+		assert.Equal(t, "local", env.Type)
+		assert.Equal(t, "https://myshop.com", env.URL)
+	})
+}
+
+func TestWithEnvironment(t *testing.T) {
+	baseConfig := func() *Config {
+		return &Config{
+			URL:      "https://myshop.com",
+			AdminApi: &ConfigAdminApi{Username: "admin", Password: "shopware"},
+			Environments: map[string]*EnvironmentConfig{
+				"staging": {
+					Type:     "local",
+					URL:      "https://staging.example.com",
+					AdminApi: &ConfigAdminApi{ClientId: "staging-id", ClientSecret: "staging-secret"},
+				},
+				"bare": {Type: "local"},
+			},
+		}
+	}
+
+	t.Run("named environment overrides url and admin api", func(t *testing.T) {
+		cfg, err := baseConfig().WithEnvironment("staging")
+		require.NoError(t, err)
+		assert.Equal(t, "https://staging.example.com", cfg.URL)
+		assert.Equal(t, "staging-id", cfg.AdminApi.ClientId)
+	})
+
+	t.Run("environment without overrides keeps base values", func(t *testing.T) {
+		cfg, err := baseConfig().WithEnvironment("bare")
+		require.NoError(t, err)
+		assert.Equal(t, "https://myshop.com", cfg.URL)
+		assert.Equal(t, "admin", cfg.AdminApi.Username)
+	})
+
+	t.Run("error on unknown environment", func(t *testing.T) {
+		_, err := baseConfig().WithEnvironment("production")
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), `environment "production" not found`)
+	})
+
+	t.Run("error on environment entry without configuration", func(t *testing.T) {
+		cfg := &Config{
+			URL:          "https://myshop.com",
+			Environments: map[string]*EnvironmentConfig{"staging": nil},
+		}
+
+		_, err := cfg.WithEnvironment("staging")
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), `environment "staging" has no configuration`)
+	})
+
+	t.Run("no name and no environments keeps config unchanged", func(t *testing.T) {
+		cfg := &Config{URL: "https://myshop.com", AdminApi: &ConfigAdminApi{Username: "admin"}}
+
+		resolved, err := cfg.WithEnvironment("")
+		require.NoError(t, err)
+		assert.Equal(t, "https://myshop.com", resolved.URL)
+		assert.Equal(t, "admin", resolved.AdminApi.Username)
+	})
+
+	t.Run("empty name keeps top-level when environments.local also exists", func(t *testing.T) {
+		cfg := &Config{
+			URL:      "https://myshop.com",
+			AdminApi: &ConfigAdminApi{Username: "admin"},
+			Environments: map[string]*EnvironmentConfig{
+				"local": {
+					URL:      "http://localhost:8000",
+					AdminApi: &ConfigAdminApi{Username: "local-admin"},
+				},
+			},
+		}
+
+		resolved, err := cfg.WithEnvironment("")
+		require.NoError(t, err)
+		assert.Equal(t, "https://myshop.com", resolved.URL)
+		assert.Equal(t, "admin", resolved.AdminApi.Username)
+	})
+
+	t.Run("empty name applies environments.local when top-level shop is unset", func(t *testing.T) {
+		cfg := &Config{
+			Environments: map[string]*EnvironmentConfig{
+				"local": {
+					URL:      "http://localhost:8000",
+					AdminApi: &ConfigAdminApi{Username: "local-admin"},
+				},
+			},
+		}
+
+		resolved, err := cfg.WithEnvironment("")
+		require.NoError(t, err)
+		assert.Equal(t, "http://localhost:8000", resolved.URL)
+		assert.Equal(t, "local-admin", resolved.AdminApi.Username)
+	})
+
+	t.Run("does not mutate the original config", func(t *testing.T) {
+		cfg := baseConfig()
+
+		_, err := cfg.WithEnvironment("staging")
+		assert.NoError(t, err)
+		assert.Equal(t, "https://myshop.com", cfg.URL)
+		assert.Equal(t, "admin", cfg.AdminApi.Username)
 	})
 }
 

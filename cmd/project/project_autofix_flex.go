@@ -18,7 +18,7 @@ var projectAutofixFlexCmd = &cobra.Command{
 	Use:   "flex",
 	Short: "Autofix project to Symfony Flex",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		project, err := findClosestShopwareProject()
+		project, err := findClosestShopwareProject(false)
 		if err != nil {
 			return err
 		}

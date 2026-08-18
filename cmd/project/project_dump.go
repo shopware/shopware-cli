@@ -198,7 +198,7 @@ func assembleConnectionURI(cmd *cobra.Command) (*mysql.Config, error) {
 // commands, but keeps dump usable outside a Shopware project: there the
 // process environment and the connection flags are all that is needed.
 func resolveDumpDatabaseConnection(cmd *cobra.Command) (*executor.DatabaseConnection, error) {
-	if _, err := findClosestShopwareProject(); err != nil {
+	if _, err := findClosestShopwareProject(false); err != nil {
 		return executor.NewLocal("").DatabaseConnection(cmd.Context())
 	}
 

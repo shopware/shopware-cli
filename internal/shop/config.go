@@ -51,24 +51,57 @@ type Config struct {
 	foundConfig            bool
 }
 
+// ResolveEnvironment returns the named environment. An empty name uses the
+// top-level url/admin_api when either is set, otherwise environments.local.
 func (c *Config) ResolveEnvironment(name string) (*EnvironmentConfig, error) {
 	if name != "" {
 		env, ok := c.Environments[name]
 		if !ok {
 			return nil, fmt.Errorf("environment %q not found in config", name)
 		}
+		if env == nil {
+			return nil, fmt.Errorf("environment %q has no configuration", name)
+		}
 		return env, nil
 	}
 
-	if env, ok := c.Environments["local"]; ok {
+	if c.URL != "" || c.AdminApi != nil {
+		return c.topLevelEnvironment(), nil
+	}
+
+	if env, ok := c.Environments["local"]; ok && env != nil {
 		return env, nil
 	}
 
+	return c.topLevelEnvironment(), nil
+}
+
+func (c *Config) topLevelEnvironment() *EnvironmentConfig {
 	return &EnvironmentConfig{
 		Type:     "local",
 		URL:      c.URL,
 		AdminApi: c.AdminApi,
-	}, nil
+	}
+}
+
+// WithEnvironment returns a copy of the config with URL and Admin API credentials from ResolveEnvironment, keeping base values the environment does not override.
+func (c *Config) WithEnvironment(name string) (*Config, error) {
+	env, err := c.ResolveEnvironment(name)
+	if err != nil {
+		return nil, err
+	}
+
+	cfg := *c
+
+	if env.URL != "" {
+		cfg.URL = env.URL
+	}
+
+	if env.AdminApi != nil {
+		cfg.AdminApi = env.AdminApi
+	}
+
+	return &cfg, nil
 }
 
 func (c *Config) IsAdminAPIConfigured() bool {
