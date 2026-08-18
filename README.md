@@ -121,6 +121,14 @@ Available skills are `shopware-cli` and `shopware-cli-docker`.
 
 Contributions are welcome. If you want to improve commands, docs, or developer workflows, open an issue or send a pull request.
 
+## Troubleshooting
+
+If commands feel slow, the update check may be timing out. The CLI fetches
+release information over the network, so a slow or unavailable internet
+connection can cause the request to use the full 900 ms timeout before the
+command exits. See [Disable update notifications](#disable-update-notifications)
+for instructions on disabling update notifications.
+
 ## License
 
 See [LICENSE](LICENSE).
