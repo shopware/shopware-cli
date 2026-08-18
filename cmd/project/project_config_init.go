@@ -15,6 +15,10 @@ import (
 var projectConfigInitCmd = &cobra.Command{
 	Use:   "init",
 	Short: "Creates a new project config in current dir",
+	Long: `Creates a new .shopware-project.yml in the current directory.
+
+Shop URL and Admin API credentials are written under environments.local.
+Omit -e / --env on later commands to target that environment.`,
 	RunE: func(cmd *cobra.Command, _ []string) error {
 		if !system.IsInteractionEnabled(cmd.Context()) {
 			return errors.New("this command requires interaction, but interaction is disabled")
@@ -43,13 +47,14 @@ func askProjectConfig(config *shop.Config) error {
 	var authType string
 	var clientId, clientSecret string
 	var username, password string
+	var shopURL string
 
 	form := huh.NewForm(
 		huh.NewGroup(
 			huh.NewInput().
 				Title("Shop-URL example: http://localhost").
 				Validate(emptyValidator).
-				Value(&config.URL),
+				Value(&shopURL),
 			huh.NewConfirm().
 				Title("Configure admin-api access").
 				Value(&configureApi),
@@ -93,20 +98,19 @@ func askProjectConfig(config *shop.Config) error {
 		return err
 	}
 
-	if !configureApi {
-		return nil
+	var adminApi *shop.ConfigAdminApi
+	if configureApi {
+		adminApi = &shop.ConfigAdminApi{}
+		if authType == "integration" {
+			adminApi.ClientId = clientId
+			adminApi.ClientSecret = clientSecret
+		} else {
+			adminApi.Username = username
+			adminApi.Password = password
+		}
 	}
 
-	config.AdminApi = &shop.ConfigAdminApi{}
-
-	if authType == "integration" {
-		config.AdminApi.ClientId = clientId
-		config.AdminApi.ClientSecret = clientSecret
-		return nil
-	}
-
-	config.AdminApi.Username = username
-	config.AdminApi.Password = password
+	config.SetLocalShop(shopURL, adminApi)
 
 	return nil
 }

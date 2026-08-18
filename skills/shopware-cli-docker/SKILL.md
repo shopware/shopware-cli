@@ -144,7 +144,7 @@ Direct Docker execution is the fallback, not the default.
 
 Do not assume that an environment named `local`, `dev`, `staging`, or similar is Docker-backed or safe to modify.
 
-Inspect `.shopware-project.yml` and use the CLI's environment selection mechanisms.
+Inspect `.shopware-project.yml` and use the CLI's environment selection mechanisms. Empty `-e` / `--env` targets `environments.local`. Store shop URL and Admin API credentials under `environments`, not at the top level.
 
 Before destructive commands, establish exactly which environment will be affected.
 

@@ -7,8 +7,11 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zaptest/observer"
 
 	"github.com/shopware/shopware-cli/internal/compatibility"
+	"github.com/shopware/shopware-cli/logging"
 )
 
 func TestConfigMerging(t *testing.T) {
@@ -79,6 +82,9 @@ func TestConfigWithoutPHPVersionStaysBackwardCompatible(t *testing.T) {
 	written, err := os.ReadFile(filepath.Join(tmpDir, ".shopware-project.yml"))
 	assert.NoError(t, err)
 	assert.NotContains(t, string(written), "php_version")
+	assert.NotRegexp(t, `(?m)^url:`, string(written))
+	assert.NotRegexp(t, `(?m)^admin_api:`, string(written))
+	assert.Contains(t, string(written), "environments:")
 }
 
 func TestReadConfigCompatibilityDateValidation(t *testing.T) {
@@ -170,6 +176,7 @@ func TestResolveEnvironment(t *testing.T) {
 	})
 
 	t.Run("empty name keeps top-level when environments.local also exists", func(t *testing.T) {
+		// Deprecation-window compatibility: mixed files keep the top-level shop.
 		cfg := &Config{
 			URL:      "https://myshop.com",
 			AdminApi: &ConfigAdminApi{Username: "admin"},
@@ -295,6 +302,7 @@ func TestWithEnvironment(t *testing.T) {
 	})
 
 	t.Run("empty name keeps top-level when environments.local also exists", func(t *testing.T) {
+		// Deprecation-window compatibility: mixed files keep the top-level shop.
 		cfg := &Config{
 			URL:      "https://myshop.com",
 			AdminApi: &ConfigAdminApi{Username: "admin"},
@@ -371,6 +379,101 @@ environments:
 	staging := config.Environments["staging"]
 	assert.Equal(t, "docker", staging.Type)
 	assert.Equal(t, "https://staging.example.com", staging.URL)
+}
+
+func TestSetLocalShop(t *testing.T) {
+	t.Run("writes environments.local without top-level shop keys", func(t *testing.T) {
+		cfg := &Config{CompatibilityDate: "2026-01-01"}
+		cfg.SetLocalShop("http://127.0.0.1:8000", &ConfigAdminApi{Username: "admin", Password: "shopware"})
+
+		assert.Empty(t, cfg.URL)
+		assert.Nil(t, cfg.AdminApi)
+		require.NotNil(t, cfg.Environments["local"])
+		assert.Equal(t, "local", cfg.Environments["local"].Type)
+		assert.Equal(t, "http://127.0.0.1:8000", cfg.Environments["local"].URL)
+		assert.Equal(t, "admin", cfg.Environments["local"].AdminApi.Username)
+		assert.Equal(t, "shopware", cfg.Environments["local"].AdminApi.Password)
+	})
+
+	t.Run("preserves existing local type when already present", func(t *testing.T) {
+		cfg := &Config{
+			Environments: map[string]*EnvironmentConfig{
+				"local": {Type: "docker"},
+			},
+		}
+		cfg.SetLocalShop("http://127.0.0.1:8000", nil)
+
+		assert.Equal(t, "docker", cfg.Environments["local"].Type)
+		assert.Equal(t, "http://127.0.0.1:8000", cfg.Environments["local"].URL)
+		assert.Nil(t, cfg.Environments["local"].AdminApi)
+	})
+}
+
+func TestHasDeprecatedTopLevelShop(t *testing.T) {
+	assert.False(t, (&Config{}).HasDeprecatedTopLevelShop())
+	assert.False(t, NewConfig().HasDeprecatedTopLevelShop())
+	assert.True(t, (&Config{URL: "https://example.com"}).HasDeprecatedTopLevelShop())
+	assert.True(t, (&Config{AdminApi: &ConfigAdminApi{Username: "admin"}}).HasDeprecatedTopLevelShop())
+}
+
+func TestReadConfigWarnsOnDeprecatedTopLevelShop(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, ".shopware-project.yml")
+	require.NoError(t, os.WriteFile(configPath, []byte(`
+url: https://example.com
+compatibility_date: "2026-01-01"
+admin_api:
+  username: admin
+  password: shopware
+`), 0o644))
+
+	core, logs := observer.New(zap.WarnLevel)
+	ctx := logging.WithLogger(t.Context(), zap.New(core).Sugar())
+
+	cfg, err := ReadConfig(ctx, configPath, false)
+	require.NoError(t, err)
+	assert.True(t, cfg.HasDeprecatedTopLevelShop())
+	require.NotEmpty(t, logs.All())
+	assert.Contains(t, logs.All()[0].Message, "deprecated top-level url/admin_api")
+	assert.Contains(t, logs.All()[0].Message, "environments.local")
+}
+
+func TestReadConfigDoesNotWarnOnEnvironmentsOnly(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, ".shopware-project.yml")
+	require.NoError(t, os.WriteFile(configPath, []byte(`
+compatibility_date: "2026-01-01"
+environments:
+  local:
+    type: local
+    url: http://127.0.0.1:8000
+    admin_api:
+      username: admin
+      password: shopware
+`), 0o644))
+
+	core, logs := observer.New(zap.WarnLevel)
+	ctx := logging.WithLogger(t.Context(), zap.New(core).Sugar())
+
+	cfg, err := ReadConfig(ctx, configPath, false)
+	require.NoError(t, err)
+	assert.False(t, cfg.HasDeprecatedTopLevelShop())
+	assert.Empty(t, logs.All())
+}
+
+func TestWriteConfigOmitsDeprecatedTopLevelShop(t *testing.T) {
+	tmpDir := t.TempDir()
+	cfg := NewConfig()
+	cfg.SetLocalShop("http://127.0.0.1:8000", &ConfigAdminApi{Username: "admin", Password: "shopware"})
+
+	require.NoError(t, WriteConfig(cfg, tmpDir))
+
+	written, err := os.ReadFile(filepath.Join(tmpDir, ".shopware-project.yml"))
+	require.NoError(t, err)
+	assert.NotRegexp(t, `(?m)^url:`, string(written))
+	assert.NotRegexp(t, `(?m)^admin_api:`, string(written))
+	assert.Contains(t, string(written), "environments:")
+	assert.Contains(t, string(written), "http://127.0.0.1:8000")
 }
 
 func TestConfigDump_EnableAnonymization(t *testing.T) {
