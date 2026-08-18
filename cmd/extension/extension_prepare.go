@@ -12,7 +12,7 @@ import (
 var extensionPrepareCmd = &cobra.Command{
 	Use:        "prepare [path]",
 	Short:      "Install Composer dependencies of an extension and delete unnecessary files for zipping",
-	Deprecated: "will be removed in October 2026. Use `extension package` instead.",
+	Deprecated: "Will be removed in October 2026. Use `extension package` instead.",
 	Args:       cobra.MinimumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		path, err := filepath.Abs(args[0])
