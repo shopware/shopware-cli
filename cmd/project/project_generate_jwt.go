@@ -19,8 +19,9 @@ import (
 )
 
 var projectNewJWTCmd = &cobra.Command{
-	Use:   "generate-jwt",
-	Short: "Generate a new JWT secret key",
+	Use:        "generate-jwt",
+	Short:      "Generate a new JWT secret key",
+	Deprecated: "will be removed in October 2026",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		publicKey, privateKey, err := generatePrivatePublicKey(2048)
 		if err != nil {
@@ -64,6 +65,8 @@ var projectNewJWTCmd = &cobra.Command{
 func init() {
 	projectRootCmd.AddCommand(projectNewJWTCmd)
 	projectNewJWTCmd.PersistentFlags().Bool("env", false, "Provide secrets as environment variables")
+	// Cobra prints Deprecated via Out; keep --env key output on stdout parseable.
+	projectNewJWTCmd.SetOut(os.Stderr)
 }
 
 func generatePrivatePublicKey(keyLength int) ([]byte, []byte, error) {
