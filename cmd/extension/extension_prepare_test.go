@@ -34,14 +34,14 @@ func TestExtensionPreparePrintsDeprecationNotice(t *testing.T) {
 	out := new(bytes.Buffer)
 	extensionPrepareCmd.SetOut(out)
 	extensionPrepareCmd.SetErr(out)
-	extensionPrepareCmd.SetArgs([]string{"--help"})
+	extensionRootCmd.SetArgs([]string{"prepare", "--help"})
 	t.Cleanup(func() {
-		extensionPrepareCmd.SetArgs(nil)
+		extensionRootCmd.SetArgs(nil)
 		extensionPrepareCmd.SetOut(nil)
 		extensionPrepareCmd.SetErr(nil)
 	})
 
-	require.NoError(t, extensionPrepareCmd.Execute())
+	require.NoError(t, extensionRootCmd.Execute())
 
 	output := out.String()
 	assert.Contains(t, output, "deprecated")
@@ -55,15 +55,15 @@ func TestExtensionPrepareStillExecutes(t *testing.T) {
 	out := new(bytes.Buffer)
 	extensionPrepareCmd.SetOut(out)
 	extensionPrepareCmd.SetErr(out)
-	extensionPrepareCmd.SetArgs([]string{dir})
 	extensionPrepareCmd.SetContext(t.Context())
+	extensionRootCmd.SetArgs([]string{"prepare", dir})
 	t.Cleanup(func() {
-		extensionPrepareCmd.SetArgs(nil)
+		extensionRootCmd.SetArgs(nil)
 		extensionPrepareCmd.SetOut(nil)
 		extensionPrepareCmd.SetErr(nil)
 	})
 
-	require.NoError(t, extensionPrepareCmd.Execute())
+	require.NoError(t, extensionRootCmd.Execute())
 	assert.Contains(t, out.String(), "deprecated")
 	assert.Contains(t, out.String(), "October 2026")
 }

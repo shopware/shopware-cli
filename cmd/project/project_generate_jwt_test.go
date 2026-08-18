@@ -21,14 +21,14 @@ func TestGenerateJWTPrintsDeprecationNotice(t *testing.T) {
 	out := new(bytes.Buffer)
 	projectNewJWTCmd.SetOut(out)
 	projectNewJWTCmd.SetErr(out)
-	projectNewJWTCmd.SetArgs([]string{"--help"})
+	projectRootCmd.SetArgs([]string{"generate-jwt", "--help"})
 	t.Cleanup(func() {
-		projectNewJWTCmd.SetArgs(nil)
+		projectRootCmd.SetArgs(nil)
 		projectNewJWTCmd.SetOut(os.Stderr)
 		projectNewJWTCmd.SetErr(nil)
 	})
 
-	require.NoError(t, projectNewJWTCmd.Execute())
+	require.NoError(t, projectRootCmd.Execute())
 
 	output := out.String()
 	assert.Contains(t, output, "deprecated")
