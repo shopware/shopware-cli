@@ -1,4 +1,4 @@
-# 2. Project configuration under `.config/shopware/`
+# 2. Shopware CLI configuration under `.config/shopware/`
 
 - Status: Proposed
 - Date: 2026-08-18
@@ -6,116 +6,156 @@
 
 ## Context
 
-Shopware CLI stores project-level settings in a YAML file at the repository root. Today that file is discovered as:
+Shopware CLI stores two kinds of checkout-level YAML configuration as root-level dotfiles:
 
-- `.shopware-project.yml` (default when creating or when no `.yaml` file is present)
-- `.shopware-project.yaml` (accepted when it already exists)
+| Kind | Current files | Written by | Missing file |
+| --- | --- | --- | --- |
+| Project (CLI + Deployment Helper) | `.shopware-project.yml`, `.shopware-project.yaml` | `project config init`, `project create`, TUI | some commands fall back; others fail |
+| Extension | `.shopware-extension.yml`, `.shopware-extension.yaml` | `extension config init` | silently falls back to an empty config |
 
-`shopware-cli project config init` and `shopware-cli project create` always write `.shopware-project.yml`. A sibling override file (`.shopware-project.local.yml` / `.shopware-project.local.yaml`) is deep-merged at read time for credentials and other values that should not be committed. `--project-config` selects an explicit path and bypasses discovery.
+Project config also supports a sibling local override (`.shopware-project.local.yml` / `.yaml`) that is deep-merged at read time. `--project-config` selects an explicit project-config path. Extension config has no local-override file and no equivalent flag; it is always discovered relative to the extension directory.
 
-This works, but it adds another root-level dotfile and spreads Shopware-specific configuration across ad-hoc names as more developer tools appear. [The `.config` convention](https://dot-config.github.io/) gives tools a shared, predictable namespace under `.config/<vendor>/` without claiming the entire project root.
+This works, but it adds more root-level dotfiles and spreads Shopware-specific configuration across ad-hoc names as more developer tools appear. [The `.config` convention](https://dot-config.github.io/) gives tools a shared, predictable namespace under `.config/<vendor>/` without claiming the entire project root.
 
-Issue #1387 asks the CLI (and, later, Deployment Helper) to prefer:
+Issue #1387 asks developer tooling in this domain to prefer `.config/shopware/`. The original sketch listed `project.yaml` and `lsp.json`. Extension config belongs in the same namespace: it is the other first-party CLI YAML file, it has the same discovery and init pattern, and leaving it at the root would keep the clutter the issue is trying to remove.
+
+`lsp.json` remains reserved for shopware-lsp / agent tooling and is not read by the CLI.
+
+This ADR applies to Shopware CLI and the project-config contract it shares with Deployment Helper. It does not define a company-wide location for every Shopware tool.
+
+## Decision
+
+Adopt `.config/shopware/` as the preferred directory for Shopware CLI checkout configuration. Keep the current YAML schemas and merge rules. Treat the root-level `.shopware-project.*` and `.shopware-extension.*` files as legacy locations during a deprecation period.
+
+### Preferred layout
 
 ```text
 .config/shopware/
 ├── project.yaml
+├── extension.yaml
 └── lsp.json
 ```
 
-`project.yaml` is the CLI and Deployment Helper configuration. `lsp.json` is reserved for shopware-lsp / agent tooling and is not read by the CLI.
+In a Shopware project that also contains extensions, the files live next to the checkout they describe:
 
-This ADR applies to Shopware CLI and the config contract it shares with Deployment Helper. It does not define a company-wide location for every Shopware tool. Extension configuration (`.shopware-extension.yml`) is unchanged.
+```text
+.config/shopware/project.yaml
+custom/plugins/MyPlugin/.config/shopware/extension.yaml
+```
 
-## Decision
-
-Adopt `.config/shopware/project.yaml` as the preferred project configuration path. Keep the current YAML schema, merge rules, and `--project-config` override. Treat the root-level `.shopware-project.yml` / `.shopware-project.yaml` files as legacy locations during a deprecation period.
-
-### Preferred layout
+A standalone extension repository uses the same relative path at its own root: `.config/shopware/extension.yaml`.
 
 | Role | Preferred path | Legacy paths still read |
 | --- | --- | --- |
 | Project config | `.config/shopware/project.yaml` | `.shopware-project.yml`, `.shopware-project.yaml` |
-| Local override (derived from the resolved base file) | `.config/shopware/project.local.yaml` | `.shopware-project.local.yml`, `.shopware-project.local.yaml` |
+| Project local override (derived from the resolved base file) | `.config/shopware/project.local.yaml` | `.shopware-project.local.yml`, `.shopware-project.local.yaml` |
+| Extension config | `.config/shopware/extension.yaml` | `.shopware-extension.yml`, `.shopware-extension.yaml` |
 | LSP / agent config | `.config/shopware/lsp.json` | out of scope for the CLI |
 
-The new location uses the `.yaml` suffix only. We will not also invent `.config/shopware/project.yml`.
+New locations use the `.yaml` suffix only. We will not also invent `.config/shopware/project.yml` or `.config/shopware/extension.yml`.
 
-### Automatic discovery
+### Shared discovery rules
 
-Discovery runs against the current working directory when `--project-config` is not set. Precedence:
+For each config kind, discovery runs against the relevant root (process working directory for project config when `--project-config` is unset; the extension directory for extension config).
+
+Precedence for project config:
 
 1. `.config/shopware/project.yaml` if the file exists
 2. `.shopware-project.yaml` if the file exists
 3. `.shopware-project.yml` if the file exists
 
-If both the preferred file and a legacy file exist, the preferred file wins and the CLI emits a warning that names both paths and tells the user the legacy file is ignored for this run.
+Precedence for extension config:
 
-If none of the files exist, the CLI behaves as it does today: commands that allow a missing config continue with an empty fallback; commands that require a config fail and point the user at `shopware-cli project config init`.
+1. `.config/shopware/extension.yaml` if the file exists
+2. `.shopware-extension.yml` if the file exists
+3. `.shopware-extension.yaml` if the file exists
 
-`--project-config <path>` always wins over discovery, including when a preferred file and a legacy file both exist. Environment variables that already override *values* inside the file (`SHOPWARE_CLI_API_*` and similar) are unchanged. This ADR does not add a new environment variable for the file path.
+Legacy order stays as it is today for each family (project prefers `.yaml` then `.yml`; extension prefers `.yml` then `.yaml`).
 
-`--project-config` must not bake a discovered filename in as the Cobra flag default at process start. Today `DefaultConfigFileName()` is evaluated when flags are registered and only distinguishes the two legacy names. After this change, an unset flag means "discover"; only an explicit flag value is treated as a fixed path.
+If both the preferred file and a legacy file of the same kind exist, the preferred file wins and the CLI emits a warning that names both paths and tells the user the legacy file is ignored for this run.
+
+If none of the files exist, the CLI behaves as it does today: project commands that allow a missing config continue with an empty fallback; project commands that require a config fail and point the user at `shopware-cli project config init`; extension commands keep the current empty-config fallback.
+
+`--project-config <path>` always wins over project-config discovery, including when a preferred file and a legacy file both exist. Environment variables that already override *values* inside the project file (`SHOPWARE_CLI_API_*` and similar) are unchanged. This ADR does not add a new environment variable for either file path, and it does not add an `--extension-config` flag.
+
+`--project-config` must not bake a discovered filename in as the Cobra flag default at process start. Today `DefaultConfigFileName()` is evaluated when flags are registered and only distinguishes the two legacy project names. After this change, an unset flag means "discover"; only an explicit flag value is treated as a fixed path.
 
 ### Writing configuration
 
-New files are written to the preferred path:
+New files are written to the preferred path for that kind:
 
 - `shopware-cli project config init`
 - `shopware-cli project create`
 - first write of a newly created project from the TUI
+- `shopware-cli extension config init` when no extension config exists yet
 
 The CLI creates `.config/shopware/` as needed.
 
-Updates write back to the file that was actually resolved for that project. The CLI does not silently copy or move a legacy file to the preferred path on save. Doing so would leave two files on disk and, on the next run, ignore the file the user just edited.
+Updates and forced overwrites write back to the file that was actually resolved. The CLI does not silently copy or move a legacy file to the preferred path on save. Doing so would leave two files on disk and, on the next run, ignore the file the user just edited.
 
-Local override writes follow the same rule: the override path is derived from the resolved base file by inserting `.local` before the extension (the existing `localConfigFileName` behavior). A preferred base file therefore uses `.config/shopware/project.local.yaml`. A legacy base file keeps `.shopware-project.local.yml` / `.yaml`. The CLI does not merge a preferred base file with a legacy local file, or the reverse.
+`extension config init --force` therefore overwrites the existing resolved file. It does not create `.config/shopware/extension.yaml` beside a leftover `.shopware-extension.yml`.
+
+Project local override writes follow the same rule: the override path is derived from the resolved base file by inserting `.local` before the extension (the existing `localConfigFileName` behavior). A preferred base file therefore uses `.config/shopware/project.local.yaml`. A legacy base file keeps `.shopware-project.local.yml` / `.yaml`. The CLI does not merge a preferred base file with a legacy local file, or the reverse. Extension config has no local-override file today and does not gain one here.
 
 ### Deployment Helper
 
-Deployment Helper consumes the same `deployment:` block and must use the same discovery and precedence rules, including the both-files warning. The lookup contract belongs with this ADR so the two tools do not diverge. The implementation in Deployment Helper is a follow-up in that repository.
+Deployment Helper consumes the same `deployment:` block from the *project* config and must use the same project-config discovery and precedence rules, including the both-files warning. The lookup contract belongs with this ADR so the two tools do not diverge. The implementation in Deployment Helper is a follow-up in that repository. Deployment Helper does not read extension config.
 
 ### Migration
 
 There is no breaking cut-over and no removal date in this ADR.
 
-The documented migration for an existing project is:
+The documented migration for an existing checkout is:
 
 1. Create `.config/shopware/` if needed.
 2. Move `.shopware-project.yml` or `.shopware-project.yaml` to `.config/shopware/project.yaml`.
 3. If a sibling `.shopware-project.local.yml` / `.yaml` exists, move it to `.config/shopware/project.local.yaml`.
-4. Commit the preferred file (not the local override).
-5. Delete the leftover root-level file so the both-files warning goes away.
+4. Move `.shopware-extension.yml` or `.shopware-extension.yaml` to `.config/shopware/extension.yaml`.
+5. Commit the preferred files (not the local override).
+6. Delete leftover root-level files so the both-files warning goes away.
 
-`shopware-cli project config init` is not a migrator. It only creates a new preferred file when none of the discovered locations exist, or when the user explicitly asks it to write.
+Do this in the project root for project config, and in each extension root for extension config.
+
+`project config init` and `extension config init` are not migrators. They only create a new preferred file when none of the discovered locations for that kind exist.
 
 ## Consequences
 
 ### Compatibility
 
-Existing projects keep working without changes. Users who already pass `--project-config` keep that path. CI jobs and scripts that assume the default write location will see `.config/shopware/project.yaml` for newly created projects.
+Existing projects and extensions keep working without changes. Users who already pass `--project-config` keep that path. CI jobs and scripts that assume the default write location will see `.config/shopware/project.yaml` or `.config/shopware/extension.yaml` for newly created files.
 
 ### Documentation and messaging
 
-Help text, doctor output, error messages, skills, and architecture notes should name the preferred path and mention that the legacy root-level files still work. The JSON schema itself does not change; only the published description of where the file lives does.
+Help text, doctor output, error messages, skills, and architecture notes should name the preferred paths and mention that the legacy root-level files still work. The JSON schemas themselves do not change; only the published description of where the files live does.
 
 ### Implementation surface in this repository
 
-The behavior change is concentrated in `internal/shop` (`DefaultConfigFileName` / discovery, `WriteConfig`, `WriteLocalConfig`) and the callers that hard-code `.shopware-project.yml` when they should use discovery or the preferred write path (`cmd/project`, TUI, verifier project loading). Tests should cover:
+Project-config changes are concentrated in `internal/shop` (`DefaultConfigFileName` / discovery, `WriteConfig`, `WriteLocalConfig`) and callers that hard-code `.shopware-project.yml` (`cmd/project`, TUI, verifier project loading).
+
+Extension-config changes are concentrated in `internal/extension` (`ConfigPath`, `InitConfig`, `readExtensionConfig`) and help text in `cmd/extension`.
+
+Tests should cover, for each kind:
 
 - preferred file is discovered
 - each legacy file is still discovered
 - preferred file wins when both exist, with a warning
-- `--project-config` wins over both
-- init and create write the preferred path
-- local override is derived from the resolved base file
+- init writes the preferred path when no file exists
 - a missing config still falls back or errors as today
+
+Additionally for project config:
+
+- `--project-config` wins over both
+- local override is derived from the resolved base file
+
+Additionally for extension config:
+
+- `--force` overwrites the resolved existing file and does not create a second location
 
 ### Out of scope
 
-- `.shopware-extension.yml` / `.shopware-extension.yaml`
 - global CLI config (`.shopware-cli.yaml`)
 - reading or writing `.config/shopware/lsp.json`
+- a local-override file for extension config
 - automatic rewriting of existing repositories
 - a hard deadline for removing legacy paths
 - a company-wide mandate that every Shopware tool adopt `.config/shopware/`
