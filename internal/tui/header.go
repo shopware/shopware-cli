@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"context"
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
@@ -17,20 +18,34 @@ const (
 // It is set from cmd/root.go at startup.
 var AppVersion = "dev"
 
+// UpdateAvailable blocks until the background update check finishes and
+// reports whether a newer, installable release exists. It is set from
+// cmd/root.go at startup, like AppVersion; when nil, the header skips the
+// update hint entirely.
+var UpdateAvailable func(context.Context) bool
+
 // Header is the branding header row the dev dashboard, the upgrade wizard,
 // and the plugin-migrate wizard render as shell chrome. It follows the Bubble
 // Tea component shape (Init/Update/View) so message-driven header state can
 // be added here without rewiring the hosts.
 type Header struct {
 	// branding is the styled "● Shopware CLI v1.0.0 · Documentation · GitHub"
-	// line, rendered once at construction; width is its visual width in
-	// terminal columns.
-	branding string
-	width    int
+	// line, rendered once at construction.
+	branding       string
+	width          int
+	showUpdateHint bool
 }
+
+// UpdateAvailableMsg is delivered when the asynchronous update check finds a
+// newer CLI version. Hosts forward it to Header.Update like any other message.
+type UpdateAvailableMsg struct{}
 
 // NewHeader creates the shared branding header.
 func NewHeader() Header {
+	return Header{}.withUpdateHint(false)
+}
+
+func (h Header) withUpdateHint(showUpdateHint bool) Header {
 	icon := lipgloss.NewStyle().Foreground(BrandColor).Render("●")
 	title := lipgloss.NewStyle().Bold(true).Foreground(TextColor).Render(appTitle)
 	version := DimStyle.Render(AppVersion)
@@ -41,18 +56,27 @@ func NewHeader() Header {
 
 	sep := DimStyle.Render(" · ")
 
-	branding := icon + " " + title + " " + version + sep + docsLink + sep + ghLink
-	return Header{branding: branding, width: lipgloss.Width(branding)}
+	updateHint := ""
+	if showUpdateHint {
+		updateHint = " " + lipgloss.NewStyle().Foreground(WarnColor).Render(" ⁺₊⋆ Update available ⋆₊⁺ ")
+	}
+
+	branding := icon + " " + title + " " + version + updateHint + sep + docsLink + sep + ghLink
+	return Header{branding: branding, width: lipgloss.Width(branding), showUpdateHint: showUpdateHint}
 }
 
-// Init implements the component contract; the header has no startup work.
+// Init starts the update-hint wait; every host that renders the header gets
+// the hint without extra wiring. Returns nil when no check is configured.
 func (h Header) Init() tea.Cmd {
-	return nil
+	return NewUpdateCheckCmd(UpdateAvailable)
 }
 
-// Update implements the component contract; the header holds no
-// message-driven state yet.
-func (h Header) Update(tea.Msg) (Header, tea.Cmd) {
+// Update applies an update result received by the parent TUI model.
+func (h Header) Update(msg tea.Msg) (Header, tea.Cmd) {
+	if _, ok := msg.(UpdateAvailableMsg); ok && !h.showUpdateHint {
+		return h.withUpdateHint(true), nil
+	}
+
 	return h, nil
 }
 
