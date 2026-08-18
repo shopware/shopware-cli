@@ -42,15 +42,19 @@ func TestFindClosestShopwareProjectFallback(t *testing.T) {
 	t.Chdir(t.TempDir())
 
 	_, err := findClosestShopwareProject(false)
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "cannot find Shopware project")
+	if assert.Error(t, err) {
+		assert.Contains(t, err.Error(), "cannot find Shopware project")
+	}
 
 	cwd, err := os.Getwd()
-	require.NoError(t, err)
+	if !assert.NoError(t, err) {
+		return
+	}
 
 	root, err := findClosestShopwareProject(true)
-	require.NoError(t, err)
-	assert.Equal(t, cwd, root)
+	if assert.NoError(t, err) {
+		assert.Equal(t, cwd, root)
+	}
 }
 
 func TestSelectExtensionsCannotBeCombinedWithOnlyExtensions(t *testing.T) {

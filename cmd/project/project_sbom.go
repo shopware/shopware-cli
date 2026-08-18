@@ -2,7 +2,6 @@ package project
 
 import (
 	"fmt"
-	"os"
 	"path/filepath"
 
 	"github.com/spf13/cobra"
@@ -80,17 +79,5 @@ func resolveProjectSbomRoot(args []string) (string, error) {
 		return filepath.Abs(args[0])
 	}
 
-	root, err := findClosestShopwareProject(false)
-	if err == nil {
-		return root, nil
-	}
-
-	// findClosestShopwareProject fails when no Shopware markers exist. Still
-	// allow generating an SBOM from a plain composer project in cwd so the
-	// command is useful outside full Shopware trees.
-	cwd, cwdErr := os.Getwd()
-	if cwdErr != nil {
-		return "", err
-	}
-	return cwd, nil
+	return findClosestShopwareProject(false)
 }
