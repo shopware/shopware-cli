@@ -25,7 +25,7 @@ var projectAdminBuildCmd = &cobra.Command{
 			if err != nil {
 				return err
 			}
-		} else if projectRoot, err = findClosestShopwareProject(); err != nil {
+		} else if projectRoot, err = findClosestShopwareProject(false); err != nil {
 			return err
 		}
 

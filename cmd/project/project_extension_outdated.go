@@ -7,7 +7,6 @@ import (
 	"github.com/spf13/cobra"
 
 	adminSdk "github.com/shopware/shopware-cli/internal/admin-api"
-	"github.com/shopware/shopware-cli/internal/shop"
 	"github.com/shopware/shopware-cli/internal/tui"
 	"github.com/shopware/shopware-cli/logging"
 )
@@ -16,16 +15,19 @@ var projectExtensionOutdatedCmd = &cobra.Command{
 	Use:   "outdated",
 	Short: "List all outdated extensions",
 	RunE: func(cmd *cobra.Command, _ []string) error {
-		var cfg *shop.Config
-		var err error
-
 		outputAsJson, _ := cmd.PersistentFlags().GetBool("json")
 
-		if cfg, err = readConfigWithEnvironment(cmd, true); err != nil {
+		projectRoot, err := findClosestShopwareProject(true)
+		if err != nil {
 			return err
 		}
 
-		client, err := shop.NewShopClient(cmd.Context(), cfg)
+		cmdExecutor, err := resolveExecutor(cmd, projectRoot)
+		if err != nil {
+			return err
+		}
+
+		client, err := cmdExecutor.AdminAPIClient(cmd.Context())
 		if err != nil {
 			return err
 		}

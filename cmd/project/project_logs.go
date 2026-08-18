@@ -22,7 +22,7 @@ var projectLogsCmd = &cobra.Command{
 	Long:  "Show the last lines of a Shopware log file. Without arguments, shows the most recently modified log file. Use --list to discover available log files.",
 	Args:  cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		projectRoot, err := findClosestShopwareProject()
+		projectRoot, err := findClosestShopwareProject(false)
 		if err != nil {
 			return err
 		}

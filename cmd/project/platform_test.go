@@ -2,6 +2,7 @@ package project
 
 import (
 	"context"
+	"os"
 	"testing"
 
 	"github.com/spf13/cobra"
@@ -34,6 +35,22 @@ func TestSelectExtensionsRequiresInteractiveTerminal(t *testing.T) {
 
 	err := validateExtensionSelection(system.WithInteraction(context.Background(), false), "", true)
 	require.EqualError(t, err, "--select-extensions requires an interactive terminal; use --only-extensions with a comma-separated list instead")
+}
+
+func TestFindClosestShopwareProjectFallback(t *testing.T) {
+	t.Setenv("PROJECT_ROOT", "")
+	t.Chdir(t.TempDir())
+
+	_, err := findClosestShopwareProject(false)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "cannot find Shopware project")
+
+	cwd, err := os.Getwd()
+	require.NoError(t, err)
+
+	root, err := findClosestShopwareProject(true)
+	require.NoError(t, err)
+	assert.Equal(t, cwd, root)
 }
 
 func TestSelectExtensionsCannotBeCombinedWithOnlyExtensions(t *testing.T) {

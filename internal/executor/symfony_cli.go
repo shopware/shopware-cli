@@ -75,6 +75,10 @@ func (s *SymfonyCLIExecutor) AdminAPIClient(ctx context.Context) (*adminSdk.Clie
 	return adminAPIClient(ctx, s.shopCfg, s.envCfg)
 }
 
+func (s *SymfonyCLIExecutor) ShopConfig() *shop.Config {
+	return s.shopCfg
+}
+
 func (s *SymfonyCLIExecutor) DatabaseConnection(_ context.Context) (*DatabaseConnection, error) {
 	return databaseConnectionFromEnv(s.projectRoot, s.env)
 }

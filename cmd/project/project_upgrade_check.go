@@ -17,7 +17,6 @@ import (
 	account_api "github.com/shopware/shopware-cli/internal/account-api"
 	adminSdk "github.com/shopware/shopware-cli/internal/admin-api"
 	"github.com/shopware/shopware-cli/internal/extension"
-	"github.com/shopware/shopware-cli/internal/shop"
 	"github.com/shopware/shopware-cli/internal/system"
 	"github.com/shopware/shopware-cli/internal/tracking"
 	"github.com/shopware/shopware-cli/internal/tui"
@@ -28,18 +27,23 @@ var projectUpgradeCheckCmd = &cobra.Command{
 	Use:   "upgrade-check",
 	Short: "Check that installed extensions are compatible with a future Shopware version",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		var cfg *shop.Config
-		var err error
 		var shopwareVersion *version.Version
 		var extensions map[string]string
 
-		if cfg, err = readConfigWithEnvironment(cmd, true); err != nil {
+		projectRoot, err := findClosestShopwareProject(true)
+		if err != nil {
 			return err
 		}
 
-		if cfg.IsAdminAPIConfigured() {
+		cmdExecutor, err := resolveExecutor(cmd, projectRoot)
+		if err != nil {
+			return err
+		}
+
+		cfg := cmdExecutor.ShopConfig()
+		if cfg != nil && cfg.IsAdminAPIConfigured() {
 			logging.FromContext(cmd.Context()).Debugf("Using Shopware Admin API to lookup for available extensions")
-			client, err := shop.NewShopClient(cmd.Context(), cfg)
+			client, err := cmdExecutor.AdminAPIClient(cmd.Context())
 			if err != nil {
 				return err
 			}
@@ -181,7 +185,7 @@ func init() {
 }
 
 func getLocalExtensions() (*version.Version, map[string]string, error) {
-	project, err := findClosestShopwareProject()
+	project, err := findClosestShopwareProject(false)
 	if err != nil {
 		return nil, nil, err
 	}

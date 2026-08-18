@@ -169,6 +169,22 @@ func TestResolveEnvironment(t *testing.T) {
 		assert.Equal(t, "http://localhost:8000", env.URL)
 	})
 
+	t.Run("empty name keeps top-level when environments.local also exists", func(t *testing.T) {
+		cfg := &Config{
+			URL:      "https://myshop.com",
+			AdminApi: &ConfigAdminApi{Username: "admin"},
+			Environments: map[string]*EnvironmentConfig{
+				"local": {Type: "docker", URL: "http://localhost:8000"},
+			},
+		}
+
+		env, err := cfg.ResolveEnvironment("")
+		require.NoError(t, err)
+		assert.Equal(t, "local", env.Type)
+		assert.Equal(t, "https://myshop.com", env.URL)
+		assert.Equal(t, "admin", env.AdminApi.Username)
+	})
+
 	t.Run("synthesizes from top-level when no environments configured", func(t *testing.T) {
 		cfg := &Config{
 			URL: "https://myshop.com",
@@ -276,6 +292,40 @@ func TestWithEnvironment(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, "https://myshop.com", resolved.URL)
 		assert.Equal(t, "admin", resolved.AdminApi.Username)
+	})
+
+	t.Run("empty name keeps top-level when environments.local also exists", func(t *testing.T) {
+		cfg := &Config{
+			URL:      "https://myshop.com",
+			AdminApi: &ConfigAdminApi{Username: "admin"},
+			Environments: map[string]*EnvironmentConfig{
+				"local": {
+					URL:      "http://localhost:8000",
+					AdminApi: &ConfigAdminApi{Username: "local-admin"},
+				},
+			},
+		}
+
+		resolved, err := cfg.WithEnvironment("")
+		require.NoError(t, err)
+		assert.Equal(t, "https://myshop.com", resolved.URL)
+		assert.Equal(t, "admin", resolved.AdminApi.Username)
+	})
+
+	t.Run("empty name applies environments.local when top-level shop is unset", func(t *testing.T) {
+		cfg := &Config{
+			Environments: map[string]*EnvironmentConfig{
+				"local": {
+					URL:      "http://localhost:8000",
+					AdminApi: &ConfigAdminApi{Username: "local-admin"},
+				},
+			},
+		}
+
+		resolved, err := cfg.WithEnvironment("")
+		require.NoError(t, err)
+		assert.Equal(t, "http://localhost:8000", resolved.URL)
+		assert.Equal(t, "local-admin", resolved.AdminApi.Username)
 	})
 
 	t.Run("does not mutate the original config", func(t *testing.T) {

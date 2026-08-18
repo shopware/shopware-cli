@@ -10,7 +10,6 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/shopware/shopware-cli/internal/curl"
-	"github.com/shopware/shopware-cli/internal/shop"
 )
 
 var skipDefaultHeaders bool
@@ -19,18 +18,22 @@ var projectAdminApiCmd = &cobra.Command{
 	Use:   "admin-api [method] [path]",
 	Short: "pre authenticated curl interface to the Admin API",
 	RunE: func(cobraCmd *cobra.Command, args []string) error {
-		var cfg *shop.Config
-		var err error
-
-		if cfg, err = readConfigWithEnvironment(cobraCmd, false); err != nil {
+		projectRoot, err := findClosestShopwareProject(true)
+		if err != nil {
 			return err
 		}
 
-		if cfg.AdminApi == nil {
+		cmdExecutor, err := resolveExecutor(cobraCmd, projectRoot)
+		if err != nil {
+			return err
+		}
+
+		cfg := cmdExecutor.ShopConfig()
+		if cfg == nil || cfg.AdminApi == nil {
 			return errors.New("admin api is not activated in the config")
 		}
 
-		client, err := shop.NewShopClient(cobraCmd.Context(), cfg)
+		client, err := cmdExecutor.AdminAPIClient(cobraCmd.Context())
 		if err != nil {
 			return err
 		}

@@ -42,6 +42,9 @@ type Executor interface {
 	StopEnvironment(ctx context.Context, opts StopOptions) error
 	EnvironmentStatus(ctx context.Context) (bool, error)
 	AdminAPIClient(ctx context.Context) (*adminSdk.Client, error)
+	// ShopConfig returns the project config with the selected environment's
+	// url and admin_api applied.
+	ShopConfig() *shop.Config
 	// DatabaseConnection returns credentials to reach the project database
 	// from the host machine.
 	DatabaseConnection(ctx context.Context) (*DatabaseConnection, error)

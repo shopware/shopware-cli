@@ -37,27 +37,48 @@ func writeMinimalPlugin(t *testing.T) string {
 	return dir
 }
 
-func TestReadConfigWithEnvironmentPropagatesConfigError(t *testing.T) {
+func clearShopClientEnv(t *testing.T) {
+	t.Helper()
+	t.Setenv("SHOPWARE_CLI_API_URL", "")
+	t.Setenv("SHOPWARE_CLI_API_CLIENT_ID", "")
+	t.Setenv("SHOPWARE_CLI_API_CLIENT_SECRET", "")
+	t.Setenv("SHOPWARE_CLI_API_USERNAME", "")
+	t.Setenv("SHOPWARE_CLI_API_PASSWORD", "")
+}
+
+func setupEnvironmentConfig(t *testing.T) {
+	t.Helper()
+	clearShopClientEnv(t)
+	t.Setenv("PROJECT_ROOT", t.TempDir())
+
+	configPath := filepath.Join(t.TempDir(), ".shopware-project.yml")
+	require.NoError(t, os.WriteFile(configPath, []byte(`
+url: http://127.0.0.1:9
+compatibility_date: "2026-01-01"
+admin_api:
+  client_id: base-id
+  client_secret: base-secret
+environments:
+  staging:
+    url: http://127.0.0.1:29
+    admin_api:
+      client_id: staging-id
+      client_secret: staging-secret
+`), 0o644))
+
 	previousConfigPath := projectConfigPath
 	previousEnvironmentName := environmentName
+	projectConfigPath = configPath
 	t.Cleanup(func() {
 		projectConfigPath = previousConfigPath
 		environmentName = previousEnvironmentName
 	})
-
-	projectConfigPath = filepath.Join(t.TempDir(), "does-not-exist.yml")
-	environmentName = "staging"
-
-	cmd := &cobra.Command{}
-	cmd.SetContext(t.Context())
-
-	_, err := readConfigWithEnvironment(cmd, false)
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "cannot find project configuration file")
 }
 
-// Without -e the base config must stay in effect even when environments.local exists.
 func TestNoEnvFlagKeepsBaseConfig(t *testing.T) {
+	clearShopClientEnv(t)
+	t.Setenv("PROJECT_ROOT", t.TempDir())
+
 	configPath := filepath.Join(t.TempDir(), ".shopware-project.yml")
 	require.NoError(t, os.WriteFile(configPath, []byte(`
 url: http://127.0.0.1:9
@@ -87,7 +108,37 @@ environments:
 	assert.NotContains(t, err.Error(), "127.0.0.1:7", "environments.local must not silently retarget commands")
 }
 
-// Every Admin API command must reject an unknown environment and contact the selected environment's URL.
+func TestNoEnvFlagUsesLocalWhenNoTopLevel(t *testing.T) {
+	clearShopClientEnv(t)
+	t.Setenv("PROJECT_ROOT", t.TempDir())
+
+	configPath := filepath.Join(t.TempDir(), ".shopware-project.yml")
+	require.NoError(t, os.WriteFile(configPath, []byte(`
+compatibility_date: "2026-01-01"
+environments:
+  local:
+    url: http://127.0.0.1:7
+    admin_api:
+      client_id: local-id
+      client_secret: local-secret
+`), 0o644))
+
+	previousConfigPath := projectConfigPath
+	previousEnvironmentName := environmentName
+	projectConfigPath = configPath
+	environmentName = ""
+	t.Cleanup(func() {
+		projectConfigPath = previousConfigPath
+		environmentName = previousEnvironmentName
+	})
+
+	projectExtensionListCmd.SetContext(t.Context())
+
+	err := projectExtensionListCmd.RunE(projectExtensionListCmd, []string{})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "127.0.0.1:7", "without -e and no top-level shop, environments.local must be used")
+}
+
 func TestAdminAPICommandsResolveEnvironment(t *testing.T) {
 	pluginDir := writeMinimalPlugin(t)
 

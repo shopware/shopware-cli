@@ -80,7 +80,7 @@ func resolveProjectSbomRoot(args []string) (string, error) {
 		return filepath.Abs(args[0])
 	}
 
-	root, err := findClosestShopwareProject()
+	root, err := findClosestShopwareProject(false)
 	if err == nil {
 		return root, nil
 	}

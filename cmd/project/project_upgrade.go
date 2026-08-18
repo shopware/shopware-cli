@@ -16,7 +16,7 @@ var projectUpgradeCmd = &cobra.Command{
 		"In a terminal this runs as an interactive wizard. With --no-interaction (or without a terminal, e.g. CI) the upgrade runs headless:\n" +
 		"--target is required there, --dry-run stops after the read-only preflight, and --no-audit continues when dependencies are blocked by security advisories.",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		projectRoot, err := findClosestShopwareProject()
+		projectRoot, err := findClosestShopwareProject(false)
 		if err != nil {
 			return err
 		}

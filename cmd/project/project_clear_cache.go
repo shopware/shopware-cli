@@ -6,7 +6,6 @@ import (
 	"github.com/spf13/cobra"
 
 	adminSdk "github.com/shopware/shopware-cli/internal/admin-api"
-	"github.com/shopware/shopware-cli/internal/shop"
 	"github.com/shopware/shopware-cli/logging"
 )
 
@@ -14,27 +13,26 @@ var projectClearCacheCmd = &cobra.Command{
 	Use:   "clear-cache",
 	Short: "Clears the Shop cache",
 	RunE: func(cmd *cobra.Command, _ []string) error {
-		var cfg *shop.Config
-		var err error
-
-		if cfg, err = readConfigWithEnvironment(cmd, false); err != nil {
+		projectRoot, err := findClosestShopwareProject(true)
+		if err != nil {
 			return err
 		}
 
-		if cfg.AdminApi == nil {
-			logging.FromContext(cmd.Context()).Infof("Clearing cache localy")
+		cmdExecutor, err := resolveExecutor(cmd, projectRoot)
+		if err != nil {
+			return err
+		}
 
-			projectRoot, err := findClosestShopwareProject()
-			if err != nil {
-				return err
-			}
+		cfg := cmdExecutor.ShopConfig()
+		if cfg == nil || cfg.AdminApi == nil {
+			logging.FromContext(cmd.Context()).Infof("Clearing cache localy")
 
 			return os.RemoveAll(projectRoot + "/var/cache")
 		}
 
 		logging.FromContext(cmd.Context()).Infof("Clearing cache using admin-api")
 
-		client, err := shop.NewShopClient(cmd.Context(), cfg)
+		client, err := cmdExecutor.AdminAPIClient(cmd.Context())
 		if err != nil {
 			return err
 		}
