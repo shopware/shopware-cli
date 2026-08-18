@@ -1,0 +1,4 @@
+{
+  "name": "shopware-cli",
+  "install": "./.cursor/install.sh"
+}
