@@ -35,6 +35,10 @@ Please keep PRs focused. Smaller PRs are easier to review and merge.
 
 ## Development
 
+Develop (branch of) from `main` unless you work on a big feature / epic,
+where you not want to block bug fix releases with a half finished implementation.
+For that use a dedicated feature branch (e.g. `next`) as your target branch.
+
 Before submitting, run the relevant checks locally:
 
 ```sh
@@ -80,3 +84,9 @@ manager.
 ## Reviews
 
 Maintainers may ask for changes, suggest a different direction, or decline a PR if the approach was not discussed beforehand. That is not personal; it is how we keep the project consistent and sustainable.
+
+## Releases
+
+In general releases happen from the default `main` branch with everything included there at the time of release.
+If a feature branch (e.g. `next`) is ready for release it needs to be merged back into `main` before the release to be included.
+The specific release process is explained in [RELEASING.md](RELEASING.md) and done on demand by the maintainers.

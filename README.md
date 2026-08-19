@@ -141,6 +141,7 @@ Available skills are `shopware-cli` and `shopware-cli-docker`.
 ## Contributing
 
 Contributions are welcome. If you want to improve commands, docs, or developer workflows, open an issue or send a pull request.
+See [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## License
 
