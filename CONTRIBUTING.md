@@ -35,9 +35,9 @@ Please keep PRs focused. Smaller PRs are easier to review and merge.
 
 ## Development
 
-Develop (branch of) from `main` unless you work on a big feature / epic,
-where you not want to block bug fix releases with a half finished implementation.
-For that use a dedicated feature branch (e.g. `next`) as your target branch.
+Branch from `main` unless you work on a large feature or epic that should not
+block bug-fix releases. In that case, use a dedicated feature branch (for
+example, `next`) as the pull request target branch.
 
 Before submitting, run the relevant checks locally:
 
