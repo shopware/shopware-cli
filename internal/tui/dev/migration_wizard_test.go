@@ -311,7 +311,8 @@ func TestMigrationWizardApplyToConfig(t *testing.T) {
 	sg.applyToConfig(cfg)
 
 	assert.Equal(t, shop.CompatibilityDevMode, cfg.CompatibilityDate)
-	assert.Equal(t, "http://127.0.0.1:8000", cfg.URL)
+	assert.Empty(t, cfg.URL, "must not write deprecated top-level url")
+	assert.Nil(t, cfg.AdminApi, "must not write deprecated top-level admin_api")
 	assert.NotNil(t, cfg.Environments)
 	assert.NotNil(t, cfg.Environments["local"])
 	assert.Equal(t, "docker", cfg.Environments["local"].Type)
@@ -331,9 +332,8 @@ func TestMigrationWizardApplyToConfig_PreservesExistingURL(t *testing.T) {
 
 	sg.applyToConfig(cfg)
 
-	// Should preserve existing URL at top level
+	// Existing top-level url is left untouched so mixed files are not retargeted
 	assert.Equal(t, "https://myshop.example.com", cfg.URL)
-	// But local env still uses the default
 	assert.Equal(t, "http://127.0.0.1:8000", cfg.Environments["local"].URL)
 }
 

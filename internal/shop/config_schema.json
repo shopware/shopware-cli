@@ -13,7 +13,7 @@
         },
         "url": {
           "type": "string",
-          "description": "The URL of the Shopware instance"
+          "description": "Shop URL. Prefer environments.local.url or another named environment; the top-level url key is still read during the deprecation window."
         },
         "compatibility_date": {
           "type": "string",
@@ -28,7 +28,8 @@
           "$ref": "#/$defs/ConfigBuild"
         },
         "admin_api": {
-          "$ref": "#/$defs/ConfigAdminApi"
+          "$ref": "#/$defs/ConfigAdminApi",
+          "description": "Admin API credentials. Prefer environments.local.admin_api or another named environment; the top-level admin_api key is still read during the deprecation window."
         },
         "dump": {
           "$ref": "#/$defs/ConfigDump"
@@ -51,7 +52,7 @@
             "$ref": "#/$defs/EnvironmentConfig"
           },
           "type": "object",
-          "description": "Named environments for multi-environment management"
+          "description": "Named shop targets. Empty -e selects environments.local. Store url and admin_api here rather than at the top level."
         },
         "disable_composer_scripts": {
           "type": "boolean",
@@ -652,10 +653,12 @@
           ]
         },
         "url": {
-          "type": "string"
+          "type": "string",
+          "description": "Shop URL for this named environment"
         },
         "admin_api": {
-          "$ref": "#/$defs/ConfigAdminApi"
+          "$ref": "#/$defs/ConfigAdminApi",
+          "description": "Admin API credentials for this named environment"
         }
       },
       "additionalProperties": false,

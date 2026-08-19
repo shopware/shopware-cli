@@ -104,6 +104,7 @@ environments:
 
 	err := projectExtensionListCmd.RunE(projectExtensionListCmd, []string{})
 	require.Error(t, err)
+	// Deprecation-window compatibility: mixed files keep the top-level shop.
 	assert.Contains(t, err.Error(), "127.0.0.1:9", "without -e the base URL must be used")
 	assert.NotContains(t, err.Error(), "127.0.0.1:7", "environments.local must not silently retarget commands")
 }

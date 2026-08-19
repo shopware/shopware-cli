@@ -21,28 +21,31 @@ import (
 )
 
 type EnvironmentConfig struct {
-	Type     string          `yaml:"type" jsonschema:"enum=local,enum=docker"`
-	URL      string          `yaml:"url,omitempty"`
+	Type string `yaml:"type" jsonschema:"enum=local,enum=docker"`
+	// Shop URL for this named environment
+	URL string `yaml:"url,omitempty"`
+	// Admin API credentials for this named environment
 	AdminApi *ConfigAdminApi `yaml:"admin_api,omitempty"`
 }
 
 type Config struct {
 	AdditionalConfigs []string `yaml:"include,omitempty"`
-	// The URL of the Shopware instance
-	URL string `yaml:"url"`
+	// Shop URL. Prefer environments.local.url or another named environment; the top-level url key is still read during the deprecation window.
+	URL string `yaml:"url,omitempty" jsonschema:"deprecated=true"`
 	// Controls date-based compatibility behavior, formatted as YYYY-MM-DD.
 	CompatibilityDate string `yaml:"compatibility_date,omitempty" jsonschema:"format=date"`
 	// PHP version (e.g. "8.3") used for local PHP and Composer commands of this project. Written by "project create" for non-Docker projects. The matching PHP is looked up on the machine running the command, so the value stays portable across machines; it takes precedence over the php found in PATH, while the PHP_BINARY environment variable overrides it.
-	PHPVersion       string            `yaml:"php_version,omitempty"`
-	Build            *ConfigBuild      `yaml:"build,omitempty"`
-	AdminApi         *ConfigAdminApi   `yaml:"admin_api,omitempty"`
+	PHPVersion string       `yaml:"php_version,omitempty"`
+	Build      *ConfigBuild `yaml:"build,omitempty"`
+	// Admin API credentials. Prefer environments.local.admin_api or another named environment; the top-level admin_api key is still read during the deprecation window.
+	AdminApi         *ConfigAdminApi   `yaml:"admin_api,omitempty" jsonschema:"deprecated=true"`
 	ConfigDump       *ConfigDump       `yaml:"dump,omitempty"`
 	ConfigDeployment *ConfigDeployment `yaml:"deployment,omitempty"`
 	Validation       *ConfigValidation `yaml:"validation,omitempty"`
 	ImageProxy       *ConfigImageProxy `yaml:"image_proxy,omitempty"`
 	// Docker dev environment configuration
 	Docker *ConfigDocker `yaml:"docker,omitempty"`
-	// Named environments for multi-environment management
+	// Named shop targets. Empty -e selects environments.local. Store url and admin_api here rather than at the top level.
 	Environments map[string]*EnvironmentConfig `yaml:"environments,omitempty"`
 	// When enabled, composer scripts will be disabled during CI builds
 	DisableComposerScripts bool `yaml:"disable_composer_scripts,omitempty"`
@@ -52,7 +55,9 @@ type Config struct {
 }
 
 // ResolveEnvironment returns the named environment. An empty name uses the
-// top-level url/admin_api when either is set, otherwise environments.local.
+// deprecated top-level url/admin_api when either is set, otherwise
+// environments.local. Mixed files are not silently retargeted during the
+// deprecation window.
 func (c *Config) ResolveEnvironment(name string) (*EnvironmentConfig, error) {
 	if name != "" {
 		env, ok := c.Environments[name]
@@ -82,6 +87,34 @@ func (c *Config) topLevelEnvironment() *EnvironmentConfig {
 		URL:      c.URL,
 		AdminApi: c.AdminApi,
 	}
+}
+
+// HasDeprecatedTopLevelShop reports whether the config still stores a shop
+// target at the top-level url or admin_api keys.
+func (c *Config) HasDeprecatedTopLevelShop() bool {
+	return c.URL != "" || c.AdminApi != nil
+}
+
+// SetLocalShop stores the shop URL and optional Admin API credentials on
+// environments.local. It does not set top-level url or admin_api.
+func (c *Config) SetLocalShop(url string, adminApi *ConfigAdminApi) {
+	env := c.ensureLocalEnvironment()
+	env.URL = url
+	if adminApi != nil {
+		env.AdminApi = adminApi
+	}
+}
+
+func (c *Config) ensureLocalEnvironment() *EnvironmentConfig {
+	if c.Environments == nil {
+		c.Environments = make(map[string]*EnvironmentConfig)
+	}
+	if env := c.Environments["local"]; env != nil {
+		return env
+	}
+	env := &EnvironmentConfig{Type: "local"}
+	c.Environments["local"] = env
+	return env
 }
 
 // WithEnvironment returns a copy of the config with URL and Admin API credentials from ResolveEnvironment, keeping base values the environment does not override.
@@ -793,6 +826,7 @@ func ReadConfig(ctx context.Context, fileName string, allowFallback bool) (*Conf
 	}
 
 	config.foundConfig = true
+	warnDeprecatedTopLevelShop(ctx, fileName, config)
 
 	if len(config.AdditionalConfigs) > 0 {
 		for _, additionalConfigFile := range config.AdditionalConfigs {
@@ -817,6 +851,17 @@ func ReadConfig(ctx context.Context, fileName string, allowFallback bool) (*Conf
 	}
 
 	return fillEmptyConfig(config), nil
+}
+
+func warnDeprecatedTopLevelShop(ctx context.Context, fileName string, c *Config) {
+	if !c.HasDeprecatedTopLevelShop() {
+		return
+	}
+
+	logging.FromContext(ctx).Warnf(
+		"Config %s uses deprecated top-level url/admin_api; move shop URL and Admin API credentials to environments (empty -e defaults to environments.local)",
+		fileName,
+	)
 }
 
 func fillEmptyConfig(c *Config) *Config {
