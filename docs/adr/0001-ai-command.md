@@ -1,7 +1,6 @@
-# 1. Shopware AI integrations in `shopware-cli`
-
-- Status: Proposed
-- Date: 2026-08-06
+title: Handling Shopware AI integrations
+date: 2026-08-06
+tags: [ai, MCP Server, Agent Skill, integration]
 
 ## Context
 
