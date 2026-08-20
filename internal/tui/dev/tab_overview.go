@@ -3,12 +3,14 @@ package dev
 import (
 	"bufio"
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"image/color"
 	"io"
 	"net"
+	"net/http"
 	"net/url"
 	"path/filepath"
 	"strconv"
@@ -24,6 +26,7 @@ import (
 	dockerpkg "github.com/shopware/shopware-cli/internal/docker"
 	"github.com/shopware/shopware-cli/internal/executor"
 	"github.com/shopware/shopware-cli/internal/extension"
+	"github.com/shopware/shopware-cli/internal/proxy"
 	"github.com/shopware/shopware-cli/internal/shop"
 	"github.com/shopware/shopware-cli/internal/system"
 	"github.com/shopware/shopware-cli/internal/tui"
@@ -50,17 +53,45 @@ type OverviewModel struct {
 	err                error
 	width              int
 	height             int
+	adminWatchURL      string
+	sfWatchURL         string
 	adminWatchRunning  bool
 	adminWatchStarting bool
+	adminWatchReady    bool
 	sfWatchRunning     bool
 	sfWatchStarting    bool
-	shopwareVersion    string
-	adminWatchURL      string
-	securityEnd        time.Time
-	health             []healthCheck
-	healthLoading      bool
-	cursor             int // focus index: 0=Admin watcher, 1=Storefront watcher
+	sfWatchReady       bool
+	// proxyHost is the project's proxy hostname (empty for a non-proxy
+	// project), resolved once at construction. Cached because the proxy-ness of
+	// a project is fixed for the session and View runs on every frame — calling
+	// proxyHostname() (which reads registry.json and resolves symlinks) per
+	// render would block the render loop.
+	proxyHost string
+	// domainsSetupDone is whether the one-time machine setup (DNS + HTTPS
+	// trust, via `proxy setup`) is in place. Drives the Domains block's Setup
+	// status and whether the `s` action is offered.
+	domainsSetupDone bool
+	shopwareVersion  string
+	securityEnd      time.Time
+	health           []healthCheck
+	healthLoading    bool
+	// Instances: the projects registered with the shared proxy, with per-instance
+	// status/memory/uptime and their combined memory. Shown only for proxy
+	// projects, under Setup health.
+	instancesLoading     bool
+	instances            []proxy.InstanceInfo
+	instancesCombinedMem int64
+	cursor               int // watcher focus index: 0=Admin, 1=Storefront (↑/↓ move it)
+	// scrollY is the vertical scroll offset (in lines) into the rendered report,
+	// so the overview can be paged when it is taller than the viewport. The mouse
+	// wheel (and pgup/pgdn/home/end) drive the scroll; the arrow keys stay bound
+	// to watcher focus.
+	scrollY int
 }
+
+// overviewBottomPadding is the blank space kept below the report so the last
+// line is not flush against the viewport edge when scrolled to the bottom.
+const overviewBottomPadding = 1
 
 type DiscoveredService struct {
 	Name     string
@@ -169,6 +200,45 @@ type watcherRunningMsg struct {
 	err  error
 }
 
+// watcherProbeMsg carries the result of one readiness probe: ready is true
+// once the watcher's URL actually answers. The webpack storefront watcher only
+// binds its port after its first compile (a few seconds), during which the
+// proxy returns 502 — so the URL is held back until a probe succeeds.
+type watcherProbeMsg struct {
+	name  string
+	url   string
+	ready bool
+}
+
+// watcherProbeInterval is how often a starting watcher's URL is polled until
+// it serves.
+const watcherProbeInterval = 750 * time.Millisecond
+
+// watcherProbeClient probes a watcher's own URL. TLS verification is skipped
+// because the proxy serves a locally generated certificate the Go client does
+// not trust, and this is only a local readiness check.
+var watcherProbeClient = &http.Client{
+	Timeout: 3 * time.Second,
+	Transport: &http.Transport{
+		TLSClientConfig: &tls.Config{InsecureSkipVerify: true}, //nolint:gosec // local readiness probe against a self-signed dev cert
+	},
+}
+
+// probeWatcher polls url once after a short delay and reports whether the
+// watcher is serving yet, so the UI can hold back its URL until then.
+func probeWatcher(name, url string) tea.Cmd {
+	return tea.Tick(watcherProbeInterval, func(time.Time) tea.Msg {
+		ready := false
+		if req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, url, nil); err == nil {
+			if resp, err := watcherProbeClient.Do(req); err == nil {
+				_ = resp.Body.Close()
+				ready = resp.StatusCode < 500
+			}
+		}
+		return watcherProbeMsg{name: name, url: url, ready: ready}
+	})
+}
+
 type knownService struct {
 	Name       string
 	TargetPort int
@@ -215,6 +285,22 @@ func linkURL(url string) string {
 	return tui.RenderStyledLink(url)
 }
 
+// watchLinkLabel returns a compact display label for a watcher URL, kept short
+// enough for the narrow "User action" column while the full URL stays the click
+// target. For proxy hostnames it is the leading label ("storefront-watch"); for
+// plain local URLs it is host:port, where the port is the distinguishing part.
+func watchLinkLabel(rawURL string) string {
+	u, err := url.Parse(rawURL)
+	if err != nil || u.Host == "" {
+		return rawURL
+	}
+	host := u.Hostname()
+	if label, _, found := strings.Cut(host, "."); found && net.ParseIP(host) == nil {
+		return label
+	}
+	return u.Host
+}
+
 // deriveAdminURL returns the admin URL for the given shop URL by appending the
 // "admin" path segment.
 func deriveAdminURL(shopURL string) string {
@@ -227,26 +313,120 @@ func deriveAdminURL(shopURL string) string {
 
 func NewOverviewModel(envType, shopURL, username, password, projectRoot string, exec executor.Executor, shopCfg *shop.Config) OverviewModel {
 	return OverviewModel{
-		envType:       envType,
-		shopURL:       shopURL,
-		adminURL:      deriveAdminURL(shopURL),
-		adminWatchURL: fmt.Sprintf("http://127.0.0.1:%d", extension.AdminDevServerPort(projectRoot)),
-		username:      username,
-		password:      password,
-		projectRoot:   projectRoot,
-		executor:      exec,
-		shopCfg:       shopCfg,
-		loading:       true,
-		healthLoading: true,
+		envType:          envType,
+		shopURL:          shopURL,
+		adminURL:         deriveAdminURL(shopURL),
+		username:         username,
+		password:         password,
+		projectRoot:      projectRoot,
+		executor:         exec,
+		shopCfg:          shopCfg,
+		adminWatchURL:    resolveAdminWatchURL(projectRoot),
+		sfWatchURL:       resolveStorefrontWatchURL(projectRoot),
+		proxyHost:        proxyHostname(projectRoot),
+		domainsSetupDone: overviewSetupDone(projectRoot),
+		instancesLoading: proxyHostname(projectRoot) != "",
+		loading:          true,
+		healthLoading:    true,
 	}
 }
 
+// overviewSetupDone reports whether the machine's one-time proxy setup (DNS +
+// HTTPS trust) is in place for a proxy project. Non-proxy projects report
+// false (the Domains block is not shown for them anyway).
+func overviewSetupDone(projectRoot string) bool {
+	if proxyHostname(projectRoot) == "" {
+		return false
+	}
+
+	baseDomain := proxy.DefaultDomain
+	if settings, err := proxy.LoadSettings(); err == nil {
+		baseDomain = settings.BaseDomain()
+	}
+
+	return proxy.CheckResolverConfigured(baseDomain).Configured
+}
+
+// proxyHostname returns the shop's hostname when the project is registered
+// with the shared proxy, or "" otherwise.
+func proxyHostname(projectRoot string) string {
+	if reg, err := proxy.LoadRegistry(); err == nil {
+		if entry, found := reg.Find(proxy.CanonicalProjectRoot(projectRoot)); found {
+			return entry.Hostname
+		}
+	}
+
+	return ""
+}
+
+// resolveAdminWatchURL returns the admin watcher's URL: the proxy hostname
+// when the project is proxied, otherwise the local dev-server port.
+func resolveAdminWatchURL(projectRoot string) string {
+	if host := proxyHostname(projectRoot); host != "" {
+		return "https://admin-watch." + host
+	}
+
+	return fmt.Sprintf("http://127.0.0.1:%d", extension.AdminDevServerPort(projectRoot))
+}
+
+// resolveStorefrontWatchURL returns the URL to open while the storefront
+// watcher runs. The (deprecated) webpack hot-proxy serves the shop with
+// hot-reload injected from its own front door: when proxied that is the
+// storefront-watch.<host> hostname routed through the shared proxy; without
+// the proxy it is the classic local hot-proxy port.
+func resolveStorefrontWatchURL(projectRoot string) string {
+	if host := proxyHostname(projectRoot); host != "" {
+		return "https://storefront-watch." + host
+	}
+
+	return "http://127.0.0.1:9998"
+}
+
 func (m OverviewModel) Init() tea.Cmd {
-	return tea.Batch(
+	cmds := []tea.Cmd{
 		discoverServices(m.projectRoot),
 		loadShopwareVersion(m.projectRoot),
 		loadSetupHealth(m.projectRoot, m.executor),
-	)
+	}
+	if m.proxyHost != "" {
+		cmds = append(cmds, loadInstances())
+	}
+	return tea.Batch(cmds...)
+}
+
+// instancesLoadedMsg carries the shared-proxy instance stats (per-instance
+// status/memory/uptime plus combined memory), loaded asynchronously.
+type instancesLoadedMsg struct {
+	instances   []proxy.InstanceInfo
+	combinedMem int64
+}
+
+// instancesTickMsg triggers a periodic re-count of running proxy instances, so
+// the section reflects shops started or stopped from another terminal.
+type instancesTickMsg struct{}
+
+// instancesTimeout bounds the docker stats call so a slow daemon cannot leave
+// the Instances section spinning forever.
+const instancesTimeout = 10 * time.Second
+
+// instancesRefreshInterval is how often the Instances count is refreshed while
+// the overview is open.
+const instancesRefreshInterval = 5 * time.Second
+
+func loadInstances() tea.Cmd {
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(context.Background(), instancesTimeout)
+		defer cancel()
+		instances, combinedMem, _ := proxy.InstanceStats(ctx)
+		return instancesLoadedMsg{instances: instances, combinedMem: combinedMem}
+	}
+}
+
+// scheduleInstancesRefresh waits one interval and then asks for another count.
+func scheduleInstancesRefresh() tea.Cmd {
+	return tea.Tick(instancesRefreshInterval, func(time.Time) tea.Msg {
+		return instancesTickMsg{}
+	})
 }
 
 func (m *OverviewModel) SetSize(width, height int) {
@@ -264,6 +444,15 @@ type stopWatcherRequestMsg struct{ name string }
 // can open the sales-channel picker (which needs the executor) before starting
 // the storefront watcher, matching the command-palette flow.
 type startStorefrontWatchRequestMsg struct{}
+
+// runProxySetupRequestMsg flows from OverviewModel to Model so the parent can
+// run the interactive `proxy setup` (sudo) via tea.ExecProcess, which pauses
+// the whole program while the setup runs.
+type runProxySetupRequestMsg struct{}
+
+// proxySetupDoneMsg is emitted after the inline `proxy setup` finishes, so the
+// Domains status and setup-health checks can refresh.
+type proxySetupDoneMsg struct{}
 
 func (m OverviewModel) Update(msg tea.Msg) (OverviewModel, tea.Cmd) {
 	switch msg := msg.(type) {
@@ -286,6 +475,15 @@ func (m OverviewModel) Update(msg tea.Msg) (OverviewModel, tea.Cmd) {
 	case setupHealthLoadedMsg:
 		m.healthLoading = false
 		m.health = msg.checks
+	case instancesLoadedMsg:
+		m.instancesLoading = false
+		m.instances = msg.instances
+		m.instancesCombinedMem = msg.combinedMem
+		return m, scheduleInstancesRefresh()
+	case instancesTickMsg:
+		return m, loadInstances()
+	case tea.MouseWheelMsg:
+		return m.handleWheel(msg), nil
 	case tea.KeyPressMsg:
 		return m.handleKey(msg)
 	}
@@ -297,11 +495,12 @@ func (m OverviewModel) focusCount() int {
 	return 2
 }
 
+// handleKey handles the overview's keyboard input: ↑/↓ move the watcher focus
+// (enter activates it), while pgup/pgdn/home/end scroll the report. Plain scroll
+// is primarily done with the mouse wheel (see Update), keeping the arrow keys
+// free for watcher focus.
 func (m OverviewModel) handleKey(msg tea.KeyPressMsg) (OverviewModel, tea.Cmd) {
 	count := m.focusCount()
-	if count == 0 {
-		return m, nil
-	}
 
 	switch tui.KeyString(msg) {
 	case "up", "k":
@@ -312,10 +511,45 @@ func (m OverviewModel) handleKey(msg tea.KeyPressMsg) (OverviewModel, tea.Cmd) {
 		if m.cursor < count-1 {
 			m.cursor++
 		}
+	case "pgdown", "pgdn":
+		m.scrollY = clampScroll(m.scrollY+m.pageStep(), m.maxScroll())
+	case "pgup":
+		m.scrollY = clampScroll(m.scrollY-m.pageStep(), m.maxScroll())
+	case "home":
+		m.scrollY = 0
+	case "end":
+		m.scrollY = m.maxScroll()
+	case "s":
+		// Run the one-time machine setup (DNS + HTTPS trust) for a proxy
+		// project that has not been set up yet.
+		if m.proxyHost != "" && !m.domainsSetupDone {
+			return m, func() tea.Msg { return runProxySetupRequestMsg{} }
+		}
 	case "enter":
 		return m.activate()
 	}
 	return m, nil
+}
+
+// mouseWheelStep is how many lines one mouse-wheel notch scrolls the report.
+const mouseWheelStep = 3
+
+// handleWheel scrolls the report in response to the mouse wheel, so the overview
+// is scrollable without stealing the arrow keys from watcher focus.
+func (m OverviewModel) handleWheel(msg tea.MouseWheelMsg) OverviewModel {
+	switch msg.Button {
+	case tea.MouseWheelUp:
+		m.scrollY = clampScroll(m.scrollY-mouseWheelStep, m.maxScroll())
+	case tea.MouseWheelDown:
+		m.scrollY = clampScroll(m.scrollY+mouseWheelStep, m.maxScroll())
+	}
+	return m
+}
+
+// pageStep is how many lines pgup/pgdn scroll: nearly a full viewport, keeping
+// a couple of lines of overlap for orientation.
+func (m OverviewModel) pageStep() int {
+	return max(1, m.height-2)
 }
 
 func (m OverviewModel) activate() (OverviewModel, tea.Cmd) {
@@ -356,6 +590,23 @@ const overviewTwoColumnMinWidth = 110
 const overviewRightColumnWidth = 32
 
 func (m OverviewModel) View(width, height int) string {
+	content := m.renderContent(width) + strings.Repeat("\n", overviewBottomPadding)
+
+	lines := strings.Split(content, "\n")
+	if height <= 0 || len(lines) <= height {
+		return content
+	}
+
+	// Show a height-tall window into the report, offset by the (clamped) scroll
+	// position, so a report taller than the viewport can be paged instead of
+	// being cut off at the bottom.
+	offset := clampScroll(m.scrollY, len(lines)-height)
+	return strings.Join(lines[offset:offset+height], "\n")
+}
+
+// renderContent builds the full overview report (two-column when wide enough,
+// stacked otherwise), independent of scrolling.
+func (m OverviewModel) renderContent(width int) string {
 	usable := width - 8
 	if width < overviewTwoColumnMinWidth {
 		return m.renderStacked(usable)
@@ -369,6 +620,32 @@ func (m OverviewModel) View(width, height int) string {
 		Left:      m.renderProjectReport(leftWidth),
 		Right:     m.renderUserActions(),
 	}).Render()
+}
+
+// contentHeight returns the number of lines the report currently renders to,
+// including the bottom padding, so scrolling can be clamped to it.
+func (m OverviewModel) contentHeight() int {
+	return len(strings.Split(m.renderContent(m.width), "\n")) + overviewBottomPadding
+}
+
+// maxScroll is the largest valid scroll offset for the current content and
+// viewport height (0 when everything fits).
+func (m OverviewModel) maxScroll() int {
+	return max(0, m.contentHeight()-m.height)
+}
+
+// clampScroll bounds a scroll offset to [0, maxOffset].
+func clampScroll(v, maxOffset int) int {
+	if maxOffset < 0 {
+		maxOffset = 0
+	}
+	if v < 0 {
+		return 0
+	}
+	if v > maxOffset {
+		return maxOffset
+	}
+	return v
 }
 
 // renderProjectReport renders the left column: the readonly project details
@@ -388,7 +665,124 @@ func (m OverviewModel) renderProjectReport(width int) string {
 	}
 	s.WriteString(divider)
 	s.WriteString(m.renderSetupHealth())
+	if m.proxyHost != "" {
+		s.WriteString(divider)
+		s.WriteString(m.renderInstances())
+	}
 	return s.String()
+}
+
+// renderInstances lists the projects registered with the shared proxy as a
+// small table (project + url, status, memory, uptime) with a running-count and
+// combined-memory summary. Only rendered for proxy projects.
+func (m OverviewModel) renderInstances() string {
+	var s strings.Builder
+	s.WriteString(tui.TitleStyle.Render("Proxy instances"))
+	s.WriteString("\n")
+	s.WriteString(helpStyle.Render("Projects registered with the local proxy. Each instance is isolated."))
+	s.WriteString("\n\n")
+
+	if m.instancesLoading {
+		s.WriteString("  " + helpStyle.Render("loading...") + "\n")
+		return s.String()
+	}
+	if len(m.instances) == 0 {
+		s.WriteString("  " + helpStyle.Render("No projects registered yet.") + "\n")
+		return s.String()
+	}
+
+	running := 0
+	for _, in := range m.instances {
+		if in.Running {
+			running++
+		}
+	}
+
+	greenDot := lipgloss.NewStyle().Foreground(tui.SuccessColor).Render("●")
+	summary := fmt.Sprintf("%s %s", greenDot, tui.BoldText.Render(fmt.Sprintf("%d running", running)))
+	if m.instancesCombinedMem > 0 {
+		summary += tui.DimText.Render("  ·  Combined memory (approx.): ") + tui.BoldText.Render("~"+formatBytes(m.instancesCombinedMem))
+	}
+	s.WriteString("  " + summary + "\n\n")
+
+	nameWidth := lipgloss.Width("Project")
+	for _, in := range m.instances {
+		nameWidth = max(nameWidth, lipgloss.Width(in.Name))
+	}
+	nameStyle := lipgloss.NewStyle().Width(nameWidth + 2)
+	statusStyle := lipgloss.NewStyle().Width(10)
+	memStyle := lipgloss.NewStyle().Width(11)
+
+	dim := tui.DimStyle
+	s.WriteString("  " + lipgloss.NewStyle().Width(2).Render("") +
+		nameStyle.Render(dim.Render("Project")) +
+		statusStyle.Render(dim.Render("Status")) +
+		memStyle.Render(dim.Render("Memory")) +
+		dim.Render("Uptime") + "\n")
+
+	for i, in := range m.instances {
+		// A blank line between instances keeps the two-line rows (name + url)
+		// from running together.
+		if i > 0 {
+			s.WriteString("\n")
+		}
+
+		dot := greenDot
+		status := lipgloss.NewStyle().Foreground(tui.SuccessColor).Render("running")
+		mem := formatBytes(in.MemBytes)
+		uptime := formatUptime(in.Uptime)
+		if !in.Running {
+			dot = tui.DimStyle.Render("●")
+			status = tui.DimStyle.Render("stopped")
+			mem = tui.DimStyle.Render("—")
+			uptime = tui.DimStyle.Render("—")
+		}
+
+		fmt.Fprintf(&s, "  %s %s%s%s%s\n",
+			dot, nameStyle.Render(in.Name), statusStyle.Render(status), memStyle.Render(mem), uptime)
+		if in.URL != "" {
+			s.WriteString("    " + linkURL(in.URL) + "\n")
+		}
+	}
+
+	s.WriteString("\n  " + helpStyle.Render("Memory is approximate — reported per proxy process; per-project usage is estimated.") + "\n")
+	return s.String()
+}
+
+// formatUptime renders a duration as a compact uptime like "1h 24m" (or "3d 2h",
+// "45m"). Non-positive durations render as an em dash.
+func formatUptime(d time.Duration) string {
+	if d <= 0 {
+		return "—"
+	}
+
+	d = d.Round(time.Minute)
+	days := int(d.Hours()) / 24
+	hours := int(d.Hours()) % 24
+	minutes := int(d.Minutes()) % 60
+
+	switch {
+	case days > 0:
+		return fmt.Sprintf("%dd %dh", days, hours)
+	case hours > 0:
+		return fmt.Sprintf("%dh %dm", hours, minutes)
+	default:
+		return fmt.Sprintf("%dm", minutes)
+	}
+}
+
+// formatBytes renders a byte count as a human-readable size (e.g. "1.9 GB").
+func formatBytes(b int64) string {
+	const unit = 1024
+	if b < unit {
+		return fmt.Sprintf("%d B", b)
+	}
+	div, exp := int64(unit), 0
+	for n := b / unit; n >= unit; n /= unit {
+		div *= unit
+		exp++
+	}
+	return fmt.Sprintf("%.1f %cB", float64(b)/float64(div), "KMGTPE"[exp])
 }
 
 // renderUserActions renders the right column: everything the user can act on.
@@ -396,7 +790,41 @@ func (m OverviewModel) renderUserActions() string {
 	var s strings.Builder
 	s.WriteString(tui.SectionTitleStyle.Render("User action"))
 	s.WriteString("\n\n")
+	if m.proxyHost != "" {
+		s.WriteString(m.renderDomains())
+		s.WriteString("\n")
+	}
 	s.WriteString(m.renderWatchers())
+	return s.String()
+}
+
+// renderDomains shows that the project is served at a stable local hostname
+// through the shared proxy, plus the one-time machine setup status (DNS +
+// trusted HTTPS). When the setup is still pending it offers the `s` action to
+// run it. Only rendered for proxy projects.
+func (m OverviewModel) renderDomains() string {
+	var s strings.Builder
+	s.WriteString(tui.TitleStyle.Render("Local domains enabled"))
+	s.WriteString("\n")
+
+	// The DNS resolver and the trusted certificate both come from the one-time
+	// `proxy setup`, tracked by a single flag. When done the row shows a green
+	// checkmark; while pending the whole row is dimmed with an empty checkbox, so
+	// it never reads as already configured. The `s` action runs the setup.
+	rows := []string{"Default domains configured", "Local certificate trusted"}
+	for _, label := range rows {
+		if m.domainsSetupDone {
+			check := lipgloss.NewStyle().Foreground(tui.SuccessColor).Render("x")
+			fmt.Fprintf(&s, "  [%s] %s\n", check, label)
+		} else {
+			fmt.Fprintf(&s, "  %s %s\n", tui.DimStyle.Render("[ ]"), tui.DimStyle.Render(label))
+		}
+	}
+
+	if !m.domainsSetupDone {
+		fmt.Fprintf(&s, "  %s\n", tui.DimStyle.Render("press s to set up (needs sudo)"))
+	}
+
 	return s.String()
 }
 
@@ -416,9 +844,17 @@ func (m OverviewModel) renderStacked(width int) string {
 		s.WriteString(m.renderBackgroundProcesses())
 	}
 	s.WriteString(divider)
+	if m.proxyHost != "" {
+		s.WriteString(m.renderDomains())
+		s.WriteString("\n")
+	}
 	s.WriteString(m.renderWatchers())
 	s.WriteString(divider)
 	s.WriteString(m.renderSetupHealth())
+	if m.proxyHost != "" {
+		s.WriteString(divider)
+		s.WriteString(m.renderInstances())
+	}
 	return s.String()
 }
 
@@ -535,8 +971,8 @@ func (m OverviewModel) renderWatchers() string {
 	var s strings.Builder
 	s.WriteString(tui.TitleStyle.Render("Watchers"))
 	s.WriteString("\n")
-	s.WriteString(m.renderWatcherStatus("Admin", m.adminWatchRunning, m.adminWatchStarting, m.adminWatchURL, m.cursor == 0))
-	s.WriteString(m.renderWatcherStatus("Storefront", m.sfWatchRunning, m.sfWatchStarting, "http://127.0.0.1:9998", m.cursor == 1))
+	s.WriteString(m.renderWatcherStatus("Admin", m.adminWatchRunning, m.adminWatchStarting, m.adminWatchReady, m.adminWatchURL, m.cursor == 0))
+	s.WriteString(m.renderWatcherStatus("Storefront", m.sfWatchRunning, m.sfWatchStarting, m.sfWatchReady, m.sfWatchURL, m.cursor == 1))
 	return s.String()
 }
 
@@ -584,6 +1020,12 @@ func (m OverviewModel) startStorefrontWatch(opts extension.StorefrontWatcherOpti
 	e := m.executor
 	projectRoot := m.projectRoot
 	shopCfg := m.shopCfg
+
+	// When proxied, route the webpack hot-proxy watcher through the shared
+	// proxy, matching the standalone `project storefront-watch` command.
+	if host := proxyHostname(projectRoot); host != "" {
+		opts.ProxyHostname = "storefront-watch." + host
+	}
 
 	return startWatcher(watcherStorefront, func(ctx context.Context, out io.Writer) (*executor.Process, error) {
 		logStep(out, "Preparing plugins.json...")
@@ -692,17 +1134,23 @@ func startWatcher(name string, prepare func(ctx context.Context, out io.Writer) 
 	return tea.Batch(startedCmd, runningCmd)
 }
 
-func (m OverviewModel) renderWatcherStatus(label string, running, starting bool, url string, focused bool) string {
+func (m OverviewModel) renderWatcherStatus(label string, running, starting, ready bool, url string, focused bool) string {
+	// A watcher that has started but is not yet answering (e.g. the webpack
+	// storefront watcher during its first compile) stays in the "starting"
+	// state, so its URL is not shown until clicking it actually works.
+	serving := running && ready
+	warming := starting || (running && !ready)
+
 	var checkbox, status string
 	switch {
-	case running:
+	case serving:
 		if focused {
 			checkbox = lipgloss.NewStyle().Bold(true).Foreground(tui.BrandColor).Render("[x]")
 		} else {
 			checkbox = lipgloss.NewStyle().Render("[x]")
 		}
 		status = lipgloss.NewStyle().Bold(true).Render("running")
-	case starting:
+	case warming:
 		checkbox = lipgloss.NewStyle().Foreground(tui.BrandColor).Render("[~]")
 		status = lipgloss.NewStyle().Foreground(tui.BrandColor).Render("starting...")
 	default:
@@ -715,8 +1163,8 @@ func (m OverviewModel) renderWatcherStatus(label string, running, starting bool,
 	}
 
 	row := fmt.Sprintf("  %s %s%s\n", checkbox, lipgloss.NewStyle().Width(14).Render(label), status)
-	if running && url != "" {
-		row += "      " + linkURL(url) + "\n"
+	if serving && url != "" {
+		row += "      " + tui.StyledLink(url, watchLinkLabel(url)+" ↗", tui.LinkStyle) + "\n"
 	}
 	return row
 }
@@ -759,6 +1207,11 @@ func discoverCompose(ctx context.Context, projectRoot string) (services []Discov
 		return nil, nil, 0, fmt.Errorf("docker compose ps: %w", err)
 	}
 
+	// In proxy mode a service publishes no host port; it is reached at its
+	// subdomain (e.g. adminer.<host>) instead. When the project is proxied,
+	// every routed service gets its proxy URL rather than a localhost port.
+	proxyHost := proxyHostname(projectRoot)
+
 	type containerInfo struct {
 		service    string
 		publishers map[int]int
@@ -796,7 +1249,9 @@ func discoverCompose(ctx context.Context, projectRoot string) (services []Discov
 			}
 		}
 
-		if len(ports) > 0 {
+		// Proxied services have no published ports, so collect them regardless
+		// and resolve their URL below from the proxy hostname.
+		if len(ports) > 0 || proxyHost != "" {
 			containers = append(containers, containerInfo{
 				service:    container.Service,
 				publishers: ports,
@@ -814,14 +1269,23 @@ func discoverCompose(ctx context.Context, projectRoot string) (services []Discov
 			continue
 		}
 
-		publishedPort, hasPort := c.publishers[known.TargetPort]
-		if !hasPort {
-			continue
+		var url string
+		switch {
+		case proxyHost != "":
+			// The compose override routes each service at a subdomain named
+			// after the service (adminer.<host>, mailer.<host>, ...).
+			url = fmt.Sprintf("https://%s.%s", c.service, proxyHost)
+		default:
+			publishedPort, hasPort := c.publishers[known.TargetPort]
+			if !hasPort {
+				continue
+			}
+			url = fmt.Sprintf("http://127.0.0.1:%d", publishedPort)
 		}
 
 		services = append(services, DiscoveredService{
 			Name:     known.Name,
-			URL:      fmt.Sprintf("http://127.0.0.1:%d", publishedPort),
+			URL:      url,
 			Username: known.Username,
 			Password: known.Password,
 		})
