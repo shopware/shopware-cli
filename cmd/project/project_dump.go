@@ -1,29 +1,18 @@
 package project
 
 import (
-	"compress/gzip"
-	"database/sql"
 	"errors"
 	"fmt"
-	"io"
 	"os"
-	"strings"
 
 	"github.com/charmbracelet/x/term"
 	"github.com/go-sql-driver/mysql"
-	"github.com/klauspost/compress/zstd"
 	"github.com/spf13/cobra"
 
 	"github.com/shopware/shopware-cli/internal/executor"
 	"github.com/shopware/shopware-cli/internal/mysqldump"
 	"github.com/shopware/shopware-cli/internal/shop"
 	"github.com/shopware/shopware-cli/internal/system"
-	"github.com/shopware/shopware-cli/logging"
-)
-
-const (
-	CompressionGzip = "gzip"
-	CompressionZstd = "zstd"
 )
 
 // passwordFlagPrompt is the sentinel value Cobra sets via NoOptDefVal when
@@ -40,101 +29,37 @@ var projectDatabaseDumpCmd = &cobra.Command{
 			return err
 		}
 
-		output, _ := cmd.Flags().GetString("output")
-		clean, _ := cmd.Flags().GetBool("clean")
-		skipLockTables, _ := cmd.Flags().GetBool("skip-lock-tables")
-		anonymize, _ := cmd.Flags().GetBool("anonymize")
-		compression, _ := cmd.Flags().GetString("compression")
-		quick, _ := cmd.Flags().GetBool("quick")
-		parallel, _ := cmd.Flags().GetInt("parallel")
-		insertIntoLimit, _ := cmd.Flags().GetInt("insert-into-limit")
-
-		db, err := sql.Open("mysql", mysqlConfig.FormatDSN())
+		compressionFlag, _ := cmd.Flags().GetString("compression")
+		compression, err := mysqldump.ParseCompression(compressionFlag)
 		if err != nil {
 			return err
 		}
 
-		dumper := mysqldump.NewMySQLDumper(db)
-		dumper.LockTables = !skipLockTables
-		dumper.Quick = quick
-		dumper.Parallel = parallel
-		dumper.InsertIntoLimit = insertIntoLimit
-
-		var projectCfg *shop.Config
-		if projectCfg, err = shop.ReadConfig(cmd.Context(), projectConfigPath, true); err != nil {
+		projectCfg, err := shop.ReadConfig(cmd.Context(), projectConfigPath, true)
+		if err != nil {
 			return err
 		}
 
-		if projectCfg.ConfigDump == nil {
-			projectCfg.ConfigDump = &shop.ConfigDump{}
-		}
+		output, _ := cmd.Flags().GetString("output")
+		clean, _ := cmd.Flags().GetBool("clean")
+		skipLockTables, _ := cmd.Flags().GetBool("skip-lock-tables")
+		anonymize, _ := cmd.Flags().GetBool("anonymize")
+		quick, _ := cmd.Flags().GetBool("quick")
+		parallel, _ := cmd.Flags().GetInt("parallel")
+		insertIntoLimit, _ := cmd.Flags().GetInt("insert-into-limit")
+		limits, _ := cmd.Flags().GetStringArray("limit")
 
-		if clean {
-			projectCfg.ConfigDump.EnableClean()
-		}
-
-		if anonymize {
-			projectCfg.ConfigDump.EnableAnonymization()
-		}
-
-		projectCfg.ConfigDump.NormalizeFakerExpressions()
-
-		dumper.SelectMap = projectCfg.ConfigDump.Rewrite
-		dumper.WhereMap = projectCfg.ConfigDump.Where
-		dumper.NoData = projectCfg.ConfigDump.NoData
-		dumper.Ignore = projectCfg.ConfigDump.Ignore
-
-		var w io.Writer
-		if output == "-" {
-			w = os.Stdout
-		} else {
-			if compression == CompressionGzip {
-				output += ".gz"
-			}
-
-			if compression == CompressionZstd {
-				output += ".zst"
-			}
-
-			if w, err = os.Create(output); err != nil {
-				return err
-			}
-		}
-
-		if compression == CompressionGzip {
-			w = gzip.NewWriter(w)
-		}
-
-		if compression == CompressionZstd {
-			w, err = zstd.NewWriter(w, zstd.WithEncoderLevel(zstd.SpeedBestCompression))
-			if err != nil {
-				return err
-			}
-		}
-
-		if err = dumper.Dump(cmd.Context(), w); err != nil {
-			if strings.Contains(err.Error(), "the RELOAD or FLUSH_TABLES privilege") {
-				return fmt.Errorf("%s, you maybe want to disable locking with --skip-lock-tables", err.Error())
-			}
-
-			return err
-		}
-
-		if compression == CompressionZstd {
-			if err = w.(*zstd.Encoder).Close(); err != nil {
-				return err
-			}
-		}
-
-		if compression == CompressionGzip {
-			if err = w.(*gzip.Writer).Close(); err != nil {
-				return err
-			}
-		}
-
-		logging.FromContext(cmd.Context()).Infof("Successfully created the dump %s", output)
-
-		return nil
+		return shop.DumpDatabase(cmd.Context(), mysqlConfig, projectCfg.ConfigDump, shop.DumpDatabaseOptions{
+			Output:          output,
+			Compression:     compression,
+			Clean:           clean,
+			Anonymize:       anonymize,
+			SkipLockTables:  skipLockTables,
+			Quick:           quick,
+			Parallel:        parallel,
+			InsertIntoLimit: insertIntoLimit,
+			LimitOverrides:  limits,
+		})
 	},
 }
 
@@ -222,4 +147,5 @@ func init() {
 	projectDatabaseDumpCmd.Flags().Bool("quick", false, "Use quick option for mysqldump")
 	projectDatabaseDumpCmd.Flags().Int("parallel", 0, "Number of tables to dump concurrently (0 = disabled)")
 	projectDatabaseDumpCmd.Flags().Int("insert-into-limit", 0, "Limit the number of rows per INSERT statement (0 = auto, takes priority over --quick when set)")
+	projectDatabaseDumpCmd.Flags().StringArray("limit", nil, "Limit the rows of a table (e.g. order=100 dumps only the 100 newest orders). Tables referencing the limited table are filtered automatically; ancestors of self-referencing rows (e.g. product variants) are kept so the dump stays importable. Requires the CREATE and DROP privileges to freeze the kept rows into staging tables. Can be specified multiple times")
 }

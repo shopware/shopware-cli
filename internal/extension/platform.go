@@ -494,7 +494,8 @@ func validatePHPFiles(c context.Context, ext Extension, check validation.Check) 
 				check.AddResult(validation.CheckResult{
 					Path:       relPath,
 					Identifier: "php.linter",
-					Message:    fmt.Sprintf("%s: %s", relPath, diag.Message),
+					Message:    diag.Message,
+					Line:       diag.Start.Line,
 					Severity:   validation.SeverityError,
 				})
 			}

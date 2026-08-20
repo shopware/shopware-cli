@@ -1,0 +1,49 @@
+# Project development tools and repeatable commands.
+#
+# Keep this file limited to tools and tasks that are useful to contributors.
+# Personal overrides belong in mise.local.toml, which is intentionally ignored.
+
+[tools]
+# Keep this aligned with the Go version declared in go.mod.
+go = "1.26.4"
+
+# Pin the linter so local results do not change when a new release is published.
+# CI currently uses a floating golangci-lint version
+# update this if you need to match a specific CI version.
+golangci-lint = "2.12.0"
+
+[env]
+# Match CI and prevent Go from silently downloading a different toolchain.
+GOTOOLCHAIN = "local"
+
+[tasks.format]
+description = "Format Go source files"
+run = "golangci-lint fmt ./..."
+
+[tasks.format-check]
+description = "Check that Go source files are formatted"
+run = "golangci-lint fmt --diff ./..."
+
+[tasks.build]
+description = "Build the shopware-cli binary"
+run = "go build -o shopware-cli ."
+
+[tasks.test]
+description = "Run the network-isolated test suite"
+run = "./scripts/run-tests.sh"
+
+[tasks.test-unit]
+description = "Run Go tests without the repository sandbox wrapper"
+run = "go test ./..."
+
+[tasks.vet]
+description = "Run the Go vet checks"
+run = "go vet ./..."
+
+[tasks.lint]
+description = "Run golangci-lint"
+run = "golangci-lint run ./... --timeout 4m"
+
+[tasks.check]
+description = "Run formatting, build, tests, vet, and lint checks"
+depends = ["format-check", "build", "test", "vet", "lint"]

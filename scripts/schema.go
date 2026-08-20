@@ -44,6 +44,10 @@ func generateProjectSchema() error {
 		return err
 	}
 
+	if err := r.AddGoComments("github.com/shopware/shopware-cli", "./internal/mysqldump"); err != nil {
+		return err
+	}
+
 	schema := r.Reflect(&shop.Config{})
 
 	bytes, err := json.MarshalIndent(schema, "", "  ")

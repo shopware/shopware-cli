@@ -556,6 +556,13 @@
           },
           "type": "object",
           "description": "Add an where condition to that table, schema is table name as key, and where statement as value"
+        },
+        "limit": {
+          "additionalProperties": {
+            "$ref": "#/$defs/TableLimit"
+          },
+          "type": "object",
+          "description": "Limit the amount of exported rows of a table, schema is table name as key. All tables referencing the limited table via foreign keys (also transitively) are filtered automatically, so they only contain rows belonging to the kept rows. A second limit on a table that is already filtered this way is rejected. When the limited table references itself (e.g. product.parent_id), the ancestors of the kept rows are exported too, so the dump stays importable. Requires the CREATE and DROP privileges to freeze the kept rows into staging tables"
         }
       },
       "additionalProperties": false,
@@ -660,6 +667,25 @@
       },
       "additionalProperties": false,
       "type": "object"
+    },
+    "TableLimit": {
+      "properties": {
+        "rows": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Maximum amount of rows to export for this table"
+        },
+        "order_by": {
+          "type": "string",
+          "description": "SQL ORDER BY clause deciding which rows are kept (e.g. \"created_at DESC\" for the newest rows). Defaults to \"created_at DESC\" when the table has a created_at column"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "required": [
+        "rows"
+      ],
+      "description": "TableLimit restricts how many rows of a table are dumped."
     }
   }
 }

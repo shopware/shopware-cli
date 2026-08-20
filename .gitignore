@@ -4,6 +4,7 @@
 dist/
 /completions
 /local
+/bin
 /.shopware-cli
 /.shopware-project.yml
 /.shopware-project.yaml
@@ -21,6 +22,10 @@ dump.sql*
 # Devenv
 .devenv*
 devenv.local.nix
+
+# mise local overrides
+/mise.local.toml
+/.mise.local.toml
 
 /.direnv
 /env-bridge/env-bridge

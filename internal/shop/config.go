@@ -16,6 +16,7 @@ import (
 	"gopkg.in/yaml.v3"
 
 	"github.com/shopware/shopware-cli/internal/compatibility"
+	"github.com/shopware/shopware-cli/internal/mysqldump"
 	"github.com/shopware/shopware-cli/internal/system"
 	"github.com/shopware/shopware-cli/logging"
 )
@@ -248,6 +249,8 @@ type ConfigDump struct {
 	Ignore []string `yaml:"ignore,omitempty"`
 	// Add an where condition to that table, schema is table name as key, and where statement as value
 	Where map[string]string `yaml:"where,omitempty"`
+	// Limit the amount of exported rows of a table, schema is table name as key. All tables referencing the limited table via foreign keys (also transitively) are filtered automatically, so they only contain rows belonging to the kept rows. A second limit on a table that is already filtered this way is rejected. When the limited table references itself (e.g. product.parent_id), the ancestors of the kept rows are exported too, so the dump stays importable. Requires the CREATE and DROP privileges to freeze the kept rows into staging tables
+	Limit map[string]mysqldump.TableLimit `yaml:"limit,omitempty"`
 }
 
 // EnableClean adds default tables that should be excluded from data dump in clean mode
