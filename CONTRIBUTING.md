@@ -35,9 +35,7 @@ Please keep PRs focused. Smaller PRs are easier to review and merge.
 
 ## Development
 
-Branch from `main` unless you work on a large feature or epic that should not
-block bug-fix releases. In that case, use a dedicated feature branch (for
-example, `next`) as the pull request target branch.
+Branch from `main` and target `main` with your pull request.
 
 Before submitting, run the relevant checks locally:
 
@@ -87,6 +85,5 @@ Maintainers may ask for changes, suggest a different direction, or decline a PR 
 
 ## Releases
 
-In general releases happen from the default `main` branch with everything included there at the time of release.
-If a feature branch (e.g. `next`) is ready for release it needs to be merged back into `main` before the release to be included.
+Releases happen from the default `main` branch with everything included there at the time of release.
 The specific release process is explained in [RELEASING.md](RELEASING.md) and done on demand by the maintainers.
