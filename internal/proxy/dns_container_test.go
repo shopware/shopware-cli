@@ -22,6 +22,11 @@ func TestEnsureDNSContainerRunningIntegration(t *testing.T) {
 	if _, err := runDocker(ctx, "version", "--format", "{{.Server.Version}}"); err != nil {
 		t.Skip("docker daemon not running")
 	}
+	// The CoreDNS image must already be cached: CI runs this step sandboxed with
+	// no network, so pulling would fail. Skip rather than pull.
+	if _, err := runDocker(ctx, "image", "inspect", DNSImage); err != nil {
+		t.Skipf("%s not present locally", DNSImage)
+	}
 
 	// Isolate from any real setup by pointing the state dir at a temp location.
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
