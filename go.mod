@@ -31,6 +31,7 @@ require (
 	github.com/shyim/go-phplint v0.2.4
 	github.com/shyim/go-spdx v0.0.0-20260602055701-a935a2772ac1
 	github.com/shyim/go-version v0.0.0-20250828113848-97ec77491b32
+	github.com/smallstep/truststore v0.13.0
 	github.com/spf13/cobra v1.10.2
 	github.com/stretchr/testify v1.12.0
 	github.com/tonistiigi/go-actions-cache v0.0.0-20260120203934-54bc28c26fd2
@@ -73,6 +74,7 @@ require (
 	go.yaml.in/yaml/v4 v4.0.0-rc.2 // indirect
 	golang.org/x/mod v0.40.0 // indirect
 	golang.org/x/tools v0.49.0 // indirect
+	howett.net/plist v1.0.0 // indirect
 )
 
 require (

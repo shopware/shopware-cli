@@ -60,17 +60,26 @@ func run(ctx context.Context) int {
 	accountApi.SetUserAgent("shopware-cli/" + version)
 	rootCmd.SetArgs(args)
 
-	// Check for update in the background
+	// Check for update in the background. Interactive TUIs consume the same
+	// result through the shared header's update hint.
 	updateCtx, updateCancel := context.WithTimeout(ctx, 900*time.Millisecond)
 	defer updateCancel()
-	updateChan := make(chan *update.ReleaseInfo, 1)
+	updateHandle := update.NewCheckHandle()
+	tui.UpdateAvailable = func(waitCtx context.Context) bool {
+		result := updateHandle.Wait(waitCtx)
+		if result.Release == nil {
+			return false
+		}
+		binaryPath, _ := os.Executable()
+		return shouldNotify(result.Release, binaryPath)
+	}
 
 	go func() {
 		releaseInfo, err := checkForUpdate(updateCtx, args)
 		if err != nil && !errors.Is(err, update.ErrNoUpdateAvailable) {
 			logging.FromContext(ctx).Debugf("checking for shopware cli update failed: %v", err)
 		}
-		updateChan <- releaseInfo
+		updateHandle.Complete(update.CheckResult{Release: releaseInfo, Err: err})
 	}()
 
 	start := time.Now()
@@ -100,19 +109,22 @@ func run(ctx context.Context) int {
 		})
 	}
 
-	// Wait for the update check to finish and print a message to stderr if an update is available
-	newRelease := <-updateChan
+	updateResult := updateHandle.Wait(ctx)
+	newRelease := updateResult.Release
 	if newRelease != nil {
 		binaryPath, err := os.Executable()
 		if err != nil {
 			logging.FromContext(ctx).Debugf("could not determine binary path: %v", err)
 		}
-		if shouldNotify(newRelease, binaryPath) {
+		if shouldNotify(newRelease, binaryPath) && update.ShouldPrintUpdateHint() {
 			fmt.Fprintln(os.Stderr, update.RenderUpdateNotification(newRelease.Version, version))
+			if err := update.MarkUpdateNotificationPrinted(); err != nil {
+				logging.FromContext(ctx).Debugf("could not save update notification timestamp: %v", err)
+			}
 		}
 	}
 
-	if errors.Is(err, project.ErrEnvironmentDown) {
+	if errors.Is(err, project.ErrEnvironmentDown) || errors.Is(err, project.ErrProxyNotRegistered) {
 		// The command already printed a human-readable status; exit 1 without
 		// logging an error.
 		return 1
