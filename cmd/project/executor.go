@@ -21,13 +21,18 @@ func resolveExecutor(cmd *cobra.Command, projectRoot string) (executor.Executor,
 		return nil, err
 	}
 
+	cfg, err = cfg.WithEnvironment(environmentName)
+	if err != nil {
+		return nil, err
+	}
+
 	return executor.New(projectRoot, envCfg, cfg)
 }
 
 // resolveProjectDatabaseConnection resolves the database credentials of the
 // current environment through its executor.
 func resolveProjectDatabaseConnection(cmd *cobra.Command) (*executor.DatabaseConnection, error) {
-	projectRoot, err := findClosestShopwareProject()
+	projectRoot, err := findClosestShopwareProject(false)
 	if err != nil {
 		return nil, err
 	}

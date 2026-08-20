@@ -121,6 +121,10 @@ func (d *DockerExecutor) AdminAPIClient(ctx context.Context) (*adminSdk.Client, 
 	return adminAPIClient(ctx, d.shopCfg, d.envCfg)
 }
 
+func (d *DockerExecutor) ShopConfig() *shop.Config {
+	return d.shopCfg
+}
+
 // DatabaseConnection resolves the database credentials as seen inside the
 // compose network and translates the service host to the port published on
 // the host machine.

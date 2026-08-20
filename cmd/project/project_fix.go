@@ -35,7 +35,7 @@ var projectFixCmd = &cobra.Command{
 		if len(args) > 0 {
 			projectPath = args[0]
 		} else {
-			projectPath, err = findClosestShopwareProject()
+			projectPath, err = findClosestShopwareProject(false)
 			if err != nil {
 				return err
 			}

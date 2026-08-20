@@ -75,7 +75,7 @@ var projectDevCmd = &cobra.Command{
 	Short: "Start the development environment",
 	Long:  "Start the development environment. Launches the interactive TUI dashboard when run in a terminal, or starts containers in the background otherwise.",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		projectRoot, err := findClosestShopwareProject()
+		projectRoot, err := findClosestShopwareProject(false)
 		if err != nil {
 			return err
 		}
@@ -170,7 +170,7 @@ func runMigrationWizardTUI(projectRoot string, cfg *shop.Config) error {
 }
 
 func setupDevEnvironment(cmd *cobra.Command) (*devEnvironment, error) {
-	projectRoot, err := findClosestShopwareProject()
+	projectRoot, err := findClosestShopwareProject(false)
 	if err != nil {
 		return nil, err
 	}

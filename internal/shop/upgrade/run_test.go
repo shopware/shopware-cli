@@ -13,6 +13,7 @@ import (
 
 	adminSdk "github.com/shopware/shopware-cli/internal/admin-api"
 	"github.com/shopware/shopware-cli/internal/executor"
+	"github.com/shopware/shopware-cli/internal/shop"
 )
 
 // fakeExecutor satisfies executor.Executor and lets each test decide which
@@ -62,6 +63,7 @@ func (f *fakeExecutor) EnvironmentStatus(context.Context) (bool, error)         
 func (f *fakeExecutor) AdminAPIClient(context.Context) (*adminSdk.Client, error) {
 	return nil, executor.ErrNotSupported
 }
+func (f *fakeExecutor) ShopConfig() *shop.Config { return nil }
 
 func runnerOptions() RunOptions {
 	return RunOptions{

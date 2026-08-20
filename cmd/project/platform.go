@@ -21,7 +21,7 @@ import (
 
 const storefrontBundleName = "Storefront"
 
-func findClosestShopwareProject() (string, error) {
+func findClosestShopwareProject(allowFallback bool) (string, error) {
 	projectRoot := os.Getenv("PROJECT_ROOT")
 
 	if projectRoot != "" {
@@ -32,6 +32,8 @@ func findClosestShopwareProject() (string, error) {
 	if err != nil {
 		return "", err
 	}
+
+	cwd := currentDir
 
 	for {
 		files := []string{
@@ -60,6 +62,10 @@ func findClosestShopwareProject() (string, error) {
 		if currentDir == filepath.Dir(currentDir) {
 			break
 		}
+	}
+
+	if allowFallback {
+		return cwd, nil
 	}
 
 	return "", errors.New("cannot find Shopware project in current directory")

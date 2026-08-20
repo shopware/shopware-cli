@@ -11,6 +11,8 @@ var (
 	environmentName   string
 )
 
+const environmentFlagUsage = "Environment to target (defaults to environments.local; deprecated top-level url/admin_api is still used when present)"
+
 var projectRootCmd = &cobra.Command{
 	Use:   "project",
 	Short: "Manage your Shopware Project",
@@ -19,5 +21,5 @@ var projectRootCmd = &cobra.Command{
 func Register(rootCmd *cobra.Command) {
 	rootCmd.AddCommand(projectRootCmd)
 	projectRootCmd.PersistentFlags().StringVar(&projectConfigPath, "project-config", shop.DefaultConfigFileName(), "Path to config")
-	projectRootCmd.PersistentFlags().StringVarP(&environmentName, "env", "e", "", "Target environment name")
+	projectRootCmd.PersistentFlags().StringVarP(&environmentName, "env", "e", "", environmentFlagUsage)
 }
