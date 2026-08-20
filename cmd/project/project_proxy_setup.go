@@ -161,7 +161,7 @@ func setupProjectHostnames(ctx context.Context) []string {
 		return nil
 	}
 
-	projectRoot, err := findClosestShopwareProject()
+	projectRoot, err := findClosestShopwareProject(false)
 	if err != nil {
 		return nil
 	}

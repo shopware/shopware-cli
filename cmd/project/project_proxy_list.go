@@ -17,7 +17,7 @@ var projectProxyStatusCmd = &cobra.Command{
 	Short:        "Report whether the current project is registered with the shared proxy",
 	SilenceUsage: true,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		projectRoot, err := findClosestShopwareProject()
+		projectRoot, err := findClosestShopwareProject(false)
 		if err != nil {
 			return err
 		}
