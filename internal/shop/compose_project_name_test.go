@@ -29,6 +29,12 @@ func TestGenerateComposeProjectName(t *testing.T) {
 	require.NoError(t, err)
 	assert.Regexp(t, regexp.MustCompile(`^sw-my-shop-[0-9a-f]{6}$`), weird)
 	assert.Regexp(t, regexp.MustCompile(`^[a-z0-9][a-z0-9_-]*$`), weird)
+
+	// Regression: user-facing names with uppercase, spaces and umlauts are
+	// accepted and still yield a valid Compose project name.
+	fancy, err := GenerateComposeProjectName(filepath.Join(t.TempDir(), "München Shop"))
+	require.NoError(t, err)
+	assert.Regexp(t, regexp.MustCompile(`^[a-z0-9][a-z0-9_-]*$`), fancy)
 }
 
 func TestEnvFileContent(t *testing.T) {
