@@ -979,11 +979,35 @@ func (m OverviewModel) renderAccess() string {
 }
 
 func (m OverviewModel) renderWatchers() string {
+	var ports shop.ConfigDockerPorts
+	if m.shopCfg != nil && m.shopCfg.Docker != nil {
+		ports = m.shopCfg.Docker.Ports
+	}
+	// A disabled port (HostPort 0) is not reachable from the host, so no URL.
+	watcherURL := func(key string) string {
+		if port := dockerpkg.HostPort(ports, key); port > 0 {
+			return fmt.Sprintf("http://127.0.0.1:%d", port)
+		}
+		return ""
+	}
+	adminURL := watcherURL(shop.DockerPortAdminWatcher)
+	storefrontURL := watcherURL(shop.DockerPortStorefrontWatcher)
+	if m.proxyHost != "" {
+		adminURL = m.adminWatchURL
+		storefrontURL = m.sfWatchURL
+	} else if m.envType != executor.TypeDocker {
+		// Outside docker the watchers bind directly on the host and
+		// docker.ports does not apply: the admin dev server port depends on
+		// the platform's build tooling (Vite or webpack-dev-server).
+		adminURL = fmt.Sprintf("http://127.0.0.1:%d", extension.AdminDevServerPort(m.projectRoot))
+		storefrontURL = "http://127.0.0.1:9998"
+	}
+
 	var s strings.Builder
 	s.WriteString(tui.TitleStyle.Render("Watchers"))
 	s.WriteString("\n")
-	s.WriteString(m.renderWatcherStatus("Admin", m.adminWatchRunning, m.adminWatchStarting, m.adminWatchReady, m.adminWatchURL, m.cursor == 0))
-	s.WriteString(m.renderWatcherStatus("Storefront", m.sfWatchRunning, m.sfWatchStarting, m.sfWatchReady, m.sfWatchURL, m.cursor == 1))
+	s.WriteString(m.renderWatcherStatus("Admin", m.adminWatchRunning, m.adminWatchStarting, m.adminWatchReady, adminURL, m.cursor == 0))
+	s.WriteString(m.renderWatcherStatus("Storefront", m.sfWatchRunning, m.sfWatchStarting, m.sfWatchReady, storefrontURL, m.cursor == 1))
 	return s.String()
 }
 

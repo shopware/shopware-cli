@@ -9,6 +9,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"gopkg.in/yaml.v3"
+
+	"github.com/shopware/shopware-cli/internal/shop"
 )
 
 func TestProfilerNeedsCredentials(t *testing.T) {
@@ -317,6 +319,70 @@ func TestGenerateComposeFile(t *testing.T) {
 		assert.Contains(t, compose, "K8S_CACHE_HOST: redis")
 		assert.Contains(t, compose, "MESSENGER_TRANSPORT_DSN")
 		assert.Contains(t, compose, "redis://redis:6379")
+	})
+
+	t.Run("custom host ports", func(t *testing.T) {
+		t.Parallel()
+		lock := &composer.Lock{
+			Packages: []composer.LockPackage{
+				{Name: "shopware/core", Version: "6.6.0.0"},
+			},
+		}
+
+		result, err := GenerateComposeFile(lock, &ComposeOptions{
+			Ports: shop.ConfigDockerPorts{
+				shop.DockerPortWeb:       8005,
+				shop.DockerPortMailerWeb: 9925,
+			},
+		})
+		assert.NoError(t, err)
+
+		compose := string(result)
+		assert.Contains(t, compose, "8005:8000")
+		assert.Contains(t, compose, "9925:8025")
+		assert.NotContains(t, compose, "8000:8000")
+		assert.NotContains(t, compose, "8025:8025")
+		// Ports without an override keep their defaults.
+		assert.Contains(t, compose, "1025:1025")
+		assert.Contains(t, compose, "9080:8080")
+		assert.Contains(t, compose, "5173:5173")
+	})
+
+	t.Run("disabled host ports", func(t *testing.T) {
+		t.Parallel()
+		lock := &composer.Lock{
+			Packages: []composer.LockPackage{
+				{Name: "shopware/core", Version: "6.6.0.0"},
+			},
+		}
+
+		result, err := GenerateComposeFile(lock, &ComposeOptions{
+			Ports: shop.ConfigDockerPorts{
+				shop.DockerPortAdminer:    shop.DockerPortDisabled,
+				shop.DockerPortMailerSMTP: shop.DockerPortDisabled,
+				shop.DockerPortMailerWeb:  shop.DockerPortDisabled,
+				shop.DockerPortWebAlt:     shop.DockerPortDisabled,
+			},
+		})
+		assert.NoError(t, err)
+
+		compose := string(result)
+		assert.NotContains(t, compose, "9080:8080")
+		assert.NotContains(t, compose, "8080:8080")
+		assert.NotContains(t, compose, "1025:1025")
+		assert.NotContains(t, compose, "8025:8025")
+		// Remaining web ports keep publishing.
+		assert.Contains(t, compose, "8000:8000")
+		assert.Contains(t, compose, "5173:5173")
+		// A service whose ports are all disabled loses its ports key entirely.
+		var parsed struct {
+			Services map[string]struct {
+				Ports []string `yaml:"ports"`
+			} `yaml:"services"`
+		}
+		assert.NoError(t, yaml.Unmarshal(result, &parsed))
+		require.Contains(t, parsed.Services, "adminer")
+		assert.Empty(t, parsed.Services["adminer"].Ports)
 	})
 
 	t.Run("custom php version", func(t *testing.T) {

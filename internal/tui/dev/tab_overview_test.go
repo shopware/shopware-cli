@@ -1,10 +1,16 @@
 package dev
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
+	"github.com/shopware/shopware-cli/internal/executor"
+	"github.com/shopware/shopware-cli/internal/shop"
 )
 
 func TestMajorMinor(t *testing.T) {
@@ -207,4 +213,51 @@ func TestViewAccessTableWithoutInstallation(t *testing.T) {
 	assert.Contains(t, view, "Shop Admin")
 	assert.Contains(t, view, "Admin credentials will appear here once Shopware is installed.")
 	assert.NotContains(t, view, "no auth")
+}
+
+func TestRenderWatchers_DockerModeUsesConfiguredPorts(t *testing.T) {
+	cfg := &shop.Config{
+		Docker: &shop.ConfigDocker{
+			Ports: shop.ConfigDockerPorts{
+				shop.DockerPortAdminWatcher:      15173,
+				shop.DockerPortStorefrontWatcher: shop.DockerPortDisabled,
+			},
+		},
+	}
+	m := NewOverviewModel(t.Context(), executor.TypeDocker, "", "", "", t.TempDir(), nil, cfg)
+	m.adminWatchRunning = true
+	m.adminWatchReady = true
+	m.sfWatchRunning = true
+	m.sfWatchReady = true
+
+	view := m.renderWatchers()
+	assert.Contains(t, view, "http://127.0.0.1:15173", "remapped host ports must be reflected in the URL")
+	assert.NotContains(t, view, "http://127.0.0.1:9998", "disabled ports must not show a URL")
+}
+
+func TestRenderWatchers_LocalModeIgnoresDockerPorts(t *testing.T) {
+	dir := t.TempDir()
+
+	// Shopware 6.6 without the ADMIN_VITE flag starts webpack-dev-server on
+	// 8080 instead of Vite's 5173.
+	adminApp := filepath.Join(dir, "vendor", "shopware", "administration", "Resources", "app", "administration")
+	require.NoError(t, os.MkdirAll(adminApp, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(adminApp, "webpack.config.js"), []byte("module.exports = {}"), 0o644))
+
+	cfg := &shop.Config{
+		Docker: &shop.ConfigDocker{
+			Ports: shop.ConfigDockerPorts{
+				shop.DockerPortAdminWatcher: shop.DockerPortDisabled,
+			},
+		},
+	}
+	m := NewOverviewModel(t.Context(), executor.TypeLocal, "", "", "", dir, nil, cfg)
+	m.adminWatchRunning = true
+	m.adminWatchReady = true
+	m.sfWatchRunning = true
+	m.sfWatchReady = true
+
+	view := m.renderWatchers()
+	assert.Contains(t, view, "http://127.0.0.1:8080", "local mode must use the platform's dev server port, not docker.ports")
+	assert.Contains(t, view, "http://127.0.0.1:9998")
 }

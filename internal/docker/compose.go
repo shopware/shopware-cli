@@ -80,11 +80,38 @@ type ComposeOptions struct {
 	// disabled (shopware.admin_worker.enable_admin_worker: false), because
 	// the message queue is then no longer dispatched from the browser.
 	DedicatedWorker bool
+	// Ports overrides the host ports the services are published on.
+	Ports shop.ConfigDockerPorts
 	// Proxy, when set, generates the compose file in shared-proxy mode: the
 	// routed services publish no host ports and instead join the proxy network
 	// with Traefik routing labels. Nil (the default) keeps fixed-port mode.
 	// Callers populate it via proxy.ComposeProxyOptions for proxy projects.
 	Proxy *ProxyOptions
+}
+
+// portBindings renders the "host:container" publish entries for the given
+// docker.ports keys, honoring host-port overrides and skipping ports that are
+// disabled (configured as false).
+func (o *ComposeOptions) portBindings(keys ...string) []string {
+	var ports shop.ConfigDockerPorts
+	if o != nil {
+		ports = o.Ports
+	}
+
+	bindings := make([]string, 0, len(keys))
+	for _, key := range keys {
+		for _, def := range PortDefinitions {
+			if def.Key != key {
+				continue
+			}
+			if hostPort := HostPort(ports, key); hostPort > 0 {
+				bindings = append(bindings, fmt.Sprintf("%d:%d", hostPort, def.Target))
+			}
+			break
+		}
+	}
+
+	return bindings
 }
 
 func (o *ComposeOptions) phpVersion() string {
@@ -123,6 +150,7 @@ func ComposeOptionsFromConfig(cfg *shop.Config) *ComposeOptions {
 		opts.BlackfireServerToken = cfg.Docker.PHP.BlackfireServerToken
 		opts.TidewaysAPIKey = cfg.Docker.PHP.TidewaysAPIKey
 	}
+	opts.Ports = cfg.Docker.Ports
 	return opts
 }
 
@@ -220,7 +248,14 @@ func buildCompose(features LockFeatures, opts *ComposeOptions) composeFile {
 	}
 	addVolumes(&web, px, ".:/var/www/html")
 	publishOrRoute(&web, px, "web",
-		[]string{"8000:8000", "8080:8080", "9999:9999", "9998:9998", "5173:5173", "5773:5773"},
+		opts.portBindings(
+			shop.DockerPortWeb,
+			shop.DockerPortWebAlt,
+			shop.DockerPortStorefrontWatcherAssets,
+			shop.DockerPortStorefrontWatcher,
+			shop.DockerPortAdminWatcher,
+			shop.DockerPortAdminWatcherHMR,
+		),
 		webProxyRoutes(px)...)
 
 	database := composeService{
@@ -268,7 +303,7 @@ func buildCompose(features LockFeatures, opts *ComposeOptions) composeFile {
 		Environment: yamlMap[string]{}.
 			set("ADMINER_DEFAULT_SERVER", "database"),
 	}
-	publishOrRoute(&adminer, px, "adminer", []string{"9080:8080"}, proxyRoute{subdomain: "adminer", containerPort: 8080})
+	publishOrRoute(&adminer, px, "adminer", opts.portBindings(shop.DockerPortAdminer), proxyRoute{subdomain: "adminer", containerPort: 8080})
 
 	mailer := composeService{
 		Image: "axllent/mailpit",
@@ -278,7 +313,7 @@ func buildCompose(features LockFeatures, opts *ComposeOptions) composeFile {
 	}
 	// Only the web UI (8025) is routed in proxy mode; SMTP (1025) stays internal
 	// to the compose network, reachable by other services as mailer:1025.
-	publishOrRoute(&mailer, px, "mailer", []string{"1025:1025", "8025:8025"}, proxyRoute{subdomain: "mailer", containerPort: 8025})
+	publishOrRoute(&mailer, px, "mailer", opts.portBindings(shop.DockerPortMailerSMTP, shop.DockerPortMailerWeb), proxyRoute{subdomain: "mailer", containerPort: 8025})
 
 	services := yamlMap[composeService]{}.
 		set("web", web).
@@ -432,7 +467,7 @@ func addOptionalServices(services *yamlMap[composeService], volumes *yamlMap[str
 		lavinmq := composeService{Image: "cloudamqp/lavinmq"}
 		// Only the management UI (15672) is routed in proxy mode; AMQP (5672)
 		// stays internal, reachable as lavinmq:5672.
-		publishOrRoute(&lavinmq, px, "lavinmq", []string{"15672:15672", "5672:5672"}, proxyRoute{subdomain: "lavinmq", containerPort: 15672})
+		publishOrRoute(&lavinmq, px, "lavinmq", opts.portBindings(shop.DockerPortAMQPManagement, shop.DockerPortAMQP), proxyRoute{subdomain: "lavinmq", containerPort: 15672})
 		lavinmq.Volumes = []string{"lavinmq-data:/var/lib/lavinmq:rw"}
 		*services = services.set("lavinmq", lavinmq)
 		*volumes = volumes.set("lavinmq-data", struct{}{})
@@ -446,7 +481,7 @@ func addOptionalServices(services *yamlMap[composeService], volumes *yamlMap[str
 				set("discovery.type", "single-node").
 				set("plugins.security.disabled", "true"),
 		}
-		publishOrRoute(&opensearch, px, "opensearch", []string{"9200:9200"}, proxyRoute{subdomain: "opensearch", containerPort: 9200})
+		publishOrRoute(&opensearch, px, "opensearch", opts.portBindings(shop.DockerPortElasticsearch), proxyRoute{subdomain: "opensearch", containerPort: 9200})
 		opensearch.Volumes = []string{"opensearch-data:/usr/share/opensearch/data"}
 		*services = services.set("opensearch", opensearch)
 		*volumes = volumes.set("opensearch-data", struct{}{})

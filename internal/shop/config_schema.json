@@ -450,6 +450,10 @@
         "php": {
           "$ref": "#/$defs/ConfigDockerPHP",
           "description": "PHP configuration for the Docker dev image"
+        },
+        "ports": {
+          "$ref": "#/$defs/ConfigDockerPorts",
+          "description": "Host port overrides for the Docker dev environment. Container ports are fixed."
         }
       },
       "additionalProperties": false,
@@ -520,6 +524,168 @@
         "tideways_api_key": {
           "type": "string",
           "description": "Tideways API key from your Tideways account. Required when profiler is \"tideways\"."
+        }
+      },
+      "additionalProperties": false,
+      "type": "object"
+    },
+    "ConfigDockerPorts": {
+      "properties": {
+        "web": {
+          "oneOf": [
+            {
+              "type": "integer",
+              "maximum": 65535,
+              "minimum": 1
+            },
+            {
+              "const": false
+            }
+          ],
+          "description": "Host port for the shop (Caddy). Defaults to 8000. Set to false to not publish the port."
+        },
+        "web_alt": {
+          "oneOf": [
+            {
+              "type": "integer",
+              "maximum": 65535,
+              "minimum": 1
+            },
+            {
+              "const": false
+            }
+          ],
+          "description": "Alternative HTTP host port of the web container. Defaults to 8080. Set to false to not publish the port."
+        },
+        "storefront_watcher_assets": {
+          "oneOf": [
+            {
+              "type": "integer",
+              "maximum": 65535,
+              "minimum": 1
+            },
+            {
+              "const": false
+            }
+          ],
+          "description": "Host port for the storefront watcher assets. Defaults to 9999. Set to false to not publish the port."
+        },
+        "storefront_watcher": {
+          "oneOf": [
+            {
+              "type": "integer",
+              "maximum": 65535,
+              "minimum": 1
+            },
+            {
+              "const": false
+            }
+          ],
+          "description": "Host port for the storefront watcher proxy. Defaults to 9998. Set to false to not publish the port."
+        },
+        "admin_watcher": {
+          "oneOf": [
+            {
+              "type": "integer",
+              "maximum": 65535,
+              "minimum": 1
+            },
+            {
+              "const": false
+            }
+          ],
+          "description": "Host port for the administration watcher (Vite). Defaults to 5173. Set to false to not publish the port."
+        },
+        "admin_watcher_hmr": {
+          "oneOf": [
+            {
+              "type": "integer",
+              "maximum": 65535,
+              "minimum": 1
+            },
+            {
+              "const": false
+            }
+          ],
+          "description": "Host port for the administration watcher hot module reload. Defaults to 5773. Set to false to not publish the port."
+        },
+        "adminer": {
+          "oneOf": [
+            {
+              "type": "integer",
+              "maximum": 65535,
+              "minimum": 1
+            },
+            {
+              "const": false
+            }
+          ],
+          "description": "Host port for the Adminer UI. Defaults to 9080. Set to false to not publish the port."
+        },
+        "mailer_smtp": {
+          "oneOf": [
+            {
+              "type": "integer",
+              "maximum": 65535,
+              "minimum": 1
+            },
+            {
+              "const": false
+            }
+          ],
+          "description": "Host port for the Mailpit SMTP endpoint. Defaults to 1025. Set to false to not publish the port."
+        },
+        "mailer_web": {
+          "oneOf": [
+            {
+              "type": "integer",
+              "maximum": 65535,
+              "minimum": 1
+            },
+            {
+              "const": false
+            }
+          ],
+          "description": "Host port for the Mailpit web UI. Defaults to 8025. Set to false to not publish the port."
+        },
+        "amqp_management": {
+          "oneOf": [
+            {
+              "type": "integer",
+              "maximum": 65535,
+              "minimum": 1
+            },
+            {
+              "const": false
+            }
+          ],
+          "description": "Host port for the LavinMQ management UI. Defaults to 15672. Set to false to not publish the port."
+        },
+        "amqp": {
+          "oneOf": [
+            {
+              "type": "integer",
+              "maximum": 65535,
+              "minimum": 1
+            },
+            {
+              "const": false
+            }
+          ],
+          "description": "Host port for the AMQP endpoint. Defaults to 5672. Set to false to not publish the port."
+        },
+        "elasticsearch": {
+          "oneOf": [
+            {
+              "type": "integer",
+              "maximum": 65535,
+              "minimum": 1
+            },
+            {
+              "const": false
+            }
+          ],
+          "description": "Host port for OpenSearch. Defaults to 9200. Set to false to not publish the port."
         }
       },
       "additionalProperties": false,

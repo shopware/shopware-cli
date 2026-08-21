@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"time"
 
 	"charm.land/bubbles/v2/progress"
@@ -11,6 +12,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 
+	dockerpkg "github.com/shopware/shopware-cli/internal/docker"
 	"github.com/shopware/shopware-cli/internal/envfile"
 	"github.com/shopware/shopware-cli/internal/executor"
 	"github.com/shopware/shopware-cli/internal/shop"
@@ -47,13 +49,17 @@ const (
 	phaseInstalling
 	phaseTask
 	phaseMigrationWizard
+	phasePortConflict
 )
 
 type Options struct {
 	ProjectRoot string
-	Config      *shop.Config
-	EnvConfig   *shop.EnvironmentConfig
-	Executor    executor.Executor
+	// ConfigPath is the path of the project configuration file; port overrides
+	// are persisted to its local override sibling.
+	ConfigPath string
+	Config     *shop.Config
+	EnvConfig  *shop.EnvironmentConfig
+	Executor   executor.Executor
 	// ProxyFallback is set when a proxy project could not start the shared
 	// proxy and dev fell back to fixed host ports. The shop is then reachable
 	// at the local port URL, not the (now unrouted) proxy hostname in Config.
@@ -83,6 +89,8 @@ type Model struct {
 	phase           phase
 	overlayLines    []string
 	projectRoot     string
+	configPath      string
+	portConflicts   []dockerpkg.PortConflict
 	executor        executor.Executor
 	dockerOutChan   <-chan string
 	install         installWizard
@@ -111,6 +119,12 @@ type shopwareInstallDoneMsg struct{ err error }
 
 type configRestartDoneMsg struct{ err error }
 
+type portConflictMsg struct{ conflicts []dockerpkg.PortConflict }
+type portFixDoneMsg struct {
+	err       error
+	overrides map[string]int
+}
+
 // commandContext returns the context tea.Cmd closures should derive from.
 // Tests construct Model literals without New, so a nil ctx falls back to
 // Background.
@@ -129,12 +143,17 @@ func (m Model) cleanupContext() context.Context {
 }
 
 func New(ctx context.Context, opts Options) Model {
+	configPath := opts.ConfigPath
+	if configPath == "" {
+		configPath = filepath.Join(opts.ProjectRoot, ".shopware-project.yml")
+	}
 	m := Model{
 		ctx:           ctx,
 		header:        tui.NewHeader(),
 		activeTab:     tabOverview,
 		dockerMode:    opts.Executor.Type() == executor.TypeDocker,
 		projectRoot:   opts.ProjectRoot,
+		configPath:    configPath,
 		executor:      opts.Executor,
 		config:        opts.Config,
 		envConfig:     opts.EnvConfig,
@@ -236,9 +255,17 @@ func (m Model) initPhase() tea.Cmd {
 		return nil
 	}
 	if m.dockerMode {
-		return checkContainersRunning(m.commandContext(), m.projectRoot)
+		return m.checkContainersRunning()
 	}
 	return m.checkShopwareInstalled()
+}
+
+// dockerPorts returns the configured host-port overrides, nil when none are set.
+func (m Model) dockerPorts() shop.ConfigDockerPorts {
+	if m.config == nil || m.config.Docker == nil {
+		return nil
+	}
+	return m.config.Docker.Ports
 }
 
 func (m *Model) shutdown() {
@@ -303,7 +330,8 @@ func (m Model) updateContent(msg tea.Msg) (app.Content, tea.Cmd) {
 
 	case dockerAlreadyRunningMsg, dockerNeedStartMsg, dockerOutputLineMsg,
 		dockerOutputDoneMsg, dockerStartedMsg, dockerStoppedMsg,
-		shopwareInstalledMsg, shopwareNotInstalledMsg, shopwareInstallDoneMsg:
+		shopwareInstalledMsg, shopwareNotInstalledMsg, shopwareInstallDoneMsg,
+		portConflictMsg, portFixDoneMsg:
 		return m.updateLifecycle(msg)
 
 	case tui.TaskLineMsg:
@@ -367,6 +395,9 @@ func (m Model) updateContent(msg tea.Msg) (app.Content, tea.Cmd) {
 		return m.handleSalesChannelPickerResult(msg)
 
 	case prompt.ResultMsg:
+		if msg.ID == portConflictID {
+			return m.handlePortConflictResult(msg)
+		}
 		return m.handleStopConfirmResult(msg)
 
 	case tea.KeyPressMsg:
@@ -554,6 +585,24 @@ func (m Model) handleSalesChannelPickerResult(msg salesChannelPickerResultMsg) (
 	}
 	m.overview.sfWatchStarting = true
 	return m, m.overview.startStorefrontWatch(msg.Opts)
+}
+
+// handlePortConflictResult resolves the port-conflict prompt: remap the busy
+// ports to random free ones and start, or quit. Dismissing with esc keeps the
+// port-conflict screen, which exits with q.
+func (m Model) handlePortConflictResult(msg prompt.ResultMsg) (app.Content, tea.Cmd) {
+	switch msg.Choice {
+	case portConflictRandom:
+		m.phase = phaseStarting
+		m.overlayLines = nil
+		m.dockerShowLogs = false
+		m.dockerSpinner = tui.NewBrandSpinner()
+		return m, tea.Batch(m.dockerSpinner.Tick, m.fixPortConflicts())
+	case portConflictQuit:
+		m.shutdown()
+		return m, tea.Quit
+	}
+	return m, nil
 }
 
 func (m Model) handleStopConfirmResult(msg prompt.ResultMsg) (app.Content, tea.Cmd) {
