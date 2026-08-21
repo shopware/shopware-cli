@@ -17,7 +17,7 @@ Project config also supports a sibling local override (`.shopware-project.local.
 
 This works, but it adds more root-level dotfiles. [The `.config` convention](https://dot-config.github.io/) lets tools move those files under `.config/` without claiming the project root.
 
-Issue #1387 originally sketched a vendor directory (`.config/shopware/project.yaml` and `lsp.json`). This ADR instead keeps the existing filenames and moves them one level down: `.config/shopware-project.yml` and `.config/shopware-extension.yml`. That is a smaller rename, matches the files people already know, and still clears the repository root.
+Issue #1387 originally sketched a vendor directory (`.config/shopware/project.yaml` and `lsp.json`). This ADR instead keeps the existing filenames (without leading `.`) and moves them one level down: `.config/shopware-project.yml` and `.config/shopware-extension.yml`. That is a smaller rename, matches the files people already know, and still clears the repository root.
 
 Extension config belongs in the same move. It is the other first-party CLI YAML file, it has the same discovery and init pattern, and leaving it at the root would keep the clutter the issue is trying to remove.
 
