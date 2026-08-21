@@ -30,6 +30,8 @@ func (s *stubDevExecutor) StartEnvironment(ctx context.Context) error {
 // newPortConflictFlagCommand returns a command carrying only the
 // on-port-conflict flag set to mode.
 func newPortConflictFlagCommand(t *testing.T, mode string) *cobra.Command {
+	t.Helper()
+
 	cmd := &cobra.Command{Use: "dev"}
 	cmd.Flags().String("on-port-conflict", mode, "")
 	cmd.SetContext(t.Context())
