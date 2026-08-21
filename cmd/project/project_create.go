@@ -17,12 +17,6 @@ const (
 	projectNameHelp = "The name of the project directory to create (leave empty to use the current directory)"
 )
 
-// projectNameFieldDescription returns the description shown under the project
-// name input in the interactive form.
-func projectNameFieldDescription() string {
-	return projectNameHelp
-}
-
 type createOptions struct {
 	projectFolder      string
 	selectedVersion    string

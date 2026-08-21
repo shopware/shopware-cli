@@ -6,12 +6,6 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestProjectNameFieldDescription(t *testing.T) {
-	t.Parallel()
-
-	assert.Equal(t, projectNameHelp, projectNameFieldDescription())
-}
-
 func TestApplyNonInteractiveDefaults(t *testing.T) {
 	t.Parallel()
 
