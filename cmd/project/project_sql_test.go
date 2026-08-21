@@ -17,12 +17,23 @@ import (
 func newSQLFormatCommand(t *testing.T, formatFlag string) *cobra.Command {
 	t.Helper()
 
+	return newSQLCommand(t, formatFlag, "")
+}
+
+func newSQLCommand(t *testing.T, formatFlag, fileFlag string) *cobra.Command {
+	t.Helper()
+
 	cmd := &cobra.Command{}
 	cmd.Flags().String("format", "", "")
+	cmd.Flags().String("file", "", "")
 	cmd.SetOut(&bytes.Buffer{})
 
 	if formatFlag != "" {
 		require.NoError(t, cmd.Flags().Set("format", formatFlag))
+	}
+
+	if fileFlag != "" {
+		require.NoError(t, cmd.Flags().Set("file", fileFlag))
 	}
 
 	return cmd
@@ -58,4 +69,70 @@ func TestIsTerminalStream(t *testing.T) {
 	defer func() { _ = file.Close() }()
 
 	assert.False(t, isTerminalStream(file), "a regular file is not a terminal")
+}
+
+func TestResolveSQLInputFromFile(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "script.sql")
+	require.NoError(t, os.WriteFile(path, []byte("SELECT 1;\nUPDATE tax SET tax_rate = 19;"), 0o644))
+
+	script, provided, err := resolveSQLInput(newSQLCommand(t, "", path), nil)
+	require.NoError(t, err)
+
+	assert.True(t, provided)
+	assert.Equal(t, "SELECT 1;\nUPDATE tax SET tax_rate = 19;", script)
+}
+
+func TestResolveSQLInputFileIgnoresStdin(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "script.sql")
+	require.NoError(t, os.WriteFile(path, []byte("SELECT id FROM tax"), 0o644))
+
+	cmd := newSQLCommand(t, "", path)
+	cmd.SetIn(strings.NewReader("SELECT * FROM product"))
+
+	script, provided, err := resolveSQLInput(cmd, nil)
+	require.NoError(t, err)
+
+	assert.True(t, provided)
+	assert.Equal(t, "SELECT id FROM tax", script)
+}
+
+func TestResolveSQLInputFileAndQueryConflict(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "script.sql")
+	require.NoError(t, os.WriteFile(path, []byte("SELECT 1"), 0o644))
+
+	_, _, err := resolveSQLInput(newSQLCommand(t, "", path), []string{"SELECT 2"})
+	assert.ErrorContains(t, err, "cannot pass a query together with --file")
+}
+
+func TestResolveSQLInputMissingFile(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "missing.sql")
+
+	_, _, err := resolveSQLInput(newSQLCommand(t, "", path), nil)
+	assert.ErrorContains(t, err, "failed to read SQL file")
+	assert.ErrorContains(t, err, path)
+}
+
+func TestResolveSQLInputFromArgs(t *testing.T) {
+	script, provided, err := resolveSQLInput(newSQLCommand(t, "", ""), []string{"SELECT", "id", "FROM", "tax"})
+	require.NoError(t, err)
+
+	assert.True(t, provided)
+	assert.Equal(t, "SELECT id FROM tax", script)
+}
+
+func TestResolveSQLInputFromStdin(t *testing.T) {
+	cmd := newSQLCommand(t, "", "")
+	cmd.SetIn(strings.NewReader("INSERT INTO tax (tax_rate) VALUES (7)"))
+
+	script, provided, err := resolveSQLInput(cmd, nil)
+	require.NoError(t, err)
+
+	assert.True(t, provided)
+	assert.Equal(t, "INSERT INTO tax (tax_rate) VALUES (7)", script)
+}
+
+func TestProjectSQLCmdRegistersFileFlag(t *testing.T) {
+	flag := projectSQLCmd.Flags().Lookup("file")
+	require.NotNil(t, flag)
+	assert.Equal(t, "path to a SQL file to execute (instead of a query argument or stdin)", flag.Usage)
 }
