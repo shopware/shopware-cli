@@ -18,16 +18,8 @@ const (
 )
 
 // projectNameFieldDescription returns the description shown under the project
-// name input in the interactive form. While the typed name is invalid it
-// returns the rule highlighted in red, validating the input live; otherwise it
-// returns the regular help text.
-func projectNameFieldDescription(name string) string {
-	if name != "" {
-		if err := shop.ValidateProjectName(name); err != nil {
-			return tui.RedText.Render(shop.ProjectNameRule)
-		}
-	}
-
+// name input in the interactive form.
+func projectNameFieldDescription() string {
 	return projectNameHelp
 }
 
@@ -119,16 +111,6 @@ var projectCreateCmd = &cobra.Command{
 
 		if opts.phpVersionExplicit {
 			if err := shop.ValidatePHPVersion(opts.phpVersion); err != nil {
-				return err
-			}
-		}
-
-		// A name passed directly as an argument skips the interactive name
-		// prompt, which is where invalid names (e.g. wrong casing) are normally
-		// rejected live. Validate it up front so it is forbidden immediately
-		// instead of only after the rest of the form has been completed.
-		if opts.projectFolder != "" {
-			if err := shop.ValidateProjectName(opts.projectFolder); err != nil {
 				return err
 			}
 		}

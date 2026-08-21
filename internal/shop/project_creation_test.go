@@ -81,62 +81,8 @@ func TestResolveInstallVersion(t *testing.T) {
 	}
 }
 
-func TestValidateProjectName(t *testing.T) {
-	t.Parallel()
-
-	validNames := []string{
-		"my-shopware-project",
-		"myshop",
-		"my_shop",
-		"shop123",
-		"123shop",
-		"a",
-		"path/to/my-shop",
-		".",
-	}
-	for _, name := range validNames {
-		t.Run("valid: "+name, func(t *testing.T) {
-			t.Parallel()
-			assert.NoError(t, ValidateProjectName(name))
-		})
-	}
-
-	invalidNames := []string{
-		"MyShop",
-		"myShop",
-		"SHOP",
-		"müller",
-		"über-shop",
-		"Müller-Shop",
-		"café",
-		"straße",
-		"my shop",
-		"my.shop",
-		"shop!",
-		"-shop",
-		"_shop",
-		"ä",
-		"",
-		"path/to/müller",
-		"path/to/MyShop",
-	}
-	for _, name := range invalidNames {
-		t.Run("invalid: "+name, func(t *testing.T) {
-			t.Parallel()
-			err := ValidateProjectName(name)
-			assert.Error(t, err)
-			assert.Contains(t, err.Error(), "invalid project name")
-		})
-	}
-}
-
 func TestValidateProjectFolder(t *testing.T) {
 	t.Parallel()
-
-	t.Run("rejects an invalid project name", func(t *testing.T) {
-		t.Parallel()
-		assert.ErrorContains(t, ValidateProjectFolder(filepath.Join(t.TempDir(), "MyShop")), "invalid project name")
-	})
 
 	t.Run("accepts a missing folder", func(t *testing.T) {
 		t.Parallel()

@@ -17,7 +17,7 @@ func TestGenerateComposeProjectName(t *testing.T) {
 	name, err := GenerateComposeProjectName("/tmp/my-shop")
 	require.NoError(t, err)
 	assert.Regexp(t, regexp.MustCompile(`^sw-my-shop-[0-9a-f]{6}$`), name)
-	assert.NoError(t, ValidateProjectName(name))
+	assert.Regexp(t, regexp.MustCompile(`^[a-z0-9][a-z0-9_-]*$`), name)
 
 	// Same basename must still differ (random suffix).
 	name2, err := GenerateComposeProjectName("/other/my-shop")
@@ -28,7 +28,7 @@ func TestGenerateComposeProjectName(t *testing.T) {
 	weird, err := GenerateComposeProjectName(filepath.Join(t.TempDir(), "My Shop!"))
 	require.NoError(t, err)
 	assert.Regexp(t, regexp.MustCompile(`^sw-my-shop-[0-9a-f]{6}$`), weird)
-	assert.NoError(t, ValidateProjectName(weird))
+	assert.Regexp(t, regexp.MustCompile(`^[a-z0-9][a-z0-9_-]*$`), weird)
 }
 
 func TestEnvFileContent(t *testing.T) {
@@ -47,7 +47,7 @@ func TestEnvFileContent(t *testing.T) {
 		require.NoError(t, err)
 		assert.True(t, strings.HasPrefix(content, ComposeProjectNameEnvKey+"=sw-demo-shop-"))
 		assert.True(t, strings.HasSuffix(content, "\n"))
-		assert.NoError(t, ValidateProjectName(strings.TrimPrefix(strings.TrimSpace(content), ComposeProjectNameEnvKey+"=")))
+		assert.Regexp(t, regexp.MustCompile(`^[a-z0-9][a-z0-9_-]*$`), strings.TrimPrefix(strings.TrimSpace(content), ComposeProjectNameEnvKey+"="))
 	})
 }
 

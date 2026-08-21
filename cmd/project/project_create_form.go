@@ -153,7 +153,7 @@ func runCreateForm(cmd *cobra.Command, opts *createOptions, releases []repositor
 				huh.NewInput().
 					Title("Project Name").
 					DescriptionFunc(func() string {
-						return projectNameFieldDescription(opts.projectFolder)
+						return projectNameFieldDescription()
 					}, &opts.projectFolder).
 					Placeholder("my-shopware-project (leave empty for current directory)").
 					Value(&opts.projectFolder).
