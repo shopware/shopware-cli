@@ -40,7 +40,7 @@ var projectSQLCmd = &cobra.Command{
 			return err
 		}
 
-		if err := errIfNoSQLInput(cmd.Context(), provided); err != nil {
+		if err := errIfNoSQLInput(cmd.Context(), provided, isTerminalStream(cmd.InOrStdin())); err != nil {
 			return err
 		}
 
@@ -90,14 +90,16 @@ func resolveSQLInput(cmd *cobra.Command, args []string) (string, bool, error) {
 			return "", false, err
 		}
 
-		return string(content), true, nil
+		script := string(content)
+
+		return script, strings.TrimSpace(script) != "", nil
 	}
 
 	return "", false, nil
 }
 
-func errIfNoSQLInput(ctx context.Context, provided bool) error {
-	if provided || system.IsInteractionEnabled(ctx) {
+func errIfNoSQLInput(ctx context.Context, provided, canOpenShell bool) error {
+	if provided || (canOpenShell && system.IsInteractionEnabled(ctx)) {
 		return nil
 	}
 

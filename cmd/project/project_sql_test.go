@@ -132,6 +132,21 @@ func TestResolveSQLInputFromStdin(t *testing.T) {
 	assert.Equal(t, "INSERT INTO tax (tax_rate) VALUES (7)", script)
 }
 
+func TestResolveSQLInputEmptyStdinIsMissing(t *testing.T) {
+	for _, stdin := range []string{"", "  \n\t"} {
+		cmd := newSQLCommand(t, "", "")
+		cmd.SetIn(strings.NewReader(stdin))
+
+		script, provided, err := resolveSQLInput(cmd, nil)
+		require.NoError(t, err, "stdin %q", stdin)
+		assert.False(t, provided, "stdin %q", stdin)
+		assert.Equal(t, stdin, script)
+
+		err = errIfNoSQLInput(system.WithInteraction(t.Context(), false), provided, isTerminalStream(cmd.InOrStdin()))
+		assert.ErrorContains(t, err, "no query given and interaction is disabled", "stdin %q", stdin)
+	}
+}
+
 func TestProjectSQLCmdRegistersFileFlag(t *testing.T) {
 	flag := projectSQLCmd.Flags().Lookup("file")
 	require.NotNil(t, flag)
@@ -139,10 +154,13 @@ func TestProjectSQLCmdRegistersFileFlag(t *testing.T) {
 }
 
 func TestErrIfNoSQLInput(t *testing.T) {
-	assert.NoError(t, errIfNoSQLInput(t.Context(), true))
-	assert.NoError(t, errIfNoSQLInput(t.Context(), false))
-	assert.NoError(t, errIfNoSQLInput(system.WithInteraction(t.Context(), false), true))
+	assert.NoError(t, errIfNoSQLInput(t.Context(), true, false))
+	assert.NoError(t, errIfNoSQLInput(t.Context(), false, true))
+	assert.NoError(t, errIfNoSQLInput(system.WithInteraction(t.Context(), false), true, true))
 
-	err := errIfNoSQLInput(system.WithInteraction(t.Context(), false), false)
+	err := errIfNoSQLInput(system.WithInteraction(t.Context(), false), false, true)
+	assert.ErrorContains(t, err, "no query given and interaction is disabled")
+
+	err = errIfNoSQLInput(t.Context(), false, false)
 	assert.ErrorContains(t, err, "no query given and interaction is disabled")
 }
