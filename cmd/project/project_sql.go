@@ -1,6 +1,7 @@
 package project
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -39,6 +40,10 @@ var projectSQLCmd = &cobra.Command{
 			return err
 		}
 
+		if err := errIfNoSQLInput(cmd.Context(), provided); err != nil {
+			return err
+		}
+
 		conn, dbConn, cleanup, err := connectProjectDatabase(cmd)
 		if err != nil {
 			return err
@@ -47,10 +52,6 @@ var projectSQLCmd = &cobra.Command{
 
 		if provided {
 			return sqlshell.Run(cmd.Context(), conn, script, cmd.OutOrStdout(), format)
-		}
-
-		if !system.IsInteractionEnabled(cmd.Context()) {
-			return errors.New("no query given and interaction is disabled, pass a query as argument, use --file, or pipe a script via stdin")
 		}
 
 		logging.FromContext(cmd.Context()).Infof("Connected to database %q at %s. Type \"exit\" or press Ctrl+D to quit.", dbConn.Database, dbConn.Addr())
@@ -93,6 +94,14 @@ func resolveSQLInput(cmd *cobra.Command, args []string) (string, bool, error) {
 	}
 
 	return "", false, nil
+}
+
+func errIfNoSQLInput(ctx context.Context, provided bool) error {
+	if provided || system.IsInteractionEnabled(ctx) {
+		return nil
+	}
+
+	return errors.New("no query given and interaction is disabled, pass a query as argument, use --file, or pipe a script via stdin")
 }
 
 func resolveSQLFormat(cmd *cobra.Command) (sqlshell.Format, error) {

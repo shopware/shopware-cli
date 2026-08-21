@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/shopware/shopware-cli/internal/sqlshell"
+	"github.com/shopware/shopware-cli/internal/system"
 )
 
 func newSQLFormatCommand(t *testing.T, formatFlag string) *cobra.Command {
@@ -135,4 +136,13 @@ func TestProjectSQLCmdRegistersFileFlag(t *testing.T) {
 	flag := projectSQLCmd.Flags().Lookup("file")
 	require.NotNil(t, flag)
 	assert.Equal(t, "path to a SQL file to execute (instead of a query argument or stdin)", flag.Usage)
+}
+
+func TestErrIfNoSQLInput(t *testing.T) {
+	assert.NoError(t, errIfNoSQLInput(t.Context(), true))
+	assert.NoError(t, errIfNoSQLInput(t.Context(), false))
+	assert.NoError(t, errIfNoSQLInput(system.WithInteraction(t.Context(), false), true))
+
+	err := errIfNoSQLInput(system.WithInteraction(t.Context(), false), false)
+	assert.ErrorContains(t, err, "no query given and interaction is disabled")
 }
