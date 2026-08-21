@@ -4,8 +4,6 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
-
-	"gopkg.in/yaml.v3"
 )
 
 // ProxyOptions carries the data needed to route a project's services through
@@ -102,10 +100,10 @@ func (p *ProxyOptions) hostname(r proxyRoute) string {
 // publishes the fixed host ports, in proxy mode it joins the shared network and
 // adds a Traefik router per route (and never publishes host ports). Keeping the
 // mode branch here keeps buildCompose readable.
-func publishOrRoute(svc *yaml.Node, p *ProxyOptions, serviceName string, hostPorts []string, routes ...proxyRoute) {
+func publishOrRoute(svc *composeService, p *ProxyOptions, serviceName string, hostPorts []string, routes ...proxyRoute) {
 	if p == nil {
 		if len(hostPorts) > 0 {
-			addKeyValueNode(svc, "ports", newSequenceNode(hostPorts...))
+			svc.Ports = hostPorts
 		}
 		return
 	}
@@ -140,12 +138,12 @@ func webProxyRoutes(p *ProxyOptions) []proxyRoute {
 // addProxyRouting joins serviceName to the shared proxy network and adds a
 // Traefik router per route. buildCompose calls it in proxy mode instead of
 // publishing fixed host ports.
-func addProxyRouting(svc *yaml.Node, p *ProxyOptions, serviceName string, routes ...proxyRoute) {
-	addKeyValueNode(svc, "networks", newSequenceNode("default", p.NetworkName))
+func addProxyRouting(svc *composeService, p *ProxyOptions, serviceName string, routes ...proxyRoute) {
+	svc.Networks = []string{"default", p.NetworkName}
 
-	labels := newMappingNode()
-	addKeyValue(labels, "traefik.enable", "true")
-	addKeyValue(labels, "traefik.docker.network", p.NetworkName)
+	labels := yamlMap[string]{}.
+		set("traefik.enable", "true").
+		set("traefik.docker.network", p.NetworkName)
 
 	// Router/service names must be unique across every project sharing the one
 	// Traefik instance, so they are prefixed with the project's own hostname
@@ -173,14 +171,15 @@ func addProxyRouting(svc *yaml.Node, p *ProxyOptions, serviceName string, routes
 			rule += fmt.Sprintf(" && PathPrefix(`%s`)", route.pathPrefix)
 		}
 
-		addKeyValue(labels, fmt.Sprintf("traefik.http.routers.%s.rule", router), rule)
-		addKeyValue(labels, fmt.Sprintf("traefik.http.routers.%s.entrypoints", router), entrypoint)
-		addKeyValue(labels, fmt.Sprintf("traefik.http.routers.%s.tls", router), "true")
-		addKeyValue(labels, fmt.Sprintf("traefik.http.routers.%s.service", router), router)
-		addKeyValue(labels, fmt.Sprintf("traefik.http.services.%s.loadbalancer.server.port", router), strconv.Itoa(route.containerPort))
+		labels = labels.
+			set(fmt.Sprintf("traefik.http.routers.%s.rule", router), rule).
+			set(fmt.Sprintf("traefik.http.routers.%s.entrypoints", router), entrypoint).
+			set(fmt.Sprintf("traefik.http.routers.%s.tls", router), "true").
+			set(fmt.Sprintf("traefik.http.routers.%s.service", router), router).
+			set(fmt.Sprintf("traefik.http.services.%s.loadbalancer.server.port", router), strconv.Itoa(route.containerPort))
 	}
 
-	addKeyValueNode(svc, "labels", labels)
+	svc.Labels = labels
 }
 
 // addVolumes attaches a service's volume list built from base mounts, plus the
@@ -188,11 +187,11 @@ func addProxyRouting(svc *yaml.Node, p *ProxyOptions, serviceName string, routes
 // proxy mode — so code in the container (PHP, curl, Node) trusts the proxy's
 // HTTPS certificates for self-calls to APP_URL while still trusting public CAs.
 // Mirrors publishOrRoute, keeping the proxy-specific mount out of buildCompose.
-func addVolumes(svc *yaml.Node, p *ProxyOptions, base ...string) {
-	vols := newSequenceNode(base...)
+func addVolumes(svc *composeService, p *ProxyOptions, base ...string) {
+	vols := base
 	if p != nil && p.CABundlePath != "" {
-		vols.Content = append(vols.Content, &yaml.Node{Kind: yaml.ScalarNode, Value: p.CABundlePath + ":" + containerCABundlePath + ":ro", Tag: "!!str"})
+		vols = append(vols, p.CABundlePath+":"+containerCABundlePath+":ro")
 	}
 
-	addKeyValueNode(svc, "volumes", vols)
+	svc.Volumes = vols
 }

@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strconv"
 
 	"github.com/shyim/go-composer"
 	"gopkg.in/yaml.v3"
@@ -193,13 +192,13 @@ func ensureEnvLocalFile(projectFolder string) error {
 	return os.WriteFile(envLocalPath, []byte(shop.EnvLocalDockerContent), 0o644)
 }
 
-func buildCompose(hasAMQP, hasElasticsearch bool, opts *ComposeOptions) yaml.Node {
+func buildCompose(hasAMQP, hasElasticsearch bool, opts *ComposeOptions) composeFile {
 	px := opts.proxy()
 
-	webEnv := newMappingNode()
-	addKeyValue(webEnv, "HOST", "0.0.0.0")
-	addKeyValue(webEnv, "DATABASE_URL", "mysql://root:root@database/shopware")
-	addKeyValue(webEnv, "MAILER_DSN", "smtp://mailer:1025")
+	webEnv := yamlMap[string]{}.
+		set("HOST", "0.0.0.0").
+		set("DATABASE_URL", "mysql://root:root@database/shopware").
+		set("MAILER_DSN", "smtp://mailer:1025")
 
 	// In proxy mode Traefik terminates TLS and forwards plain HTTP from a
 	// private container address, so Shopware must trust its X-Forwarded-*
@@ -209,8 +208,9 @@ func buildCompose(hasAMQP, hasElasticsearch bool, opts *ComposeOptions) yaml.Nod
 	if px != nil {
 		trustedProxies = "127.0.0.1,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16"
 	}
-	addKeyValue(webEnv, "TRUSTED_PROXIES", trustedProxies)
-	addKeyValue(webEnv, "SYMFONY_TRUSTED_PROXIES", trustedProxies)
+	webEnv = webEnv.
+		set("TRUSTED_PROXIES", trustedProxies).
+		set("SYMFONY_TRUSTED_PROXIES", trustedProxies)
 
 	if px != nil && px.CABundlePath != "" {
 		// APP_URL is not pinned here: proxy up writes it into .env.local before
@@ -219,116 +219,114 @@ func buildCompose(hasAMQP, hasElasticsearch bool, opts *ComposeOptions) yaml.Nod
 		// anyone editing it). Point Node at the mounted CA bundle so its own
 		// self-calls over TLS are trusted (PHP/curl trust it via the same bundle
 		// mounted over the system trust store — see addVolumes).
-		addKeyValue(webEnv, "NODE_EXTRA_CA_CERTS", containerCABundlePath)
+		webEnv = webEnv.set("NODE_EXTRA_CA_CERTS", containerCABundlePath)
 	}
 
 	if hasAMQP {
-		addKeyValue(webEnv, "MESSENGER_TRANSPORT_DSN", "amqp://guest:guest@lavinmq:5672")
+		webEnv = webEnv.set("MESSENGER_TRANSPORT_DSN", "amqp://guest:guest@lavinmq:5672")
 	}
 
 	if hasElasticsearch {
-		addKeyValue(webEnv, "OPENSEARCH_URL", "http://opensearch:9200")
-		addKeyValue(webEnv, "SHOPWARE_ES_ENABLED", "1")
-		addKeyValue(webEnv, "SHOPWARE_ES_INDEXING_ENABLED", "1")
-		addKeyValue(webEnv, "SHOPWARE_ES_INDEX_PREFIX", "sw")
+		webEnv = webEnv.
+			set("OPENSEARCH_URL", "http://opensearch:9200").
+			set("SHOPWARE_ES_ENABLED", "1").
+			set("SHOPWARE_ES_INDEXING_ENABLED", "1").
+			set("SHOPWARE_ES_INDEX_PREFIX", "sw")
 	}
 
-	webDependsOn := newMappingNode()
-	dbCondition := newMappingNode()
-	addKeyValue(dbCondition, "condition", "service_healthy")
-	addKeyValueNode(webDependsOn, "database", dbCondition)
+	webDependsOn := yamlMap[composeDependency]{}.
+		set("database", composeDependency{Condition: "service_healthy"})
 
 	if opts != nil && opts.PHPProfiler != "" {
-		addKeyValue(webEnv, "PHP_PROFILER", opts.PHPProfiler)
+		webEnv = webEnv.set("PHP_PROFILER", opts.PHPProfiler)
 		switch opts.PHPProfiler {
 		case "xdebug":
-			addKeyValue(webEnv, "XDEBUG_MODE", "debug")
-			addKeyValue(webEnv, "XDEBUG_CONFIG", "client_host=host.docker.internal")
+			webEnv = webEnv.
+				set("XDEBUG_MODE", "debug").
+				set("XDEBUG_CONFIG", "client_host=host.docker.internal")
 		case "tideways":
 			if opts.TidewaysAPIKey != "" {
-				addKeyValue(webEnv, "TIDEWAYS_APIKEY", opts.TidewaysAPIKey)
+				webEnv = webEnv.set("TIDEWAYS_APIKEY", opts.TidewaysAPIKey)
 			}
 		}
 	}
 
-	web := newMappingNode()
-	addKeyValue(web, "image", WebImage(opts))
-	if opts != nil && opts.User != "" {
-		addKeyValue(web, "user", opts.User)
+	web := composeService{
+		Image:       WebImage(opts),
+		EnvFile:     []string{".env.local"},
+		Environment: webEnv,
+		DependsOn:   webDependsOn,
 	}
-	addKeyValueNode(web, "env_file", newSequenceNode(".env.local"))
-	addKeyValueNode(web, "environment", webEnv)
-	addVolumes(web, px, ".:/var/www/html")
-	addKeyValueNode(web, "depends_on", webDependsOn)
-	publishOrRoute(web, px, "web",
+	if opts != nil && opts.User != "" {
+		web.User = opts.User
+	}
+	addVolumes(&web, px, ".:/var/www/html")
+	publishOrRoute(&web, px, "web",
 		[]string{"8000:8000", "8080:8080", "9999:9999", "9998:9998", "5173:5173", "5773:5773"},
 		webProxyRoutes(px)...)
 
-	dbEnv := newMappingNode()
-	addKeyValue(dbEnv, "MARIADB_DATABASE", "shopware")
-	addKeyValue(dbEnv, "MARIADB_ROOT_PASSWORD", "root")
-	addKeyValue(dbEnv, "MARIADB_USER", "shopware")
-	addKeyValue(dbEnv, "MARIADB_PASSWORD", "shopware")
+	database := composeService{
+		Image: "mariadb:11.8",
+		// Publish the database on a random loopback port so host-side tools
+		// (e.g. `shopware-cli project sql`) can reach it without port conflicts.
+		Ports: []string{"127.0.0.1::3306"},
+		Environment: yamlMap[string]{}.
+			set("MARIADB_DATABASE", "shopware").
+			set("MARIADB_ROOT_PASSWORD", "root").
+			set("MARIADB_USER", "shopware").
+			set("MARIADB_PASSWORD", "shopware"),
+		Volumes: []string{"db-data:/var/lib/mysql:rw"},
+		Command: []string{
+			"--sql_mode=STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION",
+			"--log_bin_trust_function_creators=1",
+			"--binlog_cache_size=16M",
+			"--key_buffer_size=0",
+			"--join_buffer_size=1024M",
+			"--innodb_log_file_size=128M",
+			"--innodb_buffer_pool_size=1024M",
+			"--innodb_buffer_pool_instances=1",
+			"--group_concat_max_len=320000",
+			"--default-time-zone=+00:00",
+			"--max_binlog_size=512M",
+			"--binlog_expire_logs_seconds=86400",
+		},
+		Healthcheck: &composeHealthcheck{
+			Test:          []string{"CMD", "mariadb-admin", "ping", "-h", "localhost", "-proot"},
+			StartPeriod:   "10s",
+			StartInterval: "3s",
+			Interval:      "5s",
+			Timeout:       "1s",
+			Retries:       10,
+		},
+	}
 
-	healthTest := newSequenceNode("CMD", "mariadb-admin", "ping", "-h", "localhost", "-proot")
+	adminer := composeService{
+		Image:      "adminer",
+		StopSignal: "SIGKILL",
+		// Long form with the default condition; equivalent to the short
+		// "depends_on: [database]" the generator used to emit.
+		DependsOn: yamlMap[composeDependency]{}.
+			set("database", composeDependency{Condition: "service_started"}),
+		Environment: yamlMap[string]{}.
+			set("ADMINER_DEFAULT_SERVER", "database"),
+	}
+	publishOrRoute(&adminer, px, "adminer", []string{"9080:8080"}, proxyRoute{subdomain: "adminer", containerPort: 8080})
 
-	healthcheck := newMappingNode()
-	addKeyValueNode(healthcheck, "test", healthTest)
-	addKeyValue(healthcheck, "start_period", "10s")
-	addKeyValue(healthcheck, "start_interval", "3s")
-	addKeyValue(healthcheck, "interval", "5s")
-	addKeyValue(healthcheck, "timeout", "1s")
-	addKeyValueNode(healthcheck, "retries", &yaml.Node{Kind: yaml.ScalarNode, Value: "10", Tag: "!!int"})
-
-	database := newMappingNode()
-	addKeyValue(database, "image", "mariadb:11.8")
-	// Publish the database on a random loopback port so host-side tools
-	// (e.g. `shopware-cli project sql`) can reach it without port conflicts.
-	addKeyValueNode(database, "ports", newSequenceNode("127.0.0.1::3306"))
-	addKeyValueNode(database, "environment", dbEnv)
-	addKeyValueNode(database, "volumes", newSequenceNode("db-data:/var/lib/mysql:rw"))
-	addKeyValueNode(database, "command", newSequenceNode(
-		"--sql_mode=STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION",
-		"--log_bin_trust_function_creators=1",
-		"--binlog_cache_size=16M",
-		"--key_buffer_size=0",
-		"--join_buffer_size=1024M",
-		"--innodb_log_file_size=128M",
-		"--innodb_buffer_pool_size=1024M",
-		"--innodb_buffer_pool_instances=1",
-		"--group_concat_max_len=320000",
-		"--default-time-zone=+00:00",
-		"--max_binlog_size=512M",
-		"--binlog_expire_logs_seconds=86400",
-	))
-	addKeyValueNode(database, "healthcheck", healthcheck)
-
-	adminerEnv := newMappingNode()
-	addKeyValue(adminerEnv, "ADMINER_DEFAULT_SERVER", "database")
-
-	adminer := newMappingNode()
-	addKeyValue(adminer, "image", "adminer")
-	addKeyValue(adminer, "stop_signal", "SIGKILL")
-	addKeyValueNode(adminer, "depends_on", newSequenceNode("database"))
-	addKeyValueNode(adminer, "environment", adminerEnv)
-	publishOrRoute(adminer, px, "adminer", []string{"9080:8080"}, proxyRoute{subdomain: "adminer", containerPort: 8080})
-
-	mailerEnv := newMappingNode()
-	addKeyValue(mailerEnv, "MP_SMTP_AUTH_ACCEPT_ANY", "1")
-	addKeyValue(mailerEnv, "MP_SMTP_AUTH_ALLOW_INSECURE", "1")
-
-	mailer := newMappingNode()
-	addKeyValue(mailer, "image", "axllent/mailpit")
+	mailer := composeService{
+		Image: "axllent/mailpit",
+		Environment: yamlMap[string]{}.
+			set("MP_SMTP_AUTH_ACCEPT_ANY", "1").
+			set("MP_SMTP_AUTH_ALLOW_INSECURE", "1"),
+	}
 	// Only the web UI (8025) is routed in proxy mode; SMTP (1025) stays internal
 	// to the compose network, reachable by other services as mailer:1025.
-	publishOrRoute(mailer, px, "mailer", []string{"1025:1025", "8025:8025"}, proxyRoute{subdomain: "mailer", containerPort: 8025})
-	addKeyValueNode(mailer, "environment", mailerEnv)
+	publishOrRoute(&mailer, px, "mailer", []string{"1025:1025", "8025:8025"}, proxyRoute{subdomain: "mailer", containerPort: 8025})
 
-	services := newMappingNode()
-	addKeyValueNode(services, "web", web)
-	addKeyValueNode(services, "database", database)
-	addKeyValueNode(services, "adminer", adminer)
-	addKeyValueNode(services, "mailer", mailer)
+	services := yamlMap[composeService]{}.
+		set("web", web).
+		set("database", database).
+		set("adminer", adminer).
+		set("mailer", mailer)
 
 	if opts != nil && opts.DedicatedWorker {
 		// The admin no longer dispatches the queue or scheduled tasks from the
@@ -336,134 +334,89 @@ func buildCompose(hasAMQP, hasElasticsearch bool, opts *ComposeOptions) yaml.Nod
 		// bounded by --time-limit / --memory-limit so it recycles periodically
 		// (restart: unless-stopped brings it back up).
 		for _, bg := range BackgroundServices {
-			addKeyValueNode(services, bg.Name, consoleService(opts, webEnv, webDependsOn, bg.command...))
+			services = services.set(bg.Name, consoleService(opts, webEnv, webDependsOn, bg.command...))
 		}
 	}
 
-	volumes := newMappingNode()
-	addKeyValueNode(volumes, "db-data", newNullNode())
+	volumes := yamlMap[struct{}]{}.set("db-data", struct{}{})
 
 	if hasAMQP {
-		lavinmq := newMappingNode()
-		addKeyValue(lavinmq, "image", "cloudamqp/lavinmq")
+		lavinmq := composeService{Image: "cloudamqp/lavinmq"}
 		// Only the management UI (15672) is routed in proxy mode; AMQP (5672)
 		// stays internal, reachable as lavinmq:5672.
-		publishOrRoute(lavinmq, px, "lavinmq", []string{"15672:15672", "5672:5672"}, proxyRoute{subdomain: "lavinmq", containerPort: 15672})
-		addKeyValueNode(lavinmq, "volumes", newSequenceNode("lavinmq-data:/var/lib/lavinmq:rw"))
-		addKeyValueNode(services, "lavinmq", lavinmq)
-		addKeyValueNode(volumes, "lavinmq-data", newNullNode())
+		publishOrRoute(&lavinmq, px, "lavinmq", []string{"15672:15672", "5672:5672"}, proxyRoute{subdomain: "lavinmq", containerPort: 15672})
+		lavinmq.Volumes = []string{"lavinmq-data:/var/lib/lavinmq:rw"}
+		services = services.set("lavinmq", lavinmq)
+		volumes = volumes.set("lavinmq-data", struct{}{})
 	}
 
 	if hasElasticsearch {
-		osEnv := newMappingNode()
-		addKeyValue(osEnv, "OPENSEARCH_INITIAL_ADMIN_PASSWORD", "Shopware123!")
-		addKeyValue(osEnv, "discovery.type", "single-node")
-		addKeyValue(osEnv, "plugins.security.disabled", "true")
-
-		opensearch := newMappingNode()
-		addKeyValue(opensearch, "image", "opensearchproject/opensearch:2")
-		addKeyValueNode(opensearch, "environment", osEnv)
-		publishOrRoute(opensearch, px, "opensearch", []string{"9200:9200"}, proxyRoute{subdomain: "opensearch", containerPort: 9200})
-		addKeyValueNode(opensearch, "volumes", newSequenceNode("opensearch-data:/usr/share/opensearch/data"))
-		addKeyValueNode(services, "opensearch", opensearch)
-		addKeyValueNode(volumes, "opensearch-data", newNullNode())
+		opensearch := composeService{
+			Image: "opensearchproject/opensearch:2",
+			Environment: yamlMap[string]{}.
+				set("OPENSEARCH_INITIAL_ADMIN_PASSWORD", "Shopware123!").
+				set("discovery.type", "single-node").
+				set("plugins.security.disabled", "true"),
+		}
+		publishOrRoute(&opensearch, px, "opensearch", []string{"9200:9200"}, proxyRoute{subdomain: "opensearch", containerPort: 9200})
+		opensearch.Volumes = []string{"opensearch-data:/usr/share/opensearch/data"}
+		services = services.set("opensearch", opensearch)
+		volumes = volumes.set("opensearch-data", struct{}{})
 	}
 
 	if opts != nil && opts.PHPProfiler == "blackfire" && opts.BlackfireServerID != "" && opts.BlackfireServerToken != "" {
-		bfEnv := newMappingNode()
-		addKeyValue(bfEnv, "BLACKFIRE_SERVER_ID", opts.BlackfireServerID)
-		addKeyValue(bfEnv, "BLACKFIRE_SERVER_TOKEN", opts.BlackfireServerToken)
-
-		blackfire := newMappingNode()
-		addKeyValue(blackfire, "image", "blackfire/blackfire:2")
-		addKeyValueNode(blackfire, "environment", bfEnv)
-		addKeyValueNode(services, "blackfire", blackfire)
+		blackfire := composeService{
+			Image: "blackfire/blackfire:2",
+			Environment: yamlMap[string]{}.
+				set("BLACKFIRE_SERVER_ID", opts.BlackfireServerID).
+				set("BLACKFIRE_SERVER_TOKEN", opts.BlackfireServerToken),
+		}
+		services = services.set("blackfire", blackfire)
 	}
 
 	if opts != nil && opts.PHPProfiler == "tideways" && opts.TidewaysAPIKey != "" {
-		tideways := newMappingNode()
-		addKeyValue(tideways, "image", "ghcr.io/tideways/daemon")
-		addKeyValueNode(services, "tideways-daemon", tideways)
+		services = services.set("tideways-daemon", composeService{Image: "ghcr.io/tideways/daemon"})
 	}
 
-	root := newMappingNode()
-	addKeyValueNode(root, "services", services)
-	addKeyValueNode(root, "volumes", volumes)
+	file := composeFile{
+		Services: services,
+		Volumes:  volumes,
+	}
 
 	// In proxy mode every routed service joins the shared external network
 	// Traefik also runs on, declared here so compose does not try to create it.
 	if px != nil {
-		externalNetwork := newMappingNode()
-		addKeyValueNode(externalNetwork, "external", newBoolNode(true))
-
-		networks := newMappingNode()
-		addKeyValueNode(networks, px.NetworkName, externalNetwork)
-		addKeyValueNode(root, "networks", networks)
+		file.Networks = yamlMap[composeExternalNetwork]{}.
+			set(px.NetworkName, composeExternalNetwork{External: true})
 	}
 
-	return yaml.Node{
-		Kind:    yaml.DocumentNode,
-		Content: []*yaml.Node{root},
-	}
+	return file
 }
 
 // consoleService builds a long-running service that reuses the web image and
 // its environment to run a `php bin/console <args...>` process. It is used for
 // the messenger worker and scheduled-task runner when the admin worker is
 // disabled.
-func consoleService(opts *ComposeOptions, webEnv, webDependsOn *yaml.Node, consoleArgs ...string) *yaml.Node {
-	svc := newMappingNode()
-	addKeyValue(svc, "image", WebImage(opts))
-	if opts.User != "" {
-		addKeyValue(svc, "user", opts.User)
+func consoleService(opts *ComposeOptions, webEnv yamlMap[string], webDependsOn yamlMap[composeDependency], consoleArgs ...string) composeService {
+	svc := composeService{
+		Image:       WebImage(opts),
+		Command:     append([]string{"php", "bin/console"}, consoleArgs...),
+		EnvFile:     []string{".env.local"},
+		Environment: webEnv,
+		DependsOn:   webDependsOn,
+		Restart:     "unless-stopped",
 	}
-	addKeyValueNode(svc, "command", newSequenceNode(append([]string{"php", "bin/console"}, consoleArgs...)...))
-	addKeyValueNode(svc, "env_file", newSequenceNode(".env.local"))
-	addKeyValueNode(svc, "environment", webEnv)
-	addVolumes(svc, opts.proxy(), ".:/var/www/html")
-	addKeyValueNode(svc, "depends_on", webDependsOn)
-	addKeyValueNode(svc, "restart", &yaml.Node{Kind: yaml.ScalarNode, Value: "unless-stopped", Tag: "!!str"})
+	if opts.User != "" {
+		svc.User = opts.User
+	}
+	addVolumes(&svc, opts.proxy(), ".:/var/www/html")
 
 	// The console processes (worker, scheduler) reach the shop's own APP_URL
 	// over TLS, so in proxy mode they join the proxy network (the CA and
 	// APP_URL env come from the shared webEnv). They publish no HTTP route.
 	if px := opts.proxy(); px != nil {
-		addKeyValueNode(svc, "networks", newSequenceNode("default", px.NetworkName))
+		svc.Networks = []string{"default", px.NetworkName}
 	}
 
 	return svc
-}
-
-func newMappingNode() *yaml.Node {
-	return &yaml.Node{Kind: yaml.MappingNode, Tag: "!!map"}
-}
-
-func newSequenceNode(values ...string) *yaml.Node {
-	seq := &yaml.Node{Kind: yaml.SequenceNode, Tag: "!!seq"}
-	for _, v := range values {
-		seq.Content = append(seq.Content, &yaml.Node{Kind: yaml.ScalarNode, Value: v, Tag: "!!str"})
-	}
-	return seq
-}
-
-func newNullNode() *yaml.Node {
-	return &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!null"}
-}
-
-func newBoolNode(v bool) *yaml.Node {
-	return &yaml.Node{Kind: yaml.ScalarNode, Value: strconv.FormatBool(v), Tag: "!!bool"}
-}
-
-func addKeyValue(m *yaml.Node, key, value string) {
-	m.Content = append(m.Content,
-		&yaml.Node{Kind: yaml.ScalarNode, Value: key, Tag: "!!str"},
-		&yaml.Node{Kind: yaml.ScalarNode, Value: value, Tag: "!!str"},
-	)
-}
-
-func addKeyValueNode(m *yaml.Node, key string, value *yaml.Node) {
-	m.Content = append(m.Content,
-		&yaml.Node{Kind: yaml.ScalarNode, Value: key, Tag: "!!str"},
-		value,
-	)
 }
