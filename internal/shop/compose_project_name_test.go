@@ -34,7 +34,7 @@ func TestGenerateComposeProjectName(t *testing.T) {
 	// accepted and still yield a valid Compose project name.
 	fancy, err := GenerateComposeProjectName(filepath.Join(t.TempDir(), "München Shop"))
 	require.NoError(t, err)
-	assert.Regexp(t, regexp.MustCompile(`^[a-z0-9][a-z0-9_-]*$`), fancy)
+	assert.Regexp(t, regexp.MustCompile(`^sw-m-nchen-shop-[0-9a-f]{6}$`), fancy)
 }
 
 func TestEnvFileContent(t *testing.T) {
