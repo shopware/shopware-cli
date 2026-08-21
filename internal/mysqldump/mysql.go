@@ -26,8 +26,19 @@ type Dumper struct {
 	// NoData contains list of tables to dump structure only (no data), supports glob wildcards (e.g. "cart*")
 	NoData []string
 	// Ignore contains list of tables to skip entirely, supports glob wildcards (e.g. "cart*")
-	Ignore    []string
-	filterMap map[string]string
+	Ignore []string
+	// LimitMap contains row limits per table (table -> limit). Tables referencing
+	// a limited table via foreign keys are filtered automatically.
+	LimitMap map[string]TableLimit
+	// limitWhere contains the WHERE conditions computed from LimitMap
+	limitWhere map[string]string
+	// limitResolver holds the planned row-limit filters between computeLimitFilters
+	// and the staging table setup.
+	limitResolver *limitResolver
+	// limitStagingTables maps a limited table to the staging table holding its
+	// frozen kept-set
+	limitStagingTables map[string]string
+	filterMap          map[string]string
 	// LockTables controls whether to lock tables during dump (default: true)
 	LockTables bool
 	// Quick enables quick mode for mysqldump (default: false)
@@ -93,6 +104,17 @@ func (d *Dumper) Dump(ctx context.Context, w io.Writer) error {
 	if err := d.prefetchAllSchemas(ctx, tablesToDump); err != nil {
 		return err
 	}
+
+	if err := d.computeLimitFilters(ctx); err != nil {
+		return err
+	}
+
+	if err := d.createLimitStagingTables(ctx); err != nil {
+		return err
+	}
+	defer func() {
+		d.dropLimitStagingTables(context.WithoutCancel(ctx), d.limitStagingTables)
+	}()
 
 	if _, err = fmt.Fprintln(w, dump); err != nil {
 		return err
@@ -295,7 +317,12 @@ func (d *Dumper) dumpTableDataDirect(ctx context.Context, w io.Writer, table str
 	var tmp string
 	var err error
 
-	if d.LockTables {
+	// Row-limit conditions contain subqueries on other tables (or the table
+	// itself), which MySQL rejects with ER_TABLE_NOT_LOCKED while the table
+	// is locked via FLUSH TABLES ... WITH READ LOCK.
+	lockTable := d.LockTables && !d.hasLimitFilter(table)
+
+	if lockTable {
 		_, err = d.mysqlFlushTable(ctx, table)
 		if err != nil {
 			return err
@@ -327,13 +354,19 @@ func (d *Dumper) dumpTableDataDirect(ctx context.Context, w io.Writer, table str
 		}
 	}
 
-	if d.LockTables {
+	if lockTable {
 		if _, dErr := d.mysqlUnlockTables(ctx); dErr != nil {
 			return dErr
 		}
 	}
 
 	return nil
+}
+
+// hasLimitFilter reports whether the queries of the table carry a row-limit condition.
+func (d *Dumper) hasLimitFilter(table string) bool {
+	_, ok := d.limitWhere[strings.ToLower(table)]
+	return ok
 }
 
 func (d *Dumper) dumpTableDataToWriter(ctx context.Context, w io.Writer, table string) error {
@@ -633,10 +666,30 @@ func (d *Dumper) getSelectQueryFor(ctx context.Context, table string) (cols []st
 		return cols, "", err
 	}
 	query = fmt.Sprintf("SELECT %s FROM `%s`", strings.Join(cols, ", "), table)
-	if where, ok := d.WhereMap[strings.ToLower(table)]; ok {
+	if where := d.effectiveWhere(table); where != "" {
 		query = fmt.Sprintf("%s WHERE %s", query, where)
 	}
 	return
+}
+
+// effectiveWhere combines the user-configured WHERE clause with the condition
+// computed from the row limits for the given table.
+func (d *Dumper) effectiveWhere(table string) string {
+	table = strings.ToLower(table)
+
+	conditions := make([]string, 0, 2)
+	for _, condition := range []string{d.WhereMap[table], d.limitWhere[table]} {
+		if condition != "" {
+			conditions = append(conditions, condition)
+		}
+	}
+
+	// Only a combination needs parentheses to keep the precedence of each part.
+	if len(conditions) < 2 {
+		return strings.Join(conditions, " AND ")
+	}
+
+	return "(" + strings.Join(conditions, ") AND (") + ")"
 }
 
 func (d *Dumper) getLockTableWriteStatement(table string) string {
@@ -686,7 +739,7 @@ func (d *Dumper) getColumnsForSelect(ctx context.Context, table string, consider
 
 func (d *Dumper) rowCount(ctx context.Context, table string) (count uint64, err error) {
 	query := fmt.Sprintf("SELECT COUNT(*) FROM `%s`", table)
-	if where, ok := d.WhereMap[strings.ToLower(table)]; ok {
+	if where := d.effectiveWhere(table); where != "" {
 		query = fmt.Sprintf("%s WHERE %s", query, where)
 	}
 	row := d.useTransactionOrDBQueryRow(ctx, query)

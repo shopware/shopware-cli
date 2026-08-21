@@ -16,6 +16,7 @@ import (
 
 	dockerpkg "github.com/shopware/shopware-cli/internal/docker"
 	"github.com/shopware/shopware-cli/internal/git"
+	"github.com/shopware/shopware-cli/internal/proxy"
 	"github.com/shopware/shopware-cli/internal/shop"
 	"github.com/shopware/shopware-cli/internal/system"
 	"github.com/shopware/shopware-cli/internal/tui"
@@ -82,6 +83,17 @@ func installAndFinalize(cmd *cobra.Command, opts *createOptions, phpConstraint *
 		shopCfg.PHPVersion = opts.phpVersion
 	}
 
+	// Serve the shop at a stable hostname through the shared proxy instead of a
+	// port. The top-level url drives proxy hostname derivation; the environment
+	// url is what `project dev` shows and installs with.
+	if opts.useDocker && opts.useLocalDomain {
+		url := "https://" + proxy.LocalDomainHostname(opts.projectFolder, proxy.BaseDomain())
+		shopCfg.URL = url
+		if env := shopCfg.Environments["local"]; env != nil {
+			env.URL = url
+		}
+	}
+
 	if err := shop.WriteConfig(shopCfg, opts.projectFolder); err != nil {
 		return err
 	}
@@ -107,6 +119,11 @@ func printCreateSummary(ctx context.Context, opts *createOptions) {
 	fmt.Println(tui.GreenText.Render("✔ Setup complete in " + projectDisplay))
 
 	if opts.useDocker {
+		shopURL := "http://127.0.0.1:8000"
+		if opts.useLocalDomain {
+			shopURL = "https://" + proxy.LocalDomainHostname(opts.projectFolder, proxy.BaseDomain())
+		}
+
 		fmt.Println()
 		fmt.Println(tui.SectionHeadingStyle.Render("Next steps"))
 		fmt.Println()
@@ -115,12 +132,22 @@ func printCreateSummary(ctx context.Context, opts *createOptions) {
 		} else {
 			fmt.Printf("  %s  %s\n", tui.GreenText.Render("Start developing:"), tui.BoldText.Render(fmt.Sprintf("cd %s && shopware-cli project dev", opts.projectFolder)))
 		}
+		if opts.useLocalDomain && !proxy.CheckResolverConfigured(proxy.BaseDomain()).Configured {
+			fmt.Println()
+			fmt.Println(tui.DimText.Render("  First time on this machine? Run ") + tui.BoldText.Render("shopware-cli project proxy setup") + tui.DimText.Render(" once (needs sudo)"))
+			fmt.Println(tui.DimText.Render("  so the local domain resolves and its certificate is trusted."))
+		}
 		fmt.Println()
 		fmt.Println(tui.SectionHeadingStyle.Render("Access your shop (after make setup)"))
 		fmt.Println()
-		fmt.Printf("  %s  %s\n", tui.GreenText.Render("Storefront:"), tui.BoldText.Render("http://127.0.0.1:8000"))
-		fmt.Printf("  %s  %s\n", tui.GreenText.Render("Admin:"), tui.BoldText.Render("http://127.0.0.1:8000/admin"))
+		fmt.Printf("  %s  %s\n", tui.GreenText.Render("Storefront:"), tui.BoldText.Render(shopURL))
+		fmt.Printf("  %s  %s\n", tui.GreenText.Render("Admin:"), tui.BoldText.Render(shopURL+"/admin"))
 		fmt.Printf("  %s  %s\n", tui.GreenText.Render("Credentials:"), tui.BoldText.Render("admin")+" / "+tui.BoldText.Render("shopware"))
+
+		if opts.useLocalDomain {
+			hostname := proxy.LocalDomainHostname(opts.projectFolder, proxy.BaseDomain())
+			maybePrintWSLWindowsAccess(proxyBrowserHostnames(opts.projectFolder, hostname))
+		}
 	}
 
 	fmt.Println()

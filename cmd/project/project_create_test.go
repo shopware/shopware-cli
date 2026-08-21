@@ -78,6 +78,34 @@ func TestApplyNonInteractiveDefaults(t *testing.T) {
 		assert.NoError(t, err)
 		assert.Equal(t, "my-shop", opts.projectFolder)
 	})
+
+	t.Run("--local-domain with --docker enables local domains without sudo", func(t *testing.T) {
+		t.Parallel()
+		opts := createOptions{useDocker: true, useLocalDomain: true}
+		err := applyNonInteractiveDefaults(&opts)
+		assert.NoError(t, err)
+		assert.True(t, opts.useLocalDomain)
+		// The one-time sudo setup is never run non-interactively.
+		assert.False(t, opts.setupProxyNow)
+	})
+
+	t.Run("--local-domain without --docker is dropped", func(t *testing.T) {
+		t.Parallel()
+		opts := createOptions{useDocker: false, useLocalDomain: true}
+		err := applyNonInteractiveDefaults(&opts)
+		assert.NoError(t, err)
+		assert.False(t, opts.useLocalDomain)
+		assert.False(t, opts.setupProxyNow)
+	})
+
+	t.Run("no --local-domain keeps local domains off", func(t *testing.T) {
+		t.Parallel()
+		opts := createOptions{useDocker: true, useLocalDomain: false}
+		err := applyNonInteractiveDefaults(&opts)
+		assert.NoError(t, err)
+		assert.False(t, opts.useLocalDomain)
+		assert.False(t, opts.setupProxyNow)
+	})
 }
 
 func TestIsComposerSecurityBlocked(t *testing.T) {
