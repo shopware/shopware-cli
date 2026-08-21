@@ -10,7 +10,7 @@ go = "1.27.0"
 # Pin the linter so local results do not change when a new release is published.
 # CI currently uses a floating golangci-lint version
 # update this if you need to match a specific CI version.
-golangci-lint = "2.13.0"
+golangci-lint = "2.13.1"
 
 [env]
 # Match CI and prevent Go from silently downloading a different toolchain.
