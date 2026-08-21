@@ -76,9 +76,13 @@ func (m Model) updateLifecycle(msg tea.Msg) (app.Content, tea.Cmd) {
 
 	case shopwareInstallDoneMsg:
 		if msg.err != nil {
+			failure := classifyInstallFailure(msg.output, msg.err)
+			m.installProg.failure = &failure
 			if m.telemetry.installOnce() {
 				tags := m.telemetry.installTags(tracking.ResultFailure, m.install)
-				tags[tracking.TagFailedStep] = installFailedStep(m.installProg.currentStep)
+				// Telemetry will consume the complete failure record in #1422.
+				// Keep today's tag behavior while fixing the pre-Start bucket.
+				tags[tracking.TagFailedStep] = failure.failingStep
 				trackEvent(tracking.EventDevInstall, tags)
 			}
 			m.installProg.showLogs = true

@@ -89,6 +89,7 @@ type installProgress struct {
 	currentStep int
 	done        bool
 	showLogs    bool
+	failure     *installFailure
 	spinner     spinner.Model
 	progress    progress.Model
 }

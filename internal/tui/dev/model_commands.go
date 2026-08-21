@@ -102,8 +102,8 @@ func (m *Model) runShopwareInstall() tea.Cmd {
 		})
 		p := withEnv.PHPCommand(context.Background(), "vendor/bin/shopware-deployment-helper", "run")
 
-		err := tui.StreamCmdOutput(p.Cmd, ch, true)
-		return shopwareInstallDoneMsg{err: err}
+		output, err := tui.StreamCmdOutputWithCapture(p.Cmd, ch, true)
+		return shopwareInstallDoneMsg{output: output, err: err}
 	}
 
 	return tea.Batch(readFromChan(ch), doneCmd)

@@ -1,7 +1,11 @@
 package dev
 
 import (
+	"errors"
+	"fmt"
+	"os/exec"
 	"regexp"
+	"strings"
 )
 
 type installFailureCategory string
@@ -148,4 +152,90 @@ func installFailurePatterns(patterns ...string) []*regexp.Regexp {
 		compiled = append(compiled, regexp.MustCompile(`(?i)`+pattern))
 	}
 	return compiled
+}
+
+const installStartStep = "install_start"
+
+
+// matchesInstallFailureRule returns true if the given value matches any of the
+// regular expressions in the given list of patterns.
+func matchesInstallFailureRule(value string, patterns []*regexp.Regexp) bool {
+	for _, pattern := range patterns {
+		if pattern.MatchString(value) {
+			return true
+		}
+	}
+	return false
+}
+
+// classifyInstallFailure analyzes the output of a failed helper run and
+// returns a structured description of the failure. The first matching rule is
+// used to classify the failure.
+func classifyInstallFailure(output []string, processErr error) installFailure {
+	failure := installFailure{
+		failingStep: installFailureStep(output),
+		category:    installFailureUnknown,
+		detail:      installFailureDetail(output, processErr),
+		retryable:   true,
+	}
+
+	for _, line := range output {
+		for _, rule := range installFailureRules {
+			if matchesInstallFailureRule(line, rule.patterns) {
+				failure.category = rule.category
+				failure.detail = strings.TrimSpace(line)
+				// Syntax and parse errors require a code/configuration change,
+				// so immediately re-running the same command cannot recover.
+				normalized := strings.ToLower(line)
+				if rule.category == installFailurePHP &&
+					(strings.Contains(normalized, "fatal error") || strings.Contains(normalized, "syntax error")) {
+					failure.retryable = false
+				}
+				return failure
+			}
+		}
+	}
+
+	return failure
+}
+
+// installFailureStep returns the last known step of the failed helper run
+// based on the output lines. If no step can be determined, the start step is
+// returned.
+func installFailureStep(output []string) string {
+	failingStep := installStartStep
+	for _, line := range output {
+		if !strings.HasPrefix(line, "Start: ") {
+			continue
+		}
+		for _, step := range installStepPatterns {
+			if strings.Contains(line, step.pattern) {
+				failingStep = step.pattern
+				break
+			}
+		}
+	}
+	return failingStep
+}
+
+// installFailureDetail returns the last non-empty line of the output as a
+// human-readable description of the failure. If no non-empty line is found, it
+// returns the error message from the process exit error, if any. If there is no
+// output and no process error, it returns a generic message indicating that the
+// helper failed without diagnostic output.
+func installFailureDetail(output []string, processErr error) string {
+	for i := len(output) - 1; i >= 0; i-- {
+		if detail := strings.TrimSpace(output[i]); detail != "" {
+			return detail
+		}
+	}
+
+	var exitErr *exec.ExitError
+	if errors.As(processErr, &exitErr) {
+		return fmt.Sprintf("deployment helper exited with code %d", exitErr.ExitCode())
+	}
+	if processErr != nil {
+		return processErr.Error()
+	}
+	return "deployment helper failed without diagnostic output"
 }
