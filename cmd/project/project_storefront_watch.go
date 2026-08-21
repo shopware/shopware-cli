@@ -36,7 +36,8 @@ var projectStorefrontWatchCmd = &cobra.Command{
 			return err
 		}
 
-		shopCfg, err := shop.ReadConfig(cmd.Context(), projectConfigPath, true)
+		actualProjectConfigPath := shop.SearchConfigPath(projectRoot, projectConfigPath)
+		shopCfg, err := shop.ReadConfig(cmd.Context(), actualProjectConfigPath, true)
 		if err != nil {
 			return err
 		}

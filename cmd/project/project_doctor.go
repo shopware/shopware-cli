@@ -35,7 +35,8 @@ var projectDoctor = &cobra.Command{
 		fmt.Println(tui.SectionHeadingStyle.Render("Project"))
 		fmt.Println()
 
-		shopCfg, err := shop.ReadConfig(cmd.Context(), projectConfigPath, true)
+		actualProjectConfigPath := shop.SearchConfigPath(".", projectConfigPath)
+		shopCfg, err := shop.ReadConfig(cmd.Context(), actualProjectConfigPath, true)
 		if err != nil {
 			return err
 		}
@@ -43,7 +44,7 @@ var projectDoctor = &cobra.Command{
 		if shopCfg.IsFallback() {
 			fmt.Printf("%s Project config: %s\n", tui.CheckWarn, tui.SecondaryText.Render("not found, using fallback"))
 		} else {
-			fmt.Printf("%s Project config: %s\n", tui.CheckOK, tui.GreenText.Render(shop.DefaultConfigFileName()))
+			fmt.Printf("%s Project config: %s\n", tui.CheckOK, tui.GreenText.Render(actualProjectConfigPath))
 		}
 
 		shopwareConstraint, err := extension.GetShopwareProjectConstraint(projectDir)
