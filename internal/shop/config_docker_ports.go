@@ -77,18 +77,18 @@ func (ConfigDockerPorts) JSONSchema() *jsonschema.Schema {
 		key         string
 		description string
 	}{
-		{DockerPortWeb, "Host port for the shop (Caddy). Defaults to 8000. Set to false to not publish the port."},
-		{DockerPortWebAlt, "Alternative HTTP host port of the web container. Defaults to 8080. Set to false to not publish the port."},
-		{DockerPortStorefrontWatcherAssets, "Host port for the storefront watcher assets. Defaults to 9999. Set to false to not publish the port."},
-		{DockerPortStorefrontWatcher, "Host port for the storefront watcher proxy. Defaults to 9998. Set to false to not publish the port."},
-		{DockerPortAdminWatcher, "Host port for the administration watcher (Vite). Defaults to 5173. Set to false to not publish the port."},
-		{DockerPortAdminWatcherHMR, "Host port for the administration watcher hot module reload. Defaults to 5773. Set to false to not publish the port."},
-		{DockerPortAdminer, "Host port for the Adminer UI. Defaults to 9080. Set to false to not publish the port."},
-		{DockerPortMailerSMTP, "Host port for the Mailpit SMTP endpoint. Defaults to 1025. Set to false to not publish the port."},
-		{DockerPortMailerWeb, "Host port for the Mailpit web UI. Defaults to 8025. Set to false to not publish the port."},
-		{DockerPortAMQPManagement, "Host port for the LavinMQ management UI. Defaults to 15672. Set to false to not publish the port."},
-		{DockerPortAMQP, "Host port for the AMQP endpoint. Defaults to 5672. Set to false to not publish the port."},
-		{DockerPortElasticsearch, "Host port for OpenSearch. Defaults to 9200. Set to false to not publish the port."},
+		{DockerPortWeb, "Host port for the shop (Caddy). Defaults to 8000."},
+		{DockerPortWebAlt, "Alternative HTTP host port of the web container. Defaults to 8080."},
+		{DockerPortStorefrontWatcherAssets, "Host port for the storefront watcher assets. Defaults to 9999."},
+		{DockerPortStorefrontWatcher, "Host port for the storefront watcher proxy. Defaults to 9998."},
+		{DockerPortAdminWatcher, "Host port for the administration watcher (Vite). Defaults to 5173."},
+		{DockerPortAdminWatcherHMR, "Host port for the administration watcher hot module reload. Defaults to 5773."},
+		{DockerPortAdminer, "Host port for the Adminer UI. Defaults to 9080."},
+		{DockerPortMailerSMTP, "Host port for the Mailpit SMTP endpoint. Defaults to 1025."},
+		{DockerPortMailerWeb, "Host port for the Mailpit web UI. Defaults to 8025."},
+		{DockerPortAMQPManagement, "Host port for the LavinMQ management UI. Defaults to 15672."},
+		{DockerPortAMQP, "Host port for the AMQP endpoint. Defaults to 5672."},
+		{DockerPortElasticsearch, "Host port for OpenSearch. Defaults to 9200."},
 	}
 
 	properties := orderedmap.New[string, *jsonschema.Schema]()
@@ -96,7 +96,7 @@ func (ConfigDockerPorts) JSONSchema() *jsonschema.Schema {
 	maximum := json.Number("65535")
 	for _, port := range ports {
 		properties.Set(port.key, &jsonschema.Schema{
-			Description: port.description,
+			Description: port.description + " Set to false to not publish the port.",
 			OneOf: []*jsonschema.Schema{
 				{
 					Type:    "integer",

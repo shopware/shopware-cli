@@ -338,15 +338,12 @@ func TestFixPortConflicts_PersistsAndRewritesCompose(t *testing.T) {
 	assert.True(t, ok)
 	assert.NoError(t, result.err)
 
-	// The command goroutine must not touch the shared config...
-	assert.Nil(t, m.config.Docker)
+	assert.Nil(t, m.config.Docker, "the command goroutine must not touch the shared config")
 
-	// ...but the override is persisted to the local override file...
 	localContent, err := os.ReadFile(filepath.Join(dir, ".shopware-project.local.yml"))
 	assert.NoError(t, err)
 	assert.Contains(t, string(localContent), fmt.Sprintf("web: %d", result.overrides[shop.DockerPortWeb]))
 
-	// ...and written into the regenerated compose file.
 	composeContent, err := os.ReadFile(filepath.Join(dir, "compose.yaml"))
 	assert.NoError(t, err)
 	assert.Contains(t, string(composeContent), fmt.Sprintf("%d:8000", result.overrides[shop.DockerPortWeb]))
@@ -359,10 +356,8 @@ func TestFixPortConflicts_PersistsAndRewritesCompose(t *testing.T) {
 }
 
 // A proxy project that fell back to fixed-port serving keeps its proxy URL in
-// the config; only the proxyFallback flag distinguishes it from proxy mode.
-// The random-port fix must therefore not regenerate the compose file via the
-// proxy-aware entry point, which would silently undo the fallback and leave
-// the shop without published host ports.
+// the config, so regenerating via the proxy-aware entry point would undo the
+// fallback and leave the shop without published host ports.
 func TestFixPortConflicts_FallbackProxyKeepsFixedPorts(t *testing.T) {
 	dir := t.TempDir()
 	writeMinimalComposeProject(t, dir)
@@ -381,8 +376,6 @@ func TestFixPortConflicts_FallbackProxyKeepsFixedPorts(t *testing.T) {
 	assert.True(t, ok)
 	assert.NoError(t, result.err)
 
-	// The regenerated compose file must stay fixed-port: published host
-	// ports with the new random host port, no Traefik routing labels.
 	composeContent, err := os.ReadFile(filepath.Join(dir, "compose.yaml"))
 	require.NoError(t, err)
 	assert.Contains(t, string(composeContent), fmt.Sprintf("%d:8000", result.overrides[shop.DockerPortWeb]))

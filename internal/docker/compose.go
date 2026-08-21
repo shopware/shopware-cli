@@ -100,14 +100,12 @@ func (o *ComposeOptions) portBindings(keys ...string) []string {
 
 	bindings := make([]string, 0, len(keys))
 	for _, key := range keys {
-		for _, def := range PortDefinitions {
-			if def.Key != key {
-				continue
-			}
-			if hostPort := HostPort(ports, key); hostPort > 0 {
-				bindings = append(bindings, fmt.Sprintf("%d:%d", hostPort, def.Target))
-			}
-			break
+		def := portDefinition(key)
+		if def == nil {
+			continue
+		}
+		if hostPort := HostPort(ports, key); hostPort > 0 {
+			bindings = append(bindings, fmt.Sprintf("%d:%d", hostPort, def.Target))
 		}
 	}
 

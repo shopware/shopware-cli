@@ -11,19 +11,13 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// LocalConfigFileName returns the path of the local override file belonging to
-// the given project configuration file.
-func LocalConfigFileName(configPath string) string {
-	return localConfigFileName(configPath)
-}
-
 // updateLocalConfig loads the local override file belonging to configPath
 // (creating an empty document when it does not exist yet), lets mutate edit the
 // root mapping node and writes the result back with 0600 permissions. The file
-// is read raw — without environment substitution — so ${VAR} references,
-// comments and !override/!reset tags survive the round-trip.
+// is read raw, so ${VAR} references, comments and !override/!reset tags survive
+// the round-trip.
 func updateLocalConfig(configPath string, mutate func(root *yaml.Node) error) error {
-	localFile := localConfigFileName(configPath)
+	localFile := LocalConfigFileName(configPath)
 
 	var doc yaml.Node
 	data, err := os.ReadFile(localFile)
@@ -51,10 +45,9 @@ func updateLocalConfig(configPath string, mutate func(root *yaml.Node) error) er
 		return fmt.Errorf("marshalling local config %s: %w", localFile, err)
 	}
 
-	// The local override holds profiler secrets, so the content must never be
-	// visible under a pre-existing permissive mode. Create the temporary file
-	// with 0600 (and chmod it, because umask can strip bits) before the rename
-	// publishes it atomically.
+	// The local override holds profiler secrets, so create the temporary file
+	// with 0600 (chmod as well, because umask can strip bits) before the
+	// rename publishes it atomically.
 	tmp, err := os.CreateTemp(filepath.Dir(localFile), ".shopware-local-*.yml")
 	if err != nil {
 		return fmt.Errorf("writing local config %s: %w", localFile, err)
@@ -118,9 +111,9 @@ func UpdateLocalDockerPorts(configPath string, ports map[string]int) error {
 }
 
 // UpdateLocalDockerPHP writes the profiler credential fields into docker.php
-// of the local override file, preserving all other content. Empty fields
-// remove the corresponding key so rotated or disabled credentials do not
-// survive on disk; a nil php config clears all known credential keys.
+// of the local override file, preserving all other content. Empty fields remove
+// the corresponding key, and a nil php config clears every credential key, so
+// rotated secrets do not survive on disk.
 func UpdateLocalDockerPHP(configPath string, php *ConfigDockerPHP) error {
 	type credential struct {
 		key   string

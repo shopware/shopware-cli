@@ -2,6 +2,7 @@ package dev
 
 import (
 	"context"
+	"maps"
 	"strings"
 
 	"charm.land/bubbles/v2/progress"
@@ -45,19 +46,15 @@ func (m *Model) checkContainersRunning() tea.Cmd {
 	}
 }
 
-// checkPortsThenStart probes for host-port conflicts and requests a container
-// start when none are found.
-func (m *Model) checkPortsThenStart() tea.Cmd {
-	return func() tea.Msg {
-		return m.needStartMsg()
-	}
+// checkPorts probes for host-port conflicts and requests a container start
+// when none are found.
+func (m *Model) checkPorts() tea.Cmd {
+	return func() tea.Msg { return m.needStartMsg() }
 }
 
 // needStartMsg probes the host ports the compose file will publish before a
-// container start. Proxy-mode projects publish no host ports, so probing is
-// skipped there — unless the shared proxy fell back to fixed-port mode, which
-// publishes ports again. Ports held by the project's own (partially) running
-// stack are not conflicts; probe errors are ignored so `docker compose up`
+// container start. Proxy-mode projects publish no host ports, except after a
+// fallback to fixed-port mode. Probe errors are ignored so `docker compose up`
 // surfaces real failures itself.
 func (m *Model) needStartMsg() tea.Msg {
 	if proxy.IsProxyProject(m.config) && !m.proxyFallback {
@@ -177,10 +174,10 @@ func (m *Model) startContainers() tea.Cmd {
 }
 
 // fixPortConflicts allocates a random free host port for every conflicting
-// port, rewrites compose.yaml and then persists the overrides to the local
-// config override file. All mutations of the shared model config happen on
-// the update thread after both writes succeeded, so a failed write cannot
-// leave compose.yaml, the local override and the in-memory config diverged.
+// port, rewrites compose.yaml and persists the overrides to the local config
+// override file. The shared model config is only updated on the update thread
+// once both writes succeeded, so a failed write cannot leave compose.yaml,
+// the local override and the in-memory config diverged.
 func (m *Model) fixPortConflicts() tea.Cmd {
 	conflicts := m.portConflicts
 	cfg := m.config
@@ -196,29 +193,19 @@ func (m *Model) fixPortConflicts() tea.Cmd {
 
 		// Apply the overrides to a detached copy: this goroutine must not
 		// mutate the shared config the UI reads concurrently, and
-		// SetDockerPortOverrides merges into the Ports map in place, so the
-		// map must be copied too.
-		base := cfg
-		if base == nil {
-			base = &shop.Config{}
-		}
-		cfgCopy := *base
-		if base.Docker != nil {
-			dockerCopy := *base.Docker
-			if base.Docker.Ports != nil {
-				dockerCopy.Ports = make(shop.ConfigDockerPorts, len(base.Docker.Ports))
-				for key, port := range base.Docker.Ports {
-					dockerCopy.Ports[key] = port
-				}
+		// SetDockerPortOverrides merges into the Ports map in place.
+		cfgCopy := *cfg
+		if cfg.Docker != nil {
+			dockerCopy := *cfg.Docker
+			if cfg.Docker.Ports != nil {
+				dockerCopy.Ports = maps.Clone(cfg.Docker.Ports)
 			}
 			cfgCopy.Docker = &dockerCopy
 		}
 		cfgCopy.SetDockerPortOverrides(overrides)
 
-		// A fallen-back proxy project keeps its proxy URL in the config, so
-		// proxy.WriteComposeFile would regenerate the compose file in proxy
-		// mode (no published ports) and silently undo the fallback; write the
-		// fixed-port compose file directly instead.
+		// A fallen-back proxy project still carries its proxy URL, so
+		// proxy.WriteComposeFile would undo the fallback.
 		if proxyFallback {
 			if err := dockerpkg.WriteComposeFile(projectRoot, dockerpkg.ComposeOptionsFromConfig(&cfgCopy)); err != nil {
 				return portFixDoneMsg{err: err}

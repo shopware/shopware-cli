@@ -11,7 +11,9 @@ import (
 	"github.com/shopware/shopware-cli/internal/system"
 )
 
-func localConfigFileName(fileName string) string {
+// LocalConfigFileName returns the path of the local override file belonging to
+// the given project configuration file.
+func LocalConfigFileName(fileName string) string {
 	ext := ""
 	base := fileName
 

@@ -260,17 +260,14 @@ func (e *devEnvironment) dockerPorts() shop.ConfigDockerPorts {
 }
 
 // resolvePortConflicts probes the host ports the compose file will publish.
-// Conflicting ports either abort the start with a descriptive error (fail) or
-// are remapped to random free ports (random), persisted to the local config
-// override so future runs reuse them.
+// Conflicting ports either abort the start (fail) or are remapped to random
+// free ports (random) and persisted to the local config override.
 func (e *devEnvironment) resolvePortConflicts(ctx context.Context, mode string) error {
 	if e.executor.Type() != executor.TypeDocker {
 		return nil
 	}
 
-	// Proxy-mode projects publish no host ports, so there is nothing to
-	// probe. After a proxy fallback the compose file is fixed-port again
-	// and its published ports are probed as usual.
+	// Proxy-mode projects publish no host ports, except after a fallback.
 	if proxy.IsProxyProject(e.cfg) && !e.proxyFallback {
 		return nil
 	}
@@ -293,14 +290,10 @@ func (e *devEnvironment) resolvePortConflicts(ctx context.Context, mode string) 
 		return err
 	}
 
-	// Rewrite compose.yaml first and only persist the overrides once that
-	// succeeded, so the local override file and compose.yaml cannot diverge.
 	e.cfg.SetDockerPortOverrides(overrides)
 
-	// A fallen-back proxy project keeps its proxy URL in the config, so
-	// proxy.WriteComposeFile would regenerate the compose file in proxy
-	// mode (no published ports) and silently undo the fallback; write the
-	// fixed-port compose file directly instead.
+	// A fallen-back proxy project still carries its proxy URL, so
+	// proxy.WriteComposeFile would undo the fallback.
 	if e.proxyFallback {
 		if err := dockerpkg.WriteComposeFile(e.projectRoot, dockerpkg.ComposeOptionsFromConfig(e.cfg)); err != nil {
 			return err
@@ -330,9 +323,6 @@ func (e *devEnvironment) start(cmd *cobra.Command) error {
 	if mode != portConflictModeFail && mode != portConflictModeRandom {
 		return fmt.Errorf("invalid value %q for --on-port-conflict, must be %q or %q", mode, portConflictModeFail, portConflictModeRandom)
 	}
-
-	// Errors past flag validation are runtime failures, not usage mistakes.
-	cmd.SilenceUsage = true
 
 	if err := e.resolvePortConflicts(cmd.Context(), mode); err != nil {
 		return err

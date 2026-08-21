@@ -51,6 +51,17 @@ var PortDefinitions = []PortDefinition{
 	{Key: shop.DockerPortElasticsearch, Service: "opensearch", Label: "OpenSearch", Target: 9200, Default: 9200, RequiresElasticsearch: true},
 }
 
+// portDefinition returns the definition for key, or nil for an unknown key.
+func portDefinition(key string) *PortDefinition {
+	for i, def := range PortDefinitions {
+		if def.Key == key {
+			return &PortDefinitions[i]
+		}
+	}
+
+	return nil
+}
+
 // HostPort returns the host port configured for key, falling back to the
 // definition default when no override is set. It returns 0 when the port is
 // disabled (configured as false) and must not be published.
@@ -64,10 +75,8 @@ func HostPort(ports shop.ConfigDockerPorts, key string) int {
 		}
 	}
 
-	for _, def := range PortDefinitions {
-		if def.Key == key {
-			return def.Default
-		}
+	if def := portDefinition(key); def != nil {
+		return def.Default
 	}
 
 	return 0
@@ -89,8 +98,7 @@ func FindPortConflicts(ctx context.Context, projectFolder string, ports shop.Con
 		return nil, fmt.Errorf("failed to read composer.lock: %w", err)
 	}
 
-	// Callers like the TUI pass context.Background(); a hung Docker CLI must
-	// not block the startup path indefinitely.
+	// A hung Docker CLI must not block the startup path indefinitely.
 	if _, hasDeadline := ctx.Deadline(); !hasDeadline {
 		var cancel context.CancelFunc
 		ctx, cancel = context.WithTimeout(ctx, 30*time.Second)
@@ -99,9 +107,9 @@ func FindPortConflicts(ctx context.Context, projectFolder string, ports shop.Con
 
 	owned := ownPublishedPorts(ctx, projectFolder)
 
-	isFree := func(port int) bool { return isPortFree(ctx, port) }
-
-	return findConflicts(activeDefinitions(lock), ports, owned, isFree), nil
+	return findConflicts(activeDefinitions(lock), ports, owned, func(port int) bool {
+		return isPortFree(ctx, port)
+	}), nil
 }
 
 // activeDefinitions filters PortDefinitions down to the services the compose
@@ -124,8 +132,8 @@ func activeDefinitions(lock *composer.Lock) []PortDefinition {
 	return defs
 }
 
-// findConflicts is the pure probing core: a port counts as a conflict when it
-// is neither disabled, published by our own compose project, nor free to bind.
+// findConflicts reports the ports that are neither disabled, published by our
+// own compose project, nor free to bind.
 func findConflicts(defs []PortDefinition, ports shop.ConfigDockerPorts, owned map[int]struct{}, isFree func(int) bool) []PortConflict {
 	var conflicts []PortConflict
 	for _, def := range defs {
@@ -161,8 +169,7 @@ func isPortFree(ctx context.Context, port int) bool {
 // ownPublishedPorts returns the host ports currently published by this
 // project's own compose containers, so an already (or partially) running
 // environment is not reported as a conflict. Errors are treated as "nothing
-// running" — the same output is parsed for the dashboard by discoverCompose in
-// internal/tui/dev.
+// running".
 func ownPublishedPorts(ctx context.Context, projectFolder string) map[int]struct{} {
 	args := []string{"compose"}
 	if os.Getenv("COMPOSE_PROJECT_NAME") == "" {
@@ -207,9 +214,9 @@ func ownPublishedPorts(ctx context.Context, projectFolder string) map[int]struct
 	return owned
 }
 
-// AllocateRandomPorts picks a distinct free host port for every conflict. All
-// listeners stay open until every port is chosen so no port is handed out
-// twice. The result maps the docker.ports config key to the new host port.
+// AllocateRandomPorts picks a distinct free host port for every conflict,
+// keyed by the docker.ports config key. All listeners stay open until every
+// port is chosen so no port is handed out twice.
 func AllocateRandomPorts(ctx context.Context, conflicts []PortConflict) (map[string]int, error) {
 	ports := make(map[string]int, len(conflicts))
 	listeners := make([]net.Listener, 0, len(conflicts))

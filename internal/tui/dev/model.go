@@ -4,7 +4,6 @@ import (
 	"context"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"time"
 
 	"charm.land/bubbles/v2/progress"
@@ -143,17 +142,13 @@ func (m Model) cleanupContext() context.Context {
 }
 
 func New(ctx context.Context, opts Options) Model {
-	configPath := opts.ConfigPath
-	if configPath == "" {
-		configPath = filepath.Join(opts.ProjectRoot, ".shopware-project.yml")
-	}
 	m := Model{
 		ctx:           ctx,
 		header:        tui.NewHeader(),
 		activeTab:     tabOverview,
 		dockerMode:    opts.Executor.Type() == executor.TypeDocker,
 		projectRoot:   opts.ProjectRoot,
-		configPath:    configPath,
+		configPath:    opts.ConfigPath,
 		executor:      opts.Executor,
 		config:        opts.Config,
 		envConfig:     opts.EnvConfig,
@@ -589,7 +584,7 @@ func (m Model) handleSalesChannelPickerResult(msg salesChannelPickerResultMsg) (
 
 // handlePortConflictResult resolves the port-conflict prompt: remap the busy
 // ports to random free ones and start, or quit. Dismissing with esc keeps the
-// port-conflict screen, which exits with q.
+// port-conflict screen.
 func (m Model) handlePortConflictResult(msg prompt.ResultMsg) (app.Content, tea.Cmd) {
 	switch msg.Choice {
 	case portConflictRandom:

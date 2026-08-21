@@ -3,7 +3,6 @@ package dev
 import (
 	tea "charm.land/bubbletea/v2"
 
-	"github.com/shopware/shopware-cli/internal/shop"
 	"github.com/shopware/shopware-cli/internal/shop/install"
 	"github.com/shopware/shopware-cli/internal/tracking"
 	"github.com/shopware/shopware-cli/internal/tui"
@@ -130,11 +129,8 @@ func (m Model) updateLifecycle(msg tea.Msg) (app.Content, tea.Cmd) {
 			m.overlayLines = append(m.overlayLines, "", helpStyle.Render("Press q to exit"))
 			return m, nil
 		}
-		// Apply the overrides to the shared config here on the update thread;
-		// the command goroutine only touched detached copies.
-		if m.config == nil {
-			m.config = &shop.Config{}
-		}
+		// The command goroutine only touched detached copies, so apply the
+		// overrides to the shared config here on the update thread.
 		m.config.SetDockerPortOverrides(msg.overrides)
 		return m, m.startContainers()
 	}

@@ -68,8 +68,8 @@ func (m Model) updateKeyPress(msg tea.KeyPressMsg) (app.Content, tea.Cmd) {
 	}
 
 	if m.phase == phasePortConflict {
-		// The pushed overlay handles the choice; this only covers the state
-		// after the prompt was dismissed with esc.
+		// The overlay handles the choice; this covers the state after the
+		// prompt was dismissed with esc.
 		if tui.KeyString(msg) == "q" || tui.KeyString(msg) == tui.KeyCtrlC {
 			return m, tea.Quit
 		}
@@ -145,9 +145,8 @@ func (m Model) updateConfigTab(msg tea.KeyPressMsg) (app.Content, tea.Cmd) {
 				m.configTab.saved = false
 				return m, nil
 			}
-			// Always update the local override: a nil php config clears
-			// credentials that are no longer configured, so rotated or
-			// disabled secrets do not survive on disk.
+			// A nil php config clears credentials that are no longer
+			// configured, so rotated secrets do not survive on disk.
 			var localPHP *shop.ConfigDockerPHP
 			if localCfg := m.configTab.LocalConfig(); localCfg != nil {
 				localPHP = localCfg.Docker.PHP
@@ -393,5 +392,5 @@ func (m Model) startAfterMigrationWizard() (app.Content, tea.Cmd) {
 
 	m.rebuildTabs()
 
-	return m, tea.Batch(m.dockerSpinner.Tick, m.checkPortsThenStart())
+	return m, tea.Batch(m.dockerSpinner.Tick, m.checkPorts())
 }

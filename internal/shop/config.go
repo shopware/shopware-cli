@@ -812,7 +812,7 @@ func ReadConfig(ctx context.Context, fileName string, allowFallback bool) (*Conf
 		if allowFallback {
 			// Even without a base config, a local override file (e.g. persisted
 			// docker port overrides) must still apply.
-			localFile := localConfigFileName(fileName)
+			localFile := LocalConfigFileName(fileName)
 			if _, localErr := os.Stat(localFile); localErr == nil {
 				mergedMap, mergeErr := mergeLocalConfig(map[string]any{}, localFile)
 				if mergeErr != nil {
@@ -839,7 +839,7 @@ func ReadConfig(ctx context.Context, fileName string, allowFallback bool) (*Conf
 		return nil, err
 	}
 
-	localFile := localConfigFileName(fileName)
+	localFile := LocalConfigFileName(fileName)
 	_, localErr := os.Stat(localFile)
 	if localErr != nil && !os.IsNotExist(localErr) {
 		logging.FromContext(ctx).Warnf("unable to access local config override %s: %v", localFile, localErr)
