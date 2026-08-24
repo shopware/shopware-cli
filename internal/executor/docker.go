@@ -4,15 +4,24 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
 	"syscall"
 
+	"github.com/mattn/go-isatty"
+
 	adminSdk "github.com/shopware/shopware-cli/internal/admin-api"
 	"github.com/shopware/shopware-cli/internal/shop"
 	"github.com/shopware/shopware-cli/internal/system"
 )
+
+// hostStdinStdoutAreTerminals reports whether the current process is attached
+// to a terminal on both stdin and stdout. Overridden in tests.
+var hostStdinStdoutAreTerminals = func() bool {
+	return isatty.IsTerminal(os.Stdin.Fd()) && isatty.IsTerminal(os.Stdout.Fd())
+}
 
 type DockerExecutor struct {
 	env         map[string]string
@@ -135,6 +144,7 @@ func (d *DockerExecutor) DatabaseConnection(ctx context.Context) (*DatabaseConne
 	databaseURL := d.env["DATABASE_URL"]
 
 	if databaseURL == "" {
+		// Always disable TTY: this captures stdout and is never interactive.
 		cmd := exec.CommandContext(ctx, "docker", "compose", "exec", "-T", "web", "printenv", "DATABASE_URL")
 		cmd.Dir = d.projectRoot
 		logCmd(ctx, cmd)
@@ -227,6 +237,7 @@ func (d *DockerExecutor) newProcess(cmd *exec.Cmd, innerArgs []string) *Process 
 			// dev server — as a child that does not receive npm's signal, so
 			// signalling only the parent orphans it and it keeps holding its
 			// port. pkill matches by pattern and would miss those children.
+			// Always disable TTY: this is a fire-and-forget cleanup command.
 			killArgs := append(d.composeArgs("exec", "-T", "web"), "sh", "-c", killTreeScript(pattern))
 			killCmd := exec.CommandContext(ctx, "docker", killArgs...)
 			killCmd.Dir = projectRoot
@@ -301,7 +312,12 @@ func (d *DockerExecutor) EnvironmentStatus(ctx context.Context) (bool, error) {
 func (d *DockerExecutor) baseArgs() []string {
 	args := d.composeArgs("exec")
 
-	args = append(args, "-T")
+	// Allocate a TTY for interactive terminals so Symfony console keeps ANSI
+	// colors and prompts. Pass -T when stdin or stdout is not a terminal so
+	// CI and piped usage do not fail with "the input device is not a TTY".
+	if !hostStdinStdoutAreTerminals() {
+		args = append(args, "-T")
+	}
 
 	// When the web service runs as the mapped host user (see the compose
 	// user: directive derived from system.ProjectUserSpec), that UID has no

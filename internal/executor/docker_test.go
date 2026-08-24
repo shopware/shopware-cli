@@ -49,6 +49,44 @@ func recordedArgs(t *testing.T, argsFile string) []string {
 	return args
 }
 
+func stubHostTerminals(t *testing.T, interactive bool) {
+	t.Helper()
+
+	orig := hostStdinStdoutAreTerminals
+	hostStdinStdoutAreTerminals = func() bool { return interactive }
+	t.Cleanup(func() { hostStdinStdoutAreTerminals = orig })
+}
+
+func TestDockerExecutorOmitsTWhenInteractive(t *testing.T) {
+	stubHostTerminals(t, true)
+
+	exec := &DockerExecutor{projectRoot: "/project"}
+
+	for _, p := range []*Process{
+		exec.ConsoleCommand(t.Context(), "cache:clear"),
+		exec.ComposerCommand(t.Context(), "install"),
+		exec.PHPCommand(t.Context(), "-v"),
+		exec.NPMCommand(t.Context(), "run", "dev"),
+	} {
+		assert.NotContains(t, p.Cmd.Args, "-T", "interactive compose exec must allocate a TTY: %v", p.Cmd.Args)
+	}
+}
+
+func TestDockerExecutorPassesTWhenNonInteractive(t *testing.T) {
+	stubHostTerminals(t, false)
+
+	exec := &DockerExecutor{projectRoot: "/project"}
+
+	for _, p := range []*Process{
+		exec.ConsoleCommand(t.Context(), "cache:clear"),
+		exec.ComposerCommand(t.Context(), "install"),
+		exec.PHPCommand(t.Context(), "-v"),
+		exec.NPMCommand(t.Context(), "run", "dev"),
+	} {
+		assert.Contains(t, p.Cmd.Args, "-T", "non-interactive compose exec must disable TTY: %v", p.Cmd.Args)
+	}
+}
+
 func TestDockerStopEnvironment(t *testing.T) {
 	tests := []struct {
 		name        string
