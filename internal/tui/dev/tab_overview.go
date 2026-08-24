@@ -1276,9 +1276,8 @@ func discoverCompose(ctx context.Context, projectRoot string) (services []Discov
 		publishedPort, hasPort := c.publishers[known.TargetPort]
 		switch {
 		case hasPort:
-			// Prefer a real published port when the service has one. RustFS
-			// keeps fixed host ports even in proxy mode (PUBLIC_URL is baked
-			// into env), so the console must stay on localhost:9001.
+			// Prefer a real published port when the service has one (plain
+			// mode). Proxied services publish nothing and fall through.
 			url = fmt.Sprintf("http://127.0.0.1:%d", publishedPort)
 		case proxyHost != "":
 			// The compose override routes each service at a subdomain named
