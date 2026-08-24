@@ -161,7 +161,7 @@ Because the whole file is generated, proxy mode simply omits the host ports
 instead of clearing them with a `!reset` tag — so there is **no Docker Compose
 version requirement**. The database keeps its published loopback port in both
 modes, so host tools (and the sales-channel URL update) still reach it. PaaS
-projects (`shopware/k8s-meta` in `composer.lock`) also keep Redis on a random
+projects (`shopware/k8s-meta` / `symfony/redis-messenger` in `composer.lock`) also keep Redis on a random
 loopback port and RustFS on fixed `9000`/`9001` — `K8S_FILESYSTEM_PUBLIC_URL`
 is baked into the PHP env, so the S3 API has to stay on host port 9000.
 

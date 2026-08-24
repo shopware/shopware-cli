@@ -135,6 +135,7 @@ func TestGenerateComposeFileProxyKeepsRustfsHostPorts(t *testing.T) {
 		Packages: []composer.LockPackage{
 			{Name: "shopware/core", Version: "6.6.0.0"},
 			{Name: "shopware/k8s-meta", Version: "1.0.0"},
+			{Name: "symfony/redis-messenger", Version: "v7.0.0"},
 		},
 	}
 

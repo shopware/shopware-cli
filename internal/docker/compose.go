@@ -126,18 +126,23 @@ func ComposeOptionsFromConfig(cfg *shop.Config) *ComposeOptions {
 	return opts
 }
 
-// redisMessengerDSN is the Symfony Redis transport used when shopware/k8s-meta
-// is present. It points at the generated redis service (not localhost) so PHP
-// containers can reach the queue on the compose network. If both k8s-meta and
-// symfony/amqp-messenger are in the lock, this DSN wins over LavinMQ.
+// redisMessengerDSN is the Symfony Redis transport used when
+// symfony/redis-messenger is in the lock (shopware/k8s-meta requires it). It
+// points at the generated redis service (not localhost) so PHP containers can
+// reach the queue on the compose network. If both Redis and AMQP messengers
+// are present, this DSN wins over LavinMQ.
 const redisMessengerDSN = "redis://redis:6379/messages/symfony/?auto_setup=true&serializer=1&stream_max_entries=0&dbindex=0"
 
 func GenerateComposeFile(lock *composer.Lock, opts *ComposeOptions) ([]byte, error) {
 	hasAMQP := lock.GetPackage("symfony/amqp-messenger") != nil
 	hasElasticsearch := lock.GetPackage("shopware/elasticsearch") != nil
+	// k8s-meta requires symfony/redis-messenger; a real lock lists both. Redis
+	// is driven by the messenger package (same pattern as AMQP → LavinMQ).
+	// RustFS / K8S_* env stay gated on k8s-meta itself.
+	hasRedisMessenger := lock.GetPackage("symfony/redis-messenger") != nil
 	hasK8sMeta := lock.GetPackage("shopware/k8s-meta") != nil
 
-	doc := buildCompose(hasAMQP, hasElasticsearch, hasK8sMeta, opts)
+	doc := buildCompose(hasAMQP, hasElasticsearch, hasRedisMessenger, hasK8sMeta, opts)
 
 	out, err := yaml.Marshal(&doc)
 	if err != nil {
@@ -199,8 +204,9 @@ func ensureEnvLocalFile(projectFolder string) error {
 	return os.WriteFile(envLocalPath, []byte(shop.EnvLocalDockerContent), 0o644)
 }
 
-func buildCompose(hasAMQP, hasElasticsearch, hasK8sMeta bool, opts *ComposeOptions) composeFile {
+func buildCompose(hasAMQP, hasElasticsearch, hasRedisMessenger, hasK8sMeta bool, opts *ComposeOptions) composeFile {
 	px := opts.proxy()
+	needsRedis := hasRedisMessenger || hasK8sMeta
 
 	webEnv := yamlMap[string]{}.
 		set("HOST", "0.0.0.0").
@@ -229,11 +235,12 @@ func buildCompose(hasAMQP, hasElasticsearch, hasK8sMeta bool, opts *ComposeOptio
 		webEnv = webEnv.set("NODE_EXTRA_CA_CERTS", containerCABundlePath)
 	}
 
-	// Redis messenger wins when k8s-meta is present, even if AMQP is also in
-	// the lock — the Flex recipe is built around Redis for cache, sessions,
-	// and the queue.
+	// Redis messenger wins over AMQP when the Redis transport is in the lock
+	// (including via shopware/k8s-meta, which requires it).
 	if hasK8sMeta {
 		webEnv = applyK8sMetaEnv(webEnv)
+	} else if hasRedisMessenger {
+		webEnv = webEnv.set("MESSENGER_TRANSPORT_DSN", redisMessengerDSN)
 	} else if hasAMQP {
 		webEnv = webEnv.set("MESSENGER_TRANSPORT_DSN", "amqp://guest:guest@lavinmq:5672")
 	}
@@ -248,10 +255,11 @@ func buildCompose(hasAMQP, hasElasticsearch, hasK8sMeta bool, opts *ComposeOptio
 
 	webDependsOn := yamlMap[composeDependency]{}.
 		set("database", composeDependency{Condition: "service_healthy"})
+	if needsRedis {
+		webDependsOn = webDependsOn.set("redis", composeDependency{Condition: "service_healthy"})
+	}
 	if hasK8sMeta {
-		webDependsOn = webDependsOn.
-			set("redis", composeDependency{Condition: "service_healthy"}).
-			set("rustfs-init", composeDependency{Condition: "service_completed_successfully"})
+		webDependsOn = webDependsOn.set("rustfs-init", composeDependency{Condition: "service_completed_successfully"})
 	}
 
 	if opts != nil && opts.PHPProfiler != "" {
@@ -381,8 +389,11 @@ func buildCompose(hasAMQP, hasElasticsearch, hasK8sMeta bool, opts *ComposeOptio
 		volumes = volumes.set("opensearch-data", struct{}{})
 	}
 
+	if needsRedis {
+		addRedisService(&services, &volumes)
+	}
 	if hasK8sMeta {
-		addK8sMetaServices(&services, &volumes)
+		addRustFSServices(&services, &volumes)
 	}
 
 	if opts != nil && opts.PHPProfiler == "blackfire" && opts.BlackfireServerID != "" && opts.BlackfireServerToken != "" {
@@ -462,12 +473,10 @@ func applyK8sMetaEnv(webEnv yamlMap[string]) yamlMap[string] {
 		set("MESSENGER_TRANSPORT_DSN", redisMessengerDSN)
 }
 
-// addK8sMetaServices appends Redis, RustFS, and the one-shot bucket-init
-// container that a PaaS lock (shopware/k8s-meta) needs. Redis is published on
-// a random loopback port (same pattern as MariaDB). RustFS keeps fixed host
-// ports because K8S_FILESYSTEM_PUBLIC_URL is baked into the PHP env and the
-// browser loads media from it — including in proxy mode.
-func addK8sMetaServices(services *yamlMap[composeService], volumes *yamlMap[struct{}]) {
+// addRedisService appends Redis when symfony/redis-messenger is in the lock
+// (or shopware/k8s-meta, which requires it). Published on a random loopback
+// port, same pattern as MariaDB.
+func addRedisService(services *yamlMap[composeService], volumes *yamlMap[struct{}]) {
 	redis := composeService{
 		Image:   "redis:7-alpine",
 		Ports:   []string{"127.0.0.1::6379"},
@@ -482,6 +491,15 @@ func addK8sMetaServices(services *yamlMap[composeService], volumes *yamlMap[stru
 		},
 	}
 
+	*services = services.set("redis", redis)
+	*volumes = volumes.set("redis-data", struct{}{})
+}
+
+// addRustFSServices appends RustFS and the one-shot bucket-init container that
+// a PaaS lock (shopware/k8s-meta) needs. RustFS keeps fixed host ports because
+// K8S_FILESYSTEM_PUBLIC_URL is baked into the PHP env and the browser loads
+// media from it — including in proxy mode.
+func addRustFSServices(services *yamlMap[composeService], volumes *yamlMap[struct{}]) {
 	rustfs := composeService{
 		Image: "rustfs/rustfs:latest",
 		Ports: []string{"9000:9000", "9001:9001"},
@@ -511,11 +529,6 @@ func addK8sMetaServices(services *yamlMap[composeService], volumes *yamlMap[stru
 			set("rustfs", composeDependency{Condition: "service_healthy"}),
 	}
 
-	*services = services.
-		set("redis", redis).
-		set("rustfs", rustfs).
-		set("rustfs-init", rustfsInit)
-	*volumes = volumes.
-		set("redis-data", struct{}{}).
-		set("rustfs-data", struct{}{})
+	*services = services.set("rustfs", rustfs).set("rustfs-init", rustfsInit)
+	*volumes = volumes.set("rustfs-data", struct{}{})
 }
