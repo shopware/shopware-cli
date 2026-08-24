@@ -14,6 +14,7 @@ type composeFile struct {
 type composeService struct {
 	Image       string                     `yaml:"image"`
 	User        string                     `yaml:"user,omitempty"`
+	Entrypoint  []string                   `yaml:"entrypoint,omitempty"`
 	Command     []string                   `yaml:"command,omitempty"`
 	Ports       []string                   `yaml:"ports,omitempty"`
 	EnvFile     []string                   `yaml:"env_file,omitempty"`
@@ -70,7 +71,21 @@ func (m yamlMap[T]) MarshalYAML() (any, error) {
 		if err := value.Encode(entry.Value); err != nil {
 			return nil, err
 		}
+		// Quote strings that contain YAML indicators (e.g. `&` in a Redis
+		// messenger DSN) so compose parsers do not treat them as aliases.
+		if s, ok := any(entry.Value).(string); ok && needsYAMLQuotes(s) {
+			value.Style = yaml.DoubleQuotedStyle
+		}
 		node.Content = append(node.Content, key, &value)
 	}
 	return node, nil
+}
+
+func needsYAMLQuotes(s string) bool {
+	for _, r := range s {
+		if r == '&' || r == '*' || r == '!' {
+			return true
+		}
+	}
+	return false
 }

@@ -126,11 +126,18 @@ func ComposeOptionsFromConfig(cfg *shop.Config) *ComposeOptions {
 	return opts
 }
 
+// redisMessengerDSN is the Symfony Redis transport used when shopware/k8s-meta
+// is present. It points at the generated redis service (not localhost) so PHP
+// containers can reach the queue on the compose network. If both k8s-meta and
+// symfony/amqp-messenger are in the lock, this DSN wins over LavinMQ.
+const redisMessengerDSN = "redis://redis:6379/messages/symfony/?auto_setup=true&serializer=1&stream_max_entries=0&dbindex=0"
+
 func GenerateComposeFile(lock *composer.Lock, opts *ComposeOptions) ([]byte, error) {
 	hasAMQP := lock.GetPackage("symfony/amqp-messenger") != nil
 	hasElasticsearch := lock.GetPackage("shopware/elasticsearch") != nil
+	hasK8sMeta := lock.GetPackage("shopware/k8s-meta") != nil
 
-	doc := buildCompose(hasAMQP, hasElasticsearch, opts)
+	doc := buildCompose(hasAMQP, hasElasticsearch, hasK8sMeta, opts)
 
 	out, err := yaml.Marshal(&doc)
 	if err != nil {
@@ -192,7 +199,7 @@ func ensureEnvLocalFile(projectFolder string) error {
 	return os.WriteFile(envLocalPath, []byte(shop.EnvLocalDockerContent), 0o644)
 }
 
-func buildCompose(hasAMQP, hasElasticsearch bool, opts *ComposeOptions) composeFile {
+func buildCompose(hasAMQP, hasElasticsearch, hasK8sMeta bool, opts *ComposeOptions) composeFile {
 	px := opts.proxy()
 
 	webEnv := yamlMap[string]{}.
@@ -222,7 +229,12 @@ func buildCompose(hasAMQP, hasElasticsearch bool, opts *ComposeOptions) composeF
 		webEnv = webEnv.set("NODE_EXTRA_CA_CERTS", containerCABundlePath)
 	}
 
-	if hasAMQP {
+	// Redis messenger wins when k8s-meta is present, even if AMQP is also in
+	// the lock — the Flex recipe is built around Redis for cache, sessions,
+	// and the queue.
+	if hasK8sMeta {
+		webEnv = applyK8sMetaEnv(webEnv)
+	} else if hasAMQP {
 		webEnv = webEnv.set("MESSENGER_TRANSPORT_DSN", "amqp://guest:guest@lavinmq:5672")
 	}
 
@@ -236,6 +248,11 @@ func buildCompose(hasAMQP, hasElasticsearch bool, opts *ComposeOptions) composeF
 
 	webDependsOn := yamlMap[composeDependency]{}.
 		set("database", composeDependency{Condition: "service_healthy"})
+	if hasK8sMeta {
+		webDependsOn = webDependsOn.
+			set("redis", composeDependency{Condition: "service_healthy"}).
+			set("rustfs-init", composeDependency{Condition: "service_completed_successfully"})
+	}
 
 	if opts != nil && opts.PHPProfiler != "" {
 		webEnv = webEnv.set("PHP_PROFILER", opts.PHPProfiler)
@@ -364,6 +381,10 @@ func buildCompose(hasAMQP, hasElasticsearch bool, opts *ComposeOptions) composeF
 		volumes = volumes.set("opensearch-data", struct{}{})
 	}
 
+	if hasK8sMeta {
+		addK8sMetaServices(&services, &volumes)
+	}
+
 	if opts != nil && opts.PHPProfiler == "blackfire" && opts.BlackfireServerID != "" && opts.BlackfireServerToken != "" {
 		blackfire := composeService{
 			Image: "blackfire/blackfire:2",
@@ -419,4 +440,82 @@ func consoleService(opts *ComposeOptions, webEnv yamlMap[string], webDependsOn y
 	}
 
 	return svc
+}
+
+// applyK8sMetaEnv injects the filesystem, cache, session, and messenger values
+// that shopware/k8s-meta's Flex recipe already reads. Compose environment
+// overrides the recipe's localhost / empty-bucket defaults so PHP talks to the
+// generated redis and rustfs services.
+func applyK8sMetaEnv(webEnv yamlMap[string]) yamlMap[string] {
+	return webEnv.
+		set("K8S_FILESYSTEM_PRIVATE_BUCKET", "shopware-private").
+		set("K8S_FILESYSTEM_PUBLIC_BUCKET", "shopware-public").
+		set("K8S_FILESYSTEM_ENDPOINT", "http://rustfs:9000").
+		set("K8S_FILESYSTEM_PUBLIC_URL", "http://127.0.0.1:9000/shopware-public").
+		set("K8S_FILESYSTEM_REGION", "us-east-1").
+		set("AWS_ACCESS_KEY_ID", "shopware").
+		set("AWS_SECRET_ACCESS_KEY", "shopware").
+		set("AWS_DEFAULT_REGION", "us-east-1").
+		set("K8S_CACHE_HOST", "redis").
+		set("K8S_CACHE_PORT", "6379").
+		set("PHP_SESSION_SAVE_PATH", "tcp://redis:6379").
+		set("MESSENGER_TRANSPORT_DSN", redisMessengerDSN)
+}
+
+// addK8sMetaServices appends Redis, RustFS, and the one-shot bucket-init
+// container that a PaaS lock (shopware/k8s-meta) needs. Redis is published on
+// a random loopback port (same pattern as MariaDB). RustFS keeps fixed host
+// ports because K8S_FILESYSTEM_PUBLIC_URL is baked into the PHP env and the
+// browser loads media from it — including in proxy mode.
+func addK8sMetaServices(services *yamlMap[composeService], volumes *yamlMap[struct{}]) {
+	redis := composeService{
+		Image:   "redis:7-alpine",
+		Ports:   []string{"127.0.0.1::6379"},
+		Volumes: []string{"redis-data:/data"},
+		Healthcheck: &composeHealthcheck{
+			Test:          []string{"CMD", "redis-cli", "ping"},
+			StartPeriod:   "5s",
+			StartInterval: "2s",
+			Interval:      "5s",
+			Timeout:       "1s",
+			Retries:       10,
+		},
+	}
+
+	rustfs := composeService{
+		Image: "rustfs/rustfs:latest",
+		Ports: []string{"9000:9000", "9001:9001"},
+		Environment: yamlMap[string]{}.
+			set("RUSTFS_VOLUMES", "/data").
+			set("RUSTFS_ADDRESS", "0.0.0.0:9000").
+			set("RUSTFS_CONSOLE_ADDRESS", "0.0.0.0:9001").
+			set("RUSTFS_CONSOLE_ENABLE", "true").
+			set("RUSTFS_ACCESS_KEY", "shopware").
+			set("RUSTFS_SECRET_KEY", "shopware"),
+		Volumes: []string{"rustfs-data:/data"},
+		Healthcheck: &composeHealthcheck{
+			Test:          []string{"CMD", "curl", "-f", "http://127.0.0.1:9000/health"},
+			StartPeriod:   "20s",
+			StartInterval: "3s",
+			Interval:      "5s",
+			Timeout:       "5s",
+			Retries:       10,
+		},
+	}
+
+	rustfsInit := composeService{
+		Image:      "minio/mc",
+		Entrypoint: []string{"/bin/sh", "-c"},
+		Command:    []string{"mc alias set rustfs http://rustfs:9000 shopware shopware && mc mb --ignore-existing rustfs/shopware-private && mc mb --ignore-existing rustfs/shopware-public"},
+		DependsOn: yamlMap[composeDependency]{}.
+			set("rustfs", composeDependency{Condition: "service_healthy"}),
+	}
+
+	*services = services.
+		set("redis", redis).
+		set("rustfs", rustfs).
+		set("rustfs-init", rustfsInit)
+	*volumes = volumes.
+		set("redis-data", struct{}{}).
+		set("rustfs-data", struct{}{})
 }

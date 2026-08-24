@@ -251,11 +251,14 @@ var knownServices = map[string]knownService{
 	"mailer":   {Name: "Mailpit", TargetPort: 8025},
 	"lavinmq":  {Name: "Queue (LavinMQ)", TargetPort: 15672, Username: "guest", Password: "guest"},
 	"rabbitmq": {Name: "Queue (RabbitMQ)", TargetPort: 15672, Username: "guest", Password: "guest"},
+	"rustfs":   {Name: "S3 (RustFS)", TargetPort: 9001, Username: "shopware", Password: "shopware"},
 }
 
 var ignoredServices = map[string]bool{
-	"web":      true,
-	"database": true,
+	"web":         true,
+	"database":    true,
+	"redis":       true, // no UI; cache/session/messenger only
+	"rustfs-init": true, // one-shot bucket create
 }
 
 // backgroundServiceLabel returns the display label for a compose service that is
@@ -1270,17 +1273,19 @@ func discoverCompose(ctx context.Context, projectRoot string) (services []Discov
 		}
 
 		var url string
+		publishedPort, hasPort := c.publishers[known.TargetPort]
 		switch {
+		case hasPort:
+			// Prefer a real published port when the service has one. RustFS
+			// keeps fixed host ports even in proxy mode (PUBLIC_URL is baked
+			// into env), so the console must stay on localhost:9001.
+			url = fmt.Sprintf("http://127.0.0.1:%d", publishedPort)
 		case proxyHost != "":
 			// The compose override routes each service at a subdomain named
 			// after the service (adminer.<host>, mailer.<host>, ...).
 			url = fmt.Sprintf("https://%s.%s", c.service, proxyHost)
 		default:
-			publishedPort, hasPort := c.publishers[known.TargetPort]
-			if !hasPort {
-				continue
-			}
-			url = fmt.Sprintf("http://127.0.0.1:%d", publishedPort)
+			continue
 		}
 
 		services = append(services, DiscoveredService{

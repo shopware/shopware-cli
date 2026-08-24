@@ -124,6 +124,31 @@ func TestGenerateComposeFileProxySkipsAbsentServices(t *testing.T) {
 
 	assert.NotContains(t, string(result), "lavinmq")
 	assert.NotContains(t, string(result), "opensearch")
+	assert.NotContains(t, string(result), "redis")
+	assert.NotContains(t, string(result), "rustfs")
+}
+
+func TestGenerateComposeFileProxyKeepsRustfsHostPorts(t *testing.T) {
+	t.Parallel()
+
+	lock := &composer.Lock{
+		Packages: []composer.LockPackage{
+			{Name: "shopware/core", Version: "6.6.0.0"},
+			{Name: "shopware/k8s-meta", Version: "1.0.0"},
+		},
+	}
+
+	result, err := GenerateComposeFile(lock, proxyComposeOptions())
+	require.NoError(t, err)
+	out := string(result)
+
+	// PUBLIC_URL is baked into env, so S3 and the console stay on fixed host
+	// ports even when the rest of the stack is proxied.
+	assert.Contains(t, out, "9000:9000")
+	assert.Contains(t, out, "9001:9001")
+	assert.Contains(t, out, "127.0.0.1::6379")
+	assert.Contains(t, out, "K8S_FILESYSTEM_PUBLIC_URL: http://127.0.0.1:9000/shopware-public")
+	assert.NotContains(t, out, "Host(`rustfs.")
 }
 
 func TestGenerateComposeFilePlainModeHasPorts(t *testing.T) {
