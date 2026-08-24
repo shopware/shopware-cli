@@ -161,9 +161,9 @@ Because the whole file is generated, proxy mode simply omits the host ports
 instead of clearing them with a `!reset` tag — so there is **no Docker Compose
 version requirement**. The database keeps its published loopback port in both
 modes, so host tools (and the sales-channel URL update) still reach it. PaaS
-projects (`shopware/k8s-meta` / `symfony/redis-messenger` in `composer.lock`) also keep Redis on a random
-loopback port and RustFS on fixed `9000`/`9001` — `K8S_FILESYSTEM_PUBLIC_URL`
-is baked into the PHP env, so the S3 API has to stay on host port 9000.
+projects (`shopware/k8s-meta` in `composer.lock`) keep RustFS on fixed `9000`/`9001`
+— `K8S_FILESYSTEM_PUBLIC_URL` is baked into the PHP env, so the S3 API has to
+stay on host port 9000. Redis stays internal on the compose network.
 
 Why a direct database `UPDATE` for the sales channel domain instead of a
 console command: it works on **every Shopware version** (the core
@@ -366,8 +366,8 @@ The CA import is one-time per machine; the hosts line is per shop.
   `adminer.shop1…`); their raw ports (management/UI) are not published in proxy
   mode — use `docker compose exec` for direct access. The database is the
   exception: it keeps a random published loopback port in both modes. PaaS
-  stacks also keep Redis (random loopback) and RustFS (`9000`/`9001`) published
-  so media URLs and the S3 console stay reachable from the host.
+  stacks also keep RustFS (`9000`/`9001`) published so media URLs and the S3
+  console stay reachable from the host. Redis is compose-internal only.
 - Only the shop's **root** hostname is aliased for in-container use — service
   subdomains (`mailer.…`) are host/browser-facing.
 - **Changing the admin-worker setting while a shop is proxied can orphan the

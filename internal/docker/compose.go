@@ -501,12 +501,11 @@ func applyK8sMetaEnv(webEnv yamlMap[string]) yamlMap[string] {
 }
 
 // addRedisService appends Redis when symfony/redis-messenger is in the lock
-// (or shopware/k8s-meta, which requires it). Published on a random loopback
-// port, same pattern as MariaDB.
+// (or shopware/k8s-meta, which requires it). It stays on the compose network
+// only — PHP talks to redis:6379; nothing is published on the host.
 func addRedisService(services *yamlMap[composeService], volumes *yamlMap[struct{}]) {
 	redis := composeService{
 		Image:   "redis:7-alpine",
-		Ports:   []string{"127.0.0.1::6379"},
 		Volumes: []string{"redis-data:/data"},
 		Healthcheck: &composeHealthcheck{
 			Test:          []string{"CMD", "redis-cli", "ping"},

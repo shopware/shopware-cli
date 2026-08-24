@@ -147,7 +147,8 @@ func TestGenerateComposeFileProxyKeepsRustfsHostPorts(t *testing.T) {
 	// ports even when the rest of the stack is proxied.
 	assert.Contains(t, out, "9000:9000")
 	assert.Contains(t, out, "9001:9001")
-	assert.Contains(t, out, "127.0.0.1::6379")
+	assert.Contains(t, out, "127.0.0.1::3306")
+	assert.NotContains(t, out, "127.0.0.1::6379")
 	assert.Contains(t, out, "K8S_FILESYSTEM_PUBLIC_URL: http://127.0.0.1:9000/shopware-public")
 	assert.NotContains(t, out, "Host(`rustfs.")
 }
