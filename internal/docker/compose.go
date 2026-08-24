@@ -133,6 +133,11 @@ func ComposeOptionsFromConfig(cfg *shop.Config) *ComposeOptions {
 // are present, this DSN wins over LavinMQ.
 const redisMessengerDSN = "redis://redis:6379/messages/symfony/?auto_setup=true&serializer=1&stream_max_entries=0&dbindex=0"
 
+const (
+	rustfsAccessKey = "shopware"
+	rustfsSecretKey = "shopware"
+)
+
 func GenerateComposeFile(lock *composer.Lock, opts *ComposeOptions) ([]byte, error) {
 	hasAMQP := lock.GetPackage("symfony/amqp-messenger") != nil
 	hasElasticsearch := lock.GetPackage("shopware/elasticsearch") != nil
@@ -208,73 +213,9 @@ func buildCompose(hasAMQP, hasElasticsearch, hasRedisMessenger, hasK8sMeta bool,
 	px := opts.proxy()
 	needsRedis := hasRedisMessenger || hasK8sMeta
 
-	webEnv := yamlMap[string]{}.
-		set("HOST", "0.0.0.0").
-		set("DATABASE_URL", "mysql://root:root@database/shopware").
-		set("MAILER_DSN", "smtp://mailer:1025")
-
-	// In proxy mode Traefik terminates TLS and forwards plain HTTP from a
-	// private container address, so Shopware must trust its X-Forwarded-*
-	// headers (private ranges) or URL generation and redirects fall back to
-	// http. Fixed-port mode only ever sees the local remote address.
-	trustedProxies := "REMOTE_ADDR"
-	if px != nil {
-		trustedProxies = "127.0.0.1,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16"
-	}
-	webEnv = webEnv.
-		set("TRUSTED_PROXIES", trustedProxies).
-		set("SYMFONY_TRUSTED_PROXIES", trustedProxies)
-
-	if px != nil && px.CABundlePath != "" {
-		// APP_URL is not pinned here: proxy up writes it into .env.local before
-		// the container starts, keeping .env.local the single, editable source of
-		// truth (a real env var would silently win over the file and confuse
-		// anyone editing it). Point Node at the mounted CA bundle so its own
-		// self-calls over TLS are trusted (PHP/curl trust it via the same bundle
-		// mounted over the system trust store — see addVolumes).
-		webEnv = webEnv.set("NODE_EXTRA_CA_CERTS", containerCABundlePath)
-	}
-
-	// Redis messenger wins over AMQP when the Redis transport is in the lock
-	// (including via shopware/k8s-meta, which requires it).
-	if hasK8sMeta {
-		webEnv = applyK8sMetaEnv(webEnv)
-	} else if hasRedisMessenger {
-		webEnv = webEnv.set("MESSENGER_TRANSPORT_DSN", redisMessengerDSN)
-	} else if hasAMQP {
-		webEnv = webEnv.set("MESSENGER_TRANSPORT_DSN", "amqp://guest:guest@lavinmq:5672")
-	}
-
-	if hasElasticsearch {
-		webEnv = webEnv.
-			set("OPENSEARCH_URL", "http://opensearch:9200").
-			set("SHOPWARE_ES_ENABLED", "1").
-			set("SHOPWARE_ES_INDEXING_ENABLED", "1").
-			set("SHOPWARE_ES_INDEX_PREFIX", "sw")
-	}
-
-	webDependsOn := yamlMap[composeDependency]{}.
-		set("database", composeDependency{Condition: "service_healthy"})
-	if needsRedis {
-		webDependsOn = webDependsOn.set("redis", composeDependency{Condition: "service_healthy"})
-	}
-	if hasK8sMeta {
-		webDependsOn = webDependsOn.set("rustfs-init", composeDependency{Condition: "service_completed_successfully"})
-	}
-
-	if opts != nil && opts.PHPProfiler != "" {
-		webEnv = webEnv.set("PHP_PROFILER", opts.PHPProfiler)
-		switch opts.PHPProfiler {
-		case "xdebug":
-			webEnv = webEnv.
-				set("XDEBUG_MODE", "debug").
-				set("XDEBUG_CONFIG", "client_host=host.docker.internal")
-		case "tideways":
-			if opts.TidewaysAPIKey != "" {
-				webEnv = webEnv.set("TIDEWAYS_APIKEY", opts.TidewaysAPIKey)
-			}
-		}
-	}
+	webEnv := baseWebEnv(px)
+	webEnv, webDependsOn := applyLockEnv(webEnv, hasAMQP, hasElasticsearch, hasRedisMessenger, hasK8sMeta, needsRedis)
+	webEnv = applyProfilerEnv(webEnv, opts)
 
 	web := composeService{
 		Image:       WebImage(opts),
@@ -364,51 +305,7 @@ func buildCompose(hasAMQP, hasElasticsearch, hasRedisMessenger, hasK8sMeta bool,
 	}
 
 	volumes := yamlMap[struct{}]{}.set("db-data", struct{}{})
-
-	if hasAMQP {
-		lavinmq := composeService{Image: "cloudamqp/lavinmq"}
-		// Only the management UI (15672) is routed in proxy mode; AMQP (5672)
-		// stays internal, reachable as lavinmq:5672.
-		publishOrRoute(&lavinmq, px, "lavinmq", []string{"15672:15672", "5672:5672"}, proxyRoute{subdomain: "lavinmq", containerPort: 15672})
-		lavinmq.Volumes = []string{"lavinmq-data:/var/lib/lavinmq:rw"}
-		services = services.set("lavinmq", lavinmq)
-		volumes = volumes.set("lavinmq-data", struct{}{})
-	}
-
-	if hasElasticsearch {
-		opensearch := composeService{
-			Image: "opensearchproject/opensearch:2",
-			Environment: yamlMap[string]{}.
-				set("OPENSEARCH_INITIAL_ADMIN_PASSWORD", "Shopware123!").
-				set("discovery.type", "single-node").
-				set("plugins.security.disabled", "true"),
-		}
-		publishOrRoute(&opensearch, px, "opensearch", []string{"9200:9200"}, proxyRoute{subdomain: "opensearch", containerPort: 9200})
-		opensearch.Volumes = []string{"opensearch-data:/usr/share/opensearch/data"}
-		services = services.set("opensearch", opensearch)
-		volumes = volumes.set("opensearch-data", struct{}{})
-	}
-
-	if needsRedis {
-		addRedisService(&services, &volumes)
-	}
-	if hasK8sMeta {
-		addRustFSServices(&services, &volumes)
-	}
-
-	if opts != nil && opts.PHPProfiler == "blackfire" && opts.BlackfireServerID != "" && opts.BlackfireServerToken != "" {
-		blackfire := composeService{
-			Image: "blackfire/blackfire:2",
-			Environment: yamlMap[string]{}.
-				set("BLACKFIRE_SERVER_ID", opts.BlackfireServerID).
-				set("BLACKFIRE_SERVER_TOKEN", opts.BlackfireServerToken),
-		}
-		services = services.set("blackfire", blackfire)
-	}
-
-	if opts != nil && opts.PHPProfiler == "tideways" && opts.TidewaysAPIKey != "" {
-		services = services.set("tideways-daemon", composeService{Image: "ghcr.io/tideways/daemon"})
-	}
+	addOptionalServices(&services, &volumes, px, opts, hasAMQP, hasElasticsearch, needsRedis, hasK8sMeta)
 
 	file := composeFile{
 		Services: services,
@@ -453,6 +350,136 @@ func consoleService(opts *ComposeOptions, webEnv yamlMap[string], webDependsOn y
 	return svc
 }
 
+func baseWebEnv(px *ProxyOptions) yamlMap[string] {
+	webEnv := yamlMap[string]{}.
+		set("HOST", "0.0.0.0").
+		set("DATABASE_URL", "mysql://root:root@database/shopware").
+		set("MAILER_DSN", "smtp://mailer:1025")
+
+	// In proxy mode Traefik terminates TLS and forwards plain HTTP from a
+	// private container address, so Shopware must trust its X-Forwarded-*
+	// headers (private ranges) or URL generation and redirects fall back to
+	// http. Fixed-port mode only ever sees the local remote address.
+	trustedProxies := "REMOTE_ADDR"
+	if px != nil {
+		trustedProxies = "127.0.0.1,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16"
+	}
+	webEnv = webEnv.
+		set("TRUSTED_PROXIES", trustedProxies).
+		set("SYMFONY_TRUSTED_PROXIES", trustedProxies)
+
+	if px != nil && px.CABundlePath != "" {
+		// APP_URL is not pinned here: proxy up writes it into .env.local before
+		// the container starts, keeping .env.local the single, editable source of
+		// truth (a real env var would silently win over the file and confuse
+		// anyone editing it). Point Node at the mounted CA bundle so its own
+		// self-calls over TLS are trusted (PHP/curl trust it via the same bundle
+		// mounted over the system trust store — see addVolumes).
+		webEnv = webEnv.set("NODE_EXTRA_CA_CERTS", containerCABundlePath)
+	}
+
+	return webEnv
+}
+
+func applyLockEnv(webEnv yamlMap[string], hasAMQP, hasElasticsearch, hasRedisMessenger, hasK8sMeta, needsRedis bool) (yamlMap[string], yamlMap[composeDependency]) {
+	// Redis messenger wins over AMQP when the Redis transport is in the lock
+	// (including via shopware/k8s-meta, which requires it).
+	switch {
+	case hasK8sMeta:
+		webEnv = applyK8sMetaEnv(webEnv)
+	case hasRedisMessenger:
+		webEnv = webEnv.set("MESSENGER_TRANSPORT_DSN", redisMessengerDSN)
+	case hasAMQP:
+		webEnv = webEnv.set("MESSENGER_TRANSPORT_DSN", "amqp://guest:guest@lavinmq:5672")
+	}
+
+	if hasElasticsearch {
+		webEnv = webEnv.
+			set("OPENSEARCH_URL", "http://opensearch:9200").
+			set("SHOPWARE_ES_ENABLED", "1").
+			set("SHOPWARE_ES_INDEXING_ENABLED", "1").
+			set("SHOPWARE_ES_INDEX_PREFIX", "sw")
+	}
+
+	webDependsOn := yamlMap[composeDependency]{}.
+		set("database", composeDependency{Condition: "service_healthy"})
+	if needsRedis {
+		webDependsOn = webDependsOn.set("redis", composeDependency{Condition: "service_healthy"})
+	}
+	if hasK8sMeta {
+		webDependsOn = webDependsOn.set("rustfs-init", composeDependency{Condition: "service_completed_successfully"})
+	}
+
+	return webEnv, webDependsOn
+}
+
+func applyProfilerEnv(webEnv yamlMap[string], opts *ComposeOptions) yamlMap[string] {
+	if opts == nil || opts.PHPProfiler == "" {
+		return webEnv
+	}
+
+	webEnv = webEnv.set("PHP_PROFILER", opts.PHPProfiler)
+	switch opts.PHPProfiler {
+	case "xdebug":
+		webEnv = webEnv.
+			set("XDEBUG_MODE", "debug").
+			set("XDEBUG_CONFIG", "client_host=host.docker.internal")
+	case "tideways":
+		if opts.TidewaysAPIKey != "" {
+			webEnv = webEnv.set("TIDEWAYS_APIKEY", opts.TidewaysAPIKey)
+		}
+	}
+
+	return webEnv
+}
+
+func addOptionalServices(services *yamlMap[composeService], volumes *yamlMap[struct{}], px *ProxyOptions, opts *ComposeOptions, hasAMQP, hasElasticsearch, needsRedis, hasK8sMeta bool) {
+	if hasAMQP {
+		lavinmq := composeService{Image: "cloudamqp/lavinmq"}
+		// Only the management UI (15672) is routed in proxy mode; AMQP (5672)
+		// stays internal, reachable as lavinmq:5672.
+		publishOrRoute(&lavinmq, px, "lavinmq", []string{"15672:15672", "5672:5672"}, proxyRoute{subdomain: "lavinmq", containerPort: 15672})
+		lavinmq.Volumes = []string{"lavinmq-data:/var/lib/lavinmq:rw"}
+		*services = services.set("lavinmq", lavinmq)
+		*volumes = volumes.set("lavinmq-data", struct{}{})
+	}
+
+	if hasElasticsearch {
+		opensearch := composeService{
+			Image: "opensearchproject/opensearch:2",
+			Environment: yamlMap[string]{}.
+				set("OPENSEARCH_INITIAL_ADMIN_PASSWORD", "Shopware123!").
+				set("discovery.type", "single-node").
+				set("plugins.security.disabled", "true"),
+		}
+		publishOrRoute(&opensearch, px, "opensearch", []string{"9200:9200"}, proxyRoute{subdomain: "opensearch", containerPort: 9200})
+		opensearch.Volumes = []string{"opensearch-data:/usr/share/opensearch/data"}
+		*services = services.set("opensearch", opensearch)
+		*volumes = volumes.set("opensearch-data", struct{}{})
+	}
+
+	if needsRedis {
+		addRedisService(services, volumes)
+	}
+	if hasK8sMeta {
+		addRustFSServices(services, volumes)
+	}
+
+	if opts != nil && opts.PHPProfiler == "blackfire" && opts.BlackfireServerID != "" && opts.BlackfireServerToken != "" {
+		blackfire := composeService{
+			Image: "blackfire/blackfire:2",
+			Environment: yamlMap[string]{}.
+				set("BLACKFIRE_SERVER_ID", opts.BlackfireServerID).
+				set("BLACKFIRE_SERVER_TOKEN", opts.BlackfireServerToken),
+		}
+		*services = services.set("blackfire", blackfire)
+	}
+
+	if opts != nil && opts.PHPProfiler == "tideways" && opts.TidewaysAPIKey != "" {
+		*services = services.set("tideways-daemon", composeService{Image: "ghcr.io/tideways/daemon"})
+	}
+}
+
 // applyK8sMetaEnv injects the filesystem, cache, session, and messenger values
 // that shopware/k8s-meta's Flex recipe already reads. Compose environment
 // overrides the recipe's localhost / empty-bucket defaults so PHP talks to the
@@ -464,8 +491,8 @@ func applyK8sMetaEnv(webEnv yamlMap[string]) yamlMap[string] {
 		set("K8S_FILESYSTEM_ENDPOINT", "http://rustfs:9000").
 		set("K8S_FILESYSTEM_PUBLIC_URL", "http://127.0.0.1:9000/shopware-public").
 		set("K8S_FILESYSTEM_REGION", "us-east-1").
-		set("AWS_ACCESS_KEY_ID", "shopware").
-		set("AWS_SECRET_ACCESS_KEY", "shopware").
+		set("AWS_ACCESS_KEY_ID", rustfsAccessKey).
+		set("AWS_SECRET_ACCESS_KEY", rustfsSecretKey).
 		set("AWS_DEFAULT_REGION", "us-east-1").
 		set("K8S_CACHE_HOST", "redis").
 		set("K8S_CACHE_PORT", "6379").
@@ -508,8 +535,8 @@ func addRustFSServices(services *yamlMap[composeService], volumes *yamlMap[struc
 			set("RUSTFS_ADDRESS", "0.0.0.0:9000").
 			set("RUSTFS_CONSOLE_ADDRESS", "0.0.0.0:9001").
 			set("RUSTFS_CONSOLE_ENABLE", "true").
-			set("RUSTFS_ACCESS_KEY", "shopware").
-			set("RUSTFS_SECRET_KEY", "shopware"),
+			set("RUSTFS_ACCESS_KEY", rustfsAccessKey).
+			set("RUSTFS_SECRET_KEY", rustfsSecretKey),
 		Volumes: []string{"rustfs-data:/data"},
 		Healthcheck: &composeHealthcheck{
 			Test:          []string{"CMD", "curl", "-f", "http://127.0.0.1:9000/health"},
@@ -524,7 +551,7 @@ func addRustFSServices(services *yamlMap[composeService], volumes *yamlMap[struc
 	rustfsInit := composeService{
 		Image:      "minio/mc",
 		Entrypoint: []string{"/bin/sh", "-c"},
-		Command:    []string{"mc alias set rustfs http://rustfs:9000 shopware shopware && mc mb --ignore-existing rustfs/shopware-private && mc mb --ignore-existing rustfs/shopware-public"},
+		Command:    []string{fmt.Sprintf("mc alias set rustfs http://rustfs:9000 %s %s && mc mb --ignore-existing rustfs/shopware-private && mc mb --ignore-existing rustfs/shopware-public", rustfsAccessKey, rustfsSecretKey)},
 		DependsOn: yamlMap[composeDependency]{}.
 			set("rustfs", composeDependency{Condition: "service_healthy"}),
 	}
