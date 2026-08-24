@@ -44,6 +44,7 @@ func runCreateForm(cmd *cobra.Command, opts *createOptions, releases []repositor
 
 	deploymentOptions := []huh.Option[string]{
 		huh.NewOption("None", shop.DeploymentNone),
+		huh.NewOption("Docker (Container)", shop.DeploymentContainer),
 		huh.NewOption("PaaS powered by Shopware", shop.DeploymentShopwarePaaS),
 		huh.NewOption("PaaS powered by Platform.sh", shop.DeploymentPlatformSH),
 		huh.NewOption("Deployer (SSH-based)", shop.DeploymentDeployer),
