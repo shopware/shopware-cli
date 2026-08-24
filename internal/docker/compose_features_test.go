@@ -29,7 +29,7 @@ func TestFeaturesFromLock(t *testing.T) {
 		AMQP:           true,
 		Elasticsearch:  true,
 		RedisMessenger: true,
-		K8sMeta:        true,
+		S3:             true,
 	}, f)
 	assert.True(t, f.NeedsRedis())
 	assert.Equal(t, []string{"lavinmq", "opensearch", "s3", "rustfs"}, f.ProxySubdomains())
@@ -45,7 +45,7 @@ func TestFeaturesFromLockFile(t *testing.T) {
 	require.NoError(t, os.WriteFile(lockPath, []byte(`{"packages":[{"name":"shopware/k8s-meta","version":"1.0.0"},{"name":"symfony/redis-messenger","version":"v7.0.0"}]}`), 0o644))
 
 	f := FeaturesFromLockFile(lockPath)
-	assert.True(t, f.K8sMeta)
+	assert.True(t, f.S3)
 	assert.True(t, f.RedisMessenger)
 	assert.True(t, f.NeedsRedis())
 	assert.False(t, f.AMQP)
@@ -56,7 +56,7 @@ func TestLockFeaturesNeedsRedis(t *testing.T) {
 
 	assert.False(t, LockFeatures{}.NeedsRedis())
 	assert.True(t, LockFeatures{RedisMessenger: true}.NeedsRedis())
-	assert.True(t, LockFeatures{K8sMeta: true}.NeedsRedis())
+	assert.True(t, LockFeatures{S3: true}.NeedsRedis())
 	assert.Empty(t, LockFeatures{}.ProxySubdomains())
 	assert.Equal(t, []string{"lavinmq"}, LockFeatures{AMQP: true}.ProxySubdomains())
 }

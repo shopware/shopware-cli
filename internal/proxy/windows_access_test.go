@@ -21,7 +21,7 @@ func TestProxyHostnames(t *testing.T) {
 	}, base)
 
 	// Optional services only appear when their packages are present.
-	full := ProxyHostnames("winshop.shopware.local", docker.LockFeatures{AMQP: true, Elasticsearch: true, K8sMeta: true})
+	full := ProxyHostnames("winshop.shopware.local", docker.LockFeatures{AMQP: true, Elasticsearch: true, S3: true})
 	assert.Contains(t, full, "lavinmq.winshop.shopware.local")
 	assert.Contains(t, full, "opensearch.winshop.shopware.local")
 	assert.Contains(t, full, "s3.winshop.shopware.local")

@@ -376,8 +376,8 @@ func applyLockEnv(webEnv yamlMap[string], px *ProxyOptions, features LockFeature
 	// Redis messenger wins over AMQP when the Redis transport is in the lock
 	// (including via shopware/k8s-meta, which requires it).
 	switch {
-	case features.K8sMeta:
-		webEnv = applyK8sMetaEnv(webEnv, px)
+	case features.S3:
+		webEnv = applyS3Env(webEnv, px)
 	case features.RedisMessenger:
 		webEnv = webEnv.set("MESSENGER_TRANSPORT_DSN", redisMessengerDSN)
 	case features.AMQP:
@@ -397,7 +397,7 @@ func applyLockEnv(webEnv yamlMap[string], px *ProxyOptions, features LockFeature
 	if features.NeedsRedis() {
 		webDependsOn = webDependsOn.set("redis", composeDependency{Condition: "service_healthy"})
 	}
-	if features.K8sMeta {
+	if features.S3 {
 		webDependsOn = webDependsOn.set("rustfs-init", composeDependency{Condition: "service_completed_successfully"})
 	}
 
@@ -452,7 +452,7 @@ func addOptionalServices(services *yamlMap[composeService], volumes *yamlMap[str
 	if features.NeedsRedis() {
 		addRedisService(services, volumes)
 	}
-	if features.K8sMeta {
+	if features.S3 {
 		addRustFSServices(services, volumes, px)
 	}
 
@@ -471,11 +471,11 @@ func addOptionalServices(services *yamlMap[composeService], volumes *yamlMap[str
 	}
 }
 
-// applyK8sMetaEnv injects the filesystem, cache, session, and messenger values
+// applyS3Env injects the filesystem, cache, session, and messenger values
 // that shopware/k8s-meta's Flex recipe already reads. Compose environment
 // overrides the recipe's localhost / empty-bucket defaults so PHP talks to the
 // generated redis and rustfs services.
-func applyK8sMetaEnv(webEnv yamlMap[string], px *ProxyOptions) yamlMap[string] {
+func applyS3Env(webEnv yamlMap[string], px *ProxyOptions) yamlMap[string] {
 	// PHP talks to RustFS on the compose network. The browser loads public
 	// media from PUBLIC_URL: localhost in plain mode, the s3.<host> proxy
 	// route (HTTPS) when the shop itself is served through the local domain.

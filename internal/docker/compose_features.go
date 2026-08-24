@@ -9,7 +9,9 @@ type LockFeatures struct {
 	AMQP           bool
 	Elasticsearch  bool
 	RedisMessenger bool
-	K8sMeta        bool
+	// S3 is set when shopware/k8s-meta is in the lock. That recipe expects
+	// S3 filesystems (RustFS locally) plus Redis cache/session env.
+	S3 bool
 }
 
 // rustfsS3Subdomain is the proxy hostname for the S3 API (PUBLIC_URL).
@@ -30,7 +32,7 @@ func FeaturesFromLock(lock *composer.Lock) LockFeatures {
 		AMQP:           lock.GetPackage("symfony/amqp-messenger") != nil,
 		Elasticsearch:  lock.GetPackage("shopware/elasticsearch") != nil,
 		RedisMessenger: lock.GetPackage("symfony/redis-messenger") != nil,
-		K8sMeta:        lock.GetPackage("shopware/k8s-meta") != nil,
+		S3:             lock.GetPackage("shopware/k8s-meta") != nil,
 	}
 }
 
@@ -47,10 +49,10 @@ func FeaturesFromLockFile(path string) LockFeatures {
 }
 
 // NeedsRedis reports whether the generated stack should include a Redis
-// service: either the Redis messenger transport is present, or k8s-meta
-// (which requires it) is.
+// service: either the Redis messenger transport is present, or S3/PaaS
+// (shopware/k8s-meta, which requires Redis for cache and sessions) is.
 func (f LockFeatures) NeedsRedis() bool {
-	return f.RedisMessenger || f.K8sMeta
+	return f.RedisMessenger || f.S3
 }
 
 // ProxySubdomains returns the extra Traefik hostnames for optional services
@@ -64,7 +66,7 @@ func (f LockFeatures) ProxySubdomains() []string {
 	if f.Elasticsearch {
 		subs = append(subs, "opensearch")
 	}
-	if f.K8sMeta {
+	if f.S3 {
 		subs = append(subs, rustfsS3Subdomain, rustfsConsoleSubdomain)
 	}
 
