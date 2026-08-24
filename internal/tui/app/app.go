@@ -12,6 +12,8 @@ package app
 
 import (
 	tea "charm.land/bubbletea/v2"
+
+	"github.com/shopware/shopware-cli/internal/system"
 )
 
 // Options configure a new App shell.
@@ -325,5 +327,8 @@ func (a *App) View() tea.View {
 
 // Run is a convenience for tea.NewProgram(a).Run().
 func (a *App) Run() (tea.Model, error) {
+	system.SetTUIActive(true)
+	defer system.SetTUIActive(false)
+
 	return tea.NewProgram(a).Run()
 }

@@ -313,9 +313,10 @@ func (d *DockerExecutor) baseArgs() []string {
 	args := d.composeArgs("exec")
 
 	// Allocate a TTY for interactive terminals so Symfony console keeps ANSI
-	// colors and prompts. Pass -T when stdin or stdout is not a terminal so
-	// CI and piped usage do not fail with "the input device is not a TTY".
-	if !hostStdinStdoutAreTerminals() {
+	// colors and prompts. Keep -T when stdin/stdout is not a terminal (CI,
+	// pipes) or when a TUI like project dev owns the host terminal — compose
+	// exec would otherwise steal the TTY from the TUI.
+	if system.IsTUIActive() || !hostStdinStdoutAreTerminals() {
 		args = append(args, "-T")
 	}
 

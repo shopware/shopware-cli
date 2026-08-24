@@ -11,6 +11,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/shopware/shopware-cli/internal/system"
 )
 
 // writeRecordingDocker installs a docker stub on PATH that records every
@@ -59,6 +61,8 @@ func stubHostTerminals(t *testing.T, interactive bool) {
 
 func TestDockerExecutorOmitsTWhenInteractive(t *testing.T) {
 	stubHostTerminals(t, true)
+	system.SetTUIActive(false)
+	t.Cleanup(func() { system.SetTUIActive(false) })
 
 	exec := &DockerExecutor{projectRoot: "/project"}
 
@@ -69,6 +73,23 @@ func TestDockerExecutorOmitsTWhenInteractive(t *testing.T) {
 		exec.NPMCommand(t.Context(), "run", "dev"),
 	} {
 		assert.NotContains(t, p.Cmd.Args, "-T", "interactive compose exec must allocate a TTY: %v", p.Cmd.Args)
+	}
+}
+
+func TestDockerExecutorPassesTWhenTUIActive(t *testing.T) {
+	stubHostTerminals(t, true)
+	system.SetTUIActive(true)
+	t.Cleanup(func() { system.SetTUIActive(false) })
+
+	exec := &DockerExecutor{projectRoot: "/project"}
+
+	for _, p := range []*Process{
+		exec.ConsoleCommand(t.Context(), "cache:clear"),
+		exec.ComposerCommand(t.Context(), "install"),
+		exec.PHPCommand(t.Context(), "-v"),
+		exec.NPMCommand(t.Context(), "run", "dev"),
+	} {
+		assert.Contains(t, p.Cmd.Args, "-T", "TUI-launched compose exec must keep -T: %v", p.Cmd.Args)
 	}
 }
 
