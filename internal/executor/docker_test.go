@@ -1,6 +1,7 @@
 package executor
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"os/exec"
@@ -61,8 +62,6 @@ func stubHostTerminals(t *testing.T, interactive bool) {
 
 func TestDockerExecutorOmitsTWhenInteractive(t *testing.T) {
 	stubHostTerminals(t, true)
-	system.SetTUIActive(false)
-	t.Cleanup(func() { system.SetTUIActive(false) })
 
 	exec := &DockerExecutor{projectRoot: "/project"}
 
@@ -76,18 +75,18 @@ func TestDockerExecutorOmitsTWhenInteractive(t *testing.T) {
 	}
 }
 
-func TestDockerExecutorPassesTWhenTUIActive(t *testing.T) {
+func TestDockerExecutorPassesTWhenTUIContext(t *testing.T) {
 	stubHostTerminals(t, true)
-	system.SetTUIActive(true)
-	t.Cleanup(func() { system.SetTUIActive(false) })
 
+	ctx, cancel := context.WithCancel(system.WithTUI(t.Context()))
+	t.Cleanup(cancel)
 	exec := &DockerExecutor{projectRoot: "/project"}
 
 	for _, p := range []*Process{
-		exec.ConsoleCommand(t.Context(), "cache:clear"),
-		exec.ComposerCommand(t.Context(), "install"),
-		exec.PHPCommand(t.Context(), "-v"),
-		exec.NPMCommand(t.Context(), "run", "dev"),
+		exec.ConsoleCommand(ctx, "cache:clear"),
+		exec.ComposerCommand(ctx, "install"),
+		exec.PHPCommand(ctx, "-v"),
+		exec.NPMCommand(ctx, "run", "dev"),
 	} {
 		assert.Contains(t, p.Cmd.Args, "-T", "TUI-launched compose exec must keep -T: %v", p.Cmd.Args)
 	}

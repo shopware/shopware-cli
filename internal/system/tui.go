@@ -1,17 +1,22 @@
 package system
 
-import "sync/atomic"
+import "context"
 
-var tuiActive atomic.Bool
+type tuiKey struct{}
 
-// SetTUIActive records whether a shopware-cli TUI currently owns the
-// terminal. Docker compose exec must keep -T while a TUI is active so it
-// does not steal the TTY from the TUI (e.g. project dev).
-func SetTUIActive(active bool) {
-	tuiActive.Store(active)
+// WithTUI marks ctx as originating from a shopware-cli TUI. Docker compose
+// exec keeps -T for commands launched with this context so they do not steal
+// the TTY from the TUI (e.g. project dev).
+func WithTUI(ctx context.Context) context.Context {
+	return context.WithValue(ctx, tuiKey{}, true)
 }
 
-// IsTUIActive reports whether a TUI currently owns the terminal.
-func IsTUIActive() bool {
-	return tuiActive.Load()
+// IsTUI reports whether ctx was marked with WithTUI.
+func IsTUI(ctx context.Context) bool {
+	if ctx == nil {
+		return false
+	}
+
+	v, ok := ctx.Value(tuiKey{}).(bool)
+	return ok && v
 }

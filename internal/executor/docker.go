@@ -48,7 +48,7 @@ func (d *DockerExecutor) composeArgs(sub ...string) []string {
 }
 
 func (d *DockerExecutor) ConsoleCommand(ctx context.Context, args ...string) *Process {
-	dockerArgs := d.baseArgs()
+	dockerArgs := d.baseArgs(ctx)
 	dockerArgs = append(dockerArgs, "env-bridge", "php", consoleCommandName(ctx))
 	dockerArgs = append(dockerArgs, args...)
 
@@ -59,7 +59,7 @@ func (d *DockerExecutor) ConsoleCommand(ctx context.Context, args ...string) *Pr
 }
 
 func (d *DockerExecutor) ComposerCommand(ctx context.Context, args ...string) *Process {
-	dockerArgs := d.baseArgs()
+	dockerArgs := d.baseArgs(ctx)
 	dockerArgs = append(dockerArgs, "composer")
 	dockerArgs = append(dockerArgs, args...)
 
@@ -70,7 +70,7 @@ func (d *DockerExecutor) ComposerCommand(ctx context.Context, args ...string) *P
 }
 
 func (d *DockerExecutor) PHPCommand(ctx context.Context, args ...string) *Process {
-	dockerArgs := d.baseArgs()
+	dockerArgs := d.baseArgs(ctx)
 	dockerArgs = append(dockerArgs, "env-bridge", "php")
 	dockerArgs = append(dockerArgs, args...)
 
@@ -81,7 +81,7 @@ func (d *DockerExecutor) PHPCommand(ctx context.Context, args ...string) *Proces
 }
 
 func (d *DockerExecutor) NPMCommand(ctx context.Context, args ...string) *Process {
-	dockerArgs := d.baseArgs()
+	dockerArgs := d.baseArgs(ctx)
 	dockerArgs = append(dockerArgs, "env-bridge", "npm")
 	dockerArgs = append(dockerArgs, args...)
 
@@ -309,14 +309,14 @@ func (d *DockerExecutor) EnvironmentStatus(ctx context.Context) (bool, error) {
 	return len(strings.TrimSpace(string(output))) > 0, nil
 }
 
-func (d *DockerExecutor) baseArgs() []string {
+func (d *DockerExecutor) baseArgs(ctx context.Context) []string {
 	args := d.composeArgs("exec")
 
 	// Allocate a TTY for interactive terminals so Symfony console keeps ANSI
 	// colors and prompts. Keep -T when stdin/stdout is not a terminal (CI,
-	// pipes) or when a TUI like project dev owns the host terminal — compose
-	// exec would otherwise steal the TTY from the TUI.
-	if system.IsTUIActive() || !hostStdinStdoutAreTerminals() {
+	// pipes) or when the command was launched from a TUI (project dev, etc.)
+	// — compose exec would otherwise steal the TTY from the TUI.
+	if system.IsTUI(ctx) || !hostStdinStdoutAreTerminals() {
 		args = append(args, "-T")
 	}
 

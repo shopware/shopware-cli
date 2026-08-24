@@ -288,7 +288,7 @@ type runState struct {
 const runLogKeep = 500
 
 func (m *Model) beginRun() (app.Content, tea.Cmd) {
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(m.commandContext())
 	m.panel = panelRun
 	m.run = runState{
 		states: make(map[migrate.StepID]migrate.StepState),

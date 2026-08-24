@@ -1,19 +1,23 @@
 package system
 
 import (
+	"context"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 )
 
-func TestTUIActive(t *testing.T) {
-	t.Cleanup(func() { SetTUIActive(false) })
+func TestWithTUI(t *testing.T) {
+	parent := t.Context()
 
-	assert.False(t, IsTUIActive())
+	assert.False(t, IsTUI(parent))
+	assert.False(t, IsTUI(nil))
+	assert.False(t, IsTUI(context.Background()))
 
-	SetTUIActive(true)
-	assert.True(t, IsTUIActive())
+	ctx := WithTUI(parent)
+	assert.True(t, IsTUI(ctx))
 
-	SetTUIActive(false)
-	assert.False(t, IsTUIActive())
+	derived, cancel := context.WithCancel(ctx)
+	t.Cleanup(cancel)
+	assert.True(t, IsTUI(derived), "WithCancel must keep the TUI mark")
 }

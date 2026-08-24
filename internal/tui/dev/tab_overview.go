@@ -48,6 +48,7 @@ type OverviewModel struct {
 	background         []BackgroundProcess
 	projectRoot        string
 	executor           executor.Executor
+	ctx                context.Context
 	shopCfg            *shop.Config
 	loading            bool
 	err                error
@@ -386,7 +387,7 @@ func (m OverviewModel) Init() tea.Cmd {
 	cmds := []tea.Cmd{
 		discoverServices(m.projectRoot),
 		loadShopwareVersion(m.projectRoot),
-		loadSetupHealth(m.projectRoot, m.executor),
+		loadSetupHealth(m.ctx, m.projectRoot, m.executor),
 	}
 	if m.proxyHost != "" {
 		cmds = append(cmds, loadInstances())
@@ -1001,7 +1002,7 @@ func (m OverviewModel) startAdminWatch() tea.Cmd {
 	projectRoot := m.projectRoot
 	shopCfg := m.shopCfg
 
-	return startWatcher(watcherAdmin, func(ctx context.Context, out io.Writer) (*executor.Process, error) {
+	return startWatcher(watcherAdmin, m.ctx, func(ctx context.Context, out io.Writer) (*executor.Process, error) {
 		logStep(out, "Preparing plugins.json...")
 		if err := extension.WriteProjectPluginJson(ctx, projectRoot, shopCfg, e); err != nil {
 			return nil, fmt.Errorf("preparing plugins.json: %w", err)
@@ -1027,7 +1028,7 @@ func (m OverviewModel) startStorefrontWatch(opts extension.StorefrontWatcherOpti
 		opts.ProxyHostname = "storefront-watch." + host
 	}
 
-	return startWatcher(watcherStorefront, func(ctx context.Context, out io.Writer) (*executor.Process, error) {
+	return startWatcher(watcherStorefront, m.ctx, func(ctx context.Context, out io.Writer) (*executor.Process, error) {
 		logStep(out, "Preparing plugins.json...")
 		if err := extension.WriteProjectPluginJson(ctx, projectRoot, shopCfg, e); err != nil {
 			return nil, fmt.Errorf("preparing plugins.json: %w", err)
@@ -1057,7 +1058,7 @@ func logStep(out io.Writer, msg string) {
 // preparation goroutine signals that the dev-server process is starting (or
 // preparation failed). This keeps the UI in a visible "starting" state during
 // preparation rather than flipping to "running" instantly.
-func startWatcher(name string, prepare func(ctx context.Context, out io.Writer) (*executor.Process, error)) tea.Cmd {
+func startWatcher(name string, parent context.Context, prepare func(ctx context.Context, out io.Writer) (*executor.Process, error)) tea.Cmd {
 	handle := &watcherHandle{}
 	lines := make(chan string, tui.StreamBufferSize)
 	running := make(chan error, 1) // buffered so the goroutine never blocks
@@ -1066,7 +1067,10 @@ func startWatcher(name string, prepare func(ctx context.Context, out io.Writer) 
 		go func() {
 			defer close(lines)
 
-			ctx := handle.begin(logging.DisableLogger(context.Background()))
+			if parent == nil {
+				parent = context.Background()
+			}
+			ctx := handle.begin(logging.DisableLogger(parent))
 			pr, pw := io.Pipe()
 
 			scanDone := make(chan struct{})

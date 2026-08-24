@@ -63,9 +63,12 @@ type setupHealthLoadedMsg struct {
 // so a stuck container cannot leave the report loading forever.
 const setupHealthTimeout = 15 * time.Second
 
-func loadSetupHealth(projectRoot string, exec executor.Executor) tea.Cmd {
+func loadSetupHealth(parent context.Context, projectRoot string, exec executor.Executor) tea.Cmd {
 	return func() tea.Msg {
-		ctx, cancel := context.WithTimeout(context.Background(), setupHealthTimeout)
+		if parent == nil {
+			parent = context.Background()
+		}
+		ctx, cancel := context.WithTimeout(parent, setupHealthTimeout)
 		defer cancel()
 		return setupHealthLoadedMsg{checks: collectSetupHealth(ctx, projectRoot, exec)}
 	}

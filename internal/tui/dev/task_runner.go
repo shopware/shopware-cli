@@ -44,6 +44,6 @@ func (m *Model) runSelfCommand(title string, args ...string) tea.Cmd {
 func (m *Model) runCacheClear() tea.Cmd {
 	e := m.executor
 	return m.runTask("Clearing Cache...", func() (*exec.Cmd, error) {
-		return e.ConsoleCommand(context.Background(), "cache:clear").Cmd, nil
+		return e.ConsoleCommand(m.commandContext(), "cache:clear").Cmd, nil
 	})
 }

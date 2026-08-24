@@ -14,6 +14,7 @@ import (
 	"github.com/shopware/shopware-cli/internal/envfile"
 	"github.com/shopware/shopware-cli/internal/executor"
 	"github.com/shopware/shopware-cli/internal/shop"
+	"github.com/shopware/shopware-cli/internal/system"
 	"github.com/shopware/shopware-cli/internal/tracking"
 	"github.com/shopware/shopware-cli/internal/tui"
 	"github.com/shopware/shopware-cli/internal/tui/app"
@@ -56,6 +57,9 @@ type Options struct {
 	Config      *shop.Config
 	EnvConfig   *shop.EnvironmentConfig
 	Executor    executor.Executor
+	// Context is the parent context for TUI-launched commands. It is marked
+	// with system.WithTUI so docker compose exec keeps -T.
+	Context context.Context
 	// ProxyFallback is set when a proxy project could not start the shared
 	// proxy and dev fell back to fixed host ports. The shop is then reachable
 	// at the local port URL, not the (now unrouted) proxy hostname in Config.
@@ -92,6 +96,7 @@ type Model struct {
 	migrationWizard migrationWizard
 	telemetry       *telemetryState
 	proxyFallback   bool
+	ctx             context.Context
 }
 
 type dockerAlreadyRunningMsg struct{}
@@ -108,6 +113,11 @@ type shopwareInstallDoneMsg struct{ err error }
 type configRestartDoneMsg struct{ err error }
 
 func New(opts Options) Model {
+	ctx := opts.Context
+	if ctx == nil {
+		ctx = context.Background()
+	}
+
 	m := Model{
 		header:        tui.NewHeader(),
 		activeTab:     tabOverview,
@@ -119,9 +129,20 @@ func New(opts Options) Model {
 		watchers:      make(map[string]*watcherHandle),
 		telemetry:     newTelemetryState(opts.Executor.Type() == executor.TypeDocker),
 		proxyFallback: opts.ProxyFallback,
+		ctx:           system.WithTUI(ctx),
 	}
 	m.rebuildTabs()
 	return m
+}
+
+// commandContext is the parent context for executor commands launched from
+// this TUI. It is marked with system.WithTUI so docker compose exec keeps -T.
+func (m Model) commandContext() context.Context {
+	if m.ctx != nil {
+		return m.ctx
+	}
+
+	return system.WithTUI(context.Background())
 }
 
 // rebuildTabs (re)creates the three tab models from the model's current
@@ -153,6 +174,7 @@ func (m *Model) rebuildTabs() {
 	envValues, _ := envfile.ReadValues(m.projectRoot, EnvFieldKeys()...)
 
 	m.overview = NewOverviewModel(m.executor.Type(), shopURL, username, password, m.projectRoot, m.executor, m.config)
+	m.overview.ctx = m.ctx
 	m.instance = NewInstanceModel(m.projectRoot, isDocker)
 	m.configTab = NewConfigModel(m.config, envValues)
 }
@@ -308,7 +330,7 @@ func (m Model) updateContent(msg tea.Msg) (app.Content, tea.Cmd) {
 		// status and the setup-health checks it affects.
 		m.overview.domainsSetupDone = overviewSetupDone(m.projectRoot)
 		m.overview.healthLoading = true
-		return m, loadSetupHealth(m.projectRoot, m.executor)
+		return m, loadSetupHealth(m.ctx, m.projectRoot, m.executor)
 
 	case watcherStartedMsg, watcherRunningMsg, watcherProbeMsg, stopWatcherRequestMsg,
 		startStorefrontWatchRequestMsg, watcherStoppedMsg, logDoneMsg:

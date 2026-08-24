@@ -8,6 +8,7 @@
 package pluginmigrate
 
 import (
+	"context"
 	"path/filepath"
 
 	"charm.land/bubbles/v2/textinput"
@@ -16,6 +17,7 @@ import (
 
 	"github.com/shopware/shopware-cli/internal/executor"
 	migrate "github.com/shopware/shopware-cli/internal/shop/pluginmigrate"
+	"github.com/shopware/shopware-cli/internal/system"
 	"github.com/shopware/shopware-cli/internal/tui"
 	"github.com/shopware/shopware-cli/internal/tui/app"
 )
@@ -34,6 +36,9 @@ const (
 type Options struct {
 	ProjectRoot string
 	Executor    executor.Executor
+	// Context is the parent context for TUI-launched commands. It is marked
+	// with system.WithTUI so docker compose exec keeps -T.
+	Context context.Context
 }
 
 // Model is the wizard screen hosted by the app shell.
@@ -61,6 +66,8 @@ type Model struct {
 
 	run  runState
 	done doneState
+
+	ctx context.Context
 }
 
 type doneState struct {
@@ -76,6 +83,11 @@ func New(opts Options) *Model {
 	ti.EchoMode = textinput.EchoPassword
 	ti.Prompt = lipgloss.NewStyle().Foreground(tui.BrandColor).Render("> ")
 
+	ctx := opts.Context
+	if ctx == nil {
+		ctx = context.Background()
+	}
+
 	return &Model{
 		opts:       opts,
 		migrator:   migrate.NewPluginMigrator(opts.ProjectRoot, opts.Executor),
@@ -83,7 +95,16 @@ func New(opts Options) *Model {
 		panel:      panelWelcome,
 		welcomeYes: true,
 		tokenInput: ti,
+		ctx:        system.WithTUI(ctx),
 	}
+}
+
+func (m *Model) commandContext() context.Context {
+	if m != nil && m.ctx != nil {
+		return m.ctx
+	}
+
+	return system.WithTUI(context.Background())
 }
 
 // NewApp assembles the wizard inside the application shell.
