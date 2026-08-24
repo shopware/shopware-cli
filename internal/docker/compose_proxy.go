@@ -83,6 +83,7 @@ var ProxiedServiceLabels = map[string]string{
 	"mailer":     "Mailpit",
 	"lavinmq":    "Queue",
 	"opensearch": "Search",
+	"rustfs":     "S3 (RustFS)",
 }
 
 // hostname returns the full hostname for this route, e.g.

@@ -214,7 +214,7 @@ func buildCompose(hasAMQP, hasElasticsearch, hasRedisMessenger, hasK8sMeta bool,
 	needsRedis := hasRedisMessenger || hasK8sMeta
 
 	webEnv := baseWebEnv(px)
-	webEnv, webDependsOn := applyLockEnv(webEnv, hasAMQP, hasElasticsearch, hasRedisMessenger, hasK8sMeta, needsRedis)
+	webEnv, webDependsOn := applyLockEnv(webEnv, px, hasAMQP, hasElasticsearch, hasRedisMessenger, hasK8sMeta, needsRedis)
 	webEnv = applyProfilerEnv(webEnv, opts)
 
 	web := composeService{
@@ -381,12 +381,12 @@ func baseWebEnv(px *ProxyOptions) yamlMap[string] {
 	return webEnv
 }
 
-func applyLockEnv(webEnv yamlMap[string], hasAMQP, hasElasticsearch, hasRedisMessenger, hasK8sMeta, needsRedis bool) (yamlMap[string], yamlMap[composeDependency]) {
+func applyLockEnv(webEnv yamlMap[string], px *ProxyOptions, hasAMQP, hasElasticsearch, hasRedisMessenger, hasK8sMeta, needsRedis bool) (yamlMap[string], yamlMap[composeDependency]) {
 	// Redis messenger wins over AMQP when the Redis transport is in the lock
 	// (including via shopware/k8s-meta, which requires it).
 	switch {
 	case hasK8sMeta:
-		webEnv = applyK8sMetaEnv(webEnv)
+		webEnv = applyK8sMetaEnv(webEnv, px)
 	case hasRedisMessenger:
 		webEnv = webEnv.set("MESSENGER_TRANSPORT_DSN", redisMessengerDSN)
 	case hasAMQP:
@@ -462,7 +462,7 @@ func addOptionalServices(services *yamlMap[composeService], volumes *yamlMap[str
 		addRedisService(services, volumes)
 	}
 	if hasK8sMeta {
-		addRustFSServices(services, volumes)
+		addRustFSServices(services, volumes, px)
 	}
 
 	if opts != nil && opts.PHPProfiler == "blackfire" && opts.BlackfireServerID != "" && opts.BlackfireServerToken != "" {
@@ -484,12 +484,20 @@ func addOptionalServices(services *yamlMap[composeService], volumes *yamlMap[str
 // that shopware/k8s-meta's Flex recipe already reads. Compose environment
 // overrides the recipe's localhost / empty-bucket defaults so PHP talks to the
 // generated redis and rustfs services.
-func applyK8sMetaEnv(webEnv yamlMap[string]) yamlMap[string] {
+func applyK8sMetaEnv(webEnv yamlMap[string], px *ProxyOptions) yamlMap[string] {
+	// PHP talks to RustFS on the compose network. The browser loads public
+	// media from PUBLIC_URL: localhost in plain mode, the s3.<host> proxy
+	// route (HTTPS) when the shop itself is served through the local domain.
+	publicURL := "http://127.0.0.1:9000/shopware-public"
+	if px != nil {
+		publicURL = "https://" + px.hostname(proxyRoute{subdomain: rustfsS3Subdomain}) + "/shopware-public"
+	}
+
 	return webEnv.
 		set("K8S_FILESYSTEM_PRIVATE_BUCKET", "shopware-private").
 		set("K8S_FILESYSTEM_PUBLIC_BUCKET", "shopware-public").
 		set("K8S_FILESYSTEM_ENDPOINT", "http://rustfs:9000").
-		set("K8S_FILESYSTEM_PUBLIC_URL", "http://127.0.0.1:9000/shopware-public").
+		set("K8S_FILESYSTEM_PUBLIC_URL", publicURL).
 		set("K8S_FILESYSTEM_REGION", "us-east-1").
 		set("AWS_ACCESS_KEY_ID", rustfsAccessKey).
 		set("AWS_SECRET_ACCESS_KEY", rustfsSecretKey).
@@ -521,14 +529,20 @@ func addRedisService(services *yamlMap[composeService], volumes *yamlMap[struct{
 	*volumes = volumes.set("redis-data", struct{}{})
 }
 
+// rustfsS3Subdomain is the proxy hostname for the S3 API (PUBLIC_URL).
+// rustfsConsoleSubdomain is the proxy hostname for the RustFS console (TUI).
+const (
+	rustfsS3Subdomain      = "s3"
+	rustfsConsoleSubdomain = "rustfs"
+)
+
 // addRustFSServices appends RustFS and the one-shot bucket-init container that
-// a PaaS lock (shopware/k8s-meta) needs. RustFS keeps fixed host ports because
-// K8S_FILESYSTEM_PUBLIC_URL is baked into the PHP env and the browser loads
-// media from it — including in proxy mode.
-func addRustFSServices(services *yamlMap[composeService], volumes *yamlMap[struct{}]) {
+// a PaaS lock (shopware/k8s-meta) needs. In plain mode S3 (9000) and the
+// console (9001) are published on the host. In proxy mode they are routed at
+// s3.<host> and rustfs.<host> so media URLs stay HTTPS on the local domain.
+func addRustFSServices(services *yamlMap[composeService], volumes *yamlMap[struct{}], px *ProxyOptions) {
 	rustfs := composeService{
 		Image: "rustfs/rustfs:latest",
-		Ports: []string{"9000:9000", "9001:9001"},
 		Environment: yamlMap[string]{}.
 			set("RUSTFS_VOLUMES", "/data").
 			set("RUSTFS_ADDRESS", "0.0.0.0:9000").
@@ -546,6 +560,11 @@ func addRustFSServices(services *yamlMap[composeService], volumes *yamlMap[struc
 			Retries:       10,
 		},
 	}
+	publishOrRoute(&rustfs, px, "rustfs",
+		[]string{"9000:9000", "9001:9001"},
+		proxyRoute{subdomain: rustfsS3Subdomain, containerPort: 9000},
+		proxyRoute{subdomain: rustfsConsoleSubdomain, containerPort: 9001},
+	)
 
 	rustfsInit := composeService{
 		Image:      "minio/mc",

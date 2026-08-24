@@ -128,7 +128,7 @@ func TestGenerateComposeFileProxySkipsAbsentServices(t *testing.T) {
 	assert.NotContains(t, string(result), "rustfs")
 }
 
-func TestGenerateComposeFileProxyKeepsRustfsHostPorts(t *testing.T) {
+func TestGenerateComposeFileProxyRoutesRustfs(t *testing.T) {
 	t.Parallel()
 
 	lock := &composer.Lock{
@@ -143,14 +143,16 @@ func TestGenerateComposeFileProxyKeepsRustfsHostPorts(t *testing.T) {
 	require.NoError(t, err)
 	out := string(result)
 
-	// PUBLIC_URL is baked into env, so S3 and the console stay on fixed host
-	// ports even when the rest of the stack is proxied.
-	assert.Contains(t, out, "9000:9000")
-	assert.Contains(t, out, "9001:9001")
+	// S3 API and console are local-domain routes so media URLs stay HTTPS.
+	assert.Contains(t, out, "Host(`s3.my-shop.shopware.local`)")
+	assert.Contains(t, out, "Host(`rustfs.my-shop.shopware.local`)")
+	assert.Contains(t, out, "K8S_FILESYSTEM_PUBLIC_URL: https://s3.my-shop.shopware.local/shopware-public")
+	assert.Contains(t, out, "K8S_FILESYSTEM_ENDPOINT: http://rustfs:9000")
 	assert.Contains(t, out, "127.0.0.1::3306")
 	assert.NotContains(t, out, "127.0.0.1::6379")
-	assert.Contains(t, out, "K8S_FILESYSTEM_PUBLIC_URL: http://127.0.0.1:9000/shopware-public")
-	assert.NotContains(t, out, "Host(`rustfs.")
+	assert.NotContains(t, out, "9000:9000")
+	assert.NotContains(t, out, "9001:9001")
+	assert.NotContains(t, out, "http://127.0.0.1:9000/shopware-public")
 }
 
 func TestGenerateComposeFilePlainModeHasPorts(t *testing.T) {

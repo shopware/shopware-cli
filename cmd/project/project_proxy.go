@@ -239,12 +239,13 @@ func (e *proxyEnvironment) up(cmd *cobra.Command) error {
 // subdomains) for the WSL Windows hosts line, reading the optional AMQP and
 // Elasticsearch services from the project's composer.lock.
 func proxyBrowserHostnames(projectRoot, hostname string) []string {
-	hasAMQP, hasElasticsearch := false, false
+	hasAMQP, hasElasticsearch, hasK8sMeta := false, false, false
 	if lock, err := composer.ReadLock(filepath.Join(projectRoot, "composer.lock")); err == nil {
 		hasAMQP = lock.GetPackage("symfony/amqp-messenger") != nil
 		hasElasticsearch = lock.GetPackage("shopware/elasticsearch") != nil
+		hasK8sMeta = lock.GetPackage("shopware/k8s-meta") != nil
 	}
-	return proxy.ProxyHostnames(hostname, hasAMQP, hasElasticsearch)
+	return proxy.ProxyHostnames(hostname, hasAMQP, hasElasticsearch, hasK8sMeta)
 }
 
 // maybePrintWSLWindowsAccess prints the one-time Windows-side steps (import the

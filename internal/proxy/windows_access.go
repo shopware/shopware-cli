@@ -9,13 +9,16 @@ import (
 // the proxy: the root hostname plus every routed subdomain (matching the routes
 // in internal/docker/compose_override.go). It is used to build the Windows hosts
 // file line under WSL, where wildcards are not available.
-func ProxyHostnames(hostname string, hasAMQP, hasElasticsearch bool) []string {
+func ProxyHostnames(hostname string, hasAMQP, hasElasticsearch, hasK8sMeta bool) []string {
 	subdomains := []string{"", "admin-watch", "storefront-watch", "adminer", "mailer"}
 	if hasAMQP {
 		subdomains = append(subdomains, "lavinmq")
 	}
 	if hasElasticsearch {
 		subdomains = append(subdomains, "opensearch")
+	}
+	if hasK8sMeta {
+		subdomains = append(subdomains, "s3", "rustfs")
 	}
 
 	hosts := make([]string, 0, len(subdomains))
