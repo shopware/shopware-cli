@@ -4,8 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"path/filepath"
-	"regexp"
 	"sort"
 	"strings"
 
@@ -15,36 +13,10 @@ import (
 
 const (
 	VersionLatest = "latest"
-
-	// ProjectNameRule describes project names that can also be used as Docker
-	// Compose project names.
-	ProjectNameRule = "only lowercase letters, digits, dashes (-) and underscores (_) are allowed, and it must start with a lowercase letter or digit"
 )
 
-var projectNameRegexp = regexp.MustCompile(`^[a-z0-9][a-z0-9_-]*$`)
-
-// ValidateProjectName ensures the final path element can be used as a Docker
-// Compose project name. The special value "." is always allowed.
-func ValidateProjectName(name string) error {
-	if name == "." {
-		return nil
-	}
-
-	base := filepath.Base(name)
-	if !projectNameRegexp.MatchString(base) {
-		return fmt.Errorf("invalid project name %q: %s, so it can be used as a Docker Compose project name", base, ProjectNameRule)
-	}
-
-	return nil
-}
-
-// ValidateProjectFolder ensures the project name is valid and that an existing
-// target is an empty directory.
+// ValidateProjectFolder ensures that an existing target is an empty directory.
 func ValidateProjectFolder(projectFolder string) error {
-	if err := ValidateProjectName(projectFolder); err != nil {
-		return err
-	}
-
 	info, err := os.Stat(projectFolder)
 	if errors.Is(err, os.ErrNotExist) {
 		return nil

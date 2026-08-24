@@ -17,7 +17,7 @@ func TestGenerateComposeProjectName(t *testing.T) {
 	name, err := GenerateComposeProjectName("/tmp/my-shop")
 	require.NoError(t, err)
 	assert.Regexp(t, regexp.MustCompile(`^sw-my-shop-[0-9a-f]{6}$`), name)
-	assert.NoError(t, ValidateProjectName(name))
+	assert.Regexp(t, regexp.MustCompile(`^[a-z0-9][a-z0-9_-]*$`), name)
 
 	// Same basename must still differ (random suffix).
 	name2, err := GenerateComposeProjectName("/other/my-shop")
@@ -28,7 +28,19 @@ func TestGenerateComposeProjectName(t *testing.T) {
 	weird, err := GenerateComposeProjectName(filepath.Join(t.TempDir(), "My Shop!"))
 	require.NoError(t, err)
 	assert.Regexp(t, regexp.MustCompile(`^sw-my-shop-[0-9a-f]{6}$`), weird)
-	assert.NoError(t, ValidateProjectName(weird))
+	assert.Regexp(t, regexp.MustCompile(`^[a-z0-9][a-z0-9_-]*$`), weird)
+
+	// Regression: user-facing names with uppercase, spaces and umlauts are
+	// accepted and still yield a valid Compose project name.
+	fancy, err := GenerateComposeProjectName(filepath.Join(t.TempDir(), "München Shop"))
+	require.NoError(t, err)
+	assert.Regexp(t, regexp.MustCompile(`^sw-m-nchen-shop-[0-9a-f]{6}$`), fancy)
+
+	// camelCase folder names are lowercased into a valid Compose project name.
+	camel, err := GenerateComposeProjectName(filepath.Join(t.TempDir(), "myShopwareProject"))
+	require.NoError(t, err)
+	assert.Regexp(t, regexp.MustCompile(`^sw-myshopwareproject-[0-9a-f]{6}$`), camel)
+	assert.Regexp(t, regexp.MustCompile(`^[a-z0-9][a-z0-9_-]*$`), camel)
 }
 
 func TestEnvFileContent(t *testing.T) {
@@ -47,7 +59,7 @@ func TestEnvFileContent(t *testing.T) {
 		require.NoError(t, err)
 		assert.True(t, strings.HasPrefix(content, ComposeProjectNameEnvKey+"=sw-demo-shop-"))
 		assert.True(t, strings.HasSuffix(content, "\n"))
-		assert.NoError(t, ValidateProjectName(strings.TrimPrefix(strings.TrimSpace(content), ComposeProjectNameEnvKey+"=")))
+		assert.Regexp(t, regexp.MustCompile(`^[a-z0-9][a-z0-9_-]*$`), strings.TrimPrefix(strings.TrimSpace(content), ComposeProjectNameEnvKey+"="))
 	})
 }
 
