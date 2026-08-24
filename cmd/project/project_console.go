@@ -2,11 +2,14 @@ package project
 
 import (
 	"context"
+	"os"
 	"os/exec"
 	"slices"
 
+	"github.com/mattn/go-isatty"
 	"github.com/spf13/cobra"
 
+	"github.com/shopware/shopware-cli/internal/executor"
 	"github.com/shopware/shopware-cli/internal/extension"
 	"github.com/shopware/shopware-cli/internal/shop"
 )
@@ -92,13 +95,23 @@ var projectConsoleCmd = &cobra.Command{
 			return err
 		}
 
-		p := cmdExecutor.ConsoleCommand(cmd.Context(), args...)
+		p := cmdExecutor.ConsoleCommand(consoleCommandContext(cmd.Context()), args...)
 		p.Cmd.Stdin = cmd.InOrStdin()
 		p.Cmd.Stdout = cmd.OutOrStdout()
 		p.Cmd.Stderr = cmd.ErrOrStderr()
 
 		return p.Run()
 	},
+}
+
+// consoleCommandContext requests a compose TTY when the user is on an
+// interactive terminal so Symfony console keeps colors and prompts.
+func consoleCommandContext(ctx context.Context) context.Context {
+	if isatty.IsTerminal(os.Stdin.Fd()) && isatty.IsTerminal(os.Stdout.Fd()) {
+		return executor.WithTTY(ctx)
+	}
+
+	return ctx
 }
 
 func init() {
