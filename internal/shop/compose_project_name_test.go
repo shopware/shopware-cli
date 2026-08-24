@@ -35,6 +35,12 @@ func TestGenerateComposeProjectName(t *testing.T) {
 	fancy, err := GenerateComposeProjectName(filepath.Join(t.TempDir(), "München Shop"))
 	require.NoError(t, err)
 	assert.Regexp(t, regexp.MustCompile(`^sw-m-nchen-shop-[0-9a-f]{6}$`), fancy)
+
+	// camelCase folder names are lowercased into a valid Compose project name.
+	camel, err := GenerateComposeProjectName(filepath.Join(t.TempDir(), "myShopwareProject"))
+	require.NoError(t, err)
+	assert.Regexp(t, regexp.MustCompile(`^sw-myshopwareproject-[0-9a-f]{6}$`), camel)
+	assert.Regexp(t, regexp.MustCompile(`^[a-z0-9][a-z0-9_-]*$`), camel)
 }
 
 func TestEnvFileContent(t *testing.T) {

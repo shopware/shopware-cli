@@ -103,6 +103,13 @@ func TestValidateProjectFolder(t *testing.T) {
 		assert.NoError(t, ValidateProjectFolder(projectFolder))
 	})
 
+	t.Run("accepts a camelCase name", func(t *testing.T) {
+		t.Parallel()
+		projectFolder := filepath.Join(t.TempDir(), "myShopwareProject")
+		require.NoError(t, os.MkdirAll(projectFolder, 0o755))
+		assert.NoError(t, ValidateProjectFolder(projectFolder))
+	})
+
 	t.Run("rejects a non-empty folder", func(t *testing.T) {
 		t.Parallel()
 		projectFolder := filepath.Join(t.TempDir(), "shop")
