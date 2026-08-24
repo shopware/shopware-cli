@@ -3,10 +3,12 @@ package project
 import (
 	"context"
 	"fmt"
+	"os"
 	"os/exec"
 	"slices"
 	"strings"
 
+	"github.com/mattn/go-isatty"
 	"github.com/spf13/cobra"
 
 	"github.com/shopware/shopware-cli/internal/executor"
@@ -107,8 +109,10 @@ var projectConsoleCmd = &cobra.Command{
 			return err
 		}
 
+		ctx := consoleCommandContext(cmd.Context())
+
 		if isComposerProxy(args) {
-			return runExecutorProcess(cmd, cmdExecutor.ComposerCommand(cmd.Context(), args[1:]...))
+			return runExecutorProcess(cmd, cmdExecutor.ComposerCommand(ctx, args[1:]...))
 		}
 
 		scripts := composerScripts(projectRoot)
@@ -118,10 +122,10 @@ var projectConsoleCmd = &cobra.Command{
 				return fmt.Errorf("composer script %q not found", args[0])
 			}
 
-			return runExecutorProcess(cmd, cmdExecutor.ComposerCommand(cmd.Context(), composerScriptArgs(script.Name, args[1:])...))
+			return runExecutorProcess(cmd, cmdExecutor.ComposerCommand(ctx, composerScriptArgs(script.Name, args[1:])...))
 		}
 
-		p := cmdExecutor.ConsoleCommand(cmd.Context(), args...)
+		p := cmdExecutor.ConsoleCommand(ctx, args...)
 		if err := runExecutorProcess(cmd, p); err != nil {
 			return err
 		}
@@ -133,6 +137,16 @@ var projectConsoleCmd = &cobra.Command{
 
 		return nil
 	},
+}
+
+// consoleCommandContext requests a compose TTY when the user is on an
+// interactive terminal so Symfony console keeps colors and prompts.
+func consoleCommandContext(ctx context.Context) context.Context {
+	if isatty.IsTerminal(os.Stdin.Fd()) && isatty.IsTerminal(os.Stdout.Fd()) {
+		return executor.WithTTY(ctx)
+	}
+
+	return ctx
 }
 
 func init() {

@@ -2,8 +2,10 @@ package project
 
 import (
 	"encoding/json"
+	"os"
 	"testing"
 
+	"github.com/mattn/go-isatty"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -76,4 +78,16 @@ func TestCommandListCompletions(t *testing.T) {
 
 func TestFilterUsedCompletions(t *testing.T) {
 	assert.Equal(t, []string{"--no-dev"}, filterUsedCompletions([]string{"--no-dev", "--dry-run"}, []string{"install", "--dry-run"}))
+}
+
+func TestConsoleCommandContext(t *testing.T) {
+	ctx := t.Context()
+	got := consoleCommandContext(ctx)
+
+	if isatty.IsTerminal(os.Stdin.Fd()) && isatty.IsTerminal(os.Stdout.Fd()) {
+		assert.NotEqual(t, ctx, got)
+		return
+	}
+
+	assert.Equal(t, ctx, got)
 }

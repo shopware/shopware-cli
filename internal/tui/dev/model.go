@@ -308,7 +308,7 @@ func (m Model) updateContent(msg tea.Msg) (app.Content, tea.Cmd) {
 		// status and the setup-health checks it affects.
 		m.overview.domainsSetupDone = overviewSetupDone(m.projectRoot)
 		m.overview.healthLoading = true
-		return m, loadSetupHealth(m.projectRoot, m.executor)
+		return m, loadSetupHealth(context.Background(), m.projectRoot, m.executor)
 
 	case watcherStartedMsg, watcherRunningMsg, watcherProbeMsg, stopWatcherRequestMsg,
 		startStorefrontWatchRequestMsg, watcherStoppedMsg, logDoneMsg:

@@ -70,6 +70,19 @@ func adminAPIClient(ctx context.Context, cfg *shop.Config, envCfg *shop.Environm
 
 type allowBinCIKey struct{}
 
+type allocateTTYKey struct{}
+
+// WithTTY requests a TTY for docker compose exec (no -T). Use this for
+// interactive console usage so Symfony keeps ANSI colors and prompts.
+func WithTTY(ctx context.Context) context.Context {
+	return context.WithValue(ctx, allocateTTYKey{}, true)
+}
+
+func wantsTTY(ctx context.Context) bool {
+	v, ok := ctx.Value(allocateTTYKey{}).(bool)
+	return ok && v
+}
+
 func AllowBinCI(ctx context.Context) context.Context {
 	return context.WithValue(ctx, allowBinCIKey{}, true)
 }

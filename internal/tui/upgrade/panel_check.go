@@ -1,6 +1,7 @@
 package upgrade
 
 import (
+	"context"
 	"fmt"
 	"strings"
 
@@ -64,7 +65,7 @@ func (m *Model) updateCheck(msg tea.Msg) (app.Content, tea.Cmd) {
 	case checksDoneMsg:
 		m.check.loading = false
 		m.check.readiness = msg.readiness
-		return m, loadCatalogCmd(m.upgrader, msg.readiness)
+		return m, loadCatalogCmd(context.Background(), m.upgrader, msg.readiness)
 
 	case catalogLoadedMsg:
 		m.check.catalog = msg.catalog
@@ -124,7 +125,7 @@ func (m *Model) updateCheckKeys(msg tea.KeyPressMsg) (app.Content, tea.Cmd) {
 
 func (m *Model) recheck() (app.Content, tea.Cmd) {
 	m.check.loading = true
-	return m, runChecksCmd(m.upgrader)
+	return m, runChecksCmd(context.Background(), m.upgrader)
 }
 
 func (m *Model) openVersionPicker() (app.Content, tea.Cmd) {

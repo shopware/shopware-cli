@@ -36,7 +36,7 @@ var projectComposerCmd = &cobra.Command{
 			return err
 		}
 
-		return runExecutorProcess(cmd, cmdExecutor.ComposerCommand(cmd.Context(), args...))
+		return runExecutorProcess(cmd, cmdExecutor.ComposerCommand(consoleCommandContext(cmd.Context()), args...))
 	},
 }
 
