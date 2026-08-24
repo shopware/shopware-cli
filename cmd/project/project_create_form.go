@@ -152,9 +152,7 @@ func runCreateForm(cmd *cobra.Command, opts *createOptions, releases []repositor
 			formGroups = append(formGroups, huh.NewGroup(
 				huh.NewInput().
 					Title("Project Name").
-					DescriptionFunc(func() string {
-						return projectNameFieldDescription(opts.projectFolder)
-					}, &opts.projectFolder).
+					Description(projectNameHelp).
 					Placeholder("my-shopware-project (leave empty for current directory)").
 					Value(&opts.projectFolder).
 					Validate(func(s string) error {

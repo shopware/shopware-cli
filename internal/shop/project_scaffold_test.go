@@ -3,6 +3,7 @@ package shop
 import (
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -71,7 +72,7 @@ func TestShopwareProjectScaffold(t *testing.T) {
 		assert.True(t, strings.HasPrefix(envContent, ComposeProjectNameEnvKey+"=sw-demo-shop-"), "got %q", envContent)
 		assert.True(t, strings.HasSuffix(envContent, "\n"))
 		name := strings.TrimPrefix(strings.TrimSpace(envContent), ComposeProjectNameEnvKey+"=")
-		assert.NoError(t, ValidateProjectName(name))
+		assert.Regexp(t, regexp.MustCompile(`^[a-z0-9][a-z0-9_-]*$`), name)
 
 		// Two docker scaffolds with the same basename get different compose names.
 		projectFolder2 := filepath.Join(t.TempDir(), "demo-shop")
