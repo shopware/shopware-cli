@@ -56,7 +56,24 @@ func TestFormatComposerScriptsList(t *testing.T) {
 	assert.Contains(t, out, "Run PHPStan")
 }
 
-func TestComposerScriptCompletion(t *testing.T) {
-	assert.Equal(t, "ecs", composerScriptCompletion("ecs", ""))
-	assert.Equal(t, "phpstan\tRun PHPStan", composerScriptCompletion("phpstan", "Run PHPStan"))
+func TestCompletionWithDescription(t *testing.T) {
+	assert.Equal(t, "ecs", completionWithDescription("ecs", ""))
+	assert.Equal(t, "phpstan\tRun PHPStan", completionWithDescription("phpstan", "Run PHPStan"))
+}
+
+func TestCommandListCompletions(t *testing.T) {
+	var resp shop.ConsoleResponse
+	require.NoError(t, json.Unmarshal([]byte(`{
+		"commands": [
+			{"name": "install", "description": "Installs the project dependencies"},
+			{"name": "hidden:cmd", "hidden": true}
+		]
+	}`), &resp))
+
+	assert.Equal(t, []string{"install\tInstalls the project dependencies"}, commandListCompletions(&resp))
+	assert.Nil(t, commandListCompletions(nil))
+}
+
+func TestFilterUsedCompletions(t *testing.T) {
+	assert.Equal(t, []string{"--no-dev"}, filterUsedCompletions([]string{"--no-dev", "--dry-run"}, []string{"install", "--dry-run"}))
 }

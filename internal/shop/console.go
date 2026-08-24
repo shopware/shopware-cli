@@ -10,9 +10,10 @@ import (
 
 type ConsoleResponse struct {
 	Commands []struct {
-		Name       string `json:"name"`
-		Hidden     bool   `json:"hidden"`
-		Definition struct {
+		Name        string `json:"name"`
+		Description string `json:"description"`
+		Hidden      bool   `json:"hidden"`
+		Definition  struct {
 			Arguments interface{} `json:"arguments"`
 			Options   map[string]struct {
 				Shortcut string `json:"shortcut"`
@@ -47,12 +48,25 @@ func (c ConsoleResponse) GetCommandOptions(name string) []string {
 // ConsoleCommandFunc avoids a circular dependency between shop and executor packages.
 type ConsoleCommandFunc func(ctx context.Context, args ...string) *exec.Cmd
 
-func consoleCompletionCachePath(projectRoot string) string {
-	return path.Join(projectRoot, "var", "cache", "console_commands.json")
+const (
+	consoleCommandsCache  = "console_commands.json"
+	composerCommandsCache = "composer_commands.json"
+)
+
+func commandListCachePath(projectRoot, name string) string {
+	return path.Join(projectRoot, "var", "cache", name)
 }
 
 func ReadCachedConsoleCompletion(projectRoot string) (*ConsoleResponse, error) {
-	bytes, err := os.ReadFile(consoleCompletionCachePath(projectRoot))
+	return readCachedCommandList(projectRoot, consoleCommandsCache)
+}
+
+func ReadCachedComposerCompletion(projectRoot string) (*ConsoleResponse, error) {
+	return readCachedCommandList(projectRoot, composerCommandsCache)
+}
+
+func readCachedCommandList(projectRoot, cacheFile string) (*ConsoleResponse, error) {
+	bytes, err := os.ReadFile(commandListCachePath(projectRoot, cacheFile))
 	if err != nil {
 		return nil, err
 	}
@@ -66,11 +80,19 @@ func ReadCachedConsoleCompletion(projectRoot string) (*ConsoleResponse, error) {
 }
 
 func GetConsoleCompletion(ctx context.Context, projectRoot string, consoleCommand ConsoleCommandFunc) (*ConsoleResponse, error) {
-	if resp, err := ReadCachedConsoleCompletion(projectRoot); err == nil {
+	return getCommandList(ctx, projectRoot, consoleCommandsCache, consoleCommand)
+}
+
+func GetComposerCompletion(ctx context.Context, projectRoot string, composerCommand ConsoleCommandFunc) (*ConsoleResponse, error) {
+	return getCommandList(ctx, projectRoot, composerCommandsCache, composerCommand)
+}
+
+func getCommandList(ctx context.Context, projectRoot, cacheFile string, listCommand ConsoleCommandFunc) (*ConsoleResponse, error) {
+	if resp, err := readCachedCommandList(projectRoot, cacheFile); err == nil {
 		return resp, nil
 	}
 
-	cmd := consoleCommand(ctx, "list", "--format=json")
+	cmd := listCommand(ctx, "list", "--format=json")
 	cmd.Dir = projectRoot
 
 	commandJson, err := cmd.Output()
@@ -84,7 +106,7 @@ func GetConsoleCompletion(ctx context.Context, projectRoot string, consoleComman
 		return nil, err
 	}
 
-	if err := os.WriteFile(consoleCompletionCachePath(projectRoot), commandJson, 0o644); err != nil {
+	if err := os.WriteFile(commandListCachePath(projectRoot, cacheFile), commandJson, 0o644); err != nil {
 		return nil, err
 	}
 

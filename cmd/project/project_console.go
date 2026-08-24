@@ -49,30 +49,25 @@ var projectConsoleCmd = &cobra.Command{
 		completions := make([]string, 0)
 
 		if len(input) == 0 {
-			completions = append(completions, composerScriptCompletion("composer", "Run Composer"))
-
-			if parsedCommands != nil {
-				for _, command := range parsedCommands.Commands {
-					if !command.Hidden {
-						completions = append(completions, command.Name)
-					}
-				}
-			}
+			completions = append(completions, completionWithDescription("composer", "Run Composer"))
+			completions = append(completions, commandListCompletions(parsedCommands)...)
 
 			for _, script := range scripts {
 				if parsedCommands != nil && parsedCommands.HasCommand(script.Name) {
 					continue
 				}
 
-				completions = append(completions, composerScriptCompletion(script.Name, script.Description))
+				completions = append(completions, completionWithDescription(script.Name, script.Description))
 				for _, alias := range script.Aliases {
 					if parsedCommands != nil && parsedCommands.HasCommand(alias) {
 						continue
 					}
 
-					completions = append(completions, composerScriptCompletion(alias, script.Description))
+					completions = append(completions, completionWithDescription(alias, script.Description))
 				}
 			}
+		} else if isComposerProxy(input) {
+			return composerCommandCompletions(cmd, projectRoot, input[1:], cmdExecutor)
 		} else {
 			if parsedCommands != nil {
 				completions = parsedCommands.GetCommandOptions(input[0])
@@ -96,16 +91,7 @@ var projectConsoleCmd = &cobra.Command{
 				}
 			}
 
-			filtered := make([]string, 0)
-			for _, completion := range completions {
-				if slices.Contains(input, completion) {
-					continue
-				}
-
-				filtered = append(filtered, completion)
-			}
-
-			completions = filtered
+			completions = filterUsedCompletions(completions, input)
 		}
 
 		return completions, cobra.ShellCompDirectiveDefault
@@ -175,7 +161,7 @@ func composerScriptArgs(name string, extra []string) []string {
 	return append(args, extra...)
 }
 
-func composerScriptCompletion(name, description string) string {
+func completionWithDescription(name, description string) string {
 	if description == "" {
 		return name
 	}
@@ -225,6 +211,49 @@ func composerScripts(projectRoot string) []shop.ComposerScript {
 	}
 
 	return scripts
+}
+
+func composerCommandCompletions(cmd *cobra.Command, projectRoot string, input []string, cmdExecutor executor.Executor) ([]string, cobra.ShellCompDirective) {
+	parsedCommands, err := shop.GetComposerCompletion(cmd.Context(), projectRoot, func(ctx context.Context, args ...string) *exec.Cmd {
+		return cmdExecutor.ComposerCommand(ctx, args...).Cmd
+	})
+	if err != nil {
+		return nil, cobra.ShellCompDirectiveDefault
+	}
+
+	if len(input) == 0 {
+		return commandListCompletions(parsedCommands), cobra.ShellCompDirectiveDefault
+	}
+
+	return filterUsedCompletions(parsedCommands.GetCommandOptions(input[0]), input), cobra.ShellCompDirectiveDefault
+}
+
+func commandListCompletions(parsedCommands *shop.ConsoleResponse) []string {
+	if parsedCommands == nil {
+		return nil
+	}
+
+	completions := make([]string, 0, len(parsedCommands.Commands))
+	for _, command := range parsedCommands.Commands {
+		if !command.Hidden {
+			completions = append(completions, completionWithDescription(command.Name, command.Description))
+		}
+	}
+
+	return completions
+}
+
+func filterUsedCompletions(completions, input []string) []string {
+	filtered := make([]string, 0, len(completions))
+	for _, completion := range completions {
+		if slices.Contains(input, completion) {
+			continue
+		}
+
+		filtered = append(filtered, completion)
+	}
+
+	return filtered
 }
 
 func runExecutorProcess(cmd *cobra.Command, p *executor.Process) error {
