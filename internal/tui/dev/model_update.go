@@ -52,12 +52,12 @@ func (m Model) updateKeyPress(msg tea.KeyPressMsg) (app.Content, tea.Cmd) {
 		return m, nil
 	}
 
-	if m.phase == phaseInstalling {
+	if m.phase == phaseInstalling || m.phase == phaseInstallFailed {
 		switch tui.KeyString(msg) {
 		case "l":
 			m.installProg.showLogs = !m.installProg.showLogs
 		case "q", tui.KeyCtrlC:
-			if m.telemetry.installOnce() {
+			if m.phase == phaseInstalling && m.telemetry.installOnce() {
 				tags := m.telemetry.installTags(tracking.ResultCancelled, m.install)
 				tags[tracking.TagAbandonedAt] = "installing"
 				trackEventNow(tracking.EventDevInstall, tags)

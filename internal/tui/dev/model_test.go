@@ -158,6 +158,25 @@ func TestUpdateKeyPress_PhaseInstalling_QuitKey(t *testing.T) {
 	assert.True(t, isQuit)
 }
 
+func TestUpdateKeyPress_PhaseInstallFailed_QuitKey(t *testing.T) {
+	m := newTestModel()
+	m.phase = phaseInstallFailed
+
+	_, cmd := m.Update(keyRune('q'))
+	assert.NotNil(t, cmd)
+	_, isQuit := cmd().(tea.QuitMsg)
+	assert.True(t, isQuit)
+}
+
+func TestUpdateKeyPress_PhaseInstallFailed_LTogglesLogs(t *testing.T) {
+	m := newTestModel()
+	m.phase = phaseInstallFailed
+	m.installProg.showLogs = false
+
+	updated, _ := m.Update(keyRune('l'))
+	assert.True(t, updated.(Model).installProg.showLogs)
+}
+
 func TestUpdateKeyPress_PhaseTask_DoneTransitionsToDashboard(t *testing.T) {
 	m := newTestModel()
 	m.phase = phaseTask
@@ -507,7 +526,7 @@ func TestMergeLocalProfilerSecrets_EmptySrcValuesDoNotOverwriteDst(t *testing.T)
 
 func TestView_DoesNotPanicForEachPhase(t *testing.T) {
 	ctx := app.Context{Width: 120, Height: 40, MainHeight: 36}
-	phases := []phase{phaseDashboard, phaseStarting, phaseStopping, phaseInstallPrompt, phaseInstalling, phaseTask, phaseMigrationWizard}
+	phases := []phase{phaseDashboard, phaseStarting, phaseStopping, phaseInstallPrompt, phaseInstalling, phaseInstallFailed, phaseTask, phaseMigrationWizard}
 	for _, p := range phases {
 		m := newTestModel()
 		m.width = 120
@@ -530,6 +549,46 @@ func TestView_DoesNotPanicForEachPhase(t *testing.T) {
 			_ = m.chromeFooter(ctx)
 		}, "phase %d", p)
 	}
+}
+
+func TestView_InstallFailedShowsClassifiedMessage(t *testing.T) {
+	m := newTestModel()
+	m.phase = phaseInstallFailed
+	m.installProg.failure = &installFailure{
+		category:    installFailureDatabaseConnection,
+		failingStep: "system:install",
+		detail:      "SQLSTATE[HY000] [2002] Connection refused",
+	}
+
+	card := m.renderInstallFailed()
+	assert.Contains(t, card, "Installation failed")
+	assert.Contains(t, card, "Database connection failed")
+	assert.Contains(t, card, "Installing Shopware")
+	assert.Contains(t, card, "to see full logs")
+	// The raw error belongs in the log view, not in the summary card.
+	assert.NotContains(t, card, "SQLSTATE")
+
+	assert.Contains(t, m.View(app.Context{Width: 120, Height: 40, MainHeight: 36}), "Installation failed")
+}
+
+func TestView_InstallFailedWithoutClassificationFallsBack(t *testing.T) {
+	m := newTestModel()
+	m.phase = phaseInstallFailed
+
+	card := m.renderInstallFailed()
+	assert.Contains(t, card, "Unknown error")
+	assert.Contains(t, card, "Starting installation")
+}
+
+func TestView_InstallFailedToggledLogsShowOverlay(t *testing.T) {
+	m := newTestModel()
+	m.phase = phaseInstallFailed
+	m.installProg.showLogs = true
+	m.overlayLines = []string{"Start: system:install", "SQLSTATE boom"}
+
+	view := m.View(app.Context{Width: 120, Height: 40, MainHeight: 36})
+	assert.Contains(t, view, "SQLSTATE boom")
+	assert.NotContains(t, view, "Error occured")
 }
 
 func TestView_ZeroSizeDoesNotPanic(t *testing.T) {
@@ -656,6 +715,7 @@ func TestView_WindowTitlePerPhase(t *testing.T) {
 		{phaseStopping, "[project] · Stopping"},
 		{phaseInstallPrompt, "[project] · Install"},
 		{phaseInstalling, "[project] · Installing..."},
+		{phaseInstallFailed, "[project] · Install failed"},
 		{phaseMigrationWizard, "[project] · Setup"},
 	}
 

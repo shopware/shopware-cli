@@ -190,7 +190,7 @@ func TestUpdateLifecycle_ShopwareInstallDone_Success(t *testing.T) {
 	assert.NotNil(t, cmd, "should kick off dashboard")
 }
 
-func TestUpdateLifecycle_ShopwareInstallDone_ErrorShowsLogs(t *testing.T) {
+func TestUpdateLifecycle_ShopwareInstallDone_ErrorShowsFailedPhase(t *testing.T) {
 	m := Model{
 		phase:       phaseInstalling,
 		projectRoot: t.TempDir(),
@@ -200,22 +200,18 @@ func TestUpdateLifecycle_ShopwareInstallDone_ErrorShowsLogs(t *testing.T) {
 		install: installWizard{
 			CredentialStep: tui.NewCredentialStep(tui.CredentialStepOptions{}),
 		},
-		installProg: installProgress{progress: newInstallProgress()},
+		installProg:  installProgress{progress: newInstallProgress()},
+		overlayLines: []string{"Start: system:install", "boom"},
 	}
 
 	wantErr := errors.New("migration failed")
 	updated, cmd := m.updateLifecycle(shopwareInstallDoneMsg{err: wantErr})
 	final := updated.(Model)
 
-	// Stays on installing so the operator can read logs.
-	assert.Equal(t, phaseInstalling, final.phase)
-	assert.True(t, final.installProg.showLogs)
+	assert.Equal(t, phaseInstallFailed, final.phase)
+	assert.NotNil(t, final.installProg.failure)
 	assert.Nil(t, cmd)
-
-	joined := strings.Join(final.overlayLines, "\n")
-	assert.Contains(t, joined, "Installation failed:")
-	assert.Contains(t, joined, "migration failed")
-	assert.Contains(t, joined, "Press q to exit")
+	assert.Equal(t, []string{"Start: system:install", "boom"}, final.overlayLines)
 
 	// envConfig should NOT be mutated on error.
 	assert.Nil(t, final.envConfig.AdminApi)

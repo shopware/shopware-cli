@@ -85,9 +85,7 @@ func (m Model) updateLifecycle(msg tea.Msg) (app.Content, tea.Cmd) {
 				tags[tracking.TagFailedStep] = failure.failingStep
 				trackEvent(tracking.EventDevInstall, tags)
 			}
-			m.installProg.showLogs = true
-			m.overlayLines = append(m.overlayLines, "", errorStyle.Render("Installation failed: "+msg.err.Error()))
-			m.overlayLines = append(m.overlayLines, "", helpStyle.Render("Press q to exit"))
+			m.phase = phaseInstallFailed
 			return m, nil
 		}
 		m.installProg.done = true

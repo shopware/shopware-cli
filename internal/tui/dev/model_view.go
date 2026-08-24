@@ -27,6 +27,8 @@ func (m Model) windowTitle() string {
 		return dir + "Install"
 	case phaseInstalling:
 		return dir + "Installing..."
+	case phaseInstallFailed:
+		return dir + "Install failed"
 	case phaseTask:
 		return ""
 	case phaseMigrationWizard:
@@ -55,7 +57,7 @@ func (m Model) chromeFooter(ctx app.Context) string {
 
 func (m Model) phaseFooterHint() string {
 	switch m.phase {
-	case phaseStarting, phaseStopping, phaseInstalling:
+	case phaseStarting, phaseStopping, phaseInstalling, phaseInstallFailed:
 		return tui.ShortcutBadge("l", "Toggle logs")
 	case phaseInstallPrompt:
 		return m.installFooterHint()
@@ -77,7 +79,7 @@ func (m Model) View(ctx app.Context) string {
 	switch m.phase {
 	case phaseDashboard:
 		return m.renderDashboard(ctx)
-	case phaseStarting, phaseStopping, phaseInstallPrompt, phaseInstalling:
+	case phaseStarting, phaseStopping, phaseInstallPrompt, phaseInstalling, phaseInstallFailed:
 		return m.renderPhase(ctx)
 	case phaseTask:
 		return m.renderTask(ctx)
@@ -200,11 +202,41 @@ func (m Model) renderPhase(ctx app.Context) string {
 		}
 		card.WriteString(tui.NewStepList(tui.StepListOptions{Steps: items}).Render())
 		content.WriteString(tui.RenderPhaseCard(strings.TrimRight(card.String(), "\n")))
+	case phaseInstallFailed:
+		if m.installProg.showLogs {
+			return m.renderDockerLogs("Installation failed", ctx.Width, ctx.MainHeight)
+		}
+		content.WriteString(tui.RenderPhaseCard(m.renderInstallFailed()))
 	case phaseDashboard, phaseTask, phaseMigrationWizard:
 		// Rendered by the outer View() dispatch, not here.
 	}
 
 	return renderPhaseBox(content.String(), ctx.Width, ctx.MainHeight)
+}
+
+// renderInstallFailed renders the failed-install card: a headline, the
+// classified reason and step, and the pointer to the log view. The raw error
+// text is deliberately left out — it is one unwrapped line that would push the
+// card out of shape, and the log view shows it in context anyway.
+func (m Model) renderInstallFailed() string {
+	failure := installFailure{category: installFailureUnknown, failingStep: installStartStep}
+	if m.installProg.failure != nil {
+		failure = *m.installProg.failure
+	}
+
+	var b strings.Builder
+	b.WriteString(headlineErrorStyle.Render("Installation failed"))
+	b.WriteString("\n")
+	b.WriteString(tui.DimStyle.Render("The installation process was canceled."))
+	b.WriteString("\n\n")
+	b.WriteString(tui.KVRow("Failed step:", valueStyle.Render(installFailureStepLabel(failure.failingStep))))
+	b.WriteString(tui.KVRow("Reason:", valueStyle.Render(failure.category.label())))
+	b.WriteString("\n")
+	b.WriteString(tui.DimStyle.Render("Press "))
+	b.WriteString(keyCapStyle.Render("l"))
+	b.WriteString(tui.DimStyle.Render(" to see full logs"))
+
+	return b.String()
 }
 
 // renderPhaseBox renders content centered inside the rounded main-region box.

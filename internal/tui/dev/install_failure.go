@@ -156,7 +156,6 @@ func installFailurePatterns(patterns ...string) []*regexp.Regexp {
 
 const installStartStep = "install_start"
 
-
 // matchesInstallFailureRule returns true if the given value matches any of the
 // regular expressions in the given list of patterns.
 func matchesInstallFailureRule(value string, patterns []*regexp.Regexp) bool {
@@ -238,4 +237,47 @@ func installFailureDetail(output []string, processErr error) string {
 		return processErr.Error()
 	}
 	return "deployment helper failed without diagnostic output"
+}
+
+// label returns a human-readable description of the category for the failure
+// screen. The raw category values stay reserved for telemetry tags.
+func (c installFailureCategory) label() string {
+	switch c {
+	case installFailureDiskSpace:
+		return "Not enough disk space"
+	case installFailurePHP:
+		return "PHP error"
+	case installFailureEnvironmentConfig:
+		return "Incomplete environment configuration"
+	case installFailureDatabaseVersion:
+		return "Unsupported database version"
+	case installFailureDatabaseConnection:
+		return "Database connection failed"
+	case installFailureMigration:
+		return "Database migration failed"
+	case installFailureAlreadyExists:
+		return "Shopware is already installed"
+	case installFailurePermission:
+		return "Missing file permissions"
+	case installFailureInvalidInput:
+		return "Invalid input"
+	case installFailureMissingPrerequisite:
+		return "Missing prerequisite"
+	case installFailureThemeCompile:
+		return "Theme compilation failed"
+	case installFailureTransport:
+		return "Message transport setup failed"
+	}
+	return "Unknown error"
+}
+
+// installFailureStepLabel maps a failing step back to the label shown in the
+// install progress list, so both screens name the same step identically.
+func installFailureStepLabel(step string) string {
+	for _, sp := range installStepPatterns {
+		if sp.pattern == step {
+			return sp.label
+		}
+	}
+	return "Starting installation"
 }

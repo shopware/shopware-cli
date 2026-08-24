@@ -44,6 +44,7 @@ const (
 	phaseStopping
 	phaseInstallPrompt
 	phaseInstalling
+	phaseInstallFailed
 	phaseTask
 	phaseMigrationWizard
 )
