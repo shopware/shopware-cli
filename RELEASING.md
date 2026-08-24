@@ -25,6 +25,18 @@ The tag push triggers the `Release` workflow. It runs GoReleaser, which creates
 the GitHub release and publishes the configured artifacts and package updates.
 Watch the workflow to completion and verify the resulting GitHub release.
 
+## Verify attestations
+
+The release workflow publishes GitHub attestations for the files listed in
+`dist/checksums.txt` and the Docker images listed in `dist/digests.txt`.
+
+After a successful release, verify a downloaded archive or a published image:
+
+```sh
+gh attestation verify --owner shopware shopware-cli_Linux_x86_64.tar.gz
+gh attestation verify --owner shopware oci://ghcr.io/shopware/shopware-cli:latest
+```
+
 ## If a release fails
 
 Investigate and fix the workflow failure before retrying. Do not move or reuse
