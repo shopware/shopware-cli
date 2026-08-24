@@ -76,7 +76,7 @@ func composeServiceSet(projectRoot string, args ...string) map[string]struct{} {
 func (m *Model) checkShopwareInstalled() tea.Cmd {
 	exec := m.executor
 	return func() tea.Msg {
-		if err := exec.ConsoleCommand(m.commandContext(), "system:is-installed").Run(); err != nil {
+		if err := exec.ConsoleCommand(context.Background(), "system:is-installed").Run(); err != nil {
 			return shopwareNotInstalledMsg{}
 		}
 		return shopwareInstalledMsg{}
@@ -100,7 +100,7 @@ func (m *Model) runShopwareInstall() tea.Cmd {
 			"INSTALL_ADMIN_USERNAME": username,
 			"INSTALL_ADMIN_PASSWORD": password,
 		})
-		p := withEnv.PHPCommand(m.commandContext(), "vendor/bin/shopware-deployment-helper", "run")
+		p := withEnv.PHPCommand(context.Background(), "vendor/bin/shopware-deployment-helper", "run")
 
 		err := tui.StreamCmdOutput(p.Cmd, ch, true)
 		return shopwareInstallDoneMsg{err: err}

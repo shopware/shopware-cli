@@ -4,24 +4,15 @@ import (
 	"context"
 	"fmt"
 	"net"
-	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
 	"syscall"
 
-	"github.com/mattn/go-isatty"
-
 	adminSdk "github.com/shopware/shopware-cli/internal/admin-api"
 	"github.com/shopware/shopware-cli/internal/shop"
 	"github.com/shopware/shopware-cli/internal/system"
 )
-
-// hostStdinStdoutAreTerminals reports whether the current process is attached
-// to a terminal on both stdin and stdout. Overridden in tests.
-var hostStdinStdoutAreTerminals = func() bool {
-	return isatty.IsTerminal(os.Stdin.Fd()) && isatty.IsTerminal(os.Stdout.Fd())
-}
 
 type DockerExecutor struct {
 	env         map[string]string
@@ -312,11 +303,9 @@ func (d *DockerExecutor) EnvironmentStatus(ctx context.Context) (bool, error) {
 func (d *DockerExecutor) baseArgs(ctx context.Context) []string {
 	args := d.composeArgs("exec")
 
-	// Allocate a TTY for interactive terminals so Symfony console keeps ANSI
-	// colors and prompts. Keep -T when stdin/stdout is not a terminal (CI,
-	// pipes) or when the command was launched from a TUI (project dev, etc.)
-	// — compose exec would otherwise steal the TTY from the TUI.
-	if system.IsTUI(ctx) || !hostStdinStdoutAreTerminals() {
+	// Keep -T unless the caller opted into a TTY via WithTTY (interactive
+	// project console). TUI, CI, and piped usage stay non-interactive.
+	if !wantsTTY(ctx) {
 		args = append(args, "-T")
 	}
 

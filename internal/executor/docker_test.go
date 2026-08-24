@@ -12,8 +12,6 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-
-	"github.com/shopware/shopware-cli/internal/system"
 )
 
 // writeRecordingDocker installs a docker stub on PATH that records every
@@ -52,33 +50,8 @@ func recordedArgs(t *testing.T, argsFile string) []string {
 	return args
 }
 
-func stubHostTerminals(t *testing.T, interactive bool) {
-	t.Helper()
-
-	orig := hostStdinStdoutAreTerminals
-	hostStdinStdoutAreTerminals = func() bool { return interactive }
-	t.Cleanup(func() { hostStdinStdoutAreTerminals = orig })
-}
-
-func TestDockerExecutorOmitsTWhenInteractive(t *testing.T) {
-	stubHostTerminals(t, true)
-
-	exec := &DockerExecutor{projectRoot: "/project"}
-
-	for _, p := range []*Process{
-		exec.ConsoleCommand(t.Context(), "cache:clear"),
-		exec.ComposerCommand(t.Context(), "install"),
-		exec.PHPCommand(t.Context(), "-v"),
-		exec.NPMCommand(t.Context(), "run", "dev"),
-	} {
-		assert.NotContains(t, p.Cmd.Args, "-T", "interactive compose exec must allocate a TTY: %v", p.Cmd.Args)
-	}
-}
-
-func TestDockerExecutorPassesTWhenTUIContext(t *testing.T) {
-	stubHostTerminals(t, true)
-
-	ctx, cancel := context.WithCancel(system.WithTUI(t.Context()))
+func TestDockerExecutorOmitsTWhenTTYRequested(t *testing.T) {
+	ctx, cancel := context.WithCancel(WithTTY(t.Context()))
 	t.Cleanup(cancel)
 	exec := &DockerExecutor{projectRoot: "/project"}
 
@@ -88,13 +61,11 @@ func TestDockerExecutorPassesTWhenTUIContext(t *testing.T) {
 		exec.PHPCommand(ctx, "-v"),
 		exec.NPMCommand(ctx, "run", "dev"),
 	} {
-		assert.Contains(t, p.Cmd.Args, "-T", "TUI-launched compose exec must keep -T: %v", p.Cmd.Args)
+		assert.NotContains(t, p.Cmd.Args, "-T", "WithTTY compose exec must allocate a TTY: %v", p.Cmd.Args)
 	}
 }
 
-func TestDockerExecutorPassesTWhenNonInteractive(t *testing.T) {
-	stubHostTerminals(t, false)
-
+func TestDockerExecutorPassesTByDefault(t *testing.T) {
 	exec := &DockerExecutor{projectRoot: "/project"}
 
 	for _, p := range []*Process{
@@ -103,7 +74,7 @@ func TestDockerExecutorPassesTWhenNonInteractive(t *testing.T) {
 		exec.PHPCommand(t.Context(), "-v"),
 		exec.NPMCommand(t.Context(), "run", "dev"),
 	} {
-		assert.Contains(t, p.Cmd.Args, "-T", "non-interactive compose exec must disable TTY: %v", p.Cmd.Args)
+		assert.Contains(t, p.Cmd.Args, "-T", "compose exec must disable TTY unless WithTTY: %v", p.Cmd.Args)
 	}
 }
 

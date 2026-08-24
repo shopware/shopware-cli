@@ -1,6 +1,7 @@
 package upgrade
 
 import (
+	"context"
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
@@ -44,7 +45,7 @@ func (m *Model) beginChecks() (app.Content, tea.Cmd) {
 	m.panel = panelCheck
 	m.check = newCheckState()
 	m.check.loading = true
-	return m, runChecksCmd(m.commandContext(), m.upgrader)
+	return m, runChecksCmd(context.Background(), m.upgrader)
 }
 
 func (m *Model) viewIntro() (title, status, body string) {

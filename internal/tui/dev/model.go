@@ -14,7 +14,6 @@ import (
 	"github.com/shopware/shopware-cli/internal/envfile"
 	"github.com/shopware/shopware-cli/internal/executor"
 	"github.com/shopware/shopware-cli/internal/shop"
-	"github.com/shopware/shopware-cli/internal/system"
 	"github.com/shopware/shopware-cli/internal/tracking"
 	"github.com/shopware/shopware-cli/internal/tui"
 	"github.com/shopware/shopware-cli/internal/tui/app"
@@ -123,12 +122,6 @@ func New(opts Options) Model {
 	}
 	m.rebuildTabs()
 	return m
-}
-
-// commandContext is the parent context for executor commands launched from
-// this TUI. It is marked with system.WithTUI so docker compose exec keeps -T.
-func (m Model) commandContext() context.Context {
-	return system.TUIContext()
 }
 
 // rebuildTabs (re)creates the three tab models from the model's current
@@ -315,7 +308,7 @@ func (m Model) updateContent(msg tea.Msg) (app.Content, tea.Cmd) {
 		// status and the setup-health checks it affects.
 		m.overview.domainsSetupDone = overviewSetupDone(m.projectRoot)
 		m.overview.healthLoading = true
-		return m, loadSetupHealth(m.commandContext(), m.projectRoot, m.executor)
+		return m, loadSetupHealth(context.Background(), m.projectRoot, m.executor)
 
 	case watcherStartedMsg, watcherRunningMsg, watcherProbeMsg, stopWatcherRequestMsg,
 		startStorefrontWatchRequestMsg, watcherStoppedMsg, logDoneMsg:

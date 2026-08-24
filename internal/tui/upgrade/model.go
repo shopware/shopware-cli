@@ -7,13 +7,10 @@
 package upgrade
 
 import (
-	"context"
-
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/shopware/shopware-cli/internal/executor"
 	backend "github.com/shopware/shopware-cli/internal/shop/upgrade"
-	"github.com/shopware/shopware-cli/internal/system"
 	"github.com/shopware/shopware-cli/internal/tui"
 	"github.com/shopware/shopware-cli/internal/tui/app"
 )
@@ -70,10 +67,6 @@ func New(opts Options) *Model {
 		intro:    newIntroState(),
 		check:    newCheckState(),
 	}
-}
-
-func (m *Model) commandContext() context.Context {
-	return system.TUIContext()
 }
 
 // NewApp assembles the wizard inside the application shell: wizard header as

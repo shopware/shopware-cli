@@ -8,7 +8,6 @@
 package pluginmigrate
 
 import (
-	"context"
 	"path/filepath"
 
 	"charm.land/bubbles/v2/textinput"
@@ -17,7 +16,6 @@ import (
 
 	"github.com/shopware/shopware-cli/internal/executor"
 	migrate "github.com/shopware/shopware-cli/internal/shop/pluginmigrate"
-	"github.com/shopware/shopware-cli/internal/system"
 	"github.com/shopware/shopware-cli/internal/tui"
 	"github.com/shopware/shopware-cli/internal/tui/app"
 )
@@ -86,10 +84,6 @@ func New(opts Options) *Model {
 		welcomeYes: true,
 		tokenInput: ti,
 	}
-}
-
-func (m *Model) commandContext() context.Context {
-	return system.TUIContext()
 }
 
 // NewApp assembles the wizard inside the application shell.

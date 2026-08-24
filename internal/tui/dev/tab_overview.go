@@ -386,7 +386,7 @@ func (m OverviewModel) Init() tea.Cmd {
 	cmds := []tea.Cmd{
 		discoverServices(m.projectRoot),
 		loadShopwareVersion(m.projectRoot),
-		loadSetupHealth(system.TUIContext(), m.projectRoot, m.executor),
+		loadSetupHealth(context.Background(), m.projectRoot, m.executor),
 	}
 	if m.proxyHost != "" {
 		cmds = append(cmds, loadInstances())
@@ -1001,7 +1001,7 @@ func (m OverviewModel) startAdminWatch() tea.Cmd {
 	projectRoot := m.projectRoot
 	shopCfg := m.shopCfg
 
-	return startWatcher(watcherAdmin, system.TUIContext(), func(ctx context.Context, out io.Writer) (*executor.Process, error) {
+	return startWatcher(watcherAdmin, context.Background(), func(ctx context.Context, out io.Writer) (*executor.Process, error) {
 		logStep(out, "Preparing plugins.json...")
 		if err := extension.WriteProjectPluginJson(ctx, projectRoot, shopCfg, e); err != nil {
 			return nil, fmt.Errorf("preparing plugins.json: %w", err)
@@ -1027,7 +1027,7 @@ func (m OverviewModel) startStorefrontWatch(opts extension.StorefrontWatcherOpti
 		opts.ProxyHostname = "storefront-watch." + host
 	}
 
-	return startWatcher(watcherStorefront, system.TUIContext(), func(ctx context.Context, out io.Writer) (*executor.Process, error) {
+	return startWatcher(watcherStorefront, context.Background(), func(ctx context.Context, out io.Writer) (*executor.Process, error) {
 		logStep(out, "Preparing plugins.json...")
 		if err := extension.WriteProjectPluginJson(ctx, projectRoot, shopCfg, e); err != nil {
 			return nil, fmt.Errorf("preparing plugins.json: %w", err)

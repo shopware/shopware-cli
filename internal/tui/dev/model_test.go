@@ -11,7 +11,6 @@ import (
 
 	"github.com/shopware/shopware-cli/internal/executor"
 	"github.com/shopware/shopware-cli/internal/shop"
-	"github.com/shopware/shopware-cli/internal/system"
 	"github.com/shopware/shopware-cli/internal/tui"
 	"github.com/shopware/shopware-cli/internal/tui/app"
 	"github.com/shopware/shopware-cli/internal/tui/picker"
@@ -78,7 +77,6 @@ func TestNew_InitializesFields(t *testing.T) {
 	assert.NotNil(t, m.watchers)
 	assert.Empty(t, m.watchers)
 	assert.Equal(t, phaseDashboard, m.phase)
-	assert.True(t, system.IsTUI(m.commandContext()))
 }
 
 func TestNewMigrationWizard_StartsInMigrationWizardPhase(t *testing.T) {
