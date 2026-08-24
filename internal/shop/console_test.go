@@ -1,8 +1,10 @@
 package shop
 
 import (
+	"context"
 	"encoding/json"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"testing"
 
@@ -56,6 +58,22 @@ func TestReadCachedComposerCompletion(t *testing.T) {
 		assert.Equal(t, "install", resp.Commands[0].Name)
 		assert.Equal(t, "Installs the project dependencies", resp.Commands[0].Description)
 	})
+}
+
+func TestGetConsoleCompletionLoadsWhenCacheMissing(t *testing.T) {
+	dir := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, "var", "cache"), 0o755))
+
+	resp, err := GetConsoleCompletion(t.Context(), dir, func(ctx context.Context, args ...string) *exec.Cmd {
+		assert.Equal(t, []string{"list", "--format=json"}, args)
+		return exec.CommandContext(ctx, "printf", "%s", `{"commands":[{"name":"cache:clear"}]}`)
+	})
+	require.NoError(t, err)
+	assert.True(t, resp.HasCommand("cache:clear"))
+
+	cached, err := ReadCachedConsoleCompletion(dir)
+	require.NoError(t, err)
+	assert.True(t, cached.HasCommand("cache:clear"))
 }
 
 func writeCommandCache(t *testing.T, name, contents string) string {

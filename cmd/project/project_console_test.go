@@ -16,6 +16,7 @@ func TestShouldRunComposerScript(t *testing.T) {
 	scripts := []shop.ComposerScript{
 		{Name: "phpstan", Aliases: []string{"stan"}},
 		{Name: "list"},
+		{Name: "cache:clear"},
 	}
 
 	var console shop.ConsoleResponse

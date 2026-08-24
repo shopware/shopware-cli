@@ -97,6 +97,8 @@ Before running an unfamiliar or state-changing Symfony command:
 shopware-cli project console <command> --help
 ```
 
+Discover Composer scripts from the project `composer.json` or `shopware-cli project console list`. Do not pass `--help` to a Composer script to inspect it; that argument is forwarded to the script and can still run it.
+
 Know which environment will be affected before proceeding.
 
 ### Remote changes

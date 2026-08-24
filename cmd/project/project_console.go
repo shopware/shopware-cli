@@ -116,7 +116,7 @@ var projectConsoleCmd = &cobra.Command{
 		}
 
 		scripts := composerScripts(projectRoot)
-		if shouldRunComposerScript(args[0], cachedConsoleCommands(projectRoot), scripts) {
+		if shouldRunComposerScript(args[0], loadConsoleCommands(cmd.Context(), projectRoot, cmdExecutor), scripts) {
 			script, ok := shop.FindComposerScript(scripts, args[0])
 			if !ok {
 				return fmt.Errorf("composer script %q not found", args[0])
@@ -209,8 +209,10 @@ func formatComposerScriptsList(scripts []shop.ComposerScript) string {
 	return b.String()
 }
 
-func cachedConsoleCommands(projectRoot string) *shop.ConsoleResponse {
-	resp, err := shop.ReadCachedConsoleCompletion(projectRoot)
+func loadConsoleCommands(ctx context.Context, projectRoot string, cmdExecutor executor.Executor) *shop.ConsoleResponse {
+	resp, err := shop.GetConsoleCompletion(ctx, projectRoot, func(ctx context.Context, args ...string) *exec.Cmd {
+		return cmdExecutor.ConsoleCommand(ctx, args...).Cmd
+	})
 	if err != nil {
 		return nil
 	}
