@@ -11,8 +11,8 @@ func TestWithTUI(t *testing.T) {
 	parent := t.Context()
 
 	assert.False(t, IsTUI(parent))
-	assert.False(t, IsTUI(nil))
 	assert.False(t, IsTUI(context.Background()))
+	assert.True(t, IsTUI(TUIContext()))
 
 	ctx := WithTUI(parent)
 	assert.True(t, IsTUI(ctx))

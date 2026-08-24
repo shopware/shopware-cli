@@ -65,9 +65,6 @@ const setupHealthTimeout = 15 * time.Second
 
 func loadSetupHealth(parent context.Context, projectRoot string, exec executor.Executor) tea.Cmd {
 	return func() tea.Msg {
-		if parent == nil {
-			parent = context.Background()
-		}
 		ctx, cancel := context.WithTimeout(parent, setupHealthTimeout)
 		defer cancel()
 		return setupHealthLoadedMsg{checks: collectSetupHealth(ctx, projectRoot, exec)}

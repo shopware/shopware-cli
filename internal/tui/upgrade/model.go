@@ -35,9 +35,6 @@ type Options struct {
 	// EnvName is the label shown in the header, e.g. "local".
 	EnvName  string
 	Executor executor.Executor
-	// Context is the parent context for TUI-launched commands. It is marked
-	// with system.WithTUI so docker compose exec keeps -T.
-	Context context.Context
 }
 
 // Model is the wizard screen hosted by the app shell.
@@ -61,17 +58,10 @@ type Model struct {
 
 	// prepareGen counts preparation runs; see prepareState.gen.
 	prepareGen int
-
-	ctx context.Context
 }
 
 // New creates the wizard model starting at the intro panel.
 func New(opts Options) *Model {
-	ctx := opts.Context
-	if ctx == nil {
-		ctx = context.Background()
-	}
-
 	return &Model{
 		opts:     opts,
 		upgrader: backend.NewProjectUpgrader(opts.ProjectRoot, opts.Executor),
@@ -79,16 +69,11 @@ func New(opts Options) *Model {
 		panel:    panelIntro,
 		intro:    newIntroState(),
 		check:    newCheckState(),
-		ctx:      system.WithTUI(ctx),
 	}
 }
 
 func (m *Model) commandContext() context.Context {
-	if m != nil && m.ctx != nil {
-		return m.ctx
-	}
-
-	return system.WithTUI(context.Background())
+	return system.TUIContext()
 }
 
 // NewApp assembles the wizard inside the application shell: wizard header as

@@ -48,7 +48,6 @@ type OverviewModel struct {
 	background         []BackgroundProcess
 	projectRoot        string
 	executor           executor.Executor
-	ctx                context.Context
 	shopCfg            *shop.Config
 	loading            bool
 	err                error
@@ -387,7 +386,7 @@ func (m OverviewModel) Init() tea.Cmd {
 	cmds := []tea.Cmd{
 		discoverServices(m.projectRoot),
 		loadShopwareVersion(m.projectRoot),
-		loadSetupHealth(m.ctx, m.projectRoot, m.executor),
+		loadSetupHealth(system.TUIContext(), m.projectRoot, m.executor),
 	}
 	if m.proxyHost != "" {
 		cmds = append(cmds, loadInstances())
@@ -1002,7 +1001,7 @@ func (m OverviewModel) startAdminWatch() tea.Cmd {
 	projectRoot := m.projectRoot
 	shopCfg := m.shopCfg
 
-	return startWatcher(watcherAdmin, m.ctx, func(ctx context.Context, out io.Writer) (*executor.Process, error) {
+	return startWatcher(watcherAdmin, system.TUIContext(), func(ctx context.Context, out io.Writer) (*executor.Process, error) {
 		logStep(out, "Preparing plugins.json...")
 		if err := extension.WriteProjectPluginJson(ctx, projectRoot, shopCfg, e); err != nil {
 			return nil, fmt.Errorf("preparing plugins.json: %w", err)
@@ -1028,7 +1027,7 @@ func (m OverviewModel) startStorefrontWatch(opts extension.StorefrontWatcherOpti
 		opts.ProxyHostname = "storefront-watch." + host
 	}
 
-	return startWatcher(watcherStorefront, m.ctx, func(ctx context.Context, out io.Writer) (*executor.Process, error) {
+	return startWatcher(watcherStorefront, system.TUIContext(), func(ctx context.Context, out io.Writer) (*executor.Process, error) {
 		logStep(out, "Preparing plugins.json...")
 		if err := extension.WriteProjectPluginJson(ctx, projectRoot, shopCfg, e); err != nil {
 			return nil, fmt.Errorf("preparing plugins.json: %w", err)
@@ -1067,9 +1066,6 @@ func startWatcher(name string, parent context.Context, prepare func(ctx context.
 		go func() {
 			defer close(lines)
 
-			if parent == nil {
-				parent = context.Background()
-			}
 			ctx := handle.begin(logging.DisableLogger(parent))
 			pr, pw := io.Pipe()
 

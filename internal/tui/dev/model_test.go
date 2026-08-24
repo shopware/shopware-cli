@@ -79,7 +79,6 @@ func TestNew_InitializesFields(t *testing.T) {
 	assert.Empty(t, m.watchers)
 	assert.Equal(t, phaseDashboard, m.phase)
 	assert.True(t, system.IsTUI(m.commandContext()))
-	assert.True(t, system.IsTUI(m.overview.ctx))
 }
 
 func TestNewMigrationWizard_StartsInMigrationWizardPhase(t *testing.T) {

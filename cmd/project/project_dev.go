@@ -90,7 +90,7 @@ var projectDevCmd = &cobra.Command{
 			if !isatty.IsTerminal(os.Stdin.Fd()) {
 				return shop.ErrDevModeNotSupported
 			}
-			return runMigrationWizardTUI(cmd.Context(), projectRoot, cfg)
+			return runMigrationWizardTUI(projectRoot, cfg)
 		}
 
 		env, err := newDevEnvironment(cmd, projectRoot, cfg)
@@ -104,7 +104,7 @@ var projectDevCmd = &cobra.Command{
 			return env.start(cmd)
 		}
 
-		return env.runTUI(cmd.Context())
+		return env.runTUI()
 	},
 }
 
@@ -153,7 +153,7 @@ var projectDevStatusCmd = &cobra.Command{
 	},
 }
 
-func runMigrationWizardTUI(ctx context.Context, projectRoot string, cfg *shop.Config) error {
+func runMigrationWizardTUI(projectRoot string, cfg *shop.Config) error {
 	envCfg := &shop.EnvironmentConfig{Type: "docker", URL: "http://127.0.0.1:8000"}
 	exec, err := executor.New(projectRoot, envCfg, cfg)
 	if err != nil {
@@ -165,7 +165,6 @@ func runMigrationWizardTUI(ctx context.Context, projectRoot string, cfg *shop.Co
 		Config:      cfg,
 		EnvConfig:   envCfg,
 		Executor:    exec,
-		Context:     ctx,
 	}).Run()
 	return err
 }
@@ -342,13 +341,12 @@ func (e *devEnvironment) status(cmd *cobra.Command) error {
 	return ErrEnvironmentDown
 }
 
-func (e *devEnvironment) runTUI(ctx context.Context) error {
+func (e *devEnvironment) runTUI() error {
 	_, err := dev.NewApp(dev.Options{
 		ProjectRoot:   e.projectRoot,
 		Config:        e.cfg,
 		EnvConfig:     e.envCfg,
 		Executor:      e.executor,
-		Context:       ctx,
 		ProxyFallback: e.proxyFallback,
 	}).Run()
 	return err

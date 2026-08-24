@@ -61,7 +61,6 @@ var projectUpgradeCmd = &cobra.Command{
 			ProjectRoot: projectRoot,
 			EnvName:     envName,
 			Executor:    exec,
-			Context:     cmd.Context(),
 		})
 
 		_, err = shell.Run()

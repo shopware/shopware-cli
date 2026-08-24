@@ -11,12 +11,13 @@ func WithTUI(ctx context.Context) context.Context {
 	return context.WithValue(ctx, tuiKey{}, true)
 }
 
+// TUIContext returns a background context marked with WithTUI.
+func TUIContext() context.Context {
+	return WithTUI(context.Background())
+}
+
 // IsTUI reports whether ctx was marked with WithTUI.
 func IsTUI(ctx context.Context) bool {
-	if ctx == nil {
-		return false
-	}
-
 	v, ok := ctx.Value(tuiKey{}).(bool)
 	return ok && v
 }
