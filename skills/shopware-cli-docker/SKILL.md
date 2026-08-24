@@ -47,7 +47,7 @@ prefer:
 shopware-cli project console <command>
 ```
 
-`project console` resolves the current Shopware project and its configured executor. In a Docker-backed environment, the CLI routes the Symfony command through the project container.
+`project console` resolves the current Shopware project and its configured executor. In a Docker-backed environment, the CLI routes the Symfony command or Composer script through the project container.
 
 This applies to Shopware and Symfony Console workflows such as:
 
@@ -57,7 +57,8 @@ This applies to Shopware and Symfony Console workflows such as:
 - migrations;
 - scheduled tasks;
 - system configuration;
-- other commands exposed by `bin/console`.
+- other commands exposed by `bin/console`;
+- custom Composer scripts from the project `composer.json`.
 
 Before executing an unfamiliar or state-changing command:
 

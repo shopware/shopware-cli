@@ -2,23 +2,29 @@ package project
 
 import (
 	"context"
+	"fmt"
 	"os/exec"
 	"slices"
+	"strings"
 
 	"github.com/spf13/cobra"
 
+	"github.com/shopware/shopware-cli/internal/executor"
 	"github.com/shopware/shopware-cli/internal/extension"
 	"github.com/shopware/shopware-cli/internal/shop"
 )
 
 var (
-	pluginCommands = []string{"plugin:install", "plugin:uninstall", "plugin:update", "plugin:activate", "plugin:deactivate"}
-	appCommands    = []string{"app:install", "app:update", "app:activate", "app:deactivate"}
+	pluginCommands          = []string{"plugin:install", "plugin:uninstall", "plugin:update", "plugin:activate", "plugin:deactivate"}
+	appCommands             = []string{"app:install", "app:update", "app:activate", "app:deactivate"}
+	reservedConsoleCommands = []string{"list", "help", "about", "completion", "composer"}
 )
 
 var projectConsoleCmd = &cobra.Command{
-	Use:                "console",
-	Short:              "Runs the Symfony Console (bin/console) for current project",
+	Use:   "console",
+	Short: "Runs Symfony Console commands or Composer scripts for the current project",
+	Long: "Runs bin/console for the current project. Custom scripts from the project composer.json " +
+		"are also available by name (for example via the swx alias).",
 	Args:               cobra.MinimumNArgs(1),
 	DisableFlagParsing: true,
 	ValidArgsFunction: func(cmd *cobra.Command, input []string, _ string) ([]string, cobra.ShellCompDirective) {
@@ -35,19 +41,42 @@ var projectConsoleCmd = &cobra.Command{
 		parsedCommands, err := shop.GetConsoleCompletion(cmd.Context(), projectRoot, func(ctx context.Context, args ...string) *exec.Cmd {
 			return cmdExecutor.ConsoleCommand(ctx, args...).Cmd
 		})
-		if err != nil {
+		scripts, _ := shop.GetComposerScripts(projectRoot)
+		if err != nil && len(scripts) == 0 {
 			return nil, cobra.ShellCompDirectiveDefault
 		}
+
 		completions := make([]string, 0)
 
 		if len(input) == 0 {
-			for _, command := range parsedCommands.Commands {
-				if !command.Hidden {
-					completions = append(completions, command.Name)
+			completions = append(completions, composerScriptCompletion("composer", "Run Composer"))
+
+			if parsedCommands != nil {
+				for _, command := range parsedCommands.Commands {
+					if !command.Hidden {
+						completions = append(completions, command.Name)
+					}
+				}
+			}
+
+			for _, script := range scripts {
+				if parsedCommands != nil && parsedCommands.HasCommand(script.Name) {
+					continue
+				}
+
+				completions = append(completions, composerScriptCompletion(script.Name, script.Description))
+				for _, alias := range script.Aliases {
+					if parsedCommands != nil && parsedCommands.HasCommand(alias) {
+						continue
+					}
+
+					completions = append(completions, composerScriptCompletion(alias, script.Description))
 				}
 			}
 		} else {
-			completions = parsedCommands.GetCommandOptions(input[0])
+			if parsedCommands != nil {
+				completions = parsedCommands.GetCommandOptions(input[0])
+			}
 
 			isAppCommand := slices.Contains(appCommands, input[0])
 			isPluginCommand := slices.Contains(pluginCommands, input[0])
@@ -92,15 +121,116 @@ var projectConsoleCmd = &cobra.Command{
 			return err
 		}
 
-		p := cmdExecutor.ConsoleCommand(cmd.Context(), args...)
-		p.Cmd.Stdin = cmd.InOrStdin()
-		p.Cmd.Stdout = cmd.OutOrStdout()
-		p.Cmd.Stderr = cmd.ErrOrStderr()
+		if isComposerProxy(args) {
+			return runExecutorProcess(cmd, cmdExecutor.ComposerCommand(cmd.Context(), args[1:]...))
+		}
 
-		return p.Run()
+		scripts := composerScripts(projectRoot)
+		if shouldRunComposerScript(args[0], cachedConsoleCommands(projectRoot), scripts) {
+			script, ok := shop.FindComposerScript(scripts, args[0])
+			if !ok {
+				return fmt.Errorf("composer script %q not found", args[0])
+			}
+
+			return runExecutorProcess(cmd, cmdExecutor.ComposerCommand(cmd.Context(), composerScriptArgs(script.Name, args[1:])...))
+		}
+
+		p := cmdExecutor.ConsoleCommand(cmd.Context(), args...)
+		if err := runExecutorProcess(cmd, p); err != nil {
+			return err
+		}
+
+		if len(args) == 1 && args[0] == "list" {
+			_, err := fmt.Fprint(cmd.OutOrStdout(), formatComposerScriptsList(scripts))
+			return err
+		}
+
+		return nil
 	},
 }
 
 func init() {
 	projectRootCmd.AddCommand(projectConsoleCmd)
+}
+
+func isComposerProxy(args []string) bool {
+	return len(args) > 0 && args[0] == "composer"
+}
+
+func shouldRunComposerScript(name string, console *shop.ConsoleResponse, scripts []shop.ComposerScript) bool {
+	if slices.Contains(reservedConsoleCommands, name) {
+		return false
+	}
+
+	if console != nil && console.HasCommand(name) {
+		return false
+	}
+
+	_, ok := shop.FindComposerScript(scripts, name)
+	return ok
+}
+
+func composerScriptArgs(name string, extra []string) []string {
+	args := []string{"run-script", "--timeout=0", "--", name}
+	return append(args, extra...)
+}
+
+func composerScriptCompletion(name, description string) string {
+	if description == "" {
+		return name
+	}
+
+	return name + "\t" + description
+}
+
+func formatComposerScriptsList(scripts []shop.ComposerScript) string {
+	if len(scripts) == 0 {
+		return ""
+	}
+
+	width := 24
+	for _, script := range scripts {
+		if n := len(script.Name) + 2; n > width {
+			width = n
+		}
+	}
+
+	var b strings.Builder
+	b.WriteString("\n composer\n")
+	for _, script := range scripts {
+		if script.Description != "" {
+			fmt.Fprintf(&b, "  %-*s %s\n", width, script.Name, script.Description)
+			continue
+		}
+
+		fmt.Fprintf(&b, "  %s\n", script.Name)
+	}
+
+	return b.String()
+}
+
+func cachedConsoleCommands(projectRoot string) *shop.ConsoleResponse {
+	resp, err := shop.ReadCachedConsoleCompletion(projectRoot)
+	if err != nil {
+		return nil
+	}
+
+	return resp
+}
+
+func composerScripts(projectRoot string) []shop.ComposerScript {
+	scripts, err := shop.GetComposerScripts(projectRoot)
+	if err != nil {
+		return nil
+	}
+
+	return scripts
+}
+
+func runExecutorProcess(cmd *cobra.Command, p *executor.Process) error {
+	p.Cmd.Stdin = cmd.InOrStdin()
+	p.Cmd.Stdout = cmd.OutOrStdout()
+	p.Cmd.Stderr = cmd.ErrOrStderr()
+
+	return p.Run()
 }

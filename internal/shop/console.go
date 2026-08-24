@@ -21,6 +21,15 @@ type ConsoleResponse struct {
 	} `json:"commands"`
 }
 
+func (c ConsoleResponse) HasCommand(name string) bool {
+	for _, command := range c.Commands {
+		if !command.Hidden && command.Name == name {
+			return true
+		}
+	}
+	return false
+}
+
 func (c ConsoleResponse) GetCommandOptions(name string) []string {
 	for _, command := range c.Commands {
 		if !command.Hidden && command.Name == name {
@@ -38,22 +47,27 @@ func (c ConsoleResponse) GetCommandOptions(name string) []string {
 // ConsoleCommandFunc avoids a circular dependency between shop and executor packages.
 type ConsoleCommandFunc func(ctx context.Context, args ...string) *exec.Cmd
 
+func consoleCompletionCachePath(projectRoot string) string {
+	return path.Join(projectRoot, "var", "cache", "console_commands.json")
+}
+
+func ReadCachedConsoleCompletion(projectRoot string) (*ConsoleResponse, error) {
+	bytes, err := os.ReadFile(consoleCompletionCachePath(projectRoot))
+	if err != nil {
+		return nil, err
+	}
+
+	var resp ConsoleResponse
+	if err := json.Unmarshal(bytes, &resp); err != nil {
+		return nil, err
+	}
+
+	return &resp, nil
+}
+
 func GetConsoleCompletion(ctx context.Context, projectRoot string, consoleCommand ConsoleCommandFunc) (*ConsoleResponse, error) {
-	cachePath := path.Join(projectRoot, "var", "cache", "console_commands.json")
-
-	if _, err := os.Stat(cachePath); err == nil {
-		var resp ConsoleResponse
-
-		bytes, err := os.ReadFile(cachePath)
-		if err != nil {
-			return nil, err
-		}
-
-		if err := json.Unmarshal(bytes, &resp); err != nil {
-			return nil, err
-		}
-
-		return &resp, nil
+	if resp, err := ReadCachedConsoleCompletion(projectRoot); err == nil {
+		return resp, nil
 	}
 
 	cmd := consoleCommand(ctx, "list", "--format=json")
@@ -70,7 +84,7 @@ func GetConsoleCompletion(ctx context.Context, projectRoot string, consoleComman
 		return nil, err
 	}
 
-	if err := os.WriteFile(cachePath, commandJson, 0o644); err != nil {
+	if err := os.WriteFile(consoleCompletionCachePath(projectRoot), commandJson, 0o644); err != nil {
 		return nil, err
 	}
 

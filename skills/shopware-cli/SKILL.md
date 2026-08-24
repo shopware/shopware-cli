@@ -89,7 +89,7 @@ Do not assume every command supports `--dry-run`.
 
 Treat commands that can change the database, Shopware application state, installed extensions, caches, indexes, migrations, or configuration as higher risk.
 
-`shopware-cli project console` is an execution bridge to Symfony Console. Its safety depends on the command passed to it.
+`shopware-cli project console` (and the `swx` alias) is an execution bridge to Symfony Console and to custom scripts from the project `composer.json`. Its safety depends on the command or script passed to it.
 
 Before running an unfamiliar or state-changing Symfony command:
 
