@@ -222,7 +222,7 @@ func TestGenerateComposeFile(t *testing.T) {
 		assert.Contains(t, compose, "9001:9001")
 		assert.Contains(t, compose, "rustfs-data:")
 		assert.Contains(t, compose, "rustfs-init:")
-		assert.Contains(t, compose, "minio/mc")
+		assert.Contains(t, compose, "rustfs/rc:latest")
 		assert.Contains(t, compose, "shopware-private")
 		assert.Contains(t, compose, "shopware-public")
 		assert.Contains(t, compose, "service_completed_successfully")

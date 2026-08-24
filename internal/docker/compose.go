@@ -136,6 +136,7 @@ const redisMessengerDSN = "redis://redis:6379/messages/symfony/?auto_setup=true&
 const (
 	rustfsAccessKey = "shopware"
 	rustfsSecretKey = "shopware"
+	rustfsRcImage   = "rustfs/rc:latest"
 )
 
 func GenerateComposeFile(lock *composer.Lock, opts *ComposeOptions) ([]byte, error) {
@@ -551,9 +552,9 @@ func addRustFSServices(services *yamlMap[composeService], volumes *yamlMap[struc
 	)
 
 	rustfsInit := composeService{
-		Image:      "minio/mc",
+		Image:      rustfsRcImage,
 		Entrypoint: []string{"/bin/sh", "-c"},
-		Command:    []string{fmt.Sprintf("mc alias set rustfs http://rustfs:9000 %s %s && mc mb --ignore-existing rustfs/shopware-private && mc mb --ignore-existing rustfs/shopware-public", rustfsAccessKey, rustfsSecretKey)},
+		Command:    []string{fmt.Sprintf("rc alias set rustfs http://rustfs:9000 %s %s && rc mb --ignore-existing rustfs/shopware-private && rc mb --ignore-existing rustfs/shopware-public", rustfsAccessKey, rustfsSecretKey)},
 		DependsOn: yamlMap[composeDependency]{}.
 			set("rustfs", composeDependency{Condition: "service_healthy"}),
 	}
