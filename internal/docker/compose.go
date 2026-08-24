@@ -139,15 +139,7 @@ const (
 )
 
 func GenerateComposeFile(lock *composer.Lock, opts *ComposeOptions) ([]byte, error) {
-	hasAMQP := lock.GetPackage("symfony/amqp-messenger") != nil
-	hasElasticsearch := lock.GetPackage("shopware/elasticsearch") != nil
-	// k8s-meta requires symfony/redis-messenger; a real lock lists both. Redis
-	// is driven by the messenger package (same pattern as AMQP → LavinMQ).
-	// RustFS / K8S_* env stay gated on k8s-meta itself.
-	hasRedisMessenger := lock.GetPackage("symfony/redis-messenger") != nil
-	hasK8sMeta := lock.GetPackage("shopware/k8s-meta") != nil
-
-	doc := buildCompose(hasAMQP, hasElasticsearch, hasRedisMessenger, hasK8sMeta, opts)
+	doc := buildCompose(FeaturesFromLock(lock), opts)
 
 	out, err := yaml.Marshal(&doc)
 	if err != nil {
@@ -209,12 +201,11 @@ func ensureEnvLocalFile(projectFolder string) error {
 	return os.WriteFile(envLocalPath, []byte(shop.EnvLocalDockerContent), 0o644)
 }
 
-func buildCompose(hasAMQP, hasElasticsearch, hasRedisMessenger, hasK8sMeta bool, opts *ComposeOptions) composeFile {
+func buildCompose(features LockFeatures, opts *ComposeOptions) composeFile {
 	px := opts.proxy()
-	needsRedis := hasRedisMessenger || hasK8sMeta
 
 	webEnv := baseWebEnv(px)
-	webEnv, webDependsOn := applyLockEnv(webEnv, px, hasAMQP, hasElasticsearch, hasRedisMessenger, hasK8sMeta, needsRedis)
+	webEnv, webDependsOn := applyLockEnv(webEnv, px, features)
 	webEnv = applyProfilerEnv(webEnv, opts)
 
 	web := composeService{
@@ -305,7 +296,7 @@ func buildCompose(hasAMQP, hasElasticsearch, hasRedisMessenger, hasK8sMeta bool,
 	}
 
 	volumes := yamlMap[struct{}]{}.set("db-data", struct{}{})
-	addOptionalServices(&services, &volumes, px, opts, hasAMQP, hasElasticsearch, needsRedis, hasK8sMeta)
+	addOptionalServices(&services, &volumes, px, opts, features)
 
 	file := composeFile{
 		Services: services,
@@ -381,19 +372,19 @@ func baseWebEnv(px *ProxyOptions) yamlMap[string] {
 	return webEnv
 }
 
-func applyLockEnv(webEnv yamlMap[string], px *ProxyOptions, hasAMQP, hasElasticsearch, hasRedisMessenger, hasK8sMeta, needsRedis bool) (yamlMap[string], yamlMap[composeDependency]) {
+func applyLockEnv(webEnv yamlMap[string], px *ProxyOptions, features LockFeatures) (yamlMap[string], yamlMap[composeDependency]) {
 	// Redis messenger wins over AMQP when the Redis transport is in the lock
 	// (including via shopware/k8s-meta, which requires it).
 	switch {
-	case hasK8sMeta:
+	case features.K8sMeta:
 		webEnv = applyK8sMetaEnv(webEnv, px)
-	case hasRedisMessenger:
+	case features.RedisMessenger:
 		webEnv = webEnv.set("MESSENGER_TRANSPORT_DSN", redisMessengerDSN)
-	case hasAMQP:
+	case features.AMQP:
 		webEnv = webEnv.set("MESSENGER_TRANSPORT_DSN", "amqp://guest:guest@lavinmq:5672")
 	}
 
-	if hasElasticsearch {
+	if features.Elasticsearch {
 		webEnv = webEnv.
 			set("OPENSEARCH_URL", "http://opensearch:9200").
 			set("SHOPWARE_ES_ENABLED", "1").
@@ -403,10 +394,10 @@ func applyLockEnv(webEnv yamlMap[string], px *ProxyOptions, hasAMQP, hasElastics
 
 	webDependsOn := yamlMap[composeDependency]{}.
 		set("database", composeDependency{Condition: "service_healthy"})
-	if needsRedis {
+	if features.NeedsRedis() {
 		webDependsOn = webDependsOn.set("redis", composeDependency{Condition: "service_healthy"})
 	}
-	if hasK8sMeta {
+	if features.K8sMeta {
 		webDependsOn = webDependsOn.set("rustfs-init", composeDependency{Condition: "service_completed_successfully"})
 	}
 
@@ -433,8 +424,8 @@ func applyProfilerEnv(webEnv yamlMap[string], opts *ComposeOptions) yamlMap[stri
 	return webEnv
 }
 
-func addOptionalServices(services *yamlMap[composeService], volumes *yamlMap[struct{}], px *ProxyOptions, opts *ComposeOptions, hasAMQP, hasElasticsearch, needsRedis, hasK8sMeta bool) {
-	if hasAMQP {
+func addOptionalServices(services *yamlMap[composeService], volumes *yamlMap[struct{}], px *ProxyOptions, opts *ComposeOptions, features LockFeatures) {
+	if features.AMQP {
 		lavinmq := composeService{Image: "cloudamqp/lavinmq"}
 		// Only the management UI (15672) is routed in proxy mode; AMQP (5672)
 		// stays internal, reachable as lavinmq:5672.
@@ -444,7 +435,7 @@ func addOptionalServices(services *yamlMap[composeService], volumes *yamlMap[str
 		*volumes = volumes.set("lavinmq-data", struct{}{})
 	}
 
-	if hasElasticsearch {
+	if features.Elasticsearch {
 		opensearch := composeService{
 			Image: "opensearchproject/opensearch:2",
 			Environment: yamlMap[string]{}.
@@ -458,10 +449,10 @@ func addOptionalServices(services *yamlMap[composeService], volumes *yamlMap[str
 		*volumes = volumes.set("opensearch-data", struct{}{})
 	}
 
-	if needsRedis {
+	if features.NeedsRedis() {
 		addRedisService(services, volumes)
 	}
-	if hasK8sMeta {
+	if features.K8sMeta {
 		addRustFSServices(services, volumes, px)
 	}
 
@@ -528,13 +519,6 @@ func addRedisService(services *yamlMap[composeService], volumes *yamlMap[struct{
 	*services = services.set("redis", redis)
 	*volumes = volumes.set("redis-data", struct{}{})
 }
-
-// rustfsS3Subdomain is the proxy hostname for the S3 API (PUBLIC_URL).
-// rustfsConsoleSubdomain is the proxy hostname for the RustFS console (TUI).
-const (
-	rustfsS3Subdomain      = "s3"
-	rustfsConsoleSubdomain = "rustfs"
-)
 
 // addRustFSServices appends RustFS and the one-shot bucket-init container that
 // a PaaS lock (shopware/k8s-meta) needs. In plain mode S3 (9000) and the

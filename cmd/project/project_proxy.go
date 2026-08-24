@@ -10,7 +10,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/shyim/go-composer"
 	"github.com/spf13/cobra"
 
 	dockerpkg "github.com/shopware/shopware-cli/internal/docker"
@@ -236,16 +235,10 @@ func (e *proxyEnvironment) up(cmd *cobra.Command) error {
 }
 
 // proxyBrowserHostnames returns the shop's proxy hostnames (root + routed
-// subdomains) for the WSL Windows hosts line, reading the optional AMQP and
-// Elasticsearch services from the project's composer.lock.
+// subdomains) for the WSL Windows hosts line, using the same lock-package
+// detection as compose generation.
 func proxyBrowserHostnames(projectRoot, hostname string) []string {
-	hasAMQP, hasElasticsearch, hasK8sMeta := false, false, false
-	if lock, err := composer.ReadLock(filepath.Join(projectRoot, "composer.lock")); err == nil {
-		hasAMQP = lock.GetPackage("symfony/amqp-messenger") != nil
-		hasElasticsearch = lock.GetPackage("shopware/elasticsearch") != nil
-		hasK8sMeta = lock.GetPackage("shopware/k8s-meta") != nil
-	}
-	return proxy.ProxyHostnames(hostname, hasAMQP, hasElasticsearch, hasK8sMeta)
+	return proxy.ProxyHostnames(hostname, dockerpkg.FeaturesFromLockFile(filepath.Join(projectRoot, "composer.lock")))
 }
 
 // maybePrintWSLWindowsAccess prints the one-time Windows-side steps (import the
