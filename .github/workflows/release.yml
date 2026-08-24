@@ -9,6 +9,7 @@ permissions:
   contents: write
   id-token: write
   packages: write
+  attestations: write
 
 env:
   GOTOOLCHAIN: local
@@ -95,3 +96,13 @@ jobs:
           APPLE_APP_STORE_CONNECT_KEY_ID: ${{ secrets.APPLE_APP_STORE_CONNECT_KEY_ID }}
           APPLE_APP_STORE_CONNECT_KEY: ${{ secrets.APPLE_APP_STORE_CONNECT_KEY }}
           CLOUDSMITH_API_KEY: ${{ secrets.CLOUDSMITH_API_KEY }}
+
+      - name: Attest release artifacts
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # ratchet:actions/attest@v4.2.2
+        with:
+          subject-checksums: ./dist/checksums.txt
+
+      - name: Attest Docker images
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # ratchet:actions/attest@v4.2.2
+        with:
+          subject-checksums: ./dist/digests.txt
