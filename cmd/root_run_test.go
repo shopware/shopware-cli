@@ -30,6 +30,13 @@ func runCLI(t *testing.T, argv ...string) (int, string) {
 		rootCmd.SetArgs(nil)
 		rootCmd.SetOut(nil)
 		rootCmd.SetErr(nil)
+		// cobra defines the version flag lazily on the first Execute, so it may
+		// not exist yet; reset it so a persisted --version cannot short-circuit
+		// a later run() call.
+		if f := rootCmd.Flags().Lookup("version"); f != nil {
+			_ = f.Value.Set("false")
+			f.Changed = false
+		}
 	})
 
 	return run(context.Background()), out.String()
