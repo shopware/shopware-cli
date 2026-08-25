@@ -18,7 +18,7 @@ import (
 // the child so the poll loop can observe the exit.
 func TestGracefulStopSigtermThenProcessDone(t *testing.T) {
 	t.Run("sigterm stops within the grace period", func(t *testing.T) {
-		cmd := exec.Command("sleep", "30")
+		cmd := exec.CommandContext(t.Context(), "sleep", "30")
 		require.NoError(t, cmd.Start())
 		waitDone := make(chan struct{})
 		go func() {
@@ -35,7 +35,7 @@ func TestGracefulStopSigtermThenProcessDone(t *testing.T) {
 	})
 
 	t.Run("limit zero kills immediately", func(t *testing.T) {
-		cmd := exec.Command("sleep", "30")
+		cmd := exec.CommandContext(t.Context(), "sleep", "30")
 		require.NoError(t, cmd.Start())
 		waitDone := make(chan struct{})
 		go func() {
