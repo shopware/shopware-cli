@@ -38,6 +38,11 @@ func MatchStep(line string, from int) (int, bool) {
 	return 0, false
 }
 
+// FailedStepSaveCredentials is the failed_step telemetry value for an
+// installation that succeeded but whose admin credentials could not be saved
+// to the project config.
+const FailedStepSaveCredentials = "save_credentials"
+
 // FailedStep names the last step that had started when the install failed.
 // Failures before the first recognized step report the first step.
 func FailedStep(current int) string {

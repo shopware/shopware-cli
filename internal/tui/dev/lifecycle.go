@@ -81,21 +81,29 @@ func (m Model) updateLifecycle(msg tea.Msg) (app.Content, tea.Cmd) {
 		}
 		m.installProg.done = true
 		m.installProg.currentStep = len(install.Steps)
-		if m.telemetry.installOnce() {
-			trackEvent(tracking.EventDevInstall, m.telemetry.installTags(tracking.ResultSuccess, m.install))
-		}
 
 		username := m.install.Username()
 		password := m.install.Password()
 
+		// Persist before recording the outcome, so a failed config write is
+		// not reported as a successful run.
 		if err := install.PersistCredentials(m.config, m.envConfig, m.projectRoot, install.Options{
 			AdminUsername: username,
 			AdminPassword: password,
 		}); err != nil {
+			if m.telemetry.installOnce() {
+				tags := m.telemetry.installTags(tracking.ResultFailure, m.install)
+				tags[tracking.TagFailedStep] = install.FailedStepSaveCredentials
+				trackEvent(tracking.EventDevInstall, tags)
+			}
 			m.installProg.showLogs = true
 			m.overlayLines = append(m.overlayLines, "", errorStyle.Render("Shopware was installed, but saving the admin credentials to the project config failed: "+err.Error()))
 			m.overlayLines = append(m.overlayLines, "", helpStyle.Render("Press q to exit"))
 			return m, nil
+		}
+
+		if m.telemetry.installOnce() {
+			trackEvent(tracking.EventDevInstall, m.telemetry.installTags(tracking.ResultSuccess, m.install))
 		}
 
 		m.overview.username = username

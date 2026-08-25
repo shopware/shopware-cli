@@ -67,11 +67,14 @@ func RunHeadless(ctx context.Context, exec executor.Executor, cfg *shop.Config, 
 		return fmt.Errorf("installing Shopware: %w", runErr)
 	}
 
-	trackOutcome(tracking.ResultSuccess, install, elapsed, "")
-
+	// Persist before recording the outcome, so a failed config write is not
+	// reported as a successful run.
 	if err := PersistCredentials(cfg, envCfg, projectRoot, install); err != nil {
+		trackOutcome(tracking.ResultFailure, install, elapsed, FailedStepSaveCredentials)
 		return fmt.Errorf("installation succeeded, but failed to save admin credentials to the project config: %w", err)
 	}
+
+	trackOutcome(tracking.ResultSuccess, install, elapsed, "")
 
 	_, _ = fmt.Fprintln(out)
 	_, _ = fmt.Fprintln(out, tui.SuccessLine(fmt.Sprintf("Shopware installed in %s", elapsed.Round(time.Second))))
