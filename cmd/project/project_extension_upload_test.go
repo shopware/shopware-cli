@@ -3,6 +3,7 @@ package project
 import (
 	"net/http"
 	"net/http/httptest"
+	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -10,12 +11,20 @@ import (
 )
 
 // newEmptyExtensionListShop fakes the minimal Admin API surface the upload
-// command touches, always reporting an empty installed-extension list.
-// Requests outside that surface get a 404 so they surface as command errors.
-func newEmptyExtensionListShop(t *testing.T) *httptest.Server {
+// command touches, always reporting an empty installed-extension list, and
+// records every request as "METHOD path". Requests outside that surface get
+// a 404 so they surface as command errors.
+func newEmptyExtensionListShop(t *testing.T) (*httptest.Server, func() []string) {
 	t.Helper()
 
+	var mu sync.Mutex
+	var calls []string
+
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		calls = append(calls, r.Method+" "+r.URL.Path)
+		mu.Unlock()
+
 		w.Header().Set("Content-Type", "application/json")
 		switch {
 		case r.Method == http.MethodPost && r.URL.Path == "/api/oauth/token":
@@ -34,11 +43,15 @@ func newEmptyExtensionListShop(t *testing.T) *httptest.Server {
 	}))
 	t.Cleanup(srv.Close)
 
-	return srv
+	return srv, func() []string {
+		mu.Lock()
+		defer mu.Unlock()
+		return append([]string(nil), calls...)
+	}
 }
 
 func TestExtensionUploadActivateFailsWhenShopDoesNotListExtension(t *testing.T) {
-	srv := newEmptyExtensionListShop(t)
+	srv, calls := newEmptyExtensionListShop(t)
 	pluginDir := writeMinimalPlugin(t)
 
 	clearShopClientEnv(t)
@@ -59,4 +72,20 @@ func TestExtensionUploadActivateFailsWhenShopDoesNotListExtension(t *testing.T) 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "cannot run lifecycle events")
 	assert.Contains(t, err.Error(), "FroshTest")
+
+	// The lifecycle lookup must run against a list fetched after the refresh
+	// call, or fresh uploads are invisible to it on real shops.
+	got := calls()
+	refreshIdx, lastListIdx := -1, -1
+	for i, call := range got {
+		switch call {
+		case "POST /api/_action/extension/refresh":
+			refreshIdx = i
+		case "GET /api/_action/extension/installed":
+			lastListIdx = i
+		}
+	}
+	require.NotEqual(t, -1, refreshIdx)
+	require.NotEqual(t, -1, lastListIdx)
+	assert.Greater(t, lastListIdx, refreshIdx)
 }

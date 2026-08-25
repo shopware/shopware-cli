@@ -167,11 +167,6 @@ var projectExtensionUploadCmd = &cobra.Command{
 
 				return fmt.Errorf("cannot upload extension update: %s", string(str))
 			}
-
-			extensions, _, err = client.ExtensionManager.ListAvailableExtensions(adminCtx)
-			if err != nil {
-				return err
-			}
 		} else {
 			if uploadResponse, err := client.ExtensionManager.UploadExtensionUpdateToCloud(adminCtx, name, &buf); err != nil {
 				return fmt.Errorf("cannot upload extension update: %w", err)
@@ -194,6 +189,11 @@ var projectExtensionUploadCmd = &cobra.Command{
 		logging.FromContext(cmd.Context()).Infof("Refreshed extension list")
 
 		if doLifecycleEvents {
+			extensions, _, err = client.ExtensionManager.ListAvailableExtensions(adminCtx)
+			if err != nil {
+				return err
+			}
+
 			remoteExtension := extensions.GetByName(name)
 			if remoteExtension == nil {
 				return fmt.Errorf("cannot run lifecycle events: uploaded extension %s is not listed by the shop yet. Re-run the command to retry", name)
