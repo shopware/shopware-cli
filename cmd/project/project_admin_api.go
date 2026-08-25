@@ -16,7 +16,7 @@ var skipDefaultHeaders bool
 
 var projectAdminApiCmd = &cobra.Command{
 	Use:   "admin-api [method] [path]",
-	Short: "pre authenticated curl interface to the Admin API",
+	Short: "Pre authenticated curl interface to the Admin API",
 	RunE: func(cobraCmd *cobra.Command, args []string) error {
 		projectRoot, err := findClosestShopwareProject(true)
 		if err != nil {
