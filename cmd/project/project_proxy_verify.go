@@ -43,16 +43,16 @@ failing layer is reported with a hint how to fix it.`,
 	},
 }
 
+// proxyVerify is a package variable so tests can fake the machine checks,
+// which probe real DNS, TLS and docker state.
+var proxyVerify = proxy.Verify
+
 // runProxyVerification prints the outcome of every proxy health check. It
 // returns ready (every check passed) and notStarted (the only failures are
 // layers that are simply not running yet — the shared DNS or Traefik container,
 // e.g. before the first `proxy up` or after a `teardown`), so callers can tell a
 // broken setup from an idle one. Shared by `proxy verify` and the final step of
 // `proxy setup`.
-// proxyVerify is a package variable so tests can fake the machine checks,
-// which probe real DNS, TLS and docker state.
-var proxyVerify = proxy.Verify
-
 func runProxyVerification(ctx context.Context, baseDomain string) (ready, notStarted bool) {
 	results := proxyVerify(ctx, baseDomain)
 
