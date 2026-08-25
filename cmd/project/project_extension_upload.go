@@ -10,6 +10,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	cp "github.com/otiai10/copy"
@@ -271,14 +272,12 @@ func increaseExtensionVersion(ctx context.Context, ext extension.Extension) erro
 						return err
 					}
 
-					ver, err := version.NewVersion(versionStr)
+					bumped, err := bumpPatchVersion(versionStr)
 					if err != nil {
 						return err
 					}
 
-					ver.IncreasePatch()
-
-					if err = encoder.EncodeElement(ver.String(), v); err != nil {
+					if err = encoder.EncodeElement(bumped, v); err != nil {
 						return err
 					}
 					continue
@@ -325,14 +324,12 @@ func increaseExtensionVersion(ctx context.Context, ext extension.Extension) erro
 		return nil
 	}
 
-	ver, err := version.NewVersion(versionStr)
+	bumped, err := bumpPatchVersion(versionStr)
 	if err != nil {
 		return err
 	}
 
-	ver.IncreasePatch()
-
-	composerJson["version"] = ver.String()
+	composerJson["version"] = bumped
 
 	composerJsonContent, err = json.Marshal(composerJson)
 	if err != nil {
@@ -344,6 +341,40 @@ func increaseExtensionVersion(ctx context.Context, ext extension.Extension) erro
 	}
 
 	return nil
+}
+
+// bumpPatchVersion increases the patch part of versionStr while keeping its
+// original number of parts (1.0.0 becomes 1.0.1, 6.6.5.2 becomes 6.6.6.0).
+// go-version's IncreasePatch cannot be used here: it mutates only the parsed
+// segments while String() keeps returning the original input, and its
+// normalized form pads every version to four parts.
+func bumpPatchVersion(versionStr string) (string, error) {
+	if _, err := version.NewVersion(versionStr); err != nil {
+		return "", err
+	}
+
+	core := versionStr
+	if i := strings.IndexAny(core, "-+"); i >= 0 {
+		core = core[:i]
+	}
+
+	parts := strings.Split(core, ".")
+	for len(parts) < 3 {
+		parts = append(parts, "0")
+	}
+
+	patch, err := strconv.Atoi(parts[2])
+	if err != nil {
+		return "", fmt.Errorf("cannot parse patch version %q: %w", parts[2], err)
+	}
+	parts[2] = strconv.Itoa(patch + 1)
+
+	// Mirror IncreasePatch's semantics: a bump resets the build part.
+	if len(parts) > 3 {
+		parts[3] = "0"
+	}
+
+	return strings.Join(parts, "."), nil
 }
 
 func init() {
