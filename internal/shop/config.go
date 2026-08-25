@@ -56,8 +56,9 @@ type Config struct {
 }
 
 // ResolveEnvironment returns the named environment. An empty name uses
-// environments.local when it is defined, otherwise the deprecated top-level
-// url/admin_api.
+// environments.local; the deprecated top-level url/admin_api only fill in what
+// that environment does not set, so a mixed file never loses the environment's
+// type (which selects the executor) or its url.
 func (c *Config) ResolveEnvironment(name string) (*EnvironmentConfig, error) {
 	if name != "" {
 		env, ok := c.Environments[name]
@@ -70,19 +71,54 @@ func (c *Config) ResolveEnvironment(name string) (*EnvironmentConfig, error) {
 		return env, nil
 	}
 
-	if env, ok := c.Environments["local"]; ok && env != nil {
-		return env, nil
+	local, ok := c.Environments["local"]
+	if !ok || local == nil {
+		return c.topLevelEnvironment(nil), nil
 	}
 
-	return c.topLevelEnvironment(), nil
+	if !c.HasDeprecatedTopLevelShop() {
+		return local, nil
+	}
+
+	return c.topLevelEnvironment(local), nil
 }
 
-func (c *Config) topLevelEnvironment() *EnvironmentConfig {
-	return &EnvironmentConfig{
-		Type:     "local",
-		URL:      c.URL,
-		AdminApi: c.AdminApi,
+// topLevelEnvironment builds the environment described by the deprecated
+// top-level url/admin_api. Values set on base take precedence over them.
+func (c *Config) topLevelEnvironment(base *EnvironmentConfig) *EnvironmentConfig {
+	env := EnvironmentConfig{Type: "local"}
+	if base != nil {
+		env = *base
+		if env.Type == "" {
+			env.Type = "local"
+		}
 	}
+
+	if env.URL == "" {
+		env.URL = c.URL
+	}
+
+	if env.AdminApi == nil {
+		env.AdminApi = c.AdminApi
+	}
+
+	return &env
+}
+
+// EffectiveURL returns the shop URL the CLI resolves for the default
+// environment: environments.local.url, falling back to the deprecated
+// top-level url. It mirrors ResolveEnvironment for callers that only need the
+// URL and cannot fail on an unknown environment name.
+func (c *Config) EffectiveURL() string {
+	if c == nil {
+		return ""
+	}
+
+	if env, ok := c.Environments["local"]; ok && env != nil && env.URL != "" {
+		return env.URL
+	}
+
+	return c.URL
 }
 
 // HasDeprecatedTopLevelShop reports whether the config still stores a shop
@@ -957,29 +993,35 @@ func ReadProjectURLState(configPath, envName string) (ConfigURLState, error) {
 	return state, nil
 }
 
-// SetProjectURL points the project config at url in place: the top-level url
-// key always (created when missing), the environment url only when it already
-// exists — an absent environment url already falls back to the top-level one,
-// so there is nothing to override. Comments, ordering and unknown keys are
-// preserved.
+// SetProjectURL points the project config at url in place: the environment
+// url when the environment exists, otherwise the deprecated top-level url. An
+// existing top-level url is updated too, so a mixed file does not keep serving
+// the old url to anything still reading it — but it is never newly created,
+// which would deprecation-warn on every later command. Comments, ordering and
+// unknown keys are preserved.
 func SetProjectURL(configPath, envName, url string) error {
 	doc, root, err := loadConfigDoc(configPath)
 	if err != nil {
 		return err
 	}
 
-	setConfigMapValue(root, "url", url)
+	env := envNode(root, envName)
 
-	if envURL := envURLNode(root, envName); envURL != nil {
-		envURL.SetString(url)
+	if env == nil || configMapValue(root, "url") != nil {
+		setConfigURLValue(root, url)
+	}
+
+	if env != nil {
+		setConfigURLValue(env, url)
 	}
 
 	return writeConfigDoc(configPath, doc)
 }
 
 // RestoreProjectURL puts the url values captured in prev back in place:
-// previously present keys get their old value, a previously absent top-level
-// url is removed again. An environment url we never touched stays untouched.
+// previously present keys get their old value, previously absent ones are
+// removed again — for the environment url too, since SetProjectURL creates it
+// when the environment exists.
 func RestoreProjectURL(configPath, envName string, prev ConfigURLState) error {
 	doc, root, err := loadConfigDoc(configPath)
 	if err != nil {
@@ -987,22 +1029,25 @@ func RestoreProjectURL(configPath, envName string, prev ConfigURLState) error {
 	}
 
 	if prev.HasRoot {
-		setConfigMapValue(root, "url", prev.RootURL)
+		setConfigURLValue(root, prev.RootURL)
 	} else {
 		removeConfigMapKey(root, "url")
 	}
 
-	if prev.HasEnv {
-		if envURL := envURLNode(root, envName); envURL != nil {
-			envURL.SetString(prev.EnvURL)
+	if env := envNode(root, envName); env != nil {
+		if prev.HasEnv {
+			setConfigURLValue(env, prev.EnvURL)
+		} else {
+			removeConfigMapKey(env, "url")
 		}
 	}
 
 	return writeConfigDoc(configPath, doc)
 }
 
-// envURLNode returns the environments.<env>.url value node, or nil.
-func envURLNode(root *yaml.Node, envName string) *yaml.Node {
+// envNode returns the environments.<env> mapping node, or nil when the
+// environment is not configured in the file.
+func envNode(root *yaml.Node, envName string) *yaml.Node {
 	environments := configMapValue(root, "environments")
 	if environments == nil || environments.Kind != yaml.MappingNode {
 		return nil
@@ -1010,6 +1055,16 @@ func envURLNode(root *yaml.Node, envName string) *yaml.Node {
 
 	env := configMapValue(environments, urlEnvKey(envName))
 	if env == nil || env.Kind != yaml.MappingNode {
+		return nil
+	}
+
+	return env
+}
+
+// envURLNode returns the environments.<env>.url value node, or nil.
+func envURLNode(root *yaml.Node, envName string) *yaml.Node {
+	env := envNode(root, envName)
+	if env == nil {
 		return nil
 	}
 
@@ -1054,16 +1109,16 @@ func configMapValue(mapping *yaml.Node, key string) *yaml.Node {
 	return nil
 }
 
-// setConfigMapValue updates key's value in a mapping node, appending the pair
-// when the key is missing.
-func setConfigMapValue(mapping *yaml.Node, key, value string) {
-	if node := configMapValue(mapping, key); node != nil {
+// setConfigURLValue updates the url key's value in a mapping node, appending
+// the pair when the key is missing.
+func setConfigURLValue(mapping *yaml.Node, value string) {
+	if node := configMapValue(mapping, "url"); node != nil {
 		node.SetString(value)
 		return
 	}
 
 	keyNode := &yaml.Node{}
-	keyNode.SetString(key)
+	keyNode.SetString("url")
 	valueNode := &yaml.Node{}
 	valueNode.SetString(value)
 

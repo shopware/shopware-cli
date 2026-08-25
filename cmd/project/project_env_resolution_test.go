@@ -75,7 +75,7 @@ environments:
 	})
 }
 
-func TestNoEnvFlagPrefersEnvironmentsLocal(t *testing.T) {
+func TestNoEnvFlagPrefersLocalEnvironmentOverTopLevel(t *testing.T) {
 	clearShopClientEnv(t)
 	t.Setenv("PROJECT_ROOT", t.TempDir())
 
@@ -107,8 +107,10 @@ environments:
 
 	err := projectExtensionListCmd.RunE(projectExtensionListCmd, []string{})
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "127.0.0.1:7", "without -e, environments.local must win over the deprecated top-level shop")
-	assert.NotContains(t, err.Error(), "127.0.0.1:9", "deprecated top-level url must not be used when environments.local exists")
+	// environments.local is what the empty -e selects; the deprecated
+	// top-level url only fills in what it leaves unset.
+	assert.Contains(t, err.Error(), "127.0.0.1:7", "without -e environments.local must be used")
+	assert.NotContains(t, err.Error(), "127.0.0.1:9", "the deprecated top-level url must not override environments.local")
 }
 
 func TestNoEnvFlagUsesLocalWhenNoTopLevel(t *testing.T) {

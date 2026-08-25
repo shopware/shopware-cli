@@ -175,7 +175,7 @@ func TestResolveEnvironment(t *testing.T) {
 		assert.Equal(t, "http://localhost:8000", env.URL)
 	})
 
-	t.Run("empty name prefers environments.local when top-level shop also exists", func(t *testing.T) {
+	t.Run("empty name prefers environments.local over the deprecated top-level shop", func(t *testing.T) {
 		cfg := &Config{
 			URL:      "https://myshop.com",
 			AdminApi: &ConfigAdminApi{Username: "admin"},
@@ -186,9 +186,38 @@ func TestResolveEnvironment(t *testing.T) {
 
 		env, err := cfg.ResolveEnvironment("")
 		require.NoError(t, err)
+		// The type picks the executor, so it must never come from the
+		// deprecated top-level keys, which never described one.
 		assert.Equal(t, "docker", env.Type)
 		assert.Equal(t, "http://localhost:8000", env.URL)
-		assert.Nil(t, env.AdminApi)
+		assert.Equal(t, "admin", env.AdminApi.Username)
+	})
+
+	t.Run("empty name fills unset environment values from the deprecated top-level shop", func(t *testing.T) {
+		cfg := &Config{
+			URL:      "https://myshop.com",
+			AdminApi: &ConfigAdminApi{Username: "admin"},
+			Environments: map[string]*EnvironmentConfig{
+				"local": {Type: "docker"},
+			},
+		}
+
+		env, err := cfg.ResolveEnvironment("")
+		require.NoError(t, err)
+		assert.Equal(t, "docker", env.Type)
+		assert.Equal(t, "https://myshop.com", env.URL)
+		assert.Equal(t, "admin", env.AdminApi.Username)
+	})
+
+	t.Run("empty name does not mutate the stored environment", func(t *testing.T) {
+		cfg := &Config{
+			URL:          "https://myshop.com",
+			Environments: map[string]*EnvironmentConfig{"local": {Type: "docker"}},
+		}
+
+		_, err := cfg.ResolveEnvironment("")
+		require.NoError(t, err)
+		assert.Empty(t, cfg.Environments["local"].URL)
 	})
 
 	t.Run("synthesizes from top-level when no environments configured", func(t *testing.T) {
@@ -300,7 +329,7 @@ func TestWithEnvironment(t *testing.T) {
 		assert.Equal(t, "admin", resolved.AdminApi.Username)
 	})
 
-	t.Run("empty name prefers environments.local when top-level shop also exists", func(t *testing.T) {
+	t.Run("empty name prefers environments.local over the deprecated top-level shop", func(t *testing.T) {
 		cfg := &Config{
 			URL:      "https://myshop.com",
 			AdminApi: &ConfigAdminApi{Username: "admin"},
@@ -1001,4 +1030,25 @@ func TestConfigBuildMJMLResolveIncludePaths(t *testing.T) {
 		want := []string{filepath.Join(projectRoot, "shared/email"), abs}
 		assert.Equal(t, want, got)
 	})
+}
+
+func TestEffectiveURL(t *testing.T) {
+	assert.Empty(t, (*Config)(nil).EffectiveURL())
+	assert.Empty(t, (&Config{}).EffectiveURL())
+	assert.Equal(t, "https://myshop.com", (&Config{URL: "https://myshop.com"}).EffectiveURL())
+
+	// environments.local wins over the deprecated top-level url, matching
+	// ResolveEnvironment.
+	mixed := &Config{
+		URL:          "http://127.0.0.1:8000",
+		Environments: map[string]*EnvironmentConfig{"local": {URL: "https://my-shop.shopware.local"}},
+	}
+	assert.Equal(t, "https://my-shop.shopware.local", mixed.EffectiveURL())
+
+	// An environment without a url falls back to the top-level one.
+	fallback := &Config{
+		URL:          "https://myshop.com",
+		Environments: map[string]*EnvironmentConfig{"local": {Type: "docker"}},
+	}
+	assert.Equal(t, "https://myshop.com", fallback.EffectiveURL())
 }
