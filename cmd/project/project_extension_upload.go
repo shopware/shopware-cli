@@ -58,9 +58,6 @@ var projectExtensionUploadCmd = &cobra.Command{
 		}
 
 		extCfg := ext.GetExtensionConfig()
-		if err != nil {
-			logging.FromContext(cmd.Context()).Fatalln(fmt.Errorf("update: %v", err))
-		}
 
 		if increaseVersionBeforeUpload {
 			if err := increaseExtensionVersion(cmd.Context(), ext); err != nil {
