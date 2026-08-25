@@ -12,9 +12,9 @@ import (
 )
 
 var extensionChangelogCmd = &cobra.Command{
-	Use:   "get-changelog [path]",
+	Use:   "get-changelog path",
 	Short: "Get the changelog",
-	Args:  cobra.MinimumNArgs(1),
+	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		path, err := filepath.Abs(args[0])
 		if err != nil {

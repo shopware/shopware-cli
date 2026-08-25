@@ -11,8 +11,9 @@ import (
 )
 
 var projectFormatCmd = &cobra.Command{
-	Use:   "format",
+	Use:   "format [path]",
 	Short: "Format project",
+	Args:  cobra.MaximumNArgs(1),
 	PreRunE: func(cmd *cobra.Command, args []string) error {
 		return verifier.SetupTools(cmd.Context(), cmd.Root().Version)
 	},

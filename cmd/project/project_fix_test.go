@@ -32,13 +32,16 @@ func TestProjectFixNoArgsAppliesGitGuardToResolvedProject(t *testing.T) {
 	err := projectFixCmd.RunE(projectFixCmd, []string{})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "not a git repository")
+	assert.Contains(t, err.Error(), dir)
 }
 
 func TestProjectFixRejectsNonGitDirectory(t *testing.T) {
+	dir := t.TempDir()
 	projectFixCmd.SetContext(t.Context())
-	err := projectFixCmd.RunE(projectFixCmd, []string{t.TempDir()})
+	err := projectFixCmd.RunE(projectFixCmd, []string{dir})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "not a git repository")
+	assert.Contains(t, err.Error(), dir)
 }
 
 func TestProjectFixPassesGitGuardWithGitDirectory(t *testing.T) {
