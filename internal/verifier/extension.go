@@ -49,6 +49,15 @@ func ConvertExtensionToToolConfig(ext extension.Extension) (*ToolConfig, error) 
 // variable so tests can replace it with a fake that does not hit the network.
 var getShopwareVersions = extension.GetShopwareVersions
 
+// OverrideShopwareVersionsForTesting replaces the Shopware version lookup and
+// returns a restore func, so tests outside this package can run
+// ConvertExtensionToToolConfig without the Packagist call.
+func OverrideShopwareVersionsForTesting(fn func(context.Context) ([]string, error)) (restore func()) {
+	previous := getShopwareVersions
+	getShopwareVersions = fn
+	return func() { getShopwareVersions = previous }
+}
+
 func determineVersionRange(cfg *ToolConfig, versionConstraint *version.Constraints) error {
 	versions, err := getShopwareVersions(context.Background())
 	if err != nil {
