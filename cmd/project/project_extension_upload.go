@@ -345,6 +345,9 @@ func increaseExtensionVersion(ctx context.Context, ext extension.Extension) erro
 
 // bumpPatchVersion increases the patch part of versionStr while keeping its
 // original number of parts (1.0.0 becomes 1.0.1, 6.6.5.2 becomes 6.6.6.0).
+// Versions with fewer than three parts are padded to MAJOR.MINOR.PATCH, and any
+// pre-release or build-metadata suffix is dropped by the bump (1.0 becomes
+// 1.0.1, 1.0.0-beta becomes 1.0.1).
 // go-version's IncreasePatch cannot be used here: it mutates only the parsed
 // segments while String() keeps returning the original input, and its
 // normalized form pads every version to four parts.
@@ -353,7 +356,7 @@ func bumpPatchVersion(versionStr string) (string, error) {
 		return "", err
 	}
 
-	core := versionStr
+	core := strings.TrimSpace(versionStr)
 	if i := strings.IndexAny(core, "-+"); i >= 0 {
 		core = core[:i]
 	}

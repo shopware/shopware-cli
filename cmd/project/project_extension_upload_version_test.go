@@ -46,6 +46,14 @@ func TestIncreaseExtensionVersionBumpsPluginComposerVersion(t *testing.T) {
 		assert.Equal(t, "6.6.6.0", bumped)
 	})
 
+	// go-version trims the input before validating, so the manual parser has to
+	// trim too; an app manifest may contain "<version> 1.2.3 </version>".
+	t.Run("whitespace-padded version bumps patch", func(t *testing.T) {
+		bumped, err := bumpPatchVersion(" 1.2.3 ")
+		require.NoError(t, err)
+		assert.Equal(t, "1.2.4", bumped)
+	})
+
 	t.Run("composer.json without version is left untouched", func(t *testing.T) {
 		dir := writeMinimalPlugin(t)
 		composerPath := filepath.Join(dir, "composer.json")
