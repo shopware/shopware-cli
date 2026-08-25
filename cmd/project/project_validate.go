@@ -15,7 +15,7 @@ import (
 )
 
 var projectValidateCmd = &cobra.Command{
-	Use:   "validate",
+	Use:   "validate [path]",
 	Short: "Validate project",
 	PreRunE: func(cmd *cobra.Command, args []string) error {
 		return verifier.SetupTools(cmd.Context(), cmd.Root().Version)
