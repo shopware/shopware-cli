@@ -36,3 +36,11 @@ func TestExtensionFormatRequiresExactlyOnePathArg(t *testing.T) {
 		})
 	}
 }
+
+func TestExtensionFormatRunsSwCliDryRun(t *testing.T) {
+	t.Setenv("SHOPWARE_CLI_TOOLS_DIR", t.TempDir())
+	fakeShopwareVersions(t)
+	resetCommandFlags(t, extensionFormat)
+
+	require.NoError(t, runExtension(t, "format", "--only", "sw-cli", "--dry-run", writePluginFixture(t)))
+}
