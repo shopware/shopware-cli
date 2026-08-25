@@ -8,7 +8,6 @@ import (
 	"strings"
 	"time"
 
-	"charm.land/huh/v2/spinner"
 	"github.com/mattn/go-isatty"
 	"github.com/spf13/cobra"
 
@@ -303,15 +302,14 @@ func (e *devEnvironment) stop(cmd *cobra.Command, opts executor.StopOptions) err
 		title = "Stopping development environment and removing data..."
 	}
 
-	err := spinner.New().
-		Title(title).
-		Context(cmd.Context()).
-		ActionWithErr(func(ctx context.Context) error {
-			return e.executor.StopEnvironment(ctx, opts)
-		}).
-		Run()
+	// runStep drops the spinner when there is no interactive terminal, so
+	// `project dev stop` also works headless (CI, an agent, a pipe with no
+	// /dev/tty) — matching start.
+	stop := func(ctx context.Context) error {
+		return e.executor.StopEnvironment(ctx, opts)
+	}
 
-	if err != nil {
+	if err := runStep(cmd.Context(), title, stop); err != nil {
 		return fmt.Errorf("stopping environment: %w", err)
 	}
 
