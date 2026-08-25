@@ -13,16 +13,17 @@ import (
 )
 
 // ProjectHostname derives the hostname a project should be reachable at
-// through the shared proxy. If cfg.URL is explicitly set in
-// .shopware-project.yml, its host is used as an override — unless it is an
-// IP address or localhost, which is what freshly created projects point at
+// through the shared proxy. If a url is explicitly set in
+// .shopware-project.yml (environments.local.url, or the deprecated top-level
+// url), its host is used as an override — unless it is an IP address or
+// localhost, which is what freshly created projects point at
 // (http://127.0.0.1:8000) and never a usable proxy hostname. Otherwise the
 // hostname is derived from the project directory name.
 func ProjectHostname(projectRoot string, cfg *shop.Config, baseDomain string) (string, error) {
-	if cfg != nil && cfg.URL != "" {
-		parsed, err := url.Parse(cfg.URL)
+	if configured := cfg.EffectiveURL(); configured != "" {
+		parsed, err := url.Parse(configured)
 		if err != nil {
-			return "", fmt.Errorf("parsing configured url %q: %w", cfg.URL, err)
+			return "", fmt.Errorf("parsing configured url %q: %w", configured, err)
 		}
 
 		if host := parsed.Hostname(); host != "" && host != "localhost" && net.ParseIP(host) == nil {
