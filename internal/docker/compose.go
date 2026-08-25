@@ -472,10 +472,10 @@ func addOptionalServices(services *yamlMap[composeService], volumes *yamlMap[str
 	}
 }
 
-// applyS3Env injects the filesystem, cache, session, and messenger values
-// that shopware/k8s-meta's Flex recipe already reads. Compose environment
-// overrides the recipe's localhost / empty-bucket defaults so PHP talks to the
-// generated redis and rustfs services.
+// applyS3Env injects the filesystem, cache, session, elasticsearch, and
+// messenger values that shopware/k8s-meta's Flex recipe already reads. Compose
+// environment overrides the recipe's localhost / empty-bucket defaults so PHP
+// talks to the generated redis and rustfs services.
 func applyS3Env(webEnv yamlMap[string], px *ProxyOptions) yamlMap[string] {
 	// PHP talks to RustFS on the compose network. The browser loads public
 	// media from PUBLIC_URL: localhost in plain mode, the s3.<host> proxy
@@ -496,7 +496,10 @@ func applyS3Env(webEnv yamlMap[string], px *ProxyOptions) yamlMap[string] {
 		set("AWS_DEFAULT_REGION", "us-east-1").
 		set("K8S_CACHE_HOST", "redis").
 		set("K8S_CACHE_PORT", "6379").
+		set("PHP_SESSION_HANDLER", "redis").
 		set("PHP_SESSION_SAVE_PATH", "tcp://redis:6379").
+		set("K8S_ES_NUMBER_OF_REPLICAS", "1").
+		set("K8S_ES_NUMBER_OF_SHARDS", "1").
 		set("MESSENGER_TRANSPORT_DSN", redisMessengerDSN)
 }
 
@@ -554,7 +557,7 @@ func addRustFSServices(services *yamlMap[composeService], volumes *yamlMap[struc
 	rustfsInit := composeService{
 		Image:      rustfsRcImage,
 		Entrypoint: []string{"/bin/sh", "-c"},
-		Command:    []string{fmt.Sprintf("rc alias set rustfs http://rustfs:9000 %s %s && rc mb --ignore-existing rustfs/shopware-private && rc mb --ignore-existing rustfs/shopware-public", rustfsAccessKey, rustfsSecretKey)},
+		Command:    []string{fmt.Sprintf("rc alias set rustfs http://rustfs:9000 %s %s && rc mb --ignore-existing rustfs/shopware-private && rc mb --ignore-existing rustfs/shopware-public && rc anonymous set download rustfs/shopware-public", rustfsAccessKey, rustfsSecretKey)},
 		DependsOn: yamlMap[composeDependency]{}.
 			set("rustfs", composeDependency{Condition: "service_healthy"}),
 	}

@@ -31,14 +31,14 @@ type EnvironmentConfig struct {
 
 type Config struct {
 	AdditionalConfigs []string `yaml:"include,omitempty"`
-	// Shop URL. Prefer environments.local.url or another named environment; the top-level url key is still read during the deprecation window.
+	// Shop URL. Prefer environments.local.url or another named environment; the top-level url key is used only when environments.local is absent.
 	URL string `yaml:"url,omitempty" jsonschema:"deprecated=true"`
 	// Controls date-based compatibility behavior, formatted as YYYY-MM-DD.
 	CompatibilityDate string `yaml:"compatibility_date,omitempty" jsonschema:"format=date"`
 	// PHP version (e.g. "8.3") used for local PHP and Composer commands of this project. Written by "project create" for non-Docker projects. The matching PHP is looked up on the machine running the command, so the value stays portable across machines; it takes precedence over the php found in PATH, while the PHP_BINARY environment variable overrides it.
 	PHPVersion string       `yaml:"php_version,omitempty"`
 	Build      *ConfigBuild `yaml:"build,omitempty"`
-	// Admin API credentials. Prefer environments.local.admin_api or another named environment; the top-level admin_api key is still read during the deprecation window.
+	// Admin API credentials. Prefer environments.local.admin_api or another named environment; the top-level admin_api key is used only when environments.local is absent.
 	AdminApi         *ConfigAdminApi   `yaml:"admin_api,omitempty" jsonschema:"deprecated=true"`
 	ConfigDump       *ConfigDump       `yaml:"dump,omitempty"`
 	ConfigDeployment *ConfigDeployment `yaml:"deployment,omitempty"`
@@ -55,10 +55,9 @@ type Config struct {
 	foundConfig            bool
 }
 
-// ResolveEnvironment returns the named environment. An empty name uses the
-// deprecated top-level url/admin_api when either is set, otherwise
-// environments.local. Mixed files are not silently retargeted during the
-// deprecation window.
+// ResolveEnvironment returns the named environment. An empty name uses
+// environments.local when it is defined, otherwise the deprecated top-level
+// url/admin_api.
 func (c *Config) ResolveEnvironment(name string) (*EnvironmentConfig, error) {
 	if name != "" {
 		env, ok := c.Environments[name]
@@ -69,10 +68,6 @@ func (c *Config) ResolveEnvironment(name string) (*EnvironmentConfig, error) {
 			return nil, fmt.Errorf("environment %q has no configuration", name)
 		}
 		return env, nil
-	}
-
-	if c.URL != "" || c.AdminApi != nil {
-		return c.topLevelEnvironment(), nil
 	}
 
 	if env, ok := c.Environments["local"]; ok && env != nil {

@@ -332,7 +332,7 @@ func TestMigrationWizardApplyToConfig_PreservesExistingURL(t *testing.T) {
 
 	sg.applyToConfig(cfg)
 
-	// Existing top-level url is left untouched so mixed files are not retargeted
+	// Existing top-level url is left untouched; environments.local wins at resolve time.
 	assert.Equal(t, "https://myshop.example.com", cfg.URL)
 	assert.Equal(t, "http://127.0.0.1:8000", cfg.Environments["local"].URL)
 }

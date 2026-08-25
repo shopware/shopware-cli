@@ -75,7 +75,7 @@ environments:
 	})
 }
 
-func TestNoEnvFlagKeepsBaseConfig(t *testing.T) {
+func TestNoEnvFlagPrefersEnvironmentsLocal(t *testing.T) {
 	clearShopClientEnv(t)
 	t.Setenv("PROJECT_ROOT", t.TempDir())
 
@@ -89,6 +89,9 @@ admin_api:
 environments:
   local:
     url: http://127.0.0.1:7
+    admin_api:
+      client_id: local-id
+      client_secret: local-secret
 `), 0o644))
 
 	previousConfigPath := projectConfigPath
@@ -104,9 +107,8 @@ environments:
 
 	err := projectExtensionListCmd.RunE(projectExtensionListCmd, []string{})
 	require.Error(t, err)
-	// Deprecation-window compatibility: mixed files keep the top-level shop.
-	assert.Contains(t, err.Error(), "127.0.0.1:9", "without -e the base URL must be used")
-	assert.NotContains(t, err.Error(), "127.0.0.1:7", "environments.local must not silently retarget commands")
+	assert.Contains(t, err.Error(), "127.0.0.1:7", "without -e, environments.local must win over the deprecated top-level shop")
+	assert.NotContains(t, err.Error(), "127.0.0.1:9", "deprecated top-level url must not be used when environments.local exists")
 }
 
 func TestNoEnvFlagUsesLocalWhenNoTopLevel(t *testing.T) {

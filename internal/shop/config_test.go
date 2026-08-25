@@ -175,8 +175,7 @@ func TestResolveEnvironment(t *testing.T) {
 		assert.Equal(t, "http://localhost:8000", env.URL)
 	})
 
-	t.Run("empty name keeps top-level when environments.local also exists", func(t *testing.T) {
-		// Deprecation-window compatibility: mixed files keep the top-level shop.
+	t.Run("empty name prefers environments.local when top-level shop also exists", func(t *testing.T) {
 		cfg := &Config{
 			URL:      "https://myshop.com",
 			AdminApi: &ConfigAdminApi{Username: "admin"},
@@ -187,9 +186,9 @@ func TestResolveEnvironment(t *testing.T) {
 
 		env, err := cfg.ResolveEnvironment("")
 		require.NoError(t, err)
-		assert.Equal(t, "local", env.Type)
-		assert.Equal(t, "https://myshop.com", env.URL)
-		assert.Equal(t, "admin", env.AdminApi.Username)
+		assert.Equal(t, "docker", env.Type)
+		assert.Equal(t, "http://localhost:8000", env.URL)
+		assert.Nil(t, env.AdminApi)
 	})
 
 	t.Run("synthesizes from top-level when no environments configured", func(t *testing.T) {
@@ -301,8 +300,7 @@ func TestWithEnvironment(t *testing.T) {
 		assert.Equal(t, "admin", resolved.AdminApi.Username)
 	})
 
-	t.Run("empty name keeps top-level when environments.local also exists", func(t *testing.T) {
-		// Deprecation-window compatibility: mixed files keep the top-level shop.
+	t.Run("empty name prefers environments.local when top-level shop also exists", func(t *testing.T) {
 		cfg := &Config{
 			URL:      "https://myshop.com",
 			AdminApi: &ConfigAdminApi{Username: "admin"},
@@ -316,8 +314,8 @@ func TestWithEnvironment(t *testing.T) {
 
 		resolved, err := cfg.WithEnvironment("")
 		require.NoError(t, err)
-		assert.Equal(t, "https://myshop.com", resolved.URL)
-		assert.Equal(t, "admin", resolved.AdminApi.Username)
+		assert.Equal(t, "http://localhost:8000", resolved.URL)
+		assert.Equal(t, "local-admin", resolved.AdminApi.Username)
 	})
 
 	t.Run("empty name applies environments.local when top-level shop is unset", func(t *testing.T) {
