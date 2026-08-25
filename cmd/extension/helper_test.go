@@ -63,8 +63,10 @@ func buildExtensionZip(t *testing.T, dir string) string {
 		if err != nil {
 			return err
 		}
-		defer src.Close()
 		_, err = io.Copy(entry, src)
+		if closeErr := src.Close(); err == nil {
+			err = closeErr
+		}
 		return err
 	}))
 	require.NoError(t, w.Close())
@@ -100,12 +102,26 @@ func resetCommandFlags(t *testing.T, cmd *cobra.Command) {
 	t.Cleanup(func() { resetFlagsNow(cmd) })
 }
 
+// setContextRecursively sets ctx on the command and all of its subcommands;
+// cobra only inherits the parent context into a subcommand whose own context is
+// still nil, so a subcommand would otherwise keep the context of the first test
+// that executed it.
+func setContextRecursively(cmd *cobra.Command, ctx context.Context) {
+	cmd.SetContext(ctx)
+	for _, sub := range cmd.Commands() {
+		setContextRecursively(sub, ctx)
+	}
+}
+
 // runExtensionCtx executes the extension root command with the given context.
 func runExtensionCtx(t *testing.T, ctx context.Context, args ...string) error {
 	t.Helper()
-	extensionRootCmd.SetContext(ctx)
+	setContextRecursively(extensionRootCmd, ctx)
 	extensionRootCmd.SetArgs(args)
-	t.Cleanup(func() { extensionRootCmd.SetArgs(nil) })
+	t.Cleanup(func() {
+		extensionRootCmd.SetArgs(nil)
+		setContextRecursively(extensionRootCmd, context.Background())
+	})
 	return extensionRootCmd.Execute()
 }
 

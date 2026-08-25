@@ -16,10 +16,21 @@ func TestExtensionGetChangelogLanguageSelection(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "CHANGELOG.md"), []byte("# 1.0.0\n- English change\n"), 0o644))
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "CHANGELOG_de-DE.md"), []byte("# 1.0.0\n- Deutsche Aenderung\n"), 0o644))
 
-	require.NoError(t, runExtension(t, "get-changelog", dir))
-	require.NoError(t, runExtension(t, "get-changelog", "--language", "de-DE", dir))
+	out := captureStdout(t, func() {
+		require.NoError(t, runExtension(t, "get-changelog", dir))
+	})
+	assert.Contains(t, out, "English change")
+
+	out = captureStdout(t, func() {
+		require.NoError(t, runExtension(t, "get-changelog", "--language", "de-DE", dir))
+	})
+	assert.Contains(t, out, "Deutsche Aenderung")
+
 	// Comma-separated languages act as fallbacks.
-	require.NoError(t, runExtension(t, "get-changelog", "--language", "fr-FR,de-DE", dir))
+	out = captureStdout(t, func() {
+		require.NoError(t, runExtension(t, "get-changelog", "--language", "fr-FR,de-DE", dir))
+	})
+	assert.Contains(t, out, "Deutsche Aenderung")
 
 	err := runExtension(t, "get-changelog", "--language", "xx-XX", dir)
 	require.Error(t, err)
