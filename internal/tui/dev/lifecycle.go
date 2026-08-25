@@ -79,11 +79,7 @@ func (m Model) updateLifecycle(msg tea.Msg) (app.Content, tea.Cmd) {
 			failure := classifyInstallFailure(msg.output, msg.err)
 			m.installProg.failure = &failure
 			if m.telemetry.installOnce() {
-				tags := m.telemetry.installTags(tracking.ResultFailure, m.install)
-				// Telemetry will consume the complete failure record in #1422.
-				// Keep today's tag behavior while fixing the pre-Start bucket.
-				tags[tracking.TagFailedStep] = failure.failingStep
-				trackEvent(tracking.EventDevInstall, tags)
+				trackEvent(tracking.EventDevInstall, m.telemetry.installFailureTags(m.install, failure))
 			}
 			m.phase = phaseInstallFailed
 			return m, nil

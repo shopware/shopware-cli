@@ -274,3 +274,20 @@ func TestInstallFailureTagsNeverLeakSecrets(t *testing.T) {
 		assert.NotContains(t, value, "super-secret-host", "tag %q leaked the raw detail", key)
 	}
 }
+
+// End-to-end over the real classifier: a DB-down run (no "Start:" line) must
+// emit failure_category=db_connection and failed_step=install_start — never the
+// coarse system:install bucket.
+func TestInstallFailureTagsFromClassifier(t *testing.T) {
+	tel := &telemetryState{}
+	output := []string{
+		"[deployment-helper] An exception occurred in the driver: SQLSTATE[HY000] [2002] No such file or directory",
+	}
+	failure := classifyInstallFailure(output, assert.AnError)
+	tags := tel.installFailureTags(installWizard{}, failure)
+
+	assert.Equal(t, "db_connection", tags[tracking.TagFailureCategory])
+	assert.Equal(t, "install_start", tags[tracking.TagFailedStep])
+	assert.NotEqual(t, "system:install", tags[tracking.TagFailedStep])
+	assert.Contains(t, tags, tracking.TagRetryable)
+}
