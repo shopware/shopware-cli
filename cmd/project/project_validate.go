@@ -17,6 +17,7 @@ import (
 var projectValidateCmd = &cobra.Command{
 	Use:   "validate [path]",
 	Short: "Validate project",
+	Args:  cobra.MaximumNArgs(1),
 	PreRunE: func(cmd *cobra.Command, args []string) error {
 		return verifier.SetupTools(cmd.Context(), cmd.Root().Version)
 	},

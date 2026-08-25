@@ -28,7 +28,7 @@ var extensionPackageCmd = &cobra.Command{
 	Use:     "package path [branch]",
 	Short:   "Package an extension",
 	Aliases: []string{"zip"},
-	Args:    cobra.MinimumNArgs(1),
+	Args:    cobra.RangeArgs(1, 2),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		if cmd.CalledAs() == "zip" {
 			logging.FromContext(cmd.Context()).Warnf("`extension zip` is deprecated, use `extension package` instead")

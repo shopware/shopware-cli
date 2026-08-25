@@ -14,6 +14,7 @@ import (
 var projectFixCmd = &cobra.Command{
 	Use:   "fix [path]",
 	Short: "Fix project",
+	Args:  cobra.MaximumNArgs(1),
 	PreRunE: func(cmd *cobra.Command, args []string) error {
 		return verifier.SetupTools(cmd.Context(), cmd.Root().Version)
 	},

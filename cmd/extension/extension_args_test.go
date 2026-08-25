@@ -31,3 +31,21 @@ func TestSinglePathCommandsRejectExtraArgs(t *testing.T) {
 		})
 	}
 }
+
+// package takes a path and an optional branch, so a third argument must be
+// rejected instead of silently ignored.
+func TestPackageRejectsMoreThanTwoArgs(t *testing.T) {
+	out := new(bytes.Buffer)
+	extensionRootCmd.SetOut(out)
+	extensionRootCmd.SetErr(out)
+	extensionRootCmd.SetArgs([]string{"package", t.TempDir(), "branch", "extra"})
+	t.Cleanup(func() {
+		extensionRootCmd.SetArgs(nil)
+		extensionRootCmd.SetOut(nil)
+		extensionRootCmd.SetErr(nil)
+	})
+
+	err := extensionRootCmd.Execute()
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "accepts between 1 and 2 arg(s), received 3")
+}
