@@ -54,6 +54,34 @@ func TestIncreaseExtensionVersionBumpsPluginComposerVersion(t *testing.T) {
 		assert.Equal(t, "1.2.4", bumped)
 	})
 
+	t.Run("two-part version is padded to major.minor.patch", func(t *testing.T) {
+		bumped, err := bumpPatchVersion("1.0")
+		require.NoError(t, err)
+		assert.Equal(t, "1.0.1", bumped)
+	})
+
+	t.Run("pre-release suffix is dropped by the bump", func(t *testing.T) {
+		bumped, err := bumpPatchVersion("1.0.0-beta")
+		require.NoError(t, err)
+		assert.Equal(t, "1.0.1", bumped)
+	})
+
+	t.Run("invalid version is rejected", func(t *testing.T) {
+		bumped, err := bumpPatchVersion("not-a-version")
+		require.Error(t, err)
+		assert.Empty(t, bumped)
+	})
+
+	// go-version also accepts a pre-release suffix without a separator
+	// ("1.0.0rc1" normalizes to 1.0.0.0-rc1), but the core is only trimmed at
+	// "-" and "+", so the patch part stays non-numeric. The bump has to fail
+	// instead of writing a broken version back into the extension.
+	t.Run("suffix without a separator is rejected", func(t *testing.T) {
+		bumped, err := bumpPatchVersion("1.0.0rc1")
+		require.ErrorContains(t, err, `cannot parse patch version "0rc1"`)
+		assert.Empty(t, bumped)
+	})
+
 	t.Run("composer.json without version is left untouched", func(t *testing.T) {
 		dir := writeMinimalPlugin(t)
 		composerPath := filepath.Join(dir, "composer.json")
