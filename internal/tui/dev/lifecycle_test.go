@@ -211,6 +211,7 @@ func TestUpdateLifecycle_ShopwareInstallDone_ErrorShowsFailedPhase(t *testing.T)
 	assert.Equal(t, phaseInstallFailed, final.phase)
 	assert.NotNil(t, final.installProg.failure)
 	assert.Nil(t, cmd)
+	// Captured output is left untouched; the failure notice is added when rendering.
 	assert.Equal(t, []string{"Start: system:install", "boom"}, final.overlayLines)
 
 	// envConfig should NOT be mutated on error.

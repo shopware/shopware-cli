@@ -204,7 +204,11 @@ func (m Model) renderPhase(ctx app.Context) string {
 		content.WriteString(tui.RenderPhaseCard(strings.TrimRight(card.String(), "\n")))
 	case phaseInstallFailed:
 		if m.installProg.showLogs {
-			return m.renderDockerLogs("Installation failed", ctx.Width, ctx.MainHeight)
+			// Appended at render time, not when the install failed: output is
+			// still draining from the stream buffer at that point, so a stored
+			// notice would end up somewhere in the middle of the log.
+			lines := append(slices.Clone(m.overlayLines), m.installFailureNotice()...)
+			return m.renderLogScreen("Installation failed", lines, ctx.Width, ctx.MainHeight)
 		}
 		content.WriteString(tui.RenderPhaseCard(m.renderInstallFailed()))
 	case phaseDashboard, phaseTask, phaseMigrationWizard:
@@ -214,11 +218,11 @@ func (m Model) renderPhase(ctx app.Context) string {
 	return renderPhaseBox(content.String(), ctx.Width, ctx.MainHeight)
 }
 
-// renderInstallFailed renders the failed-install card: a headline, the
-// classified reason and step, and the pointer to the log view. The raw error
-// text is deliberately left out — it is one unwrapped line that would push the
-// card out of shape, and the log view shows it in context anyway.
-func (m Model) renderInstallFailed() string {
+// installFailureSummary renders the facts shared by the failure card and the
+// notice closing the log view: a headline, the classified step and reason. The
+// raw error text is deliberately left out — it is one unwrapped line that would
+// push the card out of shape, and the log shows it in context anyway.
+func (m Model) installFailureSummary() string {
 	failure := installFailure{category: installFailureUnknown, failingStep: installStartStep}
 	if m.installProg.failure != nil {
 		failure = *m.installProg.failure
@@ -231,12 +235,33 @@ func (m Model) renderInstallFailed() string {
 	b.WriteString("\n\n")
 	b.WriteString(tui.KVRow("Failed step:", valueStyle.Render(installFailureStepLabel(failure.failingStep))))
 	b.WriteString(tui.KVRow("Reason:", valueStyle.Render(failure.category.label())))
-	b.WriteString("\n")
+
+	return strings.TrimRight(b.String(), "\n")
+}
+
+// renderInstallFailed renders the failed-install card: the failure summary plus
+// the pointer to the log view.
+func (m Model) renderInstallFailed() string {
+	var b strings.Builder
+	b.WriteString(m.installFailureSummary())
+	b.WriteString("\n\n")
 	b.WriteString(tui.DimStyle.Render("Press "))
 	b.WriteString(keyCapStyle.Render("l"))
 	b.WriteString(tui.DimStyle.Render(" to see full logs"))
 
 	return b.String()
+}
+
+// installFailureNotice returns the failure summary as boxed log lines. They are
+// returned per line so the log screen's tail calculation stays accurate.
+func (m Model) installFailureNotice() []string {
+	box := lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(tui.ErrorColor).
+		Padding(0, 2).
+		Render(m.installFailureSummary())
+
+	return append([]string{""}, strings.Split(box, "\n")...)
 }
 
 // renderPhaseBox renders content centered inside the rounded main-region box.
@@ -275,16 +300,18 @@ func (m Model) renderDockerLogs(title string, width, boxHeight int) string {
 }
 
 func (m Model) renderLogScreen(title string, lines []string, width, boxHeight int) string {
-	visibleLines := boxHeight - 6
-	if visibleLines < 1 {
-		visibleLines = 1
+	visibleRows := boxHeight - 6
+	if visibleRows < 1 {
+		visibleRows = 1
 	}
+	// Border (2) plus the horizontal padding below (3 each side).
+	contentWidth := width - 8
 
 	var body strings.Builder
 	body.WriteString(panelHeaderStyle.Render(title))
 	body.WriteString("\n\n")
 
-	for _, line := range tui.TailLines(lines, visibleLines) {
+	for _, line := range tui.TailWrappedLines(lines, visibleRows, contentWidth) {
 		body.WriteString(line)
 		body.WriteString("\n")
 	}

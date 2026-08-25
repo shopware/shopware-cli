@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
@@ -588,7 +589,26 @@ func TestView_InstallFailedToggledLogsShowOverlay(t *testing.T) {
 
 	view := m.View(app.Context{Width: 120, Height: 40, MainHeight: 36})
 	assert.Contains(t, view, "SQLSTATE boom")
-	assert.NotContains(t, view, "Error occured")
+	// The boxed failure notice closes the log, after the captured output.
+	assert.Greater(t, strings.Index(view, "Failed step:"), strings.Index(view, "SQLSTATE boom"))
+}
+
+func TestView_InstallFailedNoticeSurvivesWrappingLogLines(t *testing.T) {
+	m := newTestModel()
+	m.phase = phaseInstallFailed
+	m.installProg.showLogs = true
+	m.installProg.failure = &installFailure{
+		category:    installFailureDatabaseConnection,
+		failingStep: "system:install",
+	}
+	// Lines long enough to wrap; tailing by slice element used to clip the box.
+	for range 40 {
+		m.overlayLines = append(m.overlayLines, strings.Repeat("deployment-helper output ", 6))
+	}
+
+	view := m.View(app.Context{Width: 100, Height: 30, MainHeight: 26})
+	assert.Contains(t, view, "Failed step:")
+	assert.Contains(t, view, "Database connection failed")
 }
 
 func TestView_ZeroSizeDoesNotPanic(t *testing.T) {
