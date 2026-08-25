@@ -10,14 +10,19 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// fakeAdvisoryProvider serves canned security advisories through go-composer's
-// repository handler; the Package capability is never used by the gate.
+// fakeAdvisoryProvider serves canned packages and security advisories through
+// go-composer's repository handler. The advisory gate only needs the
+// advisories, the version lookups of the create flow only the package.
 type fakeAdvisoryProvider struct {
+	pkg        *repository.Package
 	advisories map[string][]repository.SecurityAdvisory
 }
 
-func (fakeAdvisoryProvider) Package(context.Context, string) (*repository.Package, error) {
-	return nil, repository.ErrPackageNotFound
+func (p fakeAdvisoryProvider) Package(_ context.Context, name string) (*repository.Package, error) {
+	if p.pkg == nil || p.pkg.Name != name {
+		return nil, repository.ErrPackageNotFound
+	}
+	return p.pkg, nil
 }
 
 func (p fakeAdvisoryProvider) SecurityAdvisories(context.Context, []string) (map[string][]repository.SecurityAdvisory, error) {
