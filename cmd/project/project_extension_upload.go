@@ -58,9 +58,6 @@ var projectExtensionUploadCmd = &cobra.Command{
 		}
 
 		extCfg := ext.GetExtensionConfig()
-		if err != nil {
-			logging.FromContext(cmd.Context()).Fatalln(fmt.Errorf("update: %v", err))
-		}
 
 		if increaseVersionBeforeUpload {
 			if err := increaseExtensionVersion(cmd.Context(), ext); err != nil {
@@ -198,6 +195,9 @@ var projectExtensionUploadCmd = &cobra.Command{
 
 		if doLifecycleEvents {
 			remoteExtension := extensions.GetByName(name)
+			if remoteExtension == nil {
+				return fmt.Errorf("cannot run lifecycle events: uploaded extension %s is not listed by the shop yet. Re-run the command to retry", name)
+			}
 
 			if remoteExtension.InstalledAt == nil {
 				if _, err := client.ExtensionManager.InstallExtension(adminCtx, remoteExtension.Type, remoteExtension.Name); err != nil {
