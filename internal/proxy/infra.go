@@ -150,12 +150,9 @@ func IsProxyProjectForDomain(cfg *shop.Config, baseDomain string) bool {
 		return false
 	}
 
-	// The local environment's url overrides the top-level one in the executor,
-	// so honor the same precedence when detecting proxy mode.
-	effective := cfg.URL
-	if env, ok := cfg.Environments["local"]; ok && env != nil && env.URL != "" {
-		effective = env.URL
-	}
+	// Resolve the url the same way the executor does, so proxy detection and
+	// the executor never disagree about which url the project serves.
+	effective := cfg.EffectiveURL()
 
 	if effective == "" {
 		return false
