@@ -25,7 +25,7 @@ var (
 )
 
 var extensionPackageCmd = &cobra.Command{
-	Use:     "package [path] [branch]",
+	Use:     "package path [branch]",
 	Short:   "Package an extension",
 	Aliases: []string{"zip"},
 	Args:    cobra.MinimumNArgs(1),

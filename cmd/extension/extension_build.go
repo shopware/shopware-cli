@@ -12,7 +12,7 @@ import (
 )
 
 var extensionAssetBundleCmd = &cobra.Command{
-	Use:   "build [path]",
+	Use:   "build path...",
 	Short: "Builds assets for extensions",
 	Args:  cobra.MinimumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {

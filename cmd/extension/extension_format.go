@@ -13,7 +13,7 @@ import (
 )
 
 var extensionFormat = &cobra.Command{
-	Use:   "format [path]",
+	Use:   "format path",
 	Short: "Format an extension",
 	Args:  cobra.ExactArgs(1),
 	PreRunE: func(cmd *cobra.Command, args []string) error {
