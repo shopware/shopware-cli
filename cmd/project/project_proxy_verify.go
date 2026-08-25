@@ -49,8 +49,12 @@ failing layer is reported with a hint how to fix it.`,
 // e.g. before the first `proxy up` or after a `teardown`), so callers can tell a
 // broken setup from an idle one. Shared by `proxy verify` and the final step of
 // `proxy setup`.
+// proxyVerify is a package variable so tests can fake the machine checks,
+// which probe real DNS, TLS and docker state.
+var proxyVerify = proxy.Verify
+
 func runProxyVerification(ctx context.Context, baseDomain string) (ready, notStarted bool) {
-	results := proxy.Verify(ctx, baseDomain)
+	results := proxyVerify(ctx, baseDomain)
 
 	ready = true
 	onlyPending := true
