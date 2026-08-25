@@ -12,7 +12,7 @@ import (
 )
 
 func TestSalesChannelPicker_ConfirmEmitsWatcherOpts(t *testing.T) {
-	sp := newSalesChannelPicker(nil)
+	sp := newSalesChannelPicker(t.Context(), nil)
 
 	loaded := salesChannelsLoadedMsg{
 		channels: []salesChannelEntry{
@@ -57,14 +57,14 @@ func TestSalesChannelPicker_ConfirmEmitsWatcherOpts(t *testing.T) {
 func TestModel_SalesChannelPicker_FullRoutingFlow(t *testing.T) {
 	m := Model{
 		phase:    phaseDashboard,
-		overview: NewOverviewModel("local", "http://localhost:8000", "", "", "/tmp/project", nil, nil),
+		overview: NewOverviewModel(t.Context(), "local", "http://localhost:8000", "", "", "/tmp/project", nil, nil),
 		watchers: make(map[string]*watcherHandle),
 	}
 	shell := app.New(app.Options{DisableDefaultKeys: true})
 	m.host = shell
 	shell.SetContent(m)
 
-	sp := newSalesChannelPicker(nil)
+	sp := newSalesChannelPicker(t.Context(), nil)
 	_ = shell.PushOverlay(sp)
 
 	_, _ = shell.Update(salesChannelsLoadedMsg{
@@ -103,7 +103,7 @@ func TestSalesChannelPicker_ExitWhileLoading(t *testing.T) {
 	// Before channels load the user must always have a way out, otherwise the
 	// loading/error/empty view feels stuck.
 	for _, key := range []rune{tea.KeyEsc, tea.KeyEnter} {
-		sp := newSalesChannelPicker(nil)
+		sp := newSalesChannelPicker(t.Context(), nil)
 		assert.Nil(t, sp.inner, "inner picker should not exist before channels load")
 
 		next, cmd := sp.Update(tea.KeyPressMsg(tea.Key{Code: key}))
@@ -116,7 +116,7 @@ func TestSalesChannelPicker_ExitWhileLoading(t *testing.T) {
 	}
 
 	// 'q' is also accepted as an exit key.
-	sp := newSalesChannelPicker(nil)
+	sp := newSalesChannelPicker(t.Context(), nil)
 	next, cmd := sp.Update(tea.KeyPressMsg(tea.Key{Code: 'q', Text: "q"}))
 	assert.Nil(t, next)
 	res, ok := cmd().(salesChannelPickerResultMsg)

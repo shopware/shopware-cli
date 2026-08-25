@@ -123,7 +123,7 @@ func TestCollectSetupHealth_WithoutExecutor(t *testing.T) {
 }
 
 func TestOverviewViewShowsSetupHealth(t *testing.T) {
-	m := NewOverviewModel("docker", "http://localhost:8000", "admin", "shopware", "/tmp/project", nil, nil)
+	m := NewOverviewModel(t.Context(), "docker", "http://localhost:8000", "admin", "shopware", "/tmp/project", nil, nil)
 	m.loading = false
 	m.healthLoading = false
 	m.health = []healthCheck{
@@ -149,7 +149,7 @@ func TestOverviewViewShowsSetupHealth(t *testing.T) {
 }
 
 func TestSetupHealthLinksAreZeroWidth(t *testing.T) {
-	m := NewOverviewModel("docker", "http://localhost:8000", "admin", "shopware", "/tmp/project", nil, nil)
+	m := NewOverviewModel(t.Context(), "docker", "http://localhost:8000", "admin", "shopware", "/tmp/project", nil, nil)
 	m.loading = false
 	m.healthLoading = false
 	m.health = []healthCheck{
@@ -183,7 +183,7 @@ func stripANSI(s string) string {
 }
 
 func TestOverviewViewSetupHealthLoading(t *testing.T) {
-	m := NewOverviewModel("docker", "http://localhost:8000", "admin", "shopware", "/tmp/project", nil, nil)
+	m := NewOverviewModel(t.Context(), "docker", "http://localhost:8000", "admin", "shopware", "/tmp/project", nil, nil)
 	m.loading = false
 
 	assert.Contains(t, m.View(120, 40), "CHECKING")

@@ -35,7 +35,7 @@ type wizard struct {
 
 func newTestWizard(t *testing.T) *wizard {
 	t.Helper()
-	shell, m := newAppWithModel(Options{ProjectRoot: "/projects/acme-shop", EnvName: "local"})
+	shell, m := newAppWithModel(t.Context(), Options{ProjectRoot: "/projects/acme-shop", EnvName: "local"})
 	h := &app.Harness{App: shell}
 	h.Send(tea.WindowSizeMsg{Width: 110, Height: 34})
 	return &wizard{Harness: h, m: m}

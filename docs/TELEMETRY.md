@@ -162,8 +162,9 @@ ever transmitted — only enumerated choices, outcomes, and durations.
 ### `shopware_cli.project.dev.install` — first-run Shopware installation
 
 Sent when the "Shopware is not initialized yet" wizard reaches a terminal
-state. Choice tags are only present once the user made that choice (an event
-for a run cancelled on the language step carries no `language` tag).
+state, or when the non-interactive `project dev install` command finishes.
+Choice tags are only present once the user made that choice (an event for a
+run cancelled on the language step carries no `language` tag).
 
 | Tag                  | Meaning                                                       | Example          |
 |----------------------|---------------------------------------------------------------|------------------|
@@ -174,6 +175,7 @@ for a run cancelled on the language step carries no `language` tag).
 | `language`           | Selected default language                                     | `de-DE`          |
 | `currency`           | Selected default currency                                     | `EUR`            |
 | `custom_credentials` | Whether the default admin username/password were changed. The credentials themselves are **never** sent. | `false` |
+| `interactive`        | `true` for the TUI wizard, `false` for `project dev install`  | `true`           |
 
 ### `shopware_cli.project.dev.migration_wizard` — dev-environment setup wizard
 

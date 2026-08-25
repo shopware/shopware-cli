@@ -8,6 +8,7 @@ import (
 
 	"charm.land/lipgloss/v2"
 
+	"github.com/shopware/shopware-cli/internal/shop/install"
 	"github.com/shopware/shopware-cli/internal/tui"
 	"github.com/shopware/shopware-cli/internal/tui/app"
 )
@@ -181,21 +182,21 @@ func (m Model) renderPhase(ctx app.Context) string {
 			return m.renderDockerLogs("Installing Shopware...", ctx.Width, ctx.MainHeight)
 		}
 		var card strings.Builder
-		total := len(installStepPatterns)
+		total := len(install.Steps)
 		pctText := fmt.Sprintf(" %d%%", int(float64(m.installProg.currentStep)/float64(total)*100))
 		card.WriteString(m.installProg.progress.View())
 		card.WriteString(tui.DimStyle.Render(pctText))
 		card.WriteString("\n\n")
 
-		items := make([]tui.StepItem, len(installStepPatterns))
-		for i, sp := range installStepPatterns {
+		items := make([]tui.StepItem, len(install.Steps))
+		for i, sp := range install.Steps {
 			switch {
 			case i < m.installProg.currentStep || (i == m.installProg.currentStep && m.installProg.done):
-				items[i] = tui.StepItem{Label: sp.label, State: tui.StepStateDone}
+				items[i] = tui.StepItem{Label: sp.Label, State: tui.StepStateDone}
 			case i == m.installProg.currentStep && !m.installProg.done:
-				items[i] = tui.StepItem{Label: sp.label, State: tui.StepStateActive, Indicator: m.installProg.spinner.View()}
+				items[i] = tui.StepItem{Label: sp.Label, State: tui.StepStateActive, Indicator: m.installProg.spinner.View()}
 			default:
-				items[i] = tui.StepItem{Label: tui.DimStyle.Render(sp.label), State: tui.StepStatePending}
+				items[i] = tui.StepItem{Label: tui.DimStyle.Render(sp.Label), State: tui.StepStatePending}
 			}
 		}
 		card.WriteString(tui.NewStepList(tui.StepListOptions{Steps: items}).Render())

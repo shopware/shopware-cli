@@ -1,7 +1,6 @@
 package upgrade
 
 import (
-	"context"
 	"fmt"
 	"strings"
 
@@ -57,11 +56,11 @@ func (m *Model) beginPrepare() (app.Content, tea.Cmd) {
 	m.prepare = prepareState{gen: m.prepareGen}
 	target := m.check.target()
 	return m, tea.Batch(
-		envStatusCmd(context.Background(), m.opts.Executor, m.prepareGen),
-		packagistCmd(context.Background(), m.upgrader, m.prepareGen),
-		resolveCmd(context.Background(), m.upgrader, target.Version.String(), m.prepareGen),
-		compatCmd(context.Background(), m.upgrader, m.check.readiness.CurrentVersion, target.Version, m.check.readiness.Extensions, m.prepareGen),
-		phpInfoCmd(context.Background(), m.upgrader, target.Version, m.prepareGen),
+		envStatusCmd(m.commandContext(), m.opts.Executor, m.prepareGen),
+		packagistCmd(m.commandContext(), m.upgrader, m.prepareGen),
+		resolveCmd(m.commandContext(), m.upgrader, target.Version.String(), m.prepareGen),
+		compatCmd(m.commandContext(), m.upgrader, m.check.readiness.CurrentVersion, target.Version, m.check.readiness.Extensions, m.prepareGen),
+		phpInfoCmd(m.commandContext(), m.upgrader, target.Version, m.prepareGen),
 	)
 }
 
@@ -114,7 +113,7 @@ func (m *Model) maybeLoadChangelogs() tea.Cmd {
 		return nil
 	}
 	m.prepare.changelogsRequested = true
-	return changelogsCmd(context.Background(), m.upgrader, target.Version.String(), m.prepare.results, m.prepare.gen)
+	return changelogsCmd(m.commandContext(), m.upgrader, target.Version.String(), m.prepare.results, m.prepare.gen)
 }
 
 // deploymentHelperMissing reports whether the upgrade will add

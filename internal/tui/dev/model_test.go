@@ -1,6 +1,7 @@
 package dev
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -24,8 +25,8 @@ import (
 func newTestModel() Model {
 	m := Model{
 		phase:       phaseDashboard,
-		overview:    NewOverviewModel("local", "http://localhost:8000", "", "", "/tmp/project", nil, nil),
-		instance:    NewInstanceModel("/tmp/project", false),
+		overview:    NewOverviewModel(context.Background(), "local", "http://localhost:8000", "", "", "/tmp/project", nil, nil),
+		instance:    NewInstanceModel(context.Background(), "/tmp/project", false),
 		configTab:   NewConfigModel(nil, nil),
 		watchers:    make(map[string]*watcherHandle),
 		projectRoot: "/tmp/project",
@@ -70,7 +71,7 @@ func TestNew_InitializesFields(t *testing.T) {
 	// the case. We construct a real local executor instead.
 	exec := &executor.LocalExecutor{}
 	opts.Executor = exec
-	m := New(opts)
+	m := New(t.Context(), opts)
 
 	assert.Equal(t, tabOverview, m.activeTab)
 	assert.False(t, m.dockerMode)
@@ -87,7 +88,7 @@ func TestNewMigrationWizard_StartsInMigrationWizardPhase(t *testing.T) {
 		EnvConfig:   &shop.EnvironmentConfig{},
 		Executor:    &executor.LocalExecutor{},
 	}
-	m := NewMigrationWizard(opts)
+	m := NewMigrationWizard(t.Context(), opts)
 	assert.Equal(t, phaseMigrationWizard, m.phase)
 	assert.True(t, m.dockerMode)
 }
