@@ -103,3 +103,64 @@ func countOccurrences(s, sub string) int {
 	}
 	return count
 }
+
+func TestSetProjectURLDoesNotCreateTopLevelURL(t *testing.T) {
+	t.Parallel()
+
+	// The shape `project create` writes: environments only, no top-level url.
+	path := writeTestConfig(t, `compatibility_date: "2026-07-15"
+environments:
+    local:
+        type: docker
+        url: http://127.0.0.1:8000
+`)
+
+	state, err := ReadProjectURLState(path, "")
+	require.NoError(t, err)
+	assert.False(t, state.HasRoot)
+	assert.True(t, state.HasEnv)
+
+	require.NoError(t, SetProjectURL(path, "", "https://my-shop.shopware.local"))
+
+	updated, err := os.ReadFile(path)
+	require.NoError(t, err)
+	// Only the environment url is rewritten; a top-level url would
+	// deprecation-warn on every later command.
+	assert.Equal(t, 1, countOccurrences(string(updated), "https://my-shop.shopware.local"))
+	assert.NotContains(t, string(updated), "\nurl:")
+
+	require.NoError(t, RestoreProjectURL(path, "", state))
+
+	restored, err := os.ReadFile(path)
+	require.NoError(t, err)
+	assert.NotContains(t, string(restored), "my-shop.shopware.local")
+	assert.NotContains(t, string(restored), "\nurl:")
+	assert.Contains(t, string(restored), "url: http://127.0.0.1:8000")
+}
+
+func TestSetProjectURLCreatesEnvironmentURLAndRestoreRemovesIt(t *testing.T) {
+	t.Parallel()
+
+	path := writeTestConfig(t, `environments:
+    local:
+        type: docker
+`)
+
+	state, err := ReadProjectURLState(path, "")
+	require.NoError(t, err)
+	assert.False(t, state.HasEnv)
+
+	require.NoError(t, SetProjectURL(path, "", "https://my-shop.shopware.local"))
+
+	updated, err := os.ReadFile(path)
+	require.NoError(t, err)
+	assert.Contains(t, string(updated), "url: https://my-shop.shopware.local")
+	assert.NotContains(t, string(updated), "\nurl:")
+
+	require.NoError(t, RestoreProjectURL(path, "", state))
+
+	restored, err := os.ReadFile(path)
+	require.NoError(t, err)
+	assert.NotContains(t, string(restored), "url:")
+	assert.Contains(t, string(restored), "type: docker")
+}
