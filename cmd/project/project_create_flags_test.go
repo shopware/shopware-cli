@@ -22,6 +22,8 @@ func TestParseCreateFlagsMapsFlagsAndArgs(t *testing.T) {
 	})
 
 	// parseCreateFlags reads interactivity from the command context.
+	oldCtx := projectCreateCmd.Context()
+	t.Cleanup(func() { projectCreateCmd.SetContext(oldCtx) })
 	projectCreateCmd.SetContext(system.WithInteraction(context.Background(), false))
 
 	require.NoError(t, flags.Set("version", "6.6.10.0"))
