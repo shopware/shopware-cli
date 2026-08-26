@@ -8,6 +8,8 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/x/ansi"
+
+	"github.com/shopware/shopware-cli/internal/shop/install"
 )
 
 type installFailureCategory string
@@ -211,9 +213,9 @@ func installFailureStep(output []string) string {
 		if !strings.HasPrefix(line, "Start: ") {
 			continue
 		}
-		for _, step := range installStepPatterns {
-			if strings.Contains(line, step.pattern) {
-				failingStep = step.pattern
+		for _, step := range install.Steps {
+			if strings.Contains(line, step.Pattern) {
+				failingStep = step.Pattern
 				break
 			}
 		}
@@ -421,9 +423,9 @@ func (f installFailure) remediation(docker bool) string {
 // installFailureStepLabel maps a failing step back to the label shown in the
 // install progress list, so both screens name the same step identically.
 func installFailureStepLabel(step string) string {
-	for _, sp := range installStepPatterns {
-		if sp.pattern == step {
-			return sp.label
+	for _, sp := range install.Steps {
+		if sp.Pattern == step {
+			return sp.Label
 		}
 	}
 	return "Starting installation"

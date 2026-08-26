@@ -364,14 +364,6 @@ func TestInstallFooterHint_UnknownStepReturnsEmpty(t *testing.T) {
 	assert.Empty(t, m.installFooterHint())
 }
 
-func TestInstallStepPatterns_NonEmpty(t *testing.T) {
-	assert.NotEmpty(t, installStepPatterns)
-	for _, sp := range installStepPatterns {
-		assert.NotEmpty(t, sp.pattern)
-		assert.NotEmpty(t, sp.label)
-	}
-}
-
 func TestInstallStepIndex(t *testing.T) {
 	assert.Equal(t, 0, installStepIndex(installStartStep))
 	assert.Equal(t, 0, installStepIndex(""))

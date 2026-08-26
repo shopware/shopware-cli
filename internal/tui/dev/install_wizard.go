@@ -71,18 +71,6 @@ var installFailureActionLabels = []string{
 	"Cancel",
 }
 
-var installStepPatterns = []struct {
-	pattern string
-	label   string
-}{
-	{"system:install", "Installing Shopware"},
-	{"user:create", "Creating admin account"},
-	{"messenger:setup-transports", "Setting up message transports"},
-	{"sales-channel:create:storefront", "Creating storefront"},
-	{"theme:change", "Compiling theme"},
-	{"plugin:refresh", "Refreshing plugins"},
-}
-
 // installStepIndex maps a classified helper step back onto the progress list.
 // Failures before the first command, and unknown step names, start at the
 // beginning so a resume still does a complete helper run.
@@ -90,8 +78,8 @@ func installStepIndex(step string) int {
 	if step == "" || step == installStartStep {
 		return 0
 	}
-	for i, sp := range installStepPatterns {
-		if sp.pattern == step {
+	for i, sp := range install.Steps {
+		if sp.Pattern == step {
 			return i
 		}
 	}
@@ -242,7 +230,7 @@ func (m Model) startInstallFrom(step string) (app.Content, tea.Cmd) {
 
 	cmds := []tea.Cmd{m.installProg.spinner.Tick, m.runShopwareInstallFrom(step)}
 	if idx > 0 {
-		pct := float64(idx) / float64(len(installStepPatterns))
+		pct := float64(idx) / float64(len(install.Steps))
 		cmds = append([]tea.Cmd{m.installProg.progress.SetPercent(pct)}, cmds...)
 	}
 	return m, tea.Batch(cmds...)

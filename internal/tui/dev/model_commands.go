@@ -87,6 +87,7 @@ func (m *Model) checkShopwareInstalled() tea.Cmd {
 }
 
 func (m *Model) runShopwareInstallFrom(fromStep string) tea.Cmd {
+	ctx := m.commandContext()
 	e := m.executor
 	language := m.install.language
 	currency := m.install.currency
@@ -106,7 +107,7 @@ func (m *Model) runShopwareInstallFrom(fromStep string) tea.Cmd {
 			"INSTALL_ADMIN_PASSWORD": password,
 		})
 
-		output, err := streamInstallFrom(withEnv, fromStep, wizard, shopURL, ch)
+		output, err := streamInstallFrom(ctx, withEnv, fromStep, wizard, shopURL, ch)
 		return shopwareInstallDoneMsg{output: output, err: err}
 	}
 
@@ -126,7 +127,7 @@ func (m Model) installShopURL() string {
 // streamInstallFrom runs the remaining install console commands from fromStep,
 // then the deployment helper so plugin/app work still happens. A failure at
 // system:install (or before any step) is just the helper, matching a full run.
-func streamInstallFrom(execr executor.Executor, fromStep string, w installWizard, shopURL string, ch chan<- string) ([]string, error) {
+func streamInstallFrom(ctx context.Context, execr executor.Executor, fromStep string, w installWizard, shopURL string, ch chan<- string) ([]string, error) {
 	defer close(ch)
 
 	var all []string
@@ -137,13 +138,13 @@ func streamInstallFrom(execr executor.Executor, fromStep string, w installWizard
 
 	idx := installStepIndex(fromStep)
 	if idx > 0 {
-		for _, sp := range installStepPatterns[idx:] {
-			args := argsForInstallStep(sp.pattern, w, shopURL)
+		for _, sp := range install.Steps[idx:] {
+			args := argsForInstallStep(sp.Pattern, w, shopURL)
 			if len(args) == 0 {
 				continue
 			}
-			emit("Start: " + sp.pattern)
-			lines, err := tui.DrainCmdOutput(execr.ConsoleCommand(context.Background(), args...).Cmd, ch, true)
+			emit("Start: " + sp.Pattern)
+			lines, err := tui.DrainCmdOutput(execr.ConsoleCommand(ctx, args...).Cmd, ch, true)
 			all = append(all, lines...)
 			if err != nil {
 				return all, err
@@ -151,7 +152,7 @@ func streamInstallFrom(execr executor.Executor, fromStep string, w installWizard
 		}
 	}
 
-	lines, err := tui.DrainCmdOutput(execr.PHPCommand(context.Background(), "vendor/bin/shopware-deployment-helper", "run").Cmd, ch, true)
+	lines, err := tui.DrainCmdOutput(execr.PHPCommand(ctx, "vendor/bin/shopware-deployment-helper", "run").Cmd, ch, true)
 	all = append(all, lines...)
 	return all, err
 }
