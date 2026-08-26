@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"context"
 	"os/exec"
 	"testing"
 
@@ -10,8 +11,8 @@ import (
 
 func TestStreamCmdsOutputWithCapture_RunsInOrderAndCloses(t *testing.T) {
 	ch := make(chan string, 8)
-	cmd1 := exec.Command("sh", "-c", "echo one")
-	cmd2 := exec.Command("sh", "-c", "echo two")
+	cmd1 := exec.CommandContext(context.Background(), "sh", "-c", "echo one")
+	cmd2 := exec.CommandContext(context.Background(), "sh", "-c", "echo two")
 
 	lines, err := StreamCmdsOutputWithCapture([]*exec.Cmd{cmd1, cmd2}, ch, true)
 	require.NoError(t, err)
@@ -21,8 +22,8 @@ func TestStreamCmdsOutputWithCapture_RunsInOrderAndCloses(t *testing.T) {
 
 func TestStreamCmdsOutputWithCapture_StopsOnFirstFailure(t *testing.T) {
 	ch := make(chan string, 8)
-	fail := exec.Command("sh", "-c", "echo failed; exit 3")
-	skip := exec.Command("sh", "-c", "echo skipped")
+	fail := exec.CommandContext(context.Background(), "sh", "-c", "echo failed; exit 3")
+	skip := exec.CommandContext(context.Background(), "sh", "-c", "echo skipped")
 
 	lines, err := StreamCmdsOutputWithCapture([]*exec.Cmd{fail, skip}, ch, true)
 	require.Error(t, err)
