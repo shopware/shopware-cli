@@ -4,12 +4,14 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+
+	"github.com/shopware/shopware-cli/internal/docker"
 )
 
 func TestProxyHostnames(t *testing.T) {
 	t.Parallel()
 
-	base := ProxyHostnames("winshop.shopware.local", false, false)
+	base := ProxyHostnames("winshop.shopware.local", docker.LockFeatures{})
 	assert.Equal(t, []string{
 		"winshop.shopware.local",
 		"admin-watch.winshop.shopware.local",
@@ -19,17 +21,20 @@ func TestProxyHostnames(t *testing.T) {
 	}, base)
 
 	// Optional services only appear when their packages are present.
-	full := ProxyHostnames("winshop.shopware.local", true, true)
+	full := ProxyHostnames("winshop.shopware.local", docker.LockFeatures{AMQP: true, Elasticsearch: true, S3: true})
 	assert.Contains(t, full, "lavinmq.winshop.shopware.local")
 	assert.Contains(t, full, "opensearch.winshop.shopware.local")
+	assert.Contains(t, full, "s3.winshop.shopware.local")
+	assert.Contains(t, full, "rustfs.winshop.shopware.local")
 	assert.NotContains(t, base, "lavinmq.winshop.shopware.local")
+	assert.NotContains(t, base, "s3.winshop.shopware.local")
 }
 
 func TestWSLWindowsAccessGuidance(t *testing.T) {
 	t.Parallel()
 
 	caPath := "/home/tomasz/.local/share/mkcert/rootCA.pem"
-	hosts := ProxyHostnames("winshop.shopware.local", false, false)
+	hosts := ProxyHostnames("winshop.shopware.local", docker.LockFeatures{})
 
 	g := WSLWindowsAccessGuidance(caPath, hosts)
 

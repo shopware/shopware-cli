@@ -11,7 +11,7 @@ var (
 	environmentName   string
 )
 
-const environmentFlagUsage = "Environment to target (defaults to environments.local; deprecated top-level url/admin_api is still used when present)"
+const environmentFlagUsage = "Environment to target (defaults to environments.local; deprecated top-level url/admin_api is used when environments.local is absent)"
 
 var projectRootCmd = &cobra.Command{
 	Use:   "project",

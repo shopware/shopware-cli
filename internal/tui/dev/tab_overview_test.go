@@ -165,6 +165,15 @@ func TestKnownServices(t *testing.T) {
 	rabbitmq := knownServices["rabbitmq"]
 	assert.Equal(t, "Queue (RabbitMQ)", rabbitmq.Name)
 	assert.Equal(t, 15672, rabbitmq.TargetPort)
+
+	rustfs := knownServices["rustfs"]
+	assert.Equal(t, "S3 (RustFS)", rustfs.Name)
+	assert.Equal(t, 9001, rustfs.TargetPort)
+	assert.Equal(t, "shopware", rustfs.Username)
+	assert.Equal(t, "shopware", rustfs.Password)
+
+	assert.True(t, ignoredServices["redis"])
+	assert.True(t, ignoredServices["rustfs-init"])
 }
 
 func TestViewShowsAccessTable(t *testing.T) {

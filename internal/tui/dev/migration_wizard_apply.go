@@ -16,8 +16,8 @@ func (sg *migrationWizard) applyToConfig(cfg *shop.Config) {
 	cfg.CompatibilityDate = shop.CompatibilityDevMode
 
 	// Shop URL and Admin API credentials belong under environments.local.
-	// Existing top-level url/admin_api are left untouched so mixed files are
-	// not silently retargeted during the deprecation window.
+	// Existing top-level url/admin_api are left untouched; environments.local
+	// wins when both are present.
 	envCfg := &shop.EnvironmentConfig{
 		Type: "docker",
 		URL:  c.url,

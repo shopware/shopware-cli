@@ -89,6 +89,9 @@ admin_api:
 environments:
   local:
     url: http://127.0.0.1:7
+    admin_api:
+      client_id: local-id
+      client_secret: local-secret
 `), 0o644))
 
 	previousConfigPath := projectConfigPath
