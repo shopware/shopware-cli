@@ -43,7 +43,7 @@ When creating or updating an extension for Store submission:
 
 ```yaml
 # .shopware-extension.yml
-compatibility_date: 2025-08-26
+compatibility_date: YYYY-MM-DD  # Run `shopware-cli extension config init` to generate current date
 
 validation:
   store_compliance: true    # Enable Store compliance checks
@@ -58,7 +58,6 @@ store:
     - de_DE
     - en_GB
   # Metadata (required for Store)
-  # Translation keys: use 'de' for German, 'en' for English
   meta_title:
     de: "Plugin Name"
     en: "Plugin Name"
@@ -93,14 +92,9 @@ build:
 
 3. **Validate early and often:**
 
-Extension path is required. Validate the current directory (`.`) or any extension directory:
-
 ```bash
 # Full validation including Store compliance
 shopware-cli extension validate . --full
-
-# Or validate a specific extension path
-shopware-cli extension validate /path/to/extension --full
 ```
 
 ## Store compliance validation
@@ -123,7 +117,7 @@ This runs automated checks for:
 
 ### Understanding Store validation categories
 
-**Mechanically verifiable** (automated, non-blocking):
+**Mechanically verifiable** (automated, errors are blocking, warnings are non-blocking):
 - File structure and naming
 - Image dimensions and formats
 - Metadata field presence and length
@@ -137,7 +131,7 @@ This runs automated checks for:
 
 Automated validation finds structural issues. Manual review evaluates content quality and legal compliance.
 
-### Using --only and --exclude during development
+### Using `--only` and `--exclude` during development
 
 Run specific validation tools without full checks:
 
@@ -148,7 +142,7 @@ shopware-cli extension validate . --only sw-cli
 # Exclude specific tools (e.g., PHPStan if not yet ready)
 shopware-cli extension validate . --full --exclude phpstan
 
-# Run only Store compliance checks
+# Run only the built-in Shopware CLI validator (not Store compliance checks)
 shopware-cli extension validate . --full --only sw-cli
 ```
 
@@ -158,7 +152,7 @@ See `shopware-cli extension validate --help` for available tools.
 
 **Prefer YAML configuration** for Store compliance settings:
 
-```bash
+```yaml
 # ✓ Use YAML config (recommended)
 validation:
   store_compliance: true
@@ -222,9 +216,8 @@ shopware-cli extension validate . --full
 ### Convert existing extension to Store-ready
 
 ```bash
-# 1. Initialize or update configuration
-# ⚠ --force overwrites existing .shopware-extension.yml; back it up first if customized
-shopware-cli extension config init --force
+# 1. Initialize configuration if missing (use --force only to create a missing file; for existing configs, edit manually)
+shopware-cli extension config init
 
 # 2. Enable Store compliance
 # Edit .shopware-extension.yml: set validation.store_compliance: true
@@ -250,16 +243,11 @@ shopware-cli extension validate . --full --reporter junit > validation-results.x
 ```
 
 The `--reporter` flag allows machine-readable output for CI systems:
-- `summary` — human-readable summary (default outside CI)
 - `json` — parsed programmatically
 - `junit` — standard test reporting format
-- `github` — GitHub CI (auto-detected when GITHUB_ACTIONS=true)
-- `gitlab` — GitLab CI (auto-detected when GITLAB_CI=true)
+- `github` — GitHub PR inline annotations
+- `gitlab` — GitLab MR inline annotations
 - `markdown` — markdown report
-
-**Reporter behavior:** Output is emitted to stdout/file. Your CI must ingest this output or configure it as a build artifact. Reporters do not automatically post to PRs/MRs; that requires CI configuration (e.g., GitHub Actions workflow to parse and comment).
-
-**Exit codes:** Use exit code, not reporter output, to signal CI pass/fail. Exit code 1 = validation failed. Most CI systems check exit codes automatically.
 
 ## Store quality requirements
 
@@ -309,7 +297,9 @@ Automated validation (`shopware-cli extension validate . --full`) catches many s
 
 4. **Validate config syntax:**
    ```bash
-   shopware-cli extension config init --force  # Regenerate if corrupted
+   # Note: --force only creates missing files, not for updating/repairing existing ones
+   # For corrupted configs, manually edit or restore from version control
+   shopware-cli extension config init
    ```
 
 ### "Metadata missing" errors
@@ -340,7 +330,7 @@ store:
     en: ["Feature 1", "Feature 2"]
 ```
 
-All localizations declared must have corresponding translation fields (de, en, etc.).
+All localizations declared must have corresponding translation fields. Only `de` and `en` keys are supported in translated YAML fields.
 
 ### Icon validation fails
 
@@ -352,26 +342,18 @@ Check:
 
 ### Localization mismatch errors
 
-Store localization declarations (de_DE, en_GB, etc.) must have corresponding translation keys (`de`, `en`) in all metadata fields.
-
-Supported translation keys: `de` (German), `en` (English). Other locale formats are accepted in `localizations` list but must have either `de` or `en` translation keys.
+Declared localizations must have translation keys present:
 
 ```yaml
 store:
   localizations:
-    - de_DE    # Must have `de` key in all store fields
-    - en_GB    # Must have `en` key in all store fields
+    - de_DE    # Must have `de` translations
+    - en_GB    # Must have `en` translations
   
-  # Translation keys must match:
+  # These must match:
   meta_title:
     de: "..."
     en: "..."
-  description:
-    de: "..."
-    en: "..."
-  features:
-    de: [...]
-    en: [...]
 ```
 
 ## Extension vs app workflows
