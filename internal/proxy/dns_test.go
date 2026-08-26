@@ -3,6 +3,7 @@ package proxy
 import (
 	"os"
 	"path/filepath"
+	"syscall"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -59,4 +60,17 @@ func TestWriteDNSCorefileRepairsRestrictivePermissions(t *testing.T) {
 	info, err := os.Stat(path)
 	require.NoError(t, err)
 	assert.Equal(t, os.FileMode(0o644), info.Mode().Perm(), "an existing 0600 Corefile must be chmod'd so the nonroot container user can read it")
+}
+
+func TestWriteDNSCorefileIgnoresUmask(t *testing.T) {
+	// umask is process-wide; do not run in parallel with other tests.
+	old := syscall.Umask(0o077)
+	t.Cleanup(func() { syscall.Umask(old) })
+
+	dir := t.TempDir()
+	require.NoError(t, writeDNSCorefile(dir, "shopware.local"))
+
+	info, err := os.Stat(filepath.Join(dir, "dns", "Corefile"))
+	require.NoError(t, err)
+	assert.Equal(t, os.FileMode(0o644), info.Mode().Perm(), "WriteFile honors umask (077 → 0600); chmod must restore world-read")
 }
