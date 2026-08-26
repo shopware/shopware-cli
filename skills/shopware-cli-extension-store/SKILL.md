@@ -43,7 +43,7 @@ When creating or updating an extension for Store submission:
 
 ```yaml
 # .shopware-extension.yml
-compatibility_date: 2025-08-26
+compatibility_date: YYYY-MM-DD  # Run `shopware-cli extension config init` to generate current date
 
 validation:
   store_compliance: true    # Enable Store compliance checks
@@ -117,7 +117,7 @@ This runs automated checks for:
 
 ### Understanding Store validation categories
 
-**Mechanically verifiable** (automated, non-blocking):
+**Mechanically verifiable** (automated, errors are blocking, warnings are non-blocking):
 - File structure and naming
 - Image dimensions and formats
 - Metadata field presence and length
@@ -142,7 +142,7 @@ shopware-cli extension validate . --only sw-cli
 # Exclude specific tools (e.g., PHPStan if not yet ready)
 shopware-cli extension validate . --full --exclude phpstan
 
-# Run only Store compliance checks
+# Run only the built-in Shopware CLI validator (not Store compliance checks)
 shopware-cli extension validate . --full --only sw-cli
 ```
 
@@ -152,7 +152,7 @@ See `shopware-cli extension validate --help` for available tools.
 
 **Prefer YAML configuration** for Store compliance settings:
 
-```bash
+```yaml
 # ✓ Use YAML config (recommended)
 validation:
   store_compliance: true
@@ -216,8 +216,8 @@ shopware-cli extension validate . --full
 ### Convert existing extension to Store-ready
 
 ```bash
-# 1. Initialize or update configuration
-shopware-cli extension config init --force
+# 1. Initialize configuration if missing (use --force only to create a missing file; for existing configs, edit manually)
+shopware-cli extension config init
 
 # 2. Enable Store compliance
 # Edit .shopware-extension.yml: set validation.store_compliance: true
@@ -297,7 +297,9 @@ Automated validation (`shopware-cli extension validate . --full`) catches many s
 
 4. **Validate config syntax:**
    ```bash
-   shopware-cli extension config init --force  # Regenerate if corrupted
+   # Note: --force only creates missing files, not for updating/repairing existing ones
+   # For corrupted configs, manually edit or restore from version control
+   shopware-cli extension config init
    ```
 
 ### "Metadata missing" errors
@@ -328,7 +330,7 @@ store:
     en: ["Feature 1", "Feature 2"]
 ```
 
-All localizations declared must have corresponding translation fields (de, en, etc.).
+All localizations declared must have corresponding translation fields. Only `de` and `en` keys are supported in translated YAML fields.
 
 ### Icon validation fails
 
