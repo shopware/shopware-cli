@@ -8,6 +8,8 @@ import (
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
+	"github.com/charmbracelet/x/ansi"
 	"github.com/stretchr/testify/assert"
 
 	"github.com/shopware/shopware-cli/internal/executor"
@@ -566,10 +568,34 @@ func TestView_InstallFailedShowsClassifiedMessage(t *testing.T) {
 	assert.Contains(t, card, "Database connection failed")
 	assert.Contains(t, card, "Installing Shopware")
 	assert.Contains(t, card, "to see full logs")
-	// The raw error belongs in the log view, not in the summary card.
-	assert.NotContains(t, card, "SQLSTATE")
+	assert.Contains(t, card, "What now?")
+	assert.Contains(t, card, "SQLSTATE[HY000] [2002] Connection refused")
+	for _, label := range []string{"Retry", "Cancel", "Start from failed step"} {
+		assert.Contains(t, card, label)
+	}
 
 	assert.Contains(t, m.View(app.Context{Width: 120, Height: 40, MainHeight: 36}), "Installation failed")
+}
+
+// A classified detail is a full sentence, so the card has to wrap it instead
+// of letting one long row widen the layout — and no word may get lost on the
+// way.
+func TestView_InstallFailedWrapsLongDetail(t *testing.T) {
+	detail := "An exception occurred in the driver: SQLSTATE[HY000] [2002] Connection refused while connecting to the database service"
+
+	m := newTestModel()
+	m.phase = phaseInstallFailed
+	m.installProg.failure = &installFailure{
+		category:    installFailureDatabaseConnection,
+		failingStep: "system:install",
+		detail:      detail,
+	}
+
+	card := m.renderInstallFailed()
+	for _, line := range strings.Split(card, "\n") {
+		assert.LessOrEqual(t, lipgloss.Width(line), tui.KVRowIndent+tui.KVKeyWidth+installFailureDetailWidth)
+	}
+	assert.Contains(t, strings.Join(strings.Fields(ansi.Strip(card)), " "), detail)
 }
 
 func TestView_InstallFailedWithoutClassificationFallsBack(t *testing.T) {
@@ -609,6 +635,8 @@ func TestView_InstallFailedNoticeSurvivesWrappingLogLines(t *testing.T) {
 	view := m.View(app.Context{Width: 100, Height: 30, MainHeight: 26})
 	assert.Contains(t, view, "Failed step:")
 	assert.Contains(t, view, "Database connection failed")
+	assert.Contains(t, view, "What now?")
+	assert.Contains(t, view, "Start from failed step")
 }
 
 func TestView_ZeroSizeDoesNotPanic(t *testing.T) {

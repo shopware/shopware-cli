@@ -218,29 +218,70 @@ func (m Model) renderPhase(ctx app.Context) string {
 	return renderPhaseBox(content.String(), ctx.Width, ctx.MainHeight)
 }
 
+// installFailureDetailWidth is the value column of the failure card: its width
+// minus the card border, the card padding, and the key column of a KVRow.
+const installFailureDetailWidth = tui.PhaseCardWidth - 2 - 6 - tui.KVRowIndent - tui.KVKeyWidth
+
 // installFailureSummary renders the facts shared by the failure card and the
-// notice closing the log view: a headline, the classified step and reason. The
-// raw error text is deliberately left out — it is one unwrapped line that would
-// push the card out of shape, and the log shows it in context anyway.
+// notice closing the log view: a headline, the classified step, the reason,
+// and the error the helper reported.
 func (m Model) installFailureSummary() string {
 	failure := installFailure{category: installFailureUnknown, failingStep: installStartStep}
 	if m.installProg.failure != nil {
 		failure = *m.installProg.failure
 	}
 
+	detail := failure.detail
+	if detail == "" {
+		detail = "—"
+	}
+
 	var b strings.Builder
 	b.WriteString(headlineErrorStyle.Render("Installation failed"))
 	b.WriteString("\n")
-	b.WriteString(tui.DimStyle.Render("The installation process was canceled."))
+	b.WriteString(tui.DimStyle.Render("The installation process failed because an error occurred:"))
 	b.WriteString("\n\n")
 	b.WriteString(tui.KVRow("Failed step:", valueStyle.Render(installFailureStepLabel(failure.failingStep))))
 	b.WriteString(tui.KVRow("Reason:", valueStyle.Render(failure.category.label())))
+	b.WriteString(installFailureDetailRow(detail))
 
 	return strings.TrimRight(b.String(), "\n")
 }
 
-// renderInstallFailed renders the failed-install card: the failure summary plus
-// the pointer to the log view.
+// installFailureDetailRow renders the reported error as a KVRow whose value
+// wraps inside the card, with continuation lines aligned under the first one.
+// Error messages are full sentences, so laying them out on one row would push
+// the card out of shape.
+func installFailureDetailRow(detail string) string {
+	lines := strings.Split(valueStyle.Width(installFailureDetailWidth).Render(detail), "\n")
+
+	var b strings.Builder
+	b.WriteString(tui.KVRow("Details:", lines[0]))
+	indent := strings.Repeat(" ", tui.KVRowIndent+tui.KVKeyWidth)
+	for _, line := range lines[1:] {
+		b.WriteString(indent + line + "\n")
+	}
+
+	return b.String()
+}
+
+// installFailureActions renders the recovery choices shown below the failure
+// summary. The buttons are placeholders: nothing reacts to them yet, so the
+// first one is highlighted purely to show the row's active state.
+func installFailureActions() string {
+	var b strings.Builder
+	b.WriteString(tui.TitleStyle.Render("What now?"))
+	b.WriteString("\n\n")
+	b.WriteString(tui.NewButtonRow(tui.ButtonRowOptions{
+		Labels: []string{"Retry", "Cancel", "Start from failed step"},
+		Active: 0,
+	}).Render())
+
+	return b.String()
+}
+
+// renderInstallFailed renders the failed-install card: the failure summary, the
+// pointer to the log view, and the recovery choices.
 func (m Model) renderInstallFailed() string {
 	var b strings.Builder
 	b.WriteString(m.installFailureSummary())
@@ -248,18 +289,21 @@ func (m Model) renderInstallFailed() string {
 	b.WriteString(tui.DimStyle.Render("Press "))
 	b.WriteString(keyCapStyle.Render("l"))
 	b.WriteString(tui.DimStyle.Render(" to see full logs"))
+	b.WriteString("\n\n")
+	b.WriteString(installFailureActions())
 
 	return b.String()
 }
 
-// installFailureNotice returns the failure summary as boxed log lines. They are
-// returned per line so the log screen's tail calculation stays accurate.
+// installFailureNotice returns the failure summary and recovery choices as
+// boxed log lines. They are returned per line so the log screen's tail
+// calculation stays accurate.
 func (m Model) installFailureNotice() []string {
 	box := lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
 		BorderForeground(tui.ErrorColor).
 		Padding(0, 2).
-		Render(m.installFailureSummary())
+		Render(m.installFailureSummary() + "\n\n" + installFailureActions())
 
 	return append([]string{""}, strings.Split(box, "\n")...)
 }

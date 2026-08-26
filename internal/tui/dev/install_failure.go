@@ -6,6 +6,8 @@ import (
 	"os/exec"
 	"regexp"
 	"strings"
+
+	"github.com/charmbracelet/x/ansi"
 )
 
 type installFailureCategory string
@@ -171,18 +173,20 @@ func matchesInstallFailureRule(value string, patterns []*regexp.Regexp) bool {
 // returns a structured description of the failure. The first matching rule is
 // used to classify the failure.
 func classifyInstallFailure(output []string, processErr error) installFailure {
+	lines := cleanInstallOutput(output)
+
 	failure := installFailure{
-		failingStep: installFailureStep(output),
+		failingStep: installFailureStep(lines),
 		category:    installFailureUnknown,
-		detail:      installFailureDetail(output, processErr),
+		detail:      installFailureDetail(lines, processErr),
 		retryable:   true,
 	}
 
-	for _, line := range output {
+	for i, line := range lines {
 		for _, rule := range installFailureRules {
 			if matchesInstallFailureRule(line, rule.patterns) {
 				failure.category = rule.category
-				failure.detail = strings.TrimSpace(line)
+				failure.detail = installFailureMessage(lines, i)
 				// Syntax and parse errors require a code/configuration change,
 				// so immediately re-running the same command cannot recover.
 				normalized := strings.ToLower(line)
@@ -217,15 +221,15 @@ func installFailureStep(output []string) string {
 	return failingStep
 }
 
-// installFailureDetail returns the last non-empty line of the output as a
+// installFailureDetail returns the message ending the output as a
 // human-readable description of the failure. If no non-empty line is found, it
 // returns the error message from the process exit error, if any. If there is no
 // output and no process error, it returns a generic message indicating that the
 // helper failed without diagnostic output.
 func installFailureDetail(output []string, processErr error) string {
 	for i := len(output) - 1; i >= 0; i-- {
-		if detail := strings.TrimSpace(output[i]); detail != "" {
-			return detail
+		if strings.TrimSpace(output[i]) != "" {
+			return installFailureMessage(output, i)
 		}
 	}
 
@@ -237,6 +241,74 @@ func installFailureDetail(output []string, processErr error) string {
 		return processErr.Error()
 	}
 	return "deployment helper failed without diagnostic output"
+}
+
+const (
+	// symfonyBlockIndent is the indentation Symfony puts in front of every
+	// line of a rendered error box.
+	symfonyBlockIndent = 2
+
+	// installFailureMessageLines bounds how many output lines are stitched
+	// into one detail, so unexpectedly indented output (a stack trace, a
+	// dumped SQL statement) cannot grow the detail without limit.
+	installFailureMessageLines = 12
+)
+
+// installRelayPrefix matches the tag the deployment helper puts in front of
+// every line it relays from the console commands it runs, e.g.
+// "[deployment-helper] ". It shifts the whole error box to the right, hiding
+// the indentation that marks it, so it goes before anything else reads a line.
+var installRelayPrefix = regexp.MustCompile(`^\[[A-Za-z0-9][A-Za-z0-9._-]*] ?`)
+
+// cleanInstallOutput removes ANSI styling, the relay prefix, and trailing
+// padding from the captured helper output, so rule matching and the stored
+// detail work on the plain message. The log view keeps rendering the original
+// lines.
+func cleanInstallOutput(output []string) []string {
+	cleaned := make([]string, len(output))
+	for i, line := range output {
+		line = installRelayPrefix.ReplaceAllString(ansi.Strip(line), "")
+		cleaned[i] = strings.TrimRight(line, " \t\r")
+	}
+	return cleaned
+}
+
+// installFailureMessage returns the complete message the line at idx belongs
+// to. The helper runs without a TTY, so Symfony renders errors into a box
+// wrapped at 80 columns: a message is spread over several output lines and any
+// single one of them is a torn-off fragment. Lines continuing the same box —
+// non-empty and indented alike — are stitched back into one message.
+func installFailureMessage(lines []string, idx int) string {
+	indent := installLineIndent(lines[idx])
+	if indent < symfonyBlockIndent {
+		return strings.TrimSpace(lines[idx])
+	}
+
+	start, end := idx, idx
+	for start > 0 && end-start+1 < installFailureMessageLines && continuesFailureBlock(lines[start-1], indent) {
+		start--
+	}
+	for end < len(lines)-1 && end-start+1 < installFailureMessageLines && continuesFailureBlock(lines[end+1], indent) {
+		end++
+	}
+
+	parts := make([]string, 0, end-start+1)
+	for _, line := range lines[start : end+1] {
+		parts = append(parts, strings.TrimSpace(line))
+	}
+	return strings.Join(parts, " ")
+}
+
+// continuesFailureBlock reports whether line carries more of an error box
+// indented by indent. The blank rows Symfony pads the box with, and any line at
+// a different indentation, end the block.
+func continuesFailureBlock(line string, indent int) bool {
+	return strings.TrimSpace(line) != "" && installLineIndent(line) == indent
+}
+
+// installLineIndent counts the leading spaces of a line.
+func installLineIndent(line string) int {
+	return len(line) - len(strings.TrimLeft(line, " "))
 }
 
 // label returns a human-readable description of the category for the failure

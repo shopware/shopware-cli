@@ -12,7 +12,7 @@ var (
 	LabelStyle = lipgloss.NewStyle().Foreground(TextColor)
 
 	// kvKeyStyle renders the key column in key-value pair rows with a fixed width.
-	kvKeyStyle = lipgloss.NewStyle().Width(22).Foreground(TextColor)
+	kvKeyStyle = lipgloss.NewStyle().Width(KVKeyWidth).Foreground(TextColor)
 
 	// LinkStyle renders clickable hyperlinks in a muted blue with an underline.
 	LinkStyle = lipgloss.NewStyle().Foreground(LinkColor).Underline(true)
@@ -38,9 +38,16 @@ func FormatLabelDim(label, detail string) string {
 	return DimStyle.Render(label + " (" + detail + ")")
 }
 
+// KVKeyWidth is the column width of the key in KVRow. Callers laying out
+// multi-line values indent their continuation lines by it plus KVRowIndent.
+const KVKeyWidth = 22
+
+// KVRowIndent is the left indentation KVRow puts in front of the key.
+const KVRowIndent = 2
+
 // KVRow renders a single key-value pair as a line with consistent alignment.
 func KVRow(key, value string) string {
-	return fmt.Sprintf("  %s%s\n", kvKeyStyle.Render(key), value)
+	return fmt.Sprintf("%s%s%s\n", strings.Repeat(" ", KVRowIndent), kvKeyStyle.Render(key), value)
 }
 
 // RenderStyledLink renders a URL as a clickable terminal hyperlink using LinkStyle.
