@@ -92,9 +92,14 @@ build:
 
 3. **Validate early and often:**
 
+Extension path is required. Validate the current directory (`.`) or specify an extension directory:
+
 ```bash
-# Full validation including Store compliance
+# Validate current directory with full checks
 shopware-cli extension validate . --full
+
+# Or validate a specific extension path
+shopware-cli extension validate /path/to/extension --full
 ```
 
 ## Store compliance validation
@@ -242,12 +247,17 @@ For automated validation in CI pipelines:
 shopware-cli extension validate . --full --reporter junit > validation-results.xml
 ```
 
-The `--reporter` flag allows machine-readable output for CI systems:
-- `json` — parsed programmatically
-- `junit` — standard test reporting format
-- `github` — GitHub PR inline annotations
-- `gitlab` — GitLab MR inline annotations
-- `markdown` — markdown report
+The `--reporter` flag controls output format. Default behavior is environment-dependent:
+- `summary` — human-readable summary (default outside CI)
+- `github` — auto-detected when `GITHUB_ACTIONS=true`; emits structured output only (does not auto-post to PRs)
+- `gitlab` — auto-detected when `GITLAB_CI=true`; emits structured output only (does not auto-post to MRs)
+- `json` — machine-readable JSON for programmatic parsing
+- `junit` — standard JUnit XML format for test reporting
+- `markdown` — markdown-formatted report
+
+**Reporter output:** Reporters emit to stdout/stderr or configured artifact files. Your CI must ingest the output (e.g., GitHub Actions workflows parse and comment, GitLab CI configures reports). Reporters do not auto-post to PRs/MRs.
+
+**Exit codes:** Check process exit code for validation result, not reporter output. Exit code `0` = pass, `1` = validation failed. Most CI systems use exit code for job success/failure.
 
 ## Store quality requirements
 
