@@ -12,6 +12,7 @@ Shopware CLI is a command line companion for common Shopware account, project, a
 - [Install](#install)
 - [Usage](#usage)
 - [Repository Layout](#repository-layout)
+- [Official Agent Skills](#official-agent-skills)
 - [Documentation](#documentation)
 - [Contributing](#contributing)
 - [License](#license)
@@ -132,7 +133,11 @@ Install them with:
 npx skills add shopware/shopware-cli
 ```
 
-Available skills are `shopware-cli` and `shopware-cli-docker`.
+Available skills:
+
+- **`shopware-cli`** — Use Shopware CLI for project, extension, and account workflows. Validate, build, format, and troubleshoot extensions. Reason about command safety and side effects.
+- **`shopware-cli-docker`** — For Docker-backed projects. Run commands in the correct container, manage development environment lifecycle, and troubleshoot Docker execution.
+- **`shopware-cli-extension-store`** — Create extensions with Store compliance intent. Configure metadata, localization, and validation upfront. Move Store requirements discovery to scaffolding phase.
 
 ## Documentation
 
