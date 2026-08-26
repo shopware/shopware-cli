@@ -339,6 +339,8 @@ func (c installFailureCategory) label() string {
 		return "Theme compilation failed"
 	case installFailureTransport:
 		return "Message transport setup failed"
+	case installFailureUnknown:
+		return "Unknown error"
 	}
 	return "Unknown error"
 }
@@ -410,6 +412,8 @@ func (f installFailure) remediation(docker bool) string {
 		return "Fix the theme.json / SCSS error in the logs and ensure var/ is writable, then use Retry from failed step."
 	case installFailureTransport:
 		return "Set MESSENGER_TRANSPORT_DSN in .env to a working transport and start that service, then use Retry from failed step."
+	case installFailureUnknown:
+		return ""
 	}
 	return ""
 }

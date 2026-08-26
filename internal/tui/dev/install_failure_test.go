@@ -1,6 +1,7 @@
 package dev
 
 import (
+	"context"
 	"errors"
 	"os/exec"
 	"strings"
@@ -148,7 +149,7 @@ func TestClassifyInstallFailure_UnknownCategoryStitchesTrailingMessage(t *testin
 }
 
 func TestClassifyInstallFailure_WithoutOutputReportsExitCode(t *testing.T) {
-	cmd := exec.Command("sh", "-c", "exit 3")
+	cmd := exec.CommandContext(context.Background(), "sh", "-c", "exit 3")
 	err := cmd.Run()
 	var exitErr *exec.ExitError
 	assert.True(t, errors.As(err, &exitErr))
