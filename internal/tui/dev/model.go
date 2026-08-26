@@ -2,11 +2,14 @@ package dev
 
 import (
 	"context"
+	"os"
+	"os/exec"
 	"time"
 
 	"charm.land/bubbles/v2/progress"
 	"charm.land/bubbles/v2/spinner"
 	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 
 	"github.com/shopware/shopware-cli/internal/envfile"
 	"github.com/shopware/shopware-cli/internal/executor"
@@ -30,8 +33,6 @@ const (
 var tabNames = []string{"Overview", "Instance", "Config"}
 
 const (
-	defaultUsername = "admin"
-
 	watcherAdmin      = "Admin Watcher"
 	watcherStorefront = "Storefront Watcher"
 )
@@ -54,9 +55,23 @@ type Options struct {
 	Config      *shop.Config
 	EnvConfig   *shop.EnvironmentConfig
 	Executor    executor.Executor
+	// ProxyFallback is set when a proxy project could not start the shared
+	// proxy and dev fell back to fixed host ports. The shop is then reachable
+	// at the local port URL, not the (now unrouted) proxy hostname in Config.
+	ProxyFallback bool
 }
 
+// fallbackShopURL is the URL a proxy project is reachable at once dev falls
+// back to fixed host ports; it matches project dev's own default.
+const fallbackShopURL = "http://127.0.0.1:8000"
+
 type Model struct {
+	// ctx is the command context of the CLI invocation (cancelled on
+	// SIGINT/SIGTERM, carries the logger). tea.Cmd closures derive their
+	// subprocess and API contexts from it. Bubbletea's fixed Update(msg)
+	// signature offers no parameter path into command builders, so the model
+	// has to carry it.
+	ctx             context.Context //nolint:containedctx
 	host            app.Host
 	header          tui.Header
 	activeTab       activeTab
@@ -81,6 +96,7 @@ type Model struct {
 	watchers        map[string]*watcherHandle
 	migrationWizard migrationWizard
 	telemetry       *telemetryState
+	proxyFallback   bool
 }
 
 type dockerAlreadyRunningMsg struct{}
@@ -99,17 +115,36 @@ type shopwareInstallDoneMsg struct {
 
 type configRestartDoneMsg struct{ err error }
 
-func New(opts Options) Model {
+// commandContext returns the context tea.Cmd closures should derive from.
+// Tests construct Model literals without New, so a nil ctx falls back to
+// Background.
+func (m Model) commandContext() context.Context {
+	if m.ctx != nil {
+		return m.ctx
+	}
+	return context.Background()
+}
+
+// cleanupContext returns a context for teardown work (stopping watchers and
+// containers, final telemetry) that must still run when the command context
+// is already cancelled, e.g. on SIGTERM.
+func (m Model) cleanupContext() context.Context {
+	return context.WithoutCancel(m.commandContext())
+}
+
+func New(ctx context.Context, opts Options) Model {
 	m := Model{
-		header:      tui.NewHeader(),
-		activeTab:   tabOverview,
-		dockerMode:  opts.Executor.Type() == executor.TypeDocker,
-		projectRoot: opts.ProjectRoot,
-		executor:    opts.Executor,
-		config:      opts.Config,
-		envConfig:   opts.EnvConfig,
-		watchers:    make(map[string]*watcherHandle),
-		telemetry:   newTelemetryState(opts.Executor.Type() == executor.TypeDocker),
+		ctx:           ctx,
+		header:        tui.NewHeader(),
+		activeTab:     tabOverview,
+		dockerMode:    opts.Executor.Type() == executor.TypeDocker,
+		projectRoot:   opts.ProjectRoot,
+		executor:      opts.Executor,
+		config:        opts.Config,
+		envConfig:     opts.EnvConfig,
+		watchers:      make(map[string]*watcherHandle),
+		telemetry:     newTelemetryState(opts.Executor.Type() == executor.TypeDocker),
+		proxyFallback: opts.ProxyFallback,
 	}
 	m.rebuildTabs()
 	return m
@@ -129,6 +164,10 @@ func (m *Model) rebuildTabs() {
 	if m.envConfig.URL != "" {
 		shopURL = m.envConfig.URL
 	}
+	if m.proxyFallback {
+		// The proxy hostname no longer routes; the shop is on a local port.
+		shopURL = fallbackShopURL
+	}
 
 	var username, password string
 	if effectiveAdminApi != nil {
@@ -139,15 +178,15 @@ func (m *Model) rebuildTabs() {
 	isDocker := m.executor.Type() == executor.TypeDocker
 	envValues, _ := envfile.ReadValues(m.projectRoot, EnvFieldKeys()...)
 
-	m.overview = NewOverviewModel(m.executor.Type(), shopURL, username, password, m.projectRoot, m.executor, m.config)
-	m.instance = NewInstanceModel(m.projectRoot, isDocker)
+	m.overview = NewOverviewModel(m.commandContext(), m.executor.Type(), shopURL, username, password, m.projectRoot, m.executor, m.config)
+	m.instance = NewInstanceModel(m.commandContext(), m.projectRoot, isDocker)
 	m.configTab = NewConfigModel(m.config, envValues)
 }
 
 // NewMigrationWizard creates a Model that starts in the migration wizard phase
 // for projects that don't yet have a development environment configured.
-func NewMigrationWizard(opts Options) Model {
-	m := New(opts)
+func NewMigrationWizard(ctx context.Context, opts Options) Model {
+	m := New(ctx, opts)
 	m.phase = phaseMigrationWizard
 	m.dockerMode = true // migration wizard always creates Docker env
 	m.migrationWizard = newMigrationWizard(opts.ProjectRoot)
@@ -155,13 +194,13 @@ func NewMigrationWizard(opts Options) Model {
 }
 
 // NewApp hosts the dashboard model inside the application shell.
-func NewApp(opts Options) *app.App {
-	return newShell(New(opts))
+func NewApp(ctx context.Context, opts Options) *app.App {
+	return newShell(New(ctx, opts))
 }
 
 // NewMigrationWizardApp hosts the migration-wizard model inside the shell.
-func NewMigrationWizardApp(opts Options) *app.App {
-	return newShell(NewMigrationWizard(opts))
+func NewMigrationWizardApp(ctx context.Context, opts Options) *app.App {
+	return newShell(NewMigrationWizard(ctx, opts))
 }
 
 // newShell wires a Model into the app host. Chrome and window title read the
@@ -179,6 +218,9 @@ func newShell(m Model) *app.App {
 		Header:          func(ctx app.Context) string { return current().chromeHeader(ctx) },
 		Footer:          func(ctx app.Context) string { return current().chromeFooter(ctx) },
 		WindowTitleFunc: func(app.Context) string { return current().windowTitle() },
+		// Enable mouse reporting so the overview scrolls with the wheel/trackpad
+		// and the instance-log viewport reacts to the wheel.
+		Mouse: true,
 		// Quit handling is phase-dependent (telemetry, stop-confirm modal) and
 		// stays in the model's key dispatch, so no default quit binding.
 		DisableDefaultKeys: true,
@@ -198,7 +240,7 @@ func (m Model) initPhase() tea.Cmd {
 		return nil
 	}
 	if m.dockerMode {
-		return checkContainersRunning(m.projectRoot)
+		return checkContainersRunning(m.commandContext(), m.projectRoot)
 	}
 	return m.checkShopwareInstalled()
 }
@@ -206,7 +248,7 @@ func (m Model) initPhase() tea.Cmd {
 func (m *Model) shutdown() {
 	m.instance.StopStreaming()
 
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	ctx, cancel := context.WithTimeout(m.cleanupContext(), 3*time.Second)
 	defer cancel()
 
 	for name, h := range m.watchers {
@@ -250,7 +292,15 @@ func (m Model) updateContent(msg tea.Msg) (app.Content, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
-		m.overview.SetSize(m.width, m.height-4)
+		// The overview is scrollable, so it must know the real visible content
+		// area: full height minus the dashboard's header/footer chrome and the
+		// content box's border+padding (3), mirroring the app shell's layout.
+		// The dashboard chrome is measured explicitly (not via the phase-aware
+		// chrome*, which differs during startup phases) so the size is correct
+		// even when the only WindowSizeMsg arrives before the dashboard shows.
+		hdr := lipgloss.Height(buildTabHeader(m.header, int(m.activeTab), msg.Width))
+		ftr := lipgloss.Height(m.renderDashboardFooter(msg.Width))
+		m.overview.SetSize(m.width, max(1, msg.Height-hdr-ftr-3))
 		m.instance.SetSize(m.width, m.height-4)
 		m.configTab.SetSize(m.width, m.height-4)
 		return m, nil
@@ -276,9 +326,26 @@ func (m Model) updateContent(msg tea.Msg) (app.Content, tea.Cmd) {
 	case configRestartDoneMsg:
 		return m.handleConfigRestartDone(msg)
 
-	case watcherStartedMsg, watcherRunningMsg, stopWatcherRequestMsg,
+	case runProxySetupRequestMsg:
+		return m.runProxySetup()
+
+	case proxySetupDoneMsg:
+		// The program resumes after the interactive setup; refresh the Domains
+		// status and the setup-health checks it affects.
+		m.overview.domainsSetupDone = overviewSetupDone(m.projectRoot)
+		m.overview.healthLoading = true
+		return m, loadSetupHealth(m.commandContext(), m.projectRoot, m.executor)
+
+	case watcherStartedMsg, watcherRunningMsg, watcherProbeMsg, stopWatcherRequestMsg,
 		startStorefrontWatchRequestMsg, watcherStoppedMsg, logDoneMsg:
 		return m.updateWatcherMsg(msg)
+
+	case instancesLoadedMsg, instancesTickMsg:
+		// Route to the overview directly so the self-scheduling refresh loop
+		// keeps ticking even during non-dashboard phases (a running task,
+		// starting/stopping); updateFallback would otherwise drop these and the
+		// loop would stop for the rest of the session.
+		return m.updateChildren(msg)
 
 	case setupHealthLoadedMsg:
 		if len(msg.checks) > 0 && m.telemetry.healthOnce() {
@@ -338,14 +405,35 @@ func (m Model) updateWatcherMsg(msg tea.Msg) (app.Content, tea.Cmd) {
 			m.overview.adminWatchStarting = false
 			if msg.err == nil && exists {
 				m.overview.adminWatchRunning = true
+				m.overview.adminWatchReady = false
+				return m, probeWatcher(m.commandContext(), watcherAdmin, m.overview.adminWatchURL)
 			}
 		case watcherStorefront:
 			m.overview.sfWatchStarting = false
 			if msg.err == nil && exists {
 				m.overview.sfWatchRunning = true
+				m.overview.sfWatchReady = false
+				return m, probeWatcher(m.commandContext(), watcherStorefront, m.overview.sfWatchURL)
 			}
 		}
 		return m, nil
+
+	case watcherProbeMsg:
+		// Stop probing once the watcher is gone.
+		if _, exists := m.watchers[msg.name]; !exists {
+			return m, nil
+		}
+		switch msg.name {
+		case watcherAdmin:
+			m.overview.adminWatchReady = msg.ready
+		case watcherStorefront:
+			m.overview.sfWatchReady = msg.ready
+		}
+		if msg.ready {
+			return m, nil
+		}
+		// Not serving yet — keep polling until it is.
+		return m, probeWatcher(m.commandContext(), msg.name, msg.url)
 
 	case stopWatcherRequestMsg:
 		return m, m.stopWatcher(msg.name)
@@ -358,9 +446,11 @@ func (m Model) updateWatcherMsg(msg tea.Msg) (app.Content, tea.Cmd) {
 		case watcherAdmin:
 			m.overview.adminWatchStarting = false
 			m.overview.adminWatchRunning = false
+			m.overview.adminWatchReady = false
 		case watcherStorefront:
 			m.overview.sfWatchStarting = false
 			m.overview.sfWatchRunning = false
+			m.overview.sfWatchReady = false
 		}
 		delete(m.watchers, msg.name)
 		if msg.err != nil {
@@ -372,8 +462,10 @@ func (m Model) updateWatcherMsg(msg tea.Msg) (app.Content, tea.Cmd) {
 		switch msg.source {
 		case watcherAdmin:
 			m.overview.adminWatchRunning = false
+			m.overview.adminWatchReady = false
 		case watcherStorefront:
 			m.overview.sfWatchRunning = false
+			m.overview.sfWatchReady = false
 		}
 		if tags, ok := m.telemetry.watcherEndTags(msg.source, watcherEndCrashed); ok {
 			trackEvent(tracking.EventDevWatcher, tags)
@@ -383,6 +475,23 @@ func (m Model) updateWatcherMsg(msg tea.Msg) (app.Content, tea.Cmd) {
 	}
 
 	return m, nil
+}
+
+// runProxySetup runs `project proxy setup` as an interactive subprocess (it
+// needs sudo), pausing the TUI via tea.ExecProcess while it runs and resuming
+// afterwards.
+func (m Model) runProxySetup() (app.Content, tea.Cmd) {
+	bin, err := os.Executable()
+	if err != nil {
+		bin = "shopware-cli"
+	}
+
+	c := exec.CommandContext(m.commandContext(), bin, "project", "proxy", "setup")
+	c.Dir = m.projectRoot
+
+	return m, tea.ExecProcess(c, func(error) tea.Msg {
+		return proxySetupDoneMsg{}
+	})
 }
 
 // updateFallback handles non-key messages that aren't matched by Update's
@@ -473,11 +582,13 @@ func (m Model) handleStopConfirmResult(msg prompt.ResultMsg) (app.Content, tea.C
 }
 
 func (m Model) updateChildren(msg tea.Msg) (app.Content, tea.Cmd) {
-	// Key presses must only reach the active tab, otherwise a key meant for one
-	// tab (e.g. Enter to pick a log source) also triggers the hidden tabs'
-	// handlers. Non-key messages are broadcast so background updates reach every
-	// child regardless of which tab is focused.
-	if _, isKey := msg.(tea.KeyPressMsg); isKey {
+	// Key presses and mouse input must only reach the active tab, otherwise input
+	// meant for one tab (e.g. Enter to pick a log source, or a wheel scroll) also
+	// triggers the hidden tabs' handlers. Other messages are broadcast so
+	// background updates reach every child regardless of which tab is focused.
+	_, isKey := msg.(tea.KeyPressMsg)
+	_, isMouse := msg.(tea.MouseMsg)
+	if isKey || isMouse {
 		switch m.activeTab {
 		case tabOverview:
 			newOverview, cmd := m.overview.Update(msg)

@@ -8,17 +8,52 @@ import (
 	"strings"
 	"time"
 
-	"charm.land/huh/v2/spinner"
 	"github.com/mattn/go-isatty"
 	"github.com/spf13/cobra"
 
 	dockerpkg "github.com/shopware/shopware-cli/internal/docker"
 	"github.com/shopware/shopware-cli/internal/executor"
+	"github.com/shopware/shopware-cli/internal/proxy"
 	"github.com/shopware/shopware-cli/internal/shop"
+	"github.com/shopware/shopware-cli/internal/shop/install"
 	"github.com/shopware/shopware-cli/internal/system"
 	"github.com/shopware/shopware-cli/internal/tui"
 	"github.com/shopware/shopware-cli/internal/tui/dev"
 )
+
+// bootstrapProxyFallback sets up the shared proxy for a proxy-mode project
+// before its development environment starts, so `project dev` serves it at its
+// stable hostname, and records the outcome in e.proxyFallback. It never blocks:
+// if the shared proxy cannot start (e.g. its port is taken), it regenerates the
+// compose file in plain fixed-port mode, points the user at a fix and marks the
+// shop as fallen back to a local port. It is a no-op for port-based projects.
+func (e *devEnvironment) bootstrapProxyFallback(cmd *cobra.Command) {
+	if !proxy.IsProxyProject(e.cfg) {
+		return
+	}
+
+	ctx := cmd.Context()
+	err := func() error {
+		env, err := newProxyEnvironmentForRoot(ctx, e.projectRoot, projectConfigPath)
+		if err != nil {
+			return err
+		}
+		if err := runStep(ctx, "Preparing shared proxy...", env.bootstrapInfra); err != nil {
+			return err
+		}
+		env.ensureHostnameResolves(ctx)
+		return nil
+	}()
+	if err != nil {
+		// Never block dev: regenerate the compose file in fixed-port mode
+		// (newDevEnvironment wrote it in proxy mode) and tell the user how to
+		// diagnose the proxy.
+		_ = dockerpkg.WriteComposeFile(e.projectRoot, dockerpkg.ComposeOptionsFromConfig(e.cfg))
+		fmt.Println(tui.RedText.Render("  Shared proxy unavailable: " + err.Error()))
+		fmt.Println(tui.DimText.Render("  Serving on a local port instead — run ") + tui.BoldText.Render("shopware-cli project proxy verify") + tui.DimText.Render(" to diagnose."))
+		e.proxyFallback = true
+	}
+}
 
 // ErrEnvironmentDown is returned by the `project dev status` command when the
 // development environment is not running. It causes the CLI to exit with code 1
@@ -30,6 +65,9 @@ type devEnvironment struct {
 	cfg         *shop.Config
 	envCfg      *shop.EnvironmentConfig
 	executor    executor.Executor
+	// proxyFallback is set when a proxy project could not start the shared
+	// proxy and was served on a local port instead, so URLs are shown for ports.
+	proxyFallback bool
 }
 
 var projectDevCmd = &cobra.Command{
@@ -37,7 +75,7 @@ var projectDevCmd = &cobra.Command{
 	Short: "Start the development environment",
 	Long:  "Start the development environment. Launches the interactive TUI dashboard when run in a terminal, or starts containers in the background otherwise.",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		projectRoot, err := findClosestShopwareProject()
+		projectRoot, err := findClosestShopwareProject(false)
 		if err != nil {
 			return err
 		}
@@ -52,7 +90,7 @@ var projectDevCmd = &cobra.Command{
 			if !isatty.IsTerminal(os.Stdin.Fd()) {
 				return shop.ErrDevModeNotSupported
 			}
-			return runMigrationWizardTUI(projectRoot, cfg)
+			return runMigrationWizardTUI(cmd.Context(), projectRoot, cfg)
 		}
 
 		env, err := newDevEnvironment(cmd, projectRoot, cfg)
@@ -60,11 +98,20 @@ var projectDevCmd = &cobra.Command{
 			return err
 		}
 
+		env.bootstrapProxyFallback(cmd)
+
 		if !isatty.IsTerminal(os.Stdin.Fd()) {
-			return env.start(cmd)
+			if err := env.start(cmd); err != nil {
+				return err
+			}
+			if !install.IsInstalled(cmd.Context(), env.executor) {
+				fmt.Println(tui.DimText.Render("  Shopware is not installed yet. Run ") + tui.BoldText.Render("shopware-cli project dev install") + tui.DimText.Render(" to install it."))
+				fmt.Println()
+			}
+			return nil
 		}
 
-		return env.runTUI()
+		return env.runTUI(cmd.Context())
 	},
 }
 
@@ -76,6 +123,8 @@ var projectDevStartCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
+
+		env.bootstrapProxyFallback(cmd)
 
 		return env.start(cmd)
 	},
@@ -111,14 +160,14 @@ var projectDevStatusCmd = &cobra.Command{
 	},
 }
 
-func runMigrationWizardTUI(projectRoot string, cfg *shop.Config) error {
+func runMigrationWizardTUI(ctx context.Context, projectRoot string, cfg *shop.Config) error {
 	envCfg := &shop.EnvironmentConfig{Type: "docker", URL: "http://127.0.0.1:8000"}
 	exec, err := executor.New(projectRoot, envCfg, cfg)
 	if err != nil {
 		return err
 	}
 
-	_, err = dev.NewMigrationWizardApp(dev.Options{
+	_, err = dev.NewMigrationWizardApp(ctx, dev.Options{
 		ProjectRoot: projectRoot,
 		Config:      cfg,
 		EnvConfig:   envCfg,
@@ -128,7 +177,7 @@ func runMigrationWizardTUI(projectRoot string, cfg *shop.Config) error {
 }
 
 func setupDevEnvironment(cmd *cobra.Command) (*devEnvironment, error) {
-	projectRoot, err := findClosestShopwareProject()
+	projectRoot, err := findClosestShopwareProject(false)
 	if err != nil {
 		return nil, err
 	}
@@ -178,7 +227,10 @@ func newDevEnvironment(cmd *cobra.Command, projectRoot string, cfg *shop.Config)
 	}
 
 	if useDocker {
-		if err := dockerpkg.WriteComposeFile(projectRoot, dockerpkg.ComposeOptionsFromConfig(cfg)); err != nil {
+		// Proxy-aware: a project configured for a local domain gets a proxy-mode
+		// compose file, a port-based one the plain fixed-port file. A failed
+		// proxy bootstrap later reverts it to plain (see the fallback above).
+		if err := proxy.WriteComposeFile(projectRoot, cfg); err != nil {
 			return nil, err
 		}
 	}
@@ -194,15 +246,10 @@ func newDevEnvironment(cmd *cobra.Command, projectRoot string, cfg *shop.Config)
 func (e *devEnvironment) start(cmd *cobra.Command) error {
 	start := time.Now()
 
-	err := spinner.New().
-		Title("Starting development environment...").
-		Context(cmd.Context()).
-		ActionWithErr(func(ctx context.Context) error {
-			return e.executor.StartEnvironment(ctx)
-		}).
-		Run()
-
-	if err != nil {
+	// runStep falls back to running the action directly without a spinner when
+	// there is no interactive terminal, so `project dev start` also works
+	// headless (e.g. an agent, CI, or a pipe with no /dev/tty).
+	if err := runStep(cmd.Context(), "Starting development environment...", e.executor.StartEnvironment); err != nil {
 		return fmt.Errorf("starting environment: %w", err)
 	}
 
@@ -214,6 +261,10 @@ func (e *devEnvironment) start(cmd *cobra.Command) error {
 	shopURL := e.cfg.URL
 	if e.envCfg.URL != "" {
 		shopURL = e.envCfg.URL
+	}
+	// After a proxy fallback the shop is on a local port, not its hostname.
+	if e.proxyFallback {
+		shopURL = defaultShopURL
 	}
 
 	var services []dev.DiscoveredService
@@ -259,15 +310,11 @@ func (e *devEnvironment) stop(cmd *cobra.Command, opts executor.StopOptions) err
 		title = "Stopping development environment and removing data..."
 	}
 
-	err := spinner.New().
-		Title(title).
-		Context(cmd.Context()).
-		ActionWithErr(func(ctx context.Context) error {
-			return e.executor.StopEnvironment(ctx, opts)
-		}).
-		Run()
+	stop := func(ctx context.Context) error {
+		return e.executor.StopEnvironment(ctx, opts)
+	}
 
-	if err != nil {
+	if err := runStep(cmd.Context(), title, stop); err != nil {
 		return fmt.Errorf("stopping environment: %w", err)
 	}
 
@@ -297,12 +344,13 @@ func (e *devEnvironment) status(cmd *cobra.Command) error {
 	return ErrEnvironmentDown
 }
 
-func (e *devEnvironment) runTUI() error {
-	_, err := dev.NewApp(dev.Options{
-		ProjectRoot: e.projectRoot,
-		Config:      e.cfg,
-		EnvConfig:   e.envCfg,
-		Executor:    e.executor,
+func (e *devEnvironment) runTUI(ctx context.Context) error {
+	_, err := dev.NewApp(ctx, dev.Options{
+		ProjectRoot:   e.projectRoot,
+		Config:        e.cfg,
+		EnvConfig:     e.envCfg,
+		Executor:      e.executor,
+		ProxyFallback: e.proxyFallback,
 	}).Run()
 	return err
 }

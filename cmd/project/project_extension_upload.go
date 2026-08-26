@@ -19,7 +19,6 @@ import (
 	adminSdk "github.com/shopware/shopware-cli/internal/admin-api"
 	"github.com/shopware/shopware-cli/internal/archiver"
 	"github.com/shopware/shopware-cli/internal/extension"
-	"github.com/shopware/shopware-cli/internal/shop"
 	"github.com/shopware/shopware-cli/logging"
 )
 
@@ -28,9 +27,6 @@ var projectExtensionUploadCmd = &cobra.Command{
 	Short: "Upload local extension to external shop",
 	Args:  cobra.MinimumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		var cfg *shop.Config
-		var err error
-
 		adminCtx := adminSdk.NewApiContext(cmd.Context())
 
 		doLifecycleEvents, _ := cmd.PersistentFlags().GetBool("activate")
@@ -62,9 +58,6 @@ var projectExtensionUploadCmd = &cobra.Command{
 		}
 
 		extCfg := ext.GetExtensionConfig()
-		if err != nil {
-			logging.FromContext(cmd.Context()).Fatalln(fmt.Errorf("update: %v", err))
-		}
 
 		if increaseVersionBeforeUpload {
 			if err := increaseExtensionVersion(cmd.Context(), ext); err != nil {
@@ -118,11 +111,17 @@ var projectExtensionUploadCmd = &cobra.Command{
 			}
 		}
 
-		if cfg, err = shop.ReadConfig(cmd.Context(), projectConfigPath, true); err != nil {
+		projectRoot, err := findClosestShopwareProject(true)
+		if err != nil {
 			return err
 		}
 
-		client, err := shop.NewShopClient(cmd.Context(), cfg)
+		cmdExecutor, err := resolveExecutor(cmd, projectRoot)
+		if err != nil {
+			return err
+		}
+
+		client, err := cmdExecutor.AdminAPIClient(cmd.Context())
 		if err != nil {
 			return err
 		}
@@ -168,11 +167,6 @@ var projectExtensionUploadCmd = &cobra.Command{
 
 				return fmt.Errorf("cannot upload extension update: %s", string(str))
 			}
-
-			extensions, _, err = client.ExtensionManager.ListAvailableExtensions(adminCtx)
-			if err != nil {
-				return err
-			}
 		} else {
 			if uploadResponse, err := client.ExtensionManager.UploadExtensionUpdateToCloud(adminCtx, name, &buf); err != nil {
 				return fmt.Errorf("cannot upload extension update: %w", err)
@@ -195,7 +189,15 @@ var projectExtensionUploadCmd = &cobra.Command{
 		logging.FromContext(cmd.Context()).Infof("Refreshed extension list")
 
 		if doLifecycleEvents {
+			extensions, _, err = client.ExtensionManager.ListAvailableExtensions(adminCtx)
+			if err != nil {
+				return err
+			}
+
 			remoteExtension := extensions.GetByName(name)
+			if remoteExtension == nil {
+				return fmt.Errorf("cannot run lifecycle events: uploaded extension %s is not listed by the shop yet. Re-run the command to retry", name)
+			}
 
 			if remoteExtension.InstalledAt == nil {
 				if _, err := client.ExtensionManager.InstallExtension(adminCtx, remoteExtension.Type, remoteExtension.Name); err != nil {

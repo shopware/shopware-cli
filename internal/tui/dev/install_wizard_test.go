@@ -7,6 +7,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"github.com/stretchr/testify/assert"
 
+	"github.com/shopware/shopware-cli/internal/shop/install"
 	"github.com/shopware/shopware-cli/internal/tui"
 )
 
@@ -93,9 +94,9 @@ func TestInstallStepLanguage_CursorClampedAtBounds(t *testing.T) {
 
 	m2 := newTestInstallModel()
 	m2.install.step = installStepLanguage
-	m2.install.cursor = len(installLanguages) - 1
+	m2.install.cursor = len(install.Languages) - 1
 	updated, _ = m2.updateInstallPrompt(tea.KeyPressMsg(tea.Key{Code: tea.KeyDown}))
-	assert.Equal(t, len(installLanguages)-1, updated.(Model).install.cursor)
+	assert.Equal(t, len(install.Languages)-1, updated.(Model).install.cursor)
 }
 
 func TestInstallStepLanguage_EnterSelectsLanguageAdvancesToCurrency(t *testing.T) {
@@ -123,7 +124,7 @@ func TestInstallStepCurrency_UpDownAndEnter(t *testing.T) {
 	out := updated.(Model)
 	assert.Equal(t, "USD", out.install.currency)
 	assert.Equal(t, installStepCredentials, out.install.step)
-	assert.Equal(t, defaultUsername, out.install.Username())
+	assert.Equal(t, install.DefaultAdminUsername, out.install.Username())
 	assert.Equal(t, "shopware", out.install.Password())
 	assert.Equal(t, tui.CredFocusUsername, out.install.FocusTarget())
 	assert.NotNil(t, cmd)
@@ -132,10 +133,10 @@ func TestInstallStepCurrency_UpDownAndEnter(t *testing.T) {
 func TestInstallStepCurrency_CursorClampedAtBounds(t *testing.T) {
 	m := newTestInstallModel()
 	m.install.step = installStepCurrency
-	m.install.cursor = len(installCurrencies) - 1
+	m.install.cursor = len(install.Currencies) - 1
 
 	updated, _ := m.updateInstallPrompt(tea.KeyPressMsg(tea.Key{Code: tea.KeyDown}))
-	assert.Equal(t, len(installCurrencies)-1, updated.(Model).install.cursor)
+	assert.Equal(t, len(install.Currencies)-1, updated.(Model).install.cursor)
 }
 
 func TestInstallStepCredentials_EnterOnUsernameFocusesPassword(t *testing.T) {
@@ -254,15 +255,6 @@ func TestInstallStepCredentials_CheckboxFocusedSwallowsTypedKeys(t *testing.T) {
 	mm := updated.(Model)
 	assert.Equal(t, "orig", mm.install.Password(), "checkbox-focused state must not forward typing to input")
 	assert.Nil(t, cmd)
-}
-
-func TestValidateAdminPassword(t *testing.T) {
-	assert.NoError(t, validateAdminPassword("shopware"))
-	assert.NoError(t, validateAdminPassword("12345678"))
-	assert.Error(t, validateAdminPassword("shopwar"))
-	assert.Error(t, validateAdminPassword(""))
-	// Length is counted in runes, not bytes.
-	assert.Error(t, validateAdminPassword("äöü"))
 }
 
 func TestInstallStepCredentials_EnterWithShortPasswordBlocks(t *testing.T) {

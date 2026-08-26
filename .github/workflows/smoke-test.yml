@@ -5,12 +5,15 @@ on:
       - main
   pull_request:
 
+permissions:
+  contents: read
+
 jobs:
   run:
     runs-on: ubuntu-latest
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@b09bb98e06d4d774595224525879c09bc6e98c40 # ratchet:step-security/harden-runner@v2.20.1
+        uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # ratchet:step-security/harden-runner@v2.21.0
         with:
           egress-policy: audit
 
@@ -20,7 +23,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # ratchet:actions/setup-go@v7.0.0
         with:
-          go-version: '1.26'
+          go-version: '1.27'
           cache: true
           check-latest: true
 
@@ -75,3 +78,91 @@ jobs:
         uses: shopwareLabs/build-project-action@88233d3fdb6b4b6ad7085c45210085c51b727d82 # ratchet:shopwareLabs/build-project-action@main
         with:
           path: shopware
+
+  docker-project:
+    name: Docker project create and dev
+    runs-on: ubuntu-latest
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # ratchet:step-security/harden-runner@v2.21.0
+        with:
+          egress-policy: audit
+
+      - name: Checkout Repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # ratchet:actions/checkout@v7.0.1
+
+      - name: Set up Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # ratchet:actions/setup-go@v7.0.0
+        with:
+          go-version: '1.27'
+          cache: true
+          check-latest: true
+
+      - name: Compile shopware-cli
+        run: go build
+
+      - name: Move to usr/bin
+        run: mv shopware-cli /usr/local/bin/
+
+      # A Docker project gets its PHP from the image, so no PHP is set up here:
+      # needing one on the runner would mean the executor picked the wrong type.
+      - name: Create Docker project
+        run: shopware-cli project create --docker --no-audit shopware-docker
+
+      # The top-level url is deprecated and, while set, used to override
+      # environments.local — which is what selects the executor.
+      - name: Project config targets environments.local only
+        working-directory: shopware-docker
+        run: |
+          cat .shopware-project.yml
+          grep -q 'type: docker' .shopware-project.yml
+          # A top-level url sits at column 0; the environment one is indented.
+          if grep -q '^url:' .shopware-project.yml; then
+            echo "::error::project create wrote a deprecated top-level url"
+            exit 1
+          fi
+
+      - name: Commands do not warn about deprecated config keys
+        working-directory: shopware-docker
+        run: |
+          shopware-cli project dev status 2>&1 | tee status.log || true
+          if grep -qi 'deprecated top-level' status.log; then
+            echo "::error::a freshly created project warns about deprecated config keys"
+            exit 1
+          fi
+
+      - name: Start the development environment
+        working-directory: shopware-docker
+        run: shopware-cli project dev start
+
+      - name: Development environment reports up
+        working-directory: shopware-docker
+        run: shopware-cli project dev status
+
+      - name: Shop responds over HTTP
+        working-directory: shopware-docker
+        run: |
+          for i in $(seq 1 30); do
+            code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 http://127.0.0.1:8000/admin || true)
+            echo "attempt $i: HTTP $code"
+            case "$code" in
+              200|301|302) exit 0 ;;
+            esac
+            sleep 5
+          done
+          echo "::error::shop did not respond on http://127.0.0.1:8000/admin"
+          docker compose ps
+          docker compose logs --tail=100 web
+          exit 1
+
+      - name: Stop the development environment
+        working-directory: shopware-docker
+        run: shopware-cli project dev stop --remove-data
+
+      - name: Development environment reports down
+        working-directory: shopware-docker
+        run: |
+          if shopware-cli project dev status; then
+            echo "::error::dev status must exit non-zero after stop"
+            exit 1
+          fi

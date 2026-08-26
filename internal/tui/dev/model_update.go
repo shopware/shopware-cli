@@ -6,9 +6,9 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
-	dockerpkg "github.com/shopware/shopware-cli/internal/docker"
 	"github.com/shopware/shopware-cli/internal/envfile"
 	"github.com/shopware/shopware-cli/internal/executor"
+	"github.com/shopware/shopware-cli/internal/proxy"
 	"github.com/shopware/shopware-cli/internal/shop"
 	"github.com/shopware/shopware-cli/internal/tracking"
 	"github.com/shopware/shopware-cli/internal/tui"
@@ -209,9 +209,9 @@ func (m Model) executeCommand(id string) (app.Content, tea.Cmd) {
 		m.telemetry.countAction()
 		trackEvent(tracking.EventDevAction, map[string]string{tracking.TagAction: id})
 		if id == "open-shop" {
-			return m, openInBrowser(m.overview.shopURL)
+			return m, openInBrowser(m.commandContext(), m.overview.shopURL)
 		}
-		return m, openInBrowser(m.overview.adminURL)
+		return m, openInBrowser(m.commandContext(), m.overview.adminURL)
 	case "cache-clear":
 		m.telemetry.beginTask(id)
 		return m, m.runCacheClear()
@@ -264,7 +264,7 @@ func (m Model) openSalesChannelPicker() (app.Content, tea.Cmd) {
 	if m.overview.sfWatchRunning || m.overview.sfWatchStarting {
 		return m, nil
 	}
-	return m, m.host.PushOverlay(newSalesChannelPicker(m.executor))
+	return m, m.host.PushOverlay(newSalesChannelPicker(m.commandContext(), m.executor))
 }
 
 func (m *Model) stopWatcher(name string) tea.Cmd {
@@ -276,9 +276,10 @@ func (m *Model) stopWatcher(name string) tea.Cmd {
 	h := m.watchers[name]
 	delete(m.watchers, name)
 
+	cleanupCtx := m.cleanupContext()
 	return func() tea.Msg {
 		if h != nil {
-			stopCtx, stopCancel := context.WithTimeout(context.Background(), 3*time.Second)
+			stopCtx, stopCancel := context.WithTimeout(cleanupCtx, 3*time.Second)
 			defer stopCancel()
 			h.stop(stopCtx)
 		}
@@ -396,7 +397,7 @@ func (m Model) startAfterMigrationWizard() (app.Content, tea.Cmd) {
 	m.executor = exec
 
 	if m.executor.Type() == executor.TypeDocker {
-		if err := dockerpkg.WriteComposeFile(m.projectRoot, dockerpkg.ComposeOptionsFromConfig(m.config)); err != nil {
+		if err := proxy.WriteComposeFile(m.projectRoot, m.config); err != nil {
 			m.migrationWizard.err = err
 			return m, nil
 		}

@@ -35,6 +35,8 @@ Please keep PRs focused. Smaller PRs are easier to review and merge.
 
 ## Development
 
+Branch from `main` and target `main` with your pull request.
+
 Before submitting, run the relevant checks locally:
 
 ```sh
@@ -80,3 +82,8 @@ manager.
 ## Reviews
 
 Maintainers may ask for changes, suggest a different direction, or decline a PR if the approach was not discussed beforehand. That is not personal; it is how we keep the project consistent and sustainable.
+
+## Releases
+
+Releases happen from the default `main` branch with everything included there at the time of release.
+The specific release process is explained in [RELEASING.md](RELEASING.md) and done on demand by the maintainers.

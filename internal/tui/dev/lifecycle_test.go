@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	"github.com/shopware/shopware-cli/internal/shop"
+	"github.com/shopware/shopware-cli/internal/shop/install"
 	"github.com/shopware/shopware-cli/internal/tui"
 )
 
@@ -176,7 +177,7 @@ func TestUpdateLifecycle_ShopwareInstallDone_Success(t *testing.T) {
 
 	assert.Equal(t, phaseDashboard, final.phase)
 	assert.True(t, final.installProg.done)
-	assert.Equal(t, len(installStepPatterns), final.installProg.currentStep)
+	assert.Equal(t, len(install.Steps), final.installProg.currentStep)
 
 	assert.NotNil(t, final.envConfig.AdminApi)
 	assert.Equal(t, "myadmin", final.envConfig.AdminApi.Username)

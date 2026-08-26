@@ -1,7 +1,6 @@
 package dev
 
 import (
-	"fmt"
 	"strings"
 
 	"charm.land/bubbles/v2/progress"
@@ -9,24 +8,11 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 
+	"github.com/shopware/shopware-cli/internal/shop/install"
 	"github.com/shopware/shopware-cli/internal/tracking"
 	"github.com/shopware/shopware-cli/internal/tui"
 	"github.com/shopware/shopware-cli/internal/tui/app"
 )
-
-// minAdminPasswordLength is the minimum admin password length enforced by the
-// Shopware core (user:create / system:install). Validating it here lets the
-// wizard reject too-short passwords up front instead of failing late during the
-// deployment-helper run.
-const minAdminPasswordLength = 8
-
-// validateAdminPassword mirrors the Shopware core password length requirement.
-func validateAdminPassword(password string) error {
-	if len([]rune(password)) < minAdminPasswordLength {
-		return fmt.Errorf("password must be at least %d characters long", minAdminPasswordLength)
-	}
-	return nil
-}
 
 type installStep int
 
@@ -35,30 +21,6 @@ const (
 	installStepLanguage
 	installStepCurrency
 	installStepCredentials
-)
-
-type installLanguage struct {
-	id    string
-	label string
-}
-
-var (
-	installLanguages = []installLanguage{
-		{"en-GB", "English (UK)"},
-		{"en-US", "English (US)"},
-		{"de-DE", "Deutsch"},
-		{"cs-CZ", "Čeština"},
-		{"da-DK", "Dansk"},
-		{"es-ES", "Español"},
-		{"fr-FR", "Français"},
-		{"it-IT", "Italiano"},
-		{"nl-NL", "Nederlands"},
-		{"nn-NO", "Norsk"},
-		{"pl-PL", "Język polski"},
-		{"pt-PT", "Português"},
-		{"sv-SE", "Svenska"},
-	}
-	installCurrencies = []string{"EUR", "USD", "GBP", "PLN", "CHF", "SEK", "DKK", "NOK", "CZK"}
 )
 
 type installWizard struct {
@@ -76,12 +38,12 @@ type installWizard struct {
 // prompts that match the install prompt layout.
 func newInstallCredentialStep() tui.CredentialStep {
 	return tui.NewCredentialStep(tui.CredentialStepOptions{
-		UsernamePlaceholder: defaultUsername,
+		UsernamePlaceholder: install.DefaultAdminUsername,
 		UsernamePrompt:      "Username: ",
-		PasswordPlaceholder: "shopware",
+		PasswordPlaceholder: install.DefaultAdminPassword,
 		PasswordPrompt:      "Password: ",
 		CharLimit:           50,
-		ValidatePassword:    validateAdminPassword,
+		ValidatePassword:    install.ValidateAdminPassword,
 	})
 }
 
@@ -219,24 +181,24 @@ func (m Model) updateInstallStepAsk(msg tea.KeyPressMsg) (app.Content, tea.Cmd) 
 
 func (m Model) updateInstallStepLanguage(msg tea.KeyPressMsg) (app.Content, tea.Cmd) {
 	if tui.KeyString(msg) == tui.KeyEnter {
-		m.install.language = installLanguages[m.install.cursor].id
+		m.install.language = install.Languages[m.install.cursor].ID
 		m.install.step = installStepCurrency
 		m.install.cursor = 0
 		return m, nil
 	}
-	m.install.cursor = tui.MoveCursor(m.install.cursor, tui.KeyString(msg), len(installLanguages))
+	m.install.cursor = tui.MoveCursor(m.install.cursor, tui.KeyString(msg), len(install.Languages))
 	return m, nil
 }
 
 func (m Model) updateInstallStepCurrency(msg tea.KeyPressMsg) (app.Content, tea.Cmd) {
 	if tui.KeyString(msg) == tui.KeyEnter {
-		m.install.currency = installCurrencies[m.install.cursor]
+		m.install.currency = install.Currencies[m.install.cursor]
 		m.install.step = installStepCredentials
-		m.install.SetUsername(defaultUsername)
-		m.install.SetPassword("shopware")
+		m.install.SetUsername(install.DefaultAdminUsername)
+		m.install.SetPassword(install.DefaultAdminPassword)
 		return m, m.install.Focus(tui.CredFocusUsername)
 	}
-	m.install.cursor = tui.MoveCursor(m.install.cursor, tui.KeyString(msg), len(installCurrencies))
+	m.install.cursor = tui.MoveCursor(m.install.cursor, tui.KeyString(msg), len(install.Currencies))
 	return m, nil
 }
 
@@ -311,17 +273,17 @@ func (m Model) renderInstallPrompt(b *strings.Builder) {
 	case installStepLanguage:
 		b.WriteString(tui.TextBadge("Step 1/3"))
 		b.WriteString("\n\n")
-		opts := make([]tui.SelectOption, len(installLanguages))
-		for i, lang := range installLanguages {
-			opts[i] = tui.SelectOption{Label: lang.label, Detail: lang.id}
+		opts := make([]tui.SelectOption, len(install.Languages))
+		for i, lang := range install.Languages {
+			opts[i] = tui.SelectOption{Label: lang.Label, Detail: lang.ID}
 		}
 		b.WriteString(tui.RenderSelectList("Default Language", "Select the primary language for your storefront", opts, m.install.cursor))
 
 	case installStepCurrency:
 		b.WriteString(tui.TextBadge("Step 2/3"))
 		b.WriteString("\n\n")
-		opts := make([]tui.SelectOption, len(installCurrencies))
-		for i, curr := range installCurrencies {
+		opts := make([]tui.SelectOption, len(install.Currencies))
+		for i, curr := range install.Currencies {
 			opts[i] = tui.SelectOption{Label: curr}
 		}
 		b.WriteString(tui.RenderSelectList("Default Currency", "Select the default currency for pricing", opts, m.install.cursor))

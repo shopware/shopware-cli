@@ -15,12 +15,9 @@ func (sg *migrationWizard) applyToConfig(cfg *shop.Config) {
 	// Always update compatibility_date to support dev mode
 	cfg.CompatibilityDate = shop.CompatibilityDevMode
 
-	// Set URL at top level for backwards compatibility
-	if cfg.URL == "" {
-		cfg.URL = c.url
-	}
-
-	// Set up local environment as Docker
+	// Shop URL and Admin API credentials belong under environments.local.
+	// Existing top-level url/admin_api are left untouched; environments.local
+	// wins when both are present.
 	envCfg := &shop.EnvironmentConfig{
 		Type: "docker",
 		URL:  c.url,

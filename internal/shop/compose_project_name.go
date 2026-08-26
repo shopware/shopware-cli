@@ -17,10 +17,10 @@ const ComposeProjectNameEnvKey = "COMPOSE_PROJECT_NAME"
 
 var nonComposeNameChars = regexp.MustCompile(`[^a-z0-9_-]+`)
 
-// GenerateComposeProjectName builds a unique Compose project name that satisfies
-// ProjectNameRule / ValidateProjectName. Format: sw-<basename>-<6 hex>.
-// The random suffix avoids volume reuse when a directory is deleted and
-// recreated with the same basename.
+// GenerateComposeProjectName builds a unique Compose project name.
+// Format: sw-<basename>-<6 hex>. The random suffix avoids volume reuse when a
+// directory is deleted and recreated with the same basename. The generated name
+// is a valid Compose project name by construction.
 func GenerateComposeProjectName(projectFolder string) (string, error) {
 	base := strings.ToLower(filepath.Base(projectFolder))
 	if base == "" || base == "." || base == string(filepath.Separator) {
@@ -32,7 +32,6 @@ func GenerateComposeProjectName(projectFolder string) (string, error) {
 	if base == "" {
 		base = "shop"
 	}
-	// Note: the "sw-" prefix already satisfies ValidateProjectName's leading-character rule.
 
 	var suffix [3]byte
 	if _, err := rand.Read(suffix[:]); err != nil {
@@ -40,9 +39,6 @@ func GenerateComposeProjectName(projectFolder string) (string, error) {
 	}
 
 	name := fmt.Sprintf("sw-%s-%s", base, hex.EncodeToString(suffix[:]))
-	if err := ValidateProjectName(name); err != nil {
-		return "", err
-	}
 
 	return name, nil
 }

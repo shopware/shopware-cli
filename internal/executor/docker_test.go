@@ -1,6 +1,7 @@
 package executor
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"os/exec"
@@ -47,6 +48,34 @@ func recordedArgs(t *testing.T, argsFile string) []string {
 	}
 
 	return args
+}
+
+func TestDockerExecutorOmitsTWhenTTYRequested(t *testing.T) {
+	ctx, cancel := context.WithCancel(WithTTY(t.Context()))
+	t.Cleanup(cancel)
+	exec := &DockerExecutor{projectRoot: "/project"}
+
+	for _, p := range []*Process{
+		exec.ConsoleCommand(ctx, "cache:clear"),
+		exec.ComposerCommand(ctx, "install"),
+		exec.PHPCommand(ctx, "-v"),
+		exec.NPMCommand(ctx, "run", "dev"),
+	} {
+		assert.NotContains(t, p.Cmd.Args, "-T", "WithTTY compose exec must allocate a TTY: %v", p.Cmd.Args)
+	}
+}
+
+func TestDockerExecutorPassesTByDefault(t *testing.T) {
+	exec := &DockerExecutor{projectRoot: "/project"}
+
+	for _, p := range []*Process{
+		exec.ConsoleCommand(t.Context(), "cache:clear"),
+		exec.ComposerCommand(t.Context(), "install"),
+		exec.PHPCommand(t.Context(), "-v"),
+		exec.NPMCommand(t.Context(), "run", "dev"),
+	} {
+		assert.Contains(t, p.Cmd.Args, "-T", "compose exec must disable TTY unless WithTTY: %v", p.Cmd.Args)
+	}
 }
 
 func TestDockerStopEnvironment(t *testing.T) {

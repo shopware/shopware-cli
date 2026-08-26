@@ -15,8 +15,9 @@ import (
 )
 
 var projectValidateCmd = &cobra.Command{
-	Use:   "validate",
+	Use:   "validate [path]",
 	Short: "Validate project",
+	Args:  cobra.MaximumNArgs(1),
 	PreRunE: func(cmd *cobra.Command, args []string) error {
 		return verifier.SetupTools(cmd.Context(), cmd.Root().Version)
 	},
@@ -36,7 +37,7 @@ var projectValidateCmd = &cobra.Command{
 		if len(args) > 0 {
 			projectPath = args[0]
 		} else {
-			projectPath, err = findClosestShopwareProject()
+			projectPath, err = findClosestShopwareProject(false)
 			if err != nil {
 				return err
 			}

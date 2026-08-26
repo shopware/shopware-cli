@@ -83,6 +83,27 @@ shopware-cli --no-update-hint
 
 ## Configuration
 
+Shop URL and Admin API credentials belong under named `environments` in `.shopware-project.yml`. Project-level keys such as `build`, `dump`, `docker`, and `php_version` stay at the top level.
+
+```yaml
+environments:
+  local:
+    type: local
+    url: http://127.0.0.1:8000
+    admin_api:
+      username: admin
+      password: shopware
+  staging:
+    url: https://staging.example.com
+    admin_api:
+      client_id: ...
+      client_secret: ...
+```
+
+Omit `-e` / `--env` to target `environments.local`. Use `-e staging` (or another name) to target a different environment.
+
+`shopware-cli project create` and `shopware-cli project config init` write `environments.local`. Top-level `url` and `admin_api` are deprecated: they are used only when `environments.local` is absent. When both are present, `environments.local` wins.
+
 ### Disable update notifications
 
 To disable update notifications for the current shell session, set:
@@ -120,6 +141,7 @@ Available skills are `shopware-cli` and `shopware-cli-docker`.
 ## Contributing
 
 Contributions are welcome. If you want to improve commands, docs, or developer workflows, open an issue or send a pull request.
+See [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## License
 

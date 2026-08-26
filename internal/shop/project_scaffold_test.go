@@ -3,6 +3,7 @@ package shop
 import (
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -49,6 +50,31 @@ func TestShopwareProjectScaffold(t *testing.T) {
 		assert.Equal(t, "memory_limit=512M", readScaffoldFile(t, projectFolder, "php.ini"))
 	})
 
+	t.Run("creates a Dockerfile for a container deployment", func(t *testing.T) {
+		t.Parallel()
+
+		projectFolder := filepath.Join(t.TempDir(), "shop")
+		scaffold := ShopwareProjectScaffold{
+			ProjectFolder:    projectFolder,
+			Version:          "6.7.12.1",
+			DeploymentMethod: DeploymentContainer,
+			CISystem:         CINone,
+			UseDocker:        true,
+			PHPVersion:       "8.4",
+		}
+
+		require.NoError(t, scaffold.Scaffold(t.Context()))
+
+		assert.FileExists(t, filepath.Join(projectFolder, "Dockerfile"))
+		assert.FileExists(t, filepath.Join(projectFolder, ".dockerignore"))
+		assert.Contains(t, readScaffoldFile(t, projectFolder, "Dockerfile"), "ghcr.io/shopware/docker-base:8.4")
+		// The container deployment needs no deployment-specific composer package.
+		composerJSON := readScaffoldFile(t, projectFolder, "composer.json")
+		assert.NotContains(t, composerJSON, "deployer/deployer")
+		assert.NotContains(t, composerJSON, "shopware/paas-meta")
+		assert.NotContains(t, composerJSON, "shopware/k8s-meta")
+	})
+
 	t.Run("configures Docker without Symfony CLI php.ini", func(t *testing.T) {
 		t.Parallel()
 
@@ -71,7 +97,7 @@ func TestShopwareProjectScaffold(t *testing.T) {
 		assert.True(t, strings.HasPrefix(envContent, ComposeProjectNameEnvKey+"=sw-demo-shop-"), "got %q", envContent)
 		assert.True(t, strings.HasSuffix(envContent, "\n"))
 		name := strings.TrimPrefix(strings.TrimSpace(envContent), ComposeProjectNameEnvKey+"=")
-		assert.NoError(t, ValidateProjectName(name))
+		assert.Regexp(t, regexp.MustCompile(`^[a-z0-9][a-z0-9_-]*$`), name)
 
 		// Two docker scaffolds with the same basename get different compose names.
 		projectFolder2 := filepath.Join(t.TempDir(), "demo-shop")
@@ -175,7 +201,7 @@ func TestSetupDeployment(t *testing.T) {
 		t.Parallel()
 		tmpDir := t.TempDir()
 
-		require.NoError(t, setupDeployment(tmpDir, DeploymentNone))
+		require.NoError(t, ShopwareProjectScaffold{ProjectFolder: tmpDir, DeploymentMethod: DeploymentNone}.setupDeployment(t.Context()))
 
 		entries, err := os.ReadDir(tmpDir)
 		require.NoError(t, err)
@@ -186,7 +212,7 @@ func TestSetupDeployment(t *testing.T) {
 		t.Parallel()
 		tmpDir := t.TempDir()
 
-		require.NoError(t, setupDeployment(tmpDir, DeploymentDeployer))
+		require.NoError(t, ShopwareProjectScaffold{ProjectFolder: tmpDir, DeploymentMethod: DeploymentDeployer}.setupDeployment(t.Context()))
 
 		assert.FileExists(t, filepath.Join(tmpDir, "deploy.php"))
 		assert.Equal(t, deployerTemplate, readScaffoldFile(t, tmpDir, "deploy.php"))
@@ -196,18 +222,37 @@ func TestSetupDeployment(t *testing.T) {
 		t.Parallel()
 		tmpDir := t.TempDir()
 
-		require.NoError(t, setupDeployment(tmpDir, DeploymentShopwarePaaS))
+		require.NoError(t, ShopwareProjectScaffold{ProjectFolder: tmpDir, DeploymentMethod: DeploymentShopwarePaaS}.setupDeployment(t.Context()))
 
 		content := readScaffoldFile(t, tmpDir, "application.yaml")
 		assert.Contains(t, content, "php:")
 		assert.Contains(t, content, "mysql:")
 	})
 
+	t.Run("container creates a Dockerfile pinned to the project PHP version", func(t *testing.T) {
+		t.Parallel()
+		tmpDir := t.TempDir()
+
+		scaffold := ShopwareProjectScaffold{ProjectFolder: tmpDir, DeploymentMethod: DeploymentContainer, PHPVersion: "8.3"}
+		require.NoError(t, scaffold.setupDeployment(t.Context()))
+
+		dockerfile := readScaffoldFile(t, tmpDir, "Dockerfile")
+		assert.Contains(t, dockerfile, "FROM ghcr.io/shopware/docker-base:8.3 AS base-image")
+		assert.Contains(t, dockerfile, "FROM ghcr.io/shopware/shopware-cli:latest-php-8.3 AS shopware-cli")
+		assert.Contains(t, dockerfile, "shopware-cli project ci /src")
+		assert.NotContains(t, dockerfile, "{{")
+
+		dockerignore := readScaffoldFile(t, tmpDir, ".dockerignore")
+		assert.Contains(t, dockerignore, "vendor")
+		// A dev-only APP_ENV must never end up in the production image.
+		assert.Contains(t, dockerignore, ".env.local")
+	})
+
 	t.Run("platformsh creates no files", func(t *testing.T) {
 		t.Parallel()
 		tmpDir := t.TempDir()
 
-		require.NoError(t, setupDeployment(tmpDir, DeploymentPlatformSH))
+		require.NoError(t, ShopwareProjectScaffold{ProjectFolder: tmpDir, DeploymentMethod: DeploymentPlatformSH}.setupDeployment(t.Context()))
 
 		entries, err := os.ReadDir(tmpDir)
 		require.NoError(t, err)

@@ -16,7 +16,7 @@ var projectUpgradeCmd = &cobra.Command{
 		"In a terminal this runs as an interactive wizard. With --no-interaction (or without a terminal, e.g. CI) the upgrade runs headless:\n" +
 		"--target is required there, --dry-run stops after the read-only preflight, and --no-audit continues when dependencies are blocked by security advisories.",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		projectRoot, err := findClosestShopwareProject()
+		projectRoot, err := findClosestShopwareProject(false)
 		if err != nil {
 			return err
 		}
@@ -57,7 +57,7 @@ var projectUpgradeCmd = &cobra.Command{
 			envName = "local"
 		}
 
-		shell := upgradetui.NewApp(upgradetui.Options{
+		shell := upgradetui.NewApp(cmd.Context(), upgradetui.Options{
 			ProjectRoot: projectRoot,
 			EnvName:     envName,
 			Executor:    exec,
@@ -70,7 +70,7 @@ var projectUpgradeCmd = &cobra.Command{
 
 func init() {
 	projectRootCmd.AddCommand(projectUpgradeCmd)
-	projectUpgradeCmd.Flags().String("target", "", "version to upgrade to (required with --no-interaction; also accepts 'recommended' or 'latest-patch')")
-	projectUpgradeCmd.Flags().Bool("dry-run", false, "non-interactive mode: stop after the read-only preflight without modifying the project")
-	projectUpgradeCmd.Flags().Bool("no-audit", false, "continue when dependencies are blocked by known security advisories")
+	projectUpgradeCmd.Flags().String("target", "", "Version to upgrade to (required with --no-interaction; also accepts 'recommended' or 'latest-patch')")
+	projectUpgradeCmd.Flags().Bool("dry-run", false, "Non-interactive mode: stop after the read-only preflight without modifying the project")
+	projectUpgradeCmd.Flags().Bool("no-audit", false, "Continue when dependencies are blocked by known security advisories")
 }

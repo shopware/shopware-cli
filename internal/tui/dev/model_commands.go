@@ -7,8 +7,9 @@ import (
 	"charm.land/bubbles/v2/progress"
 	tea "charm.land/bubbletea/v2"
 
-	dockerpkg "github.com/shopware/shopware-cli/internal/docker"
 	"github.com/shopware/shopware-cli/internal/executor"
+	"github.com/shopware/shopware-cli/internal/proxy"
+	"github.com/shopware/shopware-cli/internal/shop/install"
 	"github.com/shopware/shopware-cli/internal/tui"
 )
 
@@ -20,9 +21,9 @@ func newInstallProgress() progress.Model {
 	)
 }
 
-func checkContainersRunning(projectRoot string) tea.Cmd {
+func checkContainersRunning(ctx context.Context, projectRoot string) tea.Cmd {
 	return func() tea.Msg {
-		running := composeServiceSet(projectRoot, "ps", "--services", "--status=running")
+		running := composeServiceSet(ctx, projectRoot, "ps", "--services", "--status=running")
 		if len(running) == 0 {
 			return dockerNeedStartMsg{}
 		}
@@ -32,7 +33,7 @@ func checkContainersRunning(projectRoot string) tea.Cmd {
 		// compose.yaml (e.g. the messenger worker when the admin worker is
 		// disabled) is not running yet, so fall through to a start and let
 		// `up -d` reconcile the newcomers instead of jumping to the dashboard.
-		defined := composeServiceSet(projectRoot, "config", "--services")
+		defined := composeServiceSet(ctx, projectRoot, "config", "--services")
 		if !allRunning(defined, running) {
 			return dockerNeedStartMsg{}
 		}
@@ -58,8 +59,8 @@ func allRunning(defined, running map[string]struct{}) bool {
 // per line (e.g. `config --services` or `ps --services`) and returns the names
 // as a set. It returns nil when the command fails, so callers treat an
 // undeterminable list as "no constraint".
-func composeServiceSet(projectRoot string, args ...string) map[string]struct{} {
-	output, err := composeCommand(context.Background(), projectRoot, args...).Output()
+func composeServiceSet(ctx context.Context, projectRoot string, args ...string) map[string]struct{} {
+	output, err := composeCommand(ctx, projectRoot, args...).Output()
 	if err != nil {
 		return nil
 	}
@@ -75,17 +76,14 @@ func composeServiceSet(projectRoot string, args ...string) map[string]struct{} {
 }
 
 func (m *Model) checkShopwareInstalled() tea.Cmd {
+	ctx := m.commandContext()
 	exec := m.executor
 	return func() tea.Msg {
-		if err := exec.ConsoleCommand(context.Background(), "system:is-installed").Run(); err != nil {
+		if !install.IsInstalled(ctx, exec) {
 			return shopwareNotInstalledMsg{}
 		}
 		return shopwareInstalledMsg{}
 	}
-}
-
-func (m *Model) runShopwareInstall() tea.Cmd {
-	return m.runShopwareInstallFrom(installStartStep)
 }
 
 func (m *Model) runShopwareInstallFrom(fromStep string) tea.Cmd {
@@ -187,7 +185,7 @@ func runComposeCommand(ctx context.Context, projectRoot string, args []string, r
 func (m *Model) startContainers() tea.Cmd {
 	m.telemetry.beginDockerStart()
 	ch, outputCmd, doneCmd := runComposeCommand(
-		context.Background(),
+		m.commandContext(),
 		m.projectRoot,
 		[]string{"up", "-d"},
 		func(err error) tea.Msg { return dockerStartedMsg{err: err} },
@@ -198,20 +196,23 @@ func (m *Model) startContainers() tea.Cmd {
 
 func (m *Model) restartContainersForConfig() tea.Cmd {
 	m.telemetry.beginConfigRestart()
+	ctx := m.commandContext()
 	projectRoot := m.projectRoot
 	cfg := m.config
 	return func() tea.Msg {
-		if err := dockerpkg.WriteComposeFile(projectRoot, dockerpkg.ComposeOptionsFromConfig(cfg)); err != nil {
+		if err := proxy.WriteComposeFile(projectRoot, cfg); err != nil {
 			return configRestartDoneMsg{err: err}
 		}
-		cmd := composeCommand(context.Background(), projectRoot, "up", "-d")
+		cmd := composeCommand(ctx, projectRoot, "up", "-d")
 		return configRestartDoneMsg{err: cmd.Run()}
 	}
 }
 
 func (m *Model) stopContainers() tea.Cmd {
+	// Stopping happens on the way out — it must still work when the command
+	// context was already cancelled by a signal.
 	ch, outputCmd, doneCmd := runComposeCommand(
-		context.Background(),
+		m.cleanupContext(),
 		m.projectRoot,
 		[]string{"down"},
 		func(err error) tea.Msg { return dockerStoppedMsg{err: err} },

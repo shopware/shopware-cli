@@ -1,7 +1,6 @@
 package project
 
 import (
-	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -13,29 +12,21 @@ import (
 )
 
 var projectFixCmd = &cobra.Command{
-	Use:   "fix",
+	Use:   "fix [path]",
 	Short: "Fix project",
+	Args:  cobra.MaximumNArgs(1),
 	PreRunE: func(cmd *cobra.Command, args []string) error {
 		return verifier.SetupTools(cmd.Context(), cmd.Root().Version)
 	},
 	RunE: func(cmd *cobra.Command, args []string) error {
-		allowNonGit, _ := cmd.Flags().GetBool("allow-non-git")
-		gitPath := filepath.Join(args[0], ".git")
-		if !allowNonGit {
-			if stat, err := os.Stat(gitPath); err != nil || !stat.IsDir() {
-				return errors.New("provided folder is not a git repository. Use --allow-non-git flag to run anyway")
-			}
-		}
-
 		var err error
-		only, _ := cmd.Flags().GetString("only")
 
 		projectPath := ""
 
 		if len(args) > 0 {
 			projectPath = args[0]
 		} else {
-			projectPath, err = findClosestShopwareProject()
+			projectPath, err = findClosestShopwareProject(false)
 			if err != nil {
 				return err
 			}
@@ -45,6 +36,15 @@ var projectFixCmd = &cobra.Command{
 		if err != nil {
 			return fmt.Errorf("cannot find path: %w", err)
 		}
+
+		allowNonGit, _ := cmd.Flags().GetBool("allow-non-git")
+		if !allowNonGit {
+			if stat, err := os.Stat(filepath.Join(projectPath, ".git")); err != nil || !stat.IsDir() {
+				return fmt.Errorf("%s is not a git repository. Use --allow-non-git flag to run anyway", projectPath)
+			}
+		}
+
+		only, _ := cmd.Flags().GetString("only")
 
 		toolCfg, err := verifier.GetConfigFromProject(projectPath, false)
 		if err != nil {

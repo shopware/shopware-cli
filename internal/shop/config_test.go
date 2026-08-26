@@ -6,8 +6,12 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zaptest/observer"
 
 	"github.com/shopware/shopware-cli/internal/compatibility"
+	"github.com/shopware/shopware-cli/logging"
 )
 
 func TestConfigMerging(t *testing.T) {
@@ -78,6 +82,9 @@ func TestConfigWithoutPHPVersionStaysBackwardCompatible(t *testing.T) {
 	written, err := os.ReadFile(filepath.Join(tmpDir, ".shopware-project.yml"))
 	assert.NoError(t, err)
 	assert.NotContains(t, string(written), "php_version")
+	assert.NotRegexp(t, `(?m)^url:`, string(written))
+	assert.NotRegexp(t, `(?m)^admin_api:`, string(written))
+	assert.Contains(t, string(written), "environments:")
 }
 
 func TestReadConfigCompatibilityDateValidation(t *testing.T) {
@@ -168,6 +175,49 @@ func TestResolveEnvironment(t *testing.T) {
 		assert.Equal(t, "http://localhost:8000", env.URL)
 	})
 
+	t.Run("empty name prefers environments.local over the deprecated top-level shop", func(t *testing.T) {
+		cfg := &Config{
+			URL:      "https://myshop.com",
+			AdminApi: &ConfigAdminApi{Username: "admin"},
+			Environments: map[string]*EnvironmentConfig{
+				"local": {Type: "docker", URL: "http://localhost:8000"},
+			},
+		}
+
+		env, err := cfg.ResolveEnvironment("")
+		require.NoError(t, err)
+		assert.Equal(t, "docker", env.Type)
+		assert.Equal(t, "http://localhost:8000", env.URL)
+		assert.Equal(t, "admin", env.AdminApi.Username)
+	})
+
+	t.Run("empty name fills unset environment values from the deprecated top-level shop", func(t *testing.T) {
+		cfg := &Config{
+			URL:      "https://myshop.com",
+			AdminApi: &ConfigAdminApi{Username: "admin"},
+			Environments: map[string]*EnvironmentConfig{
+				"local": {Type: "docker"},
+			},
+		}
+
+		env, err := cfg.ResolveEnvironment("")
+		require.NoError(t, err)
+		assert.Equal(t, "docker", env.Type)
+		assert.Equal(t, "https://myshop.com", env.URL)
+		assert.Equal(t, "admin", env.AdminApi.Username)
+	})
+
+	t.Run("empty name does not mutate the stored environment", func(t *testing.T) {
+		cfg := &Config{
+			URL:          "https://myshop.com",
+			Environments: map[string]*EnvironmentConfig{"local": {Type: "docker"}},
+		}
+
+		_, err := cfg.ResolveEnvironment("")
+		require.NoError(t, err)
+		assert.Empty(t, cfg.Environments["local"].URL)
+	})
+
 	t.Run("synthesizes from top-level when no environments configured", func(t *testing.T) {
 		cfg := &Config{
 			URL: "https://myshop.com",
@@ -198,6 +248,126 @@ func TestResolveEnvironment(t *testing.T) {
 
 		_, err := cfg.ResolveEnvironment("staging")
 		assert.Error(t, err)
+	})
+
+	t.Run("error on named environment entry without configuration", func(t *testing.T) {
+		cfg := &Config{Environments: map[string]*EnvironmentConfig{"staging": nil}}
+
+		_, err := cfg.ResolveEnvironment("staging")
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), `environment "staging" has no configuration`)
+	})
+
+	t.Run("local entry without configuration falls back to top-level", func(t *testing.T) {
+		cfg := &Config{
+			URL:          "https://myshop.com",
+			Environments: map[string]*EnvironmentConfig{"local": nil},
+		}
+
+		env, err := cfg.ResolveEnvironment("")
+		require.NoError(t, err)
+		assert.Equal(t, "local", env.Type)
+		assert.Equal(t, "https://myshop.com", env.URL)
+	})
+}
+
+func TestWithEnvironment(t *testing.T) {
+	baseConfig := func() *Config {
+		return &Config{
+			URL:      "https://myshop.com",
+			AdminApi: &ConfigAdminApi{Username: "admin", Password: "shopware"},
+			Environments: map[string]*EnvironmentConfig{
+				"staging": {
+					Type:     "local",
+					URL:      "https://staging.example.com",
+					AdminApi: &ConfigAdminApi{ClientId: "staging-id", ClientSecret: "staging-secret"},
+				},
+				"bare": {Type: "local"},
+			},
+		}
+	}
+
+	t.Run("named environment overrides url and admin api", func(t *testing.T) {
+		cfg, err := baseConfig().WithEnvironment("staging")
+		require.NoError(t, err)
+		assert.Equal(t, "https://staging.example.com", cfg.URL)
+		assert.Equal(t, "staging-id", cfg.AdminApi.ClientId)
+	})
+
+	t.Run("environment without overrides keeps base values", func(t *testing.T) {
+		cfg, err := baseConfig().WithEnvironment("bare")
+		require.NoError(t, err)
+		assert.Equal(t, "https://myshop.com", cfg.URL)
+		assert.Equal(t, "admin", cfg.AdminApi.Username)
+	})
+
+	t.Run("error on unknown environment", func(t *testing.T) {
+		_, err := baseConfig().WithEnvironment("production")
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), `environment "production" not found`)
+	})
+
+	t.Run("error on environment entry without configuration", func(t *testing.T) {
+		cfg := &Config{
+			URL:          "https://myshop.com",
+			Environments: map[string]*EnvironmentConfig{"staging": nil},
+		}
+
+		_, err := cfg.WithEnvironment("staging")
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), `environment "staging" has no configuration`)
+	})
+
+	t.Run("no name and no environments keeps config unchanged", func(t *testing.T) {
+		cfg := &Config{URL: "https://myshop.com", AdminApi: &ConfigAdminApi{Username: "admin"}}
+
+		resolved, err := cfg.WithEnvironment("")
+		require.NoError(t, err)
+		assert.Equal(t, "https://myshop.com", resolved.URL)
+		assert.Equal(t, "admin", resolved.AdminApi.Username)
+	})
+
+	t.Run("empty name prefers environments.local over the deprecated top-level shop", func(t *testing.T) {
+		cfg := &Config{
+			URL:      "https://myshop.com",
+			AdminApi: &ConfigAdminApi{Username: "admin"},
+			Environments: map[string]*EnvironmentConfig{
+				"local": {
+					URL:      "http://localhost:8000",
+					AdminApi: &ConfigAdminApi{Username: "local-admin"},
+				},
+			},
+		}
+
+		resolved, err := cfg.WithEnvironment("")
+		require.NoError(t, err)
+		assert.Equal(t, "http://localhost:8000", resolved.URL)
+		assert.Equal(t, "local-admin", resolved.AdminApi.Username)
+	})
+
+	t.Run("empty name applies environments.local when top-level shop is unset", func(t *testing.T) {
+		cfg := &Config{
+			Environments: map[string]*EnvironmentConfig{
+				"local": {
+					URL:      "http://localhost:8000",
+					AdminApi: &ConfigAdminApi{Username: "local-admin"},
+				},
+			},
+		}
+
+		resolved, err := cfg.WithEnvironment("")
+		require.NoError(t, err)
+		assert.Equal(t, "http://localhost:8000", resolved.URL)
+		assert.Equal(t, "local-admin", resolved.AdminApi.Username)
+	})
+
+	t.Run("does not mutate the original config", func(t *testing.T) {
+		cfg := baseConfig()
+
+		_, err := cfg.WithEnvironment("staging")
+		assert.NoError(t, err)
+		assert.Equal(t, "https://myshop.com", cfg.URL)
+		assert.Equal(t, "admin", cfg.AdminApi.Username)
 	})
 }
 
@@ -234,6 +404,101 @@ environments:
 	staging := config.Environments["staging"]
 	assert.Equal(t, "docker", staging.Type)
 	assert.Equal(t, "https://staging.example.com", staging.URL)
+}
+
+func TestSetLocalShop(t *testing.T) {
+	t.Run("writes environments.local without top-level shop keys", func(t *testing.T) {
+		cfg := &Config{CompatibilityDate: "2026-01-01"}
+		cfg.SetLocalShop("http://127.0.0.1:8000", &ConfigAdminApi{Username: "admin", Password: "shopware"})
+
+		assert.Empty(t, cfg.URL)
+		assert.Nil(t, cfg.AdminApi)
+		require.NotNil(t, cfg.Environments["local"])
+		assert.Equal(t, "local", cfg.Environments["local"].Type)
+		assert.Equal(t, "http://127.0.0.1:8000", cfg.Environments["local"].URL)
+		assert.Equal(t, "admin", cfg.Environments["local"].AdminApi.Username)
+		assert.Equal(t, "shopware", cfg.Environments["local"].AdminApi.Password)
+	})
+
+	t.Run("preserves existing local type when already present", func(t *testing.T) {
+		cfg := &Config{
+			Environments: map[string]*EnvironmentConfig{
+				"local": {Type: "docker"},
+			},
+		}
+		cfg.SetLocalShop("http://127.0.0.1:8000", nil)
+
+		assert.Equal(t, "docker", cfg.Environments["local"].Type)
+		assert.Equal(t, "http://127.0.0.1:8000", cfg.Environments["local"].URL)
+		assert.Nil(t, cfg.Environments["local"].AdminApi)
+	})
+}
+
+func TestHasDeprecatedTopLevelShop(t *testing.T) {
+	assert.False(t, (&Config{}).HasDeprecatedTopLevelShop())
+	assert.False(t, NewConfig().HasDeprecatedTopLevelShop())
+	assert.True(t, (&Config{URL: "https://example.com"}).HasDeprecatedTopLevelShop())
+	assert.True(t, (&Config{AdminApi: &ConfigAdminApi{Username: "admin"}}).HasDeprecatedTopLevelShop())
+}
+
+func TestReadConfigWarnsOnDeprecatedTopLevelShop(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, ".shopware-project.yml")
+	require.NoError(t, os.WriteFile(configPath, []byte(`
+url: https://example.com
+compatibility_date: "2026-01-01"
+admin_api:
+  username: admin
+  password: shopware
+`), 0o644))
+
+	core, logs := observer.New(zap.WarnLevel)
+	ctx := logging.WithLogger(t.Context(), zap.New(core).Sugar())
+
+	cfg, err := ReadConfig(ctx, configPath, false)
+	require.NoError(t, err)
+	assert.True(t, cfg.HasDeprecatedTopLevelShop())
+	require.NotEmpty(t, logs.All())
+	assert.Contains(t, logs.All()[0].Message, "deprecated top-level url/admin_api")
+	assert.Contains(t, logs.All()[0].Message, "environments.local")
+}
+
+func TestReadConfigDoesNotWarnOnEnvironmentsOnly(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, ".shopware-project.yml")
+	require.NoError(t, os.WriteFile(configPath, []byte(`
+compatibility_date: "2026-01-01"
+environments:
+  local:
+    type: local
+    url: http://127.0.0.1:8000
+    admin_api:
+      username: admin
+      password: shopware
+`), 0o644))
+
+	core, logs := observer.New(zap.WarnLevel)
+	ctx := logging.WithLogger(t.Context(), zap.New(core).Sugar())
+
+	cfg, err := ReadConfig(ctx, configPath, false)
+	require.NoError(t, err)
+	assert.False(t, cfg.HasDeprecatedTopLevelShop())
+	assert.Empty(t, logs.All())
+}
+
+func TestWriteConfigOmitsDeprecatedTopLevelShop(t *testing.T) {
+	tmpDir := t.TempDir()
+	cfg := NewConfig()
+	cfg.SetLocalShop("http://127.0.0.1:8000", &ConfigAdminApi{Username: "admin", Password: "shopware"})
+
+	require.NoError(t, WriteConfig(cfg, tmpDir))
+
+	written, err := os.ReadFile(filepath.Join(tmpDir, ".shopware-project.yml"))
+	require.NoError(t, err)
+	assert.NotRegexp(t, `(?m)^url:`, string(written))
+	assert.NotRegexp(t, `(?m)^admin_api:`, string(written))
+	assert.Contains(t, string(written), "environments:")
+	assert.Contains(t, string(written), "http://127.0.0.1:8000")
 }
 
 func TestConfigDump_EnableAnonymization(t *testing.T) {
@@ -763,4 +1028,24 @@ func TestConfigBuildMJMLResolveIncludePaths(t *testing.T) {
 		want := []string{filepath.Join(projectRoot, "shared/email"), abs}
 		assert.Equal(t, want, got)
 	})
+}
+
+func TestEffectiveURL(t *testing.T) {
+	assert.Empty(t, (*Config)(nil).EffectiveURL())
+	assert.Empty(t, (&Config{}).EffectiveURL())
+	assert.Equal(t, "https://myshop.com", (&Config{URL: "https://myshop.com"}).EffectiveURL())
+
+	// environments.local wins over the deprecated top-level url.
+	mixed := &Config{
+		URL:          "http://127.0.0.1:8000",
+		Environments: map[string]*EnvironmentConfig{"local": {URL: "https://my-shop.shopware.local"}},
+	}
+	assert.Equal(t, "https://my-shop.shopware.local", mixed.EffectiveURL())
+
+	// An environment without a url falls back to the top-level one.
+	fallback := &Config{
+		URL:          "https://myshop.com",
+		Environments: map[string]*EnvironmentConfig{"local": {Type: "docker"}},
+	}
+	assert.Equal(t, "https://myshop.com", fallback.EffectiveURL())
 }

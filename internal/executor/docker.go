@@ -39,7 +39,7 @@ func (d *DockerExecutor) composeArgs(sub ...string) []string {
 }
 
 func (d *DockerExecutor) ConsoleCommand(ctx context.Context, args ...string) *Process {
-	dockerArgs := d.baseArgs()
+	dockerArgs := d.baseArgs(ctx)
 	dockerArgs = append(dockerArgs, "env-bridge", "php", consoleCommandName(ctx))
 	dockerArgs = append(dockerArgs, args...)
 
@@ -50,7 +50,7 @@ func (d *DockerExecutor) ConsoleCommand(ctx context.Context, args ...string) *Pr
 }
 
 func (d *DockerExecutor) ComposerCommand(ctx context.Context, args ...string) *Process {
-	dockerArgs := d.baseArgs()
+	dockerArgs := d.baseArgs(ctx)
 	dockerArgs = append(dockerArgs, "composer")
 	dockerArgs = append(dockerArgs, args...)
 
@@ -61,7 +61,7 @@ func (d *DockerExecutor) ComposerCommand(ctx context.Context, args ...string) *P
 }
 
 func (d *DockerExecutor) PHPCommand(ctx context.Context, args ...string) *Process {
-	dockerArgs := d.baseArgs()
+	dockerArgs := d.baseArgs(ctx)
 	dockerArgs = append(dockerArgs, "env-bridge", "php")
 	dockerArgs = append(dockerArgs, args...)
 
@@ -72,7 +72,7 @@ func (d *DockerExecutor) PHPCommand(ctx context.Context, args ...string) *Proces
 }
 
 func (d *DockerExecutor) NPMCommand(ctx context.Context, args ...string) *Process {
-	dockerArgs := d.baseArgs()
+	dockerArgs := d.baseArgs(ctx)
 	dockerArgs = append(dockerArgs, "env-bridge", "npm")
 	dockerArgs = append(dockerArgs, args...)
 
@@ -121,6 +121,10 @@ func (d *DockerExecutor) AdminAPIClient(ctx context.Context) (*adminSdk.Client, 
 	return adminAPIClient(ctx, d.shopCfg, d.envCfg)
 }
 
+func (d *DockerExecutor) ShopConfig() *shop.Config {
+	return d.shopCfg
+}
+
 // DatabaseConnection resolves the database credentials as seen inside the
 // compose network and translates the service host to the port published on
 // the host machine.
@@ -131,6 +135,7 @@ func (d *DockerExecutor) DatabaseConnection(ctx context.Context) (*DatabaseConne
 	databaseURL := d.env["DATABASE_URL"]
 
 	if databaseURL == "" {
+		// Always disable TTY: this captures stdout and is never interactive.
 		cmd := exec.CommandContext(ctx, "docker", "compose", "exec", "-T", "web", "printenv", "DATABASE_URL")
 		cmd.Dir = d.projectRoot
 		logCmd(ctx, cmd)
@@ -214,11 +219,17 @@ func (d *DockerExecutor) newProcess(cmd *exec.Cmd, innerArgs []string) *Process 
 	projectRoot := d.projectRoot
 	pattern := strings.Join(innerArgs, " ")
 
-	killArgs := append(d.composeArgs("exec", "-T", "web"), "pkill", "-INT", "-f", pattern)
-
 	return &Process{
 		Cmd: cmd,
 		stop: func(ctx context.Context) error {
+			// Signal the whole in-container process tree rooted at the
+			// matched command, not just the top process. npm (and similar
+			// wrappers) spawn the actual long-running server — e.g. the Vite
+			// dev server — as a child that does not receive npm's signal, so
+			// signalling only the parent orphans it and it keeps holding its
+			// port. pkill matches by pattern and would miss those children.
+			// Always disable TTY: this is a fire-and-forget cleanup command.
+			killArgs := append(d.composeArgs("exec", "-T", "web"), "sh", "-c", killTreeScript(pattern))
 			killCmd := exec.CommandContext(ctx, "docker", killArgs...)
 			killCmd.Dir = projectRoot
 			_ = killCmd.Run()
@@ -230,6 +241,22 @@ func (d *DockerExecutor) newProcess(cmd *exec.Cmd, innerArgs []string) *Process 
 			return nil
 		},
 	}
+}
+
+// killTreeScript builds a POSIX-sh snippet that SIGINTs every process whose
+// command line matches pattern together with all of its descendants.
+func killTreeScript(pattern string) string {
+	// pgrep -f matches against the whole command line, so this very `sh -c`
+	// script (which embeds the pattern) matches itself; skip our own PID ($$),
+	// or kill_tree would terminate the cleanup shell before the real targets.
+	return "kill_tree() { for c in $(pgrep -P \"$1\" 2>/dev/null); do kill_tree \"$c\"; done; kill -INT \"$1\" 2>/dev/null; }; " +
+		"for p in $(pgrep -f " + shellSingleQuote(pattern) + " 2>/dev/null); do [ \"$p\" = \"$$\" ] && continue; kill_tree \"$p\"; done"
+}
+
+// shellSingleQuote wraps s in single quotes safely for embedding in an sh -c
+// script.
+func shellSingleQuote(s string) string {
+	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
 }
 
 func (d *DockerExecutor) StartEnvironment(ctx context.Context) error {
@@ -273,10 +300,14 @@ func (d *DockerExecutor) EnvironmentStatus(ctx context.Context) (bool, error) {
 	return len(strings.TrimSpace(string(output))) > 0, nil
 }
 
-func (d *DockerExecutor) baseArgs() []string {
+func (d *DockerExecutor) baseArgs(ctx context.Context) []string {
 	args := d.composeArgs("exec")
 
-	args = append(args, "-T")
+	// Keep -T unless the caller opted into a TTY via WithTTY (interactive
+	// project console). TUI, CI, and piped usage stay non-interactive.
+	if !wantsTTY(ctx) {
+		args = append(args, "-T")
+	}
 
 	// When the web service runs as the mapped host user (see the compose
 	// user: directive derived from system.ProjectUserSpec), that UID has no

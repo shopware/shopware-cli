@@ -24,11 +24,12 @@ import (
 // dashboard-phase key dispatch tests without nil-deref panics. The model is
 // attached to an app shell so overlay pushes have a host; assert on open
 // overlays with topOverlay.
-func newTestModel() Model {
+func newTestModel(t *testing.T) Model {
+	t.Helper()
 	m := Model{
 		phase:       phaseDashboard,
-		overview:    NewOverviewModel("local", "http://localhost:8000", "", "", "/tmp/project", nil, nil),
-		instance:    NewInstanceModel("/tmp/project", false),
+		overview:    NewOverviewModel(t.Context(), "local", "http://localhost:8000", "", "", "/tmp/project", nil, nil),
+		instance:    NewInstanceModel(t.Context(), "/tmp/project", false),
 		configTab:   NewConfigModel(nil, nil),
 		watchers:    make(map[string]*watcherHandle),
 		projectRoot: "/tmp/project",
@@ -73,7 +74,7 @@ func TestNew_InitializesFields(t *testing.T) {
 	// the case. We construct a real local executor instead.
 	exec := &executor.LocalExecutor{}
 	opts.Executor = exec
-	m := New(opts)
+	m := New(t.Context(), opts)
 
 	assert.Equal(t, tabOverview, m.activeTab)
 	assert.False(t, m.dockerMode)
@@ -90,19 +91,19 @@ func TestNewMigrationWizard_StartsInMigrationWizardPhase(t *testing.T) {
 		EnvConfig:   &shop.EnvironmentConfig{},
 		Executor:    &executor.LocalExecutor{},
 	}
-	m := NewMigrationWizard(opts)
+	m := NewMigrationWizard(t.Context(), opts)
 	assert.Equal(t, phaseMigrationWizard, m.phase)
 	assert.True(t, m.dockerMode)
 }
 
 func TestInit_MigrationWizardPhaseReturnsNil(t *testing.T) {
-	m := newTestModel()
+	m := newTestModel(t)
 	m.phase = phaseMigrationWizard
 	assert.Nil(t, m.Init())
 }
 
 func TestUpdateKeyPress_PhaseStarting_QuitKey(t *testing.T) {
-	m := newTestModel()
+	m := newTestModel(t)
 	m.phase = phaseStarting
 
 	_, cmd := m.Update(keyRune('q'))
@@ -112,7 +113,7 @@ func TestUpdateKeyPress_PhaseStarting_QuitKey(t *testing.T) {
 }
 
 func TestUpdateKeyPress_PhaseStarting_LTogglesLogs(t *testing.T) {
-	m := newTestModel()
+	m := newTestModel(t)
 	m.phase = phaseStarting
 	m.dockerShowLogs = false
 
@@ -124,7 +125,7 @@ func TestUpdateKeyPress_PhaseStarting_LTogglesLogs(t *testing.T) {
 }
 
 func TestUpdateKeyPress_PhaseStarting_OtherKeyIgnored(t *testing.T) {
-	m := newTestModel()
+	m := newTestModel(t)
 	m.phase = phaseStarting
 
 	updated, cmd := m.Update(keyRune('x'))
@@ -133,7 +134,7 @@ func TestUpdateKeyPress_PhaseStarting_OtherKeyIgnored(t *testing.T) {
 }
 
 func TestUpdateKeyPress_PhaseStopping_CtrlCQuits(t *testing.T) {
-	m := newTestModel()
+	m := newTestModel(t)
 	m.phase = phaseStopping
 
 	_, cmd := m.Update(keyCtrl('c'))
@@ -143,7 +144,7 @@ func TestUpdateKeyPress_PhaseStopping_CtrlCQuits(t *testing.T) {
 }
 
 func TestUpdateKeyPress_PhaseInstalling_LTogglesLogs(t *testing.T) {
-	m := newTestModel()
+	m := newTestModel(t)
 	m.phase = phaseInstalling
 	m.installProg.showLogs = false
 
@@ -152,7 +153,7 @@ func TestUpdateKeyPress_PhaseInstalling_LTogglesLogs(t *testing.T) {
 }
 
 func TestUpdateKeyPress_PhaseInstalling_QuitKey(t *testing.T) {
-	m := newTestModel()
+	m := newTestModel(t)
 	m.phase = phaseInstalling
 
 	_, cmd := m.Update(keyRune('q'))
@@ -162,7 +163,7 @@ func TestUpdateKeyPress_PhaseInstalling_QuitKey(t *testing.T) {
 }
 
 func TestUpdateKeyPress_PhaseInstallFailed_QuitKey(t *testing.T) {
-	m := newTestModel()
+	m := newTestModel(t)
 	m.phase = phaseInstallFailed
 
 	_, cmd := m.Update(keyRune('q'))
@@ -172,7 +173,7 @@ func TestUpdateKeyPress_PhaseInstallFailed_QuitKey(t *testing.T) {
 }
 
 func TestUpdateKeyPress_PhaseInstallFailed_LTogglesLogs(t *testing.T) {
-	m := newTestModel()
+	m := newTestModel(t)
 	m.phase = phaseInstallFailed
 	m.installProg.showLogs = false
 
@@ -181,7 +182,7 @@ func TestUpdateKeyPress_PhaseInstallFailed_LTogglesLogs(t *testing.T) {
 }
 
 func TestUpdateKeyPress_PhaseInstallFailed_NavigatesActions(t *testing.T) {
-	m := newTestModel()
+	m := newTestModel(t)
 	m.phase = phaseInstallFailed
 
 	updated, _ := m.updateInstallFailed(keySpecial(tea.KeyRight))
@@ -198,7 +199,7 @@ func TestUpdateKeyPress_PhaseInstallFailed_NavigatesActions(t *testing.T) {
 }
 
 func TestUpdateKeyPress_PhaseInstallFailed_StartFromBeginning(t *testing.T) {
-	m := newTestModel()
+	m := newTestModel(t)
 	m.phase = phaseInstallFailed
 	m.executor = executor.NewLocalWithConfig(m.projectRoot, &shop.EnvironmentConfig{}, m.config)
 	m.overlayLines = []string{"output from failed attempt"}
@@ -233,7 +234,7 @@ func TestUpdateKeyPress_PhaseInstallFailed_StartFromBeginning(t *testing.T) {
 }
 
 func TestUpdateKeyPress_PhaseInstallFailed_StartFromFailedStep(t *testing.T) {
-	m := newTestModel()
+	m := newTestModel(t)
 	m.phase = phaseInstallFailed
 	m.executor = executor.NewLocalWithConfig(m.projectRoot, &shop.EnvironmentConfig{}, m.config)
 	m.overlayLines = []string{"output from failed attempt"}
@@ -267,7 +268,7 @@ func TestUpdateKeyPress_PhaseInstallFailed_StartFromFailedStep(t *testing.T) {
 }
 
 func TestUpdateKeyPress_PhaseInstallFailed_CancelOpensDashboard(t *testing.T) {
-	m := newTestModel()
+	m := newTestModel(t)
 	m.phase = phaseInstallFailed
 	m.overlayLines = []string{"output from failed attempt"}
 	m.installProg = installProgress{
@@ -288,7 +289,7 @@ func TestUpdateKeyPress_PhaseInstallFailed_CancelOpensDashboard(t *testing.T) {
 }
 
 func TestUpdateKeyPress_PhaseTask_DoneTransitionsToDashboard(t *testing.T) {
-	m := newTestModel()
+	m := newTestModel(t)
 	m.phase = phaseTask
 	m.task = tui.NewTask("Building...")
 	m.task, _ = m.task.Update(tui.TaskDoneMsg{})
@@ -301,7 +302,7 @@ func TestUpdateKeyPress_PhaseTask_DoneTransitionsToDashboard(t *testing.T) {
 }
 
 func TestUpdateKeyPress_PhaseTask_NotDoneQuitOnQ(t *testing.T) {
-	m := newTestModel()
+	m := newTestModel(t)
 	m.phase = phaseTask
 	m.task = tui.NewTask("Building...")
 
@@ -312,7 +313,7 @@ func TestUpdateKeyPress_PhaseTask_NotDoneQuitOnQ(t *testing.T) {
 }
 
 func TestUpdateKeyPress_PhaseTask_NotDoneOtherKeyIgnored(t *testing.T) {
-	m := newTestModel()
+	m := newTestModel(t)
 	m.phase = phaseTask
 	m.task = tui.NewTask("Building...")
 
@@ -322,7 +323,7 @@ func TestUpdateKeyPress_PhaseTask_NotDoneOtherKeyIgnored(t *testing.T) {
 }
 
 func TestUpdateKeyPress_PhaseInstallPrompt_Routed(t *testing.T) {
-	m := newTestModel()
+	m := newTestModel(t)
 	m.phase = phaseInstallPrompt
 
 	// Ctrl+C in install prompt should quit (per updateInstallPrompt)
@@ -333,7 +334,7 @@ func TestUpdateKeyPress_PhaseInstallPrompt_Routed(t *testing.T) {
 }
 
 func TestUpdateKeyPress_PhaseMigrationWizard_RoutesToMigrationWizard(t *testing.T) {
-	m := newTestModel()
+	m := newTestModel(t)
 	m.phase = phaseMigrationWizard
 	m.migrationWizard = newMigrationWizard("")
 	// Welcome step: Enter with confirmYes=true advances to admin user step
@@ -344,7 +345,7 @@ func TestUpdateKeyPress_PhaseMigrationWizard_RoutesToMigrationWizard(t *testing.
 }
 
 func TestUpdateDashboardKeys_CtrlPOpensPalette(t *testing.T) {
-	m := newTestModel()
+	m := newTestModel(t)
 
 	updated, cmd := m.Update(keyCtrl('p'))
 	um := updated.(Model)
@@ -354,7 +355,7 @@ func TestUpdateDashboardKeys_CtrlPOpensPalette(t *testing.T) {
 }
 
 func TestUpdateDashboardKeys_DigitSwitchesTabs(t *testing.T) {
-	m := newTestModel()
+	m := newTestModel(t)
 
 	updated, _ := m.Update(keyRune('2'))
 	assert.Equal(t, tabInstance, updated.(Model).activeTab)
@@ -367,7 +368,7 @@ func TestUpdateDashboardKeys_DigitSwitchesTabs(t *testing.T) {
 }
 
 func TestUpdateDashboardKeys_TabCyclesForward(t *testing.T) {
-	m := newTestModel()
+	m := newTestModel(t)
 	assert.Equal(t, tabOverview, m.activeTab)
 
 	updated, _ := m.Update(keySpecial(tea.KeyTab))
@@ -381,7 +382,7 @@ func TestUpdateDashboardKeys_TabCyclesForward(t *testing.T) {
 }
 
 func TestUpdateDashboardKeys_ShiftTabCyclesBackward(t *testing.T) {
-	m := newTestModel()
+	m := newTestModel(t)
 
 	updated, _ := m.Update(keyShiftTabMsg())
 	assert.Equal(t, tabConfig, updated.(Model).activeTab)
@@ -391,7 +392,7 @@ func TestUpdateDashboardKeys_ShiftTabCyclesBackward(t *testing.T) {
 }
 
 func TestUpdateDashboardKeys_QuitWhenNotDockerQuits(t *testing.T) {
-	m := newTestModel()
+	m := newTestModel(t)
 	m.dockerMode = false
 
 	_, cmd := m.Update(keyRune('q'))
@@ -401,7 +402,7 @@ func TestUpdateDashboardKeys_QuitWhenNotDockerQuits(t *testing.T) {
 }
 
 func TestUpdateDashboardKeys_QuitDockerModeOpensConfirm(t *testing.T) {
-	m := newTestModel()
+	m := newTestModel(t)
 	m.dockerMode = true
 
 	updated, cmd := m.Update(keyRune('q'))
@@ -412,7 +413,7 @@ func TestUpdateDashboardKeys_QuitDockerModeOpensConfirm(t *testing.T) {
 }
 
 func TestUpdateDashboardKeys_CtrlCDockerModeOpensConfirm(t *testing.T) {
-	m := newTestModel()
+	m := newTestModel(t)
 	m.dockerMode = true
 
 	updated, _ := m.Update(keyCtrl('c'))
@@ -424,7 +425,7 @@ func TestUpdateDashboardKeys_CtrlCDockerModeOpensConfirm(t *testing.T) {
 func TestUpdateConfigTab_EnterOnSaveWritesConfig(t *testing.T) {
 	dir := t.TempDir()
 	cfg := &shop.Config{URL: "http://localhost:8000"}
-	m := newTestModel()
+	m := newTestModel(t)
 	m.config = cfg
 	m.projectRoot = dir
 	m.activeTab = tabConfig
@@ -456,7 +457,7 @@ func TestUpdateConfigTab_EnterOnSaveFailureSetsErr(t *testing.T) {
 	t.Cleanup(func() { _ = os.Chmod(dir, 0o700) })
 
 	cfg := &shop.Config{}
-	m := newTestModel()
+	m := newTestModel(t)
 	m.config = cfg
 	m.projectRoot = dir
 	m.activeTab = tabConfig
@@ -471,7 +472,7 @@ func TestUpdateConfigTab_EnterOnSaveFailureSetsErr(t *testing.T) {
 }
 
 func TestUpdateConfigTab_EnterOnPickerFieldOpensModal(t *testing.T) {
-	m := newTestModel()
+	m := newTestModel(t)
 	m.activeTab = tabConfig
 	m.configTab.cursor = fieldPHPVersion
 
@@ -483,7 +484,7 @@ func TestUpdateConfigTab_EnterOnPickerFieldOpensModal(t *testing.T) {
 }
 
 func TestExecuteCommand_TabRouting(t *testing.T) {
-	m := newTestModel()
+	m := newTestModel(t)
 
 	updated, _ := m.executeCommand("tab-instance")
 	assert.Equal(t, tabInstance, updated.(Model).activeTab)
@@ -496,7 +497,7 @@ func TestExecuteCommand_TabRouting(t *testing.T) {
 }
 
 func TestExecuteCommand_QuitNonDockerReturnsTeaQuit(t *testing.T) {
-	m := newTestModel()
+	m := newTestModel(t)
 	m.dockerMode = false
 
 	_, cmd := m.executeCommand("quit")
@@ -506,7 +507,7 @@ func TestExecuteCommand_QuitNonDockerReturnsTeaQuit(t *testing.T) {
 }
 
 func TestExecuteCommand_QuitDockerOpensStopConfirm(t *testing.T) {
-	m := newTestModel()
+	m := newTestModel(t)
 	m.dockerMode = true
 
 	updated, cmd := m.executeCommand("quit")
@@ -517,7 +518,7 @@ func TestExecuteCommand_QuitDockerOpensStopConfirm(t *testing.T) {
 }
 
 func TestExecuteCommand_AdminWatchStartSetsStarting(t *testing.T) {
-	m := newTestModel()
+	m := newTestModel(t)
 	m.overview.adminWatchRunning = false
 	m.overview.adminWatchStarting = false
 
@@ -528,7 +529,7 @@ func TestExecuteCommand_AdminWatchStartSetsStarting(t *testing.T) {
 }
 
 func TestExecuteCommand_AdminWatchStartNoOpWhenRunning(t *testing.T) {
-	m := newTestModel()
+	m := newTestModel(t)
 	m.overview.adminWatchRunning = true
 
 	updated, cmd := m.executeCommand("admin-watch-start")
@@ -538,7 +539,7 @@ func TestExecuteCommand_AdminWatchStartNoOpWhenRunning(t *testing.T) {
 }
 
 func TestExecuteCommand_AdminWatchStopClearsRunning(t *testing.T) {
-	m := newTestModel()
+	m := newTestModel(t)
 	m.overview.adminWatchRunning = true
 	m.watchers[watcherAdmin] = &watcherHandle{}
 
@@ -552,7 +553,7 @@ func TestExecuteCommand_AdminWatchStopClearsRunning(t *testing.T) {
 }
 
 func TestStopWatcher_RemovesFromMapAndEmitsMsg(t *testing.T) {
-	m := newTestModel()
+	m := newTestModel(t)
 	// Use a nil process entry so cmd() doesn't try to Stop a real exec.Cmd.
 	m.watchers["test-watcher"] = nil
 
@@ -568,7 +569,7 @@ func TestStopWatcher_RemovesFromMapAndEmitsMsg(t *testing.T) {
 }
 
 func TestStopWatcher_NoEntryStillEmitsMsg(t *testing.T) {
-	m := newTestModel()
+	m := newTestModel(t)
 
 	cmd := m.stopWatcher("missing")
 	msg := cmd()
@@ -638,7 +639,7 @@ func TestView_DoesNotPanicForEachPhase(t *testing.T) {
 	ctx := app.Context{Width: 120, Height: 40, MainHeight: 36}
 	phases := []phase{phaseDashboard, phaseStarting, phaseStopping, phaseInstallPrompt, phaseInstalling, phaseInstallFailed, phaseTask, phaseMigrationWizard}
 	for _, p := range phases {
-		m := newTestModel()
+		m := newTestModel(t)
 		m.width = 120
 		m.height = 40
 		m.phase = p
@@ -662,7 +663,7 @@ func TestView_DoesNotPanicForEachPhase(t *testing.T) {
 }
 
 func TestView_InstallFailedShowsClassifiedMessage(t *testing.T) {
-	m := newTestModel()
+	m := newTestModel(t)
 	m.dockerMode = true
 	m.phase = phaseInstallFailed
 	m.installProg.failure = &installFailure{
@@ -694,7 +695,7 @@ func TestView_InstallFailedShowsClassifiedMessage(t *testing.T) {
 func TestView_InstallFailedWrapsLongDetail(t *testing.T) {
 	detail := "An exception occurred in the driver: SQLSTATE[HY000] [2002] Connection refused while connecting to the database service"
 
-	m := newTestModel()
+	m := newTestModel(t)
 	m.phase = phaseInstallFailed
 	m.installProg.failure = &installFailure{
 		category:    installFailureDatabaseConnection,
@@ -710,7 +711,7 @@ func TestView_InstallFailedWrapsLongDetail(t *testing.T) {
 }
 
 func TestView_InstallFailedWithoutClassificationFallsBack(t *testing.T) {
-	m := newTestModel()
+	m := newTestModel(t)
 	m.phase = phaseInstallFailed
 
 	card := m.renderInstallFailed()
@@ -720,7 +721,7 @@ func TestView_InstallFailedWithoutClassificationFallsBack(t *testing.T) {
 }
 
 func TestView_InstallFailedToggledLogsShowOverlay(t *testing.T) {
-	m := newTestModel()
+	m := newTestModel(t)
 	m.phase = phaseInstallFailed
 	m.installProg.showLogs = true
 	m.overlayLines = []string{"Start: system:install", "SQLSTATE boom"}
@@ -732,7 +733,7 @@ func TestView_InstallFailedToggledLogsShowOverlay(t *testing.T) {
 }
 
 func TestView_InstallFailedNoticeSurvivesWrappingLogLines(t *testing.T) {
-	m := newTestModel()
+	m := newTestModel(t)
 	m.phase = phaseInstallFailed
 	m.installProg.showLogs = true
 	m.installProg.failure = &installFailure{
@@ -752,14 +753,14 @@ func TestView_InstallFailedNoticeSurvivesWrappingLogLines(t *testing.T) {
 }
 
 func TestView_ZeroSizeDoesNotPanic(t *testing.T) {
-	m := newTestModel()
+	m := newTestModel(t)
 	assert.NotPanics(t, func() {
 		_ = m.View(app.Context{})
 	})
 }
 
 func TestView_StopConfirmOverlayRenders(t *testing.T) {
-	m := newTestModel()
+	m := newTestModel(t)
 	m.dockerMode = true
 
 	updated, _ := m.Update(keyCtrl('c'))
@@ -774,7 +775,7 @@ func TestView_StopConfirmOverlayRenders(t *testing.T) {
 
 func TestSaveMigrationWizard_PersistsConfigToDisk(t *testing.T) {
 	dir := t.TempDir()
-	m := newTestModel()
+	m := newTestModel(t)
 	m.projectRoot = dir
 	m.config = &shop.Config{}
 	m.migrationWizard = newMigrationWizard(dir)
@@ -799,7 +800,7 @@ func TestSaveMigrationWizard_FailedWriteSetsErr(t *testing.T) {
 	assert.NoError(t, os.Chmod(dir, 0o500))
 	t.Cleanup(func() { _ = os.Chmod(dir, 0o700) })
 
-	m := newTestModel()
+	m := newTestModel(t)
 	m.projectRoot = dir
 	m.config = &shop.Config{}
 	m.migrationWizard = newMigrationWizard("")
@@ -814,7 +815,7 @@ func TestSaveMigrationWizard_FailedWriteSetsErr(t *testing.T) {
 // one tab leaking into the hidden tabs' handlers. With the Logs tab active,
 // pressing Enter must not run the Overview tab's activate() logic.
 func TestUpdateChildren_KeyOnlyReachesActiveTab(t *testing.T) {
-	m := newTestModel()
+	m := newTestModel(t)
 	m.activeTab = tabInstance
 	// Overview cursor sits on the Admin watcher (0); an Enter leaking through
 	// would flip adminWatchStarting.
@@ -829,7 +830,7 @@ func TestUpdateChildren_KeyOnlyReachesActiveTab(t *testing.T) {
 // TestUpdateChildren_KeyReachesActiveOverview confirms the active tab still
 // receives its keys after the routing change.
 func TestUpdateChildren_KeyReachesActiveOverview(t *testing.T) {
-	m := newTestModel()
+	m := newTestModel(t)
 	m.activeTab = tabOverview
 	m.overview.cursor = 0 // Admin watcher
 
@@ -844,7 +845,7 @@ func TestUpdateChildren_KeyReachesActiveOverview(t *testing.T) {
 // storefront-watch start to the parent so the sales-channel picker resolves the
 // theme/domain, instead of starting with empty options.
 func TestStartStorefrontWatchRequest_OpensPicker(t *testing.T) {
-	m := newTestModel()
+	m := newTestModel(t)
 	m.activeTab = tabOverview
 	m.executor = &executor.LocalExecutor{}
 	m.overview.cursor = 1 // Storefront watcher
@@ -880,7 +881,7 @@ func TestView_WindowTitlePerPhase(t *testing.T) {
 	}
 
 	for _, tc := range cases {
-		m := newTestModel()
+		m := newTestModel(t)
 		m.projectRoot = "/tmp/project"
 		m.phase = tc.phase
 

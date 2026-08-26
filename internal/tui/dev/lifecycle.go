@@ -1,11 +1,9 @@
 package dev
 
 import (
-	"strings"
-
 	tea "charm.land/bubbletea/v2"
 
-	"github.com/shopware/shopware-cli/internal/shop"
+	"github.com/shopware/shopware-cli/internal/shop/install"
 	"github.com/shopware/shopware-cli/internal/tracking"
 	"github.com/shopware/shopware-cli/internal/tui"
 	"github.com/shopware/shopware-cli/internal/tui/app"
@@ -27,16 +25,11 @@ func (m Model) updateLifecycle(msg tea.Msg) (app.Content, tea.Cmd) {
 	case dockerOutputLineMsg:
 		m.overlayLines = tui.AppendTail(m.overlayLines, m.overlayMaxLines(), string(msg))
 		if m.phase == phaseInstalling {
-			line := string(msg)
-			if strings.HasPrefix(line, "Start: ") {
-				for i, sp := range installStepPatterns {
-					if strings.Contains(line, sp.pattern) && i >= m.installProg.currentStep {
-						m.installProg.currentStep = i
-						pct := float64(i) / float64(len(installStepPatterns))
-						cmd := m.installProg.progress.SetPercent(pct)
-						return m, tea.Batch(cmd, m.readNextDockerOutput())
-					}
-				}
+			if i, ok := install.MatchStep(string(msg), m.installProg.currentStep); ok {
+				m.installProg.currentStep = i
+				pct := float64(i) / float64(len(install.Steps))
+				cmd := m.installProg.progress.SetPercent(pct)
+				return m, tea.Batch(cmd, m.readNextDockerOutput())
 			}
 		}
 		return m, m.readNextDockerOutput()
@@ -85,20 +78,31 @@ func (m Model) updateLifecycle(msg tea.Msg) (app.Content, tea.Cmd) {
 			return m, nil
 		}
 		m.installProg.done = true
-		m.installProg.currentStep = len(installStepPatterns)
-		if m.telemetry.installOnce() {
-			trackEvent(tracking.EventDevInstall, m.telemetry.installTags(tracking.ResultSuccess, m.install))
-		}
+		m.installProg.currentStep = len(install.Steps)
 
 		username := m.install.Username()
 		password := m.install.Password()
 
-		adminApi := &shop.ConfigAdminApi{
-			Username: username,
-			Password: password,
+		// Persist before recording the outcome, so a failed config write is
+		// not reported as a successful run.
+		if err := install.PersistCredentials(m.config, m.envConfig, m.projectRoot, install.Options{
+			AdminUsername: username,
+			AdminPassword: password,
+		}); err != nil {
+			if m.telemetry.installOnce() {
+				tags := m.telemetry.installTags(tracking.ResultFailure, m.install)
+				tags[tracking.TagFailedStep] = install.FailedStepSaveCredentials
+				trackEvent(tracking.EventDevInstall, tags)
+			}
+			m.installProg.showLogs = true
+			m.overlayLines = append(m.overlayLines, "", errorStyle.Render("Shopware was installed, but saving the admin credentials to the project config failed: "+err.Error()))
+			m.overlayLines = append(m.overlayLines, "", helpStyle.Render("Press q to exit"))
+			return m, nil
 		}
-		m.envConfig.AdminApi = adminApi
-		_ = shop.WriteConfig(m.config, m.projectRoot)
+
+		if m.telemetry.installOnce() {
+			trackEvent(tracking.EventDevInstall, m.telemetry.installTags(tracking.ResultSuccess, m.install))
+		}
 
 		m.overview.username = username
 		m.overview.password = password

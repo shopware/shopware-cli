@@ -1,9 +1,12 @@
 package project
 
 import (
+	"fmt"
+
 	"github.com/shyim/go-composer/repository"
 	"github.com/spf13/cobra"
 
+	"github.com/shopware/shopware-cli/internal/proxy"
 	"github.com/shopware/shopware-cli/internal/shop"
 	"github.com/shopware/shopware-cli/internal/system"
 	"github.com/shopware/shopware-cli/internal/tui"
@@ -13,20 +16,6 @@ const (
 	// projectNameHelp is the help text shown under the project name input.
 	projectNameHelp = "The name of the project directory to create (leave empty to use the current directory)"
 )
-
-// projectNameFieldDescription returns the description shown under the project
-// name input in the interactive form. While the typed name is invalid it
-// returns the rule highlighted in red, validating the input live; otherwise it
-// returns the regular help text.
-func projectNameFieldDescription(name string) string {
-	if name != "" {
-		if err := shop.ValidateProjectName(name); err != nil {
-			return tui.RedText.Render(shop.ProjectNameRule)
-		}
-	}
-
-	return projectNameHelp
-}
 
 type createOptions struct {
 	projectFolder      string
@@ -46,6 +35,14 @@ type createOptions struct {
 	withElasticsearch bool
 	withAMQP          bool
 	noAudit           bool
+	// useLocalDomain serves the shop at a stable hostname
+	// (<name>.<baseDomain>) through the shared proxy instead of a fixed port.
+	// Only meaningful with Docker.
+	useLocalDomain bool
+	// setupProxyNow runs the one-time machine setup (DNS + HTTPS trust, needs
+	// sudo) inline during create, so the local domain works immediately. Set
+	// only when the user opts in and the machine is not configured yet.
+	setupProxyNow bool
 
 	interactive           bool
 	elasticsearchExplicit bool
@@ -64,6 +61,18 @@ func (o *createOptions) clearPHP() {
 	if !o.phpVersionExplicit {
 		o.phpVersion = ""
 	}
+}
+
+// resolveLocalDomainChoice derives the final local-domain settings from the
+// individual inputs. Local domains require Docker, so useLocalDomain is always
+// gated on useDocker regardless of how the choice was made (interactive or the
+// --local-domain flag). setupProxyNow — which triggers the one-time sudo setup
+// inline — is only ever true when the choice came from the interactive prompt
+// (promptShown), so passing --local-domain never runs sudo without asking.
+func resolveLocalDomainChoice(useDocker, wantLocalDomain, promptShown, machineSetupDone, setupNowAnswer bool) (useLocalDomain, setupProxyNow bool) {
+	useLocalDomain = useDocker && wantLocalDomain
+	setupProxyNow = useLocalDomain && promptShown && !machineSetupDone && setupNowAnswer
+	return useLocalDomain, setupProxyNow
 }
 
 var projectCreateCmd = &cobra.Command{
@@ -100,16 +109,6 @@ var projectCreateCmd = &cobra.Command{
 			}
 		}
 
-		// A name passed directly as an argument skips the interactive name
-		// prompt, which is where invalid names (e.g. wrong casing) are normally
-		// rejected live. Validate it up front so it is forbidden immediately
-		// instead of only after the rest of the form has been completed.
-		if opts.projectFolder != "" {
-			if err := shop.ValidateProjectName(opts.projectFolder); err != nil {
-				return err
-			}
-		}
-
 		if opts.interactive {
 			tui.PrintBanner()
 		}
@@ -136,6 +135,16 @@ var projectCreateCmd = &cobra.Command{
 			return err
 		}
 
+		// Do the one-time machine setup up front (while the user is still at the
+		// keyboard for the sudo prompt), before the long composer install. It is
+		// best-effort: a blocked/declined sudo just means the domain resolves
+		// once the user runs `project proxy setup` later.
+		if opts.setupProxyNow {
+			fmt.Println()
+			fmt.Println(tui.BoldText.Render("Setting up local domains (one-time, needs sudo)"))
+			_ = runInlineProxySetup(cmd.Context(), proxy.BaseDomain())
+		}
+
 		if err := scaffoldProject(cmd.Context(), &opts, chosenVersion); err != nil {
 			return err
 		}
@@ -150,6 +159,7 @@ func parseCreateFlags(cmd *cobra.Command, args []string) createOptions {
 	withAMQP, _ := cmd.PersistentFlags().GetBool("with-amqp")
 	noAudit, _ := cmd.PersistentFlags().GetBool("no-audit")
 	initGit, _ := cmd.PersistentFlags().GetBool("git")
+	localDomain, _ := cmd.PersistentFlags().GetBool("local-domain")
 	versionFlag, _ := cmd.PersistentFlags().GetString("version")
 	deploymentMethod, _ := cmd.PersistentFlags().GetString("deployment")
 	ciSystem, _ := cmd.PersistentFlags().GetString("ci")
@@ -169,6 +179,7 @@ func parseCreateFlags(cmd *cobra.Command, args []string) createOptions {
 		withAMQP:              withAMQP,
 		noAudit:               noAudit,
 		initGit:               initGit,
+		useLocalDomain:        localDomain,
 		selectedVersion:       versionFlag,
 		selectedDeployment:    deploymentMethod,
 		selectedCI:            ciSystem,
@@ -205,6 +216,10 @@ func applyNonInteractiveDefaults(opts *createOptions) error {
 	if !opts.elasticsearchExplicit {
 		opts.withElasticsearch = true
 	}
+	// Local domains need Docker; drop the flag if Docker is off. Never run the
+	// one-time sudo setup non-interactively.
+	opts.useLocalDomain = opts.useDocker && opts.useLocalDomain
+	opts.setupProxyNow = false
 	return nil
 }
 
@@ -217,8 +232,18 @@ func init() {
 	projectCreateCmd.PersistentFlags().Bool("with-amqp", false, "Include AMQP queue support (symfony/amqp-messenger)")
 	projectCreateCmd.PersistentFlags().Bool("no-audit", false, "Disable composer audit blocking insecure packages")
 	projectCreateCmd.PersistentFlags().Bool("git", false, "Initialize a Git repository")
+	projectCreateCmd.PersistentFlags().Bool("local-domain", false, "Serve the shop at a stable local hostname (<name>.shopware.local) via the shared proxy instead of a port (requires Docker)")
 	projectCreateCmd.PersistentFlags().String("version", "", "Shopware version to install (e.g., 6.6.0.0, latest)")
-	projectCreateCmd.PersistentFlags().String("deployment", "", "Deployment method: none, deployer, platformsh, shopware-paas")
+	projectCreateCmd.PersistentFlags().String("deployment", "", "Deployment method: none, container, deployer, platformsh, shopware-paas")
+	_ = projectCreateCmd.RegisterFlagCompletionFunc("deployment", func(*cobra.Command, []string, string) ([]string, cobra.ShellCompDirective) {
+		return []string{
+			shop.DeploymentNone,
+			shop.DeploymentContainer,
+			shop.DeploymentDeployer,
+			shop.DeploymentPlatformSH,
+			shop.DeploymentShopwarePaaS,
+		}, cobra.ShellCompDirectiveNoFileComp
+	})
 	projectCreateCmd.PersistentFlags().String("ci", "", "CI/CD system: none, github, gitlab")
 	projectCreateCmd.PersistentFlags().String("php-version", "", "PHP version to use (e.g. 8.3); selects the local PHP for local projects and the image tag for --docker projects")
 	_ = projectCreateCmd.RegisterFlagCompletionFunc("php-version", func(*cobra.Command, []string, string) ([]string, cobra.ShellCompDirective) {

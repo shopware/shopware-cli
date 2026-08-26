@@ -14,6 +14,7 @@ import (
 
 	"github.com/shopware/shopware-cli/internal/envfile"
 	"github.com/shopware/shopware-cli/internal/executor"
+	"github.com/shopware/shopware-cli/internal/proxy"
 	"github.com/shopware/shopware-cli/internal/shop"
 	"github.com/shopware/shopware-cli/internal/symfony"
 	"github.com/shopware/shopware-cli/internal/tui"
@@ -42,6 +43,7 @@ type healthCheck struct {
 
 const (
 	healthGroupRuntime       = "Runtime"
+	healthGroupLocalDomains  = "Local domains"
 	healthGroupLocalBehavior = "Local behavior"
 	healthGroupDebug         = "Debug (Flow Builder)"
 )
@@ -61,9 +63,9 @@ type setupHealthLoadedMsg struct {
 // so a stuck container cannot leave the report loading forever.
 const setupHealthTimeout = 15 * time.Second
 
-func loadSetupHealth(projectRoot string, exec executor.Executor) tea.Cmd {
+func loadSetupHealth(parent context.Context, projectRoot string, exec executor.Executor) tea.Cmd {
 	return func() tea.Msg {
-		ctx, cancel := context.WithTimeout(context.Background(), setupHealthTimeout)
+		ctx, cancel := context.WithTimeout(parent, setupHealthTimeout)
 		defer cancel()
 		return setupHealthLoadedMsg{checks: collectSetupHealth(ctx, projectRoot, exec)}
 	}
@@ -75,8 +77,58 @@ func loadSetupHealth(projectRoot string, exec executor.Executor) tea.Cmd {
 func collectSetupHealth(ctx context.Context, projectRoot string, exec executor.Executor) []healthCheck {
 	var checks []healthCheck
 	checks = append(checks, runtimeHealthChecks(ctx, projectRoot, exec)...)
+	checks = append(checks, proxyHealthChecks(ctx, projectRoot)...)
 	checks = append(checks, projectConfigHealthChecks(projectRoot)...)
 	return checks
+}
+
+// proxyHealthChecks reports the local-domain (shared proxy) checks, shown only
+// for proxy projects: whether the shared Traefik container is running and
+// whether the OS resolves the proxy domain. Certificate-trust and proxy-fallback
+// checks are added once their backing state exists.
+func proxyHealthChecks(ctx context.Context, projectRoot string) []healthCheck {
+	if proxyHostname(projectRoot) == "" {
+		return nil
+	}
+
+	baseDomain := proxy.DefaultDomain
+	if settings, err := proxy.LoadSettings(); err == nil {
+		baseDomain = settings.BaseDomain()
+	}
+
+	running := proxy.ContainerIsRunning(ctx)
+	resolves := proxy.CheckResolverConfigured(baseDomain).Configured
+
+	return []healthCheck{
+		{
+			Group:       healthGroupLocalDomains,
+			Name:        "Proxy",
+			Current:     boolLabel(running, "running", "stopped"),
+			Recommended: "running",
+			Level:       healthLevelIf(running),
+		},
+		{
+			Group:       healthGroupLocalDomains,
+			Name:        "Hostname resolves",
+			Current:     boolLabel(resolves, "yes", "no"),
+			Recommended: "yes",
+			Level:       healthLevelIf(resolves),
+		},
+	}
+}
+
+func boolLabel(b bool, yes, no string) string {
+	if b {
+		return yes
+	}
+	return no
+}
+
+func healthLevelIf(ok bool) healthLevel {
+	if ok {
+		return healthOK
+	}
+	return healthWarn
 }
 
 // runtimeHealthChecks reads PHP_VERSION and memory_limit from the PHP runtime

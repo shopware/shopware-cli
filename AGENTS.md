@@ -45,7 +45,7 @@ Extension detection is automatic based on file presence. Each type has specific 
 ### Configuration Files
 - **`.shopware-cli.yaml`** - Global CLI configuration
 - **`.shopware-extension.yml`** - Extension-specific settings (schema: `internal/extension/config_schema.json`, embedded and exposed via `shopware-cli extension config-schema`)
-- **`.shopware-project.yml`** - Project-specific settings (schema: `internal/shop/config_schema.json`, embedded and exposed via `shopware-cli project config-schema`)
+- **`.shopware-project.yml`** - Project-specific settings (schema: `internal/shop/config_schema.json`, embedded and exposed via `shopware-cli project config-schema`). Shop URL and Admin API credentials belong under `environments`; empty `-e` defaults to `environments.local`. Top-level `url` / `admin_api` are deprecated.
 
 ## Development Patterns
 

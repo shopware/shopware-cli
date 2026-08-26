@@ -28,7 +28,7 @@ var projectStorefrontWatchCmd = &cobra.Command{
 
 		if len(args) == 1 {
 			projectRoot = args[0]
-		} else if projectRoot, err = findClosestShopwareProject(); err != nil {
+		} else if projectRoot, err = findClosestShopwareProject(false); err != nil {
 			return err
 		}
 
@@ -57,6 +57,12 @@ var projectStorefrontWatchCmd = &cobra.Command{
 			if err != nil {
 				return err
 			}
+		}
+
+		// When the shop is proxied, route the webpack hot-proxy watcher through
+		// the shared proxy at its storefront-watch hostname.
+		if host := proxyHostname(projectRoot); host != "" {
+			opts.ProxyHostname = "storefront-watch." + host
 		}
 
 		watchProcess, err := extension.PrepareStorefrontWatcher(cmd.Context(), projectRoot, cmdExecutor, opts, cmd.InOrStdin(), os.Stdout)
@@ -89,7 +95,7 @@ func resolveStorefrontWatcherOptions(ctx context.Context, cmdExecutor executor.E
 
 	client, err := cmdExecutor.AdminAPIClient(ctx)
 	if err != nil {
-		return extension.StorefrontWatcherOptions{}, fmt.Errorf("--sales-channel requires admin api access (set admin_api in .shopware-project.yml or SHOPWARE_CLI_API_* env vars): %w", err)
+		return extension.StorefrontWatcherOptions{}, fmt.Errorf("--sales-channel requires admin api access (set environments.<name>.admin_api in .shopware-project.yml or SHOPWARE_CLI_API_* env vars): %w", err)
 	}
 
 	apiCtx := adminSdk.NewApiContext(ctx)

@@ -139,6 +139,10 @@ func (l *LocalExecutor) AdminAPIClient(ctx context.Context) (*adminSdk.Client, e
 	return adminAPIClient(ctx, l.shopCfg, l.envCfg)
 }
 
+func (l *LocalExecutor) ShopConfig() *shop.Config {
+	return l.shopCfg
+}
+
 func (l *LocalExecutor) DatabaseConnection(_ context.Context) (*DatabaseConnection, error) {
 	return databaseConnectionFromEnv(l.projectRoot, l.env)
 }
