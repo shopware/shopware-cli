@@ -656,7 +656,8 @@
           "type": "string",
           "enum": [
             "local",
-            "docker"
+            "docker",
+            "ssh"
           ]
         },
         "url": {
@@ -666,10 +667,44 @@
         "admin_api": {
           "$ref": "#/$defs/ConfigAdminApi",
           "description": "Admin API credentials for this named environment"
+        },
+        "ssh": {
+          "$ref": "#/$defs/EnvironmentSSHConfig",
+          "description": "SSH target of this named environment (type \"ssh\"): a Shopware project on a remote host reachable over SSH. Commands run through a multiplexed SSH connection, and the database is tunneled through it automatically."
         }
       },
       "additionalProperties": false,
       "type": "object"
+    },
+    "EnvironmentSSHConfig": {
+      "properties": {
+        "host": {
+          "type": "string",
+          "description": "SSH host name or IP address"
+        },
+        "user": {
+          "type": "string",
+          "description": "SSH user. Defaults to the user configured in ~/.ssh/config or the current user"
+        },
+        "port": {
+          "type": "integer",
+          "description": "SSH port. Defaults to 22"
+        },
+        "directory": {
+          "type": "string",
+          "description": "Absolute path of the Shopware project root on the remote host"
+        },
+        "identity_file": {
+          "type": "string",
+          "description": "Path to the SSH private key file. Defaults to the ssh agent or the default key files"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "required": [
+        "host",
+        "directory"
+      ]
     },
     "TableLimit": {
       "properties": {

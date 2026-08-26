@@ -19,6 +19,7 @@ var ErrNotSupported = errors.New("operation not supported by this executor")
 const (
 	TypeDocker     = "docker"
 	TypeLocal      = "local"
+	TypeSSH        = "ssh"
 	TypeSymfonyCLI = "symfony-cli"
 )
 
