@@ -57,7 +57,7 @@ var projectUpgradeCmd = &cobra.Command{
 			envName = "local"
 		}
 
-		shell := upgradetui.NewApp(upgradetui.Options{
+		shell := upgradetui.NewApp(cmd.Context(), upgradetui.Options{
 			ProjectRoot: projectRoot,
 			EnvName:     envName,
 			Executor:    exec,

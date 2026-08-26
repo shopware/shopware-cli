@@ -10,7 +10,7 @@ import (
 )
 
 func TestNewInstanceModel(t *testing.T) {
-	m := NewInstanceModel("/tmp/project", true)
+	m := NewInstanceModel(t.Context(), "/tmp/project", true)
 
 	assert.Equal(t, "/tmp/project", m.projectRoot)
 	assert.True(t, m.dockerMode)
@@ -29,7 +29,7 @@ func activeLines(m InstanceModel) []string {
 }
 
 func TestInstanceModel_LogLineMsg_AppendsLine(t *testing.T) {
-	m := NewInstanceModel("/tmp", false)
+	m := NewInstanceModel(t.Context(), "/tmp", false)
 	m.SetSize(120, 40)
 	m.sources = []logSource{{name: "web"}}
 	m.active = 0
@@ -45,7 +45,7 @@ func TestInstanceModel_LogLineMsg_RoutesToOwningSource(t *testing.T) {
 	// A line tagged for a background (non-active) source must land in that
 	// source's buffer, not the active one - this is what preserves scrollback
 	// while viewing another source.
-	m := NewInstanceModel("/tmp", false)
+	m := NewInstanceModel(t.Context(), "/tmp", false)
 	m.SetSize(120, 40)
 	m.sources = []logSource{{name: "web"}, {name: "worker"}}
 	m.active = 0
@@ -57,7 +57,7 @@ func TestInstanceModel_LogLineMsg_RoutesToOwningSource(t *testing.T) {
 }
 
 func TestInstanceModel_LogLineMsg_NoCap(t *testing.T) {
-	m := NewInstanceModel("/tmp", false)
+	m := NewInstanceModel(t.Context(), "/tmp", false)
 	m.SetSize(120, 40)
 	m.sources = []logSource{{name: "web"}}
 	m.active = 0
@@ -72,7 +72,7 @@ func TestInstanceModel_LogLineMsg_NoCap(t *testing.T) {
 }
 
 func TestInstanceModel_LogLineMsg_FollowAutoScrolls(t *testing.T) {
-	m := NewInstanceModel("/tmp", false)
+	m := NewInstanceModel(t.Context(), "/tmp", false)
 	m.SetSize(120, 10)
 	m.sources = []logSource{{name: "web"}}
 	m.active = 0
@@ -87,7 +87,7 @@ func TestInstanceModel_LogLineMsg_FollowAutoScrolls(t *testing.T) {
 }
 
 func TestInstanceModel_LogErrMsg_StylesErrorLine(t *testing.T) {
-	m := NewInstanceModel("/tmp", false)
+	m := NewInstanceModel(t.Context(), "/tmp", false)
 	m.SetSize(120, 40)
 	m.sources = []logSource{{name: "web"}}
 	m.active = 0
@@ -102,7 +102,7 @@ func TestInstanceModel_LogErrMsg_StylesErrorLine(t *testing.T) {
 }
 
 func TestInstanceModel_LogDoneMsg_AppendsTerminator(t *testing.T) {
-	m := NewInstanceModel("/tmp", false)
+	m := NewInstanceModel(t.Context(), "/tmp", false)
 	m.SetSize(120, 40)
 	m.sources = []logSource{{name: "test"}}
 	m.active = 0
@@ -113,7 +113,7 @@ func TestInstanceModel_LogDoneMsg_AppendsTerminator(t *testing.T) {
 }
 
 func TestInstanceModel_FollowToggle(t *testing.T) {
-	m := NewInstanceModel("/tmp", false)
+	m := NewInstanceModel(t.Context(), "/tmp", false)
 	m.SetSize(120, 40)
 	assert.True(t, m.follow)
 
@@ -127,7 +127,7 @@ func TestInstanceModel_FollowToggle(t *testing.T) {
 }
 
 func TestInstanceModel_SourcesLoadedMsg(t *testing.T) {
-	m := NewInstanceModel("/tmp", false)
+	m := NewInstanceModel(t.Context(), "/tmp", false)
 
 	sources := []logSource{
 		{name: "web"},
@@ -141,7 +141,7 @@ func TestInstanceModel_SourcesLoadedMsg(t *testing.T) {
 }
 
 func TestInstanceModel_SourcesLoadedMsg_EmptyKeepsInactive(t *testing.T) {
-	m := NewInstanceModel("/tmp", false)
+	m := NewInstanceModel(t.Context(), "/tmp", false)
 
 	updated, cmd := m.Update(logSourcesLoadedMsg{sources: nil})
 	assert.Nil(t, cmd)
@@ -149,7 +149,7 @@ func TestInstanceModel_SourcesLoadedMsg_EmptyKeepsInactive(t *testing.T) {
 }
 
 func TestInstanceModel_CursorNavigation(t *testing.T) {
-	m := NewInstanceModel("/tmp", false)
+	m := NewInstanceModel(t.Context(), "/tmp", false)
 	m.sources = []logSource{{name: "a"}, {name: "b"}, {name: "c"}}
 	m.cursor = 0
 
@@ -178,7 +178,7 @@ func TestInstanceModel_CursorNavigation_FollowsVisualGroupOrder(t *testing.T) {
 	// added at runtime. The sidebar renders them grouped as containers,
 	// processes, files - so arrow keys must walk that visual order, not the
 	// raw slice order (otherwise the process appears unreachable).
-	m := NewInstanceModel("/tmp", false)
+	m := NewInstanceModel(t.Context(), "/tmp", false)
 	m.sources = []logSource{
 		{name: "web", kind: sourceContainer},
 		{name: "worker", kind: sourceContainer},
@@ -211,7 +211,7 @@ func TestInstanceModel_CursorNavigation_FollowsVisualGroupOrder(t *testing.T) {
 }
 
 func TestInstanceModel_EnterFocusesAndFollows(t *testing.T) {
-	m := NewInstanceModel("/tmp", false)
+	m := NewInstanceModel(t.Context(), "/tmp", false)
 	m.SetSize(120, 40)
 	m.sources = []logSource{
 		{name: "a", filePath: "/nonexistent/a.log"},
@@ -233,7 +233,7 @@ func TestInstanceModel_EnterFocusesAndFollows(t *testing.T) {
 func TestInstanceModel_EnterPreservesEachSourceBuffer(t *testing.T) {
 	// Switching between sources must keep each source's own scrollback so
 	// returning to a source shows its previous log output.
-	m := NewInstanceModel("/tmp", false)
+	m := NewInstanceModel(t.Context(), "/tmp", false)
 	m.SetSize(120, 40)
 	m.sources = []logSource{
 		{name: "a", lines: []string{"a-1", "a-2"}},
@@ -259,7 +259,7 @@ func TestInstanceModel_EnterPreservesEachSourceBuffer(t *testing.T) {
 }
 
 func TestInstanceModel_EnterNoChangeWhenCursorEqualsActive(t *testing.T) {
-	m := NewInstanceModel("/tmp", false)
+	m := NewInstanceModel(t.Context(), "/tmp", false)
 	m.sources = []logSource{{name: "a", lines: []string{"keep"}}}
 	m.active = 0
 	m.cursor = 0
@@ -271,7 +271,7 @@ func TestInstanceModel_EnterNoChangeWhenCursorEqualsActive(t *testing.T) {
 }
 
 func TestInstanceModel_StopStreamingCancelsAllSources(t *testing.T) {
-	m := NewInstanceModel("/tmp", false)
+	m := NewInstanceModel(t.Context(), "/tmp", false)
 	aCancelled, bCancelled := false, false
 	m.cancels["a"] = func() { aCancelled = true }
 	m.cancels["b"] = func() { bCancelled = true }
@@ -289,7 +289,7 @@ func TestInstanceModel_StopStreamingCancelsAllSources(t *testing.T) {
 }
 
 func TestInstanceModel_RemoveSource_DropsActiveAndReselects(t *testing.T) {
-	m := NewInstanceModel("/tmp", false)
+	m := NewInstanceModel(t.Context(), "/tmp", false)
 	m.SetSize(120, 40)
 	m.sources = []logSource{
 		{name: "worker", lines: []string{"w-1"}},
@@ -313,7 +313,7 @@ func TestInstanceModel_RemoveSource_DropsActiveAndReselects(t *testing.T) {
 }
 
 func TestInstanceModel_RemoveSource_KeepsActiveWhenRemovingOther(t *testing.T) {
-	m := NewInstanceModel("/tmp", false)
+	m := NewInstanceModel(t.Context(), "/tmp", false)
 	m.SetSize(120, 40)
 	m.sources = []logSource{
 		{name: "worker"},
@@ -332,7 +332,7 @@ func TestInstanceModel_RemoveSource_KeepsActiveWhenRemovingOther(t *testing.T) {
 }
 
 func TestInstanceModel_RemoveSource_LastSourceGoesInactive(t *testing.T) {
-	m := NewInstanceModel("/tmp", false)
+	m := NewInstanceModel(t.Context(), "/tmp", false)
 	m.SetSize(120, 40)
 	m.sources = []logSource{{name: "Admin Watcher", kind: sourceProcess}}
 	m.active = 0
@@ -345,7 +345,7 @@ func TestInstanceModel_RemoveSource_LastSourceGoesInactive(t *testing.T) {
 }
 
 func TestInstanceModel_RemoveSource_UnknownIsNoOp(t *testing.T) {
-	m := NewInstanceModel("/tmp", false)
+	m := NewInstanceModel(t.Context(), "/tmp", false)
 	m.sources = []logSource{{name: "worker"}}
 	m.active = 0
 
@@ -355,14 +355,14 @@ func TestInstanceModel_RemoveSource_UnknownIsNoOp(t *testing.T) {
 }
 
 func TestInstanceModel_StopStreaming_NoState(t *testing.T) {
-	m := NewInstanceModel("/tmp", false)
+	m := NewInstanceModel(t.Context(), "/tmp", false)
 	assert.NotPanics(t, func() {
 		m.StopStreaming()
 	})
 }
 
 func TestInstanceModel_View_NoSourceSelected(t *testing.T) {
-	m := NewInstanceModel("/tmp", false)
+	m := NewInstanceModel(t.Context(), "/tmp", false)
 	m.SetSize(120, 40)
 
 	view := m.View()
@@ -370,7 +370,7 @@ func TestInstanceModel_View_NoSourceSelected(t *testing.T) {
 }
 
 func TestInstanceModel_View_ShowsActiveSourceAndLive(t *testing.T) {
-	m := NewInstanceModel("/tmp", false)
+	m := NewInstanceModel(t.Context(), "/tmp", false)
 	m.SetSize(120, 40)
 	m.sources = []logSource{{name: "varnish"}, {name: "mysql"}}
 	m.active = 0
@@ -384,7 +384,7 @@ func TestInstanceModel_View_ShowsActiveSourceAndLive(t *testing.T) {
 
 func TestInstanceModel_View_RunningProcessUsesHollowDot(t *testing.T) {
 	ch := make(chan string)
-	m := NewInstanceModel("/tmp", false)
+	m := NewInstanceModel(t.Context(), "/tmp", false)
 	m.SetSize(120, 40)
 	m.sources = []logSource{
 		{name: "worker", kind: sourceContainer},
@@ -415,7 +415,7 @@ func TestInstanceModel_View_RendersAtVariousSizes(t *testing.T) {
 	}
 
 	for _, sz := range sizes {
-		m := NewInstanceModel("/tmp", false)
+		m := NewInstanceModel(t.Context(), "/tmp", false)
 		m.SetSize(sz.w, sz.h)
 		assert.NotPanics(t, func() {
 			_ = m.View()
@@ -424,7 +424,7 @@ func TestInstanceModel_View_RendersAtVariousSizes(t *testing.T) {
 }
 
 func TestInstanceModel_View_NoSourcesShowsHelp(t *testing.T) {
-	m := NewInstanceModel("/tmp", false)
+	m := NewInstanceModel(t.Context(), "/tmp", false)
 	m.SetSize(120, 40)
 
 	view := m.View()
@@ -432,7 +432,7 @@ func TestInstanceModel_View_NoSourcesShowsHelp(t *testing.T) {
 }
 
 func TestInstanceModel_LogLineMsg_RendersInViewport(t *testing.T) {
-	m := NewInstanceModel("/tmp", false)
+	m := NewInstanceModel(t.Context(), "/tmp", false)
 	m.SetSize(120, 40)
 	m.sources = []logSource{{name: "web"}}
 	m.active = 0
@@ -444,6 +444,6 @@ func TestInstanceModel_LogLineMsg_RendersInViewport(t *testing.T) {
 }
 
 func TestInstanceModel_Init(t *testing.T) {
-	m := NewInstanceModel("/tmp", false)
+	m := NewInstanceModel(t.Context(), "/tmp", false)
 	assert.Nil(t, m.Init())
 }

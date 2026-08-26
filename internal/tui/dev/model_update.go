@@ -178,9 +178,9 @@ func (m Model) executeCommand(id string) (app.Content, tea.Cmd) {
 		m.telemetry.countAction()
 		trackEvent(tracking.EventDevAction, map[string]string{tracking.TagAction: id})
 		if id == "open-shop" {
-			return m, openInBrowser(m.overview.shopURL)
+			return m, openInBrowser(m.commandContext(), m.overview.shopURL)
 		}
-		return m, openInBrowser(m.overview.adminURL)
+		return m, openInBrowser(m.commandContext(), m.overview.adminURL)
 	case "cache-clear":
 		m.telemetry.beginTask(id)
 		return m, m.runCacheClear()
@@ -233,7 +233,7 @@ func (m Model) openSalesChannelPicker() (app.Content, tea.Cmd) {
 	if m.overview.sfWatchRunning || m.overview.sfWatchStarting {
 		return m, nil
 	}
-	return m, m.host.PushOverlay(newSalesChannelPicker(m.executor))
+	return m, m.host.PushOverlay(newSalesChannelPicker(m.commandContext(), m.executor))
 }
 
 func (m *Model) stopWatcher(name string) tea.Cmd {
@@ -245,9 +245,10 @@ func (m *Model) stopWatcher(name string) tea.Cmd {
 	h := m.watchers[name]
 	delete(m.watchers, name)
 
+	cleanupCtx := m.cleanupContext()
 	return func() tea.Msg {
 		if h != nil {
-			stopCtx, stopCancel := context.WithTimeout(context.Background(), 3*time.Second)
+			stopCtx, stopCancel := context.WithTimeout(cleanupCtx, 3*time.Second)
 			defer stopCancel()
 			h.stop(stopCtx)
 		}

@@ -51,26 +51,26 @@ func TestStopConfirm_ViewRendersAllChoices(t *testing.T) {
 
 func TestHandleStopConfirmResult_Choices(t *testing.T) {
 	// Cancel (or dismissal) keeps the dashboard running.
-	m := newTestModel()
+	m := newTestModel(t)
 	updated, cmd := m.handleStopConfirmResult(prompt.ResultMsg{ID: stopConfirmID, Choice: stopConfirmCancel})
 	assert.Equal(t, phaseDashboard, updated.(Model).phase)
 	assert.Nil(t, cmd)
 
 	// Quit keeps containers running and exits.
-	m = newTestModel()
+	m = newTestModel(t)
 	_, cmd = m.handleStopConfirmResult(prompt.ResultMsg{ID: stopConfirmID, Choice: stopConfirmQuit})
 	require.NotNil(t, cmd)
 	_, isQuit := cmd().(tea.QuitMsg)
 	assert.True(t, isQuit)
 
 	// Stop enters the stopping phase instead of quitting outright.
-	m = newTestModel()
+	m = newTestModel(t)
 	updated, cmd = m.handleStopConfirmResult(prompt.ResultMsg{ID: stopConfirmID, Choice: stopConfirmStop})
 	assert.Equal(t, phaseStopping, updated.(Model).phase)
 	assert.NotNil(t, cmd)
 
 	// Results from other prompts are ignored.
-	m = newTestModel()
+	m = newTestModel(t)
 	updated, cmd = m.handleStopConfirmResult(prompt.ResultMsg{ID: "other", Choice: stopConfirmStop})
 	assert.Equal(t, phaseDashboard, updated.(Model).phase)
 	assert.Nil(t, cmd)
