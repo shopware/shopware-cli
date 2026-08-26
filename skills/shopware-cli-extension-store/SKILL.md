@@ -131,7 +131,7 @@ This runs automated checks for:
 
 Automated validation finds structural issues. Manual review evaluates content quality and legal compliance.
 
-### Using --only and --exclude during development
+### Using `--only` and `--exclude` during development
 
 Run specific validation tools without full checks:
 
