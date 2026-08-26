@@ -150,8 +150,7 @@ func IsProxyProjectForDomain(cfg *shop.Config, baseDomain string) bool {
 		return false
 	}
 
-	// Resolve the url the same way the executor does, so proxy detection and
-	// the executor never disagree about which url the project serves.
+	// Resolve the url the same way the executor does.
 	effective := cfg.EffectiveURL()
 
 	if effective == "" {

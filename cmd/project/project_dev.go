@@ -302,9 +302,6 @@ func (e *devEnvironment) stop(cmd *cobra.Command, opts executor.StopOptions) err
 		title = "Stopping development environment and removing data..."
 	}
 
-	// runStep drops the spinner when there is no interactive terminal, so
-	// `project dev stop` also works headless (CI, an agent, a pipe with no
-	// /dev/tty) — matching start.
 	stop := func(ctx context.Context) error {
 		return e.executor.StopEnvironment(ctx, opts)
 	}
