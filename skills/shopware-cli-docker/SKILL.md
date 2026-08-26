@@ -49,6 +49,20 @@ shopware-cli project console <command>
 
 `project console` resolves the current Shopware project and its configured executor. In a Docker-backed environment, the CLI routes the Symfony command or Composer script through the project container.
 
+For the full Composer CLI, use:
+
+```bash
+shopware-cli project composer <arguments>
+```
+
+Instead of manually doing something like:
+
+```bash
+docker compose exec web composer <arguments>
+```
+
+In a Docker-backed environment, the CLI routes the Composer command through the project container.
+
 This applies to Shopware and Symfony Console workflows such as:
 
 - cache commands;
@@ -133,6 +147,12 @@ docker compose exec web npm ...
 ```
 
 First check whether Shopware CLI already exposes the intended workflow.
+
+For Composer itself, prefer:
+
+```bash
+shopware-cli project composer ...
+```
 
 If no CLI abstraction exists:
 
