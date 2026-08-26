@@ -133,6 +133,7 @@ func (t *telemetryState) beginInstall() {
 		return
 	}
 	t.installStart = time.Now()
+	t.installReported = false
 }
 
 // installOnce reports whether an install outcome should still be sent and

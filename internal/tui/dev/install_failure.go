@@ -343,6 +343,77 @@ func (c installFailureCategory) label() string {
 	return "Unknown error"
 }
 
+// remediation returns a concrete next action for the failure screen, or empty
+// when the output does not point to a fix we can name. docker distinguishes
+// compose-based setups from a local PHP install.
+func (f installFailure) remediation(docker bool) string {
+	detail := strings.ToLower(f.detail)
+	switch f.category {
+	case installFailureDiskSpace:
+		if docker {
+			return "Free disk space on the host and in Docker (docker system df), then retry."
+		}
+		return "Free disk space on this machine, then retry."
+	case installFailurePHP:
+		if strings.Contains(detail, "allowed memory size") || strings.Contains(detail, "outofmemory") {
+			if docker {
+				return "Raise PHP memory_limit in the web container, recreate it, then use Retry from failed step."
+			}
+			return "Raise PHP memory_limit in php.ini, then use Retry from failed step."
+		}
+		return "Fix the PHP error in the logs. Retrying will fail again until the code or configuration changes."
+	case installFailureEnvironmentConfig:
+		return "Fill in DATABASE_URL and the other required values in .env, then retry."
+	case installFailureDatabaseVersion:
+		if docker {
+			return "Use a MySQL or MariaDB version Shopware supports in compose.yaml, recreate the database service, then use Start over."
+		}
+		return "Upgrade MySQL or MariaDB to a version Shopware supports, then use Start over."
+	case installFailureDatabaseConnection:
+		switch {
+		case strings.Contains(detail, "[1045]"):
+			return "Correct the user and password in DATABASE_URL in .env, then retry."
+		case strings.Contains(detail, "[1044]"):
+			return "Grant that DATABASE_URL user rights to create and use the database, then retry."
+		case docker:
+			return "Start the database container (docker compose up -d database), check that DATABASE_URL uses host \"database\", then retry."
+		default:
+			return "Start MySQL/MariaDB and check that DATABASE_URL in .env points at it, then retry."
+		}
+	case installFailureMigration:
+		return "The schema was left half-applied. Drop the database and use Start over, or fix the migration shown in the logs first."
+	case installFailureAlreadyExists:
+		if strings.Contains(detail, "username") {
+			return "That admin user already exists. Drop the database and use Start over, or keep the existing user and continue from the next step."
+		}
+		return "Shopware is already installed (install.lock). Remove install.lock and drop the database only if you want a fresh install, then use Start over."
+	case installFailurePermission:
+		if docker {
+			return "Give the container user write access to var/, custom/, and files/ (check the compose user mapping), then use Retry from failed step."
+		}
+		return "Give the PHP user write access to var/, custom/, and files/, then use Retry from failed step."
+	case installFailureInvalidInput:
+		if strings.Contains(detail, "password") {
+			return "Choose an admin password of at least 8 characters and use Start over."
+		}
+		return "Set MESSENGER_TRANSPORT_DSN in .env to a transport Shopware ships (e.g. doctrine://default), then use Retry from failed step."
+	case installFailureMissingPrerequisite:
+		switch {
+		case strings.Contains(detail, "snippet set") || strings.Contains(detail, "isocode"):
+			return "Pick a language Shopware ships with (for example en-GB or de-DE) and use Start over."
+		case strings.Contains(detail, "theme"):
+			return "Install the Storefront package (shopware/storefront) and make sure its theme.json is present, then use Retry from failed step."
+		default:
+			return "Install the missing plugin or package named in the logs, then use Retry from failed step."
+		}
+	case installFailureThemeCompile:
+		return "Fix the theme.json / SCSS error in the logs and ensure var/ is writable, then use Retry from failed step."
+	case installFailureTransport:
+		return "Set MESSENGER_TRANSPORT_DSN in .env to a working transport and start that service, then use Retry from failed step."
+	}
+	return ""
+}
+
 // installFailureStepLabel maps a failing step back to the label shown in the
 // install progress list, so both screens name the same step identically.
 func installFailureStepLabel(step string) string {

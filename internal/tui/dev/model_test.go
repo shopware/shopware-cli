@@ -180,6 +180,113 @@ func TestUpdateKeyPress_PhaseInstallFailed_LTogglesLogs(t *testing.T) {
 	assert.True(t, updated.(Model).installProg.showLogs)
 }
 
+func TestUpdateKeyPress_PhaseInstallFailed_NavigatesActions(t *testing.T) {
+	m := newTestModel()
+	m.phase = phaseInstallFailed
+
+	updated, _ := m.updateInstallFailed(keySpecial(tea.KeyRight))
+	assert.Equal(t, installFailureActionStartFailedStep, updated.(Model).installProg.action)
+
+	updated, _ = updated.(Model).updateInstallFailed(keySpecial(tea.KeyTab))
+	assert.Equal(t, installFailureActionCancel, updated.(Model).installProg.action)
+
+	updated, _ = updated.(Model).updateInstallFailed(keyShiftTabMsg())
+	assert.Equal(t, installFailureActionStartFailedStep, updated.(Model).installProg.action)
+
+	updated, _ = updated.(Model).updateInstallFailed(keySpecial(tea.KeyLeft))
+	assert.Equal(t, installFailureActionStartBeginning, updated.(Model).installProg.action)
+}
+
+func TestUpdateKeyPress_PhaseInstallFailed_StartFromBeginning(t *testing.T) {
+	m := newTestModel()
+	m.phase = phaseInstallFailed
+	m.executor = executor.NewLocalWithConfig(m.projectRoot, &shop.EnvironmentConfig{}, m.config)
+	m.overlayLines = []string{"output from failed attempt"}
+	m.installProg = installProgress{
+		currentStep: 4,
+		done:        true,
+		showLogs:    true,
+		failure:     &installFailure{category: installFailureMigration},
+		action:      installFailureActionStartBeginning,
+	}
+	m.install.language = "de-DE"
+	m.install.currency = "EUR"
+	m.install.SetUsername("admin")
+	m.install.SetPassword("shopware")
+
+	updated, cmd := m.updateInstallFailed(keySpecial(tea.KeyEnter))
+	final := updated.(Model)
+
+	assert.Equal(t, phaseInstalling, final.phase)
+	assert.Empty(t, final.overlayLines)
+	assert.Nil(t, final.installProg.failure)
+	assert.Zero(t, final.installProg.currentStep)
+	assert.False(t, final.installProg.done)
+	assert.False(t, final.installProg.showLogs)
+	assert.Equal(t, installFailureActionStartBeginning, final.installProg.action)
+	assert.NotNil(t, final.dockerOutChan)
+	assert.NotNil(t, cmd)
+	assert.Equal(t, "de-DE", final.install.language)
+	assert.Equal(t, "EUR", final.install.currency)
+	assert.Equal(t, "admin", final.install.Username())
+	assert.Equal(t, "shopware", final.install.Password())
+}
+
+func TestUpdateKeyPress_PhaseInstallFailed_StartFromFailedStep(t *testing.T) {
+	m := newTestModel()
+	m.phase = phaseInstallFailed
+	m.executor = executor.NewLocalWithConfig(m.projectRoot, &shop.EnvironmentConfig{}, m.config)
+	m.overlayLines = []string{"output from failed attempt"}
+	m.installProg = installProgress{
+		currentStep: 4,
+		done:        true,
+		showLogs:    true,
+		failure:     &installFailure{category: installFailureThemeCompile, failingStep: "theme:change"},
+		action:      installFailureActionStartFailedStep,
+	}
+	m.install.language = "de-DE"
+	m.install.currency = "EUR"
+	m.install.SetUsername("ada")
+	m.install.SetPassword("supersecret")
+
+	updated, cmd := m.updateInstallFailed(keySpecial(tea.KeyEnter))
+	final := updated.(Model)
+
+	assert.Equal(t, phaseInstalling, final.phase)
+	assert.Empty(t, final.overlayLines)
+	assert.Nil(t, final.installProg.failure)
+	assert.Equal(t, 4, final.installProg.currentStep)
+	assert.False(t, final.installProg.done)
+	assert.False(t, final.installProg.showLogs)
+	assert.NotNil(t, final.dockerOutChan)
+	assert.NotNil(t, cmd)
+	assert.Equal(t, "de-DE", final.install.language)
+	assert.Equal(t, "EUR", final.install.currency)
+	assert.Equal(t, "ada", final.install.Username())
+	assert.Equal(t, "supersecret", final.install.Password())
+}
+
+func TestUpdateKeyPress_PhaseInstallFailed_CancelOpensDashboard(t *testing.T) {
+	m := newTestModel()
+	m.phase = phaseInstallFailed
+	m.overlayLines = []string{"output from failed attempt"}
+	m.installProg = installProgress{
+		showLogs: true,
+		failure:  &installFailure{category: installFailureMigration},
+		action:   installFailureActionCancel,
+	}
+
+	updated, cmd := m.updateInstallFailed(keySpecial(tea.KeyEnter))
+	final := updated.(Model)
+
+	assert.Equal(t, phaseDashboard, final.phase)
+	assert.Empty(t, final.overlayLines)
+	assert.Nil(t, final.dockerOutChan)
+	assert.Nil(t, final.installProg.failure)
+	assert.False(t, final.installProg.showLogs)
+	assert.NotNil(t, cmd)
+}
+
 func TestUpdateKeyPress_PhaseTask_DoneTransitionsToDashboard(t *testing.T) {
 	m := newTestModel()
 	m.phase = phaseTask
@@ -556,6 +663,7 @@ func TestView_DoesNotPanicForEachPhase(t *testing.T) {
 
 func TestView_InstallFailedShowsClassifiedMessage(t *testing.T) {
 	m := newTestModel()
+	m.dockerMode = true
 	m.phase = phaseInstallFailed
 	m.installProg.failure = &installFailure{
 		category:    installFailureDatabaseConnection,
@@ -570,7 +678,10 @@ func TestView_InstallFailedShowsClassifiedMessage(t *testing.T) {
 	assert.Contains(t, card, "to see full logs")
 	assert.Contains(t, card, "What now?")
 	assert.Contains(t, card, "SQLSTATE[HY000] [2002] Connection refused")
-	for _, label := range []string{"Retry", "Cancel", "Start from failed step"} {
+	assert.Contains(t, card, "How to fix:")
+	plain := strings.Join(strings.Fields(ansi.Strip(card)), " ")
+	assert.Contains(t, plain, "docker compose up -d database")
+	for _, label := range installFailureActionLabels {
 		assert.Contains(t, card, label)
 	}
 
@@ -605,6 +716,7 @@ func TestView_InstallFailedWithoutClassificationFallsBack(t *testing.T) {
 	card := m.renderInstallFailed()
 	assert.Contains(t, card, "Unknown error")
 	assert.Contains(t, card, "Starting installation")
+	assert.NotContains(t, card, "How to fix:")
 }
 
 func TestView_InstallFailedToggledLogsShowOverlay(t *testing.T) {
@@ -636,7 +748,7 @@ func TestView_InstallFailedNoticeSurvivesWrappingLogLines(t *testing.T) {
 	assert.Contains(t, view, "Failed step:")
 	assert.Contains(t, view, "Database connection failed")
 	assert.Contains(t, view, "What now?")
-	assert.Contains(t, view, "Start from failed step")
+	assert.Contains(t, view, "Retry from failed step")
 }
 
 func TestView_ZeroSizeDoesNotPanic(t *testing.T) {

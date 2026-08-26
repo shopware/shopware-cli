@@ -8,6 +8,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	dockerpkg "github.com/shopware/shopware-cli/internal/docker"
+	"github.com/shopware/shopware-cli/internal/executor"
 	"github.com/shopware/shopware-cli/internal/tui"
 )
 
@@ -84,11 +85,17 @@ func (m *Model) checkShopwareInstalled() tea.Cmd {
 }
 
 func (m *Model) runShopwareInstall() tea.Cmd {
+	return m.runShopwareInstallFrom(installStartStep)
+}
+
+func (m *Model) runShopwareInstallFrom(fromStep string) tea.Cmd {
 	e := m.executor
 	language := m.install.language
 	currency := m.install.currency
 	username := m.install.Username()
 	password := m.install.Password()
+	shopURL := m.installShopURL()
+	wizard := m.install
 
 	ch := make(chan string, tui.StreamBufferSize)
 	m.dockerOutChan = ch
@@ -100,13 +107,55 @@ func (m *Model) runShopwareInstall() tea.Cmd {
 			"INSTALL_ADMIN_USERNAME": username,
 			"INSTALL_ADMIN_PASSWORD": password,
 		})
-		p := withEnv.PHPCommand(context.Background(), "vendor/bin/shopware-deployment-helper", "run")
 
-		output, err := tui.StreamCmdOutputWithCapture(p.Cmd, ch, true)
+		output, err := streamInstallFrom(withEnv, fromStep, wizard, shopURL, ch)
 		return shopwareInstallDoneMsg{output: output, err: err}
 	}
 
 	return tea.Batch(readFromChan(ch), doneCmd)
+}
+
+func (m Model) installShopURL() string {
+	if m.envConfig != nil && m.envConfig.URL != "" {
+		return strings.TrimRight(m.envConfig.URL, "/")
+	}
+	if m.config != nil && m.config.URL != "" {
+		return strings.TrimRight(m.config.URL, "/")
+	}
+	return strings.TrimRight(m.overview.shopURL, "/")
+}
+
+// streamInstallFrom runs the remaining install console commands from fromStep,
+// then the deployment helper so plugin/app work still happens. A failure at
+// system:install (or before any step) is just the helper, matching a full run.
+func streamInstallFrom(execr executor.Executor, fromStep string, w installWizard, shopURL string, ch chan<- string) ([]string, error) {
+	defer close(ch)
+
+	var all []string
+	emit := func(line string) {
+		all = append(all, line)
+		ch <- line
+	}
+
+	idx := installStepIndex(fromStep)
+	if idx > 0 {
+		for _, sp := range installStepPatterns[idx:] {
+			args := argsForInstallStep(sp.pattern, w, shopURL)
+			if len(args) == 0 {
+				continue
+			}
+			emit("Start: " + sp.pattern)
+			lines, err := tui.DrainCmdOutput(execr.ConsoleCommand(context.Background(), args...).Cmd, ch, true)
+			all = append(all, lines...)
+			if err != nil {
+				return all, err
+			}
+		}
+	}
+
+	lines, err := tui.DrainCmdOutput(execr.PHPCommand(context.Background(), "vendor/bin/shopware-deployment-helper", "run").Cmd, ch, true)
+	all = append(all, lines...)
+	return all, err
 }
 
 func (m *Model) readNextDockerOutput() tea.Cmd {

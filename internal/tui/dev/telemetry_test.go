@@ -207,6 +207,13 @@ func TestInstallOnceLatches(t *testing.T) {
 	assert.False(t, (*telemetryState)(nil).installOnce())
 }
 
+func TestBeginInstallAllowsAnotherOutcome(t *testing.T) {
+	tel := newTelemetryState(true)
+	assert.True(t, tel.installOnce())
+	tel.beginInstall()
+	assert.True(t, tel.installOnce())
+}
+
 func TestHealthOnceLatches(t *testing.T) {
 	tel := newTelemetryState(true)
 	assert.True(t, tel.healthOnce())

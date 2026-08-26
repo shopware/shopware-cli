@@ -243,20 +243,23 @@ func (m Model) installFailureSummary() string {
 	b.WriteString("\n\n")
 	b.WriteString(tui.KVRow("Failed step:", valueStyle.Render(installFailureStepLabel(failure.failingStep))))
 	b.WriteString(tui.KVRow("Reason:", valueStyle.Render(failure.category.label())))
-	b.WriteString(installFailureDetailRow(detail))
+	b.WriteString(installFailureWrappedKV("Details:", detail))
+	if rem := failure.remediation(m.dockerMode); rem != "" {
+		b.WriteString(installFailureWrappedKV("How to fix:", rem))
+	}
 
 	return strings.TrimRight(b.String(), "\n")
 }
 
-// installFailureDetailRow renders the reported error as a KVRow whose value
-// wraps inside the card, with continuation lines aligned under the first one.
-// Error messages are full sentences, so laying them out on one row would push
+// installFailureWrappedKV renders a KVRow whose value wraps inside the card,
+// with continuation lines aligned under the first one. Error messages and
+// remediations are full sentences, so laying them out on one row would push
 // the card out of shape.
-func installFailureDetailRow(detail string) string {
-	lines := strings.Split(valueStyle.Width(installFailureDetailWidth).Render(detail), "\n")
+func installFailureWrappedKV(key, value string) string {
+	lines := strings.Split(valueStyle.Width(installFailureDetailWidth).Render(value), "\n")
 
 	var b strings.Builder
-	b.WriteString(tui.KVRow("Details:", lines[0]))
+	b.WriteString(tui.KVRow(key, lines[0]))
 	indent := strings.Repeat(" ", tui.KVRowIndent+tui.KVKeyWidth)
 	for _, line := range lines[1:] {
 		b.WriteString(indent + line + "\n")
@@ -266,15 +269,14 @@ func installFailureDetailRow(detail string) string {
 }
 
 // installFailureActions renders the recovery choices shown below the failure
-// summary. The buttons are placeholders: nothing reacts to them yet, so the
-// first one is highlighted purely to show the row's active state.
-func installFailureActions() string {
+// summary.
+func (m Model) installFailureActions() string {
 	var b strings.Builder
 	b.WriteString(tui.TitleStyle.Render("What now?"))
 	b.WriteString("\n\n")
 	b.WriteString(tui.NewButtonRow(tui.ButtonRowOptions{
-		Labels: []string{"Retry", "Cancel", "Start from failed step"},
-		Active: 0,
+		Labels: installFailureActionLabels,
+		Active: int(m.installProg.action),
 	}).Render())
 
 	return b.String()
@@ -290,7 +292,7 @@ func (m Model) renderInstallFailed() string {
 	b.WriteString(keyCapStyle.Render("l"))
 	b.WriteString(tui.DimStyle.Render(" to see full logs"))
 	b.WriteString("\n\n")
-	b.WriteString(installFailureActions())
+	b.WriteString(m.installFailureActions())
 
 	return b.String()
 }
@@ -303,7 +305,7 @@ func (m Model) installFailureNotice() []string {
 		Border(lipgloss.RoundedBorder()).
 		BorderForeground(tui.ErrorColor).
 		Padding(0, 2).
-		Render(m.installFailureSummary() + "\n\n" + installFailureActions())
+		Render(m.installFailureSummary() + "\n\n" + m.installFailureActions())
 
 	return append([]string{""}, strings.Split(box, "\n")...)
 }

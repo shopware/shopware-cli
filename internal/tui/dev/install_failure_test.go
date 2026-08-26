@@ -159,3 +159,53 @@ func TestClassifyInstallFailure_WithoutOutputReportsExitCode(t *testing.T) {
 	assert.Equal(t, installStartStep, failure.failingStep)
 	assert.Equal(t, "deployment helper exited with code 3", failure.detail)
 }
+
+func TestInstallFailureRemediation_ConcreteWherePossible(t *testing.T) {
+	cases := []struct {
+		category installFailureCategory
+		detail   string
+		docker   bool
+		want     string
+	}{
+		{installFailureDatabaseConnection, "SQLSTATE[HY000] [2002] Connection refused", true, "docker compose up -d database"},
+		{installFailureDatabaseConnection, "SQLSTATE[HY000] [1045] Access denied", false, "Correct the user and password in DATABASE_URL"},
+		{installFailureDatabaseConnection, "SQLSTATE[HY000] [1044] Access denied for database", false, "Grant that DATABASE_URL user rights"},
+		{installFailurePHP, "PHP Fatal error: syntax error, unexpected", false, "Fix the PHP error in the logs"},
+		{installFailurePHP, "Allowed memory size of 134217728 bytes exhausted", true, "Raise PHP memory_limit in the web container"},
+		{installFailureAlreadyExists, "Username admin already exists.", false, "That admin user already exists"},
+		{installFailureAlreadyExists, "install.lock already exists", false, "install.lock"},
+		{installFailureInvalidInput, "The password must have at least 8 characters", false, "at least 8 characters"},
+		{installFailureInvalidInput, "The transport does not exist", false, "MESSENGER_TRANSPORT_DSN"},
+		{installFailureUnknown, "something odd", false, ""},
+	}
+
+	for _, tc := range cases {
+		got := installFailure{category: tc.category, detail: tc.detail}.remediation(tc.docker)
+		if tc.want == "" {
+			assert.Empty(t, got, "%s %q", tc.category, tc.detail)
+			continue
+		}
+		assert.Contains(t, got, tc.want, "%s %q", tc.category, tc.detail)
+	}
+}
+
+func TestInstallFailureRemediation_KnownCategoriesAreNonEmpty(t *testing.T) {
+	for _, category := range []installFailureCategory{
+		installFailureDiskSpace,
+		installFailurePHP,
+		installFailureEnvironmentConfig,
+		installFailureDatabaseVersion,
+		installFailureDatabaseConnection,
+		installFailureMigration,
+		installFailureAlreadyExists,
+		installFailurePermission,
+		installFailureInvalidInput,
+		installFailureMissingPrerequisite,
+		installFailureThemeCompile,
+		installFailureTransport,
+	} {
+		assert.NotEmpty(t, installFailure{category: category}.remediation(true), string(category))
+		assert.NotEmpty(t, installFailure{category: category}.remediation(false), string(category))
+	}
+	assert.Empty(t, installFailure{category: installFailureUnknown}.remediation(true))
+}

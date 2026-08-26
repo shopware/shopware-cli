@@ -52,12 +52,12 @@ func (m Model) updateKeyPress(msg tea.KeyPressMsg) (app.Content, tea.Cmd) {
 		return m, nil
 	}
 
-	if m.phase == phaseInstalling || m.phase == phaseInstallFailed {
+	if m.phase == phaseInstalling {
 		switch tui.KeyString(msg) {
 		case "l":
 			m.installProg.showLogs = !m.installProg.showLogs
 		case "q", tui.KeyCtrlC:
-			if m.phase == phaseInstalling && m.telemetry.installOnce() {
+			if m.telemetry.installOnce() {
 				tags := m.telemetry.installTags(tracking.ResultCancelled, m.install)
 				tags[tracking.TagAbandonedAt] = "installing"
 				trackEventNow(tracking.EventDevInstall, tags)
@@ -65,6 +65,10 @@ func (m Model) updateKeyPress(msg tea.KeyPressMsg) (app.Content, tea.Cmd) {
 			return m, tea.Quit
 		}
 		return m, nil
+	}
+
+	if m.phase == phaseInstallFailed {
+		return m.updateInstallFailed(msg)
 	}
 
 	if m.phase == phaseTask {
@@ -83,6 +87,33 @@ func (m Model) updateKeyPress(msg tea.KeyPressMsg) (app.Content, tea.Cmd) {
 	}
 
 	return m.updateDashboardKeys(msg)
+}
+
+func (m Model) updateInstallFailed(msg tea.KeyPressMsg) (app.Content, tea.Cmd) {
+	switch tui.KeyString(msg) {
+	case "l":
+		m.installProg.showLogs = !m.installProg.showLogs
+	case "q", tui.KeyCtrlC:
+		return m, tea.Quit
+	case tui.KeyLeft, tui.KeyShiftTab:
+		if m.installProg.action > 0 {
+			m.installProg.action--
+		}
+	case tui.KeyRight, tui.KeyTab:
+		if int(m.installProg.action) < len(installFailureActionLabels)-1 {
+			m.installProg.action++
+		}
+	case tui.KeyEnter:
+		switch m.installProg.action {
+		case installFailureActionStartBeginning:
+			return m.startInstall()
+		case installFailureActionStartFailedStep:
+			return m.startInstallFromFailedStep()
+		case installFailureActionCancel:
+			return m.cancelFailedInstall()
+		}
+	}
+	return m, nil
 }
 
 func (m Model) updateDashboardKeys(msg tea.KeyPressMsg) (app.Content, tea.Cmd) {

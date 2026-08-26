@@ -379,3 +379,27 @@ func TestInstallStepPatterns_NonEmpty(t *testing.T) {
 		assert.NotEmpty(t, sp.label)
 	}
 }
+
+func TestInstallStepIndex(t *testing.T) {
+	assert.Equal(t, 0, installStepIndex(installStartStep))
+	assert.Equal(t, 0, installStepIndex(""))
+	assert.Equal(t, 0, installStepIndex("system:install"))
+	assert.Equal(t, 1, installStepIndex("user:create"))
+	assert.Equal(t, 4, installStepIndex("theme:change"))
+	assert.Equal(t, 0, installStepIndex("not-a-step"))
+}
+
+func TestArgsForInstallStep_UsesWizardAnswers(t *testing.T) {
+	w := installWizard{CredentialStep: newInstallCredentialStep(), language: "de-DE", currency: "CHF"}
+	w.SetUsername("ada")
+	w.SetPassword("supersecret")
+
+	assert.Equal(t, []string{
+		"system:install", "--create-database", "--shop-locale=de-DE", "--shop-currency=CHF", "--force",
+	}, argsForInstallStep("system:install", w, ""))
+	assert.Equal(t, []string{"user:create", "ada", "--password=supersecret"}, argsForInstallStep("user:create", w, ""))
+	assert.Equal(t, []string{
+		"sales-channel:create:storefront", "--name=Storefront", "--isoCode=de-DE", "--url=http://localhost:8000",
+	}, argsForInstallStep("sales-channel:create:storefront", w, "http://localhost:8000"))
+	assert.Nil(t, argsForInstallStep("unknown", w, ""))
+}

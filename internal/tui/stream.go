@@ -27,6 +27,30 @@ func StreamCmdOutput(cmd *exec.Cmd, ch chan<- string, useStdout bool) error {
 // every emitted line. Callers can inspect the complete output after the
 // process exits without depending on how quickly the UI consumed the channel.
 func StreamCmdOutputWithCapture(cmd *exec.Cmd, ch chan<- string, useStdout bool) ([]string, error) {
+	lines, err := DrainCmdOutput(cmd, ch, useStdout)
+	close(ch)
+	return lines, err
+}
+
+// StreamCmdsOutputWithCapture streams each command in order into the same
+// channel, closing it when the last one finishes or the first one fails.
+func StreamCmdsOutputWithCapture(cmds []*exec.Cmd, ch chan<- string, useStdout bool) ([]string, error) {
+	defer close(ch)
+
+	var all []string
+	for _, cmd := range cmds {
+		lines, err := DrainCmdOutput(cmd, ch, useStdout)
+		all = append(all, lines...)
+		if err != nil {
+			return all, err
+		}
+	}
+	return all, nil
+}
+
+// DrainCmdOutput streams cmd into ch without closing the channel, so callers
+// can run several processes as one captured stream.
+func DrainCmdOutput(cmd *exec.Cmd, ch chan<- string, useStdout bool) ([]string, error) {
 	var pipe io.Reader
 	var err error
 	if useStdout {
@@ -41,12 +65,10 @@ func StreamCmdOutputWithCapture(cmd *exec.Cmd, ch chan<- string, useStdout bool)
 		}
 	}
 	if err != nil {
-		close(ch)
 		return nil, err
 	}
 
 	if err := cmd.Start(); err != nil {
-		close(ch)
 		return nil, err
 	}
 
@@ -59,7 +81,6 @@ func StreamCmdOutputWithCapture(cmd *exec.Cmd, ch chan<- string, useStdout bool)
 		lines = append(lines, line)
 		ch <- line
 	}
-	close(ch)
 
 	if err := scanner.Err(); err != nil {
 		_ = cmd.Wait()
