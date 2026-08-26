@@ -186,8 +186,6 @@ func TestResolveEnvironment(t *testing.T) {
 
 		env, err := cfg.ResolveEnvironment("")
 		require.NoError(t, err)
-		// The type picks the executor, so it must never come from the
-		// deprecated top-level keys, which never described one.
 		assert.Equal(t, "docker", env.Type)
 		assert.Equal(t, "http://localhost:8000", env.URL)
 		assert.Equal(t, "admin", env.AdminApi.Username)
@@ -1037,8 +1035,7 @@ func TestEffectiveURL(t *testing.T) {
 	assert.Empty(t, (&Config{}).EffectiveURL())
 	assert.Equal(t, "https://myshop.com", (&Config{URL: "https://myshop.com"}).EffectiveURL())
 
-	// environments.local wins over the deprecated top-level url, matching
-	// ResolveEnvironment.
+	// environments.local wins over the deprecated top-level url.
 	mixed := &Config{
 		URL:          "http://127.0.0.1:8000",
 		Environments: map[string]*EnvironmentConfig{"local": {URL: "https://my-shop.shopware.local"}},

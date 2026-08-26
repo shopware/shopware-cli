@@ -84,8 +84,7 @@ func installAndFinalize(cmd *cobra.Command, opts *createOptions, phpConstraint *
 	}
 
 	// Serve the shop at a stable hostname through the shared proxy instead of a
-	// port. Only the environment url is written: the deprecated top-level url
-	// would warn on every later command and override environments.local.
+	// port.
 	if opts.useDocker && opts.useLocalDomain {
 		url := "https://" + proxy.LocalDomainHostname(opts.projectFolder, proxy.BaseDomain())
 		if env := shopCfg.Environments["local"]; env != nil {

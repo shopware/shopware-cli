@@ -124,8 +124,7 @@ environments:
 
 	updated, err := os.ReadFile(path)
 	require.NoError(t, err)
-	// Only the environment url is rewritten; a top-level url would
-	// deprecation-warn on every later command.
+	// Only the environment url is rewritten.
 	assert.Equal(t, 1, countOccurrences(string(updated), "https://my-shop.shopware.local"))
 	assert.NotContains(t, string(updated), "\nurl:")
 

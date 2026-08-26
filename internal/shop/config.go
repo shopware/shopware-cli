@@ -55,10 +55,8 @@ type Config struct {
 	foundConfig            bool
 }
 
-// ResolveEnvironment returns the named environment. An empty name uses
-// environments.local; the deprecated top-level url/admin_api only fill in what
-// that environment does not set, so a mixed file never loses the environment's
-// type (which selects the executor) or its url.
+// ResolveEnvironment returns the named environment, or for an empty name
+// environments.local with the deprecated top-level url/admin_api as fallback.
 func (c *Config) ResolveEnvironment(name string) (*EnvironmentConfig, error) {
 	if name != "" {
 		env, ok := c.Environments[name]
@@ -83,8 +81,8 @@ func (c *Config) ResolveEnvironment(name string) (*EnvironmentConfig, error) {
 	return c.topLevelEnvironment(local), nil
 }
 
-// topLevelEnvironment builds the environment described by the deprecated
-// top-level url/admin_api. Values set on base take precedence over them.
+// topLevelEnvironment builds the environment from the deprecated top-level
+// url/admin_api, using values set on base where present.
 func (c *Config) topLevelEnvironment(base *EnvironmentConfig) *EnvironmentConfig {
 	env := EnvironmentConfig{Type: "local"}
 	if base != nil {
@@ -105,10 +103,8 @@ func (c *Config) topLevelEnvironment(base *EnvironmentConfig) *EnvironmentConfig
 	return &env
 }
 
-// EffectiveURL returns the shop URL the CLI resolves for the default
-// environment: environments.local.url, falling back to the deprecated
-// top-level url. It mirrors ResolveEnvironment for callers that only need the
-// URL and cannot fail on an unknown environment name.
+// EffectiveURL returns the URL of the default environment:
+// environments.local.url, falling back to the deprecated top-level url.
 func (c *Config) EffectiveURL() string {
 	if c == nil {
 		return ""
@@ -993,12 +989,8 @@ func ReadProjectURLState(configPath, envName string) (ConfigURLState, error) {
 	return state, nil
 }
 
-// SetProjectURL points the project config at url in place: the environment
-// url when the environment exists, otherwise the deprecated top-level url. An
-// existing top-level url is updated too, so a mixed file does not keep serving
-// the old url to anything still reading it — but it is never newly created,
-// which would deprecation-warn on every later command. Comments, ordering and
-// unknown keys are preserved.
+// SetProjectURL points the project config's environment (or top-level) url at
+// url in place, preserving comments, ordering and unknown keys.
 func SetProjectURL(configPath, envName, url string) error {
 	doc, root, err := loadConfigDoc(configPath)
 	if err != nil {
@@ -1018,10 +1010,8 @@ func SetProjectURL(configPath, envName, url string) error {
 	return writeConfigDoc(configPath, doc)
 }
 
-// RestoreProjectURL puts the url values captured in prev back in place:
-// previously present keys get their old value, previously absent ones are
-// removed again — for the environment url too, since SetProjectURL creates it
-// when the environment exists.
+// RestoreProjectURL restores the url values captured in prev; previously
+// absent keys are removed again.
 func RestoreProjectURL(configPath, envName string, prev ConfigURLState) error {
 	doc, root, err := loadConfigDoc(configPath)
 	if err != nil {
@@ -1045,8 +1035,7 @@ func RestoreProjectURL(configPath, envName string, prev ConfigURLState) error {
 	return writeConfigDoc(configPath, doc)
 }
 
-// envNode returns the environments.<env> mapping node, or nil when the
-// environment is not configured in the file.
+// envNode returns the environments.<env> mapping node, or nil.
 func envNode(root *yaml.Node, envName string) *yaml.Node {
 	environments := configMapValue(root, "environments")
 	if environments == nil || environments.Kind != yaml.MappingNode {
