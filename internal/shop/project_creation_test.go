@@ -131,6 +131,7 @@ func TestValidateDeploymentMethod(t *testing.T) {
 
 	for _, deploymentMethod := range []string{
 		DeploymentNone,
+		DeploymentContainer,
 		DeploymentDeployer,
 		DeploymentPlatformSH,
 		DeploymentShopwarePaaS,
@@ -178,6 +179,33 @@ func TestShopwareProjectScaffoldNormalize(t *testing.T) {
 		scaffold.Normalize()
 
 		assert.True(t, scaffold.UseElasticsearch)
+	})
+
+	t.Run("keeps the requested PHP version for a container deployment", func(t *testing.T) {
+		t.Parallel()
+		scaffold := ShopwareProjectScaffold{DeploymentMethod: DeploymentContainer, PHPVersion: "8.3"}
+
+		scaffold.Normalize()
+
+		assert.Equal(t, "8.3", scaffold.PHPVersion)
+	})
+
+	t.Run("falls back to the highest supported PHP version", func(t *testing.T) {
+		t.Parallel()
+		scaffold := ShopwareProjectScaffold{DeploymentMethod: DeploymentContainer}
+
+		scaffold.Normalize()
+
+		assert.Equal(t, SupportedPHPVersions[len(SupportedPHPVersions)-1], scaffold.PHPVersion)
+	})
+
+	t.Run("does not pin a PHP version without a container deployment", func(t *testing.T) {
+		t.Parallel()
+		scaffold := ShopwareProjectScaffold{DeploymentMethod: DeploymentNone}
+
+		scaffold.Normalize()
+
+		assert.Empty(t, scaffold.PHPVersion)
 	})
 }
 

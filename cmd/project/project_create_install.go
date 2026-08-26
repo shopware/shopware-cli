@@ -148,6 +148,14 @@ func printCreateSummary(ctx context.Context, opts *createOptions) {
 		}
 	}
 
+	if opts.selectedDeployment == shop.DeploymentContainer {
+		fmt.Println()
+		fmt.Println(tui.SectionHeadingStyle.Render("Deploy as a container"))
+		fmt.Println()
+		fmt.Printf("  %s  %s\n", tui.GreenText.Render("Dockerfile:"), tui.BoldText.Render("Dockerfile")+tui.DimText.Render(" (PHP "+opts.phpVersion+")"))
+		fmt.Printf("  %s  %s\n", tui.GreenText.Render("Build:"), tui.BoldText.Render("docker build -t "+filepath.Base(projectDisplay)+" ."))
+	}
+
 	fmt.Println()
 }
 

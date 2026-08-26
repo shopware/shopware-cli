@@ -234,7 +234,16 @@ func init() {
 	projectCreateCmd.PersistentFlags().Bool("git", false, "Initialize a Git repository")
 	projectCreateCmd.PersistentFlags().Bool("local-domain", false, "Serve the shop at a stable local hostname (<name>.shopware.local) via the shared proxy instead of a port (requires Docker)")
 	projectCreateCmd.PersistentFlags().String("version", "", "Shopware version to install (e.g., 6.6.0.0, latest)")
-	projectCreateCmd.PersistentFlags().String("deployment", "", "Deployment method: none, deployer, platformsh, shopware-paas")
+	projectCreateCmd.PersistentFlags().String("deployment", "", "Deployment method: none, container, deployer, platformsh, shopware-paas")
+	_ = projectCreateCmd.RegisterFlagCompletionFunc("deployment", func(*cobra.Command, []string, string) ([]string, cobra.ShellCompDirective) {
+		return []string{
+			shop.DeploymentNone,
+			shop.DeploymentContainer,
+			shop.DeploymentDeployer,
+			shop.DeploymentPlatformSH,
+			shop.DeploymentShopwarePaaS,
+		}, cobra.ShellCompDirectiveNoFileComp
+	})
 	projectCreateCmd.PersistentFlags().String("ci", "", "CI/CD system: none, github, gitlab")
 	projectCreateCmd.PersistentFlags().String("php-version", "", "PHP version to use (e.g. 8.3); selects the local PHP for local projects and the image tag for --docker projects")
 	_ = projectCreateCmd.RegisterFlagCompletionFunc("php-version", func(*cobra.Command, []string, string) ([]string, cobra.ShellCompDirective) {
