@@ -2,6 +2,7 @@ package upgrade
 
 import (
 	"context"
+	"fmt"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -11,6 +12,7 @@ import (
 	"github.com/shyim/go-version"
 
 	account_api "github.com/shopware/shopware-cli/internal/account-api"
+	"github.com/shopware/shopware-cli/internal/extension"
 	"github.com/shopware/shopware-cli/logging"
 )
 
@@ -61,7 +63,7 @@ func (u *ProjectUpgrader) loadStoreStatus(ctx context.Context, current, target *
 
 	toCheck := make([]account_api.UpdateCheckExtension, 0, len(extensions))
 	for _, ext := range extensions {
-		if !ext.ComposerManaged {
+		if !ext.ComposerManaged || ext.PathInstalled {
 			continue
 		}
 		v := ext.Version
@@ -96,7 +98,7 @@ func (u *ProjectUpgrader) loadStorePlugins(ctx context.Context, target *version.
 
 	names := make([]string, 0, len(extensions))
 	for _, ext := range extensions {
-		if ext.ComposerManaged {
+		if ext.ComposerManaged && !ext.PathInstalled {
 			names = append(names, ext.Name)
 		}
 	}
@@ -150,11 +152,18 @@ func classifyExtension(ctx context.Context, repos *repository.Set, target *versi
 		return res
 	}
 
+	// Path-repository packages have no published release stream. Judge them
+	// by the shopware/core constraint in the installed composer.json.
+	if ext.PathInstalled {
+		return classifyLocalConstraint(ctx, target, ext)
+	}
+
 	pkg, client, err := repos.GetPackage(ctx, ext.Package)
 	if err != nil {
-		res.Status = ExtBlocked
-		res.Detail = "The package was not found in any configured Composer repository."
-		return res
+		// Unpublished / private packages are missing from remote metadata
+		// the same way path packages are. Fall back to the installed
+		// constraint instead of treating "not on Packagist" as blocked.
+		return classifyLocalConstraint(ctx, target, ext)
 	}
 	if client != nil {
 		res.ChangelogURL = changelogURL(client.URL(), ext.Package)
@@ -213,20 +222,72 @@ func classifyExtension(ctx context.Context, repos *repository.Set, target *versi
 	return res
 }
 
+// classifyLocalConstraint judges an installed package by the Shopware
+// constraint it already declares (lock file, composer.json, or app manifest).
+// The installed files stay; only a constraint that excludes the target blocks.
+func classifyLocalConstraint(ctx context.Context, target *version.Version, ext InstalledExtension) ExtensionResult {
+	res := ExtensionResult{Extension: ext, Available: ext.Version}
+
+	constraint, raw := localShopwareConstraint(ctx, ext)
+	switch {
+	case constraint == nil:
+		res.Status = ExtReview
+		res.Detail = "The installed package does not declare Shopware compatibility; the Composer resolution check decides."
+	case target != nil && constraint.Check(target):
+		res.Status = ExtOK
+		res.Detail = "The installed release already supports the selected Shopware version."
+	default:
+		res.Status = ExtBlocked
+		res.Available = ""
+		if raw == "" {
+			res.Detail = "The installed package does not allow the selected Shopware version."
+		} else {
+			res.Detail = fmt.Sprintf("The installed package requires %s, which does not allow Shopware %s.", raw, target)
+		}
+	}
+	return res
+}
+
+func localShopwareConstraint(ctx context.Context, ext InstalledExtension) (*version.Constraints, string) {
+	if c, raw := shopwareConstraintFromRequire(ext.Require); c != nil {
+		return c, raw
+	}
+
+	if ext.Path != "" {
+		if cj, err := composer.ReadJson(filepath.Join(ext.Path, "composer.json")); err == nil {
+			if c, raw := shopwareConstraintFromRequire(cj.Require); c != nil {
+				return c, raw
+			}
+		}
+		if extObj, err := extension.GetExtensionByFolder(ctx, ext.Path); err == nil {
+			if c, err := extObj.GetShopwareVersionConstraint(); err == nil && c != nil {
+				return c, c.String()
+			}
+		}
+	}
+
+	return nil, ""
+}
+
 // shopwareConstraintOf extracts the Shopware platform constraint of a release.
 func shopwareConstraintOf(rel repository.Version) *version.Constraints {
+	c, _ := shopwareConstraintFromRequire(rel.Require)
+	return c
+}
+
+func shopwareConstraintFromRequire(require map[string]string) (*version.Constraints, string) {
 	for _, name := range shopwareConstraintPackages {
-		raw, ok := rel.Require[name]
+		raw, ok := require[name]
 		if !ok {
 			continue
 		}
 		c, err := version.NewConstraint(raw)
 		if err != nil {
-			return nil
+			return nil, raw
 		}
-		return &c
+		return &c, name + " " + raw
 	}
-	return nil
+	return nil, ""
 }
 
 // applyStoreStatus overlays the Store's verdict on the Composer-derived

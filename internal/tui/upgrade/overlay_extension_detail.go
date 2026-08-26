@@ -54,6 +54,10 @@ func (d *extensionDetail) headline() (title, badge string, kind tui.Variant, tex
 		return "Replace extension", "REPLACE REQUIRED", tui.VariantError,
 			"This extension is deprecated and has no planned support for the selected Shopware version."
 	case backend.ExtBlocked:
+		if d.result.Extension.PathInstalled {
+			return "Blocked local extension", "BLOCKED", tui.VariantError,
+				"The installed local plugin does not allow the selected Shopware version."
+		}
 		return "Blocked extension", "BLOCKED", tui.VariantError,
 			"No compatible Composer release exists for the selected Shopware version."
 	case backend.ExtReview:
@@ -124,7 +128,7 @@ func (d *extensionDetail) viewLeft() string {
 		b.WriteString(tui.LabelStyle.Render(r.Extension.Package))
 		b.WriteString("\n\n")
 	}
-	if r.Extension.Path != "" && !r.Extension.ComposerManaged {
+	if r.Extension.Path != "" && (!r.Extension.ComposerManaged || r.Extension.PathInstalled) {
 		b.WriteString(tui.BoldStyle.Render("Path"))
 		b.WriteString("\n")
 		b.WriteString("  ")
@@ -172,9 +176,15 @@ func (d *extensionDetail) viewRight() string {
 		bullet("Remove it if no longer needed")
 		bullet("Recheck compatibility")
 	case backend.ExtBlocked:
-		bullet("Ask the vendor for a compatible release")
-		bullet("Remove or replace the extension")
-		bullet("Recheck compatibility")
+		if r.Extension.PathInstalled {
+			bullet("Update the plugin's shopware/core constraint")
+			bullet("Or make the plugin compatible with the target")
+			bullet("Recheck compatibility")
+		} else {
+			bullet("Ask the vendor for a compatible release")
+			bullet("Remove or replace the extension")
+			bullet("Recheck compatibility")
+		}
 	case backend.ExtReview:
 		bullet("Review the extension code for breaking changes")
 		bullet("Test it against the target version")

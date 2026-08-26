@@ -143,6 +143,50 @@ func TestScanFindsOnlyCustomExtensions(t *testing.T) {
 	assert.Equal(t, "3.1.0", scanned[1].Version)
 }
 
+func TestScanSkipsComposerManagedPathPlugins(t *testing.T) {
+	dir := setupProject(t)
+
+	writeFile(t, filepath.Join(dir, "custom", "static-plugins", "MyCustomPlugin", "composer.json"), `{
+		"name": "acme/custom-plugin",
+		"type": "shopware-platform-plugin",
+		"version": "1.0.0",
+		"require": {"shopware/core": "~6.7.0"},
+		"extra": {"shopware-plugin-class": "Acme\\MyCustomPlugin\\MyCustomPlugin", "label": {"en-GB": "Custom"}},
+		"autoload": {"psr-4": {"Acme\\MyCustomPlugin\\": "src/"}}
+	}`)
+	writeFile(t, filepath.Join(dir, "composer.json"), `{
+		"name": "shopware/production",
+		"require": {"shopware/core": "6.7.3.0", "acme/custom-plugin": "*"}
+	}`)
+	writeFile(t, filepath.Join(dir, "composer.lock"), `{
+		"packages": [
+			{
+				"name": "acme/custom-plugin",
+				"version": "1.0.0",
+				"type": "shopware-platform-plugin",
+				"dist": {"type": "path", "url": "custom/static-plugins/MyCustomPlugin"}
+			}
+		],
+		"packages-dev": []
+	}`)
+
+	vendorDir := filepath.Join(dir, "vendor", "acme")
+	require.NoError(t, os.MkdirAll(vendorDir, 0o755))
+	require.NoError(t, os.Symlink(
+		filepath.Join(dir, "custom", "static-plugins", "MyCustomPlugin"),
+		filepath.Join(vendorDir, "custom-plugin"),
+	))
+
+	scanned := NewPluginMigrator(dir, nil).Scan(t.Context())
+	names := make([]string, 0, len(scanned))
+	for _, ext := range scanned {
+		names = append(names, ext.Name)
+	}
+	assert.NotContains(t, names, "MyCustomPlugin", "path-repository plugins Composer already manages must not be migrated again")
+	assert.Contains(t, names, "LocalPlugin")
+	assert.Contains(t, names, "StorePlugin")
+}
+
 func TestScanReturnsAbsolutePathsForRelativeProjectRoot(t *testing.T) {
 	dir := setupProject(t)
 	cwd, err := os.Getwd()

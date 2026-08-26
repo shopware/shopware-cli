@@ -54,6 +54,50 @@ func TestRewriteComposerJSON(t *testing.T) {
 	assert.NotContains(t, parsed.Require, "shopware/elasticsearch", "absent platform packages are not added")
 }
 
+func TestRewriteComposerJSONKeepsPathRepositoryConstraints(t *testing.T) {
+	dir := setupPathPluginProject(t)
+	writeFile(t, filepath.Join(dir, "composer.json"), `{
+		"name": "shopware/production",
+		"require": {
+			"shopware/core": "6.7.3.0",
+			"shopware/deployment-helper": "*",
+			"acme/custom-plugin": "1.0.0",
+			"swag/demo": "^2.0"
+		}
+	}`)
+	writeFile(t, filepath.Join(dir, "composer.lock"), `{
+		"packages": [
+			{"name": "shopware/core", "version": "v6.7.3.0"},
+			{"name": "swag/demo", "version": "2.0.0", "type": "shopware-platform-plugin"},
+			{
+				"name": "acme/custom-plugin",
+				"version": "1.0.0",
+				"type": "shopware-platform-plugin",
+				"require": {"shopware/core": "~6.7.0"},
+				"dist": {"type": "path", "url": "custom/static-plugins/MyCustomPlugin"}
+			}
+		],
+		"packages-dev": []
+	}`)
+
+	changes, err := newTestUpgrader(t, dir).RewriteComposerJSON("6.7.11.0", map[string]string{"swag/demo": "2.1.3"})
+	require.NoError(t, err)
+	assert.Contains(t, changes, "shopware/core: 6.7.3.0 -> 6.7.11.0")
+	assert.Contains(t, changes, "swag/demo: ^2.0 -> 2.1.3")
+	for _, change := range changes {
+		assert.NotContains(t, change, "acme/custom-plugin")
+	}
+
+	content, err := os.ReadFile(filepath.Join(dir, "composer.json"))
+	require.NoError(t, err)
+	var parsed struct {
+		Require map[string]string `json:"require"`
+	}
+	require.NoError(t, json.Unmarshal(content, &parsed))
+	assert.Equal(t, "1.0.0", parsed.Require["acme/custom-plugin"])
+	assert.Equal(t, "2.1.3", parsed.Require["swag/demo"])
+}
+
 func TestRenderUpgradeManifestLeavesProjectUntouched(t *testing.T) {
 	dir := t.TempDir()
 	original := `{

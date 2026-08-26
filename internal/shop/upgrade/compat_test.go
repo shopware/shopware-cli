@@ -3,6 +3,7 @@ package upgrade
 import (
 	"context"
 	"net/http/httptest"
+	"path/filepath"
 	"testing"
 
 	"github.com/shyim/go-composer"
@@ -165,8 +166,8 @@ func TestCheckExtensionsPackageUnknownAndStoreDown(t *testing.T) {
 	})
 
 	require.Len(t, results, 1)
-	assert.Equal(t, ExtBlocked, results[0].Status)
-	assert.Contains(t, results[0].Detail, "not found")
+	assert.Equal(t, ExtReview, results[0].Status, "missing remote metadata without a local constraint is unknown, not blocked")
+	assert.Contains(t, results[0].Detail, "does not declare Shopware compatibility")
 	assert.Equal(t, "Not available in Store", results[0].StoreLabel)
 }
 
@@ -273,4 +274,78 @@ func TestClassifyExtensionWithoutConstraintMetadataIsReviewNotBlocked(t *testing
 
 	blocked := byName["SwagBlocked"]
 	assert.Equal(t, ExtBlocked, blocked.Status, "known constraints excluding the target still block")
+}
+
+func TestClassifyPathInstalledPluginUsesLocalConstraint(t *testing.T) {
+	dir := setupProject(t)
+	current, target := compatVersions(t)
+
+	u := compatUpgrader(t, dir, fakeProvider{}, nil, nil)
+
+	results := u.CheckExtensions(t.Context(), current, target, []InstalledExtension{
+		{
+			Name:            "MyCustomPlugin",
+			Package:         "acme/custom-plugin",
+			Version:         "1.0.0",
+			ComposerManaged: true,
+			PathInstalled:   true,
+			Require:         map[string]string{"shopware/core": "~6.7.0"},
+		},
+		{
+			Name:            "OldCustomPlugin",
+			Package:         "acme/old-plugin",
+			Version:         "1.0.0",
+			ComposerManaged: true,
+			PathInstalled:   true,
+			Require:         map[string]string{"shopware/core": "~6.6.0"},
+		},
+	})
+	require.Len(t, results, 2)
+
+	byName := make(map[string]ExtensionResult)
+	for _, r := range results {
+		byName[r.Extension.Name] = r
+	}
+
+	ok := byName["MyCustomPlugin"]
+	assert.Equal(t, ExtOK, ok.Status)
+	assert.Equal(t, "1.0.0", ok.Available)
+	assert.False(t, ok.Status.BlocksUpgrade())
+	assert.Contains(t, ok.Detail, "already supports")
+
+	blocked := byName["OldCustomPlugin"]
+	assert.Equal(t, ExtBlocked, blocked.Status)
+	assert.Empty(t, blocked.Available)
+	assert.True(t, blocked.Status.BlocksUpgrade())
+	assert.Contains(t, blocked.Detail, "shopware/core")
+	assert.Contains(t, blocked.Detail, "~6.6.0")
+}
+
+func TestClassifyUnpublishedPackageFallsBackToLocalComposerJSON(t *testing.T) {
+	dir := setupProject(t)
+	pluginDir := filepath.Join(dir, "custom", "static-plugins", "MyCustomPlugin")
+	writeFile(t, filepath.Join(pluginDir, "composer.json"), `{
+		"name": "acme/custom-plugin",
+		"type": "shopware-platform-plugin",
+		"version": "1.0.0",
+		"require": {"shopware/core": "~6.6.0 || ~6.7.0"},
+		"extra": {"shopware-plugin-class": "Acme\\MyCustomPlugin\\MyCustomPlugin", "label": {"en-GB": "Custom"}},
+		"autoload": {"psr-4": {"Acme\\MyCustomPlugin\\": "src/"}}
+	}`)
+
+	current, target := compatVersions(t)
+	u := compatUpgrader(t, dir, fakeProvider{}, nil, nil)
+
+	results := u.CheckExtensions(t.Context(), current, target, []InstalledExtension{
+		{
+			Name:            "MyCustomPlugin",
+			Package:         "acme/custom-plugin",
+			Path:            pluginDir,
+			Version:         "1.0.0",
+			ComposerManaged: true,
+		},
+	})
+	require.Len(t, results, 1)
+	assert.Equal(t, ExtOK, results[0].Status, "local composer.json is used when the package is not on Packagist")
+	assert.Equal(t, "1.0.0", results[0].Available)
 }
