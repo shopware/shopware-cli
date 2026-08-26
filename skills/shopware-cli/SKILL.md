@@ -1,6 +1,6 @@
 ---
 name: shopware-cli
-description: Use Shopware CLI safely and effectively for Shopware project, extension, account, development, build, validation, upgrade, and troubleshooting workflows. Also use when contributing to shopware/shopware-cli and reasoning about the CLI's user-facing behavior.
+description: Use Shopware CLI safely and effectively for Shopware project, extension, account, development, build, validation, upgrade, and troubleshooting workflows. Validate projects or extensions, run specific checks with --only/--exclude, interpret results, configure CI reporters (json, junit, github, gitlab), and troubleshoot validation issues. Also use when contributing to shopware/shopware-cli and reasoning about the CLI's user-facing behavior.
 ---
 
 # Shopware CLI
@@ -106,6 +106,102 @@ Know which environment will be affected before proceeding.
 Treat account operations that authenticate, log out, upload, push, publish, or otherwise modify remote Shopware Account state as external side effects.
 
 Do not infer permission or user intent simply because credentials are available.
+
+## Validation workflows
+
+Use `shopware-cli project validate` or `shopware-cli extension validate` to run validation checks against a project or extension.
+
+Always inspect current flags and available checks:
+
+```bash
+shopware-cli project validate --help
+shopware-cli extension validate --help
+```
+
+### Project validation
+
+```bash
+shopware-cli project validate [flags]
+```
+
+Validates the Shopware project against checks such as PHP static analysis, dependency integrity, and extension structure.
+
+Available flags:
+
+- `--only <tools>` — run only specific tools (comma-separated, e.g., `phpstan,eslint`).
+- `--exclude <tools>` — skip specific tools (comma-separated).
+- `--reporter <format>` — output format: `summary` (default), `json`, `github`, `gitlab`, `junit`, `markdown`.
+- `--local-only` — validate only plugins in custom/* folders.
+- `--no-copy` — do not copy project files to temporary directory before validation.
+- `--verbose` — show debug output.
+
+### Extension validation
+
+```bash
+shopware-cli extension validate [path] [flags]
+```
+
+Validates an extension against metadata, code quality, Shopware compatibility, and store compliance checks.
+
+Available flags:
+
+- `--only <tools>` — run only specific tools (comma-separated).
+- `--exclude <tools>` — skip specific tools.
+- `--full` — run full validation including PHPStan, ESLint, and Stylelint.
+- `--check-against <version>` — check against Shopware version (`highest` or `lowest`; default: `highest`).
+- `--store-compliance` — run store compliance checks. Prefer setting `validation.store_compliance: true` in `.shopware-extension.yml` instead.
+- `--reporter <format>` — output format: `summary` (default), `json`, `github`, `gitlab`, `junit`, `markdown`.
+- `--no-copy` — do not copy extension files to temporary directory.
+- `--verbose` — show debug output.
+
+### CI and reporters
+
+In automated environments, prefer machine-readable output:
+
+```bash
+shopware-cli project validate --reporter json > validation-results.json
+shopware-cli project validate --reporter junit > validation-results.xml
+shopware-cli extension validate --reporter github  # posts inline annotations to GitHub PR
+shopware-cli extension validate --reporter gitlab  # posts inline annotations to GitLab MR
+```
+
+Check the reporter output format to determine if validation passed or failed; do not rely on exit code alone.
+
+### Domain-specific routing
+
+When validation fails in a specific area, route users to relevant skills:
+
+- **PHP test failures** → `php-testing` skill.
+- **JavaScript/Admin failures** → `admin-testing` skill.
+- **Acceptance test failures** → `acceptance-testing` skill.
+- **Accessibility findings** → `accessibility-testing` skill.
+- **Architecture or LSP findings** → `architecture-review` skill.
+
+### Validation troubleshooting
+
+When `validate` produces unexpected results:
+
+1. **Verify the working directory and project configuration.**
+   - Ensure `.shopware-project.yml` or `.shopware-extension.yml` is present and correct.
+   - Check `--verbose` output to see what the CLI is validating.
+
+2. **Check installed and locked tool versions.**
+   - Validation depends on external tools (PHPStan, ESLint, Stylelint, PHPUnit, etc.).
+   - Verify they are in `composer.lock` or `package-lock.json` and installed.
+   - If a tool is missing, check the project's `composer.json` or build configuration.
+
+3. **Understand tool exclusions.**
+   - A tool may be skipped due to missing dependencies, unmet conditions, or configuration.
+   - Use `--verbose` to see which tools ran and which were skipped or errored.
+   - Do not assume a skipped tool means validation passed.
+
+4. **Avoid ad hoc workarounds.**
+   - Do not bypass validation with manual `phpstan`, `eslint`, or `jest` commands before understanding why validation did not run them.
+   - Use the CLI's verbose output to identify root cause first.
+
+5. **Check environment and runtime prerequisites.**
+   - Some checks may require Docker, a specific PHP version, npm dependencies, or other tooling to be available.
+   - Verify the environment matches the project's requirements.
 
 ## Inspect the project before deciding
 
