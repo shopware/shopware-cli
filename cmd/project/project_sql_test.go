@@ -150,7 +150,7 @@ func TestResolveSQLInputEmptyStdinIsMissing(t *testing.T) {
 func TestProjectSQLCmdRegistersFileFlag(t *testing.T) {
 	flag := projectSQLCmd.Flags().Lookup("file")
 	require.NotNil(t, flag)
-	assert.Equal(t, "path to a SQL file to execute (instead of a query argument or stdin)", flag.Usage)
+	assert.Equal(t, "Path to a SQL file to execute (instead of a query argument or stdin)", flag.Usage)
 }
 
 func TestErrIfNoSQLInput(t *testing.T) {

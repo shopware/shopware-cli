@@ -46,5 +46,5 @@ var projectAutofixComposerCmd = &cobra.Command{
 
 func init() {
 	projectAutofixCmd.AddCommand(projectAutofixComposerCmd)
-	projectAutofixComposerCmd.Flags().Bool("dry-run", false, "non-interactive mode: print the migration plan without modifying the project")
+	projectAutofixComposerCmd.Flags().Bool("dry-run", false, "Non-interactive mode: print the migration plan without modifying the project")
 }
