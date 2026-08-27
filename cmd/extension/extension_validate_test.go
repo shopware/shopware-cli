@@ -37,7 +37,17 @@ func TestExtensionValidateRunsSwCliChecks(t *testing.T) {
 	// The default run (no --full) executes only the built-in sw-cli checks,
 	// which flag the minimal fixture and turn into the exit-code contract
 	// CI pipelines rely on.
-	err := runExtension(t, "validate", writePluginFixture(t))
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "found errors")
+	t.Run("folder input", func(t *testing.T) {
+		err := runExtension(t, "validate", writePluginFixture(t))
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "found errors")
+	})
+
+	// Stores receive zips rather than folders, so release pipelines exercise
+	// the zip input branch.
+	t.Run("zip input", func(t *testing.T) {
+		err := runExtension(t, "validate", buildExtensionZip(t, writePluginFixture(t)))
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "found errors")
+	})
 }
