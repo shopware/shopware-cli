@@ -1,0 +1,27 @@
+{
+    "name": "{{ .ComposerName }}",
+    "description": "{{ .ComposerName }}",
+    "type": "shopware-platform-plugin",
+    "version": "1.0.0",
+    "license": "MIT",
+    "require": {
+        "shopware/core": "~6.7.0"
+    },
+    "extra": {
+        "shopware-plugin-class": "{{ .Namespace }}\\{{ .ClassName }}",
+        "label": {
+            "de-DE": "Skeleton plugin",
+            "en-GB": "Skeleton plugin"
+        }
+    },
+    "autoload": {
+        "psr-4": {
+            "{{ .Namespace }}\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "{{ .Namespace }}\\Tests\\": "tests/"
+        }
+    }
+}
