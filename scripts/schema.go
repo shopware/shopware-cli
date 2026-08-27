@@ -10,6 +10,7 @@ import (
 
 	"github.com/invopop/jsonschema"
 
+	"github.com/shopware/shopware-cli/internal/ai/directory"
 	"github.com/shopware/shopware-cli/internal/changelog"
 	"github.com/shopware/shopware-cli/internal/extension"
 	"github.com/shopware/shopware-cli/internal/shop"
@@ -110,12 +111,25 @@ func generateExtensionSchema() error {
 	return nil
 }
 
+func generateAIDirectorySchema() error {
+	bytes, err := directory.GenerateSchemaJSON()
+	if err != nil {
+		return err
+	}
+
+	return os.WriteFile("internal/ai/directory/schema.json", bytes, 0o644)
+}
+
 func main() {
 	if err := generateProjectSchema(); err != nil {
 		panic(err)
 	}
 
 	if err := generateExtensionSchema(); err != nil {
+		panic(err)
+	}
+
+	if err := generateAIDirectorySchema(); err != nil {
 		panic(err)
 	}
 }

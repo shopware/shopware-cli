@@ -1,0 +1,128 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/shopware/shopware-cli/internal/ai/directory/directory",
+  "$ref": "#/$defs/Directory",
+  "$defs": {
+    "Compatibility": {
+      "properties": {
+        "source": {
+          "type": "string",
+          "enum": [
+            "owner"
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "required": [
+        "source"
+      ]
+    },
+    "Delivery": {
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": [
+            "bundled",
+            "git"
+          ]
+        },
+        "repository": {
+          "type": "string",
+          "format": "uri"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "required": [
+        "kind"
+      ]
+    },
+    "Directory": {
+      "properties": {
+        "version": {
+          "type": "integer"
+        },
+        "integrations": {
+          "items": {
+            "$ref": "#/$defs/Integration"
+          },
+          "type": "array"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "required": [
+        "version",
+        "integrations"
+      ]
+    },
+    "Integration": {
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "display_name": {
+          "type": "string"
+        },
+        "type": {
+          "type": "string",
+          "enum": [
+            "skill"
+          ]
+        },
+        "provider": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "active",
+            "coming-soon",
+            "deprecated"
+          ]
+        },
+        "documentation": {
+          "type": "string",
+          "format": "uri"
+        },
+        "delivery": {
+          "$ref": "#/$defs/Delivery"
+        },
+        "compatibility": {
+          "$ref": "#/$defs/Compatibility"
+        },
+        "internal": {
+          "$ref": "#/$defs/Internal"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "required": [
+        "name",
+        "display_name",
+        "type",
+        "provider",
+        "description",
+        "status",
+        "documentation",
+        "delivery"
+      ]
+    },
+    "Internal": {
+      "properties": {
+        "maintainer": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "required": [
+        "maintainer"
+      ]
+    }
+  }
+}
