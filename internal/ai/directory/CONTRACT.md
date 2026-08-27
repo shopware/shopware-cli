@@ -25,6 +25,10 @@ name: must match ^[a-z][a-z0-9-]*$ and be unique across the manifest.
 
 ## JSON output (camelCase) — public contract
 
+Selected with the boolean `--json` flag on both commands (repo convention, e.g.
+`project extension list`). Not `--output=json`: `--output`/`-o` already means an
+output file path elsewhere in the CLI (e.g. `project sbom`).
+
 `ai list` — array of:
 { name, displayName, type, provider, description, status, available }
 

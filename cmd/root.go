@@ -21,6 +21,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/shopware/shopware-cli/cmd/account"
+	"github.com/shopware/shopware-cli/cmd/ai"
 	"github.com/shopware/shopware-cli/cmd/extension"
 	"github.com/shopware/shopware-cli/cmd/project"
 	accountApi "github.com/shopware/shopware-cli/internal/account-api"
@@ -254,6 +255,7 @@ func init() {
 
 	project.Register(rootCmd)
 	extension.Register(rootCmd)
+	ai.Register(rootCmd)
 	account.Register(rootCmd, func(commandName string) (*account.ServiceContainer, error) {
 		if commandName == "login" || commandName == "logout" {
 			return &account.ServiceContainer{

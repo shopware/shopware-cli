@@ -104,6 +104,18 @@ var (
 	}
 )
 
+// Get returns the integration with the given name and true, or nil and false
+// when no entry matches.
+func (d *Directory) Get(name string) (*Integration, bool) {
+	for i := range d.Integrations {
+		if d.Integrations[i].Name == name {
+			return &d.Integrations[i], true
+		}
+	}
+
+	return nil, false
+}
+
 // Load parses the embedded manifest once and caches the result. Subsequent
 // calls return the cached directory. It does not validate the contents; use
 // Validate for that.
