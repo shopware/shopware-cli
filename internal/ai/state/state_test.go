@@ -53,3 +53,21 @@ func TestReadInvalidJSONErrors(t *testing.T) {
 	_, err := Read(path)
 	require.Error(t, err)
 }
+
+func TestReadUnsupportedVersionErrors(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "installed.json")
+	require.NoError(t, os.WriteFile(path, []byte(`{"version":2,"installed":[]}`), 0o644))
+
+	_, err := Read(path)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "unsupported ai install-state version 2")
+}
+
+func TestReadMissingVersionErrors(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "installed.json")
+	require.NoError(t, os.WriteFile(path, []byte(`{"installed":[]}`), 0o644))
+
+	_, err := Read(path)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "unsupported ai install-state version 0")
+}

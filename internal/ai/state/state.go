@@ -70,6 +70,9 @@ func Read(path string) (File, error) {
 	if err := json.Unmarshal(b, &f); err != nil {
 		return File{}, fmt.Errorf("parse ai install-state %s: %w", path, err)
 	}
+	if f.Version != FileVersion {
+		return File{}, fmt.Errorf("unsupported ai install-state version %d (expected %d)", f.Version, FileVersion)
+	}
 
 	return f, nil
 }

@@ -44,7 +44,7 @@ func newAIListCmd() *cobra.Command {
 		RunE:         runAIList,
 	}
 
-	cmd.Flags().String("type", "", "Filter by integration type (skill)")
+	cmd.Flags().String("type", "", "Filter by integration type (skill, mcp)")
 	cmd.Flags().Bool("installed", false, "Show only integrations recorded as installed by the CLI")
 	cmd.Flags().Bool("json", false, "Output as json")
 
@@ -68,7 +68,7 @@ func runAIList(cmd *cobra.Command, _ []string) error {
 	}
 
 	if typeFilter != "" && !knownTypeFilters[typeFilter] {
-		return fmt.Errorf("unknown --type %q (allowed: skill)", typeFilter)
+		return fmt.Errorf("unknown --type %q (allowed: skill, mcp)", typeFilter)
 	}
 
 	dir, err := directory.Load()

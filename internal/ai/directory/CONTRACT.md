@@ -8,6 +8,7 @@ name or enum value here is a breaking change to a public interface.
 - No network access, no project detection in this version.
 
 ## Enums (all validated; values may be ADDED later, never renamed/removed)
+
 | Field           | v1 values                          | reserved for later |
 |-----------------|------------------------------------|--------------------|
 | type            | skill                              | mcp                |
@@ -21,7 +22,7 @@ Conditional: delivery.repository — required when delivery.kind == git
 Optional:  compatibility (compatibility.source: owner),
            internal (internal.maintainer)  ← NEVER emitted in any output
 
-name: must match ^[a-z][a-z0-9-]*$ and be unique across the manifest.
+`name`: must match `^[a-z][a-z0-9-]*$` and be unique across the manifest.
 
 ## JSON output (camelCase) — public contract
 
