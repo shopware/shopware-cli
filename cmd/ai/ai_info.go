@@ -73,9 +73,7 @@ func writeInfoTable(cmd *cobra.Command, e directory.Integration) error {
 		{"Description", e.Description},
 		{"Documentation", e.Documentation},
 		{"Delivery", deliveryLabel(e.Delivery)},
-	}
-	if e.Compatibility != nil {
-		lines = append(lines, [2]string{"Compatibility", e.Compatibility.Source})
+		{"Compatibility", compatibilityLabel(e)},
 	}
 
 	for _, l := range lines {
@@ -85,6 +83,20 @@ func writeInfoTable(cmd *cobra.Command, e directory.Integration) error {
 	}
 
 	return nil
+}
+
+// compatibilityLabel renders the compatibility requirements for the human view.
+// An entry without a compatibility block has no requirements; a bundled entry
+// ships with the CLI and is therefore always compatible.
+func compatibilityLabel(e directory.Integration) string {
+	if e.Compatibility != nil {
+		return e.Compatibility.Source
+	}
+	if e.Delivery.Kind == directory.DeliveryBundled {
+		return "none (bundled, always compatible)"
+	}
+
+	return "none"
 }
 
 // deliveryLabel renders a delivery block for the human view.

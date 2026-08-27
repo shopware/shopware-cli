@@ -42,6 +42,10 @@ func TestInfoHumanContains(t *testing.T) {
 		"https://developer.shopware.com/docs/products/cli/",
 		"bundled",
 		"yes",
+		// AC: info shows compatibility requirements for every entry, including
+		// bundled ones that have no explicit compatibility block.
+		"Compatibility:",
+		"none (bundled, always compatible)",
 	} {
 		assert.Contains(t, out, want)
 	}
