@@ -9,44 +9,54 @@ import (
 	"github.com/shopware/shopware-cli/internal/ai/directory"
 )
 
-var aiInfoCmd = &cobra.Command{
-	Use:          "info <name>",
-	Short:        "Show details of a Shopware AI integration",
-	Args:         cobra.ExactArgs(1),
-	SilenceUsage: true,
-	RunE: func(cmd *cobra.Command, args []string) error {
-		name := args[0]
+var aiInfoCmd = newAIInfoCmd()
 
-		asJSON, err := cmd.Flags().GetBool("json")
+func newAIInfoCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:          "info <name>",
+		Short:        "Show details of a Shopware AI integration",
+		Args:         cobra.ExactArgs(1),
+		SilenceUsage: true,
+		RunE:         runAIInfo,
+	}
+
+	cmd.Flags().Bool("json", false, "Output as json")
+
+	return cmd
+}
+
+func runAIInfo(cmd *cobra.Command, args []string) error {
+	name := args[0]
+
+	asJSON, err := cmd.Flags().GetBool("json")
+	if err != nil {
+		return err
+	}
+
+	dir, err := directory.Load()
+	if err != nil {
+		return err
+	}
+
+	found, ok := dir.Get(name)
+	if !ok {
+		return fmt.Errorf("unknown integration %q", name)
+	}
+
+	entry := applyAvailability(*found)
+
+	if asJSON {
+		out, err := json.Marshal(entry)
 		if err != nil {
 			return err
 		}
 
-		dir, err := directory.Load()
-		if err != nil {
-			return err
-		}
+		_, err = fmt.Fprintln(cmd.OutOrStdout(), string(out))
 
-		found, ok := dir.Get(name)
-		if !ok {
-			return fmt.Errorf("unknown integration %q", name)
-		}
+		return err
+	}
 
-		entry := applyAvailability(*found)
-
-		if asJSON {
-			out, err := json.Marshal(entry)
-			if err != nil {
-				return err
-			}
-
-			_, err = fmt.Fprintln(cmd.OutOrStdout(), string(out))
-
-			return err
-		}
-
-		return writeInfoTable(cmd, entry)
-	},
+	return writeInfoTable(cmd, entry)
 }
 
 // writeInfoTable prints an entry as aligned key/value lines for humans.
@@ -88,5 +98,4 @@ func deliveryLabel(d directory.Delivery) string {
 
 func init() {
 	aiRootCmd.AddCommand(aiInfoCmd)
-	aiInfoCmd.Flags().Bool("json", false, "Output as json")
 }

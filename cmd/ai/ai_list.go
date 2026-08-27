@@ -32,93 +32,105 @@ type listItem struct {
 	Available   bool             `json:"available"`
 }
 
-var aiListCmd = &cobra.Command{
-	Use:          "list",
-	Aliases:      []string{"ls"},
-	Short:        "List known Shopware AI integrations",
-	Args:         cobra.NoArgs,
-	SilenceUsage: true,
-	RunE: func(cmd *cobra.Command, _ []string) error {
-		typeFilter, err := cmd.Flags().GetString("type")
+var aiListCmd = newAIListCmd()
+
+func newAIListCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:          "list",
+		Aliases:      []string{"ls"},
+		Short:        "List known Shopware AI integrations",
+		Args:         cobra.NoArgs,
+		SilenceUsage: true,
+		RunE:         runAIList,
+	}
+
+	cmd.Flags().String("type", "", "Filter by integration type (skill)")
+	cmd.Flags().Bool("installed", false, "Show only integrations recorded as installed by the CLI")
+	cmd.Flags().Bool("json", false, "Output as json")
+
+	return cmd
+}
+
+func runAIList(cmd *cobra.Command, _ []string) error {
+	typeFilter, err := cmd.Flags().GetString("type")
+	if err != nil {
+		return err
+	}
+
+	installedOnly, err := cmd.Flags().GetBool("installed")
+	if err != nil {
+		return err
+	}
+
+	asJSON, err := cmd.Flags().GetBool("json")
+	if err != nil {
+		return err
+	}
+
+	if typeFilter != "" && !knownTypeFilters[typeFilter] {
+		return fmt.Errorf("unknown --type %q (allowed: skill)", typeFilter)
+	}
+
+	dir, err := directory.Load()
+	if err != nil {
+		return err
+	}
+
+	var installedNames map[string]bool
+	if installedOnly {
+		installedNames, err = readInstalledNames()
 		if err != nil {
 			return err
 		}
+	}
 
-		installedOnly, err := cmd.Flags().GetBool("installed")
-		if err != nil {
-			return err
+	entries := make([]directory.Integration, 0, len(dir.Integrations))
+	for _, e := range dir.Integrations {
+		if typeFilter != "" && string(e.Type) != typeFilter {
+			continue
+		}
+		if installedOnly && !installedNames[e.Name] {
+			continue
 		}
 
-		asJSON, err := cmd.Flags().GetBool("json")
-		if err != nil {
-			return err
-		}
+		entries = append(entries, applyAvailability(e))
+	}
 
-		if typeFilter != "" && !knownTypeFilters[typeFilter] {
-			return fmt.Errorf("unknown --type %q (allowed: skill)", typeFilter)
-		}
-
-		dir, err := directory.Load()
-		if err != nil {
-			return err
-		}
-
-		var installedNames map[string]bool
-		if installedOnly {
-			installedNames, err = readInstalledNames()
-			if err != nil {
-				return err
-			}
-		}
-
-		entries := make([]directory.Integration, 0, len(dir.Integrations))
-		for _, e := range dir.Integrations {
-			if typeFilter != "" && string(e.Type) != typeFilter {
-				continue
-			}
-			if installedOnly && !installedNames[e.Name] {
-				continue
-			}
-
-			entries = append(entries, applyAvailability(e))
-		}
-
-		if asJSON {
-			items := make([]listItem, 0, len(entries))
-			for _, e := range entries {
-				items = append(items, listItem{
-					Name:        e.Name,
-					DisplayName: e.DisplayName,
-					Type:        e.Type,
-					Provider:    e.Provider,
-					Description: e.Description,
-					Status:      e.Status,
-					Available:   e.Available,
-				})
-			}
-
-			out, err := json.Marshal(items)
-			if err != nil {
-				return err
-			}
-
-			_, err = fmt.Fprintln(cmd.OutOrStdout(), string(out))
-
-			return err
-		}
-
-		rows := make([][]string, 0, len(entries))
+	if asJSON {
+		items := make([]listItem, 0, len(entries))
 		for _, e := range entries {
-			rows = append(rows, []string{e.Name, string(e.Type), e.Provider, string(e.Status), availableLabel(e), e.Description})
+			items = append(items, listItem{
+				Name:        e.Name,
+				DisplayName: e.DisplayName,
+				Type:        e.Type,
+				Provider:    e.Provider,
+				Description: e.Description,
+				Status:      e.Status,
+				Available:   e.Available,
+			})
 		}
 
-		_, err = fmt.Fprintln(cmd.OutOrStdout(), tui.RenderTable(
-			[]string{"Name", "Type", "Provider", "Status", "Available", "Description"},
-			rows,
-		))
+		out, err := json.Marshal(items)
+		if err != nil {
+			return err
+		}
+
+		_, err = fmt.Fprintln(cmd.OutOrStdout(), string(out))
 
 		return err
-	},
+	}
+
+	rows := make([][]string, 0, len(entries))
+	for _, e := range entries {
+		rows = append(rows, []string{e.Name, string(e.Type), e.Provider, string(e.Status), availableLabel(e), e.Description})
+	}
+
+	_, err = fmt.Fprintln(cmd.OutOrStdout(), tui.RenderTable(
+		[]string{"Name", "Type", "Provider", "Status", "Available", "Description"},
+		rows,
+	))
+
+	return err
 }
 
 // readInstalledNames returns the set of integration names recorded as installed
@@ -157,7 +169,4 @@ func availableLabel(e directory.Integration) string {
 
 func init() {
 	aiRootCmd.AddCommand(aiListCmd)
-	aiListCmd.Flags().String("type", "", "Filter by integration type (skill)")
-	aiListCmd.Flags().Bool("installed", false, "Show only integrations recorded as installed by the CLI")
-	aiListCmd.Flags().Bool("json", false, "Output as json")
 }
