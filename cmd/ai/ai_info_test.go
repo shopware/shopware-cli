@@ -6,6 +6,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/shopware/shopware-cli/internal/ai/directory"
 )
 
 func TestInfoJSON(t *testing.T) {
@@ -49,6 +51,37 @@ func TestInfoHumanContains(t *testing.T) {
 	} {
 		assert.Contains(t, out, want)
 	}
+}
+
+// TestInfoHumanGitEntry exercises the human output for a git-delivered entry:
+// the "git (repository)" delivery rendering and the compatibility source line.
+func TestInfoHumanGitEntry(t *testing.T) {
+	out, err := executeAI(t, newAIInfoCmd(), "deployment-helper")
+	require.NoError(t, err)
+
+	for _, want := range []string{
+		"Delivery:",
+		"git (https://github.com/shopware/deployment-helper)",
+		"Compatibility:",
+		"owner",
+		"no (not yet released)",
+	} {
+		assert.Contains(t, out, want)
+	}
+}
+
+func TestCompatibilityLabel(t *testing.T) {
+	// explicit compatibility block → its source
+	withCompat := directory.Integration{Compatibility: &directory.Compatibility{Source: "owner"}}
+	assert.Equal(t, "owner", compatibilityLabel(withCompat))
+
+	// bundled entry with no block → always compatible
+	bundled := directory.Integration{Delivery: directory.Delivery{Kind: directory.DeliveryBundled}}
+	assert.Equal(t, "none (bundled, always compatible)", compatibilityLabel(bundled))
+
+	// non-bundled entry with no block → plain "none"
+	git := directory.Integration{Delivery: directory.Delivery{Kind: directory.DeliveryGit}}
+	assert.Equal(t, "none", compatibilityLabel(git))
 }
 
 func TestInfoUnknownNameErrors(t *testing.T) {

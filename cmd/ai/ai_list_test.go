@@ -2,11 +2,17 @@ package ai
 
 import (
 	"bytes"
+	"encoding/json"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/shopware/shopware-cli/internal/ai/directory"
+	"github.com/shopware/shopware-cli/internal/ai/state"
 )
 
 // executeAI runs a freshly constructed command with the given args and returns
@@ -86,4 +92,33 @@ func TestListInstalledIsEmpty(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.JSONEq(t, `[]`, out)
+}
+
+func TestAvailableLabel(t *testing.T) {
+	assert.Equal(t, "yes", availableLabel(directory.Integration{Available: true}))
+	assert.Equal(t, "no (not yet released)", availableLabel(directory.Integration{AvailabilityReason: "not yet released"}))
+	assert.Equal(t, "no", availableLabel(directory.Integration{}))
+}
+
+// TestListInstalledShowsRecordedEntry writes an install-state file and asserts
+// that --installed returns only the recorded integration.
+func TestListInstalledShowsRecordedEntry(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("HOME", tmp)
+	t.Setenv("XDG_CONFIG_HOME", tmp)
+
+	path, err := state.Path()
+	require.NoError(t, err)
+	require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o755))
+
+	const content = `{"version":1,"installed":[{"name":"shopware-cli","client":"codex","scope":"global","requestedTag":"latest","resolvedRevision":"abc"}]}`
+	require.NoError(t, os.WriteFile(path, []byte(content), 0o644))
+
+	out, err := executeAI(t, newAIListCmd(), "--installed", "--json")
+	require.NoError(t, err)
+
+	var items []map[string]any
+	require.NoError(t, json.Unmarshal([]byte(out), &items))
+	require.Len(t, items, 1)
+	assert.Equal(t, "shopware-cli", items[0]["name"])
 }

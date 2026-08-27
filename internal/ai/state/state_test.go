@@ -3,11 +3,22 @@ package state
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+func TestPath(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("HOME", tmp)
+	t.Setenv("XDG_CONFIG_HOME", tmp)
+
+	p, err := Path()
+	require.NoError(t, err)
+	assert.True(t, strings.HasSuffix(filepath.ToSlash(p), "shopware-cli/ai/installed.json"), "unexpected path: %s", p)
+}
 
 func TestReadMissingFileReturnsEmpty(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "installed.json")
