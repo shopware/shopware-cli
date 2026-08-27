@@ -7,6 +7,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/shopware/shopware-cli/internal/ai/directory"
+	"github.com/shopware/shopware-cli/internal/ai/state"
 	"github.com/shopware/shopware-cli/internal/tui"
 )
 
@@ -62,14 +63,20 @@ var aiListCmd = &cobra.Command{
 			return err
 		}
 
+		var installedNames map[string]bool
+		if installedOnly {
+			installedNames, err = readInstalledNames()
+			if err != nil {
+				return err
+			}
+		}
+
 		entries := make([]directory.Integration, 0, len(dir.Integrations))
 		for _, e := range dir.Integrations {
 			if typeFilter != "" && string(e.Type) != typeFilter {
 				continue
 			}
-			// Nothing writes install state yet (#1337), so --installed is
-			// legitimately empty for now.
-			if installedOnly {
+			if installedOnly && !installedNames[e.Name] {
 				continue
 			}
 
@@ -112,6 +119,28 @@ var aiListCmd = &cobra.Command{
 
 		return err
 	},
+}
+
+// readInstalledNames returns the set of integration names recorded as installed
+// by the CLI. Nothing writes the state file until #1337, so today this is
+// empty (a missing file yields an empty state, not an error).
+func readInstalledNames() (map[string]bool, error) {
+	path, err := state.Path()
+	if err != nil {
+		return nil, err
+	}
+
+	st, err := state.Read(path)
+	if err != nil {
+		return nil, err
+	}
+
+	names := make(map[string]bool, len(st.Installed))
+	for _, e := range st.Installed {
+		names[e.Name] = true
+	}
+
+	return names, nil
 }
 
 // availableLabel renders the availability of an entry for the human table.
