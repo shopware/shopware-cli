@@ -69,7 +69,7 @@ func run(ctx context.Context) int {
 			return false
 		}
 		binaryPath, _ := os.Executable()
-		return shouldNotify(result.Release, binaryPath)
+		return update.ShouldNotify(result.Release, binaryPath)
 	}
 
 	go func() {
@@ -120,7 +120,7 @@ func run(ctx context.Context) int {
 		if err != nil {
 			logging.FromContext(ctx).Debugf("could not determine binary path: %v", err)
 		}
-		if shouldNotify(newRelease, binaryPath) && update.ShouldPrintUpdateHint() {
+		if update.ShouldNotify(newRelease, binaryPath) && update.ShouldPrintUpdateHint() {
 			fmt.Fprintln(os.Stderr, update.RenderUpdateNotification(newRelease.Version, version))
 			if err := update.MarkUpdateNotificationPrinted(); err != nil {
 				logging.FromContext(ctx).Debugf("could not save update notification timestamp: %v", err)
@@ -202,14 +202,6 @@ func commandNameFromBinaryPath(binaryPath string) string {
 	}
 
 	return binaryName
-}
-
-// shouldNotify returns false for Homebrew users if the new version is not yet available in Homebrew
-func shouldNotify(release *update.ReleaseInfo, binaryPath string) bool {
-	if system.IsUnderHomebrew(binaryPath) && release.IsRecent() {
-		return false
-	}
-	return true
 }
 
 func init() {
