@@ -11,7 +11,7 @@ const (
 	formatJSON  = "json"
 )
 
-// addFormatFlag registers the shared --format flag (see shopware/shopware-cli#1471).
+// addFormatFlag registers the --format flag
 func addFormatFlag(cmd *cobra.Command) {
 	cmd.Flags().String("format", formatTable, "Output format (table, json)")
 }
