@@ -40,6 +40,12 @@ When the user asks for a readiness assessment, prefer a structure such as:
 
 Do not create a generic "critical issues" or "required checklist" section unless every item in it has qualifying evidence.
 
+The classification is **sticky across the entire response**. Preserve it in the finding description, issue/impact text, action column, summary, checklist, and next-step list. Do not classify an item as **Recommendation / inference** or **Schema-supported, not proven required** and then silently promote it later with mandatory language or an imperative that implies it is required.
+
+For **Recommendation / inference** and **Schema-supported, not proven required** findings, avoid language such as **reject**, **fail**, **flag**, **block**, **needs**, **must**, **required**, or other wording that implies a verified publication gate. Phrase follow-up actions conditionally, for example: "consider replacing", "verify whether this applies", or "if required by current Store documentation, configure ...".
+
+Before finalizing a readiness assessment, scan the whole answer for requirement language and verify that every strong claim still matches its evidence classification. This applies to prose outside tables as well as headings, summaries, and numbered next steps.
+
 Common traps:
 
 - Do not call `README.md`, `CHANGELOG.md`, or a physical `LICENSE` file required merely because they are common project files. Require explicit current Store documentation before classifying them as Store requirements.
@@ -263,7 +269,8 @@ When presenting these requirements:
 - label CLI findings **CLI-enforced** only when a fresh run or current source proves enforcement;
 - distinguish recommendations from rejection criteria;
 - do not turn broad quality guidance into a fabricated local checklist;
-- do not use "Store review will reject/flag this" unless an authoritative source actually supports that claim.
+- do not use "Store review will reject/flag this" unless an authoritative source actually supports that claim;
+- keep the same evidence level when restating a finding in recommendations or next steps.
 
 If official Store documentation cannot be checked, say that clearly and keep unverified publication advice in **Recommendation / inference**.
 
@@ -307,6 +314,7 @@ When results are surprising:
 7. If behavior is still unclear, inspect the current `shopware/shopware-cli` source and tests.
 8. Check current official Store documentation for publication claims.
 9. Classify every proposed change before presenting the final assessment.
+10. Check summaries and next steps for accidental promotion of recommendations into requirements.
 
 ## Information priority
 
