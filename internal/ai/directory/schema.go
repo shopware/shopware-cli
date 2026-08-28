@@ -45,8 +45,10 @@ func GenerateSchemaJSON() ([]byte, error) {
 	return json.MarshalIndent(schema, "", "  ")
 }
 
-// httpsURLPattern asserts an absolute http(s) URL with a non-empty host.
-const httpsURLPattern = `^https?://[^\s/]+`
+// httpsURLPattern asserts an absolute http(s) URL with a non-empty host. It is
+// anchored end-to-end so trailing text and empty hosts (e.g. "http://?x") are
+// rejected, mirroring isAbsoluteHTTPURL.
+const httpsURLPattern = `^https?://[^\s/?#]+(?:[/?#]\S*)?$`
 
 // setURLPattern adds the http(s) URL assertion to a property of def. It is a
 // no-op when def or the property is absent.
