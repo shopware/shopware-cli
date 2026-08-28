@@ -10,11 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// newEmptyExtensionListShop fakes the minimal Admin API surface the upload
-// command touches, always reporting an empty installed-extension list, and
-// records every request as "METHOD path". With failSecondList the second
-// installed-list request returns a 500. Requests outside that surface get
-// a 404 so they surface as command errors.
+// newEmptyExtensionListShop fakes the Admin API surface of an empty shop and records requests as "METHOD path".
 func newEmptyExtensionListShop(t *testing.T, failSecondList bool) (*httptest.Server, func() []string) {
 	t.Helper()
 
@@ -61,8 +57,6 @@ func newEmptyExtensionListShop(t *testing.T, failSecondList bool) (*httptest.Ser
 	}
 }
 
-// setupUploadActivateEnv points the upload command at the fake shop and turns
-// the activate flag on, restoring the shared flag state afterwards.
 func setupUploadActivateEnv(t *testing.T, srvURL string) {
 	t.Helper()
 
@@ -91,8 +85,7 @@ func TestExtensionUploadActivateFailsWhenShopDoesNotListExtension(t *testing.T) 
 	assert.Contains(t, err.Error(), "cannot run lifecycle events")
 	assert.Contains(t, err.Error(), "FroshTest")
 
-	// The lifecycle lookup must run against a list fetched after the refresh
-	// call, or fresh uploads are invisible to it on real shops.
+	// The installed list must be queried after the refresh call.
 	got := calls()
 	refreshIdx, lastListIdx := -1, -1
 	for i, call := range got {

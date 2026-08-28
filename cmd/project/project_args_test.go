@@ -8,8 +8,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// format, validate and fix take at most one optional path, so extra paths
-// must be rejected instead of silently ignored.
 func TestOptionalPathCommandsRejectExtraArgs(t *testing.T) {
 	commands := []string{"format", "validate", "fix"}
 

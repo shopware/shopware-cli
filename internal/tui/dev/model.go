@@ -33,8 +33,6 @@ const (
 var tabNames = []string{"Overview", "Instance", "Config"}
 
 const (
-	defaultUsername = "admin"
-
 	watcherAdmin      = "Admin Watcher"
 	watcherStorefront = "Storefront Watcher"
 )
@@ -67,6 +65,12 @@ type Options struct {
 const fallbackShopURL = "http://127.0.0.1:8000"
 
 type Model struct {
+	// ctx is the command context of the CLI invocation (cancelled on
+	// SIGINT/SIGTERM, carries the logger). tea.Cmd closures derive their
+	// subprocess and API contexts from it. Bubbletea's fixed Update(msg)
+	// signature offers no parameter path into command builders, so the model
+	// has to carry it.
+	ctx             context.Context //nolint:containedctx
 	host            app.Host
 	header          tui.Header
 	activeTab       activeTab
@@ -107,8 +111,26 @@ type shopwareInstallDoneMsg struct{ err error }
 
 type configRestartDoneMsg struct{ err error }
 
-func New(opts Options) Model {
+// commandContext returns the context tea.Cmd closures should derive from.
+// Tests construct Model literals without New, so a nil ctx falls back to
+// Background.
+func (m Model) commandContext() context.Context {
+	if m.ctx != nil {
+		return m.ctx
+	}
+	return context.Background()
+}
+
+// cleanupContext returns a context for teardown work (stopping watchers and
+// containers, final telemetry) that must still run when the command context
+// is already cancelled, e.g. on SIGTERM.
+func (m Model) cleanupContext() context.Context {
+	return context.WithoutCancel(m.commandContext())
+}
+
+func New(ctx context.Context, opts Options) Model {
 	m := Model{
+		ctx:           ctx,
 		header:        tui.NewHeader(),
 		activeTab:     tabOverview,
 		dockerMode:    opts.Executor.Type() == executor.TypeDocker,
@@ -152,15 +174,15 @@ func (m *Model) rebuildTabs() {
 	isDocker := m.executor.Type() == executor.TypeDocker
 	envValues, _ := envfile.ReadValues(m.projectRoot, EnvFieldKeys()...)
 
-	m.overview = NewOverviewModel(m.executor.Type(), shopURL, username, password, m.projectRoot, m.executor, m.config)
-	m.instance = NewInstanceModel(m.projectRoot, isDocker)
+	m.overview = NewOverviewModel(m.commandContext(), m.executor.Type(), shopURL, username, password, m.projectRoot, m.executor, m.config)
+	m.instance = NewInstanceModel(m.commandContext(), m.projectRoot, isDocker)
 	m.configTab = NewConfigModel(m.config, envValues)
 }
 
 // NewMigrationWizard creates a Model that starts in the migration wizard phase
 // for projects that don't yet have a development environment configured.
-func NewMigrationWizard(opts Options) Model {
-	m := New(opts)
+func NewMigrationWizard(ctx context.Context, opts Options) Model {
+	m := New(ctx, opts)
 	m.phase = phaseMigrationWizard
 	m.dockerMode = true // migration wizard always creates Docker env
 	m.migrationWizard = newMigrationWizard(opts.ProjectRoot)
@@ -168,13 +190,13 @@ func NewMigrationWizard(opts Options) Model {
 }
 
 // NewApp hosts the dashboard model inside the application shell.
-func NewApp(opts Options) *app.App {
-	return newShell(New(opts))
+func NewApp(ctx context.Context, opts Options) *app.App {
+	return newShell(New(ctx, opts))
 }
 
 // NewMigrationWizardApp hosts the migration-wizard model inside the shell.
-func NewMigrationWizardApp(opts Options) *app.App {
-	return newShell(NewMigrationWizard(opts))
+func NewMigrationWizardApp(ctx context.Context, opts Options) *app.App {
+	return newShell(NewMigrationWizard(ctx, opts))
 }
 
 // newShell wires a Model into the app host. Chrome and window title read the
@@ -214,7 +236,7 @@ func (m Model) initPhase() tea.Cmd {
 		return nil
 	}
 	if m.dockerMode {
-		return checkContainersRunning(m.projectRoot)
+		return checkContainersRunning(m.commandContext(), m.projectRoot)
 	}
 	return m.checkShopwareInstalled()
 }
@@ -222,7 +244,7 @@ func (m Model) initPhase() tea.Cmd {
 func (m *Model) shutdown() {
 	m.instance.StopStreaming()
 
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	ctx, cancel := context.WithTimeout(m.cleanupContext(), 3*time.Second)
 	defer cancel()
 
 	for name, h := range m.watchers {
@@ -308,7 +330,7 @@ func (m Model) updateContent(msg tea.Msg) (app.Content, tea.Cmd) {
 		// status and the setup-health checks it affects.
 		m.overview.domainsSetupDone = overviewSetupDone(m.projectRoot)
 		m.overview.healthLoading = true
-		return m, loadSetupHealth(context.Background(), m.projectRoot, m.executor)
+		return m, loadSetupHealth(m.commandContext(), m.projectRoot, m.executor)
 
 	case watcherStartedMsg, watcherRunningMsg, watcherProbeMsg, stopWatcherRequestMsg,
 		startStorefrontWatchRequestMsg, watcherStoppedMsg, logDoneMsg:
@@ -380,14 +402,14 @@ func (m Model) updateWatcherMsg(msg tea.Msg) (app.Content, tea.Cmd) {
 			if msg.err == nil && exists {
 				m.overview.adminWatchRunning = true
 				m.overview.adminWatchReady = false
-				return m, probeWatcher(watcherAdmin, m.overview.adminWatchURL)
+				return m, probeWatcher(m.commandContext(), watcherAdmin, m.overview.adminWatchURL)
 			}
 		case watcherStorefront:
 			m.overview.sfWatchStarting = false
 			if msg.err == nil && exists {
 				m.overview.sfWatchRunning = true
 				m.overview.sfWatchReady = false
-				return m, probeWatcher(watcherStorefront, m.overview.sfWatchURL)
+				return m, probeWatcher(m.commandContext(), watcherStorefront, m.overview.sfWatchURL)
 			}
 		}
 		return m, nil
@@ -407,7 +429,7 @@ func (m Model) updateWatcherMsg(msg tea.Msg) (app.Content, tea.Cmd) {
 			return m, nil
 		}
 		// Not serving yet — keep polling until it is.
-		return m, probeWatcher(msg.name, msg.url)
+		return m, probeWatcher(m.commandContext(), msg.name, msg.url)
 
 	case stopWatcherRequestMsg:
 		return m, m.stopWatcher(msg.name)
@@ -460,7 +482,7 @@ func (m Model) runProxySetup() (app.Content, tea.Cmd) {
 		bin = "shopware-cli"
 	}
 
-	c := exec.CommandContext(context.Background(), bin, "project", "proxy", "setup")
+	c := exec.CommandContext(m.commandContext(), bin, "project", "proxy", "setup")
 	c.Dir = m.projectRoot
 
 	return m, tea.ExecProcess(c, func(error) tea.Msg {

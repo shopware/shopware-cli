@@ -34,7 +34,7 @@ func TestSecurityEndRemaining(t *testing.T) {
 }
 
 func TestOverviewBackgroundProcessesSection(t *testing.T) {
-	m := NewOverviewModel("docker", "http://localhost:8000", "admin", "shopware", "/tmp/project", nil, nil)
+	m := NewOverviewModel(t.Context(), "docker", "http://localhost:8000", "admin", "shopware", "/tmp/project", nil, nil)
 	m.loading = false
 	m.width = 80
 	m.height = 40
@@ -60,7 +60,7 @@ func TestOverviewBackgroundProcessesSection(t *testing.T) {
 }
 
 func TestNewOverviewModel(t *testing.T) {
-	m := NewOverviewModel("docker", "http://localhost:8000", "admin", "shopware", "/tmp/project", nil, nil)
+	m := NewOverviewModel(t.Context(), "docker", "http://localhost:8000", "admin", "shopware", "/tmp/project", nil, nil)
 
 	assert.Equal(t, "docker", m.envType)
 	assert.Equal(t, "http://localhost:8000", m.shopURL)
@@ -72,19 +72,19 @@ func TestNewOverviewModel(t *testing.T) {
 }
 
 func TestNewOverviewModel_AdminURLTrailingSlash(t *testing.T) {
-	m := NewOverviewModel("local", "http://localhost:8000/", "", "", "/tmp/project", nil, nil)
+	m := NewOverviewModel(t.Context(), "local", "http://localhost:8000/", "", "", "/tmp/project", nil, nil)
 
 	assert.Equal(t, "http://localhost:8000/admin", m.adminURL)
 }
 
 func TestNewOverviewModel_EmptyURL(t *testing.T) {
-	m := NewOverviewModel("local", "", "", "", "/tmp/project", nil, nil)
+	m := NewOverviewModel(t.Context(), "local", "", "", "", "/tmp/project", nil, nil)
 
 	assert.Equal(t, "admin", m.adminURL)
 }
 
 func TestServicesLoadedMsg(t *testing.T) {
-	m := NewOverviewModel("docker", "http://localhost:8000", "", "", "/tmp/project", nil, nil)
+	m := NewOverviewModel(t.Context(), "docker", "http://localhost:8000", "", "", "/tmp/project", nil, nil)
 
 	services := []DiscoveredService{
 		{Name: "Adminer", URL: "http://127.0.0.1:9080", Username: "root", Password: "root"},
@@ -102,7 +102,7 @@ func TestServicesLoadedMsg(t *testing.T) {
 }
 
 func TestServicesLoadedMsg_UpdatesPortFromWebService(t *testing.T) {
-	m := NewOverviewModel("docker", "http://127.0.0.1:8000", "", "", "/tmp/project", nil, nil)
+	m := NewOverviewModel(t.Context(), "docker", "http://127.0.0.1:8000", "", "", "/tmp/project", nil, nil)
 
 	updated, _ := m.Update(servicesLoadedMsg{webPort: 8002})
 	assert.Equal(t, "http://127.0.0.1:8002", updated.shopURL)
@@ -110,7 +110,7 @@ func TestServicesLoadedMsg_UpdatesPortFromWebService(t *testing.T) {
 }
 
 func TestServicesLoadedMsg_KeepsCustomHostWhenUpdatingPort(t *testing.T) {
-	m := NewOverviewModel("docker", "http://foo.localhost:8000", "", "", "/tmp/project", nil, nil)
+	m := NewOverviewModel(t.Context(), "docker", "http://foo.localhost:8000", "", "", "/tmp/project", nil, nil)
 
 	updated, _ := m.Update(servicesLoadedMsg{webPort: 8002})
 	assert.Equal(t, "http://foo.localhost:8002", updated.shopURL)
@@ -118,7 +118,7 @@ func TestServicesLoadedMsg_KeepsCustomHostWhenUpdatingPort(t *testing.T) {
 }
 
 func TestServicesLoadedMsg_NoWebPortKeepsURL(t *testing.T) {
-	m := NewOverviewModel("docker", "http://127.0.0.1:8000", "", "", "/tmp/project", nil, nil)
+	m := NewOverviewModel(t.Context(), "docker", "http://127.0.0.1:8000", "", "", "/tmp/project", nil, nil)
 
 	updated, _ := m.Update(servicesLoadedMsg{})
 	assert.Equal(t, "http://127.0.0.1:8000", updated.shopURL)
@@ -139,7 +139,7 @@ func TestResolveShopURL(t *testing.T) {
 }
 
 func TestServicesLoadedMsg_WithError(t *testing.T) {
-	m := NewOverviewModel("docker", "http://localhost:8000", "", "", "/tmp/project", nil, nil)
+	m := NewOverviewModel(t.Context(), "docker", "http://localhost:8000", "", "", "/tmp/project", nil, nil)
 
 	updated, _ := m.Update(servicesLoadedMsg{err: assert.AnError})
 	assert.False(t, updated.loading)
@@ -165,10 +165,19 @@ func TestKnownServices(t *testing.T) {
 	rabbitmq := knownServices["rabbitmq"]
 	assert.Equal(t, "Queue (RabbitMQ)", rabbitmq.Name)
 	assert.Equal(t, 15672, rabbitmq.TargetPort)
+
+	rustfs := knownServices["rustfs"]
+	assert.Equal(t, "S3 (RustFS)", rustfs.Name)
+	assert.Equal(t, 9001, rustfs.TargetPort)
+	assert.Equal(t, "shopware", rustfs.Username)
+	assert.Equal(t, "shopware", rustfs.Password)
+
+	assert.True(t, ignoredServices["redis"])
+	assert.True(t, ignoredServices["rustfs-init"])
 }
 
 func TestViewShowsAccessTable(t *testing.T) {
-	m := NewOverviewModel("docker", "http://localhost:8000", "admin", "shopware", "/tmp/project", nil, nil)
+	m := NewOverviewModel(t.Context(), "docker", "http://localhost:8000", "admin", "shopware", "/tmp/project", nil, nil)
 	m.loading = false
 	m.services = []DiscoveredService{
 		{Name: "Adminer", URL: "http://127.0.0.1:9080", Username: "root", Password: "root"},
@@ -191,7 +200,7 @@ func TestViewShowsAccessTable(t *testing.T) {
 }
 
 func TestViewAccessTableWithoutInstallation(t *testing.T) {
-	m := NewOverviewModel("docker", "http://localhost:8000", "", "", "/tmp/project", nil, nil)
+	m := NewOverviewModel(t.Context(), "docker", "http://localhost:8000", "", "", "/tmp/project", nil, nil)
 	m.loading = false
 
 	view := m.View(120, 40)

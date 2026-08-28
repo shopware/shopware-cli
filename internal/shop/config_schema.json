@@ -13,7 +13,7 @@
         },
         "url": {
           "type": "string",
-          "description": "Shop URL. Prefer environments.local.url or another named environment; the top-level url key is still read during the deprecation window."
+          "description": "Shop URL. Prefer environments.local.url or another named environment; the top-level url key is used only when environments.local is absent."
         },
         "compatibility_date": {
           "type": "string",
@@ -29,7 +29,7 @@
         },
         "admin_api": {
           "$ref": "#/$defs/ConfigAdminApi",
-          "description": "Admin API credentials. Prefer environments.local.admin_api or another named environment; the top-level admin_api key is still read during the deprecation window."
+          "description": "Admin API credentials. Prefer environments.local.admin_api or another named environment; the top-level admin_api key is used only when environments.local is absent."
         },
         "dump": {
           "$ref": "#/$defs/ConfigDump"

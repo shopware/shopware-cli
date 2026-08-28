@@ -14,9 +14,8 @@ import (
 
 // ProjectHostname derives the hostname a project should be reachable at
 // through the shared proxy. If a url is explicitly set in
-// .shopware-project.yml (environments.local.url, or the deprecated top-level
-// url), its host is used as an override — unless it is an IP address or
-// localhost, which is what freshly created projects point at
+// .shopware-project.yml, its host is used as an override — unless it is an
+// IP address or localhost, which is what freshly created projects point at
 // (http://127.0.0.1:8000) and never a usable proxy hostname. Otherwise the
 // hostname is derived from the project directory name.
 func ProjectHostname(projectRoot string, cfg *shop.Config, baseDomain string) (string, error) {

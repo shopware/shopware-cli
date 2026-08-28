@@ -31,14 +31,14 @@ type EnvironmentConfig struct {
 
 type Config struct {
 	AdditionalConfigs []string `yaml:"include,omitempty"`
-	// Shop URL. Prefer environments.local.url or another named environment; the top-level url key is still read during the deprecation window.
+	// Shop URL. Prefer environments.local.url or another named environment; the top-level url key is used only when environments.local is absent.
 	URL string `yaml:"url,omitempty" jsonschema:"deprecated=true"`
 	// Controls date-based compatibility behavior, formatted as YYYY-MM-DD.
 	CompatibilityDate string `yaml:"compatibility_date,omitempty" jsonschema:"format=date"`
 	// PHP version (e.g. "8.3") used for local PHP and Composer commands of this project. Written by "project create" for non-Docker projects. The matching PHP is looked up on the machine running the command, so the value stays portable across machines; it takes precedence over the php found in PATH, while the PHP_BINARY environment variable overrides it.
 	PHPVersion string       `yaml:"php_version,omitempty"`
 	Build      *ConfigBuild `yaml:"build,omitempty"`
-	// Admin API credentials. Prefer environments.local.admin_api or another named environment; the top-level admin_api key is still read during the deprecation window.
+	// Admin API credentials. Prefer environments.local.admin_api or another named environment; the top-level admin_api key is used only when environments.local is absent.
 	AdminApi         *ConfigAdminApi   `yaml:"admin_api,omitempty" jsonschema:"deprecated=true"`
 	ConfigDump       *ConfigDump       `yaml:"dump,omitempty"`
 	ConfigDeployment *ConfigDeployment `yaml:"deployment,omitempty"`
@@ -55,10 +55,8 @@ type Config struct {
 	foundConfig            bool
 }
 
-// ResolveEnvironment returns the named environment. An empty name uses
-// environments.local; the deprecated top-level url/admin_api only fill in what
-// that environment does not set, so a mixed file never loses the environment's
-// type (which selects the executor) or its url.
+// ResolveEnvironment returns the named environment, or for an empty name
+// environments.local with the deprecated top-level url/admin_api as fallback.
 func (c *Config) ResolveEnvironment(name string) (*EnvironmentConfig, error) {
 	if name != "" {
 		env, ok := c.Environments[name]
@@ -83,8 +81,8 @@ func (c *Config) ResolveEnvironment(name string) (*EnvironmentConfig, error) {
 	return c.topLevelEnvironment(local), nil
 }
 
-// topLevelEnvironment builds the environment described by the deprecated
-// top-level url/admin_api. Values set on base take precedence over them.
+// topLevelEnvironment builds the environment from the deprecated top-level
+// url/admin_api, using values set on base where present.
 func (c *Config) topLevelEnvironment(base *EnvironmentConfig) *EnvironmentConfig {
 	env := EnvironmentConfig{Type: "local"}
 	if base != nil {
@@ -105,10 +103,8 @@ func (c *Config) topLevelEnvironment(base *EnvironmentConfig) *EnvironmentConfig
 	return &env
 }
 
-// EffectiveURL returns the shop URL the CLI resolves for the default
-// environment: environments.local.url, falling back to the deprecated
-// top-level url. It mirrors ResolveEnvironment for callers that only need the
-// URL and cannot fail on an unknown environment name.
+// EffectiveURL returns the URL of the default environment:
+// environments.local.url, falling back to the deprecated top-level url.
 func (c *Config) EffectiveURL() string {
 	if c == nil {
 		return ""
@@ -513,12 +509,21 @@ type ConfigDeployment struct {
 
 	// Staging mode configuration for the deployment
 	Staging *ConfigDeploymentStaging `yaml:"staging,omitempty"`
+
+	// OpenSearch configuration for the deployment.
+	OpenSearch *ConfigDeploymentOpenSearch `yaml:"opensearch,omitempty"`
 }
 
 // ConfigDeploymentStaging defines staging mode configuration.
 type ConfigDeploymentStaging struct {
 	// When enabled, staging setup commands will be executed during installation and upgrade
 	Enabled bool `yaml:"enabled,omitempty"`
+}
+
+// ConfigDeploymentOpenSearch defines OpenSearch actions during deployment.
+type ConfigDeploymentOpenSearch struct {
+	// When enabled, OpenSearch indexes are created after a fresh installation.
+	IndexOnInstall bool `yaml:"index-on-install,omitempty"`
 }
 
 // ConfigDeploymentHookStep is a single titled step of a deployment hook.
@@ -993,12 +998,8 @@ func ReadProjectURLState(configPath, envName string) (ConfigURLState, error) {
 	return state, nil
 }
 
-// SetProjectURL points the project config at url in place: the environment
-// url when the environment exists, otherwise the deprecated top-level url. An
-// existing top-level url is updated too, so a mixed file does not keep serving
-// the old url to anything still reading it — but it is never newly created,
-// which would deprecation-warn on every later command. Comments, ordering and
-// unknown keys are preserved.
+// SetProjectURL points the project config's environment (or top-level) url at
+// url in place, preserving comments, ordering and unknown keys.
 func SetProjectURL(configPath, envName, url string) error {
 	doc, root, err := loadConfigDoc(configPath)
 	if err != nil {
@@ -1018,10 +1019,8 @@ func SetProjectURL(configPath, envName, url string) error {
 	return writeConfigDoc(configPath, doc)
 }
 
-// RestoreProjectURL puts the url values captured in prev back in place:
-// previously present keys get their old value, previously absent ones are
-// removed again — for the environment url too, since SetProjectURL creates it
-// when the environment exists.
+// RestoreProjectURL restores the url values captured in prev; previously
+// absent keys are removed again.
 func RestoreProjectURL(configPath, envName string, prev ConfigURLState) error {
 	doc, root, err := loadConfigDoc(configPath)
 	if err != nil {
@@ -1045,8 +1044,7 @@ func RestoreProjectURL(configPath, envName string, prev ConfigURLState) error {
 	return writeConfigDoc(configPath, doc)
 }
 
-// envNode returns the environments.<env> mapping node, or nil when the
-// environment is not configured in the file.
+// envNode returns the environments.<env> mapping node, or nil.
 func envNode(root *yaml.Node, envName string) *yaml.Node {
 	environments := configMapValue(root, "environments")
 	if environments == nil || environments.Kind != yaml.MappingNode {

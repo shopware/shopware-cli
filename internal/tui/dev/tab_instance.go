@@ -38,6 +38,10 @@ type logSource struct {
 }
 
 type InstanceModel struct {
+	// ctx is the CLI command context the per-source log streams derive their
+	// cancellable contexts from. See Model.ctx for why bubbletea forces it
+	// onto the struct.
+	ctx         context.Context //nolint:containedctx
 	viewport    viewport.Model
 	sources     []logSource
 	cursor      int
@@ -78,8 +82,12 @@ type logSourcesLoadedMsg struct{ sources []logSource }
 
 const sidebarWidth = 28
 
-func NewInstanceModel(projectRoot string, dockerMode bool) InstanceModel {
+func NewInstanceModel(ctx context.Context, projectRoot string, dockerMode bool) InstanceModel {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	return InstanceModel{
+		ctx:         ctx,
 		projectRoot: projectRoot,
 		dockerMode:  dockerMode,
 		follow:      true,
@@ -599,14 +607,14 @@ func (m *InstanceModel) streamProcess(src logSource) tea.Cmd {
 }
 
 func (m *InstanceModel) streamContainer(name, container string) tea.Cmd {
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(m.ctx)
 	m.cancels[name] = cancel
 	cmd := composeCommand(ctx, m.projectRoot, "logs", "-f", "--tail=100", container)
 	return m.streamCommand(ctx, name, cmd, true)
 }
 
 func (m *InstanceModel) streamFile(name, filePath string) tea.Cmd {
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(m.ctx)
 	m.cancels[name] = cancel
 	cmd := exec.CommandContext(ctx, "tail", "-n", "100", "-f", filePath)
 	return m.streamCommand(ctx, name, cmd, false)
@@ -671,13 +679,14 @@ func (m *InstanceModel) readNextLine() tea.Cmd {
 }
 
 func (m *InstanceModel) discoverSources() tea.Cmd {
+	ctx := m.ctx
 	projectRoot := m.projectRoot
 	dockerMode := m.dockerMode
 	return func() tea.Msg {
 		var sources []logSource
 
 		if dockerMode {
-			sources = append(sources, discoverContainers(projectRoot)...)
+			sources = append(sources, discoverContainers(ctx, projectRoot)...)
 		}
 
 		sources = append(sources, discoverLogFiles(projectRoot)...)
@@ -686,8 +695,8 @@ func (m *InstanceModel) discoverSources() tea.Cmd {
 	}
 }
 
-func discoverContainers(projectRoot string) []logSource {
-	cmd := composeCommand(context.Background(), projectRoot, "ps", "--format", "{{.Service}}")
+func discoverContainers(ctx context.Context, projectRoot string) []logSource {
+	cmd := composeCommand(ctx, projectRoot, "ps", "--format", "{{.Service}}")
 	output, err := cmd.Output()
 	if err != nil {
 		return nil

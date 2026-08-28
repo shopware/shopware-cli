@@ -160,7 +160,10 @@ regenerate it with proxy routing, `down` regenerates it with fixed ports.
 Because the whole file is generated, proxy mode simply omits the host ports
 instead of clearing them with a `!reset` tag — so there is **no Docker Compose
 version requirement**. The database keeps its published loopback port in both
-modes, so host tools (and the sales-channel URL update) still reach it.
+modes, so host tools (and the sales-channel URL update) still reach it. PaaS
+projects (`shopware/k8s-meta` in `composer.lock`) route RustFS at `s3.<host>`
+(S3 API, used as `K8S_FILESYSTEM_PUBLIC_URL`) and `rustfs.<host>` (console).
+PHP still talks to `rustfs:9000` on the compose network. Redis stays internal.
 
 Why a direct database `UPDATE` for the sales channel domain instead of a
 console command: it works on **every Shopware version** (the core
@@ -345,7 +348,7 @@ two things the CLI cannot do from inside the subsystem (it prints them via
   127.0.0.1 shop1.shopware.local admin-watch.shop1.shopware.local storefront-watch.shop1.shopware.local adminer.shop1.shopware.local mailer.shop1.shopware.local
   ```
   `proxy up` prints this exact line for the current shop, including any
-  `lavinmq`/`opensearch` subdomains the project uses.
+  `lavinmq`/`opensearch`/`s3`/`rustfs` subdomains the project uses.
 
 The CA import is one-time per machine; the hosts line is per shop.
 
@@ -362,7 +365,9 @@ The CA import is one-time per machine; the hosts line is per shop.
 - Auxiliary services keep working through subdomains (`mailer.shop1…`,
   `adminer.shop1…`); their raw ports (management/UI) are not published in proxy
   mode — use `docker compose exec` for direct access. The database is the
-  exception: it keeps a random published loopback port in both modes.
+  exception: it keeps a random published loopback port in both modes. PaaS
+  stacks route RustFS at `s3.<host>` / `rustfs.<host>` so media URLs stay
+  HTTPS on the local domain. Redis is compose-internal only.
 - Only the shop's **root** hostname is aliased for in-container use — service
   subdomains (`mailer.…`) are host/browser-facing.
 - **Changing the admin-worker setting while a shop is proxied can orphan the

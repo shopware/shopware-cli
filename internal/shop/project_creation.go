@@ -43,10 +43,10 @@ func ValidateProjectFolder(projectFolder string) error {
 // the project scaffold.
 func ValidateDeploymentMethod(deploymentMethod string) error {
 	switch deploymentMethod {
-	case DeploymentNone, DeploymentDeployer, DeploymentPlatformSH, DeploymentShopwarePaaS:
+	case DeploymentNone, DeploymentContainer, DeploymentDeployer, DeploymentPlatformSH, DeploymentShopwarePaaS:
 		return nil
 	default:
-		return fmt.Errorf("invalid deployment method: %s. Valid options: none, deployer, platformsh, shopware-paas", deploymentMethod)
+		return fmt.Errorf("invalid deployment method: %s. Valid options: none, container, deployer, platformsh, shopware-paas", deploymentMethod)
 	}
 }
 

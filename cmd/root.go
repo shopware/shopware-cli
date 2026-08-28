@@ -248,9 +248,9 @@ func init() {
 		_ = system.CloseCaches()
 	})
 
-	rootCmd.PersistentFlags().Bool("verbose", false, "show debug output")
-	rootCmd.PersistentFlags().BoolP("no-interaction", "n", false, "do not ask any interactive questions")
-	rootCmd.PersistentFlags().Bool("no-update-hint", false, "do not show update notifications")
+	rootCmd.PersistentFlags().Bool("verbose", false, "Show debug output")
+	rootCmd.PersistentFlags().BoolP("no-interaction", "n", false, "Do not ask any interactive questions")
+	rootCmd.PersistentFlags().Bool("no-update-hint", false, "Do not show update notifications")
 
 	project.Register(rootCmd)
 	extension.Register(rootCmd)

@@ -15,6 +15,7 @@ import (
 	"github.com/shopware/shopware-cli/internal/executor"
 	"github.com/shopware/shopware-cli/internal/proxy"
 	"github.com/shopware/shopware-cli/internal/shop"
+	"github.com/shopware/shopware-cli/internal/shop/install"
 	"github.com/shopware/shopware-cli/internal/system"
 	"github.com/shopware/shopware-cli/internal/tui"
 	"github.com/shopware/shopware-cli/internal/tui/dev"
@@ -89,7 +90,7 @@ var projectDevCmd = &cobra.Command{
 			if !isatty.IsTerminal(os.Stdin.Fd()) {
 				return shop.ErrDevModeNotSupported
 			}
-			return runMigrationWizardTUI(projectRoot, cfg)
+			return runMigrationWizardTUI(cmd.Context(), projectRoot, cfg)
 		}
 
 		env, err := newDevEnvironment(cmd, projectRoot, cfg)
@@ -100,10 +101,17 @@ var projectDevCmd = &cobra.Command{
 		env.bootstrapProxyFallback(cmd)
 
 		if !isatty.IsTerminal(os.Stdin.Fd()) {
-			return env.start(cmd)
+			if err := env.start(cmd); err != nil {
+				return err
+			}
+			if !install.IsInstalled(cmd.Context(), env.executor) {
+				fmt.Println(tui.DimText.Render("  Shopware is not installed yet. Run ") + tui.BoldText.Render("shopware-cli project dev install") + tui.DimText.Render(" to install it."))
+				fmt.Println()
+			}
+			return nil
 		}
 
-		return env.runTUI()
+		return env.runTUI(cmd.Context())
 	},
 }
 
@@ -152,14 +160,14 @@ var projectDevStatusCmd = &cobra.Command{
 	},
 }
 
-func runMigrationWizardTUI(projectRoot string, cfg *shop.Config) error {
+func runMigrationWizardTUI(ctx context.Context, projectRoot string, cfg *shop.Config) error {
 	envCfg := &shop.EnvironmentConfig{Type: "docker", URL: "http://127.0.0.1:8000"}
 	exec, err := executor.New(projectRoot, envCfg, cfg)
 	if err != nil {
 		return err
 	}
 
-	_, err = dev.NewMigrationWizardApp(dev.Options{
+	_, err = dev.NewMigrationWizardApp(ctx, dev.Options{
 		ProjectRoot: projectRoot,
 		Config:      cfg,
 		EnvConfig:   envCfg,
@@ -302,9 +310,6 @@ func (e *devEnvironment) stop(cmd *cobra.Command, opts executor.StopOptions) err
 		title = "Stopping development environment and removing data..."
 	}
 
-	// runStep drops the spinner when there is no interactive terminal, so
-	// `project dev stop` also works headless (CI, an agent, a pipe with no
-	// /dev/tty) — matching start.
 	stop := func(ctx context.Context) error {
 		return e.executor.StopEnvironment(ctx, opts)
 	}
@@ -339,8 +344,8 @@ func (e *devEnvironment) status(cmd *cobra.Command) error {
 	return ErrEnvironmentDown
 }
 
-func (e *devEnvironment) runTUI() error {
-	_, err := dev.NewApp(dev.Options{
+func (e *devEnvironment) runTUI(ctx context.Context) error {
+	_, err := dev.NewApp(ctx, dev.Options{
 		ProjectRoot:   e.projectRoot,
 		Config:        e.cfg,
 		EnvConfig:     e.envCfg,

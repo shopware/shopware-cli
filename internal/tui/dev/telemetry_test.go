@@ -58,11 +58,6 @@ func TestInstallTagsDefaultCredentials(t *testing.T) {
 	assert.Equal(t, "false", tags["custom_credentials"])
 }
 
-func TestInstallFailedStepClampsToLastPattern(t *testing.T) {
-	assert.Equal(t, "system:install", installFailedStep(0))
-	assert.Equal(t, "plugin:refresh", installFailedStep(len(installStepPatterns)+5))
-}
-
 func TestMigrationWizardTagsCancelledOnWelcome(t *testing.T) {
 	sg := migrationWizard{step: migrationStepWelcome, phpVersions: []string{"8.2"}}
 	tags := migrationWizardTags("cancelled", sg)

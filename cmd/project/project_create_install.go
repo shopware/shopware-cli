@@ -71,21 +71,10 @@ func installAndFinalize(cmd *cobra.Command, opts *createOptions, phpConstraint *
 		}
 	}
 
-	shopCfg := shop.NewConfig()
-	if opts.useDocker {
-		shopCfg.Environments["local"].Type = "docker"
-		shopCfg.Docker = &shop.ConfigDocker{
-			PHP: &shop.ConfigDockerPHP{Version: composerInstallPHP},
-		}
-	} else if opts.phpVersion != "" {
-		// The version, not the executable path: the same PHP lives elsewhere on
-		// other machines, so later commands look it up locally.
-		shopCfg.PHPVersion = opts.phpVersion
-	}
+	shopCfg := newProjectConfig(opts, composerInstallPHP)
 
 	// Serve the shop at a stable hostname through the shared proxy instead of a
-	// port. Only the environment url is written: the deprecated top-level url
-	// would warn on every later command and override environments.local.
+	// port.
 	if opts.useDocker && opts.useLocalDomain {
 		url := "https://" + proxy.LocalDomainHostname(opts.projectFolder, proxy.BaseDomain())
 		if env := shopCfg.Environments["local"]; env != nil {
@@ -99,6 +88,28 @@ func installAndFinalize(cmd *cobra.Command, opts *createOptions, phpConstraint *
 
 	printCreateSummary(ctx, opts)
 	return nil
+}
+
+func newProjectConfig(opts *createOptions, composerInstallPHP string) *shop.Config {
+	shopCfg := shop.NewConfig()
+	if opts.useDocker {
+		shopCfg.Environments["local"].Type = "docker"
+		shopCfg.Docker = &shop.ConfigDocker{
+			PHP: &shop.ConfigDockerPHP{Version: composerInstallPHP},
+		}
+	} else if opts.phpVersion != "" {
+		// The version, not the executable path: the same PHP lives elsewhere on
+		// other machines, so later commands look it up locally.
+		shopCfg.PHPVersion = opts.phpVersion
+	}
+
+	if opts.selectedDeployment == shop.DeploymentShopwarePaaS {
+		shopCfg.ConfigDeployment = &shop.ConfigDeployment{
+			OpenSearch: &shop.ConfigDeploymentOpenSearch{IndexOnInstall: true},
+		}
+	}
+
+	return shopCfg
 }
 
 func printCreateSummary(ctx context.Context, opts *createOptions) {
@@ -147,6 +158,14 @@ func printCreateSummary(ctx context.Context, opts *createOptions) {
 			hostname := proxy.LocalDomainHostname(opts.projectFolder, proxy.BaseDomain())
 			maybePrintWSLWindowsAccess(proxyBrowserHostnames(opts.projectFolder, hostname))
 		}
+	}
+
+	if opts.selectedDeployment == shop.DeploymentContainer {
+		fmt.Println()
+		fmt.Println(tui.SectionHeadingStyle.Render("Deploy as a container"))
+		fmt.Println()
+		fmt.Printf("  %s  %s\n", tui.GreenText.Render("Dockerfile:"), tui.BoldText.Render("Dockerfile")+tui.DimText.Render(" (PHP "+opts.phpVersion+")"))
+		fmt.Printf("  %s  %s\n", tui.GreenText.Render("Build:"), tui.BoldText.Render("docker build -t "+filepath.Base(projectDisplay)+" ."))
 	}
 
 	fmt.Println()

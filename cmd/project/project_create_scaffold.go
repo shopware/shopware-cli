@@ -32,6 +32,7 @@ func newShopwareProjectScaffold(opts *createOptions, chosenVersion string) shop.
 		Version:          chosenVersion,
 		DeploymentMethod: opts.selectedDeployment,
 		CISystem:         opts.selectedCI,
+		PHPVersion:       opts.phpVersion,
 		UseDocker:        opts.useDocker,
 		UseElasticsearch: opts.withElasticsearch,
 		UseAMQP:          opts.withAMQP,

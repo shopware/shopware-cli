@@ -132,14 +132,14 @@ func resolveDumpDatabaseConnection(cmd *cobra.Command) (*executor.DatabaseConnec
 
 func init() {
 	projectRootCmd.AddCommand(projectDatabaseDumpCmd)
-	projectDatabaseDumpCmd.Flags().String("host", "", "hostname")
-	projectDatabaseDumpCmd.Flags().String("database", "", "database name")
-	projectDatabaseDumpCmd.Flags().StringP("username", "u", "", "mysql user")
-	projectDatabaseDumpCmd.Flags().StringP("password", "p", "", "mysql password (omit value to be prompted interactively)")
+	projectDatabaseDumpCmd.Flags().String("host", "", "Hostname")
+	projectDatabaseDumpCmd.Flags().String("database", "", "Database name")
+	projectDatabaseDumpCmd.Flags().StringP("username", "u", "", "Mysql user")
+	projectDatabaseDumpCmd.Flags().StringP("password", "p", "", "Mysql password (omit value to be prompted interactively)")
 	projectDatabaseDumpCmd.Flags().Lookup("password").NoOptDefVal = passwordFlagPrompt
-	projectDatabaseDumpCmd.Flags().String("port", "", "mysql port")
+	projectDatabaseDumpCmd.Flags().String("port", "", "Mysql port")
 
-	projectDatabaseDumpCmd.Flags().String("output", "dump.sql", "file or - (for stdout)")
+	projectDatabaseDumpCmd.Flags().String("output", "dump.sql", "File or - (for stdout)")
 	projectDatabaseDumpCmd.Flags().Bool("clean", false, "Ignores cart, messenger_messages, message_queue_stats,...")
 	projectDatabaseDumpCmd.Flags().Bool("skip-lock-tables", false, "Skips locking the tables")
 	projectDatabaseDumpCmd.Flags().Bool("anonymize", false, "Anonymize customer data")

@@ -8,8 +8,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// The single-path commands process exactly one extension, so extra paths must
-// be rejected instead of silently ignored.
 func TestSinglePathCommandsRejectExtraArgs(t *testing.T) {
 	commands := []string{"fix", "validate", "get-name", "get-version", "get-changelog"}
 
@@ -32,8 +30,6 @@ func TestSinglePathCommandsRejectExtraArgs(t *testing.T) {
 	}
 }
 
-// package takes a path and an optional branch, so a third argument must be
-// rejected instead of silently ignored.
 func TestPackageRejectsMoreThanTwoArgs(t *testing.T) {
 	out := new(bytes.Buffer)
 	extensionRootCmd.SetOut(out)

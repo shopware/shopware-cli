@@ -39,6 +39,10 @@ import (
 // return nothing or only a tea.Cmd (SetSize, start*/stop* streaming helpers)
 // use pointer receivers.
 type OverviewModel struct {
+	// ctx is the CLI command context; tea.Cmd closures built by this model
+	// derive their subprocess and HTTP contexts from it. See Model.ctx for why
+	// bubbletea forces it onto the struct.
+	ctx                context.Context //nolint:containedctx
 	envType            string
 	shopURL            string
 	adminURL           string
@@ -226,10 +230,10 @@ var watcherProbeClient = &http.Client{
 
 // probeWatcher polls url once after a short delay and reports whether the
 // watcher is serving yet, so the UI can hold back its URL until then.
-func probeWatcher(name, url string) tea.Cmd {
+func probeWatcher(ctx context.Context, name, url string) tea.Cmd {
 	return tea.Tick(watcherProbeInterval, func(time.Time) tea.Msg {
 		ready := false
-		if req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, url, nil); err == nil {
+		if req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil); err == nil {
 			if resp, err := watcherProbeClient.Do(req); err == nil {
 				_ = resp.Body.Close()
 				ready = resp.StatusCode < 500
@@ -251,11 +255,14 @@ var knownServices = map[string]knownService{
 	"mailer":   {Name: "Mailpit", TargetPort: 8025},
 	"lavinmq":  {Name: "Queue (LavinMQ)", TargetPort: 15672, Username: "guest", Password: "guest"},
 	"rabbitmq": {Name: "Queue (RabbitMQ)", TargetPort: 15672, Username: "guest", Password: "guest"},
+	"rustfs":   {Name: "S3 (RustFS)", TargetPort: 9001, Username: "shopware", Password: "shopware"},
 }
 
 var ignoredServices = map[string]bool{
-	"web":      true,
-	"database": true,
+	"web":         true,
+	"database":    true,
+	"redis":       true, // no UI; cache/session/messenger only
+	"rustfs-init": true, // one-shot bucket create
 }
 
 // backgroundServiceLabel returns the display label for a compose service that is
@@ -311,8 +318,12 @@ func deriveAdminURL(shopURL string) string {
 	return adminURL + "admin"
 }
 
-func NewOverviewModel(envType, shopURL, username, password, projectRoot string, exec executor.Executor, shopCfg *shop.Config) OverviewModel {
+func NewOverviewModel(ctx context.Context, envType, shopURL, username, password, projectRoot string, exec executor.Executor, shopCfg *shop.Config) OverviewModel {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	return OverviewModel{
+		ctx:              ctx,
 		envType:          envType,
 		shopURL:          shopURL,
 		adminURL:         deriveAdminURL(shopURL),
@@ -384,12 +395,12 @@ func resolveStorefrontWatchURL(projectRoot string) string {
 
 func (m OverviewModel) Init() tea.Cmd {
 	cmds := []tea.Cmd{
-		discoverServices(m.projectRoot),
+		discoverServices(m.ctx, m.projectRoot),
 		loadShopwareVersion(m.projectRoot),
-		loadSetupHealth(context.Background(), m.projectRoot, m.executor),
+		loadSetupHealth(m.ctx, m.projectRoot, m.executor),
 	}
 	if m.proxyHost != "" {
-		cmds = append(cmds, loadInstances())
+		cmds = append(cmds, loadInstances(m.ctx))
 	}
 	return tea.Batch(cmds...)
 }
@@ -413,9 +424,9 @@ const instancesTimeout = 10 * time.Second
 // the overview is open.
 const instancesRefreshInterval = 5 * time.Second
 
-func loadInstances() tea.Cmd {
+func loadInstances(parent context.Context) tea.Cmd {
 	return func() tea.Msg {
-		ctx, cancel := context.WithTimeout(context.Background(), instancesTimeout)
+		ctx, cancel := context.WithTimeout(parent, instancesTimeout)
 		defer cancel()
 		instances, combinedMem, _ := proxy.InstanceStats(ctx)
 		return instancesLoadedMsg{instances: instances, combinedMem: combinedMem}
@@ -468,7 +479,7 @@ func (m OverviewModel) Update(msg tea.Msg) (OverviewModel, tea.Cmd) {
 	case shopwareVersionLoadedMsg:
 		m.shopwareVersion = msg.version
 		if msg.version != "" {
-			return m, loadSecurityEnd(msg.version)
+			return m, loadSecurityEnd(m.ctx, msg.version)
 		}
 	case securityEndLoadedMsg:
 		m.securityEnd = msg.securityEnd
@@ -481,7 +492,7 @@ func (m OverviewModel) Update(msg tea.Msg) (OverviewModel, tea.Cmd) {
 		m.instancesCombinedMem = msg.combinedMem
 		return m, scheduleInstancesRefresh()
 	case instancesTickMsg:
-		return m, loadInstances()
+		return m, loadInstances(m.ctx)
 	case tea.MouseWheelMsg:
 		return m.handleWheel(msg), nil
 	case tea.KeyPressMsg:
@@ -573,9 +584,9 @@ func (m OverviewModel) activate() (OverviewModel, tea.Cmd) {
 	return m, nil
 }
 
-func openInBrowser(url string) tea.Cmd {
+func openInBrowser(ctx context.Context, url string) tea.Cmd {
 	return func() tea.Msg {
-		_ = system.OpenURL(context.Background(), url)
+		_ = system.OpenURL(ctx, url)
 		return browserOpenedMsg{}
 	}
 }
@@ -1001,7 +1012,7 @@ func (m OverviewModel) startAdminWatch() tea.Cmd {
 	projectRoot := m.projectRoot
 	shopCfg := m.shopCfg
 
-	return startWatcher(watcherAdmin, context.Background(), func(ctx context.Context, out io.Writer) (*executor.Process, error) {
+	return startWatcher(watcherAdmin, m.ctx, func(ctx context.Context, out io.Writer) (*executor.Process, error) {
 		logStep(out, "Preparing plugins.json...")
 		if err := extension.WriteProjectPluginJson(ctx, projectRoot, shopCfg, e); err != nil {
 			return nil, fmt.Errorf("preparing plugins.json: %w", err)
@@ -1027,7 +1038,7 @@ func (m OverviewModel) startStorefrontWatch(opts extension.StorefrontWatcherOpti
 		opts.ProxyHostname = "storefront-watch." + host
 	}
 
-	return startWatcher(watcherStorefront, context.Background(), func(ctx context.Context, out io.Writer) (*executor.Process, error) {
+	return startWatcher(watcherStorefront, m.ctx, func(ctx context.Context, out io.Writer) (*executor.Process, error) {
 		logStep(out, "Preparing plugins.json...")
 		if err := extension.WriteProjectPluginJson(ctx, projectRoot, shopCfg, e); err != nil {
 			return nil, fmt.Errorf("preparing plugins.json: %w", err)
@@ -1092,9 +1103,10 @@ func startWatcher(name string, parent context.Context, prepare func(ctx context.
 			}
 
 			// If the user stopped the watcher while prepare was running, do not
-			// keep the freshly started dev server around as an orphan.
+			// keep the freshly started dev server around as an orphan. Cleanup
+			// must still run when the command context is already cancelled.
 			if handle.set(process) {
-				stopCtx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+				stopCtx, cancel := context.WithTimeout(context.WithoutCancel(parent), 3*time.Second)
 				_ = process.Stop(stopCtx)
 				cancel()
 				running <- errors.New("watcher stopped")
@@ -1270,17 +1282,18 @@ func discoverCompose(ctx context.Context, projectRoot string) (services []Discov
 		}
 
 		var url string
+		publishedPort, hasPort := c.publishers[known.TargetPort]
 		switch {
+		case hasPort:
+			// Prefer a real published port when the service has one (plain
+			// mode). Proxied services publish nothing and fall through.
+			url = fmt.Sprintf("http://127.0.0.1:%d", publishedPort)
 		case proxyHost != "":
 			// The compose override routes each service at a subdomain named
 			// after the service (adminer.<host>, mailer.<host>, ...).
 			url = fmt.Sprintf("https://%s.%s", c.service, proxyHost)
 		default:
-			publishedPort, hasPort := c.publishers[known.TargetPort]
-			if !hasPort {
-				continue
-			}
-			url = fmt.Sprintf("http://127.0.0.1:%d", publishedPort)
+			continue
 		}
 
 		services = append(services, DiscoveredService{
@@ -1311,9 +1324,9 @@ func ResolveShopURL(shopURL string, webPort int) string {
 	return u.String()
 }
 
-func discoverServices(projectRoot string) tea.Cmd {
+func discoverServices(ctx context.Context, projectRoot string) tea.Cmd {
 	return func() tea.Msg {
-		services, background, webPort, err := discoverCompose(context.Background(), projectRoot)
+		services, background, webPort, err := discoverCompose(ctx, projectRoot)
 		return servicesLoadedMsg{services: services, background: background, webPort: webPort, err: err}
 	}
 }
@@ -1328,9 +1341,9 @@ func loadShopwareVersion(projectRoot string) tea.Cmd {
 // date until which security updates are provided (the end-of-life date reported
 // by endoflife.date). It resolves to an empty string when the version cannot be
 // reduced to a major.minor cycle or the release is unknown to the API.
-func loadSecurityEnd(version string) tea.Cmd {
+func loadSecurityEnd(parent context.Context, version string) tea.Cmd {
 	return func() tea.Msg {
-		ctx, cancel := context.WithTimeout(context.Background(), securityEndTimeout)
+		ctx, cancel := context.WithTimeout(parent, securityEndTimeout)
 		defer cancel()
 		return securityEndLoadedMsg{securityEnd: fetchSecurityEnd(ctx, version)}
 	}

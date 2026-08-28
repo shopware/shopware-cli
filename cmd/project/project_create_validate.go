@@ -41,6 +41,9 @@ func validateAndPreflight(ctx context.Context, opts *createOptions, releases []r
 		if opts.phpVersionExplicit && phpConstraint != nil && !phpConstraint.Check(opts.phpVersion+".0") {
 			return "", nil, fmt.Errorf("the requested PHP %s does not satisfy the PHP constraint %s of the selected Shopware version; pass --php-version with a matching version", opts.phpVersion, phpConstraint)
 		}
+		if opts.phpVersion == "" {
+			opts.phpVersion = phpConstraint.HighestSupported()
+		}
 	} else if err := resolveLocalPHP(ctx, opts, phpConstraint); err != nil {
 		return "", nil, err
 	}

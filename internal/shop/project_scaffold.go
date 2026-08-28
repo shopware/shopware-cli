@@ -34,6 +34,12 @@ var gitlabCITemplate string
 //go:embed project_scaffold_static/shopware-paas-application.yaml
 var shopwarePaasAppTemplate string
 
+//go:embed project_scaffold_static/Dockerfile.tmpl
+var dockerfileTemplate string
+
+//go:embed project_scaffold_static/dockerignore
+var dockerignoreContent string
+
 // ShopwareProjectScaffold describes the files and directories of a new
 // Shopware project. CLI concerns such as prompting, tracking, and detecting
 // local tools intentionally live outside this type.
@@ -42,6 +48,7 @@ type ShopwareProjectScaffold struct {
 	Version             string
 	DeploymentMethod    string
 	CISystem            string
+	PHPVersion          string
 	UseDocker           bool
 	UseElasticsearch    bool
 	UseAMQP             bool
@@ -59,6 +66,9 @@ func (s *ShopwareProjectScaffold) Normalize() {
 	}
 	if s.DeploymentMethod == DeploymentShopwarePaaS {
 		s.UseElasticsearch = true
+	}
+	if s.DeploymentMethod == DeploymentContainer && s.PHPVersion == "" {
+		s.PHPVersion = SupportedPHPVersions[len(SupportedPHPVersions)-1]
 	}
 }
 
@@ -129,7 +139,7 @@ func (s *ShopwareProjectScaffold) Scaffold(ctx context.Context) error {
 		}
 	}
 
-	if err := setupDeployment(s.ProjectFolder, s.DeploymentMethod); err != nil {
+	if err := s.setupDeployment(ctx); err != nil {
 		return err
 	}
 
@@ -168,15 +178,43 @@ func envLocalContent(useDocker bool) string {
 	return ""
 }
 
-func setupDeployment(projectFolder, deploymentMethod string) error {
-	switch deploymentMethod {
+func (s ShopwareProjectScaffold) setupDeployment(ctx context.Context) error {
+	switch s.DeploymentMethod {
 	case DeploymentDeployer:
-		return os.WriteFile(filepath.Join(projectFolder, "deploy.php"), []byte(deployerTemplate), os.ModePerm)
+		return os.WriteFile(filepath.Join(s.ProjectFolder, "deploy.php"), []byte(deployerTemplate), os.ModePerm)
 	case DeploymentShopwarePaaS:
-		return os.WriteFile(filepath.Join(projectFolder, "application.yaml"), []byte(shopwarePaasAppTemplate), os.ModePerm)
+		return os.WriteFile(filepath.Join(s.ProjectFolder, "application.yaml"), []byte(shopwarePaasAppTemplate), os.ModePerm)
+	case DeploymentContainer:
+		return s.writeDockerfile(ctx)
 	default:
 		return nil
 	}
+}
+
+// writeDockerfile generates the production Dockerfile and its .dockerignore,
+// with both image stages pinned to the PHP the composer.lock was resolved with.
+func (s ShopwareProjectScaffold) writeDockerfile(ctx context.Context) error {
+	tmpl, err := template.New("dockerfile").Parse(dockerfileTemplate)
+	if err != nil {
+		return err
+	}
+
+	var buf bytes.Buffer
+	if err := tmpl.Execute(&buf, struct{ PHPVersion string }{PHPVersion: s.PHPVersion}); err != nil {
+		return err
+	}
+
+	if err := os.WriteFile(filepath.Join(s.ProjectFolder, "Dockerfile"), buf.Bytes(), os.ModePerm); err != nil {
+		return err
+	}
+
+	if err := os.WriteFile(filepath.Join(s.ProjectFolder, ".dockerignore"), []byte(dockerignoreContent), os.ModePerm); err != nil {
+		return err
+	}
+
+	logging.FromContext(ctx).Infof("Created Dockerfile for PHP %s", s.PHPVersion)
+
+	return nil
 }
 
 func setupCI(ctx context.Context, projectFolder, ciSystem, deploymentMethod string) error {

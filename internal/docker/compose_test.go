@@ -8,6 +8,7 @@ import (
 	"github.com/shyim/go-composer"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"gopkg.in/yaml.v3"
 )
 
 func TestProfilerNeedsCredentials(t *testing.T) {
@@ -95,8 +96,11 @@ func TestGenerateComposeFile(t *testing.T) {
 		assert.Contains(t, compose, "mailpit")
 		assert.NotContains(t, compose, "lavinmq")
 		assert.NotContains(t, compose, "opensearch")
+		assert.NotContains(t, compose, "redis")
+		assert.NotContains(t, compose, "rustfs")
 		assert.NotContains(t, compose, "MESSENGER_TRANSPORT_DSN")
 		assert.NotContains(t, compose, "OPENSEARCH_URL")
+		assert.NotContains(t, compose, "K8S_FILESYSTEM")
 		assert.NotContains(t, compose, "PHP_PROFILER")
 	})
 
@@ -120,6 +124,8 @@ func TestGenerateComposeFile(t *testing.T) {
 		assert.Contains(t, compose, "15672:15672")
 		assert.Contains(t, compose, "5672:5672")
 		assert.NotContains(t, compose, "opensearch")
+		assert.NotContains(t, compose, "redis")
+		assert.NotContains(t, compose, "rustfs")
 	})
 
 	t.Run("with elasticsearch", func(t *testing.T) {
@@ -142,6 +148,175 @@ func TestGenerateComposeFile(t *testing.T) {
 		assert.Contains(t, compose, "SHOPWARE_ES_ENABLED")
 		assert.Contains(t, compose, "9200:9200")
 		assert.NotContains(t, compose, "lavinmq")
+		assert.NotContains(t, compose, "redis")
+		assert.NotContains(t, compose, "rustfs")
+	})
+
+	t.Run("with redis-messenger", func(t *testing.T) {
+		t.Parallel()
+		lock := &composer.Lock{
+			Packages: []composer.LockPackage{
+				{Name: "shopware/core", Version: "6.6.0.0"},
+				{Name: "symfony/redis-messenger", Version: "v7.0.0"},
+			},
+		}
+
+		result, err := GenerateComposeFile(lock, nil)
+		assert.NoError(t, err)
+
+		compose := string(result)
+		assert.Contains(t, compose, "redis:")
+		assert.Contains(t, compose, "redis:7-alpine")
+		assert.Contains(t, compose, "redis-data:")
+		assert.Contains(t, compose, "MESSENGER_TRANSPORT_DSN")
+		assert.Contains(t, compose, "redis://redis:6379")
+		assert.NotContains(t, compose, "127.0.0.1::6379")
+		assert.NotContains(t, compose, "rustfs")
+		assert.NotContains(t, compose, "K8S_FILESYSTEM")
+		assert.NotContains(t, compose, "lavinmq")
+	})
+
+	t.Run("redis-messenger wins over amqp", func(t *testing.T) {
+		t.Parallel()
+		lock := &composer.Lock{
+			Packages: []composer.LockPackage{
+				{Name: "shopware/core", Version: "6.6.0.0"},
+				{Name: "symfony/redis-messenger", Version: "v7.0.0"},
+				{Name: "symfony/amqp-messenger", Version: "v7.0.0"},
+			},
+		}
+
+		result, err := GenerateComposeFile(lock, nil)
+		assert.NoError(t, err)
+
+		compose := string(result)
+		assert.Contains(t, compose, "lavinmq:")
+		assert.Contains(t, compose, "redis:")
+		assert.Contains(t, compose, "redis://redis:6379")
+		assert.NotContains(t, compose, "amqp://guest:guest@lavinmq")
+		assert.NotContains(t, compose, "rustfs")
+	})
+
+	t.Run("with k8s-meta", func(t *testing.T) {
+		t.Parallel()
+		lock := &composer.Lock{
+			Packages: []composer.LockPackage{
+				{Name: "shopware/core", Version: "6.6.0.0"},
+				{Name: "shopware/k8s-meta", Version: "1.0.0"},
+				{Name: "symfony/redis-messenger", Version: "v7.0.0"},
+			},
+		}
+
+		result, err := GenerateComposeFile(lock, nil)
+		assert.NoError(t, err)
+
+		compose := string(result)
+		assert.Contains(t, compose, "redis:")
+		assert.Contains(t, compose, "redis:7-alpine")
+		assert.Contains(t, compose, "redis-data:")
+		assert.Contains(t, compose, "redis-cli")
+		assert.NotContains(t, compose, "127.0.0.1::6379")
+		assert.Contains(t, compose, "rustfs:")
+		assert.Contains(t, compose, "rustfs/rustfs:latest")
+		assert.Contains(t, compose, "9000:9000")
+		assert.Contains(t, compose, "9001:9001")
+		assert.Contains(t, compose, "rustfs-data:")
+		assert.Contains(t, compose, "rustfs-init:")
+		assert.Contains(t, compose, "rustfs/rc:latest")
+		assert.Contains(t, compose, "shopware-private")
+		assert.Contains(t, compose, "shopware-public")
+		assert.Contains(t, compose, "rc anonymous set download rustfs/shopware-public")
+		assert.Contains(t, compose, "service_completed_successfully")
+		assert.Contains(t, compose, "K8S_FILESYSTEM_PRIVATE_BUCKET: shopware-private")
+		assert.Contains(t, compose, "K8S_FILESYSTEM_PUBLIC_BUCKET: shopware-public")
+		assert.Contains(t, compose, "K8S_FILESYSTEM_ENDPOINT: http://rustfs:9000")
+		assert.Contains(t, compose, "K8S_FILESYSTEM_PUBLIC_URL: http://127.0.0.1:9000/shopware-public")
+		assert.Contains(t, compose, "K8S_FILESYSTEM_REGION: us-east-1")
+		assert.Contains(t, compose, "AWS_ACCESS_KEY_ID: shopware")
+		assert.Contains(t, compose, "AWS_SECRET_ACCESS_KEY: shopware")
+		assert.Contains(t, compose, "AWS_DEFAULT_REGION: us-east-1")
+		assert.Contains(t, compose, "K8S_CACHE_HOST: redis")
+		assert.Contains(t, compose, "K8S_CACHE_PORT:")
+		assert.Contains(t, compose, "PHP_SESSION_HANDLER: redis")
+		assert.Contains(t, compose, "PHP_SESSION_SAVE_PATH: tcp://redis:6379")
+		assert.Contains(t, compose, "K8S_ES_NUMBER_OF_REPLICAS:")
+		assert.Contains(t, compose, "K8S_ES_NUMBER_OF_SHARDS:")
+		assert.Contains(t, compose, "MESSENGER_TRANSPORT_DSN")
+		assert.Contains(t, compose, "redis://redis:6379")
+		assert.NotContains(t, compose, "lavinmq")
+		assert.NotContains(t, compose, "amqp://")
+
+		// The DSN contains `&`; quoted emission must still round-trip.
+		var parsed struct {
+			Services map[string]struct {
+				Environment map[string]string `yaml:"environment"`
+			} `yaml:"services"`
+		}
+		require.NoError(t, yaml.Unmarshal(result, &parsed))
+		assert.Equal(t, redisMessengerDSN, parsed.Services["web"].Environment["MESSENGER_TRANSPORT_DSN"])
+		assert.Equal(t, "1", parsed.Services["web"].Environment["K8S_ES_NUMBER_OF_REPLICAS"])
+		assert.Equal(t, "1", parsed.Services["web"].Environment["K8S_ES_NUMBER_OF_SHARDS"])
+	})
+
+	t.Run("k8s-meta without redis-messenger still adds redis and rustfs", func(t *testing.T) {
+		t.Parallel()
+		lock := &composer.Lock{
+			Packages: []composer.LockPackage{
+				{Name: "shopware/core", Version: "6.6.0.0"},
+				{Name: "shopware/k8s-meta", Version: "1.0.0"},
+			},
+		}
+
+		result, err := GenerateComposeFile(lock, nil)
+		assert.NoError(t, err)
+
+		compose := string(result)
+		assert.Contains(t, compose, "redis:")
+		assert.Contains(t, compose, "rustfs:")
+		assert.Contains(t, compose, "redis://redis:6379")
+	})
+
+	t.Run("k8s-meta messenger wins over amqp", func(t *testing.T) {
+		t.Parallel()
+		lock := &composer.Lock{
+			Packages: []composer.LockPackage{
+				{Name: "shopware/core", Version: "6.6.0.0"},
+				{Name: "shopware/k8s-meta", Version: "1.0.0"},
+				{Name: "symfony/redis-messenger", Version: "v7.0.0"},
+				{Name: "symfony/amqp-messenger", Version: "v7.0.0"},
+			},
+		}
+
+		result, err := GenerateComposeFile(lock, nil)
+		assert.NoError(t, err)
+
+		compose := string(result)
+		assert.Contains(t, compose, "lavinmq:")
+		assert.Contains(t, compose, "redis:")
+		assert.Contains(t, compose, "rustfs:")
+		assert.Contains(t, compose, "redis://redis:6379")
+		assert.NotContains(t, compose, "amqp://guest:guest@lavinmq")
+	})
+
+	t.Run("k8s-meta dedicated worker inherits redis env", func(t *testing.T) {
+		t.Parallel()
+		lock := &composer.Lock{
+			Packages: []composer.LockPackage{
+				{Name: "shopware/core", Version: "6.6.0.0"},
+				{Name: "shopware/k8s-meta", Version: "1.0.0"},
+				{Name: "symfony/redis-messenger", Version: "v7.0.0"},
+			},
+		}
+
+		result, err := GenerateComposeFile(lock, &ComposeOptions{DedicatedWorker: true})
+		assert.NoError(t, err)
+
+		compose := string(result)
+		assert.Contains(t, compose, "worker:")
+		assert.Contains(t, compose, "scheduler:")
+		assert.Contains(t, compose, "K8S_CACHE_HOST: redis")
+		assert.Contains(t, compose, "MESSENGER_TRANSPORT_DSN")
+		assert.Contains(t, compose, "redis://redis:6379")
 	})
 
 	t.Run("custom php version", func(t *testing.T) {

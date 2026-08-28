@@ -89,6 +89,9 @@ admin_api:
 environments:
   local:
     url: http://127.0.0.1:7
+    admin_api:
+      client_id: local-id
+      client_secret: local-secret
 `), 0o644))
 
 	previousConfigPath := projectConfigPath
@@ -104,8 +107,6 @@ environments:
 
 	err := projectExtensionListCmd.RunE(projectExtensionListCmd, []string{})
 	require.Error(t, err)
-	// environments.local is what the empty -e selects; the deprecated
-	// top-level url only fills in what it leaves unset.
 	assert.Contains(t, err.Error(), "127.0.0.1:7", "without -e environments.local must be used")
 	assert.NotContains(t, err.Error(), "127.0.0.1:9", "the deprecated top-level url must not override environments.local")
 }

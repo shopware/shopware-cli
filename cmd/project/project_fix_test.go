@@ -19,8 +19,6 @@ func TestProjectFixNoArgsOutsideProjectReturnsError(t *testing.T) {
 }
 
 func TestProjectFixNoArgsAppliesGitGuardToResolvedProject(t *testing.T) {
-	// The cwd contains a .git dir so a regression that guards the cwd instead
-	// of the resolved project root would not produce the guard error.
 	cwd := t.TempDir()
 	require.NoError(t, os.Mkdir(filepath.Join(cwd, ".git"), 0o755))
 	t.Chdir(cwd)
@@ -50,8 +48,6 @@ func TestProjectFixPassesGitGuardWithGitDirectory(t *testing.T) {
 
 	projectFixCmd.SetContext(t.Context())
 	err := projectFixCmd.RunE(projectFixCmd, []string{dir})
-	// The guard passes and the run fails at the next step, reading the
-	// project's composer.json.
 	require.ErrorIs(t, err, os.ErrNotExist)
 	assert.Contains(t, err.Error(), "composer.json")
 }
