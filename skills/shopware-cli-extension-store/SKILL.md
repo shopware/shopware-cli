@@ -1,36 +1,53 @@
 ---
 name: shopware-cli-extension-store
-description: MUST use for Shopware Store publication/readiness/submission/compliance questions, including "prepare this plugin/extension for the Shopware Store", "what needs to change before Store publication", Store listing metadata, Store-compliance validation, packaging, or upload readiness. Verify the live workspace, the checkout-built CLI when present, current CLI behavior, remote listing state when available, and current official Store docs before declaring readiness or requirements.
+description: MUST use for Shopware Store publication/readiness/submission/compliance questions, including "prepare this plugin/extension for the Shopware Store", "what needs to change before Store publication", Store listing metadata, Store-compliance validation, packaging, or upload readiness. Base Store claims on current sources and expose those sources to the user.
 ---
 
 # Shopware Store Readiness
 
 Use this skill whenever the user asks whether a Shopware extension/plugin is ready for the Shopware Store or what must change before publication.
 
-The goal is an evidence-backed readiness assessment, not a generic Store checklist.
+The assessment must be **source-first and traceable**. Do not generate a generic Store checklist from memory.
+
+## Core principle: no source, no Store requirement
+
+Every Store-policy claim must be tied to a current authoritative source and that source must be visible in the final answer.
+
+For each claim, identify the source type:
+
+- **Workspace** — current local file/config inspection.
+- **CLI runtime** — fresh output from the selected Shopware CLI binary.
+- **CLI source/test** — current `shopware/shopware-cli` implementation or tests when enforcement semantics matter.
+- **CLI schema** — current `extension config-schema`; proves support/shape, not publication necessity.
+- **Official Store docs** — current Shopware developer documentation; establishes Store requirements/guidance.
+- **Recommendation / inference** — explicitly not an authoritative requirement source.
+
+For every **Store-doc-required** or **Store-doc-guidance** finding, include a direct official Shopware documentation link plus the relevant page/section name when possible.
+
+If no authoritative Store source can be named and linked, the claim cannot be classified as Store-doc-required or Store-doc-guidance. Downgrade it to **Recommendation / inference** or say it could not be verified.
+
+Do not cite a broad documentation page for a narrower claim that the page does not actually establish.
 
 ## Four different truths
 
 Never collapse these into one:
 
-1. **Workspace truth** — files and values that exist in the current local extension.
-2. **CLI truth** — what the selected Shopware CLI actually validates/enforces.
-3. **Store-policy truth** — what current official Shopware Store documentation requires or recommends.
-4. **Remote-listing truth** — what is currently configured in the Shopware Account / Store listing.
+1. **Workspace truth** — what exists in the current local extension.
+2. **CLI truth** — what the selected CLI validates/enforces.
+3. **Store-policy truth** — what current official Store docs require or recommend.
+4. **Remote-listing truth** — what is configured in the Shopware Account / Store listing.
 
-A clean CLI run proves only CLI truth. It does **not** prove Store publication readiness.
+A clean CLI run proves only CLI truth. It does not prove Store publication readiness.
 
-A local value that happens to satisfy a Store content constraint is only a **candidate/source** for remote Store data unless the relevant Store listing state was actually inspected. For example, a `composer.json` description with 165 characters does not prove the remote Store short description satisfies the 150–185 character requirement.
-
-If the remote Store listing was not inspected, never say **ready for Store submission**, **ready for publication**, **descriptions pass**, or **nothing must change** for remote Store conditions. Say that local CLI validation passes but Store publication readiness remains unverified until required remote listing conditions are checked.
+A local metadata value that fits a Store constraint is only a candidate/source for remote Store data until the remote listing is inspected.
 
 ## Mandatory read-only workflow
 
-When the user asks to inspect only, do not modify files.
+When asked to inspect only, do not modify files.
 
 ### 1. Inspect the live extension
 
-Before saying a file is missing/present or stating image dimensions, verify the current tree:
+Verify current state before claiming anything is missing/present or has a certain size:
 
 ```bash
 pwd
@@ -40,11 +57,7 @@ find . -maxdepth 5 -type f \
   -not -path './.git/*' | sort
 cat composer.json
 [ -f .shopware-extension.yml ] && cat .shopware-extension.yml
-```
 
-For the normal plugin icon, avoid ambiguous shell chains. Use an explicit branch:
-
-```bash
 if [ -e src/Resources/config/plugin.png ]; then
   file src/Resources/config/plugin.png
 else
@@ -52,13 +65,9 @@ else
 fi
 ```
 
-Do not write probes such as `[ -e file ] && file file && optional-tool file || echo 'file absent'`: failure of the optional tool can falsely report an existing file as absent.
-
-Use explicit existence checks for any path you plan to call missing. Do not infer remote Store screenshots/listing data from local file absence.
+Do not use shell chains where failure of an optional command can falsely print that an existing file is absent.
 
 ### 2. Resolve one authoritative CLI deterministically
-
-Inspect PATH, then test the **literal sibling path from the current extension directory**:
 
 ```bash
 command -v shopware-cli
@@ -72,203 +81,128 @@ else
 fi
 ```
 
-Do **not** reconstruct the sibling path manually from parent directories or hard-code an absolute path. From an extension at `.../test-plugin`, `../shopware-cli/bin/shopware-cli` means the sibling checkout at `.../shopware-cli`.
+If literal `../shopware-cli/bin/shopware-cli` exists, it is authoritative unless the user explicitly asks to test the installed release.
 
-Selection rule:
-
-- If literal `[ -x ../shopware-cli/bin/shopware-cli ]` succeeds, `../shopware-cli/bin/shopware-cli` is authoritative unless the user explicitly asks to test the installed release.
-- From that point onward, every Store-readiness `--version`, `--help`, `extension validate`, `extension config-schema`, packaging, and account-discovery command must start with `../shopware-cli/bin/shopware-cli`.
-- If the sibling check succeeds but later commands use plain `shopware-cli`, the assessment is invalid: rerun those commands with the checkout binary before answering.
-- Only fall back to the PATH CLI when the literal sibling check fails.
-
-Report PATH and authoritative versions when they differ.
+After selecting it, every CLI command in this assessment must use that binary. Do not reconstruct or guess another absolute sibling path. If later commands accidentally use plain `shopware-cli`, rerun them before answering.
 
 ### 3. Run fresh validation
-
-Using the authoritative binary:
 
 ```bash
 <cli> extension validate . --reporter markdown
 <cli> extension validate --help
-```
-
-If `--store-compliance` is supported and Store compliance is not already enabled in YAML, test it read-only:
-
-```bash
 <cli> extension validate . --store-compliance --reporter markdown
 ```
 
-Fresh output outranks saved reports and earlier agent output.
+Run Store compliance only when supported by current help. Fresh output outranks saved validation reports.
 
-`validation.store_compliance: true` is useful persistent configuration for Store-intended extensions; do not call persistence a Store submission requirement unless current Store docs explicitly establish that.
-
-### 4. Inspect the current schema
+### 4. Inspect current schema
 
 ```bash
 <cli> extension config-schema
 ```
 
-A field appearing in the schema means **supported**, not automatically **required**.
+Schema presence proves a field is supported, not that it is a Store requirement.
 
-Important distinction:
+A `store:` block is a supported local synchronization mechanism. Absence of local `store.*` values does not prove the remote Store listing lacks those values.
 
-- `store.*` fields are a local CLI-supported representation for Store information/synchronization.
-- Absence of a local `store:` block does not prove remote Store listing values are missing.
-- A Store listing requirement does not prove the value must live in `.shopware-extension.yml`.
+### 5. Read current official Store documentation
 
-Current CLI code may map local metadata and optional `store.*` values to the Shopware Account via account producer commands. Treat YAML as a synchronization mechanism, not as the only possible source of Store listing data.
+Before declaring a Store requirement or Store guidance item, inspect the relevant current official Shopware source.
 
-### 5. Verify current official Store docs
+Primary sources include:
 
-Before using `required`, `must`, `blocker`, `critical`, `reject`, `will fail`, or equivalent wording, verify the current official documentation or current CLI enforcement.
+- [Content and translations](https://developer.shopware.com/docs/guides/development/testing/store/content-and-translations.html)
+- [Quality guidelines](https://developer.shopware.com/docs/guides/development/testing/store/quality-guidelines.html)
+- [Code quality](https://developer.shopware.com/docs/guides/development/testing/store/code-quality.html)
+- [Functionality and integration](https://developer.shopware.com/docs/guides/development/testing/store/functionality-integration.html)
+- [Store review errors](https://developer.shopware.com/docs/guides/development/testing/store/store-review-errors.html)
+- [Cookies and privacy](https://developer.shopware.com/docs/guides/development/testing/store/cookies-and-privacy.html)
+- [Installation and cleanup](https://developer.shopware.com/docs/guides/development/testing/store/installation-and-cleanup.html)
 
-Primary sources:
+Preserve the wording strength of the source:
 
-- <https://developer.shopware.com/docs/guides/development/testing/store/content-and-translations.html>
-- <https://developer.shopware.com/docs/guides/development/testing/store/quality-guidelines.html>
-- <https://developer.shopware.com/docs/guides/development/testing/store/code-quality.html>
-- <https://developer.shopware.com/docs/guides/development/testing/store/functionality-integration.html>
-- <https://developer.shopware.com/docs/guides/development/testing/store/store-review-errors.html>
-- <https://developer.shopware.com/docs/guides/development/testing/store/cookies-and-privacy.html>
-- <https://developer.shopware.com/docs/guides/development/testing/store/installation-and-cleanup.html>
+- `must`, `required`, or equivalent mandatory wording → may support **Store-doc-required**.
+- `should`, `preferred`, `recommended`, or equivalent → **Store-doc-guidance**.
 
-Preserve the strength of the source wording. `Should`/`prefer`/`recommended` is guidance, not a blocker.
+If the docs cannot be accessed or the relevant statement cannot be found, do not substitute memory.
 
 ## Evidence classifications
 
-Classify every actionable finding as one of:
+Each actionable finding must be exactly one of:
 
-- **CLI-enforced** — a fresh validation run fails because of it, or current source/tests directly establish enforcement.
-- **Store-doc-required** — current official Store docs clearly establish the requirement.
-- **Store-doc-guidance** — current official Store docs use non-mandatory guidance such as `should`, `prefer`, or `recommended`.
-- **Schema-supported, not proven required** — the current schema supports it, but neither CLI enforcement nor Store docs prove it mandatory.
-- **Recommendation / inference** — sensible advice without authoritative requirement evidence.
+- **CLI-enforced** — fresh CLI output fails because of it, or current CLI source/tests directly establish enforcement.
+- **Store-doc-required** — current official Store docs explicitly establish the requirement.
+- **Store-doc-guidance** — current official Store docs explicitly provide non-mandatory guidance.
+- **Schema-supported, not proven required** — current schema supports it, but no stronger evidence proves it mandatory.
+- **Recommendation / inference** — useful advice without authoritative requirement evidence.
 
-The classification is sticky through the entire response. A recommendation must not become an unconditional `Add`, `Fix`, `Replace`, `Must`, or `Critical` step later.
+Classifications are sticky across the whole response.
 
-Do not use **locally demonstrated** to mark a remote Store-listing requirement as satisfied. That state is reserved for requirements whose target is genuinely local, such as an extension-artifact file requirement. For remote listing requirements, use **local candidate/source looks compatible, remote unverified** until the Account/listing itself is inspected.
+### Mandatory source format by classification
 
-## Current Store documentation facts
+- **CLI-enforced:** Source must be the fresh command/result and, when available, the validation identifier; alternatively cite the exact current CLI source/test proving the rule.
+- **Store-doc-required:** Source must be a direct official Shopware docs link plus page/section label.
+- **Store-doc-guidance:** Source must be a direct official Shopware docs link plus page/section label.
+- **Schema-supported:** Source must identify `extension config-schema` and the exact field/path.
+- **Recommendation / inference:** Source must say `Recommendation / inference` rather than implying authority.
 
-When the current official `Content and translations` page still says the following, preserve these distinctions.
+## Current distinctions to preserve
 
-### Store-doc-required
+When current docs/source still establish these facts:
 
-- All extensions must be published in the **International Store**; German Store publication is optional.
-- If also published in the German Store, English/German content must have 1:1 parity.
-- Store **short description**: **150–185 characters**.
-- Store **long description**: **minimum 200 characters**.
-- Store listing text must be meaningful, accurately describe the extension/use cases, and include clear, complete setup/configuration instructions.
-- English must be available as the fallback for settings and error messages.
-- The license selected in the Shopware Account must match `composer.json`.
-- The docs instruct extensions to store a valid favicon named `plugin.png` at `src/Resources/config/plugin.png` with **112x112px**. Treat this as an extension-artifact Store requirement unless current docs change.
+- International Store publication is required; German Store publication is optional.
+- German/English content parity applies when publishing in the German Store.
+- Store short description is 150–185 characters.
+- Store long description is at least 200 characters.
+- Store listing text must accurately describe the extension and include clear setup/configuration instructions.
+- Shopware Account license must match `composer.json`.
+- Official Store docs specify `src/Resources/config/plugin.png` at 112x112 px.
+- Current CLI accepts the normal plugin icon from 112x112 through 256x256 and max 30 KB; therefore CLI pass and Store-doc compliance can differ.
+- Store screenshots/images are guidance when the docs use `should`; do not promote them to blockers.
+- Store-compliance validation currently covers Store-specific asset source/build pairing such as Administration/Storefront built assets without rebuildable source.
 
-The short/long description constraints above apply to the **Store listing**, not automatically to arbitrary local description fields. A local `composer.json` description can be reported as a compatible candidate/source when appropriate, but it does not satisfy the remote requirement by itself.
+Always cite the current source for these claims in the user-facing answer instead of relying on this summary alone.
 
-### Store-doc-guidance
+## Remote Store requirements
 
-- Images should show the extension in use in Storefront and Administration, including configuration/how-to detail.
-- At least one Storefront and one Administration screenshot **should** show main features.
-- Mobile and desktop screenshots are preferred.
+Store listing requirements apply to the Shopware Account/listing unless the docs explicitly require a local artifact.
 
-Do not put screenshot guidance inside a section headed `must have` or `required` unless another authoritative source establishes a stronger requirement.
+If remote state was not inspected, mark it **remote unverified**. Never say missing, satisfied, pass, compliant, ready for submission, or nothing must change.
 
-## Current CLI behavior
+A local value can be described as:
 
-For the current implementation associated with this skill:
+> local candidate/source looks compatible, remote unverified
 
-- normal extension validation includes normal metadata and plugin-icon validation;
-- a missing normal plugin icon can produce `metadata.icon`;
-- the current normal icon validator accepts **112x112 through 256x256**, max **30 KB**;
-- therefore a 128x128 `plugin.png` can pass CLI validation while still differing from Store docs specifying 112x112;
-- Store-compliance mode gates Administration/Storefront source/build pairing checks such as `assets.administration.sources_missing`;
-- `--full` is separate from Store-compliance mode.
+For example, a 165-character `composer.json` description may be a suitable candidate for the Store short description, but does not prove the remote Store short description is compliant.
 
-A passing fixture is not proof that an existing item is unenforced. Use source/tests or a controlled fixture for negative enforcement claims.
-
-## Requirement location
-
-For each **Store-doc-required** item, state where it applies:
-
-- **extension artifact** — a file/path explicitly required in the extension;
-- **Store listing / Shopware Account** — publication content/state that may be remote;
-- **CLI configuration** — only when current CLI semantics/docs explicitly require local config.
-
-If remote Account state was not read, required listing conditions are **unverified**, not `missing`, `satisfied`, `compliant`, or `pass`.
-
-Examples:
-
-- Absence of local `store.description` does not prove the Store long description is missing. Say the long-description requirement exists, remote state is unverified, and local YAML currently does not supply it for CLI synchronization.
-- A `composer.json` description whose length fits 150–185 characters is a **local candidate/source that looks compatible** with the Store short-description constraint. It is not an extension-artifact compliance result and does not prove the remote listing contains that value.
-- Never write `Descriptions pass` based only on `composer.json`; write `Local short-description candidate is within the documented range; remote short description remains unverified.`
-
-If checking a JSON string length with `jq`, use its string length rather than byte-counting a newline, for example:
-
-```bash
-jq -r '.extra.description."en-GB" | length' composer.json
-```
-
-## Required Store-condition completeness
-
-When remote Store state is unavailable, review each applicable current Store-doc-required condition and classify its state as one of:
-
-- **locally demonstrated** — local evidence directly satisfies a requirement whose target is the extension artifact/local state;
-- **local candidate/source looks compatible, remote unverified** — useful for Store listing synchronization, but not proof of remote state;
-- **remote unverified** — must be checked in the Shopware Account/listing;
-- **not applicable** — explain why.
-
-At minimum, consider the current documented conditions relevant to the extension:
+When remote state is unavailable, explicitly consider applicable required conditions including:
 
 - International Store availability;
-- German/English 1:1 parity if German Store publication is intended;
+- German/English parity when relevant;
 - short description 150–185 characters;
-- long description minimum 200 characters;
-- meaningful/accurate short and long descriptions;
-- clear setup/configuration instructions in the Store listing;
-- English fallback for settings/error messages where the extension has such user-facing text;
+- long description at least 200 characters;
+- meaningful/accurate listing text;
+- setup/configuration instructions;
+- English fallback for applicable user-facing settings/error messages;
 - Shopware Account license matching `composer.json`;
-- `plugin.png` Store favicon requirement.
+- local `plugin.png` Store favicon requirement.
 
-**If the remote Store listing was not inspected, the short-description condition must still appear in `Required Store conditions to verify`, even when a local `composer.json` description is within 150–185 characters.** Report the local value as a compatible candidate/source, then state that the remote value is unverified.
-
-Do not omit any required remote condition merely because a local candidate value appears valid.
-
-## Local sync configuration wording
-
-When a required Store listing value is absent from local `.shopware-extension.yml`, do not say it **should be added** there unless the user has chosen YAML/CLI synchronization as their workflow.
-
-Use wording such as:
-
-- `This required Store listing value can be managed in the Shopware Account or supplied through the supported store.* field for CLI synchronization.`
-- `If you want the repository to be the source of truth for Store metadata, consider configuring store.description / store.installation_manual.`
-
-Do not imply that `store.description` or `store.installation_manual` is itself the Store requirement. The requirement is the resulting Store listing content.
+Do not omit a remote requirement merely because a local candidate value looks compatible.
 
 ## Known traps
 
-Never repeat these mistakes:
+Do not:
 
-- Do not say `ready for Store submission` solely because normal/Store-compliance CLI validation passes.
-- Do not say `nothing must change` when required remote listing conditions have not been verified.
-- Do not say `Descriptions pass` solely because local `composer.json` description lengths fit the Store range.
-- Do not classify Store short-description compliance as **locally demonstrated / extension artifact** when only a local candidate value was inspected.
-- Do not omit the Store short-description requirement from remote verification merely because the local candidate is 150–185 characters.
-- Do not use the PATH/Homebrew CLI after literal `../shopware-cli/bin/shopware-cli` has been shown executable.
-- Do not invent an absolute sibling path from guessed parent directories; test `../shopware-cli/bin/shopware-cli` literally first.
-- Do not label screenshots **CLI-enforced** merely because Store docs discuss screenshots.
-- Do not put `should` screenshot guidance under `Remote Store listing must have`.
-- Do not call `README.md`, `CHANGELOG.md`, or a physical `LICENSE` file Store-required unless current official docs explicitly establish that.
-- Absence of `README.md`, `CHANGELOG.md`, or `LICENSE` alone is normally not an actionable Store-readiness finding; omit these rows unless directly relevant to a verified requirement or specifically asked about.
-- Top-level `changelog` generation configuration does **not** make absence of `CHANGELOG.md` a **Schema-supported** finding.
-- Do not call `store.type`, `store.default_locale`, `store.availabilities`, `store.localizations`, or Store metadata fields Store-required local YAML solely because the schema supports them.
-- Do not infer remote Store listing data is missing from absence of the local `store:` block.
-- Do not turn `store.icon`'s 256x256 schema description into the normal `plugin.png` requirement.
-- Do not say a 128x128 normal plugin icon is Store-compliant merely because the CLI accepts it; current Store docs specify 112x112.
-- Do not invent arbitrary icon sizes, `category`, `keywords`, translation-file requirements, or service-config requirements.
-- Do not add generic `compatibility_date` advice to a Store-readiness report unless current evidence shows a compatibility problem or the user asks about version targeting.
-- Do not pad the result with speculative `Compliant` rows unrelated to current findings.
-- Do not present packaging/upload as an immediate next step until readiness is established and the user asks for submission actions.
-- Do not invent CLI commands; inspect current `--help` first.
+- call README.md, CHANGELOG.md, or a physical LICENSE file Store-required without an explicit current source;
+- treat changelog-generation schema as evidence that CHANGELOG.md is required;
+- turn `store.icon`'s 256x256 schema description into the normal `plugin.png` requirement;
+- infer Store requirements from schema fields such as `store.type`, `store.default_locale`, `store.availabilities`, or `store.localizations`;
+- invent category, keywords, translation-file, services-config, arbitrary icon-size, or test-coverage requirements;
+- label screenshots CLI-enforced unless the CLI actually reports them;
+- say `Descriptions pass` based only on local composer metadata;
+- say `ready for Store submission` because CLI validation passes;
+- imply Store metadata must be in `.shopware-extension.yml`; it can be a local synchronization source, while the requirement applies to the resulting Store listing;
+- cite a docs home page when the specific claim is not supported by the linked page/section.
 
 ## Required response format
 
@@ -280,64 +214,62 @@ Start with **Validation status**:
 - Store-compliance validation result;
 - files modified: yes/no.
 
-Then provide only evidence-backed actionable findings:
+Then provide:
 
-| Finding | Current evidence | Classification | Applies to | Action |
-| --- | --- | --- | --- | --- |
+| Finding | Current evidence | Classification | Source | Applies to | Action |
+| --- | --- | --- | --- | --- | --- |
 
-For Store listing requirements backed only by local source values, the row must still say `Store listing / Shopware Account` in **Applies to**, and the evidence/action must explicitly preserve `remote unverified`.
+The **Source** column is mandatory.
 
-Then use these sections:
+Examples:
+
+- `Store-doc-required | [Content and translations — description](https://developer.shopware.com/docs/guides/development/testing/store/content-and-translations.html)`
+- `CLI-enforced | fresh: <cli> extension validate . --store-compliance; assets.administration.sources_missing`
+- `Schema-supported | <cli> extension config-schema → store.icon`
+- `Recommendation / inference | no authoritative requirement source`
+
+Then use:
 
 ### Required local changes
 
-Include only demonstrated **CLI-enforced** or **Store-doc-required** deficiencies whose target is the local extension artifact/configuration.
-
-If none exist, say `No other required local changes were established.` Do not translate that into overall Store readiness.
+Only demonstrated CLI-enforced or Store-doc-required deficiencies whose target is local.
 
 ### Required Store conditions to verify
 
-List **every applicable Store-doc-required Store listing / Shopware Account condition** whose remote state was not inspected, including short description even if a local candidate is valid.
+Every applicable Store-doc-required remote condition not actually inspected. If a local candidate exists, show it but keep remote state unverified.
 
-If a local source value looks compatible, say so while keeping remote state unverified. Example:
-
-> **Short description** — Store listing requires 150–185 characters. Local `composer.json` EN/DE descriptions are within that range and may be used as source values, but the remote Store short descriptions were not inspected and must still be verified.
-
-If remote state is unverified, explicitly say:
+State explicitly when applicable:
 
 > Store publication readiness cannot be confirmed from local validation alone because the required remote Store listing state was not inspected.
 
 ### Guidance / recommendations
 
-Put **Store-doc-guidance**, **Schema-supported, not proven required**, and **Recommendation / inference** here with conditional wording. Include screenshot guidance when relevant, but do not promote it to a required condition.
+Store-doc-guidance, schema-supported items, and recommendations only.
 
-When discussing YAML metadata synchronization, use `can` / `consider` rather than `should` unless the user has chosen that workflow.
+### Sources checked
 
-Do not add a generic numbered `Next steps` list that re-promotes recommendations.
+End with a compact list of the authoritative sources actually used in the assessment. Include direct clickable links for every official Store documentation page used and identify relevant CLI evidence, for example:
 
-## Final self-audit
+- [Content and translations](https://developer.shopware.com/docs/guides/development/testing/store/content-and-translations.html) — descriptions, translations, favicon, screenshots.
+- `<cli> extension validate . --reporter markdown` — current normal validation.
+- `<cli> extension validate . --store-compliance --reporter markdown` — current Store-compliance validation.
+- `<cli> extension config-schema` — supported local Store synchronization fields.
 
-Before answering, verify:
+Do not list sources that were not actually consulted.
 
-1. Every local presence/missing claim came from the live tree.
-2. File-probing commands cannot print contradictory presence/absence because an optional secondary command failed.
-3. Every dimension/size claim came from current inspection or an authoritative source.
-4. Literal `../shopware-cli/bin/shopware-cli` was tested before any reconstructed/absolute sibling path.
-5. If that literal sibling CLI existed, it was the authoritative binary for every subsequent CLI command unless the user explicitly requested otherwise.
-6. One authoritative CLI binary was used consistently after selection.
-7. Validation output is fresh.
-8. A passing fixture was not used as proof of non-enforcement.
-9. `must` vs `should` wording from Store docs was preserved.
-10. Remote Store listing values were not declared missing/satisfied/pass/compliant without reading remote state.
-11. CLI success was not converted into overall Store readiness.
-12. All applicable Store-doc-required remote conditions were considered, including short description even when a valid local candidate exists.
-13. A local Store metadata candidate was not mislabeled as an extension-artifact compliance result.
-14. Schema-supported fields were not promoted to mandatory without separate evidence.
-15. `plugin.png` and `store.icon` stayed separate.
-16. The Store-doc 112x112 favicon requirement and CLI 112–256 accepted range were reported distinctly.
-17. README/CHANGELOG/LICENSE, category/keywords, translation files, services config, and generic compatibility-date advice were not invented as requirements or noisy pseudo-findings.
-18. YAML sync fields were described as optional synchronization choices rather than the Store requirement itself.
-19. Guidance stayed guidance in summaries/actions.
-20. No files were modified during inspection-only work.
+## Final source audit
+
+Before sending the answer, verify:
+
+1. Every Store-doc-required/guidance claim has a direct official source link.
+2. The cited page/section really supports the exact claim and wording strength.
+3. Every CLI-enforced claim identifies fresh CLI output/identifier or specific current source/test.
+4. Every schema claim names the exact schema field/path.
+5. Recommendations are clearly labeled as non-authoritative.
+6. Local candidate values are not presented as proof of remote listing compliance.
+7. Remote Store requirements remain unverified unless the remote listing was inspected.
+8. The user can follow the provided links to independently verify each Store-policy claim.
+9. No requirement appears in the summary or action column without the same evidence/source level it had in the findings table.
+10. No files were modified during inspection-only work.
 
 If any check fails, correct the answer before sending it.
