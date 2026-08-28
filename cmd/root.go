@@ -6,10 +6,8 @@ import (
 	"fmt"
 	"net/http"
 	"os"
-	"os/exec"
 	"os/signal"
 	"path"
-	"path/filepath"
 	"runtime"
 	"slices"
 	"strconv"
@@ -75,7 +73,13 @@ func run(ctx context.Context) int {
 	}
 
 	go func() {
-		releaseInfo, err := checkForUpdate(updateCtx, args)
+		var releaseInfo *update.ReleaseInfo
+		var err error
+		if !update.ShouldCheckForUpdate(version, args) {
+			err = update.ErrNoUpdateAvailable
+		} else {
+			releaseInfo, err = update.CheckForUpdate(updateCtx, version, &http.Client{Timeout: 5 * time.Second})
+		}
 		if err != nil && !errors.Is(err, update.ErrNoUpdateAvailable) {
 			logging.FromContext(ctx).Debugf("checking for shopware cli update failed: %v", err)
 		}
@@ -200,45 +204,12 @@ func commandNameFromBinaryPath(binaryPath string) string {
 	return binaryName
 }
 
-// checkForUpdate returns the latest release info if an update is available.
-func checkForUpdate(ctx context.Context, args []string) (*update.ReleaseInfo, error) {
-	if !update.ShouldCheckForUpdate(version, args) {
-		return nil, update.ErrNoUpdateAvailable
-	}
-	return update.CheckForUpdate(ctx, version, &http.Client{Timeout: 5 * time.Second})
-}
-
 // shouldNotify returns false for Homebrew users if the new version is not yet available in Homebrew
 func shouldNotify(release *update.ReleaseInfo, binaryPath string) bool {
-	if isUnderHomebrew(binaryPath) && release.IsRecent() {
+	if system.IsUnderHomebrew(binaryPath) && release.IsRecent() {
 		return false
 	}
 	return true
-}
-
-// Check whether the gh binary was found under the Homebrew prefix
-func isUnderHomebrew(ghBinary string) bool {
-	brewExe, err := lookPath("brew")
-	if err != nil {
-		return false
-	}
-
-	brewPrefixBytes, err := exec.CommandContext(context.Background(), brewExe, "--prefix").Output()
-	if err != nil {
-		return false
-	}
-
-	brewBinPrefix := filepath.Join(strings.TrimSpace(string(brewPrefixBytes)), "bin") + string(filepath.Separator)
-	return strings.HasPrefix(ghBinary, brewBinPrefix)
-}
-
-// lookPath allows safe execution of the LookPath function, handling the ErrDot case.
-func lookPath(file string) (string, error) {
-	path, err := exec.LookPath(file)
-	if errors.Is(err, exec.ErrDot) {
-		return path, nil
-	}
-	return path, err
 }
 
 func init() {
