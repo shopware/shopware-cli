@@ -62,7 +62,7 @@ func fixtureDirectory() *Directory {
 			},
 			{
 				Name: "beta-skill", DisplayName: "Beta", Type: TypeSkill,
-				Provider: "shopware", Description: "b", Status: StatusComingSoon,
+				Provider: "shopware", Description: "b", Status: StatusActive,
 				Documentation: "https://example.test/b",
 				Delivery:      Delivery{Kind: DeliveryGit, Repository: "https://example.test/repo"},
 			},
@@ -70,14 +70,10 @@ func fixtureDirectory() *Directory {
 	}
 }
 
-func TestListAppliesAvailability(t *testing.T) {
+func TestListReturnsAll(t *testing.T) {
 	got, err := fixtureDirectory().List(nil, ListOptions{})
 	require.NoError(t, err)
-	require.Len(t, got, 2)
-
-	assert.True(t, got[0].Available)
-	assert.False(t, got[1].Available)
-	assert.Equal(t, "not yet released", got[1].AvailabilityReason)
+	assert.Len(t, got, 2)
 }
 
 func TestListTypeFilter(t *testing.T) {
@@ -113,14 +109,9 @@ func TestListInstalledOnly(t *testing.T) {
 func TestInfo(t *testing.T) {
 	d := fixtureDirectory()
 
-	active, err := d.Info("alpha-skill")
+	found, err := d.Info("alpha-skill")
 	require.NoError(t, err)
-	assert.True(t, active.Available)
-
-	comingSoon, err := d.Info("beta-skill")
-	require.NoError(t, err)
-	assert.False(t, comingSoon.Available)
-	assert.Equal(t, "not yet released", comingSoon.AvailabilityReason)
+	assert.Equal(t, "alpha-skill", found.Name)
 
 	_, err = d.Info("does-not-exist")
 	require.Error(t, err)

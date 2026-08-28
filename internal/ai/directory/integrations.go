@@ -32,7 +32,7 @@ var integrations = Directory{
 			Type:          TypeSkill,
 			Provider:      "shopware",
 			Description:   "Use Shopware CLI and Deployment Helper together for build and deploy workflows.",
-			Status:        StatusComingSoon,
+			Status:        StatusActive,
 			Documentation: "https://developer.shopware.com/docs/guides/hosting/installation-updates/deployments/deployment-helper/index.html",
 			Delivery: Delivery{
 				Kind:       DeliveryGit,

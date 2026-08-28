@@ -32,7 +32,6 @@ type Status string
 
 const (
 	StatusActive     Status = "active"
-	StatusComingSoon Status = "coming-soon"
 	StatusDeprecated Status = "deprecated"
 )
 
@@ -52,11 +51,6 @@ type Integration struct {
 	Provider    string `json:"provider"`
 	Description string `json:"description"`
 	Status      Status `json:"status"`
-
-	// Available and AvailabilityReason are computed at output time (project
-	// detection lands in #1336); they are not part of the stored entry.
-	Available          bool   `json:"available"`
-	AvailabilityReason string `json:"availabilityReason,omitempty"`
 
 	Documentation string         `json:"documentation"`
 	Delivery      Delivery       `json:"delivery"`
@@ -122,9 +116,9 @@ var knownTypeFilters = map[string]bool{
 	string(TypeMCP):   true,
 }
 
-// List returns the integrations matching opts, with availability applied.
-// installed is the set of integration names recorded as installed by the CLI;
-// it is consulted only when opts.InstalledOnly is set.
+// List returns the integrations matching opts. installed is the set of
+// integration names recorded as installed by the CLI; it is consulted only when
+// opts.InstalledOnly is set.
 func (d *Directory) List(installed map[string]bool, opts ListOptions) ([]Integration, error) {
 	if opts.Type != "" && !knownTypeFilters[opts.Type] {
 		return nil, fmt.Errorf("unknown type %q (allowed: skill, mcp)", opts.Type)
@@ -139,36 +133,18 @@ func (d *Directory) List(installed map[string]bool, opts ListOptions) ([]Integra
 			continue
 		}
 
-		out = append(out, withAvailability(e))
+		out = append(out, e)
 	}
 
 	return out, nil
 }
 
-// Info returns a single integration by name, with availability applied, or an
-// error when no entry matches.
+// Info returns a single integration by name, or an error when no entry matches.
 func (d *Directory) Info(name string) (Integration, error) {
 	e, ok := d.Get(name)
 	if !ok {
 		return Integration{}, fmt.Errorf("unknown integration %q", name)
 	}
 
-	return withAvailability(*e), nil
-}
-
-// withAvailability fills the computed availability fields for an entry. v1 is
-// static: a coming-soon entry is unavailable, everything else is available.
-// Project-detected availability (Core MCP) arrives with #1336; there is no
-// network access here.
-func withAvailability(e Integration) Integration {
-	if e.Status == StatusComingSoon {
-		e.Available = false
-		e.AvailabilityReason = "not yet released"
-
-		return e
-	}
-
-	e.Available = true
-
-	return e
+	return *e, nil
 }

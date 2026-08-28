@@ -21,7 +21,6 @@ type listItem struct {
 	Provider    string           `json:"provider"`
 	Description string           `json:"description"`
 	Status      directory.Status `json:"status"`
-	Available   bool             `json:"available"`
 }
 
 var aiListCmd = &cobra.Command{
@@ -69,7 +68,6 @@ func writeListJSON(w io.Writer, entries []directory.Integration) error {
 			Provider:    e.Provider,
 			Description: e.Description,
 			Status:      e.Status,
-			Available:   e.Available,
 		})
 	}
 
@@ -86,11 +84,11 @@ func writeListJSON(w io.Writer, entries []directory.Integration) error {
 func writeListTable(w io.Writer, entries []directory.Integration) error {
 	rows := make([][]string, 0, len(entries))
 	for _, e := range entries {
-		rows = append(rows, []string{e.Name, string(e.Type), e.Provider, string(e.Status), availableLabel(e), e.Description})
+		rows = append(rows, []string{e.Name, string(e.Type), e.Provider, string(e.Status), e.Description})
 	}
 
 	_, err := fmt.Fprintln(w, tui.RenderTable(
-		[]string{"Name", "Type", "Provider", "Status", "Available", "Description"},
+		[]string{"Name", "Type", "Provider", "Status", "Description"},
 		rows,
 	))
 
@@ -117,18 +115,6 @@ func readInstalledNames() (map[string]bool, error) {
 	}
 
 	return names, nil
-}
-
-// availableLabel renders the availability of an entry for the human table.
-func availableLabel(e directory.Integration) string {
-	if e.Available {
-		return "yes"
-	}
-	if e.AvailabilityReason != "" {
-		return fmt.Sprintf("no (%s)", e.AvailabilityReason)
-	}
-
-	return "no"
 }
 
 func init() {

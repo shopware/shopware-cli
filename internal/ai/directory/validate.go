@@ -21,7 +21,7 @@ var namePattern = regexp.MustCompile(`^[a-z][a-z0-9-]*$`)
 var (
 	validTypes            = map[Type]bool{TypeSkill: true}
 	validKinds            = map[DeliveryKind]bool{DeliveryBundled: true, DeliveryGit: true}
-	validStatuses         = map[Status]bool{StatusActive: true, StatusComingSoon: true, StatusDeprecated: true}
+	validStatuses         = map[Status]bool{StatusActive: true, StatusDeprecated: true}
 	validCompatibilitySrc = map[string]bool{"owner": true}
 )
 
@@ -72,7 +72,7 @@ func (d *Directory) Validate() error {
 			errs = append(errs, fmt.Errorf("%s: description is required", loc))
 		}
 		if !validStatuses[e.Status] {
-			errs = append(errs, fmt.Errorf("%s: unknown status %q (allowed: active, coming-soon, deprecated)", loc, e.Status))
+			errs = append(errs, fmt.Errorf("%s: unknown status %q (allowed: active, deprecated)", loc, e.Status))
 		}
 
 		if e.Documentation == "" {

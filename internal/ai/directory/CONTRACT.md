@@ -15,7 +15,7 @@ name or enum value here is a breaking change to a public interface.
 |-----------------|------------------------------------|--------------------|
 | type            | skill                              | mcp                |
 | delivery.kind   | bundled, git                       | project            |
-| status          | active, coming-soon, deprecated    | —                  |
+| status          | active, deprecated                 | —                  |
 
 ## Entry fields (defined in Go, validated by Validate)
 Required:  name, displayName, type, provider, description, status,
@@ -33,22 +33,15 @@ Selected with the boolean `--json` flag on both commands (repo convention, e.g.
 output file path elsewhere in the CLI (e.g. `project sbom`).
 
 `ai list` — array of:
-{ name, displayName, type, provider, description, status, available }
+{ name, displayName, type, provider, description, status }
 
 `ai info <name>` — object (superset of list):
 { name, displayName, type, provider, description, status,
-  available, availabilityReason?,        // ? = omitted when empty
   documentation,
   delivery: { kind, repository? },
   compatibility?: { source } }
 
 Never present in output: internal, internal.maintainer.
-
-## availability (computed, not stored)
-- available (bool): can the entry be used in the current context.
-- v1 rules: status == coming-soon → available:false (reason set);
-  otherwise available:true. bundled always true; git true (install
-  resolution deferred to #1337, no network here).
 
 ## --installed state (shape defined now, WRITTEN by #1337)
 Install-state file records, per installed entry:

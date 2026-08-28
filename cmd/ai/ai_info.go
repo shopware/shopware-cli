@@ -50,7 +50,6 @@ func writeInfoTable(w io.Writer, e directory.Integration) error {
 		{"Type", string(e.Type)},
 		{"Provider", e.Provider},
 		{"Status", string(e.Status)},
-		{"Available", availableLabel(e)},
 		{"Description", e.Description},
 		{"Documentation", e.Documentation},
 		{"Delivery", deliveryLabel(e.Delivery)},
