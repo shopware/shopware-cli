@@ -36,8 +36,8 @@ elif command -v php >/dev/null; then
       "license"=>$j["license"]??null,
       "label"=>$e["label"]??null,
       "authors"=>count($j["authors"]??[]),
-      "desc_en"=>strlen($e["description"]["en-GB"]??""),
-      "desc_de"=>strlen($e["description"]["de-DE"]??""),
+      "desc_en"=>mb_strlen($e["description"]["en-GB"]??"","UTF-8"),
+      "desc_de"=>mb_strlen($e["description"]["de-DE"]??"","UTF-8"),
       "manufacturerLink"=>$e["manufacturerLink"]??null,
       "supportLink"=>$e["supportLink"]??null,
     ],JSON_PRETTY_PRINT|JSON_UNESCAPED_SLASHES),"\n";'
