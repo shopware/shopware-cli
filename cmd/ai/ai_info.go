@@ -3,66 +3,47 @@ package ai
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 
 	"github.com/spf13/cobra"
 
 	"github.com/shopware/shopware-cli/internal/ai/directory"
 )
 
-var aiInfoCmd = newAIInfoCmd()
+var aiInfoCmd = &cobra.Command{
+	Use:          "info <name>",
+	Short:        "Show details of a Shopware AI integration",
+	Args:         cobra.ExactArgs(1),
+	SilenceUsage: true,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		asJSON, _ := cmd.Flags().GetBool("json")
 
-func newAIInfoCmd() *cobra.Command {
-	cmd := &cobra.Command{
-		Use:          "info <name>",
-		Short:        "Show details of a Shopware AI integration",
-		Args:         cobra.ExactArgs(1),
-		SilenceUsage: true,
-		RunE:         runAIInfo,
-	}
-
-	cmd.Flags().Bool("json", false, "Output as json")
-
-	return cmd
-}
-
-func runAIInfo(cmd *cobra.Command, args []string) error {
-	name := args[0]
-
-	asJSON, err := cmd.Flags().GetBool("json")
-	if err != nil {
-		return err
-	}
-
-	dir, err := directory.Load()
-	if err != nil {
-		return err
-	}
-
-	found, ok := dir.Get(name)
-	if !ok {
-		return fmt.Errorf("unknown integration %q", name)
-	}
-
-	entry := applyAvailability(*found)
-
-	if asJSON {
-		out, err := json.Marshal(entry)
+		entry, err := directory.Load().Info(args[0])
 		if err != nil {
 			return err
 		}
 
-		_, err = fmt.Fprintln(cmd.OutOrStdout(), string(out))
+		if asJSON {
+			return writeInfoJSON(cmd.OutOrStdout(), entry)
+		}
 
+		return writeInfoTable(cmd.OutOrStdout(), entry)
+	},
+}
+
+func writeInfoJSON(w io.Writer, e directory.Integration) error {
+	out, err := json.Marshal(e)
+	if err != nil {
 		return err
 	}
 
-	return writeInfoTable(cmd, entry)
+	_, err = fmt.Fprintln(w, string(out))
+
+	return err
 }
 
 // writeInfoTable prints an entry as aligned key/value lines for humans.
-func writeInfoTable(cmd *cobra.Command, e directory.Integration) error {
-	out := cmd.OutOrStdout()
-
+func writeInfoTable(w io.Writer, e directory.Integration) error {
 	lines := [][2]string{
 		{"Name", e.Name},
 		{"Display name", e.DisplayName},
@@ -77,7 +58,7 @@ func writeInfoTable(cmd *cobra.Command, e directory.Integration) error {
 	}
 
 	for _, l := range lines {
-		if _, err := fmt.Fprintf(out, "%-14s %s\n", l[0]+":", l[1]); err != nil {
+		if _, err := fmt.Fprintf(w, "%-14s %s\n", l[0]+":", l[1]); err != nil {
 			return err
 		}
 	}
@@ -110,4 +91,5 @@ func deliveryLabel(d directory.Delivery) string {
 
 func init() {
 	aiRootCmd.AddCommand(aiInfoCmd)
+	aiInfoCmd.Flags().Bool("json", false, "Output as json")
 }

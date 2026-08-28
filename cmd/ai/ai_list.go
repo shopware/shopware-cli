@@ -3,6 +3,7 @@ package ai
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 
 	"github.com/spf13/cobra"
 
@@ -10,15 +11,6 @@ import (
 	"github.com/shopware/shopware-cli/internal/ai/state"
 	"github.com/shopware/shopware-cli/internal/tui"
 )
-
-// knownTypeFilters are the type identifiers accepted by --type. It includes
-// "mcp", reserved for a future increment (#1336): it currently matches no
-// entry, so `--type mcp` returns an empty list with exit code 0. Any other
-// value is rejected as an error.
-var knownTypeFilters = map[string]bool{
-	string(directory.TypeSkill): true,
-	"mcp":                       true,
-}
 
 // listItem is the per-entry JSON shape for `ai list` (a subset of the info
 // shape). Field names are the public contract; see the directory CONTRACT.md.
@@ -32,100 +24,72 @@ type listItem struct {
 	Available   bool             `json:"available"`
 }
 
-var aiListCmd = newAIListCmd()
+var aiListCmd = &cobra.Command{
+	Use:          "list",
+	Aliases:      []string{"ls"},
+	Short:        "List known Shopware AI integrations",
+	Args:         cobra.NoArgs,
+	SilenceUsage: true,
+	RunE: func(cmd *cobra.Command, _ []string) error {
+		typeFilter, _ := cmd.Flags().GetString("type")
+		installedOnly, _ := cmd.Flags().GetBool("installed")
+		asJSON, _ := cmd.Flags().GetBool("json")
 
-func newAIListCmd() *cobra.Command {
-	cmd := &cobra.Command{
-		Use:          "list",
-		Aliases:      []string{"ls"},
-		Short:        "List known Shopware AI integrations",
-		Args:         cobra.NoArgs,
-		SilenceUsage: true,
-		RunE:         runAIList,
-	}
+		var installed map[string]bool
+		if installedOnly {
+			var err error
+			if installed, err = readInstalledNames(); err != nil {
+				return err
+			}
+		}
 
-	cmd.Flags().String("type", "", "Filter by integration type (skill, mcp)")
-	cmd.Flags().Bool("installed", false, "Show only integrations recorded as installed by the CLI")
-	cmd.Flags().Bool("json", false, "Output as json")
+		entries, err := directory.Load().List(installed, directory.ListOptions{
+			Type:          typeFilter,
+			InstalledOnly: installedOnly,
+		})
+		if err != nil {
+			return err
+		}
 
-	return cmd
+		if asJSON {
+			return writeListJSON(cmd.OutOrStdout(), entries)
+		}
+
+		return writeListTable(cmd.OutOrStdout(), entries)
+	},
 }
 
-func runAIList(cmd *cobra.Command, _ []string) error {
-	typeFilter, err := cmd.Flags().GetString("type")
+func writeListJSON(w io.Writer, entries []directory.Integration) error {
+	items := make([]listItem, 0, len(entries))
+	for _, e := range entries {
+		items = append(items, listItem{
+			Name:        e.Name,
+			DisplayName: e.DisplayName,
+			Type:        e.Type,
+			Provider:    e.Provider,
+			Description: e.Description,
+			Status:      e.Status,
+			Available:   e.Available,
+		})
+	}
+
+	out, err := json.Marshal(items)
 	if err != nil {
 		return err
 	}
 
-	installedOnly, err := cmd.Flags().GetBool("installed")
-	if err != nil {
-		return err
-	}
+	_, err = fmt.Fprintln(w, string(out))
 
-	asJSON, err := cmd.Flags().GetBool("json")
-	if err != nil {
-		return err
-	}
+	return err
+}
 
-	if typeFilter != "" && !knownTypeFilters[typeFilter] {
-		return fmt.Errorf("unknown --type %q (allowed: skill, mcp)", typeFilter)
-	}
-
-	dir, err := directory.Load()
-	if err != nil {
-		return err
-	}
-
-	var installedNames map[string]bool
-	if installedOnly {
-		installedNames, err = readInstalledNames()
-		if err != nil {
-			return err
-		}
-	}
-
-	entries := make([]directory.Integration, 0, len(dir.Integrations))
-	for _, e := range dir.Integrations {
-		if typeFilter != "" && string(e.Type) != typeFilter {
-			continue
-		}
-		if installedOnly && !installedNames[e.Name] {
-			continue
-		}
-
-		entries = append(entries, applyAvailability(e))
-	}
-
-	if asJSON {
-		items := make([]listItem, 0, len(entries))
-		for _, e := range entries {
-			items = append(items, listItem{
-				Name:        e.Name,
-				DisplayName: e.DisplayName,
-				Type:        e.Type,
-				Provider:    e.Provider,
-				Description: e.Description,
-				Status:      e.Status,
-				Available:   e.Available,
-			})
-		}
-
-		out, err := json.Marshal(items)
-		if err != nil {
-			return err
-		}
-
-		_, err = fmt.Fprintln(cmd.OutOrStdout(), string(out))
-
-		return err
-	}
-
+func writeListTable(w io.Writer, entries []directory.Integration) error {
 	rows := make([][]string, 0, len(entries))
 	for _, e := range entries {
 		rows = append(rows, []string{e.Name, string(e.Type), e.Provider, string(e.Status), availableLabel(e), e.Description})
 	}
 
-	_, err = fmt.Fprintln(cmd.OutOrStdout(), tui.RenderTable(
+	_, err := fmt.Fprintln(w, tui.RenderTable(
 		[]string{"Name", "Type", "Provider", "Status", "Available", "Description"},
 		rows,
 	))
@@ -134,8 +98,8 @@ func runAIList(cmd *cobra.Command, _ []string) error {
 }
 
 // readInstalledNames returns the set of integration names recorded as installed
-// by the CLI. Nothing writes the state file until #1337, so today this is
-// empty (a missing file yields an empty state, not an error).
+// by the CLI. Nothing writes the state file until #1337, so today this is empty
+// (a missing file yields an empty state, not an error).
 func readInstalledNames() (map[string]bool, error) {
 	path, err := state.Path()
 	if err != nil {
@@ -169,4 +133,7 @@ func availableLabel(e directory.Integration) string {
 
 func init() {
 	aiRootCmd.AddCommand(aiListCmd)
+	aiListCmd.Flags().String("type", "", "Filter by integration type (skill, mcp)")
+	aiListCmd.Flags().Bool("installed", false, "Show only integrations recorded as installed by the CLI")
+	aiListCmd.Flags().Bool("json", false, "Output as json")
 }

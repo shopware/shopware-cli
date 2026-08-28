@@ -1,6 +1,7 @@
 package ai
 
 import (
+	"bytes"
 	"strings"
 	"testing"
 
@@ -10,57 +11,24 @@ import (
 	"github.com/shopware/shopware-cli/internal/ai/directory"
 )
 
-func TestInfoJSON(t *testing.T) {
-	out, err := executeAI(t, newAIInfoCmd(), "deployment-helper", "--json")
-	require.NoError(t, err)
-
-	const want = `{
-	  "name": "deployment-helper",
-	  "displayName": "Shopware Deployment Helper",
-	  "type": "skill",
-	  "provider": "shopware",
-	  "description": "Use Shopware CLI and Deployment Helper together for build and deploy workflows.",
-	  "status": "coming-soon",
-	  "available": false,
-	  "availabilityReason": "not yet released",
-	  "documentation": "https://developer.shopware.com/docs/guides/hosting/installation-updates/deployments/deployment-helper/index.html",
-	  "delivery": {"kind": "git", "repository": "https://github.com/shopware/deployment-helper"},
-	  "compatibility": {"source": "owner"}
-	}`
-
-	assert.JSONEq(t, want, out)
-
-	// maintainer metadata never appears in output.
-	assert.NotContains(t, strings.ToLower(out), "maintainer")
-}
-
-func TestInfoHumanContains(t *testing.T) {
-	out, err := executeAI(t, newAIInfoCmd(), "shopware-cli")
-	require.NoError(t, err)
-
-	for _, want := range []string{
-		"shopware-cli",
-		"Documentation:",
-		"https://developer.shopware.com/docs/products/cli/",
-		"bundled",
-		"yes",
-		// AC: info shows compatibility requirements for every entry, including
-		// bundled ones that have no explicit compatibility block.
-		"Compatibility:",
-		"none (bundled, always compatible)",
-	} {
-		assert.Contains(t, out, want)
+func TestWriteInfoTable(t *testing.T) {
+	e := directory.Integration{
+		Name: "deployment-helper", DisplayName: "Shopware Deployment Helper",
+		Type: directory.TypeSkill, Provider: "shopware",
+		Status: directory.StatusComingSoon, AvailabilityReason: "not yet released",
+		Description: "desc", Documentation: "https://example.test/dh",
+		Delivery:      directory.Delivery{Kind: directory.DeliveryGit, Repository: "https://github.com/shopware/deployment-helper"},
+		Compatibility: &directory.Compatibility{Source: "owner"},
+		Internal:      &directory.Internal{Maintainer: "@shopware/team"},
 	}
-}
 
-// TestInfoHumanGitEntry exercises the human output for a git-delivered entry:
-// the "git (repository)" delivery rendering and the compatibility source line.
-func TestInfoHumanGitEntry(t *testing.T) {
-	out, err := executeAI(t, newAIInfoCmd(), "deployment-helper")
-	require.NoError(t, err)
+	var buf bytes.Buffer
+	require.NoError(t, writeInfoTable(&buf, e))
+	out := buf.String()
 
 	for _, want := range []string{
-		"Delivery:",
+		"deployment-helper",
+		"Documentation:",
 		"git (https://github.com/shopware/deployment-helper)",
 		"Compatibility:",
 		"owner",
@@ -68,24 +36,34 @@ func TestInfoHumanGitEntry(t *testing.T) {
 	} {
 		assert.Contains(t, out, want)
 	}
+
+	// maintainer metadata is never rendered
+	assert.NotContains(t, strings.ToLower(out), "maintainer")
+}
+
+func TestWriteInfoJSONExcludesInternal(t *testing.T) {
+	e := directory.Integration{Name: "x", Internal: &directory.Internal{Maintainer: "@shopware/team"}}
+
+	var buf bytes.Buffer
+	require.NoError(t, writeInfoJSON(&buf, e))
+
+	out := strings.ToLower(buf.String())
+	assert.NotContains(t, out, "maintainer")
+	assert.NotContains(t, out, "internal")
 }
 
 func TestCompatibilityLabel(t *testing.T) {
-	// explicit compatibility block → its source
 	withCompat := directory.Integration{Compatibility: &directory.Compatibility{Source: "owner"}}
 	assert.Equal(t, "owner", compatibilityLabel(withCompat))
 
-	// bundled entry with no block → always compatible
 	bundled := directory.Integration{Delivery: directory.Delivery{Kind: directory.DeliveryBundled}}
 	assert.Equal(t, "none (bundled, always compatible)", compatibilityLabel(bundled))
 
-	// non-bundled entry with no block → plain "none"
 	git := directory.Integration{Delivery: directory.Delivery{Kind: directory.DeliveryGit}}
 	assert.Equal(t, "none", compatibilityLabel(git))
 }
 
-func TestInfoUnknownNameErrors(t *testing.T) {
-	_, err := executeAI(t, newAIInfoCmd(), "does-not-exist")
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), `unknown integration "does-not-exist"`)
+func TestDeliveryLabel(t *testing.T) {
+	assert.Equal(t, "git (https://example.test/r)", deliveryLabel(directory.Delivery{Kind: directory.DeliveryGit, Repository: "https://example.test/r"}))
+	assert.Equal(t, "bundled", deliveryLabel(directory.Delivery{Kind: directory.DeliveryBundled}))
 }

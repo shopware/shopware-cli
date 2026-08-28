@@ -6,7 +6,6 @@ on:
     paths:
       - 'internal/shop/config_schema.json'
       - 'internal/extension/config_schema.json'
-      - 'internal/ai/directory/schema.json'
       - '.github/workflows/schema-pages.yml'
   release:
     types: [published]
@@ -43,7 +42,6 @@ jobs:
           mkdir -p _site
           cp internal/shop/config_schema.json _site/shopware-project-schema.json
           cp internal/extension/config_schema.json _site/shopware-extension-schema.json
-          cp internal/ai/directory/schema.json _site/shopware-ai-directory-schema.json
 
           # Prefer the release that triggered this run; otherwise use the latest non-prerelease.
           if [ "${{ github.event_name }}" = "release" ] && [ "${{ github.event.release.prerelease }}" != "true" ]; then
@@ -74,7 +72,6 @@ jobs:
               <li><a href="version.json">version.json</a> &mdash; latest CLI version</li>
               <li><a href="shopware-project-schema.json">shopware-project-schema.json</a> &mdash; schema for <code>.shopware-project.yml</code></li>
               <li><a href="shopware-extension-schema.json">shopware-extension-schema.json</a> &mdash; schema for <code>.shopware-extension.yml</code></li>
-              <li><a href="shopware-ai-directory-schema.json">shopware-ai-directory-schema.json</a> &mdash; schema for the embedded AI integrations directory manifest</li>
             </ul>
           </body>
           </html>

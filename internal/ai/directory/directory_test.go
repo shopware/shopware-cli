@@ -10,22 +10,18 @@ import (
 )
 
 func TestLoad(t *testing.T) {
-	d, err := Load()
-	require.NoError(t, err)
+	d := Load()
 	require.NotNil(t, d)
 
 	assert.Equal(t, 1, d.Version)
-	assert.Len(t, d.Integrations, 3)
+	assert.NotEmpty(t, d.Integrations)
 
-	// Load caches: a second call returns the same pointer.
-	d2, err := Load()
-	require.NoError(t, err)
-	assert.Same(t, d, d2)
+	_, ok := d.Get("shopware-cli")
+	assert.True(t, ok)
 }
 
 func TestGet(t *testing.T) {
-	d, err := Load()
-	require.NoError(t, err)
+	d := Load()
 
 	e, ok := d.Get("shopware-cli")
 	require.True(t, ok)
@@ -50,4 +46,83 @@ func TestIntegrationJSONNeverIncludesInternal(t *testing.T) {
 	out := strings.ToLower(string(b))
 	assert.NotContains(t, out, "maintainer")
 	assert.NotContains(t, out, "internal")
+}
+
+// fixtureDirectory is a fixed, minimal directory for logic tests, independent of
+// the real hardwired data so adding integrations does not break these tests.
+func fixtureDirectory() *Directory {
+	return &Directory{
+		Version: 1,
+		Integrations: []Integration{
+			{
+				Name: "alpha-skill", DisplayName: "Alpha", Type: TypeSkill,
+				Provider: "shopware", Description: "a", Status: StatusActive,
+				Documentation: "https://example.test/a",
+				Delivery:      Delivery{Kind: DeliveryBundled},
+			},
+			{
+				Name: "beta-skill", DisplayName: "Beta", Type: TypeSkill,
+				Provider: "shopware", Description: "b", Status: StatusComingSoon,
+				Documentation: "https://example.test/b",
+				Delivery:      Delivery{Kind: DeliveryGit, Repository: "https://example.test/repo"},
+			},
+		},
+	}
+}
+
+func TestListAppliesAvailability(t *testing.T) {
+	got, err := fixtureDirectory().List(nil, ListOptions{})
+	require.NoError(t, err)
+	require.Len(t, got, 2)
+
+	assert.True(t, got[0].Available)
+	assert.False(t, got[1].Available)
+	assert.Equal(t, "not yet released", got[1].AvailabilityReason)
+}
+
+func TestListTypeFilter(t *testing.T) {
+	d := fixtureDirectory()
+
+	skills, err := d.List(nil, ListOptions{Type: "skill"})
+	require.NoError(t, err)
+	assert.Len(t, skills, 2)
+
+	// "mcp" is a reserved-but-known filter: empty result, no error.
+	mcp, err := d.List(nil, ListOptions{Type: "mcp"})
+	require.NoError(t, err)
+	assert.Empty(t, mcp)
+
+	_, err = d.List(nil, ListOptions{Type: "bogus"})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "unknown type")
+}
+
+func TestListInstalledOnly(t *testing.T) {
+	d := fixtureDirectory()
+
+	got, err := d.List(map[string]bool{"beta-skill": true}, ListOptions{InstalledOnly: true})
+	require.NoError(t, err)
+	require.Len(t, got, 1)
+	assert.Equal(t, "beta-skill", got[0].Name)
+
+	none, err := d.List(nil, ListOptions{InstalledOnly: true})
+	require.NoError(t, err)
+	assert.Empty(t, none)
+}
+
+func TestInfo(t *testing.T) {
+	d := fixtureDirectory()
+
+	active, err := d.Info("alpha-skill")
+	require.NoError(t, err)
+	assert.True(t, active.Available)
+
+	comingSoon, err := d.Info("beta-skill")
+	require.NoError(t, err)
+	assert.False(t, comingSoon.Available)
+	assert.Equal(t, "not yet released", comingSoon.AvailabilityReason)
+
+	_, err = d.Info("does-not-exist")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "unknown integration")
 }

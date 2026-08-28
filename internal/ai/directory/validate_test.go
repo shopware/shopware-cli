@@ -30,10 +30,8 @@ func validDirectory() *Directory {
 func TestValidateValid(t *testing.T) {
 	require.NoError(t, validDirectory().Validate())
 
-	// The embedded manifest must also be valid.
-	d, err := Load()
-	require.NoError(t, err)
-	require.NoError(t, d.Validate())
+	// The hardwired directory must also be valid.
+	require.NoError(t, Load().Validate())
 }
 
 func TestValidateRejects(t *testing.T) {

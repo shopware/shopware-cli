@@ -1,4 +1,4 @@
-# AI Directory — Manifest Contract v1
+# AI Directory — Contract v1
 
 Frozen contract for `shopware-cli ai list` / `ai info`. Changing any field
 name or enum value here is a breaking change to a public interface.
@@ -6,6 +6,8 @@ name or enum value here is a breaking change to a public interface.
 ## Scope of v1
 - Only `type: skill` entries are listed. `mcp` (shopware-core) is deferred to #1336.
 - No network access, no project detection in this version.
+- The directory has no remote source: entries are hardwired in Go
+  (`integrations.go`). `Validate` (run by tests) guards their invariants.
 
 ## Enums (all validated; values may be ADDED later, never renamed/removed)
 
@@ -15,14 +17,14 @@ name or enum value here is a breaking change to a public interface.
 | delivery.kind   | bundled, git                       | project            |
 | status          | active, coming-soon, deprecated    | —                  |
 
-## Manifest entry (YAML, snake_case)
-Required:  name, display_name, type, provider, description, status,
+## Entry fields (defined in Go, validated by Validate)
+Required:  name, displayName, type, provider, description, status,
            delivery (+ delivery.kind), documentation
 Conditional: delivery.repository — required when delivery.kind == git
 Optional:  compatibility (compatibility.source: owner),
            internal (internal.maintainer)  ← NEVER emitted in any output
 
-`name`: must match `^[a-z][a-z0-9-]*$` and be unique across the manifest.
+`name`: must match `^[a-z][a-z0-9-]*$` and be unique across the directory.
 
 ## JSON output (camelCase) — public contract
 
