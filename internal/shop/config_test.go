@@ -87,6 +87,29 @@ func TestConfigWithoutPHPVersionStaysBackwardCompatible(t *testing.T) {
 	assert.Contains(t, string(written), "environments:")
 }
 
+func TestConfigDeploymentOpenSearchIndexOnInstallRoundTrip(t *testing.T) {
+	tmpDir := t.TempDir()
+	cfg := NewConfig()
+	cfg.ConfigDeployment = &ConfigDeployment{
+		OpenSearch: &ConfigDeploymentOpenSearch{IndexOnInstall: true},
+	}
+
+	require.NoError(t, WriteConfig(cfg, tmpDir))
+
+	written, err := os.ReadFile(filepath.Join(tmpDir, ".shopware-project.yml"))
+	require.NoError(t, err)
+	assert.Contains(t, string(written), "opensearch:\n        index-on-install: true")
+
+	configPath := filepath.Join(tmpDir, "opensearch.yml")
+	require.NoError(t, os.WriteFile(configPath, []byte("deployment:\n  opensearch:\n    index-on-install: true\n"), 0o644))
+
+	read, err := ReadConfig(t.Context(), configPath, false)
+	require.NoError(t, err)
+	require.NotNil(t, read.ConfigDeployment)
+	require.NotNil(t, read.ConfigDeployment.OpenSearch)
+	assert.True(t, read.ConfigDeployment.OpenSearch.IndexOnInstall)
+}
+
 func TestReadConfigCompatibilityDateValidation(t *testing.T) {
 	tmpDir := t.TempDir()
 	configPath := filepath.Join(tmpDir, ".shopware-project.yml")
