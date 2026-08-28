@@ -45,10 +45,18 @@ func GenerateSchemaJSON() ([]byte, error) {
 	return json.MarshalIndent(schema, "", "  ")
 }
 
-// httpsURLPattern asserts an absolute http(s) URL with a non-empty host. It is
-// anchored end-to-end so trailing text and empty hosts (e.g. "http://?x") are
-// rejected, mirroring isAbsoluteHTTPURL.
-const httpsURLPattern = `^https?://[^\s/?#]+(?:[/?#]\S*)?$`
+// httpsURLPattern is an anchored http(s) URL pattern that accepts what
+// isAbsoluteHTTPURL accepts: RFC 3986 characters with %XX escapes. It rejects
+// spaces, control characters, empty hosts, and bad escapes like "%zz".
+// TestSchemaURLPatternMatchesValidator locks this equivalence.
+const (
+	// urlHostChar: a single character valid in the authority (host/port/userinfo).
+	urlHostChar = `%[0-9A-Fa-f]{2}|[A-Za-z0-9._~:@!$&'()*+,;=\[\]-]`
+	// urlRestChar: as above, plus the path/query/fragment delimiters.
+	urlRestChar = `%[0-9A-Fa-f]{2}|[A-Za-z0-9._~:@!$&'()*+,;=/?#\[\]-]`
+
+	httpsURLPattern = `^https?://(?:` + urlHostChar + `)+(?:[/?#](?:` + urlRestChar + `)*)?$`
+)
 
 // setURLPattern adds the http(s) URL assertion to a property of def. It is a
 // no-op when def or the property is absent.

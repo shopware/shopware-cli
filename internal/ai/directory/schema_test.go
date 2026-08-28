@@ -16,17 +16,36 @@ func TestSchemaURLPatternMatchesValidator(t *testing.T) {
 	re := regexp.MustCompile(httpsURLPattern)
 
 	for _, s := range []string{
+		// valid absolute http(s) URLs
 		"https://developer.shopware.com/docs/products/cli/",
 		"https://github.com/shopware/deployment-helper",
 		"http://example.com",
-		"http://example.com?query",
+		"http://example.com:8080",
+		"http://example.com?a=b&c=d",
 		"http://example.com#frag",
-		"http://?query",
-		"http://#frag",
-		"http://example.com trailing",
+		"http://example.com/%2F",
+		"http://example.com/%2f",
+		"http://user:pass@example.com/x",
+		"http://[::1]:8080/x",
+		"http://127.0.0.1/p",
+		"https://a.b-c.d/~user/(x)!,;=",
+		// rejected: bad scheme / empty host / delimiters as host
 		"ftp://example.com",
 		"not-a-url",
 		"https://",
+		"http://?query",
+		"http://#frag",
+		// rejected: invalid percent-escapes
+		"https://example.com/%zz",
+		"http://%zz",
+		"http://example.com/%2",
+		"http://ex%ample.com",
+		// rejected: whitespace / control characters / trailing text
+		"http://example.com trailing",
+		"http://exa mple.com",
+		"http://example.com\n",
+		"http://example.com/\x01",
+		"http://example.com/\t",
 	} {
 		assert.Equalf(t, isAbsoluteHTTPURL(s), re.MatchString(s),
 			"schema pattern and Validate disagree for %q", s)
