@@ -109,6 +109,7 @@ func scaffoldingFiles(extensionName string) []ScaffoldingFile {
 	}
 }
 
+// decided to not use temporary dir because there are only a few files
 // assumes that the extension directory already exists and is empty.
 func CreateExtensionFile(extensionDir string, file ScaffoldingFile, data scaffoldData) error {
 	// create missing subdirectories under the extension directory
@@ -162,17 +163,17 @@ func createScaffoldingData(extensionName string) (scaffoldData, error) {
 	data := scaffoldData{}
 	
 	data.TechnicalName = extensionName
-	data.Namespace = createNamespace(extensionName)
-	data.ClassName = createClassName(extensionName)
-	data.ComposerName = createComposerName(extensionName)
+	data.Namespace = deriveNamespace(extensionName)
+	data.ClassName = deriveClassName(extensionName)
+	data.ComposerName = deriveComposerName(extensionName)
 
 	return data, nil
 }
 
-// createNamespace turns a technical plugin name into a PHP namespace.
+// deriveNamespace turns a technical plugin name into a PHP namespace.
 // The first PascalCase word is the vendor prefix, the rest stay one segment:
 // SwagBasicExample → Swag\BasicExample.
-func createNamespace(extensionName string) string {
+func deriveNamespace(extensionName string) string {
 	parts := splitPascalCase(extensionName)
 	if len(parts) < 2 {
 		return extensionName
@@ -181,15 +182,15 @@ func createNamespace(extensionName string) string {
 	return parts[0] + "\\" + strings.Join(parts[1:], "")
 }
 
-// createClassName is the PHP plugin class, which matches the technical name:
+// deriveClassName is the PHP plugin class, which matches the technical name:
 // SwagBasicExample → SwagBasicExample.
-func createClassName(extensionName string) string {
+func deriveClassName(extensionName string) string {
 	return extensionName
 }
 
-// createComposerName turns a technical plugin name into a Composer package name:
+// deriveComposerName turns a technical plugin name into a Composer package name:
 // SwagBasicExample → swag/basic-example.
-func createComposerName(extensionName string) string {
+func deriveComposerName(extensionName string) string {
 	parts := splitPascalCase(extensionName)
 	if len(parts) == 0 {
 		return ""
@@ -203,6 +204,7 @@ func createComposerName(extensionName string) string {
 	return vendor + "/" + strings.ToLower(strings.Join(parts[1:], "-"))
 }
 
+// splitPascalCase is a helper function and splits a PascalCase string into its constituent words.
 func splitPascalCase(name string) []string {
 	if name == "" {
 		return nil
@@ -220,4 +222,65 @@ func splitPascalCase(name string) []string {
 	}
 
 	return append(parts, string(runes[start:]))
+}
+
+// RemoveCreatedExtensionDir deletes the directory created by CreateExtensionDir.
+// It only removes a path that is an extension folder (custom/plugins/<name> or
+// custom/static-plugins/<name>), never parents, the project root, or a symlink.
+func RemoveCreatedExtensionDir(extensionDir string) error {
+	// Reject an empty path variable.
+	if strings.TrimSpace(extensionDir) == "" {
+		return errors.New("extension directory variable must not be empty")
+	}
+
+	// Turn the path into an absolute, cleaned path (no "..").
+	abs, err := filepath.Abs(extensionDir)
+	if err != nil {
+		return fmt.Errorf("resolve extension directory: %w", err)
+	}
+	abs = filepath.Clean(abs)
+
+	// Never delete the filesystem root.
+	if abs == string(filepath.Separator) {
+		return fmt.Errorf("refusing to remove %s", abs)
+	}
+
+	// The last segment must be a real folder name.
+	name := filepath.Base(abs)
+	if name == "." || name == ".." || name == string(filepath.Separator) {
+		return fmt.Errorf("refusing to remove %s", abs)
+	}
+
+	// Parent must be custom/plugins or custom/static-plugins.
+	parent := filepath.Dir(abs)
+	pluginRoot := filepath.Join(filepath.Base(filepath.Dir(parent)), filepath.Base(parent))
+	if pluginRoot != filepath.FromSlash(store) && pluginRoot != filepath.FromSlash(private) {
+		return fmt.Errorf("refusing to remove %s: not an extension directory", abs)
+	}
+
+	// Inspect the path itself, do not follow a symlink.
+	info, err := os.Lstat(abs)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return nil // Already gone.
+		}
+		return fmt.Errorf("stat extension directory: %w", err)
+	}
+	if info.Mode()&os.ModeSymlink != 0 {
+		return fmt.Errorf("refusing to remove %s: is a symlink", abs)
+	}
+	if !info.IsDir() {
+		return fmt.Errorf("%s is not a directory", abs)
+	}
+
+	// Delete the folder and everything inside it.
+	if err := os.RemoveAll(abs); err != nil {
+		return fmt.Errorf("remove extension directory: %w", err)
+	}
+
+	return nil
+}
+
+func RequireDirExists(path string) error {
+	return nil
 }

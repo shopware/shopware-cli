@@ -72,8 +72,20 @@ func Create(ctx context.Context, opts CreateOptions) error {
 
 	err = scaffolding.CreateExtensionDir(extensionDir)
 	if err != nil {
-		return err
+		return err // dir already exists -> do not delete
 	}
+
+	// If an error occurs during the scaffolding process clean up the created extension directory.
+	// Only runs if extension was created in THIS process
+	defer func() {
+          if err == nil {
+              return
+          }
+		  cleanupErr := scaffolding.RemoveCreatedExtensionDir(extensionDir)
+          if cleanupErr != nil {
+              err = errors.Join(err, cleanupErr)
+          }
+	}()
 
 	// Create the scaffolding for the new extension inside the extension directory.
 	
@@ -107,10 +119,5 @@ func Create(ctx context.Context, opts CreateOptions) error {
 
 	logging.FromContext(ctx).Infof("Extension %s created successfully.", opts.Name)
 
-	return nil
-}
-
-// if creation was canceled clean up the created files and directory
-func handleCancelation(extensionDir string) error {
 	return nil
 }
