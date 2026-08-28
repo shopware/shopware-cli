@@ -71,17 +71,7 @@ func installAndFinalize(cmd *cobra.Command, opts *createOptions, phpConstraint *
 		}
 	}
 
-	shopCfg := shop.NewConfig()
-	if opts.useDocker {
-		shopCfg.Environments["local"].Type = "docker"
-		shopCfg.Docker = &shop.ConfigDocker{
-			PHP: &shop.ConfigDockerPHP{Version: composerInstallPHP},
-		}
-	} else if opts.phpVersion != "" {
-		// The version, not the executable path: the same PHP lives elsewhere on
-		// other machines, so later commands look it up locally.
-		shopCfg.PHPVersion = opts.phpVersion
-	}
+	shopCfg := newProjectConfig(opts, composerInstallPHP)
 
 	// Serve the shop at a stable hostname through the shared proxy instead of a
 	// port.
@@ -98,6 +88,28 @@ func installAndFinalize(cmd *cobra.Command, opts *createOptions, phpConstraint *
 
 	printCreateSummary(ctx, opts)
 	return nil
+}
+
+func newProjectConfig(opts *createOptions, composerInstallPHP string) *shop.Config {
+	shopCfg := shop.NewConfig()
+	if opts.useDocker {
+		shopCfg.Environments["local"].Type = "docker"
+		shopCfg.Docker = &shop.ConfigDocker{
+			PHP: &shop.ConfigDockerPHP{Version: composerInstallPHP},
+		}
+	} else if opts.phpVersion != "" {
+		// The version, not the executable path: the same PHP lives elsewhere on
+		// other machines, so later commands look it up locally.
+		shopCfg.PHPVersion = opts.phpVersion
+	}
+
+	if opts.selectedDeployment == shop.DeploymentShopwarePaaS {
+		shopCfg.ConfigDeployment = &shop.ConfigDeployment{
+			OpenSearch: &shop.ConfigDeploymentOpenSearch{IndexOnInstall: true},
+		}
+	}
+
+	return shopCfg
 }
 
 func printCreateSummary(ctx context.Context, opts *createOptions) {
