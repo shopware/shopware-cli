@@ -302,6 +302,7 @@ func dialViaSSH(_ context.Context, sshArgs []string, target, addr string) (net.C
 	args = append(args, sshArgs...)
 	args = append(args, "-W", addr, target)
 
+	//nolint:noctx // the process must outlive the dial: database/sql cancels the dial context once the connection is established, which would kill a healthy tunnel; the ssh process dies with the connection's Close instead
 	cmd := exec.Command("ssh", args...)
 
 	stdin, err := cmd.StdinPipe()
