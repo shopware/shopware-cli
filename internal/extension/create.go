@@ -9,6 +9,7 @@ import (
 
 	"github.com/shopware/shopware-cli/internal/extension/scaffolding"
 	"github.com/shopware/shopware-cli/internal/shop"
+	"github.com/shopware/shopware-cli/internal/validation"
 	"github.com/shopware/shopware-cli/logging"
 )
 
@@ -41,8 +42,6 @@ func Create(ctx context.Context, opts CreateOptions) error {
 	// check if non-interactive, parse and validate arguments
 
 	// ask for extension name if not provided and validate
-
-	// infer namespace
 
 	// ask for extension type (theme or extension)
 
@@ -108,16 +107,62 @@ func Create(ctx context.Context, opts CreateOptions) error {
 		return err
 	}
 
+	logging.FromContext(ctx).Infof("Extension %s scaffolding created.", opts.Name)
+
 	// validate the created extension
+	valid, err := validateCreatedExtension(ctx, extensionDir)
+	if err != nil {
+		return fmt.Errorf("failed to validate created extension: %w", err)
+	}
+	if !valid {
+		return fmt.Errorf("validation failed for created extension: %s", opts.Name)
+	}
+
+	logging.FromContext(ctx).Infof("Extension %s validated successfully.", opts.Name)
 
 	// make clear which requiremtents are not checked by the CLI and need manual review
 
-	// inform user if validation is successful
-	// make clear that this does not mean that extension will pass store review
+	// inform user if validation is successful and make clear that this does not mean that extension will pass store review
 
 	// show possible next steps (maybe hint that lsp helps with development)
 
-	logging.FromContext(ctx).Infof("Extension %s created successfully.", opts.Name)
+	logging.FromContext(ctx).Infof("Extension %s creation finished.", opts.Name)
 
 	return nil
 }
+
+// validateCreatedExtension runs extension validate and returns true if the extension is valid, false if not, and an error if the validation process itself failed.
+func validateCreatedExtension(ctx context.Context, extensionDir string) (bool, error) {
+	// Load the extension from the created directory.
+	ext, err := GetExtensionByFolder(ctx, extensionDir)
+	if err != nil {
+		return false, fmt.Errorf("failed to get extension by folder: %w", err)
+	}
+
+	// Validate the extension.
+	check := &checkResult{}
+	RunValidation(ctx, ext, check)
+
+	return !check.HasErrors(), nil
+}
+
+// checkResult implements the validation.Check interface
+type checkResult struct {
+      results []validation.CheckResult
+}
+
+func (c *checkResult) AddResult(r validation.CheckResult) { c.results = append(c.results, r) }
+
+func (c *checkResult) GetResults() []validation.CheckResult { return c.results }
+
+func (c *checkResult) HasErrors() bool {
+	for _, r := range c.results {
+		if r.Severity == validation.SeverityError {
+			return true
+		}
+	}
+	return false
+}
+
+// mutex not needed in verifier.Check; that is for running PHPStan/ESLint in parallel.
+func (c *checkResult) RemoveByIdentifier([]validation.ToolConfigIgnore) validation.Check { return c }
