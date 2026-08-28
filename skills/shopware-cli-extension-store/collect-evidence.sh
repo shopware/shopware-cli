@@ -1,6 +1,8 @@
 #!/bin/bash
 set -u
 
+cd "${1:-.}" || exit 1
+
 CLI="$(command -v shopware-cli || true)"
 if [ -x ../shopware-cli/bin/shopware-cli ]; then
   CLI="$(cd ../shopware-cli/bin && pwd)/shopware-cli"
