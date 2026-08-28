@@ -1,52 +1,35 @@
 ---
 name: shopware-cli-extension-store
-description: Assess and prepare Shopware extensions for Store distribution using verified workspace facts, fresh CLI behavior, the current CLI schema/source, and authoritative Store documentation. Separate proven requirements from schema support and recommendations; never infer Store blockers from generic conventions.
+description: MUST use for Shopware Store publication/readiness/submission/compliance questions, including "prepare this plugin/extension for the Shopware Store", "what needs to change before Store publication", Store listing metadata, Store-compliance validation, packaging, or upload readiness. Verify the live workspace, current CLI behavior, and current official Store docs before declaring requirements.
 ---
 
-# Shopware Extension Store Distribution
+# Shopware Store Readiness
 
-Use this skill for Store-readiness assessments, Store-compliance validation, Store listing configuration, packaging, and submission guidance.
+Use this skill whenever the user asks whether a Shopware extension/plugin is ready for the Shopware Store or what must change before publication.
 
-The goal is not to produce a generic Store checklist. The goal is to answer from **current evidence**.
+## Core rule
 
-## Non-negotiable rules
+Never generate a generic Store checklist from memory.
 
-1. **Inspect the current working tree before describing it.** Never claim a file is missing, present, invalid, undersized, placeholder, or configured without checking the live project.
-2. **Use one authoritative CLI binary.** When an unreleased `shopware/shopware-cli` checkout is available, prefer its built binary over an older executable on `PATH` and use that same binary for help, schema, validation, and packaging discovery.
-3. **Fresh runtime output beats saved reports.** Ignore stale `validation.json`, XML, markdown, screenshots, or prior agent output when they conflict with the current tree or a fresh command.
-4. **Do not modify files during an inspection-only request.** Use read-only commands, CLI flags, schema/help output, source inspection, official docs, or a disposable fixture.
-5. **Schema support is not a requirement.** A field appearing in `extension config-schema` proves only that the CLI supports that shape.
-6. **A passing fixture does not prove non-enforcement.** If an item is present and validation passes, that does not show the validator would allow it to be absent. Use source/tests or a controlled fixture before claiming that the CLI does not enforce something.
-7. **Strong requirement language needs strong evidence.** `required`, `must`, `blocker`, `critical`, `will fail`, `reject`, and `rejection` require either current CLI enforcement or an explicit current official Store requirement.
-8. **Evidence classifications are sticky.** A recommendation cannot become an unconditional action in a later summary or next-step list.
+For every readiness assessment, establish facts in this order:
 
-## Mandatory Store-readiness protocol
+1. **Live workspace** — what files/config actually exist now.
+2. **Fresh CLI behavior** — normal and Store-compliance validation using one authoritative binary.
+3. **Current CLI schema/source** — what configuration is supported and what the CLI really enforces.
+4. **Current official Shopware Store docs** — what publication/manual-review requirements are explicitly documented.
+5. **Recommendations** — useful advice that is not proven mandatory.
 
-For a request such as “inspect this extension and tell me what needs to change for Store publication,” follow this sequence before answering.
+If evidence is missing, say so. Do not upgrade an assumption into a requirement.
 
-### 1. Resolve the authoritative CLI
+## Mandatory read-only assessment workflow
 
-Start by locating the current binary and any nearby checkout-built binary:
+When the user says to inspect only / not modify files, do not edit the extension, even temporarily.
 
-```bash
-command -v shopware-cli
-shopware-cli --version
+### 1. Inspect the current extension first
 
-# If a sibling shopware-cli checkout exists, inspect its built binary too.
-if [ -x ../shopware-cli/bin/shopware-cli ]; then
-  ../shopware-cli/bin/shopware-cli --version
-fi
-```
+Before saying that a file is missing, present, invalid, or has a particular size/dimension, verify it from the live tree.
 
-If the task is explicitly testing unreleased CLI or skill behavior from a checkout, use the checkout-built binary consistently. Do not mix its results with a Homebrew/system binary.
-
-Record which binary and version produced the evidence.
-
-### 2. Inspect the live extension
-
-Before stating workspace facts, inspect the current files directly. Keep this read-only.
-
-Typical commands:
+Typical checks:
 
 ```bash
 pwd
@@ -54,271 +37,187 @@ find . -maxdepth 4 -type f \
   -not -path './vendor/*' \
   -not -path './node_modules/*' \
   -not -path './.git/*' | sort
-
 cat composer.json
-
-if [ -f .shopware-extension.yml ]; then
-  cat .shopware-extension.yml
-fi
-
-if [ -e src/Resources/config/plugin.png ]; then
-  file src/Resources/config/plugin.png
-fi
+[ -f .shopware-extension.yml ] && cat .shopware-extension.yml
+[ -e src/Resources/config/plugin.png ] && file src/Resources/config/plugin.png
 ```
 
-Use targeted checks when making a specific claim:
+For specific claims, use explicit existence checks. Never infer "missing" from a checklist.
+
+### 2. Resolve one authoritative CLI binary
 
 ```bash
-test -f README.md && echo 'README present' || echo 'README absent'
-test -f CHANGELOG.md && echo 'CHANGELOG present' || echo 'CHANGELOG absent'
-test -f LICENSE && echo 'LICENSE present' || echo 'LICENSE absent'
-test -f src/Resources/config/plugin.png && echo 'plugin icon present' || echo 'plugin icon absent'
+command -v shopware-cli
+shopware-cli --version
 ```
 
-Do not say “missing” unless a current check shows absence. Do not state image dimensions unless current file metadata or another reliable inspection shows them.
+If this project is testing unreleased behavior from a sibling `shopware/shopware-cli` checkout and `../shopware-cli/bin/shopware-cli` exists, prefer that checkout-built binary and use it consistently.
+
+Do not mix an older PATH/Homebrew CLI with a checkout-built CLI in one assessment.
 
 ### 3. Run fresh normal validation
-
-Use the chosen binary:
 
 ```bash
 <cli> extension validate . --reporter markdown
 ```
 
-Treat the current exit status/output as authoritative for the current tree.
+Fresh output outranks saved `validation.json`, XML, markdown, screenshots, or earlier agent responses.
 
-### 4. Run Store-compliance validation without modifying the project
+### 4. Run Store-compliance validation read-only
 
-First inspect current help:
+Inspect help first:
 
 ```bash
 <cli> extension validate --help
 ```
 
-If `--store-compliance` is supported and Store compliance is not already enabled in YAML, use the flag for a read-only assessment:
+If `--store-compliance` is supported and Store compliance is not already enabled in YAML, use the flag for this read-only assessment:
 
 ```bash
 <cli> extension validate . --store-compliance --reporter markdown
 ```
 
-This is preferable to temporarily editing `.shopware-extension.yml` when the user said not to modify files.
+Do not edit `.shopware-extension.yml` just to test the mode when the user said not to modify files.
 
-For Store-intended projects, `validation.store_compliance: true` can be recommended as persistent project configuration so ordinary local/CI validation uses the same mode, but do **not** call persistence a Store submission requirement unless current official Store documentation establishes that.
+`validation.store_compliance: true` is the persistent project configuration for Store intent. Issue #1407 tracks deprecating the CLI flag; do not claim the flag is already deprecated unless current help/runtime says so.
 
-Issue #1407 tracks deprecating the flag. Do not say the flag is already deprecated unless current CLI help or runtime output says so.
-
-### 5. Inspect the current schema only for supported configuration
+### 5. Inspect schema only to learn supported configuration
 
 ```bash
 <cli> extension config-schema
 ```
 
-Only claim a schema field exists if it is visible in the current schema output. Do not invent fields from memory.
+A field appearing in the schema means **supported**, not automatically **required**.
 
-Fields such as `store.type`, `store.icon`, `store.description`, `store.meta_title`, `store.meta_description`, `store.localizations`, and others may be supported depending on the current schema.
+Never invent Store fields such as `category`, `keywords`, or `changelog` unless the current schema or current official docs actually show them.
 
-For each field, distinguish:
+### 6. Verify Store publication claims against current official docs
 
-- **supported by schema**
-- **required by schema/local validation**, if the schema or validator actually marks/enforces it
-- **required by Store publication**, only if current official Store documentation says so
+Before using words such as `required`, `must`, `blocker`, `critical`, `reject`, or `will fail`, verify the claim against either:
 
-Do not collapse these into one concept.
+- fresh/current CLI enforcement, or
+- current official Shopware Store documentation.
 
-### 6. Check current official Store documentation before declaring publication requirements
-
-When the user asks what is needed for Store publication, verify relevant current official Shopware documentation before classifying anything as a Store requirement.
-
-Useful starting points:
+Useful official starting points:
 
 - <https://developer.shopware.com/docs/guides/development/testing/store/quality-guidelines.html>
 - <https://developer.shopware.com/docs/guides/development/testing/store/content-and-translations.html>
 - <https://developer.shopware.com/docs/guides/development/testing/store/code-quality.html>
 - <https://developer.shopware.com/docs/guides/development/testing/store/functionality-integration.html>
-- <https://developer.shopware.com/docs/guides/development/testing/store/not-allowed-store-behaviors.html>
 - <https://developer.shopware.com/docs/guides/development/testing/store/store-review-errors.html>
-- <https://developer.shopware.com/docs/guides/development/testing/store/storefront-performance-and-errors.html>
-- <https://developer.shopware.com/docs/guides/development/testing/store/seo-and-structured-data.html>
 - <https://developer.shopware.com/docs/guides/development/testing/store/cookies-and-privacy.html>
 - <https://developer.shopware.com/docs/guides/development/testing/store/installation-and-cleanup.html>
 
-If current official docs cannot be accessed or do not explicitly establish a claim, do not fill the gap from memory. Downgrade it to a recommendation or state that the requirement could not be confirmed.
+If current official docs cannot be checked or do not explicitly support a claim, classify it as a recommendation or unconfirmed item.
 
-## Evidence model
+## Evidence classes
 
-Classify every proposed change as exactly one of these:
+Every proposed change must be exactly one of:
 
-- **CLI-enforced** — a fresh run fails because of it, or current CLI source/tests directly establish the rule.
-- **Store-doc-required** — current official Shopware Store documentation explicitly establishes the publication/review requirement.
-- **Schema-supported, not proven required** — current `config-schema` shows the field/shape, but neither CLI enforcement nor Store documentation proves it mandatory.
-- **Recommendation / inference** — product-quality advice, likely cleanup, branding guidance, or another sensible suggestion not established as a requirement.
+- **CLI-enforced** — fresh validation fails because of it, or current source/tests directly prove enforcement.
+- **Store-doc-required** — current official Shopware Store docs explicitly require it.
+- **Schema-supported, not proven required** — current schema supports it, but it is not proven mandatory.
+- **Recommendation / inference** — useful product-quality advice without proof that it is mandatory.
 
-Workspace observations such as “file exists,” “URL equals example.com,” or “icon is 128x128” are **evidence**, not requirement classifications. They must come from current inspection.
+These classifications are sticky. A recommendation must not later become an unconditional `Add`, `Fix`, `Replace`, `Must`, or `Critical` action.
 
-### Language by classification
+For schema-supported/recommendation items, use conditional wording such as `consider`, `verify whether`, or `if required for your submission path`.
 
-For **CLI-enforced** and **Store-doc-required**, imperative actions are appropriate when the evidence clearly requires a change.
+## Current CLI behavior to keep straight
 
-For **Schema-supported, not proven required** and **Recommendation / inference**, keep actions conditional. Prefer:
+For the current implementation associated with this skill:
 
-- “consider ...”
-- “verify whether ...”
-- “if required by current Store documentation, configure ...”
-- “this is supported but not established as mandatory”
+- normal extension validation includes normal metadata checks and plugin icon validation;
+- a missing normal plugin icon can produce `metadata.icon`;
+- normal plugin icon dimensions are accepted from 112x112 through 256x256, with a maximum file size of 30 KB in the current validator;
+- Store-compliance mode gates additional Administration/Storefront source/build pairing checks (`validateAssets`), including cases such as `assets.administration.sources_missing`;
+- `--full` is separate from Store-compliance mode and controls additional tools such as PHPStan/ESLint/Stylelint.
 
-Do not use `reject`, `fail`, `flag`, `block`, `needs`, `must`, `required`, or equivalent mandatory wording for an unverified finding.
+Do not infer that the CLI "does not enforce" something merely because the current fixture contains that thing and passes. A passing fixture is not a negative test.
 
-The classification must remain unchanged in:
+## Known traps — do not repeat these mistakes
 
-- the finding description
-- evidence/impact text
-- action text
-- summary
-- checklist
-- “next steps”
+- Do **not** claim `README.md`, `CHANGELOG.md`, or a physical `LICENSE` file is Store-required unless current official Store docs explicitly establish it.
+- Do **not** claim a normal plugin icon is missing without checking `src/Resources/config/plugin.png`.
+- Do **not** turn `store.icon` dimensions into normal-plugin-icon requirements.
+- Do **not** recommend arbitrary icon sizes such as 500x500 from memory.
+- Do **not** invent `category`, `keywords`, `changelog`, or other Store config fields from memory.
+- Do **not** require translation files merely because `composer.json` contains translated labels/descriptions. Report what the CLI/docs actually require.
+- Do **not** require `services.xml`/`services.yaml` for an extension that does not define services. An empty plugin class does not imply a missing services configuration.
+- Do **not** say placeholder URLs or test branding are formal blockers unless current Store docs explicitly establish that. They may still be sensible recommendations for a real product.
+- Do **not** present packaging/upload as the next step in an inspection-only readiness assessment unless readiness has actually been established and the user asked for submission guidance.
+- Do **not** invent `shopware-cli extension create` or any command not shown by current `--help`.
 
-Do not re-promote a recommendation later in the answer.
+## Plugin icon vs Store listing assets
 
-## What Store-compliance mode currently means
+Keep these distinct:
 
-Verify this against the current source when version accuracy matters.
+1. `src/Resources/config/plugin.png` — normal plugin icon validated by the CLI.
+2. `.shopware-extension.yml` `store.icon` — Store listing configuration when supported by current schema.
+3. Store documentation requirements — may specify publication assets independently of CLI validation.
 
-In the current implementation associated with this skill, `validation.store_compliance` gates `validateAssets`, which checks Administration and Storefront source/build pairing, including configured extra bundles.
-
-A controlled example:
-
-- compiled Administration assets under `Resources/public/administration` without an Administration source entrypoint can pass normal validation;
-- the same tree can fail Store-compliance validation with `assets.administration.sources_missing`.
-
-The inverse source-without-build situation is also checked.
-
-Do not describe unrelated normal validators as Store-only checks. Metadata, license value, plugin icon, and other built-in validators may run in normal validation.
-
-Do not conclude “Store compliance has no checks” merely because one fixture produces zero Store-compliance findings.
-
-## Plugin metadata and icons
-
-Keep these separate:
-
-- plugin metadata from `composer.json`
-- normal plugin icon, typically `src/Resources/config/plugin.png`
-- Store listing metadata/assets such as `.shopware-extension.yml` `store.icon`
-
-Never infer that the normal plugin icon is missing without checking the file.
-
-Never infer that the normal plugin icon must be exactly 256x256 from a `store.icon` schema description. If exact normal-plugin icon constraints matter, inspect current validator output/source.
-
-A physical `LICENSE`, `README.md`, or `CHANGELOG.md` may be useful, but do not call any of them required for Store publication unless current official Store documentation explicitly says so. Likewise, do not claim the CLI does not validate them merely because the current fixture passes; prove non-enforcement from source/tests or a controlled fixture if that distinction matters.
+If these sources specify different dimensions, report the difference rather than merging them into one rule.
 
 ## Store configuration
 
-`extension config-schema` describes configuration the CLI understands. It is not automatically a Store submission checklist.
+`extension config-schema` describes what `.shopware-extension.yml` can contain. It is not itself a Store submission checklist.
 
-A Store-intended extension may choose to persist Store validation intent:
+If there is no `store:` block, report that as a workspace fact. Do not say the extension "needs" one unless current CLI semantics or Store docs establish that for the relevant submission workflow.
+
+Persisting:
 
 ```yaml
 validation:
   store_compliance: true
 ```
 
-And may use a supported `store:` block for listing information. Which Store fields are actually mandatory must come from current schema validation semantics and/or current official Store documentation, not from the mere existence of those fields.
+is useful for Store-intended extensions so normal local/CI validation consistently includes Store-compliance checks. Treat persistence as configuration guidance unless Store docs explicitly make it a submission requirement.
 
-If the current extension has no `store:` block, report that as an observed configuration state. Do not say it “needs a Store section” unless evidence proves the section is mandatory for the user's intended submission path.
+## Required response format for readiness assessments
 
-## Full validation is separate
+Start with a concise **Validation status** that states:
 
-`--full` controls additional validation tools such as PHPStan, ESLint, and Stylelint. It is separate from Store-compliance mode.
+- exact CLI binary/version used;
+- normal validation result;
+- Store-compliance validation result;
+- whether any files were modified.
 
-Use only tool names accepted by the current CLI. Inspect:
-
-```bash
-<cli> extension validate --help
-```
-
-Do not invent wildcard tool names.
-
-## Packaging and account operations
-
-Before suggesting packaging or submission commands, inspect the current command surface:
-
-```bash
-<cli> extension package --help
-<cli> account producer extension --help
-<cli> account producer extension info --help
-<cli> account producer extension upload --help
-```
-
-Do not invent `shopware-cli extension create` or other commands that are not present.
-
-Do not present upload as an immediate next step merely because validation passes. Upload/push operations are remote side effects and require explicit user intent. Local validation success does not prove Store acceptance or listing completeness.
-
-## Required response shape for readiness assessments
-
-When the user asks what **needs to change**, separate proven requirements from everything else.
-
-Start with a short validation status containing:
-
-- authoritative CLI binary/version
-- normal validation result
-- Store-compliance validation result, if run
-- whether files were modified
-
-Then use a table:
+Then use:
 
 | Finding | Current evidence | Classification | Action |
 | --- | --- | --- | --- |
-| ... | live file/CLI/docs evidence | one of the four classes | wording consistent with classification |
 
-Then provide exactly these two sections when relevant:
+Then include exactly these sections when applicable:
 
 ### Required changes
 
-Include only **CLI-enforced** and **Store-doc-required** changes.
+Only include **CLI-enforced** and **Store-doc-required** items.
 
-If none are demonstrated, say:
+If none are proven, say:
 
 > No required changes were established by the current CLI checks or the Store requirements verified in this assessment.
 
 ### Recommendations / items to verify
 
-Put **Schema-supported, not proven required** and **Recommendation / inference** items here. Keep them conditional.
+Put **Schema-supported, not proven required** and **Recommendation / inference** items here with conditional wording.
 
-Do not end with an unconditional numbered “Next Steps” list that upgrades recommendations into requirements.
+Do not produce a generic `Critical / Major / Minor` checklist unless each severity is supported by evidence.
 
-## Final self-audit before answering
+## Final self-check
 
-Before sending the assessment, check all of these:
+Before answering, verify:
 
-1. **Missing-file claims:** Did I directly inspect that path in the current tree?
-2. **Presence/dimension claims:** Did I inspect the current file rather than infer from a checklist?
-3. **Non-enforcement claims:** Am I incorrectly inferring “CLI does not enforce X” merely because X is present and validation passes? If so, remove the claim or verify it from source/tests/controlled fixture.
-4. **Schema claims:** Did the exact field appear in the current `config-schema` output?
-5. **Store requirement claims:** Did current official Shopware documentation explicitly establish the requirement?
-6. **CLI requirement claims:** Did a fresh run or current source/tests establish enforcement?
-7. **Icon separation:** Did I keep `src/Resources/config/plugin.png` separate from `store.icon`?
-8. **Read-only constraint:** Did I avoid changing project files when asked not to modify them?
-9. **Binary consistency:** Did I use one intended CLI binary throughout?
-10. **Sticky classification:** Did any recommendation become `add`, `fix`, `replace`, `must`, `required`, `reject`, `fail`, or `block` later in the response?
-11. **Required-changes section:** Does it contain only CLI-enforced or Store-doc-required items?
-12. **No invented commands:** Did I verify command syntax with the current CLI before suggesting it?
+1. Every `missing` claim came from a live file check.
+2. Every dimension/size claim came from current file inspection or authoritative source.
+3. One CLI binary was used consistently.
+4. Validation output is fresh.
+5. No passing fixture was used to prove non-enforcement.
+6. Every Store `required` claim has current official documentation or current CLI enforcement.
+7. No schema-supported field was promoted to mandatory without evidence.
+8. Normal plugin icon and `store.icon` were kept separate.
+9. README/CHANGELOG/LICENSE were not invented as requirements.
+10. No category/keywords/changelog/services/translation requirement was invented.
+11. Recommendations stayed recommendations in the final action/summary.
+12. No files were modified if the user requested inspection only.
 
-If any check fails, correct the assessment before responding.
-
-## Information priority
-
-When evidence conflicts, use this order:
-
-1. Current live working-tree inspection for facts about the project.
-2. Intended/current CLI binary and fresh runtime output.
-3. Current `.shopware-extension.yml` plus current `extension config-schema`.
-4. Current `shopware/shopware-cli` source/tests for implementation semantics.
-5. Current official Shopware Store documentation for publication/review requirements.
-6. Historical reports, remembered behavior, and examples only as background.
-
-Use the source that answers the specific question: filesystem inspection establishes whether a file exists; CLI/source establishes local enforcement; official Store docs establish Store publication policy.
-
-## See also
-
-- `shopware-cli` skill for general CLI and validation guidance.
-- Issue #1407 for the `--store-compliance` deprecation plan and current mode semantics.
-- Shopware Store testing documentation: <https://developer.shopware.com/docs/guides/development/testing/store/>
+If any check fails, correct the answer before sending it.
