@@ -43,7 +43,7 @@ grep -rn '"metadata.icon.size"' --include=*.go internal/ | grep -v _test
 | L1 | `extra.description` per locale is 150–185 chars | CLI-enforced | Local file | `metadata.description` — `internal/extension/validator.go` | always |
 | L2 | `extra.manufacturerLink` per locale present | CLI-enforced | Local file | `metadata.manufacturer` — `internal/extension/platform.go` | always |
 | L3 | `extra.supportLink` per locale present | CLI-enforced | Local file | `metadata.support` — `internal/extension/platform.go` | always |
-| L4 | `src/Resources/config/plugin.png` is **112×112 px** and ≤30 kB | Store-doc-required | Local artifact | docs `#images-and-screenshots` | icon present |
+| L4 | `src/Resources/config/plugin.png` is **112–256 px** and ≤30 kB | CLI-enforced | Local artifact | `metadata.icon.size` — `internal/extension/validator.go` | icon present |
 | L5 | `authors` key present in `composer.json` | CLI-enforced | Local file | `metadata.author` — `internal/extension/platform.go` (apps: `app.go`) | always |
 | R1 | Published in the international Store | Store-doc-required | Remote listing | docs `#store-listing` | always |
 | R2 | Short description 150–185 chars | Store-doc-required | Remote listing | docs `#store-listing` | always |
@@ -68,9 +68,8 @@ Nothing outside this table is a finding, because nothing outside it has a source
 When CLI and docs disagree on a requirement:
 - Follow the **docs** reading (canonical Store review standard).
 - Flag the CLI gap or mismatch as a note only if useful for understanding why local validation passed but Store review may differ.
-- Never report the CLI reading as correct if docs have been updated.
+- Do not report the CLI reading as correct if docs have been updated.
 
-Example: Icon size. Docs specify 112×112px (fixed). CLI allows 112–256 range. An icon outside 112×112 passes CLI but fails Store review. Report "icon does not meet Store requirement" with both sources, not "icon passes CLI".
 
 ## 3. Emit rules
 
