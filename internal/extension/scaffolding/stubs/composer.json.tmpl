@@ -8,7 +8,7 @@
         "shopware/core": "~6.7.0"
     },
     "extra": {
-        "shopware-plugin-class": "{{ .Namespace }}\\{{ .ClassName }}",
+        "shopware-plugin-class": "{{ jsonEscape .Namespace }}\\{{ .ClassName }}",
         "label": {
             "de-DE": "Skeleton plugin",
             "en-GB": "Skeleton plugin"
@@ -16,12 +16,12 @@
     },
     "autoload": {
         "psr-4": {
-            "{{ .Namespace }}\\": "src/"
+            "{{ jsonEscape .Namespace }}\\": "src/"
         }
     },
     "autoload-dev": {
         "psr-4": {
-            "{{ .Namespace }}\\Tests\\": "tests/"
+            "{{ jsonEscape .Namespace }}\\Tests\\": "tests/"
         }
     }
 }

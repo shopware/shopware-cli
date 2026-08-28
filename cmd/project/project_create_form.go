@@ -19,29 +19,38 @@ import (
 )
 
 func runCreateForm(cmd *cobra.Command, opts *createOptions, releases []repository.Version, filteredVersions []*version.Version) error { //nolint:gocyclo
+	// Now I will group full versions (e.g. 6.6.10.0) under their minor line (e.g. "6.6")
+	// so later I can ask "which line?" before "which exact release?".
 	type minorGroup struct {
-		label    string
-		versions []string
+		label    string   // "6.6"
+		versions []string // "6.6.10.0", "6.6.9.0", ...
 	}
 	var minorGroups []minorGroup
+	// Now I will keep a map from "6.6" to its index in minorGroups so I can
+	// append without scanning the slice each time.
 	minorIndex := map[string]int{}
 	for _, v := range filteredVersions {
+		// Now I will split 6.6.10.0 into [6, 6, 10, 0] and keep only major.minor.
 		segments := v.Segments()
 		key := fmt.Sprintf("%d.%d", segments[0], segments[1])
 		if idx, ok := minorIndex[key]; ok {
+			// Now I will add this patch to the group I already started.
 			minorGroups[idx].versions = append(minorGroups[idx].versions, v.String())
 		} else {
+			// Now I will remember this new minor line and start a group with this version.
 			minorIndex[key] = len(minorGroups)
 			minorGroups = append(minorGroups, minorGroup{label: key, versions: []string{v.String()}})
 		}
 	}
 
+	// Now I will turn those groups into dropdown options, putting "latest" first.
 	minorOptions := make([]huh.Option[string], 0, len(minorGroups)+1)
 	minorOptions = append(minorOptions, huh.NewOption(shop.VersionLatest, shop.VersionLatest))
 	for _, g := range minorGroups {
 		minorOptions = append(minorOptions, huh.NewOption(g.label, g.label))
 	}
 
+	// Now I will prepare the deployment and CI dropdowns I may show later.
 	deploymentOptions := []huh.Option[string]{
 		huh.NewOption("None", shop.DeploymentNone),
 		huh.NewOption("Docker (Container)", shop.DeploymentContainer),
@@ -56,36 +65,42 @@ func runCreateForm(cmd *cobra.Command, opts *createOptions, releases []repositor
 		huh.NewOption("GitLab CI", shop.CIGitLab),
 	}
 
+	// Now I will check which answers are still missing (flags already fill some of these).
 	needsProjectFolder := opts.projectFolder == ""
 	needsVersion := opts.selectedVersion == ""
 	needsDeployment := opts.selectedDeployment == ""
 	needsCI := opts.selectedCI == ""
-	// An explicit --php-version is authoritative and validated later, so the form
-	// must not offer a competing choice.
+	// Now I will skip the PHP question if the user already passed --php-version;
+	// that flag is authoritative and gets validated later.
 	needsPHPVersion := !opts.phpVersionExplicit
 
+	// Now I will decide whether the "customize further?" step is worth showing at all.
 	needsAdvanced := needsDeployment || needsCI || needsPHPVersion ||
 		!cmd.PersistentFlags().Changed("git") ||
 		!cmd.PersistentFlags().Changed("with-amqp") ||
 		!opts.elasticsearchExplicit
 
+	// Now I will set friendly defaults for the yes/no questions.
 	selectDocker := tui.Yes
 	selectGit := tui.Yes
 	selectElasticsearch := tui.No
 	selectAMQP := tui.Yes
 
 	baseDomain := proxy.BaseDomain()
-	// Default to the stable hostname (recommended); only applies with Docker.
+	// Now I will default to a stable hostname (recommended); this only applies with Docker.
 	selectLocalDomain := true
-	// Whether this machine already resolves the proxy domain. When it does, the
-	// one-time sudo setup is already done, so we never ask for it again.
+	// Now I will check whether this machine already resolves the proxy domain.
+	// If it does, I will never ask for the one-time sudo setup again.
 	machineSetupDone := proxy.CheckResolverConfigured(baseDomain).Configured
 	selectSetupNow := tui.Yes
 
+	// Now I will turn Git off by default if git is not installed on this machine.
 	if !system.IsGitInstalled() {
 		selectGit = tui.No
 	}
 
+	// Now I will turn AMQP off by default when this machine's PHP has no amqp extension
+	// (Docker projects skip this check; the image can include it).
 	if !opts.useDocker {
 		extensions, err := system.GetAvailablePHPExtensions(cmd.Context())
 		if err == nil && !slices.Contains(extensions, "amqp") {
@@ -94,8 +109,8 @@ func runCreateForm(cmd *cobra.Command, opts *createOptions, releases []repositor
 	}
 	selectedMinor := shop.VersionLatest
 
-	// Docker may come from the --docker flag or from the in-form question, and
-	// the PHP selection depends on the answer either way.
+	// Now I will define a helper: Docker may come from --docker or from the form,
+	// and PHP options depend on that answer either way.
 	dockerSelected := func() bool {
 		if cmd.PersistentFlags().Changed("docker") {
 			return opts.useDocker
@@ -103,8 +118,9 @@ func runCreateForm(cmd *cobra.Command, opts *createOptions, releases []repositor
 		return selectDocker == tui.Yes
 	}
 
-	// The patch-version group stays hidden for "latest" and leaves
-	// opts.selectedVersion empty, which is only defaulted after the form ran.
+	// Now I will define a helper for "which Shopware version is in play right now?".
+	// The patch dropdown stays hidden for "latest" and leaves opts.selectedVersion
+	// empty until I default it after the form ran.
 	effectiveVersion := func() string {
 		if opts.selectedVersion != "" {
 			return opts.selectedVersion
@@ -112,9 +128,10 @@ func runCreateForm(cmd *cobra.Command, opts *createOptions, releases []repositor
 		return shop.VersionLatest
 	}
 
-	// Discovery spawns a subprocess per candidate, so it runs at most once; only
-	// the constraint filtering is redone when the Shopware version changes. Docker
-	// projects never reach it: their PHP comes from the image, not this machine.
+	// Now I will prepare PHP discovery, but I will not scan the machine until I need it.
+	// Discovery spawns a subprocess per candidate, so I run it at most once; I only
+	// re-filter when the Shopware version changes. Docker projects never reach this:
+	// their PHP comes from the image, not this machine.
 	var phpInstallations []system.PHPInstallation
 	phpDiscovered := false
 	compatiblePHPForSelection := func() []system.PHPInstallation {
@@ -125,11 +142,12 @@ func runCreateForm(cmd *cobra.Command, opts *createOptions, releases []repositor
 		return filterCompatiblePHPFor(phpInstallations, releases, effectiveVersion(), filteredVersions)
 	}
 
-	// Docker image tags the selected Shopware release supports.
+	// Now I will list Docker image PHP tags that the selected Shopware release supports.
 	dockerPHPForSelection := func() []string {
 		return phpConstraintFor(releases, effectiveVersion(), filteredVersions).SupportedVersions()
 	}
 
+	// Now I will style the form (blue titles) and helpers for the summary screen.
 	theme := huh.ThemeFunc(func(isDark bool) *huh.Styles {
 		s := huh.ThemeCharm(isDark)
 		s.Focused.Title = s.Focused.Title.Foreground(tui.BlueColor)
@@ -146,9 +164,11 @@ func runCreateForm(cmd *cobra.Command, opts *createOptions, releases []repositor
 
 	labelStyle := lipgloss.NewStyle().Width(20)
 
+	// Now I will loop: show the form, print a summary, then proceed / restart / cancel.
 	for {
 		var formGroups []*huh.Group
 
+		// Now I will ask for a project folder if the user did not already pass one.
 		if needsProjectFolder {
 			formGroups = append(formGroups, huh.NewGroup(
 				huh.NewInput().
@@ -165,6 +185,7 @@ func runCreateForm(cmd *cobra.Command, opts *createOptions, releases []repositor
 			))
 		}
 
+		// Now I will ask for Shopware line, then (unless they picked "latest") the patch.
 		if needsVersion {
 			formGroups = append(formGroups, huh.NewGroup(
 				huh.NewSelect[string]().
@@ -195,6 +216,7 @@ func runCreateForm(cmd *cobra.Command, opts *createOptions, releases []repositor
 			}))
 		}
 
+		// Now I will ask about Docker unless --docker already answered it.
 		if !cmd.PersistentFlags().Changed("docker") {
 			formGroups = append(formGroups, huh.NewGroup(
 				huh.NewSelect[string]().
@@ -208,6 +230,7 @@ func runCreateForm(cmd *cobra.Command, opts *createOptions, releases []repositor
 			))
 		}
 
+		// Now I will ask about a stable local hostname unless --local-domain was set.
 		if !cmd.PersistentFlags().Changed("local-domain") {
 			formGroups = append(formGroups, huh.NewGroup(
 				huh.NewSelect[bool]().
@@ -224,8 +247,7 @@ func runCreateForm(cmd *cobra.Command, opts *createOptions, releases []repositor
 						}
 					}, &opts.projectFolder).
 					Value(&selectLocalDomain),
-				// The shared proxy is Docker-only, so this choice is irrelevant
-				// without Docker (respecting a --docker flag override).
+				// Now I will hide this when Docker is off: the shared proxy is Docker-only.
 			).WithHideFunc(func() bool {
 				if cmd.PersistentFlags().Changed("docker") {
 					return !opts.useDocker
@@ -233,9 +255,8 @@ func runCreateForm(cmd *cobra.Command, opts *createOptions, releases []repositor
 				return selectDocker != tui.Yes
 			}))
 
-			// Offer the one-time machine setup inline, but only when it is
-			// actually needed: local domains chosen, Docker on, and the machine
-			// not configured yet. Every later project skips this automatically.
+			// Now I will offer one-time machine setup, but only when it is actually
+			// needed: local domains on, Docker on, and this machine not configured yet.
 			formGroups = append(formGroups, huh.NewGroup(
 				tui.NewYesNo().
 					Title("Set up local domains on this machine now?").
@@ -257,6 +278,7 @@ func runCreateForm(cmd *cobra.Command, opts *createOptions, releases []repositor
 			}))
 		}
 
+		// Now I will ask whether they want the extra options (PHP, deploy, CI, extras).
 		selectAdvanced := tui.No
 		if needsAdvanced {
 			formGroups = append(formGroups, huh.NewGroup(
@@ -267,11 +289,10 @@ func runCreateForm(cmd *cobra.Command, opts *createOptions, releases []repositor
 			))
 		}
 
-		// A local project selects an executable installed on this machine; a Docker
-		// project selects an image tag. phpGroupShown must not depend on OptionsFunc
-		// having run: huh evaluates WithHideFunc during navigation, while OptionsFunc
-		// is dispatched asynchronously, so deciding visibility from its options hides
-		// the group forever.
+		// Now I will decide how PHP is chosen: a local executable vs a Docker image tag.
+		// I must not hide this group based on OptionsFunc having run — huh evaluates
+		// WithHideFunc during navigation, while OptionsFunc is async, so that would
+		// hide the group forever.
 		var selectedPHP string
 		phpCandidates := func() int {
 			if dockerSelected() {
@@ -309,8 +330,7 @@ func runCreateForm(cmd *cobra.Command, opts *createOptions, releases []repositor
 						}
 
 						compatible := compatiblePHPForSelection()
-						// Keep the selection valid when changing the Shopware
-						// version narrows the compatible set.
+						// Now I will reset the pick if a Shopware version change made it invalid.
 						if system.FindPHPByBinary(compatible, selectedPHP) == nil {
 							selectedPHP = ""
 							if preferred := system.PreferredPHPInstallation(compatible); preferred != nil {
@@ -323,6 +343,7 @@ func runCreateForm(cmd *cobra.Command, opts *createOptions, releases []repositor
 			).WithHideFunc(func() bool { return !phpGroupShown() }))
 		}
 
+		// Now I will add the advanced questions, each hidden until they said "customize".
 		if needsDeployment {
 			opts.selectedDeployment = shop.DeploymentNone
 			formGroups = append(formGroups, huh.NewGroup(
@@ -372,6 +393,7 @@ func runCreateForm(cmd *cobra.Command, opts *createOptions, releases []repositor
 			).WithHideFunc(func() bool { return selectAdvanced != tui.Yes }))
 		}
 
+		// Now I will run the form if I actually built any questions.
 		if len(formGroups) > 0 {
 			form := huh.NewForm(formGroups...).WithTheme(theme)
 			if err := form.Run(); err != nil {
@@ -379,6 +401,7 @@ func runCreateForm(cmd *cobra.Command, opts *createOptions, releases []repositor
 			}
 		}
 
+		// Now I will fill in defaults for anything still empty after the prompts.
 		if opts.selectedVersion == "" {
 			opts.selectedVersion = shop.VersionLatest
 		}
@@ -387,13 +410,12 @@ func runCreateForm(cmd *cobra.Command, opts *createOptions, releases []repositor
 			opts.projectFolder = "."
 		}
 
+		// Now I will copy form answers into opts, unless a flag already owns that field.
 		if !cmd.PersistentFlags().Changed("docker") {
 			opts.useDocker = selectDocker == tui.Yes
 		}
-		// The local-domain choice comes from the --local-domain flag when set,
-		// otherwise from the prompt. The one-time setup is only offered inline
-		// when we actually prompted for it (not via the flag), so the flag never
-		// triggers an unprompted sudo.
+		// Now I will resolve local-domain: the flag wins when set, otherwise the prompt.
+		// I only offer one-time setup when I actually prompted (never unprompted sudo).
 		localFlagChanged := cmd.PersistentFlags().Changed("local-domain")
 		wantLocalDomain := opts.useLocalDomain
 		if !localFlagChanged {
@@ -411,14 +433,12 @@ func runCreateForm(cmd *cobra.Command, opts *createOptions, releases []repositor
 			opts.withAMQP = selectAMQP == tui.Yes
 		}
 		if needsPHPVersion {
-			// Reset on every round so switching to Docker (or restarting the
-			// form) does not keep a stale selection from a previous pass.
+			// Now I will clear PHP so a restart or Docker switch cannot keep a stale pick.
 			opts.clearPHP()
 			switch {
 			case opts.useDocker:
-				// Only a version, since the PHP comes from the image. Left empty
-				// when unanswered: installAndFinalize then picks the highest the
-				// release supports.
+				// Now I will store only a version string (PHP lives in the image).
+				// If I never asked, I leave it empty so installAndFinalize can pick the highest.
 				if phpGroupShown() {
 					opts.phpVersion = selectedPHP
 				}
@@ -427,14 +447,15 @@ func runCreateForm(cmd *cobra.Command, opts *createOptions, releases []repositor
 					opts.setPHP(*selected)
 				}
 			default:
-				// Nothing was asked (at most one compatible install), but resolve
-				// it anyway so the summary shows the PHP that will be used.
+				// Now I will still resolve PHP so the summary can show what will be used,
+				// even though I never asked (at most one compatible install).
 				if preferred := system.PreferredPHPInstallation(compatiblePHPForSelection()); preferred != nil {
 					opts.setPHP(*preferred)
 				}
 			}
 		}
 
+		// Now I will print a summary of every choice so the user can check it.
 		fmt.Println()
 		fmt.Println(tui.SectionHeadingStyle.Render("Summary"))
 		fmt.Println()
@@ -468,6 +489,7 @@ func runCreateForm(cmd *cobra.Command, opts *createOptions, releases []repositor
 		fmt.Printf("  %s %s\n", labelStyle.Render("AMQP:"), onOff(opts.withAMQP))
 		fmt.Println()
 
+		// Now I will ask: proceed with creation, restart this form, or cancel.
 		selectConfirm := "proceed"
 		confirmForm := huh.NewForm(huh.NewGroup(
 			huh.NewSelect[string]().
@@ -491,5 +513,6 @@ func runCreateForm(cmd *cobra.Command, opts *createOptions, releases []repositor
 		if selectConfirm == "cancel" {
 			return errors.New("project creation cancelled")
 		}
+		// Now I will loop and show the form again ("Restart form").
 	}
 }

@@ -2,6 +2,7 @@ package scaffolding
 
 import (
 	"embed"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -32,6 +33,21 @@ const store = "custom/plugins"
 
 //go:embed stubs/*
 var stubsFS embed.FS
+
+// stubFuncs are helpers available inside the stub templates.
+var stubFuncs = template.FuncMap{
+	// jsonEscape makes a value safe inside a JSON string, e.g. the
+	// backslashes of a PHP namespace: Swag\Example -> Swag\\Example.
+	"jsonEscape": func(value string) (string, error) {
+		encoded, err := json.Marshal(value)
+		if err != nil {
+			return "", fmt.Errorf("escape %q for json: %w", value, err)
+		}
+
+		// Drop the surrounding quotes json.Marshal adds.
+		return string(encoded[1 : len(encoded)-1]), nil
+	},
+}
 
 // createExtensionDir creates the directory for the new extension
 func CreateExtensionDir(extensionDir string) error {
@@ -133,7 +149,7 @@ func CreateExtensionFile(extensionDir string, file ScaffoldingFile, data scaffol
 	}
 
 	// parse stub with data and write to file
-	tmpl, err := template.New(file.Path).Parse(string(stubBytes))
+	tmpl, err := template.New(file.Path).Funcs(stubFuncs).Parse(string(stubBytes))
 	if err != nil {
 		return fmt.Errorf("parse stub: %w", err)
 	}
@@ -284,3 +300,14 @@ func RemoveCreatedExtensionDir(extensionDir string) error {
 func RequireDirExists(path string) error {
 	return nil
 }
+
+/* how the service.php gets generated
+intro
+    + CommandGenerator snippet?        // if --create-command
+    + StorefrontController snippet?
+    + StoreApiRoute snippet?
+    + EntityGenerator snippet?         // once per entity
+    + EventSubscriber snippet?
+    + ScheduledTask snippet?
+outro
+*/
