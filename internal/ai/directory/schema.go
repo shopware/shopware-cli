@@ -19,10 +19,17 @@ func GenerateSchemaJSON() ([]byte, error) {
 
 	schema := r.Reflect(&Directory{})
 
+	// documentation and delivery.repository must be absolute http(s) URLs.
+	// The `format: uri` tag alone does not enforce that, so add a matching
+	// pattern to mirror Validate.
+	setURLPattern(schema.Definitions["Integration"], "documentation")
+
 	// Encode the delivery invariants that Validate enforces (see CONTRACT.md) so
 	// external schema consumers reject the same manifests the CLI does:
 	// repository is required for git and forbidden for any other kind.
 	if delivery, ok := schema.Definitions["Delivery"]; ok {
+		setURLPattern(delivery, "repository")
+
 		delivery.AllOf = []*jsonschema.Schema{
 			{
 				If:   deliveryKindIs(string(DeliveryGit)),
@@ -36,6 +43,20 @@ func GenerateSchemaJSON() ([]byte, error) {
 	}
 
 	return json.MarshalIndent(schema, "", "  ")
+}
+
+// httpsURLPattern asserts an absolute http(s) URL with a non-empty host.
+const httpsURLPattern = `^https?://[^\s/]+`
+
+// setURLPattern adds the http(s) URL assertion to a property of def. It is a
+// no-op when def or the property is absent.
+func setURLPattern(def *jsonschema.Schema, prop string) {
+	if def == nil || def.Properties == nil {
+		return
+	}
+	if p, ok := def.Properties.Get(prop); ok {
+		p.Pattern = httpsURLPattern
+	}
 }
 
 // deliveryKindIs builds a schema that matches a Delivery whose kind equals v.

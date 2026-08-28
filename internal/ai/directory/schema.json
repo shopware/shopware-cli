@@ -67,6 +67,7 @@
         },
         "repository": {
           "type": "string",
+          "pattern": "^https?://[^\\s/]+",
           "format": "uri"
         }
       },
@@ -125,6 +126,7 @@
         },
         "documentation": {
           "type": "string",
+          "pattern": "^https?://[^\\s/]+",
           "format": "uri"
         },
         "delivery": {
