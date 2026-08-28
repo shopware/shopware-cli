@@ -1,19 +1,43 @@
 ---
 name: shopware-cli-extension-store
-description: MUST use for Shopware Store publication/readiness/submission/compliance questions, including "prepare this plugin/extension for the Shopware Store", "what needs to change before Store publication", Store listing metadata, Store-compliance validation, packaging, or upload readiness. Base Store claims on current sources and expose those sources to the user.
+description: MUST use for Shopware Store publication/readiness/submission/compliance questions, including "prepare this plugin/extension for the Shopware Store", "what needs to change before Store publication", Store listing metadata, Store-compliance validation, packaging, or upload readiness. Start immediately with safe read-only checks, resolve the CLI from the workspace, and base every Store claim on current sources exposed to the user.
 ---
 
 # Shopware Store Readiness
 
 Use this skill whenever the user asks whether a Shopware extension/plugin is ready for the Shopware Store or what must change before publication.
 
-The assessment must be **source-first and traceable**. Do not generate a generic Store checklist from memory.
+The assessment must be **source-first, traceable, and execution-first**. Do not generate a generic Store checklist from memory and do not stop for preflight questions that the workspace can answer.
+
+## Default execution: proceed, do not ask preflight questions
+
+A Store-readiness request already provides enough intent to begin a **read-only local assessment**.
+
+Do not ask the user to choose:
+
+- local readiness vs. remote listing inspection;
+- PATH CLI vs. a nearby checkout CLI;
+- whether to start the assessment;
+- whether to inspect ordinary local files;
+- whether to run read-only validation commands.
+
+Resolve these automatically:
+
+1. Inspect the local extension immediately.
+2. Detect the CLI using the deterministic rule below.
+3. Run fresh normal and Store-compliance validation read-only.
+4. Inspect the current schema and current official Store documentation.
+5. If remote Shopware Account/listing state is not already available through an authenticated read-only path, continue without it and mark those conditions **remote unverified**.
+
+Do not ask for credentials or account access merely to complete the local assessment. If the user explicitly asks for remote listing inspection and authenticated read access is unavailable, explain that remote state could not be inspected and continue with all local/source-backed findings.
+
+Only ask a clarifying question when a genuinely unresolved choice would materially change the requested work and cannot be determined from the workspace or the user's prompt.
 
 ## Core principle: no source, no Store requirement
 
-Every Store-policy claim must be tied to a current authoritative source and that source must be visible in the final answer.
+Every Store-policy claim must be tied to a current authoritative source, and that source must be visible in the final answer.
 
-For each claim, identify the source type:
+Source types:
 
 - **Workspace** — current local file/config inspection.
 - **CLI runtime** — fresh output from the selected Shopware CLI binary.
@@ -24,9 +48,9 @@ For each claim, identify the source type:
 
 For every **Store-doc-required** or **Store-doc-guidance** finding, include a direct official Shopware documentation link plus the relevant page/section name when possible.
 
-If no authoritative Store source can be named and linked, the claim cannot be classified as Store-doc-required or Store-doc-guidance. Downgrade it to **Recommendation / inference** or say it could not be verified.
+If no authoritative Store source can be named and linked, the claim cannot be classified as Store-doc-required or Store-doc-guidance. Downgrade it to **Recommendation / inference** or state that it could not be verified.
 
-Do not cite a broad documentation page for a narrower claim that the page does not actually establish.
+Do not cite a broad documentation page for a narrower claim that the page does not establish.
 
 ## Four different truths
 
@@ -69,6 +93,8 @@ Do not use shell chains where failure of an optional command can falsely print t
 
 ### 2. Resolve one authoritative CLI deterministically
 
+Run this without asking the user which binary to use:
+
 ```bash
 command -v shopware-cli
 shopware-cli --version
@@ -81,19 +107,34 @@ else
 fi
 ```
 
-If literal `../shopware-cli/bin/shopware-cli` exists, it is authoritative unless the user explicitly asks to test the installed release.
+Selection rule:
 
-After selecting it, every CLI command in this assessment must use that binary. Do not reconstruct or guess another absolute sibling path. If later commands accidentally use plain `shopware-cli`, rerun them before answering.
+- If literal `../shopware-cli/bin/shopware-cli` exists, it is authoritative unless the user explicitly asks to assess the installed release.
+- After selecting it, every CLI command in this assessment must use that binary.
+- Do not reconstruct or guess another absolute sibling path.
+- If later commands accidentally use plain `shopware-cli`, rerun them with the checkout binary before answering.
+- Fall back to PATH only when the literal sibling check fails.
+
+Report both PATH and authoritative versions when they differ.
 
 ### 3. Run fresh validation
+
+Using the authoritative binary:
 
 ```bash
 <cli> extension validate . --reporter markdown
 <cli> extension validate --help
+```
+
+If current help supports `--store-compliance`, run:
+
+```bash
 <cli> extension validate . --store-compliance --reporter markdown
 ```
 
-Run Store compliance only when supported by current help. Fresh output outranks saved validation reports.
+Fresh output outranks saved validation reports and earlier agent output.
+
+Do not edit `.shopware-extension.yml` just to activate Store compliance during an inspection-only request.
 
 ### 4. Inspect current schema
 
@@ -107,7 +148,7 @@ A `store:` block is a supported local synchronization mechanism. Absence of loca
 
 ### 5. Read current official Store documentation
 
-Before declaring a Store requirement or Store guidance item, inspect the relevant current official Shopware source.
+Before declaring a Store requirement or guidance item, inspect the relevant current official Shopware source.
 
 Primary sources include:
 
@@ -119,7 +160,7 @@ Primary sources include:
 - [Cookies and privacy](https://developer.shopware.com/docs/guides/development/testing/store/cookies-and-privacy.html)
 - [Installation and cleanup](https://developer.shopware.com/docs/guides/development/testing/store/installation-and-cleanup.html)
 
-Preserve the wording strength of the source:
+Preserve source wording strength:
 
 - `must`, `required`, or equivalent mandatory wording → may support **Store-doc-required**.
 - `should`, `preferred`, `recommended`, or equivalent → **Store-doc-guidance**.
@@ -140,15 +181,15 @@ Classifications are sticky across the whole response.
 
 ### Mandatory source format by classification
 
-- **CLI-enforced:** Source must be the fresh command/result and, when available, the validation identifier; alternatively cite the exact current CLI source/test proving the rule.
-- **Store-doc-required:** Source must be a direct official Shopware docs link plus page/section label.
-- **Store-doc-guidance:** Source must be a direct official Shopware docs link plus page/section label.
-- **Schema-supported:** Source must identify `extension config-schema` and the exact field/path.
-- **Recommendation / inference:** Source must say `Recommendation / inference` rather than implying authority.
+- **CLI-enforced:** fresh command/result and, when available, the validation identifier; or exact current CLI source/test.
+- **Store-doc-required:** direct official Shopware docs link plus page/section label.
+- **Store-doc-guidance:** direct official Shopware docs link plus page/section label.
+- **Schema-supported:** `extension config-schema` plus exact field/path.
+- **Recommendation / inference:** explicitly say there is no authoritative requirement source.
 
 ## Current distinctions to preserve
 
-When current docs/source still establish these facts:
+Always verify these against the current source before reporting them:
 
 - International Store publication is required; German Store publication is optional.
 - German/English content parity applies when publishing in the German Store.
@@ -157,15 +198,15 @@ When current docs/source still establish these facts:
 - Store listing text must accurately describe the extension and include clear setup/configuration instructions.
 - Shopware Account license must match `composer.json`.
 - Official Store docs specify `src/Resources/config/plugin.png` at 112x112 px.
-- Current CLI accepts the normal plugin icon from 112x112 through 256x256 and max 30 KB; therefore CLI pass and Store-doc compliance can differ.
+- Current CLI accepts the normal plugin icon from 112x112 through 256x256 and max 30 KB; CLI pass and Store-doc compliance can therefore differ.
 - Store screenshots/images are guidance when the docs use `should`; do not promote them to blockers.
-- Store-compliance validation currently covers Store-specific asset source/build pairing such as Administration/Storefront built assets without rebuildable source.
+- Store-compliance validation covers Store-specific checks such as Administration/Storefront asset source/build pairing when current CLI source/runtime establishes it.
 
-Always cite the current source for these claims in the user-facing answer instead of relying on this summary alone.
+Expose the actual source in the final answer instead of relying on this summary alone.
 
 ## Remote Store requirements
 
-Store listing requirements apply to the Shopware Account/listing unless the docs explicitly require a local artifact.
+Store listing requirements apply to the Shopware Account/listing unless docs explicitly require a local artifact.
 
 If remote state was not inspected, mark it **remote unverified**. Never say missing, satisfied, pass, compliant, ready for submission, or nothing must change.
 
@@ -193,6 +234,10 @@ Do not omit a remote requirement merely because a local candidate value looks co
 
 Do not:
 
+- ask “local or remote?” before starting; default to the complete local assessment and mark remote state unverified;
+- ask which CLI to use; resolve it with the sibling-checkout rule;
+- ask for confirmation before ordinary read-only inspection/validation;
+- say “need before proceeding” when the needed information can be discovered from the workspace;
 - call README.md, CHANGELOG.md, or a physical LICENSE file Store-required without an explicit current source;
 - treat changelog-generation schema as evidence that CHANGELOG.md is required;
 - turn `store.icon`'s 256x256 schema description into the normal `plugin.png` requirement;
@@ -201,7 +246,7 @@ Do not:
 - label screenshots CLI-enforced unless the CLI actually reports them;
 - say `Descriptions pass` based only on local composer metadata;
 - say `ready for Store submission` because CLI validation passes;
-- imply Store metadata must be in `.shopware-extension.yml`; it can be a local synchronization source, while the requirement applies to the resulting Store listing;
+- imply Store metadata must be in `.shopware-extension.yml`; it is a possible synchronization source while the requirement applies to the resulting Store listing;
 - cite a docs home page when the specific claim is not supported by the linked page/section.
 
 ## Required response format
@@ -212,6 +257,7 @@ Start with **Validation status**:
 - authoritative CLI binary/version;
 - normal validation result;
 - Store-compliance validation result;
+- remote Store listing state: inspected / not inspected;
 - files modified: yes/no.
 
 Then provide:
@@ -220,13 +266,6 @@ Then provide:
 | --- | --- | --- | --- | --- | --- |
 
 The **Source** column is mandatory.
-
-Examples:
-
-- `Store-doc-required | [Content and translations — description](https://developer.shopware.com/docs/guides/development/testing/store/content-and-translations.html)`
-- `CLI-enforced | fresh: <cli> extension validate . --store-compliance; assets.administration.sources_missing`
-- `Schema-supported | <cli> extension config-schema → store.icon`
-- `Recommendation / inference | no authoritative requirement source`
 
 Then use:
 
@@ -248,7 +287,7 @@ Store-doc-guidance, schema-supported items, and recommendations only.
 
 ### Sources checked
 
-End with a compact list of the authoritative sources actually used in the assessment. Include direct clickable links for every official Store documentation page used and identify relevant CLI evidence, for example:
+End with a compact list of authoritative sources actually used. Include direct clickable links for every official Store documentation page used and identify relevant CLI evidence, for example:
 
 - [Content and translations](https://developer.shopware.com/docs/guides/development/testing/store/content-and-translations.html) — descriptions, translations, favicon, screenshots.
 - `<cli> extension validate . --reporter markdown` — current normal validation.
@@ -257,19 +296,20 @@ End with a compact list of the authoritative sources actually used in the assess
 
 Do not list sources that were not actually consulted.
 
-## Final source audit
+## Final source and execution audit
 
 Before sending the answer, verify:
 
-1. Every Store-doc-required/guidance claim has a direct official source link.
-2. The cited page/section really supports the exact claim and wording strength.
-3. Every CLI-enforced claim identifies fresh CLI output/identifier or specific current source/test.
-4. Every schema claim names the exact schema field/path.
-5. Recommendations are clearly labeled as non-authoritative.
-6. Local candidate values are not presented as proof of remote listing compliance.
-7. Remote Store requirements remain unverified unless the remote listing was inspected.
-8. The user can follow the provided links to independently verify each Store-policy claim.
-9. No requirement appears in the summary or action column without the same evidence/source level it had in the findings table.
-10. No files were modified during inspection-only work.
+1. The assessment started without unnecessary user confirmation.
+2. The CLI was selected from workspace evidence, not by asking the user.
+3. If remote state was unavailable, the assessment still completed and marked it remote unverified.
+4. Every Store-doc-required/guidance claim has a direct official source link.
+5. The cited page/section supports the exact claim and wording strength.
+6. Every CLI-enforced claim identifies fresh CLI output/identifier or specific current source/test.
+7. Every schema claim names the exact schema field/path.
+8. Recommendations are clearly non-authoritative.
+9. Local candidate values are not proof of remote listing compliance.
+10. No requirement appears in the summary/action column at a stronger evidence level than in the findings table.
+11. No files were modified during inspection-only work.
 
 If any check fails, correct the answer before sending it.
