@@ -6,14 +6,16 @@
 // for integration discovery. The field/output contract lives in CONTRACT.md.
 package directory
 
-import "fmt"
+import (
+	"fmt"
+)
 
 // Type is the kind of integration.
 type Type string
 
 const (
 	TypeSkill Type = "skill"
-	TypeMCP Type = "mcp"
+	TypeMCP   Type = "mcp"
 )
 
 // DeliveryKind describes how an integration is delivered. "project" is reserved
