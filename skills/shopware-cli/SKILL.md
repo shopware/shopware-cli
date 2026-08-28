@@ -11,9 +11,10 @@ When contributing to `shopware/shopware-cli`, use this skill to reason from the 
 
 ## Start with the current CLI
 
-Treat the current CLI as authoritative for commands and flags.
+Treat the intended CLI binary as authoritative for commands and flags.
 
 ```bash
+command -v shopware-cli
 shopware-cli --version
 shopware-cli --help
 shopware-cli project --help
@@ -27,7 +28,7 @@ For a specific command:
 shopware-cli <group> <command> --help
 ```
 
-When working on unreleased functionality in the `shopware/shopware-cli` repository, inspect or run the checked-out code instead of assuming the installed release behaves the same way.
+When working on unreleased functionality in a `shopware/shopware-cli` checkout, inspect or run the checked-out code instead of assuming the installed release behaves the same way. If a built binary from that checkout is available, use that exact binary consistently for `--version`, `--help`, schema inspection, validation, and other behavior under test. Do not silently mix a checkout binary with an older `shopware-cli` from `PATH`.
 
 Do not invent commands, flags, configuration fields, or behavior from memory.
 
@@ -85,6 +86,8 @@ Before running them:
 
 Do not assume every command supports `--dry-run`.
 
+When the user asks for inspection only or explicitly says not to modify files, do not temporarily rewrite project files just to probe validation behavior. Prefer help/schema/source inspection or a separate disposable fixture.
+
 ### Database and application-state changes
 
 Treat commands that can change the database, Shopware application state, installed extensions, caches, indexes, migrations, or configuration as higher risk.
@@ -124,16 +127,18 @@ shopware-cli extension validate --help
 shopware-cli project validate [flags]
 ```
 
-Validates the Shopware project against checks such as PHP static analysis, dependency integrity, and extension structure.
+Validates the Shopware project against the checks implemented by the current CLI and configured tools.
 
-Available flags:
+Common flags include:
 
-- `--only <tools>` — run only specific tools (comma-separated, e.g., `phpstan,eslint`).
+- `--only <tools>` — run only specific tools (comma-separated).
 - `--exclude <tools>` — skip specific tools (comma-separated).
-- `--reporter <format>` — output format: `summary` (default), `json`, `github`, `gitlab`, `junit`, `markdown`.
-- `--local-only` — validate only plugins in custom/* folders.
-- `--no-copy` — do not copy project files to temporary directory before validation.
+- `--reporter <format>` — choose an output reporter supported by the current CLI.
+- `--local-only` — validate only local/custom extensions when supported by the current CLI.
+- `--no-copy` — do not copy project files to a temporary directory before validation.
 - `--verbose` — show debug output.
+
+Use current `--help` rather than treating this list as exhaustive.
 
 ### Extension validation
 
@@ -141,35 +146,47 @@ Available flags:
 shopware-cli extension validate [path] [flags]
 ```
 
-Validates an extension against metadata, code quality, Shopware compatibility, and store compliance checks.
+The extension path is required; use `.` for the current extension.
 
-Available flags:
+Normal extension validation runs the built-in checks implemented by the current CLI. Store-compliance mode can add Store-specific checks; do not assume that every metadata or quality rule is Store-only.
+
+Common flags include:
 
 - `--only <tools>` — run only specific tools (comma-separated).
 - `--exclude <tools>` — skip specific tools.
-- `--full` — run full validation including PHPStan, ESLint, and Stylelint.
-- `--check-against <version>` — check against Shopware version (`highest` or `lowest`; default: `highest`).
-- `--store-compliance` — run store compliance checks. Prefer setting `validation.store_compliance: true` in `.shopware-extension.yml` instead.
-- `--reporter <format>` — output format: `summary` (default), `json`, `github`, `gitlab`, `junit`, `markdown`.
-- `--no-copy` — do not copy extension files to temporary directory.
+- `--full` — run additional/full validation tools such as PHPStan, ESLint, and Stylelint when supported/configured.
+- `--check-against <version>` — check against a supported Shopware-version mode such as `highest` or `lowest`.
+- `--store-compliance` — enable Store-compliance mode while the current CLI supports the flag. Prefer `validation.store_compliance: true` in `.shopware-extension.yml` for persistent Store intent.
+- `--reporter <format>` — choose a reporter supported by the current CLI.
+- `--no-copy` — do not copy extension files to a temporary directory.
 - `--verbose` — show debug output.
+
+For Store-distribution workflows, use the `shopware-cli-extension-store` skill when available.
+
+### Fresh results beat saved reports
+
+Saved outputs such as `validation.json`, JUnit XML, or markdown reports can become stale after files are fixed or changed.
+
+Before diagnosing a validation failure, rerun validation against the current working tree. If a saved report contradicts the current files or a fresh run, treat the saved report as stale.
 
 ### CI and reporters
 
-In automated environments, prefer machine-readable output:
+In automated environments, prefer machine-readable output when useful:
 
 ```bash
 shopware-cli project validate --reporter json > validation-results.json
 shopware-cli project validate --reporter junit > validation-results.xml
-shopware-cli extension validate --reporter github  # posts inline annotations to GitHub PR
-shopware-cli extension validate --reporter gitlab  # posts inline annotations to GitLab MR
+shopware-cli extension validate . --reporter github
+shopware-cli extension validate . --reporter gitlab
 ```
 
-Check the reporter output format to determine if validation passed or failed; do not rely on exit code alone.
+Reporters format emitted output. They do not by themselves post comments or annotations to pull requests or merge requests; CI configuration must consume the output appropriately.
+
+Use the process exit code as the validation result. A reporter can change formatting, but validation errors still make the command fail.
 
 ### Domain-specific routing
 
-When validation fails in a specific area, route users to relevant skills:
+When validation fails in a specific area, route users to relevant skills when available:
 
 - **PHP test failures** → `php-testing` skill.
 - **JavaScript/Admin failures** → `admin-testing` skill.
@@ -181,33 +198,36 @@ When validation fails in a specific area, route users to relevant skills:
 
 When `validate` produces unexpected results:
 
-1. **Verify the working directory and project configuration.**
+1. **Verify the exact CLI binary and version.**
+   - Use `command -v shopware-cli` and `shopware-cli --version`.
+   - When testing a checkout, use its built binary consistently.
+
+2. **Verify the working directory and project configuration.**
    - Ensure `.shopware-project.yml` or `.shopware-extension.yml` is present and correct.
-   - Check `--verbose` output to see what the CLI is validating.
+   - Check `--verbose` output when useful.
 
-2. **Check installed and locked tool versions.**
-   - Validation depends on external tools (PHPStan, ESLint, Stylelint, PHPUnit, etc.).
-   - Verify they are in `composer.lock` or `package-lock.json` and installed.
-   - If a tool is missing, check the project's `composer.json` or build configuration.
+3. **Regenerate validation output.**
+   - Do not diagnose current files from an old saved report.
 
-3. **Understand tool exclusions.**
+4. **Check installed and locked tool versions.**
+   - Full validation can depend on external tools such as PHPStan, ESLint, and Stylelint.
+   - Verify relevant dependencies and configuration.
+
+5. **Understand tool exclusions.**
    - A tool may be skipped due to missing dependencies, unmet conditions, or configuration.
-   - Use `--verbose` to see which tools ran and which were skipped or errored.
    - Do not assume a skipped tool means validation passed.
 
-4. **Avoid ad hoc workarounds.**
-   - Do not bypass validation with manual `phpstan`, `eslint`, or `jest` commands before understanding why validation did not run them.
-   - Use the CLI's verbose output to identify root cause first.
+6. **Avoid ad hoc workarounds.**
+   - Do not bypass validation with manual lower-level commands before understanding why the CLI behaved as it did.
 
-5. **Check environment and runtime prerequisites.**
-   - Some checks may require Docker, a specific PHP version, npm dependencies, or other tooling to be available.
-   - Verify the environment matches the project's requirements.
+7. **Check environment and runtime prerequisites.**
+   - Some checks may require Docker, PHP, npm dependencies, or other tooling.
 
 ## Inspect the project before deciding
 
 Relevant files can include:
 
-- `.shopware-project.yml` (shop URL and Admin API credentials live under `environments`; empty `-e` targets `environments.local`)
+- `.shopware-project.yml`
 - `.shopware-extension.yml`
 - `composer.json`
 - `composer.lock`
@@ -256,7 +276,7 @@ Inspect command help before regenerating anything that may overwrite existing fi
 When a Shopware CLI command fails:
 
 1. Capture the exact command and error.
-2. Check `shopware-cli --version`.
+2. Check the exact binary path and `--version`.
 3. Inspect the command's `--help`.
 4. Verify the working directory and relevant project or extension configuration.
 5. Retry with `--verbose` when useful.
@@ -269,9 +289,9 @@ Do not work around a failing Shopware CLI command with lower-level tooling until
 
 When behavior is unclear, use this order:
 
-1. the current CLI and its `--help`;
+1. the intended/current CLI binary and fresh runtime output;
 2. project configuration and CLI-provided schemas;
-3. official Shopware CLI documentation;
-4. the `shopware/shopware-cli` source code when implementation details are required.
+3. the current `shopware/shopware-cli` source and tests when implementation details are required;
+4. official Shopware CLI documentation.
 
-Prefer version-correct facts over remembered Shopware behavior.
+Prefer version-correct facts over remembered Shopware behavior or stale generated reports.
