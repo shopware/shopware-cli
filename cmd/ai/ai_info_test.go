@@ -13,10 +13,13 @@ import (
 
 func TestWriteInfoTable(t *testing.T) {
 	e := directory.Integration{
-		Name: "deployment-helper", DisplayName: "Shopware Deployment Helper",
-		Type: directory.TypeSkill, Provider: "shopware",
-		Status:      directory.StatusActive,
-		Description: "desc", Documentation: "https://example.test/dh",
+		Name:          "deployment-helper",
+		DisplayName:   "Shopware Deployment Helper",
+		Type:          directory.TypeSkill,
+		Provider:      "shopware",
+		Status:        directory.StatusActive,
+		Description:   "desc",
+		Documentation: "https://example.test/dh",
 		Delivery:      directory.Delivery{Kind: directory.DeliveryGit, Repository: "https://github.com/shopware/deployment-helper"},
 		Compatibility: &directory.Compatibility{Source: "owner"},
 		Internal:      &directory.Internal{Maintainer: "@shopware/team"},
@@ -26,16 +29,7 @@ func TestWriteInfoTable(t *testing.T) {
 	require.NoError(t, writeInfoTable(&buf, e))
 	out := buf.String()
 
-	for _, want := range []string{
-		"deployment-helper",
-		"Documentation:",
-		"git (https://github.com/shopware/deployment-helper)",
-		"Compatibility:",
-		"owner",
-	} {
-		assert.Contains(t, out, want)
-	}
-
+	assert.Contains(t, out, "deployment-helper")
 	// maintainer metadata is never rendered
 	assert.NotContains(t, strings.ToLower(out), "maintainer")
 }

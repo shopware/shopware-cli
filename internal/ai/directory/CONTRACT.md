@@ -28,9 +28,8 @@ Optional:  compatibility (compatibility.source: owner),
 
 ## JSON output (camelCase) — public contract
 
-Selected with the boolean `--json` flag on both commands (repo convention, e.g.
-`project extension list`). Not `--output=json`: `--output`/`-o` already means an
-output file path elsewhere in the CLI (e.g. `project sbom`).
+Selected with `--format json` on both commands (default `--format table`), per
+the CLI-wide output-flag convention (shopware/shopware-cli#1471).
 
 `ai list` — array of:
 { name, displayName, type, provider, description, status }

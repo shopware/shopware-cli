@@ -8,6 +8,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/shopware/shopware-cli/internal/ai/directory"
+	"github.com/shopware/shopware-cli/internal/tui"
 )
 
 var aiInfoCmd = &cobra.Command{
@@ -16,14 +17,17 @@ var aiInfoCmd = &cobra.Command{
 	Args:         cobra.ExactArgs(1),
 	SilenceUsage: true,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		asJSON, _ := cmd.Flags().GetBool("json")
+		format, err := resolveFormat(cmd)
+		if err != nil {
+			return err
+		}
 
 		entry, err := directory.Load().Info(args[0])
 		if err != nil {
 			return err
 		}
 
-		if asJSON {
+		if format == formatJSON {
 			return writeInfoJSON(cmd.OutOrStdout(), entry)
 		}
 
@@ -42,9 +46,9 @@ func writeInfoJSON(w io.Writer, e directory.Integration) error {
 	return err
 }
 
-// writeInfoTable prints an entry as aligned key/value lines for humans.
+// writeInfoTable prints an entry as a two-column property/value table.
 func writeInfoTable(w io.Writer, e directory.Integration) error {
-	lines := [][2]string{
+	rows := [][]string{
 		{"Name", e.Name},
 		{"Display name", e.DisplayName},
 		{"Type", string(e.Type)},
@@ -56,13 +60,9 @@ func writeInfoTable(w io.Writer, e directory.Integration) error {
 		{"Compatibility", compatibilityLabel(e)},
 	}
 
-	for _, l := range lines {
-		if _, err := fmt.Fprintf(w, "%-14s %s\n", l[0]+":", l[1]); err != nil {
-			return err
-		}
-	}
+	_, err := fmt.Fprintln(w, tui.RenderTable([]string{"Property", "Value"}, rows))
 
-	return nil
+	return err
 }
 
 // compatibilityLabel renders the compatibility requirements for the human view.
@@ -90,5 +90,5 @@ func deliveryLabel(d directory.Delivery) string {
 
 func init() {
 	aiRootCmd.AddCommand(aiInfoCmd)
-	aiInfoCmd.Flags().Bool("json", false, "Output as json")
+	addFormatFlag(aiInfoCmd)
 }

@@ -30,13 +30,16 @@ var aiListCmd = &cobra.Command{
 	Args:         cobra.NoArgs,
 	SilenceUsage: true,
 	RunE: func(cmd *cobra.Command, _ []string) error {
+		format, err := resolveFormat(cmd)
+		if err != nil {
+			return err
+		}
+
 		typeFilter, _ := cmd.Flags().GetString("type")
 		installedOnly, _ := cmd.Flags().GetBool("installed")
-		asJSON, _ := cmd.Flags().GetBool("json")
 
 		var installed map[string]bool
 		if installedOnly {
-			var err error
 			if installed, err = readInstalledNames(); err != nil {
 				return err
 			}
@@ -50,7 +53,7 @@ var aiListCmd = &cobra.Command{
 			return err
 		}
 
-		if asJSON {
+		if format == formatJSON {
 			return writeListJSON(cmd.OutOrStdout(), entries)
 		}
 
@@ -121,5 +124,5 @@ func init() {
 	aiRootCmd.AddCommand(aiListCmd)
 	aiListCmd.Flags().String("type", "", "Filter by integration type (skill, mcp)")
 	aiListCmd.Flags().Bool("installed", false, "Show only integrations recorded as installed by the CLI")
-	aiListCmd.Flags().Bool("json", false, "Output as json")
+	addFormatFlag(aiListCmd)
 }
