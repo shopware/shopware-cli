@@ -11,11 +11,11 @@ Every claim in the answer carries a source. A finding without a source is not a 
 
 ## 1. Collect evidence
 
-Run this script first from the extension directory. Do not answer before it completes.
+Locate `collect-evidence.sh` next to this `SKILL.md` and run it with the extension root as the working directory:
 
-```bash
-./collect-evidence.sh
-```
+    bash "$(dirname "$SKILL_PATH")/collect-evidence.sh" .
+
+Do not answer before it completes.
 
 Script notes (collect-evidence.sh):
 
