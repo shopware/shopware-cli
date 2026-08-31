@@ -23,7 +23,10 @@ var extensionValidateCmd = &cobra.Command{
 	RunE: func(cmd *cobra.Command, args []string) error {
 		isFull, _ := cmd.Flags().GetBool("full")
 		storeCompliance, _ := cmd.Flags().GetBool("store-compliance")
-		reportingFormat, _ := cmd.Flags().GetString("reporter")
+		reportingFormat, err := extensionValidationFormat(cmd)
+		if err != nil {
+			return err
+		}
 		checkAgainst, _ := cmd.Flags().GetString("check-against")
 		tmpDir, err := os.MkdirTemp(os.TempDir(), "analyse-extension-*")
 		only, _ := cmd.Flags().GetString("only")
@@ -33,10 +36,6 @@ var extensionValidateCmd = &cobra.Command{
 		// If the user does not want to run full validation, only run shopware-cli
 		if !isFull {
 			only = "sw-cli"
-		}
-
-		if reportingFormat == "" {
-			reportingFormat = validation.DetectDefaultReporter()
 		}
 
 		if err != nil {
@@ -138,19 +137,35 @@ var extensionValidateCmd = &cobra.Command{
 	},
 }
 
+func extensionValidationFormat(cmd *cobra.Command) (string, error) {
+	format, _ := cmd.Flags().GetString("format")
+	reporter, _ := cmd.Flags().GetString("reporter")
+	if reporter != "" {
+		format = reporter
+	}
+	if format == "" {
+		format = validation.DetectDefaultReporter()
+	}
+
+	return format, validation.ValidateReporter(format)
+}
+
 func init() {
 	extensionRootCmd.AddCommand(extensionValidateCmd)
 	extensionValidateCmd.PersistentFlags().Bool("full", false, "Run full validation including PHPStan, ESLint and Stylelint")
 	extensionValidateCmd.PersistentFlags().Bool("store-compliance", false, "Runs specific store compliance checks")
+	extensionValidateCmd.PersistentFlags().String("format", "", "Reporting format (summary, json, github, gitlab, junit, markdown)")
 	extensionValidateCmd.PersistentFlags().String("reporter", "", "Reporting format (summary, json, github, gitlab, junit, markdown)")
 	extensionValidateCmd.PersistentFlags().String("check-against", "highest", "Check against Shopware Version (highest, lowest)")
 	extensionValidateCmd.PersistentFlags().String("only", "", "Run only specific tools by name (comma-separated, e.g. phpstan,eslint)")
 	extensionValidateCmd.PersistentFlags().String("exclude", "", "Exclude specific tools by name (comma-separated, e.g. phpstan,eslint)")
 	extensionValidateCmd.PersistentFlags().Bool("no-copy", false, "Do not copy extension files to temporary directory")
+	extensionValidateCmd.MarkFlagsMutuallyExclusive("format", "reporter")
+	_ = extensionValidateCmd.PersistentFlags().MarkDeprecated("reporter", "use --format instead")
+	_ = extensionValidateCmd.PersistentFlags().MarkHidden("reporter")
 	extensionValidateCmd.PreRunE = func(cmd *cobra.Command, args []string) error {
-		reporter, _ := cmd.Flags().GetString("reporter")
-		if reporter != "summary" && reporter != "json" && reporter != "github" && reporter != "gitlab" && reporter != "junit" && reporter != "markdown" && reporter != "" {
-			return fmt.Errorf("invalid reporter format: %s. Must be either 'summary', 'json', 'github', 'gitlab', 'junit' or 'markdown'", reporter)
+		if _, err := extensionValidationFormat(cmd); err != nil {
+			return err
 		}
 
 		mode, _ := cmd.Flags().GetString("check-against")
