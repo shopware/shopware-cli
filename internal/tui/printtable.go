@@ -246,8 +246,7 @@ func RenderTable(headers []string, rows [][]string) string {
 		t.AddRow(values...)
 	}
 
-	rendered, _ := t.Render(TableFormatTable)
-	return rendered
+	return t.renderTerminal()
 }
 
 // PrintTable prints a bordered table to stdout — the shared shape of the

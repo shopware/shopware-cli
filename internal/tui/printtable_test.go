@@ -123,3 +123,13 @@ func TestParseTableFormat(t *testing.T) {
 	_, err = ParseTableFormat("yaml")
 	require.EqualError(t, err, `unknown table format "yaml", allowed values: table, json`)
 }
+
+func TestRenderTablePreservesLegacyInvalidInputBehavior(t *testing.T) {
+	emptyHeader := RenderTable([]string{""}, [][]string{{"value"}})
+	assert.NotEmpty(t, emptyHeader)
+	assert.Contains(t, emptyHeader, "value")
+
+	mismatchedRow := RenderTable([]string{"Name", "Version"}, [][]string{{"Example"}})
+	assert.NotEmpty(t, mismatchedRow)
+	assert.Contains(t, mismatchedRow, "Example")
+}

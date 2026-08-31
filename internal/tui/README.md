@@ -400,7 +400,12 @@ table.AddRow(
 )
 
 format, err := tui.ParseTableFormat(formatFlag)
-err = table.Write(cmd.OutOrStdout(), format)
+if err != nil {
+    return err
+}
+if err := table.Write(cmd.OutOrStdout(), format); err != nil {
+    return err
+}
 ```
 
 `TableCell` keeps the typed JSON value separate from styled or human-readable
@@ -408,7 +413,7 @@ terminal text. `AddRowWithJSON` preserves established JSON row contracts that
 contain more fields than the human-readable table. `RenderTable` and
 `PrintTable` remain available for terminal-only call sites using `[][]string`.
 
-```
+```text
 ┌─────────┬────────────┐
 │ Name    │ Compatible │
 ├─────────┼────────────┤
