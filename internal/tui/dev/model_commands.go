@@ -102,14 +102,17 @@ func (m *Model) runShopwareInstallFrom(fromStep string) tea.Cmd {
 	m.dockerOutChan = ch
 
 	doneCmd := func() tea.Msg {
-		withEnv := e.WithEnv(map[string]string{
-			"INSTALL_LOCALE":         language,
-			"INSTALL_CURRENCY":       currency,
-			"INSTALL_ADMIN_USERNAME": username,
-			"INSTALL_ADMIN_PASSWORD": password,
-		})
+		installExecutor := e
+		if installStepIndex(fromStep) == 0 {
+			installExecutor = e.WithEnv(map[string]string{
+				"INSTALL_LOCALE":         language,
+				"INSTALL_CURRENCY":       currency,
+				"INSTALL_ADMIN_USERNAME": username,
+				"INSTALL_ADMIN_PASSWORD": password,
+			})
+		}
 
-		output, err := streamInstallFrom(ctx, withEnv, fromStep, wizard, shopURL, ch)
+		output, err := streamInstallFrom(ctx, installExecutor, fromStep, wizard, shopURL, ch)
 		return shopwareInstallDoneMsg{source: ch, output: output, err: err}
 	}
 
@@ -126,9 +129,10 @@ func (m Model) installShopURL() string {
 	return strings.TrimRight(m.overview.shopURL, "/")
 }
 
-// streamInstallFrom starts a full helper run for a new installation. A retry
-// starts at the failed console command and runs only the remaining commands;
-// running the helper again would restart installation and hit install.lock.
+// streamInstallFrom resumes the first-run console steps, then runs the helper
+// so extension management and deployment hooks are not skipped. Once all
+// first-run steps have succeeded, the helper detects an installed shop and
+// follows its update path.
 func streamInstallFrom(ctx context.Context, execr executor.Executor, fromStep string, w installWizard, shopURL string, ch chan<- string) ([]string, error) {
 	defer close(ch)
 
@@ -137,11 +141,15 @@ func streamInstallFrom(ctx context.Context, execr executor.Executor, fromStep st
 		all = append(all, line)
 		ch <- line
 	}
+	runHelper := func() error {
+		lines, err := tui.DrainCmdOutput(execr.PHPCommand(ctx, "vendor/bin/shopware-deployment-helper", "run").Cmd, ch, true)
+		all = append(all, lines...)
+		return err
+	}
 
 	idx := installStepIndex(fromStep)
 	if idx == 0 {
-		lines, err := tui.DrainCmdOutput(execr.PHPCommand(ctx, "vendor/bin/shopware-deployment-helper", "run").Cmd, ch, true)
-		all = append(all, lines...)
+		err := runHelper()
 		return all, err
 	}
 
@@ -162,7 +170,8 @@ func streamInstallFrom(ctx context.Context, execr executor.Executor, fromStep st
 		}
 	}
 
-	return all, nil
+	err := runHelper()
+	return all, err
 }
 
 func (m *Model) readNextDockerOutput() tea.Cmd {

@@ -378,9 +378,7 @@ func TestArgsForInstallStep_UsesWizardAnswers(t *testing.T) {
 	w.SetUsername("ada")
 	w.SetPassword("supersecret")
 
-	assert.Equal(t, []string{
-		"system:install", "--create-database", "--shop-locale=de-DE", "--shop-currency=CHF", "--force",
-	}, argsForInstallStep("system:install", w, ""))
+	assert.Nil(t, argsForInstallStep("system:install", w, ""))
 	assert.Nil(t, argsForInstallStep(installUserCreateStep, w, ""))
 	assert.Equal(t, []string{
 		"sales-channel:create:storefront", "--name=Storefront", "--isoCode=de-DE", "--url=http://localhost:8000",
@@ -391,18 +389,15 @@ func TestArgsForInstallStep_UsesWizardAnswers(t *testing.T) {
 func TestArgsForInstallStep_UsesInstallDefaults(t *testing.T) {
 	w := installWizard{CredentialStep: newInstallCredentialStep()}
 	assert.Equal(t, []string{
-		"system:install", "--create-database",
-		"--shop-locale=" + install.DefaultLocale,
-		"--shop-currency=" + install.DefaultCurrency,
-		"--force",
-	}, argsForInstallStep("system:install", w, ""))
+		"sales-channel:create:storefront", "--name=Storefront", "--isoCode=" + install.DefaultLocale,
+	}, argsForInstallStep("sales-channel:create:storefront", w, ""))
 }
 
-func TestArgsForInstallStep_EveryStepExceptUserCreateHasArgs(t *testing.T) {
+func TestArgsForInstallStep_EveryResumableStepHasArgs(t *testing.T) {
 	w := installWizard{CredentialStep: newInstallCredentialStep(), language: "en-GB", currency: "EUR"}
 	for _, sp := range install.Steps {
 		args := argsForInstallStep(sp.Pattern, w, "http://localhost")
-		if sp.Pattern == installUserCreateStep {
+		if sp.Pattern == "system:install" || sp.Pattern == installUserCreateStep {
 			assert.Nil(t, args, sp.Pattern)
 			continue
 		}

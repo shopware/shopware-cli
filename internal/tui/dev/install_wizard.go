@@ -83,14 +83,8 @@ func listInstallFailureActions(failure *installFailure) []installFailureAction {
 	return append(actions, installFailureActionCancel)
 }
 
-// canResumeFromFailedStep is true when "Retry from failed step" would run
-// remaining console commands. The first step (and unknown names) both start
-// at index 0, which is the full helper — the same as Start over.
 func canResumeFromFailedStep(failure *installFailure) bool {
-	if failure == nil || !failure.retryable {
-		return false
-	}
-	return installStepIndex(failure.failingStep) > 0
+	return failure != nil && failure.retryable
 }
 
 func installFailureActionIndex(actions []installFailureAction, selected installFailureAction) int {
@@ -117,27 +111,16 @@ func installStepIndex(step string) int {
 	return 0
 }
 
-// argsForInstallStep returns the bin/console arguments the deployment helper
-// uses for one install step, filled in from the wizard answers already given.
+// argsForInstallStep returns arguments for steps that can be resumed safely.
+// system:install uses the full helper and user:create is never retried because
+// doing so would expose the admin password in process arguments.
 func argsForInstallStep(step string, w installWizard, shopURL string) []string {
 	locale := w.language
 	if locale == "" {
 		locale = install.DefaultLocale
 	}
-	currency := w.currency
-	if currency == "" {
-		currency = install.DefaultCurrency
-	}
 
 	switch step {
-	case "system:install":
-		return []string{
-			"system:install",
-			"--create-database",
-			"--shop-locale=" + locale,
-			"--shop-currency=" + currency,
-			"--force",
-		}
 	case "messenger:setup-transports":
 		return []string{"messenger:setup-transports"}
 	case "sales-channel:create:storefront":

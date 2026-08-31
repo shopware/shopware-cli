@@ -48,24 +48,32 @@ type installFailure struct {
 }
 
 type installFailureRule struct {
-	category installFailureCategory
-	patterns []*regexp.Regexp
+	category  installFailureCategory
+	retryable bool
+	patterns  []*regexp.Regexp
 }
 
 // installFailureRules lists known failure patterns. Output lines are checked
 // from the end, so a terminal error wins over an earlier warning.
 var installFailureRules = []installFailureRule{
 	{
-		category: installFailurePHP,
+		category:  installFailurePHP,
+		retryable: true,
 		patterns: installFailurePatterns(
 			`allowed memory size`,
 			`outofmemoryerror`,
+		),
+	},
+	{
+		category: installFailurePHP,
+		patterns: installFailurePatterns(
 			`php fatal error`,
 			`syntax error, unexpected`,
 		),
 	},
 	{
-		category: installFailureEnvironmentConfig,
+		category:  installFailureEnvironmentConfig,
+		retryable: true,
 		patterns: installFailurePatterns(
 			`environment variable .* is not defined`,
 			`connection information is not valid\. missing parameter`,
@@ -79,7 +87,8 @@ var installFailureRules = []installFailureRule{
 		),
 	},
 	{
-		category: installFailureDatabaseConnection,
+		category:  installFailureDatabaseConnection,
+		retryable: true,
 		patterns: installFailurePatterns(
 			`sqlstate\[hy000\] \[2002\]`,
 			`sqlstate\[hy000\] \[1045\]`,
@@ -103,7 +112,8 @@ var installFailureRules = []installFailureRule{
 		),
 	},
 	{
-		category: installFailurePermission,
+		category:  installFailurePermission,
+		retryable: true,
 		patterns: installFailurePatterns(
 			`permission denied`,
 			`could not create directory`,
@@ -116,7 +126,8 @@ var installFailureRules = []installFailureRule{
 		),
 	},
 	{
-		category: installFailureMissingPrerequisite,
+		category:  installFailureMissingPrerequisite,
+		retryable: true,
 		patterns: installFailurePatterns(
 			`snippet set with isocode`,
 			`could not get id of`,
@@ -125,7 +136,8 @@ var installFailureRules = []installFailureRule{
 		),
 	},
 	{
-		category: installFailureThemeCompile,
+		category:  installFailureThemeCompile,
+		retryable: true,
 		patterns: installFailurePatterns(
 			`unable to compile the theme`,
 			`error while trying to concatenate styles`,
@@ -136,7 +148,8 @@ var installFailureRules = []installFailureRule{
 		),
 	},
 	{
-		category: installFailureTransport,
+		category:  installFailureTransport,
+		retryable: true,
 		patterns: installFailurePatterns(
 			`while setting up the .* transport`,
 			`transport does not exist`,
@@ -144,8 +157,6 @@ var installFailureRules = []installFailureRule{
 	},
 }
 
-// installFailurePatterns compiles a list of string patterns into a list of
-// regular expressions. Each pattern is treated as case-insensitive.
 func installFailurePatterns(patterns ...string) []*regexp.Regexp {
 	compiled := make([]*regexp.Regexp, 0, len(patterns))
 	for _, pattern := range patterns {
@@ -154,20 +165,8 @@ func installFailurePatterns(patterns ...string) []*regexp.Regexp {
 	return compiled
 }
 
-// matchesInstallFailureRule returns true if the given value matches any of the
-// regular expressions in the given list of patterns.
-func matchesInstallFailureRule(value string, patterns []*regexp.Regexp) bool {
-	for _, pattern := range patterns {
-		if pattern.MatchString(value) {
-			return true
-		}
-	}
-	return false
-}
-
-// classifyInstallFailure analyzes the output of a failed helper run and
-// returns a structured description of the failure. Output is scanned from the
-// end so the error that stopped the process wins over earlier warnings.
+// Output is scanned from the end so the error that stopped the process wins
+// over earlier warnings.
 func classifyInstallFailure(output []string, processErr error) installFailure {
 	lines := cleanInstallOutput(output)
 
@@ -179,38 +178,27 @@ func classifyInstallFailure(output []string, processErr error) installFailure {
 
 	for i := len(lines) - 1; i >= 0; i-- {
 		for _, rule := range installFailureRules {
-			if matchesInstallFailureRule(lines[i], rule.patterns) {
-				failure.category = rule.category
-				failure.detail = installFailureMessage(lines, i)
-				failure.retryable = isRetryableInstallFailure(failure)
-				return failure
+			for _, pattern := range rule.patterns {
+				if pattern.MatchString(lines[i]) {
+					failure.category = rule.category
+					failure.detail = installFailureMessage(lines, i)
+					failure.retryable = canRetryInstallFailure(failure.failingStep, rule.retryable)
+					return failure
+				}
 			}
 		}
 	}
 
-	failure.retryable = isRetryableInstallFailure(failure)
+	failure.retryable = canRetryInstallFailure(failure.failingStep, true)
 	return failure
 }
 
-// isRetryableInstallFailure reports whether it is safe to re-run the failed
-// step. user:create is never retried: that would put the admin password on
-// the command line. PHP fatal/syntax errors need a code change first.
-func isRetryableInstallFailure(f installFailure) bool {
-	if f.failingStep == installUserCreateStep {
-		return false
-	}
-	if f.category == installFailurePHP {
-		detail := strings.ToLower(f.detail)
-		if strings.Contains(detail, "fatal error") || strings.Contains(detail, "syntax error") {
-			return false
-		}
-	}
-	return true
+func canRetryInstallFailure(step string, categoryAllowsRetry bool) bool {
+	return categoryAllowsRetry &&
+		step != installUserCreateStep &&
+		installStepIndex(step) > 0
 }
 
-// installFailureStep returns the last known step of the failed helper run
-// based on the output lines. If no step can be determined, the start step is
-// returned.
 func installFailureStep(output []string) string {
 	failingStep := installStartStep
 	for _, line := range output {
@@ -227,11 +215,6 @@ func installFailureStep(output []string) string {
 	return failingStep
 }
 
-// installFailureDetail returns the message ending the output as a
-// human-readable description of the failure. If no non-empty line is found, it
-// returns the error message from the process exit error, if any. If there is no
-// output and no process error, it returns a generic message indicating that the
-// helper failed without diagnostic output.
 func installFailureDetail(output []string, processErr error) string {
 	for i := len(output) - 1; i >= 0; i-- {
 		if output[i] != "" {
@@ -285,8 +268,6 @@ func installFailureMessage(lines []string, idx int) string {
 	return strings.Join(lines[start:end+1], " ")
 }
 
-// label returns a human-readable description of the category for the failure
-// screen. The raw category values stay reserved for telemetry tags.
 func (c installFailureCategory) label() string {
 	switch c {
 	case installFailurePHP:
@@ -312,7 +293,6 @@ func (c installFailureCategory) label() string {
 	case installFailureTransport:
 		return "Message transport setup failed"
 	case installFailureUnknown:
-		return "Unknown error"
 	}
 	return "Unknown error"
 }
@@ -353,7 +333,7 @@ func (f installFailure) remediation(docker bool) string {
 		return "The schema was left half-applied. Drop the database and use Start over, or fix the migration shown in the logs first."
 	case installFailureAlreadyExists:
 		if strings.Contains(detail, "username") {
-			return "That admin user already exists. Drop the database and use Start over, or keep the existing user and continue from the next step."
+			return "That admin user already exists. Drop the database and use Start over."
 		}
 		return "Shopware is already installed (install.lock). Remove install.lock and drop the database only if you want a fresh install, then use Start over."
 	case installFailurePermission:

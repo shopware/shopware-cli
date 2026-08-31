@@ -31,7 +31,7 @@ func TestClassifyInstallFailure(t *testing.T) {
 	assert.Equal(t, installFailureDatabaseConnection, failure.category)
 	assert.Equal(t, "system:install", failure.failingStep)
 	assert.Equal(t, "An exception occurred in the driver: SQLSTATE[HY000] [2002] Connection refused", failure.detail)
-	assert.True(t, failure.retryable)
+	assert.False(t, failure.retryable)
 }
 
 func TestClassifyInstallFailure_BoundsTheDetail(t *testing.T) {
@@ -74,28 +74,33 @@ func TestClassifyInstallFailure_UsesLastStartedStep(t *testing.T) {
 
 func TestClassifyInstallFailure_KnownPatterns(t *testing.T) {
 	cases := []struct {
+		name      string
+		step      string
 		line      string
 		category  installFailureCategory
 		retryable bool
 	}{
-		{"Allowed memory size of 134217728 bytes exhausted", installFailurePHP, true},
-		{"PHP Fatal error: Call to undefined method", installFailurePHP, false},
-		{"Environment variable DATABASE_URL is not defined", installFailureEnvironmentConfig, true},
-		{"Requires at least MySQL 8.0", installFailureDatabaseVersion, true},
-		{"SQLSTATE[HY000] [2002] Connection refused", installFailureDatabaseConnection, true},
-		{"SQLSTATE[42S02]: Base table or view not found", installFailureMigration, true},
-		{"install.lock already exists", installFailureAlreadyExists, true},
-		{"Permission denied", installFailurePermission, true},
-		{"The password must have at least 8 characters", installFailureInvalidInput, true},
-		{"Could not find theme with name Storefront", installFailureMissingPrerequisite, true},
-		{"Unable to compile the theme", installFailureThemeCompile, true},
-		{"The transport does not exist", installFailureTransport, true},
-		{"SQLSTATE[HY000] [2003] Can't connect to MySQL server", installFailureUnknown, true},
+		{"memory limit", "theme:change", "PHP Fatal error: Allowed memory size of 134217728 bytes exhausted", installFailurePHP, true},
+		{"memory limit at first step", "system:install", "PHP Fatal error: Allowed memory size exhausted", installFailurePHP, false},
+		{"fatal PHP error", "theme:change", "PHP Fatal error: Call to undefined method", installFailurePHP, false},
+		{"environment", "theme:change", "Environment variable DATABASE_URL is not defined", installFailureEnvironmentConfig, true},
+		{"database version", "theme:change", "Requires at least MySQL 8.0", installFailureDatabaseVersion, false},
+		{"database connection", "theme:change", "SQLSTATE[HY000] [2002] Connection refused", installFailureDatabaseConnection, true},
+		{"migration", "theme:change", "SQLSTATE[42S02]: Base table or view not found", installFailureMigration, false},
+		{"already installed", "theme:change", "install.lock already exists", installFailureAlreadyExists, false},
+		{"permission", "theme:change", "Permission denied", installFailurePermission, true},
+		{"invalid input", "theme:change", "The password must have at least 8 characters", installFailureInvalidInput, false},
+		{"missing prerequisite", "theme:change", "Could not find theme with name Storefront", installFailureMissingPrerequisite, true},
+		{"theme compile", "theme:change", "Unable to compile the theme", installFailureThemeCompile, true},
+		{"transport", "theme:change", "The transport does not exist", installFailureTransport, true},
+		{"unknown", "theme:change", "SQLSTATE[HY000] [2003] Can't connect to MySQL server", installFailureUnknown, true},
 	}
 	for _, tc := range cases {
-		failure := classifyInstallFailure([]string{tc.line}, assert.AnError)
-		assert.Equal(t, tc.category, failure.category, tc.line)
-		assert.Equal(t, tc.retryable, failure.retryable, tc.line)
+		t.Run(tc.name, func(t *testing.T) {
+			failure := classifyInstallFailure([]string{"Start: " + tc.step, tc.line}, assert.AnError)
+			assert.Equal(t, tc.category, failure.category)
+			assert.Equal(t, tc.retryable, failure.retryable)
+		})
 	}
 }
 
@@ -170,6 +175,8 @@ func TestInstallFailureRemediation(t *testing.T) {
 		{installFailureEnvironmentConfig, "", false, "DATABASE_URL"},
 		{installFailureDatabaseVersion, "", true, "compose.yaml"},
 		{installFailureDatabaseConnection, "SQLSTATE[HY000] [2002] Connection refused", true, "docker compose up -d database"},
+		{installFailureDatabaseConnection, "SQLSTATE[HY000] [1045] Access denied", false, "Correct the user and password"},
+		{installFailureDatabaseConnection, "SQLSTATE[HY000] [1044] Access denied", false, "Grant that DATABASE_URL user rights"},
 		{installFailureMigration, "", false, "Drop the database"},
 		{installFailureAlreadyExists, "install.lock already exists", false, "install.lock"},
 		{installFailurePermission, "", false, "write access"},
@@ -188,4 +195,14 @@ func TestInstallFailureRemediation(t *testing.T) {
 		}
 		assert.Contains(t, got, tc.want, "%s %q", tc.category, tc.detail)
 	}
+}
+
+func TestInstallFailureRemediation_DoesNotOfferUnavailableResume(t *testing.T) {
+	got := installFailure{
+		category: installFailureAlreadyExists,
+		detail:   "Username admin already exists.",
+	}.remediation(false)
+
+	assert.NotContains(t, got, "continue from the next step")
+	assert.Contains(t, got, "Start over")
 }

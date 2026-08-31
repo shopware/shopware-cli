@@ -244,7 +244,7 @@ func (m Model) installFailureSummary() string {
 	b.WriteString(tui.KVRow("Failed step:", valueStyle.Render(installFailureStepLabel(failure.failingStep))))
 	b.WriteString(tui.KVRow("Reason:", valueStyle.Render(failure.category.label())))
 	if rem := failure.remediation(m.dockerMode); rem != "" {
-		b.WriteString(installFailureWrappedKV("This might work:", rem))
+		b.WriteString(installFailureWrappedKV("Try this:", rem))
 	}
 
 	return strings.TrimRight(b.String(), "\n")

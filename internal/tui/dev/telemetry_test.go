@@ -244,14 +244,14 @@ func TestInstallFailureTags(t *testing.T) {
 	f := installFailure{
 		failingStep: "install_start",
 		category:    installFailureDatabaseConnection,
-		retryable:   true,
+		retryable:   false,
 	}
 	tags := tel.installFailureTags(w, f)
 
 	assert.Equal(t, tracking.ResultFailure, tags[tracking.TagResult])
 	assert.Equal(t, "install_start", tags[tracking.TagFailedStep])
 	assert.Equal(t, "db_connection", tags[tracking.TagFailureCategory])
-	assert.Equal(t, "true", tags[tracking.TagRetryable])
+	assert.Equal(t, "false", tags[tracking.TagRetryable])
 	assert.Equal(t, "de-DE", tags[tracking.TagLanguage])
 }
 
@@ -266,7 +266,7 @@ func TestInstallFailureTagsNeverLeakSecrets(t *testing.T) {
 		failingStep: "system:install",
 		category:    installFailureDatabaseConnection,
 		detail:      `SQLSTATE[HY000] [1045] Access denied for user 'root'@'super-secret-host'`,
-		retryable:   true,
+		retryable:   false,
 	}
 	for key, value := range tel.installFailureTags(w, f) {
 		assert.NotContains(t, value, "super-secret-pw", "tag %q leaked the password", key)

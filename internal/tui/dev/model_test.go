@@ -211,7 +211,7 @@ func TestListInstallFailureActions(t *testing.T) {
 
 	for _, failure := range []*installFailure{
 		{failingStep: "user:create", retryable: false},
-		{failingStep: "system:install", retryable: true},
+		{failingStep: "system:install", retryable: false},
 	} {
 		assert.Equal(t, []installFailureAction{
 			installFailureActionStartBeginning,
@@ -681,14 +681,14 @@ func TestView_InstallFailedShowsClassifiedMessage(t *testing.T) {
 		category:    installFailureDatabaseConnection,
 		failingStep: "system:install",
 		detail:      "SQLSTATE[HY000] [2002] Connection refused",
-		retryable:   true,
+		retryable:   false,
 	}
 
 	card := m.renderInstallFailed()
 	assert.Contains(t, card, "Installation failed")
 	assert.Contains(t, card, "Database connection failed")
 	assert.Contains(t, card, "Installing Shopware")
-	assert.Contains(t, card, "This might work:")
+	assert.Contains(t, card, "Try this:")
 	plain := strings.Join(strings.Fields(ansi.Strip(card)), " ")
 	assert.Contains(t, plain, "docker compose up -d database")
 	assert.Contains(t, card, installFailureActionLabels[installFailureActionStartBeginning])
@@ -705,7 +705,7 @@ func TestView_InstallFailedWrapsLongRemediation(t *testing.T) {
 		category:    installFailureDatabaseConnection,
 		failingStep: "system:install",
 		detail:      "SQLSTATE[HY000] [2002] Connection refused",
-		retryable:   true,
+		retryable:   false,
 	}
 
 	card := m.renderInstallFailed()
@@ -723,7 +723,7 @@ func TestView_InstallFailedToggledLogsShowOverlay(t *testing.T) {
 	m.installProg.failure = &installFailure{
 		category:    installFailureDatabaseConnection,
 		failingStep: "system:install",
-		retryable:   true,
+		retryable:   false,
 	}
 	for range 40 {
 		m.overlayLines = append(m.overlayLines, strings.Repeat("deployment-helper output ", 6))
