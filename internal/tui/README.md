@@ -404,8 +404,9 @@ err = table.Write(cmd.OutOrStdout(), format)
 ```
 
 `TableCell` keeps the typed JSON value separate from styled or human-readable
-terminal text. `RenderTable` and `PrintTable` remain available for terminal-only
-call sites using `[][]string`.
+terminal text. `AddRowWithJSON` preserves established JSON row contracts that
+contain more fields than the human-readable table. `RenderTable` and
+`PrintTable` remain available for terminal-only call sites using `[][]string`.
 
 ```
 ┌─────────┬────────────┐

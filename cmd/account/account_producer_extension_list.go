@@ -11,12 +11,9 @@ var accountCompanyProducerExtensionListCmd = &cobra.Command{
 	Use:   "list",
 	Short: "Lists all your extensions",
 	RunE: func(cmd *cobra.Command, _ []string) error {
-		format, err := tui.ParseTableFormat(listExtensionFormat)
+		format, err := accountExtensionListFormat(listExtensionFormat, listExtensionJSON)
 		if err != nil {
 			return err
-		}
-		if listExtensionJSON {
-			format = tui.TableFormatJSON
 		}
 
 		p, err := services.AccountClient.Producer(cmd.Context())
@@ -38,6 +35,17 @@ var accountCompanyProducerExtensionListCmd = &cobra.Command{
 	},
 }
 
+func accountExtensionListFormat(formatName string, jsonAlias bool) (tui.TableFormat, error) {
+	format, err := tui.ParseTableFormat(formatName)
+	if err != nil {
+		return "", err
+	}
+	if jsonAlias {
+		return tui.TableFormatJSON, nil
+	}
+	return format, nil
+}
+
 var (
 	listExtensionSearch string
 	listExtensionPlugin bool
@@ -55,4 +63,6 @@ func init() {
 	accountCompanyProducerExtensionListCmd.Flags().BoolVar(&listExtensionJSON, "json", false, "Output as json")
 	accountCompanyProducerExtensionListCmd.MarkFlagsMutuallyExclusive("plugin", "app")
 	accountCompanyProducerExtensionListCmd.MarkFlagsMutuallyExclusive("format", "json")
+	_ = accountCompanyProducerExtensionListCmd.Flags().MarkDeprecated("json", "use --format json instead")
+	_ = accountCompanyProducerExtensionListCmd.Flags().MarkHidden("json")
 }

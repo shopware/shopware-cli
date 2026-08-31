@@ -226,8 +226,8 @@ Machine-readable output becomes a design rule, not an afterthought:
 
 Two related gaps, both blocking the AI/agent direction and the machine-readable promise:
 
-- **Machine-readable output is ad-hoc, not a contract.** A `--json` flag exists on two commands (`project extension list` / `outdated`), and the validation reporter supports json/github/gitlab/junit/markdown (internal/validation/reporter.go). But there's no consistent output-format convention across the CLI. Most commands print human text only.
-- For agents and CI to consume any command, structured output needs to be a standard (a shared `--output=json` honored everywhere it makes sense), not something bolted onto individual commands. This is the same need behind the `doctor` command.
+- **Machine-readable output is ad-hoc, not a contract.** `--format` is the convention for selecting a command's output representation, including JSON on extension list commands and json/github/gitlab/junit/markdown validation reports. The supported values remain command-specific, and most commands still print human text only.
+- For agents and CI to consume any command, structured output needs to follow the `--format` convention everywhere it makes sense, not be bolted onto individual commands. This is the same need behind the `doctor` command.
 - **Output isn't centralized.** Commands mix ~95 direct `fmt.Print*` calls with ~296 `logging.FromContext` calls. Logging is structured (`zap`) and goes to stderr; the `fmt` calls go to stdout with no level, no format control, and no way to silence or serialize them. The situation is further complicated by native CI/CD output that is heavily used by commands such as `project ci`. That fragmentation is why a clean JSON mode is hard today. There's no single output path to switch. Routing result output through one channel (and reserving stderr for logs) is the prerequisite.
 - The interactive/non-interactive split is enforced per command, at the point of prompting (`system.IsInteractionEnabled`), and only seven non-test files check it. So headless mode holds by convention, not structurally. A new command can forget the check and silently break it.
 

@@ -15,13 +15,10 @@ var projectExtensionOutdatedCmd = &cobra.Command{
 	Short: "List all outdated extensions",
 	RunE: func(cmd *cobra.Command, _ []string) error {
 		formatName, _ := cmd.Flags().GetString("format")
-		format, err := tui.ParseTableFormat(formatName)
+		outputAsJSON, _ := cmd.Flags().GetBool("json")
+		format, err := projectExtensionOutputFormat(formatName, outputAsJSON)
 		if err != nil {
 			return err
-		}
-		outputAsJSON, _ := cmd.Flags().GetBool("json")
-		if outputAsJSON {
-			format = tui.TableFormatJSON
 		}
 
 		projectRoot, err := findClosestShopwareProject(true)
@@ -54,15 +51,7 @@ var projectExtensionOutdatedCmd = &cobra.Command{
 			return nil
 		}
 
-		result := tui.NewTable(
-			tui.TableColumn{Title: "Name", JSONKey: "name"},
-			tui.TableColumn{Title: "Current Version", JSONKey: "currentVersion"},
-			tui.TableColumn{Title: "Latest Version", JSONKey: "latestVersion"},
-			tui.TableColumn{Title: "Update Source", JSONKey: "updateSource"},
-		)
-		for _, extension := range extensions {
-			result.AddRow(extension.Name, extension.Version, extension.LatestVersion, extension.UpdateSource)
-		}
+		result := projectExtensionOutdatedTable(extensions)
 		if err := result.Write(cmd.OutOrStdout(), format); err != nil {
 			return err
 		}
@@ -74,9 +63,25 @@ var projectExtensionOutdatedCmd = &cobra.Command{
 	},
 }
 
+func projectExtensionOutdatedTable(extensions adminSdk.ExtensionList) *tui.Table {
+	result := tui.NewTable(
+		tui.TableColumn{Title: "Name", JSONKey: "name"},
+		tui.TableColumn{Title: "Current Version", JSONKey: "currentVersion"},
+		tui.TableColumn{Title: "Latest Version", JSONKey: "latestVersion"},
+		tui.TableColumn{Title: "Update Source", JSONKey: "updateSource"},
+	)
+	for _, extension := range extensions {
+		result.AddRowWithJSON(extension, extension.Name, extension.Version, extension.LatestVersion, extension.UpdateSource)
+	}
+
+	return result
+}
+
 func init() {
 	projectExtensionCmd.AddCommand(projectExtensionOutdatedCmd)
 	projectExtensionOutdatedCmd.Flags().String("format", string(tui.TableFormatTable), "Output format (table or json)")
 	projectExtensionOutdatedCmd.Flags().Bool("json", false, "Output as json")
 	projectExtensionOutdatedCmd.MarkFlagsMutuallyExclusive("format", "json")
+	_ = projectExtensionOutdatedCmd.Flags().MarkDeprecated("json", "use --format json instead")
+	_ = projectExtensionOutdatedCmd.Flags().MarkHidden("json")
 }

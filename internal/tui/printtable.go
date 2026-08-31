@@ -51,7 +51,13 @@ type TableCell struct {
 // Table contains one output-neutral table definition.
 type Table struct {
 	columns []TableColumn
-	rows    [][]any
+	rows    []tableRow
+}
+
+type tableRow struct {
+	cells        []any
+	jsonValue    any
+	hasJSONValue bool
 }
 
 // NewTable creates a table with the given columns.
@@ -61,7 +67,19 @@ func NewTable(columns ...TableColumn) *Table {
 
 // AddRow appends a row. Row width is validated when the table is rendered.
 func (t *Table) AddRow(values ...any) {
-	t.rows = append(t.rows, slices.Clone(values))
+	t.rows = append(t.rows, tableRow{cells: slices.Clone(values)})
+}
+
+// AddRowWithJSON appends a row with a custom JSON representation. Prefer
+// AddRow when JSON should contain exactly the configured columns. This method
+// supports established JSON contracts that contain more data than the
+// corresponding human-readable table.
+func (t *Table) AddRowWithJSON(jsonValue any, values ...any) {
+	t.rows = append(t.rows, tableRow{
+		cells:        slices.Clone(values),
+		jsonValue:    jsonValue,
+		hasJSONValue: true,
+	})
 }
 
 // Render renders the table in the requested format.
@@ -115,8 +133,8 @@ func (t *Table) validate() error {
 	}
 
 	for i, row := range t.rows {
-		if len(row) != len(t.columns) {
-			return fmt.Errorf("table row %d has %d cells, expected %d", i+1, len(row), len(t.columns))
+		if len(row.cells) != len(t.columns) {
+			return fmt.Errorf("table row %d has %d cells, expected %d", i+1, len(row.cells), len(t.columns))
 		}
 	}
 
@@ -137,8 +155,8 @@ func (t *Table) renderTerminal() string {
 		Headers(headers...)
 
 	for _, row := range t.rows {
-		values := make([]string, len(row))
-		for i, value := range row {
+		values := make([]string, len(row.cells))
+		for i, value := range row.cells {
 			values[i] = terminalCellText(value)
 		}
 		renderer.Row(values...)
@@ -155,6 +173,14 @@ func (t *Table) renderJSON() ([]byte, error) {
 		if rowIndex > 0 {
 			output.WriteByte(',')
 		}
+		if row.hasJSONValue {
+			value, err := json.Marshal(row.jsonValue)
+			if err != nil {
+				return nil, fmt.Errorf("marshal table row %d: %w", rowIndex+1, err)
+			}
+			output.Write(value)
+			continue
+		}
 		output.WriteByte('{')
 
 		for columnIndex, column := range t.columns {
@@ -166,7 +192,7 @@ func (t *Table) renderJSON() ([]byte, error) {
 			if err != nil {
 				return nil, err
 			}
-			value, err := json.Marshal(jsonCellValue(row[columnIndex]))
+			value, err := json.Marshal(jsonCellValue(row.cells[columnIndex]))
 			if err != nil {
 				return nil, fmt.Errorf("marshal table row %d column %q: %w", rowIndex+1, column.JSONKey, err)
 			}

@@ -39,6 +39,25 @@ func TestTableJSONUsesEmptyArrayForNoRows(t *testing.T) {
 	assert.Equal(t, "[]", output)
 }
 
+func TestTableSupportsEstablishedJSONRowContract(t *testing.T) {
+	type item struct {
+		Name   string `json:"name"`
+		Active bool   `json:"active"`
+	}
+
+	result := NewTable(TableColumn{Title: "Name", JSONKey: "name"})
+	result.AddRowWithJSON(item{Name: "Example", Active: true}, "Example")
+
+	terminal, err := result.Render(TableFormatTable)
+	require.NoError(t, err)
+	assert.Contains(t, terminal, "Example")
+	assert.NotContains(t, terminal, "Active")
+
+	jsonOutput, err := result.Render(TableFormatJSON)
+	require.NoError(t, err)
+	assert.Equal(t, `[{"name":"Example","active":true}]`, jsonOutput)
+}
+
 func TestTableWriteAddsTrailingNewline(t *testing.T) {
 	result := NewTable(TableColumn{Title: "Name", JSONKey: "name"})
 	result.AddRow("Example")
