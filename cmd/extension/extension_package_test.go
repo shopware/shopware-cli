@@ -23,8 +23,13 @@ func TestPackageDoesNotDeleteUnrelatedZipsInWorkingDirectory(t *testing.T) {
 		Label:       map[string]string{"de-DE": "Test", "en-GB": "Test"},
 		Psr4:        map[string]string{`FroshTest\`: "src/"},
 	}.String())
-	testhelper.WriteFile(t, filepath.Join(extDir, ".shopware-extension.yml"),
-		"build:\n  zip:\n    composer:\n      enabled: false\n    assets:\n      enabled: false\n")
+	testhelper.WriteFile(t, filepath.Join(extDir, ".shopware-extension.yml"), `build:
+  zip:
+    composer:
+      enabled: false
+    assets:
+      enabled: false
+`)
 
 	workDir := t.TempDir()
 	decoyBackup := filepath.Join(workDir, "FroshTest-backup-2024.zip")

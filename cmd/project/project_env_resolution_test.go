@@ -26,10 +26,18 @@ func writeMinimalPlugin(t *testing.T) string {
 		Label:       map[string]string{"de-DE": "Test", "en-GB": "Test"},
 		Psr4:        map[string]string{`FroshTest\`: "src/"},
 	}.String())
-	testhelper.WriteFile(t, filepath.Join(dir, ".shopware-extension.yml"),
-		"build:\n  zip:\n    composer:\n      enabled: false\n    assets:\n      enabled: false\n")
-	testhelper.WriteFile(t, filepath.Join(dir, "src", "FroshTest.php"),
-		"<?php\nnamespace FroshTest;\nuse Shopware\\Core\\Framework\\Plugin;\nclass FroshTest extends Plugin {}\n")
+	testhelper.WriteFile(t, filepath.Join(dir, ".shopware-extension.yml"), `build:
+  zip:
+    composer:
+      enabled: false
+    assets:
+      enabled: false
+`)
+	testhelper.WriteFile(t, filepath.Join(dir, "src", "FroshTest.php"), `<?php
+namespace FroshTest;
+use Shopware\Core\Framework\Plugin;
+class FroshTest extends Plugin {}
+`)
 
 	return dir
 }
