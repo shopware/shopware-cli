@@ -102,12 +102,7 @@ func writeListTable(w io.Writer, entries []directory.Integration) error {
 // by the CLI. Nothing writes the state file until #1337, so today this is empty
 // (a missing file yields an empty state, not an error).
 func readInstalledNames() (map[string]bool, error) {
-	path, err := state.Path()
-	if err != nil {
-		return nil, err
-	}
-
-	st, err := state.Read(path)
+	st, err := state.Read()
 	if err != nil {
 		return nil, err
 	}

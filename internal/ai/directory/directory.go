@@ -37,13 +37,11 @@ const (
 
 // Directory is the set of known integrations.
 type Directory struct {
-	Version      int           `json:"version"`
 	Integrations []Integration `json:"integrations"`
 }
 
 // Integration is a single directory entry. The json field names are a public
-// contract; see CONTRACT.md. The Internal field is tagged json:"-" and must
-// never appear in any output.
+// contract; see CONTRACT.md.
 type Integration struct {
 	Name        string `json:"name"`
 	DisplayName string `json:"displayName"`
@@ -55,15 +53,9 @@ type Integration struct {
 	Documentation string         `json:"documentation"`
 	Delivery      Delivery       `json:"delivery"`
 	Compatibility *Compatibility `json:"compatibility,omitempty"`
-
-	// Internal holds maintainer-facing metadata. json:"-" keeps it out of every
-	// user-facing output.
-	Internal *Internal `json:"-"`
 }
 
-// Delivery describes how an integration is delivered. Repository is required
-// when Kind == DeliveryGit (enforced by Validate). A future "project" kind adds
-// an endpoint field here without renaming existing fields.
+// Delivery describes how an integration is delivered.
 type Delivery struct {
 	Kind       DeliveryKind `json:"kind"`
 	Repository string       `json:"repository,omitempty"`
@@ -72,11 +64,6 @@ type Delivery struct {
 // Compatibility describes how compatibility is determined for an entry.
 type Compatibility struct {
 	Source string `json:"source"`
-}
-
-// Internal is maintainer-only metadata, never exposed in user-facing output.
-type Internal struct {
-	Maintainer string `json:"-"`
 }
 
 // Load returns the directory of known integrations.
@@ -140,11 +127,11 @@ func (d *Directory) List(installed map[string]bool, opts ListOptions) ([]Integra
 }
 
 // Info returns a single integration by name, or an error when no entry matches.
-func (d *Directory) Info(name string) (Integration, error) {
+func (d *Directory) Info(name string) (*Integration, error) {
 	e, ok := d.Get(name)
 	if !ok {
-		return Integration{}, fmt.Errorf("unknown integration %q", name)
+		return nil, fmt.Errorf("unknown integration %q", name)
 	}
 
-	return *e, nil
+	return e, nil
 }

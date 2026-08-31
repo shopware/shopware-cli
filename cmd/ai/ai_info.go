@@ -28,10 +28,10 @@ var aiInfoCmd = &cobra.Command{
 		}
 
 		if format == formatJSON {
-			return writeInfoJSON(cmd.OutOrStdout(), entry)
+			return writeInfoJSON(cmd.OutOrStdout(), *entry)
 		}
 
-		return writeInfoTable(cmd.OutOrStdout(), entry)
+		return writeInfoTable(cmd.OutOrStdout(), *entry)
 	},
 }
 

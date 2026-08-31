@@ -7,9 +7,9 @@ name or enum value here is a breaking change to a public interface.
 - Only `type: skill` entries are listed. `mcp` (shopware-core) is deferred to #1336.
 - No network access, no project detection in this version.
 - The directory has no remote source: entries are hardwired in Go
-  (`integrations.go`). `Validate` (run by tests) guards their invariants.
+  (`integrations.go`).
 
-## Enums (all validated; values may be ADDED later, never renamed/removed)
+## Enums (values may be ADDED later, never renamed/removed)
 
 | Field           | v1 values                          | reserved for later |
 |-----------------|------------------------------------|--------------------|
@@ -17,14 +17,13 @@ name or enum value here is a breaking change to a public interface.
 | delivery.kind   | bundled, git                       | project            |
 | status          | active, deprecated                 | —                  |
 
-## Entry fields (defined in Go, validated by Validate)
+## Entry fields (defined in Go)
 Required:  name, displayName, type, provider, description, status,
            delivery (+ delivery.kind), documentation
 Conditional: delivery.repository — required when delivery.kind == git
-Optional:  compatibility (compatibility.source: owner),
-           internal (internal.maintainer)  ← NEVER emitted in any output
+Optional:  compatibility (compatibility.source: owner)
 
-`name`: must match `^[a-z][a-z0-9-]*$` and be unique across the directory.
+`name` is lowercase, hyphenated, and unique across the directory.
 
 ## JSON output (camelCase) — public contract
 
@@ -39,8 +38,6 @@ the CLI-wide output-flag convention (shopware/shopware-cli#1471).
   documentation,
   delivery: { kind, repository? },
   compatibility?: { source } }
-
-Never present in output: internal, internal.maintainer.
 
 ## --installed state (shape defined now, WRITTEN by #1337)
 Install-state file records, per installed entry:

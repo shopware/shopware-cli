@@ -43,9 +43,9 @@ type File struct {
 	Installed []InstalledEntry `json:"installed"`
 }
 
-// Path returns the global install-state file location
-// ($UserConfigDir/shopware-cli/ai/installed.json). It creates nothing.
-func Path() (string, error) {
+// path is the global install-state file location
+// ($UserConfigDir/shopware-cli/ai/installed.json).
+func path() (string, error) {
 	configDir, err := os.UserConfigDir()
 	if err != nil {
 		return "", err
@@ -54,11 +54,15 @@ func Path() (string, error) {
 	return filepath.Join(configDir, "shopware-cli", "ai", "installed.json"), nil
 }
 
-// Read loads the install-state file at path. A missing file is not an error: it
-// returns an empty state, which is the expected situation until #1337 writes
-// the file.
-func Read(path string) (File, error) {
-	b, err := os.ReadFile(path)
+// Read loads the install-state file. A missing file is not an error: it returns
+// an empty state, which is the expected situation until #1337 writes the file.
+func Read() (File, error) {
+	p, err := path()
+	if err != nil {
+		return File{}, err
+	}
+
+	b, err := os.ReadFile(p)
 	if errors.Is(err, fs.ErrNotExist) {
 		return File{Version: FileVersion}, nil
 	}
@@ -68,7 +72,7 @@ func Read(path string) (File, error) {
 
 	var f File
 	if err := json.Unmarshal(b, &f); err != nil {
-		return File{}, fmt.Errorf("parse ai install-state %s: %w", path, err)
+		return File{}, fmt.Errorf("parse ai install-state %s: %w", p, err)
 	}
 	if f.Version != FileVersion {
 		return File{}, fmt.Errorf("unsupported ai install-state version %d (expected %d)", f.Version, FileVersion)

@@ -1,8 +1,6 @@
 package directory
 
 import (
-	"encoding/json"
-	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -13,7 +11,6 @@ func TestLoad(t *testing.T) {
 	d := Load()
 	require.NotNil(t, d)
 
-	assert.Equal(t, 1, d.Version)
 	assert.NotEmpty(t, d.Integrations)
 
 	_, ok := d.Get("shopware-cli")
@@ -31,28 +28,10 @@ func TestGet(t *testing.T) {
 	assert.False(t, ok)
 }
 
-// TestIntegrationJSONNeverIncludesInternal asserts maintainer metadata never
-// leaks into any user-facing output: the Integration struct that `ai info`
-// marshals keeps the Internal field out of JSON via json:"-".
-func TestIntegrationJSONNeverIncludesInternal(t *testing.T) {
-	e := Integration{
-		Name:     "example",
-		Internal: &Internal{Maintainer: "@shopware/team"},
-	}
-
-	b, err := json.Marshal(e)
-	require.NoError(t, err)
-
-	out := strings.ToLower(string(b))
-	assert.NotContains(t, out, "maintainer")
-	assert.NotContains(t, out, "internal")
-}
-
 // fixtureDirectory is a fixed, minimal directory for logic tests, independent of
 // the real hardwired data so adding integrations does not break these tests.
 func fixtureDirectory() *Directory {
 	return &Directory{
-		Version: 1,
 		Integrations: []Integration{
 			{
 				Name: "alpha-skill", DisplayName: "Alpha", Type: TypeSkill,

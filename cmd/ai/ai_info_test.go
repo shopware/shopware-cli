@@ -2,7 +2,6 @@ package ai
 
 import (
 	"bytes"
-	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -22,27 +21,12 @@ func TestWriteInfoTable(t *testing.T) {
 		Documentation: "https://example.test/dh",
 		Delivery:      directory.Delivery{Kind: directory.DeliveryGit, Repository: "https://github.com/shopware/deployment-helper"},
 		Compatibility: &directory.Compatibility{Source: "owner"},
-		Internal:      &directory.Internal{Maintainer: "@shopware/team"},
 	}
 
 	var buf bytes.Buffer
 	require.NoError(t, writeInfoTable(&buf, e))
-	out := buf.String()
 
-	assert.Contains(t, out, "deployment-helper")
-	// maintainer metadata is never rendered
-	assert.NotContains(t, strings.ToLower(out), "maintainer")
-}
-
-func TestWriteInfoJSONExcludesInternal(t *testing.T) {
-	e := directory.Integration{Name: "x", Internal: &directory.Internal{Maintainer: "@shopware/team"}}
-
-	var buf bytes.Buffer
-	require.NoError(t, writeInfoJSON(&buf, e))
-
-	out := strings.ToLower(buf.String())
-	assert.NotContains(t, out, "maintainer")
-	assert.NotContains(t, out, "internal")
+	assert.Contains(t, buf.String(), "deployment-helper")
 }
 
 func TestCompatibilityLabel(t *testing.T) {

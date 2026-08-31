@@ -2,9 +2,8 @@ package directory
 
 // integrations is the hardwired directory of Shopware AI integrations. There is
 // no remote source and nothing is fetched at runtime, so the directory lives
-// directly in Go. Validate (exercised by tests) guards its invariants.
+// directly in Go.
 var integrations = Directory{
-	Version: 1,
 	Integrations: []Integration{
 		{
 			Name:          "shopware-cli",
