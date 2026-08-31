@@ -56,29 +56,24 @@ func TestRewriteComposerJSON(t *testing.T) {
 
 func TestRewriteComposerJSONKeepsPathRepositoryConstraints(t *testing.T) {
 	dir := setupPathPluginProject(t)
-	writeFile(t, filepath.Join(dir, "composer.json"), `{
-		"name": "shopware/production",
-		"require": {
-			"shopware/core": "6.7.3.0",
+	testhelper.WriteFile(t, filepath.Join(dir, "composer.json"), testhelper.ComposerJSON{
+		Name: "shopware/production",
+		Require: map[string]string{
+			"shopware/core":              "6.7.3.0",
 			"shopware/deployment-helper": "*",
-			"acme/custom-plugin": "1.0.0",
-			"swag/demo": "^2.0"
-		}
-	}`)
-	writeFile(t, filepath.Join(dir, "composer.lock"), `{
-		"packages": [
-			{"name": "shopware/core", "version": "v6.7.3.0"},
-			{"name": "swag/demo", "version": "2.0.0", "type": "shopware-platform-plugin"},
-			{
-				"name": "acme/custom-plugin",
-				"version": "1.0.0",
-				"type": "shopware-platform-plugin",
-				"require": {"shopware/core": "~6.7.0"},
-				"dist": {"type": "path", "url": "custom/static-plugins/MyCustomPlugin"}
-			}
-		],
-		"packages-dev": []
-	}`)
+			"acme/custom-plugin":         "1.0.0",
+			"swag/demo":                  "^2.0",
+		},
+	}.String())
+	testhelper.WriteFile(t, filepath.Join(dir, "composer.lock"), testhelper.ComposerLock(
+		testhelper.LockPackage{Name: "shopware/core", Version: "v6.7.3.0"},
+		testhelper.LockPackage{Name: "swag/demo", Version: "2.0.0", Type: "shopware-platform-plugin"},
+		testhelper.LockPackage{
+			Name: "acme/custom-plugin", Version: "1.0.0", Type: "shopware-platform-plugin",
+			Require: map[string]string{"shopware/core": "~6.7.0"},
+			Dist:    map[string]string{"type": "path", "url": "custom/static-plugins/MyCustomPlugin"},
+		},
+	))
 
 	changes, err := newTestUpgrader(t, dir).RewriteComposerJSON("6.7.11.0", map[string]string{"swag/demo": "2.1.3"})
 	require.NoError(t, err)

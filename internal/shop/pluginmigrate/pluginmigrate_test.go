@@ -146,29 +146,19 @@ func TestScanFindsOnlyCustomExtensions(t *testing.T) {
 func TestScanSkipsComposerManagedPathPlugins(t *testing.T) {
 	dir := setupProject(t)
 
-	writeFile(t, filepath.Join(dir, "custom", "static-plugins", "MyCustomPlugin", "composer.json"), `{
-		"name": "acme/custom-plugin",
-		"type": "shopware-platform-plugin",
-		"version": "1.0.0",
-		"require": {"shopware/core": "~6.7.0"},
-		"extra": {"shopware-plugin-class": "Acme\\MyCustomPlugin\\MyCustomPlugin", "label": {"en-GB": "Custom"}},
-		"autoload": {"psr-4": {"Acme\\MyCustomPlugin\\": "src/"}}
-	}`)
-	writeFile(t, filepath.Join(dir, "composer.json"), `{
-		"name": "shopware/production",
-		"require": {"shopware/core": "6.7.3.0", "acme/custom-plugin": "*"}
-	}`)
-	writeFile(t, filepath.Join(dir, "composer.lock"), `{
-		"packages": [
-			{
-				"name": "acme/custom-plugin",
-				"version": "1.0.0",
-				"type": "shopware-platform-plugin",
-				"dist": {"type": "path", "url": "custom/static-plugins/MyCustomPlugin"}
-			}
-		],
-		"packages-dev": []
-	}`)
+	pathPlugin := testhelper.PluginComposer("acme/custom-plugin", "1.0.0", `Acme\MyCustomPlugin\MyCustomPlugin`)
+	pathPlugin.Require = map[string]string{"shopware/core": "~6.7.0"}
+	testhelper.WriteFile(t, filepath.Join(dir, "custom", "static-plugins", "MyCustomPlugin", "composer.json"), pathPlugin.String())
+	testhelper.WriteFile(t, filepath.Join(dir, "composer.json"), testhelper.ComposerJSON{
+		Name:    "shopware/production",
+		Require: map[string]string{"shopware/core": "6.7.3.0", "acme/custom-plugin": "*"},
+	}.String())
+	testhelper.WriteFile(t, filepath.Join(dir, "composer.lock"), testhelper.ComposerLock(
+		testhelper.LockPackage{
+			Name: "acme/custom-plugin", Version: "1.0.0", Type: "shopware-platform-plugin",
+			Dist: map[string]string{"type": "path", "url": "custom/static-plugins/MyCustomPlugin"},
+		},
+	))
 
 	vendorDir := filepath.Join(dir, "vendor", "acme")
 	require.NoError(t, os.MkdirAll(vendorDir, 0o755))

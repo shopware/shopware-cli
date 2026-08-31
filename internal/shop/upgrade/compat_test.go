@@ -13,6 +13,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	account_api "github.com/shopware/shopware-cli/internal/account-api"
+	"github.com/shopware/shopware-cli/internal/testhelper"
 )
 
 type fakeProvider map[string]*repository.Package
@@ -324,14 +325,9 @@ func TestClassifyPathInstalledPluginUsesLocalConstraint(t *testing.T) {
 func TestClassifyUnpublishedPackageFallsBackToLocalComposerJSON(t *testing.T) {
 	dir := setupProject(t)
 	pluginDir := filepath.Join(dir, "custom", "static-plugins", "MyCustomPlugin")
-	writeFile(t, filepath.Join(pluginDir, "composer.json"), `{
-		"name": "acme/custom-plugin",
-		"type": "shopware-platform-plugin",
-		"version": "1.0.0",
-		"require": {"shopware/core": "~6.6.0 || ~6.7.0"},
-		"extra": {"shopware-plugin-class": "Acme\\MyCustomPlugin\\MyCustomPlugin", "label": {"en-GB": "Custom"}},
-		"autoload": {"psr-4": {"Acme\\MyCustomPlugin\\": "src/"}}
-	}`)
+	pathPlugin := testhelper.PluginComposer("acme/custom-plugin", "1.0.0", `Acme\MyCustomPlugin\MyCustomPlugin`)
+	pathPlugin.Require = map[string]string{"shopware/core": "~6.6.0 || ~6.7.0"}
+	testhelper.WriteFile(t, filepath.Join(pluginDir, "composer.json"), pathPlugin.String())
 
 	current, target := compatVersions(t)
 	u := compatUpgrader(t, dir, fakeProvider{}, nil, nil)
