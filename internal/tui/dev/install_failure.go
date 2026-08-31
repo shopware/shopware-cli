@@ -15,7 +15,6 @@ import (
 type installFailureCategory string
 
 const (
-	installFailureDiskSpace           installFailureCategory = "disk_space"
 	installFailurePHP                 installFailureCategory = "php"
 	installFailureEnvironmentConfig   installFailureCategory = "env_config"
 	installFailureDatabaseVersion     installFailureCategory = "db_version"
@@ -28,11 +27,19 @@ const (
 	installFailureThemeCompile        installFailureCategory = "theme_compile"
 	installFailureTransport           installFailureCategory = "transport"
 	installFailureUnknown             installFailureCategory = "unknown"
+
+	installStartStep      = "install_start"
+	installUserCreateStep = "user:create"
+
+	// installFailureDetailLines bounds how many output lines make up one
+	// detail, so a stack trace or a dumped query cannot grow it without limit.
+	installFailureDetailLines = 3
 )
 
-// installFailure is the shared description of one failed helper run. Later
-// telemetry, diagnostic UI, and retry work can consume this record without
-// having to classify the raw process output again.
+// installFailure is the classified result of one failed helper run. The
+// failure screen, resume logic, and telemetry all read this instead of
+// scanning the raw output again. detail is kept for matching hints and tests;
+// it is not shown on the failure card and is never sent as a telemetry tag.
 type installFailure struct {
 	failingStep string
 	category    installFailureCategory
@@ -42,26 +49,18 @@ type installFailure struct {
 
 type installFailureRule struct {
 	category installFailureCategory
-	patterns []*regexp.Regexp // compiled regex patterns to match against the output of a failed helper run
+	patterns []*regexp.Regexp
 }
 
-// installFailureRules is a list of known failure patterns that can be used to
-// classify the output of a failed helper run. The first matching rule is used
-// to classify the failure.
+// installFailureRules lists known failure patterns. Output lines are checked
+// from the end, so a terminal error wins over an earlier warning.
 var installFailureRules = []installFailureRule{
-	{
-		category: installFailureDiskSpace,
-		patterns: installFailurePatterns(
-			`no space left on device`,
-		),
-	},
 	{
 		category: installFailurePHP,
 		patterns: installFailurePatterns(
 			`allowed memory size`,
 			`outofmemoryerror`,
 			`php fatal error`,
-			`uncaught error`,
 			`syntax error, unexpected`,
 		),
 	},
@@ -82,9 +81,9 @@ var installFailureRules = []installFailureRule{
 	{
 		category: installFailureDatabaseConnection,
 		patterns: installFailurePatterns(
-			`\[2002\]`,
-			`\[1045\]`,
-			`\[1044\]`,
+			`sqlstate\[hy000\] \[2002\]`,
+			`sqlstate\[hy000\] \[1045\]`,
+			`sqlstate\[hy000\] \[1044\]`,
 		),
 	},
 	{
@@ -92,8 +91,8 @@ var installFailureRules = []installFailureRule{
 		patterns: installFailurePatterns(
 			`\[42s01\]`,
 			`\[42s02\]`,
-			`table .* doesn't exist`,
-			`sqlstate\[`,
+			`\[42s22\]`,
+			`base table or view not found`,
 		),
 	},
 	{
@@ -114,7 +113,6 @@ var installFailureRules = []installFailureRule{
 		category: installFailureInvalidInput,
 		patterns: installFailurePatterns(
 			`the password must have at least`,
-			`transport does not exist`,
 		),
 	},
 	{
@@ -124,7 +122,6 @@ var installFailureRules = []installFailureRule{
 			`could not get id of`,
 			`could not find theme with`,
 			`invalid theme name`,
-			`from plugin registry`,
 		),
 	},
 	{
@@ -132,9 +129,7 @@ var installFailureRules = []installFailureRule{
 		patterns: installFailurePatterns(
 			`unable to compile the theme`,
 			`error while trying to concatenate styles`,
-			`unable to resolve file`,
 			`unable to .* theme\.json`,
-			`is not valid for type`,
 			`unable to find setter for config field`,
 			`error loading runtime config for theme`,
 			`error while trying to write compiled files`,
@@ -144,6 +139,7 @@ var installFailureRules = []installFailureRule{
 		category: installFailureTransport,
 		patterns: installFailurePatterns(
 			`while setting up the .* transport`,
+			`transport does not exist`,
 		),
 	},
 }
@@ -158,8 +154,6 @@ func installFailurePatterns(patterns ...string) []*regexp.Regexp {
 	return compiled
 }
 
-const installStartStep = "install_start"
-
 // matchesInstallFailureRule returns true if the given value matches any of the
 // regular expressions in the given list of patterns.
 func matchesInstallFailureRule(value string, patterns []*regexp.Regexp) bool {
@@ -172,8 +166,8 @@ func matchesInstallFailureRule(value string, patterns []*regexp.Regexp) bool {
 }
 
 // classifyInstallFailure analyzes the output of a failed helper run and
-// returns a structured description of the failure. The first matching rule is
-// used to classify the failure.
+// returns a structured description of the failure. Output is scanned from the
+// end so the error that stopped the process wins over earlier warnings.
 func classifyInstallFailure(output []string, processErr error) installFailure {
 	lines := cleanInstallOutput(output)
 
@@ -181,27 +175,37 @@ func classifyInstallFailure(output []string, processErr error) installFailure {
 		failingStep: installFailureStep(lines),
 		category:    installFailureUnknown,
 		detail:      installFailureDetail(lines, processErr),
-		retryable:   true,
 	}
 
-	for i, line := range lines {
+	for i := len(lines) - 1; i >= 0; i-- {
 		for _, rule := range installFailureRules {
-			if matchesInstallFailureRule(line, rule.patterns) {
+			if matchesInstallFailureRule(lines[i], rule.patterns) {
 				failure.category = rule.category
 				failure.detail = installFailureMessage(lines, i)
-				// Syntax and parse errors require a code/configuration change,
-				// so immediately re-running the same command cannot recover.
-				normalized := strings.ToLower(line)
-				if rule.category == installFailurePHP &&
-					(strings.Contains(normalized, "fatal error") || strings.Contains(normalized, "syntax error")) {
-					failure.retryable = false
-				}
+				failure.retryable = isRetryableInstallFailure(failure)
 				return failure
 			}
 		}
 	}
 
+	failure.retryable = isRetryableInstallFailure(failure)
 	return failure
+}
+
+// isRetryableInstallFailure reports whether it is safe to re-run the failed
+// step. user:create is never retried: that would put the admin password on
+// the command line. PHP fatal/syntax errors need a code change first.
+func isRetryableInstallFailure(f installFailure) bool {
+	if f.failingStep == installUserCreateStep {
+		return false
+	}
+	if f.category == installFailurePHP {
+		detail := strings.ToLower(f.detail)
+		if strings.Contains(detail, "fatal error") || strings.Contains(detail, "syntax error") {
+			return false
+		}
+	}
+	return true
 }
 
 // installFailureStep returns the last known step of the failed helper run
@@ -230,7 +234,7 @@ func installFailureStep(output []string) string {
 // helper failed without diagnostic output.
 func installFailureDetail(output []string, processErr error) string {
 	for i := len(output) - 1; i >= 0; i-- {
-		if strings.TrimSpace(output[i]) != "" {
+		if output[i] != "" {
 			return installFailureMessage(output, i)
 		}
 	}
@@ -245,80 +249,46 @@ func installFailureDetail(output []string, processErr error) string {
 	return "deployment helper failed without diagnostic output"
 }
 
-const (
-	// symfonyBlockIndent is the indentation Symfony puts in front of every
-	// line of a rendered error box.
-	symfonyBlockIndent = 2
-
-	// installFailureMessageLines bounds how many output lines are stitched
-	// into one detail, so unexpectedly indented output (a stack trace, a
-	// dumped SQL statement) cannot grow the detail without limit.
-	installFailureMessageLines = 12
-)
-
 // installRelayPrefix matches the tag the deployment helper puts in front of
-// every line it relays from the console commands it runs, e.g.
-// "[deployment-helper] ". It shifts the whole error box to the right, hiding
-// the indentation that marks it, so it goes before anything else reads a line.
-var installRelayPrefix = regexp.MustCompile(`^\[[A-Za-z0-9][A-Za-z0-9._-]*] ?`)
+// every line it relays from the console commands it runs.
+var installRelayPrefix = regexp.MustCompile(`^\[deployment-helper] ?`)
 
-// cleanInstallOutput removes ANSI styling, the relay prefix, and trailing
-// padding from the captured helper output, so rule matching and the stored
+// cleanInstallOutput removes ANSI styling, the relay prefix, and surrounding
+// whitespace from the captured helper output, so rule matching and the stored
 // detail work on the plain message. The log view keeps rendering the original
 // lines.
 func cleanInstallOutput(output []string) []string {
 	cleaned := make([]string, len(output))
 	for i, line := range output {
-		line = installRelayPrefix.ReplaceAllString(ansi.Strip(line), "")
-		cleaned[i] = strings.TrimRight(line, " \t\r")
+		cleaned[i] = cleanInstallLine(line)
 	}
 	return cleaned
 }
 
-// installFailureMessage returns the complete message the line at idx belongs
-// to. The helper runs without a TTY, so Symfony renders errors into a box
-// wrapped at 80 columns: a message is spread over several output lines and any
-// single one of them is a torn-off fragment. Lines continuing the same box —
-// non-empty and indented alike — are stitched back into one message.
-func installFailureMessage(lines []string, idx int) string {
-	indent := installLineIndent(lines[idx])
-	if indent < symfonyBlockIndent {
-		return strings.TrimSpace(lines[idx])
-	}
+func cleanInstallLine(line string) string {
+	line = installRelayPrefix.ReplaceAllString(ansi.Strip(line), "")
+	return strings.TrimSpace(line)
+}
 
+// installFailureMessage returns the message the line at idx belongs to. Symfony
+// wraps long errors over several output lines, so one line on its own is often
+// half a sentence. The neighbouring non-empty lines are joined back into one
+// message; a blank line ends it.
+func installFailureMessage(lines []string, idx int) string {
 	start, end := idx, idx
-	for start > 0 && end-start+1 < installFailureMessageLines && continuesFailureBlock(lines[start-1], indent) {
+	for start > 0 && lines[start-1] != "" && end-start+1 < installFailureDetailLines {
 		start--
 	}
-	for end < len(lines)-1 && end-start+1 < installFailureMessageLines && continuesFailureBlock(lines[end+1], indent) {
+	for end < len(lines)-1 && lines[end+1] != "" && end-start+1 < installFailureDetailLines {
 		end++
 	}
-
-	parts := make([]string, 0, end-start+1)
-	for _, line := range lines[start : end+1] {
-		parts = append(parts, strings.TrimSpace(line))
-	}
-	return strings.Join(parts, " ")
-}
-
-// continuesFailureBlock reports whether line carries more of an error box
-// indented by indent. The blank rows Symfony pads the box with, and any line at
-// a different indentation, end the block.
-func continuesFailureBlock(line string, indent int) bool {
-	return strings.TrimSpace(line) != "" && installLineIndent(line) == indent
-}
-
-// installLineIndent counts the leading spaces of a line.
-func installLineIndent(line string) int {
-	return len(line) - len(strings.TrimLeft(line, " "))
+	return strings.Join(lines[start:end+1], " ")
 }
 
 // label returns a human-readable description of the category for the failure
 // screen. The raw category values stay reserved for telemetry tags.
 func (c installFailureCategory) label() string {
 	switch c {
-	case installFailureDiskSpace:
-		return "Not enough disk space"
 	case installFailurePHP:
 		return "PHP error"
 	case installFailureEnvironmentConfig:
@@ -353,17 +323,12 @@ func (c installFailureCategory) label() string {
 func (f installFailure) remediation(docker bool) string {
 	detail := strings.ToLower(f.detail)
 	switch f.category {
-	case installFailureDiskSpace:
-		if docker {
-			return "Free disk space on the host and in Docker (docker system df), then retry."
-		}
-		return "Free disk space on this machine, then retry."
 	case installFailurePHP:
 		if strings.Contains(detail, "allowed memory size") || strings.Contains(detail, "outofmemory") {
 			if docker {
-				return "Raise PHP memory_limit in the web container, recreate it, then use Retry from failed step."
+				return "Raise PHP memory_limit in the web container, recreate it, then retry."
 			}
-			return "Raise PHP memory_limit in php.ini, then use Retry from failed step."
+			return "Raise PHP memory_limit in php.ini, then retry."
 		}
 		return "Fix the PHP error in the logs. Retrying will fail again until the code or configuration changes."
 	case installFailureEnvironmentConfig:
@@ -393,27 +358,24 @@ func (f installFailure) remediation(docker bool) string {
 		return "Shopware is already installed (install.lock). Remove install.lock and drop the database only if you want a fresh install, then use Start over."
 	case installFailurePermission:
 		if docker {
-			return "Give the container user write access to var/, custom/, and files/ (check the compose user mapping), then use Retry from failed step."
+			return "Give the container user write access to var/, custom/, and files/ (check the compose user mapping), then retry."
 		}
-		return "Give the PHP user write access to var/, custom/, and files/, then use Retry from failed step."
+		return "Give the PHP user write access to var/, custom/, and files/, then retry."
 	case installFailureInvalidInput:
-		if strings.Contains(detail, "password") {
-			return "Choose an admin password of at least 8 characters and use Start over."
-		}
-		return "Set MESSENGER_TRANSPORT_DSN in .env to a transport Shopware ships (e.g. doctrine://default), then use Retry from failed step."
+		return "Choose an admin password of at least 8 characters and use Start over."
 	case installFailureMissingPrerequisite:
 		switch {
 		case strings.Contains(detail, "snippet set") || strings.Contains(detail, "isocode"):
 			return "Pick a language Shopware ships with (for example en-GB or de-DE) and use Start over."
 		case strings.Contains(detail, "theme"):
-			return "Install the Storefront package (shopware/storefront) and make sure its theme.json is present, then use Retry from failed step."
+			return "Install the Storefront package (shopware/storefront) and make sure its theme.json is present, then retry."
 		default:
-			return "Install the missing plugin or package named in the logs, then use Retry from failed step."
+			return "Install the missing plugin or package named in the logs, then retry."
 		}
 	case installFailureThemeCompile:
-		return "Fix the theme.json / SCSS error in the logs and ensure var/ is writable, then use Retry from failed step."
+		return "Fix the theme.json / SCSS error in the logs and ensure var/ is writable, then retry."
 	case installFailureTransport:
-		return "Set MESSENGER_TRANSPORT_DSN in .env to a working transport and start that service, then use Retry from failed step."
+		return "Set MESSENGER_TRANSPORT_DSN in .env to a working transport and start that service, then retry."
 	case installFailureUnknown:
 		return ""
 	}

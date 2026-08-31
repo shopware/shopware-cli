@@ -7,6 +7,13 @@ import (
 	"charm.land/lipgloss/v2"
 )
 
+// KVKeyWidth is the column width of the key in KVRow. Callers laying out
+// multi-line values indent their continuation lines by it plus KVRowIndent.
+const KVKeyWidth = 22
+
+// KVRowIndent is the left indentation KVRow puts in front of the key.
+const KVRowIndent = 2
+
 var (
 	// LabelStyle renders text in the primary text color.
 	LabelStyle = lipgloss.NewStyle().Foreground(TextColor)
@@ -37,13 +44,6 @@ func FormatLabelDim(label, detail string) string {
 	}
 	return DimStyle.Render(label + " (" + detail + ")")
 }
-
-// KVKeyWidth is the column width of the key in KVRow. Callers laying out
-// multi-line values indent their continuation lines by it plus KVRowIndent.
-const KVKeyWidth = 22
-
-// KVRowIndent is the left indentation KVRow puts in front of the key.
-const KVRowIndent = 2
 
 // KVRow renders a single key-value pair as a line with consistent alignment.
 func KVRow(key, value string) string {

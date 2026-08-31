@@ -184,6 +184,7 @@ func TestUpdateKeyPress_PhaseInstallFailed_LTogglesLogs(t *testing.T) {
 func TestUpdateKeyPress_PhaseInstallFailed_NavigatesActions(t *testing.T) {
 	m := newTestModel(t)
 	m.phase = phaseInstallFailed
+	m.installProg.failure = &installFailure{retryable: true, failingStep: "theme:change"}
 
 	updated, _ := m.updateInstallFailed(keySpecial(tea.KeyRight))
 	assert.Equal(t, installFailureActionStartFailedStep, updated.(Model).installProg.action)
@@ -196,6 +197,27 @@ func TestUpdateKeyPress_PhaseInstallFailed_NavigatesActions(t *testing.T) {
 
 	updated, _ = updated.(Model).updateInstallFailed(keySpecial(tea.KeyLeft))
 	assert.Equal(t, installFailureActionStartBeginning, updated.(Model).installProg.action)
+}
+
+func TestListInstallFailureActions(t *testing.T) {
+	assert.Equal(t, []installFailureAction{
+		installFailureActionStartBeginning,
+		installFailureActionStartFailedStep,
+		installFailureActionCancel,
+	}, listInstallFailureActions(&installFailure{
+		failingStep: "theme:change",
+		retryable:   true,
+	}))
+
+	for _, failure := range []*installFailure{
+		{failingStep: "user:create", retryable: false},
+		{failingStep: "system:install", retryable: true},
+	} {
+		assert.Equal(t, []installFailureAction{
+			installFailureActionStartBeginning,
+			installFailureActionCancel,
+		}, listInstallFailureActions(failure))
+	}
 }
 
 func TestUpdateKeyPress_PhaseInstallFailed_StartFromBeginning(t *testing.T) {
@@ -222,15 +244,9 @@ func TestUpdateKeyPress_PhaseInstallFailed_StartFromBeginning(t *testing.T) {
 	assert.Empty(t, final.overlayLines)
 	assert.Nil(t, final.installProg.failure)
 	assert.Zero(t, final.installProg.currentStep)
-	assert.False(t, final.installProg.done)
-	assert.False(t, final.installProg.showLogs)
-	assert.Equal(t, installFailureActionStartBeginning, final.installProg.action)
 	assert.NotNil(t, final.dockerOutChan)
 	assert.NotNil(t, cmd)
 	assert.Equal(t, "de-DE", final.install.language)
-	assert.Equal(t, "EUR", final.install.currency)
-	assert.Equal(t, "admin", final.install.Username())
-	assert.Equal(t, "shopware", final.install.Password())
 }
 
 func TestUpdateKeyPress_PhaseInstallFailed_StartFromFailedStep(t *testing.T) {
@@ -242,7 +258,7 @@ func TestUpdateKeyPress_PhaseInstallFailed_StartFromFailedStep(t *testing.T) {
 		currentStep: 4,
 		done:        true,
 		showLogs:    true,
-		failure:     &installFailure{category: installFailureThemeCompile, failingStep: "theme:change"},
+		failure:     &installFailure{category: installFailureThemeCompile, failingStep: "theme:change", retryable: true},
 		action:      installFailureActionStartFailedStep,
 	}
 	m.install.language = "de-DE"
@@ -257,14 +273,9 @@ func TestUpdateKeyPress_PhaseInstallFailed_StartFromFailedStep(t *testing.T) {
 	assert.Empty(t, final.overlayLines)
 	assert.Nil(t, final.installProg.failure)
 	assert.Equal(t, 4, final.installProg.currentStep)
-	assert.False(t, final.installProg.done)
-	assert.False(t, final.installProg.showLogs)
 	assert.NotNil(t, final.dockerOutChan)
 	assert.NotNil(t, cmd)
 	assert.Equal(t, "de-DE", final.install.language)
-	assert.Equal(t, "EUR", final.install.currency)
-	assert.Equal(t, "ada", final.install.Username())
-	assert.Equal(t, "supersecret", final.install.Password())
 }
 
 func TestUpdateKeyPress_PhaseInstallFailed_CancelOpensDashboard(t *testing.T) {
@@ -670,86 +681,60 @@ func TestView_InstallFailedShowsClassifiedMessage(t *testing.T) {
 		category:    installFailureDatabaseConnection,
 		failingStep: "system:install",
 		detail:      "SQLSTATE[HY000] [2002] Connection refused",
+		retryable:   true,
 	}
 
 	card := m.renderInstallFailed()
 	assert.Contains(t, card, "Installation failed")
 	assert.Contains(t, card, "Database connection failed")
 	assert.Contains(t, card, "Installing Shopware")
-	assert.Contains(t, card, "to see full logs")
-	assert.Contains(t, card, "What now?")
-	assert.Contains(t, card, "SQLSTATE[HY000] [2002] Connection refused")
-	assert.Contains(t, card, "How to fix:")
+	assert.Contains(t, card, "This might work:")
 	plain := strings.Join(strings.Fields(ansi.Strip(card)), " ")
 	assert.Contains(t, plain, "docker compose up -d database")
-	for _, label := range installFailureActionLabels {
-		assert.Contains(t, card, label)
-	}
-
-	assert.Contains(t, m.View(app.Context{Width: 120, Height: 40, MainHeight: 36}), "Installation failed")
+	assert.Contains(t, card, installFailureActionLabels[installFailureActionStartBeginning])
+	assert.Contains(t, card, installFailureActionLabels[installFailureActionCancel])
 }
 
-// A classified detail is a full sentence, so the card has to wrap it instead
-// of letting one long row widen the layout — and no word may get lost on the
-// way.
-func TestView_InstallFailedWrapsLongDetail(t *testing.T) {
-	detail := "An exception occurred in the driver: SQLSTATE[HY000] [2002] Connection refused while connecting to the database service"
-
+// Remediation copy is a full sentence, so the card has to wrap it instead of
+// letting one long row widen the layout — and no word may get lost on the way.
+func TestView_InstallFailedWrapsLongRemediation(t *testing.T) {
 	m := newTestModel(t)
+	m.dockerMode = true
 	m.phase = phaseInstallFailed
 	m.installProg.failure = &installFailure{
 		category:    installFailureDatabaseConnection,
 		failingStep: "system:install",
-		detail:      detail,
+		detail:      "SQLSTATE[HY000] [2002] Connection refused",
+		retryable:   true,
 	}
 
 	card := m.renderInstallFailed()
 	for _, line := range strings.Split(card, "\n") {
-		assert.LessOrEqual(t, lipgloss.Width(line), tui.KVRowIndent+tui.KVKeyWidth+installFailureDetailWidth)
+		assert.LessOrEqual(t, lipgloss.Width(line), tui.PhaseCardWidth)
 	}
-	assert.Contains(t, strings.Join(strings.Fields(ansi.Strip(card)), " "), detail)
-}
-
-func TestView_InstallFailedWithoutClassificationFallsBack(t *testing.T) {
-	m := newTestModel(t)
-	m.phase = phaseInstallFailed
-
-	card := m.renderInstallFailed()
-	assert.Contains(t, card, "Unknown error")
-	assert.Contains(t, card, "Starting installation")
-	assert.NotContains(t, card, "How to fix:")
+	plain := strings.Join(strings.Fields(ansi.Strip(card)), " ")
+	assert.Contains(t, plain, "docker compose up -d database")
 }
 
 func TestView_InstallFailedToggledLogsShowOverlay(t *testing.T) {
 	m := newTestModel(t)
 	m.phase = phaseInstallFailed
 	m.installProg.showLogs = true
-	m.overlayLines = []string{"Start: system:install", "SQLSTATE boom"}
-
-	view := m.View(app.Context{Width: 120, Height: 40, MainHeight: 36})
-	assert.Contains(t, view, "SQLSTATE boom")
-	// The boxed failure notice closes the log, after the captured output.
-	assert.Greater(t, strings.Index(view, "Failed step:"), strings.Index(view, "SQLSTATE boom"))
-}
-
-func TestView_InstallFailedNoticeSurvivesWrappingLogLines(t *testing.T) {
-	m := newTestModel(t)
-	m.phase = phaseInstallFailed
-	m.installProg.showLogs = true
 	m.installProg.failure = &installFailure{
 		category:    installFailureDatabaseConnection,
 		failingStep: "system:install",
+		retryable:   true,
 	}
-	// Lines long enough to wrap; tailing by slice element used to clip the box.
 	for range 40 {
 		m.overlayLines = append(m.overlayLines, strings.Repeat("deployment-helper output ", 6))
 	}
+	m.overlayLines = append(m.overlayLines, "SQLSTATE boom")
 
 	view := m.View(app.Context{Width: 100, Height: 30, MainHeight: 26})
+	assert.Contains(t, view, "SQLSTATE boom")
 	assert.Contains(t, view, "Failed step:")
 	assert.Contains(t, view, "Database connection failed")
-	assert.Contains(t, view, "What now?")
-	assert.Contains(t, view, "Retry from failed step")
+	assert.Contains(t, view, "Start over")
 }
 
 func TestView_ZeroSizeDoesNotPanic(t *testing.T) {

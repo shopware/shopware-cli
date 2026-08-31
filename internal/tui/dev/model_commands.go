@@ -2,6 +2,8 @@ package dev
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"strings"
 
 	"charm.land/bubbles/v2/progress"
@@ -108,7 +110,7 @@ func (m *Model) runShopwareInstallFrom(fromStep string) tea.Cmd {
 		})
 
 		output, err := streamInstallFrom(ctx, withEnv, fromStep, wizard, shopURL, ch)
-		return shopwareInstallDoneMsg{output: output, err: err}
+		return shopwareInstallDoneMsg{source: ch, output: output, err: err}
 	}
 
 	return tea.Batch(readFromChan(ch), doneCmd)
@@ -124,9 +126,9 @@ func (m Model) installShopURL() string {
 	return strings.TrimRight(m.overview.shopURL, "/")
 }
 
-// streamInstallFrom runs the remaining install console commands from fromStep,
-// then the deployment helper so plugin/app work still happens. A failure at
-// system:install (or before any step) is just the helper, matching a full run.
+// streamInstallFrom starts a full helper run for a new installation. A retry
+// starts at the failed console command and runs only the remaining commands;
+// running the helper again would restart installation and hit install.lock.
 func streamInstallFrom(ctx context.Context, execr executor.Executor, fromStep string, w installWizard, shopURL string, ch chan<- string) ([]string, error) {
 	defer close(ch)
 
@@ -137,24 +139,30 @@ func streamInstallFrom(ctx context.Context, execr executor.Executor, fromStep st
 	}
 
 	idx := installStepIndex(fromStep)
-	if idx > 0 {
-		for _, sp := range install.Steps[idx:] {
-			args := argsForInstallStep(sp.Pattern, w, shopURL)
-			if len(args) == 0 {
-				continue
-			}
-			emit("Start: " + sp.Pattern)
-			lines, err := tui.DrainCmdOutput(execr.ConsoleCommand(ctx, args...).Cmd, ch, true)
-			all = append(all, lines...)
-			if err != nil {
-				return all, err
-			}
+	if idx == 0 {
+		lines, err := tui.DrainCmdOutput(execr.PHPCommand(ctx, "vendor/bin/shopware-deployment-helper", "run").Cmd, ch, true)
+		all = append(all, lines...)
+		return all, err
+	}
+
+	if fromStep == installUserCreateStep {
+		return all, errors.New("user:create cannot be retried safely; start the installation over")
+	}
+
+	for _, sp := range install.Steps[idx:] {
+		args := argsForInstallStep(sp.Pattern, w, shopURL)
+		if len(args) == 0 {
+			return all, fmt.Errorf("no console arguments for install step %s", sp.Pattern)
+		}
+		emit("Start: " + sp.Pattern)
+		lines, err := tui.DrainCmdOutput(execr.ConsoleCommand(ctx, args...).Cmd, ch, true)
+		all = append(all, lines...)
+		if err != nil {
+			return all, err
 		}
 	}
 
-	lines, err := tui.DrainCmdOutput(execr.PHPCommand(ctx, "vendor/bin/shopware-deployment-helper", "run").Cmd, ch, true)
-	all = append(all, lines...)
-	return all, err
+	return all, nil
 }
 
 func (m *Model) readNextDockerOutput() tea.Cmd {
@@ -167,8 +175,8 @@ func (m *Model) readNextDockerOutput() tea.Cmd {
 
 func readFromChan(ch <-chan string) tea.Cmd {
 	return tui.ReadLineCmd(ch,
-		func(line string) tea.Msg { return dockerOutputLineMsg(line) },
-		dockerOutputDoneMsg{},
+		func(line string) tea.Msg { return dockerOutputLineMsg{source: ch, line: line} },
+		dockerOutputDoneMsg{source: ch},
 	)
 }
 

@@ -90,21 +90,25 @@ func (m Model) updateKeyPress(msg tea.KeyPressMsg) (app.Content, tea.Cmd) {
 }
 
 func (m Model) updateInstallFailed(msg tea.KeyPressMsg) (app.Content, tea.Cmd) {
+	actions := listInstallFailureActions(m.installProg.failure)
+	selected := installFailureActionIndex(actions, m.installProg.action)
+
 	switch tui.KeyString(msg) {
 	case "l":
 		m.installProg.showLogs = !m.installProg.showLogs
 	case "q", tui.KeyCtrlC:
+		// Unlike Cancel (which opens the dashboard), q leaves the TUI.
 		return m, tea.Quit
 	case tui.KeyLeft, tui.KeyShiftTab:
-		if m.installProg.action > 0 {
-			m.installProg.action--
+		if selected > 0 {
+			m.installProg.action = actions[selected-1]
 		}
 	case tui.KeyRight, tui.KeyTab:
-		if int(m.installProg.action) < len(installFailureActionLabels)-1 {
-			m.installProg.action++
+		if selected < len(actions)-1 {
+			m.installProg.action = actions[selected+1]
 		}
 	case tui.KeyEnter:
-		switch m.installProg.action {
+		switch actions[selected] {
 		case installFailureActionStartBeginning:
 			return m.startInstall()
 		case installFailureActionStartFailedStep:

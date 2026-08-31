@@ -14,6 +14,9 @@ import (
 	"github.com/shopware/shopware-cli/internal/tui/app"
 )
 
+// First-run install: the language/currency/credential prompts, and restarting
+// after a failure (start over vs resume from the failed console command).
+
 type installStep int
 
 const (
@@ -22,6 +25,20 @@ const (
 	installStepCurrency
 	installStepCredentials
 )
+
+type installFailureAction int
+
+const (
+	installFailureActionStartBeginning installFailureAction = iota
+	installFailureActionStartFailedStep
+	installFailureActionCancel
+)
+
+var installFailureActionLabels = map[installFailureAction]string{
+	installFailureActionStartBeginning:  "Start over",
+	installFailureActionStartFailedStep: "Retry from failed step",
+	installFailureActionCancel:          "Cancel",
+}
 
 type installWizard struct {
 	tui.CredentialStep
@@ -57,18 +74,32 @@ type installProgress struct {
 	progress    progress.Model
 }
 
-type installFailureAction int
+// listInstallFailureActions returns the buttons shown on the failure screen.
+func listInstallFailureActions(failure *installFailure) []installFailureAction {
+	actions := []installFailureAction{installFailureActionStartBeginning}
+	if canResumeFromFailedStep(failure) {
+		actions = append(actions, installFailureActionStartFailedStep)
+	}
+	return append(actions, installFailureActionCancel)
+}
 
-const (
-	installFailureActionStartBeginning installFailureAction = iota
-	installFailureActionStartFailedStep
-	installFailureActionCancel
-)
+// canResumeFromFailedStep is true when "Retry from failed step" would run
+// remaining console commands. The first step (and unknown names) both start
+// at index 0, which is the full helper — the same as Start over.
+func canResumeFromFailedStep(failure *installFailure) bool {
+	if failure == nil || !failure.retryable {
+		return false
+	}
+	return installStepIndex(failure.failingStep) > 0
+}
 
-var installFailureActionLabels = []string{
-	"Start over",
-	"Retry from failed step",
-	"Cancel",
+func installFailureActionIndex(actions []installFailureAction, selected installFailureAction) int {
+	for i, action := range actions {
+		if action == selected {
+			return i
+		}
+	}
+	return 0
 }
 
 // installStepIndex maps a classified helper step back onto the progress list.
@@ -91,11 +122,11 @@ func installStepIndex(step string) int {
 func argsForInstallStep(step string, w installWizard, shopURL string) []string {
 	locale := w.language
 	if locale == "" {
-		locale = "en-GB"
+		locale = install.DefaultLocale
 	}
 	currency := w.currency
 	if currency == "" {
-		currency = "EUR"
+		currency = install.DefaultCurrency
 	}
 
 	switch step {
@@ -107,8 +138,6 @@ func argsForInstallStep(step string, w installWizard, shopURL string) []string {
 			"--shop-currency=" + currency,
 			"--force",
 		}
-	case "user:create":
-		return []string{"user:create", w.Username(), "--password=" + w.Password()}
 	case "messenger:setup-transports":
 		return []string{"messenger:setup-transports"}
 	case "sales-channel:create:storefront":
@@ -208,11 +237,10 @@ func (m Model) startInstall() (app.Content, tea.Cmd) {
 // startInstallFromFailedStep resumes at the classified helper step without
 // returning to the language, currency, or credential prompts.
 func (m Model) startInstallFromFailedStep() (app.Content, tea.Cmd) {
-	step := installStartStep
-	if m.installProg.failure != nil && m.installProg.failure.failingStep != "" {
-		step = m.installProg.failure.failingStep
+	if !canResumeFromFailedStep(m.installProg.failure) {
+		return m.startInstall()
 	}
-	return m.startInstallFrom(step)
+	return m.startInstallFrom(m.installProg.failure.failingStep)
 }
 
 func (m Model) startInstallFrom(step string) (app.Content, tea.Cmd) {

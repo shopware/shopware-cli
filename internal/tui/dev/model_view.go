@@ -13,6 +13,10 @@ import (
 	"github.com/shopware/shopware-cli/internal/tui/app"
 )
 
+// installFailureDetailWidth is the value column of the failure card:
+// card width minus border (2), horizontal padding (3+3), and the key column.
+const installFailureDetailWidth = tui.PhaseCardWidth - 2 - 6 - tui.KVRowIndent - tui.KVKeyWidth
+
 // windowTitle names the terminal window per phase, e.g. "[project] · Overview".
 func (m Model) windowTitle() string {
 	dir := "[" + filepath.Base(m.projectRoot) + "] · "
@@ -58,8 +62,12 @@ func (m Model) chromeFooter(ctx app.Context) string {
 
 func (m Model) phaseFooterHint() string {
 	switch m.phase {
-	case phaseStarting, phaseStopping, phaseInstalling, phaseInstallFailed:
+	case phaseStarting, phaseStopping, phaseInstalling:
 		return tui.ShortcutBadge("l", "Toggle logs")
+	case phaseInstallFailed:
+		return tui.ShortcutBadge("←/→", "Choose") + "  " +
+			tui.ShortcutBadge("enter", "Confirm") + "  " +
+			tui.ShortcutBadge("l", "Toggle logs")
 	case phaseInstallPrompt:
 		return m.installFooterHint()
 	case phaseMigrationWizard:
@@ -219,22 +227,13 @@ func (m Model) renderPhase(ctx app.Context) string {
 	return renderPhaseBox(content.String(), ctx.Width, ctx.MainHeight)
 }
 
-// installFailureDetailWidth is the value column of the failure card: its width
-// minus the card border, the card padding, and the key column of a KVRow.
-const installFailureDetailWidth = tui.PhaseCardWidth - 2 - 6 - tui.KVRowIndent - tui.KVKeyWidth
-
 // installFailureSummary renders the facts shared by the failure card and the
 // notice closing the log view: a headline, the classified step, the reason,
-// and the error the helper reported.
+// and a next action when we have one. The helper's raw error stays in the logs.
 func (m Model) installFailureSummary() string {
 	failure := installFailure{category: installFailureUnknown, failingStep: installStartStep}
 	if m.installProg.failure != nil {
 		failure = *m.installProg.failure
-	}
-
-	detail := failure.detail
-	if detail == "" {
-		detail = "—"
 	}
 
 	var b strings.Builder
@@ -244,18 +243,16 @@ func (m Model) installFailureSummary() string {
 	b.WriteString("\n\n")
 	b.WriteString(tui.KVRow("Failed step:", valueStyle.Render(installFailureStepLabel(failure.failingStep))))
 	b.WriteString(tui.KVRow("Reason:", valueStyle.Render(failure.category.label())))
-	b.WriteString(installFailureWrappedKV("Details:", detail))
 	if rem := failure.remediation(m.dockerMode); rem != "" {
-		b.WriteString(installFailureWrappedKV("How to fix:", rem))
+		b.WriteString(installFailureWrappedKV("This might work:", rem))
 	}
 
 	return strings.TrimRight(b.String(), "\n")
 }
 
 // installFailureWrappedKV renders a KVRow whose value wraps inside the card,
-// with continuation lines aligned under the first one. Error messages and
-// remediations are full sentences, so laying them out on one row would push
-// the card out of shape.
+// with continuation lines aligned under the first one. Remediation copy is a
+// full sentence, so laying it out on one row would push the card out of shape.
 func installFailureWrappedKV(key, value string) string {
 	lines := strings.Split(valueStyle.Width(installFailureDetailWidth).Render(value), "\n")
 
@@ -269,31 +266,30 @@ func installFailureWrappedKV(key, value string) string {
 	return b.String()
 }
 
-// installFailureActions renders the recovery choices shown below the failure
-// summary.
-func (m Model) installFailureActions() string {
-	var b strings.Builder
-	b.WriteString(tui.TitleStyle.Render("What now?"))
-	b.WriteString("\n\n")
-	b.WriteString(tui.NewButtonRow(tui.ButtonRowOptions{
-		Labels: installFailureActionLabels,
-		Active: int(m.installProg.action),
-	}).Render())
-
-	return b.String()
+// renderInstallFailureActions renders the recovery choices below the summary.
+func (m Model) renderInstallFailureActions() string {
+	actions := listInstallFailureActions(m.installProg.failure)
+	labels := make([]string, len(actions))
+	for i, action := range actions {
+		labels[i] = installFailureActionLabels[action]
+	}
+	return tui.NewButtonRow(tui.ButtonRowOptions{
+		Labels: labels,
+		Active: installFailureActionIndex(actions, m.installProg.action),
+	}).Render()
 }
 
 // renderInstallFailed renders the failed-install card: the failure summary, the
-// pointer to the log view, and the recovery choices.
+// recovery choices, and a pointer to the log view.
 func (m Model) renderInstallFailed() string {
 	var b strings.Builder
 	b.WriteString(m.installFailureSummary())
 	b.WriteString("\n\n")
+	b.WriteString(m.renderInstallFailureActions())
+	b.WriteString("\n\n")
 	b.WriteString(tui.DimStyle.Render("Press "))
 	b.WriteString(keyCapStyle.Render("l"))
-	b.WriteString(tui.DimStyle.Render(" to see full logs"))
-	b.WriteString("\n\n")
-	b.WriteString(m.installFailureActions())
+	b.WriteString(tui.DimStyle.Render(" to see logs"))
 
 	return b.String()
 }
@@ -306,7 +302,7 @@ func (m Model) installFailureNotice() []string {
 		Border(lipgloss.RoundedBorder()).
 		BorderForeground(tui.ErrorColor).
 		Padding(0, 2).
-		Render(m.installFailureSummary() + "\n\n" + m.installFailureActions())
+		Render(m.installFailureSummary() + "\n\n" + m.renderInstallFailureActions())
 
 	return append([]string{""}, strings.Split(box, "\n")...)
 }

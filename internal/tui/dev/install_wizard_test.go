@@ -381,9 +381,31 @@ func TestArgsForInstallStep_UsesWizardAnswers(t *testing.T) {
 	assert.Equal(t, []string{
 		"system:install", "--create-database", "--shop-locale=de-DE", "--shop-currency=CHF", "--force",
 	}, argsForInstallStep("system:install", w, ""))
-	assert.Equal(t, []string{"user:create", "ada", "--password=supersecret"}, argsForInstallStep("user:create", w, ""))
+	assert.Nil(t, argsForInstallStep(installUserCreateStep, w, ""))
 	assert.Equal(t, []string{
 		"sales-channel:create:storefront", "--name=Storefront", "--isoCode=de-DE", "--url=http://localhost:8000",
 	}, argsForInstallStep("sales-channel:create:storefront", w, "http://localhost:8000"))
 	assert.Nil(t, argsForInstallStep("unknown", w, ""))
+}
+
+func TestArgsForInstallStep_UsesInstallDefaults(t *testing.T) {
+	w := installWizard{CredentialStep: newInstallCredentialStep()}
+	assert.Equal(t, []string{
+		"system:install", "--create-database",
+		"--shop-locale=" + install.DefaultLocale,
+		"--shop-currency=" + install.DefaultCurrency,
+		"--force",
+	}, argsForInstallStep("system:install", w, ""))
+}
+
+func TestArgsForInstallStep_EveryStepExceptUserCreateHasArgs(t *testing.T) {
+	w := installWizard{CredentialStep: newInstallCredentialStep(), language: "en-GB", currency: "EUR"}
+	for _, sp := range install.Steps {
+		args := argsForInstallStep(sp.Pattern, w, "http://localhost")
+		if sp.Pattern == installUserCreateStep {
+			assert.Nil(t, args, sp.Pattern)
+			continue
+		}
+		assert.NotEmpty(t, args, sp.Pattern)
+	}
 }

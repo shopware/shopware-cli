@@ -173,7 +173,7 @@ the language step carries no `language` tag).
 | `result`             | Outcome of the wizard                                         | `success` / `failure` / `cancelled` / `skipped` |
 | `abandoned_at`       | Step shown when the user quit (only for `cancelled`)          | `ask` / `language` / `currency` / `credentials` / `installing` |
 | `failed_step`        | Step that was running when the install failed (only for `failure`). `install_start` means the helper failed before any step began; `save_credentials` means the install succeeded but writing the admin credentials to the project config failed. | `system:install` / `install_start` / `save_credentials` |
-| `failure_category`   | Classified reason the install failed (only for `failure`). Closed enum — the raw error text is **never** sent. | `db_connection` / `db_version` / `env_config` / `migration` / `permission` / `disk_space` / `php` / `invalid_input` / `already_exists` / `missing_prerequisite` / `theme_compile` / `transport` / `unknown` |
+| `failure_category`   | Classified reason the install failed (only for `failure`). Closed enum — the raw error text is **never** sent. | `db_connection` / `db_version` / `env_config` / `migration` / `permission` / `php` / `invalid_input` / `already_exists` / `missing_prerequisite` / `theme_compile` / `transport` / `unknown` |
 | `retryable`          | Whether the failure was classified as retryable (only for `failure`) | `true` / `false` |
 | `duration_ms`        | Install runtime, once the install actually started            | `84213`          |
 | `language`           | Selected default language                                     | `de-DE`          |
