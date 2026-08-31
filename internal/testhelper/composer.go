@@ -10,18 +10,19 @@ import (
 // out of the rendered JSON, so partial and degenerate manifests (only a
 // version, an empty object) stay expressible.
 type ComposerJSON struct {
-	Name        string
-	Type        string
-	Version     string
-	License     string
-	Description string
-	Authors     []string // rendered as [{"name": ...}, ...]
-	Require     map[string]string
-	RequireDev  map[string]string
-	PluginClass string            // extra.shopware-plugin-class
-	Label       map[string]string // extra.label
-	Extra       map[string]any    // additional extra entries, merged last
-	Psr4        map[string]string // autoload.psr-4
+	Name         string
+	Type         string
+	Version      string
+	License      string
+	Description  string
+	Authors      []string // rendered as [{"name": ...}, ...]
+	Require      map[string]string
+	RequireDev   map[string]string
+	PluginClass  string            // extra.shopware-plugin-class
+	Label        map[string]string // extra.label
+	Extra        map[string]any    // additional extra entries, merged last
+	Psr4         map[string]string // autoload.psr-4
+	Repositories []map[string]any  // composer repositories, e.g. path or composer type
 }
 
 // PluginComposer returns the composer.json for a Shopware platform plugin.
@@ -89,6 +90,9 @@ func (c ComposerJSON) String() string {
 	if len(c.Psr4) > 0 {
 		m["autoload"] = map[string]any{"psr-4": c.Psr4}
 	}
+	if len(c.Repositories) > 0 {
+		m["repositories"] = c.Repositories
+	}
 	return marshalIndent(m)
 }
 
@@ -98,6 +102,7 @@ type LockPackage struct {
 	Version string            `json:"version"`
 	Type    string            `json:"type,omitempty"`
 	Require map[string]string `json:"require,omitempty"`
+	Dist    map[string]string `json:"dist,omitempty"` // e.g. {"type": "path", "url": "custom/static-plugins/Foo"}
 }
 
 // ComposerLock renders a composer.lock with the given packages and an empty

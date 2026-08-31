@@ -116,3 +116,27 @@ func readFile(t *testing.T, path string) string {
 	require.NoError(t, err)
 	return string(b)
 }
+
+func TestComposerJSONRepositoriesAndLockDist(t *testing.T) {
+	m := decode(t, ComposerJSON{
+		Name: "shopware/production",
+		Repositories: []map[string]any{
+			{"type": "path", "url": "custom/static-plugins/*", "options": map[string]any{"symlink": true}},
+		},
+	}.String())
+	assert.Equal(t, []any{map[string]any{
+		"type": "path", "url": "custom/static-plugins/*",
+		"options": map[string]any{"symlink": true},
+	}}, m["repositories"])
+
+	assert.JSONEq(t, `{
+		"packages": [
+			{"name": "acme/custom-plugin", "version": "1.0.0", "type": "shopware-platform-plugin",
+			 "dist": {"type": "path", "url": "custom/static-plugins/MyCustomPlugin"}}
+		],
+		"packages-dev": []
+	}`, ComposerLock(LockPackage{
+		Name: "acme/custom-plugin", Version: "1.0.0", Type: "shopware-platform-plugin",
+		Dist: map[string]string{"type": "path", "url": "custom/static-plugins/MyCustomPlugin"},
+	}))
+}
