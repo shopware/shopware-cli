@@ -177,6 +177,12 @@ func ShouldCheckForUpdate(version string, args []string) bool {
 	return true
 }
 
+// ShouldNotify returns false for Homebrew users until a newly released version
+// is likely available through Homebrew.
+func ShouldNotify(release *ReleaseInfo, binaryPath string) bool {
+	return !system.IsUnderHomebrew(binaryPath) || !release.IsRecent()
+}
+
 func loadReleaseInfoFromCache() (*ReleaseInfo, error) {
 	cacheFilePath := getUpdateCheckCacheFilePath()
 

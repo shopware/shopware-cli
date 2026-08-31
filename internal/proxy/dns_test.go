@@ -3,6 +3,7 @@ package proxy
 import (
 	"os"
 	"path/filepath"
+	"syscall"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -26,6 +27,10 @@ func TestWriteDNSCorefile(t *testing.T) {
 	assert.Contains(t, got, "IN A 127.0.0.1")
 	assert.Contains(t, got, "template IN AAAA")
 	assert.Contains(t, got, "rcode NOERROR")
+
+	info, err := os.Stat(filepath.Join(dir, "dns", "Corefile"))
+	require.NoError(t, err)
+	assert.Equal(t, os.FileMode(0o644), info.Mode().Perm(), "CoreDNS 1.11+ runs as nonroot and must be able to read the bind-mounted Corefile")
 }
 
 func TestWriteDNSCorefileCustomDomain(t *testing.T) {
@@ -38,4 +43,34 @@ func TestWriteDNSCorefileCustomDomain(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.Contains(t, string(content), "my.example.test {")
+}
+
+func TestWriteDNSCorefileRepairsRestrictivePermissions(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	dnsDir := filepath.Join(dir, "dns")
+	require.NoError(t, os.MkdirAll(dnsDir, 0o700))
+
+	path := filepath.Join(dnsDir, "Corefile")
+	require.NoError(t, os.WriteFile(path, []byte("stale"), 0o600))
+
+	require.NoError(t, writeDNSCorefile(dir, "shopware.local"))
+
+	info, err := os.Stat(path)
+	require.NoError(t, err)
+	assert.Equal(t, os.FileMode(0o644), info.Mode().Perm(), "an existing 0600 Corefile must be chmod'd so the nonroot container user can read it")
+}
+
+func TestWriteDNSCorefileIgnoresUmask(t *testing.T) {
+	// umask is process-wide; do not run in parallel with other tests.
+	old := syscall.Umask(0o077)
+	t.Cleanup(func() { syscall.Umask(old) })
+
+	dir := t.TempDir()
+	require.NoError(t, writeDNSCorefile(dir, "shopware.local"))
+
+	info, err := os.Stat(filepath.Join(dir, "dns", "Corefile"))
+	require.NoError(t, err)
+	assert.Equal(t, os.FileMode(0o644), info.Mode().Perm(), "WriteFile honors umask (077 → 0600); chmod must restore world-read")
 }

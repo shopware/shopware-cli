@@ -13,6 +13,19 @@ import (
 	"strings"
 )
 
+const reporterFormats = "summary, json, github, gitlab, junit, markdown"
+
+// ValidateReporter checks whether name identifies a supported validation
+// report format.
+func ValidateReporter(name string) error {
+	switch name {
+	case "summary", "json", "github", "gitlab", "junit", "markdown":
+		return nil
+	default:
+		return fmt.Errorf("invalid reporting format %q, allowed values: %s", name, reporterFormats)
+	}
+}
+
 func DetectDefaultReporter() string {
 	if os.Getenv("GITHUB_ACTIONS") == "true" {
 		return "github"
@@ -26,6 +39,10 @@ func DetectDefaultReporter() string {
 }
 
 func DoCheckReport(result Check, reportingFormat string) error {
+	if err := ValidateReporter(reportingFormat); err != nil {
+		return err
+	}
+
 	switch reportingFormat {
 	case "summary":
 		if err := doSummaryReport(result); err != nil {

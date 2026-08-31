@@ -387,19 +387,38 @@ tui.NewScrollbar(tui.ScrollbarOptions{Total: 30, Visible: 5, Offset: 10, Height:
 ↓
 ```
 
-### RenderTable / PrintTable — bordered tables for command output
+### Table — terminal and JSON command output
 
 ```go
-tui.PrintTable([]string{"Name", "Version"}, rows)
+table := tui.NewTable(
+    tui.TableColumn{Title: "Name", JSONKey: "name"},
+    tui.TableColumn{Title: "Compatible", JSONKey: "compatible"},
+)
+table.AddRow(
+    "Example",
+    tui.TableCell{Value: true, TerminalText: tui.GreenText.Render("Yes")},
+)
+
+format, err := tui.ParseTableFormat(formatFlag)
+if err != nil {
+    return err
+}
+if err := table.Write(cmd.OutOrStdout(), format); err != nil {
+    return err
+}
 ```
 
-```
-┌───────────────┬─────────┐
-│ Name          │ Version │
-├───────────────┼─────────┤
-│ frosh/tools   │ 2.1.0   │
-│ shopware/core │ 6.7.4.1 │
-└───────────────┴─────────┘
+`TableCell` keeps the typed JSON value separate from styled or human-readable
+terminal text. `AddRowWithJSON` preserves established JSON row contracts that
+contain more fields than the human-readable table. `RenderTable` and
+`PrintTable` remain available for terminal-only call sites using `[][]string`.
+
+```text
+┌─────────┬────────────┐
+│ Name    │ Compatible │
+├─────────┼────────────┤
+│ Example │ Yes        │
+└─────────┴────────────┘
 ```
 
 ### Labels & small helpers

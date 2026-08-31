@@ -509,12 +509,21 @@ type ConfigDeployment struct {
 
 	// Staging mode configuration for the deployment
 	Staging *ConfigDeploymentStaging `yaml:"staging,omitempty"`
+
+	// OpenSearch configuration for the deployment.
+	OpenSearch *ConfigDeploymentOpenSearch `yaml:"opensearch,omitempty"`
 }
 
 // ConfigDeploymentStaging defines staging mode configuration.
 type ConfigDeploymentStaging struct {
 	// When enabled, staging setup commands will be executed during installation and upgrade
 	Enabled bool `yaml:"enabled,omitempty"`
+}
+
+// ConfigDeploymentOpenSearch defines OpenSearch actions during deployment.
+type ConfigDeploymentOpenSearch struct {
+	// When enabled, OpenSearch indexes are created after a fresh installation.
+	IndexOnInstall bool `yaml:"index-on-install,omitempty"`
 }
 
 // ConfigDeploymentHookStep is a single titled step of a deployment hook.

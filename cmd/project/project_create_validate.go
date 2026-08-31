@@ -65,7 +65,7 @@ func validateAndPreflight(ctx context.Context, opts *createOptions, releases []r
 }
 
 func checkSecurityAdvisories(ctx context.Context, opts *createOptions, chosenVersion string) error {
-	advisories, err := repository.New(repository.PackagistURL, nil).GetSecurityAdvisories(ctx, []string{"shopware/core"})
+	advisories, err := repository.New(packagistURL, nil).GetSecurityAdvisories(ctx, []string{"shopware/core"})
 	if err != nil {
 		logging.FromContext(ctx).Warnf("Could not fetch security advisories: %v", err)
 	}

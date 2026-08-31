@@ -19,10 +19,16 @@ var projectValidateCmd = &cobra.Command{
 	Short: "Validate project",
 	Args:  cobra.MaximumNArgs(1),
 	PreRunE: func(cmd *cobra.Command, args []string) error {
+		if _, err := projectValidationFormat(cmd); err != nil {
+			return err
+		}
 		return verifier.SetupTools(cmd.Context(), cmd.Root().Version)
 	},
 	RunE: func(cmd *cobra.Command, args []string) error {
-		reportingFormat, _ := cmd.Flags().GetString("reporter")
+		reportingFormat, err := projectValidationFormat(cmd)
+		if err != nil {
+			return err
+		}
 		only, _ := cmd.Flags().GetString("only")
 		exclude, _ := cmd.Flags().GetString("exclude")
 		tmpDir, err := os.MkdirTemp(os.TempDir(), "analyse-project-*")
@@ -46,10 +52,6 @@ var projectValidateCmd = &cobra.Command{
 		projectPath, err = filepath.Abs(projectPath)
 		if err != nil {
 			return fmt.Errorf("cannot find path: %w", err)
-		}
-
-		if reportingFormat == "" {
-			reportingFormat = validation.DetectDefaultReporter()
 		}
 
 		if !noCopy {
@@ -104,11 +106,28 @@ var projectValidateCmd = &cobra.Command{
 	},
 }
 
+func projectValidationFormat(cmd *cobra.Command) (string, error) {
+	format, _ := cmd.Flags().GetString("format")
+	reporter, _ := cmd.Flags().GetString("reporter")
+	if reporter != "" {
+		format = reporter
+	}
+	if format == "" {
+		format = validation.DetectDefaultReporter()
+	}
+
+	return format, validation.ValidateReporter(format)
+}
+
 func init() {
 	projectRootCmd.AddCommand(projectValidateCmd)
+	projectValidateCmd.PersistentFlags().String("format", "", "Reporting format (summary, json, github, gitlab, junit, markdown)")
 	projectValidateCmd.PersistentFlags().String("reporter", "", "Reporting format (summary, json, github, gitlab, junit, markdown)")
 	projectValidateCmd.PersistentFlags().String("only", "", "Run only specific tools by name (comma-separated, e.g. phpstan,eslint)")
 	projectValidateCmd.PersistentFlags().String("exclude", "", "Exclude specific tools by name (comma-separated, e.g. phpstan,eslint)")
 	projectValidateCmd.PersistentFlags().Bool("no-copy", false, "Do not copy project files to temporary directory")
 	projectValidateCmd.PersistentFlags().Bool("local-only", false, "Only read plugins in custom/* folders")
+	projectValidateCmd.MarkFlagsMutuallyExclusive("format", "reporter")
+	_ = projectValidateCmd.PersistentFlags().MarkDeprecated("reporter", "use --format instead")
+	_ = projectValidateCmd.PersistentFlags().MarkHidden("reporter")
 }
