@@ -72,7 +72,25 @@ func (p ConfigDockerPort) MarshalYAML() (any, error) {
 	return int(p), nil
 }
 
-func (ConfigDockerPorts) JSONSchema() *jsonschema.Schema {
+func (ConfigDockerPort) JSONSchema() *jsonschema.Schema {
+	minimum := json.Number("1")
+	maximum := json.Number("65535")
+	return &jsonschema.Schema{
+		Description: "Host port number, or false to not publish the port.",
+		OneOf: []*jsonschema.Schema{
+			{
+				Type:    "integer",
+				Minimum: minimum,
+				Maximum: maximum,
+			},
+			{
+				Const: false,
+			},
+		},
+	}
+}
+
+func (ConfigDockerPorts) JSONSchemaExtend(s *jsonschema.Schema) {
 	ports := []struct {
 		key         string
 		description string
@@ -92,29 +110,15 @@ func (ConfigDockerPorts) JSONSchema() *jsonschema.Schema {
 	}
 
 	properties := orderedmap.New[string, *jsonschema.Schema]()
-	minimum := json.Number("1")
-	maximum := json.Number("65535")
 	for _, port := range ports {
 		properties.Set(port.key, &jsonschema.Schema{
-			Description: port.description + " Set to false to not publish the port.",
-			OneOf: []*jsonschema.Schema{
-				{
-					Type:    "integer",
-					Minimum: minimum,
-					Maximum: maximum,
-				},
-				{
-					Const: false,
-				},
-			},
+			Ref:         "#/$defs/ConfigDockerPort",
+			Description: port.description,
 		})
 	}
 
-	return &jsonschema.Schema{
-		Type:                 "object",
-		Properties:           properties,
-		AdditionalProperties: jsonschema.FalseSchema,
-	}
+	s.Properties = properties
+	s.AdditionalProperties = jsonschema.FalseSchema
 }
 
 // SetDockerPortOverrides merges host-port overrides into c.Docker.Ports,

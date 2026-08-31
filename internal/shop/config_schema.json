@@ -370,6 +370,10 @@
         "staging": {
           "$ref": "#/$defs/ConfigDeploymentStaging",
           "description": "Staging mode configuration for the deployment"
+        },
+        "opensearch": {
+          "$ref": "#/$defs/ConfigDeploymentOpenSearch",
+          "description": "OpenSearch configuration for the deployment."
         }
       },
       "additionalProperties": false,
@@ -409,6 +413,17 @@
         }
       ],
       "description": "Either a single script or a list of steps (a script string or a {title, script} object) executed individually"
+    },
+    "ConfigDeploymentOpenSearch": {
+      "properties": {
+        "index-on-install": {
+          "type": "boolean",
+          "description": "When enabled, OpenSearch indexes are created after a fresh installation."
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "description": "ConfigDeploymentOpenSearch defines OpenSearch actions during deployment."
     },
     "ConfigDeploymentOverrides": {
       "additionalProperties": {
@@ -529,167 +544,73 @@
       "additionalProperties": false,
       "type": "object"
     },
+    "ConfigDockerPort": {
+      "oneOf": [
+        {
+          "type": "integer",
+          "maximum": 65535,
+          "minimum": 1
+        },
+        {
+          "const": false
+        }
+      ],
+      "description": "Host port number, or false to not publish the port."
+    },
     "ConfigDockerPorts": {
       "properties": {
         "web": {
-          "oneOf": [
-            {
-              "type": "integer",
-              "maximum": 65535,
-              "minimum": 1
-            },
-            {
-              "const": false
-            }
-          ],
-          "description": "Host port for the shop (Caddy). Defaults to 8000. Set to false to not publish the port."
+          "$ref": "#/$defs/ConfigDockerPort",
+          "description": "Host port for the shop (Caddy). Defaults to 8000."
         },
         "web_alt": {
-          "oneOf": [
-            {
-              "type": "integer",
-              "maximum": 65535,
-              "minimum": 1
-            },
-            {
-              "const": false
-            }
-          ],
-          "description": "Alternative HTTP host port of the web container. Defaults to 8080. Set to false to not publish the port."
+          "$ref": "#/$defs/ConfigDockerPort",
+          "description": "Alternative HTTP host port of the web container. Defaults to 8080."
         },
         "storefront_watcher_assets": {
-          "oneOf": [
-            {
-              "type": "integer",
-              "maximum": 65535,
-              "minimum": 1
-            },
-            {
-              "const": false
-            }
-          ],
-          "description": "Host port for the storefront watcher assets. Defaults to 9999. Set to false to not publish the port."
+          "$ref": "#/$defs/ConfigDockerPort",
+          "description": "Host port for the storefront watcher assets. Defaults to 9999."
         },
         "storefront_watcher": {
-          "oneOf": [
-            {
-              "type": "integer",
-              "maximum": 65535,
-              "minimum": 1
-            },
-            {
-              "const": false
-            }
-          ],
-          "description": "Host port for the storefront watcher proxy. Defaults to 9998. Set to false to not publish the port."
+          "$ref": "#/$defs/ConfigDockerPort",
+          "description": "Host port for the storefront watcher proxy. Defaults to 9998."
         },
         "admin_watcher": {
-          "oneOf": [
-            {
-              "type": "integer",
-              "maximum": 65535,
-              "minimum": 1
-            },
-            {
-              "const": false
-            }
-          ],
-          "description": "Host port for the administration watcher (Vite). Defaults to 5173. Set to false to not publish the port."
+          "$ref": "#/$defs/ConfigDockerPort",
+          "description": "Host port for the administration watcher (Vite). Defaults to 5173."
         },
         "admin_watcher_hmr": {
-          "oneOf": [
-            {
-              "type": "integer",
-              "maximum": 65535,
-              "minimum": 1
-            },
-            {
-              "const": false
-            }
-          ],
-          "description": "Host port for the administration watcher hot module reload. Defaults to 5773. Set to false to not publish the port."
+          "$ref": "#/$defs/ConfigDockerPort",
+          "description": "Host port for the administration watcher hot module reload. Defaults to 5773."
         },
         "adminer": {
-          "oneOf": [
-            {
-              "type": "integer",
-              "maximum": 65535,
-              "minimum": 1
-            },
-            {
-              "const": false
-            }
-          ],
-          "description": "Host port for the Adminer UI. Defaults to 9080. Set to false to not publish the port."
+          "$ref": "#/$defs/ConfigDockerPort",
+          "description": "Host port for the Adminer UI. Defaults to 9080."
         },
         "mailer_smtp": {
-          "oneOf": [
-            {
-              "type": "integer",
-              "maximum": 65535,
-              "minimum": 1
-            },
-            {
-              "const": false
-            }
-          ],
-          "description": "Host port for the Mailpit SMTP endpoint. Defaults to 1025. Set to false to not publish the port."
+          "$ref": "#/$defs/ConfigDockerPort",
+          "description": "Host port for the Mailpit SMTP endpoint. Defaults to 1025."
         },
         "mailer_web": {
-          "oneOf": [
-            {
-              "type": "integer",
-              "maximum": 65535,
-              "minimum": 1
-            },
-            {
-              "const": false
-            }
-          ],
-          "description": "Host port for the Mailpit web UI. Defaults to 8025. Set to false to not publish the port."
+          "$ref": "#/$defs/ConfigDockerPort",
+          "description": "Host port for the Mailpit web UI. Defaults to 8025."
         },
         "amqp_management": {
-          "oneOf": [
-            {
-              "type": "integer",
-              "maximum": 65535,
-              "minimum": 1
-            },
-            {
-              "const": false
-            }
-          ],
-          "description": "Host port for the LavinMQ management UI. Defaults to 15672. Set to false to not publish the port."
+          "$ref": "#/$defs/ConfigDockerPort",
+          "description": "Host port for the LavinMQ management UI. Defaults to 15672."
         },
         "amqp": {
-          "oneOf": [
-            {
-              "type": "integer",
-              "maximum": 65535,
-              "minimum": 1
-            },
-            {
-              "const": false
-            }
-          ],
-          "description": "Host port for the AMQP endpoint. Defaults to 5672. Set to false to not publish the port."
+          "$ref": "#/$defs/ConfigDockerPort",
+          "description": "Host port for the AMQP endpoint. Defaults to 5672."
         },
         "elasticsearch": {
-          "oneOf": [
-            {
-              "type": "integer",
-              "maximum": 65535,
-              "minimum": 1
-            },
-            {
-              "const": false
-            }
-          ],
-          "description": "Host port for OpenSearch. Defaults to 9200. Set to false to not publish the port."
+          "$ref": "#/$defs/ConfigDockerPort",
+          "description": "Host port for OpenSearch. Defaults to 9200."
         }
       },
       "additionalProperties": false,
-      "type": "object"
+      "type": "object",
+      "description": "ConfigDockerPorts maps a published-port key to the host port it binds, or to false to not publish the port at all."
     },
     "ConfigDump": {
       "properties": {
