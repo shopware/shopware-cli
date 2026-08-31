@@ -197,9 +197,13 @@ func runCreateForm(cmd *cobra.Command, opts *createOptions, releases []repositor
 
 		if !cmd.PersistentFlags().Changed("docker") {
 			formGroups = append(formGroups, huh.NewGroup(
-				tui.NewYesNo().
+				huh.NewSelect[string]().
 					Title("Docker").
-					Description("Use Docker for local setup.").
+					Description("How do you want to run Shopware?").
+					Options(
+						huh.NewOption("Yes — Run Shopware with Docker", tui.Yes),
+						huh.NewOption("No — Use PHP and Composer; Shopware CLI handles the installation", tui.No),
+					).
 					Value(&selectDocker),
 			))
 		}
