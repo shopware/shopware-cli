@@ -11,51 +11,27 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/shopware/shopware-cli/internal/executor"
+	"github.com/shopware/shopware-cli/internal/testhelper"
 )
 
-func writeFile(t *testing.T, path, content string) {
-	t.Helper()
-	require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o755))
-	require.NoError(t, os.WriteFile(path, []byte(content), 0o644))
-}
-
-const testComposerLock = `{
-	"packages": [
-		{"name": "shopware/core", "version": "v6.6.10.3"},
-		{"name": "swag/demo", "version": "2.0.0", "type": "shopware-platform-plugin"}
-	],
-	"packages-dev": []
-}`
+var testComposerLock = testhelper.ComposerLock(
+	testhelper.LockPackage{Name: "shopware/core", Version: "v6.6.10.3"},
+	testhelper.LockPackage{Name: "swag/demo", Version: "2.0.0", Type: "shopware-platform-plugin"},
+)
 
 func setupProject(t *testing.T) string {
 	t.Helper()
-	dir := t.TempDir()
 
-	writeFile(t, filepath.Join(dir, "composer.json"), `{
-		"name": "shopware/production",
-		"require": {"shopware/core": "6.6.10.3", "shopware/deployment-helper": "*", "swag/demo": "^2.0"}
-	}`)
-	writeFile(t, filepath.Join(dir, "composer.lock"), testComposerLock)
+	p := testhelper.NewProject(t).
+		File("composer.json", testhelper.ComposerJSON{
+			Name:    "shopware/production",
+			Require: map[string]string{"shopware/core": "6.6.10.3", "shopware/deployment-helper": "*", "swag/demo": "^2.0"},
+		}.String()).
+		File("composer.lock", testComposerLock).
+		VendorPackage("swag/demo", testhelper.PluginComposer("swag/demo", "2.0.0", `Swag\Demo\Demo`)).
+		CustomPlugin("LocalPlugin", testhelper.PluginComposer("acme/local-plugin", "1.0.0", `Acme\LocalPlugin\LocalPlugin`))
 
-	writeFile(t, filepath.Join(dir, "vendor", "swag", "demo", "composer.json"), `{
-		"name": "swag/demo",
-		"type": "shopware-platform-plugin",
-		"version": "2.0.0",
-		"require": {"shopware/core": "~6.6.0"},
-		"extra": {"shopware-plugin-class": "Swag\\Demo\\Demo", "label": {"en-GB": "Demo"}},
-		"autoload": {"psr-4": {"Swag\\Demo\\": "src/"}}
-	}`)
-
-	writeFile(t, filepath.Join(dir, "custom", "plugins", "LocalPlugin", "composer.json"), `{
-		"name": "acme/local-plugin",
-		"type": "shopware-platform-plugin",
-		"version": "1.0.0",
-		"require": {"shopware/core": "~6.6.0"},
-		"extra": {"shopware-plugin-class": "Acme\\LocalPlugin\\LocalPlugin", "label": {"en-GB": "Local"}},
-		"autoload": {"psr-4": {"Acme\\LocalPlugin\\": "src/"}}
-	}`)
-
-	return dir
+	return p.Root
 }
 
 func newTestUpgrader(t *testing.T, dir string) *ProjectUpgrader {
@@ -126,7 +102,7 @@ func TestReadinessAllExtensionsComposerManaged(t *testing.T) {
 
 func TestReadinessMissingComposerLock(t *testing.T) {
 	dir := t.TempDir()
-	writeFile(t, filepath.Join(dir, "composer.json"), `{"require": {}}`)
+	testhelper.WriteFile(t, filepath.Join(dir, "composer.json"), `{"require": {}}`)
 
 	r := newTestUpgrader(t, dir).RunReadinessChecks(t.Context())
 
@@ -139,8 +115,8 @@ func TestReadinessMissingComposerLock(t *testing.T) {
 
 func TestReadinessLockWithoutCore(t *testing.T) {
 	dir := t.TempDir()
-	writeFile(t, filepath.Join(dir, "composer.json"), `{"require": {}}`)
-	writeFile(t, filepath.Join(dir, "composer.lock"), `{"packages": [], "packages-dev": []}`)
+	testhelper.WriteFile(t, filepath.Join(dir, "composer.json"), `{"require": {}}`)
+	testhelper.WriteFile(t, filepath.Join(dir, "composer.lock"), testhelper.ComposerLock())
 
 	r := newTestUpgrader(t, dir).RunReadinessChecks(t.Context())
 
@@ -154,7 +130,8 @@ func TestReadinessDeploymentHelperMissing(t *testing.T) {
 	// Drop the local plugin so the extension gate does not block; this test
 	// only cares about the deployment-helper check.
 	require.NoError(t, os.RemoveAll(filepath.Join(dir, "custom")))
-	writeFile(t, filepath.Join(dir, "composer.json"), `{"require": {"shopware/core": "6.6.10.3"}}`)
+	testhelper.WriteFile(t, filepath.Join(dir, "composer.json"),
+		testhelper.ComposerJSON{Require: map[string]string{"shopware/core": "6.6.10.3"}}.String())
 
 	r := newTestUpgrader(t, dir).RunReadinessChecks(t.Context())
 
@@ -197,7 +174,7 @@ func TestCheckGitClean(t *testing.T) {
 	}
 
 	runGit("init")
-	writeFile(t, filepath.Join(dir, "a.txt"), "hello")
+	testhelper.WriteFile(t, filepath.Join(dir, "a.txt"), "hello")
 
 	check = checkGitClean(t.Context(), dir)
 	assert.Equal(t, StateFail, check.State, "untracked file means dirty tree")

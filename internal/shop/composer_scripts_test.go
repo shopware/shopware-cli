@@ -1,12 +1,13 @@
 package shop
 
 import (
-	"os"
 	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/shopware/shopware-cli/internal/testhelper"
 )
 
 func TestGetComposerScripts(t *testing.T) {
@@ -76,5 +77,5 @@ func TestFindComposerScript(t *testing.T) {
 
 func writeComposerJSON(t *testing.T, dir, contents string) {
 	t.Helper()
-	require.NoError(t, os.WriteFile(filepath.Join(dir, "composer.json"), []byte(contents), 0o644))
+	testhelper.WriteFile(t, filepath.Join(dir, "composer.json"), contents)
 }

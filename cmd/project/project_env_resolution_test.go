@@ -1,13 +1,14 @@
 package project
 
 import (
-	"os"
 	"path/filepath"
 	"testing"
 
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/shopware/shopware-cli/internal/testhelper"
 )
 
 // writeMinimalPlugin creates a minimal platform plugin so the upload command reaches the environment-resolution step.
@@ -15,24 +16,20 @@ func writeMinimalPlugin(t *testing.T) string {
 	t.Helper()
 
 	dir := t.TempDir()
-	require.NoError(t, os.WriteFile(filepath.Join(dir, "composer.json"), []byte(`{
-		"name": "frosh/frosh-test",
-		"type": "shopware-platform-plugin",
-		"license": "MIT",
-		"version": "1.0.0",
-		"require": { "shopware/core": "~6.6.0" },
-		"autoload": { "psr-4": { "FroshTest\\": "src/" } },
-		"extra": {
-			"shopware-plugin-class": "FroshTest\\FroshTest",
-			"label": { "de-DE": "Test", "en-GB": "Test" }
-		}
-	}`), 0o644))
-	require.NoError(t, os.WriteFile(filepath.Join(dir, ".shopware-extension.yml"), []byte(
-		"build:\n  zip:\n    composer:\n      enabled: false\n    assets:\n      enabled: false\n",
-	), 0o644))
-	require.NoError(t, os.MkdirAll(filepath.Join(dir, "src"), 0o755))
-	require.NoError(t, os.WriteFile(filepath.Join(dir, "src", "FroshTest.php"),
-		[]byte("<?php\nnamespace FroshTest;\nuse Shopware\\Core\\Framework\\Plugin;\nclass FroshTest extends Plugin {}\n"), 0o644))
+	testhelper.WriteFile(t, filepath.Join(dir, "composer.json"), testhelper.ComposerJSON{
+		Name:        "frosh/frosh-test",
+		Type:        "shopware-platform-plugin",
+		License:     "MIT",
+		Version:     "1.0.0",
+		Require:     map[string]string{"shopware/core": "~6.6.0"},
+		PluginClass: `FroshTest\FroshTest`,
+		Label:       map[string]string{"de-DE": "Test", "en-GB": "Test"},
+		Psr4:        map[string]string{`FroshTest\`: "src/"},
+	}.String())
+	testhelper.WriteFile(t, filepath.Join(dir, ".shopware-extension.yml"),
+		"build:\n  zip:\n    composer:\n      enabled: false\n    assets:\n      enabled: false\n")
+	testhelper.WriteFile(t, filepath.Join(dir, "src", "FroshTest.php"),
+		"<?php\nnamespace FroshTest;\nuse Shopware\\Core\\Framework\\Plugin;\nclass FroshTest extends Plugin {}\n")
 
 	return dir
 }
@@ -52,7 +49,7 @@ func setupEnvironmentConfig(t *testing.T) {
 	t.Setenv("PROJECT_ROOT", t.TempDir())
 
 	configPath := filepath.Join(t.TempDir(), ".shopware-project.yml")
-	require.NoError(t, os.WriteFile(configPath, []byte(`
+	testhelper.WriteFile(t, configPath, `
 url: http://127.0.0.1:9
 compatibility_date: "2026-01-01"
 admin_api:
@@ -64,7 +61,7 @@ environments:
     admin_api:
       client_id: staging-id
       client_secret: staging-secret
-`), 0o644))
+`)
 
 	previousConfigPath := projectConfigPath
 	previousEnvironmentName := environmentName
@@ -80,7 +77,7 @@ func TestNoEnvFlagPrefersLocalEnvironmentOverTopLevel(t *testing.T) {
 	t.Setenv("PROJECT_ROOT", t.TempDir())
 
 	configPath := filepath.Join(t.TempDir(), ".shopware-project.yml")
-	require.NoError(t, os.WriteFile(configPath, []byte(`
+	testhelper.WriteFile(t, configPath, `
 url: http://127.0.0.1:9
 compatibility_date: "2026-01-01"
 admin_api:
@@ -92,7 +89,7 @@ environments:
     admin_api:
       client_id: local-id
       client_secret: local-secret
-`), 0o644))
+`)
 
 	previousConfigPath := projectConfigPath
 	previousEnvironmentName := environmentName
@@ -116,7 +113,7 @@ func TestNoEnvFlagUsesLocalWhenNoTopLevel(t *testing.T) {
 	t.Setenv("PROJECT_ROOT", t.TempDir())
 
 	configPath := filepath.Join(t.TempDir(), ".shopware-project.yml")
-	require.NoError(t, os.WriteFile(configPath, []byte(`
+	testhelper.WriteFile(t, configPath, `
 compatibility_date: "2026-01-01"
 environments:
   local:
@@ -124,7 +121,7 @@ environments:
     admin_api:
       client_id: local-id
       client_secret: local-secret
-`), 0o644))
+`)
 
 	previousConfigPath := projectConfigPath
 	previousEnvironmentName := environmentName

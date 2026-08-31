@@ -1,11 +1,12 @@
 package extension
 
 import (
-	"os"
 	"path"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+
+	"github.com/shopware/shopware-cli/internal/testhelper"
 )
 
 func TestCreateBundleEmptyFolder(t *testing.T) {
@@ -17,15 +18,10 @@ func TestCreateBundleEmptyFolder(t *testing.T) {
 }
 
 func TestCreateBundleInvalidComposerType(t *testing.T) {
-	dir := t.TempDir()
-
-	// Create composer.json
-	composer := []byte(`{
-		"name": "shopware/invalid",
-		"type": "invalid"
-	}
-	`)
-	_ = os.WriteFile(path.Join(dir, "composer.json"), composer, 0o644)
+	dir := testhelper.ExtensionDir(t, testhelper.ComposerJSON{
+		Name: "shopware/invalid",
+		Type: "invalid",
+	})
 
 	bundle, err := newShopwareBundle(t.Context(), dir)
 	assert.Error(t, err)
@@ -34,15 +30,10 @@ func TestCreateBundleInvalidComposerType(t *testing.T) {
 }
 
 func TestCreateBundleMissingName(t *testing.T) {
-	dir := t.TempDir()
-
-	// Create composer.json
-	composer := []byte(`{
-		"name": "shopware/invalid",
-		"type": "shopware-bundle"
-	}
-	`)
-	_ = os.WriteFile(path.Join(dir, "composer.json"), composer, 0o644)
+	dir := testhelper.ExtensionDir(t, testhelper.ComposerJSON{
+		Name: "shopware/invalid",
+		Type: "shopware-bundle",
+	})
 
 	bundle, err := newShopwareBundle(t.Context(), dir)
 	assert.Error(t, err)
@@ -51,24 +42,13 @@ func TestCreateBundleMissingName(t *testing.T) {
 }
 
 func TestCreateBundle(t *testing.T) {
-	dir := t.TempDir()
-
-	// Create composer.json
-	composer := []byte(`{
-		"name": "shopware/invalid",
-		"version": "1.0.0",
-		"type": "shopware-bundle",
-		"extra": {
-			"shopware-bundle-name": "TestBundle"
-		},
-		"autoload": {
-			"psr-4": {
-				"TestBundle\\": "src/"
-			}
-		}
-	}
-	`)
-	_ = os.WriteFile(path.Join(dir, "composer.json"), composer, 0o644)
+	dir := testhelper.ExtensionDir(t, testhelper.ComposerJSON{
+		Name:    "shopware/invalid",
+		Version: "1.0.0",
+		Type:    "shopware-bundle",
+		Extra:   map[string]any{"shopware-bundle-name": "TestBundle"},
+		Psr4:    map[string]string{`TestBundle\`: "src/"},
+	})
 
 	bundle, err := newShopwareBundle(t.Context(), dir)
 	assert.NoError(t, err)

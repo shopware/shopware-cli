@@ -8,17 +8,19 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/shopware/shopware-cli/internal/testhelper"
 )
 
 func writeMinimalComposerProject(t *testing.T, root string) {
 	t.Helper()
 
-	require.NoError(t, os.WriteFile(filepath.Join(root, "composer.json"), []byte(`{
-		"name": "acme/shop",
-		"version": "1.2.3"
-	}`), 0o644))
+	testhelper.WriteFile(t, filepath.Join(root, "composer.json"),
+		testhelper.ComposerJSON{Name: "acme/shop", Version: "1.2.3"}.String())
 
-	require.NoError(t, os.WriteFile(filepath.Join(root, "composer.lock"), []byte(`{
+	// The SBOM needs license and require metadata per package, which the
+	// shared lock builder does not model.
+	testhelper.WriteFile(t, filepath.Join(root, "composer.lock"), `{
 		"packages": [
 			{
 				"name": "symfony/console",
@@ -31,7 +33,7 @@ func writeMinimalComposerProject(t *testing.T, root string) {
 		"packages-dev": [
 			{"name": "phpunit/phpunit", "version": "10.0.0", "license": ["BSD-3-Clause"]}
 		]
-	}`), 0o644))
+	}`)
 }
 
 func TestWriteProjectSBOM(t *testing.T) {

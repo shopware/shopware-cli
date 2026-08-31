@@ -14,6 +14,7 @@ import (
 	adminSdk "github.com/shopware/shopware-cli/internal/admin-api"
 	"github.com/shopware/shopware-cli/internal/executor"
 	"github.com/shopware/shopware-cli/internal/shop"
+	"github.com/shopware/shopware-cli/internal/testhelper"
 )
 
 // fakeExecutor satisfies executor.Executor and lets each test decide which
@@ -255,7 +256,7 @@ func TestRunnerRecipesInstallIsNonFatal(t *testing.T) {
 func TestRunnerRestoresComposeProjectNameAfterRecipesReset(t *testing.T) {
 	dir := setupProject(t)
 	envPath := filepath.Join(dir, ".env")
-	require.NoError(t, os.WriteFile(envPath, []byte("COMPOSE_PROJECT_NAME=sw-shop-abc123\nAPP_ENV=prod\n"), 0o644))
+	testhelper.WriteFile(t, envPath, "COMPOSE_PROJECT_NAME=sw-shop-abc123\nAPP_ENV=prod\n")
 
 	u := NewProjectUpgrader(dir, &fakeExecutor{
 		composer: func(ctx context.Context, args ...string) *executor.Process {

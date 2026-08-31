@@ -7,6 +7,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/shopware/shopware-cli/internal/testhelper"
 )
 
 func TestMigrateEnv(t *testing.T) {
@@ -18,11 +20,10 @@ func TestMigrateEnv(t *testing.T) {
 
 		// Create a test .env file
 		envContent := []byte("APP_ENV=dev\nAPP_SECRET=test")
-		err := os.WriteFile(filepath.Join(tempDir, ".env"), envContent, 0o644)
-		require.NoError(t, err)
+		testhelper.WriteFile(t, filepath.Join(tempDir, ".env"), string(envContent))
 
 		// Run the migration
-		err = MigrateEnv(tempDir)
+		err := MigrateEnv(tempDir)
 		require.NoError(t, err)
 
 		// Verify .env.local exists with original content
@@ -41,10 +42,9 @@ func TestMigrateEnv(t *testing.T) {
 		tempDir := t.TempDir()
 
 		envContent := []byte("APP_ENV=dev\nCOMPOSE_PROJECT_NAME=sw-shop-abcdef\nAPP_SECRET=test\n")
-		err := os.WriteFile(filepath.Join(tempDir, ".env"), envContent, 0o644)
-		require.NoError(t, err)
+		testhelper.WriteFile(t, filepath.Join(tempDir, ".env"), string(envContent))
 
-		err = MigrateEnv(tempDir)
+		err := MigrateEnv(tempDir)
 		require.NoError(t, err)
 
 		envLocalContent, err := os.ReadFile(filepath.Join(tempDir, ".env.local"))
@@ -65,13 +65,11 @@ func TestMigrateEnv(t *testing.T) {
 		envContent := []byte("APP_ENV=dev\nAPP_SECRET=test")
 		envLocalContent := []byte("APP_ENV=local\nAPP_SECRET=local")
 
-		err := os.WriteFile(filepath.Join(tempDir, ".env"), envContent, 0o644)
-		require.NoError(t, err)
-		err = os.WriteFile(filepath.Join(tempDir, ".env.local"), envLocalContent, 0o644)
-		require.NoError(t, err)
+		testhelper.WriteFile(t, filepath.Join(tempDir, ".env"), string(envContent))
+		testhelper.WriteFile(t, filepath.Join(tempDir, ".env.local"), string(envLocalContent))
 
 		// Run the migration
-		err = MigrateEnv(tempDir)
+		err := MigrateEnv(tempDir)
 		require.NoError(t, err)
 
 		// Verify both files still exist with original content
@@ -107,11 +105,10 @@ func TestMigrateEnv(t *testing.T) {
 
 		// Create only .env.local file
 		envLocalContent := []byte("APP_ENV=local\nAPP_SECRET=local")
-		err := os.WriteFile(filepath.Join(tempDir, ".env.local"), envLocalContent, 0o644)
-		require.NoError(t, err)
+		testhelper.WriteFile(t, filepath.Join(tempDir, ".env.local"), string(envLocalContent))
 
 		// Run the migration
-		err = MigrateEnv(tempDir)
+		err := MigrateEnv(tempDir)
 		require.NoError(t, err)
 
 		// Verify .env.local still exists with original content
