@@ -1,9 +1,6 @@
 package project
 
 import (
-	"encoding/json"
-	"fmt"
-
 	"github.com/spf13/cobra"
 
 	adminSdk "github.com/shopware/shopware-cli/internal/admin-api"
@@ -15,7 +12,15 @@ var projectExtensionListCmd = &cobra.Command{
 	Aliases: []string{"ls"},
 	Short:   "List all installed extensions",
 	RunE: func(cmd *cobra.Command, _ []string) error {
-		outputAsJson, _ := cmd.PersistentFlags().GetBool("json")
+		formatName, _ := cmd.Flags().GetString("format")
+		format, err := tui.ParseTableFormat(formatName)
+		if err != nil {
+			return err
+		}
+		outputAsJSON, _ := cmd.Flags().GetBool("json")
+		if outputAsJSON {
+			format = tui.TableFormatJSON
+		}
 
 		projectRoot, err := findClosestShopwareProject(true)
 		if err != nil {
@@ -41,28 +46,22 @@ var projectExtensionListCmd = &cobra.Command{
 			return err
 		}
 
-		if outputAsJson {
-			content, err := json.Marshal(extensions)
-			if err != nil {
-				return err
-			}
-
-			fmt.Println(string(content))
-
-			return nil
-		}
-
-		rows := make([][]string, 0, len(extensions))
+		result := tui.NewTable(
+			tui.TableColumn{Title: "Name", JSONKey: "name"},
+			tui.TableColumn{Title: "Version", JSONKey: "version"},
+			tui.TableColumn{Title: "Status", JSONKey: "status"},
+		)
 		for _, extension := range extensions {
-			rows = append(rows, []string{extension.Name, extension.Version, extension.Status()})
+			result.AddRow(extension.Name, extension.Version, extension.Status())
 		}
-		tui.PrintTable([]string{"Name", "Version", "Status"}, rows)
 
-		return nil
+		return result.Write(cmd.OutOrStdout(), format)
 	},
 }
 
 func init() {
 	projectExtensionCmd.AddCommand(projectExtensionListCmd)
-	projectExtensionListCmd.PersistentFlags().Bool("json", false, "Output as json")
+	projectExtensionListCmd.Flags().String("format", string(tui.TableFormatTable), "Output format (table or json)")
+	projectExtensionListCmd.Flags().Bool("json", false, "Output as json")
+	projectExtensionListCmd.MarkFlagsMutuallyExclusive("format", "json")
 }

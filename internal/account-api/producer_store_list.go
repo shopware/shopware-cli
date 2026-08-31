@@ -3,13 +3,8 @@ package account_api
 import (
 	"cmp"
 	"context"
-	"encoding/json"
-	"fmt"
 	"io"
 	"slices"
-
-	"charm.land/lipgloss/v2"
-	liplogtable "charm.land/lipgloss/v2/table"
 
 	"github.com/shopware/shopware-cli/internal/tui"
 )
@@ -87,52 +82,16 @@ func IncludeExtension(extension Extension, pluginOnly, appOnly bool) bool {
 	return true
 }
 
-type extensionListItem struct {
-	Name       string `json:"name"`
-	Type       string `json:"type"`
-	Compatible bool   `json:"compatibleWithLatestVersion"`
-	Status     string `json:"status"`
-	Producer   string `json:"producer"`
-}
+func ExtensionsTable(extensions []Extension) *tui.Table {
+	result := tui.NewTable(
+		tui.TableColumn{Title: "Name", JSONKey: "name"},
+		tui.TableColumn{Title: "Type", JSONKey: "type"},
+		tui.TableColumn{Title: "Compatible with latest version", JSONKey: "compatibleWithLatestVersion"},
+		tui.TableColumn{Title: "Status", JSONKey: "status"},
+		tui.TableColumn{Title: "Producer", JSONKey: "producer"},
+	)
 
-func WriteExtensionsJSON(w io.Writer, extensions []Extension) error {
-	items := make([]extensionListItem, 0, len(extensions))
 	for _, extension := range extensions {
-		items = append(items, extensionListItem{
-			Name:       extension.Name,
-			Type:       extension.Generation.Name,
-			Compatible: extension.IsCompatibleWithLatestShopwareVersion,
-			Status:     extension.Status.Name,
-			Producer:   extension.Producer.Name,
-		})
-	}
-
-	content, err := json.Marshal(items)
-	if err != nil {
-		return err
-	}
-
-	_, err = fmt.Fprintln(w, string(content))
-	return err
-}
-
-func WriteExtensionsTable(w io.Writer, extensions []Extension) error {
-	cellStyle := lipgloss.NewStyle().Padding(0, 1)
-
-	t := liplogtable.New().
-		Border(lipgloss.NormalBorder()).
-		StyleFunc(func(row, col int) lipgloss.Style {
-			return cellStyle
-		}).
-		Headers("Name", "Type", "Compatible with latest version", "Status")
-
-	lastProducerId := 0
-	for _, extension := range extensions {
-		if extension.Producer.Id != lastProducerId {
-			lastProducerId = extension.Producer.Id
-			t.Row(tui.BoldText.Render(extension.Producer.Name), "", "", "")
-		}
-
 		compatible := tui.RedText.Render("No")
 		if extension.IsCompatibleWithLatestShopwareVersion {
 			compatible = tui.GreenText.Render("Yes")
@@ -148,14 +107,31 @@ func WriteExtensionsTable(w io.Writer, extensions []Extension) error {
 			status = tui.DimText.Render(extension.Status.Name)
 		}
 
-		t.Row(
-			"  "+extension.Name,
-			tui.DimText.Render(extension.Generation.Description),
-			compatible,
-			status,
+		result.AddRow(
+			extension.Name,
+			tui.TableCell{
+				Value:        extension.Generation.Name,
+				TerminalText: tui.DimText.Render(extension.Generation.Description),
+			},
+			tui.TableCell{
+				Value:        extension.IsCompatibleWithLatestShopwareVersion,
+				TerminalText: compatible,
+			},
+			tui.TableCell{
+				Value:        extension.Status.Name,
+				TerminalText: status,
+			},
+			extension.Producer.Name,
 		)
 	}
 
-	_, err := fmt.Fprintln(w, t.Render())
-	return err
+	return result
+}
+
+func WriteExtensionsJSON(w io.Writer, extensions []Extension) error {
+	return ExtensionsTable(extensions).Write(w, tui.TableFormatJSON)
+}
+
+func WriteExtensionsTable(w io.Writer, extensions []Extension) error {
+	return ExtensionsTable(extensions).Write(w, tui.TableFormatTable)
 }

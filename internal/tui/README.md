@@ -387,19 +387,32 @@ tui.NewScrollbar(tui.ScrollbarOptions{Total: 30, Visible: 5, Offset: 10, Height:
 ↓
 ```
 
-### RenderTable / PrintTable — bordered tables for command output
+### Table — terminal and JSON command output
 
 ```go
-tui.PrintTable([]string{"Name", "Version"}, rows)
+table := tui.NewTable(
+    tui.TableColumn{Title: "Name", JSONKey: "name"},
+    tui.TableColumn{Title: "Compatible", JSONKey: "compatible"},
+)
+table.AddRow(
+    "Example",
+    tui.TableCell{Value: true, TerminalText: tui.GreenText.Render("Yes")},
+)
+
+format, err := tui.ParseTableFormat(formatFlag)
+err = table.Write(cmd.OutOrStdout(), format)
 ```
 
+`TableCell` keeps the typed JSON value separate from styled or human-readable
+terminal text. `RenderTable` and `PrintTable` remain available for terminal-only
+call sites using `[][]string`.
+
 ```
-┌───────────────┬─────────┐
-│ Name          │ Version │
-├───────────────┼─────────┤
-│ frosh/tools   │ 2.1.0   │
-│ shopware/core │ 6.7.4.1 │
-└───────────────┴─────────┘
+┌─────────┬────────────┐
+│ Name    │ Compatible │
+├─────────┼────────────┤
+│ Example │ Yes        │
+└─────────┴────────────┘
 ```
 
 ### Labels & small helpers
