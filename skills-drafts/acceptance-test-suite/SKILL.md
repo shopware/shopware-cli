@@ -35,7 +35,7 @@ grep -rn -A3 'acceptance-test-suite' \
 grep -rn 'acceptance-test-suite' package.json tests/acceptance/package.json 2>/dev/null
 ```
 
-Say which of the three sources the version came from. If none yields a version, state that the ATS version could not be determined, ask the user, and avoid version specific claims until it is known.
+Say which of the three sources the version came from. If none yields a version and there is no test workspace yet, this is a fresh setup: continue with the workspace setup below. Otherwise state that the ATS version could not be determined, ask the user, and avoid version specific claims until it is known.
 
 For the version of the **shop under test** (a different thing), use the `InstanceMeta` fixture. `InstanceMeta.version` is the right way to guard a test against older Shopware releases.
 
@@ -137,7 +137,7 @@ SHOPWARE_SECRET_ACCESS_KEY="..."
 import { defineConfig, devices } from '@playwright/test';
 import dotenv from 'dotenv';
 
-dotenv.config();
+dotenv.config({ quiet: true });
 
 export default defineConfig({
   testDir: './tests',
@@ -201,7 +201,7 @@ Playwright transpiles without typechecking, so type errors run silently and surf
 ```
 
 ```bash
-npm install --save-dev typescript
+npm install --save-dev typescript @types/node
 npx tsc --noEmit
 ```
 
@@ -222,9 +222,7 @@ test('Customer can add a product to the cart.', { tag: '@Checkout' }, async ({
   StorefrontProductDetail,
   StorefrontCheckoutCart,
 }) => {
-  const category = await TestDataService.createCategory();
   const product = await TestDataService.createBasicProduct();
-  await TestDataService.assignProductCategory(product.id, category.id);
 
   await ShopCustomer.goesTo(StorefrontProductDetail.url(product));
   await ShopCustomer.attemptsTo(AddProductToCart(product, '5'));
@@ -426,4 +424,4 @@ cat node_modules/@shopware-ag/acceptance-test-suite/package.json
 cat node_modules/@shopware-ag/acceptance-test-suite/dist/index.d.ts | grep -E 'export|declare' | head -50
 ```
 
-The type definitions list the real exports, fixtures, and task names for the installed version. Published examples elsewhere sometimes use fixture names from older majors; prefer what the installed types show. If this skill and the installed package disagree, follow the package and say so.
+The type definitions list the real exports, fixtures, and task names for the installed version. Task argument shapes are not there: `Task` is typed `(...args: any[]) => () => Promise<void>`, so read a task's real parameters in `dist/index.mjs`, and do not expect `tsc` to catch wrong task arguments. Published examples elsewhere sometimes use fixture names from older majors; prefer what the installed types show. If this skill and the installed package disagree, follow the package and say so.
