@@ -32,7 +32,6 @@ func TestFeaturesFromLock(t *testing.T) {
 		S3:             true,
 	}, f)
 	assert.True(t, f.NeedsRedis())
-	assert.Equal(t, []string{"lavinmq", "opensearch", "s3", "rustfs"}, f.ProxySubdomains())
 }
 
 func TestFeaturesFromLockFile(t *testing.T) {
@@ -57,6 +56,4 @@ func TestLockFeaturesNeedsRedis(t *testing.T) {
 	assert.False(t, LockFeatures{}.NeedsRedis())
 	assert.True(t, LockFeatures{RedisMessenger: true}.NeedsRedis())
 	assert.True(t, LockFeatures{S3: true}.NeedsRedis())
-	assert.Empty(t, LockFeatures{}.ProxySubdomains())
-	assert.Equal(t, []string{"lavinmq"}, LockFeatures{AMQP: true}.ProxySubdomains())
 }

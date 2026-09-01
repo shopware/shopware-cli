@@ -14,13 +14,6 @@ type LockFeatures struct {
 	S3 bool
 }
 
-// rustfsS3Subdomain is the proxy hostname for the S3 API (PUBLIC_URL).
-// rustfsConsoleSubdomain is the proxy hostname for the RustFS console (TUI).
-const (
-	rustfsS3Subdomain      = "s3"
-	rustfsConsoleSubdomain = "rustfs"
-)
-
 // FeaturesFromLock reads the lock packages that drive optional compose
 // services. A nil lock is treated as empty (no optional infra).
 func FeaturesFromLock(lock *composer.Lock) LockFeatures {
@@ -53,22 +46,4 @@ func FeaturesFromLockFile(path string) LockFeatures {
 // (shopware/k8s-meta, which requires Redis for cache and sessions) is.
 func (f LockFeatures) NeedsRedis() bool {
 	return f.RedisMessenger || f.S3
-}
-
-// ProxySubdomains returns the extra Traefik hostnames for optional services
-// in this lock. The names must match the publishOrRoute calls in compose
-// generation so the Windows hosts line and the generated routers stay aligned.
-func (f LockFeatures) ProxySubdomains() []string {
-	var subs []string
-	if f.AMQP {
-		subs = append(subs, "lavinmq")
-	}
-	if f.Elasticsearch {
-		subs = append(subs, "opensearch")
-	}
-	if f.S3 {
-		subs = append(subs, rustfsS3Subdomain, rustfsConsoleSubdomain)
-	}
-
-	return subs
 }

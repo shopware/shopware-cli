@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	dockerpkg "github.com/shopware/shopware-cli/internal/docker"
 	"github.com/shopware/shopware-cli/internal/executor"
 	"github.com/shopware/shopware-cli/internal/shop"
 )
@@ -48,7 +49,7 @@ func TestOverviewBackgroundProcessesSection(t *testing.T) {
 	// Hidden entirely when there are no background processes.
 	assert.NotContains(t, m.View(m.width, m.height), "Background processing")
 
-	m.background = []BackgroundProcess{
+	m.background = []dockerpkg.BackgroundProcess{
 		{Name: "Queue worker", Running: true},
 		{Name: "Scheduled tasks", Running: false},
 	}
@@ -92,7 +93,7 @@ func TestNewOverviewModel_EmptyURL(t *testing.T) {
 func TestServicesLoadedMsg(t *testing.T) {
 	m := NewOverviewModel(t.Context(), "docker", "http://localhost:8000", "", "", "/tmp/project", nil, nil)
 
-	services := []DiscoveredService{
+	services := []dockerpkg.DiscoveredService{
 		{Name: "Adminer", URL: "http://127.0.0.1:9080", Username: "root", Password: "root"},
 		{Name: "Shopware", URL: "http://localhost:8000"},
 	}
@@ -153,39 +154,10 @@ func TestServicesLoadedMsg_WithError(t *testing.T) {
 	assert.Empty(t, updated.services)
 }
 
-func TestKnownServices(t *testing.T) {
-	adminer := knownServices["adminer"]
-	assert.Equal(t, "Adminer", adminer.Name)
-	assert.Equal(t, 8080, adminer.TargetPort)
-	assert.Equal(t, "root", adminer.Username)
-
-	mailer := knownServices["mailer"]
-	assert.Equal(t, "Mailpit", mailer.Name)
-	assert.Equal(t, 8025, mailer.TargetPort)
-
-	lavinmq := knownServices["lavinmq"]
-	assert.Equal(t, "Queue (LavinMQ)", lavinmq.Name)
-	assert.Equal(t, 15672, lavinmq.TargetPort)
-	assert.Equal(t, "guest", lavinmq.Username)
-
-	rabbitmq := knownServices["rabbitmq"]
-	assert.Equal(t, "Queue (RabbitMQ)", rabbitmq.Name)
-	assert.Equal(t, 15672, rabbitmq.TargetPort)
-
-	rustfs := knownServices["rustfs"]
-	assert.Equal(t, "S3 (RustFS)", rustfs.Name)
-	assert.Equal(t, 9001, rustfs.TargetPort)
-	assert.Equal(t, "shopware", rustfs.Username)
-	assert.Equal(t, "shopware", rustfs.Password)
-
-	assert.True(t, ignoredServices["redis"])
-	assert.True(t, ignoredServices["rustfs-init"])
-}
-
 func TestViewShowsAccessTable(t *testing.T) {
 	m := NewOverviewModel(t.Context(), "docker", "http://localhost:8000", "admin", "shopware", "/tmp/project", nil, nil)
 	m.loading = false
-	m.services = []DiscoveredService{
+	m.services = []dockerpkg.DiscoveredService{
 		{Name: "Adminer", URL: "http://127.0.0.1:9080", Username: "root", Password: "root"},
 		{Name: "Mailpit", URL: "http://127.0.0.1:8025"},
 	}

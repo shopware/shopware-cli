@@ -24,6 +24,8 @@ const (
 	DockerPortAMQPManagement          = "amqp_management"
 	DockerPortAMQP                    = "amqp"
 	DockerPortElasticsearch           = "elasticsearch"
+	DockerPortS3                      = "s3"
+	DockerPortS3Console               = "s3_console"
 )
 
 // ConfigDockerPorts maps a published-port key to the host port it binds, or to
@@ -107,6 +109,8 @@ func (ConfigDockerPorts) JSONSchemaExtend(s *jsonschema.Schema) {
 		{DockerPortAMQPManagement, "Host port for the LavinMQ management UI. Defaults to 15672."},
 		{DockerPortAMQP, "Host port for the AMQP endpoint. Defaults to 5672."},
 		{DockerPortElasticsearch, "Host port for OpenSearch. Defaults to 9200."},
+		{DockerPortS3, "Host port for the S3 API (RustFS). Defaults to 9000."},
+		{DockerPortS3Console, "Host port for the RustFS console. Defaults to 9001."},
 	}
 
 	properties := orderedmap.New[string, *jsonschema.Schema]()
@@ -119,6 +123,15 @@ func (ConfigDockerPorts) JSONSchemaExtend(s *jsonschema.Schema) {
 
 	s.Properties = properties
 	s.AdditionalProperties = jsonschema.FalseSchema
+}
+
+// DockerPorts returns the configured host-port overrides, nil when none are
+// set. Nil-safe for a nil config.
+func (c *Config) DockerPorts() ConfigDockerPorts {
+	if c == nil || c.Docker == nil {
+		return nil
+	}
+	return c.Docker.Ports
 }
 
 // SetDockerPortOverrides merges host-port overrides into c.Docker.Ports,

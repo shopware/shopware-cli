@@ -22,10 +22,6 @@ import (
 	"github.com/shopware/shopware-cli/internal/tui"
 )
 
-// defaultShopURL is the URL projects use outside proxy mode, matching the
-// fixed 8000:8000 port mapping of the standard dev environment.
-const defaultShopURL = "http://127.0.0.1:8000"
-
 // ErrProxyNotRegistered is returned by `project proxy status` when the
 // current project is not registered with the shared proxy.
 var ErrProxyNotRegistered = errors.New("project is not registered with the shared proxy")
@@ -152,7 +148,7 @@ func (e *proxyEnvironment) up(cmd *cobra.Command) error {
 	// Capture the pre-proxy APP_URL (so "proxy down" can restore it) and whether
 	// the URL actually changes (only then is the costly theme recompile needed).
 	// Both read .env.local before it is rewritten just below.
-	previousAppURL := defaultShopURL
+	previousAppURL := shop.DefaultShopURL
 	if entry, found := reg.Find(e.canonicalRoot); found && entry.PreviousAppURL != "" {
 		previousAppURL = entry.PreviousAppURL
 	} else if current := envfile.ReadEnvVar(e.envLocalPath(), "APP_URL"); current != "" {
@@ -162,7 +158,7 @@ func (e *proxyEnvironment) up(cmd *cobra.Command) error {
 	// born-proxy project whose .env.local already points at the hostname); that
 	// would make "proxy down" try to restore to the proxy URL.
 	if previousAppURL == proxyURL {
-		previousAppURL = defaultShopURL
+		previousAppURL = shop.DefaultShopURL
 	}
 	urlChanged := envfile.ReadEnvVar(e.envLocalPath(), "APP_URL") != proxyURL
 
@@ -404,21 +400,6 @@ func hostsFileContains(hostname string) bool {
 // envLocalPath returns the project's .env.local file path.
 func (e *proxyEnvironment) envLocalPath() string {
 	return filepath.Join(e.projectRoot, ".env.local")
-}
-
-// proxyHostname returns the shop's proxy hostname if the project is
-// registered with the shared proxy, or "" otherwise.
-func proxyHostname(projectRoot string) string {
-	reg, err := proxy.LoadRegistry()
-	if err != nil {
-		return ""
-	}
-
-	if entry, found := reg.Find(proxy.CanonicalProjectRoot(projectRoot)); found {
-		return entry.Hostname
-	}
-
-	return ""
 }
 
 // switchProjectConfigURLs points the url keys in .shopware-project.yml at

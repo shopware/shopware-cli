@@ -3,6 +3,8 @@ package docker
 import (
 	"fmt"
 	"net"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/shyim/go-composer"
@@ -39,17 +41,32 @@ func TestActiveDefinitions(t *testing.T) {
 	assert.NotContains(t, keys, shop.DockerPortAMQP)
 	assert.NotContains(t, keys, shop.DockerPortAMQPManagement)
 	assert.NotContains(t, keys, shop.DockerPortElasticsearch)
+	assert.NotContains(t, keys, shop.DockerPortS3)
+	assert.NotContains(t, keys, shop.DockerPortS3Console)
 
 	full := &composer.Lock{Packages: []composer.LockPackage{
 		{Name: "shopware/core", Version: "6.6.0.0"},
 		{Name: "symfony/amqp-messenger", Version: "v7.0.0"},
 		{Name: "shopware/elasticsearch", Version: "6.6.0.0"},
+		{Name: "shopware/k8s-meta", Version: "1.0.0"},
 	}}
 	keys = keysOf(activeDefinitions(full))
-	assert.Contains(t, keys, shop.DockerPortAMQP)
-	assert.Contains(t, keys, shop.DockerPortAMQPManagement)
-	assert.Contains(t, keys, shop.DockerPortElasticsearch)
-	assert.Len(t, keys, len(PortDefinitions))
+	assert.ElementsMatch(t, []string{
+		shop.DockerPortWeb,
+		shop.DockerPortWebAlt,
+		shop.DockerPortStorefrontWatcherAssets,
+		shop.DockerPortStorefrontWatcher,
+		shop.DockerPortAdminWatcher,
+		shop.DockerPortAdminWatcherHMR,
+		shop.DockerPortAdminer,
+		shop.DockerPortMailerSMTP,
+		shop.DockerPortMailerWeb,
+		shop.DockerPortAMQPManagement,
+		shop.DockerPortAMQP,
+		shop.DockerPortElasticsearch,
+		shop.DockerPortS3,
+		shop.DockerPortS3Console,
+	}, keys, "a lock with every optional package activates every catalog port")
 }
 
 func TestFindConflicts(t *testing.T) {
@@ -109,6 +126,32 @@ func TestFindConflicts(t *testing.T) {
 		t.Parallel()
 		assert.Empty(t, findConflicts(defs, nil, nil, freeExcept()))
 	})
+}
+
+func TestFindPortConflictsCoversS3Ports(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	lock := `{"packages": [{"name": "shopware/core", "version": "6.6.0.0"}, {"name": "shopware/k8s-meta", "version": "1.0.0"}], "packages-dev": []}`
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "composer.lock"), []byte(lock), 0o644))
+
+	// Occupy a random port and configure it as the S3 host port, so the probe
+	// reports it as busy regardless of what else runs on this machine.
+	listener, err := (&net.ListenConfig{}).Listen(t.Context(), "tcp", ":0")
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = listener.Close() })
+	busyPort := listener.Addr().(*net.TCPAddr).Port
+
+	conflicts, err := FindPortConflicts(t.Context(), dir, shop.ConfigDockerPorts{
+		shop.DockerPortS3: shop.ConfigDockerPort(busyPort),
+	})
+	require.NoError(t, err)
+
+	keys := make([]string, 0, len(conflicts))
+	for _, conflict := range conflicts {
+		keys = append(keys, conflict.Definition.Key)
+	}
+	assert.Contains(t, keys, shop.DockerPortS3, "rustfs ports must be probed for conflicts with an S3 lock")
 }
 
 func TestIsPortFree(t *testing.T) {

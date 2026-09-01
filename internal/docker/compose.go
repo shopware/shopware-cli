@@ -93,23 +93,29 @@ type ComposeOptions struct {
 // docker.ports keys, honoring host-port overrides and skipping ports that are
 // disabled (configured as false).
 func (o *ComposeOptions) portBindings(keys ...string) []string {
-	var ports shop.ConfigDockerPorts
-	if o != nil {
-		ports = o.Ports
-	}
+	ports := o.portConfig()
 
 	bindings := make([]string, 0, len(keys))
 	for _, key := range keys {
-		def := portDefinition(key)
-		if def == nil {
+		ep := EndpointByKey(key)
+		if ep == nil {
 			continue
 		}
 		if hostPort := HostPort(ports, key); hostPort > 0 {
-			bindings = append(bindings, fmt.Sprintf("%d:%d", hostPort, def.Target))
+			bindings = append(bindings, fmt.Sprintf("%d:%d", hostPort, ep.ContainerPort))
 		}
 	}
 
 	return bindings
+}
+
+// portConfig returns the configured host-port overrides, nil-safe for a nil
+// options receiver.
+func (o *ComposeOptions) portConfig() shop.ConfigDockerPorts {
+	if o == nil {
+		return nil
+	}
+	return o.Ports
 }
 
 func (o *ComposeOptions) phpVersion() string {
@@ -232,7 +238,7 @@ func buildCompose(features LockFeatures, opts *ComposeOptions) composeFile {
 	px := opts.proxy()
 
 	webEnv := baseWebEnv(px)
-	webEnv, webDependsOn := applyLockEnv(webEnv, px, features)
+	webEnv, webDependsOn := applyLockEnv(webEnv, px, features, opts)
 	webEnv = applyProfilerEnv(webEnv, opts)
 
 	web := composeService{
@@ -245,15 +251,11 @@ func buildCompose(features LockFeatures, opts *ComposeOptions) composeFile {
 		web.User = opts.User
 	}
 	addVolumes(&web, px, ".:/var/www/html")
+	// Web keeps explicit routes: the admin watch port is dynamic and the
+	// storefront watcher shares one hostname across three routes, so its proxy
+	// routing cannot be derived from plain endpoints like the other services.
 	publishOrRoute(&web, px, "web",
-		opts.portBindings(
-			shop.DockerPortWeb,
-			shop.DockerPortWebAlt,
-			shop.DockerPortStorefrontWatcherAssets,
-			shop.DockerPortStorefrontWatcher,
-			shop.DockerPortAdminWatcher,
-			shop.DockerPortAdminWatcherHMR,
-		),
+		opts.portBindings(ServiceByName("web").portKeys()...),
 		webProxyRoutes(px)...)
 
 	database := composeService{
@@ -301,7 +303,7 @@ func buildCompose(features LockFeatures, opts *ComposeOptions) composeFile {
 		Environment: yamlMap[string]{}.
 			set("ADMINER_DEFAULT_SERVER", "database"),
 	}
-	publishOrRoute(&adminer, px, "adminer", opts.portBindings(shop.DockerPortAdminer), proxyRoute{subdomain: "adminer", containerPort: 8080})
+	publishOrRouteService(&adminer, px, ServiceByName("adminer"), opts)
 
 	mailer := composeService{
 		Image: "axllent/mailpit",
@@ -311,7 +313,7 @@ func buildCompose(features LockFeatures, opts *ComposeOptions) composeFile {
 	}
 	// Only the web UI (8025) is routed in proxy mode; SMTP (1025) stays internal
 	// to the compose network, reachable by other services as mailer:1025.
-	publishOrRoute(&mailer, px, "mailer", opts.portBindings(shop.DockerPortMailerSMTP, shop.DockerPortMailerWeb), proxyRoute{subdomain: "mailer", containerPort: 8025})
+	publishOrRouteService(&mailer, px, ServiceByName("mailer"), opts)
 
 	services := yamlMap[composeService]{}.
 		set("web", web).
@@ -408,12 +410,12 @@ func baseWebEnv(px *ProxyOptions) yamlMap[string] {
 	return webEnv
 }
 
-func applyLockEnv(webEnv yamlMap[string], px *ProxyOptions, features LockFeatures) (yamlMap[string], yamlMap[composeDependency]) {
+func applyLockEnv(webEnv yamlMap[string], px *ProxyOptions, features LockFeatures, opts *ComposeOptions) (yamlMap[string], yamlMap[composeDependency]) {
 	// Redis messenger wins over AMQP when the Redis transport is in the lock
 	// (including via shopware/k8s-meta, which requires it).
 	switch {
 	case features.S3:
-		webEnv = applyS3Env(webEnv, px)
+		webEnv = applyS3Env(webEnv, px, opts)
 	case features.RedisMessenger:
 		webEnv = webEnv.set("MESSENGER_TRANSPORT_DSN", redisMessengerDSN)
 	case features.AMQP:
@@ -465,7 +467,7 @@ func addOptionalServices(services *yamlMap[composeService], volumes *yamlMap[str
 		lavinmq := composeService{Image: "cloudamqp/lavinmq"}
 		// Only the management UI (15672) is routed in proxy mode; AMQP (5672)
 		// stays internal, reachable as lavinmq:5672.
-		publishOrRoute(&lavinmq, px, "lavinmq", opts.portBindings(shop.DockerPortAMQPManagement, shop.DockerPortAMQP), proxyRoute{subdomain: "lavinmq", containerPort: 15672})
+		publishOrRouteService(&lavinmq, px, ServiceByName("lavinmq"), opts)
 		lavinmq.Volumes = []string{"lavinmq-data:/var/lib/lavinmq:rw"}
 		*services = services.set("lavinmq", lavinmq)
 		*volumes = volumes.set("lavinmq-data", struct{}{})
@@ -479,7 +481,7 @@ func addOptionalServices(services *yamlMap[composeService], volumes *yamlMap[str
 				set("discovery.type", "single-node").
 				set("plugins.security.disabled", "true"),
 		}
-		publishOrRoute(&opensearch, px, "opensearch", opts.portBindings(shop.DockerPortElasticsearch), proxyRoute{subdomain: "opensearch", containerPort: 9200})
+		publishOrRouteService(&opensearch, px, ServiceByName("opensearch"), opts)
 		opensearch.Volumes = []string{"opensearch-data:/usr/share/opensearch/data"}
 		*services = services.set("opensearch", opensearch)
 		*volumes = volumes.set("opensearch-data", struct{}{})
@@ -489,7 +491,7 @@ func addOptionalServices(services *yamlMap[composeService], volumes *yamlMap[str
 		addRedisService(services, volumes)
 	}
 	if features.S3 {
-		addRustFSServices(services, volumes, px)
+		addRustFSServices(services, volumes, px, opts)
 	}
 
 	if opts != nil && opts.PHPProfiler == "blackfire" && opts.BlackfireServerID != "" && opts.BlackfireServerToken != "" {
@@ -511,14 +513,23 @@ func addOptionalServices(services *yamlMap[composeService], volumes *yamlMap[str
 // messenger values that shopware/k8s-meta's Flex recipe already reads. Compose
 // environment overrides the recipe's localhost / empty-bucket defaults so PHP
 // talks to the generated redis and rustfs services.
-func applyS3Env(webEnv yamlMap[string], px *ProxyOptions) yamlMap[string] {
+func applyS3Env(webEnv yamlMap[string], px *ProxyOptions, opts *ComposeOptions) yamlMap[string] {
 	// PHP talks to RustFS on the compose network. The browser loads public
-	// media from PUBLIC_URL: localhost in plain mode, the s3.<host> proxy
-	// route (HTTPS) when the shop itself is served through the local domain.
-	publicURL := "http://127.0.0.1:9000/shopware-public"
+	// media from PUBLIC_URL: the published host port in plain mode, the
+	// s3.<host> proxy route (HTTPS) when the shop is served through the local
+	// domain.
+	proxyHost := ""
 	if px != nil {
-		publicURL = "https://" + px.hostname(proxyRoute{subdomain: rustfsS3Subdomain}) + "/shopware-public"
+		proxyHost = px.Hostname
 	}
+	s3 := EndpointByKey(shop.DockerPortS3)
+	publicURL := EndpointURL(*s3, proxyHost, opts.portConfig())
+	if publicURL == "" {
+		// A disabled S3 port leaves no host-reachable endpoint; fall back to
+		// the default so the generated env stays syntactically valid.
+		publicURL = loopbackHTTPURL(s3.DefaultHostPort)
+	}
+	publicURL += "/shopware-public"
 
 	return webEnv.
 		set("K8S_FILESYSTEM_PRIVATE_BUCKET", "shopware-private").
@@ -563,7 +574,7 @@ func addRedisService(services *yamlMap[composeService], volumes *yamlMap[struct{
 // a PaaS lock (shopware/k8s-meta) needs. In plain mode S3 (9000) and the
 // console (9001) are published on the host. In proxy mode they are routed at
 // s3.<host> and rustfs.<host> so media URLs stay HTTPS on the local domain.
-func addRustFSServices(services *yamlMap[composeService], volumes *yamlMap[struct{}], px *ProxyOptions) {
+func addRustFSServices(services *yamlMap[composeService], volumes *yamlMap[struct{}], px *ProxyOptions, opts *ComposeOptions) {
 	rustfs := composeService{
 		Image: "rustfs/rustfs:latest",
 		Environment: yamlMap[string]{}.
@@ -583,11 +594,7 @@ func addRustFSServices(services *yamlMap[composeService], volumes *yamlMap[struc
 			Retries:       10,
 		},
 	}
-	publishOrRoute(&rustfs, px, "rustfs",
-		[]string{"9000:9000", "9001:9001"},
-		proxyRoute{subdomain: rustfsS3Subdomain, containerPort: 9000},
-		proxyRoute{subdomain: rustfsConsoleSubdomain, containerPort: 9001},
-	)
+	publishOrRouteService(&rustfs, px, ServiceByName("rustfs"), opts)
 
 	rustfsInit := composeService{
 		Image:      rustfsRcImage,

@@ -8,11 +8,11 @@ import (
 )
 
 // ProxyHostnames returns the browser-facing hostnames for a shop served through
-// the proxy: the root hostname plus every routed subdomain (matching the
-// publishOrRoute calls in internal/docker). It is used to build the Windows
-// hosts file line under WSL, where wildcards are not available.
+// the proxy: the root hostname plus every routed subdomain, derived from the
+// service catalog in internal/docker. It is used to build the Windows hosts
+// file line under WSL, where wildcards are not available.
 func ProxyHostnames(hostname string, features docker.LockFeatures) []string {
-	subdomains := append([]string{"", "admin-watch", "storefront-watch", "adminer", "mailer"}, features.ProxySubdomains()...)
+	subdomains := docker.RoutedSubdomains(features)
 
 	hosts := make([]string, 0, len(subdomains))
 	for _, sub := range subdomains {

@@ -762,13 +762,17 @@ type ConfigImageProxy struct {
 	URL string `yaml:"url,omitempty"`
 }
 
+// DefaultShopURL is the URL a dev environment is reachable at with the default
+// ports (and no proxy), matching the web service's default host port.
+const DefaultShopURL = "http://127.0.0.1:8000"
+
 func NewConfig() *Config {
 	return &Config{
 		CompatibilityDate: compatibility.TodayDate(),
 		Environments: map[string]*EnvironmentConfig{
 			"local": {
 				Type: "local",
-				URL:  "http://127.0.0.1:8000",
+				URL:  DefaultShopURL,
 				AdminApi: &ConfigAdminApi{
 					Username: "admin",
 					Password: "shopware",

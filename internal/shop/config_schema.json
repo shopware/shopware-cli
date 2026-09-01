@@ -606,6 +606,14 @@
         "elasticsearch": {
           "$ref": "#/$defs/ConfigDockerPort",
           "description": "Host port for OpenSearch. Defaults to 9200."
+        },
+        "s3": {
+          "$ref": "#/$defs/ConfigDockerPort",
+          "description": "Host port for the S3 API (RustFS). Defaults to 9000."
+        },
+        "s3_console": {
+          "$ref": "#/$defs/ConfigDockerPort",
+          "description": "Host port for the RustFS console. Defaults to 9001."
         }
       },
       "additionalProperties": false,

@@ -100,6 +100,21 @@ func (r Registry) Find(projectRoot string) (ProjectEntry, bool) {
 	return ProjectEntry{}, false
 }
 
+// RegisteredHostname returns the hostname the project is registered under
+// with the shared proxy, or "" when it is not registered.
+func RegisteredHostname(projectRoot string) string {
+	reg, err := LoadRegistry()
+	if err != nil {
+		return ""
+	}
+
+	if entry, found := reg.Find(CanonicalProjectRoot(projectRoot)); found {
+		return entry.Hostname
+	}
+
+	return ""
+}
+
 // FindByHostname returns the entry using hostname, if any, ignoring the
 // entry (if any) belonging to exceptProjectRoot. It is used to detect
 // hostname collisions between two different projects.

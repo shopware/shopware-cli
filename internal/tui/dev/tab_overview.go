@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"context"
 	"crypto/tls"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"image/color"
@@ -48,8 +47,8 @@ type OverviewModel struct {
 	adminURL           string
 	username           string
 	password           string
-	services           []DiscoveredService
-	background         []BackgroundProcess
+	services           []dockerpkg.DiscoveredService
+	background         []dockerpkg.BackgroundProcess
 	projectRoot        string
 	executor           executor.Executor
 	shopCfg            *shop.Config
@@ -68,8 +67,8 @@ type OverviewModel struct {
 	// proxyHost is the project's proxy hostname (empty for a non-proxy
 	// project), resolved once at construction. Cached because the proxy-ness of
 	// a project is fixed for the session and View runs on every frame — calling
-	// proxyHostname() (which reads registry.json and resolves symlinks) per
-	// render would block the render loop.
+	// proxy.RegisteredHostname (which reads registry.json and resolves
+	// symlinks) per render would block the render loop.
 	proxyHost string
 	// domainsSetupDone is whether the one-time machine setup (DNS + HTTPS
 	// trust, via `proxy setup`) is in place. Drives the Domains block's Setup
@@ -97,24 +96,9 @@ type OverviewModel struct {
 // line is not flush against the viewport edge when scrolled to the bottom.
 const overviewBottomPadding = 1
 
-type DiscoveredService struct {
-	Name     string
-	URL      string
-	Username string
-	Password string
-}
-
-// BackgroundProcess is a long-running compose service without a published port
-// (the messenger worker and scheduled-task runner). Running reflects whether its
-// container is currently up.
-type BackgroundProcess struct {
-	Name    string
-	Running bool
-}
-
 type servicesLoadedMsg struct {
-	services   []DiscoveredService
-	background []BackgroundProcess
+	services   []dockerpkg.DiscoveredService
+	background []dockerpkg.BackgroundProcess
 	webPort    int
 	err        error
 }
@@ -243,46 +227,6 @@ func probeWatcher(ctx context.Context, name, url string) tea.Cmd {
 	})
 }
 
-type knownService struct {
-	Name       string
-	TargetPort int
-	Username   string
-	Password   string
-}
-
-var knownServices = map[string]knownService{
-	"adminer":  {Name: "Adminer", TargetPort: 8080, Username: "root", Password: "root"},
-	"mailer":   {Name: "Mailpit", TargetPort: 8025},
-	"lavinmq":  {Name: "Queue (LavinMQ)", TargetPort: 15672, Username: "guest", Password: "guest"},
-	"rabbitmq": {Name: "Queue (RabbitMQ)", TargetPort: 15672, Username: "guest", Password: "guest"},
-	"rustfs":   {Name: "S3 (RustFS)", TargetPort: 9001, Username: "shopware", Password: "shopware"},
-}
-
-var ignoredServices = map[string]bool{
-	"web":         true,
-	"database":    true,
-	"redis":       true, // no UI; cache/session/messenger only
-	"rustfs-init": true, // one-shot bucket create
-}
-
-// backgroundServiceLabel returns the display label for a compose service that is
-// one of the dedicated background processes (defined once in internal/docker),
-// and whether the service is such a process. These have no published port, so
-// they never appear in the Services list and are surfaced in the "Background
-// processing" section instead.
-func backgroundServiceLabel(service string) (string, bool) {
-	for _, bg := range dockerpkg.BackgroundServices {
-		if bg.Name == service {
-			return bg.Label, true
-		}
-	}
-	return "", false
-}
-
-// webServiceTargetPort is the container port the Shopware web server (the "web"
-// service) listens on. Its published host port determines the shop URL port.
-const webServiceTargetPort = 8000
-
 // linkURL renders url as a clickable OSC 8 hyperlink in the shared link style.
 // Terminals without hyperlink support show the plain styled URL instead.
 func linkURL(url string) string {
@@ -308,9 +252,9 @@ func watchLinkLabel(rawURL string) string {
 	return u.Host
 }
 
-// deriveAdminURL returns the admin URL for the given shop URL by appending the
+// DeriveAdminURL returns the admin URL for the given shop URL by appending the
 // "admin" path segment.
-func deriveAdminURL(shopURL string) string {
+func DeriveAdminURL(shopURL string) string {
 	adminURL := shopURL
 	if adminURL != "" && !strings.HasSuffix(adminURL, "/") {
 		adminURL += "/"
@@ -326,7 +270,7 @@ func NewOverviewModel(ctx context.Context, envType, shopURL, username, password,
 		ctx:              ctx,
 		envType:          envType,
 		shopURL:          shopURL,
-		adminURL:         deriveAdminURL(shopURL),
+		adminURL:         DeriveAdminURL(shopURL),
 		username:         username,
 		password:         password,
 		projectRoot:      projectRoot,
@@ -334,9 +278,9 @@ func NewOverviewModel(ctx context.Context, envType, shopURL, username, password,
 		shopCfg:          shopCfg,
 		adminWatchURL:    resolveAdminWatchURL(projectRoot),
 		sfWatchURL:       resolveStorefrontWatchURL(projectRoot),
-		proxyHost:        proxyHostname(projectRoot),
+		proxyHost:        proxy.RegisteredHostname(projectRoot),
 		domainsSetupDone: overviewSetupDone(projectRoot),
-		instancesLoading: proxyHostname(projectRoot) != "",
+		instancesLoading: proxy.RegisteredHostname(projectRoot) != "",
 		loading:          true,
 		healthLoading:    true,
 	}
@@ -346,7 +290,7 @@ func NewOverviewModel(ctx context.Context, envType, shopURL, username, password,
 // HTTPS trust) is in place for a proxy project. Non-proxy projects report
 // false (the Domains block is not shown for them anyway).
 func overviewSetupDone(projectRoot string) bool {
-	if proxyHostname(projectRoot) == "" {
+	if proxy.RegisteredHostname(projectRoot) == "" {
 		return false
 	}
 
@@ -358,23 +302,11 @@ func overviewSetupDone(projectRoot string) bool {
 	return proxy.CheckResolverConfigured(baseDomain).Configured
 }
 
-// proxyHostname returns the shop's hostname when the project is registered
-// with the shared proxy, or "" otherwise.
-func proxyHostname(projectRoot string) string {
-	if reg, err := proxy.LoadRegistry(); err == nil {
-		if entry, found := reg.Find(proxy.CanonicalProjectRoot(projectRoot)); found {
-			return entry.Hostname
-		}
-	}
-
-	return ""
-}
-
 // resolveAdminWatchURL returns the admin watcher's URL: the proxy hostname
 // when the project is proxied, otherwise the local dev-server port.
 func resolveAdminWatchURL(projectRoot string) string {
-	if host := proxyHostname(projectRoot); host != "" {
-		return "https://admin-watch." + host
+	if host := proxy.RegisteredHostname(projectRoot); host != "" {
+		return "https://" + dockerpkg.SubdomainAdminWatch + "." + host
 	}
 
 	return fmt.Sprintf("http://127.0.0.1:%d", extension.AdminDevServerPort(projectRoot))
@@ -386,8 +318,8 @@ func resolveAdminWatchURL(projectRoot string) string {
 // storefront-watch.<host> hostname routed through the shared proxy; without
 // the proxy it is the classic local hot-proxy port.
 func resolveStorefrontWatchURL(projectRoot string) string {
-	if host := proxyHostname(projectRoot); host != "" {
-		return "https://storefront-watch." + host
+	if host := proxy.RegisteredHostname(projectRoot); host != "" {
+		return "https://" + dockerpkg.SubdomainStorefrontWatch + "." + host
 	}
 
 	return "http://127.0.0.1:9998"
@@ -395,7 +327,7 @@ func resolveStorefrontWatchURL(projectRoot string) string {
 
 func (m OverviewModel) Init() tea.Cmd {
 	cmds := []tea.Cmd{
-		discoverServices(m.ctx, m.projectRoot),
+		discoverServices(m.ctx, m.projectRoot, m.proxyHost),
 		loadShopwareVersion(m.projectRoot),
 		loadSetupHealth(m.ctx, m.projectRoot, m.executor),
 	}
@@ -474,7 +406,7 @@ func (m OverviewModel) Update(msg tea.Msg) (OverviewModel, tea.Cmd) {
 		m.err = msg.err
 		if msg.webPort != 0 {
 			m.shopURL = ResolveShopURL(m.shopURL, msg.webPort)
-			m.adminURL = deriveAdminURL(m.shopURL)
+			m.adminURL = DeriveAdminURL(m.shopURL)
 		}
 	case shopwareVersionLoadedMsg:
 		m.shopwareVersion = msg.version
@@ -979,16 +911,14 @@ func (m OverviewModel) renderAccess() string {
 }
 
 func (m OverviewModel) renderWatchers() string {
-	var ports shop.ConfigDockerPorts
-	if m.shopCfg != nil && m.shopCfg.Docker != nil {
-		ports = m.shopCfg.Docker.Ports
-	}
-	// A disabled port (HostPort 0) is not reachable from the host, so no URL.
+	ports := m.shopCfg.DockerPorts()
+	// A disabled port (empty URL) is not reachable from the host, so no URL.
 	watcherURL := func(key string) string {
-		if port := dockerpkg.HostPort(ports, key); port > 0 {
-			return fmt.Sprintf("http://127.0.0.1:%d", port)
+		ep := dockerpkg.EndpointByKey(key)
+		if ep == nil {
+			return ""
 		}
-		return ""
+		return dockerpkg.EndpointURL(*ep, "", ports)
 	}
 	adminURL := watcherURL(shop.DockerPortAdminWatcher)
 	storefrontURL := watcherURL(shop.DockerPortStorefrontWatcher)
@@ -1058,7 +988,7 @@ func (m OverviewModel) startStorefrontWatch(opts extension.StorefrontWatcherOpti
 
 	// When proxied, route the webpack hot-proxy watcher through the shared
 	// proxy, matching the standalone `project storefront-watch` command.
-	if host := proxyHostname(projectRoot); host != "" {
+	if host := proxy.RegisteredHostname(projectRoot); host != "" {
 		opts.ProxyHostname = "storefront-watch." + host
 	}
 
@@ -1205,132 +1135,6 @@ func (m OverviewModel) renderWatcherStatus(label string, running, starting, read
 	return row
 }
 
-type dockerComposePSOutput struct {
-	Name       string `json:"Name"`
-	Service    string `json:"Service"`
-	State      string `json:"State"`
-	Publishers []struct {
-		URL           string `json:"URL"`
-		TargetPort    int    `json:"TargetPort"`
-		PublishedPort int    `json:"PublishedPort"`
-		Protocol      string `json:"Protocol"`
-	} `json:"Publishers"`
-}
-
-// DiscoverServices returns the auxiliary services published by the running
-// docker development environment.
-func DiscoverServices(ctx context.Context, projectRoot string) ([]DiscoveredService, error) {
-	services, _, err := DiscoverComposeServices(ctx, projectRoot)
-	return services, err
-}
-
-// DiscoverComposeServices parses `docker compose ps` once and returns both the
-// auxiliary services and the host port the web service's HTTP port (8000) is
-// published on. webPort is 0 when it cannot be determined (e.g. the environment
-// is down or the web container does not publish port 8000).
-func DiscoverComposeServices(ctx context.Context, projectRoot string) (services []DiscoveredService, webPort int, err error) {
-	services, _, webPort, err = discoverCompose(ctx, projectRoot)
-	return services, webPort, err
-}
-
-// discoverCompose parses `docker compose ps --format json` once and classifies
-// every container into a published auxiliary service, a background process, or
-// (for web) the shop's published port.
-func discoverCompose(ctx context.Context, projectRoot string) (services []DiscoveredService, background []BackgroundProcess, webPort int, err error) {
-	cmd := composeCommand(ctx, projectRoot, "ps", "--format", "json")
-	output, err := cmd.Output()
-	if err != nil {
-		return nil, nil, 0, fmt.Errorf("docker compose ps: %w", err)
-	}
-
-	// In proxy mode a service publishes no host port; it is reached at its
-	// subdomain (e.g. adminer.<host>) instead. When the project is proxied,
-	// every routed service gets its proxy URL rather than a localhost port.
-	proxyHost := proxyHostname(projectRoot)
-
-	type containerInfo struct {
-		service    string
-		publishers map[int]int
-	}
-	var containers []containerInfo
-
-	for _, line := range strings.Split(strings.TrimSpace(string(output)), "\n") {
-		if line == "" {
-			continue
-		}
-
-		var container dockerComposePSOutput
-		if err := json.Unmarshal([]byte(line), &container); err != nil {
-			continue
-		}
-
-		if label, ok := backgroundServiceLabel(container.Service); ok {
-			background = append(background, BackgroundProcess{
-				Name:    label,
-				Running: container.State == "running",
-			})
-			continue
-		}
-
-		ports := make(map[int]int)
-		for _, pub := range container.Publishers {
-			if pub.PublishedPort != 0 {
-				ports[pub.TargetPort] = pub.PublishedPort
-			}
-		}
-
-		if container.Service == "web" {
-			if port, ok := ports[webServiceTargetPort]; ok {
-				webPort = port
-			}
-		}
-
-		// Proxied services have no published ports, so collect them regardless
-		// and resolve their URL below from the proxy hostname.
-		if len(ports) > 0 || proxyHost != "" {
-			containers = append(containers, containerInfo{
-				service:    container.Service,
-				publishers: ports,
-			})
-		}
-	}
-
-	for _, c := range containers {
-		if ignoredServices[c.service] {
-			continue
-		}
-
-		known, ok := knownServices[c.service]
-		if !ok {
-			continue
-		}
-
-		var url string
-		publishedPort, hasPort := c.publishers[known.TargetPort]
-		switch {
-		case hasPort:
-			// Prefer a real published port when the service has one (plain
-			// mode). Proxied services publish nothing and fall through.
-			url = fmt.Sprintf("http://127.0.0.1:%d", publishedPort)
-		case proxyHost != "":
-			// The compose override routes each service at a subdomain named
-			// after the service (adminer.<host>, mailer.<host>, ...).
-			url = fmt.Sprintf("https://%s.%s", c.service, proxyHost)
-		default:
-			continue
-		}
-
-		services = append(services, DiscoveredService{
-			Name:     known.Name,
-			URL:      url,
-			Username: known.Username,
-			Password: known.Password,
-		})
-	}
-
-	return services, background, webPort, nil
-}
-
 // ResolveShopURL rewrites the port in shopURL to webPort, the host port the web
 // container is actually published on. The configured URL is returned unchanged
 // when shopURL is empty, webPort is 0, or shopURL cannot be parsed.
@@ -1348,10 +1152,10 @@ func ResolveShopURL(shopURL string, webPort int) string {
 	return u.String()
 }
 
-func discoverServices(ctx context.Context, projectRoot string) tea.Cmd {
+func discoverServices(ctx context.Context, projectRoot, proxyHost string) tea.Cmd {
 	return func() tea.Msg {
-		services, background, webPort, err := discoverCompose(ctx, projectRoot)
-		return servicesLoadedMsg{services: services, background: background, webPort: webPort, err: err}
+		env, err := dockerpkg.DiscoverEnvironment(ctx, projectRoot, proxyHost)
+		return servicesLoadedMsg{services: env.Services, background: env.Background, webPort: env.WebPort, err: err}
 	}
 }
 

@@ -2,13 +2,9 @@ package docker
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"net"
-	"os"
-	"os/exec"
 	"path/filepath"
-	"strings"
 	"time"
 
 	"github.com/shyim/go-composer"
@@ -28,42 +24,32 @@ type PortDefinition struct {
 	Target int
 	// Default is the host port used when no override is configured.
 	Default int
-	// RequiresAMQP/RequiresElasticsearch mark ports of services that are only
-	// generated when the matching composer package is installed.
-	RequiresAMQP          bool
-	RequiresElasticsearch bool
 }
 
-// PortDefinitions lists every host port the dev compose file can publish, in
-// the order the services appear in the generated file.
-var PortDefinitions = []PortDefinition{
-	{Key: shop.DockerPortWeb, Service: "web", Label: "Shop (Caddy)", Target: 8000, Default: 8000},
-	{Key: shop.DockerPortWebAlt, Service: "web", Label: "Shop (alternative HTTP)", Target: 8080, Default: 8080},
-	{Key: shop.DockerPortStorefrontWatcherAssets, Service: "web", Label: "Storefront watcher assets", Target: 9999, Default: 9999},
-	{Key: shop.DockerPortStorefrontWatcher, Service: "web", Label: "Storefront watcher", Target: 9998, Default: 9998},
-	{Key: shop.DockerPortAdminWatcher, Service: "web", Label: "Admin watcher (Vite)", Target: 5173, Default: 5173},
-	{Key: shop.DockerPortAdminWatcherHMR, Service: "web", Label: "Admin watcher HMR", Target: 5773, Default: 5773},
-	{Key: shop.DockerPortAdminer, Service: "adminer", Label: "Adminer", Target: 8080, Default: 9080},
-	{Key: shop.DockerPortMailerSMTP, Service: "mailer", Label: "Mailpit SMTP", Target: 1025, Default: 1025},
-	{Key: shop.DockerPortMailerWeb, Service: "mailer", Label: "Mailpit UI", Target: 8025, Default: 8025},
-	{Key: shop.DockerPortAMQPManagement, Service: "lavinmq", Label: "LavinMQ management", Target: 15672, Default: 15672, RequiresAMQP: true},
-	{Key: shop.DockerPortAMQP, Service: "lavinmq", Label: "AMQP", Target: 5672, Default: 5672, RequiresAMQP: true},
-	{Key: shop.DockerPortElasticsearch, Service: "opensearch", Label: "OpenSearch", Target: 9200, Default: 9200, RequiresElasticsearch: true},
-}
-
-// portDefinition returns the definition for key, or nil for an unknown key.
-func portDefinition(key string) *PortDefinition {
-	for i, def := range PortDefinitions {
-		if def.Key == key {
-			return &PortDefinitions[i]
+// portDefinitions flattens the keyed endpoints of the given services into
+// port definitions, in the order the services appear in the generated file.
+func portDefinitions(services []ServiceDefinition) []PortDefinition {
+	var defs []PortDefinition
+	for _, svc := range services {
+		for _, ep := range svc.Endpoints {
+			if ep.Key == "" {
+				continue
+			}
+			defs = append(defs, PortDefinition{
+				Key:     ep.Key,
+				Service: svc.Name,
+				Label:   ep.Label,
+				Target:  ep.ContainerPort,
+				Default: ep.DefaultHostPort,
+			})
 		}
 	}
 
-	return nil
+	return defs
 }
 
 // HostPort returns the host port configured for key, falling back to the
-// definition default when no override is set. It returns 0 when the port is
+// catalog default when no override is set. It returns 0 when the port is
 // disabled (configured as false) and must not be published.
 func HostPort(ports shop.ConfigDockerPorts, key string) int {
 	if port, ok := ports[key]; ok {
@@ -75,8 +61,8 @@ func HostPort(ports shop.ConfigDockerPorts, key string) int {
 		}
 	}
 
-	if def := portDefinition(key); def != nil {
-		return def.Default
+	if ep := EndpointByKey(key); ep != nil {
+		return ep.DefaultHostPort
 	}
 
 	return 0
@@ -115,21 +101,7 @@ func FindPortConflicts(ctx context.Context, projectFolder string, ports shop.Con
 // activeDefinitions filters PortDefinitions down to the services the compose
 // file will actually contain for the given composer.lock.
 func activeDefinitions(lock *composer.Lock) []PortDefinition {
-	hasAMQP := lock.GetPackage("symfony/amqp-messenger") != nil
-	hasElasticsearch := lock.GetPackage("shopware/elasticsearch") != nil
-
-	defs := make([]PortDefinition, 0, len(PortDefinitions))
-	for _, def := range PortDefinitions {
-		if def.RequiresAMQP && !hasAMQP {
-			continue
-		}
-		if def.RequiresElasticsearch && !hasElasticsearch {
-			continue
-		}
-		defs = append(defs, def)
-	}
-
-	return defs
+	return portDefinitions(ActiveServices(FeaturesFromLock(lock)))
 }
 
 // findConflicts reports the ports that are neither disabled, published by our
@@ -171,39 +143,13 @@ func isPortFree(ctx context.Context, port int) bool {
 // environment is not reported as a conflict. Errors are treated as "nothing
 // running".
 func ownPublishedPorts(ctx context.Context, projectFolder string) map[int]struct{} {
-	args := []string{"compose"}
-	if os.Getenv("COMPOSE_PROJECT_NAME") == "" {
-		// Compose re-reads the project .env per invocation; pin the name so we
-		// only ever see this project's own containers.
-		if name := shop.ReadComposeProjectName(projectFolder); name != "" {
-			args = append(args, "-p", name)
-		}
-	}
-	args = append(args, "ps", "--format", "json")
-
-	cmd := exec.CommandContext(ctx, "docker", args...)
-	cmd.Dir = projectFolder
-
-	output, err := cmd.Output()
+	containers, err := composePS(ctx, projectFolder)
 	if err != nil {
 		return nil
 	}
 
 	owned := make(map[int]struct{})
-	for _, line := range strings.Split(strings.TrimSpace(string(output)), "\n") {
-		if line == "" {
-			continue
-		}
-
-		var container struct {
-			Publishers []struct {
-				PublishedPort int `json:"PublishedPort"`
-			} `json:"Publishers"`
-		}
-		if err := json.Unmarshal([]byte(line), &container); err != nil {
-			continue
-		}
-
+	for _, container := range containers {
 		for _, pub := range container.Publishers {
 			if pub.PublishedPort != 0 {
 				owned[pub.PublishedPort] = struct{}{}

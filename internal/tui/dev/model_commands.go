@@ -61,7 +61,7 @@ func (m *Model) needStartMsg() tea.Msg {
 		return dockerNeedStartMsg{}
 	}
 
-	conflicts, err := dockerpkg.FindPortConflicts(m.commandContext(), m.projectRoot, m.dockerPorts())
+	conflicts, err := dockerpkg.FindPortConflicts(m.commandContext(), m.projectRoot, m.config.DockerPorts())
 	if err == nil && len(conflicts) > 0 {
 		return portConflictMsg{conflicts: conflicts}
 	}

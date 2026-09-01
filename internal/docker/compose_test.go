@@ -385,6 +385,37 @@ func TestGenerateComposeFile(t *testing.T) {
 		assert.Empty(t, parsed.Services["adminer"].Ports)
 	})
 
+	t.Run("custom s3 host ports", func(t *testing.T) {
+		t.Parallel()
+		lock := &composer.Lock{
+			Packages: []composer.LockPackage{
+				{Name: "shopware/core", Version: "6.6.0.0"},
+				{Name: "shopware/k8s-meta", Version: "1.0.0"},
+			},
+		}
+
+		result, err := GenerateComposeFile(lock, &ComposeOptions{
+			Ports: shop.ConfigDockerPorts{
+				shop.DockerPortS3:        19000,
+				shop.DockerPortS3Console: shop.DockerPortDisabled,
+			},
+		})
+		assert.NoError(t, err)
+
+		compose := string(result)
+		// The public media URL follows the remapped S3 port.
+		assert.Contains(t, compose, "K8S_FILESYSTEM_PUBLIC_URL: http://127.0.0.1:19000/shopware-public")
+
+		var parsed struct {
+			Services map[string]struct {
+				Ports []string `yaml:"ports"`
+			} `yaml:"services"`
+		}
+		require.NoError(t, yaml.Unmarshal(result, &parsed))
+		assert.Equal(t, []string{"19000:9000"}, parsed.Services["rustfs"].Ports,
+			"the console port is disabled and the S3 port remapped")
+	})
+
 	t.Run("custom php version", func(t *testing.T) {
 		t.Parallel()
 		lock := &composer.Lock{

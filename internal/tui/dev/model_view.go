@@ -207,9 +207,7 @@ func (m Model) renderPhase(ctx app.Context) string {
 		var card strings.Builder
 		card.WriteString(errorStyle.Render("Ports already in use"))
 		card.WriteString("\n\n")
-		for _, conflict := range m.portConflicts {
-			fmt.Fprintf(&card, "%s: port %d\n", conflict.Definition.Label, conflict.HostPort)
-		}
+		card.WriteString(portConflictLines(m.portConflicts))
 		card.WriteString("\n")
 		card.WriteString(helpStyle.Render("Press q to exit"))
 		content.WriteString(tui.RenderPhaseCard(strings.TrimRight(card.String(), "\n")))

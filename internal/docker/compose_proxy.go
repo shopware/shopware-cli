@@ -74,18 +74,6 @@ type proxyRoute struct {
 	pathPrefix string
 }
 
-// ProxiedServiceLabels maps compose service names to the human-readable label
-// shown for their proxied subdomain link (e.g. in `project proxy list`). Only
-// services with a web UI are listed; it lives here next to the routing that
-// exposes those subdomains.
-var ProxiedServiceLabels = map[string]string{
-	"adminer":    "Adminer",
-	"mailer":     "Mailpit",
-	"lavinmq":    "Queue",
-	"opensearch": "Search",
-	"rustfs":     "S3 (RustFS)",
-}
-
 // hostname returns the full hostname for this route, e.g.
 // "admin-watch.my-shop.shopware.local" or, for the root route,
 // "my-shop.shopware.local".
@@ -112,6 +100,14 @@ func publishOrRoute(svc *composeService, p *ProxyOptions, serviceName string, ho
 	addProxyRouting(svc, p, serviceName, routes...)
 }
 
+// publishOrRouteService wires a catalog-defined service for the current mode:
+// plain mode publishes the service's keyed host ports, proxy mode routes its
+// endpoint subdomains. Web uses publishOrRoute directly because its routes are
+// custom (see webProxyRoutes).
+func publishOrRouteService(svc *composeService, p *ProxyOptions, def *ServiceDefinition, opts *ComposeOptions) {
+	publishOrRoute(svc, p, def.Name, opts.portBindings(def.portKeys()...), def.proxyRoutes()...)
+}
+
 // webProxyRoutes returns the web service's routes in proxy mode: the shop root,
 // the admin watcher, and the deprecated webpack storefront watcher's three
 // endpoints (HTML proxy, asset/HMR server, and /bundles/ served from the app).
@@ -123,16 +119,16 @@ func webProxyRoutes(p *ProxyOptions) []proxyRoute {
 
 	return []proxyRoute{
 		{subdomain: "", containerPort: 8000},
-		{subdomain: "admin-watch", containerPort: p.AdminWatchPort},
+		{subdomain: SubdomainAdminWatch, containerPort: p.AdminWatchPort},
 		// The deprecated webpack storefront watcher runs two servers under one
 		// hostname: the HTML proxy on websecure and the asset+HMR server on the
 		// dedicated sfassets entrypoint.
-		{subdomain: "storefront-watch", containerPort: storefrontProxyPort},
-		{subdomain: "storefront-watch", containerPort: storefrontAssetsPort, entrypoint: storefrontAssetsEntrypoint, nameSuffix: "storefront-watch-assets"},
+		{subdomain: SubdomainStorefrontWatch, containerPort: storefrontProxyPort},
+		{subdomain: SubdomainStorefrontWatch, containerPort: storefrontAssetsPort, entrypoint: storefrontAssetsEntrypoint, nameSuffix: "storefront-watch-assets"},
 		// /bundles/ (the ESM import-map modules) must come straight from the app
 		// so they keep their JS Content-Type; the hot-proxy drops it and the
 		// browser then rejects the module. Higher priority than the route above.
-		{subdomain: "storefront-watch", pathPrefix: "/bundles/", containerPort: 8000, nameSuffix: "storefront-watch-bundles"},
+		{subdomain: SubdomainStorefrontWatch, pathPrefix: "/bundles/", containerPort: 8000, nameSuffix: "storefront-watch-bundles"},
 	}
 }
 

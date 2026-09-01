@@ -65,10 +65,6 @@ type Options struct {
 	ProxyFallback bool
 }
 
-// fallbackShopURL is the URL a proxy project is reachable at once dev falls
-// back to fixed host ports; it matches project dev's own default.
-const fallbackShopURL = "http://127.0.0.1:8000"
-
 type Model struct {
 	// ctx is the command context of the CLI invocation (cancelled on
 	// SIGINT/SIGTERM, carries the logger). tea.Cmd closures derive their
@@ -176,7 +172,7 @@ func (m *Model) rebuildTabs() {
 	}
 	if m.proxyFallback {
 		// The proxy hostname no longer routes; the shop is on a local port.
-		shopURL = fallbackShopURL
+		shopURL = shop.DefaultShopURL
 	}
 
 	var username, password string
@@ -253,14 +249,6 @@ func (m Model) initPhase() tea.Cmd {
 		return m.checkContainersRunning()
 	}
 	return m.checkShopwareInstalled()
-}
-
-// dockerPorts returns the configured host-port overrides, nil when none are set.
-func (m Model) dockerPorts() shop.ConfigDockerPorts {
-	if m.config == nil || m.config.Docker == nil {
-		return nil
-	}
-	return m.config.Docker.Ports
 }
 
 func (m *Model) shutdown() {

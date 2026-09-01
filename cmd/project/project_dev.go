@@ -168,7 +168,7 @@ var projectDevStatusCmd = &cobra.Command{
 }
 
 func runMigrationWizardTUI(ctx context.Context, projectRoot string, cfg *shop.Config) error {
-	envCfg := &shop.EnvironmentConfig{Type: "docker", URL: "http://127.0.0.1:8000"}
+	envCfg := &shop.EnvironmentConfig{Type: "docker", URL: shop.DefaultShopURL}
 	exec, err := executor.New(projectRoot, envCfg, cfg)
 	if err != nil {
 		return err
@@ -252,13 +252,6 @@ func newDevEnvironment(cmd *cobra.Command, projectRoot string, cfg *shop.Config)
 	}, nil
 }
 
-func (e *devEnvironment) dockerPorts() shop.ConfigDockerPorts {
-	if e.cfg == nil || e.cfg.Docker == nil {
-		return nil
-	}
-	return e.cfg.Docker.Ports
-}
-
 // resolvePortConflicts probes the host ports the compose file will publish.
 // Conflicting ports either abort the start (fail) or are remapped to random
 // free ports (random) and persisted to the local config override.
@@ -272,7 +265,7 @@ func (e *devEnvironment) resolvePortConflicts(ctx context.Context, mode string) 
 		return nil
 	}
 
-	conflicts, err := dockerpkg.FindPortConflicts(ctx, e.projectRoot, e.dockerPorts())
+	conflicts, err := dockerpkg.FindPortConflicts(ctx, e.projectRoot, e.cfg.DockerPorts())
 	if err != nil || len(conflicts) == 0 {
 		return err
 	}
@@ -348,22 +341,19 @@ func (e *devEnvironment) start(cmd *cobra.Command) error {
 	}
 	// After a proxy fallback the shop is on a local port, not its hostname.
 	if e.proxyFallback {
-		shopURL = defaultShopURL
+		shopURL = shop.DefaultShopURL
 	}
 
-	var services []dev.DiscoveredService
+	var services []dockerpkg.DiscoveredService
 	if e.executor.Type() == executor.TypeDocker {
-		var webPort int
-		services, webPort, _ = dev.DiscoverComposeServices(cmd.Context(), e.projectRoot)
-		shopURL = dev.ResolveShopURL(shopURL, webPort)
+		if env, err := dockerpkg.DiscoverEnvironment(cmd.Context(), e.projectRoot, proxy.RegisteredHostname(e.projectRoot)); err == nil {
+			services = env.Services
+			shopURL = dev.ResolveShopURL(shopURL, env.WebPort)
+		}
 	}
 
 	if shopURL != "" {
-		adminURL := shopURL
-		if !strings.HasSuffix(adminURL, "/") {
-			adminURL += "/"
-		}
-		adminURL += "admin"
+		adminURL := dev.DeriveAdminURL(shopURL)
 
 		fmt.Println(tui.SectionTitleStyle.Render("  Shop"))
 		fmt.Println(tui.DimText.Render("  Shop URL:  ") + tui.BoldText.Render(shopURL))

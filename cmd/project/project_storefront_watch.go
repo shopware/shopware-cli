@@ -14,6 +14,7 @@ import (
 	"github.com/shopware/shopware-cli/internal/envfile"
 	"github.com/shopware/shopware-cli/internal/executor"
 	"github.com/shopware/shopware-cli/internal/extension"
+	"github.com/shopware/shopware-cli/internal/proxy"
 	"github.com/shopware/shopware-cli/internal/shop"
 	"github.com/shopware/shopware-cli/internal/tui"
 )
@@ -61,7 +62,7 @@ var projectStorefrontWatchCmd = &cobra.Command{
 
 		// When the shop is proxied, route the webpack hot-proxy watcher through
 		// the shared proxy at its storefront-watch hostname.
-		if host := proxyHostname(projectRoot); host != "" {
+		if host := proxy.RegisteredHostname(projectRoot); host != "" {
 			opts.ProxyHostname = "storefront-watch." + host
 		}
 

@@ -120,8 +120,12 @@ func projectLinks(entry proxy.ProjectEntry, instances []proxy.Instance) []servic
 	}
 
 	for _, service := range runningServices(entry, instances) {
-		if label, ok := dockerpkg.ProxiedServiceLabels[service]; ok {
-			links = append(links, serviceLink{label: label, url: fmt.Sprintf("https://%s.%s", service, entry.Hostname)})
+		def := dockerpkg.ServiceByName(service)
+		if def == nil || def.Hidden {
+			continue
+		}
+		if url := def.ProxyURL(entry.Hostname); url != "" {
+			links = append(links, serviceLink{label: def.Label, url: url})
 		}
 	}
 
