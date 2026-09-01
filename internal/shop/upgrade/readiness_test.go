@@ -19,6 +19,43 @@ var testComposerLock = testhelper.ComposerLock(
 	testhelper.LockPackage{Name: "swag/demo", Version: "2.0.0", Type: "shopware-platform-plugin"},
 )
 
+func setupPathPluginProject(t *testing.T) string {
+	t.Helper()
+
+	pathPlugin := testhelper.PluginComposer("acme/custom-plugin", "1.0.0", `Acme\MyCustomPlugin\MyCustomPlugin`)
+	pathPlugin.Require = map[string]string{"shopware/core": "~6.7.0"}
+
+	p := testhelper.NewProject(t).
+		File("composer.json", testhelper.ComposerJSON{
+			Name: "shopware/production",
+			Require: map[string]string{
+				"shopware/core":              "6.7.3.0",
+				"shopware/deployment-helper": "*",
+				"acme/custom-plugin":         "*",
+			},
+			Repositories: []map[string]any{
+				{"type": "path", "url": "custom/static-plugins/*", "options": map[string]any{"symlink": true}},
+			},
+		}.String()).
+		File("composer.lock", testhelper.ComposerLock(
+			testhelper.LockPackage{Name: "shopware/core", Version: "v6.7.3.0"},
+			testhelper.LockPackage{
+				Name: "acme/custom-plugin", Version: "1.0.0", Type: "shopware-platform-plugin",
+				Require: map[string]string{"shopware/core": "~6.7.0"},
+				Dist:    map[string]string{"type": "path", "url": "custom/static-plugins/MyCustomPlugin"},
+			},
+		)).
+		File("custom/static-plugins/MyCustomPlugin/composer.json", pathPlugin.String()).
+		Dir("vendor/acme")
+
+	require.NoError(t, os.Symlink(
+		filepath.Join(p.Root, "custom", "static-plugins", "MyCustomPlugin"),
+		filepath.Join(p.Root, "vendor", "acme", "custom-plugin"),
+	))
+
+	return p.Root
+}
+
 func setupProject(t *testing.T) string {
 	t.Helper()
 
@@ -86,6 +123,24 @@ func TestRunReadinessChecks(t *testing.T) {
 		names[e.Name] = e.ComposerManaged
 	}
 	assert.Equal(t, map[string]bool{"Demo": true, "LocalPlugin": false}, names)
+}
+
+func TestDiscoverExtensionsPathRepositoryIsComposerManaged(t *testing.T) {
+	dir := setupPathPluginProject(t)
+
+	r := newTestUpgrader(t, dir).RunReadinessChecks(t.Context())
+
+	ext := checkByID(t, r.Checks, "extensions")
+	assert.Equal(t, StateOK, ext.State)
+	assert.Equal(t, "1 of 1", ext.Value)
+	assert.False(t, r.Blocked())
+
+	require.Len(t, r.Extensions, 1)
+	assert.Equal(t, "MyCustomPlugin", r.Extensions[0].Name)
+	assert.Equal(t, "acme/custom-plugin", r.Extensions[0].Package)
+	assert.True(t, r.Extensions[0].ComposerManaged)
+	assert.True(t, r.Extensions[0].PathInstalled)
+	assert.Equal(t, "~6.7.0", r.Extensions[0].Require["shopware/core"])
 }
 
 func TestReadinessAllExtensionsComposerManaged(t *testing.T) {

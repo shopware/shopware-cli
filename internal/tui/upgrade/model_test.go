@@ -591,6 +591,27 @@ func TestPreparePanelComposerBlocked(t *testing.T) {
 	assert.Equal(t, panelPrepare, w.m.panel)
 }
 
+func TestExtensionDetailPathInstalledBlocked(t *testing.T) {
+	result := backend.ExtensionResult{
+		Extension: backend.InstalledExtension{
+			Name:            "MyCustomPlugin",
+			Package:         "acme/custom-plugin",
+			Version:         "1.0.0",
+			ComposerManaged: true,
+			PathInstalled:   true,
+			Path:            "custom/static-plugins/MyCustomPlugin",
+		},
+		Status: backend.ExtBlocked,
+		Detail: "The installed package requires shopware/core ~6.6.0, which does not allow Shopware 6.7.11.0.",
+	}
+	detail := newExtensionDetail(result, "Target 6.7.11.0")
+	content := ansi.Strip(detail.View(110, 34))
+	assert.Contains(t, content, "Blocked local extension")
+	assert.Contains(t, content, "Update the plugin's shopware/core constraint")
+	assert.Contains(t, content, "custom/static-plugins/MyCustomPlug")
+	assert.NotContains(t, content, "Ask the vendor for a compatible release")
+}
+
 func TestExtensionDetailOverlay(t *testing.T) {
 	// A failed resolve keeps the metadata blocker (a successful one would
 	// disprove and downgrade it).
