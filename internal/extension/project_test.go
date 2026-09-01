@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	"github.com/shopware/shopware-cli/internal/shop"
+	"github.com/shopware/shopware-cli/internal/testhelper"
 )
 
 func TestGetShopwareProjectConstraintComposerJson(t *testing.T) {
@@ -130,14 +131,7 @@ final public const SHOPWARE_FALLBACK_VERSION = '6.6.9999999.9999999-dev';
 			tmpDir := t.TempDir()
 
 			for file, content := range tc.Files {
-				tmpFile := filepath.Join(tmpDir, file)
-				parentDir := filepath.Dir(tmpFile)
-
-				if _, err := os.Stat(parentDir); os.IsNotExist(err) {
-					assert.NoError(t, os.MkdirAll(parentDir, 0o755))
-				}
-
-				assert.NoError(t, os.WriteFile(tmpFile, []byte(content), 0o644))
+				testhelper.WriteFile(t, filepath.Join(tmpDir, file), content)
 			}
 
 			constraint, err := GetShopwareProjectConstraint(tmpDir)
@@ -156,10 +150,10 @@ final public const SHOPWARE_FALLBACK_VERSION = '6.6.9999999.9999999-dev';
 }
 
 func TestFindAssetSourcesOfProjectYAMLBundles(t *testing.T) {
-	tmpDir := t.TempDir()
-
 	// Minimal composer.json without extra bundles
-	assert.NoError(t, os.WriteFile(filepath.Join(tmpDir, "composer.json"), []byte(`{"require": {"shopware/core": "~6.6.0"}}`), 0o644))
+	tmpDir := testhelper.ExtensionDir(t, testhelper.ComposerJSON{
+		Require: map[string]string{"shopware/core": "~6.6.0"},
+	})
 
 	// Create the bundle directory
 	assert.NoError(t, os.MkdirAll(filepath.Join(tmpDir, "src", "MyBundle"), 0o755))
@@ -189,9 +183,9 @@ func TestFindAssetSourcesOfProjectYAMLBundles(t *testing.T) {
 }
 
 func TestFindAssetSourcesOfProjectYAMLBundleNameOverride(t *testing.T) {
-	tmpDir := t.TempDir()
-
-	assert.NoError(t, os.WriteFile(filepath.Join(tmpDir, "composer.json"), []byte(`{"require": {"shopware/core": "~6.6.0"}}`), 0o644))
+	tmpDir := testhelper.ExtensionDir(t, testhelper.ComposerJSON{
+		Require: map[string]string{"shopware/core": "~6.6.0"},
+	})
 	assert.NoError(t, os.MkdirAll(filepath.Join(tmpDir, "src", "MyBundle"), 0o755))
 
 	shopCfg := &shop.Config{
@@ -214,13 +208,11 @@ func TestFindAssetSourcesOfProjectYAMLBundleNameOverride(t *testing.T) {
 }
 
 func TestFindAssetSourcesOfProjectYAMLBundleDeduplication(t *testing.T) {
-	tmpDir := t.TempDir()
-
 	// composer.json declares the same bundle path
-	assert.NoError(t, os.WriteFile(filepath.Join(tmpDir, "composer.json"), []byte(`{
-		"require": {"shopware/core": "~6.6.0"},
-		"extra": {"shopware-bundles": {"src/MyBundle": {"name": "MyBundle"}}}
-	}`), 0o644))
+	tmpDir := testhelper.ExtensionDir(t, testhelper.ComposerJSON{
+		Require: map[string]string{"shopware/core": "~6.6.0"},
+		Extra:   map[string]any{"shopware-bundles": map[string]any{"src/MyBundle": map[string]string{"name": "MyBundle"}}},
+	})
 	assert.NoError(t, os.MkdirAll(filepath.Join(tmpDir, "src", "MyBundle"), 0o755))
 
 	shopCfg := &shop.Config{

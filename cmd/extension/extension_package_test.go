@@ -7,25 +7,29 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/shopware/shopware-cli/internal/testhelper"
 )
 
 func TestPackageDoesNotDeleteUnrelatedZipsInWorkingDirectory(t *testing.T) {
 	extDir := t.TempDir()
-	require.NoError(t, os.WriteFile(filepath.Join(extDir, "composer.json"), []byte(`{
-			"name": "frosh/frosh-test",
-			"type": "shopware-platform-plugin",
-			"license": "MIT",
-			"version": "1.0.0",
-			"require": { "shopware/core": "~6.6.0" },
-			"autoload": { "psr-4": { "FroshTest\\": "src/" } },
-			"extra": {
-				"shopware-plugin-class": "FroshTest\\FroshTest",
-				"label": { "de-DE": "Test", "en-GB": "Test" }
-			}
-		}`), 0o644))
-	require.NoError(t, os.WriteFile(filepath.Join(extDir, ".shopware-extension.yml"), []byte(
-		"build:\n  zip:\n    composer:\n      enabled: false\n    assets:\n      enabled: false\n",
-	), 0o644))
+	testhelper.WriteFile(t, filepath.Join(extDir, "composer.json"), testhelper.ComposerJSON{
+		Name:        "frosh/frosh-test",
+		Type:        "shopware-platform-plugin",
+		License:     "MIT",
+		Version:     "1.0.0",
+		Require:     map[string]string{"shopware/core": "~6.6.0"},
+		PluginClass: `FroshTest\FroshTest`,
+		Label:       map[string]string{"de-DE": "Test", "en-GB": "Test"},
+		Psr4:        map[string]string{`FroshTest\`: "src/"},
+	}.String())
+	testhelper.WriteFile(t, filepath.Join(extDir, ".shopware-extension.yml"), `build:
+  zip:
+    composer:
+      enabled: false
+    assets:
+      enabled: false
+`)
 
 	workDir := t.TempDir()
 	decoyBackup := filepath.Join(workDir, "FroshTest-backup-2024.zip")

@@ -18,6 +18,7 @@ import (
 	adminSdk "github.com/shopware/shopware-cli/internal/admin-api"
 	"github.com/shopware/shopware-cli/internal/executor"
 	"github.com/shopware/shopware-cli/internal/shop"
+	"github.com/shopware/shopware-cli/internal/testhelper"
 )
 
 // fakeExecutor satisfies executor.Executor and lets each test decide which
@@ -62,52 +63,22 @@ func (f *fakeExecutor) AdminAPIClient(context.Context) (*adminSdk.Client, error)
 }
 func (f *fakeExecutor) ShopConfig() *shop.Config { return nil }
 
-func writeFile(t *testing.T, path, content string) {
-	t.Helper()
-	require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o755))
-	require.NoError(t, os.WriteFile(path, []byte(content), 0o644))
-}
-
 // setupProject creates a project with one Store plugin and one local plugin
 // in custom/plugins, plus a vendor extension Composer already manages.
 func setupProject(t *testing.T) string {
 	t.Helper()
-	dir := t.TempDir()
 
-	writeFile(t, filepath.Join(dir, "composer.json"), `{
-		"name": "shopware/production",
-		"require": {"shopware/core": "6.6.10.3"}
-	}`)
-	writeFile(t, filepath.Join(dir, "composer.lock"), `{"packages": [], "packages-dev": []}`)
+	p := testhelper.NewProject(t).
+		File("composer.json", testhelper.ComposerJSON{
+			Name:    "shopware/production",
+			Require: map[string]string{"shopware/core": "6.6.10.3"},
+		}.String()).
+		File("composer.lock", testhelper.ComposerLock()).
+		VendorPackage("swag/demo", testhelper.PluginComposer("swag/demo", "2.0.0", `Swag\Demo\Demo`)).
+		CustomPlugin("StorePlugin", testhelper.PluginComposer("swag/store-plugin", "3.1.0", `Swag\StorePlugin\StorePlugin`)).
+		CustomPlugin("LocalPlugin", testhelper.PluginComposer("acme/local-plugin", "1.0.0", `Acme\LocalPlugin\LocalPlugin`))
 
-	writeFile(t, filepath.Join(dir, "vendor", "swag", "demo", "composer.json"), `{
-		"name": "swag/demo",
-		"type": "shopware-platform-plugin",
-		"version": "2.0.0",
-		"require": {"shopware/core": "~6.6.0"},
-		"extra": {"shopware-plugin-class": "Swag\\Demo\\Demo", "label": {"en-GB": "Demo"}},
-		"autoload": {"psr-4": {"Swag\\Demo\\": "src/"}}
-	}`)
-
-	writeFile(t, filepath.Join(dir, "custom", "plugins", "StorePlugin", "composer.json"), `{
-		"name": "swag/store-plugin",
-		"type": "shopware-platform-plugin",
-		"version": "3.1.0",
-		"require": {"shopware/core": "~6.6.0"},
-		"extra": {"shopware-plugin-class": "Swag\\StorePlugin\\StorePlugin", "label": {"en-GB": "Store"}},
-		"autoload": {"psr-4": {"Swag\\StorePlugin\\": "src/"}}
-	}`)
-
-	writeFile(t, filepath.Join(dir, "custom", "plugins", "LocalPlugin", "composer.json"), `{
-		"name": "acme/local-plugin",
-		"type": "shopware-platform-plugin",
-		"version": "1.0.0",
-		"require": {"shopware/core": "~6.6.0"},
-		"extra": {"shopware-plugin-class": "Acme\\LocalPlugin\\LocalPlugin", "label": {"en-GB": "Local"}},
-		"autoload": {"psr-4": {"Acme\\LocalPlugin\\": "src/"}}
-	}`)
-
-	return dir
+	return p.Root
 }
 
 func trueExecutor() *fakeExecutor {
@@ -301,7 +272,7 @@ func TestFetchPublishedVersionsUsesConfiguredRepository(t *testing.T) {
 	defer srv.Close()
 
 	dir := t.TempDir()
-	writeFile(t, filepath.Join(dir, "composer.json"), `{
+	testhelper.WriteFile(t, filepath.Join(dir, "composer.json"), `{
 		"require": {"shopware/core": "6.6.10.3"},
 		"repositories": [{"type": "composer", "url": "`+srv.URL+`"}]
 	}`)
@@ -379,7 +350,7 @@ func TestRunPluginRefreshFailureIsNonFatal(t *testing.T) {
 
 func TestBackupRestrictsSensitiveFilePermissions(t *testing.T) {
 	dir := setupProject(t)
-	writeFile(t, filepath.Join(dir, "auth.json"), `{"bearer": {"packages.shopware.com": "secret"}}`)
+	testhelper.WriteFile(t, filepath.Join(dir, "auth.json"), `{"bearer": {"packages.shopware.com": "secret"}}`)
 	m := NewPluginMigrator(dir, nil)
 	t.Cleanup(func() { _ = os.RemoveAll(m.backupDir()) })
 
@@ -492,15 +463,11 @@ func TestRunHeadlessFailingRequireReportsRestore(t *testing.T) {
 
 func TestRunHeadlessNothingActionable(t *testing.T) {
 	dir := t.TempDir()
-	writeFile(t, filepath.Join(dir, "composer.json"), `{"require": {"shopware/core": "6.6.10.3"}}`)
+	testhelper.WriteFile(t, filepath.Join(dir, "composer.json"),
+		testhelper.ComposerJSON{Require: map[string]string{"shopware/core": "6.6.10.3"}}.String())
 	// An extension without a composer package name cannot be migrated.
-	writeFile(t, filepath.Join(dir, "custom", "plugins", "Broken", "composer.json"), `{
-		"type": "shopware-platform-plugin",
-		"version": "1.0.0",
-		"require": {"shopware/core": "~6.6.0"},
-		"extra": {"shopware-plugin-class": "Broken\\Broken", "label": {"en-GB": "Broken"}},
-		"autoload": {"psr-4": {"Broken\\": "src/"}}
-	}`)
+	testhelper.WriteFile(t, filepath.Join(dir, "custom", "plugins", "Broken", "composer.json"),
+		testhelper.PluginComposer("", "1.0.0", `Broken\Broken`).String())
 	m := headlessMigrator(dir, trueExecutor(), nil, nil)
 
 	var out bytes.Buffer

@@ -8,25 +8,12 @@ import (
 	"github.com/shyim/go-version"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/shopware/shopware-cli/internal/testhelper"
 )
 
 func TestGetExtensionByFolder_DetectsApp(t *testing.T) {
-	tmpDir := t.TempDir()
-
-	// Create manifest.xml for an App
-	manifestContent := `<?xml version="1.0" encoding="UTF-8"?>
-<manifest xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="https://raw.githubusercontent.com/shopware/shopware/trunk/src/Core/Framework/App/Manifest/Schema/manifest-2.0.xsd">
-    <meta>
-        <name>TestApp</name>
-        <label>Test App</label>
-        <description>A test app</description>
-        <author>Test Author</author>
-        <copyright>(c) Test</copyright>
-        <version>1.0.0</version>
-        <license>MIT</license>
-    </meta>
-</manifest>`
-	require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "manifest.xml"), []byte(manifestContent), 0644))
+	tmpDir := testhelper.NewApp(t, "TestApp")
 
 	ext, err := GetExtensionByFolder(t.Context(), tmpDir)
 	require.NoError(t, err)
@@ -38,45 +25,24 @@ func TestGetExtensionByFolder_DetectsApp(t *testing.T) {
 }
 
 func TestGetExtensionByFolder_DetectsPlatformPlugin(t *testing.T) {
-	tmpDir := t.TempDir()
-
 	// Create composer.json for a PlatformPlugin
-	composerContent := `{
-    "name": "test/test-plugin",
-    "type": "shopware-platform-plugin",
-    "version": "1.0.0",
-    "license": "MIT",
-    "description": "Test plugin",
-    "authors": [{"name": "Test"}],
-    "require": {
-        "shopware/core": "~6.5.0"
-    },
-    "autoload": {
-        "psr-4": {
-            "Test\\TestPlugin\\": "src/"
-        }
-    },
-    "extra": {
-        "shopware-plugin-class": "Test\\TestPlugin\\TestPlugin",
-        "label": {
-            "de-DE": "Test Plugin",
-            "en-GB": "Test Plugin"
-        },
-        "description": {
-            "de-DE": "Ein Test Plugin",
-            "en-GB": "A test plugin"
-        },
-        "manufacturerLink": {
-            "de-DE": "https://example.com",
-            "en-GB": "https://example.com"
-        },
-        "supportLink": {
-            "de-DE": "https://example.com/support",
-            "en-GB": "https://example.com/support"
-        }
-    }
-}`
-	require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "composer.json"), []byte(composerContent), 0644))
+	tmpDir := testhelper.ExtensionDir(t, testhelper.ComposerJSON{
+		Name:        "test/test-plugin",
+		Type:        "shopware-platform-plugin",
+		Version:     "1.0.0",
+		License:     "MIT",
+		Description: "Test plugin",
+		Authors:     []string{"Test"},
+		Require:     map[string]string{"shopware/core": "~6.5.0"},
+		Psr4:        map[string]string{`Test\TestPlugin\`: "src/"},
+		PluginClass: `Test\TestPlugin\TestPlugin`,
+		Label:       map[string]string{"de-DE": "Test Plugin", "en-GB": "Test Plugin"},
+		Extra: map[string]any{
+			"description":      map[string]string{"de-DE": "Ein Test Plugin", "en-GB": "A test plugin"},
+			"manufacturerLink": map[string]string{"de-DE": "https://example.com", "en-GB": "https://example.com"},
+			"supportLink":      map[string]string{"de-DE": "https://example.com/support", "en-GB": "https://example.com/support"},
+		},
+	})
 
 	ext, err := GetExtensionByFolder(t.Context(), tmpDir)
 	require.NoError(t, err)
@@ -88,27 +54,16 @@ func TestGetExtensionByFolder_DetectsPlatformPlugin(t *testing.T) {
 }
 
 func TestGetExtensionByFolder_DetectsShopwareBundle(t *testing.T) {
-	tmpDir := t.TempDir()
-
 	// Create composer.json for a ShopwareBundle
-	composerContent := `{
-    "name": "test/test-bundle",
-    "type": "shopware-bundle",
-    "version": "1.0.0",
-    "license": "MIT",
-    "require": {
-        "shopware/core": "~6.5.0"
-    },
-    "autoload": {
-        "psr-4": {
-            "Test\\TestBundle\\": "src/"
-        }
-    },
-    "extra": {
-        "shopware-bundle-name": "TestBundle"
-    }
-}`
-	require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "composer.json"), []byte(composerContent), 0644))
+	tmpDir := testhelper.ExtensionDir(t, testhelper.ComposerJSON{
+		Name:    "test/test-bundle",
+		Type:    "shopware-bundle",
+		Version: "1.0.0",
+		License: "MIT",
+		Require: map[string]string{"shopware/core": "~6.5.0"},
+		Psr4:    map[string]string{`Test\TestBundle\`: "src/"},
+		Extra:   map[string]any{"shopware-bundle-name": "TestBundle"},
+	})
 
 	ext, err := GetExtensionByFolder(t.Context(), tmpDir)
 	require.NoError(t, err)
@@ -140,29 +95,14 @@ func TestGetExtensionByFolder_RejectsUnknownType(t *testing.T) {
 }
 
 func TestGetExtensionByFolder_PrefersManifestOverComposer(t *testing.T) {
-	tmpDir := t.TempDir()
-
 	// Create both manifest.xml and composer.json
-	manifestContent := `<?xml version="1.0" encoding="UTF-8"?>
-<manifest xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="https://raw.githubusercontent.com/shopware/shopware/trunk/src/Core/Framework/App/Manifest/Schema/manifest-2.0.xsd">
-    <meta>
-        <name>TestApp</name>
-        <label>Test App</label>
-        <description>A test app</description>
-        <author>Test Author</author>
-        <copyright>(c) Test</copyright>
-        <version>1.0.0</version>
-        <license>MIT</license>
-    </meta>
-</manifest>`
-	require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "manifest.xml"), []byte(manifestContent), 0644))
+	tmpDir := testhelper.NewApp(t, "TestApp")
 
-	composerContent := `{
-    "name": "test/test-plugin",
-    "type": "shopware-platform-plugin",
-    "version": "1.0.0"
-}`
-	require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "composer.json"), []byte(composerContent), 0644))
+	testhelper.WriteFile(t, filepath.Join(tmpDir, "composer.json"), testhelper.ComposerJSON{
+		Name:    "test/test-plugin",
+		Type:    "shopware-platform-plugin",
+		Version: "1.0.0",
+	}.String())
 
 	ext, err := GetExtensionByFolder(t.Context(), tmpDir)
 	require.NoError(t, err)
@@ -171,36 +111,21 @@ func TestGetExtensionByFolder_PrefersManifestOverComposer(t *testing.T) {
 }
 
 func TestUpdateMetaData_PlatformPlugin(t *testing.T) {
-	tmpDir := t.TempDir()
-
-	composerContent := `{
-  "name": "test/test-plugin",
-  "type": "shopware-platform-plugin",
-  "version": "1.0.0",
-  "license": "MIT",
-  "description": "Test plugin",
-  "authors": [{"name": "Test"}],
-  "require": {
-    "shopware/core": "~6.5.0"
-  },
-  "autoload": {
-    "psr-4": {
-      "Test\\TestPlugin\\": "src/"
-    }
-  },
-  "extra": {
-    "shopware-plugin-class": "Test\\TestPlugin\\TestPlugin",
-    "label": {
-      "de-DE": "Altes Label DE",
-      "en-GB": "Old Label EN"
-    },
-    "description": {
-      "de-DE": "Alte Beschreibung",
-      "en-GB": "Old description"
-    }
-  }
-}`
-	require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "composer.json"), []byte(composerContent), 0644))
+	tmpDir := testhelper.ExtensionDir(t, testhelper.ComposerJSON{
+		Name:        "test/test-plugin",
+		Type:        "shopware-platform-plugin",
+		Version:     "1.0.0",
+		License:     "MIT",
+		Description: "Test plugin",
+		Authors:     []string{"Test"},
+		Require:     map[string]string{"shopware/core": "~6.5.0"},
+		Psr4:        map[string]string{`Test\TestPlugin\`: "src/"},
+		PluginClass: `Test\TestPlugin\TestPlugin`,
+		Label:       map[string]string{"de-DE": "Altes Label DE", "en-GB": "Old Label EN"},
+		Extra: map[string]any{
+			"description": map[string]string{"de-DE": "Alte Beschreibung", "en-GB": "Old description"},
+		},
+	})
 
 	ext, err := GetExtensionByFolder(t.Context(), tmpDir)
 	require.NoError(t, err)

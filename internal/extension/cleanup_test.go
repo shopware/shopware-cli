@@ -7,6 +7,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/shopware/shopware-cli/internal/testhelper"
 )
 
 func TestCleanupExtensionFolder_RemovesDefaultNotAllowedPaths(t *testing.T) {
@@ -25,16 +27,15 @@ func TestCleanupExtensionFolder_RemovesDefaultNotAllowedPaths(t *testing.T) {
 	for _, p := range pathsToCreate {
 		fullPath := filepath.Join(tmpDir, p)
 		if filepath.Ext(p) == "" && !contains([]string{"phpstan.neon", "Makefile"}, p) {
-			require.NoError(t, os.MkdirAll(fullPath, 0755))
 			// Add a file inside directories
-			require.NoError(t, os.WriteFile(filepath.Join(fullPath, "test.txt"), []byte("test"), 0644))
+			testhelper.WriteFile(t, filepath.Join(fullPath, "test.txt"), "test")
 		} else {
-			require.NoError(t, os.WriteFile(fullPath, []byte("test"), 0644))
+			testhelper.WriteFile(t, fullPath, "test")
 		}
 	}
 
 	// Create a file that should remain
-	require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "composer.json"), []byte("{}"), 0644))
+	testhelper.WriteFile(t, filepath.Join(tmpDir, "composer.json"), "{}")
 
 	err := CleanupExtensionFolder(tmpDir, nil)
 	require.NoError(t, err)
@@ -53,9 +54,7 @@ func TestCleanupExtensionFolder_RemovesDefaultNotAllowedPaths(t *testing.T) {
 func TestCleanupExtensionFolder_RemovesNotAllowedFilesInSubdirectories(t *testing.T) {
 	tmpDir := t.TempDir()
 
-	// Create subdirectory structure
 	subDir := filepath.Join(tmpDir, "src", "Resources")
-	require.NoError(t, os.MkdirAll(subDir, 0755))
 
 	// Create not-allowed files in subdirectories
 	notAllowedFiles := []string{
@@ -67,11 +66,11 @@ func TestCleanupExtensionFolder_RemovesNotAllowedFilesInSubdirectories(t *testin
 	}
 
 	for _, f := range notAllowedFiles {
-		require.NoError(t, os.WriteFile(f, []byte("test"), 0644))
+		testhelper.WriteFile(t, f, "test")
 	}
 
 	// Create a file that should remain
-	require.NoError(t, os.WriteFile(filepath.Join(subDir, "index.js"), []byte("test"), 0644))
+	testhelper.WriteFile(t, filepath.Join(subDir, "index.js"), "test")
 
 	err := CleanupExtensionFolder(tmpDir, nil)
 	require.NoError(t, err)
@@ -99,11 +98,11 @@ func TestCleanupExtensionFolder_RemovesNotAllowedExtensions(t *testing.T) {
 	}
 
 	for _, f := range notAllowedExtFiles {
-		require.NoError(t, os.WriteFile(filepath.Join(tmpDir, f), []byte("test"), 0644))
+		testhelper.WriteFile(t, filepath.Join(tmpDir, f), "test")
 	}
 
 	// Create a file that should remain
-	require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "main.js"), []byte("test"), 0644))
+	testhelper.WriteFile(t, filepath.Join(tmpDir, "main.js"), "test")
 
 	err := CleanupExtensionFolder(tmpDir, nil)
 	require.NoError(t, err)
@@ -129,13 +128,11 @@ func TestCleanupExtensionFolder_WithAdditionalPaths(t *testing.T) {
 	}
 
 	for _, p := range customPaths {
-		fullPath := filepath.Join(tmpDir, p)
-		require.NoError(t, os.MkdirAll(fullPath, 0755))
-		require.NoError(t, os.WriteFile(filepath.Join(fullPath, "file.txt"), []byte("test"), 0644))
+		testhelper.WriteFile(t, filepath.Join(tmpDir, p, "file.txt"), "test")
 	}
 
 	// Create a file that should remain
-	require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "src.js"), []byte("test"), 0644))
+	testhelper.WriteFile(t, filepath.Join(tmpDir, "src.js"), "test")
 
 	err := CleanupExtensionFolder(tmpDir, customPaths)
 	require.NoError(t, err)
@@ -176,8 +173,7 @@ func TestCleanupExtensionFolder_NestedNodeModules(t *testing.T) {
 
 	// Create nested node_modules that matches default path
 	nestedPath := filepath.Join(tmpDir, "src", "Resources", "app", "administration", "node_modules")
-	require.NoError(t, os.MkdirAll(nestedPath, 0755))
-	require.NoError(t, os.WriteFile(filepath.Join(nestedPath, "package.json"), []byte("{}"), 0644))
+	testhelper.WriteFile(t, filepath.Join(nestedPath, "package.json"), "{}")
 
 	err := CleanupExtensionFolder(tmpDir, nil)
 	require.NoError(t, err)

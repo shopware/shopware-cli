@@ -2,11 +2,12 @@ package verifier
 
 import (
 	"context"
-	"os"
 	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+
+	"github.com/shopware/shopware-cli/internal/testhelper"
 )
 
 // stubShopwareVersions replaces the network-backed version lookup with a
@@ -26,71 +27,63 @@ build:
     - path: src/MyBundle
 `
 
+var testProjectComposerJSON = testhelper.ComposerJSON{
+	Type:    "project",
+	Require: map[string]string{"shopware/core": "~6.6.0"},
+}
+
 func TestGetConfigFromProjectYAMLBundles(t *testing.T) {
 	stubShopwareVersions(t)
-	tmpDir := t.TempDir()
-
-	// Minimal composer.json with shopware/core requirement
-	assert.NoError(t, os.WriteFile(filepath.Join(tmpDir, "composer.json"), []byte(`{
-		"type": "project",
-		"require": {"shopware/core": "~6.6.0"}
-	}`), 0o644))
+	p := testhelper.NewProject(t).
+		File("composer.json", testProjectComposerJSON.String()).
+		File(".shopware-project.yml", testProjectYAMLSingleBundle)
 
 	// Create bundle directory with an admin subfolder
-	adminPath := filepath.Join(tmpDir, "src", "MyBundle", "Resources", "app", "administration")
-	assert.NoError(t, os.MkdirAll(adminPath, 0o755))
+	p.Dir("src/MyBundle/Resources/app/administration")
+	adminPath := filepath.Join(p.Root, "src", "MyBundle", "Resources", "app", "administration")
 
-	// Write .shopware-project.yml with the bundle declared
-	assert.NoError(t, os.WriteFile(filepath.Join(tmpDir, ".shopware-project.yml"), []byte(testProjectYAMLSingleBundle), 0o644))
-
-	cfg, err := GetConfigFromProject(tmpDir, true)
+	cfg, err := GetConfigFromProject(p.Root, true)
 	assert.NoError(t, err)
 
-	assert.Contains(t, cfg.SourceDirectories, filepath.Join(tmpDir, "src", "MyBundle"))
+	assert.Contains(t, cfg.SourceDirectories, filepath.Join(p.Root, "src", "MyBundle"))
 	assert.Contains(t, cfg.AdminDirectories, adminPath)
 }
 
 func TestGetConfigFromProjectYAMLBundleStorefront(t *testing.T) {
 	stubShopwareVersions(t)
-	tmpDir := t.TempDir()
-
-	assert.NoError(t, os.WriteFile(filepath.Join(tmpDir, "composer.json"), []byte(`{
-		"type": "project",
-		"require": {"shopware/core": "~6.6.0"}
-	}`), 0o644))
+	p := testhelper.NewProject(t).
+		File("composer.json", testProjectComposerJSON.String()).
+		File(".shopware-project.yml", testProjectYAMLSingleBundle)
 
 	// Create bundle directory with a storefront subfolder only
-	storefrontPath := filepath.Join(tmpDir, "src", "MyBundle", "Resources", "app", "storefront")
-	assert.NoError(t, os.MkdirAll(storefrontPath, 0o755))
+	p.Dir("src/MyBundle/Resources/app/storefront")
+	storefrontPath := filepath.Join(p.Root, "src", "MyBundle", "Resources", "app", "storefront")
 
-	assert.NoError(t, os.WriteFile(filepath.Join(tmpDir, ".shopware-project.yml"), []byte(testProjectYAMLSingleBundle), 0o644))
-
-	cfg, err := GetConfigFromProject(tmpDir, true)
+	cfg, err := GetConfigFromProject(p.Root, true)
 	assert.NoError(t, err)
 
-	assert.Contains(t, cfg.SourceDirectories, filepath.Join(tmpDir, "src", "MyBundle"))
+	assert.Contains(t, cfg.SourceDirectories, filepath.Join(p.Root, "src", "MyBundle"))
 	assert.Contains(t, cfg.StorefrontDirectories, storefrontPath)
 }
 
 func TestGetConfigFromProjectYAMLBundleDeduplication(t *testing.T) {
 	stubShopwareVersions(t)
-	tmpDir := t.TempDir()
 
-	// composer.json declares the same bundle
-	assert.NoError(t, os.WriteFile(filepath.Join(tmpDir, "composer.json"), []byte(`{
-		"type": "project",
-		"require": {"shopware/core": "~6.6.0"},
-		"extra": {"shopware-bundles": {"src/MyBundle": {"name": "MyBundle"}}}
-	}`), 0o644))
+	// composer.json declares the same bundle as the YAML config
+	bundleComposer := testProjectComposerJSON
+	bundleComposer.Extra = map[string]any{
+		"shopware-bundles": map[string]any{"src/MyBundle": map[string]string{"name": "MyBundle"}},
+	}
+	p := testhelper.NewProject(t).
+		File("composer.json", bundleComposer.String()).
+		File(".shopware-project.yml", testProjectYAMLSingleBundle)
 
-	assert.NoError(t, os.MkdirAll(filepath.Join(tmpDir, "src", "MyBundle"), 0o755))
+	p.Dir("src/MyBundle")
 
-	assert.NoError(t, os.WriteFile(filepath.Join(tmpDir, ".shopware-project.yml"), []byte(testProjectYAMLSingleBundle), 0o644))
-
-	cfg, err := GetConfigFromProject(tmpDir, true)
+	cfg, err := GetConfigFromProject(p.Root, true)
 	assert.NoError(t, err)
 
-	bundleSrcPath := filepath.Join(tmpDir, "src", "MyBundle")
+	bundleSrcPath := filepath.Join(p.Root, "src", "MyBundle")
 	count := 0
 	for _, d := range cfg.SourceDirectories {
 		if d == bundleSrcPath {

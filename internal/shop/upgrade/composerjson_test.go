@@ -8,21 +8,23 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/shopware/shopware-cli/internal/testhelper"
 )
 
 func TestRewriteComposerJSON(t *testing.T) {
 	dir := t.TempDir()
-	writeFile(t, filepath.Join(dir, "composer.json"), `{
-		"name": "shopware/production",
-		"require": {
+	testhelper.WriteFile(t, filepath.Join(dir, "composer.json"), testhelper.ComposerJSON{
+		Name: "shopware/production",
+		Require: map[string]string{
 			"shopware/administration": "6.6.10.3",
-			"shopware/core": "6.6.10.3",
-			"shopware/storefront": "6.6.10.3",
-			"swag/demo": "^2.0",
-			"symfony/flex": "~2"
-		}
-	}`)
-	writeFile(t, filepath.Join(dir, "composer.lock"), testComposerLock)
+			"shopware/core":           "6.6.10.3",
+			"shopware/storefront":     "6.6.10.3",
+			"swag/demo":               "^2.0",
+			"symfony/flex":            "~2",
+		},
+	}.String())
+	testhelper.WriteFile(t, filepath.Join(dir, "composer.lock"), testComposerLock)
 
 	changes, err := newTestUpgrader(t, dir).RewriteComposerJSON("6.7.11.0", map[string]string{"swag/demo": "2.1.3"})
 	require.NoError(t, err)
@@ -58,8 +60,8 @@ func TestRenderUpgradeManifestLeavesProjectUntouched(t *testing.T) {
 		"name": "shopware/production",
 		"require": {"shopware/core": "6.6.10.3", "shopware/deployment-helper": "*"}
 	}`
-	writeFile(t, filepath.Join(dir, "composer.json"), original)
-	writeFile(t, filepath.Join(dir, "composer.lock"), `{"packages": [], "packages-dev": []}`)
+	testhelper.WriteFile(t, filepath.Join(dir, "composer.json"), original)
+	testhelper.WriteFile(t, filepath.Join(dir, "composer.lock"), testhelper.ComposerLock())
 
 	manifest, err := newTestUpgrader(t, dir).renderUpgradeManifest("6.7.11.0")
 	require.NoError(t, err)
@@ -77,11 +79,11 @@ func TestRenderUpgradeManifestLeavesProjectUntouched(t *testing.T) {
 
 func TestRewriteComposerJSONWithoutResolvedVersions(t *testing.T) {
 	dir := t.TempDir()
-	writeFile(t, filepath.Join(dir, "composer.json"), `{
-		"name": "shopware/production",
-		"require": {"shopware/core": "6.6.10.3", "shopware/deployment-helper": "*", "swag/demo": "^2.0"}
-	}`)
-	writeFile(t, filepath.Join(dir, "composer.lock"), testComposerLock)
+	testhelper.WriteFile(t, filepath.Join(dir, "composer.json"), testhelper.ComposerJSON{
+		Name:    "shopware/production",
+		Require: map[string]string{"shopware/core": "6.6.10.3", "shopware/deployment-helper": "*", "swag/demo": "^2.0"},
+	}.String())
+	testhelper.WriteFile(t, filepath.Join(dir, "composer.lock"), testComposerLock)
 
 	changes, err := newTestUpgrader(t, dir).RewriteComposerJSON("6.7.11.0", nil)
 	require.NoError(t, err)
@@ -90,14 +92,11 @@ func TestRewriteComposerJSONWithoutResolvedVersions(t *testing.T) {
 
 func TestRewriteComposerJSONDoesNotMoveRequireDevPackages(t *testing.T) {
 	dir := t.TempDir()
-	writeFile(t, filepath.Join(dir, "composer.json"), `{
-		"name": "shopware/production",
-		"require-dev": {
-			"shopware/core": "6.6.10.3",
-			"swag/demo": "^2.0"
-		}
-	}`)
-	writeFile(t, filepath.Join(dir, "composer.lock"), testComposerLock)
+	testhelper.WriteFile(t, filepath.Join(dir, "composer.json"), testhelper.ComposerJSON{
+		Name:       "shopware/production",
+		RequireDev: map[string]string{"shopware/core": "6.6.10.3", "swag/demo": "^2.0"},
+	}.String())
+	testhelper.WriteFile(t, filepath.Join(dir, "composer.lock"), testComposerLock)
 
 	changes, err := newTestUpgrader(t, dir).RewriteComposerJSON("6.7.11.0", map[string]string{"swag/demo": "2.1.3"})
 	require.NoError(t, err)
@@ -124,11 +123,11 @@ func TestLockNameFor(t *testing.T) {
 
 func TestRewriteComposerJSONLeavesAuditConfigUntouched(t *testing.T) {
 	dir := t.TempDir()
-	writeFile(t, filepath.Join(dir, "composer.json"), `{
-		"name": "shopware/production",
-		"require": {"shopware/core": "6.6.10.3", "shopware/deployment-helper": "*"}
-	}`)
-	writeFile(t, filepath.Join(dir, "composer.lock"), testComposerLock)
+	testhelper.WriteFile(t, filepath.Join(dir, "composer.json"), testhelper.ComposerJSON{
+		Name:    "shopware/production",
+		Require: map[string]string{"shopware/core": "6.6.10.3", "shopware/deployment-helper": "*"},
+	}.String())
+	testhelper.WriteFile(t, filepath.Join(dir, "composer.lock"), testComposerLock)
 
 	u := newTestUpgrader(t, dir)
 	u.DisableAuditBlock()

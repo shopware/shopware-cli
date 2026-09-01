@@ -7,6 +7,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/shopware/shopware-cli/internal/testhelper"
 )
 
 func TestDatabaseConnectionDefaults(t *testing.T) {
@@ -27,7 +29,7 @@ func TestDatabaseConnectionFromEnvFile(t *testing.T) {
 	t.Setenv("DATABASE_URL", "")
 
 	projectRoot := t.TempDir()
-	writeFile(t, filepath.Join(projectRoot, ".env"), "DATABASE_URL=mysql://app:secret@db.example.com:3307/shop?sslmode=disable\n")
+	testhelper.WriteFile(t, filepath.Join(projectRoot, ".env"), "DATABASE_URL=mysql://app:secret@db.example.com:3307/shop?sslmode=disable\n")
 
 	conn, err := databaseConnectionFromEnv(projectRoot, nil)
 	require.NoError(t, err)
@@ -43,8 +45,8 @@ func TestDatabaseConnectionEnvLocalOverridesEnv(t *testing.T) {
 	t.Setenv("DATABASE_URL", "")
 
 	projectRoot := t.TempDir()
-	writeFile(t, filepath.Join(projectRoot, ".env"), "DATABASE_URL=mysql://a:a@one/first\n")
-	writeFile(t, filepath.Join(projectRoot, ".env.local"), "DATABASE_URL=mysql://b:b@two/second\n")
+	testhelper.WriteFile(t, filepath.Join(projectRoot, ".env"), "DATABASE_URL=mysql://a:a@one/first\n")
+	testhelper.WriteFile(t, filepath.Join(projectRoot, ".env.local"), "DATABASE_URL=mysql://b:b@two/second\n")
 
 	conn, err := databaseConnectionFromEnv(projectRoot, nil)
 	require.NoError(t, err)
@@ -57,7 +59,7 @@ func TestDatabaseConnectionRealEnvWinsOverFile(t *testing.T) {
 	t.Setenv("DATABASE_URL", "mysql://real:env@realhost/realdb")
 
 	projectRoot := t.TempDir()
-	writeFile(t, filepath.Join(projectRoot, ".env"), "DATABASE_URL=mysql://file:file@filehost/filedb\n")
+	testhelper.WriteFile(t, filepath.Join(projectRoot, ".env"), "DATABASE_URL=mysql://file:file@filehost/filedb\n")
 
 	conn, err := databaseConnectionFromEnv(projectRoot, nil)
 	require.NoError(t, err)
@@ -177,7 +179,7 @@ func TestLocalExecutorDatabaseConnection(t *testing.T) {
 	t.Setenv("DATABASE_URL", "")
 
 	projectRoot := t.TempDir()
-	writeFile(t, filepath.Join(projectRoot, ".env"), "DATABASE_URL=mysql://shopware:shopware@127.0.0.1:13306/dev\n")
+	testhelper.WriteFile(t, filepath.Join(projectRoot, ".env"), "DATABASE_URL=mysql://shopware:shopware@127.0.0.1:13306/dev\n")
 
 	exec := &LocalExecutor{projectRoot: projectRoot}
 
@@ -187,12 +189,4 @@ func TestLocalExecutorDatabaseConnection(t *testing.T) {
 	assert.Equal(t, "127.0.0.1:13306", conn.Addr())
 	assert.Equal(t, "shopware", conn.Username)
 	assert.Equal(t, "dev", conn.Database)
-}
-
-func writeFile(t *testing.T, path, content string) {
-	t.Helper()
-
-	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
-		t.Fatal(err)
-	}
 }

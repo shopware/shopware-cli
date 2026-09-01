@@ -10,13 +10,15 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	"github.com/shopware/shopware-cli/internal/shop"
+	"github.com/shopware/shopware-cli/internal/testhelper"
 	"github.com/shopware/shopware-cli/internal/tui"
 )
 
 func writeLockWithCore(t *testing.T, dir, phpRequire string) {
 	t.Helper()
-	content := `{"packages":[{"name":"shopware/core","version":"v6.6.10.0","require":{"php":"` + phpRequire + `"}}]}`
-	assert.NoError(t, os.WriteFile(filepath.Join(dir, "composer.lock"), []byte(content), 0o644))
+	testhelper.WriteFile(t, filepath.Join(dir, "composer.lock"), testhelper.ComposerLock(
+		testhelper.LockPackage{Name: "shopware/core", Version: "v6.6.10.0", Require: map[string]string{"php": phpRequire}},
+	))
 }
 
 func TestResolvePHPVersions_NoLockFile(t *testing.T) {
@@ -211,13 +213,10 @@ func TestMergeLocalProfilerSecrets(t *testing.T) {
 
 func TestEnsureDeploymentHelper_AddsWhenMissing(t *testing.T) {
 	dir := t.TempDir()
-	composer := `{
-  "name": "shopware/production",
-  "require": {
-    "shopware/core": "^6.6"
-  }
-}`
-	assert.NoError(t, os.WriteFile(filepath.Join(dir, "composer.json"), []byte(composer), 0o644))
+	testhelper.WriteFile(t, filepath.Join(dir, "composer.json"), testhelper.ComposerJSON{
+		Name:    "shopware/production",
+		Require: map[string]string{"shopware/core": "^6.6"},
+	}.String())
 
 	changed, err := ensureDeploymentHelper(dir)
 	assert.NoError(t, err)
@@ -231,14 +230,10 @@ func TestEnsureDeploymentHelper_AddsWhenMissing(t *testing.T) {
 
 func TestEnsureDeploymentHelper_NoOpWhenAlreadyInRequire(t *testing.T) {
 	dir := t.TempDir()
-	composer := `{
-  "name": "shopware/production",
-  "require": {
-    "shopware/core": "^6.6",
-    "shopware/deployment-helper": "^1.0"
-  }
-}`
-	assert.NoError(t, os.WriteFile(filepath.Join(dir, "composer.json"), []byte(composer), 0o644))
+	testhelper.WriteFile(t, filepath.Join(dir, "composer.json"), testhelper.ComposerJSON{
+		Name:    "shopware/production",
+		Require: map[string]string{"shopware/core": "^6.6", "shopware/deployment-helper": "^1.0"},
+	}.String())
 
 	changed, err := ensureDeploymentHelper(dir)
 	assert.NoError(t, err)
@@ -252,12 +247,11 @@ func TestEnsureDeploymentHelper_NoOpWhenAlreadyInRequire(t *testing.T) {
 
 func TestEnsureDeploymentHelper_NoOpWhenInRequireDev(t *testing.T) {
 	dir := t.TempDir()
-	composer := `{
-  "name": "shopware/production",
-  "require": {"shopware/core": "^6.6"},
-  "require-dev": {"shopware/deployment-helper": "^1.0"}
-}`
-	assert.NoError(t, os.WriteFile(filepath.Join(dir, "composer.json"), []byte(composer), 0o644))
+	testhelper.WriteFile(t, filepath.Join(dir, "composer.json"), testhelper.ComposerJSON{
+		Name:       "shopware/production",
+		Require:    map[string]string{"shopware/core": "^6.6"},
+		RequireDev: map[string]string{"shopware/deployment-helper": "^1.0"},
+	}.String())
 
 	changed, err := ensureDeploymentHelper(dir)
 	assert.NoError(t, err)
@@ -272,8 +266,9 @@ func TestEnsureDeploymentHelper_MissingComposerJson(t *testing.T) {
 
 func TestResolvePHPVersions_PlatformFallback(t *testing.T) {
 	dir := t.TempDir()
-	content := `{"packages":[{"name":"shopware/platform","version":"v6.5.0.0","require":{"php":">=8.2"}}]}`
-	assert.NoError(t, os.WriteFile(filepath.Join(dir, "composer.lock"), []byte(content), 0o644))
+	testhelper.WriteFile(t, filepath.Join(dir, "composer.lock"), testhelper.ComposerLock(
+		testhelper.LockPackage{Name: "shopware/platform", Version: "v6.5.0.0", Require: map[string]string{"php": ">=8.2"}},
+	))
 
 	versions, _, constraint := resolvePHPVersions(dir)
 	assert.Equal(t, []string{"8.2", "8.3", "8.4", "8.5"}, versions)
