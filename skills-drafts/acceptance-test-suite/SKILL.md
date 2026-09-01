@@ -1,6 +1,6 @@
 ---
 name: acceptance-test-suite
-description: Write and run acceptance and accessibility tests in a Shopware project that consumes the Shopware Acceptance Test Suite (@shopware-ag/acceptance-test-suite) as a package. Use for setting up the test workspace, writing specs against its public API, creating test data, using actors and tasks, and covering accessibility with the bundled axe integration.
+description: Write and run Playwright acceptance and accessibility tests in a Shopware project that consumes the Shopware Acceptance Test Suite (@shopware-ag/acceptance-test-suite) as an npm package. Use when setting up the test workspace, writing or debugging specs, creating test data, working with actors and tasks, or checking accessibility with the bundled axe integration, including when the request just mentions ATS or acceptance tests. Not for contributing to the shopware/acceptance-test-suite repository itself.
 ---
 
 # Shopware Acceptance Test Suite (consumer guide)
@@ -8,6 +8,8 @@ description: Write and run acceptance and accessibility tests in a Shopware proj
 Use this skill when a project consumes `@shopware-ag/acceptance-test-suite` (ATS) as an npm package to test its own Shopware instance. It covers workspace setup, writing specs against the public API, test data, accessibility, and running tests.
 
 Do not use this skill for work inside the `shopware/acceptance-test-suite` repository itself. That repository ships its own contributor skill with different rules about which internal layer a change belongs in.
+
+The official consumer guide is https://developer.shopware.com/docs/guides/development/testing/e2e-playwright/ (the repository README points there); consult it for prose walkthroughs beyond what this skill covers.
 
 ## Determine the installed version first
 
@@ -49,7 +51,7 @@ These are strict and are the usual cause of a broken setup:
 - **axe is bundled**: `@axe-core/playwright` and `axe-html-reporter` are runtime dependencies of ATS. Do not install them separately.
 - **Only `dist/` is published.** The suite's own `playwright.config.ts`, its docker compose setup, and its `src/` tree are not in the npm tarball. Nothing in the installed package starts a server or a container.
 
-Environment variables the shipped code reads:
+The environment variables a typical project needs (the shipped code reads a few more for SaaS and seeded-ID setups, not listed here):
 
 | Variable | Required | Purpose |
 |---|---|---|
@@ -118,7 +120,9 @@ tests/acceptance/
 APP_URL="https://shop.example.test/"
 LANG="en-GB"
 
-# Preferred: an Admin API integration (create one in Settings, System, Integrations).
+# Preferred: an Admin API integration. Create one in Settings, System, Integrations,
+# or run `bin/console integration:create AcceptanceTest --admin` on the shop:
+# it prints both lines below ready to paste.
 SHOPWARE_ACCESS_KEY_ID="..."
 SHOPWARE_SECRET_ACCESS_KEY="..."
 
@@ -315,10 +319,10 @@ Preference order, most robust first:
 
 1. `getByRole` with an accessible name. This tests what assistive technology exposes.
 2. `getByLabel` and `getByAltText`.
-3. `getByTestId`, for controls a test depends on, added deliberately in a template override.
+3. `getByTestId`, for controls a test depends on, added deliberately in a template override. This step is general Playwright practice; ATS's own guidance lists only role, label, placeholder, and text.
 4. `getByText`, only where the text is the contract.
 
-Avoid XPath and CSS coupled to styling or DOM depth. Avoid `getByPlaceholder`: placeholder text is translated and is often absent from accessible markup, which is fragile in exactly the multilingual setups Shopware projects have. A field with no accessible label to target is usually an accessibility defect worth fixing rather than working around.
+Avoid XPath and CSS coupled to styling or DOM depth. Prefer a label or role over a placeholder: ATS's own guidance permits `getByPlaceholder` where it is stable, but placeholder text is translated and often absent from accessible markup, so it is rarely stable in the multilingual setups Shopware projects have. A field with no accessible label to target is usually an accessibility defect worth fixing rather than working around.
 
 Prefer page object properties over inline locators.
 
