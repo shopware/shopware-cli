@@ -23,9 +23,12 @@ func (m Model) updateLifecycle(msg tea.Msg) (app.Content, tea.Cmd) {
 		return m, tea.Batch(m.dockerSpinner.Tick, m.startContainers())
 
 	case dockerOutputLineMsg:
-		m.overlayLines = tui.AppendTail(m.overlayLines, m.overlayMaxLines(), string(msg))
+		if msg.source != nil && msg.source != m.dockerOutChan {
+			return m, nil
+		}
+		m.overlayLines = tui.AppendTail(m.overlayLines, m.overlayMaxLines(), msg.line)
 		if m.phase == phaseInstalling {
-			if i, ok := install.MatchStep(string(msg), m.installProg.currentStep); ok {
+			if i, ok := install.MatchStep(cleanInstallLine(msg.line), m.installProg.currentStep); ok {
 				m.installProg.currentStep = i
 				pct := float64(i) / float64(len(install.Steps))
 				cmd := m.installProg.progress.SetPercent(pct)
@@ -35,6 +38,9 @@ func (m Model) updateLifecycle(msg tea.Msg) (app.Content, tea.Cmd) {
 		return m, m.readNextDockerOutput()
 
 	case dockerOutputDoneMsg:
+		if msg.source != nil && msg.source != m.dockerOutChan {
+			return m, nil
+		}
 		return m, nil
 
 	case dockerStartedMsg:
@@ -68,14 +74,16 @@ func (m Model) updateLifecycle(msg tea.Msg) (app.Content, tea.Cmd) {
 		return m, nil
 
 	case shopwareInstallDoneMsg:
+		if msg.source != nil && msg.source != m.dockerOutChan {
+			return m, nil
+		}
 		if msg.err != nil {
 			failure := classifyInstallFailure(msg.output, msg.err)
+			m.installProg.failure = &failure
 			if m.telemetry.installOnce() {
 				trackEvent(tracking.EventDevInstall, m.telemetry.installFailureTags(m.install, failure))
 			}
-			m.installProg.showLogs = true
-			m.overlayLines = append(m.overlayLines, "", errorStyle.Render("Installation failed: "+msg.err.Error()))
-			m.overlayLines = append(m.overlayLines, "", helpStyle.Render("Press q to exit"))
+			m.phase = phaseInstallFailed
 			return m, nil
 		}
 		m.installProg.done = true

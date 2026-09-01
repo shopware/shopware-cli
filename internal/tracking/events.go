@@ -55,7 +55,6 @@ const (
 	TagAbandonedAt       = "abandoned_at"
 	TagFailedStep        = "failed_step"
 	TagFailureCategory   = "failure_category"
-	TagRetryable         = "retryable"
 	TagLanguage          = "language"
 	TagCurrency          = "currency"
 	TagCustomCredentials = "custom_credentials"

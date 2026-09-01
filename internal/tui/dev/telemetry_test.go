@@ -202,6 +202,13 @@ func TestInstallOnceLatches(t *testing.T) {
 	assert.False(t, (*telemetryState)(nil).installOnce())
 }
 
+func TestBeginInstallAllowsAnotherOutcome(t *testing.T) {
+	tel := newTelemetryState(true)
+	assert.True(t, tel.installOnce())
+	tel.beginInstall()
+	assert.True(t, tel.installOnce())
+}
+
 func TestHealthOnceLatches(t *testing.T) {
 	tel := newTelemetryState(true)
 	assert.True(t, tel.healthOnce())
@@ -235,31 +242,31 @@ func TestInstallFailureTags(t *testing.T) {
 	w := installWizard{language: "de-DE", currency: "EUR"}
 
 	f := installFailure{
-		failingStep: installStartStep,
+		failingStep: "install_start",
 		category:    installFailureDatabaseConnection,
-		detail:      `SQLSTATE[HY000] [1045] Access denied for super-secret-host`,
-		retryable:   false,
 	}
 	tags := tel.installFailureTags(w, f)
 
 	assert.Equal(t, tracking.ResultFailure, tags[tracking.TagResult])
-	assert.Equal(t, installStartStep, tags[tracking.TagFailedStep])
+	assert.Equal(t, "install_start", tags[tracking.TagFailedStep])
 	assert.Equal(t, "db_connection", tags[tracking.TagFailureCategory])
-	assert.Equal(t, "false", tags[tracking.TagRetryable])
 	assert.Equal(t, "de-DE", tags[tracking.TagLanguage])
-	for _, value := range tags {
-		assert.NotContains(t, value, "super-secret-host")
-	}
 }
 
-func TestInstallFailureTagsFromClassifier(t *testing.T) {
+// The failure event must never carry secret-like strings: only the closed-enum
+// category is sent, never the raw failure detail or credentials.
+func TestInstallFailureTagsNeverLeakSecrets(t *testing.T) {
 	tel := &telemetryState{}
-	failure := classifyInstallFailure([]string{
-		"[deployment-helper] SQLSTATE[HY000] [2002] No such file or directory",
-	}, assert.AnError)
-	tags := tel.installFailureTags(installWizard{}, failure)
+	w := installWizard{}
+	w.SetPassword("super-secret-pw")
 
-	assert.Equal(t, "db_connection", tags[tracking.TagFailureCategory])
-	assert.Equal(t, installStartStep, tags[tracking.TagFailedStep])
-	assert.Contains(t, tags, tracking.TagRetryable)
+	f := installFailure{
+		failingStep: "system:install",
+		category:    installFailureDatabaseConnection,
+		detail:      `SQLSTATE[HY000] [1045] Access denied for user 'root'@'super-secret-host'`,
+	}
+	for key, value := range tel.installFailureTags(w, f) {
+		assert.NotContains(t, value, "super-secret-pw", "tag %q leaked the password", key)
+		assert.NotContains(t, value, "super-secret-host", "tag %q leaked the raw detail", key)
+	}
 }

@@ -28,48 +28,42 @@ const (
 	installFailureTransport           installFailureCategory = "transport"
 	installFailureUnknown             installFailureCategory = "unknown"
 
-	installStartStep      = "install_start"
-	installUserCreateStep = "user:create"
+	installStartStep = "install_start"
 
+	// installFailureDetailLines bounds how many output lines make up one
+	// detail, so a stack trace or a dumped query cannot grow it without limit.
 	installFailureDetailLines = 3
 )
 
-// installFailure is the classified result of one failed helper run. Raw
-// details are retained for classification tests but never sent in telemetry.
+// installFailure is the classified result of one failed helper run. Telemetry
+// reads this instead of scanning the raw output again. detail is kept for
+// classification tests; it is not shown on the failure card and is never sent
+// as a telemetry tag.
 type installFailure struct {
 	failingStep string
 	category    installFailureCategory
 	detail      string
-	retryable   bool
 }
 
 type installFailureRule struct {
-	category  installFailureCategory
-	retryable bool
-	patterns  []*regexp.Regexp
+	category installFailureCategory
+	patterns []*regexp.Regexp
 }
 
 // installFailureRules lists known failure patterns. Output lines are checked
 // from the end, so a terminal error wins over an earlier warning.
 var installFailureRules = []installFailureRule{
 	{
-		category:  installFailurePHP,
-		retryable: true,
+		category: installFailurePHP,
 		patterns: installFailurePatterns(
 			`allowed memory size`,
 			`outofmemoryerror`,
-		),
-	},
-	{
-		category: installFailurePHP,
-		patterns: installFailurePatterns(
 			`php fatal error`,
 			`syntax error, unexpected`,
 		),
 	},
 	{
-		category:  installFailureEnvironmentConfig,
-		retryable: true,
+		category: installFailureEnvironmentConfig,
 		patterns: installFailurePatterns(
 			`environment variable .* is not defined`,
 			`connection information is not valid\. missing parameter`,
@@ -83,8 +77,7 @@ var installFailureRules = []installFailureRule{
 		),
 	},
 	{
-		category:  installFailureDatabaseConnection,
-		retryable: true,
+		category: installFailureDatabaseConnection,
 		patterns: installFailurePatterns(
 			`sqlstate\[hy000\] \[2002\]`,
 			`sqlstate\[hy000\] \[1045\]`,
@@ -108,8 +101,7 @@ var installFailureRules = []installFailureRule{
 		),
 	},
 	{
-		category:  installFailurePermission,
-		retryable: true,
+		category: installFailurePermission,
 		patterns: installFailurePatterns(
 			`permission denied`,
 			`could not create directory`,
@@ -122,8 +114,7 @@ var installFailureRules = []installFailureRule{
 		),
 	},
 	{
-		category:  installFailureMissingPrerequisite,
-		retryable: true,
+		category: installFailureMissingPrerequisite,
 		patterns: installFailurePatterns(
 			`snippet set with isocode`,
 			`could not get id of`,
@@ -132,8 +123,7 @@ var installFailureRules = []installFailureRule{
 		),
 	},
 	{
-		category:  installFailureThemeCompile,
-		retryable: true,
+		category: installFailureThemeCompile,
 		patterns: installFailurePatterns(
 			`unable to compile the theme`,
 			`error while trying to concatenate styles`,
@@ -144,8 +134,7 @@ var installFailureRules = []installFailureRule{
 		),
 	},
 	{
-		category:  installFailureTransport,
-		retryable: true,
+		category: installFailureTransport,
 		patterns: installFailurePatterns(
 			`while setting up the .* transport`,
 			`transport does not exist`,
@@ -161,6 +150,8 @@ func installFailurePatterns(patterns ...string) []*regexp.Regexp {
 	return compiled
 }
 
+// Output is scanned from the end so the error that stopped the process wins
+// over earlier warnings.
 func classifyInstallFailure(output []string, processErr error) installFailure {
 	lines := cleanInstallOutput(output)
 
@@ -176,30 +167,13 @@ func classifyInstallFailure(output []string, processErr error) installFailure {
 				if pattern.MatchString(lines[i]) {
 					failure.category = rule.category
 					failure.detail = installFailureMessage(lines, i)
-					failure.retryable = canRetryInstallFailure(failure.failingStep, rule.retryable)
 					return failure
 				}
 			}
 		}
 	}
 
-	failure.retryable = canRetryInstallFailure(failure.failingStep, true)
 	return failure
-}
-
-func canRetryInstallFailure(step string, categoryAllowsRetry bool) bool {
-	return categoryAllowsRetry &&
-		step != installUserCreateStep &&
-		installFailureStepIndex(step) > 0
-}
-
-func installFailureStepIndex(step string) int {
-	for i, candidate := range install.Steps {
-		if candidate.Pattern == step {
-			return i
-		}
-	}
-	return 0
 }
 
 func installFailureStep(output []string) string {
@@ -235,8 +209,14 @@ func installFailureDetail(output []string, processErr error) string {
 	return "deployment helper failed without diagnostic output"
 }
 
+// installRelayPrefix matches the tag the deployment helper puts in front of
+// every line it relays from the console commands it runs.
 var installRelayPrefix = regexp.MustCompile(`^\[deployment-helper] ?`)
 
+// cleanInstallOutput removes ANSI styling, the relay prefix, and surrounding
+// whitespace from the captured helper output, so rule matching and the stored
+// detail work on the plain message. The log view keeps rendering the original
+// lines.
 func cleanInstallOutput(output []string) []string {
 	cleaned := make([]string, len(output))
 	for i, line := range output {
@@ -250,6 +230,10 @@ func cleanInstallLine(line string) string {
 	return strings.TrimSpace(line)
 }
 
+// installFailureMessage returns the message the line at idx belongs to. Symfony
+// wraps long errors over several output lines, so one line on its own is often
+// half a sentence. The neighbouring non-empty lines are joined back into one
+// message; a blank line ends it.
 func installFailureMessage(lines []string, idx int) string {
 	start, end := idx, idx
 	for start > 0 && lines[start-1] != "" && end-start+1 < installFailureDetailLines {
