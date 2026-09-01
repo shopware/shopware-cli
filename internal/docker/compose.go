@@ -336,7 +336,7 @@ func consoleService(opts *ComposeOptions, webEnv yamlMap[string], webDependsOn y
 	// over TLS, so in proxy mode they join the proxy network (the CA and
 	// APP_URL env come from the shared webEnv). They publish no HTTP route.
 	if px := opts.proxy(); px != nil {
-		svc.Networks = []string{"default", px.NetworkName}
+		svc.Networks = proxyNetworks(px.NetworkName, "")
 	}
 
 	return svc
@@ -345,8 +345,10 @@ func consoleService(opts *ComposeOptions, webEnv yamlMap[string], webDependsOn y
 func baseWebEnv(px *ProxyOptions) yamlMap[string] {
 	webEnv := yamlMap[string]{}.
 		set("HOST", "0.0.0.0").
+		// database is not on the shared network (it publishes a loopback port), so
+		// its bare host never collides; shared-network services use proxyServiceHost.
 		set("DATABASE_URL", "mysql://root:root@database/shopware").
-		set("MAILER_DSN", "smtp://mailer:1025")
+		set("MAILER_DSN", "smtp://"+proxyServiceHost(px, "mailer")+":1025")
 
 	// In proxy mode Traefik terminates TLS and forwards plain HTTP from a
 	// private container address, so Shopware must trust its X-Forwarded-*
@@ -382,12 +384,12 @@ func applyLockEnv(webEnv yamlMap[string], px *ProxyOptions, features LockFeature
 	case features.RedisMessenger:
 		webEnv = webEnv.set("MESSENGER_TRANSPORT_DSN", redisMessengerDSN)
 	case features.AMQP:
-		webEnv = webEnv.set("MESSENGER_TRANSPORT_DSN", "amqp://guest:guest@lavinmq:5672")
+		webEnv = webEnv.set("MESSENGER_TRANSPORT_DSN", "amqp://guest:guest@"+proxyServiceHost(px, "lavinmq")+":5672")
 	}
 
 	if features.Elasticsearch {
 		webEnv = webEnv.
-			set("OPENSEARCH_URL", "http://opensearch:9200").
+			set("OPENSEARCH_URL", "http://"+proxyServiceHost(px, "opensearch")+":9200").
 			set("SHOPWARE_ES_ENABLED", "1").
 			set("SHOPWARE_ES_INDEXING_ENABLED", "1").
 			set("SHOPWARE_ES_INDEX_PREFIX", "sw")
@@ -488,7 +490,7 @@ func applyS3Env(webEnv yamlMap[string], px *ProxyOptions) yamlMap[string] {
 	return webEnv.
 		set("K8S_FILESYSTEM_PRIVATE_BUCKET", "shopware-private").
 		set("K8S_FILESYSTEM_PUBLIC_BUCKET", "shopware-public").
-		set("K8S_FILESYSTEM_ENDPOINT", "http://rustfs:9000").
+		set("K8S_FILESYSTEM_ENDPOINT", "http://"+proxyServiceHost(px, "rustfs")+":9000").
 		set("K8S_FILESYSTEM_PUBLIC_URL", publicURL).
 		set("K8S_FILESYSTEM_REGION", "us-east-1").
 		set("AWS_ACCESS_KEY_ID", rustfsAccessKey).

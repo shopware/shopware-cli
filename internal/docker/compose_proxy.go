@@ -136,20 +136,52 @@ func webProxyRoutes(p *ProxyOptions) []proxyRoute {
 	}
 }
 
+// proxyServiceAlias is the project-unique name a proxied service advertises on
+// the shared network, so parallel projects don't collide on the bare service
+// name there (issue #1484). Matches the Traefik router prefix (dots to dashes).
+func proxyServiceAlias(hostname, serviceName string) string {
+	return strings.ReplaceAll(hostname, ".", "-") + "-" + serviceName
+}
+
+// proxyServiceHost is the host web/console use to reach serviceName: the bare
+// name in plain mode, the project-unique alias in proxy mode (issue #1484).
+func proxyServiceHost(px *ProxyOptions, serviceName string) string {
+	if px == nil {
+		return serviceName
+	}
+
+	return proxyServiceAlias(px.Hostname, serviceName)
+}
+
+// proxyNetworks attaches a service to the default and shared proxy networks;
+// alias, when set, is the project-unique name it advertises on the shared one.
+func proxyNetworks(networkName, alias string) yamlMap[composeServiceNetwork] {
+	shared := composeServiceNetwork{}
+	if alias != "" {
+		shared.Aliases = []string{alias}
+	}
+
+	return yamlMap[composeServiceNetwork]{}.
+		set("default", composeServiceNetwork{}).
+		set(networkName, shared)
+}
+
 // addProxyRouting joins serviceName to the shared proxy network and adds a
 // Traefik router per route. buildCompose calls it in proxy mode instead of
 // publishing fixed host ports.
 func addProxyRouting(svc *composeService, p *ProxyOptions, serviceName string, routes ...proxyRoute) {
-	svc.Networks = []string{"default", p.NetworkName}
+	// Router/service names must be unique across every project sharing the one
+	// Traefik instance, so they are prefixed with the project's own hostname
+	// (dots replaced, since Traefik router names must be alphanumeric).
+	routerPrefix := proxyServiceAlias(p.Hostname, serviceName)
+
+	// The service advertises that same alias on the shared network, so internal
+	// calls resolve to it and not to a parallel project's service (#1484).
+	svc.Networks = proxyNetworks(p.NetworkName, routerPrefix)
 
 	labels := yamlMap[string]{}.
 		set("traefik.enable", "true").
 		set("traefik.docker.network", p.NetworkName)
-
-	// Router/service names must be unique across every project sharing the one
-	// Traefik instance, so they are prefixed with the project's own hostname
-	// (dots replaced, since Traefik router names must be alphanumeric).
-	routerPrefix := strings.ReplaceAll(p.Hostname, ".", "-") + "-" + serviceName
 
 	for _, route := range routes {
 		name := route.nameSuffix
