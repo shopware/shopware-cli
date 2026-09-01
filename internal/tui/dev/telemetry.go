@@ -172,6 +172,16 @@ func (t *telemetryState) installTags(result string, w installWizard) map[string]
 	return tags
 }
 
+// installFailureTags enriches the install event with a closed-enum category.
+// The raw failure detail is deliberately never included in telemetry.
+func (t *telemetryState) installFailureTags(w installWizard, f installFailure) map[string]string {
+	tags := t.installTags(tracking.ResultFailure, w)
+	tags[tracking.TagFailedStep] = f.failingStep
+	tags[tracking.TagFailureCategory] = string(f.category)
+	tags[tracking.TagRetryable] = strconv.FormatBool(f.retryable)
+	return tags
+}
+
 func installStepTagName(step installStep) string {
 	switch step {
 	case installStepAsk:

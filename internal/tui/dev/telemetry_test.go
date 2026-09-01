@@ -6,6 +6,8 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+
+	"github.com/shopware/shopware-cli/internal/tracking"
 )
 
 // TestMain disables telemetry for the whole package: tests drive Model.Update
@@ -226,4 +228,38 @@ func TestNilTelemetryStateIsSafe(t *testing.T) {
 	assert.False(t, ok)
 	_, ok = tel.configRestartTags(nil)
 	assert.False(t, ok)
+}
+
+func TestInstallFailureTags(t *testing.T) {
+	tel := &telemetryState{}
+	w := installWizard{language: "de-DE", currency: "EUR"}
+
+	f := installFailure{
+		failingStep: installStartStep,
+		category:    installFailureDatabaseConnection,
+		detail:      `SQLSTATE[HY000] [1045] Access denied for super-secret-host`,
+		retryable:   false,
+	}
+	tags := tel.installFailureTags(w, f)
+
+	assert.Equal(t, tracking.ResultFailure, tags[tracking.TagResult])
+	assert.Equal(t, installStartStep, tags[tracking.TagFailedStep])
+	assert.Equal(t, "db_connection", tags[tracking.TagFailureCategory])
+	assert.Equal(t, "false", tags[tracking.TagRetryable])
+	assert.Equal(t, "de-DE", tags[tracking.TagLanguage])
+	for _, value := range tags {
+		assert.NotContains(t, value, "super-secret-host")
+	}
+}
+
+func TestInstallFailureTagsFromClassifier(t *testing.T) {
+	tel := &telemetryState{}
+	failure := classifyInstallFailure([]string{
+		"[deployment-helper] SQLSTATE[HY000] [2002] No such file or directory",
+	}, assert.AnError)
+	tags := tel.installFailureTags(installWizard{}, failure)
+
+	assert.Equal(t, "db_connection", tags[tracking.TagFailureCategory])
+	assert.Equal(t, installStartStep, tags[tracking.TagFailedStep])
+	assert.Contains(t, tags, tracking.TagRetryable)
 }

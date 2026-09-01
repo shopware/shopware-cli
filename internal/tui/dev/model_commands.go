@@ -99,9 +99,13 @@ func (m *Model) runShopwareInstall() tea.Cmd {
 	m.dockerOutChan = ch
 
 	doneCmd := func() tea.Msg {
-		err := install.Run(ctx, e, opts, func(line string) { ch <- line })
+		var output []string
+		err := install.Run(ctx, e, opts, func(line string) {
+			output = append(output, line)
+			ch <- line
+		})
 		close(ch)
-		return shopwareInstallDoneMsg{err: err}
+		return shopwareInstallDoneMsg{output: output, err: err}
 	}
 
 	return tea.Batch(readFromChan(ch), doneCmd)

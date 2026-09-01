@@ -69,10 +69,9 @@ func (m Model) updateLifecycle(msg tea.Msg) (app.Content, tea.Cmd) {
 
 	case shopwareInstallDoneMsg:
 		if msg.err != nil {
+			failure := classifyInstallFailure(msg.output, msg.err)
 			if m.telemetry.installOnce() {
-				tags := m.telemetry.installTags(tracking.ResultFailure, m.install)
-				tags[tracking.TagFailedStep] = install.FailedStep(m.installProg.currentStep)
-				trackEvent(tracking.EventDevInstall, tags)
+				trackEvent(tracking.EventDevInstall, m.telemetry.installFailureTags(m.install, failure))
 			}
 			m.installProg.showLogs = true
 			m.overlayLines = append(m.overlayLines, "", errorStyle.Render("Installation failed: "+msg.err.Error()))

@@ -107,7 +107,10 @@ type dockerOutputDoneMsg struct{}
 
 type shopwareInstalledMsg struct{}
 type shopwareNotInstalledMsg struct{}
-type shopwareInstallDoneMsg struct{ err error }
+type shopwareInstallDoneMsg struct {
+	output []string
+	err    error
+}
 
 type configRestartDoneMsg struct{ err error }
 
