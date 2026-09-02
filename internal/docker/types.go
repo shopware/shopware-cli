@@ -12,20 +12,27 @@ type composeFile struct {
 }
 
 type composeService struct {
-	Image       string                     `yaml:"image"`
-	User        string                     `yaml:"user,omitempty"`
-	Entrypoint  []string                   `yaml:"entrypoint,omitempty"`
-	Command     []string                   `yaml:"command,omitempty"`
-	Ports       []string                   `yaml:"ports,omitempty"`
-	EnvFile     []string                   `yaml:"env_file,omitempty"`
-	Environment yamlMap[string]            `yaml:"environment,omitempty"`
-	Volumes     []string                   `yaml:"volumes,omitempty"`
-	DependsOn   yamlMap[composeDependency] `yaml:"depends_on,omitempty"`
-	Healthcheck *composeHealthcheck        `yaml:"healthcheck,omitempty"`
-	Restart     string                     `yaml:"restart,omitempty"`
-	StopSignal  string                     `yaml:"stop_signal,omitempty"`
-	Labels      yamlMap[string]            `yaml:"labels,omitempty"`
-	Networks    []string                   `yaml:"networks,omitempty"`
+	Image       string                         `yaml:"image"`
+	User        string                         `yaml:"user,omitempty"`
+	Entrypoint  []string                       `yaml:"entrypoint,omitempty"`
+	Command     []string                       `yaml:"command,omitempty"`
+	Ports       []string                       `yaml:"ports,omitempty"`
+	EnvFile     []string                       `yaml:"env_file,omitempty"`
+	Environment yamlMap[string]                `yaml:"environment,omitempty"`
+	Volumes     []string                       `yaml:"volumes,omitempty"`
+	DependsOn   yamlMap[composeDependency]     `yaml:"depends_on,omitempty"`
+	Healthcheck *composeHealthcheck            `yaml:"healthcheck,omitempty"`
+	Restart     string                         `yaml:"restart,omitempty"`
+	StopSignal  string                         `yaml:"stop_signal,omitempty"`
+	Labels      yamlMap[string]                `yaml:"labels,omitempty"`
+	Networks    yamlMap[composeServiceNetwork] `yaml:"networks,omitempty"`
+}
+
+// composeServiceNetwork is a service's per-network config; a project-unique
+// alias keeps parallel projects from colliding on the bare service name on the
+// shared proxy network (issue #1484).
+type composeServiceNetwork struct {
+	Aliases []string `yaml:"aliases,omitempty"`
 }
 
 // composeDependency is the long-form depends_on entry; an empty Condition
