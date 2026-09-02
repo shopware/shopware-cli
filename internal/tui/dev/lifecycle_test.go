@@ -2,7 +2,6 @@ package dev
 
 import (
 	"errors"
-	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -13,7 +12,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	dockerpkg "github.com/shopware/shopware-cli/internal/docker"
-	"github.com/shopware/shopware-cli/internal/proxy"
 	"github.com/shopware/shopware-cli/internal/shop"
 	"github.com/shopware/shopware-cli/internal/shop/install"
 	"github.com/shopware/shopware-cli/internal/tui"
@@ -246,7 +244,7 @@ func TestUpdateLifecycle_PortConflict_OpensPromptOverlay(t *testing.T) {
 	m.host = app.New(app.Options{DisableDefaultKeys: true})
 
 	conflicts := []dockerpkg.PortConflict{
-		{Definition: dockerpkg.PortDefinition{Key: shop.DockerPortWeb, Label: "Shop (Caddy)", Target: 8000, Default: 8000}, HostPort: 8000},
+		{Service: dockerpkg.ServiceWeb, Endpoint: dockerpkg.PortHTTP, Label: "Shop (Caddy)", HostPort: 8000},
 	}
 
 	updated, _ := m.updateLifecycle(portConflictMsg{conflicts: conflicts})
@@ -263,11 +261,15 @@ func TestUpdateLifecycle_PortFixDone_Success_StartsContainers(t *testing.T) {
 	m := newLifecycleModel(t)
 	m.phase = phaseStarting
 
-	updated, cmd := m.updateLifecycle(portFixDoneMsg{})
+	overrides := []dockerpkg.PortOverride{{Service: dockerpkg.ServiceWeb, Endpoint: dockerpkg.PortHTTP, HostPort: 52341}}
+	remapped := m.config.WithDockerPortOverrides(overrides)
+	updated, cmd := m.updateLifecycle(portFixDoneMsg{config: remapped, overrides: overrides})
 	final := updated.(Model)
 
 	assert.Equal(t, phaseStarting, final.phase)
 	assert.NotNil(t, cmd, "must start containers after the ports were remapped")
+	assert.Same(t, m.config, final.config, "tabs share the config pointer, so it must be kept")
+	assert.Equal(t, dockerpkg.Port(52341), final.config.DockerPorts(dockerpkg.ServiceWeb)[dockerpkg.PortHTTP])
 }
 
 func TestUpdateLifecycle_PortFixDone_ErrorShowsLogs(t *testing.T) {
@@ -292,7 +294,7 @@ func TestHandlePortConflictResult_RandomStartsFix(t *testing.T) {
 	m.phase = phasePortConflict
 	m.configPath = filepath.Join(m.projectRoot, ".shopware-project.yml")
 	m.portConflicts = []dockerpkg.PortConflict{
-		{Definition: dockerpkg.PortDefinition{Key: shop.DockerPortWeb, Target: 8000, Default: 8000}, HostPort: 8000},
+		{Service: dockerpkg.ServiceWeb, Endpoint: dockerpkg.PortHTTP, Label: "Shop (Caddy)", HostPort: 8000},
 	}
 
 	updated, cmd := m.handlePortConflictResult(prompt.ResultMsg{ID: portConflictID, Choice: portConflictRandom})
@@ -322,71 +324,33 @@ func TestHandlePortConflictResult_DismissedIsNoOp(t *testing.T) {
 	assert.Nil(t, cmd)
 }
 
-func TestFixPortConflicts_PersistsAndRewritesCompose(t *testing.T) {
+func TestFixPortConflicts_LeavesSharedConfigUntouched(t *testing.T) {
 	dir := t.TempDir()
-	writeMinimalComposeProject(t, dir)
+	lock := `{"packages": [{"name": "shopware/core", "version": "6.6.0.0"}], "packages-dev": []}`
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "composer.lock"), []byte(lock), 0o644))
 
 	m := newLifecycleModel(t)
 	m.projectRoot = dir
 	m.configPath = filepath.Join(dir, ".shopware-project.yml")
 	m.portConflicts = []dockerpkg.PortConflict{
-		{Definition: dockerpkg.PortDefinition{Key: shop.DockerPortWeb, Service: "web", Label: "Shop (Caddy)", Target: 8000, Default: 8000}, HostPort: 8000},
+		{Service: dockerpkg.ServiceWeb, Endpoint: dockerpkg.PortHTTP, Label: "Shop (Caddy)", HostPort: 8000},
 	}
 
 	msg := m.fixPortConflicts()()
 	result, ok := msg.(portFixDoneMsg)
-	assert.True(t, ok)
-	assert.NoError(t, result.err)
+	require.True(t, ok)
+	require.NoError(t, result.err)
 
 	assert.Nil(t, m.config.Docker, "the command goroutine must not touch the shared config")
+	require.NotNil(t, result.config)
+	require.Len(t, result.overrides, 1)
+	assert.Equal(t, dockerpkg.Port(result.overrides[0].HostPort), result.config.DockerPorts(dockerpkg.ServiceWeb)[dockerpkg.PortHTTP])
 
-	localContent, err := os.ReadFile(filepath.Join(dir, ".shopware-project.local.yml"))
-	assert.NoError(t, err)
-	assert.Contains(t, string(localContent), fmt.Sprintf("web: %d", result.overrides[shop.DockerPortWeb]))
-
-	composeContent, err := os.ReadFile(filepath.Join(dir, "compose.yaml"))
-	assert.NoError(t, err)
-	assert.Contains(t, string(composeContent), fmt.Sprintf("%d:8000", result.overrides[shop.DockerPortWeb]))
-
-	// Only the update handler applies the overrides to the shared config.
+	// Only the update handler applies the result to the shared config.
 	updated, cmd := m.updateLifecycle(result)
 	final := updated.(Model)
 	assert.NotNil(t, cmd)
-	assert.Equal(t, result.overrides[shop.DockerPortWeb], int(final.config.Docker.Ports[shop.DockerPortWeb]))
-}
-
-// A proxy project that fell back to fixed-port serving keeps its proxy URL in
-// the config, so regenerating via the proxy-aware entry point would undo the
-// fallback and leave the shop without published host ports.
-func TestFixPortConflicts_FallbackProxyKeepsFixedPorts(t *testing.T) {
-	dir := t.TempDir()
-	writeMinimalComposeProject(t, dir)
-
-	m := newLifecycleModel(t)
-	m.projectRoot = dir
-	m.configPath = filepath.Join(dir, ".shopware-project.yml")
-	m.config = &shop.Config{URL: "http://myshop." + proxy.DefaultDomain}
-	m.proxyFallback = true
-	m.portConflicts = []dockerpkg.PortConflict{
-		{Definition: dockerpkg.PortDefinition{Key: shop.DockerPortWeb, Service: "web", Label: "Shop (Caddy)", Target: 8000, Default: 8000}, HostPort: 8000},
-	}
-
-	msg := m.fixPortConflicts()()
-	result, ok := msg.(portFixDoneMsg)
-	assert.True(t, ok)
-	assert.NoError(t, result.err)
-
-	composeContent, err := os.ReadFile(filepath.Join(dir, "compose.yaml"))
-	require.NoError(t, err)
-	assert.Contains(t, string(composeContent), fmt.Sprintf("%d:8000", result.overrides[shop.DockerPortWeb]))
-	assert.NotContains(t, string(composeContent), "traefik.enable")
-}
-
-// writeMinimalComposeProject writes the composer.lock WriteComposeFile needs.
-func writeMinimalComposeProject(t *testing.T, dir string) {
-	t.Helper()
-	lock := `{"packages": [{"name": "shopware/core", "version": "6.6.0.0"}], "packages-dev": []}`
-	require.NoError(t, os.WriteFile(filepath.Join(dir, "composer.lock"), []byte(lock), 0o644))
+	assert.Equal(t, dockerpkg.Port(result.overrides[0].HostPort), final.config.DockerPorts(dockerpkg.ServiceWeb)[dockerpkg.PortHTTP])
 }
 
 func TestUpdateLifecycle_UnknownMsg_NoOp(t *testing.T) {

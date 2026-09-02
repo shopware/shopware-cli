@@ -21,7 +21,7 @@ const (
 func portConflictLines(conflicts []dockerpkg.PortConflict) string {
 	var b strings.Builder
 	for _, conflict := range conflicts {
-		fmt.Fprintf(&b, "%s: port %d\n", conflict.Definition.Label, conflict.HostPort)
+		fmt.Fprintf(&b, "%s: port %d\n", conflict.Label, conflict.HostPort)
 	}
 	return b.String()
 }

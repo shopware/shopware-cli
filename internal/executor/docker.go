@@ -260,7 +260,7 @@ func shellSingleQuote(s string) string {
 }
 
 func (d *DockerExecutor) StartEnvironment(ctx context.Context) error {
-	cmd := exec.CommandContext(ctx, "docker", d.composeArgs("up", "-d")...)
+	cmd := exec.CommandContext(ctx, "docker", d.composeArgs("up", "-d", "--remove-orphans")...)
 	cmd.Dir = d.projectRoot
 
 	output, err := cmd.CombinedOutput()

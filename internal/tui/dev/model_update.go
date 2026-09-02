@@ -379,7 +379,11 @@ func (m Model) startAfterMigrationWizard() (app.Content, tea.Cmd) {
 	m.executor = exec
 
 	if m.executor.Type() == executor.TypeDocker {
-		if err := proxy.WriteComposeFile(m.projectRoot, m.config); err != nil {
+		env, err := proxy.NewEnvironment(m.projectRoot, m.config, m.proxyFallback)
+		if err == nil {
+			err = env.WriteCompose()
+		}
+		if err != nil {
 			m.migrationWizard.err = err
 			return m, nil
 		}

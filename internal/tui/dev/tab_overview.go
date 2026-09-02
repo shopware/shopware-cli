@@ -41,17 +41,20 @@ type OverviewModel struct {
 	// ctx is the CLI command context; tea.Cmd closures built by this model
 	// derive their subprocess and HTTP contexts from it. See Model.ctx for why
 	// bubbletea forces it onto the struct.
-	ctx                context.Context //nolint:containedctx
-	envType            string
-	shopURL            string
-	adminURL           string
-	username           string
-	password           string
-	services           []dockerpkg.DiscoveredService
-	background         []dockerpkg.BackgroundProcess
-	projectRoot        string
-	executor           executor.Executor
-	shopCfg            *shop.Config
+	ctx         context.Context //nolint:containedctx
+	envType     string
+	shopURL     string
+	adminURL    string
+	username    string
+	password    string
+	services    []dockerpkg.DiscoveredService
+	background  []dockerpkg.BackgroundProcess
+	projectRoot string
+	executor    executor.Executor
+	shopCfg     *shop.Config
+	// env is the project's Docker dev environment, nil outside Docker. It is a
+	// snapshot; setEnvironment refreshes it when the config changes.
+	env                *dockerpkg.Environment
 	loading            bool
 	err                error
 	width              int
@@ -276,8 +279,8 @@ func NewOverviewModel(ctx context.Context, envType, shopURL, username, password,
 		projectRoot:      projectRoot,
 		executor:         exec,
 		shopCfg:          shopCfg,
-		adminWatchURL:    resolveAdminWatchURL(projectRoot),
-		sfWatchURL:       resolveStorefrontWatchURL(projectRoot),
+		adminWatchURL:    localAdminWatchURL(projectRoot),
+		sfWatchURL:       localStorefrontWatchURL,
 		proxyHost:        proxy.RegisteredHostname(projectRoot),
 		domainsSetupDone: overviewSetupDone(projectRoot),
 		instancesLoading: proxy.RegisteredHostname(projectRoot) != "",
@@ -302,32 +305,33 @@ func overviewSetupDone(projectRoot string) bool {
 	return proxy.CheckResolverConfigured(baseDomain).Configured
 }
 
-// resolveAdminWatchURL returns the admin watcher's URL: the proxy hostname
-// when the project is proxied, otherwise the local dev-server port.
-func resolveAdminWatchURL(projectRoot string) string {
-	if host := proxy.RegisteredHostname(projectRoot); host != "" {
-		return "https://" + dockerpkg.SubdomainAdminWatch + "." + host
-	}
+// localStorefrontWatchURL is the classic local hot-proxy port of the
+// (deprecated) webpack storefront watcher outside the proxy.
+const localStorefrontWatchURL = "http://127.0.0.1:9998"
 
+// localAdminWatchURL returns the admin watcher's local dev-server URL outside
+// the proxy: the port depends on the platform's build tooling (Vite or
+// webpack-dev-server).
+func localAdminWatchURL(projectRoot string) string {
 	return fmt.Sprintf("http://127.0.0.1:%d", extension.AdminDevServerPort(projectRoot))
 }
 
-// resolveStorefrontWatchURL returns the URL to open while the storefront
-// watcher runs. The (deprecated) webpack hot-proxy serves the shop with
-// hot-reload injected from its own front door: when proxied that is the
-// storefront-watch.<host> hostname routed through the shared proxy; without
-// the proxy it is the classic local hot-proxy port.
-func resolveStorefrontWatchURL(projectRoot string) string {
-	if host := proxy.RegisteredHostname(projectRoot); host != "" {
-		return "https://" + dockerpkg.SubdomainStorefrontWatch + "." + host
+// setEnvironment adopts the project's Docker dev environment and resolves the
+// watcher URLs for its mode: the proxy subdomains when proxied, otherwise the
+// local dev-server ports the readiness probes reach directly.
+func (m *OverviewModel) setEnvironment(env *dockerpkg.Environment) {
+	m.env = env
+	m.adminWatchURL = localAdminWatchURL(m.projectRoot)
+	m.sfWatchURL = localStorefrontWatchURL
+	if env != nil && env.ProxyHost() != "" {
+		m.adminWatchURL = env.AdminWatchURL()
+		m.sfWatchURL = env.StorefrontWatchURL()
 	}
-
-	return "http://127.0.0.1:9998"
 }
 
 func (m OverviewModel) Init() tea.Cmd {
 	cmds := []tea.Cmd{
-		discoverServices(m.ctx, m.projectRoot, m.proxyHost),
+		discoverServices(m.ctx, m.env),
 		loadShopwareVersion(m.projectRoot),
 		loadSetupHealth(m.ctx, m.projectRoot, m.executor),
 	}
@@ -911,26 +915,12 @@ func (m OverviewModel) renderAccess() string {
 }
 
 func (m OverviewModel) renderWatchers() string {
-	ports := m.shopCfg.DockerPorts()
-	// A disabled port (empty URL) is not reachable from the host, so no URL.
-	watcherURL := func(key string) string {
-		ep := dockerpkg.EndpointByKey(key)
-		if ep == nil {
-			return ""
-		}
-		return dockerpkg.EndpointURL(*ep, "", ports)
-	}
-	adminURL := watcherURL(shop.DockerPortAdminWatcher)
-	storefrontURL := watcherURL(shop.DockerPortStorefrontWatcher)
-	if m.proxyHost != "" {
-		adminURL = m.adminWatchURL
-		storefrontURL = m.sfWatchURL
-	} else if m.envType != executor.TypeDocker {
-		// Outside docker the watchers bind directly on the host and
-		// docker.ports does not apply: the admin dev server port depends on
-		// the platform's build tooling (Vite or webpack-dev-server).
-		adminURL = fmt.Sprintf("http://127.0.0.1:%d", extension.AdminDevServerPort(m.projectRoot))
-		storefrontURL = "http://127.0.0.1:9998"
+	// Outside Docker the watchers bind directly on the host, so the local
+	// dev-server URLs apply. In Docker the environment resolves them for its
+	// mode and honors docker.services.web.ports; a disabled port has no URL.
+	adminURL, storefrontURL := m.adminWatchURL, m.sfWatchURL
+	if m.env != nil {
+		adminURL, storefrontURL = m.env.AdminWatchURL(), m.env.StorefrontWatchURL()
 	}
 
 	var s strings.Builder
@@ -1152,10 +1142,13 @@ func ResolveShopURL(shopURL string, webPort int) string {
 	return u.String()
 }
 
-func discoverServices(ctx context.Context, projectRoot, proxyHost string) tea.Cmd {
+func discoverServices(ctx context.Context, env *dockerpkg.Environment) tea.Cmd {
 	return func() tea.Msg {
-		env, err := dockerpkg.DiscoverEnvironment(ctx, projectRoot, proxyHost)
-		return servicesLoadedMsg{services: env.Services, background: env.Background, webPort: env.WebPort, err: err}
+		if env == nil {
+			return servicesLoadedMsg{}
+		}
+		running, err := env.Discover(ctx)
+		return servicesLoadedMsg{services: running.Services, background: running.Background, webPort: running.WebPort, err: err}
 	}
 }
 

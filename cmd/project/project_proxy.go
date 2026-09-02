@@ -15,7 +15,6 @@ import (
 	dockerpkg "github.com/shopware/shopware-cli/internal/docker"
 	"github.com/shopware/shopware-cli/internal/envfile"
 	"github.com/shopware/shopware-cli/internal/executor"
-	"github.com/shopware/shopware-cli/internal/extension"
 	"github.com/shopware/shopware-cli/internal/proxy"
 	"github.com/shopware/shopware-cli/internal/shop"
 	"github.com/shopware/shopware-cli/internal/system"
@@ -127,10 +126,18 @@ func (e *proxyEnvironment) up(cmd *cobra.Command) error {
 		return err
 	}
 
+	// The project is proxied from here on, even before its config records the
+	// hostname (switchProjectConfigURLs runs below), so build the environment
+	// at the explicit hostname.
+	env, err := proxy.NewProxiedEnvironment(e.projectRoot, e.cfg, e.hostname)
+	if err != nil {
+		return err
+	}
+
 	var certInfo proxy.CertInfo
 	err = runStep(ctx, "Starting shared proxy...", func(ctx context.Context) error {
 		var infraErr error
-		certInfo, infraErr = proxy.PrepareInfra(ctx, e.infraParams(), reg)
+		certInfo, infraErr = proxy.PrepareInfra(ctx, e.infraParams(env.WebImage()), reg)
 		return infraErr
 	})
 	if err != nil {
@@ -139,7 +146,7 @@ func (e *proxyEnvironment) up(cmd *cobra.Command) error {
 
 	// Regenerate compose.yaml in proxy mode (no host ports, shared network,
 	// Traefik labels, combined CA bundle mounted) before starting the containers.
-	if err := dockerpkg.WriteComposeFile(e.projectRoot, e.composeOptions()); err != nil {
+	if err := env.WriteCompose(); err != nil {
 		return err
 	}
 
@@ -231,10 +238,16 @@ func (e *proxyEnvironment) up(cmd *cobra.Command) error {
 }
 
 // proxyBrowserHostnames returns the shop's proxy hostnames (root + routed
-// subdomains) for the WSL Windows hosts line, using the same lock-package
-// detection as compose generation.
+// subdomains) for the WSL Windows hosts line, from the same catalog that
+// routes the compose services. It is nil without a readable composer.lock;
+// the guidance then points at `proxy up` for the exact line.
 func proxyBrowserHostnames(projectRoot, hostname string) []string {
-	return proxy.ProxyHostnames(hostname, dockerpkg.FeaturesFromLockFile(filepath.Join(projectRoot, "composer.lock")))
+	env, err := dockerpkg.NewEnvironment(projectRoot, dockerpkg.Options{})
+	if err != nil {
+		return nil
+	}
+
+	return proxy.ProxyHostnames(hostname, env.RoutedSubdomains())
 }
 
 // maybePrintWSLWindowsAccess prints the one-time Windows-side steps (import the
@@ -255,39 +268,28 @@ func maybePrintWSLWindowsAccess(hostnames []string) {
 	printWSLGuidance(proxy.WSLWindowsAccessGuidance(caPath, hostnames))
 }
 
-// infraParams gathers the inputs proxy.PrepareInfra needs.
-func (e *proxyEnvironment) infraParams() proxy.InfraParams {
+// infraParams gathers the inputs proxy.PrepareInfra needs; image is the
+// docker-dev image the shop runs, whose CA bundle the proxy combines.
+func (e *proxyEnvironment) infraParams(image string) proxy.InfraParams {
 	return proxy.InfraParams{
 		CanonicalRoot: e.canonicalRoot,
 		Hostname:      e.hostname,
 		BaseDomain:    e.baseDomain,
 		ConfigPath:    e.configPath,
-		Image:         dockerpkg.WebImage(dockerpkg.ComposeOptionsFromConfig(e.cfg)),
+		Image:         image,
 	}
 }
 
-// composeOptions returns the compose options for this project in proxy mode
-// (no host ports, joined to the shared proxy network with Traefik labels, the
-// combined CA bundle mounted). up and dev-bootstrap use it to (re)generate
-// compose.yaml directly, since they know the project is proxied even before its
-// config records the hostname. APP_URL is not set here — proxy up writes it into
-// .env.local before the container starts, keeping the file the single source of
-// truth.
-func (e *proxyEnvironment) composeOptions() *dockerpkg.ComposeOptions {
-	opts := dockerpkg.ComposeOptionsFromConfig(e.cfg)
-	if opts == nil {
-		opts = &dockerpkg.ComposeOptions{}
+// writePlainCompose regenerates compose.yaml in plain fixed-port mode
+// regardless of the config, which may still name the proxy hostname while
+// the project is being taken out of proxy mode.
+func (e *proxyEnvironment) writePlainCompose() error {
+	env, err := proxy.NewEnvironment(e.projectRoot, e.cfg, true)
+	if err != nil {
+		return err
 	}
 
-	bundlePath, _ := proxy.ContainerCABundlePath(dockerpkg.WebImage(opts))
-	opts.Proxy = &dockerpkg.ProxyOptions{
-		Hostname:       e.hostname,
-		NetworkName:    proxy.NetworkName,
-		CABundlePath:   bundlePath,
-		AdminWatchPort: extension.AdminDevServerPort(e.projectRoot),
-	}
-
-	return opts
+	return env.WriteCompose()
 }
 
 // bootstrapInfra sets up the shared proxy for this project and registers it,
@@ -300,7 +302,7 @@ func (e *proxyEnvironment) bootstrapInfra(ctx context.Context) error {
 		return err
 	}
 
-	if _, err := proxy.PrepareInfra(ctx, e.infraParams(), reg); err != nil {
+	if _, err := proxy.PrepareInfra(ctx, e.infraParams(e.cfg.DockerOptions().PHP.WebImage()), reg); err != nil {
 		return err
 	}
 
@@ -542,7 +544,7 @@ func (e *proxyEnvironment) down(ctx context.Context, hintTeardown bool) error {
 		// compose.yaml in plain fixed-port mode to heal a proxy compose file
 		// left by a partially-failed `up`, then report honestly instead of
 		// claiming a deregistration.
-		if err := dockerpkg.WriteComposeFile(e.projectRoot, dockerpkg.ComposeOptionsFromConfig(e.cfg)); err != nil {
+		if err := e.writePlainCompose(); err != nil {
 			return err
 		}
 		fmt.Println(tui.DimText.Render("  ") + tui.BoldText.Render(e.hostname) + tui.DimText.Render(" is not registered with the shared proxy — nothing to deregister."))
@@ -574,7 +576,7 @@ func (e *proxyEnvironment) down(ctx context.Context, hintTeardown bool) error {
 
 	// Regenerate compose.yaml in plain fixed-port mode, reverting the project
 	// out of proxy mode.
-	if err := dockerpkg.WriteComposeFile(e.projectRoot, dockerpkg.ComposeOptionsFromConfig(e.cfg)); err != nil {
+	if err := e.writePlainCompose(); err != nil {
 		return err
 	}
 

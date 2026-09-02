@@ -3,46 +3,33 @@ package docker
 import (
 	"fmt"
 	"net"
-	"os"
-	"path/filepath"
 	"testing"
 
 	"github.com/shyim/go-composer"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-
-	"github.com/shopware/shopware-cli/internal/shop"
 )
 
-func TestHostPort(t *testing.T) {
+func TestActivePublishedEndpoints(t *testing.T) {
 	t.Parallel()
 
-	assert.Equal(t, 8000, HostPort(nil, shop.DockerPortWeb))
-	assert.Equal(t, 9080, HostPort(shop.ConfigDockerPorts{}, shop.DockerPortAdminer))
-	assert.Equal(t, 8005, HostPort(shop.ConfigDockerPorts{shop.DockerPortWeb: 8005}, shop.DockerPortWeb))
-	assert.Equal(t, 0, HostPort(shop.ConfigDockerPorts{shop.DockerPortWeb: shop.DockerPortDisabled}, shop.DockerPortWeb))
-	assert.Equal(t, 0, HostPort(nil, "unknown"))
-}
-
-func TestActiveDefinitions(t *testing.T) {
-	t.Parallel()
-
-	keysOf := func(defs []PortDefinition) []string {
-		keys := make([]string, 0, len(defs))
-		for _, def := range defs {
-			keys = append(keys, def.Key)
+	keysOf := func(services []service) []string {
+		var keys []string
+		for _, svc := range services {
+			for _, ep := range svc.publishedEndpoints() {
+				keys = append(keys, svc.Name+"."+ep.Name)
+			}
 		}
 		return keys
 	}
 
 	base := &composer.Lock{Packages: []composer.LockPackage{{Name: "shopware/core", Version: "6.6.0.0"}}}
-	keys := keysOf(activeDefinitions(base))
-	assert.Contains(t, keys, shop.DockerPortWeb)
-	assert.NotContains(t, keys, shop.DockerPortAMQP)
-	assert.NotContains(t, keys, shop.DockerPortAMQPManagement)
-	assert.NotContains(t, keys, shop.DockerPortElasticsearch)
-	assert.NotContains(t, keys, shop.DockerPortS3)
-	assert.NotContains(t, keys, shop.DockerPortS3Console)
+	keys := keysOf(envFor(base, Environment{}).activeServices())
+	assert.Contains(t, keys, "web.http")
+	assert.Contains(t, keys, "database.mysql")
+	assert.NotContains(t, keys, "queue.amqp")
+	assert.NotContains(t, keys, "search.http")
+	assert.NotContains(t, keys, "storage.s3")
 
 	full := &composer.Lock{Packages: []composer.LockPackage{
 		{Name: "shopware/core", Version: "6.6.0.0"},
@@ -50,90 +37,105 @@ func TestActiveDefinitions(t *testing.T) {
 		{Name: "shopware/elasticsearch", Version: "6.6.0.0"},
 		{Name: "shopware/k8s-meta", Version: "1.0.0"},
 	}}
-	keys = keysOf(activeDefinitions(full))
+	keys = keysOf(envFor(full, Environment{}).activeServices())
 	assert.ElementsMatch(t, []string{
-		shop.DockerPortWeb,
-		shop.DockerPortWebAlt,
-		shop.DockerPortStorefrontWatcherAssets,
-		shop.DockerPortStorefrontWatcher,
-		shop.DockerPortAdminWatcher,
-		shop.DockerPortAdminWatcherHMR,
-		shop.DockerPortAdminer,
-		shop.DockerPortMailerSMTP,
-		shop.DockerPortMailerWeb,
-		shop.DockerPortAMQPManagement,
-		shop.DockerPortAMQP,
-		shop.DockerPortElasticsearch,
-		shop.DockerPortS3,
-		shop.DockerPortS3Console,
+		"web.http", "web.http_alt", "web.storefront_watcher_assets", "web.storefront_watcher", "web.admin_watcher", "web.admin_watcher_hmr",
+		"database.mysql",
+		"adminer.http",
+		"mailer.smtp", "mailer.http",
+		"queue.management", "queue.amqp",
+		"search.http",
+		"storage.s3", "storage.console",
 	}, keys, "a lock with every optional package activates every catalog port")
+}
+
+// freeExcept returns an isFree predicate that reports the given ports as busy.
+func freeExcept(ports ...int) func(int) bool {
+	set := map[int]struct{}{}
+	for _, p := range ports {
+		set[p] = struct{}{}
+	}
+	return func(port int) bool {
+		_, isBusy := set[port]
+		return !isBusy
+	}
 }
 
 func TestFindConflicts(t *testing.T) {
 	t.Parallel()
 
-	defs := []PortDefinition{
-		{Key: shop.DockerPortWeb, Service: "web", Label: "Shop", Target: 8000, Default: 8000},
-		{Key: shop.DockerPortMailerWeb, Service: "mailer", Label: "Mailpit UI", Target: 8025, Default: 8025},
+	webPorts := func(port Port) Settings {
+		return Settings{ServiceWeb: {Ports: Ports{PortHTTP: port}}}
 	}
 
-	// freeExcept returns an isFree predicate that reports the given ports as busy.
-	freeExcept := func(ports ...int) func(int) bool {
-		set := map[int]struct{}{}
-		for _, p := range ports {
-			set[p] = struct{}{}
-		}
-		return func(port int) bool {
-			_, isBusy := set[port]
-			return !isBusy
-		}
-	}
-
-	t.Run("busy port is reported with its definition", func(t *testing.T) {
+	t.Run("busy port is reported with its service and endpoint", func(t *testing.T) {
 		t.Parallel()
-		conflicts := findConflicts(defs, nil, nil, freeExcept(8000))
+		conflicts := (&Environment{}).findConflicts(nil, freeExcept(8000))
 		require.Len(t, conflicts, 1)
-		assert.Equal(t, shop.DockerPortWeb, conflicts[0].Definition.Key)
-		assert.Equal(t, 8000, conflicts[0].HostPort)
+		assert.Equal(t, PortConflict{Service: ServiceWeb, Endpoint: PortHTTP, Label: "Shop (Caddy)", HostPort: 8000}, conflicts[0])
+		assert.Equal(t, "docker.services.web.ports.http", conflicts[0].ConfigPath())
+	})
+
+	t.Run("nameless endpoint is never probed", func(t *testing.T) {
+		t.Parallel()
+		env := &Environment{features: features{S3: true}}
+		assert.Empty(t, env.findConflicts(nil, freeExcept(6379)), "the cache has no ports key and is not published by the generator")
+	})
+
+	t.Run("random-port endpoint cannot conflict unless pinned", func(t *testing.T) {
+		t.Parallel()
+		assert.Empty(t, (&Environment{}).findConflicts(nil, freeExcept(3306)))
+
+		pinned := &Environment{settings: Settings{ServiceDatabase: {Ports: Ports{PortMySQL: 3306}}}}
+		conflicts := pinned.findConflicts(nil, freeExcept(3306))
+		require.Len(t, conflicts, 1)
+		assert.Equal(t, ServiceDatabase, conflicts[0].Service)
 	})
 
 	t.Run("port published by own containers is not a conflict", func(t *testing.T) {
 		t.Parallel()
 		owned := map[int]struct{}{8000: {}}
-		conflicts := findConflicts(defs, nil, owned, freeExcept(8000))
-		assert.Empty(t, conflicts)
+		assert.Empty(t, (&Environment{}).findConflicts(owned, freeExcept(8000)))
 	})
 
 	t.Run("configured override is probed instead of the default", func(t *testing.T) {
 		t.Parallel()
-		ports := shop.ConfigDockerPorts{shop.DockerPortWeb: 9500}
-		conflicts := findConflicts(defs, ports, nil, freeExcept(8000))
-		assert.Empty(t, conflicts, "default 8000 busy, but web is remapped to free 9500")
+		env := &Environment{settings: webPorts(9500)}
+		assert.Empty(t, env.findConflicts(nil, freeExcept(8000)), "default 8000 busy, but web is remapped to free 9500")
 
-		conflicts = findConflicts(defs, ports, nil, freeExcept(9500))
+		conflicts := env.findConflicts(nil, freeExcept(9500))
 		require.Len(t, conflicts, 1)
 		assert.Equal(t, 9500, conflicts[0].HostPort)
 	})
 
 	t.Run("disabled port is never probed", func(t *testing.T) {
 		t.Parallel()
-		ports := shop.ConfigDockerPorts{shop.DockerPortWeb: shop.DockerPortDisabled}
-		conflicts := findConflicts(defs, ports, nil, freeExcept(8000))
-		assert.Empty(t, conflicts, "a disabled port is not published and cannot conflict")
+		env := &Environment{settings: webPorts(PortDisabled)}
+		assert.Empty(t, env.findConflicts(nil, freeExcept(8000)), "a disabled port is not published and cannot conflict")
+	})
+
+	t.Run("proxy mode probes only unrouted services", func(t *testing.T) {
+		t.Parallel()
+		env := &Environment{
+			proxy:    &Proxy{Hostname: "my-shop.shopware.local"},
+			settings: Settings{ServiceDatabase: {Ports: Ports{PortMySQL: 3306}}},
+		}
+		conflicts := env.findConflicts(nil, freeExcept(8000, 9080, 3306))
+		require.Len(t, conflicts, 1, "routed services publish nothing; only the pinned database port is probed")
+		assert.Equal(t, "docker.services.database.ports.mysql", conflicts[0].ConfigPath())
 	})
 
 	t.Run("all free means no conflicts", func(t *testing.T) {
 		t.Parallel()
-		assert.Empty(t, findConflicts(defs, nil, nil, freeExcept()))
+		assert.Empty(t, (&Environment{}).findConflicts(nil, freeExcept()))
 	})
 }
 
-func TestFindPortConflictsCoversS3Ports(t *testing.T) {
+func TestPortConflictsCoversS3Ports(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
-	lock := `{"packages": [{"name": "shopware/core", "version": "6.6.0.0"}, {"name": "shopware/k8s-meta", "version": "1.0.0"}], "packages-dev": []}`
-	require.NoError(t, os.WriteFile(filepath.Join(dir, "composer.lock"), []byte(lock), 0o644))
+	writeLock(t, dir, "shopware/k8s-meta")
 
 	// Occupy a random port and configure it as the S3 host port, so the probe
 	// reports it as busy regardless of what else runs on this machine.
@@ -142,16 +144,16 @@ func TestFindPortConflictsCoversS3Ports(t *testing.T) {
 	t.Cleanup(func() { _ = listener.Close() })
 	busyPort := listener.Addr().(*net.TCPAddr).Port
 
-	conflicts, err := FindPortConflicts(t.Context(), dir, shop.ConfigDockerPorts{
-		shop.DockerPortS3: shop.ConfigDockerPort(busyPort),
-	})
+	env, err := NewEnvironment(dir, Options{Services: Settings{
+		ServiceStorage: {Ports: Ports{PortS3: Port(busyPort)}},
+	}})
 	require.NoError(t, err)
 
-	keys := make([]string, 0, len(conflicts))
-	for _, conflict := range conflicts {
-		keys = append(keys, conflict.Definition.Key)
+	paths := make([]string, 0)
+	for _, conflict := range env.PortConflicts(t.Context()) {
+		paths = append(paths, conflict.ConfigPath())
 	}
-	assert.Contains(t, keys, shop.DockerPortS3, "rustfs ports must be probed for conflicts with an S3 lock")
+	assert.Contains(t, paths, "docker.services.storage.ports.s3", "storage ports must be probed for conflicts with an S3 lock")
 }
 
 func TestIsPortFree(t *testing.T) {
@@ -172,25 +174,28 @@ func TestAllocateRandomPorts(t *testing.T) {
 	t.Parallel()
 
 	conflicts := []PortConflict{
-		{Definition: PortDefinition{Key: shop.DockerPortWeb, Target: 8000, Default: 8000}, HostPort: 8000},
-		{Definition: PortDefinition{Key: shop.DockerPortMailerWeb, Target: 8025, Default: 8025}, HostPort: 8025},
-		{Definition: PortDefinition{Key: shop.DockerPortAdminer, Target: 8080, Default: 9080}, HostPort: 9080},
+		{Service: ServiceWeb, Endpoint: PortHTTP, Label: "Shop (Caddy)", HostPort: 8000},
+		{Service: ServiceMailer, Endpoint: PortHTTP, Label: "Mailpit UI", HostPort: 8025},
+		{Service: ServiceAdminer, Endpoint: PortHTTP, Label: "Adminer", HostPort: 9080},
 	}
 
-	ports, err := AllocateRandomPorts(t.Context(), conflicts)
+	overrides, err := AllocateRandomPorts(t.Context(), conflicts)
 	require.NoError(t, err)
-	require.Len(t, ports, 3)
+	require.Len(t, overrides, 3)
 
 	seen := map[int]string{}
-	for key, port := range ports {
-		assert.Greater(t, port, 0, "port for %s", key)
-		if firstKey, dup := seen[port]; dup {
-			t.Fatalf("port %d handed out twice: %s and %s", port, firstKey, key)
+	for i, o := range overrides {
+		key := o.Service + "." + o.Endpoint
+		assert.Equal(t, conflicts[i].Service, o.Service, "overrides come back in conflict order")
+		assert.Equal(t, conflicts[i].Endpoint, o.Endpoint)
+		assert.Greater(t, o.HostPort, 0, "port for %s", key)
+		if firstKey, dup := seen[o.HostPort]; dup {
+			t.Fatalf("port %d handed out twice: %s and %s", o.HostPort, firstKey, key)
 		}
-		seen[port] = key
+		seen[o.HostPort] = key
 
-		listener, err := (&net.ListenConfig{}).Listen(t.Context(), "tcp", fmt.Sprintf(":%d", port))
-		require.NoError(t, err, "allocated port %d for %s must be bindable", port, key)
+		listener, err := (&net.ListenConfig{}).Listen(t.Context(), "tcp", fmt.Sprintf(":%d", o.HostPort))
+		require.NoError(t, err, "allocated port %d for %s must be bindable", o.HostPort, key)
 		require.NoError(t, listener.Close())
 	}
 }

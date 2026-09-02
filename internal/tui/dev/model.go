@@ -14,6 +14,7 @@ import (
 	dockerpkg "github.com/shopware/shopware-cli/internal/docker"
 	"github.com/shopware/shopware-cli/internal/envfile"
 	"github.com/shopware/shopware-cli/internal/executor"
+	"github.com/shopware/shopware-cli/internal/proxy"
 	"github.com/shopware/shopware-cli/internal/shop"
 	"github.com/shopware/shopware-cli/internal/tracking"
 	"github.com/shopware/shopware-cli/internal/tui"
@@ -116,8 +117,10 @@ type configRestartDoneMsg struct{ err error }
 
 type portConflictMsg struct{ conflicts []dockerpkg.PortConflict }
 type portFixDoneMsg struct {
-	err       error
-	overrides map[string]int
+	err error
+	// config carries the remapped ports; it is adopted on the update thread.
+	config    *shop.Config
+	overrides []dockerpkg.PortOverride
 }
 
 // commandContext returns the context tea.Cmd closures should derive from.
@@ -185,8 +188,26 @@ func (m *Model) rebuildTabs() {
 	envValues, _ := envfile.ReadValues(m.projectRoot, EnvFieldKeys()...)
 
 	m.overview = NewOverviewModel(m.commandContext(), m.executor.Type(), shopURL, username, password, m.projectRoot, m.executor, m.config)
+	m.overview.setEnvironment(m.dockerEnvironment())
 	m.instance = NewInstanceModel(m.commandContext(), m.projectRoot, isDocker)
 	m.configTab = NewConfigModel(m.config, envValues)
+}
+
+// dockerEnvironment resolves the project's Docker dev environment for its
+// effective run mode (honoring a proxy fallback). It is nil outside Docker
+// and when the project cannot be resolved (e.g. no composer.lock yet); the
+// caller then skips the environment-backed features.
+func (m *Model) dockerEnvironment() *dockerpkg.Environment {
+	if m.executor == nil || m.executor.Type() != executor.TypeDocker {
+		return nil
+	}
+
+	env, err := proxy.NewEnvironment(m.projectRoot, m.config, m.proxyFallback)
+	if err != nil {
+		return nil
+	}
+
+	return env
 }
 
 // NewMigrationWizard creates a Model that starts in the migration wizard phase
@@ -658,6 +679,9 @@ func (m Model) updateChildren(msg tea.Msg) (app.Content, tea.Cmd) {
 }
 
 func (m Model) handleConfigRestartDone(msg configRestartDoneMsg) (app.Content, tea.Cmd) {
+	// The config changed, so the environment snapshot the overview holds is
+	// stale; refresh it before the overview rediscovers the services.
+	m.overview.setEnvironment(m.dockerEnvironment())
 	if tags, ok := m.telemetry.configRestartTags(msg.err); ok {
 		trackEvent(tracking.EventDevDockerStart, tags)
 	}

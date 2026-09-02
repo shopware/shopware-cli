@@ -46,9 +46,24 @@ func ReadEnvVar(path, key string) string {
 		return ""
 	}
 
-	for _, l := range strings.Split(string(content), "\n") {
-		if strings.HasPrefix(strings.TrimSpace(l), key+"=") {
-			return strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(l), key+"="))
+	return ExtractEnvVar(content, key)
+}
+
+// ExtractEnvVar returns the value of key in raw dotenv content, or "" when
+// unset. Blank and comment lines are skipped, whitespace around key and value
+// is trimmed, and the first assignment wins.
+func ExtractEnvVar(content []byte, key string) string {
+	for _, line := range strings.Split(string(content), "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		k, value, ok := strings.Cut(line, "=")
+		if !ok {
+			continue
+		}
+		if strings.TrimSpace(k) == key {
+			return strings.TrimSpace(value)
 		}
 	}
 

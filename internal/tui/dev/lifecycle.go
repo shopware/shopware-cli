@@ -129,9 +129,11 @@ func (m Model) updateLifecycle(msg tea.Msg) (app.Content, tea.Cmd) {
 			m.overlayLines = append(m.overlayLines, "", helpStyle.Render("Press q to exit"))
 			return m, nil
 		}
-		// The command goroutine only touched detached copies, so apply the
-		// overrides to the shared config here on the update thread.
-		m.config.SetDockerPortOverrides(msg.overrides)
+		// The command goroutine built a detached copy; adopt it here on the
+		// update thread. The tabs share the config pointer, so copy into it
+		// rather than swapping the pointer.
+		*m.config = *msg.config
+		m.overview.setEnvironment(m.dockerEnvironment())
 		return m, m.startContainers()
 	}
 

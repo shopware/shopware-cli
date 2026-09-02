@@ -48,7 +48,9 @@ func (e *devEnvironment) bootstrapProxyFallback(cmd *cobra.Command) {
 		// Never block dev: regenerate the compose file in fixed-port mode
 		// (newDevEnvironment wrote it in proxy mode) and tell the user how to
 		// diagnose the proxy.
-		_ = dockerpkg.WriteComposeFile(e.projectRoot, dockerpkg.ComposeOptionsFromConfig(e.cfg))
+		if env, err := proxy.NewEnvironment(e.projectRoot, e.cfg, true); err == nil {
+			_ = env.WriteCompose()
+		}
 		fmt.Println(tui.RedText.Render("  Shared proxy unavailable: " + err.Error()))
 		fmt.Println(tui.DimText.Render("  Serving on a local port instead — run ") + tui.BoldText.Render("shopware-cli project proxy verify") + tui.DimText.Render(" to diagnose."))
 		e.proxyFallback = true
@@ -238,7 +240,11 @@ func newDevEnvironment(cmd *cobra.Command, projectRoot string, cfg *shop.Config)
 		// Proxy-aware: a project configured for a local domain gets a proxy-mode
 		// compose file, a port-based one the plain fixed-port file. A failed
 		// proxy bootstrap later reverts it to plain (see the fallback above).
-		if err := proxy.WriteComposeFile(projectRoot, cfg); err != nil {
+		env, err := proxy.NewEnvironment(projectRoot, cfg, false)
+		if err != nil {
+			return nil, err
+		}
+		if err := env.WriteCompose(); err != nil {
 			return nil, err
 		}
 	}
@@ -252,6 +258,12 @@ func newDevEnvironment(cmd *cobra.Command, projectRoot string, cfg *shop.Config)
 	}, nil
 }
 
+// dockerEnvironment resolves the project's dev environment for its effective
+// run mode, honoring a proxy fallback.
+func (e *devEnvironment) dockerEnvironment() (*dockerpkg.Environment, error) {
+	return proxy.NewEnvironment(e.projectRoot, e.cfg, e.proxyFallback)
+}
+
 // resolvePortConflicts probes the host ports the compose file will publish.
 // Conflicting ports either abort the start (fail) or are remapped to random
 // free ports (random) and persisted to the local config override.
@@ -260,47 +272,31 @@ func (e *devEnvironment) resolvePortConflicts(ctx context.Context, mode string) 
 		return nil
 	}
 
-	// Proxy-mode projects publish no host ports, except after a fallback.
-	if proxy.IsProxyProject(e.cfg) && !e.proxyFallback {
-		return nil
-	}
-
-	conflicts, err := dockerpkg.FindPortConflicts(ctx, e.projectRoot, e.cfg.DockerPorts())
-	if err != nil || len(conflicts) == 0 {
+	env, err := e.dockerEnvironment()
+	if err != nil {
 		return err
+	}
+	conflicts := env.PortConflicts(ctx)
+	if len(conflicts) == 0 {
+		return nil
 	}
 
 	if mode != portConflictModeRandom {
 		var lines []string
 		for _, conflict := range conflicts {
-			lines = append(lines, fmt.Sprintf("  %s (%s): port %d is already in use", conflict.Definition.Label, conflict.Definition.Key, conflict.HostPort))
+			lines = append(lines, fmt.Sprintf("  %s (%s): port %d is already in use", conflict.Label, conflict.ConfigPath(), conflict.HostPort))
 		}
-		return fmt.Errorf("cannot start the development environment, host ports are already in use:\n%s\nrerun with --on-port-conflict=random to switch them to free ports, or set docker.ports in %s", strings.Join(lines, "\n"), shop.LocalConfigFileName(e.configPath))
+		return fmt.Errorf("cannot start the development environment, host ports are already in use:\n%s\nrerun with --on-port-conflict=random to switch them to free ports, or set docker.services in %s", strings.Join(lines, "\n"), shop.LocalConfigFileName(e.configPath))
 	}
 
-	overrides, err := dockerpkg.AllocateRandomPorts(ctx, conflicts)
+	cfg, overrides, err := proxy.ApplyRandomPorts(ctx, e.projectRoot, e.configPath, e.cfg, e.proxyFallback, conflicts)
 	if err != nil {
 		return err
 	}
+	e.cfg = cfg
 
-	e.cfg.SetDockerPortOverrides(overrides)
-
-	// A fallen-back proxy project still carries its proxy URL, so
-	// proxy.WriteComposeFile would undo the fallback.
-	if e.proxyFallback {
-		if err := dockerpkg.WriteComposeFile(e.projectRoot, dockerpkg.ComposeOptionsFromConfig(e.cfg)); err != nil {
-			return err
-		}
-	} else if err := proxy.WriteComposeFile(e.projectRoot, e.cfg); err != nil {
-		return err
-	}
-
-	if err := shop.UpdateLocalDockerPorts(e.configPath, overrides); err != nil {
-		return err
-	}
-
-	for _, conflict := range conflicts {
-		fmt.Println("  " + tui.DimText.Render(fmt.Sprintf("%s: port %d is in use, switched to %d", conflict.Definition.Label, conflict.HostPort, overrides[conflict.Definition.Key])))
+	for i, conflict := range conflicts {
+		fmt.Println("  " + tui.DimText.Render(fmt.Sprintf("%s: port %d is in use, switched to %d", conflict.Label, conflict.HostPort, overrides[i].HostPort)))
 	}
 	fmt.Println("  " + tui.DimText.Render("Saved the new ports to "+shop.LocalConfigFileName(e.configPath)))
 	fmt.Println()
@@ -346,9 +342,11 @@ func (e *devEnvironment) start(cmd *cobra.Command) error {
 
 	var services []dockerpkg.DiscoveredService
 	if e.executor.Type() == executor.TypeDocker {
-		if env, err := dockerpkg.DiscoverEnvironment(cmd.Context(), e.projectRoot, proxy.RegisteredHostname(e.projectRoot)); err == nil {
-			services = env.Services
-			shopURL = dev.ResolveShopURL(shopURL, env.WebPort)
+		if env, err := e.dockerEnvironment(); err == nil {
+			if running, err := env.Discover(cmd.Context()); err == nil {
+				services = running.Services
+				shopURL = dev.ResolveShopURL(shopURL, running.WebPort)
+			}
 		}
 	}
 

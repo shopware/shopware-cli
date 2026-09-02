@@ -188,15 +188,23 @@ func TestViewAccessTableWithoutInstallation(t *testing.T) {
 }
 
 func TestRenderWatchers_DockerModeUsesConfiguredPorts(t *testing.T) {
+	dir := t.TempDir()
+	writeComposerLock(t, dir, "^8.2")
 	cfg := &shop.Config{
 		Docker: &shop.ConfigDocker{
-			Ports: shop.ConfigDockerPorts{
-				shop.DockerPortAdminWatcher:      15173,
-				shop.DockerPortStorefrontWatcher: shop.DockerPortDisabled,
+			Services: shop.ConfigDockerServices{
+				dockerpkg.ServiceWeb: {Ports: dockerpkg.Ports{
+					dockerpkg.PortAdminWatcher:      15173,
+					dockerpkg.PortStorefrontWatcher: dockerpkg.PortDisabled,
+				}},
 			},
 		},
 	}
-	m := NewOverviewModel(t.Context(), executor.TypeDocker, "", "", "", t.TempDir(), nil, cfg)
+	env, err := dockerpkg.NewEnvironment(dir, cfg.DockerOptions())
+	require.NoError(t, err)
+
+	m := NewOverviewModel(t.Context(), executor.TypeDocker, "", "", "", dir, nil, cfg)
+	m.setEnvironment(env)
 	m.adminWatchRunning = true
 	m.adminWatchReady = true
 	m.sfWatchRunning = true
@@ -205,6 +213,25 @@ func TestRenderWatchers_DockerModeUsesConfiguredPorts(t *testing.T) {
 	view := m.renderWatchers()
 	assert.Contains(t, view, "http://127.0.0.1:15173", "remapped host ports must be reflected in the URL")
 	assert.NotContains(t, view, "http://127.0.0.1:9998", "disabled ports must not show a URL")
+}
+
+func TestRenderWatchers_ProxyModeUsesSubdomains(t *testing.T) {
+	dir := t.TempDir()
+	writeComposerLock(t, dir, "^8.2")
+	env, err := dockerpkg.NewEnvironment(dir, dockerpkg.Options{Proxy: &dockerpkg.Proxy{Hostname: "my-shop.shopware.local"}})
+	require.NoError(t, err)
+
+	m := NewOverviewModel(t.Context(), executor.TypeDocker, "", "", "", dir, nil, &shop.Config{})
+	m.setEnvironment(env)
+	m.adminWatchRunning = true
+	m.adminWatchReady = true
+	m.sfWatchRunning = true
+	m.sfWatchReady = true
+
+	assert.Equal(t, "https://admin-watch.my-shop.shopware.local", m.adminWatchURL, "the readiness probe targets the proxy route")
+	view := m.renderWatchers()
+	assert.Contains(t, view, "https://admin-watch.my-shop.shopware.local")
+	assert.Contains(t, view, "https://storefront-watch.my-shop.shopware.local")
 }
 
 func TestRenderWatchers_LocalModeIgnoresDockerPorts(t *testing.T) {
@@ -218,8 +245,8 @@ func TestRenderWatchers_LocalModeIgnoresDockerPorts(t *testing.T) {
 
 	cfg := &shop.Config{
 		Docker: &shop.ConfigDocker{
-			Ports: shop.ConfigDockerPorts{
-				shop.DockerPortAdminWatcher: shop.DockerPortDisabled,
+			Services: shop.ConfigDockerServices{
+				dockerpkg.ServiceWeb: {Ports: dockerpkg.Ports{dockerpkg.PortAdminWatcher: dockerpkg.PortDisabled}},
 			},
 		},
 	}

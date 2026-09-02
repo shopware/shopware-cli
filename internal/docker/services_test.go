@@ -4,182 +4,60 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
-
-	"github.com/shopware/shopware-cli/internal/shop"
 )
-
-func TestServicesCatalogInvariants(t *testing.T) {
-	t.Parallel()
-
-	keys := map[string]string{}
-	subdomains := map[string]string{}
-	defaults := map[int]string{}
-
-	for _, svc := range Services {
-		require.NotEmpty(t, svc.Name)
-		require.NotEmpty(t, svc.Label)
-
-		uiCount := 0
-		for _, ep := range svc.Endpoints {
-			require.NotZero(t, ep.ContainerPort, "%s: endpoint %q needs a container port", svc.Name, ep.Label)
-
-			if ep.Key != "" {
-				if prev, dup := keys[ep.Key]; dup {
-					t.Fatalf("docker.ports key %q used by both %s and %s", ep.Key, prev, svc.Name)
-				}
-				keys[ep.Key] = svc.Name
-
-				require.NotEmpty(t, ep.Label, "%s.%s: keyed endpoint needs a conflict-message label", svc.Name, ep.Key)
-				require.NotZero(t, ep.DefaultHostPort, "%s.%s: keyed endpoint needs a default host port", svc.Name, ep.Key)
-				if prev, dup := defaults[ep.DefaultHostPort]; dup {
-					t.Fatalf("default host port %d used by both %s and %s", ep.DefaultHostPort, prev, ep.Key)
-				}
-				defaults[ep.DefaultHostPort] = ep.Key
-			}
-
-			if ep.Subdomain != "" {
-				if prev, dup := subdomains[ep.Subdomain]; dup {
-					t.Fatalf("proxy subdomain %q used by both %s and %s", ep.Subdomain, prev, svc.Name)
-				}
-				subdomains[ep.Subdomain] = svc.Name
-			}
-
-			if ep.Role == RoleUI {
-				uiCount++
-			}
-		}
-
-		if !svc.Hidden {
-			require.Equal(t, 1, uiCount, "%s: visible services need exactly one UI endpoint", svc.Name)
-		} else {
-			require.LessOrEqual(t, uiCount, 1, "%s: at most one UI endpoint", svc.Name)
-		}
-	}
-}
-
-func TestActiveServices(t *testing.T) {
-	t.Parallel()
-
-	names := func(services []ServiceDefinition) []string {
-		out := make([]string, 0, len(services))
-		for _, svc := range services {
-			out = append(out, svc.Name)
-		}
-		return out
-	}
-
-	base := names(ActiveServices(LockFeatures{}))
-	assert.Contains(t, base, "web")
-	assert.Contains(t, base, "database")
-	assert.Contains(t, base, "adminer")
-	assert.Contains(t, base, "mailer")
-	assert.NotContains(t, base, "lavinmq")
-	assert.NotContains(t, base, "opensearch")
-	assert.NotContains(t, base, "redis")
-	assert.NotContains(t, base, "rustfs")
-	assert.NotContains(t, base, "rustfs-init")
-
-	full := names(ActiveServices(LockFeatures{AMQP: true, Elasticsearch: true, RedisMessenger: true, S3: true}))
-	assert.Contains(t, full, "lavinmq")
-	assert.Contains(t, full, "opensearch")
-	assert.Contains(t, full, "redis")
-	assert.Contains(t, full, "rustfs")
-	assert.Contains(t, full, "rustfs-init")
-
-	// Redis follows NeedsRedis: redis messenger or S3.
-	assert.Contains(t, names(ActiveServices(LockFeatures{S3: true})), "redis")
-	assert.Contains(t, names(ActiveServices(LockFeatures{RedisMessenger: true})), "redis")
-}
 
 func TestRoutedSubdomains(t *testing.T) {
 	t.Parallel()
 
+	base := &Environment{}
 	assert.Equal(t,
-		[]string{"", SubdomainAdminWatch, SubdomainStorefrontWatch, "adminer", "mailer"},
-		RoutedSubdomains(LockFeatures{}))
+		[]string{"", subdomainAdminWatch, subdomainStorefrontWatch, "adminer", "mailer"},
+		base.RoutedSubdomains())
+
+	full := &Environment{features: features{AMQP: true, Elasticsearch: true, S3: true}}
 	assert.Equal(t,
-		[]string{"", SubdomainAdminWatch, SubdomainStorefrontWatch, "adminer", "mailer", "lavinmq", "opensearch", "s3", "rustfs"},
-		RoutedSubdomains(LockFeatures{AMQP: true, Elasticsearch: true, S3: true}))
+		[]string{"", subdomainAdminWatch, subdomainStorefrontWatch, "adminer", "mailer", "queue", "search", "s3", "storage"},
+		full.RoutedSubdomains())
 }
 
-func TestServiceByName(t *testing.T) {
+func TestServiceSubdomains(t *testing.T) {
 	t.Parallel()
 
-	assert.Nil(t, ServiceByName("rabbitmq"), "user override services are not generated")
-
-	mailer := ServiceByName("mailer")
-	require.NotNil(t, mailer)
-	assert.Equal(t, "Mailpit", mailer.Label)
+	// Web's custom routes share subdomains across several routes; they are
+	// reported once each, root first.
+	assert.Equal(t, []string{"", subdomainAdminWatch, subdomainStorefrontWatch}, serviceSubdomains(*byName(ServiceWeb)))
+	// Endpoint-derived: only endpoints with a subdomain are routed.
+	assert.Equal(t, []string{"mailer"}, serviceSubdomains(*byName(ServiceMailer)))
+	assert.Equal(t, []string{"s3", "storage"}, serviceSubdomains(*byName(ServiceStorage)))
+	assert.Empty(t, serviceSubdomains(*byName(ServiceDatabase)))
 }
 
-func TestEndpointByKey(t *testing.T) {
+func TestRoutes(t *testing.T) {
 	t.Parallel()
 
-	assert.Nil(t, EndpointByKey("unknown"))
+	plain := &Environment{}
+	assert.Empty(t, plain.routes(*byName(ServiceMailer)), "nothing is routed in fixed-port mode")
 
-	ep := EndpointByKey(shop.DockerPortMailerWeb)
-	require.NotNil(t, ep)
-	assert.Equal(t, 8025, ep.ContainerPort)
-	assert.Equal(t, 8025, ep.DefaultHostPort)
-	assert.Equal(t, "mailer", ep.Subdomain)
+	proxied := &Environment{proxy: &Proxy{Hostname: "my-shop.shopware.local"}}
+	assert.Len(t, proxied.routes(*byName(ServiceMailer)), 1)
+	assert.Empty(t, proxied.routes(*byName(ServiceDatabase)), "the database has no proxy route in either mode")
 }
 
-func TestShopEndpoint(t *testing.T) {
+func TestPortBindings(t *testing.T) {
 	t.Parallel()
 
-	assert.Equal(t, 8000, ShopEndpoint().ContainerPort)
-	assert.Equal(t, 8000, ShopEndpoint().DefaultHostPort)
-}
+	mailer := *byName(ServiceMailer)
+	assert.Equal(t, []string{"1025:1025", "8025:8025"}, portBindings(mailer, nil))
+	assert.Equal(t, []string{"1025:1025", "18025:8025"}, portBindings(mailer, Ports{PortHTTP: 18025}))
+	assert.Equal(t, []string{"8025:8025"}, portBindings(mailer, Ports{PortSMTP: PortDisabled}))
 
-func TestEndpointURL(t *testing.T) {
-	t.Parallel()
+	// Nameless endpoints are never published by the generator.
+	assert.Empty(t, portBindings(*byName(ServiceCache), nil))
 
-	adminer := EndpointByKey(shop.DockerPortAdminer)
-	require.NotNil(t, adminer)
-
-	// Plain mode: default, override, disabled.
-	assert.Equal(t, "http://127.0.0.1:9080", EndpointURL(*adminer, "", nil))
-	assert.Equal(t, "http://127.0.0.1:9999", EndpointURL(*adminer, "", shop.ConfigDockerPorts{shop.DockerPortAdminer: 9999}))
-	assert.Empty(t, EndpointURL(*adminer, "", shop.ConfigDockerPorts{shop.DockerPortAdminer: shop.DockerPortDisabled}))
-
-	// Proxy mode: routed at the endpoint's subdomain.
-	assert.Equal(t, "https://adminer.my-shop.local", EndpointURL(*adminer, "my-shop.local", nil))
-
-	// An unrouted endpoint has no proxy URL; an endpoint without a config key
-	// is never published in plain mode.
-	smtp := EndpointByKey(shop.DockerPortMailerSMTP)
-	require.NotNil(t, smtp)
-	assert.Empty(t, EndpointURL(*smtp, "my-shop.local", nil))
-	assert.Empty(t, EndpointURL(Endpoint{ContainerPort: 3306}, "", nil))
-}
-
-func TestServiceProxyURL(t *testing.T) {
-	t.Parallel()
-
-	assert.Equal(t, "https://adminer.my-shop.local", ServiceByName("adminer").ProxyURL("my-shop.local"))
-	// The rustfs UI endpoint is the console, routed at its own subdomain.
-	assert.Equal(t, "https://rustfs.my-shop.local", ServiceByName("rustfs").ProxyURL("my-shop.local"))
-	// Web's UI endpoint has no subdomain (its proxy routes are custom).
-	assert.Empty(t, ServiceByName("web").ProxyURL("my-shop.local"))
-}
-
-func TestServiceAccessURL(t *testing.T) {
-	t.Parallel()
-
-	rustfs := ServiceByName("rustfs")
-	require.NotNil(t, rustfs)
-
-	// Plain mode: the published port of the UI endpoint (the console, 9001)
-	// wins, even when other endpoints are published too.
-	assert.Equal(t, "http://127.0.0.1:19001", rustfs.AccessURL(map[int]int{9000: 19000, 9001: 19001}, ""))
-	// Proxy mode: the explicit console subdomain, not the service name.
-	assert.Equal(t, "https://rustfs.my-shop.local", rustfs.AccessURL(nil, "my-shop.local"))
-	// Neither published nor proxied: unreachable.
-	assert.Empty(t, rustfs.AccessURL(nil, ""))
-
-	// Services without a UI endpoint never get a URL.
-	redis := ServiceByName("redis")
-	require.NotNil(t, redis)
-	assert.Empty(t, redis.AccessURL(map[int]int{6379: 16379}, ""))
+	// A loopback endpoint without a default publishes on a random loopback
+	// port until pinned.
+	database := *byName(ServiceDatabase)
+	assert.Equal(t, []string{"127.0.0.1::3306"}, portBindings(database, nil))
+	assert.Equal(t, []string{"127.0.0.1:3307:3306"}, portBindings(database, Ports{PortMySQL: 3307}))
+	assert.Empty(t, portBindings(database, Ports{PortMySQL: PortDisabled}))
 }

@@ -6,38 +6,6 @@ import (
 	"strings"
 )
 
-// ProxyOptions carries the data needed to route a project's services through
-// the shared shopware-cli proxy by hostname instead of fixed host ports. It is
-// set on ComposeOptions.Proxy to switch buildCompose into proxy mode.
-type ProxyOptions struct {
-	// Hostname is the project's resolved root hostname, e.g.
-	// "my-shop.shopware.local". Every other route is a subdomain of it (e.g.
-	// "admin-watch.my-shop.shopware.local").
-	Hostname string
-	// NetworkName is the external Docker network shared with Traefik.
-	NetworkName string
-	// CABundlePath is the host path of a CA bundle that combines the image's
-	// system CAs with the proxy's root CA. When set, it is mounted read-only
-	// over the container's system trust store so everything there — PHP, curl
-	// (e.g. Shopware's own APP_URL reachability self-call) and Node — trusts the
-	// proxy's HTTPS certificates while still trusting the public internet.
-	// Mounting the bare CA under /usr/local/share/ca-certificates is not enough:
-	// the image runs as www-data and never runs update-ca-certificates.
-	CABundlePath string
-	// AdminWatchPort is the container port the admin watcher's dev server binds:
-	// Vite (5173) on Shopware 6.7+, webpack-dev-server (8080) before, decided by
-	// the ADMIN_VITE feature flag. The caller computes it (via
-	// extension.AdminDevServerPort) and passes it in, so this package needs no
-	// Shopware-version logic of its own.
-	AdminWatchPort int
-}
-
-// containerCABundlePath is where the combined CA bundle is mounted inside the
-// shop's containers: straight over the system trust store, so openssl, curl and
-// PHP pick it up with no update-ca-certificates step (which the www-data image
-// user could not run anyway). NODE_EXTRA_CA_CERTS points Node at the same file.
-const containerCABundlePath = "/etc/ssl/certs/ca-certificates.crt"
-
 const (
 	// storefrontProxyPort / storefrontAssetsPort are the two container ports the
 	// deprecated webpack hot-proxy watcher listens on: the HTML proxy and the
@@ -74,10 +42,10 @@ type proxyRoute struct {
 	pathPrefix string
 }
 
-// hostname returns the full hostname for this route, e.g.
+// routeHostname returns the full hostname for a route, e.g.
 // "admin-watch.my-shop.shopware.local" or, for the root route,
 // "my-shop.shopware.local".
-func (p *ProxyOptions) hostname(r proxyRoute) string {
+func routeHostname(p *Proxy, r proxyRoute) string {
 	if r.subdomain == "" {
 		return p.Hostname
 	}
@@ -85,50 +53,43 @@ func (p *ProxyOptions) hostname(r proxyRoute) string {
 	return fmt.Sprintf("%s.%s", r.subdomain, p.Hostname)
 }
 
-// publishOrRoute wires a service for the current mode: in plain mode it
-// publishes the fixed host ports, in proxy mode it joins the shared network and
-// adds a Traefik router per route (and never publishes host ports). Keeping the
-// mode branch here keeps buildCompose readable.
-func publishOrRoute(svc *composeService, p *ProxyOptions, serviceName string, hostPorts []string, routes ...proxyRoute) {
-	if p == nil {
-		if len(hostPorts) > 0 {
-			svc.Ports = hostPorts
-		}
+// publishOrRoute wires a built service for the current mode. In proxy mode a
+// service with routes joins the shared network and gets a Traefik router per
+// route and publishes no host ports. Otherwise its endpoints are published on
+// the host, honoring port overrides; a service without routes (the database)
+// is published the same way in both modes.
+func publishOrRoute(spec *composeService, e *Environment, svc service) {
+	if routes := e.routes(svc); len(routes) > 0 {
+		addProxyRouting(spec, e.proxy, svc.Name, routes...)
 		return
 	}
 
-	addProxyRouting(svc, p, serviceName, routes...)
-}
-
-// publishOrRouteService wires a catalog-defined service for the current mode:
-// plain mode publishes the service's keyed host ports, proxy mode routes its
-// endpoint subdomains. Web uses publishOrRoute directly because its routes are
-// custom (see webProxyRoutes).
-func publishOrRouteService(svc *composeService, p *ProxyOptions, def *ServiceDefinition, opts *ComposeOptions) {
-	publishOrRoute(svc, p, def.Name, opts.portBindings(def.portKeys()...), def.proxyRoutes()...)
+	if bindings := portBindings(svc, e.ports(svc.Name)); len(bindings) > 0 {
+		spec.Ports = bindings
+	}
 }
 
 // webProxyRoutes returns the web service's routes in proxy mode: the shop root,
 // the admin watcher, and the deprecated webpack storefront watcher's three
 // endpoints (HTML proxy, asset/HMR server, and /bundles/ served from the app).
-// It returns nil for a nil (plain-mode) options value.
-func webProxyRoutes(p *ProxyOptions) []proxyRoute {
+// It returns nil for a nil (plain-mode) proxy.
+func webProxyRoutes(p *Proxy) []proxyRoute {
 	if p == nil {
 		return nil
 	}
 
 	return []proxyRoute{
 		{subdomain: "", containerPort: 8000},
-		{subdomain: SubdomainAdminWatch, containerPort: p.AdminWatchPort},
+		{subdomain: subdomainAdminWatch, containerPort: p.AdminWatchPort},
 		// The deprecated webpack storefront watcher runs two servers under one
 		// hostname: the HTML proxy on websecure and the asset+HMR server on the
 		// dedicated sfassets entrypoint.
-		{subdomain: SubdomainStorefrontWatch, containerPort: storefrontProxyPort},
-		{subdomain: SubdomainStorefrontWatch, containerPort: storefrontAssetsPort, entrypoint: storefrontAssetsEntrypoint, nameSuffix: "storefront-watch-assets"},
+		{subdomain: subdomainStorefrontWatch, containerPort: storefrontProxyPort},
+		{subdomain: subdomainStorefrontWatch, containerPort: storefrontAssetsPort, entrypoint: storefrontAssetsEntrypoint, nameSuffix: "storefront-watch-assets"},
 		// /bundles/ (the ESM import-map modules) must come straight from the app
 		// so they keep their JS Content-Type; the hot-proxy drops it and the
 		// browser then rejects the module. Higher priority than the route above.
-		{subdomain: SubdomainStorefrontWatch, pathPrefix: "/bundles/", containerPort: 8000, nameSuffix: "storefront-watch-bundles"},
+		{subdomain: subdomainStorefrontWatch, pathPrefix: "/bundles/", containerPort: 8000, nameSuffix: "storefront-watch-bundles"},
 	}
 }
 
@@ -163,17 +124,9 @@ func proxyNetworks(networkName, alias string) yamlMap[composeServiceNetwork] {
 }
 
 // addProxyRouting joins serviceName to the shared proxy network and adds a
-// Traefik router per route. buildCompose calls it in proxy mode instead of
-// publishing fixed host ports.
-func addProxyRouting(svc *composeService, p *ProxyOptions, serviceName string, routes ...proxyRoute) {
-	// Router/service names must be unique across every project sharing the one
-	// Traefik instance, so they are prefixed with the project's own hostname
-	// (dots replaced, since Traefik router names must be alphanumeric).
-	routerPrefix := proxyServiceAlias(p.Hostname, serviceName)
-
-	// The service advertises that same alias on the shared network, so internal
-	// calls resolve to it and not to a parallel project's service (#1484).
-	svc.Networks = proxyNetworks(p.NetworkName, routerPrefix)
+// Traefik router per route.
+func addProxyRouting(spec *composeService, p *Proxy, serviceName string, routes ...proxyRoute) {
+	spec.Networks = []string{"default", p.NetworkName}
 
 	labels := yamlMap[string]{}.
 		set("traefik.enable", "true").
@@ -195,7 +148,7 @@ func addProxyRouting(svc *composeService, p *ProxyOptions, serviceName string, r
 			entrypoint = "websecure"
 		}
 
-		rule := fmt.Sprintf("Host(`%s`)", p.hostname(route))
+		rule := fmt.Sprintf("Host(`%s`)", routeHostname(p, route))
 		if route.pathPrefix != "" {
 			rule += fmt.Sprintf(" && PathPrefix(`%s`)", route.pathPrefix)
 		}
@@ -208,19 +161,5 @@ func addProxyRouting(svc *composeService, p *ProxyOptions, serviceName string, r
 			set(fmt.Sprintf("traefik.http.services.%s.loadbalancer.server.port", router), strconv.Itoa(route.containerPort))
 	}
 
-	svc.Labels = labels
-}
-
-// addVolumes attaches a service's volume list built from base mounts, plus the
-// read-only combined CA bundle mounted over the system trust store when in
-// proxy mode — so code in the container (PHP, curl, Node) trusts the proxy's
-// HTTPS certificates for self-calls to APP_URL while still trusting public CAs.
-// Mirrors publishOrRoute, keeping the proxy-specific mount out of buildCompose.
-func addVolumes(svc *composeService, p *ProxyOptions, base ...string) {
-	vols := base
-	if p != nil && p.CABundlePath != "" {
-		vols = append(vols, p.CABundlePath+":"+containerCABundlePath+":ro")
-	}
-
-	svc.Volumes = vols
+	spec.Labels = labels
 }

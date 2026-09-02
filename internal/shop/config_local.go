@@ -5,10 +5,13 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"sort"
+	"slices"
 	"strconv"
+	"strings"
 
 	"gopkg.in/yaml.v3"
+
+	"github.com/shopware/shopware-cli/internal/docker"
 )
 
 // updateLocalConfig loads the local override file belonging to configPath
@@ -74,12 +77,21 @@ func updateLocalConfig(configPath string, mutate func(root *yaml.Node) error) er
 	return nil
 }
 
-// UpdateLocalDockerPorts merges the given host-port overrides into docker.ports
-// of the local override file, preserving all other content.
-func UpdateLocalDockerPorts(configPath string, ports map[string]int) error {
-	if len(ports) == 0 {
+// UpdateLocalDockerPorts merges the given host-port overrides into
+// docker.services.<service>.ports of the local override file, preserving all
+// other content.
+func UpdateLocalDockerPorts(configPath string, overrides []docker.PortOverride) error {
+	if len(overrides) == 0 {
 		return nil
 	}
+
+	sorted := slices.Clone(overrides)
+	slices.SortFunc(sorted, func(a, b docker.PortOverride) int {
+		if c := strings.Compare(a.Service, b.Service); c != 0 {
+			return c
+		}
+		return strings.Compare(a.Endpoint, b.Endpoint)
+	})
 
 	return updateLocalConfig(configPath, func(root *yaml.Node) error {
 		docker, err := findOrCreateMapping(root, "docker")
@@ -87,22 +99,26 @@ func UpdateLocalDockerPorts(configPath string, ports map[string]int) error {
 			return err
 		}
 
-		portsNode, err := findOrCreateMapping(docker, "ports")
+		services, err := findOrCreateMapping(docker, "services")
 		if err != nil {
 			return err
 		}
 
-		keys := make([]string, 0, len(ports))
-		for key := range ports {
-			keys = append(keys, key)
-		}
-		sort.Strings(keys)
+		for _, o := range sorted {
+			service, err := findOrCreateMapping(services, o.Service)
+			if err != nil {
+				return err
+			}
 
-		for _, key := range keys {
-			setMappingValue(portsNode, key, &yaml.Node{
+			ports, err := findOrCreateMapping(service, "ports")
+			if err != nil {
+				return err
+			}
+
+			setMappingValue(ports, o.Endpoint, &yaml.Node{
 				Kind:  yaml.ScalarNode,
 				Tag:   "!!int",
-				Value: strconv.Itoa(ports[key]),
+				Value: strconv.Itoa(o.HostPort),
 			})
 		}
 

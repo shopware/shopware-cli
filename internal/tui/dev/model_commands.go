@@ -2,15 +2,12 @@ package dev
 
 import (
 	"context"
-	"maps"
 	"strings"
 
 	"charm.land/bubbles/v2/progress"
 	tea "charm.land/bubbletea/v2"
 
-	dockerpkg "github.com/shopware/shopware-cli/internal/docker"
 	"github.com/shopware/shopware-cli/internal/proxy"
-	"github.com/shopware/shopware-cli/internal/shop"
 	"github.com/shopware/shopware-cli/internal/shop/install"
 	"github.com/shopware/shopware-cli/internal/tui"
 )
@@ -53,17 +50,13 @@ func (m *Model) checkPorts() tea.Cmd {
 }
 
 // needStartMsg probes the host ports the compose file will publish before a
-// container start. Proxy-mode projects publish no host ports, except after a
-// fallback to fixed-port mode. Probe errors are ignored so `docker compose up`
-// surfaces real failures itself.
+// container start. Probe errors are ignored so `docker compose up` surfaces
+// real failures itself.
 func (m *Model) needStartMsg() tea.Msg {
-	if proxy.IsProxyProject(m.config) && !m.proxyFallback {
-		return dockerNeedStartMsg{}
-	}
-
-	conflicts, err := dockerpkg.FindPortConflicts(m.commandContext(), m.projectRoot, m.config.DockerPorts())
-	if err == nil && len(conflicts) > 0 {
-		return portConflictMsg{conflicts: conflicts}
+	if env := m.dockerEnvironment(); env != nil {
+		if conflicts := env.PortConflicts(m.commandContext()); len(conflicts) > 0 {
+			return portConflictMsg{conflicts: conflicts}
+		}
 	}
 
 	return dockerNeedStartMsg{}
@@ -175,9 +168,9 @@ func (m *Model) startContainers() tea.Cmd {
 
 // fixPortConflicts allocates a random free host port for every conflicting
 // port, rewrites compose.yaml and persists the overrides to the local config
-// override file. The shared model config is only updated on the update thread
-// once both writes succeeded, so a failed write cannot leave compose.yaml,
-// the local override and the in-memory config diverged.
+// override file. The shared model config is only replaced on the update
+// thread once both writes succeeded, so a failed write cannot leave
+// compose.yaml, the local override and the in-memory config diverged.
 func (m *Model) fixPortConflicts() tea.Cmd {
 	conflicts := m.portConflicts
 	cfg := m.config
@@ -186,39 +179,12 @@ func (m *Model) fixPortConflicts() tea.Cmd {
 	proxyFallback := m.proxyFallback
 	ctx := m.commandContext()
 	return func() tea.Msg {
-		overrides, err := dockerpkg.AllocateRandomPorts(ctx, conflicts)
+		updated, overrides, err := proxy.ApplyRandomPorts(ctx, projectRoot, configPath, cfg, proxyFallback, conflicts)
 		if err != nil {
 			return portFixDoneMsg{err: err}
 		}
 
-		// Apply the overrides to a detached copy: this goroutine must not
-		// mutate the shared config the UI reads concurrently, and
-		// SetDockerPortOverrides merges into the Ports map in place.
-		cfgCopy := *cfg
-		if cfg.Docker != nil {
-			dockerCopy := *cfg.Docker
-			if cfg.Docker.Ports != nil {
-				dockerCopy.Ports = maps.Clone(cfg.Docker.Ports)
-			}
-			cfgCopy.Docker = &dockerCopy
-		}
-		cfgCopy.SetDockerPortOverrides(overrides)
-
-		// A fallen-back proxy project still carries its proxy URL, so
-		// proxy.WriteComposeFile would undo the fallback.
-		if proxyFallback {
-			if err := dockerpkg.WriteComposeFile(projectRoot, dockerpkg.ComposeOptionsFromConfig(&cfgCopy)); err != nil {
-				return portFixDoneMsg{err: err}
-			}
-		} else if err := proxy.WriteComposeFile(projectRoot, &cfgCopy); err != nil {
-			return portFixDoneMsg{err: err}
-		}
-
-		if err := shop.UpdateLocalDockerPorts(configPath, overrides); err != nil {
-			return portFixDoneMsg{err: err}
-		}
-
-		return portFixDoneMsg{overrides: overrides}
+		return portFixDoneMsg{config: updated, overrides: overrides}
 	}
 }
 
@@ -227,8 +193,13 @@ func (m *Model) restartContainersForConfig() tea.Cmd {
 	ctx := m.commandContext()
 	projectRoot := m.projectRoot
 	cfg := m.config
+	proxyFallback := m.proxyFallback
 	return func() tea.Msg {
-		if err := proxy.WriteComposeFile(projectRoot, cfg); err != nil {
+		env, err := proxy.NewEnvironment(projectRoot, cfg, proxyFallback)
+		if err == nil {
+			err = env.WriteCompose()
+		}
+		if err != nil {
 			return configRestartDoneMsg{err: err}
 		}
 		cmd := composeCommand(ctx, projectRoot, "up", "-d")

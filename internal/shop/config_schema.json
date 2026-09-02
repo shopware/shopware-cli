@@ -466,9 +466,9 @@
           "$ref": "#/$defs/ConfigDockerPHP",
           "description": "PHP configuration for the Docker dev image"
         },
-        "ports": {
-          "$ref": "#/$defs/ConfigDockerPorts",
-          "description": "Host port overrides for the Docker dev environment. Container ports are fixed."
+        "services": {
+          "$ref": "#/$defs/ConfigDockerServices",
+          "description": "Per-service settings for the Docker dev environment: host port overrides and implementation variants."
         }
       },
       "additionalProperties": false,
@@ -544,81 +544,194 @@
       "additionalProperties": false,
       "type": "object"
     },
-    "ConfigDockerPort": {
-      "oneOf": [
-        {
-          "type": "integer",
-          "maximum": 65535,
-          "minimum": 1
-        },
-        {
-          "const": false
-        }
-      ],
-      "description": "Host port number, or false to not publish the port."
-    },
-    "ConfigDockerPorts": {
+    "ConfigDockerServices": {
       "properties": {
         "web": {
-          "$ref": "#/$defs/ConfigDockerPort",
-          "description": "Host port for the shop (Caddy). Defaults to 8000."
+          "properties": {
+            "ports": {
+              "properties": {
+                "http": {
+                  "$ref": "#/$defs/Port",
+                  "description": "Host port for Shop (Caddy). Defaults to 8000."
+                },
+                "http_alt": {
+                  "$ref": "#/$defs/Port",
+                  "description": "Host port for Shop (alternative HTTP). Defaults to 8080."
+                },
+                "storefront_watcher_assets": {
+                  "$ref": "#/$defs/Port",
+                  "description": "Host port for Storefront watcher assets. Defaults to 9999."
+                },
+                "storefront_watcher": {
+                  "$ref": "#/$defs/Port",
+                  "description": "Host port for Storefront watcher. Defaults to 9998."
+                },
+                "admin_watcher": {
+                  "$ref": "#/$defs/Port",
+                  "description": "Host port for Admin watcher (Vite). Defaults to 5173."
+                },
+                "admin_watcher_hmr": {
+                  "$ref": "#/$defs/Port",
+                  "description": "Host port for Admin watcher HMR. Defaults to 5773."
+                }
+              },
+              "additionalProperties": false,
+              "type": "object",
+              "description": "Host ports the service's endpoints are published on. false disables publishing an endpoint."
+            }
+          },
+          "additionalProperties": false,
+          "type": "object",
+          "description": "Shop service settings."
         },
-        "web_alt": {
-          "$ref": "#/$defs/ConfigDockerPort",
-          "description": "Alternative HTTP host port of the web container. Defaults to 8080."
-        },
-        "storefront_watcher_assets": {
-          "$ref": "#/$defs/ConfigDockerPort",
-          "description": "Host port for the storefront watcher assets. Defaults to 9999."
-        },
-        "storefront_watcher": {
-          "$ref": "#/$defs/ConfigDockerPort",
-          "description": "Host port for the storefront watcher proxy. Defaults to 9998."
-        },
-        "admin_watcher": {
-          "$ref": "#/$defs/ConfigDockerPort",
-          "description": "Host port for the administration watcher (Vite). Defaults to 5173."
-        },
-        "admin_watcher_hmr": {
-          "$ref": "#/$defs/ConfigDockerPort",
-          "description": "Host port for the administration watcher hot module reload. Defaults to 5773."
+        "database": {
+          "properties": {
+            "type": {
+              "type": "string",
+              "enum": [
+                "mariadb",
+                "mysql"
+              ],
+              "description": "Implementation to run. Defaults to \"mariadb\"."
+            },
+            "version": {
+              "type": "string",
+              "description": "Image version (tag) to run. Defaults to \"11.8\" for mariadb, \"8.4\" for mysql."
+            },
+            "ports": {
+              "properties": {
+                "mysql": {
+                  "$ref": "#/$defs/Port",
+                  "description": "Host port for Database (MySQL protocol). Published on a random port by default."
+                }
+              },
+              "additionalProperties": false,
+              "type": "object",
+              "description": "Host ports the service's endpoints are published on. false disables publishing an endpoint."
+            }
+          },
+          "additionalProperties": false,
+          "type": "object",
+          "description": "Database service settings."
         },
         "adminer": {
-          "$ref": "#/$defs/ConfigDockerPort",
-          "description": "Host port for the Adminer UI. Defaults to 9080."
+          "properties": {
+            "ports": {
+              "properties": {
+                "http": {
+                  "$ref": "#/$defs/Port",
+                  "description": "Host port for Adminer. Defaults to 9080."
+                }
+              },
+              "additionalProperties": false,
+              "type": "object",
+              "description": "Host ports the service's endpoints are published on. false disables publishing an endpoint."
+            }
+          },
+          "additionalProperties": false,
+          "type": "object",
+          "description": "Adminer service settings."
         },
-        "mailer_smtp": {
-          "$ref": "#/$defs/ConfigDockerPort",
-          "description": "Host port for the Mailpit SMTP endpoint. Defaults to 1025."
+        "mailer": {
+          "properties": {
+            "ports": {
+              "properties": {
+                "smtp": {
+                  "$ref": "#/$defs/Port",
+                  "description": "Host port for Mailpit SMTP. Defaults to 1025."
+                },
+                "http": {
+                  "$ref": "#/$defs/Port",
+                  "description": "Host port for Mailpit UI. Defaults to 8025."
+                }
+              },
+              "additionalProperties": false,
+              "type": "object",
+              "description": "Host ports the service's endpoints are published on. false disables publishing an endpoint."
+            }
+          },
+          "additionalProperties": false,
+          "type": "object",
+          "description": "Mailpit service settings."
         },
-        "mailer_web": {
-          "$ref": "#/$defs/ConfigDockerPort",
-          "description": "Host port for the Mailpit web UI. Defaults to 8025."
+        "queue": {
+          "properties": {
+            "type": {
+              "type": "string",
+              "enum": [
+                "lavinmq",
+                "rabbitmq"
+              ],
+              "description": "Implementation to run. Defaults to \"lavinmq\"."
+            },
+            "version": {
+              "type": "string",
+              "description": "Image version (tag) to run. Defaults to \"latest\" for lavinmq, \"4-management\" for rabbitmq."
+            },
+            "ports": {
+              "properties": {
+                "management": {
+                  "$ref": "#/$defs/Port",
+                  "description": "Host port for Queue management UI. Defaults to 15672."
+                },
+                "amqp": {
+                  "$ref": "#/$defs/Port",
+                  "description": "Host port for AMQP. Defaults to 5672."
+                }
+              },
+              "additionalProperties": false,
+              "type": "object",
+              "description": "Host ports the service's endpoints are published on. false disables publishing an endpoint."
+            }
+          },
+          "additionalProperties": false,
+          "type": "object",
+          "description": "Queue service settings."
         },
-        "amqp_management": {
-          "$ref": "#/$defs/ConfigDockerPort",
-          "description": "Host port for the LavinMQ management UI. Defaults to 15672."
+        "search": {
+          "properties": {
+            "ports": {
+              "properties": {
+                "http": {
+                  "$ref": "#/$defs/Port",
+                  "description": "Host port for OpenSearch. Defaults to 9200."
+                }
+              },
+              "additionalProperties": false,
+              "type": "object",
+              "description": "Host ports the service's endpoints are published on. false disables publishing an endpoint."
+            }
+          },
+          "additionalProperties": false,
+          "type": "object",
+          "description": "Search service settings."
         },
-        "amqp": {
-          "$ref": "#/$defs/ConfigDockerPort",
-          "description": "Host port for the AMQP endpoint. Defaults to 5672."
-        },
-        "elasticsearch": {
-          "$ref": "#/$defs/ConfigDockerPort",
-          "description": "Host port for OpenSearch. Defaults to 9200."
-        },
-        "s3": {
-          "$ref": "#/$defs/ConfigDockerPort",
-          "description": "Host port for the S3 API (RustFS). Defaults to 9000."
-        },
-        "s3_console": {
-          "$ref": "#/$defs/ConfigDockerPort",
-          "description": "Host port for the RustFS console. Defaults to 9001."
+        "storage": {
+          "properties": {
+            "ports": {
+              "properties": {
+                "s3": {
+                  "$ref": "#/$defs/Port",
+                  "description": "Host port for S3 API. Defaults to 9000."
+                },
+                "console": {
+                  "$ref": "#/$defs/Port",
+                  "description": "Host port for Storage console. Defaults to 9001."
+                }
+              },
+              "additionalProperties": false,
+              "type": "object",
+              "description": "Host ports the service's endpoints are published on. false disables publishing an endpoint."
+            }
+          },
+          "additionalProperties": false,
+          "type": "object",
+          "description": "Storage (S3) service settings."
         }
       },
       "additionalProperties": false,
       "type": "object",
-      "description": "ConfigDockerPorts maps a published-port key to the host port it binds, or to false to not publish the port at all."
+      "description": "ConfigDockerServices holds the per-service settings of the Docker dev environment, keyed by compose service name."
     },
     "ConfigDump": {
       "properties": {
@@ -765,6 +878,45 @@
       },
       "additionalProperties": false,
       "type": "object"
+    },
+    "Port": {
+      "oneOf": [
+        {
+          "type": "integer",
+          "maximum": 65535,
+          "minimum": 1
+        },
+        {
+          "const": false
+        }
+      ],
+      "description": "Host port number, or false to not publish the port."
+    },
+    "Ports": {
+      "additionalProperties": {
+        "$ref": "#/$defs/Port"
+      },
+      "type": "object",
+      "description": "Ports maps a service's endpoint name to the host port it binds, or to PortDisabled to not publish the endpoint at all."
+    },
+    "ServiceSettings": {
+      "properties": {
+        "type": {
+          "type": "string",
+          "description": "Implementation to run, for services that offer more than one (database: mariadb or mysql, queue: lavinmq or rabbitmq)."
+        },
+        "version": {
+          "type": "string",
+          "description": "Image version (tag) to run. Defaults per implementation."
+        },
+        "ports": {
+          "$ref": "#/$defs/Ports",
+          "description": "Host ports the service's endpoints are published on, keyed by endpoint name. false disables publishing an endpoint."
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "description": "ServiceSettings configures one compose service of the dev environment."
     },
     "TableLimit": {
       "properties": {

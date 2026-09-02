@@ -7,7 +7,7 @@ import (
 	"os/exec"
 	"strings"
 
-	"github.com/shopware/shopware-cli/internal/shop"
+	"github.com/shopware/shopware-cli/internal/envfile"
 )
 
 // DiscoveredService is an auxiliary service of the running development
@@ -27,9 +27,9 @@ type BackgroundProcess struct {
 	Running bool
 }
 
-// Environment is the running development environment's containers, classified
+// RunningEnvironment is the running development environment's containers, classified
 // by role.
-type Environment struct {
+type RunningEnvironment struct {
 	// Services are the auxiliary services reachable from the host.
 	Services []DiscoveredService
 	// Background are the long-running console processes.
@@ -37,30 +37,6 @@ type Environment struct {
 	// WebPort is the host port the shop is published on, 0 when it cannot be
 	// determined (environment down, web container not publishing).
 	WebPort int
-}
-
-// overrideService describes a service the generator never emits but users add
-// via compose.override.yaml, so it still shows up in the service list.
-type overrideService struct {
-	Name       string
-	TargetPort int
-	Username   string
-	Password   string
-}
-
-var overrideServices = map[string]overrideService{
-	"rabbitmq": {Name: "Queue (RabbitMQ)", TargetPort: 15672, Username: "guest", Password: "guest"},
-}
-
-// backgroundServiceLabel returns the display label for a compose service that
-// is one of the dedicated background processes, and whether it is one.
-func backgroundServiceLabel(service string) (string, bool) {
-	for _, bg := range BackgroundServices {
-		if bg.Name == service {
-			return bg.Label, true
-		}
-	}
-	return "", false
 }
 
 // composeCommand builds a `docker compose <args...>` invocation rooted at
@@ -71,7 +47,7 @@ func backgroundServiceLabel(service string) (string, bool) {
 func composeCommand(ctx context.Context, projectRoot string, args ...string) *exec.Cmd {
 	fullArgs := []string{"compose"}
 	if os.Getenv("COMPOSE_PROJECT_NAME") == "" {
-		if name := shop.ReadComposeProjectName(projectRoot); name != "" {
+		if name := envfile.ReadComposeProjectName(projectRoot); name != "" {
 			fullArgs = append(fullArgs, "-p", name)
 		}
 	}
@@ -133,29 +109,31 @@ func composePS(ctx context.Context, projectRoot string) ([]composePSContainer, e
 	return containers, nil
 }
 
-// DiscoverEnvironment inspects the project's containers via `docker compose
-// ps` and classifies them into published auxiliary services, background
-// processes, and the shop's published web port. proxyHost is the project's
-// proxy hostname ("" in plain-port mode): proxied services publish no host
-// port and are reached at their subdomain instead.
-func DiscoverEnvironment(ctx context.Context, projectRoot, proxyHost string) (Environment, error) {
-	containers, err := composePS(ctx, projectRoot)
+// Discover inspects the project's containers via `docker compose ps` and
+// classifies them into published auxiliary services, background processes,
+// and the shop's published web port. Proxied services publish no host port and
+// are reached at their subdomain instead.
+func (e *Environment) Discover(ctx context.Context) (RunningEnvironment, error) {
+	containers, err := composePS(ctx, e.root)
 	if err != nil {
-		return Environment{}, err
+		return RunningEnvironment{}, err
 	}
 
-	return classifyContainers(containers, proxyHost), nil
+	return classifyContainers(containers, e.proxyHost()), nil
 }
 
 // classifyContainers sorts raw compose containers into the environment's
 // services, background processes, and published web port.
-func classifyContainers(containers []composePSContainer, proxyHost string) Environment {
-	var env Environment
+func classifyContainers(containers []composePSContainer, proxyHost string) RunningEnvironment {
+	var env RunningEnvironment
+	shopPort := mustEndpoint(ServiceWeb, PortHTTP).ContainerPort
 
 	for _, container := range containers {
-		if label, ok := backgroundServiceLabel(container.Service); ok {
+		def := byName(container.Service)
+
+		if def != nil && def.Background {
 			env.Background = append(env.Background, BackgroundProcess{
-				Name:    label,
+				Name:    def.Label,
 				Running: container.State == "running",
 			})
 			continue
@@ -164,48 +142,28 @@ func classifyContainers(containers []composePSContainer, proxyHost string) Envir
 		ports := container.publishedPorts()
 
 		if container.Service == "web" {
-			if port, ok := ports[ShopEndpoint().ContainerPort]; ok {
+			if port, ok := ports[shopPort]; ok {
 				env.WebPort = port
 			}
 		}
 
-		if def := ServiceByName(container.Service); def != nil {
-			if def.Hidden {
-				continue
-			}
-
-			// Prefer a real published port when the service has one (plain
-			// mode). Proxied services publish nothing and resolve to their
-			// proxy subdomain instead.
-			url := def.AccessURL(ports, proxyHost)
-			if url == "" {
-				continue
-			}
-
-			env.Services = append(env.Services, DiscoveredService{
-				Name:     def.Label,
-				URL:      url,
-				Username: def.Username,
-				Password: def.Password,
-			})
+		if def == nil || def.Hidden {
 			continue
 		}
 
-		// Services the generator never emits (user compose overrides) only
-		// have a URL when they publish their target port.
-		extra, ok := overrideServices[container.Service]
-		if !ok {
+		// Prefer a real published port when the service has one (plain mode).
+		// Proxied services publish nothing and resolve to their proxy subdomain
+		// instead; services without either are unreachable and skipped.
+		url := def.publishedURL(ports, proxyHost)
+		if url == "" {
 			continue
 		}
-		publishedPort, hasPort := ports[extra.TargetPort]
-		if !hasPort {
-			continue
-		}
+
 		env.Services = append(env.Services, DiscoveredService{
-			Name:     extra.Name,
-			URL:      loopbackHTTPURL(publishedPort),
-			Username: extra.Username,
-			Password: extra.Password,
+			Name:     def.Label,
+			URL:      url,
+			Username: def.Username,
+			Password: def.Password,
 		})
 	}
 

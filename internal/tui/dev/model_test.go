@@ -529,7 +529,7 @@ func TestView_DoesNotPanicForEachPhase(t *testing.T) {
 		}
 		if p == phasePortConflict {
 			m.portConflicts = []dockerpkg.PortConflict{
-				{Definition: dockerpkg.PortDefinition{Key: shop.DockerPortWeb, Label: "Shop (Caddy)", Target: 8000, Default: 8000}, HostPort: 8000},
+				{Service: dockerpkg.ServiceWeb, Endpoint: dockerpkg.PortHTTP, Label: "Shop (Caddy)", HostPort: 8000},
 			}
 		}
 

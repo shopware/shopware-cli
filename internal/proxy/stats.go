@@ -2,14 +2,13 @@ package proxy
 
 import (
 	"context"
-	"os"
 	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
 	"time"
 
-	"github.com/shopware/shopware-cli/internal/shop"
+	"github.com/shopware/shopware-cli/internal/envfile"
 )
 
 // InstanceInfo describes one project registered with the shared proxy: whether
@@ -91,10 +90,8 @@ func InstanceStats(ctx context.Context) (instances []InstanceInfo, combinedMem i
 // (sw-<name>-<hash>) in .env; older projects fall back to Compose's default of
 // the sanitized directory basename.
 func ComposeProjectName(projectRoot string) string {
-	if content, readErr := os.ReadFile(filepath.Join(projectRoot, ".env")); readErr == nil {
-		if name := shop.ExtractComposeProjectName(content); name != "" {
-			return name
-		}
+	if name := envfile.ReadComposeProjectName(projectRoot); name != "" {
+		return name
 	}
 
 	return strings.ToLower(filepath.Base(projectRoot))
