@@ -12,24 +12,10 @@ import (
 	"unicode"
 )
 
-const private = "custom/static-plugins"
-const store = "custom/plugins"
-
-// How a basic scaffolding directory looks like:
-// my-extension
-// ├── src
-// │   └── MyExtension.php
-// │   └── Resources
-// │       └── config
-// │           └── config.xml
-// └── tests
-//     └── TestBootstrap.php
-// ├── composer.json
-// ├── phpunit.xml
-// ├── .gitignore
-
-// twig tmpl.Delims("[[", "]]")
-// $directory = \sprintf('%s/custom/%splugins/%s', $this->projectDir, $staticPrefix, $pluginName);
+const (
+	privatePluginRoot = "custom/static-plugins"
+	storePluginRoot   = "custom/plugins"
+)
 
 //go:embed stubs/*
 var stubsFS embed.FS
@@ -49,9 +35,44 @@ var stubFuncs = template.FuncMap{
 	},
 }
 
-// createExtensionDir creates the directory for the new extension
+type scaffoldingFile struct {
+	Path     string
+	StubPath string
+}
+
+// scaffoldingFiles returns a list of files with their paths and corresponding stub paths.
+func scaffoldingFiles(extensionName string) []scaffoldingFile {
+	return []scaffoldingFile{
+		{
+			Path:     "composer.json",
+			StubPath: "stubs/composer.json.tmpl",
+		},
+		{
+			Path:     "phpunit.xml",
+			StubPath: "stubs/phpunit.xml.tmpl",
+		},
+		{
+			Path:     "tests/TestBootstrap.php",
+			StubPath: "stubs/test_bootstrap.php.tmpl",
+		},
+		{
+			Path:     ".gitignore",
+			StubPath: "stubs/gitignore.tmpl",
+		},
+		{
+			Path:     "src/Resources/config/config.xml",
+			StubPath: "stubs/config.xml.tmpl",
+		},
+		{
+			Path:     filepath.Join("src", extensionName+".php"),
+			StubPath: "stubs/plugin_class.php.tmpl",
+		},
+	}
+}
+
+// CreateExtensionDir creates an empty extension directory. Its parent must
+// already exist so a misspelled project path cannot create a new tree.
 func CreateExtensionDir(extensionDir string) error {
-	// Make sure the extension directory does not already exist
 	info, err := os.Stat(extensionDir)
 	if err == nil {
 		if !info.IsDir() {
@@ -63,9 +84,19 @@ func CreateExtensionDir(extensionDir string) error {
 		return fmt.Errorf("stat extension directory: %w", err)
 	}
 
-	// Create the directory with appropriate permissions
-	err = os.Mkdir(extensionDir, 0o755) // Intended: if the parent directories (== Shopware Project) do not exist, this will fail.
+	parent := filepath.Dir(extensionDir)
+	info, err = os.Stat(parent)
+	if errors.Is(err, os.ErrNotExist) {
+		return fmt.Errorf("extension parent directory does not exist: %s", parent)
+	}
 	if err != nil {
+		return fmt.Errorf("stat extension parent directory: %w", err)
+	}
+	if !info.IsDir() {
+		return fmt.Errorf("extension parent path is not a directory: %s", parent)
+	}
+
+	if err := os.Mkdir(extensionDir, 0o755); err != nil {
 		return fmt.Errorf("create extension directory: %w", err)
 	}
 
@@ -73,95 +104,49 @@ func CreateExtensionDir(extensionDir string) error {
 }
 
 func CreateScaffoldingFiles(extensionDir, extensionName string) error {
-	scaffoldingFiles := scaffoldingFiles(extensionName)
-	for _, file := range scaffoldingFiles {
-		
-		data, err := createScaffoldingData(extensionName)
-		if err != nil {
+	data := createScaffoldingData(extensionName)
+	for _, file := range scaffoldingFiles(extensionName) {
+		if err := createExtensionFile(extensionDir, file, data); err != nil {
 			return err
 		}
-
-		err = CreateExtensionFile(extensionDir, file, data)
-		if err != nil {
-			return err
-		}
-	
 	}
+
 	return nil
 }
 
-type ScaffoldingFile struct {
-	Path    string
-	StubPath string
-}
 
-// scaffoldingFiles returns a list of files with their paths and corresponding stub paths.
-func scaffoldingFiles(extensionName string) []ScaffoldingFile {
-	return []ScaffoldingFile{
-		{
-			Path:    "composer.json",
-			StubPath: "stubs/composer.json.tmpl",
-		},
-		{
-			Path:    "phpunit.xml",
-			StubPath: "stubs/phpunit.xml.tmpl",
-		},
-		{
-			Path:    "tests/TestBootstrap.php",
-			StubPath: "stubs/test_bootstrap.php.tmpl",
-		},
-		{
-			Path:    ".gitignore",
-			StubPath: "stubs/gitignore.tmpl",
-		},
-		{
-			Path:    "src/Resources/config/config.xml",
-			StubPath: "stubs/config.xml.tmpl",
-		},
-		{
-			Path:    filepath.Join("src", extensionName+".php"),
-			StubPath: "stubs/plugin_class.php.tmpl",
-		},
-	}
-}
 
-// decided to not use temporary dir because there are only a few files
-// assumes that the extension directory already exists and is empty.
-func CreateExtensionFile(extensionDir string, file ScaffoldingFile, data scaffoldData) error {
-	// create missing subdirectories under the extension directory
+// createExtensionFile renders one embedded template into an existing extension.
+func createExtensionFile(extensionDir string, file scaffoldingFile, data scaffoldData) (err error) {
 	dest := filepath.Join(extensionDir, file.Path)
-	err := os.MkdirAll(filepath.Dir(dest), 0o755)
-	if err != nil {
+	if err := os.MkdirAll(filepath.Dir(dest), 0o755); err != nil {
 		return fmt.Errorf("create subdirectories: %w", err)
 	}
 
-	// create the file
 	f, err := os.Create(dest)
 	if err != nil {
 		return fmt.Errorf("create file: %w", err)
 	}
-	defer f.Close()
-	
-	// get scaffolding content
+	defer func() {
+		if closeErr := f.Close(); err == nil && closeErr != nil {
+			err = fmt.Errorf("close file: %w", closeErr)
+		}
+	}()
+
 	stubBytes, err := stubsFS.ReadFile(file.StubPath)
 	if err != nil {
 		return fmt.Errorf("read stub file: %w", err)
 	}
 
-	// parse stub with data and write to file
 	tmpl, err := template.New(file.Path).Funcs(stubFuncs).Parse(string(stubBytes))
 	if err != nil {
 		return fmt.Errorf("parse stub: %w", err)
 	}
 
-	err = tmpl.Execute(f, data)
-	if err != nil {
+	if err := tmpl.Execute(f, data); err != nil {
 		return fmt.Errorf("render: %w", err)
 	}
-
-	// flushing in-memory copy of recently written data to disk
-	err = f.Sync()
-	if err != nil {
+	if err := f.Sync(); err != nil {
 		return fmt.Errorf("flush file to disk: %w", err)
 	}
 
@@ -169,21 +154,17 @@ func CreateExtensionFile(extensionDir string, file ScaffoldingFile, data scaffol
 }
 
 type scaffoldData struct {
-	TechnicalName string
-	Namespace     string
-	ClassName	 string
-	ComposerName	string
+	Namespace    string
+	ClassName    string
+	ComposerName string
 }
 
-func createScaffoldingData(extensionName string) (scaffoldData, error) {
-	data := scaffoldData{}
-	
-	data.TechnicalName = extensionName
-	data.Namespace = DeriveNamespace(extensionName)
-	data.ClassName = deriveClassName(extensionName)
-	data.ComposerName = DeriveComposerName(extensionName)
-
-	return data, nil
+func createScaffoldingData(extensionName string) scaffoldData {
+	return scaffoldData{
+		Namespace:    DeriveNamespace(extensionName),
+		ClassName:    extensionName,
+		ComposerName: DeriveComposerName(extensionName),
+	}
 }
 
 // DeriveNamespace turns a technical plugin name into a PHP namespace.
@@ -196,12 +177,6 @@ func DeriveNamespace(extensionName string) string {
 	}
 
 	return parts[0] + "\\" + strings.Join(parts[1:], "")
-}
-
-// deriveClassName is the PHP plugin class, which matches the technical name:
-// SwagBasicExample → SwagBasicExample.
-func deriveClassName(extensionName string) string {
-	return extensionName
 }
 
 // DeriveComposerName turns a technical plugin name into a Composer package name:
@@ -270,7 +245,7 @@ func RemoveCreatedExtensionDir(extensionDir string) error {
 	// Parent must be custom/plugins or custom/static-plugins.
 	parent := filepath.Dir(abs)
 	pluginRoot := filepath.Join(filepath.Base(filepath.Dir(parent)), filepath.Base(parent))
-	if pluginRoot != filepath.FromSlash(store) && pluginRoot != filepath.FromSlash(private) {
+	if pluginRoot != filepath.FromSlash(storePluginRoot) && pluginRoot != filepath.FromSlash(privatePluginRoot) {
 		return fmt.Errorf("refusing to remove %s: not an extension directory", abs)
 	}
 
@@ -296,18 +271,3 @@ func RemoveCreatedExtensionDir(extensionDir string) error {
 
 	return nil
 }
-
-func RequireDirExists(path string) error {
-	return nil
-}
-
-/* how the service.php gets generated
-intro
-    + CommandGenerator snippet?        // if --create-command
-    + StorefrontController snippet?
-    + StoreApiRoute snippet?
-    + EntityGenerator snippet?         // once per entity
-    + EventSubscriber snippet?
-    + ScheduledTask snippet?
-outro
-*/

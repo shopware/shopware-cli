@@ -1,6 +1,8 @@
 package extension
 
 import (
+	"context"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -10,167 +12,404 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/shopware/shopware-cli/internal/extension/scaffolding"
+	"github.com/shopware/shopware-cli/internal/system"
+	"github.com/shopware/shopware-cli/internal/validation"
 )
 
 func TestValidateExtensionName(t *testing.T) {
 	t.Parallel()
 
-	for _, valid := range []string{"SwagBasicExample", "MyPlugin", "AcmePayPal"} {
-		assert.NoError(t, validateExtensionNameInput(valid), valid)
+	for _, valid := range []string{"SwagBasicExample", "MyPlugin", "AcmePayPal", "Swag2Example"} {
+		assert.NoError(t, IsValidName(valid), valid)
 	}
 
 	for _, invalid := range []string{
-		"",
-		"swagBasicExample",
-		"Swag",
-		"my-plugin",
-		"My_Plugin",
-		"My Plugin",
-		"1Plugin",
-		"Swag.Example",
+		"", "swagBasicExample", "Swag", "my-plugin", "My_Plugin",
+		"My Plugin", "1Plugin", "Swag.Example",
 	} {
-		assert.Error(t, validateExtensionNameInput(invalid), invalid)
+		assert.Error(t, IsValidName(invalid), invalid)
 	}
+}
+
+func TestValidateCreateOptions(t *testing.T) {
+	t.Parallel()
+
+	valid := CreateOptions{
+		Name:  "SwagBasicExample",
+		Usage: PrivateUsage,
+	}
+	require.NoError(t, validateCreateOptions(valid))
+
+	tests := []struct {
+		name   string
+		change func(*CreateOptions)
+		error  string
+	}{
+		{
+			name:   "invalid name",
+			change: func(opts *CreateOptions) { opts.Name = "invalid-name" },
+			error:  "invalid extension name",
+		},
+		{
+			name:   "invalid usage",
+			change: func(opts *CreateOptions) { opts.Usage = "unknown" },
+			error:  "invalid extension usage",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			opts := valid
+			test.change(&opts)
+			assert.ErrorContains(t, validateCreateOptions(opts), test.error)
+		})
+	}
+}
+
+func TestCreate(t *testing.T) {
+	for _, usage := range []ExtensionUsage{PrivateUsage, CommercialUsage} {
+		t.Run(string(usage), func(t *testing.T) {
+			projectDir := prepareProject(t)
+			opts := validCreateOptions()
+			opts.Usage = usage
+
+			require.NoError(t, Create(system.WithInteraction(t.Context(), false), opts))
+
+			extensionDir := extensionDirectory(projectDir, opts)
+			assert.FileExists(t, filepath.Join(extensionDir, "composer.json"))
+			assert.FileExists(t, filepath.Join(extensionDir, "src", opts.Name+".php"))
+			require.NoError(t, validateCreatedExtension(t.Context(), extensionDir))
+		})
+	}
+}
+
+func TestCreateRejectsInvalidOptionsBeforeCreatingFiles(t *testing.T) {
+	projectDir := prepareProject(t)
+	opts := validCreateOptions()
+	opts.Name = "invalid-name"
+
+	err := Create(system.WithInteraction(t.Context(), false), opts)
+
+	assert.ErrorContains(t, err, "invalid extension name")
+	assert.NoDirExists(t, extensionDirectory(projectDir, opts))
+}
+
+func TestCreateRequiresName(t *testing.T) {
+	err := Create(t.Context(), CreateOptions{
+		Usage: PrivateUsage,
+	})
+
+	assert.EqualError(t, err, "extension name must not be empty")
+}
+
+func TestCreateValidatesEnumsBeforeRequiringName(t *testing.T) {
+	err := Create(system.WithInteraction(context.Background(), false), CreateOptions{
+		Usage: "unknown",
+	})
+
+	assert.ErrorContains(t, err, "invalid extension usage")
+}
+
+func TestCreateFindsClosestProject(t *testing.T) {
+	t.Setenv("PROJECT_ROOT", "")
+	projectDir := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(projectDir, "bin"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(projectDir, "bin", "console"), nil, 0o755))
+	require.NoError(t, os.WriteFile(
+		filepath.Join(projectDir, "composer.json"),
+		[]byte(`{"require":{"shopware/core":"~6.7.0"}}`),
+		0o644,
+	))
+	require.NoError(t, os.MkdirAll(filepath.Join(projectDir, "custom", "static-plugins"), 0o755))
+	nestedDir := filepath.Join(projectDir, "custom")
+	t.Chdir(nestedDir)
+
+	opts := validCreateOptions()
+	require.NoError(t, Create(system.WithInteraction(t.Context(), false), opts))
+
+	assert.FileExists(t, filepath.Join(extensionDirectory(projectDir, opts), "composer.json"))
+}
+
+func TestCreateFailsOutsideShopwareProject(t *testing.T) {
+	t.Setenv("PROJECT_ROOT", "")
+	t.Chdir(t.TempDir())
+
+	err := Create(system.WithInteraction(t.Context(), false), validCreateOptions())
+
+	assert.ErrorContains(t, err, "cannot find Shopware project")
+}
+
+func TestCreateReportsMissingExtensionParent(t *testing.T) {
+	projectDir := t.TempDir()
+	t.Setenv("PROJECT_ROOT", projectDir)
+	opts := validCreateOptions()
+
+	err := Create(system.WithInteraction(t.Context(), false), opts)
+
+	assert.ErrorContains(t, err, "extension parent directory does not exist")
+	assert.NoDirExists(t, extensionDirectory(projectDir, opts))
+}
+
+func TestCreateDoesNotRemoveExistingDirectory(t *testing.T) {
+	projectDir := prepareProject(t)
+	opts := validCreateOptions()
+	extensionDir := extensionDirectory(projectDir, opts)
+	require.NoError(t, os.Mkdir(extensionDir, 0o755))
+	marker := filepath.Join(extensionDir, "keep.txt")
+	require.NoError(t, os.WriteFile(marker, []byte("keep"), 0o644))
+
+	err := Create(system.WithInteraction(t.Context(), false), opts)
+
+	assert.ErrorContains(t, err, "already exists")
+	assert.FileExists(t, marker)
+}
+
+func TestValidateCreatedExtensionReportsDetails(t *testing.T) {
+	extensionDir := scaffoldPlugin(t, "SwagBasicExample")
+	mutateComposer(t, extensionDir, func(composer *PlatformComposerJson) {
+		composer.Extra.Label["en-GB"] = ""
+	})
+
+	err := validateCreatedExtension(t.Context(), extensionDir)
+
+	assert.ErrorContains(t, err, "installable.label")
+	assert.ErrorContains(t, err, "extra.label")
 }
 
 func TestValidatePluginInstallable(t *testing.T) {
 	extensionDir := scaffoldPlugin(t, "SwagBasicExample")
-
 	check := &testCheck{}
+
 	validatePluginInstallable(loadPlugin(t, extensionDir), check)
 
 	assert.Empty(t, check.GetResults())
 }
 
 func TestValidatePluginInstallableReportsBrokenPlugin(t *testing.T) {
-	cases := []struct {
-		name string
-		// breakPlugin changes the scaffolding so that the plugin is not installable.
-		breakPlugin func(t *testing.T, extensionDir string)
-		// identifier is the problem the validation has to report.
-		identifier string
+	tests := []struct {
+		name        string
+		breakPlugin func(*testing.T, string)
+		identifiers []string
 	}{
 		{
 			name: "plugin class is missing",
-			breakPlugin: func(t *testing.T, extensionDir string) {
-				replaceInFile(t, filepath.Join(extensionDir, "composer.json"), `"shopware-plugin-class": "Swag\\BasicExample\\SwagBasicExample"`, `"shopware-plugin-class": ""`)
+			breakPlugin: func(t *testing.T, dir string) {
+				mutateComposer(t, dir, func(c *PlatformComposerJson) { c.Extra.ShopwarePluginClass = "" })
 			},
-			identifier: "installable.plugin-class",
+			identifiers: []string{"installable.plugin-class"},
 		},
 		{
-			name: "shopware/core is not required",
-			breakPlugin: func(t *testing.T, extensionDir string) {
-				replaceInFile(t, filepath.Join(extensionDir, "composer.json"), `"shopware/core": "~6.7.0"`, `"symfony/yaml": "^7.0"`)
+			name: "shopware core requirement is missing",
+			breakPlugin: func(t *testing.T, dir string) {
+				mutateComposer(t, dir, func(c *PlatformComposerJson) { delete(c.Require, "shopware/core") })
 			},
-			identifier: "installable.shopware-core",
+			identifiers: []string{"installable.shopware-core"},
 		},
 		{
-			name: "en-GB label is empty",
-			breakPlugin: func(t *testing.T, extensionDir string) {
-				replaceInFile(t, filepath.Join(extensionDir, "composer.json"), `"en-GB": "Skeleton plugin"`, `"en-GB": ""`)
+			name: "shopware core constraint is invalid",
+			breakPlugin: func(t *testing.T, dir string) {
+				mutateComposer(t, dir, func(c *PlatformComposerJson) { c.Require["shopware/core"] = "not a version" })
 			},
-			identifier: "installable.label",
+			identifiers: []string{"installable.shopware-core"},
 		},
 		{
-			name: "plugin class does not match the directory name",
-			breakPlugin: func(t *testing.T, extensionDir string) {
-				replaceInFile(t, filepath.Join(extensionDir, "composer.json"), `\\SwagBasicExample"`, `\\SwagOtherExample"`)
+			name: "English label is empty",
+			breakPlugin: func(t *testing.T, dir string) {
+				mutateComposer(t, dir, func(c *PlatformComposerJson) { c.Extra.Label["en-GB"] = "" })
 			},
-			identifier: "installable.technical-name",
+			identifiers: []string{"installable.label"},
 		},
 		{
-			name: "composer name is not derived from the plugin name",
-			breakPlugin: func(t *testing.T, extensionDir string) {
-				replaceInFile(t, filepath.Join(extensionDir, "composer.json"), `"name": "swag/basic-example"`, `"name": "swag/basic_example"`)
+			name: "technical name differs",
+			breakPlugin: func(t *testing.T, dir string) {
+				mutateComposer(t, dir, func(c *PlatformComposerJson) {
+					c.Extra.ShopwarePluginClass = `Swag\BasicExample\SwagOtherExample`
+				})
 			},
-			identifier: "installable.composer-name",
+			identifiers: []string{"installable.technical-name", "installable.plugin-class-file"},
 		},
 		{
-			name: "namespace is not derived from the plugin name",
-			breakPlugin: func(t *testing.T, extensionDir string) {
-				replaceInFile(t, filepath.Join(extensionDir, "composer.json"), `Swag\\BasicExample\\SwagBasicExample`, `SwagBasicExample\\SwagBasicExample`)
+			name: "composer name differs",
+			breakPlugin: func(t *testing.T, dir string) {
+				mutateComposer(t, dir, func(c *PlatformComposerJson) { c.Name = "swag/basic_example" })
 			},
-			identifier: "installable.namespace",
+			identifiers: []string{"installable.composer-name"},
+		},
+		{
+			name: "namespace differs",
+			breakPlugin: func(t *testing.T, dir string) {
+				mutateComposer(t, dir, func(c *PlatformComposerJson) {
+					c.Extra.ShopwarePluginClass = `Swag\OtherExample\SwagBasicExample`
+					c.Autoload.Psr4 = map[string]string{`Swag\OtherExample\`: "src/"}
+				})
+			},
+			identifiers: []string{"installable.namespace", "installable.plugin-class-namespace"},
 		},
 		{
 			name: "namespace is not autoloaded",
-			breakPlugin: func(t *testing.T, extensionDir string) {
-				replaceInFile(t, filepath.Join(extensionDir, "composer.json"), `"Swag\\BasicExample\\": "src/"`, `"Swag\\WrongExample\\": "src/"`)
+			breakPlugin: func(t *testing.T, dir string) {
+				mutateComposer(t, dir, func(c *PlatformComposerJson) {
+					c.Autoload.Psr4 = map[string]string{`Swag\WrongExample\`: "src/"}
+				})
 			},
-			identifier: "installable.autoload",
+			identifiers: []string{"installable.autoload"},
 		},
 		{
-			name: "plugin class file does not exist",
-			breakPlugin: func(t *testing.T, extensionDir string) {
-				require.NoError(t, os.Remove(filepath.Join(extensionDir, "src", "SwagBasicExample.php")))
+			name: "class file is missing",
+			breakPlugin: func(t *testing.T, dir string) {
+				require.NoError(t, os.Remove(filepath.Join(dir, "src", "SwagBasicExample.php")))
 			},
-			identifier: "installable.plugin-class-file",
+			identifiers: []string{"installable.plugin-class-file"},
 		},
 		{
-			name: "plugin class file declares another namespace",
-			breakPlugin: func(t *testing.T, extensionDir string) {
-				replaceInFile(t, filepath.Join(extensionDir, "src", "SwagBasicExample.php"), `namespace Swag\BasicExample;`, `namespace Swag\WrongExample;`)
+			name: "class file namespace differs",
+			breakPlugin: func(t *testing.T, dir string) {
+				replaceInFile(t, filepath.Join(dir, "src", "SwagBasicExample.php"),
+					`namespace Swag\BasicExample;`, `namespace Swag\WrongExample;`)
 			},
-			identifier: "installable.plugin-class-namespace",
+			identifiers: []string{"installable.plugin-class-namespace"},
 		},
 		{
-			name: "plugin class does not extend the shopware plugin class",
-			breakPlugin: func(t *testing.T, extensionDir string) {
-				replaceInFile(t, filepath.Join(extensionDir, "src", "SwagBasicExample.php"), "class SwagBasicExample extends Plugin", "class SwagBasicExample")
+			name: "class name differs",
+			breakPlugin: func(t *testing.T, dir string) {
+				replaceInFile(t, filepath.Join(dir, "src", "SwagBasicExample.php"),
+					"class SwagBasicExample extends Plugin", "class OtherClass extends Plugin")
 			},
-			identifier: "installable.plugin-base-class",
+			identifiers: []string{"installable.plugin-class-file"},
+		},
+		{
+			name: "base class is missing",
+			breakPlugin: func(t *testing.T, dir string) {
+				replaceInFile(t, filepath.Join(dir, "src", "SwagBasicExample.php"),
+					"class SwagBasicExample extends Plugin", "class SwagBasicExample")
+			},
+			identifiers: []string{"installable.plugin-base-class"},
+		},
+		{
+			name: "multiple metadata errors",
+			breakPlugin: func(t *testing.T, dir string) {
+				mutateComposer(t, dir, func(c *PlatformComposerJson) {
+					delete(c.Require, "shopware/core")
+					c.Extra.Label["en-GB"] = ""
+					c.Name = "wrong/name"
+				})
+			},
+			identifiers: []string{
+				"installable.shopware-core",
+				"installable.label",
+				"installable.composer-name",
+			},
 		},
 	}
 
-	for _, testCase := range cases {
-		t.Run(testCase.name, func(t *testing.T) {
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
 			extensionDir := scaffoldPlugin(t, "SwagBasicExample")
-			testCase.breakPlugin(t, extensionDir)
-
+			test.breakPlugin(t, extensionDir)
 			check := &testCheck{}
+
 			validatePluginInstallable(loadPlugin(t, extensionDir), check)
 
-			var identifiers []string
-			for _, result := range check.GetResults() {
-				identifiers = append(identifiers, result.Identifier)
-			}
-
-			assert.Contains(t, identifiers, testCase.identifier)
+			assert.ElementsMatch(t, test.identifiers, resultIdentifiers(check.GetResults()))
 		})
 	}
 }
 
-// scaffoldPlugin creates the files of a new plugin in a temporary directory.
+func TestPluginClassFileSupportsPSR0(t *testing.T) {
+	extensionDir := scaffoldPlugin(t, "SwagBasicExample")
+	oldClassFile := filepath.Join(extensionDir, "src", "SwagBasicExample.php")
+	newClassFile := filepath.Join(extensionDir, "src", "Swag", "BasicExample", "SwagBasicExample.php")
+	require.NoError(t, os.MkdirAll(filepath.Dir(newClassFile), 0o755))
+	require.NoError(t, os.Rename(oldClassFile, newClassFile))
+	mutateComposer(t, extensionDir, func(c *PlatformComposerJson) {
+		c.Autoload.Psr4 = nil
+		c.Autoload.Psr0 = map[string]string{`Swag\BasicExample\`: "src/"}
+	})
+	check := &testCheck{}
+
+	validatePluginInstallable(loadPlugin(t, extensionDir), check)
+
+	assert.Empty(t, check.GetResults())
+}
+
+func TestPluginClassMayExtendFullyQualifiedBaseClass(t *testing.T) {
+	extensionDir := scaffoldPlugin(t, "SwagBasicExample")
+	replaceInFile(t, filepath.Join(extensionDir, "src", "SwagBasicExample.php"),
+		"class SwagBasicExample extends Plugin",
+		`class SwagBasicExample extends \Shopware\Core\Framework\Plugin`)
+	check := &testCheck{}
+
+	validatePluginInstallable(loadPlugin(t, extensionDir), check)
+
+	assert.Empty(t, check.GetResults())
+}
+
+func validCreateOptions() CreateOptions {
+	return CreateOptions{
+		Name:  "SwagBasicExample",
+		Usage: PrivateUsage,
+	}
+}
+
+func prepareProject(t *testing.T) string {
+	t.Helper()
+
+	projectDir := t.TempDir()
+	t.Setenv("PROJECT_ROOT", projectDir)
+	require.NoError(t, os.MkdirAll(filepath.Join(projectDir, "custom", "plugins"), 0o755))
+	require.NoError(t, os.MkdirAll(filepath.Join(projectDir, "custom", "static-plugins"), 0o755))
+	return projectDir
+}
+
 func scaffoldPlugin(t *testing.T, name string) string {
 	t.Helper()
 
 	extensionDir := filepath.Join(t.TempDir(), name)
 	require.NoError(t, os.Mkdir(extensionDir, 0o755))
 	require.NoError(t, scaffolding.CreateScaffoldingFiles(extensionDir, name))
-
 	return extensionDir
 }
 
-// loadPlugin reads an extension directory the same way the create command does.
 func loadPlugin(t *testing.T, extensionDir string) *PlatformPlugin {
 	t.Helper()
 
 	ext, err := GetExtensionByFolder(t.Context(), extensionDir)
 	require.NoError(t, err)
-
 	plugin, ok := ext.(*PlatformPlugin)
 	require.True(t, ok, "%s is not a platform plugin", extensionDir)
-
 	return plugin
 }
 
-// replaceInFile rewrites a file with all occurrences of old replaced by new.
+func mutateComposer(t *testing.T, extensionDir string, mutate func(*PlatformComposerJson)) {
+	t.Helper()
+
+	path := filepath.Join(extensionDir, "composer.json")
+	content, err := os.ReadFile(path)
+	require.NoError(t, err)
+
+	var composer PlatformComposerJson
+	require.NoError(t, json.Unmarshal(content, &composer))
+	mutate(&composer)
+
+	content, err = json.MarshalIndent(composer, "", "    ")
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(path, append(content, '\n'), 0o644))
+}
+
 func replaceInFile(t *testing.T, path, old, replacement string) {
 	t.Helper()
 
 	content, err := os.ReadFile(path)
 	require.NoError(t, err)
 	require.Contains(t, string(content), old)
+	updated := strings.Replace(string(content), old, replacement, 1)
+	require.NoError(t, os.WriteFile(path, []byte(updated), 0o644))
+}
 
-	require.NoError(t, os.WriteFile(path, []byte(strings.ReplaceAll(string(content), old, replacement)), 0o644))
+func resultIdentifiers(results []validation.CheckResult) []string {
+	identifiers := make([]string, 0, len(results))
+	for _, result := range results {
+		identifiers = append(identifiers, result.Identifier)
+	}
+	return identifiers
 }
