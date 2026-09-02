@@ -7,6 +7,8 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
+	"strings"
 
 	"charm.land/huh/v2"
 	"github.com/shopware/shopware-cli/internal/extension/scaffolding"
@@ -115,16 +117,15 @@ func Create(ctx context.Context, opts CreateOptions) error {
 
 	logging.FromContext(ctx).Infof("Extension %s scaffolding created.", opts.Name)
 
-	/*
-		// validate the created extension
-		valid, err := validateCreatedExtension(ctx, extensionDir)
-		if err != nil {
-			return fmt.Errorf("failed to validate created extension: %w", err)
-		}
-		if !valid {
-			return fmt.Errorf("validation failed for created extension: %s, error was: %w", opts.Name, err)
-			// error message should now not be nil
-		}*/
+	// validate the created extension
+	valid, err := validateCreatedExtension(ctx, extensionDir)
+	if err != nil {
+		return fmt.Errorf("failed to validate created extension: %w", err)
+	}
+	if !valid {
+		return fmt.Errorf("validation failed for created extension: %s, error was: %w", opts.Name, err)
+		// error message should now not be nil
+	}
 
 	// inform user if validation is successful and make clear that this does not mean that extension will pass store review
 	logging.FromContext(ctx).Infof("Extension %s validated successfully.", opts.Name)
@@ -138,7 +139,9 @@ func Create(ctx context.Context, opts CreateOptions) error {
 	return nil
 }
 
-// validateCreatedExtension runs extension validate and returns true if the extension is valid, false if not, and an error if the validation process itself failed.
+// validateCreatedExtension checks that the created extension can be installed by
+// Shopware and returns true if it is valid, false if not, and an error if the
+// validation process itself failed.
 func validateCreatedExtension(ctx context.Context, extensionDir string) (bool, error) {
 	// Load the extension from the created directory.
 	ext, err := GetExtensionByFolder(ctx, extensionDir)
@@ -146,9 +149,15 @@ func validateCreatedExtension(ctx context.Context, extensionDir string) (bool, e
 		return false, fmt.Errorf("failed to get extension by folder: %w", err)
 	}
 
+	// Only a composer.json of the type shopware-platform-plugin is loaded as plugin.
+	plugin, ok := ext.(*PlatformPlugin)
+	if !ok {
+		return false, fmt.Errorf("%s is not a %s", extensionDir, ComposerTypePlugin)
+	}
+
 	// Validate the extension.
 	check := &checkResult{}
-	RunValidation(ctx, ext, check)
+	validatePluginInstallable(plugin, check)
 
 	return !check.HasErrors(), nil
 }
@@ -212,7 +221,7 @@ func runCreateForm(opts *CreateOptions) error {
 				Description("Use UpperCamelCase, starting with a capital letter. Choose a name that describes your plugin as succinctly and clearly as possible.").
 				Placeholder("SwagBasicExample").
 				Value(&opts.Name).
-				Validate(validateExtensionName),
+				Validate(validateExtensionNameInput),
 		))
 	}
 
@@ -227,9 +236,9 @@ func runCreateForm(opts *CreateOptions) error {
 // vendor prefix, letters and digits only (e.g. SwagBasicExample).
 var extensionNameRegexp = regexp.MustCompile(`^[A-Z][A-Za-z0-9]*[A-Z][A-Za-z0-9]*$`)
 
-// validateExtensionName reports whether name can be used as a Shopware plugin
+// validateExtensionNameInput reports whether name can be used as a Shopware plugin
 // technical name (directory, PHP class, and composer extra.shopware-plugin-class).
-func validateExtensionName(name string) error {
+func validateExtensionNameInput(name string) error {
 	if name == "" {
 		return errors.New("extension name must not be empty")
 	}
@@ -238,6 +247,180 @@ func validateExtensionName(name string) error {
 	}
 
 	return nil
+}
+
+// shopwarePluginBaseClass is the class every Shopware plugin class has to extend.
+const shopwarePluginBaseClass = `Shopware\Core\Framework\Plugin`
+
+// phpNamespaceRegexp matches the namespace declaration of a PHP file: `namespace Swag\BasicExample;`.
+var phpNamespaceRegexp = regexp.MustCompile(`(?m)^namespace\s+([^;]+);`)
+
+// phpClassRegexp matches a class declaration and its optional parent: `class SwagBasicExample extends Plugin`.
+var phpClassRegexp = regexp.MustCompile(`(?m)^(?:final\s+|abstract\s+)?class\s+(\w+)(?:\s+extends\s+([\w\\]+))?`)
+
+// validatePluginInstallable checks that a created plugin has everything Shopware needs
+// to discover and install it:
+//
+//   - composer.json names a plugin class, requires shopware/core, has an English
+//     label and autoloads the namespace of the plugin class.
+//   - the plugin class file exists where the autoload entry points to and declares
+//     the namespace, the class name and the base class composer.json promises.
+//
+// That composer.json exists, is valid JSON and has the type shopware-platform-plugin
+// is already guaranteed by GetExtensionByFolder returning a PlatformPlugin.
+//
+// Every problem found is added to check, so the user sees all of them at once.
+func validatePluginInstallable(plugin *PlatformPlugin, check validation.Check) {
+	// The plugin class tells Shopware which class to load, so it is the value
+	// everything else is compared against.
+	pluginClass := plugin.Composer.Extra.ShopwarePluginClass
+	namespace, className := splitPHPClass(pluginClass)
+	if namespace == "" || className == "" {
+		addInstallableError(check, "composer.json", "installable.plugin-class",
+			fmt.Sprintf("extra.shopware-plugin-class must be a full class name like %s, got %q", `Swag\BasicExample\SwagBasicExample`, pluginClass))
+		return
+	}
+
+	if _, err := plugin.GetShopwareVersionConstraint(); err != nil {
+		addInstallableError(check, "composer.json", "installable.shopware-core",
+			"require.shopware/core must be a valid version constraint: "+err.Error())
+	}
+
+	if plugin.Composer.Extra.Label["en-GB"] == "" {
+		addInstallableError(check, "composer.json", "installable.label",
+			"extra.label must contain a label for en-GB")
+	}
+
+	// The technical name of a plugin is its directory name, Shopware expects the
+	// plugin class to have the same name.
+	technicalName := filepath.Base(plugin.GetPath())
+	if technicalName != className {
+		addInstallableError(check, "composer.json", "installable.technical-name",
+			fmt.Sprintf("extra.shopware-plugin-class must end with the directory name %q, got %q", technicalName, className))
+	}
+
+	validatePluginNameDerivation(technicalName, plugin.Composer.Name, namespace, check)
+
+	classFile, found := pluginClassFile(plugin.Composer, namespace, className)
+	if !found {
+		addInstallableError(check, "composer.json", "installable.autoload",
+			fmt.Sprintf(`autoload must map the namespace "%s\\" to a directory via psr-4 or psr-0`, namespace))
+		return
+	}
+
+	validatePluginClassFile(plugin.GetPath(), classFile, namespace, className, check)
+}
+
+// validatePluginNameDerivation checks that composer.json still contains the values the
+// scaffolding derives from the technical name. It catches a broken derivation, for
+// example a namespace that lost a backslash while being written into JSON.
+func validatePluginNameDerivation(technicalName, composerName, namespace string, check validation.Check) {
+	if expected := scaffolding.DeriveComposerName(technicalName); composerName != expected {
+		addInstallableError(check, "composer.json", "installable.composer-name",
+			fmt.Sprintf("name must be %q for plugin %s, got %q", expected, technicalName, composerName))
+	}
+
+	if expected := scaffolding.DeriveNamespace(technicalName); namespace != expected {
+		addInstallableError(check, "composer.json", "installable.namespace",
+			fmt.Sprintf("namespace of extra.shopware-plugin-class must be %q for plugin %s, got %q", expected, technicalName, namespace))
+	}
+}
+
+// validatePluginClassFile checks that the plugin class file exists and declares the
+// namespace, class name and base class composer.json promises.
+func validatePluginClassFile(extensionDir, classFile, namespace, className string, check validation.Check) {
+	content, err := os.ReadFile(filepath.Join(extensionDir, classFile))
+	if err != nil {
+		addInstallableError(check, classFile, "installable.plugin-class-file",
+			"plugin class file could not be read: "+err.Error())
+		return
+	}
+
+	php := string(content)
+
+	if declared := firstSubmatch(phpNamespaceRegexp, php); declared != namespace {
+		addInstallableError(check, classFile, "installable.plugin-class-namespace",
+			fmt.Sprintf("file must declare namespace %q, got %q", namespace, declared))
+	}
+
+	class := phpClassRegexp.FindStringSubmatch(php)
+	if class == nil {
+		addInstallableError(check, classFile, "installable.plugin-class-file",
+			fmt.Sprintf("file must declare class %s", className))
+		return
+	}
+
+	if class[1] != className {
+		addInstallableError(check, classFile, "installable.plugin-class-file",
+			fmt.Sprintf("file must declare class %q, got %q", className, class[1]))
+	}
+
+	if !extendsShopwarePlugin(class[2], php) {
+		addInstallableError(check, classFile, "installable.plugin-base-class",
+			fmt.Sprintf(`class %s must extend %s`, class[1], shopwarePluginBaseClass))
+	}
+}
+
+// pluginClassFile returns the path of the plugin class file relative to the extension
+// directory. PSR-4 maps the namespace prefix directly onto a directory, PSR-0 keeps
+// the namespace as sub directories inside it.
+func pluginClassFile(composer PlatformComposerJson, namespace, className string) (string, bool) {
+	prefix := namespace + `\`
+	fileName := className + ".php"
+
+	if dir, ok := composer.Autoload.Psr4[prefix]; ok {
+		return filepath.Join(dir, fileName), true
+	}
+
+	if dir, ok := composer.Autoload.Psr0[prefix]; ok {
+		return filepath.Join(dir, filepath.Join(strings.Split(namespace, `\`)...), fileName), true
+	}
+
+	return "", false
+}
+
+// splitPHPClass splits a full class name like Swag\BasicExample\SwagBasicExample into
+// its namespace (Swag\BasicExample) and its class name (SwagBasicExample). Both are
+// empty when one of the parts is missing.
+func splitPHPClass(fullClassName string) (namespace, className string) {
+	parts := strings.Split(strings.TrimPrefix(fullClassName, `\`), `\`)
+	if len(parts) < 2 || slices.Contains(parts, "") {
+		return "", ""
+	}
+
+	return strings.Join(parts[:len(parts)-1], `\`), parts[len(parts)-1]
+}
+
+// extendsShopwarePlugin reports whether parent is Shopware's plugin base class, either
+// written out in full or imported with a use statement.
+func extendsShopwarePlugin(parent, php string) bool {
+	parent = strings.TrimPrefix(parent, `\`)
+	if parent == shopwarePluginBaseClass {
+		return true
+	}
+
+	return parent == "Plugin" && strings.Contains(php, "use "+shopwarePluginBaseClass+";")
+}
+
+// firstSubmatch returns the first capture group of the first match, or an empty string
+// when the pattern does not match at all.
+func firstSubmatch(pattern *regexp.Regexp, content string) string {
+	match := pattern.FindStringSubmatch(content)
+	if match == nil {
+		return ""
+	}
+
+	return strings.TrimSpace(match[1])
+}
+
+// addInstallableError records a problem that stops Shopware from installing the plugin.
+func addInstallableError(check validation.Check, path, identifier, message string) {
+	check.AddResult(validation.CheckResult{
+		Path:       path,
+		Identifier: identifier,
+		Message:    message,
+		Severity:   validation.SeverityError,
+	})
 }
 
 /*

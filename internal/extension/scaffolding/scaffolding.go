@@ -179,17 +179,17 @@ func createScaffoldingData(extensionName string) (scaffoldData, error) {
 	data := scaffoldData{}
 	
 	data.TechnicalName = extensionName
-	data.Namespace = deriveNamespace(extensionName)
+	data.Namespace = DeriveNamespace(extensionName)
 	data.ClassName = deriveClassName(extensionName)
-	data.ComposerName = deriveComposerName(extensionName)
+	data.ComposerName = DeriveComposerName(extensionName)
 
 	return data, nil
 }
 
-// deriveNamespace turns a technical plugin name into a PHP namespace.
+// DeriveNamespace turns a technical plugin name into a PHP namespace.
 // The first PascalCase word is the vendor prefix, the rest stay one segment:
 // SwagBasicExample → Swag\BasicExample.
-func deriveNamespace(extensionName string) string {
+func DeriveNamespace(extensionName string) string {
 	parts := splitPascalCase(extensionName)
 	if len(parts) < 2 {
 		return extensionName
@@ -204,9 +204,9 @@ func deriveClassName(extensionName string) string {
 	return extensionName
 }
 
-// deriveComposerName turns a technical plugin name into a Composer package name:
+// DeriveComposerName turns a technical plugin name into a Composer package name:
 // SwagBasicExample → swag/basic-example.
-func deriveComposerName(extensionName string) string {
+func DeriveComposerName(extensionName string) string {
 	parts := splitPascalCase(extensionName)
 	if len(parts) == 0 {
 		return ""
