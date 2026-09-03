@@ -10,7 +10,7 @@ import (
 // for example SwagBasicExample.
 var extensionNameRegexp = regexp.MustCompile(`^[A-Z][A-Za-z0-9]*[A-Z][A-Za-z0-9]*$`)
 
-func IsValidName(name string) error {
+func ValidateName(name string) error {
 	if name == "" {
 		return errors.New("extension name must not be empty")
 	}

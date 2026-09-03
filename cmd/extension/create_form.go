@@ -7,24 +7,56 @@ import (
 	"github.com/shopware/shopware-cli/internal/tui"
 )
 
-func runCreateForm(opts *extension.CreateOptions) error {
+func printQuestions(opts *extension.CreateOptions) error {
+	tui.PrintBanner()
+	
 	usageOptions := []huh.Option[extension.ExtensionUsage]{
-		huh.NewOption("Private project", extension.PrivateUsage),
-		huh.NewOption("Shopware Community Store", extension.CommercialUsage),
+		huh.NewOption("No, keep it in this project", extension.PrivateUsage),
+		huh.NewOption("Yes, Community Store", extension.CommercialUsage),
 	}
-	form := huh.NewForm(huh.NewGroup(
-		huh.NewSelect[extension.ExtensionUsage]().
-			Title("How will the extension be used?").
-			Description("Private extensions live in custom/static-plugins. Store extensions live in custom/plugins and require a vendor prefix.").
-			Options(usageOptions...).
-			Value(&opts.Usage),
-		huh.NewInput().
-			Title("Extension name").
-			Description("Use UpperCamelCase with a vendor prefix, for example SwagBasicExample.").
-			Placeholder("SwagBasicExample").
-			Value(&opts.Name).
-			Validate(extension.IsValidName),
-	))
+
+	form := huh.NewForm(
+      	huh.NewGroup(
+          	huh.NewSelect[extension.ExtensionUsage]().
+				Title("Do you intend to publish this on the Community Store?").
+				Description("Hint: In order to publish your extension on the Store a name with a vendor prefix is required.").
+				Options(usageOptions...).
+				Value(&opts.Usage),
+		),
+      	huh.NewGroup(
+          	huh.NewInput().
+				Title("Extension name").
+				Description("PascalCase, for example SwagBasicExample.").
+				Placeholder("SwagBasicExample").
+				Value(&opts.Name).
+				Validate(extension.ValidateName),
+      	),
+	)
 
 	return form.WithTheme(tui.ShopwareTheme()).Run()
+}
+
+func printSummary(name string) error {
+	form := huh.NewForm(
+		huh.NewGroup(
+			huh.NewNote().
+				Title("Summary").
+				Description("Extension name: " + name),
+		),
+	)
+
+	return form.WithTheme(tui.ShopwareTheme()).Run()
+}
+
+func runInteractiveCreateForm(opts *extension.CreateOptions) error {
+	err := printQuestions(opts)
+	if err != nil {
+		return err
+	}
+
+	err = printSummary(opts.Name)
+		if err != nil {
+		return err
+	}
+	return nil
 }

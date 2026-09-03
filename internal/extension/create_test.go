@@ -20,14 +20,14 @@ func TestValidateExtensionName(t *testing.T) {
 	t.Parallel()
 
 	for _, valid := range []string{"SwagBasicExample", "MyPlugin", "AcmePayPal", "Swag2Example"} {
-		assert.NoError(t, IsValidName(valid), valid)
+		assert.NoError(t, ValidateName(valid), valid)
 	}
 
 	for _, invalid := range []string{
 		"", "swagBasicExample", "Swag", "my-plugin", "My_Plugin",
 		"My Plugin", "1Plugin", "Swag.Example",
 	} {
-		assert.Error(t, IsValidName(invalid), invalid)
+		assert.Error(t, ValidateName(invalid), invalid)
 	}
 }
 
@@ -366,7 +366,7 @@ func scaffoldPlugin(t *testing.T, name string) string {
 
 	extensionDir := filepath.Join(t.TempDir(), name)
 	require.NoError(t, os.Mkdir(extensionDir, 0o755))
-	require.NoError(t, scaffolding.CreateScaffoldingFiles(extensionDir, name))
+	require.NoError(t, scaffolding.CreateExtensionFiles(extensionDir, name))
 	return extensionDir
 }
 

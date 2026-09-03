@@ -70,8 +70,7 @@ func scaffoldingFiles(extensionName string) []scaffoldingFile {
 	}
 }
 
-// CreateExtensionDir creates an empty extension directory. Its parent must
-// already exist so a misspelled project path cannot create a new tree.
+// CreateExtensionDir creates an empty extension directory. Its parents must already exist.
 func CreateExtensionDir(extensionDir string) error {
 	info, err := os.Stat(extensionDir)
 	if err == nil {
@@ -103,10 +102,12 @@ func CreateExtensionDir(extensionDir string) error {
 	return nil
 }
 
-func CreateScaffoldingFiles(extensionDir, extensionName string) error {
+// CreateExtensionFiles creates all scaffolding Files that are given back by scaffoldingFiles()
+func CreateExtensionFiles(extensionDir, extensionName string) error {
 	data := createScaffoldingData(extensionName)
 	for _, file := range scaffoldingFiles(extensionName) {
-		if err := createExtensionFile(extensionDir, file, data); err != nil {
+		err := createFileWithScaffolding(extensionDir, file, data)
+		if err != nil {
 			return err
 		}
 	}
@@ -114,10 +115,8 @@ func CreateScaffoldingFiles(extensionDir, extensionName string) error {
 	return nil
 }
 
-
-
-// createExtensionFile renders one embedded template into an existing extension.
-func createExtensionFile(extensionDir string, file scaffoldingFile, data scaffoldData) (err error) {
+// createFileWithScaffolding renders one embedded template into an existing extension.
+func createFileWithScaffolding(extensionDir string, file scaffoldingFile, data scaffoldData) (err error) {
 	dest := filepath.Join(extensionDir, file.Path)
 	if err := os.MkdirAll(filepath.Dir(dest), 0o755); err != nil {
 		return fmt.Errorf("create subdirectories: %w", err)
@@ -271,3 +270,4 @@ func RemoveCreatedExtensionDir(extensionDir string) error {
 
 	return nil
 }
+

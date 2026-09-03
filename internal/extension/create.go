@@ -26,17 +26,17 @@ type CreateOptions struct {
 
 // Create writes extension scaffolding in the closest Shopware project.
 func Create(ctx context.Context, opts CreateOptions) (err error) {
+	logger := logging.FromContext(ctx)
+
 	projectDir, err := shop.FindClosestShopwareProject(false)
 	if err != nil {
 		return err
 	}
 
-	extensionDir := extensionDirectory(projectDir, opts)
-	logger := logging.FromContext(ctx)
-	logger.Infof("Creating extension %s in %s", opts.Name, extensionDir)
+	extensionDir := extensionDirectory(projectDir, opts.Name, opts.Usage)
 
-	if err = scaffolding.CreateExtensionDir(extensionDir); err != nil {
-		// The target was not created by this process and must remain untouched.
+	err = scaffolding.CreateExtensionDir(extensionDir)
+	if err != nil {
 		return err
 	}
 
@@ -45,31 +45,30 @@ func Create(ctx context.Context, opts CreateOptions) (err error) {
 		if err == nil {
 			return
 		}
-		logger.Infof("Removing incomplete extension %s", extensionDir)
+		logger.Debugf("Rollback of %s", extensionDir)
 		if cleanupErr := scaffolding.RemoveCreatedExtensionDir(extensionDir); cleanupErr != nil {
-			err = errors.Join(err, fmt.Errorf("clean up incomplete extension: %w", cleanupErr))
+			err = errors.Join(err, fmt.Errorf("rollback failed: %w", cleanupErr))
 		}
 	}()
 
-	if err = scaffolding.CreateScaffoldingFiles(extensionDir, opts.Name); err != nil {
-		return fmt.Errorf("create extension scaffolding: %w", err)
+	if err = scaffolding.CreateExtensionFiles(extensionDir, opts.Name); err != nil {
+		return fmt.Errorf("create extension files: %w", err)
 	}
 
 	if err = validateCreatedExtension(ctx, extensionDir); err != nil {
 		return fmt.Errorf("validate created extension: %w", err)
 	}
 
-	logger.Infof("Extension %s created successfully in %s", opts.Name, extensionDir)
-	logger.Infof("The generated plugin is installable; run `shopware-cli extension validate %s` before publishing it", extensionDir)
+	logger.Debugf("Extension %s created successfully in %s", opts.Name, extensionDir)
 
 	return nil
 }
 
-func extensionDirectory(projectDir string, opts CreateOptions) string {
+func extensionDirectory(projectDir string, name string, usage ExtensionUsage) string {
 	pluginDir := "plugins"
-	if opts.Usage == PrivateUsage {
+	if usage == PrivateUsage {
 		pluginDir = "static-plugins"
 	}
 
-	return filepath.Join(projectDir, "custom", pluginDir, opts.Name)
+	return filepath.Join(projectDir, "custom", pluginDir, name)
 }

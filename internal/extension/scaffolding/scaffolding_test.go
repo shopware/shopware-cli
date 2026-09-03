@@ -57,7 +57,7 @@ func TestNameDerivation(t *testing.T) {
 func TestCreateScaffoldingFiles(t *testing.T) {
 	extensionDir := t.TempDir()
 
-	require.NoError(t, CreateScaffoldingFiles(extensionDir, "SwagBasicExample"))
+	require.NoError(t, CreateExtensionFiles(extensionDir, "SwagBasicExample"))
 
 	expectedFiles := []string{
 		".gitignore",

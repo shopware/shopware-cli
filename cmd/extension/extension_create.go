@@ -33,7 +33,7 @@ func newCreateCmd() *cobra.Command {
 					return errors.New("extension name is required when interaction is disabled")
 				}
 
-				if err := runCreateForm(opts); err != nil {
+				if err := runInteractiveCreateForm(opts); err != nil {
 					return fmt.Errorf("running create form: %w", err)
 				}
 			}
@@ -54,7 +54,7 @@ func validateNameArg(_ *cobra.Command, args []string) error {
 		return nil
 	}
 
-	return extension.IsValidName(args[0])
+	return extension.ValidateName(args[0])
 }
 
 func init() {
