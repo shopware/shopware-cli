@@ -105,6 +105,14 @@ func TestSSHExecutorPipeliningArgs(t *testing.T) {
 	}
 }
 
+func TestSSHExecutorControlPathStaysShort(t *testing.T) {
+	e := testSSHExecutor()
+
+	// ssh appends a random suffix (~17 chars) while binding the socket, and
+	// sun_path is limited to 104 bytes on macOS.
+	assert.LessOrEqual(t, len(e.controlPath())+17, 104, "control socket path plus ssh suffix must fit into sun_path")
+}
+
 func TestSSHExecutorTargetVariants(t *testing.T) {
 	e := &SSHExecutor{host: "shop.example.com", directory: "/var/www/shop"}
 

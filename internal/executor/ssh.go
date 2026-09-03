@@ -51,12 +51,14 @@ func (s *SSHExecutor) target() string {
 
 // controlPath returns the ssh multiplexing socket path. It is stable per
 // target (and local user), so all executors pointing at the same host share
-// one master connection.
+// one master connection. The file name is kept short on purpose: ssh appends
+// a random suffix while binding the socket, and sun_path is limited to 104
+// bytes on macOS, where TMPDIR alone is already long.
 func (s *SSHExecutor) controlPath() string {
 	identity := strings.Join([]string{strconv.Itoa(os.Getuid()), s.user, s.host, strconv.Itoa(s.port), s.identityFile}, "\x00")
 	sum := sha256.Sum256([]byte(identity))
 
-	return filepath.Join(os.TempDir(), fmt.Sprintf("shopware-cli-ssh-%x.sock", sum[:8]))
+	return filepath.Join(os.TempDir(), fmt.Sprintf("swc-%x.sock", sum[:6]))
 }
 
 // sshArgs returns the base ssh argument list: connection multiplexing for
