@@ -234,8 +234,9 @@ func TestSSHExecutorEnvironmentLifecycleUnsupported(t *testing.T) {
 
 // writeRecordingSSH installs an ssh stub on PATH that records its arguments
 // into argsFile and prints the content of outputFile, simulating a remote
-// command result.
-func writeRecordingSSH(t *testing.T, argsFile, outputFile string) {
+// command result. When failPattern is non-empty, invocations containing it
+// exit non-zero, simulating a failing remote command.
+func writeRecordingSSH(t *testing.T, argsFile, outputFile, failPattern string) {
 	t.Helper()
 
 	if runtime.GOOS == "windows" {
@@ -245,8 +246,13 @@ func writeRecordingSSH(t *testing.T, argsFile, outputFile string) {
 	shPath, err := exec.LookPath("sh")
 	require.NoError(t, err)
 
+	failSnippet := ""
+	if failPattern != "" {
+		failSnippet = fmt.Sprintf("case \"$*\" in *%s*) exit 1 ;; esac\n", failPattern)
+	}
+
 	// /bin/cat by absolute path: the stub replaces PATH, so nothing else resolves.
-	script := fmt.Sprintf("#!%s\nprintf '%%s\\n' \"$@\" > %q\n/bin/cat %q\n", shPath, argsFile, outputFile)
+	script := fmt.Sprintf("#!%s\nprintf '%%s\\n' \"$@\" > %q\n%s/bin/cat %q\n", shPath, argsFile, failSnippet, outputFile)
 
 	dir := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "ssh"), []byte(script), 0o755))
@@ -259,7 +265,7 @@ func TestSSHExecutorDatabaseConnection(t *testing.T) {
 	envFile := filepath.Join(tmp, "env.txt")
 
 	require.NoError(t, os.WriteFile(envFile, []byte(`{"APP_ENV":"prod","DATABASE_URL":"mysql://app:secret@db.internal:3307/shopware_prod"}`), 0o644))
-	writeRecordingSSH(t, argsFile, envFile)
+	writeRecordingSSH(t, argsFile, envFile, "")
 
 	e := testSSHExecutor()
 
@@ -283,12 +289,41 @@ func TestSSHExecutorDatabaseConnection(t *testing.T) {
 	assert.Contains(t, string(recorded), "dump-env", "DATABASE_URL is resolved via deployment-helper dump-env")
 }
 
+func TestSSHExecutorDatabaseConnectionMissingDeploymentHelper(t *testing.T) {
+	tmp := t.TempDir()
+	envFile := filepath.Join(tmp, "env.txt")
+
+	require.NoError(t, os.WriteFile(envFile, nil, 0o644))
+	writeRecordingSSH(t, filepath.Join(tmp, "args.txt"), envFile, "test -x")
+
+	e := testSSHExecutor()
+
+	_, err := e.DatabaseConnection(t.Context())
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "shopware-deployment-helper not found")
+	assert.Contains(t, err.Error(), "composer require shopware/deployment-helper")
+}
+
+func TestSSHExecutorDatabaseConnectionOutdatedDeploymentHelper(t *testing.T) {
+	tmp := t.TempDir()
+	envFile := filepath.Join(tmp, "env.txt")
+
+	require.NoError(t, os.WriteFile(envFile, nil, 0o644))
+	writeRecordingSSH(t, filepath.Join(tmp, "args.txt"), envFile, "dump-env")
+
+	e := testSSHExecutor()
+
+	_, err := e.DatabaseConnection(t.Context())
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "composer update shopware/deployment-helper")
+}
+
 func TestSSHExecutorDatabaseConnectionDefaults(t *testing.T) {
 	tmp := t.TempDir()
 	envFile := filepath.Join(tmp, "env.txt")
 
 	require.NoError(t, os.WriteFile(envFile, []byte(`{"APP_ENV":"prod"}`), 0o644))
-	writeRecordingSSH(t, filepath.Join(tmp, "args.txt"), envFile)
+	writeRecordingSSH(t, filepath.Join(tmp, "args.txt"), envFile, "")
 
 	e := testSSHExecutor()
 

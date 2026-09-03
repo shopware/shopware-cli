@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -257,9 +258,13 @@ func (s *SSHExecutor) DatabaseConnection(ctx context.Context) (*DatabaseConnecti
 // dotenv cascade (including .env.local.php and variable interpolation) and
 // prints the resolved values as JSON.
 func (s *SSHExecutor) remoteDatabaseURL(ctx context.Context) (string, error) {
+	if _, err := s.runRemoteShell(ctx, "test -x vendor/bin/shopware-deployment-helper"); err != nil {
+		return "", errors.New("vendor/bin/shopware-deployment-helper not found on the remote host: require shopware/deployment-helper in the project (composer require shopware/deployment-helper)")
+	}
+
 	stdout, err := s.runRemoteShell(ctx, "php vendor/bin/shopware-deployment-helper dump-env")
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("%w (dump-env requires a recent shopware/deployment-helper: run composer update shopware/deployment-helper on the remote host)", err)
 	}
 
 	var values map[string]string
@@ -284,7 +289,7 @@ func (s *SSHExecutor) runRemoteShell(ctx context.Context, remoteCmd string) (str
 	cmd.Stderr = &stderr
 
 	if err := cmd.Run(); err != nil {
-		return "", fmt.Errorf("could not run remote command via ssh: %w\n%s", err, stderr.String())
+		return "", fmt.Errorf("could not run %q on %s: %w\n%s", remoteCmd, s.target(), err, strings.TrimSpace(stderr.String()))
 	}
 
 	return stdout.String(), nil
