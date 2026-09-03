@@ -1,9 +1,6 @@
 package dev
 
 import (
-	"errors"
-	"fmt"
-	"os/exec"
 	"regexp"
 	"strings"
 
@@ -29,8 +26,6 @@ const (
 	installFailureUnknown             installFailureCategory = "unknown"
 
 	installStartStep = "install_start"
-
-	installFailureDetailLines = 3
 )
 
 // installFailure is the classified result of one failed helper run. Raw
@@ -38,7 +33,6 @@ const (
 type installFailure struct {
 	failingStep string
 	category    installFailureCategory
-	detail      string
 }
 
 type installFailureRule struct {
@@ -151,13 +145,12 @@ func installFailurePatterns(patterns ...string) []*regexp.Regexp {
 	return compiled
 }
 
-func classifyInstallFailure(output []string, processErr error) installFailure {
+func classifyInstallFailure(output []string) installFailure {
 	lines := cleanInstallOutput(output)
 
 	failure := installFailure{
 		failingStep: installFailureStep(lines),
 		category:    installFailureUnknown,
-		detail:      installFailureDetail(lines, processErr),
 	}
 
 	for i := len(lines) - 1; i >= 0; i-- {
@@ -165,7 +158,6 @@ func classifyInstallFailure(output []string, processErr error) installFailure {
 			for _, pattern := range rule.patterns {
 				if pattern.MatchString(lines[i]) {
 					failure.category = rule.category
-					failure.detail = installFailureMessage(lines, i)
 					return failure
 				}
 			}
@@ -191,23 +183,6 @@ func installFailureStep(output []string) string {
 	return failingStep
 }
 
-func installFailureDetail(output []string, processErr error) string {
-	for i := len(output) - 1; i >= 0; i-- {
-		if output[i] != "" {
-			return installFailureMessage(output, i)
-		}
-	}
-
-	var exitErr *exec.ExitError
-	if errors.As(processErr, &exitErr) {
-		return fmt.Sprintf("deployment helper exited with code %d", exitErr.ExitCode())
-	}
-	if processErr != nil {
-		return processErr.Error()
-	}
-	return "deployment helper failed without diagnostic output"
-}
-
 var installRelayPrefix = regexp.MustCompile(`^\[deployment-helper] ?`)
 
 func cleanInstallOutput(output []string) []string {
@@ -221,15 +196,4 @@ func cleanInstallOutput(output []string) []string {
 func cleanInstallLine(line string) string {
 	line = installRelayPrefix.ReplaceAllString(ansi.Strip(line), "")
 	return strings.TrimSpace(line)
-}
-
-func installFailureMessage(lines []string, idx int) string {
-	start, end := idx, idx
-	for start > 0 && lines[start-1] != "" && end-start+1 < installFailureDetailLines {
-		start--
-	}
-	for end < len(lines)-1 && lines[end+1] != "" && end-start+1 < installFailureDetailLines {
-		end++
-	}
-	return strings.Join(lines[start:end+1], " ")
 }

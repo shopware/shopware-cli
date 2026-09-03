@@ -69,7 +69,7 @@ func (m Model) updateLifecycle(msg tea.Msg) (app.Content, tea.Cmd) {
 
 	case shopwareInstallDoneMsg:
 		if msg.err != nil {
-			failure := classifyInstallFailure(msg.output, msg.err)
+			failure := classifyInstallFailure(msg.output)
 			if m.telemetry.installOnce() {
 				trackEvent(tracking.EventDevInstall, m.telemetry.installFailureTags(m.install, failure))
 			}

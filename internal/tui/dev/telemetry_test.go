@@ -237,7 +237,6 @@ func TestInstallFailureTags(t *testing.T) {
 	f := installFailure{
 		failingStep: installStartStep,
 		category:    installFailureDatabaseConnection,
-		detail:      `SQLSTATE[HY000] [1045] Access denied for super-secret-host`,
 	}
 	tags := tel.installFailureTags(w, f)
 
@@ -254,7 +253,7 @@ func TestInstallFailureTagsFromClassifier(t *testing.T) {
 	tel := &telemetryState{}
 	failure := classifyInstallFailure([]string{
 		"[deployment-helper] SQLSTATE[HY000] [2002] No such file or directory",
-	}, assert.AnError)
+	})
 	tags := tel.installFailureTags(installWizard{}, failure)
 
 	assert.Equal(t, "db_connection", tags[tracking.TagFailureCategory])
