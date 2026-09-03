@@ -8,6 +8,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/shopware/shopware-cli/internal/executor"
 	"github.com/shopware/shopware-cli/internal/shop"
@@ -312,8 +313,48 @@ func TestUpdateConfigTab_EnterOnSaveWritesConfig(t *testing.T) {
 	assert.NoError(t, um.configTab.err)
 
 	// File should exist on disk
-	_, statErr := os.Stat(filepath.Join(dir, ".shopware-project.yml"))
+	_, statErr := os.Stat(filepath.Join(dir, ".config/shopware-project.yml"))
 	assert.NoError(t, statErr)
+}
+
+func TestUpdateConfigTab_EnterOnSaveWritesExistingConfigInOriginalLocation(t *testing.T) {
+	dir := t.TempDir()
+
+	err := os.WriteFile(
+		filepath.Join(dir, ".shopware-project.yml"),
+		[]byte("compatibility_date: \"2026-02-11\"\nphp_version: \"8.5\"\ndocker:\n    php:\n        version: \"8.5\"\nenvironments:\n    local:\n        type: local\n        url: http://localhost:8000\n"),
+		0o644,
+	)
+	assert.NoError(t, err)
+
+	cfg, err := shop.ReadConfig(t.Context(), filepath.Join(dir, ".shopware-project.yml"), false)
+	assert.NoError(t, err)
+
+	m := newTestModel()
+	m.config = cfg
+	m.projectRoot = dir
+	m.activeTab = tabConfig
+	m.configTab = NewConfigModel(cfg, nil)
+	assert.Equal(t, indexOf(phpVersions, "8.5", defaultPHPVersionIndex), m.configTab.phpVersion)
+
+	m.configTab.cursor = fieldSave
+	m.configTab.modified = true
+	m.configTab.phpVersion = 1 // change php version
+
+	updated, _ := m.Update(keySpecial(tea.KeyEnter))
+	um := updated.(Model)
+	assert.True(t, um.configTab.saved)
+	assert.False(t, um.configTab.modified)
+	assert.NoError(t, um.configTab.err)
+
+	// should not be saved in original location
+	_, statErr := os.Stat(filepath.Join(dir, ".config/shopware-project.yml"))
+	assert.Error(t, statErr, "existing config shouldn't be written back in different location")
+
+	// config should be updated on disk
+	written, err := os.ReadFile(filepath.Join(dir, ".shopware-project.yml"))
+	require.NoError(t, err)
+	assert.Contains(t, string(written), phpVersions[um.configTab.phpVersion])
 }
 
 func TestUpdateConfigTab_EnterOnSaveFailureSetsErr(t *testing.T) {
@@ -566,7 +607,7 @@ func TestSaveMigrationWizard_PersistsConfigToDisk(t *testing.T) {
 	um := updated.(Model)
 	assert.NoError(t, um.migrationWizard.err)
 	assert.Equal(t, migrationStepDone, um.migrationWizard.step)
-	_, err := os.Stat(filepath.Join(dir, ".shopware-project.yml"))
+	_, err := os.Stat(filepath.Join(dir, ".config/shopware-project.yml"))
 	assert.NoError(t, err)
 }
 

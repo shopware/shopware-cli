@@ -74,7 +74,8 @@ func newProxyEnvironment(cmd *cobra.Command) (*proxyEnvironment, error) {
 // project root, used by `proxy teardown` to run down for every registered
 // project regardless of the current directory.
 func newProxyEnvironmentForRoot(ctx context.Context, projectRoot, configPath string) (*proxyEnvironment, error) {
-	cfg, err := shop.ReadConfig(ctx, configPath, true)
+	actualProjectConfigPath := shop.SearchConfigPath(projectRoot, projectConfigPath)
+	cfg, err := shop.ReadConfig(ctx, actualProjectConfigPath, true)
 	if err != nil {
 		return nil, err
 	}

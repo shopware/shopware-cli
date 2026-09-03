@@ -53,6 +53,7 @@ type Config struct {
 	// When enabled, composer install will be skipped during CI builds
 	DisableComposerInstall bool `yaml:"disable_composer_install,omitempty"`
 	foundConfig            bool
+	storageLocation        string
 }
 
 // ResolveEnvironment returns the named environment, or for an empty name
@@ -776,13 +777,31 @@ func NewConfig() *Config {
 	}
 }
 
+// WriteConfig Writes config in specified project dir under either
+// it's original location where it was read from (stored in `Config.storageLocation`),
+// or the default recommended location
 func WriteConfig(cfg *Config, dir string) error {
 	data, err := yaml.Marshal(cfg)
 	if err != nil {
 		return fmt.Errorf("failed to marshal shop configuration: %w", err)
 	}
 
-	filePath := filepath.Join(dir, ".shopware-project.yml")
+	var filePath string
+	if cfg.storageLocation == "" {
+		// fallback to default recommended storage location
+		filePath = filepath.Join(dir, ".config/shopware-project.yml")
+	} else {
+		if filepath.IsAbs(cfg.storageLocation) {
+			filePath = cfg.storageLocation
+		} else {
+			filePath = filepath.Join(dir, cfg.storageLocation)
+		}
+	}
+
+	err = os.MkdirAll(filepath.Dir(filePath), 0o755)
+	if err != nil {
+		return fmt.Errorf("failed to create all subfolders for %s: %w", filePath, err)
+	}
 
 	if err := os.WriteFile(filePath, data, 0o644); err != nil {
 		return fmt.Errorf("failed to write shop configuration to %s: %w", filePath, err)
@@ -791,7 +810,7 @@ func WriteConfig(cfg *Config, dir string) error {
 	return nil
 }
 
-// WriteLocalConfig writes a partial configuration to .shopware-project.local.yml.
+// WriteLocalConfig writes a partial configuration to shopware-project.local.yml.
 // This file is deep-merged on top of the main config at read time and is intended
 // for credentials and other values that should not be committed to version control.
 func WriteLocalConfig(cfg *Config, dir string) error {
@@ -800,7 +819,15 @@ func WriteLocalConfig(cfg *Config, dir string) error {
 		return fmt.Errorf("failed to marshal local shop configuration: %w", err)
 	}
 
-	filePath := filepath.Join(dir, ".shopware-project.local.yml")
+	filePath := cfg.storageLocation
+	if filePath == "" || !strings.Contains(filePath, ".local.") {
+		filePath = filepath.Join(dir, ".config/shopware-project.local.yml")
+	}
+
+	err = os.MkdirAll(filepath.Dir(filePath), 0o755)
+	if err != nil {
+		return fmt.Errorf("failed to create all subfolders for %s: %w", filePath, err)
+	}
 
 	if err := os.WriteFile(filePath, data, 0o600); err != nil {
 		return fmt.Errorf("failed to write local shop configuration to %s: %w", filePath, err)
@@ -865,6 +892,7 @@ func ReadConfig(ctx context.Context, fileName string, allowFallback bool) (*Conf
 	}
 
 	config.foundConfig = true
+	config.storageLocation = fileName
 	warnDeprecatedTopLevelShop(ctx, fileName, config)
 
 	if len(config.AdditionalConfigs) > 0 {
@@ -919,17 +947,31 @@ func (c Config) IsFallback() bool {
 	return !c.foundConfig
 }
 
-func DefaultConfigFileName() string {
-	currentDir, err := os.Getwd()
-	if err != nil {
-		return ".shopware-project.yml"
+// SearchConfigPath either returns the inputPath if not empty or
+// searches for the config file in projectRoot based on documented priority
+func SearchConfigPath(projectRoot string, inputPath string) string {
+	if inputPath != "" {
+		// user input has priority, regardless if the file exists at this point
+		if path.IsAbs(inputPath) {
+			return inputPath
+		} else {
+			return path.Join(projectRoot, inputPath)
+		}
 	}
 
-	if _, err := os.Stat(path.Join(currentDir, ".shopware-project.yaml")); err == nil {
-		return ".shopware-project.yaml"
+	// recommended location
+	configPath := path.Join(projectRoot, ".config/shopware-project.yml")
+	if _, err := os.Stat(configPath); err == nil {
+		return configPath
 	}
 
-	return ".shopware-project.yml"
+	// fallback to legacy location in root directory
+	configPath = path.Join(projectRoot, ".shopware-project.yaml")
+	if _, err := os.Stat(configPath); err == nil {
+		return configPath
+	}
+
+	return path.Join(projectRoot, ".shopware-project.yml")
 }
 
 // --- In-place url patching -------------------------------------------------

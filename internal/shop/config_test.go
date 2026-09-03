@@ -57,12 +57,12 @@ func TestConfigPHPVersionRoundTrip(t *testing.T) {
 	assert.NoError(t, WriteConfig(cfg, tmpDir))
 
 	// A portable version, not a machine-specific executable path.
-	written, err := os.ReadFile(filepath.Join(tmpDir, ".shopware-project.yml"))
+	written, err := os.ReadFile(filepath.Join(tmpDir, ".config/shopware-project.yml"))
 	assert.NoError(t, err)
 	assert.Contains(t, string(written), `php_version: "8.3"`)
 	assert.NotContains(t, string(written), "/bin/php")
 
-	read, err := ReadConfig(t.Context(), filepath.Join(tmpDir, ".shopware-project.yml"), false)
+	read, err := ReadConfig(t.Context(), filepath.Join(tmpDir, ".config/shopware-project.yml"), false)
 	assert.NoError(t, err)
 	assert.Equal(t, "8.3", read.PHPVersion)
 }
@@ -75,11 +75,11 @@ func TestConfigWithoutPHPVersionStaysBackwardCompatible(t *testing.T) {
 	cfg := NewConfig()
 	assert.NoError(t, WriteConfig(cfg, tmpDir))
 
-	read, err := ReadConfig(t.Context(), filepath.Join(tmpDir, ".shopware-project.yml"), false)
+	read, err := ReadConfig(t.Context(), filepath.Join(tmpDir, ".config/shopware-project.yml"), false)
 	assert.NoError(t, err)
 	assert.Empty(t, read.PHPVersion)
 
-	written, err := os.ReadFile(filepath.Join(tmpDir, ".shopware-project.yml"))
+	written, err := os.ReadFile(filepath.Join(tmpDir, ".config/shopware-project.yml"))
 	assert.NoError(t, err)
 	assert.NotContains(t, string(written), "php_version")
 	assert.NotRegexp(t, `(?m)^url:`, string(written))
@@ -513,6 +513,22 @@ func TestWriteConfigOmitsDeprecatedTopLevelShop(t *testing.T) {
 	tmpDir := t.TempDir()
 	cfg := NewConfig()
 	cfg.SetLocalShop("http://127.0.0.1:8000", &ConfigAdminApi{Username: "admin", Password: "shopware"})
+
+	require.NoError(t, WriteConfig(cfg, tmpDir))
+
+	written, err := os.ReadFile(filepath.Join(tmpDir, ".config/shopware-project.yml"))
+	require.NoError(t, err)
+	assert.NotRegexp(t, `(?m)^url:`, string(written))
+	assert.NotRegexp(t, `(?m)^admin_api:`, string(written))
+	assert.Contains(t, string(written), "environments:")
+	assert.Contains(t, string(written), "http://127.0.0.1:8000")
+}
+
+func TestWriteConfigUsesOriginalConfigPath(t *testing.T) {
+	tmpDir := t.TempDir()
+	cfg := NewConfig()
+	cfg.SetLocalShop("http://127.0.0.1:8000", &ConfigAdminApi{Username: "admin", Password: "shopware"})
+	cfg.storageLocation = ".shopware-project.yml"
 
 	require.NoError(t, WriteConfig(cfg, tmpDir))
 

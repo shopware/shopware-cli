@@ -14,8 +14,8 @@ import (
 
 var projectConfigInitCmd = &cobra.Command{
 	Use:   "init",
-	Short: "Creates a new project config in current dir",
-	Long: `Creates a new .shopware-project.yml in the current directory.
+	Short: "Creates a new project config",
+	Long: `Creates a new config in the current directory under .config/shopware-project.yaml .
 
 Shop URL and Admin API credentials are written under environments.local.
 Omit -e / --env on later commands to target that environment.`,
@@ -36,7 +36,7 @@ Omit -e / --env on later commands to target that environment.`,
 			return err
 		}
 
-		logging.FromContext(cmd.Context()).Info("Created .shopware-project.yml")
+		logging.FromContext(cmd.Context()).Info("Created .config/shopware-project.yml")
 
 		return nil
 	},
