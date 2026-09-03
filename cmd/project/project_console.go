@@ -99,6 +99,22 @@ var projectConsoleCmd = &cobra.Command{
 		return completions, cobra.ShellCompDirectiveDefault
 	},
 	RunE: func(cmd *cobra.Command, args []string) error {
+		if len(args) > 0 && (strings.HasPrefix(args[0], "-e") || strings.HasPrefix(args[0], "--env")) {
+			if strings.Contains(args[0], "=") {
+				parts := strings.SplitN(args[0], "=", 2)
+				cmd.Flags().Set("env", parts[1])
+
+				args = append(args[:0], args[1:]...)
+			} else {
+				if len(args) < 2 {
+					return fmt.Errorf("missing value for --env flag")
+				}
+
+				cmd.Flags().Set("env", args[1])
+				args = append(args[:0], args[2:]...)
+			}
+		}
+
 		projectRoot, err := findClosestShopwareProject(false)
 		if err != nil {
 			return err
