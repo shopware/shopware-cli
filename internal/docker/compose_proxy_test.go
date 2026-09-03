@@ -147,7 +147,7 @@ func TestGenerateComposeFileProxyRoutesRustfs(t *testing.T) {
 	assert.Contains(t, out, "Host(`s3.my-shop.shopware.local`)")
 	assert.Contains(t, out, "Host(`storage.my-shop.shopware.local`)")
 	assert.Contains(t, out, "K8S_FILESYSTEM_PUBLIC_URL: https://s3.my-shop.shopware.local/shopware-public")
-	assert.Contains(t, out, "K8S_FILESYSTEM_ENDPOINT: http://storage:9000")
+	assert.Contains(t, out, "K8S_FILESYSTEM_ENDPOINT: http://my-shop-shopware-local-storage:9000")
 	assert.Contains(t, out, "127.0.0.1::3306")
 	assert.NotContains(t, out, "127.0.0.1::6379")
 	assert.NotContains(t, out, "9000:9000")
@@ -173,7 +173,7 @@ func TestGenerateComposeFilePlainModeHasPorts(t *testing.T) {
 
 // TestGenerateComposeFileProxyInternalAliases guards issue #1484: on the shared
 // proxy network every project's services would otherwise advertise the same
-// bare name (opensearch, mailer, ...), so an internal call from one project
+// bare name (search, mailer, ...), so an internal call from one project
 // could reach another's container. In proxy mode the services must join the
 // shared network under a project-unique alias, and web/console must address
 // them by that alias.
@@ -188,25 +188,29 @@ func TestGenerateComposeFileProxyInternalAliases(t *testing.T) {
 		},
 	}
 
-	out, err := GenerateComposeFile(lock, proxyComposeOptions())
+	out, err := envFor(lock, proxyComposeOptions()).composeYAML()
 	require.NoError(t, err)
 	compose := string(out)
 
 	// Internal traffic uses the project-unique alias, not the bare service name.
 	assert.Contains(t, compose, "MAILER_DSN: smtp://my-shop-shopware-local-mailer:1025")
-	assert.Contains(t, compose, "OPENSEARCH_URL: http://my-shop-shopware-local-opensearch:9200")
-	assert.Contains(t, compose, "MESSENGER_TRANSPORT_DSN: amqp://guest:guest@my-shop-shopware-local-lavinmq:5672")
+	assert.Contains(t, compose, "OPENSEARCH_URL: http://my-shop-shopware-local-search:9200")
+	assert.Contains(t, compose, "MESSENGER_TRANSPORT_DSN: amqp://guest:guest@my-shop-shopware-local-queue:5672")
 
 	// The bare, collision-prone forms must be gone in proxy mode.
-	assert.NotContains(t, compose, "http://opensearch:9200")
+	assert.NotContains(t, compose, "http://search:9200")
 	assert.NotContains(t, compose, "smtp://mailer:1025")
-	assert.NotContains(t, compose, "amqp://guest:guest@lavinmq:5672")
+	assert.NotContains(t, compose, "amqp://guest:guest@queue:5672")
 
 	// Each proxied service advertises the project-unique alias on the shared
 	// network, so parallel projects never collide on the bare name there.
-	assert.Contains(t, compose, "- my-shop-shopware-local-opensearch")
+	assert.Contains(t, compose, "- my-shop-shopware-local-search")
 	assert.Contains(t, compose, "- my-shop-shopware-local-mailer")
-	assert.Contains(t, compose, "- my-shop-shopware-local-lavinmq")
+	assert.Contains(t, compose, "- my-shop-shopware-local-queue")
+
+	// The console processes join the shared network without an alias: nothing
+	// addresses them by name.
+	assert.NotContains(t, compose, "- my-shop-shopware-local-worker")
 
 	// The database is not on the shared network (it publishes a loopback port),
 	// so it keeps the bare host and never collided.
@@ -227,12 +231,12 @@ func TestGenerateComposeFilePlainModeKeepsBareServiceHosts(t *testing.T) {
 		},
 	}
 
-	out, err := GenerateComposeFile(lock, nil)
+	out, err := envFor(lock, Environment{}).composeYAML()
 	require.NoError(t, err)
 	compose := string(out)
 
 	assert.Contains(t, compose, "MAILER_DSN: smtp://mailer:1025")
-	assert.Contains(t, compose, "OPENSEARCH_URL: http://opensearch:9200")
-	assert.Contains(t, compose, "MESSENGER_TRANSPORT_DSN: amqp://guest:guest@lavinmq:5672")
+	assert.Contains(t, compose, "OPENSEARCH_URL: http://search:9200")
+	assert.Contains(t, compose, "MESSENGER_TRANSPORT_DSN: amqp://guest:guest@queue:5672")
 	assert.NotContains(t, compose, "my-shop-shopware-local-")
 }

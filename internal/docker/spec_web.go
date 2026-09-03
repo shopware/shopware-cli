@@ -50,7 +50,7 @@ func buildConsole(consoleArgs ...string) func(*Environment, service) composeServ
 		// proxy mode they join the proxy network (the CA and APP_URL env come
 		// from the shared web environment). They publish no HTTP route.
 		if e.proxy != nil {
-			console.Networks = []string{"default", e.proxy.NetworkName}
+			console.Networks = proxyNetworks(e.proxy.NetworkName, "")
 		}
 
 		return console
@@ -71,10 +71,13 @@ func phpVolumes(e *Environment) []string {
 }
 
 func webEnvironment(e *Environment) yamlMap[string] {
+	// Services on the shared proxy network are addressed by their project-unique
+	// alias (see serviceHost); the database stays on the project network, so
+	// its bare name never collides.
 	webEnv := yamlMap[string]{}.
 		set("HOST", "0.0.0.0").
 		set("DATABASE_URL", "mysql://root:root@database/shopware").
-		set("MAILER_DSN", "smtp://mailer:1025")
+		set("MAILER_DSN", "smtp://"+e.serviceHost(ServiceMailer)+":1025")
 
 	// In proxy mode Traefik terminates TLS and forwards plain HTTP from a
 	// private container address, so Shopware must trust its X-Forwarded-*
@@ -106,12 +109,12 @@ func webEnvironment(e *Environment) yamlMap[string] {
 	case e.features.RedisMessenger:
 		webEnv = webEnv.set("MESSENGER_TRANSPORT_DSN", redisMessengerDSN)
 	case e.features.AMQP:
-		webEnv = webEnv.set("MESSENGER_TRANSPORT_DSN", "amqp://guest:guest@queue:5672")
+		webEnv = webEnv.set("MESSENGER_TRANSPORT_DSN", "amqp://guest:guest@"+e.serviceHost(ServiceQueue)+":5672")
 	}
 
 	if e.features.Elasticsearch {
 		webEnv = webEnv.
-			set("OPENSEARCH_URL", "http://search:9200").
+			set("OPENSEARCH_URL", "http://"+e.serviceHost(ServiceSearch)+":9200").
 			set("SHOPWARE_ES_ENABLED", "1").
 			set("SHOPWARE_ES_INDEXING_ENABLED", "1").
 			set("SHOPWARE_ES_INDEX_PREFIX", "sw")
@@ -140,7 +143,7 @@ func applyS3Env(webEnv yamlMap[string], e *Environment) yamlMap[string] {
 	return webEnv.
 		set("K8S_FILESYSTEM_PRIVATE_BUCKET", "shopware-private").
 		set("K8S_FILESYSTEM_PUBLIC_BUCKET", "shopware-public").
-		set("K8S_FILESYSTEM_ENDPOINT", "http://storage:9000").
+		set("K8S_FILESYSTEM_ENDPOINT", "http://"+e.serviceHost(ServiceStorage)+":9000").
 		set("K8S_FILESYSTEM_PUBLIC_URL", publicURL).
 		set("K8S_FILESYSTEM_REGION", "us-east-1").
 		set("AWS_ACCESS_KEY_ID", storageAccessKey).

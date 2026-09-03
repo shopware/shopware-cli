@@ -100,14 +100,18 @@ func proxyServiceAlias(hostname, serviceName string) string {
 	return strings.ReplaceAll(hostname, ".", "-") + "-" + serviceName
 }
 
-// proxyServiceHost is the host web/console use to reach serviceName: the bare
-// name in plain mode, the project-unique alias in proxy mode (issue #1484).
-func proxyServiceHost(px *ProxyOptions, serviceName string) string {
-	if px == nil {
-		return serviceName
+// serviceHost is the host the PHP containers use to reach a routed service:
+// the bare compose name in plain mode, the project-unique alias it advertises
+// on the shared proxy network in proxy mode (issue #1484). It is only meant
+// for services that are routed (mailer, queue, search, storage); unrouted
+// services (database, cache, storage-init) stay on the project's own network,
+// where the bare name cannot collide, and are addressed by it directly.
+func (e *Environment) serviceHost(name string) string {
+	if e.proxy == nil {
+		return name
 	}
 
-	return proxyServiceAlias(px.Hostname, serviceName)
+	return proxyServiceAlias(e.proxy.Hostname, name)
 }
 
 // proxyNetworks attaches a service to the default and shared proxy networks;
@@ -126,7 +130,14 @@ func proxyNetworks(networkName, alias string) yamlMap[composeServiceNetwork] {
 // addProxyRouting joins serviceName to the shared proxy network and adds a
 // Traefik router per route.
 func addProxyRouting(spec *composeService, p *Proxy, serviceName string, routes ...proxyRoute) {
-	spec.Networks = []string{"default", p.NetworkName}
+	// Router/service names must be unique across every project sharing the one
+	// Traefik instance, so they are prefixed with the project's own hostname
+	// (dots replaced, since Traefik router names must be alphanumeric).
+	routerPrefix := proxyServiceAlias(p.Hostname, serviceName)
+
+	// The service advertises that same alias on the shared network, so internal
+	// calls resolve to it and not to a parallel project's service (#1484).
+	spec.Networks = proxyNetworks(p.NetworkName, routerPrefix)
 
 	labels := yamlMap[string]{}.
 		set("traefik.enable", "true").
