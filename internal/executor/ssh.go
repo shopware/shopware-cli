@@ -3,6 +3,7 @@ package executor
 import (
 	"context"
 	"crypto/sha256"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net"
@@ -17,7 +18,6 @@ import (
 	"time"
 
 	"github.com/go-sql-driver/mysql"
-	"github.com/joho/godotenv"
 
 	adminSdk "github.com/shopware/shopware-cli/internal/admin-api"
 	"github.com/shopware/shopware-cli/internal/shop"
@@ -247,13 +247,28 @@ func (s *SSHExecutor) DatabaseConnection(ctx context.Context) (*DatabaseConnecti
 	return conn, nil
 }
 
-// remoteDatabaseURL reads the remote Symfony env files (.env.dist < .env <
-// .env.local, matching envfile.ReadValue precedence) over ssh and extracts
-// DATABASE_URL. Concatenating in precedence order keeps the last occurrence
-// winning, mirroring godotenv.Read.
+// remoteDatabaseURL resolves DATABASE_URL on the remote host via
+// `shopware-deployment-helper dump-env`, which evaluates the full Symfony
+// dotenv cascade (including .env.local.php and variable interpolation) and
+// prints the resolved values as JSON.
 func (s *SSHExecutor) remoteDatabaseURL(ctx context.Context) (string, error) {
-	remoteCmd := "cd " + shellQuoteArg(s.remoteDir()) +
-		` && for f in .env.dist .env .env.local; do if [ -f "$f" ]; then cat "$f"; fi; done`
+	stdout, err := s.runRemoteShell(ctx, "php vendor/bin/shopware-deployment-helper dump-env")
+	if err != nil {
+		return "", err
+	}
+
+	var values map[string]string
+	if err := json.Unmarshal([]byte(stdout), &values); err != nil {
+		return "", fmt.Errorf("could not parse dump-env output: %w", err)
+	}
+
+	return values["DATABASE_URL"], nil
+}
+
+// runRemoteShell executes a shell snippet inside the remote project
+// directory and returns its stdout.
+func (s *SSHExecutor) runRemoteShell(ctx context.Context, remoteCmd string) (string, error) {
+	remoteCmd = "cd " + shellQuoteArg(s.remoteDir()) + " && " + remoteCmd
 
 	sshArgs := append(s.sshArgs(), "-T", s.target(), remoteCmd)
 	cmd := exec.CommandContext(ctx, "ssh", sshArgs...)
@@ -264,15 +279,10 @@ func (s *SSHExecutor) remoteDatabaseURL(ctx context.Context) (string, error) {
 	cmd.Stderr = &stderr
 
 	if err := cmd.Run(); err != nil {
-		return "", fmt.Errorf("could not read remote env files via ssh: %w\n%s", err, stderr.String())
+		return "", fmt.Errorf("could not run remote command via ssh: %w\n%s", err, stderr.String())
 	}
 
-	values, err := godotenv.Parse(strings.NewReader(stdout.String()))
-	if err != nil {
-		return "", fmt.Errorf("could not parse remote env files: %w", err)
-	}
-
-	return values["DATABASE_URL"], nil
+	return stdout.String(), nil
 }
 
 var sshDialerCounter atomic.Int64

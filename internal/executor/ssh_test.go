@@ -249,7 +249,7 @@ func TestSSHExecutorDatabaseConnection(t *testing.T) {
 	argsFile := filepath.Join(tmp, "args.txt")
 	envFile := filepath.Join(tmp, "env.txt")
 
-	require.NoError(t, os.WriteFile(envFile, []byte("DATABASE_URL=mysql://app:secret@db.internal:3307/shopware_prod\n"), 0o644))
+	require.NoError(t, os.WriteFile(envFile, []byte(`{"APP_ENV":"prod","DATABASE_URL":"mysql://app:secret@db.internal:3307/shopware_prod"}`), 0o644))
 	writeRecordingSSH(t, argsFile, envFile)
 
 	e := testSSHExecutor()
@@ -271,14 +271,14 @@ func TestSSHExecutorDatabaseConnection(t *testing.T) {
 	recorded, err := os.ReadFile(argsFile)
 	require.NoError(t, err)
 	assert.Contains(t, string(recorded), "deploy@shop.example.com")
-	assert.Contains(t, string(recorded), ".env.local", "remote env files are read over ssh")
+	assert.Contains(t, string(recorded), "dump-env", "DATABASE_URL is resolved via deployment-helper dump-env")
 }
 
 func TestSSHExecutorDatabaseConnectionDefaults(t *testing.T) {
 	tmp := t.TempDir()
 	envFile := filepath.Join(tmp, "env.txt")
 
-	require.NoError(t, os.WriteFile(envFile, []byte("APP_ENV=prod\n"), 0o644))
+	require.NoError(t, os.WriteFile(envFile, []byte(`{"APP_ENV":"prod"}`), 0o644))
 	writeRecordingSSH(t, filepath.Join(tmp, "args.txt"), envFile)
 
 	e := testSSHExecutor()
