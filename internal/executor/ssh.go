@@ -62,12 +62,15 @@ func (s *SSHExecutor) controlPath() string {
 }
 
 // sshArgs returns the base ssh argument list: connection multiplexing for
-// fast repeated calls, plus port and identity options.
+// fast repeated calls, plus port and identity options. LogLevel=ERROR hides
+// client-side noise like the post-quantum key exchange warning; real
+// failures are still reported.
 func (s *SSHExecutor) sshArgs() []string {
 	args := []string{
 		"-o", "ControlMaster=auto",
 		"-o", "ControlPath=" + s.controlPath(),
 		"-o", "ControlPersist=10m",
+		"-o", "LogLevel=ERROR",
 	}
 
 	if s.port != 0 && s.port != 22 {

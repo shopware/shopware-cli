@@ -82,6 +82,7 @@ func TestSSHExecutorConsoleCommand(t *testing.T) {
 		"-o", "ControlMaster=auto",
 		"-o", "ControlPath=" + e.controlPath(),
 		"-o", "ControlPersist=10m",
+		"-o", "LogLevel=ERROR",
 		"-T",
 		"deploy@shop.example.com",
 		"cd /var/www/shop && php bin/console cache:clear",
