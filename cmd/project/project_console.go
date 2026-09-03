@@ -2,6 +2,7 @@ package project
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -102,15 +103,20 @@ var projectConsoleCmd = &cobra.Command{
 		if len(args) > 0 && (strings.HasPrefix(args[0], "-e") || strings.HasPrefix(args[0], "--env")) {
 			if strings.Contains(args[0], "=") {
 				parts := strings.SplitN(args[0], "=", 2)
-				cmd.Flags().Set("env", parts[1])
+				if err := cmd.Flags().Set("env", parts[1]); err != nil {
+					return err
+				}
 
 				args = append(args[:0], args[1:]...)
 			} else {
 				if len(args) < 2 {
-					return fmt.Errorf("missing value for --env flag")
+					return errors.New("missing value for --env flag")
 				}
 
-				cmd.Flags().Set("env", args[1])
+				if err := cmd.Flags().Set("env", args[1]); err != nil {
+					return err
+				}
+
 				args = append(args[:0], args[2:]...)
 			}
 		}
