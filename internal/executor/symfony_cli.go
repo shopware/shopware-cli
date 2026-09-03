@@ -2,6 +2,7 @@ package executor
 
 import (
 	"context"
+	"io"
 	"os/exec"
 	"path/filepath"
 
@@ -60,12 +61,13 @@ func (s *SymfonyCLIExecutor) AvailableLogFiles(_ context.Context) ([]LogFile, er
 	return localLogFiles(filepath.Join(s.projectRoot, "var", "log"))
 }
 
-func (s *SymfonyCLIExecutor) GetLog(ctx context.Context, file string, lines int, follow bool) *Process {
+func (s *SymfonyCLIExecutor) GetLog(ctx context.Context, file string, lines int, follow bool, w io.Writer) error {
 	cmd := exec.CommandContext(ctx, "tail", tailArgs(logFilePath(s.projectRoot, file), lines, follow)...)
 	applyLocalEnv(s.projectRoot, s.env, cmd)
 	applyDir(resolveDir(s.projectRoot, s.relDir), cmd)
 	logCmd(ctx, cmd)
-	return newProcess(cmd)
+
+	return runStreaming(ctx, cmd, w)
 }
 
 func (s *SymfonyCLIExecutor) NormalizePath(hostPath string) string {

@@ -1,6 +1,7 @@
 package executor
 
 import (
+	"bytes"
 	"fmt"
 	"io"
 	"os"
@@ -449,13 +450,22 @@ func TestSSHExecutorAvailableLogFiles(t *testing.T) {
 }
 
 func TestSSHExecutorGetLog(t *testing.T) {
+	tmp := t.TempDir()
+	argsFile := filepath.Join(tmp, "args.txt")
+	outFile := filepath.Join(tmp, "out.txt")
+
+	require.NoError(t, os.WriteFile(outFile, []byte("line1\nline2\n"), 0o644))
+	writeRecordingSSH(t, argsFile, outFile, "", "")
+
 	e := testSSHExecutor()
 
-	p := e.GetLog(t.Context(), "prod.log", 100, false)
-	assert.Equal(t, "cd /var/www/shop && tail -n 100 /var/www/shop/var/log/prod.log", lastSSHShell(t, p))
+	var buf bytes.Buffer
+	require.NoError(t, e.GetLog(t.Context(), "prod.log", 100, false, &buf))
+	assert.Equal(t, "line1\nline2\n", buf.String())
 
-	p = e.GetLog(t.Context(), "prod.log", 5, true)
-	assert.Equal(t, "cd /var/www/shop && tail -n 5 -f /var/www/shop/var/log/prod.log", lastSSHShell(t, p))
+	recorded, err := os.ReadFile(argsFile)
+	require.NoError(t, err)
+	assert.Contains(t, string(recorded), "tail -n 100 /var/www/shop/var/log/prod.log")
 }
 
 func TestShellQuoteArg(t *testing.T) {

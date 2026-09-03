@@ -1,8 +1,11 @@
 package executor
 
 import (
+	"bytes"
+	"context"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 	"time"
 
@@ -108,8 +111,32 @@ func TestLocalExecutorAvailableLogFiles(t *testing.T) {
 func TestLocalExecutorGetLog(t *testing.T) {
 	t.Parallel()
 
-	p := NewLocal("/project").GetLog(t.Context(), "prod.log", 50, true)
+	if runtime.GOOS == "windows" {
+		t.Skip("tail requires a POSIX system")
+	}
 
-	assert.Equal(t, "tail", filepath.Base(p.Cmd.Path))
-	assert.Equal(t, []string{"tail", "-n", "50", "-f", filepath.Join("/project", "var", "log", "prod.log")}, p.Cmd.Args)
+	tmp := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(tmp, "var", "log"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(tmp, "var", "log", "prod.log"), []byte("line1\nline2\nline3\n"), 0o644))
+
+	var buf bytes.Buffer
+	require.NoError(t, NewLocal(tmp).GetLog(t.Context(), "prod.log", 2, false, &buf))
+	assert.Equal(t, "line2\nline3\n", buf.String())
+}
+
+func TestLocalExecutorGetLogCancelIsClean(t *testing.T) {
+	t.Parallel()
+
+	if runtime.GOOS == "windows" {
+		t.Skip("tail requires a POSIX system")
+	}
+
+	tmp := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(tmp, "var", "log"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(tmp, "var", "log", "prod.log"), []byte("line1\n"), 0o644))
+
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+
+	assert.NoError(t, NewLocal(tmp).GetLog(ctx, "prod.log", 100, true, &bytes.Buffer{}), "cancellation while following is a clean stop")
 }

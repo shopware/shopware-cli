@@ -3,6 +3,7 @@ package executor
 import (
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -124,12 +125,13 @@ func (l *LocalExecutor) AvailableLogFiles(_ context.Context) ([]LogFile, error) 
 	return localLogFiles(filepath.Join(l.projectRoot, "var", "log"))
 }
 
-func (l *LocalExecutor) GetLog(ctx context.Context, file string, lines int, follow bool) *Process {
+func (l *LocalExecutor) GetLog(ctx context.Context, file string, lines int, follow bool, w io.Writer) error {
 	cmd := exec.CommandContext(ctx, "tail", tailArgs(logFilePath(l.projectRoot, file), lines, follow)...)
 	applyLocalEnv(l.projectRoot, l.env, cmd)
 	applyDir(resolveDir(l.projectRoot, l.relDir), cmd)
 	logCmd(ctx, cmd)
-	return newProcess(cmd)
+
+	return runStreaming(ctx, cmd, w)
 }
 
 func (l *LocalExecutor) NormalizePath(hostPath string) string {

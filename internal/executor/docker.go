@@ -3,6 +3,7 @@ package executor
 import (
 	"context"
 	"fmt"
+	"io"
 	"net"
 	"os/exec"
 	"path/filepath"
@@ -93,7 +94,7 @@ func (d *DockerExecutor) AvailableLogFiles(ctx context.Context) ([]LogFile, erro
 	return parseLogFiles(out)
 }
 
-func (d *DockerExecutor) GetLog(ctx context.Context, file string, lines int, follow bool) *Process {
+func (d *DockerExecutor) GetLog(ctx context.Context, file string, lines int, follow bool, w io.Writer) error {
 	tail := tailArgs(d.NormalizePath(logFilePath(d.projectRoot, file)), lines, follow)
 
 	dockerArgs := d.baseArgs(ctx)
@@ -103,7 +104,8 @@ func (d *DockerExecutor) GetLog(ctx context.Context, file string, lines int, fol
 	cmd := exec.CommandContext(ctx, "docker", dockerArgs...)
 	applyDir(d.projectRoot, cmd)
 	logCmd(ctx, cmd)
-	return d.newProcess(cmd, append([]string{"tail"}, tail...))
+
+	return runStreaming(ctx, cmd, w)
 }
 
 func (d *DockerExecutor) NormalizePath(hostPath string) string {

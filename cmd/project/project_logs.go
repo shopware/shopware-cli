@@ -58,11 +58,7 @@ var projectLogsCmd = &cobra.Command{
 		lines, _ := cmd.Flags().GetInt("lines")
 		follow, _ := cmd.Flags().GetBool("follow")
 
-		p := cmdExecutor.GetLog(cmd.Context(), target, lines, follow)
-		p.Cmd.Stdout = cmd.OutOrStdout()
-		p.Cmd.Stderr = cmd.ErrOrStderr()
-
-		return p.Run()
+		return cmdExecutor.GetLog(cmd.Context(), target, lines, follow, cmd.OutOrStdout())
 	},
 }
 

@@ -1,9 +1,12 @@
 package executor
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"slices"
 	"strconv"
@@ -94,4 +97,29 @@ func tailArgs(file string, lines int, follow bool) []string {
 	}
 
 	return append(args, file)
+}
+
+// runStreaming runs cmd with stdout streamed to w for GetLog
+// implementations. A kill caused by ctx cancellation (Ctrl-C while
+// following) is a clean stop, not an error; other failures carry the
+// captured stderr.
+func runStreaming(ctx context.Context, cmd *exec.Cmd, w io.Writer) error {
+	var stderr strings.Builder
+	cmd.Stdout = w
+	cmd.Stderr = &stderr
+
+	if err := cmd.Run(); err != nil {
+		if ctx.Err() != nil {
+			//nolint:nilerr // a kill caused by ctx cancellation (Ctrl-C while following) is a clean stop
+			return nil
+		}
+
+		if msg := strings.TrimSpace(stderr.String()); msg != "" {
+			return fmt.Errorf("%w: %s", err, msg)
+		}
+
+		return err
+	}
+
+	return nil
 }
