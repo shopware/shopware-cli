@@ -29,7 +29,7 @@ func New(projectRoot string, cfg *shop.EnvironmentConfig, shopCfg *shop.Config) 
 		if cfg.SSH.Directory == "" {
 			return nil, errors.New("ssh environment requires ssh.directory")
 		}
-		return &SSHExecutor{host: cfg.SSH.Host, user: cfg.SSH.User, port: cfg.SSH.Port, directory: cfg.SSH.Directory, identityFile: cfg.SSH.IdentityFile, projectRoot: projectRoot, shopCfg: shopCfg, envCfg: cfg}, nil
+		return &SSHExecutor{host: cfg.SSH.Host, user: cfg.SSH.User, port: cfg.SSH.Port, directory: cfg.SSH.Directory, identityFile: cfg.SSH.IdentityFile, phpBinary: cfg.SSH.PHPBinary, projectRoot: projectRoot, shopCfg: shopCfg, envCfg: cfg}, nil
 	case TypeSymfonyCLI:
 		path := pathToSymfonyCLI()
 		if path == "" {

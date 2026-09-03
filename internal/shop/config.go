@@ -42,6 +42,8 @@ type EnvironmentSSHConfig struct {
 	Directory string `yaml:"directory" jsonschema:"required"`
 	// Path to the SSH private key file. Defaults to the ssh agent or the default key files
 	IdentityFile string `yaml:"identity_file,omitempty"`
+	// PHP binary used for PHP and console commands on the remote host (e.g. "/usr/bin/php8.3"). Defaults to "php"
+	PHPBinary string `yaml:"php_binary,omitempty"`
 }
 
 type Config struct {

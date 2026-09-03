@@ -198,6 +198,29 @@ func TestSSHExecutorWithRelDir(t *testing.T) {
 	assert.Equal(t, "cd /var/www/shop/custom/plugins/SwagTest && composer dump-autoload", lastSSHShell(t, p))
 }
 
+func TestSSHExecutorPHPBinary(t *testing.T) {
+	cfg := &shop.EnvironmentConfig{
+		Type: "ssh",
+		SSH:  &shop.EnvironmentSSHConfig{Host: "shop.example.com", User: "deploy", Directory: "/var/www/shop", PHPBinary: "/usr/bin/php8.3"},
+	}
+
+	e, err := New("/project", cfg, &shop.Config{})
+	require.NoError(t, err)
+
+	p := e.ConsoleCommand(t.Context(), "cache:clear")
+	assert.Equal(t, "cd /var/www/shop && /usr/bin/php8.3 bin/console cache:clear", lastSSHShell(t, p))
+
+	p = e.PHPCommand(t.Context(), "-v")
+	assert.Equal(t, "cd /var/www/shop && /usr/bin/php8.3 -v", lastSSHShell(t, p))
+
+	// WithEnv and WithRelDir keep the configured binary.
+	p = e.WithEnv(map[string]string{"FOO": "bar"}).PHPCommand(t.Context(), "-v")
+	assert.Contains(t, lastSSHShell(t, p), "/usr/bin/php8.3 -v")
+
+	p = e.WithRelDir("custom/plugins/Foo").PHPCommand(t.Context(), "-v")
+	assert.Equal(t, "cd /var/www/shop/custom/plugins/Foo && /usr/bin/php8.3 -v", lastSSHShell(t, p))
+}
+
 func TestSSHExecutorTTY(t *testing.T) {
 	e := testSSHExecutor()
 

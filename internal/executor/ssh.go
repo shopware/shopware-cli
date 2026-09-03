@@ -34,12 +34,23 @@ type SSHExecutor struct {
 	port         int
 	directory    string
 	identityFile string
+	phpBinary    string
 
 	env         map[string]string
 	projectRoot string
 	relDir      string
 	shopCfg     *shop.Config
 	envCfg      *shop.EnvironmentConfig
+}
+
+// php returns the PHP binary used on the remote host, defaulting to "php"
+// from the remote PATH.
+func (s *SSHExecutor) php() string {
+	if s.phpBinary == "" {
+		return "php"
+	}
+
+	return s.phpBinary
 }
 
 func (s *SSHExecutor) target() string {
@@ -149,7 +160,7 @@ func (s *SSHExecutor) command(ctx context.Context, name string, args ...string) 
 }
 
 func (s *SSHExecutor) ConsoleCommand(ctx context.Context, args ...string) *Process {
-	return s.command(ctx, "php", append([]string{consoleCommandName(ctx)}, args...)...)
+	return s.command(ctx, s.php(), append([]string{consoleCommandName(ctx)}, args...)...)
 }
 
 func (s *SSHExecutor) ComposerCommand(ctx context.Context, args ...string) *Process {
@@ -157,7 +168,7 @@ func (s *SSHExecutor) ComposerCommand(ctx context.Context, args ...string) *Proc
 }
 
 func (s *SSHExecutor) PHPCommand(ctx context.Context, args ...string) *Process {
-	return s.command(ctx, "php", args...)
+	return s.command(ctx, s.php(), args...)
 }
 
 func (s *SSHExecutor) NPMCommand(ctx context.Context, args ...string) *Process {
@@ -196,11 +207,11 @@ func (s *SSHExecutor) WithEnv(env map[string]string) Executor {
 		}
 	}
 
-	return &SSHExecutor{host: s.host, user: s.user, port: s.port, directory: s.directory, identityFile: s.identityFile, env: mergeEnv(s.env, env), projectRoot: s.projectRoot, relDir: s.relDir, shopCfg: s.shopCfg, envCfg: s.envCfg}
+	return &SSHExecutor{host: s.host, user: s.user, port: s.port, directory: s.directory, identityFile: s.identityFile, phpBinary: s.phpBinary, env: mergeEnv(s.env, env), projectRoot: s.projectRoot, relDir: s.relDir, shopCfg: s.shopCfg, envCfg: s.envCfg}
 }
 
 func (s *SSHExecutor) WithRelDir(relDir string) Executor {
-	return &SSHExecutor{host: s.host, user: s.user, port: s.port, directory: s.directory, identityFile: s.identityFile, env: s.env, projectRoot: s.projectRoot, relDir: relDir, shopCfg: s.shopCfg, envCfg: s.envCfg}
+	return &SSHExecutor{host: s.host, user: s.user, port: s.port, directory: s.directory, identityFile: s.identityFile, phpBinary: s.phpBinary, env: s.env, projectRoot: s.projectRoot, relDir: relDir, shopCfg: s.shopCfg, envCfg: s.envCfg}
 }
 
 func (s *SSHExecutor) AdminAPIClient(ctx context.Context) (*adminSdk.Client, error) {
@@ -276,7 +287,7 @@ func (s *SSHExecutor) remoteDatabaseURL(ctx context.Context) (string, error) {
 		return "", errors.New("vendor/bin/shopware-deployment-helper not found on the remote host: require shopware/deployment-helper in the project (composer require shopware/deployment-helper)")
 	}
 
-	stdout, err := s.runRemoteShell(ctx, "php vendor/bin/shopware-deployment-helper dump-env")
+	stdout, err := s.runRemoteShell(ctx, shellQuoteArg(s.php())+" vendor/bin/shopware-deployment-helper dump-env")
 	if err != nil {
 		return "", fmt.Errorf("%w (dump-env requires a recent shopware/deployment-helper: run composer update shopware/deployment-helper on the remote host)", err)
 	}
@@ -313,7 +324,7 @@ func (s *SSHExecutor) runRemoteShell(ctx context.Context, remoteCmd string) (str
 // on the remote host. DATABASE_URLs with host "localhost" make PHP connect
 // through this socket instead of TCP.
 func (s *SSHExecutor) remoteMySQLSocket(ctx context.Context) (string, error) {
-	stdout, err := s.runRemoteShell(ctx, `php -r 'echo ini_get("pdo_mysql.default_socket") ?: ini_get("mysqli.default_socket");'`)
+	stdout, err := s.runRemoteShell(ctx, shellQuoteArg(s.php())+` -r 'echo ini_get("pdo_mysql.default_socket") ?: ini_get("mysqli.default_socket");'`)
 	if err != nil {
 		return "", err
 	}

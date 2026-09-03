@@ -697,6 +697,10 @@
         "identity_file": {
           "type": "string",
           "description": "Path to the SSH private key file. Defaults to the ssh agent or the default key files"
+        },
+        "php_binary": {
+          "type": "string",
+          "description": "PHP binary used for PHP and console commands on the remote host (e.g. \"/usr/bin/php8.3\"). Defaults to \"php\""
         }
       },
       "additionalProperties": false,
