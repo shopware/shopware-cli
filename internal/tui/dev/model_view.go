@@ -28,6 +28,8 @@ func (m Model) windowTitle() string {
 		return dir + "Install"
 	case phaseInstalling:
 		return dir + "Installing..."
+	case phaseInstallFailed:
+		return dir + "Installation failed"
 	case phaseTask:
 		return ""
 	case phaseMigrationWizard:
@@ -58,6 +60,10 @@ func (m Model) phaseFooterHint() string {
 	switch m.phase {
 	case phaseStarting, phaseStopping, phaseInstalling:
 		return tui.ShortcutBadge("l", "Toggle logs")
+	case phaseInstallFailed:
+		return tui.ShortcutBadge("←/→", "Choose") + "  " +
+			tui.ShortcutBadge("enter", "Confirm") + "  " +
+			tui.ShortcutBadge("l", "Toggle logs")
 	case phaseInstallPrompt:
 		return m.installFooterHint()
 	case phaseMigrationWizard:
@@ -78,7 +84,7 @@ func (m Model) View(ctx app.Context) string {
 	switch m.phase {
 	case phaseDashboard:
 		return m.renderDashboard(ctx)
-	case phaseStarting, phaseStopping, phaseInstallPrompt, phaseInstalling:
+	case phaseStarting, phaseStopping, phaseInstallPrompt, phaseInstalling, phaseInstallFailed:
 		return m.renderPhase(ctx)
 	case phaseTask:
 		return m.renderTask(ctx)
@@ -201,11 +207,72 @@ func (m Model) renderPhase(ctx app.Context) string {
 		}
 		card.WriteString(tui.NewStepList(tui.StepListOptions{Steps: items}).Render())
 		content.WriteString(tui.RenderPhaseCard(strings.TrimRight(card.String(), "\n")))
+	case phaseInstallFailed:
+		if m.installProg.showLogs {
+			// Appended at render time, not when the install failed: output is
+			// still draining from the stream buffer at that point, so a stored
+			// notice would end up somewhere in the middle of the log.
+			lines := append(slices.Clone(m.overlayLines), m.installFailureNotice()...)
+			return m.renderLogScreen("Installation failed", lines, ctx.Width, ctx.MainHeight)
+		}
+		content.WriteString(tui.RenderPhaseCard(m.renderInstallFailed()))
 	case phaseDashboard, phaseTask, phaseMigrationWizard:
 		// Rendered by the outer View() dispatch, not here.
 	}
 
 	return renderPhaseBox(content.String(), ctx.Width, ctx.MainHeight)
+}
+
+// installFailureSummary is the headline and subtitle shared by the failure
+// card and the notice closing the log view. The helper's raw error stays in
+// the logs.
+func installFailureSummary() string {
+	var b strings.Builder
+	b.WriteString(headlineErrorStyle.Render("Installation failed"))
+	b.WriteString("\n")
+	b.WriteString(tui.DimStyle.Render("The installation process failed because an error occurred."))
+
+	return b.String()
+}
+
+// renderInstallFailureActions renders the recovery choices below the summary.
+func (m Model) renderInstallFailureActions() string {
+	labels := make([]string, len(installFailureActions))
+	for i, action := range installFailureActions {
+		labels[i] = installFailureActionLabels[action]
+	}
+	return tui.NewButtonRow(tui.ButtonRowOptions{
+		Labels: labels,
+		Active: installFailureActionIndex(m.installProg.action),
+	}).Render()
+}
+
+// renderInstallFailed renders the failed-install card: headline, subtitle,
+// how to open the logs, and the recovery choices.
+func (m Model) renderInstallFailed() string {
+	var b strings.Builder
+	b.WriteString(installFailureSummary())
+	b.WriteString("\n\n")
+	b.WriteString(valueStyle.Render("Toggle the logs with "))
+	b.WriteString(keyCapStyle.Render("l"))
+	b.WriteString(valueStyle.Render(" to inspect details."))
+	b.WriteString("\n\n")
+	b.WriteString(m.renderInstallFailureActions())
+
+	return b.String()
+}
+
+// installFailureNotice returns the failure summary and recovery choices as
+// boxed log lines. They are returned per line so the log screen's tail
+// calculation stays accurate.
+func (m Model) installFailureNotice() []string {
+	box := lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(tui.ErrorColor).
+		Padding(1, 2).
+		Render(installFailureSummary() + "\n\n" + m.renderInstallFailureActions())
+
+	return append([]string{""}, strings.Split(box, "\n")...)
 }
 
 // renderPhaseBox renders content centered inside the rounded main-region box.
@@ -244,16 +311,18 @@ func (m Model) renderDockerLogs(title string, width, boxHeight int) string {
 }
 
 func (m Model) renderLogScreen(title string, lines []string, width, boxHeight int) string {
-	visibleLines := boxHeight - 6
-	if visibleLines < 1 {
-		visibleLines = 1
+	visibleRows := boxHeight - 6
+	if visibleRows < 1 {
+		visibleRows = 1
 	}
+	// Border (2) plus the horizontal padding below (3 each side).
+	contentWidth := width - 8
 
 	var body strings.Builder
 	body.WriteString(panelHeaderStyle.Render(title))
 	body.WriteString("\n\n")
 
-	for _, line := range tui.TailLines(lines, visibleLines) {
+	for _, line := range tui.TailWrappedLines(lines, visibleRows, contentWidth) {
 		body.WriteString(line)
 		body.WriteString("\n")
 	}

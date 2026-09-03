@@ -4,9 +4,11 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
+	"github.com/charmbracelet/x/ansi"
 	"github.com/stretchr/testify/assert"
 
 	"github.com/shopware/shopware-cli/internal/executor"
@@ -157,6 +159,98 @@ func TestUpdateKeyPress_PhaseInstalling_QuitKey(t *testing.T) {
 	assert.NotNil(t, cmd)
 	_, isQuit := cmd().(tea.QuitMsg)
 	assert.True(t, isQuit)
+}
+
+func TestUpdateKeyPress_PhaseInstallFailed_QuitKey(t *testing.T) {
+	m := newTestModel(t)
+	m.phase = phaseInstallFailed
+
+	_, cmd := m.Update(keyRune('q'))
+	assert.NotNil(t, cmd)
+	_, isQuit := cmd().(tea.QuitMsg)
+	assert.True(t, isQuit)
+}
+
+func TestUpdateKeyPress_PhaseInstallFailed_LTogglesLogs(t *testing.T) {
+	m := newTestModel(t)
+	m.phase = phaseInstallFailed
+	m.installProg.showLogs = false
+
+	updated, _ := m.Update(keyRune('l'))
+	assert.True(t, updated.(Model).installProg.showLogs)
+
+	updated, _ = updated.(Model).Update(keyRune('l'))
+	assert.False(t, updated.(Model).installProg.showLogs)
+}
+
+func TestUpdateKeyPress_PhaseInstallFailed_NavigatesActions(t *testing.T) {
+	m := newTestModel(t)
+	m.phase = phaseInstallFailed
+
+	updated, _ := m.updateInstallFailed(keySpecial(tea.KeyLeft))
+	assert.Equal(t, installFailureActionRestart, updated.(Model).installProg.action)
+
+	updated, _ = updated.(Model).updateInstallFailed(keySpecial(tea.KeyRight))
+	assert.Equal(t, installFailureActionCancel, updated.(Model).installProg.action)
+
+	updated, _ = updated.(Model).updateInstallFailed(keySpecial(tea.KeyTab))
+	assert.Equal(t, installFailureActionCancel, updated.(Model).installProg.action)
+
+	updated, _ = updated.(Model).updateInstallFailed(keyShiftTabMsg())
+	assert.Equal(t, installFailureActionRestart, updated.(Model).installProg.action)
+}
+
+func TestUpdateKeyPress_PhaseInstallFailed_RestartRunsFullInstall(t *testing.T) {
+	m := newTestModel(t)
+	m.phase = phaseInstallFailed
+	m.executor = executor.NewLocalWithConfig(m.projectRoot, &shop.EnvironmentConfig{}, m.config)
+	m.overlayLines = []string{"output from failed attempt"}
+	m.installProg = installProgress{
+		currentStep: 4,
+		done:        true,
+		showLogs:    true,
+		failure:     &installFailure{category: installFailureMigration},
+	}
+	m.install.language = "de-DE"
+	m.install.currency = "EUR"
+	m.install.SetUsername("admin")
+	m.install.SetPassword("shopware")
+
+	updated, cmd := m.updateInstallFailed(keySpecial(tea.KeyEnter))
+	final := updated.(Model)
+
+	assert.Equal(t, phaseInstalling, final.phase)
+	assert.Empty(t, final.overlayLines)
+	assert.Nil(t, final.installProg.failure)
+	assert.Zero(t, final.installProg.currentStep)
+	assert.False(t, final.installProg.showLogs)
+	assert.False(t, final.installProg.done)
+	assert.Equal(t, installFailureActionRestart, final.installProg.action)
+	assert.NotNil(t, final.dockerOutChan)
+	assert.NotNil(t, cmd)
+	assert.Equal(t, "de-DE", final.install.language)
+	assert.Equal(t, "admin", final.install.Username())
+}
+
+func TestUpdateKeyPress_PhaseInstallFailed_CancelOpensDashboard(t *testing.T) {
+	m := newTestModel(t)
+	m.phase = phaseInstallFailed
+	m.overlayLines = []string{"output from failed attempt"}
+	m.installProg = installProgress{
+		showLogs: true,
+		failure:  &installFailure{category: installFailureMigration},
+		action:   installFailureActionCancel,
+	}
+
+	updated, cmd := m.updateInstallFailed(keySpecial(tea.KeyEnter))
+	final := updated.(Model)
+
+	assert.Equal(t, phaseDashboard, final.phase)
+	assert.Empty(t, final.overlayLines)
+	assert.Nil(t, final.dockerOutChan)
+	assert.Nil(t, final.installProg.failure)
+	assert.False(t, final.installProg.showLogs)
+	assert.NotNil(t, cmd)
 }
 
 func TestUpdateKeyPress_PhaseTask_DoneTransitionsToDashboard(t *testing.T) {
@@ -508,7 +602,7 @@ func TestMergeLocalProfilerSecrets_EmptySrcValuesDoNotOverwriteDst(t *testing.T)
 
 func TestView_DoesNotPanicForEachPhase(t *testing.T) {
 	ctx := app.Context{Width: 120, Height: 40, MainHeight: 36}
-	phases := []phase{phaseDashboard, phaseStarting, phaseStopping, phaseInstallPrompt, phaseInstalling, phaseTask, phaseMigrationWizard}
+	phases := []phase{phaseDashboard, phaseStarting, phaseStopping, phaseInstallPrompt, phaseInstalling, phaseInstallFailed, phaseTask, phaseMigrationWizard}
 	for _, p := range phases {
 		m := newTestModel(t)
 		m.width = 120
@@ -531,6 +625,43 @@ func TestView_DoesNotPanicForEachPhase(t *testing.T) {
 			_ = m.chromeFooter(ctx)
 		}, "phase %d", p)
 	}
+}
+
+func TestView_InstallFailedShowsHeadlineAndActions(t *testing.T) {
+	m := newTestModel(t)
+	m.phase = phaseInstallFailed
+	m.installProg.failure = &installFailure{
+		category:    installFailureDatabaseConnection,
+		failingStep: "system:install",
+	}
+
+	card := m.renderInstallFailed()
+	plain := strings.Join(strings.Fields(ansi.Strip(card)), " ")
+	assert.Contains(t, card, "Installation failed")
+	assert.Contains(t, card, "The installation process failed because an error occurred.")
+	assert.Contains(t, plain, "Toggle the logs with l to inspect details.")
+	assert.Contains(t, card, "Restart Installation")
+	assert.Contains(t, card, "Cancel")
+}
+
+func TestView_InstallFailedToggledLogsShowOverlay(t *testing.T) {
+	m := newTestModel(t)
+	m.phase = phaseInstallFailed
+	m.installProg.showLogs = true
+	m.installProg.failure = &installFailure{
+		category:    installFailureDatabaseConnection,
+		failingStep: "system:install",
+	}
+	for range 40 {
+		m.overlayLines = append(m.overlayLines, strings.Repeat("deployment-helper output ", 6))
+	}
+	m.overlayLines = append(m.overlayLines, "SQLSTATE boom")
+
+	view := m.View(app.Context{Width: 100, Height: 30, MainHeight: 26})
+	assert.Contains(t, view, "SQLSTATE boom")
+	assert.Contains(t, view, "Installation failed")
+	assert.Contains(t, view, "Restart Installation")
+	assert.Contains(t, view, "Cancel")
 }
 
 func TestView_ZeroSizeDoesNotPanic(t *testing.T) {
@@ -657,6 +788,7 @@ func TestView_WindowTitlePerPhase(t *testing.T) {
 		{phaseStopping, "[project] · Stopping"},
 		{phaseInstallPrompt, "[project] · Install"},
 		{phaseInstalling, "[project] · Installing..."},
+		{phaseInstallFailed, "[project] · Installation failed"},
 		{phaseMigrationWizard, "[project] · Setup"},
 	}
 

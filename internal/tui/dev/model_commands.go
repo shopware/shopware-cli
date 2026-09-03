@@ -7,6 +7,7 @@ import (
 	"charm.land/bubbles/v2/progress"
 	tea "charm.land/bubbletea/v2"
 
+	"github.com/shopware/shopware-cli/internal/executor"
 	"github.com/shopware/shopware-cli/internal/proxy"
 	"github.com/shopware/shopware-cli/internal/shop/install"
 	"github.com/shopware/shopware-cli/internal/tui"
@@ -88,23 +89,33 @@ func (m *Model) checkShopwareInstalled() tea.Cmd {
 func (m *Model) runShopwareInstall() tea.Cmd {
 	ctx := m.commandContext()
 	e := m.executor
-	opts := install.Options{
-		Locale:        m.install.language,
-		Currency:      m.install.currency,
-		AdminUsername: m.install.Username(),
-		AdminPassword: m.install.Password(),
-	}
+	language := m.install.language
+	currency := m.install.currency
+	username := m.install.Username()
+	password := m.install.Password()
 
 	ch := make(chan string, tui.StreamBufferSize)
 	m.dockerOutChan = ch
 
 	doneCmd := func() tea.Msg {
-		err := install.Run(ctx, e, opts, func(line string) { ch <- line })
-		close(ch)
-		return shopwareInstallDoneMsg{err: err}
+		installExecutor := e.WithEnv(map[string]string{
+			"INSTALL_LOCALE":         language,
+			"INSTALL_CURRENCY":       currency,
+			"INSTALL_ADMIN_USERNAME": username,
+			"INSTALL_ADMIN_PASSWORD": password,
+		})
+		output, err := streamInstall(ctx, installExecutor, ch)
+		return shopwareInstallDoneMsg{source: ch, output: output, err: err}
 	}
 
 	return tea.Batch(readFromChan(ch), doneCmd)
+}
+
+func streamInstall(ctx context.Context, execr executor.Executor, ch chan<- string) ([]string, error) {
+	defer close(ch)
+
+	lines, err := tui.DrainCmdOutput(execr.PHPCommand(ctx, "vendor/bin/shopware-deployment-helper", "run").Cmd, ch, true)
+	return lines, err
 }
 
 func (m *Model) readNextDockerOutput() tea.Cmd {
@@ -117,8 +128,8 @@ func (m *Model) readNextDockerOutput() tea.Cmd {
 
 func readFromChan(ch <-chan string) tea.Cmd {
 	return tui.ReadLineCmd(ch,
-		func(line string) tea.Msg { return dockerOutputLineMsg(line) },
-		dockerOutputDoneMsg{},
+		func(line string) tea.Msg { return dockerOutputLineMsg{source: ch, line: line} },
+		dockerOutputDoneMsg{source: ch},
 	)
 }
 

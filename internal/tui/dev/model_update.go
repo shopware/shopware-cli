@@ -67,6 +67,10 @@ func (m Model) updateKeyPress(msg tea.KeyPressMsg) (app.Content, tea.Cmd) {
 		return m, nil
 	}
 
+	if m.phase == phaseInstallFailed {
+		return m.updateInstallFailed(msg)
+	}
+
 	if m.phase == phaseTask {
 		if m.task.Done() {
 			m.phase = phaseDashboard
@@ -83,6 +87,35 @@ func (m Model) updateKeyPress(msg tea.KeyPressMsg) (app.Content, tea.Cmd) {
 	}
 
 	return m.updateDashboardKeys(msg)
+}
+
+func (m Model) updateInstallFailed(msg tea.KeyPressMsg) (app.Content, tea.Cmd) {
+	actions := installFailureActions
+	selected := installFailureActionIndex(m.installProg.action)
+
+	switch tui.KeyString(msg) {
+	case "l":
+		m.installProg.showLogs = !m.installProg.showLogs
+	case "q", tui.KeyCtrlC:
+		// Unlike Cancel (which opens the dashboard), q leaves the TUI.
+		return m, tea.Quit
+	case tui.KeyLeft, tui.KeyShiftTab:
+		if selected > 0 {
+			m.installProg.action = actions[selected-1]
+		}
+	case tui.KeyRight, tui.KeyTab:
+		if selected < len(actions)-1 {
+			m.installProg.action = actions[selected+1]
+		}
+	case tui.KeyEnter:
+		switch actions[selected] {
+		case installFailureActionRestart:
+			return m.startInstall()
+		case installFailureActionCancel:
+			return m.cancelFailedInstall()
+		}
+	}
+	return m, nil
 }
 
 func (m Model) updateDashboardKeys(msg tea.KeyPressMsg) (app.Content, tea.Cmd) {
