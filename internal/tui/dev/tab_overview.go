@@ -281,19 +281,28 @@ func NewOverviewModel(ctx context.Context, envType, shopURL, username, password,
 		shopCfg:          shopCfg,
 		adminWatchURL:    localAdminWatchURL(projectRoot),
 		sfWatchURL:       localStorefrontWatchURL,
-		proxyHost:        proxy.RegisteredHostname(projectRoot),
+		proxyHost:        registeredHostname(projectRoot),
 		domainsSetupDone: overviewSetupDone(projectRoot),
-		instancesLoading: proxy.RegisteredHostname(projectRoot) != "",
+		instancesLoading: registeredHostname(projectRoot) != "",
 		loading:          true,
 		healthLoading:    true,
 	}
+}
+
+// registeredHostname is the project's proxy hostname for the dashboard's
+// best-effort displays and health checks. A registry that cannot be read is
+// treated as "not registered": the dashboard omits proxy information rather
+// than failing, and the proxy health check reports the problem itself.
+func registeredHostname(projectRoot string) string {
+	host, _ := proxy.RegisteredHostname(projectRoot)
+	return host
 }
 
 // overviewSetupDone reports whether the machine's one-time proxy setup (DNS +
 // HTTPS trust) is in place for a proxy project. Non-proxy projects report
 // false (the Domains block is not shown for them anyway).
 func overviewSetupDone(projectRoot string) bool {
-	if proxy.RegisteredHostname(projectRoot) == "" {
+	if registeredHostname(projectRoot) == "" {
 		return false
 	}
 
@@ -978,7 +987,7 @@ func (m OverviewModel) startStorefrontWatch(opts extension.StorefrontWatcherOpti
 
 	// When proxied, route the webpack hot-proxy watcher through the shared
 	// proxy, matching the standalone `project storefront-watch` command.
-	if host := proxy.RegisteredHostname(projectRoot); host != "" {
+	if host := registeredHostname(projectRoot); host != "" {
 		opts.ProxyHostname = "storefront-watch." + host
 	}
 

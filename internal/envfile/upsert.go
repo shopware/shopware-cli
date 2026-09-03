@@ -18,9 +18,12 @@ func UpsertEnvVar(path, key, value string) error {
 	line := fmt.Sprintf("%s=%s", key, value)
 	lines := strings.Split(strings.TrimRight(string(content), "\n"), "\n")
 
+	// Match assignments the way ExtractEnvVar reads them (whitespace around the
+	// key tolerated, comments skipped), so an upsert replaces the line a read
+	// would return instead of appending a duplicate that never takes effect.
 	replaced := false
 	for i, l := range lines {
-		if strings.HasPrefix(strings.TrimSpace(l), key+"=") {
+		if isAssignmentOf(l, key) {
 			lines[i] = line
 			replaced = true
 			break
@@ -36,6 +39,16 @@ func UpsertEnvVar(path, key, value string) error {
 	}
 
 	return os.WriteFile(path, []byte(strings.Join(lines, "\n")+"\n"), 0o644)
+}
+
+// isAssignmentOf reports whether the dotenv line assigns key.
+func isAssignmentOf(line, key string) bool {
+	line = strings.TrimSpace(line)
+	if line == "" || strings.HasPrefix(line, "#") {
+		return false
+	}
+	k, _, ok := strings.Cut(line, "=")
+	return ok && strings.TrimSpace(k) == key
 }
 
 // ReadEnvVar returns the value of key in the env file at path, or "" when

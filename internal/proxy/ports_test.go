@@ -68,6 +68,37 @@ func TestApplyRandomPorts_FallbackProxyKeepsFixedPorts(t *testing.T) {
 	assert.NotContains(t, string(composeContent), "traefik.enable")
 }
 
+// A failed local-override write must not leave behind a compose file the
+// persisted config cannot reproduce.
+func TestApplyRandomPorts_RestoresComposeWhenOverrideWriteFails(t *testing.T) {
+	dir := t.TempDir()
+	writeMinimalComposeProject(t, dir)
+	configPath := filepath.Join(dir, ".shopware-project.yml")
+	composePath := filepath.Join(dir, "compose.yaml")
+	previous := []byte("services: {} # previous\n")
+	require.NoError(t, os.WriteFile(composePath, previous, 0o644))
+	// A directory where the local override file belongs makes its write fail.
+	require.NoError(t, os.Mkdir(shop.LocalConfigFileName(configPath), 0o755))
+
+	_, _, err := ApplyRandomPorts(t.Context(), dir, configPath, &shop.Config{}, false, webConflict())
+	require.Error(t, err)
+
+	content, readErr := os.ReadFile(composePath)
+	require.NoError(t, readErr)
+	assert.Equal(t, previous, content, "the previous compose file is restored")
+
+	// Without a previous compose file the written one is removed again.
+	fresh := t.TempDir()
+	writeMinimalComposeProject(t, fresh)
+	freshConfig := filepath.Join(fresh, ".shopware-project.yml")
+	require.NoError(t, os.Mkdir(shop.LocalConfigFileName(freshConfig), 0o755))
+
+	_, _, err = ApplyRandomPorts(t.Context(), fresh, freshConfig, &shop.Config{}, false, webConflict())
+	require.Error(t, err)
+	_, statErr := os.Stat(filepath.Join(fresh, "compose.yaml"))
+	assert.True(t, os.IsNotExist(statErr), "no compose file is left behind")
+}
+
 func TestNewEnvironment_ModeFollowsConfigUnlessFallback(t *testing.T) {
 	dir := t.TempDir()
 	writeMinimalComposeProject(t, dir)

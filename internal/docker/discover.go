@@ -88,7 +88,9 @@ func (c composePSContainer) publishedPorts() map[int]int {
 
 // composePS lists the project's containers via `docker compose ps`.
 func composePS(ctx context.Context, projectRoot string) ([]composePSContainer, error) {
-	output, err := composeCommand(ctx, projectRoot, "ps", "--format", "json").Output()
+	// --all includes stopped containers, so background processes report their
+	// real state instead of silently disappearing from the list.
+	output, err := composeCommand(ctx, projectRoot, "ps", "--all", "--format", "json").Output()
 	if err != nil {
 		return nil, err
 	}
@@ -147,7 +149,9 @@ func classifyContainers(containers []composePSContainer, proxyHost string) Runni
 			}
 		}
 
-		if def == nil || def.Hidden {
+		// Only running services are reachable; a stopped proxied service would
+		// otherwise still resolve to its subdomain.
+		if def == nil || def.Hidden || container.State != "running" {
 			continue
 		}
 

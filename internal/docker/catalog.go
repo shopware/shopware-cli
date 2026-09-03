@@ -265,8 +265,8 @@ var catalog = []service{
 			{Name: QueueRabbitMQ, Image: "rabbitmq", DefaultTag: "4-management"},
 		},
 		Endpoints: []endpoint{
-			{Name: PortManagement, Label: "Queue management UI", Role: roleUI, ContainerPort: 15672, DefaultHostPort: 15672, Subdomain: "queue"},
-			{Name: PortAMQP, Label: "AMQP", ContainerPort: 5672, DefaultHostPort: 5672},
+			{Name: PortManagement, Label: "Queue management UI", Role: roleUI, ContainerPort: 15672, DefaultHostPort: 15672, Loopback: true, Subdomain: "queue"},
+			{Name: PortAMQP, Label: "AMQP", ContainerPort: 5672, DefaultHostPort: 5672, Loopback: true},
 		},
 		build: buildQueue,
 	},
@@ -275,7 +275,7 @@ var catalog = []service{
 		Label:    "Search",
 		requires: requiresElasticsearch,
 		Endpoints: []endpoint{
-			{Name: PortHTTP, Label: "OpenSearch", Role: roleUI, ContainerPort: 9200, DefaultHostPort: 9200, Subdomain: "search"},
+			{Name: PortHTTP, Label: "OpenSearch", Role: roleUI, ContainerPort: 9200, DefaultHostPort: 9200, Loopback: true, Subdomain: "search"},
 		},
 		build: buildSearch,
 	},

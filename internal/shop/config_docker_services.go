@@ -127,6 +127,11 @@ func (c *Config) withoutDockerPorts() *Config {
 
 	stripped := services.clone()
 	for name, svc := range stripped {
+		// An entry without settings (e.g. "adminer:" with no value) decodes to
+		// nil; it has no ports to strip and stays as written.
+		if svc == nil {
+			continue
+		}
 		svc.Ports = nil
 		if svc.Type == "" && svc.Version == "" {
 			delete(stripped, name)

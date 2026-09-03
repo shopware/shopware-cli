@@ -60,4 +60,9 @@ func TestPortBindings(t *testing.T) {
 	assert.Equal(t, []string{"127.0.0.1::3306"}, portBindings(database, nil))
 	assert.Equal(t, []string{"127.0.0.1:3307:3306"}, portBindings(database, Ports{PortMySQL: 3307}))
 	assert.Empty(t, portBindings(database, Ports{PortMySQL: PortDisabled}))
+
+	// The queue broker and the search node are published on loopback only, so
+	// they are reachable from the host but not from the network.
+	assert.Equal(t, []string{"127.0.0.1:15672:15672", "127.0.0.1:5672:5672"}, portBindings(*byName(ServiceQueue), nil))
+	assert.Equal(t, []string{"127.0.0.1:19200:9200"}, portBindings(*byName(ServiceSearch), Ports{PortHTTP: 19200}))
 }

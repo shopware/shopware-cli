@@ -23,13 +23,15 @@ import (
 
 // bootstrapProxyFallback sets up the shared proxy for a proxy-mode project
 // before its development environment starts, so `project dev` serves it at its
-// stable hostname, and records the outcome in e.proxyFallback. It never blocks:
-// if the shared proxy cannot start (e.g. its port is taken), it regenerates the
-// compose file in plain fixed-port mode, points the user at a fix and marks the
-// shop as fallen back to a local port. It is a no-op for port-based projects.
-func (e *devEnvironment) bootstrapProxyFallback(cmd *cobra.Command) {
+// stable hostname, and records the outcome in e.proxyFallback. A proxy that
+// cannot start (e.g. its port is taken) never blocks dev: the compose file is
+// regenerated in plain fixed-port mode, the user is pointed at a fix and the
+// shop is marked as fallen back to a local port. Only a failure to write that
+// plain compose file is an error, because starting would then use the proxy
+// file without a proxy. It is a no-op for port-based projects.
+func (e *devEnvironment) bootstrapProxyFallback(cmd *cobra.Command) error {
 	if !proxy.IsProxyProject(e.cfg) {
-		return
+		return nil
 	}
 
 	ctx := cmd.Context()
@@ -44,17 +46,26 @@ func (e *devEnvironment) bootstrapProxyFallback(cmd *cobra.Command) {
 		env.ensureHostnameResolves(ctx)
 		return nil
 	}()
-	if err != nil {
-		// Never block dev: regenerate the compose file in fixed-port mode
-		// (newDevEnvironment wrote it in proxy mode) and tell the user how to
-		// diagnose the proxy.
-		if env, err := proxy.NewEnvironment(e.projectRoot, e.cfg, true); err == nil {
-			_ = env.WriteCompose()
-		}
-		fmt.Println(tui.RedText.Render("  Shared proxy unavailable: " + err.Error()))
-		fmt.Println(tui.DimText.Render("  Serving on a local port instead — run ") + tui.BoldText.Render("shopware-cli project proxy verify") + tui.DimText.Render(" to diagnose."))
-		e.proxyFallback = true
+	if err == nil {
+		return nil
 	}
+
+	// Never block dev on the proxy: regenerate the compose file in fixed-port
+	// mode (newDevEnvironment wrote it in proxy mode) and tell the user how to
+	// diagnose the proxy.
+	plain, writeErr := proxy.NewEnvironment(e.projectRoot, e.cfg, true)
+	if writeErr == nil {
+		writeErr = plain.WriteCompose()
+	}
+	if writeErr != nil {
+		return fmt.Errorf("shared proxy unavailable (%v) and the fixed-port compose file could not be written: %w", err, writeErr)
+	}
+
+	fmt.Println(tui.RedText.Render("  Shared proxy unavailable: " + err.Error()))
+	fmt.Println(tui.DimText.Render("  Serving on a local port instead — run ") + tui.BoldText.Render("shopware-cli project proxy verify") + tui.DimText.Render(" to diagnose."))
+	e.proxyFallback = true
+
+	return nil
 }
 
 // ErrEnvironmentDown is returned by the `project dev status` command when the
@@ -107,7 +118,9 @@ var projectDevCmd = &cobra.Command{
 			return err
 		}
 
-		env.bootstrapProxyFallback(cmd)
+		if err := env.bootstrapProxyFallback(cmd); err != nil {
+			return err
+		}
 
 		if !isatty.IsTerminal(os.Stdin.Fd()) {
 			if err := env.start(cmd); err != nil {
@@ -133,7 +146,9 @@ var projectDevStartCmd = &cobra.Command{
 			return err
 		}
 
-		env.bootstrapProxyFallback(cmd)
+		if err := env.bootstrapProxyFallback(cmd); err != nil {
+			return err
+		}
 
 		return env.start(cmd)
 	},

@@ -51,6 +51,7 @@ func TestClassifyContainersProxyMode(t *testing.T) {
 		psContainer("adminer", "running", nil),
 		psContainer("storage", "running", nil),
 		psContainer("storage-init", "running", nil),
+		psContainer("mailer", "exited", nil),
 	}, "my-shop.local")
 
 	assert.Zero(t, env.WebPort, "proxied web publishes no host port")
@@ -58,7 +59,7 @@ func TestClassifyContainersProxyMode(t *testing.T) {
 	assert.ElementsMatch(t, []DiscoveredService{
 		{Name: "Adminer", URL: "https://adminer.my-shop.local", Username: "root", Password: "root"},
 		{Name: "Storage (S3)", URL: "https://storage.my-shop.local", Username: "shopware", Password: "shopware"},
-	}, env.Services, "proxied services resolve to their subdomain; storage-init is hidden")
+	}, env.Services, "proxied services resolve to their subdomain; storage-init is hidden; a stopped service is not reachable")
 }
 
 func TestClassifyContainersServiceWithoutReachableEndpoint(t *testing.T) {

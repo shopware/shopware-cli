@@ -314,6 +314,7 @@ func TestWriteConfigOmitsPortOverrides(t *testing.T) {
 			Services: ConfigDockerServices{
 				docker.ServiceWeb:      {Ports: docker.Ports{docker.PortHTTP: 52341}},
 				docker.ServiceDatabase: {Type: "mysql", Ports: docker.Ports{docker.PortMySQL: 3306}},
+				docker.ServiceAdminer:  nil, // "adminer:" without a value
 			},
 		},
 	}
@@ -328,6 +329,7 @@ func TestWriteConfigOmitsPortOverrides(t *testing.T) {
 	assert.Contains(t, text, "type: mysql", "project-level service settings are committed")
 	assert.NotContains(t, text, "ports", "machine-local port overrides must not land in the committed config")
 	assert.NotContains(t, text, "web:", "a service left without settings is dropped")
+	assert.Contains(t, text, "adminer:", "an entry without settings is kept as written")
 	assert.NotNil(t, cfg.DockerPorts(docker.ServiceWeb), "the caller's config must not be mutated")
 	assert.NotNil(t, cfg.DockerPorts(docker.ServiceDatabase))
 }

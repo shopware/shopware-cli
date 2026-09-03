@@ -101,18 +101,20 @@ func (r Registry) Find(projectRoot string) (ProjectEntry, bool) {
 }
 
 // RegisteredHostname returns the hostname the project is registered under
-// with the shared proxy, or "" when it is not registered.
-func RegisteredHostname(projectRoot string) string {
+// with the shared proxy, or "" when it is not registered. The error reports a
+// registry that could not be read, which callers must not mistake for "not
+// registered".
+func RegisteredHostname(projectRoot string) (string, error) {
 	reg, err := LoadRegistry()
 	if err != nil {
-		return ""
+		return "", err
 	}
 
 	if entry, found := reg.Find(CanonicalProjectRoot(projectRoot)); found {
-		return entry.Hostname
+		return entry.Hostname, nil
 	}
 
-	return ""
+	return "", nil
 }
 
 // FindByHostname returns the entry using hostname, if any, ignoring the
