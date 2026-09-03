@@ -26,40 +26,48 @@ var projectLogsCmd = &cobra.Command{
 			return err
 		}
 
-		files, err := cmdExecutor.AvailableLogFiles(cmd.Context())
-		if err != nil {
-			return err
-		}
-
-		list, _ := cmd.Flags().GetBool("list")
-		if list {
-			return printLogFileList(files)
-		}
-
-		if len(files) == 0 {
-			return errors.New("no log files found in var/log")
-		}
-
-		target := files[0].Name
-		if len(args) > 0 {
-			target = ""
-			for _, f := range files {
-				if f.Name == args[0] {
-					target = f.Name
-					break
-				}
-			}
-
-			if target == "" {
-				return fmt.Errorf("log file not found: %s", args[0])
-			}
-		}
-
-		lines, _ := cmd.Flags().GetInt("lines")
-		follow, _ := cmd.Flags().GetBool("follow")
-
-		return cmdExecutor.GetLog(cmd.Context(), target, lines, follow, cmd.OutOrStdout())
+		return runProjectLogs(cmd, args, cmdExecutor)
 	},
+}
+
+func runProjectLogs(cmd *cobra.Command, args []string, cmdExecutor executor.Executor) error {
+	lines, _ := cmd.Flags().GetInt("lines")
+	if lines < 0 {
+		return fmt.Errorf("invalid value %d for --lines: must not be negative", lines)
+	}
+
+	files, err := cmdExecutor.AvailableLogFiles(cmd.Context())
+	if err != nil {
+		return err
+	}
+
+	list, _ := cmd.Flags().GetBool("list")
+	if list {
+		return printLogFileList(files)
+	}
+
+	if len(files) == 0 {
+		return errors.New("no log files found in var/log")
+	}
+
+	target := files[0].Name
+	if len(args) > 0 {
+		target = ""
+		for _, f := range files {
+			if f.Name == args[0] {
+				target = f.Name
+				break
+			}
+		}
+
+		if target == "" {
+			return fmt.Errorf("log file not found: %s", args[0])
+		}
+	}
+
+	follow, _ := cmd.Flags().GetBool("follow")
+
+	return cmdExecutor.GetLog(cmd.Context(), target, lines, follow, cmd.OutOrStdout())
 }
 
 func printLogFileList(files []executor.LogFile) error {
