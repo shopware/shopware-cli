@@ -2,11 +2,14 @@ package dev
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"strings"
 
 	"charm.land/bubbles/v2/progress"
 	tea "charm.land/bubbletea/v2"
 
+	"github.com/shopware/shopware-cli/internal/executor"
 	"github.com/shopware/shopware-cli/internal/proxy"
 	"github.com/shopware/shopware-cli/internal/shop/install"
 	"github.com/shopware/shopware-cli/internal/tui"
@@ -85,26 +88,90 @@ func (m *Model) checkShopwareInstalled() tea.Cmd {
 	}
 }
 
-func (m *Model) runShopwareInstall() tea.Cmd {
+func (m *Model) runShopwareInstallFrom(fromStep string) tea.Cmd {
 	ctx := m.commandContext()
 	e := m.executor
-	opts := install.Options{
-		Locale:        m.install.language,
-		Currency:      m.install.currency,
-		AdminUsername: m.install.Username(),
-		AdminPassword: m.install.Password(),
-	}
+	language := m.install.language
+	currency := m.install.currency
+	username := m.install.Username()
+	password := m.install.Password()
+	shopURL := m.installShopURL()
+	wizard := m.install
 
 	ch := make(chan string, tui.StreamBufferSize)
 	m.dockerOutChan = ch
 
 	doneCmd := func() tea.Msg {
-		err := install.Run(ctx, e, opts, func(line string) { ch <- line })
-		close(ch)
-		return shopwareInstallDoneMsg{err: err}
+		installExecutor := e
+		if installStepIndex(fromStep) == 0 {
+			installExecutor = e.WithEnv(map[string]string{
+				"INSTALL_LOCALE":         language,
+				"INSTALL_CURRENCY":       currency,
+				"INSTALL_ADMIN_USERNAME": username,
+				"INSTALL_ADMIN_PASSWORD": password,
+			})
+		}
+
+		output, err := streamInstallFrom(ctx, installExecutor, fromStep, wizard, shopURL, ch)
+		return shopwareInstallDoneMsg{source: ch, output: output, err: err}
 	}
 
 	return tea.Batch(readFromChan(ch), doneCmd)
+}
+
+func (m Model) installShopURL() string {
+	if m.envConfig != nil && m.envConfig.URL != "" {
+		return strings.TrimRight(m.envConfig.URL, "/")
+	}
+	if m.config != nil && m.config.URL != "" {
+		return strings.TrimRight(m.config.URL, "/")
+	}
+	return strings.TrimRight(m.overview.shopURL, "/")
+}
+
+// streamInstallFrom resumes the first-run console steps, then runs the helper
+// so extension management and deployment hooks are not skipped. Once all
+// first-run steps have succeeded, the helper detects an installed shop and
+// follows its update path.
+func streamInstallFrom(ctx context.Context, execr executor.Executor, fromStep string, w installWizard, shopURL string, ch chan<- string) ([]string, error) {
+	defer close(ch)
+
+	var all []string
+	emit := func(line string) {
+		all = append(all, line)
+		ch <- line
+	}
+	runHelper := func() error {
+		lines, err := tui.DrainCmdOutput(execr.PHPCommand(ctx, "vendor/bin/shopware-deployment-helper", "run").Cmd, ch, true)
+		all = append(all, lines...)
+		return err
+	}
+
+	idx := installStepIndex(fromStep)
+	if idx == 0 {
+		err := runHelper()
+		return all, err
+	}
+
+	if fromStep == installUserCreateStep {
+		return all, errors.New("user:create cannot be retried safely; start the installation over")
+	}
+
+	for _, sp := range install.Steps[idx:] {
+		args := argsForInstallStep(sp.Pattern, w, shopURL)
+		if len(args) == 0 {
+			return all, fmt.Errorf("no console arguments for install step %s", sp.Pattern)
+		}
+		emit("Start: " + sp.Pattern)
+		lines, err := tui.DrainCmdOutput(execr.ConsoleCommand(ctx, args...).Cmd, ch, true)
+		all = append(all, lines...)
+		if err != nil {
+			return all, err
+		}
+	}
+
+	err := runHelper()
+	return all, err
 }
 
 func (m *Model) readNextDockerOutput() tea.Cmd {
@@ -117,8 +184,8 @@ func (m *Model) readNextDockerOutput() tea.Cmd {
 
 func readFromChan(ch <-chan string) tea.Cmd {
 	return tui.ReadLineCmd(ch,
-		func(line string) tea.Msg { return dockerOutputLineMsg(line) },
-		dockerOutputDoneMsg{},
+		func(line string) tea.Msg { return dockerOutputLineMsg{source: ch, line: line} },
+		dockerOutputDoneMsg{source: ch},
 	)
 }
 

@@ -51,7 +51,7 @@ func TestUpdateLifecycle_DockerOutputLine_AppendsToOverlay(t *testing.T) {
 	m := newLifecycleModel(t)
 	m.height = 40 // ensure overlayMaxLines is generous
 
-	updated, _ := m.updateLifecycle(dockerOutputLineMsg("first line"))
+	updated, _ := m.updateLifecycle(dockerOutputLineMsg{line: "first line"})
 	final := updated.(Model)
 	assert.Equal(t, []string{"first line"}, final.overlayLines)
 }
@@ -64,7 +64,7 @@ func TestUpdateLifecycle_DockerOutputLine_TruncatesToMaxLines(t *testing.T) {
 		m.overlayLines = append(m.overlayLines, "old")
 	}
 
-	updated, _ := m.updateLifecycle(dockerOutputLineMsg("new"))
+	updated, _ := m.updateLifecycle(dockerOutputLineMsg{line: "new"})
 	final := updated.(Model)
 	assert.Len(t, final.overlayLines, 10)
 	assert.Equal(t, "new", final.overlayLines[len(final.overlayLines)-1])
@@ -76,10 +76,63 @@ func TestUpdateLifecycle_DockerOutputLine_InstallingAdvancesProgress(t *testing.
 	m.height = 40
 	m.installProg = installProgress{progress: newInstallProgress()}
 
-	updated, cmd := m.updateLifecycle(dockerOutputLineMsg("Start: bin/console system:install --create-database"))
+	updated, cmd := m.updateLifecycle(dockerOutputLineMsg{line: "Start: bin/console system:install --create-database"})
 	final := updated.(Model)
 	assert.Equal(t, 0, final.installProg.currentStep)
 	assert.NotNil(t, cmd)
+}
+
+func TestUpdateLifecycle_RelayedInstallLineAdvancesProgress(t *testing.T) {
+	m := newLifecycleModel(t)
+	m.phase = phaseInstalling
+	m.height = 40
+	m.installProg = installProgress{progress: newInstallProgress()}
+
+	updated, cmd := m.updateLifecycle(dockerOutputLineMsg{
+		line: "[deployment-helper] Start: bin/console user:create admin",
+	})
+	final := updated.(Model)
+
+	assert.Equal(t, 1, final.installProg.currentStep)
+	assert.NotNil(t, cmd)
+}
+
+func TestUpdateLifecycle_IgnoresOutputFromOldStream(t *testing.T) {
+	m := newLifecycleModel(t)
+	m.phase = phaseInstalling
+	m.height = 40
+	m.installProg = installProgress{currentStep: 4, progress: newInstallProgress()}
+	oldStream := make(chan string)
+	currentStream := make(chan string)
+	m.dockerOutChan = currentStream
+
+	updated, cmd := m.updateLifecycle(dockerOutputLineMsg{
+		source: oldStream,
+		line:   "Start: system:install",
+	})
+	final := updated.(Model)
+
+	assert.Empty(t, final.overlayLines)
+	assert.Equal(t, 4, final.installProg.currentStep)
+	assert.Nil(t, cmd)
+}
+
+func TestUpdateLifecycle_IgnoresCompletionFromOldInstall(t *testing.T) {
+	m := newLifecycleModel(t)
+	m.phase = phaseInstalling
+	oldStream := make(chan string)
+	currentStream := make(chan string)
+	m.dockerOutChan = currentStream
+
+	updated, cmd := m.updateLifecycle(shopwareInstallDoneMsg{
+		source: oldStream,
+		err:    errors.New("old install failed"),
+	})
+	final := updated.(Model)
+
+	assert.Equal(t, phaseInstalling, final.phase)
+	assert.Nil(t, final.installProg.failure)
+	assert.Nil(t, cmd)
 }
 
 func TestUpdateLifecycle_DockerOutputDone_NoOp(t *testing.T) {
@@ -191,7 +244,7 @@ func TestUpdateLifecycle_ShopwareInstallDone_Success(t *testing.T) {
 	assert.NotNil(t, cmd, "should kick off dashboard")
 }
 
-func TestUpdateLifecycle_ShopwareInstallDone_ErrorShowsLogs(t *testing.T) {
+func TestUpdateLifecycle_ShopwareInstallDone_ErrorShowsFailedPhase(t *testing.T) {
 	m := Model{
 		phase:       phaseInstalling,
 		projectRoot: t.TempDir(),
@@ -201,22 +254,27 @@ func TestUpdateLifecycle_ShopwareInstallDone_ErrorShowsLogs(t *testing.T) {
 		install: installWizard{
 			CredentialStep: tui.NewCredentialStep(tui.CredentialStepOptions{}),
 		},
-		installProg: installProgress{progress: newInstallProgress()},
+		installProg:  installProgress{progress: newInstallProgress()},
+		overlayLines: []string{"Start: system:install", "boom"},
 	}
 
 	wantErr := errors.New("migration failed")
-	updated, cmd := m.updateLifecycle(shopwareInstallDoneMsg{err: wantErr})
+	updated, cmd := m.updateLifecycle(shopwareInstallDoneMsg{
+		output: []string{
+			"Start: system:install",
+			"SQLSTATE[42S02]: Base table or view not found",
+		},
+		err: wantErr,
+	})
 	final := updated.(Model)
 
-	// Stays on installing so the operator can read logs.
-	assert.Equal(t, phaseInstalling, final.phase)
-	assert.True(t, final.installProg.showLogs)
+	assert.Equal(t, phaseInstallFailed, final.phase)
+	assert.NotNil(t, final.installProg.failure)
+	assert.Equal(t, installFailureMigration, final.installProg.failure.category)
+	assert.Equal(t, "system:install", final.installProg.failure.failingStep)
 	assert.Nil(t, cmd)
-
-	joined := strings.Join(final.overlayLines, "\n")
-	assert.Contains(t, joined, "Installation failed:")
-	assert.Contains(t, joined, "migration failed")
-	assert.Contains(t, joined, "Press q to exit")
+	// Captured output is left untouched; the failure notice is added when rendering.
+	assert.Equal(t, []string{"Start: system:install", "boom"}, final.overlayLines)
 
 	// envConfig should NOT be mutated on error.
 	assert.Nil(t, final.envConfig.AdminApi)

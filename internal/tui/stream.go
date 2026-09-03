@@ -19,6 +19,14 @@ const StreamBufferSize = 50
 // is merged into stdout; otherwise stdout is merged into stderr. It blocks
 // until the command exits and returns its error.
 func StreamCmdOutput(cmd *exec.Cmd, ch chan<- string, useStdout bool) error {
+	_, err := DrainCmdOutput(cmd, ch, useStdout)
+	close(ch)
+	return err
+}
+
+// DrainCmdOutput streams cmd into ch without closing the channel, so callers
+// can run several processes as one captured stream.
+func DrainCmdOutput(cmd *exec.Cmd, ch chan<- string, useStdout bool) ([]string, error) {
 	var pipe io.Reader
 	var err error
 	if useStdout {
@@ -33,28 +41,28 @@ func StreamCmdOutput(cmd *exec.Cmd, ch chan<- string, useStdout bool) error {
 		}
 	}
 	if err != nil {
-		close(ch)
-		return err
+		return nil, err
 	}
 
 	if err := cmd.Start(); err != nil {
-		close(ch)
-		return err
+		return nil, err
 	}
 
+	var lines []string
 	scanner := bufio.NewScanner(pipe)
 	buf := make([]byte, 64*1024)
 	scanner.Buffer(buf, 10*1024*1024)
 	for scanner.Scan() {
-		ch <- scanner.Text()
+		line := scanner.Text()
+		lines = append(lines, line)
+		ch <- line
 	}
-	close(ch)
 
 	if err := scanner.Err(); err != nil {
 		_ = cmd.Wait()
-		return err
+		return lines, err
 	}
-	return cmd.Wait()
+	return lines, cmd.Wait()
 }
 
 // LineWriter converts a byte stream into per-line emit calls — the io.Writer

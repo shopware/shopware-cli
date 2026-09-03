@@ -4,9 +4,12 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
+	"github.com/charmbracelet/x/ansi"
 	"github.com/stretchr/testify/assert"
 
 	"github.com/shopware/shopware-cli/internal/executor"
@@ -157,6 +160,143 @@ func TestUpdateKeyPress_PhaseInstalling_QuitKey(t *testing.T) {
 	assert.NotNil(t, cmd)
 	_, isQuit := cmd().(tea.QuitMsg)
 	assert.True(t, isQuit)
+}
+
+func TestUpdateKeyPress_PhaseInstallFailed_QuitKey(t *testing.T) {
+	m := newTestModel(t)
+	m.phase = phaseInstallFailed
+
+	_, cmd := m.Update(keyRune('q'))
+	assert.NotNil(t, cmd)
+	_, isQuit := cmd().(tea.QuitMsg)
+	assert.True(t, isQuit)
+}
+
+func TestUpdateKeyPress_PhaseInstallFailed_LTogglesLogs(t *testing.T) {
+	m := newTestModel(t)
+	m.phase = phaseInstallFailed
+	m.installProg.showLogs = false
+
+	updated, _ := m.Update(keyRune('l'))
+	assert.True(t, updated.(Model).installProg.showLogs)
+}
+
+func TestUpdateKeyPress_PhaseInstallFailed_NavigatesActions(t *testing.T) {
+	m := newTestModel(t)
+	m.phase = phaseInstallFailed
+	m.installProg.failure = &installFailure{retryable: true, failingStep: "theme:change"}
+
+	updated, _ := m.updateInstallFailed(keySpecial(tea.KeyRight))
+	assert.Equal(t, installFailureActionStartFailedStep, updated.(Model).installProg.action)
+
+	updated, _ = updated.(Model).updateInstallFailed(keySpecial(tea.KeyTab))
+	assert.Equal(t, installFailureActionCancel, updated.(Model).installProg.action)
+
+	updated, _ = updated.(Model).updateInstallFailed(keyShiftTabMsg())
+	assert.Equal(t, installFailureActionStartFailedStep, updated.(Model).installProg.action)
+
+	updated, _ = updated.(Model).updateInstallFailed(keySpecial(tea.KeyLeft))
+	assert.Equal(t, installFailureActionStartBeginning, updated.(Model).installProg.action)
+}
+
+func TestListInstallFailureActions(t *testing.T) {
+	assert.Equal(t, []installFailureAction{
+		installFailureActionStartBeginning,
+		installFailureActionStartFailedStep,
+		installFailureActionCancel,
+	}, listInstallFailureActions(&installFailure{
+		failingStep: "theme:change",
+		retryable:   true,
+	}))
+
+	for _, failure := range []*installFailure{
+		{failingStep: "user:create", retryable: false},
+		{failingStep: "system:install", retryable: false},
+	} {
+		assert.Equal(t, []installFailureAction{
+			installFailureActionStartBeginning,
+			installFailureActionCancel,
+		}, listInstallFailureActions(failure))
+	}
+}
+
+func TestUpdateKeyPress_PhaseInstallFailed_StartFromBeginning(t *testing.T) {
+	m := newTestModel(t)
+	m.phase = phaseInstallFailed
+	m.executor = executor.NewLocalWithConfig(m.projectRoot, &shop.EnvironmentConfig{}, m.config)
+	m.overlayLines = []string{"output from failed attempt"}
+	m.installProg = installProgress{
+		currentStep: 4,
+		done:        true,
+		showLogs:    true,
+		failure:     &installFailure{category: installFailureMigration},
+		action:      installFailureActionStartBeginning,
+	}
+	m.install.language = "de-DE"
+	m.install.currency = "EUR"
+	m.install.SetUsername("admin")
+	m.install.SetPassword("shopware")
+
+	updated, cmd := m.updateInstallFailed(keySpecial(tea.KeyEnter))
+	final := updated.(Model)
+
+	assert.Equal(t, phaseInstalling, final.phase)
+	assert.Empty(t, final.overlayLines)
+	assert.Nil(t, final.installProg.failure)
+	assert.Zero(t, final.installProg.currentStep)
+	assert.NotNil(t, final.dockerOutChan)
+	assert.NotNil(t, cmd)
+	assert.Equal(t, "de-DE", final.install.language)
+}
+
+func TestUpdateKeyPress_PhaseInstallFailed_StartFromFailedStep(t *testing.T) {
+	m := newTestModel(t)
+	m.phase = phaseInstallFailed
+	m.executor = executor.NewLocalWithConfig(m.projectRoot, &shop.EnvironmentConfig{}, m.config)
+	m.overlayLines = []string{"output from failed attempt"}
+	m.installProg = installProgress{
+		currentStep: 4,
+		done:        true,
+		showLogs:    true,
+		failure:     &installFailure{category: installFailureThemeCompile, failingStep: "theme:change", retryable: true},
+		action:      installFailureActionStartFailedStep,
+	}
+	m.install.language = "de-DE"
+	m.install.currency = "EUR"
+	m.install.SetUsername("ada")
+	m.install.SetPassword("supersecret")
+
+	updated, cmd := m.updateInstallFailed(keySpecial(tea.KeyEnter))
+	final := updated.(Model)
+
+	assert.Equal(t, phaseInstalling, final.phase)
+	assert.Empty(t, final.overlayLines)
+	assert.Nil(t, final.installProg.failure)
+	assert.Equal(t, 4, final.installProg.currentStep)
+	assert.NotNil(t, final.dockerOutChan)
+	assert.NotNil(t, cmd)
+	assert.Equal(t, "de-DE", final.install.language)
+}
+
+func TestUpdateKeyPress_PhaseInstallFailed_CancelOpensDashboard(t *testing.T) {
+	m := newTestModel(t)
+	m.phase = phaseInstallFailed
+	m.overlayLines = []string{"output from failed attempt"}
+	m.installProg = installProgress{
+		showLogs: true,
+		failure:  &installFailure{category: installFailureMigration},
+		action:   installFailureActionCancel,
+	}
+
+	updated, cmd := m.updateInstallFailed(keySpecial(tea.KeyEnter))
+	final := updated.(Model)
+
+	assert.Equal(t, phaseDashboard, final.phase)
+	assert.Empty(t, final.overlayLines)
+	assert.Nil(t, final.dockerOutChan)
+	assert.Nil(t, final.installProg.failure)
+	assert.False(t, final.installProg.showLogs)
+	assert.NotNil(t, cmd)
 }
 
 func TestUpdateKeyPress_PhaseTask_DoneTransitionsToDashboard(t *testing.T) {
@@ -508,7 +648,7 @@ func TestMergeLocalProfilerSecrets_EmptySrcValuesDoNotOverwriteDst(t *testing.T)
 
 func TestView_DoesNotPanicForEachPhase(t *testing.T) {
 	ctx := app.Context{Width: 120, Height: 40, MainHeight: 36}
-	phases := []phase{phaseDashboard, phaseStarting, phaseStopping, phaseInstallPrompt, phaseInstalling, phaseTask, phaseMigrationWizard}
+	phases := []phase{phaseDashboard, phaseStarting, phaseStopping, phaseInstallPrompt, phaseInstalling, phaseInstallFailed, phaseTask, phaseMigrationWizard}
 	for _, p := range phases {
 		m := newTestModel(t)
 		m.width = 120
@@ -531,6 +671,70 @@ func TestView_DoesNotPanicForEachPhase(t *testing.T) {
 			_ = m.chromeFooter(ctx)
 		}, "phase %d", p)
 	}
+}
+
+func TestView_InstallFailedShowsClassifiedMessage(t *testing.T) {
+	m := newTestModel(t)
+	m.dockerMode = true
+	m.phase = phaseInstallFailed
+	m.installProg.failure = &installFailure{
+		category:    installFailureDatabaseConnection,
+		failingStep: "system:install",
+		detail:      "SQLSTATE[HY000] [2002] Connection refused",
+		retryable:   false,
+	}
+
+	card := m.renderInstallFailed()
+	assert.Contains(t, card, "Installation failed")
+	assert.Contains(t, card, "Database connection failed")
+	assert.Contains(t, card, "Installing Shopware")
+	assert.Contains(t, card, "Try this:")
+	plain := strings.Join(strings.Fields(ansi.Strip(card)), " ")
+	assert.Contains(t, plain, "docker compose up -d database")
+	assert.Contains(t, card, installFailureActionLabels[installFailureActionStartBeginning])
+	assert.Contains(t, card, installFailureActionLabels[installFailureActionCancel])
+}
+
+// Remediation copy is a full sentence, so the card has to wrap it instead of
+// letting one long row widen the layout — and no word may get lost on the way.
+func TestView_InstallFailedWrapsLongRemediation(t *testing.T) {
+	m := newTestModel(t)
+	m.dockerMode = true
+	m.phase = phaseInstallFailed
+	m.installProg.failure = &installFailure{
+		category:    installFailureDatabaseConnection,
+		failingStep: "system:install",
+		detail:      "SQLSTATE[HY000] [2002] Connection refused",
+		retryable:   false,
+	}
+
+	card := m.renderInstallFailed()
+	for _, line := range strings.Split(card, "\n") {
+		assert.LessOrEqual(t, lipgloss.Width(line), tui.PhaseCardWidth)
+	}
+	plain := strings.Join(strings.Fields(ansi.Strip(card)), " ")
+	assert.Contains(t, plain, "docker compose up -d database")
+}
+
+func TestView_InstallFailedToggledLogsShowOverlay(t *testing.T) {
+	m := newTestModel(t)
+	m.phase = phaseInstallFailed
+	m.installProg.showLogs = true
+	m.installProg.failure = &installFailure{
+		category:    installFailureDatabaseConnection,
+		failingStep: "system:install",
+		retryable:   false,
+	}
+	for range 40 {
+		m.overlayLines = append(m.overlayLines, strings.Repeat("deployment-helper output ", 6))
+	}
+	m.overlayLines = append(m.overlayLines, "SQLSTATE boom")
+
+	view := m.View(app.Context{Width: 100, Height: 30, MainHeight: 26})
+	assert.Contains(t, view, "SQLSTATE boom")
+	assert.Contains(t, view, "Failed step:")
+	assert.Contains(t, view, "Database connection failed")
+	assert.Contains(t, view, "Start over")
 }
 
 func TestView_ZeroSizeDoesNotPanic(t *testing.T) {
@@ -657,6 +861,7 @@ func TestView_WindowTitlePerPhase(t *testing.T) {
 		{phaseStopping, "[project] · Stopping"},
 		{phaseInstallPrompt, "[project] · Install"},
 		{phaseInstalling, "[project] · Installing..."},
+		{phaseInstallFailed, "[project] · Install failed"},
 		{phaseMigrationWizard, "[project] · Setup"},
 	}
 

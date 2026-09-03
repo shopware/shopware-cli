@@ -14,6 +14,9 @@ import (
 	"github.com/shopware/shopware-cli/internal/tui/app"
 )
 
+// First-run install: the language/currency/credential prompts, and restarting
+// after a failure (start over vs resume from the failed console command).
+
 type installStep int
 
 const (
@@ -22,6 +25,20 @@ const (
 	installStepCurrency
 	installStepCredentials
 )
+
+type installFailureAction int
+
+const (
+	installFailureActionStartBeginning installFailureAction = iota
+	installFailureActionStartFailedStep
+	installFailureActionCancel
+)
+
+var installFailureActionLabels = map[installFailureAction]string{
+	installFailureActionStartBeginning:  "Start over",
+	installFailureActionStartFailedStep: "Retry from failed step",
+	installFailureActionCancel:          "Cancel",
+}
 
 type installWizard struct {
 	tui.CredentialStep
@@ -51,8 +68,73 @@ type installProgress struct {
 	currentStep int
 	done        bool
 	showLogs    bool
+	failure     *installFailure
+	action      installFailureAction
 	spinner     spinner.Model
 	progress    progress.Model
+}
+
+// listInstallFailureActions returns the buttons shown on the failure screen.
+func listInstallFailureActions(failure *installFailure) []installFailureAction {
+	actions := []installFailureAction{installFailureActionStartBeginning}
+	if canResumeFromFailedStep(failure) {
+		actions = append(actions, installFailureActionStartFailedStep)
+	}
+	return append(actions, installFailureActionCancel)
+}
+
+func canResumeFromFailedStep(failure *installFailure) bool {
+	return failure != nil && failure.retryable
+}
+
+func installFailureActionIndex(actions []installFailureAction, selected installFailureAction) int {
+	for i, action := range actions {
+		if action == selected {
+			return i
+		}
+	}
+	return 0
+}
+
+// installStepIndex maps a classified helper step back onto the progress list.
+// Failures before the first command, and unknown step names, start at the
+// beginning so a resume still does a complete helper run.
+func installStepIndex(step string) int {
+	if step == "" || step == installStartStep {
+		return 0
+	}
+	for i, sp := range install.Steps {
+		if sp.Pattern == step {
+			return i
+		}
+	}
+	return 0
+}
+
+// argsForInstallStep returns arguments for steps that can be resumed safely.
+// system:install uses the full helper and user:create is never retried because
+// doing so would expose the admin password in process arguments.
+func argsForInstallStep(step string, w installWizard, shopURL string) []string {
+	locale := w.language
+	if locale == "" {
+		locale = install.DefaultLocale
+	}
+
+	switch step {
+	case "messenger:setup-transports":
+		return []string{"messenger:setup-transports"}
+	case "sales-channel:create:storefront":
+		args := []string{"sales-channel:create:storefront", "--name=Storefront", "--isoCode=" + locale}
+		if shopURL != "" {
+			args = append(args, "--url="+shopURL)
+		}
+		return args
+	case "theme:change":
+		return []string{"theme:change", "--all", "Storefront"}
+	case "plugin:refresh":
+		return []string{"plugin:refresh"}
+	}
+	return nil
 }
 
 func (m Model) updateInstallPrompt(msg tea.KeyPressMsg) (app.Content, tea.Cmd) {
@@ -125,14 +207,56 @@ func (m Model) updateInstallStepCredentials(msg tea.KeyPressMsg) (app.Content, t
 	if !submitted {
 		return m, cmd
 	}
+	return m.startInstall()
+}
+
+// startInstall begins a complete deployment-helper run using the choices
+// already collected by the install wizard. It is shared by the initial
+// submission and the failure screen's "Start over" action.
+func (m Model) startInstall() (app.Content, tea.Cmd) {
+	return m.startInstallFrom(installStartStep)
+}
+
+// startInstallFromFailedStep resumes at the classified helper step without
+// returning to the language, currency, or credential prompts.
+func (m Model) startInstallFromFailedStep() (app.Content, tea.Cmd) {
+	if !canResumeFromFailedStep(m.installProg.failure) {
+		return m.startInstall()
+	}
+	return m.startInstallFrom(m.installProg.failure.failingStep)
+}
+
+func (m Model) startInstallFrom(step string) (app.Content, tea.Cmd) {
 	m.telemetry.beginInstall()
 	m.phase = phaseInstalling
 	m.overlayLines = nil
+
+	idx := installStepIndex(step)
+	prog := newInstallProgress()
 	m.installProg = installProgress{
-		spinner:  tui.NewBrandSpinner(),
-		progress: newInstallProgress(),
+		currentStep: idx,
+		spinner:     tui.NewBrandSpinner(),
+		progress:    prog,
 	}
-	return m, tea.Batch(m.installProg.spinner.Tick, m.runShopwareInstall())
+
+	cmds := []tea.Cmd{m.installProg.spinner.Tick, m.runShopwareInstallFrom(step)}
+	if idx > 0 {
+		pct := float64(idx) / float64(len(install.Steps))
+		cmds = append([]tea.Cmd{m.installProg.progress.SetPercent(pct)}, cmds...)
+	}
+	return m, tea.Batch(cmds...)
+}
+
+// cancelFailedInstall leaves the failure screen without retrying, the same
+// way skipping the install prompt does: the dashboard still runs so Docker
+// and project settings stay reachable. The failed attempt was already
+// reported when the helper exited.
+func (m Model) cancelFailedInstall() (app.Content, tea.Cmd) {
+	m.phase = phaseDashboard
+	m.overlayLines = nil
+	m.dockerOutChan = nil
+	m.installProg = installProgress{}
+	return m, m.startDashboard()
 }
 
 func (m Model) renderInstallPrompt(b *strings.Builder) {

@@ -136,6 +136,7 @@ func (t *telemetryState) beginInstall() {
 		return
 	}
 	t.installStart = time.Now()
+	t.installReported = false
 }
 
 // installOnce reports whether an install outcome should still be sent and
@@ -169,6 +170,18 @@ func (t *telemetryState) installTags(result string, w installWizard) map[string]
 		tags[tracking.TagCustomCredentials] = strconv.FormatBool(custom)
 	}
 	tags[tracking.TagInteractive] = "true"
+	return tags
+}
+
+// installFailureTags builds the project.dev.install event for a failed run. It
+// enriches the base install tags with the classified failure record so the
+// dashboard can tell *why* an install dropped off, not just the coarse step.
+// Only the closed-enum category is sent — the raw failure detail is never a tag.
+func (t *telemetryState) installFailureTags(w installWizard, f installFailure) map[string]string {
+	tags := t.installTags(tracking.ResultFailure, w)
+	tags[tracking.TagFailedStep] = f.failingStep
+	tags[tracking.TagFailureCategory] = string(f.category)
+	tags[tracking.TagRetryable] = strconv.FormatBool(f.retryable)
 	return tags
 }
 

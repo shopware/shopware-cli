@@ -13,6 +13,10 @@ import (
 	"github.com/shopware/shopware-cli/internal/tui/app"
 )
 
+// installFailureDetailWidth is the value column of the failure card:
+// card width minus border (2), horizontal padding (3+3), and the key column.
+const installFailureDetailWidth = tui.PhaseCardWidth - 2 - 6 - tui.KVRowIndent - tui.KVKeyWidth
+
 // windowTitle names the terminal window per phase, e.g. "[project] · Overview".
 func (m Model) windowTitle() string {
 	dir := "[" + filepath.Base(m.projectRoot) + "] · "
@@ -28,6 +32,8 @@ func (m Model) windowTitle() string {
 		return dir + "Install"
 	case phaseInstalling:
 		return dir + "Installing..."
+	case phaseInstallFailed:
+		return dir + "Install failed"
 	case phaseTask:
 		return ""
 	case phaseMigrationWizard:
@@ -58,6 +64,10 @@ func (m Model) phaseFooterHint() string {
 	switch m.phase {
 	case phaseStarting, phaseStopping, phaseInstalling:
 		return tui.ShortcutBadge("l", "Toggle logs")
+	case phaseInstallFailed:
+		return tui.ShortcutBadge("←/→", "Choose") + "  " +
+			tui.ShortcutBadge("enter", "Confirm") + "  " +
+			tui.ShortcutBadge("l", "Toggle logs")
 	case phaseInstallPrompt:
 		return m.installFooterHint()
 	case phaseMigrationWizard:
@@ -78,7 +88,7 @@ func (m Model) View(ctx app.Context) string {
 	switch m.phase {
 	case phaseDashboard:
 		return m.renderDashboard(ctx)
-	case phaseStarting, phaseStopping, phaseInstallPrompt, phaseInstalling:
+	case phaseStarting, phaseStopping, phaseInstallPrompt, phaseInstalling, phaseInstallFailed:
 		return m.renderPhase(ctx)
 	case phaseTask:
 		return m.renderTask(ctx)
@@ -201,11 +211,100 @@ func (m Model) renderPhase(ctx app.Context) string {
 		}
 		card.WriteString(tui.NewStepList(tui.StepListOptions{Steps: items}).Render())
 		content.WriteString(tui.RenderPhaseCard(strings.TrimRight(card.String(), "\n")))
+	case phaseInstallFailed:
+		if m.installProg.showLogs {
+			// Appended at render time, not when the install failed: output is
+			// still draining from the stream buffer at that point, so a stored
+			// notice would end up somewhere in the middle of the log.
+			lines := append(slices.Clone(m.overlayLines), m.installFailureNotice()...)
+			return m.renderLogScreen("Installation failed", lines, ctx.Width, ctx.MainHeight)
+		}
+		content.WriteString(tui.RenderPhaseCard(m.renderInstallFailed()))
 	case phaseDashboard, phaseTask, phaseMigrationWizard:
 		// Rendered by the outer View() dispatch, not here.
 	}
 
 	return renderPhaseBox(content.String(), ctx.Width, ctx.MainHeight)
+}
+
+// installFailureSummary renders the facts shared by the failure card and the
+// notice closing the log view: a headline, the classified step, the reason,
+// and a next action when we have one. The helper's raw error stays in the logs.
+func (m Model) installFailureSummary() string {
+	failure := installFailure{category: installFailureUnknown, failingStep: installStartStep}
+	if m.installProg.failure != nil {
+		failure = *m.installProg.failure
+	}
+
+	var b strings.Builder
+	b.WriteString(headlineErrorStyle.Render("Installation failed"))
+	b.WriteString("\n")
+	b.WriteString(tui.DimStyle.Render("The installation process failed because an error occurred:"))
+	b.WriteString("\n\n")
+	b.WriteString(tui.KVRow("Failed step:", valueStyle.Render(installFailureStepLabel(failure.failingStep))))
+	b.WriteString(tui.KVRow("Reason:", valueStyle.Render(failure.category.label())))
+	if rem := failure.remediation(m.dockerMode); rem != "" {
+		b.WriteString(installFailureWrappedKV("Try this:", rem))
+	}
+
+	return strings.TrimRight(b.String(), "\n")
+}
+
+// installFailureWrappedKV renders a KVRow whose value wraps inside the card,
+// with continuation lines aligned under the first one. Remediation copy is a
+// full sentence, so laying it out on one row would push the card out of shape.
+func installFailureWrappedKV(key, value string) string {
+	lines := strings.Split(valueStyle.Width(installFailureDetailWidth).Render(value), "\n")
+
+	var b strings.Builder
+	b.WriteString(tui.KVRow(key, lines[0]))
+	indent := strings.Repeat(" ", tui.KVRowIndent+tui.KVKeyWidth)
+	for _, line := range lines[1:] {
+		b.WriteString(indent + line + "\n")
+	}
+
+	return b.String()
+}
+
+// renderInstallFailureActions renders the recovery choices below the summary.
+func (m Model) renderInstallFailureActions() string {
+	actions := listInstallFailureActions(m.installProg.failure)
+	labels := make([]string, len(actions))
+	for i, action := range actions {
+		labels[i] = installFailureActionLabels[action]
+	}
+	return tui.NewButtonRow(tui.ButtonRowOptions{
+		Labels: labels,
+		Active: installFailureActionIndex(actions, m.installProg.action),
+	}).Render()
+}
+
+// renderInstallFailed renders the failed-install card: the failure summary, the
+// recovery choices, and a pointer to the log view.
+func (m Model) renderInstallFailed() string {
+	var b strings.Builder
+	b.WriteString(m.installFailureSummary())
+	b.WriteString("\n\n")
+	b.WriteString(m.renderInstallFailureActions())
+	b.WriteString("\n\n")
+	b.WriteString(tui.DimStyle.Render("Press "))
+	b.WriteString(keyCapStyle.Render("l"))
+	b.WriteString(tui.DimStyle.Render(" to see logs"))
+
+	return b.String()
+}
+
+// installFailureNotice returns the failure summary and recovery choices as
+// boxed log lines. They are returned per line so the log screen's tail
+// calculation stays accurate.
+func (m Model) installFailureNotice() []string {
+	box := lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(tui.ErrorColor).
+		Padding(0, 2).
+		Render(m.installFailureSummary() + "\n\n" + m.renderInstallFailureActions())
+
+	return append([]string{""}, strings.Split(box, "\n")...)
 }
 
 // renderPhaseBox renders content centered inside the rounded main-region box.
@@ -244,16 +343,18 @@ func (m Model) renderDockerLogs(title string, width, boxHeight int) string {
 }
 
 func (m Model) renderLogScreen(title string, lines []string, width, boxHeight int) string {
-	visibleLines := boxHeight - 6
-	if visibleLines < 1 {
-		visibleLines = 1
+	visibleRows := boxHeight - 6
+	if visibleRows < 1 {
+		visibleRows = 1
 	}
+	// Border (2) plus the horizontal padding below (3 each side).
+	contentWidth := width - 8
 
 	var body strings.Builder
 	body.WriteString(panelHeaderStyle.Render(title))
 	body.WriteString("\n\n")
 
-	for _, line := range tui.TailLines(lines, visibleLines) {
+	for _, line := range tui.TailWrappedLines(lines, visibleRows, contentWidth) {
 		body.WriteString(line)
 		body.WriteString("\n")
 	}

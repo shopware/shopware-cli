@@ -363,3 +363,44 @@ func TestInstallFooterHint_UnknownStepReturnsEmpty(t *testing.T) {
 	m.install.step = installStep(999)
 	assert.Empty(t, m.installFooterHint())
 }
+
+func TestInstallStepIndex(t *testing.T) {
+	assert.Equal(t, 0, installStepIndex(installStartStep))
+	assert.Equal(t, 0, installStepIndex(""))
+	assert.Equal(t, 0, installStepIndex("system:install"))
+	assert.Equal(t, 1, installStepIndex("user:create"))
+	assert.Equal(t, 4, installStepIndex("theme:change"))
+	assert.Equal(t, 0, installStepIndex("not-a-step"))
+}
+
+func TestArgsForInstallStep_UsesWizardAnswers(t *testing.T) {
+	w := installWizard{CredentialStep: newInstallCredentialStep(), language: "de-DE", currency: "CHF"}
+	w.SetUsername("ada")
+	w.SetPassword("supersecret")
+
+	assert.Nil(t, argsForInstallStep("system:install", w, ""))
+	assert.Nil(t, argsForInstallStep(installUserCreateStep, w, ""))
+	assert.Equal(t, []string{
+		"sales-channel:create:storefront", "--name=Storefront", "--isoCode=de-DE", "--url=http://localhost:8000",
+	}, argsForInstallStep("sales-channel:create:storefront", w, "http://localhost:8000"))
+	assert.Nil(t, argsForInstallStep("unknown", w, ""))
+}
+
+func TestArgsForInstallStep_UsesInstallDefaults(t *testing.T) {
+	w := installWizard{CredentialStep: newInstallCredentialStep()}
+	assert.Equal(t, []string{
+		"sales-channel:create:storefront", "--name=Storefront", "--isoCode=" + install.DefaultLocale,
+	}, argsForInstallStep("sales-channel:create:storefront", w, ""))
+}
+
+func TestArgsForInstallStep_EveryResumableStepHasArgs(t *testing.T) {
+	w := installWizard{CredentialStep: newInstallCredentialStep(), language: "en-GB", currency: "EUR"}
+	for _, sp := range install.Steps {
+		args := argsForInstallStep(sp.Pattern, w, "http://localhost")
+		if sp.Pattern == "system:install" || sp.Pattern == installUserCreateStep {
+			assert.Nil(t, args, sp.Pattern)
+			continue
+		}
+		assert.NotEmpty(t, args, sp.Pattern)
+	}
+}
