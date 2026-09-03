@@ -14,7 +14,6 @@ func TestClassifyInstallFailure(t *testing.T) {
 
 	assert.Equal(t, "system:install", failure.failingStep)
 	assert.Equal(t, installFailureMigration, failure.category)
-	assert.False(t, failure.retryable)
 	assert.NotContains(t, failure.detail, "\x1b")
 }
 
@@ -26,7 +25,6 @@ func TestClassifyInstallFailureUsesTerminalError(t *testing.T) {
 	}, assert.AnError)
 
 	assert.Equal(t, installFailurePHP, failure.category)
-	assert.False(t, failure.retryable)
 }
 
 func TestClassifyInstallFailureBeforeFirstStep(t *testing.T) {
@@ -36,7 +34,6 @@ func TestClassifyInstallFailureBeforeFirstStep(t *testing.T) {
 
 	assert.Equal(t, installStartStep, failure.failingStep)
 	assert.Equal(t, installFailureDatabaseConnection, failure.category)
-	assert.False(t, failure.retryable)
 }
 
 func TestClassifyInstallFailureUnknownAfterSafeStep(t *testing.T) {
@@ -46,5 +43,4 @@ func TestClassifyInstallFailureUnknownAfterSafeStep(t *testing.T) {
 	}, assert.AnError)
 
 	assert.Equal(t, installFailureUnknown, failure.category)
-	assert.True(t, failure.retryable)
 }

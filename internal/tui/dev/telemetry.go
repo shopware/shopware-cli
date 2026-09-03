@@ -178,7 +178,6 @@ func (t *telemetryState) installFailureTags(w installWizard, f installFailure) m
 	tags := t.installTags(tracking.ResultFailure, w)
 	tags[tracking.TagFailedStep] = f.failingStep
 	tags[tracking.TagFailureCategory] = string(f.category)
-	tags[tracking.TagRetryable] = strconv.FormatBool(f.retryable)
 	return tags
 }
 

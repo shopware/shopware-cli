@@ -238,14 +238,12 @@ func TestInstallFailureTags(t *testing.T) {
 		failingStep: installStartStep,
 		category:    installFailureDatabaseConnection,
 		detail:      `SQLSTATE[HY000] [1045] Access denied for super-secret-host`,
-		retryable:   false,
 	}
 	tags := tel.installFailureTags(w, f)
 
 	assert.Equal(t, tracking.ResultFailure, tags[tracking.TagResult])
 	assert.Equal(t, installStartStep, tags[tracking.TagFailedStep])
 	assert.Equal(t, "db_connection", tags[tracking.TagFailureCategory])
-	assert.Equal(t, "false", tags[tracking.TagRetryable])
 	assert.Equal(t, "de-DE", tags[tracking.TagLanguage])
 	for _, value := range tags {
 		assert.NotContains(t, value, "super-secret-host")
@@ -261,5 +259,4 @@ func TestInstallFailureTagsFromClassifier(t *testing.T) {
 
 	assert.Equal(t, "db_connection", tags[tracking.TagFailureCategory])
 	assert.Equal(t, installStartStep, tags[tracking.TagFailedStep])
-	assert.Contains(t, tags, tracking.TagRetryable)
 }
