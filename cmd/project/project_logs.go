@@ -1,23 +1,14 @@
 package project
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
-	"slices"
-	"strconv"
-	"time"
 
 	"github.com/spf13/cobra"
 
 	"github.com/shopware/shopware-cli/internal/executor"
 	"github.com/shopware/shopware-cli/internal/tui"
 )
-
-// listLogFilesPHP prints the var/log *.log files of the project as JSON. PHP
-// is used instead of ls/stat so the output format is identical on every
-// platform an executor can target (local, Docker, SSH remotes).
-const listLogFilesPHP = `$files = []; foreach (glob("var/log/*.log") ?: [] as $f) { $files[] = ["name" => basename($f), "size" => filesize($f), "mtime" => filemtime($f)]; } echo json_encode($files);`
 
 var projectLogsCmd = &cobra.Command{
 	Use:   "logs [filename]",
@@ -35,7 +26,7 @@ var projectLogsCmd = &cobra.Command{
 			return err
 		}
 
-		files, err := findLogFiles(cmd, cmdExecutor)
+		files, err := cmdExecutor.AvailableLogFiles(cmd.Context())
 		if err != nil {
 			return err
 		}
@@ -49,12 +40,12 @@ var projectLogsCmd = &cobra.Command{
 			return errors.New("no log files found in var/log")
 		}
 
-		target := files[0].name
+		target := files[0].Name
 		if len(args) > 0 {
 			target = ""
 			for _, f := range files {
-				if f.name == args[0] {
-					target = f.name
+				if f.Name == args[0] {
+					target = f.Name
 					break
 				}
 			}
@@ -67,13 +58,7 @@ var projectLogsCmd = &cobra.Command{
 		lines, _ := cmd.Flags().GetInt("lines")
 		follow, _ := cmd.Flags().GetBool("follow")
 
-		tailArgs := []string{"-n", strconv.Itoa(lines)}
-		if follow {
-			tailArgs = append(tailArgs, "-f")
-		}
-		tailArgs = append(tailArgs, "var/log/"+target)
-
-		p := cmdExecutor.Command(cmd.Context(), "tail", tailArgs...)
+		p := cmdExecutor.GetLog(cmd.Context(), target, lines, follow)
 		p.Cmd.Stdout = cmd.OutOrStdout()
 		p.Cmd.Stderr = cmd.ErrOrStderr()
 
@@ -81,45 +66,7 @@ var projectLogsCmd = &cobra.Command{
 	},
 }
 
-type logFileInfo struct {
-	name    string
-	size    int64
-	modTime time.Time
-}
-
-func findLogFiles(cmd *cobra.Command, cmdExecutor executor.Executor) ([]logFileInfo, error) {
-	out, err := cmdExecutor.PHPCommand(cmd.Context(), "-r", listLogFilesPHP).Output()
-	if err != nil {
-		return nil, fmt.Errorf("could not list log files: %w", err)
-	}
-
-	return parseLogFiles(out)
-}
-
-func parseLogFiles(out []byte) ([]logFileInfo, error) {
-	var entries []struct {
-		Name  string `json:"name"`
-		Size  int64  `json:"size"`
-		Mtime int64  `json:"mtime"`
-	}
-	if err := json.Unmarshal(out, &entries); err != nil {
-		return nil, fmt.Errorf("could not parse log file list: %w", err)
-	}
-
-	files := make([]logFileInfo, 0, len(entries))
-	for _, e := range entries {
-		files = append(files, logFileInfo{name: e.Name, size: e.Size, modTime: time.Unix(e.Mtime, 0)})
-	}
-
-	// Sort by modification time, most recent first
-	slices.SortFunc(files, func(a, b logFileInfo) int {
-		return b.modTime.Compare(a.modTime)
-	})
-
-	return files, nil
-}
-
-func printLogFileList(files []logFileInfo) error {
+func printLogFileList(files []executor.LogFile) error {
 	if len(files) == 0 {
 		fmt.Println(tui.DimText.Render("No log files found."))
 		return nil
@@ -127,7 +74,7 @@ func printLogFileList(files []logFileInfo) error {
 
 	rows := make([][]string, 0, len(files))
 	for _, f := range files {
-		rows = append(rows, []string{f.name, formatSize(f.size), f.modTime.Format("2006-01-02 15:04:05")})
+		rows = append(rows, []string{f.Name, formatSize(f.Size), f.ModTime.Format("2006-01-02 15:04:05")})
 	}
 	tui.PrintTable([]string{"File", "Size", "Modified"}, rows)
 

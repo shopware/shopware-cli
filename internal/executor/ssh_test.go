@@ -428,6 +428,36 @@ func TestSSHExecutorDatabaseConnectionEnvOverride(t *testing.T) {
 	assert.Equal(t, "override", conn.Database, "executor env wins without any ssh call")
 }
 
+func TestSSHExecutorAvailableLogFiles(t *testing.T) {
+	tmp := t.TempDir()
+	argsFile := filepath.Join(tmp, "args.txt")
+	outFile := filepath.Join(tmp, "out.txt")
+
+	require.NoError(t, os.WriteFile(outFile, []byte(`[{"name":"prod.log","size":10,"mtime":2000}]`), 0o644))
+	writeRecordingSSH(t, argsFile, outFile, "", "")
+
+	e := testSSHExecutor()
+
+	files, err := e.AvailableLogFiles(t.Context())
+	require.NoError(t, err)
+	require.Len(t, files, 1)
+	assert.Equal(t, "prod.log", files[0].Name)
+
+	recorded, err := os.ReadFile(argsFile)
+	require.NoError(t, err)
+	assert.Contains(t, string(recorded), "/var/www/shop/var/log/*.log")
+}
+
+func TestSSHExecutorGetLog(t *testing.T) {
+	e := testSSHExecutor()
+
+	p := e.GetLog(t.Context(), "prod.log", 100, false)
+	assert.Equal(t, "cd /var/www/shop && tail -n 100 /var/www/shop/var/log/prod.log", lastSSHShell(t, p))
+
+	p = e.GetLog(t.Context(), "prod.log", 5, true)
+	assert.Equal(t, "cd /var/www/shop && tail -n 5 -f /var/www/shop/var/log/prod.log", lastSSHShell(t, p))
+}
+
 func TestShellQuoteArg(t *testing.T) {
 	assert.Equal(t, "cache:clear", shellQuoteArg("cache:clear"))
 	assert.Equal(t, "''", shellQuoteArg(""))

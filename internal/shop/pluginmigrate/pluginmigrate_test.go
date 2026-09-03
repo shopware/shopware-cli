@@ -48,7 +48,11 @@ func (f *fakeExecutor) NPMCommand(ctx context.Context, args ...string) *executor
 	return shellProcess(ctx, "true")
 }
 
-func (f *fakeExecutor) Command(ctx context.Context, name string, args ...string) *executor.Process {
+func (f *fakeExecutor) AvailableLogFiles(context.Context) ([]executor.LogFile, error) {
+	return nil, executor.ErrNotSupported
+}
+
+func (f *fakeExecutor) GetLog(ctx context.Context, _ string, _ int, _ bool) *executor.Process {
 	return shellProcess(ctx, "true")
 }
 

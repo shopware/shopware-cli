@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 
 	adminSdk "github.com/shopware/shopware-cli/internal/admin-api"
 	"github.com/shopware/shopware-cli/internal/shop"
@@ -119,8 +120,12 @@ func (l *LocalExecutor) NPMCommand(ctx context.Context, args ...string) *Process
 	return newProcess(cmd)
 }
 
-func (l *LocalExecutor) Command(ctx context.Context, name string, args ...string) *Process {
-	cmd := exec.CommandContext(ctx, name, args...)
+func (l *LocalExecutor) AvailableLogFiles(_ context.Context) ([]LogFile, error) {
+	return localLogFiles(filepath.Join(l.projectRoot, "var", "log"))
+}
+
+func (l *LocalExecutor) GetLog(ctx context.Context, file string, lines int, follow bool) *Process {
+	cmd := exec.CommandContext(ctx, "tail", tailArgs(logFilePath(l.projectRoot, file), lines, follow)...)
 	applyLocalEnv(l.projectRoot, l.env, cmd)
 	applyDir(resolveDir(l.projectRoot, l.relDir), cmd)
 	logCmd(ctx, cmd)

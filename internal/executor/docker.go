@@ -82,15 +82,28 @@ func (d *DockerExecutor) NPMCommand(ctx context.Context, args ...string) *Proces
 	return d.newProcess(cmd, append([]string{"npm"}, args...))
 }
 
-func (d *DockerExecutor) Command(ctx context.Context, name string, args ...string) *Process {
+func (d *DockerExecutor) AvailableLogFiles(ctx context.Context) ([]LogFile, error) {
+	logDir := d.NormalizePath(filepath.Join(d.projectRoot, "var", "log"))
+
+	out, err := d.PHPCommand(ctx, "-r", listLogFilesPHP(logDir)).Output()
+	if err != nil {
+		return nil, fmt.Errorf("could not list log files: %w", err)
+	}
+
+	return parseLogFiles(out)
+}
+
+func (d *DockerExecutor) GetLog(ctx context.Context, file string, lines int, follow bool) *Process {
+	tail := tailArgs(d.NormalizePath(logFilePath(d.projectRoot, file)), lines, follow)
+
 	dockerArgs := d.baseArgs(ctx)
-	dockerArgs = append(dockerArgs, name)
-	dockerArgs = append(dockerArgs, args...)
+	dockerArgs = append(dockerArgs, "tail")
+	dockerArgs = append(dockerArgs, tail...)
 
 	cmd := exec.CommandContext(ctx, "docker", dockerArgs...)
 	applyDir(d.projectRoot, cmd)
 	logCmd(ctx, cmd)
-	return d.newProcess(cmd, append([]string{name}, args...))
+	return d.newProcess(cmd, append([]string{"tail"}, tail...))
 }
 
 func (d *DockerExecutor) NormalizePath(hostPath string) string {

@@ -35,10 +35,12 @@ type Executor interface {
 	ComposerCommand(ctx context.Context, args ...string) *Process
 	PHPCommand(ctx context.Context, args ...string) *Process
 	NPMCommand(ctx context.Context, args ...string) *Process
-	// Command runs an arbitrary command in the project environment: the
-	// working directory is the project root (or the WithRelDir directory)
-	// and the executor env is applied.
-	Command(ctx context.Context, name string, args ...string) *Process
+	// AvailableLogFiles lists the .log files in the project's var/log
+	// directory, most recently modified first.
+	AvailableLogFiles(ctx context.Context) ([]LogFile, error)
+	// GetLog returns a process printing the last lines of a var/log file,
+	// following new output when follow is true.
+	GetLog(ctx context.Context, file string, lines int, follow bool) *Process
 	NormalizePath(hostPath string) string
 	Type() string
 	WithEnv(env map[string]string) Executor
