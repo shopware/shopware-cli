@@ -228,7 +228,10 @@ func (s *SSHExecutor) EnvironmentStatus(_ context.Context) (bool, error) {
 // host:port lives in the remote network, so the mysql driver is pointed at a
 // registered dialer network that forwards each connection with `ssh -W`.
 // Every MySQL connection spawns its own channel on the multiplexed SSH
-// connection, so no persistent tunnel process has to be managed.
+// connection, so no persistent tunnel process has to be managed. When the
+// database host is "localhost", PHP would connect through a unix socket, so
+// the configured socket path is resolved on the remote host and forwarded
+// instead of a TCP port.
 func (s *SSHExecutor) DatabaseConnection(ctx context.Context) (*DatabaseConnection, error) {
 	conn := defaultDatabaseConnection()
 
@@ -248,7 +251,18 @@ func (s *SSHExecutor) DatabaseConnection(ctx context.Context) (*DatabaseConnecti
 		}
 	}
 
-	conn.tunneledNet = s.registerSSHDialer()
+	dialTarget := conn.Addr()
+
+	if conn.Host == "localhost" {
+		socket, err := s.remoteMySQLSocket(ctx)
+		if err != nil {
+			return nil, err
+		}
+
+		dialTarget = socket
+	}
+
+	conn.tunneledNet = s.registerSSHDialer(dialTarget)
 
 	return conn, nil
 }
@@ -295,26 +309,46 @@ func (s *SSHExecutor) runRemoteShell(ctx context.Context, remoteCmd string) (str
 	return stdout.String(), nil
 }
 
+// remoteMySQLSocket resolves the MySQL unix socket path configured for PHP
+// on the remote host. DATABASE_URLs with host "localhost" make PHP connect
+// through this socket instead of TCP.
+func (s *SSHExecutor) remoteMySQLSocket(ctx context.Context) (string, error) {
+	stdout, err := s.runRemoteShell(ctx, `php -r 'echo ini_get("pdo_mysql.default_socket") ?: ini_get("mysqli.default_socket");'`)
+	if err != nil {
+		return "", err
+	}
+
+	socket := strings.TrimSpace(stdout)
+	if socket == "" {
+		return "", errors.New("DATABASE_URL uses localhost, but no MySQL unix socket is configured for PHP on the remote host (pdo_mysql.default_socket and mysqli.default_socket are empty)")
+	}
+
+	return socket, nil
+}
+
 var sshDialerCounter atomic.Int64
 
-// registerSSHDialer registers a mysql driver network that dials through the
-// SSH connection and returns its name for DatabaseConnection.tunneledNet.
-func (s *SSHExecutor) registerSSHDialer() string {
+// registerSSHDialer registers a mysql driver network that dials dialTarget
+// (host:port in the remote network, or a unix socket path on the remote
+// host) through the SSH connection and returns its name for
+// DatabaseConnection.tunneledNet.
+func (s *SSHExecutor) registerSSHDialer(dialTarget string) string {
 	name := fmt.Sprintf("shopware-cli-ssh-%d", sshDialerCounter.Add(1))
 
 	sshArgs := append(s.sshArgs(), "-T")
 	target := s.target()
 
-	mysql.RegisterDialContext(name, func(ctx context.Context, addr string) (net.Conn, error) {
-		return dialViaSSH(ctx, sshArgs, target, addr)
+	mysql.RegisterDialContext(name, func(ctx context.Context, _ string) (net.Conn, error) {
+		return dialViaSSH(ctx, sshArgs, target, dialTarget)
 	})
 
 	return name
 }
 
-// dialViaSSH dials addr (host:port in the remote network) through
-// `ssh -W addr target`, returning the ssh session's stdin/stdout as a
-// net.Conn. The process is intentionally not bound to ctx: database/sql
+// dialViaSSH dials addr through `ssh -W addr target`, returning the ssh
+// session's stdin/stdout as a net.Conn. addr is either host:port in the
+// remote network or a unix socket path on the remote host (OpenSSH forwards
+// both). The process is intentionally not bound to ctx: database/sql
 // cancels the dial context once the connection is established, which would
 // kill a healthy tunnel. The ssh process dies when the connection is closed.
 func dialViaSSH(_ context.Context, sshArgs []string, target, addr string) (net.Conn, error) {
