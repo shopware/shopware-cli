@@ -50,6 +50,12 @@ func (e *devEnvironment) bootstrapProxyFallback(cmd *cobra.Command) error {
 		return nil
 	}
 
+	// An interrupted or timed-out bootstrap is not a proxy failure: propagate
+	// it instead of falling back and starting the environment anyway.
+	if ctx.Err() != nil || errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+		return err
+	}
+
 	// Never block dev on the proxy: regenerate the compose file in fixed-port
 	// mode (newDevEnvironment wrote it in proxy mode) and tell the user how to
 	// diagnose the proxy.
