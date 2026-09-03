@@ -2,16 +2,21 @@ package project
 
 import (
 	"bytes"
-	"fmt"
+	"context"
 	"io"
 	"os"
-	"path/filepath"
-	"strings"
+	"os/exec"
 	"sync"
 	"testing"
 	"time"
 
+	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
+	adminSdk "github.com/shopware/shopware-cli/internal/admin-api"
+	"github.com/shopware/shopware-cli/internal/executor"
+	"github.com/shopware/shopware-cli/internal/shop"
 )
 
 var stdoutCaptureMu sync.Mutex
@@ -40,78 +45,52 @@ func TestFormatSize(t *testing.T) {
 	}
 }
 
-func TestFindLogFilesMissingDirectory(t *testing.T) {
+func TestParseLogFilesSortsByModTime(t *testing.T) {
 	t.Parallel()
 
-	tmp := t.TempDir()
-	_, err := findLogFiles(filepath.Join(tmp, "does-not-exist"))
-	assert.Error(t, err)
+	out := []byte(`[{"name":"older.log","size":13,"mtime":1000},{"name":"newer.log","size":5,"mtime":2000}]`)
+
+	files, err := parseLogFiles(out)
+	require.NoError(t, err)
+	require.Len(t, files, 2)
+
+	assert.Equal(t, "newer.log", files[0].name)
+	assert.Equal(t, int64(5), files[0].size)
+	assert.Equal(t, int64(2000), files[0].modTime.Unix())
+	assert.Equal(t, "older.log", files[1].name)
 }
 
-func TestFindLogFilesEmptyDirectory(t *testing.T) {
+func TestParseLogFilesEmpty(t *testing.T) {
 	t.Parallel()
 
-	tmp := t.TempDir()
-	files, err := findLogFiles(tmp)
-	assert.NoError(t, err)
+	files, err := parseLogFiles([]byte(`[]`))
+	require.NoError(t, err)
 	assert.Empty(t, files)
 }
 
-func TestFindLogFilesFiltersAndSortsByModTime(t *testing.T) {
+func TestParseLogFilesInvalid(t *testing.T) {
 	t.Parallel()
 
-	tmp := t.TempDir()
-
-	writeFile := func(name, content string) string {
-		p := filepath.Join(tmp, name)
-		assert.NoError(t, os.WriteFile(p, []byte(content), 0o644))
-		return p
-	}
-
-	older := writeFile("older.log", "older content")
-	newer := writeFile("newer.log", "newer")
-	writeFile("notes.txt", "ignore me")
-	assert.NoError(t, os.Mkdir(filepath.Join(tmp, "subdir.log"), 0o755))
-
-	now := time.Now()
-	assert.NoError(t, os.Chtimes(older, now.Add(-2*time.Hour), now.Add(-2*time.Hour)))
-	assert.NoError(t, os.Chtimes(newer, now, now))
-
-	files, err := findLogFiles(tmp)
-	assert.NoError(t, err)
-	assert.Len(t, files, 2)
-
-	assert.Equal(t, "newer.log", files[0].name)
-	assert.Equal(t, "older.log", files[1].name)
-	assert.Equal(t, int64(len("newer")), files[0].size)
-	assert.Equal(t, int64(len("older content")), files[1].size)
-	assert.Equal(t, filepath.Join(tmp, "newer.log"), files[0].path)
+	_, err := parseLogFiles([]byte(`not json`))
+	assert.Error(t, err)
 }
 
-func TestListLogFilesEmpty(t *testing.T) {
-	tmp := t.TempDir()
+func TestPrintLogFileListEmpty(t *testing.T) {
 	stdout, err := captureStdout(func() error {
-		return listLogFiles(tmp)
+		return printLogFileList(nil)
 	})
 	assert.NoError(t, err)
 	assert.Contains(t, stdout, "No log files found.")
 }
 
-func TestListLogFilesMissingDir(t *testing.T) {
-	t.Parallel()
-
-	tmp := t.TempDir()
-	err := listLogFiles(filepath.Join(tmp, "missing"))
-	assert.Error(t, err)
-}
-
-func TestListLogFilesShowsAllFiles(t *testing.T) {
-	tmp := t.TempDir()
-	assert.NoError(t, os.WriteFile(filepath.Join(tmp, "a.log"), []byte("hi"), 0o644))
-	assert.NoError(t, os.WriteFile(filepath.Join(tmp, "b.log"), make([]byte, 2048), 0o644))
+func TestPrintLogFileListShowsAllFiles(t *testing.T) {
+	files := []logFileInfo{
+		{name: "a.log", size: 2, modTime: time.Unix(2000, 0)},
+		{name: "b.log", size: 2048, modTime: time.Unix(1000, 0)},
+	}
 
 	stdout, err := captureStdout(func() error {
-		return listLogFiles(tmp)
+		return printLogFileList(files)
 	})
 	assert.NoError(t, err)
 	assert.Contains(t, stdout, "a.log")
@@ -119,70 +98,73 @@ func TestListLogFilesShowsAllFiles(t *testing.T) {
 	assert.Contains(t, stdout, "2.0 KB")
 }
 
-func TestPrintLastLinesShortFile(t *testing.T) {
-	tmp := t.TempDir()
-	p := filepath.Join(tmp, "short.log")
-	assert.NoError(t, os.WriteFile(p, []byte("line1\nline2\nline3\n"), 0o644))
-
-	stdout, err := captureStdout(func() error {
-		return printLastLines(p, 100)
-	})
-	assert.NoError(t, err)
-	assert.Equal(t, "line1\nline2\nline3\n", stdout)
-}
-
-func TestPrintLastLinesTruncatesToLastN(t *testing.T) {
-	tmp := t.TempDir()
-	p := filepath.Join(tmp, "long.log")
-
-	var sb strings.Builder
-	for i := 0; i < 50; i++ {
-		fmt.Fprintf(&sb, "line%02d\n", i)
-	}
-	assert.NoError(t, os.WriteFile(p, []byte(sb.String()), 0o644))
-
-	stdout, err := captureStdout(func() error {
-		return printLastLines(p, 5)
-	})
-	assert.NoError(t, err)
-	assert.Equal(t, "line45\nline46\nline47\nline48\nline49\n", stdout)
-}
-
-func TestPrintLastLinesExactNLines(t *testing.T) {
-	tmp := t.TempDir()
-	p := filepath.Join(tmp, "exact.log")
-	assert.NoError(t, os.WriteFile(p, []byte("a\nb\nc\n"), 0o644))
-
-	stdout, err := captureStdout(func() error {
-		return printLastLines(p, 3)
-	})
-	assert.NoError(t, err)
-	assert.Equal(t, "a\nb\nc\n", stdout)
-}
-
-func TestPrintLastLinesMissingFile(t *testing.T) {
+func TestFindLogFilesUsesExecutor(t *testing.T) {
 	t.Parallel()
 
-	tmp := t.TempDir()
-	err := printLastLines(filepath.Join(tmp, "missing.log"), 10)
-	assert.Error(t, err)
+	fakeExec := &logsFakeExecutor{
+		php: func(ctx context.Context, args ...string) *executor.Process {
+			assert.Equal(t, "-r", args[0])
+			assert.Contains(t, args[1], "var/log/*.log")
+			return &executor.Process{Cmd: exec.CommandContext(ctx, "sh", "-c", `printf '%s' '[{"name":"prod.log","size":10,"mtime":2000}]'`)}
+		},
+	}
+
+	cmd := &cobra.Command{}
+	cmd.SetContext(t.Context())
+
+	files, err := findLogFiles(cmd, fakeExec)
+	require.NoError(t, err)
+	require.Len(t, files, 1)
+	assert.Equal(t, "prod.log", files[0].name)
 }
 
-func TestPrintLastLinesRingBufferOverflow(t *testing.T) {
-	tmp := t.TempDir()
-	p := filepath.Join(tmp, "ring.log")
+// logsFakeExecutor implements executor.Executor; every command but the
+// scripted PHPCommand exits successfully without output.
+type logsFakeExecutor struct {
+	php func(ctx context.Context, args ...string) *executor.Process
+}
 
-	var sb strings.Builder
-	for i := 0; i < 2000; i++ {
-		fmt.Fprintf(&sb, "L%04d\n", i)
-	}
-	assert.NoError(t, os.WriteFile(p, []byte(sb.String()), 0o644))
+func trueProcess(ctx context.Context) *executor.Process {
+	return &executor.Process{Cmd: exec.CommandContext(ctx, "true")}
+}
 
-	stdout, err := captureStdout(func() error {
-		return printLastLines(p, 3)
-	})
-	assert.NoError(t, err)
-	assert.Equal(t, "L1997\nL1998\nL1999\n", stdout)
+func (f *logsFakeExecutor) PHPCommand(ctx context.Context, args ...string) *executor.Process {
+	return f.php(ctx, args...)
+}
+
+func (f *logsFakeExecutor) ConsoleCommand(ctx context.Context, _ ...string) *executor.Process {
+	return trueProcess(ctx)
+}
+
+func (f *logsFakeExecutor) ComposerCommand(ctx context.Context, _ ...string) *executor.Process {
+	return trueProcess(ctx)
+}
+
+func (f *logsFakeExecutor) NPMCommand(ctx context.Context, _ ...string) *executor.Process {
+	return trueProcess(ctx)
+}
+
+func (f *logsFakeExecutor) Command(ctx context.Context, _ string, _ ...string) *executor.Process {
+	return trueProcess(ctx)
+}
+
+func (f *logsFakeExecutor) NormalizePath(hostPath string) string { return hostPath }
+func (f *logsFakeExecutor) Type() string                         { return executor.TypeLocal }
+func (f *logsFakeExecutor) WithEnv(map[string]string) executor.Executor {
+	return f
+}
+func (f *logsFakeExecutor) WithRelDir(string) executor.Executor    { return f }
+func (f *logsFakeExecutor) StartEnvironment(context.Context) error { return nil }
+func (f *logsFakeExecutor) StopEnvironment(context.Context, executor.StopOptions) error {
+	return nil
+}
+func (f *logsFakeExecutor) EnvironmentStatus(context.Context) (bool, error) { return true, nil }
+func (f *logsFakeExecutor) AdminAPIClient(context.Context) (*adminSdk.Client, error) {
+	return nil, executor.ErrNotSupported
+}
+func (f *logsFakeExecutor) ShopConfig() *shop.Config { return nil }
+func (f *logsFakeExecutor) DatabaseConnection(context.Context) (*executor.DatabaseConnection, error) {
+	return nil, executor.ErrNotSupported
 }
 
 func captureStdout(fn func() error) (string, error) {

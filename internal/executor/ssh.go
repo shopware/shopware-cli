@@ -175,6 +175,10 @@ func (s *SSHExecutor) NPMCommand(ctx context.Context, args ...string) *Process {
 	return s.command(ctx, "npm", args...)
 }
 
+func (s *SSHExecutor) Command(ctx context.Context, name string, args ...string) *Process {
+	return s.command(ctx, name, args...)
+}
+
 // NormalizePath translates a path below the local project root into the
 // project directory on the remote host, mirroring the Docker executor. Paths
 // outside the project root (or all paths when no project root is known) are

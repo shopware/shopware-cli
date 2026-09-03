@@ -35,6 +35,10 @@ type Executor interface {
 	ComposerCommand(ctx context.Context, args ...string) *Process
 	PHPCommand(ctx context.Context, args ...string) *Process
 	NPMCommand(ctx context.Context, args ...string) *Process
+	// Command runs an arbitrary command in the project environment: the
+	// working directory is the project root (or the WithRelDir directory)
+	// and the executor env is applied.
+	Command(ctx context.Context, name string, args ...string) *Process
 	NormalizePath(hostPath string) string
 	Type() string
 	WithEnv(env map[string]string) Executor

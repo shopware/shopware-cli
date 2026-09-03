@@ -1,20 +1,23 @@
 package project
 
 import (
-	"bufio"
+	"encoding/json"
+	"errors"
 	"fmt"
-	"os"
-	"os/exec"
-	"path/filepath"
 	"slices"
 	"strconv"
-	"strings"
 	"time"
 
 	"github.com/spf13/cobra"
 
+	"github.com/shopware/shopware-cli/internal/executor"
 	"github.com/shopware/shopware-cli/internal/tui"
 )
+
+// listLogFilesPHP prints the var/log *.log files of the project as JSON. PHP
+// is used instead of ls/stat so the output format is identical on every
+// platform an executor can target (local, Docker, SSH remotes).
+const listLogFilesPHP = `$files = []; foreach (glob("var/log/*.log") ?: [] as $f) { $files[] = ["name" => basename($f), "size" => filesize($f), "mtime" => filemtime($f)]; } echo json_encode($files);`
 
 var projectLogsCmd = &cobra.Command{
 	Use:   "logs [filename]",
@@ -27,74 +30,85 @@ var projectLogsCmd = &cobra.Command{
 			return err
 		}
 
-		logDir := filepath.Join(projectRoot, "var", "log")
-
-		list, _ := cmd.Flags().GetBool("list")
-		if list {
-			return listLogFiles(logDir)
-		}
-
-		files, err := findLogFiles(logDir)
+		cmdExecutor, err := resolveExecutor(cmd, projectRoot)
 		if err != nil {
 			return err
 		}
 
-		if len(files) == 0 {
-			return fmt.Errorf("no log files found in %s", logDir)
+		files, err := findLogFiles(cmd, cmdExecutor)
+		if err != nil {
+			return err
 		}
 
-		var target string
+		list, _ := cmd.Flags().GetBool("list")
+		if list {
+			return printLogFileList(files)
+		}
+
+		if len(files) == 0 {
+			return errors.New("no log files found in var/log")
+		}
+
+		target := files[0].name
 		if len(args) > 0 {
-			target = filepath.Join(logDir, args[0])
-			if _, err := os.Stat(target); err != nil {
+			target = ""
+			for _, f := range files {
+				if f.name == args[0] {
+					target = f.name
+					break
+				}
+			}
+
+			if target == "" {
 				return fmt.Errorf("log file not found: %s", args[0])
 			}
-		} else {
-			// Most recently modified file
-			target = files[0].path
 		}
 
 		lines, _ := cmd.Flags().GetInt("lines")
 		follow, _ := cmd.Flags().GetBool("follow")
 
+		tailArgs := []string{"-n", strconv.Itoa(lines)}
 		if follow {
-			return tailFollow(cmd, target, lines)
+			tailArgs = append(tailArgs, "-f")
 		}
+		tailArgs = append(tailArgs, "var/log/"+target)
 
-		return printLastLines(target, lines)
+		p := cmdExecutor.Command(cmd.Context(), "tail", tailArgs...)
+		p.Cmd.Stdout = cmd.OutOrStdout()
+		p.Cmd.Stderr = cmd.ErrOrStderr()
+
+		return p.Run()
 	},
 }
 
 type logFileInfo struct {
-	path    string
 	name    string
 	size    int64
 	modTime time.Time
 }
 
-func findLogFiles(logDir string) ([]logFileInfo, error) {
-	entries, err := os.ReadDir(logDir)
+func findLogFiles(cmd *cobra.Command, cmdExecutor executor.Executor) ([]logFileInfo, error) {
+	out, err := cmdExecutor.PHPCommand(cmd.Context(), "-r", listLogFilesPHP).Output()
 	if err != nil {
-		return nil, fmt.Errorf("could not read log directory: %w", err)
+		return nil, fmt.Errorf("could not list log files: %w", err)
 	}
 
-	var files []logFileInfo
-	for _, entry := range entries {
-		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".log") {
-			continue
-		}
+	return parseLogFiles(out)
+}
 
-		info, err := entry.Info()
-		if err != nil {
-			continue
-		}
+func parseLogFiles(out []byte) ([]logFileInfo, error) {
+	var entries []struct {
+		Name  string `json:"name"`
+		Size  int64  `json:"size"`
+		Mtime int64  `json:"mtime"`
+	}
+	if err := json.Unmarshal(out, &entries); err != nil {
+		return nil, fmt.Errorf("could not parse log file list: %w", err)
+	}
 
-		files = append(files, logFileInfo{
-			path:    filepath.Join(logDir, entry.Name()),
-			name:    entry.Name(),
-			size:    info.Size(),
-			modTime: info.ModTime(),
-		})
+	files := make([]logFileInfo, 0, len(entries))
+	for _, e := range entries {
+		files = append(files, logFileInfo{name: e.Name, size: e.Size, modTime: time.Unix(e.Mtime, 0)})
 	}
 
 	// Sort by modification time, most recent first
@@ -105,12 +119,7 @@ func findLogFiles(logDir string) ([]logFileInfo, error) {
 	return files, nil
 }
 
-func listLogFiles(logDir string) error {
-	files, err := findLogFiles(logDir)
-	if err != nil {
-		return err
-	}
-
+func printLogFileList(files []logFileInfo) error {
 	if len(files) == 0 {
 		fmt.Println(tui.DimText.Render("No log files found."))
 		return nil
@@ -134,44 +143,6 @@ func formatSize(bytes int64) string {
 	default:
 		return fmt.Sprintf("%d B", bytes)
 	}
-}
-
-func printLastLines(path string, n int) error {
-	f, err := os.Open(path)
-	if err != nil {
-		return err
-	}
-	defer func() { _ = f.Close() }()
-
-	scanner := bufio.NewScanner(f)
-	// Use a ring buffer to keep the last N lines
-	ring := make([]string, 0, n)
-	for scanner.Scan() {
-		if len(ring) < n {
-			ring = append(ring, scanner.Text())
-		} else {
-			copy(ring, ring[1:])
-			ring[n-1] = scanner.Text()
-		}
-	}
-
-	if err := scanner.Err(); err != nil {
-		return err
-	}
-
-	for _, line := range ring {
-		fmt.Println(line)
-	}
-
-	return nil
-}
-
-func tailFollow(cmd *cobra.Command, path string, n int) error {
-	tailCmd := exec.CommandContext(cmd.Context(), "tail", "-n", strconv.Itoa(n), "-f", path)
-	tailCmd.Stdout = cmd.OutOrStdout()
-	tailCmd.Stderr = cmd.ErrOrStderr()
-
-	return tailCmd.Run()
 }
 
 func init() {

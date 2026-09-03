@@ -47,6 +47,10 @@ func (f *fakeExecutor) NPMCommand(ctx context.Context, args ...string) *executor
 	return shellProcess(ctx, "true")
 }
 
+func (f *fakeExecutor) Command(ctx context.Context, name string, args ...string) *executor.Process {
+	return shellProcess(ctx, "true")
+}
+
 func (f *fakeExecutor) NormalizePath(hostPath string) string { return hostPath }
 func (f *fakeExecutor) Type() string                         { return executor.TypeLocal }
 func (f *fakeExecutor) WithEnv(env map[string]string) executor.Executor {
