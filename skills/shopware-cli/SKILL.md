@@ -1,6 +1,6 @@
 ---
 name: shopware-cli
-description: Use Shopware CLI safely and effectively for Shopware project, extension, account, development, build, validation, upgrade, and troubleshooting workflows. Also use when contributing to shopware/shopware-cli and reasoning about the CLI's user-facing behavior.
+description: Use Shopware CLI for Shopware project, extension, and account workflows — create and install new projects (project create, project dev install), validate projects or extensions (with --only/--exclude and CI reporters json, junit, github, gitlab), develop, build, upgrade, and troubleshoot. Also use when contributing to shopware/shopware-cli and reasoning about the CLI's user-facing behavior.
 ---
 
 # Shopware CLI
@@ -11,9 +11,10 @@ When contributing to `shopware/shopware-cli`, use this skill to reason from the 
 
 ## Start with the current CLI
 
-Treat the current CLI as authoritative for commands and flags.
+Treat the current CLI binary as authoritative for commands and flags.
 
 ```bash
+command -v shopware-cli
 shopware-cli --version
 shopware-cli --help
 shopware-cli project --help
@@ -27,7 +28,7 @@ For a specific command:
 shopware-cli <group> <command> --help
 ```
 
-When working on unreleased functionality in the `shopware/shopware-cli` repository, inspect or run the checked-out code instead of assuming the installed release behaves the same way.
+When working on unreleased functionality in a `shopware/shopware-cli` checkout, inspect or run the checked-out code instead of assuming the installed release behaves the same way. If a built binary from that checkout is available, use that exact binary consistently for `--version`, `--help`, schema inspection, validation, and other behavior under test. Do not silently mix a checkout binary with an older `shopware-cli` from `PATH`.
 
 Do not invent commands, flags, configuration fields, or behavior from memory.
 
@@ -85,6 +86,8 @@ Before running them:
 
 Do not assume every command supports `--dry-run`.
 
+When the user asks for inspection only or explicitly says not to modify files, do not temporarily rewrite project files just to probe validation behavior. Prefer help/schema/source inspection or a separate disposable fixture.
+
 ### Database and application-state changes
 
 Treat commands that can change the database, Shopware application state, installed extensions, caches, indexes, migrations, or configuration as higher risk.
@@ -106,6 +109,158 @@ Know which environment will be affected before proceeding.
 Treat account operations that authenticate, log out, upload, push, publish, or otherwise modify remote Shopware Account state as external side effects.
 
 Do not infer permission or user intent simply because credentials are available.
+
+## Validation workflows
+
+Use `shopware-cli project validate` or `shopware-cli extension validate` to run validation checks against a project or extension.
+
+Always inspect current flags and available checks:
+
+```bash
+shopware-cli project validate --help
+shopware-cli extension validate --help
+```
+
+### Project validation
+
+```bash
+shopware-cli project validate [flags]
+```
+
+Validates the Shopware project against the checks implemented by the current CLI and configured tools. It copies the project to a temporary directory and installs its toolset first, so a first run can be slow; `--no-copy` validates in place and skips the copy.
+
+Common flags include:
+
+- `--only <tools>` — run only specific tools (comma-separated).
+- `--exclude <tools>` — skip specific tools (comma-separated).
+- `--reporter <format>` — choose an output reporter supported by the current CLI.
+- `--local-only` — limit extension discovery to plugins in `custom/*` (for the project toolset); does not add per-extension metadata validation.
+- `--no-copy` — do not copy project files to a temporary directory before validation.
+- `--verbose` — show debug output.
+
+Use current `--help` rather than treating this list as exhaustive.
+
+**`project validate` is not `extension validate`.** It runs the project code-quality toolset (PHPStan, ESLint, Twig linters, …) over the discovered extensions' source directories; it does not run per-extension manifest/metadata validation, so a clean run (0 problems) does not mean the custom extensions are valid. To validate a custom extension's structure and metadata, run `shopware-cli extension validate <path>` on it directly (e.g. each `custom/plugins/<Name>`).
+
+### Extension validation
+
+```bash
+shopware-cli extension validate [path] [flags]
+```
+
+The extension path is required; use `.` for the current extension.
+
+Normal extension validation runs the built-in checks implemented by the current CLI. Store-compliance mode can add Store-specific checks; do not assume that every metadata or quality rule is Store-only.
+
+Common flags include:
+
+- `--only <tools>` — run only specific tools (comma-separated).
+- `--exclude <tools>` — skip specific tools.
+- `--full` — run additional/full validation tools such as PHPStan, ESLint, and Stylelint when supported/configured.
+- `--check-against <version>` — check against a supported Shopware-version mode such as `highest` or `lowest`.
+- `--store-compliance` — enable Store-compliance mode while the current CLI supports the flag. Prefer `validation.store_compliance: true` in `.shopware-extension.yml` for persistent Store intent.
+- `--reporter <format>` — choose a reporter supported by the current CLI.
+- `--no-copy` — do not copy extension files to a temporary directory.
+- `--verbose` — show debug output.
+
+For Store-distribution workflows, use the `shopware-cli-extension-store` skill when available.
+
+### Fresh results beat saved reports
+
+Saved outputs such as `validation.json`, JUnit XML, or markdown reports can become stale after files are fixed or changed.
+
+Before diagnosing a validation failure, rerun validation against the current working tree. If a saved report contradicts the current files or a fresh run, treat the saved report as stale.
+
+### CI and reporters
+
+In automated environments, prefer machine-readable output when useful:
+
+```bash
+shopware-cli project validate --reporter json > validation-results.json
+shopware-cli project validate --reporter junit > validation-results.xml
+shopware-cli extension validate . --reporter github
+shopware-cli extension validate . --reporter gitlab
+```
+
+Reporters format emitted output. They do not by themselves post comments or annotations to pull requests or merge requests; CI configuration must consume the output appropriately.
+
+Use the process exit code as the validation result. A reporter can change formatting, but validation errors still make the command fail.
+
+### Domain-specific routing
+
+When validation fails in a specific area, route users to relevant skills when available:
+
+- **PHP test failures** → `php-testing` skill.
+- **JavaScript/Admin failures** → `admin-testing` skill.
+- **Acceptance test failures** → `acceptance-testing` skill.
+- **Accessibility findings** → `accessibility-testing` skill.
+- **Architecture or LSP findings** → `architecture-review` skill.
+
+### Validation troubleshooting
+
+When `validate` produces unexpected results:
+
+1. **Verify the exact CLI binary and version.**
+   - Use `command -v shopware-cli` and `shopware-cli --version`.
+   - When testing a checkout, use its built binary consistently.
+
+2. **Verify the working directory and project configuration.**
+   - Ensure `.shopware-project.yml` or `.shopware-extension.yml` is present and correct.
+   - Check `--verbose` output when useful.
+
+3. **Regenerate validation output.**
+   - Do not diagnose current files from an old saved report.
+
+4. **Check installed and locked tool versions.**
+   - Full validation can depend on external tools such as PHPStan, ESLint, and Stylelint.
+   - Verify relevant dependencies and configuration.
+
+5. **Understand tool exclusions.**
+   - A tool may be skipped due to missing dependencies, unmet conditions, or configuration.
+   - Do not assume a skipped tool means validation passed.
+
+6. **Avoid ad hoc workarounds.**
+   - Do not bypass validation with manual lower-level commands before understanding why the CLI behaved as it did.
+
+7. **Check environment and runtime prerequisites.**
+   - Some checks may require Docker, PHP, npm dependencies, or other tooling.
+
+## Creating a new project
+
+Use `shopware-cli project create` to scaffold a new Shopware project.
+
+```bash
+shopware-cli project create --help
+shopware-cli project create [name] [version] [flags]
+```
+
+Always check current `--help` first; treat the flag list below as orientation, not the source of truth.
+
+### Ask the user; do not guess
+
+When this skill drives project creation, you typically run `create` non-interactively (`-n`), so the CLI's own prompts never appear and it silently applies defaults — some of which differ from the interactive ones (Elasticsearch defaults **on** non-interactively but **off** in the prompts). Do not inherit those defaults blind. Confirm the choices with the user first, then pass them as explicit flags. Walk through:
+
+- **Name** (`[name]`) — the project directory. Ask for it; do not default to the current directory (it must be empty or non-existent).
+- **Version** (`--version`) — e.g. `6.6.0.0` or `latest`.
+- **Docker** (`--docker`) — **recommended.** Runs the local setup in Docker instead of relying on a local PHP/toolchain.
+- **Local domain** (`--local-domain`) — **recommended** (requires `--docker`). Serves the shop at a stable `<name>.shopware.local` via the shared proxy instead of a port. First time on a machine it needs a one-time `shopware-cli project proxy setup` (sudo: DNS + HTTPS trust) — non-interactive `create` never runs this, so plan to run it separately.
+- **PHP version** (`--php-version`) — `8.2`–`8.5`; usually leave it to the CLI. Ask only if the user needs a specific one; it must satisfy the chosen Shopware version's PHP constraint.
+- **Elasticsearch/OpenSearch** (`--with-elasticsearch` / `--without-elasticsearch`) — ask; only useful for large catalogs/advanced search. It is on by default non-interactively, and a missing index then yields an HTTP 500 (`index_not_found`), so pass `--without-elasticsearch` unless the user wants it.
+- **AMQP** (`--with-amqp`) — ask; enable only if they need queue/messaging support.
+- **Deployment** (`--deployment`) — `none|container|deployer|platformsh|shopware-paas` (default `none`).
+- **CI/CD** (`--ci`) — `none|github|gitlab` (default `none`).
+- **Git** (`--git`) — initialize a repository.
+- **Audit** (`--no-audit`) — do not set preemptively; only use it if security advisories block the install and the user accepts the risk.
+
+**`create` scaffolds; it does not install the shop.** It writes the project, runs `composer install`, and creates `.shopware-project.yml` (plus compose file / git when requested). The database is **not** set up yet. To install afterwards:
+
+- `shopware-cli project dev install` — non-interactive: starts the environment, runs the install, and saves admin credentials to the project config (defaults `admin` / `shopware`, `en-GB`, `EUR`; override with `--admin-username`/`--admin-password`/`--locale`/`--currency`). Idempotent — skips when the shop is already installed.
+- `shopware-cli project dev` — the interactive TUI dashboard when you want to drive it by hand.
+
+**Other gotchas**
+
+- **Security advisories** block a non-interactive install unless `--no-audit` is set; interactive mode prompts instead.
+- The target folder must be empty; hostname collisions (a `<name>.shopware.local` already in use) surface at `proxy`/`dev` time, not at create.
 
 ## Inspect the project before deciding
 
@@ -160,7 +315,7 @@ Inspect command help before regenerating anything that may overwrite existing fi
 When a Shopware CLI command fails:
 
 1. Capture the exact command and error.
-2. Check `shopware-cli --version`.
+2. Check the exact binary path and `--version`.
 3. Inspect the command's `--help`.
 4. Verify the working directory and relevant project or extension configuration.
 5. Retry with `--verbose` when useful.
@@ -173,9 +328,9 @@ Do not work around a failing Shopware CLI command with lower-level tooling until
 
 When behavior is unclear, use this order:
 
-1. the current CLI and its `--help`;
+1. the current CLI binary and fresh runtime output;
 2. project configuration and CLI-provided schemas;
-3. official Shopware CLI documentation;
-4. the `shopware/shopware-cli` source code when implementation details are required.
+3. the current `shopware/shopware-cli` source and tests when implementation details are required;
+4. official Shopware CLI documentation.
 
-Prefer version-correct facts over remembered Shopware behavior.
+Prefer version-correct facts over remembered Shopware behavior or stale generated reports.
