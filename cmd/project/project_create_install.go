@@ -59,7 +59,11 @@ func installAndFinalize(cmd *cobra.Command, opts *createOptions, phpConstraint *
 	}
 
 	if opts.useDocker {
-		if err := dockerpkg.WriteComposeFile(opts.projectFolder, &dockerpkg.ComposeOptions{PHPVersion: composerInstallPHP}); err != nil {
+		env, err := dockerpkg.NewEnvironment(opts.projectFolder, dockerpkg.Options{PHP: dockerpkg.PHP{Version: composerInstallPHP}})
+		if err != nil {
+			return err
+		}
+		if err := env.WriteCompose(); err != nil {
 			return err
 		}
 	}

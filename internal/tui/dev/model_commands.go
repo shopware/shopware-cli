@@ -20,11 +20,13 @@ func newInstallProgress() progress.Model {
 	)
 }
 
-func checkContainersRunning(ctx context.Context, projectRoot string) tea.Cmd {
+func (m *Model) checkContainersRunning() tea.Cmd {
+	ctx := m.commandContext()
+	projectRoot := m.projectRoot
 	return func() tea.Msg {
 		running := composeServiceSet(ctx, projectRoot, "ps", "--services", "--status=running")
 		if len(running) == 0 {
-			return dockerNeedStartMsg{}
+			return m.needStartMsg()
 		}
 
 		// Treat the stack as already up only when every service the compose
@@ -34,11 +36,30 @@ func checkContainersRunning(ctx context.Context, projectRoot string) tea.Cmd {
 		// `up -d` reconcile the newcomers instead of jumping to the dashboard.
 		defined := composeServiceSet(ctx, projectRoot, "config", "--services")
 		if !allRunning(defined, running) {
-			return dockerNeedStartMsg{}
+			return m.needStartMsg()
 		}
 
 		return dockerAlreadyRunningMsg{}
 	}
+}
+
+// checkPorts probes for host-port conflicts and requests a container start
+// when none are found.
+func (m *Model) checkPorts() tea.Cmd {
+	return func() tea.Msg { return m.needStartMsg() }
+}
+
+// needStartMsg probes the host ports the compose file will publish before a
+// container start. Probe errors are ignored so `docker compose up` surfaces
+// real failures itself.
+func (m *Model) needStartMsg() tea.Msg {
+	if env := m.dockerEnvironment(); env != nil {
+		if conflicts := env.PortConflicts(m.commandContext()); len(conflicts) > 0 {
+			return portConflictMsg{conflicts: conflicts}
+		}
+	}
+
+	return dockerNeedStartMsg{}
 }
 
 // allRunning reports whether every service in defined is present in running.
@@ -149,13 +170,40 @@ func (m *Model) startContainers() tea.Cmd {
 	return tea.Batch(outputCmd, doneCmd)
 }
 
+// fixPortConflicts allocates a random free host port for every conflicting
+// port, rewrites compose.yaml and persists the overrides to the local config
+// override file. The shared model config is only replaced on the update
+// thread once both writes succeeded, so a failed write cannot leave
+// compose.yaml, the local override and the in-memory config diverged.
+func (m *Model) fixPortConflicts() tea.Cmd {
+	conflicts := m.portConflicts
+	cfg := m.config
+	projectRoot := m.projectRoot
+	configPath := m.configPath
+	proxyFallback := m.proxyFallback
+	ctx := m.commandContext()
+	return func() tea.Msg {
+		updated, overrides, err := proxy.ApplyRandomPorts(ctx, projectRoot, configPath, cfg, proxyFallback, conflicts)
+		if err != nil {
+			return portFixDoneMsg{err: err}
+		}
+
+		return portFixDoneMsg{config: updated, overrides: overrides}
+	}
+}
+
 func (m *Model) restartContainersForConfig() tea.Cmd {
 	m.telemetry.beginConfigRestart()
 	ctx := m.commandContext()
 	projectRoot := m.projectRoot
 	cfg := m.config
+	proxyFallback := m.proxyFallback
 	return func() tea.Msg {
-		if err := proxy.WriteComposeFile(projectRoot, cfg); err != nil {
+		env, err := proxy.NewEnvironment(projectRoot, cfg, proxyFallback)
+		if err == nil {
+			err = env.WriteCompose()
+		}
+		if err != nil {
 			return configRestartDoneMsg{err: err}
 		}
 		cmd := composeCommand(ctx, projectRoot, "up", "-d")

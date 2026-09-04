@@ -16,6 +16,7 @@ import (
 	"gopkg.in/yaml.v3"
 
 	"github.com/shopware/shopware-cli/internal/compatibility"
+	"github.com/shopware/shopware-cli/internal/docker"
 	"github.com/shopware/shopware-cli/internal/mysqldump"
 	"github.com/shopware/shopware-cli/internal/system"
 	"github.com/shopware/shopware-cli/logging"
@@ -678,6 +679,8 @@ type ConfigValidationIgnoreExtension struct {
 type ConfigDocker struct {
 	// PHP configuration for the Docker dev image
 	PHP *ConfigDockerPHP `yaml:"php,omitempty"`
+	// Per-service settings for the Docker dev environment: host port overrides and implementation variants.
+	Services ConfigDockerServices `yaml:"services,omitempty"`
 }
 
 type ConfigDockerPHP struct {
@@ -760,13 +763,17 @@ type ConfigImageProxy struct {
 	URL string `yaml:"url,omitempty"`
 }
 
+// DefaultShopURL is the URL a dev environment is reachable at with the default
+// ports (and no proxy), matching the web service's default host port.
+var DefaultShopURL = docker.DefaultShopURL
+
 func NewConfig() *Config {
 	return &Config{
 		CompatibilityDate: compatibility.TodayDate(),
 		Environments: map[string]*EnvironmentConfig{
 			"local": {
 				Type: "local",
-				URL:  "http://127.0.0.1:8000",
+				URL:  DefaultShopURL,
 				AdminApi: &ConfigAdminApi{
 					Username: "admin",
 					Password: "shopware",
@@ -777,6 +784,10 @@ func NewConfig() *Config {
 }
 
 func WriteConfig(cfg *Config, dir string) error {
+	// Port overrides are machine-specific and live in the local override
+	// file — keep them out of the committed configuration.
+	cfg = cfg.withoutDockerPorts()
+
 	data, err := yaml.Marshal(cfg)
 	if err != nil {
 		return fmt.Errorf("failed to marshal shop configuration: %w", err)
@@ -791,77 +802,52 @@ func WriteConfig(cfg *Config, dir string) error {
 	return nil
 }
 
-// WriteLocalConfig writes a partial configuration to .shopware-project.local.yml.
-// This file is deep-merged on top of the main config at read time and is intended
-// for credentials and other values that should not be committed to version control.
-func WriteLocalConfig(cfg *Config, dir string) error {
-	data, err := yaml.Marshal(cfg)
-	if err != nil {
-		return fmt.Errorf("failed to marshal local shop configuration: %w", err)
-	}
-
-	filePath := filepath.Join(dir, ".shopware-project.local.yml")
-
-	if err := os.WriteFile(filePath, data, 0o600); err != nil {
-		return fmt.Errorf("failed to write local shop configuration to %s: %w", filePath, err)
-	}
-
-	return nil
-}
-
 func ReadConfig(ctx context.Context, fileName string, allowFallback bool) (*Config, error) {
 	config := &Config{foundConfig: false}
 
 	_, err := os.Stat(fileName)
 
 	if os.IsNotExist(err) {
-		if allowFallback {
-			return fillEmptyConfig(config), nil
+		if !allowFallback {
+			return nil, fmt.Errorf("cannot find project configuration file \"%s\", use shopware-cli project config init to create one", fileName)
 		}
 
-		return nil, fmt.Errorf("cannot find project configuration file \"%s\", use shopware-cli project config init to create one", fileName)
+		// Even without a base config, a local override file (e.g. persisted
+		// docker port overrides) must still apply.
+		if _, err := applyLocalOverride(ctx, fileName, false, config); err != nil {
+			return nil, fmt.Errorf("ReadConfig(%s): %v", fileName, err)
+		}
+
+		if err := config.DockerServices().validate(); err != nil {
+			return nil, fmt.Errorf("ReadConfig(%s): %v", fileName, err)
+		}
+
+		return fillEmptyConfig(config), nil
 	}
 
 	if err != nil {
 		return nil, err
 	}
 
-	localFile := localConfigFileName(fileName)
-	_, localErr := os.Stat(localFile)
-	if localErr != nil && !os.IsNotExist(localErr) {
-		logging.FromContext(ctx).Warnf("unable to access local config override %s: %v", localFile, localErr)
+	merged, err := applyLocalOverride(ctx, fileName, true, config)
+	if err != nil {
+		return nil, fmt.Errorf("ReadConfig(%s): %v", fileName, err)
 	}
-	hasLocalFile := localErr == nil
 
-	if hasLocalFile {
-		baseMap, err := readConfigAsMap(fileName)
-		if err != nil {
-			return nil, fmt.Errorf("ReadConfig(%s): %v", fileName, err)
-		}
-
-		mergedMap, err := mergeLocalConfig(baseMap, localFile)
-		if err != nil {
-			return nil, fmt.Errorf("ReadConfig(%s): %v", fileName, err)
-		}
-
-		mergedYAML, err := marshalMap(mergedMap)
-		if err != nil {
-			return nil, fmt.Errorf("ReadConfig(%s): %v", fileName, err)
-		}
-
-		if err := yaml.Unmarshal(mergedYAML, &config); err != nil {
-			return nil, fmt.Errorf("ReadConfig(%s): %v", fileName, err)
-		}
-	} else {
+	if !merged {
 		fileHandle, err := os.ReadFile(fileName)
 		if err != nil {
 			return nil, fmt.Errorf("ReadConfig(%s): %v", fileName, err)
 		}
 
 		substitutedConfig := system.ExpandEnv(string(fileHandle))
-		if err := yaml.Unmarshal([]byte(substitutedConfig), &config); err != nil {
+		if err := yaml.Unmarshal([]byte(substitutedConfig), config); err != nil {
 			return nil, fmt.Errorf("ReadConfig(%s): %v", fileName, err)
 		}
+	}
+
+	if err := config.DockerServices().validate(); err != nil {
+		return nil, fmt.Errorf("ReadConfig(%s): %v", fileName, err)
 	}
 
 	config.foundConfig = true
@@ -890,6 +876,44 @@ func ReadConfig(ctx context.Context, fileName string, allowFallback bool) (*Conf
 	}
 
 	return fillEmptyConfig(config), nil
+}
+
+// applyLocalOverride decodes the project configuration with its local override
+// file merged on top, when one exists. Without a base file (hasBase false) the
+// override is applied to an empty document. It reports whether an override was
+// found; the caller decodes the base file itself otherwise.
+func applyLocalOverride(ctx context.Context, fileName string, hasBase bool, config *Config) (bool, error) {
+	localFile := LocalConfigFileName(fileName)
+	if _, err := os.Stat(localFile); err != nil {
+		if !os.IsNotExist(err) {
+			logging.FromContext(ctx).Warnf("unable to access local config override %s: %v", localFile, err)
+		}
+		return false, nil
+	}
+
+	baseMap := map[string]any{}
+	if hasBase {
+		var err error
+		if baseMap, err = readConfigAsMap(fileName); err != nil {
+			return false, err
+		}
+	}
+
+	mergedMap, err := mergeLocalConfig(baseMap, localFile)
+	if err != nil {
+		return false, err
+	}
+
+	mergedYAML, err := marshalMap(mergedMap)
+	if err != nil {
+		return false, err
+	}
+
+	if err := yaml.Unmarshal(mergedYAML, config); err != nil {
+		return false, err
+	}
+
+	return true, nil
 }
 
 func warnDeprecatedTopLevelShop(ctx context.Context, fileName string, c *Config) {

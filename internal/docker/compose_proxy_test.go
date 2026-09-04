@@ -8,9 +8,9 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func proxyComposeOptions() *ComposeOptions {
-	return &ComposeOptions{
-		Proxy: &ProxyOptions{
+func proxyComposeOptions() Environment {
+	return Environment{
+		proxy: &Proxy{
 			Hostname:       "my-shop.shopware.local",
 			NetworkName:    "shopware-cli-proxy",
 			CABundlePath:   "/state/proxy/ca-bundles/abcd1234.crt",
@@ -31,9 +31,9 @@ func TestGenerateComposeFileProxyMode(t *testing.T) {
 	}
 
 	opts := proxyComposeOptions()
-	opts.DedicatedWorker = true // exercise the worker/scheduler services
+	opts.dedicatedWorker = true // exercise the worker/scheduler services
 
-	result, err := GenerateComposeFile(lock, opts)
+	result, err := envFor(lock, opts).composeYAML()
 	require.NoError(t, err)
 	out := string(result)
 
@@ -43,8 +43,8 @@ func TestGenerateComposeFileProxyMode(t *testing.T) {
 	assert.Contains(t, out, "Host(`storefront-watch.my-shop.shopware.local`)")
 	assert.Contains(t, out, "Host(`adminer.my-shop.shopware.local`)")
 	assert.Contains(t, out, "Host(`mailer.my-shop.shopware.local`)")
-	assert.Contains(t, out, "Host(`lavinmq.my-shop.shopware.local`)")
-	assert.Contains(t, out, "Host(`opensearch.my-shop.shopware.local`)")
+	assert.Contains(t, out, "Host(`queue.my-shop.shopware.local`)")
+	assert.Contains(t, out, "Host(`search.my-shop.shopware.local`)")
 	assert.Contains(t, out, "websecure")
 	assert.Contains(t, out, "external: true")
 
@@ -89,14 +89,14 @@ func TestGenerateComposeFileProxyAdminWatchPort(t *testing.T) {
 	lock := &composer.Lock{Packages: []composer.LockPackage{{Name: "shopware/core", Version: "6.6.10.2"}}}
 
 	opts := proxyComposeOptions()
-	opts.Proxy.AdminWatchPort = 8080
-	webpack, err := GenerateComposeFile(lock, opts)
+	opts.proxy.AdminWatchPort = 8080
+	webpack, err := envFor(lock, opts).composeYAML()
 	require.NoError(t, err)
 	// Tie the port to the admin-watch router specifically (adminer is also 8080).
 	assert.Contains(t, string(webpack), "-admin-watch.loadbalancer.server.port: \"8080\"")
 
-	opts.Proxy.AdminWatchPort = 5173
-	vite, err := GenerateComposeFile(lock, opts)
+	opts.proxy.AdminWatchPort = 5173
+	vite, err := envFor(lock, opts).composeYAML()
 	require.NoError(t, err)
 	assert.Contains(t, string(vite), "-admin-watch.loadbalancer.server.port: \"5173\"")
 }
@@ -106,8 +106,8 @@ func TestGenerateComposeFileProxyWithoutCA(t *testing.T) {
 
 	lock := &composer.Lock{Packages: []composer.LockPackage{{Name: "shopware/core", Version: "6.6.0.0"}}}
 
-	opts := &ComposeOptions{Proxy: &ProxyOptions{Hostname: "my-shop.shopware.local", NetworkName: "shopware-cli-proxy"}}
-	result, err := GenerateComposeFile(lock, opts)
+	opts := Environment{proxy: &Proxy{Hostname: "my-shop.shopware.local", NetworkName: "shopware-cli-proxy"}}
+	result, err := envFor(lock, opts).composeYAML()
 	require.NoError(t, err)
 
 	assert.NotContains(t, string(result), "NODE_EXTRA_CA_CERTS")
@@ -119,7 +119,7 @@ func TestGenerateComposeFileProxySkipsAbsentServices(t *testing.T) {
 
 	lock := &composer.Lock{Packages: []composer.LockPackage{{Name: "shopware/core", Version: "6.6.0.0"}}}
 
-	result, err := GenerateComposeFile(lock, proxyComposeOptions())
+	result, err := envFor(lock, proxyComposeOptions()).composeYAML()
 	require.NoError(t, err)
 
 	assert.NotContains(t, string(result), "lavinmq")
@@ -139,15 +139,15 @@ func TestGenerateComposeFileProxyRoutesRustfs(t *testing.T) {
 		},
 	}
 
-	result, err := GenerateComposeFile(lock, proxyComposeOptions())
+	result, err := envFor(lock, proxyComposeOptions()).composeYAML()
 	require.NoError(t, err)
 	out := string(result)
 
 	// S3 API and console are local-domain routes so media URLs stay HTTPS.
 	assert.Contains(t, out, "Host(`s3.my-shop.shopware.local`)")
-	assert.Contains(t, out, "Host(`rustfs.my-shop.shopware.local`)")
+	assert.Contains(t, out, "Host(`storage.my-shop.shopware.local`)")
 	assert.Contains(t, out, "K8S_FILESYSTEM_PUBLIC_URL: https://s3.my-shop.shopware.local/shopware-public")
-	assert.Contains(t, out, "K8S_FILESYSTEM_ENDPOINT: http://my-shop-shopware-local-rustfs:9000")
+	assert.Contains(t, out, "K8S_FILESYSTEM_ENDPOINT: http://my-shop-shopware-local-storage:9000")
 	assert.Contains(t, out, "127.0.0.1::3306")
 	assert.NotContains(t, out, "127.0.0.1::6379")
 	assert.NotContains(t, out, "9000:9000")
@@ -160,7 +160,7 @@ func TestGenerateComposeFilePlainModeHasPorts(t *testing.T) {
 
 	lock := &composer.Lock{Packages: []composer.LockPackage{{Name: "shopware/core", Version: "6.6.0.0"}}}
 
-	result, err := GenerateComposeFile(lock, &ComposeOptions{})
+	result, err := envFor(lock, Environment{}).composeYAML()
 	require.NoError(t, err)
 	out := string(result)
 
@@ -173,7 +173,7 @@ func TestGenerateComposeFilePlainModeHasPorts(t *testing.T) {
 
 // TestGenerateComposeFileProxyInternalAliases guards issue #1484: on the shared
 // proxy network every project's services would otherwise advertise the same
-// bare name (opensearch, mailer, ...), so an internal call from one project
+// bare name (search, mailer, ...), so an internal call from one project
 // could reach another's container. In proxy mode the services must join the
 // shared network under a project-unique alias, and web/console must address
 // them by that alias.
@@ -188,25 +188,29 @@ func TestGenerateComposeFileProxyInternalAliases(t *testing.T) {
 		},
 	}
 
-	out, err := GenerateComposeFile(lock, proxyComposeOptions())
+	out, err := envFor(lock, proxyComposeOptions()).composeYAML()
 	require.NoError(t, err)
 	compose := string(out)
 
 	// Internal traffic uses the project-unique alias, not the bare service name.
 	assert.Contains(t, compose, "MAILER_DSN: smtp://my-shop-shopware-local-mailer:1025")
-	assert.Contains(t, compose, "OPENSEARCH_URL: http://my-shop-shopware-local-opensearch:9200")
-	assert.Contains(t, compose, "MESSENGER_TRANSPORT_DSN: amqp://guest:guest@my-shop-shopware-local-lavinmq:5672")
+	assert.Contains(t, compose, "OPENSEARCH_URL: http://my-shop-shopware-local-search:9200")
+	assert.Contains(t, compose, "MESSENGER_TRANSPORT_DSN: amqp://guest:guest@my-shop-shopware-local-queue:5672")
 
 	// The bare, collision-prone forms must be gone in proxy mode.
-	assert.NotContains(t, compose, "http://opensearch:9200")
+	assert.NotContains(t, compose, "http://search:9200")
 	assert.NotContains(t, compose, "smtp://mailer:1025")
-	assert.NotContains(t, compose, "amqp://guest:guest@lavinmq:5672")
+	assert.NotContains(t, compose, "amqp://guest:guest@queue:5672")
 
 	// Each proxied service advertises the project-unique alias on the shared
 	// network, so parallel projects never collide on the bare name there.
-	assert.Contains(t, compose, "- my-shop-shopware-local-opensearch")
+	assert.Contains(t, compose, "- my-shop-shopware-local-search")
 	assert.Contains(t, compose, "- my-shop-shopware-local-mailer")
-	assert.Contains(t, compose, "- my-shop-shopware-local-lavinmq")
+	assert.Contains(t, compose, "- my-shop-shopware-local-queue")
+
+	// The console processes join the shared network without an alias: nothing
+	// addresses them by name.
+	assert.NotContains(t, compose, "- my-shop-shopware-local-worker")
 
 	// The database is not on the shared network (it publishes a loopback port),
 	// so it keeps the bare host and never collided.
@@ -227,12 +231,12 @@ func TestGenerateComposeFilePlainModeKeepsBareServiceHosts(t *testing.T) {
 		},
 	}
 
-	out, err := GenerateComposeFile(lock, nil)
+	out, err := envFor(lock, Environment{}).composeYAML()
 	require.NoError(t, err)
 	compose := string(out)
 
 	assert.Contains(t, compose, "MAILER_DSN: smtp://mailer:1025")
-	assert.Contains(t, compose, "OPENSEARCH_URL: http://opensearch:9200")
-	assert.Contains(t, compose, "MESSENGER_TRANSPORT_DSN: amqp://guest:guest@lavinmq:5672")
+	assert.Contains(t, compose, "OPENSEARCH_URL: http://search:9200")
+	assert.Contains(t, compose, "MESSENGER_TRANSPORT_DSN: amqp://guest:guest@queue:5672")
 	assert.NotContains(t, compose, "my-shop-shopware-local-")
 }

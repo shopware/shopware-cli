@@ -7,6 +7,7 @@ import (
 	"os/exec"
 	"sync"
 
+	"github.com/shopware/shopware-cli/internal/envfile"
 	"github.com/shopware/shopware-cli/internal/shop"
 )
 
@@ -32,8 +33,8 @@ func New(projectRoot string, cfg *shop.EnvironmentConfig, shopCfg *shop.Config) 
 		// COMPOSE_PROJECT_NAME outranks .env in Compose's own precedence and
 		// is inherited by every docker invocation, so it stays authoritative.
 		composeProjectName := ""
-		if os.Getenv(shop.ComposeProjectNameEnvKey) == "" {
-			composeProjectName = shop.ReadComposeProjectName(projectRoot)
+		if os.Getenv(envfile.ComposeProjectNameEnvKey) == "" {
+			composeProjectName = envfile.ReadComposeProjectName(projectRoot)
 		}
 		return &DockerExecutor{projectRoot: projectRoot, shopCfg: shopCfg, envCfg: cfg, composeProjectName: composeProjectName}, nil
 	default:

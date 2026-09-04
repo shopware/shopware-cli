@@ -87,7 +87,7 @@ func collectSetupHealth(ctx context.Context, projectRoot string, exec executor.E
 // whether the OS resolves the proxy domain. Certificate-trust and proxy-fallback
 // checks are added once their backing state exists.
 func proxyHealthChecks(ctx context.Context, projectRoot string) []healthCheck {
-	if proxyHostname(projectRoot) == "" {
+	if registeredHostname(projectRoot) == "" {
 		return nil
 	}
 

@@ -9,6 +9,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/shopware/shopware-cli/internal/envfile"
 )
 
 func TestGenerateComposeProjectName(t *testing.T) {
@@ -57,18 +59,10 @@ func TestEnvFileContent(t *testing.T) {
 		t.Parallel()
 		content, err := EnvFileContent(true, "/tmp/demo-shop")
 		require.NoError(t, err)
-		assert.True(t, strings.HasPrefix(content, ComposeProjectNameEnvKey+"=sw-demo-shop-"))
+		assert.True(t, strings.HasPrefix(content, envfile.ComposeProjectNameEnvKey+"=sw-demo-shop-"))
 		assert.True(t, strings.HasSuffix(content, "\n"))
-		assert.Regexp(t, regexp.MustCompile(`^[a-z0-9][a-z0-9_-]*$`), strings.TrimPrefix(strings.TrimSpace(content), ComposeProjectNameEnvKey+"="))
+		assert.Regexp(t, regexp.MustCompile(`^[a-z0-9][a-z0-9_-]*$`), strings.TrimPrefix(strings.TrimSpace(content), envfile.ComposeProjectNameEnvKey+"="))
 	})
-}
-
-func TestExtractComposeProjectName(t *testing.T) {
-	t.Parallel()
-
-	assert.Equal(t, "sw-shop-abc123", ExtractComposeProjectName([]byte("FOO=bar\nCOMPOSE_PROJECT_NAME=sw-shop-abc123\nAPP=1\n")))
-	assert.Empty(t, ExtractComposeProjectName([]byte("APP_ENV=dev\n")))
-	assert.Empty(t, ExtractComposeProjectName(nil))
 }
 
 func TestEnsureComposeProjectName(t *testing.T) {
@@ -81,8 +75,8 @@ func TestEnsureComposeProjectName(t *testing.T) {
 
 		content, err := os.ReadFile(filepath.Join(dir, ".env"))
 		require.NoError(t, err)
-		assert.Contains(t, string(content), ComposeProjectNameEnvKey+"=")
-		assert.NotEmpty(t, ExtractComposeProjectName(content))
+		assert.Contains(t, string(content), envfile.ComposeProjectNameEnvKey+"=")
+		assert.NotEmpty(t, envfile.ExtractComposeProjectName(content))
 	})
 
 	t.Run("preserves existing", func(t *testing.T) {
@@ -94,7 +88,7 @@ func TestEnsureComposeProjectName(t *testing.T) {
 
 		content, err := os.ReadFile(filepath.Join(dir, ".env"))
 		require.NoError(t, err)
-		assert.Equal(t, "sw-keep-ffffff", ExtractComposeProjectName(content))
+		assert.Equal(t, "sw-keep-ffffff", envfile.ExtractComposeProjectName(content))
 	})
 
 	t.Run("appends without clobbering other keys", func(t *testing.T) {
@@ -107,18 +101,8 @@ func TestEnsureComposeProjectName(t *testing.T) {
 		content, err := os.ReadFile(filepath.Join(dir, ".env"))
 		require.NoError(t, err)
 		assert.Contains(t, string(content), "FOO=bar")
-		assert.Contains(t, string(content), ComposeProjectNameEnvKey+"=")
+		assert.Contains(t, string(content), envfile.ComposeProjectNameEnvKey+"=")
 	})
-}
-
-func TestReadComposeProjectName(t *testing.T) {
-	t.Parallel()
-
-	dir := t.TempDir()
-	assert.Empty(t, ReadComposeProjectName(dir), "missing .env reads as unset")
-
-	require.NoError(t, os.WriteFile(filepath.Join(dir, ".env"), []byte("APP_ENV=dev\nCOMPOSE_PROJECT_NAME=sw-shop-abc123\n"), 0o644))
-	assert.Equal(t, "sw-shop-abc123", ReadComposeProjectName(dir))
 }
 
 func TestRestoreComposeProjectName(t *testing.T) {
@@ -135,7 +119,7 @@ func TestRestoreComposeProjectName(t *testing.T) {
 		content, err := os.ReadFile(filepath.Join(dir, ".env"))
 		require.NoError(t, err)
 		assert.Contains(t, string(content), "APP_ENV=prod")
-		assert.Equal(t, "sw-shop-abc123", ExtractComposeProjectName(content))
+		assert.Equal(t, "sw-shop-abc123", envfile.ExtractComposeProjectName(content))
 	})
 
 	t.Run("empty name is a no-op", func(t *testing.T) {
@@ -157,6 +141,6 @@ func TestRestoreComposeProjectName(t *testing.T) {
 
 		content, err := os.ReadFile(filepath.Join(dir, ".env"))
 		require.NoError(t, err)
-		assert.Equal(t, "sw-keep-ffffff", ExtractComposeProjectName(content))
+		assert.Equal(t, "sw-keep-ffffff", envfile.ExtractComposeProjectName(content))
 	})
 }

@@ -8,12 +8,9 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
-)
 
-// ComposeProjectNameEnvKey is the host-side Docker Compose project name written
-// to the project .env (not .env.local). Compose loads .env automatically when
-// commands run with Dir = project root.
-const ComposeProjectNameEnvKey = "COMPOSE_PROJECT_NAME"
+	"github.com/shopware/shopware-cli/internal/envfile"
+)
 
 var nonComposeNameChars = regexp.MustCompile(`[^a-z0-9_-]+`)
 
@@ -56,37 +53,7 @@ func EnvFileContent(useDocker bool, projectFolder string) (string, error) {
 		return "", err
 	}
 
-	return ComposeProjectNameEnvKey + "=" + name + "\n", nil
-}
-
-// ReadComposeProjectName returns the COMPOSE_PROJECT_NAME configured in the
-// project's .env, or "" when the file or the key is missing.
-func ReadComposeProjectName(projectRoot string) string {
-	content, err := os.ReadFile(filepath.Join(projectRoot, ".env"))
-	if err != nil {
-		return ""
-	}
-	return ExtractComposeProjectName(content)
-}
-
-// ExtractComposeProjectName returns the COMPOSE_PROJECT_NAME value from raw
-// dotenv content, or "" when unset.
-func ExtractComposeProjectName(envContent []byte) string {
-	for _, line := range strings.Split(string(envContent), "\n") {
-		line = strings.TrimSpace(line)
-		if line == "" || strings.HasPrefix(line, "#") {
-			continue
-		}
-		key, value, ok := strings.Cut(line, "=")
-		if !ok {
-			continue
-		}
-		if strings.TrimSpace(key) == ComposeProjectNameEnvKey {
-			return strings.TrimSpace(value)
-		}
-	}
-
-	return ""
+	return envfile.ComposeProjectNameEnvKey + "=" + name + "\n", nil
 }
 
 // EnsureComposeProjectName writes COMPOSE_PROJECT_NAME into the project .env
@@ -116,7 +83,7 @@ func RestoreComposeProjectName(projectRoot, name string) error {
 		return err
 	}
 
-	if ExtractComposeProjectName(existing) != "" {
+	if envfile.ExtractComposeProjectName(existing) != "" {
 		return nil
 	}
 
@@ -124,7 +91,7 @@ func RestoreComposeProjectName(projectRoot, name string) error {
 	if len(content) > 0 && content[len(content)-1] != '\n' {
 		content = append(content, '\n')
 	}
-	content = append(content, []byte(ComposeProjectNameEnvKey+"="+name+"\n")...)
+	content = append(content, []byte(envfile.ComposeProjectNameEnvKey+"="+name+"\n")...)
 
 	return os.WriteFile(envPath, content, 0o644)
 }
