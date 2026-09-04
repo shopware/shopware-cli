@@ -127,18 +127,20 @@ shopware-cli extension validate --help
 shopware-cli project validate [flags]
 ```
 
-Validates the Shopware project against the checks implemented by the current CLI and configured tools.
+Validates the Shopware project against the checks implemented by the current CLI and configured tools. It copies the project to a temporary directory and installs its toolset first, so a first run can be slow; `--no-copy` validates in place and skips the copy.
 
 Common flags include:
 
 - `--only <tools>` — run only specific tools (comma-separated).
 - `--exclude <tools>` — skip specific tools (comma-separated).
 - `--reporter <format>` — choose an output reporter supported by the current CLI.
-- `--local-only` — validate only local/custom extensions when supported by the current CLI.
+- `--local-only` — limit extension discovery to plugins in `custom/*` (for the project toolset); does not add per-extension metadata validation.
 - `--no-copy` — do not copy project files to a temporary directory before validation.
 - `--verbose` — show debug output.
 
 Use current `--help` rather than treating this list as exhaustive.
+
+**`project validate` is not `extension validate`.** It runs the project code-quality toolset (PHPStan, ESLint, Twig linters, …) over the discovered extensions' source directories; it does not run per-extension manifest/metadata validation, so a clean run (0 problems) does not mean the custom extensions are valid. To validate a custom extension's structure and metadata, run `shopware-cli extension validate <path>` on it directly (e.g. each `custom/plugins/<Name>`).
 
 ### Extension validation
 
