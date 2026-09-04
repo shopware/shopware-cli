@@ -1,18 +1,12 @@
 package project
 
 import (
-	"bufio"
+	"errors"
 	"fmt"
-	"os"
-	"os/exec"
-	"path/filepath"
-	"slices"
-	"strconv"
-	"strings"
-	"time"
 
 	"github.com/spf13/cobra"
 
+	"github.com/shopware/shopware-cli/internal/executor"
 	"github.com/shopware/shopware-cli/internal/tui"
 )
 
@@ -27,90 +21,56 @@ var projectLogsCmd = &cobra.Command{
 			return err
 		}
 
-		logDir := filepath.Join(projectRoot, "var", "log")
-
-		list, _ := cmd.Flags().GetBool("list")
-		if list {
-			return listLogFiles(logDir)
-		}
-
-		files, err := findLogFiles(logDir)
+		cmdExecutor, err := resolveExecutor(cmd, projectRoot)
 		if err != nil {
 			return err
 		}
 
-		if len(files) == 0 {
-			return fmt.Errorf("no log files found in %s", logDir)
-		}
-
-		var target string
-		if len(args) > 0 {
-			target = filepath.Join(logDir, args[0])
-			if _, err := os.Stat(target); err != nil {
-				return fmt.Errorf("log file not found: %s", args[0])
-			}
-		} else {
-			// Most recently modified file
-			target = files[0].path
-		}
-
-		lines, _ := cmd.Flags().GetInt("lines")
-		follow, _ := cmd.Flags().GetBool("follow")
-
-		if follow {
-			return tailFollow(cmd, target, lines)
-		}
-
-		return printLastLines(target, lines)
+		return runProjectLogs(cmd, args, cmdExecutor)
 	},
 }
 
-type logFileInfo struct {
-	path    string
-	name    string
-	size    int64
-	modTime time.Time
-}
-
-func findLogFiles(logDir string) ([]logFileInfo, error) {
-	entries, err := os.ReadDir(logDir)
-	if err != nil {
-		return nil, fmt.Errorf("could not read log directory: %w", err)
+func runProjectLogs(cmd *cobra.Command, args []string, cmdExecutor executor.Executor) error {
+	lines, _ := cmd.Flags().GetInt("lines")
+	if lines < 0 {
+		return fmt.Errorf("invalid value %d for --lines: must not be negative", lines)
 	}
 
-	var files []logFileInfo
-	for _, entry := range entries {
-		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".log") {
-			continue
-		}
-
-		info, err := entry.Info()
-		if err != nil {
-			continue
-		}
-
-		files = append(files, logFileInfo{
-			path:    filepath.Join(logDir, entry.Name()),
-			name:    entry.Name(),
-			size:    info.Size(),
-			modTime: info.ModTime(),
-		})
-	}
-
-	// Sort by modification time, most recent first
-	slices.SortFunc(files, func(a, b logFileInfo) int {
-		return b.modTime.Compare(a.modTime)
-	})
-
-	return files, nil
-}
-
-func listLogFiles(logDir string) error {
-	files, err := findLogFiles(logDir)
+	files, err := cmdExecutor.AvailableLogFiles(cmd.Context())
 	if err != nil {
 		return err
 	}
 
+	list, _ := cmd.Flags().GetBool("list")
+	if list {
+		return printLogFileList(files)
+	}
+
+	if len(files) == 0 {
+		return errors.New("no log files found in var/log")
+	}
+
+	target := files[0].Name
+	if len(args) > 0 {
+		target = ""
+		for _, f := range files {
+			if f.Name == args[0] {
+				target = f.Name
+				break
+			}
+		}
+
+		if target == "" {
+			return fmt.Errorf("log file not found: %s", args[0])
+		}
+	}
+
+	follow, _ := cmd.Flags().GetBool("follow")
+
+	return cmdExecutor.GetLog(cmd.Context(), target, lines, follow, cmd.OutOrStdout())
+}
+
+func printLogFileList(files []executor.LogFile) error {
 	if len(files) == 0 {
 		fmt.Println(tui.DimText.Render("No log files found."))
 		return nil
@@ -118,7 +78,7 @@ func listLogFiles(logDir string) error {
 
 	rows := make([][]string, 0, len(files))
 	for _, f := range files {
-		rows = append(rows, []string{f.name, formatSize(f.size), f.modTime.Format("2006-01-02 15:04:05")})
+		rows = append(rows, []string{f.Name, formatSize(f.Size), f.ModTime.Format("2006-01-02 15:04:05")})
 	}
 	tui.PrintTable([]string{"File", "Size", "Modified"}, rows)
 
@@ -134,44 +94,6 @@ func formatSize(bytes int64) string {
 	default:
 		return fmt.Sprintf("%d B", bytes)
 	}
-}
-
-func printLastLines(path string, n int) error {
-	f, err := os.Open(path)
-	if err != nil {
-		return err
-	}
-	defer func() { _ = f.Close() }()
-
-	scanner := bufio.NewScanner(f)
-	// Use a ring buffer to keep the last N lines
-	ring := make([]string, 0, n)
-	for scanner.Scan() {
-		if len(ring) < n {
-			ring = append(ring, scanner.Text())
-		} else {
-			copy(ring, ring[1:])
-			ring[n-1] = scanner.Text()
-		}
-	}
-
-	if err := scanner.Err(); err != nil {
-		return err
-	}
-
-	for _, line := range ring {
-		fmt.Println(line)
-	}
-
-	return nil
-}
-
-func tailFollow(cmd *cobra.Command, path string, n int) error {
-	tailCmd := exec.CommandContext(cmd.Context(), "tail", "-n", strconv.Itoa(n), "-f", path)
-	tailCmd.Stdout = cmd.OutOrStdout()
-	tailCmd.Stderr = cmd.ErrOrStderr()
-
-	return tailCmd.Run()
 }
 
 func init() {

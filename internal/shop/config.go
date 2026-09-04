@@ -22,11 +22,28 @@ import (
 )
 
 type EnvironmentConfig struct {
-	Type string `yaml:"type" jsonschema:"enum=local,enum=docker"`
+	Type string `yaml:"type" jsonschema:"enum=local,enum=docker,enum=ssh"`
 	// Shop URL for this named environment
 	URL string `yaml:"url,omitempty"`
 	// Admin API credentials for this named environment
 	AdminApi *ConfigAdminApi `yaml:"admin_api,omitempty"`
+	// SSH target of this named environment (type "ssh"): a Shopware project on a remote host reachable over SSH. Commands run through a multiplexed SSH connection, and the database is tunneled through it automatically.
+	SSH *EnvironmentSSHConfig `yaml:"ssh,omitempty"`
+}
+
+type EnvironmentSSHConfig struct {
+	// SSH host name or IP address
+	Host string `yaml:"host" jsonschema:"required"`
+	// SSH user. Defaults to the user configured in ~/.ssh/config or the current user
+	User string `yaml:"user,omitempty"`
+	// SSH port. Defaults to 22
+	Port int `yaml:"port,omitempty"`
+	// Absolute path of the Shopware project root on the remote host
+	Directory string `yaml:"directory" jsonschema:"required"`
+	// Path to the SSH private key file. Defaults to the ssh agent or the default key files
+	IdentityFile string `yaml:"identity_file,omitempty"`
+	// PHP binary used for PHP and console commands on the remote host (e.g. "/usr/bin/php8.3"). Defaults to "php"
+	PHPBinary string `yaml:"php_binary,omitempty"`
 }
 
 type Config struct {

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -46,6 +47,14 @@ func (f *fakeExecutor) PHPCommand(ctx context.Context, args ...string) *executor
 
 func (f *fakeExecutor) NPMCommand(ctx context.Context, args ...string) *executor.Process {
 	return shellProcess(ctx, "true")
+}
+
+func (f *fakeExecutor) AvailableLogFiles(context.Context) ([]executor.LogFile, error) {
+	return nil, executor.ErrNotSupported
+}
+
+func (f *fakeExecutor) GetLog(context.Context, string, int, bool, io.Writer) error {
+	return nil
 }
 
 func (f *fakeExecutor) NormalizePath(hostPath string) string        { return hostPath }

@@ -3,6 +3,7 @@ package executor
 import (
 	"context"
 	"errors"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -19,6 +20,7 @@ var ErrNotSupported = errors.New("operation not supported by this executor")
 const (
 	TypeDocker     = "docker"
 	TypeLocal      = "local"
+	TypeSSH        = "ssh"
 	TypeSymfonyCLI = "symfony-cli"
 )
 
@@ -34,6 +36,13 @@ type Executor interface {
 	ComposerCommand(ctx context.Context, args ...string) *Process
 	PHPCommand(ctx context.Context, args ...string) *Process
 	NPMCommand(ctx context.Context, args ...string) *Process
+	// AvailableLogFiles lists the .log files in the project's var/log
+	// directory, most recently modified first.
+	AvailableLogFiles(ctx context.Context) ([]LogFile, error)
+	// GetLog streams the last lines of a var/log file to w, following new
+	// output when follow is true. It blocks until the stream ends or ctx is
+	// cancelled; cancellation (e.g. Ctrl-C while following) is not an error.
+	GetLog(ctx context.Context, file string, lines int, follow bool, w io.Writer) error
 	NormalizePath(hostPath string) string
 	Type() string
 	WithEnv(env map[string]string) Executor
