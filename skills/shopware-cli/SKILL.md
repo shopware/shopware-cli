@@ -223,6 +223,43 @@ When `validate` produces unexpected results:
 7. **Check environment and runtime prerequisites.**
    - Some checks may require Docker, PHP, npm dependencies, or other tooling.
 
+## Creating a new project
+
+Use `shopware-cli project create` to scaffold a new Shopware project.
+
+```bash
+shopware-cli project create --help
+shopware-cli project create [name] [version] [flags]
+```
+
+Always check current `--help` first; treat the flag list below as orientation, not the source of truth.
+
+### Ask the user; do not guess
+
+When this skill drives project creation, you typically run `create` non-interactively (`-n`), so the CLI's own prompts never appear and it silently applies defaults — some of which differ from the interactive ones (Elasticsearch defaults **on** non-interactively but **off** in the prompts). Do not inherit those defaults blind. Confirm the choices with the user first, then pass them as explicit flags. Walk through:
+
+- **Name** (`[name]`) — the project directory. Ask for it; do not default to the current directory (it must be empty or non-existent).
+- **Version** (`--version`) — e.g. `6.6.0.0` or `latest`.
+- **Docker** (`--docker`) — **recommended.** Runs the local setup in Docker instead of relying on a local PHP/toolchain.
+- **Local domain** (`--local-domain`) — **recommended** (requires `--docker`). Serves the shop at a stable `<name>.shopware.local` via the shared proxy instead of a port. First time on a machine it needs a one-time `shopware-cli project proxy setup` (sudo: DNS + HTTPS trust) — non-interactive `create` never runs this, so plan to run it separately.
+- **PHP version** (`--php-version`) — `8.2`–`8.5`; usually leave it to the CLI. Ask only if the user needs a specific one; it must satisfy the chosen Shopware version's PHP constraint.
+- **Elasticsearch/OpenSearch** (`--with-elasticsearch` / `--without-elasticsearch`) — ask; only useful for large catalogs/advanced search. It is on by default non-interactively, and a missing index then yields an HTTP 500 (`index_not_found`), so pass `--without-elasticsearch` unless the user wants it.
+- **AMQP** (`--with-amqp`) — ask; enable only if they need queue/messaging support.
+- **Deployment** (`--deployment`) — `none|container|deployer|platformsh|shopware-paas` (default `none`).
+- **CI/CD** (`--ci`) — `none|github|gitlab` (default `none`).
+- **Git** (`--git`) — initialize a repository.
+- **Audit** (`--no-audit`) — do not set preemptively; only use it if security advisories block the install and the user accepts the risk.
+
+**`create` scaffolds; it does not install the shop.** It writes the project, runs `composer install`, and creates `.shopware-project.yml` (plus compose file / git when requested). The database is **not** set up yet. To install afterwards:
+
+- `shopware-cli project dev install` — non-interactive: starts the environment, runs the install, and saves admin credentials to the project config (defaults `admin` / `shopware`, `en-GB`, `EUR`; override with `--admin-username`/`--admin-password`/`--locale`/`--currency`). Idempotent — skips when the shop is already installed.
+- `shopware-cli project dev` — the interactive TUI dashboard when you want to drive it by hand.
+
+**Other gotchas**
+
+- **Security advisories** block a non-interactive install unless `--no-audit` is set; interactive mode prompts instead.
+- The target folder must be empty; hostname collisions (a `<name>.shopware.local` already in use) surface at `proxy`/`dev` time, not at create.
+
 ## Inspect the project before deciding
 
 Relevant files can include:
