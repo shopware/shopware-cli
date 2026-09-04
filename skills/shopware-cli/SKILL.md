@@ -1,6 +1,6 @@
 ---
 name: shopware-cli
-description: Use Shopware CLI safely and effectively for Shopware project, extension, account, development, build, validation, upgrade, and troubleshooting workflows. Validate projects or extensions, run specific checks with --only/--exclude, interpret results, configure CI reporters (json, junit, github, gitlab), and troubleshoot validation issues. Also use when contributing to shopware/shopware-cli and reasoning about the CLI's user-facing behavior.
+description: Use Shopware CLI for Shopware project, extension, and account workflows — create and install new projects (project create, project dev install), validate projects or extensions (with --only/--exclude and CI reporters json, junit, github, gitlab), develop, build, upgrade, and troubleshoot. Also use when contributing to shopware/shopware-cli and reasoning about the CLI's user-facing behavior.
 ---
 
 # Shopware CLI
@@ -11,7 +11,7 @@ When contributing to `shopware/shopware-cli`, use this skill to reason from the 
 
 ## Start with the current CLI
 
-Treat the intended CLI binary as authoritative for commands and flags.
+Treat the current CLI binary as authoritative for commands and flags.
 
 ```bash
 command -v shopware-cli
@@ -326,7 +326,7 @@ Do not work around a failing Shopware CLI command with lower-level tooling until
 
 When behavior is unclear, use this order:
 
-1. the intended/current CLI binary and fresh runtime output;
+1. the current CLI binary and fresh runtime output;
 2. project configuration and CLI-provided schemas;
 3. the current `shopware/shopware-cli` source and tests when implementation details are required;
 4. official Shopware CLI documentation.
