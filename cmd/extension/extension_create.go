@@ -4,9 +4,10 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/spf13/cobra"
+
 	"github.com/shopware/shopware-cli/internal/extension"
 	"github.com/shopware/shopware-cli/internal/system"
-	"github.com/spf13/cobra"
 )
 
 func newCreateCmd() *cobra.Command {
@@ -22,7 +23,7 @@ func newCreateCmd() *cobra.Command {
 		},
 		RunE: func(cmd *cobra.Command, args []string) error {
 			needsName := opts.Name == ""
-			needsStore := cmd.Flags().Changed("store") == false
+			needsStore := !cmd.Flags().Changed("store")
 
 			if needsName {
 				if !system.IsInteractionEnabled(cmd.Context()) {
@@ -34,16 +35,20 @@ func newCreateCmd() *cobra.Command {
 				}
 			}
 
+			if err := extension.ValidateName(opts.Name, opts.Store); err != nil {
+				return err
+			}
+
 			return extension.Create(cmd.Context(), *opts)
 		},
 	}
 
 	flags := cmd.Flags()
-	flags.StringVarP(&opts.Name, "name", "n", "", "Extension name (PascalCase)")
+	flags.StringVar(&opts.Name, "name", "", "Extension name (PascalCase)")
 	flags.BoolVar(&opts.Store, "store", false, "Planning commercial use in Shopware Community Store")
 	flags.StringVarP((*string)(&opts.Type), "type", "t", string(extension.Plugin), "Extension type (plugin|theme)")
 
-	flags.MarkHidden("type") // Since "theme" is not implemented yet, this flag is hidden from the user
+	_ = flags.MarkHidden("type") // Since "theme" is not implemented yet, this flag is hidden from the user
 
 	_ = cmd.RegisterFlagCompletionFunc("type", cobra.FixedCompletions(
 		[]string{string(extension.Plugin), string(extension.Theme)},
@@ -61,7 +66,7 @@ func validateInput(opts *extension.CreateOptions) error {
 		return nil
 	}
 
-	return extension.ValidateName(opts.Name)
+	return extension.ValidateName(opts.Name, opts.Store)
 }
 
 func init() {

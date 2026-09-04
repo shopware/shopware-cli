@@ -47,6 +47,7 @@ func TestNameDerivation(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
 			assert.Equal(t, test.parts, splitPascalCase(test.name))
 			assert.Equal(t, test.namespace, DeriveNamespace(test.name))
 			assert.Equal(t, test.composerName, DeriveComposerName(test.name))

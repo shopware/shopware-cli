@@ -29,6 +29,8 @@ type CreateOptions struct {
 func Create(ctx context.Context, opts CreateOptions) (err error) {
 	logger := logging.FromContext(ctx)
 
+	logger.Info("Creating plugin...")
+
 	projectDir, err := shop.FindClosestShopwareProject(false)
 	if err != nil {
 		return err
@@ -56,11 +58,14 @@ func Create(ctx context.Context, opts CreateOptions) (err error) {
 		return fmt.Errorf("create extension files: %w", err)
 	}
 
+	logger.Info("✓ Extension created")
+
 	if err = validateCreatedExtension(ctx, extensionDir); err != nil {
 		return fmt.Errorf("validate created extension: %w", err)
 	}
 
-	logger.Debugf("Extension %s created successfully in %s", opts.Name, extensionDir)
+	logger.Info("✓ Extension validation passed")
+	logger.Infof("Extension created successfully in %s", extensionDir)
 
 	return nil
 }

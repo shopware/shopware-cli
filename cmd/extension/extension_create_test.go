@@ -125,6 +125,35 @@ func TestCreateCommandAcceptsNameFlag(t *testing.T) {
 	))
 }
 
+func TestCreateCommandAcceptsPrivateNameWithoutVendorPrefix(t *testing.T) {
+	projectDir := t.TempDir()
+	t.Setenv("PROJECT_ROOT", projectDir)
+	require.NoError(t, os.MkdirAll(filepath.Join(projectDir, "custom", "static-plugins"), 0o755))
+
+	cmd := newCreateCmd()
+	cmd.SetContext(system.WithInteraction(t.Context(), false))
+	cmd.SetArgs([]string{"--name", "Example"})
+
+	require.NoError(t, cmd.Execute())
+	assert.FileExists(t, filepath.Join(
+		projectDir,
+		"custom",
+		"static-plugins",
+		"Example",
+		"composer.json",
+	))
+}
+
+func TestCreateCommandRequiresVendorPrefixForStore(t *testing.T) {
+	cmd := newCreateCmd()
+	cmd.SetContext(system.WithInteraction(t.Context(), false))
+	cmd.SetArgs([]string{"--store", "--name", "Example"})
+
+	err := cmd.Execute()
+
+	assert.ErrorContains(t, err, "vendor prefix")
+}
+
 func TestCreateCommandRejectsArguments(t *testing.T) {
 	cmd := newCreateCmd()
 	cmd.SetContext(system.WithInteraction(t.Context(), false))

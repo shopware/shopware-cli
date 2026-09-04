@@ -111,7 +111,7 @@ func validatePluginClassFile(extensionDir, classFile, namespace, className strin
 	class := phpClassRegexp.FindStringSubmatch(php)
 	if class == nil {
 		addInstallableError(check, classFile, "installable.plugin-class-file",
-			fmt.Sprintf("file must declare class %s", className))
+			"file must declare class "+className)
 		return
 	}
 

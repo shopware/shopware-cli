@@ -7,71 +7,39 @@ import (
 	"github.com/shopware/shopware-cli/internal/tui"
 )
 
-func printQuestions(opts *extension.CreateOptions) error {
-	form := huh.NewForm(
-		huh.NewGroup(
-			huh.NewSelect[bool]().
-				Title("Do you intend to publish this on the Community Store?").
-				Description("Hint: In order to publish your extension on the Store a name with a vendor prefix is required.").
-				Options(
-					huh.NewOption("No, keep it in this project", false),
-					huh.NewOption("Yes, Community Store", true),
-				).
-				Value(&opts.Store),
-		),
-		huh.NewGroup(
-			huh.NewSelect[extension.ExtensionType]().
-				Title("Extension type").
-				Options(
-					huh.NewOption("Plugin", extension.Plugin),
-					huh.NewOption("Theme", extension.Theme),
-				).
-				Value(&opts.Type),
-		),
-		huh.NewGroup(
-			huh.NewInput().
-				Title("Extension name").
-				Description("PascalCase, for example SwagBasicExample.").
-				Placeholder("SwagBasicExample").
-				Value(&opts.Name).
-				Validate(extension.ValidateName),
-		),
-	)
-
-	return form.Run()
-}
-
-func runInteractiveCreateForm(opts *extension.CreateOptions, needsStore bool, needsName bool) error {
+func runInteractiveCreateForm(opts *extension.CreateOptions, needsName bool, needsStore bool) error {
 	// Print the shopware banner
 	tui.PrintBanner()
 
-	// Create the form dynamically, based on needed Input 
+	// Create the form dynamically based on required input.
 	var groups []*huh.Group
 
 	if needsStore {
 		groups = append(groups,
 			huh.NewGroup(
 				huh.NewSelect[bool]().
-					Title("Do you intend to publish this on the Community Store?").
-					Description("Hint: In order to publish your extension on the Store a name with a vendor prefix is required.").
+					Title("Do you plan to publish this extension in the Community Store?").
+					Description("This affects where the extension is created. Store extensions require a vendor-prefixed name.").
 					Options(
-						huh.NewOption("No, keep it in this project", false),
-						huh.NewOption("Yes, Community Store", true),
+						huh.NewOption("No, it's only for this project.", false),
+						huh.NewOption("Yes, I plan to publish it.", true),
 					).
 					Value(&opts.Store),
-				),
-			)
+			),
+		)
 	}
 
 	if needsName {
 		groups = append(groups,
 			huh.NewGroup(
 				huh.NewInput().
-					Title("Extension name").
-					Description("PascalCase, for example SwagBasicExample.").
+					Title("Extension Name").
+					Description("Use PascalCase and, for Community Store extensions, a vendor prefix, e.g. SwagBasicExample.").
 					Placeholder("SwagBasicExample").
 					Value(&opts.Name).
-					Validate(extension.ValidateName),
+					Validate(func(name string) error {
+						return extension.ValidateName(name, opts.Store)
+					}),
 			),
 		)
 	}
@@ -82,5 +50,3 @@ func runInteractiveCreateForm(opts *extension.CreateOptions, needsStore bool, ne
 
 	return huh.NewForm(groups...).Run()
 }
-
-

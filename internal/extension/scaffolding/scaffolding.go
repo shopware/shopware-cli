@@ -270,4 +270,3 @@ func RemoveCreatedExtensionDir(extensionDir string) error {
 
 	return nil
 }
-

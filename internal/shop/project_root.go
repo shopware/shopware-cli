@@ -48,7 +48,14 @@ func FindClosestShopwareProject(allowFallback bool) (string, error) {
 }
 
 func isShopwareProject(path string) (bool, error) {
-	if info, err := os.Stat(filepath.Join(path, "bin", "console")); err != nil || info.IsDir() {
+	info, err := os.Stat(filepath.Join(path, "bin", "console"))
+	if errors.Is(err, os.ErrNotExist) {
+		return false, nil
+	}
+	if err != nil {
+		return false, fmt.Errorf("stat bin/console: %w", err)
+	}
+	if info.IsDir() {
 		return false, nil
 	}
 
