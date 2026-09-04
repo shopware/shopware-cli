@@ -1,6 +1,6 @@
 ---
 name: shopware-cli-extension-store
-description: MUST use for Shopware Store readiness/publication/submission/compliance questions. Inspects read-only, prefers a sibling checkout-built CLI, classifies every finding by table lookup, and cites a re-checkable source for each one so local file state is never reported as remote Store listing state.
+description: MUST use for Shopware Store readiness/publication/submission/compliance questions. Inspects read-only using the installed shopware-cli, classifies every finding by table lookup, and cites a re-checkable source for each one so local file state is never reported as remote Store listing state.
 ---
 
 # Shopware Store readiness
@@ -21,7 +21,7 @@ Script notes (collect-evidence.sh):
 
 - Cobra prints its usage block on a non-zero exit. The `sed` strips it; the exit code is the real signal.
 - Without `--full`, `extension validate` runs only the `sw-cli` toolset. It does **not** run PHPStan/ESLint/Stylelint. Source: `cmd/extension/extension_validate.go`, the `if !isFull { only = "sw-cli" }` branch. Say "sw-cli checks passed", not "validation passed", unless `--full` was run.
-- If `../shopware-cli/bin/shopware-cli` exists it is authoritative for **every** command. Never mix binaries mid-answer.
+- Use one `shopware-cli` binary throughout. Never mix binaries mid-answer.
 - Output is captured to a variable before piping: PIPESTATUS is bash-only and $? after a pipe reports the last command, not the CLI. This preserves exit codes.
 - Run `extension config-schema` only if the extension already uses Store sync config, or the user asks where Store metadata is configured. Schema fields are never readiness requirements.
 
@@ -85,8 +85,8 @@ Eight invariants. Check each finding against all eight before writing it.
 6. **Every local finding needs a quoted artifact.** A required local change must cite either a verbatim CLI output line or a measured value from §1. No line and no measurement means it is not a required local change.
    - A row may be marked **CLI-enforced** only if the CLI output contains a matching error line. If validation printed `No problems found`, the Required local changes section is empty. Write "none". Never infer a CLI finding from reading `composer.json` yourself.
    - Placeholder or example values (`example.com`, `TODO`, lorem text) are **not** CLI findings: L2 and L3 check presence, not plausibility. Mention them under Local candidates if useful, never as a required local change.
-8. **Rows are the only vocabulary.** Every finding names a row ID from §2 and must match that row's actual subject. Do not attach a finding to the nearest-looking row. A1 is the license-value comparison and nothing else — an author homepage is not "A1 candidate", it is not in the table, so it is not a finding.
-6. **Every emitted row carries its provenance.** For a CLI row: the result identifier and file. For a doc row: the doc URL with its section anchor. Never paraphrase a requirement without naming where it came from.
+7. **Rows are the only vocabulary.** Every finding names a row ID from §2 and must match that row's actual subject. Do not attach a finding to the nearest-looking row. A1 is the license-value comparison and nothing else — an author homepage is not "A1 candidate", it is not in the table, so it is not a finding.
+8. **Every emitted row carries its provenance.** For a CLI row: the result identifier and file. For a doc row: the doc URL with its section anchor. Never paraphrase a requirement without naming where it came from.
 
 ## 4. Store doc map
 
@@ -115,7 +115,7 @@ Preconditions here work like §2's: a page you had no trigger to read produces n
 
 **Validation status**
 
-- CLI binary, version, and source revision if a checkout was used
+- CLI binary and version
 - inspection timestamp
 - sw-cli checks: pass/fail + exit code (state whether `--full` was run)
 - store-compliance checks: pass/fail + exit code
@@ -139,7 +139,7 @@ Preconditions here work like §2's: a page you had no trigger to read produces n
 
 **Sources checked** — a flat list the user can re-verify independently:
 
-- CLI path, version, source revision
+- CLI path and version
 - every source file path read, with the `grep` command that locates the rule
 - the Store docs index, as a clickable link, so the user can reach the whole set
 - every doc page actually read, as a clickable full URL with the date read

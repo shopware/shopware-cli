@@ -227,7 +227,7 @@ When `validate` produces unexpected results:
 
 Relevant files can include:
 
-- `.shopware-project.yml`
+- `.shopware-project.yml` (shop URL and Admin API credentials live under `environments`; empty `-e` targets `environments.local`)
 - `.shopware-extension.yml`
 - `composer.json`
 - `composer.lock`

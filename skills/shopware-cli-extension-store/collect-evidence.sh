@@ -4,9 +4,6 @@ set -u
 cd "${1:-.}" || exit 1
 
 CLI="$(command -v shopware-cli || true)"
-if [ -x ../shopware-cli/bin/shopware-cli ]; then
-  CLI="$(cd ../shopware-cli/bin && pwd)/shopware-cli"
-fi
 if [ -z "$CLI" ]; then
   echo "FATAL: no shopware-cli available"; exit 1
 fi
@@ -15,10 +12,6 @@ echo '--- provenance ---'
 printf 'cli_path: %s\n' "$CLI"
 "$CLI" --version
 date -u +'inspected_at: %Y-%m-%dT%H:%M:%SZ'
-# if a shopware-cli source checkout is present, pin the exact revision the rules were read from
-if [ -d ../shopware-cli/.git ]; then
-  printf 'cli_source_rev: %s\n' "$(git -C ../shopware-cli rev-parse --short HEAD)"
-fi
 
 echo '--- files ---'
 find . -maxdepth 5 -type f \
