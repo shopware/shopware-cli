@@ -15,9 +15,13 @@ import (
 func TestCreateCommandDefaults(t *testing.T) {
 	cmd := newCreateCmd()
 
-	usage, err := cmd.Flags().GetString("usage")
+	extensionType, err := cmd.Flags().GetString("type")
 	require.NoError(t, err)
-	assert.Equal(t, string(internalextension.PrivateUsage), usage)
+	assert.Equal(t, string(internalextension.Plugin), extensionType)
+
+	store, err := cmd.Flags().GetBool("store")
+	require.NoError(t, err)
+	assert.False(t, store)
 }
 
 func TestCreateCommandMapsFlags(t *testing.T) {
@@ -28,8 +32,8 @@ func TestCreateCommandMapsFlags(t *testing.T) {
 	cmd := newCreateCmd()
 	cmd.SetContext(system.WithInteraction(t.Context(), false))
 	cmd.SetArgs([]string{
-		"--usage", "store",
-		"SwagBasicExample",
+		"--store",
+		"--name", "SwagBasicExample",
 	})
 
 	require.NoError(t, cmd.Execute())
@@ -42,27 +46,24 @@ func TestCreateCommandMapsFlags(t *testing.T) {
 	))
 }
 
-func TestCreateCommandValidatesUsageFlag(t *testing.T) {
+func TestCreateCommandValidatesTypeFlag(t *testing.T) {
 	tests := []struct {
-		name      string
-		usage     string
-		pluginDir string
-		error     string
+		name          string
+		extensionType string
+		error         string
 	}{
 		{
-			name:      "private",
-			usage:     "private",
-			pluginDir: "static-plugins",
+			name:          "plugin",
+			extensionType: "plugin",
 		},
 		{
-			name:      "store",
-			usage:     "store",
-			pluginDir: "plugins",
+			name:          "theme",
+			extensionType: "theme",
 		},
 		{
-			name:  "rejected",
-			usage: "unknown",
-			error: `invalid extension usage "unknown"`,
+			name:          "rejected",
+			extensionType: "unknown",
+			error:         `invalid extension type "unknown"`,
 		},
 	}
 
@@ -70,17 +71,15 @@ func TestCreateCommandValidatesUsageFlag(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			projectDir := t.TempDir()
 			t.Setenv("PROJECT_ROOT", projectDir)
-			require.NoError(t, os.MkdirAll(filepath.Join(projectDir, "custom", "plugins"), 0o755))
 			require.NoError(t, os.MkdirAll(filepath.Join(projectDir, "custom", "static-plugins"), 0o755))
 
 			cmd := newCreateCmd()
 			cmd.SetContext(system.WithInteraction(t.Context(), false))
-			cmd.SetArgs([]string{"--usage", test.usage, "SwagBasicExample"})
+			cmd.SetArgs([]string{"--type", test.extensionType, "--name", "SwagBasicExample"})
 
 			err := cmd.Execute()
 			if test.error != "" {
 				assert.ErrorContains(t, err, test.error)
-				assert.NoDirExists(t, filepath.Join(projectDir, "custom", "plugins", "SwagBasicExample"))
 				assert.NoDirExists(t, filepath.Join(projectDir, "custom", "static-plugins", "SwagBasicExample"))
 				return
 			}
@@ -89,7 +88,7 @@ func TestCreateCommandValidatesUsageFlag(t *testing.T) {
 			assert.FileExists(t, filepath.Join(
 				projectDir,
 				"custom",
-				test.pluginDir,
+				"static-plugins",
 				"SwagBasicExample",
 				"composer.json",
 			))
@@ -97,14 +96,24 @@ func TestCreateCommandValidatesUsageFlag(t *testing.T) {
 	}
 }
 
-func TestCreateCommandAcceptsNameArgument(t *testing.T) {
+func TestCreateCommandValidatesNameFlag(t *testing.T) {
+	cmd := newCreateCmd()
+	cmd.SetContext(system.WithInteraction(t.Context(), false))
+	cmd.SetArgs([]string{"--name", "invalid-name"})
+
+	err := cmd.Execute()
+
+	assert.ErrorContains(t, err, "invalid extension name")
+}
+
+func TestCreateCommandAcceptsNameFlag(t *testing.T) {
 	projectDir := t.TempDir()
 	t.Setenv("PROJECT_ROOT", projectDir)
 	require.NoError(t, os.MkdirAll(filepath.Join(projectDir, "custom", "static-plugins"), 0o755))
 
 	cmd := newCreateCmd()
 	cmd.SetContext(system.WithInteraction(t.Context(), false))
-	cmd.SetArgs([]string{"SwagBasicExample"})
+	cmd.SetArgs([]string{"--name", "SwagBasicExample"})
 
 	require.NoError(t, cmd.Execute())
 	assert.FileExists(t, filepath.Join(
@@ -116,12 +125,12 @@ func TestCreateCommandAcceptsNameArgument(t *testing.T) {
 	))
 }
 
-func TestCreateCommandRejectsSecondArgument(t *testing.T) {
+func TestCreateCommandRejectsArguments(t *testing.T) {
 	cmd := newCreateCmd()
 	cmd.SetContext(system.WithInteraction(t.Context(), false))
-	cmd.SetArgs([]string{"SwagBasicExample", "Unexpected"})
+	cmd.SetArgs([]string{"SwagBasicExample"})
 
 	err := cmd.Execute()
 
-	assert.ErrorContains(t, err, "accepts at most 1 arg(s), received 2")
+	assert.ErrorContains(t, err, "unknown command")
 }

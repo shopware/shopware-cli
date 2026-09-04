@@ -13,27 +13,23 @@ func newCreateCmd() *cobra.Command {
 	opts := &extension.CreateOptions{}
 
 	cmd := &cobra.Command{
-		Use:   "create [name]",
+		Use:   "create",
 		Short: "Create a new extension",
-		Long:  `Create a new extension with scaffolding inside a Shopware project.`,
-		Args:  cobra.MatchAll(cobra.MaximumNArgs(1), validateNameArg),
+		Long:  `Create a new plugin or theme with scaffolding inside a Shopware project.`,
+		Args:  cobra.NoArgs,
 		PreRunE: func(cmd *cobra.Command, args []string) error {
-			switch opts.Usage {
-			case extension.PrivateUsage, extension.CommercialUsage:
-				return nil
-			default:
-				return fmt.Errorf("invalid --usage: %s (want private|store)", opts.Usage)
-			}
+			return validateInput(opts)
 		},
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if len(args) == 1 {
-				opts.Name = args[0]
-			} else if len(args) == 0 {
+			needsName := opts.Name == ""
+			needsStore := cmd.Flags().Changed("store") == false
+
+			if needsName {
 				if !system.IsInteractionEnabled(cmd.Context()) {
 					return errors.New("extension name is required when interaction is disabled")
 				}
 
-				if err := runInteractiveCreateForm(opts); err != nil {
+				if err := runInteractiveCreateForm(opts, needsName, needsStore); err != nil {
 					return fmt.Errorf("running create form: %w", err)
 				}
 			}
@@ -43,18 +39,29 @@ func newCreateCmd() *cobra.Command {
 	}
 
 	flags := cmd.Flags()
-	flags.StringVarP((*string)(&opts.Usage), "usage", "u", string(extension.PrivateUsage), "Extension usage (private|store)")
+	flags.StringVarP(&opts.Name, "name", "n", "", "Extension name (PascalCase)")
+	flags.BoolVar(&opts.Store, "store", false, "Planning commercial use in Shopware Community Store")
+	flags.StringVarP((*string)(&opts.Type), "type", "t", string(extension.Plugin), "Extension type (plugin|theme)")
+
+	flags.MarkHidden("type") // Since "theme" is not implemented yet, this flag is hidden from the user
+
+	_ = cmd.RegisterFlagCompletionFunc("type", cobra.FixedCompletions(
+		[]string{string(extension.Plugin), string(extension.Theme)},
+		cobra.ShellCompDirectiveNoFileComp,
+	))
 
 	return cmd
 }
 
-// validateNameArg rejects a name that cannot be used as an extension name.
-func validateNameArg(_ *cobra.Command, args []string) error {
-	if len(args) == 0 {
+func validateInput(opts *extension.CreateOptions) error {
+	if err := extension.ValidateType(opts.Type); err != nil {
+		return err
+	}
+	if opts.Name == "" {
 		return nil
 	}
 
-	return extension.ValidateName(args[0])
+	return extension.ValidateName(opts.Name)
 }
 
 func init() {

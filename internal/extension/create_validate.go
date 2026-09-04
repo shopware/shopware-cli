@@ -20,3 +20,20 @@ func ValidateName(name string) error {
 
 	return nil
 }
+
+func ValidateType(extensionType ExtensionType) error {
+	switch extensionType {
+	case Plugin, Theme:
+		return nil
+	default:
+		return fmt.Errorf("invalid extension type %q", extensionType)
+	}
+}
+
+func validateCreateOptions(opts CreateOptions) error {
+	if err := ValidateType(opts.Type); err != nil {
+		return err
+	}
+
+	return ValidateName(opts.Name)
+}

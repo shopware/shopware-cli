@@ -3,6 +3,7 @@ package extension
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -35,8 +36,8 @@ func TestValidateCreateOptions(t *testing.T) {
 	t.Parallel()
 
 	valid := CreateOptions{
-		Name:  "SwagBasicExample",
-		Usage: PrivateUsage,
+		Name: "SwagBasicExample",
+		Type: Plugin,
 	}
 	require.NoError(t, validateCreateOptions(valid))
 
@@ -51,9 +52,9 @@ func TestValidateCreateOptions(t *testing.T) {
 			error:  "invalid extension name",
 		},
 		{
-			name:   "invalid usage",
-			change: func(opts *CreateOptions) { opts.Usage = "unknown" },
-			error:  "invalid extension usage",
+			name:   "invalid type",
+			change: func(opts *CreateOptions) { opts.Type = "unknown" },
+			error:  "invalid extension type",
 		},
 	}
 
@@ -67,15 +68,15 @@ func TestValidateCreateOptions(t *testing.T) {
 }
 
 func TestCreate(t *testing.T) {
-	for _, usage := range []ExtensionUsage{PrivateUsage, CommercialUsage} {
-		t.Run(string(usage), func(t *testing.T) {
+	for _, store := range []bool{false, true} {
+		t.Run(fmt.Sprintf("store=%t", store), func(t *testing.T) {
 			projectDir := prepareProject(t)
 			opts := validCreateOptions()
-			opts.Usage = usage
+			opts.Store = store
 
 			require.NoError(t, Create(system.WithInteraction(t.Context(), false), opts))
 
-			extensionDir := extensionDirectory(projectDir, opts)
+			extensionDir := extensionDirectory(projectDir, opts.Store, opts.Name)
 			assert.FileExists(t, filepath.Join(extensionDir, "composer.json"))
 			assert.FileExists(t, filepath.Join(extensionDir, "src", opts.Name+".php"))
 			require.NoError(t, validateCreatedExtension(t.Context(), extensionDir))
@@ -91,12 +92,12 @@ func TestCreateRejectsInvalidOptionsBeforeCreatingFiles(t *testing.T) {
 	err := Create(system.WithInteraction(t.Context(), false), opts)
 
 	assert.ErrorContains(t, err, "invalid extension name")
-	assert.NoDirExists(t, extensionDirectory(projectDir, opts))
+	assert.NoDirExists(t, extensionDirectory(projectDir, opts.Store, opts.Name))
 }
 
 func TestCreateRequiresName(t *testing.T) {
 	err := Create(t.Context(), CreateOptions{
-		Usage: PrivateUsage,
+		Type: Plugin,
 	})
 
 	assert.EqualError(t, err, "extension name must not be empty")
@@ -104,10 +105,10 @@ func TestCreateRequiresName(t *testing.T) {
 
 func TestCreateValidatesEnumsBeforeRequiringName(t *testing.T) {
 	err := Create(system.WithInteraction(context.Background(), false), CreateOptions{
-		Usage: "unknown",
+		Type: "unknown",
 	})
 
-	assert.ErrorContains(t, err, "invalid extension usage")
+	assert.ErrorContains(t, err, "invalid extension type")
 }
 
 func TestCreateFindsClosestProject(t *testing.T) {
@@ -127,7 +128,7 @@ func TestCreateFindsClosestProject(t *testing.T) {
 	opts := validCreateOptions()
 	require.NoError(t, Create(system.WithInteraction(t.Context(), false), opts))
 
-	assert.FileExists(t, filepath.Join(extensionDirectory(projectDir, opts), "composer.json"))
+	assert.FileExists(t, filepath.Join(extensionDirectory(projectDir, opts.Store, opts.Name), "composer.json"))
 }
 
 func TestCreateFailsOutsideShopwareProject(t *testing.T) {
@@ -147,13 +148,13 @@ func TestCreateReportsMissingExtensionParent(t *testing.T) {
 	err := Create(system.WithInteraction(t.Context(), false), opts)
 
 	assert.ErrorContains(t, err, "extension parent directory does not exist")
-	assert.NoDirExists(t, extensionDirectory(projectDir, opts))
+	assert.NoDirExists(t, extensionDirectory(projectDir, opts.Store, opts.Name))
 }
 
 func TestCreateDoesNotRemoveExistingDirectory(t *testing.T) {
 	projectDir := prepareProject(t)
 	opts := validCreateOptions()
-	extensionDir := extensionDirectory(projectDir, opts)
+	extensionDir := extensionDirectory(projectDir, opts.Store, opts.Name)
 	require.NoError(t, os.Mkdir(extensionDir, 0o755))
 	marker := filepath.Join(extensionDir, "keep.txt")
 	require.NoError(t, os.WriteFile(marker, []byte("keep"), 0o644))
@@ -346,8 +347,8 @@ func TestPluginClassMayExtendFullyQualifiedBaseClass(t *testing.T) {
 
 func validCreateOptions() CreateOptions {
 	return CreateOptions{
-		Name:  "SwagBasicExample",
-		Usage: PrivateUsage,
+		Name: "SwagBasicExample",
+		Type: Plugin,
 	}
 }
 

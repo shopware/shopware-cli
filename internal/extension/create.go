@@ -11,17 +11,18 @@ import (
 	"github.com/shopware/shopware-cli/logging"
 )
 
-type ExtensionUsage string
+type ExtensionType string
 
 const (
-	PrivateUsage ExtensionUsage = "private"
-	CommercialUsage   ExtensionUsage = "store"
+	Plugin ExtensionType = "plugin"
+	Theme  ExtensionType = "theme"
 )
 
 // CreateOptions contains the choices used to create extension scaffolding.
 type CreateOptions struct {
 	Name  string
-	Usage ExtensionUsage
+	Type  ExtensionType
+	Store bool
 }
 
 // Create writes extension scaffolding in the closest Shopware project.
@@ -33,7 +34,7 @@ func Create(ctx context.Context, opts CreateOptions) (err error) {
 		return err
 	}
 
-	extensionDir := extensionDirectory(projectDir, opts.Name, opts.Usage)
+	extensionDir := extensionDirectory(projectDir, opts.Store, opts.Name)
 
 	err = scaffolding.CreateExtensionDir(extensionDir)
 	if err != nil {
@@ -64,10 +65,10 @@ func Create(ctx context.Context, opts CreateOptions) (err error) {
 	return nil
 }
 
-func extensionDirectory(projectDir string, name string, usage ExtensionUsage) string {
-	pluginDir := "plugins"
-	if usage == PrivateUsage {
-		pluginDir = "static-plugins"
+func extensionDirectory(projectDir string, store bool, name string) string {
+	pluginDir := "static-plugins"
+	if store {
+		pluginDir = "plugins"
 	}
 
 	return filepath.Join(projectDir, "custom", pluginDir, name)
