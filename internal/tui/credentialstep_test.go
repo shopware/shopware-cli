@@ -86,16 +86,36 @@ func TestCredentialStep_CheckboxTogglesEcho(t *testing.T) {
 	c.Focus(CredFocusShowPassword)
 	require.True(t, c.PasswordMasked(), "password starts masked")
 
-	_, submitted := c.HandleKey(credKey(tea.KeyEnter))
+	_, submitted := c.HandleKey(credKey(tea.KeySpace))
 	assert.False(t, submitted)
 	assert.False(t, c.PasswordMasked())
 
-	c.HandleKey(credKey(tea.KeyEnter))
+	c.HandleKey(credKey(tea.KeySpace))
 	assert.True(t, c.PasswordMasked())
 
 	// Typed keys are swallowed while the checkbox has focus.
 	c.HandleKey(tea.KeyPressMsg(tea.Key{Code: 'x', Text: "x"}))
 	assert.Equal(t, "shopware", c.Password())
+}
+
+func TestCredentialStep_EnterOnCheckboxSubmits(t *testing.T) {
+	c := testCreds()
+	c.Focus(CredFocusShowPassword)
+
+	_, submitted := c.HandleKey(credKey(tea.KeyEnter))
+	assert.True(t, submitted)
+	assert.True(t, c.PasswordMasked(), "enter must not toggle the checkbox")
+}
+
+func TestCredentialStep_EnterOnCheckboxWithBadPasswordRefocusesPassword(t *testing.T) {
+	c := testCreds()
+	c.SetPassword("short")
+	c.Focus(CredFocusShowPassword)
+
+	_, submitted := c.HandleKey(credKey(tea.KeyEnter))
+	assert.False(t, submitted)
+	assert.NotEmpty(t, c.PasswordErr())
+	assert.Equal(t, CredFocusPassword, c.FocusTarget())
 }
 
 func TestCredentialStep_TypingReachesFocusedInput(t *testing.T) {

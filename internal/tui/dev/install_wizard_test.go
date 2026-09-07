@@ -231,18 +231,30 @@ func TestInstallStepCredentials_NavigationClampsAtBounds(t *testing.T) {
 	assert.Equal(t, tui.CredFocusShowPassword, updated.(Model).install.FocusTarget())
 }
 
-func TestInstallStepCredentials_EnterOnCheckboxTogglesEcho(t *testing.T) {
+func TestInstallStepCredentials_SpaceOnCheckboxTogglesEcho(t *testing.T) {
 	m := newTestInstallModel()
 	m.install.step = installStepCredentials
 	m.install.Focus(tui.CredFocusShowPassword)
 
-	updated, _ := m.updateInstallPrompt(enterKey())
+	updated, _ := m.updateInstallPrompt(tea.KeyPressMsg(tea.Key{Code: tea.KeySpace}))
 	mm := updated.(Model)
 	assert.False(t, mm.install.PasswordMasked())
 	assert.Equal(t, installStepCredentials, mm.install.step, "should stay on credentials step")
 
-	updated, _ = mm.updateInstallPrompt(enterKey())
+	updated, _ = mm.updateInstallPrompt(tea.KeyPressMsg(tea.Key{Code: tea.KeySpace}))
 	assert.True(t, updated.(Model).install.PasswordMasked())
+}
+
+func TestInstallStepCredentials_EnterOnCheckboxStartsInstall(t *testing.T) {
+	m := newTestInstallModel()
+	m.install.step = installStepCredentials
+	m.install.SetPassword("shopware")
+	m.install.Focus(tui.CredFocusShowPassword)
+
+	updated, _ := m.updateInstallPrompt(enterKey())
+	mm := updated.(Model)
+	assert.Equal(t, phaseInstalling, mm.phase)
+	assert.True(t, mm.install.PasswordMasked(), "enter must not toggle the checkbox")
 }
 
 func TestInstallStepCredentials_CheckboxFocusedSwallowsTypedKeys(t *testing.T) {
