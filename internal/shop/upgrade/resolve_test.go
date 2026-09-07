@@ -6,6 +6,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/shopware/shopware-cli/internal/testhelper"
 )
 
 func writeLocks(t *testing.T) (currentPath, resolvedPath string) {
@@ -14,26 +16,20 @@ func writeLocks(t *testing.T) (currentPath, resolvedPath string) {
 	currentPath = filepath.Join(dir, "composer.lock")
 	resolvedPath = filepath.Join(dir, "resolved.lock")
 
-	writeFile(t, currentPath, `{
-		"packages": [
-			{"name": "shopware/core", "version": "v6.6.10.3"},
-			{"name": "swag/demo", "version": "2.0.0", "type": "shopware-platform-plugin"},
-			{"name": "acme/other", "version": "2.0.0"},
-			{"name": "legacy/package", "version": "1.0.0"},
-			{"name": "vendor/untouched", "version": "1.0.0"}
-		],
-		"packages-dev": []
-	}`)
-	writeFile(t, resolvedPath, `{
-		"packages": [
-			{"name": "shopware/core", "version": "v6.7.11.0"},
-			{"name": "shopware/deployment-helper", "version": "v0.5.1"},
-			{"name": "swag/demo", "version": "2.1.3", "type": "shopware-platform-plugin"},
-			{"name": "acme/other", "version": "1.9.0"},
-			{"name": "vendor/untouched", "version": "1.0.0"}
-		],
-		"packages-dev": []
-	}`)
+	testhelper.WriteFile(t, currentPath, testhelper.ComposerLock(
+		testhelper.LockPackage{Name: "shopware/core", Version: "v6.6.10.3"},
+		testhelper.LockPackage{Name: "swag/demo", Version: "2.0.0", Type: "shopware-platform-plugin"},
+		testhelper.LockPackage{Name: "acme/other", Version: "2.0.0"},
+		testhelper.LockPackage{Name: "legacy/package", Version: "1.0.0"},
+		testhelper.LockPackage{Name: "vendor/untouched", Version: "1.0.0"},
+	))
+	testhelper.WriteFile(t, resolvedPath, testhelper.ComposerLock(
+		testhelper.LockPackage{Name: "shopware/core", Version: "v6.7.11.0"},
+		testhelper.LockPackage{Name: "shopware/deployment-helper", Version: "v0.5.1"},
+		testhelper.LockPackage{Name: "swag/demo", Version: "2.1.3", Type: "shopware-platform-plugin"},
+		testhelper.LockPackage{Name: "acme/other", Version: "1.9.0"},
+		testhelper.LockPackage{Name: "vendor/untouched", Version: "1.0.0"},
+	))
 	return currentPath, resolvedPath
 }
 
@@ -74,7 +70,7 @@ func TestResolvedVersion(t *testing.T) {
 
 func TestLockVersionsIncludesDevelopmentPackages(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "composer.lock")
-	writeFile(t, path, `{
+	testhelper.WriteFile(t, path, `{
 		"packages": [{"name": "shopware/core", "version": "v6.7.11.0"}],
 		"packages-dev": [{"name": "phpunit/phpunit", "version": "v11.5.0"}]
 	}`)

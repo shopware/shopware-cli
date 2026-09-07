@@ -26,7 +26,7 @@ var shopwarePlatformPackages = []string{
 // the new platform — the web-installer approach), and makes sure the
 // Deployment Helper is required. It returns a human-readable list of the
 // changes it made.
-func applyTargetConstraints(c *composer.Json, target string, extensionPackages []string, resolved map[string]string) []string {
+func applyTargetConstraints(c *composer.Json, target string, extensionPackages []string, resolved map[string]string, pathInstalled map[string]bool) []string {
 	var changes []string
 
 	for _, pkg := range shopwarePlatformPackages {
@@ -47,6 +47,11 @@ func applyTargetConstraints(c *composer.Json, target string, extensionPackages [
 		}
 		current, ok := c.Require[pkg]
 		if !ok {
+			continue
+		}
+		// Path-repository packages stay at their local files; opening the
+		// constraint to "*" cannot discover a newer published release.
+		if pathInstalled[pkg] {
 			continue
 		}
 		constraint := "*"
@@ -86,6 +91,22 @@ func extensionPackages(projectRoot string) ([]string, error) {
 	return packages, nil
 }
 
+// pathInstalledPackageNames lists Composer packages installed from a path
+// repository (composer.lock dist.type == "path").
+func pathInstalledPackageNames(projectRoot string) map[string]bool {
+	info := lockExtensionInfo(projectRoot)
+	if len(info) == 0 {
+		return nil
+	}
+	names := make(map[string]bool, len(info))
+	for name, ext := range info {
+		if ext.pathInstalled {
+			names[name] = true
+		}
+	}
+	return names
+}
+
 // RewriteComposerJSON applies the target constraints to the project's real
 // composer.json and saves it, pinning extensions to the versions the
 // preflight resolution picked. Used by the runner after the user confirmed
@@ -101,7 +122,7 @@ func (u *ProjectUpgrader) RewriteComposerJSON(target string, resolved map[string
 		return nil, err
 	}
 
-	changes := applyTargetConstraints(c, target, extensions, resolved)
+	changes := applyTargetConstraints(c, target, extensions, resolved, pathInstalledPackageNames(u.projectRoot))
 	if err := c.Save(); err != nil {
 		return nil, err
 	}
@@ -122,7 +143,7 @@ func (u *ProjectUpgrader) renderUpgradeManifest(target string) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	applyTargetConstraints(c, target, extensions, nil)
+	applyTargetConstraints(c, target, extensions, nil, pathInstalledPackageNames(u.projectRoot))
 
 	out, err := json.MarshalIndent(c, "", "    ")
 	if err != nil {

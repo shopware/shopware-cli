@@ -8,21 +8,23 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/shopware/shopware-cli/internal/testhelper"
 )
 
 func TestRewriteComposerJSON(t *testing.T) {
 	dir := t.TempDir()
-	writeFile(t, filepath.Join(dir, "composer.json"), `{
-		"name": "shopware/production",
-		"require": {
+	testhelper.WriteFile(t, filepath.Join(dir, "composer.json"), testhelper.ComposerJSON{
+		Name: "shopware/production",
+		Require: map[string]string{
 			"shopware/administration": "6.6.10.3",
-			"shopware/core": "6.6.10.3",
-			"shopware/storefront": "6.6.10.3",
-			"swag/demo": "^2.0",
-			"symfony/flex": "~2"
-		}
-	}`)
-	writeFile(t, filepath.Join(dir, "composer.lock"), testComposerLock)
+			"shopware/core":           "6.6.10.3",
+			"shopware/storefront":     "6.6.10.3",
+			"swag/demo":               "^2.0",
+			"symfony/flex":            "~2",
+		},
+	}.String())
+	testhelper.WriteFile(t, filepath.Join(dir, "composer.lock"), testComposerLock)
 
 	changes, err := newTestUpgrader(t, dir).RewriteComposerJSON("6.7.11.0", map[string]string{"swag/demo": "2.1.3"})
 	require.NoError(t, err)
@@ -52,14 +54,53 @@ func TestRewriteComposerJSON(t *testing.T) {
 	assert.NotContains(t, parsed.Require, "shopware/elasticsearch", "absent platform packages are not added")
 }
 
+func TestRewriteComposerJSONKeepsPathRepositoryConstraints(t *testing.T) {
+	dir := setupPathPluginProject(t)
+	testhelper.WriteFile(t, filepath.Join(dir, "composer.json"), testhelper.ComposerJSON{
+		Name: "shopware/production",
+		Require: map[string]string{
+			"shopware/core":              "6.7.3.0",
+			"shopware/deployment-helper": "*",
+			"acme/custom-plugin":         "1.0.0",
+			"swag/demo":                  "^2.0",
+		},
+	}.String())
+	testhelper.WriteFile(t, filepath.Join(dir, "composer.lock"), testhelper.ComposerLock(
+		testhelper.LockPackage{Name: "shopware/core", Version: "v6.7.3.0"},
+		testhelper.LockPackage{Name: "swag/demo", Version: "2.0.0", Type: "shopware-platform-plugin"},
+		testhelper.LockPackage{
+			Name: "acme/custom-plugin", Version: "1.0.0", Type: "shopware-platform-plugin",
+			Require: map[string]string{"shopware/core": "~6.7.0"},
+			Dist:    map[string]string{"type": "path", "url": "custom/static-plugins/MyCustomPlugin"},
+		},
+	))
+
+	changes, err := newTestUpgrader(t, dir).RewriteComposerJSON("6.7.11.0", map[string]string{"swag/demo": "2.1.3"})
+	require.NoError(t, err)
+	assert.Contains(t, changes, "shopware/core: 6.7.3.0 -> 6.7.11.0")
+	assert.Contains(t, changes, "swag/demo: ^2.0 -> 2.1.3")
+	for _, change := range changes {
+		assert.NotContains(t, change, "acme/custom-plugin")
+	}
+
+	content, err := os.ReadFile(filepath.Join(dir, "composer.json"))
+	require.NoError(t, err)
+	var parsed struct {
+		Require map[string]string `json:"require"`
+	}
+	require.NoError(t, json.Unmarshal(content, &parsed))
+	assert.Equal(t, "1.0.0", parsed.Require["acme/custom-plugin"])
+	assert.Equal(t, "2.1.3", parsed.Require["swag/demo"])
+}
+
 func TestRenderUpgradeManifestLeavesProjectUntouched(t *testing.T) {
 	dir := t.TempDir()
 	original := `{
 		"name": "shopware/production",
 		"require": {"shopware/core": "6.6.10.3", "shopware/deployment-helper": "*"}
 	}`
-	writeFile(t, filepath.Join(dir, "composer.json"), original)
-	writeFile(t, filepath.Join(dir, "composer.lock"), `{"packages": [], "packages-dev": []}`)
+	testhelper.WriteFile(t, filepath.Join(dir, "composer.json"), original)
+	testhelper.WriteFile(t, filepath.Join(dir, "composer.lock"), testhelper.ComposerLock())
 
 	manifest, err := newTestUpgrader(t, dir).renderUpgradeManifest("6.7.11.0")
 	require.NoError(t, err)
@@ -77,11 +118,11 @@ func TestRenderUpgradeManifestLeavesProjectUntouched(t *testing.T) {
 
 func TestRewriteComposerJSONWithoutResolvedVersions(t *testing.T) {
 	dir := t.TempDir()
-	writeFile(t, filepath.Join(dir, "composer.json"), `{
-		"name": "shopware/production",
-		"require": {"shopware/core": "6.6.10.3", "shopware/deployment-helper": "*", "swag/demo": "^2.0"}
-	}`)
-	writeFile(t, filepath.Join(dir, "composer.lock"), testComposerLock)
+	testhelper.WriteFile(t, filepath.Join(dir, "composer.json"), testhelper.ComposerJSON{
+		Name:    "shopware/production",
+		Require: map[string]string{"shopware/core": "6.6.10.3", "shopware/deployment-helper": "*", "swag/demo": "^2.0"},
+	}.String())
+	testhelper.WriteFile(t, filepath.Join(dir, "composer.lock"), testComposerLock)
 
 	changes, err := newTestUpgrader(t, dir).RewriteComposerJSON("6.7.11.0", nil)
 	require.NoError(t, err)
@@ -90,14 +131,11 @@ func TestRewriteComposerJSONWithoutResolvedVersions(t *testing.T) {
 
 func TestRewriteComposerJSONDoesNotMoveRequireDevPackages(t *testing.T) {
 	dir := t.TempDir()
-	writeFile(t, filepath.Join(dir, "composer.json"), `{
-		"name": "shopware/production",
-		"require-dev": {
-			"shopware/core": "6.6.10.3",
-			"swag/demo": "^2.0"
-		}
-	}`)
-	writeFile(t, filepath.Join(dir, "composer.lock"), testComposerLock)
+	testhelper.WriteFile(t, filepath.Join(dir, "composer.json"), testhelper.ComposerJSON{
+		Name:       "shopware/production",
+		RequireDev: map[string]string{"shopware/core": "6.6.10.3", "swag/demo": "^2.0"},
+	}.String())
+	testhelper.WriteFile(t, filepath.Join(dir, "composer.lock"), testComposerLock)
 
 	changes, err := newTestUpgrader(t, dir).RewriteComposerJSON("6.7.11.0", map[string]string{"swag/demo": "2.1.3"})
 	require.NoError(t, err)
@@ -124,11 +162,11 @@ func TestLockNameFor(t *testing.T) {
 
 func TestRewriteComposerJSONLeavesAuditConfigUntouched(t *testing.T) {
 	dir := t.TempDir()
-	writeFile(t, filepath.Join(dir, "composer.json"), `{
-		"name": "shopware/production",
-		"require": {"shopware/core": "6.6.10.3", "shopware/deployment-helper": "*"}
-	}`)
-	writeFile(t, filepath.Join(dir, "composer.lock"), testComposerLock)
+	testhelper.WriteFile(t, filepath.Join(dir, "composer.json"), testhelper.ComposerJSON{
+		Name:    "shopware/production",
+		Require: map[string]string{"shopware/core": "6.6.10.3", "shopware/deployment-helper": "*"},
+	}.String())
+	testhelper.WriteFile(t, filepath.Join(dir, "composer.lock"), testComposerLock)
 
 	u := newTestUpgrader(t, dir)
 	u.DisableAuditBlock()

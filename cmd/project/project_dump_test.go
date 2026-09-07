@@ -8,6 +8,8 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/shopware/shopware-cli/internal/testhelper"
 )
 
 func newDumpFlagCommand(t *testing.T, flags map[string]string) *cobra.Command {
@@ -84,8 +86,9 @@ func TestAssembleConnectionURIDatabaseURLInsideProject(t *testing.T) {
 	projectRoot := t.TempDir()
 	require.NoError(t, os.MkdirAll(filepath.Join(projectRoot, "bin"), 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(projectRoot, "bin", "console"), nil, 0o755))
-	require.NoError(t, os.WriteFile(filepath.Join(projectRoot, "composer.json"), []byte(`{"require": {"shopware/core": "6.6.0"}}`), 0o644))
-	require.NoError(t, os.WriteFile(filepath.Join(projectRoot, ".env"), []byte("DATABASE_URL=mysql://app:secret@db.example.com:3307/shop\n"), 0o644))
+	testhelper.WriteFile(t, filepath.Join(projectRoot, "composer.json"),
+		testhelper.ComposerJSON{Require: map[string]string{"shopware/core": "6.6.0"}}.String())
+	testhelper.WriteFile(t, filepath.Join(projectRoot, ".env"), "DATABASE_URL=mysql://app:secret@db.example.com:3307/shop\n")
 
 	t.Setenv("PROJECT_ROOT", "")
 	t.Setenv("DATABASE_URL", "")

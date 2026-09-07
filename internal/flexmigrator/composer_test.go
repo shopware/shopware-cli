@@ -2,13 +2,14 @@ package flexmigrator
 
 import (
 	"encoding/json"
-	"os"
 	"path/filepath"
 	"testing"
 
 	"github.com/shyim/go-composer"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/shopware/shopware-cli/internal/testhelper"
 )
 
 func TestMigrateComposerJson(t *testing.T) {
@@ -44,8 +45,7 @@ func TestMigrateComposerJson(t *testing.T) {
 		composerFile := filepath.Join(tempDir, "composer.json")
 		content, err := json.MarshalIndent(initialComposer, "", "  ")
 		require.NoError(t, err)
-		err = os.WriteFile(composerFile, content, 0o644)
-		require.NoError(t, err)
+		testhelper.WriteFile(t, composerFile, string(content))
 
 		// Run the migration
 		err = MigrateComposerJson(tempDir)
@@ -132,7 +132,7 @@ func TestMigrateComposerJson(t *testing.T) {
 		composerFile := filepath.Join(tempDir, "composer.json")
 		content, err := json.MarshalIndent(initialComposer, "", "  ")
 		require.NoError(t, err)
-		require.NoError(t, os.WriteFile(composerFile, content, 0o644))
+		testhelper.WriteFile(t, composerFile, string(content))
 
 		require.NoError(t, MigrateComposerJson(tempDir))
 
@@ -159,10 +159,9 @@ func TestMigrateComposerJson(t *testing.T) {
 		t.Parallel()
 		tempDir := t.TempDir()
 		composerFile := filepath.Join(tempDir, "composer.json")
-		err := os.WriteFile(composerFile, []byte("invalid json"), 0o644)
-		require.NoError(t, err)
+		testhelper.WriteFile(t, composerFile, "invalid json")
 
-		err = MigrateComposerJson(tempDir)
+		err := MigrateComposerJson(tempDir)
 		assert.Error(t, err)
 	})
 }

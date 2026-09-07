@@ -2,6 +2,7 @@ package install
 
 import (
 	"context"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -49,6 +50,14 @@ func (f *fakeExecutor) ComposerCommand(ctx context.Context, args ...string) *exe
 
 func (f *fakeExecutor) NPMCommand(ctx context.Context, args ...string) *executor.Process {
 	return shellProcess(ctx, "true")
+}
+
+func (f *fakeExecutor) AvailableLogFiles(context.Context) ([]executor.LogFile, error) {
+	return nil, executor.ErrNotSupported
+}
+
+func (f *fakeExecutor) GetLog(context.Context, string, int, bool, io.Writer) error {
+	return nil
 }
 
 func (f *fakeExecutor) NormalizePath(hostPath string) string { return hostPath }

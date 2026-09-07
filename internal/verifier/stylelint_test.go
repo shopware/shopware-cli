@@ -1,11 +1,12 @@
 package verifier
 
 import (
-	"os"
 	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+
+	"github.com/shopware/shopware-cli/internal/testhelper"
 )
 
 func TestHasSCSSFiles(t *testing.T) {
@@ -18,10 +19,7 @@ func TestHasSCSSFiles(t *testing.T) {
 			name: "directory with SCSS files",
 			setupFunc: func(t *testing.T, dir string) {
 				t.Helper()
-				err := os.WriteFile(filepath.Join(dir, "styles.scss"), []byte("body { color: red; }"), 0644)
-				if err != nil {
-					t.Fatal(err)
-				}
+				testhelper.WriteFile(t, filepath.Join(dir, "styles.scss"), "body { color: red; }")
 			},
 			expectedResult: true,
 		},
@@ -29,15 +27,7 @@ func TestHasSCSSFiles(t *testing.T) {
 			name: "directory with SCSS files in subdirectory",
 			setupFunc: func(t *testing.T, dir string) {
 				t.Helper()
-				subdir := filepath.Join(dir, "css")
-				err := os.MkdirAll(subdir, 0755)
-				if err != nil {
-					t.Fatal(err)
-				}
-				err = os.WriteFile(filepath.Join(subdir, "main.scss"), []byte("body { color: blue; }"), 0644)
-				if err != nil {
-					t.Fatal(err)
-				}
+				testhelper.WriteFile(t, filepath.Join(dir, "css", "main.scss"), "body { color: blue; }")
 			},
 			expectedResult: true,
 		},
@@ -45,10 +35,7 @@ func TestHasSCSSFiles(t *testing.T) {
 			name: "directory without SCSS files",
 			setupFunc: func(t *testing.T, dir string) {
 				t.Helper()
-				err := os.WriteFile(filepath.Join(dir, "styles.css"), []byte("body { color: red; }"), 0644)
-				if err != nil {
-					t.Fatal(err)
-				}
+				testhelper.WriteFile(t, filepath.Join(dir, "styles.css"), "body { color: red; }")
 			},
 			expectedResult: false,
 		},
@@ -64,15 +51,7 @@ func TestHasSCSSFiles(t *testing.T) {
 			name: "SCSS files in node_modules should be ignored",
 			setupFunc: func(t *testing.T, dir string) {
 				t.Helper()
-				nodeModules := filepath.Join(dir, "node_modules")
-				err := os.MkdirAll(nodeModules, 0755)
-				if err != nil {
-					t.Fatal(err)
-				}
-				err = os.WriteFile(filepath.Join(nodeModules, "library.scss"), []byte("body { color: green; }"), 0644)
-				if err != nil {
-					t.Fatal(err)
-				}
+				testhelper.WriteFile(t, filepath.Join(dir, "node_modules", "library.scss"), "body { color: green; }")
 			},
 			expectedResult: false,
 		},
@@ -80,15 +59,7 @@ func TestHasSCSSFiles(t *testing.T) {
 			name: "SCSS files in vendor should be ignored",
 			setupFunc: func(t *testing.T, dir string) {
 				t.Helper()
-				vendor := filepath.Join(dir, "vendor")
-				err := os.MkdirAll(vendor, 0755)
-				if err != nil {
-					t.Fatal(err)
-				}
-				err = os.WriteFile(filepath.Join(vendor, "library.scss"), []byte("body { color: yellow; }"), 0644)
-				if err != nil {
-					t.Fatal(err)
-				}
+				testhelper.WriteFile(t, filepath.Join(dir, "vendor", "library.scss"), "body { color: yellow; }")
 			},
 			expectedResult: false,
 		},
@@ -96,15 +67,7 @@ func TestHasSCSSFiles(t *testing.T) {
 			name: "SCSS files in dist should be ignored",
 			setupFunc: func(t *testing.T, dir string) {
 				t.Helper()
-				dist := filepath.Join(dir, "dist")
-				err := os.MkdirAll(dist, 0755)
-				if err != nil {
-					t.Fatal(err)
-				}
-				err = os.WriteFile(filepath.Join(dist, "compiled.scss"), []byte("body { color: purple; }"), 0644)
-				if err != nil {
-					t.Fatal(err)
-				}
+				testhelper.WriteFile(t, filepath.Join(dir, "dist", "compiled.scss"), "body { color: purple; }")
 			},
 			expectedResult: false,
 		},
@@ -112,22 +75,10 @@ func TestHasSCSSFiles(t *testing.T) {
 			name: "SCSS files outside ignored directories should be found",
 			setupFunc: func(t *testing.T, dir string) {
 				t.Helper()
-				// Create ignored directories with SCSS files
-				nodeModules := filepath.Join(dir, "node_modules")
-				err := os.MkdirAll(nodeModules, 0755)
-				if err != nil {
-					t.Fatal(err)
-				}
-				err = os.WriteFile(filepath.Join(nodeModules, "library.scss"), []byte("body { color: green; }"), 0644)
-				if err != nil {
-					t.Fatal(err)
-				}
-
+				// Create an ignored directory with SCSS files
+				testhelper.WriteFile(t, filepath.Join(dir, "node_modules", "library.scss"), "body { color: green; }")
 				// Create SCSS file in valid location
-				err = os.WriteFile(filepath.Join(dir, "main.scss"), []byte("body { color: black; }"), 0644)
-				if err != nil {
-					t.Fatal(err)
-				}
+				testhelper.WriteFile(t, filepath.Join(dir, "main.scss"), "body { color: black; }")
 			},
 			expectedResult: true,
 		},

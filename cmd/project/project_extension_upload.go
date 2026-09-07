@@ -19,6 +19,7 @@ import (
 	adminSdk "github.com/shopware/shopware-cli/internal/admin-api"
 	"github.com/shopware/shopware-cli/internal/archiver"
 	"github.com/shopware/shopware-cli/internal/extension"
+	"github.com/shopware/shopware-cli/internal/shop"
 	"github.com/shopware/shopware-cli/logging"
 )
 
@@ -111,7 +112,7 @@ var projectExtensionUploadCmd = &cobra.Command{
 			}
 		}
 
-		projectRoot, err := findClosestShopwareProject(true)
+		projectRoot, err := shop.FindClosestShopwareProject(true)
 		if err != nil {
 			return err
 		}

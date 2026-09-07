@@ -7,6 +7,7 @@ import (
 	"os/exec"
 	"sync"
 
+	"github.com/shopware/shopware-cli/internal/envfile"
 	"github.com/shopware/shopware-cli/internal/shop"
 )
 
@@ -19,6 +20,17 @@ func New(projectRoot string, cfg *shop.EnvironmentConfig, shopCfg *shop.Config) 
 			}
 		}
 		return NewLocalWithConfig(projectRoot, cfg, shopCfg), nil
+	case TypeSSH:
+		if cfg.SSH == nil {
+			return nil, errors.New("ssh environment requires an ssh section with host and directory")
+		}
+		if cfg.SSH.Host == "" {
+			return nil, errors.New("ssh environment requires ssh.host")
+		}
+		if cfg.SSH.Directory == "" {
+			return nil, errors.New("ssh environment requires ssh.directory")
+		}
+		return &SSHExecutor{host: cfg.SSH.Host, user: cfg.SSH.User, port: cfg.SSH.Port, directory: cfg.SSH.Directory, identityFile: cfg.SSH.IdentityFile, phpBinary: cfg.SSH.PHPBinary, projectRoot: projectRoot, shopCfg: shopCfg, envCfg: cfg}, nil
 	case TypeSymfonyCLI:
 		path := pathToSymfonyCLI()
 		if path == "" {
@@ -32,8 +44,8 @@ func New(projectRoot string, cfg *shop.EnvironmentConfig, shopCfg *shop.Config) 
 		// COMPOSE_PROJECT_NAME outranks .env in Compose's own precedence and
 		// is inherited by every docker invocation, so it stays authoritative.
 		composeProjectName := ""
-		if os.Getenv(shop.ComposeProjectNameEnvKey) == "" {
-			composeProjectName = shop.ReadComposeProjectName(projectRoot)
+		if os.Getenv(envfile.ComposeProjectNameEnvKey) == "" {
+			composeProjectName = envfile.ReadComposeProjectName(projectRoot)
 		}
 		return &DockerExecutor{projectRoot: projectRoot, shopCfg: shopCfg, envCfg: cfg, composeProjectName: composeProjectName}, nil
 	default:

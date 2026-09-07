@@ -9,14 +9,14 @@ import (
 	"github.com/shyim/go-version"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/shopware/shopware-cli/internal/testhelper"
 )
 
 func TestGenerateChecksumJSONOverwritesExistingChecksum(t *testing.T) {
-	extensionDir := t.TempDir()
-	require.NoError(t, os.WriteFile(filepath.Join(extensionDir, "composer.json"), []byte(`{"name":"test/test-ext","version":"1.0.0"}`), 0o644))
-	require.NoError(t, os.MkdirAll(filepath.Join(extensionDir, "src", "Resources"), 0o755))
-	require.NoError(t, os.WriteFile(filepath.Join(extensionDir, "src", "Resources", "changed.js"), []byte("before"), 0o644))
-	require.NoError(t, os.WriteFile(filepath.Join(extensionDir, "src", "Resources", "removed.js"), []byte("removed"), 0o644))
+	extensionDir := testhelper.ExtensionDir(t, testhelper.ComposerJSON{Name: "test/test-ext", Version: "1.0.0"})
+	testhelper.WriteFile(t, filepath.Join(extensionDir, "src", "Resources", "changed.js"), "before")
+	testhelper.WriteFile(t, filepath.Join(extensionDir, "src", "Resources", "removed.js"), "removed")
 
 	mockExt := &mockExtension{
 		name:       "TestExt",

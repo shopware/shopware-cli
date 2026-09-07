@@ -9,16 +9,17 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/shopware/shopware-cli/internal/testhelper"
 )
 
 func TestCleanupTcpdfKeepsOnlyCourierAndHelvetica(t *testing.T) {
 	root := t.TempDir()
 	fonts := filepath.Join(root, "vendor", "tecnickcom", "tcpdf", "fonts")
-	require.NoError(t, os.MkdirAll(fonts, 0o755))
 	// foo.z falls to the general keep-list rule; the file named exactly .z
 	// has its own branch.
 	for _, name := range []string{"helvetica.php", "courier_bold.php", "times.php", "foo.z", ".z"} {
-		require.NoError(t, os.WriteFile(filepath.Join(fonts, name), []byte("x"), 0o644))
+		testhelper.WriteFile(t, filepath.Join(fonts, name), "x")
 	}
 
 	require.NoError(t, cleanupTcpdf(root, t.Context()))

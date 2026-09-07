@@ -9,6 +9,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/shopware/shopware-cli/internal/testhelper"
 )
 
 func TestCleanup(t *testing.T) {
@@ -27,19 +29,14 @@ func TestCleanup(t *testing.T) {
 		}
 
 		for _, file := range filesToCreate {
-			fullPath := filepath.Join(tempDir, file)
-			err := os.MkdirAll(filepath.Dir(fullPath), 0o755)
-			require.NoError(t, err)
-			err = os.WriteFile(fullPath, []byte("test content"), 0o644)
-			require.NoError(t, err)
+			testhelper.WriteFile(t, filepath.Join(tempDir, file), "test content")
 		}
 
 		// Create a file that should not be removed
-		err := os.WriteFile(filepath.Join(tempDir, "keep-me.txt"), []byte("keep this file"), 0o644)
-		require.NoError(t, err)
+		testhelper.WriteFile(t, filepath.Join(tempDir, "keep-me.txt"), "keep this file")
 
 		// Run cleanup
-		err = Cleanup(tempDir)
+		err := Cleanup(tempDir)
 		require.NoError(t, err)
 
 		// Verify files were removed
@@ -67,23 +64,16 @@ func TestCleanup(t *testing.T) {
 		}
 
 		for _, dir := range dirsToCreate {
-			fullPath := filepath.Join(tempDir, dir)
-			err := os.MkdirAll(fullPath, 0o755)
-			require.NoError(t, err)
 			// Add a file in each directory
-			err = os.WriteFile(filepath.Join(fullPath, "test.txt"), []byte("test content"), 0o644)
-			require.NoError(t, err)
+			testhelper.WriteFile(t, filepath.Join(tempDir, dir, "test.txt"), "test content")
 		}
 
 		// Create a directory that should not be removed
 		keepDir := filepath.Join(tempDir, "keep-me")
-		err := os.MkdirAll(keepDir, 0o755)
-		require.NoError(t, err)
-		err = os.WriteFile(filepath.Join(keepDir, "test.txt"), []byte("keep this file"), 0o644)
-		require.NoError(t, err)
+		testhelper.WriteFile(t, filepath.Join(keepDir, "test.txt"), "keep this file")
 
 		// Run cleanup
-		err = Cleanup(tempDir)
+		err := Cleanup(tempDir)
 		require.NoError(t, err)
 
 		// Verify directories were removed
@@ -126,11 +116,7 @@ func TestCleanup(t *testing.T) {
 		}
 
 		for _, tc := range testCases {
-			fullPath := filepath.Join(tempDir, tc.path)
-			err := os.MkdirAll(filepath.Dir(fullPath), 0o755)
-			require.NoError(t, err)
-			err = os.WriteFile(fullPath, tc.content, 0o644)
-			require.NoError(t, err)
+			testhelper.WriteFile(t, filepath.Join(tempDir, tc.path), string(tc.content))
 
 			if tc.remove {
 				// Verify the MD5 matches what we expect
@@ -173,13 +159,10 @@ func TestCleanup(t *testing.T) {
 		// Create a file that's in cleanupByMd5 but with different content
 		filePath := "config/packages/shopware.yaml"
 		fullPath := filepath.Join(tempDir, filePath)
-		err := os.MkdirAll(filepath.Dir(fullPath), 0o755)
-		require.NoError(t, err)
-		err = os.WriteFile(fullPath, []byte("custom content that doesn't match MD5"), 0o644)
-		require.NoError(t, err)
+		testhelper.WriteFile(t, fullPath, "custom content that doesn't match MD5")
 
 		// Run cleanup
-		err = Cleanup(tempDir)
+		err := Cleanup(tempDir)
 		require.NoError(t, err)
 
 		// Verify file still exists
