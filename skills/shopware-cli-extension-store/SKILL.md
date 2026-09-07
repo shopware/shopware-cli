@@ -11,9 +11,9 @@ Every claim in the answer carries a source. A finding without a source is not a 
 
 ## 1. Collect evidence
 
-Locate `collect-evidence.sh` next to this `SKILL.md` and run it with the extension root as the working directory:
+Locate `collect-evidence.sh` in the `scripts/` directory next to this `SKILL.md` and run it with the extension root as the working directory:
 
-bash "$(dirname "$SKILL_PATH")/collect-evidence.sh" .
+bash "$(dirname "$SKILL_PATH")/scripts/collect-evidence.sh" .
 
 Do not answer before it completes.
 
