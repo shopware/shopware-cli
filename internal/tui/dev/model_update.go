@@ -97,7 +97,13 @@ func (m Model) updateInstallFailed(msg tea.KeyPressMsg) (app.Content, tea.Cmd) {
 	case "l":
 		m.installProg.showLogs = !m.installProg.showLogs
 	case "q", tui.KeyCtrlC:
-		// Unlike Cancel (which opens the dashboard), q leaves the TUI.
+		// Unlike Cancel (which opens the dashboard), q leaves the TUI. The
+		// containers started for the install outlive it, so ask about them
+		// with the same prompt the dashboard uses.
+		if m.dockerMode {
+			return m, m.host.PushOverlay(newStopConfirm())
+		}
+		m.shutdown()
 		return m, tea.Quit
 	case tui.KeyLeft, tui.KeyShiftTab:
 		if selected > 0 {

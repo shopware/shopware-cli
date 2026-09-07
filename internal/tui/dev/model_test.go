@@ -10,6 +10,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/x/ansi"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/shopware/shopware-cli/internal/executor"
 	"github.com/shopware/shopware-cli/internal/shop"
@@ -169,6 +170,48 @@ func TestUpdateKeyPress_PhaseInstallFailed_QuitKey(t *testing.T) {
 	assert.NotNil(t, cmd)
 	_, isQuit := cmd().(tea.QuitMsg)
 	assert.True(t, isQuit)
+}
+
+func TestUpdateKeyPress_PhaseInstallFailed_QuitDockerModeOpensConfirm(t *testing.T) {
+	for _, key := range []tea.KeyPressMsg{keyRune('q'), keyCtrl('c')} {
+		m := newTestModel(t)
+		m.phase = phaseInstallFailed
+		m.dockerMode = true
+
+		updated, cmd := m.Update(key)
+		um := updated.(Model)
+		_, ok := topOverlay(um).(*prompt.Overlay)
+		assert.True(t, ok, "containers started for the install must not be left behind silently")
+		assert.Nil(t, cmd, "stop confirm has no init cmd")
+		assert.Equal(t, phaseInstallFailed, um.phase, "the failure screen stays behind the prompt")
+	}
+}
+
+func TestHandleStopConfirmResult_FromInstallFailedScreen(t *testing.T) {
+	// Cancel returns to the failure card so the user can still retry.
+	m := newTestModel(t)
+	m.phase = phaseInstallFailed
+	m.dockerMode = true
+	updated, cmd := m.handleStopConfirmResult(prompt.ResultMsg{ID: stopConfirmID, Choice: stopConfirmCancel})
+	assert.Equal(t, phaseInstallFailed, updated.(Model).phase)
+	assert.Nil(t, cmd)
+
+	// Keeping the containers exits right away.
+	m = newTestModel(t)
+	m.phase = phaseInstallFailed
+	m.dockerMode = true
+	_, cmd = m.handleStopConfirmResult(prompt.ResultMsg{ID: stopConfirmID, Choice: stopConfirmQuit})
+	require.NotNil(t, cmd)
+	_, isQuit := cmd().(tea.QuitMsg)
+	assert.True(t, isQuit)
+
+	// Stopping them shows the stopping phase instead of quitting outright.
+	m = newTestModel(t)
+	m.phase = phaseInstallFailed
+	m.dockerMode = true
+	updated, cmd = m.handleStopConfirmResult(prompt.ResultMsg{ID: stopConfirmID, Choice: stopConfirmStop})
+	assert.Equal(t, phaseStopping, updated.(Model).phase)
+	assert.NotNil(t, cmd)
 }
 
 func TestUpdateKeyPress_PhaseInstallFailed_LTogglesLogs(t *testing.T) {
