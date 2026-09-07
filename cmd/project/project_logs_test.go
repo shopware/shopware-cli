@@ -2,19 +2,64 @@ package project
 
 import (
 	"bytes"
-	"fmt"
+	"context"
 	"io"
 	"os"
-	"path/filepath"
-	"strings"
+	"os/exec"
 	"sync"
 	"testing"
 	"time"
 
+	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
+	adminSdk "github.com/shopware/shopware-cli/internal/admin-api"
+	"github.com/shopware/shopware-cli/internal/executor"
+	"github.com/shopware/shopware-cli/internal/shop"
 )
 
 var stdoutCaptureMu sync.Mutex
+
+func newLogsTestCmd(t *testing.T) *cobra.Command {
+	t.Helper()
+
+	cmd := &cobra.Command{}
+	cmd.SetContext(t.Context())
+	cmd.Flags().Int("lines", 100, "")
+	cmd.Flags().BoolP("follow", "f", false, "")
+	cmd.Flags().BoolP("list", "l", false, "")
+
+	return cmd
+}
+
+func TestProjectLogsRejectsNegativeLines(t *testing.T) {
+	t.Parallel()
+
+	cmd := newLogsTestCmd(t)
+	require.NoError(t, cmd.Flags().Set("lines", "-5"))
+
+	fakeExec := &logsFakeExecutor{files: []executor.LogFile{{Name: "prod.log"}}}
+
+	err := runProjectLogs(cmd, nil, fakeExec)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "--lines")
+	assert.False(t, fakeExec.getLogCalled, "GetLog must not be invoked with a negative --lines value")
+}
+
+func TestProjectLogsPassesValidLinesToGetLog(t *testing.T) {
+	t.Parallel()
+
+	cmd := newLogsTestCmd(t)
+	require.NoError(t, cmd.Flags().Set("lines", "50"))
+
+	fakeExec := &logsFakeExecutor{files: []executor.LogFile{{Name: "prod.log"}}}
+
+	require.NoError(t, runProjectLogs(cmd, nil, fakeExec))
+	require.True(t, fakeExec.getLogCalled)
+	assert.Equal(t, 50, fakeExec.gotLines, "valid --lines values are passed through unchanged")
+	assert.Equal(t, "prod.log", fakeExec.gotFile)
+}
 
 func TestFormatSize(t *testing.T) {
 	t.Parallel()
@@ -40,78 +85,22 @@ func TestFormatSize(t *testing.T) {
 	}
 }
 
-func TestFindLogFilesMissingDirectory(t *testing.T) {
-	t.Parallel()
-
-	tmp := t.TempDir()
-	_, err := findLogFiles(filepath.Join(tmp, "does-not-exist"))
-	assert.Error(t, err)
-}
-
-func TestFindLogFilesEmptyDirectory(t *testing.T) {
-	t.Parallel()
-
-	tmp := t.TempDir()
-	files, err := findLogFiles(tmp)
-	assert.NoError(t, err)
-	assert.Empty(t, files)
-}
-
-func TestFindLogFilesFiltersAndSortsByModTime(t *testing.T) {
-	t.Parallel()
-
-	tmp := t.TempDir()
-
-	writeFile := func(name, content string) string {
-		p := filepath.Join(tmp, name)
-		assert.NoError(t, os.WriteFile(p, []byte(content), 0o644))
-		return p
-	}
-
-	older := writeFile("older.log", "older content")
-	newer := writeFile("newer.log", "newer")
-	writeFile("notes.txt", "ignore me")
-	assert.NoError(t, os.Mkdir(filepath.Join(tmp, "subdir.log"), 0o755))
-
-	now := time.Now()
-	assert.NoError(t, os.Chtimes(older, now.Add(-2*time.Hour), now.Add(-2*time.Hour)))
-	assert.NoError(t, os.Chtimes(newer, now, now))
-
-	files, err := findLogFiles(tmp)
-	assert.NoError(t, err)
-	assert.Len(t, files, 2)
-
-	assert.Equal(t, "newer.log", files[0].name)
-	assert.Equal(t, "older.log", files[1].name)
-	assert.Equal(t, int64(len("newer")), files[0].size)
-	assert.Equal(t, int64(len("older content")), files[1].size)
-	assert.Equal(t, filepath.Join(tmp, "newer.log"), files[0].path)
-}
-
-func TestListLogFilesEmpty(t *testing.T) {
-	tmp := t.TempDir()
+func TestPrintLogFileListEmpty(t *testing.T) {
 	stdout, err := captureStdout(func() error {
-		return listLogFiles(tmp)
+		return printLogFileList(nil)
 	})
 	assert.NoError(t, err)
 	assert.Contains(t, stdout, "No log files found.")
 }
 
-func TestListLogFilesMissingDir(t *testing.T) {
-	t.Parallel()
-
-	tmp := t.TempDir()
-	err := listLogFiles(filepath.Join(tmp, "missing"))
-	assert.Error(t, err)
-}
-
-func TestListLogFilesShowsAllFiles(t *testing.T) {
-	tmp := t.TempDir()
-	assert.NoError(t, os.WriteFile(filepath.Join(tmp, "a.log"), []byte("hi"), 0o644))
-	assert.NoError(t, os.WriteFile(filepath.Join(tmp, "b.log"), make([]byte, 2048), 0o644))
+func TestPrintLogFileListShowsAllFiles(t *testing.T) {
+	files := []executor.LogFile{
+		{Name: "a.log", Size: 2, ModTime: time.Unix(2000, 0)},
+		{Name: "b.log", Size: 2048, ModTime: time.Unix(1000, 0)},
+	}
 
 	stdout, err := captureStdout(func() error {
-		return listLogFiles(tmp)
+		return printLogFileList(files)
 	})
 	assert.NoError(t, err)
 	assert.Contains(t, stdout, "a.log")
@@ -119,70 +108,59 @@ func TestListLogFilesShowsAllFiles(t *testing.T) {
 	assert.Contains(t, stdout, "2.0 KB")
 }
 
-func TestPrintLastLinesShortFile(t *testing.T) {
-	tmp := t.TempDir()
-	p := filepath.Join(tmp, "short.log")
-	assert.NoError(t, os.WriteFile(p, []byte("line1\nline2\nline3\n"), 0o644))
-
-	stdout, err := captureStdout(func() error {
-		return printLastLines(p, 100)
-	})
-	assert.NoError(t, err)
-	assert.Equal(t, "line1\nline2\nline3\n", stdout)
+// logsFakeExecutor implements executor.Executor, serving canned log files
+// and recording GetLog invocations.
+type logsFakeExecutor struct {
+	files        []executor.LogFile
+	getLogCalled bool
+	gotFile      string
+	gotLines     int
 }
 
-func TestPrintLastLinesTruncatesToLastN(t *testing.T) {
-	tmp := t.TempDir()
-	p := filepath.Join(tmp, "long.log")
-
-	var sb strings.Builder
-	for i := 0; i < 50; i++ {
-		fmt.Fprintf(&sb, "line%02d\n", i)
-	}
-	assert.NoError(t, os.WriteFile(p, []byte(sb.String()), 0o644))
-
-	stdout, err := captureStdout(func() error {
-		return printLastLines(p, 5)
-	})
-	assert.NoError(t, err)
-	assert.Equal(t, "line45\nline46\nline47\nline48\nline49\n", stdout)
+func (f *logsFakeExecutor) AvailableLogFiles(context.Context) ([]executor.LogFile, error) {
+	return f.files, nil
 }
 
-func TestPrintLastLinesExactNLines(t *testing.T) {
-	tmp := t.TempDir()
-	p := filepath.Join(tmp, "exact.log")
-	assert.NoError(t, os.WriteFile(p, []byte("a\nb\nc\n"), 0o644))
-
-	stdout, err := captureStdout(func() error {
-		return printLastLines(p, 3)
-	})
-	assert.NoError(t, err)
-	assert.Equal(t, "a\nb\nc\n", stdout)
+func (f *logsFakeExecutor) GetLog(_ context.Context, file string, lines int, _ bool, _ io.Writer) error {
+	f.getLogCalled = true
+	f.gotFile = file
+	f.gotLines = lines
+	return nil
 }
 
-func TestPrintLastLinesMissingFile(t *testing.T) {
-	t.Parallel()
-
-	tmp := t.TempDir()
-	err := printLastLines(filepath.Join(tmp, "missing.log"), 10)
-	assert.Error(t, err)
+func (f *logsFakeExecutor) ConsoleCommand(ctx context.Context, _ ...string) *executor.Process {
+	return &executor.Process{Cmd: exec.CommandContext(ctx, "true")}
 }
 
-func TestPrintLastLinesRingBufferOverflow(t *testing.T) {
-	tmp := t.TempDir()
-	p := filepath.Join(tmp, "ring.log")
+func (f *logsFakeExecutor) ComposerCommand(ctx context.Context, _ ...string) *executor.Process {
+	return &executor.Process{Cmd: exec.CommandContext(ctx, "true")}
+}
 
-	var sb strings.Builder
-	for i := 0; i < 2000; i++ {
-		fmt.Fprintf(&sb, "L%04d\n", i)
-	}
-	assert.NoError(t, os.WriteFile(p, []byte(sb.String()), 0o644))
+func (f *logsFakeExecutor) PHPCommand(ctx context.Context, _ ...string) *executor.Process {
+	return &executor.Process{Cmd: exec.CommandContext(ctx, "true")}
+}
 
-	stdout, err := captureStdout(func() error {
-		return printLastLines(p, 3)
-	})
-	assert.NoError(t, err)
-	assert.Equal(t, "L1997\nL1998\nL1999\n", stdout)
+func (f *logsFakeExecutor) NPMCommand(ctx context.Context, _ ...string) *executor.Process {
+	return &executor.Process{Cmd: exec.CommandContext(ctx, "true")}
+}
+
+func (f *logsFakeExecutor) NormalizePath(hostPath string) string { return hostPath }
+func (f *logsFakeExecutor) Type() string                         { return executor.TypeLocal }
+func (f *logsFakeExecutor) WithEnv(map[string]string) executor.Executor {
+	return f
+}
+func (f *logsFakeExecutor) WithRelDir(string) executor.Executor    { return f }
+func (f *logsFakeExecutor) StartEnvironment(context.Context) error { return nil }
+func (f *logsFakeExecutor) StopEnvironment(context.Context, executor.StopOptions) error {
+	return nil
+}
+func (f *logsFakeExecutor) EnvironmentStatus(context.Context) (bool, error) { return true, nil }
+func (f *logsFakeExecutor) AdminAPIClient(context.Context) (*adminSdk.Client, error) {
+	return nil, executor.ErrNotSupported
+}
+func (f *logsFakeExecutor) ShopConfig() *shop.Config { return nil }
+func (f *logsFakeExecutor) DatabaseConnection(context.Context) (*executor.DatabaseConnection, error) {
+	return nil, executor.ErrNotSupported
 }
 
 func captureStdout(fn func() error) (string, error) {

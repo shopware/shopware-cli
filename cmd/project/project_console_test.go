@@ -3,9 +3,11 @@ package project
 import (
 	"encoding/json"
 	"os"
+	"slices"
 	"testing"
 
 	"github.com/mattn/go-isatty"
+	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -91,4 +93,40 @@ func TestConsoleCommandContext(t *testing.T) {
 	}
 
 	assert.Equal(t, ctx, got)
+}
+
+func TestParseConsoleEnvironment(t *testing.T) {
+	for _, flag := range [][]string{
+		{"-e", "prod"},
+		{"--env", "prod"},
+		{"--env=prod"},
+		{"-e=prod"},
+		{"-eprod"},
+	} {
+		t.Run(flag[0], func(t *testing.T) {
+			cmd := &cobra.Command{}
+			cmd.Flags().StringP("env", "e", "", "")
+			args := slices.Concat(flag, []string{"cache:clear", "--no-warmup"})
+			remaining, err := parseConsoleEnvironment(cmd, args)
+			require.NoError(t, err)
+			assert.Equal(t, []string{"cache:clear", "--no-warmup"}, remaining)
+			env, err := cmd.Flags().GetString("env")
+			require.NoError(t, err)
+			assert.Equal(t, "prod", env)
+		})
+	}
+
+	for _, args := range [][]string{nil, {"cache:clear", "-eprod"}, {"--", "-eprod"}, {"--environment=prod", "cache:clear"}} {
+		cmd := &cobra.Command{}
+		cmd.Flags().StringP("env", "e", "local", "")
+		remaining, err := parseConsoleEnvironment(cmd, args)
+		require.NoError(t, err)
+		assert.Equal(t, args, remaining)
+		assert.False(t, cmd.Flags().Changed("env"))
+	}
+
+	for _, flag := range []string{"-e", "--env"} {
+		_, err := parseConsoleEnvironment(&cobra.Command{}, []string{flag})
+		assert.EqualError(t, err, "missing value for --env flag")
+	}
 }
