@@ -238,9 +238,7 @@ func TestSSHExecutorNormalizePath(t *testing.T) {
 	e := testSSHExecutor()
 
 	assert.Equal(t, "/var/www/shop/custom/plugins/Foo", e.NormalizePath("/project/custom/plugins/Foo"))
-	// Mirrors the Docker executor: relative paths escaping the project root
-	// are joined into the remote project directory as-is.
-	assert.Equal(t, "/var/www/outside/project", e.NormalizePath("/outside/project"))
+	assert.Equal(t, "/outside/project", e.NormalizePath("/outside/project"))
 
 	noRoot := &SSHExecutor{host: "shop.example.com", directory: "/var/www/shop"}
 	assert.Equal(t, "/project/custom/plugins/Foo", noRoot.NormalizePath("/project/custom/plugins/Foo"))

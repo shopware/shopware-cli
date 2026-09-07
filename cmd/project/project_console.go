@@ -172,6 +172,10 @@ func parseConsoleEnvironment(cmd *cobra.Command, args []string) ([]string, error
 		return args, nil
 	}
 
+	if value == "" {
+		return nil, errors.New("missing value for --env flag")
+	}
+
 	if err := cmd.Flags().Set("env", value); err != nil {
 		return nil, err
 	}

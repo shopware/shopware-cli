@@ -61,6 +61,20 @@ func TestProjectLogsPassesValidLinesToGetLog(t *testing.T) {
 	assert.Equal(t, "prod.log", fakeExec.gotFile)
 }
 
+func TestProjectLogsUsesExplicitFileEvenWhenNotListed(t *testing.T) {
+	t.Parallel()
+
+	cmd := newLogsTestCmd(t)
+	require.NoError(t, cmd.Flags().Set("lines", "50"))
+
+	fakeExec := &logsFakeExecutor{files: []executor.LogFile{{Name: "prod.log"}}}
+
+	require.NoError(t, runProjectLogs(cmd, []string{"custom.log"}, fakeExec))
+	require.True(t, fakeExec.getLogCalled)
+	assert.Equal(t, 50, fakeExec.gotLines)
+	assert.Equal(t, "custom.log", fakeExec.gotFile)
+}
+
 func TestFormatSize(t *testing.T) {
 	t.Parallel()
 

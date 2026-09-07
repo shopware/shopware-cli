@@ -203,6 +203,9 @@ func (s *SSHExecutor) NormalizePath(hostPath string) string {
 	if err != nil {
 		return hostPath
 	}
+	if rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return hostPath
+	}
 
 	return filepath.Join(s.directory, rel)
 }
