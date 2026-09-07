@@ -2,6 +2,8 @@ package project
 
 import (
 	"github.com/spf13/cobra"
+
+	"github.com/shopware/shopware-cli/internal/shop"
 )
 
 var projectComposerCmd = &cobra.Command{
@@ -13,7 +15,7 @@ var projectComposerCmd = &cobra.Command{
   shopware-cli project composer update --with-all-dependencies`,
 	DisableFlagParsing: true,
 	ValidArgsFunction: func(cmd *cobra.Command, input []string, _ string) ([]string, cobra.ShellCompDirective) {
-		projectRoot, err := findClosestShopwareProject(false)
+		projectRoot, err := shop.FindClosestShopwareProject(false)
 		if err != nil {
 			return nil, cobra.ShellCompDirectiveDefault
 		}
@@ -26,7 +28,7 @@ var projectComposerCmd = &cobra.Command{
 		return composerCommandCompletions(cmd, projectRoot, input, cmdExecutor)
 	},
 	RunE: func(cmd *cobra.Command, args []string) error {
-		projectRoot, err := findClosestShopwareProject(false)
+		projectRoot, err := shop.FindClosestShopwareProject(false)
 		if err != nil {
 			return err
 		}

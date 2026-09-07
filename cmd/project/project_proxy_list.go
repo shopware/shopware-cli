@@ -9,6 +9,7 @@ import (
 
 	"github.com/shopware/shopware-cli/internal/docker"
 	"github.com/shopware/shopware-cli/internal/proxy"
+	"github.com/shopware/shopware-cli/internal/shop"
 	"github.com/shopware/shopware-cli/internal/tui"
 )
 
@@ -17,7 +18,7 @@ var projectProxyStatusCmd = &cobra.Command{
 	Short:        "Report whether the current project is registered with the shared proxy",
 	SilenceUsage: true,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		projectRoot, err := findClosestShopwareProject(false)
+		projectRoot, err := shop.FindClosestShopwareProject(false)
 		if err != nil {
 			return err
 		}

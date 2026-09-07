@@ -13,6 +13,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/shopware/shopware-cli/internal/shop"
 	"github.com/shopware/shopware-cli/internal/tui"
 )
 
@@ -22,7 +23,7 @@ var projectLogsCmd = &cobra.Command{
 	Long:  "Show the last lines of a Shopware log file. Without arguments, shows the most recently modified log file. Use --list to discover available log files.",
 	Args:  cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		projectRoot, err := findClosestShopwareProject(false)
+		projectRoot, err := shop.FindClosestShopwareProject(false)
 		if err != nil {
 			return err
 		}

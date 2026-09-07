@@ -30,7 +30,7 @@ var projectConsoleCmd = &cobra.Command{
 	Args:               cobra.MinimumNArgs(1),
 	DisableFlagParsing: true,
 	ValidArgsFunction: func(cmd *cobra.Command, input []string, _ string) ([]string, cobra.ShellCompDirective) {
-		projectRoot, err := findClosestShopwareProject(false)
+		projectRoot, err := shop.FindClosestShopwareProject(false)
 		if err != nil {
 			return nil, cobra.ShellCompDirectiveDefault
 		}
@@ -99,7 +99,7 @@ var projectConsoleCmd = &cobra.Command{
 		return completions, cobra.ShellCompDirectiveDefault
 	},
 	RunE: func(cmd *cobra.Command, args []string) error {
-		projectRoot, err := findClosestShopwareProject(false)
+		projectRoot, err := shop.FindClosestShopwareProject(false)
 		if err != nil {
 			return err
 		}

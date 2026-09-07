@@ -30,7 +30,7 @@ var projectStorefrontWatchCmd = &cobra.Command{
 
 		if len(args) == 1 {
 			projectRoot = args[0]
-		} else if projectRoot, err = findClosestShopwareProject(false); err != nil {
+		} else if projectRoot, err = shop.FindClosestShopwareProject(false); err != nil {
 			return err
 		}
 

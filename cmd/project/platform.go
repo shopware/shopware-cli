@@ -3,7 +3,6 @@ package project
 import (
 	"context"
 	"errors"
-	"os"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -20,56 +19,6 @@ import (
 )
 
 const storefrontBundleName = "Storefront"
-
-func findClosestShopwareProject(allowFallback bool) (string, error) {
-	projectRoot := os.Getenv("PROJECT_ROOT")
-
-	if projectRoot != "" {
-		return projectRoot, nil
-	}
-
-	currentDir, err := os.Getwd()
-	if err != nil {
-		return "", err
-	}
-
-	cwd := currentDir
-
-	for {
-		files := []string{
-			currentDir + "/composer.json",
-			currentDir + "/composer.lock",
-		}
-
-		for _, file := range files {
-			if _, err := os.Stat(file); err == nil {
-				content, err := os.ReadFile(file)
-				if err != nil {
-					return "", err
-				}
-				contentString := string(content)
-
-				if strings.Contains(contentString, "shopware/core") {
-					if _, err := os.Stat(currentDir + "/bin/console"); err == nil {
-						return currentDir, nil
-					}
-				}
-			}
-		}
-
-		currentDir = filepath.Dir(currentDir)
-
-		if currentDir == filepath.Dir(currentDir) {
-			break
-		}
-	}
-
-	if allowFallback {
-		return cwd, nil
-	}
-
-	return "", errors.New("cannot find Shopware project in current directory")
-}
 
 func filterAndWritePluginJson(cmd *cobra.Command, projectRoot string, shopCfg *shop.Config, cmdExecutor executor.Executor) error {
 	sources, err := filterAndGetSources(cmd, projectRoot, shopCfg)
