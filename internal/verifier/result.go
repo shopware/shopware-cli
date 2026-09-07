@@ -8,8 +8,9 @@ import (
 )
 
 type Check struct {
-	Results []validation.CheckResult `json:"results"`
-	mutex   sync.Mutex
+	Results    []validation.CheckResult `json:"results"`
+	mutex      sync.Mutex
+	sourceRoot string
 }
 
 func NewCheck() *Check {
@@ -18,9 +19,20 @@ func NewCheck() *Check {
 	}
 }
 
+// SetSourceRoot configures the analysis root used to rewrite finding paths
+// into stable, input-relative locations before they are stored or reported.
+func (c *Check) SetSourceRoot(root string) {
+	c.mutex.Lock()
+	defer c.mutex.Unlock()
+	c.sourceRoot = validation.ResolveSourceRoot(root)
+}
+
 func (c *Check) AddResult(result validation.CheckResult) {
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
+	if c.sourceRoot != "" {
+		result = validation.NormalizeResult(result, c.sourceRoot)
+	}
 	c.Results = append(c.Results, result)
 }
 
@@ -58,14 +70,14 @@ func (c *Check) RemoveByIdentifier(ignores []validation.ToolConfigIgnore) valida
 
 			// If path is specified with identifier (but no message), match both
 			if ignore.Identifier != "" && ignore.Path != "" && ignore.Message == "" {
-				if r.Identifier == ignore.Identifier && r.Path == ignore.Path {
+				if r.Identifier == ignore.Identifier && c.samePath(r.Path, ignore.Path) {
 					shouldKeep = false
 					break
 				}
 			}
 
 			// Handle message-based ignores (when no identifier is specified)
-			if ignore.Identifier == "" && ignore.Message != "" && strings.Contains(r.Message, ignore.Message) && (r.Path == ignore.Path || ignore.Path == "") {
+			if ignore.Identifier == "" && ignore.Message != "" && strings.Contains(r.Message, ignore.Message) && (c.samePath(r.Path, ignore.Path) || ignore.Path == "") {
 				shouldKeep = false
 				break
 			}
@@ -77,4 +89,15 @@ func (c *Check) RemoveByIdentifier(ignores []validation.ToolConfigIgnore) valida
 	c.Results = filtered
 
 	return c
+}
+
+func (c *Check) samePath(resultPath, ignorePath string) bool {
+	if resultPath == ignorePath {
+		return true
+	}
+	if ignorePath == "" || c.sourceRoot == "" {
+		return false
+	}
+
+	return validation.NormalizeSourcePath(resultPath, c.sourceRoot) == validation.NormalizeSourcePath(ignorePath, c.sourceRoot)
 }

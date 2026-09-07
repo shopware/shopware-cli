@@ -7,7 +7,6 @@ import (
 	"os"
 	"os/exec"
 	"path"
-	"strings"
 
 	"golang.org/x/sync/errgroup"
 
@@ -83,7 +82,7 @@ func (e Eslint) Check(ctx context.Context, check *Check, config ToolConfig) erro
 			}
 
 			for _, diagnostic := range eslintOutput {
-				fixedPath := strings.TrimPrefix(strings.TrimPrefix(diagnostic.FilePath, "/private"), config.RootDir+"/")
+				fixedPath := validation.NormalizeSourcePath(diagnostic.FilePath, config.RootDir)
 
 				for _, message := range diagnostic.Messages {
 					severity := validation.SeverityWarning

@@ -75,6 +75,7 @@ var projectValidateCmd = &cobra.Command{
 		}
 
 		result := verifier.NewCheck()
+		result.SetSourceRoot(toolCfg.RootDir)
 
 		var gr errgroup.Group
 

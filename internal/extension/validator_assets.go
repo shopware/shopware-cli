@@ -13,54 +13,56 @@ func validateAssets(ext Extension, check validation.Check) {
 		return
 	}
 
+	root := ext.GetPath()
 	for _, resourceDir := range ext.GetResourcesDirs() {
-		validateAssetByResourceDir(check, resourceDir)
+		validateAssetByResourceDir(check, resourceDir, root)
 	}
 
 	for _, extraBundle := range ext.GetExtensionConfig().Build.ExtraBundles {
 		bundlePath := extraBundle.ResolvePath(ext.GetRootDir())
-		validateAssetByResourceDir(check, filepath.Join(bundlePath, "Resources"))
+		validateAssetByResourceDir(check, filepath.Join(bundlePath, "Resources"), root)
 	}
 }
 
-func validateAssetByResourceDir(check validation.Check, resourceDir string) {
+func validateAssetByResourceDir(check validation.Check, resourceDir, root string) {
 	_, foundAdminBuildFiles := os.Stat(filepath.Join(resourceDir, "public", "administration"))
 	foundAdminEntrypoint := hasJavascriptEntrypoint(filepath.Join(resourceDir, "app", "administration", "src"))
 	foundStorefrontEntrypoint := hasJavascriptEntrypoint(filepath.Join(resourceDir, "app", "storefront", "src"))
 	_, foundStorefrontDistFiles := os.Stat(filepath.Join(resourceDir, "app", "storefront", "dist"))
+	relDir := validation.NormalizeSourcePath(resourceDir, root)
 
 	if foundAdminBuildFiles == nil && !foundAdminEntrypoint {
 		check.AddResult(validation.CheckResult{
-			Path:       resourceDir,
+			Path:       relDir,
 			Identifier: "assets.administration.sources_missing",
-			Message:    fmt.Sprintf("Found administration build files in %s but no source files to rebuild the assets.", resourceDir),
+			Message:    fmt.Sprintf("Found administration build files in %s but no source files to rebuild the assets.", relDir),
 			Severity:   validation.SeverityError,
 		})
 	}
 
 	if foundAdminBuildFiles != nil && foundAdminEntrypoint {
 		check.AddResult(validation.CheckResult{
-			Path:       resourceDir,
+			Path:       relDir,
 			Identifier: "assets.administration.build_missing",
-			Message:    fmt.Sprintf("Found administration source files in %s but no build files. Please run the build command to generate the assets.", resourceDir),
+			Message:    fmt.Sprintf("Found administration source files in %s but no build files. Please run the build command to generate the assets.", relDir),
 			Severity:   validation.SeverityError,
 		})
 	}
 
 	if foundStorefrontDistFiles == nil && !foundStorefrontEntrypoint {
 		check.AddResult(validation.CheckResult{
-			Path:       resourceDir,
+			Path:       relDir,
 			Identifier: "assets.storefront.sources_missing",
-			Message:    fmt.Sprintf("Found storefront build files in %s but no source files to rebuild the assets.", resourceDir),
+			Message:    fmt.Sprintf("Found storefront build files in %s but no source files to rebuild the assets.", relDir),
 			Severity:   validation.SeverityError,
 		})
 	}
 
 	if foundStorefrontDistFiles != nil && foundStorefrontEntrypoint {
 		check.AddResult(validation.CheckResult{
-			Path:       resourceDir,
+			Path:       relDir,
 			Identifier: "assets.storefront.build_missing",
-			Message:    fmt.Sprintf("Found storefront source files in %s but no build files. Please run the build command to generate the assets.", resourceDir),
+			Message:    fmt.Sprintf("Found storefront source files in %s but no build files. Please run the build command to generate the assets.", relDir),
 			Severity:   validation.SeverityError,
 		})
 	}

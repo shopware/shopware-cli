@@ -156,7 +156,7 @@ func TestValidateServicesXmlWarnsWhenPresent(t *testing.T) {
 	assert.Len(t, check.Results, 1)
 	assert.Equal(t, "config.services_xml.deprecated", check.Results[0].Identifier)
 	assert.Equal(t, validation.SeverityWarning, check.Results[0].Severity)
-	assert.Equal(t, servicesXml, check.Results[0].Path)
+	assert.Equal(t, "src/Resources/config/services.xml", check.Results[0].Path)
 }
 
 func TestValidateRoutesXmlWarnsWhenPresent(t *testing.T) {
@@ -174,7 +174,7 @@ func TestValidateRoutesXmlWarnsWhenPresent(t *testing.T) {
 	assert.Len(t, check.Results, 1)
 	assert.Equal(t, "config.routes_xml.deprecated", check.Results[0].Identifier)
 	assert.Equal(t, validation.SeverityWarning, check.Results[0].Severity)
-	assert.Equal(t, routesXml, check.Results[0].Path)
+	assert.Equal(t, "src/Resources/config/routes.xml", check.Results[0].Path)
 }
 
 func TestValidateServicesXmlSilentWhenAbsent(t *testing.T) {
