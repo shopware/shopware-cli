@@ -154,7 +154,7 @@ func runCreateForm(cmd *cobra.Command, opts *createOptions, releases []repositor
 				huh.NewInput().
 					Title("Project Name").
 					Description(projectNameHelp).
-					Placeholder("my-shopware-project (leave empty for current directory)").
+					Placeholder("my-shopware-project").
 					Value(&opts.projectFolder).
 					Validate(func(s string) error {
 						if s == "" {
