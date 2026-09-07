@@ -227,7 +227,8 @@ tui.ConfirmButtons("Initialize now", "No, skip", confirmYes)
 ### CredentialStep — username/password/show-password fieldset
 
 Embed in a wizard; `HandleKey` owns focus navigation, enter flow, and
-validation — the wizard decides what a submit means.
+validation — the wizard decides what a submit means. Enter submits from the
+password field and the checkbox, space toggles the checkbox.
 
 ```go
 type myWizard struct {
