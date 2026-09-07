@@ -129,4 +129,9 @@ func TestParseConsoleEnvironment(t *testing.T) {
 		_, err := parseConsoleEnvironment(&cobra.Command{}, []string{flag})
 		assert.EqualError(t, err, "missing value for --env flag")
 	}
+
+	for _, flag := range []string{"-e=", "--env="} {
+		_, err := parseConsoleEnvironment(&cobra.Command{}, []string{flag})
+		assert.EqualError(t, err, "missing value for --env flag")
+	}
 }

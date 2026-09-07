@@ -238,9 +238,7 @@ func TestSSHExecutorNormalizePath(t *testing.T) {
 	e := testSSHExecutor()
 
 	assert.Equal(t, "/var/www/shop/custom/plugins/Foo", e.NormalizePath("/project/custom/plugins/Foo"))
-	// Mirrors the Docker executor: relative paths escaping the project root
-	// are joined into the remote project directory as-is.
-	assert.Equal(t, "/var/www/outside/project", e.NormalizePath("/outside/project"))
+	assert.Equal(t, "/outside/project", e.NormalizePath("/outside/project"))
 
 	noRoot := &SSHExecutor{host: "shop.example.com", directory: "/var/www/shop"}
 	assert.Equal(t, "/project/custom/plugins/Foo", noRoot.NormalizePath("/project/custom/plugins/Foo"))
@@ -449,6 +447,24 @@ func TestSSHExecutorAvailableLogFiles(t *testing.T) {
 	assert.Contains(t, string(recorded), "/var/www/shop/var/log/*.log")
 }
 
+func TestSSHExecutorAvailableLogFilesWithRelDir(t *testing.T) {
+	tmp := t.TempDir()
+	argsFile := filepath.Join(tmp, "args.txt")
+	outFile := filepath.Join(tmp, "out.txt")
+
+	require.NoError(t, os.WriteFile(outFile, []byte(`[{"name":"prod.log","size":10,"mtime":2000}]`), 0o644))
+	writeRecordingSSH(t, argsFile, outFile, "", "")
+
+	e := testSSHExecutor().WithRelDir("custom/plugins/Foo")
+
+	_, err := e.AvailableLogFiles(t.Context())
+	require.NoError(t, err)
+
+	recorded, err := os.ReadFile(argsFile)
+	require.NoError(t, err)
+	assert.Contains(t, string(recorded), "/var/www/shop/custom/plugins/Foo/var/log/*.log")
+}
+
 func TestSSHExecutorGetLog(t *testing.T) {
 	tmp := t.TempDir()
 	argsFile := filepath.Join(tmp, "args.txt")
@@ -466,6 +482,24 @@ func TestSSHExecutorGetLog(t *testing.T) {
 	recorded, err := os.ReadFile(argsFile)
 	require.NoError(t, err)
 	assert.Contains(t, string(recorded), "tail -n 100 /var/www/shop/var/log/prod.log")
+}
+
+func TestSSHExecutorGetLogWithRelDir(t *testing.T) {
+	tmp := t.TempDir()
+	argsFile := filepath.Join(tmp, "args.txt")
+	outFile := filepath.Join(tmp, "out.txt")
+
+	require.NoError(t, os.WriteFile(outFile, []byte("line1\n"), 0o644))
+	writeRecordingSSH(t, argsFile, outFile, "", "")
+
+	e := testSSHExecutor().WithRelDir("custom/plugins/Foo")
+
+	var buf bytes.Buffer
+	require.NoError(t, e.GetLog(t.Context(), "prod.log", 100, false, &buf))
+
+	recorded, err := os.ReadFile(argsFile)
+	require.NoError(t, err)
+	assert.Contains(t, string(recorded), "tail -n 100 /var/www/shop/custom/plugins/Foo/var/log/prod.log")
 }
 
 func TestShellQuoteArg(t *testing.T) {

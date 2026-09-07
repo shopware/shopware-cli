@@ -79,5 +79,5 @@ func resolveProjectSbomRoot(args []string) (string, error) {
 		return filepath.Abs(args[0])
 	}
 
-	return findClosestShopwareProject(false)
+	return shop.FindClosestShopwareProject(false)
 }

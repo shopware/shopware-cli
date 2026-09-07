@@ -7,6 +7,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/shopware/shopware-cli/internal/executor"
+	"github.com/shopware/shopware-cli/internal/shop"
 	"github.com/shopware/shopware-cli/internal/tui"
 )
 
@@ -16,7 +17,7 @@ var projectLogsCmd = &cobra.Command{
 	Long:  "Show the last lines of a Shopware log file. Without arguments, shows the most recently modified log file. Use --list to discover available log files.",
 	Args:  cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		projectRoot, err := findClosestShopwareProject(false)
+		projectRoot, err := shop.FindClosestShopwareProject(false)
 		if err != nil {
 			return err
 		}
@@ -46,25 +47,30 @@ func runProjectLogs(cmd *cobra.Command, args []string, cmdExecutor executor.Exec
 		return printLogFileList(files)
 	}
 
+	if len(args) > 0 {
+		target := args[0]
+		if len(files) > 0 {
+			found := false
+			for _, f := range files {
+				if f.Name == target {
+					found = true
+					break
+				}
+			}
+			if !found {
+				return fmt.Errorf("log file not found: %s", target)
+			}
+		}
+
+		follow, _ := cmd.Flags().GetBool("follow")
+		return cmdExecutor.GetLog(cmd.Context(), target, lines, follow, cmd.OutOrStdout())
+	}
+
 	if len(files) == 0 {
 		return errors.New("no log files found in var/log")
 	}
 
 	target := files[0].Name
-	if len(args) > 0 {
-		target = ""
-		for _, f := range files {
-			if f.Name == args[0] {
-				target = f.Name
-				break
-			}
-		}
-
-		if target == "" {
-			return fmt.Errorf("log file not found: %s", args[0])
-		}
-	}
-
 	follow, _ := cmd.Flags().GetBool("follow")
 
 	return cmdExecutor.GetLog(cmd.Context(), target, lines, follow, cmd.OutOrStdout())

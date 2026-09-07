@@ -53,7 +53,7 @@ down" to revert it. Run "proxy setup" once per machine first (DNS + trust).`,
 // newProxyEnvironment resolves the current project, its hostname and its
 // Docker executor. It requires Docker, since the shared proxy is Docker-only.
 func newProxyEnvironment(cmd *cobra.Command) (*proxyEnvironment, error) {
-	projectRoot, err := findClosestShopwareProject(false)
+	projectRoot, err := shop.FindClosestShopwareProject(false)
 	if err != nil {
 		return nil, err
 	}

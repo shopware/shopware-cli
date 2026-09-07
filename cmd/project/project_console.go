@@ -31,7 +31,7 @@ var projectConsoleCmd = &cobra.Command{
 	Args:               cobra.MinimumNArgs(1),
 	DisableFlagParsing: true,
 	ValidArgsFunction: func(cmd *cobra.Command, input []string, _ string) ([]string, cobra.ShellCompDirective) {
-		projectRoot, err := findClosestShopwareProject(false)
+		projectRoot, err := shop.FindClosestShopwareProject(false)
 		if err != nil {
 			return nil, cobra.ShellCompDirectiveDefault
 		}
@@ -109,7 +109,7 @@ var projectConsoleCmd = &cobra.Command{
 			return err
 		}
 
-		projectRoot, err := findClosestShopwareProject(false)
+		projectRoot, err := shop.FindClosestShopwareProject(false)
 		if err != nil {
 			return err
 		}
@@ -170,6 +170,10 @@ func parseConsoleEnvironment(cmd *cobra.Command, args []string) ([]string, error
 		value = strings.TrimPrefix(strings.TrimPrefix(args[0], "-e"), "=")
 	default:
 		return args, nil
+	}
+
+	if value == "" {
+		return nil, errors.New("missing value for --env flag")
 	}
 
 	if err := cmd.Flags().Set("env", value); err != nil {

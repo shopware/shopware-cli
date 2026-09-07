@@ -176,7 +176,7 @@ func (s *SSHExecutor) NPMCommand(ctx context.Context, args ...string) *Process {
 }
 
 func (s *SSHExecutor) AvailableLogFiles(ctx context.Context) ([]LogFile, error) {
-	out, err := s.PHPCommand(ctx, "-r", listLogFilesPHP(path.Join(s.directory, "var", "log"))).Output()
+	out, err := s.PHPCommand(ctx, "-r", listLogFilesPHP(path.Join(s.remoteDir(), "var", "log"))).Output()
 	if err != nil {
 		return nil, fmt.Errorf("could not list log files: %w", err)
 	}
@@ -185,7 +185,7 @@ func (s *SSHExecutor) AvailableLogFiles(ctx context.Context) ([]LogFile, error) 
 }
 
 func (s *SSHExecutor) GetLog(ctx context.Context, file string, lines int, follow bool, w io.Writer) error {
-	p := s.command(ctx, "tail", tailArgs(path.Join(s.directory, "var", "log", file), lines, follow)...)
+	p := s.command(ctx, "tail", tailArgs(path.Join(s.remoteDir(), "var", "log", file), lines, follow)...)
 
 	return runStreaming(ctx, p.Cmd, w)
 }
@@ -203,8 +203,11 @@ func (s *SSHExecutor) NormalizePath(hostPath string) string {
 	if err != nil {
 		return hostPath
 	}
+	if rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return hostPath
+	}
 
-	return filepath.Join(s.directory, rel)
+	return path.Join(s.directory, filepath.ToSlash(rel))
 }
 
 func (s *SSHExecutor) Type() string {

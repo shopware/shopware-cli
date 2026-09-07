@@ -32,7 +32,7 @@ func resolveExecutor(cmd *cobra.Command, projectRoot string) (executor.Executor,
 // resolveProjectDatabaseConnection resolves the database credentials of the
 // current environment through its executor.
 func resolveProjectDatabaseConnection(cmd *cobra.Command) (*executor.DatabaseConnection, error) {
-	projectRoot, err := findClosestShopwareProject(false)
+	projectRoot, err := shop.FindClosestShopwareProject(false)
 	if err != nil {
 		return nil, err
 	}
