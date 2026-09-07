@@ -100,25 +100,13 @@ var projectConsoleCmd = &cobra.Command{
 		return completions, cobra.ShellCompDirectiveDefault
 	},
 	RunE: func(cmd *cobra.Command, args []string) error {
-		if len(args) > 0 && (strings.HasPrefix(args[0], "-e") || strings.HasPrefix(args[0], "--env")) {
-			if strings.Contains(args[0], "=") {
-				parts := strings.SplitN(args[0], "=", 2)
-				if err := cmd.Flags().Set("env", parts[1]); err != nil {
-					return err
-				}
+		args, err := parseConsoleEnvironment(cmd, args)
+		if err != nil {
+			return err
+		}
 
-				args = append(args[:0], args[1:]...)
-			} else {
-				if len(args) < 2 {
-					return errors.New("missing value for --env flag")
-				}
-
-				if err := cmd.Flags().Set("env", args[1]); err != nil {
-					return err
-				}
-
-				args = append(args[:0], args[2:]...)
-			}
+		if err := cobra.MinimumNArgs(1)(cmd, args); err != nil {
+			return err
 		}
 
 		projectRoot, err := findClosestShopwareProject(false)
@@ -159,6 +147,36 @@ var projectConsoleCmd = &cobra.Command{
 
 		return nil
 	},
+}
+
+// parseConsoleEnvironment consumes an environment flag before the console command.
+func parseConsoleEnvironment(cmd *cobra.Command, args []string) ([]string, error) {
+	if len(args) == 0 {
+		return args, nil
+	}
+
+	var value string
+	consumed := 1
+	switch {
+	case args[0] == "-e" || args[0] == "--env":
+		if len(args) < 2 {
+			return nil, errors.New("missing value for --env flag")
+		}
+		value = args[1]
+		consumed = 2
+	case strings.HasPrefix(args[0], "--env="):
+		value = strings.TrimPrefix(args[0], "--env=")
+	case strings.HasPrefix(args[0], "-e"):
+		value = strings.TrimPrefix(strings.TrimPrefix(args[0], "-e"), "=")
+	default:
+		return args, nil
+	}
+
+	if err := cmd.Flags().Set("env", value); err != nil {
+		return nil, err
+	}
+
+	return args[consumed:], nil
 }
 
 // consoleCommandContext requests a compose TTY when the user is on an
