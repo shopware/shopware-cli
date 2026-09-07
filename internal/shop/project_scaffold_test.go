@@ -9,6 +9,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/shopware/shopware-cli/internal/envfile"
 )
 
 func TestShopwareProjectScaffold(t *testing.T) {
@@ -94,9 +96,9 @@ func TestShopwareProjectScaffold(t *testing.T) {
 		assert.NoFileExists(t, filepath.Join(projectFolder, "php.ini"))
 
 		envContent := readScaffoldFile(t, projectFolder, ".env")
-		assert.True(t, strings.HasPrefix(envContent, ComposeProjectNameEnvKey+"=sw-demo-shop-"), "got %q", envContent)
+		assert.True(t, strings.HasPrefix(envContent, envfile.ComposeProjectNameEnvKey+"=sw-demo-shop-"), "got %q", envContent)
 		assert.True(t, strings.HasSuffix(envContent, "\n"))
-		name := strings.TrimPrefix(strings.TrimSpace(envContent), ComposeProjectNameEnvKey+"=")
+		name := strings.TrimPrefix(strings.TrimSpace(envContent), envfile.ComposeProjectNameEnvKey+"=")
 		assert.Regexp(t, regexp.MustCompile(`^[a-z0-9][a-z0-9_-]*$`), name)
 
 		// Two docker scaffolds with the same basename get different compose names.
@@ -121,7 +123,7 @@ func TestShopwareProjectScaffold(t *testing.T) {
 		}
 		require.NoError(t, scaffold.Scaffold(t.Context()))
 		assert.Empty(t, readScaffoldFile(t, projectFolder, ".env"))
-		assert.NotContains(t, readScaffoldFile(t, projectFolder, ".env"), ComposeProjectNameEnvKey)
+		assert.NotContains(t, readScaffoldFile(t, projectFolder, ".env"), envfile.ComposeProjectNameEnvKey)
 	})
 
 	t.Run("creates the selected deployment and CI files", func(t *testing.T) {

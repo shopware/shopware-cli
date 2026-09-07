@@ -33,7 +33,9 @@ var projectDevInstallCmd = &cobra.Command{
 			return err
 		}
 
-		env.bootstrapProxyFallback(cmd)
+		if err := env.bootstrapProxyFallback(cmd); err != nil {
+			return err
+		}
 
 		if err := runStep(cmd.Context(), "Starting development environment...", env.executor.StartEnvironment); err != nil {
 			return err

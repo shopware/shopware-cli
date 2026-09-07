@@ -13,6 +13,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/shopware/shopware-cli/internal/envfile"
 	"github.com/shopware/shopware-cli/internal/shop"
 	"github.com/shopware/shopware-cli/internal/system"
 )
@@ -340,7 +341,7 @@ func TestNewDockerExecutorReadsComposeProjectName(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(dir, ".env"), []byte("COMPOSE_PROJECT_NAME=sw-shop-abc123\n"), 0o644))
 
 	t.Run("snapshots the .env value at construction", func(t *testing.T) {
-		t.Setenv(shop.ComposeProjectNameEnvKey, "")
+		t.Setenv(envfile.ComposeProjectNameEnvKey, "")
 		exec, err := New(dir, &shop.EnvironmentConfig{Type: "docker"}, &shop.Config{})
 		require.NoError(t, err)
 
@@ -355,7 +356,7 @@ func TestNewDockerExecutorReadsComposeProjectName(t *testing.T) {
 	})
 
 	t.Run("a process-level COMPOSE_PROJECT_NAME stays authoritative", func(t *testing.T) {
-		t.Setenv(shop.ComposeProjectNameEnvKey, "from-shell")
+		t.Setenv(envfile.ComposeProjectNameEnvKey, "from-shell")
 		exec, err := New(dir, &shop.EnvironmentConfig{Type: "docker"}, &shop.Config{})
 		require.NoError(t, err)
 

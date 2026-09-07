@@ -14,8 +14,10 @@ import (
 	"github.com/shopware/shopware-cli/internal/envfile"
 	"github.com/shopware/shopware-cli/internal/executor"
 	"github.com/shopware/shopware-cli/internal/extension"
+	"github.com/shopware/shopware-cli/internal/proxy"
 	"github.com/shopware/shopware-cli/internal/shop"
 	"github.com/shopware/shopware-cli/internal/tui"
+	"github.com/shopware/shopware-cli/logging"
 )
 
 var projectStorefrontWatchCmd = &cobra.Command{
@@ -60,8 +62,14 @@ var projectStorefrontWatchCmd = &cobra.Command{
 		}
 
 		// When the shop is proxied, route the webpack hot-proxy watcher through
-		// the shared proxy at its storefront-watch hostname.
-		if host := proxyHostname(projectRoot); host != "" {
+		// the shared proxy at its storefront-watch hostname. An unreadable
+		// registry must not silently start the watcher unproxied.
+		host, err := proxy.RegisteredHostname(projectRoot)
+		if err != nil {
+			logging.FromContext(cmd.Context()).Errorf("Could not read the shared proxy registry: %v", err)
+			return err
+		}
+		if host != "" {
 			opts.ProxyHostname = "storefront-watch." + host
 		}
 

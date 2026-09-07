@@ -67,6 +67,15 @@ func (m Model) updateKeyPress(msg tea.KeyPressMsg) (app.Content, tea.Cmd) {
 		return m, nil
 	}
 
+	if m.phase == phasePortConflict {
+		// The overlay handles the choice; this covers the state after the
+		// prompt was dismissed with esc.
+		if tui.KeyString(msg) == "q" || tui.KeyString(msg) == tui.KeyCtrlC {
+			return m, tea.Quit
+		}
+		return m, nil
+	}
+
 	if m.phase == phaseTask {
 		if m.task.Done() {
 			m.phase = phaseDashboard
@@ -136,12 +145,16 @@ func (m Model) updateConfigTab(msg tea.KeyPressMsg) (app.Content, tea.Cmd) {
 				m.configTab.saved = false
 				return m, nil
 			}
+			// A nil php config clears credentials that are no longer
+			// configured, so rotated secrets do not survive on disk.
+			var localPHP *shop.ConfigDockerPHP
 			if localCfg := m.configTab.LocalConfig(); localCfg != nil {
-				if err := shop.WriteLocalConfig(localCfg, m.projectRoot); err != nil {
-					m.configTab.err = err
-					m.configTab.saved = false
-					return m, nil
-				}
+				localPHP = localCfg.Docker.PHP
+			}
+			if err := shop.UpdateLocalDockerPHP(m.configPath, localPHP); err != nil {
+				m.configTab.err = err
+				m.configTab.saved = false
+				return m, nil
 			}
 			if envChanges := m.configTab.ChangedEnvValues(); len(envChanges) > 0 {
 				if err := envfile.WriteValues(m.projectRoot, envChanges); err != nil {
@@ -366,7 +379,11 @@ func (m Model) startAfterMigrationWizard() (app.Content, tea.Cmd) {
 	m.executor = exec
 
 	if m.executor.Type() == executor.TypeDocker {
-		if err := proxy.WriteComposeFile(m.projectRoot, m.config); err != nil {
+		env, err := proxy.NewEnvironment(m.projectRoot, m.config, m.proxyFallback)
+		if err == nil {
+			err = env.WriteCompose()
+		}
+		if err != nil {
 			m.migrationWizard.err = err
 			return m, nil
 		}
@@ -379,5 +396,5 @@ func (m Model) startAfterMigrationWizard() (app.Content, tea.Cmd) {
 
 	m.rebuildTabs()
 
-	return m, tea.Batch(m.dockerSpinner.Tick, m.startContainers())
+	return m, tea.Batch(m.dockerSpinner.Tick, m.checkPorts())
 }

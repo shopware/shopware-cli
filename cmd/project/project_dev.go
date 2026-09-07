@@ -23,13 +23,15 @@ import (
 
 // bootstrapProxyFallback sets up the shared proxy for a proxy-mode project
 // before its development environment starts, so `project dev` serves it at its
-// stable hostname, and records the outcome in e.proxyFallback. It never blocks:
-// if the shared proxy cannot start (e.g. its port is taken), it regenerates the
-// compose file in plain fixed-port mode, points the user at a fix and marks the
-// shop as fallen back to a local port. It is a no-op for port-based projects.
-func (e *devEnvironment) bootstrapProxyFallback(cmd *cobra.Command) {
+// stable hostname, and records the outcome in e.proxyFallback. A proxy that
+// cannot start (e.g. its port is taken) never blocks dev: the compose file is
+// regenerated in plain fixed-port mode, the user is pointed at a fix and the
+// shop is marked as fallen back to a local port. Only a failure to write that
+// plain compose file is an error, because starting would then use the proxy
+// file without a proxy. It is a no-op for port-based projects.
+func (e *devEnvironment) bootstrapProxyFallback(cmd *cobra.Command) error {
 	if !proxy.IsProxyProject(e.cfg) {
-		return
+		return nil
 	}
 
 	ctx := cmd.Context()
@@ -44,15 +46,32 @@ func (e *devEnvironment) bootstrapProxyFallback(cmd *cobra.Command) {
 		env.ensureHostnameResolves(ctx)
 		return nil
 	}()
-	if err != nil {
-		// Never block dev: regenerate the compose file in fixed-port mode
-		// (newDevEnvironment wrote it in proxy mode) and tell the user how to
-		// diagnose the proxy.
-		_ = dockerpkg.WriteComposeFile(e.projectRoot, dockerpkg.ComposeOptionsFromConfig(e.cfg))
-		fmt.Println(tui.RedText.Render("  Shared proxy unavailable: " + err.Error()))
-		fmt.Println(tui.DimText.Render("  Serving on a local port instead — run ") + tui.BoldText.Render("shopware-cli project proxy verify") + tui.DimText.Render(" to diagnose."))
-		e.proxyFallback = true
+	if err == nil {
+		return nil
 	}
+
+	// An interrupted or timed-out bootstrap is not a proxy failure: propagate
+	// it instead of falling back and starting the environment anyway.
+	if ctx.Err() != nil || errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+		return err
+	}
+
+	// Never block dev on the proxy: regenerate the compose file in fixed-port
+	// mode (newDevEnvironment wrote it in proxy mode) and tell the user how to
+	// diagnose the proxy.
+	plain, writeErr := proxy.NewEnvironment(e.projectRoot, e.cfg, true)
+	if writeErr == nil {
+		writeErr = plain.WriteCompose()
+	}
+	if writeErr != nil {
+		return fmt.Errorf("shared proxy unavailable (%v) and the fixed-port compose file could not be written: %w", err, writeErr)
+	}
+
+	fmt.Println(tui.RedText.Render("  Shared proxy unavailable: " + err.Error()))
+	fmt.Println(tui.DimText.Render("  Serving on a local port instead — run ") + tui.BoldText.Render("shopware-cli project proxy verify") + tui.DimText.Render(" to diagnose."))
+	e.proxyFallback = true
+
+	return nil
 }
 
 // ErrEnvironmentDown is returned by the `project dev status` command when the
@@ -62,6 +81,7 @@ var ErrEnvironmentDown = errors.New("development environment is down")
 
 type devEnvironment struct {
 	projectRoot string
+	configPath  string
 	cfg         *shop.Config
 	envCfg      *shop.EnvironmentConfig
 	executor    executor.Executor
@@ -69,6 +89,12 @@ type devEnvironment struct {
 	// proxy and was served on a local port instead, so URLs are shown for ports.
 	proxyFallback bool
 }
+
+// Values for the --on-port-conflict flag.
+const (
+	portConflictModeFail   = "fail"
+	portConflictModeRandom = "random"
+)
 
 var projectDevCmd = &cobra.Command{
 	Use:   "dev",
@@ -98,7 +124,9 @@ var projectDevCmd = &cobra.Command{
 			return err
 		}
 
-		env.bootstrapProxyFallback(cmd)
+		if err := env.bootstrapProxyFallback(cmd); err != nil {
+			return err
+		}
 
 		if !isatty.IsTerminal(os.Stdin.Fd()) {
 			if err := env.start(cmd); err != nil {
@@ -124,7 +152,9 @@ var projectDevStartCmd = &cobra.Command{
 			return err
 		}
 
-		env.bootstrapProxyFallback(cmd)
+		if err := env.bootstrapProxyFallback(cmd); err != nil {
+			return err
+		}
 
 		return env.start(cmd)
 	},
@@ -161,7 +191,7 @@ var projectDevStatusCmd = &cobra.Command{
 }
 
 func runMigrationWizardTUI(ctx context.Context, projectRoot string, cfg *shop.Config) error {
-	envCfg := &shop.EnvironmentConfig{Type: "docker", URL: "http://127.0.0.1:8000"}
+	envCfg := &shop.EnvironmentConfig{Type: "docker", URL: shop.DefaultShopURL}
 	exec, err := executor.New(projectRoot, envCfg, cfg)
 	if err != nil {
 		return err
@@ -169,6 +199,7 @@ func runMigrationWizardTUI(ctx context.Context, projectRoot string, cfg *shop.Co
 
 	_, err = dev.NewMigrationWizardApp(ctx, dev.Options{
 		ProjectRoot: projectRoot,
+		ConfigPath:  projectConfigPath,
 		Config:      cfg,
 		EnvConfig:   envCfg,
 		Executor:    exec,
@@ -230,20 +261,83 @@ func newDevEnvironment(cmd *cobra.Command, projectRoot string, cfg *shop.Config)
 		// Proxy-aware: a project configured for a local domain gets a proxy-mode
 		// compose file, a port-based one the plain fixed-port file. A failed
 		// proxy bootstrap later reverts it to plain (see the fallback above).
-		if err := proxy.WriteComposeFile(projectRoot, cfg); err != nil {
+		env, err := proxy.NewEnvironment(projectRoot, cfg, false)
+		if err != nil {
+			return nil, err
+		}
+		if err := env.WriteCompose(); err != nil {
 			return nil, err
 		}
 	}
 
 	return &devEnvironment{
 		projectRoot: projectRoot,
+		configPath:  projectConfigPath,
 		cfg:         cfg,
 		envCfg:      envCfg,
 		executor:    exec,
 	}, nil
 }
 
+// dockerEnvironment resolves the project's dev environment for its effective
+// run mode, honoring a proxy fallback.
+func (e *devEnvironment) dockerEnvironment() (*dockerpkg.Environment, error) {
+	return proxy.NewEnvironment(e.projectRoot, e.cfg, e.proxyFallback)
+}
+
+// resolvePortConflicts probes the host ports the compose file will publish.
+// Conflicting ports either abort the start (fail) or are remapped to random
+// free ports (random) and persisted to the local config override.
+func (e *devEnvironment) resolvePortConflicts(ctx context.Context, mode string) error {
+	if e.executor.Type() != executor.TypeDocker {
+		return nil
+	}
+
+	env, err := e.dockerEnvironment()
+	if err != nil {
+		return err
+	}
+	conflicts := env.PortConflicts(ctx)
+	if len(conflicts) == 0 {
+		return nil
+	}
+
+	if mode != portConflictModeRandom {
+		var lines []string
+		for _, conflict := range conflicts {
+			lines = append(lines, fmt.Sprintf("  %s (%s): port %d is already in use", conflict.Label, conflict.ConfigPath(), conflict.HostPort))
+		}
+		return fmt.Errorf("cannot start the development environment, host ports are already in use:\n%s\nrerun with --on-port-conflict=random to switch them to free ports, or set docker.services in %s", strings.Join(lines, "\n"), shop.LocalConfigFileName(e.configPath))
+	}
+
+	cfg, overrides, err := proxy.ApplyRandomPorts(ctx, e.projectRoot, e.configPath, e.cfg, e.proxyFallback, conflicts)
+	if err != nil {
+		return err
+	}
+	e.cfg = cfg
+
+	for i, conflict := range conflicts {
+		fmt.Println("  " + tui.DimText.Render(fmt.Sprintf("%s: port %d is in use, switched to %d", conflict.Label, conflict.HostPort, overrides[i].HostPort)))
+	}
+	fmt.Println("  " + tui.DimText.Render("Saved the new ports to "+shop.LocalConfigFileName(e.configPath)))
+	fmt.Println()
+
+	return nil
+}
+
 func (e *devEnvironment) start(cmd *cobra.Command) error {
+	mode, err := cmd.Flags().GetString("on-port-conflict")
+	if err != nil {
+		return err
+	}
+	if mode != portConflictModeFail && mode != portConflictModeRandom {
+		return fmt.Errorf("invalid value %q for --on-port-conflict, must be %q or %q", mode, portConflictModeFail, portConflictModeRandom)
+	}
+
+	if err := e.resolvePortConflicts(cmd.Context(), mode); err != nil {
+		return err
+	}
+
 	start := time.Now()
 
 	// runStep falls back to running the action directly without a spinner when
@@ -264,22 +358,21 @@ func (e *devEnvironment) start(cmd *cobra.Command) error {
 	}
 	// After a proxy fallback the shop is on a local port, not its hostname.
 	if e.proxyFallback {
-		shopURL = defaultShopURL
+		shopURL = shop.DefaultShopURL
 	}
 
-	var services []dev.DiscoveredService
+	var services []dockerpkg.DiscoveredService
 	if e.executor.Type() == executor.TypeDocker {
-		var webPort int
-		services, webPort, _ = dev.DiscoverComposeServices(cmd.Context(), e.projectRoot)
-		shopURL = dev.ResolveShopURL(shopURL, webPort)
+		if env, err := e.dockerEnvironment(); err == nil {
+			if running, err := env.Discover(cmd.Context()); err == nil {
+				services = running.Services
+				shopURL = dev.ResolveShopURL(shopURL, running.WebPort)
+			}
+		}
 	}
 
 	if shopURL != "" {
-		adminURL := shopURL
-		if !strings.HasSuffix(adminURL, "/") {
-			adminURL += "/"
-		}
-		adminURL += "admin"
+		adminURL := dev.DeriveAdminURL(shopURL)
 
 		fmt.Println(tui.SectionTitleStyle.Render("  Shop"))
 		fmt.Println(tui.DimText.Render("  Shop URL:  ") + tui.BoldText.Render(shopURL))
@@ -347,6 +440,7 @@ func (e *devEnvironment) status(cmd *cobra.Command) error {
 func (e *devEnvironment) runTUI(ctx context.Context) error {
 	_, err := dev.NewApp(ctx, dev.Options{
 		ProjectRoot:   e.projectRoot,
+		ConfigPath:    e.configPath,
 		Config:        e.cfg,
 		EnvConfig:     e.envCfg,
 		Executor:      e.executor,
@@ -362,4 +456,5 @@ func init() {
 	projectDevCmd.AddCommand(projectDevStatusCmd)
 
 	projectDevStopCmd.Flags().Bool("remove-data", false, "Also remove the named volumes declared in the compose file, deleting all data stored in them")
+	projectDevCmd.PersistentFlags().String("on-port-conflict", portConflictModeFail, "What to do when host ports are already in use: fail or random. Applies when starting non-interactively; the dashboard asks instead.")
 }

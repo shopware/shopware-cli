@@ -7,7 +7,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	dockerpkg "github.com/shopware/shopware-cli/internal/docker"
+	"github.com/shopware/shopware-cli/internal/docker"
 	"github.com/shopware/shopware-cli/internal/proxy"
 	"github.com/shopware/shopware-cli/internal/tui"
 )
@@ -96,7 +96,7 @@ func proxyList(cmd *cobra.Command) error {
 		}
 
 		for _, link := range projectLinks(entry, instances) {
-			fmt.Printf("    %s %s\n", tui.DimText.Render(fmt.Sprintf("%-9s", link.label)), link.url)
+			fmt.Printf("    %s %s\n", tui.DimText.Render(fmt.Sprintf("%-9s", link.Label)), link.URL)
 		}
 	}
 	fmt.Println()
@@ -104,24 +104,18 @@ func proxyList(cmd *cobra.Command) error {
 	return nil
 }
 
-// serviceLink is one URL shown below a project in `proxy list`.
-type serviceLink struct {
-	label string
-	url   string
-}
-
 // projectLinks builds the links for a running project: the shop and admin on
 // the project hostname, plus one subdomain link per running service with a
 // web UI.
-func projectLinks(entry proxy.ProjectEntry, instances []proxy.Instance) []serviceLink {
-	links := []serviceLink{
-		{label: "Shop", url: "https://" + entry.Hostname},
-		{label: "Admin", url: "https://" + entry.Hostname + "/admin"},
+func projectLinks(entry proxy.ProjectEntry, instances []proxy.Instance) []docker.Link {
+	links := []docker.Link{
+		{Label: "Shop", URL: "https://" + entry.Hostname},
+		{Label: "Admin", URL: "https://" + entry.Hostname + "/admin"},
 	}
 
 	for _, service := range runningServices(entry, instances) {
-		if label, ok := dockerpkg.ProxiedServiceLabels[service]; ok {
-			links = append(links, serviceLink{label: label, url: fmt.Sprintf("https://%s.%s", service, entry.Hostname)})
+		if link, ok := docker.ServiceLink(service, entry.Hostname); ok {
+			links = append(links, link)
 		}
 	}
 

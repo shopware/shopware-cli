@@ -2,15 +2,9 @@ package docker
 
 import "gopkg.in/yaml.v3"
 
-// composeFile mirrors only the subset of the compose spec the generator emits.
-// Struct field order keeps the output stable; yamlMap keeps map-like sections
-// (services, environment, depends_on, ...) in insertion order.
-type composeFile struct {
-	Services yamlMap[composeService]         `yaml:"services"`
-	Volumes  yamlMap[struct{}]               `yaml:"volumes,omitempty"`
-	Networks yamlMap[composeExternalNetwork] `yaml:"networks,omitempty"`
-}
-
+// composeService mirrors the subset of a compose service spec the generator
+// emits. Struct field order keeps the output stable; yamlMap keeps map-like
+// sections (environment, depends_on, labels) in insertion order.
 type composeService struct {
 	Image       string                         `yaml:"image"`
 	User        string                         `yaml:"user,omitempty"`
@@ -35,12 +29,13 @@ type composeServiceNetwork struct {
 	Aliases []string `yaml:"aliases,omitempty"`
 }
 
-// composeDependency is the long-form depends_on entry; an empty Condition
-// means compose's default "service_started".
+// composeDependency is the long-form depends_on entry; an empty Condition means
+// compose's default "service_started".
 type composeDependency struct {
 	Condition string `yaml:"condition,omitempty"`
 }
 
+// Healthcheck is a compose service healthcheck.
 type composeHealthcheck struct {
 	Test          []string `yaml:"test"`
 	StartPeriod   string   `yaml:"start_period,omitempty"`
@@ -50,21 +45,22 @@ type composeHealthcheck struct {
 	Retries       int      `yaml:"retries,omitempty"`
 }
 
+// composeExternalNetwork declares a pre-existing network in the compose file.
 type composeExternalNetwork struct {
 	External bool `yaml:"external"`
 }
 
-// yamlEntry is one key/value pair of a yamlMap.
+// Entry is one key/value pair of a Map.
 type yamlEntry[T any] struct {
 	Key   string
 	Value T
 }
 
-// yamlMap is an insertion-ordered string-keyed map for stable yaml.Marshal
+// Map is an insertion-ordered string-keyed map for stable yaml.Marshal
 // output, where a plain Go map would shuffle keys on every regeneration.
 type yamlMap[T any] []yamlEntry[T]
 
-// set appends a key/value pair and returns the extended map, so entries can be
+// Set appends a key/value pair and returns the extended map, so entries can be
 // chained in emission order.
 func (m yamlMap[T]) set(key string, value T) yamlMap[T] {
 	return append(m, yamlEntry[T]{Key: key, Value: value})

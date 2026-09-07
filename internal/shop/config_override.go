@@ -4,13 +4,16 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"time"
 
 	"gopkg.in/yaml.v3"
 
 	"github.com/shopware/shopware-cli/internal/system"
 )
 
-func localConfigFileName(fileName string) string {
+// LocalConfigFileName returns the path of the local override file belonging to
+// the given project configuration file.
+func LocalConfigFileName(fileName string) string {
 	ext := ""
 	base := fileName
 
@@ -60,6 +63,8 @@ func mergeLocalConfig(baseMap map[string]any, localFileName string) (map[string]
 	if localMap == nil {
 		return baseMap, nil
 	}
+
+	normalizeTimestamps(localMap)
 
 	for p := range resetPaths {
 		deleteAtPath(baseMap, p)
@@ -198,7 +203,42 @@ func readConfigAsMap(fileName string) (map[string]any, error) {
 		m = make(map[string]any)
 	}
 
+	normalizeTimestamps(m)
+
 	return m, nil
+}
+
+// normalizeTimestamps undoes yaml.v3's implicit !!timestamp resolution. An
+// unquoted scalar like `compatibility_date: 2026-08-01` decodes into a
+// time.Time when the target is `any`, and would re-marshal as an RFC3339
+// timestamp after the local-override merge. The config schema only contains
+// date strings, so convert them back to their textual form.
+func normalizeTimestamps(m map[string]any) {
+	for key, value := range m {
+		m[key] = normalizeTimestampValue(value)
+	}
+}
+
+func normalizeTimestampValue(value any) any {
+	switch v := value.(type) {
+	case time.Time:
+		// Compare the wall-clock fields in the value's own location; Truncate
+		// would round against the zero time in UTC and drop a non-UTC midnight.
+		if v.Hour() == 0 && v.Minute() == 0 && v.Second() == 0 && v.Nanosecond() == 0 {
+			return v.Format(time.DateOnly)
+		}
+		return v.Format(time.RFC3339)
+	case map[string]any:
+		normalizeTimestamps(v)
+		return v
+	case []any:
+		for i, item := range v {
+			v[i] = normalizeTimestampValue(item)
+		}
+		return v
+	}
+
+	return value
 }
 
 func marshalMap(m map[string]any) ([]byte, error) {
