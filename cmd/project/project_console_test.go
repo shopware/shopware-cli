@@ -3,6 +3,7 @@ package project
 import (
 	"encoding/json"
 	"os"
+	"slices"
 	"testing"
 
 	"github.com/mattn/go-isatty"
@@ -105,7 +106,7 @@ func TestParseConsoleEnvironment(t *testing.T) {
 		t.Run(flag[0], func(t *testing.T) {
 			cmd := &cobra.Command{}
 			cmd.Flags().StringP("env", "e", "", "")
-			args := append(flag, "cache:clear", "--no-warmup")
+			args := slices.Concat(flag, []string{"cache:clear", "--no-warmup"})
 			remaining, err := parseConsoleEnvironment(cmd, args)
 			require.NoError(t, err)
 			assert.Equal(t, []string{"cache:clear", "--no-warmup"}, remaining)
