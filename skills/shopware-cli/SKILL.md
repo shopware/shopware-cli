@@ -238,19 +238,21 @@ Always check current `--help` first; treat the flag list below as orientation, n
 
 ### Ask the user; do not guess
 
-When this skill drives project creation, you typically run `create` non-interactively (`-n`), so the CLI's own prompts never appear and it silently applies defaults — some of which differ from the interactive ones (Elasticsearch defaults **on** non-interactively but **off** in the prompts). Do not inherit those defaults blind. Confirm the choices with the user first, then pass them as explicit flags. Walk through:
+When this skill drives project creation, you typically run `create` non-interactively (`-n`), so the CLI's own prompts never appear and it silently applies defaults — some of which differ from the interactive ones (Elasticsearch defaults **on** non-interactively but **off** in the prompts). Do not inherit those defaults blind. Confirm the choices with the user first, then pass them as explicit flags. Frame each option by what it does for the user, not by errors it prevents or internal codes — e.g. justify skipping Elasticsearch as "simpler setup, only needed for large catalogs or advanced search", never with a 500 or index error. Walk through:
 
 - **Name** (`[name]`) — the project directory. Ask for it; do not default to the current directory (it must be empty or non-existent).
 - **Version** (`--version`) — e.g. `6.6.0.0` or `latest`.
 - **Docker** (`--docker`) — **recommended.** Runs the local setup in Docker instead of relying on a local PHP/toolchain.
 - **Local domain** (`--local-domain`) — **recommended** (requires `--docker`). Serves the shop at a stable `<name>.shopware.local` via the shared proxy instead of a port. First time on a machine it needs a one-time `shopware-cli project proxy setup` (sudo: DNS + HTTPS trust) — non-interactive `create` never runs this, so plan to run it separately.
 - **PHP version** (`--php-version`) — `8.2`–`8.5`; usually leave it to the CLI. Ask only if the user needs a specific one; it must satisfy the chosen Shopware version's PHP constraint.
-- **Elasticsearch/OpenSearch** (`--with-elasticsearch` / `--without-elasticsearch`) — ask; only useful for large catalogs/advanced search. It is on by default non-interactively, and a missing index then yields an HTTP 500 (`index_not_found`), so pass `--without-elasticsearch` unless the user wants it.
+- **Elasticsearch/OpenSearch** (`--with-elasticsearch`) — recommend leaving it off unless the user needs it (large catalogs or advanced search). It is enabled by default non-interactively, so to disable it pass `--with-elasticsearch=false` (omitting the flag leaves it on under `-n`; the separate `--without-elasticsearch` flag is deprecated).
 - **AMQP** (`--with-amqp`) — ask; enable only if they need queue/messaging support.
 - **Deployment** (`--deployment`) — `none|container|deployer|platformsh|shopware-paas` (default `none`).
 - **CI/CD** (`--ci`) — `none|github|gitlab` (default `none`).
 - **Git** (`--git`) — initialize a repository.
 - **Audit** (`--no-audit`) — do not set preemptively; only use it if security advisories block the install and the user accepts the risk.
+
+With `--docker`, `create` runs for several minutes: it pulls the dev image and runs `composer install`, autoload generation, and post-install scripts inside the container. This is expected, not a hang. Surface progress to the user — stream the command's output, or run it in the background and report the current stage from the log — rather than blocking silently.
 
 **`create` scaffolds; it does not install the shop.** It writes the project, runs `composer install`, and creates `.shopware-project.yml` (plus compose file / git when requested). The database is **not** set up yet. To install afterwards:
 
