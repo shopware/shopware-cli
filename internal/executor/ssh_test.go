@@ -447,6 +447,24 @@ func TestSSHExecutorAvailableLogFiles(t *testing.T) {
 	assert.Contains(t, string(recorded), "/var/www/shop/var/log/*.log")
 }
 
+func TestSSHExecutorAvailableLogFilesWithRelDir(t *testing.T) {
+	tmp := t.TempDir()
+	argsFile := filepath.Join(tmp, "args.txt")
+	outFile := filepath.Join(tmp, "out.txt")
+
+	require.NoError(t, os.WriteFile(outFile, []byte(`[{"name":"prod.log","size":10,"mtime":2000}]`), 0o644))
+	writeRecordingSSH(t, argsFile, outFile, "", "")
+
+	e := testSSHExecutor().WithRelDir("custom/plugins/Foo")
+
+	_, err := e.AvailableLogFiles(t.Context())
+	require.NoError(t, err)
+
+	recorded, err := os.ReadFile(argsFile)
+	require.NoError(t, err)
+	assert.Contains(t, string(recorded), "/var/www/shop/custom/plugins/Foo/var/log/*.log")
+}
+
 func TestSSHExecutorGetLog(t *testing.T) {
 	tmp := t.TempDir()
 	argsFile := filepath.Join(tmp, "args.txt")

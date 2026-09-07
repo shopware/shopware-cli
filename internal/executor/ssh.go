@@ -176,7 +176,7 @@ func (s *SSHExecutor) NPMCommand(ctx context.Context, args ...string) *Process {
 }
 
 func (s *SSHExecutor) AvailableLogFiles(ctx context.Context) ([]LogFile, error) {
-	out, err := s.PHPCommand(ctx, "-r", listLogFilesPHP(path.Join(s.directory, "var", "log"))).Output()
+	out, err := s.PHPCommand(ctx, "-r", listLogFilesPHP(path.Join(s.remoteDir(), "var", "log"))).Output()
 	if err != nil {
 		return nil, fmt.Errorf("could not list log files: %w", err)
 	}
@@ -207,7 +207,7 @@ func (s *SSHExecutor) NormalizePath(hostPath string) string {
 		return hostPath
 	}
 
-	return filepath.Join(s.directory, rel)
+	return path.Join(s.directory, filepath.ToSlash(rel))
 }
 
 func (s *SSHExecutor) Type() string {
