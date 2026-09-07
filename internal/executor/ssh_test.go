@@ -484,6 +484,24 @@ func TestSSHExecutorGetLog(t *testing.T) {
 	assert.Contains(t, string(recorded), "tail -n 100 /var/www/shop/var/log/prod.log")
 }
 
+func TestSSHExecutorGetLogWithRelDir(t *testing.T) {
+	tmp := t.TempDir()
+	argsFile := filepath.Join(tmp, "args.txt")
+	outFile := filepath.Join(tmp, "out.txt")
+
+	require.NoError(t, os.WriteFile(outFile, []byte("line1\n"), 0o644))
+	writeRecordingSSH(t, argsFile, outFile, "", "")
+
+	e := testSSHExecutor().WithRelDir("custom/plugins/Foo")
+
+	var buf bytes.Buffer
+	require.NoError(t, e.GetLog(t.Context(), "prod.log", 100, false, &buf))
+
+	recorded, err := os.ReadFile(argsFile)
+	require.NoError(t, err)
+	assert.Contains(t, string(recorded), "tail -n 100 /var/www/shop/custom/plugins/Foo/var/log/prod.log")
+}
+
 func TestShellQuoteArg(t *testing.T) {
 	assert.Equal(t, "cache:clear", shellQuoteArg("cache:clear"))
 	assert.Equal(t, "''", shellQuoteArg(""))

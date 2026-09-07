@@ -48,8 +48,22 @@ func runProjectLogs(cmd *cobra.Command, args []string, cmdExecutor executor.Exec
 	}
 
 	if len(args) > 0 {
+		target := args[0]
+		if len(files) > 0 {
+			found := false
+			for _, f := range files {
+				if f.Name == target {
+					found = true
+					break
+				}
+			}
+			if !found {
+				return fmt.Errorf("log file not found: %s", target)
+			}
+		}
+
 		follow, _ := cmd.Flags().GetBool("follow")
-		return cmdExecutor.GetLog(cmd.Context(), args[0], lines, follow, cmd.OutOrStdout())
+		return cmdExecutor.GetLog(cmd.Context(), target, lines, follow, cmd.OutOrStdout())
 	}
 
 	if len(files) == 0 {

@@ -185,7 +185,7 @@ func (s *SSHExecutor) AvailableLogFiles(ctx context.Context) ([]LogFile, error) 
 }
 
 func (s *SSHExecutor) GetLog(ctx context.Context, file string, lines int, follow bool, w io.Writer) error {
-	p := s.command(ctx, "tail", tailArgs(path.Join(s.directory, "var", "log", file), lines, follow)...)
+	p := s.command(ctx, "tail", tailArgs(path.Join(s.remoteDir(), "var", "log", file), lines, follow)...)
 
 	return runStreaming(ctx, p.Cmd, w)
 }
