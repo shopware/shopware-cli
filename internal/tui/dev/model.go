@@ -53,10 +53,6 @@ const (
 	phasePortConflict
 )
 
-// fallbackShopURL is the URL a proxy project is reachable at once dev falls
-// back to fixed host ports; it matches project dev's own default.
-const fallbackShopURL = "http://127.0.0.1:8000"
-
 type Options struct {
 	ProjectRoot string
 	// ConfigPath is the path of the project configuration file; port overrides

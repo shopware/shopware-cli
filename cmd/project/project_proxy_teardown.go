@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"path/filepath"
 
 	"charm.land/huh/v2"
 	"github.com/mattn/go-isatty"
@@ -37,7 +36,7 @@ shared DNS container. The one-time OS setup (DNS resolver, trusted CA) is kept.`
 		}
 
 		for _, entry := range reg.Projects {
-			env, err := newProxyEnvironmentForRoot(ctx, entry.ProjectRoot, filepath.Join(entry.ProjectRoot, ".shopware-project.yml"))
+			env, err := newProxyEnvironmentForRoot(ctx, entry.ProjectRoot, "")
 			if err == nil {
 				err = env.down(ctx, false)
 			}

@@ -468,7 +468,7 @@ func TestUpdateConfigTab_EnterOnSaveWritesExistingConfigInOriginalLocation(t *te
 	cfg, err := shop.ReadConfig(t.Context(), filepath.Join(dir, ".shopware-project.yml"), false)
 	assert.NoError(t, err)
 
-	m := newTestModel()
+	m := newTestModel(t)
 	m.config = cfg
 	m.projectRoot = dir
 	m.activeTab = tabConfig

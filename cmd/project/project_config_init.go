@@ -15,13 +15,20 @@ import (
 var projectConfigInitCmd = &cobra.Command{
 	Use:   "init",
 	Short: "Creates a new project config",
-	Long: `Creates a new config in the current directory under .config/shopware-project.yaml .
+	Long: `Creates a new config in the current directory under .config/shopware-project.yml .
 
 Shop URL and Admin API credentials are written under environments.local.
 Omit -e / --env on later commands to target that environment.`,
 	RunE: func(cmd *cobra.Command, _ []string) error {
 		if !system.IsInteractionEnabled(cmd.Context()) {
 			return errors.New("this command requires interaction, but interaction is disabled")
+		}
+
+		// first check if a config already exists
+		actualProjectConfigPath := shop.SearchConfigPath(".", projectConfigPath)
+		existingCfg, err := shop.ReadConfig(cmd.Context(), actualProjectConfigPath, false)
+		if err == nil {
+			return errors.New("a config already exists under " + existingCfg.GetStorageLocation())
 		}
 
 		config := &shop.Config{

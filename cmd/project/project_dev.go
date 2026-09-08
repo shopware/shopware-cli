@@ -214,7 +214,8 @@ func setupDevEnvironment(cmd *cobra.Command) (*devEnvironment, error) {
 		return nil, err
 	}
 
-	cfg, err := shop.ReadConfig(cmd.Context(), projectConfigPath, true)
+	actualProjectConfigPath := shop.SearchConfigPath(projectRoot, projectConfigPath)
+	cfg, err := shop.ReadConfig(cmd.Context(), actualProjectConfigPath, true)
 	if err != nil {
 		return nil, err
 	}

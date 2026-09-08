@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"path"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -182,6 +181,16 @@ func (c *Config) WithEnvironment(name string) (*Config, error) {
 	}
 
 	return &cfg, nil
+}
+
+// GetStorageLocation will return the actual file path where the config either was loaded from or will be persisted to.
+func (c *Config) GetStorageLocation() string {
+	if c.storageLocation == "" {
+		// fallback to default recommended storage location
+		return ".config/shopware-project.yml"
+	}
+
+	return c.storageLocation
 }
 
 func (c *Config) IsAdminAPIConfigured() bool {
@@ -802,8 +811,8 @@ func NewConfig() *Config {
 }
 
 // WriteConfig Writes config in specified project dir under either
-// it's original location where it was read from (stored in `Config.storageLocation`),
-// or the default recommended location
+// its original location where it was read from (stored in `Config.storageLocation`),
+// or the default recommended location.
 func WriteConfig(cfg *Config, dir string) error {
 	// Port overrides are machine-specific and live in the local override
 	// file — keep them out of the committed configuration.
@@ -985,26 +994,26 @@ func (c Config) IsFallback() bool {
 func SearchConfigPath(projectRoot string, inputPath string) string {
 	if inputPath != "" {
 		// user input has priority, regardless if the file exists at this point
-		if path.IsAbs(inputPath) {
+		if filepath.IsAbs(inputPath) {
 			return inputPath
 		} else {
-			return path.Join(projectRoot, inputPath)
+			return filepath.Join(projectRoot, inputPath)
 		}
 	}
 
 	// recommended location
-	configPath := path.Join(projectRoot, ".config/shopware-project.yml")
+	configPath := filepath.Join(projectRoot, ".config/shopware-project.yml")
 	if _, err := os.Stat(configPath); err == nil {
 		return configPath
 	}
 
 	// fallback to legacy location in root directory
-	configPath = path.Join(projectRoot, ".shopware-project.yaml")
+	configPath = filepath.Join(projectRoot, ".shopware-project.yaml")
 	if _, err := os.Stat(configPath); err == nil {
 		return configPath
 	}
 
-	return path.Join(projectRoot, ".shopware-project.yml")
+	return filepath.Join(projectRoot, ".shopware-project.yml")
 }
 
 // --- In-place url patching -------------------------------------------------

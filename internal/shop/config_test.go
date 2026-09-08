@@ -96,7 +96,7 @@ func TestConfigDeploymentOpenSearchIndexOnInstallRoundTrip(t *testing.T) {
 
 	require.NoError(t, WriteConfig(cfg, tmpDir))
 
-	written, err := os.ReadFile(filepath.Join(tmpDir, ".shopware-project.yml"))
+	written, err := os.ReadFile(filepath.Join(tmpDir, ".config/shopware-project.yml"))
 	require.NoError(t, err)
 	assert.Contains(t, string(written), "opensearch:\n        index-on-install: true")
 
