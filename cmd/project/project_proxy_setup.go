@@ -14,6 +14,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/shopware/shopware-cli/internal/proxy"
+	"github.com/shopware/shopware-cli/internal/shop"
 	"github.com/shopware/shopware-cli/internal/system"
 	"github.com/shopware/shopware-cli/internal/tui"
 )
@@ -161,7 +162,7 @@ func setupProjectHostnames(ctx context.Context) []string {
 		return nil
 	}
 
-	projectRoot, err := findClosestShopwareProject(false)
+	projectRoot, err := shop.FindClosestShopwareProject(false)
 	if err != nil {
 		return nil
 	}

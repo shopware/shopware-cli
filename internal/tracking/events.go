@@ -54,6 +54,7 @@ const (
 	// EventDevInstall
 	TagAbandonedAt       = "abandoned_at"
 	TagFailedStep        = "failed_step"
+	TagFailureCategory   = "failure_category"
 	TagLanguage          = "language"
 	TagCurrency          = "currency"
 	TagCustomCredentials = "custom_credentials"

@@ -138,9 +138,10 @@ func checkDeploymentHelper(projectRoot string) ReadinessCheck {
 
 // checkExtensionsComposerManaged enforces that every extension is managed
 // through Composer: the upgrade resolves and pins extension versions with
-// Composer, so extensions living outside vendor/ (e.g. custom/plugins) are
-// invisible to it and would silently stay on their current, possibly
-// incompatible release.
+// Composer, so extensions living outside Composer (e.g. custom/plugins copies
+// that are not required) are invisible to it and would silently stay on their
+// current, possibly incompatible release. Path-repository packages under
+// custom/static-plugins count as managed.
 func checkExtensionsComposerManaged(extensions []InstalledExtension) ReadinessCheck {
 	check := ReadinessCheck{
 		ID:       "extensions",
@@ -207,9 +208,11 @@ func (u *ProjectUpgrader) checkTooling(ctx context.Context) ReadinessCheck {
 }
 
 // discoverExtensions lists the project's extensions, marking whether each is
-// Composer-managed (living in vendor/) or a local extension in custom/.
+// Composer-managed (recorded in composer.lock / living in vendor/) or a local
+// extension in custom/ that Composer does not know about.
 func discoverExtensions(ctx context.Context, projectRoot string) []InstalledExtension {
 	found := extension.FindExtensionsFromProject(logging.DisableLogger(ctx), projectRoot, false)
+	lockInfo := lockExtensionInfo(projectRoot)
 
 	vendorDir := filepath.Clean(filepath.Join(projectRoot, "vendor"))
 
@@ -228,8 +231,16 @@ func discoverExtensions(ctx context.Context, projectRoot string) []InstalledExte
 		}
 
 		rel, err := filepath.Rel(vendorDir, filepath.Clean(ext.GetPath()))
-		isManaged := err == nil && rel != "." && rel != ".." &&
+		underVendor := err == nil && rel != "." && rel != ".." &&
 			!strings.HasPrefix(rel, ".."+string(filepath.Separator))
+
+		info := lockInfo[pkg]
+		isManaged := underVendor || info.inLock
+
+		require := info.require
+		if len(require) == 0 {
+			require = extensionRequire(ext)
+		}
 
 		result = append(result, InstalledExtension{
 			Name:            name,
@@ -237,8 +248,52 @@ func discoverExtensions(ctx context.Context, projectRoot string) []InstalledExte
 			Path:            ext.GetPath(),
 			Version:         ver,
 			ComposerManaged: isManaged,
+			PathInstalled:   info.pathInstalled,
+			Require:         require,
 		})
 	}
 
 	return result
+}
+
+type lockExtInfo struct {
+	require       map[string]string
+	pathInstalled bool
+	inLock        bool
+}
+
+// lockExtensionInfo indexes composer.lock packages by name.
+func lockExtensionInfo(projectRoot string) map[string]lockExtInfo {
+	lock, err := composer.ReadLock(filepath.Join(projectRoot, "composer.lock"))
+	if err != nil {
+		return nil
+	}
+
+	info := make(map[string]lockExtInfo, len(lock.Packages)+len(lock.PackagesDev))
+	add := func(pkgs []composer.LockPackage) {
+		for _, pkg := range pkgs {
+			info[pkg.Name] = lockExtInfo{
+				require:       pkg.Require,
+				pathInstalled: pkg.Dist.Type == "path",
+				inLock:        true,
+			}
+		}
+	}
+	add(lock.Packages)
+	add(lock.PackagesDev)
+	return info
+}
+
+// extensionRequire reads the Shopware-relevant require map from a discovered
+// extension. Platform plugins and bundles expose it on their composer.json;
+// apps typically do not.
+func extensionRequire(ext extension.Extension) map[string]string {
+	switch e := ext.(type) {
+	case *extension.PlatformPlugin:
+		return e.Composer.Require
+	case *extension.ShopwareBundle:
+		return e.Composer.Require
+	default:
+		return nil
+	}
 }

@@ -6,8 +6,6 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/shopware/shopware-cli/internal/docker"
-	"github.com/shopware/shopware-cli/internal/extension"
 	"github.com/shopware/shopware-cli/internal/shop"
 )
 
@@ -84,57 +82,6 @@ func ensureCertificate(hostname, baseDomain string, reg Registry) (CertInfo, err
 	return EnsureCertificate(dir, CertHosts(baseDomain, extraHosts))
 }
 
-// WriteComposeFile writes the project's compose.yaml, generating it in shared-
-// proxy mode when the project's config points at a hostname under the proxy
-// base domain, and in plain fixed-port mode otherwise. It is the single proxy-
-// aware entry point every generic caller (project dev, the dev TUI) uses, so
-// regenerating the compose file can never silently drop a project out of proxy
-// mode. Proxy up/down, which toggle the mode explicitly, build the options
-// themselves instead.
-func WriteComposeFile(projectRoot string, cfg *shop.Config) error {
-	opts := docker.ComposeOptionsFromConfig(cfg)
-
-	if p, ok := ComposeProxyOptions(projectRoot, cfg); ok {
-		if opts == nil {
-			opts = &docker.ComposeOptions{}
-		}
-		opts.Proxy = p
-	}
-
-	return docker.WriteComposeFile(projectRoot, opts)
-}
-
-// ComposeProxyOptions returns the docker proxy options for a project when it is
-// a proxy project (its configured URL is a hostname under the proxy base
-// domain), deriving everything deterministically from the config and machine
-// settings — hostname, shared network, root CA path, APP_URL and the admin
-// watcher's dev-server port. The second result is false for port-based
-// projects.
-func ComposeProxyOptions(projectRoot string, cfg *shop.Config) (*docker.ProxyOptions, bool) {
-	baseDomain := BaseDomain()
-	if !IsProxyProjectForDomain(cfg, baseDomain) {
-		return nil, false
-	}
-
-	hostname, err := ProjectHostname(projectRoot, cfg, baseDomain)
-	if err != nil {
-		return nil, false
-	}
-
-	// Reference the deterministic bundle path; the file itself is written by
-	// PrepareInfra before the containers start. Best-effort: if the state dir is
-	// unavailable the mount is simply dropped (the shop still serves, only its
-	// own TLS self-calls would be untrusted).
-	bundlePath, _ := ContainerCABundlePath(docker.WebImage(docker.ComposeOptionsFromConfig(cfg)))
-
-	return &docker.ProxyOptions{
-		Hostname:       hostname,
-		NetworkName:    NetworkName,
-		CABundlePath:   bundlePath,
-		AdminWatchPort: extension.AdminDevServerPort(projectRoot),
-	}, true
-}
-
 // IsProxyProject reports whether the project is configured to be served at a
 // stable hostname under the shared proxy's base domain (the signal
 // `project create --local-domain` and `proxy up` write into
@@ -150,12 +97,8 @@ func IsProxyProjectForDomain(cfg *shop.Config, baseDomain string) bool {
 		return false
 	}
 
-	// The local environment's url overrides the top-level one in the executor,
-	// so honor the same precedence when detecting proxy mode.
-	effective := cfg.URL
-	if env, ok := cfg.Environments["local"]; ok && env != nil && env.URL != "" {
-		effective = env.URL
-	}
+	// Resolve the url the same way the executor does.
+	effective := cfg.EffectiveURL()
 
 	if effective == "" {
 		return false

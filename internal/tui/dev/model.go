@@ -11,8 +11,10 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 
+	dockerpkg "github.com/shopware/shopware-cli/internal/docker"
 	"github.com/shopware/shopware-cli/internal/envfile"
 	"github.com/shopware/shopware-cli/internal/executor"
+	"github.com/shopware/shopware-cli/internal/proxy"
 	"github.com/shopware/shopware-cli/internal/shop"
 	"github.com/shopware/shopware-cli/internal/tracking"
 	"github.com/shopware/shopware-cli/internal/tui"
@@ -33,8 +35,6 @@ const (
 var tabNames = []string{"Overview", "Instance", "Config"}
 
 const (
-	defaultUsername = "admin"
-
 	watcherAdmin      = "Admin Watcher"
 	watcherStorefront = "Storefront Watcher"
 )
@@ -47,26 +47,37 @@ const (
 	phaseStopping
 	phaseInstallPrompt
 	phaseInstalling
+	phaseInstallFailed
 	phaseTask
 	phaseMigrationWizard
+	phasePortConflict
 )
+
+// fallbackShopURL is the URL a proxy project is reachable at once dev falls
+// back to fixed host ports; it matches project dev's own default.
+const fallbackShopURL = "http://127.0.0.1:8000"
 
 type Options struct {
 	ProjectRoot string
-	Config      *shop.Config
-	EnvConfig   *shop.EnvironmentConfig
-	Executor    executor.Executor
+	// ConfigPath is the path of the project configuration file; port overrides
+	// are persisted to its local override sibling.
+	ConfigPath string
+	Config     *shop.Config
+	EnvConfig  *shop.EnvironmentConfig
+	Executor   executor.Executor
 	// ProxyFallback is set when a proxy project could not start the shared
 	// proxy and dev fell back to fixed host ports. The shop is then reachable
 	// at the local port URL, not the (now unrouted) proxy hostname in Config.
 	ProxyFallback bool
 }
 
-// fallbackShopURL is the URL a proxy project is reachable at once dev falls
-// back to fixed host ports; it matches project dev's own default.
-const fallbackShopURL = "http://127.0.0.1:8000"
-
 type Model struct {
+	// ctx is the command context of the CLI invocation (cancelled on
+	// SIGINT/SIGTERM, carries the logger). tea.Cmd closures derive their
+	// subprocess and API contexts from it. Bubbletea's fixed Update(msg)
+	// signature offers no parameter path into command builders, so the model
+	// has to carry it.
+	ctx             context.Context //nolint:containedctx
 	host            app.Host
 	header          tui.Header
 	activeTab       activeTab
@@ -79,6 +90,8 @@ type Model struct {
 	phase           phase
 	overlayLines    []string
 	projectRoot     string
+	configPath      string
+	portConflicts   []dockerpkg.PortConflict
 	executor        executor.Executor
 	dockerOutChan   <-chan string
 	install         installWizard
@@ -98,21 +111,57 @@ type dockerAlreadyRunningMsg struct{}
 type dockerNeedStartMsg struct{}
 type dockerStartedMsg struct{ err error }
 type dockerStoppedMsg struct{ err error }
-type dockerOutputLineMsg string
-type dockerOutputDoneMsg struct{}
+type dockerOutputLineMsg struct {
+	source <-chan string
+	line   string
+}
+type dockerOutputDoneMsg struct {
+	source <-chan string
+}
 
 type shopwareInstalledMsg struct{}
 type shopwareNotInstalledMsg struct{}
-type shopwareInstallDoneMsg struct{ err error }
+type shopwareInstallDoneMsg struct {
+	source <-chan string
+	output []string
+	err    error
+}
 
 type configRestartDoneMsg struct{ err error }
 
-func New(opts Options) Model {
+type portConflictMsg struct{ conflicts []dockerpkg.PortConflict }
+type portFixDoneMsg struct {
+	err error
+	// config carries the remapped ports; it is adopted on the update thread.
+	config    *shop.Config
+	overrides []dockerpkg.PortOverride
+}
+
+// commandContext returns the context tea.Cmd closures should derive from.
+// Tests construct Model literals without New, so a nil ctx falls back to
+// Background.
+func (m Model) commandContext() context.Context {
+	if m.ctx != nil {
+		return m.ctx
+	}
+	return context.Background()
+}
+
+// cleanupContext returns a context for teardown work (stopping watchers and
+// containers, final telemetry) that must still run when the command context
+// is already cancelled, e.g. on SIGTERM.
+func (m Model) cleanupContext() context.Context {
+	return context.WithoutCancel(m.commandContext())
+}
+
+func New(ctx context.Context, opts Options) Model {
 	m := Model{
+		ctx:           ctx,
 		header:        tui.NewHeader(),
 		activeTab:     tabOverview,
 		dockerMode:    opts.Executor.Type() == executor.TypeDocker,
 		projectRoot:   opts.ProjectRoot,
+		configPath:    opts.ConfigPath,
 		executor:      opts.Executor,
 		config:        opts.Config,
 		envConfig:     opts.EnvConfig,
@@ -140,7 +189,7 @@ func (m *Model) rebuildTabs() {
 	}
 	if m.proxyFallback {
 		// The proxy hostname no longer routes; the shop is on a local port.
-		shopURL = fallbackShopURL
+		shopURL = shop.DefaultShopURL
 	}
 
 	var username, password string
@@ -152,15 +201,33 @@ func (m *Model) rebuildTabs() {
 	isDocker := m.executor.Type() == executor.TypeDocker
 	envValues, _ := envfile.ReadValues(m.projectRoot, EnvFieldKeys()...)
 
-	m.overview = NewOverviewModel(m.executor.Type(), shopURL, username, password, m.projectRoot, m.executor, m.config)
-	m.instance = NewInstanceModel(m.projectRoot, isDocker)
+	m.overview = NewOverviewModel(m.commandContext(), m.executor.Type(), shopURL, username, password, m.projectRoot, m.executor, m.config)
+	m.overview.setEnvironment(m.dockerEnvironment())
+	m.instance = NewInstanceModel(m.commandContext(), m.projectRoot, isDocker)
 	m.configTab = NewConfigModel(m.config, envValues)
+}
+
+// dockerEnvironment resolves the project's Docker dev environment for its
+// effective run mode (honoring a proxy fallback). It is nil outside Docker
+// and when the project cannot be resolved (e.g. no composer.lock yet); the
+// caller then skips the environment-backed features.
+func (m *Model) dockerEnvironment() *dockerpkg.Environment {
+	if m.executor == nil || m.executor.Type() != executor.TypeDocker {
+		return nil
+	}
+
+	env, err := proxy.NewEnvironment(m.projectRoot, m.config, m.proxyFallback)
+	if err != nil {
+		return nil
+	}
+
+	return env
 }
 
 // NewMigrationWizard creates a Model that starts in the migration wizard phase
 // for projects that don't yet have a development environment configured.
-func NewMigrationWizard(opts Options) Model {
-	m := New(opts)
+func NewMigrationWizard(ctx context.Context, opts Options) Model {
+	m := New(ctx, opts)
 	m.phase = phaseMigrationWizard
 	m.dockerMode = true // migration wizard always creates Docker env
 	m.migrationWizard = newMigrationWizard(opts.ProjectRoot)
@@ -168,13 +235,13 @@ func NewMigrationWizard(opts Options) Model {
 }
 
 // NewApp hosts the dashboard model inside the application shell.
-func NewApp(opts Options) *app.App {
-	return newShell(New(opts))
+func NewApp(ctx context.Context, opts Options) *app.App {
+	return newShell(New(ctx, opts))
 }
 
 // NewMigrationWizardApp hosts the migration-wizard model inside the shell.
-func NewMigrationWizardApp(opts Options) *app.App {
-	return newShell(NewMigrationWizard(opts))
+func NewMigrationWizardApp(ctx context.Context, opts Options) *app.App {
+	return newShell(NewMigrationWizard(ctx, opts))
 }
 
 // newShell wires a Model into the app host. Chrome and window title read the
@@ -214,7 +281,7 @@ func (m Model) initPhase() tea.Cmd {
 		return nil
 	}
 	if m.dockerMode {
-		return checkContainersRunning(m.projectRoot)
+		return m.checkContainersRunning()
 	}
 	return m.checkShopwareInstalled()
 }
@@ -222,7 +289,7 @@ func (m Model) initPhase() tea.Cmd {
 func (m *Model) shutdown() {
 	m.instance.StopStreaming()
 
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	ctx, cancel := context.WithTimeout(m.cleanupContext(), 3*time.Second)
 	defer cancel()
 
 	for name, h := range m.watchers {
@@ -281,7 +348,8 @@ func (m Model) updateContent(msg tea.Msg) (app.Content, tea.Cmd) {
 
 	case dockerAlreadyRunningMsg, dockerNeedStartMsg, dockerOutputLineMsg,
 		dockerOutputDoneMsg, dockerStartedMsg, dockerStoppedMsg,
-		shopwareInstalledMsg, shopwareNotInstalledMsg, shopwareInstallDoneMsg:
+		shopwareInstalledMsg, shopwareNotInstalledMsg, shopwareInstallDoneMsg,
+		portConflictMsg, portFixDoneMsg:
 		return m.updateLifecycle(msg)
 
 	case tui.TaskLineMsg:
@@ -308,7 +376,7 @@ func (m Model) updateContent(msg tea.Msg) (app.Content, tea.Cmd) {
 		// status and the setup-health checks it affects.
 		m.overview.domainsSetupDone = overviewSetupDone(m.projectRoot)
 		m.overview.healthLoading = true
-		return m, loadSetupHealth(m.projectRoot, m.executor)
+		return m, loadSetupHealth(m.commandContext(), m.projectRoot, m.executor)
 
 	case watcherStartedMsg, watcherRunningMsg, watcherProbeMsg, stopWatcherRequestMsg,
 		startStorefrontWatchRequestMsg, watcherStoppedMsg, logDoneMsg:
@@ -345,6 +413,9 @@ func (m Model) updateContent(msg tea.Msg) (app.Content, tea.Cmd) {
 		return m.handleSalesChannelPickerResult(msg)
 
 	case prompt.ResultMsg:
+		if msg.ID == portConflictID {
+			return m.handlePortConflictResult(msg)
+		}
 		return m.handleStopConfirmResult(msg)
 
 	case tea.KeyPressMsg:
@@ -380,14 +451,14 @@ func (m Model) updateWatcherMsg(msg tea.Msg) (app.Content, tea.Cmd) {
 			if msg.err == nil && exists {
 				m.overview.adminWatchRunning = true
 				m.overview.adminWatchReady = false
-				return m, probeWatcher(watcherAdmin, m.overview.adminWatchURL)
+				return m, probeWatcher(m.commandContext(), watcherAdmin, m.overview.adminWatchURL)
 			}
 		case watcherStorefront:
 			m.overview.sfWatchStarting = false
 			if msg.err == nil && exists {
 				m.overview.sfWatchRunning = true
 				m.overview.sfWatchReady = false
-				return m, probeWatcher(watcherStorefront, m.overview.sfWatchURL)
+				return m, probeWatcher(m.commandContext(), watcherStorefront, m.overview.sfWatchURL)
 			}
 		}
 		return m, nil
@@ -407,7 +478,7 @@ func (m Model) updateWatcherMsg(msg tea.Msg) (app.Content, tea.Cmd) {
 			return m, nil
 		}
 		// Not serving yet — keep polling until it is.
-		return m, probeWatcher(msg.name, msg.url)
+		return m, probeWatcher(m.commandContext(), msg.name, msg.url)
 
 	case stopWatcherRequestMsg:
 		return m, m.stopWatcher(msg.name)
@@ -460,7 +531,7 @@ func (m Model) runProxySetup() (app.Content, tea.Cmd) {
 		bin = "shopware-cli"
 	}
 
-	c := exec.CommandContext(context.Background(), bin, "project", "proxy", "setup")
+	c := exec.CommandContext(m.commandContext(), bin, "project", "proxy", "setup")
 	c.Dir = m.projectRoot
 
 	return m, tea.ExecProcess(c, func(error) tea.Msg {
@@ -534,6 +605,24 @@ func (m Model) handleSalesChannelPickerResult(msg salesChannelPickerResultMsg) (
 	return m, m.overview.startStorefrontWatch(msg.Opts)
 }
 
+// handlePortConflictResult resolves the port-conflict prompt: remap the busy
+// ports to random free ones and start, or quit. Dismissing with esc keeps the
+// port-conflict screen.
+func (m Model) handlePortConflictResult(msg prompt.ResultMsg) (app.Content, tea.Cmd) {
+	switch msg.Choice {
+	case portConflictRandom:
+		m.phase = phaseStarting
+		m.overlayLines = nil
+		m.dockerShowLogs = false
+		m.dockerSpinner = tui.NewBrandSpinner()
+		return m, tea.Batch(m.dockerSpinner.Tick, m.fixPortConflicts())
+	case portConflictQuit:
+		m.shutdown()
+		return m, tea.Quit
+	}
+	return m, nil
+}
+
 func (m Model) handleStopConfirmResult(msg prompt.ResultMsg) (app.Content, tea.Cmd) {
 	if msg.ID != stopConfirmID || msg.Choice == "" || msg.Choice == stopConfirmCancel {
 		return m, nil
@@ -604,6 +693,9 @@ func (m Model) updateChildren(msg tea.Msg) (app.Content, tea.Cmd) {
 }
 
 func (m Model) handleConfigRestartDone(msg configRestartDoneMsg) (app.Content, tea.Cmd) {
+	// The config changed, so the environment snapshot the overview holds is
+	// stale; refresh it before the overview rediscovers the services.
+	m.overview.setEnvironment(m.dockerEnvironment())
 	if tags, ok := m.telemetry.configRestartTags(msg.err); ok {
 		trackEvent(tracking.EventDevDockerStart, tags)
 	}

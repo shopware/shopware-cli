@@ -35,6 +35,9 @@ type salesChannelEntry struct {
 }
 
 type salesChannelPicker struct {
+	// ctx is the CLI command context the Admin API calls run under. See
+	// Model.ctx for why bubbletea forces it onto the struct.
+	ctx      context.Context //nolint:containedctx
 	executor executor.Executor
 	loading  bool
 	err      error
@@ -42,21 +45,25 @@ type salesChannelPicker struct {
 	inner    *picker.Overlay
 }
 
-func newSalesChannelPicker(exec executor.Executor) *salesChannelPicker {
-	return &salesChannelPicker{executor: exec, loading: true}
+func newSalesChannelPicker(ctx context.Context, exec executor.Executor) *salesChannelPicker {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	return &salesChannelPicker{ctx: ctx, executor: exec, loading: true}
 }
 
 func (sp *salesChannelPicker) ID() string { return "sales-channel-picker" }
 
 func (sp *salesChannelPicker) Init() tea.Cmd {
+	ctx := sp.ctx
 	exec := sp.executor
 	return func() tea.Msg {
-		client, err := exec.AdminAPIClient(context.Background())
+		client, err := exec.AdminAPIClient(ctx)
 		if err != nil {
 			return salesChannelsLoadedMsg{err: err}
 		}
 
-		apiCtx := adminSdk.NewApiContext(context.Background())
+		apiCtx := adminSdk.NewApiContext(ctx)
 		channels, err := client.SalesChannel.ListStorefront(apiCtx)
 		if err != nil {
 			return salesChannelsLoadedMsg{err: err}

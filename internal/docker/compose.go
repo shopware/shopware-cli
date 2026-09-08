@@ -2,136 +2,45 @@ package docker
 
 import (
 	"errors"
-	"fmt"
 	"os"
 	"path/filepath"
-	"strconv"
+	"strings"
 
-	"github.com/shyim/go-composer"
 	"gopkg.in/yaml.v3"
-
-	"github.com/shopware/shopware-cli/internal/shop"
-	"github.com/shopware/shopware-cli/internal/symfony"
-	"github.com/shopware/shopware-cli/internal/system"
 )
 
-const nodeVersion = "24"
-
-// backgroundProcessLimits bound the dedicated console processes so they recycle
-// periodically (paired with restart: unless-stopped in the compose file).
-var backgroundProcessLimits = []string{"--time-limit=300", "--memory-limit=512M"}
-
-// BackgroundService describes a long-running console process added to the dev
-// compose file when Shopware's admin worker is disabled. It is the single source
-// of truth for both compose generation (name + command) and the dev TUI overview
-// (name + Label), so the two never drift apart.
-type BackgroundService struct {
-	// Name is the compose service name.
-	Name string
-	// Label is the human-readable name shown in the dev TUI overview.
-	Label   string
-	command []string
+// composeFile mirrors only the subset of the compose spec the generator emits.
+// Struct field order keeps the output stable; yamlMap keeps map-like sections
+// in insertion order.
+type composeFile struct {
+	Services yamlMap[composeService]         `yaml:"services"`
+	Volumes  yamlMap[struct{}]               `yaml:"volumes,omitempty"`
+	Networks yamlMap[composeExternalNetwork] `yaml:"networks,omitempty"`
 }
 
-// BackgroundServices is the ordered set of dedicated processes generated when
-// the admin worker is disabled: the message queue consumer and the scheduled
-// task runner.
-var BackgroundServices = []BackgroundService{
-	{Name: "worker", Label: "Queue worker", command: append([]string{"messenger:consume", "--all"}, backgroundProcessLimits...)},
-	{Name: "scheduler", Label: "Scheduled tasks", command: append([]string{"scheduled-task:run"}, backgroundProcessLimits...)},
-}
+// EnvLocalContent is the initial .env.local of a Docker project. It is
+// written when the file is missing so compose can start, and by the project
+// scaffold.
+const EnvLocalContent = "APP_ENV=dev\n"
 
-// Profiler constants for the Docker dev environment.
-const (
-	ProfilerBlackfire = "blackfire"
-	ProfilerTideways  = "tideways"
-	ProfilerXdebug    = "xdebug"
-	ProfilerPcov      = "pcov"
-	ProfilerSpx       = "spx"
-)
-
-// Profilers is the ordered list of profiler names for the Docker dev environment.
-// The empty string means "no profiler".
-var Profilers = []string{"", ProfilerXdebug, ProfilerBlackfire, ProfilerTideways, ProfilerPcov, ProfilerSpx}
-
-// ProfilerNeedsCredentials reports whether the given profiler requires API credentials.
-func ProfilerNeedsCredentials(profiler string) bool {
-	return profiler == ProfilerBlackfire || profiler == ProfilerTideways
-}
-
-// ProfilerIsPaid reports whether the given profiler is a commercial product
-// that requires a paid account or plan. Blackfire and Tideways are paid SaaS
-// products; xdebug, pcov and spx are free and open source.
-func ProfilerIsPaid(profiler string) bool {
-	return profiler == ProfilerBlackfire || profiler == ProfilerTideways
-}
-
-type ComposeOptions struct {
-	PHPVersion           string
-	PHPProfiler          string
-	BlackfireServerID    string
-	BlackfireServerToken string
-	TidewaysAPIKey       string
-	// User is the "uid:gid" the web container should run as so that
-	// writes to the bind-mounted project (var/, files/, public/, ...)
-	// are owned by the host user. Empty means: use the image default.
-	User string
-	// DedicatedWorker requests an extra service that runs
-	// messenger:consume. It is needed when Shopware's admin worker is
-	// disabled (shopware.admin_worker.enable_admin_worker: false), because
-	// the message queue is then no longer dispatched from the browser.
-	DedicatedWorker bool
-	// Proxy, when set, generates the compose file in shared-proxy mode: the
-	// routed services publish no host ports and instead join the proxy network
-	// with Traefik routing labels. Nil (the default) keeps fixed-port mode.
-	// Callers populate it via proxy.ComposeProxyOptions for proxy projects.
-	Proxy *ProxyOptions
-}
-
-func (o *ComposeOptions) phpVersion() string {
-	if o != nil && o.PHPVersion != "" {
-		return o.PHPVersion
+// WriteCompose renders compose.yaml into the project folder and creates
+// .env.local when it is missing.
+func (e *Environment) WriteCompose() error {
+	composeBytes, err := e.composeYAML()
+	if err != nil {
+		return err
 	}
-	return "8.3"
-}
 
-// proxy returns the proxy options, or nil when not in proxy mode (also for a
-// nil receiver), so buildCompose can branch on a single nil-safe accessor.
-func (o *ComposeOptions) proxy() *ProxyOptions {
-	if o == nil {
-		return nil
+	if err := ensureEnvLocalFile(e.root); err != nil {
+		return err
 	}
-	return o.Proxy
+
+	return os.WriteFile(filepath.Join(e.root, "compose.yaml"), composeBytes, 0o644)
 }
 
-// WebImage returns the docker-dev image the web and console services run,
-// derived from the configured PHP version and the pinned Node version. Callers
-// outside this package (the proxy CA-bundle builder) need the exact tag to
-// operate on the same image the shop will run.
-func WebImage(opts *ComposeOptions) string {
-	return fmt.Sprintf("ghcr.io/shopware/docker-dev:php%s-node%s-caddy", opts.phpVersion(), nodeVersion)
-}
-
-func ComposeOptionsFromConfig(cfg *shop.Config) *ComposeOptions {
-	if cfg == nil || cfg.Docker == nil {
-		return nil
-	}
-	opts := &ComposeOptions{}
-	if cfg.Docker.PHP != nil {
-		opts.PHPVersion = cfg.Docker.PHP.Version
-		opts.PHPProfiler = cfg.Docker.PHP.Profiler
-		opts.BlackfireServerID = cfg.Docker.PHP.BlackfireServerID
-		opts.BlackfireServerToken = cfg.Docker.PHP.BlackfireServerToken
-		opts.TidewaysAPIKey = cfg.Docker.PHP.TidewaysAPIKey
-	}
-	return opts
-}
-
-func GenerateComposeFile(lock *composer.Lock, opts *ComposeOptions) ([]byte, error) {
-	hasAMQP := lock.GetPackage("symfony/amqp-messenger") != nil
-	hasElasticsearch := lock.GetPackage("shopware/elasticsearch") != nil
-
-	doc := buildCompose(hasAMQP, hasElasticsearch, opts)
+// composeYAML renders the compose file with the managed-file header.
+func (e *Environment) composeYAML() ([]byte, error) {
+	doc := buildCompose(e)
 
 	out, err := yaml.Marshal(&doc)
 	if err != nil {
@@ -143,39 +52,6 @@ func GenerateComposeFile(lock *composer.Lock, opts *ComposeOptions) ([]byte, err
 		"# See https://docs.docker.com/compose/how-tos/multiple-compose-files/merge/\n\n"
 
 	return append([]byte(header), out...), nil
-}
-
-func WriteComposeFile(projectFolder string, opts *ComposeOptions) error {
-	if opts == nil {
-		opts = &ComposeOptions{}
-	}
-	if opts.User == "" {
-		opts.User = system.ProjectUserSpec(projectFolder)
-	}
-
-	// The compose file targets the dev environment, so evaluate the admin
-	// worker toggle for dev. A dedicated worker is only needed when it is off.
-	adminWorkerEnabled, err := symfony.IsAdminWorkerEnabledForProject(projectFolder, "dev")
-	if err != nil {
-		return fmt.Errorf("failed to read admin worker config: %w", err)
-	}
-	opts.DedicatedWorker = !adminWorkerEnabled
-
-	lock, err := composer.ReadLock(filepath.Join(projectFolder, "composer.lock"))
-	if err != nil {
-		return fmt.Errorf("failed to read composer.lock: %w", err)
-	}
-
-	composeBytes, err := GenerateComposeFile(lock, opts)
-	if err != nil {
-		return fmt.Errorf("failed to generate compose.yaml: %w", err)
-	}
-
-	if err := ensureEnvLocalFile(projectFolder); err != nil {
-		return err
-	}
-
-	return os.WriteFile(filepath.Join(projectFolder, "compose.yaml"), composeBytes, 0o644)
 }
 
 // ensureEnvLocalFile creates .env.local when it is missing. The generated
@@ -190,280 +66,51 @@ func ensureEnvLocalFile(projectFolder string) error {
 		return err
 	}
 
-	return os.WriteFile(envLocalPath, []byte(shop.EnvLocalDockerContent), 0o644)
+	return os.WriteFile(envLocalPath, []byte(EnvLocalContent), 0o644)
 }
 
-func buildCompose(hasAMQP, hasElasticsearch bool, opts *ComposeOptions) yaml.Node {
-	px := opts.proxy()
+// buildCompose assembles the file from the catalog: every active service is
+// built from the environment, then published on the host or routed through
+// the proxy according to its endpoints, and its named volumes are declared.
+func buildCompose(e *Environment) composeFile {
+	var file composeFile
+	declared := map[string]struct{}{}
 
-	webEnv := newMappingNode()
-	addKeyValue(webEnv, "HOST", "0.0.0.0")
-	addKeyValue(webEnv, "DATABASE_URL", "mysql://root:root@database/shopware")
-	addKeyValue(webEnv, "MAILER_DSN", "smtp://mailer:1025")
+	for _, svc := range e.activeServices() {
+		spec := svc.build(e, svc)
+		publishOrRoute(&spec, e, svc)
+		file.Services = file.Services.set(svc.Name, spec)
 
-	// In proxy mode Traefik terminates TLS and forwards plain HTTP from a
-	// private container address, so Shopware must trust its X-Forwarded-*
-	// headers (private ranges) or URL generation and redirects fall back to
-	// http. Fixed-port mode only ever sees the local remote address.
-	trustedProxies := "REMOTE_ADDR"
-	if px != nil {
-		trustedProxies = "127.0.0.1,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16"
-	}
-	addKeyValue(webEnv, "TRUSTED_PROXIES", trustedProxies)
-	addKeyValue(webEnv, "SYMFONY_TRUSTED_PROXIES", trustedProxies)
-
-	if px != nil && px.CABundlePath != "" {
-		// APP_URL is not pinned here: proxy up writes it into .env.local before
-		// the container starts, keeping .env.local the single, editable source of
-		// truth (a real env var would silently win over the file and confuse
-		// anyone editing it). Point Node at the mounted CA bundle so its own
-		// self-calls over TLS are trusted (PHP/curl trust it via the same bundle
-		// mounted over the system trust store — see addVolumes).
-		addKeyValue(webEnv, "NODE_EXTRA_CA_CERTS", containerCABundlePath)
-	}
-
-	if hasAMQP {
-		addKeyValue(webEnv, "MESSENGER_TRANSPORT_DSN", "amqp://guest:guest@lavinmq:5672")
-	}
-
-	if hasElasticsearch {
-		addKeyValue(webEnv, "OPENSEARCH_URL", "http://opensearch:9200")
-		addKeyValue(webEnv, "SHOPWARE_ES_ENABLED", "1")
-		addKeyValue(webEnv, "SHOPWARE_ES_INDEXING_ENABLED", "1")
-		addKeyValue(webEnv, "SHOPWARE_ES_INDEX_PREFIX", "sw")
-	}
-
-	webDependsOn := newMappingNode()
-	dbCondition := newMappingNode()
-	addKeyValue(dbCondition, "condition", "service_healthy")
-	addKeyValueNode(webDependsOn, "database", dbCondition)
-
-	if opts != nil && opts.PHPProfiler != "" {
-		addKeyValue(webEnv, "PHP_PROFILER", opts.PHPProfiler)
-		switch opts.PHPProfiler {
-		case "xdebug":
-			addKeyValue(webEnv, "XDEBUG_MODE", "debug")
-			addKeyValue(webEnv, "XDEBUG_CONFIG", "client_host=host.docker.internal")
-		case "tideways":
-			if opts.TidewaysAPIKey != "" {
-				addKeyValue(webEnv, "TIDEWAYS_APIKEY", opts.TidewaysAPIKey)
+		for _, volume := range namedVolumes(spec) {
+			if _, ok := declared[volume]; ok {
+				continue
 			}
+			declared[volume] = struct{}{}
+			file.Volumes = file.Volumes.set(volume, struct{}{})
 		}
 	}
-
-	web := newMappingNode()
-	addKeyValue(web, "image", WebImage(opts))
-	if opts != nil && opts.User != "" {
-		addKeyValue(web, "user", opts.User)
-	}
-	addKeyValueNode(web, "env_file", newSequenceNode(".env.local"))
-	addKeyValueNode(web, "environment", webEnv)
-	addVolumes(web, px, ".:/var/www/html")
-	addKeyValueNode(web, "depends_on", webDependsOn)
-	publishOrRoute(web, px, "web",
-		[]string{"8000:8000", "8080:8080", "9999:9999", "9998:9998", "5173:5173", "5773:5773"},
-		webProxyRoutes(px)...)
-
-	dbEnv := newMappingNode()
-	addKeyValue(dbEnv, "MARIADB_DATABASE", "shopware")
-	addKeyValue(dbEnv, "MARIADB_ROOT_PASSWORD", "root")
-	addKeyValue(dbEnv, "MARIADB_USER", "shopware")
-	addKeyValue(dbEnv, "MARIADB_PASSWORD", "shopware")
-
-	healthTest := newSequenceNode("CMD", "mariadb-admin", "ping", "-h", "localhost", "-proot")
-
-	healthcheck := newMappingNode()
-	addKeyValueNode(healthcheck, "test", healthTest)
-	addKeyValue(healthcheck, "start_period", "10s")
-	addKeyValue(healthcheck, "start_interval", "3s")
-	addKeyValue(healthcheck, "interval", "5s")
-	addKeyValue(healthcheck, "timeout", "1s")
-	addKeyValueNode(healthcheck, "retries", &yaml.Node{Kind: yaml.ScalarNode, Value: "10", Tag: "!!int"})
-
-	database := newMappingNode()
-	addKeyValue(database, "image", "mariadb:11.8")
-	// Publish the database on a random loopback port so host-side tools
-	// (e.g. `shopware-cli project sql`) can reach it without port conflicts.
-	addKeyValueNode(database, "ports", newSequenceNode("127.0.0.1::3306"))
-	addKeyValueNode(database, "environment", dbEnv)
-	addKeyValueNode(database, "volumes", newSequenceNode("db-data:/var/lib/mysql:rw"))
-	addKeyValueNode(database, "command", newSequenceNode(
-		"--sql_mode=STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION",
-		"--log_bin_trust_function_creators=1",
-		"--binlog_cache_size=16M",
-		"--key_buffer_size=0",
-		"--join_buffer_size=1024M",
-		"--innodb_log_file_size=128M",
-		"--innodb_buffer_pool_size=1024M",
-		"--innodb_buffer_pool_instances=1",
-		"--group_concat_max_len=320000",
-		"--default-time-zone=+00:00",
-		"--max_binlog_size=512M",
-		"--binlog_expire_logs_seconds=86400",
-	))
-	addKeyValueNode(database, "healthcheck", healthcheck)
-
-	adminerEnv := newMappingNode()
-	addKeyValue(adminerEnv, "ADMINER_DEFAULT_SERVER", "database")
-
-	adminer := newMappingNode()
-	addKeyValue(adminer, "image", "adminer")
-	addKeyValue(adminer, "stop_signal", "SIGKILL")
-	addKeyValueNode(adminer, "depends_on", newSequenceNode("database"))
-	addKeyValueNode(adminer, "environment", adminerEnv)
-	publishOrRoute(adminer, px, "adminer", []string{"9080:8080"}, proxyRoute{subdomain: "adminer", containerPort: 8080})
-
-	mailerEnv := newMappingNode()
-	addKeyValue(mailerEnv, "MP_SMTP_AUTH_ACCEPT_ANY", "1")
-	addKeyValue(mailerEnv, "MP_SMTP_AUTH_ALLOW_INSECURE", "1")
-
-	mailer := newMappingNode()
-	addKeyValue(mailer, "image", "axllent/mailpit")
-	// Only the web UI (8025) is routed in proxy mode; SMTP (1025) stays internal
-	// to the compose network, reachable by other services as mailer:1025.
-	publishOrRoute(mailer, px, "mailer", []string{"1025:1025", "8025:8025"}, proxyRoute{subdomain: "mailer", containerPort: 8025})
-	addKeyValueNode(mailer, "environment", mailerEnv)
-
-	services := newMappingNode()
-	addKeyValueNode(services, "web", web)
-	addKeyValueNode(services, "database", database)
-	addKeyValueNode(services, "adminer", adminer)
-	addKeyValueNode(services, "mailer", mailer)
-
-	if opts != nil && opts.DedicatedWorker {
-		// The admin no longer dispatches the queue or scheduled tasks from the
-		// browser, so both need dedicated long-running processes. Each is
-		// bounded by --time-limit / --memory-limit so it recycles periodically
-		// (restart: unless-stopped brings it back up).
-		for _, bg := range BackgroundServices {
-			addKeyValueNode(services, bg.Name, consoleService(opts, webEnv, webDependsOn, bg.command...))
-		}
-	}
-
-	volumes := newMappingNode()
-	addKeyValueNode(volumes, "db-data", newNullNode())
-
-	if hasAMQP {
-		lavinmq := newMappingNode()
-		addKeyValue(lavinmq, "image", "cloudamqp/lavinmq")
-		// Only the management UI (15672) is routed in proxy mode; AMQP (5672)
-		// stays internal, reachable as lavinmq:5672.
-		publishOrRoute(lavinmq, px, "lavinmq", []string{"15672:15672", "5672:5672"}, proxyRoute{subdomain: "lavinmq", containerPort: 15672})
-		addKeyValueNode(lavinmq, "volumes", newSequenceNode("lavinmq-data:/var/lib/lavinmq:rw"))
-		addKeyValueNode(services, "lavinmq", lavinmq)
-		addKeyValueNode(volumes, "lavinmq-data", newNullNode())
-	}
-
-	if hasElasticsearch {
-		osEnv := newMappingNode()
-		addKeyValue(osEnv, "OPENSEARCH_INITIAL_ADMIN_PASSWORD", "Shopware123!")
-		addKeyValue(osEnv, "discovery.type", "single-node")
-		addKeyValue(osEnv, "plugins.security.disabled", "true")
-
-		opensearch := newMappingNode()
-		addKeyValue(opensearch, "image", "opensearchproject/opensearch:2")
-		addKeyValueNode(opensearch, "environment", osEnv)
-		publishOrRoute(opensearch, px, "opensearch", []string{"9200:9200"}, proxyRoute{subdomain: "opensearch", containerPort: 9200})
-		addKeyValueNode(opensearch, "volumes", newSequenceNode("opensearch-data:/usr/share/opensearch/data"))
-		addKeyValueNode(services, "opensearch", opensearch)
-		addKeyValueNode(volumes, "opensearch-data", newNullNode())
-	}
-
-	if opts != nil && opts.PHPProfiler == "blackfire" && opts.BlackfireServerID != "" && opts.BlackfireServerToken != "" {
-		bfEnv := newMappingNode()
-		addKeyValue(bfEnv, "BLACKFIRE_SERVER_ID", opts.BlackfireServerID)
-		addKeyValue(bfEnv, "BLACKFIRE_SERVER_TOKEN", opts.BlackfireServerToken)
-
-		blackfire := newMappingNode()
-		addKeyValue(blackfire, "image", "blackfire/blackfire:2")
-		addKeyValueNode(blackfire, "environment", bfEnv)
-		addKeyValueNode(services, "blackfire", blackfire)
-	}
-
-	if opts != nil && opts.PHPProfiler == "tideways" && opts.TidewaysAPIKey != "" {
-		tideways := newMappingNode()
-		addKeyValue(tideways, "image", "ghcr.io/tideways/daemon")
-		addKeyValueNode(services, "tideways-daemon", tideways)
-	}
-
-	root := newMappingNode()
-	addKeyValueNode(root, "services", services)
-	addKeyValueNode(root, "volumes", volumes)
 
 	// In proxy mode every routed service joins the shared external network
 	// Traefik also runs on, declared here so compose does not try to create it.
-	if px != nil {
-		externalNetwork := newMappingNode()
-		addKeyValueNode(externalNetwork, "external", newBoolNode(true))
-
-		networks := newMappingNode()
-		addKeyValueNode(networks, px.NetworkName, externalNetwork)
-		addKeyValueNode(root, "networks", networks)
+	if e.proxy != nil {
+		file.Networks = yamlMap[composeExternalNetwork]{}.
+			set(e.proxy.NetworkName, composeExternalNetwork{External: true})
 	}
 
-	return yaml.Node{
-		Kind:    yaml.DocumentNode,
-		Content: []*yaml.Node{root},
-	}
+	return file
 }
 
-// consoleService builds a long-running service that reuses the web image and
-// its environment to run a `php bin/console <args...>` process. It is used for
-// the messenger worker and scheduled-task runner when the admin worker is
-// disabled.
-func consoleService(opts *ComposeOptions, webEnv, webDependsOn *yaml.Node, consoleArgs ...string) *yaml.Node {
-	svc := newMappingNode()
-	addKeyValue(svc, "image", WebImage(opts))
-	if opts.User != "" {
-		addKeyValue(svc, "user", opts.User)
-	}
-	addKeyValueNode(svc, "command", newSequenceNode(append([]string{"php", "bin/console"}, consoleArgs...)...))
-	addKeyValueNode(svc, "env_file", newSequenceNode(".env.local"))
-	addKeyValueNode(svc, "environment", webEnv)
-	addVolumes(svc, opts.proxy(), ".:/var/www/html")
-	addKeyValueNode(svc, "depends_on", webDependsOn)
-	addKeyValueNode(svc, "restart", &yaml.Node{Kind: yaml.ScalarNode, Value: "unless-stopped", Tag: "!!str"})
-
-	// The console processes (worker, scheduler) reach the shop's own APP_URL
-	// over TLS, so in proxy mode they join the proxy network (the CA and
-	// APP_URL env come from the shared webEnv). They publish no HTTP route.
-	if px := opts.proxy(); px != nil {
-		addKeyValueNode(svc, "networks", newSequenceNode("default", px.NetworkName))
+// namedVolumes returns the named (non bind-mount) volumes a service mounts,
+// which the compose file has to declare at the top level.
+func namedVolumes(spec composeService) []string {
+	var names []string
+	for _, mount := range spec.Volumes {
+		source, _, _ := strings.Cut(mount, ":")
+		if source == "" || strings.HasPrefix(source, ".") || strings.HasPrefix(source, "/") {
+			continue
+		}
+		names = append(names, source)
 	}
 
-	return svc
-}
-
-func newMappingNode() *yaml.Node {
-	return &yaml.Node{Kind: yaml.MappingNode, Tag: "!!map"}
-}
-
-func newSequenceNode(values ...string) *yaml.Node {
-	seq := &yaml.Node{Kind: yaml.SequenceNode, Tag: "!!seq"}
-	for _, v := range values {
-		seq.Content = append(seq.Content, &yaml.Node{Kind: yaml.ScalarNode, Value: v, Tag: "!!str"})
-	}
-	return seq
-}
-
-func newNullNode() *yaml.Node {
-	return &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!null"}
-}
-
-func newBoolNode(v bool) *yaml.Node {
-	return &yaml.Node{Kind: yaml.ScalarNode, Value: strconv.FormatBool(v), Tag: "!!bool"}
-}
-
-func addKeyValue(m *yaml.Node, key, value string) {
-	m.Content = append(m.Content,
-		&yaml.Node{Kind: yaml.ScalarNode, Value: key, Tag: "!!str"},
-		&yaml.Node{Kind: yaml.ScalarNode, Value: value, Tag: "!!str"},
-	)
-}
-
-func addKeyValueNode(m *yaml.Node, key string, value *yaml.Node) {
-	m.Content = append(m.Content,
-		&yaml.Node{Kind: yaml.ScalarNode, Value: key, Tag: "!!str"},
-		value,
-	)
+	return names
 }

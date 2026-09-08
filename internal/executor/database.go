@@ -24,6 +24,11 @@ type DatabaseConnection struct {
 	Username string
 	Password string
 	Database string
+	// tunneledNet, when set, is a mysql driver network name (registered via
+	// mysql.RegisterDialContext) used instead of plain TCP. The SSH executor
+	// registers one network per connection set that dials Addr through the
+	// SSH host.
+	tunneledNet string
 }
 
 // Addr returns the host:port address of the database.
@@ -34,7 +39,11 @@ func (c *DatabaseConnection) Addr() string {
 // MySQLConfig translates the credentials into a driver configuration.
 func (c *DatabaseConnection) MySQLConfig() *mysql.Config {
 	cfg := mysql.NewConfig()
-	cfg.Net = "tcp"
+	if c.tunneledNet != "" {
+		cfg.Net = c.tunneledNet
+	} else {
+		cfg.Net = "tcp"
+	}
 	cfg.Addr = c.Addr()
 	cfg.User = c.Username
 	cfg.Passwd = c.Password

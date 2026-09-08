@@ -8,19 +8,16 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
-)
 
-// ComposeProjectNameEnvKey is the host-side Docker Compose project name written
-// to the project .env (not .env.local). Compose loads .env automatically when
-// commands run with Dir = project root.
-const ComposeProjectNameEnvKey = "COMPOSE_PROJECT_NAME"
+	"github.com/shopware/shopware-cli/internal/envfile"
+)
 
 var nonComposeNameChars = regexp.MustCompile(`[^a-z0-9_-]+`)
 
-// GenerateComposeProjectName builds a unique Compose project name that satisfies
-// ProjectNameRule / ValidateProjectName. Format: sw-<basename>-<6 hex>.
-// The random suffix avoids volume reuse when a directory is deleted and
-// recreated with the same basename.
+// GenerateComposeProjectName builds a unique Compose project name.
+// Format: sw-<basename>-<6 hex>. The random suffix avoids volume reuse when a
+// directory is deleted and recreated with the same basename. The generated name
+// is a valid Compose project name by construction.
 func GenerateComposeProjectName(projectFolder string) (string, error) {
 	base := strings.ToLower(filepath.Base(projectFolder))
 	if base == "" || base == "." || base == string(filepath.Separator) {
@@ -32,7 +29,6 @@ func GenerateComposeProjectName(projectFolder string) (string, error) {
 	if base == "" {
 		base = "shop"
 	}
-	// Note: the "sw-" prefix already satisfies ValidateProjectName's leading-character rule.
 
 	var suffix [3]byte
 	if _, err := rand.Read(suffix[:]); err != nil {
@@ -40,9 +36,6 @@ func GenerateComposeProjectName(projectFolder string) (string, error) {
 	}
 
 	name := fmt.Sprintf("sw-%s-%s", base, hex.EncodeToString(suffix[:]))
-	if err := ValidateProjectName(name); err != nil {
-		return "", err
-	}
 
 	return name, nil
 }
@@ -60,37 +53,7 @@ func EnvFileContent(useDocker bool, projectFolder string) (string, error) {
 		return "", err
 	}
 
-	return ComposeProjectNameEnvKey + "=" + name + "\n", nil
-}
-
-// ReadComposeProjectName returns the COMPOSE_PROJECT_NAME configured in the
-// project's .env, or "" when the file or the key is missing.
-func ReadComposeProjectName(projectRoot string) string {
-	content, err := os.ReadFile(filepath.Join(projectRoot, ".env"))
-	if err != nil {
-		return ""
-	}
-	return ExtractComposeProjectName(content)
-}
-
-// ExtractComposeProjectName returns the COMPOSE_PROJECT_NAME value from raw
-// dotenv content, or "" when unset.
-func ExtractComposeProjectName(envContent []byte) string {
-	for _, line := range strings.Split(string(envContent), "\n") {
-		line = strings.TrimSpace(line)
-		if line == "" || strings.HasPrefix(line, "#") {
-			continue
-		}
-		key, value, ok := strings.Cut(line, "=")
-		if !ok {
-			continue
-		}
-		if strings.TrimSpace(key) == ComposeProjectNameEnvKey {
-			return strings.TrimSpace(value)
-		}
-	}
-
-	return ""
+	return envfile.ComposeProjectNameEnvKey + "=" + name + "\n", nil
 }
 
 // EnsureComposeProjectName writes COMPOSE_PROJECT_NAME into the project .env
@@ -120,7 +83,7 @@ func RestoreComposeProjectName(projectRoot, name string) error {
 		return err
 	}
 
-	if ExtractComposeProjectName(existing) != "" {
+	if envfile.ExtractComposeProjectName(existing) != "" {
 		return nil
 	}
 
@@ -128,7 +91,7 @@ func RestoreComposeProjectName(projectRoot, name string) error {
 	if len(content) > 0 && content[len(content)-1] != '\n' {
 		content = append(content, '\n')
 	}
-	content = append(content, []byte(ComposeProjectNameEnvKey+"="+name+"\n")...)
+	content = append(content, []byte(envfile.ComposeProjectNameEnvKey+"="+name+"\n")...)
 
 	return os.WriteFile(envPath, content, 0o644)
 }

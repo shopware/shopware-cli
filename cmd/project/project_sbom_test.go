@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/shopware/shopware-cli/internal/shop"
+	"github.com/shopware/shopware-cli/internal/testhelper"
 	"github.com/shopware/shopware-cli/internal/tui"
 )
 
@@ -25,11 +26,11 @@ func TestGenerateProjectSBOMSkipsWhenLockMissing(t *testing.T) {
 func TestGenerateProjectSBOM(t *testing.T) {
 	root := t.TempDir()
 
-	require.NoError(t, os.WriteFile(filepath.Join(root, "composer.json"), []byte(`{
-		"name": "acme/shop",
-		"version": "1.2.3"
-	}`), 0o644))
-	require.NoError(t, os.WriteFile(filepath.Join(root, "composer.lock"), []byte(`{
+	testhelper.WriteFile(t, filepath.Join(root, "composer.json"),
+		testhelper.ComposerJSON{Name: "acme/shop", Version: "1.2.3"}.String())
+	// The lock carries license and require fields the SBOM must pick up, which
+	// testhelper.ComposerLock cannot express.
+	testhelper.WriteFile(t, filepath.Join(root, "composer.lock"), `{
 		"packages": [
 			{
 				"name": "symfony/console",
@@ -42,7 +43,7 @@ func TestGenerateProjectSBOM(t *testing.T) {
 		"packages-dev": [
 			{"name": "phpunit/phpunit", "version": "10.0.0", "license": ["BSD-3-Clause"]}
 		]
-	}`), 0o644))
+	}`)
 
 	assert.NoError(t, generateProjectSBOM(t.Context(), root))
 
@@ -74,11 +75,12 @@ func TestProjectSbomCommandUnsupportedFormat(t *testing.T) {
 
 func TestProjectSbomCommandSuccess(t *testing.T) {
 	root := t.TempDir()
-	require.NoError(t, os.WriteFile(filepath.Join(root, "composer.json"), []byte(`{"name":"acme/shop","version":"1.2.3"}`), 0o644))
-	require.NoError(t, os.WriteFile(filepath.Join(root, "composer.lock"), []byte(`{
+	testhelper.WriteFile(t, filepath.Join(root, "composer.json"),
+		testhelper.ComposerJSON{Name: "acme/shop", Version: "1.2.3"}.String())
+	testhelper.WriteFile(t, filepath.Join(root, "composer.lock"), `{
 		"packages":[{"name":"symfony/console","version":"v6.3.0","type":"library","license":["MIT"]}],
 		"packages-dev":[]
-	}`), 0o644))
+	}`)
 
 	out := filepath.Join(root, "from-cmd.json")
 	require.NoError(t, projectSbomCmd.Flags().Set("format", shop.ProjectSBOMFormatCycloneDXJSON))

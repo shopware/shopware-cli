@@ -130,6 +130,9 @@ docker_signs:
 checksum:
   name_template: 'checksums.txt'
 
+docker_digest:
+  name_template: 'digests.txt'
+
 changelog:
   sort: asc
   filters:

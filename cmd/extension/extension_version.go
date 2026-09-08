@@ -11,9 +11,9 @@ import (
 )
 
 var extensionVersionCmd = &cobra.Command{
-	Use:   "get-version [path]",
+	Use:   "get-version path",
 	Short: "Get the version of the given extension",
-	Args:  cobra.MinimumNArgs(1),
+	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		path, err := filepath.Abs(args[0])
 		if err != nil {

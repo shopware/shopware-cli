@@ -18,9 +18,12 @@ func UpsertEnvVar(path, key, value string) error {
 	line := fmt.Sprintf("%s=%s", key, value)
 	lines := strings.Split(strings.TrimRight(string(content), "\n"), "\n")
 
+	// Match assignments the way ExtractEnvVar reads them (whitespace around the
+	// key tolerated, comments skipped), so an upsert replaces the line a read
+	// would return instead of appending a duplicate that never takes effect.
 	replaced := false
 	for i, l := range lines {
-		if strings.HasPrefix(strings.TrimSpace(l), key+"=") {
+		if isAssignmentOf(l, key) {
 			lines[i] = line
 			replaced = true
 			break
@@ -38,6 +41,16 @@ func UpsertEnvVar(path, key, value string) error {
 	return os.WriteFile(path, []byte(strings.Join(lines, "\n")+"\n"), 0o644)
 }
 
+// isAssignmentOf reports whether the dotenv line assigns key.
+func isAssignmentOf(line, key string) bool {
+	line = strings.TrimSpace(line)
+	if line == "" || strings.HasPrefix(line, "#") {
+		return false
+	}
+	k, _, ok := strings.Cut(line, "=")
+	return ok && strings.TrimSpace(k) == key
+}
+
 // ReadEnvVar returns the value of key in the env file at path, or "" when
 // the file or the key does not exist.
 func ReadEnvVar(path, key string) string {
@@ -46,9 +59,24 @@ func ReadEnvVar(path, key string) string {
 		return ""
 	}
 
-	for _, l := range strings.Split(string(content), "\n") {
-		if strings.HasPrefix(strings.TrimSpace(l), key+"=") {
-			return strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(l), key+"="))
+	return ExtractEnvVar(content, key)
+}
+
+// ExtractEnvVar returns the value of key in raw dotenv content, or "" when
+// unset. Blank and comment lines are skipped, whitespace around key and value
+// is trimmed, and the first assignment wins.
+func ExtractEnvVar(content []byte, key string) string {
+	for _, line := range strings.Split(string(content), "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		k, value, ok := strings.Cut(line, "=")
+		if !ok {
+			continue
+		}
+		if strings.TrimSpace(k) == key {
+			return strings.TrimSpace(value)
 		}
 	}
 

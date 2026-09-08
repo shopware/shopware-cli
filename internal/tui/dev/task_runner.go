@@ -1,7 +1,6 @@
 package dev
 
 import (
-	"context"
 	"os"
 	"os/exec"
 
@@ -25,6 +24,7 @@ func (m *Model) runStorefrontBuild() tea.Cmd {
 }
 
 func (m *Model) runSelfCommand(title string, args ...string) tea.Cmd {
+	ctx := m.commandContext()
 	projectRoot := m.projectRoot
 	dockerMode := m.dockerMode
 
@@ -33,7 +33,7 @@ func (m *Model) runSelfCommand(title string, args ...string) tea.Cmd {
 		if err != nil {
 			return nil, err
 		}
-		cmd := exec.CommandContext(context.Background(), selfBin, append(args, projectRoot)...)
+		cmd := exec.CommandContext(ctx, selfBin, append(args, projectRoot)...)
 		if dockerMode {
 			cmd.Dir = projectRoot
 		}
@@ -42,8 +42,9 @@ func (m *Model) runSelfCommand(title string, args ...string) tea.Cmd {
 }
 
 func (m *Model) runCacheClear() tea.Cmd {
+	ctx := m.commandContext()
 	e := m.executor
 	return m.runTask("Clearing Cache...", func() (*exec.Cmd, error) {
-		return e.ConsoleCommand(context.Background(), "cache:clear").Cmd, nil
+		return e.ConsoleCommand(ctx, "cache:clear").Cmd, nil
 	})
 }

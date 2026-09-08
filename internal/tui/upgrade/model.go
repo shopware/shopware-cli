@@ -7,6 +7,8 @@
 package upgrade
 
 import (
+	"context"
+
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/shopware/shopware-cli/internal/executor"
@@ -36,6 +38,12 @@ type Options struct {
 
 // Model is the wizard screen hosted by the app shell.
 type Model struct {
+	// ctx is the command context of the CLI invocation (cancelled on
+	// SIGINT/SIGTERM, carries the logger). tea.Cmd closures derive their
+	// backend and subprocess contexts from it. Bubbletea's fixed Update(msg)
+	// signature offers no parameter path into command builders, so the model
+	// has to carry it.
+	ctx      context.Context //nolint:containedctx
 	opts     Options
 	host     app.Host
 	upgrader *backend.ProjectUpgrader
@@ -57,9 +65,20 @@ type Model struct {
 	prepareGen int
 }
 
+// commandContext returns the context tea.Cmd closures should derive from.
+// Tests construct Model literals without New, so a nil ctx falls back to
+// Background.
+func (m *Model) commandContext() context.Context {
+	if m.ctx != nil {
+		return m.ctx
+	}
+	return context.Background()
+}
+
 // New creates the wizard model starting at the intro panel.
-func New(opts Options) *Model {
+func New(ctx context.Context, opts Options) *Model {
 	return &Model{
+		ctx:      ctx,
 		opts:     opts,
 		upgrader: backend.NewProjectUpgrader(opts.ProjectRoot, opts.Executor),
 		header:   tui.NewHeader(),
@@ -71,15 +90,15 @@ func New(opts Options) *Model {
 
 // NewApp assembles the wizard inside the application shell: wizard header as
 // chrome, ctrl+c interception while the upgrade runs, and window titles.
-func NewApp(opts Options) *app.App {
-	shell, _ := newAppWithModel(opts)
+func NewApp(ctx context.Context, opts Options) *app.App {
+	shell, _ := newAppWithModel(ctx, opts)
 	return shell
 }
 
 // newAppWithModel wires the model into the shell and also returns the model,
 // so tests can inspect wizard state.
-func newAppWithModel(opts Options) (*app.App, *Model) {
-	m := New(opts)
+func newAppWithModel(ctx context.Context, opts Options) (*app.App, *Model) {
+	m := New(ctx, opts)
 
 	shell := app.New(app.Options{
 		Content:           m,

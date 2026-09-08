@@ -38,7 +38,7 @@ queue. The count per queue is optional and defaults to 1.`,
 		gracefulStopLimit, _ := cobraCmd.Flags().GetUint("graceful-stop-limit")
 		messagesLimit, _ := cobraCmd.Flags().GetUint("limit")
 
-		if projectRoot, err = findClosestShopwareProject(false); err != nil {
+		if projectRoot, err = shop.FindClosestShopwareProject(false); err != nil {
 			return err
 		}
 

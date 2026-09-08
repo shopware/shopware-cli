@@ -4,8 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"path/filepath"
-	"regexp"
 	"sort"
 	"strings"
 
@@ -15,36 +13,10 @@ import (
 
 const (
 	VersionLatest = "latest"
-
-	// ProjectNameRule describes project names that can also be used as Docker
-	// Compose project names.
-	ProjectNameRule = "only lowercase letters, digits, dashes (-) and underscores (_) are allowed, and it must start with a lowercase letter or digit"
 )
 
-var projectNameRegexp = regexp.MustCompile(`^[a-z0-9][a-z0-9_-]*$`)
-
-// ValidateProjectName ensures the final path element can be used as a Docker
-// Compose project name. The special value "." is always allowed.
-func ValidateProjectName(name string) error {
-	if name == "." {
-		return nil
-	}
-
-	base := filepath.Base(name)
-	if !projectNameRegexp.MatchString(base) {
-		return fmt.Errorf("invalid project name %q: %s, so it can be used as a Docker Compose project name", base, ProjectNameRule)
-	}
-
-	return nil
-}
-
-// ValidateProjectFolder ensures the project name is valid and that an existing
-// target is an empty directory.
+// ValidateProjectFolder ensures that an existing target is an empty directory.
 func ValidateProjectFolder(projectFolder string) error {
-	if err := ValidateProjectName(projectFolder); err != nil {
-		return err
-	}
-
 	info, err := os.Stat(projectFolder)
 	if errors.Is(err, os.ErrNotExist) {
 		return nil
@@ -71,10 +43,10 @@ func ValidateProjectFolder(projectFolder string) error {
 // the project scaffold.
 func ValidateDeploymentMethod(deploymentMethod string) error {
 	switch deploymentMethod {
-	case DeploymentNone, DeploymentDeployer, DeploymentPlatformSH, DeploymentShopwarePaaS:
+	case DeploymentNone, DeploymentContainer, DeploymentDeployer, DeploymentPlatformSH, DeploymentShopwarePaaS:
 		return nil
 	default:
-		return fmt.Errorf("invalid deployment method: %s. Valid options: none, deployer, platformsh, shopware-paas", deploymentMethod)
+		return fmt.Errorf("invalid deployment method: %s. Valid options: none, container, deployer, platformsh, shopware-paas", deploymentMethod)
 	}
 }
 

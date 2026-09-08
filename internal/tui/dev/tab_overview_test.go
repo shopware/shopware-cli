@@ -1,10 +1,17 @@
 package dev
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
+	dockerpkg "github.com/shopware/shopware-cli/internal/docker"
+	"github.com/shopware/shopware-cli/internal/executor"
+	"github.com/shopware/shopware-cli/internal/shop"
 )
 
 func TestMajorMinor(t *testing.T) {
@@ -34,7 +41,7 @@ func TestSecurityEndRemaining(t *testing.T) {
 }
 
 func TestOverviewBackgroundProcessesSection(t *testing.T) {
-	m := NewOverviewModel("docker", "http://localhost:8000", "admin", "shopware", "/tmp/project", nil, nil)
+	m := NewOverviewModel(t.Context(), "docker", "http://localhost:8000", "admin", "shopware", "/tmp/project", nil, nil)
 	m.loading = false
 	m.width = 80
 	m.height = 40
@@ -42,7 +49,7 @@ func TestOverviewBackgroundProcessesSection(t *testing.T) {
 	// Hidden entirely when there are no background processes.
 	assert.NotContains(t, m.View(m.width, m.height), "Background processing")
 
-	m.background = []BackgroundProcess{
+	m.background = []dockerpkg.BackgroundProcess{
 		{Name: "Queue worker", Running: true},
 		{Name: "Scheduled tasks", Running: false},
 	}
@@ -60,7 +67,7 @@ func TestOverviewBackgroundProcessesSection(t *testing.T) {
 }
 
 func TestNewOverviewModel(t *testing.T) {
-	m := NewOverviewModel("docker", "http://localhost:8000", "admin", "shopware", "/tmp/project", nil, nil)
+	m := NewOverviewModel(t.Context(), "docker", "http://localhost:8000", "admin", "shopware", "/tmp/project", nil, nil)
 
 	assert.Equal(t, "docker", m.envType)
 	assert.Equal(t, "http://localhost:8000", m.shopURL)
@@ -72,21 +79,21 @@ func TestNewOverviewModel(t *testing.T) {
 }
 
 func TestNewOverviewModel_AdminURLTrailingSlash(t *testing.T) {
-	m := NewOverviewModel("local", "http://localhost:8000/", "", "", "/tmp/project", nil, nil)
+	m := NewOverviewModel(t.Context(), "local", "http://localhost:8000/", "", "", "/tmp/project", nil, nil)
 
 	assert.Equal(t, "http://localhost:8000/admin", m.adminURL)
 }
 
 func TestNewOverviewModel_EmptyURL(t *testing.T) {
-	m := NewOverviewModel("local", "", "", "", "/tmp/project", nil, nil)
+	m := NewOverviewModel(t.Context(), "local", "", "", "", "/tmp/project", nil, nil)
 
 	assert.Equal(t, "admin", m.adminURL)
 }
 
 func TestServicesLoadedMsg(t *testing.T) {
-	m := NewOverviewModel("docker", "http://localhost:8000", "", "", "/tmp/project", nil, nil)
+	m := NewOverviewModel(t.Context(), "docker", "http://localhost:8000", "", "", "/tmp/project", nil, nil)
 
-	services := []DiscoveredService{
+	services := []dockerpkg.DiscoveredService{
 		{Name: "Adminer", URL: "http://127.0.0.1:9080", Username: "root", Password: "root"},
 		{Name: "Shopware", URL: "http://localhost:8000"},
 	}
@@ -102,7 +109,7 @@ func TestServicesLoadedMsg(t *testing.T) {
 }
 
 func TestServicesLoadedMsg_UpdatesPortFromWebService(t *testing.T) {
-	m := NewOverviewModel("docker", "http://127.0.0.1:8000", "", "", "/tmp/project", nil, nil)
+	m := NewOverviewModel(t.Context(), "docker", "http://127.0.0.1:8000", "", "", "/tmp/project", nil, nil)
 
 	updated, _ := m.Update(servicesLoadedMsg{webPort: 8002})
 	assert.Equal(t, "http://127.0.0.1:8002", updated.shopURL)
@@ -110,7 +117,7 @@ func TestServicesLoadedMsg_UpdatesPortFromWebService(t *testing.T) {
 }
 
 func TestServicesLoadedMsg_KeepsCustomHostWhenUpdatingPort(t *testing.T) {
-	m := NewOverviewModel("docker", "http://foo.localhost:8000", "", "", "/tmp/project", nil, nil)
+	m := NewOverviewModel(t.Context(), "docker", "http://foo.localhost:8000", "", "", "/tmp/project", nil, nil)
 
 	updated, _ := m.Update(servicesLoadedMsg{webPort: 8002})
 	assert.Equal(t, "http://foo.localhost:8002", updated.shopURL)
@@ -118,7 +125,7 @@ func TestServicesLoadedMsg_KeepsCustomHostWhenUpdatingPort(t *testing.T) {
 }
 
 func TestServicesLoadedMsg_NoWebPortKeepsURL(t *testing.T) {
-	m := NewOverviewModel("docker", "http://127.0.0.1:8000", "", "", "/tmp/project", nil, nil)
+	m := NewOverviewModel(t.Context(), "docker", "http://127.0.0.1:8000", "", "", "/tmp/project", nil, nil)
 
 	updated, _ := m.Update(servicesLoadedMsg{})
 	assert.Equal(t, "http://127.0.0.1:8000", updated.shopURL)
@@ -139,7 +146,7 @@ func TestResolveShopURL(t *testing.T) {
 }
 
 func TestServicesLoadedMsg_WithError(t *testing.T) {
-	m := NewOverviewModel("docker", "http://localhost:8000", "", "", "/tmp/project", nil, nil)
+	m := NewOverviewModel(t.Context(), "docker", "http://localhost:8000", "", "", "/tmp/project", nil, nil)
 
 	updated, _ := m.Update(servicesLoadedMsg{err: assert.AnError})
 	assert.False(t, updated.loading)
@@ -147,30 +154,10 @@ func TestServicesLoadedMsg_WithError(t *testing.T) {
 	assert.Empty(t, updated.services)
 }
 
-func TestKnownServices(t *testing.T) {
-	adminer := knownServices["adminer"]
-	assert.Equal(t, "Adminer", adminer.Name)
-	assert.Equal(t, 8080, adminer.TargetPort)
-	assert.Equal(t, "root", adminer.Username)
-
-	mailer := knownServices["mailer"]
-	assert.Equal(t, "Mailpit", mailer.Name)
-	assert.Equal(t, 8025, mailer.TargetPort)
-
-	lavinmq := knownServices["lavinmq"]
-	assert.Equal(t, "Queue (LavinMQ)", lavinmq.Name)
-	assert.Equal(t, 15672, lavinmq.TargetPort)
-	assert.Equal(t, "guest", lavinmq.Username)
-
-	rabbitmq := knownServices["rabbitmq"]
-	assert.Equal(t, "Queue (RabbitMQ)", rabbitmq.Name)
-	assert.Equal(t, 15672, rabbitmq.TargetPort)
-}
-
 func TestViewShowsAccessTable(t *testing.T) {
-	m := NewOverviewModel("docker", "http://localhost:8000", "admin", "shopware", "/tmp/project", nil, nil)
+	m := NewOverviewModel(t.Context(), "docker", "http://localhost:8000", "admin", "shopware", "/tmp/project", nil, nil)
 	m.loading = false
-	m.services = []DiscoveredService{
+	m.services = []dockerpkg.DiscoveredService{
 		{Name: "Adminer", URL: "http://127.0.0.1:9080", Username: "root", Password: "root"},
 		{Name: "Mailpit", URL: "http://127.0.0.1:8025"},
 	}
@@ -191,11 +178,85 @@ func TestViewShowsAccessTable(t *testing.T) {
 }
 
 func TestViewAccessTableWithoutInstallation(t *testing.T) {
-	m := NewOverviewModel("docker", "http://localhost:8000", "", "", "/tmp/project", nil, nil)
+	m := NewOverviewModel(t.Context(), "docker", "http://localhost:8000", "", "", "/tmp/project", nil, nil)
 	m.loading = false
 
 	view := m.View(120, 40)
 	assert.Contains(t, view, "Shop Admin")
 	assert.Contains(t, view, "Admin credentials will appear here once Shopware is installed.")
 	assert.NotContains(t, view, "no auth")
+}
+
+func TestRenderWatchers_DockerModeUsesConfiguredPorts(t *testing.T) {
+	dir := t.TempDir()
+	writeComposerLock(t, dir, "^8.2")
+	cfg := &shop.Config{
+		Docker: &shop.ConfigDocker{
+			Services: shop.ConfigDockerServices{
+				dockerpkg.ServiceWeb: {Ports: dockerpkg.Ports{
+					dockerpkg.PortAdminWatcher:      15173,
+					dockerpkg.PortStorefrontWatcher: dockerpkg.PortDisabled,
+				}},
+			},
+		},
+	}
+	env, err := dockerpkg.NewEnvironment(dir, cfg.DockerOptions())
+	require.NoError(t, err)
+
+	m := NewOverviewModel(t.Context(), executor.TypeDocker, "", "", "", dir, nil, cfg)
+	m.setEnvironment(env)
+	m.adminWatchRunning = true
+	m.adminWatchReady = true
+	m.sfWatchRunning = true
+	m.sfWatchReady = true
+
+	view := m.renderWatchers()
+	assert.Contains(t, view, "http://127.0.0.1:15173", "remapped host ports must be reflected in the URL")
+	assert.NotContains(t, view, "http://127.0.0.1:9998", "disabled ports must not show a URL")
+}
+
+func TestRenderWatchers_ProxyModeUsesSubdomains(t *testing.T) {
+	dir := t.TempDir()
+	writeComposerLock(t, dir, "^8.2")
+	env, err := dockerpkg.NewEnvironment(dir, dockerpkg.Options{Proxy: &dockerpkg.Proxy{Hostname: "my-shop.shopware.local"}})
+	require.NoError(t, err)
+
+	m := NewOverviewModel(t.Context(), executor.TypeDocker, "", "", "", dir, nil, &shop.Config{})
+	m.setEnvironment(env)
+	m.adminWatchRunning = true
+	m.adminWatchReady = true
+	m.sfWatchRunning = true
+	m.sfWatchReady = true
+
+	assert.Equal(t, "https://admin-watch.my-shop.shopware.local", m.adminWatchURL, "the readiness probe targets the proxy route")
+	view := m.renderWatchers()
+	assert.Contains(t, view, "https://admin-watch.my-shop.shopware.local")
+	assert.Contains(t, view, "https://storefront-watch.my-shop.shopware.local")
+}
+
+func TestRenderWatchers_LocalModeIgnoresDockerPorts(t *testing.T) {
+	dir := t.TempDir()
+
+	// Shopware 6.6 without the ADMIN_VITE flag starts webpack-dev-server on
+	// 8080 instead of Vite's 5173.
+	adminApp := filepath.Join(dir, "vendor", "shopware", "administration", "Resources", "app", "administration")
+	require.NoError(t, os.MkdirAll(adminApp, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(adminApp, "webpack.config.js"), []byte("module.exports = {}"), 0o644))
+
+	cfg := &shop.Config{
+		Docker: &shop.ConfigDocker{
+			Services: shop.ConfigDockerServices{
+				dockerpkg.ServiceWeb: {Ports: dockerpkg.Ports{dockerpkg.PortAdminWatcher: dockerpkg.PortDisabled}},
+			},
+		},
+	}
+	m := NewOverviewModel(t.Context(), executor.TypeLocal, "", "", "", dir, nil, cfg)
+	m.adminWatchRunning = true
+	m.adminWatchReady = true
+	m.sfWatchRunning = true
+	m.sfWatchReady = true
+
+	view := m.renderWatchers()
+	assert.Contains(t, view, "http://127.0.0.1:8080", "local mode must use the platform's dev server port, not docker.ports")
+	assert.Contains(t, view, "http://127.0.0.1:9998")
 }

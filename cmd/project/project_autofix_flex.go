@@ -10,6 +10,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/shopware/shopware-cli/internal/flexmigrator"
+	"github.com/shopware/shopware-cli/internal/shop"
 	"github.com/shopware/shopware-cli/internal/system"
 	"github.com/shopware/shopware-cli/internal/tui"
 )
@@ -18,7 +19,7 @@ var projectAutofixFlexCmd = &cobra.Command{
 	Use:   "flex",
 	Short: "Autofix project to Symfony Flex",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		project, err := findClosestShopwareProject(false)
+		project, err := shop.FindClosestShopwareProject(false)
 		if err != nil {
 			return err
 		}

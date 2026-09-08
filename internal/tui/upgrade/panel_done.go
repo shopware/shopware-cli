@@ -48,6 +48,8 @@ func (m *Model) trackUpgradeCmd() tea.Cmd {
 	}
 
 	return func() tea.Msg {
+		// Deliberately context.Background(): the outcome event must still send
+		// when the command context was already cancelled by a signal.
 		ctx, cancel := context.WithTimeout(context.Background(), 300*time.Millisecond)
 		defer cancel()
 		tracking.Track(ctx, tracking.EventProjectUpgrade, map[string]string{

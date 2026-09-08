@@ -164,6 +164,14 @@ func TestErrorExistsSummary(t *testing.T) {
 	assert.Error(t, DoCheckReport(check, "summary"))
 }
 
+func TestValidateReporter(t *testing.T) {
+	for _, format := range []string{"summary", "json", "github", "gitlab", "junit", "markdown"} {
+		assert.NoError(t, ValidateReporter(format))
+	}
+
+	assert.EqualError(t, ValidateReporter("yaml"), `invalid reporting format "yaml", allowed values: summary, json, github, gitlab, junit, markdown`)
+}
+
 func TestGitLabReport(t *testing.T) {
 	testResults := []CheckResult{
 		{

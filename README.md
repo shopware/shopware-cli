@@ -102,7 +102,7 @@ environments:
 
 Omit `-e` / `--env` to target `environments.local`. Use `-e staging` (or another name) to target a different environment.
 
-`shopware-cli project create` and `shopware-cli project config init` write `environments.local`. Top-level `url` and `admin_api` are deprecated: existing files that still use them keep working until that support is removed, and mixed files (top-level shop plus `environments.local`) are not silently retargeted.
+`shopware-cli project create` and `shopware-cli project config init` write `environments.local`. Top-level `url` and `admin_api` are deprecated: they are used only when `environments.local` is absent. When both are present, `environments.local` wins.
 
 ### Disable update notifications
 

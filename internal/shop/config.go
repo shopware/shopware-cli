@@ -16,29 +16,47 @@ import (
 	"gopkg.in/yaml.v3"
 
 	"github.com/shopware/shopware-cli/internal/compatibility"
+	"github.com/shopware/shopware-cli/internal/docker"
 	"github.com/shopware/shopware-cli/internal/mysqldump"
 	"github.com/shopware/shopware-cli/internal/system"
 	"github.com/shopware/shopware-cli/logging"
 )
 
 type EnvironmentConfig struct {
-	Type string `yaml:"type" jsonschema:"enum=local,enum=docker"`
+	Type string `yaml:"type" jsonschema:"enum=local,enum=docker,enum=ssh"`
 	// Shop URL for this named environment
 	URL string `yaml:"url,omitempty"`
 	// Admin API credentials for this named environment
 	AdminApi *ConfigAdminApi `yaml:"admin_api,omitempty"`
+	// SSH target of this named environment (type "ssh"): a Shopware project on a remote host reachable over SSH. Commands run through a multiplexed SSH connection, and the database is tunneled through it automatically.
+	SSH *EnvironmentSSHConfig `yaml:"ssh,omitempty"`
+}
+
+type EnvironmentSSHConfig struct {
+	// SSH host name or IP address
+	Host string `yaml:"host" jsonschema:"required"`
+	// SSH user. Defaults to the user configured in ~/.ssh/config or the current user
+	User string `yaml:"user,omitempty"`
+	// SSH port. Defaults to 22
+	Port int `yaml:"port,omitempty"`
+	// Absolute path of the Shopware project root on the remote host
+	Directory string `yaml:"directory" jsonschema:"required"`
+	// Path to the SSH private key file. Defaults to the ssh agent or the default key files
+	IdentityFile string `yaml:"identity_file,omitempty"`
+	// PHP binary used for PHP and console commands on the remote host (e.g. "/usr/bin/php8.3"). Defaults to "php"
+	PHPBinary string `yaml:"php_binary,omitempty"`
 }
 
 type Config struct {
 	AdditionalConfigs []string `yaml:"include,omitempty"`
-	// Shop URL. Prefer environments.local.url or another named environment; the top-level url key is still read during the deprecation window.
+	// Shop URL. Prefer environments.local.url or another named environment; the top-level url key is used only when environments.local is absent.
 	URL string `yaml:"url,omitempty" jsonschema:"deprecated=true"`
 	// Controls date-based compatibility behavior, formatted as YYYY-MM-DD.
 	CompatibilityDate string `yaml:"compatibility_date,omitempty" jsonschema:"format=date"`
 	// PHP version (e.g. "8.3") used for local PHP and Composer commands of this project. Written by "project create" for non-Docker projects. The matching PHP is looked up on the machine running the command, so the value stays portable across machines; it takes precedence over the php found in PATH, while the PHP_BINARY environment variable overrides it.
 	PHPVersion string       `yaml:"php_version,omitempty"`
 	Build      *ConfigBuild `yaml:"build,omitempty"`
-	// Admin API credentials. Prefer environments.local.admin_api or another named environment; the top-level admin_api key is still read during the deprecation window.
+	// Admin API credentials. Prefer environments.local.admin_api or another named environment; the top-level admin_api key is used only when environments.local is absent.
 	AdminApi         *ConfigAdminApi   `yaml:"admin_api,omitempty" jsonschema:"deprecated=true"`
 	ConfigDump       *ConfigDump       `yaml:"dump,omitempty"`
 	ConfigDeployment *ConfigDeployment `yaml:"deployment,omitempty"`
@@ -56,10 +74,8 @@ type Config struct {
 	storageLocation        string
 }
 
-// ResolveEnvironment returns the named environment. An empty name uses the
-// deprecated top-level url/admin_api when either is set, otherwise
-// environments.local. Mixed files are not silently retargeted during the
-// deprecation window.
+// ResolveEnvironment returns the named environment, or for an empty name
+// environments.local with the deprecated top-level url/admin_api as fallback.
 func (c *Config) ResolveEnvironment(name string) (*EnvironmentConfig, error) {
 	if name != "" {
 		env, ok := c.Environments[name]
@@ -72,23 +88,52 @@ func (c *Config) ResolveEnvironment(name string) (*EnvironmentConfig, error) {
 		return env, nil
 	}
 
-	if c.URL != "" || c.AdminApi != nil {
-		return c.topLevelEnvironment(), nil
+	local, ok := c.Environments["local"]
+	if !ok || local == nil {
+		return c.topLevelEnvironment(nil), nil
 	}
 
-	if env, ok := c.Environments["local"]; ok && env != nil {
-		return env, nil
+	if !c.HasDeprecatedTopLevelShop() {
+		return local, nil
 	}
 
-	return c.topLevelEnvironment(), nil
+	return c.topLevelEnvironment(local), nil
 }
 
-func (c *Config) topLevelEnvironment() *EnvironmentConfig {
-	return &EnvironmentConfig{
-		Type:     "local",
-		URL:      c.URL,
-		AdminApi: c.AdminApi,
+// topLevelEnvironment builds the environment from the deprecated top-level
+// url/admin_api, using values set on base where present.
+func (c *Config) topLevelEnvironment(base *EnvironmentConfig) *EnvironmentConfig {
+	env := EnvironmentConfig{Type: "local"}
+	if base != nil {
+		env = *base
+		if env.Type == "" {
+			env.Type = "local"
+		}
 	}
+
+	if env.URL == "" {
+		env.URL = c.URL
+	}
+
+	if env.AdminApi == nil {
+		env.AdminApi = c.AdminApi
+	}
+
+	return &env
+}
+
+// EffectiveURL returns the URL of the default environment:
+// environments.local.url, falling back to the deprecated top-level url.
+func (c *Config) EffectiveURL() string {
+	if c == nil {
+		return ""
+	}
+
+	if env, ok := c.Environments["local"]; ok && env != nil && env.URL != "" {
+		return env.URL
+	}
+
+	return c.URL
 }
 
 // HasDeprecatedTopLevelShop reports whether the config still stores a shop
@@ -483,12 +528,21 @@ type ConfigDeployment struct {
 
 	// Staging mode configuration for the deployment
 	Staging *ConfigDeploymentStaging `yaml:"staging,omitempty"`
+
+	// OpenSearch configuration for the deployment.
+	OpenSearch *ConfigDeploymentOpenSearch `yaml:"opensearch,omitempty"`
 }
 
 // ConfigDeploymentStaging defines staging mode configuration.
 type ConfigDeploymentStaging struct {
 	// When enabled, staging setup commands will be executed during installation and upgrade
 	Enabled bool `yaml:"enabled,omitempty"`
+}
+
+// ConfigDeploymentOpenSearch defines OpenSearch actions during deployment.
+type ConfigDeploymentOpenSearch struct {
+	// When enabled, OpenSearch indexes are created after a fresh installation.
+	IndexOnInstall bool `yaml:"index-on-install,omitempty"`
 }
 
 // ConfigDeploymentHookStep is a single titled step of a deployment hook.
@@ -643,6 +697,8 @@ type ConfigValidationIgnoreExtension struct {
 type ConfigDocker struct {
 	// PHP configuration for the Docker dev image
 	PHP *ConfigDockerPHP `yaml:"php,omitempty"`
+	// Per-service settings for the Docker dev environment: host port overrides and implementation variants.
+	Services ConfigDockerServices `yaml:"services,omitempty"`
 }
 
 type ConfigDockerPHP struct {
@@ -725,13 +781,17 @@ type ConfigImageProxy struct {
 	URL string `yaml:"url,omitempty"`
 }
 
+// DefaultShopURL is the URL a dev environment is reachable at with the default
+// ports (and no proxy), matching the web service's default host port.
+var DefaultShopURL = docker.DefaultShopURL
+
 func NewConfig() *Config {
 	return &Config{
 		CompatibilityDate: compatibility.TodayDate(),
 		Environments: map[string]*EnvironmentConfig{
 			"local": {
 				Type: "local",
-				URL:  "http://127.0.0.1:8000",
+				URL:  DefaultShopURL,
 				AdminApi: &ConfigAdminApi{
 					Username: "admin",
 					Password: "shopware",
@@ -745,6 +805,10 @@ func NewConfig() *Config {
 // it's original location where it was read from (stored in `Config.storageLocation`),
 // or the default recommended location
 func WriteConfig(cfg *Config, dir string) error {
+	// Port overrides are machine-specific and live in the local override
+	// file — keep them out of the committed configuration.
+	cfg = cfg.withoutDockerPorts()
+
 	data, err := yaml.Marshal(cfg)
 	if err != nil {
 		return fmt.Errorf("failed to marshal shop configuration: %w", err)
@@ -774,85 +838,52 @@ func WriteConfig(cfg *Config, dir string) error {
 	return nil
 }
 
-// WriteLocalConfig writes a partial configuration to shopware-project.local.yml.
-// This file is deep-merged on top of the main config at read time and is intended
-// for credentials and other values that should not be committed to version control.
-func WriteLocalConfig(cfg *Config, dir string) error {
-	data, err := yaml.Marshal(cfg)
-	if err != nil {
-		return fmt.Errorf("failed to marshal local shop configuration: %w", err)
-	}
-
-	filePath := cfg.storageLocation
-	if filePath == "" || !strings.Contains(filePath, ".local.") {
-		filePath = filepath.Join(dir, ".config/shopware-project.local.yml")
-	}
-
-	err = os.MkdirAll(filepath.Dir(filePath), 0o755)
-	if err != nil {
-		return fmt.Errorf("failed to create all subfolders for %s: %w", filePath, err)
-	}
-
-	if err := os.WriteFile(filePath, data, 0o600); err != nil {
-		return fmt.Errorf("failed to write local shop configuration to %s: %w", filePath, err)
-	}
-
-	return nil
-}
-
 func ReadConfig(ctx context.Context, fileName string, allowFallback bool) (*Config, error) {
 	config := &Config{foundConfig: false}
 
 	_, err := os.Stat(fileName)
 
 	if os.IsNotExist(err) {
-		if allowFallback {
-			return fillEmptyConfig(config), nil
+		if !allowFallback {
+			return nil, fmt.Errorf("cannot find project configuration file \"%s\", use shopware-cli project config init to create one", fileName)
 		}
 
-		return nil, fmt.Errorf("cannot find project configuration file \"%s\", use shopware-cli project config init to create one", fileName)
+		// Even without a base config, a local override file (e.g. persisted
+		// docker port overrides) must still apply.
+		if _, err := applyLocalOverride(ctx, fileName, false, config); err != nil {
+			return nil, fmt.Errorf("ReadConfig(%s): %v", fileName, err)
+		}
+
+		if err := config.DockerServices().validate(); err != nil {
+			return nil, fmt.Errorf("ReadConfig(%s): %v", fileName, err)
+		}
+
+		return fillEmptyConfig(config), nil
 	}
 
 	if err != nil {
 		return nil, err
 	}
 
-	localFile := localConfigFileName(fileName)
-	_, localErr := os.Stat(localFile)
-	if localErr != nil && !os.IsNotExist(localErr) {
-		logging.FromContext(ctx).Warnf("unable to access local config override %s: %v", localFile, localErr)
+	merged, err := applyLocalOverride(ctx, fileName, true, config)
+	if err != nil {
+		return nil, fmt.Errorf("ReadConfig(%s): %v", fileName, err)
 	}
-	hasLocalFile := localErr == nil
 
-	if hasLocalFile {
-		baseMap, err := readConfigAsMap(fileName)
-		if err != nil {
-			return nil, fmt.Errorf("ReadConfig(%s): %v", fileName, err)
-		}
-
-		mergedMap, err := mergeLocalConfig(baseMap, localFile)
-		if err != nil {
-			return nil, fmt.Errorf("ReadConfig(%s): %v", fileName, err)
-		}
-
-		mergedYAML, err := marshalMap(mergedMap)
-		if err != nil {
-			return nil, fmt.Errorf("ReadConfig(%s): %v", fileName, err)
-		}
-
-		if err := yaml.Unmarshal(mergedYAML, &config); err != nil {
-			return nil, fmt.Errorf("ReadConfig(%s): %v", fileName, err)
-		}
-	} else {
+	if !merged {
 		fileHandle, err := os.ReadFile(fileName)
 		if err != nil {
 			return nil, fmt.Errorf("ReadConfig(%s): %v", fileName, err)
 		}
 
 		substitutedConfig := system.ExpandEnv(string(fileHandle))
-		if err := yaml.Unmarshal([]byte(substitutedConfig), &config); err != nil {
+		if err := yaml.Unmarshal([]byte(substitutedConfig), config); err != nil {
 			return nil, fmt.Errorf("ReadConfig(%s): %v", fileName, err)
 		}
+	}
+
+	if err := config.DockerServices().validate(); err != nil {
+		return nil, fmt.Errorf("ReadConfig(%s): %v", fileName, err)
 	}
 
 	config.foundConfig = true
@@ -882,6 +913,44 @@ func ReadConfig(ctx context.Context, fileName string, allowFallback bool) (*Conf
 	}
 
 	return fillEmptyConfig(config), nil
+}
+
+// applyLocalOverride decodes the project configuration with its local override
+// file merged on top, when one exists. Without a base file (hasBase false) the
+// override is applied to an empty document. It reports whether an override was
+// found; the caller decodes the base file itself otherwise.
+func applyLocalOverride(ctx context.Context, fileName string, hasBase bool, config *Config) (bool, error) {
+	localFile := LocalConfigFileName(fileName)
+	if _, err := os.Stat(localFile); err != nil {
+		if !os.IsNotExist(err) {
+			logging.FromContext(ctx).Warnf("unable to access local config override %s: %v", localFile, err)
+		}
+		return false, nil
+	}
+
+	baseMap := map[string]any{}
+	if hasBase {
+		var err error
+		if baseMap, err = readConfigAsMap(fileName); err != nil {
+			return false, err
+		}
+	}
+
+	mergedMap, err := mergeLocalConfig(baseMap, localFile)
+	if err != nil {
+		return false, err
+	}
+
+	mergedYAML, err := marshalMap(mergedMap)
+	if err != nil {
+		return false, err
+	}
+
+	if err := yaml.Unmarshal(mergedYAML, config); err != nil {
+		return false, err
+	}
+
+	return true, nil
 }
 
 func warnDeprecatedTopLevelShop(ctx context.Context, fileName string, c *Config) {
@@ -1004,29 +1073,29 @@ func ReadProjectURLState(configPath, envName string) (ConfigURLState, error) {
 	return state, nil
 }
 
-// SetProjectURL points the project config at url in place: the top-level url
-// key always (created when missing), the environment url only when it already
-// exists — an absent environment url already falls back to the top-level one,
-// so there is nothing to override. Comments, ordering and unknown keys are
-// preserved.
+// SetProjectURL points the project config's environment (or top-level) url at
+// url in place, preserving comments, ordering and unknown keys.
 func SetProjectURL(configPath, envName, url string) error {
 	doc, root, err := loadConfigDoc(configPath)
 	if err != nil {
 		return err
 	}
 
-	setConfigMapValue(root, "url", url)
+	env := envNode(root, envName)
 
-	if envURL := envURLNode(root, envName); envURL != nil {
-		envURL.SetString(url)
+	if env == nil || configMapValue(root, "url") != nil {
+		setConfigURLValue(root, url)
+	}
+
+	if env != nil {
+		setConfigURLValue(env, url)
 	}
 
 	return writeConfigDoc(configPath, doc)
 }
 
-// RestoreProjectURL puts the url values captured in prev back in place:
-// previously present keys get their old value, a previously absent top-level
-// url is removed again. An environment url we never touched stays untouched.
+// RestoreProjectURL restores the url values captured in prev; previously
+// absent keys are removed again.
 func RestoreProjectURL(configPath, envName string, prev ConfigURLState) error {
 	doc, root, err := loadConfigDoc(configPath)
 	if err != nil {
@@ -1034,22 +1103,24 @@ func RestoreProjectURL(configPath, envName string, prev ConfigURLState) error {
 	}
 
 	if prev.HasRoot {
-		setConfigMapValue(root, "url", prev.RootURL)
+		setConfigURLValue(root, prev.RootURL)
 	} else {
 		removeConfigMapKey(root, "url")
 	}
 
-	if prev.HasEnv {
-		if envURL := envURLNode(root, envName); envURL != nil {
-			envURL.SetString(prev.EnvURL)
+	if env := envNode(root, envName); env != nil {
+		if prev.HasEnv {
+			setConfigURLValue(env, prev.EnvURL)
+		} else {
+			removeConfigMapKey(env, "url")
 		}
 	}
 
 	return writeConfigDoc(configPath, doc)
 }
 
-// envURLNode returns the environments.<env>.url value node, or nil.
-func envURLNode(root *yaml.Node, envName string) *yaml.Node {
+// envNode returns the environments.<env> mapping node, or nil.
+func envNode(root *yaml.Node, envName string) *yaml.Node {
 	environments := configMapValue(root, "environments")
 	if environments == nil || environments.Kind != yaml.MappingNode {
 		return nil
@@ -1057,6 +1128,16 @@ func envURLNode(root *yaml.Node, envName string) *yaml.Node {
 
 	env := configMapValue(environments, urlEnvKey(envName))
 	if env == nil || env.Kind != yaml.MappingNode {
+		return nil
+	}
+
+	return env
+}
+
+// envURLNode returns the environments.<env>.url value node, or nil.
+func envURLNode(root *yaml.Node, envName string) *yaml.Node {
+	env := envNode(root, envName)
+	if env == nil {
 		return nil
 	}
 
@@ -1101,16 +1182,16 @@ func configMapValue(mapping *yaml.Node, key string) *yaml.Node {
 	return nil
 }
 
-// setConfigMapValue updates key's value in a mapping node, appending the pair
-// when the key is missing.
-func setConfigMapValue(mapping *yaml.Node, key, value string) {
-	if node := configMapValue(mapping, key); node != nil {
+// setConfigURLValue updates the url key's value in a mapping node, appending
+// the pair when the key is missing.
+func setConfigURLValue(mapping *yaml.Node, value string) {
+	if node := configMapValue(mapping, "url"); node != nil {
 		node.SetString(value)
 		return
 	}
 
 	keyNode := &yaml.Node{}
-	keyNode.SetString(key)
+	keyNode.SetString("url")
 	valueNode := &yaml.Node{}
 	valueNode.SetString(value)
 

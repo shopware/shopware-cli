@@ -2,6 +2,7 @@ package upgrade
 
 import (
 	"context"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -14,6 +15,7 @@ import (
 	adminSdk "github.com/shopware/shopware-cli/internal/admin-api"
 	"github.com/shopware/shopware-cli/internal/executor"
 	"github.com/shopware/shopware-cli/internal/shop"
+	"github.com/shopware/shopware-cli/internal/testhelper"
 )
 
 // fakeExecutor satisfies executor.Executor and lets each test decide which
@@ -44,6 +46,14 @@ func (f *fakeExecutor) ConsoleCommand(ctx context.Context, args ...string) *exec
 
 func (f *fakeExecutor) NPMCommand(ctx context.Context, args ...string) *executor.Process {
 	return shellProcess(ctx, "true")
+}
+
+func (f *fakeExecutor) AvailableLogFiles(context.Context) ([]executor.LogFile, error) {
+	return nil, executor.ErrNotSupported
+}
+
+func (f *fakeExecutor) GetLog(context.Context, string, int, bool, io.Writer) error {
+	return nil
 }
 
 func (f *fakeExecutor) NormalizePath(hostPath string) string { return hostPath }
@@ -255,7 +265,7 @@ func TestRunnerRecipesInstallIsNonFatal(t *testing.T) {
 func TestRunnerRestoresComposeProjectNameAfterRecipesReset(t *testing.T) {
 	dir := setupProject(t)
 	envPath := filepath.Join(dir, ".env")
-	require.NoError(t, os.WriteFile(envPath, []byte("COMPOSE_PROJECT_NAME=sw-shop-abc123\nAPP_ENV=prod\n"), 0o644))
+	testhelper.WriteFile(t, envPath, "COMPOSE_PROJECT_NAME=sw-shop-abc123\nAPP_ENV=prod\n")
 
 	u := NewProjectUpgrader(dir, &fakeExecutor{
 		composer: func(ctx context.Context, args ...string) *executor.Process {

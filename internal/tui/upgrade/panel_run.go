@@ -35,7 +35,7 @@ func (m *Model) beginRun() (app.Content, tea.Cmd) {
 		return m, nil
 	}
 
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(m.commandContext())
 	opts := backend.RunOptions{
 		Target: target.Version.String(),
 		Report: m.reportData(),

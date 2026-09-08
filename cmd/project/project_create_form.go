@@ -44,6 +44,7 @@ func runCreateForm(cmd *cobra.Command, opts *createOptions, releases []repositor
 
 	deploymentOptions := []huh.Option[string]{
 		huh.NewOption("None", shop.DeploymentNone),
+		huh.NewOption("Docker (Container)", shop.DeploymentContainer),
 		huh.NewOption("PaaS powered by Shopware", shop.DeploymentShopwarePaaS),
 		huh.NewOption("PaaS powered by Platform.sh", shop.DeploymentPlatformSH),
 		huh.NewOption("Deployer (SSH-based)", shop.DeploymentDeployer),
@@ -152,10 +153,8 @@ func runCreateForm(cmd *cobra.Command, opts *createOptions, releases []repositor
 			formGroups = append(formGroups, huh.NewGroup(
 				huh.NewInput().
 					Title("Project Name").
-					DescriptionFunc(func() string {
-						return projectNameFieldDescription(opts.projectFolder)
-					}, &opts.projectFolder).
-					Placeholder("my-shopware-project (leave empty for current directory)").
+					Description(projectNameHelp).
+					Placeholder("my-shopware-project").
 					Value(&opts.projectFolder).
 					Validate(func(s string) error {
 						if s == "" {
@@ -198,9 +197,13 @@ func runCreateForm(cmd *cobra.Command, opts *createOptions, releases []repositor
 
 		if !cmd.PersistentFlags().Changed("docker") {
 			formGroups = append(formGroups, huh.NewGroup(
-				tui.NewYesNo().
+				huh.NewSelect[string]().
 					Title("Docker").
-					Description("Use Docker for local setup.").
+					Description("How do you want to run Shopware?").
+					Options(
+						huh.NewOption("Run Shopware with Docker", tui.Yes),
+						huh.NewOption("Use PHP and Composer; Shopware CLI handles the installation", tui.No),
+					).
 					Value(&selectDocker),
 			))
 		}

@@ -67,6 +67,19 @@ func (m Model) updateKeyPress(msg tea.KeyPressMsg) (app.Content, tea.Cmd) {
 		return m, nil
 	}
 
+	if m.phase == phaseInstallFailed {
+		return m.updateInstallFailed(msg)
+	}
+
+	if m.phase == phasePortConflict {
+		// The overlay handles the choice; this covers the state after the
+		// prompt was dismissed with esc.
+		if tui.KeyString(msg) == "q" || tui.KeyString(msg) == tui.KeyCtrlC {
+			return m, tea.Quit
+		}
+		return m, nil
+	}
+
 	if m.phase == phaseTask {
 		if m.task.Done() {
 			m.phase = phaseDashboard
@@ -83,6 +96,41 @@ func (m Model) updateKeyPress(msg tea.KeyPressMsg) (app.Content, tea.Cmd) {
 	}
 
 	return m.updateDashboardKeys(msg)
+}
+
+func (m Model) updateInstallFailed(msg tea.KeyPressMsg) (app.Content, tea.Cmd) {
+	actions := installFailureActions
+	selected := installFailureActionIndex(m.installProg.action)
+
+	switch tui.KeyString(msg) {
+	case "l":
+		m.installProg.showLogs = !m.installProg.showLogs
+	case "q", tui.KeyCtrlC:
+		// Unlike Cancel (which opens the dashboard), q leaves the TUI. The
+		// containers started for the install outlive it, so ask about them
+		// with the same prompt the dashboard uses.
+		if m.dockerMode {
+			return m, m.host.PushOverlay(newStopConfirm())
+		}
+		m.shutdown()
+		return m, tea.Quit
+	case tui.KeyLeft, tui.KeyShiftTab:
+		if selected > 0 {
+			m.installProg.action = actions[selected-1]
+		}
+	case tui.KeyRight, tui.KeyTab:
+		if selected < len(actions)-1 {
+			m.installProg.action = actions[selected+1]
+		}
+	case tui.KeyEnter:
+		switch actions[selected] {
+		case installFailureActionRestart:
+			return m.startInstall()
+		case installFailureActionCancel:
+			return m.cancelFailedInstall()
+		}
+	}
+	return m, nil
 }
 
 func (m Model) updateDashboardKeys(msg tea.KeyPressMsg) (app.Content, tea.Cmd) {
@@ -136,12 +184,16 @@ func (m Model) updateConfigTab(msg tea.KeyPressMsg) (app.Content, tea.Cmd) {
 				m.configTab.saved = false
 				return m, nil
 			}
+			// A nil php config clears credentials that are no longer
+			// configured, so rotated secrets do not survive on disk.
+			var localPHP *shop.ConfigDockerPHP
 			if localCfg := m.configTab.LocalConfig(); localCfg != nil {
-				if err := shop.WriteLocalConfig(localCfg, m.projectRoot); err != nil {
-					m.configTab.err = err
-					m.configTab.saved = false
-					return m, nil
-				}
+				localPHP = localCfg.Docker.PHP
+			}
+			if err := shop.UpdateLocalDockerPHP(m.configPath, localPHP); err != nil {
+				m.configTab.err = err
+				m.configTab.saved = false
+				return m, nil
 			}
 			if envChanges := m.configTab.ChangedEnvValues(); len(envChanges) > 0 {
 				if err := envfile.WriteValues(m.projectRoot, envChanges); err != nil {
@@ -178,9 +230,9 @@ func (m Model) executeCommand(id string) (app.Content, tea.Cmd) {
 		m.telemetry.countAction()
 		trackEvent(tracking.EventDevAction, map[string]string{tracking.TagAction: id})
 		if id == "open-shop" {
-			return m, openInBrowser(m.overview.shopURL)
+			return m, openInBrowser(m.commandContext(), m.overview.shopURL)
 		}
-		return m, openInBrowser(m.overview.adminURL)
+		return m, openInBrowser(m.commandContext(), m.overview.adminURL)
 	case "cache-clear":
 		m.telemetry.beginTask(id)
 		return m, m.runCacheClear()
@@ -233,7 +285,7 @@ func (m Model) openSalesChannelPicker() (app.Content, tea.Cmd) {
 	if m.overview.sfWatchRunning || m.overview.sfWatchStarting {
 		return m, nil
 	}
-	return m, m.host.PushOverlay(newSalesChannelPicker(m.executor))
+	return m, m.host.PushOverlay(newSalesChannelPicker(m.commandContext(), m.executor))
 }
 
 func (m *Model) stopWatcher(name string) tea.Cmd {
@@ -245,9 +297,10 @@ func (m *Model) stopWatcher(name string) tea.Cmd {
 	h := m.watchers[name]
 	delete(m.watchers, name)
 
+	cleanupCtx := m.cleanupContext()
 	return func() tea.Msg {
 		if h != nil {
-			stopCtx, stopCancel := context.WithTimeout(context.Background(), 3*time.Second)
+			stopCtx, stopCancel := context.WithTimeout(cleanupCtx, 3*time.Second)
 			defer stopCancel()
 			h.stop(stopCtx)
 		}
@@ -365,7 +418,11 @@ func (m Model) startAfterMigrationWizard() (app.Content, tea.Cmd) {
 	m.executor = exec
 
 	if m.executor.Type() == executor.TypeDocker {
-		if err := proxy.WriteComposeFile(m.projectRoot, m.config); err != nil {
+		env, err := proxy.NewEnvironment(m.projectRoot, m.config, m.proxyFallback)
+		if err == nil {
+			err = env.WriteCompose()
+		}
+		if err != nil {
 			m.migrationWizard.err = err
 			return m, nil
 		}
@@ -378,5 +435,5 @@ func (m Model) startAfterMigrationWizard() (app.Content, tea.Cmd) {
 
 	m.rebuildTabs()
 
-	return m, tea.Batch(m.dockerSpinner.Tick, m.startContainers())
+	return m, tea.Batch(m.dockerSpinner.Tick, m.checkPorts())
 }

@@ -10,15 +10,16 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/shopware/shopware-cli/internal/curl"
+	"github.com/shopware/shopware-cli/internal/shop"
 )
 
 var skipDefaultHeaders bool
 
 var projectAdminApiCmd = &cobra.Command{
 	Use:   "admin-api [method] [path]",
-	Short: "pre authenticated curl interface to the Admin API",
+	Short: "Pre-authenticated curl interface to the Admin API",
 	RunE: func(cobraCmd *cobra.Command, args []string) error {
-		projectRoot, err := findClosestShopwareProject(true)
+		projectRoot, err := shop.FindClosestShopwareProject(true)
 		if err != nil {
 			return err
 		}

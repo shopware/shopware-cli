@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/shopware/shopware-cli/internal/shop/install"
 	"github.com/shopware/shopware-cli/internal/tracking"
 )
 
@@ -75,7 +76,9 @@ func trackEvent(name string, tags map[string]string) {
 }
 
 // trackEventNow sends synchronously. Quit paths must use it — a goroutine
-// started right before tea.Quit would race the process exit.
+// started right before tea.Quit would race the process exit. It deliberately
+// uses context.Background(): quit-path events must still send when the
+// command context was already cancelled by a signal.
 func trackEventNow(name string, tags map[string]string) {
 	ctx, cancel := context.WithTimeout(context.Background(), 300*time.Millisecond)
 	defer cancel()
@@ -133,6 +136,7 @@ func (t *telemetryState) beginInstall() {
 		return
 	}
 	t.installStart = time.Now()
+	t.installReported = false
 }
 
 // installOnce reports whether an install outcome should still be sent and
@@ -162,9 +166,21 @@ func (t *telemetryState) installTags(result string, w installWizard) map[string]
 		tags[tracking.TagCurrency] = w.currency
 	}
 	if w.step == installStepCredentials || result == tracking.ResultSuccess || result == tracking.ResultFailure {
-		custom := w.Username() != defaultUsername || w.Password() != "shopware"
+		custom := w.Username() != install.DefaultAdminUsername || w.Password() != install.DefaultAdminPassword
 		tags[tracking.TagCustomCredentials] = strconv.FormatBool(custom)
 	}
+	tags[tracking.TagInteractive] = "true"
+	return tags
+}
+
+// installFailureTags builds the project.dev.install event for a failed run. It
+// enriches the base install tags with the classified failure record so the
+// dashboard can tell *why* an install dropped off, not just the coarse step.
+// Only the closed-enum category is sent — the raw failure detail is never a tag.
+func (t *telemetryState) installFailureTags(w installWizard, f installFailure) map[string]string {
+	tags := t.installTags(tracking.ResultFailure, w)
+	tags[tracking.TagFailedStep] = f.failingStep
+	tags[tracking.TagFailureCategory] = string(f.category)
 	return tags
 }
 
@@ -311,16 +327,6 @@ func (t *telemetryState) watcherEndTags(name, result string) (map[string]string,
 		tracking.TagResult:     result,
 		tracking.TagDurationMS: durationMS(time.Since(started)),
 	}, true
-}
-
-// installFailedStep names the last deployment-helper step that had started
-// when the install failed. Failures before the first recognized step report
-// the first step.
-func installFailedStep(currentStep int) string {
-	if currentStep >= len(installStepPatterns) {
-		currentStep = len(installStepPatterns) - 1
-	}
-	return installStepPatterns[currentStep].pattern
 }
 
 func watcherTagName(name string) string {

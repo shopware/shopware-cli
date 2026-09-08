@@ -20,7 +20,7 @@ const (
 	// dnsConfigVersion is stamped on the container as a label; bumping it makes
 	// EnsureDNSContainerRunning recreate containers started by older CLI
 	// versions with an incompatible Corefile or run arguments.
-	dnsConfigVersion      = "1"
+	dnsConfigVersion      = "2"
 	dnsConfigVersionLabel = "com.shopware-cli.proxy-dns-config-version"
 	// dnsDomainLabel records the base domain the container's Corefile answers
 	// for, so a container serving an outdated domain is recreated.
@@ -51,8 +51,20 @@ func writeDNSCorefile(dir, baseDomain string) error {
 	}
 
 	content := fmt.Sprintf(corefileTemplate, baseDomain, dnsTTL)
+	path := filepath.Join(dnsDir, "Corefile")
 
-	return os.WriteFile(filepath.Join(dnsDir, "Corefile"), []byte(content), 0o600)
+	// 0o644: the Corefile is not secret (it only answers 127.0.0.1) and the
+	// CoreDNS image runs as UID 65532 (nonroot). A 0o600 file owned by the
+	// host user is unreadable through the bind mount and CoreDNS crash-loops
+	// with "open /Corefile: permission denied". WriteFile does not change
+	// the mode of an existing file, so chmod after write so a leftover 0o600
+	// Corefile from earlier CLI versions is repaired in place (same inode,
+	// so an already-mounted container sees the new mode immediately).
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		return err
+	}
+
+	return os.Chmod(path, 0o644)
 }
 
 // EnsureDNSContainerRunning idempotently starts the shared DNS container: it
@@ -94,6 +106,8 @@ func EnsureDNSContainerRunning(ctx context.Context, baseDomain string) error {
 		"--label", dnsDomainLabel+"="+baseDomain,
 		"-p", fmt.Sprintf("127.0.0.1:%d:53/udp", DNSPort),
 		"-p", fmt.Sprintf("127.0.0.1:%d:53/tcp", DNSPort),
+		// File mount (not a directory): CoreDNS 1.11+ is USER 65532, so the
+		// host Corefile must be world-readable — see writeDNSCorefile.
 		"-v", filepath.Join(dir, "dns", "Corefile")+":/Corefile:ro",
 		DNSImage,
 		"-conf", "/Corefile",

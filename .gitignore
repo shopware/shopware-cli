@@ -1,6 +1,7 @@
 /.idea
 /.fleet
 /shopware-cli*
+/swx
 dist/
 /completions
 /local

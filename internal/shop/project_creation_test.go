@@ -81,62 +81,8 @@ func TestResolveInstallVersion(t *testing.T) {
 	}
 }
 
-func TestValidateProjectName(t *testing.T) {
-	t.Parallel()
-
-	validNames := []string{
-		"my-shopware-project",
-		"myshop",
-		"my_shop",
-		"shop123",
-		"123shop",
-		"a",
-		"path/to/my-shop",
-		".",
-	}
-	for _, name := range validNames {
-		t.Run("valid: "+name, func(t *testing.T) {
-			t.Parallel()
-			assert.NoError(t, ValidateProjectName(name))
-		})
-	}
-
-	invalidNames := []string{
-		"MyShop",
-		"myShop",
-		"SHOP",
-		"müller",
-		"über-shop",
-		"Müller-Shop",
-		"café",
-		"straße",
-		"my shop",
-		"my.shop",
-		"shop!",
-		"-shop",
-		"_shop",
-		"ä",
-		"",
-		"path/to/müller",
-		"path/to/MyShop",
-	}
-	for _, name := range invalidNames {
-		t.Run("invalid: "+name, func(t *testing.T) {
-			t.Parallel()
-			err := ValidateProjectName(name)
-			assert.Error(t, err)
-			assert.Contains(t, err.Error(), "invalid project name")
-		})
-	}
-}
-
 func TestValidateProjectFolder(t *testing.T) {
 	t.Parallel()
-
-	t.Run("rejects an invalid project name", func(t *testing.T) {
-		t.Parallel()
-		assert.ErrorContains(t, ValidateProjectFolder(filepath.Join(t.TempDir(), "MyShop")), "invalid project name")
-	})
 
 	t.Run("accepts a missing folder", func(t *testing.T) {
 		t.Parallel()
@@ -147,6 +93,20 @@ func TestValidateProjectFolder(t *testing.T) {
 		t.Parallel()
 		projectFolder := filepath.Join(t.TempDir(), "shop")
 		require.NoError(t, os.Mkdir(projectFolder, 0o755))
+		assert.NoError(t, ValidateProjectFolder(projectFolder))
+	})
+
+	t.Run("accepts a user-facing name with uppercase, spaces and umlauts", func(t *testing.T) {
+		t.Parallel()
+		projectFolder := filepath.Join(t.TempDir(), "München Shop")
+		require.NoError(t, os.MkdirAll(projectFolder, 0o755))
+		assert.NoError(t, ValidateProjectFolder(projectFolder))
+	})
+
+	t.Run("accepts a camelCase name", func(t *testing.T) {
+		t.Parallel()
+		projectFolder := filepath.Join(t.TempDir(), "myShopwareProject")
+		require.NoError(t, os.MkdirAll(projectFolder, 0o755))
 		assert.NoError(t, ValidateProjectFolder(projectFolder))
 	})
 
@@ -171,6 +131,7 @@ func TestValidateDeploymentMethod(t *testing.T) {
 
 	for _, deploymentMethod := range []string{
 		DeploymentNone,
+		DeploymentContainer,
 		DeploymentDeployer,
 		DeploymentPlatformSH,
 		DeploymentShopwarePaaS,
@@ -218,6 +179,33 @@ func TestShopwareProjectScaffoldNormalize(t *testing.T) {
 		scaffold.Normalize()
 
 		assert.True(t, scaffold.UseElasticsearch)
+	})
+
+	t.Run("keeps the requested PHP version for a container deployment", func(t *testing.T) {
+		t.Parallel()
+		scaffold := ShopwareProjectScaffold{DeploymentMethod: DeploymentContainer, PHPVersion: "8.3"}
+
+		scaffold.Normalize()
+
+		assert.Equal(t, "8.3", scaffold.PHPVersion)
+	})
+
+	t.Run("falls back to the highest supported PHP version", func(t *testing.T) {
+		t.Parallel()
+		scaffold := ShopwareProjectScaffold{DeploymentMethod: DeploymentContainer}
+
+		scaffold.Normalize()
+
+		assert.Equal(t, SupportedPHPVersions[len(SupportedPHPVersions)-1], scaffold.PHPVersion)
+	})
+
+	t.Run("does not pin a PHP version without a container deployment", func(t *testing.T) {
+		t.Parallel()
+		scaffold := ShopwareProjectScaffold{DeploymentMethod: DeploymentNone}
+
+		scaffold.Normalize()
+
+		assert.Empty(t, scaffold.PHPVersion)
 	})
 }
 

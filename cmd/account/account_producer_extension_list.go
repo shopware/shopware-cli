@@ -4,12 +4,18 @@ import (
 	"github.com/spf13/cobra"
 
 	account_api "github.com/shopware/shopware-cli/internal/account-api"
+	"github.com/shopware/shopware-cli/internal/tui"
 )
 
 var accountCompanyProducerExtensionListCmd = &cobra.Command{
 	Use:   "list",
 	Short: "Lists all your extensions",
 	RunE: func(cmd *cobra.Command, _ []string) error {
+		format, err := accountExtensionListFormat(listExtensionFormat, listExtensionJSON)
+		if err != nil {
+			return err
+		}
+
 		p, err := services.AccountClient.Producer(cmd.Context())
 		if err != nil {
 			return err
@@ -25,18 +31,26 @@ var accountCompanyProducerExtensionListCmd = &cobra.Command{
 		}
 
 		out := cmd.OutOrStdout()
-		if listExtensionJSON {
-			return account_api.WriteExtensionsJSON(out, extensions)
-		}
-
-		return account_api.WriteExtensionsTable(out, extensions)
+		return account_api.ExtensionsTable(extensions).Write(out, format)
 	},
+}
+
+func accountExtensionListFormat(formatName string, jsonAlias bool) (tui.TableFormat, error) {
+	format, err := tui.ParseTableFormat(formatName)
+	if err != nil {
+		return "", err
+	}
+	if jsonAlias {
+		return tui.TableFormatJSON, nil
+	}
+	return format, nil
 }
 
 var (
 	listExtensionSearch string
 	listExtensionPlugin bool
 	listExtensionApp    bool
+	listExtensionFormat string
 	listExtensionJSON   bool
 )
 
@@ -45,6 +59,10 @@ func init() {
 	accountCompanyProducerExtensionListCmd.Flags().StringVar(&listExtensionSearch, "search", "", "Filter for name")
 	accountCompanyProducerExtensionListCmd.Flags().BoolVar(&listExtensionPlugin, "plugin", false, "Show only plugins")
 	accountCompanyProducerExtensionListCmd.Flags().BoolVar(&listExtensionApp, "app", false, "Show only apps")
+	accountCompanyProducerExtensionListCmd.Flags().StringVar(&listExtensionFormat, "format", string(tui.TableFormatTable), "Output format (table or json)")
 	accountCompanyProducerExtensionListCmd.Flags().BoolVar(&listExtensionJSON, "json", false, "Output as json")
 	accountCompanyProducerExtensionListCmd.MarkFlagsMutuallyExclusive("plugin", "app")
+	accountCompanyProducerExtensionListCmd.MarkFlagsMutuallyExclusive("format", "json")
+	_ = accountCompanyProducerExtensionListCmd.Flags().MarkDeprecated("json", "use --format json instead")
+	_ = accountCompanyProducerExtensionListCmd.Flags().MarkHidden("json")
 }

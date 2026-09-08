@@ -125,7 +125,13 @@ func TestWriteExtensionsJSON(t *testing.T) {
 	var buf bytes.Buffer
 	require.NoError(t, WriteExtensionsJSON(&buf, []Extension{ext}))
 
-	var items []extensionListItem
+	var items []struct {
+		Name       string `json:"name"`
+		Type       string `json:"type"`
+		Compatible bool   `json:"compatibleWithLatestVersion"`
+		Status     string `json:"status"`
+		Producer   string `json:"producer"`
+	}
 	require.NoError(t, json.Unmarshal(buf.Bytes(), &items))
 	require.Len(t, items, 1)
 	assert.Equal(t, "PaymentPlugin", items[0].Name)

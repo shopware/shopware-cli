@@ -8,6 +8,7 @@ import (
 
 	"charm.land/lipgloss/v2"
 
+	"github.com/shopware/shopware-cli/internal/shop/install"
 	"github.com/shopware/shopware-cli/internal/tui"
 	"github.com/shopware/shopware-cli/internal/tui/app"
 )
@@ -27,10 +28,14 @@ func (m Model) windowTitle() string {
 		return dir + "Install"
 	case phaseInstalling:
 		return dir + "Installing..."
+	case phaseInstallFailed:
+		return dir + "Installation failed"
 	case phaseTask:
 		return ""
 	case phaseMigrationWizard:
 		return dir + "Setup"
+	case phasePortConflict:
+		return dir + "Port conflict"
 	}
 	return dir + "shopware-cli"
 }
@@ -57,11 +62,15 @@ func (m Model) phaseFooterHint() string {
 	switch m.phase {
 	case phaseStarting, phaseStopping, phaseInstalling:
 		return tui.ShortcutBadge("l", "Toggle logs")
+	case phaseInstallFailed:
+		return tui.ShortcutBadge("←/→", "Choose") + "  " +
+			tui.ShortcutBadge("enter", "Confirm") + "  " +
+			tui.ShortcutBadge("l", "Toggle logs")
 	case phaseInstallPrompt:
 		return m.installFooterHint()
 	case phaseMigrationWizard:
 		return m.migrationWizard.footerHint()
-	case phaseDashboard, phaseTask:
+	case phaseDashboard, phaseTask, phasePortConflict:
 		return ""
 	}
 	return ""
@@ -77,7 +86,7 @@ func (m Model) View(ctx app.Context) string {
 	switch m.phase {
 	case phaseDashboard:
 		return m.renderDashboard(ctx)
-	case phaseStarting, phaseStopping, phaseInstallPrompt, phaseInstalling:
+	case phaseStarting, phaseStopping, phaseInstallPrompt, phaseInstalling, phaseInstallFailed, phasePortConflict:
 		return m.renderPhase(ctx)
 	case phaseTask:
 		return m.renderTask(ctx)
@@ -181,30 +190,99 @@ func (m Model) renderPhase(ctx app.Context) string {
 			return m.renderDockerLogs("Installing Shopware...", ctx.Width, ctx.MainHeight)
 		}
 		var card strings.Builder
-		total := len(installStepPatterns)
+		total := len(install.Steps)
 		pctText := fmt.Sprintf(" %d%%", int(float64(m.installProg.currentStep)/float64(total)*100))
 		card.WriteString(m.installProg.progress.View())
 		card.WriteString(tui.DimStyle.Render(pctText))
 		card.WriteString("\n\n")
 
-		items := make([]tui.StepItem, len(installStepPatterns))
-		for i, sp := range installStepPatterns {
+		items := make([]tui.StepItem, len(install.Steps))
+		for i, sp := range install.Steps {
 			switch {
 			case i < m.installProg.currentStep || (i == m.installProg.currentStep && m.installProg.done):
-				items[i] = tui.StepItem{Label: sp.label, State: tui.StepStateDone}
+				items[i] = tui.StepItem{Label: sp.Label, State: tui.StepStateDone}
 			case i == m.installProg.currentStep && !m.installProg.done:
-				items[i] = tui.StepItem{Label: sp.label, State: tui.StepStateActive, Indicator: m.installProg.spinner.View()}
+				items[i] = tui.StepItem{Label: sp.Label, State: tui.StepStateActive, Indicator: m.installProg.spinner.View()}
 			default:
-				items[i] = tui.StepItem{Label: tui.DimStyle.Render(sp.label), State: tui.StepStatePending}
+				items[i] = tui.StepItem{Label: tui.DimStyle.Render(sp.Label), State: tui.StepStatePending}
 			}
 		}
 		card.WriteString(tui.NewStepList(tui.StepListOptions{Steps: items}).Render())
+		content.WriteString(tui.RenderPhaseCard(strings.TrimRight(card.String(), "\n")))
+	case phaseInstallFailed:
+		if m.installProg.showLogs {
+			// Appended at render time, not when the install failed: output is
+			// still draining from the stream buffer at that point, so a stored
+			// notice would end up somewhere in the middle of the log.
+			lines := append(slices.Clone(m.overlayLines), m.installFailureNotice()...)
+			return m.renderLogScreen("Installation failed", lines, ctx.Width, ctx.MainHeight)
+		}
+		content.WriteString(tui.RenderPhaseCard(m.renderInstallFailed()))
+	case phasePortConflict:
+		var card strings.Builder
+		card.WriteString(errorStyle.Render("Ports already in use"))
+		card.WriteString("\n\n")
+		card.WriteString(portConflictLines(m.portConflicts))
+		card.WriteString("\n")
+		card.WriteString(helpStyle.Render("Press q to exit"))
 		content.WriteString(tui.RenderPhaseCard(strings.TrimRight(card.String(), "\n")))
 	case phaseDashboard, phaseTask, phaseMigrationWizard:
 		// Rendered by the outer View() dispatch, not here.
 	}
 
 	return renderPhaseBox(content.String(), ctx.Width, ctx.MainHeight)
+}
+
+// installFailureSummary is the headline and subtitle shared by the failure
+// card and the notice closing the log view. The helper's raw error stays in
+// the logs.
+func installFailureSummary() string {
+	var b strings.Builder
+	b.WriteString(headlineErrorStyle.Render("Installation failed"))
+	b.WriteString("\n")
+	b.WriteString(tui.DimStyle.Render("The installation process failed because an error occurred."))
+
+	return b.String()
+}
+
+// renderInstallFailureActions renders the recovery choices below the summary.
+func (m Model) renderInstallFailureActions() string {
+	labels := make([]string, len(installFailureActions))
+	for i, action := range installFailureActions {
+		labels[i] = installFailureActionLabels[action]
+	}
+	return tui.NewButtonRow(tui.ButtonRowOptions{
+		Labels: labels,
+		Active: installFailureActionIndex(m.installProg.action),
+	}).Render()
+}
+
+// renderInstallFailed renders the failed-install card: headline, subtitle,
+// how to open the logs, and the recovery choices.
+func (m Model) renderInstallFailed() string {
+	var b strings.Builder
+	b.WriteString(installFailureSummary())
+	b.WriteString("\n\n")
+	b.WriteString(valueStyle.Render("Toggle the logs with "))
+	b.WriteString(keyCapStyle.Render("l"))
+	b.WriteString(valueStyle.Render(" to inspect details."))
+	b.WriteString("\n\n")
+	b.WriteString(m.renderInstallFailureActions())
+
+	return b.String()
+}
+
+// installFailureNotice returns the failure summary and recovery choices as
+// boxed log lines. They are returned per line so the log screen's tail
+// calculation stays accurate.
+func (m Model) installFailureNotice() []string {
+	box := lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(tui.ErrorColor).
+		Padding(1, 2).
+		Render(installFailureSummary() + "\n\n" + m.renderInstallFailureActions())
+
+	return append([]string{""}, strings.Split(box, "\n")...)
 }
 
 // renderPhaseBox renders content centered inside the rounded main-region box.
@@ -243,16 +321,18 @@ func (m Model) renderDockerLogs(title string, width, boxHeight int) string {
 }
 
 func (m Model) renderLogScreen(title string, lines []string, width, boxHeight int) string {
-	visibleLines := boxHeight - 6
-	if visibleLines < 1 {
-		visibleLines = 1
+	visibleRows := boxHeight - 6
+	if visibleRows < 1 {
+		visibleRows = 1
 	}
+	// Border (2) plus the horizontal padding below (3 each side).
+	contentWidth := width - 8
 
 	var body strings.Builder
 	body.WriteString(panelHeaderStyle.Render(title))
 	body.WriteString("\n\n")
 
-	for _, line := range tui.TailLines(lines, visibleLines) {
+	for _, line := range tui.TailWrappedLines(lines, visibleRows, contentWidth) {
 		body.WriteString(line)
 		body.WriteString("\n")
 	}

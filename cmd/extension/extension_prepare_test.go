@@ -2,26 +2,13 @@ package extension
 
 import (
 	"bytes"
-	"os"
-	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-)
 
-const testPrepareAppManifest = `<?xml version="1.0" encoding="UTF-8"?>
-<manifest xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="https://raw.githubusercontent.com/shopware/shopware/trunk/src/Core/Framework/App/Manifest/Schema/manifest-2.0.xsd">
-	<meta>
-		<name>MyExampleApp</name>
-		<label>Label</label>
-		<description>A description</description>
-		<author>Your Company Ltd.</author>
-		<copyright>(c) by Your Company Ltd.</copyright>
-		<version>1.0.0</version>
-		<license>MIT</license>
-	</meta>
-</manifest>`
+	"github.com/shopware/shopware-cli/internal/testhelper"
+)
 
 func TestExtensionPrepareCommandDeprecated(t *testing.T) {
 	t.Parallel()
@@ -49,8 +36,7 @@ func TestExtensionPreparePrintsDeprecationNotice(t *testing.T) {
 }
 
 func TestExtensionPrepareStillExecutes(t *testing.T) {
-	dir := t.TempDir()
-	require.NoError(t, os.WriteFile(filepath.Join(dir, "manifest.xml"), []byte(testPrepareAppManifest), 0o644))
+	dir := testhelper.NewApp(t, "MyExampleApp")
 
 	out := new(bytes.Buffer)
 	extensionPrepareCmd.SetOut(out)

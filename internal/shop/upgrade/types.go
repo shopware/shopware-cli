@@ -38,13 +38,23 @@ func (c ReadinessCheck) Failed() bool {
 }
 
 // InstalledExtension is an extension found in the project, either managed
-// through Composer (vendor/) or locally in custom/plugins and friends.
+// through Composer (vendor/ or a path repository) or locally in custom/plugins
+// and friends.
 type InstalledExtension struct {
 	Name            string // technical name, e.g. SwagPayPal
 	Package         string // composer package name, e.g. swag/paypal
 	Path            string
 	Version         string
 	ComposerManaged bool
+	// PathInstalled is true when Composer installed the package from a path
+	// repository (composer.lock dist.type == "path"). The installed files are
+	// the local project copy — typically under custom/static-plugins — not a
+	// published release that can be version-bumped independently.
+	PathInstalled bool
+	// Require is the package's composer.json/lock require map when known.
+	// Used to classify path and other unpublished packages against the
+	// target Shopware version.
+	Require map[string]string
 }
 
 // Readiness is the result of RunReadinessChecks.

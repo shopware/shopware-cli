@@ -59,7 +59,11 @@ func installAndFinalize(cmd *cobra.Command, opts *createOptions, phpConstraint *
 	}
 
 	if opts.useDocker {
-		if err := dockerpkg.WriteComposeFile(opts.projectFolder, &dockerpkg.ComposeOptions{PHPVersion: composerInstallPHP}); err != nil {
+		env, err := dockerpkg.NewEnvironment(opts.projectFolder, dockerpkg.Options{PHP: dockerpkg.PHP{Version: composerInstallPHP}})
+		if err != nil {
+			return err
+		}
+		if err := env.WriteCompose(); err != nil {
 			return err
 		}
 	}
@@ -71,6 +75,26 @@ func installAndFinalize(cmd *cobra.Command, opts *createOptions, phpConstraint *
 		}
 	}
 
+	shopCfg := newProjectConfig(opts, composerInstallPHP)
+
+	// Serve the shop at a stable hostname through the shared proxy instead of a
+	// port.
+	if opts.useDocker && opts.useLocalDomain {
+		url := "https://" + proxy.LocalDomainHostname(opts.projectFolder, proxy.BaseDomain())
+		if env := shopCfg.Environments["local"]; env != nil {
+			env.URL = url
+		}
+	}
+
+	if err := shop.WriteConfig(shopCfg, opts.projectFolder); err != nil {
+		return err
+	}
+
+	printCreateSummary(ctx, opts)
+	return nil
+}
+
+func newProjectConfig(opts *createOptions, composerInstallPHP string) *shop.Config {
 	shopCfg := shop.NewConfig()
 	if opts.useDocker {
 		shopCfg.Environments["local"].Type = "docker"
@@ -83,23 +107,13 @@ func installAndFinalize(cmd *cobra.Command, opts *createOptions, phpConstraint *
 		shopCfg.PHPVersion = opts.phpVersion
 	}
 
-	// Serve the shop at a stable hostname through the shared proxy instead of a
-	// port. The top-level url drives proxy hostname derivation; the environment
-	// url is what `project dev` shows and installs with.
-	if opts.useDocker && opts.useLocalDomain {
-		url := "https://" + proxy.LocalDomainHostname(opts.projectFolder, proxy.BaseDomain())
-		shopCfg.URL = url
-		if env := shopCfg.Environments["local"]; env != nil {
-			env.URL = url
+	if opts.selectedDeployment == shop.DeploymentShopwarePaaS {
+		shopCfg.ConfigDeployment = &shop.ConfigDeployment{
+			OpenSearch: &shop.ConfigDeploymentOpenSearch{IndexOnInstall: true},
 		}
 	}
 
-	if err := shop.WriteConfig(shopCfg, opts.projectFolder); err != nil {
-		return err
-	}
-
-	printCreateSummary(ctx, opts)
-	return nil
+	return shopCfg
 }
 
 func printCreateSummary(ctx context.Context, opts *createOptions) {
@@ -148,6 +162,14 @@ func printCreateSummary(ctx context.Context, opts *createOptions) {
 			hostname := proxy.LocalDomainHostname(opts.projectFolder, proxy.BaseDomain())
 			maybePrintWSLWindowsAccess(proxyBrowserHostnames(opts.projectFolder, hostname))
 		}
+	}
+
+	if opts.selectedDeployment == shop.DeploymentContainer {
+		fmt.Println()
+		fmt.Println(tui.SectionHeadingStyle.Render("Deploy as a container"))
+		fmt.Println()
+		fmt.Printf("  %s  %s\n", tui.GreenText.Render("Dockerfile:"), tui.BoldText.Render("Dockerfile")+tui.DimText.Render(" (PHP "+opts.phpVersion+")"))
+		fmt.Printf("  %s  %s\n", tui.GreenText.Render("Build:"), tui.BoldText.Render("docker build -t "+filepath.Base(projectDisplay)+" ."))
 	}
 
 	fmt.Println()

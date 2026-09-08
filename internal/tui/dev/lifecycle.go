@@ -1,11 +1,9 @@
 package dev
 
 import (
-	"strings"
-
 	tea "charm.land/bubbletea/v2"
 
-	"github.com/shopware/shopware-cli/internal/shop"
+	"github.com/shopware/shopware-cli/internal/shop/install"
 	"github.com/shopware/shopware-cli/internal/tracking"
 	"github.com/shopware/shopware-cli/internal/tui"
 	"github.com/shopware/shopware-cli/internal/tui/app"
@@ -25,23 +23,24 @@ func (m Model) updateLifecycle(msg tea.Msg) (app.Content, tea.Cmd) {
 		return m, tea.Batch(m.dockerSpinner.Tick, m.startContainers())
 
 	case dockerOutputLineMsg:
-		m.overlayLines = tui.AppendTail(m.overlayLines, m.overlayMaxLines(), string(msg))
+		if msg.source != nil && msg.source != m.dockerOutChan {
+			return m, nil
+		}
+		m.overlayLines = tui.AppendTail(m.overlayLines, m.overlayMaxLines(), msg.line)
 		if m.phase == phaseInstalling {
-			line := string(msg)
-			if strings.HasPrefix(line, "Start: ") {
-				for i, sp := range installStepPatterns {
-					if strings.Contains(line, sp.pattern) && i >= m.installProg.currentStep {
-						m.installProg.currentStep = i
-						pct := float64(i) / float64(len(installStepPatterns))
-						cmd := m.installProg.progress.SetPercent(pct)
-						return m, tea.Batch(cmd, m.readNextDockerOutput())
-					}
-				}
+			if i, ok := install.MatchStep(cleanInstallLine(msg.line), m.installProg.currentStep); ok {
+				m.installProg.currentStep = i
+				pct := float64(i) / float64(len(install.Steps))
+				cmd := m.installProg.progress.SetPercent(pct)
+				return m, tea.Batch(cmd, m.readNextDockerOutput())
 			}
 		}
 		return m, m.readNextDockerOutput()
 
 	case dockerOutputDoneMsg:
+		if msg.source != nil && msg.source != m.dockerOutChan {
+			return m, nil
+		}
 		return m, nil
 
 	case dockerStartedMsg:
@@ -75,32 +74,44 @@ func (m Model) updateLifecycle(msg tea.Msg) (app.Content, tea.Cmd) {
 		return m, nil
 
 	case shopwareInstallDoneMsg:
+		if msg.source != nil && msg.source != m.dockerOutChan {
+			return m, nil
+		}
 		if msg.err != nil {
+			failure := classifyInstallFailure(msg.output, msg.err)
+			m.installProg.failure = &failure
 			if m.telemetry.installOnce() {
-				tags := m.telemetry.installTags(tracking.ResultFailure, m.install)
-				tags[tracking.TagFailedStep] = installFailedStep(m.installProg.currentStep)
-				trackEvent(tracking.EventDevInstall, tags)
+				trackEvent(tracking.EventDevInstall, m.telemetry.installFailureTags(m.install, failure))
 			}
-			m.installProg.showLogs = true
-			m.overlayLines = append(m.overlayLines, "", errorStyle.Render("Installation failed: "+msg.err.Error()))
-			m.overlayLines = append(m.overlayLines, "", helpStyle.Render("Press q to exit"))
+			m.phase = phaseInstallFailed
 			return m, nil
 		}
 		m.installProg.done = true
-		m.installProg.currentStep = len(installStepPatterns)
-		if m.telemetry.installOnce() {
-			trackEvent(tracking.EventDevInstall, m.telemetry.installTags(tracking.ResultSuccess, m.install))
-		}
+		m.installProg.currentStep = len(install.Steps)
 
 		username := m.install.Username()
 		password := m.install.Password()
 
-		adminApi := &shop.ConfigAdminApi{
-			Username: username,
-			Password: password,
+		// Persist before recording the outcome, so a failed config write is
+		// not reported as a successful run.
+		if err := install.PersistCredentials(m.config, m.envConfig, m.projectRoot, install.Options{
+			AdminUsername: username,
+			AdminPassword: password,
+		}); err != nil {
+			if m.telemetry.installOnce() {
+				tags := m.telemetry.installTags(tracking.ResultFailure, m.install)
+				tags[tracking.TagFailedStep] = install.FailedStepSaveCredentials
+				trackEvent(tracking.EventDevInstall, tags)
+			}
+			m.installProg.showLogs = true
+			m.overlayLines = append(m.overlayLines, "", errorStyle.Render("Shopware was installed, but saving the admin credentials to the project config failed: "+err.Error()))
+			m.overlayLines = append(m.overlayLines, "", helpStyle.Render("Press q to exit"))
+			return m, nil
 		}
-		m.envConfig.AdminApi = adminApi
-		_ = shop.WriteConfig(m.config, m.projectRoot)
+
+		if m.telemetry.installOnce() {
+			trackEvent(tracking.EventDevInstall, m.telemetry.installTags(tracking.ResultSuccess, m.install))
+		}
 
 		m.overview.username = username
 		m.overview.password = password
@@ -112,6 +123,25 @@ func (m Model) updateLifecycle(msg tea.Msg) (app.Content, tea.Cmd) {
 
 	case dockerStoppedMsg:
 		return m, tea.Quit
+
+	case portConflictMsg:
+		m.phase = phasePortConflict
+		m.portConflicts = msg.conflicts
+		return m, m.host.PushOverlay(newPortConflictPrompt(msg.conflicts))
+
+	case portFixDoneMsg:
+		if msg.err != nil {
+			m.dockerShowLogs = true
+			m.overlayLines = append(m.overlayLines, errorStyle.Render("Failed: "+msg.err.Error()))
+			m.overlayLines = append(m.overlayLines, "", helpStyle.Render("Press q to exit"))
+			return m, nil
+		}
+		// The command goroutine built a detached copy; adopt it here on the
+		// update thread. The tabs share the config pointer, so copy into it
+		// rather than swapping the pointer.
+		*m.config = *msg.config
+		m.overview.setEnvironment(m.dockerEnvironment())
+		return m, m.startContainers()
 	}
 
 	return m, nil

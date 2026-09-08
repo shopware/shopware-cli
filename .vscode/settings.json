@@ -22,13 +22,10 @@
         ".devenv": true,
         ".direnv": true,
         ".idea": true,
-    },
-    "php.problems.exclude": {
-        "internal/phplint/testdata/invalid.php": true
+        ".delta": true,
+        ".pi": true,
+        ".crush": true
     },
     "go.toolsManagement.autoUpdate": false,
-    "go.toolsManagement.checkForUpdates": "off",
-    "yaml.schemas": {
-        "https://raw.githubusercontent.com/shopware/shopware-cli/main/internal/extension/config_schema.json": "file:///workspaces/shopware-cli/.shopware-extension.yml"
-    },
+    "go.toolsManagement.checkForUpdates": "off"
 }

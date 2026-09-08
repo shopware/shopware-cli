@@ -19,6 +19,7 @@ import (
 	adminSdk "github.com/shopware/shopware-cli/internal/admin-api"
 	"github.com/shopware/shopware-cli/internal/archiver"
 	"github.com/shopware/shopware-cli/internal/extension"
+	"github.com/shopware/shopware-cli/internal/shop"
 	"github.com/shopware/shopware-cli/logging"
 )
 
@@ -58,9 +59,6 @@ var projectExtensionUploadCmd = &cobra.Command{
 		}
 
 		extCfg := ext.GetExtensionConfig()
-		if err != nil {
-			logging.FromContext(cmd.Context()).Fatalln(fmt.Errorf("update: %v", err))
-		}
 
 		if increaseVersionBeforeUpload {
 			if err := increaseExtensionVersion(cmd.Context(), ext); err != nil {
@@ -114,7 +112,7 @@ var projectExtensionUploadCmd = &cobra.Command{
 			}
 		}
 
-		projectRoot, err := findClosestShopwareProject(true)
+		projectRoot, err := shop.FindClosestShopwareProject(true)
 		if err != nil {
 			return err
 		}
@@ -170,11 +168,6 @@ var projectExtensionUploadCmd = &cobra.Command{
 
 				return fmt.Errorf("cannot upload extension update: %s", string(str))
 			}
-
-			extensions, _, err = client.ExtensionManager.ListAvailableExtensions(adminCtx)
-			if err != nil {
-				return err
-			}
 		} else {
 			if uploadResponse, err := client.ExtensionManager.UploadExtensionUpdateToCloud(adminCtx, name, &buf); err != nil {
 				return fmt.Errorf("cannot upload extension update: %w", err)
@@ -197,7 +190,15 @@ var projectExtensionUploadCmd = &cobra.Command{
 		logging.FromContext(cmd.Context()).Infof("Refreshed extension list")
 
 		if doLifecycleEvents {
+			extensions, _, err = client.ExtensionManager.ListAvailableExtensions(adminCtx)
+			if err != nil {
+				return err
+			}
+
 			remoteExtension := extensions.GetByName(name)
+			if remoteExtension == nil {
+				return fmt.Errorf("cannot run lifecycle events: uploaded extension %s is not listed by the shop yet. Re-run the command to retry", name)
+			}
 
 			if remoteExtension.InstalledAt == nil {
 				if _, err := client.ExtensionManager.InstallExtension(adminCtx, remoteExtension.Type, remoteExtension.Name); err != nil {

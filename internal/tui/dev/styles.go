@@ -34,6 +34,17 @@ var (
 	errorStyle = lipgloss.NewStyle().
 			Foreground(tui.ErrorColor)
 
+	headlineErrorStyle = lipgloss.NewStyle().
+				Bold(true).
+				Foreground(tui.ErrorColor)
+
+	// keyCapStyle renders a single key name inline in running text, matching
+	// the key badges used in the footer shortcut bar.
+	keyCapStyle = lipgloss.NewStyle().
+			Foreground(tui.TextColor).
+			Background(tui.SubtleBgColor).
+			Padding(0, 1)
+
 	sidebarStyle = lipgloss.NewStyle().
 			Border(lipgloss.RoundedBorder()).
 			BorderForeground(tui.BorderColor).

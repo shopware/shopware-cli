@@ -7,120 +7,32 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+
+	"github.com/shopware/shopware-cli/internal/testhelper"
 )
 
-const testAppManifest = `<?xml version="1.0" encoding="UTF-8"?>
-<manifest xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="https://raw.githubusercontent.com/shopware/shopware/trunk/src/Core/Framework/App/Manifest/Schema/manifest-2.0.xsd">
-	<meta>
-		<name>MyExampleApp</name>
-		<label>Label</label>
-		<label lang="de-DE">Name</label>
-		<description>A description</description>
-		<description lang="de-DE">Eine Beschreibung</description>
-		<author>Your Company Ltd.</author>
-		<copyright>(c) by Your Company Ltd.</copyright>
-		<version>1.0.0</version>
-		<license>MIT</license>
-	</meta>
-</manifest>`
+// testAppManifestWith builds a variant of the complete MyExampleApp manifest.
+func testAppManifestWith(mutate func(*testhelper.AppManifest)) testhelper.AppManifest {
+	m := testhelper.NewAppManifest("MyExampleApp")
+	mutate(&m)
+	return m
+}
 
-const testAppManifestMissingLicense = `<?xml version="1.0" encoding="UTF-8"?>
-<manifest xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="https://raw.githubusercontent.com/shopware/shopware/trunk/src/Core/Framework/App/Manifest/Schema/manifest-2.0.xsd">
-	<meta>
-		<name>MyExampleApp</name>
-		<label>Label</label>
-		<label lang="de-DE">Name</label>
-		<description>A description</description>
-		<description lang="de-DE">Eine Beschreibung</description>
-		<author>Your Company Ltd.</author>
-		<copyright>(c) by Your Company Ltd.</copyright>
-		<version>1.0.0</version>
-	</meta>
-</manifest>`
-
-const testAppManifestMissingCopyright = `<?xml version="1.0" encoding="UTF-8"?>
-<manifest xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="https://raw.githubusercontent.com/shopware/shopware/trunk/src/Core/Framework/App/Manifest/Schema/manifest-2.0.xsd">
-	<meta>
-		<name>MyExampleApp</name>
-		<label>Label</label>
-		<label lang="de-DE">Name</label>
-		<description>A description</description>
-		<description lang="de-DE">Eine Beschreibung</description>
-		<author>Your Company Ltd.</author>
-		<version>1.0.0</version>
-		<license>MIT</license>
-	</meta>
-</manifest>`
-
-const testAppManifestMissingAuthor = `<?xml version="1.0" encoding="UTF-8"?>
-<manifest xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="https://raw.githubusercontent.com/shopware/shopware/trunk/src/Core/Framework/App/Manifest/Schema/manifest-2.0.xsd">
-	<meta>
-		<name>MyExampleApp</name>
-		<label>Label</label>
-		<label lang="de-DE">Name</label>
-		<description>A description</description>
-		<description lang="de-DE">Eine Beschreibung</description>
-		<copyright>(c) by Your Company Ltd.</copyright>
-		<version>1.0.0</version>
-		<license>MIT</license>
-	</meta>
-</manifest>`
-
-const testAppManifestCompatibility = `<?xml version="1.0" encoding="UTF-8"?>
-<manifest xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="https://raw.githubusercontent.com/shopware/shopware/trunk/src/Core/Framework/App/Manifest/Schema/manifest-2.0.xsd">
-	<meta>
-		<name>MyExampleApp</name>
-		<label>Label</label>
-		<label lang="de-DE">Name</label>
-		<description>A description</description>
-		<description lang="de-DE">Eine Beschreibung</description>
-		<compatibility>~6.5.0</compatibility>
-		<author>Your Company Ltd.</author>
-		<copyright>(c) by Your Company Ltd.</copyright>
-		<version>1.0.0</version>
-		<license>MIT</license>
-	</meta>
-</manifest>`
-
-const testAppManifestIcon = `<?xml version="1.0" encoding="UTF-8"?>
-<manifest xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="https://raw.githubusercontent.com/shopware/shopware/trunk/src/Core/Framework/App/Manifest/Schema/manifest-2.0.xsd">
-	<meta>
-		<name>MyExampleApp</name>
-		<label>Label</label>
-		<label lang="de-DE">Name</label>
-		<description>A description</description>
-		<description lang="de-DE">Eine Beschreibung</description>
-		<author>Your Company Ltd.</author>
-		<copyright>(c) by Your Company Ltd.</copyright>
-		<version>1.0.0</version>
-		<license>MIT</license>
-		<icon>app.png</icon>
-	</meta>
-</manifest>`
-
-const testAppManifestSetup = `<?xml version="1.0" encoding="UTF-8"?>
-<manifest xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="https://raw.githubusercontent.com/shopware/shopware/trunk/src/Core/Framework/App/Manifest/Schema/manifest-2.0.xsd">
-	<meta>
-		<name>MyExampleApp</name>
-		<label>Label</label>
-		<label lang="de-DE">Name</label>
-		<description>A description</description>
-		<description lang="de-DE">Eine Beschreibung</description>
-		<compatibility>~6.5.0</compatibility>
-		<author>Your Company Ltd.</author>
-		<copyright>(c) by Your Company Ltd.</copyright>
-		<version>1.0.0</version>
-		<license>MIT</license>
-	</meta>
-	<setup>
-		<secret>foo</secret>
-	</setup>
-</manifest>`
+var (
+	testAppManifest                 = testhelper.NewAppManifest("MyExampleApp")
+	testAppManifestMissingLicense   = testAppManifestWith(func(m *testhelper.AppManifest) { m.License = "" })
+	testAppManifestMissingCopyright = testAppManifestWith(func(m *testhelper.AppManifest) { m.Copyright = "" })
+	testAppManifestMissingAuthor    = testAppManifestWith(func(m *testhelper.AppManifest) { m.Author = "" })
+	testAppManifestCompatibility    = testAppManifestWith(func(m *testhelper.AppManifest) { m.Compatibility = "~6.5.0" })
+	testAppManifestIcon             = testAppManifestWith(func(m *testhelper.AppManifest) { m.Icon = "app.png" })
+	testAppManifestSetup            = testAppManifestWith(func(m *testhelper.AppManifest) {
+		m.Compatibility = "~6.5.0"
+		m.SetupSecret = "foo"
+	})
+)
 
 func TestIconNotExists(t *testing.T) {
-	appPath := t.TempDir()
-
-	assert.NoError(t, os.WriteFile(filepath.Join(appPath, "manifest.xml"), []byte(testAppManifest), 0o644))
+	appPath := testhelper.AppDir(t, testAppManifest)
 
 	app, err := newApp(t.Context(), appPath)
 
@@ -137,9 +49,7 @@ func TestIconNotExists(t *testing.T) {
 }
 
 func TestAppNoLicense(t *testing.T) {
-	appPath := t.TempDir()
-
-	assert.NoError(t, os.WriteFile(filepath.Join(appPath, "manifest.xml"), []byte(testAppManifestMissingLicense), 0o644))
+	appPath := testhelper.AppDir(t, testAppManifestMissingLicense)
 	assert.NoError(t, os.MkdirAll(filepath.Join(appPath, "Resources/config"), 0o755))
 	assert.NoError(t, createTestImage(filepath.Join(appPath, "Resources/config/plugin.png")))
 
@@ -155,9 +65,7 @@ func TestAppNoLicense(t *testing.T) {
 }
 
 func TestAppNoCopyright(t *testing.T) {
-	appPath := t.TempDir()
-
-	assert.NoError(t, os.WriteFile(filepath.Join(appPath, "manifest.xml"), []byte(testAppManifestMissingCopyright), 0o644))
+	appPath := testhelper.AppDir(t, testAppManifestMissingCopyright)
 	assert.NoError(t, os.MkdirAll(filepath.Join(appPath, "Resources/config"), 0o755))
 	assert.NoError(t, createTestImage(filepath.Join(appPath, "Resources/config/plugin.png")))
 
@@ -173,9 +81,7 @@ func TestAppNoCopyright(t *testing.T) {
 }
 
 func TestAppNoAuthor(t *testing.T) {
-	appPath := t.TempDir()
-
-	assert.NoError(t, os.WriteFile(filepath.Join(appPath, "manifest.xml"), []byte(testAppManifestMissingAuthor), 0o644))
+	appPath := testhelper.AppDir(t, testAppManifestMissingAuthor)
 	assert.NoError(t, os.MkdirAll(filepath.Join(appPath, "Resources/config"), 0o755))
 	assert.NoError(t, createTestImage(filepath.Join(appPath, "Resources/config/plugin.png")))
 
@@ -191,9 +97,7 @@ func TestAppNoAuthor(t *testing.T) {
 }
 
 func TestAppHasSecret(t *testing.T) {
-	appPath := t.TempDir()
-
-	assert.NoError(t, os.WriteFile(filepath.Join(appPath, "manifest.xml"), []byte(testAppManifestSetup), 0o644))
+	appPath := testhelper.AppDir(t, testAppManifestSetup)
 	assert.NoError(t, os.MkdirAll(filepath.Join(appPath, "Resources/config"), 0o755))
 	assert.NoError(t, createTestImage(filepath.Join(appPath, "Resources/config/plugin.png")))
 
@@ -209,12 +113,10 @@ func TestAppHasSecret(t *testing.T) {
 }
 
 func TestIconExistsDefaultsPath(t *testing.T) {
-	appPath := t.TempDir()
+	appPath := testhelper.AppDir(t, testAppManifest)
 
 	assert.NoError(t, os.MkdirAll(filepath.Join(appPath, "Resources/config"), 0o755))
 	assert.NoError(t, createTestImage(filepath.Join(appPath, "Resources/config/plugin.png")))
-
-	assert.NoError(t, os.WriteFile(filepath.Join(appPath, "manifest.xml"), []byte(testAppManifest), 0o644))
 
 	app, err := newApp(t.Context(), appPath)
 
@@ -230,9 +132,7 @@ func TestIconExistsDefaultsPath(t *testing.T) {
 }
 
 func TestIconExistsDifferentPath(t *testing.T) {
-	appPath := t.TempDir()
-
-	assert.NoError(t, os.WriteFile(filepath.Join(appPath, "manifest.xml"), []byte(testAppManifestIcon), 0o644))
+	appPath := testhelper.AppDir(t, testAppManifestIcon)
 	assert.NoError(t, createTestImageWithSize(filepath.Join(appPath, "app.png"), 120, 120))
 
 	app, err := newApp(t.Context(), appPath)
@@ -249,9 +149,7 @@ func TestIconExistsDifferentPath(t *testing.T) {
 }
 
 func TestNoCompatibilityGiven(t *testing.T) {
-	appPath := t.TempDir()
-
-	assert.NoError(t, os.WriteFile(filepath.Join(appPath, "manifest.xml"), []byte(testAppManifest), 0o644))
+	appPath := testhelper.AppDir(t, testAppManifest)
 
 	app, err := newApp(t.Context(), appPath)
 
@@ -264,9 +162,7 @@ func TestNoCompatibilityGiven(t *testing.T) {
 }
 
 func TestCompatibilityGiven(t *testing.T) {
-	appPath := t.TempDir()
-
-	assert.NoError(t, os.WriteFile(filepath.Join(appPath, "manifest.xml"), []byte(testAppManifestCompatibility), 0o644))
+	appPath := testhelper.AppDir(t, testAppManifestCompatibility)
 
 	app, err := newApp(t.Context(), appPath)
 
@@ -279,11 +175,9 @@ func TestCompatibilityGiven(t *testing.T) {
 }
 
 func TestAppWithPHPFiles(t *testing.T) {
-	appPath := t.TempDir()
+	appPath := testhelper.AppDir(t, testAppManifest)
 
 	assert.NoError(t, os.MkdirAll(filepath.Join(appPath, "Resources/config"), 0o755))
-
-	assert.NoError(t, os.WriteFile(filepath.Join(appPath, "manifest.xml"), []byte(testAppManifest), 0o644))
 	assert.NoError(t, createTestImage(filepath.Join(appPath, "Resources/config/plugin.png")))
 	assert.NoError(t, os.WriteFile(filepath.Join(appPath, "test.php"), []byte("<?php echo 'Hello World';"), 0o644))
 
@@ -303,12 +197,11 @@ func TestAppWithTwigFiles(t *testing.T) {
 		t.Skip("skipping test on windows")
 	}
 
-	appPath := t.TempDir()
+	appPath := testhelper.AppDir(t, testAppManifest)
 
 	assert.NoError(t, os.MkdirAll(filepath.Join(appPath, "Resources/config"), 0o755))
 	assert.NoError(t, os.MkdirAll(filepath.Join(appPath, "Resources/views/"), 0o755))
 
-	assert.NoError(t, os.WriteFile(filepath.Join(appPath, "manifest.xml"), []byte(testAppManifest), 0o644))
 	assert.NoError(t, createTestImage(filepath.Join(appPath, "Resources/config/plugin.png")))
 	assert.NoError(t, os.WriteFile(filepath.Join(appPath, "test.twig"), []byte("<?php echo 'Hello World';"), 0o644))
 	assert.NoError(t, os.WriteFile(filepath.Join(appPath, "Resources/views/test.twig"), []byte("<?php echo 'Hello World';"), 0o644))

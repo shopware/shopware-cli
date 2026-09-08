@@ -17,20 +17,6 @@ const (
 	projectNameHelp = "The name of the project directory to create (leave empty to use the current directory)"
 )
 
-// projectNameFieldDescription returns the description shown under the project
-// name input in the interactive form. While the typed name is invalid it
-// returns the rule highlighted in red, validating the input live; otherwise it
-// returns the regular help text.
-func projectNameFieldDescription(name string) string {
-	if name != "" {
-		if err := shop.ValidateProjectName(name); err != nil {
-			return tui.RedText.Render(shop.ProjectNameRule)
-		}
-	}
-
-	return projectNameHelp
-}
-
 type createOptions struct {
 	projectFolder      string
 	selectedVersion    string
@@ -99,7 +85,7 @@ var projectCreateCmd = &cobra.Command{
 		}
 
 		if len(args) == 1 {
-			pkg, err := repository.New(repository.PackagistURL, nil).GetPackage(cmd.Context(), "shopware/core")
+			pkg, err := repository.New(packagistURL, nil).GetPackage(cmd.Context(), "shopware/core")
 			if err != nil {
 				return []string{}, cobra.ShellCompDirectiveNoFileComp
 			}
@@ -123,21 +109,11 @@ var projectCreateCmd = &cobra.Command{
 			}
 		}
 
-		// A name passed directly as an argument skips the interactive name
-		// prompt, which is where invalid names (e.g. wrong casing) are normally
-		// rejected live. Validate it up front so it is forbidden immediately
-		// instead of only after the rest of the form has been completed.
-		if opts.projectFolder != "" {
-			if err := shop.ValidateProjectName(opts.projectFolder); err != nil {
-				return err
-			}
-		}
-
 		if opts.interactive {
 			tui.PrintBanner()
 		}
 
-		pkg, err := repository.New(repository.PackagistURL, nil).GetPackage(cmd.Context(), "shopware/core")
+		pkg, err := repository.New(packagistURL, nil).GetPackage(cmd.Context(), "shopware/core")
 		if err != nil {
 			return err
 		}
@@ -176,6 +152,10 @@ var projectCreateCmd = &cobra.Command{
 		return installAndFinalize(cmd, &opts, phpConstraint, chosenVersion)
 	},
 }
+
+// packagistURL is a package variable so tests can point the create flow at a
+// local repository server instead of Packagist.
+var packagistURL = repository.PackagistURL
 
 func parseCreateFlags(cmd *cobra.Command, args []string) createOptions {
 	useDocker, _ := cmd.PersistentFlags().GetBool("docker")
@@ -258,7 +238,16 @@ func init() {
 	projectCreateCmd.PersistentFlags().Bool("git", false, "Initialize a Git repository")
 	projectCreateCmd.PersistentFlags().Bool("local-domain", false, "Serve the shop at a stable local hostname (<name>.shopware.local) via the shared proxy instead of a port (requires Docker)")
 	projectCreateCmd.PersistentFlags().String("version", "", "Shopware version to install (e.g., 6.6.0.0, latest)")
-	projectCreateCmd.PersistentFlags().String("deployment", "", "Deployment method: none, deployer, platformsh, shopware-paas")
+	projectCreateCmd.PersistentFlags().String("deployment", "", "Deployment method: none, container, deployer, platformsh, shopware-paas")
+	_ = projectCreateCmd.RegisterFlagCompletionFunc("deployment", func(*cobra.Command, []string, string) ([]string, cobra.ShellCompDirective) {
+		return []string{
+			shop.DeploymentNone,
+			shop.DeploymentContainer,
+			shop.DeploymentDeployer,
+			shop.DeploymentPlatformSH,
+			shop.DeploymentShopwarePaaS,
+		}, cobra.ShellCompDirectiveNoFileComp
+	})
 	projectCreateCmd.PersistentFlags().String("ci", "", "CI/CD system: none, github, gitlab")
 	projectCreateCmd.PersistentFlags().String("php-version", "", "PHP version to use (e.g. 8.3); selects the local PHP for local projects and the image tag for --docker projects")
 	_ = projectCreateCmd.RegisterFlagCompletionFunc("php-version", func(*cobra.Command, []string, string) ([]string, cobra.ShellCompDirective) {

@@ -63,9 +63,9 @@ type setupHealthLoadedMsg struct {
 // so a stuck container cannot leave the report loading forever.
 const setupHealthTimeout = 15 * time.Second
 
-func loadSetupHealth(projectRoot string, exec executor.Executor) tea.Cmd {
+func loadSetupHealth(parent context.Context, projectRoot string, exec executor.Executor) tea.Cmd {
 	return func() tea.Msg {
-		ctx, cancel := context.WithTimeout(context.Background(), setupHealthTimeout)
+		ctx, cancel := context.WithTimeout(parent, setupHealthTimeout)
 		defer cancel()
 		return setupHealthLoadedMsg{checks: collectSetupHealth(ctx, projectRoot, exec)}
 	}
@@ -87,7 +87,7 @@ func collectSetupHealth(ctx context.Context, projectRoot string, exec executor.E
 // whether the OS resolves the proxy domain. Certificate-trust and proxy-fallback
 // checks are added once their backing state exists.
 func proxyHealthChecks(ctx context.Context, projectRoot string) []healthCheck {
-	if proxyHostname(projectRoot) == "" {
+	if registeredHostname(projectRoot) == "" {
 		return nil
 	}
 

@@ -10,6 +10,7 @@ import (
 	"github.com/shyim/go-composer"
 
 	"github.com/shopware/shopware-cli/internal/shop"
+	"github.com/shopware/shopware-cli/internal/shop/install"
 	"github.com/shopware/shopware-cli/internal/tui"
 )
 
@@ -94,7 +95,7 @@ func newMigrationWizard(projectRoot string) migrationWizard {
 			Password:            "shopware",
 			UsernamePlaceholder: "admin",
 			PasswordPlaceholder: "shopware",
-			ValidatePassword:    validateAdminPassword,
+			ValidatePassword:    install.ValidateAdminPassword,
 		}),
 		step:        migrationStepWelcome,
 		phpVersions: phpVersions,

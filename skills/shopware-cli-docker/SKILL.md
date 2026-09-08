@@ -47,7 +47,21 @@ prefer:
 shopware-cli project console <command>
 ```
 
-`project console` resolves the current Shopware project and its configured executor. In a Docker-backed environment, the CLI routes the Symfony command through the project container.
+`project console` resolves the current Shopware project and its configured executor. In a Docker-backed environment, the CLI routes the Symfony command or Composer script through the project container.
+
+For the full Composer CLI, use:
+
+```bash
+shopware-cli project composer <arguments>
+```
+
+Instead of manually doing something like:
+
+```bash
+docker compose exec web composer <arguments>
+```
+
+In a Docker-backed environment, the CLI routes the Composer command through the project container.
 
 This applies to Shopware and Symfony Console workflows such as:
 
@@ -57,15 +71,18 @@ This applies to Shopware and Symfony Console workflows such as:
 - migrations;
 - scheduled tasks;
 - system configuration;
-- other commands exposed by `bin/console`.
+- other commands exposed by `bin/console`;
+- custom Composer scripts from the project `composer.json`.
 
-Before executing an unfamiliar or state-changing command:
+Before executing an unfamiliar or state-changing Symfony command:
 
 ```bash
 shopware-cli project console <command> --help
 ```
 
 Do not assume a Symfony command is safe merely because it exists.
+
+Discover Composer scripts from the project `composer.json` or `shopware-cli project console list`. Do not pass `--help` to a Composer script to inspect it; that argument is forwarded to the script and can still run it.
 
 ## Development environment
 
@@ -130,6 +147,12 @@ docker compose exec web npm ...
 ```
 
 First check whether Shopware CLI already exposes the intended workflow.
+
+For Composer itself, prefer:
+
+```bash
+shopware-cli project composer ...
+```
 
 If no CLI abstraction exists:
 

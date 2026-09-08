@@ -28,6 +28,7 @@ func closeResponseBody(ctx context.Context, resp *http.Response) {
 
 const (
 	DeploymentNone         = "none"
+	DeploymentContainer    = "container"
 	DeploymentDeployer     = "deployer"
 	DeploymentPlatformSH   = "platformsh"
 	DeploymentShopwarePaaS = "shopware-paas"

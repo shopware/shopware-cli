@@ -1,7 +1,6 @@
 package dev
 
 import (
-	"os"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -11,6 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/shopware/shopware-cli/internal/symfony"
+	"github.com/shopware/shopware-cli/internal/testhelper"
 )
 
 func TestParsePHPMemoryLimit(t *testing.T) {
@@ -49,8 +49,9 @@ func TestMemoryLimitCheck(t *testing.T) {
 
 func writeComposerLock(t *testing.T, dir, phpConstraint string) {
 	t.Helper()
-	lock := `{"packages":[{"name":"shopware/core","version":"v6.7.0.0","require":{"php":"` + phpConstraint + `"}}]}`
-	require.NoError(t, os.WriteFile(filepath.Join(dir, "composer.lock"), []byte(lock), 0o644))
+	testhelper.WriteFile(t, filepath.Join(dir, "composer.lock"), testhelper.ComposerLock(
+		testhelper.LockPackage{Name: "shopware/core", Version: "v6.7.0.0", Require: map[string]string{"php": phpConstraint}},
+	))
 }
 
 func TestPHPVersionCheck(t *testing.T) {
@@ -83,10 +84,8 @@ func TestAdminWorkerCheck(t *testing.T) {
 
 func writeMonologConfig(t *testing.T, dir, level string) {
 	t.Helper()
-	packages := filepath.Join(dir, "config", "packages")
-	require.NoError(t, os.MkdirAll(packages, 0o755))
 	yaml := "monolog:\n    handlers:\n        business_event_handler_buffer:\n            level: " + level + "\n"
-	require.NoError(t, os.WriteFile(filepath.Join(packages, "monolog.yaml"), []byte(yaml), 0o644))
+	testhelper.WriteFile(t, filepath.Join(dir, "config", "packages", "monolog.yaml"), yaml)
 }
 
 func TestFlowBuilderLogLevelCheck(t *testing.T) {
@@ -123,7 +122,7 @@ func TestCollectSetupHealth_WithoutExecutor(t *testing.T) {
 }
 
 func TestOverviewViewShowsSetupHealth(t *testing.T) {
-	m := NewOverviewModel("docker", "http://localhost:8000", "admin", "shopware", "/tmp/project", nil, nil)
+	m := NewOverviewModel(t.Context(), "docker", "http://localhost:8000", "admin", "shopware", "/tmp/project", nil, nil)
 	m.loading = false
 	m.healthLoading = false
 	m.health = []healthCheck{
@@ -149,7 +148,7 @@ func TestOverviewViewShowsSetupHealth(t *testing.T) {
 }
 
 func TestSetupHealthLinksAreZeroWidth(t *testing.T) {
-	m := NewOverviewModel("docker", "http://localhost:8000", "admin", "shopware", "/tmp/project", nil, nil)
+	m := NewOverviewModel(t.Context(), "docker", "http://localhost:8000", "admin", "shopware", "/tmp/project", nil, nil)
 	m.loading = false
 	m.healthLoading = false
 	m.health = []healthCheck{
@@ -183,7 +182,7 @@ func stripANSI(s string) string {
 }
 
 func TestOverviewViewSetupHealthLoading(t *testing.T) {
-	m := NewOverviewModel("docker", "http://localhost:8000", "admin", "shopware", "/tmp/project", nil, nil)
+	m := NewOverviewModel(t.Context(), "docker", "http://localhost:8000", "admin", "shopware", "/tmp/project", nil, nil)
 	m.loading = false
 
 	assert.Contains(t, m.View(120, 40), "CHECKING")

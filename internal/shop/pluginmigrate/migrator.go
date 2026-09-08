@@ -184,6 +184,8 @@ func (m *PluginMigrator) Scan(ctx context.Context) []ScannedExtension {
 	}
 	customDir := filepath.Join(root, "custom")
 
+	managed := m.managedComposerNames()
+
 	var result []ScannedExtension
 	for _, ext := range found {
 		extPath := filepath.Clean(ext.GetPath())
@@ -215,9 +217,44 @@ func (m *PluginMigrator) Scan(ctx context.Context) []ScannedExtension {
 			scanned.Version = v.String()
 		}
 
+		// Path-repository plugins live under custom/ (often via a vendor/
+		// symlink). Composer already manages them — do not offer to migrate
+		// them again.
+		if scanned.ComposerName != "" {
+			if _, ok := managed[scanned.ComposerName]; ok {
+				continue
+			}
+		}
+
 		result = append(result, scanned)
 	}
 
 	sort.Slice(result, func(i, j int) bool { return result[i].Name < result[j].Name })
 	return result
+}
+
+// managedComposerNames lists packages Composer already requires or has locked.
+// Path-repository plugins under custom/ are included.
+func (m *PluginMigrator) managedComposerNames() map[string]struct{} {
+	names := make(map[string]struct{})
+
+	if lock, err := composer.ReadLock(filepath.Join(m.projectRoot, "composer.lock")); err == nil {
+		for _, pkg := range lock.Packages {
+			names[pkg.Name] = struct{}{}
+		}
+		for _, pkg := range lock.PackagesDev {
+			names[pkg.Name] = struct{}{}
+		}
+	}
+
+	if composerJSON, err := composer.ReadJson(filepath.Join(m.projectRoot, "composer.json")); err == nil {
+		for name := range composerJSON.Require {
+			names[name] = struct{}{}
+		}
+		for name := range composerJSON.RequireDev {
+			names[name] = struct{}{}
+		}
+	}
+
+	return names
 }

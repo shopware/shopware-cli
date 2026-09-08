@@ -3,6 +3,7 @@ package executor
 import (
 	"context"
 	"fmt"
+	"io"
 	"net"
 	"os/exec"
 	"path/filepath"
@@ -39,7 +40,7 @@ func (d *DockerExecutor) composeArgs(sub ...string) []string {
 }
 
 func (d *DockerExecutor) ConsoleCommand(ctx context.Context, args ...string) *Process {
-	dockerArgs := d.baseArgs()
+	dockerArgs := d.baseArgs(ctx)
 	dockerArgs = append(dockerArgs, "env-bridge", "php", consoleCommandName(ctx))
 	dockerArgs = append(dockerArgs, args...)
 
@@ -50,7 +51,7 @@ func (d *DockerExecutor) ConsoleCommand(ctx context.Context, args ...string) *Pr
 }
 
 func (d *DockerExecutor) ComposerCommand(ctx context.Context, args ...string) *Process {
-	dockerArgs := d.baseArgs()
+	dockerArgs := d.baseArgs(ctx)
 	dockerArgs = append(dockerArgs, "composer")
 	dockerArgs = append(dockerArgs, args...)
 
@@ -61,7 +62,7 @@ func (d *DockerExecutor) ComposerCommand(ctx context.Context, args ...string) *P
 }
 
 func (d *DockerExecutor) PHPCommand(ctx context.Context, args ...string) *Process {
-	dockerArgs := d.baseArgs()
+	dockerArgs := d.baseArgs(ctx)
 	dockerArgs = append(dockerArgs, "env-bridge", "php")
 	dockerArgs = append(dockerArgs, args...)
 
@@ -72,7 +73,7 @@ func (d *DockerExecutor) PHPCommand(ctx context.Context, args ...string) *Proces
 }
 
 func (d *DockerExecutor) NPMCommand(ctx context.Context, args ...string) *Process {
-	dockerArgs := d.baseArgs()
+	dockerArgs := d.baseArgs(ctx)
 	dockerArgs = append(dockerArgs, "env-bridge", "npm")
 	dockerArgs = append(dockerArgs, args...)
 
@@ -80,6 +81,31 @@ func (d *DockerExecutor) NPMCommand(ctx context.Context, args ...string) *Proces
 	applyDir(d.projectRoot, cmd)
 	logCmd(ctx, cmd)
 	return d.newProcess(cmd, append([]string{"npm"}, args...))
+}
+
+func (d *DockerExecutor) AvailableLogFiles(ctx context.Context) ([]LogFile, error) {
+	logDir := d.NormalizePath(filepath.Join(d.projectRoot, "var", "log"))
+
+	out, err := d.PHPCommand(ctx, "-r", listLogFilesPHP(logDir)).Output()
+	if err != nil {
+		return nil, fmt.Errorf("could not list log files: %w", err)
+	}
+
+	return parseLogFiles(out)
+}
+
+func (d *DockerExecutor) GetLog(ctx context.Context, file string, lines int, follow bool, w io.Writer) error {
+	tail := tailArgs(d.NormalizePath(logFilePath(d.projectRoot, file)), lines, follow)
+
+	dockerArgs := d.baseArgs(ctx)
+	dockerArgs = append(dockerArgs, "tail")
+	dockerArgs = append(dockerArgs, tail...)
+
+	cmd := exec.CommandContext(ctx, "docker", dockerArgs...)
+	applyDir(d.projectRoot, cmd)
+	logCmd(ctx, cmd)
+
+	return runStreaming(ctx, cmd, w)
 }
 
 func (d *DockerExecutor) NormalizePath(hostPath string) string {
@@ -135,6 +161,7 @@ func (d *DockerExecutor) DatabaseConnection(ctx context.Context) (*DatabaseConne
 	databaseURL := d.env["DATABASE_URL"]
 
 	if databaseURL == "" {
+		// Always disable TTY: this captures stdout and is never interactive.
 		cmd := exec.CommandContext(ctx, "docker", "compose", "exec", "-T", "web", "printenv", "DATABASE_URL")
 		cmd.Dir = d.projectRoot
 		logCmd(ctx, cmd)
@@ -227,6 +254,7 @@ func (d *DockerExecutor) newProcess(cmd *exec.Cmd, innerArgs []string) *Process 
 			// dev server — as a child that does not receive npm's signal, so
 			// signalling only the parent orphans it and it keeps holding its
 			// port. pkill matches by pattern and would miss those children.
+			// Always disable TTY: this is a fire-and-forget cleanup command.
 			killArgs := append(d.composeArgs("exec", "-T", "web"), "sh", "-c", killTreeScript(pattern))
 			killCmd := exec.CommandContext(ctx, "docker", killArgs...)
 			killCmd.Dir = projectRoot
@@ -258,7 +286,7 @@ func shellSingleQuote(s string) string {
 }
 
 func (d *DockerExecutor) StartEnvironment(ctx context.Context) error {
-	cmd := exec.CommandContext(ctx, "docker", d.composeArgs("up", "-d")...)
+	cmd := exec.CommandContext(ctx, "docker", d.composeArgs("up", "-d", "--remove-orphans")...)
 	cmd.Dir = d.projectRoot
 
 	output, err := cmd.CombinedOutput()
@@ -298,10 +326,14 @@ func (d *DockerExecutor) EnvironmentStatus(ctx context.Context) (bool, error) {
 	return len(strings.TrimSpace(string(output))) > 0, nil
 }
 
-func (d *DockerExecutor) baseArgs() []string {
+func (d *DockerExecutor) baseArgs(ctx context.Context) []string {
 	args := d.composeArgs("exec")
 
-	args = append(args, "-T")
+	// Keep -T unless the caller opted into a TTY via WithTTY (interactive
+	// project console). TUI, CI, and piped usage stay non-interactive.
+	if !wantsTTY(ctx) {
+		args = append(args, "-T")
+	}
 
 	// When the web service runs as the mapped host user (see the compose
 	// user: directive derived from system.ProjectUserSpec), that UID has no
