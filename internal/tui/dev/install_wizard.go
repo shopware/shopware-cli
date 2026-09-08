@@ -14,6 +14,9 @@ import (
 	"github.com/shopware/shopware-cli/internal/tui/app"
 )
 
+// First-run install: the language/currency/credential prompts, and restarting
+// after a failure.
+
 type installStep int
 
 const (
@@ -22,6 +25,23 @@ const (
 	installStepCurrency
 	installStepCredentials
 )
+
+type installFailureAction int
+
+const (
+	installFailureActionRestart installFailureAction = iota
+	installFailureActionCancel
+)
+
+var installFailureActions = []installFailureAction{
+	installFailureActionRestart,
+	installFailureActionCancel,
+}
+
+var installFailureActionLabels = map[installFailureAction]string{
+	installFailureActionRestart: "Restart Installation",
+	installFailureActionCancel:  "Cancel",
+}
 
 type installWizard struct {
 	tui.CredentialStep
@@ -51,8 +71,19 @@ type installProgress struct {
 	currentStep int
 	done        bool
 	showLogs    bool
+	failure     *installFailure
+	action      installFailureAction
 	spinner     spinner.Model
 	progress    progress.Model
+}
+
+func installFailureActionIndex(selected installFailureAction) int {
+	for i, action := range installFailureActions {
+		if action == selected {
+			return i
+		}
+	}
+	return 0
 }
 
 func (m Model) updateInstallPrompt(msg tea.KeyPressMsg) (app.Content, tea.Cmd) {
@@ -125,6 +156,13 @@ func (m Model) updateInstallStepCredentials(msg tea.KeyPressMsg) (app.Content, t
 	if !submitted {
 		return m, cmd
 	}
+	return m.startInstall()
+}
+
+// startInstall begins a complete deployment-helper run using the choices
+// already collected by the install wizard. It is shared by the initial
+// submission and the failure screen's "Restart Installation" action.
+func (m Model) startInstall() (app.Content, tea.Cmd) {
 	m.telemetry.beginInstall()
 	m.phase = phaseInstalling
 	m.overlayLines = nil
@@ -133,6 +171,18 @@ func (m Model) updateInstallStepCredentials(msg tea.KeyPressMsg) (app.Content, t
 		progress: newInstallProgress(),
 	}
 	return m, tea.Batch(m.installProg.spinner.Tick, m.runShopwareInstall())
+}
+
+// cancelFailedInstall leaves the failure screen without retrying, the same
+// way skipping the install prompt does: the dashboard still runs so Docker
+// and project settings stay reachable. The failed attempt was already
+// reported when the helper exited.
+func (m Model) cancelFailedInstall() (app.Content, tea.Cmd) {
+	m.phase = phaseDashboard
+	m.overlayLines = nil
+	m.dockerOutChan = nil
+	m.installProg = installProgress{}
+	return m, m.startDashboard()
 }
 
 func (m Model) renderInstallPrompt(b *strings.Builder) {

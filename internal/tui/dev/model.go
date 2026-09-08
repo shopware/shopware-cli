@@ -47,10 +47,15 @@ const (
 	phaseStopping
 	phaseInstallPrompt
 	phaseInstalling
+	phaseInstallFailed
 	phaseTask
 	phaseMigrationWizard
 	phasePortConflict
 )
+
+// fallbackShopURL is the URL a proxy project is reachable at once dev falls
+// back to fixed host ports; it matches project dev's own default.
+const fallbackShopURL = "http://127.0.0.1:8000"
 
 type Options struct {
 	ProjectRoot string
@@ -106,12 +111,18 @@ type dockerAlreadyRunningMsg struct{}
 type dockerNeedStartMsg struct{}
 type dockerStartedMsg struct{ err error }
 type dockerStoppedMsg struct{ err error }
-type dockerOutputLineMsg string
-type dockerOutputDoneMsg struct{}
+type dockerOutputLineMsg struct {
+	source <-chan string
+	line   string
+}
+type dockerOutputDoneMsg struct {
+	source <-chan string
+}
 
 type shopwareInstalledMsg struct{}
 type shopwareNotInstalledMsg struct{}
 type shopwareInstallDoneMsg struct {
+	source <-chan string
 	output []string
 	err    error
 }

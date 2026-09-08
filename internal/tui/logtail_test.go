@@ -26,6 +26,25 @@ func TestTailLines(t *testing.T) {
 	assert.Nil(t, TailLines(lines, 0))
 }
 
+func TestTailWrappedLines(t *testing.T) {
+	short := []string{"a", "b", "c"}
+	assert.Equal(t, []string{"b", "c"}, TailWrappedLines(short, 2, 10))
+	assert.Equal(t, short, TailWrappedLines(short, 5, 10), "budget past length returns all lines")
+	assert.Nil(t, TailWrappedLines(short, 0, 10))
+	assert.Nil(t, TailWrappedLines(nil, 3, 10))
+
+	// "aaaaaaaaaa" occupies two rows at width 5, so it costs twice as much as
+	// a short line and pushes the older lines out of the budget.
+	wrapping := []string{"x", "y", "aaaaaaaaaa"}
+	assert.Equal(t, []string{"y", "aaaaaaaaaa"}, TailWrappedLines(wrapping, 3, 5))
+	assert.Equal(t, []string{"aaaaaaaaaa"}, TailWrappedLines(wrapping, 2, 5))
+
+	assert.Equal(t, []string{"aaaaaaaaaa"}, TailWrappedLines(wrapping, 1, 5),
+		"the last line is kept even when it alone exceeds the budget")
+
+	assert.Equal(t, short, TailWrappedLines(short, 3, 0), "width <= 0 disables wrapping")
+}
+
 func TestConfirmNav(t *testing.T) {
 	assert.True(t, ConfirmNav(false, KeyLeft), "left picks yes")
 	assert.True(t, ConfirmNav(false, "h"))

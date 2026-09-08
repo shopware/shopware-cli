@@ -202,6 +202,13 @@ func TestInstallOnceLatches(t *testing.T) {
 	assert.False(t, (*telemetryState)(nil).installOnce())
 }
 
+func TestBeginInstallAllowsAnotherOutcome(t *testing.T) {
+	tel := newTelemetryState(true)
+	assert.True(t, tel.installOnce())
+	tel.beginInstall()
+	assert.True(t, tel.installOnce())
+}
+
 func TestHealthOnceLatches(t *testing.T) {
 	tel := newTelemetryState(true)
 	assert.True(t, tel.healthOnce())
@@ -244,8 +251,23 @@ func TestInstallFailureTags(t *testing.T) {
 	assert.Equal(t, installStartStep, tags[tracking.TagFailedStep])
 	assert.Equal(t, "db_connection", tags[tracking.TagFailureCategory])
 	assert.Equal(t, "de-DE", tags[tracking.TagLanguage])
-	for _, value := range tags {
-		assert.NotContains(t, value, "super-secret-host")
+}
+
+// The failure event must never carry secret-like strings: only the closed-enum
+// category is sent, never the raw failure detail or credentials.
+func TestInstallFailureTagsNeverLeakSecrets(t *testing.T) {
+	tel := &telemetryState{}
+	w := installWizard{}
+	w.SetPassword("super-secret-pw")
+
+	f := installFailure{
+		failingStep: "system:install",
+		category:    installFailureDatabaseConnection,
+		detail:      `SQLSTATE[HY000] [1045] Access denied for user 'root'@'super-secret-host'`,
+	}
+	for key, value := range tel.installFailureTags(w, f) {
+		assert.NotContains(t, value, "super-secret-pw", "tag %q leaked the password", key)
+		assert.NotContains(t, value, "super-secret-host", "tag %q leaked the raw detail", key)
 	}
 }
 
@@ -253,7 +275,7 @@ func TestInstallFailureTagsFromClassifier(t *testing.T) {
 	tel := &telemetryState{}
 	failure := classifyInstallFailure([]string{
 		"[deployment-helper] SQLSTATE[HY000] [2002] No such file or directory",
-	})
+	}, nil)
 	tags := tel.installFailureTags(installWizard{}, failure)
 
 	assert.Equal(t, "db_connection", tags[tracking.TagFailureCategory])

@@ -1,6 +1,9 @@
 package dev
 
 import (
+	"errors"
+	"fmt"
+	"os/exec"
 	"regexp"
 	"strings"
 
@@ -26,13 +29,20 @@ const (
 	installFailureUnknown             installFailureCategory = "unknown"
 
 	installStartStep = "install_start"
+
+	// installFailureDetailLines bounds how many output lines make up one
+	// detail, so a stack trace or a dumped query cannot grow it without limit.
+	installFailureDetailLines = 3
 )
 
-// installFailure is the classified result of one failed helper run. Raw
-// details are retained for classification tests but never sent in telemetry.
+// installFailure is the classified result of one failed helper run. Telemetry
+// reads this instead of scanning the raw output again. detail is kept for
+// classification tests; it is not shown on the failure card and is never sent
+// as a telemetry tag.
 type installFailure struct {
 	failingStep string
 	category    installFailureCategory
+	detail      string
 }
 
 type installFailureRule struct {
@@ -48,11 +58,6 @@ var installFailureRules = []installFailureRule{
 		patterns: installFailurePatterns(
 			`allowed memory size`,
 			`outofmemoryerror`,
-		),
-	},
-	{
-		category: installFailurePHP,
-		patterns: installFailurePatterns(
 			`php fatal error`,
 			`syntax error, unexpected`,
 		),
@@ -145,12 +150,15 @@ func installFailurePatterns(patterns ...string) []*regexp.Regexp {
 	return compiled
 }
 
-func classifyInstallFailure(output []string) installFailure {
+// Output is scanned from the end so the error that stopped the process wins
+// over earlier warnings.
+func classifyInstallFailure(output []string, processErr error) installFailure {
 	lines := cleanInstallOutput(output)
 
 	failure := installFailure{
 		failingStep: installFailureStep(lines),
 		category:    installFailureUnknown,
+		detail:      installFailureDetail(lines, processErr),
 	}
 
 	for i := len(lines) - 1; i >= 0; i-- {
@@ -158,6 +166,7 @@ func classifyInstallFailure(output []string) installFailure {
 			for _, pattern := range rule.patterns {
 				if pattern.MatchString(lines[i]) {
 					failure.category = rule.category
+					failure.detail = installFailureMessage(lines, i)
 					return failure
 				}
 			}
@@ -183,8 +192,31 @@ func installFailureStep(output []string) string {
 	return failingStep
 }
 
+func installFailureDetail(output []string, processErr error) string {
+	for i := len(output) - 1; i >= 0; i-- {
+		if output[i] != "" {
+			return installFailureMessage(output, i)
+		}
+	}
+
+	var exitErr *exec.ExitError
+	if errors.As(processErr, &exitErr) {
+		return fmt.Sprintf("deployment helper exited with code %d", exitErr.ExitCode())
+	}
+	if processErr != nil {
+		return processErr.Error()
+	}
+	return "deployment helper failed without diagnostic output"
+}
+
+// installRelayPrefix matches the tag the deployment helper puts in front of
+// every line it relays from the console commands it runs.
 var installRelayPrefix = regexp.MustCompile(`^\[deployment-helper] ?`)
 
+// cleanInstallOutput removes ANSI styling, the relay prefix, and surrounding
+// whitespace from the captured helper output, so rule matching and the stored
+// detail work on the plain message. The log view keeps rendering the original
+// lines.
 func cleanInstallOutput(output []string) []string {
 	cleaned := make([]string, len(output))
 	for i, line := range output {
@@ -196,4 +228,19 @@ func cleanInstallOutput(output []string) []string {
 func cleanInstallLine(line string) string {
 	line = installRelayPrefix.ReplaceAllString(ansi.Strip(line), "")
 	return strings.TrimSpace(line)
+}
+
+// installFailureMessage returns the message the line at idx belongs to. Symfony
+// wraps long errors over several output lines, so one line on its own is often
+// half a sentence. The neighbouring non-empty lines are joined back into one
+// message; a blank line ends it.
+func installFailureMessage(lines []string, idx int) string {
+	start, end := idx, idx
+	for start > 0 && lines[start-1] != "" && end-start+1 < installFailureDetailLines {
+		start--
+	}
+	for end < len(lines)-1 && lines[end+1] != "" && end-start+1 < installFailureDetailLines {
+		end++
+	}
+	return strings.Join(lines[start:end+1], " ")
 }
