@@ -1,6 +1,6 @@
 ---
 name: shopware-cli
-description: Use Shopware CLI for Shopware project, extension, and account workflows — create and install new projects (project create, project dev install), validate projects or extensions (with --only/--exclude and CI reporters json, junit, github, gitlab), develop, build, upgrade, and troubleshoot. Also use when contributing to shopware/shopware-cli and reasoning about the CLI's user-facing behavior.
+description: Use Shopware CLI for Shopware project, extension, and account workflows — create and install new projects (project create, project dev install), validate projects or extensions (with --only/--exclude and --format json, junit, github, gitlab for CI), develop, build, upgrade, and troubleshoot. Also use when contributing to shopware/shopware-cli and reasoning about the CLI's user-facing behavior.
 ---
 
 # Shopware CLI
@@ -133,7 +133,7 @@ Common flags include:
 
 - `--only <tools>` — run only specific tools (comma-separated).
 - `--exclude <tools>` — skip specific tools (comma-separated).
-- `--reporter <format>` — choose an output reporter supported by the current CLI.
+- `--format <format>` — choose an output format supported by the current CLI (`--reporter` is a deprecated alias).
 - `--local-only` — limit extension discovery to plugins in `custom/*` (for the project toolset); does not add per-extension metadata validation.
 - `--no-copy` — do not copy project files to a temporary directory before validation.
 - `--verbose` — show debug output.
@@ -157,9 +157,9 @@ Common flags include:
 - `--only <tools>` — run only specific tools (comma-separated).
 - `--exclude <tools>` — skip specific tools.
 - `--full` — run additional/full validation tools such as PHPStan, ESLint, and Stylelint when supported/configured.
-- `--check-against <version>` — check against a supported Shopware-version mode such as `highest` or `lowest`.
+- `--check-against <mode>` — `highest` (default) or `lowest`: which supported Shopware version to check against.
 - `--store-compliance` — enable Store-compliance mode while the current CLI supports the flag. Prefer `validation.store_compliance: true` in `.shopware-extension.yml` for persistent Store intent.
-- `--reporter <format>` — choose a reporter supported by the current CLI.
+- `--format <format>` — choose an output format supported by the current CLI (`--reporter` is a deprecated alias).
 - `--no-copy` — do not copy extension files to a temporary directory.
 - `--verbose` — show debug output.
 
@@ -176,10 +176,10 @@ Before diagnosing a validation failure, rerun validation against the current wor
 In automated environments, prefer machine-readable output when useful:
 
 ```bash
-shopware-cli project validate --reporter json > validation-results.json
-shopware-cli project validate --reporter junit > validation-results.xml
-shopware-cli extension validate . --reporter github
-shopware-cli extension validate . --reporter gitlab
+shopware-cli project validate --format json > validation-results.json
+shopware-cli project validate --format junit > validation-results.xml
+shopware-cli extension validate . --format github
+shopware-cli extension validate . --format gitlab
 ```
 
 Reporters format emitted output. They do not by themselves post comments or annotations to pull requests or merge requests; CI configuration must consume the output appropriately.

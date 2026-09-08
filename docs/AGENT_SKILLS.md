@@ -15,11 +15,17 @@ shopware-cli/
 └── skills/
     ├── shopware-cli/
     │   └── SKILL.md
-    └── shopware-cli-docker/
-        └── SKILL.md
+    ├── shopware-cli-docker/
+    │   └── SKILL.md
+    └── shopware-cli-extension-store/
+        ├── SKILL.md
+        └── scripts/
+            └── collect-evidence.sh
 ```
 
-Each skill is intentionally self-contained in a single `SKILL.md`.
+Each skill is a single `SKILL.md`, optionally with a `scripts/` directory for
+helper scripts the agent executes (the Agent Skills layout). Keep reference
+material inside `SKILL.md` itself.
 
 Do not maintain separate Claude, Cursor, Codex, Copilot, or other
 client-specific copies in this repository.
@@ -61,6 +67,19 @@ shopware-cli project dev status
 shopware-cli project dev stop
 ```
 
+### `shopware-cli-extension-store`
+
+Read-only Shopware Store readiness assessment for an extension.
+
+It teaches agents to:
+
+- collect evidence with the bundled `scripts/collect-evidence.sh` (CLI
+  provenance, metadata, icon, two `extension validate` runs);
+- classify every finding against a fixed table with a re-checkable source;
+- keep local file state separate from the remote Store listing, which it never
+  inspects;
+- never modify files.
+
 ## Source of truth
 
 The files under `skills/` are the canonical source.
@@ -78,7 +97,7 @@ For user-facing Shopware CLI changes:
 
 1. Implement the CLI change.
 2. Check whether `skills/shopware-cli/SKILL.md` is affected.
-3. Check whether `skills/shopware-cli-docker/SKILL.md` is affected.
+3. Check whether `skills/shopware-cli-docker/SKILL.md` or `skills/shopware-cli-extension-store/SKILL.md` is affected.
 4. Update the skill in the same PR when required.
 5. Validate the skills.
 6. Verify that the skills can still be discovered by the skills CLI.
@@ -96,6 +115,7 @@ Validate each skill against the Agent Skills format:
 ```bash
 skills-ref validate ./skills/shopware-cli
 skills-ref validate ./skills/shopware-cli-docker
+skills-ref validate ./skills/shopware-cli-extension-store
 ```
 
 Verify repository discovery:
@@ -152,7 +172,7 @@ npx skills check
 Update the Shopware skills with:
 
 ```bash
-npx skills update shopware-cli shopware-cli-docker
+npx skills update shopware-cli shopware-cli-docker shopware-cli-extension-store
 ```
 
 or update all installed project skills with:

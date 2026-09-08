@@ -1,6 +1,6 @@
 ---
 name: shopware-cli-extension-store
-description: MUST use for Shopware Store readiness/publication/submission/compliance questions. Inspects read-only using the installed shopware-cli, classifies every finding by table lookup, and cites a re-checkable source for each one so local file state is never reported as remote Store listing state.
+description: Use for Shopware Store readiness, publication, submission, or compliance questions about an extension. Inspects read-only using the installed shopware-cli, classifies every finding by table lookup, and cites a re-checkable source for each one so local file state is never reported as remote Store listing state.
 ---
 
 # Shopware Store readiness
@@ -11,11 +11,13 @@ Every claim in the answer carries a source. A finding without a source is not a 
 
 ## 1. Collect evidence
 
-Locate `collect-evidence.sh` in the `scripts/` directory next to this `SKILL.md` and run it with the extension root as the working directory:
+Run `scripts/collect-evidence.sh` from this skill's directory (the directory that contains this `SKILL.md`) and pass the extension root as its argument:
 
-bash "$(dirname "$SKILL_PATH")/scripts/collect-evidence.sh" .
+```bash
+bash <path-to-this-skill>/scripts/collect-evidence.sh <extension-root>
+```
 
-Do not answer before it completes.
+Do not answer before it completes. If it prints `EVIDENCE_INCOMPLETE` or exits non-zero, state which evidence is missing and do not classify rows that depend on it.
 
 Script notes (collect-evidence.sh):
 
@@ -23,6 +25,7 @@ Script notes (collect-evidence.sh):
 - Without `--full`, `extension validate` runs only the `sw-cli` toolset. It does **not** run PHPStan/ESLint/Stylelint. Source: `cmd/extension/extension_validate.go`, the `if !isFull { only = "sw-cli" }` branch. Say "sw-cli checks passed", not "validation passed", unless `--full` was run.
 - Use one `shopware-cli` binary throughout. Never mix binaries mid-answer.
 - Output is captured to a variable before piping: PIPESTATUS is bash-only and $? after a pipe reports the last command, not the CLI. This preserves exit codes.
+- Validation runs use `--format markdown`; `--reporter` is a deprecated alias and prints a warning.
 - Run `extension config-schema` only if the extension already uses Store sync config, or the user asks where Store metadata is configured. Schema fields are never readiness requirements.
 
 ## 2. Classification table — the only place classification is decided
@@ -30,9 +33,9 @@ Script notes (collect-evidence.sh):
 Copy `Level`, `Target`, and `Source` from this table **verbatim**. Do not re-derive them from doc prose, CLI output, or reasoning. If a source has changed, report the drift as a separate note; do not silently reclassify.
 
 Doc baseline: `https://developer.shopware.com/docs/guides/development/testing/store/content-and-translations.html`
-Code baseline: shopware-cli source, verified against release 0.18.3.
+Code baseline: the shopware-cli source. The result identifiers below are printed at the end of every CLI result line and are stable across releases.
 
-CLI rules are cited by their **result identifier**, not a line number — identifiers appear in the CLI's own output and survive refactors. Re-check any row with:
+CLI rules are cited by their **result identifier**, not a file or line number: identifiers appear in the CLI's own output and survive refactors. If a shopware-cli source checkout is at hand, a row can be re-checked with:
 
 ```bash
 grep -rn '"metadata.icon.size"' --include=*.go internal/ | grep -v _test
@@ -40,11 +43,12 @@ grep -rn '"metadata.icon.size"' --include=*.go internal/ | grep -v _test
 
 | # | Condition | Level | Target | Source | Emit only if |
 |---|---|---|---|---|---|
-| L1 | `extra.description` per locale is 150–185 chars | CLI-enforced | Local file | `metadata.description` — `internal/extension/validator.go` | always |
-| L2 | `extra.manufacturerLink` per locale present | CLI-enforced | Local file | `metadata.manufacturer` — `internal/extension/platform.go` | always |
-| L3 | `extra.supportLink` per locale present | CLI-enforced | Local file | `metadata.support` — `internal/extension/platform.go` | always |
-| L4 | `src/Resources/config/plugin.png` is 112×112px and ≤30 kB | Store-doc-required; CLI validation ranges to 256px  | Local artifact | `metadata.icon.size` — `internal/extension/validator.go` | icon present |
-| L5 | `authors` key present in `composer.json` | CLI-enforced | Local file | `metadata.author` — `internal/extension/platform.go` (apps: `app.go`) | always |
+| L0 | Any other error line printed by `extension validate` | CLI-enforced | Local file | the result identifier printed in that line, for example `metadata.label`, `metadata.icon`, `metadata.icon.size`, `assets.*` | always |
+| L1 | `extra.description` per locale is 150–185 chars | CLI-enforced | Local file | `metadata.description` | always |
+| L2 | `extra.manufacturerLink` per locale present | CLI-enforced | Local file | `metadata.manufacturer` | always |
+| L3 | `extra.supportLink` per locale present | CLI-enforced | Local file | `metadata.support` | always |
+| L4 | `src/Resources/config/plugin.png` is 84–256 px in both dimensions | Store-doc-required | Local artifact | docs `#images-and-screenshots` | icon present (a missing icon is the CLI's `metadata.icon` line, L0) |
+| L5 | `authors` key present in `composer.json` | CLI-enforced | Local file | `metadata.author` | always |
 | R1 | Published in the international Store | Store-doc-required | Remote listing | docs `#store-listing` | always |
 | R2 | Short description 150–185 chars | Store-doc-required | Remote listing | docs `#store-listing` | always |
 | R3 | Long description ≥200 chars | Store-doc-required | Remote listing | docs `#store-listing` | always |
@@ -61,7 +65,7 @@ grep -rn '"metadata.icon.size"' --include=*.go internal/ | grep -v _test
 | G3 | Theme preview image in Theme Manager | Store-doc-required | Remote listing | docs `#images-and-screenshots` | extension is a theme |
 | G4 | CMS element icon | Store-doc-required | Local artifact | docs `#images-and-screenshots` | extension ships CMS elements |
 
-Nothing outside this table is a finding, because nothing outside it has a source. In particular, never emit: `store.type`, demo shops, API credential checks, install/uninstall hooks, logging or JS rules for absent features, README/CHANGELOG/LICENSE-file pseudo-requirements, or generic compatibility-date advice.
+Nothing outside this table is a finding, because nothing outside it has a source. Every CLI error line has one, its identifier, which is what L0 is for. In particular, never emit: `store.type`, demo shops, API credential checks, install/uninstall hooks, logging or JS rules for absent features, README/CHANGELOG/LICENSE-file pseudo-requirements, or generic compatibility-date advice.
 
 ### CLI-vs-docs conflicts — defer to docs
 
@@ -69,6 +73,11 @@ When CLI and docs disagree on a requirement:
 - Follow the **docs** reading (canonical Store review standard).
 - Flag the CLI gap or mismatch as a note only if useful for understanding why local validation passed but Store review may differ.
 - Do not report the CLI reading as correct if docs have been updated.
+- CLI error lines stay under Required local changes regardless: they set the exit code. Put the docs reading next to them as a note.
+
+Known differences:
+- Icon: the CLI's `metadata.icon.size` check rejects icons below 112 px and files above 30 kB, stricter than L4. When it fires, add that the Store standard is 84–256 px.
+- German metadata: the CLI requires `de-DE` label, description, manufacturerLink and supportLink unless `.shopware-extension.yml` sets `store.availabilities` without `German`. When those lines fire for an extension meant for the international Store only, name that setting.
 
 
 ## 3. Emit rules
@@ -76,7 +85,7 @@ When CLI and docs disagree on a requirement:
 Eight invariants. Check each finding against all eight before writing it.
 
 1. **Lookup, not inference.** `Level`, `Target`, and `Source` come from the table verbatim.
-2. **Emit every ungated row, not a selection.** Before writing the remote section, walk rows R1–R10, A1, G1–G4 in order and emit each whose precondition holds. Dropping a row because it feels obvious or hard to check is a silent failure. Count them: an extension with no theme, no CMS elements, and no settings UI yields nine remote rows plus A1.
+2. **Emit every ungated row, not a selection.** Before writing the remote section, walk rows R1–R10, A1, G1–G4 in order and emit each whose precondition holds. Dropping a row because it feels obvious or hard to check is a silent failure. Count them: an extension with no theme, no CMS elements, no settings UI, no German Store intent and no `de-DE` values yields R1–R8 plus A1; either German trigger adds R9.
 3. **Remote rows can never become local changes.** Any row with `Target` = Remote listing / Remote Account / Extension behavior may appear **only** under "Remote conditions not verified". It can never be a required local change, and it can never be called missing, present, passing, failing, satisfied, or compliant unless the Shopware Account listing was actually inspected.
 4. **Preconditions gate emission.** A row whose `Emit only if` is not proven true by evidence from §1 emits nothing at all. Not as "N/A", not as "not applicable", not as a struck-through line. It is absent. R9 and R10 are omitted entirely for an extension with no German Store intent and no settings UI.
 5. **Local values are candidates, not proof.** Name the row and the specific rule the value bumps against, not generic advice: a label containing "Plugin" is incompatible with R5's prohibited-words rule, which is a different statement from "rename it to something better".
@@ -84,9 +93,10 @@ Eight invariants. Check each finding against all eight before writing it.
    - Never propose a change that would delete existing content (translations, locales, fields) to satisfy a rule that content already satisfies. A `composer.json` label or description is a *sync candidate*. It may be described as compatible or incompatible with a remote rule. It never satisfies or fails one. R5 with a local label of "Acme Plugin" yields: remote display name unverified, **plus** a separate note that the local label candidate looks incompatible.
 6. **Every local finding needs a quoted artifact.** A required local change must cite either a verbatim CLI output line or a measured value from §1. No line and no measurement means it is not a required local change.
    - A row may be marked **CLI-enforced** only if the CLI output contains a matching error line. If validation printed `No problems found`, the Required local changes section is empty. Write "none". Never infer a CLI finding from reading `composer.json` yourself.
+   - Every error line the CLI printed appears under Required local changes exactly once: under L1–L5 when the identifier matches, otherwise under L0.
    - Placeholder or example values (`example.com`, `TODO`, lorem text) are **not** CLI findings: L2 and L3 check presence, not plausibility. Mention them under Local candidates if useful, never as a required local change.
-7. **Rows are the only vocabulary.** Every finding names a row ID from §2 and must match that row's actual subject. Do not attach a finding to the nearest-looking row. A1 is the license-value comparison and nothing else — an author homepage is not "A1 candidate", it is not in the table, so it is not a finding.
-8. **Every emitted row carries its provenance.** For a CLI row: the result identifier and file. For a doc row: the doc URL with its section anchor. Never paraphrase a requirement without naming where it came from.
+7. **Rows are the only vocabulary.** Every finding names a row ID from §2 and must match that row's actual subject. Do not attach a finding to the nearest-looking row; a CLI line with no dedicated row is L0. A1 is the license-value comparison and nothing else — an author homepage is not "A1 candidate", it is not in the table, so it is not a finding.
+8. **Every emitted row carries its provenance.** For a CLI row: the result identifier. For a doc row: the doc URL with its section anchor. Never paraphrase a requirement without naming where it came from.
 
 ## 4. Store doc map
 
@@ -122,7 +132,7 @@ Preconditions here work like §2's: a page you had no trigger to read produces n
 - remote Store listing: inspected / not inspected
 - files modified: no
 
-**Required local changes** — table rows with `Target` = Local file / Local artifact that failed. Empty section if none; write "none".
+**Required local changes** — one entry per CLI error line (L1–L5 by identifier, otherwise L0), plus any other Local file / Local artifact row that failed. Empty section if none; write "none".
 
 | Finding | Evidence | Level | Row | Source |
 |---|---|---|---|---|
@@ -140,7 +150,7 @@ Preconditions here work like §2's: a page you had no trigger to read produces n
 **Sources checked** — a flat list the user can re-verify independently:
 
 - CLI path and version
-- every source file path read, with the `grep` command that locates the rule
+- the result identifiers relied on; source file paths and `grep` commands only if a shopware-cli checkout was actually read
 - the Store docs index, as a clickable link, so the user can reach the whole set
 - every doc page actually read, as a clickable full URL with the date read
 - the pages **not** read, listed by name with the trigger that would have required them, so the user can see what was out of scope rather than assuming it passed
@@ -148,7 +158,7 @@ Preconditions here work like §2's: a page you had no trigger to read produces n
 
 The response ends here. Do not append a summary, a recap, a next-steps list, or an offer to fix anything: the sections above already say what is wrong and what is unverified, and a summary reintroduces the collapsed local/remote framing the format exists to prevent.
 
-Every source must be a clickable URL, in every section including table rows. `content-and-translations § store-listing` is not a link.
+Every documentation source must be a clickable URL, in every section including table rows. `content-and-translations § store-listing` is not a link. CLI identifiers, local paths and commands are quoted as they are.
 
 Repeating a 100-character URL across eleven rows is tedious, so a table may instead declare its base once directly above itself and carry only anchors in the rows:
 
@@ -161,15 +171,15 @@ with rows reading `#store-listing`. Use one form or the other. Bare anchors with
 Answer only after all are true:
 
 - every `Level`/`Target`/`Source` was copied from §2, not reasoned out;
-- every finding names a source the user can open or grep, as a full URL;
+- every finding names a source the user can open (doc URL) or re-run (CLI identifier, command);
 - the Sources section links the docs index and names the pages not read;
 - no remote-target row appears as a required local change;
 - no ungated precondition row was emitted;
-- no icon finding for a 112–256 px icon;
+- every CLI error line appears under Required local changes, as L1–L5 or L0;
 - no CLI-enforced row emitted when the CLI printed `No problems found`;
 - no row emitted as "N/A";
 - every ungated row emitted, counted against §2 rather than eyeballed;
-- every source is a clickable URL, or an anchor under a base declared directly above its table;
+- every doc source is a clickable URL, or an anchor under a base declared directly above its table;
 - G rows appear in Guidance only, not in the remote table;
 - the response ends at Sources checked;
 - every finding's row ID matches that row's actual subject;
