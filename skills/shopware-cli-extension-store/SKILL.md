@@ -21,10 +21,11 @@ Do not answer before it completes. If it prints `EVIDENCE_INCOMPLETE` or exits n
 
 Script notes (collect-evidence.sh):
 
-- Cobra prints its usage block on a non-zero exit. The `sed` strips it; the exit code is the real signal.
+- The CLI writes the report to stdout and its usage block and error line to stderr. The script keeps both streams as files; the exit code is the real signal.
 - Without `--full`, `extension validate` runs only the `sw-cli` toolset. It does **not** run PHPStan/ESLint/Stylelint. Source: `cmd/extension/extension_validate.go`, the `if !isFull { only = "sw-cli" }` branch. Say "sw-cli checks passed", not "validation passed", unless `--full` was run.
 - Use one `shopware-cli` binary throughout. Never mix binaries mid-answer.
-- Output is captured to a variable before piping: PIPESTATUS is bash-only and $? after a pipe reports the last command, not the CLI. This preserves exit codes.
+- Each finding is printed once. Exact repeats are collapsed and counted (`duplicate lines collapsed: N`); the CLI currently prints a missing icon twice. The store-compliance section lists only the lines that differ from the normal run, or `identical to the normal run`.
+- The full raw output of both runs is saved to the files listed under `--- raw ---`. Quote from them when a verbatim line is needed.
 - Validation runs use `--format markdown`; `--reporter` is a deprecated alias and prints a warning.
 - Run `extension config-schema` only if the extension already uses Store sync config, or the user asks where Store metadata is configured. Schema fields are never readiness requirements.
 
@@ -150,6 +151,7 @@ Preconditions here work like §2's: a page you had no trigger to read produces n
 **Sources checked** — a flat list the user can re-verify independently:
 
 - CLI path and version
+- the raw validation output files, by path
 - the result identifiers relied on; source file paths and `grep` commands only if a shopware-cli checkout was actually read
 - the Store docs index, as a clickable link, so the user can reach the whole set
 - every doc page actually read, as a clickable full URL with the date read

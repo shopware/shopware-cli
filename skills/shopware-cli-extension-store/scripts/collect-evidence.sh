@@ -94,16 +94,37 @@ grep -rlE '\.error\(|createNotification|notification' "$resources/app" 2>/dev/nu
 grep -rlE 'registerCmsElement|cms-element' "$resources" 2>/dev/null | head -5 || true
 grep -rqE 'registerCmsElement|cms-element' "$resources" 2>/dev/null || echo 'no CMS element found'
 
-# Capture to a variable: after a pipe, $? is the exit code of sed, not the CLI.
+# The report goes to stdout, the usage block and error line go to stderr; both are kept.
+raw="$(mktemp -d "${TMPDIR:-/tmp}/sw-store-evidence.XXXXXX")" || { fail "cannot create the raw output directory"; raw=/tmp; }
+findings() { grep -E '^- \*\*' "$1" 2>/dev/null || true; }
+
 echo '--- validation: normal ---'
-out="$("$CLI" extension validate . --format markdown 2>&1)"; rc=$?
-printf '%s\n' "$out" | sed '/^Usage:/,$d'
+"$CLI" extension validate . --format markdown >"$raw/normal.md" 2>"$raw/normal.log"; rc=$?
+findings "$raw/normal.md" | LC_ALL=C sort -u > "$raw/normal.lines"
+# Print each finding once; the count of collapsed repeats is kept visible.
+findings "$raw/normal.md" | awk '!seen[$0]++'
+dups=$(( $(findings "$raw/normal.md" | wc -l) - $(wc -l < "$raw/normal.lines") ))
+[ "$dups" -gt 0 ] && echo "duplicate lines collapsed: $dups"
+grep -m1 'No problems found' "$raw/normal.md" || true
+[ ! -s "$raw/normal.lines" ] && ! grep -q 'No problems found' "$raw/normal.md" && { echo 'no report on stdout, stderr follows:'; head -3 "$raw/normal.log"; }
 echo "normal_exit=$rc"
 
+# Only the difference to the normal run is printed; identical output is not repeated.
 echo '--- validation: store-compliance ---'
-out="$("$CLI" extension validate . --store-compliance --format markdown 2>&1)"; rc=$?
-printf '%s\n' "$out" | sed '/^Usage:/,$d'
+"$CLI" extension validate . --store-compliance --format markdown >"$raw/store.md" 2>"$raw/store.log"; rc=$?
+findings "$raw/store.md" | LC_ALL=C sort -u > "$raw/store.lines"
+added="$(LC_ALL=C comm -13 "$raw/normal.lines" "$raw/store.lines")"
+removed="$(LC_ALL=C comm -23 "$raw/normal.lines" "$raw/store.lines")"
+if [ -z "$added" ] && [ -z "$removed" ]; then
+  echo 'findings: identical to the normal run'
+else
+  [ -n "$added" ] && { echo 'only in the store-compliance run:'; printf '%s\n' "$added"; }
+  [ -n "$removed" ] && { echo 'only in the normal run:'; printf '%s\n' "$removed"; }
+fi
 echo "store_exit=$rc"
+
+echo '--- raw ---'
+ls "$raw"/normal.md "$raw"/normal.log "$raw"/store.md "$raw"/store.log 2>/dev/null
 
 [ "$status" -ne 0 ] && echo 'EVIDENCE_INCOMPLETE: one or more collection steps failed, see lines above'
 exit "$status"
