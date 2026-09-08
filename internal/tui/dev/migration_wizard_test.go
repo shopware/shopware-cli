@@ -112,17 +112,27 @@ func TestMigrationWizardAdminUser_TabNavigatesFocus(t *testing.T) {
 	assert.Equal(t, tui.CredFocusShowPassword, sg.FocusTarget())
 }
 
-func TestMigrationWizardAdminUser_EnterOnCheckboxTogglesEcho(t *testing.T) {
+func TestMigrationWizardAdminUser_SpaceOnCheckboxTogglesEcho(t *testing.T) {
+	sg := newMigrationWizard("")
+	sg.step = migrationStepAdminUser
+	sg.Focus(tui.CredFocusShowPassword)
+
+	sg, _ = sg.update(tea.KeyPressMsg(tea.Key{Code: tea.KeySpace}))
+	assert.False(t, sg.PasswordMasked())
+	assert.Equal(t, migrationStepAdminUser, sg.step)
+
+	sg, _ = sg.update(tea.KeyPressMsg(tea.Key{Code: tea.KeySpace}))
+	assert.True(t, sg.PasswordMasked())
+}
+
+func TestMigrationWizardAdminUser_EnterOnCheckboxContinues(t *testing.T) {
 	sg := newMigrationWizard("")
 	sg.step = migrationStepAdminUser
 	sg.Focus(tui.CredFocusShowPassword)
 
 	sg, _ = sg.update(tea.KeyPressMsg(tea.Key{Code: tea.KeyEnter}))
-	assert.False(t, sg.PasswordMasked())
-	assert.Equal(t, migrationStepAdminUser, sg.step)
-
-	sg, _ = sg.update(tea.KeyPressMsg(tea.Key{Code: tea.KeyEnter}))
-	assert.True(t, sg.PasswordMasked())
+	assert.Equal(t, migrationStepDockerPHP, sg.step)
+	assert.True(t, sg.PasswordMasked(), "enter must not toggle the checkbox")
 }
 
 func TestMigrationWizardReview_QuitButtonQuits(t *testing.T) {

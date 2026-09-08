@@ -7,7 +7,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 
-	dockerpkg "github.com/shopware/shopware-cli/internal/docker"
+	"github.com/shopware/shopware-cli/internal/docker"
 	"github.com/shopware/shopware-cli/internal/shop"
 	"github.com/shopware/shopware-cli/internal/tui"
 	"github.com/shopware/shopware-cli/internal/tui/app"
@@ -30,15 +30,15 @@ const (
 )
 
 const (
-	profilerBlackfire = dockerpkg.ProfilerBlackfire
-	profilerTideways  = dockerpkg.ProfilerTideways
+	profilerBlackfire = docker.ProfilerBlackfire
+	profilerTideways  = docker.ProfilerTideways
 
 	defaultPHPVersionIndex = 1
 )
 
 var (
 	phpVersions = shop.SupportedPHPVersions
-	profilers   = dockerpkg.Profilers
+	profilers   = docker.Profilers
 )
 
 // envFieldDef describes a Symfony .env-backed choice field rendered in the
@@ -246,7 +246,7 @@ func (m ConfigModel) PickerForCursor() app.Overlay {
 			case p == "":
 				label = "none"
 				detail = ""
-			case dockerpkg.ProfilerIsPaid(p):
+			case docker.ProfilerIsPaid(p):
 				detail = "paid"
 			}
 			items[i] = picker.Item{Label: label, Detail: detail, Value: p}

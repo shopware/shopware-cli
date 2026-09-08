@@ -242,13 +242,13 @@ func TestInstallFailureTags(t *testing.T) {
 	w := installWizard{language: "de-DE", currency: "EUR"}
 
 	f := installFailure{
-		failingStep: "install_start",
+		failingStep: installStartStep,
 		category:    installFailureDatabaseConnection,
 	}
 	tags := tel.installFailureTags(w, f)
 
 	assert.Equal(t, tracking.ResultFailure, tags[tracking.TagResult])
-	assert.Equal(t, "install_start", tags[tracking.TagFailedStep])
+	assert.Equal(t, installStartStep, tags[tracking.TagFailedStep])
 	assert.Equal(t, "db_connection", tags[tracking.TagFailureCategory])
 	assert.Equal(t, "de-DE", tags[tracking.TagLanguage])
 }
@@ -269,4 +269,15 @@ func TestInstallFailureTagsNeverLeakSecrets(t *testing.T) {
 		assert.NotContains(t, value, "super-secret-pw", "tag %q leaked the password", key)
 		assert.NotContains(t, value, "super-secret-host", "tag %q leaked the raw detail", key)
 	}
+}
+
+func TestInstallFailureTagsFromClassifier(t *testing.T) {
+	tel := &telemetryState{}
+	failure := classifyInstallFailure([]string{
+		"[deployment-helper] SQLSTATE[HY000] [2002] No such file or directory",
+	}, nil)
+	tags := tel.installFailureTags(installWizard{}, failure)
+
+	assert.Equal(t, "db_connection", tags[tracking.TagFailureCategory])
+	assert.Equal(t, installStartStep, tags[tracking.TagFailedStep])
 }

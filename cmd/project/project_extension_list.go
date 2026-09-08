@@ -4,6 +4,7 @@ import (
 	"github.com/spf13/cobra"
 
 	adminSdk "github.com/shopware/shopware-cli/internal/admin-api"
+	"github.com/shopware/shopware-cli/internal/shop"
 	"github.com/shopware/shopware-cli/internal/tui"
 )
 
@@ -19,7 +20,7 @@ var projectExtensionListCmd = &cobra.Command{
 			return err
 		}
 
-		projectRoot, err := findClosestShopwareProject(true)
+		projectRoot, err := shop.FindClosestShopwareProject(true)
 		if err != nil {
 			return err
 		}

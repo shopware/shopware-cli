@@ -4,7 +4,7 @@ import (
 	"os"
 	"path"
 
-	"github.com/shopware/shopware-cli/internal/shop"
+	"github.com/shopware/shopware-cli/internal/envfile"
 )
 
 func MigrateEnv(project string) error {
@@ -21,7 +21,7 @@ func MigrateEnv(project string) error {
 		if err != nil {
 			return err
 		}
-		composeName := shop.ExtractComposeProjectName(envBytes)
+		composeName := envfile.ExtractComposeProjectName(envBytes)
 
 		if err := os.Rename(envPath, envLocalPath); err != nil {
 			return err
@@ -29,7 +29,7 @@ func MigrateEnv(project string) error {
 
 		newEnv := ""
 		if composeName != "" {
-			newEnv = shop.ComposeProjectNameEnvKey + "=" + composeName + "\n"
+			newEnv = envfile.ComposeProjectNameEnvKey + "=" + composeName + "\n"
 		}
 
 		return os.WriteFile(envPath, []byte(newEnv), 0o644)

@@ -146,24 +146,22 @@ func (c *CredentialStep) Focus(target CredFocus) tea.Cmd {
 }
 
 // HandleKey applies the shared credential-step key handling: tab/down and
-// shift+tab/up move focus, enter advances from the username, toggles the
-// checkbox, or submits from the password (after validation), and any other
-// key types into the focused input. It reports submitted=true when the
-// password passed validation and the step is complete — what a submit means
-// is the embedding wizard's decision.
+// shift+tab/up move focus, enter advances from the username or submits from
+// the password and the checkbox (after validation), space toggles the
+// checkbox, and any other key types into the focused input. It reports
+// submitted=true when the password passed validation and the step is
+// complete — what a submit means is the embedding wizard's decision.
 func (c *CredentialStep) HandleKey(msg tea.KeyPressMsg) (cmd tea.Cmd, submitted bool) {
 	switch KeyString(msg) {
 	case KeyEnter:
-		switch c.focus {
-		case CredFocusUsername:
+		if c.focus == CredFocusUsername {
 			return c.Focus(CredFocusPassword), false
-		case CredFocusShowPassword:
-			c.ToggleShowPassword()
-			return nil, false
-		case CredFocusPassword:
-			// Enter on the password submits; handled below.
 		}
 		if !c.ValidatePassword() {
+			if c.focus == CredFocusShowPassword {
+				// Put the cursor where the error can be fixed.
+				return c.Focus(CredFocusPassword), false
+			}
 			return nil, false
 		}
 		c.Blur()
@@ -260,14 +258,15 @@ func (c CredentialStep) Render(b *strings.Builder) {
 	b.WriteString(Checkbox(!c.PasswordMasked(), c.focus == CredFocusShowPassword, "Show password"))
 }
 
-// FooterHint returns the shortcut bar for the step: navigation plus what
-// enter does for the current focus (toggle on the checkbox, submitLabel
-// otherwise).
+// FooterHint returns the shortcut bar for the step: navigation, the space
+// toggle while the checkbox has focus, and enter for submitLabel on every
+// focus.
 func (c CredentialStep) FooterHint(submitLabel string) string {
 	if c.focus == CredFocusShowPassword {
 		return ShortcutBar(
 			Shortcut{Key: "↑/↓/tab", Label: "Navigate"},
-			Shortcut{Key: "enter", Label: "Toggle"},
+			Shortcut{Key: "space", Label: "Toggle"},
+			Shortcut{Key: "enter", Label: submitLabel},
 		)
 	}
 	return ShortcutBar(

@@ -6,6 +6,7 @@ import (
 	"github.com/spf13/cobra"
 
 	adminSdk "github.com/shopware/shopware-cli/internal/admin-api"
+	"github.com/shopware/shopware-cli/internal/shop"
 	"github.com/shopware/shopware-cli/logging"
 )
 
@@ -14,7 +15,7 @@ var projectExtensionDeleteCmd = &cobra.Command{
 	Short: "Delete a extension",
 	Args:  cobra.MinimumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		projectRoot, err := findClosestShopwareProject(true)
+		projectRoot, err := shop.FindClosestShopwareProject(true)
 		if err != nil {
 			return err
 		}

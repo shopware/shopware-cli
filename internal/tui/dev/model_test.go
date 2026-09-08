@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	dockerpkg "github.com/shopware/shopware-cli/internal/docker"
 	"github.com/shopware/shopware-cli/internal/executor"
 	"github.com/shopware/shopware-cli/internal/shop"
 	"github.com/shopware/shopware-cli/internal/tui"
@@ -436,6 +437,7 @@ func TestUpdateConfigTab_EnterOnSaveWritesConfig(t *testing.T) {
 	m := newTestModel(t)
 	m.config = cfg
 	m.projectRoot = dir
+	m.configPath = filepath.Join(dir, ".shopware-project.yml")
 	m.activeTab = tabConfig
 	m.configTab = NewConfigModel(cfg, nil)
 	m.configTab.cursor = fieldSave
@@ -468,6 +470,7 @@ func TestUpdateConfigTab_EnterOnSaveFailureSetsErr(t *testing.T) {
 	m := newTestModel(t)
 	m.config = cfg
 	m.projectRoot = dir
+	m.configPath = filepath.Join(dir, ".shopware-project.yml")
 	m.activeTab = tabConfig
 	m.configTab = NewConfigModel(cfg, nil)
 	m.configTab.cursor = fieldSave
@@ -645,7 +648,17 @@ func TestMergeLocalProfilerSecrets_EmptySrcValuesDoNotOverwriteDst(t *testing.T)
 
 func TestView_DoesNotPanicForEachPhase(t *testing.T) {
 	ctx := app.Context{Width: 120, Height: 40, MainHeight: 36}
-	phases := []phase{phaseDashboard, phaseStarting, phaseStopping, phaseInstallPrompt, phaseInstalling, phaseInstallFailed, phaseTask, phaseMigrationWizard}
+	phases := []phase{
+		phaseDashboard,
+		phaseStarting,
+		phaseStopping,
+		phaseInstallPrompt,
+		phaseInstalling,
+		phaseInstallFailed,
+		phaseTask,
+		phaseMigrationWizard,
+		phasePortConflict,
+	}
 	for _, p := range phases {
 		m := newTestModel(t)
 		m.width = 120
@@ -661,12 +674,23 @@ func TestView_DoesNotPanicForEachPhase(t *testing.T) {
 			m.installProg.spinner = tui.NewBrandSpinner()
 			m.installProg.progress = newInstallProgress()
 		}
+		if p == phasePortConflict {
+			m.portConflicts = []dockerpkg.PortConflict{
+				{Service: dockerpkg.ServiceWeb, Endpoint: dockerpkg.PortHTTP, Label: "Shop (Caddy)", HostPort: 8000},
+			}
+		}
 
+		var view string
 		assert.NotPanics(t, func() {
-			_ = m.View(ctx)
+			view = m.View(ctx)
 			_ = m.chromeHeader(ctx)
 			_ = m.chromeFooter(ctx)
 		}, "phase %d", p)
+		if p == phasePortConflict {
+			assert.Contains(t, view, "Ports already in use")
+			assert.Contains(t, view, "Shop (Caddy)")
+			assert.Contains(t, view, "8000")
+		}
 	}
 }
 
@@ -833,6 +857,7 @@ func TestView_WindowTitlePerPhase(t *testing.T) {
 		{phaseInstalling, "[project] · Installing..."},
 		{phaseInstallFailed, "[project] · Installation failed"},
 		{phaseMigrationWizard, "[project] · Setup"},
+		{phasePortConflict, "[project] · Port conflict"},
 	}
 
 	for _, tc := range cases {

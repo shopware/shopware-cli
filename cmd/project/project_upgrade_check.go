@@ -17,6 +17,7 @@ import (
 	account_api "github.com/shopware/shopware-cli/internal/account-api"
 	adminSdk "github.com/shopware/shopware-cli/internal/admin-api"
 	"github.com/shopware/shopware-cli/internal/extension"
+	"github.com/shopware/shopware-cli/internal/shop"
 	"github.com/shopware/shopware-cli/internal/system"
 	"github.com/shopware/shopware-cli/internal/tracking"
 	"github.com/shopware/shopware-cli/internal/tui"
@@ -31,7 +32,7 @@ var projectUpgradeCheckCmd = &cobra.Command{
 		var shopwareVersion *version.Version
 		var extensions map[string]string
 
-		projectRoot, err := findClosestShopwareProject(true)
+		projectRoot, err := shop.FindClosestShopwareProject(true)
 		if err != nil {
 			return err
 		}
@@ -186,7 +187,7 @@ func init() {
 }
 
 func getLocalExtensions() (*version.Version, map[string]string, error) {
-	project, err := findClosestShopwareProject(false)
+	project, err := shop.FindClosestShopwareProject(false)
 	if err != nil {
 		return nil, nil, err
 	}

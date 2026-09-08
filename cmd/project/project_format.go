@@ -7,6 +7,7 @@ import (
 	"github.com/spf13/cobra"
 	"golang.org/x/sync/errgroup"
 
+	"github.com/shopware/shopware-cli/internal/shop"
 	"github.com/shopware/shopware-cli/internal/verifier"
 )
 
@@ -27,7 +28,7 @@ var projectFormatCmd = &cobra.Command{
 		if len(args) > 0 {
 			projectPath = args[0]
 		} else {
-			projectPath, err = findClosestShopwareProject(false)
+			projectPath, err = shop.FindClosestShopwareProject(false)
 			if err != nil {
 				return err
 			}
