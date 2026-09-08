@@ -31,6 +31,26 @@ var (
 	})
 )
 
+func TestRunValidationReportsMissingAppIconOnce(t *testing.T) {
+	appPath := testhelper.AppDir(t, testAppManifest)
+
+	app, err := newApp(t.Context(), appPath)
+
+	assert.NoError(t, err)
+
+	check := &testCheck{}
+	RunValidation(getTestContext(), app, check)
+
+	iconResults := 0
+	for _, result := range check.Results {
+		if result.Identifier == "metadata.icon" {
+			iconResults++
+		}
+	}
+
+	assert.Equal(t, 1, iconResults)
+}
+
 func TestIconNotExists(t *testing.T) {
 	appPath := testhelper.AppDir(t, testAppManifest)
 

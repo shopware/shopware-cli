@@ -76,3 +76,24 @@ func TestCreateBundle(t *testing.T) {
 
 	assert.Equal(t, "FALLBACK", bundle.GetMetaData().Description.German)
 }
+
+func TestRunValidationSkipsIconCheckForBundle(t *testing.T) {
+	setupMockPHPVersionServer(t)
+	dir := testhelper.ExtensionDir(t, testhelper.ComposerJSON{
+		Name:    "shopware/test-bundle",
+		Version: "1.0.0",
+		Type:    "shopware-bundle",
+		Extra:   map[string]any{"shopware-bundle-name": "TestBundle"},
+		Psr4:    map[string]string{`TestBundle\`: "src/"},
+	})
+
+	bundle, err := newShopwareBundle(t.Context(), dir)
+	assert.NoError(t, err)
+
+	check := &testCheck{}
+	RunValidation(getTestContext(), bundle, check)
+
+	for _, result := range check.Results {
+		assert.NotEqual(t, "metadata.icon", result.Identifier, "a bundle has no icon path and must not report a missing icon")
+	}
+}

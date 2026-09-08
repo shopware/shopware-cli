@@ -94,7 +94,6 @@ func RunValidation(ctx context.Context, ext Extension, check validation.Check) {
 	validateAdministrationSnippets(ext, check)
 	validateStorefrontSnippets(ext, check)
 	validateAssets(ext, check)
-	validateExtensionIcon(ext, check)
 	validateSymfonyXml(ext, check)
 	// Note: ignores are now applied in the verifier layer
 }

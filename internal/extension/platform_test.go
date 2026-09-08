@@ -96,6 +96,26 @@ func TestPluginIconNotExists(t *testing.T) {
 	assert.Equal(t, "The extension icon Resources/config/plugin.png does not exist", check.Results[0].Message)
 }
 
+func TestRunValidationReportsMissingPluginIconOnce(t *testing.T) {
+	setupMockPHPVersionServer(t)
+	dir := t.TempDir()
+
+	plugin := getTestPlugin(dir)
+
+	check := &testCheck{}
+
+	RunValidation(getTestContext(), plugin, check)
+
+	iconResults := 0
+	for _, result := range check.Results {
+		if result.Identifier == "metadata.icon" {
+			iconResults++
+		}
+	}
+
+	assert.Equal(t, 1, iconResults)
+}
+
 func TestPluginIconExists(t *testing.T) {
 	setupMockPHPVersionServer(t)
 	dir := t.TempDir()
