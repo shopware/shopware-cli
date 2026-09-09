@@ -69,7 +69,7 @@ var projectValidateCmd = &cobra.Command{
 			tmpDir = projectPath
 		}
 
-		toolCfg, err := verifier.GetConfigFromProject(tmpDir, localOnly)
+		toolCfg, err := verifier.GetConfigFromProject(cmd.Context(), tmpDir, localOnly)
 		if err != nil {
 			return err
 		}

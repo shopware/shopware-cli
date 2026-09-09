@@ -72,7 +72,7 @@ var projectCI = &cobra.Command{
 		// Remove annoying cache invalidation errors while asset install
 		_ = os.Setenv("SHOPWARE_SKIP_ASSET_INSTALL_CACHE_INVALIDATION", "1")
 
-		actualProjectConfigPath := shop.SearchConfigPath(".", projectConfigPath)
+		actualProjectConfigPath := shop.SearchConfigPath(cmd.Context(), ".", projectConfigPath)
 		shopCfg, err := shop.ReadConfig(cmd.Context(), actualProjectConfigPath, true)
 		if err != nil {
 			return err

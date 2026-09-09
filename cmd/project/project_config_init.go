@@ -25,7 +25,7 @@ Omit -e / --env on later commands to target that environment.`,
 		}
 
 		// first check if a config already exists
-		actualProjectConfigPath := shop.SearchConfigPath(".", projectConfigPath)
+		actualProjectConfigPath := shop.SearchConfigPath(cmd.Context(), ".", projectConfigPath)
 		existingCfg, err := shop.ReadConfig(cmd.Context(), actualProjectConfigPath, false)
 		if err == nil {
 			return errors.New("a config already exists under " + existingCfg.GetStorageLocation())

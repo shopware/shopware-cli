@@ -106,7 +106,7 @@ var projectDevCmd = &cobra.Command{
 			return err
 		}
 
-		actualProjectConfigPath := shop.SearchConfigPath(".", projectConfigPath)
+		actualProjectConfigPath := shop.SearchConfigPath(cmd.Context(), ".", projectConfigPath)
 		cfg, err := shop.ReadConfig(cmd.Context(), actualProjectConfigPath, true)
 		if err != nil {
 			return err
@@ -198,9 +198,10 @@ func runMigrationWizardTUI(ctx context.Context, projectRoot string, cfg *shop.Co
 		return err
 	}
 
+	actualProjectConfigPath := shop.SearchConfigPath(ctx, projectRoot, projectConfigPath)
 	_, err = dev.NewMigrationWizardApp(ctx, dev.Options{
 		ProjectRoot: projectRoot,
-		ConfigPath:  projectConfigPath,
+		ConfigPath:  actualProjectConfigPath,
 		Config:      cfg,
 		EnvConfig:   envCfg,
 		Executor:    exec,
@@ -214,7 +215,7 @@ func setupDevEnvironment(cmd *cobra.Command) (*devEnvironment, error) {
 		return nil, err
 	}
 
-	actualProjectConfigPath := shop.SearchConfigPath(projectRoot, projectConfigPath)
+	actualProjectConfigPath := shop.SearchConfigPath(cmd.Context(), projectRoot, projectConfigPath)
 	cfg, err := shop.ReadConfig(cmd.Context(), actualProjectConfigPath, true)
 	if err != nil {
 		return nil, err
@@ -272,9 +273,10 @@ func newDevEnvironment(cmd *cobra.Command, projectRoot string, cfg *shop.Config)
 		}
 	}
 
+	actualProjectConfigPath := shop.SearchConfigPath(cmd.Context(), projectRoot, projectConfigPath)
 	return &devEnvironment{
 		projectRoot: projectRoot,
-		configPath:  projectConfigPath,
+		configPath:  actualProjectConfigPath,
 		cfg:         cfg,
 		envCfg:      envCfg,
 		executor:    exec,

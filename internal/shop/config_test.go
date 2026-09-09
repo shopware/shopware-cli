@@ -540,6 +540,69 @@ func TestWriteConfigUsesOriginalConfigPath(t *testing.T) {
 	assert.Contains(t, string(written), "http://127.0.0.1:8000")
 }
 
+func TestSearchConfigPathPriority(t *testing.T) {
+	tmpDir := t.TempDir()
+	t.Chdir(tmpDir)
+
+	core, logs := observer.New(zap.WarnLevel)
+	ctx := logging.WithLogger(t.Context(), zap.New(core).Sugar())
+
+	recommendedConfig := []byte(`
+url: https://recommended.com
+compatibility_date: "2026-01-01"
+`)
+
+	firstFallbackConfig := []byte(`
+url: https://firstFallback.com
+compatibility_date: "2026-01-01"
+`)
+
+	secondFallbackConfig := []byte(`
+url: https://secondFallback.com
+compatibility_date: "2026-01-01"
+`)
+
+	recommendedPath := filepath.Join(tmpDir, ".config/shopware-project.yml")
+	firstFallbackPath := filepath.Join(tmpDir, ".shopware-project.yaml")
+	secondFallbackPath := filepath.Join(tmpDir, ".shopware-project.yml")
+
+	require.NoError(t, os.MkdirAll(filepath.Join(tmpDir, ".config"), 0o755))
+
+	require.NoError(t, os.WriteFile(recommendedPath, recommendedConfig, 0o644))
+	require.NoError(t, os.WriteFile(firstFallbackPath, firstFallbackConfig, 0o644))
+	require.NoError(t, os.WriteFile(secondFallbackPath, secondFallbackConfig, 0o644))
+
+	// check explicit config path argument always wins, either relative or absolute path
+	assert.Equal(t, firstFallbackPath, SearchConfigPath(ctx, tmpDir, ".shopware-project.yaml"))
+	assert.Equal(t, secondFallbackPath, SearchConfigPath(ctx, tmpDir, secondFallbackPath))
+	logEntries := logs.TakeAll()
+	assert.Empty(t, logEntries) // explicit config path should not warn on other existing configs
+
+	// otherwise it should follow our documented priority
+	assert.Equal(t, recommendedPath, SearchConfigPath(ctx, tmpDir, ""))
+	logEntries = logs.TakeAll()
+	assert.Len(t, logEntries, 2)
+	assert.Contains(t, logEntries[0].Message, firstFallbackPath)
+	assert.Contains(t, logEntries[1].Message, secondFallbackPath)
+
+	require.NoError(t, os.Remove(recommendedPath))
+	assert.Equal(t, firstFallbackPath, SearchConfigPath(ctx, tmpDir, ""))
+	logEntries = logs.TakeAll()
+	assert.Len(t, logEntries, 1)
+	assert.Contains(t, logEntries[0].Message, secondFallbackPath)
+
+	require.NoError(t, os.Remove(firstFallbackPath))
+	assert.Equal(t, secondFallbackPath, SearchConfigPath(ctx, tmpDir, ""))
+	logEntries = logs.TakeAll()
+	assert.Empty(t, logEntries)
+
+	// if no config file exists, it should still return the recommended file path for error reporting
+	require.NoError(t, os.Remove(secondFallbackPath))
+	assert.Equal(t, recommendedPath, SearchConfigPath(ctx, tmpDir, ""))
+	logEntries = logs.TakeAll()
+	assert.Empty(t, logEntries)
+}
+
 func TestConfigDump_EnableAnonymization(t *testing.T) {
 	t.Run("empty config", func(t *testing.T) {
 		config := &ConfigDump{}

@@ -84,13 +84,13 @@ func getShopwareConstraint(root string) (*version.Constraints, error) {
 	return &cst, nil
 }
 
-func GetConfigFromProject(root string, onlyLocal bool) (*ToolConfig, error) {
+func GetConfigFromProject(ctx context.Context, root string, onlyLocal bool) (*ToolConfig, error) {
 	constraint, err := getShopwareConstraint(root)
 	if err != nil {
 		return nil, err
 	}
 
-	extensions := extension.FindExtensionsFromProject(logging.DisableLogger(context.Background()), root, onlyLocal)
+	extensions := extension.FindExtensionsFromProject(ctx, root, onlyLocal)
 
 	sourceDirectories := []string{}
 	adminDirectories := []string{}
@@ -98,8 +98,8 @@ func GetConfigFromProject(root string, onlyLocal bool) (*ToolConfig, error) {
 
 	vendorPath := path.Join(root, "vendor")
 
-	actualProjectConfigPath := shop.SearchConfigPath(root, "")
-	shopCfg, err := shop.ReadConfig(logging.DisableLogger(context.Background()), actualProjectConfigPath, true)
+	actualProjectConfigPath := shop.SearchConfigPath(ctx, root, "")
+	shopCfg, err := shop.ReadConfig(ctx, actualProjectConfigPath, true)
 	if err != nil {
 		return nil, err
 	}
@@ -158,7 +158,7 @@ func GetConfigFromProject(root string, onlyLocal bool) (*ToolConfig, error) {
 	// Use the build.bundles section in .shopware-project.yml instead.
 	seenBundlePaths := make(map[string]bool)
 	for bundlePath := range rootComposerJsonData.Extra.Bundles {
-		logging.FromContext(context.Background()).Warnf("Deprecation: Bundle %q is configured via composer.json extra.shopware-bundles. Please move it to the build.bundles section in .shopware-project.yml instead.", bundlePath)
+		logging.FromContext(ctx).Warnf("Deprecation: Bundle %q is configured via composer.json extra.shopware-bundles. Please move it to the build.bundles section in .shopware-project.yml instead.", bundlePath)
 		sourceDirectories = append(sourceDirectories, path.Join(root, bundlePath))
 
 		expectedAdminPath := path.Join(root, bundlePath, "Resources", "app", "administration")

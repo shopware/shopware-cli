@@ -990,8 +990,9 @@ func (c Config) IsFallback() bool {
 }
 
 // SearchConfigPath either returns the inputPath if not empty or
-// searches for the config file in projectRoot based on documented priority
-func SearchConfigPath(projectRoot string, inputPath string) string {
+// searches for the config file in projectRoot based on documented priority.
+// It logs warnings if further config files exists that aren't used
+func SearchConfigPath(ctx context.Context, projectRoot string, inputPath string) string {
 	if inputPath != "" {
 		// user input has priority, regardless if the file exists at this point
 		if filepath.IsAbs(inputPath) {
@@ -1001,19 +1002,41 @@ func SearchConfigPath(projectRoot string, inputPath string) string {
 		}
 	}
 
-	// recommended location
-	configPath := filepath.Join(projectRoot, ".config/shopware-project.yml")
-	if _, err := os.Stat(configPath); err == nil {
+	locations := []string{
+		".config/shopware-project.yml", // recommended location
+		".shopware-project.yaml",
+		".shopware-project.yml",
+	}
+
+	for idx, loc := range locations {
+		configPath := filepath.Join(projectRoot, loc)
+		if _, err := os.Stat(configPath); err != nil {
+			continue
+		}
+
+		if idx >= len(locations)-1 {
+			// no further locations to check, so no warnings needed
+			return configPath
+		}
+
+		// found config, but before returning check others and warn if they exists
+		logger := logging.FromContext(ctx)
+		for _, furherLoc := range locations[idx+1:] {
+			furtherConfigPath := filepath.Join(projectRoot, furherLoc)
+			if _, err := os.Stat(furtherConfigPath); err == nil {
+				logger.Warnf(
+					"Unused config found %s, the loaded config is %s",
+					furtherConfigPath,
+					configPath,
+				)
+			}
+		}
+
 		return configPath
 	}
 
-	// fallback to legacy location in root directory
-	configPath = filepath.Join(projectRoot, ".shopware-project.yaml")
-	if _, err := os.Stat(configPath); err == nil {
-		return configPath
-	}
-
-	return filepath.Join(projectRoot, ".shopware-project.yml")
+	// if no config exists, still return recommended path for failing downstream + error reporting
+	return filepath.Join(projectRoot, locations[0])
 }
 
 // --- In-place url patching -------------------------------------------------

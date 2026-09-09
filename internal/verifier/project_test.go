@@ -42,7 +42,7 @@ func TestGetConfigFromProjectYAMLBundles(t *testing.T) {
 	p.Dir("src/MyBundle/Resources/app/administration")
 	adminPath := filepath.Join(p.Root, "src", "MyBundle", "Resources", "app", "administration")
 
-	cfg, err := GetConfigFromProject(p.Root, true)
+	cfg, err := GetConfigFromProject(t.Context(), p.Root, true)
 	assert.NoError(t, err)
 
 	assert.Contains(t, cfg.SourceDirectories, filepath.Join(p.Root, "src", "MyBundle"))
@@ -59,7 +59,7 @@ func TestGetConfigFromProjectYAMLBundleStorefront(t *testing.T) {
 	p.Dir("src/MyBundle/Resources/app/storefront")
 	storefrontPath := filepath.Join(p.Root, "src", "MyBundle", "Resources", "app", "storefront")
 
-	cfg, err := GetConfigFromProject(p.Root, true)
+	cfg, err := GetConfigFromProject(t.Context(), p.Root, true)
 	assert.NoError(t, err)
 
 	assert.Contains(t, cfg.SourceDirectories, filepath.Join(p.Root, "src", "MyBundle"))
@@ -80,7 +80,7 @@ func TestGetConfigFromProjectYAMLBundleDeduplication(t *testing.T) {
 
 	p.Dir("src/MyBundle")
 
-	cfg, err := GetConfigFromProject(p.Root, true)
+	cfg, err := GetConfigFromProject(t.Context(), p.Root, true)
 	assert.NoError(t, err)
 
 	bundleSrcPath := filepath.Join(p.Root, "src", "MyBundle")

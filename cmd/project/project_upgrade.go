@@ -39,7 +39,7 @@ var projectUpgradeCmd = &cobra.Command{
 			})
 		}
 
-		actualProjectConfigPath := shop.SearchConfigPath(".", projectConfigPath)
+		actualProjectConfigPath := shop.SearchConfigPath(cmd.Context(), ".", projectConfigPath)
 		cfg, err := shop.ReadConfig(cmd.Context(), actualProjectConfigPath, true)
 		if err != nil {
 			return err
