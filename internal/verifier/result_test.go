@@ -1,9 +1,11 @@
 package verifier
 
 import (
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/shopware/shopware-cli/internal/validation"
 )
@@ -29,6 +31,45 @@ func TestAddResult(t *testing.T) {
 	check.AddResult(result)
 	assert.Len(t, check.Results, 1)
 	assert.Equal(t, result, check.Results[0])
+}
+
+func TestAddResultNormalizesSourceRoot(t *testing.T) {
+	root := t.TempDir()
+	check := NewCheck()
+	check.SetSourceRoot(root)
+
+	check.AddResult(validation.CheckResult{
+		Path:       filepath.Join(root, "src", "Subscriber", "ExampleSubscriber.php"),
+		Message:    "Found issue in " + filepath.Join(root, "src", "Subscriber", "ExampleSubscriber.php"),
+		Identifier: "phpstan/example",
+		Severity:   validation.SeverityError,
+	})
+
+	require.Len(t, check.GetResults(), 1)
+	assert.Equal(t, "src/Subscriber/ExampleSubscriber.php", check.Results[0].Path)
+	assert.Equal(t, "Found issue in src/Subscriber/ExampleSubscriber.php", check.Results[0].Message)
+	assert.Equal(t, 1, check.Results[0].Line)
+	assert.NotContains(t, check.Results[0].Path, root)
+	assert.NotContains(t, check.Results[0].Message, root)
+}
+
+func TestRemoveByIdentifierMatchesNormalizedIgnorePath(t *testing.T) {
+	root := t.TempDir()
+	check := NewCheck()
+	check.SetSourceRoot(root)
+
+	check.AddResult(validation.CheckResult{
+		Path:       filepath.Join(root, "composer.json"),
+		Identifier: "metadata.name",
+		Message:    "Key `name` is required",
+		Severity:   validation.SeverityError,
+	})
+
+	check.RemoveByIdentifier([]validation.ToolConfigIgnore{
+		{Path: filepath.Join(root, "composer.json"), Identifier: "metadata.name"},
+	})
+
+	assert.Empty(t, check.GetResults())
 }
 
 func TestHasErrors(t *testing.T) {

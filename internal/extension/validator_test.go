@@ -156,7 +156,7 @@ func TestValidateServicesXmlWarnsWhenPresent(t *testing.T) {
 	assert.Len(t, check.Results, 1)
 	assert.Equal(t, "config.services_xml.deprecated", check.Results[0].Identifier)
 	assert.Equal(t, validation.SeverityWarning, check.Results[0].Severity)
-	assert.Equal(t, servicesXml, check.Results[0].Path)
+	assert.Equal(t, "src/Resources/config/services.xml", check.Results[0].Path)
 }
 
 func TestValidateRoutesXmlWarnsWhenPresent(t *testing.T) {
@@ -174,7 +174,7 @@ func TestValidateRoutesXmlWarnsWhenPresent(t *testing.T) {
 	assert.Len(t, check.Results, 1)
 	assert.Equal(t, "config.routes_xml.deprecated", check.Results[0].Identifier)
 	assert.Equal(t, validation.SeverityWarning, check.Results[0].Severity)
-	assert.Equal(t, routesXml, check.Results[0].Path)
+	assert.Equal(t, "src/Resources/config/routes.xml", check.Results[0].Path)
 }
 
 func TestValidateServicesXmlSilentWhenAbsent(t *testing.T) {
@@ -224,4 +224,42 @@ func TestIgnoresWithMessage(t *testing.T) {
 		{Identifier: "metadata.name", Message: "Key `name` is required"},
 	})
 	assert.False(t, len(check.Results) > 0)
+}
+
+func countResultsWithMessage(results []validation.CheckResult, message string) int {
+	count := 0
+	for _, r := range results {
+		if r.Message == message {
+			count++
+		}
+	}
+	return count
+}
+
+func TestLicenseValidationReportedOncePerExtension(t *testing.T) {
+	dir := t.TempDir()
+	assert.NoError(t, os.MkdirAll(filepath.Join(dir, "src", "Sub"), 0o755))
+	for _, name := range []string{"a.php", "b.php", "src/c.php", "src/Sub/d.php"} {
+		assert.NoError(t, os.WriteFile(filepath.Join(dir, name), []byte("<?php"), 0o644))
+	}
+
+	plugin := getTestPlugin(dir)
+	plugin.Composer.License = ""
+
+	check := &testCheck{}
+	runDefaultValidate(plugin, check)
+
+	assert.Equal(t, 1, countResultsWithMessage(check.Results, "Could not validate the license: empty license string"))
+}
+
+func TestIconValidationReportedOncePerExtension(t *testing.T) {
+	setupMockPHPVersionServer(t)
+	dir := t.TempDir()
+
+	plugin := getTestPlugin(dir)
+
+	check := &testCheck{}
+	RunValidation(getTestContext(), plugin, check)
+
+	assert.Equal(t, 1, countResultsWithMessage(check.Results, "The extension icon src/Resources/config/plugin.png does not exist"))
 }

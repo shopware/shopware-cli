@@ -410,9 +410,14 @@ func doJUnitReport(result Check) error {
 	})
 
 	for _, r := range results {
+		className := r.Path
+		if r.Line > 0 {
+			className = fmt.Sprintf("%s:%d", r.Path, r.Line)
+		}
+
 		testCase := JUnitTestCase{
 			Name:      r.Identifier,
-			ClassName: r.Path,
+			ClassName: className,
 		}
 
 		content := r.Message

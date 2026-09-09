@@ -1,8 +1,12 @@
 package cmd
 
 import (
+	"bytes"
+	"context"
+	"errors"
 	"testing"
 
+	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -84,4 +88,46 @@ func TestCommandNameFromArgs(t *testing.T) {
 	assert.Equal(t, "shopware-cli", commandNameFromArgs([]string{"/usr/local/bin/shopware-cli"}))
 	assert.Equal(t, "swx", commandNameFromArgs([]string{"C:\\tools\\swx.exe"}))
 	assert.Equal(t, "shopware-cli", commandNameFromArgs(nil))
+}
+
+func executeRootWithCommand(t *testing.T, runErr error, args ...string) (string, error) {
+	t.Helper()
+
+	probe := &cobra.Command{
+		Use: "usage-probe",
+		RunE: func(_ *cobra.Command, _ []string) error {
+			return runErr
+		},
+	}
+	rootCmd.AddCommand(probe)
+	t.Cleanup(func() { rootCmd.RemoveCommand(probe) })
+
+	var out bytes.Buffer
+	rootCmd.SetOut(&out)
+	rootCmd.SetErr(&out)
+	t.Cleanup(func() {
+		rootCmd.SetOut(nil)
+		rootCmd.SetErr(nil)
+	})
+
+	rootCmd.SetArgs(append([]string{"usage-probe"}, args...))
+	err := rootCmd.ExecuteContext(context.Background())
+
+	return out.String(), err
+}
+
+func TestRuntimeErrorDoesNotPrintUsage(t *testing.T) {
+	runErr := errors.New("validation found problems")
+
+	out, err := executeRootWithCommand(t, runErr)
+
+	assert.ErrorIs(t, err, runErr)
+	assert.NotContains(t, out, "Usage:")
+}
+
+func TestInvocationErrorPrintsUsage(t *testing.T) {
+	out, err := executeRootWithCommand(t, nil, "--unknown-flag")
+
+	assert.ErrorContains(t, err, "unknown flag")
+	assert.Contains(t, out, "Usage:")
 }

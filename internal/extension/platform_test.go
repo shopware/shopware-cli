@@ -93,7 +93,7 @@ func TestPluginIconNotExists(t *testing.T) {
 	plugin.Validate(getTestContext(), check)
 
 	assert.Equal(t, 1, len(check.Results))
-	assert.Equal(t, "The extension icon Resources/config/plugin.png does not exist", check.Results[0].Message)
+	assert.Equal(t, "The extension icon src/Resources/config/plugin.png does not exist", check.Results[0].Message)
 }
 
 func TestPluginIconExists(t *testing.T) {
@@ -142,7 +142,7 @@ func TestPluginIconIsTooBig(t *testing.T) {
 	plugin.Validate(getTestContext(), check)
 
 	assert.Len(t, check.Results, 1)
-	assert.Equal(t, "The extension icon Resources/config/plugin.png dimensions (1000x1000) are larger than maximum 256x256 pixels with max file size 30kb and 72dpi", check.Results[0].Message)
+	assert.Equal(t, "The extension icon src/Resources/config/plugin.png dimensions (1000x1000) are larger than maximum 256x256 pixels with max file size 30kb and 72dpi", check.Results[0].Message)
 }
 
 func TestPluginGermanDescriptionMissing(t *testing.T) {
