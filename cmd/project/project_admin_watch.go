@@ -9,6 +9,7 @@ import (
 
 	"github.com/shopware/shopware-cli/internal/envfile"
 	"github.com/shopware/shopware-cli/internal/extension"
+	"github.com/shopware/shopware-cli/internal/projectbuild"
 	"github.com/shopware/shopware-cli/internal/shop"
 )
 
@@ -49,7 +50,7 @@ var projectAdminWatchCmd = &cobra.Command{
 			return err
 		}
 
-		runErr := runTransparentCommand(watchProcess)
+		runErr := projectbuild.RunCommand(watchProcess)
 
 		stopCtx, stopCancel := context.WithTimeout(context.Background(), 3*time.Second)
 		defer stopCancel()
