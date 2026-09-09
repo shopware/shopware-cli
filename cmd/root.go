@@ -208,6 +208,18 @@ func commandNameFromBinaryPath(binaryPath string) string {
 func init() {
 	rootCmd.SilenceErrors = true
 
+	// Cobra prints the usage block for every error a command returns. Flags,
+	// argument counts and flag groups are validated before the pre-run hooks
+	// fire, so silencing usage here keeps it for invocation mistakes while
+	// errors returned from RunE only print the error itself. Traversal is
+	// enabled so subtrees with their own PersistentPreRunE (account) still run
+	// this hook.
+	cobra.EnableTraverseRunHooks = true
+	rootCmd.PersistentPreRunE = func(cmd *cobra.Command, _ []string) error {
+		cmd.SilenceUsage = true
+		return nil
+	}
+
 	cobra.OnFinalize(func() {
 		_ = system.CloseCaches()
 	})
