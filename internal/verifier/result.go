@@ -76,6 +76,14 @@ func (c *Check) RemoveByIdentifier(ignores []validation.ToolConfigIgnore) valida
 				}
 			}
 
+			// If identifier and message are specified (path is optional), match all specified fields
+			if ignore.Identifier != "" && ignore.Message != "" {
+				if validation.IdentifierMatches(r.Identifier, ignore.Identifier) && strings.Contains(r.Message, ignore.Message) && (ignore.Path == "" || c.samePath(r.Path, ignore.Path)) {
+					shouldKeep = false
+					break
+				}
+			}
+
 			// Handle message-based ignores (when no identifier is specified)
 			if ignore.Identifier == "" && ignore.Message != "" && strings.Contains(r.Message, ignore.Message) && (c.samePath(r.Path, ignore.Path) || ignore.Path == "") {
 				shouldKeep = false

@@ -167,8 +167,10 @@ func TestDescriptionIgnoreMatchesSpecificAndPrefixIdentifiers(t *testing.T) {
 	})
 
 	assert.Len(t, check.Results, 2)
-	assert.Equal(t, "metadata.description.translation.en-GB", check.Results[0].Identifier)
-	assert.Equal(t, "metadata.name", check.Results[1].Identifier)
+	assert.ElementsMatch(t,
+		[]string{"metadata.description.translation.en-GB", "metadata.name"},
+		[]string{check.Results[0].Identifier, check.Results[1].Identifier},
+	)
 
 	check.RemoveByIdentifier([]validation.ToolConfigIgnore{
 		{Identifier: "metadata.description"},
@@ -213,8 +215,10 @@ func TestLabelIgnoreMatchesSpecificAndPrefixIdentifiers(t *testing.T) {
 	})
 
 	assert.Len(t, check.Results, 2)
-	assert.Equal(t, "metadata.label.translation.en-GB", check.Results[0].Identifier)
-	assert.Equal(t, "metadata.name", check.Results[1].Identifier)
+	assert.ElementsMatch(t,
+		[]string{"metadata.label.translation.en-GB", "metadata.name"},
+		[]string{check.Results[0].Identifier, check.Results[1].Identifier},
+	)
 
 	check.RemoveByIdentifier([]validation.ToolConfigIgnore{
 		{Identifier: "metadata.label"},

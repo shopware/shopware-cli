@@ -178,7 +178,7 @@ func TestPluginGermanLabelMissing(t *testing.T) {
 	assert.NoError(t, os.MkdirAll(filepath.Join(dir, "src", "Resources", "config"), 0o755))
 	assert.NoError(t, createTestImage(filepath.Join(dir, "src", "Resources", "config", "plugin.png")))
 
-	plugin.Validate(getTestContext(), check)
+	plugin.Validate(t.Context(), check)
 
 	assert.Len(t, check.Results, 1)
 	assert.Equal(t, "extra.label for language de-DE is required", check.Results[0].Message)
