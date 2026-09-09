@@ -60,7 +60,8 @@ func commandNameFromArgs(argv []string) string {
 func commandNameFromBinaryPath(binaryPath string) string {
 	normalizedPath := strings.ReplaceAll(binaryPath, "\\", "/")
 	binaryName := strings.TrimSuffix(path.Base(normalizedPath), path.Ext(normalizedPath))
-	if binaryName == "" {
+	// path.Base yields "." for an empty path and "" for extension-only names.
+	if binaryName == "" || binaryName == "." {
 		return rootCmd.Use
 	}
 

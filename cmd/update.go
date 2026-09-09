@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"time"
@@ -44,7 +45,9 @@ func startUpdateCheck(ctx context.Context, args []string) (*update.CheckHandle, 
 	return handle, cancel
 }
 
-func printUpdateHint(ctx context.Context, release *update.ReleaseInfo) {
+// printUpdateHint writes the update notification to w when a newer release is
+// available and the notification was not already printed recently.
+func printUpdateHint(ctx context.Context, w io.Writer, release *update.ReleaseInfo) {
 	if release == nil {
 		return
 	}
@@ -57,7 +60,7 @@ func printUpdateHint(ctx context.Context, release *update.ReleaseInfo) {
 		return
 	}
 
-	fmt.Fprintln(os.Stderr, update.RenderUpdateNotification(release.Version, version))
+	_, _ = fmt.Fprintln(w, update.RenderUpdateNotification(release.Version, version))
 	if err := update.MarkUpdateNotificationPrinted(); err != nil {
 		logging.FromContext(ctx).Debugf("could not save update notification timestamp: %v", err)
 	}

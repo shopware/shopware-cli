@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"context"
+	"errors"
 	"os"
 	"os/signal"
 	"slices"
@@ -52,14 +53,24 @@ func Execute(ctx context.Context) int {
 	err := rootCmd.ExecuteContext(ctx)
 
 	trackCommandExecution(ctx, args, start, err)
-	printUpdateHint(ctx, updateHandle.Wait(ctx).Release)
+	printUpdateHint(ctx, os.Stderr, updateHandle.Wait(ctx).Release)
 
-	if err != nil {
-		logging.FromContext(ctx).Errorln(err)
-		return 1
+	return exitCode(ctx, err)
+}
+
+// exitCode maps the command error to the process exit code. Status errors are
+// already printed by the command as a human-readable status, so they exit 1
+// without logging the error again.
+func exitCode(ctx context.Context, err error) int {
+	if err == nil {
+		return 0
 	}
 
-	return 0
+	if !errors.Is(err, project.ErrEnvironmentDown) && !errors.Is(err, project.ErrProxyNotRegistered) {
+		logging.FromContext(ctx).Errorln(err)
+	}
+
+	return 1
 }
 
 func init() {
