@@ -3,15 +3,9 @@ package cmd
 import (
 	"context"
 	"errors"
-	"fmt"
-	"net/http"
 	"os"
 	"os/signal"
-	"path"
-	"runtime"
 	"slices"
-	"strconv"
-	"strings"
 	"syscall"
 	"time"
 
@@ -24,9 +18,7 @@ import (
 	"github.com/shopware/shopware-cli/cmd/project"
 	accountApi "github.com/shopware/shopware-cli/internal/account-api"
 	"github.com/shopware/shopware-cli/internal/system"
-	"github.com/shopware/shopware-cli/internal/tracking"
 	"github.com/shopware/shopware-cli/internal/tui"
-	"github.com/shopware/shopware-cli/internal/update"
 	"github.com/shopware/shopware-cli/logging"
 )
 
@@ -39,13 +31,8 @@ var rootCmd = &cobra.Command{
 	Version: version,
 }
 
-func Execute(ctx context.Context) {
-	os.Exit(run(ctx))
-}
-
-// run executes the root command and returns the process exit code. It is kept
-// separate from Execute so its deferred cleanup runs before os.Exit is called.
-func run(ctx context.Context) int {
+// Execute runs the root command and returns the process exit code after cleanup.
+func Execute(ctx context.Context) int {
 	rootCmd.Use = commandNameFromArgs(os.Args)
 	args := mapAliasArgs(os.Args)
 	ctx, stop := signal.NotifyContext(ctx, syscall.SIGINT, syscall.SIGTERM)
@@ -59,150 +46,31 @@ func run(ctx context.Context) int {
 	accountApi.SetUserAgent("shopware-cli/" + version)
 	rootCmd.SetArgs(args)
 
-	// Check for update in the background. Interactive TUIs consume the same
-	// result through the shared header's update hint.
-	updateCtx, updateCancel := context.WithTimeout(ctx, 900*time.Millisecond)
+	updateHandle, updateCancel := startUpdateCheck(ctx, args)
 	defer updateCancel()
-	updateHandle := update.NewCheckHandle()
-	tui.UpdateAvailable = func(waitCtx context.Context) bool {
-		result := updateHandle.Wait(waitCtx)
-		if result.Release == nil {
-			return false
-		}
-		binaryPath, _ := os.Executable()
-		return update.ShouldNotify(result.Release, binaryPath)
-	}
-
-	go func() {
-		var releaseInfo *update.ReleaseInfo
-		var err error
-		if !update.ShouldCheckForUpdate(version, args) {
-			err = update.ErrNoUpdateAvailable
-		} else {
-			releaseInfo, err = update.CheckForUpdate(updateCtx, version, &http.Client{Timeout: 5 * time.Second})
-		}
-		if err != nil && !errors.Is(err, update.ErrNoUpdateAvailable) {
-			logging.FromContext(ctx).Debugf("checking for shopware cli update failed: %v", err)
-		}
-		updateHandle.Complete(update.CheckResult{Release: releaseInfo, Err: err})
-	}()
 
 	start := time.Now()
 	err := rootCmd.ExecuteContext(ctx)
 
-	if cmd, _, findErr := rootCmd.Find(os.Args[1:]); findErr == nil && cmd != rootCmd && cmd.RunE != nil {
-		result := tracking.ResultSuccess
-		if err != nil {
-			if errors.Is(err, context.Canceled) {
-				result = tracking.ResultCancelled
-			} else {
-				result = tracking.ResultFailure
-			}
-		}
-		name := strings.TrimPrefix(cmd.CommandPath(), "shopware-cli ")
-		name = strings.ReplaceAll(name, " ", ".")
-		name = strings.ReplaceAll(name, "-", "_")
-		trackCtx, trackCancel := context.WithTimeout(context.WithoutCancel(ctx), 300*time.Millisecond)
-		defer trackCancel()
-		tracking.Track(trackCtx, tracking.EventCommand, map[string]string{
-			tracking.TagCommandName: name,
-			tracking.TagResult:      result,
-			tracking.TagDurationMS:  strconv.FormatInt(time.Since(start).Milliseconds(), 10),
-			tracking.TagCLIVersion:  version,
-			tracking.TagOS:          runtime.GOOS,
-			tracking.TagIsTUI:       strconv.FormatBool(system.IsInteractionEnabled(ctx)),
-		})
+	trackCommandExecution(ctx, args, start, err)
+	printUpdateHint(ctx, os.Stderr, updateHandle.Wait(ctx).Release)
+
+	return exitCode(ctx, err)
+}
+
+// exitCode maps the command error to the process exit code. Status errors are
+// already printed by the command as a human-readable status, so they exit 1
+// without logging the error again.
+func exitCode(ctx context.Context, err error) int {
+	if err == nil {
+		return 0
 	}
 
-	updateResult := updateHandle.Wait(ctx)
-	newRelease := updateResult.Release
-	if newRelease != nil {
-		binaryPath, err := os.Executable()
-		if err != nil {
-			logging.FromContext(ctx).Debugf("could not determine binary path: %v", err)
-		}
-		if update.ShouldNotify(newRelease, binaryPath) && update.ShouldPrintUpdateHint() {
-			fmt.Fprintln(os.Stderr, update.RenderUpdateNotification(newRelease.Version, version))
-			if err := update.MarkUpdateNotificationPrinted(); err != nil {
-				logging.FromContext(ctx).Debugf("could not save update notification timestamp: %v", err)
-			}
-		}
-	}
-
-	if errors.Is(err, project.ErrEnvironmentDown) || errors.Is(err, project.ErrProxyNotRegistered) {
-		// The command already printed a human-readable status; exit 1 without
-		// logging an error.
-		return 1
-	}
-
-	if err != nil {
+	if !errors.Is(err, project.ErrEnvironmentDown) && !errors.Is(err, project.ErrProxyNotRegistered) {
 		logging.FromContext(ctx).Errorln(err)
-		return 1
 	}
 
-	return 0
-}
-
-func mapAliasArgs(argv []string) []string {
-	if len(argv) == 0 {
-		return nil
-	}
-
-	args := argv[1:]
-	if !isSwxAlias(argv[0]) {
-		return args
-	}
-
-	if len(args) > 0 {
-		// Let users generate completion scripts for `swx` itself.
-		if args[0] == "completion" {
-			return args
-		}
-
-		// Cobra shell completion calls these internal commands.
-		// Prefixing `project console` preserves swx-as-console behavior for completions.
-		if args[0] == "__complete" || args[0] == "__completeNoDesc" {
-			aliasedCompletionArgs := make([]string, 0, len(args)+2)
-			aliasedCompletionArgs = append(aliasedCompletionArgs, args[0], "project", "console")
-			aliasedCompletionArgs = append(aliasedCompletionArgs, args[1:]...)
-
-			return aliasedCompletionArgs
-		}
-	}
-
-	// When invoked via the `swx` symlink, forward everything to `project console`.
-	aliasedArgs := make([]string, 0, len(args)+3)
-	aliasedArgs = append(aliasedArgs, "project", "console")
-
-	if len(args) == 0 {
-		aliasedArgs = append(aliasedArgs, "list")
-	} else {
-		aliasedArgs = append(aliasedArgs, args...)
-	}
-
-	return aliasedArgs
-}
-
-func isSwxAlias(binaryPath string) bool {
-	return strings.EqualFold(commandNameFromBinaryPath(binaryPath), "swx")
-}
-
-func commandNameFromArgs(argv []string) string {
-	if len(argv) == 0 {
-		return rootCmd.Use
-	}
-
-	return commandNameFromBinaryPath(argv[0])
-}
-
-func commandNameFromBinaryPath(binaryPath string) string {
-	normalizedPath := strings.ReplaceAll(binaryPath, "\\", "/")
-	binaryName := strings.TrimSuffix(path.Base(normalizedPath), path.Ext(normalizedPath))
-	if binaryName == "" {
-		return rootCmd.Use
-	}
-
-	return binaryName
+	return 1
 }
 
 func init() {
