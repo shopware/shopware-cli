@@ -86,3 +86,62 @@ func TestUpsertReplacesSameKeyAndAppendsNewKey(t *testing.T) {
 		t.Fatalf("expected 3 entries, got %d: %+v", len(f.Installed), f.Installed)
 	}
 }
+
+func TestSaveProjectRoundTrip(t *testing.T) {
+	root := t.TempDir()
+
+	if err := SaveProject(root, File{Installed: []InstalledEntry{
+		{Name: "deployment-helper", Client: "claude-code", Scope: ScopeProject, ResolvedRevision: "v1.2.0"},
+	}}); err != nil {
+		t.Fatalf("SaveProject: %v", err)
+	}
+
+	if _, err := os.Stat(filepath.Join(root, ".shopware-cli", "ai", "installed.json")); err != nil {
+		t.Fatalf("expected project state file: %v", err)
+	}
+
+	got, err := ReadProject(root)
+	if err != nil {
+		t.Fatalf("ReadProject: %v", err)
+	}
+	if len(got.Installed) != 1 || got.Installed[0].Name != "deployment-helper" {
+		t.Fatalf("round-trip mismatch: %+v", got.Installed)
+	}
+}
+
+func TestGlobalAndProjectStateAreIndependent(t *testing.T) {
+	redirectConfigDir(t) // global state → temp
+	root := t.TempDir()  // project state
+
+	if err := Save(File{Installed: []InstalledEntry{{Name: "g", Client: "c", Scope: ScopeGlobal}}}); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+	if err := SaveProject(root, File{Installed: []InstalledEntry{{Name: "p", Client: "c", Scope: ScopeProject}}}); err != nil {
+		t.Fatalf("SaveProject: %v", err)
+	}
+
+	g, err := Read()
+	if err != nil {
+		t.Fatalf("Read: %v", err)
+	}
+	if len(g.Installed) != 1 || g.Installed[0].Name != "g" {
+		t.Fatalf("global state leaked: %+v", g.Installed)
+	}
+
+	p, err := ReadProject(root)
+	if err != nil {
+		t.Fatalf("ReadProject: %v", err)
+	}
+	if len(p.Installed) != 1 || p.Installed[0].Name != "p" {
+		t.Fatalf("project state leaked: %+v", p.Installed)
+	}
+
+	// A directory with no project state reads as empty.
+	empty, err := ReadProject(t.TempDir())
+	if err != nil {
+		t.Fatalf("ReadProject empty: %v", err)
+	}
+	if len(empty.Installed) != 0 {
+		t.Fatalf("expected empty state, got %+v", empty.Installed)
+	}
+}

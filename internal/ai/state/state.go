@@ -57,14 +57,32 @@ func path() (string, error) {
 	return filepath.Join(configDir, "shopware-cli", "ai", "installed.json"), nil
 }
 
-// Read loads the install-state file. A missing file is not an error: it returns
-// an empty state, which is the expected situation until #1337 writes the file.
+// projectPath is the project-scoped install-state location
+// (<projectRoot>/.shopware-cli/ai/installed.json). Project-scoped installs live
+// with the project, mirroring where skills.sh writes the agent config.
+func projectPath(projectRoot string) string {
+	return filepath.Join(projectRoot, ".shopware-cli", "ai", "installed.json")
+}
+
+// Read loads the global install-state file. A missing file is not an error: it
+// returns an empty state.
 func Read() (File, error) {
 	p, err := path()
 	if err != nil {
 		return File{}, err
 	}
 
+	return readFrom(p)
+}
+
+// ReadProject loads the project-scoped install-state file under projectRoot.
+func ReadProject(projectRoot string) (File, error) {
+	return readFrom(projectPath(projectRoot))
+}
+
+// readFrom loads and validates an install-state file. A missing file yields an
+// empty state rather than an error.
+func readFrom(p string) (File, error) {
 	b, err := os.ReadFile(p)
 	if errors.Is(err, fs.ErrNotExist) {
 		return File{Version: FileVersion}, nil
@@ -102,15 +120,25 @@ func Upsert(f File, e InstalledEntry) File {
 	return f
 }
 
-// Save writes the install-state file atomically: it writes a temporary file in
-// the target directory and renames it into place, so a crash mid-write never
-// leaves a partial file. The parent directories are created as needed.
+// Save writes the global install-state file atomically.
 func Save(f File) error {
 	p, err := path()
 	if err != nil {
 		return err
 	}
 
+	return saveTo(p, f)
+}
+
+// SaveProject writes the project-scoped install-state file under projectRoot.
+func SaveProject(projectRoot string, f File) error {
+	return saveTo(projectPath(projectRoot), f)
+}
+
+// saveTo writes an install-state file atomically: it writes a temporary file in
+// the target directory and renames it into place, so a crash mid-write never
+// leaves a partial file. The parent directories are created as needed.
+func saveTo(p string, f File) error {
 	f.Version = FileVersion
 	if f.Installed == nil {
 		f.Installed = []InstalledEntry{}

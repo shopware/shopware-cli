@@ -1,9 +1,9 @@
 package ai
 
 import (
-	"bytes"
 	"context"
 	"fmt"
+	"io"
 	"os/exec"
 )
 
@@ -30,17 +30,18 @@ func skillsAddArgs(source, skill, agent string, global, assumeYes bool) []string
 	return argv
 }
 
-// runSkills runs a skills.sh command via npx. It is a package var so tests can
-// substitute it without shelling out.
-var runSkills = func(ctx context.Context, argv []string) error {
+// runSkills runs a skills.sh command via npx, streaming its output to out so
+// the user sees exactly what skills.sh did (which files it wrote, where). It is
+// a package var so tests can substitute it without shelling out. Callers pass
+// stderr as out to keep stdout clean for --format json.
+var runSkills = func(ctx context.Context, argv []string, out io.Writer) error {
 	if _, err := exec.LookPath(argv[0]); err != nil {
 		return fmt.Errorf("%s not found: installing skills requires Node.js/npx on PATH", argv[0])
 	}
 
 	cmd := exec.CommandContext(ctx, argv[0], argv[1:]...)
-	var out bytes.Buffer
-	cmd.Stdout = &out
-	cmd.Stderr = &out
+	cmd.Stdout = out
+	cmd.Stderr = out
 
 	if err := cmd.Run(); err != nil {
 		return fmt.Errorf("skills install failed: %w", err)

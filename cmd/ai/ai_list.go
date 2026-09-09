@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"os"
 
 	"github.com/spf13/cobra"
 
@@ -99,17 +100,28 @@ func writeListTable(w io.Writer, entries []directory.Integration) error {
 }
 
 // readInstalledNames returns the set of integration names recorded as installed
-// by the CLI. Nothing writes the state file until #1337, so today this is empty
-// (a missing file yields an empty state, not an error).
+// by the CLI, merging the global state and the project state in the current
+// directory (a missing file yields an empty state, not an error).
 func readInstalledNames() (map[string]bool, error) {
-	st, err := state.Read()
+	names := map[string]bool{}
+
+	global, err := state.Read()
 	if err != nil {
 		return nil, err
 	}
-
-	names := make(map[string]bool, len(st.Installed))
-	for _, e := range st.Installed {
+	for _, e := range global.Installed {
 		names[e.Name] = true
+	}
+
+	// A project-scoped install is recorded in the current directory.
+	if root, err := os.Getwd(); err == nil {
+		project, err := state.ReadProject(root)
+		if err != nil {
+			return nil, err
+		}
+		for _, e := range project.Installed {
+			names[e.Name] = true
+		}
 	}
 
 	return names, nil

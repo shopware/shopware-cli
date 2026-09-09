@@ -3,6 +3,8 @@ package ai
 import (
 	"bytes"
 	"context"
+	"io"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -79,12 +81,13 @@ func setupAdd(t *testing.T) *skillsCall {
 	t.Helper()
 
 	tmp := t.TempDir()
-	t.Setenv("HOME", tmp)                                     // macOS UserConfigDir base
-	t.Setenv("XDG_CONFIG_HOME", filepath.Join(tmp, "xdgcfg")) // Linux UserConfigDir base
+	t.Setenv("HOME", tmp)                                     // macOS UserConfigDir base (global state)
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(tmp, "xdgcfg")) // Linux UserConfigDir base (global state)
+	t.Chdir(tmp)                                              // project state lives in the current directory
 
 	rec := &skillsCall{}
 	prev := runSkills
-	runSkills = func(_ context.Context, argv []string) error {
+	runSkills = func(_ context.Context, argv []string, _ io.Writer) error {
 		rec.calls++
 		rec.lastArgv = argv
 		return nil
@@ -102,7 +105,7 @@ func runAdd(t *testing.T, args ...string) (string, error) {
 
 	// Reset the shared command's flags so values do not leak between runs.
 	for name, def := range map[string]string{
-		"agent": "", "global": "false", "dry-run": "false", "yes": "false", "format": "table",
+		"agent": "", "global": "false", "dry-run": "false", "format": "table",
 	} {
 		_ = aiAddCmd.Flags().Set(name, def)
 	}
@@ -159,14 +162,33 @@ func TestAddInstallsAndIsIdempotent(t *testing.T) {
 	assert.Equal(t, 1, rec.calls, "repeated add with same revision must be a no-op")
 }
 
+func TestAddProjectScopeWritesToCurrentDir(t *testing.T) {
+	rec := setupAdd(t)
+
+	// No --global → project scope, installed into the current directory.
+	_, err := runAdd(t, "shopware-cli", "--agent", "claude-code")
+	require.NoError(t, err)
+	assert.Equal(t, 1, rec.calls)
+	assert.NotContains(t, strings.Join(rec.lastArgv, " "), "--global")
+
+	cwd, err := os.Getwd()
+	require.NoError(t, err)
+	st, err := state.ReadProject(cwd)
+	require.NoError(t, err)
+	require.Len(t, st.Installed, 1)
+	assert.Equal(t, state.ScopeProject, st.Installed[0].Scope)
+
+	// The global state stays empty.
+	global, err := state.Read()
+	require.NoError(t, err)
+	assert.Empty(t, global.Installed)
+}
+
 func TestAddGuards(t *testing.T) {
 	rec := setupAdd(t)
 
 	_, err := runAdd(t, "does-not-exist", "--agent", "claude-code", "--global")
 	assert.ErrorContains(t, err, "unknown integration")
-
-	_, err = runAdd(t, "shopware-cli", "--agent", "claude-code")
-	assert.ErrorContains(t, err, "project-scope")
 
 	_, err = runAdd(t, "shopware-cli", "--global")
 	assert.ErrorContains(t, err, "--agent")
