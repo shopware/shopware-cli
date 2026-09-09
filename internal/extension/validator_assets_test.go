@@ -51,7 +51,7 @@ func TestValidateAssetByResourceDirStorefront(t *testing.T) {
 			}
 
 			check := &testCheck{}
-			validateAssetByResourceDir(check, resourceDir)
+			validateAssetByResourceDir(check, resourceDir, resourceDir)
 
 			if tt.expectedID == "" {
 				assert.Empty(t, check.Results)

@@ -152,12 +152,12 @@ func TestValidateTheme_PreviewMediaFileNotFound(t *testing.T) {
 	check := &testCheck{}
 	validateTheme(ext, check)
 
-	expectedPath := filepath.Join(tmpDir, "src/Resources/preview.png")
 	assert.Len(t, check.Results, 1)
 	assert.Equal(t, "Resources/theme.json", check.Results[0].Path)
 	assert.Equal(t, "theme.validator", check.Results[0].Identifier)
 	assert.Contains(t, check.Results[0].Message, "Theme preview image file is expected to be placed at")
-	assert.Contains(t, check.Results[0].Message, expectedPath)
+	assert.Contains(t, check.Results[0].Message, "src/Resources/preview.png")
+	assert.NotContains(t, check.Results[0].Message, tmpDir)
 	assert.Equal(t, validation.SeverityError, check.Results[0].Severity)
 }
 

@@ -46,13 +46,14 @@ func validateTheme(ext Extension, check validation.Check) {
 			return
 		}
 
-		expectedMediaPath := fmt.Sprintf("%s/src/Resources/%s", ext.GetPath(), theme.PreviewMedia)
+		expectedMediaPath := filepath.Join(ext.GetPath(), "src", "Resources", theme.PreviewMedia)
+		relMediaPath := validation.NormalizeSourcePath(expectedMediaPath, ext.GetPath())
 
 		if _, err := os.Stat(expectedMediaPath); os.IsNotExist(err) {
 			check.AddResult(validation.CheckResult{
 				Path:       "Resources/theme.json",
 				Identifier: "theme.validator",
-				Message:    fmt.Sprintf("Theme preview image file is expected to be placed at %s, but not found there.", expectedMediaPath),
+				Message:    fmt.Sprintf("Theme preview image file is expected to be placed at %s, but not found there.", relMediaPath),
 				Severity:   validation.SeverityError,
 			})
 		}

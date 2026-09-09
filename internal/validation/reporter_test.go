@@ -502,6 +502,25 @@ func TestJUnitReportWithTip(t *testing.T) {
 	assert.Contains(t, output, "Tip: Consider fixing this")
 }
 
+func TestJUnitReportPreservesLineInClassName(t *testing.T) {
+	check := &testCheck{Results: []CheckResult{
+		{
+			Path:       "src/Service.php",
+			Line:       24,
+			Identifier: "phpstan/missingType",
+			Message:    "Method has no return type",
+			Severity:   SeverityError,
+		},
+	}}
+
+	output := captureOutput(func() {
+		err := doJUnitReport(check)
+		assert.NoError(t, err)
+	})
+
+	assert.Contains(t, output, `classname="src/Service.php:24"`)
+}
+
 // captureOutput captures stdout during function execution
 func captureOutput(fn func()) string {
 	oldStdout := os.Stdout

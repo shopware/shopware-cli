@@ -107,6 +107,7 @@ var extensionValidateCmd = &cobra.Command{
 
 		toolCfg.CheckAgainst = checkAgainst
 		result := verifier.NewCheck()
+		result.SetSourceRoot(toolCfg.RootDir)
 
 		var gr errgroup.Group
 

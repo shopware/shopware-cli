@@ -38,21 +38,21 @@ func validateAdministrationSnippets(ext Extension, check validation.Check) {
 
 // validateSnippetsForExtension validates snippets for an extension using the provided subpath and filter.
 func validateSnippetsForExtension(ext Extension, check validation.Check, subPath string, filter snippetFileFilter) {
-	rootDir := ext.GetRootDir()
+	sourceRoot := ext.GetPath()
 
 	for _, val := range ext.GetResourcesDirs() {
 		folder := filepath.Join(val, subPath)
 
-		if err := validateSnippetsByPath(folder, rootDir, check, filter); err != nil {
+		if err := validateSnippetsByPath(folder, sourceRoot, check, filter); err != nil {
 			return
 		}
 	}
 
 	for _, extraBundle := range ext.GetExtensionConfig().Build.ExtraBundles {
-		bundlePath := extraBundle.ResolvePath(rootDir)
+		bundlePath := extraBundle.ResolvePath(ext.GetRootDir())
 		folder := filepath.Join(bundlePath, "Resources", subPath)
 
-		if err := validateSnippetsByPath(folder, rootDir, check, filter); err != nil {
+		if err := validateSnippetsByPath(folder, sourceRoot, check, filter); err != nil {
 			return
 		}
 	}
@@ -102,10 +102,10 @@ func validateSnippetsByPath(folder, rootDir string, check validation.Check, filt
 		mainFile := findMainSnippetFile(files)
 
 		if len(mainFile) == 0 {
-			normalizedFolder := strings.ReplaceAll(snippetFolder, rootDir+"/", "")
-			normalizedFile := strings.ReplaceAll(files[0], rootDir+"/", "")
+			normalizedFolder := validation.NormalizeSourcePath(snippetFolder, rootDir)
+			normalizedFile := validation.NormalizeSourcePath(files[0], rootDir)
 			check.AddResult(validation.CheckResult{
-				Path:       snippetFolder,
+				Path:       normalizedFolder,
 				Identifier: "snippet.validator",
 				Message:    fmt.Sprintf("No en.json or en-GB.json file found in %s, using %s", normalizedFolder, normalizedFile),
 				Severity:   validation.SeverityWarning,
@@ -119,10 +119,11 @@ func validateSnippetsByPath(folder, rootDir string, check validation.Check, filt
 		}
 
 		if !json.Valid(mainFileContent) {
+			relMainFile := validation.NormalizeSourcePath(mainFile, rootDir)
 			check.AddResult(validation.CheckResult{
-				Path:       mainFile,
+				Path:       relMainFile,
 				Identifier: "snippet.validator",
-				Message:    fmt.Sprintf("File '%s' contains invalid JSON", mainFile),
+				Message:    fmt.Sprintf("File '%s' contains invalid JSON", relMainFile),
 				Severity:   validation.SeverityError,
 			})
 
@@ -143,12 +144,13 @@ func validateSnippetsByPath(folder, rootDir string, check validation.Check, filt
 }
 
 func compareSnippets(mainFile []byte, mainFilePath, file string, check validation.Check, extensionRoot string) {
+	relFile := validation.NormalizeSourcePath(file, extensionRoot)
 	checkFile, err := os.ReadFile(file)
 	if err != nil {
 		check.AddResult(validation.CheckResult{
-			Path:       file,
+			Path:       relFile,
 			Identifier: "snippet.validator",
-			Message:    fmt.Sprintf("Cannot read file '%s', due '%s'", file, err),
+			Message:    fmt.Sprintf("Cannot read file '%s', due '%s'", relFile, err),
 			Severity:   validation.SeverityError,
 		})
 
@@ -157,9 +159,9 @@ func compareSnippets(mainFile []byte, mainFilePath, file string, check validatio
 
 	if !json.Valid(checkFile) {
 		check.AddResult(validation.CheckResult{
-			Path:       file,
+			Path:       relFile,
 			Identifier: "snippet.validator",
-			Message:    fmt.Sprintf("File '%s' contains invalid JSON", file),
+			Message:    fmt.Sprintf("File '%s' contains invalid JSON", relFile),
 			Severity:   validation.SeverityError,
 		})
 
@@ -169,19 +171,19 @@ func compareSnippets(mainFile []byte, mainFilePath, file string, check validatio
 	compare, err := jsondiff.CompareJSON(mainFile, checkFile)
 	if err != nil {
 		check.AddResult(validation.CheckResult{
-			Path:       file,
+			Path:       relFile,
 			Identifier: "snippet.validator",
-			Message:    fmt.Sprintf("Cannot compare file '%s', due '%s'", file, err),
+			Message:    fmt.Sprintf("Cannot compare file '%s', due '%s'", relFile, err),
 			Severity:   validation.SeverityError,
 		})
 
 		return
 	}
 
-	normalizedMainFilePath := strings.ReplaceAll(mainFilePath, extensionRoot+"/", "")
+	normalizedMainFilePath := validation.NormalizeSourcePath(mainFilePath, extensionRoot)
 
 	for _, diff := range compare {
-		normalizedPath := strings.ReplaceAll(file, extensionRoot+"/", "")
+		normalizedPath := relFile
 
 		if diff.Type == jsondiff.OperationReplace && reflect.TypeOf(diff.OldValue) != reflect.TypeOf(diff.Value) {
 			check.AddResult(validation.CheckResult{

@@ -7,7 +7,6 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
-	"strings"
 
 	"github.com/shyim/go-version"
 
@@ -51,7 +50,7 @@ func (s StorefrontTwigLinter) Check(ctx context.Context, check *Check, config To
 				return err
 			}
 
-			relPath := strings.TrimPrefix(strings.TrimPrefix(path, "/private"), config.RootDir+"/")
+			relPath := validation.NormalizeSourcePath(path, config.RootDir)
 
 			parsed, err := html.NewStorefrontParser(string(file))
 			if err != nil {
@@ -62,7 +61,7 @@ func (s StorefrontTwigLinter) Check(ctx context.Context, check *Check, config To
 				}
 				check.AddResult(validation.CheckResult{
 					Path:       relPath,
-					Message:    fmt.Sprintf("Failed to parse %s: %v. Create a GitHub issue with the file content.", path, err),
+					Message:    fmt.Sprintf("Failed to parse %s: %v. Create a GitHub issue with the file content.", relPath, err),
 					Severity:   validation.SeverityWarning,
 					Identifier: "could-not-parse-twig",
 					Line:       line,

@@ -235,20 +235,21 @@ func (a App) Validate(_ context.Context, check validation.Check) {
 	allowedTwigLocations := []string{filepath.Join(a.GetRootDir(), "Resources", "views"), filepath.Join(a.GetRootDir(), "Resources", "scripts")}
 
 	_ = filepath.Walk(a.GetRootDir(), func(path string, info os.FileInfo, err error) error {
+		relPath := validation.NormalizeSourcePath(path, a.GetPath())
 		if filepath.Ext(path) == ".php" {
 			check.AddResult(validation.CheckResult{
-				Path:       path,
+				Path:       relPath,
 				Identifier: "zip.disallowed_php_file",
-				Message:    fmt.Sprintf("Found unexpected PHP file %s, PHP files are not allowed in Apps", path),
+				Message:    fmt.Sprintf("Found unexpected PHP file %s, PHP files are not allowed in Apps", relPath),
 				Severity:   validation.SeverityError,
 			})
 		}
 
 		if filepath.Ext(path) == ".twig" && (!strings.HasPrefix(path, allowedTwigLocations[0]) && !strings.HasPrefix(path, allowedTwigLocations[1])) {
 			check.AddResult(validation.CheckResult{
-				Path:       path,
+				Path:       relPath,
 				Identifier: "zip.disallowed_twig_file",
-				Message:    fmt.Sprintf("Found unexpected Twig file %s. Twig files should be at Resources/views or Resources/scripts", path),
+				Message:    fmt.Sprintf("Found unexpected Twig file %s. Twig files should be at Resources/views or Resources/scripts", relPath),
 				Severity:   validation.SeverityError,
 			})
 		}

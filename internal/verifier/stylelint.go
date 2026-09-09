@@ -76,7 +76,7 @@ func (s StyleLint) Check(ctx context.Context, check *Check, config ToolConfig) e
 			}
 
 			for _, diagnostic := range stylelintOutput {
-				fixedPath := strings.TrimPrefix(strings.TrimPrefix(diagnostic.Source, "/private"), config.RootDir+"/")
+				fixedPath := validation.NormalizeSourcePath(diagnostic.Source, config.RootDir)
 
 				for _, msg := range diagnostic.Warnings {
 					check.AddResult(validation.CheckResult{

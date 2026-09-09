@@ -130,7 +130,7 @@ func (p PhpStan) Check(ctx context.Context, check *Check, config ToolConfig) err
 				}
 
 				check.AddResult(validation.CheckResult{
-					Path:       strings.TrimPrefix(strings.TrimPrefix(fileName, "/private"), config.RootDir+"/"),
+					Path:       validation.NormalizeSourcePath(fileName, config.RootDir),
 					Line:       message.Line,
 					Message:    message.Message,
 					Severity:   validation.SeverityError,

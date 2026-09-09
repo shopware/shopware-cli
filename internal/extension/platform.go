@@ -461,10 +461,7 @@ func validatePHPFiles(c context.Context, ext Extension, check validation.Check) 
 				return nil
 			}
 
-			relPath, err := filepath.Rel(val, path)
-			if err != nil {
-				relPath = path
-			}
+			relPath := validation.NormalizeSourcePath(path, ext.GetPath())
 
 			content, err := os.ReadFile(path)
 			if err != nil {

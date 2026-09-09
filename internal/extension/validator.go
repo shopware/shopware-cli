@@ -17,10 +17,7 @@ import (
 
 func validateExtensionIcon(ext Extension, check validation.Check) {
 	fullIconPath := ext.GetIconPath()
-	relPath, err := filepath.Rel(ext.GetRootDir(), fullIconPath)
-	if err != nil {
-		relPath = fullIconPath
-	}
+	relPath := validation.NormalizeSourcePath(fullIconPath, ext.GetPath())
 
 	info, err := os.Stat(fullIconPath)
 
@@ -104,17 +101,18 @@ func validateSymfonyXml(ext Extension, check validation.Check) {
 		return
 	}
 
+	root := ext.GetPath()
 	for _, resourceDir := range ext.GetResourcesDirs() {
-		checkSymfonyXmlInResourceDir(check, resourceDir)
+		checkSymfonyXmlInResourceDir(check, resourceDir, root)
 	}
 
 	for _, extraBundle := range ext.GetExtensionConfig().Build.ExtraBundles {
 		bundlePath := extraBundle.ResolvePath(ext.GetRootDir())
-		checkSymfonyXmlInResourceDir(check, filepath.Join(bundlePath, "Resources"))
+		checkSymfonyXmlInResourceDir(check, filepath.Join(bundlePath, "Resources"), root)
 	}
 }
 
-func checkSymfonyXmlInResourceDir(check validation.Check, resourceDir string) {
+func checkSymfonyXmlInResourceDir(check validation.Check, resourceDir, root string) {
 	deprecatedFiles := []struct {
 		name       string
 		identifier string
@@ -128,10 +126,11 @@ func checkSymfonyXmlInResourceDir(check validation.Check, resourceDir string) {
 		if _, err := os.Stat(xmlPath); err == nil {
 			yamlName := strings.TrimSuffix(file.name, ".xml") + ".yaml"
 
+			relPath := validation.NormalizeSourcePath(xmlPath, root)
 			check.AddResult(validation.CheckResult{
-				Path:       xmlPath,
+				Path:       relPath,
 				Identifier: file.identifier,
-				Message:    fmt.Sprintf("Found deprecated %s. Symfony %s is deprecated, migrate to %s. Run \"shopware-cli extension fix\" to convert it automatically.", xmlPath, file.name, yamlName),
+				Message:    fmt.Sprintf("Found deprecated %s. Symfony %s is deprecated, migrate to %s. Run \"shopware-cli extension fix\" to convert it automatically.", relPath, file.name, yamlName),
 				Severity:   validation.SeverityWarning,
 			})
 		}
@@ -187,12 +186,14 @@ func runDefaultValidate(ext Extension, check validation.Check) {
 	}
 
 	notAllowedErrorFormat := "file %s is not allowed in the zip file"
-	_ = filepath.Walk(ext.GetPath(), func(p string, info fs.FileInfo, _ error) error {
+	extensionRoot := ext.GetPath()
+	_ = filepath.Walk(extensionRoot, func(p string, info fs.FileInfo, _ error) error {
 		base := filepath.Base(p)
+		relPath := validation.NormalizeSourcePath(p, extensionRoot)
 
 		if base == ".." {
 			check.AddResult(validation.CheckResult{
-				Path:       p,
+				Path:       relPath,
 				Identifier: "zip.path_travel",
 				Message:    "Path travel detected in zip file",
 				Severity:   validation.SeverityError,
@@ -202,9 +203,9 @@ func runDefaultValidate(ext Extension, check validation.Check) {
 		for _, file := range defaultNotAllowedPaths {
 			if strings.HasPrefix(p, file) {
 				check.AddResult(validation.CheckResult{
-					Path:       p,
+					Path:       relPath,
 					Identifier: "zip.disallowed_file",
-					Message:    fmt.Sprintf(notAllowedErrorFormat, p),
+					Message:    fmt.Sprintf(notAllowedErrorFormat, relPath),
 					Severity:   validation.SeverityError,
 				})
 			}
@@ -213,9 +214,9 @@ func runDefaultValidate(ext Extension, check validation.Check) {
 		for _, file := range defaultNotAllowedFiles {
 			if file == base {
 				check.AddResult(validation.CheckResult{
-					Path:       p,
+					Path:       relPath,
 					Identifier: "zip.disallowed_file",
-					Message:    fmt.Sprintf(notAllowedErrorFormat, p),
+					Message:    fmt.Sprintf(notAllowedErrorFormat, relPath),
 					Severity:   validation.SeverityError,
 				})
 			}
@@ -224,9 +225,9 @@ func runDefaultValidate(ext Extension, check validation.Check) {
 		for _, extFile := range defaultNotAllowedExtensions {
 			if strings.HasSuffix(base, extFile) {
 				check.AddResult(validation.CheckResult{
-					Path:       p,
+					Path:       relPath,
 					Identifier: "zip.disallowed_file",
-					Message:    fmt.Sprintf(notAllowedErrorFormat, p),
+					Message:    fmt.Sprintf(notAllowedErrorFormat, relPath),
 					Severity:   validation.SeverityError,
 				})
 			}

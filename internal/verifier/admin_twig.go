@@ -7,7 +7,6 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
-	"strings"
 
 	"github.com/shyim/go-version"
 
@@ -45,7 +44,7 @@ func (a AdminTwigLinter) Check(ctx context.Context, check *Check, config ToolCon
 				return err
 			}
 
-			relPath := strings.TrimPrefix(strings.TrimPrefix(path, "/private"), config.RootDir+"/")
+			relPath := validation.NormalizeSourcePath(path, config.RootDir)
 
 			parsed, err := html.NewAdminParser(string(file))
 			if err != nil {
@@ -56,7 +55,7 @@ func (a AdminTwigLinter) Check(ctx context.Context, check *Check, config ToolCon
 				}
 				check.AddResult(validation.CheckResult{
 					Path:       relPath,
-					Message:    fmt.Sprintf("Failed to parse %s: %v. Create a GitHub issue with the file content.", path, err),
+					Message:    fmt.Sprintf("Failed to parse %s: %v. Create a GitHub issue with the file content.", relPath, err),
 					Severity:   validation.SeverityWarning,
 					Identifier: "could-not-parse-twig",
 					Line:       line,
@@ -70,7 +69,7 @@ func (a AdminTwigLinter) Check(ctx context.Context, check *Check, config ToolCon
 					check.AddResult(validation.CheckResult{
 						Message:    message.Message,
 						Path:       relPath,
-						Line:       0,
+						Line:       message.Line,
 						Severity:   message.Severity,
 						Identifier: "admintwiglinter/" + message.Identifier,
 					})
@@ -157,7 +156,7 @@ func (a AdminTwigLinter) Format(ctx context.Context, config ToolConfig, dryRun b
 
 			if dryRun {
 				if string(file) != parsed.Dump(0) {
-					logging.FromContext(ctx).Infof("File %s is not correctly formatted", strings.TrimPrefix(strings.TrimPrefix(path, "/private"), config.RootDir+"/"))
+					logging.FromContext(ctx).Infof("File %s is not correctly formatted", validation.NormalizeSourcePath(path, config.RootDir))
 				}
 
 				return nil
