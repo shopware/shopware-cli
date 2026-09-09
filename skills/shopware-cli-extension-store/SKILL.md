@@ -11,23 +11,33 @@ Every claim in the answer carries a source. A finding without a source is not a 
 
 ## 1. Collect evidence
 
-Run `scripts/collect-evidence.sh` from this skill's directory (the directory that contains this `SKILL.md`) and pass the extension root as its argument:
+Gather evidence in two steps: run `shopware-cli` directly — exactly as a developer would — then read a few of the extension's own files (listed below) for the specific values the classification table needs. Do not wrap this in a bespoke script: calling the CLI directly keeps the output and the config-file discovery identical to what a human gets, and avoids re-implementing logic (e.g. config-path lookup) the CLI already owns.
+
+Run both validations from the extension root and capture the full output **and** the exit code:
 
 ```bash
-bash <path-to-this-skill>/scripts/collect-evidence.sh <extension-root>
+shopware-cli --version
+shopware-cli extension validate . --format markdown
+shopware-cli extension validate . --store-compliance --format markdown
 ```
 
-Do not answer before it completes. If it prints `EVIDENCE_INCOMPLETE` or exits non-zero, state which evidence is missing and do not classify rows that depend on it.
+- The **exit code** is the pass/fail signal (`0` = pass, non-zero = findings). The report goes to stdout; a usage block or error goes to stderr — do not read a validation failure as a usage error.
+- `--format markdown` gives a stable, quotable form. `--reporter` is a deprecated alias that prints a warning — use `--format`.
+- Treat the store-compliance run as a delta over the normal run: report only the lines it adds.
+- Without `--full`, `extension validate` runs only the built-in `sw-cli` validator — **not** PHPStan/ESLint/Stylelint. (`sw-cli` is the name of that one check, as in `--only sw-cli`, not shorthand for the `shopware-cli` binary.) So report "the `sw-cli` checks passed", not "validation passed", unless `--full` was run. Source: `cmd/extension/extension_validate.go`, the `if !isFull { only = "sw-cli" }` branch.
+- Use one `shopware-cli` binary throughout, and state its version. Never mix binaries mid-answer.
+- Each error line ends with its result identifier — that identifier is the row's Source, and `L0` catches any line the table does not name explicitly. The CLI currently prints a missing icon twice; count a repeated line once.
 
-Script notes (collect-evidence.sh):
+Then read these files yourself for the measured values and precondition triggers the classification table below uses — read only these, and do not re-derive CLI findings:
 
-- The CLI writes the report to stdout and its usage block and error line to stderr. The script keeps both streams as files; the exit code is the real signal.
-- Without `--full`, `extension validate` runs only the `sw-cli` toolset. It does **not** run PHPStan/ESLint/Stylelint. Source: `cmd/extension/extension_validate.go`, the `if !isFull { only = "sw-cli" }` branch. Say "sw-cli checks passed", not "validation passed", unless `--full` was run.
-- Use one `shopware-cli` binary throughout. Never mix binaries mid-answer.
-- Each finding is printed once. Exact repeats are collapsed and counted (`duplicate lines collapsed: N`); the CLI currently prints a missing icon twice. The store-compliance section lists only the lines that differ from the normal run, or `identical to the normal run`.
-- The full raw output of both runs is saved to the files listed under `--- raw ---`. Quote from them when a verbatim line is needed.
-- Validation runs use `--format markdown`; `--reporter` is a deprecated alias and prints a warning.
-- Run `extension config-schema` only if the extension already uses Store sync config, or the user asks where Store metadata is configured. Schema fields are never readiness requirements.
+- `composer.json` — `license`, `extra.label`, `authors`, and per-locale `extra.description` / `extra.manufacturerLink` / `extra.supportLink` (L1–L3, L5, A1, and the R9 trigger).
+- `src/Resources/config/plugin.png` — presence, dimensions, and size (the L4 gate; a missing icon is the CLI's `metadata.icon` line under L0).
+- `src/Resources/config/config.xml` — presence, and whether fields carry an English fallback (the R10 trigger).
+- extension type (plugin / theme / app) and whether it ships CMS elements (G3 / G4 triggers).
+
+Run `shopware-cli extension config-schema` only if the extension already uses Store sync config, or the user asks where Store metadata is configured. Schema fields are never readiness requirements.
+
+Do not answer before both validations have run.
 
 ## 2. Classification table — the only place classification is decided
 
@@ -151,7 +161,7 @@ Preconditions here work like §2's: a page you had no trigger to read produces n
 **Sources checked** — a flat list the user can re-verify independently:
 
 - CLI path and version
-- the raw validation output files, by path
+- the two `extension validate` commands run (normal and `--store-compliance`), so the user can re-run them and see the same output
 - the result identifiers relied on; source file paths and `grep` commands only if a shopware-cli checkout was actually read
 - the Store docs index, as a clickable link, so the user can reach the whole set
 - every doc page actually read, as a clickable full URL with the date read

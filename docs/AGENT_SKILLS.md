@@ -18,9 +18,7 @@ shopware-cli/
     ├── shopware-cli-docker/
     │   └── SKILL.md
     └── shopware-cli-extension-store/
-        ├── SKILL.md
-        └── scripts/
-            └── collect-evidence.sh
+        └── SKILL.md
 ```
 
 Each skill is a single `SKILL.md`, optionally with a `scripts/` directory for
@@ -73,8 +71,8 @@ Read-only Shopware Store readiness assessment for an extension.
 
 It teaches agents to:
 
-- collect evidence with the bundled `scripts/collect-evidence.sh` (CLI
-  provenance, metadata, icon, two `extension validate` runs);
+- collect evidence by calling the CLI directly — two `extension validate` runs
+  (normal and `--store-compliance`) plus reading the extension's metadata and icon;
 - classify every finding against a fixed table with a re-checkable source;
 - keep local file state separate from the remote Store listing, which it never
   inspects;
