@@ -277,7 +277,7 @@ func runDefaultValidate(ext Extension, check validation.Check) {
 	if len(metaData.Label.German) == 0 {
 		check.AddResult(validation.CheckResult{
 			Path:       rootFile,
-			Identifier: "metadata.label",
+			Identifier: "metadata.label.translation.de-DE",
 			Message:    "in composer.json, label is not translated in german",
 			Severity:   validation.SeverityError,
 		})
@@ -286,7 +286,7 @@ func runDefaultValidate(ext Extension, check validation.Check) {
 	if len(metaData.Label.English) == 0 {
 		check.AddResult(validation.CheckResult{
 			Path:       rootFile,
-			Identifier: "metadata.label",
+			Identifier: "metadata.label.translation.en-GB",
 			Message:    "in composer.json, label is not translated in english",
 			Severity:   validation.SeverityError,
 		})

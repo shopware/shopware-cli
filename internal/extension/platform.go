@@ -350,7 +350,7 @@ func (p PlatformPlugin) Validate(c context.Context, check validation.Check) {
 		if !hasLabel {
 			check.AddResult(validation.CheckResult{
 				Path:       "composer.json",
-				Identifier: "metadata.label",
+				Identifier: fmt.Sprintf("metadata.label.translation.%s", key),
 				Message:    fmt.Sprintf("extra.label for language %s is required", key),
 				Severity:   validation.SeverityError,
 			})

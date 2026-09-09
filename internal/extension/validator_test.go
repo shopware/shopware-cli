@@ -178,6 +178,52 @@ func TestDescriptionIgnoreMatchesSpecificAndPrefixIdentifiers(t *testing.T) {
 	assert.Equal(t, "metadata.name", check.Results[0].Identifier)
 }
 
+func TestLabelMissingUsesTranslationIdentifier(t *testing.T) {
+	app := getAppForValidation()
+	app.manifest.Meta.Label = TranslatableString{
+		struct {
+			Value string "xml:\",chardata\""
+			Lang  string "xml:\"lang,attr,omitempty\""
+		}{"", "de-DE"},
+		struct {
+			Value string "xml:\",chardata\""
+			Lang  string "xml:\"lang,attr,omitempty\""
+		}{"", "en-GB"},
+	}
+
+	check := &testCheck{}
+	runDefaultValidate(app, check)
+
+	identifiers := make([]string, 0, len(check.Results))
+	for _, result := range check.Results {
+		identifiers = append(identifiers, result.Identifier)
+	}
+	assert.Contains(t, identifiers, "metadata.label.translation.de-DE")
+	assert.Contains(t, identifiers, "metadata.label.translation.en-GB")
+}
+
+func TestLabelIgnoreMatchesSpecificAndPrefixIdentifiers(t *testing.T) {
+	check := &testCheck{}
+	check.AddResult(validation.CheckResult{Identifier: "metadata.label.translation.de-DE", Message: "missing de"})
+	check.AddResult(validation.CheckResult{Identifier: "metadata.label.translation.en-GB", Message: "missing en"})
+	check.AddResult(validation.CheckResult{Identifier: "metadata.name", Message: "required"})
+
+	check.RemoveByIdentifier([]validation.ToolConfigIgnore{
+		{Identifier: "metadata.label.translation.de-DE"},
+	})
+
+	assert.Len(t, check.Results, 2)
+	assert.Equal(t, "metadata.label.translation.en-GB", check.Results[0].Identifier)
+	assert.Equal(t, "metadata.name", check.Results[1].Identifier)
+
+	check.RemoveByIdentifier([]validation.ToolConfigIgnore{
+		{Identifier: "metadata.label"},
+	})
+
+	assert.Len(t, check.Results, 1)
+	assert.Equal(t, "metadata.name", check.Results[0].Identifier)
+}
+
 func TestIgnores(t *testing.T) {
 	check := &testCheck{}
 
