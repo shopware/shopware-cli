@@ -91,7 +91,6 @@ func RunValidation(ctx context.Context, ext Extension, check validation.Check) {
 	validateAdministrationSnippets(ext, check)
 	validateStorefrontSnippets(ext, check)
 	validateAssets(ext, check)
-	validateExtensionIcon(ext, check)
 	validateSymfonyXml(ext, check)
 	// Note: ignores are now applied in the verifier layer
 }
@@ -233,46 +232,46 @@ func runDefaultValidate(ext Extension, check validation.Check) {
 			}
 		}
 
-		license, err := ext.GetLicense()
+		return nil
+	})
 
+	license, err := ext.GetLicense()
+
+	if err != nil {
+		check.AddResult(validation.CheckResult{
+			Path:       rootFile,
+			Identifier: "metadata.license",
+			Message:    "Could not read the license of the extension: " + err.Error(),
+			Severity:   validation.SeverityError,
+		})
+	} else if strings.TrimSpace(strings.ToLower(license)) != "proprietary" {
+		spdxList, err := spdx.NewSpdxLicenses()
 		if err != nil {
 			check.AddResult(validation.CheckResult{
 				Path:       rootFile,
 				Identifier: "metadata.license",
-				Message:    "Could not read the license of the extension: " + err.Error(),
-				Severity:   validation.SeverityError,
+				Message:    "Could not load the SPDX license list: " + err.Error(),
+				Severity:   validation.SeverityWarning,
 			})
-		} else if strings.TrimSpace(strings.ToLower(license)) != "proprietary" {
-			spdxList, err := spdx.NewSpdxLicenses()
+		} else {
+			valid, err := spdxList.Validate(license)
 			if err != nil {
 				check.AddResult(validation.CheckResult{
 					Path:       rootFile,
 					Identifier: "metadata.license",
-					Message:    "Could not load the SPDX license list: " + err.Error(),
-					Severity:   validation.SeverityWarning,
+					Message:    "Could not validate the license: " + err.Error(),
+					Severity:   validation.SeverityError,
 				})
-			} else {
-				valid, err := spdxList.Validate(license)
-				if err != nil {
-					check.AddResult(validation.CheckResult{
-						Path:       rootFile,
-						Identifier: "metadata.license",
-						Message:    "Could not validate the license: " + err.Error(),
-						Severity:   validation.SeverityError,
-					})
-				} else if !valid {
-					check.AddResult(validation.CheckResult{
-						Path:       rootFile,
-						Identifier: "metadata.license",
-						Message:    fmt.Sprintf("The license %s is not a valid SPDX license", license),
-						Severity:   validation.SeverityError,
-					})
-				}
+			} else if !valid {
+				check.AddResult(validation.CheckResult{
+					Path:       rootFile,
+					Identifier: "metadata.license",
+					Message:    fmt.Sprintf("The license %s is not a valid SPDX license", license),
+					Severity:   validation.SeverityError,
+				})
 			}
 		}
-
-		return nil
-	})
+	}
 
 	metaData := ext.GetMetaData()
 	if len(metaData.Label.German) == 0 {
