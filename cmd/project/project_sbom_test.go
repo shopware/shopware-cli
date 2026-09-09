@@ -14,48 +14,6 @@ import (
 	"github.com/shopware/shopware-cli/internal/tui"
 )
 
-func TestGenerateProjectSBOMSkipsWhenLockMissing(t *testing.T) {
-	// CI wrapper must keep the historical skip-on-missing-lock behaviour.
-	root := t.TempDir()
-	assert.NoError(t, generateProjectSBOM(t.Context(), root))
-
-	_, err := os.Stat(filepath.Join(root, shop.DefaultProjectSBOMOutput))
-	assert.True(t, os.IsNotExist(err), "no SBOM should be written when composer.lock is absent")
-}
-
-func TestGenerateProjectSBOM(t *testing.T) {
-	root := t.TempDir()
-
-	testhelper.WriteFile(t, filepath.Join(root, "composer.json"),
-		testhelper.ComposerJSON{Name: "acme/shop", Version: "1.2.3"}.String())
-	// The lock carries license and require fields the SBOM must pick up, which
-	// testhelper.ComposerLock cannot express.
-	testhelper.WriteFile(t, filepath.Join(root, "composer.lock"), `{
-		"packages": [
-			{
-				"name": "symfony/console",
-				"version": "v6.3.0",
-				"type": "library",
-				"license": ["MIT"],
-				"require": {"php": ">=8.1"}
-			}
-		],
-		"packages-dev": [
-			{"name": "phpunit/phpunit", "version": "10.0.0", "license": ["BSD-3-Clause"]}
-		]
-	}`)
-
-	assert.NoError(t, generateProjectSBOM(t.Context(), root))
-
-	data, err := os.ReadFile(filepath.Join(root, shop.DefaultProjectSBOMOutput))
-	assert.NoError(t, err)
-
-	doc := map[string]interface{}{}
-	assert.NoError(t, json.Unmarshal(data, &doc))
-	assert.Equal(t, "CycloneDX", doc["bomFormat"])
-	assert.Equal(t, "1.7", doc["specVersion"])
-}
-
 func TestProjectSbomCommandUnsupportedFormat(t *testing.T) {
 	root := t.TempDir()
 

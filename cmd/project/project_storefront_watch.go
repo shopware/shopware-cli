@@ -14,6 +14,7 @@ import (
 	"github.com/shopware/shopware-cli/internal/envfile"
 	"github.com/shopware/shopware-cli/internal/executor"
 	"github.com/shopware/shopware-cli/internal/extension"
+	"github.com/shopware/shopware-cli/internal/projectbuild"
 	"github.com/shopware/shopware-cli/internal/proxy"
 	"github.com/shopware/shopware-cli/internal/shop"
 	"github.com/shopware/shopware-cli/internal/tui"
@@ -78,7 +79,7 @@ var projectStorefrontWatchCmd = &cobra.Command{
 			return err
 		}
 
-		runErr := runTransparentCommand(watchProcess)
+		runErr := projectbuild.RunCommand(watchProcess)
 
 		stopCtx, stopCancel := context.WithTimeout(context.Background(), 3*time.Second)
 		defer stopCancel()
