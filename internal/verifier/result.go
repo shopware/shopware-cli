@@ -62,7 +62,7 @@ func (c *Check) RemoveByIdentifier(ignores []validation.ToolConfigIgnore) valida
 		for _, ignore := range ignores {
 			// Only ignore all matches when identifier is the only field specified
 			if ignore.Identifier != "" && ignore.Path == "" && ignore.Message == "" {
-				if r.Identifier == ignore.Identifier {
+				if validation.IdentifierMatches(r.Identifier, ignore.Identifier) {
 					shouldKeep = false
 					break
 				}
@@ -70,7 +70,7 @@ func (c *Check) RemoveByIdentifier(ignores []validation.ToolConfigIgnore) valida
 
 			// If path is specified with identifier (but no message), match both
 			if ignore.Identifier != "" && ignore.Path != "" && ignore.Message == "" {
-				if r.Identifier == ignore.Identifier && c.samePath(r.Path, ignore.Path) {
+				if validation.IdentifierMatches(r.Identifier, ignore.Identifier) && c.samePath(r.Path, ignore.Path) {
 					shouldKeep = false
 					break
 				}

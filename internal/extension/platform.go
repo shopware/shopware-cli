@@ -282,7 +282,7 @@ func (p PlatformPlugin) Validate(c context.Context, check validation.Check) {
 	if p.Composer.Description == "" {
 		check.AddResult(validation.CheckResult{
 			Path:       "composer.json",
-			Identifier: "metadata.description",
+			Identifier: "metadata.description.required",
 			Message:    "Key `description` is required",
 			Severity:   validation.SeverityError,
 		})
@@ -359,7 +359,7 @@ func (p PlatformPlugin) Validate(c context.Context, check validation.Check) {
 		if !hasDescription {
 			check.AddResult(validation.CheckResult{
 				Path:       "composer.json",
-				Identifier: "metadata.description",
+				Identifier: fmt.Sprintf("metadata.description.translation.%s", key),
 				Message:    fmt.Sprintf("extra.description for language %s is required", key),
 				Severity:   validation.SeverityError,
 			})

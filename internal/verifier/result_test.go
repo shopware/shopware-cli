@@ -204,6 +204,33 @@ func TestRemoveByIdentifier(t *testing.T) {
 			},
 			expectedResults: []validation.CheckResult{},
 		},
+		{
+			name: "prefix identifier ignores more specific children",
+			initialResults: []validation.CheckResult{
+				{Path: "composer.json", Identifier: "metadata.description.length.de-DE"},
+				{Path: "composer.json", Identifier: "metadata.description.translation.en-GB"},
+				{Path: "composer.json", Identifier: "metadata.name"},
+			},
+			ignores: []validation.ToolConfigIgnore{
+				{Identifier: "metadata.description"},
+			},
+			expectedResults: []validation.CheckResult{
+				{Path: "composer.json", Identifier: "metadata.name"},
+			},
+		},
+		{
+			name: "specific child identifier does not ignore siblings",
+			initialResults: []validation.CheckResult{
+				{Path: "composer.json", Identifier: "metadata.description.length.de-DE"},
+				{Path: "composer.json", Identifier: "metadata.description.translation.de-DE"},
+			},
+			ignores: []validation.ToolConfigIgnore{
+				{Identifier: "metadata.description.length.de-DE"},
+			},
+			expectedResults: []validation.CheckResult{
+				{Path: "composer.json", Identifier: "metadata.description.translation.de-DE"},
+			},
+		},
 	}
 
 	for _, tt := range tests {

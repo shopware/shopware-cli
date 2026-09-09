@@ -162,6 +162,7 @@ func TestPluginGermanDescriptionMissing(t *testing.T) {
 
 	assert.Len(t, check.Results, 1)
 	assert.Equal(t, "extra.description for language de-DE is required", check.Results[0].Message)
+	assert.Equal(t, "metadata.description.translation.de-DE", check.Results[0].Identifier)
 }
 
 func TestPluginGermanDescriptionMissingOnlyEnglishMarket(t *testing.T) {

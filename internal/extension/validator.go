@@ -300,7 +300,7 @@ func runDefaultValidate(ext Extension, check validation.Check) {
 		if germanDescriptionLength == 0 {
 			check.AddResult(validation.CheckResult{
 				Path:       rootFile,
-				Identifier: "metadata.description",
+				Identifier: "metadata.description.translation.de-DE",
 				Message:    "in composer.json, description is not translated in german",
 				Severity:   validation.SeverityError,
 			})
@@ -309,7 +309,7 @@ func runDefaultValidate(ext Extension, check validation.Check) {
 		if englishDescriptionLength == 0 {
 			check.AddResult(validation.CheckResult{
 				Path:       rootFile,
-				Identifier: "metadata.description",
+				Identifier: "metadata.description.translation.en-GB",
 				Message:    "in composer.json, description is not translated in english",
 				Severity:   validation.SeverityError,
 			})
@@ -318,7 +318,7 @@ func runDefaultValidate(ext Extension, check validation.Check) {
 		if germanDescriptionLength < 150 || germanDescriptionLength > 185 {
 			check.AddResult(validation.CheckResult{
 				Path:       rootFile,
-				Identifier: "metadata.description",
+				Identifier: "metadata.description.length.de-DE",
 				Message:    fmt.Sprintf("in composer.json, the german description with length of %d should have a length from 150 up to 185 characters.", germanDescriptionLength),
 				Severity:   validation.SeverityError,
 			})
@@ -327,7 +327,7 @@ func runDefaultValidate(ext Extension, check validation.Check) {
 		if englishDescriptionLength < 150 || englishDescriptionLength > 185 {
 			check.AddResult(validation.CheckResult{
 				Path:       rootFile,
-				Identifier: "metadata.description",
+				Identifier: "metadata.description.length.en-GB",
 				Message:    fmt.Sprintf("in composer.json, the english description with length of %d should have a length from 150 up to 185 characters.", englishDescriptionLength),
 				Severity:   validation.SeverityError,
 			})

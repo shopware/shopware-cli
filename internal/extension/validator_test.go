@@ -119,10 +119,63 @@ func TestDescriptionTooLongReportsCharacterCount(t *testing.T) {
 	runDefaultValidate(app, check)
 
 	assert.Len(t, check.Results, 2)
+	identifiers := make([]string, 0, len(check.Results))
 	for _, result := range check.Results {
-		assert.Equal(t, "metadata.description", result.Identifier)
+		identifiers = append(identifiers, result.Identifier)
 		assert.Contains(t, result.Message, "length of 200")
 	}
+	assert.ElementsMatch(t, []string{
+		"metadata.description.length.de-DE",
+		"metadata.description.length.en-GB",
+	}, identifiers)
+}
+
+func TestDescriptionMissingUsesTranslationIdentifier(t *testing.T) {
+	app := getAppForValidation()
+	app.manifest.Meta.Description = TranslatableString{
+		struct {
+			Value string "xml:\",chardata\""
+			Lang  string "xml:\"lang,attr,omitempty\""
+		}{"", "de-DE"},
+		struct {
+			Value string "xml:\",chardata\""
+			Lang  string "xml:\"lang,attr,omitempty\""
+		}{"", "en-GB"},
+	}
+
+	check := &testCheck{}
+	runDefaultValidate(app, check)
+
+	identifiers := make([]string, 0, len(check.Results))
+	for _, result := range check.Results {
+		identifiers = append(identifiers, result.Identifier)
+	}
+	assert.Contains(t, identifiers, "metadata.description.translation.de-DE")
+	assert.Contains(t, identifiers, "metadata.description.translation.en-GB")
+	assert.Contains(t, identifiers, "metadata.description.length.de-DE")
+	assert.Contains(t, identifiers, "metadata.description.length.en-GB")
+}
+
+func TestDescriptionIgnoreMatchesSpecificAndPrefixIdentifiers(t *testing.T) {
+	check := &testCheck{}
+	check.AddResult(validation.CheckResult{Identifier: "metadata.description.length.de-DE", Message: "too long"})
+	check.AddResult(validation.CheckResult{Identifier: "metadata.description.translation.en-GB", Message: "missing"})
+	check.AddResult(validation.CheckResult{Identifier: "metadata.name", Message: "required"})
+
+	check.RemoveByIdentifier([]validation.ToolConfigIgnore{
+		{Identifier: "metadata.description.length"},
+	})
+
+	assert.Len(t, check.Results, 2)
+	assert.Equal(t, "metadata.description.translation.en-GB", check.Results[0].Identifier)
+	assert.Equal(t, "metadata.name", check.Results[1].Identifier)
+
+	check.RemoveByIdentifier([]validation.ToolConfigIgnore{
+		{Identifier: "metadata.description"},
+	})
+
+	assert.Len(t, check.Results, 1)
+	assert.Equal(t, "metadata.name", check.Results[0].Identifier)
 }
 
 func TestIgnores(t *testing.T) {
