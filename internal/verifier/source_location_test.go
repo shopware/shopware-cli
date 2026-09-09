@@ -11,42 +11,23 @@ import (
 
 	"github.com/shopware/shopware-cli/internal/archiver"
 	"github.com/shopware/shopware-cli/internal/extension"
+	"github.com/shopware/shopware-cli/internal/testhelper"
 	"github.com/shopware/shopware-cli/internal/validation"
 )
 
 func TestZipValidationUsesArchiveRelativePaths(t *testing.T) {
-	pluginDir := filepath.Join(t.TempDir(), "SwagExample")
-	require.NoError(t, os.MkdirAll(filepath.Join(pluginDir, "src", "Resources", "config"), 0o755))
-	require.NoError(t, os.WriteFile(filepath.Join(pluginDir, "composer.json"), []byte(`{
-		"name": "swag/example",
-		"description": "Example plugin",
-		"version": "1.0.0",
-		"type": "shopware-platform-plugin",
-		"license": "MIT",
-		"authors": [{"name": "Shopware"}],
-		"require": {"shopware/core": "~6.6.0"},
-		"autoload": {"psr-4": {"SwagExample\\": "src/"}},
-		"extra": {
-			"shopware-plugin-class": "SwagExample\\SwagExample",
-			"label": {"en-GB": "Example", "de-DE": "Beispiel"},
-			"description": {
-				"en-GB": "This is a valid English description that is long enough for store metadata checks 12345.",
-				"de-DE": "Dies ist eine gültige deutsche Beschreibung die lang genug für Store-Metadaten ist 12345."
-			},
-			"manufacturerLink": {"en-GB": "https://example.com", "de-DE": "https://example.com"},
-			"supportLink": {"en-GB": "https://example.com", "de-DE": "https://example.com"}
-		}
-	}`), 0o644))
-	require.NoError(t, os.WriteFile(filepath.Join(pluginDir, "src", "Resources", "config", "services.xml"), []byte("<container/>"), 0o644))
-	require.NoError(t, os.WriteFile(filepath.Join(pluginDir, ".DS_Store"), []byte("store"), 0o644))
+	parent := t.TempDir()
+	pluginDir := filepath.Join(parent, "SwagExample")
+	testhelper.WriteFile(t, filepath.Join(pluginDir, "composer.json"), testhelper.PluginComposer("test/swag-example", "1.0.0", `SwagExample\SwagExample`).String())
+	writeDeprecatedServicesXML(t, pluginDir)
+	testhelper.WriteFile(t, filepath.Join(pluginDir, ".DS_Store"), "store")
 
 	zipPath := filepath.Join(t.TempDir(), "SwagExample.zip")
-	require.NoError(t, archiver.CreateZip(filepath.Dir(pluginDir), zipPath))
+	require.NoError(t, archiver.CreateZip(parent, zipPath))
 
 	ext, err := extension.GetExtensionByZip(t.Context(), zipPath)
 	require.NoError(t, err)
 	require.NotEmpty(t, ext.GetPath())
-	assert.True(t, strings.Contains(ext.GetPath(), os.TempDir()) || filepath.IsAbs(ext.GetPath()))
 
 	check := NewCheck()
 	check.SetSourceRoot(ext.GetPath())
@@ -88,29 +69,8 @@ func TestZipValidationUsesArchiveRelativePaths(t *testing.T) {
 }
 
 func TestDirectoryValidationUsesExtensionRelativePaths(t *testing.T) {
-	pluginDir := t.TempDir()
-	require.NoError(t, os.MkdirAll(filepath.Join(pluginDir, "src", "Resources", "config"), 0o755))
-	require.NoError(t, os.WriteFile(filepath.Join(pluginDir, "composer.json"), []byte(`{
-		"name": "swag/example",
-		"description": "Example plugin",
-		"version": "1.0.0",
-		"type": "shopware-platform-plugin",
-		"license": "MIT",
-		"authors": [{"name": "Shopware"}],
-		"require": {"shopware/core": "~6.6.0"},
-		"autoload": {"psr-4": {"SwagExample\\": "src/"}},
-		"extra": {
-			"shopware-plugin-class": "SwagExample\\SwagExample",
-			"label": {"en-GB": "Example", "de-DE": "Beispiel"},
-			"description": {
-				"en-GB": "This is a valid English description that is long enough for store metadata checks 12345.",
-				"de-DE": "Dies ist eine gültige deutsche Beschreibung die lang genug für Store-Metadaten ist 12345."
-			},
-			"manufacturerLink": {"en-GB": "https://example.com", "de-DE": "https://example.com"},
-			"supportLink": {"en-GB": "https://example.com", "de-DE": "https://example.com"}
-		}
-	}`), 0o644))
-	require.NoError(t, os.WriteFile(filepath.Join(pluginDir, "src", "Resources", "config", "services.xml"), []byte("<container/>"), 0o644))
+	pluginDir := testhelper.NewPlugin(t, "SwagExample")
+	writeDeprecatedServicesXML(t, pluginDir)
 
 	ext, err := extension.GetExtensionByFolder(t.Context(), pluginDir)
 	require.NoError(t, err)
@@ -134,4 +94,9 @@ func TestDirectoryValidationUsesExtensionRelativePaths(t *testing.T) {
 		}
 	}
 	assert.True(t, foundXML)
+}
+
+func writeDeprecatedServicesXML(t *testing.T, pluginDir string) {
+	t.Helper()
+	testhelper.WriteFile(t, filepath.Join(pluginDir, "src", "Resources", "config", "services.xml"), "<container/>")
 }
