@@ -1,7 +1,6 @@
 // Package state records which AI integrations the CLI has installed so that
-// `ai list --installed` can report them. This package defines the on-disk file
-// format and the read path; writing the file is added by #1337. Until then the
-// file does not exist and Read returns an empty state.
+// `ai list --installed` can report them. It defines the on-disk file format,
+// the read path, and the write path used by `ai add` / `ai remove`.
 package state
 
 import (
@@ -12,6 +11,10 @@ import (
 	"os"
 	"path/filepath"
 )
+
+// userConfigDir is a seam over os.UserConfigDir so tests can redirect the
+// install-state location without touching the real user configuration.
+var userConfigDir = os.UserConfigDir
 
 // FileVersion is the install-state file format version. It is a major-only
 // integer, like the manifest: bump it only on a breaking change to the file
@@ -46,7 +49,7 @@ type File struct {
 // path is the global install-state file location
 // ($UserConfigDir/shopware-cli/ai/installed.json).
 func path() (string, error) {
-	configDir, err := os.UserConfigDir()
+	configDir, err := userConfigDir()
 	if err != nil {
 		return "", err
 	}
@@ -79,4 +82,66 @@ func Read() (File, error) {
 	}
 
 	return f, nil
+}
+
+// Upsert returns f with e added, or with the existing entry that has the same
+// (name, client, scope) replaced. The same integration can be installed for
+// different clients and scopes, so all three fields form the identity. This
+// makes a repeated `ai add` idempotent: the list does not grow.
+func Upsert(f File, e InstalledEntry) File {
+	for i := range f.Installed {
+		x := f.Installed[i]
+		if x.Name == e.Name && x.Client == e.Client && x.Scope == e.Scope {
+			f.Installed[i] = e
+			return f
+		}
+	}
+
+	f.Installed = append(f.Installed, e)
+
+	return f
+}
+
+// Save writes the install-state file atomically: it writes a temporary file in
+// the target directory and renames it into place, so a crash mid-write never
+// leaves a partial file. The parent directories are created as needed.
+func Save(f File) error {
+	p, err := path()
+	if err != nil {
+		return err
+	}
+
+	f.Version = FileVersion
+	if f.Installed == nil {
+		f.Installed = []InstalledEntry{}
+	}
+
+	b, err := json.MarshalIndent(f, "", "  ")
+	if err != nil {
+		return err
+	}
+	b = append(b, '\n')
+
+	dir := filepath.Dir(p)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return err
+	}
+
+	tmp, err := os.CreateTemp(dir, "installed-*.json.tmp")
+	if err != nil {
+		return err
+	}
+	tmpName := tmp.Name()
+	// Best-effort cleanup if we return before the rename succeeds.
+	defer func() { _ = os.Remove(tmpName) }()
+
+	if _, err := tmp.Write(b); err != nil {
+		_ = tmp.Close()
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		return err
+	}
+
+	return os.Rename(tmpName, p)
 }
