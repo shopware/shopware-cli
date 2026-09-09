@@ -225,3 +225,41 @@ func TestIgnoresWithMessage(t *testing.T) {
 	})
 	assert.False(t, len(check.Results) > 0)
 }
+
+func countResultsWithMessage(results []validation.CheckResult, message string) int {
+	count := 0
+	for _, r := range results {
+		if r.Message == message {
+			count++
+		}
+	}
+	return count
+}
+
+func TestLicenseValidationReportedOncePerExtension(t *testing.T) {
+	dir := t.TempDir()
+	assert.NoError(t, os.MkdirAll(filepath.Join(dir, "src", "Sub"), 0o755))
+	for _, name := range []string{"a.php", "b.php", "src/c.php", "src/Sub/d.php"} {
+		assert.NoError(t, os.WriteFile(filepath.Join(dir, name), []byte("<?php"), 0o644))
+	}
+
+	plugin := getTestPlugin(dir)
+	plugin.Composer.License = ""
+
+	check := &testCheck{}
+	runDefaultValidate(plugin, check)
+
+	assert.Equal(t, 1, countResultsWithMessage(check.Results, "Could not validate the license: empty license string"))
+}
+
+func TestIconValidationReportedOncePerExtension(t *testing.T) {
+	setupMockPHPVersionServer(t)
+	dir := t.TempDir()
+
+	plugin := getTestPlugin(dir)
+
+	check := &testCheck{}
+	RunValidation(getTestContext(), plugin, check)
+
+	assert.Equal(t, 1, countResultsWithMessage(check.Results, "The extension icon src/Resources/config/plugin.png does not exist"))
+}
