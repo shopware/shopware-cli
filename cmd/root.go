@@ -51,7 +51,7 @@ func Execute(ctx context.Context) int {
 	start := time.Now()
 	err := rootCmd.ExecuteContext(ctx)
 
-	trackCommandExecution(ctx, os.Args[1:], start, err)
+	trackCommandExecution(ctx, args, start, err)
 	printUpdateHint(ctx, updateHandle.Wait(ctx).Release)
 
 	if err != nil {

@@ -12,6 +12,8 @@ import (
 	"github.com/shopware/shopware-cli/internal/tracking"
 )
 
+var trackEvent = tracking.Track
+
 func trackCommandExecution(ctx context.Context, args []string, start time.Time, runErr error) {
 	cmd, _, err := rootCmd.Find(args)
 	if err != nil || cmd == rootCmd || cmd.RunE == nil {
@@ -26,12 +28,12 @@ func trackCommandExecution(ctx context.Context, args []string, start time.Time, 
 			result = tracking.ResultFailure
 		}
 	}
-	name := strings.TrimPrefix(cmd.CommandPath(), "shopware-cli ")
+	name := strings.TrimPrefix(cmd.CommandPath(), rootCmd.Name()+" ")
 	name = strings.ReplaceAll(name, " ", ".")
 	name = strings.ReplaceAll(name, "-", "_")
 	trackCtx, trackCancel := context.WithTimeout(context.WithoutCancel(ctx), 300*time.Millisecond)
 	defer trackCancel()
-	tracking.Track(trackCtx, tracking.EventCommand, map[string]string{
+	trackEvent(trackCtx, tracking.EventCommand, map[string]string{
 		tracking.TagCommandName: name,
 		tracking.TagResult:      result,
 		tracking.TagDurationMS:  strconv.FormatInt(time.Since(start).Milliseconds(), 10),
