@@ -120,3 +120,33 @@ func TestBuildStopsOnComposerFailure(t *testing.T) {
 	assert.FileExists(t, filepath.Join(root, "remove-me"))
 	assert.NoDirExists(t, filepath.Join(root, "vendor"))
 }
+
+func TestBuildStopsOnHookFailure(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("hooks run through sh -c")
+	}
+	root := t.TempDir()
+	var composerArgs []string
+	e := &buildTestExecutor{Executor: executor.NewLocal(root), composerArgs: &composerArgs}
+	t.Setenv("COMPOSER_AUTH", "")
+	t.Setenv("SHOPWARE_PACKAGES_TOKEN", "")
+	testhelper.WriteFile(t, filepath.Join(root, "remove-me"), "source")
+	cfg := &shop.Config{Build: &shop.ConfigBuild{
+		CleanupPaths: []string{"remove-me"},
+		Hooks: &shop.ConfigBuildHooks{
+			Pre:         []string{"echo pre >> steps"},
+			PreComposer: []string{"echo pre-composer >> steps && exit 1"},
+			Post:        []string{"echo post >> steps"},
+		},
+	}}
+
+	err := run(t.Context(), root, cfg, e, Options{})
+	require.ErrorContains(t, err, "hook failed (echo pre-composer >> steps && exit 1)")
+
+	steps, readErr := os.ReadFile(filepath.Join(root, "steps"))
+	require.NoError(t, readErr)
+	assert.Equal(t, "pre\npre-composer\n", string(steps))
+	assert.Empty(t, composerArgs)
+	assert.FileExists(t, filepath.Join(root, "remove-me"))
+	assert.NoDirExists(t, filepath.Join(root, "vendor"))
+}

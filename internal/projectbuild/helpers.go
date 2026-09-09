@@ -80,7 +80,7 @@ func generateProjectSBOM(ctx context.Context, root, toolVersion string) error {
 func prepareComposerAuth(ctx context.Context, root string) (string, error) {
 	auth, err := shop.ReadComposerAuth(path.Join(root, "auth.json"))
 	if err != nil {
-		logging.FromContext(ctx).Warnf("Failed to read composer auth from env: %v", err)
+		logging.FromContext(ctx).Warnf("Failed to prepare composer auth from %s or COMPOSER_AUTH: %v", path.Join(root, "auth.json"), err)
 		return "", err
 	}
 	data, err := json.Marshal(auth)
@@ -90,13 +90,21 @@ func prepareComposerAuth(ctx context.Context, root string) (string, error) {
 	return string(data), nil
 }
 
-// RunCommand runs a build or asset watcher process with inherited terminal I/O
-// and the fixed, non-production secret and lock defaults needed without a shop.
-// Environment variables already supplied by the executor are preserved.
+// RunCommand runs a build or asset watcher process with the fixed,
+// non-production secret and lock defaults needed without a shop. Streams the
+// caller has not configured inherit the terminal, so a Cobra-provided stdin
+// or a captured stdout stay in effect. Environment variables already supplied
+// by the executor are preserved.
 func RunCommand(p *executor.Process) error {
-	p.Cmd.Stdin = os.Stdin
-	p.Cmd.Stdout = os.Stdout
-	p.Cmd.Stderr = os.Stderr
+	if p.Cmd.Stdin == nil {
+		p.Cmd.Stdin = os.Stdin
+	}
+	if p.Cmd.Stdout == nil {
+		p.Cmd.Stdout = os.Stdout
+	}
+	if p.Cmd.Stderr == nil {
+		p.Cmd.Stderr = os.Stderr
+	}
 	applyTransparentEnv(p)
 	return p.Run()
 }
@@ -112,7 +120,7 @@ func binCICommand(ctx context.Context, cmdExecutor executor.Executor, args ...st
 	return cmdExecutor.PHPCommand(ctx, append([]string{"bin/ci"}, args...)...)
 }
 
-func cleanupTcpdf(folder string, ctx context.Context) error {
+func cleanupTcpdf(ctx context.Context, folder string) error {
 	tcpdfPath := path.Join(folder, "vendor", "tecnickcom/tcpdf/fonts")
 	if _, err := os.Stat(tcpdfPath); err != nil {
 		if os.IsNotExist(err) {

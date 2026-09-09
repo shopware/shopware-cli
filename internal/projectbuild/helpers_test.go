@@ -1,11 +1,13 @@
 package projectbuild
 
 import (
+	"bytes"
 	"encoding/json"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -22,13 +24,13 @@ func TestCleanupTcpdfKeepsOnlyCourierAndHelvetica(t *testing.T) {
 	for _, name := range []string{"helvetica.php", "courier_bold.php", "times.php", "foo.z", ".z"} {
 		testhelper.WriteFile(t, filepath.Join(fonts, name), "x")
 	}
-	require.NoError(t, cleanupTcpdf(root, t.Context()))
+	require.NoError(t, cleanupTcpdf(t.Context(), root))
 	assert.FileExists(t, filepath.Join(fonts, "helvetica.php"))
 	assert.FileExists(t, filepath.Join(fonts, "courier_bold.php"))
 	assert.NoFileExists(t, filepath.Join(fonts, "times.php"))
 	assert.NoFileExists(t, filepath.Join(fonts, "foo.z"))
 	assert.NoFileExists(t, filepath.Join(fonts, ".z"))
-	require.NoError(t, cleanupTcpdf(t.TempDir(), t.Context()))
+	require.NoError(t, cleanupTcpdf(t.Context(), t.TempDir()))
 }
 
 func TestExecuteCIHooksRunsInRootWithBuildEnv(t *testing.T) {
@@ -111,6 +113,18 @@ func TestRunCommandFallsBackToProcessEnv(t *testing.T) {
 	applyTransparentEnv(proc)
 	assert.Contains(t, proc.Cmd.Env, "SHOPWARE_CLI_TRANSPARENT_ENV_MARKER=present")
 	assert.Contains(t, proc.Cmd.Env, "LOCK_DSN=flock")
+}
+
+func TestRunCommandKeepsConfiguredStreams(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("uses cat")
+	}
+	var out bytes.Buffer
+	proc := &executor.Process{Cmd: exec.CommandContext(t.Context(), "cat")}
+	proc.Cmd.Stdin = strings.NewReader("from cobra")
+	proc.Cmd.Stdout = &out
+	require.NoError(t, RunCommand(proc))
+	assert.Equal(t, "from cobra", out.String())
 }
 
 func TestBuildCleanupPathsAreIndependent(t *testing.T) {

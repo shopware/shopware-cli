@@ -9,6 +9,8 @@ import (
 	"os"
 	"path"
 
+	"github.com/shyim/go-version"
+
 	"github.com/shopware/shopware-cli/internal/asset"
 	"github.com/shopware/shopware-cli/internal/ci"
 	"github.com/shopware/shopware-cli/internal/executor"
@@ -61,15 +63,9 @@ func run(ctx context.Context, root string, shopCfg *shop.Config, cmdExecutor exe
 			}
 		}
 
-		composerInstallSection := ci.Default.Section(ctx, "Composer Installation")
-		composer := cmdExecutor.WithEnv(map[string]string{"COMPOSER_AUTH": token}).ComposerCommand(ctx, composerFlags...)
-		composer.Cmd.Stdin = os.Stdin
-		composer.Cmd.Stdout = os.Stdout
-		composer.Cmd.Stderr = os.Stderr
-		if err := composer.Run(); err != nil {
+		if err := composerInstall(ctx, cmdExecutor, token, composerFlags); err != nil {
 			return err
 		}
-		composerInstallSection.End(ctx)
 
 		if shopCfg.Build.Hooks != nil && len(shopCfg.Build.Hooks.PostComposer) > 0 {
 			if err := executeCIHooks(ctx, "Running post-composer hooks", shopCfg.Build.Hooks.PostComposer, root, buildEnv); err != nil {
@@ -109,14 +105,32 @@ func run(ctx context.Context, root string, shopCfg *shop.Config, cmdExecutor exe
 	return nil
 }
 
-func buildAssets(ctx context.Context, root string, shopCfg *shop.Config, cmdExecutor executor.Executor, buildEnv map[string]string) ([]asset.Source, error) {
-	lookingForExtensionsSection := ci.Default.Section(ctx, "Looking for extensions")
+func composerInstall(ctx context.Context, cmdExecutor executor.Executor, token string, flags []string) error {
+	section := ci.Default.Section(ctx, "Composer Installation")
+	defer section.End(ctx)
+	composer := cmdExecutor.WithEnv(map[string]string{"COMPOSER_AUTH": token}).ComposerCommand(ctx, flags...)
+	composer.Cmd.Stdin = os.Stdin
+	composer.Cmd.Stdout = os.Stdout
+	composer.Cmd.Stderr = os.Stderr
+	return composer.Run()
+}
+
+func findAssetSources(ctx context.Context, root string, shopCfg *shop.Config) ([]asset.Source, *version.Constraints, error) {
+	section := ci.Default.Section(ctx, "Looking for extensions")
+	defer section.End(ctx)
 	sources := extension.FindAssetSourcesOfProject(ctx, root, shopCfg)
 	shopwareConstraint, err := extension.GetShopwareProjectConstraint(root)
 	if err != nil {
+		return nil, nil, err
+	}
+	return sources, shopwareConstraint, nil
+}
+
+func buildAssets(ctx context.Context, root string, shopCfg *shop.Config, cmdExecutor executor.Executor, buildEnv map[string]string) ([]asset.Source, error) {
+	sources, shopwareConstraint, err := findAssetSources(ctx, root, shopCfg)
+	if err != nil {
 		return nil, err
 	}
-	lookingForExtensionsSection.End(ctx)
 
 	assetCfg := extension.AssetBuildConfig{
 		EnableAssetCaching:           shopCfg.Build.AssetCaching,
@@ -180,7 +194,7 @@ func optimizeAssets(ctx context.Context, root string, shopCfg *shop.Config, sour
 			return err
 		}
 	}
-	if err := cleanupTcpdf(root, ctx); err != nil {
+	if err := cleanupTcpdf(ctx, root); err != nil {
 		return err
 	}
 	return nil
@@ -210,67 +224,76 @@ func warmup(ctx context.Context, root string, shopCfg *shop.Config, cmdExecutor 
 
 func finalize(ctx context.Context, root string, shopCfg *shop.Config, sources []asset.Source) error {
 	if shopCfg.Build.IsMjmlEnabled() {
-		mjmlSection := ci.Default.Section(ctx, "Compiling MJML templates")
-		extraIncludePaths := shopCfg.Build.MJML.ResolveIncludePaths(root)
-		for _, searchPath := range shopCfg.Build.MJML.GetPaths(root) {
-			if _, err := os.Stat(searchPath); !os.IsNotExist(err) {
-				logging.FromContext(ctx).Infof("Processing MJML files in: %s", searchPath)
-				mjmlOpts := mjml.NewCompileOptions(searchPath, shopCfg.Build.MJML.AllowIncludes, extraIncludePaths)
-				if err := mjml.ProcessDirectory(ctx, searchPath, mjmlOpts); err != nil {
-					logging.FromContext(ctx).Warnf("MJML compilation had issues in %s: %v", searchPath, err)
-				}
-			} else {
-				logging.FromContext(ctx).Debugf("MJML search path does not exist: %s", searchPath)
-			}
-		}
-		mjmlSection.End(ctx)
+		compileMJML(ctx, root, shopCfg)
 	}
-
 	if shopCfg.Build.RemoveExtensionAssets {
-		deleteAssetsSection := ci.Default.Section(ctx, "Deleting assets of extensions")
-		for _, source := range sources {
-			if _, err := os.Stat(path.Join(source.Path, "Resources", "public", "administration", "css")); err == nil {
-				if err := os.WriteFile(path.Join(source.Path, "Resources", ".administration-css"), []byte{}, 0o644); err != nil {
-					return err
-				}
+		if err := removeExtensionAssets(ctx, root, sources); err != nil {
+			return err
+		}
+	}
+	if !shopCfg.Build.DisableChecksums {
+		generateChecksums(ctx, root, shopCfg)
+	}
+	return nil
+}
+
+func compileMJML(ctx context.Context, root string, shopCfg *shop.Config) {
+	section := ci.Default.Section(ctx, "Compiling MJML templates")
+	defer section.End(ctx)
+	extraIncludePaths := shopCfg.Build.MJML.ResolveIncludePaths(root)
+	for _, searchPath := range shopCfg.Build.MJML.GetPaths(root) {
+		if _, err := os.Stat(searchPath); !os.IsNotExist(err) {
+			logging.FromContext(ctx).Infof("Processing MJML files in: %s", searchPath)
+			mjmlOpts := mjml.NewCompileOptions(searchPath, shopCfg.Build.MJML.AllowIncludes, extraIncludePaths)
+			if err := mjml.ProcessDirectory(ctx, searchPath, mjmlOpts); err != nil {
+				logging.FromContext(ctx).Warnf("MJML compilation had issues in %s: %v", searchPath, err)
 			}
-			if _, err := os.Stat(path.Join(source.Path, "Resources", "public", "administration", "js")); err == nil {
-				if err := os.WriteFile(path.Join(source.Path, "Resources", ".administration-js"), []byte{}, 0o644); err != nil {
-					return err
-				}
-			}
-			if err := os.RemoveAll(path.Join(source.Path, "Resources", "public")); err != nil {
+		} else {
+			logging.FromContext(ctx).Debugf("MJML search path does not exist: %s", searchPath)
+		}
+	}
+}
+
+func removeExtensionAssets(ctx context.Context, root string, sources []asset.Source) error {
+	section := ci.Default.Section(ctx, "Deleting assets of extensions")
+	defer section.End(ctx)
+	for _, source := range sources {
+		if _, err := os.Stat(path.Join(source.Path, "Resources", "public", "administration", "css")); err == nil {
+			if err := os.WriteFile(path.Join(source.Path, "Resources", ".administration-css"), []byte{}, 0o644); err != nil {
 				return err
 			}
 		}
-		if err := os.RemoveAll(path.Join(root, "vendor", "shopware", "administration", "Resources", "public")); err != nil {
+		if _, err := os.Stat(path.Join(source.Path, "Resources", "public", "administration", "js")); err == nil {
+			if err := os.WriteFile(path.Join(source.Path, "Resources", ".administration-js"), []byte{}, 0o644); err != nil {
+				return err
+			}
+		}
+		if err := os.RemoveAll(path.Join(source.Path, "Resources", "public")); err != nil {
 			return err
 		}
-		if err := os.WriteFile(path.Join(root, "vendor", "shopware", "administration", "Resources", ".administration-js"), []byte{}, 0o644); err != nil {
-			return err
-		}
-		if err := os.WriteFile(path.Join(root, "vendor", "shopware", "administration", "Resources", ".administration-css"), []byte{}, 0o644); err != nil {
-			return err
-		}
-		deleteAssetsSection.End(ctx)
 	}
+	if err := os.RemoveAll(path.Join(root, "vendor", "shopware", "administration", "Resources", "public")); err != nil {
+		return err
+	}
+	if err := os.WriteFile(path.Join(root, "vendor", "shopware", "administration", "Resources", ".administration-js"), []byte{}, 0o644); err != nil {
+		return err
+	}
+	return os.WriteFile(path.Join(root, "vendor", "shopware", "administration", "Resources", ".administration-css"), []byte{}, 0o644)
+}
 
-	if !shopCfg.Build.DisableChecksums {
-		checksumSection := ci.Default.Section(ctx, "Generating extension checksums")
-		extensions := extension.FindExtensionsFromProject(ctx, root, false)
-		for _, ext := range extensions {
-			extPath := ext.GetPath()
-			if shopCfg.Build.KeepExistingChecksums {
-				if _, err := os.Stat(path.Join(extPath, "checksum.json")); err == nil {
-					logging.FromContext(ctx).Infof("Keeping existing checksum.json for %s", extPath)
-					continue
-				}
-			}
-			if err := extension.GenerateChecksumJSON(ctx, extPath, ext); err != nil {
-				logging.FromContext(ctx).Warnf("Failed to generate checksum for %s: %v", extPath, err)
+func generateChecksums(ctx context.Context, root string, shopCfg *shop.Config) {
+	section := ci.Default.Section(ctx, "Generating extension checksums")
+	defer section.End(ctx)
+	for _, ext := range extension.FindExtensionsFromProject(ctx, root, false) {
+		extPath := ext.GetPath()
+		if shopCfg.Build.KeepExistingChecksums {
+			if _, err := os.Stat(path.Join(extPath, "checksum.json")); err == nil {
+				logging.FromContext(ctx).Infof("Keeping existing checksum.json for %s", extPath)
+				continue
 			}
 		}
-		checksumSection.End(ctx)
+		if err := extension.GenerateChecksumJSON(ctx, extPath, ext); err != nil {
+			logging.FromContext(ctx).Warnf("Failed to generate checksum for %s: %v", extPath, err)
+		}
 	}
-	return nil
 }
