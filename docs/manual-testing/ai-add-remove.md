@@ -12,7 +12,7 @@ result, and where noted a **verify** command.
 Build once. `npx`/Node.js must be on PATH (skills.sh runs through npx).
 
 ```bash
-cd /Users/t.turkowski/Playground/shopware-cli && go build -o /tmp/swcli .
+cd /your/work/directory/shopware-cli && go build -o /tmp/swcli .
 ```
 
 ```bash
