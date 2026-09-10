@@ -40,12 +40,17 @@ var aiRemoveCmd = &cobra.Command{
 		global, _ := cmd.Flags().GetBool("global")
 		dryRun, _ := cmd.Flags().GetBool("dry-run")
 
-		entry, ok := directory.Load().Get(name)
-		if !ok {
-			return fmt.Errorf("unknown integration %q (see `shopware-cli ai list`)", name)
-		}
 		if agent == "" {
 			return errors.New("specify the target agent with --agent (e.g. --agent claude-code)")
+		}
+
+		// The directory gives the canonical name, but a recorded install is
+		// authority enough to remove — even if the integration has since left
+		// the directory.
+		entry, known := directory.Load().Get(name)
+		removeName := name
+		if known {
+			removeName = entry.Name
 		}
 
 		// State (and the agent config) live in the user config dir for a
@@ -63,22 +68,28 @@ var aiRemoveCmd = &cobra.Command{
 			saveState = func(f state.File) error { return state.SaveProject(root, f) }
 		}
 
-		result := removeResult{
-			Name:    entry.Name,
-			Agent:   agent,
-			Scope:   scope,
-			DryRun:  dryRun,
-			Command: skillsRemoveArgs(entry.Name, agent, global),
-		}
-
 		current, err := readState()
 		if err != nil {
 			return err
 		}
 
 		// Remove only what the CLI recorded; a hand-written config is left alone.
-		next, recorded := state.Remove(current, entry.Name, agent, scope)
-		result.Removed = recorded
+		next, recorded := state.Remove(current, removeName, agent, scope)
+
+		// Nothing recorded and the name is unknown to the directory: a typo
+		// rather than a stale install.
+		if !recorded && !known {
+			return fmt.Errorf("unknown integration %q (see `shopware-cli ai list`)", name)
+		}
+
+		result := removeResult{
+			Name:    removeName,
+			Agent:   agent,
+			Scope:   scope,
+			Removed: recorded,
+			DryRun:  dryRun,
+			Command: skillsRemoveArgs(removeName, agent, global),
+		}
 
 		if dryRun || !recorded {
 			return writeRemoveResult(cmd.OutOrStdout(), format, result)
@@ -88,6 +99,7 @@ var aiRemoveCmd = &cobra.Command{
 			return err
 		}
 		if err := saveState(next); err != nil {
+			_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "warning: %s was removed but the state file could not be updated (%v); re-run `ai remove`\n", result.Name, err)
 			return err
 		}
 

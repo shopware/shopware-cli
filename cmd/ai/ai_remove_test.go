@@ -84,6 +84,26 @@ func TestRemoveDryRunTouchesNothing(t *testing.T) {
 	assert.Len(t, st.Installed, 1, "dry-run must not change state")
 }
 
+func TestRemoveRecordedButUnknownIntegration(t *testing.T) {
+	rec := setupAdd(t)
+
+	cwd, err := os.Getwd()
+	require.NoError(t, err)
+	// A recorded install whose integration is no longer in the directory.
+	require.NoError(t, state.SaveProject(cwd, state.File{Installed: []state.InstalledEntry{
+		{Name: "legacy-skill", Agent: "claude-code", Scope: state.ScopeProject},
+	}}))
+
+	out, err := runRemove(t, "legacy-skill", "--agent", "claude-code")
+	require.NoError(t, err)
+	assert.Equal(t, 1, rec.calls, "a recorded install should still be uninstalled via skills")
+	assert.Contains(t, out, "Removed legacy-skill")
+
+	st, err := state.ReadProject(cwd)
+	require.NoError(t, err)
+	assert.Empty(t, st.Installed)
+}
+
 func TestRemoveGuards(t *testing.T) {
 	rec := setupAdd(t)
 
