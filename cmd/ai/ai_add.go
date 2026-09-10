@@ -14,14 +14,13 @@ import (
 	"github.com/shopware/shopware-cli/internal/ai/state"
 )
 
-// The flag is named --agent to match skills.sh terminology; #1334 refers to it
-// as the client. The CLI hardcodes no agent names: which agents exist is
-// skills.sh's business, so a new one it supports works without a CLI change.
+// The CLI hardcodes no agent names: which agents exist is skills.sh's business,
+// so a new one it supports works without a CLI change.
 
 // addResult is the machine-readable shape of `ai add` (--format json).
 type addResult struct {
 	Name             string      `json:"name"`
-	Client           string      `json:"client"`
+	Agent            string      `json:"agent"`
 	Scope            state.Scope `json:"scope"`
 	RequestedTag     string      `json:"requestedTag"`
 	ResolvedRevision string      `json:"resolvedRevision"`
@@ -31,7 +30,7 @@ type addResult struct {
 
 var aiAddCmd = &cobra.Command{
 	Use:          "add <name>[@<tag>]",
-	Short:        "Install a Shopware AI integration into an AI client",
+	Short:        "Install a Shopware AI integration into an AI agent",
 	Args:         cobra.ExactArgs(1),
 	SilenceUsage: true,
 	RunE: func(cmd *cobra.Command, args []string) error {
@@ -61,7 +60,7 @@ var aiAddCmd = &cobra.Command{
 			return errors.New("global install of a git-delivered skill is not supported yet; install it into a project (omit --global)")
 		}
 		if agent == "" {
-			return errors.New("specify the target client with --agent (e.g. --agent claude-code)")
+			return errors.New("specify the target agent with --agent (e.g. --agent claude-code)")
 		}
 
 		// State lives where the config lives: a --global install and its state
@@ -112,7 +111,7 @@ var aiAddCmd = &cobra.Command{
 
 		result := addResult{
 			Name:             entry.Name,
-			Client:           agent,
+			Agent:            agent,
 			Scope:            scope,
 			RequestedTag:     tag,
 			ResolvedRevision: ref,
@@ -129,7 +128,7 @@ var aiAddCmd = &cobra.Command{
 			return err
 		}
 
-		// Idempotent: the same integration, client, scope and revision is a no-op.
+		// Idempotent: the same integration, agent, scope and revision is a no-op.
 		if !isInstalled(current, result) {
 			// A git skill declares an owner-maintained compatibility check; run
 			// it against the project before installing anything.
@@ -149,7 +148,7 @@ var aiAddCmd = &cobra.Command{
 
 			next := state.Upsert(current, state.InstalledEntry{
 				Name:             result.Name,
-				Client:           result.Client,
+				Agent:            result.Agent,
 				Scope:            result.Scope,
 				RequestedTag:     result.RequestedTag,
 				ResolvedRevision: result.ResolvedRevision,
@@ -175,7 +174,7 @@ func splitNameTag(s string) (name, tag string) {
 // isInstalled reports whether the state already records this exact install.
 func isInstalled(f state.File, r addResult) bool {
 	for _, e := range f.Installed {
-		if e.Name == r.Name && e.Client == r.Client && e.Scope == r.Scope && e.ResolvedRevision == r.ResolvedRevision {
+		if e.Name == r.Name && e.Agent == r.Agent && e.Scope == r.Scope && e.ResolvedRevision == r.ResolvedRevision {
 			return true
 		}
 	}
@@ -195,7 +194,7 @@ func writeAddResult(w io.Writer, format string, r addResult) error {
 	}
 
 	if r.DryRun {
-		_, err := fmt.Fprintf(w, "[dry-run] would install %s for %s (%s):\n  %s\n", r.Name, r.Client, r.Scope, strings.Join(r.Command, " "))
+		_, err := fmt.Fprintf(w, "[dry-run] would install %s for %s (%s):\n  %s\n", r.Name, r.Agent, r.Scope, strings.Join(r.Command, " "))
 
 		return err
 	}
@@ -204,7 +203,7 @@ func writeAddResult(w io.Writer, format string, r addResult) error {
 	if r.ResolvedRevision != "" {
 		rev = " @" + r.ResolvedRevision
 	}
-	_, err := fmt.Fprintf(w, "Installed %s for %s (%s)%s\n", r.Name, r.Client, r.Scope, rev)
+	_, err := fmt.Fprintf(w, "Installed %s for %s (%s)%s\n", r.Name, r.Agent, r.Scope, rev)
 
 	return err
 }

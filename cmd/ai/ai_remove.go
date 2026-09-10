@@ -17,7 +17,7 @@ import (
 // removeResult is the machine-readable shape of `ai remove` (--format json).
 type removeResult struct {
 	Name    string      `json:"name"`
-	Client  string      `json:"client"`
+	Agent   string      `json:"agent"`
 	Scope   state.Scope `json:"scope"`
 	Removed bool        `json:"removed"`
 	DryRun  bool        `json:"dryRun"`
@@ -45,10 +45,10 @@ var aiRemoveCmd = &cobra.Command{
 			return fmt.Errorf("unknown integration %q (see `shopware-cli ai list`)", name)
 		}
 		if agent == "" {
-			return errors.New("specify the target client with --agent (e.g. --agent claude-code)")
+			return errors.New("specify the target agent with --agent (e.g. --agent claude-code)")
 		}
 
-		// State (and the client config) live in the user config dir for a
+		// State (and the agent config) live in the user config dir for a
 		// --global install, or in the current directory for a project install.
 		scope := state.ScopeGlobal
 		readState := state.Read
@@ -65,7 +65,7 @@ var aiRemoveCmd = &cobra.Command{
 
 		result := removeResult{
 			Name:    entry.Name,
-			Client:  agent,
+			Agent:   agent,
 			Scope:   scope,
 			DryRun:  dryRun,
 			Command: skillsRemoveArgs(entry.Name, agent, global),
@@ -107,7 +107,7 @@ func writeRemoveResult(w io.Writer, format string, r removeResult) error {
 	}
 
 	if !r.Removed {
-		_, err := fmt.Fprintf(w, "%s is not recorded for %s (%s) by shopware-cli; nothing to remove\n", r.Name, r.Client, r.Scope)
+		_, err := fmt.Fprintf(w, "%s is not recorded for %s (%s) by shopware-cli; nothing to remove\n", r.Name, r.Agent, r.Scope)
 
 		return err
 	}
@@ -116,7 +116,7 @@ func writeRemoveResult(w io.Writer, format string, r removeResult) error {
 	if r.DryRun {
 		verb = "[dry-run] would remove"
 	}
-	_, err := fmt.Fprintf(w, "%s %s for %s (%s):\n  %s\n", verb, r.Name, r.Client, r.Scope, strings.Join(r.Command, " "))
+	_, err := fmt.Fprintf(w, "%s %s for %s (%s):\n  %s\n", verb, r.Name, r.Agent, r.Scope, strings.Join(r.Command, " "))
 
 	return err
 }

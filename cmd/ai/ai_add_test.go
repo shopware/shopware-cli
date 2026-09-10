@@ -38,29 +38,29 @@ func TestSplitNameTag(t *testing.T) {
 
 func TestIsInstalled(t *testing.T) {
 	f := state.File{Installed: []state.InstalledEntry{
-		{Name: "a", Client: "claude-code", Scope: state.ScopeGlobal, ResolvedRevision: "1"},
+		{Name: "a", Agent: "claude-code", Scope: state.ScopeGlobal, ResolvedRevision: "1"},
 	}}
 
-	assert.True(t, isInstalled(f, addResult{Name: "a", Client: "claude-code", Scope: state.ScopeGlobal, ResolvedRevision: "1"}))
+	assert.True(t, isInstalled(f, addResult{Name: "a", Agent: "claude-code", Scope: state.ScopeGlobal, ResolvedRevision: "1"}))
 	// different revision → not installed (an update)
-	assert.False(t, isInstalled(f, addResult{Name: "a", Client: "claude-code", Scope: state.ScopeGlobal, ResolvedRevision: "2"}))
-	// different client → not installed
-	assert.False(t, isInstalled(f, addResult{Name: "a", Client: "codex", Scope: state.ScopeGlobal, ResolvedRevision: "1"}))
+	assert.False(t, isInstalled(f, addResult{Name: "a", Agent: "claude-code", Scope: state.ScopeGlobal, ResolvedRevision: "2"}))
+	// different agent → not installed
+	assert.False(t, isInstalled(f, addResult{Name: "a", Agent: "codex", Scope: state.ScopeGlobal, ResolvedRevision: "1"}))
 }
 
 func TestWriteAddResultJSON(t *testing.T) {
 	var buf bytes.Buffer
 	require.NoError(t, writeAddResult(&buf, formatJSON, addResult{
-		Name: "shopware-cli", Client: "claude-code", Scope: state.ScopeGlobal,
+		Name: "shopware-cli", Agent: "claude-code", Scope: state.ScopeGlobal,
 		ResolvedRevision: "0.18.3", Command: []string{"npx", "skills"},
 	}))
-	assert.JSONEq(t, `{"name":"shopware-cli","client":"claude-code","scope":"global","requestedTag":"","resolvedRevision":"0.18.3","dryRun":false,"command":["npx","skills"]}`, buf.String())
+	assert.JSONEq(t, `{"name":"shopware-cli","agent":"claude-code","scope":"global","requestedTag":"","resolvedRevision":"0.18.3","dryRun":false,"command":["npx","skills"]}`, buf.String())
 }
 
 func TestWriteAddResultTableDryRun(t *testing.T) {
 	var buf bytes.Buffer
 	require.NoError(t, writeAddResult(&buf, formatTable, addResult{
-		Name: "shopware-cli", Client: "claude-code", Scope: state.ScopeGlobal,
+		Name: "shopware-cli", Agent: "claude-code", Scope: state.ScopeGlobal,
 		DryRun: true, Command: []string{"npx", "skills", "add"},
 	}))
 	assert.Contains(t, buf.String(), "[dry-run]")

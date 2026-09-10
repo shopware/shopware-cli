@@ -31,10 +31,10 @@ const (
 
 // InstalledEntry records a single CLI-managed installation. The field names are
 // a public contract (camelCase), reported by `ai list --installed` and
-// `ai info`. #1337 fills these when it installs a skill.
+// `ai info`.
 type InstalledEntry struct {
 	Name             string `json:"name"`
-	Client           string `json:"client"`
+	Agent            string `json:"agent"`
 	Scope            Scope  `json:"scope"`
 	RequestedTag     string `json:"requestedTag"`
 	ResolvedRevision string `json:"resolvedRevision"`
@@ -103,13 +103,13 @@ func readFrom(p string) (File, error) {
 }
 
 // Upsert returns f with e added, or with the existing entry that has the same
-// (name, client, scope) replaced. The same integration can be installed for
-// different clients and scopes, so all three fields form the identity. This
+// (name, agent, scope) replaced. The same integration can be installed for
+// different agents and scopes, so all three fields form the identity. This
 // makes a repeated `ai add` idempotent: the list does not grow.
 func Upsert(f File, e InstalledEntry) File {
 	for i := range f.Installed {
 		x := f.Installed[i]
-		if x.Name == e.Name && x.Client == e.Client && x.Scope == e.Scope {
+		if x.Name == e.Name && x.Agent == e.Agent && x.Scope == e.Scope {
 			f.Installed[i] = e
 			return f
 		}
@@ -120,13 +120,13 @@ func Upsert(f File, e InstalledEntry) File {
 	return f
 }
 
-// Remove returns f with the entry matching (name, client, scope) dropped, and
+// Remove returns f with the entry matching (name, agent, scope) dropped, and
 // whether an entry was removed. `ai remove` uses this to drop only what the CLI
 // recorded.
-func Remove(f File, name, client string, scope Scope) (File, bool) {
+func Remove(f File, name, agent string, scope Scope) (File, bool) {
 	for i := range f.Installed {
 		x := f.Installed[i]
-		if x.Name == name && x.Client == client && x.Scope == scope {
+		if x.Name == name && x.Agent == agent && x.Scope == scope {
 			f.Installed = append(f.Installed[:i], f.Installed[i+1:]...)
 			return f, true
 		}

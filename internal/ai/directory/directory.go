@@ -95,8 +95,8 @@ type ListOptions struct {
 }
 
 // knownTypeFilters are the type identifiers accepted by List. It includes "mcp",
-// reserved for a future increment (#1336): it currently matches no entry, so a
-// "mcp" filter returns an empty list rather than an error. Any other value is
+// reserved for a future increment: it currently matches no entry, so a "mcp"
+// filter returns an empty list rather than an error. Any other value is
 // rejected.
 var knownTypeFilters = map[string]bool{
 	string(TypeSkill): true,
