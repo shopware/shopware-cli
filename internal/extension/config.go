@@ -268,7 +268,7 @@ func readExtensionConfig(ctx context.Context, dir string) (*Config, error) {
 	config.Build.Zip.Assets.Enabled = true
 	config.Build.Zip.Composer.Enabled = true
 
-	config.storageLocation = ConfigPath(dir)
+	config.storageLocation = ConfigPath(ctx, dir)
 	if config.storageLocation == "" {
 		config.CompatibilityDate = compatibility.DefaultDate()
 		return config, nil

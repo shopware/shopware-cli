@@ -39,7 +39,7 @@ Examples:
 
 		force, _ := cmd.Flags().GetBool("force")
 
-		existing := extension.ConfigPath(abs)
+		existing := extension.ConfigPath(cmd.Context(), abs)
 		if !force && existing != "" && system.IsInteractionEnabled(cmd.Context()) {
 			overwrite := false
 			form := huh.NewForm(
@@ -58,7 +58,7 @@ Examples:
 			force = true
 		}
 
-		path, err := extension.InitConfig(abs, force)
+		path, err := extension.InitConfig(cmd.Context(), abs, force)
 		if err != nil {
 			return err
 		}
