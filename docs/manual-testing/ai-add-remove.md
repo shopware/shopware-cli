@@ -26,8 +26,7 @@ compatibility check passes:
 printf '{"require":{"shopware/core":"^6.6"}}\n' > /tmp/ai-shopware/composer.json
 ```
 
-> The `ai` group is `Hidden: true`, so it won't appear in `--help`, but every
-> command works when invoked directly.
+> The `ai` group is visible in `shopware-cli --help`.
 
 ---
 
