@@ -69,9 +69,8 @@ func WriteTarGz(ctx context.Context, w io.Writer, dir string, exclude func(strin
 		if err != nil {
 			return err
 		}
-		defer func() { _ = file.Close() }()
 		_, err = io.Copy(tw, ContextReader(ctx, file))
-		return err
+		return errors.Join(err, file.Close())
 	})
 }
 
