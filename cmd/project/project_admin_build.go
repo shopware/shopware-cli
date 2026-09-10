@@ -7,6 +7,7 @@ import (
 
 	"github.com/shopware/shopware-cli/internal/executor"
 	"github.com/shopware/shopware-cli/internal/extension"
+	"github.com/shopware/shopware-cli/internal/projectbuild"
 	"github.com/shopware/shopware-cli/internal/shop"
 	"github.com/shopware/shopware-cli/logging"
 )
@@ -42,7 +43,7 @@ var projectAdminBuildCmd = &cobra.Command{
 
 		logging.FromContext(cmd.Context()).Infof("Looking for extensions to build assets in project")
 
-		if err := runTransparentCommand(cmdExecutor.ConsoleCommand(executor.AllowBinCI(cmd.Context()), "feature:dump")); err != nil {
+		if err := projectbuild.RunCommand(cmdExecutor.ConsoleCommand(executor.AllowBinCI(cmd.Context()), "feature:dump")); err != nil {
 			return err
 		}
 
@@ -76,7 +77,7 @@ var projectAdminBuildCmd = &cobra.Command{
 			return nil
 		}
 
-		return runTransparentCommand(cmdExecutor.ConsoleCommand(cmd.Context(), "assets:install"))
+		return projectbuild.RunCommand(cmdExecutor.ConsoleCommand(cmd.Context(), "assets:install"))
 	},
 }
 
