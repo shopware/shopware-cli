@@ -10,7 +10,7 @@ dist/
 /.shopware-project.yml
 /.shopware-project.yaml
 /.config/shopware-project.yml
-/.config/shopware-extension.yaml
+/.config/shopware-extension.yml
 /test-app
 /go-shopware-admin-api-sdk
 /*.zip

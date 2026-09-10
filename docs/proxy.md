@@ -147,7 +147,7 @@ touches five things, records the old values, and `down` restores them exactly:
 | Traefik labels, no host ports, shared network, CA mount | `compose.yaml` (regenerated in proxy mode) | regenerated in fixed-port mode |
 | `APP_URL=https://<host>` | `.env.local` (one-line surgical edit) | previous value from registry |
 | Sales channel domain | database, via a parameterized `UPDATE` on the executor's DB connection | previous value (while the stack runs; otherwise a hint to restore it) |
-| `url:` keys (top-level + environment) | `.config/shopware-project.yml` (comment-preserving YAML edit) | previous values; a previously absent key is removed again |
+| `url:` keys (top-level + environment) | resolved project configuration file (recommended `.config/shopware-project.yml`; legacy paths preserved) | previous values; a previously absent key is removed again |
 | Traefik network aliases | shared Traefik container | reconciled to the remaining hostnames |
 | Registry entry | `<state dir>/registry.json` | entry removed |
 

@@ -18,7 +18,7 @@ type PHPVersionNotFoundError struct {
 func (e *PHPVersionNotFoundError) Error() string {
 	var b strings.Builder
 
-	fmt.Fprintf(&b, "this project requires PHP %s (php_version in .config/shopware-project.yml), but no PHP %s was found on this machine", e.Pin, e.Pin)
+	fmt.Fprintf(&b, "this project requires PHP %s (see php_version in your .config/shopware-project.yml / .shopware-project.yaml / .shopware-project.yml), but no PHP %s was found on this machine", e.Pin, e.Pin)
 
 	if len(e.Installations) > 0 {
 		found := make([]string, 0, len(e.Installations))
