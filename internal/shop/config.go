@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"path"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -559,6 +558,15 @@ type ConfigDeploymentHook struct {
 	Steps []ConfigDeploymentHookStep
 }
 
+// MarshalYAML preserves the public hook format when packaging resolved config.
+// The internal Steps wrapper is not accepted by UnmarshalYAML.
+func (h ConfigDeploymentHook) MarshalYAML() (any, error) {
+	if len(h.Steps) == 0 {
+		return "", nil
+	}
+	return h.Steps, nil
+}
+
 func (h *ConfigDeploymentHook) UnmarshalYAML(value *yaml.Node) error {
 	if value.Kind == yaml.ScalarNode {
 		var script string
@@ -966,7 +974,13 @@ func DefaultConfigFileName() string {
 		return ".shopware-project.yml"
 	}
 
-	if _, err := os.Stat(path.Join(currentDir, ".shopware-project.yaml")); err == nil {
+	return DefaultConfigFileNameInDir(currentDir)
+}
+
+// DefaultConfigFileNameInDir applies the same config filename discovery to an
+// explicit project directory without changing the process working directory.
+func DefaultConfigFileNameInDir(dir string) string {
+	if _, err := os.Stat(filepath.Join(dir, ".shopware-project.yaml")); err == nil {
 		return ".shopware-project.yaml"
 	}
 
