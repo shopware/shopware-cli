@@ -94,6 +94,11 @@ func setupAdd(t *testing.T) *skillsCall {
 	}
 	t.Cleanup(func() { runSkills = prev })
 
+	// Stub tag resolution so git-delivery tests need no network.
+	prevResolve := resolveLatestTag
+	resolveLatestTag = func(_ context.Context, _ string) (string, error) { return "0.1.9", nil }
+	t.Cleanup(func() { resolveLatestTag = prevResolve })
+
 	return rec
 }
 
@@ -182,6 +187,34 @@ func TestAddProjectScopeWritesToCurrentDir(t *testing.T) {
 	global, err := state.Read()
 	require.NoError(t, err)
 	assert.Empty(t, global.Installed)
+}
+
+func TestAddGitDeliveryResolvesLatestTagAndInstalls(t *testing.T) {
+	rec := setupAdd(t) // stubs resolveLatestTag → "0.1.9"
+
+	// No @tag → resolve the latest release from the git repository.
+	_, err := runAdd(t, "deployment-helper", "--agent", "claude-code")
+	require.NoError(t, err)
+	assert.Equal(t, 1, rec.calls)
+
+	joined := strings.Join(rec.lastArgv, " ")
+	assert.Contains(t, joined, "add shopware/deployment-helper@0.1.9")
+	assert.Contains(t, joined, "--skill deployment-helper")
+
+	cwd, err := os.Getwd()
+	require.NoError(t, err)
+	st, err := state.ReadProject(cwd)
+	require.NoError(t, err)
+	require.Len(t, st.Installed, 1)
+	assert.Equal(t, "0.1.9", st.Installed[0].ResolvedRevision)
+}
+
+func TestAddGitDeliveryGlobalNotSupported(t *testing.T) {
+	rec := setupAdd(t)
+
+	_, err := runAdd(t, "deployment-helper", "--agent", "claude-code", "--global")
+	assert.ErrorContains(t, err, "global install of a git")
+	assert.Equal(t, 0, rec.calls)
 }
 
 func TestAddGuards(t *testing.T) {

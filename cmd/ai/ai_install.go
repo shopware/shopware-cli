@@ -2,9 +2,13 @@ package ai
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os/exec"
+	"strings"
+
+	"github.com/shyim/go-version"
 )
 
 // skillsVersion pins the skills.sh CLI the commands run against, so a
@@ -48,4 +52,60 @@ var runSkills = func(ctx context.Context, argv []string, out io.Writer) error {
 	}
 
 	return nil
+}
+
+// ownerRepo turns a GitHub repository URL into the "owner/repo" form skills.sh
+// expects (https://github.com/shopware/deployment-helper -> shopware/deployment-helper).
+func ownerRepo(repoURL string) string {
+	s := strings.TrimSuffix(repoURL, ".git")
+	s = strings.TrimPrefix(s, "https://github.com/")
+	s = strings.TrimPrefix(s, "http://github.com/")
+
+	return s
+}
+
+// resolveLatestTag returns the highest stable release tag of repoURL, read with
+// `git ls-remote --tags`. It is a package var so tests can substitute it without
+// network access.
+var resolveLatestTag = func(ctx context.Context, repoURL string) (string, error) {
+	out, err := exec.CommandContext(ctx, "git", "ls-remote", "--tags", repoURL).Output()
+	if err != nil {
+		return "", fmt.Errorf("cannot list release tags of %s: %w", repoURL, err)
+	}
+
+	tag, err := latestStableTag(strings.Split(string(out), "\n"))
+	if err != nil {
+		return "", fmt.Errorf("%s: %w", repoURL, err)
+	}
+
+	return tag, nil
+}
+
+// latestStableTag picks the highest stable semver tag from `git ls-remote --tags`
+// output lines ("<sha>\trefs/tags/<tag>"). Pre-releases are ignored.
+func latestStableTag(lsRemoteLines []string) (string, error) {
+	var best *version.Version
+	var bestRaw string
+
+	for _, line := range lsRemoteLines {
+		i := strings.Index(line, "refs/tags/")
+		if i < 0 {
+			continue
+		}
+		raw := strings.TrimSpace(strings.TrimSuffix(line[i+len("refs/tags/"):], "^{}"))
+
+		v, err := version.NewVersion(strings.TrimPrefix(raw, "v"))
+		if err != nil || v.Prerelease() != "" {
+			continue
+		}
+		if best == nil || v.GreaterThan(best) {
+			best, bestRaw = v, raw
+		}
+	}
+
+	if best == nil {
+		return "", errors.New("no stable release tag found")
+	}
+
+	return bestRaw, nil
 }

@@ -50,10 +50,15 @@ var aiAddCmd = &cobra.Command{
 			return fmt.Errorf("unknown integration %q (see `shopware-cli ai list`)", name)
 		}
 
-		// Bundled skills only for now; the git delivery path and MCP arrive in
-		// later slices. The agent value is passed straight to skills.sh.
-		if entry.Type != directory.TypeSkill || entry.Delivery.Kind != directory.DeliveryBundled {
-			return fmt.Errorf("installing %q is not supported yet (only bundled skills for now)", name)
+		// Skills only for now (MCP arrives later). The agent value is passed
+		// straight to skills.sh.
+		if entry.Type != directory.TypeSkill {
+			return fmt.Errorf("installing %q is not supported yet (only skills for now)", name)
+		}
+		// A git skill's compatibility check is project-scoped, so a global
+		// install of one is deferred to a later slice.
+		if entry.Delivery.Kind == directory.DeliveryGit && global {
+			return errors.New("global install of a git-delivered skill is not supported yet; install it into a project (omit --global)")
 		}
 		if agent == "" {
 			return errors.New("specify the target client with --agent (e.g. --agent claude-code)")
@@ -75,13 +80,28 @@ var aiAddCmd = &cobra.Command{
 			saveState = func(f state.File) error { return state.SaveProject(root, f) }
 		}
 
-		// A bundled skill's version follows the CLI, so pin the source to the
-		// running CLI version unless the user pinned an explicit tag.
-		ref := tag
-		if ref == "" {
-			ref = cmd.Root().Version
+		// Resolve the source repo and the ref to install. A bundled skill's
+		// version follows the CLI; a git skill uses the explicit tag or the
+		// latest stable release from its repository.
+		var source, ref string
+		switch entry.Delivery.Kind {
+		case directory.DeliveryBundled:
+			ref = tag
+			if ref == "" {
+				ref = cmd.Root().Version
+			}
+			source = "shopware/shopware-cli"
+		case directory.DeliveryGit:
+			ref = tag
+			if ref == "" {
+				if ref, err = resolveLatestTag(cmd.Context(), entry.Delivery.Repository); err != nil {
+					return err
+				}
+			}
+			source = ownerRepo(entry.Delivery.Repository)
+		default:
+			return fmt.Errorf("unsupported delivery %q", entry.Delivery.Kind)
 		}
-		source := "shopware/shopware-cli"
 		if ref != "" {
 			source += "@" + ref
 		}
