@@ -15,17 +15,24 @@
 #
 # Env overrides:
 #   REPO=/path/to/shopware-cli   # repo root (default: two levels up from this script)
-#   SWCLI=/tmp/swcli             # binary path to build/use
+#   SWCLI=/path/to/shopware-cli  # use an existing binary instead of building one
 
 set -uo pipefail
 
 # --- config -----------------------------------------------------------------
 
 REPO="${REPO:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}"
-SWCLI="${SWCLI:-/tmp/swcli}"
-PROJ=/tmp/ai-proj
-SHOP=/tmp/ai-shopware
-HOMEDIR=/tmp/ai-home
+
+# All work happens under a private mktemp directory this script owns, so cleanup
+# never touches caller data. A caller-provided $SWCLI is used as-is and never
+# deleted; otherwise the binary is built into the work dir.
+WORKDIR="$(mktemp -d "${TMPDIR:-/tmp}/ai-e2e.XXXXXX")"
+PROJ="$WORKDIR/proj"
+SHOP="$WORKDIR/shopware"
+HOMEDIR="$WORKDIR/home"
+
+PROVIDED_SWCLI="${SWCLI:-}"
+SWCLI="${SWCLI:-$WORKDIR/swcli}"
 
 SMOKE=0
 KEEP=0
@@ -77,32 +84,40 @@ global_state() { find "$HOMEDIR" -path '*shopware-cli/ai/installed.json' 2>/dev/
 
 cleanup() {
 	if [ "$KEEP" -eq 1 ]; then
-		printf '\n(--keep) artifacts left in %s %s %s and %s\n' "$PROJ" "$SHOP" "$HOMEDIR" "$SWCLI"
+		printf '\n(--keep) artifacts left in %s\n' "$WORKDIR"
 		return
 	fi
-	rm -rf "$PROJ" "$SHOP" "$HOMEDIR" "$SWCLI"
+	rm -rf "$WORKDIR"
 }
 trap cleanup EXIT
 
 # --- prerequisites ----------------------------------------------------------
 
 step "Prerequisites"
-command -v go >/dev/null || {
-	echo "go not found on PATH" >&2
-	exit 1
-}
-echo "Building $SWCLI from $REPO ..."
-(cd "$REPO" && go build -o "$SWCLI" .) || {
-	echo "build failed" >&2
-	exit 1
-}
-ok "build"
+if [ -n "$PROVIDED_SWCLI" ]; then
+	[ -x "$SWCLI" ] || {
+		echo "provided SWCLI is not executable: $SWCLI" >&2
+		exit 1
+	}
+	echo "Using provided binary $SWCLI"
+	ok "binary"
+else
+	command -v go >/dev/null || {
+		echo "go not found on PATH" >&2
+		exit 1
+	}
+	echo "Building $SWCLI from $REPO ..."
+	(cd "$REPO" && go build -o "$SWCLI" .) || {
+		echo "build failed" >&2
+		exit 1
+	}
+	ok "build"
+fi
 
 if [ "$SMOKE" -eq 0 ] && ! command -v npx >/dev/null; then
 	echo "WARNING: npx not found — real install/remove steps (C2+, D3, D4, E, F2, F5) will fail." >&2
 fi
 
-rm -rf "$PROJ" "$SHOP" "$HOMEDIR"
 mkdir -p "$PROJ" "$SHOP" "$HOMEDIR"
 printf '{"require":{"shopware/core":"^6.6"}}\n' >"$SHOP/composer.json"
 

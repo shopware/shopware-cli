@@ -178,21 +178,22 @@ cat /tmp/ai-shopware/.shopware-cli/ai/installed.json
 
 ## E. `ai add --global` (sandboxed HOME)
 
-> All global commands prefix `HOME=/tmp/ai-home` so state
-> (`$HOME/Library/Application Support/shopware-cli/…`) and skills.sh global
-> config (`$HOME/.claude`) stay in the sandbox.
+> All global commands prefix `HOME=/tmp/ai-home XDG_CONFIG_HOME=/tmp/ai-home/.config`
+> so both the install state and the skills.sh global config (`$HOME/.claude`)
+> stay in the sandbox. The state file lives at `shopware-cli/ai/installed.json`
+> inside the OS config dir (macOS: `Library/Application Support`; Linux:
+> `$XDG_CONFIG_HOME`), so locate it with `find` rather than a fixed path.
 
 ### E1 — global install
 ```bash
-HOME=/tmp/ai-home /tmp/swcli ai add shopware-cli --agent claude-code --global
+HOME=/tmp/ai-home XDG_CONFIG_HOME=/tmp/ai-home/.config /tmp/swcli ai add shopware-cli --agent claude-code --global
 ```
-`Installed shopware-cli for claude-code (global)…`. State at
-`/tmp/ai-home/Library/Application Support/shopware-cli/ai/installed.json` with
-`"scope":"global"`.
+`Installed shopware-cli for claude-code (global)…`, with `"scope":"global"`
+recorded.
 
-Verify:
+Verify (platform-neutral lookup):
 ```bash
-cat "/tmp/ai-home/Library/Application Support/shopware-cli/ai/installed.json"
+find /tmp/ai-home -path '*shopware-cli/ai/installed.json' -exec cat {} +
 ```
 
 ---
@@ -238,7 +239,7 @@ First → `unknown integration`; second → `specify the target agent with
 
 ### F5 — global remove
 ```bash
-HOME=/tmp/ai-home /tmp/swcli ai remove shopware-cli --agent claude-code --global
+HOME=/tmp/ai-home XDG_CONFIG_HOME=/tmp/ai-home/.config /tmp/swcli ai remove shopware-cli --agent claude-code --global
 ```
 `Removed … (global)`; global state entry gone.
 
