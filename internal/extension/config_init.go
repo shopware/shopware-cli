@@ -53,11 +53,15 @@ func ConfigExists(dir string) bool {
 // If a config already exists and force is false, an error is returned.
 // Returns the path of the written file.
 func InitConfig(dir string, force bool) (string, error) {
-	if existing := ConfigPath(dir); existing != "" && !force {
-		return "", fmt.Errorf("%s already exists (pass --force to overwrite)", existing)
+	path := ConfigPath(dir)
+	if path != "" && !force {
+		return "", fmt.Errorf("%s already exists (pass --force to overwrite)", path)
 	}
 
-	path := filepath.Join(dir, ConfigLocations[0])
+	if path == "" {
+		path = filepath.Join(dir, ConfigLocations[0])
+	}
+
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return "", fmt.Errorf("create directory: %w", err)
 	}

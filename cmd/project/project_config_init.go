@@ -2,6 +2,7 @@ package project
 
 import (
 	"errors"
+	"os"
 
 	"charm.land/huh/v2"
 	"github.com/spf13/cobra"
@@ -26,9 +27,9 @@ Omit -e / --env on later commands to target that environment.`,
 
 		// first check if a config already exists
 		actualProjectConfigPath := shop.SearchConfigPath(cmd.Context(), ".", projectConfigPath)
-		existingCfg, err := shop.ReadConfig(cmd.Context(), actualProjectConfigPath, false)
+		_, err := os.Stat(actualProjectConfigPath)
 		if err == nil {
-			return errors.New("a config already exists under " + existingCfg.GetStorageLocation())
+			return errors.New("a config already exists under " + actualProjectConfigPath)
 		}
 
 		config := &shop.Config{

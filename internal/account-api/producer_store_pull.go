@@ -158,7 +158,7 @@ func PullExtensionStoreInfo(ctx context.Context, producer ProducerAPI, zipExt ex
 
 	err = newCfg.Dump(zipExt.GetPath())
 	if err != nil {
-		return fmt.Errorf("cannot Dump config: %w", err)
+		return fmt.Errorf("cannot dump config: %w", err)
 	}
 
 	logging.FromContext(ctx).Infof("Files has been written to the given extension folder")
