@@ -54,10 +54,10 @@ var aiAddCmd = &cobra.Command{
 		if entry.Type != directory.TypeSkill {
 			return fmt.Errorf("installing %q is not supported yet (only skills for now)", name)
 		}
-		// A git skill's compatibility check is project-scoped, so a global
-		// install of one is deferred to a later slice.
+		// A git skill's compatibility check runs against a project, so there is
+		// nothing to check for a global install.
 		if entry.Delivery.Kind == directory.DeliveryGit && global {
-			return errors.New("global install of a git-delivered skill is not supported yet; install it into a project (omit --global)")
+			return fmt.Errorf("%q must be installed into a project, not globally: it checks compatibility against that project (omit --global)", entry.Name)
 		}
 		if agent == "" {
 			return errors.New("specify the target agent with --agent (e.g. --agent claude-code)")

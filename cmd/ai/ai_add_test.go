@@ -236,7 +236,7 @@ func TestAddGitDeliveryGlobalNotSupported(t *testing.T) {
 	rec := setupAdd(t)
 
 	_, err := runAdd(t, "deployment-helper", "--agent", "claude-code", "--global")
-	assert.ErrorContains(t, err, "global install of a git")
+	assert.ErrorContains(t, err, "must be installed into a project")
 	assert.Equal(t, 0, rec.calls)
 }
 
