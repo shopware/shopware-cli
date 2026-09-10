@@ -1,10 +1,12 @@
 package ai
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
 	"io"
+	"net/http"
 	"os/exec"
 	"strings"
 
@@ -108,4 +110,50 @@ func latestStableTag(lsRemoteLines []string) (string, error) {
 	}
 
 	return bestRaw, nil
+}
+
+// runCompatCheck fetches the integration's owner-maintained compatibility check
+// at ref and runs it against projectDir. The script's report is written to out
+// (stderr, so --format json stdout stays clean); a non-zero exit means the
+// project is incompatible and the install must not proceed. It is a package var
+// so tests can substitute it without network access.
+var runCompatCheck = func(ctx context.Context, repo, skill, ref, projectDir string, out io.Writer) error {
+	url := fmt.Sprintf("https://raw.githubusercontent.com/%s/%s/skills/%s/scripts/compatibility-check.sh", repo, ref, skill)
+
+	script, err := httpGet(ctx, url)
+	if err != nil {
+		return fmt.Errorf("cannot fetch the compatibility check for %s@%s: %w", skill, ref, err)
+	}
+
+	// The script reads the project root as its first argument.
+	cmd := exec.CommandContext(ctx, "bash", "-s", "--", projectDir)
+	cmd.Stdin = bytes.NewReader(script)
+	cmd.Stdout = out
+	cmd.Stderr = out
+
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("%s@%s is not compatible with this project (see the report above): %w", skill, ref, err)
+	}
+
+	return nil
+}
+
+// httpGet fetches url and returns its body, erroring on any non-200 status.
+func httpGet(ctx context.Context, url string) ([]byte, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("GET %s: %s", url, resp.Status)
+	}
+
+	return io.ReadAll(resp.Body)
 }

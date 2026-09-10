@@ -3,6 +3,7 @@ package ai
 import (
 	"bytes"
 	"context"
+	"errors"
 	"io"
 	"os"
 	"path/filepath"
@@ -98,6 +99,11 @@ func setupAdd(t *testing.T) *skillsCall {
 	prevResolve := resolveLatestTag
 	resolveLatestTag = func(_ context.Context, _ string) (string, error) { return "0.1.9", nil }
 	t.Cleanup(func() { resolveLatestTag = prevResolve })
+
+	// Stub the compatibility check to "compatible" by default; tests override it.
+	prevCompat := runCompatCheck
+	runCompatCheck = func(_ context.Context, _, _, _, _ string, _ io.Writer) error { return nil }
+	t.Cleanup(func() { runCompatCheck = prevCompat })
 
 	return rec
 }
@@ -207,6 +213,23 @@ func TestAddGitDeliveryResolvesLatestTagAndInstalls(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, st.Installed, 1)
 	assert.Equal(t, "0.1.9", st.Installed[0].ResolvedRevision)
+}
+
+func TestAddGitCompatCheckFailureAbortsInstall(t *testing.T) {
+	rec := setupAdd(t)
+	runCompatCheck = func(_ context.Context, _, _, _, _ string, _ io.Writer) error {
+		return errors.New("PHP 8.2+ required, found 8.1")
+	}
+
+	_, err := runAdd(t, "deployment-helper", "--agent", "claude-code")
+	assert.ErrorContains(t, err, "PHP 8.2+")
+	assert.Equal(t, 0, rec.calls, "install must not run when the compatibility check fails")
+
+	cwd, err := os.Getwd()
+	require.NoError(t, err)
+	st, err := state.ReadProject(cwd)
+	require.NoError(t, err)
+	assert.Empty(t, st.Installed, "no state is written when the compatibility check fails")
 }
 
 func TestAddGitDeliveryGlobalNotSupported(t *testing.T) {

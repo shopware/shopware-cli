@@ -131,6 +131,18 @@ var aiAddCmd = &cobra.Command{
 
 		// Idempotent: the same integration, client, scope and revision is a no-op.
 		if !isInstalled(current, result) {
+			// A git skill declares an owner-maintained compatibility check; run
+			// it against the project before installing anything.
+			if entry.Delivery.Kind == directory.DeliveryGit && entry.Compatibility != nil {
+				projectDir, err := os.Getwd()
+				if err != nil {
+					return err
+				}
+				if err := runCompatCheck(cmd.Context(), ownerRepo(entry.Delivery.Repository), entry.Name, ref, projectDir, cmd.ErrOrStderr()); err != nil {
+					return err
+				}
+			}
+
 			if err := runSkills(cmd.Context(), argv, cmd.ErrOrStderr()); err != nil {
 				return err
 			}
