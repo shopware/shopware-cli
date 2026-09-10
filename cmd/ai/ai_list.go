@@ -114,14 +114,16 @@ func readInstalledNames() (map[string]bool, error) {
 	}
 
 	// A project-scoped install is recorded in the current directory.
-	if root, err := os.Getwd(); err == nil {
-		project, err := state.ReadProject(root)
-		if err != nil {
-			return nil, err
-		}
-		for _, e := range project.Installed {
-			names[e.Name] = true
-		}
+	root, err := os.Getwd()
+	if err != nil {
+		return nil, fmt.Errorf("get current directory for project install state: %w", err)
+	}
+	project, err := state.ReadProject(root)
+	if err != nil {
+		return nil, err
+	}
+	for _, e := range project.Installed {
+		names[e.Name] = true
 	}
 
 	return names, nil

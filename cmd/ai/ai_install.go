@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os/exec"
 	"strings"
+	"time"
 
 	"github.com/shyim/go-version"
 )
@@ -65,10 +66,21 @@ var runSkills = func(ctx context.Context, argv []string, out io.Writer) error {
 	cmd.Stderr = out
 
 	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("skills install failed: %w", err)
+		return fmt.Errorf("skills %s failed: %w", skillsOp(argv), err)
 	}
 
 	return nil
+}
+
+// skillsOp returns the skills.sh subcommand from an argv built by
+// skillsAddArgs/skillsRemoveArgs (npx --yes skills@<ver> <op> …), for error
+// messages. It falls back to "command" for an unexpected shape.
+func skillsOp(argv []string) string {
+	if len(argv) > 3 {
+		return argv[3]
+	}
+
+	return "command"
 }
 
 // ownerRepo turns a GitHub repository URL into the "owner/repo" form skills.sh
@@ -153,14 +165,22 @@ var runCompatCheck = func(ctx context.Context, repo, skill, ref, projectDir stri
 	return nil
 }
 
-// httpGet fetches url and returns its body, erroring on any non-200 status.
+// maxCompatCheckBytes caps the compatibility-check download. The script is a
+// small shell file; anything larger is treated as an error rather than fed to
+// bash.
+const maxCompatCheckBytes = 1 << 20 // 1 MiB
+
+// httpGet fetches url and returns its body, erroring on any non-200 status. The
+// request has a finite timeout and the body is bounded, so a stalled or
+// oversized response cannot hang the command or exhaust memory.
 func httpGet(ctx context.Context, url string) ([]byte, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return nil, err
 	}
 
-	resp, err := http.DefaultClient.Do(req)
+	client := &http.Client{Timeout: 30 * time.Second}
+	resp, err := client.Do(req)
 	if err != nil {
 		return nil, err
 	}
@@ -170,5 +190,13 @@ func httpGet(ctx context.Context, url string) ([]byte, error) {
 		return nil, fmt.Errorf("GET %s: %s", url, resp.Status)
 	}
 
-	return io.ReadAll(resp.Body)
+	body, err := io.ReadAll(io.LimitReader(resp.Body, maxCompatCheckBytes+1))
+	if err != nil {
+		return nil, err
+	}
+	if int64(len(body)) > maxCompatCheckBytes {
+		return nil, fmt.Errorf("GET %s: response exceeds %d bytes", url, maxCompatCheckBytes)
+	}
+
+	return body, nil
 }
