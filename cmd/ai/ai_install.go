@@ -36,6 +36,21 @@ func skillsAddArgs(source, skill, agent string, global, assumeYes bool) []string
 	return argv
 }
 
+// skillsRemoveArgs builds the `npx skills remove ...` argv. skills.sh never
+// prompts here: the skill, agent and scope are all supplied.
+func skillsRemoveArgs(skill, agent string, global bool) []string {
+	argv := []string{
+		"npx", "--yes", "skills@" + skillsVersion, "remove", skill,
+		"--agent", agent,
+	}
+	if global {
+		argv = append(argv, "--global")
+	}
+	argv = append(argv, "-y")
+
+	return argv
+}
+
 // runSkills runs a skills.sh command via npx, streaming its output to out so
 // the user sees exactly what skills.sh did (which files it wrote, where). It is
 // a package var so tests can substitute it without shelling out. Callers pass

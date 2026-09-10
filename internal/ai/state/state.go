@@ -120,6 +120,21 @@ func Upsert(f File, e InstalledEntry) File {
 	return f
 }
 
+// Remove returns f with the entry matching (name, client, scope) dropped, and
+// whether an entry was removed. `ai remove` uses this to drop only what the CLI
+// recorded.
+func Remove(f File, name, client string, scope Scope) (File, bool) {
+	for i := range f.Installed {
+		x := f.Installed[i]
+		if x.Name == name && x.Client == client && x.Scope == scope {
+			f.Installed = append(f.Installed[:i], f.Installed[i+1:]...)
+			return f, true
+		}
+	}
+
+	return f, false
+}
+
 // Save writes the global install-state file atomically.
 func Save(f File) error {
 	p, err := path()

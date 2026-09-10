@@ -87,6 +87,30 @@ func TestUpsertReplacesSameKeyAndAppendsNewKey(t *testing.T) {
 	}
 }
 
+func TestRemove(t *testing.T) {
+	f := File{Installed: []InstalledEntry{
+		{Name: "a", Client: "claude-code", Scope: ScopeGlobal},
+		{Name: "b", Client: "claude-code", Scope: ScopeGlobal},
+	}}
+
+	f, ok := Remove(f, "a", "claude-code", ScopeGlobal)
+	if !ok {
+		t.Fatal("expected removal to report true")
+	}
+	if len(f.Installed) != 1 || f.Installed[0].Name != "b" {
+		t.Fatalf("wrong entry removed: %+v", f.Installed)
+	}
+
+	// A matching name+client but different scope is not removed.
+	if _, ok := Remove(f, "b", "claude-code", ScopeProject); ok {
+		t.Error("expected no removal for a mismatched scope")
+	}
+	// A missing entry reports false.
+	if _, ok := Remove(f, "missing", "claude-code", ScopeGlobal); ok {
+		t.Error("expected no removal for a missing entry")
+	}
+}
+
 func TestSaveProjectRoundTrip(t *testing.T) {
 	root := t.TempDir()
 
