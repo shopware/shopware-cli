@@ -9,6 +9,8 @@ dist/
 /.shopware-cli
 /.shopware-project.yml
 /.shopware-project.yaml
+/.config/shopware-project.yml
+/.config/shopware-extension.yaml
 /test-app
 /go-shopware-admin-api-sdk
 /*.zip

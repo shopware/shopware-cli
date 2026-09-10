@@ -83,7 +83,7 @@ shopware-cli --no-update-hint
 
 ## Configuration
 
-Shop URL and Admin API credentials belong under named `environments` in `.shopware-project.yml`. Project-level keys such as `build`, `dump`, `docker`, and `php_version` stay at the top level.
+Shop URL and Admin API credentials belong under named `environments` in `.config/shopware-project.yml`. Project-level keys such as `build`, `dump`, `docker`, and `php_version` stay at the top level.
 
 ```yaml
 environments:

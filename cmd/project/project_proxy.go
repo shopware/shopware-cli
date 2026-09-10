@@ -407,7 +407,7 @@ func (e *proxyEnvironment) envLocalPath() string {
 	return filepath.Join(e.projectRoot, ".env.local")
 }
 
-// switchProjectConfigURLs points the url keys in .shopware-project.yml at
+// switchProjectConfigURLs points the url keys in .config/shopware-project.yml at
 // the proxy — the dev TUI and the admin API client resolve the shop URL from
 // them — and returns the pre-proxy state for the registry, so down can
 // restore the file exactly. On re-registration the state remembered by the
@@ -570,7 +570,7 @@ func (e *proxyEnvironment) down(ctx context.Context, hintTeardown bool) error {
 		}
 	}
 
-	// Restore the url keys in .shopware-project.yml to their pre-proxy state.
+	// Restore the url keys in .config/shopware-project.yml to their pre-proxy state.
 	if registered && entry.PreviousConfig != nil {
 		if err := shop.RestoreProjectURL(e.configPath, environmentName, *entry.PreviousConfig); err != nil {
 			fmt.Println(tui.RedText.Render("  Could not restore the url in the project config: " + err.Error()))

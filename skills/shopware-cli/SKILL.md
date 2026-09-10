@@ -111,13 +111,15 @@ Do not infer permission or user intent simply because credentials are available.
 
 Relevant files can include:
 
-- `.shopware-project.yml` (shop URL and Admin API credentials live under `environments`; empty `-e` targets `environments.local`)
-- `.shopware-extension.yml`
+- `.config/shopware-project.yml` / `.shopware-project.yaml` / `.shopware-project.yml` (shop URL and Admin API credentials live under `environments`; empty `-e` targets `environments.local`)
+- `.config/shopware-extension.yml` / `.shopware-extension.yml` / `.shopware-extension.yaml`
 - `composer.json`
 - `composer.lock`
 - `manifest.xml`
 
 Do not infer the project type, extension type, target environment, or Shopware version solely from the user's wording.
+
+Only the first found `yml` / `yaml` is used in the specified order above, prefer the first one for new projects.
 
 Prefer CLI-provided configuration schemas over remembered configuration fields.
 

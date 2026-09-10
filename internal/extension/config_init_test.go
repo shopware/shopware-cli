@@ -17,7 +17,7 @@ func TestInitConfigWritesSchemaCommentAndToday(t *testing.T) {
 
 	path, err := InitConfig(dir, false)
 	require.NoError(t, err)
-	assert.Equal(t, filepath.Join(dir, ConfigFileName), path)
+	assert.Equal(t, filepath.Join(dir, ".config/shopware-extension.yml"), path)
 
 	raw, err := os.ReadFile(path)
 	require.NoError(t, err)
@@ -57,7 +57,7 @@ func TestConfigExists(t *testing.T) {
 	assert.False(t, ConfigExists(dir))
 	assert.Empty(t, ConfigPath(dir))
 
-	require.NoError(t, os.WriteFile(filepath.Join(dir, ConfigFileNameAlt), []byte("{}\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, ConfigLocations[2]), []byte("{}\n"), 0o644))
 	assert.True(t, ConfigExists(dir))
-	assert.Equal(t, filepath.Join(dir, ConfigFileNameAlt), ConfigPath(dir))
+	assert.Equal(t, filepath.Join(dir, ConfigLocations[2]), ConfigPath(dir))
 }

@@ -96,7 +96,7 @@ If a file is not found locally, it proxies the request to the upstream server.`,
 		}
 
 		if upstreamURL == "" {
-			return errors.New("upstream URL must be provided either via --url flag or in .shopware-project.yml")
+			return errors.New("upstream URL must be provided either via --url flag or in " + cfg.GetStorageLocation())
 		}
 
 		// Parse upstream URL

@@ -271,7 +271,7 @@ func TestReadExtensionConfig(t *testing.T) {
 		assert.True(t, config.Build.Zip.Composer.Enabled)
 		assert.Equal(t, compatibility.DefaultDate(), config.CompatibilityDate)
 		assert.NoError(t, compatibility.ValidateDate(config.CompatibilityDate))
-		assert.Equal(t, ".shopware-extension.yml", config.FileName)
+		assert.Equal(t, "", config.storageLocation)
 	})
 
 	t.Run("reads .shopware-extension.yml", func(t *testing.T) {
@@ -284,13 +284,14 @@ store:
 build:
   shopwareVersionConstraint: "~6.5.0"
 `
-		require.NoError(t, os.WriteFile(filepath.Join(tmpDir, ".shopware-extension.yml"), []byte(configContent), 0644))
+		cfgPath := filepath.Join(tmpDir, ".shopware-extension.yml")
+		require.NoError(t, os.WriteFile(cfgPath, []byte(configContent), 0644))
 
 		config, err := readExtensionConfig(t.Context(), tmpDir)
 		require.NoError(t, err)
 		assert.Equal(t, "~6.5.0", config.Build.ShopwareVersionConstraint)
 		assert.Equal(t, "2026-02-11", config.CompatibilityDate)
-		assert.Equal(t, ".shopware-extension.yml", config.FileName)
+		assert.Equal(t, cfgPath, config.storageLocation)
 	})
 
 	t.Run("prefers .yml over .yaml", func(t *testing.T) {
@@ -310,6 +311,31 @@ build:
 		config, err := readExtensionConfig(t.Context(), tmpDir)
 		require.NoError(t, err)
 		assert.Equal(t, "from-yml", config.Build.ShopwareVersionConstraint)
+	})
+
+	t.Run("prefers .config/shopware-extension.yml over root level .yml / .yaml", func(t *testing.T) {
+		tmpDir := t.TempDir()
+
+		configContent := `
+build:
+  shopwareVersionConstraint: "from-recommended-config"
+`
+		ymlContent := `
+build:
+  shopwareVersionConstraint: "from-yml"
+`
+		yamlContent := `
+build:
+  shopwareVersionConstraint: "from-yaml"
+`
+		require.NoError(t, os.MkdirAll(filepath.Join(tmpDir, ".config"), 0o755))
+		require.NoError(t, os.WriteFile(filepath.Join(tmpDir, ".config/shopware-extension.yml"), []byte(configContent), 0644))
+		require.NoError(t, os.WriteFile(filepath.Join(tmpDir, ".shopware-extension.yml"), []byte(ymlContent), 0644))
+		require.NoError(t, os.WriteFile(filepath.Join(tmpDir, ".shopware-extension.yaml"), []byte(yamlContent), 0644))
+
+		config, err := readExtensionConfig(t.Context(), tmpDir)
+		require.NoError(t, err)
+		assert.Equal(t, "from-recommended-config", config.Build.ShopwareVersionConstraint)
 	})
 
 	t.Run("returns error for invalid yaml", func(t *testing.T) {
@@ -561,5 +587,38 @@ func TestValidateExtensionConfig(t *testing.T) {
 		err := validateExtensionConfig(config)
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "must not escape")
+	})
+}
+
+func TestConfig_Dump(t *testing.T) {
+	t.Run("dump persists to original config file location", func(t *testing.T) {
+		dir := t.TempDir()
+
+		path := filepath.Join(dir, ".shopware-extension.yml")
+		config := &Config{
+			CompatibilityDate: "helloWorld",
+			storageLocation:   path,
+		}
+
+		err := config.Dump(dir)
+		require.NoError(t, err)
+
+		_, err = os.ReadFile(path)
+		assert.NoError(t, err)
+	})
+
+	t.Run("dump falls back to recommended file location", func(t *testing.T) {
+		dir := t.TempDir()
+
+		config := &Config{
+			CompatibilityDate: "helloWorld",
+		}
+
+		err := config.Dump(dir)
+		require.NoError(t, err)
+
+		path := filepath.Join(dir, ".config/shopware-extension.yml")
+		_, err = os.ReadFile(path)
+		assert.NoError(t, err)
 	})
 }

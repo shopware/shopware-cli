@@ -244,7 +244,7 @@ func newDevEnvironment(cmd *cobra.Command, projectRoot string, cfg *shop.Config)
 	}
 
 	useDocker := exec.Type() == executor.TypeDocker
-	dockerHint := "set the environment " + tui.BoldText.Render("type") + " to " + tui.BoldText.Render("docker") + " in " + tui.BoldText.Render(".shopware-project.yml")
+	dockerHint := "set the environment " + tui.BoldText.Render("type") + " to " + tui.BoldText.Render("docker") + " in " + tui.BoldText.Render(cfg.GetStorageLocation())
 
 	// Docker gets its PHP from the image. Must use the same precedence as the
 	// executor, or the dependencies of a different PHP would be validated.

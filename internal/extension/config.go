@@ -234,7 +234,6 @@ func (c *ConfigValidationList) Identifiers() []string {
 }
 
 type Config struct {
-	FileName string `yaml:"-" jsonschema:"-"`
 	// Controls date-based compatibility behavior, formatted as YYYY-MM-DD.
 	CompatibilityDate string `yaml:"compatibility_date,omitempty" jsonschema:"format=date"`
 	// Store is the store configuration of the extension.
@@ -244,7 +243,8 @@ type Config struct {
 	// Changelog is the changelog configuration of the extension.
 	Changelog changelog.Config `yaml:"changelog,omitempty"`
 	// Validation is the validation configuration of the extension.
-	Validation ConfigValidation `yaml:"validation,omitempty"`
+	Validation      ConfigValidation `yaml:"validation,omitempty"`
+	storageLocation string
 }
 
 func (c *Config) HasCompatibilityDate() bool {
@@ -259,26 +259,24 @@ func (c *Config) IsCompatibilityDateBefore(requiredDate string) bool {
 	return compatibility.IsBefore(c.CompatibilityDate, requiredDate)
 }
 
+func (c *Config) GetStorageLocation() string {
+	return c.storageLocation
+}
+
 func readExtensionConfig(ctx context.Context, dir string) (*Config, error) {
 	config := &Config{}
 	config.Build.Zip.Assets.Enabled = true
 	config.Build.Zip.Composer.Enabled = true
-	config.FileName = ".shopware-extension.yml"
 
-	configLocation := ""
-
-	if _, err := os.Stat(filepath.Join(dir, ".shopware-extension.yml")); err == nil {
-		configLocation = filepath.Join(dir, ".shopware-extension.yml")
-	} else if _, err := os.Stat(filepath.Join(dir, ".shopware-extension.yaml")); err == nil {
-		configLocation = filepath.Join(dir, ".shopware-extension.yaml")
-	} else {
+	config.storageLocation = ConfigPath(dir)
+	if config.storageLocation == "" {
 		config.CompatibilityDate = compatibility.DefaultDate()
 		return config, nil
 	}
 
-	errorFormat := "file: " + configLocation + ": %v"
+	errorFormat := "file: " + config.storageLocation + ": %v"
 
-	fileHandle, err := os.ReadFile(configLocation)
+	fileHandle, err := os.ReadFile(config.storageLocation)
 	if err != nil {
 		return nil, fmt.Errorf(errorFormat, err)
 	}
@@ -289,11 +287,9 @@ func readExtensionConfig(ctx context.Context, dir string) (*Config, error) {
 	}
 
 	if config.CompatibilityDate == "" {
-		logging.FromContext(ctx).Warnf("Config %s is missing compatibility_date, defaulting to %s", configLocation, compatibility.DefaultDate())
+		logging.FromContext(ctx).Warnf("Config %s is missing compatibility_date, defaulting to %s", config.storageLocation, compatibility.DefaultDate())
 		config.CompatibilityDate = compatibility.DefaultDate()
 	}
-
-	config.FileName = filepath.Base(configLocation)
 
 	err = validateExtensionConfig(config)
 	if err != nil {
@@ -361,7 +357,15 @@ func validateRelativePath(p string) error {
 }
 
 func (c *Config) Dump(dir string) error {
-	filePath := filepath.Join(dir, c.FileName)
+	filePath := c.storageLocation
+	if filePath == "" {
+		filePath = filepath.Join(dir, ConfigLocations[0])
+	}
+
+	if err := os.MkdirAll(filepath.Dir(filePath), 0o755); err != nil {
+		return err
+	}
+
 	file, err := os.Create(filePath)
 	if err != nil {
 		return err

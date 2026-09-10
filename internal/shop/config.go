@@ -1052,7 +1052,7 @@ func SearchConfigPath(ctx context.Context, projectRoot string, inputPath string)
 // comments, ordering, unknown keys — untouched.
 
 // ConfigURLState captures the url values of a project config file
-// (.shopware-project.yml) before proxy registration, so deregistration can
+// (.config/shopware-project.yml) before proxy registration, so deregistration can
 // restore them exactly. The rest of the CLI (dev TUI, admin API client)
 // resolves the shop URL from these keys, which is why registration points
 // them at the proxy hostname.

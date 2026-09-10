@@ -301,7 +301,7 @@ func TestPushExtensionStoreInfo(t *testing.T) {
 		},
 	}
 
-	cfg := &extension.Config{FileName: ".shopware-extension.yml"}
+	cfg := &extension.Config{}
 	cfg.Store.Icon = &iconPath
 	cfg.Store.ImageDirectory = &imageDir
 
