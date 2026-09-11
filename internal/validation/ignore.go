@@ -27,5 +27,10 @@ func IgnoreMatches(result CheckResult, ignore ToolConfigIgnore, pathMatches func
 		return strings.Contains(result.Message, ignore.Message) && (pathMatches(result.Path, ignore.Path) || ignore.Path == "")
 	}
 
+	// Handle path-only ignores
+	if ignore.Identifier == "" && ignore.Message == "" && ignore.Path != "" {
+		return pathMatches(result.Path, ignore.Path)
+	}
+
 	return false
 }
