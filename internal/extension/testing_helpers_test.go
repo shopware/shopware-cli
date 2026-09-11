@@ -5,7 +5,6 @@ import (
 	"image/color"
 	"image/png"
 	"os"
-	"strings"
 
 	"github.com/shopware/shopware-cli/internal/validation"
 )
@@ -72,30 +71,9 @@ func (c *testCheck) RemoveByIdentifier(ignores []validation.ToolConfigIgnore) va
 	for _, r := range c.Results {
 		shouldKeep := true
 		for _, ignore := range ignores {
-			// Only ignore all matches when identifier is the only field specified
-			if ignore.Identifier != "" && ignore.Path == "" && ignore.Message == "" {
-				if validation.IdentifierMatches(r.Identifier, ignore.Identifier) {
-					shouldKeep = false
-					break
-				}
-			}
-
-			// If path is specified with identifier (but no message), match both
-			if ignore.Identifier != "" && ignore.Path != "" && ignore.Message == "" {
-				if validation.IdentifierMatches(r.Identifier, ignore.Identifier) && r.Path == ignore.Path {
-					shouldKeep = false
-					break
-				}
-			}
-
-			// If identifier and message are specified (path is optional), match all specified fields
-			if ignore.Identifier != "" && ignore.Message != "" && validation.IdentifierMatches(r.Identifier, ignore.Identifier) && strings.Contains(r.Message, ignore.Message) && (ignore.Path == "" || r.Path == ignore.Path) {
-				shouldKeep = false
-				break
-			}
-
-			// Handle message-based ignores (when no identifier is specified)
-			if ignore.Identifier == "" && ignore.Message != "" && strings.Contains(r.Message, ignore.Message) && (r.Path == ignore.Path || ignore.Path == "") {
+			if validation.IgnoreMatches(r, ignore, func(resultPath, ignorePath string) bool {
+				return resultPath == ignorePath
+			}) {
 				shouldKeep = false
 				break
 			}
