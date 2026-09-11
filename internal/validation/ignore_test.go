@@ -37,6 +37,24 @@ func TestIgnoreMatches(t *testing.T) {
 			want: true,
 		},
 		{
+			name:   "identifier only does not match similar metadata description prefix",
+			result: CheckResult{Identifier: "metadata.descriptionx.length.de-DE"},
+			ignore: ToolConfigIgnore{Identifier: "metadata.description"},
+			pathMatches: func(_, _ string) bool {
+				return false
+			},
+			want: false,
+		},
+		{
+			name:   "identifier only does not match similar metadata label prefix",
+			result: CheckResult{Identifier: "metadata.labeling.translation.de-DE"},
+			ignore: ToolConfigIgnore{Identifier: "metadata.label"},
+			pathMatches: func(_, _ string) bool {
+				return false
+			},
+			want: false,
+		},
+		{
 			name:   "identifier and path",
 			result: CheckResult{Identifier: "test.rule", Path: "composer.json"},
 			ignore: ToolConfigIgnore{Identifier: "test.rule", Path: "composer.json"},
