@@ -150,3 +150,20 @@ func TestBuildStopsOnHookFailure(t *testing.T) {
 	assert.FileExists(t, filepath.Join(root, "remove-me"))
 	assert.NoDirExists(t, filepath.Join(root, "vendor"))
 }
+
+func TestBuildRejectsEscapingDependencyLinksBeforeCleanup(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("symlinks require privileges on Windows")
+	}
+	root := t.TempDir()
+	external := t.TempDir()
+	testhelper.WriteFile(t, filepath.Join(external, "source.txt"), "original")
+	require.NoError(t, os.Symlink(external, filepath.Join(root, "dependency")))
+	cfg := &shop.Config{
+		DisableComposerInstall: true,
+		Build:                  &shop.ConfigBuild{CleanupPaths: []string{"dependency/source.txt"}},
+	}
+	err := run(t.Context(), root, cfg, executor.NewLocal(root), Options{MirrorPathRepositories: true})
+	require.ErrorContains(t, err, "symlink")
+	assert.FileExists(t, filepath.Join(external, "source.txt"))
+}

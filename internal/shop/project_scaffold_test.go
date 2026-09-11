@@ -69,7 +69,7 @@ func TestShopwareProjectScaffold(t *testing.T) {
 
 		assert.FileExists(t, filepath.Join(projectFolder, "Dockerfile"))
 		assert.FileExists(t, filepath.Join(projectFolder, ".dockerignore"))
-		assert.Contains(t, readScaffoldFile(t, projectFolder, "Dockerfile"), "ghcr.io/shopware/docker-base:8.4")
+		assert.Contains(t, readScaffoldFile(t, projectFolder, "Dockerfile"), "ARG PHP_VERSION=8.4")
 		// The container deployment needs no deployment-specific composer package.
 		composerJSON := readScaffoldFile(t, projectFolder, "composer.json")
 		assert.NotContains(t, composerJSON, "deployer/deployer")
@@ -239,8 +239,9 @@ func TestSetupDeployment(t *testing.T) {
 		require.NoError(t, scaffold.setupDeployment(t.Context()))
 
 		dockerfile := readScaffoldFile(t, tmpDir, "Dockerfile")
-		assert.Contains(t, dockerfile, "FROM ghcr.io/shopware/docker-base:8.3 AS base-image")
-		assert.Contains(t, dockerfile, "FROM ghcr.io/shopware/shopware-cli:latest-php-8.3 AS shopware-cli")
+		assert.Contains(t, dockerfile, "ARG PHP_VERSION=8.3")
+		assert.Contains(t, dockerfile, "FROM ghcr.io/shopware/docker-base:${PHP_VERSION}-frankenphp AS base-image")
+		assert.Contains(t, dockerfile, "FROM ghcr.io/shopware/shopware-cli:latest-php-${PHP_VERSION} AS shopware-cli")
 		assert.Contains(t, dockerfile, "shopware-cli project ci /src")
 		assert.NotContains(t, dockerfile, "{{")
 
