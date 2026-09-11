@@ -162,7 +162,7 @@ func TestRemoveByIdentifier(t *testing.T) {
 			},
 		},
 		{
-			name: "identifier with message should not ignore all",
+			name: "identifier with message ignores only matching message",
 			initialResults: []validation.CheckResult{
 				{Path: "file1.go", Identifier: "TEST001", Message: "error 1"},
 				{Path: "file2.go", Identifier: "TEST001", Message: "error 2"},
@@ -171,8 +171,33 @@ func TestRemoveByIdentifier(t *testing.T) {
 				{Identifier: "TEST001", Message: "error 1"},
 			},
 			expectedResults: []validation.CheckResult{
-				{Path: "file1.go", Identifier: "TEST001", Message: "error 1"},
 				{Path: "file2.go", Identifier: "TEST001", Message: "error 2"},
+			},
+		},
+		{
+			name: "identifier with message and path respects path",
+			initialResults: []validation.CheckResult{
+				{Path: "file1.go", Identifier: "TEST001", Message: "error 1"},
+				{Path: "file2.go", Identifier: "TEST001", Message: "error 1"},
+			},
+			ignores: []validation.ToolConfigIgnore{
+				{Path: "file1.go", Identifier: "TEST001", Message: "error 1"},
+			},
+			expectedResults: []validation.CheckResult{
+				{Path: "file2.go", Identifier: "TEST001", Message: "error 1"},
+			},
+		},
+		{
+			name: "identifier prefix with message ignores matching children",
+			initialResults: []validation.CheckResult{
+				{Path: "composer.json", Identifier: "metadata.description.length.de-DE", Message: "too long"},
+				{Path: "composer.json", Identifier: "metadata.description.translation.en-GB", Message: "missing"},
+			},
+			ignores: []validation.ToolConfigIgnore{
+				{Identifier: "metadata.description", Message: "too long"},
+			},
+			expectedResults: []validation.CheckResult{
+				{Path: "composer.json", Identifier: "metadata.description.translation.en-GB", Message: "missing"},
 			},
 		},
 		{
@@ -203,6 +228,33 @@ func TestRemoveByIdentifier(t *testing.T) {
 				{Message: "error 4"},                      // Should remove anything with this message
 			},
 			expectedResults: []validation.CheckResult{},
+		},
+		{
+			name: "prefix identifier ignores more specific children",
+			initialResults: []validation.CheckResult{
+				{Path: "composer.json", Identifier: "metadata.description.length.de-DE"},
+				{Path: "composer.json", Identifier: "metadata.description.translation.en-GB"},
+				{Path: "composer.json", Identifier: "metadata.name"},
+			},
+			ignores: []validation.ToolConfigIgnore{
+				{Identifier: "metadata.description"},
+			},
+			expectedResults: []validation.CheckResult{
+				{Path: "composer.json", Identifier: "metadata.name"},
+			},
+		},
+		{
+			name: "specific child identifier does not ignore siblings",
+			initialResults: []validation.CheckResult{
+				{Path: "composer.json", Identifier: "metadata.description.length.de-DE"},
+				{Path: "composer.json", Identifier: "metadata.description.translation.de-DE"},
+			},
+			ignores: []validation.ToolConfigIgnore{
+				{Identifier: "metadata.description.length.de-DE"},
+			},
+			expectedResults: []validation.CheckResult{
+				{Path: "composer.json", Identifier: "metadata.description.translation.de-DE"},
+			},
 		},
 	}
 

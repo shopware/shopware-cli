@@ -162,6 +162,27 @@ func TestPluginGermanDescriptionMissing(t *testing.T) {
 
 	assert.Len(t, check.Results, 1)
 	assert.Equal(t, "extra.description for language de-DE is required", check.Results[0].Message)
+	assert.Equal(t, "metadata.description.translation.de-DE", check.Results[0].Identifier)
+}
+
+func TestPluginGermanLabelMissing(t *testing.T) {
+	setupMockPHPVersionServer(t)
+	dir := t.TempDir()
+
+	plugin := getTestPlugin(dir)
+	plugin.Composer.Extra.Label = map[string]string{
+		"en-GB": "Frosh Tools",
+	}
+
+	check := &testCheck{}
+	assert.NoError(t, os.MkdirAll(filepath.Join(dir, "src", "Resources", "config"), 0o755))
+	assert.NoError(t, createTestImage(filepath.Join(dir, "src", "Resources", "config", "plugin.png")))
+
+	plugin.Validate(t.Context(), check)
+
+	assert.Len(t, check.Results, 1)
+	assert.Equal(t, "extra.label for language de-DE is required", check.Results[0].Message)
+	assert.Equal(t, "metadata.label.translation.de-DE", check.Results[0].Identifier)
 }
 
 func TestPluginGermanDescriptionMissingOnlyEnglishMarket(t *testing.T) {
