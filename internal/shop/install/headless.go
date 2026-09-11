@@ -86,7 +86,7 @@ func RunHeadless(ctx context.Context, exec executor.Executor, cfg *shop.Config, 
 	if shopURL != "" {
 		_, _ = fmt.Fprintln(out, tui.DimText.Render("Admin URL: ")+tui.BoldText.Render(strings.TrimSuffix(shopURL, "/")+"/admin"))
 	}
-	_, _ = fmt.Fprintln(out, tui.DimText.Render("Admin user: ")+tui.BoldText.Render(install.AdminUsername)+tui.DimText.Render(" (credentials saved to "+shop.DefaultConfigFileName()+")"))
+	_, _ = fmt.Fprintln(out, tui.DimText.Render("Admin user: ")+tui.BoldText.Render(install.AdminUsername)+tui.DimText.Render(" (credentials saved to "+cfg.GetStorageLocation()+")"))
 
 	return nil
 }

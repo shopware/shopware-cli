@@ -2,8 +2,6 @@ package project
 
 import (
 	"github.com/spf13/cobra"
-
-	"github.com/shopware/shopware-cli/internal/shop"
 )
 
 var (
@@ -20,6 +18,6 @@ var projectRootCmd = &cobra.Command{
 
 func Register(rootCmd *cobra.Command) {
 	rootCmd.AddCommand(projectRootCmd)
-	projectRootCmd.PersistentFlags().StringVar(&projectConfigPath, "project-config", shop.DefaultConfigFileName(), "Path to config")
+	projectRootCmd.PersistentFlags().StringVar(&projectConfigPath, "project-config", "", "Path to config, if empty searches default location .config/shopware-project.yml first with legacy fallbacks for .shopware-project.yaml and .shopware-project.yml")
 	projectRootCmd.PersistentFlags().StringVarP(&environmentName, "env", "e", "", environmentFlagUsage)
 }

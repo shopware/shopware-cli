@@ -19,7 +19,7 @@ type ProjectEntry struct {
 	// PreviousAppURL is the APP_URL the project had before registration, so
 	// "proxy down" can restore it (empty means the 127.0.0.1:8000 default).
 	PreviousAppURL string `json:"previous_app_url,omitempty"`
-	// PreviousConfig captures the url keys of .shopware-project.yml before
+	// PreviousConfig captures the url keys of the loaded project config before
 	// registration rewrote them; nil means the file was not touched.
 	PreviousConfig *shop.ConfigURLState `json:"previous_config,omitempty"`
 }

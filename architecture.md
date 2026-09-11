@@ -58,7 +58,7 @@ The `Extension` interface abstracts extension type behind `GetName/GetType/GetSo
 
 ### 2.4 Config schema: one field to add, embedded, self-validating
 
-In the CLI, the config YAML files (`.shopware-extension.yml` / `.shopware-project.yml`) are validated against a built-in schema, and that schema is published via `config-schema` so editors and agents can read the rules and introspect the contract. Adding a config option means adding a field (+ schema where needed) in `internal/extension/config.go` / `internal/shop/config.go`.
+In the CLI, the config YAML files (`.config/shopware-extension.yml` / `.config/shopware-project.yml`) are validated against a built-in schema, and that schema is published via `config-schema` so editors and agents can read the rules and introspect the contract. Adding a config option means adding a field (+ schema where needed) in `internal/extension/config.go` / `internal/shop/config.go`.
 
 Deployment Helper re-parses this same `deployment:` block by hand rather than from the schema.
 
@@ -149,7 +149,7 @@ shopware-cli is the tool you run locally and in CI to build, develop, and packag
 
 In code, this boundary is maintained like so:
 
-- The project config (`.shopware-project.yml`) has a `deployment:` section `ConfigDeployment` covering hooks, extension management, one-time tasks, and staging (internal/shop/config.go:329). The CLI defines and validates that section, but nothing in the CLI ever runs it: only the struct and its schema touch it. The CLI writes the instructions, and Deployment Helper carries them out. Keep it declarative-only on the CLI side.
+- The project config (`.config/shopware-project.yml`) has a `deployment:` section `ConfigDeployment` covering hooks, extension management, one-time tasks, and staging (internal/shop/config.go:329). The CLI defines and validates that section, but nothing in the CLI ever runs it: only the struct and its schema touch it. The CLI writes the instructions, and Deployment Helper carries them out. Keep it declarative-only on the CLI side.
 - Every project the CLI scaffolds automatically pulls in Deployment Helper as a dependency (`require shopware/deployment-helper`, internal/packagist/project_composer_json.go:64).
 - The CI files that the CLI generates (`internal/ci`, covering both GitHub Actions and GitLab) hand the actual deploy to Deployment Helper: The GitHub Actions deploy job `github-deploy.yml` calls `shopware/github-actions/project-deployer`; the `deploy.php` recipe calls `vendor/bin/shopware-deployment-helper run` (Deployer task).
 

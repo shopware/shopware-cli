@@ -294,9 +294,9 @@ func runCreateForm(cmd *cobra.Command, opts *createOptions, releases []repositor
 					}, &selectDocker).
 					DescriptionFunc(func() string {
 						if dockerSelected() {
-							return "Select the PHP version of the Docker image (persisted as docker.php.version in .shopware-project.yml)"
+							return "Select the PHP version of the Docker image (persisted as docker.php.version in .config/shopware-project.yml)"
 						}
-						return "Select the PHP used to create and run this project (its version is persisted as php_version in .shopware-project.yml)"
+						return "Select the PHP used to create and run this project (its version is persisted as php_version in .config/shopware-project.yml)"
 					}, &selectDocker).
 					Height(10).
 					OptionsFunc(func() []huh.Option[string] {

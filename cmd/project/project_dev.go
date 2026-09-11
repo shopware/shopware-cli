@@ -106,7 +106,8 @@ var projectDevCmd = &cobra.Command{
 			return err
 		}
 
-		cfg, err := shop.ReadConfig(cmd.Context(), projectConfigPath, true)
+		actualProjectConfigPath := shop.SearchConfigPath(cmd.Context(), projectRoot, projectConfigPath)
+		cfg, err := shop.ReadConfig(cmd.Context(), actualProjectConfigPath, true)
 		if err != nil {
 			return err
 		}
@@ -197,9 +198,10 @@ func runMigrationWizardTUI(ctx context.Context, projectRoot string, cfg *shop.Co
 		return err
 	}
 
+	actualProjectConfigPath := shop.SearchConfigPath(ctx, projectRoot, projectConfigPath)
 	_, err = dev.NewMigrationWizardApp(ctx, dev.Options{
 		ProjectRoot: projectRoot,
-		ConfigPath:  projectConfigPath,
+		ConfigPath:  actualProjectConfigPath,
 		Config:      cfg,
 		EnvConfig:   envCfg,
 		Executor:    exec,
@@ -213,7 +215,8 @@ func setupDevEnvironment(cmd *cobra.Command) (*devEnvironment, error) {
 		return nil, err
 	}
 
-	cfg, err := shop.ReadConfig(cmd.Context(), projectConfigPath, true)
+	actualProjectConfigPath := shop.SearchConfigPath(cmd.Context(), projectRoot, projectConfigPath)
+	cfg, err := shop.ReadConfig(cmd.Context(), actualProjectConfigPath, true)
 	if err != nil {
 		return nil, err
 	}
@@ -241,7 +244,7 @@ func newDevEnvironment(cmd *cobra.Command, projectRoot string, cfg *shop.Config)
 	}
 
 	useDocker := exec.Type() == executor.TypeDocker
-	dockerHint := "set the environment " + tui.BoldText.Render("type") + " to " + tui.BoldText.Render("docker") + " in " + tui.BoldText.Render(".shopware-project.yml")
+	dockerHint := "set the environment " + tui.BoldText.Render("type") + " to " + tui.BoldText.Render("docker") + " in " + tui.BoldText.Render(cfg.GetStorageLocation())
 
 	// Docker gets its PHP from the image. Must use the same precedence as the
 	// executor, or the dependencies of a different PHP would be validated.
@@ -270,9 +273,10 @@ func newDevEnvironment(cmd *cobra.Command, projectRoot string, cfg *shop.Config)
 		}
 	}
 
+	actualProjectConfigPath := shop.SearchConfigPath(cmd.Context(), projectRoot, projectConfigPath)
 	return &devEnvironment{
 		projectRoot: projectRoot,
-		configPath:  projectConfigPath,
+		configPath:  actualProjectConfigPath,
 		cfg:         cfg,
 		envCfg:      envCfg,
 		executor:    exec,

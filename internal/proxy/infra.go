@@ -85,7 +85,7 @@ func ensureCertificate(hostname, baseDomain string, reg Registry) (CertInfo, err
 // IsProxyProject reports whether the project is configured to be served at a
 // stable hostname under the shared proxy's base domain (the signal
 // `project create --local-domain` and `proxy up` write into
-// .shopware-project.yml), as opposed to a fixed localhost port.
+// .config/shopware-project.yml), as opposed to a fixed localhost port.
 func IsProxyProject(cfg *shop.Config) bool {
 	return IsProxyProjectForDomain(cfg, BaseDomain())
 }
