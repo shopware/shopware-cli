@@ -11,6 +11,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/shyim/go-version"
+
 	"github.com/shopware/shopware-cli/logging"
 )
 
@@ -56,14 +58,34 @@ func (o ComposerJsonOptions) IsDeployer() bool {
 	return o.DeploymentMethod == DeploymentDeployer
 }
 
+// deploymentHelperConstraint is the Shopware version range the
+// shopware/deployment-helper package can be installed with. Older releases
+// pin Symfony versions that conflict with the helper's requirements.
+var deploymentHelperConstraint = version.MustConstraints(version.NewConstraint(">=6.5.8"))
+
+// supportsDeploymentHelper reports whether the given Shopware version can
+// require shopware/deployment-helper. Dev branch names (e.g. dev-trunk) are
+// not parseable and report false; callers resolve them to their fallback
+// version first.
+func supportsDeploymentHelper(rawVersion string) bool {
+	v, err := version.NewVersion(rawVersion)
+	if err != nil {
+		return false
+	}
+
+	return deploymentHelperConstraint.Check(v)
+}
+
 func GenerateComposerJson(ctx context.Context, opts ComposerJsonOptions) (string, error) {
 	opts.DependingVersion = "*"
+	withDeploymentHelper := supportsDeploymentHelper(opts.Version)
 
 	if strings.HasPrefix(opts.Version, "dev-") {
 		fallbackVersion, err := getLatestFallbackVersion(ctx, strings.TrimPrefix(opts.Version, "dev-"))
 		if err != nil {
 			return "", err
 		}
+		withDeploymentHelper = supportsDeploymentHelper(fallbackVersion)
 
 		if strings.HasPrefix(opts.Version, "dev-6") {
 			opts.Version = strings.TrimPrefix(opts.Version, "dev-") + "-dev"
@@ -75,7 +97,9 @@ func GenerateComposerJson(ctx context.Context, opts ComposerJsonOptions) (string
 
 	require := newOrderedMap()
 	require.set("composer-runtime-api", "^2.0")
-	require.set("shopware/deployment-helper", "*")
+	if withDeploymentHelper {
+		require.set("shopware/deployment-helper", "*")
+	}
 	require.set("shopware/administration", opts.DependingVersion)
 	require.set("shopware/core", opts.Version)
 	if opts.UseElasticsearch {
