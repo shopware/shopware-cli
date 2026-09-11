@@ -28,6 +28,15 @@ func TestIgnoreMatches(t *testing.T) {
 			want: true,
 		},
 		{
+			name:   "identifier only metadata label",
+			result: CheckResult{Identifier: "metadata.label.translation.de-DE"},
+			ignore: ToolConfigIgnore{Identifier: "metadata.label"},
+			pathMatches: func(_, _ string) bool {
+				return false
+			},
+			want: true,
+		},
+		{
 			name:   "identifier and path",
 			result: CheckResult{Identifier: "test.rule", Path: "composer.json"},
 			ignore: ToolConfigIgnore{Identifier: "test.rule", Path: "composer.json"},
