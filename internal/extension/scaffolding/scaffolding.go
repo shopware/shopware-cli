@@ -15,6 +15,8 @@ import (
 const (
 	privatePluginRoot = "custom/static-plugins"
 	storePluginRoot   = "custom/plugins"
+	composerNameRegex = "^[a-z0-9]([_.-]?[a-z0-9]+)*/[a-z0-9](([_.]?|-{0,2})[a-z0-9]+)*$"
+	packageNameRegex  = "^[a-z0-9]([_.-]?[a-z0-9]+)*/[a-z0-9](([_.]|-{1,2})?[a-z0-9]+)*$"
 )
 
 //go:embed stubs/*
@@ -22,8 +24,7 @@ var stubsFS embed.FS
 
 // stubFuncs are helpers available inside the stub templates.
 var stubFuncs = template.FuncMap{
-	// jsonEscape makes a value safe inside a JSON string, e.g. the
-	// backslashes of a PHP namespace: Swag\Example -> Swag\\Example.
+	// jsonEscape makes a value safe inside a JSON string
 	"jsonEscape": func(value string) (string, error) {
 		encoded, err := json.Marshal(value)
 		if err != nil {
@@ -33,6 +34,10 @@ var stubFuncs = template.FuncMap{
 		// Drop the surrounding quotes json.Marshal adds.
 		return string(encoded[1 : len(encoded)-1]), nil
 	},
+	// escapeBackslash makes a value safe inside PHP strings by escaping backslashes.
+	"escapeBackslash": func(value string) string {
+		return strings.ReplaceAll(value, "\\", "\\\\")
+	},
 }
 
 type scaffoldingFile struct {
@@ -41,7 +46,7 @@ type scaffoldingFile struct {
 }
 
 // scaffoldingFiles returns a list of files with their paths and corresponding stub paths.
-func scaffoldingFiles(extensionName string) []scaffoldingFile {
+func scaffoldingFiles(className string) []scaffoldingFile {
 	return []scaffoldingFile{
 		{
 			Path:     "composer.json",
@@ -64,7 +69,7 @@ func scaffoldingFiles(extensionName string) []scaffoldingFile {
 			StubPath: "stubs/config.xml.tmpl",
 		},
 		{
-			Path:     filepath.Join("src", extensionName+".php"),
+			Path:     filepath.Join("src", className+".php"),
 			StubPath: "stubs/plugin_class.php.tmpl",
 		},
 	}
@@ -103,9 +108,9 @@ func CreateExtensionDir(extensionDir string) error {
 }
 
 // CreateExtensionFiles creates all scaffolding Files that are given back by scaffoldingFiles()
-func CreateExtensionFiles(extensionDir, extensionName string) error {
-	data := createScaffoldingData(extensionName)
-	for _, file := range scaffoldingFiles(extensionName) {
+func CreateExtensionFiles(extensionDir, extensionName, vendorName string) error {
+	data := createScaffoldingData(vendorName, extensionName)
+	for _, file := range scaffoldingFiles(data.ClassName) {
 		err := createFileWithScaffolding(extensionDir, file, data)
 		if err != nil {
 			return err
@@ -122,7 +127,7 @@ func createFileWithScaffolding(extensionDir string, file scaffoldingFile, data s
 		return fmt.Errorf("create subdirectories: %w", err)
 	}
 
-	f, err := os.Create(dest)
+	f, err := os.OpenFile(dest, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o644)
 	if err != nil {
 		return fmt.Errorf("create file: %w", err)
 	}
@@ -158,40 +163,43 @@ type scaffoldData struct {
 	ComposerName string
 }
 
-func createScaffoldingData(extensionName string) scaffoldData {
+func createScaffoldingData(vendorName string, extensionName string) scaffoldData {
 	return scaffoldData{
-		Namespace:    DeriveNamespace(extensionName),
-		ClassName:    extensionName,
-		ComposerName: DeriveComposerName(extensionName),
+		Namespace:    DeriveNamespace(vendorName, extensionName),
+		ClassName:    DeriveClassName(vendorName, extensionName),
+		ComposerName: DeriveComposerName(vendorName, extensionName),
 	}
 }
 
-// DeriveNamespace turns a technical plugin name into a PHP namespace.
-// The first PascalCase word is the vendor prefix, the rest stay one segment:
-// SwagBasicExample → Swag\BasicExample.
-func DeriveNamespace(extensionName string) string {
-	parts := splitPascalCase(extensionName)
-	if len(parts) < 2 {
+// DeriveNamespace turns a given extension name and vendor name into a PHP namespace.
+func DeriveNamespace(vendorName string, extensionName string) string {
+	if vendorName == "" {
 		return extensionName
 	}
-
-	return parts[0] + "\\" + strings.Join(parts[1:], "")
+	return vendorName + "\\" + extensionName
 }
 
-// DeriveComposerName turns a technical plugin name into a Composer package name:
-// SwagBasicExample → swag/basic-example.
-func DeriveComposerName(extensionName string) string {
-	parts := splitPascalCase(extensionName)
-	if len(parts) == 0 {
-		return ""
+// DeriveComposerName turns a given extension name and vendor name into a valid Composer package name:
+// Vendor, BasicExample → vendor/basic-example.
+func DeriveComposerName(vendor string, name string) string {
+	vendorParts := splitPascalCase(vendor)
+	nameParts := splitPascalCase(name)
+
+	lowerVendor := strings.ToLower(strings.Join(vendorParts, "-"))
+	lowerName := strings.ToLower(strings.Join(nameParts, "-"))
+
+	if lowerVendor == "" {
+		lowerVendor = lowerName
 	}
 
-	vendor := strings.ToLower(parts[0])
-	if len(parts) == 1 {
-		return vendor + "/" + vendor
-	}
+	composerName := lowerVendor + "/" + lowerName
 
-	return vendor + "/" + strings.ToLower(strings.Join(parts[1:], "-"))
+	return composerName
+}
+
+// DeriveClassName turns a given extension name and vendor name into a valid PHP class name.
+func DeriveClassName(vendorName string, extensionName string) string {
+	return vendorName + extensionName
 }
 
 // splitPascalCase is a helper function and splits a PascalCase string into its constituent words.
@@ -218,6 +226,20 @@ func splitPascalCase(name string) []string {
 // It only removes a path that is an extension folder (custom/plugins/<name> or
 // custom/static-plugins/<name>), never parents, the project root, or a symlink.
 func RemoveCreatedExtensionDir(extensionDir string) error {
+	if err := validateRemovableExtensionDir(extensionDir); err != nil {
+		return err
+	}
+	abs, _ := filepath.Abs(extensionDir) // Already validated, so error can be ignored.
+
+	// Delete the folder and everything inside it.
+	if err := os.RemoveAll(abs); err != nil {
+		return fmt.Errorf("remove extension directory: %w", err)
+	}
+
+	return nil
+}
+
+func validateRemovableExtensionDir(extensionDir string) error {
 	// Reject an empty path variable.
 	if strings.TrimSpace(extensionDir) == "" {
 		return errors.New("extension directory variable must not be empty")
@@ -262,11 +284,5 @@ func RemoveCreatedExtensionDir(extensionDir string) error {
 	if !info.IsDir() {
 		return fmt.Errorf("%s is not a directory", abs)
 	}
-
-	// Delete the folder and everything inside it.
-	if err := os.RemoveAll(abs); err != nil {
-		return fmt.Errorf("remove extension directory: %w", err)
-	}
-
 	return nil
 }

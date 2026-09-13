@@ -7,14 +7,37 @@ import (
 	"github.com/shopware/shopware-cli/internal/tui"
 )
 
-func runInteractiveCreateForm(opts *extension.CreateOptions, needsName bool, needsStore bool) error {
+func runInteractiveCreateFormWithValidation(opts *extension.CreateOptions, isProvided map[string]bool) error {
 	// Print the shopware banner
 	tui.PrintBanner()
+
+	// Define the theme for the interactive form.
+	theme := huh.ThemeFunc(func(isDark bool) *huh.Styles {
+		s := huh.ThemeCharm(isDark)
+		s.Focused.Title = s.Focused.Title.Foreground(tui.BlueColor)
+		s.Blurred.Title = s.Blurred.Title.Foreground(tui.BlueColor)
+		return s
+	})
 
 	// Create the form dynamically based on required input.
 	var groups []*huh.Group
 
-	if needsStore {
+	if !isProvided[TypeFlagName] {
+		groups = append(groups,
+			huh.NewGroup(
+				huh.NewSelect[extension.ExtensionType]().
+					Title("Extension Type").
+					Description("Choose the type of extension you want to create.").
+					Options(
+						huh.NewOption("Plugin", extension.Plugin),
+						huh.NewOption("Theme", extension.Theme),
+					).
+					Value(&opts.Type),
+			),
+		)
+	}
+
+	if !isProvided[StoreFlagName] {
 		groups = append(groups,
 			huh.NewGroup(
 				huh.NewSelect[bool]().
@@ -29,17 +52,30 @@ func runInteractiveCreateForm(opts *extension.CreateOptions, needsName bool, nee
 		)
 	}
 
-	if needsName {
+	if !isProvided[VendorFlagName] {
+		groups = append(groups,
+			huh.NewGroup(
+				huh.NewInput().
+					Title("Vendor Prefix").
+					Description("Use PascalCase, e.g. SwagBasicExample.").
+					Placeholder("Swag").
+					Value(&opts.Vendor).
+					Validate(extension.ValidateVendor),
+			).WithHideFunc(func() bool {
+				return !opts.Store
+			}),
+		)
+	}
+
+	if !isProvided[NameFlagName] {
 		groups = append(groups,
 			huh.NewGroup(
 				huh.NewInput().
 					Title("Extension Name").
 					Description("Use PascalCase and, for Community Store extensions, a vendor prefix, e.g. SwagBasicExample.").
-					Placeholder("SwagBasicExample").
+					Placeholder("BasicExample").
 					Value(&opts.Name).
-					Validate(func(name string) error {
-						return extension.ValidateName(name, opts.Store)
-					}),
+					Validate(extension.ValidateName),
 			),
 		)
 	}
@@ -48,5 +84,5 @@ func runInteractiveCreateForm(opts *extension.CreateOptions, needsName bool, nee
 		return nil
 	}
 
-	return huh.NewForm(groups...).Run()
+	return huh.NewForm(groups...).WithTheme(theme).Run()
 }

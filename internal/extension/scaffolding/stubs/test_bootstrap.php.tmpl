@@ -9,4 +9,4 @@ $loader = (new TestBootstrapper())
     ->bootstrap()
     ->getClassLoader();
 
-$loader->addPsr4('{{ .Namespace }}\\Tests\\', __DIR__);
+$loader->addPsr4('{{ escapeBackslash .Namespace }}\\Tests\\', __DIR__);

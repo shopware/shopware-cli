@@ -20,23 +20,25 @@ const (
 
 // CreateOptions contains the choices used to create extension scaffolding.
 type CreateOptions struct {
-	Name  string
-	Type  ExtensionType
-	Store bool
+	Name   string
+	Vendor string
+	Type   ExtensionType
+	Store  bool
 }
 
 // Create writes extension scaffolding in the closest Shopware project.
 func Create(ctx context.Context, opts CreateOptions) (err error) {
 	logger := logging.FromContext(ctx)
 
-	logger.Info("Creating plugin...")
+	logger.Info("Creating extension...")
 
 	projectDir, err := shop.FindClosestShopwareProject(false)
 	if err != nil {
 		return err
 	}
 
-	extensionDir := extensionDirectory(projectDir, opts.Store, opts.Name)
+	technicalName := deriveTechnicalName(opts.Name, opts.Vendor)
+	extensionDir := deriveExtensionDirectoryName(projectDir, opts.Store, technicalName)
 
 	err = scaffolding.CreateExtensionDir(extensionDir)
 	if err != nil {
@@ -54,27 +56,27 @@ func Create(ctx context.Context, opts CreateOptions) (err error) {
 		}
 	}()
 
-	if err = scaffolding.CreateExtensionFiles(extensionDir, opts.Name); err != nil {
+	if err = scaffolding.CreateExtensionFiles(extensionDir, opts.Name, opts.Vendor); err != nil {
 		return fmt.Errorf("create extension files: %w", err)
 	}
 
-	logger.Info("✓ Extension created")
-
-	if err = validateCreatedExtension(ctx, extensionDir); err != nil {
-		return fmt.Errorf("validate created extension: %w", err)
-	}
-
-	logger.Info("✓ Extension validation passed")
-	logger.Infof("Extension created successfully in %s", extensionDir)
+	logger.Infof("✓ Extension successfully created in %s", extensionDir)
 
 	return nil
 }
 
-func extensionDirectory(projectDir string, store bool, name string) string {
+func deriveTechnicalName(name, vendor string) string {
+	if vendor == "" {
+		return name
+	}
+	return vendor + name
+}
+
+func deriveExtensionDirectoryName(projectDir string, store bool, technicalName string) string {
 	pluginDir := "static-plugins"
 	if store {
 		pluginDir = "plugins"
 	}
 
-	return filepath.Join(projectDir, "custom", pluginDir, name)
+	return filepath.Join(projectDir, "custom", pluginDir, technicalName)
 }
