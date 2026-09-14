@@ -1,0 +1,8 @@
+{
+    "swag-example": {
+        "general": {
+            "mainMenuItemGeneral": "My custom module",
+            "descriptionTextModule": "Manage this custom module here"
+        }
+    }
+}
