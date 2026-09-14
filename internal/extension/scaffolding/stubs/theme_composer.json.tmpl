@@ -1,0 +1,21 @@
+{
+    "name": "{{ .ComposerName }}",
+    "description": "Theme skeleton plugin",
+    "type": "shopware-platform-plugin",
+    "license": "MIT",
+    "require": {
+        "shopware/core": "~6.7.0"
+    },
+    "autoload": {
+        "psr-4": {
+            "{{ jsonEscape .Namespace }}\\": "src/"
+        }
+    },
+    "extra": {
+        "shopware-plugin-class": "{{ jsonEscape .Namespace }}\\{{ .ClassName }}",
+        "label": {
+            "de-DE": "Theme {{ .ClassName }} plugin",
+            "en-GB": "Theme {{ .ClassName }} plugin"
+        }
+    }
+}

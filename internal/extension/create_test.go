@@ -80,24 +80,52 @@ func TestCreateFailsOutsideShopwareProject(t *testing.T) {
 }
 
 func TestCreateGeneratesAnExtension(t *testing.T) {
-	for _, store := range []bool{false, true} {
-		t.Run(fmt.Sprintf("store=%t", store), func(t *testing.T) {
-			projectDir := newProject(t)
-			opts := validCreateOptions()
-			opts.Store = store
+	for _, extensionType := range []ExtensionType{Plugin, Theme} {
+		for _, store := range []bool{false, true} {
+			t.Run(fmt.Sprintf("type=%s/store=%t", extensionType, store), func(t *testing.T) {
+				projectDir := newProject(t)
+				opts := validCreateOptions()
+				opts.Type = extensionType
+				opts.Store = store
 
-			require.NoError(t, Create(t.Context(), opts))
+				require.NoError(t, Create(t.Context(), opts))
 
-			technicalName := deriveTechnicalName(opts.Name, opts.Vendor)
-			extensionDir := deriveExtensionDirectoryName(projectDir, opts.Store, technicalName)
-			assert.FileExists(t, filepath.Join(extensionDir, "composer.json"))
-			assert.FileExists(t, filepath.Join(extensionDir, "src", "Resources", "config", "config.xml"))
-			assert.FileExists(t, filepath.Join(extensionDir, ".gitignore"))
-			assert.FileExists(t, filepath.Join(extensionDir, "phpunit.xml"))
-			assert.FileExists(t, filepath.Join(extensionDir, "src", technicalName+".php"))
-			assert.FileExists(t, filepath.Join(extensionDir, "tests", "TestBootstrap.php"))
-		})
+				technicalName := deriveTechnicalName(opts.Name, opts.Vendor)
+				extensionDir := deriveExtensionDirectoryName(projectDir, opts.Store, technicalName)
+				assert.FileExists(t, filepath.Join(extensionDir, "composer.json"))
+				assert.FileExists(t, filepath.Join(extensionDir, "src", technicalName+".php"))
+
+				if extensionType == Plugin {
+					assert.FileExists(t, filepath.Join(extensionDir, "src", "Resources", "config", "config.xml"))
+					assert.FileExists(t, filepath.Join(extensionDir, ".gitignore"))
+					assert.FileExists(t, filepath.Join(extensionDir, "phpunit.xml"))
+					assert.FileExists(t, filepath.Join(extensionDir, "tests", "TestBootstrap.php"))
+					assert.NoFileExists(t, filepath.Join(extensionDir, "src", "Resources", "theme.json"))
+					return
+				}
+
+				assert.FileExists(t, filepath.Join(extensionDir, "src", "Resources", "theme.json"))
+				assert.FileExists(t, filepath.Join(
+					extensionDir,
+					"src/Resources/app/storefront/src/scss/overrides.scss",
+				))
+				assert.NoFileExists(t, filepath.Join(extensionDir, "phpunit.xml"))
+			})
+		}
 	}
+}
+
+func TestCreateRejectsUnsupportedTypeWithoutCreatingDirectory(t *testing.T) {
+	projectDir := newProject(t)
+	opts := validCreateOptions()
+	opts.Type = "app"
+	technicalName := deriveTechnicalName(opts.Name, opts.Vendor)
+	extensionDir := deriveExtensionDirectoryName(projectDir, opts.Store, technicalName)
+
+	err := Create(t.Context(), opts)
+
+	assert.ErrorContains(t, err, `unsupported extension type "app"`)
+	assert.NoDirExists(t, extensionDir)
 }
 
 func validCreateOptions() CreateOptions {
