@@ -45,8 +45,8 @@ type scaffoldingFile struct {
 	StubPath string
 }
 
-// scaffoldingFiles returns a list of files with their paths and corresponding stub paths.
-func scaffoldingFiles(className string) []scaffoldingFile {
+// pluginScaffoldingFiles returns the files in a platform plugin scaffold.
+func pluginScaffoldingFiles(className string) []scaffoldingFile {
 	return []scaffoldingFile{
 		{
 			Path:     "composer.json",
@@ -71,6 +71,44 @@ func scaffoldingFiles(className string) []scaffoldingFile {
 		{
 			Path:     filepath.Join("src", className+".php"),
 			StubPath: "stubs/plugin_class.php.tmpl",
+		},
+	}
+}
+
+// themeScaffoldingFiles returns the default files generated for a storefront theme.
+func themeScaffoldingFiles(data scaffoldData) []scaffoldingFile {
+	return []scaffoldingFile{
+		{
+			Path:     "composer.json",
+			StubPath: "stubs/theme_composer.json.tmpl",
+		},
+		{
+			Path:     filepath.Join("src", data.ClassName+".php"),
+			StubPath: "stubs/theme_class.php.tmpl",
+		},
+		{
+			Path:     "src/Resources/theme.json",
+			StubPath: "stubs/theme.json.tmpl",
+		},
+		{
+			Path:     "src/Resources/app/storefront/src/scss/overrides.scss",
+			StubPath: "stubs/theme_overrides.scss.tmpl",
+		},
+		{
+			Path: "src/Resources/app/storefront/src/scss/base.scss",
+		},
+		{
+			Path: "src/Resources/app/storefront/src/assets/.gitkeep",
+		},
+		{
+			Path: "src/Resources/app/storefront/src/main.js",
+		},
+		{
+			Path: filepath.Join(
+				"src/Resources/app/storefront/dist/storefront/js",
+				data.AssetName,
+				data.AssetName+".js",
+			),
 		},
 	}
 }
@@ -107,10 +145,20 @@ func CreateExtensionDir(extensionDir string) error {
 	return nil
 }
 
-// CreateExtensionFiles creates all scaffolding Files that are given back by scaffoldingFiles()
-func CreateExtensionFiles(extensionDir, extensionName, vendorName string) error {
+// CreatePluginFiles creates the files for a platform plugin.
+func CreatePluginFiles(extensionDir, extensionName, vendorName string) error {
 	data := createScaffoldingData(vendorName, extensionName)
-	for _, file := range scaffoldingFiles(data.ClassName) {
+	return createExtensionFiles(extensionDir, pluginScaffoldingFiles(data.ClassName), data)
+}
+
+// CreateThemeFiles creates the files for a storefront theme.
+func CreateThemeFiles(extensionDir, extensionName, vendorName string) error {
+	data := createScaffoldingData(vendorName, extensionName)
+	return createExtensionFiles(extensionDir, themeScaffoldingFiles(data), data)
+}
+
+func createExtensionFiles(extensionDir string, files []scaffoldingFile, data scaffoldData) error {
+	for _, file := range files {
 		err := createFileWithScaffolding(extensionDir, file, data)
 		if err != nil {
 			return err
@@ -120,7 +168,7 @@ func CreateExtensionFiles(extensionDir, extensionName, vendorName string) error 
 	return nil
 }
 
-// createFileWithScaffolding renders one embedded template into an existing extension.
+// createFileWithScaffolding renders an embedded template or creates an empty placeholder.
 func createFileWithScaffolding(extensionDir string, file scaffoldingFile, data scaffoldData) (err error) {
 	dest := filepath.Join(extensionDir, file.Path)
 	if err := os.MkdirAll(filepath.Dir(dest), 0o755); err != nil {
@@ -137,18 +185,20 @@ func createFileWithScaffolding(extensionDir string, file scaffoldingFile, data s
 		}
 	}()
 
-	stubBytes, err := stubsFS.ReadFile(file.StubPath)
-	if err != nil {
-		return fmt.Errorf("read stub file: %w", err)
-	}
+	if file.StubPath != "" {
+		stubBytes, err := stubsFS.ReadFile(file.StubPath)
+		if err != nil {
+			return fmt.Errorf("read stub file: %w", err)
+		}
 
-	tmpl, err := template.New(file.Path).Funcs(stubFuncs).Parse(string(stubBytes))
-	if err != nil {
-		return fmt.Errorf("parse stub: %w", err)
-	}
+		tmpl, err := template.New(file.Path).Funcs(stubFuncs).Parse(string(stubBytes))
+		if err != nil {
+			return fmt.Errorf("parse stub: %w", err)
+		}
 
-	if err := tmpl.Execute(f, data); err != nil {
-		return fmt.Errorf("render: %w", err)
+		if err := tmpl.Execute(f, data); err != nil {
+			return fmt.Errorf("render: %w", err)
+		}
 	}
 	if err := f.Sync(); err != nil {
 		return fmt.Errorf("flush file to disk: %w", err)
@@ -161,13 +211,17 @@ type scaffoldData struct {
 	Namespace    string
 	ClassName    string
 	ComposerName string
+	AssetName    string
 }
 
 func createScaffoldingData(vendorName string, extensionName string) scaffoldData {
+	className := DeriveClassName(vendorName, extensionName)
+
 	return scaffoldData{
 		Namespace:    DeriveNamespace(vendorName, extensionName),
-		ClassName:    DeriveClassName(vendorName, extensionName),
+		ClassName:    className,
 		ComposerName: DeriveComposerName(vendorName, extensionName),
+		AssetName:    strings.ToLower(strings.Join(splitPascalCase(className), "-")),
 	}
 }
 
