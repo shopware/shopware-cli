@@ -36,11 +36,14 @@ func runCreateForm(cmd *cobra.Command, opts *createOptions, releases []repositor
 		}
 	}
 
-	minorOptions := make([]huh.Option[string], 0, len(minorGroups)+1)
+	minorOptions := make([]huh.Option[string], 0, len(minorGroups)+2)
 	minorOptions = append(minorOptions, huh.NewOption(shop.VersionLatest, shop.VersionLatest))
 	for _, g := range minorGroups {
 		minorOptions = append(minorOptions, huh.NewOption(g.label, g.label))
 	}
+	// Trunk is not a release, so it cannot be a minor group; offer it explicitly
+	// to make development installs discoverable.
+	minorOptions = append(minorOptions, huh.NewOption("trunk (development version)", shop.VersionTrunk))
 
 	deploymentOptions := []huh.Option[string]{
 		huh.NewOption("None", shop.DeploymentNone),
@@ -103,11 +106,14 @@ func runCreateForm(cmd *cobra.Command, opts *createOptions, releases []repositor
 		return selectDocker == tui.Yes
 	}
 
-	// The patch-version group stays hidden for "latest" and leaves
+	// The patch-version group stays hidden for "latest" and trunk and leaves
 	// opts.selectedVersion empty, which is only defaulted after the form ran.
 	effectiveVersion := func() string {
 		if opts.selectedVersion != "" {
 			return opts.selectedVersion
+		}
+		if selectedMinor == shop.VersionTrunk {
+			return shop.VersionTrunk
 		}
 		return shop.VersionLatest
 	}
@@ -169,7 +175,7 @@ func runCreateForm(cmd *cobra.Command, opts *createOptions, releases []repositor
 			formGroups = append(formGroups, huh.NewGroup(
 				huh.NewSelect[string]().
 					Title("Shopware Version").
-					Description("Select the major version to install").
+					Description("Select the version to install; trunk tracks the latest development state").
 					Options(minorOptions...).
 					Value(&selectedMinor),
 			))
@@ -190,8 +196,10 @@ func runCreateForm(cmd *cobra.Command, opts *createOptions, releases []repositor
 						return []huh.Option[string]{huh.NewOption(shop.VersionLatest, shop.VersionLatest)}
 					}, &selectedMinor).
 					Value(&opts.selectedVersion),
+				// Trunk has no patch releases, so like "latest" it skips the
+				// patch selection entirely.
 			).WithHideFunc(func() bool {
-				return selectedMinor == shop.VersionLatest
+				return selectedMinor == shop.VersionLatest || selectedMinor == shop.VersionTrunk
 			}))
 		}
 
@@ -379,8 +387,8 @@ func runCreateForm(cmd *cobra.Command, opts *createOptions, releases []repositor
 			}
 		}
 
-		if opts.selectedVersion == "" {
-			opts.selectedVersion = shop.VersionLatest
+		if needsVersion {
+			opts.selectedVersion = resolveFormVersion(selectedMinor, opts.selectedVersion)
 		}
 
 		if opts.projectFolder == "" {
@@ -492,4 +500,22 @@ func runCreateForm(cmd *cobra.Command, opts *createOptions, releases []repositor
 			return errors.New("project creation cancelled")
 		}
 	}
+}
+
+// resolveFormVersion maps the form's version selection to the version to
+// install. The patch select stays hidden for "latest" and trunk, so their
+// minor selection is authoritative and any stale patch value from a previous
+// form pass is discarded.
+func resolveFormVersion(selectedMinor, selectedVersion string) string {
+	switch selectedMinor {
+	case shop.VersionTrunk:
+		return shop.VersionTrunk
+	case shop.VersionLatest:
+		return shop.VersionLatest
+	}
+
+	if selectedVersion == "" {
+		return shop.VersionLatest
+	}
+	return selectedVersion
 }
