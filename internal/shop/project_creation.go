@@ -13,6 +13,10 @@ import (
 
 const (
 	VersionLatest = "latest"
+	// VersionTrunk is the Composer dev branch tracking Shopware's trunk on
+	// GitHub. It installs like a released version, e.g.
+	// `shopware-cli project create my-shop dev-trunk`.
+	VersionTrunk = "dev-trunk"
 )
 
 // ValidateProjectFolder ensures that an existing target is an empty directory.
