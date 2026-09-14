@@ -90,8 +90,8 @@ var projectCreateCmd = &cobra.Command{
 				return []string{}, cobra.ShellCompDirectiveNoFileComp
 			}
 			filteredVersions := shop.FilterInstallVersions(pkg.Versions)
-			versions := make([]string, 0, len(filteredVersions)+1)
-			versions = append(versions, shop.VersionLatest)
+			versions := make([]string, 0, len(filteredVersions)+2)
+			versions = append(versions, shop.VersionLatest, shop.VersionTrunk)
 			for _, v := range filteredVersions {
 				versions = append(versions, v.String())
 			}
@@ -237,7 +237,7 @@ func init() {
 	projectCreateCmd.PersistentFlags().Bool("no-audit", false, "Disable composer audit blocking insecure packages")
 	projectCreateCmd.PersistentFlags().Bool("git", false, "Initialize a Git repository")
 	projectCreateCmd.PersistentFlags().Bool("local-domain", false, "Serve the shop at a stable local hostname (<name>.shopware.local) via the shared proxy instead of a port (requires Docker)")
-	projectCreateCmd.PersistentFlags().String("version", "", "Shopware version to install (e.g., 6.6.0.0, latest)")
+	projectCreateCmd.PersistentFlags().String("version", "", "Shopware version to install (e.g., 6.6.0.0, latest, dev-trunk)")
 	projectCreateCmd.PersistentFlags().String("deployment", "", "Deployment method: none, container, deployer, platformsh, shopware-paas")
 	_ = projectCreateCmd.RegisterFlagCompletionFunc("deployment", func(*cobra.Command, []string, string) ([]string, cobra.ShellCompDirective) {
 		return []string{

@@ -3,6 +3,7 @@ package project
 import (
 	"context"
 	"fmt"
+	"slices"
 	"testing"
 
 	"github.com/shyim/go-composer/repository"
@@ -209,6 +210,18 @@ func TestCompatiblePHPFor(t *testing.T) {
 		assert.Equal(t, []string{"/php84", "/php83"}, binaries(got))
 	})
 
+	t.Run("filters by the constraint of the trunk dev branch", func(t *testing.T) {
+		releasesWithTrunk := append(slices.Clone(releases),
+			repository.Version{Version: "dev-trunk", Require: map[string]string{"php": "~8.3.0 || ~8.4.0"}})
+		got := compatiblePHPFor(t.Context(), releasesWithTrunk, shop.VersionTrunk, filteredVersions)
+		assert.Equal(t, []string{"/php84", "/php83"}, binaries(got))
+	})
+
+	t.Run("trunk without dev metadata matches every installation", func(t *testing.T) {
+		got := compatiblePHPFor(t.Context(), releases, shop.VersionTrunk, filteredVersions)
+		assert.Equal(t, []string{"/php84", "/php83", "/php82"}, binaries(got))
+	})
+
 	t.Run("returns nothing for an unknown version", func(t *testing.T) {
 		assert.Empty(t, compatiblePHPFor(t.Context(), releases, "6.1.0.0", filteredVersions))
 	})
@@ -250,6 +263,15 @@ func TestPHPConstraintForDockerImages(t *testing.T) {
 		phpConstraintFor(releases, "6.6.0.0", filteredVersions).SupportedVersions())
 	assert.Equal(t, []string{"8.3", "8.4"},
 		phpConstraintFor(releases, "6.7.0.0", filteredVersions).SupportedVersions())
+
+	// The trunk dev branch uses its own constraint when the release list carries
+	// dev metadata, and imposes none otherwise.
+	releasesWithTrunk := append(slices.Clone(releases),
+		repository.Version{Version: "dev-trunk", Require: map[string]string{"php": "~8.4.0 || ~8.5.0"}})
+	assert.Equal(t, []string{"8.4", "8.5"},
+		phpConstraintFor(releasesWithTrunk, shop.VersionTrunk, filteredVersions).SupportedVersions())
+	assert.Equal(t, shop.SupportedPHPVersions,
+		phpConstraintFor(releases, shop.VersionTrunk, filteredVersions).SupportedVersions())
 }
 
 // huh dispatches OptionsFunc asynchronously but evaluates hide funcs during
