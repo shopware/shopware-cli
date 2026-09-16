@@ -44,6 +44,8 @@ type EnvironmentSSHConfig struct {
 	IdentityFile string `yaml:"identity_file,omitempty"`
 	// PHP binary used for PHP and console commands on the remote host (e.g. "/usr/bin/php8.3"). Defaults to "php"
 	PHPBinary string `yaml:"php_binary,omitempty"`
+	// Persistent files and directories linked into SSH deployment releases.
+	Shared *EnvironmentSSHSharedConfig `yaml:"shared,omitempty"`
 }
 
 type Config struct {
