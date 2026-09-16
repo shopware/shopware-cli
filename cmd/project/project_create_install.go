@@ -152,7 +152,7 @@ func printCreateSummary(ctx context.Context, opts *createOptions) {
 			fmt.Println(tui.DimText.Render("  so the local domain resolves and its certificate is trusted."))
 		}
 		fmt.Println()
-		fmt.Println(tui.SectionHeadingStyle.Render("Access your shop (after make setup)"))
+		fmt.Println(tui.SectionHeadingStyle.Render("Access your shop"))
 		fmt.Println()
 		fmt.Printf("  %s  %s\n", tui.GreenText.Render("Storefront:"), tui.BoldText.Render(shopURL))
 		fmt.Printf("  %s  %s\n", tui.GreenText.Render("Admin:"), tui.BoldText.Render(shopURL+"/admin"))
