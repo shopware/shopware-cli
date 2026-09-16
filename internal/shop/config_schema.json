@@ -909,6 +909,10 @@
         "php_binary": {
           "type": "string",
           "description": "PHP binary used for PHP and console commands on the remote host (e.g. \"/usr/bin/php8.3\"). Defaults to \"php\""
+        },
+        "shared": {
+          "$ref": "#/$defs/EnvironmentSSHSharedConfig",
+          "description": "Persistent files and directories linked into SSH deployment releases."
         }
       },
       "additionalProperties": false,
@@ -917,6 +921,26 @@
         "host",
         "directory"
       ]
+    },
+    "EnvironmentSSHSharedConfig": {
+      "properties": {
+        "files": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array",
+          "description": "Project-relative files to share between releases. Omit to use .env.local, install.lock, public/.htaccess and public/.user.ini. An explicit list replaces the defaults; [] disables shared files."
+        },
+        "directories": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array",
+          "description": "Project-relative directories to share between releases. Omit to use config/jwt, files, var/log, public/media, public/plugins, public/thumbnail, public/sitemap and public/theme. An explicit list replaces the defaults; [] disables shared directories."
+        }
+      },
+      "additionalProperties": false,
+      "type": "object"
     },
     "Port": {
       "oneOf": [
