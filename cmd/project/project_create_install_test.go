@@ -3,6 +3,7 @@ package project
 import (
 	"testing"
 
+	"github.com/charmbracelet/x/ansi"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -44,11 +45,12 @@ func TestPrintCreateSummaryOmitsMakeSetup(t *testing.T) {
 		})
 		require.NoError(t, err)
 
-		assert.Contains(t, output, "Access your shop")
-		assert.NotContains(t, output, "make setup")
-		assert.Contains(t, output, "shopware-cli project dev")
-		assert.Contains(t, output, "http://127.0.0.1:8000")
-		assert.Contains(t, output, "http://127.0.0.1:8000/admin")
+		plain := ansi.Strip(output)
+		assert.Contains(t, plain, "Access your shop")
+		assert.NotContains(t, plain, "make setup")
+		assert.Contains(t, plain, "shopware-cli project dev")
+		assert.Contains(t, plain, "http://127.0.0.1:8000")
+		assert.Contains(t, plain, "http://127.0.0.1:8000/admin")
 	})
 
 	t.Run("non-interactive does not print access heading", func(t *testing.T) {
@@ -61,7 +63,8 @@ func TestPrintCreateSummaryOmitsMakeSetup(t *testing.T) {
 		})
 		require.NoError(t, err)
 
-		assert.NotContains(t, output, "Access your shop")
-		assert.NotContains(t, output, "make setup")
+		plain := ansi.Strip(output)
+		assert.NotContains(t, plain, "Access your shop")
+		assert.NotContains(t, plain, "make setup")
 	})
 }
