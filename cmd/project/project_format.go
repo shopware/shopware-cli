@@ -39,7 +39,7 @@ var projectFormatCmd = &cobra.Command{
 			return fmt.Errorf("cannot find path: %w", err)
 		}
 
-		toolCfg, err := verifier.GetConfigFromProject(projectPath, false)
+		toolCfg, err := verifier.GetConfigFromProject(cmd.Context(), projectPath, false)
 		if err != nil {
 			return err
 		}

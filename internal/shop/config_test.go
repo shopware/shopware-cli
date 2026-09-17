@@ -57,12 +57,12 @@ func TestConfigPHPVersionRoundTrip(t *testing.T) {
 	assert.NoError(t, WriteConfig(cfg, tmpDir))
 
 	// A portable version, not a machine-specific executable path.
-	written, err := os.ReadFile(filepath.Join(tmpDir, ".shopware-project.yml"))
+	written, err := os.ReadFile(filepath.Join(tmpDir, ".config/shopware-project.yml"))
 	assert.NoError(t, err)
 	assert.Contains(t, string(written), `php_version: "8.3"`)
 	assert.NotContains(t, string(written), "/bin/php")
 
-	read, err := ReadConfig(t.Context(), filepath.Join(tmpDir, ".shopware-project.yml"), false)
+	read, err := ReadConfig(t.Context(), filepath.Join(tmpDir, ".config/shopware-project.yml"), false)
 	assert.NoError(t, err)
 	assert.Equal(t, "8.3", read.PHPVersion)
 }
@@ -75,11 +75,11 @@ func TestConfigWithoutPHPVersionStaysBackwardCompatible(t *testing.T) {
 	cfg := NewConfig()
 	assert.NoError(t, WriteConfig(cfg, tmpDir))
 
-	read, err := ReadConfig(t.Context(), filepath.Join(tmpDir, ".shopware-project.yml"), false)
+	read, err := ReadConfig(t.Context(), filepath.Join(tmpDir, ".config/shopware-project.yml"), false)
 	assert.NoError(t, err)
 	assert.Empty(t, read.PHPVersion)
 
-	written, err := os.ReadFile(filepath.Join(tmpDir, ".shopware-project.yml"))
+	written, err := os.ReadFile(filepath.Join(tmpDir, ".config/shopware-project.yml"))
 	assert.NoError(t, err)
 	assert.NotContains(t, string(written), "php_version")
 	assert.NotRegexp(t, `(?m)^url:`, string(written))
@@ -96,7 +96,7 @@ func TestConfigDeploymentOpenSearchIndexOnInstallRoundTrip(t *testing.T) {
 
 	require.NoError(t, WriteConfig(cfg, tmpDir))
 
-	written, err := os.ReadFile(filepath.Join(tmpDir, ".shopware-project.yml"))
+	written, err := os.ReadFile(filepath.Join(tmpDir, ".config/shopware-project.yml"))
 	require.NoError(t, err)
 	assert.Contains(t, string(written), "opensearch:\n        index-on-install: true")
 
@@ -516,12 +516,91 @@ func TestWriteConfigOmitsDeprecatedTopLevelShop(t *testing.T) {
 
 	require.NoError(t, WriteConfig(cfg, tmpDir))
 
+	written, err := os.ReadFile(filepath.Join(tmpDir, ".config/shopware-project.yml"))
+	require.NoError(t, err)
+	assert.NotRegexp(t, `(?m)^url:`, string(written))
+	assert.NotRegexp(t, `(?m)^admin_api:`, string(written))
+	assert.Contains(t, string(written), "environments:")
+	assert.Contains(t, string(written), "http://127.0.0.1:8000")
+}
+
+func TestWriteConfigUsesOriginalConfigPath(t *testing.T) {
+	tmpDir := t.TempDir()
+	cfg := NewConfig()
+	cfg.SetLocalShop("http://127.0.0.1:8000", &ConfigAdminApi{Username: "admin", Password: "shopware"})
+	cfg.storageLocation = ".shopware-project.yml"
+
+	require.NoError(t, WriteConfig(cfg, tmpDir))
+
 	written, err := os.ReadFile(filepath.Join(tmpDir, ".shopware-project.yml"))
 	require.NoError(t, err)
 	assert.NotRegexp(t, `(?m)^url:`, string(written))
 	assert.NotRegexp(t, `(?m)^admin_api:`, string(written))
 	assert.Contains(t, string(written), "environments:")
 	assert.Contains(t, string(written), "http://127.0.0.1:8000")
+}
+
+func TestSearchConfigPathPriority(t *testing.T) {
+	tmpDir := t.TempDir()
+	t.Chdir(tmpDir)
+
+	core, logs := observer.New(zap.WarnLevel)
+	ctx := logging.WithLogger(t.Context(), zap.New(core).Sugar())
+
+	recommendedConfig := []byte(`
+url: https://recommended.com
+compatibility_date: "2026-01-01"
+`)
+
+	firstFallbackConfig := []byte(`
+url: https://firstFallback.com
+compatibility_date: "2026-01-01"
+`)
+
+	secondFallbackConfig := []byte(`
+url: https://secondFallback.com
+compatibility_date: "2026-01-01"
+`)
+
+	recommendedPath := filepath.Join(tmpDir, ".config/shopware-project.yml")
+	firstFallbackPath := filepath.Join(tmpDir, ".shopware-project.yaml")
+	secondFallbackPath := filepath.Join(tmpDir, ".shopware-project.yml")
+
+	require.NoError(t, os.MkdirAll(filepath.Join(tmpDir, ".config"), 0o755))
+
+	require.NoError(t, os.WriteFile(recommendedPath, recommendedConfig, 0o644))
+	require.NoError(t, os.WriteFile(firstFallbackPath, firstFallbackConfig, 0o644))
+	require.NoError(t, os.WriteFile(secondFallbackPath, secondFallbackConfig, 0o644))
+
+	// check explicit config path argument always wins, either relative or absolute path
+	assert.Equal(t, firstFallbackPath, SearchConfigPath(ctx, tmpDir, ".shopware-project.yaml"))
+	assert.Equal(t, secondFallbackPath, SearchConfigPath(ctx, tmpDir, secondFallbackPath))
+	logEntries := logs.TakeAll()
+	assert.Empty(t, logEntries) // explicit config path should not warn on other existing configs
+
+	// otherwise it should follow our documented priority
+	assert.Equal(t, recommendedPath, SearchConfigPath(ctx, tmpDir, ""))
+	logEntries = logs.TakeAll()
+	assert.Len(t, logEntries, 2)
+	assert.Contains(t, logEntries[0].Message, firstFallbackPath)
+	assert.Contains(t, logEntries[1].Message, secondFallbackPath)
+
+	require.NoError(t, os.Remove(recommendedPath))
+	assert.Equal(t, firstFallbackPath, SearchConfigPath(ctx, tmpDir, ""))
+	logEntries = logs.TakeAll()
+	assert.Len(t, logEntries, 1)
+	assert.Contains(t, logEntries[0].Message, secondFallbackPath)
+
+	require.NoError(t, os.Remove(firstFallbackPath))
+	assert.Equal(t, secondFallbackPath, SearchConfigPath(ctx, tmpDir, ""))
+	logEntries = logs.TakeAll()
+	assert.Empty(t, logEntries)
+
+	// if no config file exists, it should still return the recommended file path for error reporting
+	require.NoError(t, os.Remove(secondFallbackPath))
+	assert.Equal(t, recommendedPath, SearchConfigPath(ctx, tmpDir, ""))
+	logEntries = logs.TakeAll()
+	assert.Empty(t, logEntries)
 }
 
 func TestConfigDump_EnableAnonymization(t *testing.T) {

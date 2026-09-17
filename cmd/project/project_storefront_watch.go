@@ -39,7 +39,8 @@ var projectStorefrontWatchCmd = &cobra.Command{
 			return err
 		}
 
-		shopCfg, err := shop.ReadConfig(cmd.Context(), projectConfigPath, true)
+		actualProjectConfigPath := shop.SearchConfigPath(cmd.Context(), projectRoot, projectConfigPath)
+		shopCfg, err := shop.ReadConfig(cmd.Context(), actualProjectConfigPath, true)
 		if err != nil {
 			return err
 		}
@@ -105,7 +106,7 @@ func resolveStorefrontWatcherOptions(ctx context.Context, cmdExecutor executor.E
 
 	client, err := cmdExecutor.AdminAPIClient(ctx)
 	if err != nil {
-		return extension.StorefrontWatcherOptions{}, fmt.Errorf("--sales-channel requires admin api access (set environments.<name>.admin_api in .shopware-project.yml or SHOPWARE_CLI_API_* env vars): %w", err)
+		return extension.StorefrontWatcherOptions{}, fmt.Errorf("--sales-channel requires admin api access (set environments.<name>.admin_api in .config/shopware-project.yml or SHOPWARE_CLI_API_* env vars): %w", err)
 	}
 
 	apiCtx := adminSdk.NewApiContext(ctx)

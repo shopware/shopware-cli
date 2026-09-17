@@ -68,8 +68,11 @@ func newProxyEnvironment(cmd *cobra.Command) (*proxyEnvironment, error) {
 // newProxyEnvironmentForRoot builds the proxy environment for an explicit
 // project root, used by `proxy teardown` to run down for every registered
 // project regardless of the current directory.
+// for `configPath` only set a non-empty value if you want to override / use an explicit config path,
+// otherwise it will be auto discovered in the specified `projectRoot`
 func newProxyEnvironmentForRoot(ctx context.Context, projectRoot, configPath string) (*proxyEnvironment, error) {
-	cfg, err := shop.ReadConfig(ctx, configPath, true)
+	actualProjectConfigPath := shop.SearchConfigPath(ctx, projectRoot, configPath)
+	cfg, err := shop.ReadConfig(ctx, actualProjectConfigPath, true)
 	if err != nil {
 		return nil, err
 	}
@@ -98,7 +101,7 @@ func newProxyEnvironmentForRoot(ctx context.Context, projectRoot, configPath str
 	return &proxyEnvironment{
 		projectRoot:   projectRoot,
 		canonicalRoot: proxy.CanonicalProjectRoot(projectRoot),
-		configPath:    configPath,
+		configPath:    actualProjectConfigPath,
 		cfg:           cfg,
 		baseDomain:    baseDomain,
 		hostname:      hostname,
@@ -404,7 +407,7 @@ func (e *proxyEnvironment) envLocalPath() string {
 	return filepath.Join(e.projectRoot, ".env.local")
 }
 
-// switchProjectConfigURLs points the url keys in .shopware-project.yml at
+// switchProjectConfigURLs points the url keys in .config/shopware-project.yml at
 // the proxy — the dev TUI and the admin API client resolve the shop URL from
 // them — and returns the pre-proxy state for the registry, so down can
 // restore the file exactly. On re-registration the state remembered by the
@@ -567,7 +570,7 @@ func (e *proxyEnvironment) down(ctx context.Context, hintTeardown bool) error {
 		}
 	}
 
-	// Restore the url keys in .shopware-project.yml to their pre-proxy state.
+	// Restore the url keys in .config/shopware-project.yml to their pre-proxy state.
 	if registered && entry.PreviousConfig != nil {
 		if err := shop.RestoreProjectURL(e.configPath, environmentName, *entry.PreviousConfig); err != nil {
 			fmt.Println(tui.RedText.Render("  Could not restore the url in the project config: " + err.Error()))

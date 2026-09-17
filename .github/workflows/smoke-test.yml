@@ -114,10 +114,10 @@ jobs:
       - name: Project config targets environments.local only
         working-directory: shopware-docker
         run: |
-          cat .shopware-project.yml
-          grep -q 'type: docker' .shopware-project.yml
+          cat .config/shopware-project.yml
+          grep -q 'type: docker' .config/shopware-project.yml
           # A top-level url sits at column 0; the environment one is indented.
-          if grep -q '^url:' .shopware-project.yml; then
+          if grep -q '^url:' .config/shopware-project.yml; then
             echo "::error::project create wrote a deprecated top-level url"
             exit 1
           fi

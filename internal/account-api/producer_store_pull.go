@@ -9,8 +9,6 @@ import (
 	"path"
 	"strings"
 
-	"gopkg.in/yaml.v3"
-
 	"github.com/shopware/shopware-cli/internal/extension"
 	"github.com/shopware/shopware-cli/logging"
 )
@@ -158,15 +156,9 @@ func PullExtensionStoreInfo(ctx context.Context, producer ProducerAPI, zipExt ex
 		newCfg.Store.ImageDirectory = &imageDir
 	}
 
-	content, err := yaml.Marshal(newCfg)
+	err = newCfg.Dump(zipExt.GetPath())
 	if err != nil {
-		return fmt.Errorf("cannot encode yaml: %w", err)
-	}
-
-	extCfgFile := fmt.Sprintf("%s/%s", zipExt.GetPath(), newCfg.FileName)
-	err = os.WriteFile(extCfgFile, content, 0o644)
-	if err != nil {
-		return fmt.Errorf("cannot save file: %w", err)
+		return fmt.Errorf("cannot dump config: %w", err)
 	}
 
 	logging.FromContext(ctx).Infof("Files has been written to the given extension folder")

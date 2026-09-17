@@ -72,7 +72,7 @@ func TestRunHeadlessInstallsAndPersists(t *testing.T) {
 	assert.Contains(t, plain, "http://localhost:8000/admin")
 	assert.Contains(t, plain, "Admin user: admin")
 
-	written, err := os.ReadFile(filepath.Join(dir, ".shopware-project.yml"))
+	written, err := os.ReadFile(filepath.Join(dir, ".config/shopware-project.yml"))
 	require.NoError(t, err)
 	assert.Contains(t, string(written), "password: secret123")
 }

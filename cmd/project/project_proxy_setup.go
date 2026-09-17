@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"path/filepath"
 	"strings"
 
 	"charm.land/huh/v2"
@@ -167,7 +166,7 @@ func setupProjectHostnames(ctx context.Context) []string {
 		return nil
 	}
 
-	env, err := newProxyEnvironmentForRoot(ctx, projectRoot, filepath.Join(projectRoot, ".shopware-project.yml"))
+	env, err := newProxyEnvironmentForRoot(ctx, projectRoot, projectConfigPath)
 	if err != nil {
 		return nil
 	}

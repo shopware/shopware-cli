@@ -30,7 +30,7 @@ var resolveProjectPHPBinary = system.ResolveProjectPHPBinary
 var resolveComposer = system.ResolveComposer
 
 // phpBinary returns the PHP executable used for this project's commands,
-// following the precedence: PHP_BINARY > php_version from .shopware-project.yml >
+// following the precedence: PHP_BINARY > php_version from .config/shopware-project.yml >
 // "php" from PATH. Resolution failures are returned rather than falling back, so
 // the project never silently runs on a different PHP version.
 func (l *LocalExecutor) phpBinary(ctx context.Context) (string, error) {

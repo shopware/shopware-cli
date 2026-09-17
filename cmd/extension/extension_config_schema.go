@@ -8,7 +8,7 @@ import (
 
 var extensionConfigSchemaCmd = &cobra.Command{
 	Use:   "config-schema",
-	Short: "Print the JSON schema for the .shopware-extension.yml configuration",
+	Short: "Print the JSON schema for the .config/shopware-extension.yml configuration",
 	RunE: func(cmd *cobra.Command, _ []string) error {
 		_, err := cmd.OutOrStdout().Write(extension.ConfigSchema())
 		return err

@@ -2,6 +2,7 @@ package project
 
 import (
 	"errors"
+	"os"
 
 	"charm.land/huh/v2"
 	"github.com/spf13/cobra"
@@ -14,14 +15,21 @@ import (
 
 var projectConfigInitCmd = &cobra.Command{
 	Use:   "init",
-	Short: "Creates a new project config in current dir",
-	Long: `Creates a new .shopware-project.yml in the current directory.
+	Short: "Creates a new project config",
+	Long: `Creates a new .config/shopware-project.yml config in the current directory.
 
 Shop URL and Admin API credentials are written under environments.local.
 Omit -e / --env on later commands to target that environment.`,
 	RunE: func(cmd *cobra.Command, _ []string) error {
 		if !system.IsInteractionEnabled(cmd.Context()) {
 			return errors.New("this command requires interaction, but interaction is disabled")
+		}
+
+		// first check if a config already exists
+		actualProjectConfigPath := shop.SearchConfigPath(cmd.Context(), ".", projectConfigPath)
+		_, err := os.Stat(actualProjectConfigPath)
+		if err == nil {
+			return errors.New("a config already exists under " + actualProjectConfigPath)
 		}
 
 		config := &shop.Config{
@@ -36,7 +44,7 @@ Omit -e / --env on later commands to target that environment.`,
 			return err
 		}
 
-		logging.FromContext(cmd.Context()).Info("Created .shopware-project.yml")
+		logging.FromContext(cmd.Context()).Info("Created .config/shopware-project.yml")
 
 		return nil
 	},
