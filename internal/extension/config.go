@@ -221,6 +221,8 @@ type ConfigValidation struct {
 	// PhpVersion overrides the PHP version used for linting (e.g. "8.4").
 	// When set, this takes precedence over the version derived from composer.json or the static Shopware-to-PHP mapping.
 	PhpVersion string `yaml:"php_version,omitempty"`
+	// PhpstanConfig points PHPStan at an custom config instead of the bundled one.
+	PhpstanConfig string `yaml:"phpstan_config,omitempty"`
 }
 
 type ConfigValidationList []validation.ToolConfigIgnore
@@ -341,6 +343,12 @@ func validateExtensionConfig(config *Config) error {
 			if err := validateRelativePath(sp); err != nil {
 				return fmt.Errorf("build.zip.assets.additional_caches[%d].source_paths[%d]: %w", i, j, err)
 			}
+		}
+	}
+
+	if config.Validation.PhpstanConfig != "" {
+		if err := validateRelativePath(config.Validation.PhpstanConfig); err != nil {
+			return fmt.Errorf("validation.phpstan_config: %w", err)
 		}
 	}
 

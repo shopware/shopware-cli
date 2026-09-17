@@ -5,9 +5,11 @@ import (
 	"context"
 	_ "embed"
 	"encoding/json"
+	"fmt"
 	"os"
 	"os/exec"
 	"path"
+	"path/filepath"
 	"regexp"
 	"strings"
 
@@ -62,16 +64,18 @@ func (p PhpStan) Check(ctx context.Context, check *Check, config ToolConfig) err
 		return nil
 	}
 
+	configArguments, err := p.configArguments(config)
+
+	if err != nil {
+		return err
+	}
+
 	if err := installComposerDeps(ctx, config.RootDir, config.CheckAgainst); err != nil {
 		return err
 	}
 
 	for _, sourceDirectory := range config.SourceDirectories {
-		phpstanArguments := []string{"-dmemory_limit=2G", path.Join(config.ToolDirectory, "php", "vendor", "bin", "phpstan"), "analyse", "--no-progress", "--no-interaction", "--error-format=json", sourceDirectory}
-
-		if !p.configExists(config.RootDir) {
-			phpstanArguments = append(phpstanArguments, "--configuration", path.Join(config.ToolDirectory, "php", "configs", "phpstan.neon"))
-		}
+		phpstanArguments := append([]string{"-dmemory_limit=2G", path.Join(config.ToolDirectory, "php", "vendor", "bin", "phpstan"), "analyse", "--no-progress", "--no-interaction", "--error-format=json", sourceDirectory}, configArguments...)
 
 		if logging.IsVerbose(ctx) {
 			phpstanArguments = append(phpstanArguments, "-v")
@@ -142,6 +146,31 @@ func (p PhpStan) Check(ctx context.Context, check *Check, config ToolConfig) err
 	}
 
 	return nil
+}
+
+// configArguments returns the "--configuration" pair PHPStan should run with, or nothing when the
+// extension ships a config PHPStan discovers by itself.
+func (p PhpStan) configArguments(config ToolConfig) ([]string, error) {
+	if config.PhpstanConfig != "" {
+		resolved := filepath.Join(config.RootDir, config.PhpstanConfig)
+
+		info, err := os.Stat(resolved)
+		if err != nil {
+			return nil, fmt.Errorf("validation.phpstan_config %q cannot be read: %w", config.PhpstanConfig, err)
+		}
+
+		if info.IsDir() {
+			return nil, fmt.Errorf("validation.phpstan_config %q is a directory, expected a config file", config.PhpstanConfig)
+		}
+
+		return []string{"--configuration", resolved}, nil
+	}
+
+	if p.configExists(config.RootDir) {
+		return nil, nil
+	}
+
+	return []string{"--configuration", path.Join(config.ToolDirectory, "php", "configs", "phpstan.neon")}, nil
 }
 
 func isPhpStanNoFilesOutput(output string) bool {

@@ -1,9 +1,13 @@
 package verifier
 
 import (
+	"os"
+	"path"
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestPhpStan_isUselessDeprecation(t *testing.T) {
@@ -99,6 +103,96 @@ func TestIsPhpStanNoFilesOutput(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			assert.Equal(t, tt.want, isPhpStanNoFilesOutput(tt.output))
+		})
+	}
+}
+
+func TestPhpStan_configArguments(t *testing.T) {
+	toolDir := t.TempDir()
+	bundledConfig := path.Join(toolDir, "php", "configs", "phpstan.neon")
+
+	tests := []struct {
+		name          string
+		phpstanConfig string
+		rootFiles     []string
+		rootDirs      []string
+		wantConfig    string
+		wantErr       string
+	}{
+		{
+			name:          "extension supplied config is used",
+			phpstanConfig: "phpstan-verifier.neon",
+			rootFiles:     []string{"phpstan-verifier.neon"},
+			wantConfig:    "phpstan-verifier.neon",
+		},
+		{
+			name:          "extension supplied config wins over a discovered one",
+			phpstanConfig: "phpstan-verifier.neon",
+			rootFiles:     []string{"phpstan-verifier.neon", "phpstan.neon.dist"},
+			wantConfig:    "phpstan-verifier.neon",
+		},
+		{
+			name:      "discovered config is left to phpstan",
+			rootFiles: []string{"phpstan.neon.dist"},
+		},
+		{
+			name:       "bundled config when the extension has none",
+			wantConfig: bundledConfig,
+		},
+		{
+			name:          "unreadable file is reported",
+			phpstanConfig: "phpstan-verifier.neon",
+			wantErr:       "cannot be read",
+		},
+		{
+			name:          "directory is reported",
+			phpstanConfig: "configs",
+			rootDirs:      []string{"configs"},
+			wantErr:       "is a directory",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			rootDir := t.TempDir()
+
+			for _, file := range tt.rootFiles {
+				require.NoError(t, os.WriteFile(path.Join(rootDir, file), []byte("parameters:\n"), 0o600))
+			}
+
+			for _, dir := range tt.rootDirs {
+				require.NoError(t, os.Mkdir(path.Join(rootDir, dir), 0o750))
+			}
+
+			arguments, err := PhpStan{}.configArguments(ToolConfig{
+				ToolDirectory: toolDir,
+				RootDir:       rootDir,
+				PhpstanConfig: tt.phpstanConfig,
+			})
+
+			if tt.wantErr != "" {
+				require.Error(t, err)
+				assert.Contains(t, err.Error(), "validation.phpstan_config")
+				assert.Contains(t, err.Error(), tt.wantErr)
+
+				return
+			}
+
+			require.NoError(t, err)
+
+			if tt.wantConfig == "" {
+				assert.Empty(t, arguments)
+
+				return
+			}
+
+			wantConfig := tt.wantConfig
+
+			if !filepath.IsAbs(wantConfig) {
+				wantConfig = filepath.Join(rootDir, wantConfig)
+			}
+
+			assert.Equal(t, []string{"--configuration", wantConfig}, arguments)
 		})
 	}
 }
