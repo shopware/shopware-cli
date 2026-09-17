@@ -569,6 +569,15 @@ type ConfigDeploymentHook struct {
 	Steps []ConfigDeploymentHookStep
 }
 
+// MarshalYAML preserves the public hook format when packaging resolved config.
+// The internal Steps wrapper is not accepted by UnmarshalYAML.
+func (h ConfigDeploymentHook) MarshalYAML() (any, error) {
+	if len(h.Steps) == 0 {
+		return "", nil
+	}
+	return h.Steps, nil
+}
+
 func (h *ConfigDeploymentHook) UnmarshalYAML(value *yaml.Node) error {
 	if value.Kind == yaml.ScalarNode {
 		var script string

@@ -190,17 +190,12 @@ func (s ShopwareProjectScaffold) setupDeployment(ctx context.Context) error {
 // writeDockerfile generates the production Dockerfile and its .dockerignore,
 // with both image stages pinned to the PHP the composer.lock was resolved with.
 func (s ShopwareProjectScaffold) writeDockerfile(ctx context.Context) error {
-	tmpl, err := template.New("dockerfile").Parse(dockerfileTemplate)
+	dockerfile, err := ProductionDockerfile(ProductionDockerfileOptions{PHPVersion: s.PHPVersion})
 	if err != nil {
 		return err
 	}
 
-	var buf bytes.Buffer
-	if err := tmpl.Execute(&buf, struct{ PHPVersion string }{PHPVersion: s.PHPVersion}); err != nil {
-		return err
-	}
-
-	if err := os.WriteFile(filepath.Join(s.ProjectFolder, "Dockerfile"), buf.Bytes(), os.ModePerm); err != nil {
+	if err := os.WriteFile(filepath.Join(s.ProjectFolder, "Dockerfile"), dockerfile, os.ModePerm); err != nil {
 		return err
 	}
 

@@ -60,3 +60,20 @@ func TestConfigDeploymentHookUnmarshalInvalid(t *testing.T) {
 
 	assert.Error(t, err)
 }
+
+func TestConfigDeploymentHooksRoundTrip(t *testing.T) {
+	for _, input := range []string{
+		"{}",
+		"hooks:\n  pre: echo first\n",
+		"hooks:\n  pre: [echo first, echo second]\n",
+		"hooks:\n  post:\n    - title: Warm up\n      script: bin/console cache:warmup\n",
+	} {
+		var original ConfigDeployment
+		require.NoError(t, yaml.Unmarshal([]byte(input), &original))
+		data, err := yaml.Marshal(original)
+		require.NoError(t, err)
+		var restored ConfigDeployment
+		require.NoError(t, yaml.Unmarshal(data, &restored))
+		assert.Equal(t, original.Hooks, restored.Hooks)
+	}
+}

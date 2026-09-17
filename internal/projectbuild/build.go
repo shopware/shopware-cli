@@ -24,6 +24,10 @@ import (
 type Options struct {
 	WithDevDependencies bool
 	ToolVersion         string
+	// Copy Composer path repositories instead of symlinking their sources.
+	// Reject dependencies which still create escaping links (e.g. an explicit
+	// Composer symlink:true option), before build cleanup can affect sources.
+	MirrorPathRepositories bool
 }
 
 // Build runs the production build pipeline in root using a local executor.
@@ -37,6 +41,9 @@ func Build(ctx context.Context, root string, shopCfg *shop.Config, envCfg *shop.
 
 func run(ctx context.Context, root string, shopCfg *shop.Config, cmdExecutor executor.Executor, opts Options) error {
 	buildEnv := buildEnvironment(os.Getenv)
+	if opts.MirrorPathRepositories {
+		buildEnv["COMPOSER_MIRROR_PATH_REPOS"] = "1"
+	}
 	cmdExecutor = cmdExecutor.WithEnv(buildEnv)
 
 	if shopCfg.Build.Hooks != nil && len(shopCfg.Build.Hooks.Pre) > 0 {
@@ -76,6 +83,11 @@ func run(ctx context.Context, root string, shopCfg *shop.Config, cmdExecutor exe
 		logging.FromContext(ctx).Infof("Skipping composer install")
 	}
 
+	if opts.MirrorPathRepositories {
+		if err := validateBuildSymlinks(ctx, root); err != nil {
+			return err
+		}
+	}
 	if err := generateProjectSBOM(ctx, root, opts.ToolVersion); err != nil {
 		return fmt.Errorf("failed to generate SBOM: %w", err)
 	}
@@ -89,6 +101,11 @@ func run(ctx context.Context, root string, shopCfg *shop.Config, cmdExecutor exe
 	sources, err := buildAssets(ctx, root, shopCfg, cmdExecutor, buildEnv)
 	if err != nil {
 		return err
+	}
+	if opts.MirrorPathRepositories {
+		if err := validateBuildSymlinks(ctx, root); err != nil {
+			return err
+		}
 	}
 	if err := optimizeAssets(ctx, root, shopCfg, sources); err != nil {
 		return err

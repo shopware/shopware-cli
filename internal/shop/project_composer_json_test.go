@@ -2,6 +2,7 @@ package shop
 
 import (
 	"encoding/json"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -170,4 +171,48 @@ func TestGenerateComposerJson(t *testing.T) {
 		assert.True(t, data.Config.AllowPlugins["symfony/flex"], "allow-plugins should include symfony/flex")
 		assert.True(t, data.Config.AllowPlugins["symfony/runtime"], "allow-plugins should include symfony/runtime")
 	})
+
+	t.Run("deployment-helper requires Shopware 6.5.8 or higher", func(t *testing.T) {
+		t.Parallel()
+
+		tests := []struct {
+			version string
+			want    bool
+		}{
+			{version: "6.4.18.0", want: false},
+			{version: "6.4.19.0", want: false},
+			{version: "6.5.7.0", want: false},
+			{version: "6.5.8.0", want: true},
+			{version: "6.5.8.0-rc1", want: true},
+			{version: "6.6.0.0", want: true},
+			{version: "6.7.0.0-rc2", want: true},
+		}
+
+		for _, test := range tests {
+			t.Run(test.version, func(t *testing.T) {
+				t.Parallel()
+				ctx := t.Context()
+				jsonStr, err := GenerateComposerJson(ctx, ComposerJsonOptions{Version: test.version, RC: strings.Contains(test.version, "rc")})
+				assert.NoError(t, err)
+
+				var data struct {
+					Require map[string]string `json:"require"`
+				}
+				assert.NoError(t, json.Unmarshal([]byte(jsonStr), &data))
+
+				_, ok := data.Require["shopware/deployment-helper"]
+				assert.Equal(t, test.want, ok, "deployment-helper presence mismatch for %s", test.version)
+			})
+		}
+	})
+}
+
+func TestSupportsDeploymentHelper(t *testing.T) {
+	t.Parallel()
+
+	assert.False(t, supportsDeploymentHelper("6.4.19.0"))
+	assert.False(t, supportsDeploymentHelper("6.5"))
+	assert.False(t, supportsDeploymentHelper("dev-trunk"), "dev branches are not parseable; callers use the fallback version")
+	assert.True(t, supportsDeploymentHelper("6.5.8"))
+	assert.True(t, supportsDeploymentHelper("6.6"))
 }

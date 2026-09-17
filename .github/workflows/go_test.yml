@@ -58,6 +58,11 @@ jobs:
         env:
           COVERAGE_FILE: coverage.out
 
+      - name: Test experimental deployment commands (sandboxed, no network)
+        run: ./scripts/run-tests.sh -v ./cmd/project
+        env:
+          GOFLAGS: -tags=deployment
+
       - name: Upload code coverage
         uses: codecov/codecov-action@fb8b3582c8e4def4969c97caa2f19720cb33a72f # ratchet:codecov/codecov-action@v7.0.0
         with:

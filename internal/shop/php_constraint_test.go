@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/shyim/go-composer/repository"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -65,6 +66,35 @@ func TestPHPConstraintCheck(t *testing.T) {
 
 	t.Run("invalid php version returns false", func(t *testing.T) {
 		assert.False(t, NewPHPConstraint("^8.2").Check("not-a-version"))
+	})
+}
+
+func TestPHPConstraintForShopwareVersion(t *testing.T) {
+	releases := []repository.Version{
+		{Version: "v6.6.0.0", Require: map[string]string{"php": "~8.2.0 || ~8.3.0"}},
+		{Version: "dev-trunk", Require: map[string]string{"php": "~8.3.0 || ~8.4.0"}},
+		{Version: "6.5.0.0"},
+	}
+
+	t.Run("looks up a released version ignoring the v prefix", func(t *testing.T) {
+		c := PHPConstraintForShopwareVersion(releases, "6.6.0.0")
+		assert.Equal(t, "~8.2.0 || ~8.3.0", c.String())
+	})
+
+	t.Run("resolves the constraint of a dev branch", func(t *testing.T) {
+		c := PHPConstraintForShopwareVersion(releases, VersionTrunk)
+		assert.Equal(t, "~8.3.0 || ~8.4.0", c.String())
+		assert.Equal(t, []string{"8.3", "8.4"}, c.SupportedVersions())
+	})
+
+	t.Run("returns nil for an unknown version", func(t *testing.T) {
+		assert.Nil(t, PHPConstraintForShopwareVersion(releases, "6.4.0.0"))
+	})
+
+	t.Run("returns an unconstrained result when the release declares no php requirement", func(t *testing.T) {
+		c := PHPConstraintForShopwareVersion(releases, "6.5.0.0")
+		assert.Equal(t, "", c.String())
+		assert.True(t, c.Check("8.2.0"))
 	})
 }
 
