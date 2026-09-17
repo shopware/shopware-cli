@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"path/filepath"
+	"strings"
 
 	"github.com/shyim/go-composer"
 
@@ -127,6 +128,56 @@ func (u *ProjectUpgrader) RewriteComposerJSON(target string, resolved map[string
 		return nil, err
 	}
 	return changes, nil
+}
+
+// SuggestComposerName derives a valid Composer package name from the project
+// directory name, e.g. "shopware/acme-shop" for "/srv/shops/Acme Shop". It is
+// the pre-filled value of the wizard's package-name prompt.
+func SuggestComposerName(projectRoot string) string {
+	base := strings.ToLower(filepath.Base(projectRoot))
+
+	var b strings.Builder
+	separator := false
+	for _, r := range base {
+		if (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') {
+			b.WriteRune(r)
+			separator = false
+			continue
+		}
+		// Collapse every run of invalid characters into a single dash; a
+		// leading dash would violate the package-name pattern.
+		if !separator && b.Len() > 0 {
+			b.WriteByte('-')
+			separator = true
+		}
+	}
+
+	name := strings.TrimSuffix(b.String(), "-")
+	if name == "" {
+		name = "production"
+	}
+	return "shopware/" + name
+}
+
+// SetComposerName validates name against Composer's package-name rule and
+// writes it into the project's composer.json. The upgrade refuses to run
+// without one (see the composer-name readiness check), so the wizard offers
+// to set it in place.
+func (u *ProjectUpgrader) SetComposerName(name string) error {
+	if err := ValidateComposerName(name); err != nil {
+		return err
+	}
+
+	c, err := composer.ReadJson(filepath.Join(u.projectRoot, "composer.json"))
+	if err != nil {
+		return fmt.Errorf("read composer.json: %w", err)
+	}
+
+	c.Name = name
+	if err := c.Save(); err != nil {
+		return fmt.Errorf("write composer.json: %w", err)
+	}
+	return nil
 }
 
 // renderUpgradeManifest returns the project's composer.json with the target
