@@ -369,6 +369,30 @@ func TestValidateExtensionConfig(t *testing.T) {
 		assert.NoError(t, err)
 	})
 
+	t.Run("accepts a relative validation.phpstan_config", func(t *testing.T) {
+		config := &Config{Validation: ConfigValidation{PhpstanConfig: "phpstan-verifier.neon"}}
+
+		assert.NoError(t, validateExtensionConfig(config))
+	})
+
+	t.Run("fails when validation.phpstan_config is absolute", func(t *testing.T) {
+		config := &Config{Validation: ConfigValidation{PhpstanConfig: "/etc/phpstan.neon"}}
+		err := validateExtensionConfig(config)
+		
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "validation.phpstan_config")
+		assert.Contains(t, err.Error(), "must be relative")
+	})
+
+	t.Run("fails when validation.phpstan_config escapes the extension", func(t *testing.T) {
+		config := &Config{Validation: ConfigValidation{PhpstanConfig: "../phpstan.neon"}}
+		err := validateExtensionConfig(config)
+		
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "validation.phpstan_config")
+		assert.Contains(t, err.Error(), "must not escape")
+	})
+
 	t.Run("fails when English tags exceed 5", func(t *testing.T) {
 		tags := []string{"tag1", "tag2", "tag3", "tag4", "tag5", "tag6"}
 		config := &Config{

@@ -27,6 +27,7 @@ func ConvertExtensionToToolConfig(ext extension.Extension) (*ToolConfig, error) 
 		ToolDirectory:         GetToolDirectory(),
 		Extension:             ext,
 		ValidationIgnores:     ignores,
+		PhpstanConfig:         ext.GetExtensionConfig().Validation.PhpstanConfig,
 		RootDir:               ext.GetPath(),
 		SourceDirectories:     ext.GetSourceDirs(),
 		AdminDirectories:      getAdminFolders(ext),
