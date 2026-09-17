@@ -378,7 +378,7 @@ func TestValidateExtensionConfig(t *testing.T) {
 	t.Run("fails when validation.phpstan_config is absolute", func(t *testing.T) {
 		config := &Config{Validation: ConfigValidation{PhpstanConfig: "/etc/phpstan.neon"}}
 		err := validateExtensionConfig(config)
-		
+
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "validation.phpstan_config")
 		assert.Contains(t, err.Error(), "must be relative")
@@ -387,7 +387,7 @@ func TestValidateExtensionConfig(t *testing.T) {
 	t.Run("fails when validation.phpstan_config escapes the extension", func(t *testing.T) {
 		config := &Config{Validation: ConfigValidation{PhpstanConfig: "../phpstan.neon"}}
 		err := validateExtensionConfig(config)
-		
+
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "validation.phpstan_config")
 		assert.Contains(t, err.Error(), "must not escape")

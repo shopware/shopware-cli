@@ -177,7 +177,7 @@ func TestPhpStan_configArguments(t *testing.T) {
 			}
 
 			wantConfig := tt.wantConfig
-			
+
 			if !filepath.IsAbs(wantConfig) {
 				wantConfig = filepath.Join(rootDir, wantConfig)
 			}
