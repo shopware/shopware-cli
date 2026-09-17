@@ -97,10 +97,10 @@ func TestPackageArchiveUsesTemporaryCopy(t *testing.T) {
 	assert.Equal(t, "built", contents["built.txt"])
 	assert.Equal(t, "assets", contents["public/bundles/app.js"])
 	assert.Equal(t, "example", contents[".env.dist"])
-	assert.Contains(t, contents[".shopware-project.yml"], "deployment:")
-	assert.NotContains(t, contents[".shopware-project.yml"], "admin_api")
-	assert.NotContains(t, contents[".shopware-project.yml"], "environments")
-	for _, name := range []string{"source.txt", "auth.json", ".env", ".env.local", ".env.local.php", ".shopware-project.yaml", ".shopware-project.local.yml", ".git", ".shopware-cli", "var", "public/media", "public/thumbnail", "public/sitemap"} {
+	assert.Contains(t, contents[".config/shopware-project.yml"], "deployment:")
+	assert.NotContains(t, contents[".config/shopware-project.yml"], "admin_api")
+	assert.NotContains(t, contents[".config/shopware-project.yml"], "environments")
+	for _, name := range []string{"source.txt", "auth.json", ".env", ".env.local", ".env.local.php", ".shopware-project.yml", ".shopware-project.yaml", ".shopware-project.local.yml", ".git", ".shopware-cli", "var", "public/media", "public/thumbnail", "public/sitemap"} {
 		assert.NotContains(t, contents, name)
 	}
 	for name, content := range sourceFiles {

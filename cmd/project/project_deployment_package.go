@@ -3,8 +3,6 @@
 package project
 
 import (
-	"path/filepath"
-
 	"github.com/spf13/cobra"
 
 	"github.com/shopware/shopware-cli/internal/shop"
@@ -23,5 +21,5 @@ func packageProjectConfigPath(cmd *cobra.Command, root string) string {
 	if cmd.Flags().Changed("project-config") {
 		return projectConfigPath
 	}
-	return filepath.Join(root, shop.DefaultConfigFileNameInDir(root))
+	return shop.SearchConfigPath(cmd.Context(), root, projectConfigPath)
 }
