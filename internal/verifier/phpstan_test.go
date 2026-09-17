@@ -1,7 +1,6 @@
 package verifier
 
 import (
-	"io/fs"
 	"os"
 	"path"
 	"path/filepath"
@@ -116,6 +115,7 @@ func TestPhpStan_configArguments(t *testing.T) {
 		name          string
 		phpstanConfig string
 		rootFiles     []string
+		rootDirs      []string
 		wantConfig    string
 		wantErr       string
 	}{
@@ -142,7 +142,13 @@ func TestPhpStan_configArguments(t *testing.T) {
 		{
 			name:          "unreadable file is reported",
 			phpstanConfig: "phpstan-verifier.neon",
-			wantErr:       "validation.phpstan_config",
+			wantErr:       "cannot be read",
+		},
+		{
+			name:          "directory is reported",
+			phpstanConfig: "configs",
+			rootDirs:      []string{"configs"},
+			wantErr:       "is a directory",
 		},
 	}
 
@@ -154,6 +160,10 @@ func TestPhpStan_configArguments(t *testing.T) {
 				require.NoError(t, os.WriteFile(path.Join(rootDir, file), []byte("parameters:\n"), 0o600))
 			}
 
+			for _, dir := range tt.rootDirs {
+				require.NoError(t, os.Mkdir(path.Join(rootDir, dir), 0o750))
+			}
+
 			arguments, err := PhpStan{}.configArguments(ToolConfig{
 				ToolDirectory: toolDir,
 				RootDir:       rootDir,
@@ -162,8 +172,8 @@ func TestPhpStan_configArguments(t *testing.T) {
 
 			if tt.wantErr != "" {
 				require.Error(t, err)
+				assert.Contains(t, err.Error(), "validation.phpstan_config")
 				assert.Contains(t, err.Error(), tt.wantErr)
-				assert.ErrorIs(t, err, fs.ErrNotExist)
 
 				return
 			}

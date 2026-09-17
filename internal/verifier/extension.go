@@ -13,26 +13,7 @@ import (
 )
 
 func ConvertExtensionToToolConfig(ext extension.Extension) (*ToolConfig, error) {
-	var ignores []validation.ToolConfigIgnore
-
-	for _, ignore := range ext.GetExtensionConfig().Validation.Ignore {
-		ignores = append(ignores, validation.ToolConfigIgnore{
-			Identifier: ignore.Identifier,
-			Path:       ignore.Path,
-			Message:    ignore.Message,
-		})
-	}
-
-	cfg := &ToolConfig{
-		ToolDirectory:         GetToolDirectory(),
-		Extension:             ext,
-		ValidationIgnores:     ignores,
-		PhpstanConfig:         ext.GetExtensionConfig().Validation.PhpstanConfig,
-		RootDir:               ext.GetPath(),
-		SourceDirectories:     ext.GetSourceDirs(),
-		AdminDirectories:      getAdminFolders(ext),
-		StorefrontDirectories: getStorefrontFolders(ext),
-	}
+	cfg := newToolConfig(ext)
 
 	constraint, err := ext.GetShopwareVersionConstraint()
 	if err != nil {
@@ -44,6 +25,29 @@ func ConvertExtensionToToolConfig(ext extension.Extension) (*ToolConfig, error) 
 	}
 
 	return cfg, nil
+}
+
+func newToolConfig(ext extension.Extension) *ToolConfig {
+	var ignores []validation.ToolConfigIgnore
+
+	for _, ignore := range ext.GetExtensionConfig().Validation.Ignore {
+		ignores = append(ignores, validation.ToolConfigIgnore{
+			Identifier: ignore.Identifier,
+			Path:       ignore.Path,
+			Message:    ignore.Message,
+		})
+	}
+
+	return &ToolConfig{
+		ToolDirectory:         GetToolDirectory(),
+		Extension:             ext,
+		ValidationIgnores:     ignores,
+		PhpstanConfig:         ext.GetExtensionConfig().Validation.PhpstanConfig,
+		RootDir:               ext.GetPath(),
+		SourceDirectories:     ext.GetSourceDirs(),
+		AdminDirectories:      getAdminFolders(ext),
+		StorefrontDirectories: getStorefrontFolders(ext),
+	}
 }
 
 // getShopwareVersions returns the available Shopware versions. It is a package

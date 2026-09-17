@@ -154,8 +154,13 @@ func (p PhpStan) configArguments(config ToolConfig) ([]string, error) {
 	if config.PhpstanConfig != "" {
 		resolved := filepath.Join(config.RootDir, config.PhpstanConfig)
 
-		if _, err := os.Stat(resolved); err != nil {
+		info, err := os.Stat(resolved)
+		if err != nil {
 			return nil, fmt.Errorf("validation.phpstan_config %q cannot be read: %w", config.PhpstanConfig, err)
+		}
+
+		if info.IsDir() {
+			return nil, fmt.Errorf("validation.phpstan_config %q is a directory, expected a config file", config.PhpstanConfig)
 		}
 
 		return []string{"--configuration", resolved}, nil
