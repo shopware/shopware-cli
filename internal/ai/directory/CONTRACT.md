@@ -4,7 +4,7 @@ Frozen contract for `shopware-cli ai list` / `ai info`. Changing any field
 name or enum value here is a breaking change to a public interface.
 
 ## Scope of v1
-- Only `type: skill` entries are listed. `mcp` (shopware-core) is deferred to #1336.
+- Only `type: skill` entries are listed. `mcp` (shopware-core) is reserved for a later increment.
 - No network access, no project detection in this version.
 - The directory has no remote source: entries are hardwired in Go
   (`integrations.go`).
@@ -28,7 +28,7 @@ Optional:  compatibility (compatibility.source: owner)
 ## JSON output (camelCase) — public contract
 
 Selected with `--format json` on both commands (default `--format table`), per
-the CLI-wide output-flag convention (shopware/shopware-cli#1471).
+the CLI-wide output-flag convention.
 
 `ai list` — array of:
 { name, displayName, type, provider, description, status }
@@ -39,10 +39,10 @@ the CLI-wide output-flag convention (shopware/shopware-cli#1471).
   delivery: { kind, repository? },
   compatibility?: { source } }
 
-## --installed state (shape defined now, WRITTEN by #1337)
+## --installed state (written by `ai add` / `ai remove`)
 Install-state file records, per installed entry:
-{ name, client, scope: project|global, requestedTag, resolvedRevision }
-`ai list --installed` returns only recorded entries; empty until #1337.
+{ name, agent, scope: project|global, requestedTag, resolvedRevision }
+`ai list --installed` returns only recorded entries.
 
 ## Guarantees
 - All human + JSON output → stdout; logs/errors → stderr.
