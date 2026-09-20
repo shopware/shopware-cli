@@ -1,10 +1,74 @@
 package system
 
 import (
+	"context"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"runtime"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
+	"github.com/shopware/shopware-cli/internal/oci"
 )
+
+// stubRuntime is an oci.Runtime whose binary is a stub shell script.
+type stubRuntime struct{ binary string }
+
+func (s stubRuntime) Binary() string { return s.binary }
+
+func (s stubRuntime) Command(ctx context.Context, args ...string) *exec.Cmd {
+	return exec.CommandContext(ctx, s.binary, args...)
+}
+
+func (s stubRuntime) ComposeCommand(ctx context.Context, args ...string) *exec.Cmd {
+	return s.Command(ctx, append([]string{"compose"}, args...)...)
+}
+
+// writeStubRuntime writes a stub runtime binary running script and returns it
+// as an oci.Runtime.
+func writeStubRuntime(t *testing.T, script string) oci.Runtime {
+	t.Helper()
+
+	if runtime.GOOS == "windows" {
+		t.Skip("stub runtime binary requires a POSIX shell")
+	}
+
+	shPath, err := exec.LookPath("sh")
+	require.NoError(t, err)
+
+	path := filepath.Join(t.TempDir(), "oci-stub")
+	require.NoError(t, os.WriteFile(path, []byte("#!"+shPath+"\n"+script), 0o755))
+
+	return stubRuntime{binary: path}
+}
+
+func TestCheckProjectDependenciesDocker(t *testing.T) {
+	if IsInsideContainer() {
+		t.Skip("the docker dependency check is bypassed inside containers")
+	}
+
+	t.Run("runtime installed and running", func(t *testing.T) {
+		ctx := oci.WithRuntime(t.Context(), writeStubRuntime(t, "exit 0"))
+		assert.Empty(t, CheckProjectDependencies(ctx, true, nil, ""))
+	})
+
+	t.Run("runtime not running", func(t *testing.T) {
+		ctx := oci.WithRuntime(t.Context(), writeStubRuntime(t, "exit 1"))
+		missing := CheckProjectDependencies(ctx, true, nil, "")
+		require.Len(t, missing, 1)
+		assert.Equal(t, MissingDependency{Name: "Docker", Reason: "not running"}, missing[0])
+	})
+
+	t.Run("runtime not installed", func(t *testing.T) {
+		ctx := oci.WithRuntime(t.Context(), stubRuntime{binary: filepath.Join(t.TempDir(), "does-not-exist")})
+		missing := CheckProjectDependencies(ctx, true, nil, "")
+		require.Len(t, missing, 1)
+		assert.Equal(t, MissingDependency{Name: "Docker", Reason: "not installed"}, missing[0])
+	})
+}
 
 func TestCheckIncompatibilities(t *testing.T) {
 	t.Run("no incompatibilities on non-darwin", func(t *testing.T) {

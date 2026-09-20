@@ -12,28 +12,50 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/shopware/shopware-cli/internal/oci"
 )
 
-// writeRecordingDocker installs a docker stub on PATH that records every
-// argument it is invoked with, one per line, into argsFile.
-func writeRecordingDocker(t *testing.T, argsFile string) {
+// scriptRuntime is an oci.Runtime that runs the stub shell script at path
+// instead of a real container runtime binary.
+type scriptRuntime struct{ path string }
+
+func (s scriptRuntime) Binary() string { return s.path }
+
+func (s scriptRuntime) Command(ctx context.Context, args ...string) *exec.Cmd {
+	return exec.CommandContext(ctx, s.path, args...)
+}
+
+func (s scriptRuntime) ComposeCommand(ctx context.Context, args ...string) *exec.Cmd {
+	return s.Command(ctx, append([]string{"compose"}, args...)...)
+}
+
+// writeStubRuntime writes script to a stub binary and returns it as an
+// oci.Runtime, ready to be injected with oci.WithRuntime.
+func writeStubRuntime(t *testing.T, script string) oci.Runtime {
 	t.Helper()
 
 	if runtime.GOOS == "windows" {
-		t.Skip("fake docker binary requires a POSIX shell")
+		t.Skip("fake runtime stub requires a POSIX shell")
 	}
 
 	shPath, err := exec.LookPath("sh")
 	require.NoError(t, err)
 
-	script := fmt.Sprintf("#!%s\nprintf '%%s\\n' \"$@\" > %q\n", shPath, argsFile)
+	path := filepath.Join(t.TempDir(), "oci-stub")
+	require.NoError(t, os.WriteFile(path, []byte("#!"+shPath+"\n"+script), 0o755))
 
-	dir := t.TempDir()
-	require.NoError(t, os.WriteFile(filepath.Join(dir, "docker"), []byte(script), 0o755))
-	t.Setenv("PATH", dir)
+	return scriptRuntime{path: path}
 }
 
-// recordedArgs reads the arguments captured by writeRecordingDocker.
+// writeRecordingRuntime returns an oci.Runtime stub that records every
+// argument it is invoked with, one per line, into argsFile.
+func writeRecordingRuntime(t *testing.T, argsFile string) oci.Runtime {
+	t.Helper()
+	return writeStubRuntime(t, fmt.Sprintf("printf '%%s\\n' \"$@\" > %q\n", argsFile))
+}
+
+// recordedArgs reads the arguments captured by writeRecordingRuntime.
 func recordedArgs(t *testing.T, argsFile string) []string {
 	t.Helper()
 
@@ -112,11 +134,11 @@ func TestDockerStopEnvironment(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			argsFile := filepath.Join(t.TempDir(), "args.txt")
-			writeRecordingDocker(t, argsFile)
+			ctx := oci.WithRuntime(t.Context(), writeRecordingRuntime(t, argsFile))
 
 			dockerExec := &DockerExecutor{projectRoot: t.TempDir(), composeProjectName: tc.projectName}
 
-			require.NoError(t, dockerExec.StopEnvironment(t.Context(), tc.opts))
+			require.NoError(t, dockerExec.StopEnvironment(ctx, tc.opts))
 
 			assert.Equal(t, tc.want, recordedArgs(t, argsFile))
 		})

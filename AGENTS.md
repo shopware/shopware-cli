@@ -25,6 +25,7 @@ This file provides guidance to AI coding agents when working with code in this r
 3. **`project/`** - Shopware project management (creation, configuration, deployment)
 
 ### Key Internal Packages
+- **`internal/oci/`** - OCI container runtime abstraction (`Runtime` interface); every docker CLI invocation goes through `oci.FromContext(ctx)`, so tests inject fakes via `oci.WithRuntime` and alternative runtimes (e.g. Podman) only implement the interface
 - **`internal/verifier/`** - Code quality tools (PHPStan, ESLint, Twig linting)
 - **`internal/account-api/`** - Shopware Account API integration
 - **`internal/system/`** - System utilities (PHP/Node detection, filesystem)
