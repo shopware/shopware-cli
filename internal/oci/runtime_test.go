@@ -40,9 +40,9 @@ type fakeRuntime struct {
 
 func (f *fakeRuntime) Binary() string { return f.binary }
 
-func (f *fakeRuntime) Command(_ context.Context, args ...string) *exec.Cmd {
+func (f *fakeRuntime) Command(ctx context.Context, args ...string) *exec.Cmd {
 	f.calls = append(f.calls, append([]string{f.binary}, args...))
-	return exec.Command("true")
+	return exec.CommandContext(ctx, "true")
 }
 
 func (f *fakeRuntime) ComposeCommand(ctx context.Context, args ...string) *exec.Cmd {
