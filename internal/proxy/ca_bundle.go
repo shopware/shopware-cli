@@ -7,8 +7,9 @@ import (
 	"encoding/hex"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
+
+	"github.com/shopware/shopware-cli/internal/oci"
 )
 
 const caBundleDirName = "ca-bundles"
@@ -106,7 +107,7 @@ func bundleFresh(bundlePath, caPath string) bool {
 // entrypoint is bypassed (--entrypoint cat) and only stdout is used, so the
 // output is the PEM file and nothing else.
 func imageSystemCABundle(ctx context.Context, image string) ([]byte, error) {
-	cmd := exec.CommandContext(ctx, "docker", "run", "--rm", "--entrypoint", "cat", image, systemCABundlePath)
+	cmd := oci.FromContext(ctx).Command(ctx, "run", "--rm", "--entrypoint", "cat", image, systemCABundlePath)
 
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout

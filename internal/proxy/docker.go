@@ -3,16 +3,17 @@ package proxy
 import (
 	"context"
 	"fmt"
-	"os/exec"
+
+	"github.com/shopware/shopware-cli/internal/oci"
 )
 
-// runDocker runs `docker <args...>` and returns its combined output.
+// runDocker runs `<oci-runtime> <args...>` and returns its combined output.
 func runDocker(ctx context.Context, args ...string) (string, error) {
-	cmd := exec.CommandContext(ctx, "docker", args...)
+	runtime := oci.FromContext(ctx)
 
-	out, err := cmd.CombinedOutput()
+	out, err := runtime.Command(ctx, args...).CombinedOutput()
 	if err != nil {
-		return "", fmt.Errorf("docker %v: %w\n%s", args, err, out)
+		return "", fmt.Errorf("%s %v: %w\n%s", runtime.Binary(), args, err, out)
 	}
 
 	return string(out), nil

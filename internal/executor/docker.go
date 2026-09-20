@@ -11,6 +11,7 @@ import (
 	"syscall"
 
 	adminSdk "github.com/shopware/shopware-cli/internal/admin-api"
+	"github.com/shopware/shopware-cli/internal/oci"
 	"github.com/shopware/shopware-cli/internal/shop"
 	"github.com/shopware/shopware-cli/internal/system"
 )
@@ -29,55 +30,61 @@ type DockerExecutor struct {
 	composeProjectName string
 }
 
-// composeArgs starts a docker argument list for a compose subcommand, pinning
-// the project name when one is known.
+// composeArgs starts the argument list of a `compose` subcommand, pinning the
+// project name when one is known.
 func (d *DockerExecutor) composeArgs(sub ...string) []string {
-	args := []string{"compose"}
+	var args []string
 	if d.composeProjectName != "" {
 		args = append(args, "-p", d.composeProjectName)
 	}
 	return append(args, sub...)
 }
 
-func (d *DockerExecutor) ConsoleCommand(ctx context.Context, args ...string) *Process {
-	dockerArgs := d.baseArgs(ctx)
-	dockerArgs = append(dockerArgs, "env-bridge", "php", consoleCommandName(ctx))
-	dockerArgs = append(dockerArgs, args...)
+// composeCommand builds a `<runtime> compose <sub...>` invocation through the
+// OCI runtime carried by ctx.
+func (d *DockerExecutor) composeCommand(ctx context.Context, sub ...string) *exec.Cmd {
+	return oci.FromContext(ctx).ComposeCommand(ctx, d.composeArgs(sub...)...)
+}
 
-	cmd := exec.CommandContext(ctx, "docker", dockerArgs...)
+func (d *DockerExecutor) ConsoleCommand(ctx context.Context, args ...string) *Process {
+	execArgs := d.baseArgs(ctx)
+	execArgs = append(execArgs, "env-bridge", "php", consoleCommandName(ctx))
+	execArgs = append(execArgs, args...)
+
+	cmd := d.composeCommand(ctx, execArgs...)
 	applyDir(d.projectRoot, cmd)
 	logCmd(ctx, cmd)
 	return d.newProcess(cmd, append([]string{"php", consoleCommandName(ctx)}, args...))
 }
 
 func (d *DockerExecutor) ComposerCommand(ctx context.Context, args ...string) *Process {
-	dockerArgs := d.baseArgs(ctx)
-	dockerArgs = append(dockerArgs, "composer")
-	dockerArgs = append(dockerArgs, args...)
+	execArgs := d.baseArgs(ctx)
+	execArgs = append(execArgs, "composer")
+	execArgs = append(execArgs, args...)
 
-	cmd := exec.CommandContext(ctx, "docker", dockerArgs...)
+	cmd := d.composeCommand(ctx, execArgs...)
 	applyDir(d.projectRoot, cmd)
 	logCmd(ctx, cmd)
 	return d.newProcess(cmd, append([]string{"composer"}, args...))
 }
 
 func (d *DockerExecutor) PHPCommand(ctx context.Context, args ...string) *Process {
-	dockerArgs := d.baseArgs(ctx)
-	dockerArgs = append(dockerArgs, "env-bridge", "php")
-	dockerArgs = append(dockerArgs, args...)
+	execArgs := d.baseArgs(ctx)
+	execArgs = append(execArgs, "env-bridge", "php")
+	execArgs = append(execArgs, args...)
 
-	cmd := exec.CommandContext(ctx, "docker", dockerArgs...)
+	cmd := d.composeCommand(ctx, execArgs...)
 	applyDir(d.projectRoot, cmd)
 	logCmd(ctx, cmd)
 	return d.newProcess(cmd, append([]string{"php"}, args...))
 }
 
 func (d *DockerExecutor) NPMCommand(ctx context.Context, args ...string) *Process {
-	dockerArgs := d.baseArgs(ctx)
-	dockerArgs = append(dockerArgs, "env-bridge", "npm")
-	dockerArgs = append(dockerArgs, args...)
+	execArgs := d.baseArgs(ctx)
+	execArgs = append(execArgs, "env-bridge", "npm")
+	execArgs = append(execArgs, args...)
 
-	cmd := exec.CommandContext(ctx, "docker", dockerArgs...)
+	cmd := d.composeCommand(ctx, execArgs...)
 	applyDir(d.projectRoot, cmd)
 	logCmd(ctx, cmd)
 	return d.newProcess(cmd, append([]string{"npm"}, args...))
@@ -97,11 +104,11 @@ func (d *DockerExecutor) AvailableLogFiles(ctx context.Context) ([]LogFile, erro
 func (d *DockerExecutor) GetLog(ctx context.Context, file string, lines int, follow bool, w io.Writer) error {
 	tail := tailArgs(d.NormalizePath(logFilePath(d.projectRoot, file)), lines, follow)
 
-	dockerArgs := d.baseArgs(ctx)
-	dockerArgs = append(dockerArgs, "tail")
-	dockerArgs = append(dockerArgs, tail...)
+	execArgs := d.baseArgs(ctx)
+	execArgs = append(execArgs, "tail")
+	execArgs = append(execArgs, tail...)
 
-	cmd := exec.CommandContext(ctx, "docker", dockerArgs...)
+	cmd := d.composeCommand(ctx, execArgs...)
 	applyDir(d.projectRoot, cmd)
 	logCmd(ctx, cmd)
 
@@ -162,7 +169,7 @@ func (d *DockerExecutor) DatabaseConnection(ctx context.Context) (*DatabaseConne
 
 	if databaseURL == "" {
 		// Always disable TTY: this captures stdout and is never interactive.
-		cmd := exec.CommandContext(ctx, "docker", "compose", "exec", "-T", "web", "printenv", "DATABASE_URL")
+		cmd := oci.FromContext(ctx).ComposeCommand(ctx, "exec", "-T", "web", "printenv", "DATABASE_URL")
 		cmd.Dir = d.projectRoot
 		logCmd(ctx, cmd)
 
@@ -197,7 +204,7 @@ func (d *DockerExecutor) DatabaseConnection(ctx context.Context) (*DatabaseConne
 // of the compose service it points at. When the host is not a compose service
 // (external database), the address is kept untouched.
 func (d *DockerExecutor) resolvePublishedPort(ctx context.Context, conn *DatabaseConnection) error {
-	cmd := exec.CommandContext(ctx, "docker", "compose", "port", conn.Host, conn.Port)
+	cmd := oci.FromContext(ctx).ComposeCommand(ctx, "port", conn.Host, conn.Port)
 	cmd.Dir = d.projectRoot
 	logCmd(ctx, cmd)
 
@@ -256,7 +263,7 @@ func (d *DockerExecutor) newProcess(cmd *exec.Cmd, innerArgs []string) *Process 
 			// port. pkill matches by pattern and would miss those children.
 			// Always disable TTY: this is a fire-and-forget cleanup command.
 			killArgs := append(d.composeArgs("exec", "-T", "web"), "sh", "-c", killTreeScript(pattern))
-			killCmd := exec.CommandContext(ctx, "docker", killArgs...)
+			killCmd := oci.FromContext(ctx).ComposeCommand(ctx, killArgs...)
 			killCmd.Dir = projectRoot
 			_ = killCmd.Run()
 
@@ -286,7 +293,7 @@ func shellSingleQuote(s string) string {
 }
 
 func (d *DockerExecutor) StartEnvironment(ctx context.Context) error {
-	cmd := exec.CommandContext(ctx, "docker", d.composeArgs("up", "-d", "--remove-orphans")...)
+	cmd := d.composeCommand(ctx, "up", "-d", "--remove-orphans")
 	cmd.Dir = d.projectRoot
 
 	output, err := cmd.CombinedOutput()
@@ -303,7 +310,7 @@ func (d *DockerExecutor) StopEnvironment(ctx context.Context, opts StopOptions) 
 		downArgs = append(downArgs, "--volumes")
 	}
 
-	cmd := exec.CommandContext(ctx, "docker", downArgs...)
+	cmd := oci.FromContext(ctx).ComposeCommand(ctx, downArgs...)
 	cmd.Dir = d.projectRoot
 
 	output, err := cmd.CombinedOutput()
@@ -315,7 +322,7 @@ func (d *DockerExecutor) StopEnvironment(ctx context.Context, opts StopOptions) 
 }
 
 func (d *DockerExecutor) EnvironmentStatus(ctx context.Context) (bool, error) {
-	cmd := exec.CommandContext(ctx, "docker", d.composeArgs("ps", "--status=running", "-q")...)
+	cmd := d.composeCommand(ctx, "ps", "--status=running", "-q")
 	cmd.Dir = d.projectRoot
 
 	output, err := cmd.Output()

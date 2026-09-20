@@ -11,6 +11,7 @@ import (
 
 	"charm.land/lipgloss/v2"
 
+	"github.com/shopware/shopware-cli/internal/oci"
 	"github.com/shopware/shopware-cli/internal/tui"
 )
 
@@ -67,10 +68,11 @@ func CheckProjectDependencies(ctx context.Context, useDocker bool, phpConstraint
 	var missing []MissingDependency
 
 	if useDocker && !IsInsideContainer() {
-		if _, err := exec.LookPath("docker"); err != nil {
+		runtime := oci.FromContext(ctx)
+		if _, err := exec.LookPath(runtime.Binary()); err != nil {
 			missing = append(missing, MissingDependency{Name: "Docker", Reason: "not installed"})
 		} else {
-			cmd := exec.CommandContext(ctx, "docker", "info")
+			cmd := runtime.Command(ctx, "info")
 			if err := cmd.Run(); err != nil {
 				missing = append(missing, MissingDependency{Name: "Docker", Reason: "not running"})
 			}

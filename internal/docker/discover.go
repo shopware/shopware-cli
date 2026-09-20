@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/shopware/shopware-cli/internal/envfile"
+	"github.com/shopware/shopware-cli/internal/oci"
 )
 
 // DiscoveredService is an auxiliary service of the running development
@@ -39,20 +40,20 @@ type RunningEnvironment struct {
 	WebPort int
 }
 
-// composeCommand builds a `docker compose <args...>` invocation rooted at
+// composeCommand builds a `compose <args...>` invocation rooted at
 // projectRoot. Unless the environment already pins COMPOSE_PROJECT_NAME, the
 // project name is pinned explicitly: compose re-reads the project .env per
 // invocation, and pinning guarantees we only ever see this project's own
 // containers.
 func composeCommand(ctx context.Context, projectRoot string, args ...string) *exec.Cmd {
-	fullArgs := []string{"compose"}
+	var fullArgs []string
 	if os.Getenv("COMPOSE_PROJECT_NAME") == "" {
 		if name := envfile.ReadComposeProjectName(projectRoot); name != "" {
 			fullArgs = append(fullArgs, "-p", name)
 		}
 	}
 
-	cmd := exec.CommandContext(ctx, "docker", append(fullArgs, args...)...)
+	cmd := oci.FromContext(ctx).ComposeCommand(ctx, append(fullArgs, args...)...)
 	cmd.Dir = projectRoot
 	return cmd
 }

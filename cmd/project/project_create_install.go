@@ -16,6 +16,7 @@ import (
 
 	dockerpkg "github.com/shopware/shopware-cli/internal/docker"
 	"github.com/shopware/shopware-cli/internal/git"
+	"github.com/shopware/shopware-cli/internal/oci"
 	"github.com/shopware/shopware-cli/internal/proxy"
 	"github.com/shopware/shopware-cli/internal/shop"
 	"github.com/shopware/shopware-cli/internal/system"
@@ -253,7 +254,7 @@ func runComposerInstall(ctx context.Context, projectFolder string, useDocker boo
 			fmt.Sprintf("ghcr.io/shopware/docker-dev:php%s-node24-caddy", phpVersion),
 			"composer", "install", "--no-interaction")
 
-		cmdInstall = exec.CommandContext(ctx, "docker", dockerArgs...)
+		cmdInstall = oci.FromContext(ctx).Command(ctx, dockerArgs...)
 	} else {
 		composerBinary, isPhar, err := system.ResolveComposer(ctx)
 		if err != nil {
