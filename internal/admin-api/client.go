@@ -2,6 +2,7 @@ package admin_sdk
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 
@@ -98,7 +99,7 @@ func (c *Client) AccessToken(ctx context.Context) (string, error) {
 		return "", err
 	}
 	if token == "" {
-		return "", fmt.Errorf("admin api token is not available")
+		return "", errors.New("admin api token is not available")
 	}
 
 	return token, nil

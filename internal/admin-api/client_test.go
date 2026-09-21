@@ -108,10 +108,10 @@ func TestClearCache(t *testing.T) {
 func TestInfoDetectsCloudShop(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		switch {
-		case r.URL.Path == "/api/oauth/token":
+		switch r.URL.Path {
+		case "/api/oauth/token":
 			_, _ = w.Write([]byte(`{"access_token":"token","expires_in":3600}`))
-		case r.URL.Path == "/api/_info/config":
+		case "/api/_info/config":
 			_, _ = w.Write([]byte(`{"version":"6.6.5.0","bundles":{"SaasRufus":{"js":[]}}}`))
 		default:
 			w.WriteHeader(http.StatusNotFound)
