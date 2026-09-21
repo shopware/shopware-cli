@@ -79,7 +79,7 @@ func newLifecycleCommand(t *testing.T, args []string) (*cobra.Command, *bytes.Bu
 	root := &cobra.Command{Use: "project", SilenceUsage: true, SilenceErrors: true}
 	root.PersistentFlags().StringVar(&projectConfigPath, "project-config", "", "")
 	root.PersistentFlags().StringVarP(&environmentName, "env", "e", "", "")
-	deployment := &cobra.Command{Use: "deployment"}
+	deployment := &cobra.Command{Use: "deploy"}
 	create := &cobra.Command{Use: projectDeploymentCreateCmd.Use, Args: projectDeploymentCreateCmd.Args, RunE: projectDeploymentCreateCmd.RunE}
 	create.Flags().StringP("output", "o", "", "")
 	create.Flags().Bool("with-dev-dependencies", false, "")
@@ -89,13 +89,13 @@ func newLifecycleCommand(t *testing.T, args []string) (*cobra.Command, *bytes.Bu
 	out := new(bytes.Buffer)
 	root.SetOut(out)
 	root.SetErr(out)
-	root.SetArgs(append([]string{"deployment"}, args...))
+	root.SetArgs(append([]string{"deploy"}, args...))
 	return root, out
 }
 
 func TestDeploymentLifecycleCommandsRegistered(t *testing.T) {
 	for _, name := range []string{"create", "rollout"} {
-		cmd, remaining, err := projectRootCmd.Find([]string{"deployment", name})
+		cmd, remaining, err := projectRootCmd.Find([]string{"deploy", name})
 		require.NoError(t, err)
 		assert.Empty(t, remaining)
 		assert.Equal(t, name, cmd.Name())

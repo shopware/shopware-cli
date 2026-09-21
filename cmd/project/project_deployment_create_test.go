@@ -183,7 +183,7 @@ environments:
 			root := &cobra.Command{Use: "project", SilenceUsage: true, SilenceErrors: true}
 			root.PersistentFlags().StringVar(&projectConfigPath, "project-config", "", "")
 			root.PersistentFlags().StringVarP(&environmentName, "env", "e", "", "")
-			deployment := &cobra.Command{Use: "deployment"}
+			deployment := &cobra.Command{Use: "deploy"}
 			create := &cobra.Command{
 				Use:  projectDeploymentCreateCmd.Use,
 				Args: projectDeploymentCreateCmd.Args,
@@ -194,7 +194,7 @@ environments:
 			var out bytes.Buffer
 			root.SetOut(&out)
 			root.SetErr(&out)
-			root.SetArgs(append([]string{"deployment", "create", "--project-config", filepath.Join(workDir, "config.yml")}, tc.args...))
+			root.SetArgs(append([]string{"deploy", "create", "--project-config", filepath.Join(workDir, "config.yml")}, tc.args...))
 
 			err := root.ExecuteContext(t.Context())
 			require.Error(t, err)
