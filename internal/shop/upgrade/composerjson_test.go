@@ -198,21 +198,42 @@ func TestSetComposerNameWithoutComposerJSON(t *testing.T) {
 }
 
 func TestSuggestComposerName(t *testing.T) {
+	vendor := defaultComposerVendor()
+	assert.NoError(t, ValidateComposerName(vendor+"/production"), "vendor must be valid, got %q", vendor)
+
 	tests := []struct {
 		root string
 		want string
 	}{
-		{root: "/srv/shops/acme-shop", want: "shopware/acme-shop"},
-		{root: "/srv/shops/Acme Shop", want: "shopware/acme-shop"},
-		{root: "/srv/shops/My_Shop 2", want: "shopware/my-shop-2"},
-		{root: "/srv/shops/--weird--", want: "shopware/weird"},
-		{root: "/srv/shops/1337", want: "shopware/1337"},
-		{root: ".", want: "shopware/production"},
-		{root: "/", want: "shopware/production"},
+		{root: "/srv/shops/acme-shop", want: "acme-shop"},
+		{root: "/srv/shops/Acme Shop", want: "acme-shop"},
+		{root: "/srv/shops/My_Shop 2", want: "my-shop-2"},
+		{root: "/srv/shops/--weird--", want: "weird"},
+		{root: "/srv/shops/1337", want: "1337"},
+		{root: ".", want: "production"},
+		{root: "/", want: "production"},
 	}
 	for _, test := range tests {
-		assert.Equal(t, test.want, SuggestComposerName(test.root), test.root)
-		assert.NoError(t, ValidateComposerName(SuggestComposerName(test.root)), test.root)
+		got := SuggestComposerName(test.root)
+		assert.Equal(t, vendor+"/"+test.want, got, test.root)
+		assert.NoError(t, ValidateComposerName(got), test.root)
+	}
+}
+
+func TestSanitizeComposerPart(t *testing.T) {
+	tests := []struct {
+		in   string
+		want string
+	}{
+		{in: "shyim", want: "shyim"},
+		{in: "Shyim Doe", want: "shyim-doe"},
+		{in: "My_Shop 2", want: "my-shop-2"},
+		{in: "--weird--", want: "weird"},
+		{in: "", want: ""},
+		{in: "---", want: ""},
+	}
+	for _, test := range tests {
+		assert.Equal(t, test.want, sanitizeComposerPart(test.in), "%q", test.in)
 	}
 }
 

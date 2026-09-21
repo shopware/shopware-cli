@@ -3,6 +3,8 @@ package upgrade
 import (
 	"encoding/json"
 	"fmt"
+	"os"
+	"os/user"
 	"path/filepath"
 	"strings"
 
@@ -130,15 +132,46 @@ func (u *ProjectUpgrader) RewriteComposerJSON(target string, resolved map[string
 	return changes, nil
 }
 
-// SuggestComposerName derives a valid Composer package name from the project
-// directory name, e.g. "shopware/acme-shop" for "/srv/shops/Acme Shop". It is
-// the pre-filled value of the wizard's package-name prompt.
+// SuggestComposerName derives a valid Composer package name from the OS
+// username and the project directory name, e.g. "shyim/acme-shop" for
+// "/srv/shops/Acme Shop". It falls back to the "shopware" vendor when no
+// usable username is available. It is the pre-filled value of the wizard's
+// package-name prompt.
 func SuggestComposerName(projectRoot string) string {
-	base := strings.ToLower(filepath.Base(projectRoot))
+	name := sanitizeComposerPart(filepath.Base(projectRoot))
+	if name == "" {
+		name = "production"
+	}
+	return defaultComposerVendor() + "/" + name
+}
+
+// defaultComposerVendor returns the OS username sanitized into a valid Composer
+// vendor, falling back to "shopware" when it cannot be determined or contains
+// no usable characters.
+func defaultComposerVendor() string {
+	if u, err := user.Current(); err == nil && u != nil {
+		if v := sanitizeComposerPart(u.Username); v != "" {
+			return v
+		}
+	}
+	for _, env := range []string{"USER", "LOGNAME", "USERNAME"} {
+		if v := sanitizeComposerPart(os.Getenv(env)); v != "" {
+			return v
+		}
+	}
+	return "shopware"
+}
+
+// sanitizeComposerPart lowers s and collapses every run of characters outside
+// Composer's allowed set into a single dash, trimming leading/trailing dashes
+// so the result fits the package-name pattern. It returns "" when nothing
+// usable remains.
+func sanitizeComposerPart(s string) string {
+	s = strings.ToLower(s)
 
 	var b strings.Builder
 	separator := false
-	for _, r := range base {
+	for _, r := range s {
 		if (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') {
 			b.WriteRune(r)
 			separator = false
@@ -152,11 +185,7 @@ func SuggestComposerName(projectRoot string) string {
 		}
 	}
 
-	name := strings.TrimSuffix(b.String(), "-")
-	if name == "" {
-		name = "production"
-	}
-	return "shopware/" + name
+	return strings.Trim(b.String(), "-")
 }
 
 // SetComposerName validates name against Composer's package-name rule and
