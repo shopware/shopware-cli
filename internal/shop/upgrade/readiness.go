@@ -2,8 +2,10 @@ package upgrade
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"path/filepath"
+	"regexp"
 	"strings"
 
 	"github.com/shyim/go-composer"
@@ -15,6 +17,23 @@ import (
 )
 
 const deploymentHelperPackage = "shopware/deployment-helper"
+
+// composerNamePattern is the package-name rule from Composer's JSON schema:
+// lowercase vendor and package separated by a slash, digits, and the
+// separators . _ - between alphanumeric groups.
+var composerNamePattern = regexp.MustCompile(`^[a-z0-9]([_.-]?[a-z0-9]+)*/[a-z0-9](([_.]|-{1,2})?[a-z0-9]+)*$`)
+
+// ValidateComposerName returns an error when name does not satisfy Composer's
+// package-name rule (the pattern the schema validates "name" against).
+func ValidateComposerName(name string) error {
+	if name == "" {
+		return errors.New("the package name must not be empty")
+	}
+	if !composerNamePattern.MatchString(name) {
+		return fmt.Errorf("%q is not a valid Composer package name — use the vendor/package form with lowercase letters, digits and the separators . _ - (e.g. shopware/production)", name)
+	}
+	return nil
+}
 
 // RunReadinessChecks inspects the project and returns the readiness checklist
 // for the wizard's first step. It is read-only and can be re-run ("Recheck")
@@ -31,6 +50,7 @@ func (u *ProjectUpgrader) RunReadinessChecks(ctx context.Context) Readiness {
 	})
 
 	r.Checks = append(r.Checks, r.checkComposerLock(u.projectRoot))
+	r.Checks = append(r.Checks, checkComposerName(u.projectRoot))
 	r.Checks = append(r.Checks, checkGitClean(ctx, u.projectRoot))
 
 	r.Extensions = discoverExtensions(ctx, u.projectRoot)
@@ -78,6 +98,43 @@ func (r *Readiness) checkComposerLock(projectRoot string) ReadinessCheck {
 	r.CurrentVersion = current
 	check.State = StateOK
 	check.Value = "yes"
+	return check
+}
+
+// checkComposerName verifies composer.json declares a valid package name.
+// Composer's schema requires one, so a missing or invalid name makes every
+// Composer run against the project fail with a schema error that never
+// mentions the actual cause (shopware-cli#1575).
+func checkComposerName(projectRoot string) ReadinessCheck {
+	check := ReadinessCheck{
+		ID:       "composer-name",
+		Label:    "composer.json package name",
+		Blocking: true,
+	}
+
+	c, err := composer.ReadJson(filepath.Join(projectRoot, "composer.json"))
+	if err != nil {
+		check.State = StateFail
+		check.Value = "unknown"
+		check.Detail = "Could not read composer.json: " + err.Error()
+		return check
+	}
+
+	if err := ValidateComposerName(c.Name); err != nil {
+		check.State = StateFail
+		check.Value = c.Name
+		check.Detail = fmt.Sprintf("composer.json declares an invalid package name: %s. "+
+			"Fix it, e.g. \"name\": \"%s\".", err, SuggestComposerName(projectRoot))
+		if c.Name == "" {
+			check.Value = "missing"
+			check.Detail = fmt.Sprintf("composer.json has no \"name\" — Composer requires a package name and refuses to run without it. "+
+				"Set one, e.g. \"name\": \"%s\".", SuggestComposerName(projectRoot))
+		}
+		return check
+	}
+
+	check.State = StateOK
+	check.Value = c.Name
 	return check
 }
 

@@ -106,6 +106,10 @@ func TestRunReadinessChecks(t *testing.T) {
 	lock := checkByID(t, r.Checks, "composer-lock")
 	assert.Equal(t, StateOK, lock.State)
 
+	name := checkByID(t, r.Checks, "composer-name")
+	assert.Equal(t, StateOK, name.State)
+	assert.Equal(t, "shopware/production", name.Value)
+
 	dh := checkByID(t, r.Checks, "deployment-helper")
 	assert.Equal(t, StateOK, dh.State)
 
@@ -168,6 +172,74 @@ func TestReadinessMissingComposerLock(t *testing.T) {
 	assert.Nil(t, r.CurrentVersion)
 }
 
+func TestReadinessComposerNameMissing(t *testing.T) {
+	dir := setupProject(t)
+	testhelper.WriteFile(t, filepath.Join(dir, "composer.json"),
+		testhelper.ComposerJSON{Require: map[string]string{"shopware/core": "6.6.10.3"}}.String())
+
+	r := newTestUpgrader(t, dir).RunReadinessChecks(t.Context())
+
+	name := checkByID(t, r.Checks, "composer-name")
+	assert.Equal(t, StateFail, name.State)
+	assert.True(t, name.Failed(), "a missing package name blocks the upgrade")
+	assert.Equal(t, "missing", name.Value)
+	assert.Contains(t, name.Detail, `no "name"`)
+	assert.Contains(t, name.Detail, SuggestComposerName(dir))
+	assert.True(t, r.Blocked())
+}
+
+func TestReadinessComposerNameInvalid(t *testing.T) {
+	dir := setupProject(t)
+	testhelper.WriteFile(t, filepath.Join(dir, "composer.json"),
+		testhelper.ComposerJSON{Name: "Acme Shop", Require: map[string]string{"shopware/core": "6.6.10.3"}}.String())
+
+	r := newTestUpgrader(t, dir).RunReadinessChecks(t.Context())
+
+	name := checkByID(t, r.Checks, "composer-name")
+	assert.Equal(t, StateFail, name.State)
+	assert.True(t, name.Failed())
+	assert.Equal(t, "Acme Shop", name.Value)
+	assert.Contains(t, name.Detail, "not a valid Composer package name")
+	assert.True(t, r.Blocked())
+}
+
+func TestReadinessComposerNameUnreadable(t *testing.T) {
+	check := checkComposerName(t.TempDir())
+	assert.Equal(t, StateFail, check.State)
+	assert.Equal(t, "unknown", check.Value)
+	assert.Contains(t, check.Detail, "Could not read composer.json")
+}
+
+func TestValidateComposerName(t *testing.T) {
+	valid := []string{
+		"shopware/production",
+		"acme/my-shop",
+		"acme/my_shop",
+		"acme/my.shop",
+		"acme/my--shop",
+		"0acme/shop2",
+	}
+	for _, name := range valid {
+		assert.NoError(t, ValidateComposerName(name), name)
+	}
+
+	invalid := []string{
+		"",
+		"shopware",
+		"shopware/",
+		"/production",
+		"Acme/Shop",
+		"acme/my shop",
+		"acme/my---shop",
+		"acme//shop",
+		"-acme/shop",
+		"acme/shop-",
+	}
+	for _, name := range invalid {
+		assert.Error(t, ValidateComposerName(name), name)
+	}
+}
+
 func TestReadinessLockWithoutCore(t *testing.T) {
 	dir := t.TempDir()
 	testhelper.WriteFile(t, filepath.Join(dir, "composer.json"), `{"require": {}}`)
@@ -186,7 +258,7 @@ func TestReadinessDeploymentHelperMissing(t *testing.T) {
 	// only cares about the deployment-helper check.
 	require.NoError(t, os.RemoveAll(filepath.Join(dir, "custom")))
 	testhelper.WriteFile(t, filepath.Join(dir, "composer.json"),
-		testhelper.ComposerJSON{Require: map[string]string{"shopware/core": "6.6.10.3"}}.String())
+		testhelper.ComposerJSON{Name: "shopware/production", Require: map[string]string{"shopware/core": "6.6.10.3"}}.String())
 
 	r := newTestUpgrader(t, dir).RunReadinessChecks(t.Context())
 

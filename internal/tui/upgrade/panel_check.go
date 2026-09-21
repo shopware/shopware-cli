@@ -11,6 +11,7 @@ import (
 	"github.com/shopware/shopware-cli/internal/tui"
 	"github.com/shopware/shopware-cli/internal/tui/app"
 	"github.com/shopware/shopware-cli/internal/tui/picker"
+	"github.com/shopware/shopware-cli/internal/tui/textprompt"
 )
 
 // checkState backs panel 2: the readiness checklist (left) and target version
@@ -20,6 +21,10 @@ type checkState struct {
 	readiness  backend.Readiness
 	catalog    *backend.Catalog
 	catalogErr error
+	// namePromptShown records that the package-name prompt already opened
+	// automatically, so a manual Recheck does not reopen it after the user
+	// dismissed it.
+	namePromptShown bool
 
 	cursor int // index into versionRows()
 	chosen *backend.VersionOption
@@ -64,7 +69,27 @@ func (m *Model) updateCheck(msg tea.Msg) (app.Content, tea.Cmd) {
 	case checksDoneMsg:
 		m.check.loading = false
 		m.check.readiness = msg.readiness
-		return m, loadCatalogCmd(m.commandContext(), m.upgrader, msg.readiness)
+		cmd := loadCatalogCmd(m.commandContext(), m.upgrader, msg.readiness)
+		// A missing package name blocks every Composer run with a cryptic
+		// schema error — ask for it right away instead of only flagging it.
+		if m.composerNameFailed() && !m.check.namePromptShown {
+			m.check.namePromptShown = true
+			cmd = tea.Batch(cmd, m.host.PushOverlay(newComposerNamePrompt(m.opts.ProjectRoot, "", nil)))
+		}
+		return m, cmd
+
+	case textprompt.ResultMsg:
+		if _, ok := msg.Key.(composerNamePromptKey); !ok {
+			return m, nil
+		}
+		if msg.Cancelled {
+			return m, nil
+		}
+		name := strings.TrimSpace(msg.Value)
+		if err := m.upgrader.SetComposerName(name); err != nil {
+			return m, m.host.PushOverlay(newComposerNamePrompt(m.opts.ProjectRoot, name, err))
+		}
+		return m.recheck()
 
 	case catalogLoadedMsg:
 		m.check.catalog = msg.catalog
@@ -104,6 +129,10 @@ func (m *Model) updateCheckKeys(msg tea.KeyPressMsg) (app.Content, tea.Cmd) {
 		// The cursor is focus only; the selected version (◉) changes when a
 		// row is activated with Enter, never while navigating.
 		m.check.cursor = tui.MoveCursor(m.check.cursor, key, len(rows))
+	case "n":
+		if m.composerNameFailed() {
+			return m, m.host.PushOverlay(newComposerNamePrompt(m.opts.ProjectRoot, "", nil))
+		}
 	case "r":
 		return m.recheck()
 	case "q", "esc":
@@ -125,6 +154,17 @@ func (m *Model) updateCheckKeys(msg tea.KeyPressMsg) (app.Content, tea.Cmd) {
 func (m *Model) recheck() (app.Content, tea.Cmd) {
 	m.check.loading = true
 	return m, runChecksCmd(m.commandContext(), m.upgrader)
+}
+
+// composerNameFailed reports whether the composer.json package-name check
+// failed — the one failing check the wizard can fix for the user.
+func (m *Model) composerNameFailed() bool {
+	for _, check := range m.check.readiness.Checks {
+		if check.ID == "composer-name" {
+			return check.State == backend.StateFail
+		}
+	}
+	return false
 }
 
 func (m *Model) openVersionPicker() (app.Content, tea.Cmd) {
@@ -185,6 +225,12 @@ func (m *Model) viewCheckLeft() string {
 				b.WriteString(tui.DimStyle.Render("   " + line))
 				b.WriteString("\n")
 			}
+		}
+		if check.ID == "composer-name" && check.State == backend.StateFail {
+			b.WriteString(tui.DimStyle.Render("   Press "))
+			b.WriteString(tui.BoldStyle.Render("n"))
+			b.WriteString(tui.DimStyle.Render(" to set a package name now."))
+			b.WriteString("\n")
 		}
 	}
 
