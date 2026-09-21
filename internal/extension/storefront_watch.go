@@ -179,8 +179,7 @@ func ResolveStorefrontWatcherOptions(ctx context.Context, cmdExecutor executor.E
 		return StorefrontWatcherOptions{}, fmt.Errorf("--sales-channel requires admin api access (set environments.<name>.admin_api in .shopware-project.yml or SHOPWARE_CLI_API_* env vars): %w", err)
 	}
 
-	apiCtx := adminSdk.NewApiContext(ctx)
-	channels, err := client.SalesChannel.ListStorefront(apiCtx)
+	channels, err := client.ListStorefrontSalesChannels(ctx)
 	if err != nil {
 		return StorefrontWatcherOptions{}, fmt.Errorf("listing storefront sales channels: %w", err)
 	}
@@ -194,7 +193,7 @@ func ResolveStorefrontWatcherOptions(ctx context.Context, cmdExecutor executor.E
 		return StorefrontWatcherOptions{}, err
 	}
 
-	theme, err := client.SalesChannel.FindThemeForSalesChannel(apiCtx, picked.Id)
+	theme, err := client.FindThemeForSalesChannel(ctx, picked.Id)
 	if err != nil {
 		return StorefrontWatcherOptions{}, fmt.Errorf("resolving theme for sales channel %s: %w", picked.Name, err)
 	}

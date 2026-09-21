@@ -39,7 +39,7 @@ var projectAdminApiCmd = &cobra.Command{
 			return err
 		}
 
-		token, err := client.Token().Token()
+		token, err := client.AccessToken(cobraCmd.Context())
 		if err != nil {
 			return err
 		}
@@ -70,7 +70,7 @@ var projectAdminApiCmd = &cobra.Command{
 		commandConfig := []curl.Config{
 			curl.Url(fullURL),
 			curl.Method(args[0]),
-			curl.BearerToken(token.AccessToken),
+			curl.BearerToken(token),
 			curl.Args(args[2:]),
 		}
 

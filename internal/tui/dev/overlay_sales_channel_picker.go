@@ -63,15 +63,14 @@ func (sp *salesChannelPicker) Init() tea.Cmd {
 			return salesChannelsLoadedMsg{err: err}
 		}
 
-		apiCtx := adminSdk.NewApiContext(ctx)
-		channels, err := client.SalesChannel.ListStorefront(apiCtx)
+		channels, err := client.ListStorefrontSalesChannels(ctx)
 		if err != nil {
 			return salesChannelsLoadedMsg{err: err}
 		}
 
 		entries := make([]salesChannelEntry, 0, len(channels))
 		for _, sc := range channels {
-			theme, err := client.SalesChannel.FindThemeForSalesChannel(apiCtx, sc.Id)
+			theme, err := client.FindThemeForSalesChannel(ctx, sc.Id)
 			if err != nil {
 				return salesChannelsLoadedMsg{err: err}
 			}

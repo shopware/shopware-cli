@@ -109,6 +109,6 @@ func TestExtensionUploadActivateSurfacesListFetchError(t *testing.T) {
 	projectExtensionUploadCmd.SetContext(t.Context())
 	err := projectExtensionUploadCmd.RunE(projectExtensionUploadCmd, []string{pluginDir})
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "got http code 500")
+	assert.Contains(t, err.Error(), "status 500")
 	assert.NotContains(t, err.Error(), "cannot run lifecycle events")
 }

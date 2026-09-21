@@ -1,17 +1,17 @@
 package admin_sdk
 
 import (
+	"context"
 	"errors"
 	"fmt"
-	"net/http"
+
+	shopware "github.com/shopwareLabs/go-shopware-http-client"
 )
 
+// ErrNotFound is returned when a DAL search yields no matching entity.
 var ErrNotFound = errors.New("not found")
 
-type SalesChannelService ClientService
-
-const SalesChannelTypeStorefront = "8a243080f92e4c719546314b577cf82b"
-
+// SalesChannel is a storefront sales channel with its domains.
 type SalesChannel struct {
 	Id      string               `json:"id"`
 	Name    string               `json:"name"`
@@ -20,11 +20,13 @@ type SalesChannel struct {
 	Domains []SalesChannelDomain `json:"domains"`
 }
 
+// SalesChannelDomain is a domain assigned to a sales channel.
 type SalesChannelDomain struct {
 	Id  string `json:"id"`
 	Url string `json:"url"`
 }
 
+// Theme is a storefront theme assigned to a sales channel.
 type Theme struct {
 	Id            string `json:"id"`
 	Name          string `json:"name"`
@@ -32,60 +34,36 @@ type Theme struct {
 	ParentThemeId string `json:"parentThemeId"`
 }
 
-type searchResponse[T any] struct {
-	Data []T `json:"data"`
+// ListStorefrontSalesChannels returns active storefront sales channels and
+// their domains.
+func (c *Client) ListStorefrontSalesChannels(ctx context.Context) ([]SalesChannel, error) {
+	repo := shopware.NewRepository[SalesChannel](c.Client, "sales_channel")
+	result, err := repo.Search(ctx, shopware.NewCriteria().
+		SetLimit(100).
+		AddFilter(shopware.Equals("typeId", shopware.DefaultSalesChannelTypeStorefront)).
+		AddFilter(shopware.Equals("active", true)).
+		AddAssociation("domains"),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("cannot search sales channels: %w", err)
+	}
+
+	return result.Data, nil
 }
 
-func (s SalesChannelService) ListStorefront(ctx ApiContext) ([]SalesChannel, error) {
-	body := map[string]any{
-		"filter": []map[string]any{
-			{"type": "equals", "field": "typeId", "value": SalesChannelTypeStorefront},
-			{"type": "equals", "field": "active", "value": true},
-		},
-		"associations": map[string]any{
-			"domains": map[string]any{},
-		},
-		"limit": 100,
-	}
-
-	r, err := s.Client.NewRequest(ctx, http.MethodPost, "/api/search/sales-channel", body)
+// FindThemeForSalesChannel returns the theme assigned to the given sales channel.
+func (c *Client) FindThemeForSalesChannel(ctx context.Context, salesChannelID string) (*Theme, error) {
+	repo := shopware.NewRepository[Theme](c.Client, "theme")
+	result, err := repo.Search(ctx, shopware.NewCriteria().
+		SetLimit(1).
+		AddFilter(shopware.Equals("salesChannels.id", salesChannelID)),
+	)
 	if err != nil {
-		return nil, fmt.Errorf("cannot search sales channels %w", err)
+		return nil, fmt.Errorf("cannot search theme: %w", err)
 	}
-
-	var out searchResponse[SalesChannel]
-	resp, err := s.Client.Do(ctx.Context, r, &out)
-	if err != nil {
-		return nil, err
-	}
-	defer func() { _ = resp.Body.Close() }()
-
-	return out.Data, nil
-}
-
-func (s SalesChannelService) FindThemeForSalesChannel(ctx ApiContext, salesChannelId string) (*Theme, error) {
-	body := map[string]any{
-		"filter": []map[string]any{
-			{"type": "equals", "field": "salesChannels.id", "value": salesChannelId},
-		},
-		"limit": 1,
-	}
-
-	r, err := s.Client.NewRequest(ctx, http.MethodPost, "/api/search/theme", body)
-	if err != nil {
-		return nil, fmt.Errorf("cannot search theme %w", err)
-	}
-
-	var out searchResponse[Theme]
-	resp, err := s.Client.Do(ctx.Context, r, &out)
-	if err != nil {
-		return nil, err
-	}
-	defer func() { _ = resp.Body.Close() }()
-
-	if len(out.Data) == 0 {
+	if len(result.Data) == 0 {
 		return nil, ErrNotFound
 	}
 
-	return &out.Data[0], nil
+	return &result.Data[0], nil
 }

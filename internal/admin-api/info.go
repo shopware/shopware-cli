@@ -1,12 +1,11 @@
 package admin_sdk
 
 import (
+	"context"
 	"fmt"
-	"net/http"
 )
 
-type InfoService ClientService
-
+// InfoResponse is the payload of GET /api/_info/config.
 type InfoResponse struct {
 	Version         string `json:"version"`
 	VersionRevision string `json:"versionRevision"`
@@ -25,24 +24,23 @@ type infoResponseBundle struct {
 	Js  []string `json:"js"`
 }
 
+// IsCloudShop reports whether the shop exposes the SaaS admin bundle.
 func (r InfoResponse) IsCloudShop() bool {
 	_, ok := r.Bundles["SaasRufus"]
-
 	return ok
 }
 
-func (s InfoService) Info(ctx ApiContext) (*InfoResponse, *http.Response, error) {
-	r, err := s.Client.NewRequest(ctx, http.MethodGet, "/api/_info/config", nil)
-
+// Info fetches GET /api/_info/config.
+func (c *Client) Info(ctx context.Context) (*InfoResponse, error) {
+	resp, err := c.Get(ctx, "/_info/config")
 	if err != nil {
-		return nil, nil, fmt.Errorf("cannot get info %w", err)
+		return nil, fmt.Errorf("cannot get info: %w", err)
 	}
 
-	var info *InfoResponse
-	resp, err := s.Client.Do(ctx.Context, r, &info)
-	if err != nil {
-		return nil, nil, err
+	var info InfoResponse
+	if err := resp.JSON(&info); err != nil {
+		return nil, err
 	}
 
-	return info, resp, err
+	return &info, nil
 }

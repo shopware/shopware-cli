@@ -38,15 +38,15 @@ var projectExtensionOutdatedCmd = &cobra.Command{
 			return err
 		}
 
-		if _, err := client.ExtensionManager.Refresh(adminSdk.NewApiContext(cmd.Context())); err != nil {
+		if err := client.ExtensionManager.Refresh(cmd.Context()); err != nil {
 			return err
 		}
 
-		extensions, _, err := client.ExtensionManager.ListAvailableExtensions(adminSdk.NewApiContext(cmd.Context()))
+		extensions, err := client.ExtensionManager.ListAvailable(cmd.Context())
 		if err != nil {
 			return err
 		}
-		extensions = extensions.FilterByUpdateable()
+		extensions = extensions.FilterByUpdatable()
 
 		if len(extensions) == 0 && format == tui.TableFormatTable {
 			logging.FromContext(cmd.Context()).Infof("All extensions are up-to-date")

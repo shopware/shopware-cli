@@ -16,7 +16,6 @@ import (
 	"github.com/shyim/go-version"
 	"github.com/spf13/cobra"
 
-	adminSdk "github.com/shopware/shopware-cli/internal/admin-api"
 	"github.com/shopware/shopware-cli/internal/archiver"
 	"github.com/shopware/shopware-cli/internal/extension"
 	"github.com/shopware/shopware-cli/internal/shop"
@@ -28,8 +27,6 @@ var projectExtensionUploadCmd = &cobra.Command{
 	Short: "Upload a local extension to a Shopware project",
 	Args:  cobra.MinimumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		adminCtx := adminSdk.NewApiContext(cmd.Context())
-
 		doLifecycleEvents, _ := cmd.PersistentFlags().GetBool("activate")
 		increaseVersionBeforeUpload, _ := cmd.PersistentFlags().GetBool("increase-version")
 
@@ -147,50 +144,34 @@ var projectExtensionUploadCmd = &cobra.Command{
 			return err
 		}
 
-		shopInfo, _, err := client.Info.Info(adminCtx)
+		shopInfo, err := client.Info(cmd.Context())
 		if err != nil {
 			return fmt.Errorf("cannot get shop info: %w", err)
 		}
 
-		extensions, _, err := client.ExtensionManager.ListAvailableExtensions(adminCtx)
+		extensions, err := client.ExtensionManager.ListAvailable(cmd.Context())
 		if err != nil {
 			return err
 		}
 
 		if !shopInfo.IsCloudShop() || extensions.GetByName(name) == nil {
-			if uploadResponse, err := client.ExtensionManager.UploadExtension(adminCtx, &buf); err != nil {
+			if err := client.ExtensionManager.Upload(cmd.Context(), &buf); err != nil {
 				return fmt.Errorf("cannot upload extension: %w", err)
-			} else if uploadResponse.StatusCode != 204 {
-				str, err := io.ReadAll(uploadResponse.Body)
-				if err != nil {
-					return fmt.Errorf("cannot upload extension update: %w", err)
-				}
-
-				return fmt.Errorf("cannot upload extension update: %s", string(str))
 			}
-		} else {
-			if uploadResponse, err := client.ExtensionManager.UploadExtensionUpdateToCloud(adminCtx, name, &buf); err != nil {
-				return fmt.Errorf("cannot upload extension update: %w", err)
-			} else if uploadResponse.StatusCode != 204 {
-				str, err := io.ReadAll(uploadResponse.Body)
-				if err != nil {
-					return fmt.Errorf("cannot upload extension update: %w", err)
-				}
-
-				return fmt.Errorf("cannot upload extension update: %s", string(str))
-			}
+		} else if err := client.ExtensionManager.UploadUpdateToCloud(cmd.Context(), name, &buf); err != nil {
+			return fmt.Errorf("cannot upload extension update: %w", err)
 		}
 
 		logging.FromContext(cmd.Context()).Infof("Uploaded extension %s with version %s", name, version.String())
 
-		if _, err := client.ExtensionManager.Refresh(adminCtx); err != nil {
+		if err := client.ExtensionManager.Refresh(cmd.Context()); err != nil {
 			return fmt.Errorf("cannot refresh extension list: %w", err)
 		}
 
 		logging.FromContext(cmd.Context()).Infof("Refreshed extension list")
 
 		if doLifecycleEvents {
-			extensions, _, err = client.ExtensionManager.ListAvailableExtensions(adminCtx)
+			extensions, err = client.ExtensionManager.ListAvailable(cmd.Context())
 			if err != nil {
 				return err
 			}
@@ -201,7 +182,7 @@ var projectExtensionUploadCmd = &cobra.Command{
 			}
 
 			if remoteExtension.InstalledAt == nil {
-				if _, err := client.ExtensionManager.InstallExtension(adminCtx, remoteExtension.Type, remoteExtension.Name); err != nil {
+				if err := client.ExtensionManager.Install(cmd.Context(), remoteExtension.Type, remoteExtension.Name); err != nil {
 					return fmt.Errorf("cannot install extension: %w", err)
 				}
 
@@ -209,15 +190,15 @@ var projectExtensionUploadCmd = &cobra.Command{
 			}
 
 			if !remoteExtension.Active {
-				if _, err := client.ExtensionManager.ActivateExtension(adminCtx, remoteExtension.Type, remoteExtension.Name); err != nil {
+				if err := client.ExtensionManager.Activate(cmd.Context(), remoteExtension.Type, remoteExtension.Name); err != nil {
 					return fmt.Errorf("cannot activate extension: %w", err)
 				}
 
 				logging.FromContext(cmd.Context()).Infof("Activated %s", name)
 			}
 
-			if remoteExtension.IsUpdateAble() {
-				if _, err := client.ExtensionManager.UpdateExtension(adminCtx, remoteExtension.Type, remoteExtension.Name); err != nil {
+			if remoteExtension.IsUpdatable() {
+				if err := client.ExtensionManager.Update(cmd.Context(), remoteExtension.Type, remoteExtension.Name); err != nil {
 					return fmt.Errorf("cannot update extension: %w", err)
 				}
 
@@ -226,7 +207,7 @@ var projectExtensionUploadCmd = &cobra.Command{
 		}
 
 		if ext.GetType() == "plugin" {
-			if _, err := client.CacheManager.Clear(adminCtx); err != nil {
+			if err := client.ClearCache(cmd.Context()); err != nil {
 				return err
 			}
 

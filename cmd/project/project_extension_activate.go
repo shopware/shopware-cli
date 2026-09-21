@@ -5,7 +5,6 @@ import (
 
 	"github.com/spf13/cobra"
 
-	adminSdk "github.com/shopware/shopware-cli/internal/admin-api"
 	"github.com/shopware/shopware-cli/internal/shop"
 	"github.com/shopware/shopware-cli/logging"
 )
@@ -30,7 +29,7 @@ var projectExtensionActivateCmd = &cobra.Command{
 			return err
 		}
 
-		extensions, _, err := client.ExtensionManager.ListAvailableExtensions(adminSdk.NewApiContext(cmd.Context()))
+		extensions, err := client.ExtensionManager.ListAvailable(cmd.Context())
 		if err != nil {
 			return err
 		}
@@ -52,7 +51,7 @@ var projectExtensionActivateCmd = &cobra.Command{
 			}
 
 			if extension.InstalledAt == nil {
-				if _, err := client.ExtensionManager.InstallExtension(adminSdk.NewApiContext(cmd.Context()), extension.Type, extension.Name); err != nil {
+				if err := client.ExtensionManager.Install(cmd.Context(), extension.Type, extension.Name); err != nil {
 					failed = true
 
 					logging.FromContext(cmd.Context()).Errorf("Installation of %s failed with error: %v", extension.Name, err)
@@ -60,7 +59,7 @@ var projectExtensionActivateCmd = &cobra.Command{
 				}
 			}
 
-			if _, err := client.ExtensionManager.ActivateExtension(adminSdk.NewApiContext(cmd.Context()), extension.Type, extension.Name); err != nil {
+			if err := client.ExtensionManager.Activate(cmd.Context(), extension.Type, extension.Name); err != nil {
 				failed = true
 
 				logging.FromContext(cmd.Context()).Errorf("Activate of %s failed with error: %v", extension.Name, err)

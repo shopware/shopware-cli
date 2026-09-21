@@ -5,7 +5,6 @@ import (
 
 	"github.com/spf13/cobra"
 
-	adminSdk "github.com/shopware/shopware-cli/internal/admin-api"
 	"github.com/shopware/shopware-cli/internal/shop"
 	"github.com/shopware/shopware-cli/logging"
 )
@@ -32,11 +31,11 @@ var projectExtensionUpdateCmd = &cobra.Command{
 
 		disableStoreUpdates, _ := cmd.PersistentFlags().GetBool("disable-store-update")
 
-		if _, err := client.ExtensionManager.Refresh(adminSdk.NewApiContext(cmd.Context())); err != nil {
+		if err := client.ExtensionManager.Refresh(cmd.Context()); err != nil {
 			return err
 		}
 
-		extensions, _, err := client.ExtensionManager.ListAvailableExtensions(adminSdk.NewApiContext(cmd.Context()))
+		extensions, err := client.ExtensionManager.ListAvailable(cmd.Context())
 		if err != nil {
 			return err
 		}
@@ -60,7 +59,7 @@ var projectExtensionUpdateCmd = &cobra.Command{
 				continue
 			}
 
-			if !extension.IsUpdateAble() {
+			if !extension.IsUpdatable() {
 				logging.FromContext(cmd.Context()).Infof("Extension %s is up to date", arg)
 				continue
 			}
@@ -71,14 +70,14 @@ var projectExtensionUpdateCmd = &cobra.Command{
 			}
 
 			if extension.UpdateSource == "store" && !disableStoreUpdates {
-				if _, err := client.ExtensionManager.DownloadExtension(adminSdk.NewApiContext(cmd.Context()), arg); err != nil {
+				if err := client.ExtensionManager.Download(cmd.Context(), arg); err != nil {
 					logging.FromContext(cmd.Context()).Errorf("Download of %s update failed with error: %v", extension.Name, err)
 					failed = true
 					continue
 				}
 			}
 
-			if _, err := client.ExtensionManager.UpdateExtension(adminSdk.NewApiContext(cmd.Context()), extension.Type, extension.Name); err != nil {
+			if err := client.ExtensionManager.Update(cmd.Context(), extension.Type, extension.Name); err != nil {
 				failed = true
 
 				logging.FromContext(cmd.Context()).Errorf("Update of %s failed with error: %v", extension.Name, err)

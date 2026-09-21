@@ -15,7 +15,6 @@ import (
 	"github.com/spf13/cobra"
 
 	account_api "github.com/shopware/shopware-cli/internal/account-api"
-	adminSdk "github.com/shopware/shopware-cli/internal/admin-api"
 	"github.com/shopware/shopware-cli/internal/extension"
 	"github.com/shopware/shopware-cli/internal/shop"
 	"github.com/shopware/shopware-cli/internal/system"
@@ -50,7 +49,7 @@ var projectUpgradeCheckCmd = &cobra.Command{
 				return err
 			}
 
-			remoteExtensions, _, err := client.ExtensionManager.ListAvailableExtensions(adminSdk.NewApiContext(cmd.Context()))
+			remoteExtensions, err := client.ExtensionManager.ListAvailable(cmd.Context())
 
 			if err != nil {
 				return fmt.Errorf("failed to list available extensions: %w", err)

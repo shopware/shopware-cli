@@ -13,17 +13,17 @@ import (
 // ErrNoAdminAPICredentials is returned when neither the project config nor the environment provides Admin API credentials.
 var ErrNoAdminAPICredentials = errors.New("no Admin API credentials configured: set environments.<name>.admin_api in .shopware-project.yml or SHOPWARE_CLI_API_CLIENT_ID and SHOPWARE_CLI_API_CLIENT_SECRET")
 
-func newShopCredentials(config *Config) (adminSdk.OAuthCredentials, error) {
+func newShopCredentials(config *Config) (adminSdk.Credentials, error) {
 	clientId, clientSecret := os.Getenv("SHOPWARE_CLI_API_CLIENT_ID"), os.Getenv("SHOPWARE_CLI_API_CLIENT_SECRET")
 
 	if clientId != "" && clientSecret != "" {
-		return adminSdk.NewIntegrationCredentials(clientId, clientSecret, []string{"write"}), nil
+		return adminSdk.NewIntegrationCredentials(clientId, clientSecret), nil
 	}
 
 	username, password := os.Getenv("SHOPWARE_CLI_API_USERNAME"), os.Getenv("SHOPWARE_CLI_API_PASSWORD")
 
 	if username != "" && password != "" {
-		return adminSdk.NewPasswordCredentials(username, password, []string{"write"}), nil
+		return adminSdk.NewPasswordCredentials(username, password), nil
 	}
 
 	if config.AdminApi == nil {
@@ -31,10 +31,10 @@ func newShopCredentials(config *Config) (adminSdk.OAuthCredentials, error) {
 	}
 
 	if config.AdminApi.Username != "" {
-		return adminSdk.NewPasswordCredentials(config.AdminApi.Username, config.AdminApi.Password, []string{"write"}), nil
+		return adminSdk.NewPasswordCredentials(config.AdminApi.Username, config.AdminApi.Password), nil
 	}
 
-	return adminSdk.NewIntegrationCredentials(config.AdminApi.ClientId, config.AdminApi.ClientSecret, []string{"write"}), nil
+	return adminSdk.NewIntegrationCredentials(config.AdminApi.ClientId, config.AdminApi.ClientSecret), nil
 }
 
 func NewShopClient(ctx context.Context, config *Config) (*adminSdk.Client, error) {

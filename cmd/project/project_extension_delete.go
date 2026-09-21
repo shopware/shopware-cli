@@ -5,7 +5,6 @@ import (
 
 	"github.com/spf13/cobra"
 
-	adminSdk "github.com/shopware/shopware-cli/internal/admin-api"
 	"github.com/shopware/shopware-cli/internal/shop"
 	"github.com/shopware/shopware-cli/logging"
 )
@@ -30,7 +29,7 @@ var projectExtensionDeleteCmd = &cobra.Command{
 			return err
 		}
 
-		extensions, _, err := client.ExtensionManager.ListAvailableExtensions(adminSdk.NewApiContext(cmd.Context()))
+		extensions, err := client.ExtensionManager.ListAvailable(cmd.Context())
 		if err != nil {
 			return err
 		}
@@ -47,7 +46,7 @@ var projectExtensionDeleteCmd = &cobra.Command{
 			}
 
 			if extension.Active {
-				if _, err := client.ExtensionManager.DeactivateExtension(adminSdk.NewApiContext(cmd.Context()), extension.Type, extension.Name); err != nil {
+				if err := client.ExtensionManager.Deactivate(cmd.Context(), extension.Type, extension.Name); err != nil {
 					failed = true
 
 					logging.FromContext(cmd.Context()).Errorf("Deactivation of %s failed with error: %v", extension.Name, err)
@@ -58,7 +57,7 @@ var projectExtensionDeleteCmd = &cobra.Command{
 			}
 
 			if extension.InstalledAt != nil {
-				if _, err := client.ExtensionManager.UninstallExtension(adminSdk.NewApiContext(cmd.Context()), extension.Type, extension.Name); err != nil {
+				if err := client.ExtensionManager.Uninstall(cmd.Context(), extension.Type, extension.Name); err != nil {
 					failed = true
 
 					logging.FromContext(cmd.Context()).Errorf("Uninstall of %s failed with error: %v", extension.Name, err)
@@ -68,7 +67,7 @@ var projectExtensionDeleteCmd = &cobra.Command{
 				logging.FromContext(cmd.Context()).Infof("Uninstalled %s", extension.Name)
 			}
 
-			if _, err := client.ExtensionManager.RemoveExtension(adminSdk.NewApiContext(cmd.Context()), extension.Type, extension.Name); err != nil {
+			if err := client.ExtensionManager.Remove(cmd.Context(), extension.Type, extension.Name); err != nil {
 				failed = true
 
 				logging.FromContext(cmd.Context()).Errorf("Remove of %s failed with error: %v", extension.Name, err)
