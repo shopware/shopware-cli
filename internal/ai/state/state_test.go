@@ -45,7 +45,7 @@ func TestReadMissingFileReturnsEmpty(t *testing.T) {
 
 func TestReadParsesEntries(t *testing.T) {
 	p := redirectState(t)
-	content := `{"version":1,"installed":[{"name":"deployment-helper","client":"codex","scope":"global","requestedTag":"latest","resolvedRevision":"abc123"}]}`
+	content := `{"version":1,"installed":[{"name":"deployment-helper","agent":"codex","scope":"global","requestedTag":"latest","resolvedRevision":"abc123"}]}`
 	require.NoError(t, os.WriteFile(p, []byte(content), 0o644))
 
 	f, err := Read()
@@ -53,6 +53,7 @@ func TestReadParsesEntries(t *testing.T) {
 
 	require.Len(t, f.Installed, 1)
 	assert.Equal(t, "deployment-helper", f.Installed[0].Name)
+	assert.Equal(t, "codex", f.Installed[0].Agent)
 	assert.Equal(t, ScopeGlobal, f.Installed[0].Scope)
 	assert.Equal(t, "abc123", f.Installed[0].ResolvedRevision)
 }
