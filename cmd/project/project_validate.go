@@ -126,7 +126,7 @@ func init() {
 	projectValidateCmd.PersistentFlags().String("format", "", "Validation report format (summary, json, github, gitlab, junit, or markdown)")
 	projectValidateCmd.PersistentFlags().String("reporter", "", "Reporting format (summary, json, github, gitlab, junit, markdown)")
 	projectValidateCmd.PersistentFlags().String("only", "", "Run only the specified tools (comma-separated, e.g. PHPStan, ESLint)")
-	projectValidateCmd.PersistentFlags().String("exclude", "", "Exclude the specified tools (comma-separated, e.g. PHPStan, ESLint)")
+	projectValidateCmd.PersistentFlags().String("exclude", "", "Exclude tools after applying --only; names must be in the selected set (comma-separated, e.g. PHPStan, ESLint)")
 	projectValidateCmd.PersistentFlags().Bool("no-copy", false, "Validate the project in place instead of copying it to a temporary directory")
 	projectValidateCmd.PersistentFlags().Bool("local-only", false, "Validate only extensions in custom/* folders")
 	projectValidateCmd.MarkFlagsMutuallyExclusive("format", "reporter")

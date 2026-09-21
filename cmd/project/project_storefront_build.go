@@ -14,7 +14,7 @@ import (
 
 var projectStorefrontBuildCmd = &cobra.Command{
 	Use:     "storefront-build [path]",
-	Short:   "Build Storefront assets and compile the theme",
+	Short:   "Builds the Storefront",
 	Aliases: []string{"build-storefront"},
 	RunE: func(cmd *cobra.Command, args []string) error {
 		var projectRoot string
