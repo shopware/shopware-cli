@@ -16,6 +16,7 @@ import (
 
 	adminSdk "github.com/shopware/shopware-cli/internal/admin-api"
 	"github.com/shopware/shopware-cli/internal/executor"
+	"github.com/shopware/shopware-cli/internal/oci"
 	"github.com/shopware/shopware-cli/internal/shop"
 )
 
@@ -154,19 +155,19 @@ func (f *logsFakeExecutor) GetLog(_ context.Context, file string, lines int, _ b
 }
 
 func (f *logsFakeExecutor) ConsoleCommand(ctx context.Context, _ ...string) *executor.Process {
-	return &executor.Process{Cmd: exec.CommandContext(ctx, "true")}
+	return &executor.Process{Cmd: oci.WrapCommand(exec.CommandContext(ctx, "true"))}
 }
 
 func (f *logsFakeExecutor) ComposerCommand(ctx context.Context, _ ...string) *executor.Process {
-	return &executor.Process{Cmd: exec.CommandContext(ctx, "true")}
+	return &executor.Process{Cmd: oci.WrapCommand(exec.CommandContext(ctx, "true"))}
 }
 
 func (f *logsFakeExecutor) PHPCommand(ctx context.Context, _ ...string) *executor.Process {
-	return &executor.Process{Cmd: exec.CommandContext(ctx, "true")}
+	return &executor.Process{Cmd: oci.WrapCommand(exec.CommandContext(ctx, "true"))}
 }
 
 func (f *logsFakeExecutor) NPMCommand(ctx context.Context, _ ...string) *executor.Process {
-	return &executor.Process{Cmd: exec.CommandContext(ctx, "true")}
+	return &executor.Process{Cmd: oci.WrapCommand(exec.CommandContext(ctx, "true"))}
 }
 
 func (f *logsFakeExecutor) NormalizePath(hostPath string) string { return hostPath }

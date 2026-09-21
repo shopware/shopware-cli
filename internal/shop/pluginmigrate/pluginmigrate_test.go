@@ -18,6 +18,7 @@ import (
 
 	adminSdk "github.com/shopware/shopware-cli/internal/admin-api"
 	"github.com/shopware/shopware-cli/internal/executor"
+	"github.com/shopware/shopware-cli/internal/oci"
 	"github.com/shopware/shopware-cli/internal/shop"
 	"github.com/shopware/shopware-cli/internal/testhelper"
 )
@@ -30,7 +31,7 @@ type fakeExecutor struct {
 }
 
 func shellProcess(ctx context.Context, script string) *executor.Process {
-	return &executor.Process{Cmd: exec.CommandContext(ctx, "sh", "-c", script)}
+	return &executor.Process{Cmd: oci.WrapCommand(exec.CommandContext(ctx, "sh", "-c", script))}
 }
 
 func (f *fakeExecutor) ComposerCommand(ctx context.Context, args ...string) *executor.Process {

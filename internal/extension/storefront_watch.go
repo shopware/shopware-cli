@@ -149,7 +149,7 @@ func storefrontThemeDumpArgs(ctx context.Context, opts StorefrontWatcherOptions)
 
 func runStorefrontThemeDump(ctx context.Context, e executor.Executor, in io.Reader, out io.Writer, args ...string) error {
 	cmd := e.ConsoleCommand(ctx, args...)
-	cmd.Cmd.Stdin = in
+	cmd.Cmd.SetStdin(in)
 	if out != nil {
 		return cmd.RunWithOutput(out)
 	}

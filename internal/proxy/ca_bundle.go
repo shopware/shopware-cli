@@ -110,8 +110,8 @@ func imageSystemCABundle(ctx context.Context, image string) ([]byte, error) {
 	cmd := oci.FromContext(ctx).Command(ctx, "run", "--rm", "--entrypoint", "cat", image, systemCABundlePath)
 
 	var stdout, stderr bytes.Buffer
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
+	cmd.SetStdout(&stdout)
+	cmd.SetStderr(&stderr)
 
 	if err := cmd.Run(); err != nil {
 		return nil, fmt.Errorf("reading system CA bundle from %s: %w\n%s", image, err, stderr.String())

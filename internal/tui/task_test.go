@@ -11,6 +11,8 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/shopware/shopware-cli/internal/oci"
 )
 
 func TestTaskStart_ResetsState(t *testing.T) {
@@ -19,7 +21,7 @@ func TestTaskStart_ResetsState(t *testing.T) {
 	task.done = true
 	task.err = errors.New("stale")
 
-	cmd := task.Start(func() (*exec.Cmd, error) {
+	cmd := task.Start(func() (oci.Cmd, error) {
 		return nil, errors.New("factory failed")
 	})
 
@@ -34,7 +36,7 @@ func TestTaskStart_FactoryErrorEmitsDoneMsg(t *testing.T) {
 	task := NewTask("Test")
 
 	wantErr := errors.New("factory failed")
-	cmd := task.Start(func() (*exec.Cmd, error) {
+	cmd := task.Start(func() (oci.Cmd, error) {
 		return nil, wantErr
 	})
 	require.NotNil(t, cmd)
@@ -94,8 +96,8 @@ func TestTaskStart_FactoryErrorEmitsDoneMsg(t *testing.T) {
 func TestTask_StreamsLinesAndCompletes(t *testing.T) {
 	task := NewTask("Echo")
 
-	cmd := task.Start(func() (*exec.Cmd, error) {
-		return exec.CommandContext(context.Background(), "echo", "hello"), nil
+	cmd := task.Start(func() (oci.Cmd, error) {
+		return oci.WrapCommand(exec.CommandContext(context.Background(), "echo", "hello")), nil
 	})
 
 	batch, ok := cmd().(tea.BatchMsg)

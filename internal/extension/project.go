@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"os/exec"
 	"path"
 	"path/filepath"
 	"regexp"
@@ -17,6 +16,7 @@ import (
 	"github.com/shyim/go-version"
 
 	"github.com/shopware/shopware-cli/internal/asset"
+	"github.com/shopware/shopware-cli/internal/oci"
 	"github.com/shopware/shopware-cli/internal/shop"
 	"github.com/shopware/shopware-cli/logging"
 )
@@ -182,15 +182,15 @@ func FindAssetSourcesOfProject(ctx context.Context, project string, shopCfg *sho
 	return sources
 }
 
-type ConsoleCommandFunc func(ctx context.Context, args ...string) *exec.Cmd
+type ConsoleCommandFunc func(ctx context.Context, args ...string) oci.Cmd
 
 func DumpAndLoadAssetSourcesOfProject(ctx context.Context, project string, shopCfg *shop.Config, consoleCommand ConsoleCommandFunc) ([]asset.Source, error) {
 	dumpExec := consoleCommand(ctx, "bundle:dump")
-	dumpExec.Dir = project
+	dumpExec.SetDir(project)
 	// Capture output: bundle:dump's "Dumped plugin configuration." line corrupts the dev TUI render if inherited.
 	var dumpOutput bytes.Buffer
-	dumpExec.Stdout = &dumpOutput
-	dumpExec.Stderr = &dumpOutput
+	dumpExec.SetStdout(&dumpOutput)
+	dumpExec.SetStderr(&dumpOutput)
 
 	if err := dumpExec.Run(); err != nil {
 		if out := strings.TrimSpace(dumpOutput.String()); out != "" {

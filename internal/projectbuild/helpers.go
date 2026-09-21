@@ -96,24 +96,25 @@ func prepareComposerAuth(ctx context.Context, root string) (string, error) {
 // or a captured stdout stay in effect. Environment variables already supplied
 // by the executor are preserved.
 func RunCommand(p *executor.Process) error {
-	if p.Cmd.Stdin == nil {
-		p.Cmd.Stdin = os.Stdin
+	if p.Cmd.Stdin() == nil {
+		p.Cmd.SetStdin(os.Stdin)
 	}
-	if p.Cmd.Stdout == nil {
-		p.Cmd.Stdout = os.Stdout
+	if p.Cmd.Stdout() == nil {
+		p.Cmd.SetStdout(os.Stdout)
 	}
-	if p.Cmd.Stderr == nil {
-		p.Cmd.Stderr = os.Stderr
+	if p.Cmd.Stderr() == nil {
+		p.Cmd.SetStderr(os.Stderr)
 	}
 	applyTransparentEnv(p)
 	return p.Run()
 }
 
 func applyTransparentEnv(p *executor.Process) {
-	if p.Cmd.Env == nil {
-		p.Cmd.Env = os.Environ()
+	env := p.Cmd.Env()
+	if env == nil {
+		env = os.Environ()
 	}
-	p.Cmd.Env = append(p.Cmd.Env, "APP_SECRET=b59a3a283700fde2162c0d4f2bcf2588c3e841ef1976cf042d8500c3f3152ec513f77453797387dc004ff399cce0d3663e4fec770e6f11aa4ccd2846854c3a9f", "LOCK_DSN=flock")
+	p.Cmd.SetEnv(append(env, "APP_SECRET=b59a3a283700fde2162c0d4f2bcf2588c3e841ef1976cf042d8500c3f3152ec513f77453797387dc004ff399cce0d3663e4fec770e6f11aa4ccd2846854c3a9f", "LOCK_DSN=flock"))
 }
 
 func binCICommand(ctx context.Context, cmdExecutor executor.Executor, args ...string) *executor.Process {

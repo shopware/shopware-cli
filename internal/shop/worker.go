@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"os/exec"
 	"strconv"
 	"strings"
 	"sync"
@@ -13,6 +12,7 @@ import (
 
 	"golang.org/x/time/rate"
 
+	"github.com/shopware/shopware-cli/internal/oci"
 	"github.com/shopware/shopware-cli/logging"
 )
 
@@ -39,7 +39,7 @@ type WorkerConfig struct {
 
 // StartWorkerFunc creates and fully configures the consumer process for a job
 // (stdout, env, graceful stop). It must not start it.
-type StartWorkerFunc func(ctx context.Context, job WorkerJob) (*exec.Cmd, error)
+type StartWorkerFunc func(ctx context.Context, job WorkerJob) (oci.Cmd, error)
 
 // ParseWorkerSpec parses a spec like "async:5,mail:5" into worker queues.
 // The count is optional and defaults to 1, so "mail" equals "mail:1".

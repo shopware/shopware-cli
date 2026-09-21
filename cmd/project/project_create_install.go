@@ -222,7 +222,7 @@ func handleSecurityBlockedInstall(ctx context.Context, opts *createOptions, chos
 // plain composer binary when empty). When Composer is not installed, a copy
 // of the Composer PHAR is downloaded and used instead.
 func runComposerInstall(ctx context.Context, projectFolder string, useDocker bool, showSpinner bool, phpVersion string, phpBinary string) (string, error) {
-	var cmdInstall *exec.Cmd
+	var cmdInstall oci.Cmd
 
 	if useDocker && !system.IsInsideContainer() {
 		absProjectFolder, err := filepath.Abs(projectFolder)
@@ -267,29 +267,29 @@ func runComposerInstall(ctx context.Context, projectFolder string, useDocker boo
 
 		switch {
 		case phpBinary != "":
-			cmdInstall = exec.CommandContext(ctx, phpBinary, composerBinary, "install", "--no-interaction")
+			cmdInstall = oci.WrapCommand(exec.CommandContext(ctx, phpBinary, composerBinary, "install", "--no-interaction"))
 		case isPhar:
-			cmdInstall = exec.CommandContext(ctx, "php", composerBinary, "install", "--no-interaction")
+			cmdInstall = oci.WrapCommand(exec.CommandContext(ctx, "php", composerBinary, "install", "--no-interaction"))
 		default:
-			cmdInstall = exec.CommandContext(ctx, "composer", "install", "--no-interaction")
+			cmdInstall = oci.WrapCommand(exec.CommandContext(ctx, "composer", "install", "--no-interaction"))
 		}
 
-		cmdInstall.Dir = projectFolder
+		cmdInstall.SetDir(projectFolder)
 	}
 
 	var output bytes.Buffer
 
 	if !showSpinner {
-		cmdInstall.Stdin = os.Stdin
-		cmdInstall.Stdout = io.MultiWriter(os.Stdout, &output)
-		cmdInstall.Stderr = io.MultiWriter(os.Stderr, &output)
+		cmdInstall.SetStdin(os.Stdin)
+		cmdInstall.SetStdout(io.MultiWriter(os.Stdout, &output))
+		cmdInstall.SetStderr(io.MultiWriter(os.Stderr, &output))
 
 		err := cmdInstall.Run()
 		return output.String(), err
 	}
 
-	cmdInstall.Stdout = &output
-	cmdInstall.Stderr = &output
+	cmdInstall.SetStdout(&output)
+	cmdInstall.SetStderr(&output)
 
 	err := tui.RunSpinnerWithLogs(ctx, "Installing dependencies", cmdInstall)
 	return output.String(), err

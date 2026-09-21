@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"os"
-	"os/exec"
 	"os/signal"
 	"strconv"
 	"strings"
@@ -13,6 +12,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/shopware/shopware-cli/internal/oci"
 	"github.com/shopware/shopware-cli/internal/shop"
 	"github.com/shopware/shopware-cli/logging"
 )
@@ -93,15 +93,15 @@ queue. The count per queue is optional and defaults to 1.`,
 		cancelCtx, cancel := context.WithCancel(cobraCmd.Context())
 		cancelOnTermination(cancelCtx, cancel)
 
-		startWorker := func(ctx context.Context, job shop.WorkerJob) (*exec.Cmd, error) {
+		startWorker := func(ctx context.Context, job shop.WorkerJob) (oci.Cmd, error) {
 			p := cmdExecutor.ConsoleCommand(ctx, consumeConfig.ConsumeArgs(job.Queues)...)
-			p.Cmd.Stdout = os.Stdout
-			p.Cmd.Stderr = os.Stderr
-			p.Cmd.Env = append(os.Environ(), "MESSENGER_CONSUMER_NAME="+job.ConsumerName)
-			p.Cmd.WaitDelay = time.Second
-			p.Cmd.Cancel = func() error {
-				return gracefulStop(p.Cmd, gracefulStopLimit)
-			}
+			p.Cmd.SetStdout(os.Stdout)
+			p.Cmd.SetStderr(os.Stderr)
+			p.Cmd.SetEnv(append(os.Environ(), "MESSENGER_CONSUMER_NAME="+job.ConsumerName))
+			p.Cmd.SetWaitDelay(time.Second)
+			p.Cmd.SetCancel(func() error {
+				return gracefulStop(p.Cmd.Process(), gracefulStopLimit)
+			})
 
 			return p.Cmd, nil
 		}

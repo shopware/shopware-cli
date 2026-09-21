@@ -22,39 +22,39 @@ type SymfonyCLIExecutor struct {
 func (s *SymfonyCLIExecutor) ConsoleCommand(ctx context.Context, args ...string) *Process {
 	cmdArgs := []string{"php", consoleCommandName(ctx)}
 	cmdArgs = append(cmdArgs, args...)
-	cmd := exec.CommandContext(ctx, s.BinaryPath, cmdArgs...)
-	applyLocalEnv(s.projectRoot, s.env, cmd)
-	applyDir(resolveDir(s.projectRoot, s.relDir), cmd)
-	logCmd(ctx, cmd)
-	return newProcess(cmd)
+	p := newProcess(exec.CommandContext(ctx, s.BinaryPath, cmdArgs...))
+	applyLocalEnv(s.projectRoot, s.env, p.Cmd)
+	applyDir(resolveDir(s.projectRoot, s.relDir), p.Cmd)
+	logCmd(ctx, p.Cmd)
+	return p
 }
 
 func (s *SymfonyCLIExecutor) ComposerCommand(ctx context.Context, args ...string) *Process {
 	cmdArgs := []string{"composer"}
 	cmdArgs = append(cmdArgs, args...)
-	cmd := exec.CommandContext(ctx, s.BinaryPath, cmdArgs...)
-	applyLocalEnv(s.projectRoot, s.env, cmd)
-	applyDir(resolveDir(s.projectRoot, s.relDir), cmd)
-	logCmd(ctx, cmd)
-	return newProcess(cmd)
+	p := newProcess(exec.CommandContext(ctx, s.BinaryPath, cmdArgs...))
+	applyLocalEnv(s.projectRoot, s.env, p.Cmd)
+	applyDir(resolveDir(s.projectRoot, s.relDir), p.Cmd)
+	logCmd(ctx, p.Cmd)
+	return p
 }
 
 func (s *SymfonyCLIExecutor) PHPCommand(ctx context.Context, args ...string) *Process {
 	cmdArgs := []string{"php"}
 	cmdArgs = append(cmdArgs, args...)
-	cmd := exec.CommandContext(ctx, s.BinaryPath, cmdArgs...)
-	applyLocalEnv(s.projectRoot, s.env, cmd)
-	applyDir(resolveDir(s.projectRoot, s.relDir), cmd)
-	logCmd(ctx, cmd)
-	return newProcess(cmd)
+	p := newProcess(exec.CommandContext(ctx, s.BinaryPath, cmdArgs...))
+	applyLocalEnv(s.projectRoot, s.env, p.Cmd)
+	applyDir(resolveDir(s.projectRoot, s.relDir), p.Cmd)
+	logCmd(ctx, p.Cmd)
+	return p
 }
 
 func (s *SymfonyCLIExecutor) NPMCommand(ctx context.Context, args ...string) *Process {
-	cmd := exec.CommandContext(ctx, "npm", args...)
-	applyLocalEnv(s.projectRoot, s.env, cmd)
-	applyDir(resolveDir(s.projectRoot, s.relDir), cmd)
-	logCmd(ctx, cmd)
-	return newProcess(cmd)
+	p := newProcess(exec.CommandContext(ctx, "npm", args...))
+	applyLocalEnv(s.projectRoot, s.env, p.Cmd)
+	applyDir(resolveDir(s.projectRoot, s.relDir), p.Cmd)
+	logCmd(ctx, p.Cmd)
+	return p
 }
 
 func (s *SymfonyCLIExecutor) AvailableLogFiles(_ context.Context) ([]LogFile, error) {
@@ -62,12 +62,12 @@ func (s *SymfonyCLIExecutor) AvailableLogFiles(_ context.Context) ([]LogFile, er
 }
 
 func (s *SymfonyCLIExecutor) GetLog(ctx context.Context, file string, lines int, follow bool, w io.Writer) error {
-	cmd := exec.CommandContext(ctx, "tail", tailArgs(logFilePath(s.projectRoot, file), lines, follow)...)
-	applyLocalEnv(s.projectRoot, s.env, cmd)
-	applyDir(resolveDir(s.projectRoot, s.relDir), cmd)
-	logCmd(ctx, cmd)
+	p := newProcess(exec.CommandContext(ctx, "tail", tailArgs(logFilePath(s.projectRoot, file), lines, follow)...))
+	applyLocalEnv(s.projectRoot, s.env, p.Cmd)
+	applyDir(resolveDir(s.projectRoot, s.relDir), p.Cmd)
+	logCmd(ctx, p.Cmd)
 
-	return runStreaming(ctx, cmd, w)
+	return runStreaming(ctx, p.Cmd, w)
 }
 
 func (s *SymfonyCLIExecutor) NormalizePath(hostPath string) string {

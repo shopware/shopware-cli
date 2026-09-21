@@ -79,7 +79,7 @@ var projectStorefrontWatchCmd = &cobra.Command{
 			return err
 		}
 
-		watchProcess.Cmd.Stdin = cmd.InOrStdin()
+		watchProcess.Cmd.SetStdin(cmd.InOrStdin())
 		runErr := projectbuild.RunCommand(watchProcess)
 
 		stopCtx, stopCancel := context.WithTimeout(context.Background(), 3*time.Second)

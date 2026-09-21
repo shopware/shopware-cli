@@ -5,12 +5,12 @@ import (
 	"errors"
 	"io"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"sync"
 
 	adminSdk "github.com/shopware/shopware-cli/internal/admin-api"
+	"github.com/shopware/shopware-cli/internal/oci"
 	"github.com/shopware/shopware-cli/internal/shop"
 	"github.com/shopware/shopware-cli/logging"
 )
@@ -120,14 +120,14 @@ func resolveDir(projectRoot, relDir string) string {
 	return filepath.Join(projectRoot, relDir)
 }
 
-func applyDir(dir string, cmd *exec.Cmd) {
+func applyDir(dir string, cmd oci.Cmd) {
 	if dir != "" {
-		cmd.Dir = dir
+		cmd.SetDir(dir)
 	}
 }
 
-func logCmd(ctx context.Context, cmd *exec.Cmd) {
-	logging.FromContext(ctx).Debugf("exec: %s (dir: %s)", strings.Join(cmd.Args, " "), cmd.Dir)
+func logCmd(ctx context.Context, cmd oci.Cmd) {
+	logging.FromContext(ctx).Debugf("exec: %s (dir: %s)", strings.Join(cmd.Args(), " "), cmd.Dir())
 }
 
 func mergeEnv(base, extra map[string]string) map[string]string {

@@ -5,10 +5,12 @@ import (
 	"io"
 	"os/exec"
 	"syscall"
+
+	"github.com/shopware/shopware-cli/internal/oci"
 )
 
 type Process struct {
-	Cmd  *exec.Cmd
+	Cmd  oci.Cmd
 	stop func(ctx context.Context) error
 }
 
@@ -17,8 +19,8 @@ func (p *Process) Stop(ctx context.Context) error {
 		return p.stop(ctx)
 	}
 
-	if p.Cmd.Process != nil {
-		return p.Cmd.Process.Signal(syscall.SIGINT)
+	if proc := p.Cmd.Process(); proc != nil {
+		return proc.Signal(syscall.SIGINT)
 	}
 
 	return nil
@@ -30,8 +32,8 @@ func (p *Process) Run() error {
 
 // RunWithOutput runs the command and streams its combined stdout/stderr to w.
 func (p *Process) RunWithOutput(w io.Writer) error {
-	p.Cmd.Stdout = w
-	p.Cmd.Stderr = w
+	p.Cmd.SetStdout(w)
+	p.Cmd.SetStderr(w)
 	return p.Cmd.Run()
 }
 
@@ -44,7 +46,7 @@ func (p *Process) StartCombined() (io.ReadCloser, error) {
 	if err != nil {
 		return nil, err
 	}
-	p.Cmd.Stderr = p.Cmd.Stdout
+	p.Cmd.SetStderr(p.Cmd.Stdout())
 
 	if err := p.Cmd.Start(); err != nil {
 		return nil, err
@@ -78,5 +80,5 @@ func (p *Process) StderrPipe() (io.ReadCloser, error) {
 }
 
 func newProcess(cmd *exec.Cmd) *Process {
-	return &Process{Cmd: cmd}
+	return &Process{Cmd: oci.WrapCommand(cmd)}
 }

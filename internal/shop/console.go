@@ -4,8 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"os"
-	"os/exec"
 	"path"
+
+	"github.com/shopware/shopware-cli/internal/oci"
 )
 
 type ConsoleResponse struct {
@@ -46,7 +47,7 @@ func (c ConsoleResponse) GetCommandOptions(name string) []string {
 }
 
 // ConsoleCommandFunc avoids a circular dependency between shop and executor packages.
-type ConsoleCommandFunc func(ctx context.Context, args ...string) *exec.Cmd
+type ConsoleCommandFunc func(ctx context.Context, args ...string) oci.Cmd
 
 const (
 	consoleCommandsCache  = "console_commands.json"
@@ -93,7 +94,7 @@ func getCommandList(ctx context.Context, projectRoot, cacheFile string, listComm
 	}
 
 	cmd := listCommand(ctx, "list", "--format=json")
-	cmd.Dir = projectRoot
+	cmd.SetDir(projectRoot)
 
 	commandJson, err := cmd.Output()
 	if err != nil {

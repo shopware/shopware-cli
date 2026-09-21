@@ -2,9 +2,9 @@
 
 package project
 
-import "os/exec"
+import "os"
 
 // gracefulStop kills the process immediately. Windows console child processes cannot receive SIGTERM, so graceful termination is not possible;
-func gracefulStop(cmd *exec.Cmd, _ uint) error {
-	return cmd.Process.Kill()
+func gracefulStop(proc *os.Process, _ uint) error {
+	return proc.Kill()
 }

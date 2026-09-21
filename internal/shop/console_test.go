@@ -10,6 +10,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/shopware/shopware-cli/internal/oci"
 )
 
 func TestConsoleResponseHasCommand(t *testing.T) {
@@ -64,9 +66,9 @@ func TestGetConsoleCompletionLoadsWhenCacheMissing(t *testing.T) {
 	dir := t.TempDir()
 	require.NoError(t, os.MkdirAll(filepath.Join(dir, "var", "cache"), 0o755))
 
-	resp, err := GetConsoleCompletion(t.Context(), dir, func(ctx context.Context, args ...string) *exec.Cmd {
+	resp, err := GetConsoleCompletion(t.Context(), dir, func(ctx context.Context, args ...string) oci.Cmd {
 		assert.Equal(t, []string{"list", "--format=json"}, args)
-		return exec.CommandContext(ctx, "printf", "%s", `{"commands":[{"name":"cache:clear"}]}`)
+		return oci.WrapCommand(exec.CommandContext(ctx, "printf", "%s", `{"commands":[{"name":"cache:clear"}]}`))
 	})
 	require.NoError(t, err)
 	assert.True(t, resp.HasCommand("cache:clear"))

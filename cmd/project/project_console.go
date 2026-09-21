@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"os/exec"
 	"slices"
 	"strings"
 
@@ -14,6 +13,7 @@ import (
 
 	"github.com/shopware/shopware-cli/internal/executor"
 	"github.com/shopware/shopware-cli/internal/extension"
+	"github.com/shopware/shopware-cli/internal/oci"
 	"github.com/shopware/shopware-cli/internal/shop"
 )
 
@@ -41,7 +41,7 @@ var projectConsoleCmd = &cobra.Command{
 			return nil, cobra.ShellCompDirectiveDefault
 		}
 
-		parsedCommands, err := shop.GetConsoleCompletion(cmd.Context(), projectRoot, func(ctx context.Context, args ...string) *exec.Cmd {
+		parsedCommands, err := shop.GetConsoleCompletion(cmd.Context(), projectRoot, func(ctx context.Context, args ...string) oci.Cmd {
 			return cmdExecutor.ConsoleCommand(ctx, args...).Cmd
 		})
 		scripts, _ := shop.GetComposerScripts(projectRoot)
@@ -254,7 +254,7 @@ func formatComposerScriptsList(scripts []shop.ComposerScript) string {
 }
 
 func loadConsoleCommands(ctx context.Context, projectRoot string, cmdExecutor executor.Executor) *shop.ConsoleResponse {
-	resp, err := shop.GetConsoleCompletion(ctx, projectRoot, func(ctx context.Context, args ...string) *exec.Cmd {
+	resp, err := shop.GetConsoleCompletion(ctx, projectRoot, func(ctx context.Context, args ...string) oci.Cmd {
 		return cmdExecutor.ConsoleCommand(ctx, args...).Cmd
 	})
 	if err != nil {
@@ -274,7 +274,7 @@ func composerScripts(projectRoot string) []shop.ComposerScript {
 }
 
 func composerCommandCompletions(cmd *cobra.Command, projectRoot string, input []string, cmdExecutor executor.Executor) ([]string, cobra.ShellCompDirective) {
-	parsedCommands, err := shop.GetComposerCompletion(cmd.Context(), projectRoot, func(ctx context.Context, args ...string) *exec.Cmd {
+	parsedCommands, err := shop.GetComposerCompletion(cmd.Context(), projectRoot, func(ctx context.Context, args ...string) oci.Cmd {
 		return cmdExecutor.ComposerCommand(ctx, args...).Cmd
 	})
 	if err != nil {
@@ -317,9 +317,9 @@ func filterUsedCompletions(completions, input []string) []string {
 }
 
 func runExecutorProcess(cmd *cobra.Command, p *executor.Process) error {
-	p.Cmd.Stdin = cmd.InOrStdin()
-	p.Cmd.Stdout = cmd.OutOrStdout()
-	p.Cmd.Stderr = cmd.ErrOrStderr()
+	p.Cmd.SetStdin(cmd.InOrStdin())
+	p.Cmd.SetStdout(cmd.OutOrStdout())
+	p.Cmd.SetStderr(cmd.ErrOrStderr())
 
 	return p.Run()
 }

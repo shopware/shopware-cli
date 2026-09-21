@@ -4,19 +4,19 @@ import (
 	"context"
 	"encoding/json"
 	"os"
-	"os/exec"
 	"path"
 	"slices"
 
 	"github.com/shopware/shopware-cli/internal/asset"
 	"github.com/shopware/shopware-cli/internal/executor"
+	"github.com/shopware/shopware-cli/internal/oci"
 	"github.com/shopware/shopware-cli/internal/shop"
 )
 
 const storefrontBundleName = "Storefront"
 
 func LoadProjectAssetSources(ctx context.Context, projectRoot string, shopCfg *shop.Config, cmdExecutor executor.Executor) ([]asset.Source, error) {
-	return DumpAndLoadAssetSourcesOfProject(executor.AllowBinCI(ctx), projectRoot, shopCfg, func(ctx context.Context, args ...string) *exec.Cmd {
+	return DumpAndLoadAssetSourcesOfProject(executor.AllowBinCI(ctx), projectRoot, shopCfg, func(ctx context.Context, args ...string) oci.Cmd {
 		return cmdExecutor.ConsoleCommand(ctx, args...).Cmd
 	})
 }

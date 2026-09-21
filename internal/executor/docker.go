@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"io"
 	"net"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"syscall"
@@ -42,7 +41,7 @@ func (d *DockerExecutor) composeArgs(sub ...string) []string {
 
 // composeCommand builds a `<runtime> compose <sub...>` invocation through the
 // OCI runtime carried by ctx.
-func (d *DockerExecutor) composeCommand(ctx context.Context, sub ...string) *exec.Cmd {
+func (d *DockerExecutor) composeCommand(ctx context.Context, sub ...string) oci.Cmd {
 	return oci.FromContext(ctx).ComposeCommand(ctx, d.composeArgs(sub...)...)
 }
 
@@ -170,12 +169,12 @@ func (d *DockerExecutor) DatabaseConnection(ctx context.Context) (*DatabaseConne
 	if databaseURL == "" {
 		// Always disable TTY: this captures stdout and is never interactive.
 		cmd := oci.FromContext(ctx).ComposeCommand(ctx, "exec", "-T", "web", "printenv", "DATABASE_URL")
-		cmd.Dir = d.projectRoot
+		cmd.SetDir(d.projectRoot)
 		logCmd(ctx, cmd)
 
 		var stdout, stderr strings.Builder
-		cmd.Stdout = &stdout
-		cmd.Stderr = &stderr
+		cmd.SetStdout(&stdout)
+		cmd.SetStderr(&stderr)
 
 		if err := cmd.Run(); err != nil {
 			return nil, fmt.Errorf("could not read DATABASE_URL from the web container, is the environment running?: %w\n%s", err, stderr.String())
@@ -205,12 +204,12 @@ func (d *DockerExecutor) DatabaseConnection(ctx context.Context) (*DatabaseConne
 // (external database), the address is kept untouched.
 func (d *DockerExecutor) resolvePublishedPort(ctx context.Context, conn *DatabaseConnection) error {
 	cmd := oci.FromContext(ctx).ComposeCommand(ctx, "port", conn.Host, conn.Port)
-	cmd.Dir = d.projectRoot
+	cmd.SetDir(d.projectRoot)
 	logCmd(ctx, cmd)
 
 	var stdout, stderr strings.Builder
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
+	cmd.SetStdout(&stdout)
+	cmd.SetStderr(&stderr)
 
 	if err := cmd.Run(); err != nil {
 		if strings.Contains(stderr.String(), "no such service") {
@@ -248,7 +247,7 @@ func (d *DockerExecutor) containerWorkdir() string {
 	return filepath.Join("/var/www/html", d.relDir)
 }
 
-func (d *DockerExecutor) newProcess(cmd *exec.Cmd, innerArgs []string) *Process {
+func (d *DockerExecutor) newProcess(cmd oci.Cmd, innerArgs []string) *Process {
 	projectRoot := d.projectRoot
 	pattern := strings.Join(innerArgs, " ")
 
@@ -264,11 +263,11 @@ func (d *DockerExecutor) newProcess(cmd *exec.Cmd, innerArgs []string) *Process 
 			// Always disable TTY: this is a fire-and-forget cleanup command.
 			killArgs := append(d.composeArgs("exec", "-T", "web"), "sh", "-c", killTreeScript(pattern))
 			killCmd := oci.FromContext(ctx).ComposeCommand(ctx, killArgs...)
-			killCmd.Dir = projectRoot
+			killCmd.SetDir(projectRoot)
 			_ = killCmd.Run()
 
-			if cmd.Process != nil {
-				_ = cmd.Process.Signal(syscall.SIGINT)
+			if proc := cmd.Process(); proc != nil {
+				_ = proc.Signal(syscall.SIGINT)
 			}
 
 			return nil
@@ -294,7 +293,7 @@ func shellSingleQuote(s string) string {
 
 func (d *DockerExecutor) StartEnvironment(ctx context.Context) error {
 	cmd := d.composeCommand(ctx, "up", "-d", "--remove-orphans")
-	cmd.Dir = d.projectRoot
+	cmd.SetDir(d.projectRoot)
 
 	output, err := cmd.CombinedOutput()
 	if err != nil {
@@ -311,7 +310,7 @@ func (d *DockerExecutor) StopEnvironment(ctx context.Context, opts StopOptions) 
 	}
 
 	cmd := oci.FromContext(ctx).ComposeCommand(ctx, downArgs...)
-	cmd.Dir = d.projectRoot
+	cmd.SetDir(d.projectRoot)
 
 	output, err := cmd.CombinedOutput()
 	if err != nil {
@@ -323,7 +322,7 @@ func (d *DockerExecutor) StopEnvironment(ctx context.Context, opts StopOptions) 
 
 func (d *DockerExecutor) EnvironmentStatus(ctx context.Context) (bool, error) {
 	cmd := d.composeCommand(ctx, "ps", "--status=running", "-q")
-	cmd.Dir = d.projectRoot
+	cmd.SetDir(d.projectRoot)
 
 	output, err := cmd.Output()
 	if err != nil {

@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 
 	adminSdk "github.com/shopware/shopware-cli/internal/admin-api"
+	"github.com/shopware/shopware-cli/internal/oci"
 	"github.com/shopware/shopware-cli/internal/shop"
 	"github.com/shopware/shopware-cli/internal/system"
 )
@@ -66,11 +67,11 @@ func (l *LocalExecutor) phpCommand(ctx context.Context, args ...string) *exec.Cm
 func (l *LocalExecutor) ConsoleCommand(ctx context.Context, args ...string) *Process {
 	cmdArgs := []string{consoleCommandName(ctx)}
 	cmdArgs = append(cmdArgs, args...)
-	cmd := l.phpCommand(ctx, cmdArgs...)
-	applyLocalEnv(l.projectRoot, l.env, cmd)
-	applyDir(resolveDir(l.projectRoot, l.relDir), cmd)
-	logCmd(ctx, cmd)
-	return newProcess(cmd)
+	p := newProcess(l.phpCommand(ctx, cmdArgs...))
+	applyLocalEnv(l.projectRoot, l.env, p.Cmd)
+	applyDir(resolveDir(l.projectRoot, l.relDir), p.Cmd)
+	logCmd(ctx, p.Cmd)
+	return p
 }
 
 func (l *LocalExecutor) ComposerCommand(ctx context.Context, args ...string) *Process {
@@ -99,26 +100,27 @@ func (l *LocalExecutor) ComposerCommand(ctx context.Context, args ...string) *Pr
 		cmd = exec.CommandContext(ctx, "composer", args...)
 	}
 
-	applyLocalEnv(l.projectRoot, l.env, cmd)
-	applyDir(resolveDir(l.projectRoot, l.relDir), cmd)
-	logCmd(ctx, cmd)
-	return newProcess(cmd)
+	p := newProcess(cmd)
+	applyLocalEnv(l.projectRoot, l.env, p.Cmd)
+	applyDir(resolveDir(l.projectRoot, l.relDir), p.Cmd)
+	logCmd(ctx, p.Cmd)
+	return p
 }
 
 func (l *LocalExecutor) PHPCommand(ctx context.Context, args ...string) *Process {
-	cmd := l.phpCommand(ctx, args...)
-	applyLocalEnv(l.projectRoot, l.env, cmd)
-	applyDir(resolveDir(l.projectRoot, l.relDir), cmd)
-	logCmd(ctx, cmd)
-	return newProcess(cmd)
+	p := newProcess(l.phpCommand(ctx, args...))
+	applyLocalEnv(l.projectRoot, l.env, p.Cmd)
+	applyDir(resolveDir(l.projectRoot, l.relDir), p.Cmd)
+	logCmd(ctx, p.Cmd)
+	return p
 }
 
 func (l *LocalExecutor) NPMCommand(ctx context.Context, args ...string) *Process {
-	cmd := exec.CommandContext(ctx, "npm", args...)
-	applyLocalEnv(l.projectRoot, l.env, cmd)
-	applyDir(resolveDir(l.projectRoot, l.relDir), cmd)
-	logCmd(ctx, cmd)
-	return newProcess(cmd)
+	p := newProcess(exec.CommandContext(ctx, "npm", args...))
+	applyLocalEnv(l.projectRoot, l.env, p.Cmd)
+	applyDir(resolveDir(l.projectRoot, l.relDir), p.Cmd)
+	logCmd(ctx, p.Cmd)
+	return p
 }
 
 func (l *LocalExecutor) AvailableLogFiles(_ context.Context) ([]LogFile, error) {
@@ -126,12 +128,12 @@ func (l *LocalExecutor) AvailableLogFiles(_ context.Context) ([]LogFile, error) 
 }
 
 func (l *LocalExecutor) GetLog(ctx context.Context, file string, lines int, follow bool, w io.Writer) error {
-	cmd := exec.CommandContext(ctx, "tail", tailArgs(logFilePath(l.projectRoot, file), lines, follow)...)
-	applyLocalEnv(l.projectRoot, l.env, cmd)
-	applyDir(resolveDir(l.projectRoot, l.relDir), cmd)
-	logCmd(ctx, cmd)
+	p := newProcess(exec.CommandContext(ctx, "tail", tailArgs(logFilePath(l.projectRoot, file), lines, follow)...))
+	applyLocalEnv(l.projectRoot, l.env, p.Cmd)
+	applyDir(resolveDir(l.projectRoot, l.relDir), p.Cmd)
+	logCmd(ctx, p.Cmd)
 
-	return runStreaming(ctx, cmd, w)
+	return runStreaming(ctx, p.Cmd, w)
 }
 
 func (l *LocalExecutor) NormalizePath(hostPath string) string {
@@ -174,14 +176,16 @@ func (l *LocalExecutor) EnvironmentStatus(_ context.Context) (bool, error) {
 	return false, ErrNotSupported
 }
 
-func applyLocalEnv(projectRoot string, env map[string]string, cmd *exec.Cmd) {
-	cmd.Env = os.Environ()
+func applyLocalEnv(projectRoot string, env map[string]string, cmd oci.Cmd) {
+	envVars := os.Environ()
 
 	if projectRoot != "" {
-		cmd.Env = append(cmd.Env, "PROJECT_ROOT="+projectRoot)
+		envVars = append(envVars, "PROJECT_ROOT="+projectRoot)
 	}
 
 	for k, v := range env {
-		cmd.Env = append(cmd.Env, fmt.Sprintf("%s=%s", k, v))
+		envVars = append(envVars, fmt.Sprintf("%s=%s", k, v))
 	}
+
+	cmd.SetEnv(envVars)
 }

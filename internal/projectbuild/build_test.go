@@ -14,6 +14,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/shopware/shopware-cli/internal/executor"
+	"github.com/shopware/shopware-cli/internal/oci"
 	"github.com/shopware/shopware-cli/internal/shop"
 	"github.com/shopware/shopware-cli/internal/testhelper"
 )
@@ -40,16 +41,21 @@ test "$COMPOSER_ROOT_VERSION" = 1.0.0 &&
 test "$SHOPWARE_SKIP_ASSET_INSTALL_CACHE_INVALIDATION" = 1 &&
 printf '%s\n' "$1" >> steps
 `, "build-test", label)
-	cmd.Env = p.Cmd.Env
-	cmd.Dir = p.Cmd.Dir
-	return &executor.Process{Cmd: cmd}
+	cmd.Env = p.Cmd.Env()
+	cmd.Dir = p.Cmd.Dir()
+	return &executor.Process{Cmd: oci.WrapCommand(cmd)}
 }
 
 func (e *buildTestExecutor) ComposerCommand(ctx context.Context, args ...string) *executor.Process {
 	*e.composerArgs = args
-	p := e.command(ctx, "composer")
-	p.Cmd.Err = e.composerErr
-	return p
+	if e.composerErr != nil {
+		// Attach the failure as a construction error: Run surfaces it without
+		// executing anything, mirroring a broken Composer resolution.
+		cmd := exec.CommandContext(ctx, "composer", args...)
+		cmd.Err = e.composerErr
+		return &executor.Process{Cmd: oci.WrapCommand(cmd)}
+	}
+	return e.command(ctx, "composer")
 }
 
 func (e *buildTestExecutor) PHPCommand(ctx context.Context, args ...string) *executor.Process {

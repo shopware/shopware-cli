@@ -177,7 +177,7 @@ capped scrollback, done state. Route `TaskLineMsg`, `TaskDoneMsg`, and
 
 ```go
 m.task = tui.NewTask("Building Administration...")
-cmd := m.task.Start(func() (*exec.Cmd, error) { return buildCmd(), nil })
+cmd := m.task.Start(func() (oci.Cmd, error) { return buildCmd(), nil })
 // in Update:
 m.task, cmd = m.task.Update(msg)
 // in View:
@@ -188,7 +188,7 @@ done, err := m.task.Done(), m.task.Err()
 
 ### RunSpinnerWithLogs — blocking spinner for plain commands
 
-Runs a single `*exec.Cmd` behind a spinner with a toggleable live log panel
+Runs a single `oci.Cmd` behind a spinner with a toggleable live log panel
 (ctrl+l) and prints the last log lines on failure. For CLI commands, not
 hosted TUIs.
 

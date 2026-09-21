@@ -6,12 +6,13 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"slices"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/shopware/shopware-cli/internal/oci"
 )
 
 // LogFile describes a log file in the project's var/log directory.
@@ -103,10 +104,10 @@ func tailArgs(file string, lines int, follow bool) []string {
 // implementations. A kill caused by ctx cancellation (Ctrl-C while
 // following) is a clean stop, not an error; other failures carry the
 // captured stderr.
-func runStreaming(ctx context.Context, cmd *exec.Cmd, w io.Writer) error {
+func runStreaming(ctx context.Context, cmd oci.Cmd, w io.Writer) error {
 	var stderr strings.Builder
-	cmd.Stdout = w
-	cmd.Stderr = &stderr
+	cmd.SetStdout(w)
+	cmd.SetStderr(&stderr)
 
 	if err := cmd.Run(); err != nil {
 		if ctx.Err() != nil {

@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	"github.com/shopware/shopware-cli/internal/executor"
+	"github.com/shopware/shopware-cli/internal/oci"
 )
 
 type recordingInstallExecutor struct {
@@ -27,12 +28,12 @@ func (e *recordingInstallExecutor) WithEnv(env map[string]string) executor.Execu
 func (e *recordingInstallExecutor) PHPCommand(ctx context.Context, args ...string) *executor.Process {
 	e.phpCalls++
 	if e.failPHP {
-		return &executor.Process{Cmd: exec.CommandContext(ctx, "sh", "-c", "exit 1")}
+		return &executor.Process{Cmd: oci.WrapCommand(exec.CommandContext(ctx, "sh", "-c", "exit 1"))}
 	}
 	if e.phpOutput != "" {
-		return &executor.Process{Cmd: exec.CommandContext(ctx, "printf", "%s\n", e.phpOutput)}
+		return &executor.Process{Cmd: oci.WrapCommand(exec.CommandContext(ctx, "printf", "%s\n", e.phpOutput))}
 	}
-	return &executor.Process{Cmd: exec.CommandContext(ctx, "sh", "-c", "true")}
+	return &executor.Process{Cmd: oci.WrapCommand(exec.CommandContext(ctx, "sh", "-c", "true"))}
 }
 
 func set(names ...string) map[string]struct{} {

@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"os/exec"
 	"runtime"
 	"strings"
 
@@ -69,7 +68,7 @@ func CheckProjectDependencies(ctx context.Context, useDocker bool, phpConstraint
 
 	if useDocker && !IsInsideContainer() {
 		runtime := oci.FromContext(ctx)
-		if _, err := exec.LookPath(runtime.Binary()); err != nil {
+		if !runtime.Available() {
 			missing = append(missing, MissingDependency{Name: "Docker", Reason: "not installed"})
 		} else {
 			cmd := runtime.Command(ctx, "info")

@@ -13,6 +13,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/shopware/shopware-cli/internal/oci"
 )
 
 func TestParseWorkerSpec(t *testing.T) {
@@ -165,12 +167,12 @@ func TestRunWorkers(t *testing.T) {
 		var mu sync.Mutex
 		counts := map[string]int{}
 
-		start := func(ctx context.Context, job WorkerJob) (*exec.Cmd, error) {
+		start := func(ctx context.Context, job WorkerJob) (oci.Cmd, error) {
 			mu.Lock()
 			counts[job.ConsumerName]++
 			mu.Unlock()
 
-			return exec.CommandContext(ctx, "true"), nil
+			return oci.WrapCommand(exec.CommandContext(ctx, "true")), nil
 		}
 
 		ctx, cancel := context.WithTimeout(t.Context(), 500*time.Millisecond)
@@ -201,7 +203,7 @@ func TestRunWorkers(t *testing.T) {
 		var mu sync.Mutex
 		attempts := 0
 
-		start := func(_ context.Context, _ WorkerJob) (*exec.Cmd, error) {
+		start := func(_ context.Context, _ WorkerJob) (oci.Cmd, error) {
 			mu.Lock()
 			attempts++
 			mu.Unlock()

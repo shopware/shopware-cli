@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/shopware/shopware-cli/internal/executor"
+	"github.com/shopware/shopware-cli/internal/oci"
 	"github.com/shopware/shopware-cli/internal/system"
 )
 
@@ -71,14 +72,14 @@ func TestStorefrontThemeDumpArgs(t *testing.T) {
 }
 
 func TestRunStorefrontThemeDumpAttachesInput(t *testing.T) {
-	process := &executor.Process{Cmd: exec.CommandContext(t.Context(), os.Args[0], "-test.run=^$")}
+	process := &executor.Process{Cmd: oci.WrapCommand(exec.CommandContext(t.Context(), os.Args[0], "-test.run=^$"))}
 	exec := &storefrontWatchExecutor{process: process}
 	in := strings.NewReader("selected theme\n")
 	var out bytes.Buffer
 
 	require.NoError(t, runStorefrontThemeDump(t.Context(), exec, in, &out, "theme:dump"))
 	assert.Equal(t, []string{"theme:dump"}, exec.args)
-	assert.Same(t, in, process.Cmd.Stdin)
-	assert.Same(t, &out, process.Cmd.Stdout)
-	assert.Same(t, &out, process.Cmd.Stderr)
+	assert.Same(t, in, process.Cmd.Stdin())
+	assert.Same(t, &out, process.Cmd.Stdout())
+	assert.Same(t, &out, process.Cmd.Stderr())
 }

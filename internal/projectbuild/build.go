@@ -126,9 +126,9 @@ func composerInstall(ctx context.Context, cmdExecutor executor.Executor, token s
 	section := ci.Default.Section(ctx, "Composer Installation")
 	defer section.End(ctx)
 	composer := cmdExecutor.WithEnv(map[string]string{"COMPOSER_AUTH": token}).ComposerCommand(ctx, flags...)
-	composer.Cmd.Stdin = os.Stdin
-	composer.Cmd.Stdout = os.Stdout
-	composer.Cmd.Stderr = os.Stderr
+	composer.Cmd.SetStdin(os.Stdin)
+	composer.Cmd.SetStdout(os.Stdout)
+	composer.Cmd.SetStderr(os.Stderr)
 	return composer.Run()
 }
 

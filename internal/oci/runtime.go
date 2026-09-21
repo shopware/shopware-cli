@@ -11,15 +11,16 @@ import (
 
 // Runtime abstracts the container runtime CLI shopware-cli shells out to.
 type Runtime interface {
-	// Binary is the runtime executable resolved on PATH (e.g. "docker").
+	// Binary is the runtime executable name (e.g. "docker").
 	Binary() string
+	// Available reports whether the runtime binary is resolvable on PATH.
+	Available() bool
 	// Command returns a command running `<binary> <args...>`, bound to ctx.
-	// The caller wires up Dir, Stdout, Stderr, and friends as needed.
-	Command(ctx context.Context, args ...string) *exec.Cmd
+	Command(ctx context.Context, args ...string) Cmd
 	// ComposeCommand returns a command running `<binary> compose <args...>`.
 	// Compose is a separate seam because other runtimes may not ship it as a
 	// CLI plugin subcommand.
-	ComposeCommand(ctx context.Context, args ...string) *exec.Cmd
+	ComposeCommand(ctx context.Context, args ...string) Cmd
 }
 
 // DockerRuntime shells out to the docker CLI.
@@ -27,11 +28,16 @@ type DockerRuntime struct{}
 
 func (DockerRuntime) Binary() string { return "docker" }
 
-func (r DockerRuntime) Command(ctx context.Context, args ...string) *exec.Cmd {
-	return exec.CommandContext(ctx, r.Binary(), args...)
+func (r DockerRuntime) Available() bool {
+	_, err := exec.LookPath(r.Binary())
+	return err == nil
 }
 
-func (r DockerRuntime) ComposeCommand(ctx context.Context, args ...string) *exec.Cmd {
+func (r DockerRuntime) Command(ctx context.Context, args ...string) Cmd {
+	return WrapCommand(exec.CommandContext(ctx, r.Binary(), args...))
+}
+
+func (r DockerRuntime) ComposeCommand(ctx context.Context, args ...string) Cmd {
 	return r.Command(ctx, append([]string{"compose"}, args...)...)
 }
 

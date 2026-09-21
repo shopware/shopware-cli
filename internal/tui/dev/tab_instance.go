@@ -13,6 +13,7 @@ import (
 	"charm.land/lipgloss/v2"
 
 	"github.com/shopware/shopware-cli/internal/executor"
+	"github.com/shopware/shopware-cli/internal/oci"
 	"github.com/shopware/shopware-cli/internal/tui"
 )
 
@@ -585,7 +586,7 @@ func (m *InstanceModel) streamProcess(src logSource) tea.Cmd {
 	if err != nil {
 		return func() tea.Msg { return logDoneMsg{source: name} }
 	}
-	cmd.Stderr = cmd.Stdout
+	cmd.SetStderr(cmd.Stdout())
 
 	if err := cmd.Start(); err != nil {
 		return func() tea.Msg { return logDoneMsg{source: name} }
@@ -616,11 +617,11 @@ func (m *InstanceModel) streamContainer(name, container string) tea.Cmd {
 func (m *InstanceModel) streamFile(name, filePath string) tea.Cmd {
 	ctx, cancel := context.WithCancel(m.ctx)
 	m.cancels[name] = cancel
-	cmd := exec.CommandContext(ctx, "tail", "-n", "100", "-f", filePath)
+	cmd := oci.WrapCommand(exec.CommandContext(ctx, "tail", "-n", "100", "-f", filePath))
 	return m.streamCommand(ctx, name, cmd, false)
 }
 
-func (m *InstanceModel) streamCommand(ctx context.Context, name string, cmd *exec.Cmd, mergeStderr bool) tea.Cmd {
+func (m *InstanceModel) streamCommand(ctx context.Context, name string, cmd oci.Cmd, mergeStderr bool) tea.Cmd {
 	out := m.linesChan
 	m.streaming[name] = true
 
@@ -632,7 +633,7 @@ func (m *InstanceModel) streamCommand(ctx context.Context, name string, cmd *exe
 			return
 		}
 		if mergeStderr {
-			cmd.Stderr = cmd.Stdout
+			cmd.SetStderr(cmd.Stdout())
 		}
 
 		if err := cmd.Start(); err != nil {

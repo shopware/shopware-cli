@@ -178,8 +178,8 @@ func BuildAssetsForExtensions(ctx context.Context, sources []asset.Source, asset
 
 			adminExec := assetConfig.ExecutorWithRelDir(adminRelPath).WithEnv(envMap)
 			npmBuild := adminExec.NPMCommand(ctx, "run", "build")
-			npmBuild.Cmd.Stdout = os.Stdout
-			npmBuild.Cmd.Stderr = os.Stderr
+			npmBuild.Cmd.SetStdout(os.Stdout)
+			npmBuild.Cmd.SetStderr(os.Stderr)
 			err = npmBuild.Run()
 
 			if assetConfig.CleanupNodeModules {
@@ -284,8 +284,8 @@ func BuildAssetsForExtensions(ctx context.Context, sources []asset.Source, asset
 				// As we call npm install caniuse-lite, we need to run the postinstall script manually.
 				if npmPackage.HasScript("postinstall") {
 					npmRunPostInstall := sfExec.NPMCommand(ctx, "run", "postinstall")
-					npmRunPostInstall.Cmd.Stdout = os.Stdout
-					npmRunPostInstall.Cmd.Stderr = os.Stderr
+					npmRunPostInstall.Cmd.SetStdout(os.Stdout)
+					npmRunPostInstall.Cmd.SetStderr(os.Stderr)
 
 					if err := npmRunPostInstall.Run(); err != nil {
 						return err
@@ -294,8 +294,8 @@ func BuildAssetsForExtensions(ctx context.Context, sources []asset.Source, asset
 
 				if _, err := os.Stat(path.Join(storefrontRoot, "vendor/bootstrap")); os.IsNotExist(err) {
 					npmVendor := sfExec.NPMCommand(ctx, "exec", "--", "node", "copy-to-vendor.js")
-					npmVendor.Cmd.Stdout = os.Stdout
-					npmVendor.Cmd.Stderr = os.Stderr
+					npmVendor.Cmd.SetStdout(os.Stdout)
+					npmVendor.Cmd.SetStderr(os.Stderr)
 					if err := npmVendor.Run(); err != nil {
 						return err
 					}
@@ -315,16 +315,16 @@ func BuildAssetsForExtensions(ctx context.Context, sources []asset.Source, asset
 			storefrontBuildExec := sfExec.WithEnv(sfEnvMap)
 			if npmPackage.HasScript("production") {
 				npmProduction := storefrontBuildExec.NPMCommand(ctx, "run", "production")
-				npmProduction.Cmd.Stdout = os.Stdout
-				npmProduction.Cmd.Stderr = os.Stderr
+				npmProduction.Cmd.SetStdout(os.Stdout)
+				npmProduction.Cmd.SetStderr(os.Stderr)
 
 				if err := npmProduction.Run(); err != nil {
 					return err
 				}
 			} else {
 				nodeWebpackCmd := storefrontBuildExec.NPMCommand(ctx, "exec", "--", "webpack", "--config", "webpack.config.js")
-				nodeWebpackCmd.Cmd.Stdout = os.Stdout
-				nodeWebpackCmd.Cmd.Stderr = os.Stderr
+				nodeWebpackCmd.Cmd.SetStdout(os.Stdout)
+				nodeWebpackCmd.Cmd.SetStderr(os.Stderr)
 
 				if err := nodeWebpackCmd.Run(); err != nil {
 					return err

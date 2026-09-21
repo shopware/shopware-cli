@@ -69,10 +69,10 @@ func TestNewSSHExecutorValidation(t *testing.T) {
 func lastSSHShell(t *testing.T, p *Process) string {
 	t.Helper()
 
-	require.Equal(t, "ssh", filepath.Base(p.Cmd.Path))
-	require.NotEmpty(t, p.Cmd.Args)
+	require.Equal(t, "ssh", p.Cmd.Args()[0])
+	require.NotEmpty(t, p.Cmd.Args())
 
-	return p.Cmd.Args[len(p.Cmd.Args)-1]
+	return p.Cmd.Args()[len(p.Cmd.Args())-1]
 }
 
 func TestSSHExecutorConsoleCommand(t *testing.T) {
@@ -89,7 +89,7 @@ func TestSSHExecutorConsoleCommand(t *testing.T) {
 		"deploy@shop.example.com",
 		"cd /var/www/shop && php bin/console cache:clear",
 	}
-	assert.Equal(t, append([]string{"ssh"}, wantArgs...), p.Cmd.Args)
+	assert.Equal(t, append([]string{"ssh"}, wantArgs...), p.Cmd.Args())
 }
 
 func TestSSHExecutorPipeliningArgs(t *testing.T) {
@@ -101,7 +101,7 @@ func TestSSHExecutorPipeliningArgs(t *testing.T) {
 		e.PHPCommand(t.Context(), "-v"),
 		e.NPMCommand(t.Context(), "run", "dev"),
 	} {
-		args := strings.Join(p.Cmd.Args, " ")
+		args := strings.Join(p.Cmd.Args(), " ")
 		assert.Contains(t, args, "ControlMaster=auto")
 		assert.Contains(t, args, "ControlPath=")
 		assert.Contains(t, args, "ControlPersist=")
@@ -120,17 +120,17 @@ func TestSSHExecutorTargetVariants(t *testing.T) {
 	e := &SSHExecutor{host: "shop.example.com", directory: "/var/www/shop"}
 
 	p := e.PHPCommand(t.Context(), "-v")
-	assert.Contains(t, p.Cmd.Args, "shop.example.com", "without user the bare host is the target")
-	assert.NotContains(t, p.Cmd.Args, "-p", "default port 22 must not be passed")
+	assert.Contains(t, p.Cmd.Args(), "shop.example.com", "without user the bare host is the target")
+	assert.NotContains(t, p.Cmd.Args(), "-p", "default port 22 must not be passed")
 
 	e = &SSHExecutor{host: "shop.example.com", user: "deploy", port: 2222, directory: "/var/www/shop", identityFile: "/keys/id_ed25519"}
 
 	p = e.PHPCommand(t.Context(), "-v")
-	assert.Contains(t, p.Cmd.Args, "deploy@shop.example.com")
-	assert.Contains(t, p.Cmd.Args, "-p")
-	assert.Contains(t, p.Cmd.Args, "2222")
-	assert.Contains(t, p.Cmd.Args, "-i")
-	assert.Contains(t, p.Cmd.Args, "/keys/id_ed25519")
+	assert.Contains(t, p.Cmd.Args(), "deploy@shop.example.com")
+	assert.Contains(t, p.Cmd.Args(), "-p")
+	assert.Contains(t, p.Cmd.Args(), "2222")
+	assert.Contains(t, p.Cmd.Args(), "-i")
+	assert.Contains(t, p.Cmd.Args(), "/keys/id_ed25519")
 }
 
 func TestSSHExecutorCommandVariants(t *testing.T) {
@@ -226,12 +226,12 @@ func TestSSHExecutorTTY(t *testing.T) {
 	e := testSSHExecutor()
 
 	p := e.ConsoleCommand(WithTTY(t.Context()), "cache:clear")
-	assert.Contains(t, p.Cmd.Args, "-t", "WithTTY must request a TTY")
-	assert.NotContains(t, p.Cmd.Args, "-T")
+	assert.Contains(t, p.Cmd.Args(), "-t", "WithTTY must request a TTY")
+	assert.NotContains(t, p.Cmd.Args(), "-T")
 
 	p = e.ConsoleCommand(t.Context(), "cache:clear")
-	assert.Contains(t, p.Cmd.Args, "-T", "TTY must be disabled by default")
-	assert.NotContains(t, p.Cmd.Args, "-t")
+	assert.Contains(t, p.Cmd.Args(), "-T", "TTY must be disabled by default")
+	assert.NotContains(t, p.Cmd.Args(), "-t")
 }
 
 func TestSSHExecutorNormalizePath(t *testing.T) {

@@ -14,6 +14,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/shopware/shopware-cli/internal/executor"
+	"github.com/shopware/shopware-cli/internal/oci"
 	"github.com/shopware/shopware-cli/internal/shop"
 	"github.com/shopware/shopware-cli/internal/testhelper"
 )
@@ -89,9 +90,9 @@ func TestCreateEmptySnippetFolderCreatesGitkeepStubs(t *testing.T) {
 func TestBinCICommand(t *testing.T) {
 	cmdExecutor := executor.NewLocal("/project")
 	version := binCICommand(t.Context(), cmdExecutor, "--version")
-	assert.Equal(t, []string{"php", "bin/ci", "--version"}, version.Cmd.Args)
+	assert.Equal(t, []string{"php", "bin/ci", "--version"}, version.Cmd.Args())
 	assetInstall := binCICommand(t.Context(), cmdExecutor, "asset:install")
-	assert.Equal(t, []string{"php", "bin/ci", "asset:install"}, assetInstall.Cmd.Args)
+	assert.Equal(t, []string{"php", "bin/ci", "asset:install"}, assetInstall.Cmd.Args())
 }
 
 func TestRunCommandPreservesExecutorEnv(t *testing.T) {
@@ -101,18 +102,18 @@ func TestRunCommandPreservesExecutorEnv(t *testing.T) {
 	})
 	proc := cmdExecutor.NPMCommand(t.Context(), "run", "dev")
 	applyTransparentEnv(proc)
-	assert.Contains(t, proc.Cmd.Env, "PROJECT_ROOT=/project")
-	assert.Contains(t, proc.Cmd.Env, "ADMIN_ROOT=/project/vendor/shopware/administration")
-	assert.Contains(t, proc.Cmd.Env, "LOCK_DSN=flock")
+	assert.Contains(t, proc.Cmd.Env(), "PROJECT_ROOT=/project")
+	assert.Contains(t, proc.Cmd.Env(), "ADMIN_ROOT=/project/vendor/shopware/administration")
+	assert.Contains(t, proc.Cmd.Env(), "LOCK_DSN=flock")
 }
 
 func TestRunCommandFallsBackToProcessEnv(t *testing.T) {
 	t.Setenv("SHOPWARE_CLI_TRANSPARENT_ENV_MARKER", "present")
-	proc := &executor.Process{Cmd: exec.CommandContext(t.Context(), "true")}
-	require.Nil(t, proc.Cmd.Env)
+	proc := &executor.Process{Cmd: oci.WrapCommand(exec.CommandContext(t.Context(), "true"))}
+	require.Nil(t, proc.Cmd.Env())
 	applyTransparentEnv(proc)
-	assert.Contains(t, proc.Cmd.Env, "SHOPWARE_CLI_TRANSPARENT_ENV_MARKER=present")
-	assert.Contains(t, proc.Cmd.Env, "LOCK_DSN=flock")
+	assert.Contains(t, proc.Cmd.Env(), "SHOPWARE_CLI_TRANSPARENT_ENV_MARKER=present")
+	assert.Contains(t, proc.Cmd.Env(), "LOCK_DSN=flock")
 }
 
 func TestRunCommandKeepsConfiguredStreams(t *testing.T) {
@@ -120,9 +121,9 @@ func TestRunCommandKeepsConfiguredStreams(t *testing.T) {
 		t.Skip("uses cat")
 	}
 	var out bytes.Buffer
-	proc := &executor.Process{Cmd: exec.CommandContext(t.Context(), "cat")}
-	proc.Cmd.Stdin = strings.NewReader("from cobra")
-	proc.Cmd.Stdout = &out
+	proc := &executor.Process{Cmd: oci.WrapCommand(exec.CommandContext(t.Context(), "cat"))}
+	proc.Cmd.SetStdin(strings.NewReader("from cobra"))
+	proc.Cmd.SetStdout(&out)
 	require.NoError(t, RunCommand(proc))
 	assert.Equal(t, "from cobra", out.String())
 }

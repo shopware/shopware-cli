@@ -5,17 +5,18 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"os/exec"
 	"strings"
 	"sync"
 
 	"charm.land/bubbles/v2/spinner"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
+
+	"github.com/shopware/shopware-cli/internal/oci"
 )
 
 // RunSpinnerWithLogs executes the given command while displaying a spinner and allowing the user to toggle logs with Ctrl+L.
-func RunSpinnerWithLogs(ctx context.Context, title string, cmd *exec.Cmd) error {
+func RunSpinnerWithLogs(ctx context.Context, title string, cmd oci.Cmd) error {
 	return runSpinnerWithLogs(ctx, title, cmd, os.Stderr, func(ctx context.Context, model tea.Model) error {
 		p := tea.NewProgram(model, tea.WithContext(ctx))
 		_, err := p.Run()
@@ -23,20 +24,20 @@ func RunSpinnerWithLogs(ctx context.Context, title string, cmd *exec.Cmd) error 
 	})
 }
 
-func runSpinnerWithLogs(ctx context.Context, title string, cmd *exec.Cmd, output io.Writer, runProgram func(context.Context, tea.Model) error) error {
+func runSpinnerWithLogs(ctx context.Context, title string, cmd oci.Cmd, output io.Writer, runProgram func(context.Context, tea.Model) error) error {
 	cmdCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
 	var writer logWriter
-	if cmd.Stdout != nil {
-		cmd.Stdout = io.MultiWriter(cmd.Stdout, &writer)
+	if cmd.Stdout() != nil {
+		cmd.SetStdout(io.MultiWriter(cmd.Stdout(), &writer))
 	} else {
-		cmd.Stdout = &writer
+		cmd.SetStdout(&writer)
 	}
-	if cmd.Stderr != nil {
-		cmd.Stderr = io.MultiWriter(cmd.Stderr, &writer)
+	if cmd.Stderr() != nil {
+		cmd.SetStderr(io.MultiWriter(cmd.Stderr(), &writer))
 	} else {
-		cmd.Stderr = &writer
+		cmd.SetStderr(&writer)
 	}
 
 	s := NewBrandSpinner()
@@ -118,7 +119,7 @@ type installProgressModel struct {
 	logWriter *logWriter
 	showLogs  bool
 	title     string
-	cmd       *exec.Cmd
+	cmd       oci.Cmd
 	cancel    context.CancelFunc
 
 	width     int

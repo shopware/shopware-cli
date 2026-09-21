@@ -2,11 +2,11 @@ package dev
 
 import (
 	"errors"
-	"os/exec"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 
+	"github.com/shopware/shopware-cli/internal/oci"
 	"github.com/shopware/shopware-cli/internal/tui"
 	"github.com/shopware/shopware-cli/internal/tui/app"
 )
@@ -18,7 +18,7 @@ import (
 func TestRunTask_EntersTaskPhase(t *testing.T) {
 	m := &Model{phase: phaseDashboard}
 
-	cmd := m.runTask("Building...", func() (*exec.Cmd, error) { return nil, errors.New("not executed") })
+	cmd := m.runTask("Building...", func() (oci.Cmd, error) { return nil, errors.New("not executed") })
 	assert.Equal(t, phaseTask, m.phase)
 	assert.Equal(t, "Building...", m.task.Title)
 	assert.False(t, m.task.Done())

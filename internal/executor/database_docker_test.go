@@ -2,44 +2,63 @@ package executor
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"slices"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/shopware/shopware-cli/internal/oci"
+	"github.com/shopware/shopware-cli/internal/oci/ocitest"
 )
 
-// fakeDatabaseRuntime returns an oci.Runtime stub that answers
+// fakeDatabaseRuntime returns an oci.Runtime fake that answers
 // `compose exec ... printenv DATABASE_URL` with execOutput (or fails when
-// empty) and `compose port <service> <port>` with portScript.
-func fakeDatabaseRuntime(t *testing.T, execOutput, portScript string) oci.Runtime {
-	t.Helper()
-
-	execBranch := "exit 1"
-	if execOutput != "" {
-		execBranch = fmt.Sprintf("echo %q", execOutput)
-	}
-
-	return writeStubRuntime(t, fmt.Sprintf(`if [ "$1" = "compose" ] && [ "$2" = "exec" ]; then
-  %s
-elif [ "$1" = "compose" ] && [ "$2" = "port" ]; then
-  %s
-else
-  exit 1
-fi
-`, execBranch, portScript))
+// empty) and `compose port <service> <port>` via portFunc.
+func fakeDatabaseRuntime(execOutput string, portFunc func(c *ocitest.Cmd) error) oci.Runtime {
+	return &ocitest.Runtime{NewCmd: func(c *ocitest.Cmd) {
+		switch {
+		case slices.Contains(c.ArgsV, "printenv"):
+			c.RunFunc = func(c *ocitest.Cmd) error {
+				if execOutput == "" {
+					return errors.New("exec failed")
+				}
+				_, _ = fmt.Fprintln(c.StdoutV, execOutput)
+				return nil
+			}
+		case slices.Contains(c.ArgsV, "port"):
+			c.RunFunc = portFunc
+		default:
+			c.RunFunc = func(*ocitest.Cmd) error { return errors.New("unexpected command") }
+		}
+	}}
 }
 
-// withFakeDatabaseRuntime returns a context carrying the stub runtime.
-func withFakeDatabaseRuntime(t *testing.T, execOutput, portScript string) context.Context {
-	t.Helper()
-	return oci.WithRuntime(t.Context(), fakeDatabaseRuntime(t, execOutput, portScript))
+// withFakeDatabaseRuntime returns a context carrying the fake runtime.
+func withFakeDatabaseRuntime(execOutput string, portFunc func(c *ocitest.Cmd) error) context.Context {
+	return oci.WithRuntime(context.Background(), fakeDatabaseRuntime(execOutput, portFunc))
+}
+
+// portAnswer returns a portFunc writing answer to stdout.
+func portAnswer(answer string) func(c *ocitest.Cmd) error {
+	return func(c *ocitest.Cmd) error {
+		_, _ = fmt.Fprintln(c.StdoutV, answer)
+		return nil
+	}
+}
+
+// portFailure returns a portFunc failing with msg on stderr.
+func portFailure(msg string) func(c *ocitest.Cmd) error {
+	return func(c *ocitest.Cmd) error {
+		_, _ = fmt.Fprintln(c.StderrV, msg)
+		return errors.New("exit status 1")
+	}
 }
 
 func TestDockerDatabaseConnection(t *testing.T) {
-	ctx := withFakeDatabaseRuntime(t, "mysql://app:secret@database/shop", `echo "0.0.0.0:55001"`)
+	ctx := withFakeDatabaseRuntime("mysql://app:secret@database/shop", portAnswer("0.0.0.0:55001"))
 
 	dockerExec := &DockerExecutor{projectRoot: t.TempDir()}
 
@@ -54,7 +73,7 @@ func TestDockerDatabaseConnection(t *testing.T) {
 
 func TestDockerDatabaseConnectionEnvOverrideSkipsContainerLookup(t *testing.T) {
 	// The exec branch fails, so passing proves the container env is not read.
-	ctx := withFakeDatabaseRuntime(t, "", `echo "[::]:56001"`)
+	ctx := withFakeDatabaseRuntime("", portAnswer("[::]:56001"))
 
 	dockerExec := &DockerExecutor{
 		projectRoot: t.TempDir(),
@@ -70,7 +89,7 @@ func TestDockerDatabaseConnectionEnvOverrideSkipsContainerLookup(t *testing.T) {
 }
 
 func TestDockerDatabaseConnectionExternalHostKept(t *testing.T) {
-	ctx := withFakeDatabaseRuntime(t, "mysql://app:pw@db.example.com:3307/prod", `echo "no such service: db.example.com" >&2; exit 1`)
+	ctx := withFakeDatabaseRuntime("mysql://app:pw@db.example.com:3307/prod", portFailure("no such service: db.example.com"))
 
 	dockerExec := &DockerExecutor{projectRoot: t.TempDir()}
 
@@ -82,7 +101,7 @@ func TestDockerDatabaseConnectionExternalHostKept(t *testing.T) {
 }
 
 func TestDockerDatabaseConnectionUnpublishedPort(t *testing.T) {
-	ctx := withFakeDatabaseRuntime(t, "mysql://root:root@database/shopware", `echo ""`)
+	ctx := withFakeDatabaseRuntime("mysql://root:root@database/shopware", portAnswer(""))
 
 	dockerExec := &DockerExecutor{projectRoot: t.TempDir()}
 
@@ -93,7 +112,7 @@ func TestDockerDatabaseConnectionUnpublishedPort(t *testing.T) {
 }
 
 func TestDockerDatabaseConnectionPortLookupFailure(t *testing.T) {
-	ctx := withFakeDatabaseRuntime(t, "mysql://root:root@database/shopware", `echo "daemon not reachable" >&2; exit 1`)
+	ctx := withFakeDatabaseRuntime("mysql://root:root@database/shopware", portFailure("daemon not reachable"))
 
 	dockerExec := &DockerExecutor{projectRoot: t.TempDir()}
 
@@ -104,7 +123,7 @@ func TestDockerDatabaseConnectionPortLookupFailure(t *testing.T) {
 }
 
 func TestDockerDatabaseConnectionEnvironmentNotRunning(t *testing.T) {
-	ctx := withFakeDatabaseRuntime(t, "", "exit 1")
+	ctx := withFakeDatabaseRuntime("", portFailure("exit 1"))
 
 	dockerExec := &DockerExecutor{projectRoot: t.TempDir()}
 

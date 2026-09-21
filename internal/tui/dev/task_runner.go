@@ -6,10 +6,11 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
+	"github.com/shopware/shopware-cli/internal/oci"
 	"github.com/shopware/shopware-cli/internal/tui"
 )
 
-func (m *Model) runTask(title string, taskFn func() (*exec.Cmd, error)) tea.Cmd {
+func (m *Model) runTask(title string, taskFn func() (oci.Cmd, error)) tea.Cmd {
 	m.phase = phaseTask
 	m.task = tui.NewTask(title)
 	return m.task.Start(taskFn)
@@ -28,7 +29,7 @@ func (m *Model) runSelfCommand(title string, args ...string) tea.Cmd {
 	projectRoot := m.projectRoot
 	dockerMode := m.dockerMode
 
-	return m.runTask(title, func() (*exec.Cmd, error) {
+	return m.runTask(title, func() (oci.Cmd, error) {
 		selfBin, err := os.Executable()
 		if err != nil {
 			return nil, err
@@ -37,14 +38,14 @@ func (m *Model) runSelfCommand(title string, args ...string) tea.Cmd {
 		if dockerMode {
 			cmd.Dir = projectRoot
 		}
-		return cmd, nil
+		return oci.WrapCommand(cmd), nil
 	})
 }
 
 func (m *Model) runCacheClear() tea.Cmd {
 	ctx := m.commandContext()
 	e := m.executor
-	return m.runTask("Clearing Cache...", func() (*exec.Cmd, error) {
+	return m.runTask("Clearing Cache...", func() (oci.Cmd, error) {
 		return e.ConsoleCommand(ctx, "cache:clear").Cmd, nil
 	})
 }

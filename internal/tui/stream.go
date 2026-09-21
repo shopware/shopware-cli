@@ -4,10 +4,11 @@ import (
 	"bufio"
 	"bytes"
 	"io"
-	"os/exec"
 	"sync"
 
 	tea "charm.land/bubbletea/v2"
+
+	"github.com/shopware/shopware-cli/internal/oci"
 )
 
 // StreamBufferSize is the channel buffer used for streaming subprocess output
@@ -18,7 +19,7 @@ const StreamBufferSize = 50
 // closing the channel when the command finishes. With useStdout true, stderr
 // is merged into stdout; otherwise stdout is merged into stderr. It blocks
 // until the command exits and returns its error.
-func StreamCmdOutput(cmd *exec.Cmd, ch chan<- string, useStdout bool) error {
+func StreamCmdOutput(cmd oci.Cmd, ch chan<- string, useStdout bool) error {
 	_, err := DrainCmdOutput(cmd, ch, useStdout)
 	close(ch)
 	return err
@@ -26,18 +27,18 @@ func StreamCmdOutput(cmd *exec.Cmd, ch chan<- string, useStdout bool) error {
 
 // DrainCmdOutput streams cmd into ch without closing the channel, so callers
 // can run several processes as one captured stream.
-func DrainCmdOutput(cmd *exec.Cmd, ch chan<- string, useStdout bool) ([]string, error) {
+func DrainCmdOutput(cmd oci.Cmd, ch chan<- string, useStdout bool) ([]string, error) {
 	var pipe io.Reader
 	var err error
 	if useStdout {
 		pipe, err = cmd.StdoutPipe()
 		if err == nil {
-			cmd.Stderr = cmd.Stdout
+			cmd.SetStderr(cmd.Stdout())
 		}
 	} else {
 		pipe, err = cmd.StderrPipe()
 		if err == nil {
-			cmd.Stdout = cmd.Stderr
+			cmd.SetStdout(cmd.Stderr())
 		}
 	}
 	if err != nil {

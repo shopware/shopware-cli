@@ -21,6 +21,7 @@ import (
 	"github.com/go-sql-driver/mysql"
 
 	adminSdk "github.com/shopware/shopware-cli/internal/admin-api"
+	"github.com/shopware/shopware-cli/internal/oci"
 	"github.com/shopware/shopware-cli/internal/shop"
 )
 
@@ -153,10 +154,10 @@ func (s *SSHExecutor) command(ctx context.Context, name string, args ...string) 
 
 	sshArgs = append(sshArgs, s.target(), s.remoteShell(append([]string{name}, args...)...))
 
-	cmd := exec.CommandContext(ctx, "ssh", sshArgs...)
-	logCmd(ctx, cmd)
+	p := newProcess(exec.CommandContext(ctx, "ssh", sshArgs...))
+	logCmd(ctx, p.Cmd)
 
-	return newProcess(cmd)
+	return p
 }
 
 func (s *SSHExecutor) ConsoleCommand(ctx context.Context, args ...string) *Process {
@@ -325,7 +326,7 @@ func (s *SSHExecutor) runRemoteShell(ctx context.Context, remoteCmd string) (str
 
 	sshArgs := append(s.sshArgs(), "-T", s.target(), remoteCmd)
 	cmd := exec.CommandContext(ctx, "ssh", sshArgs...)
-	logCmd(ctx, cmd)
+	logCmd(ctx, oci.WrapCommand(cmd))
 
 	var stdout, stderr strings.Builder
 	cmd.Stdout = &stdout

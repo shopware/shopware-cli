@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"os"
-	"os/exec"
 	"strings"
 
 	"github.com/shopware/shopware-cli/internal/envfile"
@@ -45,7 +44,7 @@ type RunningEnvironment struct {
 // project name is pinned explicitly: compose re-reads the project .env per
 // invocation, and pinning guarantees we only ever see this project's own
 // containers.
-func composeCommand(ctx context.Context, projectRoot string, args ...string) *exec.Cmd {
+func composeCommand(ctx context.Context, projectRoot string, args ...string) oci.Cmd {
 	var fullArgs []string
 	if os.Getenv("COMPOSE_PROJECT_NAME") == "" {
 		if name := envfile.ReadComposeProjectName(projectRoot); name != "" {
@@ -54,7 +53,7 @@ func composeCommand(ctx context.Context, projectRoot string, args ...string) *ex
 	}
 
 	cmd := oci.FromContext(ctx).ComposeCommand(ctx, append(fullArgs, args...)...)
-	cmd.Dir = projectRoot
+	cmd.SetDir(projectRoot)
 	return cmd
 }
 

@@ -1,10 +1,10 @@
 package tui
 
 import (
-	"os/exec"
-
 	"charm.land/bubbles/v2/spinner"
 	tea "charm.land/bubbletea/v2"
+
+	"github.com/shopware/shopware-cli/internal/oci"
 )
 
 // taskLogKeep is the scrollback cap for a task's streamed output.
@@ -50,7 +50,7 @@ func NewTask(title string) Task {
 // Start launches the command produced by factory and begins streaming its
 // combined output. The returned command batch keeps the stream flowing and
 // the spinner ticking; completion arrives as a TaskDoneMsg.
-func (t *Task) Start(factory func() (*exec.Cmd, error)) tea.Cmd {
+func (t *Task) Start(factory func() (oci.Cmd, error)) tea.Cmd {
 	t.lines = nil
 	t.exited = false
 	t.drained = false
