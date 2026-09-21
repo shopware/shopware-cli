@@ -13,7 +13,7 @@ import (
 
 var accountCompanyProducerExtensionInfoPushCmd = &cobra.Command{
 	Use:   "push [zip or path]",
-	Short: "Update store information of extension",
+	Short: "Push Shopware Extension Store listing data",
 	Args:  cobra.MinimumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		absolutePath, err := filepath.Abs(args[0])

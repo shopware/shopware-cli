@@ -26,7 +26,7 @@ var version = "dev"
 
 var rootCmd = &cobra.Command{
 	Use:     "shopware-cli",
-	Short:   "A cli for common Shopware tasks",
+	Short:   "Build, develop, and manage Shopware projects and extensions",
 	Long:    `This application contains some utilities like extension management`,
 	Version: version,
 }

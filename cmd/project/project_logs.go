@@ -13,7 +13,7 @@ import (
 
 var projectLogsCmd = &cobra.Command{
 	Use:   "logs [filename]",
-	Short: "Show Shopware application logs from var/log/",
+	Short: "List, view, or follow Shopware application logs from var/log/",
 	Long:  "Show the last lines of a Shopware log file. Without arguments, shows the most recently modified log file. Use --list to discover available log files.",
 	Args:  cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
@@ -104,7 +104,7 @@ func formatSize(bytes int64) string {
 
 func init() {
 	projectRootCmd.AddCommand(projectLogsCmd)
-	projectLogsCmd.Flags().Int("lines", 100, "Number of lines to show")
-	projectLogsCmd.Flags().BoolP("follow", "f", false, "Follow the log file for new output")
-	projectLogsCmd.Flags().BoolP("list", "l", false, "List available log files")
+	projectLogsCmd.Flags().Int("lines", 100, "Number of log lines to show")
+	projectLogsCmd.Flags().BoolP("follow", "f", false, "Follow the selected log file for new output")
+	projectLogsCmd.Flags().BoolP("list", "l", false, "List available Shopware log files")
 }

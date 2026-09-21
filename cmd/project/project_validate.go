@@ -17,7 +17,7 @@ import (
 
 var projectValidateCmd = &cobra.Command{
 	Use:   "validate [path]",
-	Short: "Validate project",
+	Short: "Run static analysis and Shopware checks on a project",
 	Args:  cobra.MaximumNArgs(1),
 	PreRunE: func(cmd *cobra.Command, args []string) error {
 		if _, err := projectValidationFormat(cmd); err != nil {
@@ -123,12 +123,12 @@ func projectValidationFormat(cmd *cobra.Command) (string, error) {
 
 func init() {
 	projectRootCmd.AddCommand(projectValidateCmd)
-	projectValidateCmd.PersistentFlags().String("format", "", "Reporting format (summary, json, github, gitlab, junit, markdown)")
+	projectValidateCmd.PersistentFlags().String("format", "", "Validation report format (summary, json, github, gitlab, junit, or markdown)")
 	projectValidateCmd.PersistentFlags().String("reporter", "", "Reporting format (summary, json, github, gitlab, junit, markdown)")
-	projectValidateCmd.PersistentFlags().String("only", "", "Run only specific tools by name (comma-separated, e.g. phpstan,eslint)")
-	projectValidateCmd.PersistentFlags().String("exclude", "", "Exclude specific tools by name (comma-separated, e.g. phpstan,eslint)")
-	projectValidateCmd.PersistentFlags().Bool("no-copy", false, "Do not copy project files to temporary directory")
-	projectValidateCmd.PersistentFlags().Bool("local-only", false, "Only read plugins in custom/* folders")
+	projectValidateCmd.PersistentFlags().String("only", "", "Run only the specified tools (comma-separated, e.g. PHPStan, ESLint)")
+	projectValidateCmd.PersistentFlags().String("exclude", "", "Exclude the specified tools (comma-separated, e.g. PHPStan, ESLint)")
+	projectValidateCmd.PersistentFlags().Bool("no-copy", false, "Validate the project in place instead of copying it to a temporary directory")
+	projectValidateCmd.PersistentFlags().Bool("local-only", false, "Validate only extensions in custom/* folders")
 	projectValidateCmd.MarkFlagsMutuallyExclusive("format", "reporter")
 	_ = projectValidateCmd.PersistentFlags().MarkDeprecated("reporter", "use --format instead")
 	_ = projectValidateCmd.PersistentFlags().MarkHidden("reporter")

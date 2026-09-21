@@ -22,7 +22,7 @@ import (
 var projectProxySetupCmd = &cobra.Command{
 	Use:          "setup",
 	SilenceUsage: true,
-	Short:        "One-time machine setup for the shared proxy: DNS and HTTPS trust (needs sudo)",
+	Short:        "Set up shared proxy DNS and HTTPS trust once per machine",
 	Long: `Performs the one-time machine setup for the shared proxy in a single sudo
 ceremony:
 
@@ -426,6 +426,6 @@ func resolveDomainFlag(cmd *cobra.Command) (string, *domainChange, error) {
 func init() {
 	projectProxyCmd.AddCommand(projectProxySetupCmd)
 
-	projectProxySetupCmd.Flags().Bool("skip-trust", false, "Skip installing the certificate authority into the trust stores")
-	projectProxySetupCmd.Flags().String("domain", "", "Base domain for project hostnames (default "+proxy.DefaultDomain+", persisted machine-wide)")
+	projectProxySetupCmd.Flags().Bool("skip-trust", false, "Skip installing the proxy CA certificate in system trust stores")
+	projectProxySetupCmd.Flags().String("domain", "", "Base domain for project hostnames (default: "+proxy.DefaultDomain+"; persisted machine-wide)")
 }

@@ -12,7 +12,7 @@ import (
 
 var accountCompanyProducerExtensionUploadCmd = &cobra.Command{
 	Use:   "upload [zip]",
-	Short: "Uploads a new extension version",
+	Short: "Upload an extension version to the Shopware Extension Store",
 	Args:  cobra.MinimumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		path, err := filepath.Abs(args[0])

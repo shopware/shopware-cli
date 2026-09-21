@@ -14,7 +14,7 @@ import (
 
 var projectFixCmd = &cobra.Command{
 	Use:   "fix [path]",
-	Short: "Fix project",
+	Short: "Apply code-quality fixes to a project",
 	Args:  cobra.MaximumNArgs(1),
 	PreRunE: func(cmd *cobra.Command, args []string) error {
 		return verifier.SetupTools(cmd.Context(), cmd.Root().Version)
@@ -74,6 +74,6 @@ var projectFixCmd = &cobra.Command{
 
 func init() {
 	projectRootCmd.AddCommand(projectFixCmd)
-	projectFixCmd.PersistentFlags().String("only", "", "Run only specific tools by name (comma-separated, e.g. phpstan,eslint)")
-	projectFixCmd.PersistentFlags().Bool("allow-non-git", false, "Allow running on non git repositories")
+	projectFixCmd.PersistentFlags().String("only", "", "Run only the specified tools (comma-separated, e.g. PHPStan, ESLint)")
+	projectFixCmd.PersistentFlags().Bool("allow-non-git", false, "Allow fixes in projects without a Git repository")
 }

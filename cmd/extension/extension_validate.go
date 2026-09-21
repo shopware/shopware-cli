@@ -18,7 +18,7 @@ import (
 
 var extensionValidateCmd = &cobra.Command{
 	Use:   "validate path",
-	Short: "Validate an extension",
+	Short: "Validate extension metadata, assets, and code quality",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		isFull, _ := cmd.Flags().GetBool("full")

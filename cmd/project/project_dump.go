@@ -22,7 +22,7 @@ const passwordFlagPrompt = "__INTERACTIVE__"
 
 var projectDatabaseDumpCmd = &cobra.Command{
 	Use:   "dump",
-	Short: "Dumps the Shopware database",
+	Short: "Export a Shopware project's database to SQL",
 	RunE: func(cmd *cobra.Command, _ []string) error {
 		mysqlConfig, err := assembleConnectionURI(cmd)
 		if err != nil {
@@ -132,15 +132,15 @@ func resolveDumpDatabaseConnection(cmd *cobra.Command) (*executor.DatabaseConnec
 
 func init() {
 	projectRootCmd.AddCommand(projectDatabaseDumpCmd)
-	projectDatabaseDumpCmd.Flags().String("host", "", "Hostname")
-	projectDatabaseDumpCmd.Flags().String("database", "", "Database name")
-	projectDatabaseDumpCmd.Flags().StringP("username", "u", "", "Mysql user")
-	projectDatabaseDumpCmd.Flags().StringP("password", "p", "", "Mysql password (omit value to be prompted interactively)")
+	projectDatabaseDumpCmd.Flags().String("host", "", "MySQL or MariaDB hostname")
+	projectDatabaseDumpCmd.Flags().String("database", "", "MySQL or MariaDB database name")
+	projectDatabaseDumpCmd.Flags().StringP("username", "u", "", "MySQL or MariaDB username")
+	projectDatabaseDumpCmd.Flags().StringP("password", "p", "", "MySQL or MariaDB password (omit the value to be prompted interactively)")
 	projectDatabaseDumpCmd.Flags().Lookup("password").NoOptDefVal = passwordFlagPrompt
-	projectDatabaseDumpCmd.Flags().String("port", "", "Mysql port")
+	projectDatabaseDumpCmd.Flags().String("port", "", "MySQL or MariaDB port")
 
 	projectDatabaseDumpCmd.Flags().String("output", "dump.sql", "File or - (for stdout)")
-	projectDatabaseDumpCmd.Flags().Bool("clean", false, "Ignores cart, messenger_messages, message_queue_stats,...")
+	projectDatabaseDumpCmd.Flags().Bool("clean", false, "Exclude data from transient tables (e.g. cart, messenger_messages, message_queue_stats, log_entry)")
 	projectDatabaseDumpCmd.Flags().Bool("skip-lock-tables", false, "Skips locking the tables")
 	projectDatabaseDumpCmd.Flags().Bool("anonymize", false, "Anonymize customer data")
 	projectDatabaseDumpCmd.Flags().String("compression", "", "Compress the dump (gzip, zstd)")

@@ -12,7 +12,7 @@ import (
 
 var projectExtensionDeleteCmd = &cobra.Command{
 	Use:   "delete [name]",
-	Short: "Delete a extension",
+	Short: "Delete an extension from a Shopware project",
 	Args:  cobra.MinimumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		projectRoot, err := shop.FindClosestShopwareProject(true)

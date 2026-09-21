@@ -6,7 +6,7 @@ import (
 
 var projectProxyDownCmd = &cobra.Command{
 	Use:   "down",
-	Short: "Deregister the current project from the shared proxy and stop it",
+	Short: "Stop routing and restore the current project's URL",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		env, err := newProxyEnvironment(cmd)
 		if err != nil {

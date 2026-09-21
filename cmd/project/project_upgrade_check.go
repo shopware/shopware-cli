@@ -26,7 +26,7 @@ import (
 
 var projectUpgradeCheckCmd = &cobra.Command{
 	Use:        "upgrade-check",
-	Short:      "Check that installed extensions are compatible with a future Shopware version",
+	Short:      "Check extension compatibility with a Shopware upgrade",
 	Deprecated: "Will be removed in October 2026",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		var shopwareVersion *version.Version

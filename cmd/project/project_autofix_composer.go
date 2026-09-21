@@ -13,7 +13,7 @@ import (
 
 var projectAutofixComposerCmd = &cobra.Command{
 	Use:   "composer-plugins",
-	Short: "Migrate extensions from custom/ to Composer management",
+	Short: "Move custom/ extensions into Composer management",
 	Long: "Migrates the extensions living in custom/ under Composer management: Shopware Store plugins are required from packages.shopware.com and their local copy removed, everything else is registered as a Composer path repository.\n" +
 		"In a terminal this runs as an interactive wizard. With --no-interaction (or without a terminal) the migration runs headless: set SHOPWARE_PACKAGIST_TOKEN to migrate Store plugins (otherwise everything becomes a path repository) and use --dry-run to preview the plan.",
 	RunE: func(cmd *cobra.Command, args []string) error {
@@ -47,5 +47,5 @@ var projectAutofixComposerCmd = &cobra.Command{
 
 func init() {
 	projectAutofixCmd.AddCommand(projectAutofixComposerCmd)
-	projectAutofixComposerCmd.Flags().Bool("dry-run", false, "Non-interactive mode: print the migration plan without modifying the project")
+	projectAutofixComposerCmd.Flags().Bool("dry-run", false, "In non-interactive mode, print the migration plan without modifying the project")
 }
