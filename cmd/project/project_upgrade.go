@@ -71,6 +71,6 @@ var projectUpgradeCmd = &cobra.Command{
 func init() {
 	projectRootCmd.AddCommand(projectUpgradeCmd)
 	projectUpgradeCmd.Flags().String("target", "", "Version to upgrade to (required with --no-interaction; also accepts 'recommended' or 'latest-patch')")
-	projectUpgradeCmd.Flags().Bool("dry-run", false, "Non-interactive mode: Run only the read-only preflight without modifying the project")
+	projectUpgradeCmd.Flags().Bool("dry-run", false, "In non-interactive mode, run only the read-only preflight without modifying the project")
 	projectUpgradeCmd.Flags().Bool("no-audit", false, "Continue when dependencies are blocked by known security advisories")
 }
