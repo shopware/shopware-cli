@@ -77,7 +77,7 @@ func resolveLocalDomainChoice(useDocker, wantLocalDomain, promptShown, machineSe
 
 var projectCreateCmd = &cobra.Command{
 	Use:   "create [name] [version]",
-	Short: "Create and install a Shopware 6 project with optional search, messaging, Git, CI/CD, and deployment setup",
+	Short: "Create and install a new Shopware 6 project",
 	Args:  cobra.MaximumNArgs(2),
 	ValidArgsFunction: func(cmd *cobra.Command, args []string, _ string) ([]string, cobra.ShellCompDirective) {
 		if len(args) == 0 {
@@ -234,7 +234,7 @@ func init() {
 	projectCreateCmd.PersistentFlags().Bool("without-elasticsearch", false, "Remove Elasticsearch from the installation")
 	_ = projectCreateCmd.PersistentFlags().MarkDeprecated("without-elasticsearch", "use --with-elasticsearch instead")
 	projectCreateCmd.PersistentFlags().Bool("with-amqp", false, "Add AMQP queue support via Symfony's Messenger component")
-	projectCreateCmd.PersistentFlags().Bool("no-audit", false, "Unblocks insecure Composer packages")
+	projectCreateCmd.PersistentFlags().Bool("no-audit", false, "Continue when dependencies are blocked by known security advisories")
 	projectCreateCmd.PersistentFlags().Bool("git", false, "Initialize a Git repository for a Shopware project")
 	projectCreateCmd.PersistentFlags().Bool("local-domain", false, "Serve the Shopware project at a stable local hostname (<name>.shopware.local) through the shared proxy instead of a port (requires Docker)")
 	projectCreateCmd.PersistentFlags().String("version", "", "Shopware version to install (e.g., 6.6.0.0, latest, or dev-trunk)")
