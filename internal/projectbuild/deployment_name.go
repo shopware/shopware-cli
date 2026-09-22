@@ -73,5 +73,5 @@ func availableDeploymentArchivePath(root string, generate func() (string, error)
 			return "", err
 		}
 	}
-	return "", fmt.Errorf("could not allocate a deployment name after %d attempts", deploymentNameAttempts)
+	return "", fmt.Errorf("could not generate a unique deployment name after %d attempts", deploymentNameAttempts)
 }
