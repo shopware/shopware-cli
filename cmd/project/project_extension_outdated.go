@@ -80,7 +80,7 @@ func projectExtensionOutdatedTable(extensions adminSdk.ExtensionList) *tui.Table
 
 func init() {
 	projectExtensionCmd.AddCommand(projectExtensionOutdatedCmd)
-	projectExtensionOutdatedCmd.Flags().String("format", string(tui.TableFormatTable), "Output format (table or JSON)")
+	projectExtensionOutdatedCmd.Flags().String("format", string(tui.TableFormatTable), "Output format (table or json)")
 	projectExtensionOutdatedCmd.Flags().Bool("json", false, "Output as JSON")
 	projectExtensionOutdatedCmd.MarkFlagsMutuallyExclusive("format", "json")
 	_ = projectExtensionOutdatedCmd.Flags().MarkDeprecated("json", "use --format json instead")

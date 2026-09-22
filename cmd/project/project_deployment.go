@@ -14,7 +14,7 @@ import (
 
 var projectDeploymentCmd = &cobra.Command{
 	Use:   "deployment",
-	Short: "Create immutable deployments and roll them out to environments",
+	Short: "Package a project into immutable deployment artifacts",
 	Long:  "Create immutable project deployments separately from rolling them out to an environment.",
 }
 
