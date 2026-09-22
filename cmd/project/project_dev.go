@@ -455,6 +455,6 @@ func init() {
 	projectDevCmd.AddCommand(projectDevStopCmd)
 	projectDevCmd.AddCommand(projectDevStatusCmd)
 
-	projectDevStopCmd.Flags().Bool("remove-data", false, "Removes the named volumes declared in the Compose file, deleting all data stored in them")
+	projectDevStopCmd.Flags().Bool("remove-data", false, "Remove the named volumes declared in the Compose file, deleting all data stored in them")
 	projectDevCmd.PersistentFlags().String("on-port-conflict", portConflictModeFail, "When host ports are occupied: fail or use random free ports (non-interactive mode; the dashboard prompts instead)")
 }
