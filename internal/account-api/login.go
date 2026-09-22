@@ -13,6 +13,7 @@ import (
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/clientcredentials"
 
+	"github.com/shopware/shopware-cli/internal/system"
 	"github.com/shopware/shopware-cli/logging"
 )
 
@@ -41,6 +42,10 @@ func NewApi(ctx context.Context) (*Client, error) {
 	if email != "" && password != "" {
 		logging.FromContext(ctx).Warnf("authentication with username/password is deprecated and will be removed in future. Please switch to OAuth2 client credentials, see https://developer.shopware.com/docs/products/cli/shopware-account-commands/authentication.html")
 		return loginWithCredentials(ctx, email, password)
+	}
+
+	if !system.IsInteractionEnabled(ctx) {
+		return nil, errors.New("not logged in and interaction is disabled: run \"shopware-cli account login\" in a terminal, or set SHOPWARE_CLI_ACCOUNT_CLIENT_ID and SHOPWARE_CLI_ACCOUNT_CLIENT_SECRET")
 	}
 
 	// Fall back to interactive OAuth2 login
