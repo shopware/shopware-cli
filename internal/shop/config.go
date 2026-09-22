@@ -490,6 +490,8 @@ type ConfigDeployment struct {
 		PreInstall ConfigDeploymentHook `yaml:"pre-install"`
 		// The post-install hook will be executed after the installation
 		PostInstall ConfigDeploymentHook `yaml:"post-install"`
+		// The post-extension-on-project-install hook will be executed after project extensions are installed
+		PostExtensionOnProjectInstall ConfigDeploymentHook `yaml:"post-extension-on-project-install"`
 		// The pre-update hook will be executed before the update
 		PreUpdate ConfigDeploymentHook `yaml:"pre-update"`
 		// The post-update hook will be executed after the update
