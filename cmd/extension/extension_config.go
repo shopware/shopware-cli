@@ -6,7 +6,7 @@ import (
 
 var extensionConfigCmd = &cobra.Command{
 	Use:   "config",
-	Short: "Manage the extension config",
+	Short: "Create extension config or print its schema",
 }
 
 func init() {

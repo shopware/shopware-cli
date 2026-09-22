@@ -8,7 +8,7 @@ import (
 
 var projectExtensionCmd = &cobra.Command{
 	Use:   "extension",
-	Short: "Manage the extensions of the Shopware shop",
+	Short: "Manage installed Shopware extensions",
 }
 
 func projectExtensionOutputFormat(formatName string, jsonAlias bool) (tui.TableFormat, error) {

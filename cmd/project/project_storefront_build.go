@@ -14,7 +14,7 @@ import (
 
 var projectStorefrontBuildCmd = &cobra.Command{
 	Use:     "storefront-build [path]",
-	Short:   "Builds the Storefront",
+	Short:   "Build and install Storefront assets",
 	Aliases: []string{"build-storefront"},
 	RunE: func(cmd *cobra.Command, args []string) error {
 		var projectRoot string
@@ -89,7 +89,7 @@ var projectStorefrontBuildCmd = &cobra.Command{
 
 func init() {
 	projectRootCmd.AddCommand(projectStorefrontBuildCmd)
-	projectStorefrontBuildCmd.PersistentFlags().Bool("skip-assets-install", false, "Skips the assets installation")
+	projectStorefrontBuildCmd.PersistentFlags().Bool("skip-assets-install", false, "Skip installing built assets")
 	projectStorefrontBuildCmd.PersistentFlags().Bool("skip-theme-compile", false, "Skip theme compilation")
 	projectStorefrontBuildCmd.PersistentFlags().Bool("force-install-dependencies", false, "Force install NPM dependencies")
 	projectStorefrontBuildCmd.PersistentFlags().String("only-extensions", "", "Only build the given extensions (comma separated)")

@@ -10,7 +10,7 @@ import (
 
 var projectDeploymentPackageCmd = &cobra.Command{
 	Use:   "package",
-	Short: "Build deployable project artifacts without rolling them out",
+	Short: "Create deployment archives and container build files",
 }
 
 func init() {

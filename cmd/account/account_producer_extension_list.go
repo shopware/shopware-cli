@@ -9,7 +9,7 @@ import (
 
 var accountCompanyProducerExtensionListCmd = &cobra.Command{
 	Use:   "list",
-	Short: "Lists all your extensions",
+	Short: "List your Extension Store plugins and apps",
 	RunE: func(cmd *cobra.Command, _ []string) error {
 		format, err := accountExtensionListFormat(listExtensionFormat, listExtensionJSON)
 		if err != nil {

@@ -17,7 +17,7 @@ import (
 var projectProxyTeardownCmd = &cobra.Command{
 	Use:          "teardown",
 	SilenceUsage: true,
-	Short:        "Deregister every project and stop the shared proxy and DNS server",
+	Short:        "Deregister every project and stop proxy services",
 	Long: `Runs "project proxy down" for every registered project (stopping it and
 restoring its previous URL), then stops the shared Traefik container and the
 shared DNS container. The one-time OS setup (DNS resolver, trusted CA) is kept.`,
@@ -106,5 +106,5 @@ func confirmTeardown(cmd *cobra.Command, reg proxy.Registry) (bool, error) {
 
 func init() {
 	projectProxyCmd.AddCommand(projectProxyTeardownCmd)
-	projectProxyTeardownCmd.Flags().Bool("force", false, "Tear down without asking for confirmation")
+	projectProxyTeardownCmd.Flags().Bool("force", false, "Tear down the shared proxy without confirmation")
 }

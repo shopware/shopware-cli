@@ -289,6 +289,9 @@
             "post-install": {
               "$ref": "#/$defs/ConfigDeploymentHook"
             },
+            "post-extension-on-project-install": {
+              "$ref": "#/$defs/ConfigDeploymentHook"
+            },
             "pre-update": {
               "$ref": "#/$defs/ConfigDeploymentHook"
             },

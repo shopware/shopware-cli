@@ -23,7 +23,7 @@ import (
 
 var projectStorefrontWatchCmd = &cobra.Command{
 	Use:     "storefront-watch [path]",
-	Short:   "Starts the Shopware Storefront Watcher",
+	Short:   "Watch Storefront assets and rebuild on change",
 	Aliases: []string{"watch-storefront"},
 	RunE: func(cmd *cobra.Command, args []string) error {
 		var projectRoot string

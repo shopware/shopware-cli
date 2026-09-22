@@ -12,7 +12,7 @@ import (
 
 var projectExtensionInstallCmd = &cobra.Command{
 	Use:   "install [name]",
-	Short: "Install a extension",
+	Short: "Install an extension in a Shopware project",
 	Args:  cobra.MinimumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		projectRoot, err := shop.FindClosestShopwareProject(true)
@@ -82,5 +82,5 @@ var projectExtensionInstallCmd = &cobra.Command{
 
 func init() {
 	projectExtensionCmd.AddCommand(projectExtensionInstallCmd)
-	projectExtensionInstallCmd.PersistentFlags().Bool("activate", false, "Activate the extension")
+	projectExtensionInstallCmd.PersistentFlags().Bool("activate", false, "Activate the extension after installing")
 }

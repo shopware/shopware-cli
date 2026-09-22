@@ -98,7 +98,7 @@ const (
 
 var projectDevCmd = &cobra.Command{
 	Use:   "dev",
-	Short: "Start the development environment",
+	Short: "Start a project's configured Shopware development environment",
 	Long:  "Start the development environment. Launches the interactive TUI dashboard when run in a terminal, or starts containers in the background otherwise.",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		projectRoot, err := shop.FindClosestShopwareProject(false)
@@ -146,7 +146,7 @@ var projectDevCmd = &cobra.Command{
 
 var projectDevStartCmd = &cobra.Command{
 	Use:   "start",
-	Short: "Start the development environment in the background",
+	Short: "Start the configured Shopware environment in the background",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		env, err := setupDevEnvironment(cmd)
 		if err != nil {
@@ -163,7 +163,7 @@ var projectDevStartCmd = &cobra.Command{
 
 var projectDevStopCmd = &cobra.Command{
 	Use:   "stop",
-	Short: "Stop the development environment",
+	Short: "Stop the configured Shopware environment",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		env, err := setupDevEnvironment(cmd)
 		if err != nil {
@@ -178,7 +178,7 @@ var projectDevStopCmd = &cobra.Command{
 
 var projectDevStatusCmd = &cobra.Command{
 	Use:          "status",
-	Short:        "Report whether the development environment is running",
+	Short:        "Show whether the Shopware development environment is running",
 	Long:         "Report whether the development environment is running. Exits with code 0 when it is up and code 1 when it is down.",
 	SilenceUsage: true,
 	RunE: func(cmd *cobra.Command, args []string) error {
@@ -459,6 +459,6 @@ func init() {
 	projectDevCmd.AddCommand(projectDevStopCmd)
 	projectDevCmd.AddCommand(projectDevStatusCmd)
 
-	projectDevStopCmd.Flags().Bool("remove-data", false, "Also remove the named volumes declared in the compose file, deleting all data stored in them")
-	projectDevCmd.PersistentFlags().String("on-port-conflict", portConflictModeFail, "What to do when host ports are already in use: fail or random. Applies when starting non-interactively; the dashboard asks instead.")
+	projectDevStopCmd.Flags().Bool("remove-data", false, "Remove the named volumes declared in the Compose file, deleting all data stored in them")
+	projectDevCmd.PersistentFlags().String("on-port-conflict", portConflictModeFail, "When host ports are occupied: fail or use random free ports (non-interactive mode; the dashboard prompts instead)")
 }

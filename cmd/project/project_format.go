@@ -13,7 +13,7 @@ import (
 
 var projectFormatCmd = &cobra.Command{
 	Use:   "format [path]",
-	Short: "Format project",
+	Short: "Run configured formatters on project files",
 	Args:  cobra.MaximumNArgs(1),
 	PreRunE: func(cmd *cobra.Command, args []string) error {
 		return verifier.SetupTools(cmd.Context(), cmd.Root().Version)
@@ -66,6 +66,6 @@ var projectFormatCmd = &cobra.Command{
 
 func init() {
 	projectRootCmd.AddCommand(projectFormatCmd)
-	projectFormatCmd.PersistentFlags().String("only", "", "Run only specific tools by name (comma-separated, e.g. phpstan,eslint)")
-	projectFormatCmd.PersistentFlags().Bool("dry-run", false, "Run tools in dry run mode")
+	projectFormatCmd.PersistentFlags().String("only", "", "Run only the specified tools (comma-separated, e.g. phpstan,eslint)")
+	projectFormatCmd.PersistentFlags().Bool("dry-run", false, "Run formatters without changing files")
 }

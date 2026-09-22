@@ -12,7 +12,7 @@ import (
 
 var accountCompanyProducerExtensionUploadCmd = &cobra.Command{
 	Use:   "upload [zip]",
-	Short: "Uploads a new extension version",
+	Short: "Upload an extension version to the Shopware Extension Store",
 	Args:  cobra.MinimumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		path, err := filepath.Abs(args[0])
@@ -40,5 +40,5 @@ var skipWaitingForCodereviewResult bool
 
 func init() {
 	accountCompanyProducerExtensionCmd.AddCommand(accountCompanyProducerExtensionUploadCmd)
-	accountCompanyProducerExtensionUploadCmd.Flags().BoolVar(&skipWaitingForCodereviewResult, "skip-for-review-result", false, "Skips waiting for Code review result")
+	accountCompanyProducerExtensionUploadCmd.Flags().BoolVar(&skipWaitingForCodereviewResult, "skip-for-review-result", false, "Skip waiting for the code review result")
 }

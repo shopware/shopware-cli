@@ -331,9 +331,9 @@ If a file is not found locally, it proxies the request to the upstream server.`,
 
 func init() {
 	projectRootCmd.AddCommand(projectImageProxyCmd)
-	projectImageProxyCmd.Flags().StringVar(&imageProxyPort, "port", "8080", "Port to listen on")
-	projectImageProxyCmd.Flags().StringVar(&imageProxyURL, "url", "", "Upstream server URL (overrides config)")
-	projectImageProxyCmd.Flags().BoolVar(&imageProxyClear, "clear", false, "Clear cache before starting")
-	projectImageProxyCmd.Flags().StringVar(&imageProxyExternalURL, "external-url", "", "External URL for Shopware config (e.g., for reverse proxy setups)")
-	projectImageProxyCmd.Flags().BoolVar(&imageProxySkipConfig, "skip-config", false, "Skip creating Shopware config file")
+	projectImageProxyCmd.Flags().StringVar(&imageProxyPort, "port", "8080", "Port for the image proxy server to listen on")
+	projectImageProxyCmd.Flags().StringVar(&imageProxyURL, "url", "", "Upstream server URL (overrides project config)")
+	projectImageProxyCmd.Flags().BoolVar(&imageProxyClear, "clear", false, "Clear the image proxy cache before starting the server")
+	projectImageProxyCmd.Flags().StringVar(&imageProxyExternalURL, "external-url", "", "Public image proxy URL for Shopware config (e.g. for a reverse proxy setup)")
+	projectImageProxyCmd.Flags().BoolVar(&imageProxySkipConfig, "skip-config", false, "Skip creating the Shopware image-proxy config file")
 }

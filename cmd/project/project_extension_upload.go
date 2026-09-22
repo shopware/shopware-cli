@@ -25,7 +25,7 @@ import (
 
 var projectExtensionUploadCmd = &cobra.Command{
 	Use:   "upload [path]",
-	Short: "Upload local extension to external shop",
+	Short: "Upload a local extension to a Shopware project",
 	Args:  cobra.MinimumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		adminCtx := adminSdk.NewApiContext(cmd.Context())
@@ -349,6 +349,6 @@ func increaseExtensionVersion(ctx context.Context, ext extension.Extension) erro
 
 func init() {
 	projectExtensionCmd.AddCommand(projectExtensionUploadCmd)
-	projectExtensionUploadCmd.PersistentFlags().Bool("activate", false, "Installs, Activates, Updates the extension")
-	projectExtensionUploadCmd.PersistentFlags().Bool("increase-version", false, "Increases extension version before uploading")
+	projectExtensionUploadCmd.PersistentFlags().Bool("activate", false, "Install, activate, or update the extension after uploading, as needed")
+	projectExtensionUploadCmd.PersistentFlags().Bool("increase-version", false, "Increase the extension's patch version before uploading")
 }

@@ -26,7 +26,7 @@ var (
 
 var extensionPackageCmd = &cobra.Command{
 	Use:     "package path [branch]",
-	Short:   "Package an extension",
+	Short:   "Build a distributable extension ZIP",
 	Aliases: []string{"zip"},
 	Args:    cobra.RangeArgs(1, 2),
 	RunE: func(cmd *cobra.Command, args []string) error {

@@ -15,7 +15,7 @@ import (
 
 var projectDoctor = &cobra.Command{
 	Use:   "doctor",
-	Short: "Check your Shopware project for potential problems",
+	Short: "Inspect project config, Shopware version, and extensions",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		var err error
 		var projectDir string

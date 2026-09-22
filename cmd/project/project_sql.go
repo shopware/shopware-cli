@@ -18,7 +18,7 @@ import (
 
 var projectSQLCmd = &cobra.Command{
 	Use:   "sql [query]",
-	Short: "Run SQL queries against the project database",
+	Short: "Run SQL queries against a project's database",
 	Long: "Connects to the project database using the connection details of the current environment (local, docker, ...), " +
 		"so you don't need to know the host or credentials. " +
 		"Without arguments an interactive SQL shell is opened; a query can be passed as argument, loaded with --file, or a script piped via stdin.",
@@ -130,6 +130,6 @@ func isTerminalStream(stream any) bool {
 
 func init() {
 	projectRootCmd.AddCommand(projectSQLCmd)
-	projectSQLCmd.Flags().String("format", "", "Output format: table, tsv, json (default: table when stdout is a terminal, tsv otherwise)")
+	projectSQLCmd.Flags().String("format", "", "Output format: table, tsv, or json (default: table when stdout is a terminal, tsv otherwise)")
 	projectSQLCmd.Flags().String("file", "", "Path to a SQL file to execute (instead of a query argument or stdin)")
 }

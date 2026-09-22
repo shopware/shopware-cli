@@ -9,11 +9,11 @@ var (
 	environmentName   string
 )
 
-const environmentFlagUsage = "Environment to target (defaults to environments.local; deprecated top-level url/admin_api is used when environments.local is absent)"
+const environmentFlagUsage = "Select the environment to target (defaults to environments.local; falls back to deprecated top-level url/admin_api if absent)"
 
 var projectRootCmd = &cobra.Command{
 	Use:   "project",
-	Short: "Manage your Shopware Project",
+	Short: "Create, develop, build, validate, and deploy Shopware projects",
 }
 
 func Register(rootCmd *cobra.Command) {

@@ -13,7 +13,7 @@ import (
 
 var extensionChangelogCmd = &cobra.Command{
 	Use:   "get-changelog path",
-	Short: "Get the changelog",
+	Short: "Print an extension's current-version changelog",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		path, err := filepath.Abs(args[0])
