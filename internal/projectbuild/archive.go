@@ -2,7 +2,6 @@ package projectbuild
 
 import (
 	"context"
-	"crypto/rand"
 	"errors"
 	"fmt"
 	"io"
@@ -55,7 +54,10 @@ func packageArchive(ctx context.Context, root string, cfg *shop.Config, opts Arc
 	}
 	output := opts.OutputPath
 	if output == "" {
-		output = filepath.Join(root, ".shopware-cli", "deployments", "shopware-"+rand.Text()+".tar.gz")
+		output, err = availableDeploymentArchivePath(root, randomDeploymentName)
+		if err != nil {
+			return "", err
+		}
 	}
 	output, err = filepath.Abs(output)
 	if err != nil {

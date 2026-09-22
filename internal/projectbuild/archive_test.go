@@ -9,6 +9,8 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"slices"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -93,6 +95,11 @@ func TestPackageArchiveUsesTemporaryCopy(t *testing.T) {
 	realRoot, err := filepath.EvalSymlinks(root)
 	require.NoError(t, err)
 	assert.Equal(t, filepath.Join(realRoot, ".shopware-cli", "deployments"), filepath.Dir(reference))
+	name := strings.TrimSuffix(filepath.Base(reference), ".tar.gz")
+	parts := strings.Split(name, "-")
+	require.Len(t, parts, 2)
+	assert.True(t, slices.Contains(deploymentAdjectives, parts[0]))
+	assert.True(t, slices.Contains(deploymentPioneers, parts[1]))
 	contents := readArchive(t, reference)
 	assert.Equal(t, "built", contents["built.txt"])
 	assert.Equal(t, "assets", contents["public/bundles/app.js"])
