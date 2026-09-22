@@ -17,7 +17,7 @@ type githubActionsSection struct {
 }
 
 func (g *githubActions) Section(name string) Section {
-	fmt.Fprintf(g.output, "::group::%s\n", name) //nolint:errcheck // log formatting is best-effort
+	_, _ = fmt.Fprintf(g.output, "::group::%s\n", name) // log formatting is best-effort
 	return githubActionsSection{
 		name:   name,
 		start:  time.Now(),
