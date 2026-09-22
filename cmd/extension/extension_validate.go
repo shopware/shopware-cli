@@ -18,7 +18,7 @@ import (
 
 var extensionValidateCmd = &cobra.Command{
 	Use:   "validate path",
-	Short: "Validate an extension",
+	Short: "Validate extension metadata, assets, and code quality",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		isFull, _ := cmd.Flags().GetBool("full")
@@ -154,7 +154,7 @@ func extensionValidationFormat(cmd *cobra.Command) (string, error) {
 func init() {
 	extensionRootCmd.AddCommand(extensionValidateCmd)
 	extensionValidateCmd.PersistentFlags().Bool("full", false, "Run full validation including PHPStan, ESLint and Stylelint")
-	extensionValidateCmd.PersistentFlags().Bool("store-compliance", false, "Runs specific store compliance checks")
+	extensionValidateCmd.PersistentFlags().Bool("store-compliance", false, "Run the Extension Store compliance checks")
 	extensionValidateCmd.PersistentFlags().String("format", "", "Reporting format (summary, json, github, gitlab, junit, markdown)")
 	extensionValidateCmd.PersistentFlags().String("reporter", "", "Reporting format (summary, json, github, gitlab, junit, markdown)")
 	extensionValidateCmd.PersistentFlags().String("check-against", "highest", "Check against Shopware Version (highest, lowest)")

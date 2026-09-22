@@ -12,7 +12,7 @@ import (
 
 var projectExtensionActivateCmd = &cobra.Command{
 	Use:   "activate [name]",
-	Short: "Activate a extension",
+	Short: "Activate an installed extension",
 	Args:  cobra.MinimumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		projectRoot, err := shop.FindClosestShopwareProject(true)

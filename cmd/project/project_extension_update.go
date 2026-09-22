@@ -12,7 +12,7 @@ import (
 
 var projectExtensionUpdateCmd = &cobra.Command{
 	Use:   "update [name]",
-	Short: "Update a extension",
+	Short: "Update an installed extension",
 	Args:  cobra.MinimumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		projectRoot, err := shop.FindClosestShopwareProject(true)
@@ -97,5 +97,5 @@ var projectExtensionUpdateCmd = &cobra.Command{
 
 func init() {
 	projectExtensionCmd.AddCommand(projectExtensionUpdateCmd)
-	projectExtensionUpdateCmd.PersistentFlags().Bool("disable-store-update", false, "Downloads updates from store.shopware.com")
+	projectExtensionUpdateCmd.PersistentFlags().Bool("disable-store-update", false, "Disable downloading updates from store.shopware.com")
 }

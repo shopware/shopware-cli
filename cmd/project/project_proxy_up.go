@@ -6,7 +6,7 @@ import (
 
 var projectProxyUpCmd = &cobra.Command{
 	Use:   "up",
-	Short: "Register the current project with the shared proxy and start it",
+	Short: "Route the current project through the shared proxy",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		env, err := newProxyEnvironment(cmd)
 		if err != nil {

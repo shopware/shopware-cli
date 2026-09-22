@@ -54,7 +54,7 @@ var (
 
 var extensionAdminWatchCmd = &cobra.Command{
 	Use:   "admin-watch path... host",
-	Short: "Extremely fast ESBuild powered Shopware 6 Administration watcher",
+	Short: "Watch extension Administration assets with live reload",
 	Args:  cobra.MinimumNArgs(2),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		var sources []asset.Source

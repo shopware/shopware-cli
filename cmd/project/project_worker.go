@@ -19,7 +19,7 @@ import (
 
 var projectWorkerCmd = &cobra.Command{
 	Use:   "worker [amount | queue-spec]",
-	Short: "Run multiple Symfony worker in background.",
+	Short: "Start and supervise Symfony Messenger consumers concurrently",
 	Long: `Run multiple Symfony messenger consumers in background.
 
 The first argument is either a worker amount (e.g. "5") or a queue spec
@@ -112,12 +112,12 @@ queue. The count per queue is optional and defaults to 1.`,
 
 func init() {
 	projectRootCmd.AddCommand(projectWorkerCmd)
-	projectWorkerCmd.PersistentFlags().Bool("verbose", false, "Enable verbose output")
-	projectWorkerCmd.PersistentFlags().String("queue", "", "Queues to consume")
-	projectWorkerCmd.PersistentFlags().String("memory-limit", "", "Memory Limit")
-	projectWorkerCmd.PersistentFlags().String("time-limit", "", "Time Limit")
-	projectWorkerCmd.PersistentFlags().Uint("graceful-stop-limit", 0, "Graceful Stop Limit")
-	projectWorkerCmd.PersistentFlags().Uint("limit", 0, "Messages Limit")
+	projectWorkerCmd.PersistentFlags().Bool("verbose", false, "Enable verbose worker output")
+	projectWorkerCmd.PersistentFlags().String("queue", "", "Queues to consume (comma-separated)")
+	projectWorkerCmd.PersistentFlags().String("memory-limit", "", "Worker memory limit (default: 512M)")
+	projectWorkerCmd.PersistentFlags().String("time-limit", "", "Worker time limit in seconds (default: 120)")
+	projectWorkerCmd.PersistentFlags().Uint("graceful-stop-limit", 0, "Seconds to wait for workers to stop gracefully (0 = force-stop immediately)")
+	projectWorkerCmd.PersistentFlags().Uint("limit", 0, "Maximum messages per worker (0 = unlimited)")
 }
 
 func cancelOnTermination(ctx context.Context, cancel context.CancelFunc) {

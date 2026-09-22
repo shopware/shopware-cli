@@ -13,7 +13,7 @@ import (
 
 var projectDeploymentPackageContainerCmd = &cobra.Command{
 	Use:   "container [project-directory]",
-	Short: "Generate container build files and print the Docker build command",
+	Short: "Generate Docker build files and print the build command",
 	Long: `Write a standalone Dockerfile and .dockerignore into the project root for
 committing and building manually, then print a docker buildx build command.
 The Dockerfile builds with the Shopware CLI image and uses the Shopware
@@ -76,12 +76,12 @@ Generated file paths go to stderr; stdout contains the command to run.`,
 
 func init() {
 	projectDeploymentPackageCmd.AddCommand(projectDeploymentPackageContainerCmd)
-	projectDeploymentPackageContainerCmd.Flags().String("php-version", "", "PHP image version (default: project PHP/Docker config, composer.lock, then 8.3)")
-	projectDeploymentPackageContainerCmd.Flags().StringArrayP("tag", "t", nil, "Image name and optional tag (repeatable)")
-	projectDeploymentPackageContainerCmd.Flags().String("platform", "", "Target Docker platform, e.g. linux/amd64")
-	projectDeploymentPackageContainerCmd.Flags().Bool("load", false, "Include --load in the printed Docker command")
-	projectDeploymentPackageContainerCmd.Flags().Bool("push", false, "Include --push in the printed Docker command")
-	projectDeploymentPackageContainerCmd.Flags().Bool("with-dev-dependencies", false, "Install dev dependencies")
+	projectDeploymentPackageContainerCmd.Flags().String("php-version", "", "PHP version for the image (auto-detected from project configuration and composer.lock)")
+	projectDeploymentPackageContainerCmd.Flags().StringArrayP("tag", "t", nil, "Docker image name and optional tag (repeatable)")
+	projectDeploymentPackageContainerCmd.Flags().String("platform", "", "Target Docker platform (e.g. linux/amd64)")
+	projectDeploymentPackageContainerCmd.Flags().Bool("load", false, "Add --load to the printed Docker command")
+	projectDeploymentPackageContainerCmd.Flags().Bool("push", false, "Add --push to the printed Docker command")
+	projectDeploymentPackageContainerCmd.Flags().Bool("with-dev-dependencies", false, "Include development dependencies in the container build")
 	_ = projectDeploymentPackageContainerCmd.RegisterFlagCompletionFunc("php-version", func(*cobra.Command, []string, string) ([]string, cobra.ShellCompDirective) {
 		return shop.SupportedPHPVersions, cobra.ShellCompDirectiveNoFileComp
 	})

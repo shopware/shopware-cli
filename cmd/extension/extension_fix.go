@@ -16,7 +16,7 @@ import (
 
 var extensionFixCmd = &cobra.Command{
 	Use:   "fix path",
-	Short: "Fix an extension",
+	Short: "Apply code-quality fixes to an extension",
 	Args:  cobra.ExactArgs(1),
 	PreRunE: func(cmd *cobra.Command, args []string) error {
 		return verifier.SetupTools(cmd.Context(), cmd.Root().Version)

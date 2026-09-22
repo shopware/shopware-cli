@@ -18,7 +18,7 @@ import (
 
 var projectCI = &cobra.Command{
 	Use:   "ci",
-	Short: "Build Shopware in the CI",
+	Short: "Create a production build of a Shopware project",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		root, err := filepath.Abs(args[0])
@@ -55,8 +55,8 @@ var projectCI = &cobra.Command{
 
 func init() {
 	projectRootCmd.AddCommand(projectCI)
-	projectCI.PersistentFlags().Bool("with-dev-dependencies", false, "Install dev dependencies")
-	projectCI.PersistentFlags().Bool("force", false, "Run project ci outside CI even when the git working tree has local changes")
+	projectCI.PersistentFlags().Bool("with-dev-dependencies", false, "Include development dependencies in the build")
+	projectCI.PersistentFlags().Bool("force", false, "Force the CI build despite uncommitted changes")
 }
 
 func projectCISafetyCheck(ctx context.Context, root string, force bool, getenv func(string) string) error {

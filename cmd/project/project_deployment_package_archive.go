@@ -14,7 +14,7 @@ import (
 
 var projectDeploymentPackageArchiveCmd = &cobra.Command{
 	Use:   "archive [project-directory]",
-	Short: "Build a deployment archive in a temporary copy of the project",
+	Short: "Build a deployable tar.gz archive without modifying the source",
 	Long: `Run the project CI build pipeline in a temporary copy and package the result
 as tar.gz. Without a directory, find the closest Shopware project.
 
@@ -71,6 +71,6 @@ the build finishes. Nothing is uploaded or rolled out.`,
 
 func init() {
 	projectDeploymentPackageCmd.AddCommand(projectDeploymentPackageArchiveCmd)
-	projectDeploymentPackageArchiveCmd.Flags().StringP("output", "o", "", "Archive path (default: .shopware-cli/deployments/shopware-<unique-id>.tar.gz in the project)")
-	projectDeploymentPackageArchiveCmd.Flags().Bool("with-dev-dependencies", false, "Install dev dependencies")
+	projectDeploymentPackageArchiveCmd.Flags().StringP("output", "o", "", "Output archive path (default: .shopware-cli/deployments/shopware-<unique-id>.tar.gz in the project)")
+	projectDeploymentPackageArchiveCmd.Flags().Bool("with-dev-dependencies", false, "Include development dependencies in the archive")
 }

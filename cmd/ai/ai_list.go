@@ -26,7 +26,7 @@ type listItem struct {
 var aiListCmd = &cobra.Command{
 	Use:          "list",
 	Aliases:      []string{"ls"},
-	Short:        "List known Shopware AI integrations",
+	Short:        "List available Shopware AI integrations",
 	Args:         cobra.NoArgs,
 	SilenceUsage: true,
 	RunE: func(cmd *cobra.Command, _ []string) error {

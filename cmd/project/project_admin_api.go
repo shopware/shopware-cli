@@ -17,7 +17,7 @@ var skipDefaultHeaders bool
 
 var projectAdminApiCmd = &cobra.Command{
 	Use:   "admin-api [method] [path]",
-	Short: "Pre-authenticated curl interface to the Admin API",
+	Short: "Run authenticated curl requests against the Shopware Admin API",
 	RunE: func(cobraCmd *cobra.Command, args []string) error {
 		projectRoot, err := shop.FindClosestShopwareProject(true)
 		if err != nil {
@@ -96,13 +96,13 @@ func parsePath(inputPath string) (*url.URL, error) {
 }
 
 func init() {
-	projectAdminApiCmd.PersistentFlags().Bool("output-token", false, "Output only token")
+	projectAdminApiCmd.PersistentFlags().Bool("output-token", false, "Output only the Admin API token")
 	projectAdminApiCmd.PersistentFlags().BoolVarP(
 		&skipDefaultHeaders,
 		"no-default-headers",
 		"",
 		false,
-		"skips setting the content-type and accept headers",
+		"Skip setting the default Content-Type and Accept headers",
 	)
 	projectRootCmd.AddCommand(projectAdminApiCmd)
 }
