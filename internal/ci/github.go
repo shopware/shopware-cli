@@ -1,32 +1,31 @@
 package ci
 
 import (
-	"context"
 	"fmt"
+	"io"
 	"time"
-
-	"github.com/shopware/shopware-cli/logging"
 )
 
-// GithubActions implements CiHelper for GitHub Actions.
-type GithubActions struct{}
-
-type GithubActionsSection struct {
-	name  string
-	start time.Time
+type githubActions struct {
+	output io.Writer
 }
 
-// SectionStart starts a new log section.
-func (g *GithubActions) Section(ctx context.Context, name string) Section {
-	fmt.Printf("::group::%s\n", name)
-	return GithubActionsSection{
-		name:  name,
-		start: time.Now(),
+type githubActionsSection struct {
+	name   string
+	start  time.Time
+	output io.Writer
+}
+
+func (g *githubActions) Section(name string) Section {
+	fmt.Fprintf(g.output, "::group::%s\n", name) //nolint:errcheck // log formatting is best-effort
+	return githubActionsSection{
+		name:   name,
+		start:  time.Now(),
+		output: g.output,
 	}
 }
 
-func (s GithubActionsSection) End(ctx context.Context) {
-	duration := time.Since(s.start)
-	logging.FromContext(ctx).Infof("%s took %s", s.name, duration)
-	fmt.Printf("::endgroup::\n")
+func (s githubActionsSection) End() {
+	fmt.Fprintf(s.output, "%s finished in %s\n", s.name, time.Since(s.start).Round(time.Millisecond)) //nolint:errcheck // log formatting is best-effort
+	fmt.Fprintln(s.output, "::endgroup::")                                                            //nolint:errcheck // log formatting is best-effort
 }

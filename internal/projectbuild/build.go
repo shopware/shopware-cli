@@ -123,8 +123,8 @@ func run(ctx context.Context, root string, shopCfg *shop.Config, cmdExecutor exe
 }
 
 func composerInstall(ctx context.Context, cmdExecutor executor.Executor, token string, flags []string) error {
-	section := ci.Default.Section(ctx, "Composer Installation")
-	defer section.End(ctx)
+	section := ci.Start("Composer Installation")
+	defer section.End()
 	composer := cmdExecutor.WithEnv(map[string]string{"COMPOSER_AUTH": token}).ComposerCommand(ctx, flags...)
 	composer.Cmd.Stdin = os.Stdin
 	composer.Cmd.Stdout = os.Stdout
@@ -133,8 +133,8 @@ func composerInstall(ctx context.Context, cmdExecutor executor.Executor, token s
 }
 
 func findAssetSources(ctx context.Context, root string, shopCfg *shop.Config) ([]asset.Source, *version.Constraints, error) {
-	section := ci.Default.Section(ctx, "Looking for extensions")
-	defer section.End(ctx)
+	section := ci.Start("Looking for extensions")
+	defer section.End()
 	sources := extension.FindAssetSourcesOfProject(ctx, root, shopCfg)
 	shopwareConstraint, err := extension.GetShopwareProjectConstraint(root)
 	if err != nil {
@@ -180,8 +180,8 @@ func buildAssets(ctx context.Context, root string, shopCfg *shop.Config, cmdExec
 }
 
 func optimizeAssets(ctx context.Context, root string, shopCfg *shop.Config, sources []asset.Source) error {
-	optimizeSection := ci.Default.Section(ctx, "Optimizing Administration Assets")
-	defer optimizeSection.End(ctx)
+	optimizeSection := ci.Start("Optimizing Administration Assets")
+	defer optimizeSection.End()
 	if err := extension.CleanupAdministrationFiles(ctx, path.Join(root, "vendor", "shopware", "administration")); err != nil {
 		return err
 	}
@@ -218,8 +218,8 @@ func optimizeAssets(ctx context.Context, root string, shopCfg *shop.Config, sour
 }
 
 func warmup(ctx context.Context, root string, shopCfg *shop.Config, cmdExecutor executor.Executor) error {
-	warmupSection := ci.Default.Section(ctx, "Warming up container cache")
-	defer warmupSection.End(ctx)
+	warmupSection := ci.Start("Warming up container cache")
+	defer warmupSection.End()
 	if err := RunCommand(binCICommand(ctx, cmdExecutor, "--version")); err != nil {
 		return fmt.Errorf("failed to warmup container cache (php bin/ci --version): %w", err)
 	}
@@ -244,7 +244,7 @@ func finalize(ctx context.Context, root string, shopCfg *shop.Config, sources []
 		compileMJML(ctx, root, shopCfg)
 	}
 	if shopCfg.Build.RemoveExtensionAssets {
-		if err := removeExtensionAssets(ctx, root, sources); err != nil {
+		if err := removeExtensionAssets(root, sources); err != nil {
 			return err
 		}
 	}
@@ -255,8 +255,8 @@ func finalize(ctx context.Context, root string, shopCfg *shop.Config, sources []
 }
 
 func compileMJML(ctx context.Context, root string, shopCfg *shop.Config) {
-	section := ci.Default.Section(ctx, "Compiling MJML templates")
-	defer section.End(ctx)
+	section := ci.Start("Compiling MJML templates")
+	defer section.End()
 	extraIncludePaths := shopCfg.Build.MJML.ResolveIncludePaths(root)
 	for _, searchPath := range shopCfg.Build.MJML.GetPaths(root) {
 		if _, err := os.Stat(searchPath); !os.IsNotExist(err) {
@@ -271,9 +271,9 @@ func compileMJML(ctx context.Context, root string, shopCfg *shop.Config) {
 	}
 }
 
-func removeExtensionAssets(ctx context.Context, root string, sources []asset.Source) error {
-	section := ci.Default.Section(ctx, "Deleting assets of extensions")
-	defer section.End(ctx)
+func removeExtensionAssets(root string, sources []asset.Source) error {
+	section := ci.Start("Deleting assets of extensions")
+	defer section.End()
 	for _, source := range sources {
 		if _, err := os.Stat(path.Join(source.Path, "Resources", "public", "administration", "css")); err == nil {
 			if err := os.WriteFile(path.Join(source.Path, "Resources", ".administration-css"), []byte{}, 0o644); err != nil {
@@ -299,8 +299,8 @@ func removeExtensionAssets(ctx context.Context, root string, sources []asset.Sou
 }
 
 func generateChecksums(ctx context.Context, root string, shopCfg *shop.Config) {
-	section := ci.Default.Section(ctx, "Generating extension checksums")
-	defer section.End(ctx)
+	section := ci.Start("Generating extension checksums")
+	defer section.End()
 	for _, ext := range extension.FindExtensionsFromProject(ctx, root, false) {
 		extPath := ext.GetPath()
 		if shopCfg.Build.KeepExistingChecksums {

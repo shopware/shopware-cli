@@ -1,42 +1,41 @@
 package ci
 
 import (
-	"context"
 	"fmt"
+	"io"
 	"regexp"
 	"strings"
 	"time"
-
-	"github.com/shopware/shopware-cli/logging"
 )
 
 var gitlabSectionRegex = regexp.MustCompile(`[^a-zA-Z0-9_-]+`)
 
-// GitlabCi implements CiHelper for GitLab CI.
-type GitlabCi struct{}
+type gitlabCI struct {
+	output io.Writer
+}
 
-type GitlabCiSection struct {
-	name  string
-	start time.Time
+type gitlabCISection struct {
+	name   string
+	start  time.Time
+	output io.Writer
 }
 
 func gitlabSectionId(name string) string {
 	return gitlabSectionRegex.ReplaceAllString(strings.ToLower(name), "_")
 }
 
-// SectionStart starts a new log section.
-func (g *GitlabCi) Section(ctx context.Context, name string) Section {
+func (g *gitlabCI) Section(name string) Section {
 	sectionId := gitlabSectionId(name)
-	fmt.Printf("section_start:%d:%s\r\x1b[0K%s\n", time.Now().Unix(), sectionId, name)
-	return GitlabCiSection{
-		name:  name,
-		start: time.Now(),
+	fmt.Fprintf(g.output, "section_start:%d:%s\r\x1b[0K%s\n", time.Now().Unix(), sectionId, name) //nolint:errcheck // log formatting is best-effort
+	return gitlabCISection{
+		name:   name,
+		start:  time.Now(),
+		output: g.output,
 	}
 }
 
-// SectionEnd ends the current log section.
-func (g GitlabCiSection) End(ctx context.Context) {
+func (g gitlabCISection) End() {
 	sectionId := gitlabSectionId(g.name)
-	logging.FromContext(ctx).Infof("%s took %s", g.name, time.Since(g.start))
-	fmt.Printf("section_end:%d:%s\r\x1b[0K\n", time.Now().Unix(), sectionId)
+	fmt.Fprintf(g.output, "%s finished in %s\n", g.name, time.Since(g.start).Round(time.Millisecond)) //nolint:errcheck // log formatting is best-effort
+	fmt.Fprintf(g.output, "section_end:%d:%s\r\x1b[0K\n", time.Now().Unix(), sectionId)               //nolint:errcheck // log formatting is best-effort
 }
