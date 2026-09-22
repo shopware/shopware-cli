@@ -1,10 +1,9 @@
 package projectbuild
 
 import (
-	"crypto/rand"
 	"errors"
 	"fmt"
-	"math/big"
+	"math/rand/v2"
 	"os"
 	"path/filepath"
 )
@@ -40,7 +39,11 @@ var deploymentPioneers = []string{
 }
 
 func randomDeploymentName() (string, error) {
-	adjective, err := randomDeploymentWord(deploymentAdjectives)
+	firstAdjective, err := randomDeploymentWord(deploymentAdjectives)
+	if err != nil {
+		return "", err
+	}
+	secondAdjective, err := randomDeploymentWord(deploymentAdjectives)
 	if err != nil {
 		return "", err
 	}
@@ -48,11 +51,11 @@ func randomDeploymentName() (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return adjective + "-" + pioneer, nil
+	return firstAdjective + "-" + secondAdjective + "-" + pioneer, nil
 }
 
 func randomDeploymentWord(words []string) (string, error) {
-	return words[rand.Intn(len(words))]
+	return words[rand.IntN(len(words))], nil
 }
 
 func availableDeploymentArchivePath(root string, generate func() (string, error)) (string, error) {

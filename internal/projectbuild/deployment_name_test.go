@@ -18,16 +18,17 @@ func TestRandomDeploymentName(t *testing.T) {
 		name, err := randomDeploymentName()
 		require.NoError(t, err)
 		parts := strings.Split(name, "-")
-		require.Len(t, parts, 2)
+		require.Len(t, parts, 3)
 		assert.True(t, slices.Contains(deploymentAdjectives, parts[0]))
-		assert.True(t, slices.Contains(deploymentPioneers, parts[1]))
+		assert.True(t, slices.Contains(deploymentAdjectives, parts[1]))
+		assert.True(t, slices.Contains(deploymentPioneers, parts[2]))
 	}
 }
 
 func TestAvailableDeploymentArchivePathSkipsExistingNames(t *testing.T) {
 	root := t.TempDir()
-	testhelper.WriteFile(t, filepath.Join(root, ".shopware-cli/deployments/focused-turing.tar.gz"), "existing")
-	names := []string{"focused-turing", "clever-hopper"}
+	testhelper.WriteFile(t, filepath.Join(root, ".shopware-cli/deployments/focused-wise-turing.tar.gz"), "existing")
+	names := []string{"focused-wise-turing", "clever-bright-hopper"}
 
 	path, err := availableDeploymentArchivePath(root, func() (string, error) {
 		name := names[0]
@@ -36,7 +37,7 @@ func TestAvailableDeploymentArchivePathSkipsExistingNames(t *testing.T) {
 	})
 
 	require.NoError(t, err)
-	assert.Equal(t, filepath.Join(root, ".shopware-cli/deployments/clever-hopper.tar.gz"), path)
+	assert.Equal(t, filepath.Join(root, ".shopware-cli/deployments/clever-bright-hopper.tar.gz"), path)
 }
 
 func TestAvailableDeploymentArchivePathPropagatesGeneratorError(t *testing.T) {

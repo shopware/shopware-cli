@@ -23,7 +23,7 @@ runtime data, and Composer credentials are not included in the archive. The
 packaged project config contains only deployment settings. Build hooks still run
 as trusted project code; this is not a sandbox.
 
-By default, create a uniquely named archive such as focused-turing.tar.gz in the
+By default, create a uniquely named archive such as focused-wise-turing.tar.gz in the
 project's .shopware-cli/deployments directory. Use --output for an explicit path
 relative to the current directory. Existing artifacts are never overwritten.
 The created archive path is reported after the build finishes. Nothing is uploaded or rolled out.`,
