@@ -50,7 +50,7 @@ func ValidateDeploymentMethod(deploymentMethod string) error {
 	case DeploymentNone, DeploymentContainer, DeploymentDeployer, DeploymentPlatformSH, DeploymentShopwarePaaS:
 		return nil
 	default:
-		return fmt.Errorf("invalid deployment method: %s. Valid options: none, container, deployer, platformsh, shopware-paas", deploymentMethod)
+		return fmt.Errorf("invalid deployment method %q, allowed values: none, container, deployer, platformsh, shopware-paas", deploymentMethod)
 	}
 }
 
@@ -61,7 +61,7 @@ func ValidateCISystem(ciSystem string) error {
 	case CINone, CIGitHub, CIGitLab:
 		return nil
 	default:
-		return fmt.Errorf("invalid CI system: %s. Valid options: none, github, gitlab", ciSystem)
+		return fmt.Errorf("invalid CI system %q, allowed values: none, github, gitlab", ciSystem)
 	}
 }
 

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
 	"slices"
@@ -78,7 +79,11 @@ func (c *Config) ResolveEnvironment(name string) (*EnvironmentConfig, error) {
 	if name != "" {
 		env, ok := c.Environments[name]
 		if !ok {
-			return nil, fmt.Errorf("environment %q not found in config", name)
+			if len(c.Environments) == 0 {
+				return nil, fmt.Errorf("environment %q not found in config, no environments are configured", name)
+			}
+
+			return nil, fmt.Errorf("environment %q not found in config, available: %s", name, strings.Join(slices.Sorted(maps.Keys(c.Environments)), ", "))
 		}
 		if env == nil {
 			return nil, fmt.Errorf("environment %q has no configuration", name)

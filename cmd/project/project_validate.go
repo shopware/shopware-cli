@@ -62,7 +62,7 @@ var projectValidateCmd = &cobra.Command{
 
 			defer func() {
 				if err := os.RemoveAll(tmpDir); err != nil {
-					logging.FromContext(cmd.Context()).Error("Failed to remove temporary directory:", err)
+					logging.FromContext(cmd.Context()).Errorf("Failed to remove temporary directory: %v", err)
 				}
 			}()
 		} else {
