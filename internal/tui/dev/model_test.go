@@ -471,6 +471,7 @@ func TestUpdateConfigTab_EnterOnSaveWritesExistingConfigInOriginalLocation(t *te
 	m := newTestModel(t)
 	m.config = cfg
 	m.projectRoot = dir
+	m.configPath = filepath.Join(dir, ".shopware-project.yml")
 	m.activeTab = tabConfig
 	m.configTab = NewConfigModel(cfg, nil)
 	assert.Equal(t, indexOf(phpVersions, "8.5", defaultPHPVersionIndex), m.configTab.phpVersion)
@@ -493,6 +494,10 @@ func TestUpdateConfigTab_EnterOnSaveWritesExistingConfigInOriginalLocation(t *te
 	written, err := os.ReadFile(filepath.Join(dir, ".shopware-project.yml"))
 	require.NoError(t, err)
 	assert.Contains(t, string(written), phpVersions[um.configTab.phpVersion])
+
+	// the local override belongs next to the legacy config, not in the working directory
+	assert.FileExists(t, filepath.Join(dir, ".shopware-project.local.yml"))
+	assert.NoFileExists(t, ".local")
 }
 
 func TestUpdateConfigTab_EnterOnSaveFailureSetsErr(t *testing.T) {
