@@ -74,6 +74,6 @@ var projectFixCmd = &cobra.Command{
 
 func init() {
 	projectRootCmd.AddCommand(projectFixCmd)
-	projectFixCmd.PersistentFlags().String("only", "", "Run only the specified tools (comma-separated, e.g. PHPStan, ESLint)")
+	projectFixCmd.PersistentFlags().String("only", "", "Run only the specified tools (comma-separated, e.g. phpstan,eslint)")
 	projectFixCmd.PersistentFlags().Bool("allow-non-git", false, "Allow fixes in projects without a Git repository")
 }
