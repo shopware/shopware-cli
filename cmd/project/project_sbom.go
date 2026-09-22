@@ -68,7 +68,7 @@ func init() {
 	projectRootCmd.AddCommand(projectSbomCmd)
 	projectSbomCmd.Flags().String("format", shop.ProjectSBOMFormatCycloneDXJSON, "SBOM format (only cyclonedx-json is supported)")
 	projectSbomCmd.Flags().StringP("output", "o", "", fmt.Sprintf("Output file path (default: %s in the project root)", shop.DefaultProjectSBOMOutput))
-	projectSbomCmd.Flags().Bool("include-dev-dependencies", false, "Include packages-dev (development dependencies) from composer.lock (excluded by default, as in the `project ci` command)")
+	projectSbomCmd.Flags().Bool("include-dev-dependencies", false, "Include packages-dev (development dependencies) from composer.lock (excluded by default, as in the project ci command)")
 }
 
 // resolveProjectSbomRoot picks the project directory: an explicit path argument,

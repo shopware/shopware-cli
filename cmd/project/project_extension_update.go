@@ -11,7 +11,7 @@ import (
 )
 
 var projectExtensionUpdateCmd = &cobra.Command{
-	Use:   "update [name]",
+	Use:   "update name...|all",
 	Short: "Update an installed extension",
 	Args:  cobra.MinimumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {

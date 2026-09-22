@@ -11,7 +11,7 @@ import (
 )
 
 var projectExtensionDeactivateCmd = &cobra.Command{
-	Use:   "deactivate [name]",
+	Use:   "deactivate name...",
 	Short: "Deactivate an installed extension",
 	Args:  cobra.MinimumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {

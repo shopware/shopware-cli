@@ -11,7 +11,7 @@ import (
 )
 
 var projectExtensionInstallCmd = &cobra.Command{
-	Use:   "install [name]",
+	Use:   "install name...",
 	Short: "Install an extension in a Shopware project",
 	Args:  cobra.MinimumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
