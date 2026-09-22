@@ -6,11 +6,13 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"os"
 	"os/exec"
 	"path"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 
 	"github.com/shopware/shopware-cli/internal/validation"
@@ -102,7 +104,7 @@ func (p PhpStan) Check(ctx context.Context, check *Check, config ToolConfig) err
 		}
 
 		phpstan := exec.CommandContext(ctx, "php", phpstanArguments...)
-		phpstan.Env = append(os.Environ(), "PHP_DIR="+path.Join(config.ToolDirectory, "php"))
+		phpstan.Env = phpStanCommandEnv(os.Environ(), config)
 		phpstan.Dir = config.RootDir
 
 		var stderr bytes.Buffer
@@ -213,6 +215,120 @@ func dumpShopwareContainer(ctx context.Context, config ToolConfig) (string, erro
 	}
 
 	return xml, nil
+}
+
+// platformShopwarePackages are the packages the platform repository replaces
+// and keeps under src/. Composer installs of the same packages live in vendor.
+var platformShopwarePackages = map[string]string{
+	"SHOPWARE_ADMIN_ROOT":         "src/Administration",
+	"SHOPWARE_CORE_ROOT":          "src/Core",
+	"SHOPWARE_ELASTICSEARCH_ROOT": "src/Elasticsearch",
+	"SHOPWARE_STOREFRONT_ROOT":    "src/Storefront",
+}
+
+func phpStanCommandEnv(base []string, config ToolConfig) []string {
+	env := append(append([]string{}, base...), "PHP_DIR="+path.Join(config.ToolDirectory, "php"))
+
+	return appendShopwarePackageEnv(env, shopwarePackageRoots(config.RootDir))
+}
+
+// shopwarePackageRoots maps SHOPWARE_*_ROOT variables to installed package
+// directories. PHPStan neon files read them as %env.SHOPWARE_CORE_ROOT%.
+// A Composer install wins over the platform src/ checkout. Packages that are
+// not installed are omitted.
+func shopwarePackageRoots(start string) map[string]string {
+	root := shopwareInstallRoot(start)
+	if root == "" {
+		return nil
+	}
+
+	roots := map[string]string{}
+	vendorDir := filepath.Join(root, "vendor", "shopware")
+	entries, err := os.ReadDir(vendorDir)
+	if err == nil {
+		for _, entry := range entries {
+			dir := filepath.Join(vendorDir, entry.Name())
+			info, statErr := os.Stat(dir)
+			if statErr != nil || !info.IsDir() {
+				continue
+			}
+			roots[shopwarePackageEnvName(entry.Name())] = dir
+		}
+	}
+
+	for envName, relative := range platformShopwarePackages {
+		if _, exists := roots[envName]; exists {
+			continue
+		}
+		dir := filepath.Join(root, relative)
+		info, statErr := os.Stat(dir)
+		if statErr != nil || !info.IsDir() {
+			continue
+		}
+		roots[envName] = dir
+	}
+
+	if len(roots) == 0 {
+		return nil
+	}
+
+	return roots
+}
+
+func shopwareInstallRoot(start string) string {
+	dir := filepath.Clean(start)
+	for {
+		if isShopwareInstall(dir) {
+			return dir
+		}
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			return ""
+		}
+		dir = parent
+	}
+}
+
+func isShopwareInstall(dir string) bool {
+	if info, err := os.Stat(filepath.Join(dir, "vendor", "shopware", "core")); err == nil && info.IsDir() {
+		return true
+	}
+	info, err := os.Stat(filepath.Join(dir, "src", "Core", "Kernel.php"))
+	return err == nil && !info.IsDir()
+}
+
+func shopwarePackageEnvName(directoryName string) string {
+	// Administration is exposed as SHOPWARE_ADMIN_ROOT.
+	if directoryName == "administration" {
+		return "SHOPWARE_ADMIN_ROOT"
+	}
+
+	name := strings.ToUpper(strings.ReplaceAll(directoryName, "-", "_"))
+
+	return "SHOPWARE_" + name + "_ROOT"
+}
+
+func appendShopwarePackageEnv(env []string, roots map[string]string) []string {
+	if len(roots) == 0 {
+		return env
+	}
+
+	existing := make(map[string]struct{}, len(env))
+	for _, entry := range env {
+		key, _, ok := strings.Cut(entry, "=")
+		if ok {
+			existing[key] = struct{}{}
+		}
+	}
+
+	for _, key := range slices.Sorted(maps.Keys(roots)) {
+		if _, ok := existing[key]; ok {
+			continue
+		}
+		env = append(env, key+"="+roots[key])
+	}
+
+	return env
 }
 
 func phpStanBaseConfig(config ToolConfig) string {
