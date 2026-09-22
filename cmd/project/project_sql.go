@@ -130,6 +130,6 @@ func isTerminalStream(stream any) bool {
 
 func init() {
 	projectRootCmd.AddCommand(projectSQLCmd)
-	projectSQLCmd.Flags().String("format", "", "Output format: table, TSV, or JSON (default: table when stdout is a terminal, TSV otherwise)")
+	projectSQLCmd.Flags().String("format", "", "Output format: table, tsv, or json (default: table when stdout is a terminal, tsv otherwise)")
 	projectSQLCmd.Flags().String("file", "", "Path to a SQL file to execute (instead of a query argument or stdin)")
 }
