@@ -19,7 +19,7 @@ import (
 
 var projectWorkerCmd = &cobra.Command{
 	Use:   "worker [amount | queue-spec]",
-	Short: "Start and supervise Symfony Messenger consumers",
+	Short: "Start and supervise Symfony Messenger consumers concurrently",
 	Long: `Run multiple Symfony messenger consumers in background.
 
 The first argument is either a worker amount (e.g. "5") or a queue spec
