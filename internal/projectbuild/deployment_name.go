@@ -52,11 +52,7 @@ func randomDeploymentName() (string, error) {
 }
 
 func randomDeploymentWord(words []string) (string, error) {
-	index, err := rand.Int(rand.Reader, big.NewInt(int64(len(words))))
-	if err != nil {
-		return "", fmt.Errorf("generate deployment name: %w", err)
-	}
-	return words[index.Int64()], nil
+	return words[rand.Intn(len(words))]
 }
 
 func availableDeploymentArchivePath(root string, generate func() (string, error)) (string, error) {
