@@ -66,6 +66,6 @@ var projectFormatCmd = &cobra.Command{
 
 func init() {
 	projectRootCmd.AddCommand(projectFormatCmd)
-	projectFormatCmd.PersistentFlags().String("only", "", "Run only the specified tools (comma-separated, e.g. PHPStan, ESLint)")
+	projectFormatCmd.PersistentFlags().String("only", "", "Run only the specified tools (comma-separated, e.g. phpstan,eslint)")
 	projectFormatCmd.PersistentFlags().Bool("dry-run", false, "Run formatters without changing files")
 }
