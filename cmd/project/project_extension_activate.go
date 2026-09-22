@@ -56,6 +56,7 @@ var projectExtensionActivateCmd = &cobra.Command{
 					failed = true
 
 					logging.FromContext(cmd.Context()).Errorf("Installation of %s failed with error: %v", extension.Name, err)
+					continue
 				}
 			}
 
@@ -63,6 +64,7 @@ var projectExtensionActivateCmd = &cobra.Command{
 				failed = true
 
 				logging.FromContext(cmd.Context()).Errorf("Activate of %s failed with error: %v", extension.Name, err)
+				continue
 			}
 
 			logging.FromContext(cmd.Context()).Infof("Activated %s", extension.Name)
