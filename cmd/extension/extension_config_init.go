@@ -14,7 +14,7 @@ import (
 
 var extensionConfigInitCmd = &cobra.Command{
 	Use:   "init [path]",
-	Short: "Initialize extension config with .shopware-extension.yml",
+	Short: "Create a minimal .shopware-extension.yml",
 	Long: `Create a minimal .shopware-extension.yml for an extension checkout.
 
 Writes the yaml-language-server schema comment and today's compatibility_date.
