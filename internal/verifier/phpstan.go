@@ -3,11 +3,13 @@ package verifier
 import (
 	"bytes"
 	"context"
-	_ "embed"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"os"
 	"os/exec"
 	"path"
+	"path/filepath"
 	"regexp"
 	"strings"
 
@@ -66,10 +68,32 @@ func (p PhpStan) Check(ctx context.Context, check *Check, config ToolConfig) err
 		return err
 	}
 
+	// phpstan-symfony reads containerXmlPath before bootstrap files run, so the
+	// XML has to exist before analyse starts. The dump is best-effort: a project
+	// that cannot boot still gets the previous PHPStan run.
+	containerXml, err := dumpShopwareContainer(ctx, config)
+	if err != nil {
+		logging.FromContext(ctx).Debugf("skipped Shopware container dump: %s", err)
+	} else if containerXml != "" {
+		logging.FromContext(ctx).Debugf("using Shopware container %s", containerXml)
+	}
+
+	phpstanConfig := ""
+	if containerXml != "" {
+		configFile, removeConfig, err := writePhpStanContainerConfig(phpStanBaseConfig(config), containerXml)
+		if err != nil {
+			return err
+		}
+		defer removeConfig()
+		phpstanConfig = configFile
+	}
+
 	for _, sourceDirectory := range config.SourceDirectories {
 		phpstanArguments := []string{"-dmemory_limit=2G", path.Join(config.ToolDirectory, "php", "vendor", "bin", "phpstan"), "analyse", "--no-progress", "--no-interaction", "--error-format=json", sourceDirectory}
 
-		if !p.configExists(config.RootDir) {
+		if phpstanConfig != "" {
+			phpstanArguments = append(phpstanArguments, "--configuration", phpstanConfig)
+		} else if !p.configExists(config.RootDir) {
 			phpstanArguments = append(phpstanArguments, "--configuration", path.Join(config.ToolDirectory, "php", "configs", "phpstan.neon"))
 		}
 
@@ -146,6 +170,100 @@ func (p PhpStan) Check(ctx context.Context, check *Check, config ToolConfig) err
 
 func isPhpStanNoFilesOutput(output string) bool {
 	return strings.Contains(output, "No files found to analyse")
+}
+
+// dumpShopwareContainer boots the Shopware kernel and returns the dumped
+// container XML. An empty path means the directory is not a Shopware install.
+func dumpShopwareContainer(ctx context.Context, config ToolConfig) (string, error) {
+	script := path.Join(config.ToolDirectory, "php", "configs", "dump-container.php")
+	if _, err := os.Stat(script); err != nil {
+		return "", err
+	}
+
+	cmd := exec.CommandContext(ctx, "php", "-dmemory_limit=2G", script, config.RootDir)
+	cmd.Dir = config.RootDir
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+
+	err := cmd.Run()
+	if err != nil {
+		var exitErr *exec.ExitError
+		if errors.As(err, &exitErr) && exitErr.ExitCode() == 3 {
+			return "", nil
+		}
+
+		message := strings.TrimSpace(stderr.String())
+		if message == "" {
+			message = err.Error()
+		}
+
+		return "", errors.New(message)
+	}
+
+	xml := strings.TrimSpace(stdout.String())
+	if xml == "" {
+		return "", errors.New("container dump returned no path")
+	}
+
+	if _, err := os.Stat(xml); err != nil {
+		return "", fmt.Errorf("dumped container XML is missing: %s", xml)
+	}
+
+	return xml, nil
+}
+
+func phpStanBaseConfig(config ToolConfig) string {
+	for _, name := range possiblePHPStanConfigs {
+		candidate := path.Join(config.RootDir, name)
+		if _, err := os.Stat(candidate); err == nil {
+			return candidate
+		}
+	}
+
+	return path.Join(config.ToolDirectory, "php", "configs", "phpstan.neon")
+}
+
+func writePhpStanContainerConfig(baseConfig string, containerXml string) (string, func(), error) {
+	baseConfig, err := filepath.Abs(baseConfig)
+	if err != nil {
+		return "", nil, err
+	}
+
+	containerXml, err = filepath.Abs(containerXml)
+	if err != nil {
+		return "", nil, err
+	}
+
+	neon := "includes:\n    - " + neonString(baseConfig) + "\nparameters:\n    symfony:\n        containerXmlPath: " + neonString(containerXml) + "\n"
+
+	file, err := os.CreateTemp("", "shopware-cli-phpstan-*.neon")
+	if err != nil {
+		return "", nil, err
+	}
+
+	if _, err := file.WriteString(neon); err != nil {
+		_ = file.Close()
+		_ = os.Remove(file.Name())
+		return "", nil, err
+	}
+
+	if err := file.Close(); err != nil {
+		_ = os.Remove(file.Name())
+		return "", nil, err
+	}
+
+	cleanup := func() {
+		_ = os.Remove(file.Name())
+	}
+
+	return file.Name(), cleanup, nil
+}
+
+func neonString(value string) string {
+	return "'" + strings.ReplaceAll(value, "'", "''") + "'"
 }
 
 func (p PhpStan) Fix(ctx context.Context, config ToolConfig) error {
