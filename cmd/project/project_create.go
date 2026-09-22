@@ -77,7 +77,7 @@ func resolveLocalDomainChoice(useDocker, wantLocalDomain, promptShown, machineSe
 
 var projectCreateCmd = &cobra.Command{
 	Use:   "create [name] [version]",
-	Short: "Create and install a Shopware 6 project with optional CI/CD and deployment setup",
+	Short: "Create and install a Shopware 6 project with optional search, messaging, Git, CI/CD, and deployment setup",
 	Args:  cobra.MaximumNArgs(2),
 	ValidArgsFunction: func(cmd *cobra.Command, args []string, _ string) ([]string, cobra.ShellCompDirective) {
 		if len(args) == 0 {
