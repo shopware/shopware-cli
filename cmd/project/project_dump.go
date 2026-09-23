@@ -103,12 +103,16 @@ func assembleConnectionURI(cmd *cobra.Command) (*mysql.Config, error) {
 				return nil, errors.New("cannot prompt for password: stdin is not a terminal")
 			}
 
-			fmt.Fprint(cmd.ErrOrStderr(), "Enter MySQL password: ") //nolint:errcheck // prompt output is best-effort, ReadPassword surfaces real terminal errors
+			if _, err := fmt.Fprint(cmd.ErrOrStderr(), "Enter MySQL password: "); err != nil {
+				return nil, fmt.Errorf("could not write password prompt: %w", err)
+			}
 			pass, err := term.ReadPassword(os.Stdin.Fd())
-			fmt.Fprintln(cmd.ErrOrStderr()) //nolint:errcheck // trailing newline is best-effort
-
 			if err != nil {
 				return nil, fmt.Errorf("could not read password: %w", err)
+			}
+
+			if _, err := fmt.Fprintln(cmd.ErrOrStderr()); err != nil {
+				return nil, fmt.Errorf("could not write to stderr: %w", err)
 			}
 
 			dbConn.Password = string(pass)
