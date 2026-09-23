@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"io"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -16,28 +17,26 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/shopware/shopware-cli/internal/executor"
+	"github.com/shopware/shopware-cli/internal/deployment"
 	"github.com/shopware/shopware-cli/internal/testhelper"
 )
 
-type rolloutFakeExecutor struct {
-	executor.Executor
-	result   executor.Rollout
+type rolloutFakeBackend struct {
+	deploymentTestBackend
+	result   deployment.Rollout
 	err      error
-	received executor.Deployment
+	received deployment.Deployment
+	logs     string
 }
 
-func (f *rolloutFakeExecutor) CreateDeployment(context.Context) (executor.Deployment, error) {
-	panic("rollout must not rebuild")
-}
-
-func (f *rolloutFakeExecutor) RolloutDeployment(_ context.Context, deployment executor.Deployment) (executor.Rollout, error) {
-	f.received = deployment
+func (f *rolloutFakeBackend) RolloutDeployment(_ context.Context, artifact deployment.Deployment, output io.Writer) (deployment.Rollout, error) {
+	_, _ = io.WriteString(output, f.logs)
+	f.received = artifact
 	return f.result, f.err
 }
 
 func TestProjectDeploymentRollout(t *testing.T) {
-	deployment := executor.Deployment{Reference: "./builds/shop.tar.gz"}
+	artifact := deployment.Deployment{Reference: "./builds/shop.tar.gz"}
 	for _, tc := range []struct {
 		name, reference, wantErr string
 		err                      error
@@ -52,12 +51,12 @@ func TestProjectDeploymentRollout(t *testing.T) {
 			cmd.SetContext(t.Context())
 			var out bytes.Buffer
 			cmd.SetOut(&out)
-			fake := &rolloutFakeExecutor{result: executor.Rollout{Reference: tc.reference}, err: tc.err}
-			err := runProjectDeploymentRollout(cmd, fake, deployment)
-			assert.Equal(t, deployment, fake.received)
+			fake := &rolloutFakeBackend{result: deployment.Rollout{Reference: tc.reference}, err: tc.err}
+			err := runProjectDeploymentRollout(cmd, fake, artifact)
+			assert.Equal(t, artifact, fake.received)
 			if tc.wantErr == "" {
 				require.NoError(t, err)
-				assert.Equal(t, "release-id\n", out.String())
+				assert.Equal(t, "Deployed \"./builds/shop.tar.gz\" successfully\n", out.String())
 			} else {
 				require.ErrorContains(t, err, tc.wantErr)
 				assert.Empty(t, out.String())
@@ -66,10 +65,24 @@ func TestProjectDeploymentRollout(t *testing.T) {
 	}
 	cmd := &cobra.Command{}
 	cmd.SetContext(t.Context())
-	require.ErrorIs(t, runProjectDeploymentRollout(cmd, executor.NewLocal(t.TempDir()), deployment), executor.ErrNotSupported)
+	var reference bytes.Buffer
+	cmd.SetOut(&reference)
+	var logs bytes.Buffer
+	cmd.SetErr(&logs)
+	require.NoError(t, runProjectDeploymentRollout(cmd, &rolloutFakeBackend{
+		result: deployment.Rollout{Reference: "id"},
+		logs:   "preparing\nactivating\n",
+	}, artifact))
+	assert.Equal(t, "Deployed \"./builds/shop.tar.gz\" successfully\n", reference.String())
+	assert.Equal(t, "preparing\nactivating\n", logs.String())
+	reference.Reset()
+	require.NoError(t, runProjectDeploymentRollout(cmd, &rolloutFakeBackend{
+		result: deployment.Rollout{Reference: "existing-id", Unchanged: true, Active: true},
+	}, deployment.Deployment{Reference: "happy-euclid"}))
+	assert.Equal(t, "Deployment \"happy-euclid\" is already active; nothing to do\n", reference.String())
 	writeErr := errors.New("output closed")
 	cmd.SetOut(deploymentErrorWriter{err: writeErr})
-	require.ErrorIs(t, runProjectDeploymentRollout(cmd, &rolloutFakeExecutor{result: executor.Rollout{Reference: "id"}}, deployment), writeErr)
+	require.ErrorIs(t, runProjectDeploymentRollout(cmd, &rolloutFakeBackend{result: deployment.Rollout{Reference: "id"}}, artifact), writeErr)
 }
 
 func newLifecycleCommand(t *testing.T, args []string) (*cobra.Command, *bytes.Buffer) {
@@ -83,8 +96,13 @@ func newLifecycleCommand(t *testing.T, args []string) (*cobra.Command, *bytes.Bu
 	create := &cobra.Command{Use: projectDeploymentCreateCmd.Use, Args: projectDeploymentCreateCmd.Args, RunE: projectDeploymentCreateCmd.RunE}
 	create.Flags().StringP("output", "o", "", "")
 	create.Flags().Bool("with-dev-dependencies", false, "")
+	initialize := &cobra.Command{Use: projectDeploymentInitCmd.Use, Args: projectDeploymentInitCmd.Args, RunE: projectDeploymentInitCmd.RunE}
 	rollout := &cobra.Command{Use: projectDeploymentRolloutCmd.Use, Args: projectDeploymentRolloutCmd.Args, RunE: projectDeploymentRolloutCmd.RunE}
-	deployment.AddCommand(create, rollout)
+	logs := &cobra.Command{Use: projectDeploymentLogsCmd.Use, Args: projectDeploymentLogsCmd.Args, RunE: projectDeploymentLogsCmd.RunE}
+	prune := &cobra.Command{Use: projectDeploymentPruneCmd.Use, Args: projectDeploymentPruneCmd.Args, RunE: projectDeploymentPruneCmd.RunE}
+	prune.Flags().Int("keep", 5, "")
+	prune.Flags().Bool("dry-run", false, "")
+	deployment.AddCommand(create, initialize, rollout, logs, prune)
 	root.AddCommand(deployment)
 	out := new(bytes.Buffer)
 	root.SetOut(out)
@@ -94,7 +112,7 @@ func newLifecycleCommand(t *testing.T, args []string) (*cobra.Command, *bytes.Bu
 }
 
 func TestDeploymentLifecycleCommandsRegistered(t *testing.T) {
-	for _, name := range []string{"create", "rollout"} {
+	for _, name := range []string{"create", "init", "list", "logs", "prune", "rollout"} {
 		cmd, remaining, err := projectRootCmd.Find([]string{"deploy", name})
 		require.NoError(t, err)
 		assert.Empty(t, remaining)
@@ -145,9 +163,11 @@ environments:
 `)
 			cmd, out := newLifecycleCommand(t, args)
 			require.NoError(t, cmd.ExecuteContext(t.Context()))
-			archive := strings.TrimSpace(out.String())
-			assert.FileExists(t, archive)
-			assert.Contains(t, archive, filepath.Join(".shopware-cli", "deployments"))
+			output := strings.TrimSpace(out.String())
+			require.True(t, strings.HasPrefix(output, `Created deployment "`))
+			reference := strings.TrimSuffix(strings.TrimPrefix(output, `Created deployment "`), `"`)
+			assert.Regexp(t, `^[a-z]+-[a-z]+-[a-z]+$`, reference)
+			assert.FileExists(t, filepath.Join(root, ".shopware-cli", "deployments", reference+".tar.gz"))
 		})
 	}
 }
@@ -166,7 +186,15 @@ func TestProjectDeploymentRolloutCommandValidation(t *testing.T) {
 		{[]string{"rollout"}, "accepts 1 arg"},
 		{[]string{"rollout", "one", "two"}, "accepts 1 arg"},
 		{[]string{"rollout", "archive", "-e", "missing"}, `environment "missing" not found`},
-		{[]string{"rollout", "archive"}, `rolling out deployments with executor "local"`},
+		{[]string{"rollout", "archive"}, `deployments are not supported for environment type "local"`},
+		{[]string{"logs"}, "accepts 1 arg"},
+		{[]string{"logs", "one", "two"}, "accepts 1 arg"},
+		{[]string{"logs", "archive", "-e", "missing"}, `environment "missing" not found`},
+		{[]string{"logs", "archive"}, `deployments are not supported for environment type "local"`},
+		{[]string{"prune", "extra"}, `unknown command "extra"`},
+		{[]string{"prune", "--keep", "-1"}, "--keep must not be negative"},
+		{[]string{"prune", "-e", "missing"}, `environment "missing" not found`},
+		{[]string{"prune"}, `deployments are not supported for environment type "local"`},
 	} {
 		cmd, out := newLifecycleCommand(t, tc.args)
 		require.ErrorContains(t, cmd.ExecuteContext(t.Context()), tc.want)

@@ -1,10 +1,9 @@
-// Package deployment composes artifact builders with backend executors.
-// Keeping this composition above both packages avoids a projectbuild/executor
-// import cycle.
 package deployment
 
 import (
 	"context"
+	"path/filepath"
+	"strings"
 
 	"github.com/shopware/shopware-cli/internal/executor"
 	"github.com/shopware/shopware-cli/internal/projectbuild"
@@ -12,25 +11,34 @@ import (
 )
 
 type SSH struct {
-	*executor.SSHExecutor
-	root    string
-	config  *shop.Config
-	env     *shop.EnvironmentConfig
-	archive projectbuild.ArchiveOptions
+	transport  *executor.SSHExecutor
+	root       string
+	configPath string
+	config     *shop.Config
+	env        *shop.EnvironmentConfig
+	directory  string
 }
 
-var _ executor.DeploymentExecutor = (*SSH)(nil)
+var _ Backend = (*SSH)(nil)
+var _ RolloutHistory = (*SSH)(nil)
+var _ DeploymentLogs = (*SSH)(nil)
+var _ DeploymentPruner = (*SSH)(nil)
 
-func NewSSH(ssh *executor.SSHExecutor, root string, config *shop.Config, env *shop.EnvironmentConfig, archive projectbuild.ArchiveOptions) *SSH {
-	return &SSH{SSHExecutor: ssh, root: root, config: config, env: env, archive: archive}
-}
+func (s *SSH) Type() string { return executor.TypeSSH }
 
-// CreateDeployment deliberately uses no SSH operations. The returned archive
-// remains local and can be rolled out repeatedly without rebuilding.
-func (s *SSH) CreateDeployment(ctx context.Context) (executor.Deployment, error) {
-	reference, err := projectbuild.PackageArchive(ctx, s.root, s.config, s.env, s.archive)
-	if err != nil {
-		return executor.Deployment{}, err
+// CreateDeployment builds locally and retains the archive for repeated rollouts.
+func (s *SSH) CreateDeployment(ctx context.Context, options CreateOptions) (Deployment, error) {
+	archive := projectbuild.ArchiveOptions{
+		ConfigPath: s.configPath,
+		OutputPath: options.OutputPath,
+		Build:      projectbuild.Options{WithDevDependencies: options.WithDevDependencies, ToolVersion: options.ToolVersion},
 	}
-	return executor.Deployment{Reference: reference}, nil
+	reference, err := projectbuild.PackageArchive(ctx, s.root, s.config, s.env, archive)
+	if err != nil {
+		return Deployment{}, err
+	}
+	if options.OutputPath == "" {
+		reference = strings.TrimSuffix(filepath.Base(reference), ".tar.gz")
+	}
+	return Deployment{Reference: reference}, nil
 }

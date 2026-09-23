@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"io"
 	"path/filepath"
 	"testing"
 
@@ -13,20 +14,22 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/shopware/shopware-cli/internal/executor"
+	"github.com/shopware/shopware-cli/internal/deployment"
 	"github.com/shopware/shopware-cli/internal/testhelper"
 )
 
-type deploymentFakeExecutor struct {
-	executor.Executor
-	deployment   executor.Deployment
+type deploymentFakeBackend struct {
+	deploymentTestBackend
+	deployment   deployment.Deployment
+	options      deployment.CreateOptions
 	err          error
 	onCreate     func(context.Context)
 	createCalls  int
 	rolloutCalls int
 }
 
-func (f *deploymentFakeExecutor) CreateDeployment(ctx context.Context) (executor.Deployment, error) {
+func (f *deploymentFakeBackend) CreateDeployment(ctx context.Context, options deployment.CreateOptions) (deployment.Deployment, error) {
+	f.options = options
 	f.createCalls++
 	if f.onCreate != nil {
 		f.onCreate(ctx)
@@ -34,9 +37,9 @@ func (f *deploymentFakeExecutor) CreateDeployment(ctx context.Context) (executor
 	return f.deployment, f.err
 }
 
-func (f *deploymentFakeExecutor) RolloutDeployment(context.Context, executor.Deployment) (executor.Rollout, error) {
+func (f *deploymentFakeBackend) RolloutDeployment(context.Context, deployment.Deployment, io.Writer) (deployment.Rollout, error) {
 	f.rolloutCalls++
-	return executor.Rollout{}, errors.New("create must not roll out a deployment")
+	return deployment.Rollout{}, errors.New("create must not roll out a deployment")
 }
 
 func TestProjectDeploymentCreate(t *testing.T) {
@@ -51,12 +54,12 @@ func TestProjectDeploymentCreate(t *testing.T) {
 		{
 			name:      "archive reference",
 			reference: "./builds/shopware-abc123.tar.gz",
-			wantOut:   "./builds/shopware-abc123.tar.gz\n",
+			wantOut:   "Created deployment \"./builds/shopware-abc123.tar.gz\"\n",
 		},
 		{
 			name:      "opaque build ID",
 			reference: "01JPAASBUILDID",
-			wantOut:   "01JPAASBUILDID\n",
+			wantOut:   "Created deployment \"01JPAASBUILDID\"\n",
 		},
 		{
 			name:      "backend error",
@@ -79,15 +82,17 @@ func TestProjectDeploymentCreate(t *testing.T) {
 			cmd := &cobra.Command{}
 			cmd.SetContext(t.Context())
 			cmd.SetOut(&out)
-			fake := &deploymentFakeExecutor{
-				deployment: executor.Deployment{Reference: tc.reference},
+			fake := &deploymentFakeBackend{
+				deployment: deployment.Deployment{Reference: tc.reference},
 				err:        tc.buildErr,
 				onCreate: func(ctx context.Context) {
 					assert.Equal(t, cmd.Context(), ctx)
 				},
 			}
 
-			err := runProjectDeploymentCreate(cmd, fake)
+			options := deployment.CreateOptions{OutputPath: "./custom.tar.gz", WithDevDependencies: true, ToolVersion: "test"}
+			err := runProjectDeploymentCreate(cmd, fake, options)
+			assert.Equal(t, options, fake.options)
 			if tc.wantErr != "" {
 				require.EqualError(t, err, tc.wantErr)
 				if tc.buildErr != nil {
@@ -103,18 +108,6 @@ func TestProjectDeploymentCreate(t *testing.T) {
 	}
 }
 
-func TestProjectDeploymentCreateUnsupportedExecutor(t *testing.T) {
-	var out bytes.Buffer
-	cmd := &cobra.Command{}
-	cmd.SetContext(t.Context())
-	cmd.SetOut(&out)
-
-	err := runProjectDeploymentCreate(cmd, executor.NewLocal(t.TempDir()))
-	require.ErrorIs(t, err, executor.ErrNotSupported)
-	assert.Contains(t, err.Error(), `"local"`)
-	assert.Empty(t, out.String())
-}
-
 type deploymentErrorWriter struct {
 	err error
 }
@@ -128,9 +121,9 @@ func TestProjectDeploymentCreateOutputError(t *testing.T) {
 	cmd := &cobra.Command{}
 	cmd.SetContext(t.Context())
 	cmd.SetOut(deploymentErrorWriter{err: writeErr})
-	fake := &deploymentFakeExecutor{deployment: executor.Deployment{Reference: "build-id"}}
+	fake := &deploymentFakeBackend{deployment: deployment.Deployment{Reference: "build-id"}}
 
-	require.ErrorIs(t, runProjectDeploymentCreate(cmd, fake), writeErr)
+	require.ErrorIs(t, runProjectDeploymentCreate(cmd, fake, deployment.CreateOptions{}), writeErr)
 	assert.Equal(t, 1, fake.createCalls)
 	assert.Zero(t, fake.rolloutCalls)
 }
@@ -164,13 +157,13 @@ environments:
 		want string
 		cwd  string
 	}{
-		{"current project", nil, `creating deployments with executor "local"`, ""},
-		{"parent project", nil, `creating deployments with executor "local"`, filepath.Join(workDir, "bin")},
+		{"current project", nil, `deployments are not supported for environment type "local"`, ""},
+		{"parent project", nil, `deployments are not supported for environment type "local"`, filepath.Join(workDir, "bin")},
 		{"no project", nil, "cannot find Shopware project in current directory", t.TempDir()},
 		{"rejects extra arguments", []string{".", "."}, "accepts at most 1 arg(s), received 2", ""},
 		{"missing directory", []string{"missing"}, "read project directory:", ""},
 		{"file instead of directory", []string{"config.yml"}, "is not a directory", ""},
-		{"default environment", []string{"."}, `creating deployments with executor "local"`, ""},
+		{"default environment", []string{"."}, `deployments are not supported for environment type "local"`, ""},
 		{"unknown environment", []string{".", "--env", "missing"}, `environment "missing" not found`, ""},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
