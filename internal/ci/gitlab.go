@@ -26,7 +26,7 @@ func gitlabSectionId(name string) string {
 
 func (g *gitlabCI) Section(name string) Section {
 	sectionId := gitlabSectionId(name)
-	fmt.Fprintf(g.output, "section_start:%d:%s\r\x1b[0K%s\n", time.Now().Unix(), sectionId, name) //nolint:errcheck // log formatting is best-effort
+	_, _ = fmt.Fprintf(g.output, "section_start:%d:%s\r\x1b[0K%s\n", time.Now().Unix(), sectionId, name)
 	return gitlabCISection{
 		name:   name,
 		start:  time.Now(),
@@ -36,6 +36,6 @@ func (g *gitlabCI) Section(name string) Section {
 
 func (g gitlabCISection) End() {
 	sectionId := gitlabSectionId(g.name)
-	fmt.Fprintf(g.output, "%s finished in %s\n", g.name, time.Since(g.start).Round(time.Millisecond)) //nolint:errcheck // log formatting is best-effort
-	fmt.Fprintf(g.output, "section_end:%d:%s\r\x1b[0K\n", time.Now().Unix(), sectionId)               //nolint:errcheck // log formatting is best-effort
+	_, _ = fmt.Fprintf(g.output, "%s finished in %s\n", g.name, time.Since(g.start).Round(time.Millisecond))
+	_, _ = fmt.Fprintf(g.output, "section_end:%d:%s\r\x1b[0K\n", time.Now().Unix(), sectionId)
 }
