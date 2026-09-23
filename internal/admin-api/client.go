@@ -5,7 +5,10 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"os"
+	"path/filepath"
 
+	"github.com/shopware/shopware-cli/internal/system"
 	shopware "github.com/shopwareLabs/go-shopware-http-client"
 	"github.com/shopwareLabs/go-shopware-http-client/extension"
 	"github.com/shyim/go-version"
@@ -49,9 +52,30 @@ func NewPasswordCredentials(username, password string) Credentials {
 	return shopware.NewPasswordCredentials(username, password)
 }
 
+// tokenCacheDirEnv overrides the on-disk OAuth token cache directory.
+// Useful for tests to keep token caching hermetic.
+const tokenCacheDirEnv = "SHOPWARE_CLI_TOKEN_CACHE_DIR"
+
+// newTokenStorage returns a shop-scoped token storage backed by the shared
+// file cache, falling back to in-memory when the file backend is unavailable.
+// See https://github.com/shopwareLabs/go-shopware-http-client/pull/3.
+func newTokenStorage(shopURL string) shopware.TokenStorage {
+	dir := os.Getenv(tokenCacheDirEnv)
+	if dir == "" {
+		dir = filepath.Join(system.GetShopwareCliCacheDir(), "admin-api-tokens")
+	}
+
+	store, err := shopware.NewFileTokenStorage(dir)
+	if err != nil {
+		return shopware.NewInMemoryTokenStorage()
+	}
+
+	return shopware.NewScopedTokenStorage(store, shopURL)
+}
+
 // NewApiClient authenticates against the shop and returns a ready-to-use Client.
 func NewApiClient(ctx context.Context, shopURL string, credentials Credentials, httpClient *http.Client) (*Client, error) {
-	storage := shopware.NewInMemoryTokenStorage()
+	storage := newTokenStorage(shopURL)
 
 	raw := shopware.NewClient(shopware.Config{
 		BaseURL:         shopURL,

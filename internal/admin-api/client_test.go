@@ -11,8 +11,14 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func isolateTokenCache(t *testing.T) {
+	t.Helper()
+	t.Setenv(tokenCacheDirEnv, t.TempDir())
+}
+
 func newShopServer(t *testing.T, handler func(http.ResponseWriter, *http.Request)) *httptest.Server {
 	t.Helper()
+	isolateTokenCache(t)
 
 	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -48,6 +54,7 @@ func TestNewApiClientAuthenticatesAndLoadsVersion(t *testing.T) {
 }
 
 func TestNewApiClientPasswordGrant(t *testing.T) {
+	isolateTokenCache(t)
 	var grant string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -79,6 +86,7 @@ func TestNewApiClientPasswordGrant(t *testing.T) {
 }
 
 func TestNewApiClientAuthError(t *testing.T) {
+	isolateTokenCache(t)
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusUnauthorized)
 		_, _ = w.Write([]byte(`{"errors":[{"detail":"invalid credentials"}]}`))
@@ -106,6 +114,7 @@ func TestClearCache(t *testing.T) {
 }
 
 func TestInfoDetectsCloudShop(t *testing.T) {
+	isolateTokenCache(t)
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		switch r.URL.Path {
