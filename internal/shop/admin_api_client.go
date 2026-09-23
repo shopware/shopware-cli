@@ -12,10 +12,7 @@ import (
 	"github.com/shopware/shopware-cli/internal/system"
 )
 
-const (
-	tokenStorageKey = "shopware-cli"
-	userAgent       = "shopware-cli"
-)
+const userAgent = "shopware-cli"
 
 // tokenCacheDirEnv overrides the on-disk OAuth token cache directory.
 // Useful for tests to keep token caching hermetic.
@@ -41,12 +38,11 @@ func newTokenStorage(shopURL string) shopware.TokenStorage {
 // NewApiClient authenticates against the shop and returns a ready-to-use client.
 func NewApiClient(ctx context.Context, shopURL string, credentials shopware.Credentials, httpClient *http.Client) (*shopware.Client, error) {
 	client := shopware.NewClient(shopware.Config{
-		BaseURL:         shopURL,
-		Credentials:     credentials,
-		HTTPClient:      httpClient,
-		TokenStorage:    newTokenStorage(shopURL),
-		TokenStorageKey: tokenStorageKey,
-		UserAgent:       userAgent,
+		BaseURL:      shopURL,
+		Credentials:  credentials,
+		HTTPClient:   httpClient,
+		TokenStorage: newTokenStorage(shopURL),
+		UserAgent:    userAgent,
 	})
 
 	if err := client.Authenticate(ctx); err != nil {

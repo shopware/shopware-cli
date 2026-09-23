@@ -102,6 +102,38 @@ func TestNewApiClientAuthError(t *testing.T) {
 	assert.Contains(t, err.Error(), "invalid credentials")
 }
 
+func TestNewApiClientDoesNotShareTokensAcrossCredentials(t *testing.T) {
+	isolateTokenCache(t)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method == http.MethodPost && r.URL.Path == "/api/oauth/token" {
+			var payload map[string]string
+			require.NoError(t, json.NewDecoder(r.Body).Decode(&payload))
+			_, _ = w.Write([]byte(`{"access_token":"` + payload["grant_type"] + `-token","token_type":"Bearer","expires_in":3600}`))
+			return
+		}
+		if r.URL.Path == "/api/_info/config" {
+			_, _ = w.Write([]byte(`{"version":"6.6.5.0"}`))
+			return
+		}
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	t.Cleanup(srv.Close)
+
+	integrationClient, err := NewApiClient(t.Context(), srv.URL, shopware.NewIntegrationCredentials("id", "secret"), srv.Client())
+	require.NoError(t, err)
+	passwordClient, err := NewApiClient(t.Context(), srv.URL, shopware.NewPasswordCredentials("admin", "shopware"), srv.Client())
+	require.NoError(t, err)
+
+	integrationToken, err := integrationClient.AccessToken(t.Context())
+	require.NoError(t, err)
+	passwordToken, err := passwordClient.AccessToken(t.Context())
+	require.NoError(t, err)
+
+	assert.Equal(t, "client_credentials-token", integrationToken)
+	assert.Equal(t, "password-token", passwordToken)
+}
+
 func TestClearCache(t *testing.T) {
 	var method, path string
 	srv := newShopServer(t, func(w http.ResponseWriter, r *http.Request) {

@@ -54,7 +54,7 @@ func NewShopClient(ctx context.Context, config *Config) (*shopware.Client, error
 			InsecureSkipVerify: skipSSLCert, // nolint:gosec
 		},
 	}
-	client := &http.Client{Transport: tr}
+	client := &http.Client{Transport: tr, Timeout: shopware.DefaultTimeout}
 
 	shopUrl := os.Getenv("SHOPWARE_CLI_API_URL")
 
