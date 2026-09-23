@@ -47,7 +47,7 @@ var projectFixCmd = &cobra.Command{
 
 		only, _ := cmd.Flags().GetString("only")
 
-		toolCfg, err := verifier.GetConfigFromProject(projectPath, false)
+		toolCfg, err := verifier.GetConfigFromProject(cmd.Context(), projectPath, false)
 		if err != nil {
 			return err
 		}

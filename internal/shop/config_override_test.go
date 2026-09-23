@@ -285,6 +285,46 @@ url: https://local.example.com
 	assert.Equal(t, "included_id", config.AdminApi.ClientId)
 }
 
+func TestLocalConfigWithIncludeUnderConfigFolder(t *testing.T) {
+	tmpDir := t.TempDir()
+	t.Chdir(tmpDir)
+
+	includedConfig := []byte(`
+admin_api:
+  client_id: included_id
+  client_secret: included_secret
+`)
+
+	baseConfig := []byte(`
+url: https://example.com
+compatibility_date: "2026-01-01"
+include:
+  - .config/included.yml
+`)
+
+	localConfig := []byte(`
+url: https://local.example.com
+`)
+
+	includedPath := filepath.Join(tmpDir, ".config/included.yml")
+	basePath := filepath.Join(tmpDir, ".config/shopware-project.yml")
+	localPath := filepath.Join(tmpDir, ".config/shopware-project.local.yml")
+
+	assert.NoError(t, os.MkdirAll(filepath.Join(tmpDir, ".config"), 0o755))
+
+	assert.NoError(t, os.WriteFile(includedPath, includedConfig, 0o644))
+	assert.NoError(t, os.WriteFile(basePath, baseConfig, 0o644))
+	assert.NoError(t, os.WriteFile(localPath, localConfig, 0o644))
+
+	config, err := ReadConfig(t.Context(), basePath, false)
+	assert.NoError(t, err)
+
+	// Local override wins
+	assert.Equal(t, "https://local.example.com", config.URL)
+	// Included config values are still present
+	assert.Equal(t, "included_id", config.AdminApi.ClientId)
+}
+
 func TestLocalConfigEmptyLocalFile(t *testing.T) {
 	tmpDir := t.TempDir()
 	t.Chdir(tmpDir)

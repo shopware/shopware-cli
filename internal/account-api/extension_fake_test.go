@@ -91,7 +91,7 @@ func (f *fakeExtension) GetExtensionConfig() *extension.Config {
 	if f.config != nil {
 		return f.config
 	}
-	return &extension.Config{FileName: ".shopware-extension.yml"}
+	return &extension.Config{}
 }
 
 func (f *fakeExtension) Validate(context.Context, validation.Check) {}

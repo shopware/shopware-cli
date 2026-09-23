@@ -241,7 +241,7 @@ func TestPullExtensionStoreInfo(t *testing.T) {
 	zipExt := &fakeExtension{
 		name:   "TestPlugin",
 		path:   extDir,
-		config: &extension.Config{FileName: ".shopware-extension.yml"},
+		config: &extension.Config{},
 	}
 
 	require.NoError(t, PullExtensionStoreInfo(t.Context(), producer, zipExt, PullOptions{HTTPClient: assetSrv.Client()}))
@@ -252,7 +252,7 @@ func TestPullExtensionStoreInfo(t *testing.T) {
 	assert.Contains(t, string(icon), "asset:")
 
 	// config written
-	cfgContent, err := os.ReadFile(filepath.Join(extDir, ".shopware-extension.yml"))
+	cfgContent, err := os.ReadFile(filepath.Join(extDir, ".config/shopware-extension.yml"))
 	require.NoError(t, err)
 	assert.Contains(t, string(cfgContent), "icon.png")
 	assert.Contains(t, string(cfgContent), "global")

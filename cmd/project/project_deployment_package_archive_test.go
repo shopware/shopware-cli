@@ -126,8 +126,8 @@ deployment:
 			}
 			assert.Equal(t, "built", contents["generated.txt"])
 			assert.NotContains(t, contents, "source.txt")
-			assert.Contains(t, contents[".shopware-project.yml"], "staging:")
-			assert.NotContains(t, contents[".shopware-project.yml"], "environments:")
+			assert.Contains(t, contents[".config/shopware-project.yml"], "staging:")
+			assert.NotContains(t, contents[".config/shopware-project.yml"], "environments:")
 			stage := contents["php-root.txt"]
 			assert.Contains(t, stage, "shopware-deployment-")
 			assert.NoDirExists(t, stage)

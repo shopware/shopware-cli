@@ -83,7 +83,8 @@ If a file is not found locally, it proxies the request to the upstream server.`,
 			return err
 		}
 
-		cfg, err := shop.ReadConfig(cmd.Context(), projectConfigPath, true)
+		actualProjectConfigPath := shop.SearchConfigPath(cmd.Context(), path, projectConfigPath)
+		cfg, err := shop.ReadConfig(cmd.Context(), actualProjectConfigPath, true)
 		if err != nil {
 			return err
 		}
@@ -95,7 +96,7 @@ If a file is not found locally, it proxies the request to the upstream server.`,
 		}
 
 		if upstreamURL == "" {
-			return errors.New("upstream URL must be provided either via --url flag or in .shopware-project.yml")
+			return errors.New("upstream URL must be provided either via --url flag or in " + cfg.GetStorageLocation())
 		}
 
 		// Parse upstream URL

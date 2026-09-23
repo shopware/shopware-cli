@@ -113,7 +113,7 @@ func packageArchive(ctx context.Context, root string, cfg *shop.Config, opts Arc
 // Do not distribute CLI credentials or machine-specific environment config.
 // Deployment Helper only needs the resolved deployment section.
 func writeDeploymentConfig(stage string, cfg *shop.Config) error {
-	for _, name := range []string{".shopware-project.yml", ".shopware-project.yaml"} {
+	for _, name := range []string{".config/shopware-project.yml", ".shopware-project.yml", ".shopware-project.yaml"} {
 		if err := os.Remove(filepath.Join(stage, name)); err != nil && !errors.Is(err, os.ErrNotExist) {
 			return err
 		}
@@ -202,7 +202,7 @@ func archiveExcluded(name string, final bool) bool {
 
 func packageConfigPaths(root string, cfg *shop.Config, configPath string) map[string]bool {
 	result := make(map[string]bool)
-	configs := []string{configPath, filepath.Join(root, ".shopware-project.yml"), filepath.Join(root, ".shopware-project.yaml")}
+	configs := []string{configPath, filepath.Join(root, ".config/shopware-project.yml"), filepath.Join(root, ".shopware-project.yml"), filepath.Join(root, ".shopware-project.yaml")}
 	for _, name := range append(configs, cfg.AdditionalConfigs...) {
 		if name == "" {
 			continue
