@@ -7,6 +7,7 @@ import (
 
 	"github.com/shopware/shopware-cli/internal/shop"
 	"github.com/shopware/shopware-cli/logging"
+	"github.com/shopwareLabs/go-shopware-http-client/extension"
 )
 
 var projectExtensionDeactivateCmd = &cobra.Command{
@@ -29,7 +30,9 @@ var projectExtensionDeactivateCmd = &cobra.Command{
 			return err
 		}
 
-		extensions, err := client.ExtensionManager.ListAvailable(cmd.Context())
+		extensionManager := extension.NewManager(client)
+
+		extensions, err := extensionManager.ListAvailable(cmd.Context())
 		if err != nil {
 			return err
 		}
@@ -50,7 +53,7 @@ var projectExtensionDeactivateCmd = &cobra.Command{
 				continue
 			}
 
-			if err := client.ExtensionManager.Deactivate(cmd.Context(), extension.Type, extension.Name); err != nil {
+			if err := extensionManager.Deactivate(cmd.Context(), extension.Type, extension.Name); err != nil {
 				failed = true
 
 				logging.FromContext(cmd.Context()).Errorf("Deactivation of %s failed with error: %v", extension.Name, err)

@@ -7,6 +7,7 @@ import (
 
 	"github.com/shopware/shopware-cli/internal/shop"
 	"github.com/shopware/shopware-cli/logging"
+	"github.com/shopwareLabs/go-shopware-http-client/extension"
 )
 
 var projectExtensionInstallCmd = &cobra.Command{
@@ -29,9 +30,11 @@ var projectExtensionInstallCmd = &cobra.Command{
 			return err
 		}
 
+		extensionManager := extension.NewManager(client)
+
 		activateAfterInstall, _ := cmd.PersistentFlags().GetBool("activate")
 
-		extensions, err := client.ExtensionManager.ListAvailable(cmd.Context())
+		extensions, err := extensionManager.ListAvailable(cmd.Context())
 		if err != nil {
 			return err
 		}
@@ -52,7 +55,7 @@ var projectExtensionInstallCmd = &cobra.Command{
 				continue
 			}
 
-			if err := client.ExtensionManager.Install(cmd.Context(), extension.Type, extension.Name); err != nil {
+			if err := extensionManager.Install(cmd.Context(), extension.Type, extension.Name); err != nil {
 				failed = true
 
 				logging.FromContext(cmd.Context()).Errorf("Installation of %s failed with error: %v", extension.Name, err)
@@ -60,7 +63,7 @@ var projectExtensionInstallCmd = &cobra.Command{
 			}
 
 			if activateAfterInstall {
-				if err := client.ExtensionManager.Activate(cmd.Context(), extension.Type, extension.Name); err != nil {
+				if err := extensionManager.Activate(cmd.Context(), extension.Type, extension.Name); err != nil {
 					failed = true
 
 					logging.FromContext(cmd.Context()).Errorf("Activation of %s failed with error: %v", extension.Name, err)

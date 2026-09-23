@@ -10,6 +10,7 @@ import (
 
 	"github.com/shopware/shopware-cli/internal/shop"
 	"github.com/shopware/shopware-cli/internal/system"
+	shopware "github.com/shopwareLabs/go-shopware-http-client"
 )
 
 type LocalExecutor struct {
@@ -149,7 +150,7 @@ func (l *LocalExecutor) WithRelDir(relDir string) Executor {
 	return &LocalExecutor{env: l.env, projectRoot: l.projectRoot, relDir: relDir, shopCfg: l.shopCfg, envCfg: l.envCfg}
 }
 
-func (l *LocalExecutor) AdminAPIClient(ctx context.Context) (*shop.Client, error) {
+func (l *LocalExecutor) AdminAPIClient(ctx context.Context) (*shopware.Client, error) {
 	return adminAPIClient(ctx, l.shopCfg, l.envCfg)
 }
 

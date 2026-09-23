@@ -7,6 +7,7 @@ import (
 
 	"github.com/shopware/shopware-cli/internal/shop"
 	"github.com/shopware/shopware-cli/logging"
+	"github.com/shopwareLabs/go-shopware-http-client/instance"
 )
 
 var projectClearCacheCmd = &cobra.Command{
@@ -42,7 +43,7 @@ var projectClearCacheCmd = &cobra.Command{
 			return err
 		}
 
-		return client.ClearCache(cmd.Context())
+		return instance.NewManager(client).ClearCache(cmd.Context())
 	},
 }
 

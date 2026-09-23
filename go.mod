@@ -25,7 +25,7 @@ require (
 	github.com/microcosm-cc/bluemonday v1.0.27
 	github.com/otiai10/copy v1.14.1
 	github.com/pb33f/ordered-map/v2 v2.3.1
-	github.com/shopwareLabs/go-shopware-http-client v0.0.0-20260923044332-b5bd9df09217
+	github.com/shopwareLabs/go-shopware-http-client v0.0.0-20260923062933-234f7b6381d3
 	github.com/shyim/go-composer v0.1.3
 	github.com/shyim/go-composer/sbom v0.1.1
 	github.com/shyim/go-endoflife-api v0.0.0-20260630085844-dc60358f29eb

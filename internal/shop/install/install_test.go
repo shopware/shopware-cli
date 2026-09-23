@@ -13,6 +13,7 @@ import (
 
 	"github.com/shopware/shopware-cli/internal/executor"
 	"github.com/shopware/shopware-cli/internal/shop"
+	shopware "github.com/shopwareLabs/go-shopware-http-client"
 )
 
 // fakeExecutor satisfies executor.Executor and lets each test decide which
@@ -71,7 +72,7 @@ func (f *fakeExecutor) StopEnvironment(context.Context, executor.StopOptions) er
 	return nil
 }
 func (f *fakeExecutor) EnvironmentStatus(context.Context) (bool, error) { return true, nil }
-func (f *fakeExecutor) AdminAPIClient(context.Context) (*shop.Client, error) {
+func (f *fakeExecutor) AdminAPIClient(context.Context) (*shopware.Client, error) {
 	return nil, executor.ErrNotSupported
 }
 func (f *fakeExecutor) ShopConfig() *shop.Config { return nil }

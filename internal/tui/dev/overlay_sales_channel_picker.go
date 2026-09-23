@@ -63,14 +63,14 @@ func (sp *salesChannelPicker) Init() tea.Cmd {
 			return salesChannelsLoadedMsg{err: err}
 		}
 
-		channels, err := client.ListStorefrontSalesChannels(ctx)
+		channels, err := shop.ListStorefrontSalesChannels(ctx, client)
 		if err != nil {
 			return salesChannelsLoadedMsg{err: err}
 		}
 
 		entries := make([]salesChannelEntry, 0, len(channels))
 		for _, sc := range channels {
-			theme, err := client.FindThemeForSalesChannel(ctx, sc.Id)
+			theme, err := shop.FindThemeForSalesChannel(ctx, client, sc.Id)
 			if err != nil {
 				return salesChannelsLoadedMsg{err: err}
 			}

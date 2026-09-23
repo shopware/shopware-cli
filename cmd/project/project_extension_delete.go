@@ -7,6 +7,7 @@ import (
 
 	"github.com/shopware/shopware-cli/internal/shop"
 	"github.com/shopware/shopware-cli/logging"
+	"github.com/shopwareLabs/go-shopware-http-client/extension"
 )
 
 var projectExtensionDeleteCmd = &cobra.Command{
@@ -29,7 +30,9 @@ var projectExtensionDeleteCmd = &cobra.Command{
 			return err
 		}
 
-		extensions, err := client.ExtensionManager.ListAvailable(cmd.Context())
+		extensionManager := extension.NewManager(client)
+
+		extensions, err := extensionManager.ListAvailable(cmd.Context())
 		if err != nil {
 			return err
 		}
@@ -46,7 +49,7 @@ var projectExtensionDeleteCmd = &cobra.Command{
 			}
 
 			if extension.Active {
-				if err := client.ExtensionManager.Deactivate(cmd.Context(), extension.Type, extension.Name); err != nil {
+				if err := extensionManager.Deactivate(cmd.Context(), extension.Type, extension.Name); err != nil {
 					failed = true
 
 					logging.FromContext(cmd.Context()).Errorf("Deactivation of %s failed with error: %v", extension.Name, err)
@@ -57,7 +60,7 @@ var projectExtensionDeleteCmd = &cobra.Command{
 			}
 
 			if extension.InstalledAt != nil {
-				if err := client.ExtensionManager.Uninstall(cmd.Context(), extension.Type, extension.Name); err != nil {
+				if err := extensionManager.Uninstall(cmd.Context(), extension.Type, extension.Name); err != nil {
 					failed = true
 
 					logging.FromContext(cmd.Context()).Errorf("Uninstall of %s failed with error: %v", extension.Name, err)
@@ -67,7 +70,7 @@ var projectExtensionDeleteCmd = &cobra.Command{
 				logging.FromContext(cmd.Context()).Infof("Uninstalled %s", extension.Name)
 			}
 
-			if err := client.ExtensionManager.Remove(cmd.Context(), extension.Type, extension.Name); err != nil {
+			if err := extensionManager.Remove(cmd.Context(), extension.Type, extension.Name); err != nil {
 				failed = true
 
 				logging.FromContext(cmd.Context()).Errorf("Remove of %s failed with error: %v", extension.Name, err)

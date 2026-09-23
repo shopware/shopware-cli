@@ -38,11 +38,13 @@ var projectExtensionOutdatedCmd = &cobra.Command{
 			return err
 		}
 
-		if err := client.ExtensionManager.Refresh(cmd.Context()); err != nil {
+		extensionManager := extension.NewManager(client)
+
+		if err := extensionManager.Refresh(cmd.Context()); err != nil {
 			return err
 		}
 
-		extensions, err := client.ExtensionManager.ListAvailable(cmd.Context())
+		extensions, err := extensionManager.ListAvailable(cmd.Context())
 		if err != nil {
 			return err
 		}

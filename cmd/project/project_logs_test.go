@@ -16,6 +16,7 @@ import (
 
 	"github.com/shopware/shopware-cli/internal/executor"
 	"github.com/shopware/shopware-cli/internal/shop"
+	shopware "github.com/shopwareLabs/go-shopware-http-client"
 )
 
 var stdoutCaptureMu sync.Mutex
@@ -179,7 +180,7 @@ func (f *logsFakeExecutor) StopEnvironment(context.Context, executor.StopOptions
 	return nil
 }
 func (f *logsFakeExecutor) EnvironmentStatus(context.Context) (bool, error) { return true, nil }
-func (f *logsFakeExecutor) AdminAPIClient(context.Context) (*shop.Client, error) {
+func (f *logsFakeExecutor) AdminAPIClient(context.Context) (*shopware.Client, error) {
 	return nil, executor.ErrNotSupported
 }
 func (f *logsFakeExecutor) ShopConfig() *shop.Config { return nil }

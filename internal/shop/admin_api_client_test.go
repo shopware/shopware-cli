@@ -8,6 +8,8 @@ import (
 	"testing"
 
 	shopware "github.com/shopwareLabs/go-shopware-http-client"
+	"github.com/shopwareLabs/go-shopware-http-client/extension"
+	"github.com/shopwareLabs/go-shopware-http-client/instance"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -46,8 +48,9 @@ func TestNewApiClientAuthenticatesAndLoadsVersion(t *testing.T) {
 	client, err := NewApiClient(t.Context(), srv.URL, shopware.NewIntegrationCredentials("id", "secret"), srv.Client())
 	require.NoError(t, err)
 	require.NotNil(t, client)
-	require.NotNil(t, client.ShopwareVersion)
-	assert.Equal(t, "6.6.5.0", client.ShopwareVersion.String())
+	version, err := client.Version(t.Context())
+	require.NoError(t, err)
+	assert.Equal(t, "6.6.5.0", version)
 
 	token, err := client.AccessToken(t.Context())
 	require.NoError(t, err)
@@ -109,33 +112,9 @@ func TestClearCache(t *testing.T) {
 
 	client, err := NewApiClient(t.Context(), srv.URL, shopware.NewIntegrationCredentials("id", "secret"), srv.Client())
 	require.NoError(t, err)
-	require.NoError(t, client.ClearCache(t.Context()))
+	require.NoError(t, instance.NewManager(client).ClearCache(t.Context()))
 	assert.Equal(t, http.MethodDelete, method)
 	assert.Equal(t, "/api/_action/cache", path)
-}
-
-func TestInfoDetectsCloudShop(t *testing.T) {
-	isolateTokenCache(t)
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		switch r.URL.Path {
-		case "/api/oauth/token":
-			_, _ = w.Write([]byte(`{"access_token":"token","expires_in":3600}`))
-		case "/api/_info/config":
-			_, _ = w.Write([]byte(`{"version":"6.6.5.0","bundles":{"SaasRufus":{"js":[]}}}`))
-		default:
-			w.WriteHeader(http.StatusNotFound)
-		}
-	}))
-	t.Cleanup(srv.Close)
-
-	client, err := NewApiClient(t.Context(), srv.URL, shopware.NewIntegrationCredentials("id", "secret"), srv.Client())
-	require.NoError(t, err)
-
-	info, err := client.Info(t.Context())
-	require.NoError(t, err)
-	assert.True(t, info.IsCloudShop())
-	assert.False(t, InfoResponse{Bundles: map[string]infoResponseBundle{}}.IsCloudShop())
 }
 
 func TestListStorefrontSalesChannels(t *testing.T) {
@@ -151,7 +130,7 @@ func TestListStorefrontSalesChannels(t *testing.T) {
 	client, err := NewApiClient(t.Context(), srv.URL, shopware.NewIntegrationCredentials("id", "secret"), srv.Client())
 	require.NoError(t, err)
 
-	channels, err := client.ListStorefrontSalesChannels(t.Context())
+	channels, err := ListStorefrontSalesChannels(t.Context(), client)
 	require.NoError(t, err)
 	require.Len(t, channels, 1)
 	assert.Equal(t, "sc1", channels[0].Id)
@@ -173,7 +152,7 @@ func TestFindThemeForSalesChannel(t *testing.T) {
 	client, err := NewApiClient(t.Context(), srv.URL, shopware.NewIntegrationCredentials("id", "secret"), srv.Client())
 	require.NoError(t, err)
 
-	theme, err := client.FindThemeForSalesChannel(t.Context(), "sc1")
+	theme, err := FindThemeForSalesChannel(t.Context(), client, "sc1")
 	require.NoError(t, err)
 	assert.Equal(t, "theme-1", theme.Id)
 }
@@ -187,7 +166,7 @@ func TestFindThemeForSalesChannelNotFound(t *testing.T) {
 	client, err := NewApiClient(t.Context(), srv.URL, shopware.NewIntegrationCredentials("id", "secret"), srv.Client())
 	require.NoError(t, err)
 
-	_, err = client.FindThemeForSalesChannel(t.Context(), "missing")
+	_, err = FindThemeForSalesChannel(t.Context(), client, "missing")
 	assert.ErrorIs(t, err, ErrNotFound)
 }
 
@@ -201,7 +180,7 @@ func TestExtensionManagerListAvailable(t *testing.T) {
 	client, err := NewApiClient(t.Context(), srv.URL, shopware.NewIntegrationCredentials("id", "secret"), srv.Client())
 	require.NoError(t, err)
 
-	list, err := client.ExtensionManager.ListAvailable(t.Context())
+	list, err := extension.NewManager(client).ListAvailable(t.Context())
 	require.NoError(t, err)
 	require.Len(t, list, 1)
 	assert.Equal(t, "SwagPayPal", list.GetByName("SwagPayPal").Name)

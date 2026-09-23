@@ -20,6 +20,8 @@ import (
 	"github.com/shopware/shopware-cli/internal/extension"
 	"github.com/shopware/shopware-cli/internal/shop"
 	"github.com/shopware/shopware-cli/logging"
+	shopwareExtension "github.com/shopwareLabs/go-shopware-http-client/extension"
+	"github.com/shopwareLabs/go-shopware-http-client/instance"
 )
 
 var projectExtensionUploadCmd = &cobra.Command{
@@ -144,34 +146,21 @@ var projectExtensionUploadCmd = &cobra.Command{
 			return err
 		}
 
-		shopInfo, err := client.Info(cmd.Context())
-		if err != nil {
-			return fmt.Errorf("cannot get shop info: %w", err)
-		}
-
-		extensions, err := client.ExtensionManager.ListAvailable(cmd.Context())
-		if err != nil {
-			return err
-		}
-
-		if !shopInfo.IsCloudShop() || extensions.GetByName(name) == nil {
-			if err := client.ExtensionManager.Upload(cmd.Context(), &buf); err != nil {
-				return fmt.Errorf("cannot upload extension: %w", err)
-			}
-		} else if err := client.ExtensionManager.UploadUpdateToCloud(cmd.Context(), name, &buf); err != nil {
-			return fmt.Errorf("cannot upload extension update: %w", err)
+		extensionManager := shopwareExtension.NewManager(client)
+		if err := extensionManager.Upload(cmd.Context(), name, &buf); err != nil {
+			return fmt.Errorf("cannot upload extension: %w", err)
 		}
 
 		logging.FromContext(cmd.Context()).Infof("Uploaded extension %s with version %s", name, version.String())
 
-		if err := client.ExtensionManager.Refresh(cmd.Context()); err != nil {
+		if err := extensionManager.Refresh(cmd.Context()); err != nil {
 			return fmt.Errorf("cannot refresh extension list: %w", err)
 		}
 
 		logging.FromContext(cmd.Context()).Infof("Refreshed extension list")
 
 		if doLifecycleEvents {
-			extensions, err = client.ExtensionManager.ListAvailable(cmd.Context())
+			extensions, err := extensionManager.ListAvailable(cmd.Context())
 			if err != nil {
 				return err
 			}
@@ -182,7 +171,7 @@ var projectExtensionUploadCmd = &cobra.Command{
 			}
 
 			if remoteExtension.InstalledAt == nil {
-				if err := client.ExtensionManager.Install(cmd.Context(), remoteExtension.Type, remoteExtension.Name); err != nil {
+				if err := extensionManager.Install(cmd.Context(), remoteExtension.Type, remoteExtension.Name); err != nil {
 					return fmt.Errorf("cannot install extension: %w", err)
 				}
 
@@ -190,7 +179,7 @@ var projectExtensionUploadCmd = &cobra.Command{
 			}
 
 			if !remoteExtension.Active {
-				if err := client.ExtensionManager.Activate(cmd.Context(), remoteExtension.Type, remoteExtension.Name); err != nil {
+				if err := extensionManager.Activate(cmd.Context(), remoteExtension.Type, remoteExtension.Name); err != nil {
 					return fmt.Errorf("cannot activate extension: %w", err)
 				}
 
@@ -198,7 +187,7 @@ var projectExtensionUploadCmd = &cobra.Command{
 			}
 
 			if remoteExtension.IsUpdatable() {
-				if err := client.ExtensionManager.Update(cmd.Context(), remoteExtension.Type, remoteExtension.Name); err != nil {
+				if err := extensionManager.Update(cmd.Context(), remoteExtension.Type, remoteExtension.Name); err != nil {
 					return fmt.Errorf("cannot update extension: %w", err)
 				}
 
@@ -207,7 +196,7 @@ var projectExtensionUploadCmd = &cobra.Command{
 		}
 
 		if ext.GetType() == "plugin" {
-			if err := client.ClearCache(cmd.Context()); err != nil {
+			if err := instance.NewManager(client).ClearCache(cmd.Context()); err != nil {
 				return err
 			}
 

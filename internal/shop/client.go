@@ -37,7 +37,7 @@ func newShopCredentials(config *Config) (shopware.Credentials, error) {
 	return shopware.NewIntegrationCredentials(config.AdminApi.ClientId, config.AdminApi.ClientSecret), nil
 }
 
-func NewShopClient(ctx context.Context, config *Config) (*Client, error) {
+func NewShopClient(ctx context.Context, config *Config) (*shopware.Client, error) {
 	skipSSLCert := false
 
 	if config.AdminApi != nil {

@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 
 	"github.com/shopware/shopware-cli/internal/shop"
+	shopware "github.com/shopwareLabs/go-shopware-http-client"
 )
 
 type SymfonyCLIExecutor struct {
@@ -85,7 +86,7 @@ func (s *SymfonyCLIExecutor) WithRelDir(relDir string) Executor {
 	return &SymfonyCLIExecutor{BinaryPath: s.BinaryPath, env: s.env, projectRoot: s.projectRoot, relDir: relDir, shopCfg: s.shopCfg, envCfg: s.envCfg}
 }
 
-func (s *SymfonyCLIExecutor) AdminAPIClient(ctx context.Context) (*shop.Client, error) {
+func (s *SymfonyCLIExecutor) AdminAPIClient(ctx context.Context) (*shopware.Client, error) {
 	return adminAPIClient(ctx, s.shopCfg, s.envCfg)
 }
 

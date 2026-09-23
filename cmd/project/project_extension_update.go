@@ -7,6 +7,7 @@ import (
 
 	"github.com/shopware/shopware-cli/internal/shop"
 	"github.com/shopware/shopware-cli/logging"
+	"github.com/shopwareLabs/go-shopware-http-client/extension"
 )
 
 var projectExtensionUpdateCmd = &cobra.Command{
@@ -29,13 +30,15 @@ var projectExtensionUpdateCmd = &cobra.Command{
 			return err
 		}
 
+		extensionManager := extension.NewManager(client)
+
 		disableStoreUpdates, _ := cmd.PersistentFlags().GetBool("disable-store-update")
 
-		if err := client.ExtensionManager.Refresh(cmd.Context()); err != nil {
+		if err := extensionManager.Refresh(cmd.Context()); err != nil {
 			return err
 		}
 
-		extensions, err := client.ExtensionManager.ListAvailable(cmd.Context())
+		extensions, err := extensionManager.ListAvailable(cmd.Context())
 		if err != nil {
 			return err
 		}
@@ -70,14 +73,14 @@ var projectExtensionUpdateCmd = &cobra.Command{
 			}
 
 			if extension.UpdateSource == "store" && !disableStoreUpdates {
-				if err := client.ExtensionManager.Download(cmd.Context(), arg); err != nil {
+				if err := extensionManager.Download(cmd.Context(), arg); err != nil {
 					logging.FromContext(cmd.Context()).Errorf("Download of %s update failed with error: %v", extension.Name, err)
 					failed = true
 					continue
 				}
 			}
 
-			if err := client.ExtensionManager.Update(cmd.Context(), extension.Type, extension.Name); err != nil {
+			if err := extensionManager.Update(cmd.Context(), extension.Type, extension.Name); err != nil {
 				failed = true
 
 				logging.FromContext(cmd.Context()).Errorf("Update of %s failed with error: %v", extension.Name, err)

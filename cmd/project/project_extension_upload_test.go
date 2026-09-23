@@ -11,7 +11,7 @@ import (
 )
 
 // newEmptyExtensionListShop fakes the Admin API surface of an empty shop and records requests as "METHOD path".
-func newEmptyExtensionListShop(t *testing.T, failSecondList bool) (*httptest.Server, func() []string) {
+func newEmptyExtensionListShop(t *testing.T, failList bool) (*httptest.Server, func() []string) {
 	t.Helper()
 
 	var mu sync.Mutex
@@ -25,7 +25,7 @@ func newEmptyExtensionListShop(t *testing.T, failSecondList bool) (*httptest.Ser
 		if isList {
 			listCalls++
 		}
-		failList := isList && failSecondList && listCalls > 1
+		fail := isList && failList
 		mu.Unlock()
 
 		w.Header().Set("Content-Type", "application/json")
@@ -35,7 +35,7 @@ func newEmptyExtensionListShop(t *testing.T, failSecondList bool) (*httptest.Ser
 		case r.Method == http.MethodGet && r.URL.Path == "/api/_info/config":
 			_, _ = w.Write([]byte(`{"version":"6.6.5.0","bundles":{}}`))
 		case isList:
-			if failList {
+			if fail {
 				w.WriteHeader(http.StatusInternalServerError)
 				return
 			}

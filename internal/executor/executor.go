@@ -12,6 +12,7 @@ import (
 
 	"github.com/shopware/shopware-cli/internal/shop"
 	"github.com/shopware/shopware-cli/logging"
+	shopware "github.com/shopwareLabs/go-shopware-http-client"
 )
 
 var ErrNotSupported = errors.New("operation not supported by this executor")
@@ -49,7 +50,7 @@ type Executor interface {
 	StartEnvironment(ctx context.Context) error
 	StopEnvironment(ctx context.Context, opts StopOptions) error
 	EnvironmentStatus(ctx context.Context) (bool, error)
-	AdminAPIClient(ctx context.Context) (*shop.Client, error)
+	AdminAPIClient(ctx context.Context) (*shopware.Client, error)
 	// ShopConfig returns the project config with the selected environment's
 	// url and admin_api applied.
 	ShopConfig() *shop.Config
@@ -58,7 +59,7 @@ type Executor interface {
 	DatabaseConnection(ctx context.Context) (*DatabaseConnection, error)
 }
 
-func adminAPIClient(ctx context.Context, cfg *shop.Config, envCfg *shop.EnvironmentConfig) (*shop.Client, error) {
+func adminAPIClient(ctx context.Context, cfg *shop.Config, envCfg *shop.EnvironmentConfig) (*shopware.Client, error) {
 	if cfg == nil {
 		return nil, errors.New("admin api requires a shop configuration")
 	}

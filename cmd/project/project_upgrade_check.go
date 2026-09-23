@@ -21,6 +21,7 @@ import (
 	"github.com/shopware/shopware-cli/internal/tracking"
 	"github.com/shopware/shopware-cli/internal/tui"
 	"github.com/shopware/shopware-cli/logging"
+	shopwareExtension "github.com/shopwareLabs/go-shopware-http-client/extension"
 )
 
 var projectUpgradeCheckCmd = &cobra.Command{
@@ -49,7 +50,9 @@ var projectUpgradeCheckCmd = &cobra.Command{
 				return err
 			}
 
-			remoteExtensions, err := client.ExtensionManager.ListAvailable(cmd.Context())
+			extensionManager := shopwareExtension.NewManager(client)
+
+			remoteExtensions, err := extensionManager.ListAvailable(cmd.Context())
 
 			if err != nil {
 				return fmt.Errorf("failed to list available extensions: %w", err)
@@ -61,7 +64,15 @@ var projectUpgradeCheckCmd = &cobra.Command{
 				extensions[ext.Name] = ext.Version
 			}
 
-			shopwareVersion = client.ShopwareVersion
+			versionStr, err := client.Version(cmd.Context())
+			if err != nil {
+				return fmt.Errorf("failed to fetch shopware version: %w", err)
+			}
+
+			shopwareVersion, err = version.NewVersion(versionStr)
+			if err != nil {
+				return fmt.Errorf("failed to parse shopware version %q: %w", versionStr, err)
+			}
 		} else {
 			logging.FromContext(cmd.Context()).Debugf("Using local composer.lock to lookup for available extensions")
 			shopwareVersion, extensions, err = getLocalExtensions()
