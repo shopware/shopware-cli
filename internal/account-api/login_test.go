@@ -11,6 +11,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/oauth2"
+
+	"github.com/shopware/shopware-cli/internal/system"
 )
 
 func TestNewApiUsesClientCredentialsFromEnv(t *testing.T) {
@@ -75,6 +77,20 @@ func TestNewApiUsesValidTokenCache(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, client.Token)
 	assert.Equal(t, "from-cache", client.Token.AccessToken)
+}
+
+func TestNewApiFailsWithoutLoginWhenInteractionDisabled(t *testing.T) {
+	t.Setenv("SHOPWARE_CLI_CACHE_DIR", t.TempDir())
+	t.Setenv("SHOPWARE_CLI_ACCOUNT_STAGING", "")
+	t.Setenv("SHOPWARE_CLI_ACCOUNT_CLIENT_ID", "")
+	t.Setenv("SHOPWARE_CLI_ACCOUNT_CLIENT_SECRET", "")
+	t.Setenv("SHOPWARE_CLI_ACCOUNT_EMAIL", "")
+	t.Setenv("SHOPWARE_CLI_ACCOUNT_PASSWORD", "")
+
+	_, err := NewApi(system.WithInteraction(t.Context(), false))
+
+	assert.ErrorContains(t, err, "shopware-cli account login")
+	assert.ErrorContains(t, err, "SHOPWARE_CLI_ACCOUNT_CLIENT_ID")
 }
 
 func TestNewApiUsesLegacyCredentials(t *testing.T) {
