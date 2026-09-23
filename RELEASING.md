@@ -11,14 +11,18 @@ manually.
 2. Create an annotated [semantic version](https://semver.org/) tag, for example:
 
    ```sh
-   git tag -a v1.2.3 -m "v1.2.3"
+   git tag -a 1.2.3 -m "1.2.3" -s
    ```
+   
+   Use a prerelease suffix such as `1.2.3-rc.1` for prereleases.
 
-   Use a prerelease suffix such as `v1.2.3-rc.1` for prereleases.
+   The `-s` flag makes the tag "signed", similar to commits it is considered best practice.
+   For it to work you might need to refer to [GitHub's documentation on the matter](https://docs.github.com/en/authentication/managing-commit-signature-verification/associating-an-email-with-your-gpg-key).
+
 3. Push only the new tag:
 
    ```sh
-   git push origin v1.2.3
+   git push origin 1.2.3
    ```
 
 The tag push triggers the `Release` workflow. It runs GoReleaser, which creates
