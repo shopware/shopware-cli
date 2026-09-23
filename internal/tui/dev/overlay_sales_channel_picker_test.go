@@ -6,7 +6,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"github.com/stretchr/testify/assert"
 
-	adminSdk "github.com/shopware/shopware-cli/internal/admin-api"
+	"github.com/shopware/shopware-cli/internal/shop"
 	"github.com/shopware/shopware-cli/internal/tui/app"
 	"github.com/shopware/shopware-cli/internal/tui/picker"
 )
@@ -16,8 +16,8 @@ func TestSalesChannelPicker_ConfirmEmitsWatcherOpts(t *testing.T) {
 
 	loaded := salesChannelsLoadedMsg{
 		channels: []salesChannelEntry{
-			{id: "sc1", name: "Storefront EU", domain: "https://eu.example.test", theme: &adminSdk.Theme{Id: "theme-eu"}},
-			{id: "sc2", name: "Storefront US", domain: "https://us.example.test", theme: &adminSdk.Theme{Id: "theme-us"}},
+			{id: "sc1", name: "Storefront EU", domain: "https://eu.example.test", theme: &shop.Theme{Id: "theme-eu"}},
+			{id: "sc2", name: "Storefront US", domain: "https://us.example.test", theme: &shop.Theme{Id: "theme-us"}},
 		},
 	}
 
@@ -69,7 +69,7 @@ func TestModel_SalesChannelPicker_FullRoutingFlow(t *testing.T) {
 
 	_, _ = shell.Update(salesChannelsLoadedMsg{
 		channels: []salesChannelEntry{
-			{id: "sc1", name: "Main", domain: "https://main.test", theme: &adminSdk.Theme{Id: "theme-main"}},
+			{id: "sc1", name: "Main", domain: "https://main.test", theme: &shop.Theme{Id: "theme-main"}},
 		},
 	})
 	assert.NotNil(t, sp.inner)

@@ -10,7 +10,6 @@ import (
 	"strings"
 	"sync"
 
-	adminSdk "github.com/shopware/shopware-cli/internal/admin-api"
 	"github.com/shopware/shopware-cli/internal/shop"
 	"github.com/shopware/shopware-cli/logging"
 )
@@ -50,7 +49,7 @@ type Executor interface {
 	StartEnvironment(ctx context.Context) error
 	StopEnvironment(ctx context.Context, opts StopOptions) error
 	EnvironmentStatus(ctx context.Context) (bool, error)
-	AdminAPIClient(ctx context.Context) (*adminSdk.Client, error)
+	AdminAPIClient(ctx context.Context) (*shop.Client, error)
 	// ShopConfig returns the project config with the selected environment's
 	// url and admin_api applied.
 	ShopConfig() *shop.Config
@@ -59,7 +58,7 @@ type Executor interface {
 	DatabaseConnection(ctx context.Context) (*DatabaseConnection, error)
 }
 
-func adminAPIClient(ctx context.Context, cfg *shop.Config, envCfg *shop.EnvironmentConfig) (*adminSdk.Client, error) {
+func adminAPIClient(ctx context.Context, cfg *shop.Config, envCfg *shop.EnvironmentConfig) (*shop.Client, error) {
 	if cfg == nil {
 		return nil, errors.New("admin api requires a shop configuration")
 	}

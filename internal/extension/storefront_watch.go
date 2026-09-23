@@ -11,9 +11,9 @@ import (
 	"strconv"
 	"strings"
 
-	adminSdk "github.com/shopware/shopware-cli/internal/admin-api"
 	"github.com/shopware/shopware-cli/internal/executor"
 	"github.com/shopware/shopware-cli/internal/npm"
+	"github.com/shopware/shopware-cli/internal/shop"
 	"github.com/shopware/shopware-cli/internal/system"
 	"github.com/shopware/shopware-cli/internal/tui"
 )
@@ -209,7 +209,7 @@ func ResolveStorefrontWatcherOptions(ctx context.Context, cmdExecutor executor.E
 }
 
 // pickSalesChannel returns the channel with the given ID, or lets the user choose one when the ID is empty.
-func pickSalesChannel(ctx context.Context, channels []adminSdk.SalesChannel, salesChannelID string) (*adminSdk.SalesChannel, error) {
+func pickSalesChannel(ctx context.Context, channels []shop.SalesChannel, salesChannelID string) (*shop.SalesChannel, error) {
 	if salesChannelID != "" {
 		for i, sc := range channels {
 			if sc.Id == salesChannelID {

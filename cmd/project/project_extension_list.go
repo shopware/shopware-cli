@@ -3,9 +3,9 @@ package project
 import (
 	"github.com/spf13/cobra"
 
-	adminSdk "github.com/shopware/shopware-cli/internal/admin-api"
 	"github.com/shopware/shopware-cli/internal/shop"
 	"github.com/shopware/shopware-cli/internal/tui"
+	"github.com/shopwareLabs/go-shopware-http-client/extension"
 )
 
 var projectExtensionListCmd = &cobra.Command{
@@ -48,14 +48,14 @@ var projectExtensionListCmd = &cobra.Command{
 	},
 }
 
-func projectExtensionListTable(extensions adminSdk.ExtensionList) *tui.Table {
+func projectExtensionListTable(extensions extension.List) *tui.Table {
 	result := tui.NewTable(
 		tui.TableColumn{Title: "Name", JSONKey: "name"},
 		tui.TableColumn{Title: "Version", JSONKey: "version"},
 		tui.TableColumn{Title: "Status", JSONKey: "status"},
 	)
-	for _, extension := range extensions {
-		result.AddRowWithJSON(extension, extension.Name, extension.Version, extension.Status())
+	for _, ext := range extensions {
+		result.AddRowWithJSON(ext, ext.Name, ext.Version, ext.Status())
 	}
 
 	return result

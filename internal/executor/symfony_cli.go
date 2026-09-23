@@ -6,7 +6,6 @@ import (
 	"os/exec"
 	"path/filepath"
 
-	adminSdk "github.com/shopware/shopware-cli/internal/admin-api"
 	"github.com/shopware/shopware-cli/internal/shop"
 )
 
@@ -86,7 +85,7 @@ func (s *SymfonyCLIExecutor) WithRelDir(relDir string) Executor {
 	return &SymfonyCLIExecutor{BinaryPath: s.BinaryPath, env: s.env, projectRoot: s.projectRoot, relDir: relDir, shopCfg: s.shopCfg, envCfg: s.envCfg}
 }
 
-func (s *SymfonyCLIExecutor) AdminAPIClient(ctx context.Context) (*adminSdk.Client, error) {
+func (s *SymfonyCLIExecutor) AdminAPIClient(ctx context.Context) (*shop.Client, error) {
 	return adminAPIClient(ctx, s.shopCfg, s.envCfg)
 }
 

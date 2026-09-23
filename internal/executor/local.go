@@ -8,7 +8,6 @@ import (
 	"os/exec"
 	"path/filepath"
 
-	adminSdk "github.com/shopware/shopware-cli/internal/admin-api"
 	"github.com/shopware/shopware-cli/internal/shop"
 	"github.com/shopware/shopware-cli/internal/system"
 )
@@ -150,7 +149,7 @@ func (l *LocalExecutor) WithRelDir(relDir string) Executor {
 	return &LocalExecutor{env: l.env, projectRoot: l.projectRoot, relDir: relDir, shopCfg: l.shopCfg, envCfg: l.envCfg}
 }
 
-func (l *LocalExecutor) AdminAPIClient(ctx context.Context) (*adminSdk.Client, error) {
+func (l *LocalExecutor) AdminAPIClient(ctx context.Context) (*shop.Client, error) {
 	return adminAPIClient(ctx, l.shopCfg, l.envCfg)
 }
 

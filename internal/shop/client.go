@@ -7,23 +7,23 @@ import (
 	"net/http"
 	"os"
 
-	adminSdk "github.com/shopware/shopware-cli/internal/admin-api"
+	shopware "github.com/shopwareLabs/go-shopware-http-client"
 )
 
 // ErrNoAdminAPICredentials is returned when neither the project config nor the environment provides Admin API credentials.
 var ErrNoAdminAPICredentials = errors.New("no Admin API credentials configured: set environments.<name>.admin_api in .shopware-project.yml or SHOPWARE_CLI_API_CLIENT_ID and SHOPWARE_CLI_API_CLIENT_SECRET")
 
-func newShopCredentials(config *Config) (adminSdk.Credentials, error) {
+func newShopCredentials(config *Config) (shopware.Credentials, error) {
 	clientId, clientSecret := os.Getenv("SHOPWARE_CLI_API_CLIENT_ID"), os.Getenv("SHOPWARE_CLI_API_CLIENT_SECRET")
 
 	if clientId != "" && clientSecret != "" {
-		return adminSdk.NewIntegrationCredentials(clientId, clientSecret), nil
+		return shopware.NewIntegrationCredentials(clientId, clientSecret), nil
 	}
 
 	username, password := os.Getenv("SHOPWARE_CLI_API_USERNAME"), os.Getenv("SHOPWARE_CLI_API_PASSWORD")
 
 	if username != "" && password != "" {
-		return adminSdk.NewPasswordCredentials(username, password), nil
+		return shopware.NewPasswordCredentials(username, password), nil
 	}
 
 	if config.AdminApi == nil {
@@ -31,13 +31,13 @@ func newShopCredentials(config *Config) (adminSdk.Credentials, error) {
 	}
 
 	if config.AdminApi.Username != "" {
-		return adminSdk.NewPasswordCredentials(config.AdminApi.Username, config.AdminApi.Password), nil
+		return shopware.NewPasswordCredentials(config.AdminApi.Username, config.AdminApi.Password), nil
 	}
 
-	return adminSdk.NewIntegrationCredentials(config.AdminApi.ClientId, config.AdminApi.ClientSecret), nil
+	return shopware.NewIntegrationCredentials(config.AdminApi.ClientId, config.AdminApi.ClientSecret), nil
 }
 
-func NewShopClient(ctx context.Context, config *Config) (*adminSdk.Client, error) {
+func NewShopClient(ctx context.Context, config *Config) (*Client, error) {
 	skipSSLCert := false
 
 	if config.AdminApi != nil {
@@ -67,5 +67,5 @@ func NewShopClient(ctx context.Context, config *Config) (*adminSdk.Client, error
 		return nil, err
 	}
 
-	return adminSdk.NewApiClient(ctx, shopUrl, creds, client)
+	return NewApiClient(ctx, shopUrl, creds, client)
 }

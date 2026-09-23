@@ -8,19 +8,19 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	adminSdk "github.com/shopware/shopware-cli/internal/admin-api"
 	"github.com/shopware/shopware-cli/internal/tui"
+	"github.com/shopwareLabs/go-shopware-http-client/extension"
 )
 
 func TestProjectExtensionTablesPreserveJSONContract(t *testing.T) {
-	extension := &adminSdk.ExtensionDetail{
+	ext := &extension.Detail{
 		Name:          "Example",
 		Version:       "1.0.0",
 		LatestVersion: "1.1.0",
 		Active:        true,
 		UpdateSource:  "store",
 	}
-	extensions := adminSdk.ExtensionList{extension}
+	extensions := extension.List{ext}
 
 	expected, err := json.Marshal(extensions)
 	require.NoError(t, err)

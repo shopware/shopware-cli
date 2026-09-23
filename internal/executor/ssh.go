@@ -20,7 +20,6 @@ import (
 
 	"github.com/go-sql-driver/mysql"
 
-	adminSdk "github.com/shopware/shopware-cli/internal/admin-api"
 	"github.com/shopware/shopware-cli/internal/shop"
 )
 
@@ -232,7 +231,7 @@ func (s *SSHExecutor) WithRelDir(relDir string) Executor {
 	return &SSHExecutor{host: s.host, user: s.user, port: s.port, directory: s.directory, identityFile: s.identityFile, phpBinary: s.phpBinary, env: s.env, projectRoot: s.projectRoot, relDir: relDir, shopCfg: s.shopCfg, envCfg: s.envCfg}
 }
 
-func (s *SSHExecutor) AdminAPIClient(ctx context.Context) (*adminSdk.Client, error) {
+func (s *SSHExecutor) AdminAPIClient(ctx context.Context) (*shop.Client, error) {
 	return adminAPIClient(ctx, s.shopCfg, s.envCfg)
 }
 

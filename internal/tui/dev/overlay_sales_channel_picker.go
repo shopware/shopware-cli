@@ -7,9 +7,9 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 
-	adminSdk "github.com/shopware/shopware-cli/internal/admin-api"
 	"github.com/shopware/shopware-cli/internal/executor"
 	"github.com/shopware/shopware-cli/internal/extension"
+	"github.com/shopware/shopware-cli/internal/shop"
 	"github.com/shopware/shopware-cli/internal/tui"
 	"github.com/shopware/shopware-cli/internal/tui/app"
 	"github.com/shopware/shopware-cli/internal/tui/picker"
@@ -31,7 +31,7 @@ type salesChannelEntry struct {
 	id     string
 	name   string
 	domain string
-	theme  *adminSdk.Theme
+	theme  *shop.Theme
 }
 
 type salesChannelPicker struct {

@@ -14,7 +14,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	adminSdk "github.com/shopware/shopware-cli/internal/admin-api"
 	"github.com/shopware/shopware-cli/internal/executor"
 	"github.com/shopware/shopware-cli/internal/shop"
 )
@@ -180,7 +179,7 @@ func (f *logsFakeExecutor) StopEnvironment(context.Context, executor.StopOptions
 	return nil
 }
 func (f *logsFakeExecutor) EnvironmentStatus(context.Context) (bool, error) { return true, nil }
-func (f *logsFakeExecutor) AdminAPIClient(context.Context) (*adminSdk.Client, error) {
+func (f *logsFakeExecutor) AdminAPIClient(context.Context) (*shop.Client, error) {
 	return nil, executor.ErrNotSupported
 }
 func (f *logsFakeExecutor) ShopConfig() *shop.Config { return nil }

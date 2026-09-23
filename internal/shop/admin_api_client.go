@@ -1,4 +1,4 @@
-package admin_sdk
+package shop
 
 import (
 	"context"
@@ -19,15 +19,6 @@ const (
 	userAgent       = "shopware-cli"
 )
 
-// Credentials is the OAuth grant used to authenticate against a shop.
-type Credentials = shopware.Credentials
-
-// ExtensionList is the Admin API extension listing.
-type ExtensionList = extension.List
-
-// ExtensionDetail describes a single extension returned by the Admin API.
-type ExtensionDetail = extension.Detail
-
 // Client is the CLI Admin API client. It wraps
 // github.com/shopwareLabs/go-shopware-http-client and adds shopware-cli
 // helpers (token export, cache clear, sales-channel lookup).
@@ -39,17 +30,6 @@ type Client struct {
 
 	ShopwareVersion  *version.Version
 	ExtensionManager *extension.Manager
-}
-
-// NewIntegrationCredentials authenticates as a Shopware integration
-// (client_credentials grant).
-func NewIntegrationCredentials(clientID, clientSecret string) Credentials {
-	return shopware.NewIntegrationCredentials(clientID, clientSecret)
-}
-
-// NewPasswordCredentials authenticates as an admin user (password grant).
-func NewPasswordCredentials(username, password string) Credentials {
-	return shopware.NewPasswordCredentials(username, password)
 }
 
 // tokenCacheDirEnv overrides the on-disk OAuth token cache directory.
@@ -74,7 +54,7 @@ func newTokenStorage(shopURL string) shopware.TokenStorage {
 }
 
 // NewApiClient authenticates against the shop and returns a ready-to-use Client.
-func NewApiClient(ctx context.Context, shopURL string, credentials Credentials, httpClient *http.Client) (*Client, error) {
+func NewApiClient(ctx context.Context, shopURL string, credentials shopware.Credentials, httpClient *http.Client) (*Client, error) {
 	storage := newTokenStorage(shopURL)
 
 	raw := shopware.NewClient(shopware.Config{

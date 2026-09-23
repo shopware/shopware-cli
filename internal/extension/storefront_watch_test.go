@@ -11,8 +11,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	adminSdk "github.com/shopware/shopware-cli/internal/admin-api"
 	"github.com/shopware/shopware-cli/internal/executor"
+	"github.com/shopware/shopware-cli/internal/shop"
 	"github.com/shopware/shopware-cli/internal/system"
 )
 
@@ -86,7 +86,7 @@ func TestRunStorefrontThemeDumpAttachesInput(t *testing.T) {
 
 func TestPickSalesChannelWithoutInteraction(t *testing.T) {
 	ctx := system.WithInteraction(t.Context(), false)
-	channels := []adminSdk.SalesChannel{
+	channels := []shop.SalesChannel{
 		{Id: "a1", Name: "Storefront"},
 		{Id: "b2", Name: "Outlet"},
 	}

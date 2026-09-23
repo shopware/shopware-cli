@@ -10,7 +10,6 @@ import (
 	"strings"
 	"syscall"
 
-	adminSdk "github.com/shopware/shopware-cli/internal/admin-api"
 	"github.com/shopware/shopware-cli/internal/shop"
 	"github.com/shopware/shopware-cli/internal/system"
 )
@@ -143,7 +142,7 @@ func (d *DockerExecutor) WithRelDir(relDir string) Executor {
 	return &DockerExecutor{env: d.env, projectRoot: d.projectRoot, relDir: relDir, shopCfg: d.shopCfg, envCfg: d.envCfg, composeProjectName: d.composeProjectName}
 }
 
-func (d *DockerExecutor) AdminAPIClient(ctx context.Context) (*adminSdk.Client, error) {
+func (d *DockerExecutor) AdminAPIClient(ctx context.Context) (*shop.Client, error) {
 	return adminAPIClient(ctx, d.shopCfg, d.envCfg)
 }
 

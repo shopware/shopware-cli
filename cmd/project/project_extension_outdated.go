@@ -5,10 +5,10 @@ import (
 
 	"github.com/spf13/cobra"
 
-	adminSdk "github.com/shopware/shopware-cli/internal/admin-api"
 	"github.com/shopware/shopware-cli/internal/shop"
 	"github.com/shopware/shopware-cli/internal/tui"
 	"github.com/shopware/shopware-cli/logging"
+	"github.com/shopwareLabs/go-shopware-http-client/extension"
 )
 
 var projectExtensionOutdatedCmd = &cobra.Command{
@@ -61,15 +61,15 @@ var projectExtensionOutdatedCmd = &cobra.Command{
 	},
 }
 
-func projectExtensionOutdatedTable(extensions adminSdk.ExtensionList) *tui.Table {
+func projectExtensionOutdatedTable(extensions extension.List) *tui.Table {
 	result := tui.NewTable(
 		tui.TableColumn{Title: "Name", JSONKey: "name"},
 		tui.TableColumn{Title: "Current Version", JSONKey: "currentVersion"},
 		tui.TableColumn{Title: "Latest Version", JSONKey: "latestVersion"},
 		tui.TableColumn{Title: "Update Source", JSONKey: "updateSource"},
 	)
-	for _, extension := range extensions {
-		result.AddRowWithJSON(extension, extension.Name, extension.Version, extension.LatestVersion, extension.UpdateSource)
+	for _, ext := range extensions {
+		result.AddRowWithJSON(ext, ext.Name, ext.Version, ext.LatestVersion, ext.UpdateSource)
 	}
 
 	return result

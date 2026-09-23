@@ -1,4 +1,4 @@
-package admin_sdk
+package shop
 
 import (
 	"context"

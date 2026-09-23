@@ -1,4 +1,4 @@
-package admin_sdk
+package shop
 
 import (
 	"encoding/json"
@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	shopware "github.com/shopwareLabs/go-shopware-http-client"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -42,7 +43,7 @@ func TestNewApiClientAuthenticatesAndLoadsVersion(t *testing.T) {
 	srv := newShopServer(t, nil)
 	t.Cleanup(srv.Close)
 
-	client, err := NewApiClient(t.Context(), srv.URL, NewIntegrationCredentials("id", "secret"), srv.Client())
+	client, err := NewApiClient(t.Context(), srv.URL, shopware.NewIntegrationCredentials("id", "secret"), srv.Client())
 	require.NoError(t, err)
 	require.NotNil(t, client)
 	require.NotNil(t, client.ShopwareVersion)
@@ -77,7 +78,7 @@ func TestNewApiClientPasswordGrant(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 
-	client, err := NewApiClient(t.Context(), srv.URL, NewPasswordCredentials("admin", "shopware"), srv.Client())
+	client, err := NewApiClient(t.Context(), srv.URL, shopware.NewPasswordCredentials("admin", "shopware"), srv.Client())
 	require.NoError(t, err)
 	assert.Equal(t, "password", grant)
 	token, err := client.AccessToken(t.Context())
@@ -93,7 +94,7 @@ func TestNewApiClientAuthError(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 
-	_, err := NewApiClient(t.Context(), srv.URL, NewIntegrationCredentials("id", "secret"), srv.Client())
+	_, err := NewApiClient(t.Context(), srv.URL, shopware.NewIntegrationCredentials("id", "secret"), srv.Client())
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "invalid credentials")
 }
@@ -106,7 +107,7 @@ func TestClearCache(t *testing.T) {
 	})
 	t.Cleanup(srv.Close)
 
-	client, err := NewApiClient(t.Context(), srv.URL, NewIntegrationCredentials("id", "secret"), srv.Client())
+	client, err := NewApiClient(t.Context(), srv.URL, shopware.NewIntegrationCredentials("id", "secret"), srv.Client())
 	require.NoError(t, err)
 	require.NoError(t, client.ClearCache(t.Context()))
 	assert.Equal(t, http.MethodDelete, method)
@@ -128,7 +129,7 @@ func TestInfoDetectsCloudShop(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 
-	client, err := NewApiClient(t.Context(), srv.URL, NewIntegrationCredentials("id", "secret"), srv.Client())
+	client, err := NewApiClient(t.Context(), srv.URL, shopware.NewIntegrationCredentials("id", "secret"), srv.Client())
 	require.NoError(t, err)
 
 	info, err := client.Info(t.Context())
@@ -147,7 +148,7 @@ func TestListStorefrontSalesChannels(t *testing.T) {
 	})
 	t.Cleanup(srv.Close)
 
-	client, err := NewApiClient(t.Context(), srv.URL, NewIntegrationCredentials("id", "secret"), srv.Client())
+	client, err := NewApiClient(t.Context(), srv.URL, shopware.NewIntegrationCredentials("id", "secret"), srv.Client())
 	require.NoError(t, err)
 
 	channels, err := client.ListStorefrontSalesChannels(t.Context())
@@ -169,7 +170,7 @@ func TestFindThemeForSalesChannel(t *testing.T) {
 	})
 	t.Cleanup(srv.Close)
 
-	client, err := NewApiClient(t.Context(), srv.URL, NewIntegrationCredentials("id", "secret"), srv.Client())
+	client, err := NewApiClient(t.Context(), srv.URL, shopware.NewIntegrationCredentials("id", "secret"), srv.Client())
 	require.NoError(t, err)
 
 	theme, err := client.FindThemeForSalesChannel(t.Context(), "sc1")
@@ -183,7 +184,7 @@ func TestFindThemeForSalesChannelNotFound(t *testing.T) {
 	})
 	t.Cleanup(srv.Close)
 
-	client, err := NewApiClient(t.Context(), srv.URL, NewIntegrationCredentials("id", "secret"), srv.Client())
+	client, err := NewApiClient(t.Context(), srv.URL, shopware.NewIntegrationCredentials("id", "secret"), srv.Client())
 	require.NoError(t, err)
 
 	_, err = client.FindThemeForSalesChannel(t.Context(), "missing")
@@ -197,7 +198,7 @@ func TestExtensionManagerListAvailable(t *testing.T) {
 	})
 	t.Cleanup(srv.Close)
 
-	client, err := NewApiClient(t.Context(), srv.URL, NewIntegrationCredentials("id", "secret"), srv.Client())
+	client, err := NewApiClient(t.Context(), srv.URL, shopware.NewIntegrationCredentials("id", "secret"), srv.Client())
 	require.NoError(t, err)
 
 	list, err := client.ExtensionManager.ListAvailable(t.Context())
