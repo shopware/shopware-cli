@@ -14,8 +14,9 @@ import (
 )
 
 var projectDoctor = &cobra.Command{
-	Use:   "doctor",
+	Use:   "doctor [path]",
 	Short: "Inspect project config, Shopware version, and extensions",
+	Args:  cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		var err error
 		var projectDir string

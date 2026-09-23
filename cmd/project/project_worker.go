@@ -60,14 +60,6 @@ queue. The count per queue is optional and defaults to 1.`,
 			return errors.New("--queue cannot be combined with a queue spec argument")
 		}
 
-		if memoryLimit == "" {
-			memoryLimit = "512M"
-		}
-
-		if timeLimit == "" {
-			timeLimit = "120"
-		}
-
 		var defaultQueues []string
 		if workerSpec == "" {
 			if queuesToConsume != "" {
@@ -114,8 +106,8 @@ func init() {
 	projectRootCmd.AddCommand(projectWorkerCmd)
 	projectWorkerCmd.PersistentFlags().Bool("verbose", false, "Enable verbose worker output")
 	projectWorkerCmd.PersistentFlags().String("queue", "", "Queues to consume (comma-separated)")
-	projectWorkerCmd.PersistentFlags().String("memory-limit", "", "Worker memory limit (default: 512M)")
-	projectWorkerCmd.PersistentFlags().String("time-limit", "", "Worker time limit in seconds (default: 120)")
+	projectWorkerCmd.PersistentFlags().String("memory-limit", "512M", "Worker memory limit")
+	projectWorkerCmd.PersistentFlags().String("time-limit", "120", "Worker time limit in seconds")
 	projectWorkerCmd.PersistentFlags().Uint("graceful-stop-limit", 0, "Seconds to wait for workers to stop gracefully (0 = force-stop immediately)")
 	projectWorkerCmd.PersistentFlags().Uint("limit", 0, "Maximum messages per worker (0 = unlimited)")
 }

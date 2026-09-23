@@ -17,6 +17,7 @@ var projectAdminWatchCmd = &cobra.Command{
 	Use:     "admin-watch [path]",
 	Short:   "Watch Administration assets with live reload",
 	Aliases: []string{"watch-admin"},
+	Args:    cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		var projectRoot string
 		var err error
