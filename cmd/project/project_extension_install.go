@@ -57,6 +57,7 @@ var projectExtensionInstallCmd = &cobra.Command{
 				failed = true
 
 				logging.FromContext(cmd.Context()).Errorf("Installation of %s failed with error: %v", extension.Name, err)
+				continue
 			}
 
 			if activateAfterInstall {
