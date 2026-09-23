@@ -35,7 +35,7 @@ var extensionChangelogCmd = &cobra.Command{
 		}
 
 		if err != nil {
-			return fmt.Errorf("changelog: cannot open extension %w", err)
+			return fmt.Errorf("cannot open extension: %w", err)
 		}
 
 		changelog, err := ext.GetChangelog()

@@ -11,9 +11,11 @@ import (
 	"strconv"
 	"strings"
 
+	adminSdk "github.com/shopware/shopware-cli/internal/admin-api"
 	"github.com/shopware/shopware-cli/internal/executor"
 	"github.com/shopware/shopware-cli/internal/npm"
 	"github.com/shopware/shopware-cli/internal/system"
+	"github.com/shopware/shopware-cli/internal/tui"
 )
 
 // storefrontHMRPatch is a Node preload (node --require) injected only when the
@@ -166,4 +168,90 @@ func themeCompileSupportsActiveOnly(projectRoot string) bool {
 	}
 
 	return strings.Contains(string(bytes), "active-only")
+}
+
+// ResolveStorefrontWatcherOptions picks the sales channel to watch and resolves its theme through the Admin API.
+func ResolveStorefrontWatcherOptions(ctx context.Context, cmdExecutor executor.Executor, salesChannelID string) (StorefrontWatcherOptions, error) {
+	salesChannelID = strings.TrimSpace(salesChannelID)
+
+	client, err := cmdExecutor.AdminAPIClient(ctx)
+	if err != nil {
+		return StorefrontWatcherOptions{}, fmt.Errorf("--sales-channel requires admin api access (set environments.<name>.admin_api in .shopware-project.yml or SHOPWARE_CLI_API_* env vars): %w", err)
+	}
+
+	apiCtx := adminSdk.NewApiContext(ctx)
+	channels, err := client.SalesChannel.ListStorefront(apiCtx)
+	if err != nil {
+		return StorefrontWatcherOptions{}, fmt.Errorf("listing storefront sales channels: %w", err)
+	}
+
+	if len(channels) == 0 {
+		return StorefrontWatcherOptions{}, errors.New("no storefront sales channels found")
+	}
+
+	picked, err := pickSalesChannel(ctx, channels, salesChannelID)
+	if err != nil {
+		return StorefrontWatcherOptions{}, err
+	}
+
+	theme, err := client.SalesChannel.FindThemeForSalesChannel(apiCtx, picked.Id)
+	if err != nil {
+		return StorefrontWatcherOptions{}, fmt.Errorf("resolving theme for sales channel %s: %w", picked.Name, err)
+	}
+	if theme == nil {
+		return StorefrontWatcherOptions{}, fmt.Errorf("no theme assigned to sales channel %s", picked.Name)
+	}
+
+	out := StorefrontWatcherOptions{ThemeID: theme.Id}
+	if len(picked.Domains) > 0 {
+		out.DomainURL = picked.Domains[0].Url
+	}
+	return out, nil
+}
+
+// pickSalesChannel returns the channel with the given ID, or lets the user choose one when the ID is empty.
+func pickSalesChannel(ctx context.Context, channels []adminSdk.SalesChannel, salesChannelID string) (*adminSdk.SalesChannel, error) {
+	if salesChannelID != "" {
+		for i, sc := range channels {
+			if sc.Id == salesChannelID {
+				return &channels[i], nil
+			}
+		}
+
+		return nil, fmt.Errorf("sales channel %q not found or not a storefront", salesChannelID)
+	}
+
+	if !system.IsInteractionEnabled(ctx) {
+		available := make([]string, len(channels))
+		for i, sc := range channels {
+			available[i] = fmt.Sprintf("%s (%s)", sc.Name, sc.Id)
+		}
+
+		return nil, fmt.Errorf("--sales-channel cannot prompt when interaction is disabled; pass --sales-channel=<id>, available: %s", strings.Join(available, ", "))
+	}
+
+	items := make([]tui.FilterSelectItem, len(channels))
+	for i, sc := range channels {
+		detail := ""
+		if len(sc.Domains) > 0 {
+			detail = sc.Domains[0].Url
+		}
+		items[i] = tui.FilterSelectItem{Label: sc.Name, Detail: detail, Value: sc.Id}
+	}
+
+	chosenID, err := tui.FilterSelect(ctx,
+		"Which sales channel should the storefront watcher target?",
+		"Type to filter by name or domain.",
+		items)
+	if err != nil {
+		return nil, err
+	}
+
+	for i, sc := range channels {
+		if sc.Id == chosenID {
+			return &channels[i], nil
+		}
+	}
+
+	return nil, errors.New("no sales channel selected")
 }

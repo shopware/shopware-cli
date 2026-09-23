@@ -4,12 +4,14 @@ import (
 	"context"
 	"crypto/tls"
 	"errors"
-	"fmt"
 	"net/http"
 	"os"
 
 	adminSdk "github.com/shopware/shopware-cli/internal/admin-api"
 )
+
+// ErrNoAdminAPICredentials is returned when neither the project config nor the environment provides Admin API credentials.
+var ErrNoAdminAPICredentials = errors.New("no Admin API credentials configured: set environments.<name>.admin_api in .shopware-project.yml or SHOPWARE_CLI_API_CLIENT_ID and SHOPWARE_CLI_API_CLIENT_SECRET")
 
 func newShopCredentials(config *Config) (adminSdk.OAuthCredentials, error) {
 	clientId, clientSecret := os.Getenv("SHOPWARE_CLI_API_CLIENT_ID"), os.Getenv("SHOPWARE_CLI_API_CLIENT_SECRET")
@@ -25,7 +27,7 @@ func newShopCredentials(config *Config) (adminSdk.OAuthCredentials, error) {
 	}
 
 	if config.AdminApi == nil {
-		return nil, errors.New("admin-api is not enabled in config")
+		return nil, ErrNoAdminAPICredentials
 	}
 
 	if config.AdminApi.Username != "" {
@@ -62,7 +64,7 @@ func NewShopClient(ctx context.Context, config *Config) (*adminSdk.Client, error
 
 	creds, err := newShopCredentials(config)
 	if err != nil {
-		return nil, fmt.Errorf("newShopCredentials: %v", err)
+		return nil, err
 	}
 
 	return adminSdk.NewApiClient(ctx, shopUrl, creds, client)

@@ -14,7 +14,7 @@ import (
 
 var projectDeploymentPackageArchiveCmd = &cobra.Command{
 	Use:   "archive [project-directory]",
-	Short: "Build a deployable tar.gz archive without modifying the source",
+	Short: "Build a deployment archive in a temporary copy of the project",
 	Long: `Run the project CI build pipeline in a temporary copy and package the result
 as tar.gz. Without a directory, find the closest Shopware project.
 
@@ -23,10 +23,10 @@ runtime data, and Composer credentials are not included in the archive. The
 packaged project config contains only deployment settings. Build hooks still run
 as trusted project code; this is not a sandbox.
 
-By default, create a unique archive in the project's .shopware-cli/deployments
-directory. Use --output for an explicit path relative to the current directory.
-Existing artifacts are never overwritten. The archive path is printed after
-the build finishes. Nothing is uploaded or rolled out.`,
+By default, create a uniquely named archive such as focused-wise-turing.tar.gz in the
+project's .shopware-cli/deployments directory. Use --output for an explicit path
+relative to the current directory. Existing artifacts are never overwritten.
+The created archive path is reported after the build finishes. Nothing is uploaded or rolled out.`,
 	Args: cobra.MaximumNArgs(1),
 	ValidArgsFunction: func(*cobra.Command, []string, string) ([]string, cobra.ShellCompDirective) {
 		return nil, cobra.ShellCompDirectiveFilterDirs
@@ -64,13 +64,13 @@ the build finishes. Nothing is uploaded or rolled out.`,
 		if err != nil {
 			return err
 		}
-		_, err = fmt.Fprintln(cmd.OutOrStdout(), reference)
+		_, err = fmt.Fprintf(cmd.OutOrStdout(), "Created archive %q\n", reference)
 		return err
 	},
 }
 
 func init() {
 	projectDeploymentPackageCmd.AddCommand(projectDeploymentPackageArchiveCmd)
-	projectDeploymentPackageArchiveCmd.Flags().StringP("output", "o", "", "Output archive path (default: .shopware-cli/deployments/shopware-<unique-id>.tar.gz in the project)")
-	projectDeploymentPackageArchiveCmd.Flags().Bool("with-dev-dependencies", false, "Include development dependencies in the archive")
+	projectDeploymentPackageArchiveCmd.Flags().StringP("output", "o", "", "Archive path (default: .shopware-cli/deployments/<generated-name>.tar.gz in the project)")
+	projectDeploymentPackageArchiveCmd.Flags().Bool("with-dev-dependencies", false, "Install dev dependencies")
 }

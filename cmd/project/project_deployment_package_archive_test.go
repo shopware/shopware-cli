@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -28,7 +29,7 @@ func newArchiveTestCommand(t *testing.T, args []string) (*cobra.Command, *bytes.
 	root := &cobra.Command{Use: "project", SilenceUsage: true, SilenceErrors: true}
 	root.PersistentFlags().StringVar(&projectConfigPath, "project-config", "", "")
 	root.PersistentFlags().StringVarP(&environmentName, "env", "e", "", "")
-	deployment := &cobra.Command{Use: "deployment"}
+	deployment := &cobra.Command{Use: "deploy"}
 	pack := &cobra.Command{Use: "package"}
 	archive := &cobra.Command{
 		Use:  projectDeploymentPackageArchiveCmd.Use,
@@ -43,7 +44,7 @@ func newArchiveTestCommand(t *testing.T, args []string) (*cobra.Command, *bytes.
 	out := new(bytes.Buffer)
 	root.SetOut(out)
 	root.SetErr(out)
-	root.SetArgs(append([]string{"deployment", "package", "archive"}, args...))
+	root.SetArgs(append([]string{"deploy", "package", "archive"}, args...))
 	return root, out
 }
 
@@ -100,7 +101,7 @@ deployment:
 			}
 			cmd, out := newArchiveTestCommand(t, args)
 			require.NoError(t, cmd.ExecuteContext(t.Context()))
-			assert.Equal(t, output+"\n", out.String())
+			assert.Equal(t, "Created archive "+strconv.Quote(output)+"\n", out.String())
 			assert.FileExists(t, filepath.Join(root, "source.txt"))
 			assert.NoFileExists(t, filepath.Join(root, "generated.txt"))
 			assert.NoDirExists(t, filepath.Join(root, "vendor"))

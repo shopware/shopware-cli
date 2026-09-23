@@ -16,6 +16,7 @@ var projectStorefrontBuildCmd = &cobra.Command{
 	Use:     "storefront-build [path]",
 	Short:   "Build and install Storefront assets",
 	Aliases: []string{"build-storefront"},
+	Args:    cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		var projectRoot string
 		var err error
@@ -91,9 +92,9 @@ func init() {
 	projectRootCmd.AddCommand(projectStorefrontBuildCmd)
 	projectStorefrontBuildCmd.PersistentFlags().Bool("skip-assets-install", false, "Skip installing built assets")
 	projectStorefrontBuildCmd.PersistentFlags().Bool("skip-theme-compile", false, "Skip theme compilation")
-	projectStorefrontBuildCmd.PersistentFlags().Bool("force-install-dependencies", false, "Force install NPM dependencies")
-	projectStorefrontBuildCmd.PersistentFlags().String("only-extensions", "", "Only build the given extensions (comma separated)")
+	projectStorefrontBuildCmd.PersistentFlags().Bool("force-install-dependencies", false, "Force-install npm dependencies")
+	projectStorefrontBuildCmd.PersistentFlags().String("only-extensions", "", "Build only the specified extensions (comma-separated)")
 	projectStorefrontBuildCmd.PersistentFlags().Bool("select-extensions", false, "Select extensions interactively")
-	projectStorefrontBuildCmd.PersistentFlags().String("skip-extensions", "", "Skips the given extensions (comma separated)")
-	projectStorefrontBuildCmd.PersistentFlags().Bool("only-custom-static-extensions", false, "Only build extensions from custom/static-plugins directory")
+	projectStorefrontBuildCmd.PersistentFlags().String("skip-extensions", "", "Skip the specified extensions (comma-separated)")
+	projectStorefrontBuildCmd.PersistentFlags().Bool("only-custom-static-extensions", false, "Build only extensions in the custom/static-plugins directory")
 }

@@ -11,7 +11,7 @@ import (
 )
 
 var projectExtensionUninstallCmd = &cobra.Command{
-	Use:   "uninstall [name]",
+	Use:   "uninstall name...",
 	Short: "Uninstall an extension from a Shopware project",
 	Args:  cobra.MinimumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
@@ -64,7 +64,8 @@ var projectExtensionUninstallCmd = &cobra.Command{
 			if _, err := client.ExtensionManager.UninstallExtension(adminSdk.NewApiContext(cmd.Context()), extension.Type, extension.Name); err != nil {
 				failed = true
 
-				logging.FromContext(cmd.Context()).Errorf("Installation of %s failed with error: %v", extension.Name, err)
+				logging.FromContext(cmd.Context()).Errorf("Uninstall of %s failed with error: %v", extension.Name, err)
+				continue
 			}
 
 			logging.FromContext(cmd.Context()).Infof("Uninstalled %s", extension.Name)

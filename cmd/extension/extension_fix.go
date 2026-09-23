@@ -1,7 +1,6 @@
 package extension
 
 import (
-	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -26,7 +25,7 @@ var extensionFixCmd = &cobra.Command{
 
 		if !allowNonGit {
 			if stat, err := os.Stat(filepath.Join(args[0], ".git")); err != nil || !stat.IsDir() {
-				return errors.New("provided folder is not a git repository. Use --allow-non-git flag to run anyway")
+				return fmt.Errorf("%s is not a git repository. Use --allow-non-git flag to run anyway", args[0])
 			}
 		}
 

@@ -11,7 +11,7 @@ import (
 )
 
 var projectExtensionDeleteCmd = &cobra.Command{
-	Use:   "delete [name]",
+	Use:   "delete name...",
 	Short: "Delete an extension from a Shopware project",
 	Args:  cobra.MinimumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
@@ -41,6 +41,7 @@ var projectExtensionDeleteCmd = &cobra.Command{
 			extension := extensions.GetByName(arg)
 
 			if extension == nil {
+				failed = true
 				logging.FromContext(cmd.Context()).Errorf("Cannot find extension by name %s", arg)
 				continue
 			}
@@ -71,6 +72,7 @@ var projectExtensionDeleteCmd = &cobra.Command{
 				failed = true
 
 				logging.FromContext(cmd.Context()).Errorf("Remove of %s failed with error: %v", extension.Name, err)
+				continue
 			}
 
 			logging.FromContext(cmd.Context()).Infof("Removed %s", extension.Name)

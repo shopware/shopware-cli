@@ -11,7 +11,7 @@ import (
 )
 
 var projectExtensionActivateCmd = &cobra.Command{
-	Use:   "activate [name]",
+	Use:   "activate name...",
 	Short: "Activate an installed extension",
 	Args:  cobra.MinimumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
@@ -56,6 +56,7 @@ var projectExtensionActivateCmd = &cobra.Command{
 					failed = true
 
 					logging.FromContext(cmd.Context()).Errorf("Installation of %s failed with error: %v", extension.Name, err)
+					continue
 				}
 			}
 
@@ -63,6 +64,7 @@ var projectExtensionActivateCmd = &cobra.Command{
 				failed = true
 
 				logging.FromContext(cmd.Context()).Errorf("Activate of %s failed with error: %v", extension.Name, err)
+				continue
 			}
 
 			logging.FromContext(cmd.Context()).Infof("Activated %s", extension.Name)

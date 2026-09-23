@@ -4,6 +4,7 @@ import (
 	"archive/zip"
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"os/exec"
 	"strings"
@@ -20,7 +21,7 @@ func gitTagOrBranchOfFolder(ctx context.Context, source string) (string, error) 
 
 	stdout, err := tagCmd.Output()
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("cannot determine the git tag or branch of %s: %w", source, withGitStderr(err))
 	}
 
 	versions := strings.Split(string(stdout), "\n")
@@ -34,7 +35,7 @@ func gitTagOrBranchOfFolder(ctx context.Context, source string) (string, error) 
 	stdout, err = branchCmd.Output()
 
 	if err != nil {
-		return "", fmt.Errorf("gitTagOrBranchOfFolder: %v", err)
+		return "", fmt.Errorf("cannot determine the git tag or branch of %s: %w", source, withGitStderr(err))
 	}
 
 	return strings.Trim(strings.TrimLeft(string(stdout), "* "), "\n"), nil
@@ -46,7 +47,7 @@ func GitCopyFolder(ctx context.Context, source, target, commitHash string) (stri
 		commitHash, err = gitTagOrBranchOfFolder(ctx, source)
 
 		if err != nil {
-			return "", fmt.Errorf("GitCopyFolder: cannot find checkout tag or branch: %v", err)
+			return "", err
 		}
 	}
 
@@ -54,18 +55,28 @@ func GitCopyFolder(ctx context.Context, source, target, commitHash string) (stri
 
 	stdout, err := archiveCmd.Output()
 	if err != nil {
-		return "", fmt.Errorf("GitCopyFolder: cannot archive %s:  %v", commitHash, err)
+		return "", fmt.Errorf("cannot archive %s: %w", commitHash, withGitStderr(err))
 	}
 
 	zipReader, err := zip.NewReader(bytes.NewReader(stdout), int64(len(stdout)))
 	if err != nil {
-		return "", fmt.Errorf("GitCopyFolder: cannot open the zip file produced by git archive: %v", err)
+		return "", fmt.Errorf("cannot open the zip file produced by git archive: %w", err)
 	}
 
 	err = archiver.Unzip(zipReader, target)
 	if err != nil {
-		return "", fmt.Errorf("GitCopyFolder: cannot unzip the zip archive: %v", err)
+		return "", fmt.Errorf("cannot unzip the zip archive: %w", err)
 	}
 
 	return commitHash, err
+}
+
+// withGitStderr appends git's own stderr to an exec error, which otherwise only reads "exit status 128".
+func withGitStderr(err error) error {
+	var exitErr *exec.ExitError
+	if errors.As(err, &exitErr) && len(exitErr.Stderr) > 0 {
+		return fmt.Errorf("%w: %s", err, strings.ReplaceAll(strings.TrimSpace(string(exitErr.Stderr)), "\n", "; "))
+	}
+
+	return err
 }

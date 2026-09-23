@@ -69,7 +69,8 @@ func TestFindClosestShopwareProjectNotFound(t *testing.T) {
 
 	_, err := FindClosestShopwareProject(false)
 
-	assert.EqualError(t, err, "cannot find Shopware project in current directory")
+	assert.ErrorContains(t, err, "cannot find Shopware project in ")
+	assert.ErrorContains(t, err, "bin/console")
 }
 
 func TestFindClosestShopwareProjectRequiresConsole(t *testing.T) {

@@ -11,7 +11,7 @@ import (
 )
 
 var projectExtensionDeactivateCmd = &cobra.Command{
-	Use:   "deactivate [name]",
+	Use:   "deactivate name...",
 	Short: "Deactivate an installed extension",
 	Args:  cobra.MinimumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
@@ -55,6 +55,7 @@ var projectExtensionDeactivateCmd = &cobra.Command{
 				failed = true
 
 				logging.FromContext(cmd.Context()).Errorf("Deactivation of %s failed with error: %v", extension.Name, err)
+				continue
 			}
 
 			logging.FromContext(cmd.Context()).Infof("Deactivated %s", extension.Name)

@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	adminSdk "github.com/shopware/shopware-cli/internal/admin-api"
 	"github.com/shopware/shopware-cli/internal/executor"
 	"github.com/shopware/shopware-cli/internal/system"
 )
@@ -81,4 +82,25 @@ func TestRunStorefrontThemeDumpAttachesInput(t *testing.T) {
 	assert.Same(t, in, process.Cmd.Stdin)
 	assert.Same(t, &out, process.Cmd.Stdout)
 	assert.Same(t, &out, process.Cmd.Stderr)
+}
+
+func TestPickSalesChannelWithoutInteraction(t *testing.T) {
+	ctx := system.WithInteraction(t.Context(), false)
+	channels := []adminSdk.SalesChannel{
+		{Id: "a1", Name: "Storefront"},
+		{Id: "b2", Name: "Outlet"},
+	}
+
+	_, err := pickSalesChannel(ctx, channels, "")
+	assert.ErrorContains(t, err, "interaction is disabled")
+	assert.ErrorContains(t, err, "--sales-channel=<id>")
+	assert.ErrorContains(t, err, "Storefront (a1)")
+	assert.ErrorContains(t, err, "Outlet (b2)")
+
+	picked, err := pickSalesChannel(ctx, channels, "b2")
+	require.NoError(t, err)
+	assert.Equal(t, "Outlet", picked.Name)
+
+	_, err = pickSalesChannel(ctx, channels, "zz")
+	assert.ErrorContains(t, err, `sales channel "zz" not found`)
 }

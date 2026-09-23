@@ -11,7 +11,7 @@ import (
 )
 
 var projectExtensionUpdateCmd = &cobra.Command{
-	Use:   "update [name]",
+	Use:   "update name...|all",
 	Short: "Update an installed extension",
 	Args:  cobra.MinimumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
@@ -82,6 +82,7 @@ var projectExtensionUpdateCmd = &cobra.Command{
 				failed = true
 
 				logging.FromContext(cmd.Context()).Errorf("Update of %s failed with error: %v", extension.Name, err)
+				continue
 			}
 
 			logging.FromContext(cmd.Context()).Infof("Updated %s", extension.Name)

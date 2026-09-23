@@ -13,6 +13,7 @@ import (
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/clientcredentials"
 
+	"github.com/shopware/shopware-cli/internal/system"
 	"github.com/shopware/shopware-cli/logging"
 )
 
@@ -43,6 +44,10 @@ func NewApi(ctx context.Context) (*Client, error) {
 		return loginWithCredentials(ctx, email, password)
 	}
 
+	if !system.IsInteractionEnabled(ctx) {
+		return nil, errors.New("not logged in and interaction is disabled: run \"shopware-cli account login\" in a terminal, or set SHOPWARE_CLI_ACCOUNT_CLIENT_ID and SHOPWARE_CLI_ACCOUNT_CLIENT_SECRET")
+	}
+
 	// Fall back to interactive OAuth2 login
 	token, err := InteractiveLogin(ctx)
 	if err != nil {
@@ -52,7 +57,7 @@ func NewApi(ctx context.Context) (*Client, error) {
 	client = &Client{Token: token}
 
 	if err := saveApiTokenToTokenCache(client); err != nil {
-		logging.FromContext(ctx).Errorf(fmt.Sprintf("Cannot save token cache: %v", err))
+		logging.FromContext(ctx).Errorf("Cannot save token cache: %v", err)
 	}
 
 	return client, nil
@@ -133,7 +138,7 @@ func loginWithCredentials(ctx context.Context, email, password string) (*Client,
 	}
 
 	if err := saveApiTokenToTokenCache(client); err != nil {
-		logging.FromContext(ctx).Errorf(fmt.Sprintf("Cannot save token cache: %v", err))
+		logging.FromContext(ctx).Errorf("Cannot save token cache: %v", err)
 	}
 
 	return client, nil

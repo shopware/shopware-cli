@@ -68,7 +68,7 @@ var extensionValidateCmd = &cobra.Command{
 				defer func() {
 					beforeDeleteTime := time.Now()
 					if err := os.RemoveAll(tmpDir); err != nil {
-						logging.FromContext(cmd.Context()).Error("Failed to remove temporary directory:", err)
+						logging.FromContext(cmd.Context()).Errorf("Failed to remove temporary directory: %v", err)
 					}
 					logging.FromContext(cmd.Context()).Debugf("Removed temporary directory in %s", time.Since(beforeDeleteTime).String())
 				}()
@@ -171,7 +171,7 @@ func init() {
 
 		mode, _ := cmd.Flags().GetString("check-against")
 		if mode != "highest" && mode != "lowest" {
-			return fmt.Errorf("invalid mode: %s. Must be either 'highest' or 'lowest'", mode)
+			return fmt.Errorf("invalid --check-against value %q, allowed values: highest, lowest", mode)
 		}
 
 		// Dont setup tools if we dont run full validation

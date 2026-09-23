@@ -34,7 +34,7 @@ var extensionNameCmd = &cobra.Command{
 		}
 
 		if err != nil {
-			return fmt.Errorf("name: cannot open extension %w", err)
+			return fmt.Errorf("cannot open extension: %w", err)
 		}
 
 		name, err := ext.GetName()

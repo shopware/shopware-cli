@@ -60,14 +60,6 @@ queue. The count per queue is optional and defaults to 1.`,
 			return errors.New("--queue cannot be combined with a queue spec argument")
 		}
 
-		if memoryLimit == "" {
-			memoryLimit = "512M"
-		}
-
-		if timeLimit == "" {
-			timeLimit = "120"
-		}
-
 		var defaultQueues []string
 		if workerSpec == "" {
 			if queuesToConsume != "" {
@@ -114,19 +106,19 @@ func init() {
 	projectRootCmd.AddCommand(projectWorkerCmd)
 	projectWorkerCmd.PersistentFlags().Bool("verbose", false, "Enable verbose worker output")
 	projectWorkerCmd.PersistentFlags().String("queue", "", "Queues to consume (comma-separated)")
-	projectWorkerCmd.PersistentFlags().String("memory-limit", "", "Worker memory limit (default: 512M)")
-	projectWorkerCmd.PersistentFlags().String("time-limit", "", "Worker time limit in seconds (default: 120)")
+	projectWorkerCmd.PersistentFlags().String("memory-limit", "512M", "Worker memory limit")
+	projectWorkerCmd.PersistentFlags().String("time-limit", "120", "Worker time limit in seconds")
 	projectWorkerCmd.PersistentFlags().Uint("graceful-stop-limit", 0, "Seconds to wait for workers to stop gracefully (0 = force-stop immediately)")
 	projectWorkerCmd.PersistentFlags().Uint("limit", 0, "Maximum messages per worker (0 = unlimited)")
 }
 
 func cancelOnTermination(ctx context.Context, cancel context.CancelFunc) {
-	logging.FromContext(ctx).Infof("setting up a signal handler")
+	logging.FromContext(ctx).Debugf("Setting up a signal handler")
 	s := make(chan os.Signal, 1)
 	signal.Notify(s, syscall.SIGTERM, syscall.SIGINT)
 	go func() {
 		sig := <-s
-		logging.FromContext(ctx).Infof("received signal %v\n", sig.String())
+		logging.FromContext(ctx).Infof("Received signal %v", sig)
 		cancel()
 	}()
 }

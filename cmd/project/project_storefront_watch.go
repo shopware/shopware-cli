@@ -2,22 +2,16 @@ package project
 
 import (
 	"context"
-	"errors"
-	"fmt"
 	"os"
-	"strings"
 	"time"
 
 	"github.com/spf13/cobra"
 
-	adminSdk "github.com/shopware/shopware-cli/internal/admin-api"
 	"github.com/shopware/shopware-cli/internal/envfile"
-	"github.com/shopware/shopware-cli/internal/executor"
 	"github.com/shopware/shopware-cli/internal/extension"
 	"github.com/shopware/shopware-cli/internal/projectbuild"
 	"github.com/shopware/shopware-cli/internal/proxy"
 	"github.com/shopware/shopware-cli/internal/shop"
-	"github.com/shopware/shopware-cli/internal/tui"
 	"github.com/shopware/shopware-cli/logging"
 )
 
@@ -25,6 +19,7 @@ var projectStorefrontWatchCmd = &cobra.Command{
 	Use:     "storefront-watch [path]",
 	Short:   "Watch Storefront assets and rebuild on change",
 	Aliases: []string{"watch-storefront"},
+	Args:    cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		var projectRoot string
 		var err error
@@ -57,7 +52,7 @@ var projectStorefrontWatchCmd = &cobra.Command{
 		var opts extension.StorefrontWatcherOptions
 		if cmd.PersistentFlags().Changed("sales-channel") {
 			salesChannelID, _ := cmd.PersistentFlags().GetString("sales-channel")
-			opts, err = resolveStorefrontWatcherOptions(cmd.Context(), cmdExecutor, salesChannelID)
+			opts, err = extension.ResolveStorefrontWatcherOptions(cmd.Context(), cmdExecutor, salesChannelID)
 			if err != nil {
 				return err
 			}
@@ -93,83 +88,10 @@ var projectStorefrontWatchCmd = &cobra.Command{
 
 func init() {
 	projectRootCmd.AddCommand(projectStorefrontWatchCmd)
-	projectStorefrontWatchCmd.PersistentFlags().String("only-extensions", "", "Only watch the given extensions (comma separated)")
+	projectStorefrontWatchCmd.PersistentFlags().String("only-extensions", "", "Watch only the specified extensions (comma-separated)")
 	projectStorefrontWatchCmd.PersistentFlags().Bool("select-extensions", false, "Select extensions interactively")
-	projectStorefrontWatchCmd.PersistentFlags().String("skip-extensions", "", "Skips the given extensions (comma separated)")
-	projectStorefrontWatchCmd.PersistentFlags().Bool("only-custom-static-extensions", false, "Only build extensions from custom/static-plugins directory")
+	projectStorefrontWatchCmd.PersistentFlags().String("skip-extensions", "", "Skip the specified extensions (comma-separated)")
+	projectStorefrontWatchCmd.PersistentFlags().Bool("only-custom-static-extensions", false, "Watch only extensions in the custom/static-plugins directory")
 	projectStorefrontWatchCmd.PersistentFlags().String("sales-channel", "", "Sales channel ID to target with theme:dump. Pass without a value (--sales-channel) to pick interactively. Omit the flag entirely to keep the legacy theme:dump behavior")
 	projectStorefrontWatchCmd.PersistentFlags().Lookup("sales-channel").NoOptDefVal = " "
-}
-
-func resolveStorefrontWatcherOptions(ctx context.Context, cmdExecutor executor.Executor, salesChannelID string) (extension.StorefrontWatcherOptions, error) {
-	salesChannelID = strings.TrimSpace(salesChannelID)
-
-	client, err := cmdExecutor.AdminAPIClient(ctx)
-	if err != nil {
-		return extension.StorefrontWatcherOptions{}, fmt.Errorf("--sales-channel requires admin api access (set environments.<name>.admin_api in .config/shopware-project.yml or SHOPWARE_CLI_API_* env vars): %w", err)
-	}
-
-	apiCtx := adminSdk.NewApiContext(ctx)
-	channels, err := client.SalesChannel.ListStorefront(apiCtx)
-	if err != nil {
-		return extension.StorefrontWatcherOptions{}, fmt.Errorf("listing storefront sales channels: %w", err)
-	}
-
-	if len(channels) == 0 {
-		return extension.StorefrontWatcherOptions{}, errors.New("no storefront sales channels found")
-	}
-
-	var picked *adminSdk.SalesChannel
-	if salesChannelID != "" {
-		for i, sc := range channels {
-			if sc.Id == salesChannelID {
-				picked = &channels[i]
-				break
-			}
-		}
-		if picked == nil {
-			return extension.StorefrontWatcherOptions{}, fmt.Errorf("sales channel %q not found or not a storefront", salesChannelID)
-		}
-	} else {
-		items := make([]tui.FilterSelectItem, len(channels))
-		for i, sc := range channels {
-			detail := ""
-			if len(sc.Domains) > 0 {
-				detail = sc.Domains[0].Url
-			}
-			items[i] = tui.FilterSelectItem{Label: sc.Name, Detail: detail, Value: sc.Id}
-		}
-
-		chosenID, err := tui.FilterSelect(ctx,
-			"Which sales channel should the storefront watcher target?",
-			"Type to filter by name or domain.",
-			items)
-		if err != nil {
-			return extension.StorefrontWatcherOptions{}, err
-		}
-
-		for i, sc := range channels {
-			if sc.Id == chosenID {
-				picked = &channels[i]
-				break
-			}
-		}
-		if picked == nil {
-			return extension.StorefrontWatcherOptions{}, errors.New("no sales channel selected")
-		}
-	}
-
-	theme, err := client.SalesChannel.FindThemeForSalesChannel(apiCtx, picked.Id)
-	if err != nil {
-		return extension.StorefrontWatcherOptions{}, fmt.Errorf("resolving theme for sales channel %s: %w", picked.Name, err)
-	}
-	if theme == nil {
-		return extension.StorefrontWatcherOptions{}, fmt.Errorf("no theme assigned to sales channel %s", picked.Name)
-	}
-
-	out := extension.StorefrontWatcherOptions{ThemeID: theme.Id}
-	if len(picked.Domains) > 0 {
-		out.DomainURL = picked.Domains[0].Url
-	}
-	return out, nil
 }

@@ -340,7 +340,7 @@ func (e ProducerEndpoint) AddExtensionImage(ctx context.Context, extensionId int
 	var list []*ExtensionImage
 
 	if err = json.Unmarshal(body, &list); err != nil {
-		return nil, fmt.Errorf("AddExtensionImage: %v", err)
+		return nil, fmt.Errorf("cannot decode the uploaded image response: %w", err)
 	}
 
 	return list[0], nil

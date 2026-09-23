@@ -31,7 +31,7 @@ var projectAdminApiCmd = &cobra.Command{
 
 		cfg := cmdExecutor.ShopConfig()
 		if cfg == nil || cfg.AdminApi == nil {
-			return errors.New("admin api is not activated in the config")
+			return shop.ErrNoAdminAPICredentials
 		}
 
 		client, err := cmdExecutor.AdminAPIClient(cobraCmd.Context())

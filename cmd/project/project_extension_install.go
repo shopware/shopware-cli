@@ -11,7 +11,7 @@ import (
 )
 
 var projectExtensionInstallCmd = &cobra.Command{
-	Use:   "install [name]",
+	Use:   "install name...",
 	Short: "Install an extension in a Shopware project",
 	Args:  cobra.MinimumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
@@ -57,6 +57,7 @@ var projectExtensionInstallCmd = &cobra.Command{
 				failed = true
 
 				logging.FromContext(cmd.Context()).Errorf("Installation of %s failed with error: %v", extension.Name, err)
+				continue
 			}
 
 			if activateAfterInstall {

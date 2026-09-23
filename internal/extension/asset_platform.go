@@ -64,14 +64,14 @@ func BuildAssetsForExtensions(ctx context.Context, sources []asset.Source, asset
 		defer deletePaths(ctx, shopwareRoot)
 	}
 
-	nodeInstallSection := ci.Default.Section(ctx, "Installing node_modules for extensions")
+	nodeInstallSection := ci.Start("Installing node_modules for extensions")
 
 	paths, err := InstallNodeModulesOfConfigs(ctx, cfgs, assetConfig)
 	if err != nil {
 		return err
 	}
 
-	nodeInstallSection.End(ctx)
+	nodeInstallSection.End()
 
 	if shopwareRoot != "" && len(assetConfig.KeepNodeModules) > 0 {
 		paths = slices.DeleteFunc(paths, func(path string) bool {
@@ -87,7 +87,7 @@ func BuildAssetsForExtensions(ctx context.Context, sources []asset.Source, asset
 	defer deletePaths(ctx, paths...)
 
 	if !assetConfig.DisableAdminBuild && cfgs.RequiresAdminBuild() {
-		administrationSection := ci.Default.Section(ctx, "Building administration assets")
+		administrationSection := ci.Start("Building administration assets")
 
 		// Build all extensions compatible with esbuild first
 		for name, entry := range cfgs.FilterByAdminAndEsBuild(true) {
@@ -198,11 +198,11 @@ func BuildAssetsForExtensions(ctx context.Context, sources []asset.Source, asset
 			}
 		}
 
-		administrationSection.End(ctx)
+		administrationSection.End()
 	}
 
 	if !assetConfig.DisableStorefrontBuild && cfgs.RequiresStorefrontBuild() {
-		storefrontSection := ci.Default.Section(ctx, "Building storefront assets")
+		storefrontSection := ci.Start("Building storefront assets")
 		// Build all extensions compatible with esbuild first
 		for name, entry := range cfgs.FilterByStorefrontAndEsBuild(true) {
 			isNewLayout := false
@@ -336,7 +336,7 @@ func BuildAssetsForExtensions(ctx context.Context, sources []asset.Source, asset
 			}
 		}
 
-		storefrontSection.End(ctx)
+		storefrontSection.End()
 	}
 
 	if err := storeAssetCaches(ctx, cfgs, assetConfig); err != nil {

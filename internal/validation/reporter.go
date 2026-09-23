@@ -133,9 +133,26 @@ func doSummaryReport(result Check) error {
 	}
 
 	//nolint:forbidigo
-	fmt.Printf("\n✖ %d problems (%d errors, %d warnings)\n", totalProblems, errorCount, warningCount)
+	fmt.Printf("\n%s\n", summaryLine(totalProblems, errorCount, warningCount))
 
 	return nil
+}
+
+// summaryLine renders the closing line of the summary report.
+func summaryLine(total, errorCount, warningCount int) string {
+	if total == 0 {
+		return "✓ No problems found"
+	}
+
+	return fmt.Sprintf("✖ %s (%s, %s)", countNoun(total, "problem"), countNoun(errorCount, "error"), countNoun(warningCount, "warning"))
+}
+
+func countNoun(n int, noun string) string {
+	if n == 1 {
+		return fmt.Sprintf("%d %s", n, noun)
+	}
+
+	return fmt.Sprintf("%d %ss", n, noun)
 }
 
 func doJSONReport(result Check) error {

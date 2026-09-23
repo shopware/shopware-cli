@@ -69,8 +69,8 @@ func createEmptySnippetFolder(root string) error {
 
 // CI historically skips SBOM generation when composer.lock is missing.
 func generateProjectSBOM(ctx context.Context, root, toolVersion string) error {
-	section := ci.Default.Section(ctx, "Generating SBOM")
-	defer section.End(ctx)
+	section := ci.Start("Generating SBOM")
+	defer section.End()
 	return shop.WriteProjectSBOM(ctx, root, shop.ProjectSBOMOptions{
 		SkipMissingLock: true,
 		ToolVersion:     toolVersion,
@@ -156,8 +156,8 @@ func convertForceExtensionBuild(configExtensions []shop.ConfigBuildExtension) []
 }
 
 func executeCIHooks(ctx context.Context, sectionName string, hooks []string, root string, env map[string]string) error {
-	section := ci.Default.Section(ctx, sectionName)
-	defer section.End(ctx)
+	section := ci.Start(sectionName)
+	defer section.End()
 	for _, hook := range hooks {
 		logging.FromContext(ctx).Infof("Running hook: %s", hook)
 		hookCmd := exec.CommandContext(ctx, "sh", "-c", hook)

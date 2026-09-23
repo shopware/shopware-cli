@@ -26,12 +26,12 @@ var projectClearCacheCmd = &cobra.Command{
 
 		cfg := cmdExecutor.ShopConfig()
 		if cfg == nil || cfg.AdminApi == nil {
-			logging.FromContext(cmd.Context()).Infof("Clearing cache localy")
-
 			projectRoot, err = shop.FindClosestShopwareProject(false)
 			if err != nil {
 				return err
 			}
+
+			logging.FromContext(cmd.Context()).Infof("Clearing cache locally")
 
 			return os.RemoveAll(projectRoot + "/var/cache")
 		}

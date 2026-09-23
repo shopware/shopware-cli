@@ -27,13 +27,13 @@ func parseMarkdownChangelogInPath(path string) (map[string]map[string]string, er
 
 		content, err := os.ReadFile(file)
 		if err != nil {
-			return nil, fmt.Errorf("parseMarkdownChangelogInPath: %v", err)
+			return nil, fmt.Errorf("cannot read changelog %s: %w", file, err)
 		}
 
 		changelogs[language], err = parseMarkdownChangelog(string(content))
 
 		if err != nil {
-			return nil, fmt.Errorf("parseMarkdownChangelogInPath: %v", err)
+			return nil, fmt.Errorf("cannot parse changelog %s: %w", file, err)
 		}
 	}
 

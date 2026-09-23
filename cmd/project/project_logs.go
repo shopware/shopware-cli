@@ -3,6 +3,7 @@ package project
 import (
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/spf13/cobra"
 
@@ -58,7 +59,12 @@ func runProjectLogs(cmd *cobra.Command, args []string, cmdExecutor executor.Exec
 				}
 			}
 			if !found {
-				return fmt.Errorf("log file not found: %s", target)
+				names := make([]string, len(files))
+				for i, f := range files {
+					names[i] = f.Name
+				}
+
+				return fmt.Errorf("log file %q not found, available: %s", target, strings.Join(names, ", "))
 			}
 		}
 
