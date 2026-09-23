@@ -159,7 +159,7 @@ environments:
 	}{
 		{"current project", nil, `deployments are not supported for environment type "local"`, ""},
 		{"parent project", nil, `deployments are not supported for environment type "local"`, filepath.Join(workDir, "bin")},
-		{"no project", nil, "cannot find Shopware project in current directory", t.TempDir()},
+		{"no project", nil, "cannot find Shopware project", t.TempDir()},
 		{"rejects extra arguments", []string{".", "."}, "accepts at most 1 arg(s), received 2", ""},
 		{"missing directory", []string{"missing"}, "read project directory:", ""},
 		{"file instead of directory", []string{"config.yml"}, "is not a directory", ""},
