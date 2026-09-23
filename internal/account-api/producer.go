@@ -538,12 +538,12 @@ type ExtensionGeneralInformation struct {
 func (e ProducerEndpoint) GetExtensionGeneralInfo(ctx context.Context) (*ExtensionGeneralInformation, error) {
 	r, err := e.c.NewAuthenticatedRequest(ctx, http.MethodGet, getApiUrl()+"/pluginstatics/all", nil)
 	if err != nil {
-		return nil, fmt.Errorf("GetExtensionGeneralInfo: %v", err)
+		return nil, fmt.Errorf("cannot load extension general information: %w", err)
 	}
 
 	body, err := e.c.doRequest(r)
 	if err != nil {
-		return nil, fmt.Errorf("GetExtensionGeneralInfo: %v", err)
+		return nil, fmt.Errorf("cannot load extension general information: %w", err)
 	}
 
 	var info *ExtensionGeneralInformation

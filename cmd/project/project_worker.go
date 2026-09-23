@@ -121,12 +121,12 @@ func init() {
 }
 
 func cancelOnTermination(ctx context.Context, cancel context.CancelFunc) {
-	logging.FromContext(ctx).Infof("setting up a signal handler")
+	logging.FromContext(ctx).Debugf("Setting up a signal handler")
 	s := make(chan os.Signal, 1)
 	signal.Notify(s, syscall.SIGTERM, syscall.SIGINT)
 	go func() {
 		sig := <-s
-		logging.FromContext(ctx).Infof("received signal %v\n", sig.String())
+		logging.FromContext(ctx).Infof("Received signal %v", sig)
 		cancel()
 	}()
 }

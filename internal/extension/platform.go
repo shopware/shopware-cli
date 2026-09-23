@@ -63,12 +63,12 @@ func newPlatformPlugin(ctx context.Context, path string) (*PlatformPlugin, error
 
 	jsonFile, err := os.ReadFile(composerJsonFile)
 	if err != nil {
-		return nil, fmt.Errorf("newPlatformPlugin: %v", err)
+		return nil, fmt.Errorf("cannot read composer.json: %w", err)
 	}
 
 	var composerJson PlatformComposerJson
 	if err := json.Unmarshal(jsonFile, &composerJson); err != nil {
-		return nil, fmt.Errorf("newPlatformPlugin: %v", err)
+		return nil, fmt.Errorf("cannot parse composer.json: %w", err)
 	}
 
 	if composerJson.Type != ComposerTypePlugin {
@@ -77,7 +77,7 @@ func newPlatformPlugin(ctx context.Context, path string) (*PlatformPlugin, error
 
 	cfg, err := readExtensionConfig(ctx, path)
 	if err != nil {
-		return nil, fmt.Errorf("newPlatformPlugin: %v", err)
+		return nil, fmt.Errorf("cannot read extension config: %w", err)
 	}
 
 	extension := PlatformPlugin{

@@ -120,7 +120,9 @@ func filterAndGetSources(cmd *cobra.Command, projectRoot string, shopCfg *shop.C
 		sources = extension.ExcludeExtensionsFromSources(sources, strings.Split(skipExtensions, ","))
 
 	case !onlyCustomStatic:
-		logger.Infof("Excluding extensions based on project config: %s", strings.Join(shopCfg.Build.ExcludeExtensions, ", "))
+		if len(shopCfg.Build.ExcludeExtensions) > 0 {
+			logger.Infof("Excluding extensions based on project config: %s", strings.Join(shopCfg.Build.ExcludeExtensions, ", "))
+		}
 		sources = extension.ExcludeExtensionsFromSources(sources, shopCfg.Build.ExcludeExtensions)
 	}
 

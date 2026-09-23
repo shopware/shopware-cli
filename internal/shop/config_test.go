@@ -182,6 +182,7 @@ func TestResolveEnvironment(t *testing.T) {
 		_, err := cfg.ResolveEnvironment("production")
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), `environment "production" not found`)
+		assert.Contains(t, err.Error(), "available: staging")
 	})
 
 	t.Run("returns local environment when no name given", func(t *testing.T) {

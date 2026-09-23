@@ -540,3 +540,9 @@ func captureOutput(fn func()) string {
 	}
 	return buf.String()
 }
+
+func TestSummaryLine(t *testing.T) {
+	assert.Equal(t, "✓ No problems found", summaryLine(0, 0, 0))
+	assert.Equal(t, "✖ 1 problem (1 error, 0 warnings)", summaryLine(1, 1, 0))
+	assert.Equal(t, "✖ 15 problems (14 errors, 1 warning)", summaryLine(15, 14, 1))
+}

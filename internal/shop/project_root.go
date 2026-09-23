@@ -44,7 +44,7 @@ func FindClosestShopwareProject(allowFallback bool) (string, error) {
 		return startDir, nil
 	}
 
-	return "", errors.New("cannot find Shopware project in current directory")
+	return "", fmt.Errorf("cannot find Shopware project in %s or any parent directory (looking for bin/console and shopware/core in composer.json)", startDir)
 }
 
 func isShopwareProject(path string) (bool, error) {

@@ -34,7 +34,7 @@ var extensionVersionCmd = &cobra.Command{
 		}
 
 		if err != nil {
-			return fmt.Errorf("version: cannot open extension %w", err)
+			return fmt.Errorf("cannot open extension: %w", err)
 		}
 
 		version, err := ext.GetVersion()

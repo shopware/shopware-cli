@@ -247,7 +247,7 @@ func increaseExtensionVersion(ctx context.Context, ext extension.Extension) erro
 
 		defer func() {
 			if err := file.Close(); err != nil {
-				logging.FromContext(ctx).Errorf("increaseExtensionVersion: %v", err)
+				logging.FromContext(ctx).Errorf("Cannot close manifest.xml: %v", err)
 			}
 		}()
 
@@ -261,8 +261,7 @@ func increaseExtensionVersion(ctx context.Context, ext extension.Extension) erro
 				break
 			}
 			if err != nil {
-				logging.FromContext(ctx).Errorf("error getting token: %v\n", err)
-				break
+				return fmt.Errorf("cannot parse manifest.xml: %w", err)
 			}
 
 			if v, ok := token.(xml.StartElement); ok {

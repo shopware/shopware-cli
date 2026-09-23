@@ -57,7 +57,7 @@ func NewApi(ctx context.Context) (*Client, error) {
 	client = &Client{Token: token}
 
 	if err := saveApiTokenToTokenCache(client); err != nil {
-		logging.FromContext(ctx).Errorf(fmt.Sprintf("Cannot save token cache: %v", err))
+		logging.FromContext(ctx).Errorf("Cannot save token cache: %v", err)
 	}
 
 	return client, nil
@@ -138,7 +138,7 @@ func loginWithCredentials(ctx context.Context, email, password string) (*Client,
 	}
 
 	if err := saveApiTokenToTokenCache(client); err != nil {
-		logging.FromContext(ctx).Errorf(fmt.Sprintf("Cannot save token cache: %v", err))
+		logging.FromContext(ctx).Errorf("Cannot save token cache: %v", err)
 	}
 
 	return client, nil

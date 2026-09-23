@@ -61,11 +61,11 @@ func (*Client) doRequest(request *http.Request) ([]byte, error) {
 	if err != nil {
 		_ = resp.Body.Close()
 
-		return nil, fmt.Errorf("doRequest: %v", err)
+		return nil, fmt.Errorf("cannot read response body: %w", err)
 	}
 
 	if err := resp.Body.Close(); err != nil {
-		return nil, fmt.Errorf("doRequest: %v", err)
+		return nil, fmt.Errorf("cannot close response body: %w", err)
 	}
 
 	if resp.StatusCode >= 400 {
