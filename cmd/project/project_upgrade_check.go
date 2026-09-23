@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"charm.land/huh/v2"
+	shopwareExtension "github.com/shopwareLabs/go-shopware-http-client/extension"
 	"github.com/shyim/go-composer"
 	"github.com/shyim/go-version"
 	"github.com/spf13/cobra"
@@ -21,7 +22,6 @@ import (
 	"github.com/shopware/shopware-cli/internal/tracking"
 	"github.com/shopware/shopware-cli/internal/tui"
 	"github.com/shopware/shopware-cli/logging"
-	shopwareExtension "github.com/shopwareLabs/go-shopware-http-client/extension"
 )
 
 var projectUpgradeCheckCmd = &cobra.Command{

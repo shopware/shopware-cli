@@ -6,8 +6,9 @@ import (
 	"os/exec"
 	"path/filepath"
 
-	"github.com/shopware/shopware-cli/internal/shop"
 	shopware "github.com/shopwareLabs/go-shopware-http-client"
+
+	"github.com/shopware/shopware-cli/internal/shop"
 )
 
 type SymfonyCLIExecutor struct {

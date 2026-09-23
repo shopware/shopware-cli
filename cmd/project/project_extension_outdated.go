@@ -3,12 +3,12 @@ package project
 import (
 	"fmt"
 
+	"github.com/shopwareLabs/go-shopware-http-client/extension"
 	"github.com/spf13/cobra"
 
 	"github.com/shopware/shopware-cli/internal/shop"
 	"github.com/shopware/shopware-cli/internal/tui"
 	"github.com/shopware/shopware-cli/logging"
-	"github.com/shopwareLabs/go-shopware-http-client/extension"
 )
 
 var projectExtensionOutdatedCmd = &cobra.Command{

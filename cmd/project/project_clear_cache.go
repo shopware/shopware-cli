@@ -3,11 +3,11 @@ package project
 import (
 	"os"
 
+	"github.com/shopwareLabs/go-shopware-http-client/instance"
 	"github.com/spf13/cobra"
 
 	"github.com/shopware/shopware-cli/internal/shop"
 	"github.com/shopware/shopware-cli/logging"
-	"github.com/shopwareLabs/go-shopware-http-client/instance"
 )
 
 var projectClearCacheCmd = &cobra.Command{

@@ -8,9 +8,10 @@ import (
 	"os/exec"
 	"path/filepath"
 
+	shopware "github.com/shopwareLabs/go-shopware-http-client"
+
 	"github.com/shopware/shopware-cli/internal/shop"
 	"github.com/shopware/shopware-cli/internal/system"
-	shopware "github.com/shopwareLabs/go-shopware-http-client"
 )
 
 type LocalExecutor struct {

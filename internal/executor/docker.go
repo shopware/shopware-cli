@@ -10,9 +10,10 @@ import (
 	"strings"
 	"syscall"
 
+	shopware "github.com/shopwareLabs/go-shopware-http-client"
+
 	"github.com/shopware/shopware-cli/internal/shop"
 	"github.com/shopware/shopware-cli/internal/system"
-	shopware "github.com/shopwareLabs/go-shopware-http-client"
 )
 
 type DockerExecutor struct {

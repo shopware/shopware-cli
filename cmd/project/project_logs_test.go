@@ -10,13 +10,13 @@ import (
 	"testing"
 	"time"
 
+	shopware "github.com/shopwareLabs/go-shopware-http-client"
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/shopware/shopware-cli/internal/executor"
 	"github.com/shopware/shopware-cli/internal/shop"
-	shopware "github.com/shopwareLabs/go-shopware-http-client"
 )
 
 var stdoutCaptureMu sync.Mutex

@@ -19,9 +19,9 @@ import (
 	"time"
 
 	"github.com/go-sql-driver/mysql"
+	shopware "github.com/shopwareLabs/go-shopware-http-client"
 
 	"github.com/shopware/shopware-cli/internal/shop"
-	shopware "github.com/shopwareLabs/go-shopware-http-client"
 )
 
 // SSHExecutor runs commands against a Shopware project on a remote host over

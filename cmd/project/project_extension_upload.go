@@ -13,6 +13,8 @@ import (
 	"strings"
 
 	cp "github.com/otiai10/copy"
+	shopwareExtension "github.com/shopwareLabs/go-shopware-http-client/extension"
+	"github.com/shopwareLabs/go-shopware-http-client/instance"
 	"github.com/shyim/go-version"
 	"github.com/spf13/cobra"
 
@@ -20,8 +22,6 @@ import (
 	"github.com/shopware/shopware-cli/internal/extension"
 	"github.com/shopware/shopware-cli/internal/shop"
 	"github.com/shopware/shopware-cli/logging"
-	shopwareExtension "github.com/shopwareLabs/go-shopware-http-client/extension"
-	"github.com/shopwareLabs/go-shopware-http-client/instance"
 )
 
 var projectExtensionUploadCmd = &cobra.Command{

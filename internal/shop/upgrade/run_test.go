@@ -9,13 +9,13 @@ import (
 	"strings"
 	"testing"
 
+	shopware "github.com/shopwareLabs/go-shopware-http-client"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/shopware/shopware-cli/internal/executor"
 	"github.com/shopware/shopware-cli/internal/shop"
 	"github.com/shopware/shopware-cli/internal/testhelper"
-	shopware "github.com/shopwareLabs/go-shopware-http-client"
 )
 
 // fakeExecutor satisfies executor.Executor and lets each test decide which

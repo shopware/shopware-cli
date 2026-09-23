@@ -7,8 +7,9 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/shopware/shopware-cli/internal/system"
 	shopware "github.com/shopwareLabs/go-shopware-http-client"
+
+	"github.com/shopware/shopware-cli/internal/system"
 )
 
 const (

@@ -1,11 +1,11 @@
 package project
 
 import (
+	"github.com/shopwareLabs/go-shopware-http-client/extension"
 	"github.com/spf13/cobra"
 
 	"github.com/shopware/shopware-cli/internal/shop"
 	"github.com/shopware/shopware-cli/internal/tui"
-	"github.com/shopwareLabs/go-shopware-http-client/extension"
 )
 
 var projectExtensionListCmd = &cobra.Command{

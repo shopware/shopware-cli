@@ -10,9 +10,10 @@ import (
 	"strings"
 	"sync"
 
+	shopware "github.com/shopwareLabs/go-shopware-http-client"
+
 	"github.com/shopware/shopware-cli/internal/shop"
 	"github.com/shopware/shopware-cli/logging"
-	shopware "github.com/shopwareLabs/go-shopware-http-client"
 )
 
 var ErrNotSupported = errors.New("operation not supported by this executor")

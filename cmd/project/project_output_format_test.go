@@ -4,12 +4,12 @@ import (
 	"encoding/json"
 	"testing"
 
+	"github.com/shopwareLabs/go-shopware-http-client/extension"
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/shopware/shopware-cli/internal/tui"
-	"github.com/shopwareLabs/go-shopware-http-client/extension"
 )
 
 func TestProjectExtensionTablesPreserveJSONContract(t *testing.T) {
