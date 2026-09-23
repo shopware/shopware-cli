@@ -39,23 +39,14 @@ var deploymentPioneers = []string{
 }
 
 func randomDeploymentName() (string, error) {
-	firstAdjective, err := randomDeploymentWord(deploymentAdjectives)
-	if err != nil {
-		return "", err
-	}
-	secondAdjective, err := randomDeploymentWord(deploymentAdjectives)
-	if err != nil {
-		return "", err
-	}
-	pioneer, err := randomDeploymentWord(deploymentPioneers)
-	if err != nil {
-		return "", err
-	}
+	firstAdjective := randomDeploymentWord(deploymentAdjectives)
+	secondAdjective := randomDeploymentWord(deploymentAdjectives)
+	pioneer := randomDeploymentWord(deploymentPioneers)
 	return firstAdjective + "-" + secondAdjective + "-" + pioneer, nil
 }
 
-func randomDeploymentWord(words []string) (string, error) {
-	return words[rand.IntN(len(words))], nil
+func randomDeploymentWord(words []string) string {
+	return words[rand.IntN(len(words))]
 }
 
 func availableDeploymentArchivePath(root string, generate func() (string, error)) (string, error) {
