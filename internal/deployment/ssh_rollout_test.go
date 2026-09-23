@@ -112,6 +112,9 @@ exec "$DEPLOYMENT_TEST_PHP" -d memory_limit=192M "$@"
 }
 
 func TestSSHRolloutPreparesAndActivatesReleases(t *testing.T) {
+	// This integration test asserts plain terminal sections, independently of CI.
+	t.Setenv("GITHUB_ACTIONS", "")
+	t.Setenv("GITLAB_CI", "")
 	e := localDeploymentSSH(t)
 	archive := deploymentTestArchive(t,
 		`if (!is_link('.env.local') || !is_link('public/media')) { exit(9); }
@@ -610,23 +613,40 @@ func TestDeploymentHandshakeDoesNotAuthorizeCancellation(t *testing.T) {
 }
 
 func TestDeploymentHandshakeSkipsCachedArchive(t *testing.T) {
-	archive := bytes.NewBufferString("must remain unread")
-	var stdin, output bytes.Buffer
-	_, err := exchangeSSHDeployment(
-		t.Context(),
-		&stdin,
-		bufio.NewReader(strings.NewReader("CACHED id\nPREPARE id\nREADY id\nACTIVE id\n")),
-		archive,
-		sshRolloutInput{Reference: "id", Size: int64(archive.Len())},
-		ci.New(&output),
-	)
-	require.NoError(t, err)
-	assert.Equal(t, "must remain unread", archive.String())
-	assert.Equal(t, "CONTINUE id\nACTIVATE id\n", stdin.String())
-	assert.Contains(t, output.String(), "--- Using cached deployment artifact ---")
-	assert.Contains(t, output.String(), "--- Preparing release ---")
-	assert.Contains(t, output.String(), "--- Activating release ---")
-	assert.NotContains(t, output.String(), "\x1b[")
+	for _, tc := range []struct {
+		name, environment, headingPrefix, headingSuffix, endMarker string
+		ansi                                                       bool
+	}{
+		{"terminal", "", "--- ", " ---", " finished in ", false},
+		{"GitHub", "GITHUB_ACTIONS", "::group::", "", "::endgroup::", false},
+		{"GitLab", "GITLAB_CI", "\r\x1b[0K", "", "section_end:", true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Setenv("GITHUB_ACTIONS", "")
+			t.Setenv("GITLAB_CI", "")
+			if tc.environment != "" {
+				t.Setenv(tc.environment, "true")
+			}
+			archive := bytes.NewBufferString("must remain unread")
+			var stdin, output bytes.Buffer
+			_, err := exchangeSSHDeployment(
+				t.Context(),
+				&stdin,
+				bufio.NewReader(strings.NewReader("CACHED id\nPREPARE id\nREADY id\nACTIVE id\n")),
+				archive,
+				sshRolloutInput{Reference: "id", Size: int64(archive.Len())},
+				ci.New(&output),
+			)
+			require.NoError(t, err)
+			assert.Equal(t, "must remain unread", archive.String())
+			assert.Equal(t, "CONTINUE id\nACTIVATE id\n", stdin.String())
+			for _, heading := range []string{"Using cached deployment artifact", "Preparing release", "Activating release"} {
+				assert.Contains(t, output.String(), tc.headingPrefix+heading+tc.headingSuffix)
+			}
+			assert.Equal(t, 3, strings.Count(output.String(), tc.endMarker))
+			assert.Equal(t, tc.ansi, strings.Contains(output.String(), "\x1b["))
+		})
+	}
 }
 
 func TestDeploymentHandshakeUploadsMissingArchive(t *testing.T) {
