@@ -21,6 +21,45 @@ func testSSHExecutor() *SSHExecutor {
 	return &SSHExecutor{host: "shop.example.com", user: "deploy", directory: "/var/www/shop", projectRoot: "/project"}
 }
 
+func TestSSHRemotePHPCommand(t *testing.T) {
+	e := testSSHExecutor()
+	e.port = 2222
+	e.identityFile = "/keys/deploy key"
+	e.phpBinary = "/opt/php's bin/php"
+	p := e.RemotePHPCommand(t.Context(), "-r", `echo "hello";`, "--", "secret's value")
+	assert.Equal(t, []string{
+		"ssh", "-o", "ControlMaster=auto", "-o", "ControlPath=" + e.controlPath(),
+		"-o", "ControlPersist=10m", "-o", "LogLevel=ERROR", "-p", "2222", "-i", "/keys/deploy key",
+		"-T", "deploy@shop.example.com",
+		`exec '/opt/php'\''s bin/php' -r 'echo "hello";' -- 'secret'\''s value'`,
+	}, p.Cmd.Args)
+	assert.Nil(t, p.Cmd.Stdin)
+	assert.Nil(t, p.Cmd.Stdout)
+	assert.Nil(t, p.Cmd.Stderr)
+	assert.Empty(t, p.Cmd.Dir)
+	e.phpBinary = ""
+	assert.Equal(t, "exec php -v", lastSSHShell(t, e.RemotePHPCommand(t.Context(), "-v")))
+}
+
+func TestSSHRemotePHPCommandStreams(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("fixture uses POSIX shell")
+	}
+	bin := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(bin, "ssh"), []byte("#!/bin/sh\ncat\nprintf diagnostic >&2\n"), 0o755))
+	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+	e := testSSHExecutor()
+	e.directory = "/does/not/exist/current"
+	p := e.RemotePHPCommand(t.Context(), "-r", "unused")
+	p.Cmd.Stdin = strings.NewReader("private input")
+	var stdout, stderr bytes.Buffer
+	p.Cmd.Stdout = &stdout
+	p.Cmd.Stderr = &stderr
+	require.NoError(t, p.Run())
+	assert.Equal(t, "private input", stdout.String())
+	assert.Equal(t, "diagnostic", stderr.String())
+}
+
 func TestNewSSHExecutor(t *testing.T) {
 	cfg := &shop.EnvironmentConfig{
 		Type: "ssh",
