@@ -8,6 +8,7 @@ import (
 	"encoding/xml"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"sort"
 	"strings"
@@ -38,34 +39,48 @@ func DetectDefaultReporter() string {
 	return "summary"
 }
 
-func DoCheckReport(result Check, reportingFormat string) error {
+// CheckCoverage records whether a validation check was selected and invoked.
+type CheckCoverage struct {
+	Name   string `json:"name"`
+	Status string `json:"status"`
+	Reason string `json:"reason,omitempty"`
+}
+
+// DoCheckReport reports findings and, when supplied, validation coverage.
+func DoCheckReport(result Check, reportingFormat string, checks ...CheckCoverage) error {
 	if err := ValidateReporter(reportingFormat); err != nil {
 		return err
 	}
 
 	switch reportingFormat {
 	case "summary":
-		if err := doSummaryReport(result); err != nil {
+		if err := doSummaryReport(result, checks...); err != nil {
 			return err
 		}
 	case "json":
-		if err := doJSONReport(result); err != nil {
+		if err := doJSONReport(result, checks...); err != nil {
 			return err
 		}
 	case "github":
-		if err := doGitHubReport(result); err != nil {
+		if err := doGitHubReport(result, checks...); err != nil {
 			return err
 		}
 	case "gitlab":
 		if err := doGitLabReport(result); err != nil {
 			return err
 		}
+		if err := printCoverage(os.Stderr, checks); err != nil {
+			return err
+		}
 	case "markdown":
-		if err := doMarkdownReport(result); err != nil {
+		if err := doMarkdownReport(result, checks...); err != nil {
 			return err
 		}
 	case "junit":
-		if err := doJUnitReport(result); err != nil {
+		if err := doJUnitReport(result, checks...); err != nil {
+			return err
+		}
+		if err := printCoverage(os.Stderr, checks); err != nil {
 			return err
 		}
 	}
@@ -77,7 +92,11 @@ func DoCheckReport(result Check, reportingFormat string) error {
 	return nil
 }
 
-func doSummaryReport(result Check) error {
+func doSummaryReport(result Check, checks ...CheckCoverage) error {
+	if err := printCoverage(os.Stdout, checks); err != nil {
+		return err
+	}
+
 	// Group results by file
 	fileGroups := make(map[string][]CheckResult)
 	for _, r := range result.GetResults() {
@@ -133,7 +152,11 @@ func doSummaryReport(result Check) error {
 	}
 
 	//nolint:forbidigo
-	fmt.Printf("\n%s\n", summaryLine(totalProblems, errorCount, warningCount))
+	if checks != nil && !anyCheckInvoked(checks) {
+		fmt.Println("\nNo checks invoked; 0 problems reported")
+	} else {
+		fmt.Printf("\n%s\n", summaryLine(totalProblems, errorCount, warningCount))
+	}
 
 	return nil
 }
@@ -155,9 +178,12 @@ func countNoun(n int, noun string) string {
 	return fmt.Sprintf("%d %ss", n, noun)
 }
 
-func doJSONReport(result Check) error {
+func doJSONReport(result Check, checks ...CheckCoverage) error {
 	data := map[string]interface{}{
 		"results": result.GetResults(),
+	}
+	if checks != nil {
+		data["checks"] = checks
 	}
 
 	encoder := json.NewEncoder(os.Stdout)
@@ -165,7 +191,7 @@ func doJSONReport(result Check) error {
 	return encoder.Encode(data)
 }
 
-func doGitHubReport(result Check) error {
+func doGitHubReport(result Check, checks ...CheckCoverage) error {
 	// Print the human-readable summary first so the GitHub Actions log
 	// shows file/line context, then emit annotations for PR inline display.
 	// File paths and messages can contain `::` which the runner would parse
@@ -178,7 +204,7 @@ func doGitHubReport(result Check) error {
 	token := hex.EncodeToString(tokenBytes[:])
 
 	fmt.Printf("::stop-commands::%s\n", token)
-	if err := doSummaryReport(result); err != nil {
+	if err := doSummaryReport(result, checks...); err != nil {
 		fmt.Printf("::%s::\n", token)
 		return err
 	}
@@ -306,7 +332,7 @@ func doGitLabReport(result Check) error {
 	return encoder.Encode(issues)
 }
 
-func doMarkdownReport(result Check) error {
+func doMarkdownReport(result Check, checks ...CheckCoverage) error {
 	// Group results by file
 	fileGroups := make(map[string][]CheckResult)
 	for _, r := range result.GetResults() {
@@ -341,6 +367,16 @@ func doMarkdownReport(result Check) error {
 
 	fmt.Println("# Validation Report")
 	fmt.Println()
+	if checks != nil {
+		fmt.Println("## Checks")
+		fmt.Println()
+		fmt.Println("```text")
+		for _, row := range coverageRows(checks) {
+			fmt.Println(row)
+		}
+		fmt.Println("```")
+		fmt.Println()
+	}
 
 	totalProblems := 0
 	for _, path := range sortedPaths {
@@ -370,11 +406,54 @@ func doMarkdownReport(result Check) error {
 		fmt.Println()
 	}
 
-	if totalProblems == 0 {
+	if checks != nil && !anyCheckInvoked(checks) {
+		fmt.Println("No checks invoked; 0 problems reported")
+	} else if totalProblems == 0 {
 		fmt.Println("✅ No problems found")
 	}
 
 	return nil
+}
+
+func printCoverage(w io.Writer, checks []CheckCoverage) error {
+	if checks == nil {
+		return nil
+	}
+	if _, err := fmt.Fprintln(w, "Checks:"); err != nil {
+		return err
+	}
+	for _, row := range coverageRows(checks) {
+		if _, err := fmt.Fprintln(w, "  "+row); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func coverageRows(checks []CheckCoverage) []string {
+	width := 0
+	for _, check := range checks {
+		width = max(width, len(check.Name))
+	}
+
+	rows := make([]string, 0, len(checks))
+	for _, check := range checks {
+		row := fmt.Sprintf("%-*s  %-7s", width, check.Name, check.Status)
+		if check.Reason != "" {
+			row += "  " + check.Reason
+		}
+		rows = append(rows, strings.TrimRight(row, " "))
+	}
+	return rows
+}
+
+func anyCheckInvoked(checks []CheckCoverage) bool {
+	for _, check := range checks {
+		if check.Status == "invoked" {
+			return true
+		}
+	}
+	return false
 }
 
 type JUnitTestSuite struct {
@@ -383,6 +462,7 @@ type JUnitTestSuite struct {
 	Tests    int             `xml:"tests,attr"`
 	Failures int             `xml:"failures,attr"`
 	Errors   int             `xml:"errors,attr"`
+	Skipped  int             `xml:"skipped,attr,omitempty"`
 	TestCase []JUnitTestCase `xml:"testcase"`
 }
 
@@ -391,6 +471,11 @@ type JUnitTestCase struct {
 	ClassName string            `xml:"classname,attr"`
 	Failure   *JUnitTestFailure `xml:"failure,omitempty"`
 	Error     *JUnitTestError   `xml:"error,omitempty"`
+	Skipped   *JUnitTestSkipped `xml:"skipped,omitempty"`
+}
+
+type JUnitTestSkipped struct {
+	Message string `xml:"message,attr"`
 }
 
 type JUnitTestFailure struct {
@@ -405,10 +490,11 @@ type JUnitTestError struct {
 	Content string `xml:",chardata"`
 }
 
-func doJUnitReport(result Check) error {
+func doJUnitReport(result Check, checks ...CheckCoverage) error {
 	var testCases []JUnitTestCase
 	errors := 0
 	failures := 0
+	skipped := 0
 
 	// Sort results for deterministic output
 	results := result.GetResults()
@@ -460,12 +546,21 @@ func doJUnitReport(result Check) error {
 
 		testCases = append(testCases, testCase)
 	}
+	for _, check := range checks {
+		testCase := JUnitTestCase{Name: check.Name, ClassName: "validation"}
+		if check.Status == "skipped" {
+			testCase.Skipped = &JUnitTestSkipped{Message: check.Reason}
+			skipped++
+		}
+		testCases = append(testCases, testCase)
+	}
 
 	suite := JUnitTestSuite{
 		Name:     "shopware-cli-validation",
 		Tests:    len(testCases),
 		Failures: failures,
 		Errors:   errors,
+		Skipped:  skipped,
 		TestCase: testCases,
 	}
 

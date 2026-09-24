@@ -3,12 +3,14 @@ package validation
 import (
 	"bytes"
 	"encoding/json"
+	"encoding/xml"
 	"io"
 	"os"
 	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestReportingOutputIsDeterministic(t *testing.T) {
@@ -162,6 +164,102 @@ func TestErrorExistsSummary(t *testing.T) {
 	check := &testCheck{Results: testResults}
 
 	assert.Error(t, DoCheckReport(check, "summary"))
+}
+
+func TestCheckCoverageReports(t *testing.T) {
+	check := &testCheck{Results: []CheckResult{}}
+	checks := []CheckCoverage{
+		{Name: "eslint", Status: "skipped", Reason: "no JavaScript source files"},
+		{Name: "storefront-twig", Status: "skipped", Reason: "no storefront Twig templates"},
+	}
+	rows := coverageRows(checks)
+	assert.Contains(t, rows[0], "eslint")
+	assert.Contains(t, rows[0], "  skipped  no JavaScript source files")
+	assert.NotContains(t, rows[0], "(")
+
+	summary := captureOutput(func() {
+		assert.NoError(t, DoCheckReport(check, "summary", checks...))
+	})
+	for _, row := range rows {
+		assert.Contains(t, summary, "  "+row)
+	}
+	assert.Contains(t, summary, "No checks invoked; 0 problems reported")
+	assert.NotContains(t, summary, "No problems found")
+
+	github := captureOutput(func() {
+		assert.NoError(t, DoCheckReport(check, "github", checks...))
+	})
+	for _, row := range rows {
+		assert.Contains(t, github, "  "+row)
+	}
+
+	markdown := captureOutput(func() {
+		assert.NoError(t, DoCheckReport(check, "markdown", checks...))
+	})
+	assert.Contains(t, markdown, "## Checks")
+	for _, row := range rows {
+		assert.Contains(t, markdown, row)
+	}
+	assert.Contains(t, markdown, "No checks invoked; 0 problems reported")
+
+	jsonOutput := captureOutput(func() {
+		assert.NoError(t, DoCheckReport(check, "json", checks...))
+	})
+	var report struct {
+		Results []CheckResult   `json:"results"`
+		Checks  []CheckCoverage `json:"checks"`
+	}
+	assert.NoError(t, json.Unmarshal([]byte(jsonOutput), &report))
+	assert.Empty(t, report.Results)
+	assert.Equal(t, checks, report.Checks)
+
+	checks[0] = CheckCoverage{Name: "eslint", Status: "invoked"}
+	summary = captureOutput(func() {
+		assert.NoError(t, DoCheckReport(check, "summary", checks...))
+	})
+	assert.Contains(t, summary, "eslint")
+	assert.Contains(t, summary, "  invoked")
+	assert.Contains(t, summary, "No problems found")
+}
+
+func TestStructuredReportsKeepMachineOutputAndShowCoverage(t *testing.T) {
+	check := &testCheck{Results: []CheckResult{}}
+	checks := []CheckCoverage{
+		{Name: "phpstan", Status: "invoked"},
+		{Name: "sw-cli", Status: "skipped", Reason: "not selected by --only"},
+	}
+
+	var gitlabLog string
+	gitlab := captureOutput(func() {
+		gitlabLog = captureStderr(func() {
+			assert.NoError(t, DoCheckReport(check, "gitlab", checks...))
+		})
+	})
+	var issues []GitLabCodeQualityIssue
+	assert.NoError(t, json.Unmarshal([]byte(gitlab), &issues))
+	assert.Empty(t, issues)
+	for _, row := range coverageRows(checks) {
+		assert.Contains(t, gitlabLog, "  "+row)
+	}
+
+	var junitLog string
+	junit := captureOutput(func() {
+		junitLog = captureStderr(func() {
+			assert.NoError(t, DoCheckReport(check, "junit", checks...))
+		})
+	})
+	var suite JUnitTestSuite
+	require.NoError(t, xml.Unmarshal([]byte(junit), &suite))
+	assert.Equal(t, 2, suite.Tests)
+	assert.Equal(t, 1, suite.Skipped)
+	require.Len(t, suite.TestCase, 2)
+	assert.Equal(t, "phpstan", suite.TestCase[0].Name)
+	assert.Nil(t, suite.TestCase[0].Skipped)
+	require.NotNil(t, suite.TestCase[1].Skipped)
+	assert.Equal(t, "not selected by --only", suite.TestCase[1].Skipped.Message)
+	for _, row := range coverageRows(checks) {
+		assert.Contains(t, junitLog, "  "+row)
+	}
 }
 
 func TestValidateReporter(t *testing.T) {
@@ -533,6 +631,25 @@ func captureOutput(fn func()) string {
 		panic(err)
 	}
 	os.Stdout = oldStdout
+
+	var buf bytes.Buffer
+	if _, err := io.Copy(&buf, r); err != nil {
+		panic(err)
+	}
+	return buf.String()
+}
+
+func captureStderr(fn func()) string {
+	oldStderr := os.Stderr
+	r, w, _ := os.Pipe()
+	os.Stderr = w
+
+	fn()
+
+	if err := w.Close(); err != nil {
+		panic(err)
+	}
+	os.Stderr = oldStderr
 
 	var buf bytes.Buffer
 	if _, err := io.Copy(&buf, r); err != nil {
