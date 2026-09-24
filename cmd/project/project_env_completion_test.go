@@ -29,6 +29,16 @@ func writeEnvCompletionProject(t *testing.T, dir string) {
 	writeEnvCompletionConfig(t, dir, "composer.json", `{"require": {"shopware/core": "*"}}`)
 }
 
+// withProjectConfigPath temporarily sets projectConfigPath for a test and
+// restores it afterwards, keeping tests hermetic despite the package-global.
+func withProjectConfigPath(t *testing.T, path string) {
+	t.Helper()
+
+	previous := projectConfigPath
+	projectConfigPath = path
+	t.Cleanup(func() { projectConfigPath = previous })
+}
+
 func TestCompleteEnvironmentNames(t *testing.T) {
 	dir := t.TempDir()
 	writeEnvCompletionConfig(t, dir, ".config/shopware-project.yml", `
@@ -42,9 +52,7 @@ environments:
     url: https://staging.example.com
 `)
 
-	previousProjectConfig := projectConfigPath
-	projectConfigPath = ""
-	t.Cleanup(func() { projectConfigPath = previousProjectConfig })
+	withProjectConfigPath(t, "")
 	t.Chdir(dir)
 
 	completions, directive := completeEnvironmentNames(projectExtensionListCmd, nil, "")
@@ -69,9 +77,7 @@ environments:
     url: http://extra
 `)
 
-	previousProjectConfig := projectConfigPath
-	projectConfigPath = ""
-	t.Cleanup(func() { projectConfigPath = previousProjectConfig })
+	withProjectConfigPath(t, "")
 	t.Chdir(dir)
 
 	// ReadConfig merges the .local override, so both names must complete.
@@ -85,9 +91,7 @@ environments:
 func TestCompleteEnvironmentNamesNoConfig(t *testing.T) {
 	dir := t.TempDir()
 
-	previousProjectConfig := projectConfigPath
-	projectConfigPath = ""
-	t.Cleanup(func() { projectConfigPath = previousProjectConfig })
+	withProjectConfigPath(t, "")
 	t.Chdir(dir)
 
 	completions, directive := completeEnvironmentNames(projectExtensionListCmd, nil, "")
@@ -103,9 +107,7 @@ environments:
     url: http://custom
 `)
 
-	previousProjectConfig := projectConfigPath
-	projectConfigPath = custom
-	t.Cleanup(func() { projectConfigPath = previousProjectConfig })
+	withProjectConfigPath(t, custom)
 
 	completions, _ := completeEnvironmentNames(projectExtensionListCmd, nil, "")
 	assert.ElementsMatch(t, []string{"custom-env\thttp://custom"}, completions)
@@ -120,9 +122,7 @@ environments:
 `)
 	writeEnvCompletionProject(t, dir)
 
-	previousProjectConfig := projectConfigPath
-	projectConfigPath = ""
-	t.Cleanup(func() { projectConfigPath = previousProjectConfig })
+	withProjectConfigPath(t, "")
 
 	require.NoError(t, os.MkdirAll(filepath.Join(dir, "sub", "deep"), 0o755))
 	t.Chdir(filepath.Join(dir, "sub", "deep"))

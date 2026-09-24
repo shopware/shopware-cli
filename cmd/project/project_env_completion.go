@@ -38,12 +38,8 @@ func completeEnvironmentNames(cmd *cobra.Command, _ []string, _ string) ([]strin
 
 	completions := make([]string, 0, len(cfg.Environments))
 	for _, name := range slices.Sorted(maps.Keys(cfg.Environments)) {
-		description := ""
-		if env := cfg.Environments[name]; env != nil {
-			description = env.URL
-		}
-		if description != "" {
-			completions = append(completions, cobra.CompletionWithDesc(name, description))
+		if env := cfg.Environments[name]; env != nil && env.URL != "" {
+			completions = append(completions, cobra.CompletionWithDesc(name, env.URL))
 		} else {
 			completions = append(completions, name)
 		}
