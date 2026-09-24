@@ -68,9 +68,19 @@ func TestExtensionValidationSelection(t *testing.T) {
 		assert.Equal(t, []string{"sw-cli"}, toolNamesForValidation(tools))
 	})
 
-	t.Run("unsupported operation fails", func(t *testing.T) {
+	t.Run("unsupported operation lists checkers", func(t *testing.T) {
 		_, _, err := selectExtensionValidationTools(false, "prettier", "")
-		require.EqualError(t, err, "prettier does not provide a validation check")
+		require.ErrorContains(t, err, `tool with name "prettier" not found, possible tools:`)
+		assert.NotContains(t, err.Error(), "prettier,")
+		assert.Contains(t, err.Error(), "phpstan")
+	})
+
+	t.Run("typo lists only checkers", func(t *testing.T) {
+		_, _, err := selectExtensionValidationTools(false, "phpsta", "")
+		require.ErrorContains(t, err, `tool with name "phpsta" not found, possible tools:`)
+		assert.Contains(t, err.Error(), "phpstan")
+		assert.NotContains(t, err.Error(), "prettier")
+		assert.NotContains(t, err.Error(), "rector")
 	})
 
 	t.Run("empty selection fails", func(t *testing.T) {

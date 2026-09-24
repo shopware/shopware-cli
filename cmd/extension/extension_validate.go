@@ -144,17 +144,13 @@ func selectExtensionValidationTools(full bool, only, exclude string) (verifier.T
 			requested = validationTools.PossibleString()
 		}
 	}
-	selected, err := verifier.GetTools().Only(requested)
+	selected, err := validationTools.Only(requested)
 	if err != nil {
 		return nil, nil, err
 	}
 	requestedNames := make(map[string]bool, len(selected))
 	for _, tool := range selected {
-		name := tool.Name()
-		if _, ok := tool.(verifier.CheckTool); !ok {
-			return nil, nil, fmt.Errorf("%s does not provide a validation check", name)
-		}
-		requestedNames[name] = true
+		requestedNames[tool.Name()] = true
 	}
 	selected, err = selected.Exclude(exclude)
 	if err != nil {
