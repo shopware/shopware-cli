@@ -183,10 +183,10 @@ func TestToolInvocationReports(t *testing.T) {
 	for _, row := range rows {
 		assert.Contains(t, summary, "  "+row)
 	}
-	assert.Contains(t, summary, "Tools:")
-	assert.True(t, strings.HasPrefix(summary, "\nTools:\n"))
-	assert.Less(t, strings.Index(summary, "Tools:"), strings.Index(summary, "No tools invoked;"))
-	assert.Contains(t, summary, "No tools invoked; 0 problems reported")
+	assert.Contains(t, summary, "Checkers:")
+	assert.True(t, strings.HasPrefix(summary, "\nCheckers:\n"))
+	assert.Less(t, strings.Index(summary, "Checkers:"), strings.Index(summary, "No checkers invoked;"))
+	assert.Contains(t, summary, "No checkers invoked; 0 problems reported")
 	assert.NotContains(t, summary, "No problems found")
 
 	github := captureOutput(func() {
@@ -199,12 +199,12 @@ func TestToolInvocationReports(t *testing.T) {
 	markdown := captureOutput(func() {
 		assert.NoError(t, DoCheckReport(check, "markdown", tools...))
 	})
-	assert.Contains(t, markdown, "## Tools")
-	assert.Less(t, strings.Index(markdown, "## Tools"), strings.Index(markdown, "No tools invoked;"))
+	assert.Contains(t, markdown, "## Checkers")
+	assert.Less(t, strings.Index(markdown, "## Checkers"), strings.Index(markdown, "No checkers invoked;"))
 	for _, row := range rows {
 		assert.Contains(t, markdown, row)
 	}
-	assert.Contains(t, markdown, "No tools invoked; 0 problems reported")
+	assert.Contains(t, markdown, "No checkers invoked; 0 problems reported")
 
 	jsonOutput := captureOutput(func() {
 		assert.NoError(t, DoCheckReport(check, "json", tools...))
@@ -244,15 +244,15 @@ func TestToolInvocationTableFollowsFindings(t *testing.T) {
 	summary := captureOutput(func() {
 		assert.NoError(t, DoCheckReport(check, "summary", tools...))
 	})
-	assert.Less(t, strings.Index(summary, "src/file.php"), strings.Index(summary, "Tools:"))
-	assert.Less(t, strings.Index(summary, "Tools:"), strings.Index(summary, "✖ 1 problem"))
-	assert.Contains(t, summary, "\n\nTools:\n")
-	assert.NotContains(t, summary, "\n\n\nTools:\n")
+	assert.Less(t, strings.Index(summary, "src/file.php"), strings.Index(summary, "Checkers:"))
+	assert.Less(t, strings.Index(summary, "Checkers:"), strings.Index(summary, "✖ 1 problem"))
+	assert.Contains(t, summary, "\n\nCheckers:\n")
+	assert.NotContains(t, summary, "\n\n\nCheckers:\n")
 
 	markdown := captureOutput(func() {
 		assert.NoError(t, DoCheckReport(check, "markdown", tools...))
 	})
-	assert.Less(t, strings.Index(markdown, "## src/file.php"), strings.Index(markdown, "## Tools"))
+	assert.Less(t, strings.Index(markdown, "## src/file.php"), strings.Index(markdown, "## Checkers"))
 }
 
 func TestStructuredReportsKeepMachineOutputAndShowToolStatuses(t *testing.T) {
@@ -573,7 +573,7 @@ func TestMarkdownReportWithTip(t *testing.T) {
 
 	assert.Contains(t, output, "Method has no return type")
 	assert.Contains(t, output, "*Tip: Add a return type declaration*")
-	assert.NotContains(t, output, "## Tools")
+	assert.NotContains(t, output, "## Checkers")
 }
 
 func TestJSONReportWithTip(t *testing.T) {

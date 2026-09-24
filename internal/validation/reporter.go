@@ -69,7 +69,7 @@ func DoCheckReport(result Check, reportingFormat string, tools ...ToolInvocation
 		if err := doGitLabReport(result); err != nil {
 			return err
 		}
-		if err := PrintToolInvocationTable(os.Stderr, "Tools", tools); err != nil {
+		if err := PrintToolInvocationTable(os.Stderr, "Checkers", tools); err != nil {
 			return err
 		}
 	case "markdown":
@@ -80,7 +80,7 @@ func DoCheckReport(result Check, reportingFormat string, tools ...ToolInvocation
 		if err := doJUnitReport(result, tools...); err != nil {
 			return err
 		}
-		if err := PrintToolInvocationTable(os.Stderr, "Tools", tools); err != nil {
+		if err := PrintToolInvocationTable(os.Stderr, "Checkers", tools); err != nil {
 			return err
 		}
 	}
@@ -147,13 +147,13 @@ func doSummaryReport(result Check, tools ...ToolInvocationStatus) error {
 		}
 	}
 
-	if err := PrintToolInvocationTable(os.Stdout, "Tools", tools); err != nil {
+	if err := PrintToolInvocationTable(os.Stdout, "Checkers", tools); err != nil {
 		return err
 	}
 
 	//nolint:forbidigo
 	if tools != nil && !anyToolInvoked(tools) {
-		fmt.Println("\nNo tools invoked; 0 problems reported")
+		fmt.Println("\nNo checkers invoked; 0 problems reported")
 	} else {
 		fmt.Printf("\n%s\n", summaryLine(totalProblems, errorCount, warningCount))
 	}
@@ -397,7 +397,7 @@ func doMarkdownReport(result Check, tools ...ToolInvocationStatus) error {
 	}
 
 	if tools != nil {
-		fmt.Println("## Tools")
+		fmt.Println("## Checkers")
 		fmt.Println()
 		fmt.Println("```text")
 		for _, row := range toolInvocationRows(tools) {
@@ -408,7 +408,7 @@ func doMarkdownReport(result Check, tools ...ToolInvocationStatus) error {
 	}
 
 	if tools != nil && !anyToolInvoked(tools) {
-		fmt.Println("No tools invoked; 0 problems reported")
+		fmt.Println("No checkers invoked; 0 problems reported")
 	} else if totalProblems == 0 {
 		fmt.Println("✅ No problems found")
 	}
