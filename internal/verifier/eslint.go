@@ -46,6 +46,8 @@ func (e Eslint) Name() string {
 	return "eslint"
 }
 
+func (e Eslint) ValidationTool() {}
+
 func (e Eslint) Check(ctx context.Context, check *Check, config ToolConfig) error {
 	paths := append([]string{}, config.StorefrontDirectories...)
 	paths = append(paths, config.AdminDirectories...)

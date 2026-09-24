@@ -6,7 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
-	"strings"
+	"sort"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -134,15 +134,19 @@ var extensionValidateCmd = &cobra.Command{
 	},
 }
 
-// These tools have a real Check implementation; other verifier tools may only fix or format.
-var extensionValidationToolNames = []string{"admin-twig", "eslint", "phpstan", "storefront-twig", "stylelint", "sw-cli"}
-
 func selectExtensionValidationTools(full bool, only, exclude string) (verifier.ToolList, []validation.CheckCoverage, error) {
+	validationTools := make(verifier.ToolList, 0)
+	for _, tool := range verifier.GetTools() {
+		if _, ok := tool.(verifier.ValidationTool); ok {
+			validationTools = append(validationTools, tool)
+		}
+	}
+
 	requested := only
 	if requested == "" {
 		requested = "sw-cli"
 		if full {
-			requested = strings.Join(extensionValidationToolNames, ",")
+			requested = validationTools.PossibleString()
 		}
 	}
 	selected, err := verifier.GetTools().Only(requested)
@@ -152,7 +156,7 @@ func selectExtensionValidationTools(full bool, only, exclude string) (verifier.T
 	requestedNames := make(map[string]bool, len(selected))
 	for _, tool := range selected {
 		name := tool.Name()
-		if !slices.Contains(extensionValidationToolNames, name) {
+		if _, ok := tool.(verifier.ValidationTool); !ok {
 			return nil, nil, fmt.Errorf("%s does not provide a validation check", name)
 		}
 		requestedNames[name] = true
@@ -175,8 +179,9 @@ func selectExtensionValidationTools(full bool, only, exclude string) (verifier.T
 		invoked[tool.Name()] = true
 	}
 
-	coverage := make([]validation.CheckCoverage, 0, len(extensionValidationToolNames))
-	for _, name := range extensionValidationToolNames {
+	coverage := make([]validation.CheckCoverage, 0, len(validationTools))
+	for _, tool := range validationTools {
+		name := tool.Name()
 		check := validation.CheckCoverage{Name: name, Status: "skipped"}
 		switch {
 		case invoked[name]:
@@ -190,6 +195,7 @@ func selectExtensionValidationTools(full bool, only, exclude string) (verifier.T
 		}
 		coverage = append(coverage, check)
 	}
+	sort.Slice(coverage, func(i, j int) bool { return coverage[i].Name < coverage[j].Name })
 	return unique, coverage, nil
 }
 

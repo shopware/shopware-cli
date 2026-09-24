@@ -45,6 +45,8 @@ func (p PhpStan) Name() string {
 	return "phpstan"
 }
 
+func (p PhpStan) ValidationTool() {}
+
 func (p PhpStan) configExists(pluginPath string) bool {
 	for _, config := range possiblePHPStanConfigs {
 		if _, err := os.Stat(path.Join(pluginPath, config)); err == nil {

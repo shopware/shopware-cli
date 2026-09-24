@@ -54,6 +54,12 @@ type Tool interface {
 	Format(ctx context.Context, config ToolConfig, dryRun bool) error
 }
 
+// ValidationTool marks tools whose Check method performs validation.
+type ValidationTool interface {
+	Tool
+	ValidationTool()
+}
+
 func (tl ToolList) Only(only string) (ToolList, error) {
 	if only == "" {
 		return tl, nil
