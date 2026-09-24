@@ -1,3 +1,5 @@
+import './page/swag-example-list';
+
 Shopware.Module.register('swag-example', {
     type: 'plugin',
     name: 'Example',
@@ -11,23 +13,10 @@ Shopware.Module.register('swag-example', {
             component: 'swag-example-list',
             path: 'list'
         },
-        detail: {
-            component: 'swag-example-detail',
-            path: 'detail/:id',
-            meta: {
-                parentPath: 'swag.example.list'
-            }
-        },
-        create: {
-            component: 'swag-example-create',
-            path: 'create',
-            meta: {
-                parentPath: 'swag.example.list'
-            }
-        }
     },
 
     navigation: [{
+        parent: 'sw-catalogue',
         label: 'swag-example.general.mainMenuItemGeneral',
         color: '#ff3d58',
         path: 'swag.example.list',

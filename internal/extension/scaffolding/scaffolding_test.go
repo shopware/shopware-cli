@@ -97,12 +97,10 @@ func TestCreateExtensionFiles(t *testing.T) {
 
 	require.NoError(t, CreateExtensionFiles(extensionDir, "MyExtension", "MyVendor"))
 
-	assert.DirExists(t, filepath.Join(extensionDir, "src", "Resources", "config"))
 	assert.DirExists(t, filepath.Join(extensionDir, "tests"))
 
 	// all expected files for an installable extension are created
 	assert.FileExists(t, filepath.Join(extensionDir, "composer.json"))
-	assert.FileExists(t, filepath.Join(extensionDir, "src", "Resources", "config", "config.xml"))
 	assert.FileExists(t, filepath.Join(extensionDir, ".gitignore"))
 	assert.FileExists(t, filepath.Join(extensionDir, "phpunit.xml"))
 	assert.FileExists(t, filepath.Join(extensionDir, "src", technicalName+".php"))

@@ -77,6 +77,11 @@ func Generators() []Generator {
 			build: buildJavascriptPlugin,
 		},
 		{
+			Name:  "plugin-config",
+			Short: "Create an example plugin configuration",
+			build: buildPluginConfig,
+		},
+		{
 			Name:  "scheduled-task",
 			Short: "Create an example scheduled task",
 			build: buildScheduledTask,
@@ -99,9 +104,14 @@ func buildAdminModule(_ PluginInfo, _ []string) (output, error) {
 import './module/swag-example';
 `
 
+	const listPath = adminSrcPath + "module/swag-example/page/swag-example-list/"
+
 	return output{
 		Files: []file{
 			{Path: adminSrcPath + "module/swag-example/index.js", Stub: "stubs/make/admin_module.js", Raw: true},
+			{Path: listPath + "index.js", Stub: "stubs/make/admin_component_index.js", Raw: true},
+			{Path: listPath + "swag-example-list.html.twig", Stub: "stubs/make/admin_component_template.html.twig", Raw: true},
+			{Path: listPath + "swag-example-list.scss", Stub: "stubs/make/admin_component_styling.scss", Raw: true},
 			{Path: adminSrcPath + "snippet/en.json", Stub: "stubs/make/admin_snippet.json", Raw: true},
 			{Path: adminSrcPath + "snippet/de.json", Stub: "stubs/make/admin_snippet.json", Raw: true},
 		},
@@ -167,15 +177,30 @@ PluginManager.register('ExamplePlugin', ExamplePlugin, '[data-example-plugin]');
 	}, nil
 }
 
+func buildPluginConfig(_ PluginInfo, _ []string) (output, error) {
+	return output{
+		Files: []file{
+			{Path: "src/Resources/config/config.xml", Stub: "stubs/make/plugin_config.xml", Raw: true},
+		},
+	}, nil
+}
+
 func buildScheduledTask(plugin PluginInfo, _ []string) (output, error) {
 	const service = `
-    $services->set(\%s\ScheduledTask\ExampleTask::class)
+    $services->set(\%[1]s\ScheduledTask\ExampleTask::class)
         ->tag('shopware.scheduled.task');
+    $services->set(\%[1]s\ScheduledTask\ExampleTaskHandler::class)
+        ->args([
+            service('scheduled_task.repository'),
+            service('logger'),
+        ])
+        ->tag('messenger.message_handler');
 `
 
 	return output{
 		Files: []file{
 			{Path: "src/ScheduledTask/ExampleTask.php", Stub: "stubs/make/scheduled_task.php.tmpl", Data: plugin.data()},
+			{Path: "src/ScheduledTask/ExampleTaskHandler.php", Stub: "stubs/make/scheduled_task_handler.php.tmpl", Data: plugin.data()},
 		},
 		Snippets: []snippet{servicesSnippet(fmt.Sprintf(service, plugin.Namespace))},
 	}, nil
