@@ -228,6 +228,24 @@ func TestShouldCheckForUpdate(t *testing.T) {
 			expected: false,
 		},
 		{
+			name:     "disabled for shell completion requests",
+			version:  "v1.0.0",
+			args:     []string{"__complete", "project", "extension", "list", "-e", ""},
+			expected: false,
+		},
+		{
+			name:     "disabled for shell completion requests without descriptions",
+			version:  "v1.0.0",
+			args:     []string{"__completeNoDesc", "project", ""},
+			expected: false,
+		},
+		{
+			name:     "enabled for completion script generation",
+			version:  "v1.0.0",
+			args:     []string{"completion", "fish"},
+			expected: true,
+		},
+		{
 			name:     "enabled on regular local run",
 			version:  "v1.0.0",
 			expected: true,
