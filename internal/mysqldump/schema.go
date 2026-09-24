@@ -622,6 +622,20 @@ func (d *Dumper) fetchAllColumns(ctx context.Context) error {
 }
 
 func (d *Dumper) fetchAllIndexes(ctx context.Context) error {
+	hasExpressionColumnQuery := `
+		SELECT COUNT(*)
+		FROM INFORMATION_SCHEMA.COLUMNS
+		WHERE TABLE_SCHEMA = 'information_schema'
+		  AND TABLE_NAME = 'STATISTICS'
+		  AND COLUMN_NAME = 'EXPRESSION'
+	`
+
+	var hasExpressionColumn bool
+
+	if err := d.db.QueryRowContext(ctx, hasExpressionColumnQuery).Scan(&hasExpressionColumn); err != nil {
+		return err
+	}
+
 	query := `
 		SELECT
 			TABLE_NAME,
@@ -637,6 +651,24 @@ func (d *Dumper) fetchAllIndexes(ctx context.Context) error {
 		FROM INFORMATION_SCHEMA.STATISTICS
 		WHERE TABLE_SCHEMA = DATABASE()
 		ORDER BY TABLE_NAME, INDEX_NAME, SEQ_IN_INDEX`
+
+	if !hasExpressionColumn {
+		query = `
+			SELECT
+				TABLE_NAME,
+				INDEX_NAME,
+				COLUMN_NAME,
+				NULL AS EXPRESSION,
+				NON_UNIQUE,
+				INDEX_TYPE,
+				SUB_PART,
+				COLLATION,
+				INDEX_COMMENT,
+				SEQ_IN_INDEX
+			FROM INFORMATION_SCHEMA.STATISTICS
+			WHERE TABLE_SCHEMA = DATABASE()
+			ORDER BY TABLE_NAME, INDEX_NAME, SEQ_IN_INDEX`
+	}
 
 	rows, err := d.db.QueryContext(ctx, query)
 	if err != nil {

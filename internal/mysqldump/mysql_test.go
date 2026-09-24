@@ -33,6 +33,10 @@ func mockPrefetchSchemas(mock sqlmock.Sqlmock) {
 			"EXTRA", "COLLATION_NAME", "COLUMN_COMMENT", "GENERATION_EXPRESSION",
 		}))
 
+	mock.ExpectQuery("SELECT.*FROM INFORMATION_SCHEMA.COLUMNS.*TABLE_SCHEMA = 'information_schema'.*TABLE_NAME = 'STATISTICS'.*COLUMN_NAME = 'EXPRESSION'").
+		WillReturnRows(sqlmock.NewRows([]string{"COUNT(*)"}).
+			AddRow(1))
+
 	mock.ExpectQuery("SELECT.*FROM INFORMATION_SCHEMA.STATISTICS.*WHERE TABLE_SCHEMA = DATABASE()").
 		WillReturnRows(sqlmock.NewRows([]string{
 			"TABLE_NAME", "INDEX_NAME", "COLUMN_NAME", "NON_UNIQUE", "INDEX_TYPE", "SUB_PART", "COLLATION", "INDEX_COMMENT", "SEQ_IN_INDEX",
@@ -137,6 +141,10 @@ func TestMySQLDumpCreateTable(t *testing.T) {
 		}).
 			AddRow("table", "id", "bigint(20)", nil, "NO", nil, "AUTO_INCREMENT", nil, "", nil).
 			AddRow("table", "name", "varchar(255)", "utf8mb4", "NO", nil, "", "utf8mb4_unicode_ci", "", nil))
+
+	mock.ExpectQuery("SELECT.*FROM INFORMATION_SCHEMA.COLUMNS.*TABLE_SCHEMA = 'information_schema'.*TABLE_NAME = 'STATISTICS'.*COLUMN_NAME = 'EXPRESSION'").
+		WillReturnRows(sqlmock.NewRows([]string{"COUNT(*)"}).
+			AddRow(1))
 
 	mock.ExpectQuery("SELECT.*FROM INFORMATION_SCHEMA.STATISTICS.*WHERE TABLE_SCHEMA = DATABASE()").
 		WillReturnRows(sqlmock.NewRows([]string{
@@ -895,6 +903,10 @@ func Test_mySQL_noDataTableWildcard(t *testing.T) {
 		}).
 			AddRow("customer", "id", "bigint(20)", nil, "NO", nil, "AUTO_INCREMENT", nil, "", nil).
 			AddRow("customer_address", "id", "bigint(20)", nil, "NO", nil, "AUTO_INCREMENT", nil, "", nil))
+
+	mock.ExpectQuery("SELECT.*FROM INFORMATION_SCHEMA.COLUMNS.*TABLE_SCHEMA = 'information_schema'.*TABLE_NAME = 'STATISTICS'.*COLUMN_NAME = 'EXPRESSION'").
+		WillReturnRows(sqlmock.NewRows([]string{"COUNT(*)"}).
+			AddRow(1))
 
 	mock.ExpectQuery("SELECT.*FROM INFORMATION_SCHEMA.STATISTICS.*WHERE TABLE_SCHEMA = DATABASE()").
 		WillReturnRows(sqlmock.NewRows([]string{
