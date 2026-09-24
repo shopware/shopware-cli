@@ -39,6 +39,8 @@ type ToolConfig struct {
 	SourceDirectories []string
 	// Contains a list of identifiers that are ignored
 	ValidationIgnores []validation.ToolConfigIgnore
+	// Path to an extension-supplied PHPStan config, relative to RootDir. Empty means the bundled config is used.
+	PhpstanConfig string
 	// Contains a list of directories that are considered as admin code
 	AdminDirectories []string
 	// Contains a list of directories that are considered as storefront code
