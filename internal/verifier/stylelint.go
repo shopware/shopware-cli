@@ -38,6 +38,8 @@ func (s StyleLint) Name() string {
 	return "stylelint"
 }
 
+func (s StyleLint) ValidationTool() {}
+
 func (s StyleLint) Check(ctx context.Context, check *Check, config ToolConfig) error {
 	paths := append([]string{}, config.StorefrontDirectories...)
 	paths = append(paths, config.AdminDirectories...)
