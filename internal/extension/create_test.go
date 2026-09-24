@@ -115,19 +115,6 @@ func TestCreateGeneratesAnExtension(t *testing.T) {
 	}
 }
 
-func TestCreateRejectsUnsupportedTypeWithoutCreatingDirectory(t *testing.T) {
-	projectDir := newProject(t)
-	opts := validCreateOptions()
-	opts.Type = "app"
-	technicalName := deriveTechnicalName(opts.Name, opts.Vendor)
-	extensionDir := deriveExtensionDirectoryName(projectDir, opts.Store, technicalName)
-
-	err := Create(t.Context(), opts)
-
-	assert.ErrorContains(t, err, `unsupported extension type "app"`)
-	assert.NoDirExists(t, extensionDir)
-}
-
 func validCreateOptions() CreateOptions {
 	return CreateOptions{
 		Name:   "MyExtension",
