@@ -140,10 +140,10 @@ func TestMySQLDumpCreateTable(t *testing.T) {
 
 	mock.ExpectQuery("SELECT.*FROM INFORMATION_SCHEMA.STATISTICS.*WHERE TABLE_SCHEMA = DATABASE()").
 		WillReturnRows(sqlmock.NewRows([]string{
-			"TABLE_NAME", "INDEX_NAME", "COLUMN_NAME", "NON_UNIQUE", "INDEX_TYPE", "SUB_PART", "COLLATION", "INDEX_COMMENT", "SEQ_IN_INDEX",
+			"TABLE_NAME", "INDEX_NAME", "COLUMN_NAME", "EXPRESSION", "NON_UNIQUE", "INDEX_TYPE", "SUB_PART", "COLLATION", "INDEX_COMMENT", "SEQ_IN_INDEX",
 		}).
-			AddRow("table", "PRIMARY", "id", 0, "BTREE", nil, "A", "", 1).
-			AddRow("table", "idx_name", "name", 1, "BTREE", nil, "A", "", 1))
+			AddRow("table", "PRIMARY", "id", nil, 0, "BTREE", nil, "A", "", 1).
+			AddRow("table", "idx_name", "name", nil, 1, "BTREE", nil, "A", "", 1))
 
 	mock.ExpectQuery("SELECT COUNT.*KEY_COLUMN_USAGE.*").
 		WillReturnRows(sqlmock.NewRows([]string{"c"}).AddRow(0))

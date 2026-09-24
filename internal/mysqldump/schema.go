@@ -79,9 +79,10 @@ type IndexSchema struct {
 }
 
 type IndexColumnSchema struct {
-	Name    string
-	SubPart sql.NullInt64
-	Order   string
+	Name       sql.NullString
+	Expression sql.NullString
+	SubPart    sql.NullInt64
+	Order      string
 }
 
 type ForeignKeySchema struct {
@@ -288,11 +289,19 @@ func (schema *TableSchema) writeIndexes(b *strings.Builder) {
 			if j > 0 {
 				b.WriteString(",")
 			}
-			b.WriteString("`")
-			b.WriteString(col.Name)
-			b.WriteString("`")
+			if col.Name.Valid {
+				b.WriteString("`")
+				b.WriteString(col.Name.String)
+				b.WriteString("`")
+			} else {
+				b.WriteString(col.Expression.String)
+			}
 			if col.SubPart.Valid {
 				fmt.Fprintf(b, "(%d)", col.SubPart.Int64)
+			}
+			if col.Order != "" && col.Order != "ASC" {
+				b.WriteString(" ")
+				b.WriteString(col.Order)
 			}
 		}
 		b.WriteString(")")
@@ -618,6 +627,7 @@ func (d *Dumper) fetchAllIndexes(ctx context.Context) error {
 			TABLE_NAME,
 			INDEX_NAME,
 			COLUMN_NAME,
+			EXPRESSION,
 			NON_UNIQUE,
 			INDEX_TYPE,
 			SUB_PART,
@@ -639,14 +649,15 @@ func (d *Dumper) fetchAllIndexes(ctx context.Context) error {
 	seqCounters := make(map[string]int)
 
 	for rows.Next() {
-		var tableName, indexName, columnName, indexType string
+		var tableName, indexName, indexType string
+		var columnName, expression sql.NullString
 		var nonUnique int
 		var subPart sql.NullInt64
 		var collation sql.NullString
 		var comment string
 		var seqInIndex int
 
-		err := rows.Scan(&tableName, &indexName, &columnName, &nonUnique, &indexType, &subPart, &collation, &comment, &seqInIndex)
+		err := rows.Scan(&tableName, &indexName, &columnName, &expression, &nonUnique, &indexType, &subPart, &collation, &comment, &seqInIndex)
 		if err != nil {
 			return err
 		}
@@ -657,7 +668,8 @@ func (d *Dumper) fetchAllIndexes(ctx context.Context) error {
 		}
 
 		if indexName == "PRIMARY" {
-			schema.PrimaryKey = append(schema.PrimaryKey, columnName)
+			// Primary key columns must always be actual columns, not expressions
+			schema.PrimaryKey = append(schema.PrimaryKey, columnName.String)
 			continue
 		}
 
@@ -681,15 +693,23 @@ func (d *Dumper) fetchAllIndexes(ctx context.Context) error {
 			seqCounters[tableName]++
 		}
 
+		if expression.Valid {
+			// The INFORMATION_SCHEMA.STATISTICS.EXPRESSION column contains escaped strings which we must unescape.
+			//
+			// For example a check like (('A' = 'A')) is stored as (_utf8mb4\'A\' = _utf8mb4\'A\') in CHECK_CLAUSE.
+			expression.String = unescape(expression.String)
+		}
+
 		order := "ASC"
 		if collation.Valid && collation.String == "D" {
 			order = "DESC"
 		}
 
 		idx.Columns = append(idx.Columns, IndexColumnSchema{
-			Name:    columnName,
-			SubPart: subPart,
-			Order:   order,
+			Name:       columnName,
+			Expression: expression,
+			SubPart:    subPart,
+			Order:      order,
 		})
 	}
 
