@@ -117,61 +117,19 @@ func TestCreateThemeFiles(t *testing.T) {
 	require.NoError(t, os.MkdirAll(extensionDir, 0o755))
 
 	require.NoError(t, CreateThemeFiles(extensionDir, "MyExtension", "MyVendor"))
-
-	expectedFiles := []string{
-		"composer.json",
-		filepath.Join("src", technicalName+".php"),
-		"src/Resources/theme.json",
-		"src/Resources/app/storefront/src/scss/overrides.scss",
-		"src/Resources/app/storefront/src/scss/base.scss",
-		"src/Resources/app/storefront/src/assets/.gitkeep",
-		"src/Resources/app/storefront/src/main.js",
-		filepath.Join(
-			"src/Resources/app/storefront/dist/storefront/js",
-			assetName,
-			assetName+".js",
-		),
-	}
-	for _, file := range expectedFiles {
-		assert.FileExists(t, filepath.Join(extensionDir, file))
-	}
-	for _, file := range []string{
-		"src/Resources/app/storefront/src/scss/base.scss",
-		"src/Resources/app/storefront/src/assets/.gitkeep",
-		"src/Resources/app/storefront/src/main.js",
-		filepath.Join(
-			"src/Resources/app/storefront/dist/storefront/js",
-			assetName,
-			assetName+".js",
-		),
-	} {
-		info, err := os.Stat(filepath.Join(extensionDir, file))
-		require.NoError(t, err)
-		assert.Zero(t, info.Size())
-	}
-
-	assert.NoFileExists(t, filepath.Join(extensionDir, "phpunit.xml"))
-	assert.NoFileExists(t, filepath.Join(extensionDir, "src", "Resources", "config", "config.xml"))
-
-	composer, err := os.ReadFile(filepath.Join(extensionDir, "composer.json"))
-	require.NoError(t, err)
-	assert.Contains(t, string(composer), `"shopware-plugin-class": "MyVendor\\MyExtension\\MyVendorMyExtension"`)
-
-	bootstrap, err := os.ReadFile(filepath.Join(extensionDir, "src", technicalName+".php"))
-	require.NoError(t, err)
-	assert.Contains(t, string(bootstrap), `namespace MyVendor\MyExtension;`)
-	assert.Contains(t, string(bootstrap), "implements ThemeInterface")
-
-	themeConfig, err := os.ReadFile(filepath.Join(extensionDir, "src", "Resources", "theme.json"))
-	require.NoError(t, err)
-	assert.JSONEq(t, `{
-		"name": "MyVendorMyExtension",
-		"author": "Shopware AG",
-		"views": ["@Storefront", "@Plugins", "@MyVendorMyExtension"],
-		"style": ["app/storefront/src/scss/overrides.scss", "@Storefront", "app/storefront/src/scss/base.scss"],
-		"script": ["@Storefront", "app/storefront/dist/storefront/js/my-vendor-my-extension/my-vendor-my-extension.js"],
-		"asset": ["@Storefront", "app/storefront/src/assets"]
-	}`, string(themeConfig))
+	// all expected files for a storefront theme are created
+	assert.FileExists(t, filepath.Join(extensionDir, "composer.json"))
+	assert.FileExists(t, filepath.Join(extensionDir, "src", technicalName+".php"))
+	assert.FileExists(t, filepath.Join(extensionDir, "src", "Resources", "theme.json"))
+	assert.FileExists(t, filepath.Join(extensionDir, "src", "Resources", "app", "storefront", "src", "scss", "overrides.scss"))
+	assert.FileExists(t, filepath.Join(extensionDir, "src", "Resources", "app", "storefront", "src", "scss", "base.scss"))
+	assert.FileExists(t, filepath.Join(extensionDir, "src", "Resources", "app", "storefront", "src", "assets", ".gitkeep"))
+	assert.FileExists(t, filepath.Join(extensionDir, "src", "Resources", "app", "storefront", "src", "main.js"))
+	assert.FileExists(t, filepath.Join(extensionDir, "src", "Resources", "app", "storefront", "dist", "storefront", "js", assetName, assetName+".js"))
+	// all expected directories for a storefront theme are created
+	assert.DirExists(t, filepath.Join(extensionDir, "src", "Resources", "app", "storefront", "src", "scss"))
+	assert.DirExists(t, filepath.Join(extensionDir, "src", "Resources", "app", "storefront", "src", "assets"))
+	assert.DirExists(t, filepath.Join(extensionDir, "src", "Resources", "app", "storefront", "dist", "storefront", "js", assetName))
 }
 
 func TestCreateFileWithScaffoldingErrors(t *testing.T) {

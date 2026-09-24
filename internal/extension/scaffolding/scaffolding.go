@@ -80,19 +80,19 @@ func themeScaffoldingFiles(data scaffoldData) []scaffoldingFile {
 	return []scaffoldingFile{
 		{
 			Path:     "composer.json",
-			StubPath: "stubs/theme_composer.json.tmpl",
+			StubPath: "stubs/theme/theme_composer.json.tmpl",
 		},
 		{
 			Path:     filepath.Join("src", data.ClassName+".php"),
-			StubPath: "stubs/theme_class.php.tmpl",
+			StubPath: "stubs/theme/theme_class.php.tmpl",
 		},
 		{
 			Path:     "src/Resources/theme.json",
-			StubPath: "stubs/theme.json.tmpl",
+			StubPath: "stubs/theme/theme.json.tmpl",
 		},
 		{
 			Path:     "src/Resources/app/storefront/src/scss/overrides.scss",
-			StubPath: "stubs/theme_overrides.scss.tmpl",
+			StubPath: "stubs/theme/theme_overrides.scss.tmpl",
 		},
 		{
 			Path: "src/Resources/app/storefront/src/scss/base.scss",
@@ -221,7 +221,7 @@ func createScaffoldingData(vendorName string, extensionName string) scaffoldData
 		Namespace:    DeriveNamespace(vendorName, extensionName),
 		ClassName:    className,
 		ComposerName: DeriveComposerName(vendorName, extensionName),
-		AssetName:    strings.ToLower(strings.Join(splitPascalCase(className), "-")),
+		AssetName:    DeriveAssetName(className),
 	}
 }
 
@@ -254,6 +254,10 @@ func DeriveComposerName(vendor string, name string) string {
 // DeriveClassName turns a given extension name and vendor name into a valid PHP class name.
 func DeriveClassName(vendorName string, extensionName string) string {
 	return vendorName + extensionName
+}
+
+func DeriveAssetName(className string) string {
+	return strings.ToLower(strings.Join(splitPascalCase(className), "-"))
 }
 
 // splitPascalCase is a helper function and splits a PascalCase string into its constituent words.
