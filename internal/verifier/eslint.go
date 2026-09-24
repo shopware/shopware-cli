@@ -46,8 +46,6 @@ func (e Eslint) Name() string {
 	return "eslint"
 }
 
-func (e Eslint) ValidationTool() {}
-
 func (e Eslint) Check(ctx context.Context, check *Check, config ToolConfig) error {
 	paths := append([]string{}, config.StorefrontDirectories...)
 	paths = append(paths, config.AdminDirectories...)
@@ -146,10 +144,6 @@ func (e Eslint) Fix(ctx context.Context, config ToolConfig) error {
 	}
 
 	return gr.Wait()
-}
-
-func (e Eslint) Format(ctx context.Context, config ToolConfig, dryRun bool) error {
-	return nil
 }
 
 func init() {

@@ -13,8 +13,6 @@ func (s SWCLI) Name() string {
 	return "sw-cli"
 }
 
-func (s SWCLI) ValidationTool() {}
-
 func (s SWCLI) Check(ctx context.Context, check *Check, config ToolConfig) error {
 	if config.Extension == nil {
 		return nil
@@ -43,14 +41,6 @@ func (s SWCLI) Check(ctx context.Context, check *Check, config ToolConfig) error
 		check.RemoveByIdentifier(ignores)
 	}
 
-	return nil
-}
-
-func (s SWCLI) Fix(ctx context.Context, config ToolConfig) error {
-	return nil
-}
-
-func (s SWCLI) Format(ctx context.Context, config ToolConfig, dryRun bool) error {
 	return nil
 }
 

@@ -120,9 +120,9 @@ var extensionValidateCmd = &cobra.Command{
 
 		var gr errgroup.Group
 		for _, tool := range tools {
-			tool := tool
+			checker := tool.(verifier.CheckTool)
 			gr.Go(func() error {
-				return tool.Check(cmd.Context(), result, *toolCfg)
+				return checker.Check(cmd.Context(), result, *toolCfg)
 			})
 		}
 
@@ -135,12 +135,7 @@ var extensionValidateCmd = &cobra.Command{
 }
 
 func selectExtensionValidationTools(full bool, only, exclude string) (verifier.ToolList, []validation.CheckCoverage, error) {
-	validationTools := make(verifier.ToolList, 0)
-	for _, tool := range verifier.GetTools() {
-		if _, ok := tool.(verifier.ValidationTool); ok {
-			validationTools = append(validationTools, tool)
-		}
-	}
+	validationTools := verifier.GetToolsOf[verifier.CheckTool]()
 
 	requested := only
 	if requested == "" {
@@ -156,7 +151,7 @@ func selectExtensionValidationTools(full bool, only, exclude string) (verifier.T
 	requestedNames := make(map[string]bool, len(selected))
 	for _, tool := range selected {
 		name := tool.Name()
-		if _, ok := tool.(verifier.ValidationTool); !ok {
+		if _, ok := tool.(verifier.CheckTool); !ok {
 			return nil, nil, fmt.Errorf("%s does not provide a validation check", name)
 		}
 		requestedNames[name] = true

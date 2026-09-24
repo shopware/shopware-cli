@@ -21,6 +21,17 @@ func GetTools() ToolList {
 	return availableTools
 }
 
+// GetToolsOf returns registered tools that implement the requested capability.
+func GetToolsOf[T Tool]() ToolList {
+	var tools ToolList
+	for _, tool := range availableTools {
+		if _, ok := tool.(T); ok {
+			tools = append(tools, tool)
+		}
+	}
+	return tools
+}
+
 type ToolConfig struct {
 	// Path to the tool directory
 	ToolDirectory string
@@ -49,15 +60,21 @@ type ToolConfig struct {
 
 type Tool interface {
 	Name() string
-	Check(ctx context.Context, check *Check, config ToolConfig) error
-	Fix(ctx context.Context, config ToolConfig) error
-	Format(ctx context.Context, config ToolConfig, dryRun bool) error
 }
 
-// ValidationTool marks tools whose Check method performs validation.
-type ValidationTool interface {
+type CheckTool interface {
 	Tool
-	ValidationTool()
+	Check(ctx context.Context, check *Check, config ToolConfig) error
+}
+
+type FixTool interface {
+	Tool
+	Fix(ctx context.Context, config ToolConfig) error
+}
+
+type FormatTool interface {
+	Tool
+	Format(ctx context.Context, config ToolConfig, dryRun bool) error
 }
 
 func (tl ToolList) Only(only string) (ToolList, error) {

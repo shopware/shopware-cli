@@ -14,10 +14,6 @@ func (r Rector) Name() string {
 	return "rector"
 }
 
-func (r Rector) Check(ctx context.Context, check *Check, config ToolConfig) error {
-	return nil
-}
-
 func (r Rector) Fix(ctx context.Context, config ToolConfig) error {
 	if _, err := os.Stat(path.Join(config.RootDir, "composer.json")); err != nil {
 		//nolint: nilerr
@@ -90,10 +86,6 @@ func (r Rector) Fix(ctx context.Context, config ToolConfig) error {
 		}
 	}
 
-	return nil
-}
-
-func (r Rector) Format(ctx context.Context, config ToolConfig, dryRun bool) error {
 	return nil
 }
 
