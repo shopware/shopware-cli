@@ -20,10 +20,6 @@ func (SymfonyXMLConverter) Name() string {
 	return "symfony-xml"
 }
 
-func (SymfonyXMLConverter) Check(ctx context.Context, check *Check, config ToolConfig) error {
-	return nil
-}
-
 func (s SymfonyXMLConverter) Fix(ctx context.Context, config ToolConfig) error {
 	conversions := []struct {
 		fileName string
@@ -53,10 +49,6 @@ func (s SymfonyXMLConverter) Fix(ctx context.Context, config ToolConfig) error {
 		}
 	}
 
-	return nil
-}
-
-func (SymfonyXMLConverter) Format(ctx context.Context, config ToolConfig, dryRun bool) error {
 	return nil
 }
 

@@ -22,6 +22,12 @@ func toolNames(list ToolList) []string {
 	return out
 }
 
+func TestToolsByCapability(t *testing.T) {
+	assert.ElementsMatch(t, []string{"admin-twig", "eslint", "phpstan", "storefront-twig", "stylelint", "sw-cli"}, toolNames(GetToolsOf[CheckTool]()))
+	assert.ElementsMatch(t, []string{"admin-twig", "eslint", "rector", "stylelint", "symfony-xml"}, toolNames(GetToolsOf[FixTool]()))
+	assert.ElementsMatch(t, []string{"admin-twig", "php-cs-fixer", "prettier"}, toolNames(GetToolsOf[FormatTool]()))
+}
+
 func TestExclude_EmptyString_NoChange(t *testing.T) {
 	t.Parallel()
 	base := ToolList{testTool{"phpstan"}, testTool{"eslint"}, testTool{"sw-cli"}}

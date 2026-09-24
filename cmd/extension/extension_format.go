@@ -41,7 +41,7 @@ var extensionFormat = &cobra.Command{
 
 		var gr errgroup.Group
 
-		tools := verifier.GetTools()
+		tools := verifier.GetToolsOf[verifier.FormatTool]()
 		only, _ := cmd.Flags().GetString("only")
 
 		tools, err = tools.Only(only)
@@ -50,9 +50,9 @@ var extensionFormat = &cobra.Command{
 		}
 
 		for _, tool := range tools {
-			tool := tool
+			formatter := tool.(verifier.FormatTool)
 			gr.Go(func() error {
-				return tool.Format(cmd.Context(), *toolCfg, dryRun)
+				return formatter.Format(cmd.Context(), *toolCfg, dryRun)
 			})
 		}
 
@@ -66,6 +66,6 @@ var extensionFormat = &cobra.Command{
 
 func init() {
 	extensionRootCmd.AddCommand(extensionFormat)
-	extensionFormat.Flags().String("only", "", "Run only specific tools by name (comma-separated, e.g. phpstan,eslint)")
+	extensionFormat.Flags().String("only", "", "Run only specific formatters by name (comma-separated, e.g. prettier,php-cs-fixer)")
 	extensionFormat.Flags().Bool("dry-run", false, "Run in dry run mode")
 }

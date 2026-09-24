@@ -48,7 +48,7 @@ var extensionFixCmd = &cobra.Command{
 
 		var gr errgroup.Group
 
-		tools := verifier.GetTools()
+		tools := verifier.GetToolsOf[verifier.FixTool]()
 		only, _ := cmd.Flags().GetString("only")
 
 		tools, err = tools.Only(only)
@@ -57,9 +57,9 @@ var extensionFixCmd = &cobra.Command{
 		}
 
 		for _, tool := range tools {
-			tool := tool
+			fixer := tool.(verifier.FixTool)
 			gr.Go(func() error {
-				return tool.Fix(cmd.Context(), *toolCfg)
+				return fixer.Fix(cmd.Context(), *toolCfg)
 			})
 		}
 
@@ -73,6 +73,6 @@ var extensionFixCmd = &cobra.Command{
 
 func init() {
 	extensionRootCmd.AddCommand(extensionFixCmd)
-	extensionFixCmd.Flags().String("only", "", "Run only specific tools by name (comma-separated, e.g. phpstan,eslint)")
+	extensionFixCmd.Flags().String("only", "", "Run only specific fixers by name (comma-separated, e.g. eslint,rector)")
 	extensionFixCmd.Flags().Bool("allow-non-git", false, "Allow running the fix command on non-git repositories")
 }

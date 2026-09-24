@@ -45,8 +45,6 @@ func (p PhpStan) Name() string {
 	return "phpstan"
 }
 
-func (p PhpStan) ValidationTool() {}
-
 func (p PhpStan) configExists(pluginPath string) bool {
 	for _, config := range possiblePHPStanConfigs {
 		if _, err := os.Stat(path.Join(pluginPath, config)); err == nil {
@@ -148,14 +146,6 @@ func (p PhpStan) Check(ctx context.Context, check *Check, config ToolConfig) err
 
 func isPhpStanNoFilesOutput(output string) bool {
 	return strings.Contains(output, "No files found to analyse")
-}
-
-func (p PhpStan) Fix(ctx context.Context, config ToolConfig) error {
-	return nil
-}
-
-func (p PhpStan) Format(ctx context.Context, config ToolConfig, dryRun bool) error {
-	return nil
 }
 
 var tagPartRegex = regexp.MustCompile(`tag:v[0-9]+.[0-9]+.[0-9]+`)
