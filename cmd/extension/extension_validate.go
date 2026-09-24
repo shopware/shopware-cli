@@ -60,7 +60,14 @@ var extensionValidateCmd = &cobra.Command{
 				logging.FromContext(cmd.Context()).Debugf("Skipping copying extension files to temporary directory due to --no-copy flag")
 			} else if isFull {
 				beforeCopyTime := time.Now()
-				if err := system.CopyFiles(args[0], tmpDir); err != nil {
+
+				// The copy gets the target release installed, so the existing vendor/ must not travel along
+				var skip []string
+				if targetVersion != "" {
+					skip = verifier.TargetCopySkips
+				}
+
+				if err := system.CopyFiles(args[0], tmpDir, skip...); err != nil {
 					return err
 				}
 
@@ -88,6 +95,7 @@ var extensionValidateCmd = &cobra.Command{
 			}
 
 			toolCfg.InputWasDirectory = true
+			toolCfg.RootDirIsCopy = isFull && !noCopy
 		} else {
 			ext, err := extension.GetExtensionByZip(cmd.Context(), args[0])
 			if err != nil {
@@ -98,6 +106,8 @@ var extensionValidateCmd = &cobra.Command{
 			if err != nil {
 				return err
 			}
+
+			toolCfg.RootDirIsCopy = true
 		}
 
 		if storeCompliance || os.Getenv("SHOPWARE_CLI_STORE_COMPLIANCE") == "1" {

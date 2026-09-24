@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestCopyFiles(t *testing.T) {
@@ -96,4 +97,20 @@ func TestIsDirEmpty(t *testing.T) {
 	empty, err = IsDirEmpty(tmpDir)
 	assert.NoError(t, err)
 	assert.False(t, empty)
+}
+
+func TestCopyFilesSkipsRequestedEntries(t *testing.T) {
+	t.Parallel()
+	src := t.TempDir()
+	dst := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(src, "vendor", "autoload"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(src, "vendor", "autoload", "a.php"), []byte("<?php"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(src, "composer.lock"), []byte("{}"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(src, "composer.json"), []byte("{}"), 0o644))
+
+	require.NoError(t, CopyFiles(src, dst, "vendor", "composer.lock"))
+
+	assert.FileExists(t, filepath.Join(dst, "composer.json"))
+	assert.NoFileExists(t, filepath.Join(dst, "composer.lock"))
+	assert.NoDirExists(t, filepath.Join(dst, "vendor"))
 }
