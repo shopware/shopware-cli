@@ -1,9 +1,12 @@
 package extension
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
+	"strings"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -28,19 +31,15 @@ var extensionValidateCmd = &cobra.Command{
 			return err
 		}
 		checkAgainst, _ := cmd.Flags().GetString("check-against")
-		tmpDir, err := os.MkdirTemp(os.TempDir(), "analyse-extension-*")
 		only, _ := cmd.Flags().GetString("only")
 		exclude, _ := cmd.Flags().GetString("exclude")
 		noCopy, _ := cmd.Flags().GetBool("no-copy")
 
-		// If the user does not want to run full validation, only run shopware-cli
-		if !isFull {
-			only = "sw-cli"
-		}
-
+		tools, coverage, err := selectExtensionValidationTools(isFull, only, exclude)
 		if err != nil {
-			return fmt.Errorf("cannot create temporary directory: %w", err)
+			return err
 		}
+		needsTools := slices.ContainsFunc(tools, requiresToolSetup)
 
 		path, err := filepath.Abs(args[0])
 		if err != nil {
@@ -54,17 +53,14 @@ var extensionValidateCmd = &cobra.Command{
 		var toolCfg *verifier.ToolConfig
 
 		if stat.IsDir() {
+			validationPath := path
 			if noCopy {
-				tmpDir = path
 				logging.FromContext(cmd.Context()).Debugf("Skipping copying extension files to temporary directory due to --no-copy flag")
-			} else if isFull {
-				beforeCopyTime := time.Now()
-				if err := system.CopyFiles(args[0], tmpDir); err != nil {
-					return err
+			} else if needsTools {
+				tmpDir, err := os.MkdirTemp(os.TempDir(), "analyse-extension-*")
+				if err != nil {
+					return fmt.Errorf("cannot create temporary directory: %w", err)
 				}
-
-				logging.FromContext(cmd.Context()).Debugf("Copied extension files to temporary directory in %s", time.Since(beforeCopyTime).String())
-
 				defer func() {
 					beforeDeleteTime := time.Now()
 					if err := os.RemoveAll(tmpDir); err != nil {
@@ -72,11 +68,17 @@ var extensionValidateCmd = &cobra.Command{
 					}
 					logging.FromContext(cmd.Context()).Debugf("Removed temporary directory in %s", time.Since(beforeDeleteTime).String())
 				}()
-			} else if !isFull {
-				tmpDir = args[0]
+
+				beforeCopyTime := time.Now()
+				if err := system.CopyFiles(path, tmpDir); err != nil {
+					return err
+				}
+
+				logging.FromContext(cmd.Context()).Debugf("Copied extension files to temporary directory in %s", time.Since(beforeCopyTime).String())
+				validationPath = tmpDir
 			}
 
-			ext, err := extension.GetExtensionByFolder(cmd.Context(), tmpDir)
+			ext, err := extension.GetExtensionByFolder(cmd.Context(), validationPath)
 			if err != nil {
 				return err
 			}
@@ -109,20 +111,14 @@ var extensionValidateCmd = &cobra.Command{
 		result := verifier.NewCheck()
 		result.SetSourceRoot(toolCfg.RootDir)
 
+		if needsTools {
+			if err := verifier.SetupTools(cmd.Context(), cmd.Root().Version); err != nil {
+				return err
+			}
+			toolCfg.ToolDirectory = verifier.GetToolDirectory()
+		}
+
 		var gr errgroup.Group
-
-		tools := verifier.GetTools()
-
-		tools, err = tools.Only(only)
-		if err != nil {
-			return err
-		}
-
-		tools, err = tools.Exclude(exclude)
-		if err != nil {
-			return err
-		}
-
 		for _, tool := range tools {
 			tool := tool
 			gr.Go(func() error {
@@ -134,8 +130,76 @@ var extensionValidateCmd = &cobra.Command{
 			return err
 		}
 
-		return validation.DoCheckReport(result.RemoveByIdentifier(toolCfg.ValidationIgnores), reportingFormat)
+		return validation.DoCheckReport(result.RemoveByIdentifier(toolCfg.ValidationIgnores), reportingFormat, coverage...)
 	},
+}
+
+// These tools have a real Check implementation; other verifier tools may only fix or format.
+var extensionValidationToolNames = []string{"admin-twig", "eslint", "phpstan", "storefront-twig", "stylelint", "sw-cli"}
+
+func selectExtensionValidationTools(full bool, only, exclude string) (verifier.ToolList, []validation.CheckCoverage, error) {
+	requested := only
+	if requested == "" {
+		requested = "sw-cli"
+		if full {
+			requested = strings.Join(extensionValidationToolNames, ",")
+		}
+	}
+	selected, err := verifier.GetTools().Only(requested)
+	if err != nil {
+		return nil, nil, err
+	}
+	requestedNames := make(map[string]bool, len(selected))
+	for _, tool := range selected {
+		name := tool.Name()
+		if !slices.Contains(extensionValidationToolNames, name) {
+			return nil, nil, fmt.Errorf("%s does not provide a validation check", name)
+		}
+		requestedNames[name] = true
+	}
+	selected, err = selected.Exclude(exclude)
+	if err != nil {
+		return nil, nil, err
+	}
+	if len(selected) == 0 {
+		return nil, nil, errors.New("no validation checks selected after applying --exclude")
+	}
+
+	unique := make(verifier.ToolList, 0, len(selected))
+	invoked := make(map[string]bool, len(selected))
+	for _, tool := range selected {
+		if invoked[tool.Name()] {
+			continue
+		}
+		unique = append(unique, tool)
+		invoked[tool.Name()] = true
+	}
+
+	coverage := make([]validation.CheckCoverage, 0, len(extensionValidationToolNames))
+	for _, name := range extensionValidationToolNames {
+		check := validation.CheckCoverage{Name: name, Status: "skipped"}
+		switch {
+		case invoked[name]:
+			check.Status = "invoked"
+		case requestedNames[name]:
+			check.Reason = "excluded by --exclude"
+		case only != "":
+			check.Reason = "not selected by --only"
+		default:
+			check.Reason = "not selected; use --full or --only"
+		}
+		coverage = append(coverage, check)
+	}
+	return unique, coverage, nil
+}
+
+func requiresToolSetup(tool verifier.Tool) bool {
+	switch tool.(type) {
+	case verifier.PhpStan, verifier.Eslint, verifier.StyleLint:
+		return true
+	default:
+		return false
+	}
 }
 
 func extensionValidationFormat(cmd *cobra.Command) (string, error) {
@@ -153,12 +217,12 @@ func extensionValidationFormat(cmd *cobra.Command) (string, error) {
 
 func init() {
 	extensionRootCmd.AddCommand(extensionValidateCmd)
-	extensionValidateCmd.PersistentFlags().Bool("full", false, "Run full validation including PHPStan, ESLint and Stylelint")
+	extensionValidateCmd.PersistentFlags().Bool("full", false, "Run all validation checks by default (minus --exclude selections)")
 	extensionValidateCmd.PersistentFlags().Bool("store-compliance", false, "Run the Extension Store compliance checks")
 	extensionValidateCmd.PersistentFlags().String("format", "", "Reporting format (summary, json, github, gitlab, junit, markdown)")
 	extensionValidateCmd.PersistentFlags().String("reporter", "", "Reporting format (summary, json, github, gitlab, junit, markdown)")
 	extensionValidateCmd.PersistentFlags().String("check-against", "highest", "Check against Shopware Version (highest, lowest)")
-	extensionValidateCmd.PersistentFlags().String("only", "", "Run only specific tools by name (comma-separated, e.g. phpstan,eslint)")
+	extensionValidateCmd.PersistentFlags().String("only", "", "Run only these validation checks, regardless of --full (comma-separated, e.g. phpstan,eslint)")
 	extensionValidateCmd.PersistentFlags().String("exclude", "", "Exclude specific tools by name (comma-separated, e.g. phpstan,eslint)")
 	extensionValidateCmd.PersistentFlags().Bool("no-copy", false, "Do not copy extension files to temporary directory")
 	extensionValidateCmd.MarkFlagsMutuallyExclusive("format", "reporter")
@@ -174,12 +238,6 @@ func init() {
 			return fmt.Errorf("invalid --check-against value %q, allowed values: highest, lowest", mode)
 		}
 
-		// Dont setup tools if we dont run full validation
-		full, _ := cmd.Flags().GetBool("full")
-		if !full {
-			return nil
-		}
-
-		return verifier.SetupTools(cmd.Context(), cmd.Root().Version)
+		return nil
 	}
 }
