@@ -35,7 +35,7 @@ var extensionValidateCmd = &cobra.Command{
 		exclude, _ := cmd.Flags().GetString("exclude")
 		noCopy, _ := cmd.Flags().GetBool("no-copy")
 
-		tools, coverage, err := selectExtensionValidationTools(isFull, only, exclude)
+		tools, statuses, err := selectExtensionValidationTools(isFull, only, exclude)
 		if err != nil {
 			return err
 		}
@@ -130,11 +130,11 @@ var extensionValidateCmd = &cobra.Command{
 			return err
 		}
 
-		return validation.DoCheckReport(result.RemoveByIdentifier(toolCfg.ValidationIgnores), reportingFormat, coverage...)
+		return validation.DoCheckReport(result.RemoveByIdentifier(toolCfg.ValidationIgnores), reportingFormat, statuses...)
 	},
 }
 
-func selectExtensionValidationTools(full bool, only, exclude string) (verifier.ToolList, []validation.CheckCoverage, error) {
+func selectExtensionValidationTools(full bool, only, exclude string) (verifier.ToolList, []validation.ToolInvocationStatus, error) {
 	validationTools := verifier.GetToolsOf[verifier.CheckTool]()
 
 	requested := only
@@ -174,24 +174,24 @@ func selectExtensionValidationTools(full bool, only, exclude string) (verifier.T
 		invoked[tool.Name()] = true
 	}
 
-	coverage := make([]validation.CheckCoverage, 0, len(validationTools))
+	statuses := make([]validation.ToolInvocationStatus, 0, len(validationTools))
 	for _, tool := range validationTools {
 		name := tool.Name()
-		check := validation.CheckCoverage{Name: name, Status: "skipped"}
+		status := validation.ToolInvocationStatus{Name: name, Status: "skipped"}
 		switch {
 		case invoked[name]:
-			check.Status = "invoked"
+			status.Status = "invoked"
 		case requestedNames[name]:
-			check.Reason = "excluded by --exclude"
+			status.Reason = "excluded by --exclude"
 		case only != "":
-			check.Reason = "not selected by --only"
+			status.Reason = "not selected by --only"
 		default:
-			check.Reason = "not selected; use --full or --only"
+			status.Reason = "not selected; use --full or --only"
 		}
-		coverage = append(coverage, check)
+		statuses = append(statuses, status)
 	}
-	sort.Slice(coverage, func(i, j int) bool { return coverage[i].Name < coverage[j].Name })
-	return unique, coverage, nil
+	sort.Slice(statuses, func(i, j int) bool { return statuses[i].Name < statuses[j].Name })
+	return unique, statuses, nil
 }
 
 func requiresToolSetup(tool verifier.Tool) bool {
