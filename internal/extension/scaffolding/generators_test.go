@@ -67,6 +67,9 @@ func TestScheduledTaskGeneratorRegistersTaskAndHandler(t *testing.T) {
 		"src/ScheduledTask/ExampleTaskHandler.php",
 	})
 
+	task := readPluginFile(t, plugin, "src/ScheduledTask/ExampleTask.php")
+	assert.Contains(t, task, "return 'my_vendor_my_extension.example_task';")
+
 	handler := readPluginFile(t, plugin, "src/ScheduledTask/ExampleTaskHandler.php")
 	assert.Contains(t, handler, `namespace MyVendor\MyExtension\ScheduledTask;`)
 	assert.Contains(t, handler, "#[AsMessageHandler(handles: ExampleTask::class)]")
@@ -75,6 +78,17 @@ func TestScheduledTaskGeneratorRegistersTaskAndHandler(t *testing.T) {
 	assert.Contains(t, services, `$services->set(\MyVendor\MyExtension\ScheduledTask\ExampleTask::class)`)
 	assert.Contains(t, services, `$services->set(\MyVendor\MyExtension\ScheduledTask\ExampleTaskHandler::class)`)
 	assert.Contains(t, services, "->tag('messenger.message_handler');")
+}
+
+func TestEntityGeneratorPrefixesTableNameWithPlugin(t *testing.T) {
+	plugin := newPlugin(t)
+
+	result, err := generatorByName(t, "entity").Run(plugin, []string{"ExampleEntity"})
+	require.NoError(t, err)
+
+	assert.Contains(t, result.Created, "src/Core/Content/ExampleEntity/ExampleEntityDefinition.php")
+	definition := readPluginFile(t, plugin, "src/Core/Content/ExampleEntity/ExampleEntityDefinition.php")
+	assert.Contains(t, definition, "ENTITY_NAME = 'my_vendor_my_extension_example_entity'")
 }
 
 func TestPluginConfigGeneratorCreatesTheConfigXML(t *testing.T) {

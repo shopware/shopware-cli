@@ -278,7 +278,7 @@ func buildEntity(plugin PluginInfo, entities []string) (output, error) {
 			Namespace:  plugin.Namespace,
 			ClassName:  plugin.ClassName,
 			EntityName: entity,
-			TableName:  tableName(entity),
+			TableName:  tableName(plugin.ClassName) + "_" + tableName(entity),
 			Timestamp:  timestamp,
 		}
 
@@ -330,7 +330,11 @@ func migrationFile(pluginDir string, data templateData) (file, error) {
 }
 
 func (p PluginInfo) data() templateData {
-	return templateData{Namespace: p.Namespace, ClassName: p.ClassName}
+	return templateData{
+		Namespace: p.Namespace,
+		ClassName: p.ClassName,
+		TaskName:  tableName(p.ClassName) + ".example_task",
+	}
 }
 
 func servicesSnippet(content string) snippet {
@@ -341,7 +345,7 @@ func routesSnippet(content string) snippet {
 	return snippet{Path: routesPath, Content: content, Intro: routesIntro, Outro: configOutro}
 }
 
-// tableName turns a PascalCase entity name into its snake_case table name.
-func tableName(entityName string) string {
-	return strings.ToLower(strings.Join(splitPascalCase(entityName), "_"))
+// tableName turns a PascalCase name into snake_case for tables and task names.
+func tableName(name string) string {
+	return strings.ToLower(strings.Join(splitPascalCase(name), "_"))
 }
