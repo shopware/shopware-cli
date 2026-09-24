@@ -2,9 +2,13 @@ package verifier
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
+	"github.com/shopware/shopware-cli/internal/validation"
 )
 
 type testTool struct{ name string }
@@ -68,4 +72,48 @@ func TestExclude_TrimsAndIgnoresDuplicates(t *testing.T) {
 	res, err := base.Exclude(" eslint , eslint ,  \teslint\t ")
 	assert.NoError(t, err)
 	assert.Equal(t, []string{"phpstan", "sw-cli"}, toolNames(res))
+}
+
+type recordingTool struct {
+	name string
+	run  *validation.ToolRun
+	err  error
+}
+
+func (r recordingTool) Name() string { return r.name }
+func (r recordingTool) Check(ctx context.Context, check *Check, config ToolConfig) error {
+	if r.run != nil {
+		check.RecordToolRun(*r.run)
+	}
+	return r.err
+}
+func (r recordingTool) Fix(ctx context.Context, config ToolConfig) error                 { return nil }
+func (r recordingTool) Format(ctx context.Context, config ToolConfig, dryRun bool) error { return nil }
+
+func TestRunChecksRecordsTargetAndDefaultRuns(t *testing.T) {
+	t.Parallel()
+	tools := ToolList{
+		recordingTool{name: "eslint", run: &validation.ToolRun{Name: "eslint", Status: validation.ToolRunRan, Baseline: "6.7.0.0"}},
+		recordingTool{name: "stylelint"},
+	}
+	check := NewCheck()
+	cfg := ToolConfig{Target: validation.Target{Version: "6.7.0.0", Source: validation.TargetSourceConstraint}}
+
+	require.NoError(t, tools.RunChecks(t.Context(), check, cfg))
+
+	require.NotNil(t, check.GetTarget())
+	assert.Equal(t, "6.7.0.0", check.GetTarget().Version)
+	assert.Equal(t, []validation.ToolRun{
+		{Name: "eslint", Status: validation.ToolRunRan, Baseline: "6.7.0.0"},
+		{Name: "stylelint", Status: validation.ToolRunRan},
+	}, check.GetToolRuns())
+}
+
+func TestRunChecksReturnsToolError(t *testing.T) {
+	t.Parallel()
+	tools := ToolList{recordingTool{name: "broken", err: errors.New("boom")}}
+
+	err := tools.RunChecks(t.Context(), NewCheck(), ToolConfig{})
+
+	assert.EqualError(t, err, "boom")
 }

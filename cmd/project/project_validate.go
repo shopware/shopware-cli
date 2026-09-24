@@ -6,7 +6,6 @@ import (
 	"path/filepath"
 
 	"github.com/spf13/cobra"
-	"golang.org/x/sync/errgroup"
 
 	"github.com/shopware/shopware-cli/internal/shop"
 	"github.com/shopware/shopware-cli/internal/system"
@@ -77,8 +76,6 @@ var projectValidateCmd = &cobra.Command{
 		result := verifier.NewCheck()
 		result.SetSourceRoot(toolCfg.RootDir)
 
-		var gr errgroup.Group
-
 		tools := verifier.GetTools()
 
 		tools, err = tools.Only(only)
@@ -91,14 +88,7 @@ var projectValidateCmd = &cobra.Command{
 			return err
 		}
 
-		for _, tool := range tools {
-			tool := tool
-			gr.Go(func() error {
-				return tool.Check(cmd.Context(), result, *toolCfg)
-			})
-		}
-
-		if err := gr.Wait(); err != nil {
+		if err := tools.RunChecks(cmd.Context(), result, *toolCfg); err != nil {
 			return err
 		}
 

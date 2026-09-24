@@ -213,7 +213,7 @@ func GetConfigFromProject(ctx context.Context, root string, onlyLocal bool) (*To
 		ValidationIgnores:     validationIgnores,
 	}
 
-	if err := determineVersionRange(toolCfg, constraint); err != nil {
+	if err := determineBaseline(toolCfg, constraint); err != nil {
 		return nil, err
 	}
 

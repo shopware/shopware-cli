@@ -359,3 +359,30 @@ func TestRemoveByMessage(t *testing.T) {
 		})
 	}
 }
+
+func TestRecordToolRunReplacesByNameAndSortsByName(t *testing.T) {
+	t.Parallel()
+	check := NewCheck()
+	assert.Nil(t, check.GetTarget())
+	assert.Empty(t, check.GetToolRuns())
+
+	check.RecordToolRun(validation.ToolRun{Name: "phpstan", Status: validation.ToolRunRan})
+	check.RecordToolRun(validation.ToolRun{Name: "admin-twig", Status: validation.ToolRunRan, Baseline: "6.6.0.0"})
+	check.RecordToolRun(validation.ToolRun{Name: "phpstan", Status: validation.ToolRunSkipped, Note: "no composer.json"})
+
+	assert.Equal(t, []validation.ToolRun{
+		{Name: "admin-twig", Status: validation.ToolRunRan, Baseline: "6.6.0.0"},
+		{Name: "phpstan", Status: validation.ToolRunSkipped, Note: "no composer.json"},
+	}, check.GetToolRuns())
+}
+
+func TestTargetSurvivesRemoveByIdentifier(t *testing.T) {
+	t.Parallel()
+	check := NewCheck()
+	check.SetTarget(validation.Target{Version: "6.7.0.0", Source: validation.TargetSourceConstraint})
+
+	filtered := check.RemoveByIdentifier(nil)
+
+	require.NotNil(t, filtered.GetTarget())
+	assert.Equal(t, "6.7.0.0", filtered.GetTarget().Version)
+}

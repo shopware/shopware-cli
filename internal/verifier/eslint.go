@@ -53,6 +53,7 @@ func (e Eslint) Check(ctx context.Context, check *Check, config ToolConfig) erro
 	var gr errgroup.Group
 
 	env := append(os.Environ(), "SHOPWARE_VERSION="+config.MinShopwareVersion)
+	check.RecordToolRun(validation.ToolRun{Name: e.Name(), Status: validation.ToolRunRan, Baseline: config.MinShopwareVersion})
 
 	for _, p := range paths {
 		p := p

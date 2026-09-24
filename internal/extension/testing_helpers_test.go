@@ -57,6 +57,14 @@ func (c *testCheck) GetResults() []validation.CheckResult {
 	return c.Results
 }
 
+func (c *testCheck) GetTarget() *validation.Target {
+	return nil
+}
+
+func (c *testCheck) GetToolRuns() []validation.ToolRun {
+	return nil
+}
+
 func (c *testCheck) HasErrors() bool {
 	for _, r := range c.Results {
 		if r.Severity == validation.SeverityError {

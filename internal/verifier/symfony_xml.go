@@ -8,6 +8,7 @@ import (
 
 	"github.com/shopware/shopware-cli/internal/extension"
 	"github.com/shopware/shopware-cli/internal/symfony"
+	"github.com/shopware/shopware-cli/internal/validation"
 	"github.com/shopware/shopware-cli/logging"
 )
 
@@ -20,7 +21,9 @@ func (SymfonyXMLConverter) Name() string {
 	return "symfony-xml"
 }
 
-func (SymfonyXMLConverter) Check(ctx context.Context, check *Check, config ToolConfig) error {
+func (s SymfonyXMLConverter) Check(ctx context.Context, check *Check, config ToolConfig) error {
+	check.RecordToolRun(validation.ToolRun{Name: s.Name(), Status: validation.ToolRunSkipped, Note: "no check operation"})
+
 	return nil
 }
 

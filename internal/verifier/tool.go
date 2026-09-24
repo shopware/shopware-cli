@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"strings"
 
+	"golang.org/x/sync/errgroup"
+
 	"github.com/shopware/shopware-cli/internal/extension"
 	"github.com/shopware/shopware-cli/internal/validation"
 )
@@ -27,10 +29,10 @@ type ToolConfig struct {
 
 	InputWasDirectory bool
 
-	// The minimum version of Shopware that is supported
+	// The Shopware version the checks run against, see Target
 	MinShopwareVersion string
-	// The maximum version of Shopware that is supported
-	MaxShopwareVersion string
+	// Target says how MinShopwareVersion was chosen
+	Target validation.Target
 	// The version of Shopware that is checked against
 	CheckAgainst string
 	// The root directory of the extension/project
@@ -137,4 +139,43 @@ func (tl ToolList) PossibleString() string {
 	}
 
 	return strings.Join(possibleTools, ",")
+}
+
+// RunChecks runs the tools concurrently and records a run for every tool that did not record its own.
+func (tl ToolList) RunChecks(ctx context.Context, check *Check, config ToolConfig) error {
+	if config.Target.Version != "" {
+		check.SetTarget(config.Target)
+	}
+
+	var gr errgroup.Group
+
+	for _, tool := range tl {
+		gr.Go(func() error {
+			return tool.Check(ctx, check, config)
+		})
+	}
+
+	if err := gr.Wait(); err != nil {
+		return err
+	}
+
+	for _, tool := range tl {
+		if !check.hasToolRun(tool.Name()) {
+			check.RecordToolRun(validation.ToolRun{Name: tool.Name(), Status: validation.ToolRunRan})
+		}
+	}
+
+	return nil
+}
+
+// twigToolRun records whether any Twig rule applies to the baseline.
+func twigToolRun(name, area, baseline string, ruleCount int) validation.ToolRun {
+	run := validation.ToolRun{Name: name, Status: validation.ToolRunRan, Baseline: baseline}
+
+	if ruleCount == 0 {
+		run.Status = validation.ToolRunSkipped
+		run.Note = fmt.Sprintf("no %s Twig rules apply to Shopware %s", area, baseline)
+	}
+
+	return run
 }
