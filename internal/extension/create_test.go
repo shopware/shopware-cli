@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -70,14 +71,76 @@ func TestValidateExtensionType(t *testing.T) {
 	}
 }
 
-func TestCreateFailsOutsideShopwareProject(t *testing.T) {
-	t.Setenv("PROJECT_ROOT", "")
-	t.Chdir(t.TempDir())
+func TestCreateErrors(t *testing.T) {
+	t.Run("unsupported extension type", func(t *testing.T) {
+		opts := validCreateOptions()
+		opts.Type = "not-a-type"
 
-	err := Create(system.WithInteraction(t.Context(), false), validCreateOptions())
+		assert.EqualError(t, Create(t.Context(), opts), `unsupported extension type "not-a-type"`)
+	})
 
-	assert.ErrorContains(t, err, "cannot find Shopware project")
+	t.Run("cannot find Shopware project", func(t *testing.T) {
+		t.Setenv("PROJECT_ROOT", "")
+		t.Chdir(t.TempDir())
+
+		err := Create(system.WithInteraction(t.Context(), false), validCreateOptions())
+
+		assert.ErrorContains(t, err, "cannot find Shopware project")
+	})
+
+	t.Run("extension directory already exists", func(t *testing.T) {
+		projectDir := newProject(t)
+		opts := validCreateOptions()
+		extensionDir := deriveExtensionDirectoryName(projectDir, opts.Store, deriveTechnicalName(opts.Name, opts.Vendor))
+		require.NoError(t, os.Mkdir(extensionDir, 0o755))
+
+		assert.ErrorContains(t, Create(t.Context(), opts), "already exists")
+	})
+
+	t.Run("path exists as file", func(t *testing.T) {
+		projectDir := newProject(t)
+		opts := validCreateOptions()
+		extensionDir := deriveExtensionDirectoryName(projectDir, opts.Store, deriveTechnicalName(opts.Name, opts.Vendor))
+		require.NoError(t, os.WriteFile(extensionDir, nil, 0o644))
+
+		assert.ErrorContains(t, Create(t.Context(), opts), "not a directory")
+	})
+
+	t.Run("plugin root does not exist", func(t *testing.T) {
+		projectDir := newProject(t)
+		opts := validCreateOptions()
+		require.NoError(t, os.RemoveAll(filepath.Join(projectDir, "custom")))
+		extensionDir := deriveExtensionDirectoryName(projectDir, opts.Store, deriveTechnicalName(opts.Name, opts.Vendor))
+
+		assert.ErrorContains(t, Create(t.Context(), opts), "does not exist")
+		assert.NoDirExists(t, extensionDir)
+	})
+
+	t.Run("parent path not a directory", func(t *testing.T) {
+		projectDir := newProject(t)
+		opts := validCreateOptions()
+		parentPath := filepath.Join(projectDir, "custom", "static-plugins")
+		require.NoError(t, os.RemoveAll(parentPath))
+		require.NoError(t, os.WriteFile(parentPath, nil, 0o644))
+		extensionDir := deriveExtensionDirectoryName(projectDir, opts.Store, deriveTechnicalName(opts.Name, opts.Vendor))
+
+		assert.ErrorContains(t, Create(t.Context(), opts), "not a directory")
+		assert.NoDirExists(t, extensionDir)
+	})
+
+	t.Run("extension files cannot be written", func(t *testing.T) {
+		projectDir := newProject(t)
+		opts := validCreateOptions()
+		opts.Vendor = "V"
+		// Directory name stays under NAME_MAX (255); the plugin class file does not.
+		opts.Name = strings.Repeat("A", 251)
+		extensionDir := deriveExtensionDirectoryName(projectDir, opts.Store, deriveTechnicalName(opts.Name, opts.Vendor))
+
+		assert.ErrorContains(t, Create(t.Context(), opts), "create extension files:")
+		assert.NoDirExists(t, extensionDir)
+	})
 }
+
 
 func TestCreateGeneratesAnExtension(t *testing.T) {
 	for _, extensionType := range []ExtensionType{Plugin, Theme} {
