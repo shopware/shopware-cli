@@ -9,6 +9,7 @@ import (
 	"golang.org/x/sync/errgroup"
 
 	"github.com/shopware/shopware-cli/internal/extension"
+	"github.com/shopware/shopware-cli/internal/validation"
 	"github.com/shopware/shopware-cli/internal/verifier"
 	"github.com/shopware/shopware-cli/logging"
 )
@@ -48,10 +49,10 @@ var extensionFixCmd = &cobra.Command{
 
 		var gr errgroup.Group
 
-		tools := verifier.GetToolsOf[verifier.FixTool]()
+		allTools := verifier.GetToolsOf[verifier.FixTool]()
 		only, _ := cmd.Flags().GetString("only")
 
-		tools, err = tools.Only(only)
+		tools, err := allTools.Only(only)
 		if err != nil {
 			return err
 		}
@@ -63,11 +64,11 @@ var extensionFixCmd = &cobra.Command{
 			})
 		}
 
-		if err := gr.Wait(); err != nil {
+		runErr := gr.Wait()
+		if err := validation.PrintToolInvocationTable(os.Stdout, "Fixers", extensionToolInvocationStatuses(allTools, tools)); err != nil {
 			return err
 		}
-
-		return nil
+		return runErr
 	},
 }
 

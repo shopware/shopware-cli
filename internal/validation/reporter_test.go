@@ -166,65 +166,98 @@ func TestErrorExistsSummary(t *testing.T) {
 	assert.Error(t, DoCheckReport(check, "summary"))
 }
 
-func TestCheckCoverageReports(t *testing.T) {
+func TestToolInvocationReports(t *testing.T) {
 	check := &testCheck{Results: []CheckResult{}}
-	checks := []CheckCoverage{
+	tools := []ToolInvocationStatus{
 		{Name: "eslint", Status: "skipped", Reason: "no JavaScript source files"},
 		{Name: "storefront-twig", Status: "skipped", Reason: "no storefront Twig templates"},
 	}
-	rows := coverageRows(checks)
+	rows := toolInvocationRows(tools)
 	assert.Contains(t, rows[0], "eslint")
 	assert.Contains(t, rows[0], "  skipped  no JavaScript source files")
 	assert.NotContains(t, rows[0], "(")
 
 	summary := captureOutput(func() {
-		assert.NoError(t, DoCheckReport(check, "summary", checks...))
+		assert.NoError(t, DoCheckReport(check, "summary", tools...))
 	})
 	for _, row := range rows {
 		assert.Contains(t, summary, "  "+row)
 	}
-	assert.Contains(t, summary, "No checks invoked; 0 problems reported")
+	assert.Contains(t, summary, "Tools:")
+	assert.True(t, strings.HasPrefix(summary, "\nTools:\n"))
+	assert.Less(t, strings.Index(summary, "Tools:"), strings.Index(summary, "No tools invoked;"))
+	assert.Contains(t, summary, "No tools invoked; 0 problems reported")
 	assert.NotContains(t, summary, "No problems found")
 
 	github := captureOutput(func() {
-		assert.NoError(t, DoCheckReport(check, "github", checks...))
+		assert.NoError(t, DoCheckReport(check, "github", tools...))
 	})
 	for _, row := range rows {
 		assert.Contains(t, github, "  "+row)
 	}
 
 	markdown := captureOutput(func() {
-		assert.NoError(t, DoCheckReport(check, "markdown", checks...))
+		assert.NoError(t, DoCheckReport(check, "markdown", tools...))
 	})
-	assert.Contains(t, markdown, "## Checks")
+	assert.Contains(t, markdown, "## Tools")
+	assert.Less(t, strings.Index(markdown, "## Tools"), strings.Index(markdown, "No tools invoked;"))
 	for _, row := range rows {
 		assert.Contains(t, markdown, row)
 	}
-	assert.Contains(t, markdown, "No checks invoked; 0 problems reported")
+	assert.Contains(t, markdown, "No tools invoked; 0 problems reported")
 
 	jsonOutput := captureOutput(func() {
-		assert.NoError(t, DoCheckReport(check, "json", checks...))
+		assert.NoError(t, DoCheckReport(check, "json", tools...))
 	})
 	var report struct {
-		Results []CheckResult   `json:"results"`
-		Checks  []CheckCoverage `json:"checks"`
+		Results []CheckResult          `json:"results"`
+		Tools   []ToolInvocationStatus `json:"tools"`
 	}
 	assert.NoError(t, json.Unmarshal([]byte(jsonOutput), &report))
 	assert.Empty(t, report.Results)
-	assert.Equal(t, checks, report.Checks)
+	assert.Equal(t, tools, report.Tools)
+	assert.NotContains(t, jsonOutput, `"checks"`)
 
-	checks[0] = CheckCoverage{Name: "eslint", Status: "invoked"}
+	tools[0] = ToolInvocationStatus{Name: "eslint", Status: "invoked"}
 	summary = captureOutput(func() {
-		assert.NoError(t, DoCheckReport(check, "summary", checks...))
+		assert.NoError(t, DoCheckReport(check, "summary", tools...))
 	})
 	assert.Contains(t, summary, "eslint")
 	assert.Contains(t, summary, "  invoked")
 	assert.Contains(t, summary, "No problems found")
 }
 
-func TestStructuredReportsKeepMachineOutputAndShowCoverage(t *testing.T) {
+func TestPrintToolInvocationTableWithOperationTitle(t *testing.T) {
+	var output strings.Builder
+	tools := []ToolInvocationStatus{
+		{Name: "eslint", Status: "invoked"},
+		{Name: "rector", Status: "skipped", Reason: "not selected by --only"},
+	}
+	assert.NoError(t, PrintToolInvocationTable(&output, "Fixers", tools))
+	assert.Equal(t, "\nFixers:\n  eslint  invoked\n  rector  skipped  not selected by --only\n", output.String())
+}
+
+func TestToolInvocationTableFollowsFindings(t *testing.T) {
+	check := &testCheck{Results: []CheckResult{{Path: "src/file.php", Line: 1, Message: "problem", Severity: SeverityWarning}}}
+	tools := []ToolInvocationStatus{{Name: "sw-cli", Status: "invoked"}}
+
+	summary := captureOutput(func() {
+		assert.NoError(t, DoCheckReport(check, "summary", tools...))
+	})
+	assert.Less(t, strings.Index(summary, "src/file.php"), strings.Index(summary, "Tools:"))
+	assert.Less(t, strings.Index(summary, "Tools:"), strings.Index(summary, "✖ 1 problem"))
+	assert.Contains(t, summary, "\n\nTools:\n")
+	assert.NotContains(t, summary, "\n\n\nTools:\n")
+
+	markdown := captureOutput(func() {
+		assert.NoError(t, DoCheckReport(check, "markdown", tools...))
+	})
+	assert.Less(t, strings.Index(markdown, "## src/file.php"), strings.Index(markdown, "## Tools"))
+}
+
+func TestStructuredReportsKeepMachineOutputAndShowToolStatuses(t *testing.T) {
 	check := &testCheck{Results: []CheckResult{}}
-	checks := []CheckCoverage{
+	tools := []ToolInvocationStatus{
 		{Name: "phpstan", Status: "invoked"},
 		{Name: "sw-cli", Status: "skipped", Reason: "not selected by --only"},
 	}
@@ -232,20 +265,20 @@ func TestStructuredReportsKeepMachineOutputAndShowCoverage(t *testing.T) {
 	var gitlabLog string
 	gitlab := captureOutput(func() {
 		gitlabLog = captureStderr(func() {
-			assert.NoError(t, DoCheckReport(check, "gitlab", checks...))
+			assert.NoError(t, DoCheckReport(check, "gitlab", tools...))
 		})
 	})
 	var issues []GitLabCodeQualityIssue
 	assert.NoError(t, json.Unmarshal([]byte(gitlab), &issues))
 	assert.Empty(t, issues)
-	for _, row := range coverageRows(checks) {
+	for _, row := range toolInvocationRows(tools) {
 		assert.Contains(t, gitlabLog, "  "+row)
 	}
 
 	var junitLog string
 	junit := captureOutput(func() {
 		junitLog = captureStderr(func() {
-			assert.NoError(t, DoCheckReport(check, "junit", checks...))
+			assert.NoError(t, DoCheckReport(check, "junit", tools...))
 		})
 	})
 	var suite JUnitTestSuite
@@ -254,10 +287,11 @@ func TestStructuredReportsKeepMachineOutputAndShowCoverage(t *testing.T) {
 	assert.Equal(t, 1, suite.Skipped)
 	require.Len(t, suite.TestCase, 2)
 	assert.Equal(t, "phpstan", suite.TestCase[0].Name)
+	assert.Equal(t, "tool", suite.TestCase[0].ClassName)
 	assert.Nil(t, suite.TestCase[0].Skipped)
 	require.NotNil(t, suite.TestCase[1].Skipped)
 	assert.Equal(t, "not selected by --only", suite.TestCase[1].Skipped.Message)
-	for _, row := range coverageRows(checks) {
+	for _, row := range toolInvocationRows(tools) {
 		assert.Contains(t, junitLog, "  "+row)
 	}
 }
@@ -539,6 +573,7 @@ func TestMarkdownReportWithTip(t *testing.T) {
 
 	assert.Contains(t, output, "Method has no return type")
 	assert.Contains(t, output, "*Tip: Add a return type declaration*")
+	assert.NotContains(t, output, "## Tools")
 }
 
 func TestJSONReportWithTip(t *testing.T) {
@@ -565,6 +600,7 @@ func TestJSONReportWithTip(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Len(t, result["results"], 1)
 	assert.Equal(t, "Add a return type declaration", result["results"][0].Tip)
+	assert.NotContains(t, output, `"tools"`)
 }
 
 func TestJUnitReportWithTip(t *testing.T) {

@@ -11,33 +11,33 @@ import (
 	"github.com/shopware/shopware-cli/internal/verifier"
 )
 
-func coverageByName(t *testing.T, checks []validation.CheckCoverage, name string) validation.CheckCoverage {
+func toolStatusByName(t *testing.T, statuses []validation.ToolInvocationStatus, name string) validation.ToolInvocationStatus {
 	t.Helper()
-	for _, check := range checks {
-		if check.Name == name {
-			return check
+	for _, status := range statuses {
+		if status.Name == name {
+			return status
 		}
 	}
-	t.Fatalf("missing coverage for %s", name)
-	return validation.CheckCoverage{}
+	t.Fatalf("missing tool status for %s", name)
+	return validation.ToolInvocationStatus{}
 }
 
 func TestExtensionValidationSelection(t *testing.T) {
 	t.Run("default runs only sw-cli", func(t *testing.T) {
-		tools, checks, err := selectExtensionValidationTools(false, "", "")
+		tools, statuses, err := selectExtensionValidationTools(false, "", "")
 		require.NoError(t, err)
 		assert.Equal(t, []string{"sw-cli"}, toolNamesForValidation(tools))
 		assert.False(t, slices.ContainsFunc(tools, requiresToolSetup))
-		assert.Equal(t, "not selected; use --full or --only", coverageByName(t, checks, "phpstan").Reason)
+		assert.Equal(t, "not selected; use --full or --only", toolStatusByName(t, statuses, "phpstan").Reason)
 	})
 
 	t.Run("only phpstan works without full", func(t *testing.T) {
-		tools, checks, err := selectExtensionValidationTools(false, "phpstan", "")
+		tools, statuses, err := selectExtensionValidationTools(false, "phpstan", "")
 		require.NoError(t, err)
 		assert.Equal(t, []string{"phpstan"}, toolNamesForValidation(tools))
 		assert.True(t, slices.ContainsFunc(tools, requiresToolSetup))
-		assert.Equal(t, "invoked", coverageByName(t, checks, "phpstan").Status)
-		assert.Equal(t, "not selected by --only", coverageByName(t, checks, "sw-cli").Reason)
+		assert.Equal(t, "invoked", toolStatusByName(t, statuses, "phpstan").Status)
+		assert.Equal(t, "not selected by --only", toolStatusByName(t, statuses, "sw-cli").Reason)
 	})
 
 	t.Run("Twig validation needs no external tools", func(t *testing.T) {
@@ -48,18 +48,18 @@ func TestExtensionValidationSelection(t *testing.T) {
 	})
 
 	t.Run("full selects all validation checks", func(t *testing.T) {
-		tools, checks, err := selectExtensionValidationTools(true, "", "")
+		tools, statuses, err := selectExtensionValidationTools(true, "", "")
 		require.NoError(t, err)
 		assert.Len(t, tools, 6)
-		assert.Len(t, checks, len(tools))
+		assert.Len(t, statuses, len(tools))
 		assert.True(t, slices.ContainsFunc(tools, requiresToolSetup))
 	})
 
 	t.Run("exclude applies after only", func(t *testing.T) {
-		tools, checks, err := selectExtensionValidationTools(false, "phpstan,sw-cli", "sw-cli")
+		tools, statuses, err := selectExtensionValidationTools(false, "phpstan,sw-cli", "sw-cli")
 		require.NoError(t, err)
 		assert.Equal(t, []string{"phpstan"}, toolNamesForValidation(tools))
-		assert.Equal(t, "excluded by --exclude", coverageByName(t, checks, "sw-cli").Reason)
+		assert.Equal(t, "excluded by --exclude", toolStatusByName(t, statuses, "sw-cli").Reason)
 	})
 
 	t.Run("duplicate only values run once", func(t *testing.T) {

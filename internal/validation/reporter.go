@@ -39,48 +39,48 @@ func DetectDefaultReporter() string {
 	return "summary"
 }
 
-// CheckCoverage records whether a validation check was selected and invoked.
-type CheckCoverage struct {
+// ToolInvocationStatus records whether a tool was invoked or skipped.
+type ToolInvocationStatus struct {
 	Name   string `json:"name"`
 	Status string `json:"status"`
 	Reason string `json:"reason,omitempty"`
 }
 
-// DoCheckReport reports findings and, when supplied, validation coverage.
-func DoCheckReport(result Check, reportingFormat string, checks ...CheckCoverage) error {
+// DoCheckReport reports findings and, when supplied, tool invocation statuses.
+func DoCheckReport(result Check, reportingFormat string, tools ...ToolInvocationStatus) error {
 	if err := ValidateReporter(reportingFormat); err != nil {
 		return err
 	}
 
 	switch reportingFormat {
 	case "summary":
-		if err := doSummaryReport(result, checks...); err != nil {
+		if err := doSummaryReport(result, tools...); err != nil {
 			return err
 		}
 	case "json":
-		if err := doJSONReport(result, checks...); err != nil {
+		if err := doJSONReport(result, tools...); err != nil {
 			return err
 		}
 	case "github":
-		if err := doGitHubReport(result, checks...); err != nil {
+		if err := doGitHubReport(result, tools...); err != nil {
 			return err
 		}
 	case "gitlab":
 		if err := doGitLabReport(result); err != nil {
 			return err
 		}
-		if err := printCoverage(os.Stderr, checks); err != nil {
+		if err := PrintToolInvocationTable(os.Stderr, "Tools", tools); err != nil {
 			return err
 		}
 	case "markdown":
-		if err := doMarkdownReport(result, checks...); err != nil {
+		if err := doMarkdownReport(result, tools...); err != nil {
 			return err
 		}
 	case "junit":
-		if err := doJUnitReport(result, checks...); err != nil {
+		if err := doJUnitReport(result, tools...); err != nil {
 			return err
 		}
-		if err := printCoverage(os.Stderr, checks); err != nil {
+		if err := PrintToolInvocationTable(os.Stderr, "Tools", tools); err != nil {
 			return err
 		}
 	}
@@ -92,11 +92,7 @@ func DoCheckReport(result Check, reportingFormat string, checks ...CheckCoverage
 	return nil
 }
 
-func doSummaryReport(result Check, checks ...CheckCoverage) error {
-	if err := printCoverage(os.Stdout, checks); err != nil {
-		return err
-	}
-
+func doSummaryReport(result Check, tools ...ToolInvocationStatus) error {
 	// Group results by file
 	fileGroups := make(map[string][]CheckResult)
 	for _, r := range result.GetResults() {
@@ -151,9 +147,13 @@ func doSummaryReport(result Check, checks ...CheckCoverage) error {
 		}
 	}
 
+	if err := PrintToolInvocationTable(os.Stdout, "Tools", tools); err != nil {
+		return err
+	}
+
 	//nolint:forbidigo
-	if checks != nil && !anyCheckInvoked(checks) {
-		fmt.Println("\nNo checks invoked; 0 problems reported")
+	if tools != nil && !anyToolInvoked(tools) {
+		fmt.Println("\nNo tools invoked; 0 problems reported")
 	} else {
 		fmt.Printf("\n%s\n", summaryLine(totalProblems, errorCount, warningCount))
 	}
@@ -178,12 +178,12 @@ func countNoun(n int, noun string) string {
 	return fmt.Sprintf("%d %ss", n, noun)
 }
 
-func doJSONReport(result Check, checks ...CheckCoverage) error {
+func doJSONReport(result Check, tools ...ToolInvocationStatus) error {
 	data := map[string]interface{}{
 		"results": result.GetResults(),
 	}
-	if checks != nil {
-		data["checks"] = checks
+	if tools != nil {
+		data["tools"] = tools
 	}
 
 	encoder := json.NewEncoder(os.Stdout)
@@ -191,7 +191,7 @@ func doJSONReport(result Check, checks ...CheckCoverage) error {
 	return encoder.Encode(data)
 }
 
-func doGitHubReport(result Check, checks ...CheckCoverage) error {
+func doGitHubReport(result Check, tools ...ToolInvocationStatus) error {
 	// Print the human-readable summary first so the GitHub Actions log
 	// shows file/line context, then emit annotations for PR inline display.
 	// File paths and messages can contain `::` which the runner would parse
@@ -204,7 +204,7 @@ func doGitHubReport(result Check, checks ...CheckCoverage) error {
 	token := hex.EncodeToString(tokenBytes[:])
 
 	fmt.Printf("::stop-commands::%s\n", token)
-	if err := doSummaryReport(result, checks...); err != nil {
+	if err := doSummaryReport(result, tools...); err != nil {
 		fmt.Printf("::%s::\n", token)
 		return err
 	}
@@ -332,7 +332,7 @@ func doGitLabReport(result Check) error {
 	return encoder.Encode(issues)
 }
 
-func doMarkdownReport(result Check, checks ...CheckCoverage) error {
+func doMarkdownReport(result Check, tools ...ToolInvocationStatus) error {
 	// Group results by file
 	fileGroups := make(map[string][]CheckResult)
 	for _, r := range result.GetResults() {
@@ -367,16 +367,6 @@ func doMarkdownReport(result Check, checks ...CheckCoverage) error {
 
 	fmt.Println("# Validation Report")
 	fmt.Println()
-	if checks != nil {
-		fmt.Println("## Checks")
-		fmt.Println()
-		fmt.Println("```text")
-		for _, row := range coverageRows(checks) {
-			fmt.Println(row)
-		}
-		fmt.Println("```")
-		fmt.Println()
-	}
 
 	totalProblems := 0
 	for _, path := range sortedPaths {
@@ -406,8 +396,19 @@ func doMarkdownReport(result Check, checks ...CheckCoverage) error {
 		fmt.Println()
 	}
 
-	if checks != nil && !anyCheckInvoked(checks) {
-		fmt.Println("No checks invoked; 0 problems reported")
+	if tools != nil {
+		fmt.Println("## Tools")
+		fmt.Println()
+		fmt.Println("```text")
+		for _, row := range toolInvocationRows(tools) {
+			fmt.Println(row)
+		}
+		fmt.Println("```")
+		fmt.Println()
+	}
+
+	if tools != nil && !anyToolInvoked(tools) {
+		fmt.Println("No tools invoked; 0 problems reported")
 	} else if totalProblems == 0 {
 		fmt.Println("✅ No problems found")
 	}
@@ -415,14 +416,15 @@ func doMarkdownReport(result Check, checks ...CheckCoverage) error {
 	return nil
 }
 
-func printCoverage(w io.Writer, checks []CheckCoverage) error {
-	if checks == nil {
+// PrintToolInvocationTable writes an aligned table of invoked and skipped tools.
+func PrintToolInvocationTable(w io.Writer, title string, tools []ToolInvocationStatus) error {
+	if tools == nil {
 		return nil
 	}
-	if _, err := fmt.Fprintln(w, "Checks:"); err != nil {
+	if _, err := fmt.Fprintln(w, "\n"+title+":"); err != nil {
 		return err
 	}
-	for _, row := range coverageRows(checks) {
+	for _, row := range toolInvocationRows(tools) {
 		if _, err := fmt.Fprintln(w, "  "+row); err != nil {
 			return err
 		}
@@ -430,26 +432,26 @@ func printCoverage(w io.Writer, checks []CheckCoverage) error {
 	return nil
 }
 
-func coverageRows(checks []CheckCoverage) []string {
+func toolInvocationRows(tools []ToolInvocationStatus) []string {
 	width := 0
-	for _, check := range checks {
-		width = max(width, len(check.Name))
+	for _, tool := range tools {
+		width = max(width, len(tool.Name))
 	}
 
-	rows := make([]string, 0, len(checks))
-	for _, check := range checks {
-		row := fmt.Sprintf("%-*s  %-7s", width, check.Name, check.Status)
-		if check.Reason != "" {
-			row += "  " + check.Reason
+	rows := make([]string, 0, len(tools))
+	for _, tool := range tools {
+		row := fmt.Sprintf("%-*s  %-7s", width, tool.Name, tool.Status)
+		if tool.Reason != "" {
+			row += "  " + tool.Reason
 		}
 		rows = append(rows, strings.TrimRight(row, " "))
 	}
 	return rows
 }
 
-func anyCheckInvoked(checks []CheckCoverage) bool {
-	for _, check := range checks {
-		if check.Status == "invoked" {
+func anyToolInvoked(tools []ToolInvocationStatus) bool {
+	for _, tool := range tools {
+		if tool.Status == "invoked" {
 			return true
 		}
 	}
@@ -490,7 +492,7 @@ type JUnitTestError struct {
 	Content string `xml:",chardata"`
 }
 
-func doJUnitReport(result Check, checks ...CheckCoverage) error {
+func doJUnitReport(result Check, tools ...ToolInvocationStatus) error {
 	var testCases []JUnitTestCase
 	errors := 0
 	failures := 0
@@ -546,10 +548,10 @@ func doJUnitReport(result Check, checks ...CheckCoverage) error {
 
 		testCases = append(testCases, testCase)
 	}
-	for _, check := range checks {
-		testCase := JUnitTestCase{Name: check.Name, ClassName: "validation"}
-		if check.Status == "skipped" {
-			testCase.Skipped = &JUnitTestSkipped{Message: check.Reason}
+	for _, tool := range tools {
+		testCase := JUnitTestCase{Name: tool.Name, ClassName: "tool"}
+		if tool.Status == "skipped" {
+			testCase.Skipped = &JUnitTestSkipped{Message: tool.Reason}
 			skipped++
 		}
 		testCases = append(testCases, testCase)
