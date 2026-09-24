@@ -15,6 +15,8 @@ const (
 	adminSrcPath   = "src/Resources/app/administration/src/"
 	storefrontPath = "src/Resources/app/storefront/src/"
 	viewsPath      = "src/Resources/views/storefront/"
+	// mysqlMaxIdentifierLength is the longest table name MySQL and MariaDB accept.
+	mysqlMaxIdentifierLength = 64
 )
 
 // Shopware loads services and routes of a plugin from these two files. Both are
@@ -274,11 +276,16 @@ func buildEntity(plugin PluginInfo, entities []string) (output, error) {
 			return output{}, fmt.Errorf("invalid entity name %q: use PascalCase, e.g. ExampleEntity", entity)
 		}
 
+		table := tableName(plugin.ClassName) + "_" + tableName(entity)
+		if len(table) > mysqlMaxIdentifierLength {
+			return output{}, fmt.Errorf("table name %q is %d characters; MySQL allows at most %d", table, len(table), mysqlMaxIdentifierLength)
+		}
+
 		data := templateData{
 			Namespace:  plugin.Namespace,
 			ClassName:  plugin.ClassName,
 			EntityName: entity,
-			TableName:  tableName(plugin.ClassName) + "_" + tableName(entity),
+			TableName:  table,
 			Timestamp:  timestamp,
 		}
 

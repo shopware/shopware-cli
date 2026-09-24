@@ -3,6 +3,7 @@ package scaffolding
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -89,6 +90,24 @@ func TestEntityGeneratorPrefixesTableNameWithPlugin(t *testing.T) {
 	assert.Contains(t, result.Created, "src/Core/Content/ExampleEntity/ExampleEntityDefinition.php")
 	definition := readPluginFile(t, plugin, "src/Core/Content/ExampleEntity/ExampleEntityDefinition.php")
 	assert.Contains(t, definition, "ENTITY_NAME = 'my_vendor_my_extension_example_entity'")
+}
+
+func TestEntityGeneratorRejectsInvalidEntityName(t *testing.T) {
+	plugin := newPlugin(t)
+
+	_, err := generatorByName(t, "entity").Run(plugin, []string{"notPascal"})
+
+	assert.ErrorContains(t, err, `invalid entity name "notPascal"`)
+}
+
+func TestEntityGeneratorRejectsOversizedTableName(t *testing.T) {
+	plugin := newPlugin(t)
+	entity := "E" + strings.Repeat("x", 50)
+
+	_, err := generatorByName(t, "entity").Run(plugin, []string{entity})
+
+	assert.ErrorContains(t, err, "MySQL allows at most 64")
+	assert.NoDirExists(t, filepath.Join(plugin.Dir, "src", "Core", "Content", entity))
 }
 
 func TestPluginConfigGeneratorCreatesTheConfigXML(t *testing.T) {
