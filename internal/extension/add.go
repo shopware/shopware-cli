@@ -11,18 +11,18 @@ import (
 	"github.com/shopware/shopware-cli/logging"
 )
 
-// MinimumMakeShopwareVersion is the oldest Shopware release the generated code
+// MinimumAddShopwareVersion is the oldest Shopware release the generated code
 // runs on. 6.7.13.0 replaced the custom field installer with a declarative
 // Resources/config/custom-fields.xml, which the generators rely on.
-const MinimumMakeShopwareVersion = "6.7.13.0"
+const MinimumAddShopwareVersion = "6.7.13.0"
 
 // Generators returns the generators that can be run inside an existing plugin.
 func Generators() []scaffolding.Generator {
 	return scaffolding.Generators()
 }
 
-// Make runs a generator inside the plugin in the current directory.
-func Make(ctx context.Context, generator scaffolding.Generator, args []string) error {
+// Add runs a generator inside the plugin in the current directory.
+func Add(ctx context.Context, generator scaffolding.Generator, args []string) error {
 	logger := logging.FromContext(ctx)
 
 	projectDir, err := shop.FindClosestShopwareProject(false)
@@ -30,7 +30,7 @@ func Make(ctx context.Context, generator scaffolding.Generator, args []string) e
 		return err
 	}
 
-	if err := ensureMakeSupported(projectDir); err != nil {
+	if err := ensureAddSupported(projectDir); err != nil {
 		return err
 	}
 
@@ -57,16 +57,16 @@ func Make(ctx context.Context, generator scaffolding.Generator, args []string) e
 	return nil
 }
 
-// ensureMakeSupported fails when the project runs a Shopware release that does
+// ensureAddSupported fails when the project runs a Shopware release that does
 // not understand the generated code.
-func ensureMakeSupported(projectDir string) error {
-	supported, err := shop.IsShopwareVersion(projectDir, ">="+MinimumMakeShopwareVersion)
+func ensureAddSupported(projectDir string) error {
+	supported, err := shop.IsShopwareVersion(projectDir, ">="+MinimumAddShopwareVersion)
 	if err != nil {
 		return fmt.Errorf("cannot determine the Shopware version of %s: %w", projectDir, err)
 	}
 
 	if !supported {
-		return fmt.Errorf("the generators require Shopware %s or newer, %s uses an older release", MinimumMakeShopwareVersion, projectDir)
+		return fmt.Errorf("the generators require Shopware %s or newer, %s uses an older release", MinimumAddShopwareVersion, projectDir)
 	}
 
 	return nil
