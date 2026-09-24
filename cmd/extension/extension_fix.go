@@ -39,7 +39,7 @@ var extensionFixCmd = &cobra.Command{
 			return err
 		}
 
-		toolCfg, err := verifier.ConvertExtensionToToolConfig(ext)
+		toolCfg, err := verifier.ConvertExtensionToToolConfig(ext, "")
 		if err != nil {
 			return err
 		}
