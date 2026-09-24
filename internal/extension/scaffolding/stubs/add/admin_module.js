@@ -4,7 +4,7 @@ Shopware.Module.register('swag-example', {
     type: 'plugin',
     name: 'Example',
     title: 'swag-example.general.mainMenuItemGeneral',
-    description: 'sw-property.general.descriptionTextModule',
+    description: 'swag-example.general.descriptionTextModule',
     color: '#ff3d58',
     icon: 'default-shopping-paper-bag-product',
 

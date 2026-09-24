@@ -54,7 +54,9 @@ func TestAdminModuleGeneratorCreatesTheExampleComponent(t *testing.T) {
 
 	// The Twig stub is copied verbatim, its {{ }} are no Go template actions.
 	assert.Contains(t, readPluginFile(t, plugin, listPath+"swag-example-list.html.twig"), "{{ $t('swag-example.general.list.cardText') }}")
-	assert.Contains(t, readPluginFile(t, plugin, adminSrcPath+"module/swag-example/index.js"), "import './page/swag-example-list';")
+	module := readPluginFile(t, plugin, adminSrcPath+"module/swag-example/index.js")
+	assert.Contains(t, module, "import './page/swag-example-list';")
+	assert.Contains(t, module, "swag-example.general.descriptionTextModule")
 }
 
 func TestScheduledTaskGeneratorRegistersTaskAndHandler(t *testing.T) {
