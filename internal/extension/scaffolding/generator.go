@@ -76,13 +76,15 @@ func (g Generator) Run(plugin PluginInfo, args []string) (Result, error) {
 }
 
 // templateData holds every value the generator stubs can reference. The entity
-// fields are only filled by the entity generator.
+// fields are only filled by the entity generator. TaskName is only filled for
+// scheduled tasks.
 type templateData struct {
 	Namespace  string
 	ClassName  string
 	EntityName string
 	TableName  string
 	Timestamp  string
+	TaskName   string
 }
 
 // file is a single file a generator creates from an embedded stub.
