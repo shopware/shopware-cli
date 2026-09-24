@@ -57,8 +57,8 @@ func runInteractiveCreateFormWithValidation(opts *extension.CreateOptions, isPro
 			huh.NewGroup(
 				huh.NewInput().
 					Title("Vendor Prefix").
-					Description("Use PascalCase, e.g. SwagBasicExample.").
-					Placeholder("Swag").
+					Description("Provide a vendor prefix in PascalCase.").
+					Placeholder("MyVendor").
 					Value(&opts.Vendor).
 					Validate(extension.ValidateVendor),
 			).WithHideFunc(func() bool {
@@ -72,8 +72,8 @@ func runInteractiveCreateFormWithValidation(opts *extension.CreateOptions, isPro
 			huh.NewGroup(
 				huh.NewInput().
 					Title("Extension Name").
-					Description("Use PascalCase and, for Community Store extensions, a vendor prefix, e.g. SwagBasicExample.").
-					Placeholder("BasicExample").
+					Description("Provide a name in PascalCase, e.g. MyExtension.").
+					Placeholder("MyExtension").
 					Value(&opts.Name).
 					Validate(extension.ValidateName),
 			),
