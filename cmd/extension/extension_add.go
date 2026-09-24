@@ -7,9 +7,9 @@ import (
 	"github.com/shopware/shopware-cli/internal/extension/scaffolding"
 )
 
-func newMakeCmd() *cobra.Command {
+func newAddCmd() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "make",
+		Use:   "add",
 		Short: "Add an example implementation to a plugin",
 		Long: `Add an example implementation of a single Shopware feature to the plugin in the
 current directory. Generators only create missing files and extend the service
@@ -37,11 +37,11 @@ func newGeneratorCmd(generator scaffolding.Generator) *cobra.Command {
 		Short: generator.Short,
 		Args:  args,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return extension.Make(cmd.Context(), generator, args)
+			return extension.Add(cmd.Context(), generator, args)
 		},
 	}
 }
 
 func init() {
-	extensionRootCmd.AddCommand(newMakeCmd())
+	extensionRootCmd.AddCommand(newAddCmd())
 }

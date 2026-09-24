@@ -108,12 +108,12 @@ import './module/swag-example';
 
 	return output{
 		Files: []file{
-			{Path: adminSrcPath + "module/swag-example/index.js", Stub: "stubs/make/admin_module.js", Raw: true},
-			{Path: listPath + "index.js", Stub: "stubs/make/admin_component_index.js", Raw: true},
-			{Path: listPath + "swag-example-list.html.twig", Stub: "stubs/make/admin_component_template.html.twig", Raw: true},
-			{Path: listPath + "swag-example-list.scss", Stub: "stubs/make/admin_component_styling.scss", Raw: true},
-			{Path: adminSrcPath + "snippet/en.json", Stub: "stubs/make/admin_snippet.json", Raw: true},
-			{Path: adminSrcPath + "snippet/de.json", Stub: "stubs/make/admin_snippet.json", Raw: true},
+			{Path: adminSrcPath + "module/swag-example/index.js", Stub: "stubs/add/admin_module.js", Raw: true},
+			{Path: listPath + "index.js", Stub: "stubs/add/admin_component_index.js", Raw: true},
+			{Path: listPath + "swag-example-list.html.twig", Stub: "stubs/add/admin_component_template.html.twig", Raw: true},
+			{Path: listPath + "swag-example-list.scss", Stub: "stubs/add/admin_component_styling.scss", Raw: true},
+			{Path: adminSrcPath + "snippet/en.json", Stub: "stubs/add/admin_snippet.json", Raw: true},
+			{Path: adminSrcPath + "snippet/de.json", Stub: "stubs/add/admin_snippet.json", Raw: true},
 		},
 		// Shopware creates main.js instead of appending to it, which drops the
 		// import as soon as the plugin already has an entry point. Appending
@@ -130,7 +130,7 @@ func buildCommand(plugin PluginInfo, _ []string) (output, error) {
 
 	return output{
 		Files: []file{
-			{Path: "src/Command/ExampleCommand.php", Stub: "stubs/make/command.php.tmpl", Data: plugin.data()},
+			{Path: "src/Command/ExampleCommand.php", Stub: "stubs/add/command.php.tmpl", Data: plugin.data()},
 		},
 		Snippets: []snippet{servicesSnippet(fmt.Sprintf(service, plugin.Namespace))},
 	}, nil
@@ -139,7 +139,7 @@ func buildCommand(plugin PluginInfo, _ []string) (output, error) {
 func buildCustomFieldset(_ PluginInfo, _ []string) (output, error) {
 	return output{
 		Files: []file{
-			{Path: "src/Resources/config/custom-fields.xml", Stub: "stubs/make/custom_fields.xml", Raw: true},
+			{Path: "src/Resources/config/custom-fields.xml", Stub: "stubs/add/custom_fields.xml", Raw: true},
 		},
 	}, nil
 }
@@ -152,7 +152,7 @@ func buildEventSubscriber(plugin PluginInfo, _ []string) (output, error) {
 
 	return output{
 		Files: []file{
-			{Path: "src/Subscriber/MySubscriber.php", Stub: "stubs/make/event_subscriber.php.tmpl", Data: plugin.data()},
+			{Path: "src/Subscriber/MySubscriber.php", Stub: "stubs/add/event_subscriber.php.tmpl", Data: plugin.data()},
 		},
 		Snippets: []snippet{servicesSnippet(fmt.Sprintf(service, plugin.Namespace))},
 	}, nil
@@ -170,8 +170,8 @@ PluginManager.register('ExamplePlugin', ExamplePlugin, '[data-example-plugin]');
 
 	return output{
 		Files: []file{
-			{Path: storefrontPath + "example-plugin/example-plugin.plugin.js", Stub: "stubs/make/javascript_plugin.js", Raw: true},
-			{Path: viewsPath + "page/content/index.html.twig", Stub: "stubs/make/javascript_plugin_template.html.twig", Raw: true},
+			{Path: storefrontPath + "example-plugin/example-plugin.plugin.js", Stub: "stubs/add/javascript_plugin.js", Raw: true},
+			{Path: viewsPath + "page/content/index.html.twig", Stub: "stubs/add/javascript_plugin_template.html.twig", Raw: true},
 		},
 		Snippets: []snippet{{Path: storefrontPath + "main.js", Content: pluginRegistration}},
 	}, nil
@@ -180,7 +180,7 @@ PluginManager.register('ExamplePlugin', ExamplePlugin, '[data-example-plugin]');
 func buildPluginConfig(_ PluginInfo, _ []string) (output, error) {
 	return output{
 		Files: []file{
-			{Path: "src/Resources/config/config.xml", Stub: "stubs/make/plugin_config.xml", Raw: true},
+			{Path: "src/Resources/config/config.xml", Stub: "stubs/add/plugin_config.xml", Raw: true},
 		},
 	}, nil
 }
@@ -199,8 +199,8 @@ func buildScheduledTask(plugin PluginInfo, _ []string) (output, error) {
 
 	return output{
 		Files: []file{
-			{Path: "src/ScheduledTask/ExampleTask.php", Stub: "stubs/make/scheduled_task.php.tmpl", Data: plugin.data()},
-			{Path: "src/ScheduledTask/ExampleTaskHandler.php", Stub: "stubs/make/scheduled_task_handler.php.tmpl", Data: plugin.data()},
+			{Path: "src/ScheduledTask/ExampleTask.php", Stub: "stubs/add/scheduled_task.php.tmpl", Data: plugin.data()},
+			{Path: "src/ScheduledTask/ExampleTaskHandler.php", Stub: "stubs/add/scheduled_task_handler.php.tmpl", Data: plugin.data()},
 		},
 		Snippets: []snippet{servicesSnippet(fmt.Sprintf(service, plugin.Namespace))},
 	}, nil
@@ -223,9 +223,9 @@ func buildStoreAPIRoute(plugin PluginInfo, _ []string) (output, error) {
 
 	return output{
 		Files: []file{
-			{Path: salesChannelPath + "AbstractExampleRoute.php", Stub: "stubs/make/store_api_abstract_route.php.tmpl", Data: plugin.data()},
-			{Path: salesChannelPath + "ExampleRoute.php", Stub: "stubs/make/store_api_route.php.tmpl", Data: plugin.data()},
-			{Path: salesChannelPath + "ExampleRouteResponse.php", Stub: "stubs/make/store_api_response.php.tmpl", Data: plugin.data()},
+			{Path: salesChannelPath + "AbstractExampleRoute.php", Stub: "stubs/add/store_api_abstract_route.php.tmpl", Data: plugin.data()},
+			{Path: salesChannelPath + "ExampleRoute.php", Stub: "stubs/add/store_api_route.php.tmpl", Data: plugin.data()},
+			{Path: salesChannelPath + "ExampleRouteResponse.php", Stub: "stubs/add/store_api_response.php.tmpl", Data: plugin.data()},
 		},
 		Snippets: []snippet{
 			servicesSnippet(fmt.Sprintf(service, plugin.Namespace)),
@@ -247,8 +247,8 @@ func buildStorefrontController(plugin PluginInfo, _ []string) (output, error) {
 
 	return output{
 		Files: []file{
-			{Path: "src/Storefront/Controller/ExampleController.php", Stub: "stubs/make/storefront_controller.php.tmpl", Data: plugin.data()},
-			{Path: viewsPath + "page/example.html.twig", Stub: "stubs/make/storefront_template.html.twig", Raw: true},
+			{Path: "src/Storefront/Controller/ExampleController.php", Stub: "stubs/add/storefront_controller.php.tmpl", Data: plugin.data()},
+			{Path: viewsPath + "page/example.html.twig", Stub: "stubs/add/storefront_template.html.twig", Raw: true},
 		},
 		Snippets: []snippet{
 			servicesSnippet(fmt.Sprintf(service, plugin.Namespace)),
@@ -290,9 +290,9 @@ func buildEntity(plugin PluginInfo, entities []string) (output, error) {
 		}
 
 		out.Files = append(out.Files,
-			file{Path: contentPath + entity + "Entity.php", Stub: "stubs/make/entity.php.tmpl", Data: data},
-			file{Path: contentPath + entity + "Definition.php", Stub: "stubs/make/entity_definition.php.tmpl", Data: data},
-			file{Path: contentPath + entity + "Collection.php", Stub: "stubs/make/entity_collection.php.tmpl", Data: data},
+			file{Path: contentPath + entity + "Entity.php", Stub: "stubs/add/entity.php.tmpl", Data: data},
+			file{Path: contentPath + entity + "Definition.php", Stub: "stubs/add/entity_definition.php.tmpl", Data: data},
+			file{Path: contentPath + entity + "Collection.php", Stub: "stubs/add/entity_collection.php.tmpl", Data: data},
 			migration,
 		)
 
@@ -311,7 +311,7 @@ func buildEntity(plugin PluginInfo, entities []string) (output, error) {
 func migrationFile(pluginDir string, data templateData) (file, error) {
 	f := file{
 		Path: fmt.Sprintf("src/Migration/Migration%sCreate%sTable.php", data.Timestamp, data.EntityName),
-		Stub: "stubs/make/entity_migration.php.tmpl",
+		Stub: "stubs/add/entity_migration.php.tmpl",
 		Data: data,
 	}
 
