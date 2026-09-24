@@ -493,6 +493,8 @@ const mouseWheelStep = 3
 // handleWheel scrolls the report in response to the mouse wheel, so the overview
 // is scrollable without stealing the arrow keys from watcher focus.
 func (m OverviewModel) handleWheel(msg tea.MouseWheelMsg) OverviewModel {
+	// Only the wheel buttons scroll; the remaining mouse buttons are handled elsewhere.
+	//nolint:exhaustive
 	switch msg.Button {
 	case tea.MouseWheelUp:
 		m.scrollY = clampScroll(m.scrollY-mouseWheelStep, m.maxScroll())
