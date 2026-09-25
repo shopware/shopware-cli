@@ -91,14 +91,6 @@ func (s StorefrontTwigLinter) Check(ctx context.Context, check *Check, config To
 
 	return nil
 }
-func (s StorefrontTwigLinter) Fix(ctx context.Context, config ToolConfig) error {
-	return nil
-}
-
-func (a StorefrontTwigLinter) Format(ctx context.Context, config ToolConfig, dryRun bool) error {
-	return nil
-}
-
 func init() {
 	AddTool(StorefrontTwigLinter{})
 }

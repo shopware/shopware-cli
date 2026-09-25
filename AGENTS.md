@@ -110,10 +110,10 @@ shopware-cli project storefront-watch
 
 ## Code Quality Integration
 
-The verifier system provides comprehensive code quality checks:
-- **PHP**: PHPStan, PHP-CS-Fixer, Rector
-- **JavaScript**: ESLint, Prettier, Stylelint  
-- **Twig**: Custom admin Twig linter with auto-fix capabilities
-- **Composer**: Dependency validation
+The verifier registers tools through the name-only `Tool` interface. `CheckTool`, `FixTool`, and `FormatTool` add capabilities; commands select the relevant capability before applying `--only` or `--exclude`. An unsupported tool name is an error, and `ToolList[T]` preserves the capability type through filtering.
 
-Tools are configurable via JSON schemas and run automatically during builds.
+- **Checkers**: `sw-cli`, PHPStan, ESLint, Stylelint, Administration Twig, Storefront Twig
+- **Fixers**: Rector, ESLint, Stylelint, Administration Twig, Symfony XML conversion
+- **Formatters**: PHP-CS-Fixer, Prettier, Administration Twig
+
+`extension validate` defaults to `sw-cli`; `--full` selects all checkers, and an explicit `--only` overrides that default. The extension commands report whether each tool was invoked or skipped; invocation does not guarantee that files were analyzed or changed.

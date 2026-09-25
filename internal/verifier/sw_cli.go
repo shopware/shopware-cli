@@ -44,14 +44,6 @@ func (s SWCLI) Check(ctx context.Context, check *Check, config ToolConfig) error
 	return nil
 }
 
-func (s SWCLI) Fix(ctx context.Context, config ToolConfig) error {
-	return nil
-}
-
-func (s SWCLI) Format(ctx context.Context, config ToolConfig, dryRun bool) error {
-	return nil
-}
-
 func init() {
 	AddTool(SWCLI{})
 }

@@ -148,14 +148,6 @@ func isPhpStanNoFilesOutput(output string) bool {
 	return strings.Contains(output, "No files found to analyse")
 }
 
-func (p PhpStan) Fix(ctx context.Context, config ToolConfig) error {
-	return nil
-}
-
-func (p PhpStan) Format(ctx context.Context, config ToolConfig, dryRun bool) error {
-	return nil
-}
-
 var tagPartRegex = regexp.MustCompile(`tag:v[0-9]+.[0-9]+.[0-9]+`)
 var parameterRemovedRegex = regexp.MustCompile("Parameter.*will be removed")
 

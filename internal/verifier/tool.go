@@ -3,22 +3,34 @@ package verifier
 import (
 	"context"
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/shopware/shopware-cli/internal/extension"
 	"github.com/shopware/shopware-cli/internal/validation"
 )
 
-type ToolList []Tool
+type ToolList[T Tool] []T
 
-var availableTools = ToolList{}
+var availableTools = ToolList[Tool]{}
 
 func AddTool(tool Tool) {
 	availableTools = append(availableTools, tool)
 }
 
-func GetTools() ToolList {
+func GetTools() ToolList[Tool] {
 	return availableTools
+}
+
+// GetToolsOf returns registered tools that implement the requested capability.
+func GetToolsOf[T Tool]() ToolList[T] {
+	var tools ToolList[T]
+	for _, tool := range availableTools {
+		if casted, ok := tool.(T); ok {
+			tools = append(tools, casted)
+		}
+	}
+	return tools
 }
 
 type ToolConfig struct {
@@ -49,18 +61,31 @@ type ToolConfig struct {
 
 type Tool interface {
 	Name() string
+}
+
+type CheckTool interface {
+	Tool
 	Check(ctx context.Context, check *Check, config ToolConfig) error
+}
+
+type FixTool interface {
+	Tool
 	Fix(ctx context.Context, config ToolConfig) error
+}
+
+type FormatTool interface {
+	Tool
 	Format(ctx context.Context, config ToolConfig, dryRun bool) error
 }
 
-func (tl ToolList) Only(only string) (ToolList, error) {
+func (tl ToolList[T]) Only(only string) (ToolList[T], error) {
 	if only == "" {
 		return tl, nil
 	}
 
-	var filteredTools []Tool
+	var filteredTools ToolList[T]
 	requestedTools := strings.Split(only, ",")
+	seen := make(map[string]bool, len(requestedTools))
 
 	for _, requestedTool := range requestedTools {
 		requestedTool = strings.TrimSpace(requestedTool)
@@ -68,7 +93,10 @@ func (tl ToolList) Only(only string) (ToolList, error) {
 
 		for _, t := range tl {
 			if t.Name() == requestedTool {
-				filteredTools = append(filteredTools, t)
+				if !seen[requestedTool] {
+					filteredTools = append(filteredTools, t)
+					seen[requestedTool] = true
+				}
 				found = true
 				break
 			}
@@ -84,53 +112,34 @@ func (tl ToolList) Only(only string) (ToolList, error) {
 
 // Exclude filters out tools listed in the comma-separated exclude string.
 // Returns an error if any specified tool name does not exist in the current list.
-func (tl ToolList) Exclude(exclude string) (ToolList, error) {
+func (tl ToolList[T]) Exclude(exclude string) (ToolList[T], error) {
 	if exclude == "" {
 		return tl, nil
 	}
 
-	requested := strings.Split(exclude, ",")
-
-	// Validate all requested excludes exist
-	for _, name := range requested {
+	names := strings.Split(exclude, ",")
+	for i, name := range names {
 		name = strings.TrimSpace(name)
+		names[i] = name
 		if name == "" {
 			continue
 		}
-		found := false
-		for _, t := range tl {
-			if t.Name() == name {
-				found = true
-				break
-			}
-		}
-		if !found {
+		if !slices.ContainsFunc(tl, func(tool T) bool { return tool.Name() == name }) {
 			return nil, fmt.Errorf("tool with name %q not found, possible tools: %s", name, tl.PossibleString())
 		}
 	}
 
-	// Build filtered list excluding requested names
-	excludeSet := map[string]struct{}{}
-	for _, name := range requested {
-		name = strings.TrimSpace(name)
-		if name == "" {
-			continue
-		}
-		excludeSet[name] = struct{}{}
-	}
-
-	var filtered ToolList
+	var filtered ToolList[T]
 	for _, t := range tl {
-		if _, ok := excludeSet[t.Name()]; ok {
-			continue
+		if !slices.Contains(names, t.Name()) {
+			filtered = append(filtered, t)
 		}
-		filtered = append(filtered, t)
 	}
 
 	return filtered, nil
 }
 
-func (tl ToolList) PossibleString() string {
+func (tl ToolList[T]) PossibleString() string {
 	var possibleTools []string
 	for _, t := range tl {
 		possibleTools = append(possibleTools, t.Name())

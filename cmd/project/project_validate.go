@@ -79,7 +79,7 @@ var projectValidateCmd = &cobra.Command{
 
 		var gr errgroup.Group
 
-		tools := verifier.GetTools()
+		tools := verifier.GetToolsOf[verifier.CheckTool]()
 
 		tools, err = tools.Only(only)
 		if err != nil {
@@ -92,7 +92,6 @@ var projectValidateCmd = &cobra.Command{
 		}
 
 		for _, tool := range tools {
-			tool := tool
 			gr.Go(func() error {
 				return tool.Check(cmd.Context(), result, *toolCfg)
 			})

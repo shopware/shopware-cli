@@ -8,6 +8,7 @@ import (
 	"encoding/xml"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"sort"
 	"strings"
@@ -38,34 +39,48 @@ func DetectDefaultReporter() string {
 	return "summary"
 }
 
-func DoCheckReport(result Check, reportingFormat string) error {
+// ToolInvocationStatus records whether a tool was invoked or skipped.
+type ToolInvocationStatus struct {
+	Name   string `json:"name"`
+	Status string `json:"status"`
+	Reason string `json:"reason,omitempty"`
+}
+
+// DoCheckReport reports findings and, when supplied, tool invocation statuses.
+func DoCheckReport(result Check, reportingFormat string, tools ...ToolInvocationStatus) error {
 	if err := ValidateReporter(reportingFormat); err != nil {
 		return err
 	}
 
 	switch reportingFormat {
 	case "summary":
-		if err := doSummaryReport(result); err != nil {
+		if err := doSummaryReport(result, tools...); err != nil {
 			return err
 		}
 	case "json":
-		if err := doJSONReport(result); err != nil {
+		if err := doJSONReport(result, tools...); err != nil {
 			return err
 		}
 	case "github":
-		if err := doGitHubReport(result); err != nil {
+		if err := doGitHubReport(result, tools...); err != nil {
 			return err
 		}
 	case "gitlab":
 		if err := doGitLabReport(result); err != nil {
 			return err
 		}
+		if err := PrintToolInvocationTable(os.Stderr, "Checkers", tools); err != nil {
+			return err
+		}
 	case "markdown":
-		if err := doMarkdownReport(result); err != nil {
+		if err := doMarkdownReport(result, tools...); err != nil {
 			return err
 		}
 	case "junit":
-		if err := doJUnitReport(result); err != nil {
+		if err := doJUnitReport(result, tools...); err != nil {
+			return err
+		}
+		if err := PrintToolInvocationTable(os.Stderr, "Checkers", tools); err != nil {
 			return err
 		}
 	}
@@ -77,7 +92,7 @@ func DoCheckReport(result Check, reportingFormat string) error {
 	return nil
 }
 
-func doSummaryReport(result Check) error {
+func doSummaryReport(result Check, tools ...ToolInvocationStatus) error {
 	// Group results by file
 	fileGroups := make(map[string][]CheckResult)
 	for _, r := range result.GetResults() {
@@ -132,8 +147,16 @@ func doSummaryReport(result Check) error {
 		}
 	}
 
+	if err := PrintToolInvocationTable(os.Stdout, "Checkers", tools); err != nil {
+		return err
+	}
+
 	//nolint:forbidigo
-	fmt.Printf("\n%s\n", summaryLine(totalProblems, errorCount, warningCount))
+	if tools != nil && !anyToolInvoked(tools) {
+		fmt.Println("\nNo checkers invoked; 0 problems reported")
+	} else {
+		fmt.Printf("\n%s\n", summaryLine(totalProblems, errorCount, warningCount))
+	}
 
 	return nil
 }
@@ -155,9 +178,12 @@ func countNoun(n int, noun string) string {
 	return fmt.Sprintf("%d %ss", n, noun)
 }
 
-func doJSONReport(result Check) error {
+func doJSONReport(result Check, tools ...ToolInvocationStatus) error {
 	data := map[string]interface{}{
 		"results": result.GetResults(),
+	}
+	if tools != nil {
+		data["tools"] = tools
 	}
 
 	encoder := json.NewEncoder(os.Stdout)
@@ -165,7 +191,7 @@ func doJSONReport(result Check) error {
 	return encoder.Encode(data)
 }
 
-func doGitHubReport(result Check) error {
+func doGitHubReport(result Check, tools ...ToolInvocationStatus) error {
 	// Print the human-readable summary first so the GitHub Actions log
 	// shows file/line context, then emit annotations for PR inline display.
 	// File paths and messages can contain `::` which the runner would parse
@@ -178,7 +204,7 @@ func doGitHubReport(result Check) error {
 	token := hex.EncodeToString(tokenBytes[:])
 
 	fmt.Printf("::stop-commands::%s\n", token)
-	if err := doSummaryReport(result); err != nil {
+	if err := doSummaryReport(result, tools...); err != nil {
 		fmt.Printf("::%s::\n", token)
 		return err
 	}
@@ -306,7 +332,7 @@ func doGitLabReport(result Check) error {
 	return encoder.Encode(issues)
 }
 
-func doMarkdownReport(result Check) error {
+func doMarkdownReport(result Check, tools ...ToolInvocationStatus) error {
 	// Group results by file
 	fileGroups := make(map[string][]CheckResult)
 	for _, r := range result.GetResults() {
@@ -370,11 +396,66 @@ func doMarkdownReport(result Check) error {
 		fmt.Println()
 	}
 
-	if totalProblems == 0 {
+	if tools != nil {
+		fmt.Println("## Checkers")
+		fmt.Println()
+		fmt.Println("```text")
+		for _, row := range toolInvocationRows(tools) {
+			fmt.Println(row)
+		}
+		fmt.Println("```")
+		fmt.Println()
+	}
+
+	if tools != nil && !anyToolInvoked(tools) {
+		fmt.Println("No checkers invoked; 0 problems reported")
+	} else if totalProblems == 0 {
 		fmt.Println("✅ No problems found")
 	}
 
 	return nil
+}
+
+// PrintToolInvocationTable writes an aligned table of invoked and skipped tools.
+func PrintToolInvocationTable(w io.Writer, title string, tools []ToolInvocationStatus) error {
+	if tools == nil {
+		return nil
+	}
+	if _, err := fmt.Fprintln(w, "\n"+title+":"); err != nil {
+		return err
+	}
+	for _, row := range toolInvocationRows(tools) {
+		if _, err := fmt.Fprintln(w, "  "+row); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func toolInvocationRows(tools []ToolInvocationStatus) []string {
+	width := 0
+	for _, tool := range tools {
+		width = max(width, len(tool.Name))
+	}
+
+	rows := make([]string, 0, len(tools))
+	for _, tool := range tools {
+		row := fmt.Sprintf("%-*s  %-7s", width, tool.Name, tool.Status)
+		if tool.Reason != "" {
+			row += "  " + tool.Reason
+		}
+		rows = append(rows, strings.TrimRight(row, " "))
+	}
+	return rows
+}
+
+func anyToolInvoked(tools []ToolInvocationStatus) bool {
+	for _, tool := range tools {
+		if tool.Status == "invoked" {
+			return true
+		}
+	}
+	return false
 }
 
 type JUnitTestSuite struct {
@@ -383,6 +464,7 @@ type JUnitTestSuite struct {
 	Tests    int             `xml:"tests,attr"`
 	Failures int             `xml:"failures,attr"`
 	Errors   int             `xml:"errors,attr"`
+	Skipped  int             `xml:"skipped,attr,omitempty"`
 	TestCase []JUnitTestCase `xml:"testcase"`
 }
 
@@ -391,6 +473,11 @@ type JUnitTestCase struct {
 	ClassName string            `xml:"classname,attr"`
 	Failure   *JUnitTestFailure `xml:"failure,omitempty"`
 	Error     *JUnitTestError   `xml:"error,omitempty"`
+	Skipped   *JUnitTestSkipped `xml:"skipped,omitempty"`
+}
+
+type JUnitTestSkipped struct {
+	Message string `xml:"message,attr"`
 }
 
 type JUnitTestFailure struct {
@@ -405,10 +492,11 @@ type JUnitTestError struct {
 	Content string `xml:",chardata"`
 }
 
-func doJUnitReport(result Check) error {
+func doJUnitReport(result Check, tools ...ToolInvocationStatus) error {
 	var testCases []JUnitTestCase
 	errors := 0
 	failures := 0
+	skipped := 0
 
 	// Sort results for deterministic output
 	results := result.GetResults()
@@ -460,12 +548,21 @@ func doJUnitReport(result Check) error {
 
 		testCases = append(testCases, testCase)
 	}
+	for _, tool := range tools {
+		testCase := JUnitTestCase{Name: tool.Name, ClassName: "tool"}
+		if tool.Status == "skipped" {
+			testCase.Skipped = &JUnitTestSkipped{Message: tool.Reason}
+			skipped++
+		}
+		testCases = append(testCases, testCase)
+	}
 
 	suite := JUnitTestSuite{
 		Name:     "shopware-cli-validation",
 		Tests:    len(testCases),
 		Failures: failures,
 		Errors:   errors,
+		Skipped:  skipped,
 		TestCase: testCases,
 	}
 

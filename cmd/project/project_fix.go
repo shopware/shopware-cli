@@ -54,7 +54,7 @@ var projectFixCmd = &cobra.Command{
 
 		var gr errgroup.Group
 
-		tools := verifier.GetTools()
+		tools := verifier.GetToolsOf[verifier.FixTool]()
 
 		tools, err = tools.Only(only)
 		if err != nil {
@@ -62,7 +62,6 @@ var projectFixCmd = &cobra.Command{
 		}
 
 		for _, tool := range tools {
-			tool := tool
 			gr.Go(func() error {
 				return tool.Fix(cmd.Context(), *toolCfg)
 			})
@@ -74,6 +73,6 @@ var projectFixCmd = &cobra.Command{
 
 func init() {
 	projectRootCmd.AddCommand(projectFixCmd)
-	projectFixCmd.PersistentFlags().String("only", "", "Run only the specified tools (comma-separated, e.g. phpstan,eslint)")
+	projectFixCmd.PersistentFlags().String("only", "", "Run only the specified fixers (comma-separated, e.g. eslint,rector)")
 	projectFixCmd.PersistentFlags().Bool("allow-non-git", false, "Allow fixes in projects without a Git repository")
 }

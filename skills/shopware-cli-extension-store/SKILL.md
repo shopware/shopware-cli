@@ -24,7 +24,8 @@ shopware-cli extension validate . --store-compliance --format markdown
 - The **exit code** is the pass/fail signal (`0` = pass, non-zero = findings). The report goes to stdout; a usage block or error goes to stderr — do not read a validation failure as a usage error.
 - `--format markdown` gives a stable, quotable form. `--reporter` is a deprecated alias that prints a warning — use `--format`.
 - Treat the store-compliance run as a delta over the normal run: report only the lines it adds.
-- Without `--full`, `extension validate` runs only the built-in `sw-cli` validator — **not** PHPStan/ESLint/Stylelint. (`sw-cli` is the name of that one check, as in `--only sw-cli`, not shorthand for the `shopware-cli` binary.) So report "the `sw-cli` checks passed", not "validation passed", unless `--full` was run. Source: `cmd/extension/extension_validate.go`, the `if !isFull { only = "sw-cli" }` branch.
+- With neither `--full` nor `--only`, `extension validate` runs only the built-in `sw-cli` checker — **not** PHPStan/ESLint/Stylelint. (`sw-cli` is that checker's name, not shorthand for the binary.) An explicit `--only` selects its named checkers even without `--full`. For the two commands above, report "the `sw-cli` checks passed", not "full validation passed". Source: `cmd/extension/extension_validate.go`, `selectExtensionValidationTools`.
+- The Markdown report includes a checker table. `invoked` means the checker was called; it does not prove that files were analyzed or that a check passed. `skipped` means it was not selected or was excluded. Classify only finding lines, not checker-status lines.
 - Use one `shopware-cli` binary throughout, and state its version. Never mix binaries mid-answer.
 - Each error line ends with its result identifier — that identifier is the row's Source, and `L0` catches any line the table does not name explicitly. The CLI currently prints a missing icon twice; count a repeated line once.
 

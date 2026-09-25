@@ -9,6 +9,7 @@ import (
 	"golang.org/x/sync/errgroup"
 
 	"github.com/shopware/shopware-cli/internal/extension"
+	"github.com/shopware/shopware-cli/internal/validation"
 	"github.com/shopware/shopware-cli/internal/verifier"
 	"github.com/shopware/shopware-cli/logging"
 )
@@ -48,31 +49,30 @@ var extensionFixCmd = &cobra.Command{
 
 		var gr errgroup.Group
 
-		tools := verifier.GetTools()
+		allTools := verifier.GetToolsOf[verifier.FixTool]()
 		only, _ := cmd.Flags().GetString("only")
 
-		tools, err = tools.Only(only)
+		tools, err := allTools.Only(only)
 		if err != nil {
 			return err
 		}
 
 		for _, tool := range tools {
-			tool := tool
 			gr.Go(func() error {
 				return tool.Fix(cmd.Context(), *toolCfg)
 			})
 		}
 
-		if err := gr.Wait(); err != nil {
+		runErr := gr.Wait()
+		if err := validation.PrintToolInvocationTable(os.Stdout, "Fixers", extensionToolInvocationStatuses(allTools, tools)); err != nil {
 			return err
 		}
-
-		return nil
+		return runErr
 	},
 }
 
 func init() {
 	extensionRootCmd.AddCommand(extensionFixCmd)
-	extensionFixCmd.Flags().String("only", "", "Run only specific tools by name (comma-separated, e.g. phpstan,eslint)")
+	extensionFixCmd.Flags().String("only", "", "Run only specific fixers by name (comma-separated, e.g. eslint,rector)")
 	extensionFixCmd.Flags().Bool("allow-non-git", false, "Allow running the fix command on non-git repositories")
 }
