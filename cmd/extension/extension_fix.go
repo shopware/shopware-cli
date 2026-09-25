@@ -1,6 +1,7 @@
 package extension
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -51,10 +52,18 @@ var extensionFixCmd = &cobra.Command{
 
 		allTools := verifier.GetToolsOf[verifier.FixTool]()
 		only, _ := cmd.Flags().GetString("only")
+		exclude, _ := cmd.Flags().GetString("exclude")
 
-		tools, err := allTools.Only(only)
+		requestedTools, err := allTools.Only(only)
 		if err != nil {
 			return err
+		}
+		tools, err := requestedTools.Exclude(exclude)
+		if err != nil {
+			return err
+		}
+		if len(tools) == 0 {
+			return errors.New("no fixers selected after applying --exclude")
 		}
 
 		for _, tool := range tools {
@@ -64,7 +73,7 @@ var extensionFixCmd = &cobra.Command{
 		}
 
 		runErr := gr.Wait()
-		if err := validation.PrintToolInvocationTable(os.Stdout, "Fixers", extensionToolInvocationStatuses(allTools, tools)); err != nil {
+		if err := validation.PrintToolInvocationTable(os.Stdout, "Fixers", extensionToolInvocationStatuses(allTools, requestedTools, tools)); err != nil {
 			return err
 		}
 		return runErr
@@ -74,5 +83,6 @@ var extensionFixCmd = &cobra.Command{
 func init() {
 	extensionRootCmd.AddCommand(extensionFixCmd)
 	extensionFixCmd.Flags().String("only", "", "Run only specific fixers by name (comma-separated, e.g. eslint,rector)")
+	extensionFixCmd.Flags().String("exclude", "", "Exclude fixers after applying --only (comma-separated, e.g. eslint,rector)")
 	extensionFixCmd.Flags().Bool("allow-non-git", false, "Allow running the fix command on non-git repositories")
 }
