@@ -65,10 +65,6 @@ func pluginScaffoldingFiles(className string) []scaffoldingFile {
 			StubPath: "stubs/gitignore.tmpl",
 		},
 		{
-			Path:     "src/Resources/config/config.xml",
-			StubPath: "stubs/config.xml.tmpl",
-		},
-		{
 			Path:     filepath.Join("src", className+".php"),
 			StubPath: "stubs/plugin_class.php.tmpl",
 		},
