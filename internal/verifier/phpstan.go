@@ -5,6 +5,7 @@ import (
 	"context"
 	_ "embed"
 	"encoding/json"
+	"fmt"
 	"os"
 	"os/exec"
 	"path"
@@ -58,13 +59,16 @@ func (p PhpStan) configExists(pluginPath string) bool {
 func (p PhpStan) Check(ctx context.Context, check *Check, config ToolConfig) error {
 	// Apps don't have an composer.json file, skip them
 	if _, err := os.Stat(path.Join(config.RootDir, "composer.json")); err != nil {
+		check.RecordToolRun(validation.ToolRun{Name: p.Name(), Status: validation.ToolRunSkipped, Note: "no composer.json"})
 		//nolint: nilerr
 		return nil
 	}
 
-	if err := installComposerDeps(ctx, config.RootDir, config.CheckAgainst); err != nil {
+	if err := installComposerDeps(ctx, config.RootDir, config.CheckAgainst, pinnedTarget(config)); err != nil {
 		return err
 	}
+
+	check.RecordToolRun(phpstanToolRun(config, installedShopwareVersion(config.RootDir)))
 
 	for _, sourceDirectory := range config.SourceDirectories {
 		phpstanArguments := []string{"-dmemory_limit=2G", path.Join(config.ToolDirectory, "php", "vendor", "bin", "phpstan"), "analyse", "--no-progress", "--no-interaction", "--error-format=json", sourceDirectory}
@@ -142,6 +146,39 @@ func (p PhpStan) Check(ctx context.Context, check *Check, config ToolConfig) err
 	}
 
 	return nil
+}
+
+// pinnedTarget returns the release to install when an explicit target may be installed into a copy.
+func pinnedTarget(config ToolConfig) string {
+	if config.Target.Source != validation.TargetSourceFlag || !config.RootDirIsCopy || config.Extension == nil {
+		return ""
+	}
+
+	return config.Target.Version
+}
+
+// phpstanToolRun reports the installed shopware/core and how to align it with the baseline.
+func phpstanToolRun(config ToolConfig, installed string) validation.ToolRun {
+	run := validation.ToolRun{Name: PhpStan{}.Name(), Status: validation.ToolRunRan, Baseline: installed}
+	target := config.Target.Version
+
+	if installed == "" || strings.EqualFold(installed, target) {
+		return run
+	}
+
+	switch {
+	case config.Extension == nil:
+		// Validation never changes a project's dependencies, so only the project itself can align them
+		run.Note = fmt.Sprintf("analysed the installed shopware/core %s; validation does not change project dependencies, so install %s in the project to include PHPStan", installed, target)
+	case config.Target.Source == validation.TargetSourceFlag && !config.RootDirIsCopy:
+		run.Note = fmt.Sprintf("analysed the installed shopware/core %s; drop --no-copy so %s can be installed in a temporary copy", installed, target)
+	case config.Target.Source == validation.TargetSourceFlag:
+		run.Note = fmt.Sprintf("analysed the installed shopware/core %s instead of %s, because the extension ships its own vendor directory", installed, target)
+	default:
+		run.Note = fmt.Sprintf("analysed the installed shopware/core %s; pass --target-version to align all checks", installed)
+	}
+
+	return run
 }
 
 func isPhpStanNoFilesOutput(output string) bool {

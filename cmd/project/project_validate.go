@@ -74,6 +74,8 @@ var projectValidateCmd = &cobra.Command{
 			return err
 		}
 
+		toolCfg.RootDirIsCopy = !noCopy
+
 		result := verifier.NewCheck()
 		result.SetSourceRoot(toolCfg.RootDir)
 

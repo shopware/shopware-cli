@@ -28,6 +28,8 @@ type ToolConfig struct {
 	ToolDirectory string
 
 	InputWasDirectory bool
+	// RootDir is a temporary copy or extracted zip, so its dependencies may be changed
+	RootDirIsCopy bool
 
 	// The Shopware version the checks run against, see Target
 	MinShopwareVersion string

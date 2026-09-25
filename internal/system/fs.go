@@ -6,9 +6,11 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"slices"
 )
 
-func CopyFiles(currentPath string, targetPath string) error {
+// CopyFiles copies a tree; skip names top-level entries to leave out, e.g. "vendor".
+func CopyFiles(currentPath string, targetPath string, skip ...string) error {
 	// When the currentPath folder does not exist, return
 	if _, err := os.Stat(currentPath); os.IsNotExist(err) {
 		return nil
@@ -35,6 +37,14 @@ func CopyFiles(currentPath string, targetPath string) error {
 		// (e.g., .devenv, .direnv, .git)
 		if info.IsDir() && (relPath == ".devenv" || relPath == ".direnv" || relPath == ".git") {
 			return filepath.SkipDir
+		}
+
+		if slices.Contains(skip, relPath) {
+			if info.IsDir() {
+				return filepath.SkipDir
+			}
+
+			return nil
 		}
 
 		// Construct target path
