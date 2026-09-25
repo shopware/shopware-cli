@@ -82,7 +82,7 @@ func TestExclude_UnknownTool_Error(t *testing.T) {
 func TestExclude_TrimsAndIgnoresDuplicates(t *testing.T) {
 	t.Parallel()
 	base := ToolList[testTool]{testTool{"phpstan"}, testTool{"eslint"}, testTool{"sw-cli"}}
-	res, err := base.Exclude(" eslint , eslint ,  \teslint\t ")
+	res, err := base.Exclude(" , eslint , eslint ,  \teslint\t , ")
 	assert.NoError(t, err)
 	assert.Equal(t, []string{"phpstan", "sw-cli"}, toolNames(res))
 }

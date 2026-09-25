@@ -55,6 +55,20 @@ func TestExtensionValidationSelection(t *testing.T) {
 		assert.True(t, slices.ContainsFunc(tools, requiresToolSetup))
 	})
 
+	t.Run("only overrides full", func(t *testing.T) {
+		tools, statuses, err := selectExtensionValidationTools(true, "phpstan", "")
+		require.NoError(t, err)
+		assert.Equal(t, []string{"phpstan"}, toolNamesForValidation(tools))
+		assert.Equal(t, "not selected by --only", toolStatusByName(t, statuses, "sw-cli").Reason)
+	})
+
+	t.Run("full exclusion is reported", func(t *testing.T) {
+		tools, statuses, err := selectExtensionValidationTools(true, "", "phpstan")
+		require.NoError(t, err)
+		assert.NotContains(t, toolNamesForValidation(tools), "phpstan")
+		assert.Equal(t, "excluded by --exclude", toolStatusByName(t, statuses, "phpstan").Reason)
+	})
+
 	t.Run("exclude applies after only", func(t *testing.T) {
 		tools, statuses, err := selectExtensionValidationTools(false, "phpstan,sw-cli", "sw-cli")
 		require.NoError(t, err)
