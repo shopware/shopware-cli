@@ -126,11 +126,12 @@ var extensionValidateCmd = &cobra.Command{
 			})
 		}
 
-		if err := gr.Wait(); err != nil {
-			return err
+		runErr := gr.Wait()
+		reportErr := validation.DoCheckReport(result.RemoveByIdentifier(toolCfg.ValidationIgnores), reportingFormat, statuses...)
+		if runErr != nil {
+			return runErr
 		}
-
-		return validation.DoCheckReport(result.RemoveByIdentifier(toolCfg.ValidationIgnores), reportingFormat, statuses...)
+		return reportErr
 	},
 }
 
@@ -160,13 +161,8 @@ func selectExtensionValidationTools(full bool, only, exclude string) (verifier.T
 		return nil, nil, errors.New("no validation checks selected after applying --exclude")
 	}
 
-	unique := make(verifier.ToolList, 0, len(selected))
 	invoked := make(map[string]bool, len(selected))
 	for _, tool := range selected {
-		if invoked[tool.Name()] {
-			continue
-		}
-		unique = append(unique, tool)
 		invoked[tool.Name()] = true
 	}
 
@@ -187,7 +183,7 @@ func selectExtensionValidationTools(full bool, only, exclude string) (verifier.T
 		statuses = append(statuses, status)
 	}
 	sort.Slice(statuses, func(i, j int) bool { return statuses[i].Name < statuses[j].Name })
-	return unique, statuses, nil
+	return selected, statuses, nil
 }
 
 func requiresToolSetup(tool verifier.Tool) bool {
