@@ -17,6 +17,7 @@ import (
 	"github.com/shopware/shopware-cli/cmd/extension"
 	"github.com/shopware/shopware-cli/cmd/project"
 	accountApi "github.com/shopware/shopware-cli/internal/account-api"
+	adminSdk "github.com/shopware/shopware-cli/internal/admin-api"
 	"github.com/shopware/shopware-cli/internal/system"
 	"github.com/shopware/shopware-cli/internal/tui"
 	"github.com/shopware/shopware-cli/logging"
@@ -44,6 +45,7 @@ func Execute(ctx context.Context) int {
 	ctx = system.WithInteraction(ctx, !slices.Contains(args, "--no-interaction") && !slices.Contains(args, "-n") && isatty.IsTerminal(os.Stdin.Fd()))
 	tui.AppVersion = version
 	accountApi.SetUserAgent("shopware-cli/" + version)
+	adminSdk.SetUserAgent("shopware-cli/" + version)
 	rootCmd.SetArgs(args)
 
 	updateHandle, updateCancel := startUpdateCheck(ctx, args)

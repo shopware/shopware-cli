@@ -15,6 +15,11 @@ import (
 )
 
 var errNonNilContext = errors.New("context must be non-nil")
+var httpUserAgent = "shopware-cli/0.0.0"
+
+func SetUserAgent(userAgent string) {
+	httpUserAgent = userAgent
+}
 
 type Client struct {
 	url         string
@@ -155,6 +160,7 @@ func (c *Client) NewRawRequest(context ApiContext, method, urlStr string, body i
 	}
 
 	req.Header.Set("Accept", "application/json")
+	req.Header.Set("User-Agent", httpUserAgent)
 
 	return req, nil
 }
