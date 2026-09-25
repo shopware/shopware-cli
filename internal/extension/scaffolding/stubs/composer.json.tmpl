@@ -1,0 +1,27 @@
+{
+    "name": "{{ .ComposerName }}",
+    "description": "{{ .ComposerName }}",
+    "type": "shopware-platform-plugin",
+    "version": "0.1.0",
+    "license": "proprietary",
+    "require": {
+        "shopware/core": "~6.7.0"
+    },
+    "extra": {
+        "shopware-plugin-class": "{{ jsonEscape .Namespace }}\\{{ .ClassName }}",
+        "label": {
+            "de-DE": "{{ .ClassName }}",
+            "en-GB": "{{ .ClassName }}"
+        }
+    },
+    "autoload": {
+        "psr-4": {
+            "{{ jsonEscape .Namespace }}\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "{{ jsonEscape .Namespace }}\\Tests\\": "tests/"
+        }
+    }
+}
