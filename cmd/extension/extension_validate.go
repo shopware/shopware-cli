@@ -6,7 +6,6 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
-	"sort"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -138,21 +137,14 @@ func selectExtensionValidationTools(full bool, only, exclude string) (verifier.T
 	validationTools := verifier.GetToolsOf[verifier.CheckTool]()
 
 	requested := only
-	if requested == "" {
+	if requested == "" && !full {
 		requested = "sw-cli"
-		if full {
-			requested = validationTools.PossibleString()
-		}
 	}
-	selected, err := validationTools.Only(requested)
+	requestedTools, err := validationTools.Only(requested)
 	if err != nil {
 		return nil, nil, err
 	}
-	requestedNames := make(map[string]bool, len(selected))
-	for _, tool := range selected {
-		requestedNames[tool.Name()] = true
-	}
-	selected, err = selected.Exclude(exclude)
+	selected, err := requestedTools.Exclude(exclude)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -160,28 +152,17 @@ func selectExtensionValidationTools(full bool, only, exclude string) (verifier.T
 		return nil, nil, errors.New("no validation checks selected after applying --exclude")
 	}
 
-	invoked := make(map[string]bool, len(selected))
-	for _, tool := range selected {
-		invoked[tool.Name()] = true
-	}
-
-	statuses := make([]validation.ToolInvocationStatus, 0, len(validationTools))
-	for _, tool := range validationTools {
-		name := tool.Name()
-		status := validation.ToolInvocationStatus{Name: name, Status: "skipped"}
-		switch {
-		case invoked[name]:
-			status.Status = "invoked"
-		case requestedNames[name]:
-			status.Reason = "excluded by --exclude"
-		case only != "":
-			status.Reason = "not selected by --only"
-		default:
-			status.Reason = "not selected; use --full or --only"
+	statuses := extensionToolInvocationStatuses(validationTools, selected)
+	for i := range statuses {
+		if statuses[i].Status == "invoked" {
+			continue
 		}
-		statuses = append(statuses, status)
+		if slices.ContainsFunc(requestedTools, func(tool verifier.CheckTool) bool { return tool.Name() == statuses[i].Name }) {
+			statuses[i].Reason = "excluded by --exclude"
+		} else if only == "" {
+			statuses[i].Reason = "not selected; use --full or --only"
+		}
 	}
-	sort.Slice(statuses, func(i, j int) bool { return statuses[i].Name < statuses[j].Name })
 	return selected, statuses, nil
 }
 

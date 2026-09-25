@@ -3,6 +3,7 @@ package verifier
 import (
 	"context"
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/shopware/shopware-cli/internal/extension"
@@ -116,42 +117,23 @@ func (tl ToolList[T]) Exclude(exclude string) (ToolList[T], error) {
 		return tl, nil
 	}
 
-	requested := strings.Split(exclude, ",")
-
-	// Validate all requested excludes exist
-	for _, name := range requested {
+	names := strings.Split(exclude, ",")
+	for i, name := range names {
 		name = strings.TrimSpace(name)
+		names[i] = name
 		if name == "" {
 			continue
 		}
-		found := false
-		for _, t := range tl {
-			if t.Name() == name {
-				found = true
-				break
-			}
-		}
-		if !found {
+		if !slices.ContainsFunc(tl, func(tool T) bool { return tool.Name() == name }) {
 			return nil, fmt.Errorf("tool with name %q not found, possible tools: %s", name, tl.PossibleString())
 		}
 	}
 
-	// Build filtered list excluding requested names
-	excludeSet := map[string]struct{}{}
-	for _, name := range requested {
-		name = strings.TrimSpace(name)
-		if name == "" {
-			continue
-		}
-		excludeSet[name] = struct{}{}
-	}
-
 	var filtered ToolList[T]
 	for _, t := range tl {
-		if _, ok := excludeSet[t.Name()]; ok {
-			continue
+		if !slices.Contains(names, t.Name()) {
+			filtered = append(filtered, t)
 		}
-		filtered = append(filtered, t)
 	}
 
 	return filtered, nil
