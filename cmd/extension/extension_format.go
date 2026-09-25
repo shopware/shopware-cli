@@ -52,9 +52,8 @@ var extensionFormat = &cobra.Command{
 		}
 
 		for _, tool := range tools {
-			formatter := tool.(verifier.FormatTool)
 			gr.Go(func() error {
-				return formatter.Format(cmd.Context(), *toolCfg, dryRun)
+				return tool.Format(cmd.Context(), *toolCfg, dryRun)
 			})
 		}
 

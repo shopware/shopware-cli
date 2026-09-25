@@ -9,24 +9,24 @@ import (
 	"github.com/shopware/shopware-cli/internal/validation"
 )
 
-type ToolList []Tool
+type ToolList[T Tool] []T
 
-var availableTools = ToolList{}
+var availableTools = ToolList[Tool]{}
 
 func AddTool(tool Tool) {
 	availableTools = append(availableTools, tool)
 }
 
-func GetTools() ToolList {
+func GetTools() ToolList[Tool] {
 	return availableTools
 }
 
 // GetToolsOf returns registered tools that implement the requested capability.
-func GetToolsOf[T Tool]() ToolList {
-	var tools ToolList
+func GetToolsOf[T Tool]() ToolList[T] {
+	var tools ToolList[T]
 	for _, tool := range availableTools {
-		if _, ok := tool.(T); ok {
-			tools = append(tools, tool)
+		if casted, ok := tool.(T); ok {
+			tools = append(tools, casted)
 		}
 	}
 	return tools
@@ -77,12 +77,12 @@ type FormatTool interface {
 	Format(ctx context.Context, config ToolConfig, dryRun bool) error
 }
 
-func (tl ToolList) Only(only string) (ToolList, error) {
+func (tl ToolList[T]) Only(only string) (ToolList[T], error) {
 	if only == "" {
 		return tl, nil
 	}
 
-	var filteredTools []Tool
+	var filteredTools ToolList[T]
 	requestedTools := strings.Split(only, ",")
 	seen := make(map[string]bool, len(requestedTools))
 
@@ -111,7 +111,7 @@ func (tl ToolList) Only(only string) (ToolList, error) {
 
 // Exclude filters out tools listed in the comma-separated exclude string.
 // Returns an error if any specified tool name does not exist in the current list.
-func (tl ToolList) Exclude(exclude string) (ToolList, error) {
+func (tl ToolList[T]) Exclude(exclude string) (ToolList[T], error) {
 	if exclude == "" {
 		return tl, nil
 	}
@@ -146,7 +146,7 @@ func (tl ToolList) Exclude(exclude string) (ToolList, error) {
 		excludeSet[name] = struct{}{}
 	}
 
-	var filtered ToolList
+	var filtered ToolList[T]
 	for _, t := range tl {
 		if _, ok := excludeSet[t.Name()]; ok {
 			continue
@@ -157,7 +157,7 @@ func (tl ToolList) Exclude(exclude string) (ToolList, error) {
 	return filtered, nil
 }
 
-func (tl ToolList) PossibleString() string {
+func (tl ToolList[T]) PossibleString() string {
 	var possibleTools []string
 	for _, t := range tl {
 		possibleTools = append(possibleTools, t.Name())

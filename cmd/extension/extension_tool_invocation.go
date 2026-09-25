@@ -8,11 +8,11 @@ import (
 	"github.com/shopware/shopware-cli/internal/verifier"
 )
 
-func extensionToolInvocationStatuses(all, selected verifier.ToolList) []validation.ToolInvocationStatus {
+func extensionToolInvocationStatuses[T verifier.Tool](all, selected verifier.ToolList[T]) []validation.ToolInvocationStatus {
 	statuses := make([]validation.ToolInvocationStatus, 0, len(all))
 	for _, tool := range all {
 		status := validation.ToolInvocationStatus{Name: tool.Name(), Status: "skipped", Reason: "not selected by --only"}
-		if slices.ContainsFunc(selected, func(selected verifier.Tool) bool { return selected.Name() == tool.Name() }) {
+		if slices.ContainsFunc(selected, func(selected T) bool { return selected.Name() == tool.Name() }) {
 			status.Status = "invoked"
 			status.Reason = ""
 		}

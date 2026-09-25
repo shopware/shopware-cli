@@ -120,9 +120,8 @@ var extensionValidateCmd = &cobra.Command{
 
 		var gr errgroup.Group
 		for _, tool := range tools {
-			checker := tool.(verifier.CheckTool)
 			gr.Go(func() error {
-				return checker.Check(cmd.Context(), result, *toolCfg)
+				return tool.Check(cmd.Context(), result, *toolCfg)
 			})
 		}
 
@@ -135,7 +134,7 @@ var extensionValidateCmd = &cobra.Command{
 	},
 }
 
-func selectExtensionValidationTools(full bool, only, exclude string) (verifier.ToolList, []validation.ToolInvocationStatus, error) {
+func selectExtensionValidationTools(full bool, only, exclude string) (verifier.ToolList[verifier.CheckTool], []validation.ToolInvocationStatus, error) {
 	validationTools := verifier.GetToolsOf[verifier.CheckTool]()
 
 	requested := only
@@ -186,7 +185,7 @@ func selectExtensionValidationTools(full bool, only, exclude string) (verifier.T
 	return selected, statuses, nil
 }
 
-func requiresToolSetup(tool verifier.Tool) bool {
+func requiresToolSetup(tool verifier.CheckTool) bool {
 	switch tool.(type) {
 	case verifier.PhpStan, verifier.Eslint, verifier.StyleLint:
 		return true
