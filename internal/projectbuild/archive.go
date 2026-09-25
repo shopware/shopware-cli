@@ -12,6 +12,7 @@ import (
 	cp "github.com/otiai10/copy"
 
 	"github.com/shopware/shopware-cli/internal/archiver"
+	"github.com/shopware/shopware-cli/internal/ci"
 	"github.com/shopware/shopware-cli/internal/shop"
 	"github.com/shopware/shopware-cli/logging"
 )
@@ -28,6 +29,7 @@ type ArchiveOptions struct {
 
 // PackageArchive builds a private, temporary copy and publishes a tar.gz.
 // Existing output files are never overwritten. This does not deploy anything.
+// Composer rebuilds vendor unless installation is disabled.
 // Hooks are trusted project code, not sandboxed processes.
 func PackageArchive(ctx context.Context, root string, cfg *shop.Config, env *shop.EnvironmentConfig, opts ArchiveOptions) (string, error) {
 	opts.Build.MirrorPathRepositories = true
@@ -87,7 +89,11 @@ func packageArchive(ctx context.Context, root string, cfg *shop.Config, opts Arc
 		return "", err
 	}
 	stage := filepath.Join(temp, "project")
-	if err := copyPackageSource(ctx, root, stage, temp, func(name string) bool { return archiveExcluded(name, false) }); err != nil {
+	excludeSource := func(name string) bool {
+		// Keep prebuilt dependencies only when Composer installation is disabled.
+		return (name == "vendor" && !cfg.DisableComposerInstall) || archiveExcluded(name, false)
+	}
+	if err := copyPackageSource(ctx, root, stage, temp, excludeSource); err != nil {
 		return "", fmt.Errorf("copy project: %w", err)
 	}
 	if err := validateBuildSymlinks(ctx, stage); err != nil {
@@ -130,6 +136,9 @@ func writeDeploymentConfig(stage string, cfg *shop.Config) error {
 // copyPackageSource copies links without following them. The caller validates
 // the copied links before building in the staging tree.
 func copyPackageSource(ctx context.Context, root, stage, temp string, exclude func(string) bool) error {
+	section := ci.Start("Copying project")
+	defer section.End()
+
 	return cp.Copy(root, stage, cp.Options{
 		PreserveTimes: true,
 		OnSymlink:     func(string) cp.SymlinkAction { return cp.Shallow },
