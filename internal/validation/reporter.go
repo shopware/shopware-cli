@@ -78,6 +78,12 @@ func DoCheckReport(result Check, reportingFormat string) error {
 }
 
 func doSummaryReport(result Check) error {
+	target := result.GetTarget()
+	if target != nil {
+		//nolint:forbidigo
+		fmt.Printf("Shopware baseline: %s\n", target.Describe())
+	}
+
 	// Group results by file
 	fileGroups := make(map[string][]CheckResult)
 	for _, r := range result.GetResults() {
@@ -132,10 +138,43 @@ func doSummaryReport(result Check) error {
 		}
 	}
 
+	if missing := notEvaluated(target, result.GetToolRuns()); len(missing) > 0 {
+		//nolint:forbidigo
+		fmt.Printf("\nNot evaluated against %s:\n", target.Version)
+		for _, run := range missing {
+			//nolint:forbidigo
+			fmt.Printf("  %-16s %s\n", run.Name, toolRunNote(run))
+		}
+	}
+
 	//nolint:forbidigo
 	fmt.Printf("\n%s\n", summaryLine(totalProblems, errorCount, warningCount))
 
 	return nil
+}
+
+// notEvaluated lists the version-aware tools whose result does not cover the target.
+func notEvaluated(target *Target, runs []ToolRun) []ToolRun {
+	if target == nil {
+		return nil
+	}
+
+	var missing []ToolRun
+	for _, run := range runs {
+		if run.NotEvaluated(target.Version) {
+			missing = append(missing, run)
+		}
+	}
+
+	return missing
+}
+
+func toolRunNote(run ToolRun) string {
+	if run.Note != "" {
+		return run.Note
+	}
+
+	return "evaluated Shopware " + run.Baseline
 }
 
 // summaryLine renders the closing line of the summary report.
@@ -156,8 +195,18 @@ func countNoun(n int, noun string) string {
 }
 
 func doJSONReport(result Check) error {
+	checks := result.GetToolRuns()
+	if checks == nil {
+		checks = []ToolRun{}
+	}
+
 	data := map[string]interface{}{
 		"results": result.GetResults(),
+		"checks":  checks,
+	}
+
+	if target := result.GetTarget(); target != nil {
+		data["target"] = target
 	}
 
 	encoder := json.NewEncoder(os.Stdout)
@@ -227,6 +276,10 @@ func doGitHubReport(result Check) error {
 		fmt.Printf("::%s file=%s%s,title=%s::%s\n", level, file, line, r.Identifier, message)
 	}
 
+	if target := result.GetTarget(); target != nil {
+		fmt.Printf("::notice title=Shopware baseline::%s\n", target.Describe())
+	}
+
 	return nil
 }
 
@@ -248,6 +301,11 @@ type GitLabCodeQualityLines struct {
 }
 
 func doGitLabReport(result Check) error {
+	// stdout must stay a bare Code Quality array, so the baseline goes to stderr
+	if target := result.GetTarget(); target != nil {
+		fmt.Fprintf(os.Stderr, "Shopware baseline: %s\n", target.Describe())
+	}
+
 	issues := make([]GitLabCodeQualityIssue, 0)
 
 	// Sort results for deterministic output
@@ -342,6 +400,11 @@ func doMarkdownReport(result Check) error {
 	fmt.Println("# Validation Report")
 	fmt.Println()
 
+	target := result.GetTarget()
+	if target != nil {
+		fmt.Printf("Shopware baseline: %s\n\n", target.Describe())
+	}
+
 	totalProblems := 0
 	for _, path := range sortedPaths {
 		results := fileGroups[path]
@@ -370,6 +433,14 @@ func doMarkdownReport(result Check) error {
 		fmt.Println()
 	}
 
+	if missing := notEvaluated(target, result.GetToolRuns()); len(missing) > 0 {
+		fmt.Printf("## Not evaluated against %s\n\n", target.Version)
+		for _, run := range missing {
+			fmt.Printf("- **%s**: %s\n", run.Name, toolRunNote(run))
+		}
+		fmt.Println()
+	}
+
 	if totalProblems == 0 {
 		fmt.Println("✅ No problems found")
 	}
@@ -378,12 +449,22 @@ func doMarkdownReport(result Check) error {
 }
 
 type JUnitTestSuite struct {
-	XMLName  xml.Name        `xml:"testsuite"`
-	Name     string          `xml:"name,attr"`
-	Tests    int             `xml:"tests,attr"`
-	Failures int             `xml:"failures,attr"`
-	Errors   int             `xml:"errors,attr"`
-	TestCase []JUnitTestCase `xml:"testcase"`
+	XMLName    xml.Name         `xml:"testsuite"`
+	Name       string           `xml:"name,attr"`
+	Tests      int              `xml:"tests,attr"`
+	Failures   int              `xml:"failures,attr"`
+	Errors     int              `xml:"errors,attr"`
+	Properties *JUnitProperties `xml:"properties,omitempty"`
+	TestCase   []JUnitTestCase  `xml:"testcase"`
+}
+
+type JUnitProperties struct {
+	Property []JUnitProperty `xml:"property"`
+}
+
+type JUnitProperty struct {
+	Name  string `xml:"name,attr"`
+	Value string `xml:"value,attr"`
 }
 
 type JUnitTestCase struct {
@@ -467,6 +548,13 @@ func doJUnitReport(result Check) error {
 		Failures: failures,
 		Errors:   errors,
 		TestCase: testCases,
+	}
+
+	if target := result.GetTarget(); target != nil {
+		suite.Properties = &JUnitProperties{Property: []JUnitProperty{
+			{Name: "shopware.baseline", Value: target.Version},
+			{Name: "shopware.baseline.source", Value: string(target.Source)},
+		}}
 	}
 
 	encoder := xml.NewEncoder(os.Stdout)

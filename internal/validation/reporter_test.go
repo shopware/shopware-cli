@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestReportingOutputIsDeterministic(t *testing.T) {
@@ -273,7 +274,17 @@ func TestGitLabReportIsDeterministic(t *testing.T) {
 
 // testCheck is a simple implementation of Check interface for testing
 type testCheck struct {
-	Results []CheckResult
+	Results  []CheckResult
+	Target   *Target
+	ToolRuns []ToolRun
+}
+
+func (c *testCheck) GetTarget() *Target {
+	return c.Target
+}
+
+func (c *testCheck) GetToolRuns() []ToolRun {
+	return c.ToolRuns
 }
 
 func (c *testCheck) AddResult(result CheckResult) {
@@ -545,4 +556,125 @@ func TestSummaryLine(t *testing.T) {
 	assert.Equal(t, "✓ No problems found", summaryLine(0, 0, 0))
 	assert.Equal(t, "✖ 1 problem (1 error, 0 warnings)", summaryLine(1, 1, 0))
 	assert.Equal(t, "✖ 15 problems (14 errors, 1 warning)", summaryLine(15, 14, 1))
+}
+
+func baselineCheck() *testCheck {
+	return &testCheck{
+		Target: &Target{Version: "6.6.10.21", Source: TargetSourceConstraint, Constraint: "~6.6.0 || ~6.7.0", WithinConstraint: true},
+		ToolRuns: []ToolRun{
+			{Name: "admin-twig", Status: ToolRunSkipped, Baseline: "6.6.10.21", Note: "no admin Twig rules apply to Shopware 6.6.10.21"},
+			{Name: "phpstan", Status: ToolRunRan, Baseline: "6.7.14.2"},
+			{Name: "rector", Status: ToolRunSkipped, Note: "no check operation"},
+			{Name: "stylelint", Status: ToolRunRan},
+		},
+	}
+}
+
+func TestSummaryReportShowsBaselineAndNotEvaluatedTools(t *testing.T) {
+	output := captureOutput(func() {
+		_ = doSummaryReport(baselineCheck())
+	})
+
+	assert.True(t, strings.HasPrefix(output, "Shopware baseline: 6.6.10.21 (lowest release matching \"~6.6.0 || ~6.7.0\")\n"), output)
+	assert.Contains(t, output, "\nNot evaluated against 6.6.10.21:\n  admin-twig       no admin Twig rules apply to Shopware 6.6.10.21\n  phpstan          evaluated Shopware 6.7.14.2\n")
+	assert.NotContains(t, output, "rector")
+	assert.NotContains(t, output, "stylelint")
+	assert.True(t, strings.HasSuffix(output, "\n✓ No problems found\n"), output)
+}
+
+func TestSummaryReportWithoutBaselineIsUnchanged(t *testing.T) {
+	output := captureOutput(func() {
+		_ = doSummaryReport(&testCheck{})
+	})
+
+	assert.Equal(t, "\n✓ No problems found\n", output)
+}
+
+func TestMarkdownReportShowsBaselineAndNotEvaluatedTools(t *testing.T) {
+	output := captureOutput(func() {
+		_ = doMarkdownReport(baselineCheck())
+	})
+
+	assert.Contains(t, output, "# Validation Report\n\nShopware baseline: 6.6.10.21 (lowest release matching \"~6.6.0 || ~6.7.0\")\n\n")
+	assert.Contains(t, output, "## Not evaluated against 6.6.10.21\n\n- **admin-twig**: no admin Twig rules apply to Shopware 6.6.10.21\n- **phpstan**: evaluated Shopware 6.7.14.2\n")
+	assert.Contains(t, output, "✅ No problems found")
+}
+
+func TestGitHubReportEmitsBaselineNotice(t *testing.T) {
+	output := captureOutput(func() {
+		_ = doGitHubReport(baselineCheck())
+	})
+
+	assert.Contains(t, output, "Shopware baseline: 6.6.10.21 (lowest release matching \"~6.6.0 || ~6.7.0\")\n")
+	assert.Contains(t, output, "::notice title=Shopware baseline::6.6.10.21 (lowest release matching \"~6.6.0 || ~6.7.0\")\n")
+}
+
+func TestJSONReportIncludesTargetAndChecks(t *testing.T) {
+	output := captureOutput(func() {
+		_ = doJSONReport(baselineCheck())
+	})
+
+	var data struct {
+		Target  *Target       `json:"target"`
+		Checks  []ToolRun     `json:"checks"`
+		Results []CheckResult `json:"results"`
+	}
+	require.NoError(t, json.Unmarshal([]byte(output), &data))
+	assert.Equal(t, baselineCheck().Target, data.Target)
+	assert.Equal(t, baselineCheck().ToolRuns, data.Checks)
+}
+
+func TestJSONReportWithoutBaselineHasEmptyChecks(t *testing.T) {
+	output := captureOutput(func() {
+		_ = doJSONReport(&testCheck{Results: []CheckResult{}})
+	})
+
+	assert.JSONEq(t, `{"checks": [], "results": []}`, output)
+}
+
+func TestGitLabReportKeepsStdoutMachineReadable(t *testing.T) {
+	stderr := os.Stderr
+	r, w, err := os.Pipe()
+	require.NoError(t, err)
+	os.Stderr = w
+	defer func() { os.Stderr = stderr }()
+
+	output := captureOutput(func() {
+		_ = doGitLabReport(baselineCheck())
+	})
+
+	require.NoError(t, w.Close())
+	var errBuf bytes.Buffer
+	_, err = io.Copy(&errBuf, r)
+	require.NoError(t, err)
+
+	var issues []GitLabCodeQualityIssue
+	require.NoError(t, json.Unmarshal([]byte(output), &issues))
+	assert.Empty(t, issues)
+	assert.Contains(t, errBuf.String(), "Shopware baseline: 6.6.10.21")
+}
+
+func TestJUnitReportCarriesBaselineProperties(t *testing.T) {
+	output := captureOutput(func() {
+		_ = doJUnitReport(baselineCheck())
+	})
+
+	assert.Contains(t, output, `<property name="shopware.baseline" value="6.6.10.21"></property>`)
+	assert.Contains(t, output, `<property name="shopware.baseline.source" value="constraint"></property>`)
+}
+
+func TestTargetDescribe(t *testing.T) {
+	constraint := Target{Version: "6.6.0.0", Source: TargetSourceConstraint, Constraint: "~6.6.0", WithinConstraint: true}
+	fallback := Target{Version: "6.7.0.0", Source: TargetSourceFallback, Constraint: ">=7.0"}
+
+	assert.Equal(t, `6.6.0.0 (lowest release matching "~6.6.0")`, constraint.Describe())
+	assert.Equal(t, `6.7.0.0 (fallback, no release matches ">=7.0")`, fallback.Describe())
+}
+
+func TestToolRunNotEvaluated(t *testing.T) {
+	assert.False(t, ToolRun{Name: "stylelint", Status: ToolRunRan}.NotEvaluated("6.7.0.0"))
+	assert.False(t, ToolRun{Name: "rector", Status: ToolRunSkipped}.NotEvaluated("6.7.0.0"))
+	assert.False(t, ToolRun{Name: "eslint", Status: ToolRunRan, Baseline: "6.7.0.0"}.NotEvaluated("6.7.0.0"))
+	assert.True(t, ToolRun{Name: "phpstan", Status: ToolRunRan, Baseline: "6.6.0.0"}.NotEvaluated("6.7.0.0"))
+	assert.True(t, ToolRun{Name: "admin-twig", Status: ToolRunSkipped, Baseline: "6.7.0.0"}.NotEvaluated("6.7.0.0"))
 }

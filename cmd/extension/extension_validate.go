@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/spf13/cobra"
-	"golang.org/x/sync/errgroup"
 
 	"github.com/shopware/shopware-cli/internal/extension"
 	"github.com/shopware/shopware-cli/internal/system"
@@ -105,11 +104,14 @@ var extensionValidateCmd = &cobra.Command{
 			toolCfg.Extension.GetExtensionConfig().Validation.Ignore = extension.ConfigValidationList{}
 		}
 
+		// Without --full only metadata checks run, and none of them read the Shopware version
+		if !isFull {
+			toolCfg.Target = validation.Target{}
+		}
+
 		toolCfg.CheckAgainst = checkAgainst
 		result := verifier.NewCheck()
 		result.SetSourceRoot(toolCfg.RootDir)
-
-		var gr errgroup.Group
 
 		tools := verifier.GetTools()
 
@@ -123,14 +125,7 @@ var extensionValidateCmd = &cobra.Command{
 			return err
 		}
 
-		for _, tool := range tools {
-			tool := tool
-			gr.Go(func() error {
-				return tool.Check(cmd.Context(), result, *toolCfg)
-			})
-		}
-
-		if err := gr.Wait(); err != nil {
+		if err := tools.RunChecks(cmd.Context(), result, *toolCfg); err != nil {
 			return err
 		}
 

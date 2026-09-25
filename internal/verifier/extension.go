@@ -5,6 +5,7 @@ import (
 	"os"
 	"path"
 	"sort"
+	"strings"
 
 	"github.com/shyim/go-version"
 
@@ -38,7 +39,7 @@ func ConvertExtensionToToolConfig(ext extension.Extension) (*ToolConfig, error) 
 		return nil, err
 	}
 
-	if err := determineVersionRange(cfg, constraint); err != nil {
+	if err := determineBaseline(cfg, constraint); err != nil {
 		return nil, err
 	}
 
@@ -49,7 +50,8 @@ func ConvertExtensionToToolConfig(ext extension.Extension) (*ToolConfig, error) 
 // variable so tests can replace it with a fake that does not hit the network.
 var getShopwareVersions = extension.GetShopwareVersions
 
-func determineVersionRange(cfg *ToolConfig, versionConstraint *version.Constraints) error {
+// determineBaseline picks the lowest stable release matching the constraint and records why.
+func determineBaseline(cfg *ToolConfig, versionConstraint *version.Constraints) error {
 	versions, err := getShopwareVersions(context.Background())
 	if err != nil {
 		return err
@@ -68,22 +70,49 @@ func determineVersionRange(cfg *ToolConfig, versionConstraint *version.Constrain
 
 	sort.Sort(version.Collection(vs))
 
-	matchingVersions := make([]*version.Version, 0)
+	target := validation.Target{
+		Version:          lowestMatchingRelease(vs, versionConstraint),
+		Source:           validation.TargetSourceConstraint,
+		Constraint:       constraintString(versionConstraint),
+		WithinConstraint: true,
+	}
 
-	for _, v := range vs {
-		if versionConstraint.Check(v) {
-			matchingVersions = append(matchingVersions, v)
+	if target.Version == "" {
+		target.Version = "6.7.0.0"
+		target.Source = validation.TargetSourceFallback
+		target.WithinConstraint = false
+	}
+
+	cfg.MinShopwareVersion = target.Version
+	cfg.Target = target
+
+	return nil
+}
+
+// lowestMatchingRelease prefers stable releases; RC and dev tags count only when nothing else matches.
+func lowestMatchingRelease(sorted []*version.Version, constraint *version.Constraints) string {
+	prerelease := ""
+
+	for _, v := range sorted {
+		if !constraint.Check(v) {
+			continue
+		}
+
+		if !v.IsPrerelease() {
+			return v.String()
+		}
+
+		if prerelease == "" {
+			prerelease = v.String()
 		}
 	}
 
-	if len(matchingVersions) == 0 {
-		matchingVersions = append(matchingVersions, version.Must(version.NewVersion("6.7.0.0")))
-	}
+	return prerelease
+}
 
-	cfg.MinShopwareVersion = matchingVersions[0].String()
-	cfg.MaxShopwareVersion = matchingVersions[len(matchingVersions)-1].String()
-
-	return nil
+// constraintString renders a parsed constraint the way it is written in composer.json.
+func constraintString(cs *version.Constraints) string {
+	return strings.ReplaceAll(strings.ReplaceAll(cs.String(), "||", " || "), ",", " ")
 }
 
 func getAdminFolders(ext extension.Extension) []string {

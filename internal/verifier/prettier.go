@@ -7,6 +7,8 @@ import (
 	"path"
 
 	"golang.org/x/sync/errgroup"
+
+	"github.com/shopware/shopware-cli/internal/validation"
 )
 
 var ignoredPaths = `
@@ -26,6 +28,8 @@ func (b Prettier) Name() string {
 }
 
 func (b Prettier) Check(ctx context.Context, check *Check, config ToolConfig) error {
+	check.RecordToolRun(validation.ToolRun{Name: b.Name(), Status: validation.ToolRunSkipped, Note: "no check operation"})
+
 	return nil
 }
 

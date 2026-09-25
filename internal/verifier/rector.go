@@ -6,6 +6,8 @@ import (
 	"os"
 	"os/exec"
 	"path"
+
+	"github.com/shopware/shopware-cli/internal/validation"
 )
 
 type Rector struct{}
@@ -15,6 +17,8 @@ func (r Rector) Name() string {
 }
 
 func (r Rector) Check(ctx context.Context, check *Check, config ToolConfig) error {
+	check.RecordToolRun(validation.ToolRun{Name: r.Name(), Status: validation.ToolRunSkipped, Note: "no check operation"})
+
 	return nil
 }
 
