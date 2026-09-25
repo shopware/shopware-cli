@@ -53,6 +53,16 @@ func (s *SSHExecutor) php() string {
 	return s.phpBinary
 }
 
+// RemotePHPCommand runs PHP without a directory change or a TTY.
+// Callers own stdin, stdout and stderr independently through Process.Cmd.
+func (s *SSHExecutor) RemotePHPCommand(ctx context.Context, args ...string) *Process {
+	command := []string{"exec", shellQuoteArg(s.php())}
+	for _, arg := range args {
+		command = append(command, shellQuoteArg(arg))
+	}
+	return newProcess(exec.CommandContext(ctx, "ssh", append(s.sshArgs(), "-T", s.target(), strings.Join(command, " "))...))
+}
+
 func (s *SSHExecutor) target() string {
 	if s.user == "" {
 		return s.host
