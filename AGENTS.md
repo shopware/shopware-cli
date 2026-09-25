@@ -116,4 +116,4 @@ The verifier registers tools through the name-only `Tool` interface. `CheckTool`
 - **Fixers**: Rector, ESLint, Stylelint, Administration Twig, Symfony XML conversion
 - **Formatters**: PHP-CS-Fixer, Prettier, Administration Twig
 
-`extension validate` defaults to `sw-cli`; `--full` selects all checkers, and an explicit `--only` overrides that default. The extension commands report whether each tool was invoked or skipped; invocation does not guarantee that files were analyzed or changed.
+`extension validate` runs all checkers by default. The deprecated `--full` flag remains accepted but has no effect; use `--only` or `--exclude` to select checkers. The extension commands report whether each tool was invoked or skipped; invocation does not guarantee that files were analyzed or changed.
