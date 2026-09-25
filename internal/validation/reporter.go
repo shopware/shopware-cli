@@ -82,6 +82,10 @@ func doSummaryReport(result Check) error {
 	if target != nil {
 		//nolint:forbidigo
 		fmt.Printf("Shopware baseline: %s\n", target.Describe())
+		if note := target.ConstraintNote(); note != "" {
+			//nolint:forbidigo
+			fmt.Println(note)
+		}
 	}
 
 	// Group results by file
@@ -403,6 +407,9 @@ func doMarkdownReport(result Check) error {
 	target := result.GetTarget()
 	if target != nil {
 		fmt.Printf("Shopware baseline: %s\n\n", target.Describe())
+		if note := target.ConstraintNote(); note != "" {
+			fmt.Printf("%s\n\n", note)
+		}
 	}
 
 	totalProblems := 0

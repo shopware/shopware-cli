@@ -2,6 +2,7 @@ package validation
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/invopop/jsonschema"
 	orderedmap "github.com/pb33f/ordered-map/v2"
@@ -102,6 +103,8 @@ const (
 type TargetSource string
 
 const (
+	// TargetSourceFlag is an explicit --target-version.
+	TargetSourceFlag TargetSource = "flag"
 	// TargetSourceConstraint is the lowest release that satisfies the declared constraint.
 	TargetSourceConstraint TargetSource = "constraint"
 	// TargetSourceFallback is the default used when no release satisfies the constraint.
@@ -112,21 +115,52 @@ const (
 type Target struct {
 	// Version is the concrete Shopware release, e.g. 6.7.14.2.
 	Version string `json:"version"`
+	// Requested is the --target-version input Version was resolved from.
+	Requested string `json:"requested,omitempty"`
 	// Source says how Version was chosen.
 	Source TargetSource `json:"source"`
 	// Constraint is the shopware/core requirement declared by the input.
 	Constraint string `json:"constraint,omitempty"`
 	// WithinConstraint reports whether Version satisfies Constraint.
 	WithinConstraint bool `json:"within_constraint"`
+	// Unverified is set when the release list was unavailable and Version was taken as typed.
+	Unverified bool `json:"unverified,omitempty"`
 }
 
 // Describe renders the version together with the reason it was chosen.
 func (t Target) Describe() string {
-	if t.Source == TargetSourceFallback {
-		return fmt.Sprintf("%s (fallback, no release matches %q)", t.Version, t.Constraint)
+	switch t.Source {
+	case TargetSourceFlag:
+		return fmt.Sprintf("%s (%s)", t.Version, t.describeFlag())
+	case TargetSourceFallback:
+		return fmt.Sprintf("%s (fallback, no release matches %q; pass --target-version to choose)", t.Version, t.Constraint)
+	case TargetSourceConstraint:
+		return fmt.Sprintf("%s (lowest release matching %q; pass --target-version to choose)", t.Version, t.Constraint)
+	default:
+		return t.Version
+	}
+}
+
+func (t Target) describeFlag() string {
+	reason := "from --target-version"
+	if t.Requested != "" && !strings.EqualFold(t.Requested, t.Version) {
+		reason = fmt.Sprintf("newest %s release, from --target-version %s", t.Requested, t.Requested)
 	}
 
-	return fmt.Sprintf("%s (lowest release matching %q)", t.Version, t.Constraint)
+	if t.Unverified {
+		reason += ", not verified because the release list was unavailable"
+	}
+
+	return reason
+}
+
+// ConstraintNote warns when an explicit target lies outside the declared constraint.
+func (t Target) ConstraintNote() string {
+	if t.Source != TargetSourceFlag || t.Constraint == "" || t.WithinConstraint {
+		return ""
+	}
+
+	return fmt.Sprintf("Note: %s is outside the declared Shopware version constraint %q. Version-aware checks run against it anyway.", t.Version, t.Constraint)
 }
 
 // Tool run statuses.

@@ -84,7 +84,8 @@ func getShopwareConstraint(root string) (*version.Constraints, error) {
 	return &cst, nil
 }
 
-func GetConfigFromProject(ctx context.Context, root string, onlyLocal bool) (*ToolConfig, error) {
+// GetConfigFromProject builds the tool config; targetVersion is the raw --target-version input or empty.
+func GetConfigFromProject(ctx context.Context, root string, onlyLocal bool, targetVersion string) (*ToolConfig, error) {
 	constraint, err := getShopwareConstraint(root)
 	if err != nil {
 		return nil, err
@@ -213,7 +214,7 @@ func GetConfigFromProject(ctx context.Context, root string, onlyLocal bool) (*To
 		ValidationIgnores:     validationIgnores,
 	}
 
-	if err := determineBaseline(toolCfg, constraint); err != nil {
+	if err := determineBaseline(toolCfg, constraint, targetVersion); err != nil {
 		return nil, err
 	}
 

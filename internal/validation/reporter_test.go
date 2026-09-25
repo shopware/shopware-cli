@@ -575,7 +575,7 @@ func TestSummaryReportShowsBaselineAndNotEvaluatedTools(t *testing.T) {
 		_ = doSummaryReport(baselineCheck())
 	})
 
-	assert.True(t, strings.HasPrefix(output, "Shopware baseline: 6.6.10.21 (lowest release matching \"~6.6.0 || ~6.7.0\")\n"), output)
+	assert.True(t, strings.HasPrefix(output, "Shopware baseline: 6.6.10.21 (lowest release matching \"~6.6.0 || ~6.7.0\"; pass --target-version to choose)\n"), output)
 	assert.Contains(t, output, "\nNot evaluated against 6.6.10.21:\n  admin-twig       no admin Twig rules apply to Shopware 6.6.10.21\n  phpstan          evaluated Shopware 6.7.14.2\n")
 	assert.NotContains(t, output, "rector")
 	assert.NotContains(t, output, "stylelint")
@@ -595,7 +595,7 @@ func TestMarkdownReportShowsBaselineAndNotEvaluatedTools(t *testing.T) {
 		_ = doMarkdownReport(baselineCheck())
 	})
 
-	assert.Contains(t, output, "# Validation Report\n\nShopware baseline: 6.6.10.21 (lowest release matching \"~6.6.0 || ~6.7.0\")\n\n")
+	assert.Contains(t, output, "# Validation Report\n\nShopware baseline: 6.6.10.21 (lowest release matching \"~6.6.0 || ~6.7.0\"; pass --target-version to choose)\n\n")
 	assert.Contains(t, output, "## Not evaluated against 6.6.10.21\n\n- **admin-twig**: no admin Twig rules apply to Shopware 6.6.10.21\n- **phpstan**: evaluated Shopware 6.7.14.2\n")
 	assert.Contains(t, output, "✅ No problems found")
 }
@@ -605,8 +605,8 @@ func TestGitHubReportEmitsBaselineNotice(t *testing.T) {
 		_ = doGitHubReport(baselineCheck())
 	})
 
-	assert.Contains(t, output, "Shopware baseline: 6.6.10.21 (lowest release matching \"~6.6.0 || ~6.7.0\")\n")
-	assert.Contains(t, output, "::notice title=Shopware baseline::6.6.10.21 (lowest release matching \"~6.6.0 || ~6.7.0\")\n")
+	assert.Contains(t, output, "Shopware baseline: 6.6.10.21 (lowest release matching \"~6.6.0 || ~6.7.0\"; pass --target-version to choose)\n")
+	assert.Contains(t, output, "::notice title=Shopware baseline::6.6.10.21 (lowest release matching \"~6.6.0 || ~6.7.0\"; pass --target-version to choose)\n")
 }
 
 func TestJSONReportIncludesTargetAndChecks(t *testing.T) {
@@ -666,9 +666,23 @@ func TestJUnitReportCarriesBaselineProperties(t *testing.T) {
 func TestTargetDescribe(t *testing.T) {
 	constraint := Target{Version: "6.6.0.0", Source: TargetSourceConstraint, Constraint: "~6.6.0", WithinConstraint: true}
 	fallback := Target{Version: "6.7.0.0", Source: TargetSourceFallback, Constraint: ">=7.0"}
+	exact := Target{Version: "6.7.14.2", Requested: "6.7.14.2", Source: TargetSourceFlag, Constraint: "~6.6.0"}
+	shorthand := Target{Version: "6.7.14.2", Requested: "6.7", Source: TargetSourceFlag, Constraint: "~6.7.0", WithinConstraint: true}
+	unverified := Target{Version: "6.7.14.2", Requested: "6.7.14.2", Source: TargetSourceFlag, Unverified: true}
 
-	assert.Equal(t, `6.6.0.0 (lowest release matching "~6.6.0")`, constraint.Describe())
-	assert.Equal(t, `6.7.0.0 (fallback, no release matches ">=7.0")`, fallback.Describe())
+	assert.Equal(t, `6.7.14.2 (from --target-version)`, exact.Describe())
+	assert.Equal(t, `6.7.14.2 (newest 6.7 release, from --target-version 6.7)`, shorthand.Describe())
+	assert.Equal(t, `6.7.14.2 (from --target-version, not verified because the release list was unavailable)`, unverified.Describe())
+
+	// a different spelling of the same release is not a shorthand
+	sameRelease := Target{Version: "6.7.0.0-RC1", Requested: "6.7.0.0-rc1", Source: TargetSourceFlag}
+	assert.Equal(t, `6.7.0.0-RC1 (from --target-version)`, sameRelease.Describe())
+	assert.Equal(t, `Note: 6.7.14.2 is outside the declared Shopware version constraint "~6.6.0". Version-aware checks run against it anyway.`, exact.ConstraintNote())
+	assert.Empty(t, shorthand.ConstraintNote())
+	assert.Empty(t, constraint.ConstraintNote())
+
+	assert.Equal(t, `6.6.0.0 (lowest release matching "~6.6.0"; pass --target-version to choose)`, constraint.Describe())
+	assert.Equal(t, `6.7.0.0 (fallback, no release matches ">=7.0"; pass --target-version to choose)`, fallback.Describe())
 }
 
 func TestToolRunNotEvaluated(t *testing.T) {
@@ -677,4 +691,14 @@ func TestToolRunNotEvaluated(t *testing.T) {
 	assert.False(t, ToolRun{Name: "eslint", Status: ToolRunRan, Baseline: "6.7.0.0"}.NotEvaluated("6.7.0.0"))
 	assert.True(t, ToolRun{Name: "phpstan", Status: ToolRunRan, Baseline: "6.6.0.0"}.NotEvaluated("6.7.0.0"))
 	assert.True(t, ToolRun{Name: "admin-twig", Status: ToolRunSkipped, Baseline: "6.7.0.0"}.NotEvaluated("6.7.0.0"))
+}
+
+func TestSummaryReportWarnsWhenTargetIsOutsideTheConstraint(t *testing.T) {
+	check := &testCheck{Target: &Target{Version: "6.7.14.2", Requested: "6.7", Source: TargetSourceFlag, Constraint: "~6.6.0"}}
+
+	output := captureOutput(func() {
+		_ = doSummaryReport(check)
+	})
+
+	assert.True(t, strings.HasPrefix(output, "Shopware baseline: 6.7.14.2 (newest 6.7 release, from --target-version 6.7)\nNote: 6.7.14.2 is outside the declared Shopware version constraint \"~6.6.0\". Version-aware checks run against it anyway.\n"), output)
 }

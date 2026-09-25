@@ -1,6 +1,7 @@
 package extension
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -27,6 +28,7 @@ var extensionValidateCmd = &cobra.Command{
 			return err
 		}
 		checkAgainst, _ := cmd.Flags().GetString("check-against")
+		targetVersion, _ := cmd.Flags().GetString("target-version")
 		tmpDir, err := os.MkdirTemp(os.TempDir(), "analyse-extension-*")
 		only, _ := cmd.Flags().GetString("only")
 		exclude, _ := cmd.Flags().GetString("exclude")
@@ -80,7 +82,7 @@ var extensionValidateCmd = &cobra.Command{
 				return err
 			}
 
-			toolCfg, err = verifier.ConvertExtensionToToolConfig(ext)
+			toolCfg, err = verifier.ConvertExtensionToToolConfig(ext, targetVersion)
 			if err != nil {
 				return err
 			}
@@ -92,7 +94,7 @@ var extensionValidateCmd = &cobra.Command{
 				return err
 			}
 
-			toolCfg, err = verifier.ConvertExtensionToToolConfig(ext)
+			toolCfg, err = verifier.ConvertExtensionToToolConfig(ext, targetVersion)
 			if err != nil {
 				return err
 			}
@@ -153,6 +155,10 @@ func init() {
 	extensionValidateCmd.PersistentFlags().String("format", "", "Reporting format (summary, json, github, gitlab, junit, markdown)")
 	extensionValidateCmd.PersistentFlags().String("reporter", "", "Reporting format (summary, json, github, gitlab, junit, markdown)")
 	extensionValidateCmd.PersistentFlags().String("check-against", "highest", "Check against Shopware Version (highest, lowest)")
+	extensionValidateCmd.PersistentFlags().String("target-version", "", "Shopware release to validate against, e.g. 6.7.14.2, or a minor like 6.7 for its newest release (default: lowest release matching the shopware/core constraint)")
+	_ = extensionValidateCmd.RegisterFlagCompletionFunc("target-version", func(cmd *cobra.Command, _ []string, _ string) ([]string, cobra.ShellCompDirective) {
+		return verifier.TargetVersionCompletions(cmd.Context()), cobra.ShellCompDirectiveNoFileComp
+	})
 	extensionValidateCmd.PersistentFlags().String("only", "", "Run only specific tools by name (comma-separated, e.g. phpstan,eslint)")
 	extensionValidateCmd.PersistentFlags().String("exclude", "", "Exclude specific tools by name (comma-separated, e.g. phpstan,eslint)")
 	extensionValidateCmd.PersistentFlags().Bool("no-copy", false, "Do not copy extension files to temporary directory")
@@ -169,8 +175,13 @@ func init() {
 			return fmt.Errorf("invalid --check-against value %q, allowed values: highest, lowest", mode)
 		}
 
-		// Dont setup tools if we dont run full validation
 		full, _ := cmd.Flags().GetBool("full")
+		targetVersion, _ := cmd.Flags().GetString("target-version")
+		if targetVersion != "" && !full {
+			return errors.New("--target-version needs --full. Without --full only metadata checks run, and none of them depend on the Shopware version")
+		}
+
+		// Dont setup tools if we dont run full validation
 		if !full {
 			return nil
 		}

@@ -2,9 +2,9 @@ package verifier
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path"
-	"sort"
 	"strings"
 
 	"github.com/shyim/go-version"
@@ -13,7 +13,8 @@ import (
 	"github.com/shopware/shopware-cli/internal/validation"
 )
 
-func ConvertExtensionToToolConfig(ext extension.Extension) (*ToolConfig, error) {
+// ConvertExtensionToToolConfig builds the tool config; targetVersion is the raw --target-version input or empty.
+func ConvertExtensionToToolConfig(ext extension.Extension, targetVersion string) (*ToolConfig, error) {
 	var ignores []validation.ToolConfigIgnore
 
 	for _, ignore := range ext.GetExtensionConfig().Validation.Ignore {
@@ -39,7 +40,7 @@ func ConvertExtensionToToolConfig(ext extension.Extension) (*ToolConfig, error) 
 		return nil, err
 	}
 
-	if err := determineBaseline(cfg, constraint); err != nil {
+	if err := determineBaseline(cfg, constraint, targetVersion); err != nil {
 		return nil, err
 	}
 
@@ -50,41 +51,63 @@ func ConvertExtensionToToolConfig(ext extension.Extension) (*ToolConfig, error) 
 // variable so tests can replace it with a fake that does not hit the network.
 var getShopwareVersions = extension.GetShopwareVersions
 
-// determineBaseline picks the lowest stable release matching the constraint and records why.
-func determineBaseline(cfg *ToolConfig, versionConstraint *version.Constraints) error {
+// determineBaseline resolves the requested target, or picks the lowest stable release matching the constraint.
+func determineBaseline(cfg *ToolConfig, versionConstraint *version.Constraints, requested string) error {
 	versions, err := getShopwareVersions(context.Background())
 	if err != nil {
-		return err
+		return baselineWithoutReleaseList(cfg, versionConstraint, requested, err)
 	}
 
-	vs := make([]*version.Version, 0)
+	target := validation.Target{Constraint: constraintString(versionConstraint)}
 
-	for _, r := range versions {
-		v, err := version.NewVersion(r)
+	if requested != "" {
+		resolved, err := ResolveTargetVersion(requested, versions)
 		if err != nil {
-			continue
+			return err
 		}
 
-		vs = append(vs, v)
-	}
+		target.Version = resolved
+		target.Requested = normalizeRequested(requested)
+		target.Source = validation.TargetSourceFlag
+		target.WithinConstraint = versionConstraint.Check(version.Must(version.NewVersion(resolved)))
+	} else {
+		target.Version = lowestMatchingRelease(parseVersions(versions), versionConstraint)
+		target.Source = validation.TargetSourceConstraint
+		target.WithinConstraint = true
 
-	sort.Sort(version.Collection(vs))
-
-	target := validation.Target{
-		Version:          lowestMatchingRelease(vs, versionConstraint),
-		Source:           validation.TargetSourceConstraint,
-		Constraint:       constraintString(versionConstraint),
-		WithinConstraint: true,
-	}
-
-	if target.Version == "" {
-		target.Version = "6.7.0.0"
-		target.Source = validation.TargetSourceFallback
-		target.WithinConstraint = false
+		if target.Version == "" {
+			target.Version = "6.7.0.0"
+			target.Source = validation.TargetSourceFallback
+			target.WithinConstraint = false
+		}
 	}
 
 	cfg.MinShopwareVersion = target.Version
 	cfg.Target = target
+
+	return nil
+}
+
+// baselineWithoutReleaseList keeps an exact --target-version usable when Packagist is unreachable.
+func baselineWithoutReleaseList(cfg *ToolConfig, versionConstraint *version.Constraints, requested string, cause error) error {
+	if requested == "" {
+		return cause
+	}
+
+	input := normalizeRequested(requested)
+	if !isExactRelease(input) {
+		return fmt.Errorf("cannot resolve --target-version %q without the Shopware release list: %w. Pass a full release such as 6.7.14.2 to skip the lookup", requested, cause)
+	}
+
+	cfg.MinShopwareVersion = input
+	cfg.Target = validation.Target{
+		Version:          input,
+		Requested:        input,
+		Source:           validation.TargetSourceFlag,
+		Constraint:       constraintString(versionConstraint),
+		WithinConstraint: versionConstraint.Check(version.Must(version.NewVersion(input))),
+		Unverified:       true,
+	}
 
 	return nil
 }

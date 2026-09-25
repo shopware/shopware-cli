@@ -158,6 +158,7 @@ Common flags include:
 - `--exclude <tools>` — skip specific tools.
 - `--full` — run additional/full validation tools such as PHPStan, ESLint, and Stylelint when supported/configured.
 - `--check-against <mode>` — `highest` (default) or `lowest`: which supported Shopware version to check against.
+- `--target-version <version>` — Shopware release the version-aware checks run against, e.g. `6.7.14.2`, or `6.7` for the newest 6.7 release. Available on `extension validate` (where it needs `--full`) and on `project validate`. Without it the lowest release matching the declared Shopware constraint is used, and either way the report names the baseline.
 - `--store-compliance` — enable Store-compliance mode while the current CLI supports the flag. Prefer `validation.store_compliance: true` in `.shopware-extension.yml` for persistent Store intent.
 - `--format <format>` — choose an output format supported by the current CLI (`--reporter` is a deprecated alias).
 - `--no-copy` — do not copy extension files to a temporary directory.
