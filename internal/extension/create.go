@@ -8,6 +8,7 @@ import (
 
 	"github.com/shopware/shopware-cli/internal/extension/scaffolding"
 	"github.com/shopware/shopware-cli/internal/shop"
+	"github.com/shopware/shopware-cli/internal/system"
 	"github.com/shopware/shopware-cli/logging"
 )
 
@@ -61,6 +62,10 @@ func Create(ctx context.Context, opts CreateOptions) (err error) {
 	}
 
 	logger.Infof("✓ Extension successfully created in %s", extensionDir)
+
+	if opts.Type == Plugin && system.IsInteractionEnabled(ctx) {
+		logger.Info(`Add features with "shopware-cli extension add" inside the extension directory`)
+	}
 
 	return nil
 }
