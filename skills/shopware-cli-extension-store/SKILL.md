@@ -17,14 +17,14 @@ Run both validations from the extension root and capture the full output **and**
 
 ```bash
 shopware-cli --version
-shopware-cli extension validate . --format markdown
-shopware-cli extension validate . --store-compliance --format markdown
+shopware-cli extension validate . --only sw-cli --format markdown
+shopware-cli extension validate . --only sw-cli --store-compliance --format markdown
 ```
 
 - The **exit code** is the pass/fail signal (`0` = pass, non-zero = findings). The report goes to stdout; a usage block or error goes to stderr — do not read a validation failure as a usage error.
 - `--format markdown` gives a stable, quotable form. `--reporter` is a deprecated alias that prints a warning — use `--format`.
 - Treat the store-compliance run as a delta over the normal run: report only the lines it adds.
-- With neither `--full` nor `--only`, `extension validate` runs only the built-in `sw-cli` checker — **not** PHPStan/ESLint/Stylelint. (`sw-cli` is that checker's name, not shorthand for the binary.) An explicit `--only` selects its named checkers even without `--full`. For the two commands above, report "the `sw-cli` checks passed", not "full validation passed". Source: `cmd/extension/extension_validate.go`, `selectExtensionValidationTools`.
+- `extension validate` now runs all checkers by default. The two commands above explicitly select only the built-in `sw-cli` checker, not PHPStan/ESLint/Stylelint. (`sw-cli` is that checker's name, not shorthand for the binary.) Report "the `sw-cli` checks passed", not "full validation passed". Source: `cmd/extension/extension_validate.go`, `selectExtensionValidationTools`.
 - The Markdown report includes a checker table. `invoked` means the checker was called; it does not prove that files were analyzed or that a check passed. `skipped` means it was not selected or was excluded. Classify only finding lines, not checker-status lines.
 - Use one `shopware-cli` binary throughout, and state its version. Never mix binaries mid-answer.
 - Each error line ends with its result identifier — that identifier is the row's Source, and `L0` catches any line the table does not name explicitly. The CLI currently prints a missing icon twice; count a repeated line once.
@@ -123,7 +123,7 @@ Eight invariants. Check each finding against all eight before writing it.
 | [`store-review-errors`](https://developer.shopware.com/docs/guides/development/testing/store/store-review-errors.html) | Common reasons reviewers reject a submission | user asks why a submission failed, or wants rejection risks |
 | [`not-allowed-store-behaviors`](https://developer.shopware.com/docs/guides/development/testing/store/not-allowed-store-behaviors.html) | Prohibited patterns | extension touches core internals, filesystem, or DB directly |
 | [`functionality-integration`](https://developer.shopware.com/docs/guides/development/testing/store/functionality-integration.html) | Correct integration with core, persistence, public APIs | extension has subscribers, entities, or API endpoints |
-| [`code-quality`](https://developer.shopware.com/docs/guides/development/testing/store/code-quality.html) | Code standards reviewers apply | user asks about code quality, or `--full` validation was run |
+| [`code-quality`](https://developer.shopware.com/docs/guides/development/testing/store/code-quality.html) | Code standards reviewers apply | user asks about code quality, or code-quality checkers were invoked |
 | [`installation-and-cleanup`](https://developer.shopware.com/docs/guides/development/testing/store/installation-and-cleanup.html) | Install/update/uninstall and data removal | extension implements lifecycle methods or creates tables |
 | [`cookies-and-privacy`](https://developer.shopware.com/docs/guides/development/testing/store/cookies-and-privacy.html) | Cookie registration, GDPR, subprocessors | extension sets cookies, tracks, or sends data to third parties |
 | [`seo-and-structured-data`](https://developer.shopware.com/docs/guides/development/testing/store/seo-and-structured-data.html) | SEO output and structured data | extension changes storefront markup, URLs, or meta tags |
@@ -139,7 +139,7 @@ Preconditions here work like §2's: a page you had no trigger to read produces n
 
 - CLI binary and version
 - inspection timestamp
-- sw-cli checks: pass/fail + exit code (state whether `--full` was run)
+- sw-cli checks: pass/fail + exit code (state that `--only sw-cli` was used)
 - store-compliance checks: pass/fail + exit code
 - remote Store listing: inspected / not inspected
 - files modified: no
