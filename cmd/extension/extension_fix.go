@@ -58,9 +58,8 @@ var extensionFixCmd = &cobra.Command{
 		}
 
 		for _, tool := range tools {
-			fixer := tool.(verifier.FixTool)
 			gr.Go(func() error {
-				return fixer.Fix(cmd.Context(), *toolCfg)
+				return tool.Fix(cmd.Context(), *toolCfg)
 			})
 		}
 

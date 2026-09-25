@@ -92,9 +92,8 @@ var projectValidateCmd = &cobra.Command{
 		}
 
 		for _, tool := range tools {
-			checker := tool.(verifier.CheckTool)
 			gr.Go(func() error {
-				return checker.Check(cmd.Context(), result, *toolCfg)
+				return tool.Check(cmd.Context(), result, *toolCfg)
 			})
 		}
 

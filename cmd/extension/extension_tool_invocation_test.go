@@ -10,17 +10,18 @@ import (
 )
 
 func TestExtensionToolInvocationStatuses(t *testing.T) {
-	for _, all := range []verifier.ToolList{
-		verifier.GetToolsOf[verifier.FixTool](),
-		verifier.GetToolsOf[verifier.FormatTool](),
-	} {
-		selected, err := all.Only(all[0].Name())
-		require.NoError(t, err)
+	assertExtensionToolInvocationStatuses(t, verifier.GetToolsOf[verifier.FixTool]())
+	assertExtensionToolInvocationStatuses(t, verifier.GetToolsOf[verifier.FormatTool]())
+}
 
-		statuses := extensionToolInvocationStatuses(all, selected)
-		assert.Len(t, statuses, len(all))
-		assert.Equal(t, "invoked", toolStatusByName(t, statuses, all[0].Name()).Status)
-		assert.Equal(t, "skipped", toolStatusByName(t, statuses, all[1].Name()).Status)
-		assert.Equal(t, "not selected by --only", toolStatusByName(t, statuses, all[1].Name()).Reason)
-	}
+func assertExtensionToolInvocationStatuses[T verifier.Tool](t *testing.T, all verifier.ToolList[T]) {
+	t.Helper()
+	selected, err := all.Only(all[0].Name())
+	require.NoError(t, err)
+
+	statuses := extensionToolInvocationStatuses(all, selected)
+	assert.Len(t, statuses, len(all))
+	assert.Equal(t, "invoked", toolStatusByName(t, statuses, all[0].Name()).Status)
+	assert.Equal(t, "skipped", toolStatusByName(t, statuses, all[1].Name()).Status)
+	assert.Equal(t, "not selected by --only", toolStatusByName(t, statuses, all[1].Name()).Reason)
 }

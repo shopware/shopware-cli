@@ -89,7 +89,7 @@ func TestExtensionValidationSelection(t *testing.T) {
 	})
 }
 
-func toolNamesForValidation(tools verifier.ToolList) []string {
+func toolNamesForValidation(tools verifier.ToolList[verifier.CheckTool]) []string {
 	names := make([]string, 0, len(tools))
 	for _, tool := range tools {
 		names = append(names, tool.Name())

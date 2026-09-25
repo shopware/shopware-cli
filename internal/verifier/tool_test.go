@@ -14,7 +14,7 @@ func (t testTool) Check(ctx context.Context, check *Check, config ToolConfig) er
 func (t testTool) Fix(ctx context.Context, config ToolConfig) error                 { return nil }
 func (t testTool) Format(ctx context.Context, config ToolConfig, dryRun bool) error { return nil }
 
-func toolNames(list ToolList) []string {
+func toolNames[T Tool](list ToolList[T]) []string {
 	out := make([]string, 0, len(list))
 	for _, t := range list {
 		out = append(out, t.Name())
@@ -30,7 +30,7 @@ func TestToolsByCapability(t *testing.T) {
 
 func TestOnly_DeduplicatesAndPreservesOrder(t *testing.T) {
 	t.Parallel()
-	base := ToolList{testTool{"phpstan"}, testTool{"eslint"}, testTool{"sw-cli"}}
+	base := ToolList[testTool]{testTool{"phpstan"}, testTool{"eslint"}, testTool{"sw-cli"}}
 	res, err := base.Only("eslint, phpstan,eslint")
 	assert.NoError(t, err)
 	assert.Equal(t, []string{"eslint", "phpstan"}, toolNames(res))
@@ -41,7 +41,7 @@ func TestOnly_DeduplicatesAndPreservesOrder(t *testing.T) {
 
 func TestExclude_EmptyString_NoChange(t *testing.T) {
 	t.Parallel()
-	base := ToolList{testTool{"phpstan"}, testTool{"eslint"}, testTool{"sw-cli"}}
+	base := ToolList[testTool]{testTool{"phpstan"}, testTool{"eslint"}, testTool{"sw-cli"}}
 	res, err := base.Exclude("")
 	assert.NoError(t, err)
 	assert.Equal(t, toolNames(base), toolNames(res))
@@ -49,7 +49,7 @@ func TestExclude_EmptyString_NoChange(t *testing.T) {
 
 func TestExclude_SingleTool(t *testing.T) {
 	t.Parallel()
-	base := ToolList{testTool{"phpstan"}, testTool{"eslint"}, testTool{"sw-cli"}}
+	base := ToolList[testTool]{testTool{"phpstan"}, testTool{"eslint"}, testTool{"sw-cli"}}
 	res, err := base.Exclude("eslint")
 	assert.NoError(t, err)
 	assert.Equal(t, []string{"phpstan", "sw-cli"}, toolNames(res))
@@ -57,7 +57,7 @@ func TestExclude_SingleTool(t *testing.T) {
 
 func TestExclude_MultipleTools(t *testing.T) {
 	t.Parallel()
-	base := ToolList{testTool{"phpstan"}, testTool{"eslint"}, testTool{"sw-cli"}, testTool{"stylelint"}}
+	base := ToolList[testTool]{testTool{"phpstan"}, testTool{"eslint"}, testTool{"sw-cli"}, testTool{"stylelint"}}
 	res, err := base.Exclude("eslint, stylelint")
 	assert.NoError(t, err)
 	assert.Equal(t, []string{"phpstan", "sw-cli"}, toolNames(res))
@@ -65,7 +65,7 @@ func TestExclude_MultipleTools(t *testing.T) {
 
 func TestExclude_AllTools_ReturnsEmpty(t *testing.T) {
 	t.Parallel()
-	base := ToolList{testTool{"phpstan"}, testTool{"eslint"}}
+	base := ToolList[testTool]{testTool{"phpstan"}, testTool{"eslint"}}
 	res, err := base.Exclude("phpstan,eslint")
 	assert.NoError(t, err)
 	assert.Empty(t, res)
@@ -73,7 +73,7 @@ func TestExclude_AllTools_ReturnsEmpty(t *testing.T) {
 
 func TestExclude_UnknownTool_Error(t *testing.T) {
 	t.Parallel()
-	base := ToolList{testTool{"phpstan"}, testTool{"eslint"}}
+	base := ToolList[testTool]{testTool{"phpstan"}, testTool{"eslint"}}
 	res, err := base.Exclude("rector")
 	assert.Error(t, err)
 	assert.Nil(t, res)
@@ -81,7 +81,7 @@ func TestExclude_UnknownTool_Error(t *testing.T) {
 
 func TestExclude_TrimsAndIgnoresDuplicates(t *testing.T) {
 	t.Parallel()
-	base := ToolList{testTool{"phpstan"}, testTool{"eslint"}, testTool{"sw-cli"}}
+	base := ToolList[testTool]{testTool{"phpstan"}, testTool{"eslint"}, testTool{"sw-cli"}}
 	res, err := base.Exclude(" eslint , eslint ,  \teslint\t ")
 	assert.NoError(t, err)
 	assert.Equal(t, []string{"phpstan", "sw-cli"}, toolNames(res))
