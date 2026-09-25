@@ -160,14 +160,22 @@ func TestIsPortFree(t *testing.T) {
 	t.Parallel()
 
 	ctx := t.Context()
-	listener, err := (&net.ListenConfig{}).Listen(ctx, "tcp", ":0")
-	require.NoError(t, err)
-	port := listener.Addr().(*net.TCPAddr).Port
+	// The released-port probe below races with parallel `:0` allocations in
+	// this and other packages: the OS may hand our just-freed port to someone
+	// else before we re-probe it. Retry with a fresh port instead of flaking.
+	for attempt := 0; attempt < 10; attempt++ {
+		listener, err := (&net.ListenConfig{}).Listen(ctx, "tcp", ":0")
+		require.NoError(t, err)
+		port := listener.Addr().(*net.TCPAddr).Port
 
-	assert.False(t, isPortFree(ctx, port), "port held by a listener must report busy")
+		assert.False(t, isPortFree(ctx, port), "port held by a listener must report busy")
 
-	require.NoError(t, listener.Close())
-	assert.True(t, isPortFree(ctx, port), "released port must report free")
+		require.NoError(t, listener.Close())
+		if isPortFree(ctx, port) {
+			return
+		}
+	}
+	t.Fatal("released port kept reporting busy, likely stolen by a parallel test's :0 allocation")
 }
 
 func TestAllocateRandomPorts(t *testing.T) {
@@ -179,23 +187,53 @@ func TestAllocateRandomPorts(t *testing.T) {
 		{Service: ServiceAdminer, Endpoint: PortHTTP, Label: "Adminer", HostPort: 9080},
 	}
 
-	overrides, err := AllocateRandomPorts(t.Context(), conflicts)
-	require.NoError(t, err)
-	require.Len(t, overrides, 3)
+	ctx := t.Context()
+	// AllocateRandomPorts closes its holding listeners before returning, so a
+	// parallel `:0` allocation (this package runs t.Parallel, and `go test
+	// ./...` runs packages in parallel) may steal an allocated port before the
+	// verification bind below. That is an environmental race, not a product
+	// flakes, so retry the whole allocate-and-bind cycle instead of failing.
+	for attempt := 0; attempt < 10; attempt++ {
+		overrides, err := AllocateRandomPorts(ctx, conflicts)
+		require.NoError(t, err)
+		require.Len(t, overrides, 3)
 
-	seen := map[int]string{}
-	for i, o := range overrides {
-		key := o.Service + "." + o.Endpoint
-		assert.Equal(t, conflicts[i].Service, o.Service, "overrides come back in conflict order")
-		assert.Equal(t, conflicts[i].Endpoint, o.Endpoint)
-		assert.Greater(t, o.HostPort, 0, "port for %s", key)
-		if firstKey, dup := seen[o.HostPort]; dup {
-			t.Fatalf("port %d handed out twice: %s and %s", o.HostPort, firstKey, key)
+		seen := map[int]string{}
+		verify := make([]net.Listener, 0, len(overrides))
+		closeVerify := func() {
+			for _, listener := range verify {
+				_ = listener.Close()
+			}
 		}
-		seen[o.HostPort] = key
+		stolen := false
+		for i, o := range overrides {
+			key := o.Service + "." + o.Endpoint
+			if o.Service != conflicts[i].Service || o.Endpoint != conflicts[i].Endpoint {
+				closeVerify()
+				t.Fatalf("overrides come back in conflict order, got %s.%s at index %d", o.Service, o.Endpoint, i)
+			}
+			if o.HostPort <= 0 {
+				closeVerify()
+				t.Fatalf("port for %s must be positive, got %d", key, o.HostPort)
+			}
+			if firstKey, dup := seen[o.HostPort]; dup {
+				closeVerify()
+				t.Fatalf("port %d handed out twice: %s and %s", o.HostPort, firstKey, key)
+			}
+			seen[o.HostPort] = key
 
-		listener, err := (&net.ListenConfig{}).Listen(t.Context(), "tcp", fmt.Sprintf(":%d", o.HostPort))
-		require.NoError(t, err, "allocated port %d for %s must be bindable", o.HostPort, key)
-		require.NoError(t, listener.Close())
+			listener, err := (&net.ListenConfig{}).Listen(ctx, "tcp", fmt.Sprintf(":%d", o.HostPort))
+			if err != nil {
+				// Port stolen between allocation and verification; retry.
+				stolen = true
+				break
+			}
+			verify = append(verify, listener)
+		}
+		closeVerify()
+		if !stolen {
+			return
+		}
 	}
+	t.Fatal("allocated ports kept colliding with parallel test allocations")
 }
