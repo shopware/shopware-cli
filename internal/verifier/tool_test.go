@@ -28,6 +28,17 @@ func TestToolsByCapability(t *testing.T) {
 	assert.ElementsMatch(t, []string{"admin-twig", "php-cs-fixer", "prettier"}, toolNames(GetToolsOf[FormatTool]()))
 }
 
+func TestOnly_DeduplicatesAndPreservesOrder(t *testing.T) {
+	t.Parallel()
+	base := ToolList{testTool{"phpstan"}, testTool{"eslint"}, testTool{"sw-cli"}}
+	res, err := base.Only("eslint, phpstan,eslint")
+	assert.NoError(t, err)
+	assert.Equal(t, []string{"eslint", "phpstan"}, toolNames(res))
+	res, err = base.Only("eslint,eslint,unknown")
+	assert.ErrorContains(t, err, `tool with name "unknown" not found`)
+	assert.Nil(t, res)
+}
+
 func TestExclude_EmptyString_NoChange(t *testing.T) {
 	t.Parallel()
 	base := ToolList{testTool{"phpstan"}, testTool{"eslint"}, testTool{"sw-cli"}}

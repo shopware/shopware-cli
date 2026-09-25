@@ -84,6 +84,7 @@ func (tl ToolList) Only(only string) (ToolList, error) {
 
 	var filteredTools []Tool
 	requestedTools := strings.Split(only, ",")
+	seen := make(map[string]bool, len(requestedTools))
 
 	for _, requestedTool := range requestedTools {
 		requestedTool = strings.TrimSpace(requestedTool)
@@ -91,7 +92,10 @@ func (tl ToolList) Only(only string) (ToolList, error) {
 
 		for _, t := range tl {
 			if t.Name() == requestedTool {
-				filteredTools = append(filteredTools, t)
+				if !seen[requestedTool] {
+					filteredTools = append(filteredTools, t)
+					seen[requestedTool] = true
+				}
 				found = true
 				break
 			}
