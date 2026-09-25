@@ -1,0 +1,22 @@
+{
+    "name": "{{ .ComposerName }}",
+    "description": "{{ .ComposerName }}",
+    "type": "shopware-platform-plugin",
+    "license": "proprietary",
+    "version": "0.1.0",
+    "require": {
+        "shopware/core": "~6.7.0"
+    },
+    "autoload": {
+        "psr-4": {
+            "{{ jsonEscape .Namespace }}\\": "src/"
+        }
+    },
+    "extra": {
+        "shopware-plugin-class": "{{ jsonEscape .Namespace }}\\{{ .ClassName }}",
+        "label": {
+            "de-DE": "{{ .ClassName }} Theme",
+            "en-GB": "{{ .ClassName }} Theme"
+        }
+    }
+}
