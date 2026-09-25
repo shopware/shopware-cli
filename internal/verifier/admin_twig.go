@@ -13,6 +13,7 @@ import (
 	"github.com/shopware/shopware-cli/internal/html"
 	"github.com/shopware/shopware-cli/internal/validation"
 	"github.com/shopware/shopware-cli/internal/verifier/twiglinter"
+	_ "github.com/shopware/shopware-cli/internal/verifier/twiglinter/admintwiglinter"
 	"github.com/shopware/shopware-cli/logging"
 )
 
