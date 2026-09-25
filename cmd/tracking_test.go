@@ -84,6 +84,34 @@ func TestTrackCommandExecution_ReplacesHyphensAndSpaces(t *testing.T) {
 	assert.Equal(t, "extension.build_me", (*events)[0][tracking.TagCommandName])
 }
 
+func TestTrackCommandExecution_ExtensionAddGenerator(t *testing.T) {
+	originalRoot, originalTrack := rootCmd, trackEvent
+	t.Cleanup(func() {
+		rootCmd, trackEvent = originalRoot, originalTrack
+	})
+
+	rootCmd = &cobra.Command{Use: "shopware-cli"}
+	addCmd := &cobra.Command{Use: "add"}
+	addCmd.AddCommand(&cobra.Command{
+		Use:  "admin-module",
+		RunE: func(*cobra.Command, []string) error { return nil },
+	})
+	extensionCmd := &cobra.Command{Use: "extension"}
+	extensionCmd.AddCommand(addCmd)
+	rootCmd.AddCommand(extensionCmd)
+
+	var events []map[string]string
+	trackEvent = func(_ context.Context, event string, tags map[string]string) {
+		assert.Equal(t, tracking.EventCommand, event)
+		events = append(events, tags)
+	}
+
+	trackCommandExecution(context.Background(), []string{"extension", "add", "admin-module"}, time.Now(), nil)
+
+	require.Len(t, events, 1)
+	assert.Equal(t, "extension.add.admin_module", events[0][tracking.TagCommandName])
+}
+
 func TestTrackCommandExecution_Result(t *testing.T) {
 	tests := []struct {
 		name   string

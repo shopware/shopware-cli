@@ -42,6 +42,22 @@ The CLI has three primary user-facing areas:
 
 This is orientation, not a complete command catalog. Use `--help` for the current command surface.
 
+## Plugin scaffolding
+
+`extension create` writes the foundation of a plugin (`composer.json`, `.gitignore`, a minimal plugin class, PHPUnit bootstrap). PHPUnit stays on create; there is no `extension add tests`. The bootstrap uses Shopware `TestBootstrapper` (`addActivePlugins`, `setForceInstallPlugins(true)`).
+
+`extension add <generator>` adds one example feature inside an existing plugin. Generators are individual commands, not a `plugin:create` questionnaire or Core `make:plugin:*` wrappers. Run them from the plugin directory in a Shopware project on **6.7.13.0 or newer** (declarative `custom-fields.xml`). Unsupported versions fail before any files are written.
+
+Available generators: `admin-module`, `command`, `custom-fieldset`, `entity`, `event-subscriber`, `javascript-plugin`, `plugin-config`, `scheduled-task`, `store-api-route`, `storefront-controller`.
+
+Intentional differences from Shopware Core scaffolding:
+
+- PHP `src/Resources/config/services.php` and `routes.php` instead of XML.
+- Admin snippets as `en.json` / `de.json` instead of `en-GB` / `de-DE`.
+- Existing `main.js` is appended, not overwritten.
+- Existing plugin files are never overwritten; duplicate service/route blocks are skipped.
+- Interactive and non-interactive `extension add` share the same code path (flags/args only; no questionnaire).
+
 ## Prefer Shopware CLI abstractions
 
 When Shopware CLI provides a command for a task, prefer it over manually reconstructing the workflow with Composer, `bin/console`, Docker, npm, PHP, or direct filesystem changes.

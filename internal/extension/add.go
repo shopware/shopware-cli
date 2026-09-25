@@ -58,15 +58,17 @@ func Add(ctx context.Context, generator scaffolding.Generator, args []string) er
 }
 
 // ensureAddSupported fails when the project runs a Shopware release that does
-// not understand the generated code.
+// not understand the generated code. The floor is the full generator set,
+// including declarative custom-fields.xml.
 func ensureAddSupported(projectDir string) error {
-	supported, err := shop.IsShopwareVersion(projectDir, ">="+MinimumAddShopwareVersion)
+	constraint := ">=" + MinimumAddShopwareVersion
+	supported, err := shop.IsShopwareVersion(projectDir, constraint)
 	if err != nil {
-		return fmt.Errorf("cannot determine the Shopware version of %s: %w", projectDir, err)
+		return fmt.Errorf("cannot determine the Shopware version of %s (plugin generators require %s): %w", projectDir, constraint, err)
 	}
 
 	if !supported {
-		return fmt.Errorf("the generators require Shopware %s or newer, %s uses an older release", MinimumAddShopwareVersion, projectDir)
+		return fmt.Errorf("plugin generators require Shopware %s; %s is below that floor", constraint, projectDir)
 	}
 
 	return nil
