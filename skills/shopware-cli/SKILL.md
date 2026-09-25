@@ -131,7 +131,7 @@ Validates the Shopware project against the checks implemented by the current CLI
 
 Common flags include:
 
-- `--only <tools>` — run only specific tools (comma-separated).
+- `--only <tools>` — run only specific checkers (comma-separated).
 - `--exclude <tools>` — skip specific tools (comma-separated).
 - `--format <format>` — choose an output format supported by the current CLI (`--reporter` is a deprecated alias).
 - `--local-only` — limit extension discovery to plugins in `custom/*` (for the project toolset); does not add per-extension metadata validation.
@@ -154,9 +154,9 @@ Normal extension validation runs the built-in checks implemented by the current 
 
 Common flags include:
 
-- `--only <tools>` — run only specific tools (comma-separated).
-- `--exclude <tools>` — skip specific tools.
-- `--full` — run additional/full validation tools such as PHPStan, ESLint, and Stylelint when supported/configured.
+- `--only <tools>` — run only the named checkers, independently of `--full` (comma-separated).
+- `--exclude <tools>` — remove checkers from the selected set.
+- `--full` — select all checkers by default, including PHPStan, ESLint, and Stylelint; explicit `--only` takes precedence.
 - `--check-against <mode>` — `highest` (default) or `lowest`: which supported Shopware version to check against.
 - `--store-compliance` — enable Store-compliance mode while the current CLI supports the flag. Prefer `validation.store_compliance: true` in `.shopware-extension.yml` for persistent Store intent.
 - `--format <format>` — choose an output format supported by the current CLI (`--reporter` is a deprecated alias).
@@ -164,6 +164,8 @@ Common flags include:
 - `--verbose` — show debug output.
 
 For Store-distribution workflows, use the `shopware-cli-extension-store` skill when available.
+
+Each command selects only tools that support its operation. For example, `extension validate --only prettier` is an error because Prettier formats but does not check; the error lists available checkers. The extension command summaries show `invoked` or `skipped`: these describe selection and invocation, not whether files were applicable, findings were produced, or fixes were made.
 
 ### Fresh results beat saved reports
 
@@ -215,9 +217,9 @@ When `validate` produces unexpected results:
    - Full validation can depend on external tools such as PHPStan, ESLint, and Stylelint.
    - Verify relevant dependencies and configuration.
 
-5. **Understand tool exclusions.**
-   - A tool may be skipped due to missing dependencies, unmet conditions, or configuration.
-   - Do not assume a skipped tool means validation passed.
+5. **Understand tool statuses.**
+   - `skipped` means a tool was not selected or was excluded; the status note gives the reason.
+   - `invoked` means the tool was called, not that it analyzed files or succeeded. Use findings and the exit code for the validation result.
 
 6. **Avoid ad hoc workarounds.**
    - Do not bypass validation with manual lower-level commands before understanding why the CLI behaved as it did.
