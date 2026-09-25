@@ -33,6 +33,7 @@ func writeEnvCompletionProject(t *testing.T, dir string) {
 // restores it afterwards, keeping tests hermetic despite the package-global.
 func withProjectConfigPath(t *testing.T, path string) {
 	t.Helper()
+	t.Setenv("PROJECT_ROOT", "")
 
 	previous := projectConfigPath
 	projectConfigPath = path
