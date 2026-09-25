@@ -112,6 +112,11 @@ Notes:
   arguments, flags, paths, or any free-text input.
 - The root command alone (running `shopware-cli` with no sub-command) is not
   tracked.
+- Plugin generators (`shopware-cli extension add <generator>`) are measured
+  through this event. Hyphens become underscores, so Grafana can filter
+  `command_name` values that start with `extension.add.` — for example
+  `extension.add.admin_module` and `extension.add.store_api_route`. Entity
+  names and other generator arguments are never sent.
 
 ### `shopware_cli.project.create` — project scaffolding
 

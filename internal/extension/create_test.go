@@ -91,7 +91,7 @@ func TestCreateGeneratesAnExtension(t *testing.T) {
 			technicalName := deriveTechnicalName(opts.Name, opts.Vendor)
 			extensionDir := deriveExtensionDirectoryName(projectDir, opts.Store, technicalName)
 			assert.FileExists(t, filepath.Join(extensionDir, "composer.json"))
-			assert.FileExists(t, filepath.Join(extensionDir, "src", "Resources", "config", "config.xml"))
+			assert.NoFileExists(t, filepath.Join(extensionDir, "src", "Resources", "config", "config.xml"))
 			assert.FileExists(t, filepath.Join(extensionDir, ".gitignore"))
 			assert.FileExists(t, filepath.Join(extensionDir, "phpunit.xml"))
 			assert.FileExists(t, filepath.Join(extensionDir, "src", technicalName+".php"))

@@ -45,7 +45,10 @@ type scaffoldingFile struct {
 	StubPath string
 }
 
-// scaffoldingFiles returns a list of files with their paths and corresponding stub paths.
+// scaffoldingFiles returns the foundation files written by `extension create`.
+// PHPUnit and TestBootstrap stay here on purpose: they are not additive
+// `extension add` generators. The bootstrap uses Shopware TestBootstrapper
+// (addActivePlugins / setForceInstallPlugins); that API is not redesigned.
 func scaffoldingFiles(className string) []scaffoldingFile {
 	return []scaffoldingFile{
 		{

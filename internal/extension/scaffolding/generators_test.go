@@ -122,6 +122,117 @@ func TestPluginConfigGeneratorCreatesTheConfigXML(t *testing.T) {
 	assert.Contains(t, readPluginFile(t, plugin, "src/Resources/config/config.xml"), "<card>")
 }
 
+func TestGeneratorsAreAdditiveOnly(t *testing.T) {
+	t.Parallel()
+
+	var names []string
+	for _, generator := range Generators() {
+		names = append(names, generator.Name)
+	}
+
+	assert.ElementsMatch(t, []string{
+		"admin-module",
+		"command",
+		"custom-fieldset",
+		"entity",
+		"event-subscriber",
+		"javascript-plugin",
+		"plugin-config",
+		"scheduled-task",
+		"store-api-route",
+		"storefront-controller",
+	}, names)
+}
+
+func TestEntityGeneratorPreservesExistingFilesAndMigration(t *testing.T) {
+	plugin := newPlugin(t)
+	entityFile := "src/Core/Content/ExampleEntity/ExampleEntityEntity.php"
+	migration := "src/Migration/Migration111CreateExampleEntityTable.php"
+	writePluginFile(t, plugin, entityFile, "<?php // user entity\n")
+	writePluginFile(t, plugin, migration, "<?php // user migration\n")
+
+	result, err := generatorByName(t, "entity").Run(plugin, []string{"ExampleEntity"})
+	require.NoError(t, err)
+
+	assert.Contains(t, result.Skipped, entityFile)
+	assert.Contains(t, result.Skipped, migration)
+	assert.Equal(t, "<?php // user entity\n", readPluginFile(t, plugin, entityFile))
+	assert.Equal(t, "<?php // user migration\n", readPluginFile(t, plugin, migration))
+
+	entries, err := os.ReadDir(filepath.Join(plugin.Dir, "src", "Migration"))
+	require.NoError(t, err)
+	assert.Len(t, entries, 1)
+	assert.Equal(t, "Migration111CreateExampleEntityTable.php", entries[0].Name())
+}
+
+func TestCommandGeneratorAppendsServicesOnce(t *testing.T) {
+	plugin := newPlugin(t)
+	writePluginFile(t, plugin, servicesPath, servicesIntro+`
+    $services->set(\MyVendor\MyExtension\Existing\Service::class);
+`+configOutro)
+
+	result, err := generatorByName(t, "command").Run(plugin, nil)
+	require.NoError(t, err)
+	assert.Contains(t, result.Updated, servicesPath)
+
+	services := readPluginFile(t, plugin, servicesPath)
+	assert.Contains(t, services, `Existing\Service::class`)
+	assert.Equal(t, 1, strings.Count(services, `Command\ExampleCommand::class`))
+
+	second, err := generatorByName(t, "command").Run(plugin, nil)
+	require.NoError(t, err)
+	assert.Contains(t, second.Skipped, servicesPath)
+	assert.Equal(t, 1, strings.Count(readPluginFile(t, plugin, servicesPath), `Command\ExampleCommand::class`))
+}
+
+func TestStorefrontControllerGeneratorAppendsRoutesOnce(t *testing.T) {
+	plugin := newPlugin(t)
+	writePluginFile(t, plugin, routesPath, routesIntro+`
+    $routes->import('../../Existing/**/*.php', 'attribute');
+`+configOutro)
+
+	result, err := generatorByName(t, "storefront-controller").Run(plugin, nil)
+	require.NoError(t, err)
+	assert.Contains(t, result.Updated, routesPath)
+
+	routes := readPluginFile(t, plugin, routesPath)
+	assert.Contains(t, routes, "Existing/**/*.php")
+	assert.Equal(t, 1, strings.Count(routes, "Storefront/Controller/**/*Controller.php"))
+
+	second, err := generatorByName(t, "storefront-controller").Run(plugin, nil)
+	require.NoError(t, err)
+	assert.Contains(t, second.Skipped, routesPath)
+	assert.Equal(t, 1, strings.Count(readPluginFile(t, plugin, routesPath), "Storefront/Controller/**/*Controller.php"))
+}
+
+func TestAdminModuleGeneratorAppendsExistingMainJS(t *testing.T) {
+	plugin := newPlugin(t)
+	mainPath := adminSrcPath + "main.js"
+	writePluginFile(t, plugin, mainPath, "// user entry\n")
+
+	result, err := generatorByName(t, "admin-module").Run(plugin, nil)
+	require.NoError(t, err)
+	assert.Contains(t, result.Updated, mainPath)
+
+	main := readPluginFile(t, plugin, mainPath)
+	assert.True(t, strings.HasPrefix(main, "// user entry"))
+	assert.Contains(t, main, "import './module/swag-example'")
+}
+
+func TestJavascriptPluginGeneratorAppendsExistingMainJS(t *testing.T) {
+	plugin := newPlugin(t)
+	mainPath := storefrontPath + "main.js"
+	writePluginFile(t, plugin, mainPath, "// user storefront entry\n")
+
+	result, err := generatorByName(t, "javascript-plugin").Run(plugin, nil)
+	require.NoError(t, err)
+	assert.Contains(t, result.Updated, mainPath)
+
+	main := readPluginFile(t, plugin, mainPath)
+	assert.True(t, strings.HasPrefix(main, "// user storefront entry"))
+	assert.Contains(t, main, "PluginManager.register('ExamplePlugin'")
+}
+
 func generatorByName(t *testing.T, name string) Generator {
 	t.Helper()
 
@@ -153,4 +264,12 @@ func readPluginFile(t *testing.T, plugin PluginInfo, path string) string {
 	require.NoError(t, err)
 
 	return string(content)
+}
+
+func writePluginFile(t *testing.T, plugin PluginInfo, path, content string) {
+	t.Helper()
+
+	dest := filepath.Join(plugin.Dir, filepath.FromSlash(path))
+	require.NoError(t, os.MkdirAll(filepath.Dir(dest), 0o755))
+	require.NoError(t, os.WriteFile(dest, []byte(content), 0o644))
 }

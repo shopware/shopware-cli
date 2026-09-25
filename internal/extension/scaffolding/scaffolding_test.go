@@ -105,6 +105,12 @@ func TestCreateExtensionFiles(t *testing.T) {
 	assert.FileExists(t, filepath.Join(extensionDir, "phpunit.xml"))
 	assert.FileExists(t, filepath.Join(extensionDir, "src", technicalName+".php"))
 	assert.FileExists(t, filepath.Join(extensionDir, "tests", "TestBootstrap.php"))
+
+	pluginClass, err := os.ReadFile(filepath.Join(extensionDir, "src", technicalName+".php"))
+	require.NoError(t, err)
+	assert.Contains(t, string(pluginClass), "extends Plugin")
+	assert.NotContains(t, string(pluginClass), "function install(")
+	assert.NotContains(t, string(pluginClass), "function uninstall(")
 }
 
 func TestCreateFileWithScaffoldingErrors(t *testing.T) {
