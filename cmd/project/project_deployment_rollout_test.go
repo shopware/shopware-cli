@@ -18,6 +18,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/shopware/shopware-cli/internal/deployment"
+	"github.com/shopware/shopware-cli/internal/system"
 	"github.com/shopware/shopware-cli/internal/testhelper"
 )
 
@@ -48,7 +49,7 @@ func TestProjectDeploymentRollout(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			cmd := &cobra.Command{}
-			cmd.SetContext(t.Context())
+			cmd.SetContext(system.WithInteraction(t.Context(), false))
 			var out bytes.Buffer
 			cmd.SetOut(&out)
 			fake := &rolloutFakeBackend{result: deployment.Rollout{Reference: tc.reference}, err: tc.err}
@@ -64,7 +65,7 @@ func TestProjectDeploymentRollout(t *testing.T) {
 		})
 	}
 	cmd := &cobra.Command{}
-	cmd.SetContext(t.Context())
+	cmd.SetContext(system.WithInteraction(t.Context(), false))
 	var reference bytes.Buffer
 	cmd.SetOut(&reference)
 	var logs bytes.Buffer
@@ -92,17 +93,20 @@ func newLifecycleCommand(t *testing.T, args []string) (*cobra.Command, *bytes.Bu
 	root := &cobra.Command{Use: "project", SilenceUsage: true, SilenceErrors: true}
 	root.PersistentFlags().StringVar(&projectConfigPath, "project-config", "", "")
 	root.PersistentFlags().StringVarP(&environmentName, "env", "e", "", "")
+	root.PersistentFlags().String("ssh-host", "", "")
 	deployment := &cobra.Command{Use: "deploy"}
 	create := &cobra.Command{Use: projectDeploymentCreateCmd.Use, Args: projectDeploymentCreateCmd.Args, RunE: projectDeploymentCreateCmd.RunE}
 	create.Flags().StringP("output", "o", "", "")
 	create.Flags().Bool("with-dev-dependencies", false, "")
+	create.Flags().Bool("rollout", false, "")
 	initialize := &cobra.Command{Use: projectDeploymentInitCmd.Use, Args: projectDeploymentInitCmd.Args, RunE: projectDeploymentInitCmd.RunE}
 	rollout := &cobra.Command{Use: projectDeploymentRolloutCmd.Use, Args: projectDeploymentRolloutCmd.Args, RunE: projectDeploymentRolloutCmd.RunE}
+	rollback := &cobra.Command{Use: projectDeploymentRollbackCmd.Use, Args: projectDeploymentRollbackCmd.Args, RunE: projectDeploymentRollbackCmd.RunE}
 	logs := &cobra.Command{Use: projectDeploymentLogsCmd.Use, Args: projectDeploymentLogsCmd.Args, RunE: projectDeploymentLogsCmd.RunE}
 	prune := &cobra.Command{Use: projectDeploymentPruneCmd.Use, Args: projectDeploymentPruneCmd.Args, RunE: projectDeploymentPruneCmd.RunE}
 	prune.Flags().Int("keep", 5, "")
 	prune.Flags().Bool("dry-run", false, "")
-	deployment.AddCommand(create, initialize, rollout, logs, prune)
+	deployment.AddCommand(create, initialize, rollout, rollback, logs, prune)
 	root.AddCommand(deployment)
 	out := new(bytes.Buffer)
 	root.SetOut(out)
@@ -112,7 +116,7 @@ func newLifecycleCommand(t *testing.T, args []string) (*cobra.Command, *bytes.Bu
 }
 
 func TestDeploymentLifecycleCommandsRegistered(t *testing.T) {
-	for _, name := range []string{"create", "init", "list", "logs", "prune", "rollout"} {
+	for _, name := range []string{"create", "init", "list", "logs", "prune", "rollout", "rollback"} {
 		cmd, remaining, err := projectRootCmd.Find([]string{"deploy", name})
 		require.NoError(t, err)
 		assert.Empty(t, remaining)
@@ -132,7 +136,7 @@ func TestSSHDeploymentCreateCommandUsesProjectConfig(t *testing.T) {
 	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
 	t.Setenv("PHP_BINARY", "")
 	t.Setenv("PROJECT_ROOT", "")
-	for _, mode := range []string{"closest project", "explicit directory", "custom config"} {
+	for _, mode := range []string{"closest project", "explicit directory", "custom config", "create and rollout"} {
 		t.Run(mode, func(t *testing.T) {
 			root := t.TempDir()
 			caller := t.TempDir()
@@ -148,6 +152,8 @@ func TestSSHDeploymentCreateCommandUsesProjectConfig(t *testing.T) {
 			case "custom config":
 				configPath = filepath.Join(caller, "custom.yml")
 				args = append(args, "--project-config", "custom.yml")
+			case "create and rollout":
+				args = append(args, "--rollout")
 			}
 			testhelper.WriteFile(t, configPath, `
 compatibility_date: "2026-01-01"
@@ -162,12 +168,26 @@ environments:
       directory: /var/www/shop/current
 `)
 			cmd, out := newLifecycleCommand(t, args)
-			require.NoError(t, cmd.ExecuteContext(t.Context()))
-			output := strings.TrimSpace(out.String())
+			err := cmd.ExecuteContext(system.WithInteraction(t.Context(), false))
+			if mode == "create and rollout" {
+				require.ErrorContains(t, err, "roll out deployment: SSH rollout")
+			} else {
+				require.NoError(t, err)
+			}
+			output, _, _ := strings.Cut(out.String(), "\n")
 			require.True(t, strings.HasPrefix(output, `Created deployment "`))
 			reference := strings.TrimSuffix(strings.TrimPrefix(output, `Created deployment "`), `"`)
 			assert.Regexp(t, `^[a-z]+-[a-z]+-[a-z]+$`, reference)
 			assert.FileExists(t, filepath.Join(root, ".shopware-cli", "deployments", reference+".tar.gz"))
+			if mode == "create and rollout" {
+				assert.NotContains(t, out.String(), "Deploy it with:")
+				return // A failed rollout must retain the newly created archive.
+			}
+			assert.Contains(t, out.String(), "shopware-cli project deploy rollout -e 'production'")
+			assert.Contains(t, out.String(), "'"+reference+"'")
+			if mode == "custom config" {
+				assert.Contains(t, out.String(), "--project-config '"+configPath+"'")
+			}
 		})
 	}
 }
@@ -183,8 +203,11 @@ func TestProjectDeploymentRolloutCommandValidation(t *testing.T) {
 		args []string
 		want string
 	}{
-		{[]string{"rollout"}, "accepts 1 arg"},
-		{[]string{"rollout", "one", "two"}, "accepts 1 arg"},
+		{[]string{"rollout"}, "requires a deployment reference in non-interactive mode"},
+		{[]string{"rollout", "one", "two"}, "accepts at most 1 arg"},
+		{[]string{"rollback"}, "requires a deployment reference in non-interactive mode"},
+		{[]string{"rollback", "one", "two"}, "accepts at most 1 arg"},
+		{[]string{"rollback", "archive"}, `deployments are not supported for environment type "local"`},
 		{[]string{"rollout", "archive", "-e", "missing"}, `environment "missing" not found`},
 		{[]string{"rollout", "archive"}, `deployments are not supported for environment type "local"`},
 		{[]string{"logs"}, "accepts 1 arg"},
@@ -197,7 +220,7 @@ func TestProjectDeploymentRolloutCommandValidation(t *testing.T) {
 		{[]string{"prune"}, `deployments are not supported for environment type "local"`},
 	} {
 		cmd, out := newLifecycleCommand(t, tc.args)
-		require.ErrorContains(t, cmd.ExecuteContext(t.Context()), tc.want)
+		require.ErrorContains(t, cmd.ExecuteContext(system.WithInteraction(t.Context(), false)), tc.want)
 		assert.Empty(t, out.String())
 	}
 }
@@ -221,6 +244,6 @@ environments:
         directories: [../outside]
 `)
 	cmd, out := newLifecycleCommand(t, []string{"rollout", "unused.tar.gz", "-e", "production"})
-	require.ErrorContains(t, cmd.ExecuteContext(t.Context()), "ssh.shared")
+	require.ErrorContains(t, cmd.ExecuteContext(system.WithInteraction(t.Context(), false)), "ssh.shared")
 	assert.Empty(t, out.String())
 }

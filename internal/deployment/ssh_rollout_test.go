@@ -48,6 +48,9 @@ func localDeploymentSSH(t *testing.T) *SSH {
 	// Execute the SSH remote command locally. No network or sshd is involved.
 	testhelper.WriteFile(t, filepath.Join(bin, "ssh"), "#!/bin/sh\nif [ -n \"$SSH_ARGS_LOG\" ]; then printf '%s\\n' \"$@\" > \"$SSH_ARGS_LOG\"; fi\nfor arg do command=\"$arg\"; done\nexec /bin/sh -c \"$command\"\n")
 	require.NoError(t, os.Chmod(filepath.Join(bin, "ssh"), 0o755))
+	// Never classify the developer/CI machine as a hosting provider during tests.
+	testhelper.WriteFile(t, filepath.Join(bin, "hostname"), "#!/bin/sh\nprintf 'fixture.example.invalid\\n'\n")
+	require.NoError(t, os.Chmod(filepath.Join(bin, "hostname"), 0o755))
 	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
 	root, err := filepath.EvalSymlinks(t.TempDir())
 	require.NoError(t, err)

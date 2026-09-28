@@ -13,8 +13,7 @@ import (
 //go:embed ssh_deployment_prune.php
 var sshDeploymentPruneScript string
 
-// PruneDeployments applies retention remotely under the deployment lock.
-// It never reads or removes local archives.
+// PruneDeployments applies remote retention under the deployment lock.
 func (s *SSH) PruneDeployments(ctx context.Context, options DeploymentPruneOptions) (DeploymentPruneResult, error) {
 	var result DeploymentPruneResult
 	if options.Keep < 0 {

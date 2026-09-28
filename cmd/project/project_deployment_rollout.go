@@ -12,7 +12,7 @@ import (
 )
 
 var projectDeploymentRolloutCmd = &cobra.Command{
-	Use:   "rollout <deployment-reference>",
+	Use:   "rollout [deployment-reference]",
 	Short: "Roll out an existing deployment without rebuilding",
 	Long: `Roll out an existing deployment to the selected environment.
 For SSH, the reference may be a generated deployment name from
@@ -20,6 +20,11 @@ For SSH, the reference may be a generated deployment name from
 completion. ssh.directory must point to an absolute current path, for example
 /var/www/shop/current. Releases and shared data live in sibling releases/ and
 shared/ directories.
+
+Without a reference, select a deployment from an interactive picker. For SSH,
+the picker lists local archives. Non-interactive use requires a reference.
+Interactive sessions ask for confirmation before rollout. Use --no-interaction
+to skip the prompt in automation.
 
 By default, provision shared/.env.local (or a remote DATABASE_URL) before rollout.
 Configure persistent paths with environments.<name>.ssh.shared.files and
@@ -38,12 +43,21 @@ Reusing a name with different archive contents is rejected.
 Old and failed releases are retained; failed preparations require inspection
 and explicit cleanup or a new deployment name before retrying.
 
+Optionally configure environments.<name>.ssh.cachetool to reset web OPcache
+after activation. Supports FastCGI, web, or a remote native CacheTool config.
+The pinned PHAR is cached remotely in .shopware-cli/tools; downloading it requires
+curl and HTTPS access. A failed reset warns without undoing activation.
+If CacheTool is unset or disabled and the target's hostname -f contains
+de-nserver.de, activation instead sends SIGTERM to other PHP processes owned
+by the SSH user. This affects other shops/workers sharing that account; automatic
+process restart is refused for the root account.
+
 The deployment helper runs before activation. Migrations may change the shared
 database even when preparation fails. This is not a database rollback mechanism.
 Configure web serving through current/public; OPcache, long-running workers, and
 backward-compatible migrations still need an application-specific strategy for
 zero downtime.`,
-	Args:              cobra.ExactArgs(1),
+	Args:              deploymentSelectionArgs(rolloutSelection),
 	ValidArgsFunction: deploymentReferenceCompletions,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		root, err := resolveDeploymentProjectRoot(nil)
@@ -54,11 +68,19 @@ zero downtime.`,
 		if err != nil {
 			return err
 		}
-		return runProjectDeploymentRollout(cmd, target, deployment.Deployment{Reference: args[0]})
+		artifact, selected, err := selectDeployment(cmd, target, args, rolloutSelection)
+		if err != nil || !selected {
+			return err
+		}
+		return runProjectDeploymentRollout(cmd, target, artifact)
 	},
 }
 
 func runProjectDeploymentRollout(cmd *cobra.Command, backend deployment.Backend, artifact deployment.Deployment) error {
+	confirmed, err := confirmDeployment(cmd, artifact, rolloutSelection)
+	if err != nil || !confirmed {
+		return err
+	}
 	rollout, err := backend.RolloutDeployment(cmd.Context(), artifact, cmd.ErrOrStderr())
 	if err != nil {
 		return fmt.Errorf("roll out deployment: %w", err)

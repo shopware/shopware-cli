@@ -7,14 +7,25 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"time"
 )
 
-// ReferenceCompleter optionally discovers backend-specific deployment references.
-type ReferenceCompleter interface {
-	CompleteDeploymentReferences(ctx context.Context, prefix string) ([]string, error)
+// Candidate is a backend-discovered deployment available for rollout or rollback.
+type Candidate struct {
+	Deployment Deployment `json:"deployment"`
+	// BuiltAt uses the archive modification time for locally packaged SSH builds.
+	BuiltAt    *time.Time `json:"built_at,omitempty"`
+	CreatedAt  *time.Time `json:"created_at,omitempty"`
+	DeployedAt *time.Time `json:"deployed_at"`
+	Active     bool       `json:"active"`
 }
 
-func (s *SSH) CompleteDeploymentReferences(ctx context.Context, prefix string) ([]string, error) {
+type CandidateProvider interface {
+	RolloutCandidates(ctx context.Context) ([]Candidate, error)
+	RollbackCandidates(ctx context.Context) ([]Candidate, error)
+}
+
+func (s *SSH) RolloutCandidates(ctx context.Context) ([]Candidate, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
@@ -25,7 +36,7 @@ func (s *SSH) CompleteDeploymentReferences(ctx context.Context, prefix string) (
 	if err != nil {
 		return nil, err
 	}
-	references := make([]string, 0, len(entries))
+	candidates := make([]Candidate, 0, len(entries))
 	for _, entry := range entries {
 		if entry.Type()&os.ModeSymlink != 0 || !strings.HasSuffix(entry.Name(), ".tar.gz") {
 			continue
@@ -35,23 +46,29 @@ func (s *SSH) CompleteDeploymentReferences(ctx context.Context, prefix string) (
 			continue
 		}
 		reference := strings.TrimSuffix(entry.Name(), ".tar.gz")
-		if strings.HasPrefix(reference, prefix) {
-			references = append(references, reference)
-		}
+		builtAt := info.ModTime().UTC()
+		candidates = append(candidates, Candidate{
+			Deployment: Deployment{Reference: reference, Name: reference},
+			BuiltAt:    &builtAt,
+		})
 	}
-	slices.Sort(references)
-	return references, nil
+	// Prefer the newest build; use deployment names to break timestamp ties.
+	slices.SortFunc(candidates, func(a, b Candidate) int {
+		if order := b.BuiltAt.Compare(*a.BuiltAt); order != 0 {
+			return order
+		}
+		return strings.Compare(a.Deployment.Name, b.Deployment.Name)
+	})
+	return candidates, nil
 }
 
-// resolveDeploymentArchive expands a generated deployment name to its archive.
-// Explicit paths and opaque references without a matching local archive remain
-// unchanged.
+// resolveDeploymentArchive resolves local names and leaves other references unchanged.
 func resolveDeploymentArchive(root, reference string) string {
 	if reference == "" || filepath.Base(reference) != reference {
 		return reference
 	}
 	filename := reference
-	if filepath.Ext(filename) == "" {
+	if !strings.HasSuffix(filename, ".tar.gz") {
 		filename += ".tar.gz"
 	}
 	candidate := filepath.Join(root, ".shopware-cli", "deployments", filename)

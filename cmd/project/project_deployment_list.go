@@ -4,6 +4,7 @@ package project
 
 import (
 	"fmt"
+	"slices"
 
 	"github.com/spf13/cobra"
 
@@ -42,16 +43,21 @@ func runProjectDeploymentList(cmd *cobra.Command, target deployment.Backend, for
 	if !ok {
 		return fmt.Errorf("listing deployments with backend %q: %w", target.Type(), deployment.ErrNotSupported)
 	}
-	rollouts, err := history.ListRollouts(cmd.Context())
-	if err != nil {
-		return fmt.Errorf("list deployments: %w", err)
+	rollouts, listErr := history.ListRollouts(cmd.Context())
+	if listErr != nil && len(rollouts) == 0 {
+		return fmt.Errorf("list deployments: %w", listErr)
 	}
 
-	table := tui.NewTable(
-		tui.TableColumn{Title: "Deployment", JSONKey: "deployment"},
-		tui.TableColumn{Title: "Status", JSONKey: "active"},
-		tui.TableColumn{Title: "Deployed at (UTC)", JSONKey: "deployed_at"},
-	)
+	columns := []tui.TableColumn{
+		{Title: "Deployment", JSONKey: "deployment"},
+		{Title: "Status", JSONKey: "active"},
+		{Title: "Deployed at (UTC)", JSONKey: "deployed_at"},
+	}
+	showHost := slices.ContainsFunc(rollouts, func(rollout deployment.Rollout) bool { return rollout.Host != "" })
+	if showHost {
+		columns = append([]tui.TableColumn{{Title: "Host", JSONKey: "host"}}, columns...)
+	}
+	table := tui.NewTable(columns...)
 	for _, rollout := range rollouts {
 		status := "Inactive"
 		if rollout.Active {
@@ -62,14 +68,26 @@ func runProjectDeploymentList(cmd *cobra.Command, target deployment.Backend, for
 			deployedAt = rollout.DeployedAt.UTC().Format("2006-01-02 15:04:05")
 		}
 		// Keep the activation identity in structured output, not the default table.
-		table.AddRowWithJSON(map[string]any{
+		row := map[string]any{
 			"release":     rollout.Reference,
 			"deployment":  rollout.Deployment.Reference,
 			"active":      rollout.Active,
 			"deployed_at": rollout.DeployedAt,
-		}, rollout.Deployment.DisplayName(), status, deployedAt)
+		}
+		cells := []any{rollout.Deployment.DisplayName(), status, deployedAt}
+		if showHost {
+			row["host"] = rollout.Host
+			cells = append([]any{rollout.Host}, cells...)
+		}
+		table.AddRowWithJSON(row, cells...)
 	}
-	return table.Write(cmd.OutOrStdout(), format)
+	if err := table.Write(cmd.OutOrStdout(), format); err != nil {
+		return err
+	}
+	if listErr != nil {
+		return fmt.Errorf("list deployments: %w", listErr)
+	}
+	return nil
 }
 
 func init() {

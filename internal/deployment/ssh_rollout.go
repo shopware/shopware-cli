@@ -26,7 +26,11 @@ import (
 )
 
 //go:embed ssh_deployment.php
-var sshDeploymentScript string
+var sshDeploymentMainScript string
+
+var sshDeploymentScript = sshCachetoolScript + "\n" +
+	strings.TrimPrefix(sshPHPRestartScript, "<?php\n") + "\n" +
+	strings.TrimPrefix(sshDeploymentMainScript, "<?php\n")
 
 //go:embed ssh_deployment_list.php
 var sshDeploymentListScript string
@@ -49,20 +53,24 @@ func (w *synchronizedWriter) UnwrapWriter() io.Writer {
 }
 
 type sshRolloutInput struct {
-	Root              string   `json:"root"`
-	Reference         string   `json:"reference"`
-	Release           string   `json:"release"`
-	Deployment        string   `json:"deployment"`
-	Archive           string   `json:"archive"`
-	SHA256            string   `json:"sha256"`
-	Size              int64    `json:"size"`
-	PHP               string   `json:"php,omitempty"`
-	SharedFiles       []string `json:"shared_files"`
-	SharedDirectories []string `json:"shared_directories"`
+	Coordinated       bool               `json:"coordinated,omitempty"`
+	Follower          bool               `json:"follower,omitempty"`
+	Action            string             `json:"action,omitempty"`
+	Root              string             `json:"root"`
+	Reference         string             `json:"reference"`
+	Release           string             `json:"release"`
+	Deployment        string             `json:"deployment"`
+	Archive           string             `json:"archive,omitempty"`
+	SHA256            string             `json:"sha256,omitempty"`
+	Size              int64              `json:"size,omitempty"`
+	PHP               string             `json:"php,omitempty"`
+	SharedFiles       []string           `json:"shared_files"`
+	SharedDirectories []string           `json:"shared_directories"`
+	Cachetool         *sshCachetoolInput `json:"cachetool,omitempty"`
+	ProbePHPHost      bool               `json:"probe_php_host,omitempty"`
 }
 
-// RolloutDeployment prepares an isolated release, then atomically switches
-// current. No existing release is deleted, and no database rollback is implied.
+// RolloutDeployment prepares a release and atomically switches current.
 func (s *SSH) RolloutDeployment(ctx context.Context, deployment Deployment, output io.Writer) (result Rollout, err error) {
 	archive := resolveDeploymentArchive(s.root, deployment.Reference)
 	return s.rolloutArchive(ctx, deployment, archive, output)
@@ -71,6 +79,10 @@ func (s *SSH) RolloutDeployment(ctx context.Context, deployment Deployment, outp
 // rolloutArchive retains the deployment identity independently of its local path.
 func (s *SSH) rolloutArchive(ctx context.Context, deployment Deployment, archive string, output io.Writer) (result Rollout, err error) {
 	root, err := s.deploymentRoot()
+	if err != nil {
+		return result, err
+	}
+	cachetool, err := s.cachetoolInput()
 	if err != nil {
 		return result, err
 	}
@@ -120,6 +132,8 @@ func (s *SSH) rolloutArchive(ctx context.Context, deployment Deployment, archive
 		Release: release, Deployment: deployment.Reference, Archive: archivePath,
 		SHA256: hex.EncodeToString(hash.Sum(nil)), Size: info.Size(),
 		SharedFiles: sharedFiles, SharedDirectories: sharedDirectories,
+		Cachetool:    cachetool,
+		ProbePHPHost: cachetool == nil,
 	}
 	if sshConfig != nil {
 		// Preserve configured wrappers and their PHP flags when invoking the helper.
@@ -190,7 +204,7 @@ func (s *SSH) runSSHDeployment(ctx context.Context, archive io.Reader, input ssh
 	if err != nil {
 		return Rollout{}, err
 	}
-	// Do not cd into current: it need not exist for the first deployment.
+	// current may not exist yet.
 	cmd := s.transport.RemotePHPCommand(ctx, "-r", strings.TrimPrefix(sshDeploymentScript, "<?php\n"), "--", string(payload)).Cmd
 	cmd.Stderr = output
 	stdin, err := cmd.StdinPipe()
@@ -206,9 +220,12 @@ func (s *SSH) runSSHDeployment(ctx context.Context, archive io.Reader, input ssh
 	if err := cmd.Start(); err != nil {
 		return Rollout{}, err
 	}
-	result, protocolErr := exchangeSSHDeployment(ctx, stdin, bufio.NewReader(stdout), archive, input, ci.New(output))
-	// EOF also tells the remote side to abandon a prepared release if the
-	// client could not authorize activation. The remote flock is process-owned.
+	reader := bufio.NewReader(stdout)
+	result, protocolErr := exchangeSSHDeployment(ctx, stdin, reader, archive, input, ci.New(output))
+	if protocolErr == nil && input.Action == "activate" {
+		protocolErr = json.NewDecoder(reader).Decode(&result)
+	}
+	// EOF aborts any activation the client did not authorize.
 	closeErr := stdin.Close()
 	waitErr := cmd.Wait()
 	if err := errors.Join(ctx.Err(), protocolErr, closeErr, waitErr); err != nil {
@@ -221,6 +238,12 @@ func exchangeSSHDeployment(ctx context.Context, stdin io.Writer, stdout *bufio.R
 	action, err := readRolloutAction(stdout, input.Reference)
 	if err != nil {
 		return Rollout{}, fmt.Errorf("negotiate deployment: %w", err)
+	}
+	if input.Action == "activate" && action != "REUSE" && action != "UNCHANGED" {
+		return Rollout{}, fmt.Errorf("unexpected archive operation %s during retained deployment activation", action)
+	}
+	if action == "UPLOAD" && archive == nil {
+		return Rollout{}, errors.New("archive upload requested without an archive")
 	}
 	if action == "UNCHANGED" {
 		line, err := stdout.ReadSlice('\n')
@@ -304,8 +327,7 @@ func readRolloutAction(reader *bufio.Reader, reference string) (string, error) {
 }
 
 func readRolloutMessage(reader *bufio.Reader, expected string) error {
-	// A bounded protocol message also prevents unexpected remote stdout from
-	// consuming unbounded memory. Build/helper output belongs on stderr.
+	// Bound protocol messages; helper output belongs on stderr.
 	line, err := reader.ReadSlice('\n')
 	if err != nil {
 		return err

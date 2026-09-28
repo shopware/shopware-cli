@@ -24,6 +24,9 @@ func New(projectRoot string, cfg *shop.EnvironmentConfig, shopCfg *shop.Config) 
 		if cfg.SSH == nil {
 			return nil, errors.New("ssh environment requires an ssh section with host and directory")
 		}
+		if len(cfg.SSH.Hosts) != 0 {
+			return nil, errors.New("SSH command execution requires a single resolved host")
+		}
 		if cfg.SSH.Host == "" {
 			return nil, errors.New("ssh environment requires ssh.host")
 		}

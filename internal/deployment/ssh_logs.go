@@ -14,8 +14,7 @@ import (
 //go:embed ssh_deployment_logs.php
 var sshDeploymentLogsScript string
 
-// WriteDeploymentLogs streams stored helper output from the remote host.
-// It does not require the original local archive or an active release.
+// WriteDeploymentLogs streams remote helper logs without a local archive.
 func (s *SSH) WriteDeploymentLogs(ctx context.Context, deployment Deployment, output io.Writer) error {
 	root, err := s.deploymentRoot()
 	if err != nil {

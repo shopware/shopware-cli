@@ -90,3 +90,30 @@ func TestProjectDeploymentListDisplayNamePreservesJSONReference(t *testing.T) {
 		"deployed_at":null
 	}]`, output.String())
 }
+
+func TestProjectDeploymentListShowsPartialHostHistory(t *testing.T) {
+	cmd := &cobra.Command{}
+	cmd.SetContext(t.Context())
+	var output bytes.Buffer
+	cmd.SetOut(&output)
+	listErr := errors.New("web-2 state unknown: unreachable")
+	target := &rolloutHistoryFakeBackend{
+		rollouts: []deployment.Rollout{{
+			Host: "web-1", Reference: "release-id",
+			Deployment: deployment.Deployment{Reference: "happy-euclid"}, Active: true,
+		}},
+		err: listErr,
+	}
+
+	require.ErrorIs(t, runProjectDeploymentList(cmd, target, tui.TableFormatJSON), listErr)
+	assert.JSONEq(t, `[{
+		"host":"web-1","release":"release-id","deployment":"happy-euclid",
+		"active":true,"deployed_at":null
+	}]`, output.String())
+
+	output.Reset()
+	require.ErrorIs(t, runProjectDeploymentList(cmd, target, tui.TableFormatTable), listErr)
+	assert.Contains(t, output.String(), "Host")
+	assert.Contains(t, output.String(), "web-1")
+	assert.NotContains(t, output.String(), "web-2")
+}

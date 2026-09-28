@@ -887,11 +887,56 @@
       "additionalProperties": false,
       "type": "object"
     },
+    "EnvironmentSSHCachetoolConfig": {
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "description": "Enable CacheTool during SSH deployment activation. Disabled by default.",
+          "default": false
+        },
+        "adapter": {
+          "type": "string",
+          "enum": [
+            "fcgi",
+            "web"
+          ],
+          "description": "Inline adapter: fcgi (PHP-FPM) or web. Required when enabled without config."
+        },
+        "fcgi": {
+          "type": "string",
+          "description": "FCGI socket or host:port connection string. Omit for CacheTool autodetection; fcgi adapter only."
+        },
+        "fcgi_chroot": {
+          "type": "string",
+          "description": "Absolute remote POSIX PHP-FPM chroot path; fcgi adapter only."
+        },
+        "tmp_dir": {
+          "type": "string",
+          "description": "Absolute remote POSIX directory for CacheTool temporary files."
+        },
+        "web_url": {
+          "type": "string",
+          "format": "uri",
+          "description": "Absolute HTTP(S) URL for the web adapter, without credentials, query or fragment. Required for web."
+        },
+        "web_path": {
+          "type": "string",
+          "description": "Absolute remote POSIX web document root; web adapter only. Defaults to the activated release/public."
+        },
+        "config": {
+          "type": "string",
+          "description": "Absolute path to an existing remote native CacheTool YAML file targeting web/FPM, not CLI.\nMutually exclusive with all inline adapter fields, including tmp_dir, even when disabled.\nWith native web configuration, the owner must clean up temporary web endpoints if CacheTool fails to fetch them."
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "description": "EnvironmentSSHCachetoolConfig configures an opt-in web/FPM OPcache reset."
+    },
     "EnvironmentSSHConfig": {
       "properties": {
         "host": {
           "type": "string",
-          "description": "SSH host name or IP address"
+          "description": "SSH host name or IP address for a single target. Mutually exclusive with hosts."
         },
         "user": {
           "type": "string",
@@ -903,7 +948,7 @@
         },
         "directory": {
           "type": "string",
-          "description": "Absolute path of the Shopware project root on the remote host"
+          "description": "Absolute path of the Shopware project root on the remote host. Required on the single target or inherited/overridden by each named host."
         },
         "identity_file": {
           "type": "string",
@@ -916,14 +961,67 @@
         "shared": {
           "$ref": "#/$defs/EnvironmentSSHSharedConfig",
           "description": "Persistent files and directories linked into SSH deployment releases."
+        },
+        "cachetool": {
+          "$ref": "#/$defs/EnvironmentSSHCachetoolConfig",
+          "description": "Optional CacheTool reset of web/FPM OPcache after SSH activation. Disabled by default.\nWhen unset or disabled, targets whose hostname -f contains de-nserver.de\ninstead receive an account-scoped SIGTERM for PHP processes, excluding the\ndeployment process. Automatic process restart is refused for the root account."
+        },
+        "hosts": {
+          "additionalProperties": {
+            "$ref": "#/$defs/EnvironmentSSHHostConfig"
+          },
+          "type": "object",
+          "description": "Named SSH targets, mutually exclusive with host. Persistent shared directories must be shared across hosts; releases, current and .shopware-cli remain host-local."
+        },
+        "migration_host": {
+          "type": "string",
+          "description": "Named host running migrations. Required with multiple hosts; defaults to the only host otherwise."
+        },
+        "parallelism": {
+          "type": "integer",
+          "maximum": 32,
+          "minimum": 0,
+          "description": "Maximum concurrent host operations. Zero uses the default of 2; the maximum is 32."
+        }
+      },
+      "additionalProperties": false,
+      "type": "object"
+    },
+    "EnvironmentSSHHostConfig": {
+      "properties": {
+        "host": {
+          "type": "string"
+        },
+        "user": {
+          "type": "string"
+        },
+        "port": {
+          "type": "integer"
+        },
+        "directory": {
+          "type": "string"
+        },
+        "identity_file": {
+          "type": "string"
+        },
+        "php_binary": {
+          "type": "string"
+        },
+        "shared": {
+          "$ref": "#/$defs/EnvironmentSSHSharedConfig",
+          "description": "Replaces the entire common shared block when supplied."
+        },
+        "cachetool": {
+          "$ref": "#/$defs/EnvironmentSSHCachetoolConfig",
+          "description": "Replaces the entire common cachetool block when supplied."
         }
       },
       "additionalProperties": false,
       "type": "object",
       "required": [
-        "host",
-        "directory"
-      ]
+        "host"
+      ],
+      "description": "EnvironmentSSHHostConfig inherits unset scalar fields from the common SSH configuration."
     },
     "EnvironmentSSHSharedConfig": {
       "properties": {
