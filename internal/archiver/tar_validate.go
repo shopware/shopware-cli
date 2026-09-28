@@ -12,7 +12,8 @@ import (
 )
 
 // ValidateTarGz checks an archive before extracting it on a deployment host.
-// Only regular files, directories, and contained relative symlinks are allowed.
+// Only regular files, directories, and relative symlinks that stay inside the
+// archive root are allowed. Symlink targets may be missing, e.g. excluded paths.
 // It consumes the gzip stream, including its checksum, without extracting files.
 func ValidateTarGz(ctx context.Context, r io.Reader) (err error) {
 	gz, err := gzip.NewReader(ContextReader(ctx, r))
@@ -30,6 +31,10 @@ func ValidateTarGz(ctx context.Context, r io.Reader) (err error) {
 		}
 		if err != nil {
 			return err
+		}
+		// Global PAX headers (e.g. from git archive) carry metadata, not files.
+		if header.Typeflag == tar.TypeXGlobalHeader {
+			continue
 		}
 		name := path.Clean(header.Name)
 		if !containedArchivePath(header.Name) || (name == "." && header.Typeflag != tar.TypeDir) {
@@ -109,17 +114,11 @@ func validateArchiveLink(name string, entries map[string]*tar.Header, directorie
 			pending = append(strings.Split(entry.Linkname, "/"), pending...)
 			continue
 		}
-		if len(pending) > 0 && !directories[prefix] {
+		// Missing components are resolved lexically; they cannot be symlinks.
+		if len(pending) > 0 && entry != nil && !directories[prefix] {
 			return fmt.Errorf("archive symlink %q traverses a non-directory %q", name, prefix)
 		}
 		resolved = append(resolved, part)
-	}
-	target := path.Join(resolved...)
-	if target == "" {
-		target = "."
-	}
-	if entries[target] == nil && !directories[target] {
-		return fmt.Errorf("archive symlink %q has missing target %q", name, target)
 	}
 	return nil
 }

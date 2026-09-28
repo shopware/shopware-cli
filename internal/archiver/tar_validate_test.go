@@ -5,6 +5,9 @@ import (
 	"bytes"
 	"compress/gzip"
 	"context"
+	"os"
+	"path/filepath"
+	"runtime"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -43,7 +46,11 @@ func TestValidateTarGz(t *testing.T) {
 		{"duplicate", []*tar.Header{file("file"), file("./file")}, "duplicate archive path"},
 		{"absolute link", []*tar.Header{link("link", "/outside")}, "relative target"},
 		{"escaping link", []*tar.Header{link("link", "../outside")}, "outside the project"},
-		{"missing target", []*tar.Header{link("link", "missing")}, "missing target"},
+		{"missing target", []*tar.Header{link("link", "missing")}, ""},
+		{"missing directory", []*tar.Header{link("link", "missing/dir/file")}, ""},
+		{"escaping through missing directory", []*tar.Header{link("link", "missing/../../outside")}, "outside the project"},
+		{"file as directory", []*tar.Header{file("file"), link("link", "file/child")}, "traverses a non-directory"},
+		{"pax global header", []*tar.Header{{Name: "pax_global_header", Typeflag: tar.TypeXGlobalHeader, PAXRecords: map[string]string{"comment": "abc"}}, file("file")}, ""},
 		{"cyclic links", []*tar.Header{link("a", "b"), link("b", "a")}, "cycle"},
 		{"symlink parent", []*tar.Header{link("dir", "."), file("dir/file")}, "used as a directory"},
 		{"file parent", []*tar.Header{file("dir"), file("dir/file")}, "used as a directory"},
@@ -72,4 +79,17 @@ func TestValidateTarGzChecksCompressionAndCancellation(t *testing.T) {
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
 	require.ErrorIs(t, ValidateTarGz(ctx, bytes.NewReader(data)), context.Canceled)
+}
+
+func TestValidateTarGzAcceptsArchiveWithExcludedSymlinkTarget(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("symlinks require privileges on Windows")
+	}
+	dir := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, "node_modules", "pkg"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "node_modules", "pkg", "bin"), nil, 0o644))
+	require.NoError(t, os.Symlink("node_modules/pkg/bin", filepath.Join(dir, "link")))
+	var out bytes.Buffer
+	require.NoError(t, WriteTarGz(t.Context(), &out, dir, func(name string) bool { return name == "node_modules" }))
+	require.NoError(t, ValidateTarGz(t.Context(), &out))
 }
