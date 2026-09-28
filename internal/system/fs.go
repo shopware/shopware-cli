@@ -1,17 +1,49 @@
 package system
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
+	"strings"
+
+	"golang.org/x/sync/errgroup"
 )
+
+// More workers increase filesystem contention, especially when copying many
+// small files into the same directory. Keep both I/O and queued work bounded.
+const copyFileWorkers = 4
 
 func CopyFiles(currentPath string, targetPath string) error {
 	// When the currentPath folder does not exist, return
-	if _, err := os.Stat(currentPath); os.IsNotExist(err) {
+	sourceInfo, err := os.Stat(currentPath)
+	if os.IsNotExist(err) {
 		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("failed to access source directory: %w", err)
+	}
+	if !sourceInfo.IsDir() {
+		return fmt.Errorf("source %q is not a directory", currentPath)
+	}
+
+	currentPath, err = filepath.Abs(currentPath)
+	if err != nil {
+		return err
+	}
+	currentPath, err = filepath.EvalSymlinks(currentPath)
+	if err != nil {
+		return err
+	}
+	targetPath, err = resolveCopyTarget(targetPath)
+	if err != nil {
+		return err
+	}
+	if isCopyTargetInsideSource(currentPath, targetPath) {
+		return errors.New("target directory must not be inside source directory")
 	}
 
 	// Create target directory if it doesn't exist
@@ -19,10 +51,38 @@ func CopyFiles(currentPath string, targetPath string) error {
 		return fmt.Errorf("failed to create target directory: %w", err)
 	}
 
-	// Walk through the current directory
-	return filepath.Walk(currentPath, func(path string, info fs.FileInfo, err error) error {
+	type copyJob struct {
+		src, dst string
+		entry    fs.DirEntry
+	}
+	jobs := make(chan copyJob, copyFileWorkers)
+	group, ctx := errgroup.WithContext(context.Background())
+	for range copyFileWorkers {
+		group.Go(func() error {
+			for job := range jobs {
+				if err := ctx.Err(); err != nil {
+					return err
+				}
+				info, err := job.entry.Info()
+				if err != nil {
+					return fmt.Errorf("failed to access path %q: %w", job.src, err)
+				}
+				if err := copyFile(job.src, job.dst, info); err != nil {
+					return fmt.Errorf("failed to copy %q to %q: %w", job.src, job.dst, err)
+				}
+			}
+			return nil
+		})
+	}
+
+	// WalkDir avoids statting every entry on the walking goroutine. Workers
+	// fetch file metadata once and reuse it for symlinks and permissions.
+	walkErr := filepath.WalkDir(currentPath, func(path string, entry fs.DirEntry, err error) error {
 		if err != nil {
 			return fmt.Errorf("failed to access path %q: %w", path, err)
+		}
+		if err := ctx.Err(); err != nil {
+			return err
 		}
 
 		// Get the relative path
@@ -33,7 +93,7 @@ func CopyFiles(currentPath string, targetPath string) error {
 
 		// Skip development environment and VCS metadata folders
 		// (e.g., .devenv, .direnv, .git)
-		if info.IsDir() && (relPath == ".devenv" || relPath == ".direnv" || relPath == ".git") {
+		if entry.IsDir() && (relPath == ".devenv" || relPath == ".direnv" || relPath == ".git") {
 			return filepath.SkipDir
 		}
 
@@ -41,65 +101,168 @@ func CopyFiles(currentPath string, targetPath string) error {
 		targetFilePath := filepath.Join(targetPath, relPath)
 
 		// If it's a directory, create it in target
-		if info.IsDir() {
-			return os.MkdirAll(targetFilePath, 0o755)
+		if entry.IsDir() {
+			if relPath == "." {
+				return nil
+			}
+			// The walk has already created the parent. Avoid MkdirAll's
+			// extra stat calls for the usual case of a fresh destination.
+			if err := os.Mkdir(targetFilePath, 0o755); err != nil {
+				if !os.IsExist(err) {
+					return err
+				}
+				return os.MkdirAll(targetFilePath, 0o755)
+			}
+			return nil
 		}
 
-		// Copy the file
-		return copyFile(path, targetFilePath)
+		select {
+		case jobs <- copyJob{src: path, dst: targetFilePath, entry: entry}:
+			return nil
+		case <-ctx.Done():
+			return ctx.Err()
+		}
 	})
+	close(jobs)
+
+	// Always join the workers, including when walking fails. Return the actual
+	// copy error in preference to cancellation caused by that error.
+	if err := group.Wait(); err != nil {
+		return err
+	}
+	return walkErr
 }
 
-func copyFile(src, dst string) error {
-	// Check if it's a symlink
-	info, err := os.Lstat(src)
-	if err != nil {
-		return fmt.Errorf("failed to get file info: %w", err)
-	}
+func isCopyTargetInsideSource(src, dst string) bool {
+	rel, err := filepath.Rel(src, dst)
+	return err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
+}
 
+// Resolve existing ancestors before creating the target, so a directory alias
+// cannot cause us to create a destination inside the source being walked.
+func resolveCopyTarget(path string) (string, error) {
+	path, err := filepath.Abs(path)
+	if err != nil {
+		return "", err
+	}
+	var suffix string
+	for {
+		resolved, err := filepath.EvalSymlinks(path)
+		if err == nil {
+			return filepath.Join(resolved, suffix), nil
+		}
+		parent := filepath.Dir(path)
+		if !os.IsNotExist(err) || parent == path {
+			return "", err
+		}
+		suffix = filepath.Join(filepath.Base(path), suffix)
+		path = parent
+	}
+}
+
+func copyFile(src, dst string, info fs.FileInfo) error {
 	// If it's a symlink, create a new symlink
 	if info.Mode()&os.ModeSymlink != 0 {
 		linkTarget, err := os.Readlink(src)
 		if err != nil {
 			return fmt.Errorf("failed to read symlink: %w", err)
 		}
-		return os.Symlink(linkTarget, dst)
+		err = os.Symlink(linkTarget, dst)
+		if os.IsExist(err) {
+			if err := removeCopyDestination(dst, info); err != nil {
+				return err
+			}
+			err = os.Symlink(linkTarget, dst)
+		}
+		return err
+	}
+	if !info.Mode().IsRegular() {
+		return fmt.Errorf("unsupported file type %s", info.Mode().Type())
 	}
 
+	// Try a copy-on-write clone first (macOS/APFS), falling back to io.Copy
+	// for unsupported filesystems or cross-device copies.
+	err := cloneFile(src, dst)
+	if os.IsExist(err) {
+		if err := removeCopyDestination(dst, info); err != nil {
+			return err
+		}
+		err = cloneFile(src, dst)
+	}
+	if err == nil {
+		// clonefile preserves ordinary permissions, but clears these bits.
+		if info.Mode()&(os.ModeSetuid|os.ModeSetgid) != 0 {
+			return os.Chmod(dst, info.Mode())
+		}
+		return nil
+	}
+
+	return copyFileFallback(src, dst, info)
+}
+
+// Only remove an existing file after creation reports EEXIST. Never follow a
+// destination symlink, remove a directory, or unlink the source itself.
+func removeCopyDestination(dst string, sourceInfo fs.FileInfo) error {
+	destinationInfo, err := os.Lstat(dst)
+	if err != nil {
+		return err
+	}
+	if destinationInfo.IsDir() {
+		return fmt.Errorf("cannot overwrite directory %q with a file", dst)
+	}
+	if os.SameFile(sourceInfo, destinationInfo) {
+		return fmt.Errorf("source and destination %q are the same file", dst)
+	}
+	return os.Remove(dst)
+}
+
+// copyFileFallback retains io.Copy's platform-specific optimizations when
+// cloning is unavailable (e.g. cross-device or non-APFS filesystems).
+func copyFileFallback(src, dst string, info fs.FileInfo) error {
 	// Open source file
 	sourceFile, err := os.Open(src)
 	if err != nil {
 		return fmt.Errorf("failed to open source file: %w", err)
 	}
-	defer func() {
-		if closeErr := sourceFile.Close(); closeErr != nil {
-			err = fmt.Errorf("failed to close source file: %w", closeErr)
-		}
-	}()
 
 	// Create target file
-	targetFile, err := os.Create(dst)
+	targetFile, err := os.OpenFile(dst, os.O_WRONLY|os.O_CREATE|os.O_EXCL, info.Mode().Perm())
+	if os.IsExist(err) {
+		err = removeCopyDestination(dst, info)
+		if err == nil {
+			targetFile, err = os.OpenFile(dst, os.O_WRONLY|os.O_CREATE|os.O_EXCL, info.Mode().Perm())
+		}
+	}
 	if err != nil {
+		_ = sourceFile.Close()
 		return fmt.Errorf("failed to create target file: %w", err)
 	}
-	defer func() {
-		if closeErr := targetFile.Close(); closeErr != nil {
-			err = fmt.Errorf("failed to close target file: %w", closeErr)
-		}
-	}()
 
 	// Copy the contents
-	if _, err := io.Copy(targetFile, sourceFile); err != nil {
-		return fmt.Errorf("failed to copy file contents: %w", err)
+	_, copyErr := io.Copy(targetFile, sourceFile)
+	// Creating with the source mode is still subject to umask; apply the
+	// complete mode after writing, which can otherwise clear setuid/setgid.
+	var chmodErr error
+	if copyErr == nil {
+		chmodErr = targetFile.Chmod(info.Mode())
+	}
+	closeTargetErr := targetFile.Close()
+	closeSourceErr := sourceFile.Close()
+
+	if copyErr != nil {
+		return fmt.Errorf("failed to copy file contents: %w", copyErr)
+	}
+	if chmodErr != nil {
+		return fmt.Errorf("failed to set target file permissions: %w", chmodErr)
+	}
+	if closeTargetErr != nil {
+		return fmt.Errorf("failed to close target file: %w", closeTargetErr)
+	}
+	if closeSourceErr != nil {
+		return fmt.Errorf("failed to close source file: %w", closeSourceErr)
 	}
 
-	// Copy file permissions
-	sourceInfo, err := os.Stat(src)
-	if err != nil {
-		return fmt.Errorf("failed to get source file info: %w", err)
-	}
-
-	return os.Chmod(dst, sourceInfo.Mode())
+	return nil
 }
 
 func IsDirEmpty(name string) (bool, error) {
