@@ -10,6 +10,7 @@ import (
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest/observer"
 
+	"github.com/shopware/shopware-cli/internal/shop"
 	"github.com/shopware/shopware-cli/internal/testhelper"
 	"github.com/shopware/shopware-cli/logging"
 )
@@ -25,6 +26,14 @@ anonymize:
       email: faker.Internet.Email()
   system_config:
     - " SwagExample.config.clientSecret "
+    - key: SwagExample.config.merchantEmail
+      value: faker.Internet.Email()
+    - key: SwagExample.config.environment
+      value: sandbox
+    - key: SwagExample.config.enabled
+      value: false
+    - key: SwagExample.config.optional
+      value: null
 `)
 
 	cfg, err := readExtensionConfig(t.Context(), dir)
@@ -35,7 +44,20 @@ anonymize:
 			"email":        "faker.Internet.Email()",
 		},
 	}, cfg.Anonymize.Tables)
-	assert.Equal(t, []string{"SwagExample.config.clientSecret"}, cfg.Anonymize.SystemConfig)
+
+	rules := make([]shop.SystemConfigRule, 0, len(cfg.Anonymize.SystemConfig))
+	for _, entry := range cfg.Anonymize.SystemConfig {
+		rule, err := entry.DumpRule()
+		require.NoError(t, err)
+		rules = append(rules, rule)
+	}
+	assert.Equal(t, []shop.SystemConfigRule{
+		{Key: "SwagExample.config.clientSecret", Omit: true},
+		{Key: "SwagExample.config.merchantEmail", Faker: "faker.Internet.Email()"},
+		{Key: "SwagExample.config.environment", HasValue: true, Value: "sandbox"},
+		{Key: "SwagExample.config.enabled", HasValue: true, Value: false},
+		{Key: "SwagExample.config.optional", HasValue: true, Value: nil},
+	}, rules)
 }
 
 func TestValidateAnonymize(t *testing.T) {
@@ -92,6 +114,38 @@ anonymize:
 `,
 			message: "invalid system_config key",
 		},
+		{
+			name: "omit and value",
+			yaml: `
+anonymize:
+  system_config:
+    - key: SwagExample.config.secret
+      omit: true
+      value: sandbox
+`,
+			message: "sets omit and value",
+		},
+		{
+			name: "omit false without value",
+			yaml: `
+anonymize:
+  system_config:
+    - key: SwagExample.config.secret
+      omit: false
+`,
+			message: "omit: false without a value",
+		},
+		{
+			name: "duplicate key",
+			yaml: `
+anonymize:
+  system_config:
+    - SwagExample.config.secret
+    - key: SwagExample.config.secret
+      value: sandbox
+`,
+			message: "duplicate configuration key",
+		},
 	}
 
 	for _, tc := range cases {
@@ -135,7 +189,8 @@ anonymize:
       email: faker.Internet.Email()
   system_config:
     - Zzz.config.token
-    - Aaa.config.secret
+    - key: Aaa.config.secret
+      value: sandbox
 `)
 	writePlugin(t, project, "QuietPlugin", "Swag\\Quiet\\QuietPlugin", `
 compatibility_date: "2026-01-01"
@@ -175,17 +230,23 @@ anonymize:
 			"token": "NULL",
 		},
 	}, rules.Tables)
-	assert.Equal(t, []string{"Aaa.config.secret", "VendorPlugin.config.apiKey", "Zzz.config.token"}, rules.SystemConfig)
+	assert.Equal(t, []shop.SystemConfigRule{
+		{Key: "Aaa.config.secret", Omit: true},
+		{Key: "VendorPlugin.config.apiKey", Omit: true},
+		{Key: "Zzz.config.token", Omit: true},
+	}, rules.SystemConfig)
 
-	var conflict string
+	var warnings []string
 	for _, entry := range logs.All() {
 		if entry.Level == zap.WarnLevel {
-			conflict = entry.Message
+			warnings = append(warnings, entry.Message)
 		}
 	}
+	conflict := strings.Join(warnings, "\n")
 	assert.Contains(t, conflict, "ZzzPlugin")
 	assert.Contains(t, conflict, "AaaPlugin")
 	assert.Contains(t, conflict, "swag_shared.secret")
+	assert.Contains(t, conflict, "Aaa.config.secret")
 
 	var merged string
 	for _, entry := range logs.All() {

@@ -13,7 +13,6 @@ import (
 
 	"github.com/shopware/shopware-cli/internal/changelog"
 	"github.com/shopware/shopware-cli/internal/compatibility"
-	"github.com/shopware/shopware-cli/internal/shop"
 	"github.com/shopware/shopware-cli/internal/validation"
 	"github.com/shopware/shopware-cli/logging"
 )
@@ -256,8 +255,8 @@ type Config struct {
 type ConfigAnonymize struct {
 	// Tables maps a database table to column rewrites. Each column value is a SQL expression, the same format as the project dump.rewrite map. Faker expressions such as faker.Internet.Email() are supported. Write "''" to store an empty string and "NULL" to store NULL.
 	Tables map[string]map[string]string `yaml:"tables,omitempty"`
-	// SystemConfig lists system_config.configuration_key values, such as SwagPayPal.settings.clientSecret. Matching rows are dumped with configuration_value set to {"_value": null}.
-	SystemConfig []string `yaml:"system_config,omitempty"`
+	// SystemConfig anonymizes system_config rows by configuration_key. A string omits that row. An object can omit the row or replace configuration_value with a custom value or a faker expression.
+	SystemConfig []ConfigSystemConfigRule `yaml:"system_config,omitempty"`
 }
 
 func (c *Config) HasCompatibilityDate() bool {
@@ -385,13 +384,16 @@ func validateAnonymize(config *ConfigAnonymize) error {
 		}
 	}
 
-	for i, key := range config.SystemConfig {
-		trimmed := strings.TrimSpace(key)
-		if err := shop.ValidateSystemConfigKey(trimmed); err != nil {
+	seenKeys := map[string]struct{}{}
+	for i, rule := range config.SystemConfig {
+		dumpRule, err := rule.DumpRule()
+		if err != nil {
 			return fmt.Errorf("anonymize.system_config[%d]: %w", i, err)
 		}
-
-		config.SystemConfig[i] = trimmed
+		if _, exists := seenKeys[dumpRule.Key]; exists {
+			return fmt.Errorf("anonymize.system_config[%d]: duplicate configuration key %q", i, dumpRule.Key)
+		}
+		seenKeys[dumpRule.Key] = struct{}{}
 	}
 
 	return nil

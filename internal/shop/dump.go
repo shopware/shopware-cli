@@ -29,10 +29,10 @@ type DumpDatabaseOptions struct {
 	// ExtensionTables are column rewrites declared by installed extensions.
 	// Applied only when Anonymize is true. Project dump.rewrite values win.
 	ExtensionTables map[string]map[string]string
-	// SystemConfigRewrite clears system_config.configuration_value for extension-declared
-	// configuration keys. Applied only when Anonymize is true and the project has not
-	// already rewritten that column.
-	SystemConfigRewrite string
+	// SystemConfigRules anonymize system_config rows declared by installed extensions.
+	// Applied only when Anonymize is true. A project rewrite of configuration_value wins
+	// over replacement values. Omitted keys are still excluded.
+	SystemConfigRules []SystemConfigRule
 	// SkipLockTables disables locking the tables during the dump
 	SkipLockTables bool
 	// Quick enables the mysqldump quick mode
@@ -116,9 +116,14 @@ func prepareDumpConfig(cfg *ConfigDump, opts DumpDatabaseOptions) (*ConfigDump, 
 	if opts.Anonymize {
 		projectOwnsSystemConfigValue := cfg.hasColumnRewrite("system_config", "configuration_value")
 		cfg.MergeRewrite(opts.ExtensionTables)
-		if !projectOwnsSystemConfigValue && opts.SystemConfigRewrite != "" {
-			cfg.forceRewrite("system_config", "configuration_value", opts.SystemConfigRewrite)
+		rewrite, where, err := BuildSystemConfigAnonymization(opts.SystemConfigRules)
+		if err != nil {
+			return nil, err
 		}
+		if !projectOwnsSystemConfigValue && rewrite != "" {
+			cfg.forceRewrite("system_config", "configuration_value", rewrite)
+		}
+		cfg.mergeWhere("system_config", where)
 		cfg.EnableAnonymization()
 	}
 

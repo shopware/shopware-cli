@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/shopware/shopware-cli/internal/shop"
 	"github.com/shopware/shopware-cli/internal/testhelper"
 )
 
@@ -85,10 +86,9 @@ func TestAssembleConnectionURIUsernameClearsPassword(t *testing.T) {
 func TestAnonymizationFromInstalledExtensions(t *testing.T) {
 	chdirOutsideProject(t)
 
-	tables, rewrite, err := anonymizationFromInstalledExtensions(t.Context())
-	require.NoError(t, err)
+	tables, rules := anonymizationFromInstalledExtensions(t.Context())
 	assert.Nil(t, tables)
-	assert.Empty(t, rewrite)
+	assert.Nil(t, rules)
 
 	projectRoot := t.TempDir()
 	require.NoError(t, os.MkdirAll(filepath.Join(projectRoot, "bin"), 0o755))
@@ -111,13 +111,13 @@ anonymize:
 	t.Setenv("PROJECT_ROOT", "")
 	t.Chdir(projectRoot)
 
-	tables, rewrite, err = anonymizationFromInstalledExtensions(t.Context())
-	require.NoError(t, err)
+	tables, rules = anonymizationFromInstalledExtensions(t.Context())
 	assert.Equal(t, map[string]map[string]string{
 		"swag_example_token": {"access_token": "''"},
 	}, tables)
-	assert.Contains(t, rewrite, "SwagExample.config.clientSecret")
-	assert.Contains(t, rewrite, `{"_value":null}`)
+	assert.Equal(t, []shop.SystemConfigRule{
+		{Key: "SwagExample.config.clientSecret", Omit: true},
+	}, rules)
 }
 
 func TestAssembleConnectionURIDatabaseURLInsideProject(t *testing.T) {

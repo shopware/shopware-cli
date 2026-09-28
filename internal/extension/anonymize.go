@@ -6,6 +6,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/shopware/shopware-cli/internal/shop"
 	"github.com/shopware/shopware-cli/logging"
 )
 
@@ -17,13 +18,18 @@ var anonymizeIdentifierPattern = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
 type AnonymizationRules struct {
 	// Tables is table -> column -> SQL expression. Keys are lowercase.
 	Tables map[string]map[string]string
-	// SystemConfig lists system_config.configuration_key values to clear.
-	SystemConfig []string
+	// SystemConfig anonymizes system_config rows. Keys are sorted.
+	SystemConfig []shop.SystemConfigRule
 }
 
 type columnOwner struct {
 	extension  string
 	expression string
+}
+
+type systemConfigOwner struct {
+	extension string
+	rule      shop.SystemConfigRule
 }
 
 // CollectAnonymization reads the anonymize section of every extension in the
@@ -40,7 +46,7 @@ func CollectAnonymization(ctx context.Context, project string) AnonymizationRule
 		Tables: map[string]map[string]string{},
 	}
 	owners := map[string]columnOwner{}
-	seenKeys := map[string]struct{}{}
+	seenConfig := map[string]systemConfigOwner{}
 
 	for _, ext := range extensions {
 		cfg := ext.GetExtensionConfig()
@@ -75,16 +81,31 @@ func CollectAnonymization(ctx context.Context, project string) AnonymizationRule
 			}
 		}
 
-		for _, key := range cfg.Anonymize.SystemConfig {
-			if _, exists := seenKeys[key]; exists {
+		for _, entry := range cfg.Anonymize.SystemConfig {
+			rule, err := entry.DumpRule()
+			if err != nil {
+				logging.FromContext(ctx).Warnf("Extension %s has an invalid system_config anonymization rule: %s", name, err)
 				continue
 			}
-			seenKeys[key] = struct{}{}
-			rules.SystemConfig = append(rules.SystemConfig, key)
+			if previous, exists := seenConfig[rule.Key]; exists {
+				if !previous.rule.Equal(rule) {
+					logging.FromContext(ctx).Warnf(
+						"Extension %s anonymizes system_config %s, keeping the rule from %s",
+						name,
+						rule.Key,
+						previous.extension,
+					)
+				}
+				continue
+			}
+			seenConfig[rule.Key] = systemConfigOwner{extension: name, rule: rule}
+			rules.SystemConfig = append(rules.SystemConfig, rule)
 		}
 	}
 
-	slices.Sort(rules.SystemConfig)
+	slices.SortFunc(rules.SystemConfig, func(a, b shop.SystemConfigRule) int {
+		return strings.Compare(a.Key, b.Key)
+	})
 
 	if len(rules.Tables) > 0 || len(rules.SystemConfig) > 0 {
 		logging.FromContext(ctx).Infof(

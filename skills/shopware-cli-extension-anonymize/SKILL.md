@@ -58,12 +58,40 @@ These are configuration keys, not database columns.
 - In `config.xml` (plugins usually ship `src/Resources/config/config.xml`, apps `Resources/config/config.xml`): a field `<name>` is stored as `{technicalName}.config.{name}`.
 - In PHP that reads or writes system config, such as `systemConfigService->get('SwagExample.settings.clientSecret')`: copy that string. A `.settings.` key is a different key from `.config.`.
 
-Include a key when it is a live credential:
+Include a key when it is a live credential or personal data stored in system config:
 
 - `config.xml` field type `password`
 - a secret, token, password, private key, API key, client secret, client id, webhook secret, or SMTP password
+- an email address or other personal data saved as configuration
 
-Skip display and behavior settings: titles, feature toggles, sandbox flags, log level, locales, colors, CSS, snippet keys, and sales channel pickers. Clearing those makes a restored shop unusable.
+For a secret, omit the row. A plain string entry does that:
+
+```yaml
+system_config:
+  - SwagExample.config.clientSecret
+```
+
+This object form is the same thing:
+
+```yaml
+system_config:
+  - key: SwagExample.config.clientSecret
+    omit: true
+```
+
+Use `value` when the restored shop needs a specific setting, or when the stored value is personal data:
+
+```yaml
+system_config:
+  - key: SwagExample.config.environment
+    value: sandbox
+  - key: SwagExample.config.merchantEmail
+    value: faker.Internet.Email()
+```
+
+`value` is written to `configuration_value` as `{"_value": value}`. A string that starts with `faker.` is generated for each dumped row. `value: null` keeps the row and stores `{"_value": null}`. Do not set `omit` and `value` on the same key.
+
+Skip settings that are not personal data and not secrets: titles, feature toggles, log level, locales, colors, CSS, snippet keys, and sales channel pickers. Omitting those makes a restored shop unusable. A sandbox flag that must stay on is a custom `value`, not an omission.
 
 ### tables
 
@@ -115,9 +143,7 @@ Quote empty string and NULL as `"''"` and `"NULL"`. A bare `''` is an empty YAML
 
 A string column with `->addFlags(new Required())`, or a migration column declared `NOT NULL`, is required. When a string secret's nullability is unclear, use `"''"`. Importing `NULL` into a `NOT NULL` column fails.
 
-An expression containing the text `faker.` is inserted as a quoted literal, not executed as SQL. Keep `faker.` out of `JSON_REMOVE` and `JSON_REPLACE`.
-
-`system_config` entries are key names only. The dump stores `{"_value": null}` in `configuration_value` for those keys.
+A rewrite that is only a faker expression is selected as text and then evaluated. Any other expression is SQL. A faker template inside that SQL result is evaluated when the row is written.
 
 Table and column names must match `^[A-Za-z_][A-Za-z0-9_]*$`. Config keys must match `^[A-Za-z0-9_.]+$`.
 
@@ -139,7 +165,10 @@ anonymize:
       custom_fields: "JSON_REMOVE(custom_fields, '$.swag_example_vat_id')"
   system_config:
     - SwagExample.config.clientSecret
-    - SwagExample.config.clientId
+    - key: SwagExample.config.merchantEmail
+      value: faker.Internet.Email()
+    - key: SwagExample.config.environment
+      value: sandbox
 ```
 
 ## After editing
