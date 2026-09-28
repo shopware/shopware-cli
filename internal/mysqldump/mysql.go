@@ -724,9 +724,7 @@ func (d *Dumper) getColumnsForSelect(ctx context.Context, table string, consider
 
 		replacement, ok := d.SelectMap[strings.ToLower(table)][strings.ToLower(column)]
 		if ok && considerRewriteMap {
-			if strings.Contains(replacement, "faker.") {
-				replacement = fmt.Sprintf("'%s'", replacement)
-			}
+			replacement = rewriteSelectExpression(replacement)
 
 			columns = append(columns, fmt.Sprintf("%s AS `%s`", replacement, column))
 		} else {
@@ -735,6 +733,22 @@ func (d *Dumper) getColumnsForSelect(ctx context.Context, table string, consider
 	}
 
 	return columns, nil
+}
+
+// rewriteSelectExpression quotes a faker template so MySQL returns it as text.
+// SQL that only contains a faker template inside a string literal, such as a
+// CASE expression, is left as SQL. The dumped text is evaluated afterwards.
+func rewriteSelectExpression(replacement string) string {
+	if !strings.Contains(replacement, "faker.") {
+		return replacement
+	}
+
+	trimmed := strings.TrimSpace(replacement)
+	if strings.HasPrefix(trimmed, "faker.") || strings.HasPrefix(trimmed, "{{-") {
+		return "'" + replacement + "'"
+	}
+
+	return replacement
 }
 
 func (d *Dumper) rowCount(ctx context.Context, table string) (count uint64, err error) {

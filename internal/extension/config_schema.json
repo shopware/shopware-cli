@@ -73,10 +73,10 @@
         },
         "system_config": {
           "items": {
-            "type": "string"
+            "$ref": "#/$defs/ConfigSystemConfigRule"
           },
           "type": "array",
-          "description": "SystemConfig lists system_config.configuration_key values, such as SwagPayPal.settings.clientSecret. Matching rows are dumped with configuration_value set to {\"_value\": null}."
+          "description": "SystemConfig anonymizes system_config rows by configuration_key. A string omits that row. An object can omit the row or replace configuration_value with a custom value or a faker expression."
         }
       },
       "additionalProperties": false,
@@ -523,6 +523,30 @@
       },
       "additionalProperties": false,
       "type": "object"
+    },
+    "ConfigSystemConfigRule": {
+      "oneOf": [
+        {
+          "type": "string",
+          "description": "configuration_key to omit from the dump."
+        },
+        {
+          "properties": {
+            "key": {
+              "type": "string",
+              "description": "system_config.configuration_key, such as SwagPayPal.settings.clientSecret."
+            },
+            "omit": {
+              "type": "boolean",
+              "description": "When true, the dump skips rows with this configuration_key."
+            },
+            "value": {
+              "description": "Replacement stored as {\"_value\": value}. A string starting with faker. is generated per row, for example faker.Internet.Email()."
+            }
+          },
+          "type": "object"
+        }
+      ]
     },
     "ConfigTranslated[ConfigStoreFaq]": {
       "properties": {

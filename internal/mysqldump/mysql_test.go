@@ -197,6 +197,15 @@ func TestMySQLDumpCreateTableHandlingErrorWhenScanningRows(t *testing.T) {
 	assert.NotNil(t, err)
 }
 
+func TestRewriteSelectExpression(t *testing.T) {
+	assert.Equal(t, "'{{- faker.Internet.Email() -}}'", rewriteSelectExpression("{{- faker.Internet.Email() -}}"))
+	assert.Equal(t, "'faker.Person.FirstName()'", rewriteSelectExpression("faker.Person.FirstName()"))
+	assert.Equal(t, "NOW()", rewriteSelectExpression("NOW()"))
+
+	expression := "CASE WHEN `configuration_key` = 'A.config.email' THEN '{\"_value\":\"{{- faker.Internet.Email() -}}\"}' ELSE `configuration_value` END"
+	assert.Equal(t, expression, rewriteSelectExpression(expression))
+}
+
 func TestMySQLGetColumnsForSelect(t *testing.T) {
 	db, mock := getDB(t)
 	dumper := getInternalMySQLInstance(db)

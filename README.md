@@ -115,9 +115,13 @@ anonymize:
       email: faker.Internet.Email()
   system_config:
     - SwagExample.config.clientSecret
+    - key: SwagExample.config.merchantEmail
+      value: faker.Internet.Email()
+    - key: SwagExample.config.environment
+      value: sandbox
 ```
 
-`tables` uses the same column expressions as the project `dump.rewrite` map. Write `"''"` to store an empty string and `"NULL"` to store NULL. `system_config` lists `system_config.configuration_key` values. Matching rows are dumped with `configuration_value` set to `{"_value": null}`, so the restored shop no longer contains that live secret.
+`tables` uses the same column expressions as the project `dump.rewrite` map. Write `"''"` to store an empty string and `"NULL"` to store NULL. `system_config` matches `system_config.configuration_key`. A plain key omits that row from the dump. `value` replaces `configuration_value` with `{"_value": value}`. A value that starts with `faker.` is generated per row.
 
 `shopware-cli project create` and `shopware-cli project config init` write `environments.local`. Top-level `url` and `admin_api` are deprecated: they are used only when `environments.local` is absent. When both are present, `environments.local` wins.
 

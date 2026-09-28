@@ -90,6 +90,7 @@ It teaches agents to:
 - take `system_config` keys from `config.xml` and SystemConfig calls;
 - take table and column names from entity storage names and migrations;
 - choose faker expressions for personal data and `''` or `NULL` for secrets;
+- omit a `system_config` row, or replace it with a custom value or a faker value;
 - leave Shopware core anonymization and unrelated extension validation alone.
 
 ## Source of truth

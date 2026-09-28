@@ -53,26 +53,23 @@ var projectDatabaseDumpCmd = &cobra.Command{
 		limits, _ := cmd.Flags().GetStringArray("limit")
 
 		var extensionTables map[string]map[string]string
-		var systemConfigRewrite string
+		var systemConfigRules []shop.SystemConfigRule
 		if anonymize {
-			extensionTables, systemConfigRewrite, err = anonymizationFromInstalledExtensions(cmd.Context())
-			if err != nil {
-				return err
-			}
+			extensionTables, systemConfigRules = anonymizationFromInstalledExtensions(cmd.Context())
 		}
 
 		return shop.DumpDatabase(cmd.Context(), mysqlConfig, projectCfg.ConfigDump, shop.DumpDatabaseOptions{
-			Output:              output,
-			Compression:         compression,
-			Clean:               clean,
-			Anonymize:           anonymize,
-			ExtensionTables:     extensionTables,
-			SystemConfigRewrite: systemConfigRewrite,
-			SkipLockTables:      skipLockTables,
-			Quick:               quick,
-			Parallel:            parallel,
-			InsertIntoLimit:     insertIntoLimit,
-			LimitOverrides:      limits,
+			Output:            output,
+			Compression:       compression,
+			Clean:             clean,
+			Anonymize:         anonymize,
+			ExtensionTables:   extensionTables,
+			SystemConfigRules: systemConfigRules,
+			SkipLockTables:    skipLockTables,
+			Quick:             quick,
+			Parallel:          parallel,
+			InsertIntoLimit:   insertIntoLimit,
+			LimitOverrides:    limits,
 		})
 	},
 }
@@ -139,19 +136,14 @@ func assembleConnectionURI(cmd *cobra.Command) (*mysql.Config, error) {
 
 // anonymizationFromInstalledExtensions collects anonymize rules from extensions
 // in the current Shopware project. Outside a project it returns empty rules.
-func anonymizationFromInstalledExtensions(ctx context.Context) (map[string]map[string]string, string, error) {
+func anonymizationFromInstalledExtensions(ctx context.Context) (map[string]map[string]string, []shop.SystemConfigRule) {
 	// Dump stays usable outside a Shopware project. There are no extensions to read.
 	if projectRoot, err := shop.FindClosestShopwareProject(false); err == nil {
 		rules := extension.CollectAnonymization(ctx, projectRoot)
-		rewrite, err := shop.SystemConfigRewriteExpression(rules.SystemConfig)
-		if err != nil {
-			return nil, "", err
-		}
-
-		return rules.Tables, rewrite, nil
+		return rules.Tables, rules.SystemConfig
 	}
 
-	return nil, "", nil
+	return nil, nil
 }
 
 // resolveDumpDatabaseConnection resolves credentials like the other database
