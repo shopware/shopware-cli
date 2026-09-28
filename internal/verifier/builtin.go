@@ -7,13 +7,13 @@ import (
 	"github.com/shopware/shopware-cli/internal/validation"
 )
 
-type SWCLI struct{}
+type Builtin struct{}
 
-func (s SWCLI) Name() string {
+func (s Builtin) Name() string {
 	return "builtin"
 }
 
-func (s SWCLI) Check(ctx context.Context, check *Check, config ToolConfig) error {
+func (s Builtin) Check(ctx context.Context, check *Check, config ToolConfig) error {
 	if config.Extension == nil {
 		return nil
 	}
@@ -45,5 +45,5 @@ func (s SWCLI) Check(ctx context.Context, check *Check, config ToolConfig) error
 }
 
 func init() {
-	AddTool(SWCLI{})
+	AddTool(Builtin{})
 }
