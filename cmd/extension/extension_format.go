@@ -19,10 +19,23 @@ var extensionFormat = &cobra.Command{
 	Use:   "format path",
 	Short: "Format an extension's PHP, JavaScript, SCSS, and Administration Twig files",
 	Args:  cobra.ExactArgs(1),
-	PreRunE: func(cmd *cobra.Command, args []string) error {
-		return verifier.SetupTools(cmd.Context(), cmd.Root().Version)
-	},
 	RunE: func(cmd *cobra.Command, args []string) error {
+		allTools := verifier.GetToolsOf[verifier.FormatTool]()
+		only, _ := cmd.Flags().GetString("only")
+		exclude, _ := cmd.Flags().GetString("exclude")
+
+		requestedTools, err := allTools.Only(only)
+		if err != nil {
+			return err
+		}
+		tools, err := requestedTools.Exclude(exclude)
+		if err != nil {
+			return err
+		}
+		if len(tools) == 0 {
+			return errors.New("no formatters selected after applying --exclude")
+		}
+
 		dryRun, _ := cmd.Flags().GetBool("dry-run")
 
 		path, err := filepath.Abs(args[0])
@@ -42,23 +55,11 @@ var extensionFormat = &cobra.Command{
 
 		logging.FromContext(cmd.Context()).Debugf("Running fixes for Shopware version: %s", toolCfg.MinShopwareVersion)
 
+		if err := verifier.SetupTools(cmd.Context(), cmd.Root().Version); err != nil {
+			return err
+		}
+
 		var gr errgroup.Group
-
-		allTools := verifier.GetToolsOf[verifier.FormatTool]()
-		only, _ := cmd.Flags().GetString("only")
-		exclude, _ := cmd.Flags().GetString("exclude")
-
-		requestedTools, err := allTools.Only(only)
-		if err != nil {
-			return err
-		}
-		tools, err := requestedTools.Exclude(exclude)
-		if err != nil {
-			return err
-		}
-		if len(tools) == 0 {
-			return errors.New("no formatters selected after applying --exclude")
-		}
 
 		for _, tool := range tools {
 			gr.Go(func() error {
