@@ -1,4 +1,4 @@
-import Plugin from 'src/plugin-system/plugin.class';
+const plugin = window.PluginBaseClass;
 
 export default class ExamplePlugin extends Plugin {
     init() {
