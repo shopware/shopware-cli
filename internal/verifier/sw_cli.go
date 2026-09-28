@@ -10,7 +10,7 @@ import (
 type SWCLI struct{}
 
 func (s SWCLI) Name() string {
-	return "sw-cli"
+	return "builtin"
 }
 
 func (s SWCLI) Check(ctx context.Context, check *Check, config ToolConfig) error {
