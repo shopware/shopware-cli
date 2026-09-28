@@ -154,6 +154,7 @@ Available skills:
 - **`shopware-cli`** — Use Shopware CLI for project, extension, and account workflows. Validate, build, format, and troubleshoot extensions. Reason about command safety and side effects.
 - **`shopware-cli-docker`** — For Docker-backed projects. Run commands in the correct container, manage development environment lifecycle, and troubleshoot Docker execution.
 - **`shopware-cli-extension-store`** — Assess an extension's readiness for Shopware Store distribution. Read-only: classifies metadata, localization, and asset findings against Store requirements and cites a re-checkable source for each, without modifying files.
+- **`shopware-cli-extension-anonymize`** — Fill an extension's `anonymize` section in `.config/shopware-extension.yml` from its tables and system config secrets so `project dump --anonymize` includes them.
 
 ## Documentation
 
