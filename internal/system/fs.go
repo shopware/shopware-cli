@@ -33,7 +33,7 @@ func CopyFiles(currentPath string, targetPath string) error {
 
 		// Skip development environment and VCS metadata folders
 		// (e.g., .devenv, .direnv, .git)
-		if info.IsDir() && (relPath == ".devenv" || relPath == ".direnv" || relPath == ".git") {
+		if info.IsDir() && (info.Name() == ".devenv" || info.Name() == ".direnv" || info.Name() == ".git") {
 			return filepath.SkipDir
 		}
 
