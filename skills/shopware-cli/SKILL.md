@@ -310,6 +310,8 @@ Database dumps and other exports may contain sensitive customer or shop data. Tr
 
 `project dump --anonymize` also merges the `anonymize` section from each installed extension's `.config/shopware-extension.yml`: `tables` are column rewrites (same shape as project `dump.rewrite`) and `system_config` lists configuration keys whose values are cleared. Project `dump.rewrite` wins when both set the same column.
 
+To fill that section from an extension's entities and `config.xml`, use the `shopware-cli-extension-anonymize` skill when available.
+
 ## Generated files
 
 Distinguish source files from generated files before editing them.
