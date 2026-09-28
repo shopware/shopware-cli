@@ -7,7 +7,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 
-	"github.com/shopware/shopware-cli/internal/buildinfo"
+	"github.com/shopware/shopware-cli/internal/cliversion"
 )
 
 const (
@@ -46,7 +46,7 @@ func NewHeader() Header {
 func (h Header) withUpdateHint(showUpdateHint bool) Header {
 	icon := lipgloss.NewStyle().Foreground(BrandColor).Render("●")
 	title := lipgloss.NewStyle().Bold(true).Foreground(TextColor).Render(appTitle)
-	version := DimStyle.Render(buildinfo.Version)
+	version := DimStyle.Render(cliversion.Version)
 
 	lnkStyle := lipgloss.NewStyle().Foreground(LinkColor).Underline(true)
 	docsLink := StyledLink(docsURL, "Documentation", lnkStyle)

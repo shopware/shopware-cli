@@ -17,13 +17,13 @@ import (
 	"github.com/shopware/shopware-cli/cmd/extension"
 	"github.com/shopware/shopware-cli/cmd/project"
 	accountApi "github.com/shopware/shopware-cli/internal/account-api"
-	"github.com/shopware/shopware-cli/internal/buildinfo"
+	"github.com/shopware/shopware-cli/internal/cliversion"
 	"github.com/shopware/shopware-cli/internal/system"
 	"github.com/shopware/shopware-cli/logging"
 )
 
 // version is the legacy ldflags target (-X 'github.com/shopware/shopware-cli/cmd.version=...').
-// It is kept until all build platforms set internal/buildinfo.Version directly.
+// It is kept until all build platforms set internal/cliversion.Version directly.
 var version string
 
 var rootCmd = &cobra.Command{
@@ -74,9 +74,9 @@ func exitCode(ctx context.Context, err error) int {
 
 func init() {
 	if version != "" {
-		buildinfo.Version = version
+		cliversion.Version = version
 	}
-	rootCmd.Version = buildinfo.Version
+	rootCmd.Version = cliversion.Version
 
 	rootCmd.SilenceErrors = true
 

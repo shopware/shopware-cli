@@ -9,7 +9,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/shopware/shopware-cli/internal/buildinfo"
+	"github.com/shopware/shopware-cli/internal/cliversion"
 	"github.com/shopware/shopware-cli/internal/shop"
 	"github.com/shopware/shopware-cli/internal/testhelper"
 )
@@ -51,9 +51,9 @@ func TestProjectSbomCommandSuccess(t *testing.T) {
 	})
 
 	// Ensure the tool version used by the command path is stable in tests.
-	prev := buildinfo.Version
-	buildinfo.Version = "test"
-	t.Cleanup(func() { buildinfo.Version = prev })
+	prev := cliversion.Version
+	cliversion.Version = "test"
+	t.Cleanup(func() { cliversion.Version = prev })
 
 	projectSbomCmd.SetContext(t.Context())
 	require.NoError(t, projectSbomCmd.RunE(projectSbomCmd, []string{root}))

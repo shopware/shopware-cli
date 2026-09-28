@@ -6,7 +6,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/shopware/shopware-cli/internal/buildinfo"
+	"github.com/shopware/shopware-cli/internal/cliversion"
 	"github.com/shopware/shopware-cli/internal/shop"
 )
 
@@ -59,7 +59,7 @@ The command is non-interactive and exits non-zero when generation fails
 			OutputPath:             output,
 			SkipMissingLock:        false,
 			IncludeDevDependencies: includeDev,
-			ToolVersion:            buildinfo.Version,
+			ToolVersion:            cliversion.Version,
 		})
 	},
 }

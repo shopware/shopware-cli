@@ -9,7 +9,7 @@ import (
 	"os"
 	"time"
 
-	"github.com/shopware/shopware-cli/internal/buildinfo"
+	"github.com/shopware/shopware-cli/internal/cliversion"
 	"github.com/shopware/shopware-cli/internal/tui"
 	"github.com/shopware/shopware-cli/internal/update"
 	"github.com/shopware/shopware-cli/logging"
@@ -32,10 +32,10 @@ func startUpdateCheck(ctx context.Context, args []string) (*update.CheckHandle, 
 	go func() {
 		var releaseInfo *update.ReleaseInfo
 		var err error
-		if !update.ShouldCheckForUpdate(buildinfo.Version, args) {
+		if !update.ShouldCheckForUpdate(cliversion.Version, args) {
 			err = update.ErrNoUpdateAvailable
 		} else {
-			releaseInfo, err = update.CheckForUpdate(updateCtx, buildinfo.Version, &http.Client{Timeout: 5 * time.Second})
+			releaseInfo, err = update.CheckForUpdate(updateCtx, cliversion.Version, &http.Client{Timeout: 5 * time.Second})
 		}
 		if err != nil && !errors.Is(err, update.ErrNoUpdateAvailable) {
 			logging.FromContext(ctx).Debugf("checking for shopware cli update failed: %v", err)
@@ -61,7 +61,7 @@ func printUpdateHint(ctx context.Context, w io.Writer, release *update.ReleaseIn
 		return
 	}
 
-	_, _ = fmt.Fprintln(w, update.RenderUpdateNotification(release.Version, buildinfo.Version))
+	_, _ = fmt.Fprintln(w, update.RenderUpdateNotification(release.Version, cliversion.Version))
 	if err := update.MarkUpdateNotificationPrinted(); err != nil {
 		logging.FromContext(ctx).Debugf("could not save update notification timestamp: %v", err)
 	}

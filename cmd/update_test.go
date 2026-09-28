@@ -11,7 +11,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/shopware/shopware-cli/internal/buildinfo"
+	"github.com/shopware/shopware-cli/internal/cliversion"
 	"github.com/shopware/shopware-cli/internal/tui"
 	"github.com/shopware/shopware-cli/internal/update"
 )
@@ -33,9 +33,9 @@ func isolateUpdateEnvironment(t *testing.T) string {
 
 func setVersion(t *testing.T, v string) {
 	t.Helper()
-	original := buildinfo.Version
-	buildinfo.Version = v
-	t.Cleanup(func() { buildinfo.Version = original })
+	original := cliversion.Version
+	cliversion.Version = v
+	t.Cleanup(func() { cliversion.Version = original })
 }
 
 func restoreUpdateAvailable(t *testing.T) {

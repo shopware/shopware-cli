@@ -7,7 +7,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/shopware/shopware-cli/internal/buildinfo"
+	"github.com/shopware/shopware-cli/internal/cliversion"
 	"github.com/shopware/shopware-cli/internal/projectbuild"
 	"github.com/shopware/shopware-cli/internal/shop"
 )
@@ -58,7 +58,7 @@ The created archive path is reported after the build finishes. Nothing is upload
 			ConfigPath: configPath,
 			Build: projectbuild.Options{
 				WithDevDependencies: withDev,
-				ToolVersion:         buildinfo.Version,
+				ToolVersion:         cliversion.Version,
 			},
 		})
 		if err != nil {

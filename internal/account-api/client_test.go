@@ -13,7 +13,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"golang.org/x/oauth2"
 
-	"github.com/shopware/shopware-cli/internal/buildinfo"
+	"github.com/shopware/shopware-cli/internal/cliversion"
 )
 
 func TestNewAuthenticatedRequestWithOAuthToken(t *testing.T) {
@@ -26,7 +26,7 @@ func TestNewAuthenticatedRequestWithOAuthToken(t *testing.T) {
 	assert.Equal(t, "application/json", req.Header.Get("content-type"))
 	assert.Equal(t, "application/json", req.Header.Get("accept"))
 	assert.Equal(t, "Bearer access-token", req.Header.Get("Authorization"))
-	assert.Equal(t, buildinfo.UserAgent(), req.Header.Get("user-agent"))
+	assert.Equal(t, cliversion.UserAgent(), req.Header.Get("user-agent"))
 	assert.Empty(t, req.Header.Get("x-shopware-token"))
 }
 

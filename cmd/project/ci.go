@@ -8,7 +8,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/shopware/shopware-cli/internal/buildinfo"
+	"github.com/shopware/shopware-cli/internal/cliversion"
 	internalgit "github.com/shopware/shopware-cli/internal/git"
 	"github.com/shopware/shopware-cli/internal/projectbuild"
 	"github.com/shopware/shopware-cli/internal/shop"
@@ -49,7 +49,7 @@ var projectCI = &cobra.Command{
 
 		return projectbuild.Build(cmd.Context(), root, shopCfg, envCfg, projectbuild.Options{
 			WithDevDependencies: withDev,
-			ToolVersion:         buildinfo.Version,
+			ToolVersion:         cliversion.Version,
 		})
 	},
 }

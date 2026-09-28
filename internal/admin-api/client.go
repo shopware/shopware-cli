@@ -13,7 +13,7 @@ import (
 	"github.com/shyim/go-version"
 	"golang.org/x/oauth2"
 
-	"github.com/shopware/shopware-cli/internal/buildinfo"
+	"github.com/shopware/shopware-cli/internal/cliversion"
 )
 
 var errNonNilContext = errors.New("context must be non-nil")
@@ -157,7 +157,7 @@ func (c *Client) NewRawRequest(context ApiContext, method, urlStr string, body i
 	}
 
 	req.Header.Set("Accept", "application/json")
-	req.Header.Set("User-Agent", buildinfo.UserAgent())
+	req.Header.Set("User-Agent", cliversion.UserAgent())
 
 	return req, nil
 }
