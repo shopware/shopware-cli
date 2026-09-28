@@ -32,6 +32,16 @@ func Create(ctx context.Context, opts CreateOptions) (err error) {
 
 	logger.Info("Creating extension...")
 
+	var createFiles func(string, string, string) error
+	switch opts.Type {
+	case Plugin:
+		createFiles = scaffolding.CreatePluginFiles
+	case Theme:
+		createFiles = scaffolding.CreateThemeFiles
+	default:
+		return fmt.Errorf("unsupported extension type %q", opts.Type)
+	}
+
 	projectDir, err := shop.FindClosestShopwareProject(false)
 	if err != nil {
 		return err
@@ -56,7 +66,7 @@ func Create(ctx context.Context, opts CreateOptions) (err error) {
 		}
 	}()
 
-	if err = scaffolding.CreateExtensionFiles(extensionDir, opts.Name, opts.Vendor); err != nil {
+	if err = createFiles(extensionDir, opts.Name, opts.Vendor); err != nil {
 		return fmt.Errorf("create extension files: %w", err)
 	}
 
