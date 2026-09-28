@@ -141,7 +141,6 @@ func TestCreateErrors(t *testing.T) {
 	})
 }
 
-
 func TestCreateGeneratesAnExtension(t *testing.T) {
 	for _, extensionType := range []ExtensionType{Plugin, Theme} {
 		for _, store := range []bool{false, true} {
