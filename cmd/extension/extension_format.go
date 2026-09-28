@@ -2,12 +2,14 @@ package extension
 
 import (
 	"fmt"
+	"os"
 	"path/filepath"
 
 	"github.com/spf13/cobra"
 	"golang.org/x/sync/errgroup"
 
 	"github.com/shopware/shopware-cli/internal/extension"
+	"github.com/shopware/shopware-cli/internal/validation"
 	"github.com/shopware/shopware-cli/internal/verifier"
 	"github.com/shopware/shopware-cli/logging"
 )
@@ -41,31 +43,30 @@ var extensionFormat = &cobra.Command{
 
 		var gr errgroup.Group
 
-		tools := verifier.GetTools()
+		allTools := verifier.GetToolsOf[verifier.FormatTool]()
 		only, _ := cmd.Flags().GetString("only")
 
-		tools, err = tools.Only(only)
+		tools, err := allTools.Only(only)
 		if err != nil {
 			return err
 		}
 
 		for _, tool := range tools {
-			tool := tool
 			gr.Go(func() error {
 				return tool.Format(cmd.Context(), *toolCfg, dryRun)
 			})
 		}
 
-		if err := gr.Wait(); err != nil {
+		runErr := gr.Wait()
+		if err := validation.PrintToolInvocationTable(os.Stdout, "Formatters", extensionToolInvocationStatuses(allTools, tools)); err != nil {
 			return err
 		}
-
-		return nil
+		return runErr
 	},
 }
 
 func init() {
 	extensionRootCmd.AddCommand(extensionFormat)
-	extensionFormat.Flags().String("only", "", "Run only specific tools by name (comma-separated, e.g. phpstan,eslint)")
+	extensionFormat.Flags().String("only", "", "Run only specific formatters by name (comma-separated, e.g. prettier,php-cs-fixer)")
 	extensionFormat.Flags().Bool("dry-run", false, "Run in dry run mode")
 }

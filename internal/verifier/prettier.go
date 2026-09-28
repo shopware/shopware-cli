@@ -25,14 +25,6 @@ func (b Prettier) Name() string {
 	return "prettier"
 }
 
-func (b Prettier) Check(ctx context.Context, check *Check, config ToolConfig) error {
-	return nil
-}
-
-func (b Prettier) Fix(ctx context.Context, config ToolConfig) error {
-	return nil
-}
-
 func (b Prettier) Format(ctx context.Context, config ToolConfig, dryRun bool) error {
 	var gr errgroup.Group
 
