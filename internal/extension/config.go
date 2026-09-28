@@ -13,6 +13,7 @@ import (
 
 	"github.com/shopware/shopware-cli/internal/changelog"
 	"github.com/shopware/shopware-cli/internal/compatibility"
+	"github.com/shopware/shopware-cli/internal/shop"
 	"github.com/shopware/shopware-cli/internal/validation"
 	"github.com/shopware/shopware-cli/logging"
 )
@@ -243,8 +244,20 @@ type Config struct {
 	// Changelog is the changelog configuration of the extension.
 	Changelog changelog.Config `yaml:"changelog,omitempty"`
 	// Validation is the validation configuration of the extension.
-	Validation      ConfigValidation `yaml:"validation,omitempty"`
+	Validation ConfigValidation `yaml:"validation,omitempty"`
+	// Anonymize declares tables and system config values rewritten by `project dump --anonymize`.
+	// Rules from every extension found in the project are merged into that dump. Project dump.rewrite values take precedence.
+	Anonymize ConfigAnonymize `yaml:"anonymize,omitempty"`
+
 	storageLocation string
+}
+
+// ConfigAnonymize is the extension contribution to `project dump --anonymize`. Project dump.rewrite values take precedence over these rules.
+type ConfigAnonymize struct {
+	// Tables maps a database table to column rewrites. Each column value is a SQL expression, the same format as the project dump.rewrite map. Faker expressions such as faker.Internet.Email() are supported. Write "''" to store an empty string and "NULL" to store NULL.
+	Tables map[string]map[string]string `yaml:"tables,omitempty"`
+	// SystemConfig lists system_config.configuration_key values, such as SwagPayPal.settings.clientSecret. Matching rows are dumped with configuration_value set to {"_value": null}.
+	SystemConfig []string `yaml:"system_config,omitempty"`
 }
 
 func (c *Config) HasCompatibilityDate() bool {
@@ -338,6 +351,47 @@ func validateExtensionConfig(config *Config) error {
 				return fmt.Errorf("build.zip.assets.additional_caches[%d].source_paths[%d]: %w", i, j, err)
 			}
 		}
+	}
+
+	if err := validateAnonymize(&config.Anonymize); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func validateAnonymize(config *ConfigAnonymize) error {
+	if config == nil {
+		return nil
+	}
+
+	for table, columns := range config.Tables {
+		if !anonymizeIdentifierPattern.MatchString(table) {
+			return fmt.Errorf("anonymize.tables: invalid table name %q", table)
+		}
+
+		if len(columns) == 0 {
+			return fmt.Errorf("anonymize.tables.%s: at least one column is required", table)
+		}
+
+		for column, expression := range columns {
+			if !anonymizeIdentifierPattern.MatchString(column) {
+				return fmt.Errorf("anonymize.tables.%s: invalid column name %q", table, column)
+			}
+
+			if strings.TrimSpace(expression) == "" {
+				return fmt.Errorf("anonymize.tables.%s.%s: rewrite expression is required (write \"''\" to store an empty string or \"NULL\" to store NULL)", table, column)
+			}
+		}
+	}
+
+	for i, key := range config.SystemConfig {
+		trimmed := strings.TrimSpace(key)
+		if err := shop.ValidateSystemConfigKey(trimmed); err != nil {
+			return fmt.Errorf("anonymize.system_config[%d]: %w", i, err)
+		}
+
+		config.SystemConfig[i] = trimmed
 	}
 
 	return nil

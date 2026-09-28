@@ -103,6 +103,22 @@ environments:
 
 Omit `-e` / `--env` to target `environments.local`. Use `-e staging` (or another name) to target a different environment.
 
+### Anonymized dumps and extensions
+
+`shopware-cli project dump --anonymize` rewrites personal data in Shopware core tables. An extension can add its own tables and system config secrets in `.config/shopware-extension.yml`. A project dump with `--anonymize` merges those rules from every installed extension. A column already set under `dump.rewrite` in the project config is left unchanged.
+
+```yaml
+anonymize:
+  tables:
+    swag_example_token:
+      access_token: "''"
+      email: faker.Internet.Email()
+  system_config:
+    - SwagExample.config.clientSecret
+```
+
+`tables` uses the same column expressions as the project `dump.rewrite` map. Write `"''"` to store an empty string and `"NULL"` to store NULL. `system_config` lists `system_config.configuration_key` values. Matching rows are dumped with `configuration_value` set to `{"_value": null}`, so the restored shop no longer contains that live secret.
+
 `shopware-cli project create` and `shopware-cli project config init` write `environments.local`. Top-level `url` and `admin_api` are deprecated: they are used only when `environments.local` is absent. When both are present, `environments.local` wins.
 
 ### Disable update notifications

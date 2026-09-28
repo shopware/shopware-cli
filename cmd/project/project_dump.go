@@ -1,6 +1,7 @@
 package project
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"os"
@@ -10,6 +11,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/shopware/shopware-cli/internal/executor"
+	"github.com/shopware/shopware-cli/internal/extension"
 	"github.com/shopware/shopware-cli/internal/mysqldump"
 	"github.com/shopware/shopware-cli/internal/shop"
 	"github.com/shopware/shopware-cli/internal/system"
@@ -50,16 +52,27 @@ var projectDatabaseDumpCmd = &cobra.Command{
 		insertIntoLimit, _ := cmd.Flags().GetInt("insert-into-limit")
 		limits, _ := cmd.Flags().GetStringArray("limit")
 
+		var extensionTables map[string]map[string]string
+		var systemConfigRewrite string
+		if anonymize {
+			extensionTables, systemConfigRewrite, err = anonymizationFromInstalledExtensions(cmd.Context())
+			if err != nil {
+				return err
+			}
+		}
+
 		return shop.DumpDatabase(cmd.Context(), mysqlConfig, projectCfg.ConfigDump, shop.DumpDatabaseOptions{
-			Output:          output,
-			Compression:     compression,
-			Clean:           clean,
-			Anonymize:       anonymize,
-			SkipLockTables:  skipLockTables,
-			Quick:           quick,
-			Parallel:        parallel,
-			InsertIntoLimit: insertIntoLimit,
-			LimitOverrides:  limits,
+			Output:              output,
+			Compression:         compression,
+			Clean:               clean,
+			Anonymize:           anonymize,
+			ExtensionTables:     extensionTables,
+			SystemConfigRewrite: systemConfigRewrite,
+			SkipLockTables:      skipLockTables,
+			Quick:               quick,
+			Parallel:            parallel,
+			InsertIntoLimit:     insertIntoLimit,
+			LimitOverrides:      limits,
 		})
 	},
 }
@@ -124,6 +137,23 @@ func assembleConnectionURI(cmd *cobra.Command) (*mysql.Config, error) {
 	return dbConn.MySQLConfig(), nil
 }
 
+// anonymizationFromInstalledExtensions collects anonymize rules from extensions
+// in the current Shopware project. Outside a project it returns empty rules.
+func anonymizationFromInstalledExtensions(ctx context.Context) (map[string]map[string]string, string, error) {
+	// Dump stays usable outside a Shopware project. There are no extensions to read.
+	if projectRoot, err := shop.FindClosestShopwareProject(false); err == nil {
+		rules := extension.CollectAnonymization(ctx, projectRoot)
+		rewrite, err := shop.SystemConfigRewriteExpression(rules.SystemConfig)
+		if err != nil {
+			return nil, "", err
+		}
+
+		return rules.Tables, rewrite, nil
+	}
+
+	return nil, "", nil
+}
+
 // resolveDumpDatabaseConnection resolves credentials like the other database
 // commands, but keeps dump usable outside a Shopware project: there the
 // process environment and the connection flags are all that is needed.
@@ -147,7 +177,7 @@ func init() {
 	projectDatabaseDumpCmd.Flags().String("output", "dump.sql", "File or - (for stdout)")
 	projectDatabaseDumpCmd.Flags().Bool("clean", false, "Exclude data from transient tables (e.g. cart, messenger_messages, message_queue_stats, log_entry)")
 	projectDatabaseDumpCmd.Flags().Bool("skip-lock-tables", false, "Skip locking tables during the dump")
-	projectDatabaseDumpCmd.Flags().Bool("anonymize", false, "Anonymize customer data")
+	projectDatabaseDumpCmd.Flags().Bool("anonymize", false, "Anonymize personal data, extension-declared columns, and extension system config secrets")
 	projectDatabaseDumpCmd.Flags().String("compression", "", "Compress the dump (gzip, zstd)")
 	projectDatabaseDumpCmd.Flags().Bool("quick", false, "Use quick option for mysqldump")
 	projectDatabaseDumpCmd.Flags().Int("parallel", 0, "Number of tables to dump concurrently (0 = disabled)")

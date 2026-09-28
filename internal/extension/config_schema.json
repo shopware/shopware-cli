@@ -50,10 +50,38 @@
         "validation": {
           "$ref": "#/$defs/ConfigValidation",
           "description": "Validation is the validation configuration of the extension."
+        },
+        "anonymize": {
+          "$ref": "#/$defs/ConfigAnonymize",
+          "description": "Anonymize declares tables and system config values rewritten by `project dump --anonymize`.\nRules from every extension found in the project are merged into that dump. Project dump.rewrite values take precedence."
         }
       },
       "additionalProperties": false,
       "type": "object"
+    },
+    "ConfigAnonymize": {
+      "properties": {
+        "tables": {
+          "additionalProperties": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object"
+          },
+          "type": "object",
+          "description": "Tables maps a database table to column rewrites. Each column value is a SQL expression, the same format as the project dump.rewrite map. Faker expressions such as faker.Internet.Email() are supported. Write \"''\" to store an empty string and \"NULL\" to store NULL."
+        },
+        "system_config": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array",
+          "description": "SystemConfig lists system_config.configuration_key values, such as SwagPayPal.settings.clientSecret. Matching rows are dumped with configuration_value set to {\"_value\": null}."
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "description": "ConfigAnonymize is the extension contribution to `project dump --anonymize`."
     },
     "ConfigBuild": {
       "properties": {

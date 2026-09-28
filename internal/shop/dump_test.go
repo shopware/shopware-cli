@@ -32,6 +32,92 @@ func TestApplyLimitOverridesKeepsConfiguredOrderBy(t *testing.T) {
 	assert.Equal(t, mysqldump.TableLimit{Rows: 100, OrderBy: "`order_number` DESC"}, cfg.Limit["order"])
 }
 
+func TestPrepareDumpConfigMergesExtensionAnonymization(t *testing.T) {
+	cfg := &ConfigDump{
+		Rewrite: map[string]map[string]string{
+			"swag_example_token": {
+				"access_token": "PROJECT",
+			},
+		},
+	}
+
+	prepared, err := prepareDumpConfig(cfg, DumpDatabaseOptions{
+		Anonymize: true,
+		ExtensionTables: map[string]map[string]string{
+			"Swag_Example_Token": {
+				"access_token": "EXTENSION",
+				"Email":        "faker.Internet.Email()",
+			},
+			"customer": {
+				"email": "''",
+			},
+		},
+		SystemConfigRewrite: "CASE WHEN `configuration_key` IN ('SwagExample.config.clientSecret') THEN '{\"_value\":null}' ELSE `configuration_value` END",
+	})
+	require.NoError(t, err)
+
+	assert.Equal(t, "PROJECT", prepared.Rewrite["swag_example_token"]["access_token"])
+	assert.Equal(t, "{{- faker.Internet.Email() -}}", prepared.Rewrite["swag_example_token"]["email"])
+	assert.Equal(t, "''", prepared.Rewrite["customer"]["email"])
+	assert.Equal(t, "{{- faker.Person.FirstName() -}}", prepared.Rewrite["customer"]["first_name"])
+	assert.Contains(t, prepared.Rewrite["system_config"]["configuration_value"], "SwagExample.config.clientSecret")
+	assert.Contains(t, prepared.Rewrite, "order_customer")
+}
+
+func TestPrepareDumpConfigKeepsProjectSystemConfigRewrite(t *testing.T) {
+	cfg := &ConfigDump{
+		Rewrite: map[string]map[string]string{
+			"system_config": {
+				"configuration_value": "PROJECT",
+			},
+		},
+	}
+
+	prepared, err := prepareDumpConfig(cfg, DumpDatabaseOptions{
+		Anonymize: true,
+		ExtensionTables: map[string]map[string]string{
+			"system_config": {
+				"configuration_value": "EXTENSION",
+				"created_at":          "NULL",
+			},
+		},
+		SystemConfigRewrite: "CASE WHEN `configuration_key` IN ('Ignored.key') THEN '{\"_value\":null}' ELSE `configuration_value` END",
+	})
+	require.NoError(t, err)
+
+	assert.Equal(t, "PROJECT", prepared.Rewrite["system_config"]["configuration_value"])
+	assert.Equal(t, "NULL", prepared.Rewrite["system_config"]["created_at"])
+}
+
+func TestPrepareDumpConfigIgnoresExtensionRulesWithoutAnonymize(t *testing.T) {
+	prepared, err := prepareDumpConfig(nil, DumpDatabaseOptions{
+		ExtensionTables: map[string]map[string]string{
+			"swag_example_token": {"access_token": "''"},
+		},
+		SystemConfigRewrite: "CASE WHEN 1 THEN 1 END",
+	})
+	require.NoError(t, err)
+	assert.Empty(t, prepared.Rewrite)
+}
+
+func TestSystemConfigRewriteExpression(t *testing.T) {
+	expression, err := SystemConfigRewriteExpression([]string{
+		"Zzz.config.token",
+		"Aaa.config.secret",
+		"Aaa.config.secret",
+		"  ",
+	})
+	require.NoError(t, err)
+	assert.Equal(t, "CASE WHEN `configuration_key` IN ('Aaa.config.secret', 'Zzz.config.token') THEN '{\"_value\":null}' ELSE `configuration_value` END", expression)
+
+	expression, err = SystemConfigRewriteExpression(nil)
+	require.NoError(t, err)
+	assert.Empty(t, expression)
+
+	_, err = SystemConfigRewriteExpression([]string{"bad key"})
+	assert.Error(t, err)
+}
+
 func TestApplyLimitOverridesValidation(t *testing.T) {
 	cases := []struct {
 		override    string

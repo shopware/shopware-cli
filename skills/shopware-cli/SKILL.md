@@ -308,6 +308,8 @@ Prefer Shopware CLI's supported authentication and configuration mechanisms inst
 
 Database dumps and other exports may contain sensitive customer or shop data. Treat their creation, storage, and sharing accordingly.
 
+`project dump --anonymize` also merges the `anonymize` section from each installed extension's `.config/shopware-extension.yml`: `tables` are column rewrites (same shape as project `dump.rewrite`) and `system_config` lists configuration keys whose values are cleared. Project `dump.rewrite` wins when both set the same column.
+
 ## Generated files
 
 Distinguish source files from generated files before editing them.
