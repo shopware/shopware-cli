@@ -152,14 +152,9 @@ func selectExtensionValidationTools(full bool, only, exclude string) (verifier.T
 		return nil, nil, errors.New("no validation checks selected after applying --exclude")
 	}
 
-	statuses := extensionToolInvocationStatuses(validationTools, selected)
+	statuses := extensionToolInvocationStatuses(validationTools, requestedTools, selected)
 	for i := range statuses {
-		if statuses[i].Status == "invoked" {
-			continue
-		}
-		if slices.ContainsFunc(requestedTools, func(tool verifier.CheckTool) bool { return tool.Name() == statuses[i].Name }) {
-			statuses[i].Reason = "excluded by --exclude"
-		} else if only == "" {
+		if only == "" && statuses[i].Reason == "not selected by --only" {
 			statuses[i].Reason = "not selected; use --full or --only"
 		}
 	}

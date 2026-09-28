@@ -1,6 +1,7 @@
 package extension
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -18,10 +19,23 @@ var extensionFormat = &cobra.Command{
 	Use:   "format path",
 	Short: "Format an extension's PHP, JavaScript, SCSS, and Administration Twig files",
 	Args:  cobra.ExactArgs(1),
-	PreRunE: func(cmd *cobra.Command, args []string) error {
-		return verifier.SetupTools(cmd.Context(), cmd.Root().Version)
-	},
 	RunE: func(cmd *cobra.Command, args []string) error {
+		allTools := verifier.GetToolsOf[verifier.FormatTool]()
+		only, _ := cmd.Flags().GetString("only")
+		exclude, _ := cmd.Flags().GetString("exclude")
+
+		requestedTools, err := allTools.Only(only)
+		if err != nil {
+			return err
+		}
+		tools, err := requestedTools.Exclude(exclude)
+		if err != nil {
+			return err
+		}
+		if len(tools) == 0 {
+			return errors.New("no formatters selected after applying --exclude")
+		}
+
 		dryRun, _ := cmd.Flags().GetBool("dry-run")
 
 		path, err := filepath.Abs(args[0])
@@ -34,7 +48,7 @@ var extensionFormat = &cobra.Command{
 			return err
 		}
 
-		toolCfg, err := verifier.ConvertExtensionToToolConfig(ext)
+		toolCfg, err := verifier.SetupExtensionToolConfig(cmd.Context(), cmd.Root().Version, ext)
 		if err != nil {
 			return err
 		}
@@ -43,14 +57,6 @@ var extensionFormat = &cobra.Command{
 
 		var gr errgroup.Group
 
-		allTools := verifier.GetToolsOf[verifier.FormatTool]()
-		only, _ := cmd.Flags().GetString("only")
-
-		tools, err := allTools.Only(only)
-		if err != nil {
-			return err
-		}
-
 		for _, tool := range tools {
 			gr.Go(func() error {
 				return tool.Format(cmd.Context(), *toolCfg, dryRun)
@@ -58,7 +64,7 @@ var extensionFormat = &cobra.Command{
 		}
 
 		runErr := gr.Wait()
-		if err := validation.PrintToolInvocationTable(os.Stdout, "Formatters", extensionToolInvocationStatuses(allTools, tools)); err != nil {
+		if err := validation.PrintToolInvocationTable(os.Stdout, "Formatters", extensionToolInvocationStatuses(allTools, requestedTools, tools)); err != nil {
 			return err
 		}
 		return runErr
@@ -68,5 +74,6 @@ var extensionFormat = &cobra.Command{
 func init() {
 	extensionRootCmd.AddCommand(extensionFormat)
 	extensionFormat.Flags().String("only", "", "Run only specific formatters by name (comma-separated, e.g. prettier,php-cs-fixer)")
+	extensionFormat.Flags().String("exclude", "", "Exclude formatters after applying --only (comma-separated, e.g. prettier,php-cs-fixer)")
 	extensionFormat.Flags().Bool("dry-run", false, "Run in dry run mode")
 }
