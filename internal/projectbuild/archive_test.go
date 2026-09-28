@@ -118,6 +118,65 @@ func TestPackageArchiveUsesTemporaryCopy(t *testing.T) {
 	}
 }
 
+func TestPackageArchiveCopiesVendorOnlyWhenComposerInstallDisabled(t *testing.T) {
+	for _, tc := range []struct {
+		name                   string
+		disableComposerInstall bool
+	}{
+		{"install dependencies in staging", false},
+		{"use prebuilt dependencies", true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			root := t.TempDir()
+			testhelper.WriteFile(t, filepath.Join(root, "composer.json"), "{}")
+			testhelper.WriteFile(t, filepath.Join(root, "vendor/local-only.txt"), "local dependency")
+			// Nested vendor directories can be application sources, not Composer output.
+			testhelper.WriteFile(t, filepath.Join(root, "src/vendor/source.txt"), "nested source")
+			cfg := &shop.Config{DisableComposerInstall: tc.disableComposerInstall}
+			reference, err := packageArchive(t.Context(), root, cfg, ArchiveOptions{}, func(_ context.Context, stage string) error {
+				if tc.disableComposerInstall {
+					assert.FileExists(t, filepath.Join(stage, "vendor/local-only.txt"))
+				} else {
+					assert.NoDirExists(t, filepath.Join(stage, "vendor"))
+				}
+				assert.FileExists(t, filepath.Join(stage, "src/vendor/source.txt"))
+				testhelper.WriteFile(t, filepath.Join(stage, "vendor/built.txt"), "built dependency")
+				return nil
+			})
+			require.NoError(t, err)
+			contents := readArchive(t, reference)
+			assert.Equal(t, "built dependency", contents["vendor/built.txt"], "staging exclusions must not exclude built dependencies from the archive")
+			_, copiedVendor := contents["vendor/local-only.txt"]
+			assert.Equal(t, tc.disableComposerInstall, copiedVendor)
+			assert.Equal(t, "nested source", contents["src/vendor/source.txt"])
+			source, err := os.ReadFile(filepath.Join(root, "vendor/local-only.txt"))
+			require.NoError(t, err)
+			assert.Equal(t, "local dependency", string(source))
+			assert.NoFileExists(t, filepath.Join(root, "vendor/built.txt"))
+		})
+	}
+}
+
+func TestPackageArchiveSkipsSourceVendorSymlink(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("symlinks require privileges on Windows")
+	}
+	root := t.TempDir()
+	outside := t.TempDir()
+	testhelper.WriteFile(t, filepath.Join(outside, "local-only.txt"), "external dependency")
+	require.NoError(t, os.Symlink(outside, filepath.Join(root, "vendor")))
+	reference, err := packageArchive(t.Context(), root, &shop.Config{}, ArchiveOptions{}, func(_ context.Context, stage string) error {
+		_, err := os.Lstat(filepath.Join(stage, "vendor"))
+		assert.ErrorIs(t, err, os.ErrNotExist)
+		testhelper.WriteFile(t, filepath.Join(stage, "vendor/built.txt"), "built dependency")
+		return nil
+	})
+	require.NoError(t, err)
+	assert.Equal(t, "built dependency", readArchive(t, reference)["vendor/built.txt"])
+	assert.FileExists(t, filepath.Join(outside, "local-only.txt"))
+	assert.NoFileExists(t, filepath.Join(outside, "built.txt"))
+}
+
 func TestPackageArchiveFailureCleansUp(t *testing.T) {
 	root := t.TempDir()
 	output := filepath.Join(t.TempDir(), "archive.tar.gz")

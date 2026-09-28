@@ -12,6 +12,13 @@ import (
 	"github.com/shopware/shopware-cli/internal/validation"
 )
 
+func SetupExtensionToolConfig(ctx context.Context, version string, ext extension.Extension) (*ToolConfig, error) {
+	if err := SetupTools(ctx, version); err != nil {
+		return nil, err
+	}
+	return ConvertExtensionToToolConfig(ext)
+}
+
 func ConvertExtensionToToolConfig(ext extension.Extension) (*ToolConfig, error) {
 	var ignores []validation.ToolConfigIgnore
 

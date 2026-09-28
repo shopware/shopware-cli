@@ -19,10 +19,23 @@ var extensionFixCmd = &cobra.Command{
 	Use:   "fix path",
 	Short: "Apply code-quality fixes to an extension",
 	Args:  cobra.ExactArgs(1),
-	PreRunE: func(cmd *cobra.Command, args []string) error {
-		return verifier.SetupTools(cmd.Context(), cmd.Root().Version)
-	},
 	RunE: func(cmd *cobra.Command, args []string) error {
+		allTools := verifier.GetToolsOf[verifier.FixTool]()
+		only, _ := cmd.Flags().GetString("only")
+		exclude, _ := cmd.Flags().GetString("exclude")
+
+		requestedTools, err := allTools.Only(only)
+		if err != nil {
+			return err
+		}
+		tools, err := requestedTools.Exclude(exclude)
+		if err != nil {
+			return err
+		}
+		if len(tools) == 0 {
+			return errors.New("no fixers selected after applying --exclude")
+		}
+
 		allowNonGit, _ := cmd.Flags().GetBool("allow-non-git")
 
 		if !allowNonGit {
@@ -41,7 +54,7 @@ var extensionFixCmd = &cobra.Command{
 			return err
 		}
 
-		toolCfg, err := verifier.ConvertExtensionToToolConfig(ext)
+		toolCfg, err := verifier.SetupExtensionToolConfig(cmd.Context(), cmd.Root().Version, ext)
 		if err != nil {
 			return err
 		}
@@ -49,22 +62,6 @@ var extensionFixCmd = &cobra.Command{
 		logging.FromContext(cmd.Context()).Debugf("Running fixes for Shopware version: %s", toolCfg.MinShopwareVersion)
 
 		var gr errgroup.Group
-
-		allTools := verifier.GetToolsOf[verifier.FixTool]()
-		only, _ := cmd.Flags().GetString("only")
-		exclude, _ := cmd.Flags().GetString("exclude")
-
-		requestedTools, err := allTools.Only(only)
-		if err != nil {
-			return err
-		}
-		tools, err := requestedTools.Exclude(exclude)
-		if err != nil {
-			return err
-		}
-		if len(tools) == 0 {
-			return errors.New("no fixers selected after applying --exclude")
-		}
 
 		for _, tool := range tools {
 			gr.Go(func() error {

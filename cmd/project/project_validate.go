@@ -103,7 +103,7 @@ var projectValidateCmd = &cobra.Command{
 
 		filtered := result.RemoveByIdentifier(toolCfg.ValidationIgnores)
 
-		return validation.DoCheckReport(filtered, reportingFormat)
+		return validation.DoCheckReport(filtered, reportingFormat, false)
 	},
 }
 
