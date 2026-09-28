@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/shopware/shopware-cli/internal/buildinfo"
 	"github.com/shopware/shopware-cli/internal/system"
 	"github.com/shopware/shopware-cli/internal/tracking"
 )
@@ -37,7 +38,7 @@ func trackCommandExecution(ctx context.Context, args []string, start time.Time, 
 		tracking.TagCommandName: name,
 		tracking.TagResult:      result,
 		tracking.TagDurationMS:  strconv.FormatInt(time.Since(start).Milliseconds(), 10),
-		tracking.TagCLIVersion:  version,
+		tracking.TagCLIVersion:  buildinfo.Version,
 		tracking.TagOS:          runtime.GOOS,
 		tracking.TagIsTUI:       strconv.FormatBool(system.IsInteractionEnabled(ctx)),
 	})

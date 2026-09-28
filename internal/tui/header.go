@@ -6,6 +6,8 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
+
+	"github.com/shopware/shopware-cli/internal/buildinfo"
 )
 
 const (
@@ -14,13 +16,9 @@ const (
 	githubURL = "https://github.com/shopware/shopware-cli"
 )
 
-// AppVersion is the CLI version displayed in headers and branding lines.
-// It is set from cmd/root.go at startup.
-var AppVersion = "dev"
-
 // UpdateAvailable blocks until the background update check finishes and
 // reports whether a newer, installable release exists. It is set from
-// cmd/root.go at startup, like AppVersion; when nil, the header skips the
+// cmd/root.go at startup; when nil, the header skips the
 // update hint entirely.
 var UpdateAvailable func(context.Context) bool
 
@@ -48,7 +46,7 @@ func NewHeader() Header {
 func (h Header) withUpdateHint(showUpdateHint bool) Header {
 	icon := lipgloss.NewStyle().Foreground(BrandColor).Render("●")
 	title := lipgloss.NewStyle().Bold(true).Foreground(TextColor).Render(appTitle)
-	version := DimStyle.Render(AppVersion)
+	version := DimStyle.Render(buildinfo.Version)
 
 	lnkStyle := lipgloss.NewStyle().Foreground(LinkColor).Underline(true)
 	docsLink := StyledLink(docsURL, "Documentation", lnkStyle)

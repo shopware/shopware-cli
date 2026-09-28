@@ -6,8 +6,8 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/shopware/shopware-cli/internal/buildinfo"
 	"github.com/shopware/shopware-cli/internal/shop"
-	"github.com/shopware/shopware-cli/internal/tui"
 )
 
 var projectSbomCmd = &cobra.Command{
@@ -59,7 +59,7 @@ The command is non-interactive and exits non-zero when generation fails
 			OutputPath:             output,
 			SkipMissingLock:        false,
 			IncludeDevDependencies: includeDev,
-			ToolVersion:            tui.AppVersion,
+			ToolVersion:            buildinfo.Version,
 		})
 	},
 }

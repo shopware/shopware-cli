@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/shopware/shopware-cli/internal/buildinfo"
 	"github.com/shopware/shopware-cli/internal/system"
 	"github.com/shopware/shopware-cli/internal/tracking"
 )
@@ -116,7 +117,7 @@ func TestTrackCommandExecution_Tags(t *testing.T) {
 
 	require.Len(t, *events, 1)
 	tags := (*events)[0]
-	assert.Equal(t, version, tags[tracking.TagCLIVersion])
+	assert.Equal(t, buildinfo.Version, tags[tracking.TagCLIVersion])
 	assert.Equal(t, runtime.GOOS, tags[tracking.TagOS])
 	assert.Equal(t, "true", tags[tracking.TagIsTUI])
 
