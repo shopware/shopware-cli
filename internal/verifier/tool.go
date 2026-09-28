@@ -125,7 +125,7 @@ func (tl ToolList[T]) Exclude(exclude string) (ToolList[T], error) {
 			continue
 		}
 		if !slices.ContainsFunc(tl, func(tool T) bool { return tool.Name() == name }) {
-			return nil, fmt.Errorf("tool with name %q not found, possible tools: %s", name, tl.PossibleString())
+			return nil, fmt.Errorf("tool with name %q not found in the selected tools: %s (--exclude only removes selected tools)", name, tl.PossibleString())
 		}
 	}
 
