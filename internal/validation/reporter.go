@@ -47,14 +47,14 @@ type ToolInvocationStatus struct {
 }
 
 // DoCheckReport reports findings and, when supplied, tool invocation statuses.
-func DoCheckReport(result Check, reportingFormat string, tools ...ToolInvocationStatus) error {
+func DoCheckReport(result Check, reportingFormat string, hadExecutionError bool, tools ...ToolInvocationStatus) error {
 	if err := ValidateReporter(reportingFormat); err != nil {
 		return err
 	}
 
 	switch reportingFormat {
 	case "summary":
-		if err := doSummaryReport(result, tools...); err != nil {
+		if err := doSummaryReport(result, hadExecutionError, tools...); err != nil {
 			return err
 		}
 	case "json":
@@ -62,7 +62,7 @@ func DoCheckReport(result Check, reportingFormat string, tools ...ToolInvocation
 			return err
 		}
 	case "github":
-		if err := doGitHubReport(result, tools...); err != nil {
+		if err := doGitHubReport(result, hadExecutionError, tools...); err != nil {
 			return err
 		}
 	case "gitlab":
@@ -73,7 +73,7 @@ func DoCheckReport(result Check, reportingFormat string, tools ...ToolInvocation
 			return err
 		}
 	case "markdown":
-		if err := doMarkdownReport(result, tools...); err != nil {
+		if err := doMarkdownReport(result, hadExecutionError, tools...); err != nil {
 			return err
 		}
 	case "junit":
@@ -92,7 +92,7 @@ func DoCheckReport(result Check, reportingFormat string, tools ...ToolInvocation
 	return nil
 }
 
-func doSummaryReport(result Check, tools ...ToolInvocationStatus) error {
+func doSummaryReport(result Check, hadExecutionError bool, tools ...ToolInvocationStatus) error {
 	// Group results by file
 	fileGroups := make(map[string][]CheckResult)
 	for _, r := range result.GetResults() {
@@ -154,7 +154,7 @@ func doSummaryReport(result Check, tools ...ToolInvocationStatus) error {
 	//nolint:forbidigo
 	if tools != nil && !anyToolInvoked(tools) {
 		fmt.Println("\nNo checkers invoked; 0 problems reported")
-	} else {
+	} else if totalProblems > 0 || !hadExecutionError {
 		fmt.Printf("\n%s\n", summaryLine(totalProblems, errorCount, warningCount))
 	}
 
@@ -191,7 +191,7 @@ func doJSONReport(result Check, tools ...ToolInvocationStatus) error {
 	return encoder.Encode(data)
 }
 
-func doGitHubReport(result Check, tools ...ToolInvocationStatus) error {
+func doGitHubReport(result Check, hadExecutionError bool, tools ...ToolInvocationStatus) error {
 	// Print the human-readable summary first so the GitHub Actions log
 	// shows file/line context, then emit annotations for PR inline display.
 	// File paths and messages can contain `::` which the runner would parse
@@ -204,7 +204,7 @@ func doGitHubReport(result Check, tools ...ToolInvocationStatus) error {
 	token := hex.EncodeToString(tokenBytes[:])
 
 	fmt.Printf("::stop-commands::%s\n", token)
-	if err := doSummaryReport(result, tools...); err != nil {
+	if err := doSummaryReport(result, hadExecutionError, tools...); err != nil {
 		fmt.Printf("::%s::\n", token)
 		return err
 	}
@@ -332,7 +332,7 @@ func doGitLabReport(result Check) error {
 	return encoder.Encode(issues)
 }
 
-func doMarkdownReport(result Check, tools ...ToolInvocationStatus) error {
+func doMarkdownReport(result Check, hadExecutionError bool, tools ...ToolInvocationStatus) error {
 	// Group results by file
 	fileGroups := make(map[string][]CheckResult)
 	for _, r := range result.GetResults() {
@@ -409,7 +409,7 @@ func doMarkdownReport(result Check, tools ...ToolInvocationStatus) error {
 
 	if tools != nil && !anyToolInvoked(tools) {
 		fmt.Println("No checkers invoked; 0 problems reported")
-	} else if totalProblems == 0 {
+	} else if totalProblems == 0 && !hadExecutionError {
 		fmt.Println("✅ No problems found")
 	}
 

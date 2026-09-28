@@ -125,7 +125,7 @@ var extensionValidateCmd = &cobra.Command{
 		}
 
 		runErr := gr.Wait()
-		reportErr := validation.DoCheckReport(result.RemoveByIdentifier(toolCfg.ValidationIgnores), reportingFormat, statuses...)
+		reportErr := validation.DoCheckReport(result.RemoveByIdentifier(toolCfg.ValidationIgnores), reportingFormat, runErr != nil, statuses...)
 		if runErr != nil {
 			return runErr
 		}
