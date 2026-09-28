@@ -48,16 +48,12 @@ var extensionFormat = &cobra.Command{
 			return err
 		}
 
-		toolCfg, err := verifier.ConvertExtensionToToolConfig(ext)
+		toolCfg, err := verifier.SetupExtensionToolConfig(cmd.Context(), cmd.Root().Version, ext)
 		if err != nil {
 			return err
 		}
 
 		logging.FromContext(cmd.Context()).Debugf("Running fixes for Shopware version: %s", toolCfg.MinShopwareVersion)
-
-		if err := verifier.SetupTools(cmd.Context(), cmd.Root().Version); err != nil {
-			return err
-		}
 
 		var gr errgroup.Group
 
