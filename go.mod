@@ -4,7 +4,7 @@ go 1.27.0
 
 require (
 	charm.land/bubbles/v2 v2.2.1
-	charm.land/bubbletea/v2 v2.0.9
+	charm.land/bubbletea/v2 v2.0.10
 	charm.land/huh/v2 v2.0.3
 	charm.land/lipgloss/v2 v2.0.6
 	dario.cat/mergo v1.0.2
@@ -18,9 +18,9 @@ require (
 	github.com/go-sql-driver/mysql v1.10.1
 	github.com/gorilla/schema v1.4.1
 	github.com/invopop/jsonschema v0.14.0
-	github.com/jaswdr/faker/v2 v2.9.1
+	github.com/jaswdr/faker/v2 v2.10.0
 	github.com/joho/godotenv v1.5.1
-	github.com/klauspost/compress v1.20.0
+	github.com/klauspost/compress v1.20.1
 	github.com/mattn/go-isatty v0.0.24
 	github.com/microcosm-cc/bluemonday v1.0.27
 	github.com/otiai10/copy v1.14.1
@@ -44,6 +44,7 @@ require (
 	github.com/zeebo/xxh3 v1.1.0
 	go.uber.org/zap v1.28.0
 	golang.org/x/image v0.46.0
+	golang.org/x/mod v0.41.0
 	golang.org/x/net v0.59.0
 	golang.org/x/oauth2 v0.37.0
 	golang.org/x/sync v0.23.0
@@ -94,7 +95,6 @@ require (
 	go.uber.org/multierr v1.11.0 // indirect
 	go.yaml.in/yaml/v3 v3.0.5 // indirect
 	go.yaml.in/yaml/v4 v4.0.0-rc.2 // indirect
-	golang.org/x/mod v0.41.0 // indirect
 	golang.org/x/tools v0.50.0 // indirect
 	google.golang.org/protobuf v1.36.11 // indirect
 	howett.net/plist v1.0.0 // indirect

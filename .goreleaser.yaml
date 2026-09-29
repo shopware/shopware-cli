@@ -10,7 +10,7 @@ builds:
   - env:
       - CGO_ENABLED=0
     binary: shopware-cli
-    ldflags: -s -w -X 'github.com/shopware/shopware-cli/cmd.version={{ .Version }}'
+    ldflags: -s -w -X 'github.com/shopware/shopware-cli/internal/cliversion.Version={{ .Version }}'
     flags:
       - -trimpath
     goos:
