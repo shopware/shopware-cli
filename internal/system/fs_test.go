@@ -221,7 +221,7 @@ func TestCopyFilesSourceAndTarget(t *testing.T) {
 
 func TestCopyFileContentsAndPermissions(t *testing.T) {
 	t.Parallel()
-	for name, copyFn := range map[string]func(string, string, fs.FileInfo) error{
+	for name, copyFn := range map[string]func(context.Context, string, string, fs.FileInfo) error{
 		"automatic": copyFile,
 		"fallback":  copyFileFallback,
 	} {
@@ -242,7 +242,7 @@ func TestCopyFileContentsAndPermissions(t *testing.T) {
 					require.NoError(t, err)
 
 					for range 2 {
-						require.NoError(t, copyFn(src, dst, info))
+						require.NoError(t, copyFn(t.Context(), src, dst, info))
 						content, err := os.ReadFile(dst)
 						require.NoError(t, err)
 						assert.Equal(t, original, string(content))
@@ -266,7 +266,7 @@ func TestCopyFileExistingDestinations(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("Unix symlinks and hard links")
 	}
-	for name, copyFn := range map[string]func(string, string, fs.FileInfo) error{
+	for name, copyFn := range map[string]func(context.Context, string, string, fs.FileInfo) error{
 		"automatic": copyFile,
 		"fallback":  copyFileFallback,
 	} {
@@ -279,16 +279,16 @@ func TestCopyFileExistingDestinations(t *testing.T) {
 			info, err := os.Stat(src)
 			require.NoError(t, err)
 
-			require.Error(t, copyFn(src, src, info))
+			require.Error(t, copyFn(t.Context(), src, src, info))
 			require.NoError(t, os.Link(src, dst))
-			require.Error(t, copyFn(src, dst, info))
+			require.Error(t, copyFn(t.Context(), src, dst, info))
 			content, err := os.ReadFile(src)
 			require.NoError(t, err)
 			assert.Equal(t, "source", string(content))
 			require.NoError(t, os.Remove(dst))
 
 			require.NoError(t, os.Symlink(other, dst))
-			require.NoError(t, copyFn(src, dst, info))
+			require.NoError(t, copyFn(t.Context(), src, dst, info))
 			content, err = os.ReadFile(other)
 			require.NoError(t, err)
 			assert.Equal(t, "keep", string(content), "must replace destination symlink without following it")
@@ -298,10 +298,23 @@ func TestCopyFileExistingDestinations(t *testing.T) {
 			require.NoError(t, os.Remove(dst))
 
 			require.NoError(t, os.Mkdir(dst, 0o755))
-			require.Error(t, copyFn(src, dst, info))
+			require.Error(t, copyFn(t.Context(), src, dst, info))
 			assert.DirExists(t, dst)
 		})
 	}
+}
+
+func TestCopyFileFallbackCanceled(t *testing.T) {
+	t.Parallel()
+	base := t.TempDir()
+	src, dst := filepath.Join(base, "source"), filepath.Join(base, "target")
+	require.NoError(t, os.WriteFile(src, []byte("source"), 0o644))
+	info, err := os.Stat(src)
+	require.NoError(t, err)
+
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+	assert.ErrorIs(t, copyFileFallback(ctx, src, dst, info), context.Canceled)
 }
 
 func TestCopyFilesSymlinks(t *testing.T) {

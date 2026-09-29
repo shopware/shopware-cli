@@ -16,6 +16,9 @@ import (
 // small files into the same directory. Keep both I/O and queued work bounded.
 const copyFileWorkers = 4
 
+// Fallback copies check for cancellation between chunks of this size.
+const copyChunkSize = 8 << 20
+
 type copyJob struct {
 	src, dst string
 	entry    fs.DirEntry
@@ -100,7 +103,7 @@ func runCopyJobs(ctx context.Context, jobs <-chan copyJob) error {
 		if err != nil {
 			return fmt.Errorf("failed to access path %q: %w", job.src, err)
 		}
-		if err := copyFile(job.src, job.dst, info); err != nil {
+		if err := copyFile(ctx, job.src, job.dst, info); err != nil {
 			return fmt.Errorf("failed to copy %q to %q: %w", job.src, job.dst, err)
 		}
 	}
@@ -202,7 +205,7 @@ func resolveCopyTarget(path string) (string, error) {
 	}
 }
 
-func copyFile(src, dst string, info fs.FileInfo) error {
+func copyFile(ctx context.Context, src, dst string, info fs.FileInfo) error {
 	// If it's a symlink, create a new symlink
 	if info.Mode()&os.ModeSymlink != 0 {
 		linkTarget, err := os.Readlink(src)
@@ -239,7 +242,7 @@ func copyFile(src, dst string, info fs.FileInfo) error {
 		return nil
 	}
 
-	return copyFileFallback(src, dst, info)
+	return copyFileFallback(ctx, src, dst, info)
 }
 
 // describeFileType names special files for errors instead of printing raw mode bits.
@@ -276,7 +279,7 @@ func removeCopyDestination(dst string, sourceInfo fs.FileInfo) error {
 
 // copyFileFallback retains io.Copy's platform-specific optimizations when
 // cloning is unavailable (e.g. cross-device or non-APFS filesystems).
-func copyFileFallback(src, dst string, info fs.FileInfo) error {
+func copyFileFallback(ctx context.Context, src, dst string, info fs.FileInfo) error {
 	// Open source file
 	sourceFile, err := os.Open(src)
 	if err != nil {
@@ -297,7 +300,7 @@ func copyFileFallback(src, dst string, info fs.FileInfo) error {
 	}
 
 	// Copy the contents
-	_, copyErr := io.Copy(targetFile, sourceFile)
+	copyErr := copyContents(ctx, targetFile, sourceFile)
 	// Creating with the source mode is still subject to umask; apply the
 	// complete mode after writing, which can otherwise clear setuid/setgid.
 	var chmodErr error
@@ -321,6 +324,23 @@ func copyFileFallback(src, dst string, info fs.FileInfo) error {
 	}
 
 	return nil
+}
+
+// copyContents stops a large copy between chunks when ctx is canceled.
+// io.CopyN passes an io.LimitedReader, which *os.File.ReadFrom still
+// accelerates with copy_file_range or sendfile.
+func copyContents(ctx context.Context, dst io.Writer, src io.Reader) error {
+	for {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		if _, err := io.CopyN(dst, src, copyChunkSize); err != nil {
+			if err == io.EOF {
+				return nil
+			}
+			return err
+		}
+	}
 }
 
 func IsDirEmpty(name string) (bool, error) {
