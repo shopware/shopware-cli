@@ -17,19 +17,19 @@ import (
 	"github.com/shopware/shopware-cli/cmd/extension"
 	"github.com/shopware/shopware-cli/cmd/project"
 	accountApi "github.com/shopware/shopware-cli/internal/account-api"
-	adminSdk "github.com/shopware/shopware-cli/internal/admin-api"
+	"github.com/shopware/shopware-cli/internal/cliversion"
 	"github.com/shopware/shopware-cli/internal/system"
-	"github.com/shopware/shopware-cli/internal/tui"
 	"github.com/shopware/shopware-cli/logging"
 )
 
-var version = "dev"
+// version is the legacy ldflags target (-X 'github.com/shopware/shopware-cli/cmd.version=...').
+// It is kept until all build platforms set internal/cliversion.Version directly.
+var version string
 
 var rootCmd = &cobra.Command{
-	Use:     "shopware-cli",
-	Short:   "Build, develop, and manage Shopware projects and extensions",
-	Long:    `Build, develop, and manage Shopware projects and extensions from the command line.`,
-	Version: version,
+	Use:   "shopware-cli",
+	Short: "Build, develop, and manage Shopware projects and extensions",
+	Long:  `Build, develop, and manage Shopware projects and extensions from the command line.`,
 }
 
 // Execute runs the root command and returns the process exit code after cleanup.
@@ -43,9 +43,6 @@ func Execute(ctx context.Context) int {
 	ctx = logging.WithLogger(ctx, logging.NewLogger(verbose))
 	ctx = logging.WithVerbose(ctx, verbose)
 	ctx = system.WithInteraction(ctx, !slices.Contains(args, "--no-interaction") && !slices.Contains(args, "-n") && isatty.IsTerminal(os.Stdin.Fd()))
-	tui.AppVersion = version
-	accountApi.SetUserAgent("shopware-cli/" + version)
-	adminSdk.SetUserAgent("shopware-cli/" + version)
 	rootCmd.SetArgs(args)
 
 	updateHandle, updateCancel := startUpdateCheck(ctx, args)
@@ -76,6 +73,11 @@ func exitCode(ctx context.Context, err error) int {
 }
 
 func init() {
+	if version != "" {
+		cliversion.Version = version
+	}
+	rootCmd.Version = cliversion.Version
+
 	rootCmd.SilenceErrors = true
 
 	// Cobra prints the usage block for every error a command returns. Flags,
