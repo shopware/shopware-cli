@@ -18,7 +18,7 @@ func TestCopyFilesNamedPipe(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(src, "file"), []byte("content"), 0o644))
 	require.NoError(t, syscall.Mkfifo(filepath.Join(src, "pipe"), 0o644))
 
-	err := CopyFiles(src, dst)
+	err := CopyFiles(t.Context(), src, dst)
 	assert.ErrorContains(t, err, "unsupported file type: named pipe")
 	assert.FileExists(t, filepath.Join(dst, "file"))
 }

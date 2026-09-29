@@ -21,7 +21,7 @@ type copyJob struct {
 	entry    fs.DirEntry
 }
 
-func CopyFiles(currentPath string, targetPath string) error {
+func CopyFiles(ctx context.Context, currentPath string, targetPath string) error {
 	currentPath, err := prepareCopySource(currentPath)
 	if err != nil {
 		return err
@@ -42,7 +42,7 @@ func CopyFiles(currentPath string, targetPath string) error {
 		return fmt.Errorf("failed to create target directory: %w", err)
 	}
 
-	return copyDirectoryTree(currentPath, targetPath)
+	return copyDirectoryTree(ctx, currentPath, targetPath)
 }
 
 func prepareCopySource(currentPath string) (string, error) {
@@ -69,9 +69,9 @@ func prepareCopySource(currentPath string) (string, error) {
 	return currentPath, nil
 }
 
-func copyDirectoryTree(currentPath string, targetPath string) error {
+func copyDirectoryTree(ctx context.Context, currentPath string, targetPath string) error {
 	jobs := make(chan copyJob, copyFileWorkers)
-	group, ctx := errgroup.WithContext(context.Background())
+	group, ctx := errgroup.WithContext(ctx)
 	for range copyFileWorkers {
 		group.Go(func() error {
 			return runCopyJobs(ctx, jobs)

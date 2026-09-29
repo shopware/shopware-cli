@@ -63,7 +63,7 @@ var projectValidateCmd = &cobra.Command{
 				}
 			}()
 
-			if err := system.CopyFiles(projectPath, tmpDir); err != nil {
+			if err := system.CopyFiles(cmd.Context(), projectPath, tmpDir); err != nil {
 				return err
 			}
 			validationPath = tmpDir
