@@ -111,7 +111,19 @@ func CopyFiles(currentPath string, targetPath string) error {
 				if !os.IsExist(err) {
 					return err
 				}
-				return os.MkdirAll(targetFilePath, 0o755)
+				destinationInfo, lstatErr := os.Lstat(targetFilePath)
+				if lstatErr != nil {
+					return lstatErr
+				}
+				if destinationInfo.Mode()&os.ModeSymlink != 0 {
+					if err := os.Remove(targetFilePath); err != nil {
+						return err
+					}
+					return os.Mkdir(targetFilePath, 0o755)
+				}
+				if !destinationInfo.IsDir() {
+					return err
+				}
 			}
 			return nil
 		}
