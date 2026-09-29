@@ -29,7 +29,7 @@ func (deploymentTestBackend) RolloutDeployment(context.Context, deployment.Deplo
 	panic("unexpected rollout")
 }
 
-func TestDeploymentBackendHostSelection(t *testing.T) {
+func TestDeploymentBackendEnvironmentScope(t *testing.T) {
 	oldConfig, oldEnvironment := projectConfigPath, environmentName
 	t.Cleanup(func() { projectConfigPath, environmentName = oldConfig, oldEnvironment })
 	root := t.TempDir()
@@ -46,33 +46,38 @@ environments:
       hosts:
         web-1: {host: web1.example.com}
         web-2: {host: web2.example.com}
+  maintenance:
+    type: ssh
+    ssh:
+      host: web1.example.com
+      user: deploy
+      directory: /srv/shop/current
 `)
-	environmentName = "production"
 	projectConfigPath = config
 	for _, tc := range []struct {
-		command, host, wantErr string
-		single                 bool
+		command, environment, wantErr string
+		single                        bool
 	}{
-		{"rollout", "", "", false},
-		{"rollback", "", "", false},
-		{"create", "", "", false},
-		{"logs", "", "", false},
-		{"list", "web-2", "", true},
-		{"logs", "web-2", "", true},
-		{"init", "web-1", "", true},
-		{"prune", "web-2", "", true},
-		{"rollout", "web-1", "targets the whole environment", false},
-		{"rollback", "web-1", "targets the whole environment", false},
-		{"create", "web-1", "targets the whole environment", false},
-		{"init", "", "requires --ssh-host", false},
-		{"prune", "", "requires --ssh-host", false},
-		{"logs", "missing", "unknown SSH host", false},
+		{"rollout", "production", "", false},
+		{"rollback", "production", "", false},
+		{"create", "production", "", false},
+		{"logs", "production", "", false},
+		{"list", "production", "", false},
+		{"init", "production", "configure a separate single-host environment", false},
+		{"prune", "production", "configure a separate single-host environment", false},
+		{"rollout", "maintenance", "", true},
+		{"rollback", "maintenance", "", true},
+		{"create", "maintenance", "", true},
+		{"list", "maintenance", "", true},
+		{"logs", "maintenance", "", true},
+		{"init", "maintenance", "", true},
+		{"prune", "maintenance", "", true},
 	} {
-		t.Run(tc.command+"/"+tc.host, func(t *testing.T) {
+		t.Run(tc.command+"/"+tc.environment, func(t *testing.T) {
+			environmentName = tc.environment
 			cmd := &cobra.Command{Use: tc.command}
 			cmd.SetContext(t.Context())
 			cmd.Flags().String("project-config", "", "")
-			cmd.Flags().String("ssh-host", tc.host, "")
 			require.NoError(t, cmd.Flags().Set("project-config", config))
 			backend, err := resolveProjectDeploymentBackend(cmd, root)
 			if tc.wantErr != "" {

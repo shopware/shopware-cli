@@ -93,7 +93,6 @@ func newLifecycleCommand(t *testing.T, args []string) (*cobra.Command, *bytes.Bu
 	root := &cobra.Command{Use: "project", SilenceUsage: true, SilenceErrors: true}
 	root.PersistentFlags().StringVar(&projectConfigPath, "project-config", "", "")
 	root.PersistentFlags().StringVarP(&environmentName, "env", "e", "", "")
-	root.PersistentFlags().String("ssh-host", "", "")
 	deployment := &cobra.Command{Use: "deploy"}
 	create := &cobra.Command{Use: projectDeploymentCreateCmd.Use, Args: projectDeploymentCreateCmd.Args, RunE: projectDeploymentCreateCmd.RunE}
 	create.Flags().StringP("output", "o", "", "")

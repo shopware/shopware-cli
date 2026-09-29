@@ -11,8 +11,8 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/shopware/shopware-cli/internal/cliversion"
 	"github.com/shopware/shopware-cli/internal/deployment"
-	"github.com/shopware/shopware-cli/internal/tui"
 )
 
 var projectDeploymentCreateCmd = &cobra.Command{
@@ -47,7 +47,7 @@ canceled, the created archive is retained for retrying.`,
 		}
 
 		return runProjectDeploymentCreate(cmd, backend, projectRoot, deployment.CreateOptions{
-			OutputPath: output, WithDevDependencies: withDev, ToolVersion: tui.AppVersion,
+			OutputPath: output, WithDevDependencies: withDev, ToolVersion: cliversion.Version,
 		})
 	},
 }

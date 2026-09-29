@@ -62,7 +62,7 @@ func TestNewSSHExecutorRequiresResolvedHost(t *testing.T) {
 	}}
 
 	target, err := New("/project", cfg, &shop.Config{})
-	require.ErrorContains(t, err, "requires a single resolved host")
+	require.ErrorContains(t, err, "requires a single-host environment with ssh.host")
 	assert.Nil(t, target)
 }
 

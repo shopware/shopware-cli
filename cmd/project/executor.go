@@ -21,10 +21,6 @@ func resolveExecutor(cmd *cobra.Command, projectRoot string) (executor.Executor,
 	if err != nil {
 		return nil, err
 	}
-	envCfg, err = selectProjectSSHHost(cmd, envCfg, true)
-	if err != nil {
-		return nil, err
-	}
 
 	cfg, err = cfg.WithEnvironment(environmentName)
 	if err != nil {

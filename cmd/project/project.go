@@ -21,6 +21,4 @@ func Register(rootCmd *cobra.Command) {
 	projectRootCmd.PersistentFlags().StringVar(&projectConfigPath, "project-config", "", "Path to config, if empty searches default location .config/shopware-project.yml first with legacy fallbacks for .shopware-project.yaml and .shopware-project.yml")
 	projectRootCmd.PersistentFlags().StringVarP(&environmentName, "env", "e", "", environmentFlagUsage)
 	_ = projectRootCmd.RegisterFlagCompletionFunc("env", completeEnvironmentNames)
-	projectRootCmd.PersistentFlags().String("ssh-host", "", "Select a named SSH host for a single-host command")
-	_ = projectRootCmd.RegisterFlagCompletionFunc("ssh-host", sshHostCompletions)
 }

@@ -22,8 +22,8 @@ shared paths must already be provisioned consistently across hosts. Deployment
 Helper runs once on migration_host; each host prepares and activates its own release.
 Activation is sequential, not atomic across hosts; a failure stops further switches.
 
-Use --ssh-host for single-host init, prune, logs or list. Init and prune require
-an explicit host in a group; logs otherwise use migration_host.`,
+Init and prune require a single-host environment. List shows all hosts;
+logs use migration_host.`,
 }
 
 func init() {
