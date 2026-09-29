@@ -17,26 +17,18 @@ import (
 // small files into the same directory. Keep both I/O and queued work bounded.
 const copyFileWorkers = 4
 
-func CopyFiles(currentPath string, targetPath string) error {
-	// When the currentPath folder does not exist, return
-	sourceInfo, err := os.Stat(currentPath)
-	if os.IsNotExist(err) {
-		return nil
-	}
-	if err != nil {
-		return fmt.Errorf("failed to access source directory: %w", err)
-	}
-	if !sourceInfo.IsDir() {
-		return fmt.Errorf("source %q is not a directory", currentPath)
-	}
+type copyJob struct {
+	src, dst string
+	entry    fs.DirEntry
+}
 
-	currentPath, err = filepath.Abs(currentPath)
+func CopyFiles(currentPath string, targetPath string) error {
+	currentPath, err := prepareCopySource(currentPath)
 	if err != nil {
 		return err
 	}
-	currentPath, err = filepath.EvalSymlinks(currentPath)
-	if err != nil {
-		return err
+	if currentPath == "" {
+		return nil
 	}
 	targetPath, err = resolveCopyTarget(targetPath)
 	if err != nil {
@@ -51,33 +43,73 @@ func CopyFiles(currentPath string, targetPath string) error {
 		return fmt.Errorf("failed to create target directory: %w", err)
 	}
 
-	type copyJob struct {
-		src, dst string
-		entry    fs.DirEntry
+	return copyDirectoryTree(currentPath, targetPath)
+}
+
+func prepareCopySource(currentPath string) (string, error) {
+	// When the currentPath folder does not exist, return
+	sourceInfo, err := os.Stat(currentPath)
+	if os.IsNotExist(err) {
+		return "", nil
 	}
+	if err != nil {
+		return "", fmt.Errorf("failed to access source directory: %w", err)
+	}
+	if !sourceInfo.IsDir() {
+		return "", fmt.Errorf("source %q is not a directory", currentPath)
+	}
+
+	currentPath, err = filepath.Abs(currentPath)
+	if err != nil {
+		return "", err
+	}
+	currentPath, err = filepath.EvalSymlinks(currentPath)
+	if err != nil {
+		return "", err
+	}
+	return currentPath, nil
+}
+
+func copyDirectoryTree(currentPath string, targetPath string) error {
 	jobs := make(chan copyJob, copyFileWorkers)
 	group, ctx := errgroup.WithContext(context.Background())
 	for range copyFileWorkers {
 		group.Go(func() error {
-			for job := range jobs {
-				if err := ctx.Err(); err != nil {
-					return err
-				}
-				info, err := job.entry.Info()
-				if err != nil {
-					return fmt.Errorf("failed to access path %q: %w", job.src, err)
-				}
-				if err := copyFile(job.src, job.dst, info); err != nil {
-					return fmt.Errorf("failed to copy %q to %q: %w", job.src, job.dst, err)
-				}
-			}
-			return nil
+			return runCopyJobs(ctx, jobs)
 		})
 	}
 
 	// WalkDir avoids statting every entry on the walking goroutine. Workers
 	// fetch file metadata once and reuse it for symlinks and permissions.
-	walkErr := filepath.WalkDir(currentPath, func(path string, entry fs.DirEntry, err error) error {
+	walkErr := filepath.WalkDir(currentPath, walkCopySource(currentPath, targetPath, jobs, ctx))
+	close(jobs)
+
+	// Always join the workers, including when walking fails. Return the actual
+	// copy error in preference to cancellation caused by that error.
+	if err := group.Wait(); err != nil {
+		return err
+	}
+	return walkErr
+}
+
+func runCopyJobs(ctx context.Context, jobs <-chan copyJob) error {
+	for job := range jobs {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		info, err := job.entry.Info()
+		if err != nil {
+			return fmt.Errorf("failed to access path %q: %w", job.src, err)
+		}
+		if err := copyFile(job.src, job.dst, info); err != nil {
+			return fmt.Errorf("failed to copy %q to %q: %w", job.src, job.dst, err)
+		}
+	}
+	return nil
+}
+
+func walkCopySource(currentPath string, targetPath string, jobs chan<- copyJob, ctx context.Context) fs.WalkDirFunc {
+	return func(path string, entry fs.DirEntry, err error) error {
 		if err != nil {
 			return fmt.Errorf("failed to access path %q: %w", path, err)
 		}
@@ -93,7 +125,7 @@ func CopyFiles(currentPath string, targetPath string) error {
 
 		// Skip development environment and VCS metadata folders
 		// (e.g., .devenv, .direnv, .git)
-		if entry.IsDir() && (relPath == ".devenv" || relPath == ".direnv" || relPath == ".git") {
+		if entry.IsDir() && isSkippedCopyDir(relPath) {
 			return filepath.SkipDir
 		}
 
@@ -105,27 +137,7 @@ func CopyFiles(currentPath string, targetPath string) error {
 			if relPath == "." {
 				return nil
 			}
-			// The walk has already created the parent. Avoid MkdirAll's
-			// extra stat calls for the usual case of a fresh destination.
-			if err := os.Mkdir(targetFilePath, 0o755); err != nil {
-				if !os.IsExist(err) {
-					return err
-				}
-				destinationInfo, lstatErr := os.Lstat(targetFilePath)
-				if lstatErr != nil {
-					return lstatErr
-				}
-				if destinationInfo.Mode()&os.ModeSymlink != 0 {
-					if err := os.Remove(targetFilePath); err != nil {
-						return err
-					}
-					return os.Mkdir(targetFilePath, 0o755)
-				}
-				if !destinationInfo.IsDir() {
-					return err
-				}
-			}
-			return nil
+			return ensureCopyTargetDir(targetFilePath)
 		}
 
 		select {
@@ -134,15 +146,35 @@ func CopyFiles(currentPath string, targetPath string) error {
 		case <-ctx.Done():
 			return ctx.Err()
 		}
-	})
-	close(jobs)
-
-	// Always join the workers, including when walking fails. Return the actual
-	// copy error in preference to cancellation caused by that error.
-	if err := group.Wait(); err != nil {
-		return err
 	}
-	return walkErr
+}
+
+func isSkippedCopyDir(relPath string) bool {
+	return relPath == ".devenv" || relPath == ".direnv" || relPath == ".git"
+}
+
+func ensureCopyTargetDir(targetFilePath string) error {
+	// The walk has already created the parent. Avoid MkdirAll's
+	// extra stat calls for the usual case of a fresh destination.
+	if err := os.Mkdir(targetFilePath, 0o755); err != nil {
+		if !os.IsExist(err) {
+			return err
+		}
+		destinationInfo, lstatErr := os.Lstat(targetFilePath)
+		if lstatErr != nil {
+			return lstatErr
+		}
+		if destinationInfo.Mode()&os.ModeSymlink != 0 {
+			if err := os.Remove(targetFilePath); err != nil {
+				return err
+			}
+			return os.Mkdir(targetFilePath, 0o755)
+		}
+		if !destinationInfo.IsDir() {
+			return err
+		}
+	}
+	return nil
 }
 
 func isCopyTargetInsideSource(src, dst string) bool {
