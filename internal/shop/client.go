@@ -11,7 +11,7 @@ import (
 )
 
 // ErrNoAdminAPICredentials is returned when neither the project config nor the environment provides Admin API credentials.
-var ErrNoAdminAPICredentials = errors.New("no Admin API credentials configured: set environments.<name>.admin_api in .shopware-project.yml or SHOPWARE_CLI_API_CLIENT_ID and SHOPWARE_CLI_API_CLIENT_SECRET")
+var ErrNoAdminAPICredentials = errors.New("no Admin API credentials configured: set environments.<name>.admin_api in .config/shopware-project.yml or SHOPWARE_CLI_API_CLIENT_ID and SHOPWARE_CLI_API_CLIENT_SECRET")
 
 func newShopCredentials(config *Config) (adminSdk.OAuthCredentials, error) {
 	clientId, clientSecret := os.Getenv("SHOPWARE_CLI_API_CLIENT_ID"), os.Getenv("SHOPWARE_CLI_API_CLIENT_SECRET")
@@ -35,6 +35,19 @@ func newShopCredentials(config *Config) (adminSdk.OAuthCredentials, error) {
 	}
 
 	return adminSdk.NewIntegrationCredentials(config.AdminApi.ClientId, config.AdminApi.ClientSecret, []string{"write"}), nil
+}
+
+// HasAdminAPICredentials reports whether the environment or the config provides Admin API credentials.
+func HasAdminAPICredentials(config *Config) bool {
+	if os.Getenv("SHOPWARE_CLI_API_CLIENT_ID") != "" && os.Getenv("SHOPWARE_CLI_API_CLIENT_SECRET") != "" {
+		return true
+	}
+
+	if os.Getenv("SHOPWARE_CLI_API_USERNAME") != "" && os.Getenv("SHOPWARE_CLI_API_PASSWORD") != "" {
+		return true
+	}
+
+	return config != nil && config.IsAdminAPIConfigured()
 }
 
 func NewShopClient(ctx context.Context, config *Config) (*adminSdk.Client, error) {

@@ -1,9 +1,11 @@
 package project
 
 import (
+	"cmp"
 	"errors"
 	"fmt"
 	"net/url"
+	"os"
 	"path"
 	"strings"
 
@@ -30,7 +32,7 @@ var projectAdminApiCmd = &cobra.Command{
 		}
 
 		cfg := cmdExecutor.ShopConfig()
-		if cfg == nil || cfg.AdminApi == nil {
+		if cfg == nil || !shop.HasAdminAPICredentials(cfg) {
 			return shop.ErrNoAdminAPICredentials
 		}
 
@@ -55,7 +57,8 @@ var projectAdminApiCmd = &cobra.Command{
 			return errors.New("command needs 2 arguments")
 		}
 
-		shopURL, err := url.Parse(cfg.URL)
+		// same host precedence as NewShopClient, so the request goes where the token came from
+		shopURL, err := url.Parse(cmp.Or(os.Getenv("SHOPWARE_CLI_API_URL"), cfg.URL))
 		if err != nil {
 			return err
 		}
@@ -74,7 +77,7 @@ var projectAdminApiCmd = &cobra.Command{
 			curl.Args(args[2:]),
 		}
 
-		if cfg.AdminApi.DisableSSLCheck {
+		if cfg.AdminApi != nil && cfg.AdminApi.DisableSSLCheck {
 			commandConfig = append(commandConfig, curl.Args([]string{"--insecure"}))
 		}
 

@@ -84,7 +84,7 @@ If a file is not found locally, it proxies the request to the upstream server.`,
 		}
 
 		actualProjectConfigPath := shop.SearchConfigPath(cmd.Context(), path, projectConfigPath)
-		cfg, err := shop.ReadConfig(cmd.Context(), actualProjectConfigPath, true)
+		cfg, err := shop.ReadConfig(cmd.Context(), actualProjectConfigPath, projectConfigPath == "")
 		if err != nil {
 			return err
 		}

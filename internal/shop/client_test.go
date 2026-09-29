@@ -207,3 +207,33 @@ func Test_NewShopClient_CredentialsError(t *testing.T) {
 	_, err := NewShopClient(t.Context(), cfg)
 	assert.Error(t, err)
 }
+
+func TestHasAdminAPICredentials(t *testing.T) {
+	envKeys := []string{"SHOPWARE_CLI_API_CLIENT_ID", "SHOPWARE_CLI_API_CLIENT_SECRET", "SHOPWARE_CLI_API_USERNAME", "SHOPWARE_CLI_API_PASSWORD"}
+
+	cases := []struct {
+		name   string
+		env    map[string]string
+		config *Config
+		want   bool
+	}{
+		{name: "integration env pair", env: map[string]string{"SHOPWARE_CLI_API_CLIENT_ID": "id", "SHOPWARE_CLI_API_CLIENT_SECRET": "secret"}, config: &Config{}, want: true},
+		{name: "password env pair", env: map[string]string{"SHOPWARE_CLI_API_USERNAME": "user", "SHOPWARE_CLI_API_PASSWORD": "pass"}, config: &Config{}, want: true},
+		{name: "env pair with nil config", env: map[string]string{"SHOPWARE_CLI_API_CLIENT_ID": "id", "SHOPWARE_CLI_API_CLIENT_SECRET": "secret"}, config: nil, want: true},
+		{name: "half env pair", env: map[string]string{"SHOPWARE_CLI_API_CLIENT_ID": "id"}, config: &Config{}, want: false},
+		{name: "config only", config: &Config{AdminApi: &ConfigAdminApi{ClientId: "id", ClientSecret: "secret"}}, want: true},
+		{name: "config with empty fields", config: &Config{AdminApi: &ConfigAdminApi{}}, want: false},
+		{name: "nothing", config: &Config{}, want: false},
+		{name: "nil config", config: nil, want: false},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			for _, key := range envKeys {
+				t.Setenv(key, tc.env[key])
+			}
+
+			assert.Equal(t, tc.want, HasAdminAPICredentials(tc.config))
+		})
+	}
+}
