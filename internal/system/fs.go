@@ -219,7 +219,7 @@ func copyFile(src, dst string, info fs.FileInfo) error {
 		return err
 	}
 	if !info.Mode().IsRegular() {
-		return fmt.Errorf("unsupported file type %s", info.Mode().Type())
+		return fmt.Errorf("unsupported file type: %s", describeFileType(info.Mode()))
 	}
 
 	// Try a copy-on-write clone first (macOS/APFS), falling back to io.Copy
@@ -240,6 +240,22 @@ func copyFile(src, dst string, info fs.FileInfo) error {
 	}
 
 	return copyFileFallback(src, dst, info)
+}
+
+// describeFileType names special files for errors instead of printing raw mode bits.
+func describeFileType(mode fs.FileMode) string {
+	switch {
+	case mode&os.ModeNamedPipe != 0:
+		return "named pipe"
+	case mode&os.ModeSocket != 0:
+		return "socket"
+	case mode&os.ModeCharDevice != 0:
+		return "character device"
+	case mode&os.ModeDevice != 0:
+		return "block device"
+	default:
+		return mode.Type().String()
+	}
 }
 
 // Only remove an existing file after creation reports EEXIST. Never follow a
