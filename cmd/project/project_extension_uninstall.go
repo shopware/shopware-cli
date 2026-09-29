@@ -56,9 +56,10 @@ var projectExtensionUninstallCmd = &cobra.Command{
 					failed = true
 
 					logging.FromContext(cmd.Context()).Errorf("Deactivation of %s failed with error: %v", extension.Name, err)
-				} else {
-					logging.FromContext(cmd.Context()).Infof("Deactivated %s", extension.Name)
+					continue
 				}
+
+				logging.FromContext(cmd.Context()).Infof("Deactivated %s", extension.Name)
 			}
 
 			if _, err := client.ExtensionManager.UninstallExtension(adminSdk.NewApiContext(cmd.Context()), extension.Type, extension.Name); err != nil {

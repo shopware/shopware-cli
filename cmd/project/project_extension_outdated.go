@@ -57,6 +57,9 @@ var projectExtensionOutdatedCmd = &cobra.Command{
 		if err := result.Write(cmd.OutOrStdout(), format); err != nil {
 			return err
 		}
+		if len(extensions) == 0 {
+			return nil
+		}
 		return fmt.Errorf("there are %d outdated extensions", len(extensions))
 	},
 }

@@ -40,13 +40,13 @@ func newCreateCmd() *cobra.Command {
 			// Validate the relationships of provided flags
 			err := validateFlagRelations(isProvided, opts.Store, interactive)
 			if err != nil {
-				errs = errors.Join(errs, fmt.Errorf("\n%w", err))
+				errs = errors.Join(errs, err)
 			}
 
 			// Validate the values of provided flags
 			err = validateFlagValues(opts, isProvided)
 			if err != nil {
-				errs = errors.Join(errs, fmt.Errorf("\n%w", err))
+				errs = errors.Join(errs, err)
 			}
 
 			if errs != nil {
