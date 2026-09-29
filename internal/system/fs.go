@@ -2,7 +2,6 @@ package system
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"io"
 	"io/fs"
@@ -35,7 +34,7 @@ func CopyFiles(currentPath string, targetPath string) error {
 		return err
 	}
 	if isCopyTargetInsideSource(currentPath, targetPath) {
-		return errors.New("target directory must not be inside source directory")
+		return fmt.Errorf("target directory %q must not be inside source directory %q", targetPath, currentPath)
 	}
 
 	// Create target directory if it doesn't exist

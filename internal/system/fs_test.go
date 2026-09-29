@@ -170,7 +170,7 @@ func TestCopyFilesSourceAndTarget(t *testing.T) {
 		t.Parallel()
 		src := t.TempDir()
 		dst := filepath.Join(src, "nested", "copy")
-		require.Error(t, CopyFiles(src, dst))
+		require.ErrorContains(t, CopyFiles(src, dst), "must not be inside source directory")
 		assert.NoDirExists(t, dst)
 	})
 	t.Run("source named like a skipped directory", func(t *testing.T) {
