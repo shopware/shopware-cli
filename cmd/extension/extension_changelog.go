@@ -67,5 +67,5 @@ var extensionChangelogCmd = &cobra.Command{
 
 func init() {
 	extensionRootCmd.AddCommand(extensionChangelogCmd)
-	extensionChangelogCmd.PersistentFlags().String("language", "", "Language of the changelog, can be multiple specified as fallback (comma separated)")
+	extensionChangelogCmd.PersistentFlags().String("language", "", "Language of the changelog, more than one can be given as fallbacks (comma-separated, e.g. de-DE,en-GB)")
 }

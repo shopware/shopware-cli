@@ -12,7 +12,7 @@ import (
 
 var projectExtensionUpdateCmd = &cobra.Command{
 	Use:   "update name...|all",
-	Short: "Update an installed extension",
+	Short: "Update one or more installed extensions",
 	Args:  cobra.MinimumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		projectRoot, err := shop.FindClosestShopwareProject(true)

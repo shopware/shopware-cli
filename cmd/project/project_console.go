@@ -26,7 +26,7 @@ var (
 var projectConsoleCmd = &cobra.Command{
 	Use:   "console",
 	Short: "Run Symfony Console commands or Composer scripts for the current project",
-	Long: "Runs bin/console for the current project. Custom scripts from the project composer.json " +
+	Long: "Run bin/console for the current project. Custom scripts from the project composer.json " +
 		"are also available by name (for example via the swx alias).",
 	Args:               cobra.MinimumNArgs(1),
 	DisableFlagParsing: true,

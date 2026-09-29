@@ -99,7 +99,7 @@ const (
 var projectDevCmd = &cobra.Command{
 	Use:   "dev",
 	Short: "Start a project's configured Shopware development environment",
-	Long:  "Start the development environment. Launches the interactive TUI dashboard when run in a terminal, or starts containers in the background otherwise.",
+	Long:  "Start the development environment. This launches the interactive TUI dashboard when run in a terminal, or starts the containers in the background otherwise.",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		projectRoot, err := shop.FindClosestShopwareProject(false)
 		if err != nil {
@@ -146,7 +146,7 @@ var projectDevCmd = &cobra.Command{
 
 var projectDevStartCmd = &cobra.Command{
 	Use:   "start",
-	Short: "Start the configured Shopware environment in the background",
+	Short: "Start the configured development environment in the background",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		env, err := setupDevEnvironment(cmd)
 		if err != nil {
@@ -163,7 +163,7 @@ var projectDevStartCmd = &cobra.Command{
 
 var projectDevStopCmd = &cobra.Command{
 	Use:   "stop",
-	Short: "Stop the configured Shopware environment",
+	Short: "Stop the configured development environment",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		env, err := setupDevEnvironment(cmd)
 		if err != nil {
@@ -179,7 +179,7 @@ var projectDevStopCmd = &cobra.Command{
 var projectDevStatusCmd = &cobra.Command{
 	Use:          "status",
 	Short:        "Show whether the Shopware development environment is running",
-	Long:         "Report whether the development environment is running. Exits with code 0 when it is up and code 1 when it is down.",
+	Long:         "Report whether the development environment is running. The command exits with code 0 when it is up and code 1 when it is down.",
 	SilenceUsage: true,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		env, err := setupDevEnvironment(cmd)
