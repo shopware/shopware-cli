@@ -61,7 +61,7 @@ func TestCopyFiles(t *testing.T) {
 	dstDir := filepath.Join(tempDir, "dst")
 
 	// Copy files from src to dst
-	err = CopyFiles(srcDir, dstDir)
+	err = CopyFiles(t.Context(), srcDir, dstDir)
 	assert.NoError(t, err, "copyFiles failed")
 
 	// Check if normal file was copied
@@ -108,7 +108,7 @@ func TestCopyFilesTree(t *testing.T) {
 	t.Parallel()
 	src := t.TempDir()
 	dst := t.TempDir()
-	for _, dir := range []string{".git", ".devenv", ".direnv", "nested/.git", "empty"} {
+	for _, dir := range []string{".git", ".devenv", ".direnv", "nested/.git", "nested/.devenv", "empty"} {
 		require.NoError(t, os.MkdirAll(filepath.Join(src, dir), 0o755))
 	}
 	for i := range 100 {
@@ -120,7 +120,7 @@ func TestCopyFilesTree(t *testing.T) {
 
 	// Copying twice exercises merging existing directories and overwriting files.
 	for range 2 {
-		require.NoError(t, CopyFiles(src, dst))
+		require.NoError(t, CopyFiles(t.Context(), src, dst))
 	}
 	for i := range 100 {
 		name := filepath.Join("nested", strconv.Itoa(i))
@@ -128,11 +128,10 @@ func TestCopyFilesTree(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, name, string(content))
 	}
-	for _, name := range []string{".git", ".devenv", ".direnv"} {
+	for _, name := range []string{".git", ".devenv", ".direnv", "nested/.git", "nested/.devenv"} {
 		_, err := os.Lstat(filepath.Join(dst, name))
 		assert.ErrorIs(t, err, os.ErrNotExist)
 	}
-	assert.FileExists(t, filepath.Join(dst, "nested/.git/keep"))
 	assert.FileExists(t, filepath.Join(dst, "unrelated"))
 	assert.DirExists(t, filepath.Join(dst, "empty"))
 }
@@ -143,7 +142,7 @@ func TestCopyFilesSourceAndTarget(t *testing.T) {
 		t.Parallel()
 		base := t.TempDir()
 		target := filepath.Join(base, "target")
-		require.NoError(t, CopyFiles(filepath.Join(base, "missing"), target))
+		require.NoError(t, CopyFiles(t.Context(), filepath.Join(base, "missing"), target))
 		assert.NoDirExists(t, target)
 	})
 	t.Run("relative source", func(t *testing.T) {
@@ -155,14 +154,14 @@ func TestCopyFilesSourceAndTarget(t *testing.T) {
 		require.NoError(t, err)
 		require.NoError(t, os.WriteFile(filepath.Join(src, "file"), []byte("source"), 0o644))
 		dst := t.TempDir()
-		require.NoError(t, CopyFiles(rel, dst))
+		require.NoError(t, CopyFiles(t.Context(), rel, dst))
 		assert.FileExists(t, filepath.Join(dst, "file"))
 	})
 	t.Run("same directory", func(t *testing.T) {
 		t.Parallel()
 		src := t.TempDir()
 		require.NoError(t, os.WriteFile(filepath.Join(src, "file"), []byte("source"), 0o644))
-		require.Error(t, CopyFiles(src, src))
+		require.Error(t, CopyFiles(t.Context(), src, src))
 		content, err := os.ReadFile(filepath.Join(src, "file"))
 		require.NoError(t, err)
 		assert.Equal(t, "source", string(content))
@@ -171,21 +170,39 @@ func TestCopyFilesSourceAndTarget(t *testing.T) {
 		t.Parallel()
 		src := t.TempDir()
 		dst := filepath.Join(src, "nested", "copy")
-		require.Error(t, CopyFiles(src, dst))
+		require.ErrorContains(t, CopyFiles(t.Context(), src, dst), "must not be inside source directory")
 		assert.NoDirExists(t, dst)
+	})
+	t.Run("source named like a skipped directory", func(t *testing.T) {
+		t.Parallel()
+		src := filepath.Join(t.TempDir(), ".git")
+		require.NoError(t, os.Mkdir(src, 0o755))
+		require.NoError(t, os.WriteFile(filepath.Join(src, "HEAD"), []byte("ref"), 0o644))
+		dst := t.TempDir()
+		require.NoError(t, CopyFiles(t.Context(), src, dst))
+		assert.FileExists(t, filepath.Join(dst, "HEAD"))
 	})
 	t.Run("file source", func(t *testing.T) {
 		t.Parallel()
 		src := filepath.Join(t.TempDir(), "file")
 		require.NoError(t, os.WriteFile(src, []byte("source"), 0o644))
-		assert.ErrorContains(t, CopyFiles(src, t.TempDir()), "not a directory")
+		assert.ErrorContains(t, CopyFiles(t.Context(), src, t.TempDir()), "not a directory")
+	})
+	t.Run("cancelled context", func(t *testing.T) {
+		t.Parallel()
+		src, dst := t.TempDir(), t.TempDir()
+		require.NoError(t, os.WriteFile(filepath.Join(src, "file"), []byte("source"), 0o644))
+		ctx, cancel := context.WithCancel(t.Context())
+		cancel()
+		require.ErrorIs(t, CopyFiles(ctx, src, dst), context.Canceled)
+		assert.NoFileExists(t, filepath.Join(dst, "file"))
 	})
 	t.Run("worker failure", func(t *testing.T) {
 		t.Parallel()
 		src, dst := t.TempDir(), t.TempDir()
 		require.NoError(t, os.WriteFile(filepath.Join(src, "file"), []byte("source"), 0o644))
 		require.NoError(t, os.Mkdir(filepath.Join(dst, "file"), 0o755))
-		err := CopyFiles(src, dst)
+		err := CopyFiles(t.Context(), src, dst)
 		assert.ErrorContains(t, err, "cannot overwrite directory")
 		assert.NotErrorIs(t, err, context.Canceled)
 		assert.DirExists(t, filepath.Join(dst, "file"))
@@ -195,7 +212,7 @@ func TestCopyFilesSourceAndTarget(t *testing.T) {
 		src, dst := t.TempDir(), t.TempDir()
 		require.NoError(t, os.Mkdir(filepath.Join(src, "directory"), 0o755))
 		require.NoError(t, os.WriteFile(filepath.Join(dst, "directory"), []byte("keep"), 0o644))
-		require.Error(t, CopyFiles(src, dst))
+		require.Error(t, CopyFiles(t.Context(), src, dst))
 		content, err := os.ReadFile(filepath.Join(dst, "directory"))
 		require.NoError(t, err)
 		assert.Equal(t, "keep", string(content))
@@ -303,12 +320,12 @@ func TestCopyFilesSymlinks(t *testing.T) {
 	}
 	alias := filepath.Join(base, "alias")
 	require.NoError(t, os.Symlink(src, alias))
-	require.Error(t, CopyFiles(src, alias))
-	require.Error(t, CopyFiles(src, filepath.Join(alias, "nested")))
+	require.Error(t, CopyFiles(t.Context(), src, alias))
+	require.Error(t, CopyFiles(t.Context(), src, filepath.Join(alias, "nested")))
 	assert.NoDirExists(t, filepath.Join(src, "nested"))
 	// Source directory aliases work, while symlinks within the tree stay links.
 	for range 2 {
-		require.NoError(t, CopyFiles(alias, dst))
+		require.NoError(t, CopyFiles(t.Context(), alias, dst))
 	}
 	for name, target := range map[string]string{"relative": "file", "dangling": "missing", "directory": "."} {
 		actual, err := os.Readlink(filepath.Join(dst, name))

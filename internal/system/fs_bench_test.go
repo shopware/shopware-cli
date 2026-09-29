@@ -30,7 +30,7 @@ func BenchmarkCopyFiles(b *testing.B) {
 			}
 			b.ReportAllocs()
 			for b.Loop() {
-				err := CopyFiles(src, dst)
+				err := CopyFiles(b.Context(), src, dst)
 				b.StopTimer()
 				require.NoError(b, err)
 				require.NoError(b, os.RemoveAll(dst))

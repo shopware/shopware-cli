@@ -2,7 +2,6 @@ package system
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"io"
 	"io/fs"
@@ -22,7 +21,7 @@ type copyJob struct {
 	entry    fs.DirEntry
 }
 
-func CopyFiles(currentPath string, targetPath string) error {
+func CopyFiles(ctx context.Context, currentPath string, targetPath string) error {
 	currentPath, err := prepareCopySource(currentPath)
 	if err != nil {
 		return err
@@ -35,7 +34,7 @@ func CopyFiles(currentPath string, targetPath string) error {
 		return err
 	}
 	if isCopyTargetInsideSource(currentPath, targetPath) {
-		return errors.New("target directory must not be inside source directory")
+		return fmt.Errorf("target directory %q must not be inside source directory %q", targetPath, currentPath)
 	}
 
 	// Create target directory if it doesn't exist
@@ -43,7 +42,7 @@ func CopyFiles(currentPath string, targetPath string) error {
 		return fmt.Errorf("failed to create target directory: %w", err)
 	}
 
-	return copyDirectoryTree(currentPath, targetPath)
+	return copyDirectoryTree(ctx, currentPath, targetPath)
 }
 
 func prepareCopySource(currentPath string) (string, error) {
@@ -70,9 +69,9 @@ func prepareCopySource(currentPath string) (string, error) {
 	return currentPath, nil
 }
 
-func copyDirectoryTree(currentPath string, targetPath string) error {
+func copyDirectoryTree(ctx context.Context, currentPath string, targetPath string) error {
 	jobs := make(chan copyJob, copyFileWorkers)
-	group, ctx := errgroup.WithContext(context.Background())
+	group, ctx := errgroup.WithContext(ctx)
 	for range copyFileWorkers {
 		group.Go(func() error {
 			return runCopyJobs(ctx, jobs)
@@ -123,9 +122,8 @@ func walkCopySource(currentPath string, targetPath string, jobs chan<- copyJob, 
 			return fmt.Errorf("failed to get relative path for %q: %w", path, err)
 		}
 
-		// Skip development environment and VCS metadata folders
-		// (e.g., .devenv, .direnv, .git)
-		if entry.IsDir() && isSkippedCopyDir(relPath) {
+		// Skip VCS and dev environment folders at any depth, but never the source root
+		if relPath != "." && entry.IsDir() && isSkippedCopyDir(entry.Name()) {
 			return filepath.SkipDir
 		}
 
@@ -149,8 +147,8 @@ func walkCopySource(currentPath string, targetPath string, jobs chan<- copyJob, 
 	}
 }
 
-func isSkippedCopyDir(relPath string) bool {
-	return relPath == ".devenv" || relPath == ".direnv" || relPath == ".git"
+func isSkippedCopyDir(name string) bool {
+	return name == ".devenv" || name == ".direnv" || name == ".git"
 }
 
 func ensureCopyTargetDir(targetFilePath string) error {
@@ -221,7 +219,7 @@ func copyFile(src, dst string, info fs.FileInfo) error {
 		return err
 	}
 	if !info.Mode().IsRegular() {
-		return fmt.Errorf("unsupported file type %s", info.Mode().Type())
+		return fmt.Errorf("unsupported file type: %s", describeFileType(info.Mode()))
 	}
 
 	// Try a copy-on-write clone first (macOS/APFS), falling back to io.Copy
@@ -242,6 +240,22 @@ func copyFile(src, dst string, info fs.FileInfo) error {
 	}
 
 	return copyFileFallback(src, dst, info)
+}
+
+// describeFileType names special files for errors instead of printing raw mode bits.
+func describeFileType(mode fs.FileMode) string {
+	switch {
+	case mode&os.ModeNamedPipe != 0:
+		return "named pipe"
+	case mode&os.ModeSocket != 0:
+		return "socket"
+	case mode&os.ModeCharDevice != 0:
+		return "character device"
+	case mode&os.ModeDevice != 0:
+		return "block device"
+	default:
+		return mode.Type().String()
+	}
 }
 
 // Only remove an existing file after creation reports EEXIST. Never follow a
