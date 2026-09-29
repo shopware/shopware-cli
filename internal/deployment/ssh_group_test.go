@@ -380,9 +380,14 @@ func TestSSHGroupUsesDesignatedMigrationHost(t *testing.T) {
 	assert.Contains(t, logs.String(), "[b] global helper")
 	assert.Contains(t, logs.String(), "[a] local warmup")
 	assert.Equal(t, "helper\n", groupCounter(t))
-	var backend Backend = g
-	_, canInitialize := backend.(Initializer)
-	_, canPrune := backend.(DeploymentPruner)
-	assert.False(t, canInitialize)
-	assert.False(t, canPrune)
+}
+
+func TestSSHGroupSupportsInitializationAndPruning(t *testing.T) {
+	g, err := newSSHGroup([]sshHost{
+		{name: "a", backend: &SSH{}},
+		{name: "b", backend: &SSH{}},
+	}, "b", 2)
+	require.NoError(t, err)
+	assert.Implements(t, (*Initializer)(nil), g)
+	assert.Implements(t, (*DeploymentPruner)(nil), g)
 }
