@@ -32,11 +32,11 @@ func (c *Client) Producer(ctx context.Context) (*ProducerEndpoint, error) {
 
 	var producers []Producer
 	if err := json.Unmarshal(body, &producers); err != nil {
-		return nil, fmt.Errorf("producer.profile: %v", err)
+		return nil, fmt.Errorf("cannot load producer profile: %w", err)
 	}
 
 	if len(producers) == 0 {
-		return nil, errors.New("producer.profile: no producer found for current user")
+		return nil, errors.New("no producer account found for the current user")
 	}
 
 	return &ProducerEndpoint{producers: producers, c: c}, nil
@@ -129,7 +129,7 @@ func (e ProducerEndpoint) singleExtensionsByProducer(ctx context.Context, criter
 	form.Set("producerId", strconv.FormatInt(int64(producer.Id), 10))
 	err := encoder.Encode(criteria, form)
 	if err != nil {
-		return nil, fmt.Errorf("list_extensions: %v", err)
+		return nil, fmt.Errorf("cannot list producer extensions: %w", err)
 	}
 
 	r, err := e.c.NewAuthenticatedRequest(ctx, http.MethodGet, fmt.Sprintf("%s/plugins?%s", getApiUrl(), form.Encode()), nil)
@@ -144,7 +144,7 @@ func (e ProducerEndpoint) singleExtensionsByProducer(ctx context.Context, criter
 
 	var extensions []Extension
 	if err := json.Unmarshal(body, &extensions); err != nil {
-		return nil, fmt.Errorf("list_extensions: %v", err)
+		return nil, fmt.Errorf("cannot list producer extensions: %w", err)
 	}
 
 	for i := range extensions {
@@ -171,26 +171,26 @@ func (e ProducerEndpoint) GetExtensionByName(ctx context.Context, name string) (
 		}
 	}
 
-	return nil, fmt.Errorf("cannot find Extension by name %s", name)
+	return nil, fmt.Errorf("cannot find extension %q in the producer account", name)
 }
 
 func (e ProducerEndpoint) GetExtensionById(ctx context.Context, id int) (*Extension, error) {
-	errorFormat := "GetExtensionById: %v"
+	errorFormat := "cannot load extension %d: %w"
 
 	// Create it
 	r, err := e.c.NewAuthenticatedRequest(ctx, http.MethodGet, fmt.Sprintf("%s/plugins/%d", getApiUrl(), id), nil)
 	if err != nil {
-		return nil, fmt.Errorf(errorFormat, err)
+		return nil, fmt.Errorf(errorFormat, id, err)
 	}
 
 	body, err := e.c.doRequest(r)
 	if err != nil {
-		return nil, fmt.Errorf(errorFormat, err)
+		return nil, fmt.Errorf(errorFormat, id, err)
 	}
 
 	var extension Extension
 	if err := json.Unmarshal(body, &extension); err != nil {
-		return nil, fmt.Errorf(errorFormat, err)
+		return nil, fmt.Errorf(errorFormat, id, err)
 	}
 
 	return &extension, nil
@@ -383,7 +383,7 @@ func (e ProducerEndpoint) UpdateExtension(ctx context.Context, extension *Extens
 }
 
 func (e ProducerEndpoint) GetSoftwareVersions(ctx context.Context, generation string) (*SoftwareVersionList, error) {
-	errorFormat := "shopware_versions: %v"
+	errorFormat := "cannot load Shopware versions: %w"
 	r, err := e.c.NewAuthenticatedRequest(ctx, http.MethodGet, fmt.Sprintf("%s/pluginstatics/softwareVersions?filter=[{\"property\":\"pluginGeneration\",\"value\":\"%s\"},{\"property\":\"includeNonPublic\",\"value\":\"1\"}]", getApiUrl(), generation), nil)
 	if err != nil {
 		return nil, fmt.Errorf(errorFormat, err)
@@ -550,7 +550,7 @@ func (e ProducerEndpoint) GetExtensionGeneralInfo(ctx context.Context) (*Extensi
 
 	err = json.Unmarshal(body, &info)
 	if err != nil {
-		return nil, fmt.Errorf("shopware_versions: %v", err)
+		return nil, fmt.Errorf("cannot load extension general information: %w", err)
 	}
 
 	return info, nil

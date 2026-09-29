@@ -56,7 +56,7 @@ var projectExtensionUpdateCmd = &cobra.Command{
 
 			if extension == nil {
 				failed = true
-				logging.FromContext(cmd.Context()).Errorf("Cannot find extension by name %s", arg)
+				logging.FromContext(cmd.Context()).Errorf("Cannot find extension %s, run \"shopware-cli project extension list\" to see installed extensions", arg)
 				continue
 			}
 
@@ -66,7 +66,7 @@ var projectExtensionUpdateCmd = &cobra.Command{
 			}
 
 			if !extension.Active {
-				logging.FromContext(cmd.Context()).Infof("Extension %s is not active skipping", arg)
+				logging.FromContext(cmd.Context()).Infof("Extension %s is not active, skipping", arg)
 				continue
 			}
 
