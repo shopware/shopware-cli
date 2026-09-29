@@ -108,7 +108,7 @@ func TestCopyFilesTree(t *testing.T) {
 	t.Parallel()
 	src := t.TempDir()
 	dst := t.TempDir()
-	for _, dir := range []string{".git", ".devenv", ".direnv", "nested/.git", "empty"} {
+	for _, dir := range []string{".git", ".devenv", ".direnv", "nested/.git", "nested/.devenv", "empty"} {
 		require.NoError(t, os.MkdirAll(filepath.Join(src, dir), 0o755))
 	}
 	for i := range 100 {
@@ -128,11 +128,10 @@ func TestCopyFilesTree(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, name, string(content))
 	}
-	for _, name := range []string{".git", ".devenv", ".direnv"} {
+	for _, name := range []string{".git", ".devenv", ".direnv", "nested/.git", "nested/.devenv"} {
 		_, err := os.Lstat(filepath.Join(dst, name))
 		assert.ErrorIs(t, err, os.ErrNotExist)
 	}
-	assert.FileExists(t, filepath.Join(dst, "nested/.git/keep"))
 	assert.FileExists(t, filepath.Join(dst, "unrelated"))
 	assert.DirExists(t, filepath.Join(dst, "empty"))
 }
@@ -173,6 +172,15 @@ func TestCopyFilesSourceAndTarget(t *testing.T) {
 		dst := filepath.Join(src, "nested", "copy")
 		require.Error(t, CopyFiles(src, dst))
 		assert.NoDirExists(t, dst)
+	})
+	t.Run("source named like a skipped directory", func(t *testing.T) {
+		t.Parallel()
+		src := filepath.Join(t.TempDir(), ".git")
+		require.NoError(t, os.Mkdir(src, 0o755))
+		require.NoError(t, os.WriteFile(filepath.Join(src, "HEAD"), []byte("ref"), 0o644))
+		dst := t.TempDir()
+		require.NoError(t, CopyFiles(src, dst))
+		assert.FileExists(t, filepath.Join(dst, "HEAD"))
 	})
 	t.Run("file source", func(t *testing.T) {
 		t.Parallel()

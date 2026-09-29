@@ -123,9 +123,8 @@ func walkCopySource(currentPath string, targetPath string, jobs chan<- copyJob, 
 			return fmt.Errorf("failed to get relative path for %q: %w", path, err)
 		}
 
-		// Skip development environment and VCS metadata folders
-		// (e.g., .devenv, .direnv, .git)
-		if entry.IsDir() && isSkippedCopyDir(relPath) {
+		// Skip VCS and dev environment folders at any depth, but never the source root
+		if relPath != "." && entry.IsDir() && isSkippedCopyDir(entry.Name()) {
 			return filepath.SkipDir
 		}
 
@@ -149,8 +148,8 @@ func walkCopySource(currentPath string, targetPath string, jobs chan<- copyJob, 
 	}
 }
 
-func isSkippedCopyDir(relPath string) bool {
-	return relPath == ".devenv" || relPath == ".direnv" || relPath == ".git"
+func isSkippedCopyDir(name string) bool {
+	return name == ".devenv" || name == ".direnv" || name == ".git"
 }
 
 func ensureCopyTargetDir(targetFilePath string) error {
