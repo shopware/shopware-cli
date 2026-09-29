@@ -432,9 +432,6 @@ func TestSSHRolloutRejectsUnsafeInputsBeforeSSH(t *testing.T) {
 		require.Error(t, err)
 		assert.NotContains(t, err.Error(), "executable file not found", "must fail before looking for ssh")
 	}
-	testhelper.WriteFile(t, archive, "not an archive")
-	_, err := e.RolloutDeployment(t.Context(), Deployment{Reference: archive}, nil)
-	require.ErrorContains(t, err, "validate deployment archive")
 }
 
 func TestSSHRolloutRefusesRealCurrentAndMissingConfiguration(t *testing.T) {

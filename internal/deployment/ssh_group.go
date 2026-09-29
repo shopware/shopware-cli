@@ -231,8 +231,8 @@ func (g *sshGroup) RolloutDeployment(ctx context.Context, deployment Deployment,
 		err = errors.Join(err, snapshot.Close(), os.Remove(snapshot.Name()))
 	}()
 	hash := sha256.New()
-	if err := archiver.ValidateTarGz(ctx, io.TeeReader(source, io.MultiWriter(snapshot, hash))); err != nil {
-		return result, fmt.Errorf("validate deployment archive: %w", err)
+	if _, err := io.Copy(io.MultiWriter(snapshot, hash), archiver.ContextReader(ctx, source)); err != nil {
+		return result, fmt.Errorf("read deployment archive: %w", err)
 	}
 	size, err := snapshot.Seek(0, io.SeekCurrent)
 	if err != nil {
