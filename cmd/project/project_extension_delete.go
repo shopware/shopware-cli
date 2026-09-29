@@ -11,9 +11,10 @@ import (
 )
 
 var projectExtensionDeleteCmd = &cobra.Command{
-	Use:   "delete name...",
-	Short: "Delete one or more extensions from a Shopware project",
-	Args:  cobra.MinimumNArgs(1),
+	Use:     "delete name...",
+	Short:   "Delete one or more extensions from a Shopware project",
+	Args:    cobra.MinimumNArgs(1),
+	Aliases: []string{"rm"},
 	RunE: func(cmd *cobra.Command, args []string) error {
 		projectRoot, err := shop.FindClosestShopwareProject(true)
 		if err != nil {

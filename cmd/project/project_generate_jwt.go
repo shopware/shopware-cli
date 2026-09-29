@@ -19,7 +19,7 @@ import (
 )
 
 var projectNewJWTCmd = &cobra.Command{
-	Use:        "generate-jwt",
+	Use:        "generate-jwt [path]",
 	Short:      "Generate a JWT secret key",
 	Deprecated: "use \"project console system:generate-jwt-secret\" instead, will be removed in October 2026",
 	RunE: func(cmd *cobra.Command, args []string) error {

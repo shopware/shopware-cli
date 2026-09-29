@@ -15,6 +15,7 @@ var projectExtensionOutdatedCmd = &cobra.Command{
 	Use:   "outdated",
 	Short: "List all outdated extensions",
 	Long:  "List installed extensions that have a newer version available. Exits with code 1 when at least one extension is outdated, regardless of the output format.",
+	Args:  cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, _ []string) error {
 		formatName, _ := cmd.Flags().GetString("format")
 		outputAsJSON, _ := cmd.Flags().GetBool("json")

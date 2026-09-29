@@ -12,6 +12,7 @@ var projectExtensionListCmd = &cobra.Command{
 	Use:     "list",
 	Aliases: []string{"ls"},
 	Short:   "List available shop extensions with versions and status",
+	Args:    cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, _ []string) error {
 		formatName, _ := cmd.Flags().GetString("format")
 		outputAsJSON, _ := cmd.Flags().GetBool("json")

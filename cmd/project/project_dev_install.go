@@ -10,6 +10,7 @@ var projectDevInstallCmd = &cobra.Command{
 	Use:   "install",
 	Short: "Start and install Shopware in a project without prompts",
 	Long:  "Install Shopware without the interactive TUI. This starts the development environment, runs the deployment helper and saves the admin credentials to the project config; the installation is skipped when the shop is already installed.",
+	Args:  cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, _ []string) error {
 		locale, _ := cmd.Flags().GetString("locale")
 		currency, _ := cmd.Flags().GetString("currency")

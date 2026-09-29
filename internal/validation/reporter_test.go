@@ -329,7 +329,23 @@ func TestValidateReporter(t *testing.T) {
 		assert.NoError(t, ValidateReporter(format))
 	}
 
+	assert.NoError(t, ValidateReporter("JSON"))
+
 	assert.EqualError(t, ValidateReporter("yaml"), `invalid reporting format "yaml", allowed values: summary, json, github, gitlab, junit, markdown`)
+}
+
+func TestReportFormatIsCaseInsensitive(t *testing.T) {
+	tools := []ToolInvocationStatus{{Name: "phpstan", Status: "invoked"}}
+
+	output := captureOutput(func() {
+		assert.NoError(t, DoCheckReport(&testCheck{}, "JSON", false, tools...))
+	})
+
+	var report struct {
+		Tools []ToolInvocationStatus `json:"tools"`
+	}
+	require.NoError(t, json.Unmarshal([]byte(output), &report))
+	assert.Equal(t, tools, report.Tools)
 }
 
 func TestGitLabReport(t *testing.T) {

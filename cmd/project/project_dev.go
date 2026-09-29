@@ -147,6 +147,7 @@ var projectDevCmd = &cobra.Command{
 var projectDevStartCmd = &cobra.Command{
 	Use:   "start",
 	Short: "Start the configured development environment in the background",
+	Args:  cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		env, err := setupDevEnvironment(cmd)
 		if err != nil {
@@ -164,6 +165,7 @@ var projectDevStartCmd = &cobra.Command{
 var projectDevStopCmd = &cobra.Command{
 	Use:   "stop",
 	Short: "Stop the configured development environment",
+	Args:  cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		env, err := setupDevEnvironment(cmd)
 		if err != nil {
@@ -181,6 +183,7 @@ var projectDevStatusCmd = &cobra.Command{
 	Short:        "Show whether the Shopware development environment is running",
 	Long:         "Report whether the development environment is running. The command exits with code 0 when it is up and code 1 when it is down.",
 	SilenceUsage: true,
+	Args:         cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		env, err := setupDevEnvironment(cmd)
 		if err != nil {
@@ -460,5 +463,7 @@ func init() {
 	projectDevCmd.AddCommand(projectDevStatusCmd)
 
 	projectDevStopCmd.Flags().Bool("remove-data", false, "Remove the named volumes declared in the Compose file, deleting all data stored in them")
-	projectDevCmd.PersistentFlags().String("on-port-conflict", portConflictModeFail, "When host ports are occupied: fail or use random free ports (non-interactive mode; the dashboard prompts instead)")
+	portConflictUsage := "Action when host ports are occupied (fail, random); non-interactive mode only"
+	projectDevCmd.Flags().String("on-port-conflict", portConflictModeFail, portConflictUsage)
+	projectDevStartCmd.Flags().String("on-port-conflict", portConflictModeFail, portConflictUsage)
 }

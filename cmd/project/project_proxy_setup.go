@@ -33,6 +33,7 @@ ceremony:
     proxy serves are trusted
 
 Both steps are idempotent; run it again anytime to repair the setup.`,
+	Args: cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		ctx := cmd.Context()
 

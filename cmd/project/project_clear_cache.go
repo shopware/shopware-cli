@@ -13,6 +13,7 @@ import (
 var projectClearCacheCmd = &cobra.Command{
 	Use:   "clear-cache",
 	Short: "Clear a Shopware project's cache locally or via Admin API",
+	Args:  cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, _ []string) error {
 		projectRoot, err := shop.FindClosestShopwareProject(true)
 		if err != nil {

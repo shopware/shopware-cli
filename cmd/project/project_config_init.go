@@ -21,6 +21,7 @@ var projectConfigInitCmd = &cobra.Command{
 
 Shop URL and Admin API credentials are written under environments.local.
 Omit -e / --env on later commands to target that environment.`,
+	Args: cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, _ []string) error {
 		if !system.IsInteractionEnabled(cmd.Context()) {
 			return errors.New("this command requires interaction, but interaction is disabled")

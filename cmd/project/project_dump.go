@@ -26,6 +26,7 @@ var projectDatabaseDumpCmd = &cobra.Command{
 	Long: `Export the project database to a SQL file, using the connection details of the current environment unless overridden with the connection flags.
 
 --limit keeps only the newest rows of a table (e.g. order=100). Tables referencing the limited table are filtered automatically; ancestors of self-referencing rows (e.g. product variants) are kept so the dump stays importable. Freezing the kept rows into staging tables requires the CREATE and DROP privileges.`,
+	Args: cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, _ []string) error {
 		mysqlConfig, err := assembleConnectionURI(cmd)
 		if err != nil {
