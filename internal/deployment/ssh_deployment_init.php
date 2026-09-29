@@ -120,10 +120,19 @@ try {
     }
     $runtime = "$root/shared/.env.local";
     $install = "$root/.shopware-cli/install.env";
+    if (is_link("$root/shared") || (file_exists("$root/shared") && !is_dir("$root/shared"))) {
+        throw new RuntimeException("Expected a real directory: $root/shared");
+    }
     if (($input['action'] ?? '') === 'inspect') {
         $runtimeKeys = initKeys($runtime);
         $installKeys = initKeys($install);
+        $runtimeHash = file_exists($runtime) ? hash_file('sha256', $runtime) : '';
+        if ($runtimeHash === false) {
+            throw new RuntimeException("Cannot hash deployment configuration: $runtime");
+        }
         echo json_encode([
+            'has_shared_directory' => is_dir("$root/shared"),
+            'runtime_sha256' => $runtimeHash,
             'has_current' => is_link("$root/current"),
             'has_runtime_config' => file_exists($runtime),
             'has_install_config' => file_exists($install),

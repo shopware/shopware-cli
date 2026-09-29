@@ -22,8 +22,9 @@ shared paths must already be provisioned consistently across hosts. Deployment
 Helper runs once on migration_host; each host prepares and activates its own release.
 Activation is sequential, not atomic across hosts; a failure stops further switches.
 
-Init and prune require a single-host environment. List shows all hosts;
-logs use migration_host.`,
+Init prompts once on migration_host and verifies shared runtime configuration on
+all hosts. Prune applies retention independently to each host and reports partial
+failures. List shows all hosts; logs use migration_host.`,
 }
 
 func init() {

@@ -63,6 +63,14 @@ type DeploymentPruneOptions struct {
 
 // DeploymentPruneResult lists removals, or planned removals for a dry run.
 type DeploymentPruneResult struct {
+	Deployments []Deployment                `json:"deployments"`
+	Artifacts   []string                    `json:"artifacts"`
+	Hosts       []DeploymentPruneHostResult `json:"hosts,omitempty"`
+}
+
+// DeploymentPruneHostResult records a successful host-local prune, including no-op results.
+type DeploymentPruneHostResult struct {
+	Host        string       `json:"host"`
 	Deployments []Deployment `json:"deployments"`
 	Artifacts   []string     `json:"artifacts"`
 }

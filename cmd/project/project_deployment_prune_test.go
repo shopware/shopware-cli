@@ -68,6 +68,57 @@ func TestProjectDeploymentPruneErrors(t *testing.T) {
 	require.ErrorIs(t, runProjectDeploymentPrune(cmd, target, options), writeErr)
 }
 
+func TestProjectDeploymentPruneHostResults(t *testing.T) {
+	hostErr := errors.New("host web-3: cleanup state unknown")
+	for _, tc := range []struct {
+		name   string
+		dryRun bool
+		err    error
+	}{
+		{name: "pruned"},
+		{name: "dry run", dryRun: true},
+		{name: "partial failure", err: hostErr},
+		{name: "partial dry run", dryRun: true, err: hostErr},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			cmd := &cobra.Command{}
+			cmd.SetContext(t.Context())
+			var output bytes.Buffer
+			cmd.SetOut(&output)
+			target := &deploymentPruneFakeBackend{
+				result: deployment.DeploymentPruneResult{Hosts: []deployment.DeploymentPruneHostResult{
+					{Host: "web-1", Deployments: []deployment.Deployment{{Reference: "happy-euclid"}}, Artifacts: []string{"archive"}},
+					{Host: "web-2"},
+				}},
+				err: tc.err,
+			}
+			options := deployment.DeploymentPruneOptions{Keep: 3, DryRun: tc.dryRun}
+			err := runProjectDeploymentPrune(cmd, target, options)
+			if tc.err != nil {
+				require.ErrorIs(t, err, tc.err)
+			} else {
+				require.NoError(t, err)
+			}
+			assert.Equal(t, options, target.options)
+			verb := "Pruned"
+			if tc.dryRun {
+				verb = "Would prune"
+			}
+			assert.Equal(t, "[web-1] "+verb+" deployment \"happy-euclid\"\n"+
+				"[web-1] "+verb+" 1 cached artifacts\n"+
+				"[web-2] No deployments or cached artifacts to prune.\n", output.String())
+
+			writeErr := errors.New("output closed")
+			cmd.SetOut(deploymentErrorWriter{err: writeErr})
+			err = runProjectDeploymentPrune(cmd, target, options)
+			require.ErrorIs(t, err, writeErr)
+			if tc.err != nil {
+				require.ErrorIs(t, err, tc.err)
+			}
+		})
+	}
+}
+
 func TestProjectDeploymentPruneDefaults(t *testing.T) {
 	keep, err := projectDeploymentPruneCmd.Flags().GetInt("keep")
 	require.NoError(t, err)

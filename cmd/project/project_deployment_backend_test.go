@@ -55,23 +55,23 @@ environments:
 `)
 	projectConfigPath = config
 	for _, tc := range []struct {
-		command, environment, wantErr string
-		single                        bool
+		command, environment string
+		single               bool
 	}{
-		{"rollout", "production", "", false},
-		{"rollback", "production", "", false},
-		{"create", "production", "", false},
-		{"logs", "production", "", false},
-		{"list", "production", "", false},
-		{"init", "production", "configure a separate single-host environment", false},
-		{"prune", "production", "configure a separate single-host environment", false},
-		{"rollout", "maintenance", "", true},
-		{"rollback", "maintenance", "", true},
-		{"create", "maintenance", "", true},
-		{"list", "maintenance", "", true},
-		{"logs", "maintenance", "", true},
-		{"init", "maintenance", "", true},
-		{"prune", "maintenance", "", true},
+		{"rollout", "production", false},
+		{"rollback", "production", false},
+		{"create", "production", false},
+		{"logs", "production", false},
+		{"list", "production", false},
+		{"init", "production", false},
+		{"prune", "production", false},
+		{"rollout", "maintenance", true},
+		{"rollback", "maintenance", true},
+		{"create", "maintenance", true},
+		{"list", "maintenance", true},
+		{"logs", "maintenance", true},
+		{"init", "maintenance", true},
+		{"prune", "maintenance", true},
 	} {
 		t.Run(tc.command+"/"+tc.environment, func(t *testing.T) {
 			environmentName = tc.environment
@@ -80,13 +80,11 @@ environments:
 			cmd.Flags().String("project-config", "", "")
 			require.NoError(t, cmd.Flags().Set("project-config", config))
 			backend, err := resolveProjectDeploymentBackend(cmd, root)
-			if tc.wantErr != "" {
-				require.ErrorContains(t, err, tc.wantErr)
-				return
-			}
 			require.NoError(t, err)
 			_, single := backend.(*deployment.SSH)
 			assert.Equal(t, tc.single, single)
+			assert.Implements(t, (*deployment.Initializer)(nil), backend)
+			assert.Implements(t, (*deployment.DeploymentPruner)(nil), backend)
 		})
 	}
 }

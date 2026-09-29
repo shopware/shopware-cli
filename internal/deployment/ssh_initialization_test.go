@@ -1,6 +1,8 @@
 package deployment
 
 import (
+	"crypto/sha256"
+	"fmt"
 	"os"
 	"path/filepath"
 	"slices"
@@ -24,6 +26,10 @@ func TestSSHDeploymentInitializationWritesProtectedConfiguration(t *testing.T) {
 	assert.True(t, state.HasRuntimeConfig)
 	assert.False(t, state.HasInstallConfig)
 	assert.True(t, slices.Contains(state.RuntimeKeys, "DATABASE_URL"))
+	assert.True(t, state.HasSharedDirectory)
+	runtimeContent, err := os.ReadFile(filepath.Join(root, "shared/.env.local"))
+	require.NoError(t, err)
+	assert.Equal(t, fmt.Sprintf("%x", sha256.Sum256(runtimeContent)), state.RuntimeSHA256)
 
 	err = e.applyDeploymentInitialization(t.Context(), sshDeploymentInitConfig{
 		RuntimeValues: map[string]string{
@@ -61,7 +67,39 @@ func TestSSHDeploymentInitializationWritesProtectedConfiguration(t *testing.T) {
 	state, err = e.inspectDeploymentInitialization(t.Context())
 	require.NoError(t, err)
 	assert.True(t, state.HasInstallConfig)
+	runtimeContent, err = os.ReadFile(filepath.Join(root, "shared/.env.local"))
+	require.NoError(t, err)
+	assert.Equal(t, fmt.Sprintf("%x", sha256.Sum256(runtimeContent)), state.RuntimeSHA256)
 	assert.ElementsMatch(t, []string{"INSTALL_ADMIN_EMAIL", "INSTALL_ADMIN_PASSWORD", "INSTALL_ADMIN_USERNAME"}, state.InstallKeys)
+}
+
+func TestSSHDeploymentInitializationRejectsSharedDirectorySymlink(t *testing.T) {
+	e := localDeploymentSSH(t)
+	root := filepath.Dir(e.directory)
+	shared := filepath.Join(root, "shared")
+	outside := filepath.Join(t.TempDir(), "shared")
+	require.NoError(t, os.Rename(shared, outside))
+	require.NoError(t, os.Symlink(outside, shared))
+	_, err := e.inspectDeploymentInitialization(t.Context())
+	require.ErrorContains(t, err, "Expected a real directory")
+	err = e.applyDeploymentInitialization(t.Context(), sshDeploymentInitConfig{
+		RuntimeValues: map[string]string{"APP_SECRET": "must-not-write"},
+	})
+	require.ErrorContains(t, err, "Expected a real directory")
+}
+
+func TestSSHDeploymentInitializationInspectBootstrapsOnlyManagement(t *testing.T) {
+	e := localDeploymentSSH(t)
+	root := filepath.Dir(e.directory)
+	require.NoError(t, os.RemoveAll(root))
+	state, err := e.inspectDeploymentInitialization(t.Context())
+	require.NoError(t, err)
+	assert.False(t, state.HasSharedDirectory)
+	assert.False(t, state.HasRuntimeConfig)
+	assert.Empty(t, state.RuntimeSHA256)
+	assert.DirExists(t, filepath.Join(root, ".shopware-cli"))
+	assert.NoDirExists(t, filepath.Join(root, "shared"))
+	assert.NoFileExists(t, filepath.Join(root, ".shopware-cli/install.env"))
 }
 
 func TestSSHDeploymentInitializationPreservesUnrelatedRuntimeValues(t *testing.T) {

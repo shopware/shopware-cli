@@ -22,6 +22,11 @@ Database credentials and the application URL are written to shared/.env.local.
 Optional fresh-install values are stored separately and removed after a
 successful Deployment Helper run.
 
+With multiple SSH hosts, prompt once and write configuration through migration_host.
+All hosts must see the same shared/.env.local; the command verifies matching
+contents without copying credentials to followers. First-install values remain
+only on migration_host. Provision the shared filesystem before initialization.
+
 The selected environment must already exist in the project configuration.
 With no directory, the closest Shopware project is used.`,
 	Args: cobra.MaximumNArgs(1),

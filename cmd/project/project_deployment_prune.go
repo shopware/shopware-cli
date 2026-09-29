@@ -5,6 +5,7 @@ package project
 import (
 	"errors"
 	"fmt"
+	"io"
 
 	"github.com/spf13/cobra"
 
@@ -24,7 +25,11 @@ cached archives that are no longer referenced by retained deployment metadata.
 Shared data and local archives are never removed. Cleanup uses the same lock as
 rollout and initialization. Use --dry-run to preview removals without deleting
 anything. Interrupted cleanup is resumed on the next prune, even if --keep was
-increased. Removed deployments cannot be reactivated without preparing them again.`,
+increased. Removed deployments cannot be reactivated without preparing them again.
+
+For multiple hosts, apply retention independently and preserve each host's active
+deployment. Successful results are shown with host names even if another host fails.
+Cleanup is not atomic across hosts; failures do not undo completed removals.`,
 	Args: cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, _ []string) error {
 		keep, err := cmd.Flags().GetInt("keep")
@@ -57,23 +62,39 @@ func runProjectDeploymentPrune(cmd *cobra.Command, target deployment.Backend, op
 	}
 	result, err := backend.PruneDeployments(cmd.Context(), options)
 	if err != nil {
-		return fmt.Errorf("prune deployments: %w", err)
-	}
-	if len(result.Deployments) == 0 && len(result.Artifacts) == 0 {
-		_, err := fmt.Fprintln(cmd.OutOrStdout(), "No deployments or cached artifacts to prune.")
-		return err
+		err = fmt.Errorf("prune deployments: %w", err)
 	}
 	verb := "Pruned"
 	if options.DryRun {
 		verb = "Would prune"
 	}
+	if len(result.Hosts) > 0 {
+		for _, host := range result.Hosts {
+			hostResult := deployment.DeploymentPruneResult{Deployments: host.Deployments, Artifacts: host.Artifacts}
+			if writeErr := writeDeploymentPruneResult(cmd.OutOrStdout(), hostResult, verb, "["+host.Host+"] "); writeErr != nil {
+				return errors.Join(err, writeErr)
+			}
+		}
+		return err
+	}
+	if err != nil && len(result.Deployments) == 0 && len(result.Artifacts) == 0 {
+		return err
+	}
+	return errors.Join(err, writeDeploymentPruneResult(cmd.OutOrStdout(), result, verb, ""))
+}
+
+func writeDeploymentPruneResult(output io.Writer, result deployment.DeploymentPruneResult, verb, prefix string) error {
+	if len(result.Deployments) == 0 && len(result.Artifacts) == 0 {
+		_, err := fmt.Fprintf(output, "%sNo deployments or cached artifacts to prune.\n", prefix)
+		return err
+	}
 	for _, deployment := range result.Deployments {
-		if _, err := fmt.Fprintf(cmd.OutOrStdout(), "%s deployment %q\n", verb, deployment.DisplayName()); err != nil {
+		if _, err := fmt.Fprintf(output, "%s%s deployment %q\n", prefix, verb, deployment.DisplayName()); err != nil {
 			return err
 		}
 	}
 	if len(result.Artifacts) > 0 {
-		_, err := fmt.Fprintf(cmd.OutOrStdout(), "%s %d cached artifacts\n", verb, len(result.Artifacts))
+		_, err := fmt.Fprintf(output, "%s%s %d cached artifacts\n", prefix, verb, len(result.Artifacts))
 		return err
 	}
 	return nil

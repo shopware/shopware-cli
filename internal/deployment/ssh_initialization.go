@@ -17,11 +17,13 @@ import (
 var sshDeploymentInitScript string
 
 type sshDeploymentInitState struct {
-	HasCurrent       bool     `json:"has_current"`
-	HasRuntimeConfig bool     `json:"has_runtime_config"`
-	HasInstallConfig bool     `json:"has_install_config"`
-	RuntimeKeys      []string `json:"runtime_keys"`
-	InstallKeys      []string `json:"install_keys"`
+	HasSharedDirectory bool     `json:"has_shared_directory"`
+	RuntimeSHA256      string   `json:"runtime_sha256"`
+	HasCurrent         bool     `json:"has_current"`
+	HasRuntimeConfig   bool     `json:"has_runtime_config"`
+	HasInstallConfig   bool     `json:"has_install_config"`
+	RuntimeKeys        []string `json:"runtime_keys"`
+	InstallKeys        []string `json:"install_keys"`
 }
 
 type sshDeploymentInitConfig struct {

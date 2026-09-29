@@ -26,8 +26,6 @@ type sshHost struct {
 	backend *SSH
 }
 
-// sshGroup deliberately does not implement initialization or pruning: neither
-// operation is safe to broadcast over shared persistent storage.
 type sshGroup struct {
 	hosts       []sshHost
 	migration   int

@@ -100,8 +100,9 @@ environments:
 		assert.Empty(t, files)
 		assert.ElementsMatch(t, []string{"custom/data"}, directories)
 		output := t.TempDir()
+		cfg.storageLocation = ""
 		require.NoError(t, WriteConfig(cfg, output))
-		cfg, err = ReadConfig(t.Context(), filepath.Join(output, ".shopware-project.yml"), true)
+		cfg, err = ReadConfig(t.Context(), SearchConfigPath(t.Context(), output, ""), true)
 		require.NoError(t, err)
 	}
 }
