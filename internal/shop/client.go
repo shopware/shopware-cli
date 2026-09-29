@@ -50,35 +50,41 @@ func HasAdminAPICredentials(config *Config) bool {
 	return config != nil && config.IsAdminAPIConfigured()
 }
 
-func NewShopClient(ctx context.Context, config *Config) (*adminSdk.Client, error) {
-	skipSSLCert := false
-
-	if config.AdminApi != nil {
-		skipSSLCert = config.AdminApi.DisableSSLCheck
+// AdminAPIURL returns the shop URL for Admin API requests, SHOPWARE_CLI_API_URL first.
+func AdminAPIURL(config *Config) string {
+	if url := os.Getenv("SHOPWARE_CLI_API_URL"); url != "" {
+		return url
 	}
 
+	if config == nil {
+		return ""
+	}
+
+	return config.URL
+}
+
+// AdminAPIDisableSSLCheck reports whether SHOPWARE_CLI_API_DISABLE_SSL_CHECK or the config disables certificate checks.
+func AdminAPIDisableSSLCheck(config *Config) bool {
 	if os.Getenv("SHOPWARE_CLI_API_DISABLE_SSL_CHECK") == "true" {
-		skipSSLCert = true
+		return true
 	}
 
+	return config != nil && config.AdminApi != nil && config.AdminApi.DisableSSLCheck
+}
+
+func NewShopClient(ctx context.Context, config *Config) (*adminSdk.Client, error) {
 	tr := &http.Transport{
 		TLSClientConfig: &tls.Config{
 			MinVersion:         tls.VersionTLS12,
-			InsecureSkipVerify: skipSSLCert, // nolint:gosec
+			InsecureSkipVerify: AdminAPIDisableSSLCheck(config), // nolint:gosec
 		},
 	}
 	client := &http.Client{Transport: tr}
-
-	shopUrl := os.Getenv("SHOPWARE_CLI_API_URL")
-
-	if shopUrl == "" {
-		shopUrl = config.URL
-	}
 
 	creds, err := newShopCredentials(config)
 	if err != nil {
 		return nil, err
 	}
 
-	return adminSdk.NewApiClient(ctx, shopUrl, creds, client)
+	return adminSdk.NewApiClient(ctx, AdminAPIURL(config), creds, client)
 }

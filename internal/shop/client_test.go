@@ -237,3 +237,50 @@ func TestHasAdminAPICredentials(t *testing.T) {
 		})
 	}
 }
+
+func TestAdminAPIURL(t *testing.T) {
+	cases := []struct {
+		name   string
+		env    string
+		config *Config
+		want   string
+	}{
+		{name: "env wins", env: "https://env.example", config: &Config{URL: "https://config.example"}, want: "https://env.example"},
+		{name: "config fallback", config: &Config{URL: "https://config.example"}, want: "https://config.example"},
+		{name: "env with nil config", env: "https://env.example", config: nil, want: "https://env.example"},
+		{name: "nothing", config: nil, want: ""},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Setenv("SHOPWARE_CLI_API_URL", tc.env)
+
+			assert.Equal(t, tc.want, AdminAPIURL(tc.config))
+		})
+	}
+}
+
+func TestAdminAPIDisableSSLCheck(t *testing.T) {
+	cases := []struct {
+		name   string
+		env    string
+		config *Config
+		want   bool
+	}{
+		{name: "env true", env: "true", config: &Config{}, want: true},
+		{name: "env true with nil config", env: "true", config: nil, want: true},
+		{name: "config true", config: &Config{AdminApi: &ConfigAdminApi{DisableSSLCheck: true}}, want: true},
+		{name: "env false keeps config", env: "false", config: &Config{AdminApi: &ConfigAdminApi{DisableSSLCheck: true}}, want: true},
+		{name: "config false", config: &Config{AdminApi: &ConfigAdminApi{}}, want: false},
+		{name: "no admin api", config: &Config{}, want: false},
+		{name: "nil config", config: nil, want: false},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Setenv("SHOPWARE_CLI_API_DISABLE_SSL_CHECK", tc.env)
+
+			assert.Equal(t, tc.want, AdminAPIDisableSSLCheck(tc.config))
+		})
+	}
+}
