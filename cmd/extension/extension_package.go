@@ -228,7 +228,7 @@ var extensionPackageCmd = &cobra.Command{
 
 func init() {
 	extensionRootCmd.AddCommand(extensionPackageCmd)
-	extensionPackageCmd.Flags().BoolVar(&disableGit, "disable-git", false, "Copy the source folder as it is instead of a clean git checkout")
+	extensionPackageCmd.Flags().BoolVar(&disableGit, "disable-git", false, "Package the working copy instead of a clean git checkout (symlinks are skipped)")
 	extensionPackageCmd.Flags().BoolVar(&extensionReleaseMode, "release", false, "Prepare a release build (generate the changelog, remove app secrets)")
 	extensionPackageCmd.Flags().String("overwrite-app-backend-url", "", "Change all URLs in manifest.xml to this URL")
 	extensionPackageCmd.Flags().String("overwrite-app-backend-secret", "", "Change the secret to this value")

@@ -6,7 +6,7 @@ import (
 
 var projectConfigCmd = &cobra.Command{
 	Use:   "config",
-	Short: "Create the project configuration file",
+	Short: "Manage the project configuration file",
 }
 
 func init() {
