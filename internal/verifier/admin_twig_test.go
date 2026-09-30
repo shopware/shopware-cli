@@ -1,6 +1,7 @@
 package verifier
 
 import (
+	"os"
 	"path/filepath"
 	"testing"
 
@@ -11,7 +12,7 @@ import (
 )
 
 // Not parallel: the Twig parser swaps a package-level indent config in internal/html.
-func TestAdminTwigLinterReportsRemovedComponents(t *testing.T) {
+func TestAdminTwigLinterAllowsLegacyComponents(t *testing.T) {
 	dir := t.TempDir()
 	testhelper.WriteFile(t, filepath.Join(dir, "index.html.twig"), `{% block content %}<sw-button>Save</sw-button>{% endblock %}`)
 
@@ -20,8 +21,9 @@ func TestAdminTwigLinterReportsRemovedComponents(t *testing.T) {
 
 	require.NoError(t, AdminTwigLinter{}.Check(t.Context(), check, cfg))
 
-	results := check.GetResults()
-	require.Len(t, results, 1)
-	assert.Equal(t, "admintwiglinter/sw-button", results[0].Identifier)
-	assert.Equal(t, "index.html.twig", results[0].Path)
+	assert.Empty(t, check.GetResults())
+	require.NoError(t, AdminTwigLinter{}.Fix(t.Context(), cfg))
+	content, err := os.ReadFile(filepath.Join(dir, "index.html.twig"))
+	require.NoError(t, err)
+	assert.Equal(t, `{% block content %}<sw-button>Save</sw-button>{% endblock %}`, string(content))
 }

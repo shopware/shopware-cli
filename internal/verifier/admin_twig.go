@@ -8,12 +8,9 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/shyim/go-version"
-
 	"github.com/shopware/shopware-cli/internal/html"
 	"github.com/shopware/shopware-cli/internal/validation"
 	"github.com/shopware/shopware-cli/internal/verifier/twiglinter"
-	_ "github.com/shopware/shopware-cli/internal/verifier/twiglinter/admintwiglinter"
 	"github.com/shopware/shopware-cli/logging"
 )
 
@@ -24,8 +21,6 @@ func (a AdminTwigLinter) Name() string {
 }
 
 func (a AdminTwigLinter) Check(ctx context.Context, check *Check, config ToolConfig) error {
-	fixers := twiglinter.GetAdministrationFixers(version.Must(version.NewVersion(config.MinShopwareVersion)))
-
 	for _, p := range config.AdminDirectories {
 		err := filepath.WalkDir(p, func(path string, d fs.DirEntry, err error) error {
 			if err != nil {
@@ -47,7 +42,7 @@ func (a AdminTwigLinter) Check(ctx context.Context, check *Check, config ToolCon
 
 			relPath := validation.NormalizeSourcePath(path, config.RootDir)
 
-			parsed, err := html.NewAdminParser(string(file))
+			_, err = html.NewAdminParser(string(file))
 			if err != nil {
 				line := 0
 				var pe *html.ParseError
@@ -65,18 +60,6 @@ func (a AdminTwigLinter) Check(ctx context.Context, check *Check, config ToolCon
 				return nil
 			}
 
-			for _, fixer := range fixers {
-				for _, message := range fixer.Check(parsed.Nodes) {
-					check.AddResult(validation.CheckResult{
-						Message:    message.Message,
-						Path:       relPath,
-						Line:       message.Line,
-						Severity:   message.Severity,
-						Identifier: "admintwiglinter/" + message.Identifier,
-					})
-				}
-			}
-
 			return nil
 		})
 		if err != nil {
@@ -87,46 +70,8 @@ func (a AdminTwigLinter) Check(ctx context.Context, check *Check, config ToolCon
 	return nil
 }
 
+// Fix is a no-op: Administration component migrations are no longer supported.
 func (a AdminTwigLinter) Fix(ctx context.Context, config ToolConfig) error {
-	fixers := twiglinter.GetAdministrationFixers(version.Must(version.NewVersion(config.MinShopwareVersion)))
-
-	for _, p := range config.AdminDirectories {
-		err := filepath.WalkDir(p, func(path string, d fs.DirEntry, err error) error {
-			if err != nil {
-				return err
-			}
-
-			if d.IsDir() {
-				return nil
-			}
-
-			if filepath.Ext(path) != twiglinter.TwigExtension {
-				return nil
-			}
-
-			file, err := os.ReadFile(path)
-			if err != nil {
-				return err
-			}
-
-			parsed, err := html.NewAdminParser(string(file))
-			if err != nil {
-				return err
-			}
-
-			for _, fixer := range fixers {
-				if err := fixer.Fix(parsed.Nodes); err != nil {
-					return err
-				}
-			}
-
-			return os.WriteFile(path, []byte(parsed.Dump(0)), 0o644)
-		})
-		if err != nil {
-			return err
-		}
-	}
-
 	return nil
 }
 
