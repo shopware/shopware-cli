@@ -32,7 +32,7 @@ A new command is just a new file: drop `cmd/<group>/<group><sub>.go` (`cmd/root.
 
 ### 2.2 Verifier tools: provides reproducible pattern for implementing other capabilities
 
-Each code-quality tool implements one small interface (name, check, fix, format) and adds itself to a shared list. Callers can then run them all, or filter to just some, in parallel. Currently these are code quality checkers: phpstan, eslint, stylelint, prettier, php-cs-fixer, rector, composer, admin-twig, storefront-twig, sw-cli.
+Each code-quality tool implements one small interface (name, check, fix, format) and adds itself to a shared list. Callers can then run them all, or filter to just some, in parallel. Currently these are code quality checkers: phpstan, eslint, stylelint, prettier, php-cs-fixer, rector, composer, storefront-twig, sw-cli.
 
 **Decision**: will drop `dry run` and use Git. Why: Underlying tools do not support it. Under the hood, it uses eslint for js, rector for PHP.
 
@@ -48,7 +48,7 @@ type Tool interface {
 
 Registration is `func init() { AddTool(PhpStan{}) }` into a global `availableTools`; consumers call `verifier.GetTools().Only(...)` / `.Exclude(...)`.
 
-Currently registered: phpstan, eslint, stylelint, prettier, php-cs-fixer, rector, composer, admin-twig, storefront-twig, sw-cli. The last one is a tool that enforces Shopware-specific validation rules the CLI implements itself; it runs through the same machinery as the external tools.
+Currently registered: phpstan, eslint, stylelint, prettier, php-cs-fixer, rector, composer, storefront-twig, sw-cli. The last one is a tool that enforces Shopware-specific validation rules the CLI implements itself; it runs through the same machinery as the external tools.
 
 ### 2.3 Extension types: simple interface
 
