@@ -1,6 +1,7 @@
 package project
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"os"
@@ -18,7 +19,60 @@ import (
 	"github.com/shopware/shopware-cli/internal/tui"
 )
 
+// dockerAvailabilityForCreate reports the Docker dependency that blocks a
+// Docker-based project, or nil when Docker is usable. It is a variable so
+// tests can stub the docker daemon check.
+var dockerAvailabilityForCreate = func(ctx context.Context) *system.MissingDependency {
+	for _, m := range system.CheckProjectDependencies(ctx, true, nil, "") {
+		if m.Name == "Docker" {
+			missing := m
+			return &missing
+		}
+	}
+	return nil
+}
+
+// dockerUnavailableReason phrases a Docker MissingDependency for the create
+// form (e.g. "Docker is not running").
+func dockerUnavailableReason(missing *system.MissingDependency) string {
+	if missing.Reason == "not installed" {
+		return "Docker is not installed"
+	}
+	return "Docker is not running"
+}
+
+// validateDockerChoice rejects the Docker option while Docker is unavailable,
+// so the form blocks right at the Docker question instead of failing after
+// the user configured the whole project.
+func validateDockerChoice(choice string, dockerMissing *system.MissingDependency) error {
+	if choice == tui.Yes && dockerMissing != nil {
+		reason := dockerUnavailableReason(dockerMissing)
+		if dockerMissing.Reason == "not running" {
+			return fmt.Errorf("%s — start Docker to use it, or choose local PHP to continue without Docker", reason)
+		}
+		return fmt.Errorf("%s — install Docker to use it, or choose local PHP to continue without Docker", reason)
+	}
+	return nil
+}
+
+// dockerUnavailableError renders the standard missing-Docker box to stderr
+// and returns the failure, so forced --docker requests fail before the
+// network fetch and wizard instead of at the end of project creation.
+func dockerUnavailableError(missing *system.MissingDependency) error {
+	dockerHint := "re-run with " + tui.BoldText.Render("--docker")
+	fmt.Fprintln(os.Stderr, system.RenderMissingDependencies(true, []system.MissingDependency{*missing}, "create a Shopware project", dockerHint))
+	return errors.New("missing required dependencies")
+}
+
 func runCreateForm(cmd *cobra.Command, opts *createOptions, releases []repository.Version, filteredVersions []*version.Version) error { //nolint:gocyclo
+	// A forced --docker flag skips the Docker question entirely, so fail
+	// before the wizard instead of after the user configured the project.
+	if cmd.PersistentFlags().Changed("docker") && opts.useDocker {
+		if missing := dockerAvailabilityForCreate(cmd.Context()); missing != nil {
+			return dockerUnavailableError(missing)
+		}
+	}
+
 	type minorGroup struct {
 		label    string
 		versions []string
@@ -76,6 +130,13 @@ func runCreateForm(cmd *cobra.Command, opts *createOptions, releases []repositor
 	selectGit := tui.Yes
 	selectElasticsearch := tui.No
 	selectAMQP := tui.Yes
+
+	// When Docker is unavailable, default to local PHP so the Docker choice is
+	// opt-in (and rejected with guidance) instead of the pre-selected path
+	// that fails at the end of the wizard.
+	if dockerAvailabilityForCreate(cmd.Context()) != nil {
+		selectDocker = tui.No
+	}
 
 	baseDomain := proxy.BaseDomain()
 	// Default to the stable hostname (recommended); only applies with Docker.
@@ -155,6 +216,10 @@ func runCreateForm(cmd *cobra.Command, opts *createOptions, releases []repositor
 	for {
 		var formGroups []*huh.Group
 
+		// Re-check Docker every pass so starting the daemon while the form is
+		// open unblocks the Docker option without restarting the CLI.
+		dockerMissing := dockerAvailabilityForCreate(cmd.Context())
+
 		if needsProjectFolder {
 			formGroups = append(formGroups, huh.NewGroup(
 				huh.NewInput().
@@ -204,14 +269,27 @@ func runCreateForm(cmd *cobra.Command, opts *createOptions, releases []repositor
 		}
 
 		if !cmd.PersistentFlags().Changed("docker") {
+			dockerDescription := "How do you want to run Shopware?"
+			dockerOptionLabel := "Run Shopware with Docker"
+			if dockerMissing != nil {
+				if dockerMissing.Reason == "not installed" {
+					dockerDescription = "How do you want to run Shopware? Docker is not installed — install it to enable Docker, or continue with local PHP."
+				} else {
+					dockerDescription = "How do you want to run Shopware? Docker is not running — start it to enable Docker, or continue with local PHP."
+				}
+				dockerOptionLabel = fmt.Sprintf("Run Shopware with Docker (unavailable — %s)", dockerMissing.Reason)
+			}
 			formGroups = append(formGroups, huh.NewGroup(
 				huh.NewSelect[string]().
 					Title("Docker").
-					Description("How do you want to run Shopware?").
+					Description(dockerDescription).
 					Options(
-						huh.NewOption("Run Shopware with Docker", tui.Yes),
+						huh.NewOption(dockerOptionLabel, tui.Yes),
 						huh.NewOption("Use PHP and Composer; Shopware CLI handles the installation", tui.No),
 					).
+					Validate(func(v string) error {
+						return validateDockerChoice(v, dockerMissing)
+					}).
 					Value(&selectDocker),
 			))
 		}
@@ -397,6 +475,18 @@ func runCreateForm(cmd *cobra.Command, opts *createOptions, releases []repositor
 
 		if !cmd.PersistentFlags().Changed("docker") {
 			opts.useDocker = selectDocker == tui.Yes
+		}
+		// Docker may have stopped while the wizard was open. Catch it here —
+		// before the summary and the long install — and restart the form with
+		// local PHP pre-selected, instead of failing at the very end.
+		if opts.useDocker {
+			if missing := dockerAvailabilityForCreate(cmd.Context()); missing != nil {
+				_ = dockerUnavailableError(missing)
+				selectDocker = tui.No
+				opts.useDocker = false
+				opts.useLocalDomain, opts.setupProxyNow = false, false
+				continue
+			}
 		}
 		// The local-domain choice comes from the --local-domain flag when set,
 		// otherwise from the prompt. The one-time setup is only offered inline
