@@ -19,12 +19,6 @@ var projectValidateCmd = &cobra.Command{
 	Use:   "validate [path]",
 	Short: "Run static analysis and Shopware checks on a project",
 	Args:  cobra.MaximumNArgs(1),
-	PreRunE: func(cmd *cobra.Command, args []string) error {
-		if _, err := projectValidationFormat(cmd); err != nil {
-			return err
-		}
-		return verifier.SetupTools(cmd.Context(), cmd.Root().Version)
-	},
 	RunE: func(cmd *cobra.Command, args []string) error {
 		reportingFormat, err := projectValidationFormat(cmd)
 		if err != nil {
@@ -33,6 +27,21 @@ var projectValidateCmd = &cobra.Command{
 		only, _ := cmd.Flags().GetString("only")
 		exclude, _ := cmd.Flags().GetString("exclude")
 		verifier.WarnOnDeprecatedToolName(cmd.Context(), only, exclude)
+
+		// TODO: Built-in checks require a single extension and cannot validate a project (they silently early return).
+		// TODO: Investigate why that is and why other tools like PHPStan work in both
+		// TODO: extension validate + project validate commands and figure out what to check differently
+		checkers, err := verifier.GetToolsOf[verifier.CheckTool]().Exclude("builtin")
+		if err != nil {
+			return err
+		}
+		tools, statuses, err := selectProjectTools(checkers, only, exclude, "validation checks")
+		if err != nil {
+			return err
+		}
+		if err := verifier.SetupTools(cmd.Context(), cmd.Root().Version); err != nil {
+			return err
+		}
 		noCopy, _ := cmd.Flags().GetBool("no-copy")
 		localOnly, _ := cmd.Flags().GetBool("local-only")
 
@@ -80,31 +89,18 @@ var projectValidateCmd = &cobra.Command{
 
 		var gr errgroup.Group
 
-		tools := verifier.GetToolsOf[verifier.CheckTool]()
-
-		tools, err = tools.Only(only)
-		if err != nil {
-			return err
-		}
-
-		tools, err = tools.Exclude(exclude)
-		if err != nil {
-			return err
-		}
-
 		for _, tool := range tools {
 			gr.Go(func() error {
 				return tool.Check(cmd.Context(), result, *toolCfg)
 			})
 		}
 
-		if err := gr.Wait(); err != nil {
-			return err
+		runErr := gr.Wait()
+		reportErr := validation.DoCheckReport(result.RemoveByIdentifier(toolCfg.ValidationIgnores), reportingFormat, runErr != nil, statuses...)
+		if runErr != nil {
+			return runErr
 		}
-
-		filtered := result.RemoveByIdentifier(toolCfg.ValidationIgnores)
-
-		return validation.DoCheckReport(filtered, reportingFormat, false)
+		return reportErr
 	},
 }
 

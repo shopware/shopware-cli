@@ -9,6 +9,7 @@ import (
 	"golang.org/x/sync/errgroup"
 
 	"github.com/shopware/shopware-cli/internal/shop"
+	"github.com/shopware/shopware-cli/internal/validation"
 	"github.com/shopware/shopware-cli/internal/verifier"
 )
 
@@ -16,11 +17,18 @@ var projectFixCmd = &cobra.Command{
 	Use:   "fix [path]",
 	Short: "Apply code-quality fixes to a project",
 	Args:  cobra.MaximumNArgs(1),
-	PreRunE: func(cmd *cobra.Command, args []string) error {
-		return verifier.SetupTools(cmd.Context(), cmd.Root().Version)
-	},
 	RunE: func(cmd *cobra.Command, args []string) error {
-		var err error
+		only, _ := cmd.Flags().GetString("only")
+		exclude, _ := cmd.Flags().GetString("exclude")
+		verifier.WarnOnDeprecatedToolName(cmd.Context(), only, exclude)
+
+		tools, statuses, err := selectProjectTools(verifier.GetToolsOf[verifier.FixTool](), only, exclude, "fixers")
+		if err != nil {
+			return err
+		}
+		if err := verifier.SetupTools(cmd.Context(), cmd.Root().Version); err != nil {
+			return err
+		}
 
 		projectPath := ""
 
@@ -45,8 +53,6 @@ var projectFixCmd = &cobra.Command{
 			}
 		}
 
-		only, _ := cmd.Flags().GetString("only")
-
 		toolCfg, err := verifier.GetConfigFromProject(cmd.Context(), projectPath, false)
 		if err != nil {
 			return err
@@ -54,25 +60,23 @@ var projectFixCmd = &cobra.Command{
 
 		var gr errgroup.Group
 
-		tools := verifier.GetToolsOf[verifier.FixTool]()
-
-		tools, err = tools.Only(only)
-		if err != nil {
-			return err
-		}
-
 		for _, tool := range tools {
 			gr.Go(func() error {
 				return tool.Fix(cmd.Context(), *toolCfg)
 			})
 		}
 
-		return gr.Wait()
+		runErr := gr.Wait()
+		if err := validation.PrintToolInvocationTable(os.Stdout, "Fixers", statuses); err != nil {
+			return err
+		}
+		return runErr
 	},
 }
 
 func init() {
 	projectRootCmd.AddCommand(projectFixCmd)
 	projectFixCmd.PersistentFlags().String("only", "", "Run only the specified fixers (comma-separated, e.g. eslint,rector)")
+	projectFixCmd.PersistentFlags().String("exclude", "", "Exclude fixers after applying --only (comma-separated, e.g. eslint,rector)")
 	projectFixCmd.PersistentFlags().Bool("allow-non-git", false, "Allow fixes in projects without a Git repository")
 }
