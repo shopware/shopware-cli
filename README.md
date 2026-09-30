@@ -49,7 +49,7 @@ go build -o bin/shopware-cli .
 
 ### Requirements
 
-Most commands work out of the box. Docker-backed projects (`shopware-cli project create` with `docker`, `shopware-cli project dev`) need Docker plus the Docker Compose plugin. If `docker compose version` prints an error instead of a version, container startup fails with a confusing message, so install the plugin first.
+Most commands work out of the box. `shopware-cli project create --docker` needs Docker. `shopware-cli project dev` needs Docker plus the Docker Compose plugin. If `docker compose version` prints an error instead of a version, container startup fails with a confusing message, so install the plugin first.
 
 ## Usage
 
