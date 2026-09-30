@@ -41,16 +41,16 @@ func TestExtensionValidationSelection(t *testing.T) {
 	})
 
 	t.Run("Twig validation needs no external tools", func(t *testing.T) {
-		tools, _, err := selectExtensionValidationTools(false, "admin-twig", "")
+		tools, _, err := selectExtensionValidationTools(false, "storefront-twig", "")
 		require.NoError(t, err)
-		assert.Equal(t, []string{"admin-twig"}, toolNamesForValidation(tools))
+		assert.Equal(t, []string{"storefront-twig"}, toolNamesForValidation(tools))
 		assert.False(t, slices.ContainsFunc(tools, requiresToolSetup))
 	})
 
 	t.Run("full selects all validation checks", func(t *testing.T) {
 		tools, statuses, err := selectExtensionValidationTools(true, "", "")
 		require.NoError(t, err)
-		assert.Len(t, tools, 6)
+		assert.Len(t, tools, 5)
 		assert.Len(t, statuses, len(tools))
 		assert.True(t, slices.ContainsFunc(tools, requiresToolSetup))
 	})

@@ -56,7 +56,7 @@ type FormatTool interface {
 
 Registration is `func init() { AddTool(PhpStan{}) }` into a global `availableTools`. Consumers call `GetToolsOf[CheckTool]()` (or `FixTool` / `FormatTool`) to get a typed `ToolList[T]`; its `Only` and `Exclude` methods preserve that capability type.
 
-Current checkers are `sw-cli`, `phpstan`, `eslint`, `stylelint`, `admin-twig`, and `storefront-twig`. Fixers are `rector`, `admin-twig`, `eslint`, `stylelint`, and `symfony-xml`; formatters are `admin-twig`, `php-cs-fixer`, and `prettier`. `sw-cli` enforces built-in extension rules; it does not validate per-extension metadata in a project context. There is no separate Composer verifier tool.
+Current checkers are `sw-cli`, `phpstan`, `eslint`, `stylelint`, and `storefront-twig`. Fixers are `rector`, `eslint`, `stylelint`, and `symfony-xml`; formatters are `php-cs-fixer`, and `prettier`. `sw-cli` enforces built-in extension rules; it does not validate per-extension metadata in a project context. There is no separate Composer verifier tool.
 
 Extension commands report selected tools as `invoked` and others as `skipped`. This describes selection and invocation, not whether a tool found applicable files or changed them.
 

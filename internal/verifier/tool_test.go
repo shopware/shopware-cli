@@ -23,9 +23,9 @@ func toolNames[T Tool](list ToolList[T]) []string {
 }
 
 func TestToolsByCapability(t *testing.T) {
-	assert.ElementsMatch(t, []string{"admin-twig", "eslint", "phpstan", "storefront-twig", "stylelint", "sw-cli"}, toolNames(GetToolsOf[CheckTool]()))
-	assert.ElementsMatch(t, []string{"admin-twig", "eslint", "rector", "stylelint", "symfony-xml"}, toolNames(GetToolsOf[FixTool]()))
-	assert.ElementsMatch(t, []string{"admin-twig", "php-cs-fixer", "prettier"}, toolNames(GetToolsOf[FormatTool]()))
+	assert.ElementsMatch(t, []string{"eslint", "phpstan", "storefront-twig", "stylelint", "sw-cli"}, toolNames(GetToolsOf[CheckTool]()))
+	assert.ElementsMatch(t, []string{"eslint", "rector", "stylelint", "symfony-xml"}, toolNames(GetToolsOf[FixTool]()))
+	assert.ElementsMatch(t, []string{"php-cs-fixer", "prettier"}, toolNames(GetToolsOf[FormatTool]()))
 }
 
 func TestOnly_DeduplicatesAndPreservesOrder(t *testing.T) {
