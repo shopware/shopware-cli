@@ -8,11 +8,11 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/shopware/shopware-cli/internal/cliversion"
 	internalgit "github.com/shopware/shopware-cli/internal/git"
 	"github.com/shopware/shopware-cli/internal/projectbuild"
 	"github.com/shopware/shopware-cli/internal/shop"
 	"github.com/shopware/shopware-cli/internal/system"
-	"github.com/shopware/shopware-cli/internal/tui"
 	"github.com/shopware/shopware-cli/logging"
 )
 
@@ -34,7 +34,7 @@ var projectCI = &cobra.Command{
 		}
 
 		actualProjectConfigPath := shop.SearchConfigPath(cmd.Context(), ".", projectConfigPath)
-		shopCfg, err := shop.ReadConfig(cmd.Context(), actualProjectConfigPath, true)
+		shopCfg, err := shop.ReadConfig(cmd.Context(), actualProjectConfigPath, projectConfigPath == "")
 		if err != nil {
 			return err
 		}
@@ -49,7 +49,7 @@ var projectCI = &cobra.Command{
 
 		return projectbuild.Build(cmd.Context(), root, shopCfg, envCfg, projectbuild.Options{
 			WithDevDependencies: withDev,
-			ToolVersion:         tui.AppVersion,
+			ToolVersion:         cliversion.Version,
 		})
 	},
 }

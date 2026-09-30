@@ -2,6 +2,7 @@ package project
 
 import (
 	"errors"
+	"fmt"
 	"os"
 
 	"charm.land/huh/v2"
@@ -15,8 +16,8 @@ import (
 
 var projectConfigInitCmd = &cobra.Command{
 	Use:   "init",
-	Short: "Creates a new project config",
-	Long: `Creates a new .config/shopware-project.yml config in the current directory.
+	Short: "Create a new project config",
+	Long: `Create a new .config/shopware-project.yml config in the current directory.
 
 Shop URL and Admin API credentials are written under environments.local.
 Omit -e / --env on later commands to target that environment.`,
@@ -25,11 +26,12 @@ Omit -e / --env on later commands to target that environment.`,
 			return errors.New("this command requires interaction, but interaction is disabled")
 		}
 
+		force, _ := cmd.Flags().GetBool("force")
+
 		// first check if a config already exists
 		actualProjectConfigPath := shop.SearchConfigPath(cmd.Context(), ".", projectConfigPath)
-		_, err := os.Stat(actualProjectConfigPath)
-		if err == nil {
-			return errors.New("a config already exists under " + actualProjectConfigPath)
+		if _, err := os.Stat(actualProjectConfigPath); err == nil && !force {
+			return fmt.Errorf("%s already exists (pass --force to overwrite)", actualProjectConfigPath)
 		}
 
 		config := &shop.Config{
@@ -40,11 +42,14 @@ Omit -e / --env on later commands to target that environment.`,
 			return err
 		}
 
+		// write to the resolved file, so --force overwrites a legacy config in place
+		config.SetStorageLocation(actualProjectConfigPath)
+
 		if err := shop.WriteConfig(config, "."); err != nil {
 			return err
 		}
 
-		logging.FromContext(cmd.Context()).Info("Created .config/shopware-project.yml")
+		logging.FromContext(cmd.Context()).Infof("Created %s", config.GetStorageLocation())
 
 		return nil
 	},
@@ -64,7 +69,7 @@ func askProjectConfig(config *shop.Config) error {
 				Validate(emptyValidator).
 				Value(&shopURL),
 			huh.NewConfirm().
-				Title("Configure admin-api access").
+				Title("Configure Admin API access").
 				Value(&configureApi),
 		),
 		huh.NewGroup(
@@ -124,6 +129,7 @@ func askProjectConfig(config *shop.Config) error {
 }
 
 func init() {
+	projectConfigInitCmd.Flags().Bool("force", false, "Overwrite existing .config/shopware-project.yml")
 	projectConfigCmd.AddCommand(projectConfigInitCmd)
 }
 

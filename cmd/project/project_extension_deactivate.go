@@ -12,7 +12,7 @@ import (
 
 var projectExtensionDeactivateCmd = &cobra.Command{
 	Use:   "deactivate name...",
-	Short: "Deactivate an installed extension",
+	Short: "Deactivate one or more installed extensions",
 	Args:  cobra.MinimumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		projectRoot, err := shop.FindClosestShopwareProject(true)
@@ -42,7 +42,7 @@ var projectExtensionDeactivateCmd = &cobra.Command{
 
 			if extension == nil {
 				failed = true
-				logging.FromContext(cmd.Context()).Errorf("Cannot find extension by name %s", arg)
+				logging.FromContext(cmd.Context()).Errorf("Cannot find extension %s, run \"shopware-cli project extension list\" to see installed extensions", arg)
 				continue
 			}
 

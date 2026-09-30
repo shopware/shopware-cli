@@ -19,7 +19,7 @@ import (
 var projectSQLCmd = &cobra.Command{
 	Use:   "sql [query]",
 	Short: "Run SQL queries against a project's database",
-	Long: "Connects to the project database using the connection details of the current environment (local, docker, ...), " +
+	Long: "Connect to the project database using the connection details of the current environment (local, docker, ...), " +
 		"so you don't need to know the host or credentials. " +
 		"Without arguments an interactive SQL shell is opened; a query can be passed as argument, loaded with --file, or a script piped via stdin.",
 	Example: `  shopware-cli project sql "SELECT id, tax_rate FROM tax"

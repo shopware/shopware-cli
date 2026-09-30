@@ -3,12 +3,14 @@ package validation
 import (
 	"bytes"
 	"encoding/json"
+	"encoding/xml"
 	"io"
 	"os"
 	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestReportingOutputIsDeterministic(t *testing.T) {
@@ -50,7 +52,7 @@ func TestReportingOutputIsDeterministic(t *testing.T) {
 	for range 5 {
 		output := captureOutput(func() {
 			// Ignore the error since we're testing output format, not validation logic
-			_ = doSummaryReport(check)
+			_ = doSummaryReport(check, false)
 		})
 
 		// Check that files are sorted alphabetically
@@ -72,7 +74,7 @@ func TestReportingOutputIsDeterministic(t *testing.T) {
 	// Test GitHub report multiple times to ensure deterministic output
 	for range 5 {
 		output := captureOutput(func() {
-			_ = doGitHubReport(check)
+			_ = doGitHubReport(check, false)
 		})
 
 		// The GitHub reporter now prefixes the summary output before the
@@ -123,7 +125,7 @@ func TestMarkdownReportIsDeterministic(t *testing.T) {
 	// Test markdown report multiple times to ensure deterministic output
 	for range 5 {
 		output := captureOutput(func() {
-			_ = doMarkdownReport(check)
+			_ = doMarkdownReport(check, false)
 		})
 
 		// Check that files are sorted alphabetically
@@ -161,7 +163,165 @@ func TestErrorExistsSummary(t *testing.T) {
 
 	check := &testCheck{Results: testResults}
 
-	assert.Error(t, DoCheckReport(check, "summary"))
+	assert.Error(t, DoCheckReport(check, "summary", false))
+}
+
+func TestToolInvocationReports(t *testing.T) {
+	check := &testCheck{Results: []CheckResult{}}
+	tools := []ToolInvocationStatus{
+		{Name: "eslint", Status: "skipped", Reason: "no JavaScript source files"},
+		{Name: "storefront-twig", Status: "skipped", Reason: "no storefront Twig templates"},
+	}
+	rows := toolInvocationRows(tools)
+	assert.Contains(t, rows[0], "eslint")
+	assert.Contains(t, rows[0], "  skipped  no JavaScript source files")
+	assert.NotContains(t, rows[0], "(")
+
+	summary := captureOutput(func() {
+		assert.NoError(t, DoCheckReport(check, "summary", false, tools...))
+	})
+	for _, row := range rows {
+		assert.Contains(t, summary, "  "+row)
+	}
+	assert.Contains(t, summary, "Checkers:")
+	assert.True(t, strings.HasPrefix(summary, "\nCheckers:\n"))
+	assert.Less(t, strings.Index(summary, "Checkers:"), strings.Index(summary, "No checkers invoked;"))
+	assert.Contains(t, summary, "No checkers invoked; 0 problems reported")
+	assert.NotContains(t, summary, "No problems found")
+
+	github := captureOutput(func() {
+		assert.NoError(t, DoCheckReport(check, "github", false, tools...))
+	})
+	for _, row := range rows {
+		assert.Contains(t, github, "  "+row)
+	}
+
+	markdown := captureOutput(func() {
+		assert.NoError(t, DoCheckReport(check, "markdown", false, tools...))
+	})
+	assert.Contains(t, markdown, "## Checkers")
+	assert.Less(t, strings.Index(markdown, "## Checkers"), strings.Index(markdown, "No checkers invoked;"))
+	for _, row := range rows {
+		assert.Contains(t, markdown, row)
+	}
+	assert.Contains(t, markdown, "No checkers invoked; 0 problems reported")
+
+	jsonOutput := captureOutput(func() {
+		assert.NoError(t, DoCheckReport(check, "json", false, tools...))
+	})
+	var report struct {
+		Results []CheckResult          `json:"results"`
+		Tools   []ToolInvocationStatus `json:"tools"`
+	}
+	assert.NoError(t, json.Unmarshal([]byte(jsonOutput), &report))
+	assert.Empty(t, report.Results)
+	assert.Equal(t, tools, report.Tools)
+	assert.NotContains(t, jsonOutput, `"checks"`)
+
+	tools[0] = ToolInvocationStatus{Name: "eslint", Status: "invoked"}
+	summary = captureOutput(func() {
+		assert.NoError(t, DoCheckReport(check, "summary", false, tools...))
+	})
+	assert.Contains(t, summary, "eslint")
+	assert.Contains(t, summary, "  invoked")
+	assert.Contains(t, summary, "No problems found")
+}
+
+func TestExecutionErrorDoesNotReportSuccess(t *testing.T) {
+	tools := []ToolInvocationStatus{{Name: "phpstan", Status: "invoked"}}
+	for _, format := range []string{"summary", "github", "markdown"} {
+		t.Run(format, func(t *testing.T) {
+			success := captureOutput(func() {
+				assert.NoError(t, DoCheckReport(&testCheck{}, format, false, tools...))
+			})
+			assert.Contains(t, success, "No problems found")
+
+			for _, results := range [][]CheckResult{
+				{},
+				{{Path: "src/file.php", Line: 1, Message: "warning", Severity: SeverityWarning}},
+			} {
+				check := &testCheck{Results: results}
+				output := captureOutput(func() {
+					assert.NoError(t, DoCheckReport(check, format, true, tools...))
+				})
+				assert.Contains(t, output, "phpstan")
+				assert.Contains(t, output, "invoked")
+				assert.NotContains(t, output, "No problems found")
+				if len(results) > 0 {
+					assert.Contains(t, output, "warning")
+				}
+			}
+		})
+	}
+}
+
+func TestPrintToolInvocationTableWithOperationTitle(t *testing.T) {
+	var output strings.Builder
+	tools := []ToolInvocationStatus{
+		{Name: "eslint", Status: "invoked"},
+		{Name: "rector", Status: "skipped", Reason: "not selected by --only"},
+	}
+	assert.NoError(t, PrintToolInvocationTable(&output, "Fixers", tools))
+	assert.Equal(t, "\nFixers:\n  eslint  invoked\n  rector  skipped  not selected by --only\n", output.String())
+}
+
+func TestToolInvocationTableFollowsFindings(t *testing.T) {
+	check := &testCheck{Results: []CheckResult{{Path: "src/file.php", Line: 1, Message: "problem", Severity: SeverityWarning}}}
+	tools := []ToolInvocationStatus{{Name: "sw-cli", Status: "invoked"}}
+
+	summary := captureOutput(func() {
+		assert.NoError(t, DoCheckReport(check, "summary", false, tools...))
+	})
+	assert.Less(t, strings.Index(summary, "src/file.php"), strings.Index(summary, "Checkers:"))
+	assert.Less(t, strings.Index(summary, "Checkers:"), strings.Index(summary, "✖ 1 problem"))
+	assert.Contains(t, summary, "\n\nCheckers:\n")
+	assert.NotContains(t, summary, "\n\n\nCheckers:\n")
+
+	markdown := captureOutput(func() {
+		assert.NoError(t, DoCheckReport(check, "markdown", false, tools...))
+	})
+	assert.Less(t, strings.Index(markdown, "## src/file.php"), strings.Index(markdown, "## Checkers"))
+}
+
+func TestStructuredReportsKeepMachineOutputAndShowToolStatuses(t *testing.T) {
+	check := &testCheck{Results: []CheckResult{}}
+	tools := []ToolInvocationStatus{
+		{Name: "phpstan", Status: "invoked"},
+		{Name: "sw-cli", Status: "skipped", Reason: "not selected by --only"},
+	}
+
+	var gitlabLog string
+	gitlab := captureOutput(func() {
+		gitlabLog = captureStderr(func() {
+			assert.NoError(t, DoCheckReport(check, "gitlab", false, tools...))
+		})
+	})
+	var issues []GitLabCodeQualityIssue
+	assert.NoError(t, json.Unmarshal([]byte(gitlab), &issues))
+	assert.Empty(t, issues)
+	for _, row := range toolInvocationRows(tools) {
+		assert.Contains(t, gitlabLog, "  "+row)
+	}
+
+	var junitLog string
+	junit := captureOutput(func() {
+		junitLog = captureStderr(func() {
+			assert.NoError(t, DoCheckReport(check, "junit", false, tools...))
+		})
+	})
+	var suite JUnitTestSuite
+	require.NoError(t, xml.Unmarshal([]byte(junit), &suite))
+	assert.Equal(t, 2, suite.Tests)
+	assert.Equal(t, 1, suite.Skipped)
+	require.Len(t, suite.TestCase, 2)
+	assert.Equal(t, "phpstan", suite.TestCase[0].Name)
+	assert.Equal(t, "tool", suite.TestCase[0].ClassName)
+	assert.Nil(t, suite.TestCase[0].Skipped)
+	require.NotNil(t, suite.TestCase[1].Skipped)
+	assert.Equal(t, "not selected by --only", suite.TestCase[1].Skipped.Message)
+	for _, row := range toolInvocationRows(tools) {
+		assert.Contains(t, junitLog, "  "+row)
+	}
 }
 
 func TestValidateReporter(t *testing.T) {
@@ -320,7 +480,7 @@ func TestSummaryReportWithTip(t *testing.T) {
 	check := &testCheck{Results: testResults}
 
 	output := captureOutput(func() {
-		_ = doSummaryReport(check)
+		_ = doSummaryReport(check, false)
 	})
 
 	assert.Contains(t, output, "Method has no return type")
@@ -344,7 +504,7 @@ func TestGitHubReportNeutralizesSummaryCommands(t *testing.T) {
 	check := &testCheck{Results: testResults}
 
 	output := captureOutput(func() {
-		_ = doGitHubReport(check)
+		_ = doGitHubReport(check, false)
 	})
 
 	lines := strings.Split(strings.TrimSpace(output), "\n")
@@ -387,7 +547,7 @@ func TestGitHubReportWithTip(t *testing.T) {
 	check := &testCheck{Results: testResults}
 
 	output := captureOutput(func() {
-		_ = doGitHubReport(check)
+		_ = doGitHubReport(check, false)
 	})
 
 	assert.Contains(t, output, "Method has no return type")
@@ -436,11 +596,12 @@ func TestMarkdownReportWithTip(t *testing.T) {
 	check := &testCheck{Results: testResults}
 
 	output := captureOutput(func() {
-		_ = doMarkdownReport(check)
+		_ = doMarkdownReport(check, false)
 	})
 
 	assert.Contains(t, output, "Method has no return type")
 	assert.Contains(t, output, "*Tip: Add a return type declaration*")
+	assert.NotContains(t, output, "## Checkers")
 }
 
 func TestJSONReportWithTip(t *testing.T) {
@@ -467,6 +628,7 @@ func TestJSONReportWithTip(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Len(t, result["results"], 1)
 	assert.Equal(t, "Add a return type declaration", result["results"][0].Tip)
+	assert.NotContains(t, output, `"tools"`)
 }
 
 func TestJUnitReportWithTip(t *testing.T) {
@@ -533,6 +695,25 @@ func captureOutput(fn func()) string {
 		panic(err)
 	}
 	os.Stdout = oldStdout
+
+	var buf bytes.Buffer
+	if _, err := io.Copy(&buf, r); err != nil {
+		panic(err)
+	}
+	return buf.String()
+}
+
+func captureStderr(fn func()) string {
+	oldStderr := os.Stderr
+	r, w, _ := os.Pipe()
+	os.Stderr = w
+
+	fn()
+
+	if err := w.Close(); err != nil {
+		panic(err)
+	}
+	os.Stderr = oldStderr
 
 	var buf bytes.Buffer
 	if _, err := io.Copy(&buf, r); err != nil {

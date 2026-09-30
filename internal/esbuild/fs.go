@@ -35,6 +35,12 @@ func copyStaticFiles(currentPath string, targetPath string) error {
 		// Construct target path
 		targetFilePath := filepath.Join(targetPath, relPath)
 
+		// Git metadata is not static asset input and may contain special files,
+		// such as the fsmonitor daemon socket.
+		if info.IsDir() && info.Name() == ".git" {
+			return filepath.SkipDir
+		}
+
 		// If it's a directory, create it in target
 		if info.IsDir() {
 			return os.MkdirAll(targetFilePath, 0o755)

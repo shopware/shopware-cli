@@ -37,7 +37,7 @@ var projectDoctor = &cobra.Command{
 		fmt.Println()
 
 		actualProjectConfigPath := shop.SearchConfigPath(cmd.Context(), projectDir, projectConfigPath)
-		shopCfg, err := shop.ReadConfig(cmd.Context(), actualProjectConfigPath, true)
+		shopCfg, err := shop.ReadConfig(cmd.Context(), actualProjectConfigPath, projectConfigPath == "")
 		if err != nil {
 			return err
 		}

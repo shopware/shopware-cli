@@ -46,7 +46,7 @@ var projectFormatCmd = &cobra.Command{
 
 		var gr errgroup.Group
 
-		tools := verifier.GetTools()
+		tools := verifier.GetToolsOf[verifier.FormatTool]()
 
 		tools, err = tools.Only(only)
 		if err != nil {
@@ -54,7 +54,6 @@ var projectFormatCmd = &cobra.Command{
 		}
 
 		for _, tool := range tools {
-			tool := tool
 			gr.Go(func() error {
 				return tool.Format(cmd.Context(), *toolCfg, dryRun)
 			})
@@ -66,6 +65,6 @@ var projectFormatCmd = &cobra.Command{
 
 func init() {
 	projectRootCmd.AddCommand(projectFormatCmd)
-	projectFormatCmd.PersistentFlags().String("only", "", "Run only the specified tools (comma-separated, e.g. phpstan,eslint)")
+	projectFormatCmd.PersistentFlags().String("only", "", "Run only the specified formatters (comma-separated, e.g. prettier,php-cs-fixer)")
 	projectFormatCmd.PersistentFlags().Bool("dry-run", false, "Run formatters without changing files")
 }

@@ -305,19 +305,19 @@ func validateExtensionConfig(config *Config) error {
 	}
 
 	if config.Store.Tags.English != nil && len(*config.Store.Tags.English) > 5 {
-		return errors.New("store.info.tags.en can contain maximal 5 items")
+		return errors.New("store.tags.en can contain at most 5 items")
 	}
 
 	if config.Store.Tags.German != nil && len(*config.Store.Tags.German) > 5 {
-		return errors.New("store.info.tags.de can contain maximal 5 items")
+		return errors.New("store.tags.de can contain at most 5 items")
 	}
 
 	if config.Store.Videos.English != nil && len(*config.Store.Videos.English) > 2 {
-		return errors.New("store.info.videos.en can contain maximal 2 items")
+		return errors.New("store.videos.en can contain at most 2 items")
 	}
 
 	if config.Store.Videos.German != nil && len(*config.Store.Videos.German) > 2 {
-		return errors.New("store.info.videos.de can contain maximal 2 items")
+		return errors.New("store.videos.de can contain at most 2 items")
 	}
 
 	for i, cache := range config.Build.Zip.Assets.AdditionalCaches {

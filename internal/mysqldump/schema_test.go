@@ -145,15 +145,39 @@ func TestTableSchema_BuildCreateTableSQL_WithIndexes(t *testing.T) {
 		},
 		PrimaryKey: []string{"id"},
 		Indexes: []IndexSchema{
-			{Name: "idx_name", Columns: []IndexColumnSchema{{Name: "name"}}, IsUnique: false, Type: "BTREE"},
-			{Name: "uniq_sku", Columns: []IndexColumnSchema{{Name: "sku"}}, IsUnique: true, Type: "BTREE"},
+			{
+				Name:     "idx_name",
+				Columns:  []IndexColumnSchema{{Name: sql.NullString{String: "name", Valid: true}}},
+				IsUnique: false,
+				Type:     "BTREE",
+			},
+			{
+				Name:     "idx_name_desc",
+				Columns:  []IndexColumnSchema{{Name: sql.NullString{String: "name", Valid: true}, Order: "DESC"}},
+				IsUnique: false,
+				Type:     "BTREE",
+			},
+			{
+				Name:     "uniq_sku",
+				Columns:  []IndexColumnSchema{{Name: sql.NullString{String: "sku", Valid: true}}},
+				IsUnique: true,
+				Type:     "BTREE",
+			},
+			{
+				Name:     "idx_created_at_before_2026",
+				Columns:  []IndexColumnSchema{{Expression: sql.NullString{String: "(`created_at` < _utf8mb4'2026-01-01 00:00:00')", Valid: true}}},
+				IsUnique: false,
+				Type:     "BTREE",
+			},
 		},
 	}
 
 	sql := schema.BuildCreateTableSQL()
 
 	assert.Contains(t, sql, "KEY `idx_name` (`name`)")
+	assert.Contains(t, sql, "KEY `idx_name_desc` (`name` DESC)")
 	assert.Contains(t, sql, "UNIQUE KEY `uniq_sku` (`sku`)")
+	assert.Contains(t, sql, "KEY `idx_created_at_before_2026` ((`created_at` < _utf8mb4'2026-01-01 00:00:00'))")
 }
 
 func TestTableSchema_BuildCreateTableSQL_WithForeignKeys(t *testing.T) {
@@ -354,11 +378,22 @@ func TestFetchTableSchema(t *testing.T) {
 			AddRow("test_table", "name", "varchar(255)", "utf8mb4", "NO", nil, "", "utf8mb4_0900_ai_ci", "", nil).
 			AddRow("test_table", "created_at", "datetime", nil, "NO", "CURRENT_TIMESTAMP", "", nil, "", nil))
 
+	mock.ExpectQuery("SELECT.*FROM INFORMATION_SCHEMA.COLUMNS.*TABLE_SCHEMA = 'information_schema'.*TABLE_NAME = 'STATISTICS'.*COLUMN_NAME = 'EXPRESSION'").
+		WillReturnRows(sqlmock.NewRows([]string{"COUNT(*)"}).
+			AddRow(1))
+
 	mock.ExpectQuery("SELECT.*FROM INFORMATION_SCHEMA.STATISTICS.*WHERE TABLE_SCHEMA = DATABASE()").
 		WillReturnRows(sqlmock.NewRows([]string{
-			"TABLE_NAME", "INDEX_NAME", "COLUMN_NAME", "NON_UNIQUE", "INDEX_TYPE", "SUB_PART", "COLLATION", "INDEX_COMMENT", "SEQ_IN_INDEX",
+			"TABLE_NAME", "INDEX_NAME", "COLUMN_NAME", "EXPRESSION", "NON_UNIQUE", "INDEX_TYPE", "SUB_PART", "COLLATION", "INDEX_COMMENT", "SEQ_IN_INDEX",
 		}).
-			AddRow("test_table", "PRIMARY", "id", 0, "BTREE", nil, "A", "", 1))
+			AddRow("test_table", "PRIMARY", "id", nil, 0, "BTREE", nil, "A", "", 1).
+			AddRow("test_table", "idx_created_at", "created_at", nil, 1, "BTREE", nil, "A", "", 1).
+			AddRow("test_table", "idx_created_at_before_2026", nil, "(`created_at` < _utf8mb4\\'2026-01-01 00:00:00\\')", 1, "BTREE", nil, "A", "", 1).
+			AddRow("test_table", "idx_complex", nil, "(LENGTH(`name`) < 5)", 1, "BTREE", nil, "A", "Some comment", 1).
+			AddRow("test_table", "idx_complex", "name", nil, 1, "BTREE", nil, "D", "Some comment", 2).
+			AddRow("test_table", "idx_prefix", "name", nil, 1, "BTREE", "5", "", "", 1).
+			AddRow("test_table", "unq_name", "name", nil, 0, "BTREE", nil, "A", "", 1).
+			AddRow("wrong_table", "idx_test", "test", nil, 1, "BTREE", nil, "A", "", 1))
 
 	mock.ExpectQuery("SELECT COUNT.*KEY_COLUMN_USAGE.*").
 		WillReturnRows(sqlmock.NewRows([]string{"c"}).AddRow(0))
@@ -394,6 +429,179 @@ func TestFetchTableSchema(t *testing.T) {
 	assert.Equal(t, 1, len(schema.CheckConstraints))
 	assert.Equal(t, "test_table.check.with_string_literal", schema.CheckConstraints[0].Name)
 	assert.Equal(t, "`name` LIKE _utf8mb4'A%'", schema.CheckConstraints[0].Expression)
+	assert.Len(t, schema.Indexes, 5)
+	assert.Equal(t, IndexSchema{
+		Name: "idx_created_at",
+		Columns: []IndexColumnSchema{
+			{
+				Name:  sql.NullString{String: "created_at", Valid: true},
+				Order: "ASC",
+			},
+		},
+		IsUnique:   false,
+		Type:       "BTREE",
+		SeqInTable: 0,
+	}, schema.Indexes[0])
+	assert.Equal(t, IndexSchema{
+		Name: "idx_created_at_before_2026",
+		Columns: []IndexColumnSchema{
+			{
+				Expression: sql.NullString{String: "(`created_at` < _utf8mb4'2026-01-01 00:00:00')", Valid: true},
+				Order:      "ASC",
+			},
+		},
+		IsUnique:   false,
+		Type:       "BTREE",
+		SeqInTable: 1,
+	}, schema.Indexes[1])
+	assert.Equal(t, IndexSchema{
+		Name: "idx_complex",
+		Columns: []IndexColumnSchema{
+			{
+				Expression: sql.NullString{String: "(LENGTH(`name`) < 5)", Valid: true},
+				Order:      "ASC",
+			},
+			{
+				Name:  sql.NullString{String: "name", Valid: true},
+				Order: "DESC",
+			},
+		},
+		IsUnique:   false,
+		Type:       "BTREE",
+		SeqInTable: 2,
+		Comment:    "Some comment",
+	}, schema.Indexes[2])
+	assert.Equal(t, IndexSchema{
+		Name: "idx_prefix",
+		Columns: []IndexColumnSchema{
+			{
+				Name:    sql.NullString{String: "name", Valid: true},
+				Order:   "ASC",
+				SubPart: sql.NullInt64{Int64: 5, Valid: true},
+			},
+		},
+		IsUnique:   false,
+		Type:       "BTREE",
+		SeqInTable: 3,
+	}, schema.Indexes[3])
+	assert.Equal(t, IndexSchema{
+		Name: "unq_name",
+		Columns: []IndexColumnSchema{
+			{
+				Name:  sql.NullString{String: "name", Valid: true},
+				Order: "ASC",
+			},
+		},
+		IsUnique:   true,
+		Type:       "BTREE",
+		SeqInTable: 4,
+	}, schema.Indexes[4])
+}
+
+// Same as TestFetchTableSchema but the query for the INFORMATION_SCHEMA.STATISTICS.EXPRESSION column returns 0 and no expression indexes are defined
+func TestFetchTableSchemaMariaDB(t *testing.T) {
+	db, mock := getDB(t)
+	dumper := getInternalMySQLInstance(db)
+
+	mock.ExpectQuery("SELECT.*FROM INFORMATION_SCHEMA.TABLES.*TABLE_TYPE = 'BASE TABLE'").
+		WillReturnRows(sqlmock.NewRows([]string{"TABLE_NAME", "ENGINE", "TABLE_COLLATION", "TABLE_COMMENT", "ROW_FORMAT", "AUTO_INCREMENT"}).
+			AddRow("test_table", "InnoDB", "utf8mb4_0900_ai_ci", "Test table", "Dynamic", 100))
+
+	mock.ExpectQuery("SELECT.*FROM INFORMATION_SCHEMA.COLUMNS.*WHERE TABLE_SCHEMA = DATABASE()").
+		WillReturnRows(sqlmock.NewRows([]string{
+			"TABLE_NAME", "COLUMN_NAME", "COLUMN_TYPE", "CHARACTER_SET_NAME", "IS_NULLABLE", "COLUMN_DEFAULT",
+			"EXTRA", "COLLATION_NAME", "COLUMN_COMMENT", "GENERATION_EXPRESSION",
+		}).
+			AddRow("test_table", "id", "binary(16)", nil, "NO", nil, "", nil, "", nil).
+			AddRow("test_table", "name", "varchar(255)", "utf8mb4", "NO", nil, "", "utf8mb4_0900_ai_ci", "", nil).
+			AddRow("test_table", "created_at", "datetime", nil, "NO", "CURRENT_TIMESTAMP", "", nil, "", nil))
+
+	mock.ExpectQuery("SELECT.*FROM INFORMATION_SCHEMA.COLUMNS.*TABLE_SCHEMA = 'information_schema'.*TABLE_NAME = 'STATISTICS'.*COLUMN_NAME = 'EXPRESSION'").
+		WillReturnRows(sqlmock.NewRows([]string{"COUNT(*)"}).
+			AddRow(0))
+
+	mock.ExpectQuery("SELECT.*FROM INFORMATION_SCHEMA.STATISTICS.*WHERE TABLE_SCHEMA = DATABASE()").
+		WillReturnRows(sqlmock.NewRows([]string{
+			"TABLE_NAME", "INDEX_NAME", "COLUMN_NAME", "EXPRESSION", "NON_UNIQUE", "INDEX_TYPE", "SUB_PART", "COLLATION", "INDEX_COMMENT", "SEQ_IN_INDEX",
+		}).
+			AddRow("test_table", "PRIMARY", "id", nil, 0, "BTREE", nil, "A", "", 1).
+			AddRow("test_table", "idx_created_at", "created_at", nil, 1, "BTREE", nil, "A", "", 1).
+			AddRow("test_table", "idx_prefix", "name", nil, 1, "BTREE", "5", "", "", 1).
+			AddRow("test_table", "unq_name", "name", nil, 0, "BTREE", nil, "A", "", 1).
+			AddRow("wrong_table", "idx_test", "test", nil, 1, "BTREE", nil, "A", "", 1))
+
+	mock.ExpectQuery("SELECT COUNT.*KEY_COLUMN_USAGE.*").
+		WillReturnRows(sqlmock.NewRows([]string{"c"}).AddRow(0))
+	mock.ExpectQuery("SELECT COUNT.*REFERENTIAL_CONSTRAINTS.*").
+		WillReturnRows(sqlmock.NewRows([]string{"c"}).AddRow(0))
+
+	mock.ExpectQuery("SELECT DISTINCT.*FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE.*").
+		WillReturnRows(sqlmock.NewRows([]string{
+			"TABLE_NAME", "CONSTRAINT_NAME", "COLUMN_NAME", "REFERENCED_TABLE_NAME",
+			"REFERENCED_COLUMN_NAME", "UPDATE_RULE", "DELETE_RULE", "ORDINAL_POSITION",
+		}))
+
+	mock.ExpectQuery("SELECT.*FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS.*CHECK_CONSTRAINTS.*").
+		WillReturnRows(sqlmock.NewRows([]string{
+			"TABLE_NAME", "CONSTRAINT_NAME", "CHECK_CLAUSE",
+		}).
+			AddRow("test_table", "test_table.check.with_string_literal", "`name` LIKE _utf8mb4\\'A%\\'"))
+
+	err := dumper.prefetchAllSchemas(t.Context(), []string{"test_table"})
+	require.NoError(t, err)
+
+	schema, err := dumper.fetchTableSchema("test_table")
+	require.NoError(t, err)
+
+	assert.Equal(t, "test_table", schema.Name)
+	assert.Equal(t, "InnoDB", schema.Engine)
+	assert.Equal(t, "utf8mb4_unicode_ci", schema.Collation) // Should be mapped
+	assert.Equal(t, "utf8mb4", schema.Charset)
+	assert.Equal(t, int64(100), schema.AutoIncrement.Int64)
+	assert.Len(t, schema.Columns, 3)
+	assert.Equal(t, []string{"id"}, schema.PrimaryKey)
+	assert.Equal(t, "utf8mb4_unicode_ci", schema.Columns[1].Collation.String)
+	assert.Equal(t, 1, len(schema.CheckConstraints))
+	assert.Equal(t, "test_table.check.with_string_literal", schema.CheckConstraints[0].Name)
+	assert.Equal(t, "`name` LIKE _utf8mb4'A%'", schema.CheckConstraints[0].Expression)
+	assert.Len(t, schema.Indexes, 3)
+	assert.Equal(t, IndexSchema{
+		Name: "idx_created_at",
+		Columns: []IndexColumnSchema{
+			{
+				Name:  sql.NullString{String: "created_at", Valid: true},
+				Order: "ASC",
+			},
+		},
+		IsUnique:   false,
+		Type:       "BTREE",
+		SeqInTable: 0,
+	}, schema.Indexes[0])
+	assert.Equal(t, IndexSchema{
+		Name: "idx_prefix",
+		Columns: []IndexColumnSchema{
+			{
+				Name:    sql.NullString{String: "name", Valid: true},
+				Order:   "ASC",
+				SubPart: sql.NullInt64{Int64: 5, Valid: true},
+			},
+		},
+		IsUnique:   false,
+		Type:       "BTREE",
+		SeqInTable: 1,
+	}, schema.Indexes[1])
+	assert.Equal(t, IndexSchema{
+		Name: "unq_name",
+		Columns: []IndexColumnSchema{
+			{
+				Name:  sql.NullString{String: "name", Valid: true},
+				Order: "ASC",
+			},
+		},
+		IsUnique:   true,
+		Type:       "BTREE",
+		SeqInTable: 2,
+	}, schema.Indexes[2])
 }
 
 func TestGetCreateTableStatement_Integration(t *testing.T) {
@@ -410,13 +618,25 @@ func TestGetCreateTableStatement_Integration(t *testing.T) {
 			"EXTRA", "COLLATION_NAME", "COLUMN_COMMENT", "GENERATION_EXPRESSION",
 		}).
 			AddRow("products", "id", "binary(16)", nil, "NO", nil, "", nil, "", nil).
-			AddRow("products", "name", "varchar(255)", "utf8mb4", "NO", nil, "", "utf8mb4_0900_ai_ci", "", nil))
+			AddRow("products", "name", "varchar(255)", "utf8mb4", "NO", nil, "", "utf8mb4_0900_ai_ci", "", nil).
+			AddRow("products", "created_at", "datetime", nil, "NO", "CURRENT_TIMESTAMP", "", nil, "", nil))
+
+	mock.ExpectQuery("SELECT.*FROM INFORMATION_SCHEMA.COLUMNS.*TABLE_SCHEMA = 'information_schema'.*TABLE_NAME = 'STATISTICS'.*COLUMN_NAME = 'EXPRESSION'").
+		WillReturnRows(sqlmock.NewRows([]string{"COUNT(*)"}).
+			AddRow(1))
 
 	mock.ExpectQuery("SELECT.*FROM INFORMATION_SCHEMA.STATISTICS.*WHERE TABLE_SCHEMA = DATABASE()").
 		WillReturnRows(sqlmock.NewRows([]string{
-			"TABLE_NAME", "INDEX_NAME", "COLUMN_NAME", "NON_UNIQUE", "INDEX_TYPE", "SUB_PART", "COLLATION", "INDEX_COMMENT", "SEQ_IN_INDEX",
+			"TABLE_NAME", "INDEX_NAME", "COLUMN_NAME", "EXPRESSION", "NON_UNIQUE", "INDEX_TYPE", "SUB_PART", "COLLATION", "INDEX_COMMENT", "SEQ_IN_INDEX",
 		}).
-			AddRow("products", "PRIMARY", "id", 0, "BTREE", nil, "A", "", 1))
+			AddRow("products", "PRIMARY", "id", nil, 0, "BTREE", nil, "A", "", 1).
+			AddRow("products", "idx_created_at", "created_at", nil, 1, "BTREE", nil, "A", "", 1).
+			AddRow("products", "idx_created_at_before_2026", nil, "(`created_at` < _utf8mb4\\'2026-01-01 00:00:00\\')", 1, "BTREE", nil, "A", "", 1).
+			AddRow("products", "idx_complex", nil, "(LENGTH(`name`) < 5)", 1, "BTREE", nil, "A", "Some comment", 1).
+			AddRow("products", "idx_complex", "name", nil, 1, "BTREE", nil, "D", "Some comment", 2).
+			AddRow("products", "idx_prefix", "name", nil, 1, "BTREE", "5", "", "", 1).
+			AddRow("products", "unq_name", "name", nil, 0, "BTREE", nil, "A", "", 1).
+			AddRow("wrong_table", "idx_test", "test", nil, 1, "BTREE", nil, "A", "", 1))
 
 	mock.ExpectQuery("SELECT COUNT.*KEY_COLUMN_USAGE.*").
 		WillReturnRows(sqlmock.NewRows([]string{"c"}).AddRow(0))
@@ -445,6 +665,11 @@ func TestGetCreateTableStatement_Integration(t *testing.T) {
 	assert.NotContains(t, stmt, "utf8mb4_0900_ai_ci")
 	assert.Contains(t, stmt, "utf8mb4_unicode_ci")
 	assert.True(t, dumper.isColumnBinary("products", "id"))
+	assert.Contains(t, stmt, " KEY `idx_created_at` (`created_at`)")
+	assert.Contains(t, stmt, " KEY `idx_created_at_before_2026` ((`created_at` < _utf8mb4'2026-01-01 00:00:00'))")
+	assert.Contains(t, stmt, " KEY `idx_complex` ((LENGTH(`name`) < 5),`name` DESC) COMMENT 'Some comment'")
+	assert.Contains(t, stmt, " KEY `idx_prefix` (`name`(5))")
+	assert.Contains(t, stmt, " UNIQUE KEY `unq_name` (`name`)")
 }
 
 func TestIsStringType(t *testing.T) {

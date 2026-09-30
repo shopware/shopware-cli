@@ -198,6 +198,11 @@ func (c *Config) GetStorageLocation() string {
 	return c.storageLocation
 }
 
+// SetStorageLocation sets the file path WriteConfig persists the config to.
+func (c *Config) SetStorageLocation(path string) {
+	c.storageLocation = path
+}
+
 func (c *Config) IsAdminAPIConfigured() bool {
 	if c.AdminApi == nil {
 		return false
@@ -876,11 +881,11 @@ func ReadConfig(ctx context.Context, fileName string, allowFallback bool) (*Conf
 		// Even without a base config, a local override file (e.g. persisted
 		// docker port overrides) must still apply.
 		if _, err := applyLocalOverride(ctx, fileName, false, config); err != nil {
-			return nil, fmt.Errorf("ReadConfig(%s): %v", fileName, err)
+			return nil, fmt.Errorf("cannot read project config %s: %w", fileName, err)
 		}
 
 		if err := config.DockerServices().validate(); err != nil {
-			return nil, fmt.Errorf("ReadConfig(%s): %v", fileName, err)
+			return nil, fmt.Errorf("cannot read project config %s: %w", fileName, err)
 		}
 
 		return fillEmptyConfig(config), nil
@@ -892,23 +897,23 @@ func ReadConfig(ctx context.Context, fileName string, allowFallback bool) (*Conf
 
 	merged, err := applyLocalOverride(ctx, fileName, true, config)
 	if err != nil {
-		return nil, fmt.Errorf("ReadConfig(%s): %v", fileName, err)
+		return nil, fmt.Errorf("cannot read project config %s: %w", fileName, err)
 	}
 
 	if !merged {
 		fileHandle, err := os.ReadFile(fileName)
 		if err != nil {
-			return nil, fmt.Errorf("ReadConfig(%s): %v", fileName, err)
+			return nil, fmt.Errorf("cannot read project config %s: %w", fileName, err)
 		}
 
 		substitutedConfig := system.ExpandEnv(string(fileHandle))
 		if err := yaml.Unmarshal([]byte(substitutedConfig), config); err != nil {
-			return nil, fmt.Errorf("ReadConfig(%s): %v", fileName, err)
+			return nil, fmt.Errorf("cannot read project config %s: %w", fileName, err)
 		}
 	}
 
 	if err := config.DockerServices().validate(); err != nil {
-		return nil, fmt.Errorf("ReadConfig(%s): %v", fileName, err)
+		return nil, fmt.Errorf("cannot read project config %s: %w", fileName, err)
 	}
 
 	config.foundConfig = true
@@ -919,12 +924,12 @@ func ReadConfig(ctx context.Context, fileName string, allowFallback bool) (*Conf
 		for _, additionalConfigFile := range config.AdditionalConfigs {
 			additionalConfig, err := ReadConfig(ctx, additionalConfigFile, allowFallback)
 			if err != nil {
-				return nil, fmt.Errorf("error while reading included config: %s", err.Error())
+				return nil, fmt.Errorf("cannot read included config %s: %w", additionalConfigFile, err)
 			}
 
 			err = mergo.Merge(config, additionalConfig, mergo.WithOverride, mergo.WithSliceDeepCopy)
 			if err != nil {
-				return nil, fmt.Errorf("error while merging included config: %s", err.Error())
+				return nil, fmt.Errorf("cannot merge included config %s: %w", additionalConfigFile, err)
 			}
 		}
 	}
@@ -934,7 +939,7 @@ func ReadConfig(ctx context.Context, fileName string, allowFallback bool) (*Conf
 	}
 
 	if err := compatibility.ValidateDate(config.CompatibilityDate); err != nil {
-		return nil, fmt.Errorf("ReadConfig(%s): %v", fileName, err)
+		return nil, fmt.Errorf("cannot read project config %s: %w", fileName, err)
 	}
 
 	return fillEmptyConfig(config), nil

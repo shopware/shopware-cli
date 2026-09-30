@@ -45,7 +45,7 @@ func TestProducerNoProducers(t *testing.T) {
 
 	_, err := client.Producer(t.Context())
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "no producer found")
+	assert.Contains(t, err.Error(), "no producer account found for the current user")
 }
 
 func TestProducerEndpointExtensions(t *testing.T) {
@@ -114,7 +114,7 @@ func TestGetExtensionByNameNotFound(t *testing.T) {
 
 	_, err := endpoint.GetExtensionByName(t.Context(), "PayPal")
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "cannot find Extension by name PayPal")
+	assert.Contains(t, err.Error(), `cannot find extension "PayPal" in the producer account`)
 }
 
 func TestUpdateExtension(t *testing.T) {

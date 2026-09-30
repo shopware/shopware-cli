@@ -1,6 +1,7 @@
 package extension
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -9,6 +10,7 @@ import (
 	"golang.org/x/sync/errgroup"
 
 	"github.com/shopware/shopware-cli/internal/extension"
+	"github.com/shopware/shopware-cli/internal/validation"
 	"github.com/shopware/shopware-cli/internal/verifier"
 	"github.com/shopware/shopware-cli/logging"
 )
@@ -17,10 +19,23 @@ var extensionFixCmd = &cobra.Command{
 	Use:   "fix path",
 	Short: "Apply code-quality fixes to an extension",
 	Args:  cobra.ExactArgs(1),
-	PreRunE: func(cmd *cobra.Command, args []string) error {
-		return verifier.SetupTools(cmd.Context(), cmd.Root().Version)
-	},
 	RunE: func(cmd *cobra.Command, args []string) error {
+		allTools := verifier.GetToolsOf[verifier.FixTool]()
+		only, _ := cmd.Flags().GetString("only")
+		exclude, _ := cmd.Flags().GetString("exclude")
+
+		requestedTools, err := allTools.Only(only)
+		if err != nil {
+			return err
+		}
+		tools, err := requestedTools.Exclude(exclude)
+		if err != nil {
+			return err
+		}
+		if len(tools) == 0 {
+			return errors.New("no fixers selected after applying --exclude")
+		}
+
 		allowNonGit, _ := cmd.Flags().GetBool("allow-non-git")
 
 		if !allowNonGit {
@@ -39,7 +54,7 @@ var extensionFixCmd = &cobra.Command{
 			return err
 		}
 
-		toolCfg, err := verifier.ConvertExtensionToToolConfig(ext)
+		toolCfg, err := verifier.SetupExtensionToolConfig(cmd.Context(), cmd.Root().Version, ext)
 		if err != nil {
 			return err
 		}
@@ -48,31 +63,23 @@ var extensionFixCmd = &cobra.Command{
 
 		var gr errgroup.Group
 
-		tools := verifier.GetTools()
-		only, _ := cmd.Flags().GetString("only")
-
-		tools, err = tools.Only(only)
-		if err != nil {
-			return err
-		}
-
 		for _, tool := range tools {
-			tool := tool
 			gr.Go(func() error {
 				return tool.Fix(cmd.Context(), *toolCfg)
 			})
 		}
 
-		if err := gr.Wait(); err != nil {
+		runErr := gr.Wait()
+		if err := validation.PrintToolInvocationTable(os.Stdout, "Fixers", extensionToolInvocationStatuses(allTools, requestedTools, tools)); err != nil {
 			return err
 		}
-
-		return nil
+		return runErr
 	},
 }
 
 func init() {
 	extensionRootCmd.AddCommand(extensionFixCmd)
-	extensionFixCmd.Flags().String("only", "", "Run only specific tools by name (comma-separated, e.g. phpstan,eslint)")
+	extensionFixCmd.Flags().String("only", "", "Run only specific fixers by name (comma-separated, e.g. eslint,rector)")
+	extensionFixCmd.Flags().String("exclude", "", "Exclude fixers after applying --only (comma-separated, e.g. eslint,rector)")
 	extensionFixCmd.Flags().Bool("allow-non-git", false, "Allow running the fix command on non-git repositories")
 }
