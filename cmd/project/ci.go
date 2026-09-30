@@ -17,9 +17,11 @@ import (
 )
 
 var projectCI = &cobra.Command{
-	Use:   "ci",
-	Short: "Create a production build of a Shopware project",
-	Args:  cobra.ExactArgs(1),
+	Use:   "ci [path]",
+	Short: "Turn a project directory into a production build (removes dev files, adds SBOM)",
+	Long: "Build the given Shopware project directory for production and generate an SBOM. The directory itself is changed: development-only files (tests, Administration sources, source maps, build.cleanup_paths) are removed, and empty placeholders are added so Shopware still runs without them.\n" +
+		"Use it in CI or on a disposable checkout; outside CI it refuses to run with uncommitted changes or untracked files unless --force is passed.",
+	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		root, err := filepath.Abs(args[0])
 		if err != nil {
@@ -56,8 +58,8 @@ var projectCI = &cobra.Command{
 
 func init() {
 	projectRootCmd.AddCommand(projectCI)
-	projectCI.PersistentFlags().Bool("with-dev-dependencies", false, "Include development dependencies in the build")
-	projectCI.PersistentFlags().Bool("force", false, "Force the CI build despite uncommitted changes")
+	projectCI.PersistentFlags().Bool("with-dev-dependencies", false, "Include Composer dev dependencies in the build")
+	projectCI.PersistentFlags().Bool("force", false, "Run the build outside CI despite uncommitted changes or untracked files")
 }
 
 func projectCISafetyCheck(ctx context.Context, root string, force bool, getenv func(string) string) error {

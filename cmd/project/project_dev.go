@@ -98,7 +98,7 @@ const (
 
 var projectDevCmd = &cobra.Command{
 	Use:   "dev",
-	Short: "Start a project's configured Shopware development environment",
+	Short: "Start the project's development environment and open its terminal dashboard",
 	Long:  "Start the development environment. This launches the interactive TUI dashboard when run in a terminal, or starts the containers in the background otherwise. Requires a Docker environment; local and ssh environments do not manage containers.",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		projectRoot, err := shop.FindClosestShopwareProject(false)
@@ -460,5 +460,5 @@ func init() {
 	projectDevCmd.AddCommand(projectDevStatusCmd)
 
 	projectDevStopCmd.Flags().Bool("remove-data", false, "Remove the named volumes declared in the Compose file, deleting all data stored in them")
-	projectDevCmd.PersistentFlags().String("on-port-conflict", portConflictModeFail, "When host ports are occupied: fail or use random free ports (non-interactive mode; the dashboard prompts instead)")
+	projectDevCmd.PersistentFlags().String("on-port-conflict", portConflictModeFail, "In non-interactive mode, if host ports are in use: fail, or random to pick free ports and save them to the local config (the dashboard asks instead)")
 }

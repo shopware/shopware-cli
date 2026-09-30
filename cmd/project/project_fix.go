@@ -15,6 +15,7 @@ import (
 var projectFixCmd = &cobra.Command{
 	Use:   "fix [path]",
 	Short: "Apply code-quality fixes to a project",
+	Long:  "Run code-quality fixers on the project's own code, such as extensions in custom/ and configured bundles, and change the files directly. Packages that Composer installs into vendor/ are not changed. Requires a Git repository so the changes can be reviewed, unless --allow-non-git is passed.",
 	Args:  cobra.MaximumNArgs(1),
 	PreRunE: func(cmd *cobra.Command, args []string) error {
 		return verifier.SetupTools(cmd.Context(), cmd.Root().Version)
@@ -73,6 +74,6 @@ var projectFixCmd = &cobra.Command{
 
 func init() {
 	projectRootCmd.AddCommand(projectFixCmd)
-	projectFixCmd.PersistentFlags().String("only", "", "Run only the specified fixers (comma-separated, e.g. eslint,rector)")
-	projectFixCmd.PersistentFlags().Bool("allow-non-git", false, "Allow fixes in projects without a Git repository")
+	projectFixCmd.PersistentFlags().String("only", "", "Run only these fixers (comma-separated, e.g. eslint,rector)")
+	projectFixCmd.PersistentFlags().Bool("allow-non-git", false, "Allow fixes to a project that is not in a Git repository")
 }

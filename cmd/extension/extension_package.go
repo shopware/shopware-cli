@@ -25,8 +25,9 @@ var (
 )
 
 var extensionPackageCmd = &cobra.Command{
-	Use:     "package path [branch]",
+	Use:     "package [path] [branch]",
 	Short:   "Build a distributable extension ZIP",
+	Long:    "Build a ZIP of an extension. By default, files come from a clean Git checkout of the current tag or branch, so uncommitted changes are not included; use --disable-git to package the working copy. The build runs in a temporary folder and leaves the extension folder unchanged. The ZIP is named <name>-<tag>.zip unless --filename is set.",
 	Aliases: []string{"zip"},
 	Args:    cobra.RangeArgs(1, 2),
 	RunE: func(cmd *cobra.Command, args []string) error {
@@ -228,17 +229,17 @@ var extensionPackageCmd = &cobra.Command{
 
 func init() {
 	extensionRootCmd.AddCommand(extensionPackageCmd)
-	extensionPackageCmd.Flags().BoolVar(&disableGit, "disable-git", false, "Package the working copy instead of a clean git checkout (symlinks are skipped)")
-	extensionPackageCmd.Flags().BoolVar(&extensionReleaseMode, "release", false, "Prepare a release build (generate the changelog, remove app secrets)")
-	extensionPackageCmd.Flags().String("overwrite-app-backend-url", "", "Change all URLs in manifest.xml to this URL")
-	extensionPackageCmd.Flags().String("overwrite-app-backend-secret", "", "Change the secret to this value")
-	extensionPackageCmd.Flags().String("overwrite-version", "", "Change the extension version to this value")
-	extensionPackageCmd.Flags().Bool("use-git-tag-as-version", false, "Use the detected git tag as the extension version")
+	extensionPackageCmd.Flags().BoolVar(&disableGit, "disable-git", false, "Package the working copy instead of a clean Git checkout (symlinks are skipped)")
+	extensionPackageCmd.Flags().BoolVar(&extensionReleaseMode, "release", false, "Prepare a release build: generate the changelog if enabled and, for apps, remove the secret from manifest.xml")
+	extensionPackageCmd.Flags().String("overwrite-app-backend-url", "", "Replace the scheme and host of the app backend URLs in manifest.xml (apps only)")
+	extensionPackageCmd.Flags().String("overwrite-app-backend-secret", "", "Set the app secret in manifest.xml (apps only)")
+	extensionPackageCmd.Flags().String("overwrite-version", "", "Set the extension version in the package")
+	extensionPackageCmd.Flags().Bool("use-git-tag-as-version", false, "Use the Git tag (without a leading v) as the extension version")
 	extensionPackageCmd.MarkFlagsMutuallyExclusive("use-git-tag-as-version", "disable-git")
 	extensionPackageCmd.MarkFlagsMutuallyExclusive("use-git-tag-as-version", "overwrite-version")
-	extensionPackageCmd.Flags().String("output-directory", "", "Output directory for the zip file")
-	extensionPackageCmd.Flags().String("git-commit", "", "Commit hash or tag to package (defaults to the current tag or branch)")
-	extensionPackageCmd.Flags().String("filename", "", "Name of the zip file, generated from the extension name and tag when not set")
+	extensionPackageCmd.Flags().String("output-directory", "", "Directory for the ZIP file (created if missing)")
+	extensionPackageCmd.Flags().String("git-commit", "", "Git commit, tag, or branch to package (default: the current tag or branch)")
+	extensionPackageCmd.Flags().String("filename", "", "Name of the ZIP file (default: <name>-<tag>.zip)")
 }
 
 func getStringOnStringError(val string, _ error) string {

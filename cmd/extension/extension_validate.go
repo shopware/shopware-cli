@@ -19,8 +19,9 @@ import (
 )
 
 var extensionValidateCmd = &cobra.Command{
-	Use:   "validate path",
+	Use:   "validate [path]",
 	Short: "Validate extension metadata, assets, and code quality",
+	Long:  "Validate an extension folder or ZIP file. By default, it runs the built-in checks and external tools such as PHPStan and ESLint; use --only or --exclude to choose. Folders are checked on a temporary copy unless --no-copy is passed. With --store-compliance (or SHOPWARE_CLI_STORE_COMPLIANCE=1), the Store's rules apply and the extension's validation.ignore list is not used.",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		isFull, _ := cmd.Flags().GetBool("full")
@@ -186,13 +187,13 @@ func extensionValidationFormat(cmd *cobra.Command) (string, error) {
 func init() {
 	extensionRootCmd.AddCommand(extensionValidateCmd)
 	extensionValidateCmd.PersistentFlags().Bool("full", false, "Run all validation checks by default (minus --exclude selections)")
-	extensionValidateCmd.PersistentFlags().Bool("store-compliance", false, "Run the Extension Store compliance checks")
-	extensionValidateCmd.PersistentFlags().String("format", "", "Reporting format (summary, json, github, gitlab, junit, markdown)")
+	extensionValidateCmd.PersistentFlags().Bool("store-compliance", false, "Apply Shopware Extension Store rules: run compliance checks and ignore the validation.ignore list")
+	extensionValidateCmd.PersistentFlags().String("format", "", "Report format (summary, json, github, gitlab, junit, markdown; auto-detected if unset)")
 	extensionValidateCmd.PersistentFlags().String("reporter", "", "Reporting format (summary, json, github, gitlab, junit, markdown)")
-	extensionValidateCmd.PersistentFlags().String("check-against", "highest", "Check against Shopware Version (highest, lowest)")
-	extensionValidateCmd.PersistentFlags().String("only", "", "Run only these validation checks, regardless of --full (comma-separated, e.g. phpstan,eslint)")
-	extensionValidateCmd.PersistentFlags().String("exclude", "", "Exclude specific tools by name (comma-separated, e.g. phpstan,eslint)")
-	extensionValidateCmd.PersistentFlags().Bool("no-copy", false, "Do not copy extension files to temporary directory")
+	extensionValidateCmd.PersistentFlags().String("check-against", "highest", "Check PHPStan against the highest or lowest Shopware versions allowed by composer.json")
+	extensionValidateCmd.PersistentFlags().String("only", "", "Run only these tools (comma-separated, e.g. phpstan,eslint)")
+	extensionValidateCmd.PersistentFlags().String("exclude", "", "Skip these tools; must be in the --only list if set (comma-separated, e.g. phpstan,eslint)")
+	extensionValidateCmd.PersistentFlags().Bool("no-copy", false, "Validate the extension directory itself, not a temporary copy")
 	extensionValidateCmd.MarkFlagsMutuallyExclusive("format", "reporter")
 	_ = extensionValidateCmd.PersistentFlags().MarkDeprecated("reporter", "use --format instead")
 	_ = extensionValidateCmd.PersistentFlags().MarkHidden("reporter")
