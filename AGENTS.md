@@ -112,7 +112,7 @@ shopware-cli project storefront-watch
 
 The verifier registers tools through the name-only `Tool` interface. `CheckTool`, `FixTool`, and `FormatTool` add capabilities; commands select the relevant capability before applying `--only` or `--exclude`. An unsupported tool name is an error, and `ToolList[T]` preserves the capability type through filtering.
 
-- **Checkers**: `sw-cli`, PHPStan, ESLint, Stylelint, Storefront Twig
+- **Checkers**: `builtin` (legacy alias: `sw-cli`), PHPStan, ESLint, Stylelint, Storefront Twig
 - **Fixers**: Rector, ESLint, Stylelint, Symfony XML conversion
 - **Formatters**: PHP-CS-Fixer, Prettier
 

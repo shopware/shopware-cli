@@ -32,6 +32,7 @@ var projectValidateCmd = &cobra.Command{
 		}
 		only, _ := cmd.Flags().GetString("only")
 		exclude, _ := cmd.Flags().GetString("exclude")
+		verifier.WarnOnDeprecatedToolName(cmd.Context(), only, exclude)
 		noCopy, _ := cmd.Flags().GetBool("no-copy")
 		localOnly, _ := cmd.Flags().GetBool("local-only")
 

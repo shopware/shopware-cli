@@ -23,6 +23,7 @@ var extensionFormat = &cobra.Command{
 		allTools := verifier.GetToolsOf[verifier.FormatTool]()
 		only, _ := cmd.Flags().GetString("only")
 		exclude, _ := cmd.Flags().GetString("exclude")
+		verifier.WarnOnDeprecatedToolName(cmd.Context(), only, exclude)
 
 		requestedTools, err := allTools.Only(only)
 		if err != nil {
