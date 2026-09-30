@@ -13,7 +13,7 @@ import (
 )
 
 var projectFixCmd = &cobra.Command{
-	Use:   "fix [path]",
+	Use:   "fix <path>",
 	Short: "Apply code-quality fixes to a project",
 	Long:  "Run code-quality fixers on the project's own code, such as extensions in custom/ and configured bundles, and change the files directly. Packages that Composer installs into vendor/ are not changed. Requires a Git repository so the changes can be reviewed, unless --allow-non-git is passed.",
 	Args:  cobra.MaximumNArgs(1),
