@@ -43,7 +43,7 @@ var projectUpgradeCheckCmd = &cobra.Command{
 		}
 
 		cfg := cmdExecutor.ShopConfig()
-		if cfg != nil && cfg.IsAdminAPIConfigured() {
+		if cfg != nil && shop.HasAdminAPICredentials(cfg) {
 			logging.FromContext(cmd.Context()).Debugf("Using Shopware Admin API to lookup for available extensions")
 			client, err := cmdExecutor.AdminAPIClient(cmd.Context())
 			if err != nil {

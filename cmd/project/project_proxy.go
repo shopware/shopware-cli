@@ -72,7 +72,7 @@ func newProxyEnvironment(cmd *cobra.Command) (*proxyEnvironment, error) {
 // otherwise it will be auto discovered in the specified `projectRoot`
 func newProxyEnvironmentForRoot(ctx context.Context, projectRoot, configPath string) (*proxyEnvironment, error) {
 	actualProjectConfigPath := shop.SearchConfigPath(ctx, projectRoot, configPath)
-	cfg, err := shop.ReadConfig(ctx, actualProjectConfigPath, true)
+	cfg, err := shop.ReadConfig(ctx, actualProjectConfigPath, configPath == "")
 	if err != nil {
 		return nil, err
 	}

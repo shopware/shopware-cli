@@ -207,3 +207,80 @@ func Test_NewShopClient_CredentialsError(t *testing.T) {
 	_, err := NewShopClient(t.Context(), cfg)
 	assert.Error(t, err)
 }
+
+func TestHasAdminAPICredentials(t *testing.T) {
+	envKeys := []string{"SHOPWARE_CLI_API_CLIENT_ID", "SHOPWARE_CLI_API_CLIENT_SECRET", "SHOPWARE_CLI_API_USERNAME", "SHOPWARE_CLI_API_PASSWORD"}
+
+	cases := []struct {
+		name   string
+		env    map[string]string
+		config *Config
+		want   bool
+	}{
+		{name: "integration env pair", env: map[string]string{"SHOPWARE_CLI_API_CLIENT_ID": "id", "SHOPWARE_CLI_API_CLIENT_SECRET": "secret"}, config: &Config{}, want: true},
+		{name: "password env pair", env: map[string]string{"SHOPWARE_CLI_API_USERNAME": "user", "SHOPWARE_CLI_API_PASSWORD": "pass"}, config: &Config{}, want: true},
+		{name: "env pair with nil config", env: map[string]string{"SHOPWARE_CLI_API_CLIENT_ID": "id", "SHOPWARE_CLI_API_CLIENT_SECRET": "secret"}, config: nil, want: true},
+		{name: "half env pair", env: map[string]string{"SHOPWARE_CLI_API_CLIENT_ID": "id"}, config: &Config{}, want: false},
+		{name: "config only", config: &Config{AdminApi: &ConfigAdminApi{ClientId: "id", ClientSecret: "secret"}}, want: true},
+		{name: "config with empty fields", config: &Config{AdminApi: &ConfigAdminApi{}}, want: false},
+		{name: "nothing", config: &Config{}, want: false},
+		{name: "nil config", config: nil, want: false},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			for _, key := range envKeys {
+				t.Setenv(key, tc.env[key])
+			}
+
+			assert.Equal(t, tc.want, HasAdminAPICredentials(tc.config))
+		})
+	}
+}
+
+func TestAdminAPIURL(t *testing.T) {
+	cases := []struct {
+		name   string
+		env    string
+		config *Config
+		want   string
+	}{
+		{name: "env wins", env: "https://env.example", config: &Config{URL: "https://config.example"}, want: "https://env.example"},
+		{name: "config fallback", config: &Config{URL: "https://config.example"}, want: "https://config.example"},
+		{name: "env with nil config", env: "https://env.example", config: nil, want: "https://env.example"},
+		{name: "nothing", config: nil, want: ""},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Setenv("SHOPWARE_CLI_API_URL", tc.env)
+
+			assert.Equal(t, tc.want, AdminAPIURL(tc.config))
+		})
+	}
+}
+
+func TestAdminAPIDisableSSLCheck(t *testing.T) {
+	cases := []struct {
+		name   string
+		env    string
+		config *Config
+		want   bool
+	}{
+		{name: "env true", env: "true", config: &Config{}, want: true},
+		{name: "env true with nil config", env: "true", config: nil, want: true},
+		{name: "config true", config: &Config{AdminApi: &ConfigAdminApi{DisableSSLCheck: true}}, want: true},
+		{name: "env false keeps config", env: "false", config: &Config{AdminApi: &ConfigAdminApi{DisableSSLCheck: true}}, want: true},
+		{name: "config false", config: &Config{AdminApi: &ConfigAdminApi{}}, want: false},
+		{name: "no admin api", config: &Config{}, want: false},
+		{name: "nil config", config: nil, want: false},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Setenv("SHOPWARE_CLI_API_DISABLE_SSL_CHECK", tc.env)
+
+			assert.Equal(t, tc.want, AdminAPIDisableSSLCheck(tc.config))
+		})
+	}
+}

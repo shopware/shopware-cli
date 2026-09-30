@@ -39,7 +39,7 @@ var projectDatabaseDumpCmd = &cobra.Command{
 		}
 
 		actualProjectConfigPath := shop.SearchConfigPath(cmd.Context(), ".", projectConfigPath)
-		projectCfg, err := shop.ReadConfig(cmd.Context(), actualProjectConfigPath, true)
+		projectCfg, err := shop.ReadConfig(cmd.Context(), actualProjectConfigPath, projectConfigPath == "")
 		if err != nil {
 			return err
 		}
