@@ -18,7 +18,7 @@ var projectProxyTeardownCmd = &cobra.Command{
 	Use:          "teardown",
 	SilenceUsage: true,
 	Short:        "Deregister every project and stop proxy services",
-	Long: `Runs "project proxy down" for every registered project (stopping it and
+	Long: `Run "project proxy down" for every registered project (stopping it and
 restoring its previous URL), then stops the shared Traefik container and the
 shared DNS container. The one-time OS setup (DNS resolver, trusted CA) is kept.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
@@ -35,6 +35,8 @@ shared DNS container. The one-time OS setup (DNS resolver, trusted CA) is kept.`
 			}
 		}
 
+		var errs []error
+
 		for _, entry := range reg.Projects {
 			env, err := newProxyEnvironmentForRoot(ctx, entry.ProjectRoot, "")
 			if err == nil {
@@ -42,6 +44,7 @@ shared DNS container. The one-time OS setup (DNS resolver, trusted CA) is kept.`
 			}
 			if err != nil {
 				fmt.Println(tui.RedText.Render(fmt.Sprintf("  Could not deregister %s: %s", entry.Hostname, err)))
+				errs = append(errs, fmt.Errorf("cannot deregister %s: %w", entry.Hostname, err))
 			}
 		}
 
@@ -51,6 +54,10 @@ shared DNS container. The one-time OS setup (DNS resolver, trusted CA) is kept.`
 
 		if err := proxy.StopDNSContainer(ctx); err != nil {
 			return err
+		}
+
+		if len(errs) > 0 {
+			return errors.Join(errs...)
 		}
 
 		fmt.Println(tui.GreenText.Bold(true).Render("  ✓ Shared proxy and DNS server stopped"))

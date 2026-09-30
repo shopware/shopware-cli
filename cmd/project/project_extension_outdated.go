@@ -49,13 +49,16 @@ var projectExtensionOutdatedCmd = &cobra.Command{
 		extensions = extensions.FilterByUpdateable()
 
 		if len(extensions) == 0 && format == tui.TableFormatTable {
-			logging.FromContext(cmd.Context()).Infof("All extensions are up-to-date")
+			logging.FromContext(cmd.Context()).Infof("All extensions are up to date")
 			return nil
 		}
 
 		result := projectExtensionOutdatedTable(extensions)
 		if err := result.Write(cmd.OutOrStdout(), format); err != nil {
 			return err
+		}
+		if len(extensions) == 0 {
+			return nil
 		}
 		return fmt.Errorf("there are %d outdated extensions", len(extensions))
 	},

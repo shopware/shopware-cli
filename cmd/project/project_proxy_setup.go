@@ -22,7 +22,7 @@ var projectProxySetupCmd = &cobra.Command{
 	Use:          "setup",
 	SilenceUsage: true,
 	Short:        "Set up shared proxy DNS and HTTPS trust once per machine",
-	Long: `Performs the one-time machine setup for the shared proxy in a single sudo
+	Long: `Perform the one-time machine setup for the shared proxy in a single sudo
 ceremony:
 
   - configures the operating system to resolve every hostname under the proxy

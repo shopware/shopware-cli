@@ -481,7 +481,7 @@ func (d *Dumper) getTables(ctx context.Context) ([]string, error) {
 	defer func(rows *sql.Rows) {
 		dErr := rows.Close()
 		if dErr != nil {
-			logging.FromContext(ctx).Errorf("failed to close rows while getting tables: %s", err.Error())
+			logging.FromContext(ctx).Errorf("Failed to close rows while getting tables: %s", err.Error())
 		}
 	}(rows)
 
@@ -511,7 +511,7 @@ func (d *Dumper) getViews(ctx context.Context) ([]string, error) {
 	defer func(rows *sql.Rows) {
 		dErr := rows.Close()
 		if dErr != nil {
-			logging.FromContext(ctx).Errorf("failed to close rows while getting views: %s", dErr.Error())
+			logging.FromContext(ctx).Errorf("Failed to close rows while getting views: %s", dErr.Error())
 		}
 	}(rows)
 
@@ -545,7 +545,7 @@ func (d *Dumper) dumpTableData(ctx context.Context, w io.Writer, table string) e
 	defer func(rows *sql.Rows) {
 		dErr := rows.Close()
 		if dErr != nil {
-			logging.FromContext(ctx).Errorf("dumping data for table %s failed, closing rows failed: %s", table, dErr.Error())
+			logging.FromContext(ctx).Errorf("Dumping data for table %s failed, closing rows failed: %s", table, dErr.Error())
 		}
 	}(rows)
 
@@ -709,7 +709,7 @@ func (d *Dumper) getColumnsForSelect(ctx context.Context, table string, consider
 	defer func(rows *sql.Rows) {
 		dErr := rows.Close()
 		if dErr != nil {
-			logging.FromContext(ctx).Warnf("getting columns for select on table %s failed: %s", table, dErr.Error())
+			logging.FromContext(ctx).Warnf("Getting columns for select on table %s failed: %s", table, dErr.Error())
 		}
 	}(rows)
 	var tmp []string
@@ -834,7 +834,7 @@ func (d *Dumper) getTriggers(ctx context.Context) ([]string, error) {
 	defer func(rows *sql.Rows) {
 		dErr := rows.Close()
 		if dErr != nil {
-			logging.FromContext(ctx).Errorf("failed to close rows while getting triggers: %s", dErr.Error())
+			logging.FromContext(ctx).Errorf("Failed to close rows while getting triggers: %s", dErr.Error())
 		}
 	}(rows)
 

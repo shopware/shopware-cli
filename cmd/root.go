@@ -65,7 +65,7 @@ func exitCode(ctx context.Context, err error) int {
 		return 0
 	}
 
-	if !errors.Is(err, project.ErrEnvironmentDown) && !errors.Is(err, project.ErrProxyNotRegistered) {
+	if !errors.Is(err, project.ErrEnvironmentDown) && !errors.Is(err, project.ErrProxyNotRegistered) && !errors.Is(err, project.ErrProxyVerificationFailed) {
 		logging.FromContext(ctx).Errorln(err)
 	}
 

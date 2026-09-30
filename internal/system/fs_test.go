@@ -57,6 +57,13 @@ func TestCopyFiles(t *testing.T) {
 	err = os.WriteFile(subFile, []byte("sub content"), 0o644)
 	assert.NoError(t, err, "Failed to create file in subdirectory")
 
+	// Create nested Git metadata with a file that must not be copied
+	nestedGitDir := filepath.Join(srcDir, "custom", "plugins", "example", ".git")
+	err = os.MkdirAll(nestedGitDir, 0o755)
+	assert.NoError(t, err, "Failed to create nested .git directory")
+	err = os.WriteFile(filepath.Join(nestedGitDir, "metadata"), []byte("git metadata"), 0o644)
+	assert.NoError(t, err, "Failed to create nested .git file")
+
 	// Create destination directory
 	dstDir := filepath.Join(tempDir, "dst")
 
@@ -83,6 +90,11 @@ func TestCopyFiles(t *testing.T) {
 	dstDirenvDir := filepath.Join(dstDir, ".direnv")
 	_, err = os.Stat(dstDirenvDir)
 	assert.True(t, os.IsNotExist(err), ".direnv directory was not excluded")
+
+	// Check nested .git directory was excluded
+	dstNestedGitDir := filepath.Join(dstDir, "custom", "plugins", "example", ".git")
+	_, err = os.Stat(dstNestedGitDir)
+	assert.True(t, os.IsNotExist(err), "nested .git directory was not excluded")
 }
 
 func TestIsDirEmpty(t *testing.T) {

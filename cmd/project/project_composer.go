@@ -9,7 +9,7 @@ import (
 var projectComposerCmd = &cobra.Command{
 	Use:   "composer",
 	Short: "Run Composer through a project's configured executor",
-	Long:  "Proxies all arguments to Composer using the project's configured executor (local, Docker, or Symfony CLI).",
+	Long:  "Pass all arguments to Composer using the project's configured executor (local, Docker, or Symfony CLI).",
 	Example: `  shopware-cli project composer install
   shopware-cli project composer require shopware/dev-tools
   shopware-cli project composer update --with-all-dependencies`,
