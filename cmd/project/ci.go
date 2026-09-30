@@ -17,7 +17,7 @@ import (
 )
 
 var projectCI = &cobra.Command{
-	Use:   "ci [path]",
+	Use:   "ci <path>",
 	Short: "Turn a project directory into a production build (removes dev files, adds SBOM)",
 	Long: "Build the given Shopware project directory for production and generate an SBOM. The directory itself is changed: development-only files (tests, Administration sources, source maps, build.cleanup_paths) are removed, and empty placeholders are added so Shopware still runs without them.\n" +
 		"Use it in CI or on a disposable checkout; outside CI it refuses to run with uncommitted changes or untracked files unless --force is passed.",
