@@ -27,7 +27,7 @@ var (
 var extensionPackageCmd = &cobra.Command{
 	Use:     "package <path> [branch]",
 	Short:   "Build a distributable extension ZIP",
-	Long:    "Build a ZIP of an extension. By default, files come from a clean Git checkout of the current tag or branch, so uncommitted changes are not included; use --disable-git to package the working copy. The build runs in a temporary folder and leaves the extension folder unchanged. The ZIP is named <name>-<tag>.zip when a tag is available, or <name>.zip otherwise, unless --filename is set.",
+	Long:    "Build a ZIP of an extension. By default, files come from a clean Git checkout of the current tag or branch, so uncommitted changes are not included; use --disable-git to package the working copy. The build runs in a temporary folder and leaves the extension folder unchanged. The ZIP is named <name>-<tag-or-branch>.zip when a tag or branch is available, or <name>.zip otherwise, unless --filename is set.",
 	Aliases: []string{"zip"},
 	Args:    cobra.RangeArgs(1, 2),
 	RunE: func(cmd *cobra.Command, args []string) error {
