@@ -1,8 +1,9 @@
 package admintwiglinter
 
 import (
-	"github.com/shyim/go-version"
 	"strings"
+
+	"github.com/shyim/go-version"
 
 	"github.com/shopware/shopware-cli/internal/html"
 	"github.com/shopware/shopware-cli/internal/validation"

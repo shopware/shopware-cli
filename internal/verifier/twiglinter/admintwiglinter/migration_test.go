@@ -34,11 +34,12 @@ func TestMigrationBindings(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			got, err := twiglinter.RunFixerOnString(tc.fixer, tc.before)
 			require.NoError(t, err)
 			expected, err := html.NewParser(tc.after)
 			require.NoError(t, err)
-			assert.Equal(t, html.NodeList(expected).Dump(0), got)
+			assert.Equal(t, expected.Dump(0), got)
 			again, err := twiglinter.RunFixerOnString(tc.fixer, got)
 			require.NoError(t, err)
 			assert.Equal(t, got, again)
@@ -67,11 +68,12 @@ func TestManualMigrationPreservesTemplate(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			got, err := twiglinter.RunFixerOnString(tc.fixer, tc.input)
 			require.NoError(t, err)
 			original, err := html.NewParser(tc.input)
 			require.NoError(t, err)
-			assert.Equal(t, html.NodeList(original).Dump(0), got)
+			assert.Equal(t, original.Dump(0), got)
 			results, err := twiglinter.RunCheckerOnString(tc.fixer, got)
 			require.NoError(t, err)
 			assert.NotEmpty(t, results, "manual migration must remain visible to the checker")
