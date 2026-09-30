@@ -44,7 +44,7 @@ var projectExtensionInstallCmd = &cobra.Command{
 
 			if extension == nil {
 				failed = true
-				logging.FromContext(cmd.Context()).Errorf("Cannot find extension by name %s", arg)
+				logging.FromContext(cmd.Context()).Errorf("Cannot find extension %s, run \"shopware-cli project extension list\" to see installed extensions", arg)
 				continue
 			}
 

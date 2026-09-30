@@ -106,6 +106,7 @@ func FindAssetSourcesOfProject(ctx context.Context, project string, shopCfg *sho
 	composerJson, err := os.ReadFile(path.Join(project, "composer.json"))
 	if err != nil {
 		logging.FromContext(ctx).Errorf("Cannot read composer.json: %s", err.Error())
+		return sources
 	}
 
 	var composer rootComposerJson

@@ -51,7 +51,7 @@ func NewApi(ctx context.Context) (*Client, error) {
 	// Fall back to interactive OAuth2 login
 	token, err := InteractiveLogin(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("login: %v", err)
+		return nil, fmt.Errorf("login: %w", err)
 	}
 
 	client = &Client{Token: token}
@@ -89,7 +89,7 @@ func loginWithClientCredentials(ctx context.Context, clientID, clientSecret stri
 func loginWithCredentials(ctx context.Context, email, password string) (*Client, error) {
 	s, err := json.Marshal(loginRequest{Email: email, Password: password})
 	if err != nil {
-		return nil, fmt.Errorf("login: %v", err)
+		return nil, fmt.Errorf("login: %w", err)
 	}
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, getApiUrl()+"/accesstokens", bytes.NewBuffer(s))
@@ -101,7 +101,7 @@ func loginWithCredentials(ctx context.Context, email, password string) (*Client,
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("login: %v", err)
+		return nil, fmt.Errorf("login: %w", err)
 	}
 
 	defer func() {
@@ -112,7 +112,7 @@ func loginWithCredentials(ctx context.Context, email, password string) (*Client,
 
 	data, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return nil, fmt.Errorf("login: %v", err)
+		return nil, fmt.Errorf("login: %w", err)
 	}
 
 	if resp.StatusCode != 200 {
@@ -130,7 +130,7 @@ func loginWithCredentials(ctx context.Context, email, password string) (*Client,
 
 	var tokenResp legacyToken
 	if err := json.Unmarshal(data, &tokenResp); err != nil {
-		return nil, fmt.Errorf("login: %v", err)
+		return nil, fmt.Errorf("login: %w", err)
 	}
 
 	client := &Client{
