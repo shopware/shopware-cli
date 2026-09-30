@@ -60,6 +60,8 @@ var projectExtensionInstallCmd = &cobra.Command{
 				continue
 			}
 
+			logging.FromContext(cmd.Context()).Infof("Installed %s", extension.Name)
+
 			if activateAfterInstall {
 				if _, err := client.ExtensionManager.ActivateExtension(adminSdk.NewApiContext(cmd.Context()), extension.Type, extension.Name); err != nil {
 					failed = true
@@ -69,8 +71,6 @@ var projectExtensionInstallCmd = &cobra.Command{
 					logging.FromContext(cmd.Context()).Infof("Activated %s", extension.Name)
 				}
 			}
-
-			logging.FromContext(cmd.Context()).Infof("Installed %s", extension.Name)
 		}
 
 		if failed {
