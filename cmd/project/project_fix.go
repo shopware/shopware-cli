@@ -75,5 +75,5 @@ var projectFixCmd = &cobra.Command{
 func init() {
 	projectRootCmd.AddCommand(projectFixCmd)
 	projectFixCmd.PersistentFlags().String("only", "", "Run only these fixers (comma-separated, e.g. eslint,rector)")
-	projectFixCmd.PersistentFlags().Bool("allow-non-git", false, "Allow fixes to a project that is not in a Git repository")
+	projectFixCmd.PersistentFlags().Bool("allow-non-git", false, "Allow fix to run outside a Git repository")
 }
