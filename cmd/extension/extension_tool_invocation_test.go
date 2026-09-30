@@ -9,9 +9,14 @@ import (
 	"github.com/shopware/shopware-cli/internal/verifier"
 )
 
+type invocationTestTool string
+
+func (tool invocationTestTool) Name() string { return string(tool) }
+
 func TestExtensionToolInvocationStatuses(t *testing.T) {
-	assertExtensionToolInvocationStatuses(t, verifier.GetToolsOf[verifier.FixTool]())
-	assertExtensionToolInvocationStatuses(t, verifier.GetToolsOf[verifier.FormatTool]())
+	assertExtensionToolInvocationStatuses(t, verifier.ToolList[verifier.Tool]{
+		invocationTestTool("first"), invocationTestTool("second"), invocationTestTool("third"),
+	})
 }
 
 func assertExtensionToolInvocationStatuses[T verifier.Tool](t *testing.T, all verifier.ToolList[T]) {

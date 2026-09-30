@@ -17,7 +17,7 @@ import (
 
 var extensionFormat = &cobra.Command{
 	Use:   "format path",
-	Short: "Format an extension's PHP, JavaScript, SCSS, and Administration Twig files",
+	Short: "Format an extension's PHP, JavaScript, and SCSS files",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		allTools := verifier.GetToolsOf[verifier.FormatTool]()

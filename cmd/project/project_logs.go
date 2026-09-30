@@ -15,7 +15,7 @@ import (
 var projectLogsCmd = &cobra.Command{
 	Use:   "logs [filename]",
 	Short: "List, view, or follow Shopware application logs from var/log/",
-	Long:  "Show the last lines of a Shopware log file. Without arguments, shows the most recently modified log file. Use --list to discover available log files.",
+	Long:  "Show the last lines of a Shopware log file. Without arguments, the most recently modified log file is shown. Use --list to discover available log files.",
 	Args:  cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		projectRoot, err := shop.FindClosestShopwareProject(false)

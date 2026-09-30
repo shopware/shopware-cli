@@ -9,9 +9,9 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/shopware/shopware-cli/internal/cliversion"
 	"github.com/shopware/shopware-cli/internal/shop"
 	"github.com/shopware/shopware-cli/internal/testhelper"
-	"github.com/shopware/shopware-cli/internal/tui"
 )
 
 func TestProjectSbomCommandUnsupportedFormat(t *testing.T) {
@@ -51,9 +51,9 @@ func TestProjectSbomCommandSuccess(t *testing.T) {
 	})
 
 	// Ensure the tool version used by the command path is stable in tests.
-	prev := tui.AppVersion
-	tui.AppVersion = "test"
-	t.Cleanup(func() { tui.AppVersion = prev })
+	prev := cliversion.Version
+	cliversion.Version = "test"
+	t.Cleanup(func() { cliversion.Version = prev })
 
 	projectSbomCmd.SetContext(t.Context())
 	require.NoError(t, projectSbomCmd.RunE(projectSbomCmd, []string{root}))

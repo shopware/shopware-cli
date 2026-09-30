@@ -13,15 +13,10 @@ import (
 
 	"golang.org/x/oauth2"
 
+	"github.com/shopware/shopware-cli/internal/cliversion"
 	"github.com/shopware/shopware-cli/internal/system"
 	"github.com/shopware/shopware-cli/logging"
 )
-
-var httpUserAgent = "shopware-cli/0.0.0"
-
-func SetUserAgent(userAgent string) {
-	httpUserAgent = userAgent
-}
 
 type Client struct {
 	Token       *oauth2.Token `json:"token,omitempty"`
@@ -43,7 +38,7 @@ func (c *Client) NewAuthenticatedRequest(ctx context.Context, method, path strin
 		r.Header.Set("x-shopware-token", c.LegacyToken.Token)
 	}
 
-	r.Header.Set("user-agent", httpUserAgent)
+	r.Header.Set("user-agent", cliversion.UserAgent())
 
 	return r, nil
 }

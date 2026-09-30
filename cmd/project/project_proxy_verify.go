@@ -22,7 +22,7 @@ var projectProxyVerifyCmd = &cobra.Command{
 	SilenceUsage:  true,
 	SilenceErrors: true,
 	Short:         "Verify Docker, DNS, routing, and HTTPS trust for the shared proxy",
-	Long: `Verifies the whole shared-proxy chain bottom-up: Docker, the shared DNS
+	Long: `Verify the whole shared-proxy chain bottom-up: Docker, the shared DNS
 container, the operating system's hostname resolution, the Traefik container and
 finally a trusted HTTPS request to the proxy's own health endpoint. The first
 failing layer is reported with a hint how to fix it.`,

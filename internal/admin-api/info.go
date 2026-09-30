@@ -35,7 +35,7 @@ func (s InfoService) Info(ctx ApiContext) (*InfoResponse, *http.Response, error)
 	r, err := s.Client.NewRequest(ctx, http.MethodGet, "/api/_info/config", nil)
 
 	if err != nil {
-		return nil, nil, fmt.Errorf("cannot get info %w", err)
+		return nil, nil, fmt.Errorf("cannot get info: %w", err)
 	}
 
 	var info *InfoResponse

@@ -39,7 +39,7 @@ Generated file paths go to stderr; stdout contains the command to run.`,
 			return err
 		}
 		configPath := packageProjectConfigPath(cmd, root)
-		cfg, err := shop.ReadConfig(cmd.Context(), configPath, true)
+		cfg, err := shop.ReadConfig(cmd.Context(), configPath, projectConfigPath == "")
 		if err != nil {
 			return err
 		}

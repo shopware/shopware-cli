@@ -26,7 +26,7 @@ func TestExtensionValidationSelection(t *testing.T) {
 	t.Run("default runs all checkers", func(t *testing.T) {
 		tools, statuses, err := selectExtensionValidationTools("", "")
 		require.NoError(t, err)
-		assert.Len(t, tools, 6)
+		assert.Len(t, tools, 5)
 		assert.Len(t, statuses, len(tools))
 		assert.True(t, slices.ContainsFunc(tools, requiresToolSetup))
 		assert.Equal(t, "invoked", toolStatusByName(t, statuses, "phpstan").Status)
@@ -42,9 +42,9 @@ func TestExtensionValidationSelection(t *testing.T) {
 	})
 
 	t.Run("Twig validation needs no external tools", func(t *testing.T) {
-		tools, _, err := selectExtensionValidationTools("admin-twig", "")
+		tools, _, err := selectExtensionValidationTools("storefront-twig", "")
 		require.NoError(t, err)
-		assert.Equal(t, []string{"admin-twig"}, toolNamesForValidation(tools))
+		assert.Equal(t, []string{"storefront-twig"}, toolNamesForValidation(tools))
 		assert.False(t, slices.ContainsFunc(tools, requiresToolSetup))
 	})
 

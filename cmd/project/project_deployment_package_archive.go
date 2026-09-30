@@ -7,9 +7,9 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/shopware/shopware-cli/internal/cliversion"
 	"github.com/shopware/shopware-cli/internal/projectbuild"
 	"github.com/shopware/shopware-cli/internal/shop"
-	"github.com/shopware/shopware-cli/internal/tui"
 )
 
 var projectDeploymentPackageArchiveCmd = &cobra.Command{
@@ -37,7 +37,7 @@ The created archive path is reported after the build finishes. Nothing is upload
 			return err
 		}
 		configPath := packageProjectConfigPath(cmd, root)
-		cfg, err := shop.ReadConfig(cmd.Context(), configPath, true)
+		cfg, err := shop.ReadConfig(cmd.Context(), configPath, projectConfigPath == "")
 		if err != nil {
 			return err
 		}
@@ -58,7 +58,7 @@ The created archive path is reported after the build finishes. Nothing is upload
 			ConfigPath: configPath,
 			Build: projectbuild.Options{
 				WithDevDependencies: withDev,
-				ToolVersion:         tui.AppVersion,
+				ToolVersion:         cliversion.Version,
 			},
 		})
 		if err != nil {

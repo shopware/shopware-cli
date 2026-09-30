@@ -40,7 +40,7 @@ type proxyEnvironment struct {
 var projectProxyCmd = &cobra.Command{
 	Use:   "proxy",
 	Short: "Connect local shops through a shared proxy",
-	Long: `Manages a shared local reverse proxy (Traefik) that routes stable per-project
+	Long: `Manage a shared local reverse proxy (Traefik) that routes stable per-project
 hostnames like https://my-shop.shopware.local to your local Shopware instances,
 so any number of shops run in parallel without juggling ports.
 
@@ -72,7 +72,7 @@ func newProxyEnvironment(cmd *cobra.Command) (*proxyEnvironment, error) {
 // otherwise it will be auto discovered in the specified `projectRoot`
 func newProxyEnvironmentForRoot(ctx context.Context, projectRoot, configPath string) (*proxyEnvironment, error) {
 	actualProjectConfigPath := shop.SearchConfigPath(ctx, projectRoot, configPath)
-	cfg, err := shop.ReadConfig(ctx, actualProjectConfigPath, true)
+	cfg, err := shop.ReadConfig(ctx, actualProjectConfigPath, configPath == "")
 	if err != nil {
 		return nil, err
 	}

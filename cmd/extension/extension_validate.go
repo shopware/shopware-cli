@@ -68,7 +68,7 @@ var extensionValidateCmd = &cobra.Command{
 				}()
 
 				beforeCopyTime := time.Now()
-				if err := system.CopyFiles(path, tmpDir); err != nil {
+				if err := system.CopyFiles(cmd.Context(), path, tmpDir); err != nil {
 					return err
 				}
 

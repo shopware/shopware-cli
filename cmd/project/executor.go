@@ -12,7 +12,7 @@ import (
 // resolveExecutor returns the Executor for the current environment.
 func resolveExecutor(cmd *cobra.Command, projectRoot string) (executor.Executor, error) {
 	actualProjectConfigPath := shop.SearchConfigPath(cmd.Context(), projectRoot, projectConfigPath)
-	cfg, err := shop.ReadConfig(cmd.Context(), actualProjectConfigPath, true)
+	cfg, err := shop.ReadConfig(cmd.Context(), actualProjectConfigPath, projectConfigPath == "")
 	if err != nil {
 		return nil, err
 	}

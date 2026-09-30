@@ -98,6 +98,11 @@ func TestExitCode(t *testing.T) {
 			err:      project.ErrProxyNotRegistered,
 			wantCode: 1,
 		},
+		{
+			name:     "proxy verification failed exits silently",
+			err:      project.ErrProxyVerificationFailed,
+			wantCode: 1,
+		},
 	}
 
 	for _, tt := range tests {

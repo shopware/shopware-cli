@@ -112,8 +112,8 @@ shopware-cli project storefront-watch
 
 The verifier registers tools through the name-only `Tool` interface. `CheckTool`, `FixTool`, and `FormatTool` add capabilities; commands select the relevant capability before applying `--only` or `--exclude`. An unsupported tool name is an error, and `ToolList[T]` preserves the capability type through filtering.
 
-- **Checkers**: `sw-cli`, PHPStan, ESLint, Stylelint, Administration Twig, Storefront Twig
-- **Fixers**: Rector, ESLint, Stylelint, Administration Twig, Symfony XML conversion
-- **Formatters**: PHP-CS-Fixer, Prettier, Administration Twig
+- **Checkers**: `sw-cli`, PHPStan, ESLint, Stylelint, Storefront Twig
+- **Fixers**: Rector, ESLint, Stylelint, Symfony XML conversion
+- **Formatters**: PHP-CS-Fixer, Prettier
 
 `extension validate` runs all checkers by default. The deprecated `--full` flag remains accepted but has no effect; use `--only` or `--exclude` to select checkers. The extension commands report whether each tool was invoked or skipped; invocation does not guarantee that files were analyzed or changed.

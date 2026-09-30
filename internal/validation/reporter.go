@@ -376,7 +376,7 @@ func doMarkdownReport(result Check, hadExecutionError bool, tools ...ToolInvocat
 			continue
 		}
 
-		fmt.Printf("## %s (%d problems)\n\n", path, len(results))
+		fmt.Printf("## %s (%s)\n\n", path, countNoun(len(results), "problem"))
 		for _, r := range results {
 			severity := "⚠️ Warning"
 			if r.Severity == SeverityError {
