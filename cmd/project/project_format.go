@@ -66,6 +66,6 @@ var projectFormatCmd = &cobra.Command{
 
 func init() {
 	projectRootCmd.AddCommand(projectFormatCmd)
-	projectFormatCmd.PersistentFlags().String("only", "", "Run only these formatters (comma-separated, e.g. prettier,php-cs-fixer)")
+	projectFormatCmd.PersistentFlags().String("only", "", "Run only the specified formatters (comma-separated, e.g. prettier,php-cs-fixer)")
 	projectFormatCmd.PersistentFlags().Bool("dry-run", false, "Report files that would change, without changing them")
 }
