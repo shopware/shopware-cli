@@ -1,8 +1,6 @@
 package admintwiglinter
 
 import (
-	"strings"
-
 	"github.com/shyim/go-version"
 
 	"github.com/shopware/shopware-cli/internal/html"
@@ -21,7 +19,7 @@ func (d DatepickerFixer) Check(nodes []html.Node) []validation.CheckResult {
 	html.TraverseNode(nodes, func(node *html.ElementNode) {
 		if node.Tag == "sw-datepicker" {
 			checkErrors = append(checkErrors, validation.CheckResult{
-				Message:    "sw-datepicker is removed, use mt-datepicker instead. Please review the conversion for the label property.",
+				Message:    "sw-datepicker is deprecated, use mt-datepicker instead. Please review the conversion for the label property.",
 				Severity:   validation.SeverityWarning,
 				Identifier: "sw-datepicker",
 				Line:       node.Line,
@@ -38,6 +36,9 @@ func (d DatepickerFixer) Supports(v *version.Version) bool {
 func (d DatepickerFixer) Fix(nodes []html.Node) error {
 	html.TraverseNode(nodes, func(node *html.ElementNode) {
 		if node.Tag == "sw-datepicker" {
+			if !canConvertFieldSlots(node, "label") {
+				return
+			}
 			node.Tag = "mt-datepicker"
 
 			var newAttrs html.NodeList
@@ -65,37 +66,7 @@ func (d DatepickerFixer) Fix(nodes []html.Node) error {
 			}
 			node.Attributes = newAttrs
 
-			// Convert label slot to label property.
-			label := ""
-			var remainingChildren html.NodeList
-			for _, child := range node.Children {
-				if elem, ok := child.(*html.ElementNode); ok {
-					if elem.Tag == TemplateTag {
-						for _, a := range elem.Attributes {
-							if attr, ok := a.(*html.Attribute); ok {
-								if attr.Key == LabelSlotAttr {
-									var sb strings.Builder
-									for _, inner := range elem.Children {
-										sb.WriteString(strings.TrimSpace(inner.Dump(0)))
-									}
-									label = sb.String()
-									goto SkipChild
-								}
-							}
-						}
-					}
-				}
-				remainingChildren = append(remainingChildren, child)
-			SkipChild:
-			}
-
-			node.Children = remainingChildren
-			if label != "" {
-				node.Attributes = append(node.Attributes, &html.Attribute{
-					Key:   "label",
-					Value: label,
-				})
-			}
+			convertFieldSlots(node, "label")
 		}
 	})
 

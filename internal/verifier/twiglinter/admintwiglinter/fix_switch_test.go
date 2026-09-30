@@ -33,7 +33,7 @@ func TestSwitchFixer(t *testing.T) {
 		{
 			description: "replace value with checked",
 			before:      `<sw-switch-field value="true" />`,
-			after:       `<mt-switch checked="true"/>`,
+			after:       `<mt-switch model-value="true"/>`,
 		},
 		{
 			description: "convert label slot to label prop",
@@ -43,11 +43,15 @@ func TestSwitchFixer(t *testing.T) {
 			after: `<mt-switch label="Foobar"></mt-switch>`,
 		},
 		{
-			description: "remove hint slot and add comment node",
+			description: "leave unsupported hint slot for manual migration",
 			before: `<sw-switch-field><template #hint>
         Foobar
     </template></sw-switch-field>`,
-			after: `<mt-switch></mt-switch>`,
+			after: `<sw-switch-field>
+    <template #hint>
+        Foobar
+    </template>
+</sw-switch-field>`,
 		},
 	}
 

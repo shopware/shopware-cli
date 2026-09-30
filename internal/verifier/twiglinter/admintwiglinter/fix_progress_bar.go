@@ -19,7 +19,7 @@ func (p ProgressBarFixer) Check(nodes []html.Node) []validation.CheckResult {
 	html.TraverseNode(nodes, func(node *html.ElementNode) {
 		if node.Tag == "sw-progress-bar" {
 			errors = append(errors, validation.CheckResult{
-				Message:    "sw-progress-bar is removed, use mt-progress-bar instead.",
+				Message:    "sw-progress-bar is deprecated, use mt-progress-bar instead.",
 				Severity:   validation.SeverityWarning,
 				Identifier: "sw-progress-bar",
 				Line:       node.Line,
@@ -43,8 +43,8 @@ func (p ProgressBarFixer) Fix(nodes []html.Node) error {
 				// Check if the attribute is an html.Attribute
 				if attr, ok := attrNode.(*html.Attribute); ok {
 					switch attr.Key {
-					case ValueAttr:
-						attr.Key = ModelValueAttr
+					case ValueAttr, ColonValueAttr:
+						attr.Key = migratedValueKey(attr.Key)
 						newAttrs = append(newAttrs, attr)
 					case VModelValueAttr:
 						attr.Key = VModelAttr

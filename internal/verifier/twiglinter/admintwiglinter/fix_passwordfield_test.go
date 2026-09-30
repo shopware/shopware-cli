@@ -57,7 +57,7 @@ func TestPasswordFieldFixer(t *testing.T) {
         My Label
     </template>
 </sw-password-field>`,
-			after: `<mt-password-field label="My label"></mt-password-field>`,
+			after: `<mt-password-field label="My Label"></mt-password-field>`,
 		},
 		{
 			description: "process hint slot",
@@ -66,7 +66,7 @@ func TestPasswordFieldFixer(t *testing.T) {
         My Hint
     </template>
 </sw-password-field>`,
-			after: `<mt-password-field hint="My hint"></mt-password-field>`,
+			after: `<mt-password-field hint="My Hint"></mt-password-field>`,
 		},
 	}
 

@@ -43,11 +43,15 @@ func TestCheckboxFieldFixer(t *testing.T) {
 			after: `<mt-checkbox label="Hello Shopware"></mt-checkbox>`,
 		},
 		{
-			description: "remove hint slot",
+			description: "leave unsupported hint slot for manual migration",
 			before: `<sw-checkbox-field><template v-slot:hint>
         Hello Shopware
     </template></sw-checkbox-field>`,
-			after: `<mt-checkbox></mt-checkbox>`,
+			after: `<sw-checkbox-field>
+    <template v-slot:hint>
+        Hello Shopware
+    </template>
+</sw-checkbox-field>`,
 		},
 		{
 			description: "remove id and ghostValue props",

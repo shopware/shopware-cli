@@ -23,7 +23,7 @@ func (b ButtonFixer) Check(nodes []html.Node) []validation.CheckResult {
 	html.TraverseNode(nodes, func(node *html.ElementNode) {
 		if node.Tag == "sw-button" {
 			errors = append(errors, validation.CheckResult{
-				Message:    "sw-button is removed, use mt-button instead. Please review conversion for variant and router-link.",
+				Message:    "sw-button is deprecated, use mt-button instead. Review conversion for variant and router-link.",
 				Severity:   validation.SeverityWarning,
 				Identifier: "sw-button",
 				Line:       node.Line,

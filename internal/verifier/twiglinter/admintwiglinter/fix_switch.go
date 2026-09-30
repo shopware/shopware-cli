@@ -1,8 +1,6 @@
 package admintwiglinter
 
 import (
-	"strings"
-
 	"github.com/shyim/go-version"
 
 	"github.com/shopware/shopware-cli/internal/html"
@@ -21,7 +19,7 @@ func (s SwitchFixer) Check(nodes []html.Node) []validation.CheckResult {
 	html.TraverseNode(nodes, func(node *html.ElementNode) {
 		if node.Tag == "sw-switch-field" {
 			errs = append(errs, validation.CheckResult{
-				Message:    "sw-switch-field is removed, use mt-switch instead. Review conversion for props, events and slots.",
+				Message:    "sw-switch-field is deprecated, use mt-switch instead. Review conversion for props, events and slots.",
 				Severity:   validation.SeverityWarning,
 				Identifier: "sw-switch-field",
 				Line:       node.Line,
@@ -38,6 +36,9 @@ func (s SwitchFixer) Supports(v *version.Version) bool {
 func (s SwitchFixer) Fix(nodes []html.Node) error {
 	html.TraverseNode(nodes, func(node *html.ElementNode) {
 		if node.Tag == "sw-switch-field" {
+			if !canConvertFieldSlots(node, "label") {
+				return
+			}
 			node.Tag = "mt-switch"
 			var newAttrs html.NodeList
 			// Process attribute conversions.
@@ -49,8 +50,11 @@ func (s SwitchFixer) Fix(nodes []html.Node) error {
 						newAttrs = append(newAttrs, &html.Attribute{Key: "removeTopMargin"})
 					case SizeAttr, "id", "ghostValue", "padded", "partlyChecked":
 						// remove these attributes
-					case ValueAttr:
-						newAttrs = append(newAttrs, &html.Attribute{Key: "checked", Value: attr.Value})
+					case ValueAttr, ColonValueAttr:
+						newAttrs = append(newAttrs, &html.Attribute{Key: migratedValueKey(attr.Key), Value: attr.Value})
+					case UpdateValueAttr:
+						attr.Key = UpdateModelValueAttr
+						newAttrs = append(newAttrs, attr)
 					case VModelValueAttr:
 						attr.Key = VModelAttr
 						newAttrs = append(newAttrs, attr)
@@ -64,40 +68,7 @@ func (s SwitchFixer) Fix(nodes []html.Node) error {
 			}
 			node.Attributes = newAttrs
 
-			// Process children for slot conversion.
-			var labelText string
-			var remainingChildren html.NodeList
-			for _, child := range node.Children {
-				// Check if child is a slot element.
-				if elem, ok := child.(*html.ElementNode); ok && elem.Tag == TemplateTag {
-					for _, a := range elem.Attributes {
-						if attr, ok := a.(*html.Attribute); ok {
-							if attr.Key == LabelSlotAttr {
-								var sb strings.Builder
-								for _, inner := range elem.Children {
-									sb.WriteString(strings.TrimSpace(inner.Dump(0)))
-								}
-								labelText = sb.String()
-								goto SkipChild
-							}
-							if attr.Key == HintSlotAttr {
-								goto SkipChild
-							}
-						}
-					}
-				}
-				remainingChildren = append(remainingChildren, child)
-			SkipChild:
-			}
-			// Remove all slot children.
-			node.Children = remainingChildren
-			// If label slot found, add label attribute.
-			if labelText != "" {
-				node.Attributes = append(node.Attributes, &html.Attribute{
-					Key:   "label",
-					Value: labelText,
-				})
-			}
+			convertFieldSlots(node, "label")
 		}
 	})
 	return nil

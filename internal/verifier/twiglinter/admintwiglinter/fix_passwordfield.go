@@ -1,8 +1,6 @@
 package admintwiglinter
 
 import (
-	"strings"
-
 	"github.com/shyim/go-version"
 
 	"github.com/shopware/shopware-cli/internal/html"
@@ -21,7 +19,7 @@ func (p PasswordFieldFixer) Check(nodes []html.Node) []validation.CheckResult {
 	html.TraverseNode(nodes, func(node *html.ElementNode) {
 		if node.Tag == "sw-password-field" {
 			checkErrors = append(checkErrors, validation.CheckResult{
-				Message:    "sw-password-field is removed, use mt-password-field instead. Please review conversion for label/hint properties.",
+				Message:    "sw-password-field is deprecated, use mt-password-field instead. Review conversion for label/hint properties.",
 				Severity:   validation.SeverityWarning,
 				Identifier: "sw-password-field",
 				Line:       node.Line,
@@ -38,6 +36,9 @@ func (p PasswordFieldFixer) Supports(v *version.Version) bool {
 func (p PasswordFieldFixer) Fix(nodes []html.Node) error {
 	html.TraverseNode(nodes, func(node *html.ElementNode) {
 		if node.Tag == "sw-password-field" {
+			if !canConvertFieldSlots(node, "label", "hint") {
+				return
+			}
 			node.Tag = "mt-password-field"
 
 			// Update or remove attributes
@@ -46,8 +47,8 @@ func (p PasswordFieldFixer) Fix(nodes []html.Node) error {
 				// Check if the attribute is an html.Attribute
 				if attr, ok := attrNode.(*html.Attribute); ok {
 					switch attr.Key {
-					case "value":
-						attr.Key = "model-value"
+					case ValueAttr, ColonValueAttr:
+						attr.Key = migratedValueKey(attr.Key)
 						newAttrs = append(newAttrs, attr)
 					case VModelValueAttr:
 						attr.Key = "v-model"
@@ -74,47 +75,7 @@ func (p PasswordFieldFixer) Fix(nodes []html.Node) error {
 			}
 			node.Attributes = newAttrs
 
-			// Process slot children for label and hint
-			var label, hint string
-			for _, child := range node.Children {
-				if elem, ok := child.(*html.ElementNode); ok && elem.Tag == "template" {
-					for _, a := range elem.Attributes {
-						if attr, ok := a.(*html.Attribute); ok {
-							if attr.Key == "#label" {
-								var sb strings.Builder
-								for _, inner := range elem.Children {
-									sb.WriteString(strings.TrimSpace(inner.Dump(0)))
-								}
-								label = strings.Replace(sb.String(), "Label", "label", 1)
-								goto SkipChild
-							}
-							if attr.Key == "#hint" {
-								var sb strings.Builder
-								for _, inner := range elem.Children {
-									sb.WriteString(strings.TrimSpace(inner.Dump(0)))
-								}
-								hint = strings.Replace(sb.String(), "Hint", "hint", 1)
-								goto SkipChild
-							}
-						}
-					}
-				}
-			SkipChild:
-			}
-			// Remove original children after processing slots
-			node.Children = nil
-			if label != "" {
-				node.Attributes = append(node.Attributes, &html.Attribute{
-					Key:   "label",
-					Value: label,
-				})
-			}
-			if hint != "" {
-				node.Attributes = append(node.Attributes, &html.Attribute{
-					Key:   "hint",
-					Value: hint,
-				})
-			}
+			convertFieldSlots(node, "label", "hint")
 		}
 	})
 	return nil

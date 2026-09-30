@@ -19,7 +19,7 @@ func (l LoaderFixer) Check(nodes []html.Node) []validation.CheckResult {
 	html.TraverseNode(nodes, func(node *html.ElementNode) {
 		if node.Tag == "sw-loader" {
 			errs = append(errs, validation.CheckResult{
-				Message:    "sw-loader is removed, use mt-loader instead.",
+				Message:    "sw-loader is deprecated, use mt-loader instead.",
 				Severity:   validation.SeverityWarning,
 				Identifier: "sw-loader",
 				Line:       node.Line,

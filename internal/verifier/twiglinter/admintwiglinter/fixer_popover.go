@@ -2,6 +2,7 @@ package admintwiglinter
 
 import (
 	"github.com/shyim/go-version"
+	"strings"
 
 	"github.com/shopware/shopware-cli/internal/html"
 	"github.com/shopware/shopware-cli/internal/validation"
@@ -51,7 +52,10 @@ func (p PopoverFixer) Fix(node []html.Node) error {
 						attr.Key = ":isOpened"
 						newAttrs = append(newAttrs, attr)
 						hasVIf = true
-					case ":zIndex", ":resizeWidth":
+					case "resizeWidth", "resize-width", ":resizeWidth", ":resize-width":
+						attr.Key = strings.ReplaceAll(strings.ReplaceAll(attr.Key, "resizeWidth", "match-reference-width"), "resize-width", "match-reference-width")
+						newAttrs = append(newAttrs, attr)
+					case ":zIndex", ":z-index", "zIndex", "z-index", "popoverClass", "popover-class", ":popoverClass", ":popover-class":
 						// Skip these attributes
 					default:
 						newAttrs = append(newAttrs, attr)

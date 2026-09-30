@@ -29,7 +29,10 @@ func TestPopover(t *testing.T) {
 		},
 		{
 			before: `<sw-popover :resizeWidth="123"></sw-popover>`,
-			after:  `<mt-floating-ui :isOpened="true"></mt-floating-ui>`,
+			after: `<mt-floating-ui
+    :match-reference-width="123"
+    :isOpened="true"
+></mt-floating-ui>`,
 		},
 	}
 

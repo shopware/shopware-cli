@@ -1,8 +1,6 @@
 package admintwiglinter
 
 import (
-	"strings"
-
 	"github.com/shyim/go-version"
 
 	"github.com/shopware/shopware-cli/internal/html"
@@ -21,7 +19,7 @@ func (t TextareaFieldFixer) Check(nodes []html.Node) []validation.CheckResult {
 	html.TraverseNode(nodes, func(node *html.ElementNode) {
 		if node.Tag == "sw-textarea-field" {
 			checkErrors = append(checkErrors, validation.CheckResult{
-				Message:    "sw-textarea-field is removed, use mt-textarea instead. Please manually review the new API differences.",
+				Message:    "sw-textarea-field is deprecated, use mt-textarea instead. Please manually review the new API differences.",
 				Severity:   validation.SeverityWarning,
 				Identifier: "sw-textarea-field",
 				Line:       node.Line,
@@ -38,6 +36,9 @@ func (t TextareaFieldFixer) Supports(v *version.Version) bool {
 func (t TextareaFieldFixer) Fix(nodes []html.Node) error {
 	html.TraverseNode(nodes, func(node *html.ElementNode) {
 		if node.Tag == "sw-textarea-field" {
+			if !canConvertFieldSlots(node, "label") {
+				return
+			}
 			node.Tag = "mt-textarea"
 			var newAttrs html.NodeList
 
@@ -45,14 +46,14 @@ func (t TextareaFieldFixer) Fix(nodes []html.Node) error {
 				// Check if the attribute is an html.Attribute
 				if attr, ok := attrNode.(*html.Attribute); ok {
 					switch attr.Key {
-					case ValueAttr:
-						attr.Key = ModelValueAttr
+					case ValueAttr, ColonValueAttr:
+						attr.Key = migratedValueKey(attr.Key)
 						newAttrs = append(newAttrs, attr)
 					case VModelValueAttr:
 						attr.Key = VModelAttr
 						newAttrs = append(newAttrs, attr)
-					case "update:value":
-						attr.Key = "update:model-value"
+					case UpdateValueAttr:
+						attr.Key = UpdateModelValueAttr
 						newAttrs = append(newAttrs, attr)
 					default:
 						newAttrs = append(newAttrs, attr)
@@ -64,36 +65,7 @@ func (t TextareaFieldFixer) Fix(nodes []html.Node) error {
 			}
 			node.Attributes = newAttrs
 
-			label := ""
-			var remainingChildren html.NodeList
-
-			for _, child := range node.Children {
-				if element, ok := child.(*html.ElementNode); ok && element.Tag == TemplateTag {
-					for _, a := range element.Attributes {
-						if attr, ok := a.(*html.Attribute); ok {
-							if attr.Key == LabelSlotAttr {
-								var sb strings.Builder
-								for _, inner := range element.Children {
-									sb.WriteString(strings.TrimSpace(inner.Dump(0)))
-								}
-								label = sb.String()
-								goto SkipChild
-							}
-						}
-					}
-				}
-				remainingChildren = append(remainingChildren, child)
-			SkipChild:
-			}
-
-			node.Children = remainingChildren
-
-			if label != "" {
-				node.Attributes = append(node.Attributes, &html.Attribute{
-					Key:   "label",
-					Value: label,
-				})
-			}
+			convertFieldSlots(node, "label")
 		}
 	})
 	return nil

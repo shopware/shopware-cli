@@ -21,7 +21,7 @@ func (i IconFixer) Check(nodes []html.Node) []validation.CheckResult {
 	html.TraverseNode(nodes, func(node *html.ElementNode) {
 		if node.Tag == "sw-icon" {
 			errors = append(errors, validation.CheckResult{
-				Message:    "sw-icon is removed, use mt-icon instead with proper size prop.",
+				Message:    "sw-icon is deprecated, use mt-icon instead with proper size prop.",
 				Severity:   validation.SeverityWarning,
 				Identifier: "sw-icon",
 				Line:       node.Line,
@@ -60,7 +60,7 @@ func (i IconFixer) Fix(nodes []html.Node) error {
 							Value: "32px",
 						})
 						hasSize = true
-					case "size":
+					case "size", ":size":
 						// keep existing size prop
 						newAttrs = append(newAttrs, attr)
 						hasSize = true

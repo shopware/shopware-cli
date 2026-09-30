@@ -1,8 +1,6 @@
 package admintwiglinter
 
 import (
-	"strings"
-
 	"github.com/shyim/go-version"
 
 	"github.com/shopware/shopware-cli/internal/html"
@@ -22,7 +20,7 @@ func (c CheckboxFieldFixer) Check(nodes []html.Node) []validation.CheckResult {
 	html.TraverseNode(nodes, func(node *html.ElementNode) {
 		if node.Tag == "sw-checkbox-field" {
 			errs = append(errs, validation.CheckResult{
-				Message:    "sw-checkbox-field is removed, use mt-checkbox instead. Review conversion for props, events and slots.",
+				Message:    "sw-checkbox-field is deprecated, use mt-checkbox instead. Review conversion for props, events and slots.",
 				Severity:   validation.SeverityWarning,
 				Identifier: "sw-checkbox-field",
 				Line:       node.Line,
@@ -40,6 +38,9 @@ func (c CheckboxFieldFixer) Supports(v *version.Version) bool {
 func (c CheckboxFieldFixer) Fix(nodes []html.Node) error {
 	html.TraverseNode(nodes, func(node *html.ElementNode) {
 		if node.Tag == "sw-checkbox-field" {
+			if !canConvertFieldSlots(node, "label") {
+				return
+			}
 			node.Tag = "mt-checkbox"
 			var newAttrs html.NodeList
 			// Process attribute conversions.
@@ -67,39 +68,7 @@ func (c CheckboxFieldFixer) Fix(nodes []html.Node) error {
 			}
 			node.Attributes = newAttrs
 
-			// Process children for slot conversion.
-			var labelText string
-			var remainingChildren html.NodeList
-			for _, child := range node.Children {
-				if elem, ok := child.(*html.ElementNode); ok && elem.Tag == "template" {
-					// Handle label slot.
-					for _, a := range elem.Attributes {
-						if attr, ok := a.(*html.Attribute); ok {
-							if attr.Key == "#label" || attr.Key == "v-slot:label" {
-								var sb strings.Builder
-								for _, inner := range elem.Children {
-									sb.WriteString(strings.TrimSpace(inner.Dump(0)))
-								}
-								labelText = sb.String()
-								goto SkipChild
-							}
-							// Remove hint slot.
-							if attr.Key == "v-slot:hint" || attr.Key == "#hint" {
-								goto SkipChild
-							}
-						}
-					}
-				}
-				remainingChildren = append(remainingChildren, child)
-			SkipChild:
-			}
-			node.Children = remainingChildren
-			if labelText != "" {
-				node.Attributes = append(node.Attributes, &html.Attribute{
-					Key:   "label",
-					Value: labelText,
-				})
-			}
+			convertFieldSlots(node, "label")
 		}
 	})
 	return nil

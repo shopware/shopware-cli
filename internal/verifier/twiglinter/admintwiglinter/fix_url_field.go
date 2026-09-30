@@ -1,8 +1,6 @@
 package admintwiglinter
 
 import (
-	"strings"
-
 	"github.com/shyim/go-version"
 
 	"github.com/shopware/shopware-cli/internal/html"
@@ -21,7 +19,7 @@ func (u UrlFieldFixer) Check(nodes []html.Node) []validation.CheckResult {
 	html.TraverseNode(nodes, func(node *html.ElementNode) {
 		if node.Tag == "sw-url-field" {
 			errors = append(errors, validation.CheckResult{
-				Message:    "sw-url-field is removed, use mt-url-field instead. Review conversion for props, events, label and hint slot.",
+				Message:    "sw-url-field is deprecated, use mt-url-field instead. Review conversion for props, events, label and hint slot.",
 				Severity:   validation.SeverityWarning,
 				Identifier: "sw-url-field",
 				Line:       node.Line,
@@ -38,6 +36,9 @@ func (u UrlFieldFixer) Supports(v *version.Version) bool {
 func (u UrlFieldFixer) Fix(nodes []html.Node) error {
 	html.TraverseNode(nodes, func(node *html.ElementNode) {
 		if node.Tag == "sw-url-field" {
+			if !canConvertFieldSlots(node, "label") {
+				return
+			}
 			node.Tag = "mt-url-field"
 			var newAttrs html.NodeList
 
@@ -45,8 +46,8 @@ func (u UrlFieldFixer) Fix(nodes []html.Node) error {
 				// Check if the attribute is an html.Attribute
 				if attr, ok := attrNode.(*html.Attribute); ok {
 					switch attr.Key {
-					case ValueAttr:
-						attr.Key = ModelValueAttr
+					case ValueAttr, ColonValueAttr:
+						attr.Key = migratedValueKey(attr.Key)
 						newAttrs = append(newAttrs, attr)
 					case VModelValueAttr:
 						attr.Key = VModelAttr
@@ -64,39 +65,7 @@ func (u UrlFieldFixer) Fix(nodes []html.Node) error {
 			}
 			node.Attributes = newAttrs
 
-			// Process slot conversion.
-			label := ""
-			var remainingChildren html.NodeList
-			for _, child := range node.Children {
-				if elem, ok := child.(*html.ElementNode); ok && elem.Tag == TemplateTag {
-					for _, a := range elem.Attributes {
-						if attr, ok := a.(*html.Attribute); ok {
-							if attr.Key == LabelSlotAttr {
-								var sb strings.Builder
-								for _, inner := range elem.Children {
-									sb.WriteString(strings.TrimSpace(inner.Dump(0)))
-								}
-								label = sb.String()
-								goto SkipChild
-							}
-							if attr.Key == HintSlotAttr {
-								// Skip hint slot.
-								goto SkipChild
-							}
-						}
-					}
-				}
-				remainingChildren = append(remainingChildren, child)
-			SkipChild:
-			}
-			// Remove all children; label was processed, and hint slot is dropped.
-			node.Children = remainingChildren
-			if label != "" {
-				node.Attributes = append(node.Attributes, &html.Attribute{
-					Key:   "label",
-					Value: label,
-				})
-			}
+			convertFieldSlots(node, "label")
 		}
 	})
 	return nil

@@ -23,7 +23,7 @@ func (s SelectFieldFixer) Check(nodes []html.Node) []validation.CheckResult {
 	html.TraverseNode(nodes, func(node *html.ElementNode) {
 		if node.Tag == "sw-select-field" {
 			errs = append(errs, validation.CheckResult{
-				Message:    "sw-select-field is removed, use mt-select instead. Review conversion for props, slots and events.",
+				Message:    "sw-select-field is deprecated, use mt-select instead. Complex slots and options expressions require manual migration; review props and events.",
 				Severity:   validation.SeverityWarning,
 				Identifier: "sw-select-field",
 				Line:       node.Line,
@@ -40,11 +40,13 @@ func (s SelectFieldFixer) Supports(v *version.Version) bool {
 func (s SelectFieldFixer) Fix(nodes []html.Node) error {
 	html.TraverseNode(nodes, func(node *html.ElementNode) {
 		if node.Tag == "sw-select-field" {
+			// Dynamic options and arbitrary JavaScript option objects require manual migration.
+			if !canConvertSelect(node) {
+				return
+			}
 			node.Tag = "mt-select"
 
 			var newAttrs html.NodeList
-			// Flag to check if options prop is already set.
-			optionsSet := false
 
 			for _, attrNode := range node.Attributes {
 				// Check if the attribute is an html.Attribute
@@ -56,12 +58,6 @@ func (s SelectFieldFixer) Fix(nodes []html.Node) error {
 						newAttrs = append(newAttrs, &html.Attribute{Key: "v-model", Value: attr.Value})
 					case ":aside":
 						// Remove aside prop.
-					case ":options":
-						// Convert options format: replace "name" with "label" and "id" with "value"
-						converted := strings.ReplaceAll(attr.Value, "name", "label")
-						converted = strings.ReplaceAll(converted, "id", "value")
-						newAttrs = append(newAttrs, &html.Attribute{Key: ":options", Value: converted})
-						optionsSet = true
 					case UpdateValueAttr:
 						newAttrs = append(newAttrs, &html.Attribute{Key: UpdateModelValueAttr, Value: attr.Value})
 					default:
@@ -74,8 +70,9 @@ func (s SelectFieldFixer) Fix(nodes []html.Node) error {
 			}
 			node.Attributes = newAttrs
 
+			convertFieldSlots(node, "label")
+
 			// Process children for slot conversion.
-			var labelText string
 			var optionObjects []map[string]interface{}
 			var expressionOptions = make(map[string]string)
 			var expressionObjectPrefix = "abc541d6050-b044-4de0-9edd-cad83c4f3365-"
@@ -83,21 +80,6 @@ func (s SelectFieldFixer) Fix(nodes []html.Node) error {
 
 			for _, child := range node.Children {
 				if elem, ok := child.(*html.ElementNode); ok {
-					// Convert label slot to label prop.
-					if elem.Tag == TemplateTag {
-						for _, a := range elem.Attributes {
-							if attr, ok := a.(*html.Attribute); ok {
-								if attr.Key == LabelSlotAttr || attr.Key == "v-slot:label" {
-									var sb strings.Builder
-									for _, inner := range elem.Children {
-										sb.WriteString(strings.TrimSpace(inner.Dump(0)))
-									}
-									labelText = sb.String()
-									goto SkipChild
-								}
-							}
-						}
-					}
 					// Collect <option> children from default slot.
 					if elem.Tag == "option" {
 						opt := make(map[string]interface{})
@@ -140,16 +122,8 @@ func (s SelectFieldFixer) Fix(nodes []html.Node) error {
 			// Remove all children slots.
 			node.Children = nil
 
-			// If label slot was set, add label attribute.
-			if labelText != "" {
-				node.Attributes = append(node.Attributes, &html.Attribute{
-					Key:   "label",
-					Value: labelText,
-				})
-			}
-
-			// If default <option> elements were found and options prop not already set, build options prop.
-			if !optionsSet && len(optionObjects) > 0 {
+			// If default <option> elements were found, build options prop.
+			if len(optionObjects) > 0 {
 				// Serialize optionObjects slice to JSON-like string.
 				bytes, err := json.Marshal(optionObjects)
 				if err == nil {
@@ -168,4 +142,52 @@ func (s SelectFieldFixer) Fix(nodes []html.Node) error {
 		}
 	})
 	return nil
+}
+
+// Leave unsupported templates intact so the checker continues to report them.
+func canConvertSelect(node *html.ElementNode) bool {
+	if !canConvertFieldSlots(node, "label") {
+		return false
+	}
+	for _, a := range node.Attributes {
+		attr, ok := a.(*html.Attribute)
+		if !ok {
+			return false
+		}
+		if attr.Key == ":options" || attr.Key == "options" {
+			return false
+		}
+	}
+	for _, child := range node.Children {
+		switch n := child.(type) {
+		case *html.RawNode:
+			if strings.TrimSpace(n.Text) != "" {
+				return false
+			}
+		case *html.ElementNode:
+			if slotName(n) == "label" {
+				continue
+			}
+			if n.Tag != "option" {
+				return false
+			}
+			for _, a := range n.Attributes {
+				attr, ok := a.(*html.Attribute)
+				if !ok {
+					return false
+				}
+				switch attr.Key {
+				case ValueAttr, ColonValueAttr, VModelValueAttr:
+				default:
+					return false
+				}
+			}
+			if _, _, safe := slotValue(n.Children); !safe {
+				return false
+			}
+		default:
+			return false
+		}
+	}
+	return true
 }

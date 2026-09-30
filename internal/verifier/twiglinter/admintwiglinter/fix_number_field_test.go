@@ -26,7 +26,7 @@ func TestNumberFieldFixer(t *testing.T) {
 			after:       `<mt-number-field :model-value="5"/>`,
 		},
 		{
-			description: "convert v-model:value to :model-value and @change",
+			description: "convert v-model:value to :model-value and @update:model-value",
 			before:      `<sw-number-field v-model:value="myValue"/>`,
 			after:       `<mt-number-field v-model="myValue"/>`,
 		},
@@ -36,9 +36,9 @@ func TestNumberFieldFixer(t *testing.T) {
 			after:       `<mt-number-field label="My Label"></mt-number-field>`,
 		},
 		{
-			description: "replace @update:value with @change",
+			description: "replace @update:value with @update:model-value",
 			before:      `<sw-number-field @update:value="updateValue"/>`,
-			after:       `<mt-number-field @change="updateValue"/>`,
+			after:       `<mt-number-field @update:model-value="updateValue"/>`,
 		},
 	}
 

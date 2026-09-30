@@ -20,7 +20,7 @@ func (c CardFixer) Check(nodes []html.Node) []validation.CheckResult {
 	html.TraverseNode(nodes, func(node *html.ElementNode) {
 		if node.Tag == "sw-card" {
 			errors = append(errors, validation.CheckResult{
-				Message:    "sw-card is removed, use mt-card instead. Review conversion for aiBadge and contentPadding.",
+				Message:    "sw-card is deprecated, use mt-card instead. Review conversion for aiBadge and contentPadding.",
 				Severity:   validation.SeverityWarning,
 				Identifier: "sw-card",
 				Line:       node.Line,
@@ -38,6 +38,11 @@ func (c CardFixer) Supports(v *version.Version) bool {
 func (c CardFixer) Fix(nodes []html.Node) error {
 	html.TraverseNode(nodes, func(node *html.ElementNode) {
 		if node.Tag == "sw-card" {
+			for _, a := range node.Attributes {
+				if attr, ok := a.(*html.Attribute); ok && (attr.Key == ":aiBadge" || attr.Key == ":ai-badge") {
+					return
+				}
+			}
 			node.Tag = "mt-card"
 			var newAttrs html.NodeList
 			aiBadgeFound := false
@@ -64,16 +69,26 @@ func (c CardFixer) Fix(nodes []html.Node) error {
 			// If aiBadge was present, add title slot with sw-ai-copilot-badge.
 			if aiBadgeFound {
 				aiBadgeSlot := &html.ElementNode{
-					Tag: "slot",
+					Tag: TemplateTag,
 					Attributes: html.NodeList{
-						&html.Attribute{Key: "name", Value: "title"},
+						&html.Attribute{Key: "#title"},
 					},
 					Children: html.NodeList{
 						&html.ElementNode{Tag: "sw-ai-copilot-badge"},
 					},
 				}
-				// Prepend the title slot to existing children.
-				node.Children = append(html.NodeList{aiBadgeSlot}, node.Children...)
+				// Reuse an existing title slot instead of creating a duplicate.
+				found := false
+				for _, child := range node.Children {
+					if title, ok := child.(*html.ElementNode); ok && slotName(title) == "title" {
+						title.Children = append(title.Children, aiBadgeSlot.Children...)
+						found = true
+						break
+					}
+				}
+				if !found {
+					node.Children = append(html.NodeList{aiBadgeSlot}, node.Children...)
+				}
 			}
 		}
 	})

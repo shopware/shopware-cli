@@ -19,7 +19,7 @@ func (a AlertFixer) Check(nodes []html.Node) []validation.CheckResult {
 	html.TraverseNode(nodes, func(node *html.ElementNode) {
 		if node.Tag == "sw-alert" {
 			errors = append(errors, validation.CheckResult{
-				Message:    "sw-alert is removed, use mt-banner instead. Please review conversion for variant changes.",
+				Message:    "sw-alert is deprecated, use mt-banner instead. Review conversion for variant changes.",
 				Severity:   validation.SeverityWarning,
 				Identifier: "sw-alert",
 				Line:       node.Line,

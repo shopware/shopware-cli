@@ -28,7 +28,7 @@ func TestSelectFieldFixer(t *testing.T) {
 		{
 			description: "convert options prop format",
 			before:      `<sw-select-field :options="[ { label: 'Option 1', value: 1 }, { label: 'Option 2', value: 2 } ]"/>`,
-			after: `<mt-select
+			after: `<sw-select-field
     :options="[ { label: 'Option 1', value: 1 }, { label: 'Option 2', value: 2 } ]"
 />`,
 		},

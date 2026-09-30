@@ -21,7 +21,7 @@ func (t TextFieldFixer) Check(nodes []html.Node) []validation.CheckResult {
 	html.TraverseNode(nodes, func(node *html.ElementNode) {
 		if node.Tag == "sw-text-field" {
 			errs = append(errs, validation.CheckResult{
-				Message:    "sw-text-field is removed, use mt-text-field instead. Review conversion for props, events and label slot.",
+				Message:    "sw-text-field is deprecated, use mt-text-field instead. Review conversion for props, events and slots; complex slots require manual migration.",
 				Severity:   validation.SeverityWarning,
 				Identifier: "sw-text-field",
 				Line:       node.Line,
@@ -38,6 +38,9 @@ func (t TextFieldFixer) Supports(v *version.Version) bool {
 func (t TextFieldFixer) Fix(nodes []html.Node) error {
 	html.TraverseNode(nodes, func(node *html.ElementNode) {
 		if node.Tag == "sw-text-field" {
+			if !canConvertFieldSlots(node, "label") {
+				return
+			}
 			node.Tag = "mt-text-field"
 			var newAttrs html.NodeList
 			// Process attributes conversion.
@@ -48,7 +51,10 @@ func (t TextFieldFixer) Fix(nodes []html.Node) error {
 					case ValueAttr:
 						attr.Key = ModelValueAttr
 						newAttrs = append(newAttrs, attr)
-					case ColonValueAttr, VModelValueAttr:
+					case ColonValueAttr:
+						attr.Key = ":model-value"
+						newAttrs = append(newAttrs, attr)
+					case VModelValueAttr:
 						attr.Key = VModelAttr
 						newAttrs = append(newAttrs, attr)
 					case SizeAttr:
@@ -78,34 +84,7 @@ func (t TextFieldFixer) Fix(nodes []html.Node) error {
 			}
 			node.Attributes = newAttrs
 
-			// Process label slot: convert <template #label>...</template> to label prop.
-			label := ""
-			var remainingChildren html.NodeList
-			for _, child := range node.Children {
-				if elem, ok := child.(*html.ElementNode); ok && elem.Tag == TemplateTag {
-					for _, a := range elem.Attributes {
-						if attr, ok := a.(*html.Attribute); ok {
-							if attr.Key == LabelSlotAttr {
-								var sb strings.Builder
-								for _, inner := range elem.Children {
-									sb.WriteString(strings.TrimSpace(inner.Dump(0)))
-								}
-								label = sb.String()
-								goto SkipChild
-							}
-						}
-					}
-				}
-				remainingChildren = append(remainingChildren, child)
-			SkipChild:
-			}
-			node.Children = remainingChildren
-			if label != "" {
-				node.Attributes = append(node.Attributes, &html.Attribute{
-					Key:   "label",
-					Value: label,
-				})
-			}
+			convertFieldSlots(node, "label")
 		}
 	})
 	return nil
