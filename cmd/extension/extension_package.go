@@ -238,7 +238,7 @@ func init() {
 	extensionPackageCmd.MarkFlagsMutuallyExclusive("use-git-tag-as-version", "disable-git")
 	extensionPackageCmd.MarkFlagsMutuallyExclusive("use-git-tag-as-version", "overwrite-version")
 	extensionPackageCmd.Flags().String("output-directory", "", "Directory for the ZIP file (created if missing)")
-	extensionPackageCmd.Flags().String("git-commit", "", "Git commit, tag, or branch to package (default: the current tag or branch)")
+	extensionPackageCmd.Flags().String("git-commit", "", "Git commit hash, tag, or branch to package (default: the current tag or branch)")
 	extensionPackageCmd.Flags().String("filename", "", "Name of the ZIP file (default: <name>-<tag>.zip when tagged, otherwise <name>.zip)")
 }
 
