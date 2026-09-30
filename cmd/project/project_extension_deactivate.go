@@ -12,7 +12,7 @@ import (
 
 var projectExtensionDeactivateCmd = &cobra.Command{
 	Use:   "deactivate name...",
-	Short: "Deactivate an installed extension",
+	Short: "Deactivate one or more installed extensions",
 	Args:  cobra.MinimumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		projectRoot, err := shop.FindClosestShopwareProject(true)

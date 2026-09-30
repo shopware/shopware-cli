@@ -70,9 +70,9 @@ func newCreateCmd() *cobra.Command {
 
 	flags := cmd.Flags()
 	flags.StringVar(&opts.Name, NameFlagName, "", "Extension name (PascalCase)")
-	flags.StringVar(&opts.Vendor, VendorFlagName, "", "Vendor prefix (PascalCase) for the extension name and namespace. Required if --store is enabled.")
-	flags.BoolVar(&opts.Store, StoreFlagName, false, "Enable if you plan to publish the extension on the Shopware Community Store.")
-	flags.StringVarP((*string)(&opts.Type), TypeFlagName, "t", "", "Extension type (plugin|theme)")
+	flags.StringVar(&opts.Vendor, VendorFlagName, "", "Vendor prefix (PascalCase) for the extension name and namespace, required with --store")
+	flags.BoolVar(&opts.Store, StoreFlagName, false, "Enable if you plan to publish the extension on the Shopware Community Store")
+	flags.StringVarP((*string)(&opts.Type), TypeFlagName, "t", "", "Extension type (plugin, theme)")
 
 	_ = cmd.RegisterFlagCompletionFunc("type", cobra.FixedCompletions(
 		[]string{string(extension.Plugin), string(extension.Theme)},

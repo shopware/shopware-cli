@@ -16,20 +16,18 @@ var projectSbomCmd = &cobra.Command{
 	Long: `Generate a Software Bill of Materials (SBOM) for a Shopware project.
 
 Reads composer.lock (and optionally composer.json for the root component name
-and version) and writes a CycloneDX 1.7 JSON document — the same artifact that
+and version) and writes a CycloneDX 1.7 JSON document, the same artifact that
 project ci produces, without running the rest of the CI build.
 
-Examples:
-  # Write sbom.cdx.json into the current Shopware project
+The command is non-interactive and exits non-zero when generation fails
+(missing or unreadable composer.lock, unsupported format, write errors).`,
+	Example: `  # Write sbom.cdx.json into the current Shopware project
   shopware-cli project sbom
 
   # Explicit project path and output file
   shopware-cli project sbom ./my-shop \
     --format cyclonedx-json \
-    --output sbom.json
-
-The command is non-interactive and exits non-zero when generation fails
-(missing or unreadable composer.lock, unsupported format, write errors).`,
+    --output sbom.json`,
 	Args: cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		root, err := resolveProjectSbomRoot(args)

@@ -21,7 +21,7 @@ import (
 var projectNewJWTCmd = &cobra.Command{
 	Use:        "generate-jwt",
 	Short:      "Generate a JWT secret key",
-	Deprecated: "Will be removed in October 2026",
+	Deprecated: "use \"project console system:generate-jwt-secret\" instead, will be removed in October 2026",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		publicKey, privateKey, err := generatePrivatePublicKey(2048)
 		if err != nil {

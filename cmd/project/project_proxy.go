@@ -40,7 +40,7 @@ type proxyEnvironment struct {
 var projectProxyCmd = &cobra.Command{
 	Use:   "proxy",
 	Short: "Connect local shops through a shared proxy",
-	Long: `Manages a shared local reverse proxy (Traefik) that routes stable per-project
+	Long: `Manage a shared local reverse proxy (Traefik) that routes stable per-project
 hostnames like https://my-shop.shopware.local to your local Shopware instances,
 so any number of shops run in parallel without juggling ports.
 

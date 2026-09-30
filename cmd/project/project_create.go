@@ -230,14 +230,14 @@ func applyNonInteractiveDefaults(opts *createOptions) error {
 func init() {
 	projectRootCmd.AddCommand(projectCreateCmd)
 	projectCreateCmd.PersistentFlags().Bool("docker", false, "Use Docker for the project environment")
-	projectCreateCmd.PersistentFlags().Bool("with-elasticsearch", false, "Add Elasticsearch or OpenSearch support to the project")
+	projectCreateCmd.PersistentFlags().Bool("with-elasticsearch", false, "Add Elasticsearch or OpenSearch support to the project (enabled by default in non-interactive mode)")
 	projectCreateCmd.PersistentFlags().Bool("without-elasticsearch", false, "Remove Elasticsearch from the installation")
-	_ = projectCreateCmd.PersistentFlags().MarkDeprecated("without-elasticsearch", "use --with-elasticsearch instead")
+	_ = projectCreateCmd.PersistentFlags().MarkDeprecated("without-elasticsearch", "use --with-elasticsearch=false instead")
 	projectCreateCmd.PersistentFlags().Bool("with-amqp", false, "Add AMQP queue support via Symfony's Messenger component")
 	projectCreateCmd.PersistentFlags().Bool("no-audit", false, "Continue when dependencies are blocked by known security advisories")
 	projectCreateCmd.PersistentFlags().Bool("git", false, "Initialize a Git repository for a Shopware project")
-	projectCreateCmd.PersistentFlags().Bool("local-domain", false, "Serve the Shopware project at a stable local hostname (<name>.shopware.local) through the shared proxy instead of a port (requires Docker)")
-	projectCreateCmd.PersistentFlags().String("version", "", "Shopware version to install (e.g., 6.6.0.0, latest, or dev-trunk)")
+	projectCreateCmd.PersistentFlags().Bool("local-domain", false, "Serve the Shopware project at a stable local hostname (<name>."+proxy.DefaultDomain+" by default) through the shared proxy instead of a port (requires Docker)")
+	projectCreateCmd.PersistentFlags().String("version", "", "Shopware version to install (e.g. 6.6.0.0, latest, dev-trunk)")
 	projectCreateCmd.PersistentFlags().String("deployment", "", "Deployment method to configure (none, container, deployer, platformsh, or shopware-paas)")
 	_ = projectCreateCmd.RegisterFlagCompletionFunc("deployment", func(*cobra.Command, []string, string) ([]string, cobra.ShellCompDirective) {
 		return []string{
