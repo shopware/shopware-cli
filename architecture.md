@@ -34,7 +34,7 @@ A new command is just a new file: drop `cmd/<group>/<group><sub>.go` (`cmd/root.
 
 Each verifier tool registers a name and implements only the capabilities it supports: checking, fixing, formatting, or a combination. Commands select tools by capability, then apply `--only` and (where available) `--exclude`. An unsupported `--only` name is an error that lists the tools available to that command.
 
-`extension validate` runs only the built-in `sw-cli` checker by default; `--full` selects all checkers, while an explicit `--only` takes precedence over `--full`. The format commands support `--dry-run`; the fix commands do not.
+`extension validate` runs all checkers by default. The deprecated `--full` flag remains accepted but has no effect; use `--only` or `--exclude` to select checkers. The format commands support `--dry-run`; the fix commands do not.
 
 ```go
 type Tool interface {

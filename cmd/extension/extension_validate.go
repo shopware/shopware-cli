@@ -23,7 +23,6 @@ var extensionValidateCmd = &cobra.Command{
 	Short: "Validate extension metadata, assets, and code quality",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		isFull, _ := cmd.Flags().GetBool("full")
 		storeCompliance, _ := cmd.Flags().GetBool("store-compliance")
 		reportingFormat, err := extensionValidationFormat(cmd)
 		if err != nil {
@@ -34,7 +33,7 @@ var extensionValidateCmd = &cobra.Command{
 		exclude, _ := cmd.Flags().GetString("exclude")
 		noCopy, _ := cmd.Flags().GetBool("no-copy")
 
-		tools, statuses, err := selectExtensionValidationTools(isFull, only, exclude)
+		tools, statuses, err := selectExtensionValidationTools(only, exclude)
 		if err != nil {
 			return err
 		}
@@ -133,14 +132,10 @@ var extensionValidateCmd = &cobra.Command{
 	},
 }
 
-func selectExtensionValidationTools(full bool, only, exclude string) (verifier.ToolList[verifier.CheckTool], []validation.ToolInvocationStatus, error) {
+func selectExtensionValidationTools(only, exclude string) (verifier.ToolList[verifier.CheckTool], []validation.ToolInvocationStatus, error) {
 	validationTools := verifier.GetToolsOf[verifier.CheckTool]()
 
-	requested := only
-	if requested == "" && !full {
-		requested = "sw-cli"
-	}
-	requestedTools, err := validationTools.Only(requested)
+	requestedTools, err := validationTools.Only(only)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -152,13 +147,7 @@ func selectExtensionValidationTools(full bool, only, exclude string) (verifier.T
 		return nil, nil, errors.New("no validation checks selected after applying --exclude")
 	}
 
-	statuses := extensionToolInvocationStatuses(validationTools, requestedTools, selected)
-	for i := range statuses {
-		if only == "" && statuses[i].Reason == "not selected by --only" {
-			statuses[i].Reason = "not selected; use --full or --only"
-		}
-	}
-	return selected, statuses, nil
+	return selected, extensionToolInvocationStatuses(validationTools, requestedTools, selected), nil
 }
 
 func requiresToolSetup(tool verifier.CheckTool) bool {
@@ -185,15 +174,16 @@ func extensionValidationFormat(cmd *cobra.Command) (string, error) {
 
 func init() {
 	extensionRootCmd.AddCommand(extensionValidateCmd)
-	extensionValidateCmd.PersistentFlags().Bool("full", false, "Run all validation checks by default (minus --exclude selections)")
+	extensionValidateCmd.PersistentFlags().Bool("full", false, "Run all validation checks")
 	extensionValidateCmd.PersistentFlags().Bool("store-compliance", false, "Run the Extension Store compliance checks")
 	extensionValidateCmd.PersistentFlags().String("format", "", "Reporting format (summary, json, github, gitlab, junit, markdown)")
 	extensionValidateCmd.PersistentFlags().String("reporter", "", "Reporting format (summary, json, github, gitlab, junit, markdown)")
 	extensionValidateCmd.PersistentFlags().String("check-against", "highest", "Check against Shopware Version (highest, lowest)")
-	extensionValidateCmd.PersistentFlags().String("only", "", "Run only these validation checks, regardless of --full (comma-separated, e.g. phpstan,eslint)")
+	extensionValidateCmd.PersistentFlags().String("only", "", "Run only these validation checks (comma-separated, e.g. phpstan,eslint)")
 	extensionValidateCmd.PersistentFlags().String("exclude", "", "Exclude specific tools by name (comma-separated, e.g. phpstan,eslint)")
 	extensionValidateCmd.PersistentFlags().Bool("no-copy", false, "Do not copy extension files to temporary directory")
 	extensionValidateCmd.MarkFlagsMutuallyExclusive("format", "reporter")
+	_ = extensionValidateCmd.PersistentFlags().MarkDeprecated("full", "all validation checks now run by default; omit --full; to restore old behaviour use --only sw-cli")
 	_ = extensionValidateCmd.PersistentFlags().MarkDeprecated("reporter", "use --format instead")
 	_ = extensionValidateCmd.PersistentFlags().MarkHidden("reporter")
 	extensionValidateCmd.PreRunE = func(cmd *cobra.Command, args []string) error {

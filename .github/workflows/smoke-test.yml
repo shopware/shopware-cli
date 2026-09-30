@@ -55,7 +55,7 @@ jobs:
         run: shopware-cli extension package plugin --disable-git --release
 
       - name: Validate Plugin
-        run: shopware-cli extension validate FroshTools.zip
+        run: shopware-cli extension validate FroshTools.zip --only sw-cli
 
       - name: Get Changelog
         run: shopware-cli extension get-changelog FroshTools.zip

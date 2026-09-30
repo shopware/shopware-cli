@@ -154,9 +154,9 @@ Normal extension validation runs the built-in checks implemented by the current 
 
 Common flags include:
 
-- `--only <tools>` — run only the named checkers, independently of `--full` (comma-separated).
+- `--only <tools>` — run only the named checkers (comma-separated).
 - `--exclude <tools>` — remove checkers from the selected set.
-- `--full` — select all checkers by default, including PHPStan, ESLint, and Stylelint; explicit `--only` takes precedence.
+- All checkers run by default, including PHPStan, ESLint, and Stylelint. `--full` is deprecated and has no effect. To do a quick validation use `--only sw-cli`
 - `--check-against <mode>` — `highest` (default) or `lowest`: which supported Shopware version to check against.
 - `--store-compliance` — enable Store-compliance mode while the current CLI supports the flag. Prefer `validation.store_compliance: true` in `.shopware-extension.yml` for persistent Store intent.
 - `--format <format>` — choose an output format supported by the current CLI (`--reporter` is a deprecated alias).
