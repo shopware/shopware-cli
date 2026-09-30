@@ -105,6 +105,7 @@ var extensionValidateCmd = &cobra.Command{
 			toolCfg.Extension.GetExtensionConfig().Validation.StoreCompliance = true
 			// The user is not allowed to provide a custom ignore list when store compliance is enabled
 			toolCfg.Extension.GetExtensionConfig().Validation.Ignore = extension.ConfigValidationList{}
+			toolCfg.ValidationIgnores = nil
 		}
 
 		toolCfg.CheckAgainst = checkAgainst
