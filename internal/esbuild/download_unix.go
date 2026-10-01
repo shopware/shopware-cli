@@ -112,7 +112,7 @@ func detectDownloadPrefix(ctx context.Context) string {
 	resp, err := exec.CommandContext(ctx, "ldd", "--version").CombinedOutput()
 
 	if resp == nil {
-		logging.FromContext(ctx).Infof("cannot run ldd to determine which dart-sass build is requierd: %s, using gnu libc", err)
+		logging.FromContext(ctx).Warnf("Cannot run ldd to determine which dart-sass build is required: %s, using gnu libc", err)
 
 		return ""
 	}

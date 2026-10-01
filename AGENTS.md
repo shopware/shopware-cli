@@ -69,6 +69,14 @@ Commands follow Cobra CLI patterns with:
 - Context-based logging: `logging.FromContext(ctx)`
 - Graceful error reporting to users
 
+### Command Conventions
+Follow `docs/COMMAND_CONVENTIONS.md` for every command, flag and message. The short version:
+- Short texts are imperative, capitalised, no period; a parent command describes the group
+- `Use` shows required arguments bare and optional ones in brackets, no angle brackets; every leaf command declares `Args`
+- Errors are lowercase `cannot <verb> ...: %w` without Go identifiers, hints in quotes; log lines are capitalised sentences
+- Any failure exits non-zero in every output format; never log success after a failed step
+- Test the invoked `internal/` function, never the cobra layer, and test behaviour, not message wording
+
 ### AI Integration
 The CLI includes AI-powered features for:
 - Twig template upgrades (`extension ai twig-upgrade`)
@@ -112,8 +120,8 @@ shopware-cli project storefront-watch
 
 The verifier registers tools through the name-only `Tool` interface. `CheckTool`, `FixTool`, and `FormatTool` add capabilities; commands select the relevant capability before applying `--only` or `--exclude`. An unsupported tool name is an error, and `ToolList[T]` preserves the capability type through filtering.
 
-- **Checkers**: `sw-cli`, PHPStan, ESLint, Stylelint, Storefront Twig
+- **Checkers**: `builtin` (legacy alias: `sw-cli`), PHPStan, ESLint, Stylelint, Storefront Twig
 - **Fixers**: Rector, ESLint, Stylelint, Symfony XML conversion
 - **Formatters**: PHP-CS-Fixer, Prettier
 
-`extension validate` defaults to `sw-cli`; `--full` selects all checkers, and an explicit `--only` overrides that default. The extension commands report whether each tool was invoked or skipped; invocation does not guarantee that files were analyzed or changed.
+`extension validate` runs all checkers by default. The deprecated `--full` flag remains accepted but has no effect; use `--only` or `--exclude` to select checkers. The extension commands report whether each tool was invoked or skipped; invocation does not guarantee that files were analyzed or changed.
