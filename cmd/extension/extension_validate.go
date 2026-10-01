@@ -19,7 +19,7 @@ import (
 )
 
 var extensionValidateCmd = &cobra.Command{
-	Use:   "validate <path>",
+	Use:   "validate path",
 	Short: "Validate extension metadata, assets, and code quality",
 	Long:  "Validate an extension folder or ZIP file. With --store-compliance (or SHOPWARE_CLI_STORE_COMPLIANCE=1), the Store's rules apply and the extension's validation.ignore list is not used.",
 	Args:  cobra.ExactArgs(1),
