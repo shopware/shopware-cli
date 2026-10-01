@@ -166,7 +166,6 @@ func TestAdminAPICommandsResolveEnvironment(t *testing.T) {
 		{"extension uninstall", projectExtensionUninstallCmd, []string{"Foo"}},
 		{"extension update", projectExtensionUpdateCmd, []string{"Foo"}},
 		{"extension upload", projectExtensionUploadCmd, []string{pluginDir}},
-		{"upgrade-check", projectUpgradeCheckCmd, nil},
 	}
 
 	for _, tc := range cases {

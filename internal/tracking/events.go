@@ -8,8 +8,6 @@ const (
 	EventCommand = "command"
 	// EventProjectCreate is sent when a new Shopware project is scaffolded.
 	EventProjectCreate = "project.create"
-	// EventProjectUpgradeCheck is sent when an upgrade compatibility check runs.
-	EventProjectUpgradeCheck = "project.upgrade_check"
 	// EventProjectUpgrade is sent when the interactive upgrade wizard finishes
 	// an upgrade run (internal/tui/upgrade).
 	EventProjectUpgrade = "project.upgrade"
@@ -46,7 +44,7 @@ const (
 	TagWithAMQP          = "with_amqp"
 	TagInteractive       = "interactive"
 
-	// EventProjectUpgradeCheck
+	// EventProjectUpgrade
 	TagFromVersion   = "from_version"
 	TagTargetVersion = "target_version"
 	TagHasBlockers   = "has_blockers"
