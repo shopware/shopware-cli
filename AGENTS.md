@@ -69,6 +69,14 @@ Commands follow Cobra CLI patterns with:
 - Context-based logging: `logging.FromContext(ctx)`
 - Graceful error reporting to users
 
+### Command Conventions
+Follow `docs/COMMAND_CONVENTIONS.md` for every command, flag and message. The short version:
+- Short texts are imperative, capitalised, no period; a parent command describes the group
+- `Use` shows required arguments bare and optional ones in brackets, no angle brackets; every leaf command declares `Args`
+- Errors are lowercase `cannot <verb> ...: %w` without Go identifiers, hints in quotes; log lines are capitalised sentences
+- Any failure exits non-zero in every output format; never log success after a failed step
+- Test the invoked `internal/` function, never the cobra layer, and test behaviour, not message wording
+
 ### AI Integration
 The CLI includes AI-powered features for:
 - Twig template upgrades (`extension ai twig-upgrade`)
