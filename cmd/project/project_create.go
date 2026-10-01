@@ -103,6 +103,16 @@ var projectCreateCmd = &cobra.Command{
 	RunE: func(cmd *cobra.Command, args []string) error {
 		opts := parseCreateFlags(cmd, args)
 
+		// Fail fast when Docker is explicitly requested but unavailable, before
+		// the network fetch and (interactive) wizard. The interactive Docker
+		// question additionally blocks the Docker choice with guidance, and
+		// validateAndPreflight keeps a final safety net.
+		if cmd.PersistentFlags().Changed("docker") && opts.useDocker {
+			if missing := dockerAvailabilityForCreate(cmd.Context()); missing != nil {
+				return dockerUnavailableError(missing)
+			}
+		}
+
 		if opts.phpVersionExplicit {
 			if err := shop.ValidatePHPVersion(opts.phpVersion); err != nil {
 				return err
