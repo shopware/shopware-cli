@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"slices"
+	"time"
 
 	"charm.land/huh/v2"
 	"charm.land/lipgloss/v2"
@@ -19,10 +20,18 @@ import (
 	"github.com/shopware/shopware-cli/internal/tui"
 )
 
+// dockerCheckTimeout bounds the `docker info` probe, so a wedged daemon (e.g.
+// Docker Desktop stuck while starting) reports "not running" instead of
+// hanging the wizard.
+const dockerCheckTimeout = 5 * time.Second
+
 // dockerAvailabilityForCreate reports the Docker dependency that blocks a
 // Docker-based project, or nil when Docker is usable. It is a variable so
 // tests can stub the docker daemon check.
 var dockerAvailabilityForCreate = func(ctx context.Context) *system.MissingDependency {
+	ctx, cancel := context.WithTimeout(ctx, dockerCheckTimeout)
+	defer cancel()
+
 	for _, m := range system.CheckProjectDependencies(ctx, true, nil, "") {
 		if m.Name == "Docker" {
 			missing := m
@@ -65,13 +74,12 @@ func dockerUnavailableError(missing *system.MissingDependency) error {
 }
 
 func runCreateForm(cmd *cobra.Command, opts *createOptions, releases []repository.Version, filteredVersions []*version.Version) error { //nolint:gocyclo
-	// A forced --docker flag skips the Docker question entirely, so fail
-	// before the wizard instead of after the user configured the project.
-	if cmd.PersistentFlags().Changed("docker") && opts.useDocker {
-		if missing := dockerAvailabilityForCreate(cmd.Context()); missing != nil {
-			return dockerUnavailableError(missing)
-		}
-	}
+	// The Docker question is only asked without --docker; a forced --docker
+	// request is already checked by the create command before the wizard.
+	dockerPrompted := !cmd.PersistentFlags().Changed("docker")
+	// Keep the --local-domain flag value, since opts.useLocalDomain is
+	// overwritten with the resolved choice on every pass.
+	flagLocalDomain := opts.useLocalDomain
 
 	type minorGroup struct {
 		label    string
@@ -134,9 +142,14 @@ func runCreateForm(cmd *cobra.Command, opts *createOptions, releases []repositor
 	// When Docker is unavailable, default to local PHP so the Docker choice is
 	// opt-in (and rejected with guidance) instead of the pre-selected path
 	// that fails at the end of the wizard.
-	if dockerAvailabilityForCreate(cmd.Context()) != nil {
-		selectDocker = tui.No
+	var dockerMissing *system.MissingDependency
+	if dockerPrompted {
+		dockerMissing = dockerAvailabilityForCreate(cmd.Context())
+		if dockerMissing != nil {
+			selectDocker = tui.No
+		}
 	}
+	firstPass := true
 
 	baseDomain := proxy.BaseDomain()
 	// Default to the stable hostname (recommended); only applies with Docker.
@@ -216,9 +229,12 @@ func runCreateForm(cmd *cobra.Command, opts *createOptions, releases []repositor
 	for {
 		var formGroups []*huh.Group
 
-		// Re-check Docker every pass so starting the daemon while the form is
-		// open unblocks the Docker option without restarting the CLI.
-		dockerMissing := dockerAvailabilityForCreate(cmd.Context())
+		// Re-check Docker on every later pass so starting the daemon while the
+		// form is open unblocks the Docker option without restarting the CLI.
+		if dockerPrompted && !firstPass {
+			dockerMissing = dockerAvailabilityForCreate(cmd.Context())
+		}
+		firstPass = false
 
 		if needsProjectFolder {
 			formGroups = append(formGroups, huh.NewGroup(
@@ -268,7 +284,7 @@ func runCreateForm(cmd *cobra.Command, opts *createOptions, releases []repositor
 			}))
 		}
 
-		if !cmd.PersistentFlags().Changed("docker") {
+		if dockerPrompted {
 			dockerDescription := "How do you want to run Shopware?"
 			dockerOptionLabel := "Run Shopware with Docker"
 			if dockerMissing != nil {
@@ -337,7 +353,7 @@ func runCreateForm(cmd *cobra.Command, opts *createOptions, releases []repositor
 				}
 				localOn := selectLocalDomain
 				if cmd.PersistentFlags().Changed("local-domain") {
-					localOn = opts.useLocalDomain
+					localOn = flagLocalDomain
 				}
 				return !dockerOn || !localOn
 			}))
@@ -477,14 +493,17 @@ func runCreateForm(cmd *cobra.Command, opts *createOptions, releases []repositor
 			opts.useDocker = selectDocker == tui.Yes
 		}
 		// Docker may have stopped while the wizard was open. Catch it here —
-		// before the summary and the long install — and restart the form with
-		// local PHP pre-selected, instead of failing at the very end.
+		// before the summary and the long install — instead of failing at the
+		// very end. An explicit --docker request is never downgraded: it fails.
+		// Otherwise the form restarts with local PHP pre-selected.
 		if opts.useDocker {
 			if missing := dockerAvailabilityForCreate(cmd.Context()); missing != nil {
+				if !dockerPrompted {
+					return dockerUnavailableError(missing)
+				}
 				_ = dockerUnavailableError(missing)
 				selectDocker = tui.No
 				opts.useDocker = false
-				opts.useLocalDomain, opts.setupProxyNow = false, false
 				continue
 			}
 		}
@@ -493,7 +512,7 @@ func runCreateForm(cmd *cobra.Command, opts *createOptions, releases []repositor
 		// when we actually prompted for it (not via the flag), so the flag never
 		// triggers an unprompted sudo.
 		localFlagChanged := cmd.PersistentFlags().Changed("local-domain")
-		wantLocalDomain := opts.useLocalDomain
+		wantLocalDomain := flagLocalDomain
 		if !localFlagChanged {
 			wantLocalDomain = selectLocalDomain
 		}
