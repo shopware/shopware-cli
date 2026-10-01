@@ -103,6 +103,16 @@ var projectCreateCmd = &cobra.Command{
 	RunE: func(cmd *cobra.Command, args []string) error {
 		opts := parseCreateFlags(cmd, args)
 
+		// Fail fast when Docker is explicitly requested but unavailable, before
+		// the network fetch and (interactive) wizard. The interactive Docker
+		// question additionally blocks the Docker choice with guidance, and
+		// validateAndPreflight keeps a final safety net.
+		if cmd.PersistentFlags().Changed("docker") && opts.useDocker {
+			if missing := dockerAvailabilityForCreate(cmd.Context()); missing != nil {
+				return dockerUnavailableError(missing)
+			}
+		}
+
 		if opts.phpVersionExplicit {
 			if err := shop.ValidatePHPVersion(opts.phpVersion); err != nil {
 				return err
@@ -238,7 +248,7 @@ func init() {
 	projectCreateCmd.PersistentFlags().Bool("git", false, "Initialize a Git repository for a Shopware project")
 	projectCreateCmd.PersistentFlags().Bool("local-domain", false, "Serve the Shopware project at a stable local hostname (<name>."+proxy.DefaultDomain+" by default) through the shared proxy instead of a port (requires Docker)")
 	projectCreateCmd.PersistentFlags().String("version", "", "Shopware version to install (e.g. 6.6.0.0, latest, dev-trunk)")
-	projectCreateCmd.PersistentFlags().String("deployment", "", "Deployment method to configure (none, container, deployer, platformsh, or shopware-paas)")
+	projectCreateCmd.PersistentFlags().String("deployment", "", "Deployment method to configure (none, container, deployer, platformsh, shopware-paas)")
 	_ = projectCreateCmd.RegisterFlagCompletionFunc("deployment", func(*cobra.Command, []string, string) ([]string, cobra.ShellCompDirective) {
 		return []string{
 			shop.DeploymentNone,
@@ -248,7 +258,7 @@ func init() {
 			shop.DeploymentShopwarePaaS,
 		}, cobra.ShellCompDirectiveNoFileComp
 	})
-	projectCreateCmd.PersistentFlags().String("ci", "", "CI/CD system to configure (none, github, or gitlab)")
+	projectCreateCmd.PersistentFlags().String("ci", "", "CI/CD system to configure (none, github, gitlab)")
 	projectCreateCmd.PersistentFlags().String("php-version", "", "PHP version for the project (e.g. 8.4); uses the local PHP version for local projects or the image tag for Docker projects")
 	_ = projectCreateCmd.RegisterFlagCompletionFunc("php-version", func(*cobra.Command, []string, string) ([]string, cobra.ShellCompDirective) {
 		return shop.SupportedPHPVersions, cobra.ShellCompDirectiveNoFileComp

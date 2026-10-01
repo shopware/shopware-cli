@@ -351,7 +351,7 @@ func prepareShopwareForAsset(shopwareRoot string, cfgs ExtensionAssetConfig, ass
 	if _, err := os.Stat(varFolder); os.IsNotExist(err) {
 		err := os.Mkdir(varFolder, 0o755)
 		if err != nil {
-			return fmt.Errorf("prepareShopwareForAsset: %w", err)
+			return fmt.Errorf("cannot create %s: %w", varFolder, err)
 		}
 	}
 
@@ -373,16 +373,16 @@ func prepareShopwareForAsset(shopwareRoot string, cfgs ExtensionAssetConfig, ass
 
 	pluginJson, err := json.Marshal(normalized)
 	if err != nil {
-		return fmt.Errorf("prepareShopwareForAsset: %w", err)
+		return fmt.Errorf("cannot encode plugins.json: %w", err)
 	}
 
 	if err = os.WriteFile(shopwareRoot+"/var/plugins.json", pluginJson, os.ModePerm); err != nil {
-		return fmt.Errorf("prepareShopwareForAsset: %w", err)
+		return fmt.Errorf("cannot write %s: %w", shopwareRoot+"/var/plugins.json", err)
 	}
 
 	err = os.WriteFile(shopwareRoot+"/var/features.json", []byte("{}"), 0o644)
 	if err != nil {
-		return fmt.Errorf("prepareShopwareForAsset: %w", err)
+		return fmt.Errorf("cannot write %s: %w", shopwareRoot+"/var/features.json", err)
 	}
 
 	return nil

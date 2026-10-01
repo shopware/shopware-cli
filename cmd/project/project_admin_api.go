@@ -17,6 +17,7 @@ var skipDefaultHeaders bool
 
 var projectAdminApiCmd = &cobra.Command{
 	Use:   "admin-api [method] [path]",
+	Args:  cobra.ArbitraryArgs,
 	Short: "Run authenticated curl requests against the Shopware Admin API",
 	RunE: func(cobraCmd *cobra.Command, args []string) error {
 		projectRoot, err := shop.FindClosestShopwareProject(true)

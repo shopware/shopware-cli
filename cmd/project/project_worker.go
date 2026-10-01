@@ -19,6 +19,7 @@ import (
 
 var projectWorkerCmd = &cobra.Command{
 	Use:   "worker [amount | queue-spec]",
+	Args:  cobra.MaximumNArgs(1),
 	Short: "Start and supervise Symfony Messenger consumers concurrently",
 	Long: `Run multiple Symfony Messenger consumers in the background.
 
@@ -104,7 +105,7 @@ queue. The count per queue is optional and defaults to 1.`,
 
 func init() {
 	projectRootCmd.AddCommand(projectWorkerCmd)
-	projectWorkerCmd.PersistentFlags().Bool("verbose", false, "Enable verbose worker output")
+	projectWorkerCmd.PersistentFlags().Bool("verbose", false, "Show every message the workers handle, plus debug logs")
 	projectWorkerCmd.PersistentFlags().String("queue", "", "Queues to consume (comma-separated)")
 	projectWorkerCmd.PersistentFlags().String("memory-limit", "512M", "Worker memory limit")
 	projectWorkerCmd.PersistentFlags().String("time-limit", "120", "Worker time limit in seconds")

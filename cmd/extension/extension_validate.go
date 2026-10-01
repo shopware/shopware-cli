@@ -21,6 +21,7 @@ import (
 var extensionValidateCmd = &cobra.Command{
 	Use:   "validate path",
 	Short: "Validate extension metadata, assets, and code quality",
+	Long:  "Validate an extension folder or ZIP file. With --store-compliance (or SHOPWARE_CLI_STORE_COMPLIANCE=1), the Store's rules apply and the extension's validation.ignore list is not used.",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		storeCompliance, _ := cmd.Flags().GetBool("store-compliance")
@@ -104,6 +105,7 @@ var extensionValidateCmd = &cobra.Command{
 			toolCfg.Extension.GetExtensionConfig().Validation.StoreCompliance = true
 			// The user is not allowed to provide a custom ignore list when store compliance is enabled
 			toolCfg.Extension.GetExtensionConfig().Validation.Ignore = extension.ConfigValidationList{}
+			toolCfg.ValidationIgnores = nil
 		}
 
 		toolCfg.CheckAgainst = checkAgainst

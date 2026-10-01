@@ -255,7 +255,7 @@ func downloadFileTo(ctx context.Context, client *http.Client, url string, target
 
 	defer func() {
 		if err := resp.Body.Close(); err != nil {
-			logging.FromContext(ctx).Errorf("downloadFileTo: %v", err)
+			logging.FromContext(ctx).Errorf("Cannot close the download response: %v", err)
 		}
 	}()
 
