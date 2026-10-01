@@ -11,7 +11,7 @@ How commands, flags, messages and exit codes are written in `shopware-cli`. Foll
 
 **Long**
 
-- Full sentences in the imperative, same voice as the Short. Say what the command needs that is not obvious, for example `Requires a Docker environment`.
+- Open in the imperative, same voice as the Short. Plain statements of fact are fine after that, for example `Requires a Docker environment`.
 - Examples go into the `Example` field, never into `Long`. Cobra prints them under its own heading.
 - No empty `Long: ""` fields.
 
@@ -47,7 +47,7 @@ How commands, flags, messages and exit codes are written in `shopware-cli`. Foll
 
 - Log lines are capitalised sentences with a colon before the value: `Installed %s`, `Cannot parse URL %s: %s`.
 - A failed step keeps the established shape: `Activation of %s failed with error: %v`.
-- Log a failure or return it, not both. The root command prints every returned error once.
+- Log a failure or return it, not both. The root command prints every returned error once, apart from the sentinel errors described under exit codes.
 - Never log a success line after a failed step. In a loop, `continue` after a failure.
 
 ## Exit codes and output
