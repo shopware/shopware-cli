@@ -9,6 +9,7 @@ import (
 var projectConfigSchemaCmd = &cobra.Command{
 	Use:   "config-schema",
 	Short: "Print the JSON schema for .config/shopware-project.yml",
+	Args:  cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, _ []string) error {
 		_, err := cmd.OutOrStdout().Write(shop.ConfigSchema())
 		return err

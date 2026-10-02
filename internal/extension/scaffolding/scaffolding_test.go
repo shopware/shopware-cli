@@ -97,16 +97,20 @@ func TestCreatePluginFiles(t *testing.T) {
 
 	require.NoError(t, CreatePluginFiles(extensionDir, "MyExtension", "MyVendor"))
 
-	assert.DirExists(t, filepath.Join(extensionDir, "src", "Resources", "config"))
 	assert.DirExists(t, filepath.Join(extensionDir, "tests"))
 
 	// all expected files for an installable extension are created
 	assert.FileExists(t, filepath.Join(extensionDir, "composer.json"))
-	assert.FileExists(t, filepath.Join(extensionDir, "src", "Resources", "config", "config.xml"))
 	assert.FileExists(t, filepath.Join(extensionDir, ".gitignore"))
 	assert.FileExists(t, filepath.Join(extensionDir, "phpunit.xml"))
 	assert.FileExists(t, filepath.Join(extensionDir, "src", technicalName+".php"))
 	assert.FileExists(t, filepath.Join(extensionDir, "tests", "TestBootstrap.php"))
+
+	pluginClass, err := os.ReadFile(filepath.Join(extensionDir, "src", technicalName+".php"))
+	require.NoError(t, err)
+	assert.Contains(t, string(pluginClass), "extends Plugin")
+	assert.NotContains(t, string(pluginClass), "function install(")
+	assert.NotContains(t, string(pluginClass), "function uninstall(")
 }
 
 func TestCreateThemeFiles(t *testing.T) {

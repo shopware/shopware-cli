@@ -31,6 +31,15 @@ func TestResolveFormat(t *testing.T) {
 		assert.Equal(t, formatJSON, format)
 	})
 
+	t.Run("uppercase json", func(t *testing.T) {
+		cmd := newCmd()
+		require.NoError(t, cmd.Flags().Set("format", "JSON"))
+
+		format, err := resolveFormat(cmd)
+		require.NoError(t, err)
+		assert.Equal(t, formatJSON, format)
+	})
+
 	t.Run("invalid", func(t *testing.T) {
 		cmd := newCmd()
 		require.NoError(t, cmd.Flags().Set("format", "xml"))

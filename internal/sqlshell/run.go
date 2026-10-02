@@ -39,9 +39,9 @@ const (
 
 // ParseFormat validates a format name given on the command line.
 func ParseFormat(name string) (Format, error) {
-	switch Format(name) {
+	switch format := Format(strings.ToLower(name)); format {
 	case FormatTable, FormatTSV, FormatJSON:
-		return Format(name), nil
+		return format, nil
 	}
 
 	return "", fmt.Errorf("unknown format %q, allowed values: table, tsv, json", name)

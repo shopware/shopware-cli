@@ -17,6 +17,7 @@ var projectProxyStatusCmd = &cobra.Command{
 	Use:          "status",
 	Short:        "Show current project proxy status",
 	SilenceUsage: true,
+	Args:         cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		projectRoot, err := shop.FindClosestShopwareProject(false)
 		if err != nil {
@@ -28,8 +29,10 @@ var projectProxyStatusCmd = &cobra.Command{
 }
 
 var projectProxyListCmd = &cobra.Command{
-	Use:   "list",
-	Short: "List projects registered with the shared proxy",
+	Use:     "list",
+	Aliases: []string{"ls"},
+	Short:   "List projects registered with the shared proxy",
+	Args:    cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		return proxyList(cmd)
 	},
