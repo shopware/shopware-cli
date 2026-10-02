@@ -17,7 +17,9 @@ shopware-cli/
     │   └── SKILL.md
     ├── shopware-cli-docker/
     │   └── SKILL.md
-    └── shopware-cli-extension-store/
+    ├── shopware-cli-extension-store/
+    │   └── SKILL.md
+    └── shopware-cli-extension-anonymize/
         └── SKILL.md
 ```
 
@@ -78,6 +80,19 @@ It teaches agents to:
   inspects;
 - never modify files.
 
+### `shopware-cli-extension-anonymize`
+
+Bootstrap the `anonymize` section of an extension's `.config/shopware-extension.yml`.
+
+It teaches agents to:
+
+- edit only the config file the CLI actually loads;
+- take `system_config` keys from `config.xml` and SystemConfig calls;
+- take table and column names from entity storage names and migrations;
+- choose faker expressions for personal data and `''` or `NULL` for secrets;
+- omit a `system_config` row, or replace it with a custom value or a faker value;
+- leave Shopware core anonymization and unrelated extension validation alone.
+
 ## Source of truth
 
 The files under `skills/` are the canonical source.
@@ -95,7 +110,7 @@ For user-facing Shopware CLI changes:
 
 1. Implement the CLI change.
 2. Check whether `skills/shopware-cli/SKILL.md` is affected.
-3. Check whether `skills/shopware-cli-docker/SKILL.md` or `skills/shopware-cli-extension-store/SKILL.md` is affected.
+3. Check whether `skills/shopware-cli-docker/SKILL.md`, `skills/shopware-cli-extension-store/SKILL.md`, or `skills/shopware-cli-extension-anonymize/SKILL.md` is affected.
 4. Update the skill in the same PR when required.
 5. Validate the skills.
 6. Verify that the skills can still be discovered by the skills CLI.
@@ -114,6 +129,7 @@ Validate each skill against the Agent Skills format:
 skills-ref validate ./skills/shopware-cli
 skills-ref validate ./skills/shopware-cli-docker
 skills-ref validate ./skills/shopware-cli-extension-store
+skills-ref validate ./skills/shopware-cli-extension-anonymize
 ```
 
 Verify repository discovery:
@@ -170,7 +186,7 @@ npx skills check
 Update the Shopware skills with:
 
 ```bash
-npx skills update shopware-cli shopware-cli-docker shopware-cli-extension-store
+npx skills update shopware-cli shopware-cli-docker shopware-cli-extension-store shopware-cli-extension-anonymize
 ```
 
 or update all installed project skills with:

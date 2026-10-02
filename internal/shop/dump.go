@@ -23,8 +23,16 @@ type DumpDatabaseOptions struct {
 	Compression mysqldump.Compression
 	// Clean excludes volatile tables (cart, messenger_messages, ...) from the data dump
 	Clean bool
-	// Anonymize rewrites customer related columns with faker data
+	// Anonymize rewrites customer related columns with faker data and merges
+	// extension-declared tables and system config keys
 	Anonymize bool
+	// ExtensionTables are column rewrites declared by installed extensions.
+	// Applied only when Anonymize is true. Project dump.rewrite values win.
+	ExtensionTables map[string]map[string]string
+	// SystemConfigRules anonymize system_config rows declared by installed extensions.
+	// Applied only when Anonymize is true. A project rewrite of configuration_value wins
+	// over replacement values. Omitted keys are still excluded.
+	SystemConfigRules []SystemConfigRule
 	// SkipLockTables disables locking the tables during the dump
 	SkipLockTables bool
 	// Quick enables the mysqldump quick mode
@@ -50,23 +58,10 @@ func DumpDatabase(ctx context.Context, sqlCfg *mysql.Config, cfg *ConfigDump, op
 }
 
 func dumpDatabase(ctx context.Context, db *sql.DB, cfg *ConfigDump, opts DumpDatabaseOptions) error {
-	if cfg == nil {
-		cfg = &ConfigDump{}
-	}
-
-	if opts.Clean {
-		cfg.EnableClean()
-	}
-
-	if opts.Anonymize {
-		cfg.EnableAnonymization()
-	}
-
-	if err := applyLimitOverrides(cfg, opts.LimitOverrides); err != nil {
+	cfg, err := prepareDumpConfig(cfg, opts)
+	if err != nil {
 		return err
 	}
-
-	cfg.NormalizeFakerExpressions()
 
 	dumper := mysqldump.NewMySQLDumper(db)
 	dumper.LockTables = !opts.SkipLockTables
@@ -103,6 +98,42 @@ func dumpDatabase(ctx context.Context, db *sql.DB, cfg *ConfigDump, opts DumpDat
 	logging.FromContext(ctx).Infof("Successfully created the dump %s", output)
 
 	return nil
+}
+
+// prepareDumpConfig applies clean, anonymize, and limit options to cfg.
+// Extension tables are merged before the built-in customer anonymization, and
+// project dump.rewrite values are left in place. Extension system config keys
+// own system_config.configuration_value unless the project already rewrote it.
+func prepareDumpConfig(cfg *ConfigDump, opts DumpDatabaseOptions) (*ConfigDump, error) {
+	if cfg == nil {
+		cfg = &ConfigDump{}
+	}
+
+	if opts.Clean {
+		cfg.EnableClean()
+	}
+
+	if opts.Anonymize {
+		projectOwnsSystemConfigValue := cfg.hasColumnRewrite("system_config", "configuration_value")
+		cfg.MergeRewrite(opts.ExtensionTables)
+		rewrite, where, err := BuildSystemConfigAnonymization(opts.SystemConfigRules)
+		if err != nil {
+			return nil, err
+		}
+		if !projectOwnsSystemConfigValue && rewrite != "" {
+			cfg.forceRewrite("system_config", "configuration_value", rewrite)
+		}
+		cfg.mergeWhere("system_config", where)
+		cfg.EnableAnonymization()
+	}
+
+	if err := applyLimitOverrides(cfg, opts.LimitOverrides); err != nil {
+		return nil, err
+	}
+
+	cfg.NormalizeFakerExpressions()
+
+	return cfg, nil
 }
 
 // applyLimitOverrides merges "table=rows" entries into the dump config,

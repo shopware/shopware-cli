@@ -50,10 +50,38 @@
         "validation": {
           "$ref": "#/$defs/ConfigValidation",
           "description": "Validation is the validation configuration of the extension."
+        },
+        "anonymize": {
+          "$ref": "#/$defs/ConfigAnonymize",
+          "description": "Anonymize declares tables and system config values rewritten by `project dump --anonymize`.\nRules from every extension found in the project are merged into that dump. Project dump.rewrite values take precedence."
         }
       },
       "additionalProperties": false,
       "type": "object"
+    },
+    "ConfigAnonymize": {
+      "properties": {
+        "tables": {
+          "additionalProperties": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object"
+          },
+          "type": "object",
+          "description": "Tables maps a database table to column rewrites. Each column value is a SQL expression, the same format as the project dump.rewrite map. Faker expressions such as faker.Internet.Email() are supported. Write \"''\" to store an empty string and \"NULL\" to store NULL."
+        },
+        "system_config": {
+          "items": {
+            "$ref": "#/$defs/ConfigSystemConfigRule"
+          },
+          "type": "array",
+          "description": "SystemConfig anonymizes system_config rows by configuration_key. A string omits that row. An object can omit the row or replace configuration_value with a custom value or a faker expression."
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "description": "ConfigAnonymize is the extension contribution to `project dump --anonymize`."
     },
     "ConfigBuild": {
       "properties": {
@@ -495,6 +523,30 @@
       },
       "additionalProperties": false,
       "type": "object"
+    },
+    "ConfigSystemConfigRule": {
+      "oneOf": [
+        {
+          "type": "string",
+          "description": "configuration_key to omit from the dump."
+        },
+        {
+          "properties": {
+            "key": {
+              "type": "string",
+              "description": "system_config.configuration_key, such as SwagPayPal.settings.clientSecret."
+            },
+            "omit": {
+              "type": "boolean",
+              "description": "When true, the dump skips rows with this configuration_key."
+            },
+            "value": {
+              "description": "Replacement stored as {\"_value\": value}. A string starting with faker. is generated per row, for example faker.Internet.Email()."
+            }
+          },
+          "type": "object"
+        }
+      ]
     },
     "ConfigTranslated[ConfigStoreFaq]": {
       "properties": {
