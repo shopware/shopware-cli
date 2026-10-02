@@ -61,7 +61,7 @@ func init() {
 	accountCompanyProducerExtensionListCmd.Flags().StringVar(&listExtensionSearch, "search", "", "Filter by name")
 	accountCompanyProducerExtensionListCmd.Flags().BoolVar(&listExtensionPlugin, "plugin", false, "Show only plugins")
 	accountCompanyProducerExtensionListCmd.Flags().BoolVar(&listExtensionApp, "app", false, "Show only apps")
-	accountCompanyProducerExtensionListCmd.Flags().StringVar(&listExtensionFormat, "format", string(tui.TableFormatTable), "Output format (table or json)")
+	accountCompanyProducerExtensionListCmd.Flags().StringVar(&listExtensionFormat, "format", string(tui.TableFormatTable), "Output format (table, json)")
 	accountCompanyProducerExtensionListCmd.Flags().BoolVar(&listExtensionJSON, "json", false, "Output as JSON")
 	accountCompanyProducerExtensionListCmd.MarkFlagsMutuallyExclusive("plugin", "app")
 	accountCompanyProducerExtensionListCmd.MarkFlagsMutuallyExclusive("format", "json")

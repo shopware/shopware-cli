@@ -19,7 +19,7 @@ import (
 )
 
 func PrepareFolderForZipping(ctx context.Context, path string, ext Extension, extCfg *Config) error {
-	errorFormat := "PrepareFolderForZipping: %v"
+	errorFormat := "cannot prepare the extension folder for packaging: %w"
 	composerJSONPath := filepath.Join(path, "composer.json")
 	composerLockPath := filepath.Join(path, "composer.lock")
 

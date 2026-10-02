@@ -953,7 +953,7 @@ func applyLocalOverride(ctx context.Context, fileName string, hasBase bool, conf
 	localFile := LocalConfigFileName(fileName)
 	if _, err := os.Stat(localFile); err != nil {
 		if !os.IsNotExist(err) {
-			logging.FromContext(ctx).Warnf("unable to access local config override %s: %v", localFile, err)
+			logging.FromContext(ctx).Warnf("Cannot access local config override %s: %v", localFile, err)
 		}
 		return false, nil
 	}

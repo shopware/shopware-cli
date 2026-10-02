@@ -78,7 +78,7 @@ func generatePrivatePublicKey(keyLength int) ([]byte, []byte, error) {
 	rsaPrivKey := encodePrivateKeyToPEM(rsaKey)
 	rsaPubKey, err := generatePublicKey(rsaKey)
 	if err != nil {
-		return nil, nil, fmt.Errorf("unable to generate public key: %v", err)
+		return nil, nil, fmt.Errorf("cannot generate public key: %w", err)
 	}
 
 	return rsaPubKey, rsaPrivKey, nil

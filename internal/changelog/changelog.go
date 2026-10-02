@@ -113,7 +113,7 @@ func renderChangelog(commits []git.GitCommit, cfg Config) (string, error) {
 
 	var buf bytes.Buffer
 	if err := templateParsed.Execute(&buf, templateContext); err != nil {
-		return "", fmt.Errorf("failed to execute template: %v", err)
+		return "", fmt.Errorf("cannot execute changelog template: %w", err)
 	}
 
 	return strings.Trim(buf.String(), "\n"), nil
