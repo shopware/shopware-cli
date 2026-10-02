@@ -55,8 +55,6 @@ func TestNewApiFailsWithIncompleteClientCredentials(t *testing.T) {
 	t.Setenv("SHOPWARE_CLI_CACHE_DIR", t.TempDir())
 	t.Setenv("SHOPWARE_CLI_ACCOUNT_CLIENT_ID", "test-client-id")
 	t.Setenv("SHOPWARE_CLI_ACCOUNT_CLIENT_SECRET", "")
-	t.Setenv("SHOPWARE_CLI_ACCOUNT_EMAIL", "")
-	t.Setenv("SHOPWARE_CLI_ACCOUNT_PASSWORD", "")
 
 	_, err := NewApi(t.Context())
 	assert.ErrorContains(t, err, "both SHOPWARE_CLI_ACCOUNT_CLIENT_ID and SHOPWARE_CLI_ACCOUNT_CLIENT_SECRET must be set")
@@ -67,8 +65,6 @@ func TestNewApiUsesValidTokenCache(t *testing.T) {
 	t.Setenv("SHOPWARE_CLI_ACCOUNT_STAGING", "")
 	t.Setenv("SHOPWARE_CLI_ACCOUNT_CLIENT_ID", "")
 	t.Setenv("SHOPWARE_CLI_ACCOUNT_CLIENT_SECRET", "")
-	t.Setenv("SHOPWARE_CLI_ACCOUNT_EMAIL", "")
-	t.Setenv("SHOPWARE_CLI_ACCOUNT_PASSWORD", "")
 
 	cached := &Client{Token: &oauth2.Token{AccessToken: "from-cache", Expiry: time.Now().Add(time.Hour)}}
 	require.NoError(t, saveApiTokenToTokenCache(cached))
@@ -84,8 +80,6 @@ func TestNewApiFailsWithoutLoginWhenInteractionDisabled(t *testing.T) {
 	t.Setenv("SHOPWARE_CLI_ACCOUNT_STAGING", "")
 	t.Setenv("SHOPWARE_CLI_ACCOUNT_CLIENT_ID", "")
 	t.Setenv("SHOPWARE_CLI_ACCOUNT_CLIENT_SECRET", "")
-	t.Setenv("SHOPWARE_CLI_ACCOUNT_EMAIL", "")
-	t.Setenv("SHOPWARE_CLI_ACCOUNT_PASSWORD", "")
 
 	_, err := NewApi(system.WithInteraction(t.Context(), false))
 
