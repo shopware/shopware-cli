@@ -2,6 +2,8 @@ package extension
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"regexp"
 	"slices"
 	"strings"
@@ -12,6 +14,9 @@ import (
 
 // anonymizeIdentifierPattern matches Shopware table and column names.
 var anonymizeIdentifierPattern = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
+
+// jsonRemovePattern matches JSON_REMOVE(column, paths) and captures the column and the paths.
+var jsonRemovePattern = regexp.MustCompile("(?is)^\\s*JSON_REMOVE\\s*\\(\\s*(`?([A-Za-z_][A-Za-z0-9_]*)`?)\\s*,(.+)\\)\\s*$")
 
 // AnonymizationRules are the column rewrites and system config keys declared
 // by extensions installed in a project.
@@ -33,11 +38,23 @@ type systemConfigOwner struct {
 }
 
 // CollectAnonymization reads the anonymize section of every extension in the
-// Shopware project and merges them. Extensions are visited in name order.
-// When two extensions rewrite the same column with different expressions, the
-// first extension is kept and a warning is logged.
-func CollectAnonymization(ctx context.Context, project string) AnonymizationRules {
-	extensions := FindExtensionsFromProject(ctx, project, false)
+// Shopware project and merges them in name order. JSON_REMOVE rules on the same
+// column are combined; for other conflicts the first extension wins with a warning.
+// An unreadable extension config is an error, so no rules are skipped silently.
+func CollectAnonymization(ctx context.Context, project string) (AnonymizationRules, error) {
+	var configErrors []error
+	seenPaths := map[string]bool{}
+	extensions := findExtensionsFromProject(ctx, project, false, func(err error) {
+		var configErr *ConfigError
+		if errors.As(err, &configErr) && !seenPaths[configErr.Path] {
+			seenPaths[configErr.Path] = true
+			configErrors = append(configErrors, err)
+		}
+	})
+	if len(configErrors) > 0 {
+		return AnonymizationRules{}, fmt.Errorf("cannot collect anonymize rules from extensions: %w", errors.Join(configErrors...))
+	}
+
 	slices.SortFunc(extensions, func(a, b Extension) int {
 		return strings.Compare(extensionSortName(a), extensionSortName(b))
 	})
@@ -61,15 +78,21 @@ func CollectAnonymization(ctx context.Context, project string) AnonymizationRule
 				column = strings.ToLower(column)
 				key := table + "." + column
 				if owner, exists := owners[key]; exists {
-					if owner.expression != expression {
-						logging.FromContext(ctx).Warnf(
-							"Extension %s rewrites %s.%s, keeping the anonymization rule from %s",
-							name,
-							table,
-							column,
-							owner.extension,
-						)
+					if owner.expression == expression {
+						continue
 					}
+					if merged, ok := mergeJSONRemove(column, owner.expression, expression); ok {
+						owners[key] = columnOwner{extension: owner.extension, expression: merged}
+						rules.Tables[table][column] = merged
+						continue
+					}
+					logging.FromContext(ctx).Warnf(
+						"Extension %s rewrites %s.%s, keeping the anonymization rule from %s",
+						name,
+						table,
+						column,
+						owner.extension,
+					)
 					continue
 				}
 
@@ -115,7 +138,18 @@ func CollectAnonymization(ctx context.Context, project string) AnonymizationRule
 		)
 	}
 
-	return rules
+	return rules, nil
+}
+
+// mergeJSONRemove combines two JSON_REMOVE rules on the same column into one, so both remove their keys.
+func mergeJSONRemove(column, existing, incoming string) (string, bool) {
+	current := jsonRemovePattern.FindStringSubmatch(existing)
+	next := jsonRemovePattern.FindStringSubmatch(incoming)
+	if current == nil || next == nil || !strings.EqualFold(current[2], column) || !strings.EqualFold(next[2], column) {
+		return "", false
+	}
+
+	return "JSON_REMOVE(" + current[1] + ", " + strings.TrimSpace(current[3]) + ", " + strings.TrimSpace(next[3]) + ")", true
 }
 
 func extensionSortName(ext Extension) string {

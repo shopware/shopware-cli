@@ -1,6 +1,7 @@
 package extension
 
 import (
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -213,7 +214,8 @@ anonymize:
 	core, logs := observer.New(zap.InfoLevel)
 	ctx := logging.WithLogger(t.Context(), zap.New(core).Sugar())
 
-	rules := CollectAnonymization(ctx, project)
+	rules, err := CollectAnonymization(ctx, project)
+	require.NoError(t, err)
 
 	assert.Equal(t, map[string]map[string]string{
 		"swag_shared": {
@@ -256,6 +258,75 @@ anonymize:
 	}
 	assert.Contains(t, merged, "4 tables")
 	assert.Contains(t, merged, "3 system config keys")
+}
+
+func TestCollectAnonymizationFailsOnUnreadableConfig(t *testing.T) {
+	project := t.TempDir()
+	writePlugin(t, project, "AaaPlugin", "Swag\\Aaa\\AaaPlugin", `
+compatibility_date: "2026-01-01"
+anonymize:
+  tables:
+    aaa_token:
+      access_token: "''"
+`)
+	writePlugin(t, project, "BrokenPlugin", "Swag\\Broken\\BrokenPlugin", `
+compatibility_date: "2026-01-01"
+anonymize:
+  system_config:
+    - key: Broken.config.secret
+      omitt: true
+`)
+
+	_, err := CollectAnonymization(t.Context(), project)
+
+	var configErr *ConfigError
+	require.ErrorAs(t, err, &configErr)
+	assert.True(t, strings.HasSuffix(configErr.Path, filepath.Join("BrokenPlugin", ".config", "shopware-extension.yml")))
+}
+
+func TestCollectAnonymizationCombinesJSONRemove(t *testing.T) {
+	project := t.TempDir()
+	writePlugin(t, project, "AaaPlugin", "Swag\\Aaa\\AaaPlugin", `
+compatibility_date: "2026-01-01"
+anonymize:
+  tables:
+    customer:
+      custom_fields: "JSON_REMOVE(custom_fields, '$.aaa_vat', '$.aaa_phone')"
+`)
+	writePlugin(t, project, "ZzzPlugin", "Swag\\Zzz\\ZzzPlugin", `
+compatibility_date: "2026-01-01"
+anonymize:
+  tables:
+    customer:
+      custom_fields: "json_remove(custom_fields, '$.zzz_token')"
+`)
+	require.NoError(t, os.MkdirAll(filepath.Join(project, "custom", "plugins", "not-an-extension"), 0o755))
+
+	rules, err := CollectAnonymization(t.Context(), project)
+	require.NoError(t, err)
+
+	assert.Equal(t, "JSON_REMOVE(custom_fields, '$.aaa_vat', '$.aaa_phone', '$.zzz_token')", rules.Tables["customer"]["custom_fields"])
+}
+
+func TestReadExtensionConfigRejectsUnknownAnonymizeField(t *testing.T) {
+	dir := t.TempDir()
+	testhelper.WriteFile(t, filepath.Join(dir, ".shopware-extension.yml"), `
+compatibility_date: "2026-01-01"
+anonymize:
+  system-config:
+    - SwagExample.config.clientSecret
+`)
+
+	_, err := readExtensionConfig(t.Context(), dir)
+	var configErr *ConfigError
+	assert.ErrorAs(t, err, &configErr)
+
+	testhelper.WriteFile(t, filepath.Join(dir, ".shopware-extension.yml"), `
+compatibility_date: "2026-01-01"
+anonymize:
+`)
+	_, err = readExtensionConfig(t.Context(), dir)
+	assert.NoError(t, err)
 }
 
 func writePlugin(t *testing.T, project, folder, class, config string) {

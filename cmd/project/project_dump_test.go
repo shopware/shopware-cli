@@ -86,7 +86,8 @@ func TestAssembleConnectionURIUsernameClearsPassword(t *testing.T) {
 func TestAnonymizationFromInstalledExtensions(t *testing.T) {
 	chdirOutsideProject(t)
 
-	tables, rules := anonymizationFromInstalledExtensions(t.Context())
+	tables, rules, err := anonymizationFromInstalledExtensions(t.Context())
+	require.NoError(t, err)
 	assert.Nil(t, tables)
 	assert.Nil(t, rules)
 
@@ -111,7 +112,8 @@ anonymize:
 	t.Setenv("PROJECT_ROOT", "")
 	t.Chdir(projectRoot)
 
-	tables, rules = anonymizationFromInstalledExtensions(t.Context())
+	tables, rules, err = anonymizationFromInstalledExtensions(t.Context())
+	require.NoError(t, err)
 	assert.Equal(t, map[string]map[string]string{
 		"swag_example_token": {"access_token": "''"},
 	}, tables)

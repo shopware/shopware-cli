@@ -544,7 +544,11 @@
               "description": "Replacement stored as {\"_value\": value}. A string starting with faker. is generated per row, for example faker.Internet.Email()."
             }
           },
-          "type": "object"
+          "additionalProperties": false,
+          "type": "object",
+          "required": [
+            "key"
+          ]
         }
       ]
     },
