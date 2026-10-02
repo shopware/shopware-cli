@@ -55,7 +55,10 @@ var projectDatabaseDumpCmd = &cobra.Command{
 		var extensionTables map[string]map[string]string
 		var systemConfigRules []shop.SystemConfigRule
 		if anonymize {
-			extensionTables, systemConfigRules = anonymizationFromInstalledExtensions(cmd.Context())
+			extensionTables, systemConfigRules, err = anonymizationFromInstalledExtensions(cmd.Context())
+			if err != nil {
+				return err
+			}
 		}
 
 		return shop.DumpDatabase(cmd.Context(), mysqlConfig, projectCfg.ConfigDump, shop.DumpDatabaseOptions{
@@ -136,14 +139,17 @@ func assembleConnectionURI(cmd *cobra.Command) (*mysql.Config, error) {
 
 // anonymizationFromInstalledExtensions collects anonymize rules from extensions
 // in the current Shopware project. Outside a project it returns empty rules.
-func anonymizationFromInstalledExtensions(ctx context.Context) (map[string]map[string]string, []shop.SystemConfigRule) {
+func anonymizationFromInstalledExtensions(ctx context.Context) (map[string]map[string]string, []shop.SystemConfigRule, error) {
 	// Dump stays usable outside a Shopware project. There are no extensions to read.
 	if projectRoot, err := shop.FindClosestShopwareProject(false); err == nil {
-		rules := extension.CollectAnonymization(ctx, projectRoot)
-		return rules.Tables, rules.SystemConfig
+		rules, err := extension.CollectAnonymization(ctx, projectRoot)
+		if err != nil {
+			return nil, nil, err
+		}
+		return rules.Tables, rules.SystemConfig, nil
 	}
 
-	return nil, nil
+	return nil, nil, nil
 }
 
 // resolveDumpDatabaseConnection resolves credentials like the other database

@@ -259,6 +259,34 @@ type ConfigAnonymize struct {
 	SystemConfig []ConfigSystemConfigRule `yaml:"system_config,omitempty"`
 }
 
+// UnmarshalYAML rejects unknown keys, so a typo cannot silently drop rules.
+func (c *ConfigAnonymize) UnmarshalYAML(value *yaml.Node) error {
+	if value.Kind == yaml.MappingNode {
+		for i := 0; i+1 < len(value.Content); i += 2 {
+			if field := value.Content[i].Value; field != "tables" && field != "system_config" {
+				return fmt.Errorf("unknown anonymize field %q", field)
+			}
+		}
+	}
+
+	type plain ConfigAnonymize
+	return value.Decode((*plain)(c))
+}
+
+// ConfigError reports an extension config file that cannot be loaded.
+type ConfigError struct {
+	Path string
+	Err  error
+}
+
+func (e *ConfigError) Error() string {
+	return "file: " + e.Path + ": " + e.Err.Error()
+}
+
+func (e *ConfigError) Unwrap() error {
+	return e.Err
+}
+
 func (c *Config) HasCompatibilityDate() bool {
 	return c.CompatibilityDate != ""
 }
@@ -286,16 +314,14 @@ func readExtensionConfig(ctx context.Context, dir string) (*Config, error) {
 		return config, nil
 	}
 
-	errorFormat := "file: " + config.storageLocation + ": %v"
-
 	fileHandle, err := os.ReadFile(config.storageLocation)
 	if err != nil {
-		return nil, fmt.Errorf(errorFormat, err)
+		return nil, &ConfigError{Path: config.storageLocation, Err: err}
 	}
 
 	err = yaml.Unmarshal(fileHandle, &config)
 	if err != nil {
-		return nil, fmt.Errorf(errorFormat, err)
+		return nil, &ConfigError{Path: config.storageLocation, Err: err}
 	}
 
 	if config.CompatibilityDate == "" {
@@ -305,7 +331,7 @@ func readExtensionConfig(ctx context.Context, dir string) (*Config, error) {
 
 	err = validateExtensionConfig(config)
 	if err != nil {
-		return nil, fmt.Errorf(errorFormat, err)
+		return nil, &ConfigError{Path: config.storageLocation, Err: err}
 	}
 
 	return config, nil

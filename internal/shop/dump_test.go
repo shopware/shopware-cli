@@ -49,7 +49,8 @@ func TestPrepareDumpConfigMergesExtensionAnonymization(t *testing.T) {
 				"Email":        "faker.Internet.Email()",
 			},
 			"customer": {
-				"email": "''",
+				"email":         "''",
+				"custom_fields": "NULL",
 			},
 		},
 		SystemConfigRules: []SystemConfigRule{
@@ -61,7 +62,8 @@ func TestPrepareDumpConfigMergesExtensionAnonymization(t *testing.T) {
 
 	assert.Equal(t, "PROJECT", prepared.Rewrite["swag_example_token"]["access_token"])
 	assert.Equal(t, "{{- faker.Internet.Email() -}}", prepared.Rewrite["swag_example_token"]["email"])
-	assert.Equal(t, "''", prepared.Rewrite["customer"]["email"])
+	assert.Equal(t, "{{- faker.Internet.Email() -}}", prepared.Rewrite["customer"]["email"])
+	assert.Equal(t, "NULL", prepared.Rewrite["customer"]["custom_fields"])
 	assert.Equal(t, "{{- faker.Person.FirstName() -}}", prepared.Rewrite["customer"]["first_name"])
 	assert.Contains(t, prepared.Rewrite["system_config"]["configuration_value"], "SwagExample.config.merchantEmail")
 	assert.Contains(t, prepared.Rewrite["system_config"]["configuration_value"], "{{- faker.Internet.Email() -}}")

@@ -103,9 +103,11 @@ environments:
 
 Omit `-e` / `--env` to target `environments.local`. Use `-e staging` (or another name) to target a different environment.
 
+`shopware-cli project create` and `shopware-cli project config init` write `environments.local`. Top-level `url` and `admin_api` are deprecated: they are used only when `environments.local` is absent. When both are present, `environments.local` wins.
+
 ### Anonymized dumps and extensions
 
-`shopware-cli project dump --anonymize` rewrites personal data in Shopware core tables. An extension can add its own tables and system config secrets in `.config/shopware-extension.yml`. A project dump with `--anonymize` merges those rules from every installed extension. A column already set under `dump.rewrite` in the project config is left unchanged.
+`shopware-cli project dump --anonymize` rewrites personal data in Shopware core tables. An extension can add its own tables and system config secrets in `.config/shopware-extension.yml`. A project dump with `--anonymize` merges those rules from every installed extension. A column already set under `dump.rewrite` in the project config, or by the built-in rules, is left unchanged. If an extension config cannot be read, the dump stops with an error instead of skipping that extension.
 
 ```yaml
 anonymize:
@@ -121,9 +123,7 @@ anonymize:
       value: sandbox
 ```
 
-`tables` uses the same column expressions as the project `dump.rewrite` map. Write `"''"` to store an empty string and `"NULL"` to store NULL. `system_config` matches `system_config.configuration_key`. A plain key omits that row from the dump. `value` replaces `configuration_value` with `{"_value": value}`. A value that starts with `faker.` is generated per row.
-
-`shopware-cli project create` and `shopware-cli project config init` write `environments.local`. Top-level `url` and `admin_api` are deprecated: they are used only when `environments.local` is absent. When both are present, `environments.local` wins.
+`tables` uses the same column expressions as the project `dump.rewrite` map. Write `"''"` to store an empty string and `"NULL"` to store NULL. `system_config` matches `system_config.configuration_key`. A plain key omits that row from the dump. `value` replaces `configuration_value` with `{"_value": value}`. A value that starts with `faker.` is generated per row. When several extensions remove keys from the same column with `JSON_REMOVE`, their rules are combined.
 
 ### Disable update notifications
 
