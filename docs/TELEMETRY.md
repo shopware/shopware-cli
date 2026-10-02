@@ -133,17 +133,6 @@ starting configurations are popular.
 | `with_amqp`          | Whether AMQP was enabled                 | `false`         |
 | `interactive`        | Whether the wizard ran interactively     | `true`          |
 
-### `shopware_cli.project.upgrade_check` — upgrade compatibility check
-
-Sent when a user runs an upgrade check. Helps us understand upgrade paths and
-how often blockers are encountered.
-
-| Tag              | Meaning                                          | Example  |
-|------------------|--------------------------------------------------|----------|
-| `from_version`   | The current Shopware version                     | `6.5.8`  |
-| `target_version` | The version the user wants to upgrade to         | `6.6.0`  |
-| `has_blockers`   | Whether any blocking incompatibilities were found| `true`   |
-
 ### `shopware_cli.project.upgrade` — interactive upgrade wizard run
 
 Sent when the upgrade wizard (`shopware-cli project upgrade`) finishes
