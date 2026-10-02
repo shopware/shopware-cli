@@ -47,7 +47,6 @@ const (
 	// EventProjectUpgrade
 	TagFromVersion   = "from_version"
 	TagTargetVersion = "target_version"
-	TagHasBlockers   = "has_blockers"
 
 	// EventDevInstall
 	TagAbandonedAt       = "abandoned_at"
