@@ -18,6 +18,7 @@ import (
 var projectAutofixFlexCmd = &cobra.Command{
 	Use:   "flex",
 	Short: "Migrate a Shopware project to Symfony Flex",
+	Args:  cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		project, err := shop.FindClosestShopwareProject(false)
 		if err != nil {

@@ -19,7 +19,7 @@ const reporterFormats = "summary, json, github, gitlab, junit, markdown"
 // ValidateReporter checks whether name identifies a supported validation
 // report format.
 func ValidateReporter(name string) error {
-	switch name {
+	switch strings.ToLower(name) {
 	case "summary", "json", "github", "gitlab", "junit", "markdown":
 		return nil
 	default:
@@ -48,6 +48,8 @@ type ToolInvocationStatus struct {
 
 // DoCheckReport reports findings and, when supplied, tool invocation statuses.
 func DoCheckReport(result Check, reportingFormat string, hadExecutionError bool, tools ...ToolInvocationStatus) error {
+	reportingFormat = strings.ToLower(reportingFormat)
+
 	if err := ValidateReporter(reportingFormat); err != nil {
 		return err
 	}

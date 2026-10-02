@@ -15,6 +15,7 @@ var projectUpgradeCmd = &cobra.Command{
 	Long: "Upgrade a local Shopware project step by step: readiness checks, version selection, extension compatibility, and the guided execution.\n" +
 		"In a terminal this runs as an interactive wizard. With --no-interaction (or without a terminal, e.g. CI) the upgrade runs headless:\n" +
 		"--target is required there, --dry-run stops after the read-only preflight, and --no-audit continues when dependencies are blocked by security advisories.",
+	Args: cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		projectRoot, err := shop.FindClosestShopwareProject(false)
 		if err != nil {

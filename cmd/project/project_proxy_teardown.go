@@ -21,6 +21,7 @@ var projectProxyTeardownCmd = &cobra.Command{
 	Long: `Run "project proxy down" for every registered project (stopping it and
 restoring its previous URL), then stops the shared Traefik container and the
 shared DNS container. The one-time OS setup (DNS resolver, trusted CA) is kept.`,
+	Args: cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		ctx := cmd.Context()
 

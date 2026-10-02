@@ -18,6 +18,10 @@ func TestParseFormat(t *testing.T) {
 
 	_, err := ParseFormat("xml")
 	assert.Error(t, err)
+
+	format, err := ParseFormat("JSON")
+	require.NoError(t, err)
+	assert.Equal(t, FormatJSON, format)
 }
 
 func TestFirstKeyword(t *testing.T) {

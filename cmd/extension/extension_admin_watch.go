@@ -53,9 +53,10 @@ var (
 )
 
 var extensionAdminWatchCmd = &cobra.Command{
-	Use:   "admin-watch path... host",
-	Short: "Watch extension Administration assets with live reload",
-	Args:  cobra.MinimumNArgs(2),
+	Use:     "admin-watch path... host",
+	Short:   "Watch extension Administration assets with live reload",
+	Aliases: []string{"watch-admin"},
+	Args:    cobra.MinimumNArgs(2),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		var sources []asset.Source
 

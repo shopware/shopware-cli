@@ -12,7 +12,7 @@ import (
 )
 
 var aiInfoCmd = &cobra.Command{
-	Use:          "info <name>",
+	Use:          "info name",
 	Short:        "Show details of a Shopware AI integration",
 	Args:         cobra.ExactArgs(1),
 	SilenceUsage: true,
