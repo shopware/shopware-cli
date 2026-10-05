@@ -3,6 +3,7 @@ package ai
 import (
 	"bytes"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -54,6 +55,7 @@ func TestRemoveRecordedInstall(t *testing.T) {
 	st, err := state.ReadProject(cwd)
 	require.NoError(t, err)
 	assert.Empty(t, st.Installed, "state entry should be gone after remove")
+	assert.NoFileExists(t, filepath.Join(cwd, ".shopware-cli", "ai", "installed.json"), "empty state file should be removed")
 }
 
 func TestRemoveNotRecordedIsNoOp(t *testing.T) {

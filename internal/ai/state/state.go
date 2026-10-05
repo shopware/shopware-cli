@@ -150,6 +150,37 @@ func SaveProject(projectRoot string, f File) error {
 	return saveTo(projectPath(projectRoot), f)
 }
 
+// Clear removes the global install-state file once nothing is recorded, so no
+// empty file is left behind.
+func Clear() error {
+	p, err := path()
+	if err != nil {
+		return err
+	}
+
+	return clearAt(p)
+}
+
+// ClearProject removes the project-scoped install-state file under projectRoot.
+func ClearProject(projectRoot string) error {
+	return clearAt(projectPath(projectRoot))
+}
+
+// clearAt removes the state file and prunes the ai/ directory and its parent when
+// they become empty (os.Remove only removes an empty directory, so a parent that
+// still holds other files is left alone). A missing file is not an error.
+func clearAt(p string) error {
+	if err := os.Remove(p); err != nil && !errors.Is(err, fs.ErrNotExist) {
+		return err
+	}
+
+	dir := filepath.Dir(p)           // .../ai
+	_ = os.Remove(dir)               // only if empty
+	_ = os.Remove(filepath.Dir(dir)) // .../.shopware-cli or .../shopware-cli, only if empty
+
+	return nil
+}
+
 // saveTo writes an install-state file atomically: it writes a temporary file in
 // the target directory and renames it into place, so a crash mid-write never
 // leaves a partial file. The parent directories are created as needed.

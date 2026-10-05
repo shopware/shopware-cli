@@ -88,6 +88,28 @@ func TestRemove(t *testing.T) {
 	assert.False(t, ok, "expected no removal for a missing entry")
 }
 
+func TestClearRemovesFileAndPrunesDirs(t *testing.T) {
+	base := redirectConfigDir(t)
+
+	require.NoError(t, Save(File{Installed: []InstalledEntry{{Name: "a", Agent: "c", Scope: ScopeGlobal}}}))
+	require.FileExists(t, filepath.Join(base, "shopware-cli", "ai", "installed.json"))
+
+	require.NoError(t, Clear())
+	assert.NoFileExists(t, filepath.Join(base, "shopware-cli", "ai", "installed.json"))
+	assert.NoDirExists(t, filepath.Join(base, "shopware-cli", "ai"))
+
+	// Clearing an already-missing file is not an error.
+	require.NoError(t, Clear())
+}
+
+func TestClearProjectRemovesFile(t *testing.T) {
+	root := t.TempDir()
+
+	require.NoError(t, SaveProject(root, File{Installed: []InstalledEntry{{Name: "a", Agent: "c", Scope: ScopeProject}}}))
+	require.NoError(t, ClearProject(root))
+	assert.NoFileExists(t, filepath.Join(root, ".shopware-cli", "ai", "installed.json"))
+}
+
 func TestSaveProjectRoundTrip(t *testing.T) {
 	root := t.TempDir()
 

@@ -58,6 +58,7 @@ var aiRemoveCmd = &cobra.Command{
 		projectRoot := ""
 		readState := state.Read
 		saveState := state.Save
+		clearState := state.Clear
 		if !global {
 			root, err := shop.FindClosestShopwareProject(false)
 			if err != nil {
@@ -67,6 +68,7 @@ var aiRemoveCmd = &cobra.Command{
 			projectRoot = root
 			readState = func() (state.File, error) { return state.ReadProject(root) }
 			saveState = func(f state.File) error { return state.SaveProject(root, f) }
+			clearState = func() error { return state.ClearProject(root) }
 		}
 
 		current, err := readState()
@@ -99,7 +101,14 @@ var aiRemoveCmd = &cobra.Command{
 		if err := runSkills(cmd.Context(), result.Command, projectRoot, cmd.ErrOrStderr()); err != nil {
 			return err
 		}
-		if err := saveState(next); err != nil {
+
+		// Drop the record; when nothing is left, remove the state file rather than
+		// leave an empty one behind.
+		save := saveState
+		if len(next.Installed) == 0 {
+			save = func(state.File) error { return clearState() }
+		}
+		if err := save(next); err != nil {
 			return fmt.Errorf("%s was removed but its record could not be updated (re-run `ai remove`): %w", result.Name, err)
 		}
 
