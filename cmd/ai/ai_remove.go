@@ -5,13 +5,13 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"os"
 	"strings"
 
 	"github.com/spf13/cobra"
 
 	"github.com/shopware/shopware-cli/internal/ai/directory"
 	"github.com/shopware/shopware-cli/internal/ai/state"
+	"github.com/shopware/shopware-cli/internal/shop"
 )
 
 // removeResult is the machine-readable shape of `ai remove` (--format json).
@@ -53,17 +53,19 @@ var aiRemoveCmd = &cobra.Command{
 			removeName = entry.Name
 		}
 
-		// State (and the agent config) live in the user config dir for a
-		// --global install, or in the current directory for a project install.
+		// State (and the agent config) live in the user config dir for a --global
+		// install, or at the Shopware project root for a project install.
 		scope := state.ScopeGlobal
+		projectRoot := ""
 		readState := state.Read
 		saveState := state.Save
 		if !global {
-			root, err := os.Getwd()
+			root, err := shop.FindClosestShopwareProject(false)
 			if err != nil {
-				return err
+				return fmt.Errorf("a project removal must run inside a Shopware project (or use --global): %w", err)
 			}
 			scope = state.ScopeProject
+			projectRoot = root
 			readState = func() (state.File, error) { return state.ReadProject(root) }
 			saveState = func(f state.File) error { return state.SaveProject(root, f) }
 		}
@@ -95,7 +97,7 @@ var aiRemoveCmd = &cobra.Command{
 			return writeRemoveResult(cmd.OutOrStdout(), format, result)
 		}
 
-		if err := runSkills(cmd.Context(), result.Command, cmd.ErrOrStderr()); err != nil {
+		if err := runSkills(cmd.Context(), result.Command, projectRoot, cmd.ErrOrStderr()); err != nil {
 			return err
 		}
 		if err := saveState(next); err != nil {

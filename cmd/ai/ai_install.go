@@ -60,16 +60,19 @@ func skillsRemoveArgs(skill, agent string, global bool) []string {
 	return argv
 }
 
-// runSkills runs a skills.sh command via npx, streaming its output to out so
-// the user sees exactly what skills.sh did (which files it wrote, where). It is
-// a package var so tests can substitute it without shelling out. Callers pass
-// stderr as out to keep stdout clean for --format json.
-var runSkills = func(ctx context.Context, argv []string, out io.Writer) error {
+// runSkills runs a skills.sh command via npx in dir (empty = inherit the current
+// directory), streaming its output to out so the user sees exactly what skills.sh
+// did (which files it wrote, where). A project install passes the project root as
+// dir so skills.sh writes the agent config there, not in a subdirectory. It is a
+// package var so tests can substitute it without shelling out. Callers pass stderr
+// as out to keep stdout clean for --format json.
+var runSkills = func(ctx context.Context, argv []string, dir string, out io.Writer) error {
 	if _, err := exec.LookPath(argv[0]); err != nil {
 		return fmt.Errorf("%s not found: installing skills requires Node.js/npx on PATH", argv[0])
 	}
 
 	cmd := exec.CommandContext(ctx, argv[0], argv[1:]...)
+	cmd.Dir = dir
 	cmd.Stdout = out
 	cmd.Stderr = out
 

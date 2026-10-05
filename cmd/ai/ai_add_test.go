@@ -85,11 +85,12 @@ func setupAdd(t *testing.T) *skillsCall {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)                                     // macOS UserConfigDir base (global state)
 	t.Setenv("XDG_CONFIG_HOME", filepath.Join(tmp, "xdgcfg")) // Linux UserConfigDir base (global state)
-	t.Chdir(tmp)                                              // project state lives in the current directory
+	t.Setenv("PROJECT_ROOT", tmp)                             // project scope resolves here
+	t.Chdir(tmp)
 
 	rec := &skillsCall{}
 	prev := runSkills
-	runSkills = func(_ context.Context, argv []string, _ io.Writer) error {
+	runSkills = func(_ context.Context, argv []string, _ string, _ io.Writer) error {
 		rec.calls++
 		rec.lastArgv = argv
 		return nil

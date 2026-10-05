@@ -5,13 +5,13 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"os"
 	"strings"
 
 	"github.com/spf13/cobra"
 
 	"github.com/shopware/shopware-cli/internal/ai/directory"
 	"github.com/shopware/shopware-cli/internal/ai/state"
+	"github.com/shopware/shopware-cli/internal/shop"
 )
 
 // The CLI hardcodes no agent names: which agents exist is skills.sh's business,
@@ -75,20 +75,9 @@ var aiAddCmd = &cobra.Command{
 			return errors.New("specify the target agent with --agent (e.g. --agent claude-code)")
 		}
 
-		// State lives where the config lives: a --global install and its state
-		// go to the user config dir; a project install and its state go to the
-		// current directory, matching where skills.sh writes the agent config.
 		scope := state.ScopeGlobal
-		readState := state.Read
-		saveState := state.Save
 		if !global {
-			root, err := os.Getwd()
-			if err != nil {
-				return err
-			}
 			scope = state.ScopeProject
-			readState = func() (state.File, error) { return state.ReadProject(root) }
-			saveState = func(f state.File) error { return state.SaveProject(root, f) }
 		}
 
 		// Resolve the repo and the ref to install, then build a GitHub tree URL
@@ -156,6 +145,23 @@ var aiAddCmd = &cobra.Command{
 			return writeAddResult(cmd.OutOrStdout(), format, result)
 		}
 
+		// State lives where the config lives: a --global install and its state go
+		// to the user config dir; a project install resolves the Shopware project
+		// root, so the state and the agent config land at the root (not in a
+		// subdirectory), matching where other project commands operate.
+		projectRoot := ""
+		readState := state.Read
+		saveState := state.Save
+		if !global {
+			root, err := shop.FindClosestShopwareProject(false)
+			if err != nil {
+				return fmt.Errorf("a project install must run inside a Shopware project (or use --global): %w", err)
+			}
+			projectRoot = root
+			readState = func() (state.File, error) { return state.ReadProject(root) }
+			saveState = func(f state.File) error { return state.SaveProject(root, f) }
+		}
+
 		current, err := readState()
 		if err != nil {
 			return err
@@ -166,16 +172,12 @@ var aiAddCmd = &cobra.Command{
 			// A git skill declares an owner-maintained compatibility check; run
 			// it against the project before installing anything.
 			if entry.Delivery.Kind == directory.DeliveryGit && entry.Compatibility != nil {
-				projectDir, err := os.Getwd()
-				if err != nil {
-					return err
-				}
-				if err := runCompatCheck(cmd.Context(), ownerRepo(entry.Delivery.Repository), entry.Name, ref, projectDir, cmd.ErrOrStderr()); err != nil {
+				if err := runCompatCheck(cmd.Context(), ownerRepo(entry.Delivery.Repository), entry.Name, ref, projectRoot, cmd.ErrOrStderr()); err != nil {
 					return err
 				}
 			}
 
-			if err := runSkills(cmd.Context(), argv, cmd.ErrOrStderr()); err != nil {
+			if err := runSkills(cmd.Context(), argv, projectRoot, cmd.ErrOrStderr()); err != nil {
 				return err
 			}
 

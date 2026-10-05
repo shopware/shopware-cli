@@ -4,12 +4,12 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"os"
 
 	"github.com/spf13/cobra"
 
 	"github.com/shopware/shopware-cli/internal/ai/directory"
 	"github.com/shopware/shopware-cli/internal/ai/state"
+	"github.com/shopware/shopware-cli/internal/shop"
 	"github.com/shopware/shopware-cli/internal/tui"
 )
 
@@ -113,10 +113,12 @@ func readInstalledNames() (map[string]bool, error) {
 		names[e.Name] = true
 	}
 
-	// A project-scoped install is recorded in the current directory.
-	root, err := os.Getwd()
+	// A project-scoped install is recorded at the Shopware project root; fall back
+	// to the current directory when not inside a project (global installs still
+	// show).
+	root, err := shop.FindClosestShopwareProject(true)
 	if err != nil {
-		return nil, fmt.Errorf("get current directory for project install state: %w", err)
+		return nil, fmt.Errorf("locate project install state: %w", err)
 	}
 	project, err := state.ReadProject(root)
 	if err != nil {
