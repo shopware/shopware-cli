@@ -30,6 +30,9 @@ type AnonymizationRules struct {
 type columnOwner struct {
 	extension  string
 	expression string
+	// inputs are the expressions already merged into expression. MySQL applies
+	// JSON_REMOVE paths left to right, so a repeated path must not be added twice.
+	inputs []string
 }
 
 type systemConfigOwner struct {
@@ -40,19 +43,27 @@ type systemConfigOwner struct {
 // CollectAnonymization reads the anonymize section of every extension in the
 // Shopware project and merges them in name order. JSON_REMOVE rules on the same
 // column are combined; for other conflicts the first extension wins with a warning.
-// An unreadable extension config is an error, so no rules are skipped silently.
+// An unreadable extension config or a Composer-listed extension that cannot be
+// loaded is an error, so no rules are skipped silently. Folders under custom/
+// that are not extensions are ignored.
 func CollectAnonymization(ctx context.Context, project string) (AnonymizationRules, error) {
-	var configErrors []error
+	var loadErrors []error
 	seenPaths := map[string]bool{}
 	extensions := findExtensionsFromProject(ctx, project, false, func(err error) {
 		var configErr *ConfigError
-		if errors.As(err, &configErr) && !seenPaths[configErr.Path] {
-			seenPaths[configErr.Path] = true
-			configErrors = append(configErrors, err)
+		var packageErr *ComposerPackageError
+		switch {
+		case errors.As(err, &configErr):
+			if !seenPaths[configErr.Path] {
+				seenPaths[configErr.Path] = true
+				loadErrors = append(loadErrors, err)
+			}
+		case errors.As(err, &packageErr):
+			loadErrors = append(loadErrors, err)
 		}
 	})
-	if len(configErrors) > 0 {
-		return AnonymizationRules{}, fmt.Errorf("cannot collect anonymize rules from extensions: %w", errors.Join(configErrors...))
+	if len(loadErrors) > 0 {
+		return AnonymizationRules{}, fmt.Errorf("cannot collect anonymize rules from extensions: %w", errors.Join(loadErrors...))
 	}
 
 	slices.SortFunc(extensions, func(a, b Extension) int {
@@ -78,11 +89,13 @@ func CollectAnonymization(ctx context.Context, project string) (AnonymizationRul
 				column = strings.ToLower(column)
 				key := table + "." + column
 				if owner, exists := owners[key]; exists {
-					if owner.expression == expression {
+					if owner.expression == expression || slices.Contains(owner.inputs, expression) {
 						continue
 					}
 					if merged, ok := mergeJSONRemove(column, owner.expression, expression); ok {
-						owners[key] = columnOwner{extension: owner.extension, expression: merged}
+						owner.expression = merged
+						owner.inputs = append(owner.inputs, expression)
+						owners[key] = owner
 						rules.Tables[table][column] = merged
 						continue
 					}
@@ -96,7 +109,7 @@ func CollectAnonymization(ctx context.Context, project string) (AnonymizationRul
 					continue
 				}
 
-				owners[key] = columnOwner{extension: name, expression: expression}
+				owners[key] = columnOwner{extension: name, expression: expression, inputs: []string{expression}}
 				if rules.Tables[table] == nil {
 					rules.Tables[table] = map[string]string{}
 				}

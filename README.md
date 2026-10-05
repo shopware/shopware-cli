@@ -107,7 +107,7 @@ Omit `-e` / `--env` to target `environments.local`. Use `-e staging` (or another
 
 ### Anonymized dumps and extensions
 
-`shopware-cli project dump --anonymize` rewrites personal data in Shopware core tables. An extension can add its own tables and system config secrets in `.config/shopware-extension.yml`. A project dump with `--anonymize` merges those rules from every installed extension. A column already set under `dump.rewrite` in the project config, or by the built-in rules, is left unchanged. If an extension config cannot be read, the dump stops with an error instead of skipping that extension.
+`shopware-cli project dump --anonymize` rewrites personal data in Shopware core tables. An extension can add its own tables and system config secrets in `.config/shopware-extension.yml`. A project dump with `--anonymize` merges those rules from every installed extension. A column already set under `dump.rewrite` in the project config, or by the built-in rules, is left unchanged. If an extension config cannot be read, or an extension listed in `composer.lock` cannot be loaded from `vendor`, the dump stops with an error instead of skipping that extension.
 
 ```yaml
 anonymize:
