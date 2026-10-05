@@ -1,0 +1,50 @@
+name: AI commands smoke
+
+on:
+  push:
+    branches: ["main"]
+    tags-ignore:
+      - "*"
+  pull_request:
+    branches: ["main"]
+
+permissions:
+  contents: read
+
+env:
+  GOTOOLCHAIN: local
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # ratchet:step-security/harden-runner@v2.21.1
+        with:
+          egress-policy: block
+          allowed-endpoints: >
+            api.github.com:443
+            github.com:443
+            objects.githubusercontent.com:443
+            proxy.golang.org:443
+            release-assets.githubusercontent.com:443
+            storage.googleapis.com:443
+            sum.golang.org:443
+
+      - name: Checkout Repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # ratchet:actions/checkout@v7.0.1
+
+      - name: Set up Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # ratchet:actions/setup-go@v7.0.0
+        with:
+          go-version: '1.27'
+          check-latest: true
+          cache: true
+
+      - name: Download modules
+        run: go mod download
+
+      # Offline: builds the CLI and exercises ai list/info, input guards and
+      # --dry-run only — no npx, no network (dry-run never resolves tags).
+      - name: AI commands offline smoke
+        run: bash docs/manual-testing/run-ai-tests.sh --smoke

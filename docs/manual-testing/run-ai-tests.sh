@@ -27,8 +27,9 @@ REPO="${REPO:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}"
 # never touches caller data. A caller-provided $SWCLI is used as-is and never
 # deleted; otherwise the binary is built into the work dir.
 WORKDIR="$(mktemp -d "${TMPDIR:-/tmp}/ai-e2e.XXXXXX")"
-PROJ="$WORKDIR/proj"
-SHOP="$WORKDIR/shopware"
+PROJ="$WORKDIR/proj"         # a Shopware project (bundled installs land here)
+SHOP="$WORKDIR/shopware"     # a Shopware project (git-skill installs land here)
+NONPROJ="$WORKDIR/elsewhere" # not a Shopware project (project installs are refused)
 HOMEDIR="$WORKDIR/home"
 
 PROVIDED_SWCLI="${SWCLI:-}"
@@ -77,6 +78,17 @@ file_contains() { # desc needle file
 file_missing() { # desc needle file  (passes when file has no such line)
 	if [ ! -f "$3" ] || ! grep -q "$2" "$3"; then ok "$1"; else bad "$1 (unexpected in $3)"; fi
 }
+file_absent() { # desc file  (passes when the file does not exist)
+	if [ ! -f "$2" ]; then ok "$1"; else bad "$1 ($2 still exists)"; fi
+}
+
+# mkShopwareProject makes dir look like a Shopware project so project scope
+# resolves there (bin/console + composer.json requiring shopware/core).
+mkShopwareProject() {
+	mkdir -p "$1/bin"
+	touch "$1/bin/console"
+	printf '{"require":{"shopware/core":"^6.6"}}\n' >"$1/composer.json"
+}
 
 proj_state="$PROJ/.shopware-cli/ai/installed.json"
 shop_state="$SHOP/.shopware-cli/ai/installed.json"
@@ -115,11 +127,12 @@ else
 fi
 
 if [ "$SMOKE" -eq 0 ] && ! command -v npx >/dev/null; then
-	echo "WARNING: npx not found — real install/remove steps (C2+, D3, D4, E, F2, F5) will fail." >&2
+	echo "WARNING: npx not found — real install/remove steps (C2+, D4, E, F2, F5) will fail." >&2
 fi
 
-mkdir -p "$PROJ" "$SHOP" "$HOMEDIR"
-printf '{"require":{"shopware/core":"^6.6"}}\n' >"$SHOP/composer.json"
+mkdir -p "$NONPROJ" "$HOMEDIR"
+mkShopwareProject "$PROJ"
+mkShopwareProject "$SHOP"
 
 # --- A. Directory (read-only) ----------------------------------------------
 
@@ -187,7 +200,7 @@ step "D2 — git dry-run with explicit tag (no network)"
 out=$( (cd "$SHOP" && "$SWCLI" ai add deployment-helper@0.1.7 --agent claude-code --dry-run) 2>&1)
 code=$?
 expect_exit "git dry-run exits 0" 0 $code
-expect_contains "pins the requested tag" "deployment-helper@0.1.7" "$out"
+expect_contains "pins the requested tag via tree URL" "tree/0.1.7/skills/deployment-helper" "$out"
 
 if [ "$SMOKE" -eq 1 ]; then
 	step "SMOKE mode — skipping real install/remove (C2+, D3, D4, E, F)"
@@ -206,13 +219,14 @@ expect_exit "install exits 0" 0 $code
 file_contains "state records agent (not client)" '"agent": "claude-code"' "$proj_state"
 file_contains "state records project scope" '"scope": "project"' "$proj_state"
 
-step "C3 — idempotency (repeat = no-op)"
+step "C3 — repeat add re-runs skills.sh, record stays one entry"
 before=$(shasum "$proj_state" 2>/dev/null | awk '{print $1}')
 out=$( (cd "$PROJ" && "$SWCLI" ai add shopware-cli --agent claude-code) 2>&1)
 code=$?
 after=$(shasum "$proj_state" 2>/dev/null | awk '{print $1}')
 count=$(grep -c '"name"' "$proj_state" 2>/dev/null)
 expect_exit "repeat add exits 0" 0 $code
+expect_contains "reports already installed" "Already installed" "$out"
 [ "$before" = "$after" ] && ok "state file unchanged" || bad "state file changed on repeat add"
 [ "$count" -eq 1 ] && ok "still a single entry" || bad "entry count = $count, want 1"
 
@@ -225,13 +239,12 @@ expect_not_contains "hides non-installed deployment-helper" "deployment-helper" 
 
 # --- D. git skill + compat-check gate (needs network) ----------------------
 
-step "D3 — compat-check BLOCKS install on a non-Shopware project"
-out=$( (cd "$PROJ" && "$SWCLI" ai add deployment-helper --agent claude-code) 2>&1)
+step "D3 — project install outside a Shopware project is refused"
+out=$( (cd "$NONPROJ" && "$SWCLI" ai add deployment-helper --agent claude-code) 2>&1)
 code=$?
 echo "$out"
-expect_exit "incompatible install exits 1" 1 $code
-expect_contains "reports incompatibility" "not compatible" "$out"
-file_missing "no partial state for deployment-helper" "deployment-helper" "$proj_state"
+expect_exit "refused install exits 1" 1 $code
+expect_contains "points at a Shopware project" "must run inside a Shopware project" "$out"
 
 step "D4 — compat-check PASSES on a Shopware project → installs"
 out=$( (cd "$SHOP" && "$SWCLI" ai add deployment-helper --agent claude-code) 2>&1)
@@ -267,7 +280,7 @@ code=$?
 echo "$out"
 expect_exit "remove exits 0" 0 $code
 expect_contains "prints Removed line" "Removed shopware-cli" "$out"
-file_contains "state entry gone (installed empty)" '"installed": \[\]' "$proj_state"
+file_absent "state file removed after last uninstall" "$proj_state"
 
 step "F3 — remove not-recorded = safe no-op"
 out=$( (cd "$PROJ" && "$SWCLI" ai remove shopware-cli --agent claude-code) 2>&1)
@@ -291,7 +304,7 @@ code=$?
 echo "$out"
 expect_exit "global remove exits 0" 0 $code
 gstate=$(global_state)
-file_contains "global state entry gone" '"installed": \[\]' "${gstate:-/nonexistent}"
+[ -z "$gstate" ] && ok "global state file removed after last uninstall" || bad "global state file still present ($gstate)"
 
 # --- summary ----------------------------------------------------------------
 

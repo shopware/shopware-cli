@@ -16,14 +16,16 @@ cd /your/work/directory/shopware-cli && go build -o /tmp/swcli .
 ```
 
 ```bash
-rm -rf /tmp/ai-proj /tmp/ai-shopware /tmp/ai-home && mkdir -p /tmp/ai-proj /tmp/ai-shopware /tmp/ai-home
+rm -rf /tmp/ai-proj /tmp/ai-shopware /tmp/ai-elsewhere /tmp/ai-home && mkdir -p /tmp/ai-proj/bin /tmp/ai-shopware/bin /tmp/ai-elsewhere /tmp/ai-home
 ```
 
-Make `/tmp/ai-shopware` look like a Shopware project so the deployment-helper
-compatibility check passes:
+A project install resolves the Shopware project root, so `/tmp/ai-proj` and
+`/tmp/ai-shopware` must look like Shopware projects (`bin/console` plus a
+`composer.json` requiring `shopware/core`); `/tmp/ai-elsewhere` is left as a
+non-project directory to show a project install being refused there:
 
 ```bash
-printf '{"require":{"shopware/core":"^6.6"}}\n' > /tmp/ai-shopware/composer.json
+for d in /tmp/ai-proj /tmp/ai-shopware; do touch "$d/bin/console"; printf '{"require":{"shopware/core":"^6.6"}}\n' > "$d/composer.json"; done
 ```
 
 > The `ai` group is visible in `shopware-cli --help`.
@@ -101,8 +103,9 @@ compatibility against that project (omit --global)`, `exit=1`.
 cd /tmp/ai-proj && /tmp/swcli ai add shopware-cli --agent claude-code --dry-run
 ```
 `[dry-run] would install shopware-cli for claude-code (project):` followed by
-`npx --yes skills@1.5.18 add shopware/shopware-cli… --skill shopware-cli --agent
-claude-code -y`. No `.claude/` and no `.shopware-cli/` created.
+`npx --yes skills@1.5.18 add https://github.com/shopware/shopware-cli/tree/<ref>/skills/shopware-cli
+--agent claude-code -y` (a plain `dev` build shows `<latest-release>` as the ref).
+No `.claude/` and no `.shopware-cli/` created.
 
 Verify nothing was written:
 ```bash
@@ -114,8 +117,8 @@ ls -la /tmp/ai-proj
 cd /tmp/ai-proj && /tmp/swcli ai add shopware-cli --agent claude-code
 ```
 skills.sh output streamed to stderr; final line `Installed shopware-cli for
-claude-code (project)…` on stdout. Skill lands in
-`/tmp/ai-proj/.claude/skills/…`; state written.
+claude-code (project)…` on stdout. Skill lands at the project root
+(`/tmp/ai-proj/.claude/skills/…`), even when run from a subdirectory; state written.
 
 Verify state (JSON uses `agent`, not `client`):
 ```bash
@@ -148,19 +151,14 @@ cd /tmp/ai-shopware && /tmp/swcli ai add deployment-helper@0.1.7 --agent claude-
 `shopware/deployment-helper@0.1.7`. No tag lookup, no compat-check, nothing
 written.
 
-### D3 — compat-check BLOCKS install on a non-Shopware project
+### D3 — project install outside a Shopware project is refused
 ```bash
-cd /tmp/ai-proj && /tmp/swcli ai add deployment-helper --agent claude-code; echo "exit=$?"
+cd /tmp/ai-elsewhere && /tmp/swcli ai add deployment-helper --agent claude-code; echo "exit=$?"
 ```
-Resolves latest tag, fetches + runs the owner compat-check, which fails (no
-`shopware/core`); report on stderr; `… is not compatible with this project …`;
-no install, no state written, `exit=1`.
-
-Verify no partial install:
-```bash
-cat /tmp/ai-proj/.shopware-cli/ai/installed.json
-```
-Still only the `shopware-cli` entry (deployment-helper absent).
+`a project install must run inside a Shopware project (or use --global)`,
+`exit=1`. Nothing is fetched or installed. (An incompatible-but-Shopware project
+is instead reported by the compatibility check — see the `interpretCompatOutput`
+unit test.)
 
 ### D4 — compat-check PASSES on a Shopware project → installs
 ```bash
@@ -214,13 +212,13 @@ cd /tmp/ai-proj && /tmp/swcli ai remove shopware-cli --agent claude-code
 ```
 Runs `skills … remove …`; skills.sh reports success on stderr; `Removed
 shopware-cli for claude-code (project):` on stdout. Skill gone from
-`.claude/skills`; state entry removed.
+`.claude/skills`; the record is dropped.
 
-Verify state empty:
+Verify the empty state file was removed (not left as `installed: []`):
 ```bash
-cat /tmp/ai-proj/.shopware-cli/ai/installed.json
+ls /tmp/ai-proj/.shopware-cli/ai/installed.json 2>&1
 ```
-Expected: `"installed": []`.
+Expected: `No such file or directory`.
 
 ### F3 — remove not-recorded = safe no-op
 ```bash
@@ -251,7 +249,7 @@ Removes all test artifacts. Your real `~/.claude` is untouched because global
 tests used `HOME=/tmp/ai-home`.
 
 ```bash
-rm -rf /tmp/ai-proj /tmp/ai-shopware /tmp/ai-home /tmp/swcli
+rm -rf /tmp/ai-proj /tmp/ai-shopware /tmp/ai-elsewhere /tmp/ai-home /tmp/swcli
 ```
 
 ---
@@ -261,6 +259,7 @@ rm -rf /tmp/ai-proj /tmp/ai-shopware /tmp/ai-home /tmp/swcli
 - **D1** is intentionally skipped in the numbering — the latest-tag resolution
   (`git ls-remote`) is covered in practice by **D4** (add without `@tag`), so
   there is no separate step just for the lookup.
-- A bundled skill built via `go build` without ldflags has an empty `Version`,
-  so the dry-run shows `shopware/shopware-cli` with no `@ref` — that is correct.
-  To test version pinning for a bundled skill, use `shopware-cli@<tag>`.
+- A bundled skill built via `go build` without ldflags reports version `dev`, so
+  a real install falls back to the latest release and `--dry-run` shows
+  `<latest-release>` as the ref (it stays offline). To test exact pinning, use
+  `shopware-cli@<tag>`.
