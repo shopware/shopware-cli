@@ -3,6 +3,7 @@ package ai
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -13,6 +14,10 @@ import (
 
 	"github.com/shyim/go-version"
 )
+
+// errNotFound marks an HTTP 404 so callers can give a friendlier message than the
+// raw status.
+var errNotFound = errors.New("not found")
 
 // skillsVersion pins the skills.sh CLI the commands run against, so a
 // shopware-cli release always drives a known skills.sh behavior.
@@ -180,30 +185,73 @@ func latestStableTag(lsRemoteLines []string) (string, error) {
 	return bestRaw, nil
 }
 
+// compatReport is the JSON verdict the owner-maintained compatibility check
+// prints. Parsing it lets the CLI tell "incompatible" apart from "could not run"
+// and render a readable message instead of raw JSON.
+type compatReport struct {
+	Compatible bool     `json:"compatible"`
+	Errors     []string `json:"errors"`
+	Warnings   []string `json:"warnings"`
+	Info       []string `json:"info"`
+}
+
 // runCompatCheck fetches the integration's owner-maintained compatibility check
-// at ref and runs it against projectDir. The script's report is written to out
-// (stderr, so --format json stdout stays clean); a non-zero exit means the
-// project is incompatible and the install must not proceed. It is a package var
-// so tests can substitute it without network access.
+// at ref and runs it against projectDir. It is a package var so tests can
+// substitute it without network access.
 var runCompatCheck = func(ctx context.Context, repo, skill, ref, projectDir string, out io.Writer) error {
 	url := fmt.Sprintf("https://raw.githubusercontent.com/%s/%s/skills/%s/scripts/compatibility-check.sh", repo, ref, skill)
 
 	script, err := httpGet(ctx, url)
+	if errors.Is(err, errNotFound) {
+		return fmt.Errorf("release %q does not include the %s skill (it may predate it) — try a newer release", ref, skill)
+	}
 	if err != nil {
 		return fmt.Errorf("cannot fetch the compatibility check for %s@%s: %w", skill, ref, err)
 	}
 
-	// The script reads the project root as its first argument.
+	// The script reads the project root as its first argument and prints a JSON
+	// verdict on stdout.
 	cmd := exec.CommandContext(ctx, "bash", "-s", "--", projectDir)
 	cmd.Stdin = bytes.NewReader(script)
-	cmd.Stdout = out
-	cmd.Stderr = out
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
 
-	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("%s@%s is not compatible with this project (see the report above): %w", skill, ref, err)
+	runErr := cmd.Run()
+
+	return interpretCompatOutput(stdout.Bytes(), strings.TrimSpace(stderr.String()), skill, ref, runErr, out)
+}
+
+// interpretCompatOutput turns a compatibility-check run into a clear outcome: a
+// parsed verdict distinguishes "incompatible" (render the reasons) from "could
+// not run" (no verdict produced, e.g. PHP missing). Raw JSON is never shown.
+func interpretCompatOutput(stdout []byte, stderr, skill, ref string, runErr error, out io.Writer) error {
+	var report compatReport
+	if json.Unmarshal(bytes.TrimSpace(stdout), &report) != nil {
+		if stderr != "" {
+			return fmt.Errorf("could not run the compatibility check for %s@%s: %s", skill, ref, stderr)
+		}
+
+		return fmt.Errorf("could not run the compatibility check for %s@%s (is PHP available?): %w", skill, ref, runErr)
 	}
 
-	return nil
+	if report.Compatible {
+		for _, w := range report.Warnings {
+			_, _ = fmt.Fprintf(out, "warning: %s\n", w)
+		}
+
+		return nil
+	}
+
+	_, _ = fmt.Fprintf(out, "%s@%s is not compatible with this project:\n", skill, ref)
+	for _, e := range report.Errors {
+		_, _ = fmt.Fprintf(out, "  - %s\n", e)
+	}
+	for _, w := range report.Warnings {
+		_, _ = fmt.Fprintf(out, "  (warning) %s\n", w)
+	}
+
+	return fmt.Errorf("%s@%s is not compatible with this project", skill, ref)
 }
 
 // maxCompatCheckBytes caps the compatibility-check download. The script is a
@@ -227,6 +275,9 @@ func httpGet(ctx context.Context, url string) ([]byte, error) {
 	}
 	defer func() { _ = resp.Body.Close() }()
 
+	if resp.StatusCode == http.StatusNotFound {
+		return nil, fmt.Errorf("GET %s: %w", url, errNotFound)
+	}
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("GET %s: %s", url, resp.Status)
 	}

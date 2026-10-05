@@ -202,8 +202,7 @@ var aiAddCmd = &cobra.Command{
 			ResolvedRevision: result.ResolvedRevision,
 		})
 		if err := saveState(next); err != nil {
-			_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "warning: %s was installed but could not be recorded (%v); re-run `ai add` to record it\n", result.Name, err)
-			return err
+			return fmt.Errorf("%s was installed but its record could not be written (re-run `ai add` to record it): %w", result.Name, err)
 		}
 
 		switch {

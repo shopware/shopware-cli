@@ -100,8 +100,7 @@ var aiRemoveCmd = &cobra.Command{
 			return err
 		}
 		if err := saveState(next); err != nil {
-			_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "warning: %s was removed but the state file could not be updated (%v); re-run `ai remove`\n", result.Name, err)
-			return err
+			return fmt.Errorf("%s was removed but its record could not be updated (re-run `ai remove`): %w", result.Name, err)
 		}
 
 		return writeRemoveResult(cmd.OutOrStdout(), format, result)

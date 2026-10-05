@@ -1,12 +1,35 @@
 package ai
 
 import (
+	"bytes"
+	"errors"
 	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+func TestInterpretCompatOutput(t *testing.T) {
+	var out bytes.Buffer
+
+	// Compatible → no error, no noise.
+	require.NoError(t, interpretCompatOutput([]byte(`{"compatible":true}`), "", "dh", "0.1.7", nil, &out))
+
+	// Incompatible → error, reasons rendered, no raw JSON shown.
+	out.Reset()
+	err := interpretCompatOutput(
+		[]byte(`{"compatible":false,"errors":["composer.json not found — not a Shopware project"]}`),
+		"", "dh", "0.1.7", errors.New("exit 1"), &out)
+	assert.ErrorContains(t, err, "not compatible")
+	assert.Contains(t, out.String(), "composer.json not found — not a Shopware project")
+	assert.NotContains(t, out.String(), "{", "raw JSON must not reach the user")
+
+	// No verdict produced → could not run (environment problem).
+	out.Reset()
+	err = interpretCompatOutput([]byte("bash: php: command not found"), "php: command not found", "dh", "0.1.7", errors.New("exit 127"), &out)
+	assert.ErrorContains(t, err, "could not run")
+}
 
 func TestOwnerRepo(t *testing.T) {
 	assert.Equal(t, "shopware/deployment-helper", ownerRepo("https://github.com/shopware/deployment-helper"))

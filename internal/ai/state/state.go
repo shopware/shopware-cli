@@ -93,7 +93,7 @@ func readFrom(p string) (File, error) {
 
 	var f File
 	if err := json.Unmarshal(b, &f); err != nil {
-		return File{}, fmt.Errorf("parse ai install-state %s: %w", p, err)
+		return File{}, fmt.Errorf("parse ai install-state %s (delete this file to reset the install record, or fix the JSON): %w", p, err)
 	}
 	if f.Version != FileVersion {
 		return File{}, fmt.Errorf("unsupported ai install-state version %d (expected %d)", f.Version, FileVersion)
