@@ -37,16 +37,20 @@ func TestSplitNameTag(t *testing.T) {
 	assert.Equal(t, "1.2.3", tag)
 }
 
-func TestIsInstalled(t *testing.T) {
+func TestFindInstall(t *testing.T) {
 	f := state.File{Installed: []state.InstalledEntry{
 		{Name: "a", Agent: "claude-code", Scope: state.ScopeGlobal, ResolvedRevision: "1"},
 	}}
 
-	assert.True(t, isInstalled(f, addResult{Name: "a", Agent: "claude-code", Scope: state.ScopeGlobal, ResolvedRevision: "1"}))
-	// different revision → not installed (an update)
-	assert.False(t, isInstalled(f, addResult{Name: "a", Agent: "claude-code", Scope: state.ScopeGlobal, ResolvedRevision: "2"}))
-	// different agent → not installed
-	assert.False(t, isInstalled(f, addResult{Name: "a", Agent: "codex", Scope: state.ScopeGlobal, ResolvedRevision: "1"}))
+	got, ok := findInstall(f, "a", "claude-code", state.ScopeGlobal)
+	require.True(t, ok)
+	assert.Equal(t, "1", got.ResolvedRevision)
+
+	_, ok = findInstall(f, "a", "codex", state.ScopeGlobal)
+	assert.False(t, ok, "different agent is a different install")
+
+	_, ok = findInstall(f, "a", "claude-code", state.ScopeProject)
+	assert.False(t, ok, "different scope is a different install")
 }
 
 func TestWriteAddResultJSON(t *testing.T) {
@@ -175,10 +179,33 @@ func TestAddInstallsAndIsIdempotent(t *testing.T) {
 	assert.Equal(t, "shopware-cli", st.Installed[0].Name)
 	assert.Equal(t, state.ScopeGlobal, st.Installed[0].Scope)
 
-	// Second identical add: skills not run again, state unchanged.
-	_, err = runAdd(t, "shopware-cli", "--agent", "claude-code", "--global")
+	// Second identical add: skills.sh runs again (it is idempotent and owns the
+	// disk), the record stays one entry, and the outcome is "Already installed".
+	out, err := runAdd(t, "shopware-cli", "--agent", "claude-code", "--global")
 	require.NoError(t, err)
-	assert.Equal(t, 1, rec.calls, "repeated add with same revision must be a no-op")
+	assert.Equal(t, 2, rec.calls, "repeated add re-runs skills.sh")
+	assert.Contains(t, out, "Already installed")
+
+	st, err = state.Read()
+	require.NoError(t, err)
+	assert.Len(t, st.Installed, 1, "repeated add must not grow the record")
+}
+
+func TestAddReportsAction(t *testing.T) {
+	setupAdd(t)
+
+	out, err := runAdd(t, "shopware-cli@0.18.3", "--agent", "claude-code", "--global")
+	require.NoError(t, err)
+	assert.Contains(t, out, "Installed shopware-cli")
+
+	out, err = runAdd(t, "shopware-cli@0.18.3", "--agent", "claude-code", "--global")
+	require.NoError(t, err)
+	assert.Contains(t, out, "Already installed")
+
+	out, err = runAdd(t, "shopware-cli@0.18.4", "--agent", "claude-code", "--global")
+	require.NoError(t, err)
+	assert.Contains(t, out, "Updated shopware-cli")
+	assert.Contains(t, out, "0.18.3 → 0.18.4")
 }
 
 func TestAddProjectScopeWritesToCurrentDir(t *testing.T) {

@@ -28,6 +28,13 @@ const (
 	refPlaceholder = "<latest-release>"
 )
 
+// Install outcomes reported by `ai add`.
+const (
+	actionInstalled = "installed"
+	actionUnchanged = "unchanged"
+	actionUpdated   = "updated"
+)
+
 // addResult is the machine-readable shape of `ai add` (--format json).
 type addResult struct {
 	Name             string      `json:"name"`
@@ -35,6 +42,8 @@ type addResult struct {
 	Scope            state.Scope `json:"scope"`
 	RequestedTag     string      `json:"requestedTag"`
 	ResolvedRevision string      `json:"resolvedRevision"`
+	Action           string      `json:"action,omitempty"`
+	PreviousRevision string      `json:"previousRevision,omitempty"`
 	DryRun           bool        `json:"dryRun"`
 	Command          []string    `json:"command"`
 }
@@ -166,31 +175,45 @@ var aiAddCmd = &cobra.Command{
 			return err
 		}
 
-		// Idempotent: the same integration, agent, scope and revision is a no-op.
-		if !isInstalled(current, result) {
-			// A git skill declares an owner-maintained compatibility check; run
-			// it against the project before installing anything.
-			if entry.Delivery.Kind == directory.DeliveryGit && entry.Compatibility != nil {
-				if err := runCompatCheck(cmd.Context(), ownerRepo(entry.Delivery.Repository), entry.Name, ref, projectRoot, cmd.ErrOrStderr()); err != nil {
-					return err
-				}
-			}
+		// Record the prior revision (if any) to report the outcome as a fresh
+		// install, a no-op, or an update.
+		prev, hadPrev := findInstall(current, result.Name, result.Agent, result.Scope)
 
-			if err := runSkills(cmd.Context(), argv, projectRoot, cmd.ErrOrStderr()); err != nil {
+		// A git skill declares an owner-maintained compatibility check; run it
+		// against the project before installing anything.
+		if entry.Delivery.Kind == directory.DeliveryGit && entry.Compatibility != nil {
+			if err := runCompatCheck(cmd.Context(), ownerRepo(entry.Delivery.Repository), entry.Name, ref, projectRoot, cmd.ErrOrStderr()); err != nil {
 				return err
 			}
+		}
 
-			next := state.Upsert(current, state.InstalledEntry{
-				Name:             result.Name,
-				Agent:            result.Agent,
-				Scope:            result.Scope,
-				RequestedTag:     result.RequestedTag,
-				ResolvedRevision: result.ResolvedRevision,
-			})
-			if err := saveState(next); err != nil {
-				_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "warning: %s was installed but could not be recorded (%v); re-run `ai add` to record it\n", result.Name, err)
-				return err
-			}
+		// Always run skills.sh: it is idempotent and is the source of truth on
+		// disk, so the record is never trusted over the actual installation (a
+		// deleted skill is restored on a repeat add).
+		if err := runSkills(cmd.Context(), argv, projectRoot, cmd.ErrOrStderr()); err != nil {
+			return err
+		}
+
+		next := state.Upsert(current, state.InstalledEntry{
+			Name:             result.Name,
+			Agent:            result.Agent,
+			Scope:            result.Scope,
+			RequestedTag:     result.RequestedTag,
+			ResolvedRevision: result.ResolvedRevision,
+		})
+		if err := saveState(next); err != nil {
+			_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "warning: %s was installed but could not be recorded (%v); re-run `ai add` to record it\n", result.Name, err)
+			return err
+		}
+
+		switch {
+		case !hadPrev:
+			result.Action = actionInstalled
+		case prev.ResolvedRevision == result.ResolvedRevision:
+			result.Action = actionUnchanged
+		default:
+			result.Action = actionUpdated
+			result.PreviousRevision = prev.ResolvedRevision
 		}
 
 		return writeAddResult(cmd.OutOrStdout(), format, result)
@@ -206,15 +229,16 @@ func splitNameTag(s string) (name, tag string) {
 	return s, ""
 }
 
-// isInstalled reports whether the state already records this exact install.
-func isInstalled(f state.File, r addResult) bool {
+// findInstall returns the recorded entry for (name, agent, scope) and whether one
+// existed, so `ai add` can report a fresh install, a no-op, or an update.
+func findInstall(f state.File, name, agent string, scope state.Scope) (state.InstalledEntry, bool) {
 	for _, e := range f.Installed {
-		if e.Name == r.Name && e.Agent == r.Agent && e.Scope == r.Scope && e.ResolvedRevision == r.ResolvedRevision {
-			return true
+		if e.Name == name && e.Agent == agent && e.Scope == scope {
+			return e, true
 		}
 	}
 
-	return false
+	return state.InstalledEntry{}, false
 }
 
 func writeAddResult(w io.Writer, format string, r addResult) error {
@@ -238,9 +262,21 @@ func writeAddResult(w io.Writer, format string, r addResult) error {
 	if r.ResolvedRevision != "" {
 		rev = " @" + r.ResolvedRevision
 	}
-	_, err := fmt.Fprintf(w, "Installed %s for %s (%s)%s\n", r.Name, r.Agent, r.Scope, rev)
 
-	return err
+	switch r.Action {
+	case actionUnchanged:
+		_, err := fmt.Fprintf(w, "Already installed %s for %s (%s)%s\n", r.Name, r.Agent, r.Scope, rev)
+
+		return err
+	case actionUpdated:
+		_, err := fmt.Fprintf(w, "Updated %s for %s (%s): %s → %s\n", r.Name, r.Agent, r.Scope, r.PreviousRevision, r.ResolvedRevision)
+
+		return err
+	default:
+		_, err := fmt.Fprintf(w, "Installed %s for %s (%s)%s\n", r.Name, r.Agent, r.Scope, rev)
+
+		return err
+	}
 }
 
 func init() {
