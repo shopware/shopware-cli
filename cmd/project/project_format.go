@@ -13,7 +13,8 @@ import (
 
 var projectFormatCmd = &cobra.Command{
 	Use:   "format [path]",
-	Short: "Format project",
+	Short: "Format a project's code with PHP-CS-Fixer and Prettier",
+	Long:  "Format the project's own code, such as extensions in custom/ and configured bundles, and change the files directly. Packages that Composer installs into vendor/ are not changed. PHP-CS-Fixer uses the project's .php-cs-fixer.dist.php if present; Prettier always uses the CLI's own config. Use --dry-run to only report files that would change.",
 	Args:  cobra.MaximumNArgs(1),
 	PreRunE: func(cmd *cobra.Command, args []string) error {
 		return verifier.SetupTools(cmd.Context(), cmd.Root().Version)
@@ -39,14 +40,14 @@ var projectFormatCmd = &cobra.Command{
 			return fmt.Errorf("cannot find path: %w", err)
 		}
 
-		toolCfg, err := verifier.GetConfigFromProject(projectPath, false)
+		toolCfg, err := verifier.GetConfigFromProject(cmd.Context(), projectPath, false)
 		if err != nil {
 			return err
 		}
 
 		var gr errgroup.Group
 
-		tools := verifier.GetTools()
+		tools := verifier.GetToolsOf[verifier.FormatTool]()
 
 		tools, err = tools.Only(only)
 		if err != nil {
@@ -54,7 +55,6 @@ var projectFormatCmd = &cobra.Command{
 		}
 
 		for _, tool := range tools {
-			tool := tool
 			gr.Go(func() error {
 				return tool.Format(cmd.Context(), *toolCfg, dryRun)
 			})
@@ -66,6 +66,6 @@ var projectFormatCmd = &cobra.Command{
 
 func init() {
 	projectRootCmd.AddCommand(projectFormatCmd)
-	projectFormatCmd.PersistentFlags().String("only", "", "Run only specific tools by name (comma-separated, e.g. phpstan,eslint)")
-	projectFormatCmd.PersistentFlags().Bool("dry-run", false, "Run tools in dry run mode")
+	projectFormatCmd.PersistentFlags().String("only", "", "Run only the specified formatters (comma-separated, e.g. prettier,php-cs-fixer)")
+	projectFormatCmd.PersistentFlags().Bool("dry-run", false, "Report files that would change, without changing them")
 }

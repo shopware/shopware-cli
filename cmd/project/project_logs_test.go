@@ -82,7 +82,7 @@ func TestProjectLogsRejectsUnknownExplicitFile(t *testing.T) {
 	fakeExec := &logsFakeExecutor{files: []executor.LogFile{{Name: "prod.log"}}}
 
 	err := runProjectLogs(cmd, []string{"custom.log"}, fakeExec)
-	require.EqualError(t, err, "log file not found: custom.log")
+	require.EqualError(t, err, `log file "custom.log" not found, available: prod.log`)
 	assert.False(t, fakeExec.getLogCalled)
 }
 

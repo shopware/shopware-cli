@@ -27,17 +27,17 @@ func newShopwareBundle(ctx context.Context, path string) (*ShopwareBundle, error
 
 	jsonFile, err := os.ReadFile(composerJsonFile)
 	if err != nil {
-		return nil, fmt.Errorf("newShopwareBundle: %v", err)
+		return nil, fmt.Errorf("cannot read composer.json: %w", err)
 	}
 
 	var composerJson shopwareBundleComposerJson
 	err = json.Unmarshal(jsonFile, &composerJson)
 	if err != nil {
-		return nil, fmt.Errorf("newShopwareBundle: %v", err)
+		return nil, fmt.Errorf("cannot parse composer.json: %w", err)
 	}
 
 	if composerJson.Type != "shopware-bundle" {
-		return nil, errors.New("newShopwareBundle: composer.json type is not shopware-bundle")
+		return nil, errors.New("composer.json type is not shopware-bundle")
 	}
 
 	if composerJson.Extra.BundleName == "" {
@@ -46,7 +46,7 @@ func newShopwareBundle(ctx context.Context, path string) (*ShopwareBundle, error
 
 	cfg, err := readExtensionConfig(ctx, path)
 	if err != nil {
-		return nil, fmt.Errorf("newShopwareBundle: %v", err)
+		return nil, fmt.Errorf("cannot read extension config: %w", err)
 	}
 
 	extension := ShopwareBundle{

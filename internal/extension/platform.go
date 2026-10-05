@@ -63,12 +63,12 @@ func newPlatformPlugin(ctx context.Context, path string) (*PlatformPlugin, error
 
 	jsonFile, err := os.ReadFile(composerJsonFile)
 	if err != nil {
-		return nil, fmt.Errorf("newPlatformPlugin: %v", err)
+		return nil, fmt.Errorf("cannot read composer.json: %w", err)
 	}
 
 	var composerJson PlatformComposerJson
 	if err := json.Unmarshal(jsonFile, &composerJson); err != nil {
-		return nil, fmt.Errorf("newPlatformPlugin: %v", err)
+		return nil, fmt.Errorf("cannot parse composer.json: %w", err)
 	}
 
 	if composerJson.Type != ComposerTypePlugin {
@@ -77,7 +77,7 @@ func newPlatformPlugin(ctx context.Context, path string) (*PlatformPlugin, error
 
 	cfg, err := readExtensionConfig(ctx, path)
 	if err != nil {
-		return nil, fmt.Errorf("newPlatformPlugin: %v", err)
+		return nil, fmt.Errorf("cannot read extension config: %w", err)
 	}
 
 	extension := PlatformPlugin{
@@ -282,7 +282,7 @@ func (p PlatformPlugin) Validate(c context.Context, check validation.Check) {
 	if p.Composer.Description == "" {
 		check.AddResult(validation.CheckResult{
 			Path:       "composer.json",
-			Identifier: "metadata.description",
+			Identifier: "metadata.description.required",
 			Message:    "Key `description` is required",
 			Severity:   validation.SeverityError,
 		})
@@ -350,7 +350,7 @@ func (p PlatformPlugin) Validate(c context.Context, check validation.Check) {
 		if !hasLabel {
 			check.AddResult(validation.CheckResult{
 				Path:       "composer.json",
-				Identifier: "metadata.label",
+				Identifier: "metadata.label.translation." + key,
 				Message:    fmt.Sprintf("extra.label for language %s is required", key),
 				Severity:   validation.SeverityError,
 			})
@@ -359,7 +359,7 @@ func (p PlatformPlugin) Validate(c context.Context, check validation.Check) {
 		if !hasDescription {
 			check.AddResult(validation.CheckResult{
 				Path:       "composer.json",
-				Identifier: "metadata.description",
+				Identifier: "metadata.description.translation." + key,
 				Message:    fmt.Sprintf("extra.description for language %s is required", key),
 				Severity:   validation.SeverityError,
 			})

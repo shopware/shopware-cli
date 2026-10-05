@@ -98,15 +98,16 @@ const (
 
 var projectDevCmd = &cobra.Command{
 	Use:   "dev",
-	Short: "Start the development environment",
-	Long:  "Start the development environment. Launches the interactive TUI dashboard when run in a terminal, or starts containers in the background otherwise.",
+	Short: "Start the project's development environment and, when run in a terminal, open its terminal dashboard",
+	Long:  "Start the development environment. This launches the interactive TUI dashboard when run in a terminal, or starts the containers in the background otherwise. Requires a Docker environment; local and ssh environments do not manage containers.",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		projectRoot, err := shop.FindClosestShopwareProject(false)
 		if err != nil {
 			return err
 		}
 
-		cfg, err := shop.ReadConfig(cmd.Context(), projectConfigPath, true)
+		actualProjectConfigPath := shop.SearchConfigPath(cmd.Context(), projectRoot, projectConfigPath)
+		cfg, err := shop.ReadConfig(cmd.Context(), actualProjectConfigPath, projectConfigPath == "")
 		if err != nil {
 			return err
 		}
@@ -145,7 +146,8 @@ var projectDevCmd = &cobra.Command{
 
 var projectDevStartCmd = &cobra.Command{
 	Use:   "start",
-	Short: "Start the development environment in the background",
+	Short: "Start the configured development environment in the background",
+	Args:  cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		env, err := setupDevEnvironment(cmd)
 		if err != nil {
@@ -162,7 +164,8 @@ var projectDevStartCmd = &cobra.Command{
 
 var projectDevStopCmd = &cobra.Command{
 	Use:   "stop",
-	Short: "Stop the development environment",
+	Short: "Stop the configured development environment",
+	Args:  cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		env, err := setupDevEnvironment(cmd)
 		if err != nil {
@@ -177,9 +180,10 @@ var projectDevStopCmd = &cobra.Command{
 
 var projectDevStatusCmd = &cobra.Command{
 	Use:          "status",
-	Short:        "Report whether the development environment is running",
-	Long:         "Report whether the development environment is running. Exits with code 0 when it is up and code 1 when it is down.",
+	Short:        "Show whether the Shopware development environment is running",
+	Long:         "Report whether the development environment is running. The command exits with code 0 when it is up and code 1 when it is down.",
 	SilenceUsage: true,
+	Args:         cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		env, err := setupDevEnvironment(cmd)
 		if err != nil {
@@ -197,9 +201,10 @@ func runMigrationWizardTUI(ctx context.Context, projectRoot string, cfg *shop.Co
 		return err
 	}
 
+	actualProjectConfigPath := shop.SearchConfigPath(ctx, projectRoot, projectConfigPath)
 	_, err = dev.NewMigrationWizardApp(ctx, dev.Options{
 		ProjectRoot: projectRoot,
-		ConfigPath:  projectConfigPath,
+		ConfigPath:  actualProjectConfigPath,
 		Config:      cfg,
 		EnvConfig:   envCfg,
 		Executor:    exec,
@@ -213,7 +218,8 @@ func setupDevEnvironment(cmd *cobra.Command) (*devEnvironment, error) {
 		return nil, err
 	}
 
-	cfg, err := shop.ReadConfig(cmd.Context(), projectConfigPath, true)
+	actualProjectConfigPath := shop.SearchConfigPath(cmd.Context(), projectRoot, projectConfigPath)
+	cfg, err := shop.ReadConfig(cmd.Context(), actualProjectConfigPath, projectConfigPath == "")
 	if err != nil {
 		return nil, err
 	}
@@ -241,7 +247,7 @@ func newDevEnvironment(cmd *cobra.Command, projectRoot string, cfg *shop.Config)
 	}
 
 	useDocker := exec.Type() == executor.TypeDocker
-	dockerHint := "set the environment " + tui.BoldText.Render("type") + " to " + tui.BoldText.Render("docker") + " in " + tui.BoldText.Render(".shopware-project.yml")
+	dockerHint := "set the environment " + tui.BoldText.Render("type") + " to " + tui.BoldText.Render("docker") + " in " + tui.BoldText.Render(cfg.GetStorageLocation())
 
 	// Docker gets its PHP from the image. Must use the same precedence as the
 	// executor, or the dependencies of a different PHP would be validated.
@@ -270,9 +276,10 @@ func newDevEnvironment(cmd *cobra.Command, projectRoot string, cfg *shop.Config)
 		}
 	}
 
+	actualProjectConfigPath := shop.SearchConfigPath(cmd.Context(), projectRoot, projectConfigPath)
 	return &devEnvironment{
 		projectRoot: projectRoot,
-		configPath:  projectConfigPath,
+		configPath:  actualProjectConfigPath,
 		cfg:         cfg,
 		envCfg:      envCfg,
 		executor:    exec,
@@ -455,6 +462,8 @@ func init() {
 	projectDevCmd.AddCommand(projectDevStopCmd)
 	projectDevCmd.AddCommand(projectDevStatusCmd)
 
-	projectDevStopCmd.Flags().Bool("remove-data", false, "Also remove the named volumes declared in the compose file, deleting all data stored in them")
-	projectDevCmd.PersistentFlags().String("on-port-conflict", portConflictModeFail, "What to do when host ports are already in use: fail or random. Applies when starting non-interactively; the dashboard asks instead.")
+	projectDevStopCmd.Flags().Bool("remove-data", false, "Remove the named volumes declared in the Compose file, deleting all data stored in them")
+	portConflictUsage := "In non-interactive mode, if host ports are in use: fail, or random to pick free ports and save them to the local config (the dashboard asks instead)"
+	projectDevCmd.Flags().String("on-port-conflict", portConflictModeFail, portConflictUsage)
+	projectDevStartCmd.Flags().String("on-port-conflict", portConflictModeFail, portConflictUsage)
 }

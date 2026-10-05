@@ -64,14 +64,14 @@ func BuildAssetsForExtensions(ctx context.Context, sources []asset.Source, asset
 		defer deletePaths(ctx, shopwareRoot)
 	}
 
-	nodeInstallSection := ci.Default.Section(ctx, "Installing node_modules for extensions")
+	nodeInstallSection := ci.Start("Installing node_modules for extensions")
 
 	paths, err := InstallNodeModulesOfConfigs(ctx, cfgs, assetConfig)
 	if err != nil {
 		return err
 	}
 
-	nodeInstallSection.End(ctx)
+	nodeInstallSection.End()
 
 	if shopwareRoot != "" && len(assetConfig.KeepNodeModules) > 0 {
 		paths = slices.DeleteFunc(paths, func(path string) bool {
@@ -87,7 +87,7 @@ func BuildAssetsForExtensions(ctx context.Context, sources []asset.Source, asset
 	defer deletePaths(ctx, paths...)
 
 	if !assetConfig.DisableAdminBuild && cfgs.RequiresAdminBuild() {
-		administrationSection := ci.Default.Section(ctx, "Building administration assets")
+		administrationSection := ci.Start("Building administration assets")
 
 		// Build all extensions compatible with esbuild first
 		for name, entry := range cfgs.FilterByAdminAndEsBuild(true) {
@@ -198,11 +198,11 @@ func BuildAssetsForExtensions(ctx context.Context, sources []asset.Source, asset
 			}
 		}
 
-		administrationSection.End(ctx)
+		administrationSection.End()
 	}
 
 	if !assetConfig.DisableStorefrontBuild && cfgs.RequiresStorefrontBuild() {
-		storefrontSection := ci.Default.Section(ctx, "Building storefront assets")
+		storefrontSection := ci.Start("Building storefront assets")
 		// Build all extensions compatible with esbuild first
 		for name, entry := range cfgs.FilterByStorefrontAndEsBuild(true) {
 			isNewLayout := false
@@ -336,7 +336,7 @@ func BuildAssetsForExtensions(ctx context.Context, sources []asset.Source, asset
 			}
 		}
 
-		storefrontSection.End(ctx)
+		storefrontSection.End()
 	}
 
 	if err := storeAssetCaches(ctx, cfgs, assetConfig); err != nil {
@@ -351,7 +351,7 @@ func prepareShopwareForAsset(shopwareRoot string, cfgs ExtensionAssetConfig, ass
 	if _, err := os.Stat(varFolder); os.IsNotExist(err) {
 		err := os.Mkdir(varFolder, 0o755)
 		if err != nil {
-			return fmt.Errorf("prepareShopwareForAsset: %w", err)
+			return fmt.Errorf("cannot create %s: %w", varFolder, err)
 		}
 	}
 
@@ -373,16 +373,16 @@ func prepareShopwareForAsset(shopwareRoot string, cfgs ExtensionAssetConfig, ass
 
 	pluginJson, err := json.Marshal(normalized)
 	if err != nil {
-		return fmt.Errorf("prepareShopwareForAsset: %w", err)
+		return fmt.Errorf("cannot encode plugins.json: %w", err)
 	}
 
 	if err = os.WriteFile(shopwareRoot+"/var/plugins.json", pluginJson, os.ModePerm); err != nil {
-		return fmt.Errorf("prepareShopwareForAsset: %w", err)
+		return fmt.Errorf("cannot write %s: %w", shopwareRoot+"/var/plugins.json", err)
 	}
 
 	err = os.WriteFile(shopwareRoot+"/var/features.json", []byte("{}"), 0o644)
 	if err != nil {
-		return fmt.Errorf("prepareShopwareForAsset: %w", err)
+		return fmt.Errorf("cannot write %s: %w", shopwareRoot+"/var/features.json", err)
 	}
 
 	return nil

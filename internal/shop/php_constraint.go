@@ -142,8 +142,7 @@ func satisfiesAll(v *version.Version, constraints []version.Constraints) bool {
 
 // GetPHPConstraintForShopwareVersion fetches shopware/core's metadata from packagist
 // and returns the `require.php` constraint declared for the given version. nil is
-// returned when the version is a dev branch, cannot be found, or has no PHP
-// requirement.
+// returned when the version cannot be found or has no PHP requirement.
 func GetPHPConstraintForShopwareVersion(ctx context.Context, chosenVersion string) (*PHPConstraint, error) {
 	pkg, err := repository.New(repository.PackagistURL, nil).GetPackage(ctx, "shopware/core")
 	if err != nil {
@@ -154,13 +153,11 @@ func GetPHPConstraintForShopwareVersion(ctx context.Context, chosenVersion strin
 }
 
 // PHPConstraintForShopwareVersion returns the `require.php` constraint declared for
-// the given version in the provided release list. nil is returned when the version is
-// a dev branch, cannot be found, or has no PHP requirement.
+// the given version in the provided release list. Dev branches (e.g. dev-trunk) are
+// looked up like any other version: the repository client fetches Packagist's dev
+// metadata, so their constraint is usually known. nil is returned when the version
+// cannot be found or has no PHP requirement.
 func PHPConstraintForShopwareVersion(releases []repository.Version, chosenVersion string) *PHPConstraint {
-	if strings.HasPrefix(chosenVersion, "dev-") {
-		return nil
-	}
-
 	normalized := strings.TrimPrefix(chosenVersion, "v")
 	for _, release := range releases {
 		if strings.TrimPrefix(release.Version, "v") == normalized {

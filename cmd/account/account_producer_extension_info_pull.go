@@ -12,7 +12,7 @@ import (
 
 var accountCompanyProducerExtensionInfoPullCmd = &cobra.Command{
 	Use:   "pull [path]",
-	Short: "Generates local store configuration from account data",
+	Short: "Pull store listing data into local config",
 	Args:  cobra.MinimumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		absolutePath, err := filepath.Abs(args[0])

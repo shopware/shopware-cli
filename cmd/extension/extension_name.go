@@ -12,7 +12,7 @@ import (
 
 var extensionNameCmd = &cobra.Command{
 	Use:   "get-name path",
-	Short: "Get the name of the given extension",
+	Short: "Print an extension's name from a folder or ZIP",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		path, err := filepath.Abs(args[0])
@@ -34,7 +34,7 @@ var extensionNameCmd = &cobra.Command{
 		}
 
 		if err != nil {
-			return fmt.Errorf("name: cannot open extension %w", err)
+			return fmt.Errorf("cannot open extension: %w", err)
 		}
 
 		name, err := ext.GetName()

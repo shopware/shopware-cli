@@ -321,7 +321,7 @@ func TestWriteConfigOmitsPortOverrides(t *testing.T) {
 
 	require.NoError(t, WriteConfig(cfg, dir))
 
-	content, err := os.ReadFile(filepath.Join(dir, ".shopware-project.yml"))
+	content, err := os.ReadFile(filepath.Join(dir, ".config/shopware-project.yml"))
 	require.NoError(t, err)
 	text := string(content)
 

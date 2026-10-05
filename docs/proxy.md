@@ -34,7 +34,7 @@ implementation (`internal/proxy/`, `cmd/project/project_proxy*.go`).
 ## Two ways a project uses the proxy
 
 - **New projects** — pick **"Local domains: Yes"** in `project create` (or pass
-  `--local-domain`). That writes the hostname into `.shopware-project.yml`, and
+  `--local-domain`). That writes the hostname into `.config/shopware-project.yml`, and
   `project dev` then brings the shop up through the proxy automatically — no
   `proxy up` needed. Run `proxy setup` once per machine first (DNS + trust).
 - **Existing port-based projects** — `proxy up` opts them in on demand (switching
@@ -147,7 +147,7 @@ touches five things, records the old values, and `down` restores them exactly:
 | Traefik labels, no host ports, shared network, CA mount | `compose.yaml` (regenerated in proxy mode) | regenerated in fixed-port mode |
 | `APP_URL=https://<host>` | `.env.local` (one-line surgical edit) | previous value from registry |
 | Sales channel domain | database, via a parameterized `UPDATE` on the executor's DB connection | previous value (while the stack runs; otherwise a hint to restore it) |
-| `url:` keys (top-level + environment) | `.shopware-project.yml` (comment-preserving YAML edit) | previous values; a previously absent key is removed again |
+| `url:` keys (top-level + environment) | resolved project configuration file (recommended `.config/shopware-project.yml`; legacy paths preserved) | previous values; a previously absent key is removed again |
 | Traefik network aliases | shared Traefik container | reconciled to the remaining hostnames |
 | Registry entry | `<state dir>/registry.json` | entry removed |
 
@@ -171,7 +171,7 @@ console command: it works on **every Shopware version** (the core
 `sales-channel:update:domain` keeps the previous port), and it reuses the
 executor's database connection rather than shelling into a container.
 
-> **Trade-off:** while a shop is registered, `.shopware-project.yml` and
+> **Trade-off:** while a shop is registered, `.config/shopware-project.yml` and
 > `.env.local` show as modified in git. That is intentional — the dev TUI and
 > the admin API client read the URL from those files — but don't commit the
 > proxy URLs. `down` cleans them up.
@@ -272,7 +272,7 @@ check, which curls the shop over HTTPS.
 | `~/Library/Application Support/shopware-cli/proxy/` (macOS) / `~/.config/shopware-cli/proxy/` (Linux) | `registry.json` (registered projects + remembered previous values), `settings.json` (domain), `dns/Corefile` (CoreDNS zone config), `traefik/certs/` + `traefik/dynamic/` (server cert, watched Traefik config) |
 | mkcert CAROOT (e.g. `~/Library/Application Support/mkcert/`) | `rootCA.pem`, `rootCA-key.pem` — shared with mkcert |
 | `/etc/resolver/<domain>` or `/etc/systemd/resolved.conf.d/90-shopware-cli.conf` | OS split-DNS routing (sudo, written by `setup`, removed on domain change) |
-| Per project | `compose.yaml` (regenerated in proxy mode, incl. the read-only CA mount), `APP_URL` in `.env.local`, `url:` in `.shopware-project.yml` — all reverted by `down` |
+| Per project | `compose.yaml` (regenerated in proxy mode, incl. the read-only CA mount), `APP_URL` in `.env.local`, `url:` in `.config/shopware-project.yml` — all reverted by `down` |
 
 ## When something is wrong
 

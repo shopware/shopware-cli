@@ -8,7 +8,7 @@ import (
 
 var accountRootCmd = &cobra.Command{
 	Use:   "account",
-	Short: "Manage your Shopware Account",
+	Short: "Authenticate with Shopware Account and upload extensions",
 }
 
 type ServiceContainer struct {

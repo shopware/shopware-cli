@@ -72,3 +72,27 @@ func TestIncludeFilters(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, "- [NEXT-1234 - Fooo](/1234567890)", changelog)
 }
+
+func TestInvalidPattern(t *testing.T) {
+	t.Parallel()
+
+	_, err := renderChangelog(nil, Config{Pattern: "("})
+
+	assert.ErrorContains(t, err, `cannot compile changelog pattern "("`)
+}
+
+func TestInvalidVariablePattern(t *testing.T) {
+	t.Parallel()
+
+	_, err := renderChangelog(nil, Config{Variables: map[string]string{"ticket": "["}})
+
+	assert.ErrorContains(t, err, `cannot compile changelog variable ticket pattern "["`)
+}
+
+func TestInvalidTemplate(t *testing.T) {
+	t.Parallel()
+
+	_, err := renderChangelog(nil, Config{Template: "{{ .Commits"})
+
+	assert.ErrorContains(t, err, "cannot parse changelog template")
+}

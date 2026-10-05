@@ -44,8 +44,8 @@ Extension detection is automatic based on file presence. Each type has specific 
 
 ### Configuration Files
 - **`.shopware-cli.yaml`** - Global CLI configuration
-- **`.shopware-extension.yml`** - Extension-specific settings (schema: `internal/extension/config_schema.json`, embedded and exposed via `shopware-cli extension config-schema`)
-- **`.shopware-project.yml`** - Project-specific settings (schema: `internal/shop/config_schema.json`, embedded and exposed via `shopware-cli project config-schema`). Shop URL and Admin API credentials belong under `environments`; empty `-e` defaults to `environments.local`. Top-level `url` / `admin_api` are deprecated. An environment's `type` is `local`, `docker`, or `ssh`; `ssh` targets point at a remote host via `ssh.host`/`ssh.user`/`ssh.directory` and run commands through a multiplexed SSH connection (database connections are tunneled automatically).
+- **`.config/shopware-extension.yml` / `.shopware-extension.yml` / `.shopware-extension.yaml`** - Extension-specific settings (schema: `internal/extension/config_schema.json`, embedded and exposed via `shopware-cli extension config-schema`). Only one file is loaded and the first is preferred / used for new projects, the others are legacy and still supported
+- **`.config/shopware-project.yml` / `.shopware-project.yaml` / `.shopware-project.yml`** - Project-specific settings (schema: `internal/shop/config_schema.json`, embedded and exposed via `shopware-cli project config-schema`). Shop URL and Admin API credentials belong under `environments`; empty `-e` defaults to `environments.local`. Top-level `url` / `admin_api` are deprecated. An environment's `type` is `local`, `docker`, or `ssh`; `ssh` targets point at a remote host via `ssh.host`/`ssh.user`/`ssh.directory` and run commands through a multiplexed SSH connection (database connections are tunneled automatically). Only one file is loaded and the first is preferred / used for new projects, the others are legacy and still supported
 
 ## Development Patterns
 
@@ -68,6 +68,14 @@ Commands follow Cobra CLI patterns with:
 - Use structured logging via `go.uber.org/zap`
 - Context-based logging: `logging.FromContext(ctx)`
 - Graceful error reporting to users
+
+### Command Conventions
+Follow `docs/COMMAND_CONVENTIONS.md` for every command, flag and message. The short version:
+- Short texts are imperative, capitalised, no period; a parent command describes the group
+- `Use` shows required arguments bare and optional ones in brackets, no angle brackets; every leaf command declares `Args`
+- Errors are lowercase `cannot <verb> ...: %w` without Go identifiers, hints in quotes; log lines are capitalised sentences
+- Any failure exits non-zero in every output format; never log success after a failed step
+- Test the invoked `internal/` function, never the cobra layer, and test behaviour, not message wording
 
 ### AI Integration
 The CLI includes AI-powered features for:
@@ -110,10 +118,10 @@ shopware-cli project storefront-watch
 
 ## Code Quality Integration
 
-The verifier system provides comprehensive code quality checks:
-- **PHP**: PHPStan, PHP-CS-Fixer, Rector
-- **JavaScript**: ESLint, Prettier, Stylelint  
-- **Twig**: Custom admin Twig linter with auto-fix capabilities
-- **Composer**: Dependency validation
+The verifier registers tools through the name-only `Tool` interface. `CheckTool`, `FixTool`, and `FormatTool` add capabilities; commands select the relevant capability before applying `--only` or `--exclude`. An unsupported tool name is an error, and `ToolList[T]` preserves the capability type through filtering.
 
-Tools are configurable via JSON schemas and run automatically during builds.
+- **Checkers**: `builtin` (legacy alias: `sw-cli`), PHPStan, ESLint, Stylelint, Storefront Twig
+- **Fixers**: Rector, ESLint, Stylelint, Symfony XML conversion
+- **Formatters**: PHP-CS-Fixer, Prettier
+
+`extension validate` runs all checkers by default. The deprecated `--full` flag remains accepted but has no effect; use `--only` or `--exclude` to select checkers. The extension commands report whether each tool was invoked or skipped; invocation does not guarantee that files were analyzed or changed.

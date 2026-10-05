@@ -108,7 +108,7 @@ func (c *DiskCache) StoreFolderCache(ctx context.Context, key string, folderPath
 	_ = os.RemoveAll(tmpPath)
 
 	// Copy the folder to temporary location
-	if err := CopyFiles(folderPath, tmpPath); err != nil {
+	if err := CopyFiles(ctx, folderPath, tmpPath); err != nil {
 		_ = os.RemoveAll(tmpPath)
 		return fmt.Errorf("failed to copy folder to cache: %w", err)
 	}
@@ -155,7 +155,7 @@ func (c *DiskCache) RestoreFolderCache(ctx context.Context, key string, targetPa
 	}
 
 	// Copy cached folder to target location
-	if err := CopyFiles(folderPath, targetPath); err != nil {
+	if err := CopyFiles(ctx, folderPath, targetPath); err != nil {
 		return fmt.Errorf("failed to restore cached folder: %w", err)
 	}
 

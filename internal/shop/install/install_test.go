@@ -249,7 +249,7 @@ func TestPersistCredentialsStoredEnvironment(t *testing.T) {
 
 	assert.Nil(t, cfg.AdminApi, "a stored environment does not touch the deprecated top-level admin_api")
 
-	written, err := os.ReadFile(filepath.Join(dir, ".shopware-project.yml"))
+	written, err := os.ReadFile(filepath.Join(dir, ".config/shopware-project.yml"))
 	require.NoError(t, err)
 	assert.Contains(t, string(written), "username: boss")
 	assert.Contains(t, string(written), "password: secret123")
@@ -270,7 +270,7 @@ func TestPersistCredentialsTopLevelCopy(t *testing.T) {
 	require.NotNil(t, cfg.AdminApi, "credentials must land on the config that gets written, not only the copy")
 	assert.Equal(t, "boss", cfg.AdminApi.Username)
 
-	written, err := os.ReadFile(filepath.Join(dir, ".shopware-project.yml"))
+	written, err := os.ReadFile(filepath.Join(dir, ".config/shopware-project.yml"))
 	require.NoError(t, err)
 	assert.Contains(t, string(written), "username: boss")
 }

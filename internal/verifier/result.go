@@ -1,7 +1,6 @@
 package verifier
 
 import (
-	"strings"
 	"sync"
 
 	"github.com/shopware/shopware-cli/internal/validation"
@@ -60,24 +59,7 @@ func (c *Check) RemoveByIdentifier(ignores []validation.ToolConfigIgnore) valida
 	for _, r := range c.Results {
 		shouldKeep := true
 		for _, ignore := range ignores {
-			// Only ignore all matches when identifier is the only field specified
-			if ignore.Identifier != "" && ignore.Path == "" && ignore.Message == "" {
-				if r.Identifier == ignore.Identifier {
-					shouldKeep = false
-					break
-				}
-			}
-
-			// If path is specified with identifier (but no message), match both
-			if ignore.Identifier != "" && ignore.Path != "" && ignore.Message == "" {
-				if r.Identifier == ignore.Identifier && c.samePath(r.Path, ignore.Path) {
-					shouldKeep = false
-					break
-				}
-			}
-
-			// Handle message-based ignores (when no identifier is specified)
-			if ignore.Identifier == "" && ignore.Message != "" && strings.Contains(r.Message, ignore.Message) && (c.samePath(r.Path, ignore.Path) || ignore.Path == "") {
+			if validation.IgnoreMatches(r, ignore, c.samePath) {
 				shouldKeep = false
 				break
 			}

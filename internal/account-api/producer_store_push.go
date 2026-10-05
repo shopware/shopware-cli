@@ -327,7 +327,7 @@ func parseInlineablePath(path, extensionDir string) (string, error) {
 
 	content, err := os.ReadFile(filePath)
 	if err != nil {
-		return "", fmt.Errorf("error reading file at path %s with error: %v", filePath, err)
+		return "", fmt.Errorf("cannot read %s: %w", filePath, err)
 	}
 
 	if filepath.Ext(filePath) != ".md" {
@@ -336,7 +336,7 @@ func parseInlineablePath(path, extensionDir string) (string, error) {
 
 	html, err := markdown.ToHTML(content)
 	if err != nil {
-		return "", fmt.Errorf("cannot convert file at path %s from markdown to html with error: %v", filePath, err)
+		return "", fmt.Errorf("cannot convert %s from Markdown to HTML: %w", filePath, err)
 	}
 
 	return html, nil

@@ -15,8 +15,9 @@ import (
 
 var projectAdminWatchCmd = &cobra.Command{
 	Use:     "admin-watch [path]",
-	Short:   "Starts the Shopware Admin Watcher",
+	Short:   "Watch Administration assets with live reload",
 	Aliases: []string{"watch-admin"},
+	Args:    cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		var projectRoot string
 		var err error
@@ -31,7 +32,8 @@ var projectAdminWatchCmd = &cobra.Command{
 			return err
 		}
 
-		shopCfg, err := shop.ReadConfig(cmd.Context(), projectConfigPath, true)
+		actualProjectConfigPath := shop.SearchConfigPath(cmd.Context(), projectRoot, projectConfigPath)
+		shopCfg, err := shop.ReadConfig(cmd.Context(), actualProjectConfigPath, projectConfigPath == "")
 		if err != nil {
 			return err
 		}
@@ -62,8 +64,8 @@ var projectAdminWatchCmd = &cobra.Command{
 
 func init() {
 	projectRootCmd.AddCommand(projectAdminWatchCmd)
-	projectAdminWatchCmd.PersistentFlags().String("only-extensions", "", "Only watch the given extensions (comma separated)")
+	projectAdminWatchCmd.PersistentFlags().String("only-extensions", "", "Watch only the specified extensions (comma-separated)")
 	projectAdminWatchCmd.PersistentFlags().Bool("select-extensions", false, "Select extensions interactively")
-	projectAdminWatchCmd.PersistentFlags().String("skip-extensions", "", "Skips the given extensions (comma separated)")
-	projectAdminWatchCmd.PersistentFlags().Bool("only-custom-static-extensions", false, "Only build extensions from custom/static-plugins directory")
+	projectAdminWatchCmd.PersistentFlags().String("skip-extensions", "", "Skip the specified extensions (comma-separated)")
+	projectAdminWatchCmd.PersistentFlags().Bool("only-custom-static-extensions", false, "Watch only extensions in the custom/static-plugins directory")
 }

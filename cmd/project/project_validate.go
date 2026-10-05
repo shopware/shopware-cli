@@ -17,7 +17,8 @@ import (
 
 var projectValidateCmd = &cobra.Command{
 	Use:   "validate [path]",
-	Short: "Validate project",
+	Short: "Run static analysis and Shopware checks on a project",
+	Long:  "Validate the project's own code, such as extensions in custom/ and configured bundles. Packages that Composer installs into vendor/ are not validated. Runs on a temporary copy unless --no-copy is passed.",
 	Args:  cobra.MaximumNArgs(1),
 	PreRunE: func(cmd *cobra.Command, args []string) error {
 		if _, err := projectValidationFormat(cmd); err != nil {
@@ -32,12 +33,9 @@ var projectValidateCmd = &cobra.Command{
 		}
 		only, _ := cmd.Flags().GetString("only")
 		exclude, _ := cmd.Flags().GetString("exclude")
-		tmpDir, err := os.MkdirTemp(os.TempDir(), "analyse-project-*")
+		verifier.WarnOnDeprecatedToolName(cmd.Context(), only, exclude)
 		noCopy, _ := cmd.Flags().GetBool("no-copy")
 		localOnly, _ := cmd.Flags().GetBool("local-only")
-		if err != nil {
-			return fmt.Errorf("cannot create temporary directory: %w", err)
-		}
 
 		projectPath := ""
 
@@ -55,21 +53,25 @@ var projectValidateCmd = &cobra.Command{
 			return fmt.Errorf("cannot find path: %w", err)
 		}
 
+		validationPath := projectPath
 		if !noCopy {
-			if err := system.CopyFiles(projectPath, tmpDir); err != nil {
-				return err
+			tmpDir, err := os.MkdirTemp(os.TempDir(), "analyse-project-*")
+			if err != nil {
+				return fmt.Errorf("cannot create temporary directory: %w", err)
 			}
-
 			defer func() {
 				if err := os.RemoveAll(tmpDir); err != nil {
-					logging.FromContext(cmd.Context()).Error("Failed to remove temporary directory:", err)
+					logging.FromContext(cmd.Context()).Errorf("Failed to remove temporary directory: %v", err)
 				}
 			}()
-		} else {
-			tmpDir = projectPath
+
+			if err := system.CopyFiles(cmd.Context(), projectPath, tmpDir); err != nil {
+				return err
+			}
+			validationPath = tmpDir
 		}
 
-		toolCfg, err := verifier.GetConfigFromProject(tmpDir, localOnly)
+		toolCfg, err := verifier.GetConfigFromProject(cmd.Context(), validationPath, localOnly)
 		if err != nil {
 			return err
 		}
@@ -79,7 +81,7 @@ var projectValidateCmd = &cobra.Command{
 
 		var gr errgroup.Group
 
-		tools := verifier.GetTools()
+		tools := verifier.GetToolsOf[verifier.CheckTool]()
 
 		tools, err = tools.Only(only)
 		if err != nil {
@@ -92,7 +94,6 @@ var projectValidateCmd = &cobra.Command{
 		}
 
 		for _, tool := range tools {
-			tool := tool
 			gr.Go(func() error {
 				return tool.Check(cmd.Context(), result, *toolCfg)
 			})
@@ -104,7 +105,7 @@ var projectValidateCmd = &cobra.Command{
 
 		filtered := result.RemoveByIdentifier(toolCfg.ValidationIgnores)
 
-		return validation.DoCheckReport(filtered, reportingFormat)
+		return validation.DoCheckReport(filtered, reportingFormat, false)
 	},
 }
 
@@ -123,12 +124,12 @@ func projectValidationFormat(cmd *cobra.Command) (string, error) {
 
 func init() {
 	projectRootCmd.AddCommand(projectValidateCmd)
-	projectValidateCmd.PersistentFlags().String("format", "", "Reporting format (summary, json, github, gitlab, junit, markdown)")
+	projectValidateCmd.PersistentFlags().String("format", "", "Report format (summary, json, github, gitlab, junit, markdown; auto-detected if unset)")
 	projectValidateCmd.PersistentFlags().String("reporter", "", "Reporting format (summary, json, github, gitlab, junit, markdown)")
-	projectValidateCmd.PersistentFlags().String("only", "", "Run only specific tools by name (comma-separated, e.g. phpstan,eslint)")
-	projectValidateCmd.PersistentFlags().String("exclude", "", "Exclude specific tools by name (comma-separated, e.g. phpstan,eslint)")
-	projectValidateCmd.PersistentFlags().Bool("no-copy", false, "Do not copy project files to temporary directory")
-	projectValidateCmd.PersistentFlags().Bool("local-only", false, "Only read plugins in custom/* folders")
+	projectValidateCmd.PersistentFlags().String("only", "", "Run only the specified tools (comma-separated). Available: phpstan, eslint, stylelint, storefront-twig, builtin (legacy alias: sw-cli, deprecated)")
+	projectValidateCmd.PersistentFlags().String("exclude", "", "Skip these tools (comma-separated); with --only, each must be selected there. Names: phpstan, eslint, stylelint, storefront-twig, builtin (legacy alias: sw-cli, deprecated)")
+	projectValidateCmd.PersistentFlags().Bool("no-copy", false, "Validate the project directory itself, not a temporary copy")
+	projectValidateCmd.PersistentFlags().Bool("local-only", false, "Validate only extensions in custom/* folders")
 	projectValidateCmd.MarkFlagsMutuallyExclusive("format", "reporter")
 	_ = projectValidateCmd.PersistentFlags().MarkDeprecated("reporter", "use --format instead")
 	_ = projectValidateCmd.PersistentFlags().MarkHidden("reporter")

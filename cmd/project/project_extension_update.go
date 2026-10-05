@@ -11,8 +11,8 @@ import (
 )
 
 var projectExtensionUpdateCmd = &cobra.Command{
-	Use:   "update [name]",
-	Short: "Update a extension",
+	Use:   "update name...|all",
+	Short: "Update one or more installed extensions",
 	Args:  cobra.MinimumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		projectRoot, err := shop.FindClosestShopwareProject(true)
@@ -56,7 +56,7 @@ var projectExtensionUpdateCmd = &cobra.Command{
 
 			if extension == nil {
 				failed = true
-				logging.FromContext(cmd.Context()).Errorf("Cannot find extension by name %s", arg)
+				logging.FromContext(cmd.Context()).Errorf("Cannot find extension %s, run \"shopware-cli project extension list\" to see installed extensions", arg)
 				continue
 			}
 
@@ -66,7 +66,7 @@ var projectExtensionUpdateCmd = &cobra.Command{
 			}
 
 			if !extension.Active {
-				logging.FromContext(cmd.Context()).Infof("Extension %s is not active skipping", arg)
+				logging.FromContext(cmd.Context()).Infof("Extension %s is not active, skipping", arg)
 				continue
 			}
 
@@ -82,6 +82,7 @@ var projectExtensionUpdateCmd = &cobra.Command{
 				failed = true
 
 				logging.FromContext(cmd.Context()).Errorf("Update of %s failed with error: %v", extension.Name, err)
+				continue
 			}
 
 			logging.FromContext(cmd.Context()).Infof("Updated %s", extension.Name)
@@ -97,5 +98,5 @@ var projectExtensionUpdateCmd = &cobra.Command{
 
 func init() {
 	projectExtensionCmd.AddCommand(projectExtensionUpdateCmd)
-	projectExtensionUpdateCmd.PersistentFlags().Bool("disable-store-update", false, "Downloads updates from store.shopware.com")
+	projectExtensionUpdateCmd.PersistentFlags().Bool("disable-store-update", false, "Disable downloading updates from store.shopware.com")
 }

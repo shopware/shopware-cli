@@ -13,9 +13,10 @@ import (
 )
 
 var projectAdminBuildCmd = &cobra.Command{
-	Use:     "admin-build [project-dir]",
-	Short:   "Builds the Administration",
+	Use:     "admin-build [path]",
+	Short:   "Build and install Administration assets",
 	Aliases: []string{"build-admin"},
+	Args:    cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		var projectRoot string
 		var err error
@@ -30,7 +31,8 @@ var projectAdminBuildCmd = &cobra.Command{
 			return err
 		}
 
-		shopCfg, err := shop.ReadConfig(cmd.Context(), projectConfigPath, true)
+		actualProjectConfigPath := shop.SearchConfigPath(cmd.Context(), projectRoot, projectConfigPath)
+		shopCfg, err := shop.ReadConfig(cmd.Context(), actualProjectConfigPath, projectConfigPath == "")
 		if err != nil {
 			return err
 		}
@@ -82,10 +84,10 @@ var projectAdminBuildCmd = &cobra.Command{
 
 func init() {
 	projectRootCmd.AddCommand(projectAdminBuildCmd)
-	projectAdminBuildCmd.PersistentFlags().Bool("skip-assets-install", false, "Skips the assets installation")
-	projectAdminBuildCmd.PersistentFlags().Bool("force-install-dependencies", false, "Force install NPM dependencies")
-	projectAdminBuildCmd.PersistentFlags().String("only-extensions", "", "Only build the given extensions (comma separated)")
+	projectAdminBuildCmd.PersistentFlags().Bool("skip-assets-install", false, "Skip installing built assets")
+	projectAdminBuildCmd.PersistentFlags().Bool("force-install-dependencies", false, "Force-install npm dependencies")
+	projectAdminBuildCmd.PersistentFlags().String("only-extensions", "", "Build only the specified extensions (comma-separated)")
 	projectAdminBuildCmd.PersistentFlags().Bool("select-extensions", false, "Select extensions interactively")
-	projectAdminBuildCmd.PersistentFlags().String("skip-extensions", "", "Skips the given extensions (comma separated)")
-	projectAdminBuildCmd.PersistentFlags().Bool("only-custom-static-extensions", false, "Only build extensions from custom/static-plugins directory")
+	projectAdminBuildCmd.PersistentFlags().String("skip-extensions", "", "Skip the specified extensions (comma-separated)")
+	projectAdminBuildCmd.PersistentFlags().Bool("only-custom-static-extensions", false, "Build only extensions in the custom/static-plugins directory")
 }

@@ -79,9 +79,10 @@ type IndexSchema struct {
 }
 
 type IndexColumnSchema struct {
-	Name    string
-	SubPart sql.NullInt64
-	Order   string
+	Name       sql.NullString
+	Expression sql.NullString
+	SubPart    sql.NullInt64
+	Order      string
 }
 
 type ForeignKeySchema struct {
@@ -288,11 +289,19 @@ func (schema *TableSchema) writeIndexes(b *strings.Builder) {
 			if j > 0 {
 				b.WriteString(",")
 			}
-			b.WriteString("`")
-			b.WriteString(col.Name)
-			b.WriteString("`")
+			if col.Name.Valid {
+				b.WriteString("`")
+				b.WriteString(col.Name.String)
+				b.WriteString("`")
+			} else {
+				b.WriteString(col.Expression.String)
+			}
 			if col.SubPart.Valid {
 				fmt.Fprintf(b, "(%d)", col.SubPart.Int64)
+			}
+			if col.Order != "" && col.Order != "ASC" {
+				b.WriteString(" ")
+				b.WriteString(col.Order)
 			}
 		}
 		b.WriteString(")")
@@ -613,11 +622,26 @@ func (d *Dumper) fetchAllColumns(ctx context.Context) error {
 }
 
 func (d *Dumper) fetchAllIndexes(ctx context.Context) error {
+	hasExpressionColumnQuery := `
+		SELECT COUNT(*)
+		FROM INFORMATION_SCHEMA.COLUMNS
+		WHERE TABLE_SCHEMA = 'information_schema'
+		  AND TABLE_NAME = 'STATISTICS'
+		  AND COLUMN_NAME = 'EXPRESSION'
+	`
+
+	var hasExpressionColumn bool
+
+	if err := d.db.QueryRowContext(ctx, hasExpressionColumnQuery).Scan(&hasExpressionColumn); err != nil {
+		return err
+	}
+
 	query := `
 		SELECT
 			TABLE_NAME,
 			INDEX_NAME,
 			COLUMN_NAME,
+			EXPRESSION,
 			NON_UNIQUE,
 			INDEX_TYPE,
 			SUB_PART,
@@ -627,6 +651,24 @@ func (d *Dumper) fetchAllIndexes(ctx context.Context) error {
 		FROM INFORMATION_SCHEMA.STATISTICS
 		WHERE TABLE_SCHEMA = DATABASE()
 		ORDER BY TABLE_NAME, INDEX_NAME, SEQ_IN_INDEX`
+
+	if !hasExpressionColumn {
+		query = `
+			SELECT
+				TABLE_NAME,
+				INDEX_NAME,
+				COLUMN_NAME,
+				NULL AS EXPRESSION,
+				NON_UNIQUE,
+				INDEX_TYPE,
+				SUB_PART,
+				COLLATION,
+				INDEX_COMMENT,
+				SEQ_IN_INDEX
+			FROM INFORMATION_SCHEMA.STATISTICS
+			WHERE TABLE_SCHEMA = DATABASE()
+			ORDER BY TABLE_NAME, INDEX_NAME, SEQ_IN_INDEX`
+	}
 
 	rows, err := d.db.QueryContext(ctx, query)
 	if err != nil {
@@ -639,14 +681,15 @@ func (d *Dumper) fetchAllIndexes(ctx context.Context) error {
 	seqCounters := make(map[string]int)
 
 	for rows.Next() {
-		var tableName, indexName, columnName, indexType string
+		var tableName, indexName, indexType string
+		var columnName, expression sql.NullString
 		var nonUnique int
 		var subPart sql.NullInt64
 		var collation sql.NullString
 		var comment string
 		var seqInIndex int
 
-		err := rows.Scan(&tableName, &indexName, &columnName, &nonUnique, &indexType, &subPart, &collation, &comment, &seqInIndex)
+		err := rows.Scan(&tableName, &indexName, &columnName, &expression, &nonUnique, &indexType, &subPart, &collation, &comment, &seqInIndex)
 		if err != nil {
 			return err
 		}
@@ -657,7 +700,8 @@ func (d *Dumper) fetchAllIndexes(ctx context.Context) error {
 		}
 
 		if indexName == "PRIMARY" {
-			schema.PrimaryKey = append(schema.PrimaryKey, columnName)
+			// Primary key columns must always be actual columns, not expressions
+			schema.PrimaryKey = append(schema.PrimaryKey, columnName.String)
 			continue
 		}
 
@@ -681,15 +725,23 @@ func (d *Dumper) fetchAllIndexes(ctx context.Context) error {
 			seqCounters[tableName]++
 		}
 
+		if expression.Valid {
+			// The INFORMATION_SCHEMA.STATISTICS.EXPRESSION column contains escaped strings which we must unescape.
+			//
+			// For example a check like (('A' = 'A')) is stored as (_utf8mb4\'A\' = _utf8mb4\'A\') in CHECK_CLAUSE.
+			expression.String = unescape(expression.String)
+		}
+
 		order := "ASC"
 		if collation.Valid && collation.String == "D" {
 			order = "DESC"
 		}
 
 		idx.Columns = append(idx.Columns, IndexColumnSchema{
-			Name:    columnName,
-			SubPart: subPart,
-			Order:   order,
+			Name:       columnName,
+			Expression: expression,
+			SubPart:    subPart,
+			Order:      order,
 		})
 	}
 

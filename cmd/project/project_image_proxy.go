@@ -77,13 +77,15 @@ var projectImageProxyCmd = &cobra.Command{
 	Short: "Start a proxy server for serving images from the public folder",
 	Long: `Start an HTTP server that serves files from the public folder of the closest Shopware project.
 If a file is not found locally, it proxies the request to the upstream server.`,
+	Args: cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		path, err := shop.FindClosestShopwareProject(false)
 		if err != nil {
 			return err
 		}
 
-		cfg, err := shop.ReadConfig(cmd.Context(), projectConfigPath, true)
+		actualProjectConfigPath := shop.SearchConfigPath(cmd.Context(), path, projectConfigPath)
+		cfg, err := shop.ReadConfig(cmd.Context(), actualProjectConfigPath, projectConfigPath == "")
 		if err != nil {
 			return err
 		}
@@ -95,7 +97,7 @@ If a file is not found locally, it proxies the request to the upstream server.`,
 		}
 
 		if upstreamURL == "" {
-			return errors.New("upstream URL must be provided either via --url flag or in .shopware-project.yml")
+			return errors.New("upstream URL must be provided either via --url flag or in " + cfg.GetStorageLocation())
 		}
 
 		// Parse upstream URL
@@ -330,9 +332,9 @@ If a file is not found locally, it proxies the request to the upstream server.`,
 
 func init() {
 	projectRootCmd.AddCommand(projectImageProxyCmd)
-	projectImageProxyCmd.Flags().StringVar(&imageProxyPort, "port", "8080", "Port to listen on")
-	projectImageProxyCmd.Flags().StringVar(&imageProxyURL, "url", "", "Upstream server URL (overrides config)")
-	projectImageProxyCmd.Flags().BoolVar(&imageProxyClear, "clear", false, "Clear cache before starting")
-	projectImageProxyCmd.Flags().StringVar(&imageProxyExternalURL, "external-url", "", "External URL for Shopware config (e.g., for reverse proxy setups)")
-	projectImageProxyCmd.Flags().BoolVar(&imageProxySkipConfig, "skip-config", false, "Skip creating Shopware config file")
+	projectImageProxyCmd.Flags().StringVar(&imageProxyPort, "port", "8080", "Port for the image proxy server to listen on")
+	projectImageProxyCmd.Flags().StringVar(&imageProxyURL, "url", "", "Upstream server URL (overrides project config)")
+	projectImageProxyCmd.Flags().BoolVar(&imageProxyClear, "clear", false, "Clear the image proxy cache before starting the server")
+	projectImageProxyCmd.Flags().StringVar(&imageProxyExternalURL, "external-url", "", "Public image proxy URL for Shopware config (e.g. for a reverse proxy setup)")
+	projectImageProxyCmd.Flags().BoolVar(&imageProxySkipConfig, "skip-config", false, "Skip creating the Shopware image-proxy config file")
 }

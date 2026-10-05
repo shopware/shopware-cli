@@ -50,18 +50,18 @@ func newApp(ctx context.Context, path string) (*App, error) {
 
 	appFile, err := os.ReadFile(appFileName)
 	if err != nil {
-		return nil, fmt.Errorf("newApp: %v", err)
+		return nil, fmt.Errorf("cannot read manifest.xml: %w", err)
 	}
 
 	var manifest Manifest
 	err = xml.Unmarshal(appFile, &manifest)
 	if err != nil {
-		return nil, fmt.Errorf("newApp: %v", err)
+		return nil, fmt.Errorf("cannot parse manifest.xml: %w", err)
 	}
 
 	cfg, err := readExtensionConfig(ctx, path)
 	if err != nil {
-		return nil, fmt.Errorf("newApp: %v", err)
+		return nil, fmt.Errorf("cannot read extension config: %w", err)
 	}
 
 	app := App{

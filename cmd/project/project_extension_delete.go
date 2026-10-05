@@ -11,9 +11,10 @@ import (
 )
 
 var projectExtensionDeleteCmd = &cobra.Command{
-	Use:   "delete [name]",
-	Short: "Delete a extension",
-	Args:  cobra.MinimumNArgs(1),
+	Use:     "delete name...",
+	Short:   "Delete one or more extensions from a Shopware project",
+	Args:    cobra.MinimumNArgs(1),
+	Aliases: []string{"rm"},
 	RunE: func(cmd *cobra.Command, args []string) error {
 		projectRoot, err := shop.FindClosestShopwareProject(true)
 		if err != nil {
@@ -41,7 +42,8 @@ var projectExtensionDeleteCmd = &cobra.Command{
 			extension := extensions.GetByName(arg)
 
 			if extension == nil {
-				logging.FromContext(cmd.Context()).Errorf("Cannot find extension by name %s", arg)
+				failed = true
+				logging.FromContext(cmd.Context()).Errorf("Cannot find extension %s, run \"shopware-cli project extension list\" to see installed extensions", arg)
 				continue
 			}
 
@@ -70,14 +72,15 @@ var projectExtensionDeleteCmd = &cobra.Command{
 			if _, err := client.ExtensionManager.RemoveExtension(adminSdk.NewApiContext(cmd.Context()), extension.Type, extension.Name); err != nil {
 				failed = true
 
-				logging.FromContext(cmd.Context()).Errorf("Remove of %s failed with error: %v", extension.Name, err)
+				logging.FromContext(cmd.Context()).Errorf("Removal of %s failed with error: %v", extension.Name, err)
+				continue
 			}
 
 			logging.FromContext(cmd.Context()).Infof("Removed %s", extension.Name)
 		}
 
 		if failed {
-			return errors.New("remove failed")
+			return errors.New("delete failed")
 		}
 
 		return nil

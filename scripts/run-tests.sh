@@ -9,7 +9,7 @@ cd "$REPO_DIR"
 COVERPROFILE="${COVERAGE_FILE:-}"
 
 if [ $# -eq 0 ]; then
-    set -- -v ./...
+    set -- ./...
 fi
 
 # Warm the build cache while we still have network so the sandboxed run

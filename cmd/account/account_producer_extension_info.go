@@ -6,7 +6,7 @@ import (
 
 var accountCompanyProducerExtensionInfoCmd = &cobra.Command{
 	Use:   "info",
-	Short: "Manage store page",
+	Short: "Sync local metadata with an Extension Store listing",
 }
 
 func init() {

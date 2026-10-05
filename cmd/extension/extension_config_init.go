@@ -14,18 +14,15 @@ import (
 
 var extensionConfigInitCmd = &cobra.Command{
 	Use:   "init [path]",
-	Short: "Create a minimal .shopware-extension.yml",
-	Long: `Create a minimal .shopware-extension.yml for an extension checkout.
+	Short: "Create a minimal .config/shopware-extension.yml",
+	Long: `Create a minimal .config/shopware-extension.yml for an extension checkout.
 
-Writes the yaml-language-server schema comment and today's compatibility_date.
-All other configuration keys are optional — add what you need
-(see: shopware-cli extension config-schema).
-
-Examples:
-  shopware-cli extension config init
+It writes the yaml-language-server schema comment and today's compatibility_date.
+All other configuration keys are optional, add what you need
+(see: shopware-cli extension config-schema).`,
+	Example: `  shopware-cli extension config init
   shopware-cli extension config init ./my-extension
-  shopware-cli extension config init --force
-`,
+  shopware-cli extension config init --force`,
 	Args: cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		root := "."
@@ -39,12 +36,13 @@ Examples:
 
 		force, _ := cmd.Flags().GetBool("force")
 
-		if !force && extension.ConfigExists(abs) && system.IsInteractionEnabled(cmd.Context()) {
+		existing := extension.ConfigPath(cmd.Context(), abs)
+		if !force && existing != "" && system.IsInteractionEnabled(cmd.Context()) {
 			overwrite := false
 			form := huh.NewForm(
 				huh.NewGroup(
 					huh.NewConfirm().
-						Title(extension.ConfigFileName + " already exists. Overwrite?").
+						Title(existing + " already exists. Overwrite?").
 						Value(&overwrite),
 				),
 			)
@@ -57,7 +55,7 @@ Examples:
 			force = true
 		}
 
-		path, err := extension.InitConfig(abs, force)
+		path, err := extension.InitConfig(cmd.Context(), abs, force)
 		if err != nil {
 			return err
 		}
@@ -71,5 +69,5 @@ Examples:
 func init() {
 	extensionConfigCmd.AddCommand(extensionConfigInitCmd)
 
-	extensionConfigInitCmd.Flags().Bool("force", false, "Overwrite existing .shopware-extension.yml")
+	extensionConfigInitCmd.Flags().Bool("force", false, "Overwrite existing .config/shopware-extension.yml")
 }

@@ -11,8 +11,8 @@ import (
 )
 
 var projectExtensionUninstallCmd = &cobra.Command{
-	Use:   "uninstall [name]",
-	Short: "Uninstall a extension",
+	Use:   "uninstall name...",
+	Short: "Uninstall one or more extensions from a Shopware project",
 	Args:  cobra.MinimumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		projectRoot, err := shop.FindClosestShopwareProject(true)
@@ -42,7 +42,7 @@ var projectExtensionUninstallCmd = &cobra.Command{
 
 			if extension == nil {
 				failed = true
-				logging.FromContext(cmd.Context()).Errorf("Cannot find extension by name %s", arg)
+				logging.FromContext(cmd.Context()).Errorf("Cannot find extension %s, run \"shopware-cli project extension list\" to see installed extensions", arg)
 				continue
 			}
 
@@ -56,15 +56,17 @@ var projectExtensionUninstallCmd = &cobra.Command{
 					failed = true
 
 					logging.FromContext(cmd.Context()).Errorf("Deactivation of %s failed with error: %v", extension.Name, err)
-				} else {
-					logging.FromContext(cmd.Context()).Infof("Deactivated %s", extension.Name)
+					continue
 				}
+
+				logging.FromContext(cmd.Context()).Infof("Deactivated %s", extension.Name)
 			}
 
 			if _, err := client.ExtensionManager.UninstallExtension(adminSdk.NewApiContext(cmd.Context()), extension.Type, extension.Name); err != nil {
 				failed = true
 
-				logging.FromContext(cmd.Context()).Errorf("Installation of %s failed with error: %v", extension.Name, err)
+				logging.FromContext(cmd.Context()).Errorf("Uninstall of %s failed with error: %v", extension.Name, err)
+				continue
 			}
 
 			logging.FromContext(cmd.Context()).Infof("Uninstalled %s", extension.Name)

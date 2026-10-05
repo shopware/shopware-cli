@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"path/filepath"
 
 	"charm.land/huh/v2"
 	"github.com/mattn/go-isatty"
@@ -18,10 +17,11 @@ import (
 var projectProxyTeardownCmd = &cobra.Command{
 	Use:          "teardown",
 	SilenceUsage: true,
-	Short:        "Deregister every project and stop the shared proxy and DNS server",
-	Long: `Runs "project proxy down" for every registered project (stopping it and
+	Short:        "Deregister every project and stop proxy services",
+	Long: `Run "project proxy down" for every registered project (stopping it and
 restoring its previous URL), then stops the shared Traefik container and the
 shared DNS container. The one-time OS setup (DNS resolver, trusted CA) is kept.`,
+	Args: cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		ctx := cmd.Context()
 
@@ -36,13 +36,16 @@ shared DNS container. The one-time OS setup (DNS resolver, trusted CA) is kept.`
 			}
 		}
 
+		var errs []error
+
 		for _, entry := range reg.Projects {
-			env, err := newProxyEnvironmentForRoot(ctx, entry.ProjectRoot, filepath.Join(entry.ProjectRoot, ".shopware-project.yml"))
+			env, err := newProxyEnvironmentForRoot(ctx, entry.ProjectRoot, "")
 			if err == nil {
 				err = env.down(ctx, false)
 			}
 			if err != nil {
 				fmt.Println(tui.RedText.Render(fmt.Sprintf("  Could not deregister %s: %s", entry.Hostname, err)))
+				errs = append(errs, fmt.Errorf("cannot deregister %s: %w", entry.Hostname, err))
 			}
 		}
 
@@ -52,6 +55,10 @@ shared DNS container. The one-time OS setup (DNS resolver, trusted CA) is kept.`
 
 		if err := proxy.StopDNSContainer(ctx); err != nil {
 			return err
+		}
+
+		if len(errs) > 0 {
+			return errors.Join(errs...)
 		}
 
 		fmt.Println(tui.GreenText.Bold(true).Render("  ✓ Shared proxy and DNS server stopped"))
@@ -107,5 +114,5 @@ func confirmTeardown(cmd *cobra.Command, reg proxy.Registry) (bool, error) {
 
 func init() {
 	projectProxyCmd.AddCommand(projectProxyTeardownCmd)
-	projectProxyTeardownCmd.Flags().Bool("force", false, "Tear down without asking for confirmation")
+	projectProxyTeardownCmd.Flags().Bool("force", false, "Tear down the shared proxy without confirmation")
 }

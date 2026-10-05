@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"path/filepath"
 	"strings"
 
 	"charm.land/huh/v2"
@@ -22,8 +21,8 @@ import (
 var projectProxySetupCmd = &cobra.Command{
 	Use:          "setup",
 	SilenceUsage: true,
-	Short:        "One-time machine setup for the shared proxy: DNS and HTTPS trust (needs sudo)",
-	Long: `Performs the one-time machine setup for the shared proxy in a single sudo
+	Short:        "Set up shared proxy DNS and HTTPS trust once per machine",
+	Long: `Perform the one-time machine setup for the shared proxy in a single sudo
 ceremony:
 
   - configures the operating system to resolve every hostname under the proxy
@@ -34,6 +33,7 @@ ceremony:
     proxy serves are trusted
 
 Both steps are idempotent; run it again anytime to repair the setup.`,
+	Args: cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		ctx := cmd.Context()
 
@@ -167,7 +167,7 @@ func setupProjectHostnames(ctx context.Context) []string {
 		return nil
 	}
 
-	env, err := newProxyEnvironmentForRoot(ctx, projectRoot, filepath.Join(projectRoot, ".shopware-project.yml"))
+	env, err := newProxyEnvironmentForRoot(ctx, projectRoot, projectConfigPath)
 	if err != nil {
 		return nil
 	}
@@ -426,6 +426,6 @@ func resolveDomainFlag(cmd *cobra.Command) (string, *domainChange, error) {
 func init() {
 	projectProxyCmd.AddCommand(projectProxySetupCmd)
 
-	projectProxySetupCmd.Flags().Bool("skip-trust", false, "Skip installing the certificate authority into the trust stores")
-	projectProxySetupCmd.Flags().String("domain", "", "Base domain for project hostnames (default "+proxy.DefaultDomain+", persisted machine-wide)")
+	projectProxySetupCmd.Flags().Bool("skip-trust", false, "Skip installing the proxy CA certificate in system trust stores")
+	projectProxySetupCmd.Flags().String("domain", "", "Base domain for project hostnames (default: "+proxy.DefaultDomain+"; persisted machine-wide)")
 }

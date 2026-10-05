@@ -11,8 +11,8 @@ import (
 
 var loginCmd = &cobra.Command{
 	Use:   "login",
-	Short: "Login into your Shopware Account",
-	Long:  "",
+	Short: "Log in to Shopware Account to manage extensions and credentials",
+	Args:  cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, _ []string) error {
 		tui.PrintBanner()
 

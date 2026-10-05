@@ -6,7 +6,7 @@ import (
 
 var accountCompanyProducerExtensionCmd = &cobra.Command{
 	Use:   "extension",
-	Short: "Manage your Shopware extensions",
+	Short: "List, sync, and upload Extension Store extensions",
 }
 
 func init() {

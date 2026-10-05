@@ -234,3 +234,9 @@ func TestFindAssetSourcesOfProjectYAMLBundleDeduplication(t *testing.T) {
 
 	assert.Equal(t, 1, count, "bundle declared in both composer.json and YAML config should only appear once")
 }
+
+func TestFindAssetSourcesOfProjectWithoutComposerJSON(t *testing.T) {
+	sources := FindAssetSourcesOfProject(t.Context(), t.TempDir(), &shop.Config{})
+
+	assert.Empty(t, sources)
+}

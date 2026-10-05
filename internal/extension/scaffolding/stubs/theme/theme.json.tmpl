@@ -1,0 +1,22 @@
+{
+    "name": "{{ .ClassName }}",
+    "author": "Acme",
+    "views": [
+        "@Storefront",
+        "@Plugins",
+        "@{{ .ClassName }}"
+    ],
+    "style": [
+        "app/storefront/src/scss/overrides.scss",
+        "@Storefront",
+        "app/storefront/src/scss/base.scss"
+    ],
+    "script": [
+        "@Storefront",
+        "app/storefront/dist/storefront/js/{{ .AssetName }}/{{ .AssetName }}.js"
+    ],
+    "asset": [
+        "@Storefront",
+        "app/storefront/src/assets"
+    ]
+}

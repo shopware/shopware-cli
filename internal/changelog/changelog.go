@@ -61,12 +61,20 @@ func GenerateChangelog(ctx context.Context, currentVersion string, repository st
 func renderChangelog(commits []git.GitCommit, cfg Config) (string, error) {
 	var matcher *regexp.Regexp
 	if cfg.Pattern != "" {
-		matcher = regexp.MustCompile(cfg.Pattern)
+		var err error
+		matcher, err = regexp.Compile(cfg.Pattern)
+		if err != nil {
+			return "", fmt.Errorf("cannot compile changelog pattern %q: %w", cfg.Pattern, err)
+		}
 	}
 
 	variableMatchers := map[string]*regexp.Regexp{}
 	for key, value := range cfg.Variables {
-		variableMatchers[key] = regexp.MustCompile(value)
+		variableMatcher, err := regexp.Compile(value)
+		if err != nil {
+			return "", fmt.Errorf("cannot compile changelog variable %s pattern %q: %w", key, value, err)
+		}
+		variableMatchers[key] = variableMatcher
 	}
 
 	changelog := make([]Commit, 0)
@@ -93,7 +101,10 @@ func renderChangelog(commits []git.GitCommit, cfg Config) (string, error) {
 		changelog = append(changelog, parsed)
 	}
 
-	templateParsed := template.Must(template.New("changelog").Parse(cfg.Template))
+	templateParsed, err := template.New("changelog").Parse(cfg.Template)
+	if err != nil {
+		return "", fmt.Errorf("cannot parse changelog template: %w", err)
+	}
 
 	templateContext := map[string]interface{}{
 		"Commits": changelog,
@@ -102,7 +113,7 @@ func renderChangelog(commits []git.GitCommit, cfg Config) (string, error) {
 
 	var buf bytes.Buffer
 	if err := templateParsed.Execute(&buf, templateContext); err != nil {
-		return "", fmt.Errorf("failed to execute template: %v", err)
+		return "", fmt.Errorf("cannot execute changelog template: %w", err)
 	}
 
 	return strings.Trim(buf.String(), "\n"), nil

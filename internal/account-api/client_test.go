@@ -12,21 +12,11 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/oauth2"
+
+	"github.com/shopware/shopware-cli/internal/cliversion"
 )
 
-func TestSetUserAgent(t *testing.T) {
-	prev := httpUserAgent
-	t.Cleanup(func() { httpUserAgent = prev })
-
-	SetUserAgent("shopware-cli/test")
-	assert.Equal(t, "shopware-cli/test", httpUserAgent)
-}
-
 func TestNewAuthenticatedRequestWithOAuthToken(t *testing.T) {
-	prev := httpUserAgent
-	t.Cleanup(func() { httpUserAgent = prev })
-	SetUserAgent("shopware-cli/test")
-
 	client := &Client{
 		Token: &oauth2.Token{AccessToken: "access-token"},
 	}
@@ -36,19 +26,8 @@ func TestNewAuthenticatedRequestWithOAuthToken(t *testing.T) {
 	assert.Equal(t, "application/json", req.Header.Get("content-type"))
 	assert.Equal(t, "application/json", req.Header.Get("accept"))
 	assert.Equal(t, "Bearer access-token", req.Header.Get("Authorization"))
-	assert.Equal(t, "shopware-cli/test", req.Header.Get("user-agent"))
+	assert.Equal(t, cliversion.UserAgent(), req.Header.Get("user-agent"))
 	assert.Empty(t, req.Header.Get("x-shopware-token"))
-}
-
-func TestNewAuthenticatedRequestWithLegacyToken(t *testing.T) {
-	client := &Client{
-		LegacyToken: &legacyToken{Token: "legacy-token"},
-	}
-
-	req, err := client.NewAuthenticatedRequest(t.Context(), http.MethodPost, "https://example.com/path", nil)
-	require.NoError(t, err)
-	assert.Equal(t, "legacy-token", req.Header.Get("x-shopware-token"))
-	assert.Empty(t, req.Header.Get("Authorization"))
 }
 
 func TestDoRequestSuccess(t *testing.T) {
@@ -88,36 +67,6 @@ func TestIsTokenValidOAuth(t *testing.T) {
 	assert.True(t, (&Client{Token: &oauth2.Token{Expiry: time.Now().Add(time.Hour)}}).isTokenValid())
 	assert.False(t, (&Client{Token: &oauth2.Token{Expiry: time.Now().Add(30 * time.Second)}}).isTokenValid())
 	assert.False(t, (&Client{}).isTokenValid())
-}
-
-func TestIsTokenValidLegacy(t *testing.T) {
-	valid := &Client{LegacyToken: &legacyToken{
-		Token: "tok",
-		Expire: tokenExpire{
-			Date:     time.Now().UTC().Add(time.Hour).Format("2006-01-02 15:04:05.000000"),
-			Timezone: "UTC",
-		},
-	}}
-	assert.True(t, valid.isTokenValid())
-
-	expired := &Client{LegacyToken: &legacyToken{
-		Token: "tok",
-		Expire: tokenExpire{
-			Date:     time.Now().UTC().Add(-time.Hour).Format("2006-01-02 15:04:05.000000"),
-			Timezone: "UTC",
-		},
-	}}
-	assert.False(t, expired.isTokenValid())
-
-	badTimezone := &Client{LegacyToken: &legacyToken{
-		Expire: tokenExpire{Date: "2020-01-01 00:00:00.000000", Timezone: "Not/AZone"},
-	}}
-	assert.False(t, badTimezone.isTokenValid())
-
-	badDate := &Client{LegacyToken: &legacyToken{
-		Expire: tokenExpire{Date: "not-a-date", Timezone: "UTC"},
-	}}
-	assert.False(t, badDate.isTokenValid())
 }
 
 func TestGetCacheFileName(t *testing.T) {

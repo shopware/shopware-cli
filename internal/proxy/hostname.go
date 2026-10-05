@@ -14,7 +14,7 @@ import (
 
 // ProjectHostname derives the hostname a project should be reachable at
 // through the shared proxy. If a url is explicitly set in
-// .shopware-project.yml, its host is used as an override — unless it is an
+// .config/shopware-project.yml, its host is used as an override — unless it is an
 // IP address or localhost, which is what freshly created projects point at
 // (http://127.0.0.1:8000) and never a usable proxy hostname. Otherwise the
 // hostname is derived from the project directory name.

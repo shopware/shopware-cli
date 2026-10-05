@@ -13,19 +13,13 @@ import (
 
 	"golang.org/x/oauth2"
 
+	"github.com/shopware/shopware-cli/internal/cliversion"
 	"github.com/shopware/shopware-cli/internal/system"
 	"github.com/shopware/shopware-cli/logging"
 )
 
-var httpUserAgent = "shopware-cli/0.0.0"
-
-func SetUserAgent(userAgent string) {
-	httpUserAgent = userAgent
-}
-
 type Client struct {
-	Token       *oauth2.Token `json:"token,omitempty"`
-	LegacyToken *legacyToken  `json:"legacyToken,omitempty"`
+	Token *oauth2.Token `json:"token,omitempty"`
 }
 
 func (c *Client) NewAuthenticatedRequest(ctx context.Context, method, path string, body io.Reader) (*http.Request, error) {
@@ -39,11 +33,9 @@ func (c *Client) NewAuthenticatedRequest(ctx context.Context, method, path strin
 
 	if c.Token != nil {
 		c.Token.SetAuthHeader(r)
-	} else if c.LegacyToken != nil {
-		r.Header.Set("x-shopware-token", c.LegacyToken.Token)
 	}
 
-	r.Header.Set("user-agent", httpUserAgent)
+	r.Header.Set("user-agent", cliversion.UserAgent())
 
 	return r, nil
 }
@@ -61,11 +53,11 @@ func (*Client) doRequest(request *http.Request) ([]byte, error) {
 	if err != nil {
 		_ = resp.Body.Close()
 
-		return nil, fmt.Errorf("doRequest: %v", err)
+		return nil, fmt.Errorf("cannot read response body: %w", err)
 	}
 
 	if err := resp.Body.Close(); err != nil {
-		return nil, fmt.Errorf("doRequest: %v", err)
+		return nil, fmt.Errorf("cannot close response body: %w", err)
 	}
 
 	if resp.StatusCode >= 400 {
@@ -78,20 +70,6 @@ func (*Client) doRequest(request *http.Request) ([]byte, error) {
 func (c *Client) isTokenValid() bool {
 	if c.Token != nil {
 		return time.Until(c.Token.Expiry) > time.Minute
-	}
-
-	if c.LegacyToken != nil {
-		loc, err := time.LoadLocation(c.LegacyToken.Expire.Timezone)
-		if err != nil {
-			return false
-		}
-
-		expire, err := time.ParseInLocation("2006-01-02 15:04:05.000000", c.LegacyToken.Expire.Date, loc)
-		if err != nil {
-			return false
-		}
-
-		return expire.UTC().Sub(time.Now().UTC()).Seconds() > 60
 	}
 
 	return false

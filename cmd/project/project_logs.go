@@ -3,6 +3,7 @@ package project
 import (
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/spf13/cobra"
 
@@ -13,8 +14,8 @@ import (
 
 var projectLogsCmd = &cobra.Command{
 	Use:   "logs [filename]",
-	Short: "Show Shopware application logs from var/log/",
-	Long:  "Show the last lines of a Shopware log file. Without arguments, shows the most recently modified log file. Use --list to discover available log files.",
+	Short: "List, view, or follow Shopware application logs from var/log/",
+	Long:  "Show the last lines of a Shopware log file. Without arguments, the most recently modified log file is shown. Use --list to discover available log files.",
 	Args:  cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		projectRoot, err := shop.FindClosestShopwareProject(false)
@@ -58,7 +59,12 @@ func runProjectLogs(cmd *cobra.Command, args []string, cmdExecutor executor.Exec
 				}
 			}
 			if !found {
-				return fmt.Errorf("log file not found: %s", target)
+				names := make([]string, len(files))
+				for i, f := range files {
+					names[i] = f.Name
+				}
+
+				return fmt.Errorf("log file %q not found, available: %s", target, strings.Join(names, ", "))
 			}
 		}
 
@@ -104,7 +110,7 @@ func formatSize(bytes int64) string {
 
 func init() {
 	projectRootCmd.AddCommand(projectLogsCmd)
-	projectLogsCmd.Flags().Int("lines", 100, "Number of lines to show")
-	projectLogsCmd.Flags().BoolP("follow", "f", false, "Follow the log file for new output")
-	projectLogsCmd.Flags().BoolP("list", "l", false, "List available log files")
+	projectLogsCmd.Flags().Int("lines", 100, "Number of log lines to show")
+	projectLogsCmd.Flags().BoolP("follow", "f", false, "Follow the selected log file for new output")
+	projectLogsCmd.Flags().BoolP("list", "l", false, "List available Shopware log files")
 }

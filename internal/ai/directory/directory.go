@@ -8,6 +8,7 @@ package directory
 
 import (
 	"fmt"
+	"strings"
 )
 
 // Type is the kind of integration.
@@ -122,7 +123,12 @@ func (d *Directory) List(opts ListOptions) ([]Integration, error) {
 func (d *Directory) Info(name string) (*Integration, error) {
 	e, ok := d.Get(name)
 	if !ok {
-		return nil, fmt.Errorf("unknown integration %q", name)
+		names := make([]string, len(d.Integrations))
+		for i, e := range d.Integrations {
+			names[i] = e.Name
+		}
+
+		return nil, fmt.Errorf("unknown integration %q, available: %s", name, strings.Join(names, ", "))
 	}
 
 	return e, nil

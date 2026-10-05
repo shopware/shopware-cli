@@ -17,7 +17,8 @@ var skipDefaultHeaders bool
 
 var projectAdminApiCmd = &cobra.Command{
 	Use:   "admin-api [method] [path]",
-	Short: "Pre-authenticated curl interface to the Admin API",
+	Args:  cobra.ArbitraryArgs,
+	Short: "Run authenticated curl requests against the Shopware Admin API",
 	RunE: func(cobraCmd *cobra.Command, args []string) error {
 		projectRoot, err := shop.FindClosestShopwareProject(true)
 		if err != nil {
@@ -30,8 +31,8 @@ var projectAdminApiCmd = &cobra.Command{
 		}
 
 		cfg := cmdExecutor.ShopConfig()
-		if cfg == nil || cfg.AdminApi == nil {
-			return errors.New("admin api is not activated in the config")
+		if cfg == nil || !shop.HasAdminAPICredentials(cfg) {
+			return shop.ErrNoAdminAPICredentials
 		}
 
 		client, err := cmdExecutor.AdminAPIClient(cobraCmd.Context())
@@ -55,7 +56,7 @@ var projectAdminApiCmd = &cobra.Command{
 			return errors.New("command needs 2 arguments")
 		}
 
-		shopURL, err := url.Parse(cfg.URL)
+		shopURL, err := url.Parse(shop.AdminAPIURL(cfg))
 		if err != nil {
 			return err
 		}
@@ -74,7 +75,7 @@ var projectAdminApiCmd = &cobra.Command{
 			curl.Args(args[2:]),
 		}
 
-		if cfg.AdminApi.DisableSSLCheck {
+		if shop.AdminAPIDisableSSLCheck(cfg) {
 			commandConfig = append(commandConfig, curl.Args([]string{"--insecure"}))
 		}
 
@@ -96,13 +97,13 @@ func parsePath(inputPath string) (*url.URL, error) {
 }
 
 func init() {
-	projectAdminApiCmd.PersistentFlags().Bool("output-token", false, "Output only token")
+	projectAdminApiCmd.PersistentFlags().Bool("output-token", false, "Output only the Admin API token")
 	projectAdminApiCmd.PersistentFlags().BoolVarP(
 		&skipDefaultHeaders,
 		"no-default-headers",
 		"",
 		false,
-		"skips setting the content-type and accept headers",
+		"Skip setting the default Content-Type and Accept headers",
 	)
 	projectRootCmd.AddCommand(projectAdminApiCmd)
 }

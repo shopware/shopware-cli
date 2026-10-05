@@ -172,6 +172,19 @@ func TestGenerateComposerJson(t *testing.T) {
 		assert.True(t, data.Config.AllowPlugins["symfony/runtime"], "allow-plugins should include symfony/runtime")
 	})
 
+	t.Run("require includes symfony/runtime", func(t *testing.T) {
+		t.Parallel()
+		ctx := t.Context()
+		jsonStr, err := GenerateComposerJson(ctx, ComposerJsonOptions{Version: "6.4.18.0"})
+		assert.NoError(t, err)
+
+		var data struct {
+			Require map[string]string `json:"require"`
+		}
+		assert.NoError(t, json.Unmarshal([]byte(jsonStr), &data))
+		assert.Equal(t, "*", data.Require["symfony/runtime"])
+	})
+
 	t.Run("deployment-helper requires Shopware 6.5.8 or higher", func(t *testing.T) {
 		t.Parallel()
 

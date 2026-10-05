@@ -4,8 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
 	"os"
-	"path"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -71,6 +71,7 @@ type Config struct {
 	// When enabled, composer install will be skipped during CI builds
 	DisableComposerInstall bool `yaml:"disable_composer_install,omitempty"`
 	foundConfig            bool
+	storageLocation        string
 }
 
 // ResolveEnvironment returns the named environment, or for an empty name
@@ -79,7 +80,11 @@ func (c *Config) ResolveEnvironment(name string) (*EnvironmentConfig, error) {
 	if name != "" {
 		env, ok := c.Environments[name]
 		if !ok {
-			return nil, fmt.Errorf("environment %q not found in config", name)
+			if len(c.Environments) == 0 {
+				return nil, fmt.Errorf("environment %q not found in config, no environments are configured", name)
+			}
+
+			return nil, fmt.Errorf("environment %q not found in config, available: %s", name, strings.Join(slices.Sorted(maps.Keys(c.Environments)), ", "))
 		}
 		if env == nil {
 			return nil, fmt.Errorf("environment %q has no configuration", name)
@@ -181,6 +186,21 @@ func (c *Config) WithEnvironment(name string) (*Config, error) {
 	}
 
 	return &cfg, nil
+}
+
+// GetStorageLocation will return the actual file path where the config either was loaded from or will be persisted to.
+func (c *Config) GetStorageLocation() string {
+	if c.storageLocation == "" {
+		// fallback to default recommended storage location
+		return ".config/shopware-project.yml"
+	}
+
+	return c.storageLocation
+}
+
+// SetStorageLocation sets the file path WriteConfig persists the config to.
+func (c *Config) SetStorageLocation(path string) {
+	c.storageLocation = path
 }
 
 func (c *Config) IsAdminAPIConfigured() bool {
@@ -491,6 +511,8 @@ type ConfigDeployment struct {
 		PreInstall ConfigDeploymentHook `yaml:"pre-install"`
 		// The post-install hook will be executed after the installation
 		PostInstall ConfigDeploymentHook `yaml:"post-install"`
+		// The post-extension-on-project-install hook will be executed after project extensions are installed
+		PostExtensionOnProjectInstall ConfigDeploymentHook `yaml:"post-extension-on-project-install"`
 		// The pre-update hook will be executed before the update
 		PreUpdate ConfigDeploymentHook `yaml:"pre-update"`
 		// The post-update hook will be executed after the update
@@ -557,6 +579,15 @@ type ConfigDeploymentHookStep struct {
 // a plain script string or an object with a "title" and a "script".
 type ConfigDeploymentHook struct {
 	Steps []ConfigDeploymentHookStep
+}
+
+// MarshalYAML preserves the public hook format when packaging resolved config.
+// The internal Steps wrapper is not accepted by UnmarshalYAML.
+func (h ConfigDeploymentHook) MarshalYAML() (any, error) {
+	if len(h.Steps) == 0 {
+		return "", nil
+	}
+	return h.Steps, nil
 }
 
 func (h *ConfigDeploymentHook) UnmarshalYAML(value *yaml.Node) error {
@@ -800,6 +831,9 @@ func NewConfig() *Config {
 	}
 }
 
+// WriteConfig Writes config in specified project dir under either
+// its original location where it was read from (stored in `Config.storageLocation`),
+// or the default recommended location.
 func WriteConfig(cfg *Config, dir string) error {
 	// Port overrides are machine-specific and live in the local override
 	// file — keep them out of the committed configuration.
@@ -810,7 +844,22 @@ func WriteConfig(cfg *Config, dir string) error {
 		return fmt.Errorf("failed to marshal shop configuration: %w", err)
 	}
 
-	filePath := filepath.Join(dir, ".shopware-project.yml")
+	var filePath string
+	if cfg.storageLocation == "" {
+		// fallback to default recommended storage location
+		filePath = filepath.Join(dir, ".config/shopware-project.yml")
+	} else {
+		if filepath.IsAbs(cfg.storageLocation) {
+			filePath = cfg.storageLocation
+		} else {
+			filePath = filepath.Join(dir, cfg.storageLocation)
+		}
+	}
+
+	err = os.MkdirAll(filepath.Dir(filePath), 0o755)
+	if err != nil {
+		return fmt.Errorf("failed to create all subfolders for %s: %w", filePath, err)
+	}
 
 	if err := os.WriteFile(filePath, data, 0o644); err != nil {
 		return fmt.Errorf("failed to write shop configuration to %s: %w", filePath, err)
@@ -832,11 +881,11 @@ func ReadConfig(ctx context.Context, fileName string, allowFallback bool) (*Conf
 		// Even without a base config, a local override file (e.g. persisted
 		// docker port overrides) must still apply.
 		if _, err := applyLocalOverride(ctx, fileName, false, config); err != nil {
-			return nil, fmt.Errorf("ReadConfig(%s): %v", fileName, err)
+			return nil, fmt.Errorf("cannot read project config %s: %w", fileName, err)
 		}
 
 		if err := config.DockerServices().validate(); err != nil {
-			return nil, fmt.Errorf("ReadConfig(%s): %v", fileName, err)
+			return nil, fmt.Errorf("cannot read project config %s: %w", fileName, err)
 		}
 
 		return fillEmptyConfig(config), nil
@@ -848,38 +897,39 @@ func ReadConfig(ctx context.Context, fileName string, allowFallback bool) (*Conf
 
 	merged, err := applyLocalOverride(ctx, fileName, true, config)
 	if err != nil {
-		return nil, fmt.Errorf("ReadConfig(%s): %v", fileName, err)
+		return nil, fmt.Errorf("cannot read project config %s: %w", fileName, err)
 	}
 
 	if !merged {
 		fileHandle, err := os.ReadFile(fileName)
 		if err != nil {
-			return nil, fmt.Errorf("ReadConfig(%s): %v", fileName, err)
+			return nil, fmt.Errorf("cannot read project config %s: %w", fileName, err)
 		}
 
 		substitutedConfig := system.ExpandEnv(string(fileHandle))
 		if err := yaml.Unmarshal([]byte(substitutedConfig), config); err != nil {
-			return nil, fmt.Errorf("ReadConfig(%s): %v", fileName, err)
+			return nil, fmt.Errorf("cannot read project config %s: %w", fileName, err)
 		}
 	}
 
 	if err := config.DockerServices().validate(); err != nil {
-		return nil, fmt.Errorf("ReadConfig(%s): %v", fileName, err)
+		return nil, fmt.Errorf("cannot read project config %s: %w", fileName, err)
 	}
 
 	config.foundConfig = true
+	config.storageLocation = fileName
 	warnDeprecatedTopLevelShop(ctx, fileName, config)
 
 	if len(config.AdditionalConfigs) > 0 {
 		for _, additionalConfigFile := range config.AdditionalConfigs {
 			additionalConfig, err := ReadConfig(ctx, additionalConfigFile, allowFallback)
 			if err != nil {
-				return nil, fmt.Errorf("error while reading included config: %s", err.Error())
+				return nil, fmt.Errorf("cannot read included config %s: %w", additionalConfigFile, err)
 			}
 
 			err = mergo.Merge(config, additionalConfig, mergo.WithOverride, mergo.WithSliceDeepCopy)
 			if err != nil {
-				return nil, fmt.Errorf("error while merging included config: %s", err.Error())
+				return nil, fmt.Errorf("cannot merge included config %s: %w", additionalConfigFile, err)
 			}
 		}
 	}
@@ -889,7 +939,7 @@ func ReadConfig(ctx context.Context, fileName string, allowFallback bool) (*Conf
 	}
 
 	if err := compatibility.ValidateDate(config.CompatibilityDate); err != nil {
-		return nil, fmt.Errorf("ReadConfig(%s): %v", fileName, err)
+		return nil, fmt.Errorf("cannot read project config %s: %w", fileName, err)
 	}
 
 	return fillEmptyConfig(config), nil
@@ -903,7 +953,7 @@ func applyLocalOverride(ctx context.Context, fileName string, hasBase bool, conf
 	localFile := LocalConfigFileName(fileName)
 	if _, err := os.Stat(localFile); err != nil {
 		if !os.IsNotExist(err) {
-			logging.FromContext(ctx).Warnf("unable to access local config override %s: %v", localFile, err)
+			logging.FromContext(ctx).Warnf("Cannot access local config override %s: %v", localFile, err)
 		}
 		return false, nil
 	}
@@ -960,17 +1010,54 @@ func (c Config) IsFallback() bool {
 	return !c.foundConfig
 }
 
-func DefaultConfigFileName() string {
-	currentDir, err := os.Getwd()
-	if err != nil {
-		return ".shopware-project.yml"
+// SearchConfigPath either returns the inputPath if not empty or
+// searches for the config file in projectRoot based on documented priority.
+// It logs warnings if further config files exists that aren't used
+func SearchConfigPath(ctx context.Context, projectRoot string, inputPath string) string {
+	if inputPath != "" {
+		// user input has priority, regardless if the file exists at this point
+		if filepath.IsAbs(inputPath) {
+			return inputPath
+		} else {
+			return filepath.Join(projectRoot, inputPath)
+		}
 	}
 
-	if _, err := os.Stat(path.Join(currentDir, ".shopware-project.yaml")); err == nil {
-		return ".shopware-project.yaml"
+	locations := []string{
+		".config/shopware-project.yml", // recommended location
+		".shopware-project.yaml",
+		".shopware-project.yml",
 	}
 
-	return ".shopware-project.yml"
+	for idx, loc := range locations {
+		configPath := filepath.Join(projectRoot, loc)
+		if _, err := os.Stat(configPath); err != nil {
+			continue
+		}
+
+		if idx >= len(locations)-1 {
+			// no further locations to check, so no warnings needed
+			return configPath
+		}
+
+		// found config, but before returning check others and warn if they exists
+		logger := logging.FromContext(ctx)
+		for _, furherLoc := range locations[idx+1:] {
+			furtherConfigPath := filepath.Join(projectRoot, furherLoc)
+			if _, err := os.Stat(furtherConfigPath); err == nil {
+				logger.Warnf(
+					"Unused config found %s, the loaded config is %s",
+					furtherConfigPath,
+					configPath,
+				)
+			}
+		}
+
+		return configPath
+	}
+
+	// if no config exists, still return recommended path for failing downstream + error reporting
+	return filepath.Join(projectRoot, locations[0])
 }
 
 // --- In-place url patching -------------------------------------------------
@@ -986,7 +1073,7 @@ func DefaultConfigFileName() string {
 // comments, ordering, unknown keys — untouched.
 
 // ConfigURLState captures the url values of a project config file
-// (.shopware-project.yml) before proxy registration, so deregistration can
+// (.config/shopware-project.yml) before proxy registration, so deregistration can
 // restore them exactly. The rest of the CLI (dev TUI, admin API client)
 // resolves the shop URL from these keys, which is why registration points
 // them at the proxy hostname.

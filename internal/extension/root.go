@@ -35,7 +35,7 @@ func GetExtensionByFolder(ctx context.Context, path string) (Extension, error) {
 	}
 
 	if _, err := os.Stat(path + "/composer.json"); err != nil {
-		return nil, errors.New("unknown extension type")
+		return nil, fmt.Errorf("unknown extension type: no composer.json or manifest.xml found in %s", path)
 	}
 
 	var ext Extension

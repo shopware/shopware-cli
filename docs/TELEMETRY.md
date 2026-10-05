@@ -112,6 +112,11 @@ Notes:
   arguments, flags, paths, or any free-text input.
 - The root command alone (running `shopware-cli` with no sub-command) is not
   tracked.
+- Plugin generators (`shopware-cli extension add <generator>`) are measured
+  through this event. Hyphens become underscores, so Grafana can filter
+  `command_name` values that start with `extension.add.` — for example
+  `extension.add.admin_module` and `extension.add.store_api_route`. Entity
+  names and other generator arguments are never sent.
 
 ### `shopware_cli.project.create` — project scaffolding
 
@@ -127,17 +132,6 @@ starting configurations are popular.
 | `with_elasticsearch` | Whether Elasticsearch was enabled        | `false`         |
 | `with_amqp`          | Whether AMQP was enabled                 | `false`         |
 | `interactive`        | Whether the wizard ran interactively     | `true`          |
-
-### `shopware_cli.project.upgrade_check` — upgrade compatibility check
-
-Sent when a user runs an upgrade check. Helps us understand upgrade paths and
-how often blockers are encountered.
-
-| Tag              | Meaning                                          | Example  |
-|------------------|--------------------------------------------------|----------|
-| `from_version`   | The current Shopware version                     | `6.5.8`  |
-| `target_version` | The version the user wants to upgrade to         | `6.6.0`  |
-| `has_blockers`   | Whether any blocking incompatibilities were found| `true`   |
 
 ### `shopware_cli.project.upgrade` — interactive upgrade wizard run
 

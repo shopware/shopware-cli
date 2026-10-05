@@ -6,8 +6,8 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/shopware/shopware-cli/internal/cliversion"
 	"github.com/shopware/shopware-cli/internal/shop"
-	"github.com/shopware/shopware-cli/internal/tui"
 )
 
 var projectSbomCmd = &cobra.Command{
@@ -16,20 +16,18 @@ var projectSbomCmd = &cobra.Command{
 	Long: `Generate a Software Bill of Materials (SBOM) for a Shopware project.
 
 Reads composer.lock (and optionally composer.json for the root component name
-and version) and writes a CycloneDX 1.7 JSON document — the same artifact that
+and version) and writes a CycloneDX 1.7 JSON document, the same artifact that
 project ci produces, without running the rest of the CI build.
 
-Examples:
-  # Write sbom.cdx.json into the current Shopware project
+The command is non-interactive and exits non-zero when generation fails
+(missing or unreadable composer.lock, unsupported format, write errors).`,
+	Example: `  # Write sbom.cdx.json into the current Shopware project
   shopware-cli project sbom
 
   # Explicit project path and output file
   shopware-cli project sbom ./my-shop \
     --format cyclonedx-json \
-    --output sbom.json
-
-The command is non-interactive and exits non-zero when generation fails
-(missing or unreadable composer.lock, unsupported format, write errors).`,
+    --output sbom.json`,
 	Args: cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		root, err := resolveProjectSbomRoot(args)
@@ -59,7 +57,7 @@ The command is non-interactive and exits non-zero when generation fails
 			OutputPath:             output,
 			SkipMissingLock:        false,
 			IncludeDevDependencies: includeDev,
-			ToolVersion:            tui.AppVersion,
+			ToolVersion:            cliversion.Version,
 		})
 	},
 }
@@ -68,7 +66,7 @@ func init() {
 	projectRootCmd.AddCommand(projectSbomCmd)
 	projectSbomCmd.Flags().String("format", shop.ProjectSBOMFormatCycloneDXJSON, "SBOM format (only cyclonedx-json is supported)")
 	projectSbomCmd.Flags().StringP("output", "o", "", fmt.Sprintf("Output file path (default: %s in the project root)", shop.DefaultProjectSBOMOutput))
-	projectSbomCmd.Flags().Bool("include-dev-dependencies", false, "Include packages-dev from composer.lock (excluded by default, matching project ci)")
+	projectSbomCmd.Flags().Bool("include-dev-dependencies", false, "Include packages-dev (development dependencies) from composer.lock (excluded by default, as in the project ci command)")
 }
 
 // resolveProjectSbomRoot picks the project directory: an explicit path argument,

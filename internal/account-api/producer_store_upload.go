@@ -104,7 +104,7 @@ func UploadExtension(ctx context.Context, producer ProducerAPI, zipExt extension
 		foundBinary, err = producer.CreateExtensionBinary(ctx, ext.Producer.Id, ext.Id, create)
 		if err != nil {
 			logging.FromContext(ctx).Debugf("Failed to create extension binary: %v", err)
-			return fmt.Errorf("create extension binary: %w", err)
+			return err
 		}
 
 		logging.FromContext(ctx).Infof("Created new binary with version %s", zipVersion)
@@ -142,7 +142,7 @@ func UploadExtension(ctx context.Context, producer ProducerAPI, zipExt extension
 			return nil
 		}
 		logging.FromContext(ctx).Debugf("Error is not BinariesException-40, returning error")
-		return fmt.Errorf("upload extension binary file: %w", err)
+		return err
 	}
 
 	logging.FromContext(ctx).Debugf("Successfully uploaded extension binary file")

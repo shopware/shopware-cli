@@ -144,10 +144,6 @@ func (s StyleLint) Fix(ctx context.Context, config ToolConfig) error {
 	return gr.Wait()
 }
 
-func (s StyleLint) Format(ctx context.Context, config ToolConfig, dryRun bool) error {
-	return nil
-}
-
 func init() {
 	AddTool(StyleLint{})
 }

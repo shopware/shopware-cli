@@ -32,23 +32,33 @@ A new command is just a new file: drop `cmd/<group>/<group><sub>.go` (`cmd/root.
 
 ### 2.2 Verifier tools: provides reproducible pattern for implementing other capabilities
 
-Each code-quality tool implements one small interface (name, check, fix, format) and adds itself to a shared list. Callers can then run them all, or filter to just some, in parallel. Currently these are code quality checkers: phpstan, eslint, stylelint, prettier, php-cs-fixer, rector, composer, admin-twig, storefront-twig, sw-cli.
+Each verifier tool registers a name and implements only the capabilities it supports: checking, fixing, formatting, or a combination. Commands select tools by capability, then apply `--only` and (where available) `--exclude`. An unsupported `--only` name is an error that lists the tools available to that command.
 
-**Decision**: will drop `dry run` and use Git. Why: Underlying tools do not support it. Under the hood, it uses eslint for js, rector for PHP.
+`extension validate` runs all checkers by default. The deprecated `--full` flag remains accepted but has no effect; use `--only` or `--exclude` to select checkers. The format commands support `--dry-run`; the fix commands do not.
 
 ```go
-// internal/verifier/tool.go:50
 type Tool interface {
     Name() string
+}
+type CheckTool interface {
+    Tool
     Check(ctx context.Context, check *Check, config ToolConfig) error
+}
+type FixTool interface {
+    Tool
     Fix(ctx context.Context, config ToolConfig) error
+}
+type FormatTool interface {
+    Tool
     Format(ctx context.Context, config ToolConfig, dryRun bool) error
 }
 ```
 
-Registration is `func init() { AddTool(PhpStan{}) }` into a global `availableTools`; consumers call `verifier.GetTools().Only(...)` / `.Exclude(...)`.
+Registration is `func init() { AddTool(PhpStan{}) }` into a global `availableTools`. Consumers call `GetToolsOf[CheckTool]()` (or `FixTool` / `FormatTool`) to get a typed `ToolList[T]`; its `Only` and `Exclude` methods preserve that capability type.
 
-Currently registered: phpstan, eslint, stylelint, prettier, php-cs-fixer, rector, composer, admin-twig, storefront-twig, sw-cli. The last one is a tool that enforces Shopware-specific validation rules the CLI implements itself; it runs through the same machinery as the external tools.
+Current checkers are `builtin`, `phpstan`, `eslint`, `stylelint`, and `storefront-twig`. Fixers are `rector`, `eslint`, `stylelint`, and `symfony-xml`; formatters are `php-cs-fixer`, and `prettier`. `builtin` enforces built-in extension rules; the legacy name `sw-cli` is still accepted as an input alias. It does not validate per-extension metadata in a project context. There is no separate Composer verifier tool.
+
+Extension commands report selected tools as `invoked` and others as `skipped`. This describes selection and invocation, not whether a tool found applicable files or changed them.
 
 ### 2.3 Extension types: simple interface
 
@@ -58,7 +68,7 @@ The `Extension` interface abstracts extension type behind `GetName/GetType/GetSo
 
 ### 2.4 Config schema: one field to add, embedded, self-validating
 
-In the CLI, the config YAML files (`.shopware-extension.yml` / `.shopware-project.yml`) are validated against a built-in schema, and that schema is published via `config-schema` so editors and agents can read the rules and introspect the contract. Adding a config option means adding a field (+ schema where needed) in `internal/extension/config.go` / `internal/shop/config.go`.
+In the CLI, the config YAML files (`.config/shopware-extension.yml` / `.config/shopware-project.yml`) are validated against a built-in schema, and that schema is published via `config-schema` so editors and agents can read the rules and introspect the contract. Adding a config option means adding a field (+ schema where needed) in `internal/extension/config.go` / `internal/shop/config.go`.
 
 Deployment Helper re-parses this same `deployment:` block by hand rather than from the schema.
 
@@ -103,7 +113,7 @@ In discussions we identified confusion opportunities around `doctor` vs. `valida
 
 ### 3.1 Where the CLI already does/runs things concurrently, for speed
 
-- **Validate / format / fix:** runs all the code checkers at the same time via `errgroup.Group` (cmd/extension/extension_validate.go:112 and the project equivalents); if one fails, it stops the rest.
+- **Validate / format / fix:** runs the selected capability-specific tools concurrently via `errgroup.Group` and waits for them; an execution error makes the command fail.
 - **npm installs:** installs dependencies for multiple extensions in parallel, with as many workers as you have CPU cores (`runtime.NumCPU()`, internal/extension/npm.go:70).
 - **Asset file hashing:** hashes files using a pool of eight workers at once (asset_config.go:231).
 - **DB dump:** dumps multiple database tables at once (`--parallel`), with a cap so it doesn't overload (internal/mysqldump/mysql.go).
@@ -149,7 +159,7 @@ shopware-cli is the tool you run locally and in CI to build, develop, and packag
 
 In code, this boundary is maintained like so:
 
-- The project config (`.shopware-project.yml`) has a `deployment:` section `ConfigDeployment` covering hooks, extension management, one-time tasks, and staging (internal/shop/config.go:329). The CLI defines and validates that section, but nothing in the CLI ever runs it: only the struct and its schema touch it. The CLI writes the instructions, and Deployment Helper carries them out. Keep it declarative-only on the CLI side.
+- The project config (`.config/shopware-project.yml`) has a `deployment:` section `ConfigDeployment` covering hooks, extension management, one-time tasks, and staging (internal/shop/config.go:329). The CLI defines and validates that section, but nothing in the CLI ever runs it: only the struct and its schema touch it. The CLI writes the instructions, and Deployment Helper carries them out. Keep it declarative-only on the CLI side.
 - Every project the CLI scaffolds automatically pulls in Deployment Helper as a dependency (`require shopware/deployment-helper`, internal/packagist/project_composer_json.go:64).
 - The CI files that the CLI generates (`internal/ci`, covering both GitHub Actions and GitLab) hand the actual deploy to Deployment Helper: The GitHub Actions deploy job `github-deploy.yml` calls `shopware/github-actions/project-deployer`; the `deploy.php` recipe calls `vendor/bin/shopware-deployment-helper run` (Deployer task).
 

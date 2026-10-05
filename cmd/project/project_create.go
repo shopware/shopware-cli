@@ -77,7 +77,7 @@ func resolveLocalDomainChoice(useDocker, wantLocalDomain, promptShown, machineSe
 
 var projectCreateCmd = &cobra.Command{
 	Use:   "create [name] [version]",
-	Short: "Create a new Shopware 6 project",
+	Short: "Create and install a new Shopware 6 project",
 	Args:  cobra.MaximumNArgs(2),
 	ValidArgsFunction: func(cmd *cobra.Command, args []string, _ string) ([]string, cobra.ShellCompDirective) {
 		if len(args) == 0 {
@@ -90,8 +90,8 @@ var projectCreateCmd = &cobra.Command{
 				return []string{}, cobra.ShellCompDirectiveNoFileComp
 			}
 			filteredVersions := shop.FilterInstallVersions(pkg.Versions)
-			versions := make([]string, 0, len(filteredVersions)+1)
-			versions = append(versions, shop.VersionLatest)
+			versions := make([]string, 0, len(filteredVersions)+2)
+			versions = append(versions, shop.VersionLatest, shop.VersionTrunk)
 			for _, v := range filteredVersions {
 				versions = append(versions, v.String())
 			}
@@ -102,6 +102,16 @@ var projectCreateCmd = &cobra.Command{
 	},
 	RunE: func(cmd *cobra.Command, args []string) error {
 		opts := parseCreateFlags(cmd, args)
+
+		// Fail fast when Docker is explicitly requested but unavailable, before
+		// the network fetch and (interactive) wizard. The interactive Docker
+		// question additionally blocks the Docker choice with guidance, and
+		// validateAndPreflight keeps a final safety net.
+		if cmd.PersistentFlags().Changed("docker") && opts.useDocker {
+			if missing := dockerAvailabilityForCreate(cmd.Context()); missing != nil {
+				return dockerUnavailableError(missing)
+			}
+		}
 
 		if opts.phpVersionExplicit {
 			if err := shop.ValidatePHPVersion(opts.phpVersion); err != nil {
@@ -229,16 +239,16 @@ func applyNonInteractiveDefaults(opts *createOptions) error {
 
 func init() {
 	projectRootCmd.AddCommand(projectCreateCmd)
-	projectCreateCmd.PersistentFlags().Bool("docker", false, "Use Docker for local setup.")
-	projectCreateCmd.PersistentFlags().Bool("with-elasticsearch", false, "Include Elasticsearch/OpenSearch support")
+	projectCreateCmd.PersistentFlags().Bool("docker", false, "Use Docker for the project environment")
+	projectCreateCmd.PersistentFlags().Bool("with-elasticsearch", false, "Add Elasticsearch or OpenSearch support to the project (enabled by default in non-interactive mode)")
 	projectCreateCmd.PersistentFlags().Bool("without-elasticsearch", false, "Remove Elasticsearch from the installation")
-	_ = projectCreateCmd.PersistentFlags().MarkDeprecated("without-elasticsearch", "use --with-elasticsearch instead")
-	projectCreateCmd.PersistentFlags().Bool("with-amqp", false, "Include AMQP queue support (symfony/amqp-messenger)")
-	projectCreateCmd.PersistentFlags().Bool("no-audit", false, "Disable composer audit blocking insecure packages")
-	projectCreateCmd.PersistentFlags().Bool("git", false, "Initialize a Git repository")
-	projectCreateCmd.PersistentFlags().Bool("local-domain", false, "Serve the shop at a stable local hostname (<name>.shopware.local) via the shared proxy instead of a port (requires Docker)")
-	projectCreateCmd.PersistentFlags().String("version", "", "Shopware version to install (e.g., 6.6.0.0, latest)")
-	projectCreateCmd.PersistentFlags().String("deployment", "", "Deployment method: none, container, deployer, platformsh, shopware-paas")
+	_ = projectCreateCmd.PersistentFlags().MarkDeprecated("without-elasticsearch", "use --with-elasticsearch=false instead")
+	projectCreateCmd.PersistentFlags().Bool("with-amqp", false, "Add AMQP queue support via Symfony's Messenger component")
+	projectCreateCmd.PersistentFlags().Bool("no-audit", false, "Continue when dependencies are blocked by known security advisories")
+	projectCreateCmd.PersistentFlags().Bool("git", false, "Initialize a Git repository for a Shopware project")
+	projectCreateCmd.PersistentFlags().Bool("local-domain", false, "Serve the Shopware project at a stable local hostname (<name>."+proxy.DefaultDomain+" by default) through the shared proxy instead of a port (requires Docker)")
+	projectCreateCmd.PersistentFlags().String("version", "", "Shopware version to install (e.g. 6.6.0.0, latest, dev-trunk)")
+	projectCreateCmd.PersistentFlags().String("deployment", "", "Deployment method to configure (none, container, deployer, platformsh, shopware-paas)")
 	_ = projectCreateCmd.RegisterFlagCompletionFunc("deployment", func(*cobra.Command, []string, string) ([]string, cobra.ShellCompDirective) {
 		return []string{
 			shop.DeploymentNone,
@@ -248,8 +258,8 @@ func init() {
 			shop.DeploymentShopwarePaaS,
 		}, cobra.ShellCompDirectiveNoFileComp
 	})
-	projectCreateCmd.PersistentFlags().String("ci", "", "CI/CD system: none, github, gitlab")
-	projectCreateCmd.PersistentFlags().String("php-version", "", "PHP version to use (e.g. 8.3); selects the local PHP for local projects and the image tag for --docker projects")
+	projectCreateCmd.PersistentFlags().String("ci", "", "CI/CD system to configure (none, github, gitlab)")
+	projectCreateCmd.PersistentFlags().String("php-version", "", "PHP version for the project (e.g. 8.4); uses the local PHP version for local projects or the image tag for Docker projects")
 	_ = projectCreateCmd.RegisterFlagCompletionFunc("php-version", func(*cobra.Command, []string, string) ([]string, cobra.ShellCompDirective) {
 		return shop.SupportedPHPVersions, cobra.ShellCompDirectiveNoFileComp
 	})

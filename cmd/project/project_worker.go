@@ -19,8 +19,9 @@ import (
 
 var projectWorkerCmd = &cobra.Command{
 	Use:   "worker [amount | queue-spec]",
-	Short: "Run multiple Symfony worker in background.",
-	Long: `Run multiple Symfony messenger consumers in background.
+	Args:  cobra.MaximumNArgs(1),
+	Short: "Start and supervise Symfony Messenger consumers concurrently",
+	Long: `Run multiple Symfony Messenger consumers in the background.
 
 The first argument is either a worker amount (e.g. "5") or a queue spec
 (e.g. "async:5,mail:5") which starts the given amount of consumers per
@@ -58,14 +59,6 @@ queue. The count per queue is optional and defaults to 1.`,
 
 		if workerSpec != "" && queuesToConsume != "" {
 			return errors.New("--queue cannot be combined with a queue spec argument")
-		}
-
-		if memoryLimit == "" {
-			memoryLimit = "512M"
-		}
-
-		if timeLimit == "" {
-			timeLimit = "120"
 		}
 
 		var defaultQueues []string
@@ -112,21 +105,21 @@ queue. The count per queue is optional and defaults to 1.`,
 
 func init() {
 	projectRootCmd.AddCommand(projectWorkerCmd)
-	projectWorkerCmd.PersistentFlags().Bool("verbose", false, "Enable verbose output")
-	projectWorkerCmd.PersistentFlags().String("queue", "", "Queues to consume")
-	projectWorkerCmd.PersistentFlags().String("memory-limit", "", "Memory Limit")
-	projectWorkerCmd.PersistentFlags().String("time-limit", "", "Time Limit")
-	projectWorkerCmd.PersistentFlags().Uint("graceful-stop-limit", 0, "Graceful Stop Limit")
-	projectWorkerCmd.PersistentFlags().Uint("limit", 0, "Messages Limit")
+	projectWorkerCmd.PersistentFlags().Bool("verbose", false, "Show every message the workers handle, plus debug logs")
+	projectWorkerCmd.PersistentFlags().String("queue", "", "Queues to consume (comma-separated)")
+	projectWorkerCmd.PersistentFlags().String("memory-limit", "512M", "Worker memory limit")
+	projectWorkerCmd.PersistentFlags().String("time-limit", "120", "Worker time limit in seconds")
+	projectWorkerCmd.PersistentFlags().Uint("graceful-stop-limit", 0, "Seconds to wait for workers to stop gracefully (0 = force-stop immediately)")
+	projectWorkerCmd.PersistentFlags().Uint("limit", 0, "Maximum messages per worker (0 = unlimited)")
 }
 
 func cancelOnTermination(ctx context.Context, cancel context.CancelFunc) {
-	logging.FromContext(ctx).Infof("setting up a signal handler")
+	logging.FromContext(ctx).Debugf("Setting up a signal handler")
 	s := make(chan os.Signal, 1)
 	signal.Notify(s, syscall.SIGTERM, syscall.SIGINT)
 	go func() {
 		sig := <-s
-		logging.FromContext(ctx).Infof("received signal %v\n", sig.String())
+		logging.FromContext(ctx).Infof("Received signal %v", sig)
 		cancel()
 	}()
 }

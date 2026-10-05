@@ -42,6 +42,22 @@ The CLI has three primary user-facing areas:
 
 This is orientation, not a complete command catalog. Use `--help` for the current command surface.
 
+## Plugin scaffolding
+
+`extension create` writes the foundation of a plugin (`composer.json`, `.gitignore`, a minimal plugin class, PHPUnit bootstrap). PHPUnit stays on create; there is no `extension add tests`. The bootstrap uses Shopware `TestBootstrapper` (`addActivePlugins`, `setForceInstallPlugins(true)`).
+
+`extension add <generator>` adds one example feature inside an existing plugin. Generators are individual commands, not a `plugin:create` questionnaire or Core `make:plugin:*` wrappers. Run them from the plugin directory in a Shopware project on **6.7.13.0 or newer** (declarative `custom-fields.xml`). Unsupported versions fail before any files are written.
+
+Available generators: `admin-module`, `command`, `custom-fieldset`, `entity`, `event-subscriber`, `javascript-plugin`, `plugin-config`, `scheduled-task`, `store-api-route`, `storefront-controller`.
+
+Intentional differences from Shopware Core scaffolding:
+
+- PHP `src/Resources/config/services.php` and `routes.php` instead of XML.
+- Admin snippets as `en.json` / `de.json` instead of `en-GB` / `de-DE`.
+- Existing `main.js` is appended, not overwritten.
+- Existing plugin files are never overwritten; duplicate service/route blocks are skipped.
+- Interactive and non-interactive `extension add` share the same code path (flags/args only; no questionnaire).
+
 ## Prefer Shopware CLI abstractions
 
 When Shopware CLI provides a command for a task, prefer it over manually reconstructing the workflow with Composer, `bin/console`, Docker, npm, PHP, or direct filesystem changes.
@@ -131,7 +147,7 @@ Validates the Shopware project against the checks implemented by the current CLI
 
 Common flags include:
 
-- `--only <tools>` — run only specific tools (comma-separated).
+- `--only <tools>` — run only specific checkers (comma-separated).
 - `--exclude <tools>` — skip specific tools (comma-separated).
 - `--format <format>` — choose an output format supported by the current CLI (`--reporter` is a deprecated alias).
 - `--local-only` — limit extension discovery to plugins in `custom/*` (for the project toolset); does not add per-extension metadata validation.
@@ -154,9 +170,9 @@ Normal extension validation runs the built-in checks implemented by the current 
 
 Common flags include:
 
-- `--only <tools>` — run only specific tools (comma-separated).
-- `--exclude <tools>` — skip specific tools.
-- `--full` — run additional/full validation tools such as PHPStan, ESLint, and Stylelint when supported/configured.
+- `--only <tools>` — run only the named checkers (comma-separated).
+- `--exclude <tools>` — remove checkers from the selected set.
+- All checkers run by default, including PHPStan, ESLint, and Stylelint. `--full` is deprecated and has no effect. To do a quick validation use `--only builtin` (`sw-cli` remains accepted as a legacy alias and emits a deprecation warning).
 - `--check-against <mode>` — `highest` (default) or `lowest`: which supported Shopware version to check against.
 - `--store-compliance` — enable Store-compliance mode while the current CLI supports the flag. Prefer `validation.store_compliance: true` in `.shopware-extension.yml` for persistent Store intent.
 - `--format <format>` — choose an output format supported by the current CLI (`--reporter` is a deprecated alias).
@@ -164,6 +180,8 @@ Common flags include:
 - `--verbose` — show debug output.
 
 For Store-distribution workflows, use the `shopware-cli-extension-store` skill when available.
+
+Each command selects only tools that support its operation. For example, `extension validate --only prettier` is an error because Prettier formats but does not check; the error lists available checkers. The extension command summaries show `invoked` or `skipped`: these describe selection and invocation, not whether files were applicable, findings were produced, or fixes were made.
 
 ### Fresh results beat saved reports
 
@@ -215,9 +233,9 @@ When `validate` produces unexpected results:
    - Full validation can depend on external tools such as PHPStan, ESLint, and Stylelint.
    - Verify relevant dependencies and configuration.
 
-5. **Understand tool exclusions.**
-   - A tool may be skipped due to missing dependencies, unmet conditions, or configuration.
-   - Do not assume a skipped tool means validation passed.
+5. **Understand tool statuses.**
+   - `skipped` means a tool was not selected or was excluded; the status note gives the reason.
+   - `invoked` means the tool was called, not that it analyzed files or succeeded. Use findings and the exit code for the validation result.
 
 6. **Avoid ad hoc workarounds.**
    - Do not bypass validation with manual lower-level commands before understanding why the CLI behaved as it did.
@@ -268,13 +286,15 @@ With `--docker`, `create` runs for several minutes: it pulls the dev image and r
 
 Relevant files can include:
 
-- `.shopware-project.yml` (shop URL and Admin API credentials live under `environments`; empty `-e` targets `environments.local`)
-- `.shopware-extension.yml`
+- `.config/shopware-project.yml` / `.shopware-project.yaml` / `.shopware-project.yml` (shop URL and Admin API credentials live under `environments`; empty `-e` targets `environments.local`)
+- `.config/shopware-extension.yml` / `.shopware-extension.yml` / `.shopware-extension.yaml`
 - `composer.json`
 - `composer.lock`
 - `manifest.xml`
 
 Do not infer the project type, extension type, target environment, or Shopware version solely from the user's wording.
+
+Only the first found `yml` / `yaml` is used in the specified order above, prefer the first one for new projects.
 
 Prefer CLI-provided configuration schemas over remembered configuration fields.
 

@@ -53,11 +53,15 @@ func (m *Model) footerHint(width int) string {
 			tui.Shortcut{Key: "esc", Label: "Back"},
 		)
 	case panelCheck:
-		return tui.ShortcutBarFit(fit,
-			tui.Shortcut{Key: "↑/↓", Label: "Navigate"},
-			tui.Shortcut{Key: "enter", Label: "Select & continue"},
-			tui.Shortcut{Key: "r", Label: "Recheck"},
-		)
+		shortcuts := []tui.Shortcut{
+			{Key: "↑/↓", Label: "Navigate"},
+			{Key: "enter", Label: "Select & continue"},
+			{Key: "r", Label: "Recheck"},
+		}
+		if m.composerNameFailed() {
+			shortcuts = append(shortcuts, tui.Shortcut{Key: "n", Label: "Set package name"})
+		}
+		return tui.ShortcutBarFit(fit, shortcuts...)
 	case panelPrepare:
 		enterLabel := "Details"
 		if m.prepare.cursor >= len(m.prepare.results) {

@@ -14,8 +14,9 @@ import (
 )
 
 var projectDoctor = &cobra.Command{
-	Use:   "doctor",
-	Short: "Check your Shopware project for potential problems",
+	Use:   "doctor [path]",
+	Short: "Inspect project config, Shopware version, and extensions",
+	Args:  cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		var err error
 		var projectDir string
@@ -35,7 +36,8 @@ var projectDoctor = &cobra.Command{
 		fmt.Println(tui.SectionHeadingStyle.Render("Project"))
 		fmt.Println()
 
-		shopCfg, err := shop.ReadConfig(cmd.Context(), projectConfigPath, true)
+		actualProjectConfigPath := shop.SearchConfigPath(cmd.Context(), projectDir, projectConfigPath)
+		shopCfg, err := shop.ReadConfig(cmd.Context(), actualProjectConfigPath, projectConfigPath == "")
 		if err != nil {
 			return err
 		}
@@ -43,7 +45,7 @@ var projectDoctor = &cobra.Command{
 		if shopCfg.IsFallback() {
 			fmt.Printf("%s Project config: %s\n", tui.CheckWarn, tui.SecondaryText.Render("not found, using fallback"))
 		} else {
-			fmt.Printf("%s Project config: %s\n", tui.CheckOK, tui.GreenText.Render(shop.DefaultConfigFileName()))
+			fmt.Printf("%s Project config: %s\n", tui.CheckOK, tui.GreenText.Render(actualProjectConfigPath))
 		}
 
 		shopwareConstraint, err := extension.GetShopwareProjectConstraint(projectDir)

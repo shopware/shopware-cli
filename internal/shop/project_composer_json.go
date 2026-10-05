@@ -119,6 +119,7 @@ func GenerateComposerJson(ctx context.Context, opts ComposerJsonOptions) (string
 		require.set("shopware/k8s-meta", "*")
 	}
 	require.set("symfony/flex", "~2")
+	require.set("symfony/runtime", "*")
 
 	allowPlugins := newOrderedMap()
 	allowPlugins.set("php-http/discovery", true)

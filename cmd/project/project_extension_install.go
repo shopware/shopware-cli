@@ -11,8 +11,8 @@ import (
 )
 
 var projectExtensionInstallCmd = &cobra.Command{
-	Use:   "install [name]",
-	Short: "Install a extension",
+	Use:   "install name...",
+	Short: "Install one or more extensions in a Shopware project",
 	Args:  cobra.MinimumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		projectRoot, err := shop.FindClosestShopwareProject(true)
@@ -44,7 +44,7 @@ var projectExtensionInstallCmd = &cobra.Command{
 
 			if extension == nil {
 				failed = true
-				logging.FromContext(cmd.Context()).Errorf("Cannot find extension by name %s", arg)
+				logging.FromContext(cmd.Context()).Errorf("Cannot find extension %s, run \"shopware-cli project extension list\" to see installed extensions", arg)
 				continue
 			}
 
@@ -57,7 +57,10 @@ var projectExtensionInstallCmd = &cobra.Command{
 				failed = true
 
 				logging.FromContext(cmd.Context()).Errorf("Installation of %s failed with error: %v", extension.Name, err)
+				continue
 			}
+
+			logging.FromContext(cmd.Context()).Infof("Installed %s", extension.Name)
 
 			if activateAfterInstall {
 				if _, err := client.ExtensionManager.ActivateExtension(adminSdk.NewApiContext(cmd.Context()), extension.Type, extension.Name); err != nil {
@@ -68,8 +71,6 @@ var projectExtensionInstallCmd = &cobra.Command{
 					logging.FromContext(cmd.Context()).Infof("Activated %s", extension.Name)
 				}
 			}
-
-			logging.FromContext(cmd.Context()).Infof("Installed %s", extension.Name)
 		}
 
 		if failed {
@@ -82,5 +83,5 @@ var projectExtensionInstallCmd = &cobra.Command{
 
 func init() {
 	projectExtensionCmd.AddCommand(projectExtensionInstallCmd)
-	projectExtensionInstallCmd.PersistentFlags().Bool("activate", false, "Activate the extension")
+	projectExtensionInstallCmd.PersistentFlags().Bool("activate", false, "Activate the extension after installing")
 }

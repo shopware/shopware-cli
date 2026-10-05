@@ -11,10 +11,11 @@ import (
 
 var projectUpgradeCmd = &cobra.Command{
 	Use:   "upgrade",
-	Short: "Upgrade Shopware to a newer version",
-	Long: "Guides you through a local Shopware upgrade: readiness checks, version selection, extension compatibility, and the guided execution.\n" +
+	Short: "Check compatibility and guide a Shopware upgrade",
+	Long: "Upgrade a local Shopware project step by step: readiness checks, version selection, extension compatibility, and the guided execution.\n" +
 		"In a terminal this runs as an interactive wizard. With --no-interaction (or without a terminal, e.g. CI) the upgrade runs headless:\n" +
 		"--target is required there, --dry-run stops after the read-only preflight, and --no-audit continues when dependencies are blocked by security advisories.",
+	Args: cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		projectRoot, err := shop.FindClosestShopwareProject(false)
 		if err != nil {
@@ -39,7 +40,8 @@ var projectUpgradeCmd = &cobra.Command{
 			})
 		}
 
-		cfg, err := shop.ReadConfig(cmd.Context(), projectConfigPath, true)
+		actualProjectConfigPath := shop.SearchConfigPath(cmd.Context(), projectRoot, projectConfigPath)
+		cfg, err := shop.ReadConfig(cmd.Context(), actualProjectConfigPath, projectConfigPath == "")
 		if err != nil {
 			return err
 		}
@@ -71,6 +73,6 @@ var projectUpgradeCmd = &cobra.Command{
 func init() {
 	projectRootCmd.AddCommand(projectUpgradeCmd)
 	projectUpgradeCmd.Flags().String("target", "", "Version to upgrade to (required with --no-interaction; also accepts 'recommended' or 'latest-patch')")
-	projectUpgradeCmd.Flags().Bool("dry-run", false, "Non-interactive mode: stop after the read-only preflight without modifying the project")
+	projectUpgradeCmd.Flags().Bool("dry-run", false, "In non-interactive mode, run only the read-only preflight without modifying the project")
 	projectUpgradeCmd.Flags().Bool("no-audit", false, "Continue when dependencies are blocked by known security advisories")
 }

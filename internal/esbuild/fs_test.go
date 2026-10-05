@@ -16,6 +16,9 @@ func TestCopyStaticFiles(t *testing.T) {
 		sourceFile := filepath.Join(sourceDir, "images", "icon.svg")
 		require.NoError(t, os.MkdirAll(filepath.Dir(sourceFile), 0o755))
 		require.NoError(t, os.WriteFile(sourceFile, []byte("<svg>icon</svg>"), 0o640))
+		nestedGitFile := filepath.Join(sourceDir, "custom", "plugin", ".git", "metadata")
+		require.NoError(t, os.MkdirAll(filepath.Dir(nestedGitFile), 0o755))
+		require.NoError(t, os.WriteFile(nestedGitFile, []byte("git metadata"), 0o640))
 
 		require.NoError(t, copyStaticFiles(sourceDir, targetDir))
 
@@ -27,6 +30,9 @@ func TestCopyStaticFiles(t *testing.T) {
 		info, err := os.Stat(targetFile)
 		require.NoError(t, err)
 		assert.Equal(t, os.FileMode(0o640), info.Mode().Perm())
+
+		_, err = os.Stat(filepath.Join(targetDir, "custom", "plugin", ".git"))
+		assert.ErrorIs(t, err, os.ErrNotExist)
 	})
 
 	t.Run("ignores missing source directory", func(t *testing.T) {

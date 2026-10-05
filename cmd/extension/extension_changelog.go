@@ -13,7 +13,7 @@ import (
 
 var extensionChangelogCmd = &cobra.Command{
 	Use:   "get-changelog path",
-	Short: "Get the changelog",
+	Short: "Print an extension's current-version changelog",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		path, err := filepath.Abs(args[0])
@@ -35,7 +35,7 @@ var extensionChangelogCmd = &cobra.Command{
 		}
 
 		if err != nil {
-			return fmt.Errorf("changelog: cannot open extension %w", err)
+			return fmt.Errorf("cannot open extension: %w", err)
 		}
 
 		changelog, err := ext.GetChangelog()
@@ -67,5 +67,5 @@ var extensionChangelogCmd = &cobra.Command{
 
 func init() {
 	extensionRootCmd.AddCommand(extensionChangelogCmd)
-	extensionChangelogCmd.PersistentFlags().String("language", "", "Language of the changelog, can be multiple specified as fallback (comma separated)")
+	extensionChangelogCmd.PersistentFlags().String("language", "", "Language of the changelog, more than one can be given as fallbacks (comma-separated, e.g. de-DE,en-GB)")
 }

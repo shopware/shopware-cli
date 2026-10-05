@@ -22,7 +22,11 @@ const passwordFlagPrompt = "__INTERACTIVE__"
 
 var projectDatabaseDumpCmd = &cobra.Command{
 	Use:   "dump",
-	Short: "Dumps the Shopware database",
+	Short: "Export a Shopware project's database to SQL",
+	Long: `Export the project database to a SQL file, using the connection details of the current environment unless overridden with the connection flags.
+
+--limit keeps only the newest rows of a table (e.g. order=100). Tables referencing the limited table are filtered automatically; ancestors of self-referencing rows (e.g. product variants) are kept so the dump stays importable. Freezing the kept rows into staging tables requires the CREATE and DROP privileges.`,
+	Args: cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, _ []string) error {
 		mysqlConfig, err := assembleConnectionURI(cmd)
 		if err != nil {
@@ -35,7 +39,8 @@ var projectDatabaseDumpCmd = &cobra.Command{
 			return err
 		}
 
-		projectCfg, err := shop.ReadConfig(cmd.Context(), projectConfigPath, true)
+		actualProjectConfigPath := shop.SearchConfigPath(cmd.Context(), ".", projectConfigPath)
+		projectCfg, err := shop.ReadConfig(cmd.Context(), actualProjectConfigPath, projectConfigPath == "")
 		if err != nil {
 			return err
 		}
@@ -102,12 +107,16 @@ func assembleConnectionURI(cmd *cobra.Command) (*mysql.Config, error) {
 				return nil, errors.New("cannot prompt for password: stdin is not a terminal")
 			}
 
-			fmt.Fprint(cmd.ErrOrStderr(), "Enter MySQL password: ") //nolint:errcheck // prompt output is best-effort, ReadPassword surfaces real terminal errors
+			if _, err := fmt.Fprint(cmd.ErrOrStderr(), "Enter MySQL password: "); err != nil {
+				return nil, fmt.Errorf("could not write password prompt: %w", err)
+			}
 			pass, err := term.ReadPassword(os.Stdin.Fd())
-			fmt.Fprintln(cmd.ErrOrStderr()) //nolint:errcheck // trailing newline is best-effort
-
 			if err != nil {
 				return nil, fmt.Errorf("could not read password: %w", err)
+			}
+
+			if _, err := fmt.Fprintln(cmd.ErrOrStderr()); err != nil {
+				return nil, fmt.Errorf("could not write to stderr: %w", err)
 			}
 
 			dbConn.Password = string(pass)
@@ -132,20 +141,20 @@ func resolveDumpDatabaseConnection(cmd *cobra.Command) (*executor.DatabaseConnec
 
 func init() {
 	projectRootCmd.AddCommand(projectDatabaseDumpCmd)
-	projectDatabaseDumpCmd.Flags().String("host", "", "Hostname")
-	projectDatabaseDumpCmd.Flags().String("database", "", "Database name")
-	projectDatabaseDumpCmd.Flags().StringP("username", "u", "", "Mysql user")
-	projectDatabaseDumpCmd.Flags().StringP("password", "p", "", "Mysql password (omit value to be prompted interactively)")
+	projectDatabaseDumpCmd.Flags().String("host", "", "MySQL or MariaDB hostname")
+	projectDatabaseDumpCmd.Flags().String("database", "", "MySQL or MariaDB database name")
+	projectDatabaseDumpCmd.Flags().StringP("username", "u", "", "MySQL or MariaDB username")
+	projectDatabaseDumpCmd.Flags().StringP("password", "p", "", "MySQL or MariaDB password (omit the value to be prompted interactively)")
 	projectDatabaseDumpCmd.Flags().Lookup("password").NoOptDefVal = passwordFlagPrompt
-	projectDatabaseDumpCmd.Flags().String("port", "", "Mysql port")
+	projectDatabaseDumpCmd.Flags().String("port", "", "MySQL or MariaDB port")
 
 	projectDatabaseDumpCmd.Flags().String("output", "dump.sql", "File or - (for stdout)")
-	projectDatabaseDumpCmd.Flags().Bool("clean", false, "Ignores cart, messenger_messages, message_queue_stats,...")
-	projectDatabaseDumpCmd.Flags().Bool("skip-lock-tables", false, "Skips locking the tables")
+	projectDatabaseDumpCmd.Flags().Bool("clean", false, "Exclude data from transient tables (e.g. cart, messenger_messages, message_queue_stats, log_entry)")
+	projectDatabaseDumpCmd.Flags().Bool("skip-lock-tables", false, "Skip locking tables during the dump")
 	projectDatabaseDumpCmd.Flags().Bool("anonymize", false, "Anonymize customer data")
 	projectDatabaseDumpCmd.Flags().String("compression", "", "Compress the dump (gzip, zstd)")
 	projectDatabaseDumpCmd.Flags().Bool("quick", false, "Use quick option for mysqldump")
 	projectDatabaseDumpCmd.Flags().Int("parallel", 0, "Number of tables to dump concurrently (0 = disabled)")
 	projectDatabaseDumpCmd.Flags().Int("insert-into-limit", 0, "Limit the number of rows per INSERT statement (0 = auto, takes priority over --quick when set)")
-	projectDatabaseDumpCmd.Flags().StringArray("limit", nil, "Limit the rows of a table (e.g. order=100 dumps only the 100 newest orders). Tables referencing the limited table are filtered automatically; ancestors of self-referencing rows (e.g. product variants) are kept so the dump stays importable. Requires the CREATE and DROP privileges to freeze the kept rows into staging tables. Can be specified multiple times")
+	projectDatabaseDumpCmd.Flags().StringArray("limit", nil, "Limit the rows of a table to the newest ones (e.g. order=100), can be given multiple times")
 }

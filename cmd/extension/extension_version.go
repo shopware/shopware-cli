@@ -12,7 +12,7 @@ import (
 
 var extensionVersionCmd = &cobra.Command{
 	Use:   "get-version path",
-	Short: "Get the version of the given extension",
+	Short: "Print an extension's declared version from a folder or ZIP",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		path, err := filepath.Abs(args[0])
@@ -34,7 +34,7 @@ var extensionVersionCmd = &cobra.Command{
 		}
 
 		if err != nil {
-			return fmt.Errorf("version: cannot open extension %w", err)
+			return fmt.Errorf("cannot open extension: %w", err)
 		}
 
 		version, err := ext.GetVersion()

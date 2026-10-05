@@ -70,7 +70,7 @@ type ExtensionCreate struct {
 }
 
 func (e ProducerEndpoint) GetExtensionBinaries(ctx context.Context, producerId int, extensionId int) ([]*ExtensionBinary, error) {
-	errorFormat := "GetExtensionBinaries: %v"
+	errorFormat := "cannot list extension binaries: %w"
 
 	r, err := e.c.NewAuthenticatedRequest(ctx, http.MethodGet, fmt.Sprintf("%s/producers/%d/plugins/%d/binaries", getApiUrl(), producerId, extensionId), nil)
 	if err != nil {
@@ -91,7 +91,7 @@ func (e ProducerEndpoint) GetExtensionBinaries(ctx context.Context, producerId i
 }
 
 func (e ProducerEndpoint) UpdateExtensionBinaryInfo(ctx context.Context, producerId, extensionId int, update ExtensionUpdate) error {
-	errorFormat := "UpdateExtensionBinaryInfo: %v"
+	errorFormat := "cannot update extension binary info: %w"
 
 	content, err := json.Marshal(update)
 	if err != nil {
@@ -109,7 +109,7 @@ func (e ProducerEndpoint) UpdateExtensionBinaryInfo(ctx context.Context, produce
 }
 
 func (e ProducerEndpoint) CreateExtensionBinary(ctx context.Context, producerId, extensionId int, create ExtensionCreate) (*ExtensionBinary, error) {
-	errorFormat := "CreateExtensionBinary: %v"
+	errorFormat := "cannot create extension binary: %w"
 
 	createPayload, err := json.Marshal(create)
 	if err != nil {
@@ -135,7 +135,7 @@ func (e ProducerEndpoint) CreateExtensionBinary(ctx context.Context, producerId,
 }
 
 func (e ProducerEndpoint) UpdateExtensionBinaryFile(ctx context.Context, producerId, extensionId, binaryId int, zipPath string) error {
-	errorFormat := "UpdateExtensionBinaryFile: %v"
+	errorFormat := "cannot upload extension binary file: %w"
 
 	var b bytes.Buffer
 	w := multipart.NewWriter(&b)
@@ -175,7 +175,7 @@ func (e ProducerEndpoint) UpdateExtensionBinaryFile(ctx context.Context, produce
 }
 
 func (e ProducerEndpoint) UpdateExtensionIcon(ctx context.Context, extensionId int, iconFilePath string) error {
-	errorFormat := "UpdateExtensionIcon: %v"
+	errorFormat := "cannot update extension icon: %w"
 
 	var b bytes.Buffer
 	w := multipart.NewWriter(&b)
@@ -250,7 +250,7 @@ type ExtensionImage struct {
 }
 
 func (e ProducerEndpoint) GetExtensionImages(ctx context.Context, extensionId int) ([]*ExtensionImage, error) {
-	errorFormat := "GetExtensionImages: %v"
+	errorFormat := "cannot list extension images: %w"
 
 	r, err := e.c.NewAuthenticatedRequest(ctx, http.MethodGet, fmt.Sprintf("%s/plugins/%d/pictures", getApiUrl(), extensionId), nil)
 	if err != nil {
@@ -271,7 +271,7 @@ func (e ProducerEndpoint) GetExtensionImages(ctx context.Context, extensionId in
 }
 
 func (e ProducerEndpoint) DeleteExtensionImages(ctx context.Context, extensionId, imageId int) error {
-	errorFormat := "DeleteExtensionImages: %v"
+	errorFormat := "cannot delete extension image: %w"
 
 	r, err := e.c.NewAuthenticatedRequest(ctx, http.MethodDelete, fmt.Sprintf("%s/plugins/%d/pictures/%d", getApiUrl(), extensionId, imageId), nil)
 	if err != nil {
@@ -284,7 +284,7 @@ func (e ProducerEndpoint) DeleteExtensionImages(ctx context.Context, extensionId
 }
 
 func (e ProducerEndpoint) UpdateExtensionImage(ctx context.Context, extensionId int, image *ExtensionImage) error {
-	errorFormat := "UpdateExtensionImage: %v"
+	errorFormat := "cannot update extension image: %w"
 
 	content, err := json.Marshal(image)
 	if err != nil {
@@ -302,7 +302,7 @@ func (e ProducerEndpoint) UpdateExtensionImage(ctx context.Context, extensionId 
 }
 
 func (e ProducerEndpoint) AddExtensionImage(ctx context.Context, extensionId int, file string) (*ExtensionImage, error) {
-	errorFormat := "AddExtensionImage: %v"
+	errorFormat := "cannot add extension image: %w"
 
 	var b bytes.Buffer
 	w := multipart.NewWriter(&b)
@@ -340,14 +340,14 @@ func (e ProducerEndpoint) AddExtensionImage(ctx context.Context, extensionId int
 	var list []*ExtensionImage
 
 	if err = json.Unmarshal(body, &list); err != nil {
-		return nil, fmt.Errorf("AddExtensionImage: %v", err)
+		return nil, fmt.Errorf("cannot decode the uploaded image response: %w", err)
 	}
 
 	return list[0], nil
 }
 
 func (e ProducerEndpoint) TriggerCodeReview(ctx context.Context, extensionId int) error {
-	errorFormat := "TriggerCodeReview: %v"
+	errorFormat := "cannot trigger code review: %w"
 
 	r, err := e.c.NewAuthenticatedRequest(ctx, http.MethodPost, fmt.Sprintf("%s/plugins/%d/reviews", getApiUrl(), extensionId), nil)
 	if err != nil {
@@ -360,7 +360,7 @@ func (e ProducerEndpoint) TriggerCodeReview(ctx context.Context, extensionId int
 }
 
 func (e ProducerEndpoint) GetBinaryReviewResults(ctx context.Context, extensionId, binaryId int) ([]BinaryReviewResult, error) {
-	errorFormat := "GetBinaryReviewResults: %v"
+	errorFormat := "cannot load code review results: %w"
 
 	r, err := e.c.NewAuthenticatedRequest(ctx, http.MethodGet, fmt.Sprintf("%s/plugins/%d/binaries/%d/checkresults", getApiUrl(), extensionId, binaryId), nil)
 	if err != nil {

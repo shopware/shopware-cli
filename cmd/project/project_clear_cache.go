@@ -12,7 +12,8 @@ import (
 
 var projectClearCacheCmd = &cobra.Command{
 	Use:   "clear-cache",
-	Short: "Clears the Shop cache",
+	Short: "Clear a Shopware project's cache locally or via Admin API",
+	Args:  cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, _ []string) error {
 		projectRoot, err := shop.FindClosestShopwareProject(true)
 		if err != nil {
@@ -25,18 +26,18 @@ var projectClearCacheCmd = &cobra.Command{
 		}
 
 		cfg := cmdExecutor.ShopConfig()
-		if cfg == nil || cfg.AdminApi == nil {
-			logging.FromContext(cmd.Context()).Infof("Clearing cache localy")
-
+		if cfg == nil || !shop.HasAdminAPICredentials(cfg) {
 			projectRoot, err = shop.FindClosestShopwareProject(false)
 			if err != nil {
 				return err
 			}
 
+			logging.FromContext(cmd.Context()).Infof("Clearing cache locally")
+
 			return os.RemoveAll(projectRoot + "/var/cache")
 		}
 
-		logging.FromContext(cmd.Context()).Infof("Clearing cache using admin-api")
+		logging.FromContext(cmd.Context()).Infof("Clearing cache using the Admin API")
 
 		client, err := cmdExecutor.AdminAPIClient(cmd.Context())
 		if err != nil {

@@ -154,6 +154,11 @@ func RenderUpdateNotification(latestVersion string, buildVersion string) string 
 
 // ShouldCheckForUpdate decides whether the CLI checks for updates based on user preferences and execution context.
 func ShouldCheckForUpdate(version string, args []string) bool {
+	// Shell completion requests run on every TAB press and their stderr is discarded.
+	if len(args) > 0 && (args[0] == "__complete" || args[0] == "__completeNoDesc") {
+		return false
+	}
+
 	if len(args) > 0 {
 		for _, arg := range args {
 			if arg == "--no-update-hint" || arg == "-n" {

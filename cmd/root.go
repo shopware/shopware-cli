@@ -17,18 +17,19 @@ import (
 	"github.com/shopware/shopware-cli/cmd/extension"
 	"github.com/shopware/shopware-cli/cmd/project"
 	accountApi "github.com/shopware/shopware-cli/internal/account-api"
+	"github.com/shopware/shopware-cli/internal/cliversion"
 	"github.com/shopware/shopware-cli/internal/system"
-	"github.com/shopware/shopware-cli/internal/tui"
 	"github.com/shopware/shopware-cli/logging"
 )
 
-var version = "dev"
+// version is the legacy ldflags target (-X 'github.com/shopware/shopware-cli/cmd.version=...').
+// It is kept until all build platforms set internal/cliversion.Version directly.
+var version string
 
 var rootCmd = &cobra.Command{
-	Use:     "shopware-cli",
-	Short:   "A cli for common Shopware tasks",
-	Long:    `This application contains some utilities like extension management`,
-	Version: version,
+	Use:   "shopware-cli",
+	Short: "Build, develop, and manage Shopware projects and extensions",
+	Long:  `Build, develop, and manage Shopware projects and extensions from the command line.`,
 }
 
 // Execute runs the root command and returns the process exit code after cleanup.
@@ -42,8 +43,6 @@ func Execute(ctx context.Context) int {
 	ctx = logging.WithLogger(ctx, logging.NewLogger(verbose))
 	ctx = logging.WithVerbose(ctx, verbose)
 	ctx = system.WithInteraction(ctx, !slices.Contains(args, "--no-interaction") && !slices.Contains(args, "-n") && isatty.IsTerminal(os.Stdin.Fd()))
-	tui.AppVersion = version
-	accountApi.SetUserAgent("shopware-cli/" + version)
 	rootCmd.SetArgs(args)
 
 	updateHandle, updateCancel := startUpdateCheck(ctx, args)
@@ -66,7 +65,7 @@ func exitCode(ctx context.Context, err error) int {
 		return 0
 	}
 
-	if !errors.Is(err, project.ErrEnvironmentDown) && !errors.Is(err, project.ErrProxyNotRegistered) {
+	if !errors.Is(err, project.ErrEnvironmentDown) && !errors.Is(err, project.ErrProxyNotRegistered) && !errors.Is(err, project.ErrProxyVerificationFailed) {
 		logging.FromContext(ctx).Errorln(err)
 	}
 
@@ -74,6 +73,11 @@ func exitCode(ctx context.Context, err error) int {
 }
 
 func init() {
+	if version != "" {
+		cliversion.Version = version
+	}
+	rootCmd.Version = cliversion.Version
+
 	rootCmd.SilenceErrors = true
 
 	// Cobra prints the usage block for every error a command returns. Flags,
@@ -92,9 +96,9 @@ func init() {
 		_ = system.CloseCaches()
 	})
 
-	rootCmd.PersistentFlags().Bool("verbose", false, "Show debug output")
-	rootCmd.PersistentFlags().BoolP("no-interaction", "n", false, "Do not ask any interactive questions")
-	rootCmd.PersistentFlags().Bool("no-update-hint", false, "Do not show update notifications")
+	rootCmd.PersistentFlags().Bool("verbose", false, "Show debug logs and detailed tool output")
+	rootCmd.PersistentFlags().BoolP("no-interaction", "n", false, "Run without prompting; commands use defaults or fail where input is needed")
+	rootCmd.PersistentFlags().Bool("no-update-hint", false, "Skip checking for a newer shopware-cli version")
 
 	project.Register(rootCmd)
 	extension.Register(rootCmd)

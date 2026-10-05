@@ -70,8 +70,8 @@ jobs:
             <p>Latest release: <code>${VERSION}</code></p>
             <ul>
               <li><a href="version.json">version.json</a> &mdash; latest CLI version</li>
-              <li><a href="shopware-project-schema.json">shopware-project-schema.json</a> &mdash; schema for <code>.shopware-project.yml</code></li>
-              <li><a href="shopware-extension-schema.json">shopware-extension-schema.json</a> &mdash; schema for <code>.shopware-extension.yml</code></li>
+              <li><a href="shopware-project-schema.json">shopware-project-schema.json</a> &mdash; schema for <code>.config/shopware-project.yml</code></li>
+              <li><a href="shopware-extension-schema.json">shopware-extension-schema.json</a> &mdash; schema for <code>.config/shopware-extension.yml</code></li>
             </ul>
           </body>
           </html>

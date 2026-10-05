@@ -14,7 +14,8 @@ import (
 
 var projectFixCmd = &cobra.Command{
 	Use:   "fix [path]",
-	Short: "Fix project",
+	Short: "Apply code-quality fixes to a project",
+	Long:  "Run code-quality fixers on the project's own code, such as extensions in custom/ and configured bundles, and change the files directly. Packages that Composer installs into vendor/ are not changed. Requires a Git repository so the changes can be reviewed, unless --allow-non-git is passed.",
 	Args:  cobra.MaximumNArgs(1),
 	PreRunE: func(cmd *cobra.Command, args []string) error {
 		return verifier.SetupTools(cmd.Context(), cmd.Root().Version)
@@ -47,14 +48,14 @@ var projectFixCmd = &cobra.Command{
 
 		only, _ := cmd.Flags().GetString("only")
 
-		toolCfg, err := verifier.GetConfigFromProject(projectPath, false)
+		toolCfg, err := verifier.GetConfigFromProject(cmd.Context(), projectPath, false)
 		if err != nil {
 			return err
 		}
 
 		var gr errgroup.Group
 
-		tools := verifier.GetTools()
+		tools := verifier.GetToolsOf[verifier.FixTool]()
 
 		tools, err = tools.Only(only)
 		if err != nil {
@@ -62,7 +63,6 @@ var projectFixCmd = &cobra.Command{
 		}
 
 		for _, tool := range tools {
-			tool := tool
 			gr.Go(func() error {
 				return tool.Fix(cmd.Context(), *toolCfg)
 			})
@@ -74,6 +74,6 @@ var projectFixCmd = &cobra.Command{
 
 func init() {
 	projectRootCmd.AddCommand(projectFixCmd)
-	projectFixCmd.PersistentFlags().String("only", "", "Run only specific tools by name (comma-separated, e.g. phpstan,eslint)")
-	projectFixCmd.PersistentFlags().Bool("allow-non-git", false, "Allow running on non git repositories")
+	projectFixCmd.PersistentFlags().String("only", "", "Run only the specified fixers (comma-separated, e.g. eslint,rector)")
+	projectFixCmd.PersistentFlags().Bool("allow-non-git", false, "Allow fix to run outside a Git repository")
 }
