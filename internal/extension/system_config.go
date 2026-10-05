@@ -87,8 +87,10 @@ func (ConfigSystemConfigRule) JSONSchema() *jsonschema.Schema {
 				Description: "configuration_key to omit from the dump.",
 			},
 			{
-				Type:       "object",
-				Properties: object,
+				Type:                 "object",
+				Properties:           object,
+				Required:             []string{"key"},
+				AdditionalProperties: jsonschema.FalseSchema,
 			},
 		},
 	}

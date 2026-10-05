@@ -27,7 +27,7 @@ type DumpDatabaseOptions struct {
 	// extension-declared tables and system config keys
 	Anonymize bool
 	// ExtensionTables are column rewrites declared by installed extensions.
-	// Applied only when Anonymize is true. Project dump.rewrite values win.
+	// Applied only when Anonymize is true. Project dump.rewrite values and the built-in rules win.
 	ExtensionTables map[string]map[string]string
 	// SystemConfigRules anonymize system_config rows declared by installed extensions.
 	// Applied only when Anonymize is true. A project rewrite of configuration_value wins
@@ -101,9 +101,9 @@ func dumpDatabase(ctx context.Context, db *sql.DB, cfg *ConfigDump, opts DumpDat
 }
 
 // prepareDumpConfig applies clean, anonymize, and limit options to cfg.
-// Extension tables are merged before the built-in customer anonymization, and
-// project dump.rewrite values are left in place. Extension system config keys
-// own system_config.configuration_value unless the project already rewrote it.
+// Extension tables are merged after the built-in customer anonymization, so they
+// only fill columns that neither the project nor the built-in rules set. Extension
+// system config keys own system_config.configuration_value unless the project already rewrote it.
 func prepareDumpConfig(cfg *ConfigDump, opts DumpDatabaseOptions) (*ConfigDump, error) {
 	if cfg == nil {
 		cfg = &ConfigDump{}
@@ -115,6 +115,7 @@ func prepareDumpConfig(cfg *ConfigDump, opts DumpDatabaseOptions) (*ConfigDump, 
 
 	if opts.Anonymize {
 		projectOwnsSystemConfigValue := cfg.hasColumnRewrite("system_config", "configuration_value")
+		cfg.EnableAnonymization()
 		cfg.MergeRewrite(opts.ExtensionTables)
 		rewrite, where, err := BuildSystemConfigAnonymization(opts.SystemConfigRules)
 		if err != nil {
@@ -124,7 +125,6 @@ func prepareDumpConfig(cfg *ConfigDump, opts DumpDatabaseOptions) (*ConfigDump, 
 			cfg.forceRewrite("system_config", "configuration_value", rewrite)
 		}
 		cfg.mergeWhere("system_config", where)
-		cfg.EnableAnonymization()
 	}
 
 	if err := applyLimitOverrides(cfg, opts.LimitOverrides); err != nil {

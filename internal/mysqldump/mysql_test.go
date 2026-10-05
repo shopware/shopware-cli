@@ -204,6 +204,10 @@ func TestRewriteSelectExpression(t *testing.T) {
 
 	expression := "CASE WHEN `configuration_key` = 'A.config.email' THEN '{\"_value\":\"{{- faker.Internet.Email() -}}\"}' ELSE `configuration_value` END"
 	assert.Equal(t, expression, rewriteSelectExpression(expression))
+
+	assert.Equal(t, "'qa+{{- faker.Internet.User() -}}@example.com'", rewriteSelectExpression("qa+{{- faker.Internet.User() -}}@example.com"))
+	assert.Equal(t, "IF(company IS NULL, company, '{{- faker.Person.Name() -}}')", rewriteSelectExpression("IF(company IS NULL, company, '{{- faker.Person.Name() -}}')"))
+	assert.Equal(t, "CONCAT('it''s ', '{{- faker.Person.Name() -}}')", rewriteSelectExpression("CONCAT('it''s ', '{{- faker.Person.Name() -}}')"))
 }
 
 func TestMySQLGetColumnsForSelect(t *testing.T) {

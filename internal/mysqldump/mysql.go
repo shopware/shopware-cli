@@ -736,19 +736,35 @@ func (d *Dumper) getColumnsForSelect(ctx context.Context, table string, consider
 }
 
 // rewriteSelectExpression quotes a faker template so MySQL returns it as text.
-// SQL that only contains a faker template inside a string literal, such as a
+// SQL that only contains faker templates inside string literals, such as a
 // CASE expression, is left as SQL. The dumped text is evaluated afterwards.
 func rewriteSelectExpression(replacement string) string {
 	if !strings.Contains(replacement, "faker.") {
 		return replacement
 	}
 
-	trimmed := strings.TrimSpace(replacement)
-	if strings.HasPrefix(trimmed, "faker.") || strings.HasPrefix(trimmed, "{{-") {
+	if strings.HasPrefix(strings.TrimSpace(replacement), "faker.") || hasTemplateOutsideStringLiteral(replacement) {
 		return "'" + replacement + "'"
 	}
 
 	return replacement
+}
+
+// hasTemplateOutsideStringLiteral reports whether a {{- template appears outside a single-quoted SQL string.
+func hasTemplateOutsideStringLiteral(expression string) bool {
+	inLiteral := false
+	for i := 0; i < len(expression); i++ {
+		switch {
+		case inLiteral && expression[i] == '\\':
+			i++
+		case expression[i] == '\'':
+			inLiteral = !inLiteral
+		case !inLiteral && strings.HasPrefix(expression[i:], "{{-"):
+			return true
+		}
+	}
+
+	return false
 }
 
 func (d *Dumper) rowCount(ctx context.Context, table string) (count uint64, err error) {
