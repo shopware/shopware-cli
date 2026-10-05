@@ -13,8 +13,11 @@ import (
 )
 
 var aiInfoCmd = &cobra.Command{
-	Use:          "info <name>",
-	Short:        "Show details of a Shopware AI integration",
+	Use:   "info <name>",
+	Short: "Show details of a Shopware AI integration",
+	Long: `Show the details of a Shopware AI integration, including any installs this CLI
+has recorded (agent, scope and resolved revision).`,
+	Example:      `  shopware-cli ai info deployment-helper`,
 	Args:         cobra.ExactArgs(1),
 	SilenceUsage: true,
 	RunE: func(cmd *cobra.Command, args []string) error {

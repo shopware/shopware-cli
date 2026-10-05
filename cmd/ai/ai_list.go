@@ -25,9 +25,16 @@ type listItem struct {
 }
 
 var aiListCmd = &cobra.Command{
-	Use:          "list",
-	Aliases:      []string{"ls"},
-	Short:        "List known Shopware AI integrations",
+	Use:     "list",
+	Aliases: []string{"ls"},
+	Short:   "List known Shopware AI integrations",
+	Long: `List the known Shopware AI integrations.
+
+With --installed, list the integrations this CLI has installed instead — one row
+per agent and scope, with the requested tag and resolved revision.`,
+	Example: `  shopware-cli ai list
+  shopware-cli ai list --installed
+  shopware-cli ai list --format json`,
 	Args:         cobra.NoArgs,
 	SilenceUsage: true,
 	RunE: func(cmd *cobra.Command, _ []string) error {

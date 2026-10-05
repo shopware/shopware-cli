@@ -49,8 +49,32 @@ type addResult struct {
 }
 
 var aiAddCmd = &cobra.Command{
-	Use:          "add <name>[@<tag>]",
-	Short:        "Install a Shopware AI integration into an AI agent",
+	Use:   "add <name>[@<tag>]",
+	Short: "Install a Shopware AI integration into an AI agent",
+	Long: `Install a Shopware AI integration (a skill) into an AI agent via skills.sh.
+
+By default the skill is installed into the current Shopware project; use --global
+to install at the user level from anywhere. Pin a release with @<tag>, otherwise
+the latest release (or the CLI version for bundled skills) is used.
+
+Requirements: Node.js/npx on PATH; git-delivered integrations also need git and
+network access. The agent name is whatever skills.sh supports (e.g. claude-code,
+codex) — the CLI keeps no list of its own.
+
+The install writes the agent's skill files plus skills-lock.json, and records the
+install under .shopware-cli/ai/. Commit those to share the integration with your
+team, or gitignore them to keep it local.`,
+	Example: `  # install the Shopware CLI skill into Claude Code for this project
+  shopware-cli ai add shopware-cli --agent claude-code
+
+  # pin a specific release
+  shopware-cli ai add deployment-helper@0.1.7 --agent claude-code
+
+  # install at the user level, from anywhere
+  shopware-cli ai add shopware-cli --agent claude-code --global
+
+  # preview the exact skills.sh command without changing anything
+  shopware-cli ai add shopware-cli --agent claude-code --dry-run`,
 	Args:         cobra.ExactArgs(1),
 	SilenceUsage: true,
 	RunE: func(cmd *cobra.Command, args []string) error {
