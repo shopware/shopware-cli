@@ -17,6 +17,18 @@ import (
 // The CLI hardcodes no agent names: which agents exist is skills.sh's business,
 // so a new one it supports works without a CLI change.
 
+const (
+	// bundledRepoURL is the repository a bundled skill is installed from; its ref
+	// follows the CLI version.
+	bundledRepoURL = "https://github.com/shopware/shopware-cli"
+	// devVersion is the version a plain `go build` reports; it is not a real ref,
+	// so bundled installs fall back to the latest release.
+	devVersion = "dev"
+	// refPlaceholder stands in for an unresolved ref in --dry-run output, so the
+	// dry run stays offline (no tag lookup).
+	refPlaceholder = "<latest-release>"
+)
+
 // addResult is the machine-readable shape of `ai add` (--format json).
 type addResult struct {
 	Name             string      `json:"name"`
@@ -79,35 +91,56 @@ var aiAddCmd = &cobra.Command{
 			saveState = func(f state.File) error { return state.SaveProject(root, f) }
 		}
 
-		// Resolve the source repo and the ref to install. A bundled skill's
-		// version follows the CLI; a git skill uses the explicit tag or the
-		// latest stable release from its repository.
-		var source, ref string
+		// Resolve the repo and the ref to install, then build a GitHub tree URL
+		// that pins the ref (skills.sh ignores a bare owner/repo@ref). A bundled
+		// skill follows the CLI version; a git skill uses the explicit tag or the
+		// latest stable release. Tag lookups hit the network, so a --dry-run stays
+		// offline and shows a placeholder when the ref cannot be resolved locally.
+		var repoURL string
+		ref := tag
 		switch entry.Delivery.Kind {
 		case directory.DeliveryBundled:
-			ref = tag
-			if ref == "" {
+			repoURL = bundledRepoURL
+			switch {
+			case ref != "":
+				if !dryRun {
+					if err = verifyTag(cmd.Context(), repoURL, ref); err != nil {
+						return err
+					}
+				}
+			default:
 				ref = cmd.Root().Version
+				if ref == "" || ref == devVersion {
+					if dryRun {
+						ref = refPlaceholder
+					} else if ref, err = resolveLatestTag(cmd.Context(), repoURL); err != nil {
+						return err
+					}
+				}
 			}
-			source = "shopware/shopware-cli"
 		case directory.DeliveryGit:
-			ref = tag
-			if ref == "" {
-				if ref, err = resolveLatestTag(cmd.Context(), entry.Delivery.Repository); err != nil {
+			repoURL = entry.Delivery.Repository
+			switch {
+			case ref == "":
+				if dryRun {
+					ref = refPlaceholder
+				} else if ref, err = resolveLatestTag(cmd.Context(), repoURL); err != nil {
+					return err
+				}
+			case !dryRun:
+				if err = verifyTag(cmd.Context(), repoURL, ref); err != nil {
 					return err
 				}
 			}
-			source = ownerRepo(entry.Delivery.Repository)
 		default:
 			return fmt.Errorf("unsupported delivery %q", entry.Delivery.Kind)
 		}
-		if ref != "" {
-			source += "@" + ref
-		}
 
-		// skills.sh must never prompt: this command already supplies the skill,
+		source := skillSourceURL(repoURL, ref, entry.Name)
+
+		// skills.sh must never prompt: this command already supplies the source,
 		// agent and scope, so its confirmation prompts are always skipped.
-		argv := skillsAddArgs(source, entry.Name, agent, global, true)
+		argv := skillsAddArgs(source, agent, global, true)
 
 		result := addResult{
 			Name:             entry.Name,

@@ -17,11 +17,12 @@ import (
 )
 
 func TestSkillsAddArgs(t *testing.T) {
-	got := strings.Join(skillsAddArgs("shopware/shopware-cli@0.18.3", "shopware-cli", "claude-code", true, true), " ")
-	want := "npx --yes skills@" + skillsVersion + " add shopware/shopware-cli@0.18.3 --skill shopware-cli --agent claude-code --global -y"
+	src := "https://github.com/shopware/shopware-cli/tree/0.18.3/skills/shopware-cli"
+	got := strings.Join(skillsAddArgs(src, "claude-code", true, true), " ")
+	want := "npx --yes skills@" + skillsVersion + " add " + src + " --agent claude-code --global -y"
 	assert.Equal(t, want, got)
 
-	got = strings.Join(skillsAddArgs("a", "s", "claude-code", false, false), " ")
+	got = strings.Join(skillsAddArgs("a", "claude-code", false, false), " ")
 	assert.NotContains(t, got, "--global")
 	assert.NotContains(t, got, " -y")
 }
@@ -105,6 +106,11 @@ func setupAdd(t *testing.T) *skillsCall {
 	runCompatCheck = func(_ context.Context, _, _, _, _ string, _ io.Writer) error { return nil }
 	t.Cleanup(func() { runCompatCheck = prevCompat })
 
+	// Stub tag verification to "exists" so explicit-tag tests need no network.
+	prevVerify := verifyTag
+	verifyTag = func(_ context.Context, _, _ string) error { return nil }
+	t.Cleanup(func() { verifyTag = prevVerify })
+
 	return rec
 }
 
@@ -156,8 +162,9 @@ func TestAddInstallsAndIsIdempotent(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, 1, rec.calls)
 	joined := strings.Join(rec.lastArgv, " ")
-	assert.Contains(t, joined, "add shopware/shopware-cli")
-	assert.Contains(t, joined, "--skill shopware-cli")
+	// The test root has an empty version, so a bundled install falls back to the
+	// resolved latest tag (stubbed to 0.1.9) and pins it via a tree URL.
+	assert.Contains(t, joined, "github.com/shopware/shopware-cli/tree/0.1.9/skills/shopware-cli")
 	assert.Contains(t, joined, "--agent claude-code")
 	assert.Contains(t, joined, "--global")
 
@@ -204,8 +211,7 @@ func TestAddGitDeliveryResolvesLatestTagAndInstalls(t *testing.T) {
 	assert.Equal(t, 1, rec.calls)
 
 	joined := strings.Join(rec.lastArgv, " ")
-	assert.Contains(t, joined, "add shopware/deployment-helper@0.1.9")
-	assert.Contains(t, joined, "--skill deployment-helper")
+	assert.Contains(t, joined, "github.com/shopware/deployment-helper/tree/0.1.9/skills/deployment-helper")
 
 	cwd, err := os.Getwd()
 	require.NoError(t, err)

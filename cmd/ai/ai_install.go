@@ -18,13 +18,13 @@ import (
 // shopware-cli release always drives a known skills.sh behavior.
 const skillsVersion = "1.5.18"
 
-// skillsAddArgs builds the `npx skills add ...` argv. shopware-cli is the front
-// door: it decides what to install; skills.sh writes the agent configuration.
-// `ai add --dry-run` prints this without running it.
-func skillsAddArgs(source, skill, agent string, global, assumeYes bool) []string {
+// skillsAddArgs builds the `npx skills add ...` argv. The source is a GitHub
+// tree URL (see skillSourceURL) that points straight at the skill directory and
+// pins the ref, so no `--skill` is needed. `ai add --dry-run` prints this
+// without running it.
+func skillsAddArgs(source, agent string, global, assumeYes bool) []string {
 	argv := []string{
 		"npx", "--yes", "skills@" + skillsVersion, "add", source,
-		"--skill", skill,
 		"--agent", agent,
 	}
 	if global {
@@ -35,6 +35,14 @@ func skillsAddArgs(source, skill, agent string, global, assumeYes bool) []string
 	}
 
 	return argv
+}
+
+// skillSourceURL builds the GitHub tree URL that pins a skill to a ref, e.g.
+// https://github.com/shopware/shopware-cli/tree/0.18.3/skills/shopware-cli.
+// skills.sh honors the ref in this form; a bare owner/repo@ref is ignored and
+// the default branch is installed instead.
+func skillSourceURL(repoURL, ref, skill string) string {
+	return fmt.Sprintf("https://github.com/%s/tree/%s/skills/%s", ownerRepo(repoURL), ref, skill)
 }
 
 // skillsRemoveArgs builds the `npx skills remove ...` argv. skills.sh never
@@ -108,6 +116,21 @@ var resolveLatestTag = func(ctx context.Context, repoURL string) (string, error)
 	}
 
 	return tag, nil
+}
+
+// verifyTag errors unless ref is an existing tag of repoURL. It is a package var
+// so tests can substitute it without network access. skills.sh silently installs
+// the default branch for a bad ref, so an explicit @tag is checked up front.
+var verifyTag = func(ctx context.Context, repoURL, ref string) error {
+	out, err := exec.CommandContext(ctx, "git", "ls-remote", "--tags", repoURL, "refs/tags/"+ref).Output()
+	if err != nil {
+		return fmt.Errorf("cannot verify tag %s of %s: %w", ref, repoURL, err)
+	}
+	if strings.TrimSpace(string(out)) == "" {
+		return fmt.Errorf("release %q not found in %s", ref, repoURL)
+	}
+
+	return nil
 }
 
 // latestStableTag picks the highest stable semver tag from `git ls-remote --tags`

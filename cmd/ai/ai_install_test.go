@@ -13,6 +13,15 @@ func TestOwnerRepo(t *testing.T) {
 	assert.Equal(t, "shopware/deployment-helper", ownerRepo("https://github.com/shopware/deployment-helper.git"))
 }
 
+func TestSkillSourceURL(t *testing.T) {
+	assert.Equal(t,
+		"https://github.com/shopware/shopware-cli/tree/0.18.3/skills/shopware-cli",
+		skillSourceURL("https://github.com/shopware/shopware-cli", "0.18.3", "shopware-cli"))
+	assert.Equal(t,
+		"https://github.com/shopware/deployment-helper/tree/0.1.7/skills/deployment-helper",
+		skillSourceURL("https://github.com/shopware/deployment-helper.git", "0.1.7", "deployment-helper"))
+}
+
 func TestLatestStableTag(t *testing.T) {
 	lines := strings.Split(strings.TrimSpace(`
 deadbeef	refs/tags/0.1.5
