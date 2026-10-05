@@ -89,9 +89,6 @@ type ListOptions struct {
 	// identifier (see knownTypeFilters), including reserved ones that match no
 	// entry yet.
 	Type string
-	// InstalledOnly keeps only entries whose name is in the installed set passed
-	// to List.
-	InstalledOnly bool
 }
 
 // knownTypeFilters are the type identifiers accepted by List. It includes "mcp",
@@ -103,10 +100,8 @@ var knownTypeFilters = map[string]bool{
 	string(TypeMCP):   true,
 }
 
-// List returns the integrations matching opts. installed is the set of
-// integration names recorded as installed by the CLI; it is consulted only when
-// opts.InstalledOnly is set.
-func (d *Directory) List(installed map[string]bool, opts ListOptions) ([]Integration, error) {
+// List returns the integrations matching opts.
+func (d *Directory) List(opts ListOptions) ([]Integration, error) {
 	if opts.Type != "" && !knownTypeFilters[opts.Type] {
 		return nil, fmt.Errorf("unknown type %q (allowed: skill, mcp)", opts.Type)
 	}
@@ -114,9 +109,6 @@ func (d *Directory) List(installed map[string]bool, opts ListOptions) ([]Integra
 	out := make([]Integration, 0, len(d.Integrations))
 	for _, e := range d.Integrations {
 		if opts.Type != "" && string(e.Type) != opts.Type {
-			continue
-		}
-		if opts.InstalledOnly && !installed[e.Name] {
 			continue
 		}
 

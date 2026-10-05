@@ -13,9 +13,6 @@ import (
 	"github.com/shopware/shopware-cli/internal/shop"
 )
 
-// The CLI hardcodes no agent names: which agents exist is skills.sh's business,
-// so a new one it supports works without a CLI change.
-
 const (
 	// bundledRepoURL is the repository a bundled skill is installed from; its ref
 	// follows the CLI version.

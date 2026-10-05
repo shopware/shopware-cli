@@ -192,7 +192,6 @@ type compatReport struct {
 	Compatible bool     `json:"compatible"`
 	Errors     []string `json:"errors"`
 	Warnings   []string `json:"warnings"`
-	Info       []string `json:"info"`
 }
 
 // runCompatCheck fetches the integration's owner-maintained compatibility check

@@ -60,7 +60,7 @@ per agent and scope, with the requested tag and resolved revision.`,
 			return writeInstalledTable(cmd.OutOrStdout(), records)
 		}
 
-		entries, err := directory.Load().List(nil, directory.ListOptions{Type: typeFilter})
+		entries, err := directory.Load().List(directory.ListOptions{Type: typeFilter})
 		if err != nil {
 			return err
 		}
