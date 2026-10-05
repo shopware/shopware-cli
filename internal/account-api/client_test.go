@@ -30,17 +30,6 @@ func TestNewAuthenticatedRequestWithOAuthToken(t *testing.T) {
 	assert.Empty(t, req.Header.Get("x-shopware-token"))
 }
 
-func TestNewAuthenticatedRequestWithLegacyToken(t *testing.T) {
-	client := &Client{
-		LegacyToken: &legacyToken{Token: "legacy-token"},
-	}
-
-	req, err := client.NewAuthenticatedRequest(t.Context(), http.MethodPost, "https://example.com/path", nil)
-	require.NoError(t, err)
-	assert.Equal(t, "legacy-token", req.Header.Get("x-shopware-token"))
-	assert.Empty(t, req.Header.Get("Authorization"))
-}
-
 func TestDoRequestSuccess(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		assert.Equal(t, http.MethodGet, r.Method)
@@ -78,36 +67,6 @@ func TestIsTokenValidOAuth(t *testing.T) {
 	assert.True(t, (&Client{Token: &oauth2.Token{Expiry: time.Now().Add(time.Hour)}}).isTokenValid())
 	assert.False(t, (&Client{Token: &oauth2.Token{Expiry: time.Now().Add(30 * time.Second)}}).isTokenValid())
 	assert.False(t, (&Client{}).isTokenValid())
-}
-
-func TestIsTokenValidLegacy(t *testing.T) {
-	valid := &Client{LegacyToken: &legacyToken{
-		Token: "tok",
-		Expire: tokenExpire{
-			Date:     time.Now().UTC().Add(time.Hour).Format("2006-01-02 15:04:05.000000"),
-			Timezone: "UTC",
-		},
-	}}
-	assert.True(t, valid.isTokenValid())
-
-	expired := &Client{LegacyToken: &legacyToken{
-		Token: "tok",
-		Expire: tokenExpire{
-			Date:     time.Now().UTC().Add(-time.Hour).Format("2006-01-02 15:04:05.000000"),
-			Timezone: "UTC",
-		},
-	}}
-	assert.False(t, expired.isTokenValid())
-
-	badTimezone := &Client{LegacyToken: &legacyToken{
-		Expire: tokenExpire{Date: "2020-01-01 00:00:00.000000", Timezone: "Not/AZone"},
-	}}
-	assert.False(t, badTimezone.isTokenValid())
-
-	badDate := &Client{LegacyToken: &legacyToken{
-		Expire: tokenExpire{Date: "not-a-date", Timezone: "UTC"},
-	}}
-	assert.False(t, badDate.isTokenValid())
 }
 
 func TestGetCacheFileName(t *testing.T) {

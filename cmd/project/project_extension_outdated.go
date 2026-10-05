@@ -15,6 +15,7 @@ var projectExtensionOutdatedCmd = &cobra.Command{
 	Use:   "outdated",
 	Short: "List all outdated extensions",
 	Long:  "List installed extensions that have a newer version available. Exits with code 1 when at least one extension is outdated, regardless of the output format.",
+	Args:  cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, _ []string) error {
 		formatName, _ := cmd.Flags().GetString("format")
 		outputAsJSON, _ := cmd.Flags().GetBool("json")
@@ -80,7 +81,7 @@ func projectExtensionOutdatedTable(extensions adminSdk.ExtensionList) *tui.Table
 
 func init() {
 	projectExtensionCmd.AddCommand(projectExtensionOutdatedCmd)
-	projectExtensionOutdatedCmd.Flags().String("format", string(tui.TableFormatTable), "Output format (table or json)")
+	projectExtensionOutdatedCmd.Flags().String("format", string(tui.TableFormatTable), "Output format (table, json)")
 	projectExtensionOutdatedCmd.Flags().Bool("json", false, "Output as JSON")
 	projectExtensionOutdatedCmd.MarkFlagsMutuallyExclusive("format", "json")
 	_ = projectExtensionOutdatedCmd.Flags().MarkDeprecated("json", "use --format json instead")

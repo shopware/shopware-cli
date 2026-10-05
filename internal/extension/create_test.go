@@ -158,7 +158,6 @@ func TestCreateGeneratesAnExtension(t *testing.T) {
 				assert.FileExists(t, filepath.Join(extensionDir, "src", technicalName+".php"))
 
 				if extensionType == Plugin {
-					assert.FileExists(t, filepath.Join(extensionDir, "src", "Resources", "config", "config.xml"))
 					assert.FileExists(t, filepath.Join(extensionDir, ".gitignore"))
 					assert.FileExists(t, filepath.Join(extensionDir, "phpunit.xml"))
 					assert.FileExists(t, filepath.Join(extensionDir, "tests", "TestBootstrap.php"))

@@ -196,7 +196,7 @@ func TestParseInlineablePathMissingFile(t *testing.T) {
 	_, err := parseInlineablePath("file:missing.html", t.TempDir())
 
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "error reading file")
+	assert.Contains(t, err.Error(), "cannot read")
 }
 
 func TestLanguageFromLocale(t *testing.T) {

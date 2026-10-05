@@ -15,7 +15,8 @@ import (
 
 var projectFormatCmd = &cobra.Command{
 	Use:   "format [path]",
-	Short: "Run configured formatters on project files",
+	Short: "Format a project's code with PHP-CS-Fixer and Prettier",
+	Long:  "Format the project's own code, such as extensions in custom/ and configured bundles, and change the files directly. Packages that Composer installs into vendor/ are not changed. PHP-CS-Fixer uses the project's .php-cs-fixer.dist.php if present; Prettier always uses the CLI's own config. Use --dry-run to only report files that would change.",
 	Args:  cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		only, _ := cmd.Flags().GetString("only")
@@ -71,6 +72,6 @@ var projectFormatCmd = &cobra.Command{
 func init() {
 	projectRootCmd.AddCommand(projectFormatCmd)
 	projectFormatCmd.PersistentFlags().String("only", "", "Run only the specified formatters (comma-separated, e.g. prettier,php-cs-fixer)")
+	projectFormatCmd.PersistentFlags().Bool("dry-run", false, "Report files that would change, without changing them")
 	projectFormatCmd.PersistentFlags().String("exclude", "", "Exclude formatters after applying --only (comma-separated, e.g. prettier,php-cs-fixer)")
-	projectFormatCmd.PersistentFlags().Bool("dry-run", false, "Run formatters without changing files")
 }

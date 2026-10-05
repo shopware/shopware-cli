@@ -2,6 +2,7 @@ package ai
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/spf13/cobra"
 )
@@ -20,9 +21,9 @@ func addFormatFlag(cmd *cobra.Command) {
 func resolveFormat(cmd *cobra.Command) (string, error) {
 	format, _ := cmd.Flags().GetString("format")
 
-	switch format {
+	switch lowered := strings.ToLower(format); lowered {
 	case formatTable, formatJSON:
-		return format, nil
+		return lowered, nil
 	default:
 		return "", fmt.Errorf("unknown --format %q (allowed: table, json)", format)
 	}

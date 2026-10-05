@@ -26,6 +26,7 @@ var projectProxyVerifyCmd = &cobra.Command{
 container, the operating system's hostname resolution, the Traefik container and
 finally a trusted HTTPS request to the proxy's own health endpoint. The first
 failing layer is reported with a hint how to fix it.`,
+	Args: cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		settings, err := proxy.LoadSettings()
 		if err != nil {
