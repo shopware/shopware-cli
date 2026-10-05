@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"os/exec"
 	"path"
 	"time"
 
@@ -33,7 +32,7 @@ func installComposerDeps(ctx context.Context, rootDir string, checkAgainst strin
 				additionalParams = append(additionalParams, suggest+":*")
 			}
 
-			composerInstall := exec.CommandContext(ctx, "composer", additionalParams...)
+			composerInstall := CommandContext(ctx, "composer", additionalParams...)
 			composerInstall.Env = append(os.Environ(), fmt.Sprintf("COMPOSER_AUTH=%s", encoded))
 			composerInstall.Dir = rootDir
 
@@ -52,7 +51,7 @@ func installComposerDeps(ctx context.Context, rootDir string, checkAgainst strin
 			additionalParams = append(additionalParams, "--prefer-lowest")
 		}
 
-		composerInstall := exec.CommandContext(ctx, "composer", additionalParams...)
+		composerInstall := CommandContext(ctx, "composer", additionalParams...)
 		composerInstall.Env = append(os.Environ(), fmt.Sprintf("COMPOSER_AUTH=%s", encoded))
 		composerInstall.Dir = rootDir
 

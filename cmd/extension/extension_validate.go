@@ -24,6 +24,7 @@ var extensionValidateCmd = &cobra.Command{
 	Long:  "Validate an extension folder or ZIP file. With --store-compliance (or SHOPWARE_CLI_STORE_COMPLIANCE=1), the Store's rules apply and the extension's validation.ignore list is not used.",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
+		logger := logging.FromContext(cmd.Context())
 		storeCompliance, _ := cmd.Flags().GetBool("store-compliance")
 		reportingFormat, err := extensionValidationFormat(cmd)
 		if err != nil {
@@ -55,7 +56,7 @@ var extensionValidateCmd = &cobra.Command{
 		if stat.IsDir() {
 			validationPath := path
 			if noCopy {
-				logging.FromContext(cmd.Context()).Debugf("Skipping copying extension files to temporary directory due to --no-copy flag")
+				logger.Debugf("Skipping copying extension files to temporary directory due to --no-copy flag")
 			} else if needsTools {
 				tmpDir, err := os.MkdirTemp(os.TempDir(), "analyse-extension-*")
 				if err != nil {
@@ -64,9 +65,9 @@ var extensionValidateCmd = &cobra.Command{
 				defer func() {
 					beforeDeleteTime := time.Now()
 					if err := os.RemoveAll(tmpDir); err != nil {
-						logging.FromContext(cmd.Context()).Errorf("Failed to remove temporary directory: %v", err)
+						logger.Errorf("Failed to remove temporary directory: %v", err)
 					}
-					logging.FromContext(cmd.Context()).Debugf("Removed temporary directory in %s", time.Since(beforeDeleteTime).String())
+					logger.Debugf("Removed temporary directory in %s", time.Since(beforeDeleteTime).String())
 				}()
 
 				beforeCopyTime := time.Now()
@@ -74,7 +75,7 @@ var extensionValidateCmd = &cobra.Command{
 					return err
 				}
 
-				logging.FromContext(cmd.Context()).Debugf("Copied extension files to temporary directory in %s", time.Since(beforeCopyTime).String())
+				logger.Debugf("Copied extension files to temporary directory in %s", time.Since(beforeCopyTime).String())
 				validationPath = tmpDir
 			}
 
@@ -83,7 +84,7 @@ var extensionValidateCmd = &cobra.Command{
 				return err
 			}
 
-			toolCfg, err = verifier.ConvertExtensionToToolConfig(ext)
+			toolCfg, err = verifier.ConvertExtensionToToolConfig(cmd.Context(), ext)
 			if err != nil {
 				return err
 			}
@@ -95,16 +96,16 @@ var extensionValidateCmd = &cobra.Command{
 				return err
 			}
 
-			toolCfg, err = verifier.ConvertExtensionToToolConfig(ext)
+			toolCfg, err = verifier.ConvertExtensionToToolConfig(cmd.Context(), ext)
 			if err != nil {
 				return err
 			}
 		}
 
 		if storeCompliance || os.Getenv("SHOPWARE_CLI_STORE_COMPLIANCE") == "1" {
-			toolCfg.Extension.GetExtensionConfig().Validation.StoreCompliance = true
+			toolCfg.Extensions[0].GetExtensionConfig().Validation.StoreCompliance = true
 			// The user is not allowed to provide a custom ignore list when store compliance is enabled
-			toolCfg.Extension.GetExtensionConfig().Validation.Ignore = extension.ConfigValidationList{}
+			toolCfg.Extensions[0].GetExtensionConfig().Validation.Ignore = extension.ConfigValidationList{}
 			toolCfg.ValidationIgnores = nil
 		}
 

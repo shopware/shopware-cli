@@ -57,7 +57,7 @@ func TestSymfonyXMLConverterFixesPlugin(t *testing.T) {
 	ext, err := extension.GetExtensionByFolder(t.Context(), tmpDir)
 	require.NoError(t, err)
 
-	err = SymfonyXMLConverter{}.Fix(t.Context(), ToolConfig{Extension: ext, RootDir: tmpDir})
+	err = SymfonyXMLConverter{}.Fix(t.Context(), ToolConfig{Extensions: []extension.Extension{ext}, RootDir: tmpDir})
 	require.NoError(t, err)
 
 	assertConvertedConfigDir(t, filepath.Join(tmpDir, "src", "Resources", "config"))
@@ -70,7 +70,7 @@ func TestSymfonyXMLConverterFixesExtraBundles(t *testing.T) {
 	ext, err := extension.GetExtensionByFolder(t.Context(), tmpDir)
 	require.NoError(t, err)
 
-	err = SymfonyXMLConverter{}.Fix(t.Context(), ToolConfig{Extension: ext, RootDir: tmpDir})
+	err = SymfonyXMLConverter{}.Fix(t.Context(), ToolConfig{Extensions: []extension.Extension{ext}, RootDir: tmpDir})
 	require.NoError(t, err)
 
 	assert.NoFileExists(t, filepath.Join(bundleConfigDir, "services.xml"))
@@ -87,7 +87,7 @@ func TestSymfonyXMLConverterSkipsApps(t *testing.T) {
 	ext, err := extension.GetExtensionByFolder(t.Context(), tmpDir)
 	require.NoError(t, err)
 
-	err = SymfonyXMLConverter{}.Fix(t.Context(), ToolConfig{Extension: ext, RootDir: tmpDir})
+	err = SymfonyXMLConverter{}.Fix(t.Context(), ToolConfig{Extensions: []extension.Extension{ext}, RootDir: tmpDir})
 	require.NoError(t, err)
 
 	assert.FileExists(t, filepath.Join(configDir, "services.xml"))
@@ -103,7 +103,7 @@ func TestSymfonyXMLConverterKeepsUnconvertibleFile(t *testing.T) {
 	ext, err := extension.GetExtensionByFolder(t.Context(), tmpDir)
 	require.NoError(t, err)
 
-	err = SymfonyXMLConverter{}.Fix(t.Context(), ToolConfig{Extension: ext, RootDir: tmpDir})
+	err = SymfonyXMLConverter{}.Fix(t.Context(), ToolConfig{Extensions: []extension.Extension{ext}, RootDir: tmpDir})
 	require.NoError(t, err)
 
 	assert.FileExists(t, filepath.Join(configDir, "services.xml"))
@@ -113,7 +113,9 @@ func TestSymfonyXMLConverterKeepsUnconvertibleFile(t *testing.T) {
 func TestSymfonyXMLConverterFixesProjectPlugins(t *testing.T) {
 	tmpDir := copySymfonyXMLFixture(t, "project")
 
-	err := SymfonyXMLConverter{}.Fix(t.Context(), ToolConfig{RootDir: tmpDir})
+	exts := extension.FindExtensionsFromProject(t.Context(), tmpDir, true)
+	require.NotEmpty(t, exts)
+	err := SymfonyXMLConverter{}.Fix(t.Context(), ToolConfig{RootDir: tmpDir, Extensions: exts})
 	require.NoError(t, err)
 
 	assertConvertedConfigDir(t, filepath.Join(tmpDir, "custom", "plugins", "TestPlugin", "src", "Resources", "config"))

@@ -29,13 +29,7 @@ var projectValidateCmd = &cobra.Command{
 		exclude, _ := cmd.Flags().GetString("exclude")
 		verifier.WarnOnDeprecatedToolName(cmd.Context(), only, exclude)
 
-		// TODO: Built-in checks require a single extension and cannot validate a project (they silently early return).
-		// TODO: Investigate why that is and why other tools like PHPStan work in both
-		// TODO: extension validate + project validate commands and figure out what to check differently
-		checkers, err := verifier.GetToolsOf[verifier.CheckTool]().Exclude("builtin")
-		if err != nil {
-			return err
-		}
+		checkers := verifier.GetToolsOf[verifier.CheckTool]()
 		tools, statuses, err := selectProjectTools(checkers, only, exclude, "validation checks")
 		if err != nil {
 			return err
