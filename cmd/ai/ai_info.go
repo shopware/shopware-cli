@@ -8,6 +8,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/shopware/shopware-cli/internal/ai/directory"
+	"github.com/shopware/shopware-cli/internal/ai/state"
 	"github.com/shopware/shopware-cli/internal/tui"
 )
 
@@ -27,16 +28,28 @@ var aiInfoCmd = &cobra.Command{
 			return err
 		}
 
-		if format == formatJSON {
-			return writeInfoJSON(cmd.OutOrStdout(), *entry)
+		installed, err := installedRecordsFor(entry.Name)
+		if err != nil {
+			return err
 		}
 
-		return writeInfoTable(cmd.OutOrStdout(), *entry)
+		if format == formatJSON {
+			return writeInfoJSON(cmd.OutOrStdout(), *entry, installed)
+		}
+
+		return writeInfoTable(cmd.OutOrStdout(), *entry, installed)
 	},
 }
 
-func writeInfoJSON(w io.Writer, e directory.Integration) error {
-	out, err := json.Marshal(e)
+func writeInfoJSON(w io.Writer, e directory.Integration, installed []state.InstalledEntry) error {
+	if installed == nil {
+		installed = []state.InstalledEntry{}
+	}
+
+	out, err := json.Marshal(struct {
+		directory.Integration
+		Installed []state.InstalledEntry `json:"installed"`
+	}{e, installed})
 	if err != nil {
 		return err
 	}
@@ -46,8 +59,9 @@ func writeInfoJSON(w io.Writer, e directory.Integration) error {
 	return err
 }
 
-// writeInfoTable prints an entry as a two-column property/value table.
-func writeInfoTable(w io.Writer, e directory.Integration) error {
+// writeInfoTable prints an entry as a two-column property/value table, followed
+// by the recorded installs (or "no" when none).
+func writeInfoTable(w io.Writer, e directory.Integration, installed []state.InstalledEntry) error {
 	rows := [][]string{
 		{"Name", e.Name},
 		{"Display name", e.DisplayName},
@@ -58,6 +72,18 @@ func writeInfoTable(w io.Writer, e directory.Integration) error {
 		{"Documentation", e.Documentation},
 		{"Delivery", deliveryLabel(e.Delivery)},
 		{"Compatibility", compatibilityLabel(e)},
+	}
+
+	if len(installed) == 0 {
+		rows = append(rows, []string{"Installed", "no"})
+	} else {
+		for i, rec := range installed {
+			label := ""
+			if i == 0 {
+				label = "Installed"
+			}
+			rows = append(rows, []string{label, fmt.Sprintf("%s (%s) @%s", rec.Agent, rec.Scope, rec.ResolvedRevision)})
+		}
 	}
 
 	_, err := fmt.Fprintln(w, tui.RenderTable([]string{"Property", "Value"}, rows))

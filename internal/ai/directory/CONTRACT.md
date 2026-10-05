@@ -33,16 +33,20 @@ the CLI-wide output-flag convention.
 `ai list` — array of:
 { name, displayName, type, provider, description, status }
 
-`ai info <name>` — object (superset of list):
+`ai list --installed` — array of recorded installs (one per agent/scope), not the
+catalog:
+{ name, agent, scope: project|global, requestedTag, resolvedRevision }
+
+`ai info <name>` — object (superset of list) plus the recorded installs:
 { name, displayName, type, provider, description, status,
   documentation,
   delivery: { kind, repository? },
-  compatibility?: { source } }
+  compatibility?: { source },
+  installed: [ { name, agent, scope, requestedTag, resolvedRevision } ] }
 
 ## --installed state (written by `ai add` / `ai remove`)
 Install-state file records, per installed entry:
 { name, agent, scope: project|global, requestedTag, resolvedRevision }
-`ai list --installed` returns only recorded entries.
 
 ## Guarantees
 - All human + JSON output → stdout; logs/errors → stderr.

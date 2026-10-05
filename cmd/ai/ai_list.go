@@ -39,17 +39,21 @@ var aiListCmd = &cobra.Command{
 		typeFilter, _ := cmd.Flags().GetString("type")
 		installedOnly, _ := cmd.Flags().GetBool("installed")
 
-		var installed map[string]bool
+		// --installed reports the recorded installs (one row per agent/scope),
+		// not the catalog, so it can show the agent, scope and revision.
 		if installedOnly {
-			if installed, err = readInstalledNames(); err != nil {
+			records, err := installedRecords()
+			if err != nil {
 				return err
 			}
+			if format == formatJSON {
+				return writeInstalledJSON(cmd.OutOrStdout(), records)
+			}
+
+			return writeInstalledTable(cmd.OutOrStdout(), records)
 		}
 
-		entries, err := directory.Load().List(installed, directory.ListOptions{
-			Type:          typeFilter,
-			InstalledOnly: installedOnly,
-		})
+		entries, err := directory.Load().List(nil, directory.ListOptions{Type: typeFilter})
 		if err != nil {
 			return err
 		}
@@ -99,23 +103,19 @@ func writeListTable(w io.Writer, entries []directory.Integration) error {
 	return err
 }
 
-// readInstalledNames returns the set of integration names recorded as installed
-// by the CLI, merging the global state and the project state in the current
-// directory (a missing file yields an empty state, not an error).
-func readInstalledNames() (map[string]bool, error) {
-	names := map[string]bool{}
-
+// installedRecords returns every install the CLI recorded, merging the global
+// state and the project state at the Shopware project root (a missing file yields
+// an empty state, not an error). Each record carries its own agent and scope, so
+// the same integration installed for two agents or scopes yields two rows.
+func installedRecords() ([]state.InstalledEntry, error) {
 	global, err := state.Read()
 	if err != nil {
 		return nil, err
 	}
-	for _, e := range global.Installed {
-		names[e.Name] = true
-	}
+	records := append([]state.InstalledEntry{}, global.Installed...)
 
-	// A project-scoped install is recorded at the Shopware project root; fall back
-	// to the current directory when not inside a project (global installs still
-	// show).
+	// Fall back to the current directory when not inside a project; global
+	// installs still show.
 	root, err := shop.FindClosestShopwareProject(true)
 	if err != nil {
 		return nil, fmt.Errorf("locate project install state: %w", err)
@@ -124,11 +124,54 @@ func readInstalledNames() (map[string]bool, error) {
 	if err != nil {
 		return nil, err
 	}
-	for _, e := range project.Installed {
-		names[e.Name] = true
+
+	return append(records, project.Installed...), nil
+}
+
+// installedRecordsFor returns the recorded installs for a single integration.
+func installedRecordsFor(name string) ([]state.InstalledEntry, error) {
+	all, err := installedRecords()
+	if err != nil {
+		return nil, err
 	}
 
-	return names, nil
+	out := make([]state.InstalledEntry, 0, len(all))
+	for _, e := range all {
+		if e.Name == name {
+			out = append(out, e)
+		}
+	}
+
+	return out, nil
+}
+
+func writeInstalledJSON(w io.Writer, records []state.InstalledEntry) error {
+	if records == nil {
+		records = []state.InstalledEntry{}
+	}
+
+	out, err := json.Marshal(records)
+	if err != nil {
+		return err
+	}
+
+	_, err = fmt.Fprintln(w, string(out))
+
+	return err
+}
+
+func writeInstalledTable(w io.Writer, records []state.InstalledEntry) error {
+	rows := make([][]string, 0, len(records))
+	for _, e := range records {
+		rows = append(rows, []string{e.Name, e.Agent, string(e.Scope), e.RequestedTag, e.ResolvedRevision})
+	}
+
+	_, err := fmt.Fprintln(w, tui.RenderTable(
+		[]string{"Name", "Agent", "Scope", "Requested", "Revision"},
+		rows,
+	))
+
+	return err
 }
 
 func init() {
