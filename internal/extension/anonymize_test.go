@@ -300,12 +300,59 @@ anonymize:
     customer:
       custom_fields: "json_remove(custom_fields, '$.zzz_token')"
 `)
+	writePlugin(t, project, "RepeatPlugin", "Swag\\Repeat\\RepeatPlugin", `
+compatibility_date: "2026-01-01"
+anonymize:
+  tables:
+    customer:
+      custom_fields: "JSON_REMOVE(custom_fields, '$.aaa_vat', '$.aaa_phone')"
+`)
 	require.NoError(t, os.MkdirAll(filepath.Join(project, "custom", "plugins", "not-an-extension"), 0o755))
 
 	rules, err := CollectAnonymization(t.Context(), project)
 	require.NoError(t, err)
 
 	assert.Equal(t, "JSON_REMOVE(custom_fields, '$.aaa_vat', '$.aaa_phone', '$.zzz_token')", rules.Tables["customer"]["custom_fields"])
+}
+
+func TestCollectAnonymizationFailsOnBrokenComposerPackage(t *testing.T) {
+	project := t.TempDir()
+	vendorDir := filepath.Join(project, "vendor", "swag", "broken-plugin")
+	testhelper.WriteFile(t, filepath.Join(vendorDir, "composer.json"), "{ not json")
+	testhelper.WriteFile(t, filepath.Join(vendorDir, ".shopware-extension.yml"), `
+compatibility_date: "2026-01-01"
+anonymize:
+  system_config:
+    - BrokenPlugin.config.apiKey
+`)
+	testhelper.WriteFile(t, filepath.Join(project, "composer.lock"), testhelper.ComposerLock(
+		testhelper.LockPackage{Name: "swag/broken-plugin", Version: "1.0.0", Type: "shopware-platform-plugin"},
+	))
+
+	_, err := CollectAnonymization(t.Context(), project)
+
+	var packageErr *ComposerPackageError
+	require.ErrorAs(t, err, &packageErr)
+	assert.Equal(t, "swag/broken-plugin", packageErr.Package)
+}
+
+func TestCollectAnonymizationSkipsUninstalledComposerPackage(t *testing.T) {
+	project := t.TempDir()
+	writePlugin(t, project, "AaaPlugin", "Swag\\Aaa\\AaaPlugin", `
+compatibility_date: "2026-01-01"
+anonymize:
+  tables:
+    aaa_token:
+      access_token: "''"
+`)
+	testhelper.WriteFile(t, filepath.Join(project, "composer.lock"), testhelper.ComposerLock(
+		testhelper.LockPackage{Name: "swag/not-installed", Version: "1.0.0", Type: "shopware-platform-plugin"},
+	))
+
+	rules, err := CollectAnonymization(t.Context(), project)
+	require.NoError(t, err)
+
+	assert.Equal(t, map[string]map[string]string{"aaa_token": {"access_token": "''"}}, rules.Tables)
 }
 
 func TestReadExtensionConfigRejectsUnknownAnonymizeField(t *testing.T) {

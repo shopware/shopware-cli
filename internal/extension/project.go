@@ -314,6 +314,21 @@ func findExtensionsFromProject(ctx context.Context, project string, onlyLocal bo
 	return extensionsSlice
 }
 
+// ComposerPackageError reports an extension listed in composer.lock whose
+// installed vendor folder cannot be loaded.
+type ComposerPackageError struct {
+	Package string
+	Err     error
+}
+
+func (e *ComposerPackageError) Error() string {
+	return "package " + e.Package + ": " + e.Err.Error()
+}
+
+func (e *ComposerPackageError) Unwrap() error {
+	return e.Err
+}
+
 func addExtensionsByComposer(ctx context.Context, project string, onError func(error)) []Extension {
 	var list []Extension
 
@@ -329,10 +344,16 @@ func addExtensionsByComposer(ctx context.Context, project string, onError func(e
 
 	for _, pkg := range composer.Packages {
 		if pkg.PackageType == ComposerTypePlugin || pkg.PackageType == ComposerTypeBundle || pkg.PackageType == ComposerTypeApp {
-			ext, err := GetExtensionByFolder(ctx, path.Join(project, "vendor", pkg.Name))
+			folder := path.Join(project, "vendor", pkg.Name)
+			if _, err := os.Stat(folder); errors.Is(err, os.ErrNotExist) {
+				// The package is locked but not installed, so there is nothing to load.
+				continue
+			}
+
+			ext, err := GetExtensionByFolder(ctx, folder)
 			if err != nil {
 				if onError != nil {
-					onError(err)
+					onError(&ComposerPackageError{Package: pkg.Name, Err: err})
 				}
 				continue
 			}
