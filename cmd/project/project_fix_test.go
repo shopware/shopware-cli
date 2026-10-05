@@ -10,6 +10,7 @@ import (
 )
 
 func TestProjectFixNoArgsOutsideProjectReturnsError(t *testing.T) {
+	t.Setenv("SHOPWARE_CLI_TOOLS_DIR", t.TempDir())
 	chdirOutsideProject(t)
 
 	projectFixCmd.SetContext(t.Context())
@@ -19,6 +20,7 @@ func TestProjectFixNoArgsOutsideProjectReturnsError(t *testing.T) {
 }
 
 func TestProjectFixNoArgsAppliesGitGuardToResolvedProject(t *testing.T) {
+	t.Setenv("SHOPWARE_CLI_TOOLS_DIR", t.TempDir())
 	cwd := t.TempDir()
 	require.NoError(t, os.Mkdir(filepath.Join(cwd, ".git"), 0o755))
 	t.Chdir(cwd)
@@ -34,6 +36,7 @@ func TestProjectFixNoArgsAppliesGitGuardToResolvedProject(t *testing.T) {
 }
 
 func TestProjectFixRejectsNonGitDirectory(t *testing.T) {
+	t.Setenv("SHOPWARE_CLI_TOOLS_DIR", t.TempDir())
 	dir := t.TempDir()
 	projectFixCmd.SetContext(t.Context())
 	err := projectFixCmd.RunE(projectFixCmd, []string{dir})
@@ -43,6 +46,7 @@ func TestProjectFixRejectsNonGitDirectory(t *testing.T) {
 }
 
 func TestProjectFixPassesGitGuardWithGitDirectory(t *testing.T) {
+	t.Setenv("SHOPWARE_CLI_TOOLS_DIR", t.TempDir())
 	dir := t.TempDir()
 	require.NoError(t, os.Mkdir(filepath.Join(dir, ".git"), 0o755))
 
