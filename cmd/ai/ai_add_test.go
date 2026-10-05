@@ -256,5 +256,11 @@ func TestAddGuards(t *testing.T) {
 	_, err = runAdd(t, "shopware-cli", "--global")
 	assert.ErrorContains(t, err, "--agent")
 
+	_, err = runAdd(t, "shopware-cli", "--agent", "*", "--global")
+	assert.ErrorContains(t, err, "single agent")
+
+	_, err = runAdd(t, "shopware-cli", "--agent", "claude-code,cursor", "--global")
+	assert.ErrorContains(t, err, "single agent")
+
 	assert.Equal(t, 0, rec.calls)
 }

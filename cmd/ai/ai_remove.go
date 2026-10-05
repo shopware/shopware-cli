@@ -2,7 +2,6 @@ package ai
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"strings"
@@ -40,8 +39,8 @@ var aiRemoveCmd = &cobra.Command{
 		global, _ := cmd.Flags().GetBool("global")
 		dryRun, _ := cmd.Flags().GetBool("dry-run")
 
-		if agent == "" {
-			return errors.New("specify the target agent with --agent (e.g. --agent claude-code)")
+		if err := validateAgent(agent); err != nil {
+			return err
 		}
 
 		// The directory gives the canonical name, but a recorded install is

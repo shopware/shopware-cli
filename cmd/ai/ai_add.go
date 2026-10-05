@@ -2,7 +2,6 @@ package ai
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"strings"
@@ -71,8 +70,8 @@ var aiAddCmd = &cobra.Command{
 		if entry.Delivery.Kind == directory.DeliveryGit && global {
 			return fmt.Errorf("%q must be installed into a project, not globally: it checks compatibility against that project (omit --global)", entry.Name)
 		}
-		if agent == "" {
-			return errors.New("specify the target agent with --agent (e.g. --agent claude-code)")
+		if err := validateAgent(agent); err != nil {
+			return err
 		}
 
 		scope := state.ScopeGlobal

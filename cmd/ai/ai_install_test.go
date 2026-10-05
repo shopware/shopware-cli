@@ -13,6 +13,15 @@ func TestOwnerRepo(t *testing.T) {
 	assert.Equal(t, "shopware/deployment-helper", ownerRepo("https://github.com/shopware/deployment-helper.git"))
 }
 
+func TestValidateAgent(t *testing.T) {
+	require.NoError(t, validateAgent("claude-code"))
+
+	assert.ErrorContains(t, validateAgent(""), "--agent")
+	for _, bad := range []string{"*", "claude-code,cursor", "claude code"} {
+		assert.ErrorContains(t, validateAgent(bad), "single agent", "should reject %q", bad)
+	}
+}
+
 func TestSkillSourceURL(t *testing.T) {
 	assert.Equal(t,
 		"https://github.com/shopware/shopware-cli/tree/0.18.3/skills/shopware-cli",

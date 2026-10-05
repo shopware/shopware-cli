@@ -37,6 +37,21 @@ func skillsAddArgs(source, agent string, global, assumeYes bool) []string {
 	return argv
 }
 
+// validateAgent rejects --agent values skills.sh cannot round-trip (install then
+// remove). It does not check the name against a list — which agents exist is
+// skills.sh's business — only the shape: empty, the "*" wildcard, and comma- or
+// whitespace-separated lists. Install one agent at a time.
+func validateAgent(agent string) error {
+	if agent == "" {
+		return errors.New("specify the target agent with --agent (e.g. --agent claude-code)")
+	}
+	if strings.ContainsAny(agent, "*, \t") {
+		return fmt.Errorf("--agent takes a single agent (e.g. claude-code); %q is not supported — run the command once per agent", agent)
+	}
+
+	return nil
+}
+
 // skillSourceURL builds the GitHub tree URL that pins a skill to a ref, e.g.
 // https://github.com/shopware/shopware-cli/tree/0.18.3/skills/shopware-cli.
 // skills.sh honors the ref in this form; a bare owner/repo@ref is ignored and
