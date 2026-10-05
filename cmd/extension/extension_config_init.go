@@ -17,15 +17,12 @@ var extensionConfigInitCmd = &cobra.Command{
 	Short: "Create a minimal .config/shopware-extension.yml",
 	Long: `Create a minimal .config/shopware-extension.yml for an extension checkout.
 
-Writes the yaml-language-server schema comment and today's compatibility_date.
-All other configuration keys are optional — add what you need
-(see: shopware-cli extension config-schema).
-
-Examples:
-  shopware-cli extension config init
+It writes the yaml-language-server schema comment and today's compatibility_date.
+All other configuration keys are optional, add what you need
+(see: shopware-cli extension config-schema).`,
+	Example: `  shopware-cli extension config init
   shopware-cli extension config init ./my-extension
-  shopware-cli extension config init --force
-`,
+  shopware-cli extension config init --force`,
 	Args: cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		root := "."

@@ -17,6 +17,7 @@ var skipDefaultHeaders bool
 
 var projectAdminApiCmd = &cobra.Command{
 	Use:   "admin-api [method] [path]",
+	Args:  cobra.ArbitraryArgs,
 	Short: "Run authenticated curl requests against the Shopware Admin API",
 	RunE: func(cobraCmd *cobra.Command, args []string) error {
 		projectRoot, err := shop.FindClosestShopwareProject(true)
@@ -30,7 +31,7 @@ var projectAdminApiCmd = &cobra.Command{
 		}
 
 		cfg := cmdExecutor.ShopConfig()
-		if cfg == nil || cfg.AdminApi == nil {
+		if cfg == nil || !shop.HasAdminAPICredentials(cfg) {
 			return shop.ErrNoAdminAPICredentials
 		}
 
@@ -55,7 +56,7 @@ var projectAdminApiCmd = &cobra.Command{
 			return errors.New("command needs 2 arguments")
 		}
 
-		shopURL, err := url.Parse(cfg.URL)
+		shopURL, err := url.Parse(shop.AdminAPIURL(cfg))
 		if err != nil {
 			return err
 		}
@@ -74,7 +75,7 @@ var projectAdminApiCmd = &cobra.Command{
 			curl.Args(args[2:]),
 		}
 
-		if cfg.AdminApi.DisableSSLCheck {
+		if shop.AdminAPIDisableSSLCheck(cfg) {
 			commandConfig = append(commandConfig, curl.Args([]string{"--insecure"}))
 		}
 

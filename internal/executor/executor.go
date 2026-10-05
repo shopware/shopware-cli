@@ -61,7 +61,7 @@ type Executor interface {
 
 func adminAPIClient(ctx context.Context, cfg *shop.Config, envCfg *shop.EnvironmentConfig) (*adminSdk.Client, error) {
 	if cfg == nil {
-		return nil, errors.New("admin api requires a shop configuration")
+		return nil, errors.New("the Admin API requires a shop configuration")
 	}
 
 	effective := *cfg

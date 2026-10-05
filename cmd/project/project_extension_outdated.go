@@ -15,6 +15,7 @@ var projectExtensionOutdatedCmd = &cobra.Command{
 	Use:   "outdated",
 	Short: "List all outdated extensions",
 	Long:  "List installed extensions that have a newer version available. Exits with code 1 when at least one extension is outdated, regardless of the output format.",
+	Args:  cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, _ []string) error {
 		formatName, _ := cmd.Flags().GetString("format")
 		outputAsJSON, _ := cmd.Flags().GetBool("json")
@@ -49,13 +50,16 @@ var projectExtensionOutdatedCmd = &cobra.Command{
 		extensions = extensions.FilterByUpdateable()
 
 		if len(extensions) == 0 && format == tui.TableFormatTable {
-			logging.FromContext(cmd.Context()).Infof("All extensions are up-to-date")
+			logging.FromContext(cmd.Context()).Infof("All extensions are up to date")
 			return nil
 		}
 
 		result := projectExtensionOutdatedTable(extensions)
 		if err := result.Write(cmd.OutOrStdout(), format); err != nil {
 			return err
+		}
+		if len(extensions) == 0 {
+			return nil
 		}
 		return fmt.Errorf("there are %d outdated extensions", len(extensions))
 	},
@@ -77,7 +81,7 @@ func projectExtensionOutdatedTable(extensions adminSdk.ExtensionList) *tui.Table
 
 func init() {
 	projectExtensionCmd.AddCommand(projectExtensionOutdatedCmd)
-	projectExtensionOutdatedCmd.Flags().String("format", string(tui.TableFormatTable), "Output format (table or json)")
+	projectExtensionOutdatedCmd.Flags().String("format", string(tui.TableFormatTable), "Output format (table, json)")
 	projectExtensionOutdatedCmd.Flags().Bool("json", false, "Output as JSON")
 	projectExtensionOutdatedCmd.MarkFlagsMutuallyExclusive("format", "json")
 	_ = projectExtensionOutdatedCmd.Flags().MarkDeprecated("json", "use --format json instead")

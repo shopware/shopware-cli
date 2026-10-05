@@ -12,7 +12,7 @@ import (
 
 var projectExtensionUpdateCmd = &cobra.Command{
 	Use:   "update name...|all",
-	Short: "Update an installed extension",
+	Short: "Update one or more installed extensions",
 	Args:  cobra.MinimumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		projectRoot, err := shop.FindClosestShopwareProject(true)
@@ -56,7 +56,7 @@ var projectExtensionUpdateCmd = &cobra.Command{
 
 			if extension == nil {
 				failed = true
-				logging.FromContext(cmd.Context()).Errorf("Cannot find extension by name %s", arg)
+				logging.FromContext(cmd.Context()).Errorf("Cannot find extension %s, run \"shopware-cli project extension list\" to see installed extensions", arg)
 				continue
 			}
 
@@ -66,7 +66,7 @@ var projectExtensionUpdateCmd = &cobra.Command{
 			}
 
 			if !extension.Active {
-				logging.FromContext(cmd.Context()).Infof("Extension %s is not active skipping", arg)
+				logging.FromContext(cmd.Context()).Infof("Extension %s is not active, skipping", arg)
 				continue
 			}
 

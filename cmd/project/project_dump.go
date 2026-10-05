@@ -25,6 +25,10 @@ const passwordFlagPrompt = "__INTERACTIVE__"
 var projectDatabaseDumpCmd = &cobra.Command{
 	Use:   "dump",
 	Short: "Export a Shopware project's database to SQL",
+	Long: `Export the project database to a SQL file, using the connection details of the current environment unless overridden with the connection flags.
+
+--limit keeps only the newest rows of a table (e.g. order=100). Tables referencing the limited table are filtered automatically; ancestors of self-referencing rows (e.g. product variants) are kept so the dump stays importable. Freezing the kept rows into staging tables requires the CREATE and DROP privileges.`,
+	Args: cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, _ []string) error {
 		mysqlConfig, err := assembleConnectionURI(cmd)
 		if err != nil {
@@ -38,7 +42,7 @@ var projectDatabaseDumpCmd = &cobra.Command{
 		}
 
 		actualProjectConfigPath := shop.SearchConfigPath(cmd.Context(), ".", projectConfigPath)
-		projectCfg, err := shop.ReadConfig(cmd.Context(), actualProjectConfigPath, true)
+		projectCfg, err := shop.ReadConfig(cmd.Context(), actualProjectConfigPath, projectConfigPath == "")
 		if err != nil {
 			return err
 		}
@@ -180,5 +184,5 @@ func init() {
 	projectDatabaseDumpCmd.Flags().Bool("quick", false, "Use quick option for mysqldump")
 	projectDatabaseDumpCmd.Flags().Int("parallel", 0, "Number of tables to dump concurrently (0 = disabled)")
 	projectDatabaseDumpCmd.Flags().Int("insert-into-limit", 0, "Limit the number of rows per INSERT statement (0 = auto, takes priority over --quick when set)")
-	projectDatabaseDumpCmd.Flags().StringArray("limit", nil, "Limit the rows of a table (e.g. order=100 dumps only the 100 newest orders). Tables referencing the limited table are filtered automatically; ancestors of self-referencing rows (e.g. product variants) are kept so the dump stays importable. Requires the CREATE and DROP privileges to freeze the kept rows into staging tables. Can be specified multiple times")
+	projectDatabaseDumpCmd.Flags().StringArray("limit", nil, "Limit the rows of a table to the newest ones (e.g. order=100), can be given multiple times")
 }

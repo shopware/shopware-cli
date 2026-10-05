@@ -8,6 +8,7 @@ import (
 
 	"github.com/shopware/shopware-cli/internal/extension"
 	"github.com/shopware/shopware-cli/internal/validation"
+	"github.com/shopware/shopware-cli/logging"
 )
 
 type ToolList[T Tool] []T
@@ -78,6 +79,26 @@ type FormatTool interface {
 	Format(ctx context.Context, config ToolConfig, dryRun bool) error
 }
 
+func canonicalToolName(name string) string {
+	if name == "sw-cli" {
+		return "builtin"
+	}
+
+	return name
+}
+
+// WarnOnDeprecatedToolName reports use of the legacy built-in checker name.
+func WarnOnDeprecatedToolName(ctx context.Context, values ...string) {
+	for _, value := range values {
+		for _, name := range strings.Split(value, ",") {
+			if strings.TrimSpace(name) == "sw-cli" {
+				logging.FromContext(ctx).Warnf("The tool name %q is deprecated as input; use %q instead", "sw-cli", "builtin")
+				return
+			}
+		}
+	}
+}
+
 func (tl ToolList[T]) Only(only string) (ToolList[T], error) {
 	if only == "" {
 		return tl, nil
@@ -88,7 +109,7 @@ func (tl ToolList[T]) Only(only string) (ToolList[T], error) {
 	seen := make(map[string]bool, len(requestedTools))
 
 	for _, requestedTool := range requestedTools {
-		requestedTool = strings.TrimSpace(requestedTool)
+		requestedTool = canonicalToolName(strings.TrimSpace(requestedTool))
 		found := false
 
 		for _, t := range tl {
@@ -119,7 +140,7 @@ func (tl ToolList[T]) Exclude(exclude string) (ToolList[T], error) {
 
 	names := strings.Split(exclude, ",")
 	for i, name := range names {
-		name = strings.TrimSpace(name)
+		name = canonicalToolName(strings.TrimSpace(name))
 		names[i] = name
 		if name == "" {
 			continue

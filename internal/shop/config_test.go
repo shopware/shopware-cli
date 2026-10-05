@@ -1152,3 +1152,27 @@ func TestEffectiveURL(t *testing.T) {
 	}
 	assert.Equal(t, "https://myshop.com", fallback.EffectiveURL())
 }
+
+func TestReadConfigMissingFile(t *testing.T) {
+	configPath := filepath.Join(t.TempDir(), "custom.yml")
+
+	// an explicit path must exist
+	_, err := ReadConfig(t.Context(), configPath, false)
+	assert.ErrorContains(t, err, "cannot find project configuration file")
+
+	// the default search still falls back to an empty config
+	cfg, err := ReadConfig(t.Context(), configPath, true)
+	assert.NoError(t, err)
+	assert.True(t, cfg.IsFallback())
+}
+
+func TestWriteConfigHonoursStorageLocation(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	cfg := NewConfig()
+	cfg.SetStorageLocation(".shopware-project.yml")
+	assert.NoError(t, WriteConfig(cfg, tmpDir))
+
+	assert.FileExists(t, filepath.Join(tmpDir, ".shopware-project.yml"))
+	assert.NoFileExists(t, filepath.Join(tmpDir, ".config/shopware-project.yml"))
+}

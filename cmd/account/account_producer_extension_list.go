@@ -8,8 +8,10 @@ import (
 )
 
 var accountCompanyProducerExtensionListCmd = &cobra.Command{
-	Use:   "list",
-	Short: "List your Extension Store plugins and apps",
+	Use:     "list",
+	Aliases: []string{"ls"},
+	Short:   "List your Extension Store plugins and apps",
+	Args:    cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, _ []string) error {
 		format, err := accountExtensionListFormat(listExtensionFormat, listExtensionJSON)
 		if err != nil {
@@ -56,11 +58,11 @@ var (
 
 func init() {
 	accountCompanyProducerExtensionCmd.AddCommand(accountCompanyProducerExtensionListCmd)
-	accountCompanyProducerExtensionListCmd.Flags().StringVar(&listExtensionSearch, "search", "", "Filter for name")
+	accountCompanyProducerExtensionListCmd.Flags().StringVar(&listExtensionSearch, "search", "", "Filter by name")
 	accountCompanyProducerExtensionListCmd.Flags().BoolVar(&listExtensionPlugin, "plugin", false, "Show only plugins")
 	accountCompanyProducerExtensionListCmd.Flags().BoolVar(&listExtensionApp, "app", false, "Show only apps")
-	accountCompanyProducerExtensionListCmd.Flags().StringVar(&listExtensionFormat, "format", string(tui.TableFormatTable), "Output format (table or json)")
-	accountCompanyProducerExtensionListCmd.Flags().BoolVar(&listExtensionJSON, "json", false, "Output as json")
+	accountCompanyProducerExtensionListCmd.Flags().StringVar(&listExtensionFormat, "format", string(tui.TableFormatTable), "Output format (table, json)")
+	accountCompanyProducerExtensionListCmd.Flags().BoolVar(&listExtensionJSON, "json", false, "Output as JSON")
 	accountCompanyProducerExtensionListCmd.MarkFlagsMutuallyExclusive("plugin", "app")
 	accountCompanyProducerExtensionListCmd.MarkFlagsMutuallyExclusive("format", "json")
 	_ = accountCompanyProducerExtensionListCmd.Flags().MarkDeprecated("json", "use --format json instead")

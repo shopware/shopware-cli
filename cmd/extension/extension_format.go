@@ -17,12 +17,13 @@ import (
 
 var extensionFormat = &cobra.Command{
 	Use:   "format path",
-	Short: "Format an extension's PHP, JavaScript, SCSS, and Administration Twig files",
+	Short: "Format an extension's PHP, JavaScript, and SCSS files",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		allTools := verifier.GetToolsOf[verifier.FormatTool]()
 		only, _ := cmd.Flags().GetString("only")
 		exclude, _ := cmd.Flags().GetString("exclude")
+		verifier.WarnOnDeprecatedToolName(cmd.Context(), only, exclude)
 
 		requestedTools, err := allTools.Only(only)
 		if err != nil {
@@ -73,7 +74,7 @@ var extensionFormat = &cobra.Command{
 
 func init() {
 	extensionRootCmd.AddCommand(extensionFormat)
-	extensionFormat.Flags().String("only", "", "Run only specific formatters by name (comma-separated, e.g. prettier,php-cs-fixer)")
-	extensionFormat.Flags().String("exclude", "", "Exclude formatters after applying --only (comma-separated, e.g. prettier,php-cs-fixer)")
+	extensionFormat.Flags().String("only", "", "Run only the specified formatters (comma-separated, e.g. prettier,php-cs-fixer)")
+	extensionFormat.Flags().String("exclude", "", "Skip these formatters; must be in the --only list if set (comma-separated, e.g. prettier,php-cs-fixer)")
 	extensionFormat.Flags().Bool("dry-run", false, "Run in dry run mode")
 }

@@ -53,7 +53,7 @@ func InstallDependenciesStreamed(ctx context.Context, exec executor.Executor, pk
 
 	combinedOutput, err := installProcess.CombinedOutput()
 	if err != nil {
-		logging.FromContext(context.Background()).Errorf("npm install failed: %s", string(combinedOutput))
+		logging.FromContext(ctx).Errorf("npm install failed: %s", string(combinedOutput))
 		return fmt.Errorf("installing dependencies failed with error: %w", err)
 	}
 

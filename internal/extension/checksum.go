@@ -69,8 +69,15 @@ func GenerateChecksumJSON(ctx context.Context, baseFolder string, ext Extension)
 		ExtensionVersion: version.String(),
 	}
 
+	// filepath.Walk does not follow symlinks, not even the root. Extensions
+	// installed from composer path repositories are symlinked into vendor/.
+	walkRoot, err := filepath.EvalSymlinks(baseFolder)
+	if err != nil {
+		return fmt.Errorf("resolve extension path: %w", err)
+	}
+
 	// Walk through all files in the folder and calculate checksums
-	err = filepath.Walk(baseFolder, func(path string, info fs.FileInfo, err error) error {
+	err = filepath.Walk(walkRoot, func(path string, info fs.FileInfo, err error) error {
 		if err != nil {
 			return err
 		}
@@ -90,7 +97,7 @@ func GenerateChecksumJSON(ctx context.Context, baseFolder string, ext Extension)
 		}
 
 		// Get relative path for the file
-		relPath, err := filepath.Rel(baseFolder, path)
+		relPath, err := filepath.Rel(walkRoot, path)
 		if err != nil {
 			return fmt.Errorf("get relative path: %w", err)
 		}
@@ -106,6 +113,18 @@ func GenerateChecksumJSON(ctx context.Context, baseFolder string, ext Extension)
 
 		// Skip vendor and node_modules files
 		if strings.Contains(relPath, "vendor/") || strings.Contains(relPath, "node_modules/") {
+			return nil
+		}
+
+		// Hash symlinked files by their target, skip symlinked directories
+		if info.Mode()&fs.ModeSymlink != 0 {
+			info, err = os.Stat(path)
+			if err != nil {
+				return fmt.Errorf("stat symlink target: %w", err)
+			}
+		}
+
+		if !info.Mode().IsRegular() {
 			return nil
 		}
 

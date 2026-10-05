@@ -36,7 +36,7 @@ type supportWindow struct {
 // LoadCatalog fetches all Shopware versions newer than current and annotates
 // them with release-cycle support information. Stable versions only — release
 // candidates and other prereleases are excluded, matching `project
-// upgrade-check`.
+// upgrade`.
 func (u *ProjectUpgrader) LoadCatalog(ctx context.Context, current *version.Version) (*Catalog, error) {
 	all, err := u.shopwareVersions(ctx)
 	if err != nil {

@@ -267,7 +267,7 @@ func TestPrintToolInvocationTableWithOperationTitle(t *testing.T) {
 
 func TestToolInvocationTableFollowsFindings(t *testing.T) {
 	check := &testCheck{Results: []CheckResult{{Path: "src/file.php", Line: 1, Message: "problem", Severity: SeverityWarning}}}
-	tools := []ToolInvocationStatus{{Name: "sw-cli", Status: "invoked"}}
+	tools := []ToolInvocationStatus{{Name: "builtin", Status: "invoked"}}
 
 	summary := captureOutput(func() {
 		assert.NoError(t, DoCheckReport(check, "summary", false, tools...))
@@ -287,7 +287,7 @@ func TestStructuredReportsKeepMachineOutputAndShowToolStatuses(t *testing.T) {
 	check := &testCheck{Results: []CheckResult{}}
 	tools := []ToolInvocationStatus{
 		{Name: "phpstan", Status: "invoked"},
-		{Name: "sw-cli", Status: "skipped", Reason: "not selected by --only"},
+		{Name: "builtin", Status: "skipped", Reason: "not selected by --only"},
 	}
 
 	var gitlabLog string
@@ -329,7 +329,23 @@ func TestValidateReporter(t *testing.T) {
 		assert.NoError(t, ValidateReporter(format))
 	}
 
+	assert.NoError(t, ValidateReporter("JSON"))
+
 	assert.EqualError(t, ValidateReporter("yaml"), `invalid reporting format "yaml", allowed values: summary, json, github, gitlab, junit, markdown`)
+}
+
+func TestReportFormatIsCaseInsensitive(t *testing.T) {
+	tools := []ToolInvocationStatus{{Name: "phpstan", Status: "invoked"}}
+
+	output := captureOutput(func() {
+		assert.NoError(t, DoCheckReport(&testCheck{}, "JSON", false, tools...))
+	})
+
+	var report struct {
+		Tools []ToolInvocationStatus `json:"tools"`
+	}
+	require.NoError(t, json.Unmarshal([]byte(output), &report))
+	assert.Equal(t, tools, report.Tools)
 }
 
 func TestGitLabReport(t *testing.T) {

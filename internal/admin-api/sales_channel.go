@@ -50,7 +50,7 @@ func (s SalesChannelService) ListStorefront(ctx ApiContext) ([]SalesChannel, err
 
 	r, err := s.Client.NewRequest(ctx, http.MethodPost, "/api/search/sales-channel", body)
 	if err != nil {
-		return nil, fmt.Errorf("cannot search sales channels %w", err)
+		return nil, fmt.Errorf("cannot search sales channels: %w", err)
 	}
 
 	var out searchResponse[SalesChannel]
@@ -73,7 +73,7 @@ func (s SalesChannelService) FindThemeForSalesChannel(ctx ApiContext, salesChann
 
 	r, err := s.Client.NewRequest(ctx, http.MethodPost, "/api/search/theme", body)
 	if err != nil {
-		return nil, fmt.Errorf("cannot search theme %w", err)
+		return nil, fmt.Errorf("cannot search theme: %w", err)
 	}
 
 	var out searchResponse[Theme]

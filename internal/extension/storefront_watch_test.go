@@ -97,6 +97,9 @@ func TestPickSalesChannelWithoutInteraction(t *testing.T) {
 	assert.ErrorContains(t, err, "Storefront (a1)")
 	assert.ErrorContains(t, err, "Outlet (b2)")
 
+	_, err = pickSalesChannel(ctx, channels, SalesChannelSelect)
+	assert.ErrorContains(t, err, "interaction is disabled")
+
 	picked, err := pickSalesChannel(ctx, channels, "b2")
 	require.NoError(t, err)
 	assert.Equal(t, "Outlet", picked.Name)

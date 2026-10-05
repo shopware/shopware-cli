@@ -12,6 +12,7 @@ var projectExtensionListCmd = &cobra.Command{
 	Use:     "list",
 	Aliases: []string{"ls"},
 	Short:   "List available shop extensions with versions and status",
+	Args:    cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, _ []string) error {
 		formatName, _ := cmd.Flags().GetString("format")
 		outputAsJSON, _ := cmd.Flags().GetBool("json")
@@ -63,7 +64,7 @@ func projectExtensionListTable(extensions adminSdk.ExtensionList) *tui.Table {
 
 func init() {
 	projectExtensionCmd.AddCommand(projectExtensionListCmd)
-	projectExtensionListCmd.Flags().String("format", string(tui.TableFormatTable), "Output format (table or json)")
+	projectExtensionListCmd.Flags().String("format", string(tui.TableFormatTable), "Output format (table, json)")
 	projectExtensionListCmd.Flags().Bool("json", false, "Output as JSON")
 	projectExtensionListCmd.MarkFlagsMutuallyExclusive("format", "json")
 	_ = projectExtensionListCmd.Flags().MarkDeprecated("json", "use --format json instead")

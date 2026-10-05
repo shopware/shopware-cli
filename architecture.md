@@ -34,7 +34,7 @@ A new command is just a new file: drop `cmd/<group>/<group><sub>.go` (`cmd/root.
 
 Each verifier tool registers a name and implements only the capabilities it supports: checking, fixing, formatting, or a combination. Commands select tools by capability, then apply `--only` and (where available) `--exclude`. An unsupported `--only` name is an error that lists the tools available to that command.
 
-`extension validate` runs only the built-in `sw-cli` checker by default; `--full` selects all checkers, while an explicit `--only` takes precedence over `--full`. The format commands support `--dry-run`; the fix commands do not.
+`extension validate` runs all checkers by default. The deprecated `--full` flag remains accepted but has no effect; use `--only` or `--exclude` to select checkers. The format commands support `--dry-run`; the fix commands do not.
 
 ```go
 type Tool interface {
@@ -56,7 +56,7 @@ type FormatTool interface {
 
 Registration is `func init() { AddTool(PhpStan{}) }` into a global `availableTools`. Consumers call `GetToolsOf[CheckTool]()` (or `FixTool` / `FormatTool`) to get a typed `ToolList[T]`; its `Only` and `Exclude` methods preserve that capability type.
 
-Current checkers are `sw-cli`, `phpstan`, `eslint`, `stylelint`, `admin-twig`, and `storefront-twig`. Fixers are `rector`, `admin-twig`, `eslint`, `stylelint`, and `symfony-xml`; formatters are `admin-twig`, `php-cs-fixer`, and `prettier`. `sw-cli` enforces built-in extension rules; it does not validate per-extension metadata in a project context. There is no separate Composer verifier tool.
+Current checkers are `builtin`, `phpstan`, `eslint`, `stylelint`, and `storefront-twig`. Fixers are `rector`, `eslint`, `stylelint`, and `symfony-xml`; formatters are `php-cs-fixer`, and `prettier`. `builtin` enforces built-in extension rules; the legacy name `sw-cli` is still accepted as an input alias. It does not validate per-extension metadata in a project context. There is no separate Composer verifier tool.
 
 Extension commands report selected tools as `invoked` and others as `skipped`. This describes selection and invocation, not whether a tool found applicable files or changed them.
 

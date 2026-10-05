@@ -2,6 +2,7 @@ package project
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"time"
 
@@ -12,12 +13,12 @@ import (
 	"github.com/shopware/shopware-cli/internal/projectbuild"
 	"github.com/shopware/shopware-cli/internal/proxy"
 	"github.com/shopware/shopware-cli/internal/shop"
-	"github.com/shopware/shopware-cli/logging"
 )
 
 var projectStorefrontWatchCmd = &cobra.Command{
 	Use:     "storefront-watch [path]",
 	Short:   "Watch Storefront assets and rebuild on change",
+	Long:    "Watch Storefront assets and rebuild them on change. With --sales-channel, theme:dump targets that sales channel; omit the flag to keep the legacy theme:dump behavior.",
 	Aliases: []string{"watch-storefront"},
 	Args:    cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
@@ -35,7 +36,7 @@ var projectStorefrontWatchCmd = &cobra.Command{
 		}
 
 		actualProjectConfigPath := shop.SearchConfigPath(cmd.Context(), projectRoot, projectConfigPath)
-		shopCfg, err := shop.ReadConfig(cmd.Context(), actualProjectConfigPath, true)
+		shopCfg, err := shop.ReadConfig(cmd.Context(), actualProjectConfigPath, projectConfigPath == "")
 		if err != nil {
 			return err
 		}
@@ -63,8 +64,7 @@ var projectStorefrontWatchCmd = &cobra.Command{
 		// registry must not silently start the watcher unproxied.
 		host, err := proxy.RegisteredHostname(projectRoot)
 		if err != nil {
-			logging.FromContext(cmd.Context()).Errorf("Could not read the shared proxy registry: %v", err)
-			return err
+			return fmt.Errorf("cannot read the shared proxy registry: %w", err)
 		}
 		if host != "" {
 			opts.ProxyHostname = "storefront-watch." + host
@@ -92,6 +92,6 @@ func init() {
 	projectStorefrontWatchCmd.PersistentFlags().Bool("select-extensions", false, "Select extensions interactively")
 	projectStorefrontWatchCmd.PersistentFlags().String("skip-extensions", "", "Skip the specified extensions (comma-separated)")
 	projectStorefrontWatchCmd.PersistentFlags().Bool("only-custom-static-extensions", false, "Watch only extensions in the custom/static-plugins directory")
-	projectStorefrontWatchCmd.PersistentFlags().String("sales-channel", "", "Sales channel ID to target with theme:dump. Pass without a value (--sales-channel) to pick interactively. Omit the flag entirely to keep the legacy theme:dump behavior")
-	projectStorefrontWatchCmd.PersistentFlags().Lookup("sales-channel").NoOptDefVal = " "
+	projectStorefrontWatchCmd.PersistentFlags().String("sales-channel", "", "Sales channel ID for theme:dump; pass the flag without a value to pick interactively")
+	projectStorefrontWatchCmd.PersistentFlags().Lookup("sales-channel").NoOptDefVal = extension.SalesChannelSelect
 }

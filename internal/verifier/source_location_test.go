@@ -31,7 +31,7 @@ func TestZipValidationUsesArchiveRelativePaths(t *testing.T) {
 
 	check := NewCheck()
 	check.SetSourceRoot(ext.GetPath())
-	require.NoError(t, SWCLI{}.Check(t.Context(), check, ToolConfig{
+	require.NoError(t, Builtin{}.Check(t.Context(), check, ToolConfig{
 		Extension: ext,
 		RootDir:   ext.GetPath(),
 	}))
@@ -77,7 +77,7 @@ func TestDirectoryValidationUsesExtensionRelativePaths(t *testing.T) {
 
 	check := NewCheck()
 	check.SetSourceRoot(pluginDir)
-	require.NoError(t, SWCLI{}.Check(t.Context(), check, ToolConfig{
+	require.NoError(t, Builtin{}.Check(t.Context(), check, ToolConfig{
 		Extension:         ext,
 		RootDir:           pluginDir,
 		InputWasDirectory: true,

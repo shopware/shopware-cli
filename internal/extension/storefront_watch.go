@@ -170,13 +170,14 @@ func themeCompileSupportsActiveOnly(projectRoot string) bool {
 	return strings.Contains(string(bytes), "active-only")
 }
 
+// SalesChannelSelect is the --sales-channel value that asks for an interactive pick.
+const SalesChannelSelect = "select"
+
 // ResolveStorefrontWatcherOptions picks the sales channel to watch and resolves its theme through the Admin API.
 func ResolveStorefrontWatcherOptions(ctx context.Context, cmdExecutor executor.Executor, salesChannelID string) (StorefrontWatcherOptions, error) {
-	salesChannelID = strings.TrimSpace(salesChannelID)
-
 	client, err := cmdExecutor.AdminAPIClient(ctx)
 	if err != nil {
-		return StorefrontWatcherOptions{}, fmt.Errorf("--sales-channel requires admin api access (set environments.<name>.admin_api in .shopware-project.yml or SHOPWARE_CLI_API_* env vars): %w", err)
+		return StorefrontWatcherOptions{}, fmt.Errorf("--sales-channel requires Admin API access (set environments.<name>.admin_api in .config/shopware-project.yml or SHOPWARE_CLI_API_* env vars): %w", err)
 	}
 
 	apiCtx := adminSdk.NewApiContext(ctx)
@@ -209,9 +210,9 @@ func ResolveStorefrontWatcherOptions(ctx context.Context, cmdExecutor executor.E
 	return out, nil
 }
 
-// pickSalesChannel returns the channel with the given ID, or lets the user choose one when the ID is empty.
+// pickSalesChannel returns the channel with the given ID, or lets the user choose one when the ID is empty or SalesChannelSelect.
 func pickSalesChannel(ctx context.Context, channels []adminSdk.SalesChannel, salesChannelID string) (*adminSdk.SalesChannel, error) {
-	if salesChannelID != "" {
+	if salesChannelID != "" && salesChannelID != SalesChannelSelect {
 		for i, sc := range channels {
 			if sc.Id == salesChannelID {
 				return &channels[i], nil

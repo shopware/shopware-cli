@@ -8,18 +8,20 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/shopware/shopware-cli/internal/cliversion"
 	internalgit "github.com/shopware/shopware-cli/internal/git"
 	"github.com/shopware/shopware-cli/internal/projectbuild"
 	"github.com/shopware/shopware-cli/internal/shop"
 	"github.com/shopware/shopware-cli/internal/system"
-	"github.com/shopware/shopware-cli/internal/tui"
 	"github.com/shopware/shopware-cli/logging"
 )
 
 var projectCI = &cobra.Command{
-	Use:   "ci",
-	Short: "Create a production build of a Shopware project",
-	Args:  cobra.ExactArgs(1),
+	Use:   "ci path",
+	Short: "Turn a project directory into a production build (removes dev files, adds SBOM)",
+	Long: "Build the given Shopware project directory for production and generate an SBOM. The directory itself is changed: development-only files (tests, Administration sources, source maps, build.cleanup_paths) are removed, and empty placeholders are added so Shopware still runs without them.\n" +
+		"Use it in CI or on a disposable checkout; outside CI it refuses to run with uncommitted changes or untracked files unless --force is passed.",
+	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		root, err := filepath.Abs(args[0])
 		if err != nil {
@@ -34,7 +36,7 @@ var projectCI = &cobra.Command{
 		}
 
 		actualProjectConfigPath := shop.SearchConfigPath(cmd.Context(), ".", projectConfigPath)
-		shopCfg, err := shop.ReadConfig(cmd.Context(), actualProjectConfigPath, true)
+		shopCfg, err := shop.ReadConfig(cmd.Context(), actualProjectConfigPath, projectConfigPath == "")
 		if err != nil {
 			return err
 		}
@@ -49,15 +51,15 @@ var projectCI = &cobra.Command{
 
 		return projectbuild.Build(cmd.Context(), root, shopCfg, envCfg, projectbuild.Options{
 			WithDevDependencies: withDev,
-			ToolVersion:         tui.AppVersion,
+			ToolVersion:         cliversion.Version,
 		})
 	},
 }
 
 func init() {
 	projectRootCmd.AddCommand(projectCI)
-	projectCI.PersistentFlags().Bool("with-dev-dependencies", false, "Include development dependencies in the build")
-	projectCI.PersistentFlags().Bool("force", false, "Force the CI build despite uncommitted changes")
+	projectCI.PersistentFlags().Bool("with-dev-dependencies", false, "Include Composer dev dependencies in the build")
+	projectCI.PersistentFlags().Bool("force", false, "Run the build outside CI despite uncommitted changes or untracked files")
 }
 
 func projectCISafetyCheck(ctx context.Context, root string, force bool, getenv func(string) string) error {

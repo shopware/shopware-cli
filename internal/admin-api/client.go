@@ -12,14 +12,11 @@ import (
 
 	"github.com/shyim/go-version"
 	"golang.org/x/oauth2"
+
+	"github.com/shopware/shopware-cli/internal/cliversion"
 )
 
 var errNonNilContext = errors.New("context must be non-nil")
-var httpUserAgent = "shopware-cli/0.0.0"
-
-func SetUserAgent(userAgent string) {
-	httpUserAgent = userAgent
-}
 
 type Client struct {
 	url         string
@@ -140,7 +137,7 @@ func (c *Client) Do(ctx context.Context, req *http.Request, v interface{}) (*htt
 
 func (c *Client) NewRawRequest(context ApiContext, method, urlStr string, body io.Reader) (*http.Request, error) {
 	if strings.HasSuffix(c.url, "/") {
-		return nil, fmt.Errorf("BaseURL must not have a trailing slash, but %q does", c.url)
+		return nil, fmt.Errorf("shop URL %q must not end with a slash", c.url)
 	}
 
 	req, err := http.NewRequestWithContext(context.Context, method, c.url+urlStr, body)
@@ -160,7 +157,7 @@ func (c *Client) NewRawRequest(context ApiContext, method, urlStr string, body i
 	}
 
 	req.Header.Set("Accept", "application/json")
-	req.Header.Set("User-Agent", httpUserAgent)
+	req.Header.Set("User-Agent", cliversion.UserAgent())
 
 	return req, nil
 }
