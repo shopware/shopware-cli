@@ -46,7 +46,7 @@ type addResult struct {
 }
 
 var aiAddCmd = &cobra.Command{
-	Use:   "add <name>[@<tag>]",
+	Use:   "add name[@tag]",
 	Short: "Install a Shopware AI integration into an AI agent",
 	Long: `Install a Shopware AI integration (a skill) into an AI agent via skills.sh.
 

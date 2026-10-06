@@ -24,7 +24,7 @@ type removeResult struct {
 }
 
 var aiRemoveCmd = &cobra.Command{
-	Use:   "remove <name>",
+	Use:   "remove name",
 	Short: "Remove a Shopware AI integration the CLI installed",
 	Long: `Remove a Shopware AI integration that this CLI installed, via skills.sh.
 

@@ -13,7 +13,7 @@ import (
 )
 
 var aiInfoCmd = &cobra.Command{
-	Use:   "info <name>",
+	Use:   "info name",
 	Short: "Show details of a Shopware AI integration",
 	Long: `Show the details of a Shopware AI integration, including any installs this CLI
 has recorded (agent, scope and resolved revision).`,
