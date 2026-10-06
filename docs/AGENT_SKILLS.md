@@ -183,12 +183,25 @@ shopware-cli ai remove shopware-cli --agent claude-code
 ```
 
 A project install resolves the Shopware project root (so the skill is written
-where agents read it) and records the install under `.shopware-cli/ai/`; it
-refuses to run outside a Shopware project (use `--global` instead). The agent
-name is whatever skills.sh supports (e.g. `claude-code`, `codex`); the CLI keeps
-no list of its own. Commit `.claude/skills/` (or the agent's directory),
-`skills-lock.json`, and `.shopware-cli/ai/installed.json` to share an integration
-with your team, or gitignore them to keep it local.
+where agents read it) and records the install under `.shopware-cli/ai/`. "Project"
+here means a Shopware shop (a `bin/console` plus a `composer.json` requiring
+`shopware/core`); a project install refuses to run anywhere else. An extension
+(plugin or app) repository is not a shop, so install the general `shopware-cli`
+skill with `--global` there — which is the natural scope for it anyway, making it
+available in every repository. The agent name is whatever skills.sh supports (e.g.
+`claude-code`, `codex`); the CLI keeps no list of its own. Commit `.claude/skills/`
+(or the agent's directory), `skills-lock.json`, and
+`.shopware-cli/ai/installed.json` to share an integration with your team, or
+gitignore them to keep it local.
+
+### Known limitations
+
+- The result line describes the CLI's own record, not what skills.sh did on disk:
+  a re-install of a manually deleted skill still reads `Already installed`, and
+  `ai remove` reports `Removed` for a recorded install even if skills.sh found
+  nothing to delete.
+- The Codex agent can leave files behind on a project-scope `ai remove` (a
+  skills.sh defect); the CLI still reports the removal.
 
 ## Updating installed skills
 

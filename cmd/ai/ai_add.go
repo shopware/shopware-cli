@@ -49,8 +49,9 @@ var aiAddCmd = &cobra.Command{
 	Short: "Install a Shopware AI integration into an AI agent",
 	Long: `Install a Shopware AI integration (a skill) into an AI agent via skills.sh.
 
-By default the skill is installed into the current Shopware project; use --global
-to install at the user level from anywhere. Pin a release with @<tag>, otherwise
+By default the skill is installed into the current Shopware project (a shop); use
+--global to install at the user level from anywhere (the right choice in an
+extension repository, which is not a shop). Pin a release with @<tag>, otherwise
 the latest release (or the CLI version for bundled skills) is used.
 
 Requirements: Node.js/npx on PATH; git-delivered integrations also need git and
