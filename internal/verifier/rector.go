@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"os/exec"
 	"path"
 )
 
@@ -64,7 +63,7 @@ func (r Rector) Fix(ctx context.Context, config ToolConfig) error {
 	}
 
 	for _, sourceDirectory := range config.SourceDirectories {
-		rector := exec.CommandContext(ctx, "php", "-dmemory_limit=2G", path.Join(config.ToolDirectory, "php", "vendor", "bin", "rector"), "process", "--config", rectorConfigFile, "--autoload-file", path.Join("vendor", "autoload.php"), sourceDirectory)
+		rector := CommandContext(ctx, "php", "-dmemory_limit=2G", path.Join(config.ToolDirectory, "php", "vendor", "bin", "rector"), "process", "--config", rectorConfigFile, "--autoload-file", path.Join("vendor", "autoload.php"), sourceDirectory)
 		rector.Dir = config.RootDir
 
 		log, _ := rector.CombinedOutput()

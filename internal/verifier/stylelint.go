@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"os/exec"
 	"path"
 	"path/filepath"
 	"strings"
@@ -57,7 +56,7 @@ func (s StyleLint) Check(ctx context.Context, check *Check, config ToolConfig) e
 		}
 
 		gr.Go(func() error {
-			stylelint := exec.CommandContext(ctx, "node", path.Join(config.ToolDirectory, "js", "node_modules", ".bin", "stylelint"),
+			stylelint := CommandContext(ctx, "node", path.Join(config.ToolDirectory, "js", "node_modules", ".bin", "stylelint"),
 				"--formatter=json",
 				"--config", path.Join(config.ToolDirectory, "js", "configs", fmt.Sprintf("stylelint.config.%s.mjs", path.Base(p))),
 				"--ignore-pattern", "dist/**",
@@ -125,7 +124,7 @@ func (s StyleLint) Fix(ctx context.Context, config ToolConfig) error {
 		}
 
 		gr.Go(func() error {
-			stylelint := exec.CommandContext(ctx, "node", path.Join(config.ToolDirectory, "js", "node_modules", ".bin", "stylelint"),
+			stylelint := CommandContext(ctx, "node", path.Join(config.ToolDirectory, "js", "node_modules", ".bin", "stylelint"),
 				"--config", path.Join(config.ToolDirectory, "js", "configs", fmt.Sprintf("stylelint.config.%s.mjs", path.Base(p))),
 				"--ignore-pattern", "dist/**",
 				"--ignore-pattern", ".tmp/**",

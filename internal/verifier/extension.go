@@ -16,10 +16,10 @@ func SetupExtensionToolConfig(ctx context.Context, version string, ext extension
 	if err := SetupTools(ctx, version); err != nil {
 		return nil, err
 	}
-	return ConvertExtensionToToolConfig(ext)
+	return ConvertExtensionToToolConfig(ctx, ext)
 }
 
-func ConvertExtensionToToolConfig(ext extension.Extension) (*ToolConfig, error) {
+func ConvertExtensionToToolConfig(ctx context.Context, ext extension.Extension) (*ToolConfig, error) {
 	var ignores []validation.ToolConfigIgnore
 
 	for _, ignore := range ext.GetExtensionConfig().Validation.Ignore {
@@ -32,7 +32,7 @@ func ConvertExtensionToToolConfig(ext extension.Extension) (*ToolConfig, error) 
 
 	cfg := &ToolConfig{
 		ToolDirectory:         GetToolDirectory(),
-		Extension:             ext,
+		Extensions:            []extension.Extension{ext},
 		ValidationIgnores:     ignores,
 		RootDir:               ext.GetPath(),
 		SourceDirectories:     ext.GetSourceDirs(),
@@ -49,6 +49,7 @@ func ConvertExtensionToToolConfig(ext extension.Extension) (*ToolConfig, error) 
 		return nil, err
 	}
 
+	cfg.logConfiguration(ctx)
 	return cfg, nil
 }
 

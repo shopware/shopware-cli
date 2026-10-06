@@ -32,8 +32,8 @@ func TestZipValidationUsesArchiveRelativePaths(t *testing.T) {
 	check := NewCheck()
 	check.SetSourceRoot(ext.GetPath())
 	require.NoError(t, Builtin{}.Check(t.Context(), check, ToolConfig{
-		Extension: ext,
-		RootDir:   ext.GetPath(),
+		Extensions: []extension.Extension{ext},
+		RootDir:    ext.GetPath(),
 	}))
 
 	results := check.GetResults()
@@ -78,7 +78,7 @@ func TestDirectoryValidationUsesExtensionRelativePaths(t *testing.T) {
 	check := NewCheck()
 	check.SetSourceRoot(pluginDir)
 	require.NoError(t, Builtin{}.Check(t.Context(), check, ToolConfig{
-		Extension:         ext,
+		Extensions:        []extension.Extension{ext},
 		RootDir:           pluginDir,
 		InputWasDirectory: true,
 	}))

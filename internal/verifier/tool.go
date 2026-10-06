@@ -3,6 +3,7 @@ package verifier
 import (
 	"context"
 	"fmt"
+	"os/exec"
 	"slices"
 	"strings"
 
@@ -56,8 +57,30 @@ type ToolConfig struct {
 	AdminDirectories []string
 	// Contains a list of directories that are considered as storefront code
 	StorefrontDirectories []string
+	// List of extensions of the project or a single extension
+	Extensions []extension.Extension
+}
 
-	Extension extension.Extension
+func (c *ToolConfig) logConfiguration(ctx context.Context) {
+	logger := logging.FromContext(ctx)
+	logger.Debugf("Tool root directory: %s", c.RootDir)
+	for _, dir := range c.SourceDirectories {
+		logger.Debugf("Tool source directory: %s", dir)
+	}
+	for _, dir := range c.AdminDirectories {
+		logger.Debugf("Tool administration directory: %s", dir)
+	}
+	for _, dir := range c.StorefrontDirectories {
+		logger.Debugf("Tool storefront directory: %s", dir)
+	}
+	for _, ext := range c.Extensions {
+		name, err := ext.GetName()
+		if err != nil {
+			logger.Debugf("Cannot read tool extension name for %s: %v", ext.GetPath(), err)
+			continue
+		}
+		logger.Debugf("Tool extension: %s", name)
+	}
 }
 
 type Tool interface {
@@ -167,4 +190,10 @@ func (tl ToolList[T]) PossibleString() string {
 	}
 
 	return strings.Join(possibleTools, ",")
+}
+
+// CommandContext logs the command before creating it with exec.CommandContext.
+func CommandContext(ctx context.Context, name string, arg ...string) *exec.Cmd {
+	logging.FromContext(ctx).Debugf("Executing command: %s %s", name, strings.Join(arg, " "))
+	return exec.CommandContext(ctx, name, arg...)
 }

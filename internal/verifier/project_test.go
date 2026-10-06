@@ -2,13 +2,59 @@ package verifier
 
 import (
 	"context"
+	"os"
 	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/shopware/shopware-cli/internal/testhelper"
 )
+
+func TestProjectBuiltinValidatesOnlyIncludedLocalExtensions(t *testing.T) {
+	stubShopwareVersions(t)
+	p := testhelper.NewProject(t).
+		File("composer.json", testProjectComposerJSON.String()).
+		File(".shopware-project.yml", "validation:\n  ignore_extensions:\n    - name: IgnoredPlugin\n")
+	for _, name := range []string{"LocalPlugin", "IgnoredPlugin"} {
+		p.CustomPlugin(name, testhelper.PluginComposer("test/"+name, "1.0.0", name+`\`+name))
+		pluginDir := filepath.Join(p.Root, "custom", "plugins", name)
+		writeDeprecatedServicesXML(t, pluginDir)
+		testhelper.WriteFile(t, filepath.Join(pluginDir, ".DS_Store"), "store")
+	}
+	// Vendor symlinks are excluded; a sibling with a similar name is local code.
+	for _, dir := range []string{"vendor", "vendor-local"} {
+		name := "VendorPlugin"
+		if dir == "vendor-local" {
+			name = "SiblingPlugin"
+		}
+		pluginDir := filepath.Join(p.Root, dir, "test", name)
+		testhelper.WriteFile(t, filepath.Join(pluginDir, "composer.json"), testhelper.PluginComposer("test/"+name, "1.0.0", name+`\`+name).String())
+		writeDeprecatedServicesXML(t, pluginDir)
+		require.NoError(t, os.Symlink(pluginDir, filepath.Join(p.Root, "custom", "plugins", name)))
+	}
+
+	cfg, err := GetConfigFromProject(t.Context(), p.Root, true)
+	require.NoError(t, err)
+	assert.True(t, cfg.InputWasDirectory)
+	require.Len(t, cfg.Extensions, 2)
+
+	check := NewCheck()
+	check.SetSourceRoot(p.Root)
+	require.NoError(t, Builtin{}.Check(t.Context(), check, *cfg))
+	var xmlPaths []string
+	for _, result := range check.GetResults() {
+		assert.NotEqual(t, "zip.disallowed_file", result.Identifier)
+		if result.Identifier == "config.services_xml.deprecated" {
+			xmlPaths = append(xmlPaths, result.Path)
+		}
+	}
+	assert.ElementsMatch(t, []string{
+		"custom/plugins/LocalPlugin/src/Resources/config/services.xml",
+		"vendor-local/test/SiblingPlugin/src/Resources/config/services.xml",
+	}, xmlPaths)
+}
 
 // stubShopwareVersions replaces the network-backed version lookup with a
 // fixed list, so GetConfigFromProject does not hit repo.packagist.org.

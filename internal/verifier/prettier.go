@@ -3,7 +3,6 @@ package verifier
 import (
 	"context"
 	"os"
-	"os/exec"
 	"path"
 
 	"golang.org/x/sync/errgroup"
@@ -49,7 +48,7 @@ func (b Prettier) Format(ctx context.Context, config ToolConfig, dryRun bool) er
 		}
 
 		gr.Go(func() error {
-			cmd := exec.CommandContext(ctx, "node", args...)
+			cmd := CommandContext(ctx, "node", args...)
 			cmd.Dir = sourceDirectory
 			cmd.Stderr = os.Stderr
 			cmd.Stdout = os.Stdout
