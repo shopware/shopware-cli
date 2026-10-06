@@ -96,7 +96,7 @@ func GetConfigFromProject(ctx context.Context, root string, onlyLocal bool) (*To
 	adminDirectories := []string{}
 	storefrontDirectories := []string{}
 
-	vendorPath := path.Join(root, "vendor")
+	vendorPath := validation.ResolveSourceRoot(path.Join(root, "vendor"))
 
 	actualProjectConfigPath := shop.SearchConfigPath(ctx, root, "")
 	shopCfg, err := shop.ReadConfig(ctx, actualProjectConfigPath, true)
@@ -112,27 +112,25 @@ func GetConfigFromProject(ctx context.Context, root string, onlyLocal bool) (*To
 		}
 	}
 
+	checkExtensions := []extension.Extension{}
+
 	for _, ext := range extensions {
 		extName, err := ext.GetName()
 		if err != nil {
 			return nil, err
 		}
 
-		rootDir := ext.GetRootDir()
-
-		resolvedPath, err := filepath.EvalSymlinks(rootDir)
-		if err == nil {
-			rootDir = resolvedPath
-		}
+		rootDir := validation.ResolveSourceRoot(ext.GetRootDir())
 
 		// Skip plugins in vendor folder
-		if strings.HasPrefix(rootDir, vendorPath) || slices.Contains(excludeExtensions, extName) {
+		if (rootDir == vendorPath || strings.HasPrefix(rootDir, vendorPath+string(filepath.Separator))) || slices.Contains(excludeExtensions, extName) {
 			continue
 		}
 
 		sourceDirectories = append(sourceDirectories, ext.GetSourceDirs()...)
 		adminDirectories = append(adminDirectories, getAdminFolders(ext)...)
 		storefrontDirectories = append(storefrontDirectories, getStorefrontFolders(ext)...)
+		checkExtensions = append(checkExtensions, ext)
 	}
 
 	var rootComposerJsonData rootComposerJson
@@ -206,17 +204,20 @@ func GetConfigFromProject(ctx context.Context, root string, onlyLocal bool) (*To
 
 	toolCfg := &ToolConfig{
 		ToolDirectory:         GetToolDirectory(),
+		InputWasDirectory:     true,
 		RootDir:               root,
 		SourceDirectories:     sourceDirectories,
 		AdminDirectories:      adminDirectories,
 		StorefrontDirectories: storefrontDirectories,
 		ValidationIgnores:     validationIgnores,
+		Extensions:            checkExtensions,
 	}
 
 	if err := determineVersionRange(toolCfg, constraint); err != nil {
 		return nil, err
 	}
 
+	toolCfg.logConfiguration(ctx)
 	return toolCfg, nil
 }
 

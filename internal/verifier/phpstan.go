@@ -6,7 +6,6 @@ import (
 	_ "embed"
 	"encoding/json"
 	"os"
-	"os/exec"
 	"path"
 	"regexp"
 	"strings"
@@ -65,7 +64,6 @@ func (p PhpStan) Check(ctx context.Context, check *Check, config ToolConfig) err
 	if err := installComposerDeps(ctx, config.RootDir, config.CheckAgainst); err != nil {
 		return err
 	}
-
 	for _, sourceDirectory := range config.SourceDirectories {
 		phpstanArguments := []string{"-dmemory_limit=2G", path.Join(config.ToolDirectory, "php", "vendor", "bin", "phpstan"), "analyse", "--no-progress", "--no-interaction", "--error-format=json", sourceDirectory}
 
@@ -77,7 +75,7 @@ func (p PhpStan) Check(ctx context.Context, check *Check, config ToolConfig) err
 			phpstanArguments = append(phpstanArguments, "-v")
 		}
 
-		phpstan := exec.CommandContext(ctx, "php", phpstanArguments...)
+		phpstan := CommandContext(ctx, "php", phpstanArguments...)
 		phpstan.Env = append(os.Environ(), "PHP_DIR="+path.Join(config.ToolDirectory, "php"))
 		phpstan.Dir = config.RootDir
 

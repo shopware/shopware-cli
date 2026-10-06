@@ -9,6 +9,7 @@ import (
 	"golang.org/x/sync/errgroup"
 
 	"github.com/shopware/shopware-cli/internal/shop"
+	"github.com/shopware/shopware-cli/internal/validation"
 	"github.com/shopware/shopware-cli/internal/verifier"
 )
 
@@ -18,11 +19,23 @@ var projectFixCmd = &cobra.Command{
 	Long:  "Run code-quality fixers on the project's own code, such as extensions in custom/ and configured bundles, and change the files directly. Packages that Composer installs into vendor/ are not changed. Requires a Git repository so the changes can be reviewed, unless --allow-non-git is passed.",
 	Args:  cobra.MaximumNArgs(1),
 	PreRunE: func(cmd *cobra.Command, args []string) error {
-		return verifier.SetupTools(cmd.Context(), cmd.Root().Version)
+		only, _ := cmd.Flags().GetString("only")
+		exclude, _ := cmd.Flags().GetString("exclude")
+		verifier.WarnOnDeprecatedToolName(cmd.Context(), only, exclude)
+		_, _, err := selectProjectTools(verifier.GetToolsOf[verifier.FixTool](), only, exclude, "fixers")
+		return err
 	},
 	RunE: func(cmd *cobra.Command, args []string) error {
-		var err error
+		only, _ := cmd.Flags().GetString("only")
+		exclude, _ := cmd.Flags().GetString("exclude")
 
+		// Tool selection was validated in PreRunE.
+		tools, statuses, _ := selectProjectTools(verifier.GetToolsOf[verifier.FixTool](), only, exclude, "fixers")
+		if err := verifier.SetupTools(cmd.Context(), cmd.Root().Version); err != nil {
+			return err
+		}
+
+		var err error
 		projectPath := ""
 
 		if len(args) > 0 {
@@ -46,8 +59,6 @@ var projectFixCmd = &cobra.Command{
 			}
 		}
 
-		only, _ := cmd.Flags().GetString("only")
-
 		toolCfg, err := verifier.GetConfigFromProject(cmd.Context(), projectPath, false)
 		if err != nil {
 			return err
@@ -55,20 +66,17 @@ var projectFixCmd = &cobra.Command{
 
 		var gr errgroup.Group
 
-		tools := verifier.GetToolsOf[verifier.FixTool]()
-
-		tools, err = tools.Only(only)
-		if err != nil {
-			return err
-		}
-
 		for _, tool := range tools {
 			gr.Go(func() error {
 				return tool.Fix(cmd.Context(), *toolCfg)
 			})
 		}
 
-		return gr.Wait()
+		runErr := gr.Wait()
+		if err := validation.PrintToolInvocationTable(os.Stdout, "Fixers", statuses); err != nil {
+			return err
+		}
+		return runErr
 	},
 }
 
@@ -76,4 +84,5 @@ func init() {
 	projectRootCmd.AddCommand(projectFixCmd)
 	projectFixCmd.PersistentFlags().String("only", "", "Run only the specified fixers (comma-separated, e.g. eslint,rector)")
 	projectFixCmd.PersistentFlags().Bool("allow-non-git", false, "Allow fix to run outside a Git repository")
+	projectFixCmd.PersistentFlags().String("exclude", "", "Exclude specified fixers from running (comma-separated, e.g. eslint,rector). When combined with --only, exclude fixers from the selected set")
 }

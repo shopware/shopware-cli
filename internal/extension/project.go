@@ -265,7 +265,7 @@ func FindExtensionsFromProject(ctx context.Context, project string, onlyLocal bo
 
 		version, _ := ext.GetVersion()
 
-		logging.FromContext(ctx).Infof("Found extension in custom/plugins: %s (%s)", name, version)
+		logging.FromContext(ctx).Infof("Found extension in custom/static-plugins: %s (%s)", name, version)
 
 		extensions[name] = ext
 	}

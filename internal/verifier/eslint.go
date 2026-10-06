@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"os/exec"
 	"path"
 
 	"golang.org/x/sync/errgroup"
@@ -58,7 +57,7 @@ func (e Eslint) Check(ctx context.Context, check *Check, config ToolConfig) erro
 		p := p
 
 		gr.Go(func() error {
-			eslint := exec.CommandContext(ctx,
+			eslint := CommandContext(ctx,
 				"node",
 				path.Join(config.ToolDirectory, "js", "node_modules", ".bin", "eslint"),
 				"--format=json",
@@ -119,7 +118,7 @@ func (e Eslint) Fix(ctx context.Context, config ToolConfig) error {
 		p := p
 
 		gr.Go(func() error {
-			eslint := exec.CommandContext(ctx,
+			eslint := CommandContext(ctx,
 				"node",
 				path.Join(config.ToolDirectory, "js", "node_modules", ".bin", "eslint"),
 				"--config", path.Join(config.ToolDirectory, "js", "configs", fmt.Sprintf("eslint.config.%s.mjs", path.Base(p))),

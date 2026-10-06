@@ -4,7 +4,6 @@ import (
 	"context"
 	"os"
 	"path/filepath"
-	"strings"
 
 	"github.com/shopware/shopware-cli/internal/extension"
 	"github.com/shopware/shopware-cli/internal/symfony"
@@ -29,7 +28,7 @@ func (s SymfonyXMLConverter) Fix(ctx context.Context, config ToolConfig) error {
 		{"routes.xml", symfony.ConvertRoutesXMLFile},
 	}
 
-	for _, configDir := range s.collectConfigDirs(ctx, config) {
+	for _, configDir := range s.collectConfigDirs(config) {
 		for _, conversion := range conversions {
 			xmlPath := filepath.Join(configDir, conversion.fileName)
 
@@ -57,12 +56,12 @@ func (s SymfonyXMLConverter) Fix(ctx context.Context, config ToolConfig) error {
 // container and bundles may load their configuration files explicitly by
 // path, so only plugins (where Shopware picks the XML or YAML variant
 // automatically) are converted.
-func (SymfonyXMLConverter) collectConfigDirs(ctx context.Context, config ToolConfig) []string {
+func (SymfonyXMLConverter) collectConfigDirs(config ToolConfig) []string {
 	dirs := []string{}
 
-	addExtension := func(ext extension.Extension) {
+	for _, ext := range config.Extensions {
 		if ext.GetType() != extension.TypePlatformPlugin {
-			return
+			continue
 		}
 
 		for _, resourcesDir := range ext.GetResourcesDirs() {
@@ -74,27 +73,6 @@ func (SymfonyXMLConverter) collectConfigDirs(ctx context.Context, config ToolCon
 				dirs = append(dirs, filepath.Join(bundle.ResolvePath(ext.GetRootDir()), "Resources", "config"))
 			}
 		}
-	}
-
-	if config.Extension != nil {
-		addExtension(config.Extension)
-
-		return dirs
-	}
-
-	vendorDir := filepath.Join(config.RootDir, "vendor")
-
-	for _, ext := range extension.FindExtensionsFromProject(logging.DisableLogger(ctx), config.RootDir, true) {
-		rootDir := ext.GetRootDir()
-		if resolvedPath, err := filepath.EvalSymlinks(rootDir); err == nil {
-			rootDir = resolvedPath
-		}
-
-		if strings.HasPrefix(rootDir, vendorDir) {
-			continue
-		}
-
-		addExtension(ext)
 	}
 
 	return dirs
