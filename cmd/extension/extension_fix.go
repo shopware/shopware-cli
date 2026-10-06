@@ -92,6 +92,6 @@ var extensionFixCmd = &cobra.Command{
 func init() {
 	extensionRootCmd.AddCommand(extensionFixCmd)
 	extensionFixCmd.Flags().String("only", "", "Run only the specified fixers (comma-separated, e.g. eslint,rector)")
-	extensionFixCmd.Flags().String("exclude", "", "Skip these fixers (comma-separated, e.g. eslint,rector); when --only is set, excluded fixers must be selected there")
+	extensionFixCmd.Flags().String("exclude", "", "Exclude specified fixers from running (comma-separated, e.g. eslint,rector). When combined with --only, exclude fixers from the selected set")
 	extensionFixCmd.Flags().Bool("allow-non-git", false, "Allow fix to run outside a Git repository")
 }

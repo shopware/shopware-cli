@@ -84,5 +84,5 @@ func init() {
 	projectRootCmd.AddCommand(projectFixCmd)
 	projectFixCmd.PersistentFlags().String("only", "", "Run only the specified fixers (comma-separated, e.g. eslint,rector)")
 	projectFixCmd.PersistentFlags().Bool("allow-non-git", false, "Allow fix to run outside a Git repository")
-	projectFixCmd.PersistentFlags().String("exclude", "", "Skip these fixers (comma-separated, e.g. eslint,rector); when --only is set, excluded fixers must be selected there")
+	projectFixCmd.PersistentFlags().String("exclude", "", "Exclude specified fixers from running (comma-separated, e.g. eslint,rector). When combined with --only, exclude fixers from the selected set")
 }

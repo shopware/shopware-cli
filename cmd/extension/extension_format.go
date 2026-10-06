@@ -86,6 +86,6 @@ var extensionFormat = &cobra.Command{
 func init() {
 	extensionRootCmd.AddCommand(extensionFormat)
 	extensionFormat.Flags().String("only", "", "Run only the specified formatters (comma-separated, e.g. prettier,php-cs-fixer)")
-	extensionFormat.Flags().String("exclude", "", "Skip these formatters (comma-separated, e.g. prettier,php-cs-fixer); when --only is set, excluded formatters must be selected there")
+	extensionFormat.Flags().String("exclude", "", "Exclude specified formatters from running (comma-separated, e.g. prettier,php-cs-fixer). When combined with --only, exclude formatters from the selected set")
 	extensionFormat.Flags().Bool("dry-run", false, "Run in dry run mode")
 }
