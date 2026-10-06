@@ -45,7 +45,7 @@ func validateAgent(agent string) error {
 		return errors.New("specify the target agent with --agent (e.g. --agent claude-code)")
 	}
 	if strings.ContainsAny(agent, "*, \t") {
-		return fmt.Errorf("--agent takes a single agent (e.g. claude-code); %q is not supported — run the command once per agent", agent)
+		return fmt.Errorf("--agent takes a single agent (e.g. claude-code); %q is not supported, run the command once per agent", agent)
 	}
 
 	return nil
@@ -109,15 +109,53 @@ func ownerRepo(repoURL string) string {
 	return s
 }
 
-// resolveLatestTag returns the highest stable release tag of repoURL via
-// `git ls-remote`. A package var so tests can replace it.
-var resolveLatestTag = func(ctx context.Context, repoURL string) (string, error) {
+// remoteTagNames lists the tag names of repoURL via `git ls-remote --tags`.
+func remoteTagNames(ctx context.Context, repoURL string) ([]string, error) {
 	out, err := exec.CommandContext(ctx, "git", "ls-remote", "--tags", repoURL).Output()
 	if err != nil {
-		return "", fmt.Errorf("cannot list release tags of %s: %w", repoURL, err)
+		return nil, fmt.Errorf("cannot list release tags of %s: %w", repoURL, err)
 	}
 
-	tag, err := latestStableTag(strings.Split(string(out), "\n"))
+	return tagNames(strings.Split(string(out), "\n")), nil
+}
+
+// tagNames extracts tag names from `git ls-remote --tags` lines
+// ("<sha>\trefs/tags/<tag>"), dropping the peeled "^{}" suffix.
+func tagNames(lsRemoteLines []string) []string {
+	var tags []string
+	for _, line := range lsRemoteLines {
+		i := strings.Index(line, "refs/tags/")
+		if i < 0 {
+			continue
+		}
+		tags = append(tags, strings.TrimSpace(strings.TrimSuffix(line[i+len("refs/tags/"):], "^{}")))
+	}
+
+	return tags
+}
+
+// matchTag returns the tag matching want, ignoring a leading "v" on either side
+// (repos tag releases inconsistently, e.g. "0.1.10" but "v0.1.9").
+func matchTag(tags []string, want string) (string, bool) {
+	norm := strings.TrimPrefix(want, "v")
+	for _, tag := range tags {
+		if strings.TrimPrefix(tag, "v") == norm {
+			return tag, true
+		}
+	}
+
+	return "", false
+}
+
+// resolveLatestTag returns the highest stable release tag of repoURL. A package
+// var so tests can replace it.
+var resolveLatestTag = func(ctx context.Context, repoURL string) (string, error) {
+	tags, err := remoteTagNames(ctx, repoURL)
+	if err != nil {
+		return "", err
+	}
+
+	tag, err := latestStableTag(tags)
 	if err != nil {
 		return "", fmt.Errorf("%s: %w", repoURL, err)
 	}
@@ -125,33 +163,27 @@ var resolveLatestTag = func(ctx context.Context, repoURL string) (string, error)
 	return tag, nil
 }
 
-// verifyTag errors unless ref is an existing tag of repoURL (skills.sh would
-// silently install the default branch otherwise). A package var for tests.
-var verifyTag = func(ctx context.Context, repoURL, ref string) error {
-	out, err := exec.CommandContext(ctx, "git", "ls-remote", "--tags", repoURL, "refs/tags/"+ref).Output()
+// resolveTag returns the actual tag of repoURL matching want, accepting a "v"
+// prefix on either side. skills.sh would silently install the default branch for
+// a missing ref, so the tag is resolved up front. A package var for tests.
+var resolveTag = func(ctx context.Context, repoURL, want string) (string, error) {
+	tags, err := remoteTagNames(ctx, repoURL)
 	if err != nil {
-		return fmt.Errorf("cannot verify tag %s of %s: %w", ref, repoURL, err)
+		return "", err
 	}
-	if strings.TrimSpace(string(out)) == "" {
-		return fmt.Errorf("release %q not found in %s", ref, repoURL)
+	if tag, ok := matchTag(tags, want); ok {
+		return tag, nil
 	}
 
-	return nil
+	return "", fmt.Errorf("cannot find release %q in %s", want, repoURL)
 }
 
-// latestStableTag picks the highest stable semver tag from `git ls-remote --tags`
-// output lines ("<sha>\trefs/tags/<tag>"). Pre-releases are ignored.
-func latestStableTag(lsRemoteLines []string) (string, error) {
+// latestStableTag picks the highest stable semver tag; pre-releases are ignored.
+func latestStableTag(tags []string) (string, error) {
 	var best *version.Version
 	var bestRaw string
 
-	for _, line := range lsRemoteLines {
-		i := strings.Index(line, "refs/tags/")
-		if i < 0 {
-			continue
-		}
-		raw := strings.TrimSpace(strings.TrimSuffix(line[i+len("refs/tags/"):], "^{}"))
-
+	for _, raw := range tags {
 		v, err := version.NewVersion(strings.TrimPrefix(raw, "v"))
 		if err != nil || v.Prerelease() != "" {
 			continue
@@ -182,7 +214,7 @@ var runCompatCheck = func(ctx context.Context, repo, skill, ref, projectDir stri
 
 	script, err := httpGet(ctx, url)
 	if errors.Is(err, errNotFound) {
-		return fmt.Errorf("release %q does not include the %s skill (it may predate it) — try a newer release", ref, skill)
+		return fmt.Errorf("release %q does not include the %s skill (it may predate it), try a newer release", ref, skill)
 	}
 	if err != nil {
 		return fmt.Errorf("cannot fetch the compatibility check for %s@%s: %w", skill, ref, err)
@@ -207,10 +239,10 @@ func interpretCompatOutput(stdout []byte, stderr, skill, ref string, runErr erro
 	var report compatReport
 	if json.Unmarshal(bytes.TrimSpace(stdout), &report) != nil {
 		if stderr != "" {
-			return fmt.Errorf("could not run the compatibility check for %s@%s: %s", skill, ref, stderr)
+			return fmt.Errorf("cannot run the compatibility check for %s@%s: %s", skill, ref, stderr)
 		}
 
-		return fmt.Errorf("could not run the compatibility check for %s@%s (is PHP available?): %w", skill, ref, runErr)
+		return fmt.Errorf("cannot run the compatibility check for %s@%s (is PHP available?): %w", skill, ref, runErr)
 	}
 
 	if report.Compatible {

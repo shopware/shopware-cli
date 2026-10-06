@@ -111,10 +111,10 @@ func setupAdd(t *testing.T) *skillsCall {
 	runCompatCheck = func(_ context.Context, _, _, _, _ string, _ io.Writer) error { return nil }
 	t.Cleanup(func() { runCompatCheck = prevCompat })
 
-	// Stub tag verification to "exists" so explicit-tag tests need no network.
-	prevVerify := verifyTag
-	verifyTag = func(_ context.Context, _, _ string) error { return nil }
-	t.Cleanup(func() { verifyTag = prevVerify })
+	// Stub tag resolution to echo the request so explicit-tag tests need no network.
+	prevResolveTag := resolveTag
+	resolveTag = func(_ context.Context, _, want string) (string, error) { return want, nil }
+	t.Cleanup(func() { resolveTag = prevResolveTag })
 
 	return rec
 }

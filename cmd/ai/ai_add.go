@@ -35,6 +35,7 @@ type addResult struct {
 	Name             string      `json:"name"`
 	Agent            string      `json:"agent"`
 	Scope            state.Scope `json:"scope"`
+	Dir              string      `json:"dir,omitempty"`
 	RequestedTag     string      `json:"requestedTag"`
 	ResolvedRevision string      `json:"resolvedRevision"`
 	Action           string      `json:"action,omitempty"`
@@ -113,7 +114,7 @@ func performAdd(ctx context.Context, o addOptions, progress io.Writer) (addResul
 
 	entry, ok := directory.Load().Get(name)
 	if !ok {
-		return addResult{}, fmt.Errorf("unknown integration %q (see `shopware-cli ai list`)", name)
+		return addResult{}, fmt.Errorf("unknown integration %q (see \"shopware-cli ai list\")", name)
 	}
 
 	// Skills only for now (MCP later).
@@ -133,6 +134,17 @@ func performAdd(ctx context.Context, o addOptions, progress io.Writer) (addResul
 		scope = state.ScopeProject
 	}
 
+	// Project scope resolves the Shopware project root (filesystem only, so a
+	// dry-run resolves it too); global uses the user config dir.
+	projectRoot := ""
+	if !o.global {
+		root, err := shop.FindClosestShopwareProject(false)
+		if err != nil {
+			return addResult{}, fmt.Errorf("a project install must run inside a Shopware project (or use --global): %w", err)
+		}
+		projectRoot = root
+	}
+
 	repoURL, ref, err := resolveSource(ctx, entry, tag, o.cliVersion, o.dryRun)
 	if err != nil {
 		return addResult{}, err
@@ -145,6 +157,7 @@ func performAdd(ctx context.Context, o addOptions, progress io.Writer) (addResul
 		Name:             entry.Name,
 		Agent:            o.agent,
 		Scope:            scope,
+		Dir:              projectRoot,
 		RequestedTag:     tag,
 		ResolvedRevision: ref,
 		DryRun:           o.dryRun,
@@ -155,19 +168,11 @@ func performAdd(ctx context.Context, o addOptions, progress io.Writer) (addResul
 		return result, nil
 	}
 
-	// Project scope resolves the Shopware project root; global uses the user
-	// config dir.
-	projectRoot := ""
 	readState := state.Read
 	saveState := state.Save
 	if !o.global {
-		root, err := shop.FindClosestShopwareProject(false)
-		if err != nil {
-			return addResult{}, fmt.Errorf("a project install must run inside a Shopware project (or use --global): %w", err)
-		}
-		projectRoot = root
-		readState = func() (state.File, error) { return state.ReadProject(root) }
-		saveState = func(f state.File) error { return state.SaveProject(root, f) }
+		readState = func() (state.File, error) { return state.ReadProject(projectRoot) }
+		saveState = func(f state.File) error { return state.SaveProject(projectRoot, f) }
 	}
 
 	current, err := readState()
@@ -198,7 +203,7 @@ func performAdd(ctx context.Context, o addOptions, progress io.Writer) (addResul
 		ResolvedRevision: result.ResolvedRevision,
 	})
 	if err := saveState(next); err != nil {
-		return addResult{}, fmt.Errorf("%s was installed but its record could not be written (re-run `ai add` to record it): %w", result.Name, err)
+		return addResult{}, fmt.Errorf("%s was installed but its record cannot be written, re-run \"ai add\": %w", result.Name, err)
 	}
 
 	switch {
@@ -225,24 +230,30 @@ func resolveSource(ctx context.Context, entry *directory.Integration, tag, cliVe
 		switch {
 		case ref != "":
 			if !dryRun {
-				err = verifyTag(ctx, repoURL, ref)
+				ref, err = resolveTag(ctx, repoURL, ref)
 			}
-		case dryRun && (cliVersion == "" || cliVersion == devVersion):
-			ref = refPlaceholder
 		case cliVersion == "" || cliVersion == devVersion:
-			ref, err = resolveLatestTag(ctx, repoURL)
+			if dryRun {
+				ref = refPlaceholder
+			} else {
+				ref, err = resolveLatestTag(ctx, repoURL)
+			}
+		case !dryRun:
+			ref, err = resolveTag(ctx, repoURL, cliVersion)
 		default:
 			ref = cliVersion
 		}
 	case directory.DeliveryGit:
 		repoURL = entry.Delivery.Repository
 		switch {
-		case ref == "" && dryRun:
-			ref = refPlaceholder
 		case ref == "":
-			ref, err = resolveLatestTag(ctx, repoURL)
+			if dryRun {
+				ref = refPlaceholder
+			} else {
+				ref, err = resolveLatestTag(ctx, repoURL)
+			}
 		case !dryRun:
-			err = verifyTag(ctx, repoURL, ref)
+			ref, err = resolveTag(ctx, repoURL, ref)
 		}
 	default:
 		err = fmt.Errorf("unsupported delivery %q", entry.Delivery.Kind)
@@ -282,8 +293,13 @@ func writeAddResult(w io.Writer, format string, r addResult) error {
 		return err
 	}
 
+	dest := ""
+	if r.Dir != "" {
+		dest = " into " + r.Dir
+	}
+
 	if r.DryRun {
-		_, err := fmt.Fprintf(w, "[dry-run] would install %s for %s (%s):\n  %s\n", r.Name, r.Agent, r.Scope, strings.Join(r.Command, " "))
+		_, err := fmt.Fprintf(w, "[dry-run] would install %s for %s (%s)%s:\n  %s\n", r.Name, r.Agent, r.Scope, dest, strings.Join(r.Command, " "))
 
 		return err
 	}
@@ -295,15 +311,15 @@ func writeAddResult(w io.Writer, format string, r addResult) error {
 
 	switch r.Action {
 	case actionUnchanged:
-		_, err := fmt.Fprintf(w, "Already installed %s for %s (%s)%s\n", r.Name, r.Agent, r.Scope, rev)
+		_, err := fmt.Fprintf(w, "Already installed %s for %s (%s)%s%s\n", r.Name, r.Agent, r.Scope, dest, rev)
 
 		return err
 	case actionUpdated:
-		_, err := fmt.Fprintf(w, "Updated %s for %s (%s): %s → %s\n", r.Name, r.Agent, r.Scope, r.PreviousRevision, r.ResolvedRevision)
+		_, err := fmt.Fprintf(w, "Updated %s for %s (%s)%s: %s → %s\n", r.Name, r.Agent, r.Scope, dest, r.PreviousRevision, r.ResolvedRevision)
 
 		return err
 	default:
-		_, err := fmt.Fprintf(w, "Installed %s for %s (%s)%s\n", r.Name, r.Agent, r.Scope, rev)
+		_, err := fmt.Fprintf(w, "Installed %s for %s (%s)%s%s\n", r.Name, r.Agent, r.Scope, dest, rev)
 
 		return err
 	}

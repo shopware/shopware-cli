@@ -110,7 +110,7 @@ func performRemove(ctx context.Context, o removeOptions, progress io.Writer) (re
 
 	// Unknown name with nothing recorded is a typo, not a stale install.
 	if !recorded && !known {
-		return removeResult{}, fmt.Errorf("unknown integration %q (see `shopware-cli ai list`)", o.name)
+		return removeResult{}, fmt.Errorf("unknown integration %q (see \"shopware-cli ai list\")", o.name)
 	}
 
 	result := removeResult{
@@ -136,7 +136,7 @@ func performRemove(ctx context.Context, o removeOptions, progress io.Writer) (re
 		save = func(state.File) error { return clearState() }
 	}
 	if err := save(next); err != nil {
-		return removeResult{}, fmt.Errorf("%s was removed but its record could not be updated (re-run `ai remove`): %w", result.Name, err)
+		return removeResult{}, fmt.Errorf("%s was removed but its record cannot be updated, re-run \"ai remove\": %w", result.Name, err)
 	}
 
 	return result, nil
