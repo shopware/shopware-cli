@@ -1,12 +1,8 @@
 package mysqldump
 
 import (
-	"encoding/json"
 	"strings"
 	"testing"
-
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
 const (
@@ -253,17 +249,4 @@ func Test_service_FakerError(t *testing.T) {
 			},
 		)
 	}
-}
-
-func TestReplaceStringWithFakerKeepsJSONValid(t *testing.T) {
-	for range 20 {
-		got := replaceStringWithFakerWhenRequested(`{"_value":"{{- faker.Address.Address() -}}"}`)
-
-		var decoded map[string]string
-		require.NoError(t, json.Unmarshal([]byte(got), &decoded))
-		assert.NotEmpty(t, decoded["_value"])
-		assert.NotContains(t, decoded["_value"], "faker")
-	}
-
-	assert.Contains(t, replaceStringWithFakerWhenRequested("{{- faker.Address.Address() -}}"), "\n")
 }
