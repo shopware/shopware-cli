@@ -5,7 +5,8 @@ name or enum value here is a breaking change to a public interface.
 
 ## Scope of v1
 - Only `type: skill` entries are listed. `mcp` (shopware-core) is reserved for a later increment.
-- No network access, no project detection in this version.
+- No network access. `ai list --installed` resolves the project root to read
+  project-scoped state (filesystem only).
 - The directory has no remote source: entries are hardwired in Go
   (`integrations.go`).
 

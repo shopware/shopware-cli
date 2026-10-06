@@ -126,12 +126,12 @@ cat /tmp/ai-proj/.shopware-cli/ai/installed.json
 ```
 Expected entry: `{"name":"shopware-cli","agent":"claude-code","scope":"project",…}`.
 
-### C3 — idempotency (repeat = no-op)
+### C3 — repeat add re-runs skills.sh, record unchanged
 ```bash
 cd /tmp/ai-proj && /tmp/swcli ai add shopware-cli --agent claude-code
 ```
-Prints the same `Installed …` line, but skills.sh is NOT re-run (no
-npx/download output this time). State file unchanged (single entry).
+skills.sh runs again (it is idempotent and owns the disk); the outcome reads
+`Already installed …` and the state file still holds a single entry.
 
 ### C4 — installed filter (merges scopes)
 ```bash
@@ -148,8 +148,8 @@ Only `shopware-cli` listed (the one recorded), not the full directory.
 cd /tmp/ai-shopware && /tmp/swcli ai add deployment-helper@0.1.7 --agent claude-code --dry-run
 ```
 `[dry-run] would install deployment-helper …` with source
-`shopware/deployment-helper@0.1.7`. No tag lookup, no compat-check, nothing
-written.
+`…/deployment-helper/tree/0.1.7/skills/deployment-helper`. No tag lookup, no
+compat-check, nothing written.
 
 ### D3 — project install outside a Shopware project is refused
 ```bash
