@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/shopware/shopware-cli/internal/shop"
 	"github.com/shopware/shopware-cli/internal/testhelper"
 )
 
@@ -80,6 +81,45 @@ func TestAssembleConnectionURIUsernameClearsPassword(t *testing.T) {
 
 	assert.Equal(t, "backup", cfg.User)
 	assert.Empty(t, cfg.Passwd)
+}
+
+func TestAnonymizationFromInstalledExtensions(t *testing.T) {
+	chdirOutsideProject(t)
+
+	tables, rules, err := anonymizationFromInstalledExtensions(t.Context())
+	require.NoError(t, err)
+	assert.Nil(t, tables)
+	assert.Nil(t, rules)
+
+	projectRoot := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(projectRoot, "bin"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(projectRoot, "bin", "console"), nil, 0o755))
+	testhelper.WriteFile(t, filepath.Join(projectRoot, "composer.json"),
+		testhelper.ComposerJSON{Require: map[string]string{"shopware/core": "6.6.0"}}.String())
+
+	pluginDir := filepath.Join(projectRoot, "custom", "plugins", "SwagExample")
+	testhelper.WriteFile(t, filepath.Join(pluginDir, "composer.json"), testhelper.PluginComposer("swag/example", "1.0.0", `Swag\Example\SwagExample`).String())
+	testhelper.WriteFile(t, filepath.Join(pluginDir, ".config", "shopware-extension.yml"), `
+compatibility_date: "2026-01-01"
+anonymize:
+  tables:
+    swag_example_token:
+      access_token: "''"
+  system_config:
+    - SwagExample.config.clientSecret
+`)
+
+	t.Setenv("PROJECT_ROOT", "")
+	t.Chdir(projectRoot)
+
+	tables, rules, err = anonymizationFromInstalledExtensions(t.Context())
+	require.NoError(t, err)
+	assert.Equal(t, map[string]map[string]string{
+		"swag_example_token": {"access_token": "''"},
+	}, tables)
+	assert.Equal(t, []shop.SystemConfigRule{
+		{Key: "SwagExample.config.clientSecret", Omit: true},
+	}, rules)
 }
 
 func TestAssembleConnectionURIDatabaseURLInsideProject(t *testing.T) {

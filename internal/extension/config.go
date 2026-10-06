@@ -243,8 +243,48 @@ type Config struct {
 	// Changelog is the changelog configuration of the extension.
 	Changelog changelog.Config `yaml:"changelog,omitempty"`
 	// Validation is the validation configuration of the extension.
-	Validation      ConfigValidation `yaml:"validation,omitempty"`
+	Validation ConfigValidation `yaml:"validation,omitempty"`
+	// Anonymize declares tables and system config values rewritten by `project dump --anonymize`.
+	// Rules from every extension found in the project are merged into that dump. Project dump.rewrite values take precedence.
+	Anonymize ConfigAnonymize `yaml:"anonymize,omitempty"`
+
 	storageLocation string
+}
+
+// ConfigAnonymize is the extension contribution to `project dump --anonymize`. Project dump.rewrite values take precedence over these rules.
+type ConfigAnonymize struct {
+	// Tables maps a database table to column rewrites. Each column value is a SQL expression, the same format as the project dump.rewrite map. Faker expressions such as faker.Internet.Email() are supported. Write "''" to store an empty string and "NULL" to store NULL.
+	Tables map[string]map[string]string `yaml:"tables,omitempty"`
+	// SystemConfig anonymizes system_config rows by configuration_key. A string omits that row. An object can omit the row or replace configuration_value with a custom value or a faker expression.
+	SystemConfig []ConfigSystemConfigRule `yaml:"system_config,omitempty"`
+}
+
+// UnmarshalYAML rejects unknown keys, so a typo cannot silently drop rules.
+func (c *ConfigAnonymize) UnmarshalYAML(value *yaml.Node) error {
+	if value.Kind == yaml.MappingNode {
+		for i := 0; i+1 < len(value.Content); i += 2 {
+			if field := value.Content[i].Value; field != "tables" && field != "system_config" {
+				return fmt.Errorf("unknown anonymize field %q", field)
+			}
+		}
+	}
+
+	type plain ConfigAnonymize
+	return value.Decode((*plain)(c))
+}
+
+// ConfigError reports an extension config file that cannot be loaded.
+type ConfigError struct {
+	Path string
+	Err  error
+}
+
+func (e *ConfigError) Error() string {
+	return "file: " + e.Path + ": " + e.Err.Error()
+}
+
+func (e *ConfigError) Unwrap() error {
+	return e.Err
 }
 
 func (c *Config) HasCompatibilityDate() bool {
@@ -274,16 +314,14 @@ func readExtensionConfig(ctx context.Context, dir string) (*Config, error) {
 		return config, nil
 	}
 
-	errorFormat := "file: " + config.storageLocation + ": %v"
-
 	fileHandle, err := os.ReadFile(config.storageLocation)
 	if err != nil {
-		return nil, fmt.Errorf(errorFormat, err)
+		return nil, &ConfigError{Path: config.storageLocation, Err: err}
 	}
 
 	err = yaml.Unmarshal(fileHandle, &config)
 	if err != nil {
-		return nil, fmt.Errorf(errorFormat, err)
+		return nil, &ConfigError{Path: config.storageLocation, Err: err}
 	}
 
 	if config.CompatibilityDate == "" {
@@ -293,7 +331,7 @@ func readExtensionConfig(ctx context.Context, dir string) (*Config, error) {
 
 	err = validateExtensionConfig(config)
 	if err != nil {
-		return nil, fmt.Errorf(errorFormat, err)
+		return nil, &ConfigError{Path: config.storageLocation, Err: err}
 	}
 
 	return config, nil
@@ -338,6 +376,50 @@ func validateExtensionConfig(config *Config) error {
 				return fmt.Errorf("build.zip.assets.additional_caches[%d].source_paths[%d]: %w", i, j, err)
 			}
 		}
+	}
+
+	if err := validateAnonymize(&config.Anonymize); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func validateAnonymize(config *ConfigAnonymize) error {
+	if config == nil {
+		return nil
+	}
+
+	for table, columns := range config.Tables {
+		if !anonymizeIdentifierPattern.MatchString(table) {
+			return fmt.Errorf("anonymize.tables: invalid table name %q", table)
+		}
+
+		if len(columns) == 0 {
+			return fmt.Errorf("anonymize.tables.%s: at least one column is required", table)
+		}
+
+		for column, expression := range columns {
+			if !anonymizeIdentifierPattern.MatchString(column) {
+				return fmt.Errorf("anonymize.tables.%s: invalid column name %q", table, column)
+			}
+
+			if strings.TrimSpace(expression) == "" {
+				return fmt.Errorf("anonymize.tables.%s.%s: rewrite expression is required (write \"''\" to store an empty string or \"NULL\" to store NULL)", table, column)
+			}
+		}
+	}
+
+	seenKeys := map[string]struct{}{}
+	for i, rule := range config.SystemConfig {
+		dumpRule, err := rule.DumpRule()
+		if err != nil {
+			return fmt.Errorf("anonymize.system_config[%d]: %w", i, err)
+		}
+		if _, exists := seenKeys[dumpRule.Key]; exists {
+			return fmt.Errorf("anonymize.system_config[%d]: duplicate configuration key %q", i, dumpRule.Key)
+		}
+		seenKeys[dumpRule.Key] = struct{}{}
 	}
 
 	return nil

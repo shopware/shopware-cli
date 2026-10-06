@@ -235,10 +235,15 @@ func DumpAndLoadAssetSourcesOfProject(ctx context.Context, project string, shopC
 }
 
 func FindExtensionsFromProject(ctx context.Context, project string, onlyLocal bool) []Extension {
+	return findExtensionsFromProject(ctx, project, onlyLocal, nil)
+}
+
+// findExtensionsFromProject passes the error of every folder that cannot be loaded to onError.
+func findExtensionsFromProject(ctx context.Context, project string, onlyLocal bool, onError func(error)) []Extension {
 	extensions := make(map[string]Extension)
 
 	if !onlyLocal {
-		for _, ext := range addExtensionsByComposer(ctx, project) {
+		for _, ext := range addExtensionsByComposer(ctx, project, onError) {
 			name, err := ext.GetName()
 			if err != nil {
 				continue
@@ -252,7 +257,7 @@ func FindExtensionsFromProject(ctx context.Context, project string, onlyLocal bo
 		}
 	}
 
-	for _, ext := range addExtensionsByWildcard(ctx, path.Join(project, "custom", "static-plugins")) {
+	for _, ext := range addExtensionsByWildcard(ctx, path.Join(project, "custom", "static-plugins"), onError) {
 		name, err := ext.GetName()
 		if err != nil {
 			continue
@@ -270,7 +275,7 @@ func FindExtensionsFromProject(ctx context.Context, project string, onlyLocal bo
 		extensions[name] = ext
 	}
 
-	for _, ext := range addExtensionsByWildcard(ctx, path.Join(project, "custom", "plugins")) {
+	for _, ext := range addExtensionsByWildcard(ctx, path.Join(project, "custom", "plugins"), onError) {
 		name, err := ext.GetName()
 		if err != nil {
 			continue
@@ -288,7 +293,7 @@ func FindExtensionsFromProject(ctx context.Context, project string, onlyLocal bo
 		extensions[name] = ext
 	}
 
-	for _, ext := range addExtensionsByWildcard(ctx, path.Join(project, "custom", "apps")) {
+	for _, ext := range addExtensionsByWildcard(ctx, path.Join(project, "custom", "apps"), onError) {
 		name, err := ext.GetName()
 		if err != nil {
 			continue
@@ -309,7 +314,22 @@ func FindExtensionsFromProject(ctx context.Context, project string, onlyLocal bo
 	return extensionsSlice
 }
 
-func addExtensionsByComposer(ctx context.Context, project string) []Extension {
+// ComposerPackageError reports an extension listed in composer.lock whose
+// installed vendor folder cannot be loaded.
+type ComposerPackageError struct {
+	Package string
+	Err     error
+}
+
+func (e *ComposerPackageError) Error() string {
+	return "package " + e.Package + ": " + e.Err.Error()
+}
+
+func (e *ComposerPackageError) Unwrap() error {
+	return e.Err
+}
+
+func addExtensionsByComposer(ctx context.Context, project string, onError func(error)) []Extension {
 	var list []Extension
 
 	lock, err := os.ReadFile(path.Join(project, "composer.lock"))
@@ -324,8 +344,17 @@ func addExtensionsByComposer(ctx context.Context, project string) []Extension {
 
 	for _, pkg := range composer.Packages {
 		if pkg.PackageType == ComposerTypePlugin || pkg.PackageType == ComposerTypeBundle || pkg.PackageType == ComposerTypeApp {
-			ext, err := GetExtensionByFolder(ctx, path.Join(project, "vendor", pkg.Name))
+			folder := path.Join(project, "vendor", pkg.Name)
+			if _, err := os.Stat(folder); errors.Is(err, os.ErrNotExist) {
+				// The package is locked but not installed, so there is nothing to load.
+				continue
+			}
+
+			ext, err := GetExtensionByFolder(ctx, folder)
 			if err != nil {
+				if onError != nil {
+					onError(&ComposerPackageError{Package: pkg.Name, Err: err})
+				}
 				continue
 			}
 
@@ -346,7 +375,7 @@ func addExtensionsByComposer(ctx context.Context, project string) []Extension {
 	return list
 }
 
-func addExtensionsByWildcard(ctx context.Context, extensionDir string) []Extension {
+func addExtensionsByWildcard(ctx context.Context, extensionDir string, onError func(error)) []Extension {
 	var list []Extension
 
 	extensions, err := os.ReadDir(extensionDir)
@@ -375,6 +404,9 @@ func addExtensionsByWildcard(ctx context.Context, extensionDir string) []Extensi
 		if isDir {
 			ext, err := GetExtensionByFolder(ctx, evaluatedPath)
 			if err != nil {
+				if onError != nil {
+					onError(err)
+				}
 				continue
 			}
 
