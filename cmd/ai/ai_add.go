@@ -15,14 +15,11 @@ import (
 )
 
 const (
-	// bundledRepoURL is the repository a bundled skill is installed from; its ref
-	// follows the CLI version.
+	// bundledRepoURL is where bundled skills are installed from.
 	bundledRepoURL = "https://github.com/shopware/shopware-cli"
-	// devVersion is the version a plain `go build` reports; it is not a real ref,
-	// so bundled installs fall back to the latest release.
+	// devVersion is what a plain `go build` reports (not a real ref).
 	devVersion = "dev"
-	// refPlaceholder stands in for an unresolved ref in --dry-run output, so the
-	// dry run stays offline (no tag lookup).
+	// refPlaceholder is shown for an unresolved ref in --dry-run.
 	refPlaceholder = "<latest-release>"
 )
 
@@ -109,11 +106,8 @@ type addOptions struct {
 	cliVersion string
 }
 
-// performAdd runs the `ai add` flow and returns the outcome. It resolves the
-// pinned source, (for a git skill) runs the compatibility check, delegates the
-// install to skills.sh and records it; skills.sh output and check messages go to
-// progress. It lives outside the cobra command so the behaviour can be tested
-// directly.
+// performAdd resolves the pinned source, runs any compatibility check, installs
+// via skills.sh and records the result. skills.sh output goes to progress.
 func performAdd(ctx context.Context, o addOptions, progress io.Writer) (addResult, error) {
 	name, tag := splitNameTag(o.name)
 
@@ -122,13 +116,11 @@ func performAdd(ctx context.Context, o addOptions, progress io.Writer) (addResul
 		return addResult{}, fmt.Errorf("unknown integration %q (see `shopware-cli ai list`)", name)
 	}
 
-	// Skills only for now (MCP arrives later). The agent value is passed
-	// straight to skills.sh.
+	// Skills only for now (MCP later).
 	if entry.Type != directory.TypeSkill {
 		return addResult{}, fmt.Errorf("installing %q is not supported yet (only skills for now)", name)
 	}
-	// A git skill's compatibility check runs against a project, so there is
-	// nothing to check for a global install.
+	// A git skill's compatibility check needs a project, so no global install.
 	if entry.Delivery.Kind == directory.DeliveryGit && o.global {
 		return addResult{}, fmt.Errorf("%q must be installed into a project, not globally: it checks compatibility against that project (omit --global)", entry.Name)
 	}
@@ -146,8 +138,7 @@ func performAdd(ctx context.Context, o addOptions, progress io.Writer) (addResul
 		return addResult{}, err
 	}
 
-	// skills.sh must never prompt: this command already supplies the source,
-	// agent and scope, so its confirmation prompts are always skipped.
+	// -y: we supply everything, so skills.sh must not prompt.
 	argv := skillsAddArgs(skillSourceURL(repoURL, ref, entry.Name), o.agent, o.global, true)
 
 	result := addResult{
@@ -164,10 +155,8 @@ func performAdd(ctx context.Context, o addOptions, progress io.Writer) (addResul
 		return result, nil
 	}
 
-	// State lives where the config lives: a --global install and its state go to
-	// the user config dir; a project install resolves the Shopware project root,
-	// so the state and the agent config land at the root (not in a subdirectory),
-	// matching where other project commands operate.
+	// Project scope resolves the Shopware project root; global uses the user
+	// config dir.
 	projectRoot := ""
 	readState := state.Read
 	saveState := state.Save
@@ -186,21 +175,17 @@ func performAdd(ctx context.Context, o addOptions, progress io.Writer) (addResul
 		return addResult{}, err
 	}
 
-	// Record the prior revision (if any) to report the outcome as a fresh
-	// install, a no-op, or an update.
+	// Prior revision drives the installed/unchanged/updated outcome.
 	prev, hadPrev := findInstall(current, result.Name, result.Agent, result.Scope)
 
-	// A git skill declares an owner-maintained compatibility check; run it
-	// against the project before installing anything.
+	// Check compatibility before installing anything.
 	if entry.Delivery.Kind == directory.DeliveryGit && entry.Compatibility != nil {
 		if err := runCompatCheck(ctx, ownerRepo(entry.Delivery.Repository), entry.Name, ref, projectRoot, progress); err != nil {
 			return addResult{}, err
 		}
 	}
 
-	// Always run skills.sh: it is idempotent and is the source of truth on disk,
-	// so the record is never trusted over the actual installation (a deleted
-	// skill is restored on a repeat add).
+	// Always run skills.sh (idempotent); it owns the disk, the record only reports.
 	if err := runSkills(ctx, argv, projectRoot, progress); err != nil {
 		return addResult{}, err
 	}
@@ -229,11 +214,9 @@ func performAdd(ctx context.Context, o addOptions, progress io.Writer) (addResul
 	return result, nil
 }
 
-// resolveSource resolves the repo URL and the git ref to install for entry; the
-// caller pins them into a GitHub tree URL (skills.sh ignores a bare
-// owner/repo@ref). A bundled skill follows the CLI version; a git skill uses the
-// explicit tag or the latest stable release. Tag lookups hit the network, so a
-// --dry-run stays offline and returns a placeholder ref instead.
+// resolveSource returns the repo URL and ref to install: a bundled skill follows
+// the CLI version, a git skill the explicit tag or latest release. A dry-run
+// skips the network lookup and returns a placeholder ref.
 func resolveSource(ctx context.Context, entry *directory.Integration, tag, cliVersion string, dryRun bool) (repoURL, ref string, err error) {
 	ref = tag
 	switch entry.Delivery.Kind {
@@ -277,8 +260,7 @@ func splitNameTag(s string) (name, tag string) {
 	return s, ""
 }
 
-// findInstall returns the recorded entry for (name, agent, scope) and whether one
-// existed, so `ai add` can report a fresh install, a no-op, or an update.
+// findInstall returns the recorded entry for (name, agent, scope), if any.
 func findInstall(f state.File, name, agent string, scope state.Scope) (state.InstalledEntry, bool) {
 	for _, e := range f.Installed {
 		if e.Name == name && e.Agent == agent && e.Scope == scope {

@@ -110,10 +110,8 @@ func writeListTable(w io.Writer, entries []directory.Integration) error {
 	return err
 }
 
-// installedRecords returns every install the CLI recorded, merging the global
-// state and the project state at the Shopware project root (a missing file yields
-// an empty state, not an error). Each record carries its own agent and scope, so
-// the same integration installed for two agents or scopes yields two rows.
+// installedRecords returns every recorded install, merging global and project
+// state. Each record carries its own agent and scope.
 func installedRecords() ([]state.InstalledEntry, error) {
 	global, err := state.Read()
 	if err != nil {

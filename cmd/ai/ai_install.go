@@ -15,18 +15,14 @@ import (
 	"github.com/shyim/go-version"
 )
 
-// errNotFound marks an HTTP 404 so callers can give a friendlier message than the
-// raw status.
+// errNotFound marks an HTTP 404 for a friendlier caller message.
 var errNotFound = errors.New("not found")
 
-// skillsVersion pins the skills.sh CLI the commands run against, so a
-// shopware-cli release always drives a known skills.sh behavior.
+// skillsVersion pins the skills.sh CLI the commands run against.
 const skillsVersion = "1.5.18"
 
-// skillsAddArgs builds the `npx skills add ...` argv. The source is a GitHub
-// tree URL (see skillSourceURL) that points straight at the skill directory and
-// pins the ref, so no `--skill` is needed. `ai add --dry-run` prints this
-// without running it.
+// skillsAddArgs builds the `npx skills add ...` argv. The source is a tree URL
+// (see skillSourceURL) pinning the skill, so no `--skill` is needed.
 func skillsAddArgs(source, agent string, global, assumeYes bool) []string {
 	argv := []string{
 		"npx", "--yes", "skills@" + skillsVersion, "add", source,
@@ -42,10 +38,8 @@ func skillsAddArgs(source, agent string, global, assumeYes bool) []string {
 	return argv
 }
 
-// validateAgent rejects --agent values skills.sh cannot round-trip (install then
-// remove). It does not check the name against a list — which agents exist is
-// skills.sh's business — only the shape: empty, the "*" wildcard, and comma- or
-// whitespace-separated lists. Install one agent at a time.
+// validateAgent rejects --agent shapes skills.sh cannot round-trip: empty, the
+// "*" wildcard, and comma/whitespace lists. The name itself is not checked.
 func validateAgent(agent string) error {
 	if agent == "" {
 		return errors.New("specify the target agent with --agent (e.g. --agent claude-code)")
@@ -57,16 +51,14 @@ func validateAgent(agent string) error {
 	return nil
 }
 
-// skillSourceURL builds the GitHub tree URL that pins a skill to a ref, e.g.
-// https://github.com/shopware/shopware-cli/tree/0.18.3/skills/shopware-cli.
-// skills.sh honors the ref in this form; a bare owner/repo@ref is ignored and
-// the default branch is installed instead.
+// skillSourceURL builds the GitHub tree URL pinning a skill to a ref, e.g.
+// .../shopware-cli/tree/0.18.3/skills/shopware-cli. A bare owner/repo@ref is
+// ignored by skills.sh (it installs the default branch).
 func skillSourceURL(repoURL, ref, skill string) string {
 	return fmt.Sprintf("https://github.com/%s/tree/%s/skills/%s", ownerRepo(repoURL), ref, skill)
 }
 
-// skillsRemoveArgs builds the `npx skills remove ...` argv. skills.sh never
-// prompts here: the skill, agent and scope are all supplied.
+// skillsRemoveArgs builds the `npx skills remove ...` argv.
 func skillsRemoveArgs(skill, agent string, global bool) []string {
 	argv := []string{
 		"npx", "--yes", "skills@" + skillsVersion, "remove", skill,
@@ -80,12 +72,8 @@ func skillsRemoveArgs(skill, agent string, global bool) []string {
 	return argv
 }
 
-// runSkills runs a skills.sh command via npx in dir (empty = inherit the current
-// directory), streaming its output to out so the user sees exactly what skills.sh
-// did (which files it wrote, where). A project install passes the project root as
-// dir so skills.sh writes the agent config there, not in a subdirectory. It is a
-// package var so tests can substitute it without shelling out. Callers pass stderr
-// as out to keep stdout clean for --format json.
+// runSkills runs a skills.sh command via npx in dir (empty = current directory),
+// streaming output to out. A package var so tests can replace it.
 var runSkills = func(ctx context.Context, argv []string, dir string, out io.Writer) error {
 	if _, err := exec.LookPath(argv[0]); err != nil {
 		return fmt.Errorf("%s not found: installing skills requires Node.js/npx on PATH", argv[0])
@@ -103,9 +91,7 @@ var runSkills = func(ctx context.Context, argv []string, dir string, out io.Writ
 	return nil
 }
 
-// skillsOp returns the skills.sh subcommand from an argv built by
-// skillsAddArgs/skillsRemoveArgs (npx --yes skills@<ver> <op> …), for error
-// messages. It falls back to "command" for an unexpected shape.
+// skillsOp returns the skills.sh subcommand from argv, for error messages.
 func skillsOp(argv []string) string {
 	if len(argv) > 3 {
 		return argv[3]
@@ -114,8 +100,7 @@ func skillsOp(argv []string) string {
 	return "command"
 }
 
-// ownerRepo turns a GitHub repository URL into the "owner/repo" form skills.sh
-// expects (https://github.com/shopware/deployment-helper -> shopware/deployment-helper).
+// ownerRepo turns a GitHub repo URL into "owner/repo" form.
 func ownerRepo(repoURL string) string {
 	s := strings.TrimSuffix(repoURL, ".git")
 	s = strings.TrimPrefix(s, "https://github.com/")
@@ -124,9 +109,8 @@ func ownerRepo(repoURL string) string {
 	return s
 }
 
-// resolveLatestTag returns the highest stable release tag of repoURL, read with
-// `git ls-remote --tags`. It is a package var so tests can substitute it without
-// network access.
+// resolveLatestTag returns the highest stable release tag of repoURL via
+// `git ls-remote`. A package var so tests can replace it.
 var resolveLatestTag = func(ctx context.Context, repoURL string) (string, error) {
 	out, err := exec.CommandContext(ctx, "git", "ls-remote", "--tags", repoURL).Output()
 	if err != nil {
@@ -141,9 +125,8 @@ var resolveLatestTag = func(ctx context.Context, repoURL string) (string, error)
 	return tag, nil
 }
 
-// verifyTag errors unless ref is an existing tag of repoURL. It is a package var
-// so tests can substitute it without network access. skills.sh silently installs
-// the default branch for a bad ref, so an explicit @tag is checked up front.
+// verifyTag errors unless ref is an existing tag of repoURL (skills.sh would
+// silently install the default branch otherwise). A package var for tests.
 var verifyTag = func(ctx context.Context, repoURL, ref string) error {
 	out, err := exec.CommandContext(ctx, "git", "ls-remote", "--tags", repoURL, "refs/tags/"+ref).Output()
 	if err != nil {
@@ -185,18 +168,15 @@ func latestStableTag(lsRemoteLines []string) (string, error) {
 	return bestRaw, nil
 }
 
-// compatReport is the JSON verdict the owner-maintained compatibility check
-// prints. Parsing it lets the CLI tell "incompatible" apart from "could not run"
-// and render a readable message instead of raw JSON.
+// compatReport is the JSON verdict the compatibility check prints.
 type compatReport struct {
 	Compatible bool     `json:"compatible"`
 	Errors     []string `json:"errors"`
 	Warnings   []string `json:"warnings"`
 }
 
-// runCompatCheck fetches the integration's owner-maintained compatibility check
-// at ref and runs it against projectDir. It is a package var so tests can
-// substitute it without network access.
+// runCompatCheck fetches the owner compatibility check at ref and runs it against
+// projectDir. A package var so tests can replace it.
 var runCompatCheck = func(ctx context.Context, repo, skill, ref, projectDir string, out io.Writer) error {
 	url := fmt.Sprintf("https://raw.githubusercontent.com/%s/%s/skills/%s/scripts/compatibility-check.sh", repo, ref, skill)
 
@@ -221,9 +201,8 @@ var runCompatCheck = func(ctx context.Context, repo, skill, ref, projectDir stri
 	return interpretCompatOutput(stdout.Bytes(), strings.TrimSpace(stderr.String()), skill, ref, runErr, out)
 }
 
-// interpretCompatOutput turns a compatibility-check run into a clear outcome: a
-// parsed verdict distinguishes "incompatible" (render the reasons) from "could
-// not run" (no verdict produced, e.g. PHP missing). Raw JSON is never shown.
+// interpretCompatOutput renders the verdict: parsed JSON means incompatible (show
+// reasons), no JSON means the check could not run (e.g. PHP missing).
 func interpretCompatOutput(stdout []byte, stderr, skill, ref string, runErr error, out io.Writer) error {
 	var report compatReport
 	if json.Unmarshal(bytes.TrimSpace(stdout), &report) != nil {
@@ -253,14 +232,10 @@ func interpretCompatOutput(stdout []byte, stderr, skill, ref string, runErr erro
 	return fmt.Errorf("%s@%s is not compatible with this project", skill, ref)
 }
 
-// maxCompatCheckBytes caps the compatibility-check download. The script is a
-// small shell file; anything larger is treated as an error rather than fed to
-// bash.
+// maxCompatCheckBytes caps the compatibility-check download (a small shell file).
 const maxCompatCheckBytes = 1 << 20 // 1 MiB
 
-// httpGet fetches url and returns its body, erroring on any non-200 status. The
-// request has a finite timeout and the body is bounded, so a stalled or
-// oversized response cannot hang the command or exhaust memory.
+// httpGet fetches url with a timeout and a bounded body, erroring on non-200.
 func httpGet(ctx context.Context, url string) ([]byte, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {

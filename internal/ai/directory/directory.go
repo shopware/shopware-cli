@@ -86,16 +86,12 @@ func (d *Directory) Get(name string) (*Integration, bool) {
 
 // ListOptions filters a directory listing.
 type ListOptions struct {
-	// Type, when set, keeps only entries of that type. It accepts any known type
-	// identifier (see knownTypeFilters), including reserved ones that match no
-	// entry yet.
+	// Type, when set, keeps only entries of that type (see knownTypeFilters).
 	Type string
 }
 
-// knownTypeFilters are the type identifiers accepted by List. It includes "mcp",
-// reserved for a future increment: it currently matches no entry, so a "mcp"
-// filter returns an empty list rather than an error. Any other value is
-// rejected.
+// knownTypeFilters are the type identifiers List accepts. "mcp" is reserved and
+// matches no entry yet (empty result, not an error); anything else is rejected.
 var knownTypeFilters = map[string]bool{
 	string(TypeSkill): true,
 	string(TypeMCP):   true,

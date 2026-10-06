@@ -68,17 +68,14 @@ type removeOptions struct {
 	dryRun bool
 }
 
-// performRemove runs the `ai remove` flow and returns the outcome. It removes
-// only what the CLI recorded (a hand-written config is left alone), delegates the
-// uninstall to skills.sh, and drops the record. It lives outside the cobra
-// command so the behaviour can be tested directly.
+// performRemove uninstalls via skills.sh and drops the record, but only for what
+// the CLI recorded; a hand-written config is left alone.
 func performRemove(ctx context.Context, o removeOptions, progress io.Writer) (removeResult, error) {
 	if err := validateAgent(o.agent); err != nil {
 		return removeResult{}, err
 	}
 
-	// The directory gives the canonical name, but a recorded install is authority
-	// enough to remove — even if the integration has since left the directory.
+	// A recorded install is enough to remove, even if it left the directory.
 	entry, known := directory.Load().Get(o.name)
 	removeName := o.name
 	if known {
@@ -111,8 +108,7 @@ func performRemove(ctx context.Context, o removeOptions, progress io.Writer) (re
 
 	next, recorded := state.Remove(current, removeName, o.agent, scope)
 
-	// Nothing recorded and the name is unknown to the directory: a typo rather
-	// than a stale install.
+	// Unknown name with nothing recorded is a typo, not a stale install.
 	if !recorded && !known {
 		return removeResult{}, fmt.Errorf("unknown integration %q (see `shopware-cli ai list`)", o.name)
 	}
@@ -134,8 +130,7 @@ func performRemove(ctx context.Context, o removeOptions, progress io.Writer) (re
 		return removeResult{}, err
 	}
 
-	// Drop the record; when nothing is left, remove the state file rather than
-	// leave an empty one behind.
+	// Remove the state file once empty instead of leaving an empty one.
 	save := saveState
 	if len(next.Installed) == 0 {
 		save = func(state.File) error { return clearState() }

@@ -102,10 +102,8 @@ func readFrom(p string) (File, error) {
 	return f, nil
 }
 
-// Upsert returns f with e added, or with the existing entry that has the same
-// (name, agent, scope) replaced. The same integration can be installed for
-// different agents and scopes, so all three fields form the identity. This
-// makes a repeated `ai add` idempotent: the list does not grow.
+// Upsert adds e, or replaces the entry with the same (name, agent, scope) so a
+// repeated add does not grow the list.
 func Upsert(f File, e InstalledEntry) File {
 	for i := range f.Installed {
 		x := f.Installed[i]
@@ -166,9 +164,8 @@ func ClearProject(projectRoot string) error {
 	return clearAt(projectPath(projectRoot))
 }
 
-// clearAt removes the state file and prunes the ai/ directory and its parent when
-// they become empty (os.Remove only removes an empty directory, so a parent that
-// still holds other files is left alone). A missing file is not an error.
+// clearAt removes the state file and prunes now-empty parent dirs (os.Remove
+// leaves non-empty ones). A missing file is not an error.
 func clearAt(p string) error {
 	if err := os.Remove(p); err != nil && !errors.Is(err, fs.ErrNotExist) {
 		return err
@@ -181,9 +178,7 @@ func clearAt(p string) error {
 	return nil
 }
 
-// saveTo writes an install-state file atomically: it writes a temporary file in
-// the target directory and renames it into place, so a crash mid-write never
-// leaves a partial file. The parent directories are created as needed.
+// saveTo writes the file atomically (temp file + rename) and creates parent dirs.
 func saveTo(p string, f File) error {
 	f.Version = FileVersion
 	if f.Installed == nil {
