@@ -26,20 +26,14 @@ var extensionValidateCmd = &cobra.Command{
 	RunE: func(cmd *cobra.Command, args []string) error {
 		logger := logging.FromContext(cmd.Context())
 		storeCompliance, _ := cmd.Flags().GetBool("store-compliance")
-		reportingFormat, err := extensionValidationFormat(cmd)
-		if err != nil {
-			return err
-		}
+		// Reporting format and tool selection were validated in PreRunE.
+		reportingFormat, _ := extensionValidationFormat(cmd)
 		checkAgainst, _ := cmd.Flags().GetString("check-against")
 		only, _ := cmd.Flags().GetString("only")
 		exclude, _ := cmd.Flags().GetString("exclude")
 		noCopy, _ := cmd.Flags().GetBool("no-copy")
-		verifier.WarnOnDeprecatedToolName(cmd.Context(), only, exclude)
 
-		tools, statuses, err := selectExtensionValidationTools(only, exclude)
-		if err != nil {
-			return err
-		}
+		tools, statuses, _ := selectExtensionValidationTools(only, exclude)
 		needsTools := slices.ContainsFunc(tools, requiresToolSetup)
 
 		path, err := filepath.Abs(args[0])
@@ -184,7 +178,7 @@ func init() {
 	extensionValidateCmd.PersistentFlags().String("reporter", "", "Reporting format (summary, json, github, gitlab, junit, markdown)")
 	extensionValidateCmd.PersistentFlags().String("check-against", "highest", "Check against Shopware Version (highest, lowest)")
 	extensionValidateCmd.PersistentFlags().String("only", "", "Run only these validation checks (comma-separated, e.g. phpstan,eslint)")
-	extensionValidateCmd.PersistentFlags().String("exclude", "", "Exclude specific tools by name (comma-separated, e.g. phpstan,eslint)")
+	extensionValidateCmd.PersistentFlags().String("exclude", "", "Skip these validation checks (comma-separated, e.g. phpstan,eslint); when --only is set, excluded checks must be selected there")
 	extensionValidateCmd.PersistentFlags().Bool("no-copy", false, "Do not copy extension files to temporary directory")
 	extensionValidateCmd.MarkFlagsMutuallyExclusive("format", "reporter")
 	_ = extensionValidateCmd.PersistentFlags().MarkDeprecated("full", "all validation checks now run by default; omit --full; to restore old behaviour use --only builtin")
@@ -200,6 +194,10 @@ func init() {
 			return fmt.Errorf("invalid --check-against value %q, allowed values: highest, lowest", mode)
 		}
 
-		return nil
+		only, _ := cmd.Flags().GetString("only")
+		exclude, _ := cmd.Flags().GetString("exclude")
+		verifier.WarnOnDeprecatedToolName(cmd.Context(), only, exclude)
+		_, _, err := selectExtensionValidationTools(only, exclude)
+		return err
 	}
 }

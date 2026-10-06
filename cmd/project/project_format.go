@@ -18,20 +18,25 @@ var projectFormatCmd = &cobra.Command{
 	Short: "Format a project's code with PHP-CS-Fixer and Prettier",
 	Long:  "Format the project's own code, such as extensions in custom/ and configured bundles, and change the files directly. Packages that Composer installs into vendor/ are not changed. PHP-CS-Fixer uses the project's .php-cs-fixer.dist.php if present; Prettier always uses the CLI's own config. Use --dry-run to only report files that would change.",
 	Args:  cobra.MaximumNArgs(1),
-	RunE: func(cmd *cobra.Command, args []string) error {
+	PreRunE: func(cmd *cobra.Command, args []string) error {
 		only, _ := cmd.Flags().GetString("only")
 		exclude, _ := cmd.Flags().GetString("exclude")
 		verifier.WarnOnDeprecatedToolName(cmd.Context(), only, exclude)
+		_, _, err := selectProjectTools(verifier.GetToolsOf[verifier.FormatTool](), only, exclude, "formatters")
+		return err
+	},
+	RunE: func(cmd *cobra.Command, args []string) error {
+		only, _ := cmd.Flags().GetString("only")
+		exclude, _ := cmd.Flags().GetString("exclude")
 
-		tools, statuses, err := selectProjectTools(verifier.GetToolsOf[verifier.FormatTool](), only, exclude, "formatters")
-		if err != nil {
-			return err
-		}
+		// Tool selection was validated in PreRunE.
+		tools, statuses, _ := selectProjectTools(verifier.GetToolsOf[verifier.FormatTool](), only, exclude, "formatters")
 		if err := verifier.SetupTools(cmd.Context(), cmd.Root().Version); err != nil {
 			return err
 		}
 		dryRun, _ := cmd.Flags().GetBool("dry-run")
 
+		var err error
 		projectPath := ""
 
 		if len(args) > 0 {
@@ -73,5 +78,5 @@ func init() {
 	projectRootCmd.AddCommand(projectFormatCmd)
 	projectFormatCmd.PersistentFlags().String("only", "", "Run only the specified formatters (comma-separated, e.g. prettier,php-cs-fixer)")
 	projectFormatCmd.PersistentFlags().Bool("dry-run", false, "Report files that would change, without changing them")
-	projectFormatCmd.PersistentFlags().String("exclude", "", "Exclude formatters after applying --only (comma-separated, e.g. prettier,php-cs-fixer)")
+	projectFormatCmd.PersistentFlags().String("exclude", "", "Skip these formatters (comma-separated, e.g. prettier,php-cs-fixer); when --only is set, excluded formatters must be selected there")
 }

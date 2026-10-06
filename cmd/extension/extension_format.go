@@ -19,7 +19,7 @@ var extensionFormat = &cobra.Command{
 	Use:   "format path",
 	Short: "Format an extension's PHP, JavaScript, and SCSS files",
 	Args:  cobra.ExactArgs(1),
-	RunE: func(cmd *cobra.Command, args []string) error {
+	PreRunE: func(cmd *cobra.Command, args []string) error {
 		allTools := verifier.GetToolsOf[verifier.FormatTool]()
 		only, _ := cmd.Flags().GetString("only")
 		exclude, _ := cmd.Flags().GetString("exclude")
@@ -36,6 +36,17 @@ var extensionFormat = &cobra.Command{
 		if len(tools) == 0 {
 			return errors.New("no formatters selected after applying --exclude")
 		}
+
+		return nil
+	},
+	RunE: func(cmd *cobra.Command, args []string) error {
+		allTools := verifier.GetToolsOf[verifier.FormatTool]()
+		only, _ := cmd.Flags().GetString("only")
+		exclude, _ := cmd.Flags().GetString("exclude")
+
+		// Tool selection was validated in PreRunE.
+		requestedTools, _ := allTools.Only(only)
+		tools, _ := requestedTools.Exclude(exclude)
 
 		dryRun, _ := cmd.Flags().GetBool("dry-run")
 
@@ -75,6 +86,6 @@ var extensionFormat = &cobra.Command{
 func init() {
 	extensionRootCmd.AddCommand(extensionFormat)
 	extensionFormat.Flags().String("only", "", "Run only the specified formatters (comma-separated, e.g. prettier,php-cs-fixer)")
-	extensionFormat.Flags().String("exclude", "", "Skip these formatters; must be in the --only list if set (comma-separated, e.g. prettier,php-cs-fixer)")
+	extensionFormat.Flags().String("exclude", "", "Skip these formatters (comma-separated, e.g. prettier,php-cs-fixer); when --only is set, excluded formatters must be selected there")
 	extensionFormat.Flags().Bool("dry-run", false, "Run in dry run mode")
 }

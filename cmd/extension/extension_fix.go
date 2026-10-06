@@ -19,7 +19,7 @@ var extensionFixCmd = &cobra.Command{
 	Use:   "fix path",
 	Short: "Apply code-quality fixes to an extension",
 	Args:  cobra.ExactArgs(1),
-	RunE: func(cmd *cobra.Command, args []string) error {
+	PreRunE: func(cmd *cobra.Command, args []string) error {
 		allTools := verifier.GetToolsOf[verifier.FixTool]()
 		only, _ := cmd.Flags().GetString("only")
 		exclude, _ := cmd.Flags().GetString("exclude")
@@ -36,6 +36,17 @@ var extensionFixCmd = &cobra.Command{
 		if len(tools) == 0 {
 			return errors.New("no fixers selected after applying --exclude")
 		}
+
+		return nil
+	},
+	RunE: func(cmd *cobra.Command, args []string) error {
+		allTools := verifier.GetToolsOf[verifier.FixTool]()
+		only, _ := cmd.Flags().GetString("only")
+		exclude, _ := cmd.Flags().GetString("exclude")
+
+		// Tool selection was validated in PreRunE.
+		requestedTools, _ := allTools.Only(only)
+		tools, _ := requestedTools.Exclude(exclude)
 
 		allowNonGit, _ := cmd.Flags().GetBool("allow-non-git")
 
@@ -81,6 +92,6 @@ var extensionFixCmd = &cobra.Command{
 func init() {
 	extensionRootCmd.AddCommand(extensionFixCmd)
 	extensionFixCmd.Flags().String("only", "", "Run only the specified fixers (comma-separated, e.g. eslint,rector)")
-	extensionFixCmd.Flags().String("exclude", "", "Skip these fixers; must be in the --only list if set (comma-separated, e.g. eslint,rector)")
+	extensionFixCmd.Flags().String("exclude", "", "Skip these fixers (comma-separated, e.g. eslint,rector); when --only is set, excluded fixers must be selected there")
 	extensionFixCmd.Flags().Bool("allow-non-git", false, "Allow fix to run outside a Git repository")
 }

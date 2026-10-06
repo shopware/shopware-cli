@@ -20,26 +20,31 @@ var projectValidateCmd = &cobra.Command{
 	Short: "Run static analysis and Shopware checks on a project",
 	Long:  "Validate the project's own code, such as extensions in custom/ and configured bundles. Packages that Composer installs into vendor/ are not validated. Runs on a temporary copy unless --no-copy is passed.",
 	Args:  cobra.MaximumNArgs(1),
-	RunE: func(cmd *cobra.Command, args []string) error {
-		reportingFormat, err := projectValidationFormat(cmd)
-		if err != nil {
+	PreRunE: func(cmd *cobra.Command, args []string) error {
+		if _, err := projectValidationFormat(cmd); err != nil {
 			return err
 		}
 		only, _ := cmd.Flags().GetString("only")
 		exclude, _ := cmd.Flags().GetString("exclude")
 		verifier.WarnOnDeprecatedToolName(cmd.Context(), only, exclude)
+		_, _, err := selectProjectTools(verifier.GetToolsOf[verifier.CheckTool](), only, exclude, "validation checks")
+		return err
+	},
+	RunE: func(cmd *cobra.Command, args []string) error {
+		// Reporting format and tool selection were validated in PreRunE.
+		reportingFormat, _ := projectValidationFormat(cmd)
+		only, _ := cmd.Flags().GetString("only")
+		exclude, _ := cmd.Flags().GetString("exclude")
 
 		checkers := verifier.GetToolsOf[verifier.CheckTool]()
-		tools, statuses, err := selectProjectTools(checkers, only, exclude, "validation checks")
-		if err != nil {
-			return err
-		}
+		tools, statuses, _ := selectProjectTools(checkers, only, exclude, "validation checks")
 		if err := verifier.SetupTools(cmd.Context(), cmd.Root().Version); err != nil {
 			return err
 		}
 		noCopy, _ := cmd.Flags().GetBool("no-copy")
 		localOnly, _ := cmd.Flags().GetBool("local-only")
 
+		var err error
 		projectPath := ""
 
 		if len(args) > 0 {
@@ -116,8 +121,8 @@ func init() {
 	projectRootCmd.AddCommand(projectValidateCmd)
 	projectValidateCmd.PersistentFlags().String("format", "", "Report format (summary, json, github, gitlab, junit, markdown; auto-detected if unset)")
 	projectValidateCmd.PersistentFlags().String("reporter", "", "Reporting format (summary, json, github, gitlab, junit, markdown)")
-	projectValidateCmd.PersistentFlags().String("only", "", "Run only the specified tools (comma-separated). Available: phpstan, eslint, stylelint, storefront-twig, builtin (legacy alias: sw-cli, deprecated)")
-	projectValidateCmd.PersistentFlags().String("exclude", "", "Skip these tools (comma-separated); with --only, each must be selected there. Names: phpstan, eslint, stylelint, storefront-twig, builtin (legacy alias: sw-cli, deprecated)")
+	projectValidateCmd.PersistentFlags().String("only", "", "Run only these validation checks (comma-separated, e.g. phpstan,eslint)")
+	projectValidateCmd.PersistentFlags().String("exclude", "", "Skip these validation checks (comma-separated, e.g. phpstan,eslint); when --only is set, excluded checks must be selected there")
 	projectValidateCmd.PersistentFlags().Bool("no-copy", false, "Validate the project directory itself, not a temporary copy")
 	projectValidateCmd.PersistentFlags().Bool("local-only", false, "Validate only extensions in custom/* folders")
 	projectValidateCmd.MarkFlagsMutuallyExclusive("format", "reporter")

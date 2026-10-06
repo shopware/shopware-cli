@@ -18,19 +18,24 @@ var projectFixCmd = &cobra.Command{
 	Short: "Apply code-quality fixes to a project",
 	Long:  "Run code-quality fixers on the project's own code, such as extensions in custom/ and configured bundles, and change the files directly. Packages that Composer installs into vendor/ are not changed. Requires a Git repository so the changes can be reviewed, unless --allow-non-git is passed.",
 	Args:  cobra.MaximumNArgs(1),
-	RunE: func(cmd *cobra.Command, args []string) error {
+	PreRunE: func(cmd *cobra.Command, args []string) error {
 		only, _ := cmd.Flags().GetString("only")
 		exclude, _ := cmd.Flags().GetString("exclude")
 		verifier.WarnOnDeprecatedToolName(cmd.Context(), only, exclude)
+		_, _, err := selectProjectTools(verifier.GetToolsOf[verifier.FixTool](), only, exclude, "fixers")
+		return err
+	},
+	RunE: func(cmd *cobra.Command, args []string) error {
+		only, _ := cmd.Flags().GetString("only")
+		exclude, _ := cmd.Flags().GetString("exclude")
 
-		tools, statuses, err := selectProjectTools(verifier.GetToolsOf[verifier.FixTool](), only, exclude, "fixers")
-		if err != nil {
-			return err
-		}
+		// Tool selection was validated in PreRunE.
+		tools, statuses, _ := selectProjectTools(verifier.GetToolsOf[verifier.FixTool](), only, exclude, "fixers")
 		if err := verifier.SetupTools(cmd.Context(), cmd.Root().Version); err != nil {
 			return err
 		}
 
+		var err error
 		projectPath := ""
 
 		if len(args) > 0 {
@@ -79,5 +84,5 @@ func init() {
 	projectRootCmd.AddCommand(projectFixCmd)
 	projectFixCmd.PersistentFlags().String("only", "", "Run only the specified fixers (comma-separated, e.g. eslint,rector)")
 	projectFixCmd.PersistentFlags().Bool("allow-non-git", false, "Allow fix to run outside a Git repository")
-	projectFixCmd.PersistentFlags().String("exclude", "", "Exclude fixers after applying --only (comma-separated, e.g. eslint,rector)")
+	projectFixCmd.PersistentFlags().String("exclude", "", "Skip these fixers (comma-separated, e.g. eslint,rector); when --only is set, excluded fixers must be selected there")
 }
