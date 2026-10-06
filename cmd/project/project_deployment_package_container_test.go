@@ -23,7 +23,7 @@ func newContainerTestCommand(t *testing.T, args []string) (*cobra.Command, *byte
 	root := &cobra.Command{Use: "project", SilenceUsage: true, SilenceErrors: true}
 	root.PersistentFlags().StringVar(&projectConfigPath, "project-config", "", "")
 	root.PersistentFlags().StringVarP(&environmentName, "env", "e", "", "")
-	deployment := &cobra.Command{Use: "deployment"}
+	deployment := &cobra.Command{Use: "deploy"}
 	pack := &cobra.Command{Use: "package"}
 	container := &cobra.Command{
 		Use:  projectDeploymentPackageContainerCmd.Use,
@@ -42,7 +42,7 @@ func newContainerTestCommand(t *testing.T, args []string) (*cobra.Command, *byte
 	out, logs := new(bytes.Buffer), new(bytes.Buffer)
 	root.SetOut(out)
 	root.SetErr(logs)
-	root.SetArgs(append([]string{"deployment", "package", "container"}, args...))
+	root.SetArgs(append([]string{"deploy", "package", "container"}, args...))
 	return root, out, logs
 }
 

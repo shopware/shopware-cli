@@ -33,18 +33,31 @@ type EnvironmentConfig struct {
 }
 
 type EnvironmentSSHConfig struct {
-	// SSH host name or IP address
-	Host string `yaml:"host" jsonschema:"required"`
+	// SSH host name or IP address for a single target. Mutually exclusive with hosts.
+	Host string `yaml:"host,omitempty"`
 	// SSH user. Defaults to the user configured in ~/.ssh/config or the current user
 	User string `yaml:"user,omitempty"`
 	// SSH port. Defaults to 22
 	Port int `yaml:"port,omitempty"`
-	// Absolute path of the Shopware project root on the remote host
-	Directory string `yaml:"directory" jsonschema:"required"`
+	// Absolute path of the Shopware project root on the remote host. Required on the single target or inherited/overridden by each named host.
+	Directory string `yaml:"directory,omitempty"`
 	// Path to the SSH private key file. Defaults to the ssh agent or the default key files
 	IdentityFile string `yaml:"identity_file,omitempty"`
 	// PHP binary used for PHP and console commands on the remote host (e.g. "/usr/bin/php8.3"). Defaults to "php"
 	PHPBinary string `yaml:"php_binary,omitempty"`
+	// Persistent files and directories linked into SSH deployment releases.
+	Shared *EnvironmentSSHSharedConfig `yaml:"shared,omitempty"`
+	// Optional CacheTool reset of web/FPM OPcache after SSH activation. Disabled by default.
+	// When unset or disabled, targets whose hostname -f contains de-nserver.de
+	// instead receive an account-scoped SIGTERM for PHP processes, excluding the
+	// deployment process. Automatic process restart is refused for the root account.
+	Cachetool *EnvironmentSSHCachetoolConfig `yaml:"cachetool,omitempty"`
+	// Named SSH targets, mutually exclusive with host. Persistent shared directories must be shared across hosts; releases, current and .shopware-cli remain host-local.
+	Hosts map[string]*EnvironmentSSHHostConfig `yaml:"hosts,omitempty"`
+	// Named host running migrations. Required with multiple hosts; defaults to the only host otherwise.
+	MigrationHost string `yaml:"migration_host,omitempty"`
+	// Maximum concurrent host operations. Zero uses the default of 2; the maximum is 32.
+	Parallelism int `yaml:"parallelism,omitempty" jsonschema:"minimum=0,maximum=32"`
 }
 
 type Config struct {
@@ -869,6 +882,19 @@ func WriteConfig(cfg *Config, dir string) error {
 }
 
 func ReadConfig(ctx context.Context, fileName string, allowFallback bool) (*Config, error) {
+	config, err := readConfig(ctx, fileName, allowFallback)
+	if err != nil {
+		return nil, err
+	}
+	if err := config.validateSSHCachetool(); err != nil {
+		return nil, fmt.Errorf("ReadConfig(%s): %v", fileName, err)
+	}
+	return config, nil
+}
+
+// readConfig permits partial included configurations; CacheTool is validated by
+// ReadConfig only after all includes and local overrides have been merged.
+func readConfig(ctx context.Context, fileName string, allowFallback bool) (*Config, error) {
 	config := &Config{foundConfig: false}
 
 	_, err := os.Stat(fileName)
@@ -922,7 +948,7 @@ func ReadConfig(ctx context.Context, fileName string, allowFallback bool) (*Conf
 
 	if len(config.AdditionalConfigs) > 0 {
 		for _, additionalConfigFile := range config.AdditionalConfigs {
-			additionalConfig, err := ReadConfig(ctx, additionalConfigFile, allowFallback)
+			additionalConfig, err := readConfig(ctx, additionalConfigFile, allowFallback)
 			if err != nil {
 				return nil, fmt.Errorf("cannot read included config %s: %w", additionalConfigFile, err)
 			}
@@ -931,6 +957,7 @@ func ReadConfig(ctx context.Context, fileName string, allowFallback bool) (*Conf
 			if err != nil {
 				return nil, fmt.Errorf("cannot merge included config %s: %w", additionalConfigFile, err)
 			}
+			config.applyIncludedCachetoolEnabled(additionalConfig)
 		}
 	}
 

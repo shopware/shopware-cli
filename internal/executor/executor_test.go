@@ -54,6 +54,18 @@ func TestNewUnsupportedType(t *testing.T) {
 	assert.Contains(t, err.Error(), "unsupported environment type: unknown")
 }
 
+func TestNewSSHExecutorRequiresResolvedHost(t *testing.T) {
+	cfg := &shop.EnvironmentConfig{Type: TypeSSH, SSH: &shop.EnvironmentSSHConfig{
+		Hosts: map[string]*shop.EnvironmentSSHHostConfig{
+			"web": {Host: "web.example.com", Directory: "/srv/shop/current"},
+		},
+	}}
+
+	target, err := New("/project", cfg, &shop.Config{})
+	require.ErrorContains(t, err, "requires a single-host environment with ssh.host")
+	assert.Nil(t, target)
+}
+
 func TestLocalExecutorConsoleCommand(t *testing.T) {
 	t.Setenv("PHP_BINARY", "")
 	exec := &LocalExecutor{projectRoot: "/project"}

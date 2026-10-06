@@ -13,9 +13,18 @@ import (
 )
 
 var projectDeploymentCmd = &cobra.Command{
-	Use:   "deployment",
-	Short: "Package a project into immutable deployment artifacts",
-	Long:  "Create immutable project deployments separately from rolling them out to an environment.",
+	Use:   "deploy",
+	Short: "Manage project deployments",
+	Long: `Initialize deployment environments and create immutable deployments separately from rolling them out.
+
+For multiple SSH hosts, rollout and rollback target the entire group. Persistent
+shared paths must already be provisioned consistently across hosts. Deployment
+Helper runs once on migration_host; each host prepares and activates its own release.
+Activation is sequential, not atomic across hosts; a failure stops further switches.
+
+Init prompts once on migration_host and verifies shared runtime configuration on
+all hosts. Prune applies retention independently to each host and reports partial
+failures. List shows all hosts; logs use migration_host.`,
 }
 
 func init() {
