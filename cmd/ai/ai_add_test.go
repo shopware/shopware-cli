@@ -119,40 +119,22 @@ func setupAdd(t *testing.T) *skillsCall {
 	return rec
 }
 
-// runAdd runs `ai add` in isolation: it resets flags, parses args, and invokes
-// RunE directly. Calling Execute() on the shared command tree would delegate to
-// the global root (os.Args), so we drive the subcommand itself.
-func runAdd(t *testing.T, args ...string) (string, error) {
+// runAdd drives the add flow directly (not the cobra layer); progress output is
+// discarded. All runAdd calls in one test share the config dir set by setupAdd.
+func runAdd(t *testing.T, o addOptions) (addResult, error) {
 	t.Helper()
 
-	// Reset the shared command's flags so values do not leak between runs.
-	for name, def := range map[string]string{
-		"agent": "", "global": "false", "dry-run": "false", "format": "table",
-	} {
-		_ = aiAddCmd.Flags().Set(name, def)
-	}
+	var progress bytes.Buffer
 
-	var buf bytes.Buffer
-	aiAddCmd.SetOut(&buf)
-	aiAddCmd.SetErr(&buf)
-	aiAddCmd.SetContext(t.Context())
-
-	if err := aiAddCmd.ParseFlags(args); err != nil {
-		return buf.String(), err
-	}
-
-	err := aiAddCmd.RunE(aiAddCmd, aiAddCmd.Flags().Args())
-
-	return buf.String(), err
+	return performAdd(t.Context(), o, &progress)
 }
 
 func TestAddDryRunTouchesNothing(t *testing.T) {
 	rec := setupAdd(t)
 
-	out, err := runAdd(t, "shopware-cli", "--agent", "claude-code", "--global", "--dry-run")
+	res, err := runAdd(t, addOptions{name: "shopware-cli", agent: "claude-code", global: true, dryRun: true})
 	require.NoError(t, err)
-
-	assert.Contains(t, out, "[dry-run]")
+	assert.True(t, res.DryRun)
 	assert.Equal(t, 0, rec.calls, "dry-run must not run skills")
 
 	st, err := state.Read()
@@ -163,28 +145,25 @@ func TestAddDryRunTouchesNothing(t *testing.T) {
 func TestAddInstallsAndIsIdempotent(t *testing.T) {
 	rec := setupAdd(t)
 
-	_, err := runAdd(t, "shopware-cli", "--agent", "claude-code", "--global")
+	res, err := runAdd(t, addOptions{name: "shopware-cli", agent: "claude-code", global: true})
 	require.NoError(t, err)
 	assert.Equal(t, 1, rec.calls)
-	joined := strings.Join(rec.lastArgv, " ")
-	// The test root has an empty version, so a bundled install falls back to the
-	// resolved latest tag (stubbed to 0.1.9) and pins it via a tree URL.
-	assert.Contains(t, joined, "github.com/shopware/shopware-cli/tree/0.1.9/skills/shopware-cli")
-	assert.Contains(t, joined, "--agent claude-code")
-	assert.Contains(t, joined, "--global")
+	assert.Equal(t, actionInstalled, res.Action)
+	// An empty CLI version makes a bundled install fall back to the resolved
+	// latest tag (stubbed to 0.1.9), pinned via a tree URL.
+	assert.Contains(t, strings.Join(rec.lastArgv, " "), "github.com/shopware/shopware-cli/tree/0.1.9/skills/shopware-cli")
 
 	st, err := state.Read()
 	require.NoError(t, err)
 	require.Len(t, st.Installed, 1)
-	assert.Equal(t, "shopware-cli", st.Installed[0].Name)
 	assert.Equal(t, state.ScopeGlobal, st.Installed[0].Scope)
 
-	// Second identical add: skills.sh runs again (it is idempotent and owns the
-	// disk), the record stays one entry, and the outcome is "Already installed".
-	out, err := runAdd(t, "shopware-cli", "--agent", "claude-code", "--global")
+	// Second identical add: skills.sh runs again (idempotent, owns the disk), the
+	// record stays one entry, and the outcome is reported as unchanged.
+	res, err = runAdd(t, addOptions{name: "shopware-cli", agent: "claude-code", global: true})
 	require.NoError(t, err)
 	assert.Equal(t, 2, rec.calls, "repeated add re-runs skills.sh")
-	assert.Contains(t, out, "Already installed")
+	assert.Equal(t, actionUnchanged, res.Action)
 
 	st, err = state.Read()
 	require.NoError(t, err)
@@ -194,27 +173,28 @@ func TestAddInstallsAndIsIdempotent(t *testing.T) {
 func TestAddReportsAction(t *testing.T) {
 	setupAdd(t)
 
-	out, err := runAdd(t, "shopware-cli@0.18.3", "--agent", "claude-code", "--global")
+	res, err := runAdd(t, addOptions{name: "shopware-cli@0.18.3", agent: "claude-code", global: true})
 	require.NoError(t, err)
-	assert.Contains(t, out, "Installed shopware-cli")
+	assert.Equal(t, actionInstalled, res.Action)
 
-	out, err = runAdd(t, "shopware-cli@0.18.3", "--agent", "claude-code", "--global")
+	res, err = runAdd(t, addOptions{name: "shopware-cli@0.18.3", agent: "claude-code", global: true})
 	require.NoError(t, err)
-	assert.Contains(t, out, "Already installed")
+	assert.Equal(t, actionUnchanged, res.Action)
 
-	out, err = runAdd(t, "shopware-cli@0.18.4", "--agent", "claude-code", "--global")
+	res, err = runAdd(t, addOptions{name: "shopware-cli@0.18.4", agent: "claude-code", global: true})
 	require.NoError(t, err)
-	assert.Contains(t, out, "Updated shopware-cli")
-	assert.Contains(t, out, "0.18.3 → 0.18.4")
+	assert.Equal(t, actionUpdated, res.Action)
+	assert.Equal(t, "0.18.3", res.PreviousRevision)
+	assert.Equal(t, "0.18.4", res.ResolvedRevision)
 }
 
-func TestAddProjectScopeWritesToCurrentDir(t *testing.T) {
+func TestAddProjectScopeWritesToProjectRoot(t *testing.T) {
 	rec := setupAdd(t)
 
-	// No --global → project scope, installed into the current directory.
-	_, err := runAdd(t, "shopware-cli", "--agent", "claude-code")
+	res, err := runAdd(t, addOptions{name: "shopware-cli", agent: "claude-code"})
 	require.NoError(t, err)
 	assert.Equal(t, 1, rec.calls)
+	assert.Equal(t, state.ScopeProject, res.Scope)
 	assert.NotContains(t, strings.Join(rec.lastArgv, " "), "--global")
 
 	cwd, err := os.Getwd()
@@ -234,12 +214,11 @@ func TestAddGitDeliveryResolvesLatestTagAndInstalls(t *testing.T) {
 	rec := setupAdd(t) // stubs resolveLatestTag → "0.1.9"
 
 	// No @tag → resolve the latest release from the git repository.
-	_, err := runAdd(t, "deployment-helper", "--agent", "claude-code")
+	res, err := runAdd(t, addOptions{name: "deployment-helper", agent: "claude-code"})
 	require.NoError(t, err)
 	assert.Equal(t, 1, rec.calls)
-
-	joined := strings.Join(rec.lastArgv, " ")
-	assert.Contains(t, joined, "github.com/shopware/deployment-helper/tree/0.1.9/skills/deployment-helper")
+	assert.Equal(t, "0.1.9", res.ResolvedRevision)
+	assert.Contains(t, strings.Join(rec.lastArgv, " "), "github.com/shopware/deployment-helper/tree/0.1.9/skills/deployment-helper")
 
 	cwd, err := os.Getwd()
 	require.NoError(t, err)
@@ -255,7 +234,7 @@ func TestAddGitCompatCheckFailureAbortsInstall(t *testing.T) {
 		return errors.New("PHP 8.2+ required, found 8.1")
 	}
 
-	_, err := runAdd(t, "deployment-helper", "--agent", "claude-code")
+	_, err := runAdd(t, addOptions{name: "deployment-helper", agent: "claude-code"})
 	assert.ErrorContains(t, err, "PHP 8.2+")
 	assert.Equal(t, 0, rec.calls, "install must not run when the compatibility check fails")
 
@@ -269,7 +248,7 @@ func TestAddGitCompatCheckFailureAbortsInstall(t *testing.T) {
 func TestAddGitDeliveryGlobalNotSupported(t *testing.T) {
 	rec := setupAdd(t)
 
-	_, err := runAdd(t, "deployment-helper", "--agent", "claude-code", "--global")
+	_, err := runAdd(t, addOptions{name: "deployment-helper", agent: "claude-code", global: true})
 	assert.ErrorContains(t, err, "must be installed into a project")
 	assert.Equal(t, 0, rec.calls)
 }
@@ -277,16 +256,16 @@ func TestAddGitDeliveryGlobalNotSupported(t *testing.T) {
 func TestAddGuards(t *testing.T) {
 	rec := setupAdd(t)
 
-	_, err := runAdd(t, "does-not-exist", "--agent", "claude-code", "--global")
+	_, err := runAdd(t, addOptions{name: "does-not-exist", agent: "claude-code", global: true})
 	assert.ErrorContains(t, err, "unknown integration")
 
-	_, err = runAdd(t, "shopware-cli", "--global")
+	_, err = runAdd(t, addOptions{name: "shopware-cli", global: true})
 	assert.ErrorContains(t, err, "--agent")
 
-	_, err = runAdd(t, "shopware-cli", "--agent", "*", "--global")
+	_, err = runAdd(t, addOptions{name: "shopware-cli", agent: "*", global: true})
 	assert.ErrorContains(t, err, "single agent")
 
-	_, err = runAdd(t, "shopware-cli", "--agent", "claude-code,cursor", "--global")
+	_, err = runAdd(t, addOptions{name: "shopware-cli", agent: "claude-code,cursor", global: true})
 	assert.ErrorContains(t, err, "single agent")
 
 	assert.Equal(t, 0, rec.calls)

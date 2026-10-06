@@ -13,42 +13,27 @@ import (
 	"github.com/shopware/shopware-cli/internal/ai/state"
 )
 
-// runRemove runs `ai remove` in isolation, mirroring runAdd.
-func runRemove(t *testing.T, args ...string) (string, error) {
+// runRemove drives the remove flow directly (not the cobra layer).
+func runRemove(t *testing.T, o removeOptions) (removeResult, error) {
 	t.Helper()
 
-	for name, def := range map[string]string{
-		"agent": "", "global": "false", "dry-run": "false", "format": "table",
-	} {
-		_ = aiRemoveCmd.Flags().Set(name, def)
-	}
+	var progress bytes.Buffer
 
-	var buf bytes.Buffer
-	aiRemoveCmd.SetOut(&buf)
-	aiRemoveCmd.SetErr(&buf)
-	aiRemoveCmd.SetContext(t.Context())
-
-	if err := aiRemoveCmd.ParseFlags(args); err != nil {
-		return buf.String(), err
-	}
-
-	err := aiRemoveCmd.RunE(aiRemoveCmd, aiRemoveCmd.Flags().Args())
-
-	return buf.String(), err
+	return performRemove(t.Context(), o, &progress)
 }
 
 func TestRemoveRecordedInstall(t *testing.T) {
 	rec := setupAdd(t)
 
-	_, err := runAdd(t, "shopware-cli", "--agent", "claude-code")
+	_, err := runAdd(t, addOptions{name: "shopware-cli", agent: "claude-code"})
 	require.NoError(t, err)
 	require.Equal(t, 1, rec.calls)
 
-	out, err := runRemove(t, "shopware-cli", "--agent", "claude-code")
+	res, err := runRemove(t, removeOptions{name: "shopware-cli", agent: "claude-code"})
 	require.NoError(t, err)
+	assert.True(t, res.Removed)
 	assert.Equal(t, 2, rec.calls) // add + remove
 	assert.Contains(t, strings.Join(rec.lastArgv, " "), "remove shopware-cli --agent claude-code")
-	assert.Contains(t, out, "Removed shopware-cli")
 
 	cwd, err := os.Getwd()
 	require.NoError(t, err)
@@ -61,23 +46,23 @@ func TestRemoveRecordedInstall(t *testing.T) {
 func TestRemoveNotRecordedIsNoOp(t *testing.T) {
 	rec := setupAdd(t)
 
-	out, err := runRemove(t, "shopware-cli", "--agent", "claude-code")
+	res, err := runRemove(t, removeOptions{name: "shopware-cli", agent: "claude-code"})
 	require.NoError(t, err)
+	assert.False(t, res.Removed)
 	assert.Equal(t, 0, rec.calls, "must not touch skills when nothing is recorded")
-	assert.Contains(t, out, "nothing to remove")
 }
 
 func TestRemoveDryRunTouchesNothing(t *testing.T) {
 	rec := setupAdd(t)
 
-	_, err := runAdd(t, "shopware-cli", "--agent", "claude-code")
+	_, err := runAdd(t, addOptions{name: "shopware-cli", agent: "claude-code"})
 	require.NoError(t, err)
 	require.Equal(t, 1, rec.calls)
 
-	out, err := runRemove(t, "shopware-cli", "--agent", "claude-code", "--dry-run")
+	res, err := runRemove(t, removeOptions{name: "shopware-cli", agent: "claude-code", dryRun: true})
 	require.NoError(t, err)
+	assert.True(t, res.DryRun)
 	assert.Equal(t, 1, rec.calls, "dry-run must not call skills")
-	assert.Contains(t, out, "[dry-run] would remove")
 
 	cwd, err := os.Getwd()
 	require.NoError(t, err)
@@ -96,10 +81,10 @@ func TestRemoveRecordedButUnknownIntegration(t *testing.T) {
 		{Name: "legacy-skill", Agent: "claude-code", Scope: state.ScopeProject},
 	}}))
 
-	out, err := runRemove(t, "legacy-skill", "--agent", "claude-code")
+	res, err := runRemove(t, removeOptions{name: "legacy-skill", agent: "claude-code"})
 	require.NoError(t, err)
+	assert.True(t, res.Removed)
 	assert.Equal(t, 1, rec.calls, "a recorded install should still be uninstalled via skills")
-	assert.Contains(t, out, "Removed legacy-skill")
 
 	st, err := state.ReadProject(cwd)
 	require.NoError(t, err)
@@ -109,10 +94,10 @@ func TestRemoveRecordedButUnknownIntegration(t *testing.T) {
 func TestRemoveGuards(t *testing.T) {
 	rec := setupAdd(t)
 
-	_, err := runRemove(t, "does-not-exist", "--agent", "claude-code")
+	_, err := runRemove(t, removeOptions{name: "does-not-exist", agent: "claude-code"})
 	assert.ErrorContains(t, err, "unknown integration")
 
-	_, err = runRemove(t, "shopware-cli")
+	_, err = runRemove(t, removeOptions{name: "shopware-cli"})
 	assert.ErrorContains(t, err, "--agent")
 
 	assert.Equal(t, 0, rec.calls)

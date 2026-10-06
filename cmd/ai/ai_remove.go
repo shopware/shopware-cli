@@ -1,6 +1,7 @@
 package ai
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -41,86 +42,109 @@ operates on the current Shopware project. Requires Node.js/npx on PATH.`,
 			return err
 		}
 
-		name := args[0]
 		agent, _ := cmd.Flags().GetString("agent")
 		global, _ := cmd.Flags().GetBool("global")
 		dryRun, _ := cmd.Flags().GetBool("dry-run")
 
-		if err := validateAgent(agent); err != nil {
-			return err
-		}
-
-		// The directory gives the canonical name, but a recorded install is
-		// authority enough to remove — even if the integration has since left
-		// the directory.
-		entry, known := directory.Load().Get(name)
-		removeName := name
-		if known {
-			removeName = entry.Name
-		}
-
-		// State (and the agent config) live in the user config dir for a --global
-		// install, or at the Shopware project root for a project install.
-		scope := state.ScopeGlobal
-		projectRoot := ""
-		readState := state.Read
-		saveState := state.Save
-		clearState := state.Clear
-		if !global {
-			root, err := shop.FindClosestShopwareProject(false)
-			if err != nil {
-				return fmt.Errorf("a project removal must run inside a Shopware project (or use --global): %w", err)
-			}
-			scope = state.ScopeProject
-			projectRoot = root
-			readState = func() (state.File, error) { return state.ReadProject(root) }
-			saveState = func(f state.File) error { return state.SaveProject(root, f) }
-			clearState = func() error { return state.ClearProject(root) }
-		}
-
-		current, err := readState()
+		result, err := performRemove(cmd.Context(), removeOptions{
+			name:   args[0],
+			agent:  agent,
+			global: global,
+			dryRun: dryRun,
+		}, cmd.ErrOrStderr())
 		if err != nil {
 			return err
 		}
 
-		// Remove only what the CLI recorded; a hand-written config is left alone.
-		next, recorded := state.Remove(current, removeName, agent, scope)
-
-		// Nothing recorded and the name is unknown to the directory: a typo
-		// rather than a stale install.
-		if !recorded && !known {
-			return fmt.Errorf("unknown integration %q (see `shopware-cli ai list`)", name)
-		}
-
-		result := removeResult{
-			Name:    removeName,
-			Agent:   agent,
-			Scope:   scope,
-			Removed: recorded,
-			DryRun:  dryRun,
-			Command: skillsRemoveArgs(removeName, agent, global),
-		}
-
-		if dryRun || !recorded {
-			return writeRemoveResult(cmd.OutOrStdout(), format, result)
-		}
-
-		if err := runSkills(cmd.Context(), result.Command, projectRoot, cmd.ErrOrStderr()); err != nil {
-			return err
-		}
-
-		// Drop the record; when nothing is left, remove the state file rather than
-		// leave an empty one behind.
-		save := saveState
-		if len(next.Installed) == 0 {
-			save = func(state.File) error { return clearState() }
-		}
-		if err := save(next); err != nil {
-			return fmt.Errorf("%s was removed but its record could not be updated (re-run `ai remove`): %w", result.Name, err)
-		}
-
 		return writeRemoveResult(cmd.OutOrStdout(), format, result)
 	},
+}
+
+// removeOptions are the inputs to performRemove, parsed from the command flags.
+type removeOptions struct {
+	name   string
+	agent  string
+	global bool
+	dryRun bool
+}
+
+// performRemove runs the `ai remove` flow and returns the outcome. It removes
+// only what the CLI recorded (a hand-written config is left alone), delegates the
+// uninstall to skills.sh, and drops the record. It lives outside the cobra
+// command so the behaviour can be tested directly.
+func performRemove(ctx context.Context, o removeOptions, progress io.Writer) (removeResult, error) {
+	if err := validateAgent(o.agent); err != nil {
+		return removeResult{}, err
+	}
+
+	// The directory gives the canonical name, but a recorded install is authority
+	// enough to remove — even if the integration has since left the directory.
+	entry, known := directory.Load().Get(o.name)
+	removeName := o.name
+	if known {
+		removeName = entry.Name
+	}
+
+	// State (and the agent config) live in the user config dir for a --global
+	// install, or at the Shopware project root for a project install.
+	scope := state.ScopeGlobal
+	projectRoot := ""
+	readState := state.Read
+	saveState := state.Save
+	clearState := state.Clear
+	if !o.global {
+		root, err := shop.FindClosestShopwareProject(false)
+		if err != nil {
+			return removeResult{}, fmt.Errorf("a project removal must run inside a Shopware project (or use --global): %w", err)
+		}
+		scope = state.ScopeProject
+		projectRoot = root
+		readState = func() (state.File, error) { return state.ReadProject(root) }
+		saveState = func(f state.File) error { return state.SaveProject(root, f) }
+		clearState = func() error { return state.ClearProject(root) }
+	}
+
+	current, err := readState()
+	if err != nil {
+		return removeResult{}, err
+	}
+
+	next, recorded := state.Remove(current, removeName, o.agent, scope)
+
+	// Nothing recorded and the name is unknown to the directory: a typo rather
+	// than a stale install.
+	if !recorded && !known {
+		return removeResult{}, fmt.Errorf("unknown integration %q (see `shopware-cli ai list`)", o.name)
+	}
+
+	result := removeResult{
+		Name:    removeName,
+		Agent:   o.agent,
+		Scope:   scope,
+		Removed: recorded,
+		DryRun:  o.dryRun,
+		Command: skillsRemoveArgs(removeName, o.agent, o.global),
+	}
+
+	if o.dryRun || !recorded {
+		return result, nil
+	}
+
+	if err := runSkills(ctx, result.Command, projectRoot, progress); err != nil {
+		return removeResult{}, err
+	}
+
+	// Drop the record; when nothing is left, remove the state file rather than
+	// leave an empty one behind.
+	save := saveState
+	if len(next.Installed) == 0 {
+		save = func(state.File) error { return clearState() }
+	}
+	if err := save(next); err != nil {
+		return removeResult{}, fmt.Errorf("%s was removed but its record could not be updated (re-run `ai remove`): %w", result.Name, err)
+	}
+
+	return result, nil
 }
 
 func writeRemoveResult(w io.Writer, format string, r removeResult) error {

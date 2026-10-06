@@ -6,90 +6,59 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/shopware/shopware-cli/internal/ai/state"
 )
 
-func runList(t *testing.T, args ...string) (string, error) {
-	t.Helper()
-
-	for name, def := range map[string]string{"type": "", "installed": "false", "format": "table"} {
-		_ = aiListCmd.Flags().Set(name, def)
-	}
-
-	var buf bytes.Buffer
-	aiListCmd.SetOut(&buf)
-	aiListCmd.SetErr(&buf)
-	aiListCmd.SetContext(t.Context())
-
-	if err := aiListCmd.ParseFlags(args); err != nil {
-		return buf.String(), err
-	}
-
-	err := aiListCmd.RunE(aiListCmd, aiListCmd.Flags().Args())
-
-	return buf.String(), err
-}
-
-func runInfo(t *testing.T, args ...string) (string, error) {
-	t.Helper()
-
-	_ = aiInfoCmd.Flags().Set("format", "table")
-
-	var buf bytes.Buffer
-	aiInfoCmd.SetOut(&buf)
-	aiInfoCmd.SetErr(&buf)
-	aiInfoCmd.SetContext(t.Context())
-
-	if err := aiInfoCmd.ParseFlags(args); err != nil {
-		return buf.String(), err
-	}
-
-	err := aiInfoCmd.RunE(aiInfoCmd, aiInfoCmd.Flags().Args())
-
-	return buf.String(), err
-}
-
-func TestListInstalledReportsRecordsPerAgentAndScope(t *testing.T) {
+func TestInstalledRecordsMergesScopesAndAgents(t *testing.T) {
 	setupAdd(t)
 
-	// Same integration, two agents and scopes → two distinct rows.
-	_, err := runAdd(t, "shopware-cli@0.18.3", "--agent", "claude-code", "--global")
+	// Same integration, two agents and scopes → two distinct records.
+	_, err := runAdd(t, addOptions{name: "shopware-cli@0.18.3", agent: "claude-code", global: true})
 	require.NoError(t, err)
-	_, err = runAdd(t, "shopware-cli@0.18.4", "--agent", "codex") // project scope
+	_, err = runAdd(t, addOptions{name: "shopware-cli@0.18.4", agent: "codex"}) // project scope
 	require.NoError(t, err)
 
-	out, err := runList(t, "--installed")
+	records, err := installedRecords()
 	require.NoError(t, err)
-	assert.Contains(t, out, "claude-code")
-	assert.Contains(t, out, "codex")
-	assert.Contains(t, out, "global")
-	assert.Contains(t, out, "project")
-	assert.Contains(t, out, "0.18.3")
-	assert.Contains(t, out, "0.18.4")
+	require.Len(t, records, 2)
 
-	out, err = runList(t, "--installed", "--format", "json")
-	require.NoError(t, err)
-	assert.Contains(t, out, `"agent":"claude-code"`)
-	assert.Contains(t, out, `"agent":"codex"`)
-	assert.Contains(t, out, `"resolvedRevision":"0.18.4"`)
+	byAgent := map[string]state.InstalledEntry{}
+	for _, r := range records {
+		byAgent[r.Agent] = r
+	}
+	assert.Equal(t, state.ScopeGlobal, byAgent["claude-code"].Scope)
+	assert.Equal(t, "0.18.3", byAgent["claude-code"].ResolvedRevision)
+	assert.Equal(t, state.ScopeProject, byAgent["codex"].Scope)
+	assert.Equal(t, "0.18.4", byAgent["codex"].ResolvedRevision)
 }
 
-func TestInfoShowsInstalledRecords(t *testing.T) {
+func TestInstalledRecordsForFiltersByName(t *testing.T) {
 	setupAdd(t)
 
-	// Nothing installed yet → empty installed list.
-	out, err := runInfo(t, "shopware-cli", "--format", "json")
-	require.NoError(t, err)
-	assert.Contains(t, out, `"installed":[]`)
-
-	_, err = runAdd(t, "shopware-cli@0.18.3", "--agent", "claude-code", "--global")
+	_, err := runAdd(t, addOptions{name: "shopware-cli", agent: "claude-code", global: true})
 	require.NoError(t, err)
 
-	out, err = runInfo(t, "shopware-cli", "--format", "json")
+	got, err := installedRecordsFor("shopware-cli")
 	require.NoError(t, err)
-	assert.Contains(t, out, `"agent":"claude-code"`)
-	assert.Contains(t, out, `"resolvedRevision":"0.18.3"`)
+	require.Len(t, got, 1)
+	assert.Equal(t, "claude-code", got[0].Agent)
 
-	out, err = runInfo(t, "shopware-cli")
+	none, err := installedRecordsFor("deployment-helper")
 	require.NoError(t, err)
-	assert.Contains(t, out, "claude-code")
+	assert.Empty(t, none)
+}
+
+func TestWriteInstalledJSON(t *testing.T) {
+	var buf bytes.Buffer
+	require.NoError(t, writeInstalledJSON(&buf, []state.InstalledEntry{
+		{Name: "shopware-cli", Agent: "claude-code", Scope: state.ScopeGlobal, RequestedTag: "0.18.3", ResolvedRevision: "0.18.3"},
+	}))
+	assert.JSONEq(t, `[{"name":"shopware-cli","agent":"claude-code","scope":"global","requestedTag":"0.18.3","resolvedRevision":"0.18.3"}]`, buf.String())
+}
+
+func TestWriteInstalledJSONEmpty(t *testing.T) {
+	var buf bytes.Buffer
+	require.NoError(t, writeInstalledJSON(&buf, nil))
+	assert.JSONEq(t, `[]`, buf.String())
 }
