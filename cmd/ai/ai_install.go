@@ -210,6 +210,13 @@ type compatReport struct {
 // runCompatCheck fetches the owner compatibility check at ref and runs it against
 // projectDir. A package var so tests can replace it.
 var runCompatCheck = func(ctx context.Context, repo, skill, ref, projectDir string, out io.Writer) error {
+	// The check runs locally and needs PHP; without it the script reports the
+	// project as incompatible instead of signalling a missing tool, so check up
+	// front (a Docker project may not expose PHP on the host).
+	if _, err := exec.LookPath("php"); err != nil {
+		return fmt.Errorf("cannot run the compatibility check for %s: PHP is not on PATH", skill)
+	}
+
 	url := fmt.Sprintf("https://raw.githubusercontent.com/%s/%s/skills/%s/scripts/compatibility-check.sh", repo, ref, skill)
 
 	script, err := httpGet(ctx, url)

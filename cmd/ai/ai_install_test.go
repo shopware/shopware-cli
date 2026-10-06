@@ -3,12 +3,20 @@ package ai
 import (
 	"bytes"
 	"errors"
+	"io"
 	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+func TestCompatCheckRequiresPHP(t *testing.T) {
+	t.Setenv("PATH", "") // hide php; the check must fail fast, before any network
+
+	err := runCompatCheck(t.Context(), "shopware/deployment-helper", "deployment-helper", "0.1.7", t.TempDir(), io.Discard)
+	assert.ErrorContains(t, err, "PHP is not on PATH")
+}
 
 func TestInterpretCompatOutput(t *testing.T) {
 	var out bytes.Buffer
