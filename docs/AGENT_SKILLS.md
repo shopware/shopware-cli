@@ -194,6 +194,15 @@ available in every repository. The agent name is whatever skills.sh supports (e.
 `.shopware-cli/ai/installed.json` to share an integration with your team, or
 gitignore them to keep it local.
 
+### Recommendation
+
+When a supported AI client runs the CLI (detected from the `AI_AGENT` environment
+variable), and the `shopware-cli` skill is not yet installed for it, the CLI
+prints a one-line, non-blocking recommendation to stderr with the exact
+`ai add` command. It never installs anything. It is not shown again for the same
+client within 24 hours, and stays silent in non-interactive or CI runs, while
+using `ai` commands, and when `--no-ai-hint` is passed.
+
 ### Known limitations
 
 - The result line describes the CLI's own record, not what skills.sh did on disk:
