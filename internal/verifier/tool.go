@@ -59,6 +59,8 @@ type ToolConfig struct {
 	StorefrontDirectories []string
 	// List of extensions of the project or a single extension
 	Extensions []extension.Extension
+	// PHP version of the project the extensions are validated in; empty for a single extension
+	PHPVersion string
 }
 
 func (c *ToolConfig) logConfiguration(ctx context.Context) {

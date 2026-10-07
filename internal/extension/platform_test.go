@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/shyim/go-version"
 	"github.com/stretchr/testify/assert"
 
 	"github.com/shopware/shopware-cli/internal/validation"
@@ -19,7 +20,7 @@ func setupMockPHPVersionServer(t *testing.T) {
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"6.4.0.0": "7.4", "6.5.0.0": "8.1", "6.6.0.0": "8.2"}`))
+		_, _ = w.Write([]byte(`{"6.4.0.0": "7.4", "6.5.0.0": "8.1", "6.6.0.0": "8.2", "invalid": "9.9"}`))
 	}))
 	t.Cleanup(server.Close)
 
@@ -221,4 +222,56 @@ func TestNormalizePhpVersion(t *testing.T) {
 			assert.Equal(t, tc.expected, normalizePhpVersion(tc.input))
 		})
 	}
+}
+
+func TestGetPhpVersionUsesLowestMatchingShopwareVersion(t *testing.T) {
+	setupMockPHPVersionServer(t)
+
+	constraint, err := version.NewConstraint(">=6.4")
+	assert.NoError(t, err)
+
+	for range 20 {
+		phpVersion, err := GetPhpVersion(t.Context(), &constraint)
+		assert.NoError(t, err)
+		assert.Equal(t, "7.4", phpVersion)
+	}
+}
+
+func TestWithProjectPHPVersionIgnoresEmptyVersion(t *testing.T) {
+	ctx := WithProjectPHPVersion(t.Context(), "")
+	assert.Equal(t, "", projectPHPVersionFromContext(ctx))
+
+	ctx = WithProjectPHPVersion(ctx, "8.2")
+	assert.Equal(t, "8.2", projectPHPVersionFromContext(ctx))
+}
+
+func TestValidatePHPFilesUsesProjectPHPVersion(t *testing.T) {
+	setupMockPHPVersionServer(t)
+	dir := t.TempDir()
+
+	plugin := getTestPlugin(dir)
+	assert.NoError(t, os.MkdirAll(filepath.Join(dir, "src"), 0o755))
+	assert.NoError(t, os.WriteFile(filepath.Join(dir, "src", "Status.php"), []byte("<?php\n\nenum Status\n{\n    case Active;\n}\n"), 0o644))
+
+	withoutProject := &testCheck{}
+	validatePHPFiles(t.Context(), plugin, withoutProject)
+	assert.NotEmpty(t, withoutProject.Results)
+
+	withProject := &testCheck{}
+	validatePHPFiles(WithProjectPHPVersion(t.Context(), "8.2"), plugin, withProject)
+	assert.Empty(t, withProject.Results)
+}
+
+func TestValidatePHPFilesPrefersExtensionPHPVersionOverProject(t *testing.T) {
+	setupMockPHPVersionServer(t)
+	dir := t.TempDir()
+
+	plugin := getTestPlugin(dir)
+	plugin.config.Validation.PhpVersion = "7.4"
+	assert.NoError(t, os.MkdirAll(filepath.Join(dir, "src"), 0o755))
+	assert.NoError(t, os.WriteFile(filepath.Join(dir, "src", "Status.php"), []byte("<?php\n\nenum Status\n{\n    case Active;\n}\n"), 0o644))
+
+	check := &testCheck{}
+	validatePHPFiles(WithProjectPHPVersion(t.Context(), "8.2"), plugin, check)
+	assert.NotEmpty(t, check.Results)
 }

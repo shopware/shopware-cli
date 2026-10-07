@@ -16,6 +16,7 @@ func (s Builtin) Name() string {
 
 func (s Builtin) Check(ctx context.Context, check *Check, config ToolConfig) error {
 	ignores := make([]validation.ToolConfigIgnore, 0)
+	ctx = extension.WithProjectPHPVersion(ctx, config.PHPVersion)
 
 	for _, ext := range config.Extensions {
 		extensionCheck := NewCheck()
