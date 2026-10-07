@@ -104,7 +104,7 @@ compatibility against that project (omit --global)`, `exit=1`.
 cd /tmp/ai-proj && /tmp/swcli ai add shopware-cli --agent claude-code --dry-run
 ```
 `[dry-run] would install shopware-cli for claude-code (project):` followed by
-`npx --yes skills@1.5.18 add https://github.com/shopware/shopware-cli/tree/<ref>/skills/shopware-cli
+`npx --yes skills@1 add https://github.com/shopware/shopware-cli/tree/<ref>/skills/shopware-cli
 --agent claude-code -y` (a plain `dev` build shows `<latest-release>` as the ref).
 No `.claude/` and no `.shopware-cli/` created.
 
@@ -204,7 +204,7 @@ find /tmp/ai-home -path '*shopware-cli/ai/installed.json' -exec cat {} +
 cd /tmp/ai-proj && /tmp/swcli ai remove shopware-cli --agent claude-code --dry-run
 ```
 `[dry-run] would remove shopware-cli for claude-code (project): npx --yes
-skills@1.5.18 remove shopware-cli --agent claude-code -y`. State + skill still
+skills@1 remove shopware-cli --agent claude-code -y`. State + skill still
 present.
 
 ### F2 — real remove (project)

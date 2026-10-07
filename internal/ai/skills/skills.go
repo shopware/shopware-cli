@@ -21,8 +21,9 @@ import (
 // errNotFound marks an HTTP 404 for a friendlier caller message.
 var errNotFound = errors.New("not found")
 
-// skillsVersion pins the skills.sh CLI the commands run against.
-const skillsVersion = "1.5.18"
+// skillsVersion pins the skills.sh major line; npx resolves the latest 1.x, so we
+// get fixes but never a breaking 2.0.
+const skillsVersion = "1"
 
 // AddArgs builds the `npx skills add ...` argv. The source is a tree URL (see
 // SourceURL) pinning the skill, so no `--skill` is needed.
