@@ -127,7 +127,7 @@ func performRemove(ctx context.Context, o removeOptions, progress io.Writer) (re
 		return result, nil
 	}
 
-	if err := skills.Run(ctx, result.Command, projectRoot, progress); err != nil {
+	if err := runSkills(ctx, result.Command, projectRoot, progress); err != nil {
 		return removeResult{}, err
 	}
 

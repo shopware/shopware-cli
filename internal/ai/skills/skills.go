@@ -73,8 +73,8 @@ func OwnerRepo(repoURL string) string {
 }
 
 // Run runs a skills.sh command via npx in dir (empty = current directory),
-// streaming output to out. A package var so tests can replace it.
-var Run = func(ctx context.Context, argv []string, dir string, out io.Writer) error {
+// streaming output to out.
+func Run(ctx context.Context, argv []string, dir string, out io.Writer) error {
 	if _, err := exec.LookPath(argv[0]); err != nil {
 		return fmt.Errorf("%s not found: installing skills requires Node.js/npx on PATH", argv[0])
 	}
@@ -138,9 +138,8 @@ func matchTag(tags []string, want string) (string, bool) {
 	return "", false
 }
 
-// ResolveLatestTag returns the highest stable release tag of repoURL. A package
-// var so tests can replace it.
-var ResolveLatestTag = func(ctx context.Context, repoURL string) (string, error) {
+// ResolveLatestTag returns the highest stable release tag of repoURL.
+func ResolveLatestTag(ctx context.Context, repoURL string) (string, error) {
 	tags, err := remoteTagNames(ctx, repoURL)
 	if err != nil {
 		return "", err
@@ -156,8 +155,8 @@ var ResolveLatestTag = func(ctx context.Context, repoURL string) (string, error)
 
 // ResolveTag returns the actual tag of repoURL matching want, accepting a "v"
 // prefix on either side. skills.sh would silently install the default branch for
-// a missing ref, so the tag is resolved up front. A package var for tests.
-var ResolveTag = func(ctx context.Context, repoURL, want string) (string, error) {
+// a missing ref, so the tag is resolved up front.
+func ResolveTag(ctx context.Context, repoURL, want string) (string, error) {
 	tags, err := remoteTagNames(ctx, repoURL)
 	if err != nil {
 		return "", err
@@ -199,8 +198,8 @@ type compatReport struct {
 }
 
 // RunCompatCheck fetches the owner compatibility check at ref and runs it against
-// projectDir. A package var so tests can replace it.
-var RunCompatCheck = func(ctx context.Context, repo, skill, ref, projectDir string, out io.Writer) error {
+// projectDir.
+func RunCompatCheck(ctx context.Context, repo, skill, ref, projectDir string, out io.Writer) error {
 	// The check runs locally and needs PHP; without it the script reports the
 	// project as incompatible instead of signalling a missing tool, so check up
 	// front (a Docker project may not expose PHP on the host).

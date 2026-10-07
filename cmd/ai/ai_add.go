@@ -32,6 +32,14 @@ const (
 	actionUpdated   = "updated"
 )
 
+// Indirection over the skills package's network/exec calls so tests can stub them.
+var (
+	runSkills        = skills.Run
+	resolveTag       = skills.ResolveTag
+	resolveLatestTag = skills.ResolveLatestTag
+	runCompatCheck   = skills.RunCompatCheck
+)
+
 // addResult is the machine-readable shape of `ai add` (--format json).
 type addResult struct {
 	Name             string      `json:"name"`
@@ -188,13 +196,13 @@ func performAdd(ctx context.Context, o addOptions, progress io.Writer) (addResul
 
 	// Check compatibility before installing anything.
 	if entry.Delivery.Kind == directory.DeliveryGit && entry.Compatibility != nil {
-		if err := skills.RunCompatCheck(ctx, skills.OwnerRepo(entry.Delivery.Repository), entry.Name, ref, projectRoot, progress); err != nil {
+		if err := runCompatCheck(ctx, skills.OwnerRepo(entry.Delivery.Repository), entry.Name, ref, projectRoot, progress); err != nil {
 			return addResult{}, err
 		}
 	}
 
 	// Always run skills.sh (idempotent); it owns the disk, the record only reports.
-	if err := skills.Run(ctx, argv, projectRoot, progress); err != nil {
+	if err := runSkills(ctx, argv, projectRoot, progress); err != nil {
 		return addResult{}, err
 	}
 
@@ -233,16 +241,16 @@ func resolveSource(ctx context.Context, entry *directory.Integration, tag, cliVe
 		switch {
 		case ref != "":
 			if !dryRun {
-				ref, err = skills.ResolveTag(ctx, repoURL, ref)
+				ref, err = resolveTag(ctx, repoURL, ref)
 			}
 		case cliVersion == "" || cliVersion == devVersion:
 			if dryRun {
 				ref = refPlaceholder
 			} else {
-				ref, err = skills.ResolveLatestTag(ctx, repoURL)
+				ref, err = resolveLatestTag(ctx, repoURL)
 			}
 		case !dryRun:
-			ref, err = skills.ResolveTag(ctx, repoURL, cliVersion)
+			ref, err = resolveTag(ctx, repoURL, cliVersion)
 		default:
 			ref = cliVersion
 		}
@@ -253,10 +261,10 @@ func resolveSource(ctx context.Context, entry *directory.Integration, tag, cliVe
 			if dryRun {
 				ref = refPlaceholder
 			} else {
-				ref, err = skills.ResolveLatestTag(ctx, repoURL)
+				ref, err = resolveLatestTag(ctx, repoURL)
 			}
 		case !dryRun:
-			ref, err = skills.ResolveTag(ctx, repoURL, ref)
+			ref, err = resolveTag(ctx, repoURL, ref)
 		}
 	default:
 		err = fmt.Errorf("unsupported delivery %q", entry.Delivery.Kind)
