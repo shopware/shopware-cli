@@ -39,5 +39,18 @@ var integrations = Directory{
 			},
 			Compatibility: &Compatibility{Source: "owner"},
 		},
+		{
+			Name:          "acceptance-test-suite",
+			DisplayName:   "Shopware Acceptance Test Suite",
+			Type:          TypeSkill,
+			Provider:      "shopware",
+			Description:   "Write and run Playwright acceptance and accessibility tests for a Shopware project with the Acceptance Test Suite.",
+			Status:        StatusActive,
+			Documentation: "https://developer.shopware.com/docs/guides/development/testing/e2e-playwright/",
+			Delivery: Delivery{
+				Kind:       DeliveryGit,
+				Repository: "https://github.com/shopware/acceptance-test-suite",
+			},
+		},
 	},
 }
