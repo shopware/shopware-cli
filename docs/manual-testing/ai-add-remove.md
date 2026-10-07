@@ -28,7 +28,8 @@ non-project directory to show a project install being refused there:
 for d in /tmp/ai-proj /tmp/ai-shopware; do touch "$d/bin/console"; printf '{"require":{"shopware/core":"^6.6"}}\n' > "$d/composer.json"; done
 ```
 
-> The `ai` group is visible in `shopware-cli --help`.
+> The `ai` group is `Hidden` (not shown in `shopware-cli --help`) until the
+> feature is released, but every command still works when invoked.
 
 ---
 

@@ -11,6 +11,8 @@ var aiRootCmd = &cobra.Command{
 
 Integrations are installed through skills.sh, which requires Node.js/npx on PATH
 (git-delivered integrations also need git and network access).`,
+	// Hidden from --help until the feature is released; the commands still work.
+	Hidden: true,
 }
 
 // Register adds the ai command group to the root command.
