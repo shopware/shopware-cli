@@ -9,6 +9,7 @@ import (
 
 	"github.com/shopware/shopware-cli/internal/ai/directory"
 	"github.com/shopware/shopware-cli/internal/ai/state"
+	"github.com/shopware/shopware-cli/internal/shop"
 	"github.com/shopware/shopware-cli/internal/tui"
 )
 
@@ -24,9 +25,16 @@ type listItem struct {
 }
 
 var aiListCmd = &cobra.Command{
-	Use:          "list",
-	Aliases:      []string{"ls"},
-	Short:        "List available Shopware AI integrations",
+	Use:     "list",
+	Aliases: []string{"ls"},
+	Short:   "List known Shopware AI integrations",
+	Long: `List the known Shopware AI integrations.
+
+With --installed, list the integrations this CLI has installed instead — one row
+per agent and scope, with the requested tag and resolved revision.`,
+	Example: `  shopware-cli ai list
+  shopware-cli ai list --installed
+  shopware-cli ai list --format json`,
 	Args:         cobra.NoArgs,
 	SilenceUsage: true,
 	RunE: func(cmd *cobra.Command, _ []string) error {
@@ -38,17 +46,21 @@ var aiListCmd = &cobra.Command{
 		typeFilter, _ := cmd.Flags().GetString("type")
 		installedOnly, _ := cmd.Flags().GetBool("installed")
 
-		var installed map[string]bool
+		// --installed reports the recorded installs (one row per agent/scope),
+		// not the catalog, so it can show the agent, scope and revision.
 		if installedOnly {
-			if installed, err = readInstalledNames(); err != nil {
+			records, err := installedRecords()
+			if err != nil {
 				return err
 			}
+			if format == formatJSON {
+				return writeInstalledJSON(cmd.OutOrStdout(), records)
+			}
+
+			return writeInstalledTable(cmd.OutOrStdout(), records)
 		}
 
-		entries, err := directory.Load().List(installed, directory.ListOptions{
-			Type:          typeFilter,
-			InstalledOnly: installedOnly,
-		})
+		entries, err := directory.Load().List(directory.ListOptions{Type: typeFilter})
 		if err != nil {
 			return err
 		}
@@ -98,21 +110,73 @@ func writeListTable(w io.Writer, entries []directory.Integration) error {
 	return err
 }
 
-// readInstalledNames returns the set of integration names recorded as installed
-// by the CLI. Nothing writes the state file until #1337, so today this is empty
-// (a missing file yields an empty state, not an error).
-func readInstalledNames() (map[string]bool, error) {
-	st, err := state.Read()
+// installedRecords returns every recorded install, merging global and project
+// state. Each record carries its own agent and scope.
+func installedRecords() ([]state.InstalledEntry, error) {
+	global, err := state.Read()
+	if err != nil {
+		return nil, err
+	}
+	records := append([]state.InstalledEntry{}, global.Installed...)
+
+	// Fall back to the current directory when not inside a project; global
+	// installs still show.
+	root, err := shop.FindClosestShopwareProject(true)
+	if err != nil {
+		return nil, fmt.Errorf("locate project install state: %w", err)
+	}
+	project, err := state.ReadProject(root)
 	if err != nil {
 		return nil, err
 	}
 
-	names := make(map[string]bool, len(st.Installed))
-	for _, e := range st.Installed {
-		names[e.Name] = true
+	return append(records, project.Installed...), nil
+}
+
+// installedRecordsFor returns the recorded installs for a single integration.
+func installedRecordsFor(name string) ([]state.InstalledEntry, error) {
+	all, err := installedRecords()
+	if err != nil {
+		return nil, err
 	}
 
-	return names, nil
+	out := make([]state.InstalledEntry, 0, len(all))
+	for _, e := range all {
+		if e.Name == name {
+			out = append(out, e)
+		}
+	}
+
+	return out, nil
+}
+
+func writeInstalledJSON(w io.Writer, records []state.InstalledEntry) error {
+	if records == nil {
+		records = []state.InstalledEntry{}
+	}
+
+	out, err := json.Marshal(records)
+	if err != nil {
+		return err
+	}
+
+	_, err = fmt.Fprintln(w, string(out))
+
+	return err
+}
+
+func writeInstalledTable(w io.Writer, records []state.InstalledEntry) error {
+	rows := make([][]string, 0, len(records))
+	for _, e := range records {
+		rows = append(rows, []string{e.Name, e.Agent, string(e.Scope), e.RequestedTag, e.ResolvedRevision})
+	}
+
+	_, err := fmt.Fprintln(w, tui.RenderTable(
+		[]string{"Name", "Agent", "Scope", "Requested", "Revision"},
+		rows,
+	))
+
+	return err
 }
 
 func init() {

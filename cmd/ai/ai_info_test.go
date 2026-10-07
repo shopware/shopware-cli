@@ -24,9 +24,10 @@ func TestWriteInfoTable(t *testing.T) {
 	}
 
 	var buf bytes.Buffer
-	require.NoError(t, writeInfoTable(&buf, e))
+	require.NoError(t, writeInfoTable(&buf, e, nil))
 
 	assert.Contains(t, buf.String(), "deployment-helper")
+	assert.Contains(t, buf.String(), "Installed")
 }
 
 func TestCompatibilityLabel(t *testing.T) {

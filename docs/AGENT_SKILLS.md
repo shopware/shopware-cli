@@ -157,6 +157,61 @@ npx skills add shopware/shopware-cli --list
 The `skills` CLI is responsible for installing the canonical skills for
 supported AI clients. Shopware CLI does not maintain client-specific copies.
 
+## Installing with Shopware CLI
+
+Shopware CLI exposes an `ai` command group as a thin front door over skills.sh —
+it decides what to install and records it, while skills.sh writes the agent
+configuration. It requires Node.js/npx on PATH (git-delivered integrations also
+need git and network access).
+
+```bash
+# discover integrations
+shopware-cli ai list
+shopware-cli ai info deployment-helper
+
+# install into an agent for the current Shopware project (pin with @<tag>)
+shopware-cli ai add shopware-cli --agent claude-code
+shopware-cli ai add deployment-helper@0.1.7 --agent claude-code
+
+# install at the user level, from anywhere
+shopware-cli ai add shopware-cli --agent claude-code --global
+
+# preview, list what the CLI installed, and remove
+shopware-cli ai add shopware-cli --agent claude-code --dry-run
+shopware-cli ai list --installed
+shopware-cli ai remove shopware-cli --agent claude-code
+```
+
+A project install resolves the Shopware project root (so the skill is written
+where agents read it) and records the install under `.shopware-cli/ai/`. "Project"
+here means a Shopware shop (a `bin/console` plus a `composer.json` requiring
+`shopware/core`); a project install refuses to run anywhere else. An extension
+(plugin or app) repository is not a shop, so install the general `shopware-cli`
+skill with `--global` there — which is the natural scope for it anyway, making it
+available in every repository. The agent name is whatever skills.sh supports (e.g.
+`claude-code`, `codex`); the CLI keeps no list of its own. Commit `.claude/skills/`
+(or the agent's directory), `skills-lock.json`, and
+`.shopware-cli/ai/installed.json` to share an integration with your team, or
+gitignore them to keep it local.
+
+### Recommendation
+
+When a supported AI client runs the CLI (detected from the `AI_AGENT` environment
+variable), and the `shopware-cli` skill is not yet installed for it, the CLI
+prints a one-line, non-blocking recommendation to stderr with the exact
+`ai add` command. It never installs anything. It is not shown again for the same
+client within 24 hours, and stays silent in non-interactive or CI runs, while
+using `ai` commands, and when `--no-ai-hint` is passed.
+
+### Known limitations
+
+- The result line describes the CLI's own record, not what skills.sh did on disk:
+  a re-install of a manually deleted skill still reads `Already installed`, and
+  `ai remove` reports `Removed` for a recorded install even if skills.sh found
+  nothing to delete.
+- The Codex agent can leave files behind on a project-scope `ai remove` (a
+  skills.sh defect); the CLI still reports the removal.
+
 ## Updating installed skills
 
 The canonical source changes whenever `skills/` changes on the default branch.

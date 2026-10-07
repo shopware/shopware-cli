@@ -1,7 +1,6 @@
 // Package state records which AI integrations the CLI has installed so that
-// `ai list --installed` can report them. This package defines the on-disk file
-// format and the read path; writing the file is added by #1337. Until then the
-// file does not exist and Read returns an empty state.
+// `ai list --installed` can report them. It defines the on-disk file format,
+// the read path, and the write path used by `ai add` / `ai remove`.
 package state
 
 import (
@@ -12,6 +11,10 @@ import (
 	"os"
 	"path/filepath"
 )
+
+// userConfigDir is a seam over os.UserConfigDir so tests can redirect the
+// install-state location without touching the real user configuration.
+var userConfigDir = os.UserConfigDir
 
 // FileVersion is the install-state file format version. It is a major-only
 // integer, like the manifest: bump it only on a breaking change to the file
@@ -28,10 +31,10 @@ const (
 
 // InstalledEntry records a single CLI-managed installation. The field names are
 // a public contract (camelCase), reported by `ai list --installed` and
-// `ai info`. #1337 fills these when it installs a skill.
+// `ai info`.
 type InstalledEntry struct {
 	Name             string `json:"name"`
-	Client           string `json:"client"`
+	Agent            string `json:"agent"`
 	Scope            Scope  `json:"scope"`
 	RequestedTag     string `json:"requestedTag"`
 	ResolvedRevision string `json:"resolvedRevision"`
@@ -46,7 +49,7 @@ type File struct {
 // path is the global install-state file location
 // ($UserConfigDir/shopware-cli/ai/installed.json).
 func path() (string, error) {
-	configDir, err := os.UserConfigDir()
+	configDir, err := userConfigDir()
 	if err != nil {
 		return "", err
 	}
@@ -54,14 +57,32 @@ func path() (string, error) {
 	return filepath.Join(configDir, "shopware-cli", "ai", "installed.json"), nil
 }
 
-// Read loads the install-state file. A missing file is not an error: it returns
-// an empty state, which is the expected situation until #1337 writes the file.
+// projectPath is the project-scoped install-state location
+// (<projectRoot>/.shopware-cli/ai/installed.json). Project-scoped installs live
+// with the project, mirroring where skills.sh writes the agent config.
+func projectPath(projectRoot string) string {
+	return filepath.Join(projectRoot, ".shopware-cli", "ai", "installed.json")
+}
+
+// Read loads the global install-state file. A missing file is not an error: it
+// returns an empty state.
 func Read() (File, error) {
 	p, err := path()
 	if err != nil {
 		return File{}, err
 	}
 
+	return readFrom(p)
+}
+
+// ReadProject loads the project-scoped install-state file under projectRoot.
+func ReadProject(projectRoot string) (File, error) {
+	return readFrom(projectPath(projectRoot))
+}
+
+// readFrom loads and validates an install-state file. A missing file yields an
+// empty state rather than an error.
+func readFrom(p string) (File, error) {
 	b, err := os.ReadFile(p)
 	if errors.Is(err, fs.ErrNotExist) {
 		return File{Version: FileVersion}, nil
@@ -72,11 +93,124 @@ func Read() (File, error) {
 
 	var f File
 	if err := json.Unmarshal(b, &f); err != nil {
-		return File{}, fmt.Errorf("parse ai install-state %s: %w", p, err)
+		return File{}, fmt.Errorf("parse ai install-state %s (delete this file to reset the install record, or fix the JSON): %w", p, err)
 	}
 	if f.Version != FileVersion {
 		return File{}, fmt.Errorf("unsupported ai install-state version %d (expected %d)", f.Version, FileVersion)
 	}
 
 	return f, nil
+}
+
+// Upsert adds e, or replaces the entry with the same (name, agent, scope) so a
+// repeated add does not grow the list.
+func Upsert(f File, e InstalledEntry) File {
+	for i := range f.Installed {
+		x := f.Installed[i]
+		if x.Name == e.Name && x.Agent == e.Agent && x.Scope == e.Scope {
+			f.Installed[i] = e
+			return f
+		}
+	}
+
+	f.Installed = append(f.Installed, e)
+
+	return f
+}
+
+// Remove returns f with the entry matching (name, agent, scope) dropped, and
+// whether an entry was removed. `ai remove` uses this to drop only what the CLI
+// recorded.
+func Remove(f File, name, agent string, scope Scope) (File, bool) {
+	for i := range f.Installed {
+		x := f.Installed[i]
+		if x.Name == name && x.Agent == agent && x.Scope == scope {
+			f.Installed = append(f.Installed[:i], f.Installed[i+1:]...)
+			return f, true
+		}
+	}
+
+	return f, false
+}
+
+// Save writes the global install-state file atomically.
+func Save(f File) error {
+	p, err := path()
+	if err != nil {
+		return err
+	}
+
+	return saveTo(p, f)
+}
+
+// SaveProject writes the project-scoped install-state file under projectRoot.
+func SaveProject(projectRoot string, f File) error {
+	return saveTo(projectPath(projectRoot), f)
+}
+
+// Clear removes the global install-state file once nothing is recorded, so no
+// empty file is left behind.
+func Clear() error {
+	p, err := path()
+	if err != nil {
+		return err
+	}
+
+	return clearAt(p)
+}
+
+// ClearProject removes the project-scoped install-state file under projectRoot.
+func ClearProject(projectRoot string) error {
+	return clearAt(projectPath(projectRoot))
+}
+
+// clearAt removes the state file and prunes now-empty parent dirs (os.Remove
+// leaves non-empty ones). A missing file is not an error.
+func clearAt(p string) error {
+	if err := os.Remove(p); err != nil && !errors.Is(err, fs.ErrNotExist) {
+		return err
+	}
+
+	dir := filepath.Dir(p)           // .../ai
+	_ = os.Remove(dir)               // only if empty
+	_ = os.Remove(filepath.Dir(dir)) // .../.shopware-cli or .../shopware-cli, only if empty
+
+	return nil
+}
+
+// saveTo writes the file atomically (temp file + rename) and creates parent dirs.
+func saveTo(p string, f File) error {
+	f.Version = FileVersion
+	if f.Installed == nil {
+		f.Installed = []InstalledEntry{}
+	}
+
+	b, err := json.MarshalIndent(f, "", "  ")
+	if err != nil {
+		return err
+	}
+	b = append(b, '\n')
+
+	dir := filepath.Dir(p)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return err
+	}
+
+	tmp, err := os.CreateTemp(dir, "installed-*.json.tmp")
+	if err != nil {
+		return err
+	}
+	tmpName := tmp.Name()
+	// Best-effort cleanup if we return before the rename succeeds.
+	defer func() { _ = os.Remove(tmpName) }()
+
+	if _, err := tmp.Write(b); err != nil {
+		_ = tmp.Close()
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		return err
+	}
+
+	return os.Rename(tmpName, p)
 }
