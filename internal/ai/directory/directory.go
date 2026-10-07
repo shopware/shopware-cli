@@ -86,28 +86,19 @@ func (d *Directory) Get(name string) (*Integration, bool) {
 
 // ListOptions filters a directory listing.
 type ListOptions struct {
-	// Type, when set, keeps only entries of that type. It accepts any known type
-	// identifier (see knownTypeFilters), including reserved ones that match no
-	// entry yet.
+	// Type, when set, keeps only entries of that type (see knownTypeFilters).
 	Type string
-	// InstalledOnly keeps only entries whose name is in the installed set passed
-	// to List.
-	InstalledOnly bool
 }
 
-// knownTypeFilters are the type identifiers accepted by List. It includes "mcp",
-// reserved for a future increment (#1336): it currently matches no entry, so a
-// "mcp" filter returns an empty list rather than an error. Any other value is
-// rejected.
+// knownTypeFilters are the type identifiers List accepts. "mcp" is reserved and
+// matches no entry yet (empty result, not an error); anything else is rejected.
 var knownTypeFilters = map[string]bool{
 	string(TypeSkill): true,
 	string(TypeMCP):   true,
 }
 
-// List returns the integrations matching opts. installed is the set of
-// integration names recorded as installed by the CLI; it is consulted only when
-// opts.InstalledOnly is set.
-func (d *Directory) List(installed map[string]bool, opts ListOptions) ([]Integration, error) {
+// List returns the integrations matching opts.
+func (d *Directory) List(opts ListOptions) ([]Integration, error) {
 	if opts.Type != "" && !knownTypeFilters[opts.Type] {
 		return nil, fmt.Errorf("unknown type %q (allowed: skill, mcp)", opts.Type)
 	}
@@ -115,9 +106,6 @@ func (d *Directory) List(installed map[string]bool, opts ListOptions) ([]Integra
 	out := make([]Integration, 0, len(d.Integrations))
 	for _, e := range d.Integrations {
 		if opts.Type != "" && string(e.Type) != opts.Type {
-			continue
-		}
-		if opts.InstalledOnly && !installed[e.Name] {
 			continue
 		}
 

@@ -50,7 +50,7 @@ func fixtureDirectory() *Directory {
 }
 
 func TestListReturnsAll(t *testing.T) {
-	got, err := fixtureDirectory().List(nil, ListOptions{})
+	got, err := fixtureDirectory().List(ListOptions{})
 	require.NoError(t, err)
 	assert.Len(t, got, 2)
 }
@@ -58,31 +58,18 @@ func TestListReturnsAll(t *testing.T) {
 func TestListTypeFilter(t *testing.T) {
 	d := fixtureDirectory()
 
-	skills, err := d.List(nil, ListOptions{Type: "skill"})
+	skills, err := d.List(ListOptions{Type: "skill"})
 	require.NoError(t, err)
 	assert.Len(t, skills, 2)
 
 	// "mcp" is a reserved-but-known filter: empty result, no error.
-	mcp, err := d.List(nil, ListOptions{Type: "mcp"})
+	mcp, err := d.List(ListOptions{Type: "mcp"})
 	require.NoError(t, err)
 	assert.Empty(t, mcp)
 
-	_, err = d.List(nil, ListOptions{Type: "bogus"})
+	_, err = d.List(ListOptions{Type: "bogus"})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "unknown type")
-}
-
-func TestListInstalledOnly(t *testing.T) {
-	d := fixtureDirectory()
-
-	got, err := d.List(map[string]bool{"beta-skill": true}, ListOptions{InstalledOnly: true})
-	require.NoError(t, err)
-	require.Len(t, got, 1)
-	assert.Equal(t, "beta-skill", got[0].Name)
-
-	none, err := d.List(nil, ListOptions{InstalledOnly: true})
-	require.NoError(t, err)
-	assert.Empty(t, none)
 }
 
 func TestInfo(t *testing.T) {

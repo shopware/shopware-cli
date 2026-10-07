@@ -6,10 +6,12 @@ import (
 
 var aiRootCmd = &cobra.Command{
 	Use:   "ai",
-	Short: "Explore Shopware AI integrations",
-	// Hidden until the feature is complete (install/MCP land in #1336/#1337).
-	// The commands still work when invoked; they are only kept out of --help so
-	// incremental merges do not advertise a half-finished command group.
+	Short: "Discover Shopware AI integrations",
+	Long: `Discover and install Shopware AI integrations (skills) into AI agents.
+
+Integrations are installed through skills.sh, which requires Node.js/npx on PATH
+(git-delivered integrations also need git and network access).`,
+	// Hidden from --help until the feature is released; the commands still work.
 	Hidden: true,
 }
 
