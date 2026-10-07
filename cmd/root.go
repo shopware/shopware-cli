@@ -53,6 +53,7 @@ func Execute(ctx context.Context) int {
 
 	trackCommandExecution(ctx, args, start, err)
 	printUpdateHint(ctx, os.Stderr, updateHandle.Wait(ctx).Release)
+	printAIHint(ctx, os.Stderr, args)
 
 	return exitCode(ctx, err)
 }
@@ -99,6 +100,7 @@ func init() {
 	rootCmd.PersistentFlags().Bool("verbose", false, "Show debug logs and detailed tool output")
 	rootCmd.PersistentFlags().BoolP("no-interaction", "n", false, "Run without prompting; commands use defaults or fail where input is needed")
 	rootCmd.PersistentFlags().Bool("no-update-hint", false, "Skip checking for a newer shopware-cli version")
+	rootCmd.PersistentFlags().Bool("no-ai-hint", false, "Skip the AI client skill recommendation")
 
 	project.Register(rootCmd)
 	extension.Register(rootCmd)
