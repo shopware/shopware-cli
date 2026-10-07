@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/shyim/go-phplint"
@@ -399,6 +400,23 @@ func (p PlatformPlugin) Validate(c context.Context, check validation.Check) {
 	validatePHPFilesFn(c, p, check)
 }
 
+type projectPHPVersionKey struct{}
+
+// WithProjectPHPVersion returns a context that carries the PHP version of the
+// project the extension is validated in. The PHP linter uses it when the
+// extension config does not set validation.php_version.
+func WithProjectPHPVersion(ctx context.Context, phpVersion string) context.Context {
+	if phpVersion == "" {
+		return ctx
+	}
+	return context.WithValue(ctx, projectPHPVersionKey{}, phpVersion)
+}
+
+func projectPHPVersionFromContext(ctx context.Context) string {
+	phpVersion, _ := ctx.Value(projectPHPVersionKey{}).(string)
+	return phpVersion
+}
+
 // validatePHPFilesFn can be overridden in tests to skip PHP file validation.
 var validatePHPFilesFn = validatePHPFiles
 
@@ -417,6 +435,9 @@ func validatePHPFiles(c context.Context, ext Extension, check validation.Check) 
 	override := ""
 	if cfg := ext.GetExtensionConfig(); cfg != nil {
 		override = cfg.Validation.PhpVersion
+	}
+	if override == "" {
+		override = projectPHPVersionFromContext(c)
 	}
 
 	var phpVersion string
@@ -536,14 +557,23 @@ func GetPhpVersion(ctx context.Context, constraint *version.Constraints) (string
 		return "", err
 	}
 
-	for shopwareVersion, phpVersion := range shopwareToPHPVersion {
-		shopwareVersionConstraint, err := version.NewVersion(shopwareVersion)
+	// Map iteration order is random; check the Shopware versions in ascending
+	// order so the lowest supported Shopware version decides the PHP version.
+	shopwareVersions := make([]*version.Version, 0, len(shopwareToPHPVersion))
+	for shopwareVersion := range shopwareToPHPVersion {
+		v, err := version.NewVersion(shopwareVersion)
 		if err != nil {
 			continue
 		}
+		shopwareVersions = append(shopwareVersions, v)
+	}
+	slices.SortFunc(shopwareVersions, func(a, b *version.Version) int {
+		return a.Compare(b)
+	})
 
-		if constraint.Check(shopwareVersionConstraint) {
-			return phpVersion, nil
+	for _, shopwareVersion := range shopwareVersions {
+		if constraint.Check(shopwareVersion) {
+			return shopwareToPHPVersion[shopwareVersion.Original()], nil
 		}
 	}
 

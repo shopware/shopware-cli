@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/shopware/shopware-cli/internal/shop"
 	"github.com/shopware/shopware-cli/internal/testhelper"
 )
 
@@ -137,4 +138,45 @@ func TestGetConfigFromProjectYAMLBundleDeduplication(t *testing.T) {
 		}
 	}
 	assert.Equal(t, 1, count, "bundle declared in both composer.json and YAML config should only appear once in SourceDirectories")
+}
+
+func TestProjectPHPVersion(t *testing.T) {
+	composerWith := func(platform, require string) rootComposerJson {
+		var c rootComposerJson
+		c.Config.Platform.PHP = platform
+		c.Require = map[string]string{"php": require}
+		return c
+	}
+
+	cases := []struct {
+		name     string
+		cfg      *shop.Config
+		composer rootComposerJson
+		expected string
+	}{
+		{"validation php version wins", &shop.Config{PHPVersion: "8.4", Validation: &shop.ConfigValidation{PhpVersion: "8.2"}}, composerWith("8.3.0", "^8.2"), "8.2"},
+		{"project config wins", &shop.Config{PHPVersion: "8.4", Docker: &shop.ConfigDocker{PHP: &shop.ConfigDockerPHP{Version: "8.3"}}}, composerWith("8.2.0", "^8.2"), "8.4"},
+		{"docker php version", &shop.Config{Docker: &shop.ConfigDocker{PHP: &shop.ConfigDockerPHP{Version: "8.3"}}}, composerWith("8.2.0", "^8.2"), "8.3"},
+		{"composer platform", &shop.Config{}, composerWith("8.3.12", "^8.2"), "8.3.12"},
+		{"composer require", &shop.Config{}, composerWith("", ">=8.3"), "8.3"},
+		{"invalid composer require", &shop.Config{}, composerWith("", "not a constraint"), ""},
+		{"nothing set", &shop.Config{}, rootComposerJson{}, ""},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			assert.Equal(t, tc.expected, projectPHPVersion(tc.cfg, tc.composer))
+		})
+	}
+}
+
+func TestGetConfigFromProjectPHPVersion(t *testing.T) {
+	stubShopwareVersions(t)
+	p := testhelper.NewProject(t).
+		File("composer.json", testProjectComposerJSON.String()).
+		File(".shopware-project.yml", "php_version: \"8.4\"\n")
+
+	cfg, err := GetConfigFromProject(t.Context(), p.Root, true)
+	require.NoError(t, err)
+	assert.Equal(t, "8.4", cfg.PHPVersion)
 }
