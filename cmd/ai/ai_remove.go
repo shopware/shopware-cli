@@ -10,6 +10,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/shopware/shopware-cli/internal/ai/directory"
+	"github.com/shopware/shopware-cli/internal/ai/skills"
 	"github.com/shopware/shopware-cli/internal/ai/state"
 	"github.com/shopware/shopware-cli/internal/shop"
 )
@@ -119,14 +120,14 @@ func performRemove(ctx context.Context, o removeOptions, progress io.Writer) (re
 		Scope:   scope,
 		Removed: recorded,
 		DryRun:  o.dryRun,
-		Command: skillsRemoveArgs(removeName, o.agent, o.global),
+		Command: skills.RemoveArgs(removeName, o.agent, o.global),
 	}
 
 	if o.dryRun || !recorded {
 		return result, nil
 	}
 
-	if err := runSkills(ctx, result.Command, projectRoot, progress); err != nil {
+	if err := skills.Run(ctx, result.Command, projectRoot, progress); err != nil {
 		return removeResult{}, err
 	}
 

@@ -1,4 +1,7 @@
-package ai
+// Package skills is a thin client over the skills.sh CLI (via npx) plus the git
+// and HTTP lookups the ai commands need: building argv, resolving release tags,
+// and running an integration's compatibility check.
+package skills
 
 import (
 	"bytes"
@@ -21,9 +24,9 @@ var errNotFound = errors.New("not found")
 // skillsVersion pins the skills.sh CLI the commands run against.
 const skillsVersion = "1.5.18"
 
-// skillsAddArgs builds the `npx skills add ...` argv. The source is a tree URL
-// (see skillSourceURL) pinning the skill, so no `--skill` is needed.
-func skillsAddArgs(source, agent string, global, assumeYes bool) []string {
+// AddArgs builds the `npx skills add ...` argv. The source is a tree URL (see
+// SourceURL) pinning the skill, so no `--skill` is needed.
+func AddArgs(source, agent string, global, assumeYes bool) []string {
 	argv := []string{
 		"npx", "--yes", "skills@" + skillsVersion, "add", source,
 		"--agent", agent,
@@ -38,28 +41,8 @@ func skillsAddArgs(source, agent string, global, assumeYes bool) []string {
 	return argv
 }
 
-// validateAgent rejects --agent shapes skills.sh cannot round-trip: empty, the
-// "*" wildcard, and comma/whitespace lists. The name itself is not checked.
-func validateAgent(agent string) error {
-	if agent == "" {
-		return errors.New("specify the target agent with --agent (e.g. --agent claude-code)")
-	}
-	if strings.ContainsAny(agent, "*, \t") {
-		return fmt.Errorf("--agent takes a single agent (e.g. claude-code); %q is not supported, run the command once per agent", agent)
-	}
-
-	return nil
-}
-
-// skillSourceURL builds the GitHub tree URL pinning a skill to a ref, e.g.
-// .../shopware-cli/tree/0.18.3/skills/shopware-cli. A bare owner/repo@ref is
-// ignored by skills.sh (it installs the default branch).
-func skillSourceURL(repoURL, ref, skill string) string {
-	return fmt.Sprintf("https://github.com/%s/tree/%s/skills/%s", ownerRepo(repoURL), ref, skill)
-}
-
-// skillsRemoveArgs builds the `npx skills remove ...` argv.
-func skillsRemoveArgs(skill, agent string, global bool) []string {
+// RemoveArgs builds the `npx skills remove ...` argv.
+func RemoveArgs(skill, agent string, global bool) []string {
 	argv := []string{
 		"npx", "--yes", "skills@" + skillsVersion, "remove", skill,
 		"--agent", agent,
@@ -72,9 +55,25 @@ func skillsRemoveArgs(skill, agent string, global bool) []string {
 	return argv
 }
 
-// runSkills runs a skills.sh command via npx in dir (empty = current directory),
+// SourceURL builds the GitHub tree URL pinning a skill to a ref, e.g.
+// .../shopware-cli/tree/0.18.3/skills/shopware-cli. A bare owner/repo@ref is
+// ignored by skills.sh (it installs the default branch).
+func SourceURL(repoURL, ref, skill string) string {
+	return fmt.Sprintf("https://github.com/%s/tree/%s/skills/%s", OwnerRepo(repoURL), ref, skill)
+}
+
+// OwnerRepo turns a GitHub repo URL into "owner/repo" form.
+func OwnerRepo(repoURL string) string {
+	s := strings.TrimSuffix(repoURL, ".git")
+	s = strings.TrimPrefix(s, "https://github.com/")
+	s = strings.TrimPrefix(s, "http://github.com/")
+
+	return s
+}
+
+// Run runs a skills.sh command via npx in dir (empty = current directory),
 // streaming output to out. A package var so tests can replace it.
-var runSkills = func(ctx context.Context, argv []string, dir string, out io.Writer) error {
+var Run = func(ctx context.Context, argv []string, dir string, out io.Writer) error {
 	if _, err := exec.LookPath(argv[0]); err != nil {
 		return fmt.Errorf("%s not found: installing skills requires Node.js/npx on PATH", argv[0])
 	}
@@ -85,28 +84,19 @@ var runSkills = func(ctx context.Context, argv []string, dir string, out io.Writ
 	cmd.Stderr = out
 
 	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("skills %s failed: %w", skillsOp(argv), err)
+		return fmt.Errorf("skills %s failed: %w", op(argv), err)
 	}
 
 	return nil
 }
 
-// skillsOp returns the skills.sh subcommand from argv, for error messages.
-func skillsOp(argv []string) string {
+// op returns the skills.sh subcommand from argv, for error messages.
+func op(argv []string) string {
 	if len(argv) > 3 {
 		return argv[3]
 	}
 
 	return "command"
-}
-
-// ownerRepo turns a GitHub repo URL into "owner/repo" form.
-func ownerRepo(repoURL string) string {
-	s := strings.TrimSuffix(repoURL, ".git")
-	s = strings.TrimPrefix(s, "https://github.com/")
-	s = strings.TrimPrefix(s, "http://github.com/")
-
-	return s
 }
 
 // remoteTagNames lists the tag names of repoURL via `git ls-remote --tags`.
@@ -147,9 +137,9 @@ func matchTag(tags []string, want string) (string, bool) {
 	return "", false
 }
 
-// resolveLatestTag returns the highest stable release tag of repoURL. A package
+// ResolveLatestTag returns the highest stable release tag of repoURL. A package
 // var so tests can replace it.
-var resolveLatestTag = func(ctx context.Context, repoURL string) (string, error) {
+var ResolveLatestTag = func(ctx context.Context, repoURL string) (string, error) {
 	tags, err := remoteTagNames(ctx, repoURL)
 	if err != nil {
 		return "", err
@@ -163,10 +153,10 @@ var resolveLatestTag = func(ctx context.Context, repoURL string) (string, error)
 	return tag, nil
 }
 
-// resolveTag returns the actual tag of repoURL matching want, accepting a "v"
+// ResolveTag returns the actual tag of repoURL matching want, accepting a "v"
 // prefix on either side. skills.sh would silently install the default branch for
 // a missing ref, so the tag is resolved up front. A package var for tests.
-var resolveTag = func(ctx context.Context, repoURL, want string) (string, error) {
+var ResolveTag = func(ctx context.Context, repoURL, want string) (string, error) {
 	tags, err := remoteTagNames(ctx, repoURL)
 	if err != nil {
 		return "", err
@@ -207,9 +197,9 @@ type compatReport struct {
 	Warnings   []string `json:"warnings"`
 }
 
-// runCompatCheck fetches the owner compatibility check at ref and runs it against
+// RunCompatCheck fetches the owner compatibility check at ref and runs it against
 // projectDir. A package var so tests can replace it.
-var runCompatCheck = func(ctx context.Context, repo, skill, ref, projectDir string, out io.Writer) error {
+var RunCompatCheck = func(ctx context.Context, repo, skill, ref, projectDir string, out io.Writer) error {
 	// The check runs locally and needs PHP; without it the script reports the
 	// project as incompatible instead of signalling a missing tool, so check up
 	// front (a Docker project may not expose PHP on the host).

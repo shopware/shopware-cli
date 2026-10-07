@@ -3,6 +3,7 @@ package ai
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"strings"
@@ -10,6 +11,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/shopware/shopware-cli/internal/ai/directory"
+	"github.com/shopware/shopware-cli/internal/ai/skills"
 	"github.com/shopware/shopware-cli/internal/ai/state"
 	"github.com/shopware/shopware-cli/internal/shop"
 )
@@ -152,7 +154,7 @@ func performAdd(ctx context.Context, o addOptions, progress io.Writer) (addResul
 	}
 
 	// -y: we supply everything, so skills.sh must not prompt.
-	argv := skillsAddArgs(skillSourceURL(repoURL, ref, entry.Name), o.agent, o.global, true)
+	argv := skills.AddArgs(skills.SourceURL(repoURL, ref, entry.Name), o.agent, o.global, true)
 
 	result := addResult{
 		Name:             entry.Name,
@@ -186,13 +188,13 @@ func performAdd(ctx context.Context, o addOptions, progress io.Writer) (addResul
 
 	// Check compatibility before installing anything.
 	if entry.Delivery.Kind == directory.DeliveryGit && entry.Compatibility != nil {
-		if err := runCompatCheck(ctx, ownerRepo(entry.Delivery.Repository), entry.Name, ref, projectRoot, progress); err != nil {
+		if err := skills.RunCompatCheck(ctx, skills.OwnerRepo(entry.Delivery.Repository), entry.Name, ref, projectRoot, progress); err != nil {
 			return addResult{}, err
 		}
 	}
 
 	// Always run skills.sh (idempotent); it owns the disk, the record only reports.
-	if err := runSkills(ctx, argv, projectRoot, progress); err != nil {
+	if err := skills.Run(ctx, argv, projectRoot, progress); err != nil {
 		return addResult{}, err
 	}
 
@@ -231,16 +233,16 @@ func resolveSource(ctx context.Context, entry *directory.Integration, tag, cliVe
 		switch {
 		case ref != "":
 			if !dryRun {
-				ref, err = resolveTag(ctx, repoURL, ref)
+				ref, err = skills.ResolveTag(ctx, repoURL, ref)
 			}
 		case cliVersion == "" || cliVersion == devVersion:
 			if dryRun {
 				ref = refPlaceholder
 			} else {
-				ref, err = resolveLatestTag(ctx, repoURL)
+				ref, err = skills.ResolveLatestTag(ctx, repoURL)
 			}
 		case !dryRun:
-			ref, err = resolveTag(ctx, repoURL, cliVersion)
+			ref, err = skills.ResolveTag(ctx, repoURL, cliVersion)
 		default:
 			ref = cliVersion
 		}
@@ -251,16 +253,29 @@ func resolveSource(ctx context.Context, entry *directory.Integration, tag, cliVe
 			if dryRun {
 				ref = refPlaceholder
 			} else {
-				ref, err = resolveLatestTag(ctx, repoURL)
+				ref, err = skills.ResolveLatestTag(ctx, repoURL)
 			}
 		case !dryRun:
-			ref, err = resolveTag(ctx, repoURL, ref)
+			ref, err = skills.ResolveTag(ctx, repoURL, ref)
 		}
 	default:
 		err = fmt.Errorf("unsupported delivery %q", entry.Delivery.Kind)
 	}
 
 	return repoURL, ref, err
+}
+
+// validateAgent rejects --agent shapes skills.sh cannot round-trip: empty, the
+// "*" wildcard, and comma/whitespace lists. The name itself is not checked.
+func validateAgent(agent string) error {
+	if agent == "" {
+		return errors.New("specify the target agent with --agent (e.g. --agent claude-code)")
+	}
+	if strings.ContainsAny(agent, "*, \t") {
+		return fmt.Errorf("--agent takes a single agent (e.g. claude-code); %q is not supported, run the command once per agent", agent)
+	}
+
+	return nil
 }
 
 // splitNameTag splits "name@tag" into its parts; a missing tag yields "".

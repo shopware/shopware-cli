@@ -13,18 +13,17 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/shopware/shopware-cli/internal/ai/skills"
 	"github.com/shopware/shopware-cli/internal/ai/state"
 )
 
-func TestSkillsAddArgs(t *testing.T) {
-	src := "https://github.com/shopware/shopware-cli/tree/0.18.3/skills/shopware-cli"
-	got := strings.Join(skillsAddArgs(src, "claude-code", true, true), " ")
-	want := "npx --yes skills@" + skillsVersion + " add " + src + " --agent claude-code --global -y"
-	assert.Equal(t, want, got)
+func TestValidateAgent(t *testing.T) {
+	require.NoError(t, validateAgent("claude-code"))
 
-	got = strings.Join(skillsAddArgs("a", "claude-code", false, false), " ")
-	assert.NotContains(t, got, "--global")
-	assert.NotContains(t, got, " -y")
+	assert.ErrorContains(t, validateAgent(""), "--agent")
+	for _, bad := range []string{"*", "claude-code,cursor", "claude code"} {
+		assert.ErrorContains(t, validateAgent(bad), "single agent", "should reject %q", bad)
+	}
 }
 
 func TestSplitNameTag(t *testing.T) {
@@ -93,28 +92,28 @@ func setupAdd(t *testing.T) *skillsCall {
 	t.Chdir(tmp)
 
 	rec := &skillsCall{}
-	prev := runSkills
-	runSkills = func(_ context.Context, argv []string, _ string, _ io.Writer) error {
+	prev := skills.Run
+	skills.Run = func(_ context.Context, argv []string, _ string, _ io.Writer) error {
 		rec.calls++
 		rec.lastArgv = argv
 		return nil
 	}
-	t.Cleanup(func() { runSkills = prev })
+	t.Cleanup(func() { skills.Run = prev })
 
-	// Stub tag resolution so git-delivery tests need no network.
-	prevResolve := resolveLatestTag
-	resolveLatestTag = func(_ context.Context, _ string) (string, error) { return "0.1.9", nil }
-	t.Cleanup(func() { resolveLatestTag = prevResolve })
+	// Stub latest-tag resolution so git-delivery tests need no network.
+	prevResolve := skills.ResolveLatestTag
+	skills.ResolveLatestTag = func(_ context.Context, _ string) (string, error) { return "0.1.9", nil }
+	t.Cleanup(func() { skills.ResolveLatestTag = prevResolve })
 
 	// Stub the compatibility check to "compatible" by default; tests override it.
-	prevCompat := runCompatCheck
-	runCompatCheck = func(_ context.Context, _, _, _, _ string, _ io.Writer) error { return nil }
-	t.Cleanup(func() { runCompatCheck = prevCompat })
+	prevCompat := skills.RunCompatCheck
+	skills.RunCompatCheck = func(_ context.Context, _, _, _, _ string, _ io.Writer) error { return nil }
+	t.Cleanup(func() { skills.RunCompatCheck = prevCompat })
 
-	// Stub tag resolution to echo the request so explicit-tag tests need no network.
-	prevResolveTag := resolveTag
-	resolveTag = func(_ context.Context, _, want string) (string, error) { return want, nil }
-	t.Cleanup(func() { resolveTag = prevResolveTag })
+	// Stub explicit-tag resolution to echo the request so tests need no network.
+	prevResolveTag := skills.ResolveTag
+	skills.ResolveTag = func(_ context.Context, _, want string) (string, error) { return want, nil }
+	t.Cleanup(func() { skills.ResolveTag = prevResolveTag })
 
 	return rec
 }
@@ -230,7 +229,7 @@ func TestAddGitDeliveryResolvesLatestTagAndInstalls(t *testing.T) {
 
 func TestAddGitCompatCheckFailureAbortsInstall(t *testing.T) {
 	rec := setupAdd(t)
-	runCompatCheck = func(_ context.Context, _, _, _, _ string, _ io.Writer) error {
+	skills.RunCompatCheck = func(_ context.Context, _, _, _, _ string, _ io.Writer) error {
 		return errors.New("PHP 8.2+ required, found 8.1")
 	}
 
