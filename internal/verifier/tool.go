@@ -101,7 +101,7 @@ type FixTool interface {
 
 type FormatTool interface {
 	Tool
-	Format(ctx context.Context, config ToolConfig, dryRun bool) error
+	Format(ctx context.Context, check *Check, config ToolConfig, dryRun bool) error
 }
 
 func canonicalToolName(name string) string {

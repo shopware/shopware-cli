@@ -3,7 +3,6 @@ package extension
 import (
 	"errors"
 	"fmt"
-	"os"
 	"path/filepath"
 
 	"github.com/spf13/cobra"
@@ -40,13 +39,13 @@ var extensionFormat = &cobra.Command{
 		return nil
 	},
 	RunE: func(cmd *cobra.Command, args []string) error {
-		allTools := verifier.GetToolsOf[verifier.FormatTool]()
+		// Reporting format and tool selection were validated in PreRunE.
+		reportingFormat, _ := extensionValidationFormat(cmd)
 		only, _ := cmd.Flags().GetString("only")
 		exclude, _ := cmd.Flags().GetString("exclude")
 
 		// Tool selection was validated in PreRunE.
-		requestedTools, _ := allTools.Only(only)
-		tools, _ := requestedTools.Exclude(exclude)
+		tools, statuses, _ := selectExtensionFormattingTools(only, exclude)
 
 		dryRun, _ := cmd.Flags().GetBool("dry-run")
 
@@ -67,24 +66,52 @@ var extensionFormat = &cobra.Command{
 
 		logging.FromContext(cmd.Context()).Debugf("Running fixes for Shopware version: %s", toolCfg.MinShopwareVersion)
 
-		var gr errgroup.Group
+		result := verifier.NewCheck()
+		result.SetSourceRoot(toolCfg.RootDir)
 
+		var gr errgroup.Group
 		for _, tool := range tools {
 			gr.Go(func() error {
-				return tool.Format(cmd.Context(), *toolCfg, dryRun)
+				return tool.Format(cmd.Context(), result, *toolCfg, dryRun)
 			})
 		}
-
 		runErr := gr.Wait()
-		if err := validation.PrintToolInvocationTable(os.Stdout, "Formatters", extensionToolInvocationStatuses(allTools, requestedTools, tools)); err != nil {
-			return err
+
+		reportErr := validation.DoCheckReport(result.RemoveByIdentifier(
+			toolCfg.ValidationIgnores),
+			reportingFormat,
+			runErr != nil,
+			statuses...)
+		if runErr != nil {
+			return runErr
 		}
-		return runErr
+
+		return reportErr
 	},
+}
+
+func selectExtensionFormattingTools(only, exclude string) (verifier.ToolList[verifier.FormatTool], []validation.ToolInvocationStatus, error) {
+	validationTools := verifier.GetToolsOf[verifier.FormatTool]()
+
+	requestedTools, err := validationTools.Only(only)
+	if err != nil {
+		return nil, nil, err
+	}
+	selected, err := requestedTools.Exclude(exclude)
+	if err != nil {
+		return nil, nil, err
+	}
+	if len(selected) == 0 {
+		return nil, nil, errors.New("no format tools selected after applying --exclude")
+	}
+
+	return selected, extensionToolInvocationStatuses(validationTools, requestedTools, selected), nil
 }
 
 func init() {
 	extensionRootCmd.AddCommand(extensionFormat)
+	extensionFormat.PersistentFlags().String("format", "", "Reporting format (summary, json, github, gitlab, junit, markdown)")
+	extensionFormat.PersistentFlags().String("reporter", "", "Reporting format (summary, json, github, gitlab, junit, markdown)")
 	extensionFormat.Flags().String("only", "", "Run only the specified formatters (comma-separated, e.g. prettier,php-cs-fixer)")
 	extensionFormat.Flags().String("exclude", "", "Exclude specified formatters from running (comma-separated, e.g. prettier,php-cs-fixer). When combined with --only, exclude formatters from the selected set")
 	extensionFormat.Flags().Bool("dry-run", false, "Run in dry run mode")
