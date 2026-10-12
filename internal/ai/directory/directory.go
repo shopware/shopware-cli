@@ -11,31 +11,6 @@ import (
 	"strings"
 )
 
-// Type is the kind of integration.
-type Type string
-
-const (
-	TypeSkill Type = "skill"
-	TypeMCP   Type = "mcp"
-)
-
-// DeliveryKind describes how an integration is delivered. "project" is reserved
-// for a later increment and must not be renamed when added.
-type DeliveryKind string
-
-const (
-	DeliveryBundled DeliveryKind = "bundled"
-	DeliveryGit     DeliveryKind = "git"
-)
-
-// Status is the lifecycle state of an integration.
-type Status string
-
-const (
-	StatusActive     Status = "active"
-	StatusDeprecated Status = "deprecated"
-)
-
 // Directory is the set of known integrations.
 type Directory struct {
 	Integrations []Integration `json:"integrations"`
@@ -45,26 +20,8 @@ type Directory struct {
 // contract; see CONTRACT.md.
 type Integration struct {
 	Name        string `json:"name"`
-	DisplayName string `json:"displayName"`
-	Type        Type   `json:"type"`
-	Provider    string `json:"provider"`
 	Description string `json:"description"`
-	Status      Status `json:"status"`
-
-	Documentation string         `json:"documentation"`
-	Delivery      Delivery       `json:"delivery"`
-	Compatibility *Compatibility `json:"compatibility,omitempty"`
-}
-
-// Delivery describes how an integration is delivered.
-type Delivery struct {
-	Kind       DeliveryKind `json:"kind"`
-	Repository string       `json:"repository,omitempty"`
-}
-
-// Compatibility describes how compatibility is determined for an entry.
-type Compatibility struct {
-	Source string `json:"source"`
+	Repository  string `json:"repository"`
 }
 
 // Load returns the directory of known integrations.
@@ -84,47 +41,15 @@ func (d *Directory) Get(name string) (*Integration, bool) {
 	return nil, false
 }
 
-// ListOptions filters a directory listing.
-type ListOptions struct {
-	// Type, when set, keeps only entries of that type. It accepts any known type
-	// identifier (see knownTypeFilters), including reserved ones that match no
-	// entry yet.
-	Type string
-	// InstalledOnly keeps only entries whose name is in the installed set passed
-	// to List.
-	InstalledOnly bool
-}
-
-// knownTypeFilters are the type identifiers accepted by List. It includes "mcp",
-// reserved for a future increment (#1336): it currently matches no entry, so a
-// "mcp" filter returns an empty list rather than an error. Any other value is
-// rejected.
-var knownTypeFilters = map[string]bool{
-	string(TypeSkill): true,
-	string(TypeMCP):   true,
-}
-
-// List returns the integrations matching opts. installed is the set of
-// integration names recorded as installed by the CLI; it is consulted only when
-// opts.InstalledOnly is set.
-func (d *Directory) List(installed map[string]bool, opts ListOptions) ([]Integration, error) {
-	if opts.Type != "" && !knownTypeFilters[opts.Type] {
-		return nil, fmt.Errorf("unknown type %q (allowed: skill, mcp)", opts.Type)
-	}
-
+// List returns all skills, or only names in installed when installedOnly is set.
+func (d *Directory) List(installed map[string]bool, installedOnly bool) []Integration {
 	out := make([]Integration, 0, len(d.Integrations))
 	for _, e := range d.Integrations {
-		if opts.Type != "" && string(e.Type) != opts.Type {
-			continue
+		if !installedOnly || installed[e.Name] {
+			out = append(out, e)
 		}
-		if opts.InstalledOnly && !installed[e.Name] {
-			continue
-		}
-
-		out = append(out, e)
 	}
-
-	return out, nil
+	return out
 }
 
 // Info returns a single integration by name, or an error when no entry matches.

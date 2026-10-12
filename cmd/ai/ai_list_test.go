@@ -11,20 +11,12 @@ import (
 )
 
 func TestWriteListJSON(t *testing.T) {
-	entries := []directory.Integration{
-		{
-			Name: "x", DisplayName: "X", Type: directory.TypeSkill,
-			Provider: "shopware", Description: "d", Status: directory.StatusActive,
-			// fields below must not appear in the list shape
-			Documentation: "https://example.test/x",
-			Delivery:      directory.Delivery{Kind: directory.DeliveryBundled},
-		},
-	}
+	entries := []directory.Integration{{Name: "x", Description: "d", Repository: "https://example.test/repo"}}
 
 	var buf bytes.Buffer
 	require.NoError(t, writeListJSON(&buf, entries))
 
-	assert.JSONEq(t, `[{"name":"x","displayName":"X","type":"skill","provider":"shopware","description":"d","status":"active"}]`, buf.String())
+	assert.JSONEq(t, `[{"name":"x","description":"d","repository":"https://example.test/repo"}]`, buf.String())
 }
 
 func TestWriteListJSONEmpty(t *testing.T) {

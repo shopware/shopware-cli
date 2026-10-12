@@ -12,6 +12,9 @@ func TestLoad(t *testing.T) {
 	require.NotNil(t, d)
 
 	assert.NotEmpty(t, d.Integrations)
+	for _, entry := range d.Integrations {
+		assert.NotEmpty(t, entry.Repository)
+	}
 
 	_, ok := d.Get("shopware-cli")
 	assert.True(t, ok)
@@ -31,57 +34,25 @@ func TestGet(t *testing.T) {
 // fixtureDirectory is a fixed, minimal directory for logic tests, independent of
 // the real hardwired data so adding integrations does not break these tests.
 func fixtureDirectory() *Directory {
-	return &Directory{
-		Integrations: []Integration{
-			{
-				Name: "alpha-skill", DisplayName: "Alpha", Type: TypeSkill,
-				Provider: "shopware", Description: "a", Status: StatusActive,
-				Documentation: "https://example.test/a",
-				Delivery:      Delivery{Kind: DeliveryBundled},
-			},
-			{
-				Name: "beta-skill", DisplayName: "Beta", Type: TypeSkill,
-				Provider: "shopware", Description: "b", Status: StatusActive,
-				Documentation: "https://example.test/b",
-				Delivery:      Delivery{Kind: DeliveryGit, Repository: "https://example.test/repo"},
-			},
-		},
-	}
+	return &Directory{Integrations: []Integration{
+		{Name: "alpha-skill", Description: "a", Repository: "https://example.test/repo"},
+		{Name: "beta-skill", Description: "b", Repository: "https://example.test/repo"},
+	}}
 }
 
 func TestListReturnsAll(t *testing.T) {
-	got, err := fixtureDirectory().List(nil, ListOptions{})
-	require.NoError(t, err)
+	got := fixtureDirectory().List(nil, false)
 	assert.Len(t, got, 2)
-}
-
-func TestListTypeFilter(t *testing.T) {
-	d := fixtureDirectory()
-
-	skills, err := d.List(nil, ListOptions{Type: "skill"})
-	require.NoError(t, err)
-	assert.Len(t, skills, 2)
-
-	// "mcp" is a reserved-but-known filter: empty result, no error.
-	mcp, err := d.List(nil, ListOptions{Type: "mcp"})
-	require.NoError(t, err)
-	assert.Empty(t, mcp)
-
-	_, err = d.List(nil, ListOptions{Type: "bogus"})
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "unknown type")
 }
 
 func TestListInstalledOnly(t *testing.T) {
 	d := fixtureDirectory()
 
-	got, err := d.List(map[string]bool{"beta-skill": true}, ListOptions{InstalledOnly: true})
-	require.NoError(t, err)
+	got := d.List(map[string]bool{"beta-skill": true}, true)
 	require.Len(t, got, 1)
 	assert.Equal(t, "beta-skill", got[0].Name)
 
-	none, err := d.List(nil, ListOptions{InstalledOnly: true})
-	require.NoError(t, err)
+	none := d.List(nil, true)
 	assert.Empty(t, none)
 }
 

@@ -157,7 +157,47 @@ npx skills add shopware/shopware-cli --list
 The `skills` CLI is responsible for installing the canonical skills for
 supported AI clients. Shopware CLI does not maintain client-specific copies.
 
-## Updating installed skills
+## Installing and updating skills
+
+### Installing through Shopware CLI
+
+The experimental `ai` commands use the curated directory shown by `ai list`:
+
+```bash
+shopware-cli ai add shopware-cli
+shopware-cli ai add shopware-cli-docker --client claude-code --global
+shopware-cli ai add deployment-helper --client cursor --dry-run
+shopware-cli ai remove shopware-cli
+```
+
+Both commands accept an optional `--client`, passed unchanged to the skills CLI
+as `--agent` (for example, `claude-code` or `codex`). The skills CLI validates
+the agent name; Shopware CLI maintains no client list or aliases.
+When omitted, no agent filter is passed and the skills CLI detects clients.
+The default scope is the current directory. Use `--global` for the user scope.
+Node.js and npm are required: Shopware CLI invokes `npx --yes skills` with the
+selected skill, agent, scope, and `--yes`.
+
+All skills are installed from the remote repository specified in the directory.
+The CLI skills come from `shopware/shopware-cli`; Deployment Helper comes from
+`shopware/deployment-helper`. No skills are embedded in the binary. Source
+resolution, installation layout, and lock files are managed by the skills CLI;
+Shopware CLI does not independently resolve compatible release tags or claim a
+resolved Git revision in its state.
+
+Installed skills are read from `npx skills list --json`; Shopware CLI keeps no
+separate installation state. `ai list --installed` filters the directory to
+skills installed in the current project. Add `--global` to query user-level
+installations. Skills installed directly with `npx skills` are included too.
+`ai remove` delegates removal of a directory skill to the skills CLI, regardless
+of which tool installed it. Old Shopware CLI install-state files are ignored.
+
+`--dry-run` previews the delegated command without invoking npx or writing files.
+It does not predict the files the external tool will change. `--format json`
+returns a versioned operation description on stdout; subprocess output and errors
+go to stderr. Errors retain the CLI's standard error format.
+
+### Installing directly through the skills CLI
 
 The canonical source changes whenever `skills/` changes on the default branch.
 
