@@ -13,7 +13,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/shopware/shopware-cli/internal/ai/state"
-	"github.com/shopware/shopware-cli/internal/cliversion"
 )
 
 func TestValidateAgent(t *testing.T) {
@@ -105,10 +104,21 @@ func TestAddDryRunTouchesNothing(t *testing.T) {
 	assert.Empty(t, st.Installed, "dry-run must not write state")
 }
 
-func TestAddBundledDefaultBranchWhenNoVersion(t *testing.T) {
+func TestAddWithTagIsVerbatim(t *testing.T) {
 	rec := setup(t)
-	// The test binary reports the dev version, so a bundled skill with no tag
-	// installs from the default branch (bare owner/repo + --skill).
+
+	// The tag is the git ref verbatim (no normalization), pinned via a tree URL.
+	res, err := runAdd(t, Options{Name: "deployment-helper@v0.1.9", Agent: "claude-code", Global: true})
+	require.NoError(t, err)
+	assert.Equal(t, "v0.1.9", res.ResolvedRevision)
+	assert.Contains(t, strings.Join(rec.lastArgv, " "), "github.com/shopware/deployment-helper/tree/v0.1.9/skills/deployment-helper")
+}
+
+func TestAddNoTagInstallsDefaultBranch(t *testing.T) {
+	rec := setup(t)
+
+	// shopware-cli ships in the shopware/shopware-cli repo; with no tag it installs
+	// from the default branch (bare owner/repo + --skill, no tree URL).
 	res, err := runAdd(t, Options{Name: "shopware-cli", Agent: "claude-code", Global: true})
 	require.NoError(t, err)
 	assert.Equal(t, ActionInstalled, res.Action)
@@ -119,50 +129,18 @@ func TestAddBundledDefaultBranchWhenNoVersion(t *testing.T) {
 	assert.NotContains(t, joined, "/tree/")
 }
 
-func TestAddBundledPinsToCLIVersion(t *testing.T) {
-	rec := setup(t)
-	prev := cliversion.Version
-	cliversion.Version = "0.18.3"
-	t.Cleanup(func() { cliversion.Version = prev })
-
-	res, err := runAdd(t, Options{Name: "shopware-cli", Agent: "claude-code", Global: true})
-	require.NoError(t, err)
-	assert.Equal(t, "v0.18.3", res.ResolvedRevision, "bare CLI version is normalized to the v tag")
-	assert.Contains(t, strings.Join(rec.lastArgv, " "), "github.com/shopware/shopware-cli/tree/v0.18.3/skills/shopware-cli")
-}
-
-func TestAddGitWithTagNormalizesRef(t *testing.T) {
-	rec := setup(t)
-
-	// User types the bare version; it is normalized to the v-prefixed tag.
-	res, err := runAdd(t, Options{Name: "deployment-helper@0.1.9", Agent: "claude-code", Global: true})
-	require.NoError(t, err)
-	assert.Equal(t, "v0.1.9", res.ResolvedRevision)
-	assert.Contains(t, strings.Join(rec.lastArgv, " "), "github.com/shopware/deployment-helper/tree/v0.1.9/skills/deployment-helper")
-}
-
-func TestAddGitNoTagInstallsDefaultBranch(t *testing.T) {
-	rec := setup(t)
-
-	res, err := runAdd(t, Options{Name: "deployment-helper", Agent: "claude-code"})
-	require.NoError(t, err)
-	assert.Equal(t, state.ScopeProject, res.Scope)
-	assert.Equal(t, "", res.ResolvedRevision)
-	assert.Contains(t, strings.Join(rec.lastArgv, " "), "add shopware/deployment-helper --skill deployment-helper")
-}
-
 func TestAddIsIdempotentAndReportsAction(t *testing.T) {
 	setup(t)
 
-	res, err := runAdd(t, Options{Name: "deployment-helper@0.1.9", Agent: "claude-code", Global: true})
+	res, err := runAdd(t, Options{Name: "deployment-helper@v0.1.9", Agent: "claude-code", Global: true})
 	require.NoError(t, err)
 	assert.Equal(t, ActionInstalled, res.Action)
 
-	res, err = runAdd(t, Options{Name: "deployment-helper@0.1.9", Agent: "claude-code", Global: true})
+	res, err = runAdd(t, Options{Name: "deployment-helper@v0.1.9", Agent: "claude-code", Global: true})
 	require.NoError(t, err)
 	assert.Equal(t, ActionUnchanged, res.Action)
 
-	res, err = runAdd(t, Options{Name: "deployment-helper@0.2.0", Agent: "claude-code", Global: true})
+	res, err = runAdd(t, Options{Name: "deployment-helper@v0.2.0", Agent: "claude-code", Global: true})
 	require.NoError(t, err)
 	assert.Equal(t, ActionUpdated, res.Action)
 	assert.Equal(t, "v0.1.9", res.PreviousRevision)

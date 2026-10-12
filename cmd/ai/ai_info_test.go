@@ -30,6 +30,6 @@ func TestWriteInfoTable(t *testing.T) {
 }
 
 func TestDeliveryLabel(t *testing.T) {
-	assert.Equal(t, "git (https://example.test/r)", deliveryLabel(directory.Delivery{Kind: directory.DeliveryGit, Repository: "https://example.test/r"}))
-	assert.Equal(t, "bundled", deliveryLabel(directory.Delivery{Kind: directory.DeliveryBundled}))
+	assert.Equal(t, "git (shopware/deployment-helper)", deliveryLabel(directory.Delivery{Kind: directory.DeliveryGit, Repository: "shopware/deployment-helper"}))
+	assert.Equal(t, "git", deliveryLabel(directory.Delivery{Kind: directory.DeliveryGit}))
 }

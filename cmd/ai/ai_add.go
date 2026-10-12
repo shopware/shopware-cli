@@ -17,9 +17,8 @@ var aiAddCmd = &cobra.Command{
 
 By default the skill is installed into the current Shopware project (a shop); use
 --global to install at the user level from anywhere (the right choice in an
-extension repository, which is not a shop). Pin a release with @<version>,
-otherwise the repository's default branch is used (bundled skills follow the CLI
-version).
+extension repository, which is not a shop). Pin a release with @<tag> (the exact
+git tag, e.g. @v0.1.9); otherwise the repository's default branch is used.
 
 Requires Node.js/npx on PATH; git-delivered integrations also need git and network
 access. The agent name is whatever skills.sh supports (e.g. claude-code, codex) —
@@ -31,8 +30,8 @@ team, or gitignore them to keep it local.`,
 	Example: `  # install the Shopware CLI skill into Claude Code for this project
   shopware-cli ai add shopware-cli --agent claude-code
 
-  # pin a specific release
-  shopware-cli ai add deployment-helper@0.1.9 --agent claude-code
+  # pin a specific release (the exact git tag)
+  shopware-cli ai add deployment-helper@v0.1.9 --agent claude-code
 
   # install at the user level, from anywhere
   shopware-cli ai add shopware-cli --agent claude-code --global

@@ -24,8 +24,7 @@ const (
 type DeliveryKind string
 
 const (
-	DeliveryBundled DeliveryKind = "bundled"
-	DeliveryGit     DeliveryKind = "git"
+	DeliveryGit DeliveryKind = "git"
 )
 
 // Status is the lifecycle state of an integration.
@@ -55,7 +54,8 @@ type Integration struct {
 	Delivery      Delivery `json:"delivery"`
 }
 
-// Delivery describes how an integration is delivered.
+// Delivery describes how an integration is delivered. Repository is the GitHub
+// "owner/repo" the skill is installed from.
 type Delivery struct {
 	Kind       DeliveryKind `json:"kind"`
 	Repository string       `json:"repository,omitempty"`

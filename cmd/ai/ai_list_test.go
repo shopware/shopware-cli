@@ -30,7 +30,7 @@ func TestWriteListJSON(t *testing.T) {
 			Provider: "shopware", Description: "d", Status: directory.StatusActive,
 			// fields below must not appear in the list shape
 			Documentation: "https://example.test/x",
-			Delivery:      directory.Delivery{Kind: directory.DeliveryBundled},
+			Delivery:      directory.Delivery{Kind: directory.DeliveryGit, Repository: "shopware/x"},
 		},
 	}
 

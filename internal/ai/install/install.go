@@ -1,7 +1,7 @@
 // Package install orchestrates installing and removing Shopware AI integrations:
-// it resolves the pinned source, runs skills.sh (via the skills package) and
-// records the result in the install state. The cmd/ai layer stays a thin front
-// end that only parses flags and renders the returned result.
+// it runs skills.sh (via the skills package) and records the result in the install
+// state. The cmd/ai layer stays a thin front end that only parses flags and
+// renders the returned result.
 package install
 
 import (
@@ -14,15 +14,8 @@ import (
 	"github.com/shopware/shopware-cli/internal/ai/directory"
 	"github.com/shopware/shopware-cli/internal/ai/skills"
 	"github.com/shopware/shopware-cli/internal/ai/state"
-	"github.com/shopware/shopware-cli/internal/cliversion"
 	"github.com/shopware/shopware-cli/internal/shop"
 )
-
-// bundledRepoURL is where bundled skills are installed from.
-const bundledRepoURL = "https://github.com/shopware/shopware-cli"
-
-// devVersion is what a plain `go build` reports (not a real ref).
-const devVersion = "dev"
 
 // Install outcomes reported by Add.
 const (
@@ -86,17 +79,17 @@ func Add(ctx context.Context, o Options, progress io.Writer) (Result, error) {
 		scope = state.ScopeProject
 	}
 
-	repoURL, ref := resolveSource(entry, tag)
-
+	// The tag is the git ref verbatim (e.g. v0.1.9); an empty tag installs the
+	// repository's default branch.
 	result := Result{
 		Name:             entry.Name,
 		Agent:            o.Agent,
 		Scope:            scope,
 		Dir:              st.root,
 		RequestedTag:     tag,
-		ResolvedRevision: ref,
+		ResolvedRevision: tag,
 		DryRun:           o.DryRun,
-		Command:          skills.AddArgs(skills.Source(repoURL, ref, entry.Name), entry.Name, o.Agent, o.Global, true),
+		Command:          skills.AddArgs(skills.Source(entry.Delivery.Repository, tag, entry.Name), entry.Name, o.Agent, o.Global, true),
 	}
 	if o.DryRun {
 		return result, nil
@@ -221,29 +214,6 @@ func Remove(ctx context.Context, o RemoveOptions, progress io.Writer) (RemoveRes
 	}
 
 	return result, nil
-}
-
-// resolveSource returns the repo URL and ref to install. A ref is derived without
-// a network call: an explicit tag (or the CLI version for bundled skills),
-// normalized to the v-prefixed tag form. An empty ref installs the default branch.
-func resolveSource(entry *directory.Integration, tag string) (repoURL, ref string) {
-	switch entry.Delivery.Kind {
-	case directory.DeliveryBundled:
-		repoURL = bundledRepoURL
-		switch {
-		case tag != "":
-			ref = skills.NormalizeRef(tag)
-		case cliversion.Version != "" && cliversion.Version != devVersion:
-			ref = skills.NormalizeRef(cliversion.Version)
-		}
-	case directory.DeliveryGit:
-		repoURL = entry.Delivery.Repository
-		if tag != "" {
-			ref = skills.NormalizeRef(tag)
-		}
-	}
-
-	return repoURL, ref
 }
 
 // store reads and writes the install state at the right scope: the user config

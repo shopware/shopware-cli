@@ -37,13 +37,13 @@ func fixtureDirectory() *Directory {
 				Name: "alpha-skill", DisplayName: "Alpha", Type: TypeSkill,
 				Provider: "shopware", Description: "a", Status: StatusActive,
 				Documentation: "https://example.test/a",
-				Delivery:      Delivery{Kind: DeliveryBundled},
+				Delivery:      Delivery{Kind: DeliveryGit, Repository: "shopware/alpha"},
 			},
 			{
 				Name: "beta-skill", DisplayName: "Beta", Type: TypeSkill,
 				Provider: "shopware", Description: "b", Status: StatusActive,
 				Documentation: "https://example.test/b",
-				Delivery:      Delivery{Kind: DeliveryGit, Repository: "https://example.test/repo"},
+				Delivery:      Delivery{Kind: DeliveryGit, Repository: "shopware/beta"},
 			},
 		},
 	}

@@ -8,14 +8,7 @@ import (
 	"fmt"
 	"io"
 	"os/exec"
-	"regexp"
-	"strings"
 )
-
-// semverLike matches a bare version such as "0.1.9" or "1.2" (with an optional
-// pre-release/build suffix), so NormalizeRef only touches refs that are versions,
-// not commit SHAs or branch names.
-var semverLike = regexp.MustCompile(`^\d+\.\d+(\.\d+)?([-+].*)?$`)
 
 // skillsVersion pins the skills.sh major line; npx resolves the latest 1.x, so we
 // get fixes but never a breaking 2.0.
@@ -54,36 +47,15 @@ func RemoveArgs(skill, agent string, global bool) []string {
 	return argv
 }
 
-// Source returns the skills.sh source argument: a GitHub tree URL pinned to ref
-// (e.g. .../shopware-cli/tree/v0.18.3/skills/shopware-cli), or the bare owner/repo
-// (its default branch) when ref is empty.
-func Source(repoURL, ref, skill string) string {
+// Source returns the skills.sh source argument for a GitHub "owner/repo": a tree
+// URL pinned to ref (e.g. shopware/shopware-cli/tree/v0.18.3/skills/shopware-cli),
+// or the bare owner/repo (its default branch) when ref is empty.
+func Source(ownerRepo, ref, skill string) string {
 	if ref == "" {
-		return OwnerRepo(repoURL)
+		return ownerRepo
 	}
 
-	return fmt.Sprintf("https://github.com/%s/tree/%s/skills/%s", OwnerRepo(repoURL), ref, skill)
-}
-
-// OwnerRepo turns a GitHub repo URL into "owner/repo" form.
-func OwnerRepo(repoURL string) string {
-	s := strings.TrimSuffix(repoURL, ".git")
-	s = strings.TrimPrefix(s, "https://github.com/")
-	s = strings.TrimPrefix(s, "http://github.com/")
-
-	return s
-}
-
-// NormalizeRef maps a bare version like "0.1.9" to the "v"-prefixed tag form the
-// Shopware repositories now use ("v0.1.9"), so a ref can be resolved without a
-// network lookup. A ref that already carries the "v", or is not a bare version (a
-// branch name, a commit SHA), is returned unchanged.
-func NormalizeRef(ref string) string {
-	if semverLike.MatchString(ref) {
-		return "v" + ref
-	}
-
-	return ref
+	return fmt.Sprintf("https://github.com/%s/tree/%s/skills/%s", ownerRepo, ref, skill)
 }
 
 // Run runs a skills.sh command via npx in dir (empty = current directory),

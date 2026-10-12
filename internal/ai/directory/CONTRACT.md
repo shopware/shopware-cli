@@ -15,13 +15,13 @@ name or enum value here is a breaking change to a public interface.
 | Field           | v1 values                          | reserved for later |
 |-----------------|------------------------------------|--------------------|
 | type            | skill                              | mcp                |
-| delivery.kind   | bundled, git                       | project            |
+| delivery.kind   | git                                | project            |
 | status          | active, deprecated                 | —                  |
 
 ## Entry fields (defined in Go)
 Required:  name, displayName, type, provider, description, status,
            delivery (+ delivery.kind), documentation
-Conditional: delivery.repository — required when delivery.kind == git
+Conditional: delivery.repository ("owner/repo") — required when delivery.kind == git
 
 `name` is lowercase, hyphenated, and unique across the directory.
 
