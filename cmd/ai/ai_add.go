@@ -76,20 +76,9 @@ func writeAddResult(w io.Writer, r install.Result) error {
 		rev = " @" + r.ResolvedRevision
 	}
 
-	switch r.Action {
-	case install.ActionUnchanged:
-		_, err := fmt.Fprintf(w, "Already installed %s for %s (%s)%s%s\n", r.Name, r.Agent, r.Scope, dest, rev)
+	_, err := fmt.Fprintf(w, "Installed %s for %s (%s)%s%s\n", r.Name, r.Agent, r.Scope, dest, rev)
 
-		return err
-	case install.ActionUpdated:
-		_, err := fmt.Fprintf(w, "Updated %s for %s (%s)%s: %s → %s\n", r.Name, r.Agent, r.Scope, dest, r.PreviousRevision, r.ResolvedRevision)
-
-		return err
-	default:
-		_, err := fmt.Fprintf(w, "Installed %s for %s (%s)%s%s\n", r.Name, r.Agent, r.Scope, dest, rev)
-
-		return err
-	}
+	return err
 }
 
 func init() {

@@ -1,13 +1,15 @@
 package ai
 
 import (
+	"context"
 	"fmt"
 	"io"
+	"strings"
 
 	"github.com/spf13/cobra"
 
 	"github.com/shopware/shopware-cli/internal/ai/directory"
-	"github.com/shopware/shopware-cli/internal/ai/state"
+	"github.com/shopware/shopware-cli/internal/ai/skills"
 	"github.com/shopware/shopware-cli/internal/shop"
 	"github.com/shopware/shopware-cli/internal/tui"
 )
@@ -23,14 +25,17 @@ type listItem struct {
 	Status      directory.Status `json:"status"`
 }
 
+// listSkills is a seam over skills.List so tests can stub the npx call.
+var listSkills = skills.List
+
 var aiListCmd = &cobra.Command{
 	Use:     "list",
 	Aliases: []string{"ls"},
 	Short:   "List known Shopware AI integrations",
 	Long: `List the known Shopware AI integrations.
 
-With --installed, list the integrations this CLI has installed instead — one row
-per agent and scope, with the requested tag and resolved revision.`,
+With --installed, list what skills.sh reports as installed instead (one row per
+skill and scope, with the agents and source). Requires Node.js/npx on PATH.`,
 	Example: `  shopware-cli ai list
   shopware-cli ai list --installed
   shopware-cli ai list --format json`,
@@ -52,15 +57,10 @@ per agent and scope, with the requested tag and resolved revision.`,
 			return err
 		}
 
-		// --installed reports the recorded installs (one row per agent/scope),
-		// not the catalog, so it can show the agent, scope and revision.
 		if installedOnly {
-			records, err := installedRecords()
+			records, err := installedRecords(cmd.Context(), entries)
 			if err != nil {
 				return err
-			}
-			if typeFilter != "" {
-				records = recordsInCatalog(records, entries)
 			}
 
 			return writeInstalled(cmd.OutOrStdout(), format, records)
@@ -92,72 +92,45 @@ func writeList(w io.Writer, format string, entries []directory.Integration) erro
 	return t.Write(w, tui.TableFormat(format))
 }
 
-func writeInstalled(w io.Writer, format string, records []state.InstalledEntry) error {
+func writeInstalled(w io.Writer, format string, records []skills.Installed) error {
 	t := tui.NewTable(
 		tui.TableColumn{Title: "Name", JSONKey: "name"},
-		tui.TableColumn{Title: "Agent", JSONKey: "agent"},
+		tui.TableColumn{Title: "Agents", JSONKey: "agents"},
 		tui.TableColumn{Title: "Scope", JSONKey: "scope"},
-		tui.TableColumn{Title: "Requested", JSONKey: "requestedTag"},
-		tui.TableColumn{Title: "Revision", JSONKey: "resolvedRevision"},
+		tui.TableColumn{Title: "Source", JSONKey: "source"},
 	)
 	for _, e := range records {
-		t.AddRowWithJSON(e, e.Name, e.Agent, string(e.Scope), e.RequestedTag, e.ResolvedRevision)
+		t.AddRowWithJSON(e, e.Name, strings.Join(e.Agents, ", "), e.Scope, e.Source)
 	}
 
 	return t.Write(w, tui.TableFormat(format))
 }
 
-// recordsInCatalog keeps only the install records whose integration is in the
-// (type-filtered) catalog, so `ai list --installed --type X` shows only type X.
-func recordsInCatalog(records []state.InstalledEntry, catalog []directory.Integration) []state.InstalledEntry {
-	names := make(map[string]bool, len(catalog))
+// installedRecords asks skills.sh what is installed (global and the current
+// project) and keeps only the skills in the given catalog (already type-filtered).
+func installedRecords(ctx context.Context, catalog []directory.Integration) ([]skills.Installed, error) {
+	known := make(map[string]bool, len(catalog))
 	for _, e := range catalog {
-		names[e.Name] = true
+		known[e.Name] = true
 	}
 
-	out := make([]state.InstalledEntry, 0, len(records))
-	for _, r := range records {
-		if names[r.Name] {
-			out = append(out, r)
-		}
-	}
-
-	return out
-}
-
-// installedRecords returns every recorded install, merging global and project
-// state. Each record carries its own agent and scope.
-func installedRecords() ([]state.InstalledEntry, error) {
-	global, err := state.Read()
+	global, err := listSkills(ctx, "", true)
 	if err != nil {
 		return nil, err
 	}
-	records := append([]state.InstalledEntry{}, global.Installed...)
 
-	// Fall back to the current directory when not inside a project; global
-	// installs still show.
 	root, err := shop.FindClosestShopwareProject(true)
 	if err != nil {
 		return nil, fmt.Errorf("locate project install state: %w", err)
 	}
-	project, err := state.ReadProject(root)
+	project, err := listSkills(ctx, root, false)
 	if err != nil {
 		return nil, err
 	}
 
-	return append(records, project.Installed...), nil
-}
-
-// installedRecordsFor returns the recorded installs for a single integration.
-func installedRecordsFor(name string) ([]state.InstalledEntry, error) {
-	all, err := installedRecords()
-	if err != nil {
-		return nil, err
-	}
-
-	out := make([]state.InstalledEntry, 0, len(all))
-	for _, e := range all {
-		if e.Name == name {
+	out := make([]skills.Installed, 0, len(global)+len(project))
+	for _, e := range append(global, project...) {
+		if known[e.Name] {
 			out = append(out, e)
 		}
 	}
@@ -168,6 +141,6 @@ func installedRecordsFor(name string) ([]state.InstalledEntry, error) {
 func init() {
 	aiRootCmd.AddCommand(aiListCmd)
 	aiListCmd.Flags().String("type", "", "Filter by integration type (skill, mcp)")
-	aiListCmd.Flags().Bool("installed", false, "Show only integrations recorded as installed by the CLI")
+	aiListCmd.Flags().Bool("installed", false, "Show what skills.sh reports as installed")
 	addFormatFlag(aiListCmd)
 }

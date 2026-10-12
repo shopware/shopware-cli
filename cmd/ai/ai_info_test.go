@@ -19,14 +19,29 @@ func TestWriteInfoTable(t *testing.T) {
 		Status:        directory.StatusActive,
 		Description:   "desc",
 		Documentation: "https://example.test/dh",
-		Delivery:      directory.Delivery{Kind: directory.DeliveryGit, Repository: "https://github.com/shopware/deployment-helper"},
+		Delivery:      directory.Delivery{Kind: directory.DeliveryGit, Repository: "shopware/deployment-helper"},
 	}
 
 	var buf bytes.Buffer
-	require.NoError(t, writeInfoTable(&buf, e, nil))
+	require.NoError(t, writeInfoTable(&buf, e))
 
 	assert.Contains(t, buf.String(), "deployment-helper")
-	assert.Contains(t, buf.String(), "Installed")
+	assert.Contains(t, buf.String(), "git (shopware/deployment-helper)")
+}
+
+func TestWriteInfoJSON(t *testing.T) {
+	e := directory.Integration{
+		Name: "deployment-helper", DisplayName: "DH", Type: directory.TypeSkill,
+		Provider: "shopware", Status: directory.StatusActive, Description: "d",
+		Documentation: "https://example.test/dh",
+		Delivery:      directory.Delivery{Kind: directory.DeliveryGit, Repository: "shopware/deployment-helper"},
+	}
+
+	var buf bytes.Buffer
+	require.NoError(t, writeInfoJSON(&buf, e))
+
+	assert.Contains(t, buf.String(), `"name":"deployment-helper"`)
+	assert.NotContains(t, buf.String(), "installed")
 }
 
 func TestDeliveryLabel(t *testing.T) {

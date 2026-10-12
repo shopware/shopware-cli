@@ -5,10 +5,10 @@ name or enum value here is a breaking change to a public interface.
 
 ## Scope of v1
 - Only `type: skill` entries are listed. `mcp` (shopware-core) is reserved for a later increment.
-- No network access. `ai list --installed` resolves the project root to read
-  project-scoped state (filesystem only).
 - The directory has no remote source: entries are hardwired in Go
-  (`integrations.go`).
+  (`integrations.go`). `ai list` / `ai info` make no network calls.
+- `ai list --installed` is not part of this catalog contract: it reports what
+  skills.sh has installed (via `skills list --json`), not the directory.
 
 ## Enums (values may be ADDED later, never renamed/removed)
 
@@ -33,21 +33,16 @@ the CLI-wide output-flag convention.
 `ai list` — array of:
 { name, displayName, type, provider, description, status }
 
-`ai list --installed` — array of recorded installs (one per agent/scope), not the
-catalog:
-{ name, agent, scope: project|global, requestedTag, resolvedRevision }
-
-`ai info <name>` — object (superset of list) plus the recorded installs:
+`ai info <name>` — object (superset of list):
 { name, displayName, type, provider, description, status,
   documentation,
-  delivery: { kind, repository? },
-  installed: [ { name, agent, scope, requestedTag, resolvedRevision } ] }
+  delivery: { kind, repository? } }
 
-## --installed state (written by `ai add` / `ai remove`)
-Install-state file records, per installed entry:
-{ name, agent, scope: project|global, requestedTag, resolvedRevision }
+`ai list --installed` is reported straight from skills.sh (`skills list --json`),
+filtered to the directory's skills, and is not frozen by this contract:
+{ name, scope, agents: [ ... ], source }
 
 ## Guarantees
 - All human + JSON output → stdout; logs/errors → stderr.
 - Unknown name → clear stderr message, exit code 1.
-- No network calls in the ai list / ai info code path.
+- No network calls in the ai list / ai info code path (`--installed` excepted).

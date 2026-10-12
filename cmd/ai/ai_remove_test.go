@@ -8,31 +8,22 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/shopware/shopware-cli/internal/ai/install"
-	"github.com/shopware/shopware-cli/internal/ai/state"
 )
 
-func TestWriteRemoveResultNotRecorded(t *testing.T) {
+func TestWriteRemoveResult(t *testing.T) {
 	var buf bytes.Buffer
 	require.NoError(t, writeRemoveResult(&buf, install.RemoveResult{
-		Name: "shopware-cli", Agent: "claude-code", Scope: state.ScopeGlobal, Removed: false,
+		Name: "shopware-cli", Agent: "claude-code", Scope: install.ScopeProject,
+		Command: []string{"npx", "skills", "remove", "shopware-cli"},
 	}))
-	assert.Contains(t, buf.String(), "nothing to remove")
-}
-
-func TestWriteRemoveResultRemoved(t *testing.T) {
-	var buf bytes.Buffer
-	require.NoError(t, writeRemoveResult(&buf, install.RemoveResult{
-		Name: "shopware-cli", Agent: "claude-code", Scope: state.ScopeGlobal,
-		Removed: true, Command: []string{"npx", "skills", "remove", "shopware-cli"},
-	}))
-	assert.Contains(t, buf.String(), "Removed shopware-cli")
+	assert.Contains(t, buf.String(), "Removed shopware-cli for claude-code (project)")
 }
 
 func TestWriteRemoveResultDryRun(t *testing.T) {
 	var buf bytes.Buffer
 	require.NoError(t, writeRemoveResult(&buf, install.RemoveResult{
-		Name: "shopware-cli", Agent: "claude-code", Scope: state.ScopeGlobal,
-		Removed: true, DryRun: true, Command: []string{"npx", "skills", "remove", "shopware-cli"},
+		Name: "shopware-cli", Agent: "claude-code", Scope: install.ScopeGlobal,
+		DryRun: true, Command: []string{"npx", "skills", "remove", "shopware-cli"},
 	}))
 	assert.Contains(t, buf.String(), "[dry-run] would remove")
 }

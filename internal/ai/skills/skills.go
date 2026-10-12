@@ -4,7 +4,9 @@
 package skills
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"os/exec"
@@ -84,4 +86,44 @@ func op(argv []string) string {
 	}
 
 	return "command"
+}
+
+// Installed is one entry of `skills list --json`: skills.sh is the source of
+// truth for what is installed, so the CLI reads it instead of keeping its own
+// record.
+type Installed struct {
+	Name   string   `json:"name"`
+	Scope  string   `json:"scope"`
+	Agents []string `json:"agents"`
+	Source string   `json:"source"`
+}
+
+// List returns the skills skills.sh has installed at the given scope, parsed from
+// `skills list --json`. dir is where to run it (the project root for project
+// scope); it is ignored for the global scope.
+func List(ctx context.Context, dir string, global bool) ([]Installed, error) {
+	argv := []string{"npx", "--yes", "skills@" + skillsVersion, "list", "--json"}
+	if global {
+		argv = append(argv, "--global")
+	}
+
+	if _, err := exec.LookPath(argv[0]); err != nil {
+		return nil, fmt.Errorf("%s not found: listing skills requires Node.js/npx on PATH", argv[0])
+	}
+
+	cmd := exec.CommandContext(ctx, argv[0], argv[1:]...)
+	cmd.Dir = dir
+	var stdout bytes.Buffer
+	cmd.Stdout = &stdout
+
+	if err := cmd.Run(); err != nil {
+		return nil, fmt.Errorf("skills list failed: %w", err)
+	}
+
+	var out []Installed
+	if err := json.Unmarshal(stdout.Bytes(), &out); err != nil {
+		return nil, fmt.Errorf("cannot parse skills list output: %w", err)
+	}
+
+	return out, nil
 }

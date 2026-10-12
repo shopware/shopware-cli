@@ -1,7 +1,7 @@
 // Package install orchestrates installing and removing Shopware AI integrations:
-// it runs skills.sh (via the skills package) and records the result in the install
-// state. The cmd/ai layer stays a thin front end that only parses flags and
-// renders the returned result.
+// it runs skills.sh (via the skills package) in the right scope. skills.sh is the
+// source of truth for what is installed, so the CLI keeps no record of its own.
+// The cmd/ai layer stays a thin front end that parses flags and renders the result.
 package install
 
 import (
@@ -13,15 +13,13 @@ import (
 
 	"github.com/shopware/shopware-cli/internal/ai/directory"
 	"github.com/shopware/shopware-cli/internal/ai/skills"
-	"github.com/shopware/shopware-cli/internal/ai/state"
 	"github.com/shopware/shopware-cli/internal/shop"
 )
 
-// Install outcomes reported by Add.
+// Install scopes.
 const (
-	ActionInstalled = "installed"
-	ActionUnchanged = "unchanged"
-	ActionUpdated   = "updated"
+	ScopeProject = "project"
+	ScopeGlobal  = "global"
 )
 
 // runSkills is a seam over skills.Run so tests can stub the npx call.
@@ -39,22 +37,20 @@ type Options struct {
 type Result struct {
 	Name             string
 	Agent            string
-	Scope            state.Scope
+	Scope            string
 	Dir              string
 	RequestedTag     string
 	ResolvedRevision string
-	Action           string
-	PreviousRevision string
 	DryRun           bool
 	Command          []string
 }
 
-// Add installs a skill into an agent via skills.sh and records it. skills.sh
-// output is streamed to progress.
+// Add installs a skill into an agent via skills.sh. skills.sh output is streamed
+// to progress and it owns the on-disk record (skills-lock.json).
 func Add(ctx context.Context, o Options, progress io.Writer) (Result, error) {
 	name, tag := splitNameTag(o.Name)
 	if tag == "" && strings.Contains(o.Name, "@") {
-		return Result{}, fmt.Errorf("empty version after \"@\" in %q; pin a release like %s@1.2.3 or omit the @", o.Name, name)
+		return Result{}, fmt.Errorf("empty version after \"@\" in %q; pin a release like %s@v1.2.3 or omit the @", o.Name, name)
 	}
 
 	entry, ok := directory.Load().Get(name)
@@ -68,15 +64,9 @@ func Add(ctx context.Context, o Options, progress io.Writer) (Result, error) {
 		return Result{}, err
 	}
 
-	st := store{global: o.Global}
-	scope := state.ScopeGlobal
-	if !o.Global {
-		root, err := shop.FindClosestShopwareProject(false)
-		if err != nil {
-			return Result{}, fmt.Errorf("a project install must run inside a Shopware project (or use --global): %w", err)
-		}
-		st.root = root
-		scope = state.ScopeProject
+	scope, dir, err := resolveScope(o.Global)
+	if err != nil {
+		return Result{}, err
 	}
 
 	// The tag is the git ref verbatim (e.g. v0.1.9); an empty tag installs the
@@ -85,7 +75,7 @@ func Add(ctx context.Context, o Options, progress io.Writer) (Result, error) {
 		Name:             entry.Name,
 		Agent:            o.Agent,
 		Scope:            scope,
-		Dir:              st.root,
+		Dir:              dir,
 		RequestedTag:     tag,
 		ResolvedRevision: tag,
 		DryRun:           o.DryRun,
@@ -95,38 +85,8 @@ func Add(ctx context.Context, o Options, progress io.Writer) (Result, error) {
 		return result, nil
 	}
 
-	current, err := st.read()
-	if err != nil {
+	if err := runSkills(ctx, result.Command, dir, progress); err != nil {
 		return Result{}, err
-	}
-
-	// Prior revision drives the installed/unchanged/updated outcome.
-	prev, hadPrev := findInstall(current, result.Name, result.Agent, result.Scope)
-
-	// skills.sh owns the disk and is idempotent; the record only reports.
-	if err := runSkills(ctx, result.Command, st.root, progress); err != nil {
-		return Result{}, err
-	}
-
-	next := state.Upsert(current, state.InstalledEntry{
-		Name:             result.Name,
-		Agent:            result.Agent,
-		Scope:            result.Scope,
-		RequestedTag:     result.RequestedTag,
-		ResolvedRevision: result.ResolvedRevision,
-	})
-	if err := st.save(next); err != nil {
-		return Result{}, fmt.Errorf("%s was installed but its record cannot be written, re-run \"ai add\": %w", result.Name, err)
-	}
-
-	switch {
-	case !hadPrev:
-		result.Action = ActionInstalled
-	case prev.ResolvedRevision == result.ResolvedRevision:
-		result.Action = ActionUnchanged
-	default:
-		result.Action = ActionUpdated
-		result.PreviousRevision = prev.ResolvedRevision
 	}
 
 	return result, nil
@@ -144,107 +104,59 @@ type RemoveOptions struct {
 type RemoveResult struct {
 	Name    string
 	Agent   string
-	Scope   state.Scope
-	Removed bool
+	Scope   string
 	DryRun  bool
 	Command []string
 }
 
-// Remove uninstalls via skills.sh and drops the record, but only for what the CLI
-// recorded; a hand-written agent config is left alone.
+// Remove uninstalls a skill from an agent via skills.sh.
 func Remove(ctx context.Context, o RemoveOptions, progress io.Writer) (RemoveResult, error) {
 	if err := validateAgent(o.Agent); err != nil {
 		return RemoveResult{}, err
 	}
 
-	// A recorded install is enough to remove, even if it left the directory.
-	entry, known := directory.Load().Get(o.Name)
-	removeName := o.Name
-	if known {
-		removeName = entry.Name
-	}
-
-	st := store{global: o.Global}
-	scope := state.ScopeGlobal
-	if !o.Global {
-		root, err := shop.FindClosestShopwareProject(false)
-		if err != nil {
-			return RemoveResult{}, fmt.Errorf("a project removal must run inside a Shopware project (or use --global): %w", err)
-		}
-		st.root = root
-		scope = state.ScopeProject
-	}
-
-	current, err := st.read()
-	if err != nil {
-		return RemoveResult{}, err
-	}
-
-	next, recorded := state.Remove(current, removeName, o.Agent, scope)
-
-	// Unknown name with nothing recorded is a typo, not a stale install.
-	if !recorded && !known {
+	entry, ok := directory.Load().Get(o.Name)
+	if !ok {
 		return RemoveResult{}, fmt.Errorf("unknown integration %q (see \"shopware-cli ai list\")", o.Name)
 	}
 
-	result := RemoveResult{
-		Name:    removeName,
-		Agent:   o.Agent,
-		Scope:   scope,
-		Removed: recorded,
-		DryRun:  o.DryRun,
-		Command: skills.RemoveArgs(removeName, o.Agent, o.Global),
-	}
-	if o.DryRun || !recorded {
-		return result, nil
-	}
-
-	if err := runSkills(ctx, result.Command, st.root, progress); err != nil {
+	scope, dir, err := resolveScope(o.Global)
+	if err != nil {
 		return RemoveResult{}, err
 	}
 
-	// Remove the state file once empty instead of leaving an empty one.
-	if len(next.Installed) == 0 {
-		err = st.clear()
-	} else {
-		err = st.save(next)
+	result := RemoveResult{
+		Name:    entry.Name,
+		Agent:   o.Agent,
+		Scope:   scope,
+		DryRun:  o.DryRun,
+		Command: skills.RemoveArgs(entry.Name, o.Agent, o.Global),
 	}
-	if err != nil {
-		return RemoveResult{}, fmt.Errorf("%s was removed but its record cannot be updated, re-run \"ai remove\": %w", result.Name, err)
+	if o.DryRun {
+		return result, nil
+	}
+
+	if err := runSkills(ctx, result.Command, dir, progress); err != nil {
+		return RemoveResult{}, err
 	}
 
 	return result, nil
 }
 
-// store reads and writes the install state at the right scope: the user config
-// dir for a global install, the project root for a project install.
-type store struct {
-	global bool
-	root   string
-}
-
-func (s store) read() (state.File, error) {
-	if s.global {
-		return state.Read()
+// resolveScope returns the scope label and the directory to run skills.sh in. A
+// project install resolves the Shopware project root so skills.sh writes the agent
+// config and skills-lock.json there; a global install runs anywhere.
+func resolveScope(global bool) (scope, dir string, err error) {
+	if global {
+		return ScopeGlobal, "", nil
 	}
 
-	return state.ReadProject(s.root)
-}
-
-func (s store) save(f state.File) error {
-	if s.global {
-		return state.Save(f)
+	root, err := shop.FindClosestShopwareProject(false)
+	if err != nil {
+		return "", "", fmt.Errorf("a project install must run inside a Shopware project (or use --global): %w", err)
 	}
 
-	return state.SaveProject(s.root, f)
-}
-
-func (s store) clear() error {
-	if s.global {
-		return state.Clear()
-	}
-
-	return state.ClearProject(s.root)
+	return ScopeProject, root, nil
 }
 
 // validateAgent rejects --agent shapes skills.sh cannot round-trip: empty, the
@@ -267,15 +179,4 @@ func splitNameTag(s string) (name, tag string) {
 	}
 
 	return s, ""
-}
-
-// findInstall returns the recorded entry for (name, agent, scope), if any.
-func findInstall(f state.File, name, agent string, scope state.Scope) (state.InstalledEntry, bool) {
-	for _, e := range f.Installed {
-		if e.Name == name && e.Agent == agent && e.Scope == scope {
-			return e, true
-		}
-	}
-
-	return state.InstalledEntry{}, false
 }
