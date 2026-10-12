@@ -37,7 +37,6 @@ var integrations = Directory{
 				Kind:       DeliveryGit,
 				Repository: "https://github.com/shopware/deployment-helper",
 			},
-			Compatibility: &Compatibility{Source: "owner"},
 		},
 		{
 			Name:          "acceptance-test-suite",

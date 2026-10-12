@@ -22,7 +22,6 @@ name or enum value here is a breaking change to a public interface.
 Required:  name, displayName, type, provider, description, status,
            delivery (+ delivery.kind), documentation
 Conditional: delivery.repository — required when delivery.kind == git
-Optional:  compatibility (compatibility.source: owner)
 
 `name` is lowercase, hyphenated, and unique across the directory.
 
@@ -42,7 +41,6 @@ catalog:
 { name, displayName, type, provider, description, status,
   documentation,
   delivery: { kind, repository? },
-  compatibility?: { source },
   installed: [ { name, agent, scope, requestedTag, resolvedRevision } ] }
 
 ## --installed state (written by `ai add` / `ai remove`)

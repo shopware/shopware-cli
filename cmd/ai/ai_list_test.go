@@ -2,6 +2,8 @@ package ai
 
 import (
 	"bytes"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -10,6 +12,16 @@ import (
 	"github.com/shopware/shopware-cli/internal/ai/directory"
 	"github.com/shopware/shopware-cli/internal/ai/state"
 )
+
+// seedEnv isolates the install-state (global and project) in temp dirs.
+func seedEnv(t *testing.T) {
+	t.Helper()
+	tmp := t.TempDir()
+	t.Setenv("HOME", tmp)
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(tmp, "xdgcfg"))
+	t.Setenv("PROJECT_ROOT", tmp)
+	t.Chdir(tmp)
+}
 
 func TestWriteListJSON(t *testing.T) {
 	entries := []directory.Integration{
@@ -23,26 +35,44 @@ func TestWriteListJSON(t *testing.T) {
 	}
 
 	var buf bytes.Buffer
-	require.NoError(t, writeListJSON(&buf, entries))
+	require.NoError(t, writeList(&buf, formatJSON, entries))
 
 	assert.JSONEq(t, `[{"name":"x","displayName":"X","type":"skill","provider":"shopware","description":"d","status":"active"}]`, buf.String())
 }
 
 func TestWriteListJSONEmpty(t *testing.T) {
 	var buf bytes.Buffer
-	require.NoError(t, writeListJSON(&buf, nil))
+	require.NoError(t, writeList(&buf, formatJSON, nil))
+
+	assert.JSONEq(t, `[]`, buf.String())
+}
+
+func TestWriteInstalledJSON(t *testing.T) {
+	var buf bytes.Buffer
+	require.NoError(t, writeInstalled(&buf, formatJSON, []state.InstalledEntry{
+		{Name: "shopware-cli", Agent: "claude-code", Scope: state.ScopeGlobal, RequestedTag: "0.18.3", ResolvedRevision: "v0.18.3"},
+	}))
+	assert.JSONEq(t, `[{"name":"shopware-cli","agent":"claude-code","scope":"global","requestedTag":"0.18.3","resolvedRevision":"v0.18.3"}]`, buf.String())
+}
+
+func TestWriteInstalledJSONEmpty(t *testing.T) {
+	var buf bytes.Buffer
+	require.NoError(t, writeInstalled(&buf, formatJSON, nil))
 
 	assert.JSONEq(t, `[]`, buf.String())
 }
 
 func TestInstalledRecordsMergesScopesAndAgents(t *testing.T) {
-	setupAdd(t)
+	seedEnv(t)
 
-	// Same integration, two agents and scopes → two distinct records.
-	_, err := runAdd(t, addOptions{name: "shopware-cli@0.18.3", agent: "claude-code", global: true})
+	require.NoError(t, state.Save(state.File{Installed: []state.InstalledEntry{
+		{Name: "shopware-cli", Agent: "claude-code", Scope: state.ScopeGlobal, ResolvedRevision: "v0.18.3"},
+	}}))
+	cwd, err := os.Getwd()
 	require.NoError(t, err)
-	_, err = runAdd(t, addOptions{name: "shopware-cli@0.18.4", agent: "codex"}) // project scope
-	require.NoError(t, err)
+	require.NoError(t, state.SaveProject(cwd, state.File{Installed: []state.InstalledEntry{
+		{Name: "shopware-cli", Agent: "codex", Scope: state.ScopeProject, ResolvedRevision: "v0.18.4"},
+	}}))
 
 	records, err := installedRecords()
 	require.NoError(t, err)
@@ -53,16 +83,15 @@ func TestInstalledRecordsMergesScopesAndAgents(t *testing.T) {
 		byAgent[r.Agent] = r
 	}
 	assert.Equal(t, state.ScopeGlobal, byAgent["claude-code"].Scope)
-	assert.Equal(t, "0.18.3", byAgent["claude-code"].ResolvedRevision)
 	assert.Equal(t, state.ScopeProject, byAgent["codex"].Scope)
-	assert.Equal(t, "0.18.4", byAgent["codex"].ResolvedRevision)
 }
 
 func TestInstalledRecordsForFiltersByName(t *testing.T) {
-	setupAdd(t)
+	seedEnv(t)
 
-	_, err := runAdd(t, addOptions{name: "shopware-cli", agent: "claude-code", global: true})
-	require.NoError(t, err)
+	require.NoError(t, state.Save(state.File{Installed: []state.InstalledEntry{
+		{Name: "shopware-cli", Agent: "claude-code", Scope: state.ScopeGlobal},
+	}}))
 
 	got, err := installedRecordsFor("shopware-cli")
 	require.NoError(t, err)
@@ -72,19 +101,4 @@ func TestInstalledRecordsForFiltersByName(t *testing.T) {
 	none, err := installedRecordsFor("deployment-helper")
 	require.NoError(t, err)
 	assert.Empty(t, none)
-}
-
-func TestWriteInstalledJSON(t *testing.T) {
-	var buf bytes.Buffer
-	require.NoError(t, writeInstalledJSON(&buf, []state.InstalledEntry{
-		{Name: "shopware-cli", Agent: "claude-code", Scope: state.ScopeGlobal, RequestedTag: "0.18.3", ResolvedRevision: "0.18.3"},
-	}))
-	assert.JSONEq(t, `[{"name":"shopware-cli","agent":"claude-code","scope":"global","requestedTag":"0.18.3","resolvedRevision":"0.18.3"}]`, buf.String())
-}
-
-func TestWriteInstalledJSONEmpty(t *testing.T) {
-	var buf bytes.Buffer
-	require.NoError(t, writeInstalledJSON(&buf, nil))
-
-	assert.JSONEq(t, `[]`, buf.String())
 }

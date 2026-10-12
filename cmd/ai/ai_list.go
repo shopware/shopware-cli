@@ -1,7 +1,6 @@
 package ai
 
 import (
-	"encoding/json"
 	"fmt"
 	"io"
 
@@ -53,11 +52,8 @@ per agent and scope, with the requested tag and resolved revision.`,
 			if err != nil {
 				return err
 			}
-			if format == formatJSON {
-				return writeInstalledJSON(cmd.OutOrStdout(), records)
-			}
 
-			return writeInstalledTable(cmd.OutOrStdout(), records)
+			return writeInstalled(cmd.OutOrStdout(), format, records)
 		}
 
 		entries, err := directory.Load().List(directory.ListOptions{Type: typeFilter})
@@ -65,49 +61,45 @@ per agent and scope, with the requested tag and resolved revision.`,
 			return err
 		}
 
-		if format == formatJSON {
-			return writeListJSON(cmd.OutOrStdout(), entries)
-		}
-
-		return writeListTable(cmd.OutOrStdout(), entries)
+		return writeList(cmd.OutOrStdout(), format, entries)
 	},
 }
 
-func writeListJSON(w io.Writer, entries []directory.Integration) error {
-	items := make([]listItem, 0, len(entries))
+func writeList(w io.Writer, format string, entries []directory.Integration) error {
+	t := tui.NewTable(
+		tui.TableColumn{Title: "Name", JSONKey: "name"},
+		tui.TableColumn{Title: "Type", JSONKey: "type"},
+		tui.TableColumn{Title: "Provider", JSONKey: "provider"},
+		tui.TableColumn{Title: "Status", JSONKey: "status"},
+		tui.TableColumn{Title: "Description", JSONKey: "description"},
+	)
 	for _, e := range entries {
-		items = append(items, listItem{
+		t.AddRowWithJSON(listItem{
 			Name:        e.Name,
 			DisplayName: e.DisplayName,
 			Type:        e.Type,
 			Provider:    e.Provider,
 			Description: e.Description,
 			Status:      e.Status,
-		})
+		}, e.Name, string(e.Type), e.Provider, string(e.Status), e.Description)
 	}
 
-	out, err := json.Marshal(items)
-	if err != nil {
-		return err
-	}
-
-	_, err = fmt.Fprintln(w, string(out))
-
-	return err
+	return t.Write(w, tui.TableFormat(format))
 }
 
-func writeListTable(w io.Writer, entries []directory.Integration) error {
-	rows := make([][]string, 0, len(entries))
-	for _, e := range entries {
-		rows = append(rows, []string{e.Name, string(e.Type), e.Provider, string(e.Status), e.Description})
+func writeInstalled(w io.Writer, format string, records []state.InstalledEntry) error {
+	t := tui.NewTable(
+		tui.TableColumn{Title: "Name", JSONKey: "name"},
+		tui.TableColumn{Title: "Agent", JSONKey: "agent"},
+		tui.TableColumn{Title: "Scope", JSONKey: "scope"},
+		tui.TableColumn{Title: "Requested", JSONKey: "requestedTag"},
+		tui.TableColumn{Title: "Revision", JSONKey: "resolvedRevision"},
+	)
+	for _, e := range records {
+		t.AddRowWithJSON(e, e.Name, e.Agent, string(e.Scope), e.RequestedTag, e.ResolvedRevision)
 	}
 
-	_, err := fmt.Fprintln(w, tui.RenderTable(
-		[]string{"Name", "Type", "Provider", "Status", "Description"},
-		rows,
-	))
-
-	return err
+	return t.Write(w, tui.TableFormat(format))
 }
 
 // installedRecords returns every recorded install, merging global and project
@@ -148,35 +140,6 @@ func installedRecordsFor(name string) ([]state.InstalledEntry, error) {
 	}
 
 	return out, nil
-}
-
-func writeInstalledJSON(w io.Writer, records []state.InstalledEntry) error {
-	if records == nil {
-		records = []state.InstalledEntry{}
-	}
-
-	out, err := json.Marshal(records)
-	if err != nil {
-		return err
-	}
-
-	_, err = fmt.Fprintln(w, string(out))
-
-	return err
-}
-
-func writeInstalledTable(w io.Writer, records []state.InstalledEntry) error {
-	rows := make([][]string, 0, len(records))
-	for _, e := range records {
-		rows = append(rows, []string{e.Name, e.Agent, string(e.Scope), e.RequestedTag, e.ResolvedRevision})
-	}
-
-	_, err := fmt.Fprintln(w, tui.RenderTable(
-		[]string{"Name", "Agent", "Scope", "Requested", "Revision"},
-		rows,
-	))
-
-	return err
 }
 
 func init() {

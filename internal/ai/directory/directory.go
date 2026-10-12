@@ -51,20 +51,14 @@ type Integration struct {
 	Description string `json:"description"`
 	Status      Status `json:"status"`
 
-	Documentation string         `json:"documentation"`
-	Delivery      Delivery       `json:"delivery"`
-	Compatibility *Compatibility `json:"compatibility,omitempty"`
+	Documentation string   `json:"documentation"`
+	Delivery      Delivery `json:"delivery"`
 }
 
 // Delivery describes how an integration is delivered.
 type Delivery struct {
 	Kind       DeliveryKind `json:"kind"`
 	Repository string       `json:"repository,omitempty"`
-}
-
-// Compatibility describes how compatibility is determined for an entry.
-type Compatibility struct {
-	Source string `json:"source"`
 }
 
 // Load returns the directory of known integrations.

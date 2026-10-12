@@ -20,7 +20,6 @@ func TestWriteInfoTable(t *testing.T) {
 		Description:   "desc",
 		Documentation: "https://example.test/dh",
 		Delivery:      directory.Delivery{Kind: directory.DeliveryGit, Repository: "https://github.com/shopware/deployment-helper"},
-		Compatibility: &directory.Compatibility{Source: "owner"},
 	}
 
 	var buf bytes.Buffer
@@ -28,17 +27,6 @@ func TestWriteInfoTable(t *testing.T) {
 
 	assert.Contains(t, buf.String(), "deployment-helper")
 	assert.Contains(t, buf.String(), "Installed")
-}
-
-func TestCompatibilityLabel(t *testing.T) {
-	withCompat := directory.Integration{Compatibility: &directory.Compatibility{Source: "owner"}}
-	assert.Equal(t, "owner", compatibilityLabel(withCompat))
-
-	bundled := directory.Integration{Delivery: directory.Delivery{Kind: directory.DeliveryBundled}}
-	assert.Equal(t, "none (bundled, always compatible)", compatibilityLabel(bundled))
-
-	git := directory.Integration{Delivery: directory.Delivery{Kind: directory.DeliveryGit}}
-	assert.Equal(t, "none", compatibilityLabel(git))
 }
 
 func TestDeliveryLabel(t *testing.T) {

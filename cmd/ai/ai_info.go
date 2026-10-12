@@ -74,7 +74,6 @@ func writeInfoTable(w io.Writer, e directory.Integration, installed []state.Inst
 		{"Description", e.Description},
 		{"Documentation", e.Documentation},
 		{"Delivery", deliveryLabel(e.Delivery)},
-		{"Compatibility", compatibilityLabel(e)},
 	}
 
 	if len(installed) == 0 {
@@ -85,27 +84,17 @@ func writeInfoTable(w io.Writer, e directory.Integration, installed []state.Inst
 			if i == 0 {
 				label = "Installed"
 			}
-			rows = append(rows, []string{label, fmt.Sprintf("%s (%s) @%s", rec.Agent, rec.Scope, rec.ResolvedRevision)})
+			detail := fmt.Sprintf("%s (%s)", rec.Agent, rec.Scope)
+			if rec.ResolvedRevision != "" {
+				detail += " @" + rec.ResolvedRevision
+			}
+			rows = append(rows, []string{label, detail})
 		}
 	}
 
 	_, err := fmt.Fprintln(w, tui.RenderTable([]string{"Property", "Value"}, rows))
 
 	return err
-}
-
-// compatibilityLabel renders the compatibility requirements for the human view.
-// An entry without a compatibility block has no requirements; a bundled entry
-// ships with the CLI and is therefore always compatible.
-func compatibilityLabel(e directory.Integration) string {
-	if e.Compatibility != nil {
-		return e.Compatibility.Source
-	}
-	if e.Delivery.Kind == directory.DeliveryBundled {
-		return "none (bundled, always compatible)"
-	}
-
-	return "none"
 }
 
 // deliveryLabel renders a delivery block for the human view.
