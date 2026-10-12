@@ -37,14 +37,25 @@ symlink switch. Rollout progress and helper output stream to stderr; the
 deployment name is printed after activation. Uploaded archives are
 cached by checksum, so rolling out the same deployment again skips the upload.
 Releases use the deployment name (or the archive filename without .tar.gz).
-An already-active deployment with the same checksum is a no-op. An inactive
+An already-active read-only deployment with the same checksum is a no-op. An inactive
 prepared release is reactivated without rerunning the deployment helper.
 Reusing a name with different archive contents is rejected.
 Old and failed releases are retained; failed preparations require inspection
 and explicit cleanup or a new deployment name before retrying.
 
+Release files and directories are made read-only before activation, preserving
+read and execute permissions. Shared targets are never changed. var/cache is
+linked to runtime/<deployment>/cache outside the release and must not be configured
+as shared; caches remain local to each host and deployment. Extensions must write
+runtime data to these writable paths, not their installed source directories.
+Older inactive releases are hardened before reuse. An active writable release
+cannot be hardened in place; deploy a new name instead.
+
 Optionally configure environments.<name>.ssh.cachetool to reset web OPcache
 after activation. Supports FastCGI, web, or a remote native CacheTool config.
+Web mode requires an explicitly configured writable web_path outside releases
+and current. Native configurations must also use external writable web/temp paths;
+their contents are not validated by the CLI. FastCGI avoids writing web endpoints.
 The pinned PHAR is cached remotely in .shopware-cli/tools; downloading it requires
 curl and HTTPS access. A failed reset warns without undoing activation.
 If CacheTool is unset or disabled and the target's hostname -f contains
@@ -56,7 +67,8 @@ The deployment helper runs before activation. Migrations may change the shared
 database even when preparation fails. This is not a database rollback mechanism.
 Configure web serving through current/public; OPcache, long-running workers, and
 backward-compatible migrations still need an application-specific strategy for
-zero downtime.`,
+zero downtime. Read-only permissions do not prevent the file owner from changing
+them; use separate deployment and runtime users for stronger isolation.`,
 	Args:              deploymentSelectionArgs(rolloutSelection),
 	ValidArgsFunction: deploymentReferenceCompletions,
 	RunE: func(cmd *cobra.Command, args []string) error {

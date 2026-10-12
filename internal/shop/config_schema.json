@@ -912,7 +912,7 @@
         },
         "tmp_dir": {
           "type": "string",
-          "description": "Absolute remote POSIX directory for CacheTool temporary files."
+          "description": "Absolute remote POSIX directory for CacheTool temporary files, outside the deployment root's releases and current paths."
         },
         "web_url": {
           "type": "string",
@@ -921,11 +921,11 @@
         },
         "web_path": {
           "type": "string",
-          "description": "Absolute remote POSIX web document root; web adapter only. Defaults to the activated release/public."
+          "description": "Required for web: explicit writable absolute remote POSIX web directory outside the deployment root's releases and current paths."
         },
         "config": {
           "type": "string",
-          "description": "Absolute path to an existing remote native CacheTool YAML file targeting web/FPM, not CLI.\nMutually exclusive with all inline adapter fields, including tmp_dir, even when disabled.\nWith native web configuration, the owner must clean up temporary web endpoints if CacheTool fails to fetch them."
+          "description": "Absolute path to an existing remote native CacheTool YAML file targeting web/FPM, not CLI.\nMutually exclusive with all inline adapter fields, including tmp_dir, even when disabled.\nThe owner must configure writable external web and temporary paths; native YAML paths cannot be preflighted.\nWith native web configuration, the owner must clean up temporary web endpoints if CacheTool fails to fetch them."
         }
       },
       "additionalProperties": false,

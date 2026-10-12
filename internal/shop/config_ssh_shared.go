@@ -37,6 +37,9 @@ func (c *EnvironmentSSHConfig) SharedPaths() (files, directories []string, err e
 			strings.ContainsRune(name, '\\') || strings.ContainsFunc(name, unicode.IsControl) {
 			return nil, nil, fmt.Errorf("ssh.shared path %q must be a clean project-relative path", name)
 		}
+		if name == "var" || name == "var/cache" || strings.HasPrefix(name, "var/cache/") {
+			return nil, nil, fmt.Errorf("ssh.shared path %q overlaps var/cache, which must remain host- and release-local", name)
+		}
 		for _, previous := range paths[:i] {
 			if name == previous || strings.HasPrefix(name, previous+"/") || strings.HasPrefix(previous, name+"/") {
 				return nil, nil, fmt.Errorf("ssh.shared paths %q and %q overlap", previous, name)

@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
@@ -92,4 +93,46 @@ func TestCachetoolDisabledIncludeReachesBackend(t *testing.T) {
 	settings, err := backend.(*SSH).cachetoolInput()
 	require.NoError(t, err)
 	assert.Nil(t, settings)
+}
+
+func TestCachetoolExternalPathResolvesSymlinkAncestors(t *testing.T) {
+	php := deploymentPHP(t)
+	root := t.TempDir()
+	external := t.TempDir()
+	release := filepath.Join(root, "releases", "first")
+	require.NoError(t, os.MkdirAll(release, 0o755))
+	require.NoError(t, os.Symlink(external, filepath.Join(release, "public")))
+	require.NoError(t, os.Symlink(release, filepath.Join(root, "current")))
+	alias := filepath.Join(t.TempDir(), "release-alias")
+	require.NoError(t, os.Symlink(release, alias))
+	safeAlias := filepath.Join(t.TempDir(), "external-alias")
+	require.NoError(t, os.Symlink(external, safeAlias))
+	indirect := filepath.Join(t.TempDir(), "indirect")
+	require.NoError(t, os.Symlink(root+"/current/public", indirect))
+	for _, tc := range []struct {
+		name, path string
+		valid      bool
+	}{
+		{"current public external symlink", root + "/current/public", false},
+		{"release public external symlink", release + "/public", false},
+		{"release alias external child", alias + "/public", false},
+		{"alias through current to external public", indirect, false},
+		{"existing release alias nonexistent child", alias + "/new/tmp", false},
+		{"safe external alias", safeAlias + "/./new", true},
+		{"similar external name", root + "/releases-other/new", true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			script := strings.TrimPrefix(sshCachetoolScript, "<?php\n") + `
+try { echo deploymentCachetoolExternalPath($argv[1], $argv[2], 'web_path'); }
+catch (Throwable $error) { fwrite(STDERR, $error->getMessage()); exit(1); }
+`
+			output, err := exec.CommandContext(t.Context(), php, "-r", script, "--", tc.path, root).CombinedOutput()
+			if tc.valid {
+				require.NoError(t, err, string(output))
+			} else {
+				require.Error(t, err)
+				assert.Contains(t, string(output), "outside releases and current")
+			}
+		})
+	}
 }

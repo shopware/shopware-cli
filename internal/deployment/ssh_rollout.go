@@ -30,6 +30,7 @@ var sshDeploymentMainScript string
 
 var sshDeploymentScript = sshCachetoolScript + "\n" +
 	strings.TrimPrefix(sshPHPRestartScript, "<?php\n") + "\n" +
+	strings.TrimPrefix(sshPermissionsScript, "<?php\n") + "\n" +
 	strings.TrimPrefix(sshDeploymentMainScript, "<?php\n")
 
 //go:embed ssh_deployment_list.php

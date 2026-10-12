@@ -202,8 +202,10 @@ func TestSSHRetainedEligibility(t *testing.T) {
 			eventPath := filepath.Join(root, ".shopware-cli/rollouts", first.Reference+".json")
 			switch damage {
 			case "missing":
+				restoreDeploymentDirectories(t, filepath.Join(root, "releases/first"))
 				require.NoError(t, os.RemoveAll(filepath.Join(root, "releases/first")))
 			case "symlink":
+				restoreDeploymentDirectories(t, filepath.Join(root, "releases/first"))
 				require.NoError(t, os.RemoveAll(filepath.Join(root, "releases/first")))
 				require.NoError(t, os.Symlink("second", filepath.Join(root, "releases/first")))
 			case "legacy":

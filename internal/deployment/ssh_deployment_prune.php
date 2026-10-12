@@ -104,7 +104,7 @@ function pruneRecords(string $directory, string $identity, bool &$archivesKnown)
 
 function pruneRemoveTree(string $path): void
 {
-    // Release-local links include shared runtime data; unlink, never traverse.
+    // Links include shared data and per-release cache; unlink, never traverse.
     if (is_link($path) || is_file($path)) {
         if (!unlink($path)) {
             throw new RuntimeException("Cannot remove release entry: $path");
@@ -113,6 +113,13 @@ function pruneRemoveTree(string $path): void
     }
     if (!is_dir($path)) {
         throw new RuntimeException("Unexpected release entry: $path");
+    }
+    // Only directories need write access to unlink children. Preserve all other
+    // mode bits, never chmod files or symlink targets, and only do this after
+    // publishing the resumable pruning marker (never during plan validation).
+    $mode = fileperms($path) & 07777;
+    if (($mode & 0700) !== 0700 && !chmod($path, $mode | 0700)) {
+        throw new RuntimeException("Cannot restore directory access: $path");
     }
     foreach (new FilesystemIterator($path) as $entry) {
         pruneRemoveTree($entry->getPathname());
@@ -184,7 +191,7 @@ function prunePlan(array $input): array
         if (!flock($lock, LOCK_EX | LOCK_NB)) {
             throw new RuntimeException("Another deployment holds the lock for $root");
         }
-        foreach (["$root/releases", "$state/releases", "$state/rollouts", "$state/logs", "$state/artifacts"] as $directory) {
+        foreach (["$root/releases", "$root/runtime", "$state/releases", "$state/rollouts", "$state/logs", "$state/artifacts"] as $directory) {
             pruneDirectory($directory);
         }
         $active = null;
@@ -293,8 +300,12 @@ function prunePlan(array $input): array
         $files = [];
         $removeHashes = [];
         foreach ($remove as $name) {
-            if (pruneDirectory("$root/releases/$name")) {
-                pruneValidateTree("$root/releases/$name");
+            // Runtime is owned by the same managed release, not an independent
+            // retention candidate. Unknown runtime entries are never inspected.
+            foreach (["$root/releases/$name", "$root/runtime/$name"] as $path) {
+                if (pruneDirectory($path)) {
+                    pruneValidateTree($path);
+                }
             }
             $removeHashes[$name] = $records[$name]['sha256'] ?? $historyHashes[$name];
             $files[$name] = [];
@@ -347,8 +358,10 @@ function prunePlan(array $input): array
                 // an interruption. Keep the marker until every related file is gone.
                 $marker = "$state/releases/$name.json";
                 pruneMarkRelease($marker, (string) $name, $removeHashes[$name]);
-                if (is_dir("$root/releases/$name")) {
-                    pruneRemoveTree("$root/releases/$name");
+                foreach (["$root/releases/$name", "$root/runtime/$name"] as $path) {
+                    if (pruneDirectory($path)) {
+                        pruneRemoveTree($path);
+                    }
                 }
                 foreach (array_keys($files[$name]) as $path) {
                     if (!unlink($path)) {

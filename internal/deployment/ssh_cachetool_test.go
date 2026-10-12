@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -158,6 +159,7 @@ func TestSSHCachetoolAdapters(t *testing.T) {
 				config.Adapter = "web"
 				config.FCGI = ""
 				config.WebURL = "https://shop.example.com/base"
+				config.WebPath = t.TempDir()
 			case "native":
 				config.Adapter = ""
 				config.FCGI = ""
@@ -189,7 +191,9 @@ func TestSSHCachetoolAdapters(t *testing.T) {
 				assert.Equal(t, "SymfonyHttpClient", got[0].Config["webClient"])
 				webPath, ok := got[0].Config["webPath"].(string)
 				require.True(t, ok)
-				assert.Equal(t, filepath.Join(root, "releases/first/public"), filepath.Dir(webPath))
+				resolved, err := filepath.EvalSymlinks(config.WebPath)
+				require.NoError(t, err)
+				assert.Equal(t, resolved, filepath.Dir(webPath))
 				assert.Equal(t, config.WebURL+"/"+filepath.Base(webPath), got[0].Config["webUrl"])
 				assert.NoDirExists(t, webPath)
 			case "native":
@@ -282,6 +286,7 @@ func TestSSHCachetoolResetFailureDoesNotUndoActivation(t *testing.T) {
 			config, records, _ := cachetoolTestFixture(t, s)
 			config.Adapter, config.FCGI = "web", ""
 			config.WebURL = "https://shop.example.com"
+			config.WebPath = t.TempDir()
 			if failure == "timeout" {
 				config.TimeoutSeconds = 1
 				t.Setenv("CACHETOOL_TEST_SLEEP", "1")
@@ -314,5 +319,66 @@ func TestSSHCachetoolResetFailureDoesNotUndoActivation(t *testing.T) {
 				assert.False(t, strings.Contains(entry.Name(), "cachetool-"), "public CacheTool files must be cleaned on failure")
 			}
 		})
+	}
+}
+
+func TestSSHCachetoolWritablePathsFailBeforeDownloadAndActivation(t *testing.T) {
+	for _, active := range []bool{false, true} {
+		for _, field := range []string{"web_path", "web_tmp_dir", "fcgi_tmp_dir"} {
+			for _, location := range []string{"missing", "current", "release", "dot", "parent", "alias"} {
+				if location == "missing" && field != "web_path" {
+					continue
+				}
+				t.Run(fmt.Sprintf("active=%t/%s/%s", active, field, location), func(t *testing.T) {
+					s := localDeploymentSSH(t)
+					root := filepath.Dir(s.directory)
+					archive := deploymentTestArchive(t, "")
+					if active {
+						_, err := s.rolloutArchive(t.Context(), Deployment{Reference: "first"}, archive, nil)
+						require.NoError(t, err)
+					}
+					config, records, downloads := cachetoolTestFixture(t, s)
+					path := ""
+					switch location {
+					case "current":
+						path = root + "/current/public"
+					case "release":
+						path = root + "/releases/second/public"
+					case "dot":
+						path = root + "/./releases//second/public"
+					case "parent":
+						path = root + "/shared/../releases/second/public"
+					case "alias":
+						require.NoError(t, os.MkdirAll(filepath.Join(root, "releases"), 0o755))
+						alias := filepath.Join(t.TempDir(), "alias")
+						require.NoError(t, os.Symlink(filepath.Join(root, "releases"), alias))
+						path = alias + "/second/public"
+					}
+					if field != "fcgi_tmp_dir" {
+						config.Adapter, config.FCGI = "web", ""
+						config.WebURL = "https://shop.example"
+						config.WebPath = t.TempDir()
+					}
+					if field == "web_path" {
+						config.WebPath = path
+					} else {
+						config.TmpDir = path
+					}
+					input, data := cachetoolTestInput(t, s, archive, "second", "event-second", config)
+					var output bytes.Buffer
+					_, err := s.runSSHDeployment(t.Context(), bytes.NewReader(data), input, &output)
+					require.Error(t, err)
+					assert.Contains(t, output.String(), "CacheTool")
+					assert.NoFileExists(t, downloads, "invalid writable paths must fail before downloading")
+					assert.NoFileExists(t, records, "invalid writable paths must never execute CacheTool")
+					if active {
+						assert.Equal(t, "releases/first", currentRelease(t, s))
+					} else {
+						_, err := os.Lstat(s.directory)
+						assert.True(t, os.IsNotExist(err), "current must remain absent")
+					}
+				})
+			}
+		}
 	}
 }

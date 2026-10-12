@@ -23,7 +23,8 @@ func TestSSHCachetoolReadConfig(t *testing.T) {
 		{"fcgi autodetection", "{enabled: true, adapter: fcgi}", true},
 		{"fcgi socket", "{enabled: true, adapter: fcgi, fcgi: /run/php/fpm.sock, fcgi_chroot: /srv/shop, tmp_dir: /tmp/cachetool}", true},
 		{"fcgi tcp", "{enabled: true, adapter: fcgi, fcgi: '127.0.0.1:9000'}", true},
-		{"web default path", "{enabled: true, adapter: web, web_url: 'https://shop.example'}", true},
+		{"web missing path", "{enabled: true, adapter: web, web_url: 'https://shop.example'}", false},
+		{"disabled web missing path", "{adapter: web, web_url: 'https://shop.example'}", false},
 		{"web custom path", "{enabled: true, adapter: web, web_url: 'http://localhost:8080/shop', web_path: /srv/shop/public}", true},
 		{"native", "{enabled: true, config: /etc/cachetool.yml}", true},
 		{"native disabled", "{config: /etc/cachetool.yml}", true},
@@ -87,7 +88,7 @@ func TestSSHCachetoolInvalidPaths(t *testing.T) {
 func TestSSHCachetoolInvalidURLs(t *testing.T) {
 	for _, value := range []string{"relative", "//shop.example", "ftp://shop.example", "https:///path", "https://user:secret@shop.example", "https://shop.example?q=1", "https://shop.example?", "https://shop.example#fragment", "https://shop.example#", "https://shop.example/\n", "https://shop.example/%zz"} {
 		t.Run(value, func(t *testing.T) {
-			cfg := &EnvironmentSSHCachetoolConfig{Adapter: "web", WebURL: value}
+			cfg := &EnvironmentSSHCachetoolConfig{Adapter: "web", WebURL: value, WebPath: "/srv/cachetool"}
 			require.ErrorContains(t, cfg.Validate(), "ssh.cachetool.web_url")
 		})
 	}

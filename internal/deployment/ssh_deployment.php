@@ -372,17 +372,19 @@ try {
     }
     $current = "$root/current";
     $release = "$root/releases/$name";
+    $sameActive = $action !== 'candidates' && is_link($current)
+        && realpath($current) !== false && realpath($current) === realpath($release);
+    foreach ([$root, "$root/releases", "$root/shared", "$root/.shopware-cli", "$root/.shopware-cli/releases",
+        "$root/.shopware-cli/rollouts", "$root/.shopware-cli/artifacts"] as $directory) {
+        if (is_link($directory) || (file_exists($directory) && !is_dir($directory))) {
+            throw new RuntimeException("Expected a real directory: $directory");
+        }
+    }
     umask(0022);
-    if ($action === '') {
+    if ($action === '' && !$sameActive) {
         deploymentDirectory($root);
         deploymentDirectory("$root/.shopware-cli", 0700);
     } else {
-        foreach ([$root, "$root/releases", "$root/.shopware-cli", "$root/.shopware-cli/releases",
-            "$root/.shopware-cli/rollouts", "$root/.shopware-cli/artifacts"] as $directory) {
-            if (is_link($directory) || (file_exists($directory) && !is_dir($directory))) {
-                throw new RuntimeException("Expected a real directory: $directory");
-            }
-        }
         if (!is_dir("$root/.shopware-cli")) {
             if ($action === 'candidates' && !file_exists($current) && !is_link($current)) {
                 echo "[]\n";
@@ -395,7 +397,7 @@ try {
     if (is_link($lockPath) || (file_exists($lockPath) && !is_file($lockPath))) {
         throw new RuntimeException("Deployment lock must be a regular file");
     }
-    $lock = fopen($lockPath, $action === 'candidates' ? 'r' : 'c');
+    $lock = fopen($lockPath, $action === 'candidates' || $sameActive ? 'r' : 'c');
     if ($lock === false || !flock($lock, LOCK_EX | LOCK_NB)) {
         throw new RuntimeException("Another deployment holds the lock for $root");
     }
@@ -404,13 +406,6 @@ try {
     }
     if ($action === '' && (!is_int($input['size'] ?? null) || $input['size'] < 0)) {
         throw new RuntimeException('Invalid deployment archive size');
-    }
-    if ($action === '') {
-        deploymentDirectory("$root/releases");
-        deploymentDirectory("$root/shared");
-        deploymentDirectory("$root/.shopware-cli/rollouts", 0700);
-        deploymentDirectory("$root/.shopware-cli/releases", 0700);
-        deploymentDirectory("$root/.shopware-cli/artifacts", 0700);
     }
     $previous = null;
     if (is_link($current)) {
@@ -487,6 +482,7 @@ try {
                 || ($successful['deployed_at'] ?? null) !== $releaseMetadata['deployed_at']) {
                 throw new RuntimeException("Cannot establish the last successful activation of release $name");
             }
+            deploymentVerifySealedRelease($root, $release, $name);
             echo "UNCHANGED $id\n$reference\n";
             deploymentActivationResult($input, $successful, true);
             fflush(STDOUT);
@@ -499,6 +495,13 @@ try {
     $rolloutFile = "$root/.shopware-cli/rollouts/$id.json";
     if (file_exists($rolloutFile) || is_link($rolloutFile)) {
         throw new RuntimeException("Rollout reference already exists: $id");
+    }
+    if ($action === '') {
+        deploymentDirectory("$root/releases");
+        deploymentDirectory("$root/shared");
+        deploymentDirectory("$root/.shopware-cli/rollouts", 0700);
+        deploymentDirectory("$root/.shopware-cli/releases", 0700);
+        deploymentDirectory("$root/.shopware-cli/artifacts", 0700);
     }
     // Same-active and candidate requests have already returned. Prepare before
     // rollout metadata, release writes, or migrations can change application state.
@@ -524,6 +527,9 @@ try {
                 throw new RuntimeException('Client did not authorize preparation');
             }
         }
+        $releaseMetadata['ready'] = false;
+        deploymentMetadata($releaseFile, $releaseMetadata);
+        deploymentRuntimeCache($root, $release, $name, true);
     } else {
         $archive = "$root/.shopware-cli/artifacts/{$input['sha256']}.tar.gz";
         if (is_link($archive) || (file_exists($archive) && !is_file($archive))) {
@@ -577,7 +583,8 @@ try {
         deploymentMetadata($releaseFile, $releaseMetadata);
         deploymentDirectory($release);
         deploymentRun(['tar', '-xzf', $archive, '--no-same-owner', '--no-same-permissions', '-C', $release], $root);
-        // Keep cache/build output release-local. Share runtime data and credentials.
+        deploymentRuntimeCache($root, $release, $name);
+        // Persistent shared data is separate from host- and release-local cache.
         foreach ($input['shared_directories'] ?? [] as $relative) {
             deploymentShare($root, $release, $relative, true, $previous, $input['coordinated'] ?? false);
         }
@@ -628,9 +635,10 @@ try {
         if ($shareInstallLock) {
             deploymentShare($root, $release, 'install.lock', false, $previous);
         }
-        $releaseMetadata['ready'] = true;
-        deploymentMetadata($releaseFile, $releaseMetadata);
     }
+    deploymentSealRelease($root, $release, $name);
+    $releaseMetadata['ready'] = true;
+    deploymentMetadata($releaseFile, $releaseMetadata);
     $metadata['status'] = 'prepared';
     deploymentMetadata($metadataFile, $metadata);
     echo "READY $id\n";

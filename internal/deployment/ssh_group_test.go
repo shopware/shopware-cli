@@ -127,6 +127,7 @@ func TestSSHGroupRolloutAndRollback(t *testing.T) {
 	for _, host := range g.hosts {
 		require.NoError(t, os.RemoveAll(filepath.Join(filepath.Dir(host.backend.directory), ".shopware-cli/artifacts")))
 		// Rollback must not execute either helper or follower console.
+		restoreDeploymentDirectories(t, filepath.Join(filepath.Dir(host.backend.directory), "releases/first"))
 		for _, file := range []string{"bin/console", "vendor/bin/shopware-deployment-helper"} {
 			require.NoError(t, os.Remove(filepath.Join(filepath.Dir(host.backend.directory), "releases/first", file)))
 		}

@@ -69,6 +69,28 @@ func TestSSHSharedPathsRejectUnsafeAndOverlappingPaths(t *testing.T) {
 	}
 }
 
+func TestSSHSharedPathsReserveReleaseLocalCache(t *testing.T) {
+	for _, name := range []string{"var", "var/cache", "var/cache/prod"} {
+		t.Run(name, func(t *testing.T) {
+			for _, files := range []bool{true, false} {
+				paths := []string{name}
+				shared := &EnvironmentSSHSharedConfig{}
+				if files {
+					shared.Files = &paths
+				} else {
+					shared.Directories = &paths
+				}
+				_, _, err := (&EnvironmentSSHConfig{Shared: shared}).SharedPaths()
+				require.ErrorContains(t, err, "host- and release-local")
+			}
+		})
+	}
+	paths := []string{"var/cache-extra", "var/log"}
+	_, directories, err := (&EnvironmentSSHConfig{Shared: &EnvironmentSSHSharedConfig{Directories: &paths}}).SharedPaths()
+	require.NoError(t, err)
+	assert.ElementsMatch(t, paths, directories)
+}
+
 func TestSSHSharedPathsLocalOverrideAndWriteConfig(t *testing.T) {
 	root := t.TempDir()
 	testhelper.WriteFile(t, filepath.Join(root, ".shopware-project.yml"), `

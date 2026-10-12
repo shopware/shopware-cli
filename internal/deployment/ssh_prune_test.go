@@ -39,6 +39,14 @@ func addPruneRelease(t *testing.T, e *SSH, name, reference, checksum, status str
 	stamp := time.Date(2026, 9, 22, 10, minute, 0, 0, time.UTC).Format(time.RFC3339Nano)
 	testhelper.WriteFile(t, filepath.Join(root, ".shopware-cli/deployment.lock"), "")
 	testhelper.WriteFile(t, filepath.Join(root, "releases", name, "app.txt"), name)
+	testhelper.WriteFile(t, filepath.Join(root, "runtime", name, "cache", "cached.txt"), "cache for "+name)
+	cache := filepath.Join(root, "releases", name, "var", "cache")
+	require.NoError(t, os.MkdirAll(filepath.Dir(cache), 0o755))
+	if _, err := os.Lstat(cache); os.IsNotExist(err) {
+		require.NoError(t, os.Symlink(filepath.Join(root, "runtime", name, "cache"), cache))
+	} else {
+		require.NoError(t, err)
+	}
 	testhelper.WriteFile(t, filepath.Join(root, ".shopware-cli/logs", name+".log"), "logs for "+name)
 	testhelper.WriteFile(t, filepath.Join(root, ".shopware-cli/artifacts", checksum+".tar.gz"), "cached archive")
 	metadata := map[string]any{
@@ -107,6 +115,10 @@ func TestSSHPruneRetentionAndDryRun(t *testing.T) {
 	testhelper.WriteFile(t, filepath.Join(root, ".shopware-cli/artifacts", orphan), "unused archive")
 	testhelper.WriteFile(t, filepath.Join(root, ".shopware-cli/artifacts/upload.tmp"), "incomplete upload")
 
+	retainedRuntime := map[string]map[string]string{}
+	for _, name := range []string{"active-old", "recent", "newest", "failed", "incomplete"} {
+		retainedRuntime[name] = pruneSnapshot(t, filepath.Join(root, "runtime", name))
+	}
 	before := pruneSnapshot(t, root)
 	preview, err := e.PruneDeployments(t.Context(), DeploymentPruneOptions{Keep: 2, DryRun: true})
 	require.NoError(t, err)
@@ -119,12 +131,14 @@ func TestSSHPruneRetentionAndDryRun(t *testing.T) {
 	assert.Equal(t, preview, result)
 	for _, name := range []string{"old", "shared-old"} {
 		assert.NoDirExists(t, filepath.Join(root, "releases", name))
+		assert.NoDirExists(t, filepath.Join(root, "runtime", name))
 		assert.NoFileExists(t, filepath.Join(root, ".shopware-cli/releases", name+".json"))
 		assert.NoFileExists(t, filepath.Join(root, ".shopware-cli/logs", name+".log"))
 		assert.NoFileExists(t, filepath.Join(root, ".shopware-cli/rollouts", name+"-event.json"))
 	}
 	for _, name := range []string{"active-old", "recent", "newest", "failed", "incomplete"} {
 		assert.DirExists(t, filepath.Join(root, "releases", name))
+		assert.Equal(t, retainedRuntime[name], pruneSnapshot(t, filepath.Join(root, "runtime", name)))
 		assert.FileExists(t, filepath.Join(root, ".shopware-cli/logs", name+".log"))
 	}
 	for _, name := range []string{"active", "shared", "newest", "failed", "incomplete"} {
@@ -175,6 +189,11 @@ func TestSSHPruneProtectsUnmanagedReleases(t *testing.T) {
 	root := filepath.Dir(e.directory)
 	addPruneRelease(t, e, "managed", "event", pruneChecksum("managed"), "successful", 1)
 	testhelper.WriteFile(t, filepath.Join(root, "releases/unmanaged/app.txt"), "not owned by the CLI")
+	testhelper.WriteFile(t, filepath.Join(root, "runtime/unmanaged/cache/keep"), "unmanaged cache")
+	testhelper.WriteFile(t, filepath.Join(root, "runtime/unknown/cache/keep"), "orphaned runtime is not proof of ownership")
+	require.NoError(t, os.Symlink("../shared", filepath.Join(root, "runtime/unknown-link")))
+	runtimeBefore := pruneSnapshot(t, filepath.Join(root, "runtime/unmanaged"))
+	unknownBefore := pruneSnapshot(t, filepath.Join(root, "runtime/unknown"))
 	orphan := filepath.Join(root, ".shopware-cli/artifacts", pruneChecksum("unknown")+".tar.gz")
 	testhelper.WriteFile(t, orphan, "may belong to unmanaged release")
 	result, err := e.PruneDeployments(t.Context(), DeploymentPruneOptions{Keep: 0})
@@ -182,6 +201,11 @@ func TestSSHPruneProtectsUnmanagedReleases(t *testing.T) {
 	assert.Equal(t, []Deployment{{Reference: "managed"}}, result.Deployments)
 	assert.Empty(t, result.Artifacts, "cannot prove that unmanaged releases don't reference cached archives")
 	assert.DirExists(t, filepath.Join(root, "releases/unmanaged"))
+	assert.Equal(t, runtimeBefore, pruneSnapshot(t, filepath.Join(root, "runtime/unmanaged")))
+	assert.Equal(t, unknownBefore, pruneSnapshot(t, filepath.Join(root, "runtime/unknown")))
+	target, err := os.Readlink(filepath.Join(root, "runtime/unknown-link"))
+	require.NoError(t, err)
+	assert.Equal(t, "../shared", target)
 	assert.FileExists(t, orphan)
 }
 
@@ -302,7 +326,7 @@ func TestSSHPruneDefaultRetentionCountsDistinctReleases(t *testing.T) {
 }
 
 func TestSSHPruneResumesInterruptedCleanup(t *testing.T) {
-	for _, stage := range []string{"before tree removal", "after tree removal", "after history removal", "marker only"} {
+	for _, stage := range []string{"before tree removal", "after tree removal", "after runtime removal", "after history removal", "marker only"} {
 		t.Run(stage, func(t *testing.T) {
 			e := localDeploymentSSH(t)
 			root := filepath.Dir(e.directory)
@@ -313,6 +337,9 @@ func TestSSHPruneResumesInterruptedCleanup(t *testing.T) {
 			})
 			if stage != "before tree removal" {
 				require.NoError(t, os.RemoveAll(filepath.Join(root, "releases/old")))
+			}
+			if stage == "after runtime removal" || stage == "after history removal" || stage == "marker only" {
+				require.NoError(t, os.RemoveAll(filepath.Join(root, "runtime/old")))
 			}
 			if stage == "after history removal" || stage == "marker only" {
 				require.NoError(t, os.Remove(filepath.Join(root, ".shopware-cli/rollouts/event.json")))
@@ -329,6 +356,7 @@ func TestSSHPruneResumesInterruptedCleanup(t *testing.T) {
 			require.NoError(t, err)
 			assert.Equal(t, preview, result)
 			assert.NoDirExists(t, filepath.Join(root, "releases/old"))
+			assert.NoDirExists(t, filepath.Join(root, "runtime/old"))
 			assert.NoFileExists(t, filepath.Join(root, ".shopware-cli/releases/old.json"))
 			assert.NoFileExists(t, filepath.Join(root, ".shopware-cli/rollouts/event.json"))
 			assert.NoFileExists(t, filepath.Join(root, ".shopware-cli/logs/old.log"))
@@ -372,4 +400,98 @@ func TestSSHPruneNeverResumesActiveReleaseCleanup(t *testing.T) {
 	_, err := e.PruneDeployments(t.Context(), DeploymentPruneOptions{Keep: 0})
 	require.ErrorContains(t, err, "active release")
 	assert.Equal(t, before, pruneSnapshot(t, root))
+}
+
+func TestSSHPruneRetriesAfterRuntimeRemovalFailure(t *testing.T) {
+	e := localDeploymentSSH(t)
+	if os.Geteuid() == 0 {
+		t.Skip("root bypasses directory write permissions")
+	}
+	root := filepath.Dir(e.directory)
+	addPruneRelease(t, e, "old", "event", pruneChecksum("old"), "successful", 1)
+	runtime := filepath.Join(root, "runtime")
+	require.NoError(t, os.Chmod(runtime, 0o500))
+	t.Cleanup(func() { _ = os.Chmod(runtime, 0o700) })
+
+	_, err := e.PruneDeployments(t.Context(), DeploymentPruneOptions{Keep: 0})
+	require.Error(t, err)
+	assert.NoDirExists(t, filepath.Join(root, "releases/old"))
+	assert.DirExists(t, filepath.Join(runtime, "old"))
+	marker, err := os.ReadFile(filepath.Join(root, ".shopware-cli/releases/old.json"))
+	require.NoError(t, err)
+	assert.JSONEq(t, fmt.Sprintf(`{"release":"old","sha256":%q,"ready":false,"pruning":true}`, pruneChecksum("old")), string(marker))
+	assert.FileExists(t, filepath.Join(root, ".shopware-cli/rollouts/event.json"))
+
+	require.NoError(t, os.Chmod(runtime, 0o700))
+	result, err := e.PruneDeployments(t.Context(), DeploymentPruneOptions{Keep: 5})
+	require.NoError(t, err)
+	assert.Equal(t, []Deployment{{Reference: "old"}}, result.Deployments)
+	assert.NoDirExists(t, filepath.Join(runtime, "old"))
+	assert.NoFileExists(t, filepath.Join(root, ".shopware-cli/releases/old.json"))
+}
+
+func TestSSHPruneReadonlyReleaseAndRuntime(t *testing.T) {
+	e := localDeploymentSSH(t)
+	root := filepath.Dir(e.directory)
+	addPruneRelease(t, e, "old", "event", pruneChecksum("old"), "successful", 1)
+	release := filepath.Join(root, "releases/old")
+	testhelper.WriteFile(t, filepath.Join(release, "nested/deeper/readonly.txt"), "readonly bytes")
+	require.NoError(t, os.Symlink(filepath.Join(root, "shared"), filepath.Join(release, "nested/shared")))
+	require.NoError(t, os.Symlink(filepath.Join(root, "shared"), filepath.Join(root, "runtime/old/shared")))
+
+	// A retained hard link exposes any accidental chmod of a release file.
+	retained := filepath.Join(root, "shared/retained-file")
+	require.NoError(t, os.Link(filepath.Join(release, "nested/deeper/readonly.txt"), retained))
+	require.NoError(t, filepath.WalkDir(release, func(path string, entry fs.DirEntry, err error) error {
+		if err != nil || entry.Type()&os.ModeSymlink != 0 {
+			return err
+		}
+		if entry.IsDir() {
+			return os.Chmod(path, 0o550)
+		}
+		return os.Chmod(path, 0o440)
+	}))
+	sharedBefore := pruneSnapshot(t, filepath.Join(root, "shared"))
+	before := pruneSnapshot(t, root)
+	preview, err := e.PruneDeployments(t.Context(), DeploymentPruneOptions{Keep: 0, DryRun: true})
+	require.NoError(t, err)
+	assert.Equal(t, []Deployment{{Reference: "old"}}, preview.Deployments)
+	assert.Equal(t, before, pruneSnapshot(t, root), "dry-run must not restore permissions or change data")
+
+	result, err := e.PruneDeployments(t.Context(), DeploymentPruneOptions{Keep: 0})
+	require.NoError(t, err)
+	assert.Equal(t, preview, result)
+	assert.NoDirExists(t, release)
+	assert.NoDirExists(t, filepath.Join(root, "runtime/old"))
+	assert.NoFileExists(t, filepath.Join(root, ".shopware-cli/releases/old.json"))
+	assert.Equal(t, sharedBefore, pruneSnapshot(t, filepath.Join(root, "shared")),
+		"shared symlink targets and retained hard links must keep their permissions and contents")
+}
+
+func TestSSHPruneRejectsUnsafeRuntimeBeforeDeletion(t *testing.T) {
+	for _, scenario := range []string{"root symlink", "release symlink", "root file", "release file"} {
+		for _, dryRun := range []bool{false, true} {
+			t.Run(fmt.Sprintf("%s/dry-run=%t", scenario, dryRun), func(t *testing.T) {
+				e := localDeploymentSSH(t)
+				root := filepath.Dir(e.directory)
+				// A later invalid candidate must prevent deletion of an earlier one.
+				addPruneRelease(t, e, "a-old", "a-event", pruneChecksum("a-old"), "successful", 1)
+				addPruneRelease(t, e, "z-old", "z-event", pruneChecksum("z-old"), "successful", 2)
+				path := filepath.Join(root, "runtime")
+				if strings.HasPrefix(scenario, "release") {
+					path = filepath.Join(path, "z-old")
+				}
+				require.NoError(t, os.RemoveAll(path))
+				if strings.HasSuffix(scenario, "symlink") {
+					require.NoError(t, os.Symlink(filepath.Join(root, "shared"), path))
+				} else {
+					testhelper.WriteFile(t, path, "not a directory")
+				}
+				before := pruneSnapshot(t, root)
+				_, err := e.PruneDeployments(t.Context(), DeploymentPruneOptions{Keep: 0, DryRun: dryRun})
+				require.ErrorContains(t, err, "Expected a real directory")
+				assert.Equal(t, before, pruneSnapshot(t, root), "validate every runtime path before any mutation")
+			})
+		}
+	}
 }

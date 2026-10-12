@@ -22,7 +22,7 @@ func TestSSHResolveHostsInheritanceAndIsolation(t *testing.T) {
 			"web-1": {
 				Host: "one", User: "other", Port: 23, Directory: "/other", IdentityFile: "/other-key", PHPBinary: "php",
 				Shared:    &EnvironmentSSHSharedConfig{Files: new([]string{})},
-				Cachetool: &EnvironmentSSHCachetoolConfig{Enabled: new(true), Adapter: "web", WebURL: "https://example.com"},
+				Cachetool: &EnvironmentSSHCachetoolConfig{Enabled: new(true), Adapter: "web", WebURL: "https://example.com", WebPath: "/srv/cachetool"},
 			},
 		},
 	}

@@ -20,14 +20,15 @@ type EnvironmentSSHCachetoolConfig struct {
 	FCGI string `yaml:"fcgi,omitempty" json:"fcgi,omitempty"`
 	// Absolute remote POSIX PHP-FPM chroot path; fcgi adapter only.
 	FCGIChroot string `yaml:"fcgi_chroot,omitempty" json:"fcgi_chroot,omitempty"`
-	// Absolute remote POSIX directory for CacheTool temporary files.
+	// Absolute remote POSIX directory for CacheTool temporary files, outside the deployment root's releases and current paths.
 	TmpDir string `yaml:"tmp_dir,omitempty" json:"tmp_dir,omitempty"`
 	// Absolute HTTP(S) URL for the web adapter, without credentials, query or fragment. Required for web.
 	WebURL string `yaml:"web_url,omitempty" json:"web_url,omitempty" jsonschema:"format=uri"`
-	// Absolute remote POSIX web document root; web adapter only. Defaults to the activated release/public.
+	// Required for web: explicit writable absolute remote POSIX web directory outside the deployment root's releases and current paths.
 	WebPath string `yaml:"web_path,omitempty" json:"web_path,omitempty"`
 	// Absolute path to an existing remote native CacheTool YAML file targeting web/FPM, not CLI.
 	// Mutually exclusive with all inline adapter fields, including tmp_dir, even when disabled.
+	// The owner must configure writable external web and temporary paths; native YAML paths cannot be preflighted.
 	// With native web configuration, the owner must clean up temporary web endpoints if CacheTool fails to fetch them.
 	Config string `yaml:"config,omitempty" json:"config,omitempty"`
 }
@@ -59,6 +60,9 @@ func (c *EnvironmentSSHCachetoolConfig) Validate() error {
 	}
 	if c.Adapter == "web" && c.WebURL == "" {
 		return errors.New("ssh.cachetool.web_url is required for adapter web")
+	}
+	if c.Adapter == "web" && c.WebPath == "" {
+		return errors.New("ssh.cachetool.web_path is required for adapter web and must be outside releases and current")
 	}
 	return c.validateLocations()
 }

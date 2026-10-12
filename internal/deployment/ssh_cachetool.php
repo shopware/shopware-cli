@@ -152,6 +152,65 @@ function deploymentRunBoundedCommand(array $command, string $directory, int $tim
     }
 }
 
+// Resolve existing ancestors even when the final directory does not exist yet.
+// Reject parent traversal rather than normalizing it across symlink boundaries.
+function deploymentCachetoolPath(string $path, bool $resolve, array $protected = [], int $links = 0): string
+{
+    if (!str_starts_with($path, '/') || str_contains($path, '\\') || preg_match('/[\x00-\x1f\x7f]/', $path)) {
+        throw new RuntimeException('CacheTool requires an absolute remote POSIX path');
+    }
+    if ($links > 40) {
+        throw new RuntimeException('Too many symlinks in CacheTool path');
+    }
+    $result = '';
+    foreach (explode('/', $path) as $part) {
+        if ($part === '' || $part === '.') {
+            continue;
+        }
+        if ($part === '..') {
+            if ($links === 0) {
+                throw new RuntimeException('CacheTool paths must not contain parent traversal');
+            }
+            // Relative symlink targets may legitimately contain parent components.
+            $result = dirname($result);
+            continue;
+        }
+        $result = rtrim($result, '/') . '/' . $part;
+        foreach ($protected as $boundary) {
+            if ($result === $boundary || str_starts_with($result, $boundary . '/')) {
+                throw new RuntimeException("CacheTool writable paths must be outside releases and current: $path");
+            }
+        }
+        if ($resolve && is_link($result)) {
+            $target = readlink($result);
+            if ($target === false || realpath($result) === false) {
+                throw new RuntimeException("Cannot resolve CacheTool path: $result");
+            }
+            // Resolve every hop, not just realpath's final destination: an alias
+            // through current/public remains forbidden even if public links out.
+            $target = str_starts_with($target, '/') ? $target : dirname($result) . '/' . $target;
+            $result = deploymentCachetoolPath($target, true, $protected, $links + 1);
+        }
+    }
+    return $result === '' ? '/' : $result;
+}
+
+function deploymentCachetoolExternalPath(string $path, string $root, string $field): string
+{
+    $lexical = deploymentCachetoolPath($path, false);
+    $boundaries = [];
+    foreach (array_unique([deploymentCachetoolPath($root, false), deploymentCachetoolPath($root, true)]) as $base) {
+        foreach (['releases', 'current'] as $reserved) {
+            $protected = rtrim($base, '/') . '/' . $reserved;
+            $boundaries[] = $protected;
+            if ($lexical === $protected || str_starts_with($lexical, $protected . '/')) {
+                throw new RuntimeException("CacheTool $field must be outside releases and current: $path");
+            }
+        }
+    }
+    return deploymentCachetoolPath($path, true, $boundaries);
+}
+
 function deploymentCachetoolPrepare(array $input, string $root, string $release): ?array
 {
     $options = $input['cachetool'] ?? null;
@@ -191,6 +250,8 @@ function deploymentCachetoolPrepare(array $input, string $root, string $release)
         }
         // Native YAML must select fastcgi or web, not cli. CacheTool parses it;
         // do not implement a partial YAML parser here or expose its credentials.
+        // Its owner must configure writable external web/temp paths. We cannot
+        // preflight values hidden in native YAML and never reopen sealed code.
         // Its owner also manages web endpoint cleanup after HTTP failures.
     } else {
         $adapter = $options['adapter'] ?? 'fcgi';
@@ -209,10 +270,18 @@ function deploymentCachetoolPrepare(array $input, string $root, string $release)
                 || parse_url($webUrl, PHP_URL_FRAGMENT) !== null) {
                 throw new RuntimeException('CacheTool web adapter requires an HTTP(S) web_url without query or fragment');
             }
+            $webPath = $options['web_path'] ?? '';
+            if ($webPath === '') {
+                throw new RuntimeException('CacheTool web adapter requires an explicit web_path outside releases and current');
+            }
+            $webPath = deploymentCachetoolExternalPath($webPath, $root, 'web_path');
+            if (!is_dir($webPath) || !is_writable($webPath)) {
+                throw new RuntimeException('CacheTool web_path must be an existing writable external directory');
+            }
             // CacheTool 10 leaves its endpoint behind when HTTP requests fail.
             // Give it an isolated namespace that we can remove safely afterward.
             $webName = 'shopware-cli-cachetool-' . bin2hex(random_bytes(16));
-            $webDirectory = rtrim(($options['web_path'] ?? '') ?: "$release/public", '/') . '/' . $webName;
+            $webDirectory = rtrim($webPath, '/') . '/' . $webName;
             $native['webClient'] = 'SymfonyHttpClient';
             $native['webUrl'] = rtrim($webUrl, '/') . '/' . $webName;
             $native['webPath'] = $webDirectory;
@@ -228,6 +297,7 @@ function deploymentCachetoolPrepare(array $input, string $root, string $release)
             }
         }
         if (($options['tmp_dir'] ?? '') !== '') {
+            deploymentCachetoolExternalPath($options['tmp_dir'], $root, 'tmp_dir');
             $native['temp_dir'] = $options['tmp_dir'];
         }
     }

@@ -21,7 +21,9 @@ plus the active deployment if it falls outside that set. Failed, incomplete and
 unmanaged releases are retained.
 
 For SSH, remove pruned release directories, their metadata and helper logs, and
-cached archives that are no longer referenced by retained deployment metadata.
+their release-local runtime caches. Cached archives are removed when no longer
+referenced by retained deployment metadata. Read-only directories are made
+writable only while deleting selected releases under the deployment lock.
 Shared data and local archives are never removed. Cleanup uses the same lock as
 rollout and initialization. Use --dry-run to preview removals without deleting
 anything. Interrupted cleanup is resumed on the next prune, even if --keep was

@@ -22,11 +22,14 @@ Interactive sessions ask for confirmation before activation. Use --no-interactio
 to skip the prompt in automation.
 
 For SSH, the reference is a remote deployment name. The local archive and remote
-archive cache are not required. This only switches current to an existing prepared
-release and records a new activation. It does not build, upload, extract, run
+archive cache are not required. This switches current to an existing prepared
+release and records a new activation. Older inactive releases are made read-only
+and their cache moved to release-local runtime storage before activation.
+It does not build, upload, extract, run
 Deployment Helper, replace helper logs, or roll back the database.
-An already-active deployment is a no-op. Missing, failed, incomplete, pruning,
-or inconsistent releases cannot be activated.
+An already-active read-only deployment is a no-op. Writable active releases must
+be replaced by deploying a new name. Missing, failed, incomplete, pruning, or
+inconsistent releases cannot be activated.
 If environments.<name>.ssh.cachetool is enabled, OPcache is reset after activation.
 A failed reset warns without undoing the activation.
 On targets whose hostname -f contains de-nserver.de, unset/disabled CacheTool instead uses

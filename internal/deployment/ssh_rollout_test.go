@@ -56,6 +56,7 @@ func localDeploymentSSH(t *testing.T) *SSH {
 	require.NoError(t, err)
 	// Spaces and apostrophes must survive SSH's remote shell.
 	root = filepath.Join(root, "shop's releases")
+	t.Cleanup(func() { restoreDeploymentDirectories(t, root) })
 	testhelper.WriteFile(t, filepath.Join(root, "shared/.env.local"), "DATABASE_URL=provided-on-server\n")
 	testhelper.WriteFile(t, filepath.Join(root, "shared/public/media/upload"), "persistent")
 	backend, err := New(t.TempDir(), "", &shop.Config{}, &shop.EnvironmentConfig{
@@ -64,6 +65,27 @@ func localDeploymentSSH(t *testing.T) *SSH {
 	})
 	require.NoError(t, err)
 	return backend.(*SSH)
+}
+
+// Restore directory access for fixture cleanup without following release symlinks.
+func restoreDeploymentDirectories(t *testing.T, root string) {
+	t.Helper()
+	assert.NoError(t, filepath.WalkDir(root, func(name string, entry os.DirEntry, err error) error {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+		if !entry.IsDir() {
+			return nil
+		}
+		info, err := entry.Info()
+		if err != nil {
+			return err
+		}
+		return os.Chmod(name, info.Mode().Perm()|0o700)
+	}))
 }
 
 func deploymentTestArchive(t *testing.T, helper string) string {
@@ -122,7 +144,7 @@ func TestSSHRolloutPreparesAndActivatesReleases(t *testing.T) {
 	archive := deploymentTestArchive(t,
 		`if (!is_link('.env.local') || !is_link('public/media')) { exit(9); }
 if (file_get_contents('.env') !== "APP_ENV=prod\nAPP_DEBUG=0\n") { exit(9); }
-file_put_contents('helper-ran', implode(' ', array_slice($argv, 1)));
+file_put_contents('helper-ran', "prepared once", FILE_APPEND);
 fwrite(STDOUT, "helper stdout\n");
 fwrite(STDERR, "helper stderr\n");`)
 	deployment := Deployment{Reference: "focused-turing"}
@@ -157,7 +179,6 @@ fwrite(STDERR, "helper stderr\n");`)
 	linkBefore, err := os.Lstat(e.directory)
 	require.NoError(t, err)
 	// A prepared directory must not be modified by either no-op or reactivation.
-	testhelper.WriteFile(t, filepath.Join(e.directory, "helper-ran"), "prepared once")
 	logs.Reset()
 	unchanged, err := e.rolloutArchive(t.Context(), deployment, archive, &logs)
 	require.NoError(t, err)

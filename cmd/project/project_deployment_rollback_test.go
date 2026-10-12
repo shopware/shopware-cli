@@ -107,6 +107,18 @@ func TestSSHDeploymentRollbackCommandAndCompletion(t *testing.T) {
 	testhelper.WriteFile(t, filepath.Join(root, ".shopware-cli/deployments/only-local.tar.gz"), "unused")
 	t.Chdir(filepath.Join(root, "bin"))
 	remote := t.TempDir()
+	t.Cleanup(func() {
+		assert.NoError(t, filepath.WalkDir(remote, func(name string, entry os.DirEntry, err error) error {
+			if err != nil || !entry.IsDir() {
+				return err
+			}
+			info, err := entry.Info()
+			if err != nil {
+				return err
+			}
+			return os.Chmod(name, info.Mode().Perm()|0o700)
+		}))
+	})
 	testhelper.WriteFile(t, filepath.Join(remote, ".shopware-cli/deployment.lock"), "")
 	for i, name := range []string{"focused-wise-turing", "happy-bright-euclid"} {
 		timestamp := fmt.Sprintf("2026-09-22T11:%02d:00Z", i)
