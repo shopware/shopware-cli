@@ -11,18 +11,9 @@ import (
 	"github.com/shopware/shopware-cli/internal/ai/state"
 )
 
-func TestWriteAddResultJSON(t *testing.T) {
+func TestWriteAddResultDryRun(t *testing.T) {
 	var buf bytes.Buffer
-	require.NoError(t, writeAddResult(&buf, formatJSON, install.Result{
-		Name: "shopware-cli", Agent: "claude-code", Scope: state.ScopeGlobal,
-		ResolvedRevision: "v0.18.3", Command: []string{"npx", "skills"},
-	}))
-	assert.JSONEq(t, `{"name":"shopware-cli","agent":"claude-code","scope":"global","requestedTag":"","resolvedRevision":"v0.18.3","dryRun":false,"command":["npx","skills"]}`, buf.String())
-}
-
-func TestWriteAddResultTableDryRun(t *testing.T) {
-	var buf bytes.Buffer
-	require.NoError(t, writeAddResult(&buf, formatTable, install.Result{
+	require.NoError(t, writeAddResult(&buf, install.Result{
 		Name: "shopware-cli", Agent: "claude-code", Scope: state.ScopeGlobal,
 		DryRun: true, Command: []string{"npx", "skills", "add"},
 	}))
@@ -30,12 +21,21 @@ func TestWriteAddResultTableDryRun(t *testing.T) {
 	assert.Contains(t, buf.String(), "npx skills add")
 }
 
-func TestWriteAddResultTableActions(t *testing.T) {
+func TestWriteAddResultActions(t *testing.T) {
 	var buf bytes.Buffer
-	require.NoError(t, writeAddResult(&buf, formatTable, install.Result{
+	require.NoError(t, writeAddResult(&buf, install.Result{
 		Name: "shopware-cli", Agent: "claude-code", Scope: state.ScopeGlobal,
 		Action: install.ActionUpdated, PreviousRevision: "v0.18.3", ResolvedRevision: "v0.18.4",
 	}))
 	assert.Contains(t, buf.String(), "Updated")
 	assert.Contains(t, buf.String(), "v0.18.3 → v0.18.4")
+}
+
+func TestWriteAddResultInstalled(t *testing.T) {
+	var buf bytes.Buffer
+	require.NoError(t, writeAddResult(&buf, install.Result{
+		Name: "shopware-cli", Agent: "claude-code", Scope: state.ScopeGlobal,
+		Action: install.ActionInstalled, ResolvedRevision: "v0.18.4",
+	}))
+	assert.Contains(t, buf.String(), "Installed shopware-cli for claude-code (global) @v0.18.4")
 }

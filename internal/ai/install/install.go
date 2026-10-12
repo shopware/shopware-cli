@@ -42,18 +42,18 @@ type Options struct {
 	DryRun bool
 }
 
-// Result is the machine-readable outcome of Add (the `ai add` JSON contract).
+// Result is the outcome of Add, rendered by the command as a human-readable line.
 type Result struct {
-	Name             string      `json:"name"`
-	Agent            string      `json:"agent"`
-	Scope            state.Scope `json:"scope"`
-	Dir              string      `json:"dir,omitempty"`
-	RequestedTag     string      `json:"requestedTag"`
-	ResolvedRevision string      `json:"resolvedRevision"`
-	Action           string      `json:"action,omitempty"`
-	PreviousRevision string      `json:"previousRevision,omitempty"`
-	DryRun           bool        `json:"dryRun"`
-	Command          []string    `json:"command"`
+	Name             string
+	Agent            string
+	Scope            state.Scope
+	Dir              string
+	RequestedTag     string
+	ResolvedRevision string
+	Action           string
+	PreviousRevision string
+	DryRun           bool
+	Command          []string
 }
 
 // Add installs a skill into an agent via skills.sh and records it. skills.sh
@@ -144,14 +144,14 @@ type RemoveOptions struct {
 	DryRun bool
 }
 
-// RemoveResult is the machine-readable outcome of Remove.
+// RemoveResult is the outcome of Remove, rendered by the command as a line.
 type RemoveResult struct {
-	Name    string      `json:"name"`
-	Agent   string      `json:"agent"`
-	Scope   state.Scope `json:"scope"`
-	Removed bool        `json:"removed"`
-	DryRun  bool        `json:"dryRun"`
-	Command []string    `json:"command"`
+	Name    string
+	Agent   string
+	Scope   state.Scope
+	Removed bool
+	DryRun  bool
+	Command []string
 }
 
 // Remove uninstalls via skills.sh and drops the record, but only for what the CLI

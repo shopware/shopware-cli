@@ -1,7 +1,6 @@
 package ai
 
 import (
-	"encoding/json"
 	"fmt"
 	"io"
 	"strings"
@@ -24,11 +23,6 @@ operates on the current Shopware project. Requires Node.js/npx on PATH.`,
 	Args:         cobra.ExactArgs(1),
 	SilenceUsage: true,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		format, err := resolveFormat(cmd)
-		if err != nil {
-			return err
-		}
-
 		agent, _ := cmd.Flags().GetString("agent")
 		global, _ := cmd.Flags().GetBool("global")
 		dryRun, _ := cmd.Flags().GetBool("dry-run")
@@ -43,21 +37,11 @@ operates on the current Shopware project. Requires Node.js/npx on PATH.`,
 			return err
 		}
 
-		return writeRemoveResult(cmd.OutOrStdout(), format, result)
+		return writeRemoveResult(cmd.OutOrStdout(), result)
 	},
 }
 
-func writeRemoveResult(w io.Writer, format string, r install.RemoveResult) error {
-	if format == formatJSON {
-		out, err := json.Marshal(r)
-		if err != nil {
-			return err
-		}
-		_, err = fmt.Fprintln(w, string(out))
-
-		return err
-	}
-
+func writeRemoveResult(w io.Writer, r install.RemoveResult) error {
 	if !r.Removed {
 		_, err := fmt.Fprintf(w, "%s is not recorded for %s (%s) by shopware-cli; nothing to remove\n", r.Name, r.Agent, r.Scope)
 
@@ -78,5 +62,4 @@ func init() {
 	aiRemoveCmd.Flags().String("agent", "", "Target AI agent (e.g. claude-code)")
 	aiRemoveCmd.Flags().Bool("global", false, "Remove the user-level install instead of the current project")
 	aiRemoveCmd.Flags().Bool("dry-run", false, "Show what would be removed without changing anything")
-	addFormatFlag(aiRemoveCmd)
 }

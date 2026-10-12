@@ -1,7 +1,6 @@
 package ai
 
 import (
-	"encoding/json"
 	"fmt"
 	"io"
 	"strings"
@@ -43,11 +42,6 @@ team, or gitignore them to keep it local.`,
 	Args:         cobra.ExactArgs(1),
 	SilenceUsage: true,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		format, err := resolveFormat(cmd)
-		if err != nil {
-			return err
-		}
-
 		agent, _ := cmd.Flags().GetString("agent")
 		global, _ := cmd.Flags().GetBool("global")
 		dryRun, _ := cmd.Flags().GetBool("dry-run")
@@ -62,21 +56,11 @@ team, or gitignore them to keep it local.`,
 			return err
 		}
 
-		return writeAddResult(cmd.OutOrStdout(), format, result)
+		return writeAddResult(cmd.OutOrStdout(), result)
 	},
 }
 
-func writeAddResult(w io.Writer, format string, r install.Result) error {
-	if format == formatJSON {
-		out, err := json.Marshal(r)
-		if err != nil {
-			return err
-		}
-		_, err = fmt.Fprintln(w, string(out))
-
-		return err
-	}
-
+func writeAddResult(w io.Writer, r install.Result) error {
 	dest := ""
 	if r.Dir != "" {
 		dest = " into " + r.Dir
@@ -114,5 +98,4 @@ func init() {
 	aiAddCmd.Flags().String("agent", "", "Target AI agent (e.g. claude-code)")
 	aiAddCmd.Flags().Bool("global", false, "Install at user level instead of the current project")
 	aiAddCmd.Flags().Bool("dry-run", false, "Show what would be installed without changing anything")
-	addFormatFlag(aiAddCmd)
 }
