@@ -25,17 +25,17 @@ var projectFormatCmd = &cobra.Command{
 		only, _ := cmd.Flags().GetString("only")
 		exclude, _ := cmd.Flags().GetString("exclude")
 		verifier.WarnOnDeprecatedToolName(cmd.Context(), only, exclude)
-		_, _, err := selectProjectTools(verifier.GetToolsOf[verifier.FormatTool](), only, exclude, "formatters")
+		_, _, err := selectProjectFormattingTools(only, exclude)
 		return err
 	},
 	RunE: func(cmd *cobra.Command, args []string) error {
-		// Reporting format and tool selection were validated in PreRunE.
+		// Reporting format was validated in PreRunE.
 		reportingFormat, _ := projectValidationFormat(cmd)
 		only, _ := cmd.Flags().GetString("only")
 		exclude, _ := cmd.Flags().GetString("exclude")
 
 		// Tool selection was validated in PreRunE.
-		tools, statuses, _ := selectProjectTools(verifier.GetToolsOf[verifier.FormatTool](), only, exclude, "formatters")
+		tools, statuses, _ := selectProjectFormattingTools(only, exclude)
 		if err := verifier.SetupTools(cmd.Context(), cmd.Root().Version); err != nil {
 			return err
 		}
