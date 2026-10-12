@@ -8,8 +8,14 @@ import (
 	"fmt"
 	"io"
 	"os/exec"
+	"regexp"
 	"strings"
 )
+
+// semverLike matches a bare version such as "0.1.9" or "1.2" (with an optional
+// pre-release/build suffix), so NormalizeRef only touches refs that are versions,
+// not commit SHAs or branch names.
+var semverLike = regexp.MustCompile(`^\d+\.\d+(\.\d+)?([-+].*)?$`)
 
 // skillsVersion pins the skills.sh major line; npx resolves the latest 1.x, so we
 // get fixes but never a breaking 2.0.
@@ -69,11 +75,11 @@ func OwnerRepo(repoURL string) string {
 }
 
 // NormalizeRef maps a bare version like "0.1.9" to the "v"-prefixed tag form the
-// Shopware repositories now use ("v0.1.9"). A ref that already carries the "v" or
-// is not a bare version (a branch name, a commit) is returned unchanged, so a ref
-// can be resolved without a network lookup.
+// Shopware repositories now use ("v0.1.9"), so a ref can be resolved without a
+// network lookup. A ref that already carries the "v", or is not a bare version (a
+// branch name, a commit SHA), is returned unchanged.
 func NormalizeRef(ref string) string {
-	if ref != "" && ref[0] >= '0' && ref[0] <= '9' {
+	if semverLike.MatchString(ref) {
 		return "v" + ref
 	}
 

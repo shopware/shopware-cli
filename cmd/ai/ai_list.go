@@ -45,6 +45,13 @@ per agent and scope, with the requested tag and resolved revision.`,
 		typeFilter, _ := cmd.Flags().GetString("type")
 		installedOnly, _ := cmd.Flags().GetBool("installed")
 
+		// List validates the type filter (for both branches) and yields the
+		// type-filtered catalog.
+		entries, err := directory.Load().List(directory.ListOptions{Type: typeFilter})
+		if err != nil {
+			return err
+		}
+
 		// --installed reports the recorded installs (one row per agent/scope),
 		// not the catalog, so it can show the agent, scope and revision.
 		if installedOnly {
@@ -52,13 +59,11 @@ per agent and scope, with the requested tag and resolved revision.`,
 			if err != nil {
 				return err
 			}
+			if typeFilter != "" {
+				records = recordsInCatalog(records, entries)
+			}
 
 			return writeInstalled(cmd.OutOrStdout(), format, records)
-		}
-
-		entries, err := directory.Load().List(directory.ListOptions{Type: typeFilter})
-		if err != nil {
-			return err
 		}
 
 		return writeList(cmd.OutOrStdout(), format, entries)
@@ -100,6 +105,24 @@ func writeInstalled(w io.Writer, format string, records []state.InstalledEntry) 
 	}
 
 	return t.Write(w, tui.TableFormat(format))
+}
+
+// recordsInCatalog keeps only the install records whose integration is in the
+// (type-filtered) catalog, so `ai list --installed --type X` shows only type X.
+func recordsInCatalog(records []state.InstalledEntry, catalog []directory.Integration) []state.InstalledEntry {
+	names := make(map[string]bool, len(catalog))
+	for _, e := range catalog {
+		names[e.Name] = true
+	}
+
+	out := make([]state.InstalledEntry, 0, len(records))
+	for _, r := range records {
+		if names[r.Name] {
+			out = append(out, r)
+		}
+	}
+
+	return out
 }
 
 // installedRecords returns every recorded install, merging global and project

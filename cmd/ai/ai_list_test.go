@@ -86,6 +86,18 @@ func TestInstalledRecordsMergesScopesAndAgents(t *testing.T) {
 	assert.Equal(t, state.ScopeProject, byAgent["codex"].Scope)
 }
 
+func TestRecordsInCatalog(t *testing.T) {
+	records := []state.InstalledEntry{
+		{Name: "shopware-cli", Agent: "claude-code"},
+		{Name: "meteor", Agent: "claude-code"},
+	}
+	catalog := []directory.Integration{{Name: "meteor", Type: directory.TypeMCP}}
+
+	got := recordsInCatalog(records, catalog)
+	require.Len(t, got, 1)
+	assert.Equal(t, "meteor", got[0].Name)
+}
+
 func TestInstalledRecordsForFiltersByName(t *testing.T) {
 	seedEnv(t)
 

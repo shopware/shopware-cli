@@ -46,7 +46,11 @@ func TestSource(t *testing.T) {
 
 func TestNormalizeRef(t *testing.T) {
 	assert.Equal(t, "v0.1.9", NormalizeRef("0.1.9"), "bare version gets the v prefix")
+	assert.Equal(t, "v1.2", NormalizeRef("1.2"), "major.minor is a version too")
+	assert.Equal(t, "v0.2.0-RC1", NormalizeRef("0.2.0-RC1"), "pre-release suffix is kept")
 	assert.Equal(t, "v0.1.9", NormalizeRef("v0.1.9"), "already prefixed stays")
 	assert.Equal(t, "main", NormalizeRef("main"), "a branch name is left alone")
+	assert.Equal(t, "2024-hotfix", NormalizeRef("2024-hotfix"), "a digit-leading branch is left alone")
+	assert.Equal(t, "1a2b3c4", NormalizeRef("1a2b3c4"), "a commit sha is left alone")
 	assert.Equal(t, "", NormalizeRef(""), "empty stays empty")
 }

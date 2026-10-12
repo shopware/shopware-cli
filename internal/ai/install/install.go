@@ -60,6 +60,9 @@ type Result struct {
 // output is streamed to progress.
 func Add(ctx context.Context, o Options, progress io.Writer) (Result, error) {
 	name, tag := splitNameTag(o.Name)
+	if tag == "" && strings.Contains(o.Name, "@") {
+		return Result{}, fmt.Errorf("empty version after \"@\" in %q; pin a release like %s@1.2.3 or omit the @", o.Name, name)
+	}
 
 	entry, ok := directory.Load().Get(name)
 	if !ok {

@@ -169,6 +169,14 @@ func TestAddIsIdempotentAndReportsAction(t *testing.T) {
 	assert.Equal(t, "v0.2.0", res.ResolvedRevision)
 }
 
+func TestAddRejectsEmptyTag(t *testing.T) {
+	rec := setup(t)
+
+	_, err := runAdd(t, Options{Name: "deployment-helper@", Agent: "claude-code", Global: true})
+	assert.ErrorContains(t, err, "empty version")
+	assert.Equal(t, 0, rec.calls)
+}
+
 func TestAddProjectScopeWritesToProjectRoot(t *testing.T) {
 	setup(t)
 
