@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path"
+	"path/filepath"
 	"strconv"
 	"strings"
 
@@ -27,7 +28,7 @@ type PrettierOutputFile struct {
 	Unchanged bool
 }
 
-var ignoredPaths = `
+const ignoredPaths = `
 Resources/app/administration/.tmp/**
 Resources/app/storefront/dist/**
 Resources/public/**
@@ -47,10 +48,6 @@ func (p Prettier) Format(ctx context.Context, check *Check, config ToolConfig, d
 	var gr errgroup.Group
 
 	for _, sourceDirectory := range config.SourceDirectories {
-		if err := os.WriteFile(path.Join(sourceDirectory, ".prettierignore"), []byte(ignoredPaths), 0o644); err != nil {
-			return err
-		}
-
 		args := []string{
 			path.Join(config.ToolDirectory, "js", "node_modules", ".bin", "prettier"),
 			"--config",
@@ -68,6 +65,22 @@ func (p Prettier) Format(ctx context.Context, check *Check, config ToolConfig, d
 		}
 
 		gr.Go(func() error {
+			ignorePath := path.Join(sourceDirectory, ".prettierignore")
+			if err := os.WriteFile(ignorePath, []byte(ignoredPaths), 0o644); err != nil {
+				return fmt.Errorf("cannot write prettier ignore file: %w", err)
+			}
+
+			defer func() {
+				if err := os.Remove(ignorePath); err != nil && !errors.Is(err, os.ErrNotExist) {
+					check.AddResult(validation.CheckResult{
+						Path:       sourceDirectory,
+						Message:    "failed to remove prettier ignore file: " + err.Error(),
+						Severity:   validation.SeverityError,
+						Identifier: "prettier/error",
+					})
+				}
+			}()
+
 			cmd := CommandContext(ctx, "node", args...)
 			cmd.Dir = sourceDirectory
 
@@ -76,11 +89,10 @@ func (p Prettier) Format(ctx context.Context, check *Check, config ToolConfig, d
 
 			output, err := cmd.Output()
 
-			if !p.isExpectedPrettierExit(err) {
-				errorOutput := stderr.String()
-				if strings.TrimSpace(errorOutput) == "" {
-					errorOutput = string(output)
-				}
+			hasErrorDiagnostics := strings.Contains(stderr.String(), "[error]")
+			failedWithoutOutput := err != nil && len(bytes.TrimSpace(output)) == 0
+			if !p.isExpectedPrettierExit(err, dryRun) || hasErrorDiagnostics || failedWithoutOutput {
+				errorOutput := commandOutputOrError(stderr.String(), output, err)
 
 				check.AddResult(validation.CheckResult{
 					Path:       sourceDirectory,
@@ -95,10 +107,7 @@ func (p Prettier) Format(ctx context.Context, check *Check, config ToolConfig, d
 
 			prettierOutput, err := p.Parse(string(output))
 			if err != nil {
-				errorOutput := stderr.String()
-				if strings.TrimSpace(errorOutput) == "" {
-					errorOutput = string(output)
-				}
+				errorOutput := commandOutputOrError(stderr.String(), output, err)
 
 				check.AddResult(validation.CheckResult{
 					Path:       sourceDirectory,
@@ -111,21 +120,30 @@ func (p Prettier) Format(ctx context.Context, check *Check, config ToolConfig, d
 				return nil
 			}
 
+			severity := validation.SeverityWarning
+			if dryRun {
+				severity = validation.SeverityError
+			}
+
 			for _, file := range prettierOutput.Files {
 				if file.Unchanged {
 					continue
 				}
 
+				filePath := file.Path
+				if !filepath.IsAbs(filePath) {
+					filePath = filepath.Join(sourceDirectory, filePath)
+				}
 				check.AddResult(validation.CheckResult{
-					Path:       validation.NormalizeSourcePath(file.Path, config.RootDir),
+					Path:       validation.NormalizeSourcePath(filePath, config.RootDir),
 					Message:    ruleViolationMessage,
-					Severity:   validation.SeverityWarning,
+					Severity:   severity,
 					Line:       0,
 					Identifier: "prettier/format",
 				})
 			}
 
-			return os.Remove(path.Join(sourceDirectory, ".prettierignore"))
+			return nil
 		})
 	}
 
@@ -133,9 +151,9 @@ func (p Prettier) Format(ctx context.Context, check *Check, config ToolConfig, d
 }
 
 // isExpectedPrettierExit reports whether Prettier completed with an expected exit status.
-// Exit code 0 indicates success, while code 1 indicates formatting violations.
+// Exit code 1 is accepted only for dry runs. Stderr is checked separately for errors.
 // All other exit codes and execution errors are treated as failures.
-func (p Prettier) isExpectedPrettierExit(err error) bool {
+func (p Prettier) isExpectedPrettierExit(err error, dryRun bool) bool {
 	if err == nil {
 		return true
 	}
@@ -145,7 +163,7 @@ func (p Prettier) isExpectedPrettierExit(err error) bool {
 		return false
 	}
 
-	return exitErr.ExitCode() == 1
+	return dryRun && exitErr.ExitCode() == 1
 }
 
 // Parse converts Prettier output into structured results.

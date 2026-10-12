@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"os/exec"
 	"path"
@@ -13,6 +14,11 @@ import (
 	"golang.org/x/sync/errgroup"
 
 	"github.com/shopware/shopware-cli/internal/validation"
+)
+
+const (
+	phpCsFixerExitInvalidSyntax = 4
+	phpCsFixerExitNeedsFixing   = 8
 )
 
 type PhpCsFixerOutput struct {
@@ -45,8 +51,10 @@ func (p PHPCSFixer) getConfigPath(toolDirectory, rootDir string) string {
 func (p PHPCSFixer) Format(ctx context.Context, check *Check, config ToolConfig, dryRun bool) error {
 	// Apps don't have a composer.json file, skip them
 	if _, err := os.Stat(path.Join(config.RootDir, "composer.json")); err != nil {
-		//nolint: nilerr
-		return nil
+		if errors.Is(err, os.ErrNotExist) {
+			return nil
+		}
+		return fmt.Errorf("cannot read composer manifest: %w", err)
 	}
 
 	var gr errgroup.Group
@@ -55,7 +63,15 @@ func (p PHPCSFixer) Format(ctx context.Context, check *Check, config ToolConfig,
 		gr.Go(func() error {
 			fixDir := sourceDirectory
 
-			args := []string{"fix", "--show-progress", "dots", "--verbose", "--format", "json", "--config", p.getConfigPath(config.ToolDirectory, config.RootDir), fixDir}
+			args := []string{
+				"fix",
+				"--show-progress", "dots",
+				"-vv",
+				"--no-ansi",
+				"--format", "json",
+				"--config", p.getConfigPath(config.ToolDirectory, config.RootDir),
+				fixDir,
+			}
 			ruleViolationMessage := "Formatting violations have been fixed."
 			if dryRun {
 				args = append(args, "--dry-run")
@@ -71,10 +87,7 @@ func (p PHPCSFixer) Format(ctx context.Context, check *Check, config ToolConfig,
 			output, err := cmd.Output()
 
 			if !p.isExpectedPHPCSFixerExit(err) {
-				errorOutput := stderr.String()
-				if strings.TrimSpace(errorOutput) == "" {
-					errorOutput = string(output)
-				}
+				errorOutput := commandOutputOrError(stderr.String(), output, err)
 
 				check.AddResult(validation.CheckResult{
 					Path:       fixDir,
@@ -87,12 +100,19 @@ func (p PHPCSFixer) Format(ctx context.Context, check *Check, config ToolConfig,
 				return nil
 			}
 
+			// JSON contains changed files. Lint and fixing errors are reported on stderr.
+			if diagnostics := phpCsFixerDiagnostics(stderr.String(), err); diagnostics != "" {
+				check.AddResult(validation.CheckResult{
+					Path:       fixDir,
+					Message:    "failed to format PHP files: " + diagnostics,
+					Severity:   validation.SeverityError,
+					Identifier: "php-cs-fixer/error",
+				})
+			}
+
 			var phpCsFixerOutput PhpCsFixerOutput
 			if err := json.Unmarshal(output, &phpCsFixerOutput); err != nil {
-				errorOutput := stderr.String()
-				if strings.TrimSpace(errorOutput) == "" {
-					errorOutput = string(output)
-				}
+				errorOutput := commandOutputOrError(stderr.String(), output, err)
 
 				check.AddResult(validation.CheckResult{
 					Path:       fixDir,
@@ -105,13 +125,18 @@ func (p PHPCSFixer) Format(ctx context.Context, check *Check, config ToolConfig,
 				return nil
 			}
 
+			severity := validation.SeverityWarning
+			if dryRun {
+				severity = validation.SeverityError
+			}
+
 			for _, file := range phpCsFixerOutput.Files {
 				for _, appliedFixer := range file.AppliedFixers {
 					check.AddResult(validation.CheckResult{
 						Path:       validation.NormalizeSourcePath(file.Name, config.RootDir),
 						Line:       1,
 						Message:    ruleViolationMessage,
-						Severity:   validation.SeverityWarning,
+						Severity:   severity,
 						Identifier: "php-cs-fixer/" + appliedFixer,
 					})
 				}
@@ -122,6 +147,22 @@ func (p PHPCSFixer) Format(ctx context.Context, check *Check, config ToolConfig,
 	}
 
 	return gr.Wait()
+}
+
+// phpCsFixerDiagnostics extracts errors from stderr and falls back to the process
+// error when the exit code reports invalid PHP without any diagnostic output.
+func phpCsFixerDiagnostics(stderr string, err error) string {
+	const errorHeading = "Files that were not fixed due to errors reported during "
+	if index := strings.Index(stderr, errorHeading); index >= 0 {
+		return strings.TrimSpace(stderr[index:])
+	}
+
+	var exitErr *exec.ExitError
+	if errors.As(err, &exitErr) && exitErr.ExitCode()&phpCsFixerExitInvalidSyntax != 0 {
+		return commandOutputOrError(stderr, nil, err)
+	}
+
+	return ""
 }
 
 // isExpectedPHPCSFixerExit reports whether PHP-CS-Fixer completed without a critical error.
@@ -137,12 +178,7 @@ func (p PHPCSFixer) isExpectedPHPCSFixerExit(err error) bool {
 		return false
 	}
 
-	const (
-		invalidSyntax = 4
-		needsFixing   = 8
-	)
-
-	const findings = invalidSyntax | needsFixing
+	const findings = phpCsFixerExitInvalidSyntax | phpCsFixerExitNeedsFixing
 
 	return exitErr.ExitCode() & ^findings == 0
 }
