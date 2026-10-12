@@ -118,6 +118,7 @@ func readInstalledNames() (map[string]bool, error) {
 func init() {
 	aiRootCmd.AddCommand(aiListCmd)
 	aiListCmd.Flags().String("type", "", "Filter by integration type (skill, mcp)")
+	_ = aiListCmd.RegisterFlagCompletionFunc("type", cobra.FixedCompletions([]string{string(directory.TypeSkill), string(directory.TypeMCP)}, cobra.ShellCompDirectiveNoFileComp))
 	aiListCmd.Flags().Bool("installed", false, "Show only integrations recorded as installed by the CLI")
 	addFormatFlag(aiListCmd)
 }

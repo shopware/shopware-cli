@@ -153,6 +153,7 @@ func init() {
 	projectDatabaseDumpCmd.Flags().Bool("skip-lock-tables", false, "Skip locking tables during the dump")
 	projectDatabaseDumpCmd.Flags().Bool("anonymize", false, "Anonymize customer data")
 	projectDatabaseDumpCmd.Flags().String("compression", "", "Compress the dump (gzip, zstd)")
+	_ = projectDatabaseDumpCmd.RegisterFlagCompletionFunc("compression", cobra.FixedCompletions([]string{string(mysqldump.CompressionGzip), string(mysqldump.CompressionZstd)}, cobra.ShellCompDirectiveNoFileComp))
 	projectDatabaseDumpCmd.Flags().Bool("quick", false, "Use quick option for mysqldump")
 	projectDatabaseDumpCmd.Flags().Int("parallel", 0, "Number of tables to dump concurrently (0 = disabled)")
 	projectDatabaseDumpCmd.Flags().Int("insert-into-limit", 0, "Limit the number of rows per INSERT statement (0 = auto, takes priority over --quick when set)")

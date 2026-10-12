@@ -6,11 +6,13 @@ import (
 	"os"
 	"os/signal"
 	"slices"
+	"strings"
 	"syscall"
 	"time"
 
 	"github.com/mattn/go-isatty"
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 
 	"github.com/shopware/shopware-cli/cmd/account"
 	"github.com/shopware/shopware-cli/cmd/ai"
@@ -19,6 +21,7 @@ import (
 	accountApi "github.com/shopware/shopware-cli/internal/account-api"
 	"github.com/shopware/shopware-cli/internal/cliversion"
 	"github.com/shopware/shopware-cli/internal/system"
+	"github.com/shopware/shopware-cli/internal/tui"
 	"github.com/shopware/shopware-cli/logging"
 )
 
@@ -72,6 +75,15 @@ func exitCode(ctx context.Context, err error) int {
 	return 1
 }
 
+// helpWidth is the column flag descriptions wrap at; 0 leaves piped help unwrapped.
+func helpWidth() int {
+	if !isatty.IsTerminal(os.Stdout.Fd()) {
+		return 0
+	}
+
+	return tui.TerminalWidth()
+}
+
 func init() {
 	if version != "" {
 		cliversion.Version = version
@@ -79,6 +91,14 @@ func init() {
 	rootCmd.Version = cliversion.Version
 
 	rootCmd.SilenceErrors = true
+
+	cobra.AddTemplateFunc("wrappedFlagUsages", func(flags *pflag.FlagSet) string {
+		return flags.FlagUsagesWrapped(helpWidth())
+	})
+	rootCmd.SetUsageTemplate(strings.NewReplacer(
+		".LocalFlags.FlagUsages", "wrappedFlagUsages .LocalFlags",
+		".InheritedFlags.FlagUsages", "wrappedFlagUsages .InheritedFlags",
+	).Replace(rootCmd.UsageTemplate()))
 
 	// Cobra prints the usage block for every error a command returns. Flags,
 	// argument counts and flag groups are validated before the pre-run hooks
