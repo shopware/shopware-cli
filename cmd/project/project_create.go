@@ -259,6 +259,7 @@ func init() {
 		}, cobra.ShellCompDirectiveNoFileComp
 	})
 	projectCreateCmd.PersistentFlags().String("ci", "", "CI/CD system to configure (none, github, gitlab)")
+	_ = projectCreateCmd.RegisterFlagCompletionFunc("ci", cobra.FixedCompletions([]string{shop.CINone, shop.CIGitHub, shop.CIGitLab}, cobra.ShellCompDirectiveNoFileComp))
 	projectCreateCmd.PersistentFlags().String("php-version", "", "PHP version for the project (e.g. 8.4); uses the local PHP version for local projects or the image tag for Docker projects")
 	_ = projectCreateCmd.RegisterFlagCompletionFunc("php-version", func(*cobra.Command, []string, string) ([]string, cobra.ShellCompDirective) {
 		return shop.SupportedPHPVersions, cobra.ShellCompDirectiveNoFileComp

@@ -15,6 +15,7 @@ const (
 // addFormatFlag registers the --format flag
 func addFormatFlag(cmd *cobra.Command) {
 	cmd.Flags().String("format", formatTable, "Output format (table, json)")
+	_ = cmd.RegisterFlagCompletionFunc("format", cobra.FixedCompletions([]string{formatTable, formatJSON}, cobra.ShellCompDirectiveNoFileComp))
 }
 
 // resolveFormat reads and validates the --format flag.

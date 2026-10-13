@@ -79,4 +79,6 @@ func init() {
 	projectFormatCmd.PersistentFlags().String("only", "", "Run only the specified formatters (comma-separated, e.g. prettier,php-cs-fixer)")
 	projectFormatCmd.PersistentFlags().Bool("dry-run", false, "Report files that would change, without changing them")
 	projectFormatCmd.PersistentFlags().String("exclude", "", "Exclude specified formatters from running (comma-separated, e.g. prettier,php-cs-fixer). When combined with --only, exclude formatters from the selected set")
+	_ = projectFormatCmd.RegisterFlagCompletionFunc("only", completeToolNames[verifier.FormatTool])
+	_ = projectFormatCmd.RegisterFlagCompletionFunc("exclude", completeToolNames[verifier.FormatTool])
 }

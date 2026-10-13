@@ -59,6 +59,8 @@ type ToolConfig struct {
 	StorefrontDirectories []string
 	// List of extensions of the project or a single extension
 	Extensions []extension.Extension
+	// PHP version of the project the extensions are validated in; empty for a single extension
+	PHPVersion string
 }
 
 func (c *ToolConfig) logConfiguration(ctx context.Context) {
@@ -190,6 +192,28 @@ func (tl ToolList[T]) PossibleString() string {
 	}
 
 	return strings.Join(possibleTools, ",")
+}
+
+// CompleteNames completes a comma-separated tool selection, skipping names already typed.
+func (tl ToolList[T]) CompleteNames(toComplete string) []string {
+	prefix := ""
+	if i := strings.LastIndex(toComplete, ","); i >= 0 {
+		prefix = toComplete[:i+1]
+	}
+
+	var chosen []string
+	for _, name := range strings.Split(prefix, ",") {
+		chosen = append(chosen, canonicalToolName(strings.TrimSpace(name)))
+	}
+
+	var completions []string
+	for _, t := range tl {
+		if !slices.Contains(chosen, t.Name()) {
+			completions = append(completions, prefix+t.Name())
+		}
+	}
+
+	return completions
 }
 
 // CommandContext logs the command before creating it with exec.CommandContext.

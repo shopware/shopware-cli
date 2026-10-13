@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/shopware/shopware-cli/internal/testhelper"
+	"github.com/shopware/shopware-cli/internal/validation"
 )
 
 func TestProjectBuiltinValidatesOnlyIncludedLocalExtensions(t *testing.T) {
@@ -137,4 +138,73 @@ func TestGetConfigFromProjectYAMLBundleDeduplication(t *testing.T) {
 		}
 	}
 	assert.Equal(t, 1, count, "bundle declared in both composer.json and YAML config should only appear once in SourceDirectories")
+}
+
+func TestGetConfigFromProjectPHPVersion(t *testing.T) {
+	stubShopwareVersions(t)
+
+	for _, tc := range []struct {
+		name     string
+		config   string
+		expected string
+	}{
+		{"unset", "{}", ""},
+		{"project target", "php_version: '8.4'", "8.4"},
+		{"validation target", "validation:\n  php_version: '8.2'", "8.2"},
+		{"validation override", "php_version: '8.4'\nvalidation:\n  php_version: '8.2'", "8.2"},
+		{"empty validation target", "php_version: '8.4'\nvalidation:\n  php_version: ''", "8.4"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			p := testhelper.NewProject(t).
+				File("composer.json", testProjectComposerJSON.String()).
+				File(".config/shopware-project.yml", tc.config)
+
+			cfg, err := GetConfigFromProject(t.Context(), p.Root, true)
+			require.NoError(t, err)
+			assert.Equal(t, tc.expected, cfg.PHPVersion)
+		})
+	}
+}
+
+func TestProjectBuiltinPHPVersion(t *testing.T) {
+	stubShopwareVersions(t)
+
+	for _, tc := range []struct {
+		name             string
+		extensionVersion string
+		wantSyntaxError  bool
+	}{
+		{name: "project target"},
+		{name: "extension override", extensionVersion: "7.4", wantSyntaxError: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			plugin := testhelper.PluginComposer("test/plugin", "1.0.0", `TestPlugin\TestPlugin`)
+			plugin.Require["shopware/core"] = ">=6.4"
+			p := testhelper.NewProject(t).
+				File("composer.json", testProjectComposerJSON.String()).
+				File(".config/shopware-project.yml", "php_version: '8.2'").
+				CustomPlugin("TestPlugin", plugin).
+				File("custom/plugins/TestPlugin/src/Status.php", "<?php\nenum Status { case Active; }\n")
+			if tc.extensionVersion != "" {
+				p.File("custom/plugins/TestPlugin/.config/shopware-extension.yml", "validation:\n  php_version: '"+tc.extensionVersion+"'")
+			}
+
+			cfg, err := GetConfigFromProject(t.Context(), p.Root, true)
+			require.NoError(t, err)
+			require.Len(t, cfg.Extensions, 1)
+
+			check := NewCheck()
+			require.NoError(t, Builtin{}.Check(t.Context(), check, *cfg))
+			var lintResults []validation.CheckResult
+			for _, result := range check.GetResults() {
+				if result.Identifier == "php.linter" {
+					lintResults = append(lintResults, result)
+					assert.Equal(t, validation.SeverityError, result.Severity)
+					assert.Equal(t, "custom/plugins/TestPlugin/src/Status.php", result.Path)
+				}
+			}
+			assert.Equal(t, tc.wantSyntaxError, len(lintResults) > 0)
+			assert.Equal(t, tc.extensionVersion, cfg.Extensions[0].GetExtensionConfig().Validation.PhpVersion)
+		})
+	}
 }

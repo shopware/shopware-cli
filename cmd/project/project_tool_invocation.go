@@ -5,9 +5,15 @@ import (
 	"slices"
 	"sort"
 
+	"github.com/spf13/cobra"
+
 	"github.com/shopware/shopware-cli/internal/validation"
 	"github.com/shopware/shopware-cli/internal/verifier"
 )
+
+func completeToolNames[T verifier.Tool](_ *cobra.Command, _ []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+	return verifier.GetToolsOf[T]().CompleteNames(toComplete), cobra.ShellCompDirectiveNoFileComp
+}
 
 func projectToolInvocationStatuses[T verifier.Tool](all, requested, selected verifier.ToolList[T]) []validation.ToolInvocationStatus {
 	statuses := make([]validation.ToolInvocationStatus, 0, len(all))

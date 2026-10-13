@@ -1,40 +1,12 @@
 package extension
 
 import (
-	"context"
-	"net/http"
-	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-
-	"github.com/shopware/shopware-cli/internal/validation"
 )
-
-func setupMockPHPVersionServer(t *testing.T) {
-	t.Helper()
-	t.Setenv("SHOPWARE_CLI_CACHE_DIR", t.TempDir())
-
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"6.4.0.0": "7.4", "6.5.0.0": "8.1", "6.6.0.0": "8.2"}`))
-	}))
-	t.Cleanup(server.Close)
-
-	original := phpVersionURL
-	phpVersionURL = server.URL
-	t.Cleanup(func() {
-		phpVersionURL = original
-	})
-
-	originalValidate := validatePHPFilesFn
-	validatePHPFilesFn = func(_ context.Context, _ Extension, _ validation.Check) {}
-	t.Cleanup(func() {
-		validatePHPFilesFn = originalValidate
-	})
-}
 
 func getTestPlugin(tempDir string) PlatformPlugin {
 	return PlatformPlugin{
@@ -83,7 +55,6 @@ func getTestPlugin(tempDir string) PlatformPlugin {
 }
 
 func TestPluginIconNotExists(t *testing.T) {
-	setupMockPHPVersionServer(t)
 	dir := t.TempDir()
 
 	plugin := getTestPlugin(dir)
@@ -97,7 +68,6 @@ func TestPluginIconNotExists(t *testing.T) {
 }
 
 func TestPluginIconExists(t *testing.T) {
-	setupMockPHPVersionServer(t)
 	dir := t.TempDir()
 
 	plugin := getTestPlugin(dir)
@@ -113,7 +83,6 @@ func TestPluginIconExists(t *testing.T) {
 }
 
 func TestPluginIconDifferntPathExists(t *testing.T) {
-	setupMockPHPVersionServer(t)
 	dir := t.TempDir()
 
 	plugin := getTestPlugin(dir)
@@ -129,7 +98,6 @@ func TestPluginIconDifferntPathExists(t *testing.T) {
 }
 
 func TestPluginIconIsTooBig(t *testing.T) {
-	setupMockPHPVersionServer(t)
 	dir := t.TempDir()
 
 	plugin := getTestPlugin(dir)
@@ -146,7 +114,6 @@ func TestPluginIconIsTooBig(t *testing.T) {
 }
 
 func TestPluginGermanDescriptionMissing(t *testing.T) {
-	setupMockPHPVersionServer(t)
 	dir := t.TempDir()
 
 	plugin := getTestPlugin(dir)
@@ -166,7 +133,6 @@ func TestPluginGermanDescriptionMissing(t *testing.T) {
 }
 
 func TestPluginGermanLabelMissing(t *testing.T) {
-	setupMockPHPVersionServer(t)
 	dir := t.TempDir()
 
 	plugin := getTestPlugin(dir)
@@ -186,7 +152,6 @@ func TestPluginGermanLabelMissing(t *testing.T) {
 }
 
 func TestPluginGermanDescriptionMissingOnlyEnglishMarket(t *testing.T) {
-	setupMockPHPVersionServer(t)
 	dir := t.TempDir()
 
 	plugin := getTestPlugin(dir)
@@ -202,23 +167,4 @@ func TestPluginGermanDescriptionMissingOnlyEnglishMarket(t *testing.T) {
 	plugin.Validate(getTestContext(), check)
 
 	assert.Len(t, check.Results, 0)
-}
-
-func TestNormalizePhpVersion(t *testing.T) {
-	cases := []struct {
-		input    string
-		expected string
-	}{
-		{"8.4", "8.4"},
-		{"8.4.1", "8.4"},
-		{" 8.2 ", "8.2"},
-		{"8", "8"},
-		{"7.4.33-1", "7.4"},
-	}
-
-	for _, tc := range cases {
-		t.Run(tc.input, func(t *testing.T) {
-			assert.Equal(t, tc.expected, normalizePhpVersion(tc.input))
-		})
-	}
 }
