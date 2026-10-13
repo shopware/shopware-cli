@@ -156,8 +156,8 @@ func onlyDockerDependencies(missing []MissingDependency) bool {
 	})
 }
 
-// dockerInstruction phrases the Docker steps, e.g. "Start Docker and try again."
-func dockerInstruction(missing []MissingDependency) string {
+// DockerSteps lists what to do about the missing Docker dependencies, e.g. "start Docker and install the Docker Compose plugin".
+func DockerSteps(missing []MissingDependency) string {
 	var steps []string
 	for _, m := range missing {
 		switch {
@@ -170,9 +170,14 @@ func dockerInstruction(missing []MissingDependency) string {
 		}
 	}
 
-	sentence := strings.Join(steps, " and ")
+	return strings.Join(steps, " and ")
+}
+
+// dockerInstruction phrases the Docker steps, e.g. "Start Docker and try again."
+func dockerInstruction(missing []MissingDependency) string {
+	sentence := DockerSteps(missing)
 	sentence = strings.ToUpper(sentence[:1]) + sentence[1:]
-	if len(steps) == 1 {
+	if len(missing) == 1 {
 		return sentence + " and try again."
 	}
 

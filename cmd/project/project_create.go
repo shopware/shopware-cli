@@ -108,7 +108,7 @@ var projectCreateCmd = &cobra.Command{
 		// question additionally blocks the Docker choice with guidance, and
 		// validateAndPreflight keeps a final safety net.
 		if cmd.PersistentFlags().Changed("docker") && opts.useDocker {
-			if missing := dockerAvailabilityForCreate(cmd.Context()); missing != nil {
+			if missing := dockerAvailabilityForCreate(cmd.Context()); len(missing) > 0 {
 				return dockerUnavailableError(missing)
 			}
 		}
