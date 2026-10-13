@@ -1,41 +1,12 @@
 package extension
 
 import (
-	"context"
-	"net/http"
-	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"testing"
 
-	"github.com/shyim/go-version"
 	"github.com/stretchr/testify/assert"
-
-	"github.com/shopware/shopware-cli/internal/validation"
 )
-
-func setupMockPHPVersionServer(t *testing.T) {
-	t.Helper()
-	t.Setenv("SHOPWARE_CLI_CACHE_DIR", t.TempDir())
-
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"6.4.0.0": "7.4", "6.5.0.0": "8.1", "6.6.0.0": "8.2", "invalid": "9.9"}`))
-	}))
-	t.Cleanup(server.Close)
-
-	original := phpVersionURL
-	phpVersionURL = server.URL
-	t.Cleanup(func() {
-		phpVersionURL = original
-	})
-
-	originalValidate := validatePHPFilesFn
-	validatePHPFilesFn = func(_ context.Context, _ Extension, _ validation.Check) {}
-	t.Cleanup(func() {
-		validatePHPFilesFn = originalValidate
-	})
-}
 
 func getTestPlugin(tempDir string) PlatformPlugin {
 	return PlatformPlugin{
@@ -84,7 +55,6 @@ func getTestPlugin(tempDir string) PlatformPlugin {
 }
 
 func TestPluginIconNotExists(t *testing.T) {
-	setupMockPHPVersionServer(t)
 	dir := t.TempDir()
 
 	plugin := getTestPlugin(dir)
@@ -98,7 +68,6 @@ func TestPluginIconNotExists(t *testing.T) {
 }
 
 func TestPluginIconExists(t *testing.T) {
-	setupMockPHPVersionServer(t)
 	dir := t.TempDir()
 
 	plugin := getTestPlugin(dir)
@@ -114,7 +83,6 @@ func TestPluginIconExists(t *testing.T) {
 }
 
 func TestPluginIconDifferntPathExists(t *testing.T) {
-	setupMockPHPVersionServer(t)
 	dir := t.TempDir()
 
 	plugin := getTestPlugin(dir)
@@ -130,7 +98,6 @@ func TestPluginIconDifferntPathExists(t *testing.T) {
 }
 
 func TestPluginIconIsTooBig(t *testing.T) {
-	setupMockPHPVersionServer(t)
 	dir := t.TempDir()
 
 	plugin := getTestPlugin(dir)
@@ -147,7 +114,6 @@ func TestPluginIconIsTooBig(t *testing.T) {
 }
 
 func TestPluginGermanDescriptionMissing(t *testing.T) {
-	setupMockPHPVersionServer(t)
 	dir := t.TempDir()
 
 	plugin := getTestPlugin(dir)
@@ -167,7 +133,6 @@ func TestPluginGermanDescriptionMissing(t *testing.T) {
 }
 
 func TestPluginGermanLabelMissing(t *testing.T) {
-	setupMockPHPVersionServer(t)
 	dir := t.TempDir()
 
 	plugin := getTestPlugin(dir)
@@ -187,7 +152,6 @@ func TestPluginGermanLabelMissing(t *testing.T) {
 }
 
 func TestPluginGermanDescriptionMissingOnlyEnglishMarket(t *testing.T) {
-	setupMockPHPVersionServer(t)
 	dir := t.TempDir()
 
 	plugin := getTestPlugin(dir)
@@ -203,75 +167,4 @@ func TestPluginGermanDescriptionMissingOnlyEnglishMarket(t *testing.T) {
 	plugin.Validate(getTestContext(), check)
 
 	assert.Len(t, check.Results, 0)
-}
-
-func TestNormalizePhpVersion(t *testing.T) {
-	cases := []struct {
-		input    string
-		expected string
-	}{
-		{"8.4", "8.4"},
-		{"8.4.1", "8.4"},
-		{" 8.2 ", "8.2"},
-		{"8", "8"},
-		{"7.4.33-1", "7.4"},
-	}
-
-	for _, tc := range cases {
-		t.Run(tc.input, func(t *testing.T) {
-			assert.Equal(t, tc.expected, normalizePhpVersion(tc.input))
-		})
-	}
-}
-
-func TestGetPhpVersionUsesLowestMatchingShopwareVersion(t *testing.T) {
-	setupMockPHPVersionServer(t)
-
-	constraint, err := version.NewConstraint(">=6.4")
-	assert.NoError(t, err)
-
-	for range 20 {
-		phpVersion, err := GetPhpVersion(t.Context(), &constraint)
-		assert.NoError(t, err)
-		assert.Equal(t, "7.4", phpVersion)
-	}
-}
-
-func TestWithProjectPHPVersionIgnoresEmptyVersion(t *testing.T) {
-	ctx := WithProjectPHPVersion(t.Context(), "")
-	assert.Equal(t, "", projectPHPVersionFromContext(ctx))
-
-	ctx = WithProjectPHPVersion(ctx, "8.2")
-	assert.Equal(t, "8.2", projectPHPVersionFromContext(ctx))
-}
-
-func TestValidatePHPFilesUsesProjectPHPVersion(t *testing.T) {
-	setupMockPHPVersionServer(t)
-	dir := t.TempDir()
-
-	plugin := getTestPlugin(dir)
-	assert.NoError(t, os.MkdirAll(filepath.Join(dir, "src"), 0o755))
-	assert.NoError(t, os.WriteFile(filepath.Join(dir, "src", "Status.php"), []byte("<?php\n\nenum Status\n{\n    case Active;\n}\n"), 0o644))
-
-	withoutProject := &testCheck{}
-	validatePHPFiles(t.Context(), plugin, withoutProject)
-	assert.NotEmpty(t, withoutProject.Results)
-
-	withProject := &testCheck{}
-	validatePHPFiles(WithProjectPHPVersion(t.Context(), "8.2"), plugin, withProject)
-	assert.Empty(t, withProject.Results)
-}
-
-func TestValidatePHPFilesPrefersExtensionPHPVersionOverProject(t *testing.T) {
-	setupMockPHPVersionServer(t)
-	dir := t.TempDir()
-
-	plugin := getTestPlugin(dir)
-	plugin.config.Validation.PhpVersion = "7.4"
-	assert.NoError(t, os.MkdirAll(filepath.Join(dir, "src"), 0o755))
-	assert.NoError(t, os.WriteFile(filepath.Join(dir, "src", "Status.php"), []byte("<?php\n\nenum Status\n{\n    case Active;\n}\n"), 0o644))
-
-	check := &testCheck{}
-	validatePHPFiles(WithProjectPHPVersion(t.Context(), "8.2"), plugin, check)
-	assert.NotEmpty(t, check.Results)
 }

@@ -16,12 +16,11 @@ func (s Builtin) Name() string {
 
 func (s Builtin) Check(ctx context.Context, check *Check, config ToolConfig) error {
 	ignores := make([]validation.ToolConfigIgnore, 0)
-	ctx = extension.WithProjectPHPVersion(ctx, config.PHPVersion)
 
 	for _, ext := range config.Extensions {
 		extensionCheck := NewCheck()
 		extensionCheck.SetSourceRoot(ext.GetPath())
-		extension.RunValidation(ctx, ext, extensionCheck)
+		extension.RunValidation(ctx, ext, extensionCheck, config.PHPVersion)
 
 		// Apply ignores from extension config
 		ignores = ignores[:0] // rebuild ignores for each extension

@@ -211,7 +211,10 @@ func GetConfigFromProject(ctx context.Context, root string, onlyLocal bool) (*To
 		StorefrontDirectories: storefrontDirectories,
 		ValidationIgnores:     validationIgnores,
 		Extensions:            checkExtensions,
-		PHPVersion:            projectPHPVersion(shopCfg, rootComposerJsonData),
+		PHPVersion:            shopCfg.PHPVersion,
+	}
+	if shopCfg.Validation != nil && shopCfg.Validation.PhpVersion != "" {
+		toolCfg.PHPVersion = shopCfg.Validation.PhpVersion
 	}
 
 	if err := determineVersionRange(toolCfg, constraint); err != nil {
@@ -222,47 +225,9 @@ func GetConfigFromProject(ctx context.Context, root string, onlyLocal bool) (*To
 	return toolCfg, nil
 }
 
-// projectPHPVersion returns the PHP version the project's extensions are
-// linted with: validation.php_version from the project config, then
-// php_version, then docker.php.version, then
-// config.platform.php from composer.json, then the lowest supported version
-// allowed by require.php. It returns an empty string when none is set.
-func projectPHPVersion(shopCfg *shop.Config, composerJson rootComposerJson) string {
-	if shopCfg.Validation != nil && shopCfg.Validation.PhpVersion != "" {
-		return shopCfg.Validation.PhpVersion
-	}
-	if shopCfg.PHPVersion != "" {
-		return shopCfg.PHPVersion
-	}
-	if shopCfg.Docker != nil && shopCfg.Docker.PHP != nil && shopCfg.Docker.PHP.Version != "" {
-		return shopCfg.Docker.PHP.Version
-	}
-	if composerJson.Config.Platform.PHP != "" {
-		return composerJson.Config.Platform.PHP
-	}
-	if constraint := composerJson.Require["php"]; constraint != "" {
-		parsed, err := version.NewConstraint(constraint)
-		if err != nil {
-			return ""
-		}
-		for _, candidate := range shop.SupportedPHPVersions {
-			v, err := version.NewVersion(candidate + ".0")
-			if err == nil && parsed.Check(v) {
-				return candidate
-			}
-		}
-	}
-	return ""
-}
-
 type rootComposerJson struct {
 	Require map[string]string `json:"require"`
-	Config  struct {
-		Platform struct {
-			PHP string `json:"php"`
-		} `json:"platform"`
-	} `json:"config"`
-	Extra struct {
+	Extra   struct {
 		Bundles map[string]rootShopwareBundle `json:"shopware-bundles"`
 	}
 }
