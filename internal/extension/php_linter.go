@@ -52,11 +52,6 @@ func validatePHPFiles(c context.Context, ext Extension, check validation.Check, 
 		}
 	}
 
-	if phpVersion == "7.2" {
-		phpVersion = "7.3"
-		logging.FromContext(c).Infof("PHP 7.2 is not supported for PHP linting, using 7.3 now")
-	}
-
 	ver, err := phplint.ParseVersion(phpVersion)
 	if err != nil {
 		check.AddResult(validation.CheckResult{
