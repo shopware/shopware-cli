@@ -2,6 +2,11 @@ title: Handling Shopware AI integrations
 date: 2026-08-06
 tags: [ai, MCP Server, Agent Skill, integration]
 
+> **Status:** Accepted; amended 2026-10-13 after implementation review. Several
+> decisions below were simplified or reversed during implementation — see the
+> "Update (after implementation review)" section at the end for the as-built
+> behaviour.
+
 ## Context
 
 Add a top-level `ai` command to Shopware CLI that gives developers and automation agents a way to discover and connect Shopware-provided AI integrations. The first phase would cover Shopware-provided integrations only. Support for user-supplied and third-party integrations would be considered separately.
@@ -142,3 +147,35 @@ A Shopware-provided integration must include:
 - compatibility checks maintained by the owning team.
 
 The DX Tools team, who drive the Shopware CLI, would review whether the entry can be presented and installed safely. The team will not take ownership of the integration's behavior, content, availability, or compatibility.
+
+## Update (after implementation review)
+
+Implementation review simplified the `ai` command into a thin wrapper around
+skills.sh, which reversed several decisions above. The as-built behaviour:
+
+- **No bundled skill.** `shopware-cli` (and `shopware-cli-docker`) are ordinary git
+  entries in the `shopware/shopware-cli` repository, installed through skills.sh
+  like any other skill. They are not baked into the binary and do not follow the
+  CLI version; with no `@tag` they install the repository's default branch.
+- **No version resolution or recording.** A `@tag` is passed to skills.sh as the
+  exact git ref — no "latest compatible release" lookup, no pre-release rules, no
+  network resolution. The CLI keeps no install record of its own; skills.sh
+  (`skills-lock.json`) is the source of truth, and `ai list --installed` reads
+  `skills list --json`.
+- **No compatibility checks.** Downloading and running an owner-provided check
+  (an HTTP fetch plus PHP execution) was dropped as unsafe. `compatibility` is no
+  longer a directory field or a contribution requirement.
+- **Removal is not restricted to CLI-created config.** With no own record, `ai
+  remove` acts on whatever skills.sh has installed for that name and agent; it
+  first consults `skills list --json` so it reports "nothing to remove" accurately.
+- **Machine-readable output only on the read commands.** `ai list` and `ai info`
+  support `--format json`; `ai add` / `ai remove` print a human line only. There is
+  no versioned JSON schema or structured JSON error shape; errors are plain stderr
+  text with a non-zero exit code.
+- **Directory lives in Go, not YAML.** Entries are hardwired in `integrations.go`
+  (field/output contract in `internal/ai/directory/CONTRACT.md`); there is no YAML
+  manifest or generated JSON Schema step.
+
+Unchanged: the CLI is a front door, not a runtime; a curated, baked-in directory;
+skills.sh for installation; `--dry-run`; and an explicit `--agent` is required.
+Remote MCP servers and Shopware Core MCP detection remain planned, not implemented.
