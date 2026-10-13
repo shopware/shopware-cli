@@ -159,10 +159,10 @@ supported AI clients. Shopware CLI does not maintain client-specific copies.
 
 ## Installing with Shopware CLI
 
-Shopware CLI exposes an `ai` command group as a thin front door over skills.sh —
-it decides what to install and records it, while skills.sh writes the agent
-configuration. It requires Node.js/npx on PATH (git-delivered integrations also
-need git and network access).
+Shopware CLI exposes an `ai` command group as a thin front door over skills.sh
+(and add-mcp for MCP integrations) — it decides what to install, while those tools
+write the agent configuration. It requires Node.js/npx on PATH (git-delivered
+integrations also need git and network access).
 
 ```bash
 # discover integrations
@@ -193,6 +193,25 @@ available in every repository. The agent name is whatever skills.sh supports (e.
 (or the agent's directory), `skills-lock.json`, and
 `.shopware-cli/ai/installed.json` to share an integration with your team, or
 gitignore them to keep it local.
+
+### MCP integrations
+
+An integration of type `mcp` (for example `meteor`, the Meteor MCP server) is a
+remote server rather than a skill. The CLI installs it into the agent via
+[add-mcp](https://www.npmjs.com/package/add-mcp) instead of skills.sh. A remote
+server is not tied to a shop, so an MCP install is always at user level (global)
+and takes no `@<tag>`.
+
+```bash
+shopware-cli ai info meteor
+shopware-cli ai add meteor --agent claude-code          # always global
+shopware-cli ai add meteor --agent claude-code --dry-run
+shopware-cli ai remove meteor --agent claude-code
+```
+
+add-mcp owns the per-agent MCP configuration and supports the same agent names;
+the CLI keeps no list of its own. `ai list --installed` reports skills, not MCP
+servers, so a configured server is not listed there (a later increment may add it).
 
 ### Known limitations
 
