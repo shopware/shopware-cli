@@ -12,7 +12,7 @@ import (
 
 var aiRemoveCmd = &cobra.Command{
 	Use:   "remove name",
-	Short: "Remove a Shopware AI integration the CLI installed",
+	Short: "Remove a Shopware AI integration from an AI agent",
 	Long: `Remove a Shopware AI integration from an AI agent via skills.sh.
 
 Use --global to remove a user-level install, otherwise the command operates on the
@@ -41,6 +41,12 @@ current Shopware project. Requires Node.js/npx on PATH.`,
 }
 
 func writeRemoveResult(w io.Writer, r install.RemoveResult) error {
+	if !r.Removed {
+		_, err := fmt.Fprintf(w, "%s is not installed for %s (%s); nothing to remove\n", r.Name, r.Agent, r.Scope)
+
+		return err
+	}
+
 	verb := "Removed"
 	if r.DryRun {
 		verb = "[dry-run] would remove"

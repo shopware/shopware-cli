@@ -9,6 +9,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/shopware/shopware-cli/internal/ai/skills"
 )
 
 func TestValidateAgent(t *testing.T) {
@@ -30,15 +32,16 @@ func TestSplitNameTag(t *testing.T) {
 	assert.Equal(t, "v1.2.3", tag)
 }
 
-// call captures how runSkills was invoked.
+// call captures how runSkills was invoked and what listSkills should return.
 type call struct {
-	calls    int
-	lastArgv []string
-	lastDir  string
+	calls     int
+	lastArgv  []string
+	lastDir   string
+	installed []skills.Installed // what listSkills returns
 }
 
-// setup replaces runSkills with a fake and points project resolution at a temp
-// dir so a project install needs no real Shopware project.
+// setup replaces runSkills and listSkills with fakes and points project
+// resolution at a temp dir so a project install needs no real Shopware project.
 func setup(t *testing.T) *call {
 	t.Helper()
 
@@ -47,14 +50,21 @@ func setup(t *testing.T) *call {
 	t.Chdir(tmp)
 
 	rec := &call{}
-	prev := runSkills
+	prevRun := runSkills
 	runSkills = func(_ context.Context, argv []string, dir string, _ io.Writer) error {
 		rec.calls++
 		rec.lastArgv = argv
 		rec.lastDir = dir
 		return nil
 	}
-	t.Cleanup(func() { runSkills = prev })
+	prevList := listSkills
+	listSkills = func(_ context.Context, _ string, _ bool) ([]skills.Installed, error) {
+		return rec.installed, nil
+	}
+	t.Cleanup(func() {
+		runSkills = prevRun
+		listSkills = prevList
+	})
 
 	return rec
 }
@@ -137,14 +147,42 @@ func TestAddGuards(t *testing.T) {
 	assert.Equal(t, 0, rec.calls)
 }
 
-func TestRemoveBuildsCommand(t *testing.T) {
+func TestRemoveInstalledRunsSkills(t *testing.T) {
 	rec := setup(t)
+	rec.installed = []skills.Installed{{Name: "shopware-cli", Agents: []string{"Claude Code"}}}
 
 	res, err := runRemove(t, RemoveOptions{Name: "shopware-cli", Agent: "claude-code", Global: true})
 	require.NoError(t, err)
+	assert.True(t, res.Removed)
 	assert.Equal(t, ScopeGlobal, res.Scope)
 	assert.Equal(t, 1, rec.calls)
 	assert.Contains(t, strings.Join(rec.lastArgv, " "), "remove shopware-cli --agent claude-code --global")
+}
+
+func TestRemoveNothingInstalledIsNoOp(t *testing.T) {
+	rec := setup(t) // nothing installed
+
+	res, err := runRemove(t, RemoveOptions{Name: "shopware-cli", Agent: "claude-code", Global: true})
+	require.NoError(t, err)
+	assert.False(t, res.Removed)
+	assert.Equal(t, 0, rec.calls, "must not run skills when nothing is installed")
+}
+
+func TestRemoveWrongAgentIsNoOp(t *testing.T) {
+	rec := setup(t)
+	// Installed for Claude Code only; removing for cursor must be a no-op.
+	rec.installed = []skills.Installed{{Name: "shopware-cli", Agents: []string{"Claude Code"}}}
+
+	res, err := runRemove(t, RemoveOptions{Name: "shopware-cli", Agent: "cursor", Global: true})
+	require.NoError(t, err)
+	assert.False(t, res.Removed)
+	assert.Equal(t, 0, rec.calls)
+}
+
+func TestHasAgentMatchesDisplayNames(t *testing.T) {
+	assert.True(t, hasAgent([]string{"Claude Code"}, "claude-code"))
+	assert.True(t, hasAgent([]string{"GitHub Copilot"}, "github-copilot"))
+	assert.False(t, hasAgent([]string{"Claude Code"}, "cursor"))
 }
 
 func TestRemoveGuards(t *testing.T) {

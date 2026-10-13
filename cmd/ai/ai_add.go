@@ -24,9 +24,8 @@ Requires Node.js/npx on PATH; git-delivered integrations also need git and netwo
 access. The agent name is whatever skills.sh supports (e.g. claude-code, codex) —
 the CLI keeps no list of its own.
 
-The install writes the agent's skill files plus skills-lock.json, and records the
-install under .shopware-cli/ai/. Commit those to share the integration with your
-team, or gitignore them to keep it local.`,
+skills.sh writes the agent's skill files and a skills-lock.json. Commit those to
+share the integration with your team, or gitignore them to keep it local.`,
 	Example: `  # install the Shopware CLI skill into Claude Code for this project
   shopware-cli ai add shopware-cli --agent claude-code
 

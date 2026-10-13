@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"regexp"
 	"strings"
 
 	"github.com/shopware/shopware-cli/internal/ai/directory"
@@ -22,8 +23,11 @@ const (
 	ScopeGlobal  = "global"
 )
 
-// runSkills is a seam over skills.Run so tests can stub the npx call.
-var runSkills = skills.Run
+// Seams over the skills package so tests can stub the npx calls.
+var (
+	runSkills  = skills.Run
+	listSkills = skills.List
+)
 
 // Options are the inputs to Add.
 type Options struct {
@@ -101,15 +105,20 @@ type RemoveOptions struct {
 }
 
 // RemoveResult is the outcome of Remove, rendered by the command as a line.
+// Removed is false when the skill was not installed for that agent and scope, so
+// skills.sh had nothing to delete.
 type RemoveResult struct {
 	Name    string
 	Agent   string
 	Scope   string
+	Removed bool
 	DryRun  bool
 	Command []string
 }
 
-// Remove uninstalls a skill from an agent via skills.sh.
+// Remove uninstalls a skill from an agent via skills.sh. It first asks skills.sh
+// whether the skill is installed for that agent and scope, because skills.sh
+// reports success even when there was nothing to remove.
 func Remove(ctx context.Context, o RemoveOptions, progress io.Writer) (RemoveResult, error) {
 	if err := validateAgent(o.Agent); err != nil {
 		return RemoveResult{}, err
@@ -132,7 +141,14 @@ func Remove(ctx context.Context, o RemoveOptions, progress io.Writer) (RemoveRes
 		DryRun:  o.DryRun,
 		Command: skills.RemoveArgs(entry.Name, o.Agent, o.Global),
 	}
-	if o.DryRun {
+
+	installed, err := installedForAgent(ctx, dir, o.Global, entry.Name, o.Agent)
+	if err != nil {
+		return RemoveResult{}, err
+	}
+	result.Removed = installed
+
+	if o.DryRun || !installed {
 		return result, nil
 	}
 
@@ -141,6 +157,46 @@ func Remove(ctx context.Context, o RemoveOptions, progress io.Writer) (RemoveRes
 	}
 
 	return result, nil
+}
+
+// installedForAgent reports whether skills.sh has the named skill installed for
+// the given agent at the given scope.
+func installedForAgent(ctx context.Context, dir string, global bool, name, agent string) (bool, error) {
+	records, err := listSkills(ctx, dir, global)
+	if err != nil {
+		return false, err
+	}
+
+	for _, r := range records {
+		if r.Name == name && hasAgent(r.Agents, agent) {
+			return true, nil
+		}
+	}
+
+	return false, nil
+}
+
+// hasAgent reports whether target (an agent id like "claude-code") is among the
+// agent display names skills.sh returns (e.g. "Claude Code"), comparing on
+// alphanumerics only so ids and display names match.
+func hasAgent(agents []string, target string) bool {
+	want := normalizeAgent(target)
+	for _, a := range agents {
+		if normalizeAgent(a) == want {
+			return true
+		}
+	}
+
+	return false
+}
+
+// nonAlnum matches everything that is not a lowercase letter or digit.
+var nonAlnum = regexp.MustCompile(`[^a-z0-9]+`)
+
+// normalizeAgent canonicalizes an agent id or display name ("Claude Code",
+// "claude-code") to a comparable token ("claudecode").
+func normalizeAgent(s string) string {
+	return nonAlnum.ReplaceAllString(strings.ToLower(s), "")
 }
 
 // resolveScope returns the scope label and the directory to run skills.sh in. A
