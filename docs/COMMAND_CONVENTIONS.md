@@ -62,6 +62,7 @@ How commands, flags, messages and exit codes are written in `shopware-cli`. Foll
 - New tests target the `internal/` function a command calls, not the cobra layer. Keep `cmd/` thin enough that this is possible.
 - Test behaviour: the request a call makes, the value a parser returns, that bad input yields an error instead of a panic. Do not add tests whose only assertion is the wording of a message.
 - Table tests with testify, `t.Setenv` for environment variables, `t.Context()` for contexts.
+- The command-line contract (exit code, stdout, stderr, files written) is pinned by acceptance scripts in `acceptance/testdata/`. A new exit code rule or output format gets a script. Scripts run the binary like a user does and never touch cobra objects.
 
 ## Checking your change
 

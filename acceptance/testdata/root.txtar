@@ -1,0 +1,17 @@
+# The CLI reports its version and help on stdout and exits 0.
+exec shopware-cli --version
+stdout .
+! stderr .
+
+exec shopware-cli --help
+stdout 'Usage:'
+! stderr .
+
+exec shopware-cli help extension
+stdout 'Usage:'
+! stderr .
+
+# An unknown command fails and prints no help.
+! exec shopware-cli nonexistent
+! stdout .
+stderr .

@@ -1,0 +1,9 @@
+# The swx binary name runs project console with the same arguments.
+! exec swx cache:clear
+cp stderr swx.txt
+! exec shopware-cli project console cache:clear
+cmp stderr swx.txt
+
+# Completion is not redirected to project console.
+exec swx completion fish
+stdout .

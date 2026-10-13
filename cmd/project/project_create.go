@@ -6,6 +6,7 @@ import (
 	"github.com/shyim/go-composer/repository"
 	"github.com/spf13/cobra"
 
+	"github.com/shopware/shopware-cli/internal/extension"
 	"github.com/shopware/shopware-cli/internal/proxy"
 	"github.com/shopware/shopware-cli/internal/shop"
 	"github.com/shopware/shopware-cli/internal/system"
@@ -165,7 +166,7 @@ var projectCreateCmd = &cobra.Command{
 
 // packagistURL is a package variable so tests can point the create flow at a
 // local repository server instead of Packagist.
-var packagistURL = repository.PackagistURL
+var packagistURL = extension.PackagistURL()
 
 func parseCreateFlags(cmd *cobra.Command, args []string) createOptions {
 	useDocker, _ := cmd.PersistentFlags().GetBool("docker")

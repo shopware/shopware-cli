@@ -1,0 +1,19 @@
+# Version resolution and preflight checks fail before anything is installed, naming the offending value.
+! exec shopware-cli project create demo 9.9.9
+! stdout .
+stderr '9\.9\.9'
+
+! exec shopware-cli project create taken 6.6.0.0
+! stdout .
+stderr 'taken'
+
+! exec shopware-cli project create --php-version abc demo 6.6.0.0
+! stdout .
+stderr 'abc'
+
+! exec shopware-cli project create demo 6.6.0.0 --ci jenkins
+! stdout .
+stderr 'jenkins'
+
+-- taken/file --
+not empty

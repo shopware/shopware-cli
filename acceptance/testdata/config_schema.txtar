@@ -1,0 +1,8 @@
+# Both config schemas are printed as JSON on stdout.
+exec shopware-cli extension config-schema
+stdout '\A\{'
+! stderr .
+
+exec shopware-cli project config-schema
+stdout '\A\{'
+! stderr .

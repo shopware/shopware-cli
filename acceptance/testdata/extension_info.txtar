@@ -1,0 +1,36 @@
+# get-name and get-version print only the value, so shell scripts can capture it.
+exec shopware-cli extension get-name plugin
+stdout '\ATestPlugin\n\z'
+! stderr .
+
+exec shopware-cli extension get-version plugin
+stdout '\A1\.0\.0\n\z'
+! stderr .
+
+# A missing changelog is a failure, not an empty result.
+! exec shopware-cli extension get-changelog plugin
+! stdout .
+stderr .
+
+-- plugin/composer.json --
+{
+    "name": "test/test-plugin",
+    "type": "shopware-platform-plugin",
+    "version": "1.0.0",
+    "license": "MIT",
+    "description": "Test plugin",
+    "require": {
+        "shopware/core": "~6.6.0"
+    },
+    "autoload": {
+        "psr-4": {
+            "Test\\TestPlugin\\": "src/"
+        }
+    },
+    "extra": {
+        "shopware-plugin-class": "Test\\TestPlugin\\TestPlugin",
+        "label": {
+            "en-GB": "Test Plugin"
+        }
+    }
+}

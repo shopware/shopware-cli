@@ -63,6 +63,7 @@ Commands follow Cobra CLI patterns with:
 - Prefer assert.ElementsMatch on lists to ignore ordering issues
 - Use t.Setenv for environment variables
 - Use t.Context() for Context creation in tests
+- Acceptance scripts in `acceptance/testdata/*.txtar` run the built CLI end to end (`go test ./acceptance`); they assert exit codes, streams and files, never message wording
 
 ### Error Handling
 - Use structured logging via `go.uber.org/zap`

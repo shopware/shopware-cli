@@ -1,0 +1,42 @@
+# --format json writes the report to stdout and still exits non-zero on findings.
+! exec shopware-cli extension validate --only builtin --format json plugin
+stdout '\A\{'
+stdout '"results"'
+stdout '"tools"'
+stdout '\}\n\z'
+stderr .
+
+# Format names are case-insensitive.
+! exec shopware-cli extension validate --only builtin --format JSON plugin
+stdout '\A\{'
+
+# The deprecated --reporter flag still selects the format.
+! exec shopware-cli extension validate --only builtin --reporter json plugin
+stdout '\A\{'
+
+# An unknown format fails before any check runs.
+! exec shopware-cli extension validate --only builtin --format yaml plugin
+! stdout .
+
+-- plugin/composer.json --
+{
+    "name": "test/test-plugin",
+    "type": "shopware-platform-plugin",
+    "version": "1.0.0",
+    "license": "MIT",
+    "description": "Test plugin",
+    "require": {
+        "shopware/core": "~6.6.0"
+    },
+    "autoload": {
+        "psr-4": {
+            "Test\\TestPlugin\\": "src/"
+        }
+    },
+    "extra": {
+        "shopware-plugin-class": "Test\\TestPlugin\\TestPlugin",
+        "label": {
+            "en-GB": "Test Plugin"
+        }
+    }
+}
