@@ -25,6 +25,7 @@ type DeliveryKind string
 
 const (
 	DeliveryGit DeliveryKind = "git"
+	DeliveryMCP DeliveryKind = "mcp"
 )
 
 // Status is the lifecycle state of an integration.
@@ -55,10 +56,13 @@ type Integration struct {
 }
 
 // Delivery describes how an integration is delivered. Repository is the GitHub
-// "owner/repo" the skill is installed from.
+// "owner/repo" a skill is installed from; URL and Transport describe a remote MCP
+// server.
 type Delivery struct {
 	Kind       DeliveryKind `json:"kind"`
 	Repository string       `json:"repository,omitempty"`
+	URL        string       `json:"url,omitempty"`
+	Transport  string       `json:"transport,omitempty"`
 }
 
 // Load returns the directory of known integrations.
