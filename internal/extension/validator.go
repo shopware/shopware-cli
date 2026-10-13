@@ -85,9 +85,12 @@ func validateExtensionIcon(ext Extension, check validation.Check) {
 	}
 }
 
-func RunValidation(ctx context.Context, ext Extension, check validation.Check) {
+// RunValidation uses phpVersion as the default PHP target unless the extension
+// sets validation.php_version. An empty target uses the Shopware minimum.
+func RunValidation(ctx context.Context, ext Extension, check validation.Check, phpVersion string) {
 	runDefaultValidate(ext, check)
 	ext.Validate(ctx, check)
+	validatePHPFiles(ctx, ext, check, phpVersion)
 	validateAdministrationSnippets(ext, check)
 	validateStorefrontSnippets(ext, check)
 	validateAssets(ext, check)
