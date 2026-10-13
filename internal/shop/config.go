@@ -704,8 +704,9 @@ type ConfigValidation struct {
 
 	IgnoreExtensions []ConfigValidationIgnoreExtension `yaml:"ignore_extensions,omitempty"`
 
-	// PhpVersion overrides the PHP version used for linting (e.g. "8.4").
-	// When set, this takes precedence over the version derived from composer.json or the static Shopware-to-PHP mapping.
+	// PhpVersion sets the default PHP lint target for project extensions (e.g. "8.4").
+	// Falls back to the project's php_version, then the minimum PHP version for each extension's Shopware constraint.
+	// An extension's validation.php_version takes precedence.
 	PhpVersion string `yaml:"php_version,omitempty"`
 }
 
