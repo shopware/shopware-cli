@@ -91,6 +91,17 @@ func TestExclude_TrimsAndIgnoresDuplicates(t *testing.T) {
 	assert.Equal(t, []string{"phpstan", "builtin"}, toolNames(res))
 }
 
+func TestCompleteNames(t *testing.T) {
+	tools := ToolList[Tool]{testTool{name: "eslint"}, testTool{name: "phpstan"}, testTool{name: "builtin"}}
+
+	assert.ElementsMatch(t, []string{"eslint", "phpstan", "builtin"}, tools.CompleteNames(""))
+	assert.ElementsMatch(t, []string{"eslint", "phpstan", "builtin"}, tools.CompleteNames("php"))
+	assert.ElementsMatch(t, []string{"phpstan,eslint", "phpstan,builtin"}, tools.CompleteNames("phpstan,"))
+	assert.ElementsMatch(t, []string{"phpstan,eslint", "phpstan,builtin"}, tools.CompleteNames("phpstan,b"))
+	assert.ElementsMatch(t, []string{"sw-cli,eslint", "sw-cli,phpstan"}, tools.CompleteNames("sw-cli,"))
+	assert.Empty(t, tools.CompleteNames("eslint,phpstan,builtin,"))
+}
+
 func TestOnly_LegacyBuiltinAlias(t *testing.T) {
 	base := ToolList[testTool]{testTool{"phpstan"}, testTool{"builtin"}}
 	res, err := base.Only("sw-cli")

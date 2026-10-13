@@ -10,21 +10,22 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"slices"
 	"sort"
 	"strings"
 )
 
-const reporterFormats = "summary, json, github, gitlab, junit, markdown"
+// ReporterFormats lists the supported validation report formats.
+var ReporterFormats = []string{"summary", "json", "github", "gitlab", "junit", "markdown"}
 
 // ValidateReporter checks whether name identifies a supported validation
 // report format.
 func ValidateReporter(name string) error {
-	switch strings.ToLower(name) {
-	case "summary", "json", "github", "gitlab", "junit", "markdown":
+	if slices.Contains(ReporterFormats, strings.ToLower(name)) {
 		return nil
-	default:
-		return fmt.Errorf("invalid reporting format %q, allowed values: %s", name, reporterFormats)
 	}
+
+	return fmt.Errorf("invalid reporting format %q, allowed values: %s", name, strings.Join(ReporterFormats, ", "))
 }
 
 func DetectDefaultReporter() string {
