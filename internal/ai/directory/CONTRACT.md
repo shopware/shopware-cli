@@ -27,8 +27,9 @@ Conditional: delivery.repository ("owner/repo") — required when delivery.kind 
 
 ## JSON output (camelCase) — public contract
 
-Selected with `--format json` on both commands (default `--format table`), per
-the CLI-wide output-flag convention.
+Selected with `--format json` on `ai list` and `ai info` (default `--format
+table`), per the CLI-wide output-flag convention. `ai add` / `ai remove` print a
+human line only.
 
 `ai list` — array of:
 { name, displayName, type, provider, description, status }
