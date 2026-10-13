@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"slices"
+	"strings"
 	"time"
 
 	"charm.land/huh/v2"
@@ -25,41 +26,37 @@ import (
 // hanging the wizard.
 const dockerCheckTimeout = 5 * time.Second
 
-// dockerAvailabilityForCreate reports the Docker dependency that blocks a
+// dockerAvailabilityForCreate reports the Docker dependencies that block a
 // Docker-based project, or nil when Docker is usable. It is a variable so
 // tests can stub the docker daemon check.
-var dockerAvailabilityForCreate = func(ctx context.Context) *system.MissingDependency {
+var dockerAvailabilityForCreate = func(ctx context.Context) []system.MissingDependency {
 	ctx, cancel := context.WithTimeout(ctx, dockerCheckTimeout)
 	defer cancel()
 
-	for _, m := range system.CheckProjectDependencies(ctx, true, nil, "") {
-		if m.Name == "Docker" {
-			missing := m
-			return &missing
-		}
-	}
-	return nil
+	// With Docker selected the check only reports Docker and its Compose plugin.
+	return system.CheckProjectDependencies(ctx, true, nil, "")
 }
 
-// dockerUnavailableReason phrases a Docker MissingDependency for the create
-// form (e.g. "Docker is not running").
-func dockerUnavailableReason(missing *system.MissingDependency) string {
-	if missing.Reason == "not installed" {
-		return "Docker is not installed"
+// dockerUnavailableReason phrases the missing Docker dependencies for the
+// create form (e.g. "Docker is not running").
+func dockerUnavailableReason(missing []system.MissingDependency) string {
+	reasons := make([]string, 0, len(missing))
+	for _, m := range missing {
+		if m.Reason == "not installed" {
+			reasons = append(reasons, m.Name+" is not installed")
+		} else {
+			reasons = append(reasons, "Docker is not running")
+		}
 	}
-	return "Docker is not running"
+	return strings.Join(reasons, " and ")
 }
 
 // validateDockerChoice rejects the Docker option while Docker is unavailable,
 // so the form blocks right at the Docker question instead of failing after
 // the user configured the whole project.
-func validateDockerChoice(choice string, dockerMissing *system.MissingDependency) error {
-	if choice == tui.Yes && dockerMissing != nil {
-		reason := dockerUnavailableReason(dockerMissing)
-		if dockerMissing.Reason == "not running" {
-			return fmt.Errorf("%s — start Docker to use it, or choose local PHP to continue without Docker", reason)
-		}
-		return fmt.Errorf("%s — install Docker to use it, or choose local PHP to continue without Docker", reason)
+func validateDockerChoice(choice string, dockerMissing []system.MissingDependency) error {
+	if choice == tui.Yes && len(dockerMissing) > 0 {
+		return fmt.Errorf("%s — %s, or choose local PHP to continue without Docker", dockerUnavailableReason(dockerMissing), system.DockerSteps(dockerMissing))
 	}
 	return nil
 }
@@ -67,9 +64,9 @@ func validateDockerChoice(choice string, dockerMissing *system.MissingDependency
 // dockerUnavailableError renders the standard missing-Docker box to stderr
 // and returns the failure, so forced --docker requests fail before the
 // network fetch and wizard instead of at the end of project creation.
-func dockerUnavailableError(missing *system.MissingDependency) error {
+func dockerUnavailableError(missing []system.MissingDependency) error {
 	dockerHint := "re-run with " + tui.BoldText.Render("--docker")
-	fmt.Fprintln(os.Stderr, system.RenderMissingDependencies(true, []system.MissingDependency{*missing}, "create a Shopware project", dockerHint))
+	fmt.Fprintln(os.Stderr, system.RenderMissingDependencies(true, missing, "create a Shopware project", dockerHint))
 	return errors.New("missing required dependencies")
 }
 
@@ -142,10 +139,10 @@ func runCreateForm(cmd *cobra.Command, opts *createOptions, releases []repositor
 	// When Docker is unavailable, default to local PHP so the Docker choice is
 	// opt-in (and rejected with guidance) instead of the pre-selected path
 	// that fails at the end of the wizard.
-	var dockerMissing *system.MissingDependency
+	var dockerMissing []system.MissingDependency
 	if dockerPrompted {
 		dockerMissing = dockerAvailabilityForCreate(cmd.Context())
-		if dockerMissing != nil {
+		if len(dockerMissing) > 0 {
 			selectDocker = tui.No
 		}
 	}
@@ -287,13 +284,9 @@ func runCreateForm(cmd *cobra.Command, opts *createOptions, releases []repositor
 		if dockerPrompted {
 			dockerDescription := "How do you want to run Shopware?"
 			dockerOptionLabel := "Run Shopware with Docker"
-			if dockerMissing != nil {
-				if dockerMissing.Reason == "not installed" {
-					dockerDescription = "How do you want to run Shopware? Docker is not installed — install it to enable Docker, or continue with local PHP."
-				} else {
-					dockerDescription = "How do you want to run Shopware? Docker is not running — start it to enable Docker, or continue with local PHP."
-				}
-				dockerOptionLabel = fmt.Sprintf("Run Shopware with Docker (unavailable — %s)", dockerMissing.Reason)
+			if len(dockerMissing) > 0 {
+				dockerDescription = fmt.Sprintf("How do you want to run Shopware? %s — %s to enable Docker, or continue with local PHP.", dockerUnavailableReason(dockerMissing), system.DockerSteps(dockerMissing))
+				dockerOptionLabel = fmt.Sprintf("Run Shopware with Docker (unavailable — %s)", dockerUnavailableReason(dockerMissing))
 			}
 			formGroups = append(formGroups, huh.NewGroup(
 				huh.NewSelect[string]().
@@ -497,7 +490,7 @@ func runCreateForm(cmd *cobra.Command, opts *createOptions, releases []repositor
 		// very end. An explicit --docker request is never downgraded: it fails.
 		// Otherwise the form restarts with local PHP pre-selected.
 		if opts.useDocker {
-			if missing := dockerAvailabilityForCreate(cmd.Context()); missing != nil {
+			if missing := dockerAvailabilityForCreate(cmd.Context()); len(missing) > 0 {
 				if !dockerPrompted {
 					return dockerUnavailableError(missing)
 				}
