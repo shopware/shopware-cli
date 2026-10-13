@@ -76,6 +76,13 @@ func TestValidateDockerChoice(t *testing.T) {
 		assert.ErrorContains(t, err, "start Docker")
 	})
 
+	t.Run("docker blocked when the compose plugin is missing", func(t *testing.T) {
+		t.Parallel()
+		missing := &system.MissingDependency{Name: "Docker Compose plugin", Reason: "not installed"}
+		assert.Error(t, validateDockerChoice(tui.Yes, missing))
+		assert.NoError(t, validateDockerChoice(tui.No, missing))
+	})
+
 	t.Run("docker blocked when not installed", func(t *testing.T) {
 		t.Parallel()
 		missing := &system.MissingDependency{Name: "Docker", Reason: "not installed"}

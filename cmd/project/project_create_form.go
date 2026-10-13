@@ -32,11 +32,9 @@ var dockerAvailabilityForCreate = func(ctx context.Context) *system.MissingDepen
 	ctx, cancel := context.WithTimeout(ctx, dockerCheckTimeout)
 	defer cancel()
 
-	for _, m := range system.CheckProjectDependencies(ctx, true, nil, "") {
-		if m.Name == "Docker" {
-			missing := m
-			return &missing
-		}
+	// With Docker selected the check only reports Docker and its Compose plugin.
+	if missing := system.CheckProjectDependencies(ctx, true, nil, ""); len(missing) > 0 {
+		return &missing[0]
 	}
 	return nil
 }
@@ -45,7 +43,7 @@ var dockerAvailabilityForCreate = func(ctx context.Context) *system.MissingDepen
 // form (e.g. "Docker is not running").
 func dockerUnavailableReason(missing *system.MissingDependency) string {
 	if missing.Reason == "not installed" {
-		return "Docker is not installed"
+		return missing.Name + " is not installed"
 	}
 	return "Docker is not running"
 }
@@ -56,10 +54,14 @@ func dockerUnavailableReason(missing *system.MissingDependency) string {
 func validateDockerChoice(choice string, dockerMissing *system.MissingDependency) error {
 	if choice == tui.Yes && dockerMissing != nil {
 		reason := dockerUnavailableReason(dockerMissing)
-		if dockerMissing.Reason == "not running" {
+		switch {
+		case dockerMissing.Reason == "not running":
 			return fmt.Errorf("%s — start Docker to use it, or choose local PHP to continue without Docker", reason)
+		case dockerMissing.Name == "Docker":
+			return fmt.Errorf("%s — install Docker to use it, or choose local PHP to continue without Docker", reason)
+		default:
+			return fmt.Errorf("%s — install the Docker Compose plugin to use Docker, or choose local PHP to continue without Docker", reason)
 		}
-		return fmt.Errorf("%s — install Docker to use it, or choose local PHP to continue without Docker", reason)
 	}
 	return nil
 }
