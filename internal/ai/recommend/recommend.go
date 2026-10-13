@@ -26,6 +26,10 @@ const interval = 24 * time.Hour
 // guidanceSkill is the skill the recommendation points at.
 const guidanceSkill = "shopware-cli"
 
+// lookupTimeout bounds the best-effort "is it installed?" check so a stalled
+// skills.sh never delays the already-finished command.
+const lookupTimeout = 5 * time.Second
+
 // listSkills is a seam over skills.List so tests can stub the npx call.
 var listSkills = skills.List
 
@@ -49,14 +53,21 @@ func Suggest(ctx context.Context) (client, msg string) {
 		return "", ""
 	}
 
+	// The guidance skill is general, not shop-specific, so recommend a global
+	// install — it runs from anywhere, including an extension repo or any
+	// non-shop directory where a project install would refuse.
 	return client, fmt.Sprintf(
-		"Official Shopware CLI guidance is available for %s.\nRun: shopware-cli ai add %s --agent %s",
+		"Official Shopware CLI guidance is available for %s.\nRun: shopware-cli ai add %s --agent %s --global",
 		client, guidanceSkill, client)
 }
 
 // installedFor reports whether the guidance skill is installed for client,
-// according to skills.sh (the global scope or the current project).
+// according to skills.sh (the global scope or the current project). The lookup is
+// best-effort and time-bounded so a stalled skills.sh never blocks the CLI.
 func installedFor(ctx context.Context, client string) bool {
+	ctx, cancel := context.WithTimeout(ctx, lookupTimeout)
+	defer cancel()
+
 	if records, err := listSkills(ctx, "", true); err == nil && hasGuidance(records, client) {
 		return true
 	}

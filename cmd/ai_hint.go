@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"slices"
 
 	"github.com/shopware/shopware-cli/internal/ai/recommend"
 	"github.com/shopware/shopware-cli/logging"
@@ -17,11 +16,17 @@ var suggest = recommend.Suggest
 // printAIHint writes a one-line recommendation to install the Shopware CLI skill
 // when the CLI was invoked by a detected AI client (AI_AGENT). It is non-blocking
 // (w is stderr) and stays silent in CI, when `--no-ai-hint` is passed, while
-// using `ai` commands, and when no agent is detected or the skill is already
+// running an `ai` command, and when no agent is detected or the skill is already
 // installed for it. The detection itself is the trigger, so it must not depend on
 // stdin being a terminal — agents invoke the CLI non-interactively.
 func printAIHint(ctx context.Context, w io.Writer, args []string) {
-	if os.Getenv("CI") != "" || slices.Contains(args, "--no-ai-hint") || slices.Contains(args, "ai") {
+	if os.Getenv("CI") != "" {
+		return
+	}
+	if noHint, err := rootCmd.PersistentFlags().GetBool("no-ai-hint"); err == nil && noHint {
+		return
+	}
+	if isAICommand(args) {
 		return
 	}
 
@@ -30,8 +35,30 @@ func printAIHint(ctx context.Context, w io.Writer, args []string) {
 		return
 	}
 
-	_, _ = fmt.Fprintln(w, msg)
+	// Only suppress future recommendations once this one actually reached the user.
+	if _, err := fmt.Fprintln(w, msg); err != nil {
+		logging.FromContext(ctx).Debugf("could not write ai recommendation: %v", err)
+
+		return
+	}
 	if err := recommend.MarkShown(client); err != nil {
 		logging.FromContext(ctx).Debugf("could not record ai recommendation: %v", err)
 	}
+}
+
+// isAICommand reports whether args resolve to a command under the `ai` group, so
+// the hint does not nag while the user is already working with `ai`.
+func isAICommand(args []string) bool {
+	cmd, _, err := rootCmd.Find(args)
+	if err != nil || cmd == nil {
+		return false
+	}
+
+	for c := cmd; c != nil; c = c.Parent() {
+		if c.Name() == "ai" {
+			return true
+		}
+	}
+
+	return false
 }

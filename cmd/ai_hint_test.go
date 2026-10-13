@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // setupAIHint stubs the recommendation and isolates the suppression cache, so the
@@ -17,7 +18,7 @@ func setupAIHint(t *testing.T) {
 
 	prev := suggest
 	suggest = func(context.Context) (string, string) {
-		return "claude-code", "Official Shopware CLI guidance is available for claude-code.\nRun: shopware-cli ai add shopware-cli --agent claude-code"
+		return "claude-code", "Official Shopware CLI guidance is available for claude-code.\nRun: shopware-cli ai add shopware-cli --agent claude-code --global"
 	}
 	t.Cleanup(func() { suggest = prev })
 }
@@ -51,13 +52,20 @@ func TestPrintAIHintSilentInCI(t *testing.T) {
 	assert.Empty(t, buf.String())
 }
 
-func TestPrintAIHintSkipsAICommandAndFlag(t *testing.T) {
+func TestPrintAIHintSkipsAICommand(t *testing.T) {
 	setupAIHint(t)
 
 	var buf bytes.Buffer
 	printAIHint(t.Context(), &buf, []string{"ai", "list"})
 	assert.Empty(t, buf.String(), "do not nag while using ai commands")
+}
 
-	printAIHint(t.Context(), &buf, []string{"project", "list", "--no-ai-hint"})
+func TestPrintAIHintNoHintFlag(t *testing.T) {
+	setupAIHint(t)
+	require.NoError(t, rootCmd.PersistentFlags().Set("no-ai-hint", "true"))
+	t.Cleanup(func() { _ = rootCmd.PersistentFlags().Set("no-ai-hint", "false") })
+
+	var buf bytes.Buffer
+	printAIHint(t.Context(), &buf, []string{"project", "list"})
 	assert.Empty(t, buf.String(), "--no-ai-hint suppresses it")
 }
