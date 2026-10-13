@@ -251,26 +251,34 @@ type Config struct {
 	storageLocation string
 }
 
+// ColumnSQLMap maps column names to SQL rewrite expressions.
+type ColumnSQLMap = map[string]string
+
 // ConfigAnonymize is the extension contribution to `project dump --anonymize`. Project dump.rewrite values take precedence over these rules.
 type ConfigAnonymize struct {
-	// Tables maps a database table to column rewrites. Each column value is a SQL expression, the same format as the project dump.rewrite map. Faker expressions such as faker.Internet.Email() are supported. Write "''" to store an empty string and "NULL" to store NULL.
-	Tables map[string]map[string]string `yaml:"tables,omitempty"`
+	// Tables maps a database table to column rewrites. Each column value is a SQL expression, the same format as the project dump.rewrite map. Faker expressions such as faker.Internet.Email() are supported. Write "''" to store an empty string and "NULL" to store NULL. JSON_REMOVE expressions on the same column are merged across extensions, so JSON_REMOVE(custom_fields, '$.first_secret') and JSON_REMOVE(custom_fields, '$.second_secret') remove both keys.
+	Tables map[string]ColumnSQLMap `yaml:"tables,omitempty"`
 	// SystemConfig anonymizes system_config rows by configuration_key. A string omits that row. An object can omit the row or replace configuration_value with a custom value or a faker expression.
 	SystemConfig []ConfigSystemConfigRule `yaml:"system_config,omitempty"`
 }
 
 // UnmarshalYAML rejects unknown keys, so a typo cannot silently drop rules.
 func (c *ConfigAnonymize) UnmarshalYAML(value *yaml.Node) error {
-	if value.Kind == yaml.MappingNode {
-		for i := 0; i+1 < len(value.Content); i += 2 {
-			if field := value.Content[i].Value; field != "tables" && field != "system_config" {
-				return fmt.Errorf("unknown anonymize field %q", field)
-			}
-		}
-	}
-
+	// A distinct type omits UnmarshalYAML, preventing recursive calls to this method.
 	type plain ConfigAnonymize
-	return value.Decode((*plain)(c))
+	decoded := struct {
+		*plain  `yaml:",inline"`
+		Unknown map[string]yaml.Node `yaml:",inline"`
+	}{plain: (*plain)(c)}
+	// Node.Decode has no KnownFields option. An inline map captures unknown keys
+	// using the struct's YAML tags without making the rest of the config strict.
+	if err := value.Decode(&decoded); err != nil {
+		return err
+	}
+	for field := range decoded.Unknown {
+		return fmt.Errorf("cannot decode anonymize rules: unknown field %q", field)
+	}
+	return nil
 }
 
 // ConfigError reports an extension config file that cannot be loaded.

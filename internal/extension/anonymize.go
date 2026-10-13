@@ -2,7 +2,6 @@ package extension
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"regexp"
 	"slices"
@@ -22,7 +21,7 @@ var jsonRemovePattern = regexp.MustCompile("(?is)^\\s*JSON_REMOVE\\s*\\(\\s*(`?(
 // by extensions installed in a project.
 type AnonymizationRules struct {
 	// Tables is table -> column -> SQL expression. Keys are lowercase.
-	Tables map[string]map[string]string
+	Tables map[string]ColumnSQLMap
 	// SystemConfig anonymizes system_config rows. Keys are sorted.
 	SystemConfig []shop.SystemConfigRule
 }
@@ -30,9 +29,11 @@ type AnonymizationRules struct {
 type columnOwner struct {
 	extension  string
 	expression string
-	// inputs are the expressions already merged into expression. MySQL applies
-	// JSON_REMOVE paths left to right, so a repeated path must not be added twice.
-	inputs []string
+	jsonColumn string
+	jsonPaths  []string
+	// MySQL applies JSON_REMOVE paths left to right, so repeated inputs must
+	// not remove another array element after earlier removals shift its index.
+	inputs map[string]struct{}
 }
 
 type systemConfigOwner struct {
@@ -47,101 +48,15 @@ type systemConfigOwner struct {
 // loaded is an error, so no rules are skipped silently. Folders under custom/
 // that are not extensions are ignored.
 func CollectAnonymization(ctx context.Context, project string) (AnonymizationRules, error) {
-	var loadErrors []error
-	seenPaths := map[string]bool{}
-	extensions := findExtensionsFromProject(ctx, project, false, func(err error) {
-		var configErr *ConfigError
-		var packageErr *ComposerPackageError
-		switch {
-		case errors.As(err, &configErr):
-			if !seenPaths[configErr.Path] {
-				seenPaths[configErr.Path] = true
-				loadErrors = append(loadErrors, err)
-			}
-		case errors.As(err, &packageErr):
-			loadErrors = append(loadErrors, err)
-		}
-	})
-	if len(loadErrors) > 0 {
-		return AnonymizationRules{}, fmt.Errorf("cannot collect anonymize rules from extensions: %w", errors.Join(loadErrors...))
+	extensions, err := FindExtensionsFromProject(ctx, project, false)
+	if err != nil {
+		return AnonymizationRules{}, fmt.Errorf("cannot collect anonymize rules from extensions: %w", err)
 	}
-
-	slices.SortFunc(extensions, func(a, b Extension) int {
-		return strings.Compare(extensionSortName(a), extensionSortName(b))
-	})
 
 	rules := AnonymizationRules{
-		Tables: map[string]map[string]string{},
+		Tables:       collectTableAnonymization(ctx, extensions),
+		SystemConfig: collectSystemConfigAnonymization(ctx, extensions),
 	}
-	owners := map[string]columnOwner{}
-	seenConfig := map[string]systemConfigOwner{}
-
-	for _, ext := range extensions {
-		cfg := ext.GetExtensionConfig()
-		if cfg == nil {
-			continue
-		}
-
-		name := extensionSortName(ext)
-		for table, columns := range cfg.Anonymize.Tables {
-			table = strings.ToLower(table)
-			for column, expression := range columns {
-				column = strings.ToLower(column)
-				key := table + "." + column
-				if owner, exists := owners[key]; exists {
-					if owner.expression == expression || slices.Contains(owner.inputs, expression) {
-						continue
-					}
-					if merged, ok := mergeJSONRemove(column, owner.expression, expression); ok {
-						owner.expression = merged
-						owner.inputs = append(owner.inputs, expression)
-						owners[key] = owner
-						rules.Tables[table][column] = merged
-						continue
-					}
-					logging.FromContext(ctx).Warnf(
-						"Extension %s rewrites %s.%s, keeping the anonymization rule from %s",
-						name,
-						table,
-						column,
-						owner.extension,
-					)
-					continue
-				}
-
-				owners[key] = columnOwner{extension: name, expression: expression, inputs: []string{expression}}
-				if rules.Tables[table] == nil {
-					rules.Tables[table] = map[string]string{}
-				}
-				rules.Tables[table][column] = expression
-			}
-		}
-
-		for _, entry := range cfg.Anonymize.SystemConfig {
-			rule, err := entry.DumpRule()
-			if err != nil {
-				logging.FromContext(ctx).Warnf("Extension %s has an invalid system_config anonymization rule: %s", name, err)
-				continue
-			}
-			if previous, exists := seenConfig[rule.Key]; exists {
-				if !previous.rule.Equal(rule) {
-					logging.FromContext(ctx).Warnf(
-						"Extension %s anonymizes system_config %s, keeping the rule from %s",
-						name,
-						rule.Key,
-						previous.extension,
-					)
-				}
-				continue
-			}
-			seenConfig[rule.Key] = systemConfigOwner{extension: name, rule: rule}
-			rules.SystemConfig = append(rules.SystemConfig, rule)
-		}
-	}
-
-	slices.SortFunc(rules.SystemConfig, func(a, b shop.SystemConfigRule) int {
-		return strings.Compare(a.Key, b.Key)
-	})
 
 	if len(rules.Tables) > 0 || len(rules.SystemConfig) > 0 {
 		logging.FromContext(ctx).Infof(
@@ -154,22 +69,116 @@ func CollectAnonymization(ctx context.Context, project string) (AnonymizationRul
 	return rules, nil
 }
 
-// mergeJSONRemove combines two JSON_REMOVE rules on the same column into one, so both remove their keys.
-func mergeJSONRemove(column, existing, incoming string) (string, bool) {
-	current := jsonRemovePattern.FindStringSubmatch(existing)
-	next := jsonRemovePattern.FindStringSubmatch(incoming)
-	if current == nil || next == nil || !strings.EqualFold(current[2], column) || !strings.EqualFold(next[2], column) {
-		return "", false
+// collectTableAnonymization combines column rewrites in extension discovery order.
+func collectTableAnonymization(ctx context.Context, extensions []Extension) map[string]ColumnSQLMap {
+	owners := map[string]map[string]*columnOwner{}
+	for _, ext := range extensions {
+		cfg := ext.GetExtensionConfig()
+		if cfg == nil {
+			continue
+		}
+
+		name, _ := ext.GetName()
+		for table, columns := range cfg.Anonymize.Tables {
+			table = strings.ToLower(table)
+			if owners[table] == nil {
+				owners[table] = map[string]*columnOwner{}
+			}
+			for column, expression := range columns {
+				column = strings.ToLower(column)
+				if owner, exists := owners[table][column]; exists {
+					if !owner.merge(column, expression) {
+						logging.FromContext(ctx).Warnf(
+							"Extension %s rewrites %s.%s, keeping the anonymization rule from %s",
+							name, table, column, owner.extension,
+						)
+					}
+					continue
+				}
+
+				jsonColumn, paths := parseJSONRemove(column, expression)
+				owners[table][column] = &columnOwner{
+					extension: name, expression: expression,
+					jsonColumn: jsonColumn, jsonPaths: paths,
+					inputs: map[string]struct{}{expression: {}},
+				}
+			}
+		}
 	}
 
-	return "JSON_REMOVE(" + current[1] + ", " + strings.TrimSpace(current[3]) + ", " + strings.TrimSpace(next[3]) + ")", true
+	tables := map[string]ColumnSQLMap{}
+	for table, columns := range owners {
+		tables[table] = ColumnSQLMap{}
+		for column, owner := range columns {
+			expression := owner.expression
+			if len(owner.jsonPaths) > 1 {
+				expression = "JSON_REMOVE(" + owner.jsonColumn + ", " + strings.Join(owner.jsonPaths, ", ") + ")"
+			}
+			tables[table][column] = expression
+		}
+	}
+	return tables
 }
 
-func extensionSortName(ext Extension) string {
-	name, err := ext.GetName()
-	if err != nil || name == "" {
-		return ext.GetPath()
+// merge collects compatible JSON_REMOVE arguments without reparsing prior inputs.
+func (o *columnOwner) merge(column, expression string) bool {
+	if _, exists := o.inputs[expression]; exists {
+		return true
+	}
+	_, paths := parseJSONRemove(column, expression)
+	if len(o.jsonPaths) == 0 || len(paths) == 0 {
+		return false
+	}
+	// An extension may repeat the complete set accumulated from earlier rules.
+	if paths[0] != strings.Join(o.jsonPaths, ", ") {
+		o.jsonPaths = append(o.jsonPaths, paths...)
+	}
+	o.inputs[expression] = struct{}{}
+	return true
+}
+
+// parseJSONRemove keeps path arguments intact, including quoted commas and escapes.
+func parseJSONRemove(column, expression string) (string, []string) {
+	match := jsonRemovePattern.FindStringSubmatch(expression)
+	if match == nil || !strings.EqualFold(match[2], column) {
+		return "", nil
+	}
+	return match[1], []string{strings.TrimSpace(match[3])}
+}
+
+// collectSystemConfigAnonymization keeps the first rule for each configuration key.
+func collectSystemConfigAnonymization(ctx context.Context, extensions []Extension) []shop.SystemConfigRule {
+	seen := map[string]systemConfigOwner{}
+	var rules []shop.SystemConfigRule
+	for _, ext := range extensions {
+		cfg := ext.GetExtensionConfig()
+		if cfg == nil {
+			continue
+		}
+
+		name, _ := ext.GetName()
+		for _, entry := range cfg.Anonymize.SystemConfig {
+			rule, err := entry.DumpRule()
+			if err != nil {
+				logging.FromContext(ctx).Warnf("Extension %s has an invalid system_config anonymization rule: %s", name, err)
+				continue
+			}
+			if previous, exists := seen[rule.Key]; exists {
+				if !previous.rule.Equal(rule) {
+					logging.FromContext(ctx).Warnf(
+						"Extension %s anonymizes system_config %s, keeping the rule from %s",
+						name, rule.Key, previous.extension,
+					)
+				}
+				continue
+			}
+			seen[rule.Key] = systemConfigOwner{extension: name, rule: rule}
+			rules = append(rules, rule)
+		}
 	}
 
-	return name
+	slices.SortFunc(rules, func(a, b shop.SystemConfigRule) int {
+		return strings.Compare(a.Key, b.Key)
+	})
+	return rules
 }

@@ -1,6 +1,7 @@
 package extension
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -315,6 +316,117 @@ anonymize:
 	assert.Equal(t, "JSON_REMOVE(custom_fields, '$.aaa_vat', '$.aaa_phone', '$.zzz_token')", rules.Tables["customer"]["custom_fields"])
 }
 
+func TestCollectAnonymizationJSONRemoveConflicts(t *testing.T) {
+	cases := []struct {
+		name        string
+		expressions []string
+		want        string
+		warnings    int
+	}{
+		{
+			name:        "preserve a single expression",
+			expressions: []string{" json_remove( `CUSTOM_FIELDS` , '$.secret' ) "},
+			want:        " json_remove( `CUSTOM_FIELDS` , '$.secret' ) ",
+		},
+		{
+			name: "merge quoted columns and paths containing commas",
+			expressions: []string{
+				"json_remove(`CUSTOM_FIELDS`, '$.\"first,secret\"')",
+				"JSON_REMOVE(custom_fields, '$.second', '$.third')",
+			},
+			want: "JSON_REMOVE(`CUSTOM_FIELDS`, '$.\"first,secret\"', '$.second', '$.third')",
+		},
+		{
+			name: "skip repeated inputs after merging array paths",
+			expressions: []string{
+				"JSON_REMOVE(custom_fields, '$.secrets[0]')",
+				"JSON_REMOVE(custom_fields, '$.tokens[0]')",
+				"JSON_REMOVE(custom_fields, '$.secrets[0]')",
+				"JSON_REMOVE(custom_fields, '$.tokens[0]')",
+			},
+			want: "JSON_REMOVE(custom_fields, '$.secrets[0]', '$.tokens[0]')",
+		},
+		{
+			name: "skip an already merged expression",
+			expressions: []string{
+				"JSON_REMOVE(custom_fields, '$.secrets[0]')",
+				"JSON_REMOVE(custom_fields, '$.tokens[0]')",
+				"JSON_REMOVE(custom_fields, '$.secrets[0]', '$.tokens[0]')",
+			},
+			want: "JSON_REMOVE(custom_fields, '$.secrets[0]', '$.tokens[0]')",
+		},
+		{
+			name:        "keep an earlier non JSON rewrite",
+			expressions: []string{"NULL", "JSON_REMOVE(custom_fields, '$.secret')"},
+			want:        "NULL",
+			warnings:    1,
+		},
+		{
+			name:        "reject a later non JSON rewrite",
+			expressions: []string{"JSON_REMOVE(custom_fields, '$.secret')", "NULL"},
+			want:        "JSON_REMOVE(custom_fields, '$.secret')",
+			warnings:    1,
+		},
+		{
+			name:        "reject a different source column",
+			expressions: []string{"JSON_REMOVE(custom_fields, '$.secret')", "JSON_REMOVE(other_fields, '$.token')"},
+			want:        "JSON_REMOVE(custom_fields, '$.secret')",
+			warnings:    1,
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			project := t.TempDir()
+			for i, expression := range tc.expressions {
+				name := fmt.Sprintf("Plugin%d", i)
+				writePlugin(t, project, name, "Swag\\"+name+"\\"+name, fmt.Sprintf(`
+compatibility_date: "2026-01-01"
+anonymize:
+  tables:
+    Customer:
+      Custom_Fields: %q
+`, expression))
+			}
+			core, logs := observer.New(zap.WarnLevel)
+			ctx := logging.WithLogger(t.Context(), zap.New(core).Sugar())
+
+			rules, err := CollectAnonymization(ctx, project)
+
+			require.NoError(t, err)
+			assert.Equal(t, tc.want, rules.Tables["customer"]["custom_fields"])
+			assert.Equal(t, tc.warnings, logs.FilterLevelExact(zap.WarnLevel).Len())
+		})
+	}
+}
+
+func TestCollectAnonymizationFailsOnInvalidComposerLock(t *testing.T) {
+	for _, unreadable := range []bool{false, true} {
+		t.Run(fmt.Sprintf("unreadable=%t", unreadable), func(t *testing.T) {
+			project := t.TempDir()
+			writePlugin(t, project, "ValidPlugin", "Swag\\Valid\\ValidPlugin", `
+compatibility_date: "2026-01-01"
+anonymize:
+  system_config:
+    - Valid.config.secret
+`)
+			lockPath := filepath.Join(project, "composer.lock")
+			if unreadable {
+				require.NoError(t, os.Mkdir(lockPath, 0o755))
+			} else {
+				testhelper.WriteFile(t, lockPath, "{ invalid json")
+			}
+
+			rules, err := CollectAnonymization(t.Context(), project)
+
+			require.Error(t, err)
+			assert.Empty(t, rules)
+			extensions, discoveryErr := FindExtensionsFromProject(t.Context(), project, false)
+			require.Error(t, discoveryErr)
+			assert.Len(t, extensions, 1)
+		})
+	}
+}
+
 func TestCollectAnonymizationFailsOnBrokenComposerPackage(t *testing.T) {
 	project := t.TempDir()
 	vendorDir := filepath.Join(project, "vendor", "swag", "broken-plugin")
@@ -374,6 +486,38 @@ anonymize:
 `)
 	_, err = readExtensionConfig(t.Context(), dir)
 	assert.NoError(t, err)
+}
+
+func TestReadExtensionConfigAnonymizeYAMLMerge(t *testing.T) {
+	for _, field := range []string{"system_config", "system-config"} {
+		t.Run(field, func(t *testing.T) {
+			dir := t.TempDir()
+			// Unrelated fields remain accepted; only anonymize rejects unknown keys.
+			testhelper.WriteFile(t, filepath.Join(dir, ".shopware-extension.yml"), fmt.Sprintf(`
+compatibility_date: "2026-01-01"
+defaults: &defaults
+  %s:
+    - SwagExample.config.clientSecret
+anonymize:
+  <<: *defaults
+  tables:
+    customer:
+      custom_fields: "JSON_REMOVE(custom_fields, '$.secret')"
+`, field))
+
+			cfg, err := readExtensionConfig(t.Context(), dir)
+
+			if field == "system-config" {
+				var configErr *ConfigError
+				require.ErrorAs(t, err, &configErr)
+				return
+			}
+			require.NoError(t, err)
+			require.Len(t, cfg.Anonymize.SystemConfig, 1)
+			assert.Equal(t, "SwagExample.config.clientSecret", cfg.Anonymize.SystemConfig[0].Key)
+			assert.Equal(t, "JSON_REMOVE(custom_fields, '$.secret')", cfg.Anonymize.Tables["customer"]["custom_fields"])
+		})
+	}
 }
 
 func writePlugin(t *testing.T, project, folder, class, config string) {
