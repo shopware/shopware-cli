@@ -4,14 +4,17 @@
 package recommend
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
+	"strings"
 	"time"
 
 	"github.com/shopware/shopware-cli/internal/ai/agent"
-	"github.com/shopware/shopware-cli/internal/ai/state"
+	"github.com/shopware/shopware-cli/internal/ai/skills"
 	"github.com/shopware/shopware-cli/internal/shop"
 	"github.com/shopware/shopware-cli/internal/system"
 )
@@ -20,15 +23,29 @@ import (
 // matching the update notification cadence.
 const interval = 24 * time.Hour
 
-// guidanceSkill is the bundled skill the recommendation points at.
+// guidanceSkill is the skill the recommendation points at.
 const guidanceSkill = "shopware-cli"
 
+// listSkills is a seam over skills.List so tests can stub the npx call.
+var listSkills = skills.List
+
 // Suggest returns the client to record and the line to print, or ("", "") when
-// nothing should be shown: no agent detected, the skill already installed for it
-// (global or current project), or shown within the suppression window.
-func Suggest() (client, msg string) {
+// nothing should be shown: no agent detected, shown within the suppression
+// window, or the skill already installed for the client.
+//
+// The cheap checks run first; the costly "already installed?" check asks
+// skills.sh and therefore runs at most once per interval. When it finds the skill
+// it records the client as shown, so an installed client is not re-checked on
+// every command.
+func Suggest(ctx context.Context) (client, msg string) {
 	client = agent.Detect()
-	if client == "" || installedFor(client) || !ShouldShow(client) {
+	if client == "" || !ShouldShow(client) {
+		return "", ""
+	}
+
+	if installedFor(ctx, client) {
+		_ = MarkShown(client)
+
 		return "", ""
 	}
 
@@ -37,14 +54,14 @@ func Suggest() (client, msg string) {
 		client, guidanceSkill, client)
 }
 
-// installedFor reports whether the guidance skill is recorded for client in the
-// global state or the current project's state.
-func installedFor(client string) bool {
-	if global, err := state.Read(); err == nil && hasSkill(global, client) {
+// installedFor reports whether the guidance skill is installed for client,
+// according to skills.sh (the global scope or the current project).
+func installedFor(ctx context.Context, client string) bool {
+	if records, err := listSkills(ctx, "", true); err == nil && hasGuidance(records, client) {
 		return true
 	}
 	if root, err := shop.FindClosestShopwareProject(true); err == nil {
-		if project, err := state.ReadProject(root); err == nil && hasSkill(project, client) {
+		if records, err := listSkills(ctx, root, false); err == nil && hasGuidance(records, client) {
 			return true
 		}
 	}
@@ -52,14 +69,33 @@ func installedFor(client string) bool {
 	return false
 }
 
-func hasSkill(f state.File, client string) bool {
-	for _, e := range f.Installed {
-		if e.Name == guidanceSkill && e.Agent == client {
+func hasGuidance(records []skills.Installed, client string) bool {
+	for _, r := range records {
+		if r.Name == guidanceSkill && matchesAgent(r.Agents, client) {
 			return true
 		}
 	}
 
 	return false
+}
+
+// matchesAgent reports whether the agent id (e.g. "claude-code") is among the
+// display names skills.sh returns (e.g. "Claude Code"), compared on alphanumerics.
+func matchesAgent(agents []string, id string) bool {
+	want := normalizeAgent(id)
+	for _, a := range agents {
+		if normalizeAgent(a) == want {
+			return true
+		}
+	}
+
+	return false
+}
+
+var nonAlnum = regexp.MustCompile(`[^a-z0-9]+`)
+
+func normalizeAgent(s string) string {
+	return nonAlnum.ReplaceAllString(strings.ToLower(s), "")
 }
 
 func file() string {

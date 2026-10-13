@@ -199,9 +199,10 @@ gitignore them to keep it local.
 When a supported AI client runs the CLI (detected from the `AI_AGENT` environment
 variable), and the `shopware-cli` skill is not yet installed for it, the CLI
 prints a one-line, non-blocking recommendation to stderr with the exact
-`ai add` command. It never installs anything. It is not shown again for the same
-client within 24 hours, and stays silent in non-interactive or CI runs, while
-using `ai` commands, and when `--no-ai-hint` is passed.
+`ai add` command. It never installs anything. The detection itself is the trigger,
+so it is shown in non-interactive runs too (that is how agents invoke the CLI). It
+is not shown again for the same client within 24 hours, and stays silent in CI
+runs, while using `ai` commands, and when `--no-ai-hint` is passed.
 
 ### Known limitations
 

@@ -11,6 +11,9 @@ import (
 	"github.com/shopware/shopware-cli/logging"
 )
 
+// suggest is a seam over recommend.Suggest so tests can stub it.
+var suggest = recommend.Suggest
+
 // printAIHint writes a one-line recommendation to install the Shopware CLI skill
 // when the CLI was invoked by a detected AI client (AI_AGENT). It is non-blocking
 // (w is stderr) and stays silent in CI, when `--no-ai-hint` is passed, while
@@ -22,7 +25,7 @@ func printAIHint(ctx context.Context, w io.Writer, args []string) {
 		return
 	}
 
-	client, msg := recommend.Suggest()
+	client, msg := suggest(ctx)
 	if msg == "" {
 		return
 	}

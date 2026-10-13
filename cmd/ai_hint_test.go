@@ -2,22 +2,24 @@ package cmd
 
 import (
 	"bytes"
+	"context"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 )
 
-// setupAIHint isolates state, project root and the suppression cache, and marks
-// the process as invoked by Claude Code.
+// setupAIHint stubs the recommendation and isolates the suppression cache, so the
+// test exercises printAIHint's own gating without invoking skills.sh.
 func setupAIHint(t *testing.T) {
 	t.Helper()
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-	t.Setenv("XDG_CONFIG_HOME", home)
-	t.Setenv("PROJECT_ROOT", t.TempDir())
-	t.Setenv("SHOPWARE_CLI_CACHE_DIR", t.TempDir())
-	t.Setenv("AI_AGENT", "claude-code_2-1-289_agent")
+	t.Setenv("SHOPWARE_CLI_CACHE_DIR", t.TempDir()) // MarkShown writes here
 	t.Setenv("CI", "")
+
+	prev := suggest
+	suggest = func(context.Context) (string, string) {
+		return "claude-code", "Official Shopware CLI guidance is available for claude-code.\nRun: shopware-cli ai add shopware-cli --agent claude-code"
+	}
+	t.Cleanup(func() { suggest = prev })
 }
 
 func TestPrintAIHintShows(t *testing.T) {
@@ -29,9 +31,9 @@ func TestPrintAIHintShows(t *testing.T) {
 	assert.Contains(t, buf.String(), "ai add shopware-cli --agent claude-code")
 }
 
-func TestPrintAIHintSilentWithoutAgent(t *testing.T) {
+func TestPrintAIHintSilentWhenNoSuggestion(t *testing.T) {
 	setupAIHint(t)
-	t.Setenv("AI_AGENT", "")
+	suggest = func(context.Context) (string, string) { return "", "" }
 
 	var buf bytes.Buffer
 	printAIHint(t.Context(), &buf, []string{"project", "list"})
