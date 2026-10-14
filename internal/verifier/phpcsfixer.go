@@ -16,6 +16,8 @@ import (
 	"github.com/shopware/shopware-cli/internal/validation"
 )
 
+// PHP-CS-Fixer combines exit-code bitflags to report multiple conditions.
+// Values are documented at https://cs.symfony.com/doc/usage.html#exit-code.
 const (
 	phpCsFixerExitInvalidSyntax = 4
 	phpCsFixerExitNeedsFixing   = 8
@@ -158,6 +160,7 @@ func phpCsFixerDiagnostics(stderr string, err error) string {
 	}
 
 	var exitErr *exec.ExitError
+	// PHP-CS-Fixer uses bit flags for exit codes. Test whether the invalid syntax flag is set.
 	if errors.As(err, &exitErr) && exitErr.ExitCode()&phpCsFixerExitInvalidSyntax != 0 {
 		return commandOutputOrError(stderr, nil, err)
 	}
@@ -178,8 +181,11 @@ func (p PHPCSFixer) isExpectedPHPCSFixerExit(err error) bool {
 		return false
 	}
 
+	// Combine the two accepted finding flags into one mask.
 	const findings = phpCsFixerExitInvalidSyntax | phpCsFixerExitNeedsFixing
 
+	// Apply bitwise AND to the exit code using the inverted mask of accepted flags.
+	// The result is zero only when the exit code contains no flags outside the accepted mask.
 	return exitErr.ExitCode() & ^findings == 0
 }
 

@@ -67,8 +67,8 @@ var extensionFormat = &cobra.Command{
 		}
 		runErr := gr.Wait()
 
-		reportErr := validation.DoCheckReport(result.RemoveByIdentifier(
-			toolCfg.ValidationIgnores),
+		reportErr := validation.DoCheckReport(
+			result.RemoveByIdentifier(toolCfg.ValidationIgnores),
 			reportingFormat,
 			runErr != nil,
 			statuses...)
