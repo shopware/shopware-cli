@@ -53,11 +53,12 @@ func Suggest(ctx context.Context) (client, msg string) {
 		return "", ""
 	}
 
-	// The guidance skill is general, not shop-specific, so recommend a global
-	// install — it runs from anywhere, including an extension repo or any
-	// non-shop directory where a project install would refuse.
+	// Describe the install rather than instruct it: a detected agent may run a
+	// printed command without asking, and installing without the user's consent
+	// is out of scope (#1338). The guidance skill is general, not shop-specific,
+	// so point at a global install, which runs from anywhere.
 	return client, fmt.Sprintf(
-		"Official Shopware CLI guidance is available for %s.\nRun: shopware-cli ai add %s --agent %s --global",
+		"Shopware CLI guidance is available for %s.\nTo enable it, ask the user to run: shopware-cli ai add %s --agent %s --global",
 		client, guidanceSkill, client)
 }
 

@@ -18,7 +18,7 @@ func setupAIHint(t *testing.T) {
 
 	prev := suggest
 	suggest = func(context.Context) (string, string) {
-		return "claude-code", "Official Shopware CLI guidance is available for claude-code.\nRun: shopware-cli ai add shopware-cli --agent claude-code --global"
+		return "claude-code", "Shopware CLI guidance is available for claude-code.\nTo enable it, ask the user to run: shopware-cli ai add shopware-cli --agent claude-code --global"
 	}
 	t.Cleanup(func() { suggest = prev })
 }
@@ -40,6 +40,14 @@ func TestPrintAIHintSilentWhenNoSuggestion(t *testing.T) {
 	printAIHint(t.Context(), &buf, []string{"project", "list"})
 
 	assert.Empty(t, buf.String())
+}
+
+func TestPrintAIHintSilentDuringCompletion(t *testing.T) {
+	setupAIHint(t)
+
+	var buf bytes.Buffer
+	printAIHint(t.Context(), &buf, []string{"__complete", "project", "list", ""})
+	assert.Empty(t, buf.String(), "shell completion must not trigger the hint")
 }
 
 func TestPrintAIHintSilentInCI(t *testing.T) {

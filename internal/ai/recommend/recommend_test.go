@@ -43,6 +43,7 @@ func TestSuggestRecommends(t *testing.T) {
 	client, msg := Suggest(t.Context())
 	assert.Equal(t, "claude-code", client)
 	assert.Contains(t, msg, "ai add shopware-cli --agent claude-code --global")
+	assert.Contains(t, msg, "ask the user", "describe the install, do not instruct it")
 }
 
 func TestSuggestSkipsWhenInstalled(t *testing.T) {
