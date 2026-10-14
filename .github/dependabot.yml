@@ -4,6 +4,8 @@ updates:
     directory: "/"
     schedule:
       interval: "weekly"
+    reviewers:
+      - "shopware/product-dx"
     commit-message:
       prefix: 'fix(deps): '
     groups:
@@ -14,6 +16,8 @@ updates:
     directory: "/"
     schedule:
       interval: "weekly"
+    reviewers:
+      - "shopware/product-dx"
     commit-message:
       prefix: 'fix(deps): '
     groups:
@@ -25,6 +29,8 @@ updates:
     directory: "/internal/verifier/php"
     schedule:
       interval: "weekly"
+    reviewers:
+      - "shopware/product-dx"
     commit-message:
       prefix: 'fix(deps): '
     groups:
@@ -36,6 +42,8 @@ updates:
     directory: "/internal/verifier/js"
     schedule:
       interval: "weekly"
+    reviewers:
+      - "shopware/product-dx"
     commit-message:
       prefix: 'fix(deps): '
     groups:
