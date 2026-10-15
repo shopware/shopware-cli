@@ -1,7 +1,6 @@
 package extension
 
 import (
-	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -26,13 +25,14 @@ var extensionValidateCmd = &cobra.Command{
 	RunE: func(cmd *cobra.Command, args []string) error {
 		logger := logging.FromContext(cmd.Context())
 		storeCompliance, _ := cmd.Flags().GetBool("store-compliance")
-		// Reporting format and tool selection were validated in PreRunE.
+		// Reporting format was validated in PreRunE.
 		reportingFormat, _ := extensionValidationFormat(cmd)
 		checkAgainst, _ := cmd.Flags().GetString("check-against")
 		only, _ := cmd.Flags().GetString("only")
 		exclude, _ := cmd.Flags().GetString("exclude")
 		noCopy, _ := cmd.Flags().GetBool("no-copy")
 
+		// Tool selection was validated in PreRunE.
 		tools, statuses, _ := selectExtensionValidationTools(only, exclude)
 		needsTools := slices.ContainsFunc(tools, requiresToolSetup)
 
@@ -128,24 +128,6 @@ var extensionValidateCmd = &cobra.Command{
 		}
 		return reportErr
 	},
-}
-
-func selectExtensionValidationTools(only, exclude string) (verifier.ToolList[verifier.CheckTool], []validation.ToolInvocationStatus, error) {
-	validationTools := verifier.GetToolsOf[verifier.CheckTool]()
-
-	requestedTools, err := validationTools.Only(only)
-	if err != nil {
-		return nil, nil, err
-	}
-	selected, err := requestedTools.Exclude(exclude)
-	if err != nil {
-		return nil, nil, err
-	}
-	if len(selected) == 0 {
-		return nil, nil, errors.New("no validation checks selected after applying --exclude")
-	}
-
-	return selected, extensionToolInvocationStatuses(validationTools, requestedTools, selected), nil
 }
 
 func requiresToolSetup(tool verifier.CheckTool) bool {
