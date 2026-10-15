@@ -1,6 +1,8 @@
 package mysqldump
 
 import (
+	"bytes"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"reflect"
@@ -42,6 +44,9 @@ func replaceStringWithFakerWhenRequested(request string) string {
 	// It handles quoted strings within arguments and chained calls both with and without parens.
 	r := regexp.MustCompile(`\{\{\-\s*faker(?:\.[a-zA-Z0-9]+(?:\((?:(?:"(?:[^"\\]|\\.)*"|[^"()])*)\))?)+\s*\-\}\}`)
 
+	// In valid JSON every template sits inside a string, so generated values are escaped to keep it valid.
+	inJSON := json.Valid([]byte(request))
+
 	return r.ReplaceAllStringFunc(request, func(match string) string {
 		// Remove {{- -}} and whitespace safely
 		trimmed := strings.TrimSpace(strings.TrimSuffix(strings.TrimPrefix(match, "{{-"), "-}}"))
@@ -50,8 +55,25 @@ func replaceStringWithFakerWhenRequested(request string) string {
 			return match
 		}
 
+		if inJSON {
+			return escapeJSONString(val)
+		}
+
 		return val
 	})
+}
+
+// escapeJSONString escapes s for use inside a JSON string literal.
+func escapeJSONString(s string) string {
+	var buf bytes.Buffer
+	encoder := json.NewEncoder(&buf)
+	encoder.SetEscapeHTML(false)
+	if err := encoder.Encode(s); err != nil {
+		return s
+	}
+
+	encoded := bytes.TrimSpace(buf.Bytes())
+	return string(encoded[1 : len(encoded)-1])
 }
 
 // evaluateFakerExpression evaluates a single faker expression (without the {{- -}} delimiters).

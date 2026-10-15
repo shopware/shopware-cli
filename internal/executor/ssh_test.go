@@ -261,6 +261,47 @@ func TestSSHExecutorPHPBinary(t *testing.T) {
 	assert.Equal(t, "cd /var/www/shop/custom/plugins/Foo && /usr/bin/php8.3 -v", lastSSHShell(t, p))
 }
 
+func TestSSHExecutorPHPArgs(t *testing.T) {
+	cfg := &shop.EnvironmentConfig{
+		Type: "ssh",
+		SSH: &shop.EnvironmentSSHConfig{
+			Host:      "shop.example.com",
+			User:      "deploy",
+			Directory: "/var/www/shop",
+			PHPBinary: "/usr/bin/php8.3",
+			PHPArgs:   []string{"-d", "memory_limit=512M", "-c", "/etc/php/custom.ini"},
+		},
+	}
+
+	e, err := New("/project", cfg, &shop.Config{})
+	require.NoError(t, err)
+	sshExec, ok := e.(*SSHExecutor)
+	require.True(t, ok, "expected *SSHExecutor")
+
+	p := e.PHPCommand(t.Context(), "-v")
+	assert.Equal(t, "cd /var/www/shop && /usr/bin/php8.3 -d memory_limit=512M -c /etc/php/custom.ini -v", lastSSHShell(t, p))
+
+	p = e.ConsoleCommand(t.Context(), "cache:clear")
+	assert.Equal(t, "cd /var/www/shop && /usr/bin/php8.3 -d memory_limit=512M -c /etc/php/custom.ini bin/console cache:clear", lastSSHShell(t, p))
+
+	p = sshExec.RemotePHPCommand(t.Context(), "-v")
+	assert.Equal(t, "exec /usr/bin/php8.3 -d memory_limit=512M -c /etc/php/custom.ini -v", lastSSHShell(t, p))
+
+	// WithEnv and WithRelDir keep the configured args.
+	p = e.WithEnv(map[string]string{"FOO": "bar"}).PHPCommand(t.Context(), "-v")
+	assert.Contains(t, lastSSHShell(t, p), "/usr/bin/php8.3 -d memory_limit=512M -c /etc/php/custom.ini -v")
+
+	p = e.WithRelDir("custom/plugins/Foo").PHPCommand(t.Context(), "-v")
+	assert.Equal(t, "cd /var/www/shop/custom/plugins/Foo && /usr/bin/php8.3 -d memory_limit=512M -c /etc/php/custom.ini -v", lastSSHShell(t, p))
+}
+
+func TestSSHExecutorPHPArgsQuoting(t *testing.T) {
+	e := &SSHExecutor{host: "shop.example.com", directory: "/var/www/shop", phpArgs: []string{"-d", "memory_limit=512 M"}}
+
+	p := e.PHPCommand(t.Context(), "-v")
+	assert.Equal(t, "cd /var/www/shop && php -d 'memory_limit=512 M' -v", lastSSHShell(t, p))
+}
+
 func TestSSHExecutorTTY(t *testing.T) {
 	e := testSSHExecutor()
 

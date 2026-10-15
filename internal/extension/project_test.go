@@ -7,10 +7,48 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/shopware/shopware-cli/internal/shop"
 	"github.com/shopware/shopware-cli/internal/testhelper"
 )
+
+func TestFindExtensionsFromProjectReturnsSortedPartialResult(t *testing.T) {
+	project := t.TempDir()
+	writePlugin(t, project, "FirstFolder", "Swag\\Zzz\\ZzzPlugin", `compatibility_date: "2026-01-01"`)
+	writePlugin(t, project, "LastFolder", "Swag\\Aaa\\AaaPlugin", `compatibility_date: "2026-01-01"`)
+	writePlugin(t, project, "BrokenPlugin", "Swag\\Broken\\BrokenPlugin", `
+compatibility_date: "2026-01-01"
+anonymize:
+  unknown_field: true
+`)
+	testhelper.WriteFile(t, filepath.Join(project, "vendor", "swag", "broken", "composer.json"), "{ invalid json")
+	testhelper.WriteFile(t, filepath.Join(project, "composer.lock"), testhelper.ComposerLock(
+		testhelper.LockPackage{Name: "swag/broken", Version: "1.0.0", Type: ComposerTypePlugin},
+	))
+	require.NoError(t, os.MkdirAll(filepath.Join(project, "custom", "plugins", "not-an-extension"), 0o755))
+
+	extensions, err := FindExtensionsFromProject(t.Context(), project, false)
+
+	var configErr *ConfigError
+	var packageErr *ComposerPackageError
+	require.ErrorAs(t, err, &configErr)
+	require.ErrorAs(t, err, &packageErr)
+	assert.Equal(t, "swag/broken", packageErr.Package)
+	require.Len(t, extensions, 2)
+	var names []string
+	for _, ext := range extensions {
+		name, err := ext.GetName()
+		require.NoError(t, err)
+		names = append(names, name)
+	}
+	assert.Equal(t, []string{"AaaPlugin", "ZzzPlugin"}, names)
+
+	local, err := FindExtensionsFromProject(t.Context(), project, true)
+	require.ErrorAs(t, err, &configErr)
+	assert.NotErrorAs(t, err, &packageErr)
+	assert.Len(t, local, 2)
+}
 
 func TestGetShopwareProjectConstraintComposerJson(t *testing.T) {
 	testCases := []struct {

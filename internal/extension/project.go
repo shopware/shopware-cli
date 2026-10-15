@@ -6,11 +6,13 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"os"
 	"os/exec"
 	"path"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 
 	gocomposer "github.com/shyim/go-composer"
@@ -100,7 +102,7 @@ func getProjectConstraintFromKernel(project string) (*version.Constraints, error
 
 // FindAssetSourcesOfProject This finds all assets without invoking any PHP function and thinks all plugins / apps are active. Optional for CI usage.
 func FindAssetSourcesOfProject(ctx context.Context, project string, shopCfg *shop.Config) []asset.Source {
-	extensions := FindExtensionsFromProject(ctx, project, false)
+	extensions, _ := FindExtensionsFromProject(ctx, project, false)
 	sources := ConvertExtensionsToSources(ctx, extensions)
 
 	composerJson, err := os.ReadFile(path.Join(project, "composer.json"))
@@ -234,11 +236,18 @@ func DumpAndLoadAssetSourcesOfProject(ctx context.Context, project string, shopC
 	return sources, nil
 }
 
-func FindExtensionsFromProject(ctx context.Context, project string, onlyLocal bool) []Extension {
+// FindExtensionsFromProject returns successfully loaded extensions in name order
+// along with any load errors. Callers that can use partial results may ignore the error.
+// Composer package failures and invalid extension configs are reported; arbitrary
+// folders under custom/ that are not extensions are ignored.
+func FindExtensionsFromProject(ctx context.Context, project string, onlyLocal bool) ([]Extension, error) {
 	extensions := make(map[string]Extension)
+	var loadErrors []error
 
 	if !onlyLocal {
-		for _, ext := range addExtensionsByComposer(ctx, project) {
+		composerExtensions, err := addExtensionsByComposer(ctx, project)
+		loadErrors = append(loadErrors, err)
+		for _, ext := range composerExtensions {
 			name, err := ext.GetName()
 			if err != nil {
 				continue
@@ -252,7 +261,9 @@ func FindExtensionsFromProject(ctx context.Context, project string, onlyLocal bo
 		}
 	}
 
-	for _, ext := range addExtensionsByWildcard(ctx, path.Join(project, "custom", "static-plugins")) {
+	staticPlugins, err := addExtensionsByWildcard(ctx, path.Join(project, "custom", "static-plugins"))
+	loadErrors = append(loadErrors, err)
+	for _, ext := range staticPlugins {
 		name, err := ext.GetName()
 		if err != nil {
 			continue
@@ -270,7 +281,9 @@ func FindExtensionsFromProject(ctx context.Context, project string, onlyLocal bo
 		extensions[name] = ext
 	}
 
-	for _, ext := range addExtensionsByWildcard(ctx, path.Join(project, "custom", "plugins")) {
+	plugins, err := addExtensionsByWildcard(ctx, path.Join(project, "custom", "plugins"))
+	loadErrors = append(loadErrors, err)
+	for _, ext := range plugins {
 		name, err := ext.GetName()
 		if err != nil {
 			continue
@@ -288,7 +301,9 @@ func FindExtensionsFromProject(ctx context.Context, project string, onlyLocal bo
 		extensions[name] = ext
 	}
 
-	for _, ext := range addExtensionsByWildcard(ctx, path.Join(project, "custom", "apps")) {
+	apps, err := addExtensionsByWildcard(ctx, path.Join(project, "custom", "apps"))
+	loadErrors = append(loadErrors, err)
+	for _, ext := range apps {
 		name, err := ext.GetName()
 		if err != nil {
 			continue
@@ -302,30 +317,56 @@ func FindExtensionsFromProject(ctx context.Context, project string, onlyLocal bo
 
 	extensionsSlice := make([]Extension, 0, len(extensions))
 
-	for _, ext := range extensions {
-		extensionsSlice = append(extensionsSlice, ext)
+	for _, name := range slices.Sorted(maps.Keys(extensions)) {
+		extensionsSlice = append(extensionsSlice, extensions[name])
 	}
 
-	return extensionsSlice
+	return extensionsSlice, errors.Join(loadErrors...)
 }
 
-func addExtensionsByComposer(ctx context.Context, project string) []Extension {
+// ComposerPackageError reports an extension listed in composer.lock whose
+// installed vendor folder cannot be loaded.
+type ComposerPackageError struct {
+	Package string
+	Err     error
+}
+
+func (e *ComposerPackageError) Error() string {
+	return "package " + e.Package + ": " + e.Err.Error()
+}
+
+func (e *ComposerPackageError) Unwrap() error {
+	return e.Err
+}
+
+func addExtensionsByComposer(ctx context.Context, project string) ([]Extension, error) {
 	var list []Extension
+	var loadErrors []error
 
 	lock, err := os.ReadFile(path.Join(project, "composer.lock"))
+	if errors.Is(err, os.ErrNotExist) {
+		return list, nil
+	}
 	if err != nil {
-		return list
+		return list, fmt.Errorf("cannot read composer.lock: %w", err)
 	}
 
 	var composer composerLock
 	if err := json.Unmarshal(lock, &composer); err != nil {
-		return list
+		return list, fmt.Errorf("cannot parse composer.lock: %w", err)
 	}
 
 	for _, pkg := range composer.Packages {
 		if pkg.PackageType == ComposerTypePlugin || pkg.PackageType == ComposerTypeBundle || pkg.PackageType == ComposerTypeApp {
-			ext, err := GetExtensionByFolder(ctx, path.Join(project, "vendor", pkg.Name))
+			folder := path.Join(project, "vendor", pkg.Name)
+			if _, err := os.Stat(folder); errors.Is(err, os.ErrNotExist) {
+				// The package is locked but not installed, so there is nothing to load.
+				continue
+			}
+
+			ext, err := GetExtensionByFolder(ctx, folder)
 			if err != nil {
+				loadErrors = append(loadErrors, &ComposerPackageError{Package: pkg.Name, Err: err})
 				continue
 			}
 
@@ -343,15 +384,19 @@ func addExtensionsByComposer(ctx context.Context, project string) []Extension {
 		}
 	}
 
-	return list
+	return list, errors.Join(loadErrors...)
 }
 
-func addExtensionsByWildcard(ctx context.Context, extensionDir string) []Extension {
+func addExtensionsByWildcard(ctx context.Context, extensionDir string) ([]Extension, error) {
 	var list []Extension
+	var loadErrors []error
 
 	extensions, err := os.ReadDir(extensionDir)
+	if errors.Is(err, os.ErrNotExist) {
+		return list, nil
+	}
 	if err != nil {
-		return list
+		return list, fmt.Errorf("cannot read extension directory %q: %w", extensionDir, err)
 	}
 
 	for _, file := range extensions {
@@ -375,6 +420,12 @@ func addExtensionsByWildcard(ctx context.Context, extensionDir string) []Extensi
 		if isDir {
 			ext, err := GetExtensionByFolder(ctx, evaluatedPath)
 			if err != nil {
+				// Wildcard searches also encounter folders that are not extensions.
+				// Only a failure to load a recognized extension's config is fatal.
+				var configErr *ConfigError
+				if errors.As(err, &configErr) {
+					loadErrors = append(loadErrors, err)
+				}
 				continue
 			}
 
@@ -382,7 +433,7 @@ func addExtensionsByWildcard(ctx context.Context, extensionDir string) []Extensi
 		}
 	}
 
-	return list
+	return list, errors.Join(loadErrors...)
 }
 
 type composerLock struct {
