@@ -39,6 +39,9 @@ type createOptions struct {
 	// (<name>.<baseDomain>) through the shared proxy instead of a fixed port.
 	// Only meaningful with Docker.
 	useLocalDomain bool
+	// composeProjectName, when set, is written to .env as COMPOSE_PROJECT_NAME
+	// instead of the generated sw-<folder>-<hash> value.
+	composeProjectName string
 	// setupProxyNow runs the one-time machine setup (DNS + HTTPS trust, needs
 	// sudo) inline during create, so the local domain works immediately. Set
 	// only when the user opts in and the machine is not configured yet.
@@ -78,7 +81,12 @@ func resolveLocalDomainChoice(useDocker, wantLocalDomain, promptShown, machineSe
 var projectCreateCmd = &cobra.Command{
 	Use:   "create [name] [version]",
 	Short: "Create and install a new Shopware 6 project",
-	Args:  cobra.MaximumNArgs(2),
+	Long: `Create a Shopware project and install its Composer dependencies.
+
+Docker projects write COMPOSE_PROJECT_NAME to .env as sw-<folder>-<hash> so Compose volumes stay unique. Pass --compose-project-name to write a stable name instead. The name must be lowercase letters, digits, dashes, and underscores, and must start with a letter or digit.`,
+	Example: `  shopware-cli project create my-shop --docker --compose-project-name acme-live
+  shopware-cli project create my-shop --docker --no-interaction`,
+	Args: cobra.MaximumNArgs(2),
 	ValidArgsFunction: func(cmd *cobra.Command, args []string, _ string) ([]string, cobra.ShellCompDirective) {
 		if len(args) == 0 {
 			return []string{}, cobra.ShellCompDirectiveFilterDirs
@@ -101,7 +109,10 @@ var projectCreateCmd = &cobra.Command{
 		return []string{}, cobra.ShellCompDirectiveNoFileComp
 	},
 	RunE: func(cmd *cobra.Command, args []string) error {
-		opts := parseCreateFlags(cmd, args)
+		opts, err := parseCreateFlags(cmd, args)
+		if err != nil {
+			return err
+		}
 
 		// Fail fast when Docker is explicitly requested but unavailable, before
 		// the network fetch and (interactive) wizard. The interactive Docker
@@ -167,7 +178,7 @@ var projectCreateCmd = &cobra.Command{
 // local repository server instead of Packagist.
 var packagistURL = repository.PackagistURL
 
-func parseCreateFlags(cmd *cobra.Command, args []string) createOptions {
+func parseCreateFlags(cmd *cobra.Command, args []string) (createOptions, error) {
 	useDocker, _ := cmd.PersistentFlags().GetBool("docker")
 	withElasticsearch, _ := cmd.PersistentFlags().GetBool("with-elasticsearch")
 	withAMQP, _ := cmd.PersistentFlags().GetBool("with-amqp")
@@ -178,6 +189,12 @@ func parseCreateFlags(cmd *cobra.Command, args []string) createOptions {
 	deploymentMethod, _ := cmd.PersistentFlags().GetString("deployment")
 	ciSystem, _ := cmd.PersistentFlags().GetString("ci")
 	phpVersion, _ := cmd.PersistentFlags().GetString("php-version")
+	composeProjectName, _ := cmd.PersistentFlags().GetString("compose-project-name")
+	if cmd.PersistentFlags().Changed("compose-project-name") {
+		if err := shop.ValidateComposeProjectName(composeProjectName); err != nil {
+			return createOptions{}, err
+		}
+	}
 
 	if cmd.PersistentFlags().Changed("without-elasticsearch") {
 		withoutElasticsearch, _ := cmd.PersistentFlags().GetBool("without-elasticsearch")
@@ -194,6 +211,7 @@ func parseCreateFlags(cmd *cobra.Command, args []string) createOptions {
 		noAudit:               noAudit,
 		initGit:               initGit,
 		useLocalDomain:        localDomain,
+		composeProjectName:    composeProjectName,
 		selectedVersion:       versionFlag,
 		selectedDeployment:    deploymentMethod,
 		selectedCI:            ciSystem,
@@ -211,7 +229,7 @@ func parseCreateFlags(cmd *cobra.Command, args []string) createOptions {
 		opts.selectedVersion = args[1]
 	}
 
-	return opts
+	return opts, nil
 }
 
 func applyNonInteractiveDefaults(opts *createOptions) error {
@@ -261,6 +279,7 @@ func init() {
 	projectCreateCmd.PersistentFlags().String("ci", "", "CI/CD system to configure (none, github, gitlab)")
 	_ = projectCreateCmd.RegisterFlagCompletionFunc("ci", cobra.FixedCompletions([]string{shop.CINone, shop.CIGitHub, shop.CIGitLab}, cobra.ShellCompDirectiveNoFileComp))
 	projectCreateCmd.PersistentFlags().String("php-version", "", "PHP version for the project (e.g. 8.4); uses the local PHP version for local projects or the image tag for Docker projects")
+	projectCreateCmd.PersistentFlags().String("compose-project-name", "", "Compose project name written to .env (Docker default sw-<folder>-<hash>)")
 	_ = projectCreateCmd.RegisterFlagCompletionFunc("php-version", func(*cobra.Command, []string, string) ([]string, cobra.ShellCompDirective) {
 		return shop.SupportedPHPVersions, cobra.ShellCompDirectiveNoFileComp
 	})

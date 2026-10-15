@@ -110,6 +110,41 @@ func TestShopwareProjectScaffold(t *testing.T) {
 		assert.NotEqual(t, envContent, env2)
 	})
 
+	t.Run("writes an explicit compose project name", func(t *testing.T) {
+		t.Parallel()
+
+		projectFolder := filepath.Join(t.TempDir(), "My Shop")
+		scaffold := ShopwareProjectScaffold{
+			ProjectFolder:      projectFolder,
+			Version:            "6.6.10.0",
+			DeploymentMethod:   DeploymentNone,
+			CISystem:           CINone,
+			UseDocker:          true,
+			ComposeProjectName: "acme-live",
+		}
+
+		require.NoError(t, scaffold.Scaffold(t.Context()))
+		assert.Equal(t, envfile.ComposeProjectNameEnvKey+"=acme-live\n", readScaffoldFile(t, projectFolder, ".env"))
+	})
+
+	t.Run("rejects an invalid compose project name before writing", func(t *testing.T) {
+		t.Parallel()
+
+		projectFolder := filepath.Join(t.TempDir(), "shop")
+		scaffold := ShopwareProjectScaffold{
+			ProjectFolder:      projectFolder,
+			Version:            "6.6.10.0",
+			DeploymentMethod:   DeploymentNone,
+			CISystem:           CINone,
+			UseDocker:          true,
+			ComposeProjectName: "Acme Live",
+		}
+
+		require.Error(t, scaffold.Scaffold(t.Context()))
+		_, err := os.Stat(projectFolder)
+		assert.True(t, os.IsNotExist(err))
+	})
+
 	t.Run("non-docker leaves .env empty without compose project name", func(t *testing.T) {
 		t.Parallel()
 
