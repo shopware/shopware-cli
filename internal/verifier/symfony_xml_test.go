@@ -113,9 +113,10 @@ func TestSymfonyXMLConverterKeepsUnconvertibleFile(t *testing.T) {
 func TestSymfonyXMLConverterFixesProjectPlugins(t *testing.T) {
 	tmpDir := copySymfonyXMLFixture(t, "project")
 
-	exts := extension.FindExtensionsFromProject(t.Context(), tmpDir, true)
+	exts, err := extension.FindExtensionsFromProject(t.Context(), tmpDir, true)
+	require.NoError(t, err)
 	require.NotEmpty(t, exts)
-	err := SymfonyXMLConverter{}.Fix(t.Context(), ToolConfig{RootDir: tmpDir, Extensions: exts})
+	err = SymfonyXMLConverter{}.Fix(t.Context(), ToolConfig{RootDir: tmpDir, Extensions: exts})
 	require.NoError(t, err)
 
 	assertConvertedConfigDir(t, filepath.Join(tmpDir, "custom", "plugins", "TestPlugin", "src", "Resources", "config"))

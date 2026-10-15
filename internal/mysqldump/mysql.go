@@ -724,9 +724,7 @@ func (d *Dumper) getColumnsForSelect(ctx context.Context, table string, consider
 
 		replacement, ok := d.SelectMap[strings.ToLower(table)][strings.ToLower(column)]
 		if ok && considerRewriteMap {
-			if strings.Contains(replacement, "faker.") {
-				replacement = fmt.Sprintf("'%s'", replacement)
-			}
+			replacement = rewriteSelectExpression(replacement)
 
 			columns = append(columns, fmt.Sprintf("%s AS `%s`", replacement, column))
 		} else {
@@ -735,6 +733,38 @@ func (d *Dumper) getColumnsForSelect(ctx context.Context, table string, consider
 	}
 
 	return columns, nil
+}
+
+// rewriteSelectExpression quotes a faker template so MySQL returns it as text.
+// SQL that only contains faker templates inside string literals, such as a
+// CASE expression, is left as SQL. The dumped text is evaluated afterwards.
+func rewriteSelectExpression(replacement string) string {
+	if !strings.Contains(replacement, "faker.") {
+		return replacement
+	}
+
+	if strings.HasPrefix(strings.TrimSpace(replacement), "faker.") || hasTemplateOutsideStringLiteral(replacement) {
+		return "'" + replacement + "'"
+	}
+
+	return replacement
+}
+
+// hasTemplateOutsideStringLiteral reports whether a {{- template appears outside a single-quoted SQL string.
+func hasTemplateOutsideStringLiteral(expression string) bool {
+	inLiteral := false
+	for i := 0; i < len(expression); i++ {
+		switch {
+		case inLiteral && expression[i] == '\\':
+			i++
+		case expression[i] == '\'':
+			inLiteral = !inLiteral
+		case !inLiteral && strings.HasPrefix(expression[i:], "{{-"):
+			return true
+		}
+	}
+
+	return false
 }
 
 func (d *Dumper) rowCount(ctx context.Context, table string) (count uint64, err error) {

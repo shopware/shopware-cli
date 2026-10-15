@@ -301,7 +301,8 @@ func removeExtensionAssets(root string, sources []asset.Source) error {
 func generateChecksums(ctx context.Context, root string, shopCfg *shop.Config) {
 	section := ci.Start("Generating extension checksums")
 	defer section.End()
-	for _, ext := range extension.FindExtensionsFromProject(ctx, root, false) {
+	extensions, _ := extension.FindExtensionsFromProject(ctx, root, false)
+	for _, ext := range extensions {
 		extPath := ext.GetPath()
 		if shopCfg.Build.KeepExistingChecksums {
 			if _, err := os.Stat(path.Join(extPath, "checksum.json")); err == nil {
