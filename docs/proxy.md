@@ -376,10 +376,12 @@ The CA import is one-time per machine; the hosts line is per shop.
   `docker compose down` does not know to stop the already-running ones. It is
   an edge (no normal flow flips that mid-lifecycle); `docker compose down
   --remove-orphans` clears it.
-- **Dev watchers (`admin-watch`, `storefront-watch`) are not wired end-to-end.**
-  Traefik routes the subdomains and proxies websockets, but Vite's HMR client
-  URL and `allowedHosts` must point at the proxy hostname — that config lives
-  in `docker-dev` / the Vite setup, so it is a separate, cross-repo workstream.
+- Storefront watching uses Vite if Shopware is `6.7.11+` or the Storefront
+  package defines a `dev:server` script. In proxy mode with Vite, open
+  `https://<host>` to view the storefront with live assets from the Vite
+  watcher. If Vite is not used, open `https://storefront-watch.<host>` for the
+  legacy `hot-proxy` storefront. The admin watcher always loads assets from
+  `https://admin-watch.<host>`.
 - **WSL2 needs manual Windows-side steps.** Native Windows is a clean "not
   supported". WSL2 works, but because the daemon runs in the distro and the
   browser runs on Windows, it needs one-time manual wiring: a systemd-resolved
