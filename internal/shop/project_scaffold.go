@@ -55,6 +55,9 @@ type ShopwareProjectScaffold struct {
 	UseAMQP             bool
 	NoAudit             bool
 	SymfonyCLIInstalled bool
+	// ComposeProjectName, when set, is written to .env as COMPOSE_PROJECT_NAME
+	// instead of the generated sw-<folder>-<hash> value.
+	ComposeProjectName string
 }
 
 // Normalize applies project defaults and deployment-specific requirements.
@@ -84,8 +87,14 @@ func (s ShopwareProjectScaffold) Validate() error {
 	if err := ValidateDeploymentMethod(s.DeploymentMethod); err != nil {
 		return err
 	}
+	if err := ValidateCISystem(s.CISystem); err != nil {
+		return err
+	}
+	if s.ComposeProjectName == "" {
+		return nil
+	}
 
-	return ValidateCISystem(s.CISystem)
+	return ValidateComposeProjectName(s.ComposeProjectName)
 }
 
 // Scaffold creates the initial project structure without installing its
@@ -106,7 +115,7 @@ func (s *ShopwareProjectScaffold) Scaffold(ctx context.Context) error {
 		return err
 	}
 
-	envContent, err := EnvFileContent(s.UseDocker, s.ProjectFolder)
+	envContent, err := EnvFileContent(s.UseDocker, s.ProjectFolder, s.ComposeProjectName)
 	if err != nil {
 		return err
 	}

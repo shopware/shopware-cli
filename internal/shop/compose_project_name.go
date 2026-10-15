@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/shopware/shopware-cli/internal/envfile"
+	"github.com/shopware/shopware-cli/internal/system"
 )
 
 var nonComposeNameChars = regexp.MustCompile(`[^a-z0-9_-]+`)
@@ -40,16 +41,36 @@ func GenerateComposeProjectName(projectFolder string) (string, error) {
 	return name, nil
 }
 
-// EnvFileContent returns the initial host .env contents for a scaffolded project.
-// Docker projects get a unique COMPOSE_PROJECT_NAME so Compose volumes are not
-// reused across same-basename recreations. Non-docker projects get an empty .env.
-func EnvFileContent(useDocker bool, projectFolder string) (string, error) {
-	if !useDocker {
-		return "", nil
+// ValidateComposeProjectName reports whether name can be written as
+// COMPOSE_PROJECT_NAME. Compose accepts only lowercase letters, digits, dashes,
+// and underscores, and the name must start with a letter or digit.
+func ValidateComposeProjectName(name string) error {
+	if err := system.ValidateDockerComposeName(name); err != nil {
+		return fmt.Errorf("cannot use compose project name: %w", err)
 	}
 
-	name, err := GenerateComposeProjectName(projectFolder)
-	if err != nil {
+	return nil
+}
+
+// EnvFileContent returns the initial host .env contents for a scaffolded project.
+// Docker projects get a unique COMPOSE_PROJECT_NAME so Compose volumes are not
+// reused across same-basename recreations, unless composeProjectName is set.
+// An explicit name is written as-is (and rejected when it is not a valid Compose
+// project name), including for non-docker projects. Non-docker projects without
+// an explicit name get an empty .env.
+func EnvFileContent(useDocker bool, projectFolder, composeProjectName string) (string, error) {
+	name := composeProjectName
+	if name == "" {
+		if !useDocker {
+			return "", nil
+		}
+
+		generated, err := GenerateComposeProjectName(projectFolder)
+		if err != nil {
+			return "", err
+		}
+		name = generated
+	} else if err := ValidateComposeProjectName(name); err != nil {
 		return "", err
 	}
 

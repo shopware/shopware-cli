@@ -20,6 +20,7 @@ func TestGenerateComposeProjectName(t *testing.T) {
 	require.NoError(t, err)
 	assert.Regexp(t, regexp.MustCompile(`^sw-my-shop-[0-9a-f]{6}$`), name)
 	assert.Regexp(t, regexp.MustCompile(`^[a-z0-9][a-z0-9_-]*$`), name)
+	assert.NoError(t, ValidateComposeProjectName(name))
 
 	// Same basename must still differ (random suffix).
 	name2, err := GenerateComposeProjectName("/other/my-shop")
@@ -50,19 +51,54 @@ func TestEnvFileContent(t *testing.T) {
 
 	t.Run("non-docker is empty", func(t *testing.T) {
 		t.Parallel()
-		content, err := EnvFileContent(false, "/tmp/shop")
+		content, err := EnvFileContent(false, "/tmp/shop", "")
 		require.NoError(t, err)
 		assert.Empty(t, content)
 	})
 
 	t.Run("docker writes unique compose project name", func(t *testing.T) {
 		t.Parallel()
-		content, err := EnvFileContent(true, "/tmp/demo-shop")
+		content, err := EnvFileContent(true, "/tmp/demo-shop", "")
 		require.NoError(t, err)
 		assert.True(t, strings.HasPrefix(content, envfile.ComposeProjectNameEnvKey+"=sw-demo-shop-"))
 		assert.True(t, strings.HasSuffix(content, "\n"))
 		assert.Regexp(t, regexp.MustCompile(`^[a-z0-9][a-z0-9_-]*$`), strings.TrimPrefix(strings.TrimSpace(content), envfile.ComposeProjectNameEnvKey+"="))
 	})
+
+	t.Run("explicit name is written exactly", func(t *testing.T) {
+		t.Parallel()
+		content, err := EnvFileContent(true, "/tmp/demo-shop", "acme-live")
+		require.NoError(t, err)
+		assert.Equal(t, envfile.ComposeProjectNameEnvKey+"=acme-live\n", content)
+
+		// The override is host .env content, not only a docker default.
+		withoutDocker, err := EnvFileContent(false, "/tmp/demo-shop", "acme_stage")
+		require.NoError(t, err)
+		assert.Equal(t, envfile.ComposeProjectNameEnvKey+"=acme_stage\n", withoutDocker)
+	})
+
+	t.Run("invalid explicit name is rejected", func(t *testing.T) {
+		t.Parallel()
+		_, err := EnvFileContent(true, "/tmp/demo-shop", "Acme Live")
+		require.Error(t, err)
+		assert.ErrorContains(t, err, "Acme Live")
+	})
+}
+
+func TestValidateComposeProjectName(t *testing.T) {
+	t.Parallel()
+
+	valid := []string{"a", "1shop", "acme-live", "shop_1", "sw-my-shop-abc123"}
+	for _, name := range valid {
+		assert.NoError(t, ValidateComposeProjectName(name), name)
+	}
+
+	invalid := []string{"", "Acme", "shop name", "-shop", "_shop", "shop.name", "shop/name", "München"}
+	for _, name := range invalid {
+		err := ValidateComposeProjectName(name)
+		require.Error(t, err, name)
+		assert.ErrorContains(t, err, name)
+	}
 }
 
 func TestEnsureComposeProjectName(t *testing.T) {
