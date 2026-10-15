@@ -199,16 +199,20 @@ func unshallowRepository(ctx context.Context, repo string) error {
 }
 
 // workingTreeEnvironment keeps Git discovery and status relative to the target
-// directory instead of an inherited repository location.
+// directory instead of inherited repository locations or discovery controls.
 func workingTreeEnvironment() []string {
 	return slices.DeleteFunc(os.Environ(), func(entry string) bool {
-		return strings.HasPrefix(entry, "GIT_DIR=") || strings.HasPrefix(entry, "GIT_WORK_TREE=")
+		return strings.HasPrefix(entry, "GIT_DIR=") ||
+			strings.HasPrefix(entry, "GIT_WORK_TREE=") ||
+			strings.HasPrefix(entry, "GIT_CEILING_DIRECTORIES=") ||
+			strings.HasPrefix(entry, "GIT_DISCOVERY_ACROSS_FILESYSTEM=")
 	})
 }
 
 // IsInsideWorkingTree reports whether repo is in a Git working tree, including
 // enclosing repositories, linked worktrees, and submodules. It does not require
-// a clean tree or tracked files. Inherited GIT_DIR and GIT_WORK_TREE are ignored.
+// a clean tree or tracked files. Inherited repository locations and discovery
+// controls are ignored.
 func IsInsideWorkingTree(ctx context.Context, repo string) (bool, error) {
 	cmd := exec.CommandContext(ctx, "git", "-C", repo, "rev-parse", "--is-inside-work-tree") //nolint:gosec
 	cmd.Env = workingTreeEnvironment()

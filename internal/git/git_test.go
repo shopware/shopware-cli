@@ -278,3 +278,54 @@ func TestWorkingTreeChecksIgnoreRepositoryEnvironment(t *testing.T) {
 		})
 	}
 }
+
+// TestWorkingTreeChecksIgnoreDiscoveryEnvironment checks enclosing repositories
+// despite inherited discovery controls, without accepting unrelated paths.
+func TestWorkingTreeChecksIgnoreDiscoveryEnvironment(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		variable string
+		value    string
+	}{
+		{"ceiling", "GIT_CEILING_DIRECTORIES", ""},
+		{"filesystem disabled", "GIT_DISCOVERY_ACROSS_FILESYSTEM", "0"},
+		{"cross filesystem", "GIT_DISCOVERY_ACROSS_FILESYSTEM", "1"},
+		{"invalid boolean", "GIT_DISCOVERY_ACROSS_FILESYSTEM", "invalid"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			repo := t.TempDir()
+			prepareRepository(t, repo)
+			parent := filepath.Join(repo, "custom")
+			nested := filepath.Join(parent, "plugins", "Example")
+			assert.NoError(t, os.MkdirAll(nested, 0o755))
+			value := tc.value
+			if tc.variable == "GIT_CEILING_DIRECTORIES" {
+				value = parent
+			}
+			t.Setenv(tc.variable, value)
+
+			inside, err := IsInsideWorkingTree(t.Context(), nested)
+			assert.NoError(t, err)
+			assert.True(t, inside)
+			dirty, isRepo, err := IsWorkingTreeDirty(t.Context(), nested)
+			assert.NoError(t, err)
+			assert.True(t, isRepo)
+			assert.False(t, dirty)
+
+			assert.NoError(t, os.WriteFile(filepath.Join(nested, "untracked.txt"), []byte("local work"), 0o644))
+			dirty, isRepo, err = IsWorkingTreeDirty(t.Context(), nested)
+			assert.NoError(t, err)
+			assert.True(t, isRepo)
+			assert.True(t, dirty)
+
+			outside := t.TempDir()
+			inside, err = IsInsideWorkingTree(t.Context(), outside)
+			assert.NoError(t, err)
+			assert.False(t, inside)
+			dirty, isRepo, err = IsWorkingTreeDirty(t.Context(), outside)
+			assert.NoError(t, err)
+			assert.False(t, isRepo)
+			assert.False(t, dirty)
+		})
+	}
+}
