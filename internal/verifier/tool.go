@@ -1,6 +1,7 @@
 package verifier
 
 import (
+	"cmp"
 	"context"
 	"fmt"
 	"os/exec"
@@ -59,6 +60,8 @@ type ToolConfig struct {
 	StorefrontDirectories []string
 	// List of extensions of the project or a single extension
 	Extensions []extension.Extension
+	// PHP version of the project the extensions are validated in; empty for a single extension
+	PHPVersion string
 }
 
 func (c *ToolConfig) logConfiguration(ctx context.Context) {
@@ -99,7 +102,7 @@ type FixTool interface {
 
 type FormatTool interface {
 	Tool
-	Format(ctx context.Context, config ToolConfig, dryRun bool) error
+	Format(ctx context.Context, check *Check, config ToolConfig, dryRun bool) error
 }
 
 func canonicalToolName(name string) string {
@@ -183,6 +186,50 @@ func (tl ToolList[T]) Exclude(exclude string) (ToolList[T], error) {
 	return filtered, nil
 }
 
+// SelectTools applies the --only and --exclude filters and returns the
+// selected tools and their invocation statuses. kind names the tools in the
+// error returned when no tools remain, such as "formatters".
+func SelectTools[T Tool](all ToolList[T], only, exclude, kind string) (
+	ToolList[T],
+	[]validation.ToolInvocationStatus,
+	error,
+) {
+	requested, err := all.Only(only)
+	if err != nil {
+		return nil, nil, err
+	}
+	selected, err := requested.Exclude(exclude)
+	if err != nil {
+		return nil, nil, err
+	}
+	if len(selected) == 0 {
+		return nil, nil, fmt.Errorf("no %s selected after applying --exclude", kind)
+	}
+
+	return selected, ToolInvocationStatuses(all, requested, selected), nil
+}
+
+// ToolInvocationStatuses returns a status for each available tool, sorted by
+// name. A tool is skipped if --only omitted it or --exclude removed it.
+func ToolInvocationStatuses[T Tool](all, requested, selected ToolList[T]) []validation.ToolInvocationStatus {
+	statuses := make([]validation.ToolInvocationStatus, 0, len(all))
+	for _, tool := range all {
+		status := validation.ToolInvocationStatus{Name: tool.Name(), Status: "skipped", Reason: "not selected by --only"}
+		switch {
+		case slices.ContainsFunc(selected, func(candidate T) bool { return candidate.Name() == tool.Name() }):
+			status.Status = "invoked"
+			status.Reason = ""
+		case slices.ContainsFunc(requested, func(candidate T) bool { return candidate.Name() == tool.Name() }):
+			status.Reason = "excluded by --exclude"
+		}
+		statuses = append(statuses, status)
+	}
+	slices.SortFunc(statuses, func(a, b validation.ToolInvocationStatus) int {
+		return cmp.Compare(a.Name, b.Name)
+	})
+	return statuses
+}
+
 func (tl ToolList[T]) PossibleString() string {
 	var possibleTools []string
 	for _, t := range tl {
@@ -192,8 +239,46 @@ func (tl ToolList[T]) PossibleString() string {
 	return strings.Join(possibleTools, ",")
 }
 
+// CompleteNames completes a comma-separated tool selection, skipping names already typed.
+func (tl ToolList[T]) CompleteNames(toComplete string) []string {
+	prefix := ""
+	if i := strings.LastIndex(toComplete, ","); i >= 0 {
+		prefix = toComplete[:i+1]
+	}
+
+	var chosen []string
+	for _, name := range strings.Split(prefix, ",") {
+		chosen = append(chosen, canonicalToolName(strings.TrimSpace(name)))
+	}
+
+	var completions []string
+	for _, t := range tl {
+		if !slices.Contains(chosen, t.Name()) {
+			completions = append(completions, prefix+t.Name())
+		}
+	}
+
+	return completions
+}
+
 // CommandContext logs the command before creating it with exec.CommandContext.
 func CommandContext(ctx context.Context, name string, arg ...string) *exec.Cmd {
 	logging.FromContext(ctx).Debugf("Executing command: %s %s", name, strings.Join(arg, " "))
 	return exec.CommandContext(ctx, name, arg...)
+}
+
+// commandOutputOrError prefers stderr, then stdout, and falls back to the process error.
+// Captured output is trimmed before it is returned.
+func commandOutputOrError(stderr string, stdout []byte, err error) string {
+	if output := strings.TrimSpace(stderr); output != "" {
+		return output
+	}
+	if output := strings.TrimSpace(string(stdout)); output != "" {
+		return output
+	}
+	if err != nil {
+		return err.Error()
+	}
+
+	return ""
 }

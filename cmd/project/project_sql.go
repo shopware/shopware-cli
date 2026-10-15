@@ -132,4 +132,5 @@ func init() {
 	projectRootCmd.AddCommand(projectSQLCmd)
 	projectSQLCmd.Flags().String("format", "", "Output format (table, tsv, json); defaults to table when stdout is a terminal, tsv otherwise")
 	projectSQLCmd.Flags().String("file", "", "Path to a SQL file to execute (instead of a query argument or stdin)")
+	_ = projectSQLCmd.RegisterFlagCompletionFunc("format", cobra.FixedCompletions([]string{string(sqlshell.FormatTable), string(sqlshell.FormatTSV), string(sqlshell.FormatJSON)}, cobra.ShellCompDirectiveNoFileComp))
 }

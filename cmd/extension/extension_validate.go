@@ -1,7 +1,6 @@
 package extension
 
 import (
-	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -26,13 +25,14 @@ var extensionValidateCmd = &cobra.Command{
 	RunE: func(cmd *cobra.Command, args []string) error {
 		logger := logging.FromContext(cmd.Context())
 		storeCompliance, _ := cmd.Flags().GetBool("store-compliance")
-		// Reporting format and tool selection were validated in PreRunE.
+		// Reporting format was validated in PreRunE.
 		reportingFormat, _ := extensionValidationFormat(cmd)
 		checkAgainst, _ := cmd.Flags().GetString("check-against")
 		only, _ := cmd.Flags().GetString("only")
 		exclude, _ := cmd.Flags().GetString("exclude")
 		noCopy, _ := cmd.Flags().GetBool("no-copy")
 
+		// Tool selection was validated in PreRunE.
 		tools, statuses, _ := selectExtensionValidationTools(only, exclude)
 		needsTools := slices.ContainsFunc(tools, requiresToolSetup)
 
@@ -130,24 +130,6 @@ var extensionValidateCmd = &cobra.Command{
 	},
 }
 
-func selectExtensionValidationTools(only, exclude string) (verifier.ToolList[verifier.CheckTool], []validation.ToolInvocationStatus, error) {
-	validationTools := verifier.GetToolsOf[verifier.CheckTool]()
-
-	requestedTools, err := validationTools.Only(only)
-	if err != nil {
-		return nil, nil, err
-	}
-	selected, err := requestedTools.Exclude(exclude)
-	if err != nil {
-		return nil, nil, err
-	}
-	if len(selected) == 0 {
-		return nil, nil, errors.New("no validation checks selected after applying --exclude")
-	}
-
-	return selected, extensionToolInvocationStatuses(validationTools, requestedTools, selected), nil
-}
-
 func requiresToolSetup(tool verifier.CheckTool) bool {
 	switch tool.(type) {
 	case verifier.PhpStan, verifier.Eslint, verifier.StyleLint:
@@ -180,6 +162,10 @@ func init() {
 	extensionValidateCmd.PersistentFlags().String("only", "", "Run only these validation checks (comma-separated, e.g. phpstan,eslint)")
 	extensionValidateCmd.PersistentFlags().String("exclude", "", "Exclude specified validation checks from running (comma-separated, e.g. phpstan,eslint). When combined with --only, exclude validation checks from the selected set")
 	extensionValidateCmd.PersistentFlags().Bool("no-copy", false, "Do not copy extension files to temporary directory")
+	_ = extensionValidateCmd.RegisterFlagCompletionFunc("format", cobra.FixedCompletions(validation.ReporterFormats, cobra.ShellCompDirectiveNoFileComp))
+	_ = extensionValidateCmd.RegisterFlagCompletionFunc("check-against", cobra.FixedCompletions([]string{"highest", "lowest"}, cobra.ShellCompDirectiveNoFileComp))
+	_ = extensionValidateCmd.RegisterFlagCompletionFunc("only", completeToolNames[verifier.CheckTool])
+	_ = extensionValidateCmd.RegisterFlagCompletionFunc("exclude", completeToolNames[verifier.CheckTool])
 	extensionValidateCmd.MarkFlagsMutuallyExclusive("format", "reporter")
 	_ = extensionValidateCmd.PersistentFlags().MarkDeprecated("full", "all validation checks now run by default; omit --full; to restore old behaviour use --only builtin")
 	_ = extensionValidateCmd.PersistentFlags().MarkDeprecated("reporter", "use --format instead")

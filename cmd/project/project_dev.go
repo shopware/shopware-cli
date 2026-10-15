@@ -98,7 +98,7 @@ const (
 
 var projectDevCmd = &cobra.Command{
 	Use:   "dev",
-	Short: "Start the project's development environment and, when run in a terminal, open its terminal dashboard",
+	Short: "Start the development environment, with its dashboard when run in a terminal",
 	Long:  "Start the development environment. This launches the interactive TUI dashboard when run in a terminal, or starts the containers in the background otherwise. Requires a Docker environment; local and ssh environments do not manage containers.",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		projectRoot, err := shop.FindClosestShopwareProject(false)
@@ -466,4 +466,6 @@ func init() {
 	portConflictUsage := "In non-interactive mode, if host ports are in use: fail, or random to pick free ports and save them to the local config (the dashboard asks instead)"
 	projectDevCmd.Flags().String("on-port-conflict", portConflictModeFail, portConflictUsage)
 	projectDevStartCmd.Flags().String("on-port-conflict", portConflictModeFail, portConflictUsage)
+	_ = projectDevCmd.RegisterFlagCompletionFunc("on-port-conflict", cobra.FixedCompletions([]string{portConflictModeFail, portConflictModeRandom}, cobra.ShellCompDirectiveNoFileComp))
+	_ = projectDevStartCmd.RegisterFlagCompletionFunc("on-port-conflict", cobra.FixedCompletions([]string{portConflictModeFail, portConflictModeRandom}, cobra.ShellCompDirectiveNoFileComp))
 }

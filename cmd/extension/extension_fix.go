@@ -1,7 +1,6 @@
 package extension
 
 import (
-	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -20,33 +19,18 @@ var extensionFixCmd = &cobra.Command{
 	Short: "Apply code-quality fixes to an extension",
 	Args:  cobra.ExactArgs(1),
 	PreRunE: func(cmd *cobra.Command, args []string) error {
-		allTools := verifier.GetToolsOf[verifier.FixTool]()
 		only, _ := cmd.Flags().GetString("only")
 		exclude, _ := cmd.Flags().GetString("exclude")
 		verifier.WarnOnDeprecatedToolName(cmd.Context(), only, exclude)
-
-		requestedTools, err := allTools.Only(only)
-		if err != nil {
-			return err
-		}
-		tools, err := requestedTools.Exclude(exclude)
-		if err != nil {
-			return err
-		}
-		if len(tools) == 0 {
-			return errors.New("no fixers selected after applying --exclude")
-		}
-
-		return nil
+		_, _, err := selectExtensionFixTools(only, exclude)
+		return err
 	},
 	RunE: func(cmd *cobra.Command, args []string) error {
-		allTools := verifier.GetToolsOf[verifier.FixTool]()
 		only, _ := cmd.Flags().GetString("only")
 		exclude, _ := cmd.Flags().GetString("exclude")
 
 		// Tool selection was validated in PreRunE.
-		requestedTools, _ := allTools.Only(only)
-		tools, _ := requestedTools.Exclude(exclude)
+		tools, statuses, _ := selectExtensionFixTools(only, exclude)
 
 		allowNonGit, _ := cmd.Flags().GetBool("allow-non-git")
 
@@ -82,7 +66,7 @@ var extensionFixCmd = &cobra.Command{
 		}
 
 		runErr := gr.Wait()
-		if err := validation.PrintToolInvocationTable(os.Stdout, "Fixers", extensionToolInvocationStatuses(allTools, requestedTools, tools)); err != nil {
+		if err := validation.PrintToolInvocationTable(os.Stdout, "Fixers", statuses); err != nil {
 			return err
 		}
 		return runErr
@@ -94,4 +78,6 @@ func init() {
 	extensionFixCmd.Flags().String("only", "", "Run only the specified fixers (comma-separated, e.g. eslint,rector)")
 	extensionFixCmd.Flags().String("exclude", "", "Exclude specified fixers from running (comma-separated, e.g. eslint,rector). When combined with --only, exclude fixers from the selected set")
 	extensionFixCmd.Flags().Bool("allow-non-git", false, "Allow fix to run outside a Git repository")
+	_ = extensionFixCmd.RegisterFlagCompletionFunc("only", completeToolNames[verifier.FixTool])
+	_ = extensionFixCmd.RegisterFlagCompletionFunc("exclude", completeToolNames[verifier.FixTool])
 }

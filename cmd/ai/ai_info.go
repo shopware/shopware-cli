@@ -14,6 +14,8 @@ import (
 var aiInfoCmd = &cobra.Command{
 	Use:          "info name",
 	Short:        "Show details of a Shopware AI integration",
+	Long:         `Show the details of a Shopware AI integration from the directory.`,
+	Example:      `  shopware-cli ai info deployment-helper`,
 	Args:         cobra.ExactArgs(1),
 	SilenceUsage: true,
 	RunE: func(cmd *cobra.Command, args []string) error {
@@ -57,26 +59,11 @@ func writeInfoTable(w io.Writer, e directory.Integration) error {
 		{"Description", e.Description},
 		{"Documentation", e.Documentation},
 		{"Delivery", deliveryLabel(e.Delivery)},
-		{"Compatibility", compatibilityLabel(e)},
 	}
 
 	_, err := fmt.Fprintln(w, tui.RenderTable([]string{"Property", "Value"}, rows))
 
 	return err
-}
-
-// compatibilityLabel renders the compatibility requirements for the human view.
-// An entry without a compatibility block has no requirements; a bundled entry
-// ships with the CLI and is therefore always compatible.
-func compatibilityLabel(e directory.Integration) string {
-	if e.Compatibility != nil {
-		return e.Compatibility.Source
-	}
-	if e.Delivery.Kind == directory.DeliveryBundled {
-		return "none (bundled, always compatible)"
-	}
-
-	return "none"
 }
 
 // deliveryLabel renders a delivery block for the human view.

@@ -65,6 +65,7 @@ func projectExtensionListTable(extensions adminSdk.ExtensionList) *tui.Table {
 func init() {
 	projectExtensionCmd.AddCommand(projectExtensionListCmd)
 	projectExtensionListCmd.Flags().String("format", string(tui.TableFormatTable), "Output format (table, json)")
+	_ = projectExtensionListCmd.RegisterFlagCompletionFunc("format", cobra.FixedCompletions([]string{string(tui.TableFormatTable), string(tui.TableFormatJSON)}, cobra.ShellCompDirectiveNoFileComp))
 	projectExtensionListCmd.Flags().Bool("json", false, "Output as JSON")
 	projectExtensionListCmd.MarkFlagsMutuallyExclusive("format", "json")
 	_ = projectExtensionListCmd.Flags().MarkDeprecated("json", "use --format json instead")

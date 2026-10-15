@@ -27,17 +27,17 @@ var projectValidateCmd = &cobra.Command{
 		only, _ := cmd.Flags().GetString("only")
 		exclude, _ := cmd.Flags().GetString("exclude")
 		verifier.WarnOnDeprecatedToolName(cmd.Context(), only, exclude)
-		_, _, err := selectProjectTools(verifier.GetToolsOf[verifier.CheckTool](), only, exclude, "validation checks")
+		_, _, err := selectProjectValidationTools(only, exclude)
 		return err
 	},
 	RunE: func(cmd *cobra.Command, args []string) error {
-		// Reporting format and tool selection were validated in PreRunE.
+		// Reporting format was validated in PreRunE.
 		reportingFormat, _ := projectValidationFormat(cmd)
 		only, _ := cmd.Flags().GetString("only")
 		exclude, _ := cmd.Flags().GetString("exclude")
 
-		checkers := verifier.GetToolsOf[verifier.CheckTool]()
-		tools, statuses, _ := selectProjectTools(checkers, only, exclude, "validation checks")
+		// Tool selection was validated in PreRunE.
+		tools, statuses, _ := selectProjectValidationTools(only, exclude)
 		if err := verifier.SetupTools(cmd.Context(), cmd.Root().Version); err != nil {
 			return err
 		}
@@ -125,6 +125,9 @@ func init() {
 	projectValidateCmd.PersistentFlags().String("exclude", "", "Exclude specified validation checks from running (comma-separated, e.g. phpstan,eslint). When combined with --only, exclude validation checks from the selected set")
 	projectValidateCmd.PersistentFlags().Bool("no-copy", false, "Validate the project directory itself, not a temporary copy")
 	projectValidateCmd.PersistentFlags().Bool("local-only", false, "Validate only extensions in custom/* folders")
+	_ = projectValidateCmd.RegisterFlagCompletionFunc("format", cobra.FixedCompletions(validation.ReporterFormats, cobra.ShellCompDirectiveNoFileComp))
+	_ = projectValidateCmd.RegisterFlagCompletionFunc("only", completeToolNames[verifier.CheckTool])
+	_ = projectValidateCmd.RegisterFlagCompletionFunc("exclude", completeToolNames[verifier.CheckTool])
 	projectValidateCmd.MarkFlagsMutuallyExclusive("format", "reporter")
 	_ = projectValidateCmd.PersistentFlags().MarkDeprecated("reporter", "use --format instead")
 	_ = projectValidateCmd.PersistentFlags().MarkHidden("reporter")

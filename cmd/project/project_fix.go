@@ -22,7 +22,7 @@ var projectFixCmd = &cobra.Command{
 		only, _ := cmd.Flags().GetString("only")
 		exclude, _ := cmd.Flags().GetString("exclude")
 		verifier.WarnOnDeprecatedToolName(cmd.Context(), only, exclude)
-		_, _, err := selectProjectTools(verifier.GetToolsOf[verifier.FixTool](), only, exclude, "fixers")
+		_, _, err := selectProjectFixTools(only, exclude)
 		return err
 	},
 	RunE: func(cmd *cobra.Command, args []string) error {
@@ -30,7 +30,7 @@ var projectFixCmd = &cobra.Command{
 		exclude, _ := cmd.Flags().GetString("exclude")
 
 		// Tool selection was validated in PreRunE.
-		tools, statuses, _ := selectProjectTools(verifier.GetToolsOf[verifier.FixTool](), only, exclude, "fixers")
+		tools, statuses, _ := selectProjectFixTools(only, exclude)
 		if err := verifier.SetupTools(cmd.Context(), cmd.Root().Version); err != nil {
 			return err
 		}
@@ -85,4 +85,6 @@ func init() {
 	projectFixCmd.PersistentFlags().String("only", "", "Run only the specified fixers (comma-separated, e.g. eslint,rector)")
 	projectFixCmd.PersistentFlags().Bool("allow-non-git", false, "Allow fix to run outside a Git repository")
 	projectFixCmd.PersistentFlags().String("exclude", "", "Exclude specified fixers from running (comma-separated, e.g. eslint,rector). When combined with --only, exclude fixers from the selected set")
+	_ = projectFixCmd.RegisterFlagCompletionFunc("only", completeToolNames[verifier.FixTool])
+	_ = projectFixCmd.RegisterFlagCompletionFunc("exclude", completeToolNames[verifier.FixTool])
 }
