@@ -98,6 +98,8 @@ func RunValidation(ctx context.Context, ext Extension, check validation.Check, p
 	// Note: ignores are now applied in the verifier layer
 }
 
+// validateSymfonyXml checks plugin resources and configured extra bundles for
+// deprecated Symfony XML files. Other extension types are skipped.
 func validateSymfonyXml(ext Extension, check validation.Check) {
 	if ext.GetType() != TypePlatformPlugin {
 		return

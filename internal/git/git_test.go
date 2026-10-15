@@ -94,6 +94,7 @@ func TestGetPublicVCSURL(t *testing.T) {
 	assert.NoError(t, err)
 }
 
+// TestIsWorkingTreeDirty distinguishes clean, untracked, and non-repository paths.
 func TestIsWorkingTreeDirty(t *testing.T) {
 	t.Run("clean git working tree", func(t *testing.T) {
 		tmpDir := t.TempDir()
@@ -142,6 +143,8 @@ func runCommand(t *testing.T, tmpDir string, args ...string) {
 	}
 }
 
+// prepareRepository initializes a test repository with a local commit identity
+// and disables commit and tag signing.
 func prepareRepository(t *testing.T, tmpDir string) {
 	t.Helper()
 

@@ -11,6 +11,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// TestProjectFixNoArgsOutsideProjectReturnsError checks that automatic project
+// discovery fails outside a Shopware project.
 func TestProjectFixNoArgsOutsideProjectReturnsError(t *testing.T) {
 	t.Setenv("SHOPWARE_CLI_TOOLS_DIR", t.TempDir())
 	chdirOutsideProject(t)
@@ -39,6 +41,8 @@ func TestProjectFixNoArgsAppliesGitGuardToResolvedProject(t *testing.T) {
 	assert.Contains(t, err.Error(), dir)
 }
 
+// TestProjectFixRejectsNonGitDirectory checks that an explicit path outside a
+// working tree is rejected before project loading.
 func TestProjectFixRejectsNonGitDirectory(t *testing.T) {
 	t.Setenv("SHOPWARE_CLI_TOOLS_DIR", t.TempDir())
 	dir := t.TempDir()
