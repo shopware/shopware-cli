@@ -2,10 +2,13 @@ package dev
 
 import (
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
+	"github.com/charmbracelet/x/ansi"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -446,4 +449,31 @@ func TestInstanceModel_LogLineMsg_RendersInViewport(t *testing.T) {
 func TestInstanceModel_Init(t *testing.T) {
 	m := NewInstanceModel(t.Context(), "/tmp", false)
 	assert.Nil(t, m.Init())
+}
+
+func TestInstanceModel_SidebarKeepsCursorInView(t *testing.T) {
+	m := NewInstanceModel(t.Context(), "/tmp", false)
+	m.SetSize(120, 20)
+	m.sources = []logSource{{name: "admin-watcher", kind: sourceProcess}}
+	for i := range 30 {
+		m.sources = append(m.sources, logSource{name: fmt.Sprintf("file-%02d.log", i), kind: sourceFile})
+	}
+	m.active = 0
+
+	for _, cursor := range []int{0, 1, 15, len(m.sources) - 1} {
+		m.cursor = cursor
+		sidebar := m.renderSidebar()
+
+		assert.LessOrEqual(t, lipgloss.Height(sidebar), 20-3, "cursor %d", cursor)
+		assert.Contains(t, ansi.Strip(sidebar), m.sources[cursor].name, "cursor %d", cursor)
+	}
+}
+
+func TestWindowLines(t *testing.T) {
+	lines := "a\nb\nc\nd\ne"
+
+	assert.Equal(t, lines, windowLines(lines, 4, 10), "fits")
+	assert.Equal(t, "a\nb", windowLines(lines, 0, 2))
+	assert.Equal(t, "b\nc\nd", windowLines(lines, 2, 3))
+	assert.Equal(t, "d\ne", windowLines(lines, 4, 2))
 }
