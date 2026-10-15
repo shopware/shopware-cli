@@ -21,6 +21,8 @@ func TestProjectFixNoArgsOutsideProjectReturnsError(t *testing.T) {
 	assert.Contains(t, err.Error(), "cannot find Shopware project")
 }
 
+// TestProjectFixNoArgsAppliesGitGuardToResolvedProject checks the discovered
+// project rather than the working directory used to invoke the command.
 func TestProjectFixNoArgsAppliesGitGuardToResolvedProject(t *testing.T) {
 	t.Setenv("SHOPWARE_CLI_TOOLS_DIR", t.TempDir())
 	cwd := t.TempDir()
@@ -47,6 +49,8 @@ func TestProjectFixRejectsNonGitDirectory(t *testing.T) {
 	assert.Contains(t, err.Error(), dir)
 }
 
+// TestProjectFixPassesGitGuardWithGitWorkingTree verifies that a real working
+// tree reaches project loading even when composer.json is missing.
 func TestProjectFixPassesGitGuardWithGitWorkingTree(t *testing.T) {
 	t.Setenv("SHOPWARE_CLI_TOOLS_DIR", t.TempDir())
 	dir := t.TempDir()
@@ -58,6 +62,8 @@ func TestProjectFixPassesGitGuardWithGitWorkingTree(t *testing.T) {
 	assert.Contains(t, err.Error(), "composer.json")
 }
 
+// initFixRepository creates a real working tree in dir without inheriting
+// repository locations that could redirect Git elsewhere.
 func initFixRepository(t *testing.T, dir string) {
 	t.Helper()
 	cmd := exec.CommandContext(t.Context(), "git", "init", dir)

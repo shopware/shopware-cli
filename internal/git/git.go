@@ -208,7 +208,7 @@ func workingTreeEnvironment() []string {
 
 // IsInsideWorkingTree reports whether repo is in a Git working tree, including
 // enclosing repositories, linked worktrees, and submodules. It does not require
-// a clean tree or tracked files.
+// a clean tree or tracked files. Inherited GIT_DIR and GIT_WORK_TREE are ignored.
 func IsInsideWorkingTree(ctx context.Context, repo string) (bool, error) {
 	cmd := exec.CommandContext(ctx, "git", "-C", repo, "rev-parse", "--is-inside-work-tree") //nolint:gosec
 	cmd.Env = workingTreeEnvironment()
@@ -225,6 +225,8 @@ func IsInsideWorkingTree(ctx context.Context, repo string) (bool, error) {
 	return strings.TrimSpace(string(output)) == "true", nil
 }
 
+// IsWorkingTreeDirty reports whether repo has modified or untracked files and
+// whether it belongs to a working tree. Outside a working tree both are false.
 func IsWorkingTreeDirty(ctx context.Context, repo string) (bool, bool, error) {
 	inside, err := IsInsideWorkingTree(ctx, repo)
 	if err != nil || !inside {

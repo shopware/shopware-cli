@@ -114,6 +114,9 @@ func validateSymfonyXml(ext Extension, check validation.Check) {
 	}
 }
 
+// checkSymfonyXmlInResourceDir warns about services.xml and routes.xml under
+// resourceDir, with paths relative to root and a conversion command to run from
+// the extension directory.
 func checkSymfonyXmlInResourceDir(check validation.Check, resourceDir, root string) {
 	deprecatedFiles := []struct {
 		name       string

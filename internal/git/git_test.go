@@ -127,6 +127,8 @@ func TestIsWorkingTreeDirty(t *testing.T) {
 	})
 }
 
+// runCommand runs Git in tmpDir without inherited repository locations, so
+// fixture commands cannot target another repository.
 func runCommand(t *testing.T, tmpDir string, args ...string) {
 	t.Helper()
 
@@ -150,6 +152,8 @@ func prepareRepository(t *testing.T, tmpDir string) {
 	runCommand(t, tmpDir, "config", "user.email", "test@test.de")
 }
 
+// TestIsInsideWorkingTree covers Git discovery across repository layouts and
+// symlinks, including ignored and untracked directories.
 func TestIsInsideWorkingTree(t *testing.T) {
 	t.Parallel()
 
@@ -207,6 +211,8 @@ func TestIsInsideWorkingTree(t *testing.T) {
 	}
 }
 
+// TestIsInsideWorkingTreeWithoutGit distinguishes a missing Git executable
+// from a target outside a working tree.
 func TestIsInsideWorkingTreeWithoutGit(t *testing.T) {
 	t.Setenv("PATH", t.TempDir())
 	inside, err := IsInsideWorkingTree(t.Context(), t.TempDir())
@@ -214,6 +220,8 @@ func TestIsInsideWorkingTreeWithoutGit(t *testing.T) {
 	assert.False(t, inside)
 }
 
+// TestWorkingTreeChecksIgnoreRepositoryEnvironment checks membership and dirty
+// status against the target even when inherited locations point elsewhere.
 func TestWorkingTreeChecksIgnoreRepositoryEnvironment(t *testing.T) {
 	ambient := t.TempDir()
 	prepareRepository(t, ambient)
