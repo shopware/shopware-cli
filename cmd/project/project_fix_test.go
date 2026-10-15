@@ -2,7 +2,7 @@ package project
 
 import (
 	"os"
-	"path/filepath"
+	"os/exec"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -22,7 +22,7 @@ func TestProjectFixNoArgsOutsideProjectReturnsError(t *testing.T) {
 func TestProjectFixNoArgsAppliesGitGuardToResolvedProject(t *testing.T) {
 	t.Setenv("SHOPWARE_CLI_TOOLS_DIR", t.TempDir())
 	cwd := t.TempDir()
-	require.NoError(t, os.Mkdir(filepath.Join(cwd, ".git"), 0o755))
+	require.NoError(t, exec.CommandContext(t.Context(), "git", "init", cwd).Run())
 	t.Chdir(cwd)
 
 	dir := t.TempDir()
@@ -45,10 +45,10 @@ func TestProjectFixRejectsNonGitDirectory(t *testing.T) {
 	assert.Contains(t, err.Error(), dir)
 }
 
-func TestProjectFixPassesGitGuardWithGitDirectory(t *testing.T) {
+func TestProjectFixPassesGitGuardWithGitWorkingTree(t *testing.T) {
 	t.Setenv("SHOPWARE_CLI_TOOLS_DIR", t.TempDir())
 	dir := t.TempDir()
-	require.NoError(t, os.Mkdir(filepath.Join(dir, ".git"), 0o755))
+	require.NoError(t, exec.CommandContext(t.Context(), "git", "init", dir).Run())
 
 	projectFixCmd.SetContext(t.Context())
 	err := projectFixCmd.RunE(projectFixCmd, []string{dir})

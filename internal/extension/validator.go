@@ -132,7 +132,7 @@ func checkSymfonyXmlInResourceDir(check validation.Check, resourceDir, root stri
 			check.AddResult(validation.CheckResult{
 				Path:       relPath,
 				Identifier: file.identifier,
-				Message:    fmt.Sprintf("Found deprecated %s. Symfony %s is deprecated, migrate to %s. Run \"shopware-cli extension fix\" to convert it automatically.", relPath, file.name, yamlName),
+				Message:    fmt.Sprintf("Found deprecated %s. Symfony %s is deprecated, migrate to %s. Run \"shopware-cli extension fix . --only symfony-xml\" from the extension directory to convert it automatically.", relPath, file.name, yamlName),
 				Severity:   validation.SeverityWarning,
 			})
 		}

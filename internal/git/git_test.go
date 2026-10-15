@@ -148,3 +148,67 @@ func prepareRepository(t *testing.T, tmpDir string) {
 	runCommand(t, tmpDir, "config", "user.name", "test")
 	runCommand(t, tmpDir, "config", "user.email", "test@test.de")
 }
+
+func TestIsInsideWorkingTree(t *testing.T) {
+	t.Parallel()
+
+	repo := t.TempDir()
+	prepareRepository(t, repo)
+	assert.NoError(t, os.WriteFile(filepath.Join(repo, ".gitignore"), []byte("ignored/\n"), 0o644))
+	runCommand(t, repo, "add", ".gitignore")
+	runCommand(t, repo, "commit", "-m", "initial commit")
+
+	nested := filepath.Join(repo, "custom", "plugins", "Example")
+	ignored := filepath.Join(repo, "ignored")
+	for _, dir := range []string{nested, ignored} {
+		assert.NoError(t, os.MkdirAll(dir, 0o755))
+	}
+	assert.NoError(t, os.WriteFile(filepath.Join(nested, "untracked.txt"), []byte("local work"), 0o644))
+
+	worktree := filepath.Join(t.TempDir(), "worktree")
+	runCommand(t, repo, "worktree", "add", "-b", "linked", worktree)
+	link := filepath.Join(t.TempDir(), "linked-extension")
+	assert.NoError(t, os.Symlink(nested, link))
+
+	runCommand(t, repo, "-c", "protocol.file.allow=always", "submodule", "add", repo, "module")
+	outside := t.TempDir()
+	externalLink := filepath.Join(repo, "external")
+	assert.NoError(t, os.Symlink(outside, externalLink))
+
+	bare := t.TempDir()
+	runCommand(t, bare, "init", "--bare")
+	empty := t.TempDir()
+	assert.NoError(t, os.Mkdir(filepath.Join(empty, ".git"), 0o755))
+
+	for _, tc := range []struct {
+		name string
+		path string
+		want bool
+	}{
+		{"repository root", repo, true},
+		{"nested untracked extension", nested, true},
+		{"ignored directory", ignored, true},
+		{"linked worktree", worktree, true},
+		{"submodule", filepath.Join(repo, "module"), true},
+		{"symlink outside repository", externalLink, false},
+		{"symlink to extension", link, true},
+		{"bare repository", bare, false},
+		{"empty git directory", empty, false},
+		{"outside git", t.TempDir(), false},
+		{"missing path", filepath.Join(t.TempDir(), "missing"), false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			inside, err := IsInsideWorkingTree(t.Context(), tc.path)
+			assert.NoError(t, err)
+			assert.Equal(t, tc.want, inside)
+		})
+	}
+}
+
+func TestIsInsideWorkingTreeWithoutGit(t *testing.T) {
+	t.Setenv("PATH", t.TempDir())
+	inside, err := IsInsideWorkingTree(t.Context(), t.TempDir())
+	assert.Error(t, err)
+	assert.False(t, inside)
+}
