@@ -43,6 +43,26 @@ func TestProxyHostnames(t *testing.T) {
 	assert.NotContains(t, base, "s3.winshop.shopware.local")
 }
 
+func TestProxyHostnamesWithStorefrontViteRoute(t *testing.T) {
+	dir := t.TempDir()
+	lock := `{"packages": [{"name": "shopware/core", "version": "6.7.11.0"}], "packages-dev": []}`
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "composer.lock"), []byte(lock), 0o644))
+	env, err := docker.NewEnvironment(dir, docker.Options{StorefrontUsesVite: true})
+	require.NoError(t, err)
+	legacyEnv, err := docker.NewEnvironment(dir, docker.Options{})
+	require.NoError(t, err)
+	assert.Equal(
+		t,
+		legacyEnv.RoutedSubdomains(),
+		env.RoutedSubdomains(),
+		"the WSL hosts list does not depend on the watcher implementation")
+
+	hosts := ProxyHostnames("vite-shop.shopware.local", env.RoutedSubdomains())
+	assert.Contains(t, hosts, "vite-shop.shopware.local")
+	assert.Contains(t, hosts, "admin-watch.vite-shop.shopware.local")
+	assert.Contains(t, hosts, "storefront-watch.vite-shop.shopware.local")
+}
+
 func TestWSLWindowsAccessGuidance(t *testing.T) {
 	t.Parallel()
 

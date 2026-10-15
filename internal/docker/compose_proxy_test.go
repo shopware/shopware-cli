@@ -52,6 +52,7 @@ func TestGenerateComposeFileProxyMode(t *testing.T) {
 	assert.NotContains(t, out, "8000:8000")
 	assert.NotContains(t, out, "9080:8080")
 	assert.NotContains(t, out, "8025:8025")
+	assert.NotContains(t, out, "5175:5175")
 
 	// The database keeps its random loopback port so host tools (and the sales
 	// channel URL repoint) can still reach it in proxy mode.
@@ -81,6 +82,33 @@ func TestGenerateComposeFileProxyMode(t *testing.T) {
 	assert.Contains(t, out, "scheduler:")
 	assert.NotContains(t, out, "Host(`worker")
 	assert.NotContains(t, out, "Host(`scheduler")
+}
+
+func TestGenerateComposeFileProxyStorefrontVite(t *testing.T) {
+	t.Parallel()
+	lock := &composer.Lock{Packages: []composer.LockPackage{{Name: "shopware/core", Version: "6.7.11.0"}}}
+	opts := proxyComposeOptions()
+	opts.storefrontUsesVite = true
+
+	result, err := envFor(lock, opts).composeYAML()
+	require.NoError(t, err)
+	out := string(result)
+	assert.Contains(t, out, "Host(`storefront-watch.my-shop.shopware.local`)")
+	assert.Contains(t, out, "storefront-watch.loadbalancer.server.port: \"5175\"")
+	assert.NotContains(t, out, "5175:5175")
+	assert.NotContains(t, out, "storefront-watch-assets")
+}
+
+func TestGenerateComposeFilePlainModeStorefrontViteUsesFixedPort(t *testing.T) {
+	t.Parallel()
+	lock := &composer.Lock{Packages: []composer.LockPackage{{Name: "shopware/core", Version: "6.7.11.0"}}}
+	opts := Environment{storefrontUsesVite: true}
+
+	result, err := envFor(lock, opts).composeYAML()
+	require.NoError(t, err)
+	assert.Contains(t, string(result), "5175:5175")
+	assert.NotContains(t, string(result), "9998:9998")
+	assert.NotContains(t, string(result), "9999:9999")
 }
 
 func TestGenerateComposeFileProxyAdminWatchPort(t *testing.T) {
