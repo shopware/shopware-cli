@@ -132,6 +132,7 @@ func runCommand(t *testing.T, tmpDir string, args ...string) {
 
 	c := exec.CommandContext(t.Context(), "git", args...)
 	c.Dir = tmpDir
+	c.Env = workingTreeEnvironment()
 
 	out, err := c.CombinedOutput()
 	if err != nil {
@@ -211,4 +212,58 @@ func TestIsInsideWorkingTreeWithoutGit(t *testing.T) {
 	inside, err := IsInsideWorkingTree(t.Context(), t.TempDir())
 	assert.Error(t, err)
 	assert.False(t, inside)
+}
+
+func TestWorkingTreeChecksIgnoreRepositoryEnvironment(t *testing.T) {
+	ambient := t.TempDir()
+	prepareRepository(t, ambient)
+	assert.NoError(t, os.WriteFile(filepath.Join(ambient, "ambient.txt"), []byte("ambient work"), 0o644))
+
+	for _, tc := range []struct {
+		name     string
+		dir      string
+		workTree string
+	}{
+		{"git dir", filepath.Join(ambient, ".git"), ""},
+		{"work tree", "", ambient},
+		{"both", filepath.Join(ambient, ".git"), ambient},
+		{"invalid locations", filepath.Join(ambient, "missing"), filepath.Join(ambient, "missing")},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if tc.dir != "" {
+				t.Setenv("GIT_DIR", tc.dir)
+			}
+			if tc.workTree != "" {
+				t.Setenv("GIT_WORK_TREE", tc.workTree)
+			}
+
+			repo := t.TempDir()
+			prepareRepository(t, repo)
+			_, err := os.Stat(filepath.Join(repo, ".git", "HEAD"))
+			assert.NoError(t, err)
+			inside, err := IsInsideWorkingTree(t.Context(), repo)
+			assert.NoError(t, err)
+			assert.True(t, inside)
+
+			dirty, isRepo, err := IsWorkingTreeDirty(t.Context(), repo)
+			assert.NoError(t, err)
+			assert.True(t, isRepo)
+			assert.False(t, dirty)
+
+			assert.NoError(t, os.WriteFile(filepath.Join(repo, "target.txt"), []byte("target work"), 0o644))
+			dirty, isRepo, err = IsWorkingTreeDirty(t.Context(), repo)
+			assert.NoError(t, err)
+			assert.True(t, isRepo)
+			assert.True(t, dirty)
+
+			outside := t.TempDir()
+			inside, err = IsInsideWorkingTree(t.Context(), outside)
+			assert.NoError(t, err)
+			assert.False(t, inside)
+			dirty, isRepo, err = IsWorkingTreeDirty(t.Context(), outside)
+			assert.NoError(t, err)
+			assert.False(t, isRepo)
+			assert.False(t, dirty)
+		})
+	}
 }

@@ -3,6 +3,8 @@ package project
 import (
 	"os"
 	"os/exec"
+	"slices"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -22,7 +24,7 @@ func TestProjectFixNoArgsOutsideProjectReturnsError(t *testing.T) {
 func TestProjectFixNoArgsAppliesGitGuardToResolvedProject(t *testing.T) {
 	t.Setenv("SHOPWARE_CLI_TOOLS_DIR", t.TempDir())
 	cwd := t.TempDir()
-	require.NoError(t, exec.CommandContext(t.Context(), "git", "init", cwd).Run())
+	initFixRepository(t, cwd)
 	t.Chdir(cwd)
 
 	dir := t.TempDir()
@@ -48,10 +50,19 @@ func TestProjectFixRejectsNonGitDirectory(t *testing.T) {
 func TestProjectFixPassesGitGuardWithGitWorkingTree(t *testing.T) {
 	t.Setenv("SHOPWARE_CLI_TOOLS_DIR", t.TempDir())
 	dir := t.TempDir()
-	require.NoError(t, exec.CommandContext(t.Context(), "git", "init", dir).Run())
+	initFixRepository(t, dir)
 
 	projectFixCmd.SetContext(t.Context())
 	err := projectFixCmd.RunE(projectFixCmd, []string{dir})
 	require.ErrorIs(t, err, os.ErrNotExist)
 	assert.Contains(t, err.Error(), "composer.json")
+}
+
+func initFixRepository(t *testing.T, dir string) {
+	t.Helper()
+	cmd := exec.CommandContext(t.Context(), "git", "init", dir)
+	cmd.Env = slices.DeleteFunc(os.Environ(), func(entry string) bool {
+		return strings.HasPrefix(entry, "GIT_DIR=") || strings.HasPrefix(entry, "GIT_WORK_TREE=")
+	})
+	require.NoError(t, cmd.Run())
 }
