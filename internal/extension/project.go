@@ -392,8 +392,11 @@ func addExtensionsByWildcard(ctx context.Context, extensionDir string) ([]Extens
 	var loadErrors []error
 
 	extensions, err := os.ReadDir(extensionDir)
-	if err != nil {
+	if errors.Is(err, os.ErrNotExist) {
 		return list, nil
+	}
+	if err != nil {
+		return list, fmt.Errorf("cannot read extension directory %q: %w", extensionDir, err)
 	}
 
 	for _, file := range extensions {
