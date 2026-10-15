@@ -35,6 +35,7 @@ type SSHExecutor struct {
 	directory    string
 	identityFile string
 	phpBinary    string
+	phpArgs      []string
 
 	env         map[string]string
 	projectRoot string
@@ -53,10 +54,31 @@ func (s *SSHExecutor) php() string {
 	return s.phpBinary
 }
 
+// phpCommand returns the remote PHP invocation: the configured binary
+// followed by the configured extra arguments (e.g. "-d", "memory_limit=512M").
+func (s *SSHExecutor) phpCommand() []string {
+	return append([]string{s.php()}, s.phpArgs...)
+}
+
+// quotedPHP returns the remote PHP invocation with every part quoted for
+// POSIX sh, for snippets built as shell strings.
+func (s *SSHExecutor) quotedPHP() string {
+	parts := s.phpCommand()
+	quoted := make([]string, 0, len(parts))
+	for _, part := range parts {
+		quoted = append(quoted, shellQuoteArg(part))
+	}
+
+	return strings.Join(quoted, " ")
+}
+
 // RemotePHPCommand runs PHP without a directory change or a TTY.
 // Callers own stdin, stdout and stderr independently through Process.Cmd.
 func (s *SSHExecutor) RemotePHPCommand(ctx context.Context, args ...string) *Process {
 	command := []string{"exec", shellQuoteArg(s.php())}
+	for _, arg := range s.phpArgs {
+		command = append(command, shellQuoteArg(arg))
+	}
 	for _, arg := range args {
 		command = append(command, shellQuoteArg(arg))
 	}
@@ -170,7 +192,8 @@ func (s *SSHExecutor) command(ctx context.Context, name string, args ...string) 
 }
 
 func (s *SSHExecutor) ConsoleCommand(ctx context.Context, args ...string) *Process {
-	return s.command(ctx, s.php(), append([]string{consoleCommandName(ctx)}, args...)...)
+	php := append(s.phpCommand(), consoleCommandName(ctx))
+	return s.command(ctx, php[0], append(php[1:], args...)...)
 }
 
 func (s *SSHExecutor) ComposerCommand(ctx context.Context, args ...string) *Process {
@@ -178,7 +201,8 @@ func (s *SSHExecutor) ComposerCommand(ctx context.Context, args ...string) *Proc
 }
 
 func (s *SSHExecutor) PHPCommand(ctx context.Context, args ...string) *Process {
-	return s.command(ctx, s.php(), args...)
+	php := s.phpCommand()
+	return s.command(ctx, php[0], append(php[1:], args...)...)
 }
 
 func (s *SSHExecutor) NPMCommand(ctx context.Context, args ...string) *Process {
@@ -235,11 +259,11 @@ func (s *SSHExecutor) WithEnv(env map[string]string) Executor {
 		}
 	}
 
-	return &SSHExecutor{host: s.host, user: s.user, port: s.port, directory: s.directory, identityFile: s.identityFile, phpBinary: s.phpBinary, env: mergeEnv(s.env, env), projectRoot: s.projectRoot, relDir: s.relDir, shopCfg: s.shopCfg, envCfg: s.envCfg}
+	return &SSHExecutor{host: s.host, user: s.user, port: s.port, directory: s.directory, identityFile: s.identityFile, phpBinary: s.phpBinary, phpArgs: s.phpArgs, env: mergeEnv(s.env, env), projectRoot: s.projectRoot, relDir: s.relDir, shopCfg: s.shopCfg, envCfg: s.envCfg}
 }
 
 func (s *SSHExecutor) WithRelDir(relDir string) Executor {
-	return &SSHExecutor{host: s.host, user: s.user, port: s.port, directory: s.directory, identityFile: s.identityFile, phpBinary: s.phpBinary, env: s.env, projectRoot: s.projectRoot, relDir: relDir, shopCfg: s.shopCfg, envCfg: s.envCfg}
+	return &SSHExecutor{host: s.host, user: s.user, port: s.port, directory: s.directory, identityFile: s.identityFile, phpBinary: s.phpBinary, phpArgs: s.phpArgs, env: s.env, projectRoot: s.projectRoot, relDir: relDir, shopCfg: s.shopCfg, envCfg: s.envCfg}
 }
 
 func (s *SSHExecutor) AdminAPIClient(ctx context.Context) (*adminSdk.Client, error) {
@@ -315,7 +339,7 @@ func (s *SSHExecutor) remoteDatabaseURL(ctx context.Context) (string, error) {
 		return "", errors.New("vendor/bin/shopware-deployment-helper not found on the remote host: require shopware/deployment-helper in the project (composer require shopware/deployment-helper)")
 	}
 
-	stdout, err := s.runRemoteShell(ctx, shellQuoteArg(s.php())+" vendor/bin/shopware-deployment-helper dump-env")
+	stdout, err := s.runRemoteShell(ctx, s.quotedPHP()+" vendor/bin/shopware-deployment-helper dump-env")
 	if err != nil {
 		return "", fmt.Errorf("%w (dump-env requires a recent shopware/deployment-helper: run composer update shopware/deployment-helper on the remote host)", err)
 	}
@@ -352,7 +376,7 @@ func (s *SSHExecutor) runRemoteShell(ctx context.Context, remoteCmd string) (str
 // on the remote host. DATABASE_URLs with host "localhost" make PHP connect
 // through this socket instead of TCP.
 func (s *SSHExecutor) remoteMySQLSocket(ctx context.Context) (string, error) {
-	stdout, err := s.runRemoteShell(ctx, shellQuoteArg(s.php())+` -r 'echo ini_get("pdo_mysql.default_socket") ?: ini_get("mysqli.default_socket");'`)
+	stdout, err := s.runRemoteShell(ctx, s.quotedPHP()+` -r 'echo ini_get("pdo_mysql.default_socket") ?: ini_get("mysqli.default_socket");'`)
 	if err != nil {
 		return "", err
 	}
