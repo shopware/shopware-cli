@@ -19,6 +19,7 @@ import (
 	"github.com/shopware/shopware-cli/cmd/extension"
 	"github.com/shopware/shopware-cli/cmd/project"
 	accountApi "github.com/shopware/shopware-cli/internal/account-api"
+	"github.com/shopware/shopware-cli/internal/ai/agent"
 	"github.com/shopware/shopware-cli/internal/cliversion"
 	"github.com/shopware/shopware-cli/internal/system"
 	"github.com/shopware/shopware-cli/internal/tui"
@@ -33,6 +34,9 @@ var rootCmd = &cobra.Command{
 	Use:   "shopware-cli",
 	Short: "Build, develop, and manage Shopware projects and extensions",
 	Long:  `Build, develop, and manage Shopware projects and extensions from the command line.`,
+	// The general CLI skill is recommended for any command; a subcommand can
+	// override this annotation to recommend a more specific skill.
+	Annotations: map[string]string{agent.RecommendedSkillAnnotation: "shopware-cli"},
 }
 
 // Execute runs the root command and returns the process exit code after cleanup.
@@ -56,6 +60,7 @@ func Execute(ctx context.Context) int {
 
 	trackCommandExecution(ctx, args, start, err)
 	printUpdateHint(ctx, os.Stderr, updateHandle.Wait(ctx).Release)
+	printAIHint(ctx, os.Stderr, args)
 
 	return exitCode(ctx, err)
 }
@@ -119,6 +124,7 @@ func init() {
 	rootCmd.PersistentFlags().Bool("verbose", false, "Show debug logs and detailed tool output")
 	rootCmd.PersistentFlags().BoolP("no-interaction", "n", false, "Run without prompting; commands use defaults or fail where input is needed")
 	rootCmd.PersistentFlags().Bool("no-update-hint", false, "Skip checking for a newer shopware-cli version")
+	rootCmd.PersistentFlags().Bool("no-ai-hint", false, "Skip the AI client skill recommendation")
 
 	project.Register(rootCmd)
 	extension.Register(rootCmd)
