@@ -70,6 +70,22 @@ func TestSuggestSkipsWhenInstalled(t *testing.T) {
 	assert.Empty(t, msg, "already installed for this client")
 }
 
+func TestSuggestSkipsWhenInstalledForAnotherAgent(t *testing.T) {
+	setupSuggest(t)
+	t.Setenv("AI_AGENT", "claude-code_2-1-289_agent")
+	// Installed for Cursor, detected client is claude-code: the check is
+	// agent-agnostic, so it is still treated as installed.
+	listSkills = func(_ context.Context, _ string, global bool) ([]skills.Installed, error) {
+		if global {
+			return []skills.Installed{{Name: "shopware-cli", Agents: []string{"Cursor"}}}, nil
+		}
+		return nil, nil
+	}
+
+	_, msg := Suggest(t.Context(), "shopware-cli")
+	assert.Empty(t, msg, "installed for any agent suppresses the recommendation")
+}
+
 func TestSuggestSilentWhenLookupFails(t *testing.T) {
 	setupSuggest(t)
 	t.Setenv("AI_AGENT", "claude-code_2-1-289_agent")
@@ -108,9 +124,4 @@ func TestShowsAgainAfterInterval(t *testing.T) {
 	require.NoError(t, os.WriteFile(file(), b, 0o644))
 
 	assert.True(t, ShouldShow(), "older than the interval should show again")
-}
-
-func TestMatchesAgent(t *testing.T) {
-	assert.True(t, matchesAgent([]string{"Claude Code"}, "claude-code"))
-	assert.False(t, matchesAgent([]string{"Claude Code"}, "cursor"))
 }

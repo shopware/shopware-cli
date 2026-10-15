@@ -9,8 +9,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"regexp"
-	"strings"
 	"time"
 
 	"github.com/shopware/shopware-cli/internal/ai/agent"
@@ -43,7 +41,7 @@ func Suggest(ctx context.Context, skill string) (client, msg string) {
 		return "", ""
 	}
 
-	installed, known := installedFor(ctx, skill, client)
+	installed, known := installedFor(ctx, skill)
 	if !known {
 		// The lookup failed (e.g. timed out); skip quietly and retry next run
 		// rather than risk a wrong recommendation or burn the 24h window.
@@ -64,11 +62,13 @@ func Suggest(ctx context.Context, skill string) (client, msg string) {
 		client, skill, client)
 }
 
-// installedFor reports whether skill is installed for client and whether the
-// lookup could determine it. A failed or timed-out skills.sh lookup returns
-// known=false, so the caller does not mistake "couldn't check" for "absent". The
-// lookup is time-bounded so a stalled skills.sh never blocks the CLI.
-func installedFor(ctx context.Context, skill, client string) (installed, known bool) {
+// installedFor reports whether skill is installed for any agent, and whether the
+// lookup could determine it. The check is agent-agnostic: once a user has the
+// skill for any client they know about it, so a different detected client is not
+// nagged. A failed or timed-out skills.sh lookup returns known=false, so the
+// caller does not mistake "couldn't check" for "absent"; the lookup is time-bounded
+// so a stalled skills.sh never blocks the CLI.
+func installedFor(ctx context.Context, skill string) (installed, known bool) {
 	ctx, cancel := context.WithTimeout(ctx, lookupTimeout)
 	defer cancel()
 
@@ -76,7 +76,7 @@ func installedFor(ctx context.Context, skill, client string) (installed, known b
 	if err != nil {
 		return false, false
 	}
-	if hasSkill(global, skill, client) {
+	if hasSkill(global, skill) {
 		return true, true
 	}
 
@@ -90,36 +90,17 @@ func installedFor(ctx context.Context, skill, client string) (installed, known b
 		return false, false
 	}
 
-	return hasSkill(project, skill, client), true
+	return hasSkill(project, skill), true
 }
 
-func hasSkill(records []skills.Installed, skill, client string) bool {
+func hasSkill(records []skills.Installed, skill string) bool {
 	for _, r := range records {
-		if r.Name == skill && matchesAgent(r.Agents, client) {
+		if r.Name == skill {
 			return true
 		}
 	}
 
 	return false
-}
-
-// matchesAgent reports whether the agent id (e.g. "claude-code") is among the
-// display names skills.sh returns (e.g. "Claude Code"), compared on alphanumerics.
-func matchesAgent(agents []string, id string) bool {
-	want := normalizeAgent(id)
-	for _, a := range agents {
-		if normalizeAgent(a) == want {
-			return true
-		}
-	}
-
-	return false
-}
-
-var nonAlnum = regexp.MustCompile(`[^a-z0-9]+`)
-
-func normalizeAgent(s string) string {
-	return nonAlnum.ReplaceAllString(strings.ToLower(s), "")
 }
 
 func file() string {
