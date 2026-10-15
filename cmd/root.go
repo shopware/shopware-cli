@@ -19,6 +19,7 @@ import (
 	"github.com/shopware/shopware-cli/cmd/extension"
 	"github.com/shopware/shopware-cli/cmd/project"
 	accountApi "github.com/shopware/shopware-cli/internal/account-api"
+	"github.com/shopware/shopware-cli/internal/ai/agent"
 	"github.com/shopware/shopware-cli/internal/cliversion"
 	"github.com/shopware/shopware-cli/internal/system"
 	"github.com/shopware/shopware-cli/internal/tui"
@@ -33,6 +34,9 @@ var rootCmd = &cobra.Command{
 	Use:   "shopware-cli",
 	Short: "Build, develop, and manage Shopware projects and extensions",
 	Long:  `Build, develop, and manage Shopware projects and extensions from the command line.`,
+	// The general CLI skill is recommended for any command; a subcommand can
+	// override this annotation to recommend a more specific skill.
+	Annotations: map[string]string{agent.RecommendedSkillAnnotation: "shopware-cli"},
 }
 
 // Execute runs the root command and returns the process exit code after cleanup.

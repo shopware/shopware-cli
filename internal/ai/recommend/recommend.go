@@ -1,6 +1,6 @@
-// Package recommend remembers when the "install the Shopware CLI skill"
-// recommendation was last shown for an AI client, so it is not repeated too
-// often. The state is a cache file, keyed by client.
+// Package recommend decides when to suggest installing a Shopware skill to a
+// detected AI client, and remembers when a recommendation was last shown (a cache
+// file) so it is not repeated too often.
 package recommend
 
 import (
@@ -19,12 +19,9 @@ import (
 	"github.com/shopware/shopware-cli/internal/system"
 )
 
-// interval is the minimum time between showing the recommendation for a client,
-// matching the update notification cadence.
+// interval is the minimum time between showing a recommendation, matching the
+// update notification cadence.
 const interval = 24 * time.Hour
-
-// guidanceSkill is the skill the recommendation points at.
-const guidanceSkill = "shopware-cli"
 
 // lookupTimeout bounds the best-effort "is it installed?" check so a stalled
 // skills.sh never delays the already-finished command.
@@ -33,28 +30,27 @@ const lookupTimeout = 5 * time.Second
 // listSkills is a seam over skills.List so tests can stub the npx call.
 var listSkills = skills.List
 
-// Suggest returns the client to record and the line to print, or ("", "") when
-// nothing should be shown: no agent detected, shown within the suppression
-// window, or the skill already installed for the client.
+// Suggest returns the detected client and the line to print recommending skill,
+// or ("", "") when nothing should be shown: no agent detected, no skill given,
+// shown within the suppression window, or the skill already installed.
 //
-// The cheap checks run first; the costly "already installed?" check asks
-// skills.sh and therefore runs at most once per interval. When it finds the skill
-// it records the client as shown, so an installed client is not re-checked on
-// every command.
-func Suggest(ctx context.Context) (client, msg string) {
+// The cheap checks run first; the costly "already installed?" check asks skills.sh
+// and therefore runs at most once per interval. When it finds the skill it records
+// the recommendation as shown, so it is not re-checked on every command.
+func Suggest(ctx context.Context, skill string) (client, msg string) {
 	client = agent.Detect()
-	if client == "" || !ShouldShow(client) {
+	if client == "" || skill == "" || !ShouldShow() {
 		return "", ""
 	}
 
-	installed, known := installedFor(ctx, client)
+	installed, known := installedFor(ctx, skill, client)
 	if !known {
 		// The lookup failed (e.g. timed out); skip quietly and retry next run
 		// rather than risk a wrong recommendation or burn the 24h window.
 		return "", ""
 	}
 	if installed {
-		_ = MarkShown(client)
+		_ = MarkShown()
 
 		return "", ""
 	}
@@ -65,14 +61,14 @@ func Suggest(ctx context.Context) (client, msg string) {
 	// so point at a global install, which runs from anywhere.
 	return client, fmt.Sprintf(
 		"Shopware CLI guidance is available for %s.\nTo enable it, ask the user to run: shopware-cli ai add %s --agent %s --global",
-		client, guidanceSkill, client)
+		client, skill, client)
 }
 
-// installedFor reports whether the guidance skill is installed for client and
-// whether the lookup could determine it. A failed or timed-out skills.sh lookup
-// returns known=false, so the caller does not mistake "couldn't check" for
-// "absent". The lookup is time-bounded so a stalled skills.sh never blocks the CLI.
-func installedFor(ctx context.Context, client string) (installed, known bool) {
+// installedFor reports whether skill is installed for client and whether the
+// lookup could determine it. A failed or timed-out skills.sh lookup returns
+// known=false, so the caller does not mistake "couldn't check" for "absent". The
+// lookup is time-bounded so a stalled skills.sh never blocks the CLI.
+func installedFor(ctx context.Context, skill, client string) (installed, known bool) {
 	ctx, cancel := context.WithTimeout(ctx, lookupTimeout)
 	defer cancel()
 
@@ -80,7 +76,7 @@ func installedFor(ctx context.Context, client string) (installed, known bool) {
 	if err != nil {
 		return false, false
 	}
-	if hasGuidance(global, client) {
+	if hasSkill(global, skill, client) {
 		return true, true
 	}
 
@@ -94,12 +90,12 @@ func installedFor(ctx context.Context, client string) (installed, known bool) {
 		return false, false
 	}
 
-	return hasGuidance(project, client), true
+	return hasSkill(project, skill, client), true
 }
 
-func hasGuidance(records []skills.Installed, client string) bool {
+func hasSkill(records []skills.Installed, skill, client string) bool {
 	for _, r := range records {
-		if r.Name == guidanceSkill && matchesAgent(r.Agents, client) {
+		if r.Name == skill && matchesAgent(r.Agents, client) {
 			return true
 		}
 	}
@@ -131,38 +127,34 @@ func file() string {
 }
 
 type store struct {
-	ShownAt map[string]time.Time `json:"shownAt"`
+	LastShownAt time.Time `json:"lastShownAt"`
 }
 
-// load reads the store; any problem (missing, corrupt) yields an empty one.
+// load reads the store; any problem (missing, corrupt) yields the zero store,
+// whose zero LastShownAt means "never shown".
 func load() store {
 	b, err := os.ReadFile(file())
 	if err != nil {
-		return store{ShownAt: map[string]time.Time{}}
+		return store{}
 	}
 
 	var s store
-	if json.Unmarshal(b, &s) != nil || s.ShownAt == nil {
-		return store{ShownAt: map[string]time.Time{}}
+	if json.Unmarshal(b, &s) != nil {
+		return store{}
 	}
 
 	return s
 }
 
-// ShouldShow reports whether the recommendation for client may be shown now (it
-// was not shown within the last interval).
-func ShouldShow(client string) bool {
-	last, ok := load().ShownAt[client]
-
-	return !ok || time.Since(last) >= interval
+// ShouldShow reports whether a recommendation may be shown now (none was shown
+// within the last interval, regardless of client).
+func ShouldShow() bool {
+	return time.Since(load().LastShownAt) >= interval
 }
 
-// MarkShown records that the recommendation for client was shown now.
-func MarkShown(client string) error {
-	s := load()
-	s.ShownAt[client] = time.Now()
-
-	b, err := json.MarshalIndent(s, "", "  ")
+// MarkShown records that a recommendation was shown now.
+func MarkShown() error {
+	b, err := json.MarshalIndent(store{LastShownAt: time.Now()}, "", "  ")
 	if err != nil {
 		return err
 	}

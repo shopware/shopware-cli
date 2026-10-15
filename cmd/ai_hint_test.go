@@ -17,7 +17,7 @@ func setupAIHint(t *testing.T) {
 	t.Setenv("CI", "")
 
 	prev := suggest
-	suggest = func(context.Context) (string, string) {
+	suggest = func(context.Context, string) (string, string) {
 		return "claude-code", "Shopware CLI guidance is available for claude-code.\nTo enable it, ask the user to run: shopware-cli ai add shopware-cli --agent claude-code --global"
 	}
 	t.Cleanup(func() { suggest = prev })
@@ -34,7 +34,7 @@ func TestPrintAIHintShows(t *testing.T) {
 
 func TestPrintAIHintSilentWhenNoSuggestion(t *testing.T) {
 	setupAIHint(t)
-	suggest = func(context.Context) (string, string) { return "", "" }
+	suggest = func(context.Context, string) (string, string) { return "", "" }
 
 	var buf bytes.Buffer
 	printAIHint(t.Context(), &buf, []string{"project", "list"})

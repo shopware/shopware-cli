@@ -32,16 +32,24 @@ func TestSuggestNoAgent(t *testing.T) {
 	setupSuggest(t)
 	t.Setenv("AI_AGENT", "")
 
-	client, msg := Suggest(t.Context())
+	client, msg := Suggest(t.Context(), "shopware-cli")
 	assert.Empty(t, client)
 	assert.Empty(t, msg)
+}
+
+func TestSuggestNoSkill(t *testing.T) {
+	setupSuggest(t)
+	t.Setenv("AI_AGENT", "claude-code_2-1-289_agent")
+
+	_, msg := Suggest(t.Context(), "")
+	assert.Empty(t, msg, "no skill annotated means nothing to recommend")
 }
 
 func TestSuggestRecommends(t *testing.T) {
 	setupSuggest(t)
 	t.Setenv("AI_AGENT", "claude-code_2-1-289_agent")
 
-	client, msg := Suggest(t.Context())
+	client, msg := Suggest(t.Context(), "shopware-cli")
 	assert.Equal(t, "claude-code", client)
 	assert.Contains(t, msg, "ai add shopware-cli --agent claude-code --global")
 	assert.Contains(t, msg, "ask the user", "describe the install, do not instruct it")
@@ -50,7 +58,7 @@ func TestSuggestRecommends(t *testing.T) {
 func TestSuggestSkipsWhenInstalled(t *testing.T) {
 	setupSuggest(t)
 	t.Setenv("AI_AGENT", "claude-code_2-1-289_agent")
-	// skills.sh reports the guidance skill installed for Claude Code (global).
+	// skills.sh reports the skill installed for Claude Code (global).
 	listSkills = func(_ context.Context, _ string, global bool) ([]skills.Installed, error) {
 		if global {
 			return []skills.Installed{{Name: "shopware-cli", Agents: []string{"Claude Code"}}}, nil
@@ -58,7 +66,7 @@ func TestSuggestSkipsWhenInstalled(t *testing.T) {
 		return nil, nil
 	}
 
-	_, msg := Suggest(t.Context())
+	_, msg := Suggest(t.Context(), "shopware-cli")
 	assert.Empty(t, msg, "already installed for this client")
 }
 
@@ -69,40 +77,37 @@ func TestSuggestSilentWhenLookupFails(t *testing.T) {
 		return nil, errors.New("npx boom")
 	}
 
-	_, msg := Suggest(t.Context())
+	_, msg := Suggest(t.Context(), "shopware-cli")
 	assert.Empty(t, msg, "a failed lookup must not produce a recommendation")
-	assert.True(t, ShouldShow("claude-code"), "a failed lookup must not suppress future runs")
+	assert.True(t, ShouldShow(), "a failed lookup must not suppress future runs")
 }
 
 func TestSuggestSkipsWhenRecentlyShown(t *testing.T) {
 	setupSuggest(t)
 	t.Setenv("AI_AGENT", "claude-code_2-1-289_agent")
-	require.NoError(t, MarkShown("claude-code"))
+	require.NoError(t, MarkShown())
 
-	_, msg := Suggest(t.Context())
+	_, msg := Suggest(t.Context(), "shopware-cli")
 	assert.Empty(t, msg, "within the suppression window")
 }
 
 func TestShouldShowAndMarkShown(t *testing.T) {
 	t.Setenv("SHOPWARE_CLI_CACHE_DIR", t.TempDir())
 
-	assert.True(t, ShouldShow("claude-code"), "an unseen client should show")
+	assert.True(t, ShouldShow(), "nothing shown yet")
 
-	require.NoError(t, MarkShown("claude-code"))
-	assert.False(t, ShouldShow("claude-code"), "a just-shown client is suppressed")
-
-	// A different client is independent.
-	assert.True(t, ShouldShow("codex"))
+	require.NoError(t, MarkShown())
+	assert.False(t, ShouldShow(), "just shown is suppressed, regardless of client")
 }
 
 func TestShowsAgainAfterInterval(t *testing.T) {
 	t.Setenv("SHOPWARE_CLI_CACHE_DIR", t.TempDir())
 
-	b, err := json.Marshal(store{ShownAt: map[string]time.Time{"claude-code": time.Now().Add(-25 * time.Hour)}})
+	b, err := json.Marshal(store{LastShownAt: time.Now().Add(-25 * time.Hour)})
 	require.NoError(t, err)
 	require.NoError(t, os.WriteFile(file(), b, 0o644))
 
-	assert.True(t, ShouldShow("claude-code"), "older than the interval should show again")
+	assert.True(t, ShouldShow(), "older than the interval should show again")
 }
 
 func TestMatchesAgent(t *testing.T) {
