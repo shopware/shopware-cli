@@ -3,6 +3,7 @@ package recommend
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"os"
 	"testing"
 	"time"
@@ -59,6 +60,18 @@ func TestSuggestSkipsWhenInstalled(t *testing.T) {
 
 	_, msg := Suggest(t.Context())
 	assert.Empty(t, msg, "already installed for this client")
+}
+
+func TestSuggestSilentWhenLookupFails(t *testing.T) {
+	setupSuggest(t)
+	t.Setenv("AI_AGENT", "claude-code_2-1-289_agent")
+	listSkills = func(_ context.Context, _ string, _ bool) ([]skills.Installed, error) {
+		return nil, errors.New("npx boom")
+	}
+
+	_, msg := Suggest(t.Context())
+	assert.Empty(t, msg, "a failed lookup must not produce a recommendation")
+	assert.True(t, ShouldShow("claude-code"), "a failed lookup must not suppress future runs")
 }
 
 func TestSuggestSkipsWhenRecentlyShown(t *testing.T) {

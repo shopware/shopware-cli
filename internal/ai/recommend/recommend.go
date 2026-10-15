@@ -47,7 +47,13 @@ func Suggest(ctx context.Context) (client, msg string) {
 		return "", ""
 	}
 
-	if installedFor(ctx, client) {
+	installed, known := installedFor(ctx, client)
+	if !known {
+		// The lookup failed (e.g. timed out); skip quietly and retry next run
+		// rather than risk a wrong recommendation or burn the 24h window.
+		return "", ""
+	}
+	if installed {
 		_ = MarkShown(client)
 
 		return "", ""
@@ -62,23 +68,33 @@ func Suggest(ctx context.Context) (client, msg string) {
 		client, guidanceSkill, client)
 }
 
-// installedFor reports whether the guidance skill is installed for client,
-// according to skills.sh (the global scope or the current project). The lookup is
-// best-effort and time-bounded so a stalled skills.sh never blocks the CLI.
-func installedFor(ctx context.Context, client string) bool {
+// installedFor reports whether the guidance skill is installed for client and
+// whether the lookup could determine it. A failed or timed-out skills.sh lookup
+// returns known=false, so the caller does not mistake "couldn't check" for
+// "absent". The lookup is time-bounded so a stalled skills.sh never blocks the CLI.
+func installedFor(ctx context.Context, client string) (installed, known bool) {
 	ctx, cancel := context.WithTimeout(ctx, lookupTimeout)
 	defer cancel()
 
-	if records, err := listSkills(ctx, "", true); err == nil && hasGuidance(records, client) {
-		return true
+	global, err := listSkills(ctx, "", true)
+	if err != nil {
+		return false, false
 	}
-	if root, err := shop.FindClosestShopwareProject(true); err == nil {
-		if records, err := listSkills(ctx, root, false); err == nil && hasGuidance(records, client) {
-			return true
-		}
+	if hasGuidance(global, client) {
+		return true, true
 	}
 
-	return false
+	root, err := shop.FindClosestShopwareProject(true)
+	if err != nil {
+		// No project to check; the global lookup was conclusive.
+		return false, true
+	}
+	project, err := listSkills(ctx, root, false)
+	if err != nil {
+		return false, false
+	}
+
+	return hasGuidance(project, client), true
 }
 
 func hasGuidance(records []skills.Installed, client string) bool {
