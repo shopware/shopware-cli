@@ -117,6 +117,9 @@ type Options struct {
 	// services publish no host ports and instead join the proxy network with
 	// Traefik routing labels. Nil keeps fixed-port mode.
 	Proxy *Proxy
+	// StorefrontUsesVite enables the Storefront Vite endpoint when supported by
+	// the installed Shopware version.
+	StorefrontUsesVite bool
 	// User is the "uid:gid" the PHP containers run as so that writes to the
 	// bind-mounted project are owned by the host user. Empty resolves the
 	// host user of the project folder.
@@ -139,8 +142,9 @@ type Environment struct {
 	// worker, scheduled tasks). It is needed when Shopware's admin worker is
 	// disabled, because the queue is then no longer dispatched from the
 	// browser.
-	dedicatedWorker bool
-	settings        Settings
+	dedicatedWorker    bool
+	storefrontUsesVite bool
+	settings           Settings
 }
 
 // NewEnvironment resolves the dev environment of the project at projectRoot:
@@ -167,13 +171,14 @@ func NewEnvironment(projectRoot string, opts Options) (*Environment, error) {
 	}
 
 	return &Environment{
-		root:            projectRoot,
-		features:        featuresFromLock(lock),
-		proxy:           opts.Proxy,
-		php:             opts.PHP,
-		user:            user,
-		dedicatedWorker: !adminWorkerEnabled,
-		settings:        opts.Services,
+		root:               projectRoot,
+		features:           featuresFromLock(lock),
+		proxy:              opts.Proxy,
+		php:                opts.PHP,
+		user:               user,
+		dedicatedWorker:    !adminWorkerEnabled,
+		storefrontUsesVite: opts.StorefrontUsesVite,
+		settings:           opts.Services,
 	}, nil
 }
 
@@ -195,10 +200,20 @@ func (e *Environment) AdminWatchURL() string {
 	return e.webWatchURL(subdomainAdminWatch, PortAdminWatcher)
 }
 
-// StorefrontWatchURL returns where the storefront watcher is reachable from
-// the host, resolved like AdminWatchURL.
+// StorefrontWatchURL returns where the active storefront watcher is reachable
+// from the host. Vite mode returns the Vite server URL in fixed-port mode.
 func (e *Environment) StorefrontWatchURL() string {
-	return e.webWatchURL(subdomainStorefrontWatch, PortStorefrontWatcher)
+	endpoint := PortStorefrontVite
+	if !e.storefrontUsesVite {
+		endpoint = PortStorefrontWatcher
+	}
+
+	return e.webWatchURL(subdomainStorefrontWatch, endpoint)
+}
+
+// StorefrontUsesVite reports whether this environment uses the Storefront Vite server.
+func (e *Environment) StorefrontUsesVite() bool {
+	return e.storefrontUsesVite
 }
 
 func (e *Environment) webWatchURL(subdomain, endpointName string) string {

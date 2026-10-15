@@ -58,10 +58,8 @@ var projectStorefrontWatchCmd = &cobra.Command{
 				return err
 			}
 		}
-
-		// When the shop is proxied, route the webpack hot-proxy watcher through
-		// the shared proxy at its storefront-watch hostname. An unreadable
-		// registry must not silently start the watcher unproxied.
+		// When the shop is proxied, use its shared storefront-watch hostname.
+		// An unreadable registry must not silently start the watcher unproxied.
 		host, err := proxy.RegisteredHostname(projectRoot)
 		if err != nil {
 			return fmt.Errorf("cannot read the shared proxy registry: %w", err)

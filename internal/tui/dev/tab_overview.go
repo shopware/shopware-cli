@@ -81,6 +81,9 @@ type OverviewModel struct {
 	securityEnd      time.Time
 	health           []healthCheck
 	healthLoading    bool
+	// sfWatchProbeURL targets the watcher server. sfWatchURL is the link shown
+	// to users, which is the shop itself when Vite injects its assets there.
+	sfWatchProbeURL string
 	// Instances: the projects registered with the shared proxy, with per-instance
 	// status/memory/uptime and their combined memory. Shown only for proxy
 	// projects, under Setup health.
@@ -281,6 +284,7 @@ func NewOverviewModel(ctx context.Context, envType, shopURL, username, password,
 		shopCfg:          shopCfg,
 		adminWatchURL:    localAdminWatchURL(projectRoot),
 		sfWatchURL:       localStorefrontWatchURL,
+		sfWatchProbeURL:  localStorefrontWatchURL,
 		proxyHost:        registeredHostname(projectRoot),
 		domainsSetupDone: overviewSetupDone(projectRoot),
 		instancesLoading: registeredHostname(projectRoot) != "",
@@ -326,16 +330,35 @@ func localAdminWatchURL(projectRoot string) string {
 }
 
 // setEnvironment adopts the project's Docker dev environment and resolves the
-// watcher URLs for its mode: the proxy subdomains when proxied, otherwise the
-// local dev-server ports the readiness probes reach directly.
+// visible watcher links and readiness probe URLs for its mode.
 func (m *OverviewModel) setEnvironment(env *dockerpkg.Environment) {
 	m.env = env
 	m.adminWatchURL = localAdminWatchURL(m.projectRoot)
 	m.sfWatchURL = localStorefrontWatchURL
-	if env != nil && env.ProxyHost() != "" {
+	m.sfWatchProbeURL = localStorefrontWatchURL
+	if env == nil {
+		if !extension.StorefrontUsesVite(m.projectRoot) {
+			return
+		}
+
+		m.sfWatchProbeURL = localStorefrontViteURL()
+	} else {
 		m.adminWatchURL = env.AdminWatchURL()
 		m.sfWatchURL = env.StorefrontWatchURL()
+		m.sfWatchProbeURL = m.sfWatchURL
+		if !env.StorefrontUsesVite() {
+			return
+		}
 	}
+
+	if m.shopURL != "" {
+		m.sfWatchURL = m.shopURL
+	}
+}
+
+// localStorefrontViteURL returns the host URL of the Vite server outside Docker.
+func localStorefrontViteURL() string {
+	return fmt.Sprintf("http://127.0.0.1:%d", extension.StorefrontVitePort)
 }
 
 func (m OverviewModel) Init() tea.Cmd {
@@ -926,19 +949,11 @@ func (m OverviewModel) renderAccess() string {
 }
 
 func (m OverviewModel) renderWatchers() string {
-	// Outside Docker the watchers bind directly on the host, so the local
-	// dev-server URLs apply. In Docker the environment resolves them for its
-	// mode and honors docker.services.web.ports; a disabled port has no URL.
-	adminURL, storefrontURL := m.adminWatchURL, m.sfWatchURL
-	if m.env != nil {
-		adminURL, storefrontURL = m.env.AdminWatchURL(), m.env.StorefrontWatchURL()
-	}
-
 	var s strings.Builder
 	s.WriteString(tui.TitleStyle.Render("Watchers"))
 	s.WriteString("\n")
-	s.WriteString(m.renderWatcherStatus("Admin", m.adminWatchRunning, m.adminWatchStarting, m.adminWatchReady, adminURL, m.cursor == 0))
-	s.WriteString(m.renderWatcherStatus("Storefront", m.sfWatchRunning, m.sfWatchStarting, m.sfWatchReady, storefrontURL, m.cursor == 1))
+	s.WriteString(m.renderWatcherStatus("Admin", m.adminWatchRunning, m.adminWatchStarting, m.adminWatchReady, m.adminWatchURL, m.cursor == 0))
+	s.WriteString(m.renderWatcherStatus("Storefront", m.sfWatchRunning, m.sfWatchStarting, m.sfWatchReady, m.sfWatchURL, m.cursor == 1))
 	return s.String()
 }
 
@@ -987,13 +1002,17 @@ func (m OverviewModel) startStorefrontWatch(opts extension.StorefrontWatcherOpti
 	projectRoot := m.projectRoot
 	shopCfg := m.shopCfg
 
-	// When proxied, route the webpack hot-proxy watcher through the shared
-	// proxy, matching the standalone `project storefront-watch` command.
-	if host := registeredHostname(projectRoot); host != "" {
-		opts.ProxyHostname = "storefront-watch." + host
-	}
-
 	return startWatcher(watcherStorefront, m.ctx, func(ctx context.Context, out io.Writer) (*executor.Process, error) {
+		// When proxied, use the shared storefront-watch hostname. Do not start
+		// with local-port settings if the registry cannot be read.
+		host, err := proxy.RegisteredHostname(projectRoot)
+		if err != nil {
+			return nil, fmt.Errorf("cannot read the shared proxy registry: %w", err)
+		}
+		if host != "" {
+			opts.ProxyHostname = "storefront-watch." + host
+		}
+
 		logStep(out, "Preparing plugins.json...")
 		if err := extension.WriteProjectPluginJson(ctx, projectRoot, shopCfg, e); err != nil {
 			return nil, fmt.Errorf("preparing plugins.json: %w", err)

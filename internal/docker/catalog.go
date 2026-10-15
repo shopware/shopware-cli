@@ -1,6 +1,9 @@
 package docker
 
-import "fmt"
+import (
+	"fmt"
+	"slices"
+)
 
 // Compose service names.
 const (
@@ -27,6 +30,7 @@ const (
 	PortAdminWatcherHMR         = "admin_watcher_hmr"
 	PortStorefrontWatcher       = "storefront_watcher"
 	PortStorefrontWatcherAssets = "storefront_watcher_assets"
+	PortStorefrontVite          = "storefront_vite"
 	PortMySQL                   = "mysql"
 	PortSMTP                    = "smtp"
 	PortAMQP                    = "amqp"
@@ -200,6 +204,7 @@ var catalog = []service{
 			{Name: PortHTTPAlt, Label: "Shop (alternative HTTP)", ContainerPort: 8080, DefaultHostPort: 8080},
 			{Name: PortStorefrontWatcherAssets, Label: "Storefront watcher assets", ContainerPort: 9999, DefaultHostPort: 9999},
 			{Name: PortStorefrontWatcher, Label: "Storefront watcher", ContainerPort: 9998, DefaultHostPort: 9998},
+			{Name: PortStorefrontVite, Label: "Storefront watcher (Vite)", ContainerPort: 5175, DefaultHostPort: 5175},
 			{Name: PortAdminWatcher, Label: "Admin watcher (Vite)", ContainerPort: 5173, DefaultHostPort: 5173},
 			{Name: PortAdminWatcherHMR, Label: "Admin watcher HMR", ContainerPort: 5773, DefaultHostPort: 5773},
 		},
@@ -334,11 +339,29 @@ func (e *Environment) activeServices() []service {
 	services := make([]service, 0, len(catalog))
 	for _, svc := range catalog {
 		if svc.requires == nil || svc.requires(e) {
+			if svc.Name == ServiceWeb {
+				svc.Endpoints = e.storefrontWatchEndpoints(svc.Endpoints)
+			}
 			services = append(services, svc)
 		}
 	}
 
 	return services
+}
+
+// storefrontWatchEndpoints removes endpoints for the inactive storefront watcher.
+func (e *Environment) storefrontWatchEndpoints(endpoints []endpoint) []endpoint {
+	endpoints = slices.Clone(endpoints)
+	if !e.storefrontUsesVite {
+		return slices.DeleteFunc(endpoints, func(ep endpoint) bool {
+			return ep.Name == PortStorefrontVite
+		})
+	}
+	endpoints = slices.DeleteFunc(endpoints, func(ep endpoint) bool {
+		return ep.Name == PortStorefrontWatcher || ep.Name == PortStorefrontWatcherAssets
+	})
+
+	return endpoints
 }
 
 // byName returns the catalog entry for a compose service name, or nil for an
