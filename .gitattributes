@@ -3,3 +3,4 @@
 *.json eol=lf
 
 .github/workflows/*.lock.yml linguist-generated=true
+*.txtar eol=lf

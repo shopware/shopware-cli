@@ -1,0 +1,47 @@
+# Invocation mistakes fail and print the usage block. The plugin exists so each
+# failure below is the one named, not a missing path.
+! exec shopware-cli extension validate
+stderr 'Usage:'
+
+! exec shopware-cli extension validate --no-such-flag plugin
+stderr 'Usage:'
+
+! exec shopware-cli extension validate plugin extra
+stderr 'Usage:'
+
+# Failures inside a command print the error without the usage block.
+! exec shopware-cli extension validate --format yaml plugin
+! stderr 'Usage:'
+stderr .
+
+! exec shopware-cli extension validate --only nonexistent plugin
+! stderr 'Usage:'
+stderr .
+
+! exec shopware-cli project console list
+! stderr 'Usage:'
+stderr .
+! stdout .
+
+-- plugin/composer.json --
+{
+    "name": "test/test-plugin",
+    "type": "shopware-platform-plugin",
+    "version": "1.0.0",
+    "license": "MIT",
+    "description": "Test plugin",
+    "require": {
+        "shopware/core": "~6.6.0"
+    },
+    "autoload": {
+        "psr-4": {
+            "Test\\TestPlugin\\": "src/"
+        }
+    },
+    "extra": {
+        "shopware-plugin-class": "Test\\TestPlugin\\TestPlugin",
+        "label": {
+            "en-GB": "Test Plugin"
+        }
+    }
+}

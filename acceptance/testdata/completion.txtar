@@ -1,0 +1,13 @@
+# Completion scripts are generated on stdout.
+exec shopware-cli completion bash
+stdout .
+! stderr .
+
+exec shopware-cli completion fish
+stdout .
+! stderr .
+
+# Completing a command group lists its subcommands.
+exec shopware-cli __complete extension ''
+stdout 'validate'
+stdout 'build'

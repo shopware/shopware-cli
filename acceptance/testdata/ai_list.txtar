@@ -1,0 +1,9 @@
+# ai list offers a machine-readable format on stdout.
+exec shopware-cli ai list --format json
+stdout '\A\['
+! stderr .
+
+# An unknown integration name fails.
+! exec shopware-cli ai info nonexistent
+! stdout .
+stderr .
