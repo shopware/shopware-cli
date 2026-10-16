@@ -9,11 +9,8 @@ import (
 	"github.com/shyim/go-version"
 )
 
-// PackagistURL is the Composer repository to query; tests point it at a local server.
-var PackagistURL = repository.PackagistURL
-
 func GetShopwareVersions(ctx context.Context) ([]string, error) {
-	pkg, err := repository.New(PackagistURL, nil).GetPackage(ctx, "shopware/core")
+	pkg, err := repository.New(repository.PackagistURL, nil).GetPackage(ctx, "shopware/core")
 	if err != nil {
 		return nil, fmt.Errorf("get package versions: %w", err)
 	}

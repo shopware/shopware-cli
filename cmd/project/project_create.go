@@ -6,7 +6,6 @@ import (
 	"github.com/shyim/go-composer/repository"
 	"github.com/spf13/cobra"
 
-	"github.com/shopware/shopware-cli/internal/extension"
 	"github.com/shopware/shopware-cli/internal/proxy"
 	"github.com/shopware/shopware-cli/internal/shop"
 	"github.com/shopware/shopware-cli/internal/system"
@@ -86,7 +85,7 @@ var projectCreateCmd = &cobra.Command{
 		}
 
 		if len(args) == 1 {
-			pkg, err := repository.New(extension.PackagistURL, nil).GetPackage(cmd.Context(), "shopware/core")
+			pkg, err := repository.New(packagistURL, nil).GetPackage(cmd.Context(), "shopware/core")
 			if err != nil {
 				return []string{}, cobra.ShellCompDirectiveNoFileComp
 			}
@@ -124,7 +123,7 @@ var projectCreateCmd = &cobra.Command{
 			tui.PrintBanner()
 		}
 
-		pkg, err := repository.New(extension.PackagistURL, nil).GetPackage(cmd.Context(), "shopware/core")
+		pkg, err := repository.New(packagistURL, nil).GetPackage(cmd.Context(), "shopware/core")
 		if err != nil {
 			return err
 		}
@@ -163,6 +162,10 @@ var projectCreateCmd = &cobra.Command{
 		return installAndFinalize(cmd, &opts, phpConstraint, chosenVersion)
 	},
 }
+
+// packagistURL is a package variable so tests can point the create flow at a
+// local repository server instead of Packagist.
+var packagistURL = repository.PackagistURL
 
 func parseCreateFlags(cmd *cobra.Command, args []string) createOptions {
 	useDocker, _ := cmd.PersistentFlags().GetBool("docker")
