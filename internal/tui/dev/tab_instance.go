@@ -257,17 +257,23 @@ func (m InstanceModel) neighborCursor(delta int) int {
 }
 
 func (m InstanceModel) renderSidebar() string {
+	height := max(m.height-3, 8)
+	title := tui.TitleStyle.Render("Instance Stack")
+
 	var b strings.Builder
-	b.WriteString(tui.TitleStyle.Render("Instance Stack"))
+	b.WriteString(title)
 	b.WriteString("\n")
 
 	if len(m.sources) == 0 {
 		b.WriteString(helpStyle.Render("No sources found yet."))
 		return sidebarStyle.
 			Width(sidebarWidth).
-			Height(max(m.height-3, 8)).
+			Height(height).
 			Render(b.String())
 	}
+
+	var list strings.Builder
+	cursorRow := 0
 
 	groups := m.groupedSources()
 
@@ -278,10 +284,10 @@ func (m InstanceModel) renderSidebar() string {
 
 	for gi, g := range groups {
 		if gi > 0 {
-			b.WriteString("\n")
+			list.WriteString("\n")
 		}
-		b.WriteString(groupHeaderStyle.Render(strings.ToUpper(g.header)))
-		b.WriteString("\n")
+		list.WriteString(groupHeaderStyle.Render(strings.ToUpper(g.header)))
+		list.WriteString("\n")
 
 		for _, i := range g.sources {
 			src := m.sources[i]
@@ -317,19 +323,33 @@ func (m InstanceModel) renderSidebar() string {
 
 			if i == m.cursor {
 				item = lipgloss.JoinHorizontal(lipgloss.Center, lipgloss.NewStyle().Foreground(tui.BrandColor).Bold(true).Render("▸"), " ", item)
+				cursorRow = strings.Count(list.String(), "\n")
 			} else {
 				item = lipgloss.JoinHorizontal(lipgloss.Center, "  ", item)
 			}
 
-			b.WriteString(style.Width(sidebarWidth - 4).Render(item))
-			b.WriteString("\n")
+			list.WriteString(style.Width(sidebarWidth - 4).Render(item))
+			list.WriteString("\n")
 		}
 	}
 
+	// The border takes two rows; the list scrolls to keep the cursor in view.
+	b.WriteString(windowLines(list.String(), cursorRow, height-2-lipgloss.Height(title)))
+
 	return sidebarStyle.
 		Width(sidebarWidth).
-		Height(max(m.height-3, 8)).
+		Height(height).
 		Render(b.String())
+}
+
+// windowLines keeps at most rows lines of s, scrolled so line focus stays visible.
+func windowLines(s string, focus, rows int) string {
+	lines := strings.Split(strings.TrimSuffix(s, "\n"), "\n")
+	if rows <= 0 || len(lines) <= rows {
+		return strings.Join(lines, "\n")
+	}
+	start := min(max(focus-rows/2, 0), len(lines)-rows)
+	return strings.Join(lines[start:start+rows], "\n")
 }
 
 func (m InstanceModel) renderContent() string {
