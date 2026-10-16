@@ -9,6 +9,7 @@ import (
 	"golang.org/x/sync/errgroup"
 
 	"github.com/shopware/shopware-cli/internal/extension"
+	"github.com/shopware/shopware-cli/internal/git"
 	"github.com/shopware/shopware-cli/internal/validation"
 	"github.com/shopware/shopware-cli/internal/verifier"
 	"github.com/shopware/shopware-cli/logging"
@@ -17,6 +18,7 @@ import (
 var extensionFixCmd = &cobra.Command{
 	Use:   "fix path",
 	Short: "Apply code-quality fixes to an extension",
+	Long:  "Apply code-quality fixes to an extension inside its own or an enclosing Git working tree, unless --allow-non-git is passed. The tree need not be clean; ignored and untracked files are not protected by this check.",
 	Args:  cobra.ExactArgs(1),
 	PreRunE: func(cmd *cobra.Command, args []string) error {
 		only, _ := cmd.Flags().GetString("only")
@@ -35,7 +37,11 @@ var extensionFixCmd = &cobra.Command{
 		allowNonGit, _ := cmd.Flags().GetBool("allow-non-git")
 
 		if !allowNonGit {
-			if stat, err := os.Stat(filepath.Join(args[0], ".git")); err != nil || !stat.IsDir() {
+			inside, err := git.IsInsideWorkingTree(cmd.Context(), args[0])
+			if err != nil {
+				return err
+			}
+			if !inside {
 				return fmt.Errorf("%s is not a git repository. Use --allow-non-git flag to run anyway", args[0])
 			}
 		}

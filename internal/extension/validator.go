@@ -98,6 +98,8 @@ func RunValidation(ctx context.Context, ext Extension, check validation.Check, p
 	// Note: ignores are now applied in the verifier layer
 }
 
+// validateSymfonyXml checks plugin resources and configured extra bundles for
+// deprecated Symfony XML files. Other extension types are skipped.
 func validateSymfonyXml(ext Extension, check validation.Check) {
 	if ext.GetType() != TypePlatformPlugin {
 		return
@@ -114,6 +116,9 @@ func validateSymfonyXml(ext Extension, check validation.Check) {
 	}
 }
 
+// checkSymfonyXmlInResourceDir warns about services.xml and routes.xml under
+// resourceDir, with paths relative to root and a conversion command to run from
+// the extension directory.
 func checkSymfonyXmlInResourceDir(check validation.Check, resourceDir, root string) {
 	deprecatedFiles := []struct {
 		name       string
@@ -132,7 +137,7 @@ func checkSymfonyXmlInResourceDir(check validation.Check, resourceDir, root stri
 			check.AddResult(validation.CheckResult{
 				Path:       relPath,
 				Identifier: file.identifier,
-				Message:    fmt.Sprintf("Found deprecated %s. Symfony %s is deprecated, migrate to %s. Run \"shopware-cli extension fix\" to convert it automatically.", relPath, file.name, yamlName),
+				Message:    fmt.Sprintf("Found deprecated %s. Symfony %s is deprecated, migrate to %s. Run \"shopware-cli extension fix . --only symfony-xml\" from the extension directory to convert it automatically.", relPath, file.name, yamlName),
 				Severity:   validation.SeverityWarning,
 			})
 		}

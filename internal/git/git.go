@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path"
+	"slices"
 	"sort"
 	"strings"
 
@@ -197,23 +198,57 @@ func unshallowRepository(ctx context.Context, repo string) error {
 	return err
 }
 
-func IsWorkingTreeDirty(ctx context.Context, repo string) (bool, bool, error) {
+// workingTreeEnvironment keeps Git discovery and status relative to the target
+// directory instead of inherited repository locations or discovery controls.
+// Each override is removed in the listed order, regardless of its position in
+// the inherited environment. Unrelated entries retain their order and values.
+func workingTreeEnvironment() []string {
+	env := os.Environ()
+	for _, name := range [...]string{
+		"GIT_DIR",
+		"GIT_WORK_TREE",
+		"GIT_CEILING_DIRECTORIES",
+		"GIT_DISCOVERY_ACROSS_FILESYSTEM",
+	} {
+		env = slices.DeleteFunc(env, func(entry string) bool {
+			return strings.HasPrefix(entry, name+"=")
+		})
+	}
+
+	return env
+}
+
+// IsInsideWorkingTree reports whether repo is in a Git working tree, including
+// enclosing repositories, linked worktrees, and submodules. It does not require
+// a clean tree or tracked files. Inherited repository locations and discovery
+// controls are ignored. Bare repositories and paths outside a working tree
+// return false; they do not fall back to the current directory or inherited tree.
+func IsInsideWorkingTree(ctx context.Context, repo string) (bool, error) {
 	cmd := exec.CommandContext(ctx, "git", "-C", repo, "rev-parse", "--is-inside-work-tree") //nolint:gosec
+	cmd.Env = workingTreeEnvironment()
 	output, err := cmd.Output()
 	if err != nil {
 		var exitErr *exec.ExitError
 		if errors.As(err, &exitErr) {
-			return false, false, nil
+			return false, nil
 		}
 
-		return false, false, fmt.Errorf("checking git repository: %w", err)
+		return false, fmt.Errorf("checking git repository: %w", err)
 	}
 
-	if strings.TrimSpace(string(output)) != "true" {
-		return false, false, nil
+	return strings.TrimSpace(string(output)) == "true", nil
+}
+
+// IsWorkingTreeDirty reports whether repo has modified or untracked files and
+// whether it belongs to a working tree. Outside a working tree both are false.
+func IsWorkingTreeDirty(ctx context.Context, repo string) (bool, bool, error) {
+	inside, err := IsInsideWorkingTree(ctx, repo)
+	if err != nil || !inside {
+		return false, false, err
 	}
 
 	statusCmd := exec.CommandContext(ctx, "git", "-C", repo, "status", "--porcelain", "--untracked-files=all") //nolint:gosec
+	statusCmd.Env = workingTreeEnvironment()
 	status, err := statusCmd.Output()
 	if err != nil {
 		return false, true, fmt.Errorf("checking git working tree status: %w", err)

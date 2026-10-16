@@ -8,6 +8,7 @@ import (
 	"github.com/spf13/cobra"
 	"golang.org/x/sync/errgroup"
 
+	"github.com/shopware/shopware-cli/internal/git"
 	"github.com/shopware/shopware-cli/internal/shop"
 	"github.com/shopware/shopware-cli/internal/validation"
 	"github.com/shopware/shopware-cli/internal/verifier"
@@ -54,7 +55,11 @@ var projectFixCmd = &cobra.Command{
 
 		allowNonGit, _ := cmd.Flags().GetBool("allow-non-git")
 		if !allowNonGit {
-			if stat, err := os.Stat(filepath.Join(projectPath, ".git")); err != nil || !stat.IsDir() {
+			inside, err := git.IsInsideWorkingTree(cmd.Context(), projectPath)
+			if err != nil {
+				return err
+			}
+			if !inside {
 				return fmt.Errorf("%s is not a git repository. Use --allow-non-git flag to run anyway", projectPath)
 			}
 		}
