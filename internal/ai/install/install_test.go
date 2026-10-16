@@ -197,6 +197,31 @@ func TestRemoveMCPReportsWhetherPresent(t *testing.T) {
 	assert.True(t, res.Removed)
 }
 
+func TestRemoveMCPDryRunReportsPresenceWithoutWriting(t *testing.T) {
+	setup(t)
+
+	// Dry run with nothing installed must not claim a removal.
+	res, err := runRemove(t, RemoveOptions{Name: "meteor", Agent: "claude-code", DryRun: true})
+	require.NoError(t, err)
+	assert.True(t, res.DryRun)
+	assert.False(t, res.Removed, "dry-run must not report a removal when nothing is configured")
+
+	servers, err := mcp.List()
+	require.NoError(t, err)
+	assert.Empty(t, servers, "dry-run must not write the config")
+
+	// Dry run after an install reports it would remove, still without writing.
+	_, err = runAdd(t, Options{Name: "meteor", Agent: "claude-code"})
+	require.NoError(t, err)
+	res, err = runRemove(t, RemoveOptions{Name: "meteor", Agent: "claude-code", DryRun: true})
+	require.NoError(t, err)
+	assert.True(t, res.Removed)
+
+	servers, err = mcp.List()
+	require.NoError(t, err)
+	assert.Len(t, servers, 1, "dry-run leaves the installed server in place")
+}
+
 func TestRemoveInstalledRunsSkills(t *testing.T) {
 	rec := setup(t)
 	rec.installed = []skills.Installed{{Name: "shopware-cli", Agents: []string{"Claude Code"}}}

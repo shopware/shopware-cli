@@ -223,7 +223,11 @@ func removeMCP(o RemoveOptions, entry *directory.Integration) (RemoveResult, err
 		Command: []string{"updates", path},
 	}
 	if o.DryRun {
-		result.Removed = true
+		present, err := mcp.Has(o.Agent, entry.Name)
+		if err != nil {
+			return RemoveResult{}, err
+		}
+		result.Removed = present
 
 		return result, nil
 	}

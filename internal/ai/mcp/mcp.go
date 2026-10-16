@@ -118,6 +118,28 @@ func Add(agent, name, url, transport string) error {
 	return writeDoc(path, doc)
 }
 
+// Has reports whether the named server is configured for agent, without changing
+// anything. Remove uses it to report truthfully on a dry run.
+func Has(agent, name string) (bool, error) {
+	cfg, ok := agents[agent]
+	if !ok {
+		return false, unsupported(agent)
+	}
+	path, err := cfg.path()
+	if err != nil {
+		return false, err
+	}
+
+	doc, err := readDoc(path)
+	if err != nil {
+		return false, err
+	}
+	servers, _ := doc[cfg.key].(map[string]any)
+	_, exists := servers[name]
+
+	return exists, nil
+}
+
 // Remove deletes exactly the named server from agent's config and reports whether
 // it was there.
 func Remove(agent, name string) (bool, error) {
@@ -229,6 +251,11 @@ func readDoc(path string) (map[string]any, error) {
 	return doc, nil
 }
 
+// writeDoc writes doc as indented JSON to path atomically: it writes a temporary
+// file in the same directory and renames it over the target, so a reader never
+// sees a half-written config and an interrupted write cannot corrupt it. A path
+// that is a symlink is resolved first so the rename updates the link's target
+// rather than replacing the link, and an existing file's mode is preserved.
 func writeDoc(path string, doc map[string]any) error {
 	b, err := json.MarshalIndent(doc, "", "  ")
 	if err != nil {
@@ -236,11 +263,45 @@ func writeDoc(path string, doc map[string]any) error {
 	}
 	b = append(b, '\n')
 
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+	target := path
+	if resolved, err := filepath.EvalSymlinks(path); err == nil {
+		target = resolved
+	} else if !os.IsNotExist(err) {
 		return err
 	}
 
-	return os.WriteFile(path, b, 0o644)
+	if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
+		return err
+	}
+
+	mode := os.FileMode(0o644)
+	if fi, err := os.Stat(target); err == nil {
+		mode = fi.Mode().Perm()
+	} else if !os.IsNotExist(err) {
+		return err
+	}
+
+	tmp, err := os.CreateTemp(filepath.Dir(target), filepath.Base(target)+".tmp-*")
+	if err != nil {
+		return err
+	}
+	defer func() { _ = os.Remove(tmp.Name()) }()
+
+	if _, err := tmp.Write(b); err != nil {
+		_ = tmp.Close()
+
+		return err
+	}
+	if err := tmp.Chmod(mode); err != nil {
+		_ = tmp.Close()
+
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		return err
+	}
+
+	return os.Rename(tmp.Name(), target)
 }
 
 func unsupported(agent string) error {

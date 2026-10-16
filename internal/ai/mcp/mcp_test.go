@@ -3,6 +3,7 @@ package mcp
 import (
 	"encoding/json"
 	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -101,6 +102,50 @@ func TestRemoveReportsFalseWhenAbsent(t *testing.T) {
 	removed, err := Remove("claude-code", "meteor")
 	require.NoError(t, err)
 	assert.False(t, removed, "nothing to remove when the server is not configured")
+}
+
+func TestHasReportsPresenceWithoutWriting(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	path, _ := ConfigPath("claude-code")
+
+	has, err := Has("claude-code", "meteor")
+	require.NoError(t, err)
+	assert.False(t, has)
+	_, statErr := os.Stat(path)
+	assert.True(t, os.IsNotExist(statErr), "Has must not create the config file")
+
+	require.NoError(t, Add("claude-code", "meteor", "https://meteor.shopware.com/mcp", "http"))
+	has, err = Has("claude-code", "meteor")
+	require.NoError(t, err)
+	assert.True(t, has)
+}
+
+func TestWriteUpdatesSymlinkTargetAndKeepsMode(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("HOME", dir)
+
+	// Make ~/.claude.json a symlink to a file elsewhere with a non-default mode.
+	realPath := filepath.Join(dir, "store", "config.json")
+	require.NoError(t, os.MkdirAll(filepath.Dir(realPath), 0o755))
+	require.NoError(t, os.WriteFile(realPath, []byte("{}\n"), 0o600))
+
+	link, _ := ConfigPath("claude-code")
+	require.NoError(t, os.Symlink(realPath, link))
+
+	require.NoError(t, Add("claude-code", "meteor", "https://meteor.shopware.com/mcp", "http"))
+
+	// The link is still a link, its target carries the write, and the mode is kept.
+	fi, err := os.Lstat(link)
+	require.NoError(t, err)
+	assert.NotZero(t, fi.Mode()&os.ModeSymlink, "the symlink is preserved, not replaced")
+
+	b, err := os.ReadFile(realPath)
+	require.NoError(t, err)
+	assert.Contains(t, string(b), "meteor", "the write lands on the symlink target")
+
+	tfi, err := os.Stat(realPath)
+	require.NoError(t, err)
+	assert.Equal(t, os.FileMode(0o600), tfi.Mode().Perm(), "the existing file mode is preserved")
 }
 
 func TestListReadsAcrossAgents(t *testing.T) {
