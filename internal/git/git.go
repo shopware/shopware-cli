@@ -200,6 +200,7 @@ func unshallowRepository(ctx context.Context, repo string) error {
 
 // workingTreeEnvironment keeps Git discovery and status relative to the target
 // directory instead of inherited repository locations or discovery controls.
+// Filtering preserves the order of the remaining environment entries.
 func workingTreeEnvironment() []string {
 	return slices.DeleteFunc(os.Environ(), func(entry string) bool {
 		return strings.HasPrefix(entry, "GIT_DIR=") ||

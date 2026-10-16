@@ -4,10 +4,70 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 )
+
+// TestWorkingTreeChecksIgnoreEnvironmentOrder checks that combined overrides
+// cannot redirect membership or status, regardless of their environment order.
+func TestWorkingTreeChecksIgnoreEnvironmentOrder(t *testing.T) {
+	for _, reverse := range []bool{false, true} {
+		name := "forward"
+		if reverse {
+			name = "reverse"
+		}
+		t.Run(name, func(t *testing.T) {
+			ambient := t.TempDir()
+			prepareRepository(t, ambient)
+			assert.NoError(t, os.WriteFile(filepath.Join(ambient, "ambient.txt"), []byte("ambient work"), 0o644))
+			repo := t.TempDir()
+			prepareRepository(t, repo)
+			nested := filepath.Join(repo, "custom", "plugins", "Example")
+			assert.NoError(t, os.MkdirAll(nested, 0o755))
+			variables := []struct{ key, value string }{
+				{"GIT_DIR", filepath.Join(ambient, ".git")},
+				{"GIT_WORK_TREE", ambient},
+				{"GIT_CEILING_DIRECTORIES", filepath.Join(repo, "custom")},
+				{"GIT_DISCOVERY_ACROSS_FILESYSTEM", "invalid"},
+			}
+			// Remove existing entries so Setenv inserts them in the chosen order.
+			for _, variable := range variables {
+				t.Setenv(variable.key, "")
+				assert.NoError(t, os.Unsetenv(variable.key))
+			}
+			if reverse {
+				slices.Reverse(variables)
+			}
+			for _, variable := range variables {
+				t.Setenv(variable.key, variable.value)
+			}
+
+			inside, err := IsInsideWorkingTree(t.Context(), nested)
+			assert.NoError(t, err)
+			assert.True(t, inside)
+			dirty, isRepo, err := IsWorkingTreeDirty(t.Context(), nested)
+			assert.NoError(t, err)
+			assert.True(t, isRepo)
+			assert.False(t, dirty)
+			assert.NoError(t, os.WriteFile(filepath.Join(nested, "target.txt"), []byte("target work"), 0o644))
+			dirty, isRepo, err = IsWorkingTreeDirty(t.Context(), nested)
+			assert.NoError(t, err)
+			assert.True(t, isRepo)
+			assert.True(t, dirty)
+
+			outside := t.TempDir()
+			inside, err = IsInsideWorkingTree(t.Context(), outside)
+			assert.NoError(t, err)
+			assert.False(t, inside)
+			dirty, isRepo, err = IsWorkingTreeDirty(t.Context(), outside)
+			assert.NoError(t, err)
+			assert.False(t, isRepo)
+			assert.False(t, dirty)
+		})
+	}
+}
 
 func TestInvalidGitRepository(t *testing.T) {
 	t.Parallel()
