@@ -7,8 +7,9 @@ name or enum value here is a breaking change to a public interface.
 - `type: skill` and `type: mcp` entries are listed.
 - The directory has no remote source: entries are hardwired in Go
   (`integrations.go`). `ai list` / `ai info` make no network calls.
-- `ai list --installed` is not part of this catalog contract: it reports what
-  skills.sh has installed (via `skills list --json`), not the directory.
+- `ai list --installed` is not part of this catalog contract: it reports what is
+  installed on disk — skills (via skills.sh `skills list --json`) and MCP servers
+  (read from the agent config files) — not the directory.
 
 ## Enums (values may be ADDED later, never renamed/removed)
 
@@ -40,9 +41,10 @@ human line only.
   documentation,
   delivery: { kind, repository?, url?, transport? } }
 
-`ai list --installed` is reported straight from skills.sh (`skills list --json`),
-filtered to the directory's skills, and is not frozen by this contract:
-{ name, scope, agents: [ ... ], source }
+`ai list --installed` reports what is installed on disk — skills (from skills.sh
+`skills list --json`) and MCP servers (from the agent config files) — filtered to
+the directory, and is not frozen by this contract:
+{ name, type, scope, agents: [ ... ], source }
 
 ## Guarantees
 - All human + JSON output → stdout; logs/errors → stderr.

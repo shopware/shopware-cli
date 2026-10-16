@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/shopware/shopware-cli/internal/ai/mcp"
 	"github.com/shopware/shopware-cli/internal/ai/skills"
 )
 
@@ -32,23 +33,23 @@ func TestSplitNameTag(t *testing.T) {
 	assert.Equal(t, "v1.2.3", tag)
 }
 
-// call captures how runSkills/runMCP were invoked and what listSkills should return.
+// call captures how runSkills was invoked and what listSkills should return.
 type call struct {
 	calls     int
 	lastArgv  []string
 	lastDir   string
 	installed []skills.Installed // what listSkills returns
-	mcpCalls  int
-	mcpArgv   []string
 }
 
-// setup replaces runSkills and listSkills with fakes and points project
-// resolution at a temp dir so a project install needs no real Shopware project.
+// setup replaces runSkills and listSkills with fakes, points project resolution at
+// a temp dir, and isolates HOME so MCP file writes land in a temp config.
 func setup(t *testing.T) *call {
 	t.Helper()
 
 	tmp := t.TempDir()
 	t.Setenv("PROJECT_ROOT", tmp)
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	t.Chdir(tmp)
 
 	rec := &call{}
@@ -63,16 +64,9 @@ func setup(t *testing.T) *call {
 	listSkills = func(_ context.Context, _ string, _ bool) ([]skills.Installed, error) {
 		return rec.installed, nil
 	}
-	prevMCP := runMCP
-	runMCP = func(_ context.Context, argv []string, _ string, _ io.Writer) error {
-		rec.mcpCalls++
-		rec.mcpArgv = argv
-		return nil
-	}
 	t.Cleanup(func() {
 		runSkills = prevRun
 		listSkills = prevList
-		runMCP = prevMCP
 	})
 
 	return rec
@@ -156,40 +150,51 @@ func TestAddGuards(t *testing.T) {
 	assert.Equal(t, 0, rec.calls)
 }
 
-func TestAddMCPInstallsGlobally(t *testing.T) {
+func TestAddMCPWritesConfig(t *testing.T) {
 	rec := setup(t)
 
 	// No --global flag: an MCP install is always global.
 	res, err := runAdd(t, Options{Name: "meteor", Agent: "claude-code"})
 	require.NoError(t, err)
 	assert.Equal(t, ScopeGlobal, res.Scope)
-	assert.Equal(t, 1, rec.mcpCalls)
 	assert.Equal(t, 0, rec.calls, "mcp install must not run skills.sh")
 
-	joined := strings.Join(rec.mcpArgv, " ")
-	assert.Contains(t, joined, "add-mcp@2")
-	assert.Contains(t, joined, "https://meteor.shopware.com/mcp")
-	assert.Contains(t, joined, "--agent claude-code")
-	assert.Contains(t, joined, "--transport http")
+	servers, err := mcp.List()
+	require.NoError(t, err)
+	require.Len(t, servers, 1)
+	assert.Equal(t, "meteor", servers[0].Name)
+	assert.Equal(t, "https://meteor.shopware.com/mcp", servers[0].Source)
 }
 
 func TestAddMCPRejectsTag(t *testing.T) {
-	rec := setup(t)
+	setup(t)
 
 	_, err := runAdd(t, Options{Name: "meteor@1.0", Agent: "claude-code"})
 	assert.ErrorContains(t, err, "cannot be pinned")
-	assert.Equal(t, 0, rec.mcpCalls)
 }
 
-func TestRemoveMCP(t *testing.T) {
-	rec := setup(t)
+func TestAddMCPRejectsUnsupportedAgent(t *testing.T) {
+	setup(t)
 
+	_, err := runAdd(t, Options{Name: "meteor", Agent: "codex"})
+	assert.ErrorContains(t, err, "not supported for MCP")
+}
+
+func TestRemoveMCPReportsWhetherPresent(t *testing.T) {
+	setup(t)
+
+	// Nothing installed yet → reports not removed.
 	res, err := runRemove(t, RemoveOptions{Name: "meteor", Agent: "claude-code"})
 	require.NoError(t, err)
-	assert.True(t, res.Removed)
+	assert.False(t, res.Removed)
 	assert.Equal(t, ScopeGlobal, res.Scope)
-	assert.Equal(t, 1, rec.mcpCalls)
-	assert.Contains(t, strings.Join(rec.mcpArgv, " "), "add-mcp@2 remove meteor --agent claude-code")
+
+	// Install then remove → reports removed.
+	_, err = runAdd(t, Options{Name: "meteor", Agent: "claude-code"})
+	require.NoError(t, err)
+	res, err = runRemove(t, RemoveOptions{Name: "meteor", Agent: "claude-code"})
+	require.NoError(t, err)
+	assert.True(t, res.Removed)
 }
 
 func TestRemoveInstalledRunsSkills(t *testing.T) {
