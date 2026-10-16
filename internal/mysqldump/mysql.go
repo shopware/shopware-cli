@@ -32,6 +32,13 @@ type Dumper struct {
 	LimitMap map[string]TableLimit
 	// limitWhere contains the WHERE conditions computed from LimitMap
 	limitWhere map[string]string
+	// ExcludeMap contains per-table conditions selecting the rows to exclude
+	// (table -> WHERE clause). Tables referencing an excluded table via foreign
+	// keys are filtered automatically, so rows referencing an excluded row are
+	// excluded too.
+	ExcludeMap map[string]string
+	// excludeWhere contains the WHERE conditions computed from ExcludeMap
+	excludeWhere map[string]string
 	// limitResolver holds the planned row-limit filters between computeLimitFilters
 	// and the staging table setup.
 	limitResolver *limitResolver
@@ -106,6 +113,10 @@ func (d *Dumper) Dump(ctx context.Context, w io.Writer) error {
 	}
 
 	if err := d.computeLimitFilters(ctx); err != nil {
+		return err
+	}
+
+	if err := d.computeExcludeFilters(ctx); err != nil {
 		return err
 	}
 
@@ -317,10 +328,10 @@ func (d *Dumper) dumpTableDataDirect(ctx context.Context, w io.Writer, table str
 	var tmp string
 	var err error
 
-	// Row-limit conditions contain subqueries on other tables (or the table
-	// itself), which MySQL rejects with ER_TABLE_NOT_LOCKED while the table
-	// is locked via FLUSH TABLES ... WITH READ LOCK.
-	lockTable := d.LockTables && !d.hasLimitFilter(table)
+	// Row-limit and row-exclusion conditions contain subqueries on other tables
+	// (or the table itself), which MySQL rejects with ER_TABLE_NOT_LOCKED while
+	// the table is locked via FLUSH TABLES ... WITH READ LOCK.
+	lockTable := d.LockTables && !d.hasLimitFilter(table) && !d.hasExcludeFilter(table)
 
 	if lockTable {
 		_, err = d.mysqlFlushTable(ctx, table)
@@ -366,6 +377,12 @@ func (d *Dumper) dumpTableDataDirect(ctx context.Context, w io.Writer, table str
 // hasLimitFilter reports whether the queries of the table carry a row-limit condition.
 func (d *Dumper) hasLimitFilter(table string) bool {
 	_, ok := d.limitWhere[strings.ToLower(table)]
+	return ok
+}
+
+// hasExcludeFilter reports whether the queries of the table carry a row-exclusion condition.
+func (d *Dumper) hasExcludeFilter(table string) bool {
+	_, ok := d.excludeWhere[strings.ToLower(table)]
 	return ok
 }
 
@@ -672,13 +689,13 @@ func (d *Dumper) getSelectQueryFor(ctx context.Context, table string) (cols []st
 	return
 }
 
-// effectiveWhere combines the user-configured WHERE clause with the condition
-// computed from the row limits for the given table.
+// effectiveWhere combines the user-configured WHERE clause with the conditions
+// computed from the row limits and row exclusions for the given table.
 func (d *Dumper) effectiveWhere(table string) string {
 	table = strings.ToLower(table)
 
-	conditions := make([]string, 0, 2)
-	for _, condition := range []string{d.WhereMap[table], d.limitWhere[table]} {
+	conditions := make([]string, 0, 3)
+	for _, condition := range []string{d.WhereMap[table], d.limitWhere[table], d.excludeWhere[table]} {
 		if condition != "" {
 			conditions = append(conditions, condition)
 		}
