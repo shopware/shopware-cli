@@ -455,9 +455,14 @@ func prefixColumns(tableRef string, columns []string) string {
 }
 
 func (r *limitResolver) nullableColumns(table string, columns []string) []string {
+	return nullableColumns(r.schemas[table], columns)
+}
+
+// nullableColumns returns the subset of columns that the schema allows to be NULL.
+func nullableColumns(schema *TableSchema, columns []string) []string {
 	var nullable []string
 	for _, column := range columns {
-		for _, col := range r.schemas[table].Columns {
+		for _, col := range schema.Columns {
 			if col.Name == column && col.Nullable {
 				nullable = append(nullable, column)
 				break

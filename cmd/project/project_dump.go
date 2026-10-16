@@ -27,7 +27,9 @@ var projectDatabaseDumpCmd = &cobra.Command{
 	Short: "Export a Shopware project's database to SQL",
 	Long: `Export the project database to a SQL file, using the connection details of the current environment unless overridden with the connection flags.
 
---limit keeps only the newest rows of a table (e.g. order=100). Tables referencing the limited table are filtered automatically; ancestors of self-referencing rows (e.g. product variants) are kept so the dump stays importable. Freezing the kept rows into staging tables requires the CREATE and DROP privileges.`,
+--limit keeps only the newest rows of a table (e.g. order=100). Tables referencing the limited table are filtered automatically; ancestors of self-referencing rows (e.g. product variants) are kept so the dump stays importable. Freezing the kept rows into staging tables requires the CREATE and DROP privileges.
+
+--clone-shop prepares the dump for use as a new shop: apps with an app secret and all rows referencing them are left out, and the shop ID (core.app.shopId, core.app.shopIdV2) is removed from system_config so the clone generates a new one.`,
 	Args: cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, _ []string) error {
 		mysqlConfig, err := assembleConnectionURI(cmd)
@@ -51,6 +53,7 @@ var projectDatabaseDumpCmd = &cobra.Command{
 		clean, _ := cmd.Flags().GetBool("clean")
 		skipLockTables, _ := cmd.Flags().GetBool("skip-lock-tables")
 		anonymize, _ := cmd.Flags().GetBool("anonymize")
+		cloneShop, _ := cmd.Flags().GetBool("clone-shop")
 		quick, _ := cmd.Flags().GetBool("quick")
 		parallel, _ := cmd.Flags().GetInt("parallel")
 		insertIntoLimit, _ := cmd.Flags().GetInt("insert-into-limit")
@@ -70,6 +73,7 @@ var projectDatabaseDumpCmd = &cobra.Command{
 			Compression:       compression,
 			Clean:             clean,
 			Anonymize:         anonymize,
+			CloneShop:         cloneShop,
 			ExtensionTables:   extensionTables,
 			SystemConfigRules: systemConfigRules,
 			SkipLockTables:    skipLockTables,
@@ -180,6 +184,7 @@ func init() {
 	projectDatabaseDumpCmd.Flags().Bool("clean", false, "Exclude data from transient tables (e.g. cart, messenger_messages, message_queue_stats, log_entry)")
 	projectDatabaseDumpCmd.Flags().Bool("skip-lock-tables", false, "Skip locking tables during the dump")
 	projectDatabaseDumpCmd.Flags().Bool("anonymize", false, "Anonymize personal data, extension-declared columns, and extension system config secrets")
+	projectDatabaseDumpCmd.Flags().Bool("clone-shop", false, "Prepare the dump for cloning the shop: remove apps with an app secret including their relations, and remove the shop ID")
 	projectDatabaseDumpCmd.Flags().String("compression", "", "Compress the dump (gzip, zstd)")
 	_ = projectDatabaseDumpCmd.RegisterFlagCompletionFunc("compression", cobra.FixedCompletions([]string{string(mysqldump.CompressionGzip), string(mysqldump.CompressionZstd)}, cobra.ShellCompDirectiveNoFileComp))
 	projectDatabaseDumpCmd.Flags().Bool("quick", false, "Use quick option for mysqldump")
