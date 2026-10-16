@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/shopware/shopware-cli/internal/ai/mcp"
 	"github.com/shopware/shopware-cli/internal/ai/skills"
 )
 
@@ -40,13 +41,15 @@ type call struct {
 	installed []skills.Installed // what listSkills returns
 }
 
-// setup replaces runSkills and listSkills with fakes and points project
-// resolution at a temp dir so a project install needs no real Shopware project.
+// setup replaces runSkills and listSkills with fakes, points project resolution at
+// a temp dir, and isolates HOME so MCP file writes land in a temp config.
 func setup(t *testing.T) *call {
 	t.Helper()
 
 	tmp := t.TempDir()
 	t.Setenv("PROJECT_ROOT", tmp)
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	t.Chdir(tmp)
 
 	rec := &call{}
@@ -145,6 +148,78 @@ func TestAddGuards(t *testing.T) {
 	assert.ErrorContains(t, err, "single agent")
 
 	assert.Equal(t, 0, rec.calls)
+}
+
+func TestAddMCPWritesConfig(t *testing.T) {
+	rec := setup(t)
+
+	// No --global flag: an MCP install is always global.
+	res, err := runAdd(t, Options{Name: "meteor", Agent: "claude-code"})
+	require.NoError(t, err)
+	assert.Equal(t, ScopeGlobal, res.Scope)
+	assert.Equal(t, 0, rec.calls, "mcp install must not run skills.sh")
+
+	servers, err := mcp.List()
+	require.NoError(t, err)
+	require.Len(t, servers, 1)
+	assert.Equal(t, "meteor", servers[0].Name)
+	assert.Equal(t, "https://meteor.shopware.com/mcp", servers[0].Source)
+}
+
+func TestAddMCPRejectsTag(t *testing.T) {
+	setup(t)
+
+	_, err := runAdd(t, Options{Name: "meteor@1.0", Agent: "claude-code"})
+	assert.ErrorContains(t, err, "cannot be pinned")
+}
+
+func TestAddMCPRejectsUnsupportedAgent(t *testing.T) {
+	setup(t)
+
+	_, err := runAdd(t, Options{Name: "meteor", Agent: "codex"})
+	assert.ErrorContains(t, err, "not supported for MCP")
+}
+
+func TestRemoveMCPReportsWhetherPresent(t *testing.T) {
+	setup(t)
+
+	// Nothing installed yet → reports not removed.
+	res, err := runRemove(t, RemoveOptions{Name: "meteor", Agent: "claude-code"})
+	require.NoError(t, err)
+	assert.False(t, res.Removed)
+	assert.Equal(t, ScopeGlobal, res.Scope)
+
+	// Install then remove → reports removed.
+	_, err = runAdd(t, Options{Name: "meteor", Agent: "claude-code"})
+	require.NoError(t, err)
+	res, err = runRemove(t, RemoveOptions{Name: "meteor", Agent: "claude-code"})
+	require.NoError(t, err)
+	assert.True(t, res.Removed)
+}
+
+func TestRemoveMCPDryRunReportsPresenceWithoutWriting(t *testing.T) {
+	setup(t)
+
+	// Dry run with nothing installed must not claim a removal.
+	res, err := runRemove(t, RemoveOptions{Name: "meteor", Agent: "claude-code", DryRun: true})
+	require.NoError(t, err)
+	assert.True(t, res.DryRun)
+	assert.False(t, res.Removed, "dry-run must not report a removal when nothing is configured")
+
+	servers, err := mcp.List()
+	require.NoError(t, err)
+	assert.Empty(t, servers, "dry-run must not write the config")
+
+	// Dry run after an install reports it would remove, still without writing.
+	_, err = runAdd(t, Options{Name: "meteor", Agent: "claude-code"})
+	require.NoError(t, err)
+	res, err = runRemove(t, RemoveOptions{Name: "meteor", Agent: "claude-code", DryRun: true})
+	require.NoError(t, err)
+	assert.True(t, res.Removed)
+
+	servers, err = mcp.List()
+	require.NoError(t, err)
+	assert.Len(t, servers, 1, "dry-run leaves the installed server in place")
 }
 
 func TestRemoveInstalledRunsSkills(t *testing.T) {

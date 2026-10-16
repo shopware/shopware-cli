@@ -4,24 +4,26 @@ Frozen contract for `shopware-cli ai list` / `ai info`. Changing any field
 name or enum value here is a breaking change to a public interface.
 
 ## Scope of v1
-- Only `type: skill` entries are listed. `mcp` (shopware-core) is reserved for a later increment.
+- `type: skill` and `type: mcp` entries are listed.
 - The directory has no remote source: entries are hardwired in Go
   (`integrations.go`). `ai list` / `ai info` make no network calls.
-- `ai list --installed` is not part of this catalog contract: it reports what
-  skills.sh has installed (via `skills list --json`), not the directory.
+- `ai list --installed` is not part of this catalog contract: it reports what is
+  installed on disk — skills (via skills.sh `skills list --json`) and MCP servers
+  (read from the agent config files) — not the directory.
 
 ## Enums (values may be ADDED later, never renamed/removed)
 
 | Field           | v1 values                          | reserved for later |
 |-----------------|------------------------------------|--------------------|
-| type            | skill                              | mcp                |
-| delivery.kind   | git                                | project            |
+| type            | skill, mcp                         | —                  |
+| delivery.kind   | git, mcp                           | project            |
 | status          | active, deprecated                 | —                  |
 
 ## Entry fields (defined in Go)
 Required:  name, displayName, type, provider, description, status,
            delivery (+ delivery.kind), documentation
 Conditional: delivery.repository ("owner/repo") — required when delivery.kind == git
+             delivery.url, delivery.transport — required when delivery.kind == mcp
 
 `name` is lowercase, hyphenated, and unique across the directory.
 
@@ -37,11 +39,12 @@ human line only.
 `ai info <name>` — object (superset of list):
 { name, displayName, type, provider, description, status,
   documentation,
-  delivery: { kind, repository? } }
+  delivery: { kind, repository?, url?, transport? } }
 
-`ai list --installed` is reported straight from skills.sh (`skills list --json`),
-filtered to the directory's skills, and is not frozen by this contract:
-{ name, scope, agents: [ ... ], source }
+`ai list --installed` reports what is installed on disk — skills (from skills.sh
+`skills list --json`) and MCP servers (from the agent config files) — filtered to
+the directory, and is not frozen by this contract:
+{ name, type, scope, agents: [ ... ], source }
 
 ## Guarantees
 - All human + JSON output → stdout; logs/errors → stderr.

@@ -13,6 +13,7 @@ import (
 	"strings"
 
 	"github.com/shopware/shopware-cli/internal/ai/directory"
+	"github.com/shopware/shopware-cli/internal/ai/mcp"
 	"github.com/shopware/shopware-cli/internal/ai/skills"
 	"github.com/shopware/shopware-cli/internal/shop"
 )
@@ -61,6 +62,9 @@ func Add(ctx context.Context, o Options, progress io.Writer) (Result, error) {
 	if !ok {
 		return Result{}, fmt.Errorf("unknown integration %q (see \"shopware-cli ai list\")", name)
 	}
+	if entry.Type == directory.TypeMCP {
+		return addMCP(o, entry, tag)
+	}
 	if entry.Type != directory.TypeSkill {
 		return Result{}, fmt.Errorf("installing %q is not supported", entry.Name)
 	}
@@ -90,6 +94,43 @@ func Add(ctx context.Context, o Options, progress io.Writer) (Result, error) {
 	}
 
 	if err := runSkills(ctx, result.Command, dir, progress); err != nil {
+		return Result{}, err
+	}
+
+	return result, nil
+}
+
+// addMCP installs an MCP server by writing the agent's config directly. MCP
+// integrations are global by design (a remote server is not shop-specific), so the
+// install takes no project root and no @tag.
+func addMCP(o Options, entry *directory.Integration, tag string) (Result, error) {
+	if tag != "" {
+		return Result{}, fmt.Errorf("%q is an MCP server and cannot be pinned with @tag", entry.Name)
+	}
+	if err := validateAgent(o.Agent); err != nil {
+		return Result{}, err
+	}
+	if !mcp.Supported(o.Agent) {
+		return Result{}, fmt.Errorf("agent %q is not supported for MCP (supported: %s)", o.Agent, strings.Join(mcp.SupportedAgents(), ", "))
+	}
+
+	path, err := mcp.ConfigPath(o.Agent)
+	if err != nil {
+		return Result{}, err
+	}
+
+	result := Result{
+		Name:    entry.Name,
+		Agent:   o.Agent,
+		Scope:   ScopeGlobal,
+		DryRun:  o.DryRun,
+		Command: []string{"writes", path},
+	}
+	if o.DryRun {
+		return result, nil
+	}
+
+	if err := mcp.Add(o.Agent, entry.Name, entry.Delivery.URL, entry.Delivery.Transport); err != nil {
 		return Result{}, err
 	}
 
@@ -128,6 +169,9 @@ func Remove(ctx context.Context, o RemoveOptions, progress io.Writer) (RemoveRes
 	if !ok {
 		return RemoveResult{}, fmt.Errorf("unknown integration %q (see \"shopware-cli ai list\")", o.Name)
 	}
+	if entry.Type == directory.TypeMCP {
+		return removeMCP(o, entry)
+	}
 
 	scope, dir, err := resolveScope(o.Global)
 	if err != nil {
@@ -155,6 +199,44 @@ func Remove(ctx context.Context, o RemoveOptions, progress io.Writer) (RemoveRes
 	if err := runSkills(ctx, result.Command, dir, progress); err != nil {
 		return RemoveResult{}, err
 	}
+
+	return result, nil
+}
+
+// removeMCP removes an MCP server from the agent's config (always global),
+// deleting exactly the named entry and reporting whether it was there.
+func removeMCP(o RemoveOptions, entry *directory.Integration) (RemoveResult, error) {
+	if !mcp.Supported(o.Agent) {
+		return RemoveResult{}, fmt.Errorf("agent %q is not supported for MCP (supported: %s)", o.Agent, strings.Join(mcp.SupportedAgents(), ", "))
+	}
+
+	path, err := mcp.ConfigPath(o.Agent)
+	if err != nil {
+		return RemoveResult{}, err
+	}
+
+	result := RemoveResult{
+		Name:    entry.Name,
+		Agent:   o.Agent,
+		Scope:   ScopeGlobal,
+		DryRun:  o.DryRun,
+		Command: []string{"updates", path},
+	}
+	if o.DryRun {
+		present, err := mcp.Has(o.Agent, entry.Name)
+		if err != nil {
+			return RemoveResult{}, err
+		}
+		result.Removed = present
+
+		return result, nil
+	}
+
+	removed, err := mcp.Remove(o.Agent, entry.Name)
+	if err != nil {
+		return RemoveResult{}, err
+	}
+	result.Removed = removed
 
 	return result, nil
 }
