@@ -389,3 +389,51 @@ func TestWorkingTreeChecksIgnoreDiscoveryEnvironment(t *testing.T) {
 		})
 	}
 }
+
+// TestWorkingTreeChecksDoNotFallBack checks explicit targets while both the
+// current directory and inherited locations point at a different working tree.
+func TestWorkingTreeChecksDoNotFallBack(t *testing.T) {
+	ambient := t.TempDir()
+	prepareRepository(t, ambient)
+	assert.NoError(t, os.WriteFile(filepath.Join(ambient, "ambient.txt"), []byte("local work"), 0o644))
+	repo := t.TempDir()
+	prepareRepository(t, repo)
+	assert.NoError(t, os.WriteFile(filepath.Join(repo, "tracked.txt"), []byte("committed"), 0o644))
+	runCommand(t, repo, "add", ".")
+	runCommand(t, repo, "commit", "-m", "initial commit")
+	worktree := filepath.Join(t.TempDir(), "worktree")
+	runCommand(t, repo, "worktree", "add", "-b", "fallback-test", worktree)
+	bare := t.TempDir()
+	runCommand(t, bare, "init", "--bare")
+
+	t.Chdir(ambient)
+	t.Setenv("GIT_DIR", filepath.Join(ambient, ".git"))
+	t.Setenv("GIT_WORK_TREE", ambient)
+	for _, tc := range []struct {
+		name   string
+		path   string
+		inside bool
+	}{
+		{"linked worktree", worktree, true},
+		{"bare repository", bare, false},
+		{"outside git", t.TempDir(), false},
+		{"missing path", filepath.Join(t.TempDir(), "missing"), false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			inside, err := IsInsideWorkingTree(t.Context(), tc.path)
+			assert.NoError(t, err)
+			assert.Equal(t, tc.inside, inside)
+			dirty, isRepo, err := IsWorkingTreeDirty(t.Context(), tc.path)
+			assert.NoError(t, err)
+			assert.Equal(t, tc.inside, isRepo)
+			assert.False(t, dirty)
+			if tc.inside {
+				assert.NoError(t, os.WriteFile(filepath.Join(tc.path, "tracked.txt"), []byte("modified"), 0o644))
+				dirty, isRepo, err = IsWorkingTreeDirty(t.Context(), tc.path)
+				assert.NoError(t, err)
+				assert.True(t, isRepo)
+				assert.True(t, dirty)
+			}
+		})
+	}
+}
