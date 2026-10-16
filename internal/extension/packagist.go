@@ -3,24 +3,17 @@ package extension
 import (
 	"context"
 	"fmt"
-	"os"
 	"sort"
 
 	"github.com/shyim/go-composer/repository"
 	"github.com/shyim/go-version"
 )
 
-// PackagistURL returns the Composer repository to query, SHOPWARE_CLI_PACKAGIST_URL first.
-func PackagistURL() string {
-	if url := os.Getenv("SHOPWARE_CLI_PACKAGIST_URL"); url != "" {
-		return url
-	}
-
-	return repository.PackagistURL
-}
+// PackagistURL is the Composer repository to query; tests point it at a local server.
+var PackagistURL = repository.PackagistURL
 
 func GetShopwareVersions(ctx context.Context) ([]string, error) {
-	pkg, err := repository.New(PackagistURL(), nil).GetPackage(ctx, "shopware/core")
+	pkg, err := repository.New(PackagistURL, nil).GetPackage(ctx, "shopware/core")
 	if err != nil {
 		return nil, fmt.Errorf("get package versions: %w", err)
 	}

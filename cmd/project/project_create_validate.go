@@ -12,6 +12,7 @@ import (
 	"github.com/shyim/go-composer/repository"
 	"github.com/shyim/go-version"
 
+	"github.com/shopware/shopware-cli/internal/extension"
 	"github.com/shopware/shopware-cli/internal/shop"
 	"github.com/shopware/shopware-cli/internal/system"
 	"github.com/shopware/shopware-cli/internal/tui"
@@ -65,7 +66,7 @@ func validateAndPreflight(ctx context.Context, opts *createOptions, releases []r
 }
 
 func checkSecurityAdvisories(ctx context.Context, opts *createOptions, chosenVersion string) error {
-	advisories, err := repository.New(packagistURL, nil).GetSecurityAdvisories(ctx, []string{"shopware/core"})
+	advisories, err := repository.New(extension.PackagistURL, nil).GetSecurityAdvisories(ctx, []string{"shopware/core"})
 	if err != nil {
 		logging.FromContext(ctx).Warnf("Could not fetch security advisories: %v", err)
 	}

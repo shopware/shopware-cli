@@ -1,16 +1,36 @@
 package extension
 
 import (
+	"context"
+	"net/http/httptest"
 	"testing"
 
 	"github.com/shyim/go-composer/repository"
 	"github.com/stretchr/testify/assert"
 )
 
-func TestPackagistURL(t *testing.T) {
-	t.Setenv("SHOPWARE_CLI_PACKAGIST_URL", "")
-	assert.Equal(t, repository.PackagistURL, PackagistURL())
+type fakeShopwareCore struct{}
 
-	t.Setenv("SHOPWARE_CLI_PACKAGIST_URL", "http://127.0.0.1:9/p2")
-	assert.Equal(t, "http://127.0.0.1:9/p2", PackagistURL())
+func (fakeShopwareCore) Package(_ context.Context, name string) (*repository.Package, error) {
+	if name != "shopware/core" {
+		return nil, repository.ErrPackageNotFound
+	}
+
+	return &repository.Package{Name: name, Versions: []repository.Version{
+		{Name: name, Version: "v6.6.0.0", VersionNormalized: "6.6.0.0"},
+		{Name: name, Version: "v6.7.0.0", VersionNormalized: "6.7.0.0"},
+	}}, nil
+}
+
+func TestGetShopwareVersions(t *testing.T) {
+	server := httptest.NewServer(repository.NewHandler(fakeShopwareCore{}))
+	t.Cleanup(server.Close)
+
+	original := PackagistURL
+	PackagistURL = server.URL
+	t.Cleanup(func() { PackagistURL = original })
+
+	versions, err := GetShopwareVersions(t.Context())
+	assert.NoError(t, err)
+	assert.ElementsMatch(t, []string{"6.6.0.0", "6.7.0.0"}, versions)
 }

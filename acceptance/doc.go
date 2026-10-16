@@ -3,8 +3,9 @@
 //
 // Each testdata/*.txtar file is a script for [testscript]: commands,
 // assertions on exit status, stdout, stderr and files, and the fixtures the
-// script needs. Scripts assert behaviour, never message wording, and run
-// without network access.
+// script needs. Scripts match values the command echoes back and structural
+// markers such as the Usage: heading, never sentences. They run without
+// network access.
 //
 // Run every script, or one script with its transcript:
 //

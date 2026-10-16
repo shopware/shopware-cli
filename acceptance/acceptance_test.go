@@ -1,21 +1,12 @@
 package acceptance
 
 import (
-	"context"
 	"net/http/httptest"
-	"os"
 	"testing"
 
 	"github.com/rogpeppe/go-internal/testscript"
 	"github.com/shyim/go-composer/repository"
-
-	"github.com/shopware/shopware-cli/cmd"
 )
-
-// runCLI is what the scripts execute; it matches main.
-func runCLI() {
-	os.Exit(cmd.Execute(context.Background()))
-}
 
 func TestMain(m *testing.M) {
 	testscript.Main(m, map[string]func(){
@@ -38,7 +29,7 @@ func TestScripts(t *testing.T) {
 			// Scripts run offline: no telemetry, no update check, a local Packagist.
 			env.Setenv("DO_NOT_TRACK", "1")
 			env.Setenv("SHOPWARE_CLI_NO_UPDATE_NOTIFICATION", "true")
-			env.Setenv("SHOPWARE_CLI_PACKAGIST_URL", packagist.URL)
+			env.Setenv("ACCEPTANCE_PACKAGIST_URL", packagist.URL)
 			return nil
 		},
 	})

@@ -7,7 +7,6 @@ import (
 )
 
 // shopwareCoreVersions is a Composer repository with a fixed set of shopware/core releases.
-// Kept out of the test files so a coverage run instruments this package; otherwise every CLI process warns about -cover.
 type shopwareCoreVersions struct{}
 
 func (shopwareCoreVersions) Package(_ context.Context, name string) (*repository.Package, error) {
