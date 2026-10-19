@@ -19,6 +19,12 @@ const (
 	TypeMCP   Type = "mcp"
 )
 
+// String returns the type's wire value, so callers can render a Type without a
+// string() conversion.
+func (t Type) String() string {
+	return string(t)
+}
+
 // DeliveryKind describes how an integration is delivered. "project" is reserved
 // for a later increment and must not be renamed when added.
 type DeliveryKind string

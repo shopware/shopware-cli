@@ -102,7 +102,7 @@ func writeList(w io.Writer, format string, entries []directory.Integration) erro
 			Provider:    e.Provider,
 			Description: e.Description,
 			Status:      e.Status,
-		}, e.Name, string(e.Type), e.Provider, string(e.Status), e.Description)
+		}, e.Name, e.Type.String(), e.Provider, string(e.Status), e.Description)
 	}
 
 	return t.Write(w, tui.TableFormat(format))
@@ -117,7 +117,7 @@ func writeInstalled(w io.Writer, format string, records []installedRow) error {
 		tui.TableColumn{Title: "Source", JSONKey: "source"},
 	)
 	for _, e := range records {
-		t.AddRowWithJSON(e, e.Name, string(e.Type), strings.Join(e.Agents, ", "), e.Scope, e.Source)
+		t.AddRowWithJSON(e, e.Name, e.Type.String(), strings.Join(e.Agents, ", "), e.Scope, e.Source)
 	}
 
 	return t.Write(w, tui.TableFormat(format))
@@ -160,7 +160,7 @@ func installedRecords(ctx context.Context, catalog []directory.Integration) ([]i
 		}
 	}
 
-	servers, err := listMCP()
+	servers, err := listMCP(root)
 	if err != nil {
 		return nil, err
 	}
@@ -169,8 +169,7 @@ func installedRecords(ctx context.Context, catalog []directory.Integration) ([]i
 			out = append(out, installedRow{
 				Name:   s.Name,
 				Type:   directory.TypeMCP,
-				Agents: []string{s.Agent},
-				Scope:  "global",
+				Scope:  "project",
 				Source: s.Source,
 			})
 		}
@@ -182,7 +181,7 @@ func installedRecords(ctx context.Context, catalog []directory.Integration) ([]i
 func init() {
 	aiRootCmd.AddCommand(aiListCmd)
 	aiListCmd.Flags().String("type", "", "Filter by integration type (skill, mcp)")
-	_ = aiListCmd.RegisterFlagCompletionFunc("type", cobra.FixedCompletions([]string{string(directory.TypeSkill), string(directory.TypeMCP)}, cobra.ShellCompDirectiveNoFileComp))
+	_ = aiListCmd.RegisterFlagCompletionFunc("type", cobra.FixedCompletions([]string{directory.TypeSkill.String(), directory.TypeMCP.String()}, cobra.ShellCompDirectiveNoFileComp))
 	aiListCmd.Flags().Bool("installed", false, "Show installed skills and MCP servers")
 	addFormatFlag(aiListCmd)
 }

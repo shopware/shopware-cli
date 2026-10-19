@@ -160,9 +160,9 @@ supported AI clients. Shopware CLI does not maintain client-specific copies.
 ## Installing with Shopware CLI
 
 Shopware CLI exposes an `ai` command group as a thin front door for installing
-integrations: it runs skills.sh for skills and writes the agent's MCP config
-itself for MCP servers. Installing a skill requires Node.js/npx on PATH
-(git-delivered integrations also need git and network access).
+integrations: it runs skills.sh for skills and writes the project's `.mcp.json`
+for MCP servers. Installing a skill requires Node.js/npx on PATH (git-delivered
+integrations also need git and network access).
 
 ```bash
 # discover integrations
@@ -196,34 +196,31 @@ integration with your team, or gitignore them to keep it local.
 ### MCP integrations
 
 An integration of type `mcp` (for example `meteor`, the Meteor MCP server) is a
-remote server rather than a skill. The CLI configures it by editing the agent's
-own MCP config file directly — no external tooling — so `add` and `remove` target
-exactly the named server. A remote server is not tied to a shop, so an MCP install
-is always at user level (global) and takes no `@<tag>`.
+remote server rather than a skill. The CLI configures it by writing the project's
+`.mcp.json` — the standard `{"mcpServers": {…}}` file MCP clients read — instead of
+any agent's own config. Because the CLI owns that one file, `add` and `remove`
+target exactly the named server, and no per-agent config paths need to be known.
+
+An MCP install is project-scoped: `.mcp.json` lives in the Shopware project root,
+and committing it shares the server with your team. It takes no `@<tag>` and no
+`--agent` (the file is not agent-specific), and `--global` is not supported.
 
 ```bash
 shopware-cli ai info meteor
-shopware-cli ai add meteor --agent claude-code          # always global
-shopware-cli ai add meteor --agent claude-code --dry-run
-shopware-cli ai remove meteor --agent claude-code
+shopware-cli ai add meteor               # writes <project>/.mcp.json
+shopware-cli ai add meteor --dry-run
+shopware-cli ai remove meteor
 ```
 
-Supported agents are the ones Meteor documents, each written to its own config
-file:
+`add` writes a remote `{"type":"http","url":…}` entry under `mcpServers`,
+preserving other servers and unrelated keys; `remove` deletes only the named
+server. `ai list --installed` reads the project's `.mcp.json` back and reports
+configured MCP servers alongside skills, with a `Type` column.
 
-| Agent            | Config file                                            |
-| ---------------- | ------------------------------------------------------ |
-| `claude-code`    | `~/.claude.json`                                       |
-| `cursor`         | `~/.cursor/mcp.json`                                    |
-| `vscode`         | `<user config dir>/Code/User/mcp.json`                 |
-| `claude-desktop` | `<user config dir>/Claude/claude_desktop_config.json`  |
-
-`add` writes a remote `{"type":"http","url":…}` entry (VS Code uses the `servers`
-key; the others use `mcpServers`). Claude Desktop has no native remote transport,
-so the CLI writes an `npx mcp-remote <url>` bridge for it. Other keys in the file
-are preserved, and `remove` deletes only the named server. `ai list --installed`
-reads these files back and reports configured MCP servers alongside skills, with a
-`Type` column.
+Claude Code reads `.mcp.json` from the project root natively. Clients that use a
+different project path (for example Cursor's `.cursor/mcp.json` or VS Code's
+`.vscode/mcp.json`) can import it; if broader coverage is needed later, the server
+can be distributed with a dedicated MCP installer instead.
 
 ### Known limitations
 

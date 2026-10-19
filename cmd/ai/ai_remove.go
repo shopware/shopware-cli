@@ -41,8 +41,15 @@ current Shopware project. Requires Node.js/npx on PATH.`,
 }
 
 func writeRemoveResult(w io.Writer, r install.RemoveResult) error {
+	// An MCP server lives in the project's .mcp.json, not an agent, so it carries no
+	// agent to name.
+	agent := ""
+	if r.Agent != "" {
+		agent = " for " + r.Agent
+	}
+
 	if !r.Removed {
-		_, err := fmt.Fprintf(w, "%s is not installed for %s (%s); nothing to remove\n", r.Name, r.Agent, r.Scope)
+		_, err := fmt.Fprintf(w, "%s is not installed%s (%s); nothing to remove\n", r.Name, agent, r.Scope)
 
 		return err
 	}
@@ -51,7 +58,7 @@ func writeRemoveResult(w io.Writer, r install.RemoveResult) error {
 	if r.DryRun {
 		verb = "[dry-run] would remove"
 	}
-	_, err := fmt.Fprintf(w, "%s %s for %s (%s):\n  %s\n", verb, r.Name, r.Agent, r.Scope, strings.Join(r.Command, " "))
+	_, err := fmt.Fprintf(w, "%s %s%s (%s):\n  %s\n", verb, r.Name, agent, r.Scope, strings.Join(r.Command, " "))
 
 	return err
 }

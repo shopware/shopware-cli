@@ -1,6 +1,9 @@
-// Package mcp configures remote MCP servers in AI agents by editing their config
-// files directly (no external tooling), so add and remove target exactly the named
-// server. It supports the agents Meteor documents; MCP installs are global.
+// Package mcp configures MCP servers for a project by maintaining a standard
+// .mcp.json file in the project root. The file uses the conventional
+// {"mcpServers": {...}} shape that MCP clients read, so a single committed file
+// serves the whole project (and the team) without the CLI having to know each
+// agent's own config location. Because the CLI owns this one file, add and remove
+// target exactly the named server.
 package mcp
 
 import (
@@ -12,192 +15,96 @@ import (
 	"strings"
 )
 
-// Installed is one MCP server configured for an agent.
+// FileName is the standard MCP config file an MCP client reads from a project.
+const FileName = ".mcp.json"
+
+// serversKey is the top-level object that holds the servers.
+const serversKey = "mcpServers"
+
+// Installed is one MCP server configured in a project's .mcp.json.
 type Installed struct {
 	Name   string
-	Agent  string // the agent's display name
 	Source string // the server URL
 }
 
-type entryShape int
-
-const (
-	shapeHTTP   entryShape = iota // {"type":"http","url":...} — direct remote server
-	shapeBridge                   // {"command":"npx","args":["mcp-remote",url]} — stdio bridge
-)
-
-type agentConfig struct {
-	display string
-	key     string // top-level object holding servers ("mcpServers" or "servers")
-	shape   entryShape
-	path    func() (string, error) // the global config file
+// ConfigPath returns the .mcp.json path for the given project root.
+func ConfigPath(dir string) string {
+	return filepath.Join(dir, FileName)
 }
 
-func home(parts ...string) func() (string, error) {
-	return func() (string, error) {
-		h, err := os.UserHomeDir()
-		if err != nil {
-			return "", err
-		}
-
-		return filepath.Join(append([]string{h}, parts...)...), nil
-	}
-}
-
-func userConfig(parts ...string) func() (string, error) {
-	return func() (string, error) {
-		// UserConfigDir is ~/Library/Application Support on macOS and
-		// $XDG_CONFIG_HOME (or ~/.config) on Linux — matching where these agents keep
-		// their config.
-		d, err := os.UserConfigDir()
-		if err != nil {
-			return "", err
-		}
-
-		return filepath.Join(append([]string{d}, parts...)...), nil
-	}
-}
-
-// agents are the clients Meteor documents. All store servers as JSON; VS Code uses
-// the "servers" key, and Claude Desktop needs an npx bridge for a remote server.
-var agents = map[string]agentConfig{
-	"claude-code":    {"Claude Code", "mcpServers", shapeHTTP, home(".claude.json")},
-	"cursor":         {"Cursor", "mcpServers", shapeHTTP, home(".cursor", "mcp.json")},
-	"vscode":         {"VS Code", "servers", shapeHTTP, userConfig("Code", "User", "mcp.json")},
-	"claude-desktop": {"Claude Desktop", "mcpServers", shapeBridge, userConfig("Claude", "claude_desktop_config.json")},
-}
-
-// Supported reports whether agent has a known MCP config layout.
-func Supported(agent string) bool {
-	_, ok := agents[agent]
-
-	return ok
-}
-
-// SupportedAgents lists the supported agent ids, sorted.
-func SupportedAgents() []string {
-	ids := make([]string, 0, len(agents))
-	for id := range agents {
-		ids = append(ids, id)
-	}
-	sort.Strings(ids)
-
-	return ids
-}
-
-// ConfigPath returns the file agent's MCP servers live in.
-func ConfigPath(agent string) (string, error) {
-	cfg, ok := agents[agent]
-	if !ok {
-		return "", unsupported(agent)
-	}
-
-	return cfg.path()
-}
-
-// Add writes the server into agent's config under the agent's server key,
-// replacing any entry of the same name. Other config content is preserved.
-func Add(agent, name, url, transport string) error {
-	cfg, ok := agents[agent]
-	if !ok {
-		return unsupported(agent)
-	}
-	path, err := cfg.path()
-	if err != nil {
-		return err
-	}
+// Add writes the server into dir's .mcp.json under the standard mcpServers key,
+// replacing any entry of the same name. Other servers and unrelated keys are
+// preserved.
+func Add(dir, name, url, transport string) error {
+	path := ConfigPath(dir)
 
 	doc, err := readDoc(path)
 	if err != nil {
 		return err
 	}
-	servers := serversMap(doc, cfg.key)
-	servers[name] = cfg.entry(url, transport)
-	doc[cfg.key] = servers
+	servers := serversMap(doc)
+	servers[name] = entry(url, transport)
+	doc[serversKey] = servers
 
 	return writeDoc(path, doc)
 }
 
-// Has reports whether the named server is configured for agent, without changing
-// anything. Remove uses it to report truthfully on a dry run.
-func Has(agent, name string) (bool, error) {
-	cfg, ok := agents[agent]
-	if !ok {
-		return false, unsupported(agent)
-	}
-	path, err := cfg.path()
+// Has reports whether the named server is configured in dir's .mcp.json, without
+// changing anything. Callers use it to report truthfully on a dry run.
+func Has(dir, name string) (bool, error) {
+	doc, err := readDoc(ConfigPath(dir))
 	if err != nil {
 		return false, err
 	}
-
-	doc, err := readDoc(path)
-	if err != nil {
-		return false, err
-	}
-	servers, _ := doc[cfg.key].(map[string]any)
+	servers, _ := doc[serversKey].(map[string]any)
 	_, exists := servers[name]
 
 	return exists, nil
 }
 
-// Remove deletes exactly the named server from agent's config and reports whether
-// it was there.
-func Remove(agent, name string) (bool, error) {
-	cfg, ok := agents[agent]
-	if !ok {
-		return false, unsupported(agent)
-	}
-	path, err := cfg.path()
-	if err != nil {
-		return false, err
-	}
+// Remove deletes exactly the named server from dir's .mcp.json and reports
+// whether it was there.
+func Remove(dir, name string) (bool, error) {
+	path := ConfigPath(dir)
 
 	doc, err := readDoc(path)
 	if err != nil {
 		return false, err
 	}
-	servers, _ := doc[cfg.key].(map[string]any)
+	servers, _ := doc[serversKey].(map[string]any)
 	if _, exists := servers[name]; !exists {
 		return false, nil
 	}
 	delete(servers, name)
-	doc[cfg.key] = servers
+	doc[serversKey] = servers
 
 	return true, writeDoc(path, doc)
 }
 
-// List returns the MCP servers configured across the supported agents.
-func List() ([]Installed, error) {
-	var out []Installed
-	for _, id := range SupportedAgents() {
-		cfg := agents[id]
-		path, err := cfg.path()
-		if err != nil {
-			continue
-		}
-		doc, err := readDoc(path)
-		if err != nil {
-			continue // an unreadable config is skipped; listing is best-effort
-		}
+// List returns the MCP servers configured in dir's .mcp.json, sorted by name.
+func List(dir string) ([]Installed, error) {
+	doc, err := readDoc(ConfigPath(dir))
+	if err != nil {
+		return nil, err
+	}
+	servers, _ := doc[serversKey].(map[string]any)
 
-		servers, _ := doc[cfg.key].(map[string]any)
-		names := make([]string, 0, len(servers))
-		for name := range servers {
-			names = append(names, name)
-		}
-		sort.Strings(names)
-		for _, name := range names {
-			out = append(out, Installed{Name: name, Agent: cfg.display, Source: sourceOf(servers[name])})
-		}
+	names := make([]string, 0, len(servers))
+	for name := range servers {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+
+	out := make([]Installed, 0, len(names))
+	for _, name := range names {
+		out = append(out, Installed{Name: name, Source: sourceOf(servers[name])})
 	}
 
 	return out, nil
 }
 
-func (c agentConfig) entry(url, transport string) map[string]any {
-	if c.shape == shapeBridge {
-		return map[string]any{"command": "npx", "args": []any{"mcp-remote", url}}
-	}
+// entry is the standard remote-server shape: {"type":"http","url":...}.
+func entry(url, transport string) map[string]any {
 	if transport == "" {
 		transport = "http"
 	}
@@ -205,7 +112,7 @@ func (c agentConfig) entry(url, transport string) map[string]any {
 	return map[string]any{"type": transport, "url": url}
 }
 
-// sourceOf extracts the server URL from an entry (direct or npx bridge).
+// sourceOf extracts the server URL from an entry.
 func sourceOf(v any) string {
 	m, ok := v.(map[string]any)
 	if !ok {
@@ -214,17 +121,12 @@ func sourceOf(v any) string {
 	if url, ok := m["url"].(string); ok {
 		return url
 	}
-	if args, ok := m["args"].([]any); ok && len(args) > 0 {
-		if last, ok := args[len(args)-1].(string); ok {
-			return last
-		}
-	}
 
 	return ""
 }
 
-func serversMap(doc map[string]any, key string) map[string]any {
-	if m, ok := doc[key].(map[string]any); ok {
+func serversMap(doc map[string]any) map[string]any {
+	if m, ok := doc[serversKey].(map[string]any); ok {
 		return m
 	}
 
@@ -302,8 +204,4 @@ func writeDoc(path string, doc map[string]any) error {
 	}
 
 	return os.Rename(tmp.Name(), target)
-}
-
-func unsupported(agent string) error {
-	return fmt.Errorf("agent %q is not supported for MCP (supported: %s)", agent, strings.Join(SupportedAgents(), ", "))
 }

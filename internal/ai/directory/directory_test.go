@@ -84,6 +84,11 @@ func TestInfo(t *testing.T) {
 	assert.Contains(t, err.Error(), "unknown integration")
 }
 
+func TestTypeString(t *testing.T) {
+	assert.Equal(t, "skill", TypeSkill.String())
+	assert.Equal(t, "mcp", TypeMCP.String())
+}
+
 func TestMeteorMCPEntry(t *testing.T) {
 	e, ok := Load().Get("meteor")
 	require.True(t, ok)

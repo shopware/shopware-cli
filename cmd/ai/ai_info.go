@@ -53,7 +53,7 @@ func writeInfoTable(w io.Writer, e directory.Integration) error {
 	rows := [][]string{
 		{"Name", e.Name},
 		{"Display name", e.DisplayName},
-		{"Type", string(e.Type)},
+		{"Type", e.Type.String()},
 		{"Provider", e.Provider},
 		{"Status", string(e.Status)},
 		{"Description", e.Description},

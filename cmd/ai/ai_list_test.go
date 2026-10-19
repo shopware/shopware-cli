@@ -70,7 +70,7 @@ func TestInstalledRecordsFiltersToCatalog(t *testing.T) {
 	t.Cleanup(func() { listSkills = prev })
 
 	prevMCP := listMCP
-	listMCP = func() ([]mcp.Installed, error) { return nil, nil }
+	listMCP = func(string) ([]mcp.Installed, error) { return nil, nil }
 	t.Cleanup(func() { listMCP = prevMCP })
 
 	catalog, err := directory.Load().List(directory.ListOptions{})
@@ -94,10 +94,10 @@ func TestInstalledRecordsIncludesMCP(t *testing.T) {
 	t.Cleanup(func() { listSkills = prev })
 
 	prevMCP := listMCP
-	listMCP = func() ([]mcp.Installed, error) {
+	listMCP = func(string) ([]mcp.Installed, error) {
 		return []mcp.Installed{
-			{Name: "meteor", Agent: "Claude Code", Source: "https://meteor.shopware.com/mcp"},
-			{Name: "some-other-mcp", Agent: "Cursor", Source: "https://other/mcp"}, // not in the directory
+			{Name: "meteor", Source: "https://meteor.shopware.com/mcp"},
+			{Name: "some-other-mcp", Source: "https://other/mcp"}, // not in the directory
 		}, nil
 	}
 	t.Cleanup(func() { listMCP = prevMCP })
@@ -111,6 +111,6 @@ func TestInstalledRecordsIncludesMCP(t *testing.T) {
 	require.Len(t, records, 1, "only catalog MCP servers are kept")
 	assert.Equal(t, "meteor", records[0].Name)
 	assert.Equal(t, directory.TypeMCP, records[0].Type)
-	assert.Equal(t, "global", records[0].Scope)
-	assert.Equal(t, []string{"Claude Code"}, records[0].Agents)
+	assert.Equal(t, "project", records[0].Scope)
+	assert.Empty(t, records[0].Agents, "an MCP server in .mcp.json is not agent-specific")
 }

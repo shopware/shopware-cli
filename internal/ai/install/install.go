@@ -100,29 +100,25 @@ func Add(ctx context.Context, o Options, progress io.Writer) (Result, error) {
 	return result, nil
 }
 
-// addMCP installs an MCP server by writing the agent's config directly. MCP
-// integrations are global by design (a remote server is not shop-specific), so the
-// install takes no project root and no @tag.
+// addMCP installs an MCP server by writing the project's .mcp.json — the standard
+// file MCP clients read — rather than any agent's own config. It is project-scoped
+// (committing the file shares the server with the team) and takes no @tag; the
+// --agent flag does not apply because the file is not agent-specific.
 func addMCP(o Options, entry *directory.Integration, tag string) (Result, error) {
 	if tag != "" {
 		return Result{}, fmt.Errorf("%q is an MCP server and cannot be pinned with @tag", entry.Name)
 	}
-	if err := validateAgent(o.Agent); err != nil {
-		return Result{}, err
-	}
-	if !mcp.Supported(o.Agent) {
-		return Result{}, fmt.Errorf("agent %q is not supported for MCP (supported: %s)", o.Agent, strings.Join(mcp.SupportedAgents(), ", "))
-	}
 
-	path, err := mcp.ConfigPath(o.Agent)
+	root, err := mcpProjectRoot(o.Global)
 	if err != nil {
 		return Result{}, err
 	}
+	path := mcp.ConfigPath(root)
 
 	result := Result{
 		Name:    entry.Name,
-		Agent:   o.Agent,
-		Scope:   ScopeGlobal,
+		Scope:   ScopeProject,
+		Dir:     root,
 		DryRun:  o.DryRun,
 		Command: []string{"writes", path},
 	}
@@ -130,11 +126,27 @@ func addMCP(o Options, entry *directory.Integration, tag string) (Result, error)
 		return result, nil
 	}
 
-	if err := mcp.Add(o.Agent, entry.Name, entry.Delivery.URL, entry.Delivery.Transport); err != nil {
+	if err := mcp.Add(root, entry.Name, entry.Delivery.URL, entry.Delivery.Transport); err != nil {
 		return Result{}, err
 	}
 
 	return result, nil
+}
+
+// mcpProjectRoot resolves the project whose .mcp.json an MCP install writes. MCP
+// servers live with the project, so --global is rejected rather than silently
+// ignored.
+func mcpProjectRoot(global bool) (string, error) {
+	if global {
+		return "", errors.New("an MCP server is written to the project's .mcp.json; --global is not supported")
+	}
+
+	root, err := shop.FindClosestShopwareProject(false)
+	if err != nil {
+		return "", fmt.Errorf("an MCP install must run inside a Shopware project: %w", err)
+	}
+
+	return root, nil
 }
 
 // RemoveOptions are the inputs to Remove.
@@ -161,16 +173,16 @@ type RemoveResult struct {
 // whether the skill is installed for that agent and scope, because skills.sh
 // reports success even when there was nothing to remove.
 func Remove(ctx context.Context, o RemoveOptions, progress io.Writer) (RemoveResult, error) {
-	if err := validateAgent(o.Agent); err != nil {
-		return RemoveResult{}, err
-	}
-
 	entry, ok := directory.Load().Get(o.Name)
 	if !ok {
 		return RemoveResult{}, fmt.Errorf("unknown integration %q (see \"shopware-cli ai list\")", o.Name)
 	}
 	if entry.Type == directory.TypeMCP {
 		return removeMCP(o, entry)
+	}
+
+	if err := validateAgent(o.Agent); err != nil {
+		return RemoveResult{}, err
 	}
 
 	scope, dir, err := resolveScope(o.Global)
@@ -203,27 +215,23 @@ func Remove(ctx context.Context, o RemoveOptions, progress io.Writer) (RemoveRes
 	return result, nil
 }
 
-// removeMCP removes an MCP server from the agent's config (always global),
-// deleting exactly the named entry and reporting whether it was there.
+// removeMCP removes an MCP server from the project's .mcp.json, deleting exactly
+// the named entry and reporting whether it was there.
 func removeMCP(o RemoveOptions, entry *directory.Integration) (RemoveResult, error) {
-	if !mcp.Supported(o.Agent) {
-		return RemoveResult{}, fmt.Errorf("agent %q is not supported for MCP (supported: %s)", o.Agent, strings.Join(mcp.SupportedAgents(), ", "))
-	}
-
-	path, err := mcp.ConfigPath(o.Agent)
+	root, err := mcpProjectRoot(o.Global)
 	if err != nil {
 		return RemoveResult{}, err
 	}
+	path := mcp.ConfigPath(root)
 
 	result := RemoveResult{
 		Name:    entry.Name,
-		Agent:   o.Agent,
-		Scope:   ScopeGlobal,
+		Scope:   ScopeProject,
 		DryRun:  o.DryRun,
 		Command: []string{"updates", path},
 	}
 	if o.DryRun {
-		present, err := mcp.Has(o.Agent, entry.Name)
+		present, err := mcp.Has(root, entry.Name)
 		if err != nil {
 			return RemoveResult{}, err
 		}
@@ -232,7 +240,7 @@ func removeMCP(o RemoveOptions, entry *directory.Integration) (RemoveResult, err
 		return result, nil
 	}
 
-	removed, err := mcp.Remove(o.Agent, entry.Name)
+	removed, err := mcp.Remove(root, entry.Name)
 	if err != nil {
 		return RemoveResult{}, err
 	}

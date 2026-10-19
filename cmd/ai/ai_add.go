@@ -64,8 +64,15 @@ func writeAddResult(w io.Writer, r install.Result) error {
 		dest = " into " + r.Dir
 	}
 
+	// An MCP install writes the project's .mcp.json, not an agent, so it carries no
+	// agent to name.
+	agent := ""
+	if r.Agent != "" {
+		agent = " for " + r.Agent
+	}
+
 	if r.DryRun {
-		_, err := fmt.Fprintf(w, "[dry-run] would install %s for %s (%s)%s:\n  %s\n", r.Name, r.Agent, r.Scope, dest, strings.Join(r.Command, " "))
+		_, err := fmt.Fprintf(w, "[dry-run] would install %s%s (%s)%s:\n  %s\n", r.Name, agent, r.Scope, dest, strings.Join(r.Command, " "))
 
 		return err
 	}
@@ -75,7 +82,7 @@ func writeAddResult(w io.Writer, r install.Result) error {
 		rev = " @" + r.ResolvedRevision
 	}
 
-	_, err := fmt.Fprintf(w, "Installed %s for %s (%s)%s%s\n", r.Name, r.Agent, r.Scope, dest, rev)
+	_, err := fmt.Fprintf(w, "Installed %s%s (%s)%s%s\n", r.Name, agent, r.Scope, dest, rev)
 
 	return err
 }

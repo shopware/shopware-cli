@@ -38,21 +38,20 @@ type call struct {
 	calls     int
 	lastArgv  []string
 	lastDir   string
+	root      string             // the resolved project root (PROJECT_ROOT)
 	installed []skills.Installed // what listSkills returns
 }
 
-// setup replaces runSkills and listSkills with fakes, points project resolution at
-// a temp dir, and isolates HOME so MCP file writes land in a temp config.
+// setup replaces runSkills and listSkills with fakes and points project resolution
+// at a temp dir, which is also where an MCP install writes its .mcp.json.
 func setup(t *testing.T) *call {
 	t.Helper()
 
 	tmp := t.TempDir()
 	t.Setenv("PROJECT_ROOT", tmp)
-	t.Setenv("HOME", t.TempDir())
-	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	t.Chdir(tmp)
 
-	rec := &call{}
+	rec := &call{root: tmp}
 	prevRun := runSkills
 	runSkills = func(_ context.Context, argv []string, dir string, _ io.Writer) error {
 		rec.calls++
@@ -150,16 +149,17 @@ func TestAddGuards(t *testing.T) {
 	assert.Equal(t, 0, rec.calls)
 }
 
-func TestAddMCPWritesConfig(t *testing.T) {
+func TestAddMCPWritesProjectConfig(t *testing.T) {
 	rec := setup(t)
 
-	// No --global flag: an MCP install is always global.
-	res, err := runAdd(t, Options{Name: "meteor", Agent: "claude-code"})
+	// An MCP install is project-scoped and needs no --agent.
+	res, err := runAdd(t, Options{Name: "meteor"})
 	require.NoError(t, err)
-	assert.Equal(t, ScopeGlobal, res.Scope)
+	assert.Equal(t, ScopeProject, res.Scope)
+	assert.Equal(t, rec.root, res.Dir, "writes into the resolved project root")
 	assert.Equal(t, 0, rec.calls, "mcp install must not run skills.sh")
 
-	servers, err := mcp.List()
+	servers, err := mcp.List(rec.root)
 	require.NoError(t, err)
 	require.Len(t, servers, 1)
 	assert.Equal(t, "meteor", servers[0].Name)
@@ -169,55 +169,59 @@ func TestAddMCPWritesConfig(t *testing.T) {
 func TestAddMCPRejectsTag(t *testing.T) {
 	setup(t)
 
-	_, err := runAdd(t, Options{Name: "meteor@1.0", Agent: "claude-code"})
+	_, err := runAdd(t, Options{Name: "meteor@1.0"})
 	assert.ErrorContains(t, err, "cannot be pinned")
 }
 
-func TestAddMCPRejectsUnsupportedAgent(t *testing.T) {
+func TestAddMCPRejectsGlobal(t *testing.T) {
 	setup(t)
 
-	_, err := runAdd(t, Options{Name: "meteor", Agent: "codex"})
-	assert.ErrorContains(t, err, "not supported for MCP")
+	_, err := runAdd(t, Options{Name: "meteor", Global: true})
+	assert.ErrorContains(t, err, "--global is not supported")
 }
 
 func TestRemoveMCPReportsWhetherPresent(t *testing.T) {
-	setup(t)
+	rec := setup(t)
 
 	// Nothing installed yet → reports not removed.
-	res, err := runRemove(t, RemoveOptions{Name: "meteor", Agent: "claude-code"})
+	res, err := runRemove(t, RemoveOptions{Name: "meteor"})
 	require.NoError(t, err)
 	assert.False(t, res.Removed)
-	assert.Equal(t, ScopeGlobal, res.Scope)
+	assert.Equal(t, ScopeProject, res.Scope)
 
 	// Install then remove → reports removed.
-	_, err = runAdd(t, Options{Name: "meteor", Agent: "claude-code"})
+	_, err = runAdd(t, Options{Name: "meteor"})
 	require.NoError(t, err)
-	res, err = runRemove(t, RemoveOptions{Name: "meteor", Agent: "claude-code"})
+	res, err = runRemove(t, RemoveOptions{Name: "meteor"})
 	require.NoError(t, err)
 	assert.True(t, res.Removed)
+
+	servers, err := mcp.List(rec.root)
+	require.NoError(t, err)
+	assert.Empty(t, servers, "the server is gone from .mcp.json")
 }
 
 func TestRemoveMCPDryRunReportsPresenceWithoutWriting(t *testing.T) {
-	setup(t)
+	rec := setup(t)
 
 	// Dry run with nothing installed must not claim a removal.
-	res, err := runRemove(t, RemoveOptions{Name: "meteor", Agent: "claude-code", DryRun: true})
+	res, err := runRemove(t, RemoveOptions{Name: "meteor", DryRun: true})
 	require.NoError(t, err)
 	assert.True(t, res.DryRun)
 	assert.False(t, res.Removed, "dry-run must not report a removal when nothing is configured")
 
-	servers, err := mcp.List()
+	servers, err := mcp.List(rec.root)
 	require.NoError(t, err)
 	assert.Empty(t, servers, "dry-run must not write the config")
 
 	// Dry run after an install reports it would remove, still without writing.
-	_, err = runAdd(t, Options{Name: "meteor", Agent: "claude-code"})
+	_, err = runAdd(t, Options{Name: "meteor"})
 	require.NoError(t, err)
-	res, err = runRemove(t, RemoveOptions{Name: "meteor", Agent: "claude-code", DryRun: true})
+	res, err = runRemove(t, RemoveOptions{Name: "meteor", DryRun: true})
 	require.NoError(t, err)
 	assert.True(t, res.Removed)
 
-	servers, err = mcp.List()
+	servers, err = mcp.List(rec.root)
 	require.NoError(t, err)
 	assert.Len(t, servers, 1, "dry-run leaves the installed server in place")
 }
