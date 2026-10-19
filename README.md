@@ -76,14 +76,6 @@ If you need CI-friendly behavior, disable prompts:
 shopware-cli --no-interaction <command>
 ```
 
-Docker projects write a unique `COMPOSE_PROJECT_NAME` to `.env` (`sw-<folder>-<6 hex>`) so Compose volumes stay isolated when a directory is recreated. Set a stable name at create time when the committed `.env` should keep a known Compose identity:
-
-```bash
-shopware-cli project create my-shop --docker --compose-project-name=acme-live
-```
-
-The name must use lowercase letters, digits, dashes, and underscores, and must start with a letter or digit. Omitting the flag keeps the generated name.
-
 Silence update notifications for a single command:
 
 ```bash
