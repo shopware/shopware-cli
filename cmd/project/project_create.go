@@ -81,12 +81,7 @@ func resolveLocalDomainChoice(useDocker, wantLocalDomain, promptShown, machineSe
 var projectCreateCmd = &cobra.Command{
 	Use:   "create [name] [version]",
 	Short: "Create and install a new Shopware 6 project",
-	Long: `Create a Shopware project and install its Composer dependencies.
-
-Docker projects write COMPOSE_PROJECT_NAME to .env as sw-<folder>-<hash> so Compose volumes stay unique. Pass --compose-project-name to write a stable name instead. The name must be lowercase letters, digits, dashes, and underscores, and must start with a letter or digit.`,
-	Example: `  shopware-cli project create my-shop --docker --compose-project-name acme-live
-  shopware-cli project create my-shop --docker --no-interaction`,
-	Args: cobra.MaximumNArgs(2),
+	Args:  cobra.MaximumNArgs(2),
 	ValidArgsFunction: func(cmd *cobra.Command, args []string, _ string) ([]string, cobra.ShellCompDirective) {
 		if len(args) == 0 {
 			return []string{}, cobra.ShellCompDirectiveFilterDirs
