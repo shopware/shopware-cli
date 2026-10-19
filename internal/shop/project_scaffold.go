@@ -11,6 +11,7 @@ import (
 	"text/template"
 
 	"github.com/shopware/shopware-cli/internal/docker"
+	"github.com/shopware/shopware-cli/internal/envfile"
 	"github.com/shopware/shopware-cli/logging"
 )
 
@@ -115,9 +116,14 @@ func (s *ShopwareProjectScaffold) Scaffold(ctx context.Context) error {
 		return err
 	}
 
-	envContent, err := EnvFileContent(s.UseDocker, s.ProjectFolder, s.ComposeProjectName)
+	name, err := resolveComposeProjectName(s.UseDocker, s.ProjectFolder, s.ComposeProjectName)
 	if err != nil {
 		return err
+	}
+
+	envContent := ""
+	if name != "" {
+		envContent = envfile.ComposeProjectNameEnvKey + "=" + name + "\n"
 	}
 
 	files := []struct {

@@ -4,7 +4,6 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
-	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -46,40 +45,38 @@ func TestGenerateComposeProjectName(t *testing.T) {
 	assert.Regexp(t, regexp.MustCompile(`^[a-z0-9][a-z0-9_-]*$`), camel)
 }
 
-func TestEnvFileContent(t *testing.T) {
+func TestResolveComposeProjectName(t *testing.T) {
 	t.Parallel()
 
 	t.Run("non-docker is empty", func(t *testing.T) {
 		t.Parallel()
-		content, err := EnvFileContent(false, "/tmp/shop", "")
+		name, err := resolveComposeProjectName(false, "/tmp/shop", "")
 		require.NoError(t, err)
-		assert.Empty(t, content)
+		assert.Empty(t, name)
 	})
 
-	t.Run("docker writes unique compose project name", func(t *testing.T) {
+	t.Run("docker generates compose project name", func(t *testing.T) {
 		t.Parallel()
-		content, err := EnvFileContent(true, "/tmp/demo-shop", "")
+		name, err := resolveComposeProjectName(true, "/tmp/demo-shop", "")
 		require.NoError(t, err)
-		assert.True(t, strings.HasPrefix(content, envfile.ComposeProjectNameEnvKey+"=sw-demo-shop-"))
-		assert.True(t, strings.HasSuffix(content, "\n"))
-		assert.Regexp(t, regexp.MustCompile(`^[a-z0-9][a-z0-9_-]*$`), strings.TrimPrefix(strings.TrimSpace(content), envfile.ComposeProjectNameEnvKey+"="))
+		assert.Regexp(t, regexp.MustCompile(`^sw-demo-shop-[0-9a-f]{6}$`), name)
 	})
 
-	t.Run("explicit name is written exactly", func(t *testing.T) {
+	t.Run("explicit name is preserved", func(t *testing.T) {
 		t.Parallel()
-		content, err := EnvFileContent(true, "/tmp/demo-shop", "acme-live")
+		name, err := resolveComposeProjectName(true, "/tmp/demo-shop", "acme-live")
 		require.NoError(t, err)
-		assert.Equal(t, envfile.ComposeProjectNameEnvKey+"=acme-live\n", content)
+		assert.Equal(t, "acme-live", name)
 
-		// The override is host .env content, not only a docker default.
-		withoutDocker, err := EnvFileContent(false, "/tmp/demo-shop", "acme_stage")
+		// Explicit names also apply to non-Docker projects.
+		withoutDocker, err := resolveComposeProjectName(false, "/tmp/demo-shop", "acme_stage")
 		require.NoError(t, err)
-		assert.Equal(t, envfile.ComposeProjectNameEnvKey+"=acme_stage\n", withoutDocker)
+		assert.Equal(t, "acme_stage", withoutDocker)
 	})
 
 	t.Run("invalid explicit name is rejected", func(t *testing.T) {
 		t.Parallel()
-		_, err := EnvFileContent(true, "/tmp/demo-shop", "Acme Live")
+		_, err := resolveComposeProjectName(true, "/tmp/demo-shop", "Acme Live")
 		require.Error(t, err)
 		assert.ErrorContains(t, err, "Acme Live")
 	})

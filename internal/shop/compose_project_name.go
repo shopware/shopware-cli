@@ -52,29 +52,19 @@ func ValidateComposeProjectName(name string) error {
 	return nil
 }
 
-// EnvFileContent returns the initial host .env contents for a scaffolded project.
-// Docker projects get a unique COMPOSE_PROJECT_NAME so Compose volumes are not
-// reused across same-basename recreations, unless composeProjectName is set.
-// An explicit name is written as-is (and rejected when it is not a valid Compose
-// project name), including for non-docker projects. Non-docker projects without
-// an explicit name get an empty .env.
-func EnvFileContent(useDocker bool, projectFolder, composeProjectName string) (string, error) {
-	name := composeProjectName
-	if name == "" {
-		if !useDocker {
-			return "", nil
-		}
-
-		generated, err := GenerateComposeProjectName(projectFolder)
-		if err != nil {
+// resolveComposeProjectName validates an explicit name or generates one for Docker.
+// Non-Docker projects without an explicit name return an empty name.
+func resolveComposeProjectName(useDocker bool, projectFolder, composeProjectName string) (string, error) {
+	if composeProjectName != "" {
+		if err := ValidateComposeProjectName(composeProjectName); err != nil {
 			return "", err
 		}
-		name = generated
-	} else if err := ValidateComposeProjectName(name); err != nil {
-		return "", err
+		return composeProjectName, nil
 	}
-
-	return envfile.ComposeProjectNameEnvKey + "=" + name + "\n", nil
+	if !useDocker {
+		return "", nil
+	}
+	return GenerateComposeProjectName(projectFolder)
 }
 
 // EnsureComposeProjectName writes COMPOSE_PROJECT_NAME into the project .env
