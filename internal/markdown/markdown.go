@@ -1,9 +1,9 @@
 // Package markdown renders Markdown to HTML for content that is pushed to the
 // Shopware Store (extension description, installation manual and changelog).
 //
-// The generated HTML is embedded inside a store page that already owns its
-// heading hierarchy, so the renderer is configured to follow the Shopware
-// Storefront SEO guidelines (see heading_renderer.go).
+// The generated HTML is embedded inside a store page, and the Store only
+// allows <h2>-<h4> headings, so the renderer clamps Markdown headings to
+// that range (see heading_renderer.go).
 package markdown
 
 import (
@@ -28,11 +28,10 @@ func New() goldmark.Markdown {
 		goldmark.WithRendererOptions(
 			html.WithHardWraps(),
 			html.WithXHTML(),
-			// Override heading rendering so Markdown headings become
-			// <span class="hN"> instead of competing <h1>-<h6> tags in the
-			// store page. Priority < 1000 makes it win over the default
-			// HTML renderer.
-			renderer.WithNodeRenderers(util.Prioritized(&spanHeadingRenderer{}, 100)),
+			// Override heading rendering so Markdown headings are clamped
+			// to the <h2>-<h4> range allowed by the Store. Priority < 1000
+			// makes it win over the default HTML renderer.
+			renderer.WithNodeRenderers(util.Prioritized(&storeHeadingRenderer{}, 100)),
 		),
 	)
 }
