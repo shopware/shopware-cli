@@ -126,6 +126,79 @@ func TestValidateProjectFolder(t *testing.T) {
 	})
 }
 
+func TestProjectFolderExists(t *testing.T) {
+	t.Parallel()
+
+	t.Run("reports a missing folder", func(t *testing.T) {
+		t.Parallel()
+		exists, err := ProjectFolderExists(filepath.Join(t.TempDir(), "shop"))
+		require.NoError(t, err)
+		assert.False(t, exists)
+	})
+
+	t.Run("reports an existing folder", func(t *testing.T) {
+		t.Parallel()
+		exists, err := ProjectFolderExists(t.TempDir())
+		require.NoError(t, err)
+		assert.True(t, exists)
+	})
+
+	t.Run("rejects an empty folder", func(t *testing.T) {
+		t.Parallel()
+		_, err := ProjectFolderExists("")
+		assert.Error(t, err)
+	})
+}
+
+func TestCleanupFailedProjectCreation(t *testing.T) {
+	t.Parallel()
+
+	t.Run("removes a folder created by the failed creation", func(t *testing.T) {
+		t.Parallel()
+		projectFolder := filepath.Join(t.TempDir(), "shop")
+		require.NoError(t, os.MkdirAll(filepath.Join(projectFolder, "vendor", "shopware"), 0o755))
+		require.NoError(t, os.WriteFile(filepath.Join(projectFolder, "composer.json"), []byte("{}"), 0o600))
+		require.NoError(t, os.WriteFile(filepath.Join(projectFolder, "vendor", "shopware", "core.php"), []byte("x"), 0o600))
+
+		require.NoError(t, CleanupFailedProjectCreation(projectFolder, false))
+
+		_, err := os.Stat(projectFolder)
+		assert.True(t, os.IsNotExist(err))
+	})
+
+	t.Run("empties but keeps a pre-existing folder", func(t *testing.T) {
+		t.Parallel()
+		projectFolder := t.TempDir()
+		require.NoError(t, os.MkdirAll(filepath.Join(projectFolder, "custom", "plugins"), 0o755))
+		require.NoError(t, os.WriteFile(filepath.Join(projectFolder, "composer.json"), []byte("{}"), 0o600))
+
+		require.NoError(t, CleanupFailedProjectCreation(projectFolder, true))
+
+		assert.DirExists(t, projectFolder)
+		entries, err := os.ReadDir(projectFolder)
+		require.NoError(t, err)
+		assert.Empty(t, entries)
+	})
+
+	t.Run("ignores a folder that is already gone", func(t *testing.T) {
+		t.Parallel()
+		projectFolder := filepath.Join(t.TempDir(), "shop")
+		assert.NoError(t, CleanupFailedProjectCreation(projectFolder, false))
+		assert.NoError(t, CleanupFailedProjectCreation(projectFolder, true))
+	})
+
+	t.Run("rejects an empty folder", func(t *testing.T) {
+		t.Parallel()
+		assert.Error(t, CleanupFailedProjectCreation("", false))
+	})
+
+	t.Run("refuses the filesystem root", func(t *testing.T) {
+		t.Parallel()
+		assert.Error(t, CleanupFailedProjectCreation("/", true))
+		assert.Error(t, CleanupFailedProjectCreation("/", false))
+	})
+}
+
 func TestValidateDeploymentMethod(t *testing.T) {
 	t.Parallel()
 

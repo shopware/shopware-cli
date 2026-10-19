@@ -2,11 +2,14 @@ package project
 
 import (
 	"context"
+	"errors"
+	"path/filepath"
 	"strconv"
 
 	"github.com/shopware/shopware-cli/internal/shop"
 	"github.com/shopware/shopware-cli/internal/system"
 	"github.com/shopware/shopware-cli/internal/tracking"
+	"github.com/shopware/shopware-cli/logging"
 )
 
 func scaffoldProject(ctx context.Context, opts *createOptions, chosenVersion string) error {
@@ -24,6 +27,27 @@ func scaffoldProject(ctx context.Context, opts *createOptions, chosenVersion str
 	scaffold.SymfonyCLIInstalled = !opts.useDocker && system.IsSymfonyCliInstalled()
 
 	return scaffold.Scaffold(ctx)
+}
+
+// rollbackFailedProjectCreation removes a partially created project after a
+// failed or cancelled creation and returns the original error, joined with
+// the cleanup error when the rollback itself fails.
+func rollbackFailedProjectCreation(ctx context.Context, opts *createOptions, existedBefore bool, cause error) error {
+	if err := shop.CleanupFailedProjectCreation(opts.projectFolder, existedBefore); err != nil {
+		return errors.Join(cause, err)
+	}
+
+	displayFolder := opts.projectFolder
+	if absFolder, err := filepath.Abs(opts.projectFolder); err == nil {
+		displayFolder = absFolder
+	}
+	if existedBefore {
+		logging.FromContext(ctx).Infof("Removed partially created project files in %s", displayFolder)
+	} else {
+		logging.FromContext(ctx).Infof("Removed partially created project in %s", displayFolder)
+	}
+
+	return cause
 }
 
 func newShopwareProjectScaffold(opts *createOptions, chosenVersion string) shop.ShopwareProjectScaffold {
