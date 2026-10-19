@@ -90,7 +90,7 @@ jobs:
     steps:
       - name: Generate GitHub App token
         id: side-repo-app-token
-        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
         with:
           client-id: ${{ vars.DOCS_BOT_APP_CLIENT_ID }}
           private-key: ${{ secrets.DOCS_BOT_APP_PRIVATE_KEY }}
@@ -98,7 +98,7 @@ jobs:
           repositories: docs
           github-api-url: ${{ github.api_url }}
       - name: Setup Scripts
-        uses: github/gh-aw-actions/setup@7a073567000cd18a81b85d31527ac08d414c9599 # v0.91.7
+        uses: github/gh-aw-actions/setup@dc455073a216c68be9fe9a292c4371243c036d25 # v0.92.4
         with:
           destination: ${{ runner.temp }}/gh-aw/actions
 
@@ -141,7 +141,7 @@ jobs:
     steps:
       - name: Generate GitHub App token
         id: side-repo-app-token
-        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
         with:
           client-id: ${{ vars.DOCS_BOT_APP_CLIENT_ID }}
           private-key: ${{ secrets.DOCS_BOT_APP_PRIVATE_KEY }}
@@ -154,7 +154,7 @@ jobs:
           persist-credentials: false
 
       - name: Setup Scripts
-        uses: github/gh-aw-actions/setup@7a073567000cd18a81b85d31527ac08d414c9599 # v0.91.7
+        uses: github/gh-aw-actions/setup@dc455073a216c68be9fe9a292c4371243c036d25 # v0.92.4
         with:
           destination: ${{ runner.temp }}/gh-aw/actions
 
@@ -169,7 +169,7 @@ jobs:
             await main();
 
       - name: Install gh-aw
-        uses: github/gh-aw-actions/setup-cli@7a073567000cd18a81b85d31527ac08d414c9599 # v0.91.7
+        uses: github/gh-aw-actions/setup-cli@dc455073a216c68be9fe9a292c4371243c036d25 # v0.92.4
         with:
           version: v0.86.2
 
@@ -197,7 +197,7 @@ jobs:
     steps:
       - name: Generate GitHub App token
         id: side-repo-app-token
-        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
         with:
           client-id: ${{ vars.DOCS_BOT_APP_CLIENT_ID }}
           private-key: ${{ secrets.DOCS_BOT_APP_PRIVATE_KEY }}
@@ -210,7 +210,7 @@ jobs:
           persist-credentials: false
 
       - name: Setup Scripts
-        uses: github/gh-aw-actions/setup@7a073567000cd18a81b85d31527ac08d414c9599 # v0.91.7
+        uses: github/gh-aw-actions/setup@dc455073a216c68be9fe9a292c4371243c036d25 # v0.92.4
         with:
           destination: ${{ runner.temp }}/gh-aw/actions
 
@@ -225,7 +225,7 @@ jobs:
             await main();
 
       - name: Install gh-aw
-        uses: github/gh-aw-actions/setup-cli@7a073567000cd18a81b85d31527ac08d414c9599 # v0.91.7
+        uses: github/gh-aw-actions/setup-cli@dc455073a216c68be9fe9a292c4371243c036d25 # v0.92.4
         with:
           version: v0.86.2
 
@@ -318,7 +318,7 @@ jobs:
           persist-credentials: false
 
       - name: Setup Scripts
-        uses: github/gh-aw-actions/setup@7a073567000cd18a81b85d31527ac08d414c9599 # v0.91.7
+        uses: github/gh-aw-actions/setup@dc455073a216c68be9fe9a292c4371243c036d25 # v0.92.4
         with:
           destination: ${{ runner.temp }}/gh-aw/actions
 
@@ -333,7 +333,7 @@ jobs:
             await main();
 
       - name: Install gh-aw
-        uses: github/gh-aw-actions/setup-cli@7a073567000cd18a81b85d31527ac08d414c9599 # v0.91.7
+        uses: github/gh-aw-actions/setup-cli@dc455073a216c68be9fe9a292c4371243c036d25 # v0.92.4
         with:
           version: v0.86.2
 
