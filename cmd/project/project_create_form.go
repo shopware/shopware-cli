@@ -566,6 +566,9 @@ func runCreateForm(cmd *cobra.Command, opts *createOptions, releases []repositor
 			}
 			fmt.Printf("  %s %s\n", labelStyle.Render("PHP:"), phpDisplay)
 		}
+		if opts.composeProjectName != "" {
+			fmt.Printf("  %s %s\n", labelStyle.Render("Compose project:"), opts.composeProjectName)
+		}
 		if opts.useDocker {
 			localDomainValue := onOff(opts.useLocalDomain)
 			if opts.useLocalDomain {

@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"io"
 	"os/exec"
+	"time"
 )
 
 // skillsVersion pins the skills.sh major line; npx resolves the latest 1.x, so we
@@ -113,6 +114,10 @@ func List(ctx context.Context, dir string, global bool) ([]Installed, error) {
 
 	cmd := exec.CommandContext(ctx, argv[0], argv[1:]...)
 	cmd.Dir = dir
+	// When ctx is cancelled (e.g. the recommendation's lookup timeout), a spawned
+	// skills child can keep the stdout pipe open; WaitDelay bounds how long Run
+	// waits for it instead of blocking indefinitely.
+	cmd.WaitDelay = 2 * time.Second
 	var stdout bytes.Buffer
 	cmd.Stdout = &stdout
 

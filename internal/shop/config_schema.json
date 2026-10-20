@@ -912,6 +912,13 @@
         "php_binary": {
           "type": "string",
           "description": "PHP binary used for PHP and console commands on the remote host (e.g. \"/usr/bin/php8.3\"). Defaults to \"php\""
+        },
+        "php_args": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array",
+          "description": "Additional arguments passed to the PHP binary for PHP and console commands on the remote host (e.g. [\"-d\", \"memory_limit=512M\"] or [\"-c\", \"/path/to/php.ini\"]). Appended after the binary."
         }
       },
       "additionalProperties": false,
