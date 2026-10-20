@@ -15,25 +15,24 @@ func renderMarkdown(t *testing.T, source string) string {
 	return html
 }
 
-func TestMarkdownHeadingsRenderedAsSemanticHeadings(t *testing.T) {
-	html := renderMarkdown(t, "## Digitale Inhalte professionell bereitstellen\n\n### Details\n\nText")
+func TestMarkdownHeadings(t *testing.T) {
+	html := renderMarkdown(t, "## Title\n\n### Subtitle\n\nText")
 
-	assert.Contains(t, html, `<h2 id="digitale-inhalte-professionell-bereitstellen">Digitale Inhalte professionell bereitstellen</h2>`)
-	assert.Contains(t, html, `<h3 id="details">Details</h3>`)
+	assert.Contains(t, html, `<h2>Title</h2>`)
+	assert.Contains(t, html, `<h3>Subtitle</h3>`)
 	assert.NotContains(t, html, "<span")
 }
 
-func TestMarkdownHeadingLevelsClampedToStoreRange(t *testing.T) {
+func TestMarkdownHeadingLevelsClamped(t *testing.T) {
 	html := renderMarkdown(t, "# A\n\n## B\n\n### C\n\n#### D\n\n##### E\n\n###### F")
 
-	// The Store only allows <h2>-<h4>: <h1> belongs to the store page
-	// itself and <h5>/<h6> are rejected.
-	assert.Contains(t, html, `<h2 id="a">A</h2>`)
-	assert.Contains(t, html, `<h2 id="b">B</h2>`)
-	assert.Contains(t, html, `<h3 id="c">C</h3>`)
-	assert.Contains(t, html, `<h4 id="d">D</h4>`)
-	assert.Contains(t, html, `<h4 id="e">E</h4>`)
-	assert.Contains(t, html, `<h4 id="f">F</h4>`)
+	// The Store only allows <h2>-<h4>; <h1> is the store page's own title.
+	assert.Contains(t, html, `<h2>A</h2>`)
+	assert.Contains(t, html, `<h2>B</h2>`)
+	assert.Contains(t, html, `<h3>C</h3>`)
+	assert.Contains(t, html, `<h4>D</h4>`)
+	assert.Contains(t, html, `<h4>E</h4>`)
+	assert.Contains(t, html, `<h4>F</h4>`)
 	assert.NotContains(t, html, "<h1")
 	assert.NotContains(t, html, "<h5")
 	assert.NotContains(t, html, "<h6")
