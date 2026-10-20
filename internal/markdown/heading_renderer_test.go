@@ -15,26 +15,28 @@ func renderMarkdown(t *testing.T, source string) string {
 	return html
 }
 
-func TestMarkdownHeadingsRenderedAsSpans(t *testing.T) {
-	html := renderMarkdown(t, "# Title\n\n## Subtitle\n\nText")
+func TestMarkdownHeadings(t *testing.T) {
+	html := renderMarkdown(t, "## Title\n\n### Subtitle\n\nText")
 
-	// Headings must not emit real <h1>-<h6> tags so they do not compete with
-	// the store page heading hierarchy.
-	assert.NotContains(t, html, "<h1")
-	assert.NotContains(t, html, "<h2")
-	assert.Contains(t, html, `<span class="h1"`)
-	assert.Contains(t, html, `<span class="h2"`)
-	assert.Contains(t, html, "Title</span>")
-	assert.Contains(t, html, "Subtitle</span>")
+	assert.Contains(t, html, `<h2>Title</h2>`)
+	assert.Contains(t, html, `<h3>Subtitle</h3>`)
+	assert.NotContains(t, html, "<span")
 }
 
-func TestMarkdownAllHeadingLevelsRenderedAsSpans(t *testing.T) {
+func TestMarkdownHeadingLevelsClamped(t *testing.T) {
 	html := renderMarkdown(t, "# A\n\n## B\n\n### C\n\n#### D\n\n##### E\n\n###### F")
 
-	for _, level := range []string{"h1", "h2", "h3", "h4", "h5", "h6"} {
-		assert.Contains(t, html, `<span class="`+level+`"`)
-		assert.NotContains(t, html, "<"+level)
-	}
+	// The Store only allows <h2>-<h4>; <h1> is the store page's own title.
+	assert.Contains(t, html, `<h2>A</h2>`)
+	assert.Contains(t, html, `<h2>B</h2>`)
+	assert.Contains(t, html, `<h3>C</h3>`)
+	assert.Contains(t, html, `<h4>D</h4>`)
+	assert.Contains(t, html, `<h4>E</h4>`)
+	assert.Contains(t, html, `<h4>F</h4>`)
+	assert.NotContains(t, html, "<h1")
+	assert.NotContains(t, html, "<h5")
+	assert.NotContains(t, html, "<h6")
+	assert.NotContains(t, html, "<span")
 }
 
 func TestMarkdownNonHeadingContentUnchanged(t *testing.T) {
