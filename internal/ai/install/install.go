@@ -109,7 +109,7 @@ func addMCP(o Options, entry *directory.Integration, tag string) (Result, error)
 		return Result{}, fmt.Errorf("%q is an MCP server and cannot be pinned with @tag", entry.Name)
 	}
 
-	root, err := mcpProjectRoot(o.Global)
+	root, err := mcpProjectRoot(o.Agent, o.Global)
 	if err != nil {
 		return Result{}, err
 	}
@@ -134,9 +134,13 @@ func addMCP(o Options, entry *directory.Integration, tag string) (Result, error)
 }
 
 // mcpProjectRoot resolves the project whose .mcp.json an MCP install writes. MCP
-// servers live with the project, so --global is rejected rather than silently
-// ignored.
-func mcpProjectRoot(global bool) (string, error) {
+// servers live with the project and are not agent-specific, so --agent and
+// --global are rejected rather than silently ignored (either would otherwise let
+// an agent- or user-scoped request change the shared project config).
+func mcpProjectRoot(agent string, global bool) (string, error) {
+	if agent != "" {
+		return "", errors.New("--agent does not apply to an MCP server; it is written to the project's .mcp.json for all agents")
+	}
 	if global {
 		return "", errors.New("an MCP server is written to the project's .mcp.json; --global is not supported")
 	}
@@ -218,7 +222,7 @@ func Remove(ctx context.Context, o RemoveOptions, progress io.Writer) (RemoveRes
 // removeMCP removes an MCP server from the project's .mcp.json, deleting exactly
 // the named entry and reporting whether it was there.
 func removeMCP(o RemoveOptions, entry *directory.Integration) (RemoveResult, error) {
-	root, err := mcpProjectRoot(o.Global)
+	root, err := mcpProjectRoot(o.Agent, o.Global)
 	if err != nil {
 		return RemoveResult{}, err
 	}

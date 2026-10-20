@@ -180,6 +180,24 @@ func TestAddMCPRejectsGlobal(t *testing.T) {
 	assert.ErrorContains(t, err, "--global is not supported")
 }
 
+func TestAddMCPRejectsAgent(t *testing.T) {
+	rec := setup(t)
+
+	_, err := runAdd(t, Options{Name: "meteor", Agent: "claude-code"})
+	assert.ErrorContains(t, err, "--agent does not apply")
+
+	servers, err := mcp.List(rec.root)
+	require.NoError(t, err)
+	assert.Empty(t, servers, "a rejected agent request must not write the config")
+}
+
+func TestRemoveMCPRejectsAgent(t *testing.T) {
+	setup(t)
+
+	_, err := runRemove(t, RemoveOptions{Name: "meteor", Agent: "claude-code"})
+	assert.ErrorContains(t, err, "--agent does not apply")
+}
+
 func TestRemoveMCPReportsWhetherPresent(t *testing.T) {
 	rec := setup(t)
 
