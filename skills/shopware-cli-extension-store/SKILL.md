@@ -140,7 +140,7 @@ Preconditions here work like §2's: a page you had no trigger to read produces n
 - CLI binary and version
 - inspection timestamp
    - builtin checks: pass/fail + exit code (state that `--only builtin` was used)
-- store-compliance checks: pass/fail + exit code
+- Store compliance checks: pass/fail + exit code
 - remote Store listing: inspected / not inspected
 - files modified: no
 

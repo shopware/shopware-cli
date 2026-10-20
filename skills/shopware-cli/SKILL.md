@@ -166,7 +166,7 @@ shopware-cli extension validate [path] [flags]
 
 The extension path is required; use `.` for the current extension.
 
-Normal extension validation runs the built-in checks implemented by the current CLI. Store-compliance mode can add Store-specific checks; do not assume that every metadata or quality rule is Store-only.
+Normal extension validation runs the built-in checks implemented by the current CLI. Store compliance checks that Administration and Storefront source files have matching compiled assets. Validation also reports metadata and code quality findings that are not specific to Store compliance.
 
 Common flags include:
 
