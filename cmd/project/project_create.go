@@ -161,11 +161,8 @@ var projectCreateCmd = &cobra.Command{
 			_ = runInlineProxySetup(cmd.Context(), proxy.BaseDomain())
 		}
 
-		// From here on the project folder is written to. Capture whether it
-		// already existed (creation only accepts it empty), so a failed or
-		// cancelled creation — e.g. Ctrl+C during the Composer install, which
-		// cancels the command context — can remove everything it created
-		// without ever deleting a folder the user already had.
+		// Remember whether the folder existed, so a failed or cancelled creation
+		// can clean up without deleting a folder the user already had.
 		projectExisted, err := shop.ProjectFolderExists(opts.projectFolder)
 		if err != nil {
 			return err

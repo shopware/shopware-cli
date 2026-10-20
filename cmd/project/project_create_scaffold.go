@@ -29,9 +29,8 @@ func scaffoldProject(ctx context.Context, opts *createOptions, chosenVersion str
 	return scaffold.Scaffold(ctx)
 }
 
-// rollbackFailedProjectCreation removes a partially created project after a
-// failed or cancelled creation and returns the original error, joined with
-// the cleanup error when the rollback itself fails.
+// rollbackFailedProjectCreation removes a partially created project and
+// returns cause, joined with any cleanup error.
 func rollbackFailedProjectCreation(ctx context.Context, opts *createOptions, existedBefore bool, cause error) error {
 	if err := shop.CleanupFailedProjectCreation(opts.projectFolder, existedBefore); err != nil {
 		return errors.Join(cause, err)

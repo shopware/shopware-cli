@@ -44,9 +44,7 @@ func ValidateProjectFolder(projectFolder string) error {
 	return nil
 }
 
-// ProjectFolderExists reports whether the project folder already exists
-// before creation starts. Callers capture this before scaffolding so a later
-// rollback knows whether it may remove the folder itself.
+// ProjectFolderExists reports whether the project folder already exists.
 func ProjectFolderExists(projectFolder string) (bool, error) {
 	if projectFolder == "" {
 		return false, errors.New("project folder must not be empty")
@@ -60,11 +58,8 @@ func ProjectFolderExists(projectFolder string) (bool, error) {
 	return true, nil
 }
 
-// CleanupFailedProjectCreation removes everything a failed or cancelled
-// project creation wrote into the project folder. A folder that did not
-// exist before creation is removed entirely; a pre-existing folder (which
-// creation only accepts when empty) is kept and emptied again. The
-// filesystem root is never touched.
+// CleanupFailedProjectCreation removes what a failed creation wrote into the
+// project folder. A folder that existed before is kept and only emptied.
 func CleanupFailedProjectCreation(projectFolder string, existedBefore bool) error {
 	if projectFolder == "" {
 		return errors.New("cannot remove partially created project: project folder must not be empty")

@@ -99,9 +99,7 @@ func (s ShopwareProjectScaffold) Validate() error {
 }
 
 // Scaffold creates the initial project structure without installing its
-// Composer dependencies. When scaffolding fails partway through, everything
-// it already created is removed again, so no half-written project is left
-// behind; a validation failure leaves the target untouched.
+// Composer dependencies. A failed scaffold removes everything it wrote.
 func (s *ShopwareProjectScaffold) Scaffold(ctx context.Context) error {
 	s.Normalize()
 	if err := s.Validate(); err != nil {
