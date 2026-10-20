@@ -99,3 +99,51 @@ build:
 	assert.NoFileExists(t, sshArgsLog)
 	assert.NoFileExists(t, filepath.Join(root, "generated.txt"), "build must not modify the source project")
 }
+
+func TestSSHInitializationValues(t *testing.T) {
+	assert.NoError(t, validateDatabaseURL("mysql://user:password@db.example.com:3306/shopware"))
+	assert.NoError(t, validateDatabaseURL("mariadb://user@db.example.com/shopware?ssl=true"))
+	assert.Error(t, validateDatabaseURL("postgres://user@db.example.com/shopware"))
+	assert.Error(t, validateDatabaseURL("mysql://db.example.com"))
+	assert.Equal(t, "mysql://us%40er:p%40ss%2Fword@db.example.com:3307/shop%20name",
+		buildDatabaseURL("db.example.com", "3307", "shop name", "us@er", "p@ss/word"))
+	secret, err := deploymentSecret()
+	require.NoError(t, err)
+	assert.Len(t, secret, 64)
+}
+
+func TestSSHInitializationWithoutSharedEnvLocal(t *testing.T) {
+	backend := localDeploymentSSH(t)
+	backend.env.SSH.Shared = &shop.EnvironmentSSHSharedConfig{Files: new([]string{})}
+	called := false
+	err := backend.initializeDeployment(t.Context(), func(context.Context, sshDeploymentInitState) (sshDeploymentInitConfig, bool, error) {
+		called = true
+		return sshDeploymentInitConfig{RuntimeValues: map[string]string{"APP_ENV": "prod"}}, true, nil
+	})
+	require.NoError(t, err)
+	assert.True(t, called)
+}
+
+func TestSSHInitializationCancellationDoesNotWrite(t *testing.T) {
+	store := &memoryInitializationStore{}
+	backend := &SSH{initStore: store}
+	err := backend.initializeDeployment(t.Context(), func(context.Context, sshDeploymentInitState) (sshDeploymentInitConfig, bool, error) {
+		return sshDeploymentInitConfig{RuntimeValues: map[string]string{"APP_SECRET": "not-written"}}, false, nil
+	})
+	require.ErrorIs(t, err, ErrInitializationCanceled)
+	assert.Empty(t, store.writes)
+	assert.Equal(t, 1, store.inspections)
+}
+
+func TestSSHInitializationRepeatDoesNotPromptOrWrite(t *testing.T) {
+	store := &memoryInitializationStore{}
+	store.states[0].Initialized = true
+	backend := &SSH{initStore: store}
+	err := backend.initializeDeployment(t.Context(), func(context.Context, sshDeploymentInitState) (sshDeploymentInitConfig, bool, error) {
+		t.Fatal("completed initialization must not prompt")
+		return sshDeploymentInitConfig{}, false, nil
+	})
+	require.NoError(t, err)
+	assert.Empty(t, store.writes)
+	assert.Equal(t, 1, store.inspections)
+}

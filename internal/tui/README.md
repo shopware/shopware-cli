@@ -200,6 +200,26 @@ err := tui.RunSpinnerWithLogs(ctx, "Installing dependencies...", cmd)
 
 ## Input
 
+### Validation
+
+Validators use `func(string) error`, so they work with both Huh fields and
+custom input components. `CombineValidators` runs checks in order and returns
+the first error; `OptionalValidator` skips only an empty string. Neither helper
+trims or modifies the input.
+
+```go
+requiredLine := tui.CombineValidators(tui.ValidateRequired, tui.ValidateSingleLine)
+applicationURL := tui.CombineValidators(requiredLine, tui.ValidateHTTPURL)
+optionalEmail := tui.OptionalValidator(tui.ValidateEmail)
+
+field := huh.NewInput().Title("Application URL").Validate(applicationURL)
+```
+
+`ValidatePort` checks the TCP port range. HTTP URLs must be absolute and contain
+no credentials; email addresses must not include a display name. Combine these
+checks with domain validators, such as `install.ValidateAdminPassword`, at the
+call site.
+
 ### Checkbox
 
 ```go

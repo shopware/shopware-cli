@@ -12,6 +12,9 @@ import (
 )
 
 type SSH struct {
+	initStore  initializationStore
+	transport  *executor.SSHExecutor
+	directory  string
 	root       string
 	configPath string
 	config     *shop.Config
