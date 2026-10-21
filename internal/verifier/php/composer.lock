@@ -1665,21 +1665,21 @@
         },
         {
             "name": "shopwarelabs/phpstan-shopware",
-            "version": "0.2.4",
+            "version": "0.2.5",
             "source": {
                 "type": "git",
                 "url": "https://github.com/shopware/phpstan-shopware.git",
-                "reference": "6b568464ed67f18d7f8476b0d479e41070fa76fa"
+                "reference": "06b83939fcda8590c18685b8d90f328c58625b62"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/shopware/phpstan-shopware/zipball/6b568464ed67f18d7f8476b0d479e41070fa76fa",
-                "reference": "6b568464ed67f18d7f8476b0d479e41070fa76fa",
+                "url": "https://api.github.com/repos/shopware/phpstan-shopware/zipball/06b83939fcda8590c18685b8d90f328c58625b62",
+                "reference": "06b83939fcda8590c18685b8d90f328c58625b62",
                 "shasum": ""
             },
             "require": {
                 "php": "^8.2",
-                "phpstan/phpstan": "^2",
+                "phpstan/phpstan": "^2.1.7",
                 "symfony/polyfill-php84": "*"
             },
             "require-dev": {
@@ -1708,22 +1708,22 @@
             "description": "PhpStan Rules for Shopware",
             "support": {
                 "issues": "https://github.com/shopware/phpstan-shopware/issues",
-                "source": "https://github.com/shopware/phpstan-shopware/tree/0.2.4"
+                "source": "https://github.com/shopware/phpstan-shopware/tree/0.2.5"
             },
-            "time": "2026-09-02T12:21:13+00:00"
+            "time": "2026-10-15T08:20:50+00:00"
         },
         {
             "name": "spaze/phpstan-disallowed-calls",
-            "version": "v4.14.0",
+            "version": "v4.15.0",
             "source": {
                 "type": "git",
                 "url": "https://github.com/spaze/phpstan-disallowed-calls.git",
-                "reference": "90210a86e93e3a96f9a7fded9f5a8b3ee40925dd"
+                "reference": "388075908225e22c46b9622177d1629203d41c1f"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/spaze/phpstan-disallowed-calls/zipball/90210a86e93e3a96f9a7fded9f5a8b3ee40925dd",
-                "reference": "90210a86e93e3a96f9a7fded9f5a8b3ee40925dd",
+                "url": "https://api.github.com/repos/spaze/phpstan-disallowed-calls/zipball/388075908225e22c46b9622177d1629203d41c1f",
+                "reference": "388075908225e22c46b9622177d1629203d41c1f",
                 "shasum": ""
             },
             "require": {
@@ -1769,7 +1769,7 @@
             ],
             "support": {
                 "issues": "https://github.com/spaze/phpstan-disallowed-calls/issues",
-                "source": "https://github.com/spaze/phpstan-disallowed-calls/tree/v4.14.0"
+                "source": "https://github.com/spaze/phpstan-disallowed-calls/tree/v4.15.0"
             },
             "funding": [
                 {
@@ -1777,7 +1777,7 @@
                     "type": "github"
                 }
             ],
-            "time": "2026-08-02T15:18:24+00:00"
+            "time": "2026-10-13T00:31:30+00:00"
         },
         {
             "name": "symfony/console",
@@ -2324,16 +2324,16 @@
         },
         {
             "name": "symfony/polyfill-php84",
-            "version": "v1.38.1",
+            "version": "v1.43.0",
             "source": {
                 "type": "git",
                 "url": "https://github.com/symfony/polyfill-php84.git",
-                "reference": "f4e1dfaee5b74aba5964fe1fd4dfc7ba5e3085fa"
+                "reference": "22c6548499cbe5c5bb072fc0c42312dff062a015"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/symfony/polyfill-php84/zipball/f4e1dfaee5b74aba5964fe1fd4dfc7ba5e3085fa",
-                "reference": "f4e1dfaee5b74aba5964fe1fd4dfc7ba5e3085fa",
+                "url": "https://api.github.com/repos/symfony/polyfill-php84/zipball/22c6548499cbe5c5bb072fc0c42312dff062a015",
+                "reference": "22c6548499cbe5c5bb072fc0c42312dff062a015",
                 "shasum": ""
             },
             "require": {
@@ -2380,7 +2380,7 @@
                 "shim"
             ],
             "support": {
-                "source": "https://github.com/symfony/polyfill-php84/tree/v1.38.1"
+                "source": "https://github.com/symfony/polyfill-php84/tree/v1.43.0"
             },
             "funding": [
                 {
@@ -2400,7 +2400,7 @@
                     "type": "tidelift"
                 }
             ],
-            "time": "2026-05-26T12:51:13+00:00"
+            "time": "2026-09-23T22:01:09+00:00"
         },
         {
             "name": "symfony/process",

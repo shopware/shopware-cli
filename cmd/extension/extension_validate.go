@@ -21,8 +21,10 @@ import (
 var extensionValidateCmd = &cobra.Command{
 	Use:   "validate path",
 	Short: "Validate extension metadata, assets, and code quality",
-	Long:  "Validate an extension folder or ZIP file. With --store-compliance (or SHOPWARE_CLI_STORE_COMPLIANCE=1), the Store's rules apply and the extension's validation.ignore list is not used.",
-	Args:  cobra.ExactArgs(1),
+	Long: `Validate an extension folder or ZIP file.
+Store compliance checks that Administration and Storefront source files have matching compiled assets.
+Enable it with validation.store_compliance in the extension configuration or SHOPWARE_CLI_STORE_COMPLIANCE=1.`,
+	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		storeCompliance, _ := cmd.Flags().GetBool("store-compliance")
 		// Reporting format was validated in PreRunE.
@@ -184,7 +186,7 @@ func extensionValidationFormat(cmd *cobra.Command) (string, error) {
 func init() {
 	extensionRootCmd.AddCommand(extensionValidateCmd)
 	extensionValidateCmd.PersistentFlags().Bool("full", false, "Run all validation checks")
-	extensionValidateCmd.PersistentFlags().Bool("store-compliance", false, "Run the Extension Store compliance checks")
+	extensionValidateCmd.PersistentFlags().Bool("store-compliance", false, "Enable Store compliance (deprecated: use validation.store_compliance in the extension configuration)")
 	extensionValidateCmd.PersistentFlags().String("format", "", "Reporting format (summary, json, github, gitlab, junit, markdown)")
 	extensionValidateCmd.PersistentFlags().String("reporter", "", "Reporting format (summary, json, github, gitlab, junit, markdown)")
 	extensionValidateCmd.PersistentFlags().String("check-against", "highest", "Check against Shopware Version (highest, lowest)")
@@ -197,6 +199,7 @@ func init() {
 	_ = extensionValidateCmd.RegisterFlagCompletionFunc("exclude", completeToolNames[verifier.CheckTool])
 	extensionValidateCmd.MarkFlagsMutuallyExclusive("format", "reporter")
 	_ = extensionValidateCmd.PersistentFlags().MarkDeprecated("full", "all validation checks now run by default; omit --full; to restore old behaviour use --only builtin")
+	_ = extensionValidateCmd.PersistentFlags().MarkDeprecated("store-compliance", "use validation.store_compliance in the extension configuration")
 	_ = extensionValidateCmd.PersistentFlags().MarkDeprecated("reporter", "use --format instead")
 	_ = extensionValidateCmd.PersistentFlags().MarkHidden("reporter")
 	extensionValidateCmd.PreRunE = func(cmd *cobra.Command, args []string) error {

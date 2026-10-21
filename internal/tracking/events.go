@@ -12,6 +12,13 @@ const (
 	// an upgrade run (internal/tui/upgrade).
 	EventProjectUpgrade = "project.upgrade"
 
+	// The ai.* events are sent by the ai command group (cmd/ai) after the
+	// integration is resolved against the directory, so TagIntegration is always a
+	// known catalog value. An unrecognized name is covered by EventCommand and is
+	// never transmitted here.
+	EventAIAdd    = "ai.add"
+	EventAIRemove = "ai.remove"
+
 	// The project.dev.* events are sent by the interactive dev TUI (internal/tui/dev).
 	EventDevSession         = "project.dev.session"
 	EventDevInstall         = "project.dev.install"
@@ -47,6 +54,15 @@ const (
 	// EventProjectUpgrade
 	TagFromVersion   = "from_version"
 	TagTargetVersion = "target_version"
+
+	// EventAIAdd, EventAIRemove
+	TagIntegration = "integration" // directory name, e.g. shopware-cli / meteor
+	TagType        = "type"        // skill / mcp
+	TagAgent       = "agent"       // skills only, enumerated client id (claude-code)
+	TagScope       = "scope"       // project / global
+	TagPinned      = "pinned"      // add only, skills only: a @<tag> was requested
+	TagDryRun      = "dry_run"     // preview run; nothing changed on disk
+	TagRemoved     = "removed"     // remove only: the integration was actually present
 
 	// EventDevInstall
 	TagAbandonedAt       = "abandoned_at"

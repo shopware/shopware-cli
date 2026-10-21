@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/shopware/shopware-cli/internal/ai/directory"
+	"github.com/shopware/shopware-cli/internal/ai/mcp"
 	"github.com/shopware/shopware-cli/internal/ai/skills"
 )
 
@@ -38,10 +39,10 @@ func TestWriteListJSONEmpty(t *testing.T) {
 
 func TestWriteInstalledJSON(t *testing.T) {
 	var buf bytes.Buffer
-	require.NoError(t, writeInstalled(&buf, formatJSON, []skills.Installed{
-		{Name: "deployment-helper", Scope: "project", Agents: []string{"Claude Code"}, Source: "shopware/deployment-helper"},
+	require.NoError(t, writeInstalled(&buf, formatJSON, []installedRow{
+		{Name: "deployment-helper", Type: directory.TypeSkill, Scope: "project", Agents: []string{"Claude Code"}, Source: "shopware/deployment-helper"},
 	}))
-	assert.JSONEq(t, `[{"name":"deployment-helper","scope":"project","agents":["Claude Code"],"source":"shopware/deployment-helper"}]`, buf.String())
+	assert.JSONEq(t, `[{"name":"deployment-helper","type":"skill","scope":"project","agents":["Claude Code"],"source":"shopware/deployment-helper"}]`, buf.String())
 }
 
 func TestWriteInstalledJSONEmpty(t *testing.T) {
@@ -68,6 +69,10 @@ func TestInstalledRecordsFiltersToCatalog(t *testing.T) {
 	}
 	t.Cleanup(func() { listSkills = prev })
 
+	prevMCP := listMCP
+	listMCP = func(string) ([]mcp.Installed, error) { return nil, nil }
+	t.Cleanup(func() { listMCP = prevMCP })
+
 	catalog, err := directory.Load().List(directory.ListOptions{})
 	require.NoError(t, err)
 
@@ -79,4 +84,33 @@ func TestInstalledRecordsFiltersToCatalog(t *testing.T) {
 		names[i] = r.Name
 	}
 	assert.ElementsMatch(t, []string{"shopware-cli", "deployment-helper"}, names, "non-catalog skills are dropped")
+}
+
+func TestInstalledRecordsIncludesMCP(t *testing.T) {
+	t.Setenv("PROJECT_ROOT", t.TempDir())
+
+	prev := listSkills
+	listSkills = func(_ context.Context, _ string, _ bool) ([]skills.Installed, error) { return nil, nil }
+	t.Cleanup(func() { listSkills = prev })
+
+	prevMCP := listMCP
+	listMCP = func(string) ([]mcp.Installed, error) {
+		return []mcp.Installed{
+			{Name: "meteor", Source: "https://meteor.shopware.com/mcp"},
+			{Name: "some-other-mcp", Source: "https://other/mcp"}, // not in the directory
+		}, nil
+	}
+	t.Cleanup(func() { listMCP = prevMCP })
+
+	catalog, err := directory.Load().List(directory.ListOptions{})
+	require.NoError(t, err)
+
+	records, err := installedRecords(t.Context(), catalog)
+	require.NoError(t, err)
+
+	require.Len(t, records, 1, "only catalog MCP servers are kept")
+	assert.Equal(t, "meteor", records[0].Name)
+	assert.Equal(t, directory.TypeMCP, records[0].Type)
+	assert.Equal(t, "project", records[0].Scope)
+	assert.Empty(t, records[0].Agents, "an MCP server in .mcp.json is not agent-specific")
 }
