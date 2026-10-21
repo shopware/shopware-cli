@@ -17,7 +17,9 @@ shopware-cli/
     │   └── SKILL.md
     ├── shopware-cli-docker/
     │   └── SKILL.md
-    └── shopware-cli-extension-store/
+    ├── shopware-cli-extension-store/
+    │   └── SKILL.md
+    └── shopware-cli-extension-anonymize/
         └── SKILL.md
 ```
 
@@ -72,11 +74,24 @@ Read-only Shopware Store readiness assessment for an extension.
 It teaches agents to:
 
 - collect evidence by calling the CLI directly — two `extension validate` runs
-  (normal and `--store-compliance`) plus reading the extension's metadata and icon;
+  (normal and with `validation.store_compliance: true` in the extension configuration) plus reading the extension's metadata and icon;
 - classify every finding against a fixed table with a re-checkable source;
 - keep local file state separate from the remote Store listing, which it never
   inspects;
 - never modify files.
+
+### `shopware-cli-extension-anonymize`
+
+Bootstrap the `anonymize` section of an extension's `.config/shopware-extension.yml`.
+
+It teaches agents to:
+
+- edit only the config file the CLI actually loads;
+- take `system_config` keys from `config.xml` and SystemConfig calls;
+- take table and column names from entity storage names and migrations;
+- choose faker expressions for personal data and `''` or `NULL` for secrets;
+- omit a `system_config` row, or replace it with a custom value or a faker value;
+- leave Shopware core anonymization and unrelated extension validation alone.
 
 ## Source of truth
 
@@ -95,7 +110,7 @@ For user-facing Shopware CLI changes:
 
 1. Implement the CLI change.
 2. Check whether `skills/shopware-cli/SKILL.md` is affected.
-3. Check whether `skills/shopware-cli-docker/SKILL.md` or `skills/shopware-cli-extension-store/SKILL.md` is affected.
+3. Check whether `skills/shopware-cli-docker/SKILL.md`, `skills/shopware-cli-extension-store/SKILL.md`, or `skills/shopware-cli-extension-anonymize/SKILL.md` is affected.
 4. Update the skill in the same PR when required.
 5. Validate the skills.
 6. Verify that the skills can still be discovered by the skills CLI.
@@ -114,6 +129,7 @@ Validate each skill against the Agent Skills format:
 skills-ref validate ./skills/shopware-cli
 skills-ref validate ./skills/shopware-cli-docker
 skills-ref validate ./skills/shopware-cli-extension-store
+skills-ref validate ./skills/shopware-cli-extension-anonymize
 ```
 
 Verify repository discovery:
@@ -222,6 +238,18 @@ different project path (for example Cursor's `.cursor/mcp.json` or VS Code's
 `.vscode/mcp.json`) can import it; if broader coverage is needed later, the server
 can be distributed with a dedicated MCP installer instead.
 
+### Recommendation
+
+When a supported AI client runs the CLI (detected from the `AI_AGENT` environment
+variable), and the `shopware-cli` skill is not yet installed for it, the CLI
+prints a short, non-blocking recommendation to stderr pointing at
+`shopware-cli ai add shopware-cli --agent <client> --global`. It never installs
+anything and asks the agent to confirm with the user first. The detection itself
+is the trigger, so it is shown in non-interactive runs too (that is how agents
+invoke the CLI). It is not shown again for the same client within 24 hours, and
+stays silent in CI runs, during shell completion, while using `ai` commands, and
+when `--no-ai-hint` is passed.
+
 ### Known limitations
 
 - `ai remove` asks skills.sh whether the skill is installed before deleting it, so
@@ -242,7 +270,7 @@ npx skills check
 Update the Shopware skills with:
 
 ```bash
-npx skills update shopware-cli shopware-cli-docker shopware-cli-extension-store
+npx skills update shopware-cli shopware-cli-docker shopware-cli-extension-store shopware-cli-extension-anonymize
 ```
 
 or update all installed project skills with:

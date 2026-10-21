@@ -90,7 +90,7 @@ func GetConfigFromProject(ctx context.Context, root string, onlyLocal bool) (*To
 		return nil, err
 	}
 
-	extensions := extension.FindExtensionsFromProject(ctx, root, onlyLocal)
+	extensions, _ := extension.FindExtensionsFromProject(ctx, root, onlyLocal)
 
 	sourceDirectories := []string{}
 	adminDirectories := []string{}

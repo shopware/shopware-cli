@@ -45,6 +45,8 @@ type EnvironmentSSHConfig struct {
 	IdentityFile string `yaml:"identity_file,omitempty"`
 	// PHP binary used for PHP and console commands on the remote host (e.g. "/usr/bin/php8.3"). Defaults to "php"
 	PHPBinary string `yaml:"php_binary,omitempty"`
+	// Additional arguments passed to the PHP binary for PHP and console commands on the remote host (e.g. ["-d", "memory_limit=512M"] or ["-c", "/path/to/php.ini"]). Appended after the binary.
+	PHPArgs []string `yaml:"php_args,omitempty"`
 }
 
 type Config struct {
@@ -932,6 +934,12 @@ func ReadConfig(ctx context.Context, fileName string, allowFallback bool) (*Conf
 			if err != nil {
 				return nil, fmt.Errorf("cannot merge included config %s: %w", additionalConfigFile, err)
 			}
+
+			// Table lists add up, the project's own list must not drop the included tables.
+			if config.ConfigDump != nil && additionalConfig.ConfigDump != nil {
+				config.ConfigDump.NoData = appendMissing(config.ConfigDump.NoData, additionalConfig.ConfigDump.NoData)
+				config.ConfigDump.Ignore = appendMissing(config.ConfigDump.Ignore, additionalConfig.ConfigDump.Ignore)
+			}
 		}
 	}
 
@@ -944,6 +952,17 @@ func ReadConfig(ctx context.Context, fileName string, allowFallback bool) (*Conf
 	}
 
 	return fillEmptyConfig(config), nil
+}
+
+// appendMissing appends the items of add that list does not contain yet.
+func appendMissing(list []string, add []string) []string {
+	for _, item := range add {
+		if !slices.Contains(list, item) {
+			list = append(list, item)
+		}
+	}
+
+	return list
 }
 
 // applyLocalOverride decodes the project configuration with its local override

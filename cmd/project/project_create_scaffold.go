@@ -28,14 +28,15 @@ func scaffoldProject(ctx context.Context, opts *createOptions, chosenVersion str
 
 func newShopwareProjectScaffold(opts *createOptions, chosenVersion string) shop.ShopwareProjectScaffold {
 	return shop.ShopwareProjectScaffold{
-		ProjectFolder:    opts.projectFolder,
-		Version:          chosenVersion,
-		DeploymentMethod: opts.selectedDeployment,
-		CISystem:         opts.selectedCI,
-		PHPVersion:       opts.phpVersion,
-		UseDocker:        opts.useDocker,
-		UseElasticsearch: opts.withElasticsearch,
-		UseAMQP:          opts.withAMQP,
-		NoAudit:          opts.noAudit,
+		ProjectFolder:      opts.projectFolder,
+		Version:            chosenVersion,
+		DeploymentMethod:   opts.selectedDeployment,
+		CISystem:           opts.selectedCI,
+		PHPVersion:         opts.phpVersion,
+		UseDocker:          opts.useDocker,
+		UseElasticsearch:   opts.withElasticsearch,
+		UseAMQP:            opts.withAMQP,
+		NoAudit:            opts.noAudit,
+		ComposeProjectName: opts.composeProjectName,
 	}
 }

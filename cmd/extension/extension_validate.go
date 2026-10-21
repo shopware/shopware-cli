@@ -1,7 +1,6 @@
 package extension
 
 import (
-	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -21,18 +20,21 @@ import (
 var extensionValidateCmd = &cobra.Command{
 	Use:   "validate path",
 	Short: "Validate extension metadata, assets, and code quality",
-	Long:  "Validate an extension folder or ZIP file. With --store-compliance (or SHOPWARE_CLI_STORE_COMPLIANCE=1), the Store's rules apply and the extension's validation.ignore list is not used.",
-	Args:  cobra.ExactArgs(1),
+	Long: `Validate an extension folder or ZIP file.
+Store compliance checks that Administration and Storefront source files have matching compiled assets.
+Enable it with validation.store_compliance in the extension configuration or SHOPWARE_CLI_STORE_COMPLIANCE=1.`,
+	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		logger := logging.FromContext(cmd.Context())
 		storeCompliance, _ := cmd.Flags().GetBool("store-compliance")
-		// Reporting format and tool selection were validated in PreRunE.
+		// Reporting format was validated in PreRunE.
 		reportingFormat, _ := extensionValidationFormat(cmd)
 		checkAgainst, _ := cmd.Flags().GetString("check-against")
 		only, _ := cmd.Flags().GetString("only")
 		exclude, _ := cmd.Flags().GetString("exclude")
 		noCopy, _ := cmd.Flags().GetBool("no-copy")
 
+		// Tool selection was validated in PreRunE.
 		tools, statuses, _ := selectExtensionValidationTools(only, exclude)
 		needsTools := slices.ContainsFunc(tools, requiresToolSetup)
 
@@ -130,24 +132,6 @@ var extensionValidateCmd = &cobra.Command{
 	},
 }
 
-func selectExtensionValidationTools(only, exclude string) (verifier.ToolList[verifier.CheckTool], []validation.ToolInvocationStatus, error) {
-	validationTools := verifier.GetToolsOf[verifier.CheckTool]()
-
-	requestedTools, err := validationTools.Only(only)
-	if err != nil {
-		return nil, nil, err
-	}
-	selected, err := requestedTools.Exclude(exclude)
-	if err != nil {
-		return nil, nil, err
-	}
-	if len(selected) == 0 {
-		return nil, nil, errors.New("no validation checks selected after applying --exclude")
-	}
-
-	return selected, extensionToolInvocationStatuses(validationTools, requestedTools, selected), nil
-}
-
 func requiresToolSetup(tool verifier.CheckTool) bool {
 	switch tool.(type) {
 	case verifier.PhpStan, verifier.Eslint, verifier.StyleLint:
@@ -173,7 +157,7 @@ func extensionValidationFormat(cmd *cobra.Command) (string, error) {
 func init() {
 	extensionRootCmd.AddCommand(extensionValidateCmd)
 	extensionValidateCmd.PersistentFlags().Bool("full", false, "Run all validation checks")
-	extensionValidateCmd.PersistentFlags().Bool("store-compliance", false, "Run the Extension Store compliance checks")
+	extensionValidateCmd.PersistentFlags().Bool("store-compliance", false, "Enable Store compliance (deprecated: use validation.store_compliance in the extension configuration)")
 	extensionValidateCmd.PersistentFlags().String("format", "", "Reporting format (summary, json, github, gitlab, junit, markdown)")
 	extensionValidateCmd.PersistentFlags().String("reporter", "", "Reporting format (summary, json, github, gitlab, junit, markdown)")
 	extensionValidateCmd.PersistentFlags().String("check-against", "highest", "Check against Shopware Version (highest, lowest)")
@@ -186,6 +170,7 @@ func init() {
 	_ = extensionValidateCmd.RegisterFlagCompletionFunc("exclude", completeToolNames[verifier.CheckTool])
 	extensionValidateCmd.MarkFlagsMutuallyExclusive("format", "reporter")
 	_ = extensionValidateCmd.PersistentFlags().MarkDeprecated("full", "all validation checks now run by default; omit --full; to restore old behaviour use --only builtin")
+	_ = extensionValidateCmd.PersistentFlags().MarkDeprecated("store-compliance", "use validation.store_compliance in the extension configuration")
 	_ = extensionValidateCmd.PersistentFlags().MarkDeprecated("reporter", "use --format instead")
 	_ = extensionValidateCmd.PersistentFlags().MarkHidden("reporter")
 	extensionValidateCmd.PreRunE = func(cmd *cobra.Command, args []string) error {

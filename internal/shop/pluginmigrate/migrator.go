@@ -171,7 +171,7 @@ type ScannedExtension struct {
 // Scan lists the extensions living below custom/ — the ones Composer does not
 // manage. It is read-only.
 func (m *PluginMigrator) Scan(ctx context.Context) []ScannedExtension {
-	found := extension.FindExtensionsFromProject(logging.DisableLogger(ctx), m.projectRoot, false)
+	found, _ := extension.FindExtensionsFromProject(logging.DisableLogger(ctx), m.projectRoot, false)
 
 	// Extension paths come back symlink-resolved; resolve the root the same
 	// way so the prefix comparison holds (e.g. /var vs /private/var on macOS).

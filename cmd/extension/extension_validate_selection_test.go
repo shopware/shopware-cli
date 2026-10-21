@@ -7,20 +7,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/shopware/shopware-cli/internal/validation"
 	"github.com/shopware/shopware-cli/internal/verifier"
 )
-
-func toolStatusByName(t *testing.T, statuses []validation.ToolInvocationStatus, name string) validation.ToolInvocationStatus {
-	t.Helper()
-	for _, status := range statuses {
-		if status.Name == name {
-			return status
-		}
-	}
-	t.Fatalf("missing tool status for %s", name)
-	return validation.ToolInvocationStatus{}
-}
 
 func TestExtensionValidationSelection(t *testing.T) {
 	t.Run("default runs all checkers", func(t *testing.T) {
