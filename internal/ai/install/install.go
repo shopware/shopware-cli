@@ -39,8 +39,12 @@ type Options struct {
 }
 
 // Result is the outcome of Add, rendered by the command as a human-readable line.
+// On a post-resolution failure (the install step itself fails) the identifying
+// fields are still populated alongside the error, so the caller can report what
+// was attempted; on an input or guard error the zero Result is returned.
 type Result struct {
 	Name             string
+	Type             directory.Type
 	Agent            string
 	Scope            string
 	Dir              string
@@ -81,6 +85,7 @@ func Add(ctx context.Context, o Options, progress io.Writer) (Result, error) {
 	// repository's default branch.
 	result := Result{
 		Name:             entry.Name,
+		Type:             entry.Type,
 		Agent:            o.Agent,
 		Scope:            scope,
 		Dir:              dir,
@@ -94,7 +99,7 @@ func Add(ctx context.Context, o Options, progress io.Writer) (Result, error) {
 	}
 
 	if err := runSkills(ctx, result.Command, dir, progress); err != nil {
-		return Result{}, err
+		return result, err
 	}
 
 	return result, nil
@@ -117,6 +122,7 @@ func addMCP(o Options, entry *directory.Integration, tag string) (Result, error)
 
 	result := Result{
 		Name:    entry.Name,
+		Type:    entry.Type,
 		Scope:   ScopeProject,
 		Dir:     root,
 		DryRun:  o.DryRun,
@@ -127,7 +133,7 @@ func addMCP(o Options, entry *directory.Integration, tag string) (Result, error)
 	}
 
 	if err := mcp.Add(root, entry.Name, entry.Delivery.URL, entry.Delivery.Transport); err != nil {
-		return Result{}, err
+		return result, err
 	}
 
 	return result, nil
@@ -163,9 +169,11 @@ type RemoveOptions struct {
 
 // RemoveResult is the outcome of Remove, rendered by the command as a line.
 // Removed is false when the skill was not installed for that agent and scope, so
-// skills.sh had nothing to delete.
+// skills.sh had nothing to delete. As with Result, a post-resolution failure
+// still populates the identifying fields alongside the error.
 type RemoveResult struct {
 	Name    string
+	Type    directory.Type
 	Agent   string
 	Scope   string
 	Removed bool
@@ -196,6 +204,7 @@ func Remove(ctx context.Context, o RemoveOptions, progress io.Writer) (RemoveRes
 
 	result := RemoveResult{
 		Name:    entry.Name,
+		Type:    entry.Type,
 		Agent:   o.Agent,
 		Scope:   scope,
 		DryRun:  o.DryRun,
@@ -204,7 +213,7 @@ func Remove(ctx context.Context, o RemoveOptions, progress io.Writer) (RemoveRes
 
 	installed, err := installedForAgent(ctx, dir, o.Global, entry.Name, o.Agent)
 	if err != nil {
-		return RemoveResult{}, err
+		return result, err
 	}
 	result.Removed = installed
 
@@ -213,7 +222,7 @@ func Remove(ctx context.Context, o RemoveOptions, progress io.Writer) (RemoveRes
 	}
 
 	if err := runSkills(ctx, result.Command, dir, progress); err != nil {
-		return RemoveResult{}, err
+		return result, err
 	}
 
 	return result, nil
@@ -230,6 +239,7 @@ func removeMCP(o RemoveOptions, entry *directory.Integration) (RemoveResult, err
 
 	result := RemoveResult{
 		Name:    entry.Name,
+		Type:    entry.Type,
 		Scope:   ScopeProject,
 		DryRun:  o.DryRun,
 		Command: []string{"updates", path},
@@ -237,7 +247,7 @@ func removeMCP(o RemoveOptions, entry *directory.Integration) (RemoveResult, err
 	if o.DryRun {
 		present, err := mcp.Has(root, entry.Name)
 		if err != nil {
-			return RemoveResult{}, err
+			return result, err
 		}
 		result.Removed = present
 
@@ -246,7 +256,7 @@ func removeMCP(o RemoveOptions, entry *directory.Integration) (RemoveResult, err
 
 	removed, err := mcp.Remove(root, entry.Name)
 	if err != nil {
-		return RemoveResult{}, err
+		return result, err
 	}
 	result.Removed = removed
 
