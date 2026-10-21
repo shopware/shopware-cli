@@ -4,8 +4,9 @@
 # Personal overrides belong in mise.local.toml, which is intentionally ignored.
 
 [tools]
-# Keep this aligned with the Go version declared in go.mod.
-go = "1.27.3"
+# Keep this aligned with the Go minor version declared in go.mod.
+# Run `mise upgrade go` to install the latest patch release.
+go = "1.27"
 
 # Pin the linter so local results do not change when a new release is published.
 # Keep this in sync with the version in .github/workflows/lint.yml.
