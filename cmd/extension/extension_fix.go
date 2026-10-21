@@ -26,6 +26,9 @@ var extensionFixCmd = &cobra.Command{
 		return err
 	},
 	RunE: func(cmd *cobra.Command, args []string) error {
+		ctx := cmd.Context()
+		progress := verifier.NewProgress("")
+
 		only, _ := cmd.Flags().GetString("only")
 		exclude, _ := cmd.Flags().GetString("exclude")
 
@@ -45,27 +48,44 @@ var extensionFixCmd = &cobra.Command{
 			return fmt.Errorf("cannot find path: %w", err)
 		}
 
-		ext, err := extension.GetExtensionByFolder(cmd.Context(), path)
+		ext, err := extension.GetExtensionByFolder(ctx, path)
 		if err != nil {
 			return err
 		}
 
-		toolCfg, err := verifier.SetupExtensionToolConfig(cmd.Context(), cmd.Root().Version, ext)
+		finishSetup := progress.Start("preparing tools")
+		setupErr := verifier.SetupTools(ctx, cmd.Root().Version)
+		finishSetup(setupErr)
+		if setupErr != nil {
+			return setupErr
+		}
+		finishConfig := progress.Start("discovering extension configuration")
+		toolCfg, err := verifier.ConvertExtensionToToolConfig(ctx, ext)
+		finishConfig(err)
 		if err != nil {
 			return err
 		}
 
-		logging.FromContext(cmd.Context()).Debugf("Running fixes for Shopware version: %s", toolCfg.MinShopwareVersion)
+		logging.FromContext(ctx).Debugf("Running fixes for Shopware version: %s", toolCfg.MinShopwareVersion)
 
 		var gr errgroup.Group
 
 		for _, tool := range tools {
 			gr.Go(func() error {
-				return tool.Fix(cmd.Context(), *toolCfg)
+				finish := progress.Start(tool.Name())
+				err := tool.Fix(ctx, *toolCfg)
+				if err == nil {
+					err = ctx.Err()
+				}
+				finish(err)
+				return err
 			})
 		}
 
 		runErr := gr.Wait()
+		if runErr == nil {
+			runErr = ctx.Err()
+		}
 		if err := validation.PrintToolInvocationTable(os.Stdout, "Fixers", statuses); err != nil {
 			return err
 		}

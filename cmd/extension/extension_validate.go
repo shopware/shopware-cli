@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"sync"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -23,10 +24,14 @@ var extensionValidateCmd = &cobra.Command{
 	Long:  "Validate an extension folder or ZIP file. With --store-compliance (or SHOPWARE_CLI_STORE_COMPLIANCE=1), the Store's rules apply and the extension's validation.ignore list is not used.",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		logger := logging.FromContext(cmd.Context())
 		storeCompliance, _ := cmd.Flags().GetBool("store-compliance")
 		// Reporting format was validated in PreRunE.
 		reportingFormat, _ := extensionValidationFormat(cmd)
+		ctx := cmd.Context()
+		progress := verifier.NewProgress(reportingFormat)
+		cleanup := func() {}
+		defer func() { cleanup() }()
+		logger := logging.FromContext(ctx)
 		checkAgainst, _ := cmd.Flags().GetString("check-against")
 		only, _ := cmd.Flags().GetString("only")
 		exclude, _ := cmd.Flags().GetString("exclude")
@@ -56,41 +61,51 @@ var extensionValidateCmd = &cobra.Command{
 				if err != nil {
 					return fmt.Errorf("cannot create temporary directory: %w", err)
 				}
-				defer func() {
-					beforeDeleteTime := time.Now()
-					if err := os.RemoveAll(tmpDir); err != nil {
-						logger.Errorf("Failed to remove temporary directory: %v", err)
+				cleanup = sync.OnceFunc(func() {
+					finishCleanup := progress.Start("removing temporary files")
+					cleanupErr := os.RemoveAll(tmpDir)
+					finishCleanup(cleanupErr)
+					if cleanupErr != nil {
+						logger.Errorf("Failed to remove temporary directory: %v", cleanupErr)
 					}
-					logger.Debugf("Removed temporary directory in %s", time.Since(beforeDeleteTime).String())
-				}()
+				})
 
 				beforeCopyTime := time.Now()
-				if err := system.CopyFiles(cmd.Context(), path, tmpDir); err != nil {
-					return err
+				finishCopy := progress.Start("copying files (use \"--no-copy\" to skip)")
+				copyErr := system.CopyFiles(ctx, path, tmpDir)
+				finishCopy(copyErr)
+				if copyErr != nil {
+					return copyErr
 				}
 
 				logger.Debugf("Copied extension files to temporary directory in %s", time.Since(beforeCopyTime).String())
 				validationPath = tmpDir
 			}
 
-			ext, err := extension.GetExtensionByFolder(cmd.Context(), validationPath)
+			ext, err := extension.GetExtensionByFolder(ctx, validationPath)
 			if err != nil {
 				return err
 			}
 
-			toolCfg, err = verifier.ConvertExtensionToToolConfig(cmd.Context(), ext)
+			finishConfig := progress.Start("discovering extension configuration")
+			toolCfg, err = verifier.ConvertExtensionToToolConfig(ctx, ext)
+			finishConfig(err)
 			if err != nil {
 				return err
 			}
 
 			toolCfg.InputWasDirectory = true
 		} else {
-			ext, err := extension.GetExtensionByZip(cmd.Context(), args[0])
+			finishMetadata := progress.Start("extracting extension archive")
+			ext, err := extension.GetExtensionByZip(ctx, args[0])
+			finishMetadata(err)
 			if err != nil {
 				return err
 			}
 
-			toolCfg, err = verifier.ConvertExtensionToToolConfig(cmd.Context(), ext)
+			finishConfig := progress.Start("discovering extension configuration")
+			toolCfg, err = verifier.ConvertExtensionToToolConfig(ctx, ext)
+			finishConfig(err)
 			if err != nil {
 				return err
 			}
@@ -108,8 +123,11 @@ var extensionValidateCmd = &cobra.Command{
 		result.SetSourceRoot(toolCfg.RootDir)
 
 		if needsTools {
-			if err := verifier.SetupTools(cmd.Context(), cmd.Root().Version); err != nil {
-				return err
+			finishSetup := progress.Start("preparing tools")
+			setupErr := verifier.SetupTools(ctx, cmd.Root().Version)
+			finishSetup(setupErr)
+			if setupErr != nil {
+				return setupErr
 			}
 			toolCfg.ToolDirectory = verifier.GetToolDirectory()
 		}
@@ -117,12 +135,23 @@ var extensionValidateCmd = &cobra.Command{
 		var gr errgroup.Group
 		for _, tool := range tools {
 			gr.Go(func() error {
-				return tool.Check(cmd.Context(), result, *toolCfg)
+				finish := progress.Start(tool.Name())
+				err := tool.Check(ctx, result, *toolCfg)
+				if err == nil {
+					err = ctx.Err()
+				}
+				finish(err)
+				return err
 			})
 		}
 
 		runErr := gr.Wait()
-		reportErr := validation.DoCheckReport(result.RemoveByIdentifier(toolCfg.ValidationIgnores), reportingFormat, runErr != nil, statuses...)
+		report := result.RemoveByIdentifier(toolCfg.ValidationIgnores)
+		cleanup()
+		if runErr == nil {
+			runErr = ctx.Err()
+		}
+		reportErr := validation.DoCheckReport(report, reportingFormat, runErr != nil, statuses...)
 		if runErr != nil {
 			return runErr
 		}
