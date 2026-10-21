@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/otiai10/copy"
+	cp "github.com/otiai10/copy"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -145,7 +145,7 @@ func copyFixture(t *testing.T) string {
 	t.Helper()
 
 	dst := t.TempDir()
-	require.NoError(t, copy.Copy(fixtureProject, dst))
+	require.NoError(t, cp.Copy(fixtureProject, dst))
 
 	return dst
 }
