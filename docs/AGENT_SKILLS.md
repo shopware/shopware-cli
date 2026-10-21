@@ -175,10 +175,10 @@ supported AI clients. Shopware CLI does not maintain client-specific copies.
 
 ## Installing with Shopware CLI
 
-Shopware CLI exposes an `ai` command group as a thin front door over skills.sh —
-it decides what to install and records it, while skills.sh writes the agent
-configuration. It requires Node.js/npx on PATH (git-delivered integrations also
-need git and network access).
+Shopware CLI exposes an `ai` command group as a thin front door for installing
+integrations: it runs skills.sh for skills and writes the project's `.mcp.json`
+for MCP servers. Installing a skill requires Node.js/npx on PATH (git-delivered
+integrations also need git and network access).
 
 ```bash
 # discover integrations
@@ -199,16 +199,44 @@ shopware-cli ai remove shopware-cli --agent claude-code
 ```
 
 A project install resolves the Shopware project root (so the skill is written
-where agents read it) and records the install under `.shopware-cli/ai/`. "Project"
-here means a Shopware shop (a `bin/console` plus a `composer.json` requiring
-`shopware/core`); a project install refuses to run anywhere else. An extension
-(plugin or app) repository is not a shop, so install the general `shopware-cli`
-skill with `--global` there — which is the natural scope for it anyway, making it
-available in every repository. The agent name is whatever skills.sh supports (e.g.
-`claude-code`, `codex`); the CLI keeps no list of its own. Commit `.claude/skills/`
-(or the agent's directory), `skills-lock.json`, and
-`.shopware-cli/ai/installed.json` to share an integration with your team, or
-gitignore them to keep it local.
+where agents read it). "Project" here means a Shopware shop (a `bin/console` plus
+a `composer.json` requiring `shopware/core`); a project install refuses to run
+anywhere else. An extension (plugin or app) repository is not a shop, so install
+the general `shopware-cli` skill with `--global` there — which is the natural scope
+for it anyway, making it available in every repository. The agent name is whatever
+skills.sh supports (e.g. `claude-code`, `codex`); the CLI keeps no record of its
+own — skills.sh is the source of truth for what is installed. Commit
+`.claude/skills/` (or the agent's directory) and `skills-lock.json` to share an
+integration with your team, or gitignore them to keep it local.
+
+### MCP integrations
+
+An integration of type `mcp` (for example `meteor`, the Meteor MCP server) is a
+remote server rather than a skill. The CLI configures it by writing the project's
+`.mcp.json` — the standard `{"mcpServers": {…}}` file MCP clients read — instead of
+any agent's own config. Because the CLI owns that one file, `add` and `remove`
+target exactly the named server, and no per-agent config paths need to be known.
+
+An MCP install is project-scoped: `.mcp.json` lives in the Shopware project root,
+and committing it shares the server with your team. It takes no `@<tag>` and no
+`--agent` (the file is not agent-specific), and `--global` is not supported.
+
+```bash
+shopware-cli ai info meteor
+shopware-cli ai add meteor               # writes <project>/.mcp.json
+shopware-cli ai add meteor --dry-run
+shopware-cli ai remove meteor
+```
+
+`add` writes a remote `{"type":"http","url":…}` entry under `mcpServers`,
+preserving other servers and unrelated keys; `remove` deletes only the named
+server. `ai list --installed` reads the project's `.mcp.json` back and reports
+configured MCP servers alongside skills, with a `Type` column.
+
+Claude Code reads `.mcp.json` from the project root natively. Clients that use a
+different project path (for example Cursor's `.cursor/mcp.json` or VS Code's
+`.vscode/mcp.json`) can import it; if broader coverage is needed later, the server
+can be distributed with a dedicated MCP installer instead.
 
 ### Recommendation
 
@@ -224,12 +252,10 @@ when `--no-ai-hint` is passed.
 
 ### Known limitations
 
-- The result line describes the CLI's own record, not what skills.sh did on disk:
-  a re-install of a manually deleted skill still reads `Already installed`, and
-  `ai remove` reports `Removed` for a recorded install even if skills.sh found
-  nothing to delete.
-- The Codex agent can leave files behind on a project-scope `ai remove` (a
-  skills.sh defect); the CLI still reports the removal.
+- `ai remove` asks skills.sh whether the skill is installed before deleting it, so
+  it reports `Removed` only when there was something to remove. The Codex agent can
+  still leave files behind on a project-scope `ai remove` (a skills.sh defect); the
+  CLI reports the removal that skills.sh carried out.
 
 ## Updating installed skills
 
