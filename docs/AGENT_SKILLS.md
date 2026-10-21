@@ -74,7 +74,7 @@ Read-only Shopware Store readiness assessment for an extension.
 It teaches agents to:
 
 - collect evidence by calling the CLI directly — two `extension validate` runs
-  (normal and `--store-compliance`) plus reading the extension's metadata and icon;
+  (normal and with `validation.store_compliance: true` in the extension configuration) plus reading the extension's metadata and icon;
 - classify every finding against a fixed table with a re-checkable source;
 - keep local file state separate from the remote Store listing, which it never
   inspects;
