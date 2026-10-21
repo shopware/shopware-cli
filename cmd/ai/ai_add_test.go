@@ -12,7 +12,7 @@ import (
 
 func TestWriteAddResultInstalled(t *testing.T) {
 	var buf bytes.Buffer
-	require.NoError(t, writeAddResult(&buf, install.Result{
+	require.NoError(t, writeAddResult(&buf, install.AddResult{
 		Name: "shopware-cli", Agent: "claude-code", Scope: install.ScopeGlobal,
 		ResolvedRevision: "v0.18.4",
 	}))
@@ -21,7 +21,7 @@ func TestWriteAddResultInstalled(t *testing.T) {
 
 func TestWriteAddResultDryRun(t *testing.T) {
 	var buf bytes.Buffer
-	require.NoError(t, writeAddResult(&buf, install.Result{
+	require.NoError(t, writeAddResult(&buf, install.AddResult{
 		Name: "shopware-cli", Agent: "claude-code", Scope: install.ScopeGlobal,
 		DryRun: true, Command: []string{"npx", "skills", "add"},
 	}))

@@ -71,7 +71,7 @@ func setup(t *testing.T) *call {
 	return rec
 }
 
-func runAdd(t *testing.T, o Options) (Result, error) {
+func runAdd(t *testing.T, o Options) (AddResult, error) {
 	t.Helper()
 	var progress bytes.Buffer
 

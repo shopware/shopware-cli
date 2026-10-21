@@ -63,7 +63,7 @@ share the integration with your team, or gitignore them to keep it local.`,
 	},
 }
 
-func writeAddResult(w io.Writer, r install.Result) error {
+func writeAddResult(w io.Writer, r install.AddResult) error {
 	dest := ""
 	if r.Dir != "" {
 		dest = " into " + r.Dir
@@ -93,9 +93,9 @@ func writeAddResult(w io.Writer, r install.Result) error {
 }
 
 // trackAIAdd emits the ai.add usage event for a resolved integration. An input or
-// guard error returns a zero Result (nothing was resolved); those runs are already
+// guard error returns a zero AddResult (nothing was resolved); those runs are already
 // covered by shopware_cli.command, so nothing is sent here.
-func trackAIAdd(ctx context.Context, r install.Result, runErr error) {
+func trackAIAdd(ctx context.Context, r install.AddResult, runErr error) {
 	if r.Name == "" {
 		return
 	}

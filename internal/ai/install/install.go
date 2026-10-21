@@ -38,11 +38,11 @@ type Options struct {
 	DryRun bool
 }
 
-// Result is the outcome of Add, rendered by the command as a human-readable line.
+// AddResult is the outcome of Add, rendered by the command as a human-readable line.
 // On a post-resolution failure (the install step itself fails) the identifying
 // fields are still populated alongside the error, so the caller can report what
-// was attempted; on an input or guard error the zero Result is returned.
-type Result struct {
+// was attempted; on an input or guard error the zero AddResult is returned.
+type AddResult struct {
 	Name             string
 	Type             directory.Type
 	Agent            string
@@ -56,34 +56,34 @@ type Result struct {
 
 // Add installs a skill into an agent via skills.sh. skills.sh output is streamed
 // to progress and it owns the on-disk record (skills-lock.json).
-func Add(ctx context.Context, o Options, progress io.Writer) (Result, error) {
+func Add(ctx context.Context, o Options, progress io.Writer) (AddResult, error) {
 	name, tag := splitNameTag(o.Name)
 	if tag == "" && strings.Contains(o.Name, "@") {
-		return Result{}, fmt.Errorf("empty version after \"@\" in %q; pin a release like %s@v1.2.3 or omit the @", o.Name, name)
+		return AddResult{}, fmt.Errorf("empty version after \"@\" in %q; pin a release like %s@v1.2.3 or omit the @", o.Name, name)
 	}
 
 	entry, ok := directory.Load().Get(name)
 	if !ok {
-		return Result{}, fmt.Errorf("unknown integration %q (see \"shopware-cli ai list\")", name)
+		return AddResult{}, fmt.Errorf("unknown integration %q (see \"shopware-cli ai list\")", name)
 	}
 	if entry.Type == directory.TypeMCP {
 		return addMCP(o, entry, tag)
 	}
 	if entry.Type != directory.TypeSkill {
-		return Result{}, fmt.Errorf("installing %q is not supported", entry.Name)
+		return AddResult{}, fmt.Errorf("installing %q is not supported", entry.Name)
 	}
 	if err := validateAgent(o.Agent); err != nil {
-		return Result{}, err
+		return AddResult{}, err
 	}
 
 	scope, dir, err := resolveScope(o.Global)
 	if err != nil {
-		return Result{}, err
+		return AddResult{}, err
 	}
 
 	// The tag is the git ref verbatim (e.g. v0.1.9); an empty tag installs the
 	// repository's default branch.
-	result := Result{
+	result := AddResult{
 		Name:             entry.Name,
 		Type:             entry.Type,
 		Agent:            o.Agent,
@@ -109,18 +109,18 @@ func Add(ctx context.Context, o Options, progress io.Writer) (Result, error) {
 // file MCP clients read — rather than any agent's own config. It is project-scoped
 // (committing the file shares the server with the team) and takes no @tag; the
 // --agent flag does not apply because the file is not agent-specific.
-func addMCP(o Options, entry *directory.Integration, tag string) (Result, error) {
+func addMCP(o Options, entry *directory.Integration, tag string) (AddResult, error) {
 	if tag != "" {
-		return Result{}, fmt.Errorf("%q is an MCP server and cannot be pinned with @tag", entry.Name)
+		return AddResult{}, fmt.Errorf("%q is an MCP server and cannot be pinned with @tag", entry.Name)
 	}
 
 	root, err := mcpProjectRoot(o.Agent, o.Global)
 	if err != nil {
-		return Result{}, err
+		return AddResult{}, err
 	}
 	path := mcp.ConfigPath(root)
 
-	result := Result{
+	result := AddResult{
 		Name:    entry.Name,
 		Type:    entry.Type,
 		Scope:   ScopeProject,
@@ -169,7 +169,7 @@ type RemoveOptions struct {
 
 // RemoveResult is the outcome of Remove, rendered by the command as a line.
 // Removed is false when the skill was not installed for that agent and scope, so
-// skills.sh had nothing to delete. As with Result, a post-resolution failure
+// skills.sh had nothing to delete. As with AddResult, a post-resolution failure
 // still populates the identifying fields alongside the error.
 type RemoveResult struct {
 	Name    string
