@@ -106,3 +106,13 @@ jobs:
         uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # ratchet:actions/attest@v4.2.2
         with:
           subject-checksums: ./dist/digests.txt
+
+  publish-version-feed:
+    name: Publish version feed
+    needs: release
+    # Releases made with GITHUB_TOKEN never trigger workflows, so call it here
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    uses: ./.github/workflows/schema-pages.yml
