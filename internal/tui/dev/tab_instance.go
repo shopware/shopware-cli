@@ -273,7 +273,7 @@ func (m InstanceModel) renderSidebar() string {
 	}
 
 	var list strings.Builder
-	cursorRow := 0
+	var cursorRow, cursorEnd int
 
 	groups := m.groupedSources()
 
@@ -328,13 +328,18 @@ func (m InstanceModel) renderSidebar() string {
 				item = lipgloss.JoinHorizontal(lipgloss.Center, "  ", item)
 			}
 
-			list.WriteString(style.Width(sidebarWidth - 4).Render(item))
+			rendered := style.Width(sidebarWidth - 4).Render(item)
+			if i == m.cursor {
+				// A long name wraps, so the cursor spans every line of its item.
+				cursorEnd = cursorRow + lipgloss.Height(rendered) - 1
+			}
+			list.WriteString(rendered)
 			list.WriteString("\n")
 		}
 	}
 
 	// The border takes two rows; the list scrolls to keep the cursor in view.
-	b.WriteString(windowLines(list.String(), cursorRow, height-2-lipgloss.Height(title)))
+	b.WriteString(windowLines(list.String(), cursorRow, cursorEnd, height-2-lipgloss.Height(title)))
 
 	return sidebarStyle.
 		Width(sidebarWidth).
@@ -342,13 +347,17 @@ func (m InstanceModel) renderSidebar() string {
 		Render(b.String())
 }
 
-// windowLines keeps at most rows lines of s, scrolled so line focus stays visible.
-func windowLines(s string, focus, rows int) string {
+// windowLines keeps at most rows lines of s, scrolled so lines first..last stay visible.
+func windowLines(s string, first, last, rows int) string {
 	lines := strings.Split(strings.TrimSuffix(s, "\n"), "\n")
 	if rows <= 0 || len(lines) <= rows {
 		return strings.Join(lines, "\n")
 	}
-	start := min(max(focus-rows/2, 0), len(lines)-rows)
+	start := min(max(first-rows/2, 0), len(lines)-rows)
+	if last >= start+rows {
+		// Show the end of the focused block, or its start when it is taller than the window.
+		start = min(last-rows+1, first)
+	}
 	return strings.Join(lines[start:start+rows], "\n")
 }
 

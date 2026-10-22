@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+	"unicode"
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
@@ -469,11 +470,38 @@ func TestInstanceModel_SidebarKeepsCursorInView(t *testing.T) {
 	}
 }
 
+func TestInstanceModel_SidebarKeepsWrappedCursorInView(t *testing.T) {
+	m := NewInstanceModel(t.Context(), "/tmp", false)
+	m.SetSize(120, 10)
+	long := "business_events_consumer_queue_stats_2026-10-22.log"
+	for i := range 10 {
+		m.sources = append(m.sources, logSource{name: fmt.Sprintf("file-%02d.log", i), kind: sourceFile})
+	}
+	m.sources = append(m.sources, logSource{name: long, kind: sourceFile})
+	for i := range 10 {
+		m.sources = append(m.sources, logSource{name: fmt.Sprintf("tail-%02d.log", i), kind: sourceFile})
+	}
+	m.active = 10
+	m.cursor = 10
+
+	sidebar := m.renderSidebar()
+	assert.LessOrEqual(t, lipgloss.Height(sidebar), 8, "the sidebar keeps its minimum height")
+	compact := strings.Map(func(r rune) rune {
+		if unicode.IsSpace(r) || r == '│' {
+			return -1
+		}
+		return r
+	}, ansi.Strip(sidebar))
+	assert.Contains(t, compact, long, "the wrapped selected name should be visible in full")
+}
+
 func TestWindowLines(t *testing.T) {
 	lines := "a\nb\nc\nd\ne"
 
-	assert.Equal(t, lines, windowLines(lines, 4, 10), "fits")
-	assert.Equal(t, "a\nb", windowLines(lines, 0, 2))
-	assert.Equal(t, "b\nc\nd", windowLines(lines, 2, 3))
-	assert.Equal(t, "d\ne", windowLines(lines, 4, 2))
+	assert.Equal(t, lines, windowLines(lines, 4, 4, 10), "fits")
+	assert.Equal(t, "a\nb", windowLines(lines, 0, 0, 2))
+	assert.Equal(t, "b\nc\nd", windowLines(lines, 2, 2, 3))
+	assert.Equal(t, "d\ne", windowLines(lines, 4, 4, 2))
+	assert.Equal(t, "c\nd\ne", windowLines(lines, 2, 4, 3), "the focused block ends in view")
+	assert.Equal(t, "b\nc", windowLines(lines, 1, 3, 2), "a block taller than the window starts in view")
 }
