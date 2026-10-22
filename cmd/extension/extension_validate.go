@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/spf13/cobra"
-	"golang.org/x/sync/errgroup"
 
 	"github.com/shopware/shopware-cli/internal/extension"
 	"github.com/shopware/shopware-cli/internal/system"
@@ -121,8 +120,6 @@ Enable it with validation.store_compliance in the extension configuration or SHO
 		}
 
 		toolCfg.CheckAgainst = checkAgainst
-		result := verifier.NewCheck()
-		result.SetSourceRoot(toolCfg.RootDir)
 
 		if needsTools {
 			finishSetup := progress.Start("preparing tools")
@@ -134,30 +131,12 @@ Enable it with validation.store_compliance in the extension configuration or SHO
 			toolCfg.ToolDirectory = verifier.GetToolDirectory()
 		}
 
-		var gr errgroup.Group
-		for _, tool := range tools {
-			gr.Go(func() error {
-				finish := progress.Start(tool.Name())
-				err := tool.Check(ctx, result, *toolCfg)
-				if err == nil {
-					err = ctx.Err()
-				}
-				finish(err)
-				return err
-			})
-		}
-
-		runErr := gr.Wait()
-		report := result.RemoveByIdentifier(toolCfg.ValidationIgnores)
+		toolCfg.Progress = progress
+		results := verifier.RunTools(ctx, tools, statuses, *toolCfg, func(tool verifier.CheckTool, execution *verifier.ToolExecution) verifier.ToolResult {
+			return tool.Check(ctx, *toolCfg, execution)
+		})
 		cleanup()
-		if runErr == nil {
-			runErr = ctx.Err()
-		}
-		reportErr := validation.DoCheckReport(report, reportingFormat, runErr != nil, statuses...)
-		if runErr != nil {
-			return runErr
-		}
-		return reportErr
+		return validation.ReportTools(results, reportingFormat, "Checkers")
 	},
 }
 

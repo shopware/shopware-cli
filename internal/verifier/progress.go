@@ -40,5 +40,7 @@ func (p *Progress) Start(title string) func(error) {
 }
 
 func (p *Progress) print(state, title string) {
-	_, _ = fmt.Fprintln(p.output, state, title)
+	if p != nil {
+		_, _ = fmt.Fprintln(p.output, state, title)
+	}
 }

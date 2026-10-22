@@ -22,13 +22,23 @@ func (s StorefrontTwigLinter) Name() string {
 	return "storefront-twig"
 }
 
-func (s StorefrontTwigLinter) Check(ctx context.Context, check *Check, config ToolConfig) error {
-	fixers := twiglinter.GetStorefrontFixers(version.Must(version.NewVersion(config.MinShopwareVersion)))
+func (s StorefrontTwigLinter) Check(ctx context.Context, config ToolConfig, execution *ToolExecution) ToolResult {
+	shopwareVersion, err := version.NewVersion(config.MinShopwareVersion)
+	if err != nil {
+		execution.Fail(&ToolError{Err: fmt.Errorf("cannot parse Shopware version: %w", err)})
+		return ToolResult{}
+	}
+	fixers := twiglinter.GetStorefrontFixers(shopwareVersion)
+	found := false
 
 	for _, p := range config.SourceDirectories {
 		twigDir := filepath.Join(p, "Resources", "views")
 
 		if _, err := os.Stat(twigDir); err != nil {
+			if errors.Is(err, os.ErrNotExist) {
+				continue
+			}
+			execution.Fail(&ToolError{Err: fmt.Errorf("cannot read template directory: %w", err)})
 			continue
 		}
 
@@ -44,6 +54,7 @@ func (s StorefrontTwigLinter) Check(ctx context.Context, check *Check, config To
 			if filepath.Ext(path) != twiglinter.TwigExtension {
 				return nil
 			}
+			found = true
 
 			file, err := os.ReadFile(path)
 			if err != nil {
@@ -59,7 +70,7 @@ func (s StorefrontTwigLinter) Check(ctx context.Context, check *Check, config To
 				if errors.As(err, &pe) {
 					line = pe.Pos.Line
 				}
-				check.AddResult(validation.CheckResult{
+				execution.AddFindings(validation.CheckResult{
 					Path:       relPath,
 					Message:    fmt.Sprintf("Failed to parse %s: %v. Create a GitHub issue with the file content.", relPath, err),
 					Severity:   validation.SeverityWarning,
@@ -72,7 +83,7 @@ func (s StorefrontTwigLinter) Check(ctx context.Context, check *Check, config To
 
 			for _, fixer := range fixers {
 				for _, message := range fixer.Check(parsed.Nodes) {
-					check.AddResult(validation.CheckResult{
+					execution.AddFindings(validation.CheckResult{
 						Path:       relPath,
 						Message:    message.Message,
 						Severity:   message.Severity,
@@ -85,11 +96,14 @@ func (s StorefrontTwigLinter) Check(ctx context.Context, check *Check, config To
 			return nil
 		})
 		if err != nil {
-			return err
+			execution.Fail(&ToolError{Err: fmt.Errorf("cannot check Twig templates: %w", err)})
 		}
 	}
 
-	return nil
+	if !found {
+		return ToolResult{SkipReason: "no storefront Twig templates"}
+	}
+	return ToolResult{}
 }
 func init() {
 	AddTool(StorefrontTwigLinter{})

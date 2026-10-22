@@ -22,7 +22,7 @@ Each tool invocation should have one reporting model for its outcome, findings, 
 
 ## Decision
 
-Keep capability interfaces, but give each tool invocation an execution helper. Tools deliver findings through the helper and return an outcome summary instead of mutating a shared `Check` or returning a separate error.
+Keep capability interfaces, but give each tool invocation an execution helper. Tools deliver findings and failures through the helper and return optional note or skip metadata in `ToolResult` instead of mutating a shared `Check` or returning a separate error. The runner finalizes the outcome after the tool returns, including its deferred cleanup.
 
 Findings use the existing `validation.CheckResult` struct and are delivered through a callback rather than included in the returned summary. This lets a live renderer receive findings before the tool finishes, while the tool runner owns filtering and storage.
 
@@ -63,7 +63,7 @@ type ToolError struct {
 }
 ```
 
-The tool runner attaches the tool name to each result. It creates skipped results for tools omitted by `--only` or removed by `--exclude`. Selected tools can also return a skip reason when they do not apply (e.g. early return).
+The tool runner attaches the tool name, `HasFindings`, and `Errors` to each result using the execution helper's final snapshot. Tools return only `Note` and `SkipReason`; they do not need to take snapshots themselves. The runner clears any skip reason when execution errors were recorded. It creates skipped results for tools omitted by `--only` or removed by `--exclude`. Selected tools can also return a skip reason when they do not apply (e.g. early return).
 
 Derive the displayed outcome in this order:
 
@@ -91,7 +91,7 @@ A subprocess failure does not cancel sibling work or discard findings already de
 | --- | --- |
 | Execution helper | Execute subprocesses, capture their output, record subprocess telemetry, track whether findings survived filtering, deliver findings and optional subprocess diagnostics through callbacks, and collect all reported failures |
 | Tool | Configure subprocesses, interpret process errors and exit codes, parse output, and report findings or failures |
-| Tool runner | Create the helper, manage tool selection and lifecycle, normalize and filter findings, collect them by tool, and coordinate optional live findings and verbose subprocess output |
+| Tool runner | Create the helper, manage tool selection and lifecycle, finalize outcomes after cleanup, normalize and filter findings, collect them by tool, and coordinate optional progress, live findings, and verbose subprocess output |
 | Renderer | Present published findings and final results as interactive, plain-text, or structured output |
 
 Tools and the execution helper do not print directly. Tools control subprocess concurrency.
@@ -195,7 +195,7 @@ The tool runner normalizes paths, applies ignore rules, and stores the remaining
 
 Subprocess findings are delivered after that subprocess finishes and its output is parsed. In-process tools can deliver findings as their checks complete. Synchronous callbacks provide backpressure without a channel or background consumer; once all tools finish, all findings have been collected. Final renderers need no live subscription.
 
-`Result` returns a snapshot of `HasFindings` and all reported failures in `ToolResult.Errors`, without findings or aggregate output. The tool can set `Note` or `SkipReason` before returning this result.
+`Result` returns a snapshot of `HasFindings` and all reported failures in `ToolResult.Errors`, without findings or aggregate output. The runner takes this snapshot after the tool returns and attaches the tool's returned `Note` and `SkipReason`. Deferred cleanup failures are therefore included automatically.
 
 For example, inside an ESLint tool's per-directory function:
 
@@ -216,7 +216,7 @@ if err != nil {
 execution.AddFindings(findings...)
 ```
 
-Here, `cmd` is an `*exec.Cmd` configured by the tool. The illustrative `isExpectedESLintExit` and `parseESLint` functions belong to the tool; the exit check accepts findings-related exit codes. After all per-directory functions finish, the tool returns `execution.Result()`.
+Here, `cmd` is an `*exec.Cmd` configured by the tool. The illustrative `isExpectedESLintExit` and `parseESLint` functions belong to the tool; the exit check accepts findings-related exit codes. After all per-directory functions finish, the tool returns `ToolResult{}` or a result containing note or skip metadata. The runner owns the final execution snapshot and progress notification.
 
 ## Consequences
 

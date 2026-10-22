@@ -14,7 +14,10 @@ func (s Builtin) Name() string {
 	return "builtin"
 }
 
-func (s Builtin) Check(ctx context.Context, check *Check, config ToolConfig) error {
+func (s Builtin) Check(ctx context.Context, config ToolConfig, execution *ToolExecution) ToolResult {
+	if len(config.Extensions) == 0 {
+		return ToolResult{SkipReason: "no extensions to check"}
+	}
 	ignores := make([]validation.ToolConfigIgnore, 0)
 
 	for _, ext := range config.Extensions {
@@ -51,11 +54,11 @@ func (s Builtin) Check(ctx context.Context, check *Check, config ToolConfig) err
 				}
 				result.Path = validation.NormalizeSourcePath(result.Path, config.RootDir)
 			}
-			check.AddResult(result)
+			execution.AddFindings(result)
 		}
 	}
 
-	return nil
+	return ToolResult{}
 }
 
 func init() {

@@ -90,7 +90,10 @@ func GetConfigFromProject(ctx context.Context, root string, onlyLocal bool) (*To
 		return nil, err
 	}
 
-	extensions, _ := extension.FindExtensionsFromProject(ctx, root, onlyLocal)
+	extensions, err := extension.FindExtensionsFromProject(ctx, root, onlyLocal)
+	if err != nil {
+		return nil, fmt.Errorf("cannot discover project extensions: %w", err)
+	}
 
 	sourceDirectories := []string{}
 	adminDirectories := []string{}
@@ -128,8 +131,8 @@ func GetConfigFromProject(ctx context.Context, root string, onlyLocal bool) (*To
 		}
 
 		sourceDirectories = append(sourceDirectories, ext.GetSourceDirs()...)
-		adminDirectories = append(adminDirectories, getAdminFolders(ext)...)
-		storefrontDirectories = append(storefrontDirectories, getStorefrontFolders(ext)...)
+		adminDirectories = append(adminDirectories, getAppFolders(ext, "administration")...)
+		storefrontDirectories = append(storefrontDirectories, getAppFolders(ext, "storefront")...)
 		checkExtensions = append(checkExtensions, ext)
 	}
 
@@ -152,11 +155,11 @@ func GetConfigFromProject(ctx context.Context, root string, onlyLocal bool) (*To
 		return nil, err
 	}
 
-	// Deprecated: Loading bundles from composer.json extra.shopware-bundles is deprecated.
-	// Use the build.bundles section in .config/shopware-project.yml instead.
 	seenBundlePaths := make(map[string]bool)
-	for bundlePath := range rootComposerJsonData.Extra.Bundles {
-		logging.FromContext(ctx).Warnf("Deprecation: Bundle %q is configured via composer.json extra.shopware-bundles. Please move it to the build.bundles section in %s instead.", bundlePath, shopCfg.GetStorageLocation())
+	addBundle := func(bundlePath string) {
+		if seenBundlePaths[bundlePath] {
+			return
+		}
 		sourceDirectories = append(sourceDirectories, path.Join(root, bundlePath))
 
 		expectedAdminPath := path.Join(root, bundlePath, "Resources", "app", "administration")
@@ -172,22 +175,15 @@ func GetConfigFromProject(ctx context.Context, root string, onlyLocal bool) (*To
 		seenBundlePaths[bundlePath] = true
 	}
 
+	// Deprecated: Loading bundles from composer.json extra.shopware-bundles is deprecated.
+	// Use the build.bundles section in .config/shopware-project.yml instead.
+	for bundlePath := range rootComposerJsonData.Extra.Bundles {
+		logging.FromContext(ctx).Warnf("Deprecation: Bundle %q is configured via composer.json extra.shopware-bundles. Please move it to the build.bundles section in %s instead.", bundlePath, shopCfg.GetStorageLocation())
+		addBundle(bundlePath)
+	}
+
 	for _, bundle := range shopCfg.Build.Bundles {
-		if seenBundlePaths[bundle.Path] {
-			continue
-		}
-		sourceDirectories = append(sourceDirectories, path.Join(root, bundle.Path))
-
-		expectedAdminPath := path.Join(root, bundle.Path, "Resources", "app", "administration")
-		expectedStorefrontPath := path.Join(root, bundle.Path, "Resources", "app", "storefront")
-
-		if _, err := os.Stat(expectedAdminPath); err == nil {
-			adminDirectories = append(adminDirectories, expectedAdminPath)
-		}
-
-		if _, err := os.Stat(expectedStorefrontPath); err == nil {
-			storefrontDirectories = append(storefrontDirectories, expectedStorefrontPath)
-		}
+		addBundle(bundle.Path)
 	}
 
 	var validationIgnores []validation.ToolConfigIgnore

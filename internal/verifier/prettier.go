@@ -1,18 +1,15 @@
 package verifier
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"fmt"
 	"os"
-	"os/exec"
 	"path"
 	"path/filepath"
 	"strconv"
 	"strings"
-
-	"golang.org/x/sync/errgroup"
+	"sync/atomic"
 
 	"github.com/shopware/shopware-cli/internal/validation"
 )
@@ -44,126 +41,83 @@ func (p Prettier) Name() string {
 	return "prettier"
 }
 
-func (p Prettier) Format(ctx context.Context, check *Check, config ToolConfig, dryRun bool) error {
-	var gr errgroup.Group
-
-	for _, sourceDirectory := range config.SourceDirectories {
+func (p Prettier) Format(ctx context.Context, config ToolConfig, execution *ToolExecution, dryRun bool) ToolResult {
+	if len(config.SourceDirectories) == 0 {
+		return ToolResult{SkipReason: "no source directories"}
+	}
+	var changed atomic.Int64
+	runDirectories(config.SourceDirectories, func(directory string) {
+		ignore, err := os.CreateTemp(directory, ".shopware-cli-prettier-ignore-*")
+		if err != nil {
+			execution.Fail(&ToolError{Err: fmt.Errorf("cannot create prettier ignore file: %w", err)})
+			return
+		}
+		defer func() {
+			if err := os.Remove(ignore.Name()); err != nil && !errors.Is(err, os.ErrNotExist) {
+				execution.Fail(&ToolError{Err: fmt.Errorf("cannot remove prettier ignore file: %w", err)})
+			}
+		}()
+		_, writeErr := ignore.WriteString(ignoredPaths)
+		if err := errors.Join(writeErr, ignore.Close()); err != nil {
+			execution.Fail(&ToolError{Err: fmt.Errorf("cannot write prettier ignore file: %w", err)})
+			return
+		}
 		args := []string{
 			path.Join(config.ToolDirectory, "js", "node_modules", ".bin", "prettier"),
-			"--config",
-			path.Join(config.ToolDirectory, "js", "configs", "prettierrc.js"),
-			"--no-color",
-			".",
+			"--config", path.Join(config.ToolDirectory, "js", "configs", "prettierrc.js"),
+			"--ignore-path", ignore.Name(), "--ignore-path", ".gitignore", "--ignore-path", ".prettierignore", "--no-color", ".",
 		}
-
-		ruleViolationMessage := "Formatting violations found. Run format without dry-run to resolve them."
-		if !dryRun {
-			args = append(args, "--write")
-			ruleViolationMessage = "Formatting violations have been fixed."
-		} else {
+		if dryRun {
 			args = append(args, "--list-different")
+		} else {
+			args = append(args, "--write")
 		}
-
-		gr.Go(func() error {
-			ignorePath := path.Join(sourceDirectory, ".prettierignore")
-			if err := os.WriteFile(ignorePath, []byte(ignoredPaths), 0o644); err != nil {
-				return fmt.Errorf("cannot write prettier ignore file: %w", err)
+		cmd := CommandContext(ctx, "node", args...)
+		cmd.Dir = directory
+		subprocess := execution.Run(cmd)
+		output, runErr := subprocess.Stdout, subprocess.Err
+		if !p.isExpectedPrettierExit(runErr, dryRun) || strings.Contains(subprocess.Stderr, "[error]") || (runErr != nil && strings.TrimSpace(output) == "") {
+			if runErr == nil {
+				runErr = errors.New("prettier reported an error")
 			}
-
-			defer func() {
-				if err := os.Remove(ignorePath); err != nil && !errors.Is(err, os.ErrNotExist) {
-					check.AddResult(validation.CheckResult{
-						Path:       sourceDirectory,
-						Message:    "failed to remove prettier ignore file: " + err.Error(),
-						Severity:   validation.SeverityError,
-						Identifier: "prettier/error",
-					})
-				}
-			}()
-
-			cmd := CommandContext(ctx, "node", args...)
-			cmd.Dir = sourceDirectory
-
-			var stderr bytes.Buffer
-			cmd.Stderr = &stderr
-
-			output, err := cmd.Output()
-
-			hasErrorDiagnostics := strings.Contains(stderr.String(), "[error]")
-			failedWithoutOutput := err != nil && len(bytes.TrimSpace(output)) == 0
-			if !p.isExpectedPrettierExit(err, dryRun) || hasErrorDiagnostics || failedWithoutOutput {
-				errorOutput := commandOutputOrError(stderr.String(), output, err)
-
-				check.AddResult(validation.CheckResult{
-					Path:       sourceDirectory,
-					Message:    "failed to run prettier: " + errorOutput,
-					Severity:   validation.SeverityError,
-					Line:       0,
-					Identifier: "prettier/error",
-				})
-
-				return nil
+			execution.Fail(subprocess.ToolError(fmt.Errorf("cannot run prettier in %s: %w", directory, runErr)))
+			return
+		}
+		parsed, err := p.Parse(output)
+		if err != nil {
+			execution.Fail(subprocess.ToolError(fmt.Errorf("cannot parse prettier output: %w", err)))
+			return
+		}
+		for _, file := range parsed.Files {
+			if file.Unchanged {
+				continue
 			}
-
-			prettierOutput, err := p.Parse(string(output))
-			if err != nil {
-				errorOutput := commandOutputOrError(stderr.String(), output, err)
-
-				check.AddResult(validation.CheckResult{
-					Path:       sourceDirectory,
-					Message:    "failed to parse prettier output: " + errorOutput,
-					Severity:   validation.SeverityError,
-					Line:       0,
-					Identifier: "prettier/error",
-				})
-
-				return nil
+			changed.Add(1)
+			if !dryRun {
+				continue
 			}
-
-			severity := validation.SeverityWarning
-			if dryRun {
-				severity = validation.SeverityError
+			filePath := file.Path
+			if !filepath.IsAbs(filePath) {
+				filePath = filepath.Join(directory, filePath)
 			}
-
-			for _, file := range prettierOutput.Files {
-				if file.Unchanged {
-					continue
-				}
-
-				filePath := file.Path
-				if !filepath.IsAbs(filePath) {
-					filePath = filepath.Join(sourceDirectory, filePath)
-				}
-				check.AddResult(validation.CheckResult{
-					Path:       validation.NormalizeSourcePath(filePath, config.RootDir),
-					Message:    ruleViolationMessage,
-					Severity:   severity,
-					Line:       0,
-					Identifier: "prettier/format",
-				})
-			}
-
-			return nil
-		})
+			execution.AddFindings(validation.CheckResult{
+				Path:     validation.NormalizeSourcePath(filePath, config.RootDir),
+				Message:  "Formatting violations found. Run format without dry-run to resolve them.",
+				Severity: validation.SeverityError, Identifier: "prettier/format",
+			})
+		}
+	})
+	if !dryRun {
+		return ToolResult{Note: fileChangeNote(int(changed.Load()), "formatted")}
 	}
-
-	return gr.Wait()
+	return ToolResult{}
 }
 
 // isExpectedPrettierExit reports whether Prettier completed with an expected exit status.
 // Exit code 1 is accepted only for dry runs. Stderr is checked separately for errors.
 // All other exit codes and execution errors are treated as failures.
 func (p Prettier) isExpectedPrettierExit(err error, dryRun bool) bool {
-	if err == nil {
-		return true
-	}
-
-	var exitErr *exec.ExitError
-	if !errors.As(err, &exitErr) {
-		return false
-	}
-
-	return dryRun && exitErr.ExitCode() == 1
+	return err == nil || (dryRun && expectedExit(err, 1))
 }
 
 // Parse converts Prettier output into structured results.

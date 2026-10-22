@@ -96,6 +96,22 @@ All events share a common envelope:
 There are the command-level events below, plus a set of events sent by the
 interactive development TUI (`shopware-cli project dev`).
 
+### `shopware_cli.tool.subprocess` — checker, formatter, and fixer subprocesses
+
+Sent after each subprocess attempt, including preparation commands such as
+Composer installation. This respects `DO_NOT_TRACK`.
+
+| Tag | Description |
+| --- | --- |
+| `tool` | Tool name, such as `phpstan` or `eslint` |
+| `started` | Whether the process started (`true` or `false`) |
+| `exit_code` | Exit code when available; omitted for start failures and signals |
+| `stdout_bytes` | Number of bytes captured from stdout |
+| `stderr_bytes` | Number of bytes captured from stderr |
+
+Output contents, command arguments, working directories, and error messages
+are never included in this event. Sizes help assess future output buffer limits.
+
 ### `shopware_cli.command` — every command run
 
 Sent after (almost) any sub-command finishes. This is our broadest signal of

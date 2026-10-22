@@ -9,9 +9,22 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/shopware/shopware-cli/internal/extension"
 	"github.com/shopware/shopware-cli/internal/testhelper"
 	"github.com/shopware/shopware-cli/internal/validation"
 )
+
+func TestGetConfigFromProjectRejectsInvalidExtensionConfiguration(t *testing.T) {
+	p := testhelper.NewProject(t).
+		File("composer.json", testProjectComposerJSON.String()).
+		CustomPlugin("BrokenPlugin", testhelper.PluginComposer("test/broken", "1.0.0", `BrokenPlugin\BrokenPlugin`)).
+		File("custom/plugins/BrokenPlugin/.config/shopware-extension.yml", "validation: [")
+
+	cfg, err := GetConfigFromProject(t.Context(), p.Root, true)
+	var configError *extension.ConfigError
+	require.ErrorAs(t, err, &configError)
+	assert.Nil(t, cfg)
+}
 
 func TestProjectBuiltinValidatesOnlyIncludedLocalExtensions(t *testing.T) {
 	stubShopwareVersions(t)
@@ -41,11 +54,10 @@ func TestProjectBuiltinValidatesOnlyIncludedLocalExtensions(t *testing.T) {
 	assert.True(t, cfg.InputWasDirectory)
 	require.Len(t, cfg.Extensions, 2)
 
-	check := NewCheck()
-	check.SetSourceRoot(p.Root)
-	require.NoError(t, Builtin{}.Check(t.Context(), check, *cfg))
+	toolResult := runCheckTool(t, Builtin{}, *cfg)
+	require.Empty(t, toolResult.Errors)
 	var xmlPaths []string
-	for _, result := range check.GetResults() {
+	for _, result := range toolResult.Findings {
 		assert.NotEqual(t, "zip.disallowed_file", result.Identifier)
 		if result.Identifier == "config.services_xml.deprecated" {
 			xmlPaths = append(xmlPaths, result.Path)
@@ -193,10 +205,10 @@ func TestProjectBuiltinPHPVersion(t *testing.T) {
 			require.NoError(t, err)
 			require.Len(t, cfg.Extensions, 1)
 
-			check := NewCheck()
-			require.NoError(t, Builtin{}.Check(t.Context(), check, *cfg))
+			toolResult := runCheckTool(t, Builtin{}, *cfg)
+			require.Empty(t, toolResult.Errors)
 			var lintResults []validation.CheckResult
-			for _, result := range check.GetResults() {
+			for _, result := range toolResult.Findings {
 				if result.Identifier == "php.linter" {
 					lintResults = append(lintResults, result)
 					assert.Equal(t, validation.SeverityError, result.Severity)

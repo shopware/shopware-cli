@@ -15,9 +15,8 @@ func TestExtensionValidationSelection(t *testing.T) {
 		tools, statuses, err := selectExtensionValidationTools("", "")
 		require.NoError(t, err)
 		assert.Len(t, tools, 5)
-		assert.Len(t, statuses, len(tools))
+		assert.Empty(t, statuses)
 		assert.True(t, slices.ContainsFunc(tools, requiresToolSetup))
-		assert.Equal(t, "invoked", toolStatusByName(t, statuses, "phpstan").Status)
 	})
 
 	t.Run("only phpstan", func(t *testing.T) {
@@ -25,8 +24,7 @@ func TestExtensionValidationSelection(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, []string{"phpstan"}, toolNamesForValidation(tools))
 		assert.True(t, slices.ContainsFunc(tools, requiresToolSetup))
-		assert.Equal(t, "invoked", toolStatusByName(t, statuses, "phpstan").Status)
-		assert.Equal(t, "not selected by --only", toolStatusByName(t, statuses, "builtin").Reason)
+		assert.Equal(t, "not selected by --only", toolStatusByName(t, statuses, "builtin").SkipReason)
 	})
 
 	t.Run("Twig validation needs no external tools", func(t *testing.T) {
@@ -40,14 +38,14 @@ func TestExtensionValidationSelection(t *testing.T) {
 		tools, statuses, err := selectExtensionValidationTools("", "phpstan")
 		require.NoError(t, err)
 		assert.NotContains(t, toolNamesForValidation(tools), "phpstan")
-		assert.Equal(t, "excluded by --exclude", toolStatusByName(t, statuses, "phpstan").Reason)
+		assert.Equal(t, "excluded by --exclude", toolStatusByName(t, statuses, "phpstan").SkipReason)
 	})
 
 	t.Run("exclude applies after only", func(t *testing.T) {
 		tools, statuses, err := selectExtensionValidationTools("phpstan,sw-cli", "sw-cli")
 		require.NoError(t, err)
 		assert.Equal(t, []string{"phpstan"}, toolNamesForValidation(tools))
-		assert.Equal(t, "excluded by --exclude", toolStatusByName(t, statuses, "builtin").Reason)
+		assert.Equal(t, "excluded by --exclude", toolStatusByName(t, statuses, "builtin").SkipReason)
 	})
 
 	t.Run("duplicate only values run once", func(t *testing.T) {
