@@ -31,6 +31,8 @@ var extensionFormat = &cobra.Command{
 	RunE: func(cmd *cobra.Command, args []string) error {
 		// Reporting format was validated in PreRunE.
 		reportingFormat, _ := extensionValidationFormat(cmd)
+		ctx := cmd.Context()
+		progress := verifier.NewProgress(reportingFormat)
 		only, _ := cmd.Flags().GetString("only")
 		exclude, _ := cmd.Flags().GetString("exclude")
 
@@ -44,17 +46,25 @@ var extensionFormat = &cobra.Command{
 			return fmt.Errorf("cannot find path: %w", err)
 		}
 
-		ext, err := extension.GetExtensionByFolder(cmd.Context(), path)
+		ext, err := extension.GetExtensionByFolder(ctx, path)
 		if err != nil {
 			return err
 		}
 
-		toolCfg, err := verifier.SetupExtensionToolConfig(cmd.Context(), cmd.Root().Version, ext)
+		finishSetup := progress.Start("preparing tools")
+		setupErr := verifier.SetupTools(ctx, cmd.Root().Version)
+		finishSetup(setupErr)
+		if setupErr != nil {
+			return setupErr
+		}
+		finishConfig := progress.Start("discovering extension configuration")
+		toolCfg, err := verifier.ConvertExtensionToToolConfig(ctx, ext)
+		finishConfig(err)
 		if err != nil {
 			return err
 		}
 
-		logging.FromContext(cmd.Context()).Debugf("Running formatters for Shopware version: %s", toolCfg.MinShopwareVersion)
+		logging.FromContext(ctx).Debugf("Running formatters for Shopware version: %s", toolCfg.MinShopwareVersion)
 
 		result := verifier.NewCheck()
 		result.SetSourceRoot(toolCfg.RootDir)
@@ -62,10 +72,19 @@ var extensionFormat = &cobra.Command{
 		var gr errgroup.Group
 		for _, tool := range tools {
 			gr.Go(func() error {
-				return tool.Format(cmd.Context(), result, *toolCfg, dryRun)
+				finish := progress.Start(tool.Name())
+				err := tool.Format(ctx, result, *toolCfg, dryRun)
+				if err == nil {
+					err = ctx.Err()
+				}
+				finish(err)
+				return err
 			})
 		}
 		runErr := gr.Wait()
+		if runErr == nil {
+			runErr = ctx.Err()
+		}
 
 		reportErr := validation.DoCheckReport(
 			result.RemoveByIdentifier(toolCfg.ValidationIgnores),
