@@ -43,7 +43,11 @@ func TestProjectBuiltinValidatesOnlyIncludedLocalExtensions(t *testing.T) {
 
 	check := NewCheck()
 	check.SetSourceRoot(p.Root)
-	require.NoError(t, Builtin{}.Check(t.Context(), check, *cfg))
+	toolResult := Builtin{}.Check(t.Context(), *cfg)
+	require.NoError(t, toolResult.Err)
+	for _, finding := range toolResult.Findings {
+		check.AddResult(finding)
+	}
 	var xmlPaths []string
 	for _, result := range check.GetResults() {
 		assert.NotEqual(t, "zip.disallowed_file", result.Identifier)
@@ -194,7 +198,11 @@ func TestProjectBuiltinPHPVersion(t *testing.T) {
 			require.Len(t, cfg.Extensions, 1)
 
 			check := NewCheck()
-			require.NoError(t, Builtin{}.Check(t.Context(), check, *cfg))
+			toolResult := Builtin{}.Check(t.Context(), *cfg)
+			require.NoError(t, toolResult.Err)
+			for _, finding := range toolResult.Findings {
+				check.AddResult(finding)
+			}
 			var lintResults []validation.CheckResult
 			for _, result := range check.GetResults() {
 				if result.Identifier == "php.linter" {

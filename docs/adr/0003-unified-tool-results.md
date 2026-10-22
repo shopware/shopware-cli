@@ -1,6 +1,6 @@
 # 3. Unified tool results and output
 
-- Status: Proposed
+- Status: Accepted
 - Date: 2026-10-22
 
 ## Context
@@ -98,10 +98,12 @@ Fixers:
 
 Show detailed findings below the overview, grouped by tool. Include captured output for failures; verbose output can also expose it for completed tools.
 
-Renderers consume the same result collection. Structured output explicitly serializes execution errors. Ignore rules apply only to findings. Execution errors and remaining error findings cause a nonzero command exit in every output format. Successfully applied changes alone do not constitute error findings.
+Renderers consume the same result collection. Preserve existing machine-readable schemas: JSON keeps flat `results` and `tools` entries with `name`, `status` (`invoked` or `skipped`), and optional `reason`. Map execution errors into `reason`; use existing error elements in JUnit and stderr for GitLab diagnostics. Raw process output never enters machine-readable stdout.
+
+Keep existing format options and defaults for validate and format commands. Fix commands use the shared human summary and gain no new output formats. Ignore rules apply only to findings. Execution errors and remaining error findings cause a nonzero command exit in every output format. Successfully applied changes alone do not constitute error findings.
 
 ## Consequences
 
 Tools produce results without printing directly. Selection and execution share one reporting model, replacing separate invocation-status reporting.
 
-The desired interfaces cover checkers, formatters, and fixers. Implementation can migrate these capabilities separately. Exact serialized schemas and compatibility changes follow during implementation.
+The desired interfaces cover checkers, formatters, and fixers. The shared result is an internal contract; existing serialized schemas remain compatible.

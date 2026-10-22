@@ -5,11 +5,11 @@ import (
 	"path/filepath"
 
 	"github.com/spf13/cobra"
-	"golang.org/x/sync/errgroup"
 
 	"github.com/shopware/shopware-cli/internal/shop"
 	"github.com/shopware/shopware-cli/internal/validation"
 	"github.com/shopware/shopware-cli/internal/verifier"
+	"github.com/shopware/shopware-cli/logging"
 )
 
 var projectFormatCmd = &cobra.Command{
@@ -70,36 +70,13 @@ var projectFormatCmd = &cobra.Command{
 			return err
 		}
 
-		result := verifier.NewCheck()
-		result.SetSourceRoot(toolCfg.RootDir)
-
-		var gr errgroup.Group
-		for _, tool := range tools {
-			gr.Go(func() error {
-				finish := progress.Start(tool.Name())
-				err := tool.Format(ctx, result, *toolCfg, dryRun)
-				if err == nil {
-					err = ctx.Err()
-				}
-				finish(err)
-				return err
-			})
-		}
-		runErr := gr.Wait()
-		if runErr == nil {
-			runErr = ctx.Err()
-		}
-
-		reportErr := validation.DoCheckReport(
-			result.RemoveByIdentifier(toolCfg.ValidationIgnores),
-			reportingFormat,
-			runErr != nil,
-			statuses...)
-		if runErr != nil {
-			return runErr
-		}
-
-		return reportErr
+		results := verifier.RunTools(tools, statuses, *toolCfg, func(tool verifier.FormatTool) verifier.ToolResult {
+			finish := progress.Start(tool.Name())
+			result := tool.Format(ctx, *toolCfg, dryRun)
+			finish(result.Err)
+			return result
+		})
+		return validation.ReportTools(results, reportingFormat, "Formatters", logging.IsVerbose(ctx))
 	},
 }
 

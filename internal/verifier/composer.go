@@ -3,27 +3,33 @@ package verifier
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"maps"
 	"os"
 	"path"
+	"slices"
 	"time"
 
 	"github.com/shopware/shopware-cli/internal/shop"
 	"github.com/shopware/shopware-cli/logging"
 )
 
-func installComposerDeps(ctx context.Context, rootDir string, checkAgainst string) error {
+func installComposerDeps(ctx context.Context, rootDir string, checkAgainst string, result *ToolResult) error {
 	suggets := getComposerSuggets(rootDir)
 
-	if _, err := os.Stat(path.Join(rootDir, "vendor")); os.IsNotExist(err) {
+	if _, err := os.Stat(path.Join(rootDir, "vendor")); err != nil {
+		if !errors.Is(err, os.ErrNotExist) {
+			return fmt.Errorf("cannot read vendor directory: %w", err)
+		}
 		composerAuth, err := shop.ReadComposerAuth(path.Join(rootDir, "auth.json"))
 		if err != nil {
-			return fmt.Errorf("failed to read composer auth file: %w", err)
+			return fmt.Errorf("cannot read Composer auth file: %w", err)
 		}
 
 		encoded, err := composerAuth.Json(false)
 		if err != nil {
-			return fmt.Errorf("failed to encode composer auth: %w", err)
+			return fmt.Errorf("cannot encode Composer auth: %w", err)
 		}
 
 		if len(suggets) > 0 {
@@ -36,12 +42,9 @@ func installComposerDeps(ctx context.Context, rootDir string, checkAgainst strin
 			composerInstall.Env = append(os.Environ(), fmt.Sprintf("COMPOSER_AUTH=%s", encoded))
 			composerInstall.Dir = rootDir
 
-			log, err := composerInstall.CombinedOutput()
+			_, _, err = captureCommand(composerInstall, result)
 			if err != nil {
-				if _, writeErr := os.Stderr.Write(log); writeErr != nil {
-					return fmt.Errorf("failed to write error log: %w (original error: %v)", writeErr, err)
-				}
-				return err
+				return fmt.Errorf("cannot install Composer suggestions: %w", err)
 			}
 		}
 
@@ -57,12 +60,9 @@ func installComposerDeps(ctx context.Context, rootDir string, checkAgainst strin
 
 		beforeStart := time.Now()
 
-		log, err := composerInstall.CombinedOutput()
+		_, _, err = captureCommand(composerInstall, result)
 		if err != nil {
-			if _, writeErr := os.Stderr.Write(log); writeErr != nil {
-				return fmt.Errorf("failed to write error log: %w (original error: %v)", writeErr, err)
-			}
-			return err
+			return fmt.Errorf("cannot install Composer dependencies: %w", err)
 		}
 
 		logging.FromContext(ctx).Debugf("Composer dependencies installed in %s", time.Since(beforeStart).String())
@@ -77,19 +77,12 @@ func getComposerSuggets(rootDir string) []string {
 		return []string{}
 	}
 
-	var composerJSONData map[string]interface{}
+	var composerJSONData struct {
+		Suggest map[string]string `json:"suggest"`
+	}
 	if err := json.Unmarshal(composerJSON, &composerJSONData); err != nil {
 		return []string{}
 	}
 
-	if composerJSONData["suggest"] == nil {
-		return []string{}
-	}
-
-	suggests := make([]string, 0, len(composerJSONData["suggest"].(map[string]interface{})))
-	for k := range composerJSONData["suggest"].(map[string]interface{}) {
-		suggests = append(suggests, k)
-	}
-
-	return suggests
+	return slices.Sorted(maps.Keys(composerJSONData.Suggest))
 }

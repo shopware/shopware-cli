@@ -14,6 +14,7 @@ import (
 	"go.uber.org/zap/zaptest/observer"
 
 	"github.com/shopware/shopware-cli/cmd/project"
+	"github.com/shopware/shopware-cli/internal/validation"
 	"github.com/shopware/shopware-cli/logging"
 )
 
@@ -82,6 +83,16 @@ func TestExitCode(t *testing.T) {
 			err:      fmt.Errorf("running command: %w", errors.New("something broke")),
 			wantCode: 1,
 			wantLog:  []string{"running command: something broke"},
+		},
+		{
+			name:     "reported tool failure exits silently",
+			err:      validation.ErrToolReportFailed,
+			wantCode: 1,
+		},
+		{
+			name:     "wrapped tool report failure exits silently",
+			err:      fmt.Errorf("status: %w", validation.ErrToolReportFailed),
+			wantCode: 1,
 		},
 		{
 			name:     "environment down exits silently",

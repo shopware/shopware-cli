@@ -31,10 +31,14 @@ func TestZipValidationUsesArchiveRelativePaths(t *testing.T) {
 
 	check := NewCheck()
 	check.SetSourceRoot(ext.GetPath())
-	require.NoError(t, Builtin{}.Check(t.Context(), check, ToolConfig{
+	toolResult := Builtin{}.Check(t.Context(), ToolConfig{
 		Extensions: []extension.Extension{ext},
 		RootDir:    ext.GetPath(),
-	}))
+	})
+	require.NoError(t, toolResult.Err)
+	for _, finding := range toolResult.Findings {
+		check.AddResult(finding)
+	}
 
 	results := check.GetResults()
 	require.NotEmpty(t, results)
@@ -77,11 +81,15 @@ func TestDirectoryValidationUsesExtensionRelativePaths(t *testing.T) {
 
 	check := NewCheck()
 	check.SetSourceRoot(pluginDir)
-	require.NoError(t, Builtin{}.Check(t.Context(), check, ToolConfig{
+	toolResult := Builtin{}.Check(t.Context(), ToolConfig{
 		Extensions:        []extension.Extension{ext},
 		RootDir:           pluginDir,
 		InputWasDirectory: true,
-	}))
+	})
+	require.NoError(t, toolResult.Err)
+	for _, finding := range toolResult.Findings {
+		check.AddResult(finding)
+	}
 
 	foundXML := false
 	for _, result := range check.GetResults() {
