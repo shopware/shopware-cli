@@ -41,6 +41,25 @@ gh attestation verify --owner shopware shopware-cli_Linux_x86_64.tar.gz
 gh attestation verify --owner shopware oci://ghcr.io/shopware/shopware-cli:latest
 ```
 
+## Version feed
+
+The CLI's update hint reads `https://shopware.github.io/shopware-cli/version.json`.
+The release workflow publishes that file by calling the `Publish Config Schemas`
+workflow once the GitHub release exists, so the feed and the config schemas of the
+tag go live together.
+
+That call runs on the tag, so the `github-pages` environment must allow deployments
+from release tags. The rule is a repository setting, not part of any workflow file:
+Settings, Environments, `github-pages`, deployment branches and tags, tag pattern
+`[0-9]*`. As an admin, the same rule can be added with:
+
+```sh
+gh api -X POST repos/shopware/shopware-cli/environments/github-pages/deployment-branch-policies -f name='[0-9]*' -f type=tag
+```
+
+If the `Publish version feed` job fails with an environment protection error, the
+rule is missing. Add it and re-run the job; the release itself is unaffected.
+
 ## If a release fails
 
 Investigate and fix the workflow failure before retrying. Do not move or reuse

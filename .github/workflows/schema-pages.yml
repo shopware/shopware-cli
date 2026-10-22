@@ -7,8 +7,9 @@ on:
       - 'internal/shop/config_schema.json'
       - 'internal/extension/config_schema.json'
       - '.github/workflows/schema-pages.yml'
-  # Releases are created with GITHUB_TOKEN, and GitHub never starts workflows
-  # from events made with it, so release.yml dispatches this workflow instead.
+  # Called by release.yml after each release; a release created with
+  # GITHUB_TOKEN would never trigger this workflow on its own.
+  workflow_call:
   workflow_dispatch:
 
 permissions:
@@ -16,13 +17,13 @@ permissions:
   pages: write
   id-token: write
 
-concurrency:
-  group: pages
-  cancel-in-progress: false
-
 jobs:
   publish:
     runs-on: ubuntu-latest
+    # One Pages deployment at a time, whether run directly or called.
+    concurrency:
+      group: pages
+      cancel-in-progress: false
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}

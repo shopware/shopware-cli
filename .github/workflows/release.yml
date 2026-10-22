@@ -107,40 +107,14 @@ jobs:
         with:
           subject-checksums: ./dist/digests.txt
 
-  verify-version-feed:
-    name: Verify version feed
+  publish-version-feed:
+    name: Publish version feed
     needs: release
-    runs-on: ubuntu-latest
+    # A release created with GITHUB_TOKEN never triggers schema-pages.yml on
+    # its own, so call it here; the call runs at this tag, so the published
+    # schemas and version.json match the release.
     permissions:
-      actions: write
       contents: read
-    steps:
-      - name: Harden Runner
-        uses: step-security/harden-runner@ccd8616d44fd3846e67624a50d5aad6d37bf2d25 # ratchet:step-security/harden-runner@v2.22.1
-        with:
-          egress-policy: audit
-
-      # A release created with GITHUB_TOKEN never triggers schema-pages.yml,
-      # so dispatch it here; workflow_dispatch is exempt from that rule.
-      - name: Publish version.json
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: gh workflow run schema-pages.yml --repo "$GITHUB_REPOSITORY" --ref main
-
-      - name: Wait until version.json carries the latest release
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          expected=$(gh api "repos/$GITHUB_REPOSITORY/releases/latest" --jq .tag_name)
-          expected="${expected#v}"
-          for _ in $(seq 1 45); do
-            published=$(curl -fsS "https://shopware.github.io/shopware-cli/version.json?release=$expected" | jq -r .version)
-            if [ "$published" = "$expected" ]; then
-              echo "version.json carries $published"
-              exit 0
-            fi
-            echo "version.json carries $published, waiting for $expected"
-            sleep 20
-          done
-          echo "::error::version.json still carries $published after 15 minutes, expected $expected"
-          exit 1
+      pages: write
+      id-token: write
+    uses: ./.github/workflows/schema-pages.yml
