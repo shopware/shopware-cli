@@ -9,6 +9,15 @@ Checkers, formatters, and fixers currently report findings, invocation errors, s
 
 Each tool should explain whether it completed, failed, or was skipped, alongside its findings and captured output.
 
+## Why now
+
+Recent requests, including [issue #1695](https://github.com/shopware/shopware-cli/issues/1695), are pushing tool output to explain more than findings alone:
+users also need to know what ran, what was skipped, and why an invocation failed.
+The current implementation carries these details through separate paths:
+tools mutate a shared `Check` or return an error, while selection status is collected and rendered independently.
+As transparency grows, each new piece of invocation information adds coordination across those paths and makes future tool additions harder to maintain.
+Consolidating the outcome now addresses that accumulated complexity and gives upcoming changes one consistent place to report results.
+
 ## Decision
 
 Keep capability interfaces, but return one result instead of mutating a shared `Check` or returning a separate error:
