@@ -20,7 +20,7 @@ require (
 	github.com/invopop/jsonschema v0.14.0
 	github.com/jaswdr/faker/v2 v2.10.0
 	github.com/joho/godotenv v1.5.1
-	github.com/klauspost/compress v1.20.1
+	github.com/klauspost/compress v1.20.3
 	github.com/mattn/go-isatty v0.0.24
 	github.com/microcosm-cc/bluemonday v1.0.27
 	github.com/otiai10/copy v1.14.1

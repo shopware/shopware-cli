@@ -19,12 +19,19 @@ const (
 	TypeMCP   Type = "mcp"
 )
 
+// String returns the type's wire value, so callers can render a Type without a
+// string() conversion.
+func (t Type) String() string {
+	return string(t)
+}
+
 // DeliveryKind describes how an integration is delivered. "project" is reserved
 // for a later increment and must not be renamed when added.
 type DeliveryKind string
 
 const (
 	DeliveryGit DeliveryKind = "git"
+	DeliveryMCP DeliveryKind = "mcp"
 )
 
 // Status is the lifecycle state of an integration.
@@ -55,10 +62,13 @@ type Integration struct {
 }
 
 // Delivery describes how an integration is delivered. Repository is the GitHub
-// "owner/repo" the skill is installed from.
+// "owner/repo" a skill is installed from; URL and Transport describe a remote MCP
+// server.
 type Delivery struct {
 	Kind       DeliveryKind `json:"kind"`
 	Repository string       `json:"repository,omitempty"`
+	URL        string       `json:"url,omitempty"`
+	Transport  string       `json:"transport,omitempty"`
 }
 
 // Load returns the directory of known integrations.

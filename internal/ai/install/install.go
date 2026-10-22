@@ -13,6 +13,7 @@ import (
 	"strings"
 
 	"github.com/shopware/shopware-cli/internal/ai/directory"
+	"github.com/shopware/shopware-cli/internal/ai/mcp"
 	"github.com/shopware/shopware-cli/internal/ai/skills"
 	"github.com/shopware/shopware-cli/internal/shop"
 )
@@ -37,9 +38,13 @@ type Options struct {
 	DryRun bool
 }
 
-// Result is the outcome of Add, rendered by the command as a human-readable line.
-type Result struct {
+// AddResult is the outcome of Add, rendered by the command as a human-readable line.
+// On a post-resolution failure (the install step itself fails) the identifying
+// fields are still populated alongside the error, so the caller can report what
+// was attempted; on an input or guard error the zero AddResult is returned.
+type AddResult struct {
 	Name             string
+	Type             directory.Type
 	Agent            string
 	Scope            string
 	Dir              string
@@ -51,32 +56,36 @@ type Result struct {
 
 // Add installs a skill into an agent via skills.sh. skills.sh output is streamed
 // to progress and it owns the on-disk record (skills-lock.json).
-func Add(ctx context.Context, o Options, progress io.Writer) (Result, error) {
+func Add(ctx context.Context, o Options, progress io.Writer) (AddResult, error) {
 	name, tag := splitNameTag(o.Name)
 	if tag == "" && strings.Contains(o.Name, "@") {
-		return Result{}, fmt.Errorf("empty version after \"@\" in %q; pin a release like %s@v1.2.3 or omit the @", o.Name, name)
+		return AddResult{}, fmt.Errorf("empty version after \"@\" in %q; pin a release like %s@v1.2.3 or omit the @", o.Name, name)
 	}
 
 	entry, ok := directory.Load().Get(name)
 	if !ok {
-		return Result{}, fmt.Errorf("unknown integration %q (see \"shopware-cli ai list\")", name)
+		return AddResult{}, fmt.Errorf("unknown integration %q (see \"shopware-cli ai list\")", name)
+	}
+	if entry.Type == directory.TypeMCP {
+		return addMCP(o, entry, tag)
 	}
 	if entry.Type != directory.TypeSkill {
-		return Result{}, fmt.Errorf("installing %q is not supported", entry.Name)
+		return AddResult{}, fmt.Errorf("installing %q is not supported", entry.Name)
 	}
 	if err := validateAgent(o.Agent); err != nil {
-		return Result{}, err
+		return AddResult{}, err
 	}
 
 	scope, dir, err := resolveScope(o.Global)
 	if err != nil {
-		return Result{}, err
+		return AddResult{}, err
 	}
 
 	// The tag is the git ref verbatim (e.g. v0.1.9); an empty tag installs the
 	// repository's default branch.
-	result := Result{
+	result := AddResult{
 		Name:             entry.Name,
+		Type:             entry.Type,
 		Agent:            o.Agent,
 		Scope:            scope,
 		Dir:              dir,
@@ -90,10 +99,64 @@ func Add(ctx context.Context, o Options, progress io.Writer) (Result, error) {
 	}
 
 	if err := runSkills(ctx, result.Command, dir, progress); err != nil {
-		return Result{}, err
+		return result, err
 	}
 
 	return result, nil
+}
+
+// addMCP installs an MCP server by writing the project's .mcp.json — the standard
+// file MCP clients read — rather than any agent's own config. It is project-scoped
+// (committing the file shares the server with the team) and takes no @tag; the
+// --agent flag does not apply because the file is not agent-specific.
+func addMCP(o Options, entry *directory.Integration, tag string) (AddResult, error) {
+	if tag != "" {
+		return AddResult{}, fmt.Errorf("%q is an MCP server and cannot be pinned with @tag", entry.Name)
+	}
+
+	root, err := mcpProjectRoot(o.Agent, o.Global)
+	if err != nil {
+		return AddResult{}, err
+	}
+	path := mcp.ConfigPath(root)
+
+	result := AddResult{
+		Name:    entry.Name,
+		Type:    entry.Type,
+		Scope:   ScopeProject,
+		Dir:     root,
+		DryRun:  o.DryRun,
+		Command: []string{"writes", path},
+	}
+	if o.DryRun {
+		return result, nil
+	}
+
+	if err := mcp.Add(root, entry.Name, entry.Delivery.URL, entry.Delivery.Transport); err != nil {
+		return result, err
+	}
+
+	return result, nil
+}
+
+// mcpProjectRoot resolves the project whose .mcp.json an MCP install writes. MCP
+// servers live with the project and are not agent-specific, so --agent and
+// --global are rejected rather than silently ignored (either would otherwise let
+// an agent- or user-scoped request change the shared project config).
+func mcpProjectRoot(agent string, global bool) (string, error) {
+	if agent != "" {
+		return "", errors.New("--agent does not apply to an MCP server; it is written to the project's .mcp.json for all agents")
+	}
+	if global {
+		return "", errors.New("an MCP server is written to the project's .mcp.json; --global is not supported")
+	}
+
+	root, err := shop.FindClosestShopwareProject(false)
+	if err != nil {
+		return "", fmt.Errorf("an MCP install must run inside a Shopware project: %w", err)
+	}
+
+	return root, nil
 }
 
 // RemoveOptions are the inputs to Remove.
@@ -106,9 +169,11 @@ type RemoveOptions struct {
 
 // RemoveResult is the outcome of Remove, rendered by the command as a line.
 // Removed is false when the skill was not installed for that agent and scope, so
-// skills.sh had nothing to delete.
+// skills.sh had nothing to delete. As with AddResult, a post-resolution failure
+// still populates the identifying fields alongside the error.
 type RemoveResult struct {
 	Name    string
+	Type    directory.Type
 	Agent   string
 	Scope   string
 	Removed bool
@@ -120,13 +185,16 @@ type RemoveResult struct {
 // whether the skill is installed for that agent and scope, because skills.sh
 // reports success even when there was nothing to remove.
 func Remove(ctx context.Context, o RemoveOptions, progress io.Writer) (RemoveResult, error) {
-	if err := validateAgent(o.Agent); err != nil {
-		return RemoveResult{}, err
-	}
-
 	entry, ok := directory.Load().Get(o.Name)
 	if !ok {
 		return RemoveResult{}, fmt.Errorf("unknown integration %q (see \"shopware-cli ai list\")", o.Name)
+	}
+	if entry.Type == directory.TypeMCP {
+		return removeMCP(o, entry)
+	}
+
+	if err := validateAgent(o.Agent); err != nil {
+		return RemoveResult{}, err
 	}
 
 	scope, dir, err := resolveScope(o.Global)
@@ -136,6 +204,7 @@ func Remove(ctx context.Context, o RemoveOptions, progress io.Writer) (RemoveRes
 
 	result := RemoveResult{
 		Name:    entry.Name,
+		Type:    entry.Type,
 		Agent:   o.Agent,
 		Scope:   scope,
 		DryRun:  o.DryRun,
@@ -144,7 +213,7 @@ func Remove(ctx context.Context, o RemoveOptions, progress io.Writer) (RemoveRes
 
 	installed, err := installedForAgent(ctx, dir, o.Global, entry.Name, o.Agent)
 	if err != nil {
-		return RemoveResult{}, err
+		return result, err
 	}
 	result.Removed = installed
 
@@ -153,8 +222,43 @@ func Remove(ctx context.Context, o RemoveOptions, progress io.Writer) (RemoveRes
 	}
 
 	if err := runSkills(ctx, result.Command, dir, progress); err != nil {
+		return result, err
+	}
+
+	return result, nil
+}
+
+// removeMCP removes an MCP server from the project's .mcp.json, deleting exactly
+// the named entry and reporting whether it was there.
+func removeMCP(o RemoveOptions, entry *directory.Integration) (RemoveResult, error) {
+	root, err := mcpProjectRoot(o.Agent, o.Global)
+	if err != nil {
 		return RemoveResult{}, err
 	}
+	path := mcp.ConfigPath(root)
+
+	result := RemoveResult{
+		Name:    entry.Name,
+		Type:    entry.Type,
+		Scope:   ScopeProject,
+		DryRun:  o.DryRun,
+		Command: []string{"updates", path},
+	}
+	if o.DryRun {
+		present, err := mcp.Has(root, entry.Name)
+		if err != nil {
+			return result, err
+		}
+		result.Removed = present
+
+		return result, nil
+	}
+
+	removed, err := mcp.Remove(root, entry.Name)
+	if err != nil {
+		return result, err
+	}
+	result.Removed = removed
 
 	return result, nil
 }

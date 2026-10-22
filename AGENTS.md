@@ -5,11 +5,12 @@ This file provides guidance to AI coding agents when working with code in this r
 ## Development Commands
 
 ### Building and Running
-- **Build the CLI**: `go build -o shopware-cli .`
-- **Run directly**: `go run main.go [command]`
-- **Run tests**: `go test ./...`
-- **Run specific test**: `go test ./[package_path]`
-- **Verbose test output**: `go test -v ./...`
+- Prefer using `mise run [task]` if installed, otherwise:
+  - **Build the CLI**: `go build -o ./bin/shopware-cli .`
+  - **Run directly**: `go run main.go [command]`
+  - **Run tests**: `go test ./...`
+  - **Run specific test**: `go test ./[package_path]`
+  - **Verbose test output**: `go test -v ./...`
 
 ### Code Quality
 - **Prefer Go 1.24 packages** like slices package

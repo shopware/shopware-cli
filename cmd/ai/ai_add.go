@@ -1,13 +1,17 @@
 package ai
 
 import (
+	"context"
 	"fmt"
 	"io"
+	"strconv"
 	"strings"
 
 	"github.com/spf13/cobra"
 
+	"github.com/shopware/shopware-cli/internal/ai/directory"
 	"github.com/shopware/shopware-cli/internal/ai/install"
+	"github.com/shopware/shopware-cli/internal/tracking"
 )
 
 var aiAddCmd = &cobra.Command{
@@ -50,6 +54,7 @@ share the integration with your team, or gitignore them to keep it local.`,
 			Global: global,
 			DryRun: dryRun,
 		}, cmd.ErrOrStderr())
+		trackAIAdd(cmd.Context(), result, err)
 		if err != nil {
 			return err
 		}
@@ -58,14 +63,21 @@ share the integration with your team, or gitignore them to keep it local.`,
 	},
 }
 
-func writeAddResult(w io.Writer, r install.Result) error {
+func writeAddResult(w io.Writer, r install.AddResult) error {
 	dest := ""
 	if r.Dir != "" {
 		dest = " into " + r.Dir
 	}
 
+	// An MCP install writes the project's .mcp.json, not an agent, so it carries no
+	// agent to name.
+	agent := ""
+	if r.Agent != "" {
+		agent = " for " + r.Agent
+	}
+
 	if r.DryRun {
-		_, err := fmt.Fprintf(w, "[dry-run] would install %s for %s (%s)%s:\n  %s\n", r.Name, r.Agent, r.Scope, dest, strings.Join(r.Command, " "))
+		_, err := fmt.Fprintf(w, "[dry-run] would install %s%s (%s)%s:\n  %s\n", r.Name, agent, r.Scope, dest, strings.Join(r.Command, " "))
 
 		return err
 	}
@@ -75,9 +87,39 @@ func writeAddResult(w io.Writer, r install.Result) error {
 		rev = " @" + r.ResolvedRevision
 	}
 
-	_, err := fmt.Fprintf(w, "Installed %s for %s (%s)%s%s\n", r.Name, r.Agent, r.Scope, dest, rev)
+	_, err := fmt.Fprintf(w, "Installed %s%s (%s)%s%s\n", r.Name, agent, r.Scope, dest, rev)
 
 	return err
+}
+
+// trackAIAdd emits the ai.add usage event for a resolved integration. An input or
+// guard error returns a zero AddResult (nothing was resolved); those runs are already
+// covered by shopware_cli.command, so nothing is sent here.
+func trackAIAdd(ctx context.Context, r install.AddResult, runErr error) {
+	if r.Name == "" {
+		return
+	}
+
+	result := tracking.ResultSuccess
+	if runErr != nil {
+		result = tracking.ResultFailure
+	}
+
+	tags := map[string]string{
+		tracking.TagIntegration: r.Name,
+		tracking.TagType:        r.Type.String(),
+		tracking.TagScope:       r.Scope,
+		tracking.TagDryRun:      strconv.FormatBool(r.DryRun),
+		tracking.TagResult:      result,
+	}
+	// Agent and a pinned release only apply to skills; an MCP server lives in the
+	// project's .mcp.json and is not agent- or version-specific.
+	if r.Type == directory.TypeSkill {
+		tags[tracking.TagAgent] = r.Agent
+		tags[tracking.TagPinned] = strconv.FormatBool(r.RequestedTag != "")
+	}
+
+	go tracking.Track(ctx, tracking.EventAIAdd, tags)
 }
 
 func init() {

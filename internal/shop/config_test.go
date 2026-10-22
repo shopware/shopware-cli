@@ -48,6 +48,41 @@ include:
 	assert.NotNil(t, config.ConfigDump.Where)
 }
 
+func TestConfigMergingDumpTableLists(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	t.Chdir(tmpDir)
+
+	baseConfig := []byte(`
+dump:
+  nodata:
+    - promotion
+    - newsletter_recipient
+  ignore:
+    - product_search_keyword
+`)
+
+	projectConfig := []byte(`
+include:
+  - base.yml
+dump:
+  nodata:
+    - frosh_mail_archive
+    - promotion
+  ignore:
+    - product_keyword_dictionary
+`)
+
+	assert.NoError(t, os.WriteFile(filepath.Join(tmpDir, "base.yml"), baseConfig, 0644))
+	assert.NoError(t, os.WriteFile(filepath.Join(tmpDir, "project.yml"), projectConfig, 0644))
+
+	config, err := ReadConfig(t.Context(), filepath.Join(tmpDir, "project.yml"), false)
+	assert.NoError(t, err)
+
+	assert.Equal(t, []string{"frosh_mail_archive", "promotion", "newsletter_recipient"}, config.ConfigDump.NoData)
+	assert.Equal(t, []string{"product_keyword_dictionary", "product_search_keyword"}, config.ConfigDump.Ignore)
+}
+
 func TestConfigPHPVersionRoundTrip(t *testing.T) {
 	tmpDir := t.TempDir()
 
