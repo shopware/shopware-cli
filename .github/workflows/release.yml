@@ -110,9 +110,7 @@ jobs:
   publish-version-feed:
     name: Publish version feed
     needs: release
-    # A release created with GITHUB_TOKEN never triggers schema-pages.yml on
-    # its own, so call it here; the call runs at this tag, so the published
-    # schemas and version.json match the release.
+    # Releases made with GITHUB_TOKEN never trigger workflows, so call it here
     permissions:
       contents: read
       pages: write

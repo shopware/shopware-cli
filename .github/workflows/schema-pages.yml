@@ -7,8 +7,6 @@ on:
       - 'internal/shop/config_schema.json'
       - 'internal/extension/config_schema.json'
       - '.github/workflows/schema-pages.yml'
-  # Called by release.yml after each release; a release created with
-  # GITHUB_TOKEN would never trigger this workflow on its own.
   workflow_call:
   workflow_dispatch:
 
@@ -20,7 +18,6 @@ permissions:
 jobs:
   publish:
     runs-on: ubuntu-latest
-    # One Pages deployment at a time, whether run directly or called.
     concurrency:
       group: pages
       cancel-in-progress: false
@@ -44,7 +41,6 @@ jobs:
           cp internal/shop/config_schema.json _site/shopware-project-schema.json
           cp internal/extension/config_schema.json _site/shopware-extension-schema.json
 
-          # The latest non-prerelease, as GitHub marks it.
           VERSION=$(gh api "repos/${{ github.repository }}/releases/latest" --jq .tag_name 2>/dev/null || true)
           RELEASE_TIME=$(gh api "repos/${{ github.repository }}/releases/latest" --jq .published_at 2>/dev/null || true)
           VERSION="${VERSION#v}"
