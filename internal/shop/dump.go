@@ -26,6 +26,10 @@ type DumpDatabaseOptions struct {
 	// Anonymize rewrites customer related columns with faker data and merges
 	// extension-declared tables and system config keys
 	Anonymize bool
+	// CloneShop prepares the dump for use as a new shop: apps with an app
+	// secret and all rows referencing them are excluded, and the shop ID is
+	// removed from system_config so the clone generates a new one
+	CloneShop bool
 	// ExtensionTables are column rewrites declared by installed extensions.
 	// Applied only when Anonymize is true. Project dump.rewrite values and the built-in rules win.
 	ExtensionTables map[string]map[string]string
@@ -46,7 +50,7 @@ type DumpDatabaseOptions struct {
 }
 
 // DumpDatabase dumps the database described by sqlCfg to opts.Output. cfg may
-// be nil; Clean, Anonymize and LimitOverrides are applied to cfg in place.
+// be nil; Clean, Anonymize, CloneShop and LimitOverrides are applied to cfg in place.
 func DumpDatabase(ctx context.Context, sqlCfg *mysql.Config, cfg *ConfigDump, opts DumpDatabaseOptions) error {
 	db, err := sql.Open("mysql", sqlCfg.FormatDSN())
 	if err != nil {
@@ -63,17 +67,7 @@ func dumpDatabase(ctx context.Context, db *sql.DB, cfg *ConfigDump, opts DumpDat
 		return err
 	}
 
-	dumper := mysqldump.NewMySQLDumper(db)
-	dumper.LockTables = !opts.SkipLockTables
-	dumper.Quick = opts.Quick
-	dumper.Parallel = opts.Parallel
-	dumper.InsertIntoLimit = opts.InsertIntoLimit
-	dumper.SelectMap = cfg.Rewrite
-	dumper.WhereMap = cfg.Where
-	dumper.NoData = cfg.NoData
-	dumper.Ignore = cfg.Ignore
-
-	dumper.LimitMap = cfg.Limit
+	dumper := newDumper(db, cfg, opts)
 
 	w, output, err := mysqldump.OpenOutput(opts.Output, opts.Compression)
 	if err != nil {
@@ -100,7 +94,36 @@ func dumpDatabase(ctx context.Context, db *sql.DB, cfg *ConfigDump, opts DumpDat
 	return nil
 }
 
-// prepareDumpConfig applies clean, anonymize, and limit options to cfg.
+// cloneShopSystemConfigWhere drops the shop ID from system_config. Shopware
+// stores it under core.app.shopId (legacy) and core.app.shopIdV2 (current);
+// removing both matches ShopIdProvider::deleteShopId, so the cloned shop
+// generates a new shop ID on first use.
+const cloneShopSystemConfigWhere = "`configuration_key` NOT IN ('core.app.shopId', 'core.app.shopIdV2')"
+
+// newDumper builds the MySQL dumper for the prepared dump config and options.
+func newDumper(db *sql.DB, cfg *ConfigDump, opts DumpDatabaseOptions) *mysqldump.Dumper {
+	dumper := mysqldump.NewMySQLDumper(db)
+	dumper.LockTables = !opts.SkipLockTables
+	dumper.Quick = opts.Quick
+	dumper.Parallel = opts.Parallel
+	dumper.InsertIntoLimit = opts.InsertIntoLimit
+	dumper.SelectMap = cfg.Rewrite
+	dumper.WhereMap = cfg.Where
+	dumper.NoData = cfg.NoData
+	dumper.Ignore = cfg.Ignore
+	dumper.LimitMap = cfg.Limit
+
+	if opts.CloneShop {
+		// Apps with a secret are registered at their app server under the
+		// shop ID of the source shop and cannot be reused by the clone. The
+		// dumper also excludes every row referencing such an app.
+		dumper.ExcludeMap = map[string]string{"app": "`app_secret` IS NOT NULL"}
+	}
+
+	return dumper
+}
+
+// prepareDumpConfig applies clean, anonymize, clone-shop, and limit options to cfg.
 // Extension tables are merged after the built-in customer anonymization, so they
 // only fill columns that neither the project nor the built-in rules set. Extension
 // system config keys own system_config.configuration_value unless the project already rewrote it.
@@ -111,6 +134,10 @@ func prepareDumpConfig(cfg *ConfigDump, opts DumpDatabaseOptions) (*ConfigDump, 
 
 	if opts.Clean {
 		cfg.EnableClean()
+	}
+
+	if opts.CloneShop {
+		cfg.mergeWhere("system_config", cloneShopSystemConfigWhere)
 	}
 
 	if opts.Anonymize {

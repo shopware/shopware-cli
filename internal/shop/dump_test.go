@@ -150,6 +150,46 @@ func TestPrepareDumpConfigMergesSystemConfigWhere(t *testing.T) {
 	assert.Equal(t, "(sales_channel_id IS NULL) AND (`configuration_key` NOT IN ('SwagExample.config.secret'))", prepared.Where["system_config"])
 }
 
+func TestPrepareDumpConfigCloneShop(t *testing.T) {
+	prepared, err := prepareDumpConfig(nil, DumpDatabaseOptions{CloneShop: true})
+	require.NoError(t, err)
+	assert.Equal(t, "`configuration_key` NOT IN ('core.app.shopId', 'core.app.shopIdV2')", prepared.Where["system_config"])
+}
+
+func TestPrepareDumpConfigCloneShopMergesSystemConfigWhere(t *testing.T) {
+	prepared, err := prepareDumpConfig(&ConfigDump{
+		Where: map[string]string{"system_config": "sales_channel_id IS NULL"},
+	}, DumpDatabaseOptions{CloneShop: true})
+	require.NoError(t, err)
+	assert.Equal(t, "(sales_channel_id IS NULL) AND (`configuration_key` NOT IN ('core.app.shopId', 'core.app.shopIdV2'))", prepared.Where["system_config"])
+}
+
+func TestPrepareDumpConfigCloneShopWithAnonymize(t *testing.T) {
+	prepared, err := prepareDumpConfig(nil, DumpDatabaseOptions{
+		CloneShop: true,
+		Anonymize: true,
+		SystemConfigRules: []SystemConfigRule{
+			{Key: "SwagExample.config.secret", Omit: true},
+		},
+	})
+	require.NoError(t, err)
+	assert.Equal(t, "(`configuration_key` NOT IN ('core.app.shopId', 'core.app.shopIdV2')) AND (`configuration_key` NOT IN ('SwagExample.config.secret'))", prepared.Where["system_config"])
+}
+
+func TestPrepareDumpConfigWithoutCloneShopKeepsShopId(t *testing.T) {
+	prepared, err := prepareDumpConfig(nil, DumpDatabaseOptions{})
+	require.NoError(t, err)
+	assert.Empty(t, prepared.Where)
+}
+
+func TestNewDumperCloneShopExcludesAppsWithSecret(t *testing.T) {
+	dumper := newDumper(nil, &ConfigDump{}, DumpDatabaseOptions{CloneShop: true})
+	assert.Equal(t, map[string]string{"app": "`app_secret` IS NOT NULL"}, dumper.ExcludeMap)
+
+	dumper = newDumper(nil, &ConfigDump{}, DumpDatabaseOptions{})
+	assert.Empty(t, dumper.ExcludeMap)
+}
+
 func TestApplyLimitOverridesValidation(t *testing.T) {
 	cases := []struct {
 		override    string
