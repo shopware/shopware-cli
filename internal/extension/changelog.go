@@ -5,9 +5,16 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 
 	"github.com/shopware/shopware-cli/internal/markdown"
+)
+
+var (
+	changelogVersionHeadingRegex = regexp.MustCompile(`^#{1,3}\s*\[?(?i:v)?([0-9]+\.[0-9]+(?:\.[0-9]+)*(?:-[0-9A-Za-z._-]+)?(?:\+[0-9A-Za-z._-]+)?)\]?(?:\([^)]*\)|\[[^\]]*\])?(?:\s*[-–—/:]\s*.*|\s+\([^)]*\).*|\s+\[(?i:yanked)\]|\s+[0-9]{4}[-/.][0-9]{1,2}[-/.][0-9]{1,2}.*)?$`)
+	changelogUnreleasedRegex     = regexp.MustCompile(`^#{1,3}\s*\[?(?i:unreleased|unveröffentlicht)\]?(?:\([^)]*\)|\[[^\]]*\])?(?:\s+.*)?$`)
+	changelogLinkRefRegex        = regexp.MustCompile(`^\s*\[[^\]]+\]:\s+\S+`)
 )
 
 func parseMarkdownChangelogInPath(path string) (map[string]map[string]string, error) {
@@ -43,25 +50,53 @@ func parseMarkdownChangelogInPath(path string) (map[string]map[string]string, er
 func parseMarkdownChangelog(content string) (map[string]string, error) {
 	versions := make(map[string]string)
 	currentVersion := ""
-	versionText := ""
+	var versionLines []string
+	var linkRefs []string
+
+	saveCurrentVersion := func() {
+		versionText := strings.TrimSpace(strings.Join(versionLines, "\n"))
+		if currentVersion != "" && versionText != "" {
+			versions[currentVersion] = versionText
+		}
+		versionLines = nil
+	}
+
+	content = strings.ReplaceAll(content, "\r\n", "\n")
 
 	for _, line := range strings.Split(content, "\n") {
-		if strings.HasPrefix(line, "#") {
-			if len(currentVersion) > 0 && len(versionText) > 0 {
-				versions[currentVersion] = versionText
-			}
+		trimmedLine := strings.TrimSpace(line)
 
-			currentVersion = strings.Trim(strings.TrimPrefix(line, "#"), " ")
-			versionText = ""
-		} else {
-			versionText = strings.Trim(versionText+"\n"+line, " ")
+		if matches := changelogVersionHeadingRegex.FindStringSubmatch(trimmedLine); len(matches) > 1 {
+			saveCurrentVersion()
+			currentVersion = matches[1]
+			continue
+		}
+
+		if changelogUnreleasedRegex.MatchString(trimmedLine) {
+			saveCurrentVersion()
+			currentVersion = ""
+			continue
+		}
+
+		if changelogLinkRefRegex.MatchString(trimmedLine) {
+			linkRefs = append(linkRefs, trimmedLine)
+			continue
+		}
+
+		if currentVersion != "" {
+			versionLines = append(versionLines, line)
 		}
 	}
 
-	versions[currentVersion] = versionText
+	saveCurrentVersion()
+
+	linkRefSuffix := ""
+	if len(linkRefs) > 0 {
+		linkRefSuffix = "\n\n" + strings.Join(linkRefs, "\n")
+	}
 
 	for key, changelog := range versions {
-		html, err := markdown.ToHTML([]byte(changelog))
+		html, err := markdown.ToHTML([]byte(changelog + linkRefSuffix))
 		if err != nil {
 			return nil, err
 		}
@@ -88,7 +123,9 @@ func parseExtensionMarkdownChangelog(ext Extension) (*ExtensionChangelog, error)
 		return nil, fmt.Errorf("english changelog in version %s is missing", v.String())
 	}
 
-	changelogEnVersion, ok := changelogEn[v.String()]
+	versionKey := strings.TrimPrefix(strings.TrimPrefix(v.String(), "v"), "V")
+
+	changelogEnVersion, ok := changelogEn[versionKey]
 	if !ok {
 		return nil, errors.New("english changelog is missing")
 	}
@@ -98,7 +135,7 @@ func parseExtensionMarkdownChangelog(ext Extension) (*ExtensionChangelog, error)
 		changelogDe = changelogEn
 	}
 
-	changelogDeVersion, ok := changelogDe[v.String()]
+	changelogDeVersion, ok := changelogDe[versionKey]
 	if !ok {
 		return nil, fmt.Errorf("german changelog in version %s is missing", v.String())
 	}
@@ -106,7 +143,7 @@ func parseExtensionMarkdownChangelog(ext Extension) (*ExtensionChangelog, error)
 	allChangelogsInVersion := make(map[string]string)
 
 	for key, changelog := range changelogs {
-		changelogVersion, ok := changelog[v.String()]
+		changelogVersion, ok := changelog[versionKey]
 		if !ok {
 			continue
 		}
