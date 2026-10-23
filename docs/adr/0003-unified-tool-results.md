@@ -89,7 +89,7 @@ A subprocess failure does not cancel sibling work or discard findings already de
 
 | Component | Responsibility |
 | --- | --- |
-| Execution helper | Execute subprocesses, capture their output, track whether findings survived filtering, deliver findings and optional subprocess diagnostics through callbacks, and collect all reported failures |
+| Execution helper | Execute subprocesses, capture their output, record subprocess telemetry, track whether findings survived filtering, deliver findings and optional subprocess diagnostics through callbacks, and collect all reported failures |
 | Tool | Configure subprocesses, interpret process errors and exit codes, parse output, and report findings or failures |
 | Tool runner | Create the helper, manage tool selection and lifecycle, normalize and filter findings, collect them by tool, and coordinate optional live findings and verbose subprocess output |
 | Renderer | Present published findings and final results as interactive, plain-text, or structured output |
@@ -169,7 +169,11 @@ func (e *ToolExecution) Result() ToolResult
 
 Each `Fail` call appends the supplied error under synchronization, including preparation and cleanup failures without subprocess context. Errors are collected in reporting order, which can vary when subprocesses run concurrently.
 
-Each subprocess has its own stdout and stderr buffers for parsing. The helper does not merge output or retain a history of subprocess results. Successful subprocess output can be discarded after parsing; failure output is retained in the corresponding `ToolError`. Its context and output fields remain empty when unavailable, such as for preparation failures. Exit codes remain internal to the tool.
+Each subprocess has its own stdout and stderr buffers for parsing. The helper does not merge output or retain a history of subprocess results. Successful subprocess output can be discarded after parsing; failure output is retained in the corresponding `ToolError`. Its context and output fields remain empty when unavailable, such as for preparation failures. Tools interpret exit codes to classify outcomes; the helper also records them for telemetry. They are not added to `ToolResult`.
+
+The execution helper records telemetry for each subprocess, associated with its tool: the exit code when available, and the number of bytes captured in stdout and stderr separately. Attempts that fail before the process starts are distinguished from processes that exit. This uses the existing telemetry infrastructure and respects its opt-out setting.
+
+Output-size measurements will inform future decisions about buffer limits and memory usage. Telemetry records sizes without transmitting output contents, command arguments, or working directories.
 
 For verbose diagnostics, the tool runner can supply an optional callback receiving each completed `SubprocessResult`. `Run` calls it synchronously before returning. The tool runner binds it to the tool's identity and serializes verbose output and live findings delivery across tools.
 
