@@ -5,22 +5,26 @@
 
 ## Context
 
-Checkers, formatters, and fixers currently report findings, invocation errors, selection statuses, and execution context through different mechanisms. This makes consistent output difficult.
+Checkers, formatters, and fixers currently mutate a shared `Check` or return an error, while tool selection status is collected and rendered separately. This makes consistent output difficult. For example, [issue #1695](https://github.com/shopware/shopware-cli/issues/1695) describes a Prettier preparation failure that appears in the command's error output but is missing from its report.
 
-Each tool should explain whether it completed, failed, or was skipped, alongside its findings and captured output.
+Users also need to know what ran, what was skipped, and which configuration was used. [Issue #1676](https://github.com/shopware/shopware-cli/issues/1676), for example, requests the Shopware version used by PHPStan. As we report more execution details, coordinating these separate paths makes tool additions and changes harder to maintain.
 
-## Why now
+Each tool invocation should have one reporting model for its outcome, findings, and execution context.
 
-Recent requests, including [issue #1695](https://github.com/shopware/shopware-cli/issues/1695), are pushing tool output to explain more than findings alone:
-users also need to know what ran, what was skipped, and why an invocation failed.
-The current implementation carries these details through separate paths:
-tools mutate a shared `Check` or return an error, while selection status is collected and rendered independently.
-As transparency grows, each new piece of invocation information adds coordination across those paths and makes future tool additions harder to maintain.
-Consolidating the outcome now addresses that accumulated complexity and gives upcoming changes one consistent place to report results.
+## Vocabulary
+
+- **CLI command:** a user-facing operation such as `shopware-cli project validate`.
+- **Tool:** an implementation of a `CheckTool`, `FormatTool`, or `FixTool` interface.
+- **Tool runner:** the orchestration code that selects and invokes tools.
+- **Subprocess:** an external process spawned by a tool, such as one ESLint invocation.
+- **Finding:** a structured source or formatting diagnostic.
+- **Renderer:** a component that consumes findings and `ToolResult` summaries to produce output in a specific format, such as JSON or human-readable text.
 
 ## Decision
 
-Keep capability interfaces, but return one result instead of mutating a shared `Check` or returning a separate error:
+Keep capability interfaces, but give each tool invocation an execution helper. Tools deliver findings through the helper and return an outcome summary instead of mutating a shared `Check` or returning a separate error.
+
+Findings use the existing `validation.CheckResult` struct and are delivered through a callback rather than included in the returned summary. This lets a live renderer receive findings before the tool finishes, while the tool runner owns filtering and storage.
 
 ```go
 type Tool interface {
@@ -29,63 +33,74 @@ type Tool interface {
 
 type CheckTool interface {
     Tool
-    Check(ctx context.Context, config ToolConfig) ToolResult
+    Check(ctx context.Context, config ToolConfig, execution *ToolExecution) ToolResult
 }
 
 type FormatTool interface {
     Tool
-    Format(ctx context.Context, config ToolConfig, dryRun bool) ToolResult
+    Format(ctx context.Context, config ToolConfig, execution *ToolExecution, dryRun bool) ToolResult
 }
 
 type FixTool interface {
     Tool
-    Fix(ctx context.Context, config ToolConfig) ToolResult
+    Fix(ctx context.Context, config ToolConfig, execution *ToolExecution) ToolResult
 }
 
 type ToolResult struct {
-    Name       string
-    SkipReason string
-    Findings   []validation.CheckResult // using our existing struct
-    Note       string
-    Stdout     string
-    Stderr     string
-    Err        *ToolError
+    Name        string
+    SkipReason  string
+    HasFindings bool
+    Note        string
+    Errors      []ToolError
 }
 
 type ToolError struct {
     Err     error
-    Command []string // optional executable and arguments
+    Command []string // optional subprocess executable and arguments
     Dir     string   // optional working directory
     Stdout  string   // optional output from the failed invocation
     Stderr  string   // optional output from the failed invocation
 }
 ```
 
-The runner attaches the tool name and collects results. It creates skipped results for tools omitted by `--only` or removed by `--exclude`. Selected tools can also return a skip reason when they do not apply.
+The tool runner attaches the tool name to each result. It creates skipped results for tools omitted by `--only` or removed by `--exclude`. Selected tools can also return a skip reason when they do not apply (e.g. early return).
 
 Derive the displayed outcome in this order:
 
 | Condition | Outcome |
 | --- | --- |
-| Non-nil `Err` | Failed |
+| Nonempty `Errors` | Failed |
 | Nonempty `SkipReason` | Skipped |
 | Otherwise | Completed |
 
-Skipped results contain no findings or execution error. Failed results retain captured output and any partial findings.
+A completed or failed outcome indicates that the tool ran, without implying that it spawned a subprocess. Skipped tools have `HasFindings == false`, publish no findings, and have no execution errors.
 
-`Err` means the tool could not complete reliably, including preparation, process execution, output parsing, or cleanup failures. Source problems and formatting violations are findings. Each tool interprets process exit codes internally; neither a nonzero exit code nor stderr alone establishes failure.
+`HasFindings` indicates whether at least one reported finding remains after ignore rules. It can be true for completed or failed tools and stays false if all findings are ignored.
 
-A `ToolError` requires a non-nil underlying error. Its `Error()` method returns that error's message, and `Unwrap()` preserves the cause. All other fields are optional, so failures before a command is constructed can omit them. Process and parsing failures include the failing command's context when available.
+`Note` holds optional context, such as the Shopware version used or a summary of changes.
 
-`ToolError.Stdout` and `Stderr` contain only output captured from the failed invocation. They are optional and can be empty, including for preparation failures. `ToolResult.Stdout` and `Stderr` retain the merged output across all invocations, including the failed one.
+`Errors` means the tool could not complete reliably, including preparation, process execution, output parsing, or cleanup failures. Source problems and formatting violations are findings. Each tool interprets process exit codes internally; neither a nonzero exit code nor stderr alone establishes failure.
 
-When a tool runs multiple commands, it retains the first detected execution error. Other invocations can finish normally and contribute findings and captured output; the tool waits for them before returning its result. A failure does not cancel the other invocations. Which error is detected first can vary when commands run concurrently.
+A `ToolError` requires a non-nil underlying error. Its `Error()` method returns that error's message, and `Unwrap()` preserves the cause. All other fields are optional.
 
-Use one optional note for context or a summary of changes. Capture stdout and stderr as strings, appending output when multiple internal commands run. Do not expose exit codes or individual execution records.
+A subprocess failure does not cancel sibling work or discard findings already delivered. Tools wait for all their subprocesses before returning. Cancellation of the CLI command still cancels work through its context, and the tool runner checks for cancellation so an interrupted command exits nonzero even if a tool reports no error.
+
+### Responsibilities
+
+| Component | Responsibility |
+| --- | --- |
+| Execution helper | Execute subprocesses, capture their output, track whether findings survived filtering, deliver findings and optional subprocess diagnostics through callbacks, and collect all reported failures |
+| Tool | Configure subprocesses, interpret process errors and exit codes, parse output, and report findings or failures |
+| Tool runner | Create the helper, manage tool selection and lifecycle, normalize and filter findings, collect them by tool, and coordinate optional live findings and verbose subprocess output |
+| Renderer | Present published findings and final results as interactive, plain-text, or structured output |
+
+Tools and the execution helper do not print directly. Tools control subprocess concurrency.
 
 ## Output
 
-Show an overview of all tools supporting the requested capability:
+The output below is illustrative. Layout, wording, grouping, and ordering depend on the renderer's implementation.
+
+A human-readable renderer could show an overview of all tools supporting the requested capability:
 
 ```text
 Checkers:
@@ -110,15 +125,15 @@ Fixers:
   symfony-xml  completed  no changes
 ```
 
-Show detailed findings below the overview, grouped by tool. Failed tools explicitly indicate that their findings may be incomplete. Include the failed invocation's stdout and stderr alongside its error; verbose output can also expose merged output for any tool.
+Detailed findings could appear below the overview, grouped by tool. Reports must indicate that failed tools' findings may be incomplete and include every reported execution error with its subprocess context and captured stdout and stderr when available.
 
-Renderers consume the same result collection. Structured output serializes an execution error as an object with `message` and optional `command` (an array of executable and arguments), `dir`, `stdout`, and `stderr` fields, rather than serializing the underlying Go error. Ignore rules apply only to findings. Execution errors and remaining error findings cause a nonzero command exit in every output format. Successfully applied changes alone do not constitute error findings.
+All renderers consume the same collected findings and execution results. Execution errors must appear in reports rather than only in the command's terminal error output. Format-specific representations and compatibility changes follow during implementation.
+
+Ignore rules apply only to findings. Any execution error or remaining error finding causes a nonzero CLI command exit in every output format. Successfully applied changes alone do not constitute error findings.
 
 ### Example: ESLint failure with partial findings
 
-ESLint runs against three source directories. Two invocations complete with three findings between them; the third cannot load its configuration. The other invocations finish normally, and ESLint returns their three findings, merged output, and a `ToolError` containing the first failure's cause, command, working directory, and invocation-specific stdout and stderr.
-
-The output makes the failure and potentially incomplete findings explicit:
+ESLint checks three source directories. Two subprocesses report three findings; the third fails to load its configuration. The report includes the execution error and the three findings, marked as potentially incomplete:
 
 ```text
 Checkers:
@@ -126,7 +141,7 @@ Checkers:
 
 Execution error:
   cannot load ESLint configuration
-  Command: node /tools/node_modules/.bin/eslint --format=json .
+  Subprocess: node /tools/node_modules/.bin/eslint --format=json .
   Directory: /project/custom/plugins/Example/src/Resources/app/administration
   Stderr:
     [configuration error output from this invocation]
@@ -135,10 +150,76 @@ Findings:
   [three findings from the two completed invocations]
 ```
 
-The command exits nonzero because ESLint failed, even if ignore rules remove all three findings.
+The CLI command exits nonzero because ESLint failed, even if ignore rules remove all three findings.
+
+## Execution helper
+
+`ToolExecution` provides four operations, all safe for concurrent use:
+
+```go
+func (e *ToolExecution) Run(cmd *exec.Cmd) SubprocessResult
+func (e *ToolExecution) AddFindings(findings ...validation.CheckResult)
+func (e *ToolExecution) Fail(err *ToolError)
+func (e *ToolExecution) Result() ToolResult
+```
+
+### Subprocesses and failures
+
+`Run` waits for one subprocess to finish and returns its executable and arguments, working directory, separate stdout and stderr, and process error in `SubprocessResult`. `SubprocessResult.ToolError(err)` attaches that subprocess's context and captured output to a supplied error. The tool decides whether the process error or parsed output represents a failure; `Run` does not automatically call `Fail`.
+
+Each `Fail` call appends the supplied error under synchronization, including preparation and cleanup failures without subprocess context. Errors are collected in reporting order, which can vary when subprocesses run concurrently.
+
+Each subprocess has its own stdout and stderr buffers for parsing. The helper does not merge output or retain a history of subprocess results. Successful subprocess output can be discarded after parsing; failure output is retained in the corresponding `ToolError`. Its context and output fields remain empty when unavailable, such as for preparation failures. Exit codes remain internal to the tool.
+
+For verbose diagnostics, the tool runner can supply an optional callback receiving each completed `SubprocessResult`. `Run` calls it synchronously before returning. The tool runner binds it to the tool's identity and serializes verbose output and live findings delivery across tools.
+
+The verbose renderer displays each subprocess's output as one complete block labelled with tool, executable and arguments, and working directory. Each block is delivered after the subprocess finishes. Concurrent completions may be displayed in either order; the original interleaving of stdout and stderr is not preserved. Verbose output is delivered through the callback rather than replayed from final results.
+
+### Findings and results
+
+The tool runner creates each helper with a required callback bound to the tool's identity. The callback returns whether any findings in the batch were retained after filtering:
+
+```go
+execution := NewToolExecution(func(findings []validation.CheckResult) bool {
+    return runner.collectFindings(tool.Name(), findings)
+})
+```
+
+`AddFindings` synchronously delivers each nonempty batch through this callback and sets `HasFindings` to true if the callback returns true. Empty batches have no effect, and subsequent calls never reset the flag. The helper does not retain the findings themselves.
+
+The tool runner normalizes paths, applies ignore rules, and stores the remaining findings by tool, even without a live renderer. It optionally forwards them to a live renderer. Collection and live delivery are serialized across tools.
+
+Subprocess findings are delivered after that subprocess finishes and its output is parsed. In-process tools can deliver findings as their checks complete. Synchronous callbacks provide backpressure without a channel or background consumer; once all tools finish, all findings have been collected. Final renderers need no live subscription.
+
+`Result` returns a snapshot of `HasFindings` and all reported failures in `ToolResult.Errors`, without findings or aggregate output. The tool can set `Note` or `SkipReason` before returning this result.
+
+For example, inside an ESLint tool's per-directory function:
+
+```go
+subprocess := execution.Run(cmd)
+if !isExpectedESLintExit(subprocess.Err) {
+    execution.Fail(subprocess.ToolError(
+        fmt.Errorf("cannot run ESLint: %w", subprocess.Err)))
+    return
+}
+
+findings, err := parseESLint(subprocess.Stdout)
+if err != nil {
+    execution.Fail(subprocess.ToolError(
+        fmt.Errorf("cannot parse ESLint output: %w", err)))
+    return
+}
+execution.AddFindings(findings...)
+```
+
+Here, `cmd` is an `*exec.Cmd` configured by the tool. The illustrative `isExpectedESLintExit` and `parseESLint` functions belong to the tool; the exit check accepts findings-related exit codes. After all per-directory functions finish, the tool returns `execution.Result()`.
 
 ## Consequences
 
-Tools produce results without printing directly. Selection and execution share one reporting model, replacing separate invocation-status reporting.
+Selection and execution share one reporting model, replacing separate invocation-status reporting. Consumers needing only tool status can use `ToolResult`; full reports combine it with collected findings.
 
-The desired interfaces cover checkers, formatters, and fixers. Implementation can migrate these capabilities separately. The remaining serialized schemas and compatibility changes follow during implementation.
+Synchronous callbacks simplify collection, but slow rendering can delay tool progress. Each tool must explicitly distinguish findings from execution failures and report failures through `Fail`; running a subprocess through the helper alone does not guarantee that its failure is reported.
+
+Changing the capability interfaces requires migrating every tool implementation and its callers.
+
+This decision does not define raw-output streaming, incremental subprocess parsing, output limits, persistent storage, or a TUI implementation.
