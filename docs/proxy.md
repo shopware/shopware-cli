@@ -376,7 +376,7 @@ The CA import is one-time per machine; the hosts line is per shop.
   `docker compose down` does not know to stop the already-running ones. It is
   an edge (no normal flow flips that mid-lifecycle); `docker compose down
   --remove-orphans` clears it.
-- Storefront watching uses Vite if Shopware is `6.7.11+` or the Storefront
+- Storefront watching uses Vite if Shopware is `6.7.17+` or the Storefront
   package defines a `dev:server` script. In proxy mode with Vite, open
   `https://<host>` to view the storefront with live assets from the Vite
   watcher. If Vite is not used, open `https://storefront-watch.<host>` for the

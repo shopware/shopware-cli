@@ -90,9 +90,9 @@ func TestStorefrontUsesVite(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(projectRoot, "composer.json"), []byte(`{"name":"shopware/platform"}`), 0o644))
 	assert.False(t, StorefrontUsesVite(projectRoot))
 
-	require.NoError(t, os.WriteFile(filepath.Join(projectRoot, "composer.lock"), []byte(`{"packages":[{"name":"shopware/core","version":"6.7.11.0"}]}`), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(projectRoot, "composer.lock"), []byte(`{"packages":[{"name":"shopware/core","version":"6.7.17.0"}]}`), 0o644))
 	assert.True(t, StorefrontUsesVite(projectRoot))
-	require.NoError(t, os.WriteFile(filepath.Join(projectRoot, "composer.lock"), []byte(`{"packages":[{"name":"shopware/core","version":"6.7.10.0"}]}`), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(projectRoot, "composer.lock"), []byte(`{"packages":[{"name":"shopware/core","version":"6.7.16.0"}]}`), 0o644))
 	assert.False(t, StorefrontUsesVite(projectRoot))
 }
 
