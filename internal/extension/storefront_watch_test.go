@@ -105,6 +105,7 @@ func TestStorefrontViteEnv(t *testing.T) {
 	}{
 		{
 			name:         "local",
+			opts:         StorefrontWatcherOptions{VitePublicPort: 15180},
 			executorType: executor.TypeLocal,
 			want: map[string]string{
 				"STOREFRONT_VITE_HOST":   "127.0.0.1",
@@ -122,8 +123,18 @@ func TestStorefrontViteEnv(t *testing.T) {
 			},
 		},
 		{
+			name:         "docker with remapped host port",
+			opts:         StorefrontWatcherOptions{VitePublicPort: 15180},
+			executorType: executor.TypeDocker,
+			want: map[string]string{
+				"STOREFRONT_VITE_HOST":   "0.0.0.0",
+				"STOREFRONT_VITE_PORT":   "5175",
+				"STOREFRONT_VITE_ORIGIN": "http://127.0.0.1:15180",
+			},
+		},
+		{
 			name:         "proxy",
-			opts:         StorefrontWatcherOptions{ProxyHostname: "storefront-watch.shop.example.test"},
+			opts:         StorefrontWatcherOptions{ProxyHostname: "storefront-watch.shop.example.test", VitePublicPort: 15180},
 			executorType: executor.TypeDocker,
 			want: map[string]string{
 				"STOREFRONT_VITE_HOST":                   "0.0.0.0",

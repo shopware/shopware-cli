@@ -54,6 +54,9 @@ type StorefrontWatcherOptions struct {
 	// ProxyHostname is the shared HTTPS hostname used by the watcher in proxy
 	// mode. Empty keeps local-port access for the watcher.
 	ProxyHostname string
+	// VitePublicPort is the Docker host port used in Vite's origin.
+	// Non-positive values use StorefrontVitePort.
+	VitePublicPort int
 }
 
 // PrepareStorefrontWatcher runs the preparation steps and returns the selected
@@ -140,7 +143,7 @@ func storefrontViteEnv(opts StorefrontWatcherOptions, executorType string) map[s
 
 	env := map[string]string{
 		"STOREFRONT_VITE_HOST": listenHost,
-		// Keep the server port aligned with the Docker endpoint and browser origin.
+		// Keep the listen port aligned with the Docker container endpoint.
 		"STOREFRONT_VITE_PORT": strconv.Itoa(StorefrontVitePort),
 	}
 	if opts.ProxyHostname != "" {
@@ -149,7 +152,11 @@ func storefrontViteEnv(opts StorefrontWatcherOptions, executorType string) map[s
 		return env
 	}
 
-	env["STOREFRONT_VITE_ORIGIN"] = "http://127.0.0.1:" + strconv.Itoa(StorefrontVitePort)
+	publicPort := StorefrontVitePort
+	if executorType == executor.TypeDocker && opts.VitePublicPort > 0 {
+		publicPort = opts.VitePublicPort
+	}
+	env["STOREFRONT_VITE_ORIGIN"] = "http://127.0.0.1:" + strconv.Itoa(publicPort)
 	return env
 }
 

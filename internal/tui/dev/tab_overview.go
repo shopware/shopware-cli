@@ -1003,6 +1003,8 @@ func (m OverviewModel) startStorefrontWatch(opts extension.StorefrontWatcherOpti
 	shopCfg := m.shopCfg
 
 	return startWatcher(watcherStorefront, m.ctx, func(ctx context.Context, out io.Writer) (*executor.Process, error) {
+		opts.VitePublicPort = int(shopCfg.DockerPorts(dockerpkg.ServiceWeb)[dockerpkg.PortStorefrontVite])
+
 		// When proxied, use the shared storefront-watch hostname. Do not start
 		// with local-port settings if the registry cannot be read.
 		host, err := proxy.RegisteredHostname(projectRoot)
