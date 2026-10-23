@@ -86,7 +86,7 @@ func TestGenerateComposeFileProxyMode(t *testing.T) {
 
 func TestGenerateComposeFileProxyStorefrontVite(t *testing.T) {
 	t.Parallel()
-	lock := &composer.Lock{Packages: []composer.LockPackage{{Name: "shopware/core", Version: "6.7.11.0"}}}
+	lock := &composer.Lock{Packages: []composer.LockPackage{{Name: "shopware/core", Version: "6.7.17.0"}}}
 	opts := proxyComposeOptions()
 	opts.storefrontUsesVite = true
 
@@ -101,7 +101,7 @@ func TestGenerateComposeFileProxyStorefrontVite(t *testing.T) {
 
 func TestGenerateComposeFilePlainModeStorefrontViteUsesFixedPort(t *testing.T) {
 	t.Parallel()
-	lock := &composer.Lock{Packages: []composer.LockPackage{{Name: "shopware/core", Version: "6.7.11.0"}}}
+	lock := &composer.Lock{Packages: []composer.LockPackage{{Name: "shopware/core", Version: "6.7.17.0"}}}
 	opts := Environment{storefrontUsesVite: true}
 
 	result, err := envFor(lock, opts).composeYAML()

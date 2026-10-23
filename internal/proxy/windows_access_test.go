@@ -45,7 +45,7 @@ func TestProxyHostnames(t *testing.T) {
 
 func TestProxyHostnamesWithStorefrontViteRoute(t *testing.T) {
 	dir := t.TempDir()
-	lock := `{"packages": [{"name": "shopware/core", "version": "6.7.11.0"}], "packages-dev": []}`
+	lock := `{"packages": [{"name": "shopware/core", "version": "6.7.17.0"}], "packages-dev": []}`
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "composer.lock"), []byte(lock), 0o644))
 	env, err := docker.NewEnvironment(dir, docker.Options{StorefrontUsesVite: true})
 	require.NoError(t, err)
