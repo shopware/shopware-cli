@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"sort"
 	"strings"
 
@@ -40,6 +41,60 @@ func ValidateProjectFolder(projectFolder string) error {
 		return fmt.Errorf("the folder %s exists already and is not empty", projectFolder)
 	}
 
+	return nil
+}
+
+// ProjectFolderExists reports whether the project folder already exists.
+func ProjectFolderExists(projectFolder string) (bool, error) {
+	if projectFolder == "" {
+		return false, errors.New("project folder must not be empty")
+	}
+	if _, err := os.Stat(projectFolder); err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return false, nil
+		}
+		return false, err
+	}
+	return true, nil
+}
+
+// CleanupFailedProjectCreation removes what a failed creation wrote into the
+// project folder. A folder that existed before is kept and only emptied.
+func CleanupFailedProjectCreation(projectFolder string, existedBefore bool) error {
+	if projectFolder == "" {
+		return errors.New("cannot remove partially created project: project folder must not be empty")
+	}
+
+	absFolder, err := filepath.Abs(projectFolder)
+	if err != nil {
+		return fmt.Errorf("cannot remove partially created project in %s: %w", projectFolder, err)
+	}
+	if absFolder == filepath.Dir(absFolder) {
+		return fmt.Errorf("cannot remove partially created project in %s: it is the filesystem root", projectFolder)
+	}
+	if resolved, err := filepath.EvalSymlinks(absFolder); err == nil && resolved == filepath.Dir(resolved) {
+		return fmt.Errorf("cannot remove partially created project in %s: it is the filesystem root", projectFolder)
+	}
+
+	if !existedBefore {
+		if err := os.RemoveAll(absFolder); err != nil {
+			return fmt.Errorf("cannot remove partially created project in %s: %w", projectFolder, err)
+		}
+		return nil
+	}
+
+	entries, err := os.ReadDir(absFolder)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("cannot remove partially created project in %s: %w", projectFolder, err)
+	}
+	for _, entry := range entries {
+		if err := os.RemoveAll(filepath.Join(absFolder, entry.Name())); err != nil {
+			return fmt.Errorf("cannot remove partially created project in %s: %w", projectFolder, err)
+		}
+	}
 	return nil
 }
 

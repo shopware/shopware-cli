@@ -99,13 +99,29 @@ func (s ShopwareProjectScaffold) Validate() error {
 }
 
 // Scaffold creates the initial project structure without installing its
-// Composer dependencies.
+// Composer dependencies. A failed scaffold removes everything it wrote.
 func (s *ShopwareProjectScaffold) Scaffold(ctx context.Context) error {
 	s.Normalize()
 	if err := s.Validate(); err != nil {
 		return err
 	}
 
+	existedBefore, err := ProjectFolderExists(s.ProjectFolder)
+	if err != nil {
+		return err
+	}
+
+	if err := s.scaffold(ctx); err != nil {
+		if cleanupErr := CleanupFailedProjectCreation(s.ProjectFolder, existedBefore); cleanupErr != nil {
+			return errors.Join(err, cleanupErr)
+		}
+		return err
+	}
+
+	return nil
+}
+
+func (s *ShopwareProjectScaffold) scaffold(ctx context.Context) error {
 	if err := os.MkdirAll(s.ProjectFolder, os.ModePerm); err != nil {
 		return err
 	}

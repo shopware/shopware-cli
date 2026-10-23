@@ -161,11 +161,22 @@ var projectCreateCmd = &cobra.Command{
 			_ = runInlineProxySetup(cmd.Context(), proxy.BaseDomain())
 		}
 
-		if err := scaffoldProject(cmd.Context(), &opts, chosenVersion); err != nil {
+		// Remember whether the folder existed, so a failed or cancelled creation
+		// can clean up without deleting a folder the user already had.
+		projectExisted, err := shop.ProjectFolderExists(opts.projectFolder)
+		if err != nil {
 			return err
 		}
 
-		return installAndFinalize(cmd, &opts, phpConstraint, chosenVersion)
+		if err := scaffoldProject(cmd.Context(), &opts, chosenVersion); err != nil {
+			return rollbackFailedProjectCreation(cmd.Context(), &opts, projectExisted, err)
+		}
+
+		if err := installAndFinalize(cmd, &opts, phpConstraint, chosenVersion); err != nil {
+			return rollbackFailedProjectCreation(cmd.Context(), &opts, projectExisted, err)
+		}
+
+		return nil
 	},
 }
 
