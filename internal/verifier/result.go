@@ -1,10 +1,39 @@
 package verifier
 
 import (
+	"cmp"
+	"fmt"
+	"slices"
 	"sync"
 
 	"github.com/shopware/shopware-cli/internal/validation"
 )
+
+type ToolResult = validation.ToolResult
+
+// RunTools collects independent outcomes without cancelling sibling tools when
+// one fails. Each goroutine owns a separate result slot.
+func RunTools[T Tool](tools ToolList[T], skipped []ToolResult, config ToolConfig, run func(T) ToolResult) []ToolResult {
+	results := make([]ToolResult, len(tools), len(tools)+len(skipped))
+	var group sync.WaitGroup
+	for i, tool := range tools {
+		group.Go(func() {
+			result := run(tool)
+			result.Name = tool.Name()
+			check := NewCheck()
+			check.SetSourceRoot(config.RootDir)
+			for _, finding := range result.Findings {
+				check.AddResult(finding)
+			}
+			result.Findings = check.RemoveByIdentifier(config.ValidationIgnores).GetResults()
+			results[i] = result
+		})
+	}
+	group.Wait()
+	results = append(results, skipped...)
+	slices.SortFunc(results, func(a, b ToolResult) int { return cmp.Compare(a.Name, b.Name) })
+	return results
+}
 
 type Check struct {
 	Results    []validation.CheckResult `json:"results"`
@@ -82,4 +111,14 @@ func (c *Check) samePath(resultPath, ignorePath string) bool {
 	}
 
 	return validation.NormalizeSourcePath(resultPath, c.sourceRoot) == validation.NormalizeSourcePath(ignorePath, c.sourceRoot)
+}
+
+func fileChangeNote(count int, action string) string {
+	if count == 0 {
+		return "no changes"
+	}
+	if count == 1 {
+		return "1 file " + action
+	}
+	return fmt.Sprintf("%d files %s", count, action)
 }

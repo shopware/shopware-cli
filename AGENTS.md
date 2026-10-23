@@ -125,4 +125,4 @@ The verifier registers tools through the name-only `Tool` interface. `CheckTool`
 - **Fixers**: Rector, ESLint, Stylelint, Symfony XML conversion
 - **Formatters**: PHP-CS-Fixer, Prettier
 
-`extension validate` runs all checkers by default. The deprecated `--full` flag remains accepted but has no effect; use `--only` or `--exclude` to select checkers. The extension commands report whether each tool was invoked or skipped; invocation does not guarantee that files were analyzed or changed.
+`extension validate` runs all checkers by default. The deprecated `--full` flag remains accepted but has no effect; use `--only` or `--exclude` to select checkers. CheckTool, FormatTool, and FixTool return a ToolResult containing findings, an optional note, captured stdout/stderr, an execution error, or a skip reason. A shared runner collects results; tools do not print their output directly. Human reports show completed, failed, or skipped outcomes. Existing structured report schemas remain compatible, including JSON's invoked/skipped status values. A completed tool can still report source errors; invocation does not guarantee that files were analyzed or changed.

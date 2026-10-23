@@ -43,10 +43,14 @@ func TestBuiltinScopesExtensionIgnores(t *testing.T) {
 					Line:       1,
 				}
 				check.AddResult(previous)
-				require.NoError(t, Builtin{}.Check(t.Context(), check, ToolConfig{
+				toolResult := Builtin{}.Check(t.Context(), ToolConfig{
 					Extensions: exts,
 					RootDir:    p.Root,
-				}))
+				})
+				require.NoError(t, toolResult.Err)
+				for _, finding := range toolResult.Findings {
+					check.AddResult(finding)
+				}
 
 				var paths []string
 				for _, result := range check.GetResults() {

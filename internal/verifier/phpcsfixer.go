@@ -1,7 +1,6 @@
 package verifier
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -10,8 +9,6 @@ import (
 	"os/exec"
 	"path"
 	"strings"
-
-	"golang.org/x/sync/errgroup"
 
 	"github.com/shopware/shopware-cli/internal/validation"
 )
@@ -50,105 +47,65 @@ func (p PHPCSFixer) getConfigPath(toolDirectory, rootDir string) string {
 	return path.Join(toolDirectory, "php", "configs", "php-cs-fixer.dist.php")
 }
 
-func (p PHPCSFixer) Format(ctx context.Context, check *Check, config ToolConfig, dryRun bool) error {
-	// Apps don't have a composer.json file, skip them
+func (p PHPCSFixer) Format(ctx context.Context, config ToolConfig, dryRun bool) ToolResult {
+	result := ToolResult{}
+	if len(config.SourceDirectories) == 0 {
+		return ToolResult{SkipReason: "no source directories"}
+	}
 	if _, err := os.Stat(path.Join(config.RootDir, "composer.json")); err != nil {
 		if errors.Is(err, os.ErrNotExist) {
-			return nil
+			return ToolResult{SkipReason: "no composer.json found"}
 		}
-		return fmt.Errorf("cannot read composer manifest: %w", err)
+		return ToolResult{Err: fmt.Errorf("cannot read composer manifest: %w", err)}
 	}
-
-	var gr errgroup.Group
-
-	for _, sourceDirectory := range config.SourceDirectories {
-		gr.Go(func() error {
-			fixDir := sourceDirectory
-
-			args := []string{
-				"fix",
-				"--show-progress", "dots",
-				"-vv",
-				"--no-ansi",
-				"--format", "json",
-				"--config", p.getConfigPath(config.ToolDirectory, config.RootDir),
-				fixDir,
-			}
-			ruleViolationMessage := "Formatting violations have been fixed."
-			if dryRun {
-				args = append(args, "--dry-run")
-				ruleViolationMessage = "Formatting violations found. Run format without dry-run to resolve them."
-			}
-
-			cmd := CommandContext(ctx, path.Join(config.ToolDirectory, "php", "vendor", "bin", "php-cs-fixer"), args...)
-			cmd.Dir = config.RootDir
-
-			var stderr bytes.Buffer
-			cmd.Stderr = &stderr
-
-			output, err := cmd.Output()
-
-			if !p.isExpectedPHPCSFixerExit(err) {
-				errorOutput := commandOutputOrError(stderr.String(), output, err)
-
-				check.AddResult(validation.CheckResult{
-					Path:       fixDir,
-					Message:    "failed to run php-cs-fixer: " + errorOutput,
-					Severity:   validation.SeverityError,
-					Line:       0,
-					Identifier: "php-cs-fixer/error",
-				})
-
-				return nil
-			}
-
-			// JSON contains changed files. Lint and fixing errors are reported on stderr.
-			if diagnostics := phpCsFixerDiagnostics(stderr.String(), err); diagnostics != "" {
-				check.AddResult(validation.CheckResult{
-					Path:       fixDir,
-					Message:    "failed to format PHP files: " + diagnostics,
-					Severity:   validation.SeverityError,
-					Identifier: "php-cs-fixer/error",
+	changed := 0
+	for _, directory := range config.SourceDirectories {
+		args := []string{
+			"fix", "--show-progress", "dots", "-vv", "--no-ansi", "--format", "json",
+			"--config", p.getConfigPath(config.ToolDirectory, config.RootDir), directory,
+		}
+		if dryRun {
+			args = append(args, "--dry-run")
+		}
+		cmd := CommandContext(ctx, path.Join(config.ToolDirectory, "php", "vendor", "bin", "php-cs-fixer"), args...)
+		cmd.Dir = config.RootDir
+		output, stderr, runErr := captureCommand(cmd, &result)
+		if !p.isExpectedPHPCSFixerExit(runErr) {
+			result.Err = errors.Join(result.Err, fmt.Errorf("cannot run php-cs-fixer in %s: %w", directory, runErr))
+			continue
+		}
+		if diagnostics := phpCsFixerDiagnostics(string(stderr), runErr); diagnostics != "" {
+			result.Findings = append(result.Findings, validation.CheckResult{
+				Path: directory, Message: diagnostics, Severity: validation.SeverityError, Identifier: "php-cs-fixer/error",
+			})
+		}
+		var parsed PhpCsFixerOutput
+		if err := json.Unmarshal(output, &parsed); err != nil {
+			result.Err = errors.Join(result.Err, fmt.Errorf("cannot parse php-cs-fixer output: %w", err))
+			continue
+		}
+		if parsed.Files == nil {
+			result.Err = errors.Join(result.Err, errors.New("cannot parse php-cs-fixer output: missing file results"))
+			continue
+		}
+		changed += len(parsed.Files)
+		if !dryRun {
+			continue
+		}
+		for _, file := range parsed.Files {
+			for _, fixer := range file.AppliedFixers {
+				result.Findings = append(result.Findings, validation.CheckResult{
+					Path: validation.NormalizeSourcePath(file.Name, config.RootDir), Line: 1,
+					Message:  "Formatting violations found. Run format without dry-run to resolve them.",
+					Severity: validation.SeverityError, Identifier: "php-cs-fixer/" + fixer,
 				})
 			}
-
-			var phpCsFixerOutput PhpCsFixerOutput
-			if err := json.Unmarshal(output, &phpCsFixerOutput); err != nil {
-				errorOutput := commandOutputOrError(stderr.String(), output, err)
-
-				check.AddResult(validation.CheckResult{
-					Path:       fixDir,
-					Message:    "failed to unmarshal php-cs-fixer output: " + errorOutput,
-					Severity:   validation.SeverityError,
-					Line:       0,
-					Identifier: "php-cs-fixer/error",
-				})
-
-				return nil
-			}
-
-			severity := validation.SeverityWarning
-			if dryRun {
-				severity = validation.SeverityError
-			}
-
-			for _, file := range phpCsFixerOutput.Files {
-				for _, appliedFixer := range file.AppliedFixers {
-					check.AddResult(validation.CheckResult{
-						Path:       validation.NormalizeSourcePath(file.Name, config.RootDir),
-						Line:       1,
-						Message:    ruleViolationMessage,
-						Severity:   severity,
-						Identifier: "php-cs-fixer/" + appliedFixer,
-					})
-				}
-			}
-
-			return nil
-		})
+		}
 	}
-
-	return gr.Wait()
+	if !dryRun && result.Err == nil {
+		result.Note = fileChangeNote(changed, "formatted")
+	}
+	return result
 }
 
 // phpCsFixerDiagnostics extracts errors from stderr and falls back to the process

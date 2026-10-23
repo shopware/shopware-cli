@@ -12,8 +12,6 @@ import (
 	"strconv"
 	"strings"
 
-	"golang.org/x/sync/errgroup"
-
 	"github.com/shopware/shopware-cli/internal/validation"
 )
 
@@ -44,110 +42,78 @@ func (p Prettier) Name() string {
 	return "prettier"
 }
 
-func (p Prettier) Format(ctx context.Context, check *Check, config ToolConfig, dryRun bool) error {
-	var gr errgroup.Group
-
-	for _, sourceDirectory := range config.SourceDirectories {
-		args := []string{
-			path.Join(config.ToolDirectory, "js", "node_modules", ".bin", "prettier"),
-			"--config",
-			path.Join(config.ToolDirectory, "js", "configs", "prettierrc.js"),
-			"--no-color",
-			".",
-		}
-
-		ruleViolationMessage := "Formatting violations found. Run format without dry-run to resolve them."
-		if !dryRun {
-			args = append(args, "--write")
-			ruleViolationMessage = "Formatting violations have been fixed."
-		} else {
-			args = append(args, "--list-different")
-		}
-
-		gr.Go(func() error {
-			ignorePath := path.Join(sourceDirectory, ".prettierignore")
-			if err := os.WriteFile(ignorePath, []byte(ignoredPaths), 0o644); err != nil {
-				return fmt.Errorf("cannot write prettier ignore file: %w", err)
+func (p Prettier) Format(ctx context.Context, config ToolConfig, dryRun bool) ToolResult {
+	result := ToolResult{}
+	if len(config.SourceDirectories) == 0 {
+		return ToolResult{SkipReason: "no source directories"}
+	}
+	changed := 0
+	for _, directory := range config.SourceDirectories {
+		func() {
+			ignore, err := os.CreateTemp(directory, ".shopware-cli-prettier-ignore-*")
+			if err != nil {
+				result.Err = errors.Join(result.Err, fmt.Errorf("cannot create prettier ignore file: %w", err))
+				return
 			}
-
 			defer func() {
-				if err := os.Remove(ignorePath); err != nil && !errors.Is(err, os.ErrNotExist) {
-					check.AddResult(validation.CheckResult{
-						Path:       sourceDirectory,
-						Message:    "failed to remove prettier ignore file: " + err.Error(),
-						Severity:   validation.SeverityError,
-						Identifier: "prettier/error",
-					})
+				if err := os.Remove(ignore.Name()); err != nil && !errors.Is(err, os.ErrNotExist) {
+					result.Err = errors.Join(result.Err, fmt.Errorf("cannot remove prettier ignore file: %w", err))
 				}
 			}()
-
-			cmd := CommandContext(ctx, "node", args...)
-			cmd.Dir = sourceDirectory
-
-			var stderr bytes.Buffer
-			cmd.Stderr = &stderr
-
-			output, err := cmd.Output()
-
-			hasErrorDiagnostics := strings.Contains(stderr.String(), "[error]")
-			failedWithoutOutput := err != nil && len(bytes.TrimSpace(output)) == 0
-			if !p.isExpectedPrettierExit(err, dryRun) || hasErrorDiagnostics || failedWithoutOutput {
-				errorOutput := commandOutputOrError(stderr.String(), output, err)
-
-				check.AddResult(validation.CheckResult{
-					Path:       sourceDirectory,
-					Message:    "failed to run prettier: " + errorOutput,
-					Severity:   validation.SeverityError,
-					Line:       0,
-					Identifier: "prettier/error",
-				})
-
-				return nil
+			_, writeErr := ignore.WriteString(ignoredPaths)
+			if err := errors.Join(writeErr, ignore.Close()); err != nil {
+				result.Err = errors.Join(result.Err, fmt.Errorf("cannot write prettier ignore file: %w", err))
+				return
 			}
-
-			prettierOutput, err := p.Parse(string(output))
-			if err != nil {
-				errorOutput := commandOutputOrError(stderr.String(), output, err)
-
-				check.AddResult(validation.CheckResult{
-					Path:       sourceDirectory,
-					Message:    "failed to parse prettier output: " + errorOutput,
-					Severity:   validation.SeverityError,
-					Line:       0,
-					Identifier: "prettier/error",
-				})
-
-				return nil
+			args := []string{
+				path.Join(config.ToolDirectory, "js", "node_modules", ".bin", "prettier"),
+				"--config", path.Join(config.ToolDirectory, "js", "configs", "prettierrc.js"),
+				"--ignore-path", ignore.Name(), "--no-color", ".",
 			}
-
-			severity := validation.SeverityWarning
 			if dryRun {
-				severity = validation.SeverityError
+				args = append(args, "--list-different")
+			} else {
+				args = append(args, "--write")
 			}
-
-			for _, file := range prettierOutput.Files {
+			cmd := CommandContext(ctx, "node", args...)
+			cmd.Dir = directory
+			output, stderr, runErr := captureCommand(cmd, &result)
+			if !p.isExpectedPrettierExit(runErr, dryRun) || strings.Contains(string(stderr), "[error]") || (runErr != nil && len(bytes.TrimSpace(output)) == 0) {
+				if runErr == nil {
+					runErr = errors.New("prettier reported an error")
+				}
+				result.Err = errors.Join(result.Err, fmt.Errorf("cannot run prettier in %s: %w", directory, runErr))
+				return
+			}
+			parsed, err := p.Parse(string(output))
+			if err != nil {
+				result.Err = errors.Join(result.Err, fmt.Errorf("cannot parse prettier output: %w", err))
+				return
+			}
+			for _, file := range parsed.Files {
 				if file.Unchanged {
 					continue
 				}
-
+				changed++
+				if !dryRun {
+					continue
+				}
 				filePath := file.Path
 				if !filepath.IsAbs(filePath) {
-					filePath = filepath.Join(sourceDirectory, filePath)
+					filePath = filepath.Join(directory, filePath)
 				}
-				check.AddResult(validation.CheckResult{
-					Path:       validation.NormalizeSourcePath(filePath, config.RootDir),
-					Message:    ruleViolationMessage,
-					Severity:   severity,
-					Line:       0,
-					Identifier: "prettier/format",
+				result.Findings = append(result.Findings, validation.CheckResult{
+					Path:     validation.NormalizeSourcePath(filePath, config.RootDir),
+					Message:  "Formatting violations found. Run format without dry-run to resolve them.",
+					Severity: validation.SeverityError, Identifier: "prettier/format",
 				})
 			}
-
-			return nil
-		})
+		}()
 	}
-
-	return gr.Wait()
+	if !dryRun && result.Err == nil {
+		result.Note = fileChangeNote(changed, "formatted")
+	}
+	return result
 }
 
 // isExpectedPrettierExit reports whether Prettier completed with an expected exit status.

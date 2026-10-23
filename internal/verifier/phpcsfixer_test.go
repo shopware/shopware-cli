@@ -77,11 +77,10 @@ func TestPHPCSFixerGetConfigPath(t *testing.T) {
 
 func TestPHPCSFixerFormatComposerManifest(t *testing.T) {
 	t.Run("missing manifest skips formatting", func(t *testing.T) {
-		check := NewCheck()
-		err := (PHPCSFixer{}).Format(t.Context(), check, ToolConfig{RootDir: t.TempDir()}, false)
+		result := (PHPCSFixer{}).Format(t.Context(), ToolConfig{RootDir: t.TempDir(), SourceDirectories: []string{"src"}}, false)
 
-		assert.NoError(t, err)
-		assert.Empty(t, check.GetResults())
+		assert.NoError(t, result.Err)
+		assert.Empty(t, result.Findings)
 	})
 
 	t.Run("other stat errors are returned", func(t *testing.T) {
@@ -89,13 +88,12 @@ func TestPHPCSFixerFormatComposerManifest(t *testing.T) {
 		root := filepath.Join(t.TempDir(), "not-a-directory")
 		require.NoError(t, os.WriteFile(root, nil, 0o644))
 
-		check := NewCheck()
-		err := (PHPCSFixer{}).Format(t.Context(), check, ToolConfig{RootDir: root}, false)
+		result := (PHPCSFixer{}).Format(t.Context(), ToolConfig{RootDir: root, SourceDirectories: []string{root}}, false)
 
 		var pathErr *os.PathError
-		require.ErrorAs(t, err, &pathErr)
-		assert.False(t, errors.Is(err, os.ErrNotExist))
-		assert.Empty(t, check.GetResults())
+		require.ErrorAs(t, result.Err, &pathErr)
+		assert.False(t, errors.Is(result.Err, os.ErrNotExist))
+		assert.Empty(t, result.Findings)
 	})
 }
 

@@ -2,12 +2,14 @@ package verifier
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 
 	"github.com/shopware/shopware-cli/internal/extension"
 	"github.com/shopware/shopware-cli/internal/symfony"
-	"github.com/shopware/shopware-cli/logging"
+	"github.com/shopware/shopware-cli/internal/validation"
 )
 
 // SymfonyXMLConverter converts deprecated Symfony XML configuration files
@@ -19,7 +21,10 @@ func (SymfonyXMLConverter) Name() string {
 	return "symfony-xml"
 }
 
-func (s SymfonyXMLConverter) Fix(ctx context.Context, config ToolConfig) error {
+func (s SymfonyXMLConverter) Fix(_ context.Context, config ToolConfig) ToolResult {
+	result := ToolResult{}
+	found := false
+	changed := 0
 	conversions := []struct {
 		fileName string
 		convert  func(string) (map[string]string, error)
@@ -33,22 +38,38 @@ func (s SymfonyXMLConverter) Fix(ctx context.Context, config ToolConfig) error {
 			xmlPath := filepath.Join(configDir, conversion.fileName)
 
 			if _, err := os.Stat(xmlPath); err != nil {
+				if !errors.Is(err, os.ErrNotExist) {
+					result.Err = errors.Join(result.Err, fmt.Errorf("cannot read XML configuration: %w", err))
+				}
 				continue
 			}
+			found = true
 
 			converted, err := conversion.convert(xmlPath)
 			if err != nil {
-				logging.FromContext(ctx).Warnf("Could not convert %s to YAML, keeping the XML file: %v", xmlPath, err)
+				var pathErr *os.PathError
+				if errors.As(err, &pathErr) {
+					result.Err = errors.Join(result.Err, fmt.Errorf("cannot convert XML configuration: %w", err))
+				} else {
+					result.Findings = append(result.Findings, validation.CheckResult{
+						Path: validation.NormalizeSourcePath(xmlPath, config.RootDir), Severity: validation.SeverityWarning,
+						Identifier: "symfony-xml/unsupported", Message: fmt.Sprintf("Cannot convert XML to YAML; keeping the XML file: %v", err),
+					})
+				}
 				continue
 			}
 
-			for from, to := range converted {
-				logging.FromContext(ctx).Infof("Converted %s to %s", from, to)
-			}
+			changed += len(converted)
 		}
 	}
 
-	return nil
+	if !found && result.Err == nil {
+		result.SkipReason = "no XML configuration files"
+	}
+	if found {
+		result.Note = fileChangeNote(changed, "converted")
+	}
+	return result
 }
 
 // collectConfigDirs returns the Resources/config directories of all platform

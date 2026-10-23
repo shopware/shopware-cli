@@ -22,13 +22,25 @@ func (s StorefrontTwigLinter) Name() string {
 	return "storefront-twig"
 }
 
-func (s StorefrontTwigLinter) Check(ctx context.Context, check *Check, config ToolConfig) error {
-	fixers := twiglinter.GetStorefrontFixers(version.Must(version.NewVersion(config.MinShopwareVersion)))
+func (s StorefrontTwigLinter) Check(ctx context.Context, config ToolConfig) ToolResult {
+	result := ToolResult{}
+	check := NewCheck()
+	shopwareVersion, err := version.NewVersion(config.MinShopwareVersion)
+	if err != nil {
+		result.Err = fmt.Errorf("cannot parse Shopware version: %w", err)
+		return result
+	}
+	fixers := twiglinter.GetStorefrontFixers(shopwareVersion)
+	found := false
 
 	for _, p := range config.SourceDirectories {
 		twigDir := filepath.Join(p, "Resources", "views")
 
 		if _, err := os.Stat(twigDir); err != nil {
+			if errors.Is(err, os.ErrNotExist) {
+				continue
+			}
+			result.Err = errors.Join(result.Err, fmt.Errorf("cannot read template directory: %w", err))
 			continue
 		}
 
@@ -44,6 +56,7 @@ func (s StorefrontTwigLinter) Check(ctx context.Context, check *Check, config To
 			if filepath.Ext(path) != twiglinter.TwigExtension {
 				return nil
 			}
+			found = true
 
 			file, err := os.ReadFile(path)
 			if err != nil {
@@ -85,11 +98,15 @@ func (s StorefrontTwigLinter) Check(ctx context.Context, check *Check, config To
 			return nil
 		})
 		if err != nil {
-			return err
+			result.Err = errors.Join(result.Err, fmt.Errorf("cannot check Twig templates: %w", err))
 		}
 	}
 
-	return nil
+	result.Findings = check.GetResults()
+	if !found && result.Err == nil {
+		result.SkipReason = "no storefront Twig templates"
+	}
+	return result
 }
 func init() {
 	AddTool(StorefrontTwigLinter{})
