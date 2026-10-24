@@ -4,10 +4,70 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 )
+
+// TestWorkingTreeChecksIgnoreEnvironmentOrder checks that combined overrides
+// cannot redirect membership or status, regardless of their environment order.
+func TestWorkingTreeChecksIgnoreEnvironmentOrder(t *testing.T) {
+	for _, reverse := range []bool{false, true} {
+		name := "forward"
+		if reverse {
+			name = "reverse"
+		}
+		t.Run(name, func(t *testing.T) {
+			ambient := t.TempDir()
+			prepareRepository(t, ambient)
+			assert.NoError(t, os.WriteFile(filepath.Join(ambient, "ambient.txt"), []byte("ambient work"), 0o644))
+			repo := t.TempDir()
+			prepareRepository(t, repo)
+			nested := filepath.Join(repo, "custom", "plugins", "Example")
+			assert.NoError(t, os.MkdirAll(nested, 0o755))
+			variables := []struct{ key, value string }{
+				{"GIT_DIR", filepath.Join(ambient, ".git")},
+				{"GIT_WORK_TREE", ambient},
+				{"GIT_CEILING_DIRECTORIES", filepath.Join(repo, "custom")},
+				{"GIT_DISCOVERY_ACROSS_FILESYSTEM", "invalid"},
+			}
+			// Remove existing entries so Setenv inserts them in the chosen order.
+			for _, variable := range variables {
+				t.Setenv(variable.key, "")
+				assert.NoError(t, os.Unsetenv(variable.key))
+			}
+			if reverse {
+				slices.Reverse(variables)
+			}
+			for _, variable := range variables {
+				t.Setenv(variable.key, variable.value)
+			}
+
+			inside, err := IsInsideWorkingTree(t.Context(), nested)
+			assert.NoError(t, err)
+			assert.True(t, inside)
+			dirty, isRepo, err := IsWorkingTreeDirty(t.Context(), nested)
+			assert.NoError(t, err)
+			assert.True(t, isRepo)
+			assert.False(t, dirty)
+			assert.NoError(t, os.WriteFile(filepath.Join(nested, "target.txt"), []byte("target work"), 0o644))
+			dirty, isRepo, err = IsWorkingTreeDirty(t.Context(), nested)
+			assert.NoError(t, err)
+			assert.True(t, isRepo)
+			assert.True(t, dirty)
+
+			outside := t.TempDir()
+			inside, err = IsInsideWorkingTree(t.Context(), outside)
+			assert.NoError(t, err)
+			assert.False(t, inside)
+			dirty, isRepo, err = IsWorkingTreeDirty(t.Context(), outside)
+			assert.NoError(t, err)
+			assert.False(t, isRepo)
+			assert.False(t, dirty)
+		})
+	}
+}
 
 func TestInvalidGitRepository(t *testing.T) {
 	t.Parallel()
@@ -94,6 +154,7 @@ func TestGetPublicVCSURL(t *testing.T) {
 	assert.NoError(t, err)
 }
 
+// TestIsWorkingTreeDirty distinguishes clean, untracked, and non-repository paths.
 func TestIsWorkingTreeDirty(t *testing.T) {
 	t.Run("clean git working tree", func(t *testing.T) {
 		tmpDir := t.TempDir()
@@ -127,11 +188,14 @@ func TestIsWorkingTreeDirty(t *testing.T) {
 	})
 }
 
+// runCommand runs Git in tmpDir without inherited repository locations, so
+// fixture commands cannot target another repository.
 func runCommand(t *testing.T, tmpDir string, args ...string) {
 	t.Helper()
 
 	c := exec.CommandContext(t.Context(), "git", args...)
 	c.Dir = tmpDir
+	c.Env = workingTreeEnvironment()
 
 	out, err := c.CombinedOutput()
 	if err != nil {
@@ -139,6 +203,8 @@ func runCommand(t *testing.T, tmpDir string, args ...string) {
 	}
 }
 
+// prepareRepository initializes a test repository with a local commit identity
+// and disables commit and tag signing.
 func prepareRepository(t *testing.T, tmpDir string) {
 	t.Helper()
 
@@ -147,4 +213,227 @@ func prepareRepository(t *testing.T, tmpDir string) {
 	runCommand(t, tmpDir, "config", "tag.gpgsign", "false")
 	runCommand(t, tmpDir, "config", "user.name", "test")
 	runCommand(t, tmpDir, "config", "user.email", "test@test.de")
+}
+
+// TestIsInsideWorkingTree covers Git discovery across repository layouts and
+// symlinks, including ignored and untracked directories.
+func TestIsInsideWorkingTree(t *testing.T) {
+	t.Parallel()
+
+	repo := t.TempDir()
+	prepareRepository(t, repo)
+	assert.NoError(t, os.WriteFile(filepath.Join(repo, ".gitignore"), []byte("ignored/\n"), 0o644))
+	runCommand(t, repo, "add", ".gitignore")
+	runCommand(t, repo, "commit", "-m", "initial commit")
+
+	nested := filepath.Join(repo, "custom", "plugins", "Example")
+	ignored := filepath.Join(repo, "ignored")
+	for _, dir := range []string{nested, ignored} {
+		assert.NoError(t, os.MkdirAll(dir, 0o755))
+	}
+	assert.NoError(t, os.WriteFile(filepath.Join(nested, "untracked.txt"), []byte("local work"), 0o644))
+
+	worktree := filepath.Join(t.TempDir(), "worktree")
+	runCommand(t, repo, "worktree", "add", "-b", "linked", worktree)
+	link := filepath.Join(t.TempDir(), "linked-extension")
+	assert.NoError(t, os.Symlink(nested, link))
+
+	runCommand(t, repo, "-c", "protocol.file.allow=always", "submodule", "add", repo, "module")
+	outside := t.TempDir()
+	externalLink := filepath.Join(repo, "external")
+	assert.NoError(t, os.Symlink(outside, externalLink))
+
+	bare := t.TempDir()
+	runCommand(t, bare, "init", "--bare")
+	empty := t.TempDir()
+	assert.NoError(t, os.Mkdir(filepath.Join(empty, ".git"), 0o755))
+
+	for _, tc := range []struct {
+		name string
+		path string
+		want bool
+	}{
+		{"repository root", repo, true},
+		{"nested untracked extension", nested, true},
+		{"ignored directory", ignored, true},
+		{"linked worktree", worktree, true},
+		{"submodule", filepath.Join(repo, "module"), true},
+		{"symlink outside repository", externalLink, false},
+		{"symlink to extension", link, true},
+		{"bare repository", bare, false},
+		{"empty git directory", empty, false},
+		{"outside git", t.TempDir(), false},
+		{"missing path", filepath.Join(t.TempDir(), "missing"), false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			inside, err := IsInsideWorkingTree(t.Context(), tc.path)
+			assert.NoError(t, err)
+			assert.Equal(t, tc.want, inside)
+		})
+	}
+}
+
+// TestIsInsideWorkingTreeWithoutGit distinguishes a missing Git executable
+// from a target outside a working tree.
+func TestIsInsideWorkingTreeWithoutGit(t *testing.T) {
+	t.Setenv("PATH", t.TempDir())
+	inside, err := IsInsideWorkingTree(t.Context(), t.TempDir())
+	assert.Error(t, err)
+	assert.False(t, inside)
+}
+
+// TestWorkingTreeChecksIgnoreRepositoryEnvironment checks membership and dirty
+// status against the target even when inherited locations point elsewhere.
+func TestWorkingTreeChecksIgnoreRepositoryEnvironment(t *testing.T) {
+	ambient := t.TempDir()
+	prepareRepository(t, ambient)
+	assert.NoError(t, os.WriteFile(filepath.Join(ambient, "ambient.txt"), []byte("ambient work"), 0o644))
+
+	for _, tc := range []struct {
+		name     string
+		dir      string
+		workTree string
+	}{
+		{"git dir", filepath.Join(ambient, ".git"), ""},
+		{"work tree", "", ambient},
+		{"both", filepath.Join(ambient, ".git"), ambient},
+		{"invalid locations", filepath.Join(ambient, "missing"), filepath.Join(ambient, "missing")},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if tc.dir != "" {
+				t.Setenv("GIT_DIR", tc.dir)
+			}
+			if tc.workTree != "" {
+				t.Setenv("GIT_WORK_TREE", tc.workTree)
+			}
+
+			repo := t.TempDir()
+			prepareRepository(t, repo)
+			_, err := os.Stat(filepath.Join(repo, ".git", "HEAD"))
+			assert.NoError(t, err)
+			inside, err := IsInsideWorkingTree(t.Context(), repo)
+			assert.NoError(t, err)
+			assert.True(t, inside)
+
+			dirty, isRepo, err := IsWorkingTreeDirty(t.Context(), repo)
+			assert.NoError(t, err)
+			assert.True(t, isRepo)
+			assert.False(t, dirty)
+
+			assert.NoError(t, os.WriteFile(filepath.Join(repo, "target.txt"), []byte("target work"), 0o644))
+			dirty, isRepo, err = IsWorkingTreeDirty(t.Context(), repo)
+			assert.NoError(t, err)
+			assert.True(t, isRepo)
+			assert.True(t, dirty)
+
+			outside := t.TempDir()
+			inside, err = IsInsideWorkingTree(t.Context(), outside)
+			assert.NoError(t, err)
+			assert.False(t, inside)
+			dirty, isRepo, err = IsWorkingTreeDirty(t.Context(), outside)
+			assert.NoError(t, err)
+			assert.False(t, isRepo)
+			assert.False(t, dirty)
+		})
+	}
+}
+
+// TestWorkingTreeChecksIgnoreDiscoveryEnvironment checks enclosing repositories
+// despite inherited discovery controls, without accepting unrelated paths.
+func TestWorkingTreeChecksIgnoreDiscoveryEnvironment(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		variable string
+		value    string
+	}{
+		{"ceiling", "GIT_CEILING_DIRECTORIES", ""},
+		{"filesystem disabled", "GIT_DISCOVERY_ACROSS_FILESYSTEM", "0"},
+		{"cross filesystem", "GIT_DISCOVERY_ACROSS_FILESYSTEM", "1"},
+		{"invalid boolean", "GIT_DISCOVERY_ACROSS_FILESYSTEM", "invalid"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			repo := t.TempDir()
+			prepareRepository(t, repo)
+			parent := filepath.Join(repo, "custom")
+			nested := filepath.Join(parent, "plugins", "Example")
+			assert.NoError(t, os.MkdirAll(nested, 0o755))
+			value := tc.value
+			if tc.variable == "GIT_CEILING_DIRECTORIES" {
+				value = parent
+			}
+			t.Setenv(tc.variable, value)
+
+			inside, err := IsInsideWorkingTree(t.Context(), nested)
+			assert.NoError(t, err)
+			assert.True(t, inside)
+			dirty, isRepo, err := IsWorkingTreeDirty(t.Context(), nested)
+			assert.NoError(t, err)
+			assert.True(t, isRepo)
+			assert.False(t, dirty)
+
+			assert.NoError(t, os.WriteFile(filepath.Join(nested, "untracked.txt"), []byte("local work"), 0o644))
+			dirty, isRepo, err = IsWorkingTreeDirty(t.Context(), nested)
+			assert.NoError(t, err)
+			assert.True(t, isRepo)
+			assert.True(t, dirty)
+
+			outside := t.TempDir()
+			inside, err = IsInsideWorkingTree(t.Context(), outside)
+			assert.NoError(t, err)
+			assert.False(t, inside)
+			dirty, isRepo, err = IsWorkingTreeDirty(t.Context(), outside)
+			assert.NoError(t, err)
+			assert.False(t, isRepo)
+			assert.False(t, dirty)
+		})
+	}
+}
+
+// TestWorkingTreeChecksDoNotFallBack checks explicit targets while both the
+// current directory and inherited locations point at a different working tree.
+func TestWorkingTreeChecksDoNotFallBack(t *testing.T) {
+	ambient := t.TempDir()
+	prepareRepository(t, ambient)
+	assert.NoError(t, os.WriteFile(filepath.Join(ambient, "ambient.txt"), []byte("local work"), 0o644))
+	repo := t.TempDir()
+	prepareRepository(t, repo)
+	assert.NoError(t, os.WriteFile(filepath.Join(repo, "tracked.txt"), []byte("committed"), 0o644))
+	runCommand(t, repo, "add", ".")
+	runCommand(t, repo, "commit", "-m", "initial commit")
+	worktree := filepath.Join(t.TempDir(), "worktree")
+	runCommand(t, repo, "worktree", "add", "-b", "fallback-test", worktree)
+	bare := t.TempDir()
+	runCommand(t, bare, "init", "--bare")
+
+	t.Chdir(ambient)
+	t.Setenv("GIT_DIR", filepath.Join(ambient, ".git"))
+	t.Setenv("GIT_WORK_TREE", ambient)
+	for _, tc := range []struct {
+		name   string
+		path   string
+		inside bool
+	}{
+		{"linked worktree", worktree, true},
+		{"bare repository", bare, false},
+		{"outside git", t.TempDir(), false},
+		{"missing path", filepath.Join(t.TempDir(), "missing"), false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			inside, err := IsInsideWorkingTree(t.Context(), tc.path)
+			assert.NoError(t, err)
+			assert.Equal(t, tc.inside, inside)
+			dirty, isRepo, err := IsWorkingTreeDirty(t.Context(), tc.path)
+			assert.NoError(t, err)
+			assert.Equal(t, tc.inside, isRepo)
+			assert.False(t, dirty)
+			if tc.inside {
+				assert.NoError(t, os.WriteFile(filepath.Join(tc.path, "tracked.txt"), []byte("modified"), 0o644))
+				dirty, isRepo, err = IsWorkingTreeDirty(t.Context(), tc.path)
+				assert.NoError(t, err)
+				assert.True(t, isRepo)
+				assert.True(t, dirty)
+			}
+		})
+	}
 }

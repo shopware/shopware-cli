@@ -82,6 +82,19 @@ Silence update notifications for a single command:
 shopware-cli --no-update-hint
 ```
 
+### Fix extensions in a project
+
+From an extension directory, convert deprecated Symfony XML configuration with:
+
+```bash
+shopware-cli extension fix . --only symfony-xml
+```
+
+The extension may use its own Git working tree or the enclosing project's working
+tree. Linked worktrees are supported. Fix commands check working-tree membership,
+not whether the tree is clean or individual files are tracked or ignored.
+Outside a Git working tree, `--allow-non-git` explicitly bypasses the check.
+
 ## Configuration
 
 Shop URL and Admin API credentials belong under named `environments` in `.config/shopware-project.yml`. Project-level keys such as `build`, `dump`, `docker`, and `php_version` stay at the top level.
