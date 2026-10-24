@@ -5,6 +5,7 @@ import (
 	"context"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -67,6 +68,86 @@ func TestStorefrontThemeDumpArgs(t *testing.T) {
 
 			require.NoError(t, err)
 			assert.Equal(t, tt.want, args)
+		})
+	}
+}
+
+func TestStorefrontUsesVite(t *testing.T) {
+	projectRoot := t.TempDir()
+	packagePath := PlatformPath(projectRoot, "Storefront", filepath.Join("Resources", "app", "storefront", "package.json"))
+	require.NoError(t, os.MkdirAll(filepath.Dir(packagePath), 0o755))
+
+	writePackage := func(content string) {
+		t.Helper()
+		require.NoError(t, os.WriteFile(packagePath, []byte(content), 0o644))
+	}
+
+	writePackage(`{"scripts":{"dev:server":"vite --host"}}`)
+	assert.True(t, StorefrontUsesVite(projectRoot))
+
+	writePackage(`{"scripts":{"hot-proxy":"NODE_ENV=development MODE=hot node ./build/start-hot-reload.js"}}`)
+	assert.False(t, StorefrontUsesVite(projectRoot))
+	require.NoError(t, os.WriteFile(filepath.Join(projectRoot, "composer.json"), []byte(`{"name":"shopware/platform"}`), 0o644))
+	assert.False(t, StorefrontUsesVite(projectRoot))
+
+	require.NoError(t, os.WriteFile(filepath.Join(projectRoot, "composer.lock"), []byte(`{"packages":[{"name":"shopware/core","version":"6.7.17.0"}]}`), 0o644))
+	assert.True(t, StorefrontUsesVite(projectRoot))
+	require.NoError(t, os.WriteFile(filepath.Join(projectRoot, "composer.lock"), []byte(`{"packages":[{"name":"shopware/core","version":"6.7.16.0"}]}`), 0o644))
+	assert.False(t, StorefrontUsesVite(projectRoot))
+}
+
+func TestStorefrontViteEnv(t *testing.T) {
+	tests := []struct {
+		name         string
+		opts         StorefrontWatcherOptions
+		executorType string
+		want         map[string]string
+	}{
+		{
+			name:         "local",
+			opts:         StorefrontWatcherOptions{VitePublicPort: 15180},
+			executorType: executor.TypeLocal,
+			want: map[string]string{
+				"STOREFRONT_VITE_HOST":   "127.0.0.1",
+				"STOREFRONT_VITE_PORT":   "5175",
+				"STOREFRONT_VITE_ORIGIN": "http://127.0.0.1:5175",
+			},
+		},
+		{
+			name:         "docker without proxy",
+			executorType: executor.TypeDocker,
+			want: map[string]string{
+				"STOREFRONT_VITE_HOST":   "0.0.0.0",
+				"STOREFRONT_VITE_PORT":   "5175",
+				"STOREFRONT_VITE_ORIGIN": "http://127.0.0.1:5175",
+			},
+		},
+		{
+			name:         "docker with remapped host port",
+			opts:         StorefrontWatcherOptions{VitePublicPort: 15180},
+			executorType: executor.TypeDocker,
+			want: map[string]string{
+				"STOREFRONT_VITE_HOST":   "0.0.0.0",
+				"STOREFRONT_VITE_PORT":   "5175",
+				"STOREFRONT_VITE_ORIGIN": "http://127.0.0.1:15180",
+			},
+		},
+		{
+			name:         "proxy",
+			opts:         StorefrontWatcherOptions{ProxyHostname: "storefront-watch.shop.example.test", VitePublicPort: 15180},
+			executorType: executor.TypeDocker,
+			want: map[string]string{
+				"STOREFRONT_VITE_HOST":                   "0.0.0.0",
+				"STOREFRONT_VITE_PORT":                   "5175",
+				"STOREFRONT_VITE_ORIGIN":                 "https://storefront-watch.shop.example.test",
+				"__VITE_ADDITIONAL_SERVER_ALLOWED_HOSTS": "storefront-watch.shop.example.test",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, storefrontViteEnv(tt.opts, tt.executorType))
 		})
 	}
 }

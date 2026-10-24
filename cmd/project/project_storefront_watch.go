@@ -8,6 +8,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/shopware/shopware-cli/internal/docker"
 	"github.com/shopware/shopware-cli/internal/envfile"
 	"github.com/shopware/shopware-cli/internal/extension"
 	"github.com/shopware/shopware-cli/internal/projectbuild"
@@ -58,10 +59,10 @@ var projectStorefrontWatchCmd = &cobra.Command{
 				return err
 			}
 		}
+		opts.VitePublicPort = int(shopCfg.DockerPorts(docker.ServiceWeb)[docker.PortStorefrontVite])
 
-		// When the shop is proxied, route the webpack hot-proxy watcher through
-		// the shared proxy at its storefront-watch hostname. An unreadable
-		// registry must not silently start the watcher unproxied.
+		// When the shop is proxied, use its shared storefront-watch hostname.
+		// An unreadable registry must not silently start the watcher unproxied.
 		host, err := proxy.RegisteredHostname(projectRoot)
 		if err != nil {
 			return fmt.Errorf("cannot read the shared proxy registry: %w", err)

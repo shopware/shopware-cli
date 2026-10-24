@@ -6,10 +6,9 @@ import (
 	"strconv"
 )
 
-// customRoutes holds the proxy routes of services whose routing cannot be
-// derived from their endpoints. Only web needs it: the admin watch port is
-// dynamic and the storefront watcher shares one hostname across three routes.
-var customRoutes = map[string]func(*Proxy) []proxyRoute{
+// customRoutes holds project-specific proxy routes. The web service needs them
+// because its watcher ports and routes depend on project settings.
+var customRoutes = map[string]func(*Environment) []proxyRoute{
 	ServiceWeb: webProxyRoutes,
 }
 
@@ -23,12 +22,14 @@ func (e *Environment) routes(svc service) []proxyRoute {
 		return nil
 	}
 
-	return serviceRoutes(svc, e.proxy)
+	return serviceRoutes(svc, e)
 }
 
-func serviceRoutes(svc service, p *Proxy) []proxyRoute {
+// serviceRoutes returns custom routes when the service has them and otherwise
+// derives routes from its endpoints.
+func serviceRoutes(svc service, e *Environment) []proxyRoute {
 	if custom, ok := customRoutes[svc.Name]; ok {
-		return custom(p)
+		return custom(e)
 	}
 
 	var routes []proxyRoute
@@ -48,7 +49,7 @@ func serviceRoutes(svc service, p *Proxy) []proxyRoute {
 func (e *Environment) RoutedSubdomains() []string {
 	var subs []string
 	for _, svc := range e.activeServices() {
-		subs = append(subs, serviceSubdomains(svc)...)
+		subs = append(subs, serviceSubdomains(svc, e)...)
 	}
 
 	return subs
@@ -57,9 +58,17 @@ func (e *Environment) RoutedSubdomains() []string {
 // serviceSubdomains returns the distinct proxy subdomains the service is
 // routed at, in route order; an empty entry denotes the project's root
 // hostname.
-func serviceSubdomains(svc service) []string {
+func serviceSubdomains(svc service, e *Environment) []string {
+	// Web routes depend on Vite mode, so hostname discovery passes that state
+	// to the route builder. A placeholder proxy enables route generation before
+	// proxy setup. Only the route subdomains are used here.
+	routeEnvironment := &Environment{
+		proxy:              &Proxy{},
+		storefrontUsesVite: e.storefrontUsesVite,
+	}
+
 	var subs []string
-	for _, route := range serviceRoutes(svc, &Proxy{}) {
+	for _, route := range serviceRoutes(svc, routeEnvironment) {
 		if !slices.Contains(subs, route.subdomain) {
 			subs = append(subs, route.subdomain)
 		}

@@ -3,6 +3,7 @@ package extension
 import (
 	"context"
 	_ "embed"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -14,6 +15,7 @@ import (
 	adminSdk "github.com/shopware/shopware-cli/internal/admin-api"
 	"github.com/shopware/shopware-cli/internal/executor"
 	"github.com/shopware/shopware-cli/internal/npm"
+	"github.com/shopware/shopware-cli/internal/shop"
 	"github.com/shopware/shopware-cli/internal/system"
 	"github.com/shopware/shopware-cli/internal/tui"
 )
@@ -25,6 +27,11 @@ import (
 //
 //go:embed storefront_hmr_patch.cjs
 var storefrontHMRPatch []byte
+
+const (
+	// StorefrontVitePort is the port used by Shopware's Storefront Vite server.
+	StorefrontVitePort = 5175
+)
 
 const (
 	// storefrontHMRPatchFile is where the preload is written inside the project
@@ -44,19 +51,19 @@ const (
 type StorefrontWatcherOptions struct {
 	ThemeID   string
 	DomainURL string
-	// ProxyHostname, when set, routes the deprecated webpack hot-proxy watcher
-	// through the shared proxy at this hostname (e.g.
-	// "storefront-watch.my-shop.shopware.local") instead of exposing fixed
-	// local ports, so multiple shops can watch in parallel. Empty keeps the
-	// classic local-port behavior.
+	// ProxyHostname is the shared HTTPS hostname used by the watcher in proxy
+	// mode. Empty keeps local-port access for the watcher.
 	ProxyHostname string
+	// VitePublicPort is the Docker host port used in Vite's origin.
+	// Non-positive values use StorefrontVitePort.
+	VitePublicPort int
 }
 
-// PrepareStorefrontWatcher runs the storefront watcher preparation steps and
-// returns the hot-proxy process. When out is non-nil, the output of every
-// preparation step (feature:dump, theme:compile, theme:dump, npm install) is
+// PrepareStorefrontWatcher runs the preparation steps and returns the selected
+// storefront watcher process. When out is non-nil, preparation output is
 // streamed to it so the steps are not silent while they run.
 func PrepareStorefrontWatcher(ctx context.Context, projectRoot string, cmdExecutor executor.Executor, opts StorefrontWatcherOptions, in io.Reader, out io.Writer) (*executor.Process, error) {
+	useVite := StorefrontUsesVite(projectRoot)
 	dumpArgs, err := storefrontThemeDumpArgs(ctx, opts)
 	if err != nil {
 		return nil, err
@@ -67,14 +74,16 @@ func PrepareStorefrontWatcher(ctx context.Context, projectRoot string, cmdExecut
 		return nil, err
 	}
 
-	activeOnly := "--active-only"
-	if !themeCompileSupportsActiveOnly(projectRoot) {
-		activeOnly = "-v"
-	}
+	if !useVite {
+		activeOnly := "--active-only"
+		if !themeCompileSupportsActiveOnly(projectRoot) {
+			activeOnly = "-v"
+		}
 
-	logStep(out, "Compiling theme...")
-	if err := runStep(ctx, cmdExecutor, out, "theme:compile", activeOnly); err != nil {
-		return nil, err
+		logStep(out, "Compiling theme...")
+		if err := runStep(ctx, cmdExecutor, out, "theme:compile", activeOnly); err != nil {
+			return nil, err
+		}
 	}
 
 	logStep(out, "Dumping theme...")
@@ -82,10 +91,18 @@ func PrepareStorefrontWatcher(ctx context.Context, projectRoot string, cmdExecut
 		return nil, err
 	}
 
-	storefrontRelPath := PlatformRelPath(projectRoot, "Storefront", "Resources/app/storefront")
+	storefrontRelPath := PlatformRelPath(projectRoot, "Storefront", filepath.Join("Resources", "app", "storefront"))
 	storefrontExecutor := cmdExecutor.WithRelDir(storefrontRelPath)
 
-	if _, err := os.Stat(PlatformPath(projectRoot, "Storefront", "Resources/app/storefront/node_modules/webpack-dev-server")); os.IsNotExist(err) {
+	dependency := "vite"
+	if !useVite {
+		dependency = "webpack-dev-server"
+	}
+	dependencyPath := PlatformPath(projectRoot, "Storefront", filepath.Join("Resources", "app", "storefront", "node_modules", dependency))
+	if _, err := os.Stat(dependencyPath); err != nil {
+		if !errors.Is(err, os.ErrNotExist) {
+			return nil, fmt.Errorf("checking storefront dependencies: %w", err)
+		}
 		logStep(out, "Installing npm dependencies (this can take a few minutes)...")
 		if err := npm.InstallDependenciesStreamed(ctx, storefrontExecutor, npm.NonEmptyPackage, out); err != nil {
 			return nil, err
@@ -95,6 +112,13 @@ func PrepareStorefrontWatcher(ctx context.Context, projectRoot string, cmdExecut
 	env := map[string]string{
 		"PROJECT_ROOT":    projectRoot,
 		"STOREFRONT_ROOT": PlatformPath(projectRoot, "Storefront", ""),
+	}
+
+	if useVite {
+		for key, value := range storefrontViteEnv(opts, cmdExecutor.Type()) {
+			env[key] = value
+		}
+		return storefrontExecutor.WithEnv(env).NPMCommand(ctx, "run-script", "dev:server"), nil
 	}
 
 	if opts.ProxyHostname != "" {
@@ -108,6 +132,52 @@ func PrepareStorefrontWatcher(ctx context.Context, projectRoot string, cmdExecut
 	}
 
 	return storefrontExecutor.WithEnv(env).NPMCommand(ctx, "run-script", "hot-proxy"), nil
+}
+
+// storefrontViteEnv configures Vite's listen host and browser-facing origin.
+func storefrontViteEnv(opts StorefrontWatcherOptions, executorType string) map[string]string {
+	listenHost := "127.0.0.1"
+	if executorType == executor.TypeDocker {
+		listenHost = "0.0.0.0"
+	}
+
+	env := map[string]string{
+		"STOREFRONT_VITE_HOST": listenHost,
+		// Keep the listen port aligned with the Docker container endpoint.
+		"STOREFRONT_VITE_PORT": strconv.Itoa(StorefrontVitePort),
+	}
+	if opts.ProxyHostname != "" {
+		env["STOREFRONT_VITE_ORIGIN"] = "https://" + opts.ProxyHostname
+		env["__VITE_ADDITIONAL_SERVER_ALLOWED_HOSTS"] = opts.ProxyHostname
+		return env
+	}
+
+	publicPort := StorefrontVitePort
+	if executorType == executor.TypeDocker && opts.VitePublicPort > 0 {
+		publicPort = opts.VitePublicPort
+	}
+	env["STOREFRONT_VITE_ORIGIN"] = "http://127.0.0.1:" + strconv.Itoa(publicPort)
+	return env
+}
+
+// StorefrontUsesVite reports whether the package defines a Vite dev server
+// script or Shopware is 6.7.17 or newer.
+func StorefrontUsesVite(projectRoot string) bool {
+	packageJSON := PlatformPath(projectRoot, "Storefront", filepath.Join("Resources", "app", "storefront", "package.json"))
+	var pkg struct {
+		Scripts map[string]string `json:"scripts"`
+	}
+	if data, err := os.ReadFile(packageJSON); err == nil &&
+		json.Unmarshal(data, &pkg) == nil &&
+		pkg.Scripts["dev:server"] != "" {
+		return true
+	}
+
+	if _, err := os.Stat(filepath.Join(projectRoot, "composer.lock")); err != nil {
+		return false
+	}
+	usesVite, err := shop.IsShopwareVersion(projectRoot, ">=6.7.17")
+	return err == nil && usesVite
 }
 
 // storefrontProxyEnv writes the hot-reload websocket preload and returns the

@@ -234,6 +234,46 @@ func TestRenderWatchers_ProxyModeUsesSubdomains(t *testing.T) {
 	assert.Contains(t, view, "https://storefront-watch.my-shop.shopware.local")
 }
 
+func TestSetEnvironmentStorefrontViteSeparatesShopLinkAndProbeURL(t *testing.T) {
+	t.Setenv("APP_ENV", "test")
+	dir := t.TempDir()
+	writeComposerLock(t, dir, "^8.2")
+	packagePath := filepath.Join(dir, "vendor", "shopware", "storefront", "Resources", "app", "storefront", "package.json")
+	require.NoError(t, os.MkdirAll(filepath.Dir(packagePath), 0o755))
+	require.NoError(t, os.WriteFile(packagePath, []byte(`{"scripts":{"dev:server":"vite"}}`), 0o644))
+
+	t.Run("fixed port mode", func(t *testing.T) {
+		env, err := dockerpkg.NewEnvironment(dir, dockerpkg.Options{
+			StorefrontUsesVite: true,
+		})
+		require.NoError(t, err)
+
+		m := NewOverviewModel(t.Context(), executor.TypeDocker, "http://127.0.0.1:8000", "", "", dir, nil, nil)
+		m.setEnvironment(env)
+
+		assert.Equal(t, "http://127.0.0.1:8000", m.sfWatchURL)
+		assert.Equal(t, "http://127.0.0.1:5175", m.sfWatchProbeURL)
+	})
+
+	t.Run("proxy mode", func(t *testing.T) {
+		env, err := dockerpkg.NewEnvironment(dir, dockerpkg.Options{
+			Proxy:              &dockerpkg.Proxy{Hostname: "vite-shop.shopware.local"},
+			StorefrontUsesVite: true,
+		})
+		require.NoError(t, err)
+
+		cfg := &shop.Config{Environments: map[string]*shop.EnvironmentConfig{
+			"local":   {URL: "https://local-shop.shopware.local"},
+			"staging": {URL: "https://staging-shop.shopware.local"},
+		}}
+		m := NewOverviewModel(t.Context(), executor.TypeDocker, "https://staging-shop.shopware.local", "", "", dir, nil, cfg)
+		m.setEnvironment(env)
+
+		assert.Equal(t, "https://staging-shop.shopware.local", m.sfWatchURL)
+		assert.Equal(t, "https://storefront-watch.vite-shop.shopware.local", m.sfWatchProbeURL)
+	})
+}
+
 func TestRenderWatchers_LocalModeIgnoresDockerPorts(t *testing.T) {
 	dir := t.TempDir()
 
