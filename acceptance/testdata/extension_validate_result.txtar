@@ -1,0 +1,79 @@
+# Complete metadata passes with exit 0. The icon check is ignored through the
+# extension config because a PNG cannot live in a text fixture.
+exec shopware-cli extension validate --only builtin valid
+! stderr .
+
+# The deprecated --full flag is accepted and changes nothing.
+exec shopware-cli extension validate --only builtin --full valid
+
+# Missing metadata fails with exit 1 and reports on stdout.
+! exec shopware-cli extension validate --only builtin invalid
+stdout .
+
+-- valid/.config/shopware-extension.yml --
+compatibility_date: 2026-02-11
+validation:
+  ignore:
+    - identifier: metadata.icon
+-- valid/composer.json --
+{
+    "name": "test/valid-plugin",
+    "type": "shopware-platform-plugin",
+    "version": "1.0.0",
+    "license": "MIT",
+    "description": "A plugin whose metadata satisfies every builtin check",
+    "authors": [
+        {
+            "name": "Test Author"
+        }
+    ],
+    "require": {
+        "shopware/core": "~6.6.0"
+    },
+    "autoload": {
+        "psr-4": {
+            "Test\\ValidPlugin\\": "src/"
+        }
+    },
+    "extra": {
+        "shopware-plugin-class": "Test\\ValidPlugin\\ValidPlugin",
+        "label": {
+            "de-DE": "Gültiges Plugin",
+            "en-GB": "Valid Plugin"
+        },
+        "description": {
+            "de-DE": "Dieses Plugin dient ausschließlich den Akzeptanztests der shopware-cli. Es hat keine Funktionen, aber seine Metadaten sind vollständig genug für jede eingebaute Prüfung.",
+            "en-GB": "This plugin exists only to exercise the acceptance scripts of shopware-cli. It has no features, but its metadata is complete enough to pass every builtin check."
+        },
+        "manufacturerLink": {
+            "de-DE": "https://example.com",
+            "en-GB": "https://example.com"
+        },
+        "supportLink": {
+            "de-DE": "https://example.com/support",
+            "en-GB": "https://example.com/support"
+        }
+    }
+}
+-- invalid/composer.json --
+{
+    "name": "test/test-plugin",
+    "type": "shopware-platform-plugin",
+    "version": "1.0.0",
+    "license": "MIT",
+    "description": "Test plugin",
+    "require": {
+        "shopware/core": "~6.6.0"
+    },
+    "autoload": {
+        "psr-4": {
+            "Test\\TestPlugin\\": "src/"
+        }
+    },
+    "extra": {
+        "shopware-plugin-class": "Test\\TestPlugin\\TestPlugin",
+        "label": {
+            "en-GB": "Test Plugin"
+        }
+    }
+}
