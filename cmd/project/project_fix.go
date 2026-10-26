@@ -6,7 +6,6 @@ import (
 	"path/filepath"
 
 	"github.com/spf13/cobra"
-	"golang.org/x/sync/errgroup"
 
 	"github.com/shopware/shopware-cli/internal/shop"
 	"github.com/shopware/shopware-cli/internal/validation"
@@ -72,28 +71,10 @@ var projectFixCmd = &cobra.Command{
 			return err
 		}
 
-		var gr errgroup.Group
-
-		for _, tool := range tools {
-			gr.Go(func() error {
-				finish := progress.Start(tool.Name())
-				err := tool.Fix(ctx, *toolCfg)
-				if err == nil {
-					err = ctx.Err()
-				}
-				finish(err)
-				return err
-			})
-		}
-
-		runErr := gr.Wait()
-		if runErr == nil {
-			runErr = ctx.Err()
-		}
-		if err := validation.PrintToolInvocationTable(os.Stdout, "Fixers", statuses); err != nil {
-			return err
-		}
-		return runErr
+		results := verifier.RunTools(ctx, tools, statuses, *toolCfg, progress, func(tool verifier.FixTool, execution *verifier.ToolExecution) verifier.ToolSummary {
+			return tool.Fix(ctx, *toolCfg, execution)
+		})
+		return validation.ReportTools(results, "summary", "Fixers")
 	},
 }
 

@@ -5,7 +5,6 @@ import (
 	"path/filepath"
 
 	"github.com/spf13/cobra"
-	"golang.org/x/sync/errgroup"
 
 	"github.com/shopware/shopware-cli/internal/extension"
 	"github.com/shopware/shopware-cli/internal/validation"
@@ -66,36 +65,10 @@ var extensionFormat = &cobra.Command{
 
 		logging.FromContext(ctx).Debugf("Running formatters for Shopware version: %s", toolCfg.MinShopwareVersion)
 
-		result := verifier.NewCheck()
-		result.SetSourceRoot(toolCfg.RootDir)
-
-		var gr errgroup.Group
-		for _, tool := range tools {
-			gr.Go(func() error {
-				finish := progress.Start(tool.Name())
-				err := tool.Format(ctx, result, *toolCfg, dryRun)
-				if err == nil {
-					err = ctx.Err()
-				}
-				finish(err)
-				return err
-			})
-		}
-		runErr := gr.Wait()
-		if runErr == nil {
-			runErr = ctx.Err()
-		}
-
-		reportErr := validation.DoCheckReport(
-			result.RemoveByIdentifier(toolCfg.ValidationIgnores),
-			reportingFormat,
-			runErr != nil,
-			statuses...)
-		if runErr != nil {
-			return runErr
-		}
-
-		return reportErr
+		results := verifier.RunTools(ctx, tools, statuses, *toolCfg, progress, func(tool verifier.FormatTool, execution *verifier.ToolExecution) verifier.ToolSummary {
+			return tool.Format(ctx, *toolCfg, execution, dryRun)
+		})
+		return validation.ReportTools(results, reportingFormat, "Formatters")
 	},
 }
 

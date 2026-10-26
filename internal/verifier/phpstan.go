@@ -1,10 +1,11 @@
 package verifier
 
 import (
-	"bytes"
 	"context"
 	_ "embed"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"os"
 	"path"
 	"regexp"
@@ -21,16 +22,10 @@ var possiblePHPStanConfigs = []string{
 }
 
 type PhpStanOutput struct {
-	Totals struct {
-		Errors     int `json:"errors"`
-		FileErrors int `json:"file_errors"`
-	} `json:"totals"`
 	Files map[string]struct {
-		Errors   int `json:"errors"`
 		Messages []struct {
 			Message    string `json:"message"`
 			Line       int    `json:"line"`
-			Ignorable  bool   `json:"ignorable"`
 			Identifier string `json:"identifier"`
 			Tip        string `json:"tip"`
 		} `json:"messages"`
@@ -54,92 +49,100 @@ func (p PhpStan) configExists(pluginPath string) bool {
 	return false
 }
 
-func (p PhpStan) Check(ctx context.Context, check *Check, config ToolConfig) error {
-	// Apps don't have an composer.json file, skip them
-	if _, err := os.Stat(path.Join(config.RootDir, "composer.json")); err != nil {
-		//nolint: nilerr
-		return nil
+func (p PhpStan) Check(ctx context.Context, config ToolConfig, execution *ToolExecution) ToolSummary {
+	if result, applicable := preparePHPTool(config, execution); !applicable {
+		return result
 	}
-
-	if err := installComposerDeps(ctx, config.RootDir, config.CheckAgainst); err != nil {
-		return err
+	note := ""
+	_, vendorErr := os.Stat(path.Join(config.RootDir, "vendor"))
+	if err := installComposerDeps(ctx, config.RootDir, config.CheckAgainst, execution); err != nil {
+		execution.Fail(err)
+		return ToolSummary{}
 	}
-	for _, sourceDirectory := range config.SourceDirectories {
-		phpstanArguments := []string{"-dmemory_limit=2G", path.Join(config.ToolDirectory, "php", "vendor", "bin", "phpstan"), "analyse", "--no-progress", "--no-interaction", "--error-format=json", sourceDirectory}
-
+	if installed := installedShopwareVersion(config.RootDir); installed != "" {
+		note = "Shopware " + installed
+		if errors.Is(vendorErr, os.ErrNotExist) && config.CheckAgainst != "" {
+			note += " (" + config.CheckAgainst + ")"
+		}
+	}
+	analysed := false
+	for _, directory := range config.SourceDirectories {
+		args := []string{"-dmemory_limit=2G", path.Join(config.ToolDirectory, "php", "vendor", "bin", "phpstan"), "analyse", "--no-progress", "--no-interaction", "--error-format=json", directory}
 		if !p.configExists(config.RootDir) {
-			phpstanArguments = append(phpstanArguments, "--configuration", path.Join(config.ToolDirectory, "php", "configs", "phpstan.neon"))
+			args = append(args, "--configuration", path.Join(config.ToolDirectory, "php", "configs", "phpstan.neon"))
 		}
-
 		if logging.IsVerbose(ctx) {
-			phpstanArguments = append(phpstanArguments, "-v")
+			args = append(args, "-v")
 		}
-
-		phpstan := CommandContext(ctx, "php", phpstanArguments...)
-		phpstan.Env = append(os.Environ(), "PHP_DIR="+path.Join(config.ToolDirectory, "php"))
-		phpstan.Dir = config.RootDir
-
-		var stderr bytes.Buffer
-		phpstan.Stderr = &stderr
-
-		log, _ := phpstan.Output()
-
-		// When all files of a source directory are excluded by excludePaths in a
-		// local phpstan.neon, PHPStan prints a plain text message instead of JSON.
-		if isPhpStanNoFilesOutput(string(log)) || isPhpStanNoFilesOutput(stderr.String()) {
+		cmd := CommandContext(ctx, "php", args...)
+		cmd.Env = append(os.Environ(), "PHP_DIR="+path.Join(config.ToolDirectory, "php"))
+		cmd.Dir = config.RootDir
+		subprocess := execution.Run(cmd)
+		stdout, stderr, runErr := []byte(subprocess.Stdout), []byte(subprocess.Stderr), subprocess.Err
+		if !expectedExit(runErr, 1) {
+			execution.Fail(subprocess.ToolError(fmt.Errorf("cannot run phpstan in %s: %w", directory, runErr)))
 			continue
 		}
-
-		log = []byte(strings.ReplaceAll(string(log), "\"files\":[]", "\"files\":{}"))
-
-		var phpstanResult PhpStanOutput
-
-		if err := json.Unmarshal(log, &phpstanResult); err != nil {
-			errorOutput := stderr.String()
-			if strings.TrimSpace(errorOutput) == "" {
-				errorOutput = string(log)
-			}
-
-			check.AddResult(validation.CheckResult{
-				Path:       "phpstan.neon",
-				Message:    "failed to unmarshal phpstan output: " + errorOutput,
-				Severity:   validation.SeverityError,
-				Line:       0,
-				Identifier: "phpstan/error",
-			})
-			//nolint: nilerr
-			return nil
+		if isPhpStanNoFilesOutput(string(stdout)) || isPhpStanNoFilesOutput(string(stderr)) {
+			continue
 		}
-
-		for _, message := range phpstanResult.Errors {
-			check.AddResult(validation.CheckResult{
-				Path:       "phpstan.neon",
-				Message:    message,
-				Severity:   validation.SeverityError,
-				Line:       0,
-				Identifier: "phpstan/error",
-			})
+		analysed = true
+		output := strings.ReplaceAll(string(stdout), `"files":[]`, `"files":{}`)
+		var parsed PhpStanOutput
+		if err := json.Unmarshal([]byte(output), &parsed); err != nil {
+			execution.Fail(subprocess.ToolError(fmt.Errorf("cannot parse phpstan output: %w", err)))
+			continue
 		}
-
-		for fileName, file := range phpstanResult.Files {
+		if parsed.Files == nil {
+			execution.Fail(subprocess.ToolError(errors.New("cannot parse phpstan output: missing file results")))
+			continue
+		}
+		for _, message := range parsed.Errors {
+			execution.Fail(subprocess.ToolError(fmt.Errorf("cannot complete phpstan analysis: %s", message)))
+		}
+		for fileName, file := range parsed.Files {
 			for _, message := range file.Messages {
 				if strings.HasSuffix(message.Identifier, "deprecated") && p.isUselessDeprecation(message.Message) {
 					continue
 				}
-
-				check.AddResult(validation.CheckResult{
-					Path:       validation.NormalizeSourcePath(fileName, config.RootDir),
-					Line:       message.Line,
-					Message:    message.Message,
-					Severity:   validation.SeverityError,
-					Identifier: "phpstan/" + message.Identifier,
-					Tip:        message.Tip,
+				execution.AddFindings(validation.CheckResult{
+					Path: validation.NormalizeSourcePath(fileName, config.RootDir), Line: message.Line,
+					Message: message.Message, Severity: validation.SeverityError,
+					Identifier: "phpstan/" + message.Identifier, Tip: message.Tip,
 				})
 			}
 		}
 	}
+	result := ToolSummary{Note: note}
+	if !analysed {
+		result.SkipReason = "no files to analyse"
+	}
+	return result
+}
 
-	return nil
+func installedShopwareVersion(root string) string {
+	data, err := os.ReadFile(path.Join(root, "vendor", "composer", "installed.json"))
+	if err != nil {
+		return ""
+	}
+	type installedPackage struct {
+		Name    string `json:"name"`
+		Version string `json:"version"`
+	}
+	var installed struct {
+		Packages []installedPackage `json:"packages"`
+	}
+	if err := json.Unmarshal(data, &installed); err != nil {
+		if err := json.Unmarshal(data, &installed.Packages); err != nil {
+			return ""
+		}
+	}
+	for _, pkg := range installed.Packages {
+		if pkg.Name == "shopware/core" {
+			return pkg.Version
+		}
+	}
+	return ""
 }
 
 func isPhpStanNoFilesOutput(output string) bool {

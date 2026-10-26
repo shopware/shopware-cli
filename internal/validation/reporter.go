@@ -1,17 +1,16 @@
 package validation
 
 import (
+	"cmp"
 	"crypto/md5"
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
 	"encoding/xml"
-	"errors"
 	"fmt"
 	"io"
 	"os"
 	"slices"
-	"sort"
 	"strings"
 )
 
@@ -40,127 +39,79 @@ func DetectDefaultReporter() string {
 	return "summary"
 }
 
-// ToolInvocationStatus records whether a tool was invoked or skipped.
-type ToolInvocationStatus struct {
-	Name   string `json:"name"`
-	Status string `json:"status"`
-	Reason string `json:"reason,omitempty"`
+// toolInvocationStatus records whether a tool was invoked or skipped.
+type toolInvocationStatus struct {
+	Name               string      `json:"name"`
+	Status             string      `json:"status"`
+	Reason             string      `json:"reason,omitempty"`
+	Note               string      `json:"note,omitempty"`
+	HasFindings        bool        `json:"has_findings"`
+	Errors             []ToolError `json:"errors,omitempty"`
+	FindingsIncomplete bool        `json:"findings_incomplete,omitempty"`
 }
 
-// DoCheckReport reports findings and, when supplied, tool invocation statuses.
-func DoCheckReport(result Check, reportingFormat string, hadExecutionError bool, tools ...ToolInvocationStatus) error {
+// ReportTools renders collected findings and outcomes, preserving existing
+// report formats and adding execution diagnostics where supported.
+func ReportTools(tools []ToolReport, reportingFormat, title string) error {
 	reportingFormat = strings.ToLower(reportingFormat)
-
 	if err := ValidateReporter(reportingFormat); err != nil {
 		return err
 	}
-
+	tools = slices.Clone(tools)
+	slices.SortFunc(tools, func(a, b ToolReport) int { return cmp.Compare(a.Name, b.Name) })
+	findings := make([]CheckResult, 0)
+	statuses := make([]toolInvocationStatus, 0, len(tools))
+	failed := false
+	for _, tool := range tools {
+		findings = append(findings, tool.Findings...)
+		status := toolInvocationStatus{Name: tool.Name, Status: "invoked", Note: tool.Note, HasFindings: tool.HasFindings}
+		if tool.Status() == "skipped" {
+			status.Status, status.Reason = "skipped", tool.SkipReason
+		}
+		if len(tool.Errors) > 0 {
+			failed = true
+			status.Errors = tool.Errors
+			status.FindingsIncomplete = tool.HasFindings
+		}
+		for _, finding := range tool.Findings {
+			if finding.Severity == SeverityError {
+				failed = true
+			}
+		}
+		statuses = append(statuses, status)
+	}
+	var err error
 	switch reportingFormat {
 	case "summary":
-		if err := doSummaryReport(result, hadExecutionError, tools...); err != nil {
-			return err
-		}
-	case "json":
-		if err := doJSONReport(result, tools...); err != nil {
-			return err
-		}
-	case "github":
-		if err := doGitHubReport(result, hadExecutionError, tools...); err != nil {
-			return err
-		}
-	case "gitlab":
-		if err := doGitLabReport(result); err != nil {
-			return err
-		}
-		if err := PrintToolInvocationTable(os.Stderr, "Checkers", tools); err != nil {
-			return err
-		}
+		err = writeToolSummary(os.Stdout, tools, title, false)
 	case "markdown":
-		if err := doMarkdownReport(result, hadExecutionError, tools...); err != nil {
-			return err
+		err = writeToolSummary(os.Stdout, tools, title, true)
+	case "json":
+		err = doJSONReport(findings, statuses...)
+	case "github":
+		err = doGitHubReport(findings, tools, title)
+	case "gitlab":
+		for _, tool := range tools {
+			for _, failure := range tool.Errors {
+				findings = append(findings, CheckResult{Path: ".", Line: 1, Severity: SeverityError, Identifier: tool.Name + "/execution", Message: toolErrorDetail(tool, failure)})
+			}
+		}
+		err = doGitLabReport(findings)
+		if err == nil {
+			err = writeToolSummary(os.Stderr, tools, title, false)
 		}
 	case "junit":
-		if err := doJUnitReport(result, tools...); err != nil {
-			return err
-		}
-		if err := PrintToolInvocationTable(os.Stderr, "Checkers", tools); err != nil {
-			return err
+		err = doJUnitReport(findings, tools...)
+		if err == nil {
+			err = writeToolSummary(os.Stderr, tools, title, false)
 		}
 	}
-
-	if result.HasErrors() {
-		return errors.New("found errors")
-	}
-
-	return nil
-}
-
-func doSummaryReport(result Check, hadExecutionError bool, tools ...ToolInvocationStatus) error {
-	// Group results by file
-	fileGroups := make(map[string][]CheckResult)
-	for _, r := range result.GetResults() {
-		fileGroups[r.Path] = append(fileGroups[r.Path], r)
-	}
-
-	// Sort results within each file group for deterministic output
-	for path, results := range fileGroups {
-		sort.Slice(results, func(i, j int) bool {
-			// Sort by line number first, then by identifier, then by message
-			if results[i].Line != results[j].Line {
-				return results[i].Line < results[j].Line
-			}
-			if results[i].Identifier != results[j].Identifier {
-				return results[i].Identifier < results[j].Identifier
-			}
-			return results[i].Message < results[j].Message
-		})
-		fileGroups[path] = results
-	}
-
-	// Get sorted list of file paths for deterministic output
-	var sortedPaths []string
-	for path := range fileGroups {
-		sortedPaths = append(sortedPaths, path)
-	}
-	sort.Strings(sortedPaths)
-
-	// Print results grouped by file
-	totalProblems := 0
-	errorCount := 0
-	warningCount := 0
-
-	for _, file := range sortedPaths {
-		results := fileGroups[file]
-		//nolint:forbidigo
-		fmt.Printf("\n%s\n", file)
-		for _, r := range results {
-			totalProblems++
-			switch r.Severity {
-			case SeverityError:
-				errorCount++
-			case SeverityWarning:
-				warningCount++
-			}
-			//nolint:forbidigo
-			fmt.Printf("  %d  %-7s  [%s]  %s\n", r.Line, r.Severity, r.Identifier, r.Message)
-			if r.Tip != "" {
-				//nolint:forbidigo
-				fmt.Printf("             Tip: %s\n", r.Tip)
-			}
-		}
-	}
-
-	if err := PrintToolInvocationTable(os.Stdout, "Checkers", tools); err != nil {
+	if err != nil {
 		return err
 	}
-
-	//nolint:forbidigo
-	if tools != nil && !anyToolInvoked(tools) {
-		fmt.Println("\nNo checkers invoked; 0 problems reported")
-	} else if totalProblems > 0 || !hadExecutionError {
-		fmt.Printf("\n%s\n", summaryLine(totalProblems, errorCount, warningCount))
+	if failed {
+		return ErrToolReportFailed
 	}
-
 	return nil
 }
 
@@ -181,9 +132,9 @@ func countNoun(n int, noun string) string {
 	return fmt.Sprintf("%d %ss", n, noun)
 }
 
-func doJSONReport(result Check, tools ...ToolInvocationStatus) error {
+func doJSONReport(findings []CheckResult, tools ...toolInvocationStatus) error {
 	data := map[string]interface{}{
-		"results": result.GetResults(),
+		"results": findings,
 	}
 	if tools != nil {
 		data["tools"] = tools
@@ -194,40 +145,28 @@ func doJSONReport(result Check, tools ...ToolInvocationStatus) error {
 	return encoder.Encode(data)
 }
 
-func doGitHubReport(result Check, hadExecutionError bool, tools ...ToolInvocationStatus) error {
+func doGitHubReport(findings []CheckResult, tools []ToolReport, title string) error {
 	// Print the human-readable summary first so the GitHub Actions log
 	// shows file/line context, then emit annotations for PR inline display.
 	// File paths and messages can contain `::` which the runner would parse
 	// as a workflow command, so wrap the summary in stop-commands/resume
 	// using a random token to neutralize any embedded commands.
+	var output strings.Builder
 	var tokenBytes [16]byte
 	if _, err := rand.Read(tokenBytes[:]); err != nil {
 		return err
 	}
 	token := hex.EncodeToString(tokenBytes[:])
 
-	fmt.Printf("::stop-commands::%s\n", token)
-	if err := doSummaryReport(result, hadExecutionError, tools...); err != nil {
-		fmt.Printf("::%s::\n", token)
+	fmt.Fprintf(&output, "::stop-commands::%s\n", token)
+	if err := writeToolSummary(&output, tools, title, false); err != nil {
+		fmt.Fprintf(&output, "::%s::\n", token)
 		return err
 	}
-	fmt.Printf("::%s::\n", token)
+	fmt.Fprintf(&output, "::%s::\n", token)
 
 	// Sort results for deterministic output
-	results := result.GetResults()
-	sort.Slice(results, func(i, j int) bool {
-		// Sort by path first, then by line number, then by identifier, then by message
-		if results[i].Path != results[j].Path {
-			return results[i].Path < results[j].Path
-		}
-		if results[i].Line != results[j].Line {
-			return results[i].Line < results[j].Line
-		}
-		if results[i].Identifier != results[j].Identifier {
-			return results[i].Identifier < results[j].Identifier
-		}
-		return results[i].Message < results[j].Message
-	})
+	results := sortedFindings(findings)
 
 	for _, r := range results {
 		file := r.Path
@@ -253,10 +192,17 @@ func doGitHubReport(result Check, hadExecutionError bool, tools ...ToolInvocatio
 			message = message + "%0A%0ATip: " + tip
 		}
 
-		fmt.Printf("::%s file=%s%s,title=%s::%s\n", level, file, line, r.Identifier, message)
+		fmt.Fprintf(&output, "::%s file=%s%s,title=%s::%s\n", level, file, line, r.Identifier, message)
 	}
 
-	return nil
+	for _, tool := range tools {
+		for _, failure := range tool.Errors {
+			message := strings.NewReplacer("%", "%25", "\r", "%0D", "\n", "%0A").Replace(failure.Error())
+			fmt.Fprintf(&output, "::error title=%s::%s\n", tool.Name, message)
+		}
+	}
+	_, err := io.WriteString(os.Stdout, output.String())
+	return err
 }
 
 type GitLabCodeQualityIssue struct {
@@ -276,24 +222,11 @@ type GitLabCodeQualityLines struct {
 	Begin int `json:"begin"`
 }
 
-func doGitLabReport(result Check) error {
+func doGitLabReport(findings []CheckResult) error {
 	issues := make([]GitLabCodeQualityIssue, 0)
 
 	// Sort results for deterministic output
-	results := result.GetResults()
-	sort.Slice(results, func(i, j int) bool {
-		// Sort by path first, then by line number, then by identifier, then by message
-		if results[i].Path != results[j].Path {
-			return results[i].Path < results[j].Path
-		}
-		if results[i].Line != results[j].Line {
-			return results[i].Line < results[j].Line
-		}
-		if results[i].Identifier != results[j].Identifier {
-			return results[i].Identifier < results[j].Identifier
-		}
-		return results[i].Message < results[j].Message
-	})
+	results := sortedFindings(findings)
 
 	for _, r := range results {
 		// Convert severity to GitLab format
@@ -335,132 +268,6 @@ func doGitLabReport(result Check) error {
 	return encoder.Encode(issues)
 }
 
-func doMarkdownReport(result Check, hadExecutionError bool, tools ...ToolInvocationStatus) error {
-	// Group results by file
-	fileGroups := make(map[string][]CheckResult)
-	for _, r := range result.GetResults() {
-		if r.Path == "" {
-			r.Path = "general"
-		}
-
-		fileGroups[r.Path] = append(fileGroups[r.Path], r)
-	}
-
-	// Sort results within each file group for deterministic output
-	for path, results := range fileGroups {
-		sort.Slice(results, func(i, j int) bool {
-			// Sort by line number first, then by identifier, then by message
-			if results[i].Line != results[j].Line {
-				return results[i].Line < results[j].Line
-			}
-			if results[i].Identifier != results[j].Identifier {
-				return results[i].Identifier < results[j].Identifier
-			}
-			return results[i].Message < results[j].Message
-		})
-		fileGroups[path] = results
-	}
-
-	// Get sorted list of file paths for deterministic output
-	var sortedPaths []string
-	for path := range fileGroups {
-		sortedPaths = append(sortedPaths, path)
-	}
-	sort.Strings(sortedPaths)
-
-	fmt.Println("# Validation Report")
-	fmt.Println()
-
-	totalProblems := 0
-	for _, path := range sortedPaths {
-		results := fileGroups[path]
-		totalProblems += len(results)
-		if len(results) == 0 {
-			continue
-		}
-
-		fmt.Printf("## %s (%s)\n\n", path, countNoun(len(results), "problem"))
-		for _, r := range results {
-			severity := "⚠️ Warning"
-			if r.Severity == SeverityError {
-				severity = "❌ Error"
-			}
-
-			location := ""
-			if r.Line > 0 {
-				location = fmt.Sprintf(":%d", r.Line)
-			}
-
-			fmt.Printf("- **%s** %s%s: %s (`%s`)\n", severity, r.Path, location, r.Message, r.Identifier)
-			if r.Tip != "" {
-				fmt.Printf("  - *Tip: %s*\n", r.Tip)
-			}
-		}
-		fmt.Println()
-	}
-
-	if tools != nil {
-		fmt.Println("## Checkers")
-		fmt.Println()
-		fmt.Println("```text")
-		for _, row := range toolInvocationRows(tools) {
-			fmt.Println(row)
-		}
-		fmt.Println("```")
-		fmt.Println()
-	}
-
-	if tools != nil && !anyToolInvoked(tools) {
-		fmt.Println("No checkers invoked; 0 problems reported")
-	} else if totalProblems == 0 && !hadExecutionError {
-		fmt.Println("✅ No problems found")
-	}
-
-	return nil
-}
-
-// PrintToolInvocationTable writes an aligned table of invoked and skipped tools.
-func PrintToolInvocationTable(w io.Writer, title string, tools []ToolInvocationStatus) error {
-	if tools == nil {
-		return nil
-	}
-	if _, err := fmt.Fprintln(w, "\n"+title+":"); err != nil {
-		return err
-	}
-	for _, row := range toolInvocationRows(tools) {
-		if _, err := fmt.Fprintln(w, "  "+row); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func toolInvocationRows(tools []ToolInvocationStatus) []string {
-	width := 0
-	for _, tool := range tools {
-		width = max(width, len(tool.Name))
-	}
-
-	rows := make([]string, 0, len(tools))
-	for _, tool := range tools {
-		row := fmt.Sprintf("%-*s  %-7s", width, tool.Name, tool.Status)
-		if tool.Reason != "" {
-			row += "  " + tool.Reason
-		}
-		rows = append(rows, strings.TrimRight(row, " "))
-	}
-	return rows
-}
-
-func anyToolInvoked(tools []ToolInvocationStatus) bool {
-	for _, tool := range tools {
-		if tool.Status == "invoked" {
-			return true
-		}
-	}
-	return false
-}
-
 type JUnitTestSuite struct {
 	XMLName  xml.Name        `xml:"testsuite"`
 	Name     string          `xml:"name,attr"`
@@ -495,27 +302,14 @@ type JUnitTestError struct {
 	Content string `xml:",chardata"`
 }
 
-func doJUnitReport(result Check, tools ...ToolInvocationStatus) error {
+func doJUnitReport(findings []CheckResult, tools ...ToolReport) error {
 	var testCases []JUnitTestCase
 	errors := 0
 	failures := 0
 	skipped := 0
 
 	// Sort results for deterministic output
-	results := result.GetResults()
-	sort.Slice(results, func(i, j int) bool {
-		// Sort by path first, then by line number, then by identifier, then by message
-		if results[i].Path != results[j].Path {
-			return results[i].Path < results[j].Path
-		}
-		if results[i].Line != results[j].Line {
-			return results[i].Line < results[j].Line
-		}
-		if results[i].Identifier != results[j].Identifier {
-			return results[i].Identifier < results[j].Identifier
-		}
-		return results[i].Message < results[j].Message
-	})
+	results := sortedFindings(findings)
 
 	for _, r := range results {
 		className := r.Path
@@ -553,10 +347,19 @@ func doJUnitReport(result Check, tools ...ToolInvocationStatus) error {
 	}
 	for _, tool := range tools {
 		testCase := JUnitTestCase{Name: tool.Name, ClassName: "tool"}
-		if tool.Status == "skipped" {
-			testCase.Skipped = &JUnitTestSkipped{Message: tool.Reason}
+		if tool.Status() == "skipped" {
+			testCase.Skipped = &JUnitTestSkipped{Message: tool.SkipReason}
 			skipped++
 		}
+
+		if len(tool.Errors) > 0 {
+			for _, failure := range tool.Errors {
+				testCases = append(testCases, JUnitTestCase{Name: tool.Name, ClassName: "tool", Error: &JUnitTestError{Message: failure.Error(), Type: "tool-execution", Content: toolErrorDetail(tool, failure)}})
+				errors++
+			}
+			continue
+		}
+
 		testCases = append(testCases, testCase)
 	}
 
@@ -572,4 +375,12 @@ func doJUnitReport(result Check, tools ...ToolInvocationStatus) error {
 	encoder := xml.NewEncoder(os.Stdout)
 	encoder.Indent("", "  ")
 	return encoder.Encode(suite)
+}
+
+func sortedFindings(findings []CheckResult) []CheckResult {
+	findings = slices.Clone(findings)
+	slices.SortFunc(findings, func(a, b CheckResult) int {
+		return cmp.Or(cmp.Compare(a.Path, b.Path), cmp.Compare(a.Line, b.Line), cmp.Compare(a.Identifier, b.Identifier), cmp.Compare(a.Message, b.Message))
+	})
+	return findings
 }

@@ -1,6 +1,6 @@
 # 3. Unified tool results and output
 
-- Status: Proposed
+- Status: Implemented
 - Date: 2026-10-22
 
 ## Context
@@ -33,17 +33,22 @@ type Tool interface {
 
 type CheckTool interface {
     Tool
-    Check(ctx context.Context, config ToolConfig, execution *ToolExecution) ToolResult
+    Check(ctx context.Context, config ToolConfig, execution *ToolExecution) ToolSummary
 }
 
 type FormatTool interface {
     Tool
-    Format(ctx context.Context, config ToolConfig, execution *ToolExecution, dryRun bool) ToolResult
+    Format(ctx context.Context, config ToolConfig, execution *ToolExecution, dryRun bool) ToolSummary
 }
 
 type FixTool interface {
     Tool
-    Fix(ctx context.Context, config ToolConfig, execution *ToolExecution) ToolResult
+    Fix(ctx context.Context, config ToolConfig, execution *ToolExecution) ToolSummary
+}
+
+type ToolSummary struct {
+    Note       string
+    SkipReason string
 }
 
 type ToolResult struct {
@@ -154,13 +159,12 @@ The CLI command exits nonzero because ESLint failed, even if ignore rules remove
 
 ## Execution helper
 
-`ToolExecution` provides four operations, all safe for concurrent use:
+`ToolExecution` provides three operations for tools, all safe for concurrent use:
 
 ```go
 func (e *ToolExecution) Run(cmd *exec.Cmd) SubprocessResult
 func (e *ToolExecution) AddFindings(findings ...validation.CheckResult)
 func (e *ToolExecution) Fail(err *ToolError)
-func (e *ToolExecution) Result() ToolResult
 ```
 
 ### Subprocesses and failures
@@ -195,7 +199,7 @@ The tool runner normalizes paths, applies ignore rules, and stores the remaining
 
 Subprocess findings are delivered after that subprocess finishes and its output is parsed. In-process tools can deliver findings as their checks complete. Synchronous callbacks provide backpressure without a channel or background consumer; once all tools finish, all findings have been collected. Final renderers need no live subscription.
 
-`Result` returns a snapshot of `HasFindings` and all reported failures in `ToolResult.Errors`, without findings or aggregate output. The tool can set `Note` or `SkipReason` before returning this result.
+Tools return `ToolSummary` containing optional `Note` and `SkipReason` metadata. After the tool and its deferred cleanup finish, the runner uses the private `execution.snapshot()` method to read `HasFindings` and all reported failures in `ToolResult.Errors`, then adds the tool name and returned metadata. A skip reason is applied only when there are no retained findings or failures.
 
 For example, inside an ESLint tool's per-directory function:
 
@@ -216,7 +220,7 @@ if err != nil {
 execution.AddFindings(findings...)
 ```
 
-Here, `cmd` is an `*exec.Cmd` configured by the tool. The illustrative `isExpectedESLintExit` and `parseESLint` functions belong to the tool; the exit check accepts findings-related exit codes. After all per-directory functions finish, the tool returns `execution.Result()`.
+Here, `cmd` is an `*exec.Cmd` configured by the tool. The illustrative `isExpectedESLintExit` and `parseESLint` functions belong to the tool; the exit check accepts findings-related exit codes. After all per-directory functions finish, the tool returns its `ToolSummary`.
 
 ## Consequences
 

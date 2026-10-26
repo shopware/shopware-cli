@@ -1,6 +1,6 @@
 # 2. Shopware CLI configuration under `.config/`
 
-- Status: Proposed
+- Status: Implemented
 - Date: 2026-08-18
 - Related: [Issue #1387](https://github.com/shopware/shopware-cli/issues/1387)
 
