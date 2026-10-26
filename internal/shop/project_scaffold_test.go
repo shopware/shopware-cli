@@ -211,6 +211,57 @@ func TestShopwareProjectScaffold(t *testing.T) {
 	})
 }
 
+func TestShopwareProjectScaffoldRollback(t *testing.T) {
+	t.Parallel()
+
+	// DeploymentContainer with an unsupported PHP version only fails in
+	// setupDeployment, after composer.json and the base files were written.
+	failingScaffold := func(projectFolder string) ShopwareProjectScaffold {
+		return ShopwareProjectScaffold{
+			ProjectFolder:    projectFolder,
+			Version:          "6.6.10.0",
+			DeploymentMethod: DeploymentContainer,
+			CISystem:         CINone,
+			PHPVersion:       "9.9",
+		}
+	}
+
+	t.Run("removes a newly created folder when scaffolding fails", func(t *testing.T) {
+		t.Parallel()
+		projectFolder := filepath.Join(t.TempDir(), "shop")
+		scaffold := failingScaffold(projectFolder)
+
+		assert.Error(t, scaffold.Scaffold(t.Context()))
+
+		_, err := os.Stat(projectFolder)
+		assert.True(t, os.IsNotExist(err))
+	})
+
+	t.Run("empties but keeps a pre-existing folder when scaffolding fails", func(t *testing.T) {
+		t.Parallel()
+		projectFolder := t.TempDir()
+		scaffold := failingScaffold(projectFolder)
+
+		assert.Error(t, scaffold.Scaffold(t.Context()))
+
+		assert.DirExists(t, projectFolder)
+		entries, err := os.ReadDir(projectFolder)
+		require.NoError(t, err)
+		assert.Empty(t, entries)
+	})
+
+	t.Run("keeps a non-empty folder untouched when validation fails", func(t *testing.T) {
+		t.Parallel()
+		projectFolder := t.TempDir()
+		require.NoError(t, os.WriteFile(filepath.Join(projectFolder, "existing"), []byte("keep"), 0o600))
+		scaffold := failingScaffold(projectFolder)
+
+		assert.Error(t, scaffold.Scaffold(t.Context()))
+
+		assert.Equal(t, "keep", readScaffoldFile(t, projectFolder, "existing"))
+	})
+}
+
 func TestWriteComposerJsonDisablesAuditBlocking(t *testing.T) {
 	t.Parallel()
 
