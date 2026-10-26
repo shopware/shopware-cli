@@ -9,6 +9,7 @@ import (
 	"runtime"
 	"slices"
 	"strings"
+	"time"
 
 	"charm.land/lipgloss/v2"
 
@@ -21,6 +22,15 @@ type MissingDependency struct {
 }
 
 const dockerComposePlugin = "Docker Compose plugin"
+
+// dockerProbeTimeout bounds one docker CLI probe. A stopped daemon fails
+// immediately; this only caps a daemon that accepts the connection and does
+// not answer, such as dockerd or Docker Desktop still starting. Each probe
+// gets its own timeout. One shared deadline used to expire during a slow
+// daemon check, which was reported as Docker not running, and then fail the
+// Compose check on that expired context, so the plugin looked missing too.
+// Tests shorten it to cover a hung probe without waiting.
+var dockerProbeTimeout = 30 * time.Second
 
 type Incompatibility struct {
 	Title       string
@@ -73,10 +83,12 @@ func CheckProjectDependencies(ctx context.Context, useDocker bool, phpConstraint
 		if _, err := exec.LookPath("docker"); err != nil {
 			return append(missing, MissingDependency{Name: "Docker", Reason: "not installed"})
 		}
-		if err := exec.CommandContext(ctx, "docker", "info").Run(); err != nil {
+		// docker version contacts the daemon without docker info's full engine
+		// scan, which on a cold daemon often takes longer than a few seconds.
+		if err := runDockerProbe(ctx, "version"); err != nil {
 			missing = append(missing, MissingDependency{Name: "Docker", Reason: "not running"})
 		}
-		if err := exec.CommandContext(ctx, "docker", "compose", "version").Run(); err != nil {
+		if err := runDockerProbe(ctx, "compose", "version"); err != nil {
 			missing = append(missing, MissingDependency{Name: dockerComposePlugin, Reason: "not installed"})
 		}
 		return missing
@@ -99,6 +111,15 @@ func CheckProjectDependencies(ctx context.Context, useDocker bool, phpConstraint
 	}
 
 	return missing
+}
+
+// runDockerProbe runs one docker CLI invocation with its own timeout, so a
+// slow daemon probe cannot cancel the Compose plugin probe that follows.
+func runDockerProbe(ctx context.Context, args ...string) error {
+	ctx, cancel := context.WithTimeout(ctx, dockerProbeTimeout)
+	defer cancel()
+
+	return exec.CommandContext(ctx, "docker", args...).Run()
 }
 
 // installedPHPVersion returns the version of the given PHP binary, or of the
