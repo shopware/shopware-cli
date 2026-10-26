@@ -6,9 +6,11 @@ import (
 	"io"
 	"os"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
 
+	"github.com/shopware/shopware-cli/internal/tracking"
 	"github.com/shopware/shopware-cli/internal/validation"
 	"github.com/shopware/shopware-cli/logging"
 )
@@ -36,8 +38,19 @@ func RunTools[T Tool](ctx context.Context, tools ToolList[T], skipped []ToolResu
 				collected = append(collected, retained...)
 				return len(retained) > 0
 			})
-			if logging.IsVerbose(ctx) {
-				execution.onSubprocess = func(subprocess SubprocessResult) {
+			execution.onSubprocess = func(subprocess SubprocessResult) {
+				if subprocess.ProcessState != nil {
+					tags := map[string]string{
+						tracking.TagTool:        tool.Name(),
+						tracking.TagStdoutBytes: strconv.Itoa(len(subprocess.Stdout)),
+						tracking.TagStderrBytes: strconv.Itoa(len(subprocess.Stderr)),
+					}
+					if code := subprocess.ProcessState.ExitCode(); code >= 0 {
+						tags[tracking.TagExitCode] = strconv.Itoa(code)
+					}
+					tracking.Track(ctx, tracking.EventToolSubprocess, tags)
+				}
+				if logging.IsVerbose(ctx) {
 					delivery.Lock()
 					defer delivery.Unlock()
 					var output strings.Builder

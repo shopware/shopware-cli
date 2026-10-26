@@ -4,6 +4,8 @@ package tracking
 // itself. Every event and its tags are documented in docs/TELEMETRY.md; new
 // events must be added there as well.
 const (
+	// EventToolSubprocess measures captured output after each started tool subprocess finishes.
+	EventToolSubprocess = "tool.subprocess"
 	// EventCommand is sent after (almost) any sub-command finishes (cmd/root.go).
 	EventCommand = "command"
 	// EventProjectCreate is sent when a new Shopware project is scaffolded.
@@ -34,6 +36,12 @@ const (
 // table materializes columns from these shared keys, so a new event reusing
 // them is aggregatable without schema changes.
 const (
+	// EventToolSubprocess
+	TagTool        = "tool"
+	TagExitCode    = "exit_code"
+	TagStdoutBytes = "stdout_bytes"
+	TagStderrBytes = "stderr_bytes"
+
 	// EventCommand
 	TagCommandName = "command_name"
 	TagResult      = "result"

@@ -2,6 +2,7 @@ package verifier
 
 import (
 	"bytes"
+	"os"
 	"os/exec"
 	"slices"
 	"sync"
@@ -17,6 +18,8 @@ type SubprocessResult struct {
 	Stdout  string
 	Stderr  string
 	Err     error
+	// ProcessState is nil when the process could not start.
+	ProcessState *os.ProcessState
 }
 
 func (r SubprocessResult) ToolError(err error) *ToolError {
@@ -50,7 +53,7 @@ func (e *ToolExecution) Run(cmd *exec.Cmd) SubprocessResult {
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &stdout, &stderr
 	err := cmd.Run()
-	result := SubprocessResult{Command: slices.Clone(cmd.Args), Dir: cmd.Dir, Stdout: stdout.String(), Stderr: stderr.String(), Err: err}
+	result := SubprocessResult{Command: slices.Clone(cmd.Args), Dir: cmd.Dir, Stdout: stdout.String(), Stderr: stderr.String(), Err: err, ProcessState: cmd.ProcessState}
 	if e.onSubprocess != nil {
 		e.onSubprocess(result)
 	}
