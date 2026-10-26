@@ -7,7 +7,6 @@ import (
 	"os"
 	"slices"
 	"strings"
-	"time"
 
 	"charm.land/huh/v2"
 	"charm.land/lipgloss/v2"
@@ -21,18 +20,12 @@ import (
 	"github.com/shopware/shopware-cli/internal/tui"
 )
 
-// dockerCheckTimeout bounds the `docker info` probe, so a wedged daemon (e.g.
-// Docker Desktop stuck while starting) reports "not running" instead of
-// hanging the wizard.
-const dockerCheckTimeout = 5 * time.Second
-
 // dockerAvailabilityForCreate reports the Docker dependencies that block a
 // Docker-based project, or nil when Docker is usable. It is a variable so
-// tests can stub the docker daemon check.
+// tests can stub the docker daemon check. The probes time out individually
+// inside CheckProjectDependencies. A single short deadline here used to
+// cancel a slow daemon probe and the Compose check together.
 var dockerAvailabilityForCreate = func(ctx context.Context) []system.MissingDependency {
-	ctx, cancel := context.WithTimeout(ctx, dockerCheckTimeout)
-	defer cancel()
-
 	// With Docker selected the check only reports Docker and its Compose plugin.
 	return system.CheckProjectDependencies(ctx, true, nil, "")
 }
