@@ -15,6 +15,7 @@ import (
 	"github.com/spf13/cobra"
 
 	dockerpkg "github.com/shopware/shopware-cli/internal/docker"
+	"github.com/shopware/shopware-cli/internal/executor"
 	"github.com/shopware/shopware-cli/internal/proxy"
 	"github.com/shopware/shopware-cli/internal/shop"
 	"github.com/shopware/shopware-cli/internal/system"
@@ -44,7 +45,7 @@ func installAndFinalize(cmd *cobra.Command, opts *createOptions, phpConstraint *
 	}
 
 	if output, err := runComposerInstall(ctx, opts.projectFolder, opts.useDocker, showSpinner, composerInstallPHP, opts.phpBinary); err != nil {
-		if ctx.Err() != nil || errors.Is(err, system.ErrDockerCleanup) || !isComposerSecurityBlocked(output) || opts.noAudit {
+		if ctx.Err() != nil || errors.Is(err, executor.ErrDockerCleanup) || !isComposerSecurityBlocked(output) || opts.noAudit {
 			return err
 		}
 
@@ -222,7 +223,6 @@ func runComposerInstall(ctx context.Context, projectFolder string, useDocker boo
 		}
 
 		dockerArgs := []string{
-			"--rm",
 			"--pull=always",
 			"-v", absProjectFolder + ":/app",
 			"-w", "/app"}
@@ -245,7 +245,7 @@ func runComposerInstall(ctx context.Context, projectFolder string, useDocker boo
 			fmt.Sprintf("ghcr.io/shopware/docker-dev:php%s-node24-caddy", phpVersion),
 			"composer", "install", "--no-interaction")
 
-		cmdInstall, finish = system.DockerRunCommand(ctx, dockerArgs...)
+		cmdInstall, finish = executor.DockerRunCommand(ctx, dockerArgs...)
 	} else {
 		composerBinary, isPhar, err := system.ResolveComposer(ctx)
 		if err != nil {

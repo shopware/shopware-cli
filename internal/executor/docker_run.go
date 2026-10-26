@@ -1,4 +1,4 @@
-package system
+package executor
 
 import (
 	"context"
@@ -13,20 +13,20 @@ import (
 	"github.com/shopware/shopware-cli/logging"
 )
 
-// ErrDockerCleanup indicates that a container might still be writing to its mounts.
-var ErrDockerCleanup = errors.New("cannot stop installation container")
+// ErrDockerCleanup indicates that a disposable container might still be running.
+var ErrDockerCleanup = errors.New("cannot remove Docker container")
 
-// DockerRunCommand gives a disposable container a unique name and waits for its
-// removal on cancellation, before callers can remove any bind-mounted files.
+// DockerRunCommand creates a disposable container with a unique name and waits
+// for its removal on cancellation before callers continue.
 func DockerRunCommand(ctx context.Context, args ...string) (*exec.Cmd, func(error) error) {
-	name := "shopware-cli-install-" + rand.Text()
-	args = append([]string{"run", "--name", name}, args...)
+	name := "shopware-cli-run-" + rand.Text()
+	args = append([]string{"run", "--rm", "--name", name}, args...)
 	cmd := exec.CommandContext(ctx, "docker", args...)
 	var once sync.Once
 	var cleanupErr error
 	cmd.Cancel = func() error {
 		once.Do(func() {
-			logging.FromContext(ctx).Info("Stopping installation container")
+			logging.FromContext(ctx).Info("Stopping Docker container")
 			// Stop the client first so a pending pull cannot subsequently start a container.
 			_ = cmd.Process.Kill()
 			cleanupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 30*time.Second)
@@ -40,7 +40,7 @@ func DockerRunCommand(ctx context.Context, args ...string) (*exec.Cmd, func(erro
 	}
 	return cmd, func(err error) error {
 		// A disconnected client can also leave its container running without a
-		// cancelled context. Stop it on every unsuccessful run before rollback.
+		// cancelled context. Stop it on every unsuccessful run before continuing.
 		if err != nil && cmd.Process != nil {
 			_ = cmd.Cancel()
 		}

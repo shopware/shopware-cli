@@ -7,6 +7,7 @@ import (
 	"github.com/shyim/go-composer/repository"
 	"github.com/spf13/cobra"
 
+	"github.com/shopware/shopware-cli/internal/executor"
 	"github.com/shopware/shopware-cli/internal/git"
 	"github.com/shopware/shopware-cli/internal/proxy"
 	"github.com/shopware/shopware-cli/internal/shop"
@@ -169,7 +170,7 @@ var projectCreateCmd = &cobra.Command{
 			return err
 		}
 		if err := installAndFinalize(cmd, &opts, phpConstraint, chosenVersion); err != nil {
-			if errors.Is(err, system.ErrDockerCleanup) {
+			if errors.Is(err, executor.ErrDockerCleanup) {
 				return err
 			}
 			return folder.Rollback(cmd.Context(), err)

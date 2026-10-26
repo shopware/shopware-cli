@@ -50,6 +50,7 @@ func ValidateProjectFolder(projectFolder string) error {
 // ProjectFolder tracks directories owned by a project creation attempt. Its path
 // is parsed once; cleanup is only enabled after the empty target is prepared.
 type ProjectFolder struct {
+	// path is absolute and non-empty; NewProjectFolder is its only constructor.
 	path     string
 	created  []string
 	prepared bool
@@ -74,7 +75,7 @@ func NewProjectFolder(name string) (*ProjectFolder, error) {
 // Prepare validates the target immediately before writing and records only
 // directories this attempt creates, including missing parents.
 func (p *ProjectFolder) Prepare() error {
-	if p == nil || p.path == "" {
+	if p == nil {
 		return errors.New("cannot prepare an uninitialized project folder")
 	}
 	if err := ValidateProjectFolder(p.path); err != nil {

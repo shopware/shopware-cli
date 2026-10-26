@@ -1,4 +1,4 @@
-package system
+package executor
 
 import (
 	"context"
@@ -28,7 +28,7 @@ func TestDockerRunCommandCancellation(t *testing.T) {
 			require.NoError(t, os.WriteFile(filepath.Join(dir, "docker"), []byte(`#!/bin/sh
 case "$1" in
 run)
- printf '%s' "$3" > "$DOCKER_READY"
+ printf '%s' "$4" > "$DOCKER_READY"
  exec sleep 30
  ;;
 rm)
@@ -40,7 +40,7 @@ esac
 			t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
 			ctx, cancel := context.WithCancel(t.Context())
 			defer cancel()
-			cmd, finish := DockerRunCommand(ctx, "--rm", "image", "composer", "install")
+			cmd, finish := DockerRunCommand(ctx, "image", "composer", "install")
 			require.NoError(t, cmd.Start())
 			require.Eventually(t, func() bool { data, _ := os.ReadFile(ready); return len(data) > 0 }, 5*time.Second, 10*time.Millisecond)
 			cancel()
@@ -53,12 +53,21 @@ esac
 			assert.NotErrorIs(t, err, ErrDockerCleanup)
 			name, err := os.ReadFile(ready)
 			require.NoError(t, err)
-			assert.Contains(t, string(name), "shopware-cli-install-")
+			assert.Contains(t, string(name), "shopware-cli-run-")
 			stopped, err := os.ReadFile(removed)
 			require.NoError(t, err)
 			assert.Equal(t, name, stopped)
 		})
 	}
+}
+
+func TestDockerRunCommandIsDisposable(t *testing.T) {
+	cmd, _ := DockerRunCommand(t.Context(), "image")
+
+	require.Len(t, cmd.Args, 6)
+	assert.Equal(t, []string{"docker", "run", "--rm", "--name"}, cmd.Args[:4])
+	assert.Contains(t, cmd.Args[4], "shopware-cli-run-")
+	assert.Equal(t, "image", cmd.Args[5])
 }
 
 func TestDockerRunCommandExit(t *testing.T) {
@@ -70,7 +79,7 @@ func TestDockerRunCommandExit(t *testing.T) {
 		wantCleanup    bool
 		wantCleanupErr bool
 	}{
-		{name: "successful install", runExit: "0"},
+		{name: "successful run", runExit: "0"},
 		{name: "failed client", runExit: "1", wantErr: true, wantCleanup: true},
 		{name: "already removed container", runExit: "1", cleanup: "missing", wantErr: true, wantCleanup: true},
 		{name: "cleanup failure", runExit: "1", cleanup: "failed", wantErr: true, wantCleanup: true, wantCleanupErr: true},
@@ -95,7 +104,7 @@ rm)
 esac
 `), 0o755))
 			t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
-			cmd, finish := DockerRunCommand(t.Context(), "--rm", "image")
+			cmd, finish := DockerRunCommand(t.Context(), "image")
 			runErr := cmd.Run()
 			err := finish(runErr)
 			if test.wantErr {
@@ -116,7 +125,7 @@ esac
 
 func TestDockerRunCommandStartFailure(t *testing.T) {
 	t.Setenv("PATH", t.TempDir())
-	cmd, finish := DockerRunCommand(t.Context(), "--rm", "image")
+	cmd, finish := DockerRunCommand(t.Context(), "image")
 	err := cmd.Run()
 	require.Error(t, err)
 	assert.ErrorIs(t, finish(err), err)
