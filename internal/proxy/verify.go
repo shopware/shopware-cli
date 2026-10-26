@@ -26,10 +26,9 @@ type CheckResult struct {
 	Err error
 	// Hint tells the user how to fix a failed check.
 	Hint string
-	// Pending marks a failure that only means "this layer is not running yet"
-	// (the shared DNS or Traefik container), as opposed to something being
-	// broken. Callers render it as a calm "not started yet" rather than an error,
-	// so a torn-down machine does not look faulty.
+	// Pending marks a failure that only means "this layer is not running yet":
+	// its container does not exist or stopped cleanly. A restarting container,
+	// an unreachable port or a wrong answer are real failures, never pending.
 	Pending bool
 }
 
@@ -50,12 +49,7 @@ func Verify(ctx context.Context, baseDomain string) []CheckResult {
 
 	probe := randomProbeHostname(baseDomain)
 
-	checks := []struct {
-		name    string
-		run     func(context.Context) error
-		hint    string
-		pending bool
-	}{
+	checks := []verifyCheck{
 		{
 			name: "Docker is running",
 			run:  checkDocker,
@@ -66,8 +60,9 @@ func Verify(ctx context.Context, baseDomain string) []CheckResult {
 			run: func(ctx context.Context) error {
 				return checkDNSContainer(ctx, probe)
 			},
-			hint:    "Run \"shopware-cli project proxy setup\" (or \"proxy up\" in a shop) to start it",
-			pending: true,
+			hint:     "Check \"docker logs " + DNSContainerName + "\", then run \"shopware-cli project proxy setup\" to recreate it",
+			idleHint: "Run \"shopware-cli project proxy setup\" (or \"proxy up\" in a shop) to start it",
+			idle:     func(ctx context.Context) bool { return containerIdle(ctx, DNSContainerName) },
 		},
 		{
 			name: fmt.Sprintf("OS resolves *.%s to 127.0.0.1", baseDomain),
@@ -77,10 +72,11 @@ func Verify(ctx context.Context, baseDomain string) []CheckResult {
 			hint: osResolutionHint(baseDomain, SupportsWildcardDNS(ctx)),
 		},
 		{
-			name:    "Shared proxy is running on port 443",
-			run:     checkTraefik,
-			hint:    "Run \"shopware-cli project proxy up\" in a shop to start it; another local web server may also occupy port 80/443",
-			pending: true,
+			name:     "Shared proxy is running on port 443",
+			run:      checkTraefik,
+			hint:     "Check \"docker logs " + ContainerName + "\"; another local web server may also occupy port 80/443",
+			idleHint: "Run \"shopware-cli project proxy up\" in a shop to start it",
+			idle:     func(ctx context.Context) bool { return containerIdle(ctx, ContainerName) },
 		},
 		{
 			name: fmt.Sprintf("HTTPS works and is trusted (https://%s/ping)", PingHostname(baseDomain)),
@@ -91,6 +87,21 @@ func Verify(ctx context.Context, baseDomain string) []CheckResult {
 		},
 	}
 
+	return runChecks(ctx, checks)
+}
+
+// verifyCheck is one layer of the proxy chain. idle, when set, decides whether
+// a failure only means "not running yet"; idleHint then replaces hint.
+type verifyCheck struct {
+	name     string
+	run      func(context.Context) error
+	hint     string
+	idleHint string
+	idle     func(context.Context) bool
+}
+
+// runChecks runs the checks in order and stops at the first failure.
+func runChecks(ctx context.Context, checks []verifyCheck) []CheckResult {
 	var results []CheckResult
 	for _, check := range checks {
 		err := check.run(ctx)
@@ -98,7 +109,10 @@ func Verify(ctx context.Context, baseDomain string) []CheckResult {
 		result := CheckResult{Name: check.name, Err: err}
 		if err != nil {
 			result.Hint = check.hint
-			result.Pending = check.pending
+			result.Pending = check.idle != nil && check.idle(ctx)
+			if result.Pending && check.idleHint != "" {
+				result.Hint = check.idleHint
+			}
 		}
 
 		results = append(results, result)
@@ -186,6 +200,9 @@ func checkDocker(ctx context.Context) error {
 func checkDNSContainer(ctx context.Context, probe string) error {
 	resp, err := queryDNS(ctx, fmt.Sprintf("127.0.0.1:%d", DNSPort), probe, dnsmessage.TypeA, 2*time.Second)
 	if err != nil {
+		if containerCrashLooping(ctx, DNSContainerName) {
+			return errors.New("cannot reach the DNS server, its container keeps restarting")
+		}
 		return fmt.Errorf("the DNS server on 127.0.0.1:%d did not answer: %w", DNSPort, err)
 	}
 
@@ -221,6 +238,9 @@ func checkOSResolution(ctx context.Context, probe string) error {
 
 func checkTraefik(ctx context.Context) error {
 	if !ContainerIsRunning(ctx) {
+		if containerCrashLooping(ctx, ContainerName) {
+			return errors.New("cannot reach the shared proxy, its container keeps restarting")
+		}
 		return errors.New("the shared proxy container is not running")
 	}
 

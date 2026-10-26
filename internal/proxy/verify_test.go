@@ -1,11 +1,14 @@
 package proxy
 
 import (
+	"context"
+	"errors"
 	"runtime"
 	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestOSResolutionHint(t *testing.T) {
@@ -58,4 +61,97 @@ func TestRandomProbeHostnameIsUniqueAndInZone(t *testing.T) {
 
 	assert.True(t, strings.HasSuffix(a, ".shopware.local"))
 	assert.NotEqual(t, a, b)
+}
+
+func TestIdleState(t *testing.T) {
+	t.Parallel()
+
+	for state, want := range map[string]bool{
+		"":           true,
+		"created":    true,
+		"exited":     true,
+		"running":    false,
+		"restarting": false,
+		"paused":     false,
+		"dead":       false,
+	} {
+		assert.Equal(t, want, idleState(state), "state %q", state)
+	}
+}
+
+func TestCrashLooping(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		status   string
+		restarts int
+		want     bool
+	}{
+		{"restarting", 0, true},
+		{"restarting", 3, true},
+		{"running", 2, true},
+		{"running", 0, false},
+		{"exited", 5, false},
+		{"", 0, false},
+	}
+	for _, tc := range cases {
+		assert.Equal(t, tc.want, crashLooping(tc.status, tc.restarts), "status %q restarts %d", tc.status, tc.restarts)
+	}
+}
+
+func TestRunChecksPendingFollowsIdleState(t *testing.T) {
+	t.Parallel()
+
+	fail := func(context.Context) error { return errors.New("broken") }
+	pass := func(context.Context) error { return nil }
+	idleYes := func(context.Context) bool { return true }
+	idleNo := func(context.Context) bool { return false }
+
+	cases := []struct {
+		name        string
+		checks      []verifyCheck
+		wantResults int
+		wantPending bool
+		wantHint    string
+	}{
+		{
+			name:        "idle container makes a failure pending and shows the start hint",
+			checks:      []verifyCheck{{name: "a", run: fail, hint: "fix", idleHint: "start", idle: idleYes}, {name: "b", run: pass}},
+			wantResults: 1,
+			wantPending: true,
+			wantHint:    "start",
+		},
+		{
+			name:        "broken container makes the same failure real and keeps the fix hint",
+			checks:      []verifyCheck{{name: "a", run: fail, hint: "fix", idleHint: "start", idle: idleNo}},
+			wantResults: 1,
+			wantPending: false,
+			wantHint:    "fix",
+		},
+		{
+			name:        "checks without an idle rule never go pending",
+			checks:      []verifyCheck{{name: "a", run: pass}, {name: "b", run: fail, hint: "fix"}},
+			wantResults: 2,
+			wantPending: false,
+			wantHint:    "fix",
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			results := runChecks(t.Context(), tc.checks)
+			require.Len(t, results, tc.wantResults)
+
+			last := results[len(results)-1]
+			require.Error(t, last.Err)
+			assert.Equal(t, tc.wantPending, last.Pending)
+			assert.Equal(t, tc.wantHint, last.Hint)
+			for _, r := range results[:len(results)-1] {
+				assert.NoError(t, r.Err)
+				assert.Empty(t, r.Hint)
+			}
+		})
+	}
 }
