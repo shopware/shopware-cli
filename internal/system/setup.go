@@ -83,8 +83,6 @@ func CheckProjectDependencies(ctx context.Context, useDocker bool, phpConstraint
 		if _, err := exec.LookPath("docker"); err != nil {
 			return append(missing, MissingDependency{Name: "Docker", Reason: "not installed"})
 		}
-		// docker version contacts the daemon without docker info's full engine
-		// scan, which on a cold daemon often takes longer than a few seconds.
 		if err := runDockerProbe(ctx, "version"); err != nil {
 			missing = append(missing, MissingDependency{Name: "Docker", Reason: "not running"})
 		}
