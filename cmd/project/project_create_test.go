@@ -1,14 +1,9 @@
 package project
 
 import (
-	"context"
-	"errors"
-	"os"
-	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
 func TestApplyNonInteractiveDefaults(t *testing.T) {
@@ -85,41 +80,6 @@ func TestIsComposerSecurityBlocked(t *testing.T) {
 	t.Run("ignores empty output", func(t *testing.T) {
 		t.Parallel()
 		assert.False(t, isComposerSecurityBlocked(""))
-	})
-}
-
-func TestRollbackFailedProjectCreation(t *testing.T) {
-	t.Parallel()
-
-	t.Run("removes a created folder and preserves the original error", func(t *testing.T) {
-		t.Parallel()
-		projectFolder := filepath.Join(t.TempDir(), "shop")
-		require.NoError(t, os.MkdirAll(filepath.Join(projectFolder, "vendor"), 0o755))
-		require.NoError(t, os.WriteFile(filepath.Join(projectFolder, "composer.json"), []byte("{}"), 0o600))
-
-		cause := context.Canceled
-		opts := createOptions{projectFolder: projectFolder}
-		err := rollbackFailedProjectCreation(t.Context(), &opts, false, cause)
-
-		assert.ErrorIs(t, err, cause)
-		_, statErr := os.Stat(projectFolder)
-		assert.True(t, os.IsNotExist(statErr))
-	})
-
-	t.Run("empties a pre-existing folder and preserves the original error", func(t *testing.T) {
-		t.Parallel()
-		projectFolder := t.TempDir()
-		require.NoError(t, os.WriteFile(filepath.Join(projectFolder, "composer.json"), []byte("{}"), 0o600))
-
-		cause := errors.New("composer failed")
-		opts := createOptions{projectFolder: projectFolder}
-		err := rollbackFailedProjectCreation(t.Context(), &opts, true, cause)
-
-		assert.ErrorIs(t, err, cause)
-		assert.DirExists(t, projectFolder)
-		entries, readErr := os.ReadDir(projectFolder)
-		require.NoError(t, readErr)
-		assert.Empty(t, entries)
 	})
 }
 

@@ -1,15 +1,18 @@
 package project
 
 import (
+	"errors"
 	"fmt"
 
 	"github.com/shyim/go-composer/repository"
 	"github.com/spf13/cobra"
 
+	"github.com/shopware/shopware-cli/internal/git"
 	"github.com/shopware/shopware-cli/internal/proxy"
 	"github.com/shopware/shopware-cli/internal/shop"
 	"github.com/shopware/shopware-cli/internal/system"
 	"github.com/shopware/shopware-cli/internal/tui"
+	"github.com/shopware/shopware-cli/logging"
 )
 
 const (
@@ -161,19 +164,35 @@ var projectCreateCmd = &cobra.Command{
 			_ = runInlineProxySetup(cmd.Context(), proxy.BaseDomain())
 		}
 
-		// Remember whether the folder existed, so a failed or cancelled creation
-		// can clean up without deleting a folder the user already had.
-		projectExisted, err := shop.ProjectFolderExists(opts.projectFolder)
+		folder, err := scaffoldProject(cmd.Context(), &opts, chosenVersion)
 		if err != nil {
 			return err
 		}
-
-		if err := scaffoldProject(cmd.Context(), &opts, chosenVersion); err != nil {
-			return rollbackFailedProjectCreation(cmd.Context(), &opts, projectExisted, err)
-		}
-
 		if err := installAndFinalize(cmd, &opts, phpConstraint, chosenVersion); err != nil {
-			return rollbackFailedProjectCreation(cmd.Context(), &opts, projectExisted, err)
+			if errors.Is(err, system.ErrDockerCleanup) {
+				return err
+			}
+			return folder.Rollback(cmd.Context(), err)
+		}
+		if err := cmd.Context().Err(); err != nil {
+			return folder.Rollback(cmd.Context(), err)
+		}
+		// Git is optional post-install work: preserve the completed project if it fails.
+		if opts.initGit {
+			logging.FromContext(cmd.Context()).Infof("Initializing Git repository")
+			if err := git.Init(cmd.Context(), opts.projectFolder); err != nil {
+				if cmd.Context().Err() != nil {
+					return folder.Rollback(cmd.Context(), cmd.Context().Err())
+				}
+				return fmt.Errorf("cannot initialize git repository: %w", err)
+			}
+		}
+		if err := cmd.Context().Err(); err != nil {
+			return folder.Rollback(cmd.Context(), err)
+		}
+		printCreateSummary(cmd.Context(), &opts)
+		if err := cmd.Context().Err(); err != nil {
+			return folder.Rollback(cmd.Context(), err)
 		}
 
 		return nil

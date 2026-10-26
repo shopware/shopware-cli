@@ -1,6 +1,7 @@
 package shop
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"os"
@@ -10,6 +11,8 @@ import (
 
 	"github.com/shyim/go-composer/repository"
 	"github.com/shyim/go-version"
+
+	"github.com/shopware/shopware-cli/logging"
 )
 
 const (
@@ -44,58 +47,90 @@ func ValidateProjectFolder(projectFolder string) error {
 	return nil
 }
 
-// ProjectFolderExists reports whether the project folder already exists.
-func ProjectFolderExists(projectFolder string) (bool, error) {
-	if projectFolder == "" {
-		return false, errors.New("project folder must not be empty")
-	}
-	if _, err := os.Stat(projectFolder); err != nil {
-		if errors.Is(err, os.ErrNotExist) {
-			return false, nil
-		}
-		return false, err
-	}
-	return true, nil
+// ProjectFolder tracks directories owned by a project creation attempt. Its path
+// is parsed once; cleanup is only enabled after the empty target is prepared.
+type ProjectFolder struct {
+	path     string
+	created  []string
+	prepared bool
 }
 
-// CleanupFailedProjectCreation removes what a failed creation wrote into the
-// project folder. A folder that existed before is kept and only emptied.
-func CleanupFailedProjectCreation(projectFolder string, existedBefore bool) error {
-	if projectFolder == "" {
-		return errors.New("cannot remove partially created project: project folder must not be empty")
+// NewProjectFolder parses a non-empty path and rejects filesystem roots.
+func NewProjectFolder(name string) (*ProjectFolder, error) {
+	if name == "" {
+		return nil, errors.New("cannot create project: project folder name must not be empty")
 	}
-
-	absFolder, err := filepath.Abs(projectFolder)
+	path, err := filepath.Abs(name)
 	if err != nil {
-		return fmt.Errorf("cannot remove partially created project in %s: %w", projectFolder, err)
+		return nil, fmt.Errorf("cannot resolve project folder: %w", err)
 	}
-	if absFolder == filepath.Dir(absFolder) {
-		return fmt.Errorf("cannot remove partially created project in %s: it is the filesystem root", projectFolder)
+	resolved, err := filepath.EvalSymlinks(path)
+	if path == filepath.Dir(path) || (err == nil && resolved == filepath.Dir(resolved)) {
+		return nil, errors.New("cannot create project in the filesystem root")
 	}
-	if resolved, err := filepath.EvalSymlinks(absFolder); err == nil && resolved == filepath.Dir(resolved) {
-		return fmt.Errorf("cannot remove partially created project in %s: it is the filesystem root", projectFolder)
-	}
+	return &ProjectFolder{path: path}, nil
+}
 
-	if !existedBefore {
-		if err := os.RemoveAll(absFolder); err != nil {
-			return fmt.Errorf("cannot remove partially created project in %s: %w", projectFolder, err)
+// Prepare validates the target immediately before writing and records only
+// directories this attempt creates, including missing parents.
+func (p *ProjectFolder) Prepare() error {
+	if p == nil || p.path == "" {
+		return errors.New("cannot prepare an uninitialized project folder")
+	}
+	if err := ValidateProjectFolder(p.path); err != nil {
+		return err
+	}
+	var missing []string
+	for dir := p.path; ; dir = filepath.Dir(dir) {
+		_, err := os.Stat(dir)
+		if err == nil {
+			break
 		}
-		return nil
-	}
-
-	entries, err := os.ReadDir(absFolder)
-	if errors.Is(err, os.ErrNotExist) {
-		return nil
-	}
-	if err != nil {
-		return fmt.Errorf("cannot remove partially created project in %s: %w", projectFolder, err)
-	}
-	for _, entry := range entries {
-		if err := os.RemoveAll(filepath.Join(absFolder, entry.Name())); err != nil {
-			return fmt.Errorf("cannot remove partially created project in %s: %w", projectFolder, err)
+		if !errors.Is(err, os.ErrNotExist) {
+			return err
 		}
+		missing = append(missing, dir)
 	}
+	for i := len(missing) - 1; i >= 0; i-- {
+		if err := os.Mkdir(missing[i], os.ModePerm); err != nil {
+			return err
+		}
+		p.created = append(p.created, missing[i])
+	}
+	p.prepared = true
 	return nil
+}
+
+// Rollback preserves cause and joins any cleanup failure. Existing target
+// directories are retained, and newly created parents are removed only if empty.
+func (p *ProjectFolder) Rollback(ctx context.Context, cause error) error {
+	if p == nil || (!p.prepared && len(p.created) == 0) {
+		return cause
+	}
+	entries, err := os.ReadDir(p.path)
+	if err != nil && !errors.Is(err, os.ErrNotExist) {
+		return errors.Join(cause, fmt.Errorf("cannot read partially created project in %s: %w", p.path, err))
+	}
+	if len(entries) == 0 && len(p.created) == 0 {
+		return cause
+	}
+	logging.FromContext(ctx).Infof("Removing partially created project: %s", p.path)
+	if p.prepared {
+		for _, entry := range entries {
+			if err := os.RemoveAll(filepath.Join(p.path, entry.Name())); err != nil {
+				return errors.Join(cause, fmt.Errorf("cannot remove partially created project in %s: %w", p.path, err))
+			}
+		}
+	}
+	for i := len(p.created) - 1; i >= 0; i-- {
+		if err := os.Remove(p.created[i]); err != nil && !errors.Is(err, os.ErrNotExist) {
+			return errors.Join(cause, fmt.Errorf("cannot remove created directory %s: %w", p.created[i], err))
+		}
+	}
+	p.created = nil
+	p.prepared = false
+	logging.FromContext(ctx).Infof("Removed partially created project: %s", p.path)
+	return cause
 }
 
 // ValidateDeploymentMethod reports whether a deployment method is supported by

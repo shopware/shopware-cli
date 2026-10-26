@@ -1,6 +1,7 @@
 package shop
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"testing"
@@ -9,6 +10,10 @@ import (
 	"github.com/shyim/go-version"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zaptest/observer"
+
+	"github.com/shopware/shopware-cli/logging"
 )
 
 func TestFilterInstallVersions(t *testing.T) {
@@ -123,79 +128,6 @@ func TestValidateProjectFolder(t *testing.T) {
 		projectFolder := filepath.Join(t.TempDir(), "shop")
 		require.NoError(t, os.WriteFile(projectFolder, nil, 0o600))
 		assert.ErrorContains(t, ValidateProjectFolder(projectFolder), "not a directory")
-	})
-}
-
-func TestProjectFolderExists(t *testing.T) {
-	t.Parallel()
-
-	t.Run("reports a missing folder", func(t *testing.T) {
-		t.Parallel()
-		exists, err := ProjectFolderExists(filepath.Join(t.TempDir(), "shop"))
-		require.NoError(t, err)
-		assert.False(t, exists)
-	})
-
-	t.Run("reports an existing folder", func(t *testing.T) {
-		t.Parallel()
-		exists, err := ProjectFolderExists(t.TempDir())
-		require.NoError(t, err)
-		assert.True(t, exists)
-	})
-
-	t.Run("rejects an empty folder", func(t *testing.T) {
-		t.Parallel()
-		_, err := ProjectFolderExists("")
-		assert.Error(t, err)
-	})
-}
-
-func TestCleanupFailedProjectCreation(t *testing.T) {
-	t.Parallel()
-
-	t.Run("removes a folder created by the failed creation", func(t *testing.T) {
-		t.Parallel()
-		projectFolder := filepath.Join(t.TempDir(), "shop")
-		require.NoError(t, os.MkdirAll(filepath.Join(projectFolder, "vendor", "shopware"), 0o755))
-		require.NoError(t, os.WriteFile(filepath.Join(projectFolder, "composer.json"), []byte("{}"), 0o600))
-		require.NoError(t, os.WriteFile(filepath.Join(projectFolder, "vendor", "shopware", "core.php"), []byte("x"), 0o600))
-
-		require.NoError(t, CleanupFailedProjectCreation(projectFolder, false))
-
-		_, err := os.Stat(projectFolder)
-		assert.True(t, os.IsNotExist(err))
-	})
-
-	t.Run("empties but keeps a pre-existing folder", func(t *testing.T) {
-		t.Parallel()
-		projectFolder := t.TempDir()
-		require.NoError(t, os.MkdirAll(filepath.Join(projectFolder, "custom", "plugins"), 0o755))
-		require.NoError(t, os.WriteFile(filepath.Join(projectFolder, "composer.json"), []byte("{}"), 0o600))
-
-		require.NoError(t, CleanupFailedProjectCreation(projectFolder, true))
-
-		assert.DirExists(t, projectFolder)
-		entries, err := os.ReadDir(projectFolder)
-		require.NoError(t, err)
-		assert.Empty(t, entries)
-	})
-
-	t.Run("ignores a folder that is already gone", func(t *testing.T) {
-		t.Parallel()
-		projectFolder := filepath.Join(t.TempDir(), "shop")
-		assert.NoError(t, CleanupFailedProjectCreation(projectFolder, false))
-		assert.NoError(t, CleanupFailedProjectCreation(projectFolder, true))
-	})
-
-	t.Run("rejects an empty folder", func(t *testing.T) {
-		t.Parallel()
-		assert.Error(t, CleanupFailedProjectCreation("", false))
-	})
-
-	t.Run("refuses the filesystem root", func(t *testing.T) {
-		t.Parallel()
-		assert.Error(t, CleanupFailedProjectCreation("/", true))
-		assert.Error(t, CleanupFailedProjectCreation("/", false))
 	})
 }
 
@@ -321,4 +253,116 @@ func TestShopwareProjectScaffoldValidate(t *testing.T) {
 		scaffold.CISystem = "jenkins"
 		assert.ErrorContains(t, scaffold.Validate(), "invalid CI system")
 	})
+}
+
+func TestProjectFolderRollback(t *testing.T) {
+	t.Parallel()
+	for _, test := range []struct {
+		name     string
+		existing bool
+	}{
+		{name: "new folder"},
+		{name: "existing folder", existing: true},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			root := t.TempDir()
+			path := filepath.Join(root, "clients", "acme", "shop")
+			if test.existing {
+				require.NoError(t, os.MkdirAll(path, 0o755))
+			}
+			folder, err := NewProjectFolder(path)
+			require.NoError(t, err)
+			require.NoError(t, folder.Prepare())
+			require.NoError(t, os.MkdirAll(filepath.Join(path, "vendor"), 0o755))
+			require.NoError(t, os.WriteFile(filepath.Join(path, "composer.json"), nil, 0o600))
+			assert.ErrorIs(t, folder.Rollback(t.Context(), context.Canceled), context.Canceled)
+			if test.existing {
+				entries, err := os.ReadDir(path)
+				require.NoError(t, err)
+				assert.Empty(t, entries)
+			} else {
+				assert.NoDirExists(t, filepath.Join(root, "clients"))
+			}
+			assert.DirExists(t, root)
+		})
+	}
+}
+
+func TestProjectFolderRejectsInvalidPaths(t *testing.T) {
+	t.Parallel()
+	for _, path := range []string{"", "/"} {
+		_, err := NewProjectFolder(path)
+		assert.Error(t, err)
+	}
+	var zero ProjectFolder
+	assert.Error(t, zero.Prepare())
+}
+
+func TestProjectFolderPreservesFilesBeforePreparation(t *testing.T) {
+	t.Parallel()
+	path := t.TempDir()
+	folder, err := NewProjectFolder(path)
+	require.NoError(t, err)
+	file := filepath.Join(path, "existing")
+	require.NoError(t, os.WriteFile(file, []byte("keep"), 0o600))
+	err = folder.Prepare()
+	require.Error(t, err)
+	assert.ErrorIs(t, folder.Rollback(t.Context(), err), err)
+	content, err := os.ReadFile(file)
+	require.NoError(t, err)
+	assert.Equal(t, "keep", string(content))
+}
+
+func TestProjectFolderPreservesNewSiblingInCreatedParent(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	folder, err := NewProjectFolder(filepath.Join(root, "parent", "shop"))
+	require.NoError(t, err)
+	require.NoError(t, folder.Prepare())
+	sibling := filepath.Join(root, "parent", "unrelated")
+	require.NoError(t, os.WriteFile(sibling, nil, 0o600))
+	err = folder.Rollback(t.Context(), context.Canceled)
+	assert.ErrorIs(t, err, context.Canceled)
+	assert.FileExists(t, sibling)
+	assert.NoDirExists(t, filepath.Join(root, "parent", "shop"))
+}
+
+func TestProjectFolderDoesNotLogCleanupBeforeWriting(t *testing.T) {
+	t.Parallel()
+	core, logs := observer.New(zap.InfoLevel)
+	ctx := logging.WithLogger(t.Context(), zap.New(core).Sugar())
+	folder, err := NewProjectFolder(filepath.Join(t.TempDir(), "missing", "shop"))
+	require.NoError(t, err)
+	assert.ErrorIs(t, folder.Rollback(ctx, context.Canceled), context.Canceled)
+	assert.Zero(t, logs.Len())
+}
+
+func TestProjectFolderPreparationFailsWithoutLoggingCleanup(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	require.NoError(t, os.Chmod(root, 0o555))
+	t.Cleanup(func() { require.NoError(t, os.Chmod(root, 0o755)) })
+	core, logs := observer.New(zap.InfoLevel)
+	ctx := logging.WithLogger(t.Context(), zap.New(core).Sugar())
+	path := filepath.Join(root, "shop")
+	folder, err := NewProjectFolder(path)
+	require.NoError(t, err)
+	err = folder.Prepare()
+	if err == nil {
+		t.Skip("requires a user without permission to write to read-only directories")
+	}
+	assert.ErrorIs(t, err, os.ErrPermission)
+	assert.ErrorIs(t, folder.Rollback(ctx, err), err)
+	assert.Zero(t, logs.Len())
+	assert.NoDirExists(t, path)
+	assert.DirExists(t, root)
+}
+
+func TestProjectFolderRejectsRootSymlink(t *testing.T) {
+	t.Parallel()
+	link := filepath.Join(t.TempDir(), "root")
+	require.NoError(t, os.Symlink("/", link))
+	_, err := NewProjectFolder(link)
+	assert.Error(t, err)
 }
