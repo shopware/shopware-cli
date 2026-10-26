@@ -13,9 +13,10 @@ import (
 )
 
 var projectDeploymentCmd = &cobra.Command{
-	Use:   "deployment",
-	Short: "Package a project into immutable deployment artifacts",
-	Long:  "Create immutable project deployments separately from rolling them out to an environment.",
+	Use:     "deploy",
+	Aliases: []string{"deployment"},
+	Short:   "Manage project deployment artifacts",
+	Long:    "Create immutable deployments and package projects into archives or container build files.",
 }
 
 func init() {
@@ -35,10 +36,10 @@ func resolveDeploymentProjectRoot(args []string) (string, error) {
 	}
 	info, err := os.Stat(root)
 	if err != nil {
-		return "", fmt.Errorf("read project directory: %w", err)
+		return "", fmt.Errorf("cannot read project directory: %w", err)
 	}
 	if !info.IsDir() {
-		return "", fmt.Errorf("project path %q is not a directory", root)
+		return "", fmt.Errorf("cannot use project path %q: it is not a directory", root)
 	}
 	return root, nil
 }
