@@ -2,12 +2,15 @@ package verifier
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest/observer"
 
+	"github.com/shopware/shopware-cli/internal/validation"
 	"github.com/shopware/shopware-cli/logging"
 )
 
@@ -126,5 +129,92 @@ func TestWarnOnDeprecatedToolName(t *testing.T) {
 		assert.Contains(t, logs.All()[0].Message, "sw-cli")
 		assert.Contains(t, logs.All()[0].Message, "builtin")
 		assert.Equal(t, "warn", logs.All()[0].Level.String())
+	}
+}
+
+func TestSelectTools(t *testing.T) {
+	all := ToolList[Tool]{testTool{name: "alpha"}, testTool{name: "beta"}, testTool{name: "gamma"}}
+
+	t.Run("selects all by default", func(t *testing.T) {
+		selected, statuses, err := SelectTools(all, "", "", "formatters")
+		require.NoError(t, err)
+		assert.Equal(t, all, selected)
+		assert.Equal(t, []validation.ToolInvocationStatus{
+			{Name: "alpha", Status: "invoked"},
+			{Name: "beta", Status: "invoked"},
+			{Name: "gamma", Status: "invoked"},
+		}, statuses)
+	})
+
+	t.Run("applies only and exclude and sorts statuses", func(t *testing.T) {
+		selected, statuses, err := SelectTools(all, "gamma,beta", "beta", "formatters")
+		require.NoError(t, err)
+		assert.Equal(t, ToolList[Tool]{testTool{name: "gamma"}}, selected)
+		assert.Equal(t, []validation.ToolInvocationStatus{
+			{Name: "alpha", Status: "skipped", Reason: "not selected by --only"},
+			{Name: "beta", Status: "skipped", Reason: "excluded by --exclude"},
+			{Name: "gamma", Status: "invoked"},
+		}, statuses)
+	})
+
+	t.Run("rejects excluding every selected tool", func(t *testing.T) {
+		_, statuses, err := SelectTools(all, "beta", "beta", "formatters")
+		require.ErrorContains(t, err, "no formatters selected after applying --exclude")
+		assert.Nil(t, statuses)
+	})
+
+	t.Run("rejects excluding a tool outside the only set", func(t *testing.T) {
+		_, _, err := SelectTools(all, "alpha", "beta", "formatters")
+		require.ErrorContains(t, err, "not found in the selected tools")
+	})
+}
+
+func TestToolInvocationStatuses(t *testing.T) {
+	all := ToolList[Tool]{testTool{name: "alpha"}, testTool{name: "beta"}, testTool{name: "gamma"}}
+	requested := ToolList[Tool]{testTool{name: "gamma"}, testTool{name: "beta"}}
+	selected := ToolList[Tool]{testTool{name: "gamma"}}
+
+	assert.Equal(t, []validation.ToolInvocationStatus{
+		{Name: "alpha", Status: "skipped", Reason: "not selected by --only"},
+		{Name: "beta", Status: "skipped", Reason: "excluded by --exclude"},
+		{Name: "gamma", Status: "invoked"},
+	}, ToolInvocationStatuses(all, requested, selected))
+}
+
+func TestCommandOutputOrError(t *testing.T) {
+	tests := []struct {
+		name   string
+		stderr string
+		stdout []byte
+		err    error
+		want   string
+	}{
+		{
+			name:   "prefers stderr",
+			stderr: " stderr ",
+			stdout: []byte("stdout"),
+			err:    errors.New("process failed"),
+			want:   "stderr",
+		},
+		{
+			name:   "falls back to stdout",
+			stdout: []byte(" stdout "),
+			err:    errors.New("process failed"),
+			want:   "stdout",
+		},
+		{
+			name: "falls back to process error",
+			err:  errors.New("process failed"),
+			want: "process failed",
+		},
+		{
+			name: "empty when there is no output or error",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, commandOutputOrError(tt.stderr, tt.stdout, tt.err))
+		})
 	}
 }

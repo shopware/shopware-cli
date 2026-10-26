@@ -268,7 +268,7 @@ func (u *ProjectUpgrader) checkTooling(ctx context.Context) ReadinessCheck {
 // Composer-managed (recorded in composer.lock / living in vendor/) or a local
 // extension in custom/ that Composer does not know about.
 func discoverExtensions(ctx context.Context, projectRoot string) []InstalledExtension {
-	found := extension.FindExtensionsFromProject(logging.DisableLogger(ctx), projectRoot, false)
+	found, _ := extension.FindExtensionsFromProject(logging.DisableLogger(ctx), projectRoot, false)
 	lockInfo := lockExtensionInfo(projectRoot)
 
 	vendorDir := filepath.Clean(filepath.Join(projectRoot, "vendor"))

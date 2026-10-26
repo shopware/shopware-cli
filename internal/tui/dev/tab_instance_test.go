@@ -2,10 +2,14 @@ package dev
 
 import (
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
+	"unicode"
 
 	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
+	"github.com/charmbracelet/x/ansi"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -446,4 +450,58 @@ func TestInstanceModel_LogLineMsg_RendersInViewport(t *testing.T) {
 func TestInstanceModel_Init(t *testing.T) {
 	m := NewInstanceModel(t.Context(), "/tmp", false)
 	assert.Nil(t, m.Init())
+}
+
+func TestInstanceModel_SidebarKeepsCursorInView(t *testing.T) {
+	m := NewInstanceModel(t.Context(), "/tmp", false)
+	m.SetSize(120, 20)
+	m.sources = []logSource{{name: "admin-watcher", kind: sourceProcess}}
+	for i := range 30 {
+		m.sources = append(m.sources, logSource{name: fmt.Sprintf("file-%02d.log", i), kind: sourceFile})
+	}
+	m.active = 0
+
+	for _, cursor := range []int{0, 1, 15, len(m.sources) - 1} {
+		m.cursor = cursor
+		sidebar := m.renderSidebar()
+
+		assert.LessOrEqual(t, lipgloss.Height(sidebar), 20-3, "cursor %d", cursor)
+		assert.Contains(t, ansi.Strip(sidebar), m.sources[cursor].name, "cursor %d", cursor)
+	}
+}
+
+func TestInstanceModel_SidebarKeepsWrappedCursorInView(t *testing.T) {
+	m := NewInstanceModel(t.Context(), "/tmp", false)
+	m.SetSize(120, 10)
+	long := "business_events_consumer_queue_stats_2026-10-22.log"
+	for i := range 10 {
+		m.sources = append(m.sources, logSource{name: fmt.Sprintf("file-%02d.log", i), kind: sourceFile})
+	}
+	m.sources = append(m.sources, logSource{name: long, kind: sourceFile})
+	for i := range 10 {
+		m.sources = append(m.sources, logSource{name: fmt.Sprintf("tail-%02d.log", i), kind: sourceFile})
+	}
+	m.active = 10
+	m.cursor = 10
+
+	sidebar := m.renderSidebar()
+	assert.LessOrEqual(t, lipgloss.Height(sidebar), 8, "the sidebar keeps its minimum height")
+	compact := strings.Map(func(r rune) rune {
+		if unicode.IsSpace(r) || r == '│' {
+			return -1
+		}
+		return r
+	}, ansi.Strip(sidebar))
+	assert.Contains(t, compact, long, "the wrapped selected name should be visible in full")
+}
+
+func TestWindowLines(t *testing.T) {
+	lines := "a\nb\nc\nd\ne"
+
+	assert.Equal(t, lines, windowLines(lines, 4, 4, 10), "fits")
+	assert.Equal(t, "a\nb", windowLines(lines, 0, 0, 2))
+	assert.Equal(t, "b\nc\nd", windowLines(lines, 2, 2, 3))
+	assert.Equal(t, "d\ne", windowLines(lines, 4, 4, 2))
+	assert.Equal(t, "c\nd\ne", windowLines(lines, 2, 4, 3), "the focused block ends in view")
+	assert.Equal(t, "b\nc", windowLines(lines, 1, 3, 2), "a block taller than the window starts in view")
 }

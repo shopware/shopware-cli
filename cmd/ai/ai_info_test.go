@@ -19,28 +19,32 @@ func TestWriteInfoTable(t *testing.T) {
 		Status:        directory.StatusActive,
 		Description:   "desc",
 		Documentation: "https://example.test/dh",
-		Delivery:      directory.Delivery{Kind: directory.DeliveryGit, Repository: "https://github.com/shopware/deployment-helper"},
-		Compatibility: &directory.Compatibility{Source: "owner"},
+		Delivery:      directory.Delivery{Kind: directory.DeliveryGit, Repository: "shopware/deployment-helper"},
 	}
 
 	var buf bytes.Buffer
 	require.NoError(t, writeInfoTable(&buf, e))
 
 	assert.Contains(t, buf.String(), "deployment-helper")
+	assert.Contains(t, buf.String(), "git (shopware/deployment-helper)")
 }
 
-func TestCompatibilityLabel(t *testing.T) {
-	withCompat := directory.Integration{Compatibility: &directory.Compatibility{Source: "owner"}}
-	assert.Equal(t, "owner", compatibilityLabel(withCompat))
+func TestWriteInfoJSON(t *testing.T) {
+	e := directory.Integration{
+		Name: "deployment-helper", DisplayName: "DH", Type: directory.TypeSkill,
+		Provider: "shopware", Status: directory.StatusActive, Description: "d",
+		Documentation: "https://example.test/dh",
+		Delivery:      directory.Delivery{Kind: directory.DeliveryGit, Repository: "shopware/deployment-helper"},
+	}
 
-	bundled := directory.Integration{Delivery: directory.Delivery{Kind: directory.DeliveryBundled}}
-	assert.Equal(t, "none (bundled, always compatible)", compatibilityLabel(bundled))
+	var buf bytes.Buffer
+	require.NoError(t, writeInfoJSON(&buf, e))
 
-	git := directory.Integration{Delivery: directory.Delivery{Kind: directory.DeliveryGit}}
-	assert.Equal(t, "none", compatibilityLabel(git))
+	assert.Contains(t, buf.String(), `"name":"deployment-helper"`)
+	assert.NotContains(t, buf.String(), "installed")
 }
 
 func TestDeliveryLabel(t *testing.T) {
-	assert.Equal(t, "git (https://example.test/r)", deliveryLabel(directory.Delivery{Kind: directory.DeliveryGit, Repository: "https://example.test/r"}))
-	assert.Equal(t, "bundled", deliveryLabel(directory.Delivery{Kind: directory.DeliveryBundled}))
+	assert.Equal(t, "git (shopware/deployment-helper)", deliveryLabel(directory.Delivery{Kind: directory.DeliveryGit, Repository: "shopware/deployment-helper"}))
+	assert.Equal(t, "git", deliveryLabel(directory.Delivery{Kind: directory.DeliveryGit}))
 }

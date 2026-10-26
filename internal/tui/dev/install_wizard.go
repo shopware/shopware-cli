@@ -185,7 +185,17 @@ func (m Model) cancelFailedInstall() (app.Content, tea.Cmd) {
 	return m, m.startDashboard()
 }
 
-func (m Model) renderInstallPrompt(b *strings.Builder) {
+// installListRows returns how many options fit below the step badge, title and description; 0 shows all.
+func installListRows(contentRows, options int) int {
+	const above, windowedBelow = 5, 2
+	if contentRows <= 0 || contentRows-above >= options {
+		return 0
+	}
+	return max(contentRows-above-windowedBelow, 3)
+}
+
+// renderInstallPrompt writes the current install step; contentRows limits the lists to the card's rows, 0 means unbounded.
+func (m Model) renderInstallPrompt(b *strings.Builder, contentRows int) {
 	switch m.install.step {
 	case installStepAsk:
 		warnStyle := lipgloss.NewStyle().Bold(true).Foreground(tui.ErrorColor)
@@ -202,7 +212,7 @@ func (m Model) renderInstallPrompt(b *strings.Builder) {
 		for i, lang := range install.Languages {
 			opts[i] = tui.SelectOption{Label: lang.Label, Detail: lang.ID}
 		}
-		b.WriteString(tui.RenderSelectList("Default Language", "Select the primary language for your storefront", opts, m.install.cursor))
+		b.WriteString(tui.RenderSelectListWindowed("Default Language", "Select the primary language for your storefront", opts, m.install.cursor, installListRows(contentRows, len(opts))))
 
 	case installStepCurrency:
 		b.WriteString(tui.TextBadge("Step 2/3"))
@@ -211,7 +221,7 @@ func (m Model) renderInstallPrompt(b *strings.Builder) {
 		for i, curr := range install.Currencies {
 			opts[i] = tui.SelectOption{Label: curr}
 		}
-		b.WriteString(tui.RenderSelectList("Default Currency", "Select the default currency for pricing", opts, m.install.cursor))
+		b.WriteString(tui.RenderSelectListWindowed("Default Currency", "Select the default currency for pricing", opts, m.install.cursor, installListRows(contentRows, len(opts))))
 
 	case installStepCredentials:
 		b.WriteString(tui.TextBadge("Step 3/3"))

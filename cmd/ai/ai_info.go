@@ -14,6 +14,8 @@ import (
 var aiInfoCmd = &cobra.Command{
 	Use:          "info name",
 	Short:        "Show details of a Shopware AI integration",
+	Long:         `Show the details of a Shopware AI integration from the directory.`,
+	Example:      `  shopware-cli ai info deployment-helper`,
 	Args:         cobra.ExactArgs(1),
 	SilenceUsage: true,
 	RunE: func(cmd *cobra.Command, args []string) error {
@@ -51,13 +53,12 @@ func writeInfoTable(w io.Writer, e directory.Integration) error {
 	rows := [][]string{
 		{"Name", e.Name},
 		{"Display name", e.DisplayName},
-		{"Type", string(e.Type)},
+		{"Type", e.Type.String()},
 		{"Provider", e.Provider},
 		{"Status", string(e.Status)},
 		{"Description", e.Description},
 		{"Documentation", e.Documentation},
 		{"Delivery", deliveryLabel(e.Delivery)},
-		{"Compatibility", compatibilityLabel(e)},
 	}
 
 	_, err := fmt.Fprintln(w, tui.RenderTable([]string{"Property", "Value"}, rows))
@@ -65,27 +66,20 @@ func writeInfoTable(w io.Writer, e directory.Integration) error {
 	return err
 }
 
-// compatibilityLabel renders the compatibility requirements for the human view.
-// An entry without a compatibility block has no requirements; a bundled entry
-// ships with the CLI and is therefore always compatible.
-func compatibilityLabel(e directory.Integration) string {
-	if e.Compatibility != nil {
-		return e.Compatibility.Source
-	}
-	if e.Delivery.Kind == directory.DeliveryBundled {
-		return "none (bundled, always compatible)"
-	}
-
-	return "none"
-}
-
 // deliveryLabel renders a delivery block for the human view.
 func deliveryLabel(d directory.Delivery) string {
-	if d.Repository != "" {
-		return fmt.Sprintf("%s (%s)", d.Kind, d.Repository)
-	}
+	switch {
+	case d.URL != "":
+		if d.Transport != "" {
+			return fmt.Sprintf("%s (%s, %s)", d.Kind, d.Transport, d.URL)
+		}
 
-	return string(d.Kind)
+		return fmt.Sprintf("%s (%s)", d.Kind, d.URL)
+	case d.Repository != "":
+		return fmt.Sprintf("%s (%s)", d.Kind, d.Repository)
+	default:
+		return string(d.Kind)
+	}
 }
 
 func init() {

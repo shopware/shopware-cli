@@ -37,20 +37,20 @@ func fixtureDirectory() *Directory {
 				Name: "alpha-skill", DisplayName: "Alpha", Type: TypeSkill,
 				Provider: "shopware", Description: "a", Status: StatusActive,
 				Documentation: "https://example.test/a",
-				Delivery:      Delivery{Kind: DeliveryBundled},
+				Delivery:      Delivery{Kind: DeliveryGit, Repository: "shopware/alpha"},
 			},
 			{
 				Name: "beta-skill", DisplayName: "Beta", Type: TypeSkill,
 				Provider: "shopware", Description: "b", Status: StatusActive,
 				Documentation: "https://example.test/b",
-				Delivery:      Delivery{Kind: DeliveryGit, Repository: "https://example.test/repo"},
+				Delivery:      Delivery{Kind: DeliveryGit, Repository: "shopware/beta"},
 			},
 		},
 	}
 }
 
 func TestListReturnsAll(t *testing.T) {
-	got, err := fixtureDirectory().List(nil, ListOptions{})
+	got, err := fixtureDirectory().List(ListOptions{})
 	require.NoError(t, err)
 	assert.Len(t, got, 2)
 }
@@ -58,31 +58,18 @@ func TestListReturnsAll(t *testing.T) {
 func TestListTypeFilter(t *testing.T) {
 	d := fixtureDirectory()
 
-	skills, err := d.List(nil, ListOptions{Type: "skill"})
+	skills, err := d.List(ListOptions{Type: "skill"})
 	require.NoError(t, err)
 	assert.Len(t, skills, 2)
 
 	// "mcp" is a reserved-but-known filter: empty result, no error.
-	mcp, err := d.List(nil, ListOptions{Type: "mcp"})
+	mcp, err := d.List(ListOptions{Type: "mcp"})
 	require.NoError(t, err)
 	assert.Empty(t, mcp)
 
-	_, err = d.List(nil, ListOptions{Type: "bogus"})
+	_, err = d.List(ListOptions{Type: "bogus"})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "unknown type")
-}
-
-func TestListInstalledOnly(t *testing.T) {
-	d := fixtureDirectory()
-
-	got, err := d.List(map[string]bool{"beta-skill": true}, ListOptions{InstalledOnly: true})
-	require.NoError(t, err)
-	require.Len(t, got, 1)
-	assert.Equal(t, "beta-skill", got[0].Name)
-
-	none, err := d.List(nil, ListOptions{InstalledOnly: true})
-	require.NoError(t, err)
-	assert.Empty(t, none)
 }
 
 func TestInfo(t *testing.T) {
@@ -95,4 +82,29 @@ func TestInfo(t *testing.T) {
 	_, err = d.Info("does-not-exist")
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "unknown integration")
+}
+
+func TestTypeString(t *testing.T) {
+	assert.Equal(t, "skill", TypeSkill.String())
+	assert.Equal(t, "mcp", TypeMCP.String())
+}
+
+func TestMeteorMCPEntry(t *testing.T) {
+	e, ok := Load().Get("meteor")
+	require.True(t, ok)
+
+	assert.Equal(t, TypeMCP, e.Type)
+	assert.Equal(t, DeliveryMCP, e.Delivery.Kind)
+	assert.Equal(t, "https://meteor.shopware.com/mcp", e.Delivery.URL)
+	assert.Equal(t, "http", e.Delivery.Transport)
+}
+
+func TestListMCPTypeFromRealDirectory(t *testing.T) {
+	got, err := Load().List(ListOptions{Type: "mcp"})
+	require.NoError(t, err)
+	require.NotEmpty(t, got)
+
+	for _, e := range got {
+		assert.Equal(t, TypeMCP, e.Type)
+	}
 }

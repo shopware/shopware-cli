@@ -7,11 +7,13 @@ import (
 	"time"
 
 	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 	"github.com/stretchr/testify/assert"
 
 	"github.com/shopware/shopware-cli/internal/shop"
 	"github.com/shopware/shopware-cli/internal/testhelper"
 	"github.com/shopware/shopware-cli/internal/tui"
+	"github.com/shopware/shopware-cli/internal/tui/app"
 )
 
 func writeLockWithCore(t *testing.T, dir, phpRequire string) {
@@ -414,4 +416,17 @@ func TestMigrationWizardWelcome_EnterSetsStartedAt(t *testing.T) {
 	assert.False(t, next.startedAt.IsZero(), "startedAt should be set after Enter on welcome")
 	assert.False(t, next.startedAt.Before(before), "startedAt should not be before test start")
 	assert.False(t, next.startedAt.After(after), "startedAt should not be after test end")
+}
+
+func TestMigrationWizardFitsA100x30Terminal(t *testing.T) {
+	ctx := app.Context{Width: 100, Height: 30, MainHeight: 28}
+
+	for _, step := range []migrationStep{migrationStepWelcome, migrationStepAdminUser, migrationStepDockerPHP, migrationStepReview, migrationStepDone} {
+		m := Model{phase: phaseMigrationWizard, migrationWizard: newMigrationWizard("")}
+		m.migrationWizard.step = step
+
+		view := m.View(ctx)
+		assert.LessOrEqual(t, lipgloss.Height(view), ctx.MainHeight, "step %d", step)
+		assert.LessOrEqual(t, lipgloss.Width(view), ctx.Width, "step %d", step)
+	}
 }

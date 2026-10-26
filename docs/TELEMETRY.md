@@ -34,6 +34,9 @@ The goal of telemetry is to answer questions like:
 - For the interactive development TUI (`project dev`): do the setup wizards
   succeed or where do users abandon them, do Docker environments start
   reliably, and which dashboard features (watchers, builds, tabs) are used?
+- For the AI integrations (`shopware-cli ai`): which skills and MCP servers are
+  actually installed, into which agents, at project vs. user scope, how often a
+  specific release is pinned, and how often installs succeed vs. fail?
 
 ## How we identify users
 
@@ -90,7 +93,7 @@ All events share a common envelope:
 | `timestamp` | RFC 3339 timestamp of when the event was sent                      |
 | `tags`      | Event-specific key/value pairs (all string values), described below|
 
-There are three command-level events, plus a set of events sent by the
+There are the command-level events below, plus a set of events sent by the
 interactive development TUI (`shopware-cli project dev`).
 
 ### `shopware_cli.command` — every command run
@@ -144,6 +147,50 @@ paths succeed and where guided upgrades fail.
 | `from_version`   | The Shopware version before the upgrade   | `6.6.10.3` |
 | `target_version` | The version the wizard upgraded to        | `6.7.11.0` |
 | `result`         | Outcome of the upgrade run                | `success` / `failure` |
+
+## AI integration events (`shopware-cli ai`)
+
+The `ai` command group sends the events below after an integration has been
+**resolved against the built-in directory**, so the `integration` and `agent`
+values are always enumerated catalog/client identifiers — never free-text, a
+file path, or an unrecognized name a user typed. An unknown name, a missing
+`--agent`, and other input errors are covered by `shopware_cli.command`
+(`result=failure`) and are not reported here. No URLs and no project paths are
+ever sent.
+
+### `shopware_cli.ai.add` — AI integration installed
+
+Sent when `shopware-cli ai add` installs (or previews, with `--dry-run`) a known
+integration, whether the attempt succeeds or fails.
+
+| Tag           | Meaning                                                        | Example                        |
+|---------------|----------------------------------------------------------------|--------------------------------|
+| `integration` | The integration from the directory                             | `shopware-cli` / `deployment-helper` / `meteor` |
+| `type`        | Kind of integration                                            | `skill` / `mcp`                |
+| `agent`       | Target AI agent (skills only; omitted for MCP)                 | `claude-code` / `codex`        |
+| `scope`       | Where it was installed                                         | `project` / `global`           |
+| `pinned`      | Whether a specific release was requested with `@<tag>` (skills only). The tag value itself is **never** sent. | `false` |
+| `dry_run`     | Whether this was a preview that changed nothing on disk        | `false`                        |
+| `result`      | Outcome of the install                                         | `success` / `failure`          |
+
+MCP installs are always `scope=project` and carry no `agent` (the project's
+`.mcp.json` is not agent-specific). The command's duration is already captured by
+`shopware_cli.command`, so it is not repeated here.
+
+### `shopware_cli.ai.remove` — AI integration removed
+
+Sent when `shopware-cli ai remove` removes (or previews, with `--dry-run`) a known
+integration.
+
+| Tag           | Meaning                                                        | Example                 |
+|---------------|----------------------------------------------------------------|-------------------------|
+| `integration` | The integration from the directory                             | `meteor`                |
+| `type`        | Kind of integration                                            | `skill` / `mcp`         |
+| `agent`       | Target AI agent (skills only; omitted for MCP)                 | `claude-code`           |
+| `scope`       | Which install was targeted                                     | `project` / `global`    |
+| `dry_run`     | Whether this was a preview that changed nothing                | `false`                 |
+| `removed`     | Whether the integration was actually present (`false` = there was nothing to remove) | `true` |
+| `result`      | Outcome of the removal                                         | `success` / `failure`   |
 
 ## Development TUI events (`shopware-cli project dev`)
 

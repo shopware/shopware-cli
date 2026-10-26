@@ -261,6 +261,47 @@ func TestSSHExecutorPHPBinary(t *testing.T) {
 	assert.Equal(t, "cd /var/www/shop/custom/plugins/Foo && /usr/bin/php8.3 -v", lastSSHShell(t, p))
 }
 
+func TestSSHExecutorPHPArgs(t *testing.T) {
+	cfg := &shop.EnvironmentConfig{
+		Type: "ssh",
+		SSH: &shop.EnvironmentSSHConfig{
+			Host:      "shop.example.com",
+			User:      "deploy",
+			Directory: "/var/www/shop",
+			PHPBinary: "/usr/bin/php8.3",
+			PHPArgs:   []string{"-d", "memory_limit=512M", "-c", "/etc/php/custom.ini"},
+		},
+	}
+
+	e, err := New("/project", cfg, &shop.Config{})
+	require.NoError(t, err)
+	sshExec, ok := e.(*SSHExecutor)
+	require.True(t, ok, "expected *SSHExecutor")
+
+	p := e.PHPCommand(t.Context(), "-v")
+	assert.Equal(t, "cd /var/www/shop && /usr/bin/php8.3 -d memory_limit=512M -c /etc/php/custom.ini -v", lastSSHShell(t, p))
+
+	p = e.ConsoleCommand(t.Context(), "cache:clear")
+	assert.Equal(t, "cd /var/www/shop && /usr/bin/php8.3 -d memory_limit=512M -c /etc/php/custom.ini bin/console cache:clear", lastSSHShell(t, p))
+
+	p = sshExec.RemotePHPCommand(t.Context(), "-v")
+	assert.Equal(t, "exec /usr/bin/php8.3 -d memory_limit=512M -c /etc/php/custom.ini -v", lastSSHShell(t, p))
+
+	// WithEnv and WithRelDir keep the configured args.
+	p = e.WithEnv(map[string]string{"FOO": "bar"}).PHPCommand(t.Context(), "-v")
+	assert.Contains(t, lastSSHShell(t, p), "/usr/bin/php8.3 -d memory_limit=512M -c /etc/php/custom.ini -v")
+
+	p = e.WithRelDir("custom/plugins/Foo").PHPCommand(t.Context(), "-v")
+	assert.Equal(t, "cd /var/www/shop/custom/plugins/Foo && /usr/bin/php8.3 -d memory_limit=512M -c /etc/php/custom.ini -v", lastSSHShell(t, p))
+}
+
+func TestSSHExecutorPHPArgsQuoting(t *testing.T) {
+	e := &SSHExecutor{host: "shop.example.com", directory: "/var/www/shop", phpArgs: []string{"-d", "memory_limit=512 M"}}
+
+	p := e.PHPCommand(t.Context(), "-v")
+	assert.Equal(t, "cd /var/www/shop && php -d 'memory_limit=512 M' -v", lastSSHShell(t, p))
+}
+
 func TestSSHExecutorTTY(t *testing.T) {
 	e := testSSHExecutor()
 
@@ -309,6 +350,11 @@ func writeRecordingSSH(t *testing.T, argsFile, outputFile, failPattern, socketFi
 
 	shPath, err := exec.LookPath("sh")
 	require.NoError(t, err)
+	// Absolute path: the stub replaces PATH, so a bare cat would not resolve.
+	// Look it up from the test environment instead of assuming /bin/cat, which
+	// is absent in sandboxes that only provide /bin/sh (Nix).
+	catPath, err := exec.LookPath("cat")
+	require.NoError(t, err)
 
 	failSnippet := ""
 	if failPattern != "" {
@@ -317,11 +363,10 @@ func writeRecordingSSH(t *testing.T, argsFile, outputFile, failPattern, socketFi
 
 	socketSnippet := ""
 	if socketFile != "" {
-		socketSnippet = fmt.Sprintf("case \"$*\" in *default_socket*) /bin/cat %q; exit 0 ;; esac\n", socketFile)
+		socketSnippet = fmt.Sprintf("case \"$*\" in *default_socket*) %q %q; exit 0 ;; esac\n", catPath, socketFile)
 	}
 
-	// /bin/cat by absolute path: the stub replaces PATH, so nothing else resolves.
-	script := fmt.Sprintf("#!%s\nprintf '%%s\\n' \"$@\" > %q\n%s%s/bin/cat %q\n", shPath, argsFile, failSnippet, socketSnippet, outputFile)
+	script := fmt.Sprintf("#!%s\nprintf '%%s\\n' \"$@\" > %q\n%s%s%q %q\n", shPath, argsFile, failSnippet, socketSnippet, catPath, outputFile)
 
 	dir := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "ssh"), []byte(script), 0o755))

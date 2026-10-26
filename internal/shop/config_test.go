@@ -48,6 +48,41 @@ include:
 	assert.NotNil(t, config.ConfigDump.Where)
 }
 
+func TestConfigMergingDumpTableLists(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	t.Chdir(tmpDir)
+
+	baseConfig := []byte(`
+dump:
+  nodata:
+    - promotion
+    - newsletter_recipient
+  ignore:
+    - product_search_keyword
+`)
+
+	projectConfig := []byte(`
+include:
+  - base.yml
+dump:
+  nodata:
+    - frosh_mail_archive
+    - promotion
+  ignore:
+    - product_keyword_dictionary
+`)
+
+	assert.NoError(t, os.WriteFile(filepath.Join(tmpDir, "base.yml"), baseConfig, 0644))
+	assert.NoError(t, os.WriteFile(filepath.Join(tmpDir, "project.yml"), projectConfig, 0644))
+
+	config, err := ReadConfig(t.Context(), filepath.Join(tmpDir, "project.yml"), false)
+	assert.NoError(t, err)
+
+	assert.Equal(t, []string{"frosh_mail_archive", "promotion", "newsletter_recipient"}, config.ConfigDump.NoData)
+	assert.Equal(t, []string{"product_keyword_dictionary", "product_search_keyword"}, config.ConfigDump.Ignore)
+}
+
 func TestConfigPHPVersionRoundTrip(t *testing.T) {
 	tmpDir := t.TempDir()
 
@@ -1175,4 +1210,31 @@ func TestWriteConfigHonoursStorageLocation(t *testing.T) {
 
 	assert.FileExists(t, filepath.Join(tmpDir, ".shopware-project.yml"))
 	assert.NoFileExists(t, filepath.Join(tmpDir, ".config/shopware-project.yml"))
+}
+
+func TestReadConfigSSHEnvironmentPHPArgs(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, ".shopware-project.yml")
+	content := []byte(`
+compatibility_date: "2026-01-01"
+environments:
+  remote:
+    type: ssh
+    ssh:
+      host: shop.example.com
+      directory: /var/www/shop
+      php_binary: /usr/bin/php8.3
+      php_args:
+        - -d
+        - memory_limit=512M
+        - -c
+        - /etc/php/custom.ini
+`)
+	assert.NoError(t, os.WriteFile(configPath, content, 0o644))
+
+	cfg, err := ReadConfig(t.Context(), configPath, false)
+	require.NoError(t, err)
+	require.NotNil(t, cfg.Environments["remote"].SSH)
+	assert.Equal(t, "/usr/bin/php8.3", cfg.Environments["remote"].SSH.PHPBinary)
+	assert.Equal(t, []string{"-d", "memory_limit=512M", "-c", "/etc/php/custom.ini"}, cfg.Environments["remote"].SSH.PHPArgs)
 }

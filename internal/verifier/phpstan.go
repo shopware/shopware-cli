@@ -111,10 +111,10 @@ func (p PhpStan) Check(ctx context.Context, check *Check, config ToolConfig) err
 			return nil
 		}
 
-		for _, error := range phpstanResult.Errors {
+		for _, message := range phpstanResult.Errors {
 			check.AddResult(validation.CheckResult{
 				Path:       "phpstan.neon",
-				Message:    error,
+				Message:    message,
 				Severity:   validation.SeverityError,
 				Line:       0,
 				Identifier: "phpstan/error",

@@ -18,12 +18,12 @@ Run both validations from the extension root and capture the full output **and**
 ```bash
 shopware-cli --version
 shopware-cli extension validate . --only builtin --format markdown
-shopware-cli extension validate . --only builtin --store-compliance --format markdown
+SHOPWARE_CLI_STORE_COMPLIANCE=1 shopware-cli extension validate . --only builtin --format markdown
 ```
 
 - The **exit code** is the pass/fail signal (`0` = pass, non-zero = findings). The report goes to stdout; a usage block or error goes to stderr — do not read a validation failure as a usage error.
 - `--format markdown` gives a stable, quotable form. `--reporter` is a deprecated alias that prints a warning — use `--format`.
-- Treat the store-compliance run as a delta over the normal run: report only the lines it adds.
+- Configure `validation.store_compliance: true` in the extension configuration, or set `SHOPWARE_CLI_STORE_COMPLIANCE=1`, to enable Store compliance checks for Administration and Storefront assets. Treat that run as a delta over the normal run: report only the lines it adds.
 - `extension validate` now runs all checkers by default. The two commands above explicitly select only the built-in `builtin` checker, not PHPStan/ESLint/Stylelint. (`sw-cli` remains accepted as a legacy alias. It is that checker's deprecated name, not shorthand for the binary.) Report "the `builtin` checks passed", not "full validation passed". Source: `cmd/extension/extension_validate.go`, `selectExtensionValidationTools`.
 - The Markdown report includes a checker table. `invoked` means the checker was called; it does not prove that files were analyzed or that a check passed. `skipped` means it was not selected or was excluded. Classify only finding lines, not checker-status lines.
 - Use one `shopware-cli` binary throughout, and state its version. Never mix binaries mid-answer.
@@ -140,7 +140,7 @@ Preconditions here work like §2's: a page you had no trigger to read produces n
 - CLI binary and version
 - inspection timestamp
    - builtin checks: pass/fail + exit code (state that `--only builtin` was used)
-- store-compliance checks: pass/fail + exit code
+- Store compliance checks: pass/fail + exit code
 - remote Store listing: inspected / not inspected
 - files modified: no
 
@@ -162,7 +162,7 @@ Preconditions here work like §2's: a page you had no trigger to read produces n
 **Sources checked** — a flat list the user can re-verify independently:
 
 - CLI path and version
-- the two `extension validate` commands run (normal and `--store-compliance`), so the user can re-run them and see the same output
+- the two `extension validate` runs (normal and with Store compliance enabled), so the user can re-run them and see the same output
 - the result identifiers relied on; source file paths and `grep` commands only if a shopware-cli checkout was actually read
 - the Store docs index, as a clickable link, so the user can reach the whole set
 - every doc page actually read, as a clickable full URL with the date read

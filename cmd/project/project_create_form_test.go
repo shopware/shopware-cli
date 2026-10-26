@@ -44,12 +44,12 @@ func TestDockerUnavailableReason(t *testing.T) {
 
 	t.Run("not running", func(t *testing.T) {
 		t.Parallel()
-		assert.Equal(t, "Docker is not running", dockerUnavailableReason(&system.MissingDependency{Name: "Docker", Reason: "not running"}))
+		assert.Equal(t, "Docker is not running", dockerUnavailableReason([]system.MissingDependency{{Name: "Docker", Reason: "not running"}}))
 	})
 
 	t.Run("not installed", func(t *testing.T) {
 		t.Parallel()
-		assert.Equal(t, "Docker is not installed", dockerUnavailableReason(&system.MissingDependency{Name: "Docker", Reason: "not installed"}))
+		assert.Equal(t, "Docker is not installed", dockerUnavailableReason([]system.MissingDependency{{Name: "Docker", Reason: "not installed"}}))
 	})
 }
 
@@ -64,24 +64,63 @@ func TestValidateDockerChoice(t *testing.T) {
 
 	t.Run("local php allowed when docker unavailable", func(t *testing.T) {
 		t.Parallel()
-		missing := &system.MissingDependency{Name: "Docker", Reason: "not running"}
+		missing := []system.MissingDependency{{Name: "Docker", Reason: "not running"}}
 		assert.NoError(t, validateDockerChoice(tui.No, missing))
 	})
 
 	t.Run("docker blocked when daemon not running", func(t *testing.T) {
 		t.Parallel()
-		missing := &system.MissingDependency{Name: "Docker", Reason: "not running"}
+		missing := []system.MissingDependency{{Name: "Docker", Reason: "not running"}}
 		err := validateDockerChoice(tui.Yes, missing)
-		assert.ErrorContains(t, err, "Docker is not running")
-		assert.ErrorContains(t, err, "start Docker")
+		assert.Error(t, err)
+	})
+
+	t.Run("docker blocked when the compose plugin is missing", func(t *testing.T) {
+		t.Parallel()
+		missing := []system.MissingDependency{{Name: "Docker Compose plugin", Reason: "not installed"}}
+		assert.Error(t, validateDockerChoice(tui.Yes, missing))
+		assert.NoError(t, validateDockerChoice(tui.No, missing))
+	})
+
+	t.Run("docker blocked when the daemon is down and the compose plugin is missing", func(t *testing.T) {
+		t.Parallel()
+		missing := []system.MissingDependency{{Name: "Docker", Reason: "not running"}, {Name: "Docker Compose plugin", Reason: "not installed"}}
+		assert.Error(t, validateDockerChoice(tui.Yes, missing))
+		assert.NoError(t, validateDockerChoice(tui.No, missing))
 	})
 
 	t.Run("docker blocked when not installed", func(t *testing.T) {
 		t.Parallel()
-		missing := &system.MissingDependency{Name: "Docker", Reason: "not installed"}
+		missing := []system.MissingDependency{{Name: "Docker", Reason: "not installed"}}
 		err := validateDockerChoice(tui.Yes, missing)
-		assert.ErrorContains(t, err, "Docker is not installed")
-		assert.ErrorContains(t, err, "install Docker")
+		assert.Error(t, err)
+	})
+}
+
+func TestRecheckDockerChoice(t *testing.T) {
+	t.Parallel()
+	down := []system.MissingDependency{{Name: "Docker", Reason: "not running"}}
+
+	t.Run("probes again when docker is chosen while unavailable", func(t *testing.T) {
+		t.Parallel()
+		probes := 0
+		missing := recheckDockerChoice(tui.Yes, down, func() []system.MissingDependency { probes++; return nil })
+		assert.Equal(t, 1, probes)
+		assert.Empty(t, missing)
+		assert.NoError(t, validateDockerChoice(tui.Yes, missing))
+	})
+
+	t.Run("keeps blocking while the probe still fails", func(t *testing.T) {
+		t.Parallel()
+		missing := recheckDockerChoice(tui.Yes, down, func() []system.MissingDependency { return down })
+		assert.Error(t, validateDockerChoice(tui.Yes, missing))
+	})
+
+	t.Run("does not probe for local php or when docker was available", func(t *testing.T) {
+		t.Parallel()
+		probe := func() []system.MissingDependency { t.Fatal("probe must not run"); return nil }
+		assert.Equal(t, down, recheckDockerChoice(tui.No, down, probe))
+		assert.Empty(t, recheckDockerChoice(tui.Yes, nil, probe))
 	})
 }
 
@@ -90,7 +129,7 @@ func TestDockerUnavailableError(t *testing.T) {
 
 	t.Run("returns missing dependencies error", func(t *testing.T) {
 		t.Parallel()
-		err := dockerUnavailableError(&system.MissingDependency{Name: "Docker", Reason: "not running"})
+		err := dockerUnavailableError([]system.MissingDependency{{Name: "Docker", Reason: "not running"}})
 		assert.ErrorContains(t, err, "missing required dependencies")
 	})
 }

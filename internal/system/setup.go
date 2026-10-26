@@ -7,7 +7,9 @@ import (
 	"os"
 	"os/exec"
 	"runtime"
+	"slices"
 	"strings"
+	"time"
 
 	"charm.land/lipgloss/v2"
 
@@ -18,6 +20,17 @@ type MissingDependency struct {
 	Name   string
 	Reason string
 }
+
+const dockerComposePlugin = "Docker Compose plugin"
+
+// dockerProbeTimeout bounds one docker CLI probe. A stopped daemon fails
+// immediately; this only caps a daemon that accepts the connection and does
+// not answer, such as dockerd or Docker Desktop still starting. Each probe
+// gets its own timeout. One shared deadline used to expire during a slow
+// daemon check, which was reported as Docker not running, and then fail the
+// Compose check on that expired context, so the plugin looked missing too.
+// Tests shorten it to cover a hung probe without waiting.
+var dockerProbeTimeout = 30 * time.Second
 
 type Incompatibility struct {
 	Title       string
@@ -57,7 +70,7 @@ type PHPVersionChecker interface {
 
 // CheckProjectDependencies returns the dependencies required to set up a
 // Shopware project that are not currently available. When useDocker is true
-// and we are not already inside a container, only Docker is required;
+// and we are not already inside a container, only Docker and its Compose plugin are required;
 // otherwise PHP 8.2+ must be present locally (Composer is not required — a
 // PHAR copy is downloaded on demand when it is missing, see ResolveComposer).
 // If phpConstraint is non-nil and the checked PHP does not satisfy it, that
@@ -68,12 +81,13 @@ func CheckProjectDependencies(ctx context.Context, useDocker bool, phpConstraint
 
 	if useDocker && !IsInsideContainer() {
 		if _, err := exec.LookPath("docker"); err != nil {
-			missing = append(missing, MissingDependency{Name: "Docker", Reason: "not installed"})
-		} else {
-			cmd := exec.CommandContext(ctx, "docker", "info")
-			if err := cmd.Run(); err != nil {
-				missing = append(missing, MissingDependency{Name: "Docker", Reason: "not running"})
-			}
+			return append(missing, MissingDependency{Name: "Docker", Reason: "not installed"})
+		}
+		if err := runDockerProbe(ctx, "version"); err != nil {
+			missing = append(missing, MissingDependency{Name: "Docker", Reason: "not running"})
+		}
+		if err := runDockerProbe(ctx, "compose", "version"); err != nil {
+			missing = append(missing, MissingDependency{Name: dockerComposePlugin, Reason: "not installed"})
 		}
 		return missing
 	}
@@ -95,6 +109,15 @@ func CheckProjectDependencies(ctx context.Context, useDocker bool, phpConstraint
 	}
 
 	return missing
+}
+
+// runDockerProbe runs one docker CLI invocation with its own timeout, so a
+// slow daemon probe cannot cancel the Compose plugin probe that follows.
+func runDockerProbe(ctx context.Context, args ...string) error {
+	ctx, cancel := context.WithTimeout(ctx, dockerProbeTimeout)
+	defer cancel()
+
+	return exec.CommandContext(ctx, "docker", args...).Run()
 }
 
 // installedPHPVersion returns the version of the given PHP binary, or of the
@@ -145,6 +168,41 @@ func phpBinaryExample(constraint string) string {
 	return "PHP_BINARY=/usr/bin/php8.2"
 }
 
+// onlyDockerDependencies reports whether every missing dependency is Docker or its Compose plugin.
+func onlyDockerDependencies(missing []MissingDependency) bool {
+	return len(missing) > 0 && !slices.ContainsFunc(missing, func(m MissingDependency) bool {
+		return m.Name != "Docker" && m.Name != dockerComposePlugin
+	})
+}
+
+// DockerSteps lists what to do about the missing Docker dependencies, e.g. "start Docker and install the Docker Compose plugin".
+func DockerSteps(missing []MissingDependency) string {
+	var steps []string
+	for _, m := range missing {
+		switch {
+		case m.Name == dockerComposePlugin:
+			steps = append(steps, "install the Docker Compose plugin")
+		case m.Reason == "not running":
+			steps = append(steps, "start Docker")
+		default:
+			steps = append(steps, "install Docker")
+		}
+	}
+
+	return strings.Join(steps, " and ")
+}
+
+// dockerInstruction phrases the Docker steps, e.g. "Start Docker and try again."
+func dockerInstruction(missing []MissingDependency) string {
+	sentence := DockerSteps(missing)
+	sentence = strings.ToUpper(sentence[:1]) + sentence[1:]
+	if len(missing) == 1 {
+		return sentence + " and try again."
+	}
+
+	return sentence + ", then try again."
+}
+
 func RenderMissingDependencies(useDocker bool, missing []MissingDependency, action, dockerHint string) string {
 	var b strings.Builder
 
@@ -167,12 +225,9 @@ func RenderMissingDependencies(useDocker bool, missing []MissingDependency, acti
 	arrow := tui.GreenText.Render("→")
 	insideContainer := IsInsideContainer()
 
-	dockerOnlyMissing := useDocker && len(missing) == 1 && missing[0].Name == "Docker"
 	switch {
-	case dockerOnlyMissing && missing[0].Reason == "not running":
-		b.WriteString(tui.BoldText.Render("Start Docker and try again."))
-	case dockerOnlyMissing && missing[0].Reason == "not installed":
-		b.WriteString(tui.BoldText.Render("Install Docker and try again."))
+	case useDocker && onlyDockerDependencies(missing):
+		b.WriteString(tui.BoldText.Render(dockerInstruction(missing)))
 	case insideContainer:
 		b.WriteString(tui.BoldText.Render(fmt.Sprintf("To %s from inside this container, install:", action)))
 		b.WriteString("\n\n")

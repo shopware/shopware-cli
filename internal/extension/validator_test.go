@@ -362,7 +362,7 @@ func TestIconValidationReportedOncePerExtension(t *testing.T) {
 	plugin := getTestPlugin(dir)
 
 	check := &testCheck{}
-	RunValidation(getTestContext(), plugin, check)
+	RunValidation(t.Context(), plugin, check, "")
 
 	assert.Equal(t, 1, countResultsWithMessage(check.Results, "The extension icon src/Resources/config/plugin.png does not exist"))
 }
