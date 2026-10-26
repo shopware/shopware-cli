@@ -15,7 +15,7 @@ var projectDeploymentCreateCmd = &cobra.Command{
 	Use:   "create [project-directory]",
 	Short: "Create an immutable deployment archive",
 	Long: `Create an immutable deployment using the selected environment's backend.
-Requires an SSH environment. Build a temporary local copy using the archive
+Requires an environment with SSH backend. Build a temporary local copy using the archive
 packaging pipeline and retain the tar.gz under a generated name in
 .shopware-cli/deployments. Creation does not connect to SSH or upload anything.
 
@@ -34,7 +34,7 @@ Shopware project.`,
 		if err != nil {
 			return err
 		}
-		backend, err := resolveProjectDeploymentBackend(cmd, root)
+		backend, err := deployment.ResolveBackend(cmd.Context(), root, projectConfigPath, environmentName)
 		if err != nil {
 			return err
 		}
