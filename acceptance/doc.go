@@ -4,8 +4,13 @@
 // Each testdata/*.txtar file is a script for [testscript]: commands,
 // assertions on exit status, stdout, stderr and files, and the fixtures the
 // script needs. Scripts match values the command echoes back and structural
-// markers such as the Usage: heading, never sentences. They run without
-// network access.
+// markers such as the Usage: heading, never sentences.
+//
+// Scripts run offline by construction: inside each CLI process, Packagist and
+// the Shopware static data are served by fakes on loopback, and a request to
+// any other host is refused and fails the script when it ends. PATH is the
+// host's, so a script that needs a tool such as php gates its commands with
+// the [exec:php] condition.
 //
 // Run every script, or one script with its transcript:
 //

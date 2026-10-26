@@ -1,7 +1,11 @@
-# Complete metadata passes with exit 0. The icon check is ignored through the
-# extension config because a PNG cannot live in a text fixture.
+# Complete metadata passes with exit 0 and an empty result list. The icon check
+# is ignored through the extension config because a PNG cannot live in a text
+# fixture. Progress lines go to stderr, the report to stdout.
 exec shopware-cli extension validate --only builtin valid
-! stderr .
+stdout 'builtin'
+
+exec shopware-cli extension validate --only builtin --format json valid
+stdout '"results": \[\]'
 
 # The deprecated --full flag is accepted and changes nothing.
 exec shopware-cli extension validate --only builtin --full valid
