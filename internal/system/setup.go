@@ -1,8 +1,8 @@
 package system
 
 import (
+	"cmp"
 	"context"
-	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -19,6 +19,29 @@ import (
 type MissingDependency struct {
 	Name   string
 	Reason string
+	// ID is the stable telemetry identifier, such as docker_not_running.
+	ID string
+}
+
+// MissingDependenciesError is returned when a command cannot run because
+// dependencies are missing; the explanation has already been printed.
+type MissingDependenciesError struct {
+	Missing []MissingDependency
+}
+
+func (e *MissingDependenciesError) Error() string {
+	return "missing required dependencies"
+}
+
+// IDs returns the sorted, de-duplicated identifiers of the missing dependencies.
+func (e *MissingDependenciesError) IDs() []string {
+	ids := make([]string, 0, len(e.Missing))
+	for _, m := range e.Missing {
+		ids = append(ids, cmp.Or(m.ID, "other"))
+	}
+	slices.Sort(ids)
+
+	return slices.Compact(ids)
 }
 
 const dockerComposePlugin = "Docker Compose plugin"
@@ -81,13 +104,13 @@ func CheckProjectDependencies(ctx context.Context, useDocker bool, phpConstraint
 
 	if useDocker && !IsInsideContainer() {
 		if _, err := exec.LookPath("docker"); err != nil {
-			return append(missing, MissingDependency{Name: "Docker", Reason: "not installed"})
+			return append(missing, MissingDependency{Name: "Docker", Reason: "not installed", ID: "docker_not_installed"})
 		}
 		if err := runDockerProbe(ctx, "version"); err != nil {
-			missing = append(missing, MissingDependency{Name: "Docker", Reason: "not running"})
+			missing = append(missing, MissingDependency{Name: "Docker", Reason: "not running", ID: "docker_not_running"})
 		}
 		if err := runDockerProbe(ctx, "compose", "version"); err != nil {
-			missing = append(missing, MissingDependency{Name: dockerComposePlugin, Reason: "not installed"})
+			missing = append(missing, MissingDependency{Name: dockerComposePlugin, Reason: "not installed", ID: "compose_plugin_missing"})
 		}
 		return missing
 	}
@@ -96,14 +119,15 @@ func CheckProjectDependencies(ctx context.Context, useDocker bool, phpConstraint
 	phpOk := err == nil && phpVersionAtLeast(installed, "8.2")
 	switch {
 	case err != nil:
-		missing = append(missing, MissingDependency{Name: "PHP 8.2+", Reason: "not installed"})
+		missing = append(missing, MissingDependency{Name: "PHP 8.2+", Reason: "not installed", ID: "php_not_installed"})
 	case !phpOk:
-		missing = append(missing, MissingDependency{Name: "PHP 8.2+", Reason: "found PHP " + strings.TrimSpace(installed)})
+		missing = append(missing, MissingDependency{Name: "PHP 8.2+", Reason: "found PHP " + strings.TrimSpace(installed), ID: "php_version"})
 	default:
 		if phpConstraint != nil && !phpConstraint.Check(installed) {
 			missing = append(missing, MissingDependency{
 				Name:   fmt.Sprintf("PHP %s", phpConstraint),
 				Reason: "found PHP " + strings.TrimSpace(installed),
+				ID:     "php_version",
 			})
 		}
 	}
@@ -142,7 +166,7 @@ func ValidateProjectDependencies(ctx context.Context, useDocker bool, phpConstra
 	}
 
 	fmt.Fprintln(os.Stderr, RenderMissingDependencies(useDocker, missing, action, dockerHint))
-	return errors.New("missing required dependencies")
+	return &MissingDependenciesError{Missing: missing}
 }
 
 // phpDependencyConstraint returns the constraint text from a PHP-related

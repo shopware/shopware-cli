@@ -248,3 +248,29 @@ func TestTrackCommandExecution_TracksAfterContextCancelled(t *testing.T) {
 	assert.Equal(t, tracking.ResultCancelled, (*events)[0][tracking.TagResult])
 	assert.NoError(t, trackCtxErr, "tracking must get a live context even after the command context was cancelled")
 }
+
+func TestTrackCommandExecution_MissingDependencies(t *testing.T) {
+	events := useTrackingTestRoot(t, "shopware-cli")
+	runErr := fmt.Errorf("cannot create project: %w", &system.MissingDependenciesError{Missing: []system.MissingDependency{
+		{Name: "Docker", Reason: "not running", ID: "docker_not_running"},
+		{Name: "Docker Compose plugin", Reason: "not installed", ID: "compose_plugin_missing"},
+	}})
+
+	trackCommandExecution(context.Background(), []string{"project", "console"}, time.Now(), runErr)
+
+	require.Len(t, *events, 1)
+	tags := (*events)[0]
+	assert.Equal(t, tracking.ResultFailure, tags[tracking.TagResult])
+	assert.Equal(t, tracking.FailureMissingPrerequisite, tags[tracking.TagFailureCategory])
+	assert.Equal(t, "compose_plugin_missing,docker_not_running", tags[tracking.TagMissing])
+}
+
+func TestTrackCommandExecution_PlainFailureHasNoCategory(t *testing.T) {
+	events := useTrackingTestRoot(t, "shopware-cli")
+
+	trackCommandExecution(context.Background(), []string{"project", "console"}, time.Now(), errors.New("boom"))
+
+	require.Len(t, *events, 1)
+	assert.NotContains(t, (*events)[0], tracking.TagFailureCategory)
+	assert.NotContains(t, (*events)[0], tracking.TagMissing)
+}

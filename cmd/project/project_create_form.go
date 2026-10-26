@@ -96,7 +96,7 @@ func validateDockerChoice(choice string, dockerMissing []system.MissingDependenc
 func dockerUnavailableError(missing []system.MissingDependency) error {
 	dockerHint := "re-run with " + tui.BoldText.Render("--docker")
 	fmt.Fprintln(os.Stderr, system.RenderMissingDependencies(true, missing, "create a Shopware project", dockerHint))
-	return errors.New("missing required dependencies")
+	return &system.MissingDependenciesError{Missing: missing}
 }
 
 func runCreateForm(cmd *cobra.Command, opts *createOptions, releases []repository.Version, filteredVersions []*version.Version) error { //nolint:gocyclo

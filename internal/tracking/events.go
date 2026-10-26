@@ -55,6 +55,7 @@ const (
 	TagIsTUI       = "is_tui"
 	TagIsWSL       = "is_wsl"
 	TagCIProvider  = "ci_provider"
+	TagMissing     = "missing"
 
 	// EventProjectCreate
 	TagVersion           = "version"
@@ -107,6 +108,12 @@ const (
 	TagTabsVisited  = "tabs_visited"
 	TagActions      = "actions"
 	TagWatchersUsed = "watchers_used"
+)
+
+// Values of the TagFailureCategory tag on the command event. The dev install
+// event uses the same word for its own closed set (internal/tui/dev).
+const (
+	FailureMissingPrerequisite = "missing_prerequisite"
 )
 
 // Values of the TagResult tag shared across events.

@@ -153,8 +153,13 @@ overall CLI usage.
 | `is_tui`       | Whether the run was interactive (a terminal / TUI session)    | `true` / `false`       |
 | `is_wsl`       | Whether a Linux run happens inside the Windows Subsystem for Linux | `true` / `false`  |
 | `ci_provider`  | The CI system a run executes on; only present on CI runs. `other` means CI was detected without a known provider | `github` / `gitlab` / `bitbucket` / `other` |
+| `failure_category` | Why the command failed, when the CLI knows; only sent with `result=failure`. Closed enum, the raw error text is never sent. Today only `missing_prerequisite`, when the dependency check stopped the command; more values follow | `missing_prerequisite` |
+| `missing`      | Which dependencies the check found missing, sorted and comma-separated; only with `failure_category=missing_prerequisite` | `compose_plugin_missing,docker_not_running` |
 
 Notes:
+- `missing` uses stable identifiers: `docker_not_installed`, `docker_not_running`,
+  `compose_plugin_missing`, `php_not_installed`, `php_version` and `other`. The
+  versions found or required are never sent.
 - The command *name* is captured (e.g. `project.create`), but **not** its
   arguments, flags, paths, or any free-text input.
 - The root command alone (running `shopware-cli` with no sub-command) is not
