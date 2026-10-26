@@ -6,12 +6,14 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"maps"
 	"net"
 	"os"
 	"path/filepath"
 	"sync"
 	"time"
 
+	"github.com/shopware/shopware-cli/internal/cliversion"
 	"github.com/shopware/shopware-cli/logging"
 )
 
@@ -101,8 +103,13 @@ func Track(ctx context.Context, eventName string, tags map[string]string) {
 
 	ensureInitialized()
 
+	// Every event carries the CLI version, so dev builds can be excluded anywhere.
+	tags = maps.Clone(tags)
 	if tags == nil {
 		tags = make(map[string]string)
+	}
+	if _, ok := tags[TagCLIVersion]; !ok {
+		tags[TagCLIVersion] = cliversion.Version
 	}
 
 	e := event{

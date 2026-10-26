@@ -11,6 +11,8 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+
+	"github.com/shopware/shopware-cli/internal/cliversion"
 )
 
 // resetInit resets the lazy initialization so each test starts fresh.
@@ -48,8 +50,16 @@ func TestTrackSendsUDPPayload(t *testing.T) {
 
 	assert.Equal(t, "shopware_cli.test_event", received.Event)
 	assert.Equal(t, "value", received.Tags["key"])
+	assert.Equal(t, cliversion.Version, received.Tags[TagCLIVersion])
 	assert.NotEmpty(t, received.UserID)
 	assert.NotEmpty(t, received.Timestamp)
+
+	// An explicit version wins over the build's own.
+	Track(t.Context(), "test_event", map[string]string{TagCLIVersion: "1.2.3"})
+	n, err = conn.Read(buf)
+	assert.NoError(t, err)
+	assert.NoError(t, json.Unmarshal(buf[:n], &received))
+	assert.Equal(t, "1.2.3", received.Tags[TagCLIVersion])
 }
 
 func TestTrackRespectsDoNotTrack(t *testing.T) {
