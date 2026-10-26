@@ -83,3 +83,28 @@ func TestInfo(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "unknown integration")
 }
+
+func TestTypeString(t *testing.T) {
+	assert.Equal(t, "skill", TypeSkill.String())
+	assert.Equal(t, "mcp", TypeMCP.String())
+}
+
+func TestMeteorMCPEntry(t *testing.T) {
+	e, ok := Load().Get("meteor")
+	require.True(t, ok)
+
+	assert.Equal(t, TypeMCP, e.Type)
+	assert.Equal(t, DeliveryMCP, e.Delivery.Kind)
+	assert.Equal(t, "https://meteor.shopware.com/mcp", e.Delivery.URL)
+	assert.Equal(t, "http", e.Delivery.Transport)
+}
+
+func TestListMCPTypeFromRealDirectory(t *testing.T) {
+	got, err := Load().List(ListOptions{Type: "mcp"})
+	require.NoError(t, err)
+	require.NotEmpty(t, got)
+
+	for _, e := range got {
+		assert.Equal(t, TypeMCP, e.Type)
+	}
+}

@@ -166,7 +166,7 @@ shopware-cli extension validate [path] [flags]
 
 The extension path is required; use `.` for the current extension.
 
-Normal extension validation runs the built-in checks implemented by the current CLI. Store-compliance mode can add Store-specific checks; do not assume that every metadata or quality rule is Store-only.
+Normal extension validation runs the built-in checks implemented by the current CLI. Store compliance checks that Administration and Storefront source files have matching compiled assets. Validation also reports metadata and code quality findings that are not specific to Store compliance.
 
 Common flags include:
 
@@ -174,12 +174,15 @@ Common flags include:
 - `--exclude <tools>` — remove checkers from the selected set.
 - All checkers run by default, including PHPStan, ESLint, and Stylelint. `--full` is deprecated and has no effect. To do a quick validation use `--only builtin` (`sw-cli` remains accepted as a legacy alias and emits a deprecation warning).
 - `--check-against <mode>` — `highest` (default) or `lowest`: which supported Shopware version to check against.
-- `--store-compliance` — enable Store-compliance mode while the current CLI supports the flag. Prefer `validation.store_compliance: true` in `.shopware-extension.yml` for persistent Store intent.
 - `--format <format>` — choose an output format supported by the current CLI (`--reporter` is a deprecated alias).
 - `--no-copy` — do not copy extension files to a temporary directory.
 - `--verbose` — show debug output.
 
 For Store-distribution workflows, use the `shopware-cli-extension-store` skill when available.
+
+Store compliance is enabled with `validation.store_compliance: true` in
+`.shopware-extension.yml`. Setting `SHOPWARE_CLI_STORE_COMPLIANCE=1` also
+enables it. It checks Administration and Storefront source and compiled asset pairs.
 
 Each command selects only tools that support its operation. For example, `extension validate --only prettier` is an error because Prettier formats but does not check; the error lists available checkers. The extension command summaries show `invoked` or `skipped`: these describe selection and invocation, not whether files were applicable, findings were produced, or fixes were made.
 

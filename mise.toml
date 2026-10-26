@@ -4,12 +4,13 @@
 # Personal overrides belong in mise.local.toml, which is intentionally ignored.
 
 [tools]
-# Keep this aligned with the Go version declared in go.mod.
-go = "1.27.0"
+# Keep this aligned with the Go minor version declared in go.mod.
+# Run `mise upgrade go` to install the latest patch release.
+go = "1.27"
 
 # Pin the linter so local results do not change when a new release is published.
 # Keep this in sync with the version in .github/workflows/lint.yml.
-golangci-lint = "2.14.0"
+golangci-lint = "2.15.0"
 
 [env]
 # Match CI and prevent Go from silently downloading a different toolchain.
@@ -25,7 +26,7 @@ run = "golangci-lint fmt --diff ./..."
 
 [tasks.build]
 description = "Build the shopware-cli binary"
-run = "go build -o shopware-cli ."
+run = "go build -o ./bin/shopware-cli ."
 
 [tasks.test]
 description = "Run the network-isolated test suite"

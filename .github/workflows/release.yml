@@ -77,7 +77,7 @@ jobs:
         run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
 
       - name: Run GoReleaser
-        uses: goreleaser/goreleaser-action@f06c13b6b1a9625abc9e6e439d9c05a8f2190e94 # ratchet:goreleaser/goreleaser-action@v7.2.3
+        uses: goreleaser/goreleaser-action@a4f02ab5355a589de60d917a659ce617ed19b3de # ratchet:goreleaser/goreleaser-action@v7.3.0
         with:
           distribution: goreleaser-pro
           version: '~> v2'
@@ -106,3 +106,13 @@ jobs:
         uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # ratchet:actions/attest@v4.2.2
         with:
           subject-checksums: ./dist/digests.txt
+
+  publish-version-feed:
+    name: Publish version feed
+    needs: release
+    # Releases made with GITHUB_TOKEN never trigger workflows, so call it here
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    uses: ./.github/workflows/schema-pages.yml
