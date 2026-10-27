@@ -14,6 +14,7 @@ import (
 	"github.com/shopware/shopware-cli/internal/testhelper"
 )
 
+// deploymentPHP finds PHP for remote-script tests, skipping when POSIX tools are unavailable.
 func deploymentPHP(t *testing.T) string {
 	t.Helper()
 	if runtime.GOOS == "windows" {
@@ -29,11 +30,13 @@ func deploymentPHP(t *testing.T) string {
 	return php
 }
 
+// localDeploymentSSH creates a local SSH fixture using the default active release link.
 func localDeploymentSSH(t *testing.T) *SSH {
 	t.Helper()
 	return localDeploymentSSHWithLink(t, "current")
 }
 
+// localDeploymentSSHWithLink executes remote commands locally against an isolated deployment layout.
 func localDeploymentSSHWithLink(t *testing.T, name string) *SSH {
 	t.Helper()
 	php := deploymentPHP(t)
@@ -70,12 +73,14 @@ type memoryInitializationStore struct {
 	applyErr    error
 }
 
+// Inspect returns the next scripted inspection result.
 func (s *memoryInitializationStore) Inspect(context.Context) (sshDeploymentInitState, error) {
 	i := s.inspections
 	s.inspections++
 	return s.states[i], s.inspectErrs[i]
 }
 
+// Apply records a configuration write and returns the scripted error.
 func (s *memoryInitializationStore) Apply(_ context.Context, config sshDeploymentInitConfig) error {
 	s.writes = append(s.writes, config)
 	return s.applyErr

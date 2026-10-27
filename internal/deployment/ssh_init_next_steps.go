@@ -11,10 +11,12 @@ import (
 var _ InitializationGuide = (*SSH)(nil)
 var _ InitializationGuide = (*sshGroup)(nil)
 
+// WriteInitializationNextSteps prints configuration locations and follow-up commands for the deployment targets.
 func (s *SSH) WriteInitializationNextSteps(environment string, output io.Writer) error {
 	return writeSSHInitializationNextSteps(s, []*SSH{s}, environment, output)
 }
 
+// WriteInitializationNextSteps prints configuration locations and follow-up commands for the deployment targets.
 func (g *sshGroup) WriteInitializationNextSteps(environment string, output io.Writer) error {
 	targets := make([]*SSH, 0, len(g.hosts))
 	for _, host := range g.hosts {
@@ -23,6 +25,7 @@ func (g *sshGroup) WriteInitializationNextSteps(environment string, output io.Wr
 	return writeSSHInitializationNextSteps(g.hosts[g.migration].backend, targets, environment, output)
 }
 
+// writeSSHInitializationNextSteps preserves the environment and config selection in shell-quoted deployment instructions.
 func writeSSHInitializationNextSteps(source *SSH, targets []*SSH, environment string, output io.Writer) error {
 	root, err := filepath.Abs(source.root)
 	if err != nil {

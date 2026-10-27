@@ -11,6 +11,7 @@ import (
 	"github.com/shopware/shopware-cli/internal/testhelper"
 )
 
+// TestSSHSharedPaths checks default, overridden and explicitly empty shared-path lists.
 func TestSSHSharedPaths(t *testing.T) {
 	var omitted *EnvironmentSSHConfig
 	defaultFiles, defaultDirectories, err := omitted.SharedPaths()
@@ -47,6 +48,7 @@ func TestSSHSharedPaths(t *testing.T) {
 	}
 }
 
+// TestSSHSharedPathsRejectUnsafeAndOverlappingPaths checks traversal, aliases and overlapping shared paths are rejected.
 func TestSSHSharedPathsRejectUnsafeAndOverlappingPaths(t *testing.T) {
 	for _, name := range []string{"", ".", "..", "../outside", "/absolute", "public/../media", "./media", "media/", "public//media", `public\media`, "media\nother", "media\x00"} {
 		t.Run(name, func(t *testing.T) {
@@ -69,6 +71,7 @@ func TestSSHSharedPathsRejectUnsafeAndOverlappingPaths(t *testing.T) {
 	}
 }
 
+// TestSSHSharedPathsReserveReleaseLocalCache checks that shared paths cannot include release-local cache storage.
 func TestSSHSharedPathsReserveReleaseLocalCache(t *testing.T) {
 	for _, name := range []string{"var", "var/cache", "var/cache/prod"} {
 		t.Run(name, func(t *testing.T) {
@@ -91,6 +94,7 @@ func TestSSHSharedPathsReserveReleaseLocalCache(t *testing.T) {
 	assert.ElementsMatch(t, paths, directories)
 }
 
+// TestSSHSharedPathsLocalOverrideAndWriteConfig checks that shared-path overrides survive configuration serialization.
 func TestSSHSharedPathsLocalOverrideAndWriteConfig(t *testing.T) {
 	root := t.TempDir()
 	testhelper.WriteFile(t, filepath.Join(root, ".shopware-project.yml"), `

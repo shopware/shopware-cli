@@ -10,6 +10,7 @@ import (
 	"github.com/shopware/shopware-cli/internal/testhelper"
 )
 
+// TestReadConfigValidatesSSHEnvironments checks SSH validation during project configuration loading.
 func TestReadConfigValidatesSSHEnvironments(t *testing.T) {
 	for name, settings := range map[string]string{
 		"missing section":        "{type: ssh}",
@@ -36,6 +37,7 @@ func TestReadConfigValidatesSSHEnvironments(t *testing.T) {
 	}
 }
 
+// TestReadConfigValidatesSSHAfterAllIncludesAndOverrides checks that validation runs on the fully merged configuration.
 func TestReadConfigValidatesSSHAfterAllIncludesAndOverrides(t *testing.T) {
 	root := t.TempDir()
 	t.Chdir(root)
@@ -98,6 +100,7 @@ environments:
 	require.Error(t, err)
 }
 
+// TestReadConfigValidatesSSHInFallbackOverride checks that fallback overrides receive SSH validation.
 func TestReadConfigValidatesSSHInFallbackOverride(t *testing.T) {
 	file := filepath.Join(t.TempDir(), "project.yml")
 	local := LocalConfigFileName(file)

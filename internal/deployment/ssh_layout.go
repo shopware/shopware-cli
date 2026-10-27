@@ -11,6 +11,7 @@ import (
 //go:embed ssh_layout.php
 var sshLayoutScript string
 
+// withSSHDeploymentLayout prepends shared layout validation to a remote PHP script.
 func withSSHDeploymentLayout(script string) string {
 	return sshLayoutScript + "\n" + strings.TrimPrefix(script, "<?php\n")
 }
@@ -32,6 +33,7 @@ func (s *SSH) deploymentRoot() (string, error) {
 	return path.Dir(current), nil
 }
 
+// activeLinkName returns the configured active release symlink name.
 func (s *SSH) activeLinkName() string {
 	return path.Base(path.Clean(s.directory))
 }

@@ -17,6 +17,7 @@ import (
 	"github.com/shopware/shopware-cli/internal/testhelper"
 )
 
+// TestInitializationNextStepsPreserveCommandContext checks that generated commands retain config paths and environment selection.
 func TestInitializationNextStepsPreserveCommandContext(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("generated command targets a POSIX shell")
@@ -55,6 +56,7 @@ func TestInitializationNextStepsPreserveCommandContext(t *testing.T) {
 	assert.NoFileExists(t, filepath.Join(caller, "unexpected"))
 }
 
+// TestInitializationNextStepsIncludeAllTargets checks that guidance includes every host and its web root.
 func TestInitializationNextStepsIncludeAllTargets(t *testing.T) {
 	backend, err := New(t.TempDir(), "", &shop.Config{}, &shop.EnvironmentConfig{
 		Type: "ssh", SSH: &shop.EnvironmentSSHConfig{

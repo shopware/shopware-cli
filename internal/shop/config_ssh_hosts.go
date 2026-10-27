@@ -35,6 +35,7 @@ func (c *EnvironmentSSHConfig) Validate() error {
 	return err
 }
 
+// validateSSHHosts validates SSH environments after configuration includes and overrides are resolved.
 func (c *Config) validateSSHHosts() error {
 	for _, name := range slices.Sorted(maps.Keys(c.Environments)) {
 		env := c.Environments[name]
@@ -138,6 +139,7 @@ func (c *EnvironmentSSHConfig) ResolveHosts() ([]SSHHost, string, error) {
 	return hosts, primary, nil
 }
 
+// validateSSHMember requires a host and directory and validates the resolved shared paths.
 func validateSSHMember(c *EnvironmentSSHConfig) error {
 	if c.Host == "" {
 		return errors.New("ssh environment requires ssh.host")
@@ -149,6 +151,7 @@ func validateSSHMember(c *EnvironmentSSHConfig) error {
 	return err
 }
 
+// cloneSSHMember copies a resolved host without retaining group settings or mutable shared slices.
 func cloneSSHMember(c *EnvironmentSSHConfig) *EnvironmentSSHConfig {
 	member := *c
 	member.Hosts, member.MigrationHost, member.Parallelism = nil, "", 0

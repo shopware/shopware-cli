@@ -35,6 +35,7 @@ type sshDeploymentInitState struct {
 	InstallKeys        []string `json:"install_keys"`
 }
 
+// HasValidRuntimeConfig reports whether inspection found a runtime file and its content digest.
 func (s sshDeploymentInitState) HasValidRuntimeConfig() bool {
 	return s.HasRuntimeConfig && s.RuntimeSHA256 != ""
 }
@@ -52,6 +53,7 @@ type sshDeploymentInitInput struct {
 	InstallValues map[string]string `json:"install_values,omitempty"`
 }
 
+// Inspect reads remote initialization metadata without returning configuration secrets.
 func (s sshInitializationStore) Inspect(ctx context.Context) (sshDeploymentInitState, error) {
 	var state sshDeploymentInitState
 	root, err := s.ssh.deploymentRoot()
@@ -70,6 +72,7 @@ func (s sshInitializationStore) Inspect(ctx context.Context) (sshDeploymentInitS
 	return state, nil
 }
 
+// Apply writes runtime and install values through the protected remote initialization script.
 func (s sshInitializationStore) Apply(ctx context.Context, config sshDeploymentInitConfig) error {
 	root, err := s.ssh.deploymentRoot()
 	if err != nil {
@@ -84,6 +87,7 @@ func (s sshInitializationStore) Apply(ctx context.Context, config sshDeploymentI
 	return err
 }
 
+// run sends initialization input over stdin so secrets stay out of SSH command arguments.
 func (s sshInitializationStore) run(ctx context.Context, input sshDeploymentInitInput) ([]byte, error) {
 	payload, err := json.Marshal(input)
 	if err != nil {

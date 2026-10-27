@@ -4,6 +4,7 @@ ini_set('display_errors', 'stderr');
 ini_set('html_errors', '0');
 ini_set('log_errors', '0');
 
+/** Create a real directory with the requested permissions, rejecting symlinks. */
 function initDirectory(string $directory, int $mode = 0755): void
 {
     if (is_link($directory) || (file_exists($directory) && !is_dir($directory))) {
@@ -16,6 +17,7 @@ function initDirectory(string $directory, int $mode = 0755): void
     }
 }
 
+/** Read environment key names without exposing their values. */
 function initKeys(string $file): array
 {
     if (!file_exists($file) && !is_link($file)) {
@@ -34,6 +36,7 @@ function initKeys(string $file): array
     return $keys;
 }
 
+/** Quote a value for dotenv while preserving literal special characters. */
 function initEncode(string $value): string
 {
     return '"' . str_replace(
@@ -43,6 +46,7 @@ function initEncode(string $value): string
     ) . '"';
 }
 
+/** Replace existing keys literally and append missing keys, preserving unrelated content. */
 function initMerge(string $content, array $values): string
 {
     ksort($values);
@@ -53,7 +57,7 @@ function initMerge(string $content, array $values): string
         $line = $key . '=' . initEncode($value);
         $pattern = '/^\s*(?:export\s+)?' . preg_quote($key, '/') . '\s*=.*$/m';
         if (preg_match($pattern, $content)) {
-            $content = (string) preg_replace($pattern, $line, $content, 1);
+            $content = (string) preg_replace_callback($pattern, static fn (): string => $line, $content, 1);
         } else {
             if ($content !== '' && !str_ends_with($content, "\n")) {
                 $content .= "\n";
@@ -64,6 +68,7 @@ function initMerge(string $content, array $values): string
     return $content;
 }
 
+/** Publish a complete configuration file atomically with owner-only permissions. */
 function initWrite(string $file, array $values): void
 {
     if (is_link($file) || (file_exists($file) && !is_file($file))) {

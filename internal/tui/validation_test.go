@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// TestCombineValidators checks validation order and propagation of the first failure.
 func TestCombineValidators(t *testing.T) {
 	expected := errors.New("invalid input")
 	var calls []string
@@ -37,6 +38,7 @@ func TestCombineValidators(t *testing.T) {
 	require.Error(t, requiredLine("first\nsecond"))
 }
 
+// TestOptionalValidator checks that only an empty string bypasses validation.
 func TestOptionalValidator(t *testing.T) {
 	expected := errors.New("invalid input")
 	var values []string
@@ -56,6 +58,7 @@ func TestOptionalValidator(t *testing.T) {
 	require.Error(t, email(" "))
 }
 
+// TestInputValidators checks accepted and rejected form input values.
 func TestInputValidators(t *testing.T) {
 	for _, test := range []struct {
 		name     string

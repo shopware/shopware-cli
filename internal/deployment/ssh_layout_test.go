@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// TestSSHDeploymentLayout checks valid active-link layouts and reserved storage path rejection.
 func TestSSHDeploymentLayout(t *testing.T) {
 	for _, directory := range []string{"/srv/shop/current", "/srv/shop/live", "/var/www/shop", "/srv/shop/live/", "/srv/shop/live's shop"} {
 		t.Run(directory, func(t *testing.T) {
@@ -29,6 +30,7 @@ func TestSSHDeploymentLayout(t *testing.T) {
 	}
 }
 
+// TestSSHRemoteLayoutRejectsUnsafeLinkNames checks that remote PHP enforces active-link path restrictions.
 func TestSSHRemoteLayoutRejectsUnsafeLinkNames(t *testing.T) {
 	php := deploymentPHP(t)
 	root := t.TempDir()

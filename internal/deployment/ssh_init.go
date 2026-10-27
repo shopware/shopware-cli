@@ -20,10 +20,12 @@ import (
 
 var _ Initializer = (*SSH)(nil)
 
+// InitializeDeployment prompts for configuration and initializes the SSH deployment target.
 func (s *SSH) InitializeDeployment(ctx context.Context) error {
 	return s.initializeDeployment(ctx, s.promptDeploymentInitialization)
 }
 
+// initializeDeployment inspects the target and writes configuration only after confirmation.
 func (s *SSH) initializeDeployment(ctx context.Context, prompt func(context.Context, sshDeploymentInitState) (sshDeploymentInitConfig, bool, error)) error {
 	state, err := s.initStore.Inspect(ctx)
 	if err != nil {
@@ -43,6 +45,7 @@ func (s *SSH) initializeDeployment(ctx context.Context, prompt func(context.Cont
 	return s.initStore.Apply(ctx, config)
 }
 
+// promptDeploymentInitialization collects runtime and optional first-install values without writing them.
 func (s *SSH) promptDeploymentInitialization(ctx context.Context, state sshDeploymentInitState) (sshDeploymentInitConfig, bool, error) {
 	configureInstall := !state.HasCurrent && !state.HasInstallConfig
 	confirmed := true
@@ -210,6 +213,7 @@ func (s *SSH) promptDeploymentInitialization(ctx context.Context, state sshDeplo
 	return config, confirmed, nil
 }
 
+// validateDatabaseURL requires a single-line MySQL or MariaDB URL with a host and database.
 func validateDatabaseURL(value string) error {
 	if err := tui.CombineValidators(tui.ValidateRequired, tui.ValidateSingleLine)(value); err != nil {
 		return err
@@ -221,6 +225,7 @@ func validateDatabaseURL(value string) error {
 	return nil
 }
 
+// buildDatabaseURL encodes credentials and joins the database host and port into a MySQL URL.
 func buildDatabaseURL(host, port, database, username, password string) string {
 	return (&url.URL{
 		Scheme: "mysql",
@@ -230,6 +235,7 @@ func buildDatabaseURL(host, port, database, username, password string) string {
 	}).String()
 }
 
+// deploymentSecret generates a random 256-bit APP_SECRET encoded as hexadecimal.
 func deploymentSecret() (string, error) {
 	value := make([]byte, 32)
 	if _, err := rand.Read(value); err != nil {

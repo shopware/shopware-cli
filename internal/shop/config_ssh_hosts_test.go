@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// TestSSHResolveHostsInheritanceAndIsolation checks host overrides and independence of mutable resolved settings.
 func TestSSHResolveHostsInheritanceAndIsolation(t *testing.T) {
 	base := &EnvironmentSSHConfig{
 		User: "deploy", Port: 2222, Directory: "/srv/shop", IdentityFile: "/key", PHPBinary: "php8.4",
@@ -57,6 +58,7 @@ func TestSSHResolveHostsInheritanceAndIsolation(t *testing.T) {
 	assert.Equal(t, 3, base.Parallelism)
 }
 
+// TestSSHResolveHostsSingle checks resolution of single-host configurations.
 func TestSSHResolveHostsSingle(t *testing.T) {
 	legacy := &EnvironmentSSHConfig{Host: "example.com", Directory: "/srv/shop"}
 	hosts, primary, err := legacy.ResolveHosts()
@@ -73,6 +75,7 @@ func TestSSHResolveHostsSingle(t *testing.T) {
 	assert.Equal(t, legacy, hosts[0].Config)
 }
 
+// TestSSHResolveHostsInvalid checks rejection of ambiguous or invalid host groups.
 func TestSSHResolveHostsInvalid(t *testing.T) {
 	tests := []struct {
 		name    string

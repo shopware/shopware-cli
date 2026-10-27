@@ -44,8 +44,10 @@ func newSSHGroup(hosts []sshHost, migrationHost string, parallelism int) (*sshGr
 	return g, nil
 }
 
+// Type identifies a group of SSH hosts as an SSH deployment backend.
 func (g *sshGroup) Type() string { return "ssh" }
 
+// CreateDeployment creates the archive using the migration host configuration.
 func (g *sshGroup) CreateDeployment(ctx context.Context, options CreateOptions) (Deployment, error) {
 	return g.hosts[g.migration].backend.CreateDeployment(ctx, options)
 }

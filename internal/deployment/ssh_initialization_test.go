@@ -15,6 +15,7 @@ import (
 	"github.com/shopware/shopware-cli/internal/envfile"
 )
 
+// TestSSHDeploymentInitializationWritesProtectedConfiguration checks secret transport, dotenv round trips and restrictive file permissions.
 func TestSSHDeploymentInitializationWritesProtectedConfiguration(t *testing.T) {
 	e := localDeploymentSSH(t)
 	root := filepath.Dir(e.directory)
@@ -75,6 +76,22 @@ func TestSSHDeploymentInitializationWritesProtectedConfiguration(t *testing.T) {
 	assert.ElementsMatch(t, []string{"INSTALL_ADMIN_EMAIL", "INSTALL_ADMIN_PASSWORD", "INSTALL_ADMIN_USERNAME"}, state.InstallKeys)
 }
 
+// TestSSHDeploymentInitializationPreservesEscapesWhenReplacingValues guards against replacement-string interpretation of dotenv escapes.
+func TestSSHDeploymentInitializationPreservesEscapesWhenReplacingValues(t *testing.T) {
+	e := localDeploymentSSH(t)
+	root := filepath.Dir(e.directory)
+	runtimeFile := filepath.Join(root, "shared/.env.local")
+	require.NoError(t, os.WriteFile(runtimeFile, []byte("DATABASE_URL=old\n"), 0o600))
+	value := `mysql://user:a\nb$HOME${USER}$1\1"quoted"@localhost/shopware`
+	require.NoError(t, e.initStore.Apply(t.Context(), sshDeploymentInitConfig{
+		RuntimeValues: map[string]string{"DATABASE_URL": value},
+	}))
+	values, err := envfile.ReadValues(filepath.Join(root, "shared"), "DATABASE_URL")
+	require.NoError(t, err)
+	assert.Equal(t, value, values["DATABASE_URL"])
+}
+
+// TestSSHDeploymentInitializationRejectsSharedDirectorySymlink checks that initialization cannot write through a shared-directory symlink.
 func TestSSHDeploymentInitializationRejectsSharedDirectorySymlink(t *testing.T) {
 	e := localDeploymentSSH(t)
 	root := filepath.Dir(e.directory)
@@ -90,6 +107,7 @@ func TestSSHDeploymentInitializationRejectsSharedDirectorySymlink(t *testing.T) 
 	require.ErrorContains(t, err, "Expected a real directory")
 }
 
+// TestSSHDeploymentInitializationInspectBootstrapsOnlyManagement checks that inspection creates management storage without runtime configuration.
 func TestSSHDeploymentInitializationInspectBootstrapsOnlyManagement(t *testing.T) {
 	e := localDeploymentSSH(t)
 	root := filepath.Dir(e.directory)
@@ -104,6 +122,7 @@ func TestSSHDeploymentInitializationInspectBootstrapsOnlyManagement(t *testing.T
 	assert.NoFileExists(t, filepath.Join(root, ".shopware-cli/install.env"))
 }
 
+// TestSSHDeploymentInitializationPreservesUnrelatedRuntimeValues checks that updating a key retains unrelated settings and comments.
 func TestSSHDeploymentInitializationPreservesUnrelatedRuntimeValues(t *testing.T) {
 	e := localDeploymentSSH(t)
 	root := filepath.Dir(e.directory)
@@ -120,6 +139,7 @@ func TestSSHDeploymentInitializationPreservesUnrelatedRuntimeValues(t *testing.T
 	assert.NotContains(t, string(content), "old.example.com")
 }
 
+// TestSSHDeploymentInitializationRejectsUnsafeTargets checks that config paths cannot be directories or symlinks.
 func TestSSHDeploymentInitializationRejectsUnsafeTargets(t *testing.T) {
 	e := localDeploymentSSH(t)
 	root := filepath.Dir(e.directory)
@@ -141,11 +161,13 @@ func TestSSHDeploymentInitializationRejectsUnsafeTargets(t *testing.T) {
 	require.ErrorContains(t, err, "regular file")
 }
 
+// TestSSHDeploymentInitializationRejectsEmptyConfiguration checks that an empty configuration cannot be applied.
 func TestSSHDeploymentInitializationRejectsEmptyConfiguration(t *testing.T) {
 	e := localDeploymentSSH(t)
 	require.ErrorContains(t, e.initStore.Apply(t.Context(), sshDeploymentInitConfig{}), "no values")
 }
 
+// TestSSHInitializationUsesConfiguredActiveLink checks that initialization respects custom active links without modifying releases.
 func TestSSHInitializationUsesConfiguredActiveLink(t *testing.T) {
 	for _, name := range []string{"current", "shop", "live's shop"} {
 		t.Run(name, func(t *testing.T) {
@@ -174,6 +196,7 @@ func TestSSHInitializationUsesConfiguredActiveLink(t *testing.T) {
 	}
 }
 
+// TestSSHInitializationApplyDoesNotOverwriteCompletedConfiguration checks that a second writer cannot replace completed initialization.
 func TestSSHInitializationApplyDoesNotOverwriteCompletedConfiguration(t *testing.T) {
 	backend := localDeploymentSSH(t)
 	config := sshDeploymentInitConfig{
@@ -199,6 +222,7 @@ func TestSSHInitializationApplyDoesNotOverwriteCompletedConfiguration(t *testing
 	}
 }
 
+// TestSSHInitializationFailedWriteCanBeRetried checks that a failed write leaves initialization retryable.
 func TestSSHInitializationFailedWriteCanBeRetried(t *testing.T) {
 	backend := localDeploymentSSH(t)
 	root := filepath.Dir(backend.directory)
@@ -220,6 +244,7 @@ func TestSSHInitializationFailedWriteCanBeRetried(t *testing.T) {
 	assert.True(t, state.Initialized)
 }
 
+// TestSSHInitializationRejectsUnsafeCompletionMarker checks that unsafe completion markers prevent configuration changes.
 func TestSSHInitializationRejectsUnsafeCompletionMarker(t *testing.T) {
 	for _, symlink := range []bool{true, false} {
 		t.Run(fmt.Sprintf("symlink=%t", symlink), func(t *testing.T) {

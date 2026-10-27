@@ -30,7 +30,7 @@ var projectDeploymentInitCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		target, err := resolveProjectDeploymentBackend(cmd, root)
+		target, err := deployment.ResolveBackend(cmd.Context(), root, projectConfigPath, environmentName)
 		if err != nil {
 			return err
 		}
@@ -38,6 +38,7 @@ var projectDeploymentInitCmd = &cobra.Command{
 	},
 }
 
+// runProjectDeploymentInit initializes a supported backend and prints its setup guidance after success.
 func runProjectDeploymentInit(cmd *cobra.Command, target deployment.Backend) error {
 	initializer, ok := target.(deployment.Initializer)
 	if !ok {

@@ -12,6 +12,7 @@ import (
 	"github.com/shopware/shopware-cli/internal/shop"
 )
 
+// fixtureInitializationGroup creates a two-host group with inspectable in-memory configuration stores.
 func fixtureInitializationGroup(t *testing.T) (*sshGroup, map[string]*memoryInitializationStore) {
 	t.Helper()
 	backend, err := New(t.TempDir(), "", &shop.Config{}, &shop.EnvironmentConfig{
@@ -37,6 +38,7 @@ func fixtureInitializationGroup(t *testing.T) (*sshGroup, map[string]*memoryInit
 	return g, stores
 }
 
+// TestSSHGroupInitializationWritesOnceOnMigrationHost checks that only the migration host receives configuration.
 func TestSSHGroupInitializationWritesOnceOnMigrationHost(t *testing.T) {
 	g, stores := fixtureInitializationGroup(t)
 	stores["a"].states[0] = sshDeploymentInitState{HasSharedDirectory: true, HasCurrent: true}
@@ -61,6 +63,7 @@ func TestSSHGroupInitializationWritesOnceOnMigrationHost(t *testing.T) {
 	}
 }
 
+// TestSSHGroupInitializationPromptStopsWithoutWriting checks that cancellation and prompt errors leave every host untouched.
 func TestSSHGroupInitializationPromptStopsWithoutWriting(t *testing.T) {
 	promptErr := errors.New("prompt failed")
 	for _, test := range []struct {
@@ -88,6 +91,7 @@ func TestSSHGroupInitializationPromptStopsWithoutWriting(t *testing.T) {
 	}
 }
 
+// TestSSHGroupInitializationApplyError checks that a failed migration-host write is returned to the caller.
 func TestSSHGroupInitializationApplyError(t *testing.T) {
 	g, stores := fixtureInitializationGroup(t)
 	stores["b"].applyErr = errors.New("write failed")
@@ -103,6 +107,7 @@ func TestSSHGroupInitializationApplyError(t *testing.T) {
 	}
 }
 
+// TestSSHGroupInitializationRepeatVerifiesWithoutWriting checks that repeated initialization verifies shared state without another write.
 func TestSSHGroupInitializationRepeatVerifiesWithoutWriting(t *testing.T) {
 	for _, consistent := range []bool{true, false} {
 		t.Run(fmt.Sprintf("consistent=%t", consistent), func(t *testing.T) {
@@ -128,6 +133,7 @@ func TestSSHGroupInitializationRepeatVerifiesWithoutWriting(t *testing.T) {
 	}
 }
 
+// TestSSHGroupInitializationPreflight checks that unsafe host states prevent prompting and writing.
 func TestSSHGroupInitializationPreflight(t *testing.T) {
 	unreachable := errors.New("host unreachable")
 	for _, test := range []struct {
@@ -158,6 +164,7 @@ func TestSSHGroupInitializationPreflight(t *testing.T) {
 	}
 }
 
+// TestSSHGroupInitializationVerification checks that missing or inconsistent shared configuration fails verification.
 func TestSSHGroupInitializationVerification(t *testing.T) {
 	unreachable := errors.New("host unreachable")
 	for _, test := range []struct {

@@ -10,6 +10,7 @@ import (
 
 var _ Initializer = (*sshGroup)(nil)
 
+// InitializeDeployment prompts for configuration and initializes the SSH deployment target.
 func (g *sshGroup) InitializeDeployment(ctx context.Context) error {
 	return g.initializeDeployment(ctx, g.hosts[g.migration].backend.promptDeploymentInitialization)
 }
