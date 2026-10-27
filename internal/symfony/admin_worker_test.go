@@ -81,3 +81,28 @@ func TestIsAdminWorkerEnabled(t *testing.T) {
 		assert.True(t, enabled)
 	})
 }
+
+func TestAdminWorkerSetting(t *testing.T) {
+	cases := []struct {
+		name       string
+		body       string
+		enabled    bool
+		configured bool
+	}{
+		{name: "not configured is the enabled default", body: "", enabled: true, configured: false},
+		{name: "explicitly disabled", body: "shopware:\n  admin_worker:\n    enable_admin_worker: false\n", enabled: false, configured: true},
+		{name: "explicitly enabled", body: "shopware:\n  admin_worker:\n    enable_admin_worker: true\n", enabled: true, configured: true},
+		{name: "non-boolean value counts as not configured", body: "shopware:\n  admin_worker:\n    enable_admin_worker: maybe\n", enabled: true, configured: false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			pc, err := NewProjectConfig(writeAdminWorkerConfig(t, tc.body))
+			require.NoError(t, err)
+
+			enabled, configured, err := pc.AdminWorkerSetting("dev")
+			require.NoError(t, err)
+			assert.Equal(t, tc.enabled, enabled)
+			assert.Equal(t, tc.configured, configured)
+		})
+	}
+}

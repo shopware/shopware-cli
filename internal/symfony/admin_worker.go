@@ -11,21 +11,25 @@ const adminWorkerConfigPath = "shopware.admin_worker.enable_admin_worker"
 // does not configure it at all is treated as enabled. It is only considered
 // disabled when enable_admin_worker resolves to a literal false.
 func (pc *ProjectConfig) IsAdminWorkerEnabled(environment string) (bool, error) {
+	enabled, _, err := pc.AdminWorkerSetting(environment)
+	return enabled, err
+}
+
+// AdminWorkerSetting reports whether the admin worker is enabled and whether
+// the project configures it at all; an absent or non-boolean value is
+// Shopware's default, enabled.
+func (pc *ProjectConfig) AdminWorkerSetting(environment string) (enabled, configured bool, err error) {
 	value, ok, err := pc.GetResolvedConfigValue(environment, adminWorkerConfigPath)
 	if err != nil {
-		return false, err
+		return false, false, err
 	}
 
-	if !ok {
-		return true, nil
+	enabled, isBool := value.(bool)
+	if !ok || !isBool {
+		return true, false, nil
 	}
 
-	enabled, ok := value.(bool)
-	if !ok {
-		return true, nil
-	}
-
-	return enabled, nil
+	return enabled, true, nil
 }
 
 // IsAdminWorkerEnabledForProject loads the project's config/packages tree and

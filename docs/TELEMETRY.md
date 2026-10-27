@@ -280,6 +280,9 @@ the check's level is sent, never the underlying values.
 | `check`  | Which check ran (`php_version`, `memory_limit`, `admin_worker`, `flow_builder_log_level`) | `admin_worker` |
 | `result` | The check's level                             | `ok` / `warn` / `critical` |
 
+`admin_worker` is `warn` only when the project explicitly enables the admin
+worker; Shopware's default counts as `ok`.
+
 ### `shopware_cli.project.dev.session` — dashboard session shape
 
 Sent when the user leaves the dashboard (the overall command duration is

@@ -244,8 +244,8 @@ func projectConfigHealthChecks(projectRoot string) []healthCheck {
 	env := appEnvironment(projectRoot)
 
 	var checks []healthCheck
-	if enabled, err := pc.IsAdminWorkerEnabled(env); err == nil {
-		checks = append(checks, adminWorkerCheck(enabled))
+	if enabled, configured, err := pc.AdminWorkerSetting(env); err == nil {
+		checks = append(checks, adminWorkerCheck(enabled, configured))
 	}
 	checks = append(checks, flowBuilderLogLevelCheck(pc, env))
 	return checks
@@ -263,11 +263,15 @@ func appEnvironment(projectRoot string) string {
 
 // adminWorkerCheck reports whether Shopware's browser-based admin worker is
 // disabled. The dev environments run a dedicated worker process, so the admin
-// worker should be off to avoid processing the queue twice.
-func adminWorkerCheck(enabled bool) healthCheck {
+// worker should be off to avoid processing the queue twice. Only an explicit
+// enable is worth a warning; Shopware's default is reported as such.
+func adminWorkerCheck(enabled, configured bool) healthCheck {
 	current := "disabled"
 	level := healthOK
-	if enabled {
+	switch {
+	case !configured:
+		current = "default (enabled)"
+	case enabled:
 		current = "enabled"
 		level = healthWarn
 	}

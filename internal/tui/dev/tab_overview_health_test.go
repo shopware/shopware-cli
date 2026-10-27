@@ -73,13 +73,18 @@ func TestPHPVersionCheck_NoComposerLock(t *testing.T) {
 }
 
 func TestAdminWorkerCheck(t *testing.T) {
-	disabled := adminWorkerCheck(false)
+	disabled := adminWorkerCheck(false, true)
 	assert.Equal(t, healthOK, disabled.Level)
 	assert.Equal(t, "disabled", disabled.Current)
 
-	enabled := adminWorkerCheck(true)
+	enabled := adminWorkerCheck(true, true)
 	assert.Equal(t, healthWarn, enabled.Level)
 	assert.Equal(t, "enabled", enabled.Current)
+
+	// Shopware's default is enabled, but only an explicit choice is worth a warning.
+	byDefault := adminWorkerCheck(true, false)
+	assert.Equal(t, healthOK, byDefault.Level)
+	assert.Equal(t, "default (enabled)", byDefault.Current)
 }
 
 func writeMonologConfig(t *testing.T, dir, level string) {
