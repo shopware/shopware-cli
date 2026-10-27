@@ -3,6 +3,7 @@ package proxy
 import (
 	"context"
 	"errors"
+	"fmt"
 	"runtime"
 	"strings"
 	"testing"
@@ -102,10 +103,12 @@ func TestCrashLooping(t *testing.T) {
 func TestRunChecksPendingFollowsIdleState(t *testing.T) {
 	t.Parallel()
 
-	fail := func(context.Context) error { return errors.New("broken") }
+	errBroken := errors.New("broken")
+	fail := func(context.Context) error { return errBroken }
 	pass := func(context.Context) error { return nil }
-	idleYes := func(context.Context) bool { return true }
-	idleNo := func(context.Context) bool { return false }
+	idleYes := func(context.Context, error) bool { return true }
+	idleNo := func(context.Context, error) bool { return false }
+	idleUnlessBroken := func(_ context.Context, err error) bool { return !errors.Is(err, errBroken) }
 
 	cases := []struct {
 		name        string
@@ -124,6 +127,13 @@ func TestRunChecksPendingFollowsIdleState(t *testing.T) {
 		{
 			name:        "broken container makes the same failure real and keeps the fix hint",
 			checks:      []verifyCheck{{name: "a", run: fail, hint: "fix", idleHint: "start", idle: idleNo}},
+			wantResults: 1,
+			wantPending: false,
+			wantHint:    "fix",
+		},
+		{
+			name:        "the idle rule sees the failure and can keep it real",
+			checks:      []verifyCheck{{name: "a", run: fail, hint: "fix", idleHint: "start", idle: idleUnlessBroken}},
 			wantResults: 1,
 			wantPending: false,
 			wantHint:    "fix",
@@ -154,4 +164,10 @@ func TestRunChecksPendingFollowsIdleState(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestDNSWrongAnswerIsNeverIdle(t *testing.T) {
+	t.Parallel()
+
+	assert.False(t, dnsIdle(t.Context(), fmt.Errorf("%w (asked for probe)", errWrongAnswer)))
 }

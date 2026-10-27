@@ -62,7 +62,7 @@ func Verify(ctx context.Context, baseDomain string) []CheckResult {
 			},
 			hint:     "Check \"docker logs " + DNSContainerName + "\", then run \"shopware-cli project proxy setup\" to recreate it",
 			idleHint: "Run \"shopware-cli project proxy setup\" (or \"proxy up\" in a shop) to start it",
-			idle:     func(ctx context.Context) bool { return containerIdle(ctx, DNSContainerName) },
+			idle:     dnsIdle,
 		},
 		{
 			name: fmt.Sprintf("OS resolves *.%s to 127.0.0.1", baseDomain),
@@ -76,7 +76,7 @@ func Verify(ctx context.Context, baseDomain string) []CheckResult {
 			run:      checkTraefik,
 			hint:     "Check \"docker logs " + ContainerName + "\"; another local web server may also occupy port 80/443",
 			idleHint: "Run \"shopware-cli project proxy up\" in a shop to start it",
-			idle:     func(ctx context.Context) bool { return containerIdle(ctx, ContainerName) },
+			idle:     func(ctx context.Context, _ error) bool { return containerIdle(ctx, ContainerName) },
 		},
 		{
 			name: fmt.Sprintf("HTTPS works and is trusted (https://%s/ping)", PingHostname(baseDomain)),
@@ -91,13 +91,13 @@ func Verify(ctx context.Context, baseDomain string) []CheckResult {
 }
 
 // verifyCheck is one layer of the proxy chain. idle, when set, decides whether
-// a failure only means "not running yet"; idleHint then replaces hint.
+// the failure only means "not running yet"; idleHint then replaces hint.
 type verifyCheck struct {
 	name     string
 	run      func(context.Context) error
 	hint     string
 	idleHint string
-	idle     func(context.Context) bool
+	idle     func(context.Context, error) bool
 }
 
 // runChecks runs the checks in order and stops at the first failure.
@@ -109,7 +109,7 @@ func runChecks(ctx context.Context, checks []verifyCheck) []CheckResult {
 		result := CheckResult{Name: check.name, Err: err}
 		if err != nil {
 			result.Hint = check.hint
-			result.Pending = check.idle != nil && check.idle(ctx)
+			result.Pending = check.idle != nil && check.idle(ctx, err)
 			if result.Pending && check.idleHint != "" {
 				result.Hint = check.idleHint
 			}
@@ -195,6 +195,14 @@ func checkDocker(ctx context.Context) error {
 	return err
 }
 
+// errWrongAnswer means something else answers on the DNS port, so the layer is never idle.
+var errWrongAnswer = errors.New("the DNS server answered without an A record for 127.0.0.1")
+
+// dnsIdle reports whether a failed DNS check only means the container is not running.
+func dnsIdle(ctx context.Context, err error) bool {
+	return !errors.Is(err, errWrongAnswer) && containerIdle(ctx, DNSContainerName)
+}
+
 // checkDNSContainer queries the shared DNS container directly, bypassing the
 // OS resolver, to isolate DNS problems from resolver-configuration problems.
 func checkDNSContainer(ctx context.Context, probe string) error {
@@ -212,7 +220,7 @@ func checkDNSContainer(ctx context.Context, probe string) error {
 		}
 	}
 
-	return fmt.Errorf("the DNS server answered %s without an A record for 127.0.0.1", probe)
+	return fmt.Errorf("%w (asked for %s)", errWrongAnswer, probe)
 }
 
 // checkOSResolution resolves the probe through the operating system's own
