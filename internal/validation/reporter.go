@@ -91,15 +91,7 @@ func ReportTools(tools []ToolReport, reportingFormat, title string) error {
 	case "github":
 		err = doGitHubReport(findings, tools, title)
 	case "gitlab":
-		for _, tool := range tools {
-			for _, failure := range tool.Errors {
-				findings = append(findings, CheckResult{Path: ".", Line: 1, Severity: SeverityError, Identifier: tool.Name + "/execution", Message: toolErrorDetail(tool, failure)})
-			}
-		}
-		err = doGitLabReport(findings)
-		if err == nil {
-			err = writeToolSummary(os.Stderr, tools, title, false)
-		}
+		err = doGitLabReport(findings, tools, title)
 	case "junit":
 		err = doJUnitReport(findings, tools...)
 		if err == nil {
@@ -222,7 +214,13 @@ type GitLabCodeQualityLines struct {
 	Begin int `json:"begin"`
 }
 
-func doGitLabReport(findings []CheckResult) error {
+func doGitLabReport(findings []CheckResult, tools []ToolReport, title string) error {
+	for _, tool := range tools {
+		for _, failure := range tool.Errors {
+			findings = append(findings, CheckResult{Path: ".", Line: 1, Severity: SeverityError, Identifier: tool.Name + "/execution", Message: toolErrorDetail(tool, failure)})
+		}
+	}
+
 	issues := make([]GitLabCodeQualityIssue, 0)
 
 	// Sort results for deterministic output
@@ -265,7 +263,10 @@ func doGitLabReport(findings []CheckResult) error {
 
 	encoder := json.NewEncoder(os.Stdout)
 	encoder.SetIndent("", "  ")
-	return encoder.Encode(issues)
+	if err := encoder.Encode(issues); err != nil {
+		return err
+	}
+	return writeToolSummary(os.Stderr, tools, title, false)
 }
 
 type JUnitTestSuite struct {

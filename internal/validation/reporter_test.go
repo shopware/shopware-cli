@@ -185,7 +185,7 @@ func TestGitLabReport(t *testing.T) {
 	check := &testCheck{Results: testResults}
 
 	output := captureOutput(func() {
-		err := doGitLabReport(check.GetResults())
+		err := doGitLabReport(check.GetResults(), nil, "Checkers")
 		assert.NoError(t, err)
 	})
 
@@ -241,7 +241,7 @@ func TestGitLabReportIsDeterministic(t *testing.T) {
 	var previousOutput string
 	for i := range 5 {
 		output := captureOutput(func() {
-			_ = doGitLabReport(check.GetResults())
+			_ = doGitLabReport(check.GetResults(), nil, "Checkers")
 		})
 
 		if i > 0 {
@@ -401,7 +401,7 @@ func TestGitLabReportWithTip(t *testing.T) {
 	check := &testCheck{Results: testResults}
 
 	output := captureOutput(func() {
-		err := doGitLabReport(check.GetResults())
+		err := doGitLabReport(check.GetResults(), nil, "Checkers")
 		assert.NoError(t, err)
 	})
 
