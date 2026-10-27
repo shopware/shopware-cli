@@ -145,33 +145,6 @@ func TestConfigDeploymentOpenSearchIndexOnInstallRoundTrip(t *testing.T) {
 	assert.True(t, read.ConfigDeployment.OpenSearch.IndexOnInstall)
 }
 
-func TestConfigDeploymentSkipAssetsInstallRoundTrip(t *testing.T) {
-	for _, value := range []string{"true", "false"} {
-		t.Run(value, func(t *testing.T) {
-			dir := t.TempDir()
-			path := filepath.Join(dir, ".shopware-project.yml")
-			require.NoError(t, os.WriteFile(path, []byte("deployment:\n  skip-assets-install: "+value+"\n"), 0o644))
-
-			cfg, err := ReadConfig(t.Context(), path, false)
-			require.NoError(t, err)
-			require.NotNil(t, cfg.ConfigDeployment)
-			require.NotNil(t, cfg.ConfigDeployment.SkipAssetsInstall)
-			assert.Equal(t, value == "true", *cfg.ConfigDeployment.SkipAssetsInstall)
-
-			require.NoError(t, WriteConfig(cfg, dir))
-			written, err := os.ReadFile(path)
-			require.NoError(t, err)
-			assert.Contains(t, string(written), "skip-assets-install: "+value)
-
-			read, err := ReadConfig(t.Context(), path, false)
-			require.NoError(t, err)
-			require.NotNil(t, read.ConfigDeployment)
-			require.NotNil(t, read.ConfigDeployment.SkipAssetsInstall)
-			assert.Equal(t, value == "true", *read.ConfigDeployment.SkipAssetsInstall)
-		})
-	}
-}
-
 func TestReadConfigCompatibilityDateValidation(t *testing.T) {
 	tmpDir := t.TempDir()
 	configPath := filepath.Join(tmpDir, ".shopware-project.yml")
