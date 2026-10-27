@@ -62,7 +62,7 @@ func adminViteFeatureEnabled(projectRoot string) bool {
 func PrepareAdminWatcher(ctx context.Context, projectRoot string, cmdExecutor executor.Executor, out io.Writer) (*executor.Process, error) {
 	logStep(out, "Dumping features...")
 	if err := runStep(ctx, cmdExecutor, out, "feature:dump"); err != nil {
-		return nil, err
+		return nil, failedStep(WatcherStepFeatureDump, err)
 	}
 
 	adminRelPath := PlatformRelPath(projectRoot, "Administration", "Resources/app/administration")
@@ -71,7 +71,7 @@ func PrepareAdminWatcher(ctx context.Context, projectRoot string, cmdExecutor ex
 	if _, err := os.Stat(PlatformPath(projectRoot, "Administration", "Resources/app/administration/node_modules/webpack-dev-server")); os.IsNotExist(err) {
 		logStep(out, "Installing npm dependencies (this can take a few minutes)...")
 		if err := npm.InstallDependenciesStreamed(ctx, adminExecutor, npm.NonEmptyPackage, out); err != nil {
-			return nil, err
+			return nil, failedStep(WatcherStepNPMInstall, err)
 		}
 	}
 
@@ -79,7 +79,7 @@ func PrepareAdminWatcher(ctx context.Context, projectRoot string, cmdExecutor ex
 	if _, err := os.Stat(converterPath); err == nil {
 		logStep(out, "Generating entity schema...")
 		if err := prepareEntitySchema(ctx, projectRoot, cmdExecutor, adminExecutor, out); err != nil {
-			return nil, err
+			return nil, failedStep(WatcherStepEntitySchema, err)
 		}
 	}
 

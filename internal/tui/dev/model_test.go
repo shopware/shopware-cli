@@ -1,6 +1,9 @@
 package dev
 
 import (
+	"context"
+	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -14,7 +17,9 @@ import (
 
 	dockerpkg "github.com/shopware/shopware-cli/internal/docker"
 	"github.com/shopware/shopware-cli/internal/executor"
+	"github.com/shopware/shopware-cli/internal/extension"
 	"github.com/shopware/shopware-cli/internal/shop"
+	"github.com/shopware/shopware-cli/internal/tracking"
 	"github.com/shopware/shopware-cli/internal/tui"
 	"github.com/shopware/shopware-cli/internal/tui/app"
 	"github.com/shopware/shopware-cli/internal/tui/picker"
@@ -912,4 +917,85 @@ func TestView_WindowTitlePerPhase(t *testing.T) {
 
 		assert.Equal(t, tc.wantTitle, m.windowTitle(), "phase %d", tc.phase)
 	}
+}
+
+type devEvent struct {
+	name string
+	tags map[string]string
+}
+
+// captureDevEvents replaces the tracking seam and returns the recorded events.
+func captureDevEvents(t *testing.T) *[]devEvent {
+	t.Helper()
+	original := trackEvent
+	t.Cleanup(func() { trackEvent = original })
+
+	events := &[]devEvent{}
+	trackEvent = func(name string, tags map[string]string) {
+		*events = append(*events, devEvent{name: name, tags: tags})
+	}
+	return events
+}
+
+func TestWatcherPrepFailureReportsTheStep(t *testing.T) {
+	events := captureDevEvents(t)
+	m := newTestModel(t)
+	m.telemetry = newTelemetryState(false)
+
+	updated, _ := m.updateWatcherMsg(watcherStartedMsg{name: watcherAdmin, handle: &watcherHandle{}, proxied: true})
+	m = updated.(Model)
+	stepErr := &extension.WatcherStepError{Step: extension.WatcherStepFeatureDump, Err: errors.New("exit status 1")}
+	updated, _ = m.updateWatcherMsg(watcherRunningMsg{name: watcherAdmin, err: fmt.Errorf("starting admin watcher: %w", stepErr)})
+	m = updated.(Model)
+
+	require.Len(t, *events, 1)
+	assert.Equal(t, tracking.EventDevWatcher, (*events)[0].name)
+	tags := (*events)[0].tags
+	assert.Equal(t, "prep_failed", tags[tracking.TagResult])
+	assert.Equal(t, "feature_dump", tags[tracking.TagFailedStep])
+	assert.Equal(t, "preparing", tags[tracking.TagPhase])
+	assert.Equal(t, "true", tags[tracking.TagProxied])
+	assert.False(t, m.overview.adminWatchStarting)
+}
+
+func TestWatcherPrepCancelledBySessionEndIsNotAFailure(t *testing.T) {
+	events := captureDevEvents(t)
+	m := newTestModel(t)
+	m.telemetry = newTelemetryState(false)
+	ctx, cancel := context.WithCancel(t.Context())
+	m.ctx = ctx
+
+	updated, _ := m.updateWatcherMsg(watcherStartedMsg{name: watcherStorefront, handle: &watcherHandle{}})
+	m = updated.(Model)
+	cancel()
+	stepErr := &extension.WatcherStepError{Step: extension.WatcherStepFeatureDump, Err: context.Canceled}
+	_, _ = m.updateWatcherMsg(watcherRunningMsg{name: watcherStorefront, err: stepErr})
+
+	require.Len(t, *events, 1)
+	tags := (*events)[0].tags
+	assert.Equal(t, "session_end", tags[tracking.TagResult])
+	assert.Equal(t, "preparing", tags[tracking.TagPhase])
+	assert.NotContains(t, tags, tracking.TagFailedStep)
+}
+
+func TestWatcherPhasesFollowTheLifecycle(t *testing.T) {
+	events := captureDevEvents(t)
+	m := newTestModel(t)
+	m.telemetry = newTelemetryState(false)
+
+	updated, _ := m.updateWatcherMsg(watcherStartedMsg{name: watcherAdmin, handle: &watcherHandle{}})
+	m = updated.(Model)
+	updated, _ = m.updateWatcherMsg(watcherRunningMsg{name: watcherAdmin})
+	m = updated.(Model)
+	assert.Equal(t, "starting", m.telemetry.watcherRuns[watcherAdmin].phase)
+
+	updated, _ = m.updateWatcherMsg(watcherProbeMsg{name: watcherAdmin, url: "http://127.0.0.1:1", ready: true})
+	m = updated.(Model)
+	updated, _ = m.updateWatcherMsg(logDoneMsg{source: watcherAdmin})
+	m = updated.(Model)
+
+	require.Len(t, *events, 1)
+	assert.Equal(t, "crashed", (*events)[0].tags[tracking.TagResult])
+	assert.Equal(t, "running", (*events)[0].tags[tracking.TagPhase])
+	assert.False(t, m.overview.adminWatchRunning)
 }

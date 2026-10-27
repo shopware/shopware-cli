@@ -260,12 +260,18 @@ their outcome and runtime.
 
 ### `shopware_cli.project.dev.watcher` — admin/storefront watchers
 
-Sent once per watcher run, when the watcher ends.
+Sent once per watcher run, when the watcher ends. A run that ends while it is
+still preparing or starting carries that phase, so runs that never got going
+are visible. A session that ends while preparation is still running is
+reported as `session_end`, not as a failed preparation.
 
 | Tag           | Meaning                                                     | Example    |
 |---------------|-------------------------------------------------------------|------------|
 | `watcher`     | Which watcher ran                                           | `admin` / `storefront` |
 | `result`      | How the run ended: preparation failed, the dev-server process exited on its own, the user stopped it, or the TUI session ended | `prep_failed` / `crashed` / `user_stopped` / `session_end` |
+| `phase`       | How far the run got when it ended: the preparation steps, the dev server started but not answering yet, or answering | `preparing` / `starting` / `running` |
+| `failed_step` | The preparation step that failed (only for `prep_failed`)   | `plugins_json` / `feature_dump` / `npm_install` / `entity_schema` / `theme_select` / `theme_compile` / `theme_dump` / `proxy_env` |
+| `proxied`     | Whether the watcher runs through the shared proxy           | `true` / `false` |
 | `duration_ms` | How long the watcher ran                                    | `1830211`  |
 
 ### `shopware_cli.project.dev.health` — setup health snapshot
