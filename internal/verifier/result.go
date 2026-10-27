@@ -18,9 +18,9 @@ import (
 type ToolResult = validation.ToolResult
 
 // RunTools collects findings as tools publish them and waits for every tool,
-// including when a sibling fails. Finding delivery and verbose output are
-// serialized across tools. Tools return ToolSummary metadata; the runner obtains
-// HasFindings and Errors from the execution helper after all tool cleanup has
+// including when a sibling fails. Finding delivery is serialized per tool, while
+// verbose output is serialized across tools. Tools return ToolSummary metadata;
+// the runner obtains HasFindings and Errors from the execution helper after all tool cleanup has
 // completed. A tool that returns after ctx is cancelled fails with the
 // cancellation, so interrupted commands exit nonzero.
 func RunTools[T Tool](
@@ -33,14 +33,15 @@ func RunTools[T Tool](
 ) []validation.ToolReport {
 	results := make([]validation.ToolReport, len(tools), len(tools)+len(skipped))
 	sourceRoot := validation.ResolveSourceRoot(config.RootDir)
-	var delivery sync.Mutex
+	var stderrMu sync.Mutex
 	var group sync.WaitGroup
 	for i, tool := range tools {
 		group.Go(func() {
 			var collected []validation.CheckResult
+			var findingsMu sync.Mutex
 			execution := NewToolExecution(func(findings []validation.CheckResult) bool {
-				delivery.Lock()
-				defer delivery.Unlock()
+				findingsMu.Lock()
+				defer findingsMu.Unlock()
 				retained := filterFindings(findings, sourceRoot, config.ValidationIgnores)
 				collected = append(collected, retained...)
 				return len(retained) > 0
@@ -48,8 +49,8 @@ func RunTools[T Tool](
 			execution.onSubprocess = func(subprocess SubprocessResult) {
 				tracking.Track(ctx, tracking.EventToolSubprocess, subprocessTelemetryTags(tool.Name(), subprocess))
 				if logging.IsVerbose(ctx) {
-					delivery.Lock()
-					defer delivery.Unlock()
+					stderrMu.Lock()
+					defer stderrMu.Unlock()
 					var output strings.Builder
 					fmt.Fprintf(&output, "\n%s subprocess: %s\nDirectory: %s\n", tool.Name(), strings.Join(subprocess.Command, " "), subprocess.Dir)
 					if subprocess.Stdout != "" {

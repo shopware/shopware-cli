@@ -63,6 +63,31 @@ func TestRunToolsRetainsIndependentResults(t *testing.T) {
 	assert.Equal(t, "skipped", results[3].Status())
 }
 
+func TestRunToolsCollectsConcurrentFindings(t *testing.T) {
+	directories := []string{"first", "second", "third"}
+	results := RunTools(t.Context(), ToolList[Tool]{testTool{name: "one"}, testTool{name: "two"}}, nil, ToolConfig{
+		ValidationIgnores: []validation.ToolConfigIgnore{{Identifier: "ignored"}},
+	}, nil, func(tool Tool, execution *ToolExecution) ToolSummary {
+		runDirectories(directories, func(directory string) {
+			execution.AddFindings(
+				validation.CheckResult{Identifier: tool.Name() + "/" + directory},
+				validation.CheckResult{Identifier: "ignored"},
+			)
+		})
+		return ToolSummary{}
+	})
+	require.Len(t, results, 2)
+	for _, result := range results {
+		assert.True(t, result.HasFindings)
+		assert.Empty(t, result.Errors)
+		assert.ElementsMatch(t, []validation.CheckResult{
+			{Identifier: result.Name + "/first"},
+			{Identifier: result.Name + "/second"},
+			{Identifier: result.Name + "/third"},
+		}, result.Findings)
+	}
+}
+
 func TestRunToolsFinalizesAfterCleanup(t *testing.T) {
 	var output bytes.Buffer
 	failure := errors.New("cannot clean up temporary files")
