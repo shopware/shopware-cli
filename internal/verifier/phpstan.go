@@ -11,6 +11,7 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/shopware/shopware-cli/internal/shop"
 	"github.com/shopware/shopware-cli/internal/validation"
 	"github.com/shopware/shopware-cli/logging"
 )
@@ -59,7 +60,7 @@ func (p PhpStan) Check(ctx context.Context, config ToolConfig, execution *ToolEx
 		execution.Fail(err)
 		return ToolSummary{}
 	}
-	if installed := installedShopwareVersion(config.RootDir); installed != "" {
+	if installed := shop.DetectShopwareVersion(config.RootDir); installed != "" {
 		note = "Shopware " + installed
 		if errors.Is(vendorErr, os.ErrNotExist) && config.CheckAgainst != "" {
 			note += " (" + config.CheckAgainst + ")"
@@ -118,31 +119,6 @@ func (p PhpStan) Check(ctx context.Context, config ToolConfig, execution *ToolEx
 		result.SkipReason = "no files to analyse"
 	}
 	return result
-}
-
-func installedShopwareVersion(root string) string {
-	data, err := os.ReadFile(path.Join(root, "vendor", "composer", "installed.json"))
-	if err != nil {
-		return ""
-	}
-	type installedPackage struct {
-		Name    string `json:"name"`
-		Version string `json:"version"`
-	}
-	var installed struct {
-		Packages []installedPackage `json:"packages"`
-	}
-	if err := json.Unmarshal(data, &installed); err != nil {
-		if err := json.Unmarshal(data, &installed.Packages); err != nil {
-			return ""
-		}
-	}
-	for _, pkg := range installed.Packages {
-		if pkg.Name == "shopware/core" {
-			return pkg.Version
-		}
-	}
-	return ""
 }
 
 func isPhpStanNoFilesOutput(output string) bool {
