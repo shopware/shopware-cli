@@ -4,7 +4,7 @@ package tracking
 // itself. Every event and its tags are documented in docs/TELEMETRY.md; new
 // events must be added there as well.
 const (
-	// EventToolSubprocess measures captured output after each started tool subprocess finishes.
+	// EventToolSubprocess measures duration and captured output for each tool subprocess attempt.
 	EventToolSubprocess = "tool.subprocess"
 	// EventCommand is sent after (almost) any sub-command finishes (cmd/root.go).
 	EventCommand = "command"
@@ -38,9 +38,11 @@ const (
 const (
 	// EventToolSubprocess
 	TagTool        = "tool"
+	TagOperation   = "operation"
 	TagExitCode    = "exit_code"
 	TagStdoutBytes = "stdout_bytes"
 	TagStderrBytes = "stderr_bytes"
+	TagStarted     = "started"
 
 	// EventCommand
 	TagCommandName = "command_name"

@@ -47,7 +47,9 @@ func (e Eslint) run(ctx context.Context, config ToolConfig, execution *ToolExecu
 			"--ignore-pattern", "vendor/**", "--ignore-pattern", "test/e2e/**",
 			"--ignore-pattern", "**/jest.config.js", "--no-error-on-unmatched-pattern",
 		}
+		operation := "check"
 		if fix {
+			operation = "fix"
 			args = append(args, "--fix")
 		} else {
 			args = append(args, "--format=json")
@@ -55,7 +57,7 @@ func (e Eslint) run(ctx context.Context, config ToolConfig, execution *ToolExecu
 		cmd := CommandContext(ctx, "node", args...)
 		cmd.Dir = directory
 		cmd.Env = append(os.Environ(), "SHOPWARE_VERSION="+config.MinShopwareVersion)
-		subprocess := execution.Run(cmd)
+		subprocess := execution.Run(operation, cmd)
 		runErr := subprocess.Err
 		// Fix output remains unparsed until structured fixer reports are introduced.
 		if fix {

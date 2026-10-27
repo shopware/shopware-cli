@@ -46,17 +46,7 @@ func RunTools[T Tool](
 				return len(retained) > 0
 			})
 			execution.onSubprocess = func(subprocess SubprocessResult) {
-				if subprocess.ProcessState != nil {
-					tags := map[string]string{
-						tracking.TagTool:        tool.Name(),
-						tracking.TagStdoutBytes: strconv.Itoa(len(subprocess.Stdout)),
-						tracking.TagStderrBytes: strconv.Itoa(len(subprocess.Stderr)),
-					}
-					if code := subprocess.ProcessState.ExitCode(); code >= 0 {
-						tags[tracking.TagExitCode] = strconv.Itoa(code)
-					}
-					tracking.Track(ctx, tracking.EventToolSubprocess, tags)
-				}
+				tracking.Track(ctx, tracking.EventToolSubprocess, subprocessTelemetryTags(tool.Name(), subprocess))
 				if logging.IsVerbose(ctx) {
 					delivery.Lock()
 					defer delivery.Unlock()
@@ -96,6 +86,23 @@ func RunTools[T Tool](
 		results = append(results, validation.ToolReport{ToolResult: result})
 	}
 	return results
+}
+
+func subprocessTelemetryTags(tool string, subprocess SubprocessResult) map[string]string {
+	tags := map[string]string{
+		tracking.TagTool:        tool,
+		tracking.TagOperation:   subprocess.Operation,
+		tracking.TagStdoutBytes: strconv.Itoa(len(subprocess.Stdout)),
+		tracking.TagStderrBytes: strconv.Itoa(len(subprocess.Stderr)),
+		tracking.TagDurationMS:  strconv.FormatInt(subprocess.Duration.Milliseconds(), 10),
+		tracking.TagStarted:     strconv.FormatBool(subprocess.ProcessState != nil),
+	}
+	if subprocess.ProcessState != nil {
+		if code := subprocess.ProcessState.ExitCode(); code >= 0 {
+			tags[tracking.TagExitCode] = strconv.Itoa(code)
+		}
+	}
+	return tags
 }
 
 type Check struct {

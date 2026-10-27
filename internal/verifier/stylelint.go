@@ -61,14 +61,16 @@ func (s StyleLint) run(ctx context.Context, config ToolConfig, execution *ToolEx
 			"--config", path.Join(config.ToolDirectory, "js", "configs", fmt.Sprintf("stylelint.config.%s.mjs", path.Base(directory))),
 			"--ignore-pattern", "dist/**", "--ignore-pattern", ".tmp/**", "--ignore-pattern", "vendor/**", "**/*.scss",
 		}
+		operation := "check"
 		if fix {
+			operation = "fix"
 			args = append(args, "--fix")
 		} else {
 			args = append(args, "--formatter=json")
 		}
 		cmd := CommandContext(ctx, "node", args...)
 		cmd.Dir = directory
-		subprocess := execution.Run(cmd)
+		subprocess := execution.Run(operation, cmd)
 		runErr := subprocess.Err
 		// Fix output remains unparsed until structured fixer reports are introduced.
 		if fix {

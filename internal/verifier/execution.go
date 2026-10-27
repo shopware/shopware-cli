@@ -6,6 +6,7 @@ import (
 	"os/exec"
 	"slices"
 	"sync"
+	"time"
 
 	"github.com/shopware/shopware-cli/internal/validation"
 )
@@ -13,11 +14,14 @@ import (
 type ToolError = validation.ToolError
 
 type SubprocessResult struct {
-	Command []string
-	Dir     string
-	Stdout  string
-	Stderr  string
-	Err     error
+	Operation string
+	Command   []string
+	Dir       string
+	Stdout    string
+	Stderr    string
+	Err       error
+	// Duration measures the command attempt, including time spent starting it.
+	Duration time.Duration
 	// ProcessState is nil when the process could not start.
 	ProcessState *os.ProcessState
 }
@@ -49,16 +53,20 @@ func runDirectories(directories []string, run func(string)) {
 	group.Wait()
 }
 
-func (e *ToolExecution) Run(cmd *exec.Cmd) SubprocessResult {
+func (e *ToolExecution) Run(operation string, cmd *exec.Cmd) SubprocessResult {
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &stdout, &stderr
+	started := time.Now()
 	err := cmd.Run()
+	duration := time.Since(started)
 	result := SubprocessResult{
+		Operation:    operation,
 		Command:      slices.Clone(cmd.Args),
 		Dir:          cmd.Dir,
 		Stdout:       stdout.String(),
 		Stderr:       stderr.String(),
 		Err:          err,
+		Duration:     duration,
 		ProcessState: cmd.ProcessState,
 	}
 	if e.onSubprocess != nil {

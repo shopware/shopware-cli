@@ -67,14 +67,16 @@ func (p Prettier) Format(ctx context.Context, config ToolConfig, execution *Tool
 			"--config", path.Join(config.ToolDirectory, "js", "configs", "prettierrc.js"),
 			"--ignore-path", ignore.Name(), "--ignore-path", ".gitignore", "--ignore-path", ".prettierignore", "--no-color", ".",
 		}
+		operation := "format"
 		if dryRun {
+			operation = "check"
 			args = append(args, "--list-different")
 		} else {
 			args = append(args, "--write")
 		}
 		cmd := CommandContext(ctx, "node", args...)
 		cmd.Dir = directory
-		subprocess := execution.Run(cmd)
+		subprocess := execution.Run(operation, cmd)
 		output, runErr := subprocess.Stdout, subprocess.Err
 		if !p.isExpectedPrettierExit(runErr, dryRun) || strings.Contains(subprocess.Stderr, "[error]") || (runErr != nil && strings.TrimSpace(output) == "") {
 			if runErr == nil {

@@ -52,12 +52,14 @@ func (p PHPCSFixer) Format(ctx context.Context, config ToolConfig, execution *To
 			"fix", "--show-progress", "dots", "-vv", "--no-ansi", "--format", "json",
 			"--config", p.getConfigPath(config.ToolDirectory, config.RootDir), directory,
 		}
+		operation := "format"
 		if dryRun {
+			operation = "check"
 			args = append(args, "--dry-run")
 		}
 		cmd := CommandContext(ctx, path.Join(config.ToolDirectory, "php", "vendor", "bin", "php-cs-fixer"), args...)
 		cmd.Dir = config.RootDir
-		subprocess := execution.Run(cmd)
+		subprocess := execution.Run(operation, cmd)
 		output, stderr, runErr := []byte(subprocess.Stdout), []byte(subprocess.Stderr), subprocess.Err
 		if !p.isExpectedPHPCSFixerExit(runErr) {
 			execution.Fail(subprocess.ToolError(fmt.Errorf("cannot run php-cs-fixer in %s: %w", directory, runErr)))

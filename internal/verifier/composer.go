@@ -55,7 +55,7 @@ func installComposerDeps(ctx context.Context, rootDir string, checkAgainst strin
 			composerInstall.Env = append(os.Environ(), fmt.Sprintf("COMPOSER_AUTH=%s", encoded))
 			composerInstall.Dir = rootDir
 
-			subprocess := execution.Run(composerInstall)
+			subprocess := execution.Run("composer_require", composerInstall)
 			if subprocess.Err != nil {
 				return subprocess.ToolError(fmt.Errorf("cannot install Composer suggestions: %w", subprocess.Err))
 			}
@@ -73,7 +73,7 @@ func installComposerDeps(ctx context.Context, rootDir string, checkAgainst strin
 
 		beforeStart := time.Now()
 
-		subprocess := execution.Run(composerInstall)
+		subprocess := execution.Run("composer_update", composerInstall)
 		if subprocess.Err != nil {
 			return subprocess.ToolError(fmt.Errorf("cannot install Composer dependencies: %w", subprocess.Err))
 		}
