@@ -380,7 +380,12 @@ func doJUnitReport(findings []CheckResult, tools ...ToolReport) error {
 func sortedFindings(findings []CheckResult) []CheckResult {
 	findings = slices.Clone(findings)
 	slices.SortFunc(findings, func(a, b CheckResult) int {
-		return cmp.Or(cmp.Compare(a.Path, b.Path), cmp.Compare(a.Line, b.Line), cmp.Compare(a.Identifier, b.Identifier), cmp.Compare(a.Message, b.Message))
+		return cmp.Or(
+			cmp.Compare(a.Path, b.Path),
+			cmp.Compare(a.Line, b.Line),
+			cmp.Compare(a.Identifier, b.Identifier),
+			cmp.Compare(a.Message, b.Message),
+		)
 	})
 	return findings
 }

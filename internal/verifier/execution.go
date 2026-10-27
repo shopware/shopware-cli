@@ -53,7 +53,14 @@ func (e *ToolExecution) Run(cmd *exec.Cmd) SubprocessResult {
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &stdout, &stderr
 	err := cmd.Run()
-	result := SubprocessResult{Command: slices.Clone(cmd.Args), Dir: cmd.Dir, Stdout: stdout.String(), Stderr: stderr.String(), Err: err, ProcessState: cmd.ProcessState}
+	result := SubprocessResult{
+		Command:      slices.Clone(cmd.Args),
+		Dir:          cmd.Dir,
+		Stdout:       stdout.String(),
+		Stderr:       stderr.String(),
+		Err:          err,
+		ProcessState: cmd.ProcessState,
+	}
 	if e.onSubprocess != nil {
 		e.onSubprocess(result)
 	}

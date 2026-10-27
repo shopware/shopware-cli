@@ -23,7 +23,14 @@ type ToolResult = validation.ToolResult
 // HasFindings and Errors from the execution helper after all tool cleanup has
 // completed. A tool that returns after ctx is cancelled fails with the
 // cancellation, so interrupted commands exit nonzero.
-func RunTools[T Tool](ctx context.Context, tools ToolList[T], skipped []ToolResult, config ToolConfig, progress *Progress, run func(T, *ToolExecution) ToolSummary) []validation.ToolReport {
+func RunTools[T Tool](
+	ctx context.Context,
+	tools ToolList[T],
+	skipped []ToolResult,
+	config ToolConfig,
+	progress *Progress,
+	run func(T, *ToolExecution) ToolSummary,
+) []validation.ToolReport {
 	results := make([]validation.ToolReport, len(tools), len(tools)+len(skipped))
 	sourceRoot := validation.ResolveSourceRoot(config.RootDir)
 	var delivery sync.Mutex
