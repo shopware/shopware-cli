@@ -56,6 +56,25 @@ func (s StepID) Label() string {
 	return "Unknown step"
 }
 
+// ID is the stable telemetry identifier of a step.
+func (s StepID) ID() string {
+	switch s {
+	case StepRewriteComposer:
+		return "rewrite_composer"
+	case StepComposerUpdate:
+		return "composer_update"
+	case StepRecipesInstall:
+		return "recipes_install"
+	case StepDeploymentHelper:
+		return "deployment_helper"
+	case StepWriteReport:
+		return "write_report"
+	case StepFinished:
+		return "finished"
+	}
+	return "unknown"
+}
+
 // StepEvent is emitted by the Runner while the upgrade executes. Line events
 // carry streamed subprocess output (State is StateRunning); state events mark
 // step transitions.

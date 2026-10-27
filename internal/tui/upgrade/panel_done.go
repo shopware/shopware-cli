@@ -31,11 +31,20 @@ func (m *Model) beginDone() (app.Content, tea.Cmd) {
 	return m, m.trackUpgradeCmd()
 }
 
+var trackEvent = tracking.Track
+
 // trackUpgradeCmd reports the upgrade outcome to telemetry.
 func (m *Model) trackUpgradeCmd() tea.Cmd {
 	result := tracking.ResultFailure
-	if m.done.succeeded {
+	switch {
+	case m.done.succeeded:
 		result = tracking.ResultSuccess
+	case m.run.cancelled:
+		result = tracking.ResultCancelled
+	}
+	failedStep := ""
+	if !m.done.succeeded {
+		failedStep = m.run.failedStep
 	}
 
 	current := ""
@@ -52,11 +61,15 @@ func (m *Model) trackUpgradeCmd() tea.Cmd {
 		// when the command context was already cancelled by a signal.
 		ctx, cancel := context.WithTimeout(context.Background(), 300*time.Millisecond)
 		defer cancel()
-		tracking.Track(ctx, tracking.EventProjectUpgrade, map[string]string{
+		tags := map[string]string{
 			tracking.TagFromVersion:   current,
 			tracking.TagTargetVersion: target,
 			tracking.TagResult:        result,
-		})
+		}
+		if failedStep != "" {
+			tags[tracking.TagFailedStep] = failedStep
+		}
+		trackEvent(ctx, tracking.EventProjectUpgrade, tags)
 		return nil
 	}
 }
