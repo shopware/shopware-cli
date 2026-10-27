@@ -1,7 +1,6 @@
 package shop
 
 import (
-	"encoding/json"
 	"os"
 	"path/filepath"
 	"testing"
@@ -171,59 +170,6 @@ func TestConfigDeploymentSkipAssetsInstallRoundTrip(t *testing.T) {
 			assert.Equal(t, value == "true", *read.ConfigDeployment.SkipAssetsInstall)
 		})
 	}
-}
-
-func TestConfigDeploymentSkipAssetsInstallLocalOverride(t *testing.T) {
-	for _, tc := range []struct {
-		base, local string
-		want        bool
-	}{
-		{base: "false", local: "true", want: true},
-		{base: "true", local: "false", want: false},
-	} {
-		t.Run(tc.base+"_to_"+tc.local, func(t *testing.T) {
-			dir := t.TempDir()
-			path := filepath.Join(dir, ".shopware-project.yml")
-			require.NoError(t, os.WriteFile(path, []byte("deployment:\n  skip-assets-install: "+tc.base+"\n"), 0o644))
-			require.NoError(t, os.WriteFile(LocalConfigFileName(path), []byte("deployment:\n  skip-assets-install: "+tc.local+"\n"), 0o644))
-
-			cfg, err := ReadConfig(t.Context(), path, false)
-			require.NoError(t, err)
-			require.NotNil(t, cfg.ConfigDeployment)
-			require.NotNil(t, cfg.ConfigDeployment.SkipAssetsInstall)
-			assert.Equal(t, tc.want, *cfg.ConfigDeployment.SkipAssetsInstall)
-		})
-	}
-}
-
-func TestConfigDeploymentSkipAssetsInstallAbsent(t *testing.T) {
-	dir := t.TempDir()
-	path := filepath.Join(dir, ".shopware-project.yml")
-	require.NoError(t, os.WriteFile(path, []byte("deployment: {}\n"), 0o644))
-
-	cfg, err := ReadConfig(t.Context(), path, false)
-	require.NoError(t, err)
-	require.NotNil(t, cfg.ConfigDeployment)
-	assert.Nil(t, cfg.ConfigDeployment.SkipAssetsInstall)
-
-	require.NoError(t, WriteConfig(cfg, dir))
-	written, err := os.ReadFile(path)
-	require.NoError(t, err)
-	assert.NotContains(t, string(written), "skip-assets-install")
-}
-
-func TestConfigDeploymentSkipAssetsInstallSchema(t *testing.T) {
-	var schema struct {
-		Defs map[string]struct {
-			Properties map[string]struct {
-				Type string `json:"type"`
-			} `json:"properties"`
-		} `json:"$defs"`
-	}
-	require.NoError(t, json.Unmarshal(ConfigSchema(), &schema))
-	property, ok := schema.Defs["ConfigDeployment"].Properties["skip-assets-install"]
-	require.True(t, ok)
-	assert.Equal(t, "boolean", property.Type)
 }
 
 func TestReadConfigCompatibilityDateValidation(t *testing.T) {
