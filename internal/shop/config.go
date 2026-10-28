@@ -504,6 +504,9 @@ func (c *ConfigDump) NormalizeFakerExpressions() {
 }
 
 type ConfigDeployment struct {
+	// Skip asset installation during deployment when assets were built in CI/CD. This can also be enabled with SHOPWARE_DEPLOYMENT_SKIP_ASSETS_INSTALL=1.
+	SkipAssetsInstall *bool `yaml:"skip-assets-install,omitempty"`
+
 	Hooks struct {
 		// The pre hook will be executed before the deployment
 		Pre ConfigDeploymentHook `yaml:"pre"`
@@ -934,6 +937,12 @@ func ReadConfig(ctx context.Context, fileName string, allowFallback bool) (*Conf
 			if err != nil {
 				return nil, fmt.Errorf("cannot merge included config %s: %w", additionalConfigFile, err)
 			}
+
+			// Table lists add up, the project's own list must not drop the included tables.
+			if config.ConfigDump != nil && additionalConfig.ConfigDump != nil {
+				config.ConfigDump.NoData = appendMissing(config.ConfigDump.NoData, additionalConfig.ConfigDump.NoData)
+				config.ConfigDump.Ignore = appendMissing(config.ConfigDump.Ignore, additionalConfig.ConfigDump.Ignore)
+			}
 		}
 	}
 
@@ -946,6 +955,17 @@ func ReadConfig(ctx context.Context, fileName string, allowFallback bool) (*Conf
 	}
 
 	return fillEmptyConfig(config), nil
+}
+
+// appendMissing appends the items of add that list does not contain yet.
+func appendMissing(list []string, add []string) []string {
+	for _, item := range add {
+		if !slices.Contains(list, item) {
+			list = append(list, item)
+		}
+	}
+
+	return list
 }
 
 // applyLocalOverride decodes the project configuration with its local override

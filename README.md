@@ -44,7 +44,7 @@ go install github.com/shopware/shopware-cli@latest
 ```bash
 git clone https://github.com/shopware/shopware-cli.git
 cd shopware-cli
-go build -o bin/shopware-cli .
+go build -o ./bin/shopware-cli .
 ```
 
 ## Usage

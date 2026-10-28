@@ -46,5 +46,19 @@ var integrations = Directory{
 			Documentation: "https://developer.shopware.com/docs/guides/development/testing/e2e-playwright/",
 			Delivery:      Delivery{Kind: DeliveryGit, Repository: "shopware/acceptance-test-suite"},
 		},
+		{
+			Name:          "meteor",
+			DisplayName:   "Meteor MCP Server",
+			Type:          TypeMCP,
+			Provider:      "shopware",
+			Description:   "Connect your AI agent to the Meteor MCP server for Shopware development assistance.",
+			Status:        StatusActive,
+			Documentation: "https://meteor.shopware.com/documentation/getting-started/agents",
+			Delivery: Delivery{
+				Kind:      DeliveryMCP,
+				URL:       "https://meteor.shopware.com/mcp",
+				Transport: "http",
+			},
+		},
 	},
 }

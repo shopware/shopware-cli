@@ -20,7 +20,7 @@ require (
 	github.com/invopop/jsonschema v0.14.0
 	github.com/jaswdr/faker/v2 v2.10.0
 	github.com/joho/godotenv v1.5.1
-	github.com/klauspost/compress v1.20.1
+	github.com/klauspost/compress v1.20.3
 	github.com/mattn/go-isatty v0.0.24
 	github.com/microcosm-cc/bluemonday v1.0.27
 	github.com/otiai10/copy v1.14.1
@@ -38,7 +38,7 @@ require (
 	github.com/spf13/pflag v1.0.10
 	github.com/stretchr/testify v1.12.1
 	github.com/tonistiigi/go-actions-cache v0.0.0-20260120203934-54bc28c26fd2
-	github.com/vulcand/oxy/v2 v2.2.1
+	github.com/vulcand/oxy/v2 v2.3.0
 	github.com/wI2L/jsondiff v0.7.1
 	github.com/yuin/goldmark v1.8.6
 	github.com/zeebo/xxh3 v1.1.0

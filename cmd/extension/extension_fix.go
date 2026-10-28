@@ -6,7 +6,6 @@ import (
 	"path/filepath"
 
 	"github.com/spf13/cobra"
-	"golang.org/x/sync/errgroup"
 
 	"github.com/shopware/shopware-cli/internal/extension"
 	"github.com/shopware/shopware-cli/internal/git"
@@ -28,6 +27,7 @@ var extensionFixCmd = &cobra.Command{
 		return err
 	},
 	RunE: func(cmd *cobra.Command, args []string) error {
+		progress := verifier.NewProgress("")
 		only, _ := cmd.Flags().GetString("only")
 		exclude, _ := cmd.Flags().GetString("exclude")
 
@@ -56,26 +56,19 @@ var extensionFixCmd = &cobra.Command{
 			return err
 		}
 
+		finishSetup := progress.Start("preparing tools and discovering extension configuration")
 		toolCfg, err := verifier.SetupExtensionToolConfig(cmd.Context(), cmd.Root().Version, ext)
+		finishSetup(err)
 		if err != nil {
 			return err
 		}
 
 		logging.FromContext(cmd.Context()).Debugf("Running fixes for Shopware version: %s", toolCfg.MinShopwareVersion)
 
-		var gr errgroup.Group
-
-		for _, tool := range tools {
-			gr.Go(func() error {
-				return tool.Fix(cmd.Context(), *toolCfg)
-			})
-		}
-
-		runErr := gr.Wait()
-		if err := validation.PrintToolInvocationTable(os.Stdout, "Fixers", statuses); err != nil {
-			return err
-		}
-		return runErr
+		results := verifier.RunTools(cmd.Context(), tools, statuses, *toolCfg, progress, func(tool verifier.FixTool, execution *verifier.ToolExecution) verifier.ToolSummary {
+			return tool.Fix(cmd.Context(), *toolCfg, execution)
+		})
+		return validation.ReportTools(results, "summary", "Fixers")
 	},
 }
 

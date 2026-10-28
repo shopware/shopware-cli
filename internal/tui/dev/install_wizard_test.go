@@ -5,10 +5,13 @@ import (
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
+	"github.com/charmbracelet/x/ansi"
 	"github.com/stretchr/testify/assert"
 
 	"github.com/shopware/shopware-cli/internal/shop/install"
 	"github.com/shopware/shopware-cli/internal/tui"
+	"github.com/shopware/shopware-cli/internal/tui/app"
 )
 
 func newTestInstallModel() Model {
@@ -318,7 +321,7 @@ func TestRenderInstallPrompt_PasswordErrorShown(t *testing.T) {
 	m = updated.(Model)
 
 	var b strings.Builder
-	m.renderInstallPrompt(&b)
+	m.renderInstallPrompt(&b, 0)
 	assert.Contains(t, b.String(), "password must be at least 8 characters long")
 }
 
@@ -339,7 +342,7 @@ func TestRenderInstallPrompt_AllStepsDoNotPanic(t *testing.T) {
 		m.install.step = s.step
 		var b strings.Builder
 		assert.NotPanics(t, func() {
-			m.renderInstallPrompt(&b)
+			m.renderInstallPrompt(&b, 0)
 		})
 		out := b.String()
 		for _, want := range s.expects {
@@ -374,4 +377,50 @@ func TestInstallFooterHint_UnknownStepReturnsEmpty(t *testing.T) {
 	m := newTestInstallModel()
 	m.install.step = installStep(999)
 	assert.Empty(t, m.installFooterHint())
+}
+
+func TestInstallPromptFitsSmallTerminals(t *testing.T) {
+	sizes := []app.Context{
+		{Width: 80, Height: 24, MainHeight: 22},
+		{Width: 100, Height: 30, MainHeight: 28},
+	}
+	steps := []struct {
+		step   installStep
+		cursor int
+	}{
+		{installStepAsk, 0},
+		{installStepLanguage, len(install.Languages) - 1},
+		{installStepCurrency, len(install.Currencies) - 1},
+		{installStepCredentials, 0},
+	}
+
+	for _, ctx := range sizes {
+		for _, s := range steps {
+			m := newTestInstallModel()
+			m.install.step = s.step
+			m.install.cursor = s.cursor
+
+			view := m.View(ctx)
+			assert.LessOrEqual(t, lipgloss.Height(view), ctx.MainHeight, "step %d at %dx%d", s.step, ctx.Width, ctx.Height)
+			assert.LessOrEqual(t, lipgloss.Width(view), ctx.Width, "step %d at %dx%d", s.step, ctx.Width, ctx.Height)
+
+			// Every line of the prompt, including the selected option and the buttons, is on screen.
+			_, cardHeight := phaseCardBounds(ctx)
+			var prompt strings.Builder
+			m.renderInstallPrompt(&prompt, tui.PhaseCardContentRows(cardHeight))
+			plainView := ansi.Strip(view)
+			for _, line := range strings.Split(ansi.Strip(prompt.String()), "\n") {
+				if line = strings.TrimSpace(line); line != "" {
+					assert.Contains(t, plainView, line, "step %d at %dx%d", s.step, ctx.Width, ctx.Height)
+				}
+			}
+		}
+	}
+}
+
+func TestInstallListRows(t *testing.T) {
+	assert.Equal(t, 0, installListRows(0, 13), "unbounded shows all")
+	assert.Equal(t, 0, installListRows(18, 13), "all options fit")
+	assert.Equal(t, 10, installListRows(17, 13))
+	assert.Equal(t, 3, installListRows(6, 13), "never fewer than three options")
 }

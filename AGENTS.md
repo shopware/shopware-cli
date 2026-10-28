@@ -5,11 +5,12 @@ This file provides guidance to AI coding agents when working with code in this r
 ## Development Commands
 
 ### Building and Running
-- **Build the CLI**: `go build -o shopware-cli .`
-- **Run directly**: `go run main.go [command]`
-- **Run tests**: `go test ./...`
-- **Run specific test**: `go test ./[package_path]`
-- **Verbose test output**: `go test -v ./...`
+- Prefer using `mise run [task]` if installed, otherwise:
+  - **Build the CLI**: `go build -o ./bin/shopware-cli .`
+  - **Run directly**: `go run main.go [command]`
+  - **Run tests**: `go test ./...`
+  - **Run specific test**: `go test ./[package_path]`
+  - **Verbose test output**: `go test -v ./...`
 
 ### Code Quality
 - **Prefer Go 1.24 packages** like slices package
@@ -124,4 +125,4 @@ The verifier registers tools through the name-only `Tool` interface. `CheckTool`
 - **Fixers**: Rector, ESLint, Stylelint, Symfony XML conversion
 - **Formatters**: PHP-CS-Fixer, Prettier
 
-`extension validate` runs all checkers by default. The deprecated `--full` flag remains accepted but has no effect; use `--only` or `--exclude` to select checkers. The extension commands report whether each tool was invoked or skipped; invocation does not guarantee that files were analyzed or changed.
+`extension validate` runs all checkers by default. The deprecated `--full` flag remains accepted but has no effect; use `--only` or `--exclude` to select checkers. Tools report findings and failures through a `ToolExecution` helper and return a `ToolResult` with an optional note or skip reason; the shared runner (`RunTools`) filters and collects findings, and reports show completed, failed, or skipped outcomes (see `docs/adr/0003-unified-tool-results.md`). Structured report schemas stay compatible; JSON only adds fields. A completed tool can still report source errors; invocation does not guarantee that files were analyzed or changed.

@@ -51,6 +51,39 @@ func TestCleanupExtensionFolder_RemovesDefaultNotAllowedPaths(t *testing.T) {
 	assert.NoError(t, err, "composer.json should remain")
 }
 
+func TestCleanupExtensionFolder_RemovesShopwareCliCache(t *testing.T) {
+	for _, tt := range []struct {
+		name            string
+		additionalPaths []string
+	}{
+		{name: "default exclusions"},
+		{name: "custom exclusions", additionalPaths: []string{"custom-build"}},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			tmpDir := t.TempDir()
+			cacheDir := filepath.Join(tmpDir, ".cache", "shopware-cli")
+			testhelper.WriteFile(t, filepath.Join(cacheDir, "folders", "ab", "cached-assets", "app.js"), "cached assets")
+
+			retainedFiles := []string{
+				"composer.json",
+				"src/Resources/public/administration/js/app.js",
+				"src/Resources/app/storefront/dist/storefront/js/app.js",
+				".cache/other-tool/data.json",
+			}
+			for _, file := range retainedFiles {
+				testhelper.WriteFile(t, filepath.Join(tmpDir, file), "keep")
+			}
+
+			require.NoError(t, CleanupExtensionFolder(tmpDir, tt.additionalPaths))
+
+			assert.NoDirExists(t, cacheDir)
+			for _, file := range retainedFiles {
+				assert.FileExists(t, filepath.Join(tmpDir, file))
+			}
+		})
+	}
+}
+
 func TestCleanupExtensionFolder_RemovesNotAllowedFilesInSubdirectories(t *testing.T) {
 	tmpDir := t.TempDir()
 

@@ -275,6 +275,10 @@
     },
     "ConfigDeployment": {
       "properties": {
+        "skip-assets-install": {
+          "type": "boolean",
+          "description": "Skip asset installation during deployment when assets were built in CI/CD. This can also be enabled with SHOPWARE_DEPLOYMENT_SKIP_ASSETS_INSTALL=1."
+        },
         "hooks": {
           "properties": {
             "pre": {

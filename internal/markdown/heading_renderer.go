@@ -3,39 +3,30 @@ package markdown
 import (
 	"github.com/yuin/goldmark/ast"
 	"github.com/yuin/goldmark/renderer"
-	"github.com/yuin/goldmark/renderer/html"
 	"github.com/yuin/goldmark/util"
 )
 
-// spanHeadingRenderer renders Markdown headings as <span class="hN"> elements
-// instead of real <h1>-<h6> tags.
-//
-// The HTML produced by this package is pushed to the Shopware Store
-// (extension description, installation manual and changelog) where it is
-// embedded inside a store page that already owns its heading hierarchy
-// (the <h1> is the product title). Emitting real headings for this description
-// chrome would inject competing headings and harm the page's SEO structure, so
-// we keep the visual hierarchy via CSS classes (class="h1" ... "h6") without the
-// heading semantics, matching the Shopware Storefront SEO guideline.
-type spanHeadingRenderer struct{}
+// storeHeadingRenderer renders Markdown headings as <h2>-<h4> elements, as
+// the Shopware Store rejects other heading levels and <span> elements.
+type storeHeadingRenderer struct{}
 
-func (r *spanHeadingRenderer) RegisterFuncs(reg renderer.NodeRendererFuncRegisterer) {
+func (r *storeHeadingRenderer) RegisterFuncs(reg renderer.NodeRendererFuncRegisterer) {
 	reg.Register(ast.KindHeading, r.renderHeading)
 }
 
-func (r *spanHeadingRenderer) renderHeading(w util.BufWriter, _ []byte, node ast.Node, entering bool) (ast.WalkStatus, error) {
+func (r *storeHeadingRenderer) renderHeading(w util.BufWriter, _ []byte, node ast.Node, entering bool) (ast.WalkStatus, error) {
 	n := node.(*ast.Heading)
 
+	level := min(max(n.Level, 2), 4)
+
 	if entering {
-		_, _ = w.WriteString(`<span class="h`)
-		_ = w.WriteByte("0123456"[n.Level])
-		_ = w.WriteByte('"')
-		if n.Attributes() != nil {
-			html.RenderAttributes(w, node, html.HeadingAttributeFilter)
-		}
+		_, _ = w.WriteString("<h")
+		_ = w.WriteByte("0123456"[level])
 		_ = w.WriteByte('>')
 	} else {
-		_, _ = w.WriteString("</span>\n")
+		_, _ = w.WriteString("</h")
+		_ = w.WriteByte("0123456"[level])
+		_, _ = w.WriteString(">\n")
 	}
 
 	return ast.WalkContinue, nil

@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sync"
 
 	"github.com/spf13/cobra"
-	"golang.org/x/sync/errgroup"
 
 	"github.com/shopware/shopware-cli/internal/shop"
 	"github.com/shopware/shopware-cli/internal/system"
@@ -33,14 +33,15 @@ var projectValidateCmd = &cobra.Command{
 	RunE: func(cmd *cobra.Command, args []string) error {
 		// Reporting format was validated in PreRunE.
 		reportingFormat, _ := projectValidationFormat(cmd)
+		ctx := cmd.Context()
+		progress := verifier.NewProgress(reportingFormat)
+		cleanup := func() {}
+		defer func() { cleanup() }()
 		only, _ := cmd.Flags().GetString("only")
 		exclude, _ := cmd.Flags().GetString("exclude")
 
 		// Tool selection was validated in PreRunE.
 		tools, statuses, _ := selectProjectValidationTools(only, exclude)
-		if err := verifier.SetupTools(cmd.Context(), cmd.Root().Version); err != nil {
-			return err
-		}
 		noCopy, _ := cmd.Flags().GetBool("no-copy")
 		localOnly, _ := cmd.Flags().GetBool("local-only")
 
@@ -67,40 +68,44 @@ var projectValidateCmd = &cobra.Command{
 			if err != nil {
 				return fmt.Errorf("cannot create temporary directory: %w", err)
 			}
-			defer func() {
-				if err := os.RemoveAll(tmpDir); err != nil {
-					logging.FromContext(cmd.Context()).Errorf("Failed to remove temporary directory: %v", err)
+			cleanup = sync.OnceFunc(func() {
+				finishCleanup := progress.Start("removing temporary files")
+				cleanupErr := os.RemoveAll(tmpDir)
+				finishCleanup(cleanupErr)
+				if cleanupErr != nil {
+					logging.FromContext(ctx).Errorf("Failed to remove temporary directory: %v", cleanupErr)
 				}
-			}()
+			})
 
-			if err := system.CopyFiles(cmd.Context(), projectPath, tmpDir); err != nil {
-				return err
+			finishCopy := progress.Start("copying files (use \"--no-copy\" to skip)")
+			copyErr := system.CopyFiles(ctx, projectPath, tmpDir)
+			finishCopy(copyErr)
+			if copyErr != nil {
+				return copyErr
 			}
 			validationPath = tmpDir
 		}
 
-		toolCfg, err := verifier.GetConfigFromProject(cmd.Context(), validationPath, localOnly)
+		finishConfig := progress.Start("discovering project configuration")
+		toolCfg, err := verifier.GetConfigFromProject(ctx, validationPath, localOnly)
+		finishConfig(err)
 		if err != nil {
 			return err
 		}
 
-		result := verifier.NewCheck()
-		result.SetSourceRoot(toolCfg.RootDir)
-
-		var gr errgroup.Group
-
-		for _, tool := range tools {
-			gr.Go(func() error {
-				return tool.Check(cmd.Context(), result, *toolCfg)
-			})
+		finishSetup := progress.Start("preparing tools")
+		setupErr := verifier.SetupTools(ctx, cmd.Root().Version)
+		finishSetup(setupErr)
+		if setupErr != nil {
+			return setupErr
 		}
+		toolCfg.ToolDirectory = verifier.GetToolDirectory()
 
-		runErr := gr.Wait()
-		reportErr := validation.DoCheckReport(result.RemoveByIdentifier(toolCfg.ValidationIgnores), reportingFormat, runErr != nil, statuses...)
-		if runErr != nil {
-			return runErr
-		}
-		return reportErr
+		results := verifier.RunTools(ctx, tools, statuses, *toolCfg, progress, func(tool verifier.CheckTool, execution *verifier.ToolExecution) verifier.ToolSummary {
+			return tool.Check(ctx, *toolCfg, execution)
+		})
+		cleanup()
+		return validation.ReportTools(results, reportingFormat, "Checkers")
 	},
 }
 
