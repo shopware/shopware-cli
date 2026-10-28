@@ -504,6 +504,9 @@ func (c *ConfigDump) NormalizeFakerExpressions() {
 }
 
 type ConfigDeployment struct {
+	// Skip asset installation during deployment when assets were built in CI/CD. This can also be enabled with SHOPWARE_DEPLOYMENT_SKIP_ASSETS_INSTALL=1.
+	SkipAssetsInstall *bool `yaml:"skip-assets-install,omitempty"`
+
 	Hooks struct {
 		// The pre hook will be executed before the deployment
 		Pre ConfigDeploymentHook `yaml:"pre"`
