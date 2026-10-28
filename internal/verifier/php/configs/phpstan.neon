@@ -6,8 +6,6 @@ parameters:
     level: 5
     tmpDir: %env.SHOPWARE_CLI_PHPSTAN_TMP_DIR%
 
-    paths:
-        - %currentWorkingDirectory%
     excludePaths:
         - src/Resources/config (?)
         - vendor (?)

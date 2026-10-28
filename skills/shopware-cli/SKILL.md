@@ -143,7 +143,7 @@ shopware-cli extension validate --help
 shopware-cli project validate [flags]
 ```
 
-Validates the Shopware project against the checks implemented by the current CLI and configured tools. It copies the project to a temporary directory and installs its toolset first, so a first run can be slow; `--no-copy` validates in place and skips the copy.
+Validates the Shopware project in place against the checks implemented by the current CLI and configured tools. It installs its toolset first, so a first run can be slow. PHPStan needs the project's installed `vendor/`: run `composer install` first, or the PHPStan check fails.
 
 Common flags include:
 
@@ -151,7 +151,7 @@ Common flags include:
 - `--exclude <tools>` — skip specific tools (comma-separated).
 - `--format <format>` — choose an output format supported by the current CLI (`--reporter` is a deprecated alias).
 - `--local-only` — limit extension discovery to plugins in `custom/*` (for the project toolset); does not add per-extension metadata validation.
-- `--no-copy` — do not copy project files to a temporary directory before validation.
+- `--no-copy` — deprecated and has no effect; validation always runs in place.
 - `--verbose` — show debug output.
 
 Use current `--help` rather than treating this list as exhaustive.
@@ -166,6 +166,8 @@ shopware-cli extension validate [path] [flags]
 
 The extension path is required; use `.` for the current extension.
 
+A folder is validated in place. When it has no `vendor/`, PHPStan's composer dependencies are installed into `var/cache/shopware-cli/` inside the extension. That directory ignores itself in git, is not packed into the zip, and is reused until the dependencies change or a day has passed. An existing `vendor/` is used as it is, so `--check-against` has no effect then.
+
 Normal extension validation runs the built-in checks implemented by the current CLI. Store-compliance mode can add Store-specific checks; do not assume that every metadata or quality rule is Store-only.
 
 Common flags include:
@@ -176,7 +178,7 @@ Common flags include:
 - `--check-against <mode>` — `highest` (default) or `lowest`: which supported Shopware version to check against.
 - `--store-compliance` — enable Store-compliance mode while the current CLI supports the flag. Prefer `validation.store_compliance: true` in `.shopware-extension.yml` for persistent Store intent.
 - `--format <format>` — choose an output format supported by the current CLI (`--reporter` is a deprecated alias).
-- `--no-copy` — do not copy extension files to a temporary directory.
+- `--no-copy` — deprecated and has no effect; validation always runs in place.
 - `--verbose` — show debug output.
 
 For Store-distribution workflows, use the `shopware-cli-extension-store` skill when available.

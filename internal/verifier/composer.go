@@ -1,17 +1,17 @@
 package verifier
 
 import (
+	"bytes"
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path"
 	"time"
 
+	"github.com/shopware/shopware-cli/internal/extension"
 	"github.com/shopware/shopware-cli/internal/shop"
-	"github.com/shopware/shopware-cli/internal/system"
 	"github.com/shopware/shopware-cli/logging"
 )
 
@@ -28,15 +28,24 @@ func installComposerDeps(ctx context.Context, rootDir string, checkAgainst strin
 	return runComposerDeps(ctx, rootDir, path.Join(rootDir, "auth.json"), getComposerSuggets(rootDir), checkAgainst)
 }
 
-// prepareComposerAutoload returns the autoload file to analyse rootDir with.
-// When rootDir has no vendor/, the dependencies are installed into a shared
-// cache directory instead, so validation never writes into the user's folder.
-func prepareComposerAutoload(ctx context.Context, rootDir string, checkAgainst string) (string, error) {
-	if _, err := os.Stat(path.Join(rootDir, "vendor")); !os.IsNotExist(err) {
-		return path.Join(rootDir, "vendor", "autoload.php"), nil
+// prepareComposerAutoload returns the autoload file to analyse config.RootDir with.
+// An existing vendor/ is used as it is. A project must have one; for an
+// extension without vendor/ the dependencies are installed into its validation
+// cache, so validation never touches vendor/, composer.json or composer.lock.
+func prepareComposerAutoload(ctx context.Context, config ToolConfig) (string, error) {
+	if _, err := os.Stat(path.Join(config.RootDir, "vendor")); !os.IsNotExist(err) {
+		if config.CheckAgainst == "lowest" {
+			logging.FromContext(ctx).Warnf("Using the existing vendor/ directory, --check-against lowest has no effect")
+		}
+
+		return path.Join(config.RootDir, "vendor", "autoload.php"), nil
 	}
 
-	composerJSON, err := os.ReadFile(path.Join(rootDir, "composer.json"))
+	if config.IsProject {
+		return "", errors.New(`cannot run phpstan without vendor/: run "composer install" first (pass --exclude phpstan to skip it)`)
+	}
+
+	composerJSON, err := os.ReadFile(path.Join(config.RootDir, "composer.json"))
 	if err != nil {
 		return "", fmt.Errorf("cannot read composer.json: %w", err)
 	}
@@ -46,23 +55,27 @@ func prepareComposerAutoload(ctx context.Context, rootDir string, checkAgainst s
 		return "", err
 	}
 
-	hash := sha256.Sum256(append(append(dependencies, 0), checkAgainst...))
-	cacheRoot := path.Join(system.GetShopwareCliCacheDir(), "validate-vendor")
-	workDir := path.Join(cacheRoot, hex.EncodeToString(hash[:])[:16])
+	cacheDir, err := ensureValidationCacheDir(config.RootDir)
+	if err != nil {
+		return "", err
+	}
+
+	mode := "highest"
+	if config.CheckAgainst == "lowest" {
+		mode = "lowest"
+	}
+
+	workDir := path.Join(cacheDir, "composer-"+mode)
 	autoloadFile := path.Join(workDir, "vendor", "autoload.php")
 
-	if info, err := os.Stat(autoloadFile); err == nil && time.Since(info.ModTime()) < validationVendorTTL {
+	if isComposerCacheFresh(workDir, dependencies) {
 		logging.FromContext(ctx).Debugf("Using cached composer dependencies from %s", workDir)
 		return autoloadFile, nil
 	}
 
-	if err := os.MkdirAll(cacheRoot, 0o755); err != nil {
-		return "", fmt.Errorf("cannot create composer cache directory: %w", err)
-	}
-
 	// Build next to the final directory and rename it into place, so parallel
 	// runs never see a half-installed vendor directory.
-	buildDir, err := os.MkdirTemp(cacheRoot, "build-*")
+	buildDir, err := os.MkdirTemp(cacheDir, "build-*")
 	if err != nil {
 		return "", fmt.Errorf("cannot create composer cache directory: %w", err)
 	}
@@ -72,7 +85,7 @@ func prepareComposerAutoload(ctx context.Context, rootDir string, checkAgainst s
 		return "", fmt.Errorf("cannot write composer.json: %w", err)
 	}
 
-	if err := runComposerDeps(ctx, buildDir, path.Join(rootDir, "auth.json"), nil, checkAgainst); err != nil {
+	if err := runComposerDeps(ctx, buildDir, path.Join(config.RootDir, "auth.json"), nil, config.CheckAgainst); err != nil {
 		return "", err
 	}
 
@@ -91,8 +104,39 @@ func prepareComposerAutoload(ctx context.Context, rootDir string, checkAgainst s
 	return autoloadFile, nil
 }
 
+// isComposerCacheFresh reports whether workDir holds an install of exactly
+// these dependencies that is younger than validationVendorTTL.
+func isComposerCacheFresh(workDir string, dependencies []byte) bool {
+	cached, err := os.ReadFile(path.Join(workDir, "composer.json"))
+	if err != nil || !bytes.Equal(cached, dependencies) {
+		return false
+	}
+
+	info, err := os.Stat(path.Join(workDir, "vendor", "autoload.php"))
+
+	return err == nil && time.Since(info.ModTime()) < validationVendorTTL
+}
+
+// ensureValidationCacheDir creates the validation cache of rootDir. The cache
+// ignores itself in git, so the user's .gitignore stays untouched.
+func ensureValidationCacheDir(rootDir string) (string, error) {
+	cacheDir := path.Join(rootDir, extension.ValidationCacheDir)
+	if err := os.MkdirAll(cacheDir, 0o755); err != nil {
+		return "", fmt.Errorf("cannot create validation cache directory: %w", err)
+	}
+
+	gitignore := path.Join(cacheDir, ".gitignore")
+	if _, err := os.Stat(gitignore); os.IsNotExist(err) {
+		if err := os.WriteFile(gitignore, []byte("*\n"), 0o644); err != nil {
+			return "", fmt.Errorf("cannot create validation cache directory: %w", err)
+		}
+	}
+
+	return cacheDir, nil
+}
+
 // validationComposerJSON keeps only what decides which packages get installed,
-// so extensions with the same dependencies share one cached vendor directory.
+// so the cached install is only redone when that changes.
 // The extension's own classes need no autoloading: PHPStan discovers them in
 // the analysed paths.
 func validationComposerJSON(composerJSON []byte) ([]byte, error) {

@@ -17,7 +17,7 @@ import (
 var extensionValidateCmd = &cobra.Command{
 	Use:   "validate path",
 	Short: "Validate extension metadata, assets, and code quality",
-	Long:  "Validate an extension folder or ZIP file. With --store-compliance (or SHOPWARE_CLI_STORE_COMPLIANCE=1), the Store's rules apply and the extension's validation.ignore list is not used.",
+	Long:  "Validate an extension folder or ZIP file. With --store-compliance (or SHOPWARE_CLI_STORE_COMPLIANCE=1), the Store's rules apply and the extension's validation.ignore list is not used. A folder is validated in place; without vendor/, the composer dependencies for PHPStan are installed into var/cache/shopware-cli inside it.",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		storeCompliance, _ := cmd.Flags().GetBool("store-compliance")
@@ -43,10 +43,7 @@ var extensionValidateCmd = &cobra.Command{
 		var toolCfg *verifier.ToolConfig
 
 		if stat.IsDir() {
-			// POC: validate in place; PHPStan installs missing composer deps outside the folder.
-			validationPath := path
-
-			ext, err := extension.GetExtensionByFolder(cmd.Context(), validationPath)
+			ext, err := extension.GetExtensionByFolder(cmd.Context(), path)
 			if err != nil {
 				return err
 			}
@@ -142,6 +139,7 @@ func init() {
 	extensionValidateCmd.MarkFlagsMutuallyExclusive("format", "reporter")
 	_ = extensionValidateCmd.PersistentFlags().MarkDeprecated("full", "all validation checks now run by default; omit --full; to restore old behaviour use --only builtin")
 	_ = extensionValidateCmd.PersistentFlags().MarkDeprecated("reporter", "use --format instead")
+	_ = extensionValidateCmd.PersistentFlags().MarkDeprecated("no-copy", "validation always runs in place, omit --no-copy")
 	_ = extensionValidateCmd.PersistentFlags().MarkHidden("reporter")
 	extensionValidateCmd.PreRunE = func(cmd *cobra.Command, args []string) error {
 		if _, err := extensionValidationFormat(cmd); err != nil {

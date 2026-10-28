@@ -3,16 +3,13 @@ package verifier
 import (
 	"bytes"
 	"context"
-	"crypto/sha256"
 	_ "embed"
-	"encoding/hex"
 	"encoding/json"
 	"os"
 	"path"
 	"regexp"
 	"strings"
 
-	"github.com/shopware/shopware-cli/internal/system"
 	"github.com/shopware/shopware-cli/internal/validation"
 	"github.com/shopware/shopware-cli/logging"
 )
@@ -64,82 +61,96 @@ func (p PhpStan) Check(ctx context.Context, check *Check, config ToolConfig) err
 		return nil
 	}
 
-	autoloadFile, err := prepareComposerAutoload(ctx, config.RootDir, config.CheckAgainst)
+	if len(config.SourceDirectories) == 0 {
+		return nil
+	}
+
+	autoloadFile, err := prepareComposerAutoload(ctx, config)
 	if err != nil {
 		return err
 	}
-	for _, sourceDirectory := range config.SourceDirectories {
-		phpstanArguments := []string{"-dmemory_limit=2G", path.Join(config.ToolDirectory, "php", "vendor", "bin", "phpstan"), "analyse", "--no-progress", "--no-interaction", "--error-format=json", "--autoload-file", autoloadFile, sourceDirectory}
 
-		if !p.configExists(config.RootDir) {
-			phpstanArguments = append(phpstanArguments, "--configuration", path.Join(config.ToolDirectory, "php", "configs", "phpstan.neon"))
+	// All source directories go into one run, so PHPStan knows the classes of
+	// each of them while analysing the others.
+	phpstanArguments := []string{"-dmemory_limit=2G", path.Join(config.ToolDirectory, "php", "vendor", "bin", "phpstan"), "analyse", "--no-progress", "--no-interaction", "--error-format=json", "--autoload-file", autoloadFile}
+	phpstanArguments = append(phpstanArguments, config.SourceDirectories...)
+	env := append(os.Environ(), "PHP_DIR="+path.Join(config.ToolDirectory, "php"))
+
+	// A local phpstan.neon brings its own tmpDir.
+	if !p.configExists(config.RootDir) {
+		cacheDir, err := ensureValidationCacheDir(config.RootDir)
+		if err != nil {
+			return err
 		}
 
-		if logging.IsVerbose(ctx) {
-			phpstanArguments = append(phpstanArguments, "-v")
+		phpstanArguments = append(phpstanArguments, "--configuration", path.Join(config.ToolDirectory, "php", "configs", "phpstan.neon"))
+		env = append(env, "SHOPWARE_CLI_PHPSTAN_TMP_DIR="+path.Join(cacheDir, "phpstan"))
+	}
+
+	if logging.IsVerbose(ctx) {
+		phpstanArguments = append(phpstanArguments, "-v")
+	}
+
+	phpstan := CommandContext(ctx, "php", phpstanArguments...)
+	phpstan.Env = env
+	phpstan.Dir = config.RootDir
+
+	var stderr bytes.Buffer
+	phpstan.Stderr = &stderr
+
+	log, _ := phpstan.Output()
+
+	// When all files are excluded by excludePaths in a local phpstan.neon,
+	// PHPStan prints a plain text message instead of JSON.
+	if isPhpStanNoFilesOutput(string(log)) || isPhpStanNoFilesOutput(stderr.String()) {
+		return nil
+	}
+
+	log = []byte(strings.ReplaceAll(string(log), "\"files\":[]", "\"files\":{}"))
+
+	var phpstanResult PhpStanOutput
+
+	if err := json.Unmarshal(log, &phpstanResult); err != nil {
+		errorOutput := stderr.String()
+		if strings.TrimSpace(errorOutput) == "" {
+			errorOutput = string(log)
 		}
 
-		phpstan := CommandContext(ctx, "php", phpstanArguments...)
-		phpstan.Env = append(os.Environ(), "PHP_DIR="+path.Join(config.ToolDirectory, "php"), "SHOPWARE_CLI_PHPSTAN_TMP_DIR="+phpstanTmpDir(config.RootDir))
-		phpstan.Dir = config.RootDir
+		check.AddResult(validation.CheckResult{
+			Path:       "phpstan.neon",
+			Message:    "failed to unmarshal phpstan output: " + errorOutput,
+			Severity:   validation.SeverityError,
+			Line:       0,
+			Identifier: "phpstan/error",
+		})
+		//nolint: nilerr
+		return nil
+	}
 
-		var stderr bytes.Buffer
-		phpstan.Stderr = &stderr
+	for _, phpstanError := range phpstanResult.Errors {
+		check.AddResult(validation.CheckResult{
+			Path:       "phpstan.neon",
+			Message:    phpstanError,
+			Severity:   validation.SeverityError,
+			Line:       0,
+			Identifier: "phpstan/error",
+		})
+	}
 
-		log, _ := phpstan.Output()
-
-		// When all files of a source directory are excluded by excludePaths in a
-		// local phpstan.neon, PHPStan prints a plain text message instead of JSON.
-		if isPhpStanNoFilesOutput(string(log)) || isPhpStanNoFilesOutput(stderr.String()) {
-			continue
-		}
-
-		log = []byte(strings.ReplaceAll(string(log), "\"files\":[]", "\"files\":{}"))
-
-		var phpstanResult PhpStanOutput
-
-		if err := json.Unmarshal(log, &phpstanResult); err != nil {
-			errorOutput := stderr.String()
-			if strings.TrimSpace(errorOutput) == "" {
-				errorOutput = string(log)
+	for fileName, file := range phpstanResult.Files {
+		for _, message := range file.Messages {
+			if strings.HasSuffix(message.Identifier, "deprecated") && p.isUselessDeprecation(message.Message) {
+				continue
 			}
 
 			check.AddResult(validation.CheckResult{
-				Path:       "phpstan.neon",
-				Message:    "failed to unmarshal phpstan output: " + errorOutput,
+				Path:       validation.NormalizeSourcePath(fileName, config.RootDir),
+				Line:       message.Line,
+				Message:    message.Message,
 				Severity:   validation.SeverityError,
-				Line:       0,
-				Identifier: "phpstan/error",
+				Identifier: "phpstan/" + message.Identifier,
+				Tip:        message.Tip,
 			})
-			//nolint: nilerr
-			return nil
-		}
-
-		for _, error := range phpstanResult.Errors {
-			check.AddResult(validation.CheckResult{
-				Path:       "phpstan.neon",
-				Message:    error,
-				Severity:   validation.SeverityError,
-				Line:       0,
-				Identifier: "phpstan/error",
-			})
-		}
-
-		for fileName, file := range phpstanResult.Files {
-			for _, message := range file.Messages {
-				if strings.HasSuffix(message.Identifier, "deprecated") && p.isUselessDeprecation(message.Message) {
-					continue
-				}
-
-				check.AddResult(validation.CheckResult{
-					Path:       validation.NormalizeSourcePath(fileName, config.RootDir),
-					Line:       message.Line,
-					Message:    message.Message,
-					Severity:   validation.SeverityError,
-					Identifier: "phpstan/" + message.Identifier,
-					Tip:        message.Tip,
-				})
-			}
 		}
 	}
 
@@ -173,12 +184,4 @@ func (p PhpStan) isUselessDeprecation(message string) bool {
 
 func init() {
 	AddTool(PhpStan{})
-}
-
-// phpstanTmpDir gives every validated folder its own stable result cache, so
-// repeated runs reuse it and validating another folder doesn't overwrite it.
-func phpstanTmpDir(rootDir string) string {
-	hash := sha256.Sum256([]byte(rootDir))
-
-	return path.Join(system.GetShopwareCliCacheDir(), "phpstan", hex.EncodeToString(hash[:])[:16])
 }

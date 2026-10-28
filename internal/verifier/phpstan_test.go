@@ -1,9 +1,13 @@
 package verifier
 
 import (
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestPhpStan_isUselessDeprecation(t *testing.T) {
@@ -100,5 +104,35 @@ func TestIsPhpStanNoFilesOutput(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			assert.Equal(t, tt.want, isPhpStanNoFilesOutput(tt.output))
 		})
+	}
+}
+
+func TestPhpStanAnalysesAllSourceDirectoriesInOneRun(t *testing.T) {
+	rootDir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(rootDir, "composer.json"), []byte(`{}`), 0o644))
+	require.NoError(t, os.Mkdir(filepath.Join(rootDir, "vendor"), 0o755))
+	sourceDirectories := []string{filepath.Join(rootDir, "src"), filepath.Join(rootDir, "lib")}
+
+	// A fake php records every run and reports no errors.
+	binDir := t.TempDir()
+	runsLog := filepath.Join(binDir, "runs.log")
+	script := "#!/bin/sh\necho \"$*\" >> '" + runsLog + "'\necho '{\"totals\":{\"errors\":0,\"file_errors\":0},\"files\":[],\"errors\":[]}'\n"
+	require.NoError(t, os.WriteFile(filepath.Join(binDir, "php"), []byte(script), 0o755))
+	t.Setenv("PATH", binDir)
+
+	err := PhpStan{}.Check(t.Context(), NewCheck(), ToolConfig{
+		RootDir:           rootDir,
+		ToolDirectory:     t.TempDir(),
+		SourceDirectories: sourceDirectories,
+	})
+	require.NoError(t, err)
+
+	runs, err := os.ReadFile(runsLog)
+	require.NoError(t, err)
+
+	lines := strings.Split(strings.TrimSpace(string(runs)), "\n")
+	require.Len(t, lines, 1)
+	for _, sourceDirectory := range sourceDirectories {
+		assert.Contains(t, lines[0], sourceDirectory)
 	}
 }

@@ -15,7 +15,7 @@ import (
 var projectValidateCmd = &cobra.Command{
 	Use:   "validate [path]",
 	Short: "Run static analysis and Shopware checks on a project",
-	Long:  "Validate the project's own code, such as extensions in custom/ and configured bundles. Packages that Composer installs into vendor/ are not validated. Runs on a temporary copy unless --no-copy is passed.",
+	Long:  "Validate the project's own code, such as extensions in custom/ and configured bundles. Packages that Composer installs into vendor/ are not validated, but PHPStan needs them, so run composer install first.",
 	Args:  cobra.MaximumNArgs(1),
 	PreRunE: func(cmd *cobra.Command, args []string) error {
 		if _, err := projectValidationFormat(cmd); err != nil {
@@ -57,10 +57,7 @@ var projectValidateCmd = &cobra.Command{
 			return fmt.Errorf("cannot find path: %w", err)
 		}
 
-		// POC: validate in place; PHPStan installs missing composer deps outside the folder.
-		validationPath := projectPath
-
-		toolCfg, err := verifier.GetConfigFromProject(cmd.Context(), validationPath, localOnly)
+		toolCfg, err := verifier.GetConfigFromProject(cmd.Context(), projectPath, localOnly)
 		if err != nil {
 			return err
 		}
@@ -111,5 +108,6 @@ func init() {
 	_ = projectValidateCmd.RegisterFlagCompletionFunc("exclude", completeToolNames[verifier.CheckTool])
 	projectValidateCmd.MarkFlagsMutuallyExclusive("format", "reporter")
 	_ = projectValidateCmd.PersistentFlags().MarkDeprecated("reporter", "use --format instead")
+	_ = projectValidateCmd.PersistentFlags().MarkDeprecated("no-copy", "validation always runs in place, omit --no-copy")
 	_ = projectValidateCmd.PersistentFlags().MarkHidden("reporter")
 }
