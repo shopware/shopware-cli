@@ -3,13 +3,16 @@ package verifier
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
 	_ "embed"
+	"encoding/hex"
 	"encoding/json"
 	"os"
 	"path"
 	"regexp"
 	"strings"
 
+	"github.com/shopware/shopware-cli/internal/system"
 	"github.com/shopware/shopware-cli/internal/validation"
 	"github.com/shopware/shopware-cli/logging"
 )
@@ -61,11 +64,12 @@ func (p PhpStan) Check(ctx context.Context, check *Check, config ToolConfig) err
 		return nil
 	}
 
-	if err := installComposerDeps(ctx, config.RootDir, config.CheckAgainst); err != nil {
+	autoloadFile, err := prepareComposerAutoload(ctx, config.RootDir, config.CheckAgainst)
+	if err != nil {
 		return err
 	}
 	for _, sourceDirectory := range config.SourceDirectories {
-		phpstanArguments := []string{"-dmemory_limit=2G", path.Join(config.ToolDirectory, "php", "vendor", "bin", "phpstan"), "analyse", "--no-progress", "--no-interaction", "--error-format=json", sourceDirectory}
+		phpstanArguments := []string{"-dmemory_limit=2G", path.Join(config.ToolDirectory, "php", "vendor", "bin", "phpstan"), "analyse", "--no-progress", "--no-interaction", "--error-format=json", "--autoload-file", autoloadFile, sourceDirectory}
 
 		if !p.configExists(config.RootDir) {
 			phpstanArguments = append(phpstanArguments, "--configuration", path.Join(config.ToolDirectory, "php", "configs", "phpstan.neon"))
@@ -76,7 +80,7 @@ func (p PhpStan) Check(ctx context.Context, check *Check, config ToolConfig) err
 		}
 
 		phpstan := CommandContext(ctx, "php", phpstanArguments...)
-		phpstan.Env = append(os.Environ(), "PHP_DIR="+path.Join(config.ToolDirectory, "php"))
+		phpstan.Env = append(os.Environ(), "PHP_DIR="+path.Join(config.ToolDirectory, "php"), "SHOPWARE_CLI_PHPSTAN_TMP_DIR="+phpstanTmpDir(config.RootDir))
 		phpstan.Dir = config.RootDir
 
 		var stderr bytes.Buffer
@@ -169,4 +173,12 @@ func (p PhpStan) isUselessDeprecation(message string) bool {
 
 func init() {
 	AddTool(PhpStan{})
+}
+
+// phpstanTmpDir gives every validated folder its own stable result cache, so
+// repeated runs reuse it and validating another folder doesn't overwrite it.
+func phpstanTmpDir(rootDir string) string {
+	hash := sha256.Sum256([]byte(rootDir))
+
+	return path.Join(system.GetShopwareCliCacheDir(), "phpstan", hex.EncodeToString(hash[:])[:16])
 }

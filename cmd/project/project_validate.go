@@ -2,17 +2,14 @@ package project
 
 import (
 	"fmt"
-	"os"
 	"path/filepath"
 
 	"github.com/spf13/cobra"
 	"golang.org/x/sync/errgroup"
 
 	"github.com/shopware/shopware-cli/internal/shop"
-	"github.com/shopware/shopware-cli/internal/system"
 	"github.com/shopware/shopware-cli/internal/validation"
 	"github.com/shopware/shopware-cli/internal/verifier"
-	"github.com/shopware/shopware-cli/logging"
 )
 
 var projectValidateCmd = &cobra.Command{
@@ -41,7 +38,6 @@ var projectValidateCmd = &cobra.Command{
 		if err := verifier.SetupTools(cmd.Context(), cmd.Root().Version); err != nil {
 			return err
 		}
-		noCopy, _ := cmd.Flags().GetBool("no-copy")
 		localOnly, _ := cmd.Flags().GetBool("local-only")
 
 		var err error
@@ -61,23 +57,8 @@ var projectValidateCmd = &cobra.Command{
 			return fmt.Errorf("cannot find path: %w", err)
 		}
 
+		// POC: validate in place; PHPStan installs missing composer deps outside the folder.
 		validationPath := projectPath
-		if !noCopy {
-			tmpDir, err := os.MkdirTemp(os.TempDir(), "analyse-project-*")
-			if err != nil {
-				return fmt.Errorf("cannot create temporary directory: %w", err)
-			}
-			defer func() {
-				if err := os.RemoveAll(tmpDir); err != nil {
-					logging.FromContext(cmd.Context()).Errorf("Failed to remove temporary directory: %v", err)
-				}
-			}()
-
-			if err := system.CopyFiles(cmd.Context(), projectPath, tmpDir); err != nil {
-				return err
-			}
-			validationPath = tmpDir
-		}
 
 		toolCfg, err := verifier.GetConfigFromProject(cmd.Context(), validationPath, localOnly)
 		if err != nil {
