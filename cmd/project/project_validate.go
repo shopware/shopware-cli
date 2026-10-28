@@ -7,7 +7,6 @@ import (
 	"sync"
 
 	"github.com/spf13/cobra"
-	"golang.org/x/sync/errgroup"
 
 	"github.com/shopware/shopware-cli/internal/shop"
 	"github.com/shopware/shopware-cli/internal/system"
@@ -102,34 +101,11 @@ var projectValidateCmd = &cobra.Command{
 		}
 		toolCfg.ToolDirectory = verifier.GetToolDirectory()
 
-		result := verifier.NewCheck()
-		result.SetSourceRoot(toolCfg.RootDir)
-
-		var gr errgroup.Group
-
-		for _, tool := range tools {
-			gr.Go(func() error {
-				finish := progress.Start(tool.Name())
-				err := tool.Check(ctx, result, *toolCfg)
-				if err == nil {
-					err = ctx.Err()
-				}
-				finish(err)
-				return err
-			})
-		}
-
-		runErr := gr.Wait()
-		report := result.RemoveByIdentifier(toolCfg.ValidationIgnores)
+		results := verifier.RunTools(ctx, tools, statuses, *toolCfg, progress, func(tool verifier.CheckTool, execution *verifier.ToolExecution) verifier.ToolSummary {
+			return tool.Check(ctx, *toolCfg, execution)
+		})
 		cleanup()
-		if runErr == nil {
-			runErr = ctx.Err()
-		}
-		reportErr := validation.DoCheckReport(report, reportingFormat, runErr != nil, statuses...)
-		if runErr != nil {
-			return runErr
-		}
-		return reportErr
+		return validation.ReportTools(results, reportingFormat, "Checkers")
 	},
 }
 

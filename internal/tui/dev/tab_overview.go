@@ -11,7 +11,6 @@ import (
 	"net"
 	"net/http"
 	"net/url"
-	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
@@ -19,7 +18,6 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
-	"github.com/shyim/go-composer"
 	endoflife "github.com/shyim/go-endoflife-api"
 
 	dockerpkg "github.com/shopware/shopware-cli/internal/docker"
@@ -1165,7 +1163,7 @@ func discoverServices(ctx context.Context, env *dockerpkg.Environment) tea.Cmd {
 
 func loadShopwareVersion(projectRoot string) tea.Cmd {
 	return func() tea.Msg {
-		return shopwareVersionLoadedMsg{version: detectShopwareVersion(projectRoot)}
+		return shopwareVersionLoadedMsg{version: shop.DetectShopwareVersion(projectRoot)}
 	}
 }
 
@@ -1266,17 +1264,4 @@ func majorMinor(version string) string {
 		return ""
 	}
 	return parts[0] + "." + parts[1]
-}
-
-func detectShopwareVersion(projectRoot string) string {
-	lock, err := composer.ReadLock(filepath.Join(projectRoot, "composer.lock"))
-	if err != nil {
-		return ""
-	}
-	for _, name := range []string{"shopware/core", "shopware/platform"} {
-		if pkg := lock.GetPackage(name); pkg != nil {
-			return strings.TrimPrefix(pkg.Version, "v")
-		}
-	}
-	return ""
 }

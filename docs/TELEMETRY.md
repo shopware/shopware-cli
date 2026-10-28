@@ -96,6 +96,43 @@ All events share a common envelope:
 There are the command-level events below, plus a set of events sent by the
 interactive development TUI (`shopware-cli project dev`).
 
+### `shopware_cli.tool.subprocess` — subprocess duration and output sizes
+
+Sent after each checker, formatter, or fixer subprocess attempt, including failed
+starts and preparation commands such as Composer installation. This respects `DO_NOT_TRACK`.
+
+| Tag | Meaning |
+| --- | --- |
+| `tool` | Tool name, such as `phpstan` or `eslint` |
+| `operation` | Fixed operation label identifying the subprocess purpose; see below |
+| `stdout_bytes` | Number of bytes captured from stdout |
+| `stderr_bytes` | Number of bytes captured from stderr |
+| `duration_ms` | Elapsed wall-clock milliseconds around command execution, including startup; may be zero for fast attempts |
+| `started` | `"true"` if the process started, `"false"` if it failed to start |
+| `exit_code` | Exit code when available; omitted for failed starts and signal termination |
+
+Operation labels are defined in the CLI code and never derived from command
+arguments, paths, or package names. They are included for failed starts too.
+
+| Tool | Operation |
+| --- | --- |
+| PHPStan or Rector preparation | `composer_require`, `composer_update` |
+| PHPStan | `analyse` |
+| Rector | `fix` |
+| ESLint, Stylelint | `check`, `fix` |
+| Prettier, PHP-CS-Fixer | `check` (dry run), `format` |
+
+Repeated invocations across source directories share the same operation label;
+directory details remain in local verbose logs.
+
+Duration excludes output parsing and telemetry delivery. Processes terminated by
+a signal still report their duration and captured output sizes. A nonzero exit code can indicate
+findings rather than an execution failure, depending on the tool.
+Output contents, command arguments, working directories, and error messages are not included.
+These measurements help compare subprocess runtime, output sizes, and exit codes,
+identify startup failures, and decide which tools need streaming output instead of
+buffering it in memory.
+
 ### `shopware_cli.command` — every command run
 
 Sent after (almost) any sub-command finishes. This is our broadest signal of
