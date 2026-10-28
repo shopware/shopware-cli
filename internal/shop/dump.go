@@ -41,6 +41,9 @@ type DumpDatabaseOptions struct {
 	Parallel int
 	// InsertIntoLimit caps the rows per INSERT statement (0 = auto, takes priority over Quick when set)
 	InsertIntoLimit int
+	// InsertIntoMaxBytes targets the maximum INSERT size in bytes (0 = default).
+	// Individual rows larger than the target are emitted on their own.
+	InsertIntoMaxBytes int
 	// LimitOverrides contains "table=rows" entries limiting the dumped rows per table
 	LimitOverrides []string
 }
@@ -68,6 +71,7 @@ func dumpDatabase(ctx context.Context, db *sql.DB, cfg *ConfigDump, opts DumpDat
 	dumper.Quick = opts.Quick
 	dumper.Parallel = opts.Parallel
 	dumper.InsertIntoLimit = opts.InsertIntoLimit
+	dumper.InsertIntoMaxBytes = opts.InsertIntoMaxBytes
 	dumper.SelectMap = cfg.Rewrite
 	dumper.WhereMap = cfg.Where
 	dumper.NoData = cfg.NoData

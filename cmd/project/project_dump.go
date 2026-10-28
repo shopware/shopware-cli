@@ -54,6 +54,7 @@ var projectDatabaseDumpCmd = &cobra.Command{
 		quick, _ := cmd.Flags().GetBool("quick")
 		parallel, _ := cmd.Flags().GetInt("parallel")
 		insertIntoLimit, _ := cmd.Flags().GetInt("insert-into-limit")
+		insertIntoMaxBytes, _ := cmd.Flags().GetInt("insert-into-max-bytes")
 		limits, _ := cmd.Flags().GetStringArray("limit")
 
 		var extensionTables map[string]map[string]string
@@ -66,17 +67,18 @@ var projectDatabaseDumpCmd = &cobra.Command{
 		}
 
 		return shop.DumpDatabase(cmd.Context(), mysqlConfig, projectCfg.ConfigDump, shop.DumpDatabaseOptions{
-			Output:            output,
-			Compression:       compression,
-			Clean:             clean,
-			Anonymize:         anonymize,
-			ExtensionTables:   extensionTables,
-			SystemConfigRules: systemConfigRules,
-			SkipLockTables:    skipLockTables,
-			Quick:             quick,
-			Parallel:          parallel,
-			InsertIntoLimit:   insertIntoLimit,
-			LimitOverrides:    limits,
+			Output:             output,
+			Compression:        compression,
+			Clean:              clean,
+			Anonymize:          anonymize,
+			ExtensionTables:    extensionTables,
+			SystemConfigRules:  systemConfigRules,
+			SkipLockTables:     skipLockTables,
+			Quick:              quick,
+			Parallel:           parallel,
+			InsertIntoLimit:    insertIntoLimit,
+			InsertIntoMaxBytes: insertIntoMaxBytes,
+			LimitOverrides:     limits,
 		})
 	},
 }
@@ -185,5 +187,6 @@ func init() {
 	projectDatabaseDumpCmd.Flags().Bool("quick", false, "Use quick option for mysqldump")
 	projectDatabaseDumpCmd.Flags().Int("parallel", 0, "Number of tables to dump concurrently (0 = disabled)")
 	projectDatabaseDumpCmd.Flags().Int("insert-into-limit", 0, "Limit the number of rows per INSERT statement (0 = auto, takes priority over --quick when set)")
+	projectDatabaseDumpCmd.Flags().Int("insert-into-max-bytes", mysqldump.DefaultInsertIntoMaxBytes, "Target maximum INSERT size in bytes; a single larger row is written on its own")
 	projectDatabaseDumpCmd.Flags().StringArray("limit", nil, "Limit the rows of a table to the newest ones (e.g. order=100), can be given multiple times")
 }
