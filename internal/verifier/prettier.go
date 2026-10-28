@@ -67,9 +67,9 @@ func (p Prettier) Format(ctx context.Context, config ToolConfig, execution *Tool
 			"--config", path.Join(config.ToolDirectory, "js", "configs", "prettierrc.js"),
 			"--ignore-path", ignore.Name(), "--ignore-path", ".gitignore", "--ignore-path", ".prettierignore", "--no-color", ".",
 		}
-		operation := "format"
+		operation := OperationFormat
 		if dryRun {
-			operation = "check"
+			operation = OperationCheck
 			args = append(args, "--list-different")
 		} else {
 			args = append(args, "--write")

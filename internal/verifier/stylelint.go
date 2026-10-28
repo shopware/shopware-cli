@@ -61,9 +61,9 @@ func (s StyleLint) run(ctx context.Context, config ToolConfig, execution *ToolEx
 			"--config", path.Join(config.ToolDirectory, "js", "configs", fmt.Sprintf("stylelint.config.%s.mjs", path.Base(directory))),
 			"--ignore-pattern", "dist/**", "--ignore-pattern", ".tmp/**", "--ignore-pattern", "vendor/**", "**/*.scss",
 		}
-		operation := "check"
+		operation := OperationCheck
 		if fix {
-			operation = "fix"
+			operation = OperationFix
 			args = append(args, "--fix")
 		} else {
 			args = append(args, "--formatter=json")

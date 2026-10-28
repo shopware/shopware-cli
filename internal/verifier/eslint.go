@@ -47,9 +47,9 @@ func (e Eslint) run(ctx context.Context, config ToolConfig, execution *ToolExecu
 			"--ignore-pattern", "vendor/**", "--ignore-pattern", "test/e2e/**",
 			"--ignore-pattern", "**/jest.config.js", "--no-error-on-unmatched-pattern",
 		}
-		operation := "check"
+		operation := OperationCheck
 		if fix {
-			operation = "fix"
+			operation = OperationFix
 			args = append(args, "--fix")
 		} else {
 			args = append(args, "--format=json")

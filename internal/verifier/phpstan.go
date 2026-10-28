@@ -78,7 +78,7 @@ func (p PhpStan) Check(ctx context.Context, config ToolConfig, execution *ToolEx
 		cmd := CommandContext(ctx, "php", args...)
 		cmd.Env = append(os.Environ(), "PHP_DIR="+path.Join(config.ToolDirectory, "php"))
 		cmd.Dir = config.RootDir
-		subprocess := execution.Run("analyse", cmd)
+		subprocess := execution.Run(OperationAnalyse, cmd)
 		stdout, stderr, runErr := []byte(subprocess.Stdout), []byte(subprocess.Stderr), subprocess.Err
 		if !expectedExit(runErr, 1) {
 			execution.Fail(subprocess.ToolError(fmt.Errorf("cannot run phpstan in %s: %w", directory, runErr)))

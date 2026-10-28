@@ -52,9 +52,9 @@ func (p PHPCSFixer) Format(ctx context.Context, config ToolConfig, execution *To
 			"fix", "--show-progress", "dots", "-vv", "--no-ansi", "--format", "json",
 			"--config", p.getConfigPath(config.ToolDirectory, config.RootDir), directory,
 		}
-		operation := "format"
+		operation := OperationFormat
 		if dryRun {
-			operation = "check"
+			operation = OperationCheck
 			args = append(args, "--dry-run")
 		}
 		cmd := CommandContext(ctx, path.Join(config.ToolDirectory, "php", "vendor", "bin", "php-cs-fixer"), args...)

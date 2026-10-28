@@ -34,7 +34,7 @@ func TestToolExecutionRunDeliversDiagnosticsWithoutReportingFailure(t *testing.T
 		delivered = true
 		assert.Equal(t, "output", subprocess.Stdout)
 	}
-	subprocess := execution.Run("check", exec.CommandContext(t.Context(), "/bin/sh", "-c", "printf output; exit 1"))
+	subprocess := execution.Run(OperationCheck, exec.CommandContext(t.Context(), "/bin/sh", "-c", "printf output; exit 1"))
 	assert.True(t, delivered)
 	require.Error(t, subprocess.Err)
 	assert.Empty(t, execution.snapshot().Errors)
@@ -42,7 +42,7 @@ func TestToolExecutionRunDeliversDiagnosticsWithoutReportingFailure(t *testing.T
 	execution.Fail(subprocess.ToolError(cause))
 	assert.ErrorIs(t, execution.snapshot().Errors[0], cause)
 	execution.onSubprocess = nil
-	subprocess = execution.Run("check", exec.CommandContext(t.Context(), "/missing-executable"))
+	subprocess = execution.Run(OperationCheck, exec.CommandContext(t.Context(), "/missing-executable"))
 	require.Error(t, subprocess.Err)
 	assert.Len(t, execution.snapshot().Errors, 1, "Run must leave failure classification to the tool")
 }
@@ -63,7 +63,7 @@ func TestToolExecutionRunTelemetry(t *testing.T) {
 			execution.onSubprocess = func(result SubprocessResult) {
 				tags = subprocessTelemetryTags("test", result)
 			}
-			result := execution.Run("check", exec.CommandContext(t.Context(), "/bin/sh", "-c", tt.script))
+			result := execution.Run(OperationCheck, exec.CommandContext(t.Context(), "/bin/sh", "-c", tt.script))
 			assert.Equal(t, "check", result.Operation)
 			require.NotNil(t, result.ProcessState)
 			assert.Equal(t, tt.code, result.ProcessState.ExitCode())
@@ -90,7 +90,7 @@ func TestToolExecutionRunTelemetry(t *testing.T) {
 	execution.onSubprocess = func(result SubprocessResult) {
 		tags = subprocessTelemetryTags("test", result)
 	}
-	result := execution.Run("check", exec.CommandContext(t.Context(), "/missing-executable"))
+	result := execution.Run(OperationCheck, exec.CommandContext(t.Context(), "/missing-executable"))
 	require.Error(t, result.Err)
 	assert.Nil(t, result.ProcessState)
 	assert.Positive(t, result.Duration)

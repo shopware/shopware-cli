@@ -13,6 +13,16 @@ import (
 
 type ToolError = validation.ToolError
 
+// Subprocess operations identify tool attempts in telemetry.
+const (
+	OperationCheck           = "check"
+	OperationFix             = "fix"
+	OperationFormat          = "format"
+	OperationAnalyse         = "analyse"
+	OperationComposerRequire = "composer_require"
+	OperationComposerUpdate  = "composer_update"
+)
+
 type SubprocessResult struct {
 	Operation string
 	Command   []string
@@ -53,6 +63,8 @@ func runDirectories(directories []string, run func(string)) {
 	group.Wait()
 }
 
+// Run executes cmd and records its output and telemetry. Prefer one of the
+// Operation constants for operation to keep telemetry values consistent.
 func (e *ToolExecution) Run(operation string, cmd *exec.Cmd) SubprocessResult {
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &stdout, &stderr

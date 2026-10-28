@@ -86,7 +86,7 @@ func (r Rector) Fix(ctx context.Context, config ToolConfig, execution *ToolExecu
 	for _, sourceDirectory := range config.SourceDirectories {
 		rector := CommandContext(ctx, "php", "-dmemory_limit=2G", path.Join(config.ToolDirectory, "php", "vendor", "bin", "rector"), "process", "--config", rectorConfigFile, "--autoload-file", path.Join("vendor", "autoload.php"), sourceDirectory)
 		rector.Dir = config.RootDir
-		if subprocess := execution.Run("fix", rector); subprocess.Err != nil {
+		if subprocess := execution.Run(OperationFix, rector); subprocess.Err != nil {
 			execution.Fail(subprocess.ToolError(fmt.Errorf("cannot run rector in %s: %w", sourceDirectory, subprocess.Err)))
 		}
 	}
