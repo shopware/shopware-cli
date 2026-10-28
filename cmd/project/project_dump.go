@@ -49,6 +49,8 @@ var projectDatabaseDumpCmd = &cobra.Command{
 
 		output, _ := cmd.Flags().GetString("output")
 		clean, _ := cmd.Flags().GetBool("clean")
+		skipCustomerData, _ := cmd.Flags().GetBool("skip-customer-data")
+		noData, _ := cmd.Flags().GetStringArray("no-data")
 		skipLockTables, _ := cmd.Flags().GetBool("skip-lock-tables")
 		anonymize, _ := cmd.Flags().GetBool("anonymize")
 		quick, _ := cmd.Flags().GetBool("quick")
@@ -70,6 +72,8 @@ var projectDatabaseDumpCmd = &cobra.Command{
 			Output:             output,
 			Compression:        compression,
 			Clean:              clean,
+			SkipCustomerData:   skipCustomerData,
+			NoData:             noData,
 			Anonymize:          anonymize,
 			ExtensionTables:    extensionTables,
 			SystemConfigRules:  systemConfigRules,
@@ -180,8 +184,11 @@ func init() {
 
 	projectDatabaseDumpCmd.Flags().String("output", "dump.sql", "File or - (for stdout)")
 	projectDatabaseDumpCmd.Flags().Bool("clean", false, "Exclude data from transient tables (e.g. cart, messenger_messages, message_queue_stats, log_entry)")
+	projectDatabaseDumpCmd.Flags().Bool("skip-customer-data", false, "Exclude customer, order, newsletter, review, document, and related history data while keeping table schemas")
+	projectDatabaseDumpCmd.Flags().StringArray("no-data", nil, "Export only the schema of a table or glob pattern (e.g. 'klarna_*'), can be given multiple times")
 	projectDatabaseDumpCmd.Flags().Bool("skip-lock-tables", false, "Skip locking tables during the dump")
 	projectDatabaseDumpCmd.Flags().Bool("anonymize", false, "Anonymize personal data, extension-declared columns, and extension system config secrets")
+	projectDatabaseDumpCmd.MarkFlagsMutuallyExclusive("skip-customer-data", "anonymize")
 	projectDatabaseDumpCmd.Flags().String("compression", "", "Compress the dump (gzip, zstd)")
 	_ = projectDatabaseDumpCmd.RegisterFlagCompletionFunc("compression", cobra.FixedCompletions([]string{string(mysqldump.CompressionGzip), string(mysqldump.CompressionZstd)}, cobra.ShellCompDirectiveNoFileComp))
 	projectDatabaseDumpCmd.Flags().Bool("quick", false, "Use quick option for mysqldump")

@@ -3,6 +3,7 @@ package shop
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"strconv"
 	"strings"
@@ -23,6 +24,10 @@ type DumpDatabaseOptions struct {
 	Compression mysqldump.Compression
 	// Clean excludes volatile tables (cart, messenger_messages, ...) from the data dump
 	Clean bool
+	// SkipCustomerData excludes customer and order data while keeping table schemas.
+	SkipCustomerData bool
+	// NoData adds table names or glob patterns to export with schema only.
+	NoData []string
 	// Anonymize rewrites customer related columns with faker data and merges
 	// extension-declared tables and system config keys
 	Anonymize bool
@@ -49,7 +54,7 @@ type DumpDatabaseOptions struct {
 }
 
 // DumpDatabase dumps the database described by sqlCfg to opts.Output. cfg may
-// be nil; Clean, Anonymize and LimitOverrides are applied to cfg in place.
+// be nil; dump options are applied to cfg in place.
 func DumpDatabase(ctx context.Context, sqlCfg *mysql.Config, cfg *ConfigDump, opts DumpDatabaseOptions) error {
 	db, err := sql.Open("mysql", sqlCfg.FormatDSN())
 	if err != nil {
@@ -104,13 +109,22 @@ func dumpDatabase(ctx context.Context, db *sql.DB, cfg *ConfigDump, opts DumpDat
 	return nil
 }
 
-// prepareDumpConfig applies clean, anonymize, and limit options to cfg.
+// prepareDumpConfig applies data exclusions, anonymization, and limits to cfg.
 // Extension tables are merged after the built-in customer anonymization, so they
 // only fill columns that neither the project nor the built-in rules set. Extension
 // system config keys own system_config.configuration_value unless the project already rewrote it.
 func prepareDumpConfig(cfg *ConfigDump, opts DumpDatabaseOptions) (*ConfigDump, error) {
 	if cfg == nil {
 		cfg = &ConfigDump{}
+	}
+
+	if opts.Anonymize && (opts.SkipCustomerData || cfg.SkipCustomerData) {
+		return nil, errors.New("cannot anonymize a dump with customer data excluded: disable \"--skip-customer-data\" and \"dump.skip_customer_data\"")
+	}
+
+	cfg.NoData = appendMissing(cfg.NoData, opts.NoData)
+	if opts.SkipCustomerData || cfg.SkipCustomerData {
+		cfg.EnableSkipCustomerData()
 	}
 
 	if opts.Clean {

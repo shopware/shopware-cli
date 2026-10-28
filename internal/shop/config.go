@@ -374,6 +374,10 @@ type ConfigAdminApi struct {
 }
 
 type ConfigDump struct {
+	// Exclude customer, order, newsletter, review, document, and related history data while keeping table schemas
+	SkipCustomerData bool `yaml:"skip_customer_data,omitempty"`
+	// Additional tables to export with schema only when skipping customer data, supports glob wildcards (e.g. "payone_payment_*")
+	SkipCustomerDataTables []string `yaml:"skip_customer_data_tables,omitempty"`
 	// Allows to rewrite single columns, perfect for GDPR compliance
 	Rewrite map[string]map[string]string `yaml:"rewrite,omitempty"`
 	// Only export the schema of these tables, supports glob wildcards (e.g. "customer*")
@@ -942,6 +946,7 @@ func ReadConfig(ctx context.Context, fileName string, allowFallback bool) (*Conf
 			if config.ConfigDump != nil && additionalConfig.ConfigDump != nil {
 				config.ConfigDump.NoData = appendMissing(config.ConfigDump.NoData, additionalConfig.ConfigDump.NoData)
 				config.ConfigDump.Ignore = appendMissing(config.ConfigDump.Ignore, additionalConfig.ConfigDump.Ignore)
+				config.ConfigDump.SkipCustomerDataTables = appendMissing(config.ConfigDump.SkipCustomerDataTables, additionalConfig.ConfigDump.SkipCustomerDataTables)
 			}
 		}
 	}
