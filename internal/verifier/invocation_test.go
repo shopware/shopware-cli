@@ -2,7 +2,9 @@ package verifier
 
 import (
 	"os"
+	"os/exec"
 	"path/filepath"
+	"strconv"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -114,9 +116,9 @@ exit 2
 
 func TestFixersLeaveOutputUnparsed(t *testing.T) {
 	for _, tool := range []FixTool{Eslint{}, StyleLint{}} {
-		for _, code := range []string{"0", "1"} {
+		for _, code := range []string{"0", "1", "2"} {
 			t.Run(tool.Name()+"/"+code, func(t *testing.T) {
-				fakeTool(t, "node", "printf 'unstructured output'; exit \"$TOOL_EXIT\"\n")
+				fakeTool(t, "node", "printf 'unstructured output'; printf 'diagnostic' >&2; exit \"$TOOL_EXIT\"\n")
 				t.Setenv("TOOL_EXIT", code)
 				root := t.TempDir()
 				require.NoError(t, os.WriteFile(filepath.Join(root, "file.scss"), nil, 0o644))
@@ -126,6 +128,12 @@ func TestFixersLeaveOutputUnparsed(t *testing.T) {
 				if code != "0" {
 					require.Len(t, result.Errors, 1)
 					assert.Equal(t, "unstructured output", result.Errors[0].Stdout)
+					assert.Equal(t, "diagnostic", result.Errors[0].Stderr)
+					var exitErr *exec.ExitError
+					require.ErrorAs(t, result.Errors[0], &exitErr)
+					expectedCode, err := strconv.Atoi(code)
+					require.NoError(t, err)
+					assert.Equal(t, expectedCode, exitErr.ExitCode())
 				}
 			})
 		}

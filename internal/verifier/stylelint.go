@@ -74,7 +74,9 @@ func (s StyleLint) run(ctx context.Context, config ToolConfig, execution *ToolEx
 		runErr := subprocess.Err
 		// Fix output remains unparsed until structured fixer reports are introduced.
 		if fix {
-			if runErr != nil {
+			if runErr != nil && expectedExit(runErr, 2) {
+				execution.Fail(subprocess.ToolError(fmt.Errorf("stylelint reported problems remaining after fixes in %s: %w", directory, runErr)))
+			} else if runErr != nil {
 				execution.Fail(subprocess.ToolError(fmt.Errorf("cannot run stylelint in %s: %w", directory, runErr)))
 			}
 			return
