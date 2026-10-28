@@ -36,5 +36,7 @@ func (c *ConfigDump) EnableSkipCustomerData() {
 		"sales_channel_tracking_customer",
 		"sales_channel_tracking_order",
 		"state_machine_history",
+		"version_commit_data",
+		"webhook_event_log",
 	})
 }

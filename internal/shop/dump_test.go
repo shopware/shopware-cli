@@ -28,6 +28,7 @@ func TestPrepareDumpConfigSkipCustomerData(t *testing.T) {
 				"order", "order_transaction_capture_refund_position", "order_line_item_download",
 				"document", "document_file", "newsletter_recipient", "product_review",
 				"sales_channel_tracking_customer", "sales_channel_tracking_order",
+				"version_commit_data", "webhook_event_log",
 				"payone_payment_card", "klarna_*",
 			} {
 				assert.Contains(t, prepared.NoData, table)
@@ -35,7 +36,7 @@ func TestPrepareDumpConfigSkipCustomerData(t *testing.T) {
 			for _, table := range []string{"customer_group", "customer_group_translation", "document_type", "user", "integration", "product", "sales_channel", "version"} {
 				assert.NotContains(t, prepared.NoData, table)
 			}
-			for _, table := range []string{"dead_message", "enqueue", "messenger_messages", "import_export_log", "log_entry", "notification", "payment_token", "version_commit", "version_commit_data", "webhook_event_log"} {
+			for _, table := range []string{"dead_message", "enqueue", "messenger_messages", "import_export_log", "log_entry", "notification", "payment_token", "version_commit"} {
 				assert.NotContains(t, prepared.NoData, table)
 			}
 			assert.Equal(t, []string{"obsolete_table"}, prepared.Ignore)
