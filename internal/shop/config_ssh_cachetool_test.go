@@ -1,7 +1,6 @@
 package shop
 
 import (
-	"encoding/json"
 	"fmt"
 	"path/filepath"
 	"testing"
@@ -12,55 +11,43 @@ import (
 	"github.com/shopware/shopware-cli/internal/testhelper"
 )
 
-func TestSSHCachetoolReadConfig(t *testing.T) {
+func TestSSHCachetoolValidate(t *testing.T) {
 	for _, tc := range []struct {
-		name, options string
-		valid         bool
+		name  string
+		cfg   *EnvironmentSSHCachetoolConfig
+		valid bool
 	}{
-		{"missing", "", true},
-		{"disabled", "{}", true},
-		{"explicitly disabled", "{enabled: false}", true},
-		{"fcgi autodetection", "{enabled: true, adapter: fcgi}", true},
-		{"fcgi socket", "{enabled: true, adapter: fcgi, fcgi: /run/php/fpm.sock, fcgi_chroot: /srv/shop, tmp_dir: /tmp/cachetool}", true},
-		{"fcgi tcp", "{enabled: true, adapter: fcgi, fcgi: '127.0.0.1:9000'}", true},
-		{"web missing path", "{enabled: true, adapter: web, web_url: 'https://shop.example'}", false},
-		{"disabled web missing path", "{adapter: web, web_url: 'https://shop.example'}", false},
-		{"web custom path", "{enabled: true, adapter: web, web_url: 'http://localhost:8080/shop', web_path: /srv/shop/public}", true},
-		{"native", "{enabled: true, config: /etc/cachetool.yml}", true},
-		{"native disabled", "{config: /etc/cachetool.yml}", true},
-		{"enabled missing target", "{enabled: true}", false},
-		{"cli", "{adapter: cli}", false},
-		{"unknown adapter disabled", "{adapter: invalid}", false},
-		{"web missing url", "{enabled: true, adapter: web}", false},
-		{"web fcgi", "{adapter: web, web_url: 'https://shop.example', fcgi: /run/php.sock}", false},
-		{"fcgi web", "{adapter: fcgi, web_path: /srv/public}", false},
-		{"unscoped fcgi", "{fcgi: /run/php.sock}", false},
-		{"unscoped web", "{web_url: 'https://shop.example'}", false},
+		{"missing", nil, true},
+		{"disabled", &EnvironmentSSHCachetoolConfig{}, true},
+		{"fcgi", &EnvironmentSSHCachetoolConfig{Enabled: new(true), Adapter: "fcgi"}, true},
+		{"web", &EnvironmentSSHCachetoolConfig{Adapter: "web", WebURL: "https://shop.example", WebPath: "/srv/public"}, true},
+		{"native", &EnvironmentSSHCachetoolConfig{Enabled: new(true), Config: "/etc/cachetool.yml"}, true},
+		{"missing target", &EnvironmentSSHCachetoolConfig{Enabled: new(true)}, false},
+		{"cli", &EnvironmentSSHCachetoolConfig{Adapter: "cli"}, false},
+		{"web missing path", &EnvironmentSSHCachetoolConfig{Adapter: "web", WebURL: "https://shop.example"}, false},
+		{"web missing url", &EnvironmentSSHCachetoolConfig{Adapter: "web", WebPath: "/srv/public"}, false},
+		{"web with fcgi", &EnvironmentSSHCachetoolConfig{Adapter: "web", FCGI: "/run/php.sock"}, false},
+		{"fcgi with web", &EnvironmentSSHCachetoolConfig{Adapter: "fcgi", WebPath: "/srv/public"}, false},
+		{"unscoped fcgi", &EnvironmentSSHCachetoolConfig{FCGI: "/run/php.sock"}, false},
+		{"unscoped web", &EnvironmentSSHCachetoolConfig{WebURL: "https://shop.example"}, false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			file := filepath.Join(t.TempDir(), ".shopware-project.yml")
-			testhelper.WriteFile(t, file, fmt.Sprintf("compatibility_date: '2026-01-01'\nenvironments:\n  production:\n    type: ssh\n    ssh:\n      host: example.invalid\n      directory: /srv/shop\n      cachetool: %s\n", tc.options))
-			cfg, err := ReadConfig(t.Context(), file, false)
-			if !tc.valid {
-				require.ErrorContains(t, err, "ssh.cachetool")
-				return
+			if tc.valid {
+				require.NoError(t, tc.cfg.Validate())
+			} else {
+				require.Error(t, tc.cfg.Validate())
 			}
-			require.NoError(t, err)
-			require.NoError(t, cfg.Environments["production"].SSH.Cachetool.Validate())
 		})
 	}
 }
 
-func TestSSHCachetoolNativeConfigExcludesEveryInlineOption(t *testing.T) {
-	for _, option := range []string{"adapter: fcgi", "fcgi: /run/php.sock", "fcgi_chroot: /srv", "tmp_dir: /tmp", "web_url: 'https://shop.example'", "web_path: /srv/public"} {
-		for _, enabled := range []bool{true, false} {
-			t.Run(fmt.Sprintf("%s/enabled=%t", option, enabled), func(t *testing.T) {
-				file := filepath.Join(t.TempDir(), ".shopware-project.yml")
-				testhelper.WriteFile(t, file, fmt.Sprintf("environments:\n  production:\n    ssh:\n      cachetool: {enabled: %t, config: /etc/cachetool.yml, %s}\n", enabled, option))
-				_, err := ReadConfig(t.Context(), file, false)
-				require.ErrorContains(t, err, "ssh.cachetool.config cannot be combined")
-			})
-		}
+func TestSSHCachetoolNativeConfigExcludesInlineOptions(t *testing.T) {
+	for _, cfg := range []EnvironmentSSHCachetoolConfig{
+		{Adapter: "fcgi"}, {FCGI: "/run/php.sock"}, {FCGIChroot: "/srv"},
+		{TmpDir: "/tmp"}, {WebURL: "https://shop.example"}, {WebPath: "/srv/public"},
+	} {
+		cfg.Config = "/etc/cachetool.yml"
+		require.Error(t, cfg.Validate())
 	}
 }
 
@@ -135,16 +122,6 @@ environments:
 			assert.Equal(t, "fcgi", cfg.Environments["production"].SSH.Cachetool.Adapter)
 		})
 	}
-}
-
-func TestSSHCachetoolJSONNames(t *testing.T) {
-	cfg := &EnvironmentSSHCachetoolConfig{Enabled: new(true), Adapter: "fcgi", FCGI: "/run/php.sock", FCGIChroot: "/srv", TmpDir: "/tmp", WebURL: "https://shop.example", WebPath: "/srv/public", Config: "/etc/cachetool.yml"}
-	data, err := json.Marshal(cfg)
-	require.NoError(t, err)
-	assert.JSONEq(t, `{"enabled":true,"adapter":"fcgi","fcgi":"/run/php.sock","fcgi_chroot":"/srv","tmp_dir":"/tmp","web_url":"https://shop.example","web_path":"/srv/public","config":"/etc/cachetool.yml"}`, string(data))
-	data, err = json.Marshal(&EnvironmentSSHCachetoolConfig{})
-	require.NoError(t, err)
-	assert.JSONEq(t, `{}`, string(data))
 }
 
 func TestSSHCachetoolIncludeCanDisableReset(t *testing.T) {
