@@ -19,7 +19,7 @@ func TestProjectFixNoArgsOutsideProjectReturnsError(t *testing.T) {
 	assert.Contains(t, err.Error(), "cannot find Shopware project")
 }
 
-func TestProjectFixNoArgsUsesResolvedProjectOutsideGit(t *testing.T) {
+func TestProjectFixNoArgsUsesCustomProjectRoot(t *testing.T) {
 	t.Setenv("SHOPWARE_CLI_TOOLS_DIR", t.TempDir())
 	cwd := t.TempDir()
 	t.Chdir(cwd)
