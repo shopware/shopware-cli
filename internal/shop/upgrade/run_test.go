@@ -381,3 +381,17 @@ func TestStepIDsAreStableAndUnique(t *testing.T) {
 		seen[id] = step
 	}
 }
+
+func TestStepTelemetryIDsMatchTheDocs(t *testing.T) {
+	documented := map[StepID]string{
+		StepRewriteComposer:  "rewrite_composer",
+		StepComposerUpdate:   "composer_update",
+		StepRecipesInstall:   "recipes_install",
+		StepDeploymentHelper: "deployment_helper",
+		StepWriteReport:      "write_report",
+	}
+	for step, want := range documented {
+		assert.Equal(t, want, step.TelemetryID(), step.Label())
+	}
+	assert.Len(t, documented, len(RunSteps), "every visible step has a documented name")
+}

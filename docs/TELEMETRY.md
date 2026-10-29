@@ -141,8 +141,9 @@ starting configurations are popular.
 Sent when `shopware-cli project upgrade` finishes executing an upgrade,
 successfully or not, in the wizard or non-interactively, and when a
 non-interactive run stops at a blocking check before the upgrade starts. Dry
-runs and projects that are already on the latest version send nothing. Helps us
-understand which upgrade paths succeed and where guided upgrades fail.
+runs send nothing, and neither does a run that finds the project already on the
+latest version. Helps us understand which upgrade paths succeed and where guided
+upgrades fail.
 
 | Tag              | Meaning                                   | Example    |
 |------------------|-------------------------------------------|------------|
