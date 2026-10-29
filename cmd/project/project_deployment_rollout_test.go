@@ -102,7 +102,8 @@ func newLifecycleCommand(t *testing.T, args []string) (*cobra.Command, *bytes.Bu
 	initialize := &cobra.Command{Use: projectDeploymentInitCmd.Use, Args: projectDeploymentInitCmd.Args, RunE: projectDeploymentInitCmd.RunE}
 	rollout := &cobra.Command{Use: projectDeploymentRolloutCmd.Use, Args: projectDeploymentRolloutCmd.Args, RunE: projectDeploymentRolloutCmd.RunE}
 	rollback := &cobra.Command{Use: projectDeploymentRollbackCmd.Use, Args: projectDeploymentRollbackCmd.Args, RunE: projectDeploymentRollbackCmd.RunE}
-	deployment.AddCommand(create, initialize, rollout, rollback)
+	logs := &cobra.Command{Use: projectDeploymentLogsCmd.Use, Args: projectDeploymentLogsCmd.Args, RunE: projectDeploymentLogsCmd.RunE}
+	deployment.AddCommand(create, initialize, rollout, rollback, logs)
 	root.AddCommand(deployment)
 	out := new(bytes.Buffer)
 	root.SetOut(out)
@@ -112,7 +113,7 @@ func newLifecycleCommand(t *testing.T, args []string) (*cobra.Command, *bytes.Bu
 }
 
 func TestDeploymentLifecycleCommandsRegistered(t *testing.T) {
-	for _, name := range []string{"create", "init", "rollout", "rollback"} {
+	for _, name := range []string{"create", "init", "list", "logs", "rollout", "rollback"} {
 		cmd, remaining, err := projectRootCmd.Find([]string{"deploy", name})
 		require.NoError(t, err)
 		assert.Empty(t, remaining)
@@ -208,6 +209,10 @@ func TestProjectDeploymentRolloutCommandValidation(t *testing.T) {
 		{[]string{"rollback", "archive"}, `cannot create deployments for environment type "local"`},
 		{[]string{"rollout", "archive", "-e", "missing"}, `environment "missing" not found`},
 		{[]string{"rollout", "archive"}, `cannot create deployments for environment type "local"`},
+		{[]string{"logs"}, "accepts 1 arg"},
+		{[]string{"logs", "one", "two"}, "accepts 1 arg"},
+		{[]string{"logs", "archive", "-e", "missing"}, `environment "missing" not found`},
+		{[]string{"logs", "archive"}, `cannot create deployments for environment type "local"`},
 	} {
 		cmd, out := newLifecycleCommand(t, tc.args)
 		require.ErrorContains(t, cmd.ExecuteContext(system.WithInteraction(t.Context(), false)), tc.want)
