@@ -85,6 +85,7 @@ environments:
 			_, single := backend.(*ssh.SSH)
 			assert.Equal(t, tc.single, single)
 			assert.Implements(t, (*deployment.Initializer)(nil), backend)
+			assert.Implements(t, (*deployment.DeploymentPruner)(nil), backend)
 		})
 	}
 }

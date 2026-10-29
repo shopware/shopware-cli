@@ -408,4 +408,5 @@ func TestSSHGroupSupportsInitializationAndPruning(t *testing.T) {
 	}, "b", 2)
 	require.NoError(t, err)
 	assert.Implements(t, (*Initializer)(nil), g)
+	assert.Implements(t, (*DeploymentPruner)(nil), g)
 }

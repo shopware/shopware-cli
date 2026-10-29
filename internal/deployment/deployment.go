@@ -54,6 +54,31 @@ type DeploymentLogs interface {
 	WriteDeploymentLogs(ctx context.Context, deployment Deployment, output io.Writer) error
 }
 
+// DeploymentPruneOptions controls retention; active, failed and incomplete releases stay.
+// Interrupted cleanup resumes regardless of Keep.
+type DeploymentPruneOptions struct {
+	Keep   int  `json:"keep"`
+	DryRun bool `json:"dry_run"`
+}
+
+// DeploymentPruneResult lists removals, or planned removals for a dry run.
+type DeploymentPruneResult struct {
+	Deployments []Deployment                `json:"deployments"`
+	Artifacts   []string                    `json:"artifacts"`
+	Hosts       []DeploymentPruneHostResult `json:"hosts,omitempty"`
+}
+
+// DeploymentPruneHostResult records a successful host-local prune, including no-op results.
+type DeploymentPruneHostResult struct {
+	Host        string       `json:"host"`
+	Deployments []Deployment `json:"deployments"`
+	Artifacts   []string     `json:"artifacts"`
+}
+
+type DeploymentPruner interface {
+	PruneDeployments(ctx context.Context, options DeploymentPruneOptions) (DeploymentPruneResult, error)
+}
+
 // RolloutHistory lists successful retained rollouts, newest first.
 type RolloutHistory interface {
 	ListRollouts(ctx context.Context) ([]Rollout, error)
