@@ -12,12 +12,13 @@ import (
 // configuration. Shared replaces the entire common block when set; shared lists
 // are never merged with the common block.
 type EnvironmentSSHHostConfig struct {
-	Host         string `yaml:"host" jsonschema:"required"`
-	User         string `yaml:"user,omitempty"`
-	Port         int    `yaml:"port,omitempty"`
-	Directory    string `yaml:"directory,omitempty"`
-	IdentityFile string `yaml:"identity_file,omitempty"`
-	PHPBinary    string `yaml:"php_binary,omitempty"`
+	Cachetool    *EnvironmentSSHCachetoolConfig `yaml:"cachetool,omitempty"`
+	Host         string                         `yaml:"host" jsonschema:"required"`
+	User         string                         `yaml:"user,omitempty"`
+	Port         int                            `yaml:"port,omitempty"`
+	Directory    string                         `yaml:"directory,omitempty"`
+	IdentityFile string                         `yaml:"identity_file,omitempty"`
+	PHPBinary    string                         `yaml:"php_binary,omitempty"`
 	// Replaces the entire common shared block when supplied.
 	Shared *EnvironmentSSHSharedConfig `yaml:"shared,omitempty"`
 }
@@ -103,6 +104,13 @@ func (c *EnvironmentSSHConfig) ResolveHosts() ([]SSHHost, string, error) {
 			return nil, "", fmt.Errorf("ssh.hosts.%s must not be null", name)
 		}
 		member := *c
+		if c.Cachetool != nil {
+			cachetool := *c.Cachetool
+			if cachetool.Enabled != nil {
+				cachetool.Enabled = new(*cachetool.Enabled)
+			}
+			member.Cachetool = &cachetool
+		}
 		member.Host = override.Host
 		for _, field := range []struct {
 			target *string
@@ -117,6 +125,9 @@ func (c *EnvironmentSSHConfig) ResolveHosts() ([]SSHHost, string, error) {
 		}
 		if override.Port != 0 {
 			member.Port = override.Port
+		}
+		if override.Cachetool != nil {
+			member.Cachetool = override.Cachetool
 		}
 		if override.Shared != nil {
 			member.Shared = override.Shared
@@ -154,6 +165,13 @@ func validateSSHMember(c *EnvironmentSSHConfig) error {
 // cloneSSHMember copies a resolved host without retaining group settings or mutable shared slices.
 func cloneSSHMember(c *EnvironmentSSHConfig) *EnvironmentSSHConfig {
 	member := *c
+	if c.Cachetool != nil {
+		cachetool := *c.Cachetool
+		if cachetool.Enabled != nil {
+			cachetool.Enabled = new(*cachetool.Enabled)
+		}
+		member.Cachetool = &cachetool
+	}
 	member.Hosts, member.MigrationHost, member.Parallelism = nil, "", 0
 	member.PHPArgs = slices.Clone(c.PHPArgs)
 	if c.Shared != nil {
