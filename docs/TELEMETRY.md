@@ -136,20 +136,22 @@ starting configurations are popular.
 | `with_amqp`          | Whether AMQP was enabled                 | `false`         |
 | `interactive`        | Whether the wizard ran interactively     | `true`          |
 
-### `shopware_cli.project.upgrade` — interactive upgrade wizard run
+### `shopware_cli.project.upgrade` — project upgrade run
 
-Sent when the upgrade wizard (`shopware-cli project upgrade`) finishes
-executing an upgrade, successfully or not, and when a non-interactive run stops
-at a blocking check before the upgrade starts. A dry run or a project that is
-already on the latest version sends nothing. Helps us understand which upgrade
-paths succeed and where guided upgrades fail.
+Sent when `shopware-cli project upgrade` finishes executing an upgrade,
+successfully or not, in the wizard or non-interactively, and when a
+non-interactive run stops at a blocking check before the upgrade starts. Dry
+runs and projects that are already on the latest version send nothing. Helps us
+understand which upgrade paths succeed and where guided upgrades fail.
 
 | Tag              | Meaning                                   | Example    |
 |------------------|-------------------------------------------|------------|
 | `from_version`   | The Shopware version before the upgrade; empty when the run stopped before it could be read | `6.6.10.3` |
-| `target_version` | The version the wizard upgraded to; empty when the run stopped before a target was chosen | `6.7.11.0` |
+| `target_version` | The version the run upgrades to; empty when the run stopped before a target was chosen | `6.7.11.0` |
 | `result`         | Outcome of the upgrade run (`cancelled` when the user interrupted it) | `success` / `failure` / `cancelled` |
 | `failed_step`    | Where a failed or cancelled run stopped; absent on success and when unknown. Before the upgrade starts (non-interactive runs): `readiness`, `catalog`, `target`, `security_advisory`, `composer_resolve`. During the upgrade: `rewrite_composer`, `composer_update`, `recipes_install`, `deployment_helper`, `write_report` | `composer_update` |
+| `blocking_checks` | The blocking readiness checks that stopped a non-interactive run, sorted and comma-separated; only with `failed_step=readiness`: `composer_lock`, `composer_name`, `git_clean`, `extensions`, `tooling` | `composer_lock,git_clean` |
+| `interactive`    | `true` for the wizard, `false` for a non-interactive run | `false` |
 
 ## AI integration events (`shopware-cli ai`)
 

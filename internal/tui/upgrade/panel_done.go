@@ -65,6 +65,7 @@ func (m *Model) trackUpgradeCmd() tea.Cmd {
 			tracking.TagFromVersion:   current,
 			tracking.TagTargetVersion: target,
 			tracking.TagResult:        result,
+			tracking.TagInteractive:   "true",
 		}
 		if failedStep != "" {
 			tags[tracking.TagFailedStep] = failedStep

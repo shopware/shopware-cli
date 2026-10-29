@@ -82,7 +82,7 @@ func (m *Model) updateRun(msg tea.Msg) (app.Content, tea.Cmd) {
 				m.run.stepErrs[ev.Step] = ev.Err
 			}
 			if ev.State == backend.StateFail && m.run.failedStep == "" {
-				m.run.failedStep = ev.Step.ID()
+				m.run.failedStep = ev.Step.TelemetryID()
 			}
 		}
 		return m, readRunEventCmd(m.run.events)

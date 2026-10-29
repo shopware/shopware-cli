@@ -237,8 +237,7 @@ func TestRunHeadlessInterruptedUpdateReportsCancelled(t *testing.T) {
 	dir := setupComposerProject(t)
 	u := headlessUpgrader(t, dir, "true")
 
-	// The preflight resolution passes; the context is cancelled as soon as
-	// the runner asks for the real `composer update`, like a Ctrl+C there.
+	// Preflight passes; the real composer update cancels the context, like a Ctrl+C.
 	ctx, cancel := context.WithCancel(t.Context())
 	u.executor.(*fakeExecutor).composer = func(ctx context.Context, args ...string) *executor.Process {
 		if (len(args) > 0 && args[0] == "--version") || slices.Contains(args, "--no-install") {
@@ -283,6 +282,7 @@ func TestRunHeadlessExecutes(t *testing.T) {
 	require.Len(t, *events, 1)
 	assert.Equal(t, tracking.ResultSuccess, (*events)[0][tracking.TagResult])
 	assert.NotContains(t, (*events)[0], tracking.TagFailedStep)
+	assert.Equal(t, "false", (*events)[0][tracking.TagInteractive])
 }
 
 func TestRunHeadlessFailingUpdateRollsBack(t *testing.T) {
@@ -321,4 +321,41 @@ func TestRunHeadlessFailingUpdateRollsBack(t *testing.T) {
 	require.Len(t, *events, 1)
 	assert.Equal(t, tracking.ResultFailure, (*events)[0][tracking.TagResult])
 	assert.Equal(t, "composer_update", (*events)[0][tracking.TagFailedStep])
+}
+
+func TestRunHeadlessReadinessBlockNamesTheChecks(t *testing.T) {
+	t.Setenv("DO_NOT_TRACK", "1")
+	events := captureUpgradeEvents(t)
+	// setupProject has a plugin outside Composer, which blocks the upgrade.
+	u := headlessUpgrader(t, setupProject(t), "true")
+
+	err := u.RunHeadless(t.Context(), HeadlessOptions{Target: "6.7.11.0", Out: io.Discard})
+
+	require.Error(t, err)
+	require.Len(t, *events, 1)
+	assert.Equal(t, "readiness", (*events)[0][tracking.TagFailedStep])
+	assert.Equal(t, "extensions", (*events)[0][tracking.TagBlockingChecks])
+}
+
+func TestRunHeadlessFailingDryRunSendsNothing(t *testing.T) {
+	t.Setenv("DO_NOT_TRACK", "1")
+	events := captureUpgradeEvents(t)
+	u := headlessUpgrader(t, setupComposerProject(t), "true")
+
+	err := u.RunHeadless(t.Context(), HeadlessOptions{DryRun: true, Out: io.Discard})
+
+	require.Error(t, err, "no target was given")
+	assert.Empty(t, *events)
+}
+
+func TestBlockingCheckIDs(t *testing.T) {
+	r := Readiness{Checks: []ReadinessCheck{
+		{ID: "git-clean", Blocking: true, State: StateFail},
+		{ID: "composer-lock", Blocking: true, State: StateFail},
+		{ID: "tooling", Blocking: true, State: StateOK},
+		{ID: "deployment-helper", State: StateWarn},
+	}}
+
+	assert.Equal(t, "composer_lock,git_clean", blockingCheckIDs(r))
+	assert.Empty(t, blockingCheckIDs(Readiness{}))
 }

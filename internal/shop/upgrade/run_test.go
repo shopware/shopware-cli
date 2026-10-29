@@ -375,7 +375,7 @@ func TestCheckComposerResolvableNoAuditEnv(t *testing.T) {
 func TestStepIDsAreStableAndUnique(t *testing.T) {
 	seen := map[string]StepID{}
 	for _, step := range RunSteps {
-		id := step.ID()
+		id := step.TelemetryID()
 		assert.NotEqual(t, "unknown", id, step.Label())
 		assert.NotContains(t, seen, id, "duplicate id for %s", step.Label())
 		seen[id] = step

@@ -8,8 +8,7 @@ const (
 	EventCommand = "command"
 	// EventProjectCreate is sent when a new Shopware project is scaffolded.
 	EventProjectCreate = "project.create"
-	// EventProjectUpgrade is sent when the interactive upgrade wizard finishes
-	// an upgrade run (internal/tui/upgrade).
+	// EventProjectUpgrade is sent when an upgrade run ends or stops at a blocking check.
 	EventProjectUpgrade = "project.upgrade"
 
 	// The ai.* events are sent by the ai command group (cmd/ai) after the
@@ -52,8 +51,9 @@ const (
 	TagInteractive       = "interactive"
 
 	// EventProjectUpgrade
-	TagFromVersion   = "from_version"
-	TagTargetVersion = "target_version"
+	TagFromVersion    = "from_version"
+	TagTargetVersion  = "target_version"
+	TagBlockingChecks = "blocking_checks"
 
 	// EventAIAdd, EventAIRemove
 	TagIntegration = "integration" // directory name, e.g. shopware-cli / meteor

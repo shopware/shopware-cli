@@ -848,6 +848,7 @@ func TestRunPanelFailureReportsTheFailingStep(t *testing.T) {
 	assert.Equal(t, tracking.ResultFailure, (*events)[0][tracking.TagResult])
 	assert.Equal(t, "composer_update", (*events)[0][tracking.TagFailedStep])
 	assert.Equal(t, "6.7.11.0", (*events)[0][tracking.TagTargetVersion])
+	assert.Equal(t, "true", (*events)[0][tracking.TagInteractive])
 }
 
 func TestRunPanelCtrlCReportsCancelled(t *testing.T) {
@@ -856,7 +857,7 @@ func TestRunPanelCtrlCReportsCancelled(t *testing.T) {
 	w.Send(runEventMsg(backend.StepEvent{Step: backend.StepComposerUpdate, State: backend.StateRunning}))
 
 	// ctrl+c during the run cancels the runner instead of quitting.
-	w.Send(tea.KeyPressMsg(tea.Key{Code: 'c', Mod: tea.ModCtrl}))
+	w.Send(ctrlC())
 	assert.Equal(t, panelRun, w.m.panel)
 
 	w.Send(runEventMsg(backend.StepEvent{Step: backend.StepComposerUpdate, State: backend.StateFail, Err: context.Canceled}))

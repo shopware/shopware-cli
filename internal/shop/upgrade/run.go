@@ -56,8 +56,8 @@ func (s StepID) Label() string {
 	return "Unknown step"
 }
 
-// ID is the stable telemetry identifier of a step.
-func (s StepID) ID() string {
+// TelemetryID is the stable name of a step in telemetry events.
+func (s StepID) TelemetryID() string {
 	switch s {
 	case StepRewriteComposer:
 		return "rewrite_composer"

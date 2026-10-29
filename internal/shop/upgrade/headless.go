@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 
@@ -34,8 +35,7 @@ type HeadlessOptions struct {
 	Out io.Writer
 }
 
-// Values of the failed_step tag for stops before the upgrade runs; a failing
-// run reports the runner step's ID instead.
+// failed_step values for stops before the upgrade runs; failing runner steps report their own name.
 const (
 	failedStepReadiness        = "readiness"
 	failedStepCatalog          = "catalog"
@@ -46,7 +46,7 @@ const (
 
 // headlessOutcome collects what the telemetry event needs while RunHeadless proceeds.
 type headlessOutcome struct {
-	current, target, failedStep string
+	current, target, failedStep, blockingChecks string
 	// attempted is set once the upgrade itself started.
 	attempted bool
 	// cancelled is set when the command context ended before the run did.
@@ -60,6 +60,10 @@ type headlessOutcome struct {
 func (u *ProjectUpgrader) RunHeadless(ctx context.Context, opts HeadlessOptions) (err error) {
 	var outcome headlessOutcome
 	defer func() {
+		// A dry run is a preview, not an upgrade attempt.
+		if opts.DryRun {
+			return
+		}
 		outcome.cancelled = ctx.Err() != nil
 		u.trackHeadlessOutcome(outcome, err)
 	}()
@@ -87,6 +91,7 @@ func (u *ProjectUpgrader) RunHeadless(ctx context.Context, opts HeadlessOptions)
 	}
 	if readiness.Blocked() {
 		outcome.failedStep = failedStepReadiness
+		outcome.blockingChecks = blockingCheckIDs(readiness)
 		return errors.New("the project is not ready to upgrade; fix the failing checks above")
 	}
 
@@ -233,8 +238,7 @@ func (u *ProjectUpgrader) resolveHeadless(ctx context.Context, target string) (R
 	return resolve, nil
 }
 
-// securityBlockedError stops a headless upgrade whose dependencies carry
-// known security advisories while audit blocking is on.
+// securityBlockedError stops an upgrade whose dependencies have known security advisories.
 type securityBlockedError struct {
 	target string
 }
@@ -283,8 +287,7 @@ func (u *ProjectUpgrader) headlessReportData(ctx context.Context, readiness Read
 	}
 }
 
-// consumeRunEvents streams runner progress to out and returns the ID of the
-// first failing step and the final error.
+// consumeRunEvents streams runner progress and returns the first failing step and the final error.
 func (u *ProjectUpgrader) consumeRunEvents(out io.Writer, events <-chan StepEvent) (string, error) {
 	var (
 		runErr     error
@@ -295,7 +298,7 @@ func (u *ProjectUpgrader) consumeRunEvents(out io.Writer, events <-chan StepEven
 			runErr = ev.Err
 		}
 		if ev.Step != StepFinished && ev.State == StateFail && failedStep == "" {
-			failedStep = ev.Step.ID()
+			failedStep = ev.Step.TelemetryID()
 		}
 		switch {
 		case ev.Line != "":
@@ -331,8 +334,7 @@ func (u *ProjectUpgrader) PlannedChanges() []string {
 
 var trackEvent = tracking.Track
 
-// trackHeadlessOutcome reports a finished, failed or interrupted upgrade; a
-// dry run or a project with nothing to upgrade sends nothing.
+// trackHeadlessOutcome reports the run unless nothing was attempted and nothing failed.
 func (u *ProjectUpgrader) trackHeadlessOutcome(outcome headlessOutcome, err error) {
 	if err == nil && !outcome.attempted {
 		return
@@ -349,9 +351,13 @@ func (u *ProjectUpgrader) trackHeadlessOutcome(outcome headlessOutcome, err erro
 		tracking.TagFromVersion:   outcome.current,
 		tracking.TagTargetVersion: outcome.target,
 		tracking.TagResult:        result,
+		tracking.TagInteractive:   "false",
 	}
 	if err != nil && outcome.failedStep != "" {
 		tags[tracking.TagFailedStep] = outcome.failedStep
+	}
+	if outcome.blockingChecks != "" {
+		tags[tracking.TagBlockingChecks] = outcome.blockingChecks
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 300*time.Millisecond)
@@ -371,4 +377,17 @@ func stateGlyph(s CheckState) string {
 		return tui.StateDot(tui.DotPending)
 	}
 	return tui.StateDot(tui.DotPending)
+}
+
+// blockingCheckIDs lists the failed blocking readiness checks, sorted and comma-separated.
+func blockingCheckIDs(r Readiness) string {
+	var ids []string
+	for _, c := range r.Checks {
+		if c.Failed() {
+			ids = append(ids, strings.ReplaceAll(c.ID, "-", "_"))
+		}
+	}
+	slices.Sort(ids)
+
+	return strings.Join(ids, ",")
 }
