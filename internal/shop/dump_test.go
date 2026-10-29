@@ -33,12 +33,15 @@ func TestPrepareDumpConfigSkipCustomerData(t *testing.T) {
 			} {
 				assert.Contains(t, prepared.NoData, table)
 			}
-			for _, table := range []string{"customer_group", "customer_group_translation", "document_type", "user", "integration", "product", "sales_channel", "version"} {
+			for _, table := range []string{"customer_group", "customer_group_translation", "document_type", "user", "integration", "product", "sales_channel", "promotion", "promotion_individual_code"} {
 				assert.NotContains(t, prepared.NoData, table)
 			}
-			for _, table := range []string{"dead_message", "enqueue", "messenger_messages", "import_export_log", "log_entry", "notification", "payment_token", "version_commit"} {
-				assert.NotContains(t, prepared.NoData, table)
+			for _, table := range []string{"cart", "customer_recovery", "dead_message", "enqueue", "messenger_messages", "import_export_log", "log_entry", "notification", "payment_token", "version", "version_commit"} {
+				assert.Contains(t, prepared.NoData, table)
 			}
+			assert.Equal(t, "NULL", prepared.Rewrite["promotion"]["orders_per_customer_count"])
+			assert.Equal(t, "0", prepared.Rewrite["promotion"]["order_count"])
+			assert.Equal(t, "NULL", prepared.Rewrite["promotion_individual_code"]["payload"])
 			assert.Equal(t, []string{"obsolete_table"}, prepared.Ignore)
 			firstNoData := append([]string(nil), prepared.NoData...)
 			prepared, err = prepareDumpConfig(prepared, opts)
@@ -56,6 +59,34 @@ func TestPrepareDumpConfigSkipCustomerDataWithClean(t *testing.T) {
 	assert.Contains(t, prepared.NoData, "elasticsearch_index_task")
 	assert.Contains(t, prepared.NoData, "messenger_messages")
 	assert.Contains(t, prepared.NoData, "import_export_log")
+}
+
+func TestPrepareDumpConfigClearsPromotionRedemptions(t *testing.T) {
+	cfg := &ConfigDump{
+		Rewrite: map[string]map[string]string{
+			"promotion": {
+				"orders_per_customer_count": "orders_per_customer_count",
+				"order_count":               "order_count",
+				"code":                      "'TEST'",
+			},
+			"promotion_individual_code": {
+				"payload": "payload",
+				"code":    "'TEST-CODE'",
+			},
+		},
+	}
+
+	prepared, err := prepareDumpConfig(cfg, DumpDatabaseOptions{SkipCustomerData: true})
+	require.NoError(t, err)
+	assert.Equal(t, map[string]string{
+		"orders_per_customer_count": "NULL",
+		"order_count":               "0",
+		"code":                      "'TEST'",
+	}, prepared.Rewrite["promotion"])
+	assert.Equal(t, map[string]string{
+		"payload": "NULL",
+		"code":    "'TEST-CODE'",
+	}, prepared.Rewrite["promotion_individual_code"])
 }
 
 func TestPrepareDumpConfigConditionalTables(t *testing.T) {

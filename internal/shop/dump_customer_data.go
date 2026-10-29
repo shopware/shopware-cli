@@ -1,16 +1,15 @@
 package shop
 
 // EnableSkipCustomerData excludes customer and order records, their dependent
-// records, and their history. Use explicit names so
-// configuration tables such as customer_group and document_type keep their data.
+// records, and their history, including transient data and promotion redemptions.
+// Explicit names preserve configuration tables such as customer_group and document_type.
 // Plugin tables can be added through dump.skip_customer_data_tables.
 func (c *ConfigDump) EnableSkipCustomerData() {
+	c.EnableClean()
 	c.NoData = appendMissing(c.NoData, c.SkipCustomerDataTables)
 	c.NoData = appendMissing(c.NoData, []string{
-		"cart",
 		"customer",
 		"customer_address",
-		"customer_recovery",
 		"customer_tag",
 		"customer_wishlist",
 		"customer_wishlist_product",
@@ -36,7 +35,9 @@ func (c *ConfigDump) EnableSkipCustomerData() {
 		"sales_channel_tracking_customer",
 		"sales_channel_tracking_order",
 		"state_machine_history",
-		"version_commit_data",
-		"webhook_event_log",
 	})
+
+	c.forceRewrite("promotion", "orders_per_customer_count", "NULL")
+	c.forceRewrite("promotion", "order_count", "0")
+	c.forceRewrite("promotion_individual_code", "payload", "NULL")
 }

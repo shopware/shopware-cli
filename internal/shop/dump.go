@@ -24,7 +24,7 @@ type DumpDatabaseOptions struct {
 	Compression mysqldump.Compression
 	// Clean excludes volatile tables (cart, messenger_messages, ...) from the data dump
 	Clean bool
-	// SkipCustomerData excludes customer and order data while keeping table schemas.
+	// SkipCustomerData excludes customer and order data, includes Clean
 	SkipCustomerData bool
 	// NoData adds table names or glob patterns to export with schema only.
 	NoData []string

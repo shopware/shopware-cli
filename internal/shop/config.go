@@ -374,7 +374,7 @@ type ConfigAdminApi struct {
 }
 
 type ConfigDump struct {
-	// Exclude customer, order, newsletter, review, document, and related history data while keeping table schemas
+	// Exclude customer, order, newsletter, review, document, and related history data while keeping table schemas; includes clean mode
 	SkipCustomerData bool `yaml:"skip_customer_data,omitempty"`
 	// Additional tables to export with schema only when skipping customer data, supports glob wildcards (e.g. "payone_payment_*")
 	SkipCustomerDataTables []string `yaml:"skip_customer_data_tables,omitempty"`
