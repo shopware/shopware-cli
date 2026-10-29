@@ -5,6 +5,7 @@ on:
     paths:
       - "skills/**"
       - "docs/AGENT_SKILLS.md"
+      - ".github/workflows/agent-skills.yml"
   push:
     branches:
       - main
@@ -12,12 +13,17 @@ on:
       - "skills/**"
       - ".github/workflows/agent-skills.yml"
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 permissions:
   contents: read
 
 jobs:
   validate:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
 
     steps:
       - name: Checkout

@@ -1,0 +1,11 @@
+# actionlint 1.7.12 does not yet recognize these supported GitHub Actions fields.
+# Remove the exceptions once actionlint supports them.
+# https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax
+paths:
+  .github/workflows/go_test.yml:
+    ignore:
+      - '^unknown permission scope "code-quality"\.'
+  .github/workflows/pr-docs-check.lock.yml:
+    ignore:
+      - '^unknown permission scope "copilot-requests"\.'
+      - '^unexpected key "queue" for "concurrency" section\.'

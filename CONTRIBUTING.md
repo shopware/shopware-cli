@@ -73,6 +73,7 @@ mise run test         # Run the network-isolated test suite (Linux/macOS only)
 mise run test-unit    # Run Go tests without the sandbox wrapper (works everywhere)
 mise run vet          # Run go vet
 mise run lint         # Run golangci-lint
+mise run lint-workflows # Validate GitHub Actions workflows
 ```
 
 For machine-specific settings, create `mise.local.toml`. This file is ignored

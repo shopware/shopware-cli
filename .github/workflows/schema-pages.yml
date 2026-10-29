@@ -18,6 +18,7 @@ permissions:
 jobs:
   publish:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     concurrency:
       group: pages
       cancel-in-progress: false
