@@ -44,13 +44,17 @@ const (
 	TagStderrBytes = "stderr_bytes"
 	TagStarted     = "started"
 
+	// Every event, set by Track
+	TagCLIVersion = "cli_version"
+
 	// EventCommand
 	TagCommandName = "command_name"
 	TagResult      = "result"
 	TagDurationMS  = "duration_ms"
-	TagCLIVersion  = "cli_version"
 	TagOS          = "os"
 	TagIsTUI       = "is_tui"
+	TagIsWSL       = "is_wsl"
+	TagCIProvider  = "ci_provider"
 
 	// EventProjectCreate
 	TagVersion           = "version"

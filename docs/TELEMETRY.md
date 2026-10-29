@@ -27,6 +27,8 @@ The goal of telemetry is to answer questions like:
   maintaining?
 - What operating systems do our users run (Linux / macOS / Windows)?
 - How often do commands fail vs. succeed, and how long do they take?
+- Which CI systems run the CLI, and does WSL behave differently from native
+  Linux?
 - Is the CLI mostly run interactively by developers, or non-interactively in
   CI pipelines?
 - For key flows (project creation, upgrade checks), which configuration options
@@ -93,6 +95,9 @@ All events share a common envelope:
 | `timestamp` | RFC 3339 timestamp of when the event was sent                      |
 | `tags`      | Event-specific key/value pairs (all string values), described below|
 
+Every event's `tags` also carry `cli_version`, the version of `shopware-cli`
+that sent it, so dev builds can be excluded for every event.
+
 There are the command-level events below, plus a set of events sent by the
 interactive development TUI (`shopware-cli project dev`).
 
@@ -141,11 +146,13 @@ overall CLI usage.
 | Tag            | Meaning                                                       | Example                |
 |----------------|---------------------------------------------------------------|------------------------|
 | `command_name` | The command path, dot-separated (dashes become underscores)   | `extension.build`      |
-| `result`       | Outcome of the command                                        | `success` / `failure` / `cancelled` |
+| `result`       | Outcome of the command. A run that ends with an error after Ctrl+C or SIGTERM, or because the user aborted a prompt, is `cancelled`, even when a child process reported the error. Long-running commands that shut down cleanly after a signal, such as `project worker`, stay `success` | `success` / `failure` / `cancelled` |
 | `duration_ms`  | How long the command took, in milliseconds                    | `1423`                 |
 | `cli_version`  | The version of `shopware-cli` in use                          | `0.4.123`              |
 | `os`           | Operating system the CLI runs on (Go `runtime.GOOS`)          | `linux` / `darwin` / `windows` |
 | `is_tui`       | Whether the run was interactive (a terminal / TUI session)    | `true` / `false`       |
+| `is_wsl`       | Whether a Linux run happens inside the Windows Subsystem for Linux | `true` / `false`  |
+| `ci_provider`  | The CI system a run executes on; only present on CI runs. `other` means CI was detected without a known provider | `github` / `gitlab` / `bitbucket` / `other` |
 
 Notes:
 - The command *name* is captured (e.g. `project.create`), but **not** its

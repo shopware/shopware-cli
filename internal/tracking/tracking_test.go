@@ -9,8 +9,12 @@ import (
 	"path/filepath"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
+	"github.com/shopware/shopware-cli/internal/cliversion"
 )
 
 // resetInit resets the lazy initialization so each test starts fresh.
@@ -38,6 +42,7 @@ func TestTrackSendsUDPPayload(t *testing.T) {
 
 	Track(t.Context(), "test_event", map[string]string{"key": "value"})
 
+	require.NoError(t, conn.SetReadDeadline(time.Now().Add(5*time.Second)))
 	buf := make([]byte, 4096)
 	n, err := conn.Read(buf)
 	assert.NoError(t, err)
@@ -48,6 +53,7 @@ func TestTrackSendsUDPPayload(t *testing.T) {
 
 	assert.Equal(t, "shopware_cli.test_event", received.Event)
 	assert.Equal(t, "value", received.Tags["key"])
+	assert.Equal(t, cliversion.Version, received.Tags[TagCLIVersion])
 	assert.NotEmpty(t, received.UserID)
 	assert.NotEmpty(t, received.Timestamp)
 }
