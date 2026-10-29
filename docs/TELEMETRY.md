@@ -153,7 +153,7 @@ overall CLI usage.
 | `is_tui`       | Whether the run was interactive (a terminal / TUI session)    | `true` / `false`       |
 | `is_wsl`       | Whether a Linux run happens inside the Windows Subsystem for Linux | `true` / `false`  |
 | `ci_provider`  | The CI system a run executes on; only present on CI runs. `other` means CI was detected without a known provider | `github` / `gitlab` / `bitbucket` / `other` |
-| `shopware_version` | The project's installed Shopware version when the command started, read from the installed packages with `composer.lock` as fallback: a release, a release candidate or `dev-trunk`; other development branches are never sent. Only on `project` commands run inside a project, not on `project create` | `6.7.11.0` |
+| `shopware_version` | The installed Shopware version of the project in the working directory when the command started, read from the installed packages with `composer.lock` as fallback: a release, a release candidate or `dev-trunk`; other development branches are never sent. Only on `project` commands run inside a project, not on `project create` | `6.7.11.0` |
 
 Notes:
 - The command *name* is captured (e.g. `project.create`), but **not** its

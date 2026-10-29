@@ -56,8 +56,8 @@ func Execute(ctx context.Context) int {
 	updateHandle, updateCancel := startUpdateCheck(ctx, args)
 	defer updateCancel()
 
-	start := time.Now()
 	shopwareVersion := projectShopwareVersion(args)
+	start := time.Now()
 	err := rootCmd.ExecuteContext(ctx)
 
 	trackCommandExecution(ctx, args, start, err, shopwareVersion)
