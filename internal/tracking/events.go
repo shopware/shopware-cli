@@ -55,6 +55,8 @@ const (
 	TagIsTUI       = "is_tui"
 	TagIsWSL       = "is_wsl"
 	TagCIProvider  = "ci_provider"
+	// TagShopwareVersion is the project's Shopware version, on project commands run inside a project.
+	TagShopwareVersion = "shopware_version"
 
 	// EventProjectCreate
 	TagVersion           = "version"
