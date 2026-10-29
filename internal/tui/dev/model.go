@@ -431,14 +431,19 @@ func (m Model) updateWatcherMsg(msg tea.Msg) (app.Content, tea.Cmd) {
 	switch msg := msg.(type) {
 	case watcherStartedMsg:
 		m.watchers[msg.name] = msg.handle
-		m.telemetry.watcherStarted(msg.name)
+		m.telemetry.watcherStarted(msg.name, msg.proxied)
 		return m, m.instance.AddStreamingSource(msg.name, msg.lines)
 
 	case watcherRunningMsg:
 		if msg.err != nil {
 			if tags, ok := m.telemetry.watcherEndTags(msg.name, watcherEndPrepFailed); ok {
+				if step := watcherFailedStep(msg.err); step != "" {
+					tags[tracking.TagFailedStep] = step
+				}
 				trackEvent(tracking.EventDevWatcher, tags)
 			}
+		} else {
+			m.telemetry.watcherProcessStarted(msg.name)
 		}
 		_, exists := m.watchers[msg.name]
 		switch msg.name {
@@ -471,6 +476,7 @@ func (m Model) updateWatcherMsg(msg tea.Msg) (app.Content, tea.Cmd) {
 			m.overview.sfWatchReady = msg.ready
 		}
 		if msg.ready {
+			m.telemetry.watcherReady(msg.name)
 			return m, nil
 		}
 		// Not serving yet — keep polling until it is.

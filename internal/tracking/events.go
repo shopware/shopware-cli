@@ -98,6 +98,8 @@ const (
 
 	// EventDevWatcher
 	TagWatcher = "watcher"
+	TagProxied = "proxied"
+	TagPhase   = "phase"
 
 	// EventDevHealth
 	TagCheck = "check"

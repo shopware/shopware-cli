@@ -11,6 +11,8 @@ import (
 
 	dockerpkg "github.com/shopware/shopware-cli/internal/docker"
 	"github.com/shopware/shopware-cli/internal/executor"
+	"github.com/shopware/shopware-cli/internal/extension"
+	"github.com/shopware/shopware-cli/internal/proxy"
 	"github.com/shopware/shopware-cli/internal/shop"
 )
 
@@ -259,4 +261,25 @@ func TestRenderWatchers_LocalModeIgnoresDockerPorts(t *testing.T) {
 	view := m.renderWatchers()
 	assert.Contains(t, view, "http://127.0.0.1:8080", "local mode must use the platform's dev server port, not docker.ports")
 	assert.Contains(t, view, "http://127.0.0.1:9998")
+}
+
+func TestWatcherProxiedDetection(t *testing.T) {
+	dir := t.TempDir()
+	writeComposerLock(t, dir, "^8.2")
+	env, err := dockerpkg.NewEnvironment(dir, dockerpkg.Options{Proxy: &dockerpkg.Proxy{Hostname: "my-shop.shopware.local"}})
+	require.NoError(t, err)
+
+	m := NewOverviewModel(t.Context(), executor.TypeDocker, "", "", "", dir, nil, &shop.Config{})
+	assert.False(t, m.adminWatchProxied(), "no environment")
+	m.setEnvironment(env)
+	assert.True(t, m.adminWatchProxied())
+
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("HOME", t.TempDir())
+	assert.Empty(t, storefrontWatchOptions(dir, extension.StorefrontWatcherOptions{}).ProxyHostname, "not registered")
+
+	reg := proxy.Registry{}
+	reg.Upsert(proxy.ProjectEntry{ProjectRoot: proxy.CanonicalProjectRoot(dir), Hostname: "my-shop.shopware.local"})
+	require.NoError(t, reg.Save())
+	assert.Equal(t, "storefront-watch.my-shop.shopware.local", storefrontWatchOptions(dir, extension.StorefrontWatcherOptions{}).ProxyHostname)
 }

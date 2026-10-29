@@ -2,11 +2,13 @@ package dev
 
 import (
 	"context"
+	"errors"
 	"slices"
 	"strconv"
 	"strings"
 	"time"
 
+	"github.com/shopware/shopware-cli/internal/extension"
 	"github.com/shopware/shopware-cli/internal/shop/install"
 	"github.com/shopware/shopware-cli/internal/tracking"
 )
@@ -21,6 +23,13 @@ const (
 	watcherEndCrashed     = "crashed"
 	watcherEndUserStopped = "user_stopped"
 	watcherEndSessionEnd  = "session_end"
+)
+
+// Values of the watcher event's "phase" tag: how far a run got when it ended.
+const (
+	watcherPhasePreparing = "preparing"
+	watcherPhaseStarting  = "starting"
+	watcherPhaseRunning   = "running"
 )
 
 // Values of the session event's "result" tag: how the session ended.
@@ -47,7 +56,7 @@ type telemetryState struct {
 	installReported bool
 	dockerStart     time.Time
 	restartStart    time.Time
-	watcherStarts   map[string]time.Time
+	watcherRuns     map[string]*watcherRun
 	taskAction      string
 	taskStart       time.Time
 	healthSent      bool
@@ -59,17 +68,24 @@ func newTelemetryState(dockerMode bool) *telemetryState {
 		executorType = "docker"
 	}
 	return &telemetryState{
-		sessionStart:  time.Now(),
-		executor:      executorType,
-		tabsVisited:   map[string]struct{}{"overview": {}},
-		watchersUsed:  map[string]struct{}{},
-		watcherStarts: map[string]time.Time{},
+		sessionStart: time.Now(),
+		executor:     executorType,
+		tabsVisited:  map[string]struct{}{"overview": {}},
+		watchersUsed: map[string]struct{}{},
+		watcherRuns:  map[string]*watcherRun{},
 	}
+}
+
+// watcherRun is what the watcher event needs about one run while it lasts.
+type watcherRun struct {
+	started time.Time
+	proxied bool
+	phase   string
 }
 
 // trackEvent sends one anonymous usage event without blocking the UI: the
 // send (including DNS resolution) runs in a goroutine with a short timeout.
-func trackEvent(name string, tags map[string]string) {
+var trackEvent = func(name string, tags map[string]string) {
 	go func() {
 		trackEventNow(name, tags)
 	}()
@@ -79,7 +95,7 @@ func trackEvent(name string, tags map[string]string) {
 // started right before tea.Quit would race the process exit. It deliberately
 // uses context.Background(): quit-path events must still send when the
 // command context was already cancelled by a signal.
-func trackEventNow(name string, tags map[string]string) {
+var trackEventNow = func(name string, tags map[string]string) {
 	ctx, cancel := context.WithTimeout(context.Background(), 300*time.Millisecond)
 	defer cancel()
 	tracking.Track(ctx, name, tags)
@@ -298,35 +314,65 @@ func (t *telemetryState) taskTags(result string) (map[string]string, bool) {
 	return tags, true
 }
 
-func (t *telemetryState) watcherStarted(name string) {
+func (t *telemetryState) watcherStarted(name string, proxied bool) {
 	if t == nil {
 		return
 	}
-	if _, ok := t.watcherStarts[name]; ok {
+	if _, ok := t.watcherRuns[name]; ok {
 		return
 	}
-	t.watcherStarts[name] = time.Now()
+	t.watcherRuns[name] = &watcherRun{started: time.Now(), proxied: proxied, phase: watcherPhasePreparing}
 	t.watchersUsed[watcherTagName(name)] = struct{}{}
 }
 
+// watcherProcessStarted records that preparation succeeded and the dev server is starting.
+func (t *telemetryState) watcherProcessStarted(name string) {
+	t.setWatcherPhase(name, watcherPhaseStarting)
+}
+
+// watcherReady records that the dev server answers.
+func (t *telemetryState) watcherReady(name string) {
+	t.setWatcherPhase(name, watcherPhaseRunning)
+}
+
+func (t *telemetryState) setWatcherPhase(name, phase string) {
+	if t == nil {
+		return
+	}
+	if run, ok := t.watcherRuns[name]; ok {
+		run.phase = phase
+	}
+}
+
 // watcherEndTags builds the project.dev.watcher event for one watcher run and
-// forgets its start time, so follow-up messages for the same run (a
-// logDoneMsg after a user stop, a watcherRunningMsg error after a stop during
-// preparation) don't produce a second event.
+// forgets the run, so follow-up messages for the same run (a logDoneMsg after
+// a user stop, a watcherRunningMsg error after a stop during preparation)
+// don't produce a second event.
 func (t *telemetryState) watcherEndTags(name, result string) (map[string]string, bool) {
 	if t == nil {
 		return nil, false
 	}
-	started, ok := t.watcherStarts[name]
+	run, ok := t.watcherRuns[name]
 	if !ok {
 		return nil, false
 	}
-	delete(t.watcherStarts, name)
+	delete(t.watcherRuns, name)
 	return map[string]string{
 		tracking.TagWatcher:    watcherTagName(name),
 		tracking.TagResult:     result,
-		tracking.TagDurationMS: durationMS(time.Since(started)),
+		tracking.TagPhase:      run.phase,
+		tracking.TagProxied:    strconv.FormatBool(run.proxied),
+		tracking.TagDurationMS: durationMS(time.Since(run.started)),
 	}, true
+}
+
+// watcherFailedStep returns the preparation step recorded on err, if any.
+func watcherFailedStep(err error) string {
+	var stepErr *extension.WatcherStepError
+	if errors.As(err, &stepErr) {
+		return stepErr.Step
+	}
+	return ""
 }
 
 func watcherTagName(name string) string {
