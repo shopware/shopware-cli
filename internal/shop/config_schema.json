@@ -902,6 +902,51 @@
       "additionalProperties": false,
       "type": "object"
     },
+    "EnvironmentSSHCachetoolConfig": {
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "description": "Enable CacheTool during SSH deployment activation. Disabled by default.",
+          "default": false
+        },
+        "adapter": {
+          "type": "string",
+          "enum": [
+            "fcgi",
+            "web"
+          ],
+          "description": "Inline adapter: fcgi (PHP-FPM) or web. Required when enabled without config."
+        },
+        "fcgi": {
+          "type": "string",
+          "description": "FCGI socket or host:port connection string. Omit for CacheTool autodetection; fcgi adapter only."
+        },
+        "fcgi_chroot": {
+          "type": "string",
+          "description": "Absolute remote POSIX PHP-FPM chroot path; fcgi adapter only."
+        },
+        "tmp_dir": {
+          "type": "string",
+          "description": "Absolute remote POSIX directory for CacheTool temporary files, outside releases and the active symlink configured by ssh.directory."
+        },
+        "web_url": {
+          "type": "string",
+          "format": "uri",
+          "description": "Absolute HTTP(S) URL for the web adapter, without credentials, query or fragment. Required for web."
+        },
+        "web_path": {
+          "type": "string",
+          "description": "Required for web: explicit writable absolute remote POSIX web directory outside releases and the active symlink configured by ssh.directory."
+        },
+        "config": {
+          "type": "string",
+          "description": "Absolute path to an existing remote native CacheTool YAML file targeting web/FPM, not CLI.\nMutually exclusive with all inline adapter fields, including tmp_dir, even when disabled.\nThe owner must configure writable external web and temporary paths; native YAML paths cannot be preflighted.\nWith native web configuration, the owner must clean up temporary web endpoints if CacheTool fails to fetch them."
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "description": "EnvironmentSSHCachetoolConfig configures an opt-in web/FPM OPcache reset."
+    },
     "EnvironmentSSHConfig": {
       "properties": {
         "host": {
@@ -935,9 +980,12 @@
           "type": "array",
           "description": "Additional arguments passed to the PHP binary for PHP and console commands on the remote host (e.g. [\"-d\", \"memory_limit=512M\"] or [\"-c\", \"/path/to/php.ini\"]). Appended after the binary."
         },
-        "shared": {
-          "$ref": "#/$defs/EnvironmentSSHSharedConfig",
+        "cachetool": {
+          "$ref": "#/$defs/EnvironmentSSHCachetoolConfig",
           "description": "Persistent files and directories linked into SSH deployment releases."
+        },
+        "shared": {
+          "$ref": "#/$defs/EnvironmentSSHSharedConfig"
         },
         "hosts": {
           "additionalProperties": {
@@ -962,6 +1010,9 @@
     },
     "EnvironmentSSHHostConfig": {
       "properties": {
+        "cachetool": {
+          "$ref": "#/$defs/EnvironmentSSHCachetoolConfig"
+        },
         "host": {
           "type": "string"
         },
@@ -999,14 +1050,14 @@
             "type": "string"
           },
           "type": "array",
-          "description": "Project-relative files to share between releases. Omit to use .env.local, install.lock, public/.htaccess and public/.user.ini. An explicit list replaces the defaults; [] disables shared files."
+          "description": "Project-relative files to share between releases. Omit to use .env.local,\ninstall.lock, public/.htaccess and public/.user.ini. An explicit list\nreplaces the defaults; [] disables shared files."
         },
         "directories": {
           "items": {
             "type": "string"
           },
           "type": "array",
-          "description": "Project-relative directories to share between releases. Omit to use config/jwt, files, var/log, public/media, public/plugins, public/thumbnail, public/sitemap and public/theme. An explicit list replaces the defaults; [] disables shared directories."
+          "description": "Project-relative directories to share between releases. Omit to use\nconfig/jwt, files, var/log, public/media, public/plugins, public/thumbnail,\npublic/sitemap and public/theme. An explicit list replaces the defaults;\n[] disables shared directories."
         }
       },
       "additionalProperties": false,

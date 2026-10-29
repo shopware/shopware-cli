@@ -48,7 +48,8 @@ type EnvironmentSSHConfig struct {
 	// Additional arguments passed to the PHP binary for PHP and console commands on the remote host (e.g. ["-d", "memory_limit=512M"] or ["-c", "/path/to/php.ini"]). Appended after the binary.
 	PHPArgs []string `yaml:"php_args,omitempty"`
 	// Persistent files and directories linked into SSH deployment releases.
-	Shared *EnvironmentSSHSharedConfig `yaml:"shared,omitempty"`
+	Cachetool *EnvironmentSSHCachetoolConfig `yaml:"cachetool,omitempty"`
+	Shared    *EnvironmentSSHSharedConfig    `yaml:"shared,omitempty"`
 	// Named SSH targets, mutually exclusive with host. Persistent shared directories must be shared across hosts; releases, the active symlink and .shopware-cli remain host-local.
 	Hosts map[string]*EnvironmentSSHHostConfig `yaml:"hosts,omitempty"`
 	// Named host running migrations and initialization. Required with multiple hosts; defaults to the only host otherwise.
@@ -891,6 +892,9 @@ func ReadConfig(ctx context.Context, fileName string, allowFallback bool) (*Conf
 	if err != nil {
 		return nil, err
 	}
+	if err := config.validateSSHCachetool(); err != nil {
+		return nil, fmt.Errorf("cannot read project config %s: %w", fileName, err)
+	}
 	if err := config.validateSSHHosts(); err != nil {
 		return nil, fmt.Errorf("cannot read project config %s: %w", fileName, err)
 	}
@@ -968,6 +972,7 @@ func readConfig(ctx context.Context, fileName string, allowFallback bool) (*Conf
 				config.ConfigDump.Ignore = appendMissing(config.ConfigDump.Ignore, additionalConfig.ConfigDump.Ignore)
 				config.ConfigDump.SkipCustomerDataTables = appendMissing(config.ConfigDump.SkipCustomerDataTables, additionalConfig.ConfigDump.SkipCustomerDataTables)
 			}
+			config.applyIncludedCachetoolEnabled(additionalConfig)
 		}
 	}
 
