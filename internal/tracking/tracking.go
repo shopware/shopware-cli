@@ -108,9 +108,7 @@ func Track(ctx context.Context, eventName string, tags map[string]string) {
 	if tags == nil {
 		tags = make(map[string]string)
 	}
-	if _, ok := tags[TagCLIVersion]; !ok {
-		tags[TagCLIVersion] = cliversion.Version
-	}
+	tags[TagCLIVersion] = cliversion.Version
 
 	e := event{
 		Event:     eventPrefix + eventName,

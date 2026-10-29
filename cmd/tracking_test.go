@@ -3,17 +3,20 @@ package cmd
 import (
 	"context"
 	"errors"
+	"fmt"
 	"runtime"
 	"strconv"
 	"testing"
 	"time"
 
+	"charm.land/huh/v2"
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/shopware/shopware-cli/internal/system"
 	"github.com/shopware/shopware-cli/internal/tracking"
+	"github.com/shopware/shopware-cli/internal/tui"
 )
 
 // useTrackingTestRoot swaps rootCmd for a minimal tree containing
@@ -125,6 +128,8 @@ func TestTrackCommandExecution_Result(t *testing.T) {
 		{name: "wrapped cancelled", runErr: errors.Join(errors.New("stopped"), context.Canceled), want: tracking.ResultCancelled},
 		{name: "interrupted run with a child exit error", interrupted: true, runErr: errors.New("exit status 130"), want: tracking.ResultCancelled},
 		{name: "interrupted run that still succeeded", interrupted: true, runErr: nil, want: tracking.ResultSuccess},
+		{name: "prompt aborted with ctrl+c", runErr: fmt.Errorf("cannot create project: %w", huh.ErrUserAborted), want: tracking.ResultCancelled},
+		{name: "selection dismissed", runErr: tui.ErrFilterSelectCancelled, want: tracking.ResultCancelled},
 	}
 
 	for _, tt := range tests {

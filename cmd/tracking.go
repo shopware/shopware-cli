@@ -9,8 +9,11 @@ import (
 	"strings"
 	"time"
 
+	"charm.land/huh/v2"
+
 	"github.com/shopware/shopware-cli/internal/system"
 	"github.com/shopware/shopware-cli/internal/tracking"
+	"github.com/shopware/shopware-cli/internal/tui"
 )
 
 var trackEvent = tracking.Track
@@ -21,11 +24,11 @@ func trackCommandExecution(ctx context.Context, args []string, start time.Time, 
 		return
 	}
 
-	// An interrupted run is cancelled even when a child process reported the error.
+	// Ctrl+C counts as cancelled, also when a child process or a prompt reported it.
 	result := tracking.ResultSuccess
 	switch {
 	case runErr == nil:
-	case ctx.Err() != nil || errors.Is(runErr, context.Canceled):
+	case ctx.Err() != nil || errors.Is(runErr, context.Canceled) || errors.Is(runErr, huh.ErrUserAborted) || errors.Is(runErr, tui.ErrFilterSelectCancelled):
 		result = tracking.ResultCancelled
 	default:
 		result = tracking.ResultFailure

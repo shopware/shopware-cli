@@ -27,16 +27,14 @@ func IsCIEnvironment(getenv func(string) string) bool {
 	return false
 }
 
-// CIProvider names the CI system a run executes on: github, gitlab or
-// bitbucket, other when CI is detected without a known provider, and "" when
-// the run is not on CI.
+// CIProvider names the CI system of a run: github, gitlab, bitbucket, other, or "" outside CI.
 func CIProvider(getenv func(string) string) string {
 	switch {
 	case getenv("GITHUB_ACTIONS") != "":
 		return "github"
 	case getenv("GITLAB_CI") != "":
 		return "gitlab"
-	case getenv("BITBUCKET_BUILD_NUMBER") != "" || getenv("BITBUCKET_REPO_FULL_NAME") != "":
+	case getenv("BITBUCKET_BUILD_NUMBER") != "":
 		return "bitbucket"
 	case IsCIEnvironment(getenv):
 		return "other"

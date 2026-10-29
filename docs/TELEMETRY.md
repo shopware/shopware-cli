@@ -146,7 +146,7 @@ overall CLI usage.
 | Tag            | Meaning                                                       | Example                |
 |----------------|---------------------------------------------------------------|------------------------|
 | `command_name` | The command path, dot-separated (dashes become underscores)   | `extension.build`      |
-| `result`       | Outcome of the command. A run interrupted with Ctrl+C or SIGTERM is `cancelled`, even when a child process reported an error | `success` / `failure` / `cancelled` |
+| `result`       | Outcome of the command. A run that ends with an error after Ctrl+C or SIGTERM, or because the user aborted a prompt, is `cancelled`, even when a child process reported the error. Long-running commands that shut down cleanly after a signal, such as `project worker`, stay `success` | `success` / `failure` / `cancelled` |
 | `duration_ms`  | How long the command took, in milliseconds                    | `1423`                 |
 | `cli_version`  | The version of `shopware-cli` in use                          | `0.4.123`              |
 | `os`           | Operating system the CLI runs on (Go `runtime.GOOS`)          | `linux` / `darwin` / `windows` |

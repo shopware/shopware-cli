@@ -43,7 +43,7 @@ func TestCIProvider(t *testing.T) {
 		{name: "github", env: map[string]string{"GITHUB_ACTIONS": "true", "CI": "true"}, want: "github"},
 		{name: "gitlab", env: map[string]string{"GITLAB_CI": "true", "CI": "true"}, want: "gitlab"},
 		{name: "bitbucket pipelines", env: map[string]string{"BITBUCKET_BUILD_NUMBER": "7"}, want: "bitbucket"},
-		{name: "bitbucket repo only", env: map[string]string{"BITBUCKET_REPO_FULL_NAME": "team/repo"}, want: "bitbucket"},
+		{name: "bitbucket repository name alone is not CI", env: map[string]string{"BITBUCKET_REPO_FULL_NAME": "team/repo"}, want: ""},
 		{name: "generic CI", env: map[string]string{"CI": "true"}, want: "other"},
 		{name: "known vendor without a name", env: map[string]string{"JENKINS_URL": "https://ci.example"}, want: "other"},
 		{name: "developer machine", env: map[string]string{}, want: ""},
@@ -53,8 +53,7 @@ func TestCIProvider(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			getenv := func(key string) string { return tc.env[key] }
-			assert.Equal(t, tc.want, CIProvider(getenv))
+			assert.Equal(t, tc.want, CIProvider(mapGetenv(tc.env)))
 		})
 	}
 }
