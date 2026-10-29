@@ -436,9 +436,8 @@ func (m Model) updateWatcherMsg(msg tea.Msg) (app.Content, tea.Cmd) {
 
 	case watcherRunningMsg:
 		if msg.err != nil {
-			result := watcherPrepResult(m.commandContext())
-			if tags, ok := m.telemetry.watcherEndTags(msg.name, result); ok {
-				if step := watcherFailedStep(msg.err); step != "" && result == watcherEndPrepFailed {
+			if tags, ok := m.telemetry.watcherEndTags(msg.name, watcherEndPrepFailed); ok {
+				if step := watcherFailedStep(msg.err); step != "" {
 					tags[tracking.TagFailedStep] = step
 				}
 				trackEvent(tracking.EventDevWatcher, tags)

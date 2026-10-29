@@ -1,7 +1,6 @@
 package dev
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"os"
@@ -292,33 +291,29 @@ func TestWatcherEndTagsCarryPhaseAndProxied(t *testing.T) {
 	tel.watcherStarted(watcherStorefront, true)
 	tags, ok := tel.watcherEndTags(watcherStorefront, watcherEndSessionEnd)
 	assert.True(t, ok)
-	assert.Equal(t, "preparing", tags["phase"])
-	assert.Equal(t, "true", tags["proxied"])
+	assert.Equal(t, "preparing", tags[tracking.TagPhase])
+	assert.Equal(t, "true", tags[tracking.TagProxied])
 
 	tel.watcherStarted(watcherAdmin, false)
 	tel.watcherProcessStarted(watcherAdmin)
 	tags, _ = tel.watcherEndTags(watcherAdmin, watcherEndUserStopped)
-	assert.Equal(t, "starting", tags["phase"])
-	assert.Equal(t, "false", tags["proxied"])
+	assert.Equal(t, "starting", tags[tracking.TagPhase])
+	assert.Equal(t, "false", tags[tracking.TagProxied])
 
 	tel.watcherStarted(watcherAdmin, false)
 	tel.watcherProcessStarted(watcherAdmin)
 	tel.watcherReady(watcherAdmin)
 	tags, _ = tel.watcherEndTags(watcherAdmin, watcherEndCrashed)
-	assert.Equal(t, "running", tags["phase"])
+	assert.Equal(t, "running", tags[tracking.TagPhase])
 
-	tel.watcherReady("unknown")
 	var nilTel *telemetryState
-	nilTel.watcherProcessStarted(watcherAdmin)
+	assert.NotPanics(t, func() {
+		tel.watcherReady("unknown")
+		nilTel.watcherProcessStarted(watcherAdmin)
+	})
 }
 
-func TestWatcherPrepResultAndFailedStep(t *testing.T) {
-	assert.Equal(t, watcherEndPrepFailed, watcherPrepResult(t.Context()))
-
-	ctx, cancel := context.WithCancel(t.Context())
-	cancel()
-	assert.Equal(t, watcherEndSessionEnd, watcherPrepResult(ctx))
-
+func TestWatcherFailedStep(t *testing.T) {
 	stepErr := &extension.WatcherStepError{Step: extension.WatcherStepNPMInstall, Err: errors.New("boom")}
 	assert.Equal(t, "npm_install", watcherFailedStep(fmt.Errorf("starting admin watcher: %w", stepErr)))
 	assert.Empty(t, watcherFailedStep(errors.New("boom")))

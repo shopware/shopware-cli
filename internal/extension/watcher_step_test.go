@@ -20,7 +20,11 @@ func TestPrepareAdminWatcherReportsTheFailingStep(t *testing.T) {
 	require.ErrorAs(t, err, &stepErr)
 	assert.Equal(t, WatcherStepFeatureDump, stepErr.Step)
 	assert.Equal(t, []string{"feature:dump"}, e.args)
-	assert.Contains(t, err.Error(), "exit status 1", "the step keeps the original message")
+	var exitErr *exec.ExitError
+	assert.ErrorAs(t, err, &exitErr, "the step keeps the original error")
+}
+
+func TestFailedStepKeepsNil(t *testing.T) {
 	assert.NoError(t, failedStep(WatcherStepFeatureDump, nil))
 }
 

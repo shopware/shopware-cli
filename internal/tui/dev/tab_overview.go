@@ -969,9 +969,7 @@ func (m OverviewModel) startAdminWatch() tea.Cmd {
 	projectRoot := m.projectRoot
 	shopCfg := m.shopCfg
 
-	proxied := m.env != nil && m.env.ProxyHost() != ""
-
-	return startWatcher(watcherAdmin, m.ctx, proxied, func(ctx context.Context, out io.Writer) (*executor.Process, error) {
+	return startWatcher(watcherAdmin, m.ctx, m.adminWatchProxied(), func(ctx context.Context, out io.Writer) (*executor.Process, error) {
 		logStep(out, "Preparing plugins.json...")
 		if err := extension.WriteProjectPluginJson(ctx, projectRoot, shopCfg, e); err != nil {
 			return nil, &extension.WatcherStepError{Step: extension.WatcherStepPluginsJSON, Err: fmt.Errorf("preparing plugins.json: %w", err)}
@@ -991,11 +989,7 @@ func (m OverviewModel) startStorefrontWatch(opts extension.StorefrontWatcherOpti
 	projectRoot := m.projectRoot
 	shopCfg := m.shopCfg
 
-	// When proxied, route the webpack hot-proxy watcher through the shared
-	// proxy, matching the standalone `project storefront-watch` command.
-	if host := registeredHostname(projectRoot); host != "" {
-		opts.ProxyHostname = "storefront-watch." + host
-	}
+	opts = storefrontWatchOptions(projectRoot, opts)
 
 	return startWatcher(watcherStorefront, m.ctx, opts.ProxyHostname != "", func(ctx context.Context, out io.Writer) (*executor.Process, error) {
 		logStep(out, "Preparing plugins.json...")
@@ -1010,6 +1004,19 @@ func (m OverviewModel) startStorefrontWatch(opts extension.StorefrontWatcherOpti
 
 		return watchProcess, nil
 	})
+}
+
+// adminWatchProxied is whether the admin watcher runs behind the shared proxy.
+func (m OverviewModel) adminWatchProxied() bool {
+	return m.env != nil && m.env.ProxyHost() != ""
+}
+
+// storefrontWatchOptions routes the storefront watcher through the shared proxy for registered projects, like the standalone command.
+func storefrontWatchOptions(projectRoot string, opts extension.StorefrontWatcherOptions) extension.StorefrontWatcherOptions {
+	if host := registeredHostname(projectRoot); host != "" {
+		opts.ProxyHostname = "storefront-watch." + host
+	}
+	return opts
 }
 
 // logStep mirrors extension.logStep for prep work done inside the dev package itself.

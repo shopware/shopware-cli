@@ -95,7 +95,7 @@ var trackEvent = func(name string, tags map[string]string) {
 // started right before tea.Quit would race the process exit. It deliberately
 // uses context.Background(): quit-path events must still send when the
 // command context was already cancelled by a signal.
-func trackEventNow(name string, tags map[string]string) {
+var trackEventNow = func(name string, tags map[string]string) {
 	ctx, cancel := context.WithTimeout(context.Background(), 300*time.Millisecond)
 	defer cancel()
 	tracking.Track(ctx, name, tags)
@@ -364,15 +364,6 @@ func (t *telemetryState) watcherEndTags(name, result string) (map[string]string,
 		tracking.TagProxied:    strconv.FormatBool(run.proxied),
 		tracking.TagDurationMS: durationMS(time.Since(run.started)),
 	}, true
-}
-
-// watcherPrepResult classifies a failed preparation: a command context that
-// is already cancelled means the session is ending, not a broken step.
-func watcherPrepResult(ctx context.Context) string {
-	if ctx.Err() != nil {
-		return watcherEndSessionEnd
-	}
-	return watcherEndPrepFailed
 }
 
 // watcherFailedStep returns the preparation step recorded on err, if any.

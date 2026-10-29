@@ -927,13 +927,14 @@ type devEvent struct {
 // captureDevEvents replaces the tracking seam and returns the recorded events.
 func captureDevEvents(t *testing.T) *[]devEvent {
 	t.Helper()
-	original := trackEvent
-	t.Cleanup(func() { trackEvent = original })
+	original, originalNow := trackEvent, trackEventNow
+	t.Cleanup(func() { trackEvent, trackEventNow = original, originalNow })
 
 	events := &[]devEvent{}
-	trackEvent = func(name string, tags map[string]string) {
+	record := func(name string, tags map[string]string) {
 		*events = append(*events, devEvent{name: name, tags: tags})
 	}
+	trackEvent, trackEventNow = record, record
 	return events
 }
 
@@ -958,26 +959,6 @@ func TestWatcherPrepFailureReportsTheStep(t *testing.T) {
 	assert.False(t, m.overview.adminWatchStarting)
 }
 
-func TestWatcherPrepCancelledBySessionEndIsNotAFailure(t *testing.T) {
-	events := captureDevEvents(t)
-	m := newTestModel(t)
-	m.telemetry = newTelemetryState(false)
-	ctx, cancel := context.WithCancel(t.Context())
-	m.ctx = ctx
-
-	updated, _ := m.updateWatcherMsg(watcherStartedMsg{name: watcherStorefront, handle: &watcherHandle{}})
-	m = updated.(Model)
-	cancel()
-	stepErr := &extension.WatcherStepError{Step: extension.WatcherStepFeatureDump, Err: context.Canceled}
-	_, _ = m.updateWatcherMsg(watcherRunningMsg{name: watcherStorefront, err: stepErr})
-
-	require.Len(t, *events, 1)
-	tags := (*events)[0].tags
-	assert.Equal(t, "session_end", tags[tracking.TagResult])
-	assert.Equal(t, "preparing", tags[tracking.TagPhase])
-	assert.NotContains(t, tags, tracking.TagFailedStep)
-}
-
 func TestWatcherPhasesFollowTheLifecycle(t *testing.T) {
 	events := captureDevEvents(t)
 	m := newTestModel(t)
@@ -998,4 +979,48 @@ func TestWatcherPhasesFollowTheLifecycle(t *testing.T) {
 	assert.Equal(t, "crashed", (*events)[0].tags[tracking.TagResult])
 	assert.Equal(t, "running", (*events)[0].tags[tracking.TagPhase])
 	assert.False(t, m.overview.adminWatchRunning)
+}
+
+func TestStopWhilePreparingReportsUserStopped(t *testing.T) {
+	events := captureDevEvents(t)
+	m := newTestModel(t)
+	m.telemetry = newTelemetryState(false)
+
+	updated, _ := m.updateWatcherMsg(watcherStartedMsg{name: watcherAdmin, handle: &watcherHandle{}})
+	m = updated.(Model)
+	m.overview.adminWatchStarting = true
+
+	updated, cmd := m.executeCommand("admin-watch-stop")
+	m = updated.(Model)
+	require.NotNil(t, cmd, "the palette's stop entry works while the watcher prepares")
+	_, isTracked := m.watchers[watcherAdmin]
+	assert.False(t, isTracked)
+
+	// The cancelled preparation reports back, but the run was already counted.
+	_, _ = m.updateWatcherMsg(watcherRunningMsg{name: watcherAdmin, err: context.Canceled})
+
+	require.Len(t, *events, 1)
+	assert.Equal(t, "user_stopped", (*events)[0].tags[tracking.TagResult])
+	assert.Equal(t, "preparing", (*events)[0].tags[tracking.TagPhase])
+}
+
+func TestQuitDuringTaskReportsRunningWatchers(t *testing.T) {
+	events := captureDevEvents(t)
+	m := newTestModel(t)
+	m.telemetry = newTelemetryState(false)
+	updated, _ := m.updateWatcherMsg(watcherStartedMsg{name: watcherAdmin, handle: &watcherHandle{}})
+	m = updated.(Model)
+	m.phase = phaseTask
+
+	_, cmd := m.Update(keyRune('q'))
+
+	require.NotNil(t, cmd)
+	assert.IsType(t, tea.QuitMsg{}, cmd())
+	names := make([]string, 0, len(*events))
+	for _, e := range *events {
+		names = append(names, e.name)
+	}
+	assert.Contains(t, names, tracking.EventDevWatcher)
+	assert.Contains(t, names, tracking.EventDevSession)
+	assert.Empty(t, m.watchers, "the watchers are stopped")
 }
