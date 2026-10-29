@@ -2,7 +2,6 @@ package extension
 
 import (
 	"fmt"
-	"os"
 	"path/filepath"
 
 	"github.com/spf13/cobra"
@@ -31,14 +30,6 @@ var extensionFixCmd = &cobra.Command{
 
 		// Tool selection was validated in PreRunE.
 		tools, statuses, _ := selectExtensionFixTools(only, exclude)
-
-		allowNonGit, _ := cmd.Flags().GetBool("allow-non-git")
-
-		if !allowNonGit {
-			if stat, err := os.Stat(filepath.Join(args[0], ".git")); err != nil || !stat.IsDir() {
-				return fmt.Errorf("%s is not a git repository. Use --allow-non-git flag to run anyway", args[0])
-			}
-		}
 
 		path, err := filepath.Abs(args[0])
 		if err != nil {
@@ -71,6 +62,7 @@ func init() {
 	extensionFixCmd.Flags().String("only", "", "Run only the specified fixers (comma-separated, e.g. eslint,rector)")
 	extensionFixCmd.Flags().String("exclude", "", "Exclude specified fixers from running (comma-separated, e.g. eslint,rector). When combined with --only, exclude fixers from the selected set")
 	extensionFixCmd.Flags().Bool("allow-non-git", false, "Allow fix to run outside a Git repository")
+	_ = extensionFixCmd.Flags().MarkDeprecated("allow-non-git", "a Git repository is no longer required; omit --allow-non-git")
 	_ = extensionFixCmd.RegisterFlagCompletionFunc("only", completeToolNames[verifier.FixTool])
 	_ = extensionFixCmd.RegisterFlagCompletionFunc("exclude", completeToolNames[verifier.FixTool])
 }
