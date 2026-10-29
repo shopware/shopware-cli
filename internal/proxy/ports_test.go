@@ -123,3 +123,30 @@ func TestNewEnvironment_ModeFollowsConfigUnlessFallback(t *testing.T) {
 	_, err = NewEnvironment(t.TempDir(), cfg, false)
 	assert.ErrorContains(t, err, "composer.lock", "a project without a lock has no environment")
 }
+
+func TestProjectDockerOptionsDetectViteFromDevServerScript(t *testing.T) {
+	dir := t.TempDir()
+	// Shopware 6.6 is below the version cutoff, so the dev:server script is
+	// what enables Vite in this fixture.
+	lock := `{"packages": [{"name": "shopware/core", "version": "6.6.0.0"}], "packages-dev": []}`
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "composer.lock"), []byte(lock), 0o644))
+	packagePath := filepath.Join(dir, "vendor", "shopware", "storefront", "Resources", "app", "storefront", "package.json")
+	require.NoError(t, os.MkdirAll(filepath.Dir(packagePath), 0o755))
+	require.NoError(t, os.WriteFile(packagePath, []byte(`{"scripts":{"dev:server":"vite --host"}}`), 0o644))
+	t.Setenv("APP_ENV", "dev")
+
+	opts := projectDockerOptions(dir, &shop.Config{})
+	assert.True(t, opts.StorefrontUsesVite)
+}
+
+func TestProjectDockerOptionsUseLegacyWatcherWithHotProxyScript(t *testing.T) {
+	dir := t.TempDir()
+	writeMinimalComposeProject(t, dir)
+	packagePath := filepath.Join(dir, "vendor", "shopware", "storefront", "Resources", "app", "storefront", "package.json")
+	require.NoError(t, os.MkdirAll(filepath.Dir(packagePath), 0o755))
+	require.NoError(t, os.WriteFile(packagePath, []byte(`{"scripts":{"hot-proxy":"node ./build/start-hot-reload.js"}}`), 0o644))
+	t.Setenv("APP_ENV", "dev")
+
+	opts := projectDockerOptions(dir, &shop.Config{})
+	assert.False(t, opts.StorefrontUsesVite)
+}

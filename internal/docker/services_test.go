@@ -1,9 +1,11 @@
 package docker
 
 import (
+	"slices"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestRoutedSubdomains(t *testing.T) {
@@ -18,18 +20,26 @@ func TestRoutedSubdomains(t *testing.T) {
 	assert.Equal(t,
 		[]string{"", subdomainAdminWatch, subdomainStorefrontWatch, "adminer", "mailer", "queue", "search", "s3", "storage"},
 		full.RoutedSubdomains())
+
+	vite := &Environment{storefrontUsesVite: true}
+	assert.Equal(t,
+		[]string{"", subdomainAdminWatch, subdomainStorefrontWatch, "adminer", "mailer"},
+		vite.RoutedSubdomains())
 }
 
 func TestServiceSubdomains(t *testing.T) {
 	t.Parallel()
 
-	// Web's custom routes share subdomains across several routes; they are
-	// reported once each, root first.
-	assert.Equal(t, []string{"", subdomainAdminWatch, subdomainStorefrontWatch}, serviceSubdomains(*byName(ServiceWeb)))
+	webService := byName(ServiceWeb)
+	require.NotNil(t, webService)
+
+	// The web hostnames are stable across legacy and Vite watcher modes.
+	assert.Equal(t, []string{"", subdomainAdminWatch, subdomainStorefrontWatch}, serviceSubdomains(*webService, &Environment{}))
+	assert.Equal(t, []string{"", subdomainAdminWatch, subdomainStorefrontWatch}, serviceSubdomains(*webService, &Environment{storefrontUsesVite: true}))
 	// Endpoint-derived: only endpoints with a subdomain are routed.
-	assert.Equal(t, []string{"mailer"}, serviceSubdomains(*byName(ServiceMailer)))
-	assert.Equal(t, []string{"s3", "storage"}, serviceSubdomains(*byName(ServiceStorage)))
-	assert.Empty(t, serviceSubdomains(*byName(ServiceDatabase)))
+	assert.Equal(t, []string{"mailer"}, serviceSubdomains(*byName(ServiceMailer), &Environment{}))
+	assert.Equal(t, []string{"s3", "storage"}, serviceSubdomains(*byName(ServiceStorage), &Environment{}))
+	assert.Empty(t, serviceSubdomains(*byName(ServiceDatabase), &Environment{}))
 }
 
 func TestRoutes(t *testing.T) {
@@ -65,4 +75,43 @@ func TestPortBindings(t *testing.T) {
 	// they are reachable from the host but not from the network.
 	assert.Equal(t, []string{"127.0.0.1:15672:15672", "127.0.0.1:5672:5672"}, portBindings(*byName(ServiceQueue), nil))
 	assert.Equal(t, []string{"127.0.0.1:19200:9200"}, portBindings(*byName(ServiceSearch), Ports{PortHTTP: 19200}))
+}
+
+func TestStorefrontViteEndpointDoesNotMutateCatalog(t *testing.T) {
+	t.Parallel()
+
+	webCatalogService := byName(ServiceWeb)
+	require.NotNil(t, webCatalogService)
+	catalogEndpoints := slices.Clone(webCatalogService.Endpoints)
+
+	vite := &Environment{storefrontUsesVite: true}
+	services := vite.activeServices()
+	web := serviceByName(services, ServiceWeb)
+	require.Equal(t, ServiceWeb, web.Name)
+	assert.Equal(
+		t,
+		endpointByName(catalogEndpoints, PortStorefrontVite),
+		endpointByName(web.Endpoints, PortStorefrontVite))
+	assert.Empty(t, endpointByName(web.Endpoints, PortStorefrontWatcher))
+	assert.Empty(t, endpointByName(web.Endpoints, PortStorefrontWatcherAssets))
+
+	assert.Equal(t, catalogEndpoints, webCatalogService.Endpoints)
+}
+
+func serviceByName(services []service, name string) service {
+	for _, svc := range services {
+		if svc.Name == name {
+			return svc
+		}
+	}
+	return service{}
+}
+
+func endpointByName(endpoints []endpoint, name string) endpoint {
+	for _, ep := range endpoints {
+		if ep.Name == name {
+			return ep
+		}
+	}
+	return endpoint{}
 }
