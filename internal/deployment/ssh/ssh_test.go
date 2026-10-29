@@ -1,4 +1,4 @@
-package deployment
+package ssh
 
 import (
 	"context"
@@ -10,34 +10,10 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/shopware/shopware-cli/internal/executor"
+	"github.com/shopware/shopware-cli/internal/deployment"
 	"github.com/shopware/shopware-cli/internal/shop"
 	"github.com/shopware/shopware-cli/internal/testhelper"
 )
-
-func TestNewBackend(t *testing.T) {
-	for _, kind := range []string{"", "local", "docker", "unknown"} {
-		t.Run(kind, func(t *testing.T) {
-			_, err := New(t.TempDir(), "", &shop.Config{}, &shop.EnvironmentConfig{Type: kind})
-			require.ErrorIs(t, err, ErrNotSupported)
-		})
-	}
-	_, err := New(t.TempDir(), "", &shop.Config{}, nil)
-	require.ErrorIs(t, err, ErrNotSupported)
-	for _, config := range []*shop.EnvironmentSSHConfig{
-		nil, {}, {Host: "example.invalid"}, {Directory: "/srv/shop"},
-	} {
-		_, err := New(t.TempDir(), "", &shop.Config{}, &shop.EnvironmentConfig{Type: "ssh", SSH: config})
-		require.Error(t, err)
-	}
-	backend, err := New(t.TempDir(), "", &shop.Config{}, &shop.EnvironmentConfig{
-		Type: "ssh", SSH: &shop.EnvironmentSSHConfig{Host: "example.invalid", Directory: "/srv/shop"},
-	})
-	require.NoError(t, err)
-	assert.Equal(t, "ssh", backend.Type())
-	_, generalExecutor := backend.(executor.Executor)
-	assert.False(t, generalExecutor, "deployment backends must not expose general execution")
-}
 
 func TestSSHCreateBuildsLocallyAndRetainsArchive(t *testing.T) {
 	if runtime.GOOS == "windows" {
@@ -67,9 +43,9 @@ build:
 	env := &shop.EnvironmentConfig{Type: "ssh", SSH: &shop.EnvironmentSSHConfig{Host: "example.invalid", Directory: "/var/www/shop/current"}}
 	backend, err := New(root, configPath, cfg, env)
 	require.NoError(t, err)
-	first, err := backend.CreateDeployment(t.Context(), CreateOptions{})
+	first, err := backend.CreateDeployment(t.Context(), deployment.CreateOptions{})
 	require.NoError(t, err)
-	second, err := backend.CreateDeployment(t.Context(), CreateOptions{})
+	second, err := backend.CreateDeployment(t.Context(), deployment.CreateOptions{})
 	require.NoError(t, err)
 	assert.NotEqual(t, first.Reference, second.Reference)
 	assert.Regexp(t, `^[a-z]+-[a-z]+-[a-z]+$`, first.Reference)
@@ -78,13 +54,13 @@ build:
 	assert.FileExists(t, filepath.Join(root, ".shopware-cli", "deployments", second.Reference+".tar.gz"))
 	assert.NoFileExists(t, sshArgsLog, "creation must not open SSH")
 	customPath := filepath.Join(t.TempDir(), "custom.tar.gz")
-	customDeployment, err := backend.CreateDeployment(t.Context(), CreateOptions{OutputPath: customPath})
+	customDeployment, err := backend.CreateDeployment(t.Context(), deployment.CreateOptions{OutputPath: customPath})
 	require.NoError(t, err)
 	assert.Equal(t, customPath, customDeployment.Reference)
 	assert.FileExists(t, customPath)
 	before, err := os.ReadFile(customPath)
 	require.NoError(t, err)
-	_, err = backend.CreateDeployment(t.Context(), CreateOptions{OutputPath: customPath})
+	_, err = backend.CreateDeployment(t.Context(), deployment.CreateOptions{OutputPath: customPath})
 	require.Error(t, err)
 	after, err := os.ReadFile(customPath)
 	require.NoError(t, err)
@@ -92,7 +68,7 @@ build:
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
 	canceledPath := filepath.Join(t.TempDir(), "canceled.tar.gz")
-	artifact, err := backend.CreateDeployment(ctx, CreateOptions{OutputPath: canceledPath})
+	artifact, err := backend.CreateDeployment(ctx, deployment.CreateOptions{OutputPath: canceledPath})
 	require.ErrorIs(t, err, context.Canceled)
 	assert.Empty(t, artifact.Reference)
 	assert.NoFileExists(t, canceledPath)
@@ -130,7 +106,7 @@ func TestSSHInitializationCancellationDoesNotWrite(t *testing.T) {
 	err := backend.initializeDeployment(t.Context(), func(context.Context, sshDeploymentInitState) (sshDeploymentInitConfig, bool, error) {
 		return sshDeploymentInitConfig{RuntimeValues: map[string]string{"APP_SECRET": "not-written"}}, false, nil
 	})
-	require.ErrorIs(t, err, ErrInitializationCanceled)
+	require.ErrorIs(t, err, deployment.ErrInitializationCanceled)
 	assert.Empty(t, store.writes)
 	assert.Equal(t, 1, store.inspections)
 }

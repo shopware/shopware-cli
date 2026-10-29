@@ -1,4 +1,4 @@
-package deployment
+package ssh
 
 import (
 	"context"
@@ -7,6 +7,8 @@ import (
 	"slices"
 	"strings"
 	"sync"
+
+	"github.com/shopware/shopware-cli/internal/deployment"
 )
 
 type sshHost struct {
@@ -48,7 +50,7 @@ func newSSHGroup(hosts []sshHost, migrationHost string, parallelism int) (*sshGr
 func (g *sshGroup) Type() string { return "ssh" }
 
 // CreateDeployment creates the archive using the migration host configuration.
-func (g *sshGroup) CreateDeployment(ctx context.Context, options CreateOptions) (Deployment, error) {
+func (g *sshGroup) CreateDeployment(ctx context.Context, options deployment.CreateOptions) (deployment.Deployment, error) {
 	return g.hosts[g.migration].backend.CreateDeployment(ctx, options)
 }
 

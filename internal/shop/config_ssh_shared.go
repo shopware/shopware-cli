@@ -8,18 +8,35 @@ import (
 	"unicode"
 )
 
+const sshSharedExcludedPath = "var/cache"
+
+var (
+	defaultSSHSharedFiles = []string{
+		".env.local", "install.lock", "public/.htaccess", "public/.user.ini",
+	}
+	defaultSSHSharedDirectories = []string{
+		"config/jwt", "files", "var/log", "public/media", "public/plugins",
+		"public/thumbnail", "public/sitemap", "public/theme",
+	}
+)
+
 type EnvironmentSSHSharedConfig struct {
-	// Project-relative files to share between releases. Omit to use .env.local, install.lock, public/.htaccess and public/.user.ini. An explicit list replaces the defaults; [] disables shared files.
+	// Project-relative files to share between releases. Omit to use .env.local,
+	// install.lock, public/.htaccess and public/.user.ini. An explicit list
+	// replaces the defaults; [] disables shared files.
 	Files *[]string `yaml:"files,omitempty"`
-	// Project-relative directories to share between releases. Omit to use config/jwt, files, var/log, public/media, public/plugins, public/thumbnail, public/sitemap and public/theme. An explicit list replaces the defaults; [] disables shared directories.
+	// Project-relative directories to share between releases. Omit to use
+	// config/jwt, files, var/log, public/media, public/plugins, public/thumbnail,
+	// public/sitemap and public/theme. An explicit list replaces the defaults;
+	// [] disables shared directories.
 	Directories *[]string `yaml:"directories,omitempty"`
 }
 
 // SharedPaths resolves each list independently. Pointers preserve explicitly
 // empty lists when project configuration is written back to YAML.
 func (c *EnvironmentSSHConfig) SharedPaths() (files, directories []string, err error) {
-	files = []string{".env.local", "install.lock", "public/.htaccess", "public/.user.ini"}
-	directories = []string{"config/jwt", "files", "var/log", "public/media", "public/plugins", "public/thumbnail", "public/sitemap", "public/theme"}
+	files = slices.Clone(defaultSSHSharedFiles)
+	directories = slices.Clone(defaultSSHSharedDirectories)
 	if c != nil && c.Shared != nil {
 		if c.Shared.Files != nil {
 			files = slices.Clone(*c.Shared.Files)
@@ -37,8 +54,9 @@ func (c *EnvironmentSSHConfig) SharedPaths() (files, directories []string, err e
 			strings.ContainsRune(name, '\\') || strings.ContainsFunc(name, unicode.IsControl) {
 			return nil, nil, fmt.Errorf("ssh.shared path %q must be a clean project-relative path", name)
 		}
-		if name == "var" || name == "var/cache" || strings.HasPrefix(name, "var/cache/") {
-			return nil, nil, fmt.Errorf("ssh.shared path %q overlaps var/cache, which must remain host- and release-local", name)
+		if name == sshSharedExcludedPath || strings.HasPrefix(name, sshSharedExcludedPath+"/") ||
+			strings.HasPrefix(sshSharedExcludedPath, name+"/") {
+			return nil, nil, fmt.Errorf("ssh.shared path %q overlaps %s, which must remain host- and release-local", name, sshSharedExcludedPath)
 		}
 		for _, previous := range paths[:i] {
 			if name == previous || strings.HasPrefix(name, previous+"/") || strings.HasPrefix(previous, name+"/") {

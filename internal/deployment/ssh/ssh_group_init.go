@@ -1,18 +1,23 @@
-package deployment
+package ssh
 
 import (
 	"context"
 	"errors"
 	"fmt"
 
+	"github.com/shopware/shopware-cli/internal/deployment"
 	"github.com/shopware/shopware-cli/logging"
 )
 
-var _ Initializer = (*sshGroup)(nil)
+var _ deployment.Initializer = (*sshGroup)(nil)
 
-// InitializeDeployment prompts for configuration and initializes the SSH deployment target.
-func (g *sshGroup) InitializeDeployment(ctx context.Context) error {
-	return g.initializeDeployment(ctx, g.hosts[g.migration].backend.promptDeploymentInitialization)
+// InitializeDeployment initializes the group using the migration host's configuration.
+func (g *sshGroup) InitializeDeployment(ctx context.Context, options deployment.InitializationOptions) error {
+	prompt, err := g.hosts[g.migration].backend.initializationPrompt(ctx, options)
+	if err != nil {
+		return err
+	}
+	return g.initializeDeployment(ctx, prompt)
 }
 
 // Initialization uses each host's ordinary deployment lock during inspection
@@ -47,7 +52,7 @@ func (g *sshGroup) initializeDeployment(ctx context.Context, prompt func(context
 			return err
 		}
 		if !confirmed {
-			return ErrInitializationCanceled
+			return deployment.ErrInitializationCanceled
 		}
 		host := g.hosts[g.migration]
 		if err := host.backend.initStore.Apply(ctx, config); err != nil {

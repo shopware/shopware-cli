@@ -1,4 +1,4 @@
-package deployment
+package ssh
 
 import (
 	"context"
@@ -13,16 +13,45 @@ import (
 
 	"charm.land/huh/v2"
 
+	"github.com/shopware/shopware-cli/internal/deployment"
 	shopinstall "github.com/shopware/shopware-cli/internal/shop/install"
+	"github.com/shopware/shopware-cli/internal/system"
 	"github.com/shopware/shopware-cli/internal/tui"
 	"github.com/shopware/shopware-cli/logging"
 )
 
-var _ Initializer = (*SSH)(nil)
+var _ deployment.Initializer = (*SSH)(nil)
 
-// InitializeDeployment prompts for configuration and initializes the SSH deployment target.
-func (s *SSH) InitializeDeployment(ctx context.Context) error {
-	return s.initializeDeployment(ctx, s.promptDeploymentInitialization)
+// InitializeDeployment initializes the SSH target from a form or supplied configuration.
+func (s *SSH) InitializeDeployment(ctx context.Context, options deployment.InitializationOptions) error {
+	prompt, err := s.initializationPrompt(ctx, options)
+	if err != nil {
+		return err
+	}
+	return s.initializeDeployment(ctx, prompt)
+}
+
+func (s *SSH) initializationPrompt(ctx context.Context, options deployment.InitializationOptions) (func(context.Context, sshDeploymentInitState) (sshDeploymentInitConfig, bool, error), error) {
+	if options.Config == nil {
+		if !system.IsInteractionEnabled(ctx) {
+			return nil, errors.New("cannot initialize deployment without interaction: pass --init-config with a JSON file or '-' for stdin")
+		}
+		return s.promptDeploymentInitialization, nil
+	}
+	config, err := prepareInitializationConfig(*options.Config)
+	if err != nil {
+		return nil, err
+	}
+	return func(_ context.Context, state sshDeploymentInitState) (sshDeploymentInitConfig, bool, error) {
+		if _, provided := config.RuntimeValues["APP_SECRET"]; !provided && !slices.Contains(state.RuntimeKeys, "APP_SECRET") {
+			secret, err := deploymentSecret()
+			if err != nil {
+				return config, false, err
+			}
+			config.RuntimeValues["APP_SECRET"] = secret
+		}
+		return config, true, nil
+	}, nil
 }
 
 // initializeDeployment inspects the target and writes configuration only after confirmation.
@@ -40,7 +69,7 @@ func (s *SSH) initializeDeployment(ctx context.Context, prompt func(context.Cont
 		return err
 	}
 	if !confirmed {
-		return ErrInitializationCanceled
+		return deployment.ErrInitializationCanceled
 	}
 	return s.initStore.Apply(ctx, config)
 }

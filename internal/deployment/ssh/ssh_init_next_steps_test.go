@@ -1,4 +1,4 @@
-package deployment
+package ssh
 
 import (
 	"bytes"
@@ -13,6 +13,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/shopware/shopware-cli/internal/deployment"
 	"github.com/shopware/shopware-cli/internal/shop"
 	"github.com/shopware/shopware-cli/internal/testhelper"
 )
@@ -32,7 +33,7 @@ func TestInitializationNextStepsPreserveCommandContext(t *testing.T) {
 	})
 	require.NoError(t, err)
 	var output bytes.Buffer
-	require.NoError(t, backend.(InitializationGuide).WriteInitializationNextSteps(environment, &output))
+	require.NoError(t, backend.(deployment.InitializationGuide).WriteInitializationNextSteps(environment, &output))
 	assert.Contains(t, output.String(), `"/srv/shop/shared/.env.local"`)
 	assert.Contains(t, output.String(), `"/srv/shop/live/public"`)
 	var command string
@@ -68,7 +69,7 @@ func TestInitializationNextStepsIncludeAllTargets(t *testing.T) {
 		},
 	})
 	require.NoError(t, err)
-	guide := backend.(InitializationGuide)
+	guide := backend.(deployment.InitializationGuide)
 	var output bytes.Buffer
 	require.NoError(t, guide.WriteInitializationNextSteps("", &output))
 	assert.Contains(t, output.String(), `"first.example.invalid": "/srv/shop/shared/.env.local"`)

@@ -1,4 +1,4 @@
-package deployment
+package ssh
 
 import (
 	"context"
@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/shopware/shopware-cli/internal/deployment"
 	"github.com/shopware/shopware-cli/internal/shop"
 )
 
@@ -71,7 +72,7 @@ func TestSSHGroupInitializationPromptStopsWithoutWriting(t *testing.T) {
 		err  error
 		want error
 	}{
-		{"canceled", nil, ErrInitializationCanceled},
+		{"canceled", nil, deployment.ErrInitializationCanceled},
 		{"failed", promptErr, promptErr},
 	} {
 		t.Run(test.name, func(t *testing.T) {

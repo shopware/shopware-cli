@@ -2,6 +2,7 @@ package shop
 
 import (
 	"path/filepath"
+	"slices"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -44,6 +45,28 @@ func TestSSHSharedPaths(t *testing.T) {
 				cfg = EnvironmentSSHConfig{}
 				require.NoError(t, yaml.Unmarshal(encoded, &cfg), "explicit empty lists must survive serialization")
 			}
+		})
+	}
+}
+
+func TestSSHSharedPathsReturnsIndependentSlices(t *testing.T) {
+	for _, config := range []string{"{}", "shared:\n  files: [custom/runtime.ini]\n  directories: [custom/data]"} {
+		t.Run(config, func(t *testing.T) {
+			var cfg EnvironmentSSHConfig
+			require.NoError(t, yaml.Unmarshal([]byte(config), &cfg))
+			wantFiles, wantDirectories, err := cfg.SharedPaths()
+			require.NoError(t, err)
+			wantFiles = slices.Clone(wantFiles)
+			wantDirectories = slices.Clone(wantDirectories)
+			files, directories, err := cfg.SharedPaths()
+			require.NoError(t, err)
+			files[0] = "changed-file"
+			directories[0] = "changed-directory"
+
+			files, directories, err = cfg.SharedPaths()
+			require.NoError(t, err)
+			assert.Equal(t, wantFiles, files)
+			assert.Equal(t, wantDirectories, directories)
 		})
 	}
 }

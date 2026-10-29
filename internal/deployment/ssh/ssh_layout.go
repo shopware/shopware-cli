@@ -1,4 +1,4 @@
-package deployment
+package ssh
 
 import (
 	_ "embed"
@@ -20,6 +20,8 @@ func withSSHDeploymentLayout(script string) string {
 // releases, shared data and deployment metadata, regardless of the link's name.
 func (s *SSH) deploymentRoot() (string, error) {
 	current := path.Clean(s.directory)
+	// Reject ASCII control characters below space (0x20) and DEL (0x7f),
+	// matching the remote PHP layout validation.
 	if !path.IsAbs(current) || path.Dir(current) == "/" ||
 		strings.Contains(s.directory, "\\") ||
 		strings.ContainsFunc(s.directory, func(r rune) bool { return r < 0x20 || r == 0x7f }) {

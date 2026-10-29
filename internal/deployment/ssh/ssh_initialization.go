@@ -1,4 +1,4 @@
-package deployment
+package ssh
 
 import (
 	"bytes"
@@ -9,6 +9,8 @@ import (
 	"fmt"
 	"slices"
 	"strings"
+
+	"github.com/shopware/shopware-cli/internal/deployment"
 )
 
 //go:embed ssh_deployment_init.php
@@ -40,17 +42,23 @@ func (s sshDeploymentInitState) HasValidRuntimeConfig() bool {
 	return s.HasRuntimeConfig && s.RuntimeSHA256 != ""
 }
 
-type sshDeploymentInitConfig struct {
-	RuntimeValues map[string]string
-	InstallValues map[string]string
-}
+type sshDeploymentInitConfig = deployment.InitializationConfig
+
+// sshDeploymentInitAction values are the JSON action names accepted by
+// ssh_deployment_init.php; keep these strings in sync with its dispatch branches.
+type sshDeploymentInitAction string
+
+const (
+	sshDeploymentInitInspect sshDeploymentInitAction = "inspect"
+	sshDeploymentInitApply   sshDeploymentInitAction = "apply"
+)
 
 type sshDeploymentInitInput struct {
-	Action        string            `json:"action"`
-	Root          string            `json:"root"`
-	Current       string            `json:"current,omitempty"`
-	RuntimeValues map[string]string `json:"runtime_values,omitempty"`
-	InstallValues map[string]string `json:"install_values,omitempty"`
+	Action        sshDeploymentInitAction `json:"action"`
+	Root          string                  `json:"root"`
+	Current       string                  `json:"current,omitempty"`
+	RuntimeValues map[string]string       `json:"runtime_values,omitempty"`
+	InstallValues map[string]string       `json:"install_values,omitempty"`
 }
 
 // Inspect reads remote initialization metadata without returning configuration secrets.
@@ -60,7 +68,7 @@ func (s sshInitializationStore) Inspect(ctx context.Context) (sshDeploymentInitS
 	if err != nil {
 		return state, err
 	}
-	output, err := s.run(ctx, sshDeploymentInitInput{Action: "inspect", Root: root, Current: s.ssh.activeLinkName()})
+	output, err := s.run(ctx, sshDeploymentInitInput{Action: sshDeploymentInitInspect, Root: root, Current: s.ssh.activeLinkName()})
 	if err != nil {
 		return state, err
 	}
@@ -82,7 +90,7 @@ func (s sshInitializationStore) Apply(ctx context.Context, config sshDeploymentI
 		return errors.New("deployment initialization has no values to write")
 	}
 	_, err = s.run(ctx, sshDeploymentInitInput{
-		Action: "apply", Root: root, Current: s.ssh.activeLinkName(), RuntimeValues: config.RuntimeValues, InstallValues: config.InstallValues,
+		Action: sshDeploymentInitApply, Root: root, Current: s.ssh.activeLinkName(), RuntimeValues: config.RuntimeValues, InstallValues: config.InstallValues,
 	})
 	return err
 }

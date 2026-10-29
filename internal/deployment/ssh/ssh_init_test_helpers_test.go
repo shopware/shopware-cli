@@ -1,4 +1,4 @@
-package deployment
+package ssh
 
 import (
 	"context"

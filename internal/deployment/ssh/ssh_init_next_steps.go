@@ -1,4 +1,4 @@
-package deployment
+package ssh
 
 import (
 	"fmt"
@@ -6,10 +6,12 @@ import (
 	"path"
 	"path/filepath"
 	"strings"
+
+	"github.com/shopware/shopware-cli/internal/deployment"
 )
 
-var _ InitializationGuide = (*SSH)(nil)
-var _ InitializationGuide = (*sshGroup)(nil)
+var _ deployment.InitializationGuide = (*SSH)(nil)
+var _ deployment.InitializationGuide = (*sshGroup)(nil)
 
 // WriteInitializationNextSteps prints configuration locations and follow-up commands for the deployment targets.
 func (s *SSH) WriteInitializationNextSteps(environment string, output io.Writer) error {
