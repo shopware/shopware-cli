@@ -125,7 +125,7 @@ To make the setting **persistent**, add the export command to your shell profile
 
 ## Official Agent Skills
 
-Shopware CLI maintainers provide official Agent Skills in this repository's `skills/` folder. These skills teach compatible AI coding agents how to use Shopware CLI workflows safely and correctly. 
+Shopware CLI maintainers provide official Agent Skills in this repository's `skills/` folder. These skills teach compatible AI coding agents how to use Shopware CLI workflows safely and correctly.
 
 Install them with:
 

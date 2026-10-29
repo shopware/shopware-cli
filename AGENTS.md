@@ -5,6 +5,7 @@ This file provides guidance to AI coding agents when working with code in this r
 ## Development Commands
 
 ### Building and Running
+
 - Prefer using `mise run [task]` if installed, otherwise:
   - **Build the CLI**: `go build -o ./bin/shopware-cli .`
   - **Run directly**: `go run main.go [command]`
@@ -13,6 +14,7 @@ This file provides guidance to AI coding agents when working with code in this r
   - **Verbose test output**: `go test -v ./...`
 
 ### Code Quality
+
 - **Prefer Go 1.24 packages** like slices package
 - **Check Go modules**: `go mod tidy`
 - **Format code**: `go fmt ./...`
@@ -21,11 +23,13 @@ This file provides guidance to AI coding agents when working with code in this r
 ## Architecture Overview
 
 ### Core Command Groups
+
 1. **`account/`** - Shopware Account management (login, companies, extensions)
 2. **`extension/`** - Extension development tools (build, validate, AI assistance)
 3. **`project/`** - Shopware project management (creation, configuration, deployment)
 
 ### Key Internal Packages
+
 - **`internal/verifier/`** - Code quality tools (PHPStan, ESLint, Twig linting)
 - **`internal/account-api/`** - Shopware Account API integration
 - **`internal/system/`** - System utilities (PHP/Node detection, filesystem)
@@ -36,7 +40,9 @@ This file provides guidance to AI coding agents when working with code in this r
 - **`internal/ci/`** - CI/CD configuration generation
 
 ### Extension System
+
 The CLI supports three extension types:
+
 - **Platform Plugins**: Standard Shopware 6 plugins with `composer.json`
 - **Shopware Apps**: App system extensions with `manifest.xml`
 - **Shopware Bundles**: Custom bundle implementations
@@ -44,6 +50,7 @@ The CLI supports three extension types:
 Extension detection is automatic based on file presence. Each type has specific build, validation, and packaging rules.
 
 ### Configuration Files
+
 - **`.shopware-cli.yaml`** - Global CLI configuration
 - **`.config/shopware-extension.yml` / `.shopware-extension.yml` / `.shopware-extension.yaml`** - Extension-specific settings (schema: `internal/extension/config_schema.json`, embedded and exposed via `shopware-cli extension config-schema`). Only one file is loaded and the first is preferred / used for new projects, the others are legacy and still supported
 - **`.config/shopware-project.yml` / `.shopware-project.yaml` / `.shopware-project.yml`** - Project-specific settings (schema: `internal/shop/config_schema.json`, embedded and exposed via `shopware-cli project config-schema`). Shop URL and Admin API credentials belong under `environments`; empty `-e` defaults to `environments.local`. Top-level `url` / `admin_api` are deprecated. An environment's `type` is `local`, `docker`, or `ssh`; `ssh` targets point at a remote host via `ssh.host`/`ssh.user`/`ssh.directory` and run commands through a multiplexed SSH connection (database connections are tunneled automatically). Only one file is loaded and the first is preferred / used for new projects, the others are legacy and still supported
@@ -51,12 +58,15 @@ Extension detection is automatic based on file presence. Each type has specific 
 ## Development Patterns
 
 ### Command Structure
+
 Commands follow Cobra CLI patterns with:
+
 - Main command in `cmd/[group]/[group].go`
 - Subcommands in `cmd/[group]/[group]_[subcommand].go`
 - Service containers for dependency injection
 
 ### Testing Strategy
+
 - Unit tests alongside source files (`*_test.go`)
 - Use testify assert for test assertions (`github.com/stretchr/testify/assert`)
 - Test data in `testdata/` directories
@@ -66,12 +76,15 @@ Commands follow Cobra CLI patterns with:
 - Use t.Context() for Context creation in tests
 
 ### Error Handling
+
 - Use structured logging via `go.uber.org/zap`
 - Context-based logging: `logging.FromContext(ctx)`
 - Graceful error reporting to users
 
 ### Command Conventions
+
 Follow `docs/COMMAND_CONVENTIONS.md` for every command, flag and message. The short version:
+
 - Short texts are imperative, capitalised, no period; a parent command describes the group
 - `Use` shows required arguments bare and optional ones in brackets, no angle brackets; every leaf command declares `Args`
 - Errors are lowercase `cannot <verb> ...: %w` without Go identifiers, hints in quotes; log lines are capitalised sentences
@@ -79,7 +92,9 @@ Follow `docs/COMMAND_CONVENTIONS.md` for every command, flag and message. The sh
 - Test the invoked `internal/` function, never the cobra layer, and test behaviour, not message wording
 
 ### AI Integration
+
 The CLI includes AI-powered features for:
+
 - Twig template upgrades (`extension ai twig-upgrade`)
 - Code quality suggestions
 - Automated fixes for common issues
@@ -89,6 +104,7 @@ LLM providers are configurable (OpenAI, Gemini, OpenRouter) with API key managem
 ## Extension Development Workflow
 
 ### Building Extensions
+
 ```bash
 # Build extension (auto-detects type)
 shopware-cli extension build
@@ -104,6 +120,7 @@ shopware-cli extension package
 ```
 
 ### Project Management
+
 ```bash
 # Create new project
 shopware-cli project create

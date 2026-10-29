@@ -1,4 +1,5 @@
 ## What changed?
+
 _If this PR makes TUI or CLI output changes, please add screenshots or examples that show the before and after behavior._
 
 ## Why?

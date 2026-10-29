@@ -1,0 +1,21 @@
+globs:
+  - "**/*.{md,mdx}"
+gitignore: true
+ignores:
+  # Installed and updated by gh-aw; keep upstream formatting intact.
+  - ".github/agents/agentic-workflows.md"
+  - ".github/skills/agentic-workflows/SKILL.md"
+config:
+  extends: markdownlint/style/prettier
+  # Documents with metadata still have their own visible top-level heading.
+  MD025:
+    front_matter_title: ""
+  MD041:
+    front_matter_title: ""
+overrides:
+  - filter:
+      - ".github/pull_request_template.md"
+    combine: merge
+    config:
+      # A PR template contains sections rather than a document title.
+      MD041: false

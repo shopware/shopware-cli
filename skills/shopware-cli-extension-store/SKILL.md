@@ -53,44 +53,45 @@ CLI rules are cited by their **result identifier**, not a file or line number: i
 grep -rn '"metadata.icon.size"' --include=*.go internal/ | grep -v _test
 ```
 
-| # | Condition | Level | Target | Source | Emit only if |
-|---|---|---|---|---|---|
-| L0 | Any other error line printed by `extension validate` | CLI-enforced | Local file | the result identifier printed in that line, for example `metadata.label`, `metadata.icon`, `metadata.icon.size`, `assets.*` | always |
-| L1 | `extra.description` per locale is 150–185 chars | CLI-enforced | Local file | `metadata.description` | always |
-| L2 | `extra.manufacturerLink` per locale present | CLI-enforced | Local file | `metadata.manufacturer` | always |
-| L3 | `extra.supportLink` per locale present | CLI-enforced | Local file | `metadata.support` | always |
-| L4 | `src/Resources/config/plugin.png` is 84–256 px in both dimensions | Store-doc-required | Local artifact | docs `#images-and-screenshots` | icon present (a missing icon is the CLI's `metadata.icon` line, L0) |
-| L5 | `authors` key present in `composer.json` | CLI-enforced | Local file | `metadata.author` | always |
-| R1 | Published in the international Store | Store-doc-required | Remote listing | docs `#store-listing` | always |
-| R2 | Short description 150–185 chars | Store-doc-required | Remote listing | docs `#store-listing` | always |
-| R3 | Long description ≥200 chars | Store-doc-required | Remote listing | docs `#store-listing` | always |
-| R4 | Descriptions and use cases are meaningful and accurate | Store-doc-required | Remote listing | docs `#store-listing` | always |
-| R5 | Display name avoids "plugin" and "shopware" | Store-doc-required | Remote listing | docs `#store-listing` | always |
-| R6 | Clear, complete setup/configuration instructions | Store-doc-required | Remote listing | docs `#store-listing` | always |
-| R7 | Clean HTML, allowed tags only, no ads/contact info/backlinks | Store-doc-required | Remote listing | docs `#store-listing` | always |
-| R8 | No blank-space filler text | Store-doc-required | Remote listing | docs `#store-listing` | always |
-| R9 | German/English 1:1 parity | Store-doc-required | Remote listing | docs `#store-listing` | user states German Store intent, **or** `de-DE` values exist in `composer.json` (state which triggered it) |
-| R10 | English fallback for settings and error messages | Store-doc-required | Extension behavior | docs `#admin-translations` | extension has user-facing settings or error messages |
-| A1 | Shopware Account license matches the `composer.json` license **value** | Store-doc-required | Remote Account | docs `#extension-master-data-and-license` | always |
-| G1 | ≥1 storefront and ≥1 admin screenshot showing main features | Store-doc-guidance | Remote listing | docs `#images-and-screenshots` (*should*) | always |
-| G2 | Mobile and desktop screenshots | Store-doc-guidance | Remote listing | docs `#images-and-screenshots` (*prefer*) | always |
-| G3 | Theme preview image in Theme Manager | Store-doc-required | Remote listing | docs `#images-and-screenshots` | extension is a theme |
-| G4 | CMS element icon | Store-doc-required | Local artifact | docs `#images-and-screenshots` | extension ships CMS elements |
+| #   | Condition                                                              | Level              | Target             | Source                                                                                                                      | Emit only if                                                                                               |
+| --- | ---------------------------------------------------------------------- | ------------------ | ------------------ | --------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| L0  | Any other error line printed by `extension validate`                   | CLI-enforced       | Local file         | the result identifier printed in that line, for example `metadata.label`, `metadata.icon`, `metadata.icon.size`, `assets.*` | always                                                                                                     |
+| L1  | `extra.description` per locale is 150–185 chars                        | CLI-enforced       | Local file         | `metadata.description`                                                                                                      | always                                                                                                     |
+| L2  | `extra.manufacturerLink` per locale present                            | CLI-enforced       | Local file         | `metadata.manufacturer`                                                                                                     | always                                                                                                     |
+| L3  | `extra.supportLink` per locale present                                 | CLI-enforced       | Local file         | `metadata.support`                                                                                                          | always                                                                                                     |
+| L4  | `src/Resources/config/plugin.png` is 84–256 px in both dimensions      | Store-doc-required | Local artifact     | docs `#images-and-screenshots`                                                                                              | icon present (a missing icon is the CLI's `metadata.icon` line, L0)                                        |
+| L5  | `authors` key present in `composer.json`                               | CLI-enforced       | Local file         | `metadata.author`                                                                                                           | always                                                                                                     |
+| R1  | Published in the international Store                                   | Store-doc-required | Remote listing     | docs `#store-listing`                                                                                                       | always                                                                                                     |
+| R2  | Short description 150–185 chars                                        | Store-doc-required | Remote listing     | docs `#store-listing`                                                                                                       | always                                                                                                     |
+| R3  | Long description ≥200 chars                                            | Store-doc-required | Remote listing     | docs `#store-listing`                                                                                                       | always                                                                                                     |
+| R4  | Descriptions and use cases are meaningful and accurate                 | Store-doc-required | Remote listing     | docs `#store-listing`                                                                                                       | always                                                                                                     |
+| R5  | Display name avoids "plugin" and "shopware"                            | Store-doc-required | Remote listing     | docs `#store-listing`                                                                                                       | always                                                                                                     |
+| R6  | Clear, complete setup/configuration instructions                       | Store-doc-required | Remote listing     | docs `#store-listing`                                                                                                       | always                                                                                                     |
+| R7  | Clean HTML, allowed tags only, no ads/contact info/backlinks           | Store-doc-required | Remote listing     | docs `#store-listing`                                                                                                       | always                                                                                                     |
+| R8  | No blank-space filler text                                             | Store-doc-required | Remote listing     | docs `#store-listing`                                                                                                       | always                                                                                                     |
+| R9  | German/English 1:1 parity                                              | Store-doc-required | Remote listing     | docs `#store-listing`                                                                                                       | user states German Store intent, **or** `de-DE` values exist in `composer.json` (state which triggered it) |
+| R10 | English fallback for settings and error messages                       | Store-doc-required | Extension behavior | docs `#admin-translations`                                                                                                  | extension has user-facing settings or error messages                                                       |
+| A1  | Shopware Account license matches the `composer.json` license **value** | Store-doc-required | Remote Account     | docs `#extension-master-data-and-license`                                                                                   | always                                                                                                     |
+| G1  | ≥1 storefront and ≥1 admin screenshot showing main features            | Store-doc-guidance | Remote listing     | docs `#images-and-screenshots` (_should_)                                                                                   | always                                                                                                     |
+| G2  | Mobile and desktop screenshots                                         | Store-doc-guidance | Remote listing     | docs `#images-and-screenshots` (_prefer_)                                                                                   | always                                                                                                     |
+| G3  | Theme preview image in Theme Manager                                   | Store-doc-required | Remote listing     | docs `#images-and-screenshots`                                                                                              | extension is a theme                                                                                       |
+| G4  | CMS element icon                                                       | Store-doc-required | Local artifact     | docs `#images-and-screenshots`                                                                                              | extension ships CMS elements                                                                               |
 
 Nothing outside this table is a finding, because nothing outside it has a source. Every CLI error line has one, its identifier, which is what L0 is for. In particular, never emit: `store.type`, demo shops, API credential checks, install/uninstall hooks, logging or JS rules for absent features, README/CHANGELOG/LICENSE-file pseudo-requirements, or generic compatibility-date advice.
 
 ### CLI-vs-docs conflicts — defer to docs
 
 When CLI and docs disagree on a requirement:
+
 - Follow the **docs** reading (canonical Store review standard).
 - Flag the CLI gap or mismatch as a note only if useful for understanding why local validation passed but Store review may differ.
 - Do not report the CLI reading as correct if docs have been updated.
 - CLI error lines stay under Required local changes regardless: they set the exit code. Put the docs reading next to them as a note.
 
 Known differences:
+
 - Icon: the CLI's `metadata.icon.size` check rejects icons below 112 px and files above 30 kB, stricter than L4. When it fires, add that the Store standard is 84–256 px.
 - German metadata: the CLI requires `de-DE` label, description, manufacturerLink and supportLink unless `.shopware-extension.yml` sets `store.availabilities` without `German`. When those lines fire for an extension meant for the international Store only, name that setting.
-
 
 ## 3. Emit rules
 
@@ -102,7 +103,7 @@ Eight invariants. Check each finding against all eight before writing it.
 4. **Preconditions gate emission.** A row whose `Emit only if` is not proven true by evidence from §1 emits nothing at all. Not as "N/A", not as "not applicable", not as a struck-through line. It is absent. R9 and R10 are omitted entirely for an extension with no German Store intent and no settings UI.
 5. **Local values are candidates, not proof.** Name the row and the specific rule the value bumps against, not generic advice: a label containing "Plugin" is incompatible with R5's prohibited-words rule, which is a different statement from "rename it to something better".
    - A candidate entry requires a **measured deficiency** — a value you read that conflicts with a named rule. A precondition firing is not a deficiency. If `config.xml` exists and its fields carry unqualified defaults plus `lang="…"` variants, the English fallback is present; say so or say nothing. Never write "verify that…" or "this may not…" about a file you have read: you either found a conflict and can quote it, or you did not.
-   - Never propose a change that would delete existing content (translations, locales, fields) to satisfy a rule that content already satisfies. A `composer.json` label or description is a *sync candidate*. It may be described as compatible or incompatible with a remote rule. It never satisfies or fails one. R5 with a local label of "Acme Plugin" yields: remote display name unverified, **plus** a separate note that the local label candidate looks incompatible.
+   - Never propose a change that would delete existing content (translations, locales, fields) to satisfy a rule that content already satisfies. A `composer.json` label or description is a _sync candidate_. It may be described as compatible or incompatible with a remote rule. It never satisfies or fails one. R5 with a local label of "Acme Plugin" yields: remote display name unverified, **plus** a separate note that the local label candidate looks incompatible.
 6. **Every local finding needs a quoted artifact.** A required local change must cite either a verbatim CLI output line or a measured value from §1. No line and no measurement means it is not a required local change.
    - A row may be marked **CLI-enforced** only if the CLI output contains a matching error line. If validation printed `No problems found`, the Required local changes section is empty. Write "none". Never infer a CLI finding from reading `composer.json` yourself.
    - Every error line the CLI printed appears under Required local changes exactly once: under L1–L5 when the identifier matches, otherwise under L0.
@@ -116,30 +117,29 @@ Eight invariants. Check each finding against all eight before writing it.
 
 `content-and-translations` is the **baseline**: read it every run, it backs the table in §2. Read any other page only when its trigger fires, and add its rows to the answer as sourced findings. Never audit the whole set unprompted.
 
-| Page | Covers | Read when |
-|---|---|---|
-| [`quality-guidelines`](https://developer.shopware.com/docs/guides/development/testing/store/quality-guidelines.html) | Non-negotiable quality, security, compliance rules for every extension | user asks for a full compliance audit or pre-submission review |
-| [`content-and-translations`](https://developer.shopware.com/docs/guides/development/testing/store/content-and-translations.html) | Listing text, translations, images, icon, license | **always** |
-| [`store-review-errors`](https://developer.shopware.com/docs/guides/development/testing/store/store-review-errors.html) | Common reasons reviewers reject a submission | user asks why a submission failed, or wants rejection risks |
-| [`not-allowed-store-behaviors`](https://developer.shopware.com/docs/guides/development/testing/store/not-allowed-store-behaviors.html) | Prohibited patterns | extension touches core internals, filesystem, or DB directly |
-| [`functionality-integration`](https://developer.shopware.com/docs/guides/development/testing/store/functionality-integration.html) | Correct integration with core, persistence, public APIs | extension has subscribers, entities, or API endpoints |
-| [`code-quality`](https://developer.shopware.com/docs/guides/development/testing/store/code-quality.html) | Code standards reviewers apply | user asks about code quality, or code-quality checkers were invoked |
-| [`installation-and-cleanup`](https://developer.shopware.com/docs/guides/development/testing/store/installation-and-cleanup.html) | Install/update/uninstall and data removal | extension implements lifecycle methods or creates tables |
-| [`cookies-and-privacy`](https://developer.shopware.com/docs/guides/development/testing/store/cookies-and-privacy.html) | Cookie registration, GDPR, subprocessors | extension sets cookies, tracks, or sends data to third parties |
-| [`seo-and-structured-data`](https://developer.shopware.com/docs/guides/development/testing/store/seo-and-structured-data.html) | SEO output and structured data | extension changes storefront markup, URLs, or meta tags |
-| [`storefront-performance-and-errors`](https://developer.shopware.com/docs/guides/development/testing/store/storefront-performance-and-errors.html) | Storefront performance and error handling | extension ships storefront JS/CSS or template overrides |
-| [`faq`](https://developer.shopware.com/docs/guides/development/testing/store/faq.html) | Preview requirements and misc answers | user asks about previews or something the other pages miss |
+| Page                                                                                                                                               | Covers                                                                 | Read when                                                           |
+| -------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------- | ------------------------------------------------------------------- |
+| [`quality-guidelines`](https://developer.shopware.com/docs/guides/development/testing/store/quality-guidelines.html)                               | Non-negotiable quality, security, compliance rules for every extension | user asks for a full compliance audit or pre-submission review      |
+| [`content-and-translations`](https://developer.shopware.com/docs/guides/development/testing/store/content-and-translations.html)                   | Listing text, translations, images, icon, license                      | **always**                                                          |
+| [`store-review-errors`](https://developer.shopware.com/docs/guides/development/testing/store/store-review-errors.html)                             | Common reasons reviewers reject a submission                           | user asks why a submission failed, or wants rejection risks         |
+| [`not-allowed-store-behaviors`](https://developer.shopware.com/docs/guides/development/testing/store/not-allowed-store-behaviors.html)             | Prohibited patterns                                                    | extension touches core internals, filesystem, or DB directly        |
+| [`functionality-integration`](https://developer.shopware.com/docs/guides/development/testing/store/functionality-integration.html)                 | Correct integration with core, persistence, public APIs                | extension has subscribers, entities, or API endpoints               |
+| [`code-quality`](https://developer.shopware.com/docs/guides/development/testing/store/code-quality.html)                                           | Code standards reviewers apply                                         | user asks about code quality, or code-quality checkers were invoked |
+| [`installation-and-cleanup`](https://developer.shopware.com/docs/guides/development/testing/store/installation-and-cleanup.html)                   | Install/update/uninstall and data removal                              | extension implements lifecycle methods or creates tables            |
+| [`cookies-and-privacy`](https://developer.shopware.com/docs/guides/development/testing/store/cookies-and-privacy.html)                             | Cookie registration, GDPR, subprocessors                               | extension sets cookies, tracks, or sends data to third parties      |
+| [`seo-and-structured-data`](https://developer.shopware.com/docs/guides/development/testing/store/seo-and-structured-data.html)                     | SEO output and structured data                                         | extension changes storefront markup, URLs, or meta tags             |
+| [`storefront-performance-and-errors`](https://developer.shopware.com/docs/guides/development/testing/store/storefront-performance-and-errors.html) | Storefront performance and error handling                              | extension ships storefront JS/CSS or template overrides             |
+| [`faq`](https://developer.shopware.com/docs/guides/development/testing/store/faq.html)                                                             | Preview requirements and misc answers                                  | user asks about previews or something the other pages miss          |
 
 Preconditions here work like §2's: a page you had no trigger to read produces no findings, and you say so rather than guessing at its contents.
 
-
 ## 5. Response format
 
-**Validation status**
+### Validation status
 
 - CLI binary and version
 - inspection timestamp
-   - builtin checks: pass/fail + exit code (state that `--only builtin` was used)
+  - builtin checks: pass/fail + exit code (state that `--only builtin` was used)
 - Store compliance checks: pass/fail + exit code
 - remote Store listing: inspected / not inspected
 - files modified: no
@@ -147,7 +147,7 @@ Preconditions here work like §2's: a page you had no trigger to read produces n
 **Required local changes** — one entry per CLI error line (L1–L5 by identifier, otherwise L0), plus any other Local file / Local artifact row that failed. Empty section if none; write "none".
 
 | Finding | Evidence | Level | Row | Source |
-|---|---|---|---|---|
+| ------- | -------- | ----- | --- | ------ |
 
 `Evidence` is the verbatim CLI line or the measured value. `Source` is the identifier and file, or the doc anchor link.
 
@@ -175,7 +175,7 @@ Every documentation source must be a clickable URL, in every section including t
 
 Repeating a 100-character URL across eleven rows is tedious, so a table may instead declare its base once directly above itself and carry only anchors in the rows:
 
-> Sources below are anchors on https://developer.shopware.com/docs/guides/development/testing/store/content-and-translations.html
+> Sources below are anchors on <https://developer.shopware.com/docs/guides/development/testing/store/content-and-translations.html>
 
 with rows reading `#store-listing`. Use one form or the other. Bare anchors with no declared base are not acceptable — that is the failure this replaces.
 
@@ -200,4 +200,4 @@ Answer only after all are true:
 - every required local change quotes a CLI line or a measured value;
 - Account-license comparison uses the `license` value, not the package name;
 - one CLI binary used throughout, and its version is stated;
-- the "Sources checked" section lists what was *not* inspected as well as what was.
+- the "Sources checked" section lists what was _not_ inspected as well as what was.

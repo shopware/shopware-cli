@@ -72,11 +72,11 @@ The tool runner attaches the tool name to each result. It creates skipped result
 
 Derive the displayed outcome in this order:
 
-| Condition | Outcome |
-| --- | --- |
-| Nonempty `Errors` | Failed |
-| Nonempty `SkipReason` | Skipped |
-| Otherwise | Completed |
+| Condition             | Outcome   |
+| --------------------- | --------- |
+| Nonempty `Errors`     | Failed    |
+| Nonempty `SkipReason` | Skipped   |
+| Otherwise             | Completed |
 
 A completed or failed outcome indicates that the tool ran, without implying that it spawned a subprocess. Skipped tools have `HasFindings == false`, publish no findings, and have no execution errors.
 
@@ -92,12 +92,12 @@ A subprocess failure does not cancel sibling work or discard findings already de
 
 ### Responsibilities
 
-| Component | Responsibility |
-| --- | --- |
+| Component        | Responsibility                                                                                                                                                                                                                |
+| ---------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Execution helper | Execute subprocesses, capture their output, record subprocess telemetry, track whether findings survived filtering, deliver findings and optional subprocess diagnostics through callbacks, and collect all reported failures |
-| Tool | Configure subprocesses, interpret process errors and exit codes, parse output, and report findings or failures |
-| Tool runner | Create the helper, manage tool selection and lifecycle, normalize and filter findings, collect them by tool, and coordinate optional live findings and verbose subprocess output |
-| Renderer | Present published findings and final results as interactive, plain-text, or structured output |
+| Tool             | Configure subprocesses, interpret process errors and exit codes, parse output, and report findings or failures                                                                                                                |
+| Tool runner      | Create the helper, manage tool selection and lifecycle, normalize and filter findings, collect them by tool, and coordinate optional live findings and verbose subprocess output                                              |
+| Renderer         | Present published findings and final results as interactive, plain-text, or structured output                                                                                                                                 |
 
 Tools and the execution helper do not print directly. Tools control subprocess concurrency.
 

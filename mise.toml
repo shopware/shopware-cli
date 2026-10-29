@@ -12,16 +12,23 @@ go = "1.27"
 # Keep this in sync with the version in .github/workflows/lint.yml.
 golangci-lint = "2.15.0"
 
+# Markdown tools are shared by local tasks and CI.
+node = "24.18.1"
+"npm:markdownlint-cli2" = "0.24.0"
+"npm:prettier" = "3.9.10"
+
 [env]
 # Match CI and prevent Go from silently downloading a different toolchain.
 GOTOOLCHAIN = "local"
 
 [tasks.format]
-description = "Format Go source files"
+description = "Format Go and Markdown files"
+depends = ["fix-markdown"]
 run = "golangci-lint fmt ./..."
 
 [tasks.format-check]
-description = "Check that Go source files are formatted"
+description = "Check Go and Markdown formatting"
+depends = ["format-markdown-check"]
 run = "golangci-lint fmt --diff ./..."
 
 [tasks.build]
@@ -41,9 +48,31 @@ description = "Run the Go vet checks"
 run = "go vet ./..."
 
 [tasks.lint]
-description = "Run golangci-lint"
+description = "Lint Go and Markdown files"
+depends = ["lint-markdown"]
 run = "golangci-lint run ./... --timeout 4m"
 
 [tasks.check]
 description = "Run formatting, build, tests, vet, and lint checks"
 depends = ["format-check", "build", "test", "vet", "lint"]
+
+[tasks.lint-markdown]
+description = "Lint Markdown files"
+run = "markdownlint-cli2"
+
+[tasks.fix-markdown]
+description = "Fix Markdown lint findings and format Markdown files"
+# Fix first, then format; report any findings that need a manual correction.
+run = """
+markdownlint-cli2 --fix || test "$?" -eq 1
+mise run format-markdown
+markdownlint-cli2
+"""
+
+[tasks.format-markdown]
+description = "Format Markdown files"
+run = 'prettier --write --ignore-path .gitignore --ignore-path .prettierignore "**/*.{md,mdx}"'
+
+[tasks.format-markdown-check]
+description = "Check Markdown formatting"
+run = 'prettier --check --ignore-path .gitignore --ignore-path .prettierignore "**/*.{md,mdx}"'

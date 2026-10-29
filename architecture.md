@@ -88,7 +88,7 @@ The Deployment Helper approach to dependency injection—a single Symfony contai
 
 There's no shared place in the CLI to run logic around every command (auth refresh, policy checks, telemetry, third-party commands). Telemetry is middleware-shaped; `Execute()` and other setup is repeated per group. ([cmd/root.go#L36](https://github.com/shopware/shopware-cli/blob/6ebf84df16147190a258d2aeadf91a4a15c707d7/cmd/root.go#L36))
 
-- Cleanup activity: *instead of each being baked into `Execute()` or duplicated per group*, cobra has pre and post functions that we could use to offload some of thatactivity. We use these for `account` already; will extend into the rest of CLI.
+- Cleanup activity: _instead of each being baked into `Execute()` or duplicated per group_, cobra has pre and post functions that we could use to offload some of thatactivity. We use these for `account` already; will extend into the rest of CLI.
 
 Deployment Helper offers a registry-style seam via `PostDeploy` subscribers (`RunCommand.php:80`). Fastly, Platform.sh, staging, usage-consent, always-clear-cache. The strong seam: keeps provider/env behavior out of the managers. `FastlyServiceUpdater` is opt-in via `config/fastly`, env creds, diff-before-write, activate only on change.
 
@@ -141,7 +141,7 @@ None are broken, but some are slower.
 - **Medium:** cache is local/CI-only. No shared backend a whole CI fleet can reuse. `internal/system/cache_*`
   - **TODO:** For GH, whole fleet can use it. for gitlab you kinda have to share the directory, so we need to document what to do in GitLab.
 - **Low:** untuned HTTP client. Uses Go's defaults: no connection-reuse tuning, no retries. `internal/shop/client.go:37`
-  - **TODO:** remove and replace with a general http client for Shopware in Go, wired into https://github.com/shopware/app-sdk-go
+  - **TODO:** remove and replace with a general http client for Shopware in Go, wired into <https://github.com/shopware/app-sdk-go>
 
 A fresh php/composer/node process is started for every call, but it's not possible to reuse them so this isn't an issue. `internal/phpexec`, `internal/npm`
 
@@ -167,7 +167,7 @@ In code, this boundary is maintained like so:
 
 The split isn't arbitrary, but follows the question: **where does the work run?** If it happens on your machine or in CI, it's the CLI's. If it happens on the server as part of going live, it's the Helper's. Almost every job lands cleanly on one side.
 
-**Runs locally / in CI → shopware-cli**
+### Runs locally / in CI → shopware-cli
 
 - Scaffold a project / `composer.json`
 - Build theme/admin assets
@@ -177,7 +177,7 @@ The split isn't arbitrary, but follows the question: **where does the work run?*
 - Upload an extension to the Account/shop
 - Write + validate the `deployment:` config — but only writes it; the Helper is what runs it
 
-**Runs on the server at deploy time → Deployment Helper**
+### Runs on the server at deploy time → Deployment Helper
 
 - Run migrations / `system:install`
 - Compile the theme on the server
@@ -229,7 +229,7 @@ In the "deploy/release" stage of our user journey we propose a guided `project u
 Machine-readable output becomes a design rule, not an afterthought:
 
 - Per-plugin Markdown scan output an agent (or human) can work through (for `plugin validate`)
-- Explicit opt-in project skills that produce agent-ready plans, making AI-assisted workflows a deliberate user choice while remaining independent of any specific provider or agent implementation. (See https://github.com/shadcn/improve)
+- Explicit opt-in project skills that produce agent-ready plans, making AI-assisted workflows a deliberate user choice while remaining independent of any specific provider or agent implementation. (See <https://github.com/shadcn/improve>)
 - a natural-language env command that drives local actions (start/stop env, watchers, cache clear, logs) via skills.
 
 ### 5.1 Output & interaction need to become consumable and consistent

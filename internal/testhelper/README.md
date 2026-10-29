@@ -3,7 +3,7 @@
 Shared fixture builders for tests. This package removes the boilerplate of
 building Shopware project and extension trees on disk — temp directories,
 composer.json / composer.lock rendering, and app manifest.xml rendering — so
-tests state *what* the fixture is, not how to write it.
+tests state _what_ the fixture is, not how to write it.
 
 Everything here is behavior-first: builders render deterministic output, omit
 zero-valued fields, and are covered by this package's own tests. When a fixture

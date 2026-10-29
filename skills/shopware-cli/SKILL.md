@@ -280,7 +280,7 @@ With `--docker`, `create` runs for several minutes: it pulls the dev image and r
 - `shopware-cli project dev install` — non-interactive: starts the environment, runs the install, and saves admin credentials to the project config (defaults `admin` / `shopware`, `en-GB`, `EUR`; override with `--admin-username`/`--admin-password`/`--locale`/`--currency`). Idempotent — skips when the shop is already installed.
 - `shopware-cli project dev` — the interactive TUI dashboard when you want to drive it by hand.
 
-**Other gotchas**
+### Other gotchas
 
 - **Security advisories** block a non-interactive install unless `--no-audit` is set; interactive mode prompts instead.
 - The target folder must be empty; hostname collisions (a `<name>.shopware.local` already in use) surface at `proxy`/`dev` time, not at create.

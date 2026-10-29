@@ -1,6 +1,10 @@
+---
 title: Project import and export
 date: 2026-08-11
 tags: [project import, project export, mysql, database]
+---
+
+# Project import and export
 
 ## Context
 

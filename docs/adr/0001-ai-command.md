@@ -1,6 +1,10 @@
+---
 title: Handling Shopware AI integrations
 date: 2026-08-06
 tags: [ai, MCP Server, Agent Skill, integration]
+---
+
+# Handling Shopware AI integrations
 
 > **Status:** Accepted; amended 2026-10-13 after implementation review. Several
 > decisions below were simplified or reversed during implementation — see the
@@ -51,7 +55,7 @@ The Deployment Helper skill could cover a workflow spanning both the CLI and Dep
 
 As part of the installed Shopware platform, it would be detected by the CLI. The CLI could only help to connect the client to the server already provided by the project.
 
-#### Planned, non-platform MCP Servers, skills, etc.
+#### Planned, non-platform MCP Servers, skills, etc
 
 If an MCP Server is a remote server, users could connect an MCP-capable assistant to its endpoint and authenticate through their Shopware account. The client could handle the browser-based OAuth flow; the CLI would only write the connection configuration. Support could be added once the MCP Server provides a stable, publicly usable endpoint and documentation. The CLI design would ideally be ready for it without depending on its delivery timeline.
 
@@ -165,8 +169,8 @@ skills.sh, which reversed several decisions above. The as-built behaviour:
 - **No compatibility checks.** Downloading and running an owner-provided check
   (an HTTP fetch plus PHP execution) was dropped as unsafe. `compatibility` is no
   longer a directory field or a contribution requirement.
-- **Removal is not restricted to CLI-created config.** With no own record, `ai
-  remove` acts on whatever skills.sh has installed for that name and agent; it
+- **Removal is not restricted to CLI-created config.** With no own record,
+  `ai remove` acts on whatever skills.sh has installed for that name and agent; it
   first consults `skills list --json` so it reports "nothing to remove" accurately.
 - **Machine-readable output only on the read commands.** `ai list` and `ai info`
   support `--format json`; `ai add` / `ai remove` print a human line only. There is

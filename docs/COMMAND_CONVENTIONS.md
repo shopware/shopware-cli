@@ -4,18 +4,18 @@ How commands, flags, messages and exit codes are written in `shopware-cli`. Foll
 
 ## Commands
 
-**Short**
+### Short
 
 - Imperative, capitalised, no trailing period, under 80 characters: `Build and install Administration assets`.
 - A parent command without `RunE` describes the group, not one child: `Manage the project configuration file`, `Manage installed Shopware extensions`.
 
-**Long**
+### Long
 
 - Open in the imperative, same voice as the Short. Plain statements of fact are fine after that, for example `Requires a Docker environment`.
 - Examples go into the `Example` field, never into `Long`. Cobra prints them under its own heading.
 - No empty `Long: ""` fields.
 
-**Use and arguments**
+### Use and arguments
 
 - Required arguments are bare, optional ones are in brackets, variadic ones get three dots: `validate path`, `fix [path]`, `activate name...`, `package path [branch]`. No angle brackets.
 - Every leaf command declares `Args`. A command without positional arguments uses `cobra.NoArgs`, so a stray argument fails with `unknown command "x" for "..."` instead of being ignored.

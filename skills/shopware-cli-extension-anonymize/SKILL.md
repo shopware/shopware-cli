@@ -128,22 +128,22 @@ Do not rewrite `system_config.configuration_value` under `tables`. That would wi
 
 `tables` values are SQL expressions, same as project `dump.rewrite`.
 
-| Data | Expression |
-|---|---|
-| email | `faker.Internet.Email()` |
-| first name | `faker.Person.FirstName()` |
-| last name | `faker.Person.LastName()` |
-| company, title, or a person name | `faker.Person.Name()` |
-| street | `faker.Address.StreetAddress()` |
-| zip code | `faker.Address.PostCode()` |
-| city | `faker.Address.City()` |
-| phone | `faker.Phone.Number()` |
-| IP address | `faker.Internet.Ipv4()` |
-| secret or token on a required or `NOT NULL` column | `"''"` |
-| secret or token on a nullable column | `"NULL"` |
-| free text, such as a mail body or a note | `"NULL"` on a nullable column, otherwise `"''"` |
-| JSON column | `"'{}'"`, or `JSON_OBJECT` with faker templates (see below) |
-| secret on a column with a UNIQUE index | `"NULL"` on a nullable column, otherwise a per-row value such as `"HEX(id)"` |
+| Data                                               | Expression                                                                   |
+| -------------------------------------------------- | ---------------------------------------------------------------------------- |
+| email                                              | `faker.Internet.Email()`                                                     |
+| first name                                         | `faker.Person.FirstName()`                                                   |
+| last name                                          | `faker.Person.LastName()`                                                    |
+| company, title, or a person name                   | `faker.Person.Name()`                                                        |
+| street                                             | `faker.Address.StreetAddress()`                                              |
+| zip code                                           | `faker.Address.PostCode()`                                                   |
+| city                                               | `faker.Address.City()`                                                       |
+| phone                                              | `faker.Phone.Number()`                                                       |
+| IP address                                         | `faker.Internet.Ipv4()`                                                      |
+| secret or token on a required or `NOT NULL` column | `"''"`                                                                       |
+| secret or token on a nullable column               | `"NULL"`                                                                     |
+| free text, such as a mail body or a note           | `"NULL"` on a nullable column, otherwise `"''"`                              |
+| JSON column                                        | `"'{}'"`, or `JSON_OBJECT` with faker templates (see below)                  |
+| secret on a column with a UNIQUE index             | `"NULL"` on a nullable column, otherwise a per-row value such as `"HEX(id)"` |
 
 When the whole rewrite is a bare faker call, write it without `{{- -}}`. The dump adds those delimiters.
 

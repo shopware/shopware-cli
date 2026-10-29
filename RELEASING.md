@@ -13,7 +13,7 @@ manually.
    ```sh
    git tag -s 1.2.3 -m "1.2.3"
    ```
-   
+
    Use a prerelease suffix such as `1.2.3-rc.1` for prereleases.
 
    The `-s` flag makes the tag "signed", similar to commits it is considered best practice.
