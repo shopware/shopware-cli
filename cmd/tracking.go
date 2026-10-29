@@ -51,7 +51,6 @@ func trackCommandExecution(ctx context.Context, args []string, start time.Time, 
 	}
 	var missing *system.MissingDependenciesError
 	if result == tracking.ResultFailure && errors.As(runErr, &missing) {
-		tags[tracking.TagFailureCategory] = tracking.FailureMissingPrerequisite
 		tags[tracking.TagMissing] = strings.Join(missing.IDs(), ",")
 	}
 	trackEvent(trackCtx, tracking.EventCommand, tags)

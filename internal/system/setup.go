@@ -23,8 +23,7 @@ type MissingDependency struct {
 	ID string
 }
 
-// MissingDependenciesError is returned when a command cannot run because
-// dependencies are missing; the explanation has already been printed.
+// MissingDependenciesError stops a command whose missing dependencies were already explained.
 type MissingDependenciesError struct {
 	Missing []MissingDependency
 }
