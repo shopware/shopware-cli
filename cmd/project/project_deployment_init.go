@@ -17,7 +17,6 @@ import (
 var projectDeploymentInitCmd = &cobra.Command{
 	Use:   "init [project-directory]",
 	Short: "Initialize a deployment environment",
-	Long:  "Initialize a deployment environment using a form or a JSON configuration file.\nPass --init-config to supply runtime_values and optional install_values without prompts.\nConfiguration contains secrets; protect the file or use '-' to read from stdin.",
 	Example: `  shopware-cli project deploy init -e production
   shopware-cli -n project deploy init -e production --init-config - < init.json`,
 	Args: cobra.MaximumNArgs(1),
