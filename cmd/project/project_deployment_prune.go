@@ -15,24 +15,7 @@ import (
 var projectDeploymentPruneCmd = &cobra.Command{
 	Use:   "prune",
 	Short: "Remove old deployments on the target",
-	Long: `Remove old deployments and their stored helper logs from the selected target.
-Keep the most recently activated distinct successful deployments (5 by default),
-plus the active deployment if it falls outside that set. Failed, incomplete and
-unmanaged releases are retained.
-
-For SSH, remove pruned release directories, their metadata and helper logs, and
-their release-local runtime caches. Cached archives are removed when no longer
-referenced by retained deployment metadata. Read-only directories are made
-writable only while deleting selected releases under the deployment lock.
-Shared data and local archives are never removed. Cleanup uses the same lock as
-rollout and initialization. Use --dry-run to preview removals without deleting
-anything. Interrupted cleanup is resumed on the next prune, even if --keep was
-increased. Removed deployments cannot be reactivated without preparing them again.
-
-For multiple hosts, apply retention independently and preserve each host's active
-deployment. Successful results are shown with host names even if another host fails.
-Cleanup is not atomic across hosts; failures do not undo completed removals.`,
-	Args: cobra.NoArgs,
+	Args:  cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, _ []string) error {
 		keep, err := cmd.Flags().GetInt("keep")
 		if err != nil {
