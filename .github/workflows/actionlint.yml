@@ -4,12 +4,14 @@ on:
   pull_request:
     paths:
       - '.github/workflows/**'
+      - '.github/dependabot.yml'
       - 'mise.toml'
       - 'mise.lock'
   push:
     branches: [main]
     paths:
       - '.github/workflows/**'
+      - '.github/dependabot.yml'
       - 'mise.toml'
       - 'mise.lock'
   workflow_dispatch:

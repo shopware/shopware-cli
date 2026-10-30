@@ -6,7 +6,7 @@ on:
       - '*'
 
 concurrency:
-  group: ${{ github.workflow }}-caller-${{ github.ref }}
+  group: ${{ github.workflow }}-caller
   cancel-in-progress: false
   queue: max
 
