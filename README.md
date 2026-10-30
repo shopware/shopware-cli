@@ -44,7 +44,7 @@ go install github.com/shopware/shopware-cli@latest
 ```bash
 git clone https://github.com/shopware/shopware-cli.git
 cd shopware-cli
-go build -o bin/shopware-cli .
+go build -o ./bin/shopware-cli .
 ```
 
 ## Usage
@@ -104,26 +104,6 @@ environments:
 Omit `-e` / `--env` to target `environments.local`. Use `-e staging` (or another name) to target a different environment.
 
 `shopware-cli project create` and `shopware-cli project config init` write `environments.local`. Top-level `url` and `admin_api` are deprecated: they are used only when `environments.local` is absent. When both are present, `environments.local` wins.
-
-### Anonymized dumps and extensions
-
-`shopware-cli project dump --anonymize` rewrites personal data in Shopware core tables. An extension can add its own tables and system config secrets in `.config/shopware-extension.yml`. A project dump with `--anonymize` merges those rules from every installed extension. A column already set under `dump.rewrite` in the project config, or by the built-in rules, is left unchanged. If an extension config cannot be read, or an extension listed in `composer.lock` cannot be loaded from `vendor`, the dump stops with an error instead of skipping that extension.
-
-```yaml
-anonymize:
-  tables:
-    swag_example_token:
-      access_token: "''"
-      email: faker.Internet.Email()
-  system_config:
-    - SwagExample.config.clientSecret
-    - key: SwagExample.config.merchantEmail
-      value: faker.Internet.Email()
-    - key: SwagExample.config.environment
-      value: sandbox
-```
-
-`tables` uses the same column expressions as the project `dump.rewrite` map. Write `"''"` to store an empty string and `"NULL"` to store NULL. `system_config` matches `system_config.configuration_key`. A plain key omits that row from the dump. `value` replaces `configuration_value` with `{"_value": value}`. A value that starts with `faker.` is generated per row. When several extensions remove keys from the same column with `JSON_REMOVE`, their rules are combined.
 
 ### Disable update notifications
 

@@ -15,6 +15,7 @@ const ValidationCacheDir = "var/cache/shopware-cli"
 var (
 	// These paths will only be removed relative to the top level of the plugin
 	defaultNotAllowedPaths = []string{
+		".cache/shopware-cli",
 		".editorconfig",
 		".git",
 		".github",

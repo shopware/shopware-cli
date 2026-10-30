@@ -76,10 +76,17 @@ func TestRunSpinnerWithLogs(t *testing.T) {
 	})
 
 	t.Run("returns success", func(t *testing.T) {
+		err := runSpinnerWithLogs(t.Context(), "Installing dependencies", exec.CommandContext(t.Context(), "true"), &bytes.Buffer{}, func(_ context.Context, model tea.Model) error {
+			return model.(*installProgressModel).wait()
+		})
+		assert.NoError(t, err)
+	})
+
+	t.Run("reports command errors after an early renderer exit", func(t *testing.T) {
 		err := runSpinnerWithLogs(t.Context(), "Installing dependencies", exec.CommandContext(t.Context(), "false"), &bytes.Buffer{}, func(context.Context, tea.Model) error {
 			return nil
 		})
-		assert.NoError(t, err)
+		assert.Error(t, err)
 	})
 }
 
@@ -93,7 +100,7 @@ func TestRunSpinnerWithLogsTeesPresetWriters(t *testing.T) {
 	var logLines []string
 	err := runSpinnerWithLogs(t.Context(), "Installing dependencies", cmd, &bytes.Buffer{}, func(_ context.Context, model tea.Model) error {
 		progress := model.(*installProgressModel)
-		progress.err = progress.cmd.Run()
+		progress.err = progress.wait()
 		logLines = progress.logWriter.GetLastLines(10)
 		return nil
 	})
@@ -128,7 +135,7 @@ func TestLogWriterStoresAndTrimsLines(t *testing.T) {
 	assert.Equal(t, []string{"xx"}, writer.GetLastLines(1))
 }
 
-func TestInstallProgressModelInitRunsCommand(t *testing.T) {
+func TestInstallProgressModelInitWaitsForCommand(t *testing.T) {
 	model := newProgressModel(exec.CommandContext(t.Context(), "false"))
 
 	batch, ok := model.Init()().(tea.BatchMsg)
@@ -232,7 +239,26 @@ func newProgressModel(cmd *exec.Cmd) *installProgressModel {
 		spinner:   spinner.New(),
 		logWriter: &logWriter{},
 		title:     "Installing dependencies",
-		cmd:       cmd,
+		wait:      func() error { return cmd.Run() },
 		cancel:    func() {},
 	}
+}
+
+func TestSpinnerWaitsForCommandCancellation(t *testing.T) {
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	cmd := exec.CommandContext(ctx, "sleep", "30")
+	stopped := false
+	cmd.Cancel = func() error {
+		err := cmd.Process.Kill()
+		stopped = true
+		return err
+	}
+	err := runSpinnerWithLogs(ctx, "Installing", cmd, &bytes.Buffer{}, func(_ context.Context, model tea.Model) error {
+		model.(*installProgressModel).cancelled = true
+		return nil
+	})
+	assert.ErrorIs(t, err, context.Canceled)
+	assert.True(t, stopped)
+	require.NotNil(t, cmd.ProcessState)
 }

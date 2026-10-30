@@ -3,18 +3,20 @@ package cmd
 import (
 	"context"
 	"errors"
+	"fmt"
 	"runtime"
 	"strconv"
 	"testing"
 	"time"
 
+	"charm.land/huh/v2"
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/shopware/shopware-cli/internal/cliversion"
 	"github.com/shopware/shopware-cli/internal/system"
 	"github.com/shopware/shopware-cli/internal/tracking"
+	"github.com/shopware/shopware-cli/internal/tui"
 )
 
 // useTrackingTestRoot swaps rootCmd for a minimal tree containing
@@ -115,21 +117,33 @@ func TestTrackCommandExecution_ExtensionAddGenerator(t *testing.T) {
 
 func TestTrackCommandExecution_Result(t *testing.T) {
 	tests := []struct {
-		name   string
-		runErr error
-		want   string
+		name        string
+		interrupted bool
+		runErr      error
+		want        string
 	}{
 		{name: "success", runErr: nil, want: tracking.ResultSuccess},
 		{name: "failure", runErr: errors.New("boom"), want: tracking.ResultFailure},
 		{name: "cancelled", runErr: context.Canceled, want: tracking.ResultCancelled},
 		{name: "wrapped cancelled", runErr: errors.Join(errors.New("stopped"), context.Canceled), want: tracking.ResultCancelled},
+		{name: "interrupted run with a child exit error", interrupted: true, runErr: errors.New("exit status 130"), want: tracking.ResultCancelled},
+		{name: "interrupted run that still succeeded", interrupted: true, runErr: nil, want: tracking.ResultSuccess},
+		{name: "prompt aborted with ctrl+c", runErr: fmt.Errorf("cannot create project: %w", huh.ErrUserAborted), want: tracking.ResultCancelled},
+		{name: "selection dismissed", runErr: tui.ErrFilterSelectCancelled, want: tracking.ResultCancelled},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			events := useTrackingTestRoot(t, "shopware-cli")
 
-			trackCommandExecution(context.Background(), []string{"project", "console"}, time.Now(), tt.runErr)
+			ctx := context.Background()
+			if tt.interrupted {
+				var cancel context.CancelFunc
+				ctx, cancel = context.WithCancel(ctx)
+				cancel()
+			}
+
+			trackCommandExecution(ctx, []string{"project", "console"}, time.Now(), tt.runErr)
 
 			require.Len(t, *events, 1)
 			assert.Equal(t, tt.want, (*events)[0][tracking.TagResult])
@@ -145,13 +159,42 @@ func TestTrackCommandExecution_Tags(t *testing.T) {
 
 	require.Len(t, *events, 1)
 	tags := (*events)[0]
-	assert.Equal(t, cliversion.Version, tags[tracking.TagCLIVersion])
 	assert.Equal(t, runtime.GOOS, tags[tracking.TagOS])
 	assert.Equal(t, "true", tags[tracking.TagIsTUI])
+	assert.Equal(t, strconv.FormatBool(system.IsWSL()), tags[tracking.TagIsWSL])
 
 	durationMS, err := strconv.ParseInt(tags[tracking.TagDurationMS], 10, 64)
 	require.NoError(t, err)
 	assert.GreaterOrEqual(t, durationMS, int64(2000))
+}
+
+// clearCIProviderEnv unsets every variable CIProvider and IsCIEnvironment read.
+func clearCIProviderEnv(t *testing.T) {
+	t.Helper()
+	for _, name := range []string{"CI", "GITHUB_ACTIONS", "GITLAB_CI", "BITBUCKET_BUILD_NUMBER", "BITBUCKET_REPO_FULL_NAME", "JENKINS_URL", "BUILDKITE", "CIRCLECI", "DRONE", "TEAMCITY_VERSION", "TF_BUILD"} {
+		t.Setenv(name, "")
+	}
+}
+
+func TestTrackCommandExecution_CIProvider(t *testing.T) {
+	clearCIProviderEnv(t)
+	t.Setenv("GITHUB_ACTIONS", "true")
+	events := useTrackingTestRoot(t, "shopware-cli")
+
+	trackCommandExecution(context.Background(), []string{"project", "console"}, time.Now(), nil)
+
+	require.Len(t, *events, 1)
+	assert.Equal(t, "github", (*events)[0][tracking.TagCIProvider])
+}
+
+func TestTrackCommandExecution_NoCIProviderOutsideCI(t *testing.T) {
+	clearCIProviderEnv(t)
+	events := useTrackingTestRoot(t, "shopware-cli")
+
+	trackCommandExecution(context.Background(), []string{"project", "console"}, time.Now(), nil)
+
+	require.Len(t, *events, 1)
+	assert.NotContains(t, (*events)[0], tracking.TagCIProvider)
 }
 
 func TestTrackCommandExecution_IsTUIFollowsInteraction(t *testing.T) {

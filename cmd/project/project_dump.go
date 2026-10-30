@@ -49,11 +49,14 @@ var projectDatabaseDumpCmd = &cobra.Command{
 
 		output, _ := cmd.Flags().GetString("output")
 		clean, _ := cmd.Flags().GetBool("clean")
+		skipCustomerData, _ := cmd.Flags().GetBool("skip-customer-data")
+		noData, _ := cmd.Flags().GetStringArray("no-data")
 		skipLockTables, _ := cmd.Flags().GetBool("skip-lock-tables")
 		anonymize, _ := cmd.Flags().GetBool("anonymize")
 		quick, _ := cmd.Flags().GetBool("quick")
 		parallel, _ := cmd.Flags().GetInt("parallel")
 		insertIntoLimit, _ := cmd.Flags().GetInt("insert-into-limit")
+		insertIntoMaxBytes, _ := cmd.Flags().GetInt("insert-into-max-bytes")
 		limits, _ := cmd.Flags().GetStringArray("limit")
 
 		var extensionTables map[string]map[string]string
@@ -66,17 +69,20 @@ var projectDatabaseDumpCmd = &cobra.Command{
 		}
 
 		return shop.DumpDatabase(cmd.Context(), mysqlConfig, projectCfg.ConfigDump, shop.DumpDatabaseOptions{
-			Output:            output,
-			Compression:       compression,
-			Clean:             clean,
-			Anonymize:         anonymize,
-			ExtensionTables:   extensionTables,
-			SystemConfigRules: systemConfigRules,
-			SkipLockTables:    skipLockTables,
-			Quick:             quick,
-			Parallel:          parallel,
-			InsertIntoLimit:   insertIntoLimit,
-			LimitOverrides:    limits,
+			Output:             output,
+			Compression:        compression,
+			Clean:              clean,
+			SkipCustomerData:   skipCustomerData,
+			NoData:             noData,
+			Anonymize:          anonymize,
+			ExtensionTables:    extensionTables,
+			SystemConfigRules:  systemConfigRules,
+			SkipLockTables:     skipLockTables,
+			Quick:              quick,
+			Parallel:           parallel,
+			InsertIntoLimit:    insertIntoLimit,
+			InsertIntoMaxBytes: insertIntoMaxBytes,
+			LimitOverrides:     limits,
 		})
 	},
 }
@@ -178,12 +184,16 @@ func init() {
 
 	projectDatabaseDumpCmd.Flags().String("output", "dump.sql", "File or - (for stdout)")
 	projectDatabaseDumpCmd.Flags().Bool("clean", false, "Exclude data from transient tables (e.g. cart, messenger_messages, message_queue_stats, log_entry)")
+	projectDatabaseDumpCmd.Flags().Bool("skip-customer-data", false, "Exclude customer, order, newsletter, review, document, and related history data while keeping table schemas; includes clean mode")
+	projectDatabaseDumpCmd.Flags().StringArray("no-data", nil, "Export only the schema of a table or glob pattern (e.g. 'klarna_*'), can be given multiple times")
 	projectDatabaseDumpCmd.Flags().Bool("skip-lock-tables", false, "Skip locking tables during the dump")
 	projectDatabaseDumpCmd.Flags().Bool("anonymize", false, "Anonymize personal data, extension-declared columns, and extension system config secrets")
+	projectDatabaseDumpCmd.MarkFlagsMutuallyExclusive("skip-customer-data", "anonymize")
 	projectDatabaseDumpCmd.Flags().String("compression", "", "Compress the dump (gzip, zstd)")
 	_ = projectDatabaseDumpCmd.RegisterFlagCompletionFunc("compression", cobra.FixedCompletions([]string{string(mysqldump.CompressionGzip), string(mysqldump.CompressionZstd)}, cobra.ShellCompDirectiveNoFileComp))
 	projectDatabaseDumpCmd.Flags().Bool("quick", false, "Use quick option for mysqldump")
 	projectDatabaseDumpCmd.Flags().Int("parallel", 0, "Number of tables to dump concurrently (0 = disabled)")
 	projectDatabaseDumpCmd.Flags().Int("insert-into-limit", 0, "Limit the number of rows per INSERT statement (0 = auto, takes priority over --quick when set)")
+	projectDatabaseDumpCmd.Flags().Int("insert-into-max-bytes", mysqldump.DefaultInsertIntoMaxBytes, "Target maximum INSERT size in bytes; a single larger row is written on its own")
 	projectDatabaseDumpCmd.Flags().StringArray("limit", nil, "Limit the rows of a table to the newest ones (e.g. order=100), can be given multiple times")
 }

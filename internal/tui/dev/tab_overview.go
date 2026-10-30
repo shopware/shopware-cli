@@ -11,7 +11,6 @@ import (
 	"net"
 	"net/http"
 	"net/url"
-	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
@@ -19,7 +18,6 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
-	"github.com/shyim/go-composer"
 	endoflife "github.com/shyim/go-endoflife-api"
 
 	dockerpkg "github.com/shopware/shopware-cli/internal/docker"
@@ -178,6 +176,8 @@ type watcherStartedMsg struct {
 	name   string
 	handle *watcherHandle
 	lines  <-chan string
+	// proxied is whether the watcher runs through the shared proxy.
+	proxied bool
 }
 type watcherStoppedMsg struct {
 	name string
@@ -967,10 +967,10 @@ func (m OverviewModel) startAdminWatch() tea.Cmd {
 	projectRoot := m.projectRoot
 	shopCfg := m.shopCfg
 
-	return startWatcher(watcherAdmin, m.ctx, func(ctx context.Context, out io.Writer) (*executor.Process, error) {
+	return startWatcher(watcherAdmin, m.ctx, m.adminWatchProxied(), func(ctx context.Context, out io.Writer) (*executor.Process, error) {
 		logStep(out, "Preparing plugins.json...")
 		if err := extension.WriteProjectPluginJson(ctx, projectRoot, shopCfg, e); err != nil {
-			return nil, fmt.Errorf("preparing plugins.json: %w", err)
+			return nil, &extension.WatcherStepError{Step: extension.WatcherStepPluginsJSON, Err: fmt.Errorf("preparing plugins.json: %w", err)}
 		}
 
 		watchProcess, err := extension.PrepareAdminWatcher(ctx, projectRoot, e, out)
@@ -987,16 +987,12 @@ func (m OverviewModel) startStorefrontWatch(opts extension.StorefrontWatcherOpti
 	projectRoot := m.projectRoot
 	shopCfg := m.shopCfg
 
-	// When proxied, route the webpack hot-proxy watcher through the shared
-	// proxy, matching the standalone `project storefront-watch` command.
-	if host := registeredHostname(projectRoot); host != "" {
-		opts.ProxyHostname = "storefront-watch." + host
-	}
+	opts = storefrontWatchOptions(projectRoot, opts)
 
-	return startWatcher(watcherStorefront, m.ctx, func(ctx context.Context, out io.Writer) (*executor.Process, error) {
+	return startWatcher(watcherStorefront, m.ctx, opts.ProxyHostname != "", func(ctx context.Context, out io.Writer) (*executor.Process, error) {
 		logStep(out, "Preparing plugins.json...")
 		if err := extension.WriteProjectPluginJson(ctx, projectRoot, shopCfg, e); err != nil {
-			return nil, fmt.Errorf("preparing plugins.json: %w", err)
+			return nil, &extension.WatcherStepError{Step: extension.WatcherStepPluginsJSON, Err: fmt.Errorf("preparing plugins.json: %w", err)}
 		}
 
 		watchProcess, err := extension.PrepareStorefrontWatcher(ctx, projectRoot, e, opts, nil, out)
@@ -1006,6 +1002,19 @@ func (m OverviewModel) startStorefrontWatch(opts extension.StorefrontWatcherOpti
 
 		return watchProcess, nil
 	})
+}
+
+// adminWatchProxied is whether the admin watcher runs behind the shared proxy.
+func (m OverviewModel) adminWatchProxied() bool {
+	return m.env != nil && m.env.ProxyHost() != ""
+}
+
+// storefrontWatchOptions routes the storefront watcher through the shared proxy for registered projects, like the standalone command.
+func storefrontWatchOptions(projectRoot string, opts extension.StorefrontWatcherOptions) extension.StorefrontWatcherOptions {
+	if host := registeredHostname(projectRoot); host != "" {
+		opts.ProxyHostname = "storefront-watch." + host
+	}
+	return opts
 }
 
 // logStep mirrors extension.logStep for prep work done inside the dev package itself.
@@ -1023,7 +1032,7 @@ func logStep(out io.Writer, msg string) {
 // preparation goroutine signals that the dev-server process is starting (or
 // preparation failed). This keeps the UI in a visible "starting" state during
 // preparation rather than flipping to "running" instantly.
-func startWatcher(name string, parent context.Context, prepare func(ctx context.Context, out io.Writer) (*executor.Process, error)) tea.Cmd {
+func startWatcher(name string, parent context.Context, proxied bool, prepare func(ctx context.Context, out io.Writer) (*executor.Process, error)) tea.Cmd {
 	handle := &watcherHandle{}
 	lines := make(chan string, tui.StreamBufferSize)
 	running := make(chan error, 1) // buffered so the goroutine never blocks
@@ -1090,7 +1099,7 @@ func startWatcher(name string, parent context.Context, prepare func(ctx context.
 			}
 		}()
 
-		return watcherStartedMsg{name: name, handle: handle, lines: lines}
+		return watcherStartedMsg{name: name, handle: handle, lines: lines, proxied: proxied}
 	}
 
 	runningCmd := func() tea.Msg {
@@ -1165,7 +1174,7 @@ func discoverServices(ctx context.Context, env *dockerpkg.Environment) tea.Cmd {
 
 func loadShopwareVersion(projectRoot string) tea.Cmd {
 	return func() tea.Msg {
-		return shopwareVersionLoadedMsg{version: detectShopwareVersion(projectRoot)}
+		return shopwareVersionLoadedMsg{version: shop.DetectShopwareVersion(projectRoot)}
 	}
 }
 
@@ -1266,17 +1275,4 @@ func majorMinor(version string) string {
 		return ""
 	}
 	return parts[0] + "." + parts[1]
-}
-
-func detectShopwareVersion(projectRoot string) string {
-	lock, err := composer.ReadLock(filepath.Join(projectRoot, "composer.lock"))
-	if err != nil {
-		return ""
-	}
-	for _, name := range []string{"shopware/core", "shopware/platform"} {
-		if pkg := lock.GetPackage(name); pkg != nil {
-			return strings.TrimPrefix(pkg.Version, "v")
-		}
-	}
-	return ""
 }

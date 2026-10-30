@@ -11,6 +11,7 @@ import (
 	"text/template"
 
 	"github.com/shopware/shopware-cli/internal/docker"
+	"github.com/shopware/shopware-cli/internal/envfile"
 	"github.com/shopware/shopware-cli/logging"
 )
 
@@ -55,6 +56,9 @@ type ShopwareProjectScaffold struct {
 	UseAMQP             bool
 	NoAudit             bool
 	SymfonyCLIInstalled bool
+	// ComposeProjectName, when set, is written to .env as COMPOSE_PROJECT_NAME
+	// instead of the generated sw-<folder>-<hash> value.
+	ComposeProjectName string
 }
 
 // Normalize applies project defaults and deployment-specific requirements.
@@ -84,31 +88,64 @@ func (s ShopwareProjectScaffold) Validate() error {
 	if err := ValidateDeploymentMethod(s.DeploymentMethod); err != nil {
 		return err
 	}
+	if err := ValidateCISystem(s.CISystem); err != nil {
+		return err
+	}
+	if s.ComposeProjectName == "" {
+		return nil
+	}
 
-	return ValidateCISystem(s.CISystem)
+	return ValidateComposeProjectName(s.ComposeProjectName)
 }
 
 // Scaffold creates the initial project structure without installing its
-// Composer dependencies.
+// Composer dependencies. A failed scaffold removes everything it wrote.
 func (s *ShopwareProjectScaffold) Scaffold(ctx context.Context) error {
+	_, err := s.ScaffoldWithCleanup(ctx)
+	return err
+}
+
+// ScaffoldWithCleanup returns the prepared folder so installation failures can
+// roll back the same creation attempt. Validation failures never trigger cleanup.
+func (s *ShopwareProjectScaffold) ScaffoldWithCleanup(ctx context.Context) (*ProjectFolder, error) {
 	s.Normalize()
+	folder, err := NewProjectFolder(s.ProjectFolder)
+	if err != nil {
+		return nil, err
+	}
 	if err := s.Validate(); err != nil {
-		return err
+		return nil, err
 	}
-
-	if err := os.MkdirAll(s.ProjectFolder, os.ModePerm); err != nil {
-		return err
+	if err := ctx.Err(); err != nil {
+		return nil, err
 	}
+	if err := folder.Prepare(); err != nil {
+		return nil, folder.Rollback(ctx, err)
+	}
+	if err := s.scaffold(ctx); err != nil {
+		return nil, folder.Rollback(ctx, err)
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, folder.Rollback(ctx, err)
+	}
+	return folder, nil
+}
 
+func (s *ShopwareProjectScaffold) scaffold(ctx context.Context) error {
 	logging.FromContext(ctx).Infof("Setting up Shopware %s", s.Version)
 
 	if err := s.WriteComposerJson(ctx); err != nil {
 		return err
 	}
 
-	envContent, err := EnvFileContent(s.UseDocker, s.ProjectFolder)
+	name, err := resolveComposeProjectName(s.UseDocker, s.ProjectFolder, s.ComposeProjectName)
 	if err != nil {
 		return err
+	}
+
+	envContent := ""
+	if name != "" {
+		envContent = envfile.ComposeProjectNameEnvKey + "=" + name + "\n"
 	}
 
 	files := []struct {

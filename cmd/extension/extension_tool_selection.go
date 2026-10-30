@@ -3,13 +3,12 @@ package extension
 import (
 	"github.com/spf13/cobra"
 
-	"github.com/shopware/shopware-cli/internal/validation"
 	"github.com/shopware/shopware-cli/internal/verifier"
 )
 
 func selectExtensionValidationTools(only, exclude string) (
 	verifier.ToolList[verifier.CheckTool],
-	[]validation.ToolInvocationStatus,
+	[]verifier.ToolResult,
 	error,
 ) {
 	return verifier.SelectTools(verifier.GetToolsOf[verifier.CheckTool](), only, exclude, "validation checks")
@@ -17,7 +16,7 @@ func selectExtensionValidationTools(only, exclude string) (
 
 func selectExtensionFixTools(only, exclude string) (
 	verifier.ToolList[verifier.FixTool],
-	[]validation.ToolInvocationStatus,
+	[]verifier.ToolResult,
 	error,
 ) {
 	return verifier.SelectTools(verifier.GetToolsOf[verifier.FixTool](), only, exclude, "fixers")
@@ -25,7 +24,7 @@ func selectExtensionFixTools(only, exclude string) (
 
 func selectExtensionFormattingTools(only, exclude string) (
 	verifier.ToolList[verifier.FormatTool],
-	[]validation.ToolInvocationStatus,
+	[]verifier.ToolResult,
 	error,
 ) {
 	return verifier.SelectTools(verifier.GetToolsOf[verifier.FormatTool](), only, exclude, "formatters")

@@ -350,6 +350,11 @@ func writeRecordingSSH(t *testing.T, argsFile, outputFile, failPattern, socketFi
 
 	shPath, err := exec.LookPath("sh")
 	require.NoError(t, err)
+	// Absolute path: the stub replaces PATH, so a bare cat would not resolve.
+	// Look it up from the test environment instead of assuming /bin/cat, which
+	// is absent in sandboxes that only provide /bin/sh (Nix).
+	catPath, err := exec.LookPath("cat")
+	require.NoError(t, err)
 
 	failSnippet := ""
 	if failPattern != "" {
@@ -358,11 +363,10 @@ func writeRecordingSSH(t *testing.T, argsFile, outputFile, failPattern, socketFi
 
 	socketSnippet := ""
 	if socketFile != "" {
-		socketSnippet = fmt.Sprintf("case \"$*\" in *default_socket*) /bin/cat %q; exit 0 ;; esac\n", socketFile)
+		socketSnippet = fmt.Sprintf("case \"$*\" in *default_socket*) %q %q; exit 0 ;; esac\n", catPath, socketFile)
 	}
 
-	// /bin/cat by absolute path: the stub replaces PATH, so nothing else resolves.
-	script := fmt.Sprintf("#!%s\nprintf '%%s\\n' \"$@\" > %q\n%s%s/bin/cat %q\n", shPath, argsFile, failSnippet, socketSnippet, outputFile)
+	script := fmt.Sprintf("#!%s\nprintf '%%s\\n' \"$@\" > %q\n%s%s%q %q\n", shPath, argsFile, failSnippet, socketSnippet, catPath, outputFile)
 
 	dir := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "ssh"), []byte(script), 0o755))

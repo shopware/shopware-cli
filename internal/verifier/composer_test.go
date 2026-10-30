@@ -13,6 +13,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/shopware/shopware-cli/internal/extension"
+	"github.com/shopware/shopware-cli/internal/validation"
 )
 
 func TestValidationComposerJSONIgnoresPackageIdentity(t *testing.T) {
@@ -75,8 +76,8 @@ func TestPrepareComposerAutoloadKeepsExistingVendor(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(rootDir, "composer.json"), []byte(`{"require": {"shopware/core": "*"}}`), 0o644))
 	require.NoError(t, os.Mkdir(filepath.Join(rootDir, "vendor"), 0o755))
 
-	autoloadFile, err := prepareComposerAutoload(t.Context(), ToolConfig{RootDir: rootDir, CheckAgainst: "lowest"})
-	require.NoError(t, err)
+	autoloadFile, toolErr := prepareComposerAutoload(t.Context(), ToolConfig{RootDir: rootDir, CheckAgainst: "lowest"}, testExecution())
+	require.Nil(t, toolErr)
 
 	assert.Equal(t, filepath.Join(rootDir, "vendor", "autoload.php"), autoloadFile)
 
@@ -89,8 +90,8 @@ func TestPrepareComposerAutoloadRequiresProjectVendor(t *testing.T) {
 	rootDir := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(rootDir, "composer.json"), []byte(`{"require": {"shopware/core": "*"}}`), 0o644))
 
-	_, err := prepareComposerAutoload(t.Context(), ToolConfig{RootDir: rootDir, IsProject: true})
-	require.Error(t, err)
+	_, err := prepareComposerAutoload(t.Context(), ToolConfig{RootDir: rootDir, IsProject: true}, testExecution())
+	require.NotNil(t, err)
 
 	assert.NoDirExists(t, filepath.Join(rootDir, "vendor"))
 	assert.NoDirExists(t, filepath.Join(rootDir, "var"))
@@ -130,13 +131,13 @@ func TestPrepareComposerAutoloadCache(t *testing.T) {
 			modified := time.Now().Add(-tc.age)
 			require.NoError(t, os.Chtimes(cachedAutoload, modified, modified))
 
-			autoloadFile, err := prepareComposerAutoload(t.Context(), ToolConfig{RootDir: rootDir, CheckAgainst: tc.checkAgainst})
+			autoloadFile, err := prepareComposerAutoload(t.Context(), ToolConfig{RootDir: rootDir, CheckAgainst: tc.checkAgainst}, testExecution())
 			if !tc.reused {
-				assert.Error(t, err)
+				assert.NotNil(t, err)
 				return
 			}
 
-			require.NoError(t, err)
+			require.Nil(t, err)
 			assert.Equal(t, cachedAutoload, autoloadFile)
 		})
 	}
@@ -151,6 +152,10 @@ func TestEnsureValidationCacheDirIgnoresItselfInGit(t *testing.T) {
 	gitignore, err := os.ReadFile(filepath.Join(cacheDir, ".gitignore"))
 	require.NoError(t, err)
 	assert.Equal(t, "*\n", string(gitignore))
+}
+
+func testExecution() *ToolExecution {
+	return NewToolExecution(func([]validation.CheckResult) bool { return true })
 }
 
 func entryNames(entries []os.DirEntry) []string {

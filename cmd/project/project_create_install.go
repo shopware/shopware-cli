@@ -15,7 +15,7 @@ import (
 	"github.com/spf13/cobra"
 
 	dockerpkg "github.com/shopware/shopware-cli/internal/docker"
-	"github.com/shopware/shopware-cli/internal/git"
+	"github.com/shopware/shopware-cli/internal/executor"
 	"github.com/shopware/shopware-cli/internal/proxy"
 	"github.com/shopware/shopware-cli/internal/shop"
 	"github.com/shopware/shopware-cli/internal/system"
@@ -45,7 +45,7 @@ func installAndFinalize(cmd *cobra.Command, opts *createOptions, phpConstraint *
 	}
 
 	if output, err := runComposerInstall(ctx, opts.projectFolder, opts.useDocker, showSpinner, composerInstallPHP, opts.phpBinary); err != nil {
-		if !isComposerSecurityBlocked(output) || opts.noAudit {
+		if ctx.Err() != nil || errors.Is(err, executor.ErrDockerCleanup) || !isComposerSecurityBlocked(output) || opts.noAudit {
 			return err
 		}
 
@@ -68,13 +68,6 @@ func installAndFinalize(cmd *cobra.Command, opts *createOptions, phpConstraint *
 		}
 	}
 
-	if opts.initGit {
-		logging.FromContext(ctx).Infof("Initializing Git repository")
-		if err := git.Init(ctx, opts.projectFolder); err != nil {
-			return fmt.Errorf("failed to initialize git repository: %w", err)
-		}
-	}
-
 	shopCfg := newProjectConfig(opts, composerInstallPHP)
 
 	// Serve the shop at a stable hostname through the shared proxy instead of a
@@ -90,8 +83,7 @@ func installAndFinalize(cmd *cobra.Command, opts *createOptions, phpConstraint *
 		return err
 	}
 
-	printCreateSummary(ctx, opts)
-	return nil
+	return ctx.Err()
 }
 
 func newProjectConfig(opts *createOptions, composerInstallPHP string) *shop.Config {
@@ -222,6 +214,7 @@ func handleSecurityBlockedInstall(ctx context.Context, opts *createOptions, chos
 // of the Composer PHAR is downloaded and used instead.
 func runComposerInstall(ctx context.Context, projectFolder string, useDocker bool, showSpinner bool, phpVersion string, phpBinary string) (string, error) {
 	var cmdInstall *exec.Cmd
+	finish := func(err error) error { return err }
 
 	if useDocker && !system.IsInsideContainer() {
 		absProjectFolder, err := filepath.Abs(projectFolder)
@@ -229,8 +222,7 @@ func runComposerInstall(ctx context.Context, projectFolder string, useDocker boo
 			return "", err
 		}
 
-		dockerArgs := []string{"run",
-			"--rm",
+		dockerArgs := []string{
 			"--pull=always",
 			"-v", absProjectFolder + ":/app",
 			"-w", "/app"}
@@ -253,7 +245,7 @@ func runComposerInstall(ctx context.Context, projectFolder string, useDocker boo
 			fmt.Sprintf("ghcr.io/shopware/docker-dev:php%s-node24-caddy", phpVersion),
 			"composer", "install", "--no-interaction")
 
-		cmdInstall = exec.CommandContext(ctx, "docker", dockerArgs...)
+		cmdInstall, finish = executor.DockerRunCommand(ctx, dockerArgs...)
 	} else {
 		composerBinary, isPhar, err := system.ResolveComposer(ctx)
 		if err != nil {
@@ -284,12 +276,12 @@ func runComposerInstall(ctx context.Context, projectFolder string, useDocker boo
 		cmdInstall.Stderr = io.MultiWriter(os.Stderr, &output)
 
 		err := cmdInstall.Run()
-		return output.String(), err
+		return output.String(), finish(err)
 	}
 
 	cmdInstall.Stdout = &output
 	cmdInstall.Stderr = &output
 
 	err := tui.RunSpinnerWithLogs(ctx, "Installing dependencies", cmdInstall)
-	return output.String(), err
+	return output.String(), finish(err)
 }

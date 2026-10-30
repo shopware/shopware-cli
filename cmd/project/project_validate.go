@@ -5,7 +5,6 @@ import (
 	"path/filepath"
 
 	"github.com/spf13/cobra"
-	"golang.org/x/sync/errgroup"
 
 	"github.com/shopware/shopware-cli/internal/shop"
 	"github.com/shopware/shopware-cli/internal/validation"
@@ -30,14 +29,13 @@ var projectValidateCmd = &cobra.Command{
 	RunE: func(cmd *cobra.Command, args []string) error {
 		// Reporting format was validated in PreRunE.
 		reportingFormat, _ := projectValidationFormat(cmd)
+		ctx := cmd.Context()
+		progress := verifier.NewProgress(reportingFormat)
 		only, _ := cmd.Flags().GetString("only")
 		exclude, _ := cmd.Flags().GetString("exclude")
 
 		// Tool selection was validated in PreRunE.
 		tools, statuses, _ := selectProjectValidationTools(only, exclude)
-		if err := verifier.SetupTools(cmd.Context(), cmd.Root().Version); err != nil {
-			return err
-		}
 		localOnly, _ := cmd.Flags().GetBool("local-only")
 
 		var err error
@@ -57,28 +55,25 @@ var projectValidateCmd = &cobra.Command{
 			return fmt.Errorf("cannot find path: %w", err)
 		}
 
-		toolCfg, err := verifier.GetConfigFromProject(cmd.Context(), projectPath, localOnly)
+		finishConfig := progress.Start("discovering project configuration")
+		toolCfg, err := verifier.GetConfigFromProject(ctx, projectPath, localOnly)
+		finishConfig(err)
 		if err != nil {
 			return err
 		}
 
-		result := verifier.NewCheck()
-		result.SetSourceRoot(toolCfg.RootDir)
-
-		var gr errgroup.Group
-
-		for _, tool := range tools {
-			gr.Go(func() error {
-				return tool.Check(cmd.Context(), result, *toolCfg)
-			})
+		finishSetup := progress.Start("preparing tools")
+		setupErr := verifier.SetupTools(ctx, cmd.Root().Version)
+		finishSetup(setupErr)
+		if setupErr != nil {
+			return setupErr
 		}
+		toolCfg.ToolDirectory = verifier.GetToolDirectory()
 
-		runErr := gr.Wait()
-		reportErr := validation.DoCheckReport(result.RemoveByIdentifier(toolCfg.ValidationIgnores), reportingFormat, runErr != nil, statuses...)
-		if runErr != nil {
-			return runErr
-		}
-		return reportErr
+		results := verifier.RunTools(ctx, tools, statuses, *toolCfg, progress, func(tool verifier.CheckTool, execution *verifier.ToolExecution) verifier.ToolSummary {
+			return tool.Check(ctx, *toolCfg, execution)
+		})
+		return validation.ReportTools(results, reportingFormat, "Checkers")
 	},
 }
 

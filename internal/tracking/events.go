@@ -4,13 +4,21 @@ package tracking
 // itself. Every event and its tags are documented in docs/TELEMETRY.md; new
 // events must be added there as well.
 const (
+	// EventToolSubprocess measures duration and captured output for each tool subprocess attempt.
+	EventToolSubprocess = "tool.subprocess"
 	// EventCommand is sent after (almost) any sub-command finishes (cmd/root.go).
 	EventCommand = "command"
 	// EventProjectCreate is sent when a new Shopware project is scaffolded.
 	EventProjectCreate = "project.create"
-	// EventProjectUpgrade is sent when the interactive upgrade wizard finishes
-	// an upgrade run (internal/tui/upgrade).
+	// EventProjectUpgrade is sent when an upgrade run ends or stops at a blocking check.
 	EventProjectUpgrade = "project.upgrade"
+
+	// The ai.* events are sent by the ai command group (cmd/ai) after the
+	// integration is resolved against the directory, so TagIntegration is always a
+	// known catalog value. An unrecognized name is covered by EventCommand and is
+	// never transmitted here.
+	EventAIAdd    = "ai.add"
+	EventAIRemove = "ai.remove"
 
 	// The project.dev.* events are sent by the interactive dev TUI (internal/tui/dev).
 	EventDevSession         = "project.dev.session"
@@ -27,13 +35,25 @@ const (
 // table materializes columns from these shared keys, so a new event reusing
 // them is aggregatable without schema changes.
 const (
+	// EventToolSubprocess
+	TagTool        = "tool"
+	TagOperation   = "operation"
+	TagExitCode    = "exit_code"
+	TagStdoutBytes = "stdout_bytes"
+	TagStderrBytes = "stderr_bytes"
+	TagStarted     = "started"
+
+	// Every event, set by Track
+	TagCLIVersion = "cli_version"
+
 	// EventCommand
 	TagCommandName = "command_name"
 	TagResult      = "result"
 	TagDurationMS  = "duration_ms"
-	TagCLIVersion  = "cli_version"
 	TagOS          = "os"
 	TagIsTUI       = "is_tui"
+	TagIsWSL       = "is_wsl"
+	TagCIProvider  = "ci_provider"
 
 	// EventProjectCreate
 	TagVersion           = "version"
@@ -45,8 +65,18 @@ const (
 	TagInteractive       = "interactive"
 
 	// EventProjectUpgrade
-	TagFromVersion   = "from_version"
-	TagTargetVersion = "target_version"
+	TagFromVersion    = "from_version"
+	TagTargetVersion  = "target_version"
+	TagBlockingChecks = "blocking_checks"
+
+	// EventAIAdd, EventAIRemove
+	TagIntegration = "integration" // directory name, e.g. shopware-cli / meteor
+	TagType        = "type"        // skill / mcp
+	TagAgent       = "agent"       // skills only, enumerated client id (claude-code)
+	TagScope       = "scope"       // project / global
+	TagPinned      = "pinned"      // add only, skills only: a @<tag> was requested
+	TagDryRun      = "dry_run"     // preview run; nothing changed on disk
+	TagRemoved     = "removed"     // remove only: the integration was actually present
 
 	// EventDevInstall
 	TagAbandonedAt       = "abandoned_at"
@@ -68,6 +98,8 @@ const (
 
 	// EventDevWatcher
 	TagWatcher = "watcher"
+	TagProxied = "proxied"
+	TagPhase   = "phase"
 
 	// EventDevHealth
 	TagCheck = "check"

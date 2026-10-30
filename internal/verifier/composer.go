@@ -19,45 +19,68 @@ import (
 // dependencies are resolved again to pick up new releases.
 const validationVendorTTL = 24 * time.Hour
 
+// preparePHPTool checks whether a tool has PHP sources and a Composer manifest.
+func preparePHPTool(config ToolConfig, execution *ToolExecution) (ToolSummary, bool) {
+	if len(config.SourceDirectories) == 0 {
+		return ToolSummary{SkipReason: "no source directories"}, false
+	}
+	if _, err := os.Stat(path.Join(config.RootDir, "composer.json")); err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return ToolSummary{SkipReason: "no composer.json found"}, false
+		}
+		execution.Fail(&ToolError{Err: fmt.Errorf("cannot read composer manifest: %w", err)})
+		return ToolSummary{}, false
+	}
+	return ToolSummary{}, true
+}
+
 // installComposerDeps installs the dependencies into rootDir itself when vendor/ is missing.
-func installComposerDeps(ctx context.Context, rootDir string, checkAgainst string) error {
-	if _, err := os.Stat(path.Join(rootDir, "vendor")); !os.IsNotExist(err) {
+func installComposerDeps(ctx context.Context, rootDir string, checkAgainst string, execution *ToolExecution) *ToolError {
+	_, err := os.Stat(path.Join(rootDir, "vendor"))
+	if err == nil {
 		return nil
 	}
+	if !errors.Is(err, os.ErrNotExist) {
+		return &ToolError{Err: fmt.Errorf("cannot read vendor directory: %w", err)}
+	}
 
-	return runComposerDeps(ctx, rootDir, path.Join(rootDir, "auth.json"), getComposerSuggets(rootDir), checkAgainst)
+	return runComposerDeps(ctx, rootDir, path.Join(rootDir, "auth.json"), getComposerSuggets(rootDir), checkAgainst, execution)
 }
 
 // prepareComposerAutoload returns the autoload file to analyse config.RootDir with.
 // An existing vendor/ is used as it is. A project must have one; for an
 // extension without vendor/ the dependencies are installed into its validation
 // cache, so validation never touches vendor/, composer.json or composer.lock.
-func prepareComposerAutoload(ctx context.Context, config ToolConfig) (string, error) {
-	if _, err := os.Stat(path.Join(config.RootDir, "vendor")); !os.IsNotExist(err) {
+func prepareComposerAutoload(ctx context.Context, config ToolConfig, execution *ToolExecution) (string, *ToolError) {
+	_, err := os.Stat(path.Join(config.RootDir, "vendor"))
+	if err == nil {
 		if config.CheckAgainst == "lowest" {
 			logging.FromContext(ctx).Warnf("Using the existing vendor/ directory, --check-against lowest has no effect")
 		}
 
 		return path.Join(config.RootDir, "vendor", "autoload.php"), nil
 	}
+	if !errors.Is(err, os.ErrNotExist) {
+		return "", &ToolError{Err: fmt.Errorf("cannot read vendor directory: %w", err)}
+	}
 
 	if config.IsProject {
-		return "", errors.New(`cannot run phpstan without vendor/: run "composer install" first (pass --exclude phpstan to skip it)`)
+		return "", &ToolError{Err: errors.New(`cannot run phpstan without vendor/: run "composer install" first (pass --exclude phpstan to skip it)`)}
 	}
 
 	composerJSON, err := os.ReadFile(path.Join(config.RootDir, "composer.json"))
 	if err != nil {
-		return "", fmt.Errorf("cannot read composer.json: %w", err)
+		return "", &ToolError{Err: fmt.Errorf("cannot read composer.json: %w", err)}
 	}
 
 	dependencies, err := validationComposerJSON(composerJSON)
 	if err != nil {
-		return "", err
+		return "", &ToolError{Err: err}
 	}
 
 	cacheDir, err := ensureValidationCacheDir(config.RootDir)
 	if err != nil {
-		return "", err
+		return "", &ToolError{Err: err}
 	}
 
 	mode := "highest"
@@ -77,20 +100,20 @@ func prepareComposerAutoload(ctx context.Context, config ToolConfig) (string, er
 	// runs never see a half-installed vendor directory.
 	buildDir, err := os.MkdirTemp(cacheDir, "build-*")
 	if err != nil {
-		return "", fmt.Errorf("cannot create composer cache directory: %w", err)
+		return "", &ToolError{Err: fmt.Errorf("cannot create composer cache directory: %w", err)}
 	}
 	defer func() { _ = os.RemoveAll(buildDir) }()
 
 	if err := os.WriteFile(path.Join(buildDir, "composer.json"), dependencies, 0o644); err != nil {
-		return "", fmt.Errorf("cannot write composer.json: %w", err)
+		return "", &ToolError{Err: fmt.Errorf("cannot write composer.json: %w", err)}
 	}
 
-	if err := runComposerDeps(ctx, buildDir, path.Join(config.RootDir, "auth.json"), nil, config.CheckAgainst); err != nil {
-		return "", err
+	if toolErr := runComposerDeps(ctx, buildDir, path.Join(config.RootDir, "auth.json"), nil, config.CheckAgainst, execution); toolErr != nil {
+		return "", toolErr
 	}
 
 	if err := os.RemoveAll(workDir); err != nil {
-		return "", fmt.Errorf("cannot replace cached composer dependencies: %w", err)
+		return "", &ToolError{Err: fmt.Errorf("cannot replace cached composer dependencies: %w", err)}
 	}
 
 	if err := os.Rename(buildDir, workDir); err != nil {
@@ -98,7 +121,7 @@ func prepareComposerAutoload(ctx context.Context, config ToolConfig) (string, er
 		if _, statErr := os.Stat(autoloadFile); statErr == nil {
 			return autoloadFile, nil
 		}
-		return "", fmt.Errorf("cannot store composer dependencies: %w", err)
+		return "", &ToolError{Err: fmt.Errorf("cannot store composer dependencies: %w", err)}
 	}
 
 	return autoloadFile, nil
@@ -170,15 +193,15 @@ func validationComposerJSON(composerJSON []byte) ([]byte, error) {
 	return json.Marshal(dependencies)
 }
 
-func runComposerDeps(ctx context.Context, dir string, authFile string, suggets []string, checkAgainst string) error {
+func runComposerDeps(ctx context.Context, dir string, authFile string, suggets []string, checkAgainst string, execution *ToolExecution) *ToolError {
 	composerAuth, err := shop.ReadComposerAuth(authFile)
 	if err != nil {
-		return fmt.Errorf("failed to read composer auth file: %w", err)
+		return &ToolError{Err: fmt.Errorf("cannot read Composer auth file: %w", err)}
 	}
 
 	encoded, err := composerAuth.Json(false)
 	if err != nil {
-		return fmt.Errorf("failed to encode composer auth: %w", err)
+		return &ToolError{Err: fmt.Errorf("cannot encode Composer auth: %w", err)}
 	}
 
 	env := append(os.Environ(), fmt.Sprintf("COMPOSER_AUTH=%s", encoded))
@@ -193,12 +216,9 @@ func runComposerDeps(ctx context.Context, dir string, authFile string, suggets [
 		composerInstall.Env = env
 		composerInstall.Dir = dir
 
-		log, err := composerInstall.CombinedOutput()
-		if err != nil {
-			if _, writeErr := os.Stderr.Write(log); writeErr != nil {
-				return fmt.Errorf("failed to write error log: %w (original error: %v)", writeErr, err)
-			}
-			return err
+		subprocess := execution.Run(OperationComposerRequire, composerInstall)
+		if subprocess.Err != nil {
+			return subprocess.ToolError(fmt.Errorf("cannot install Composer suggestions: %w", subprocess.Err))
 		}
 	}
 
@@ -214,12 +234,9 @@ func runComposerDeps(ctx context.Context, dir string, authFile string, suggets [
 
 	beforeStart := time.Now()
 
-	log, err := composerInstall.CombinedOutput()
-	if err != nil {
-		if _, writeErr := os.Stderr.Write(log); writeErr != nil {
-			return fmt.Errorf("failed to write error log: %w (original error: %v)", writeErr, err)
-		}
-		return err
+	subprocess := execution.Run(OperationComposerUpdate, composerInstall)
+	if subprocess.Err != nil {
+		return subprocess.ToolError(fmt.Errorf("cannot install Composer dependencies: %w", subprocess.Err))
 	}
 
 	logging.FromContext(ctx).Debugf("Composer dependencies installed in %s", time.Since(beforeStart).String())

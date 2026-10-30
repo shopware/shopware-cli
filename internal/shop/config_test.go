@@ -48,6 +48,48 @@ include:
 	assert.NotNil(t, config.ConfigDump.Where)
 }
 
+func TestConfigMergingDumpTableLists(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	t.Chdir(tmpDir)
+
+	baseConfig := []byte(`
+dump:
+  nodata:
+    - promotion
+    - newsletter_recipient
+  skip_customer_data_tables:
+    - payone_payment_card
+    - 'unzer_payment_*'
+  ignore:
+    - product_search_keyword
+`)
+
+	projectConfig := []byte(`
+include:
+  - base.yml
+dump:
+  nodata:
+    - frosh_mail_archive
+    - promotion
+  skip_customer_data_tables:
+    - klarna_payment_request_log
+    - payone_payment_card
+  ignore:
+    - product_keyword_dictionary
+`)
+
+	assert.NoError(t, os.WriteFile(filepath.Join(tmpDir, "base.yml"), baseConfig, 0644))
+	assert.NoError(t, os.WriteFile(filepath.Join(tmpDir, "project.yml"), projectConfig, 0644))
+
+	config, err := ReadConfig(t.Context(), filepath.Join(tmpDir, "project.yml"), false)
+	assert.NoError(t, err)
+
+	assert.Equal(t, []string{"frosh_mail_archive", "promotion", "newsletter_recipient"}, config.ConfigDump.NoData)
+	assert.Equal(t, []string{"product_keyword_dictionary", "product_search_keyword"}, config.ConfigDump.Ignore)
+	assert.ElementsMatch(t, []string{"klarna_payment_request_log", "payone_payment_card", "unzer_payment_*"}, config.ConfigDump.SkipCustomerDataTables)
+}
+
 func TestConfigPHPVersionRoundTrip(t *testing.T) {
 	tmpDir := t.TempDir()
 

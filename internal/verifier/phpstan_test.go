@@ -114,18 +114,15 @@ func TestPhpStanAnalysesAllSourceDirectoriesInOneRun(t *testing.T) {
 	sourceDirectories := []string{filepath.Join(rootDir, "src"), filepath.Join(rootDir, "lib")}
 
 	// A fake php records every run and reports no errors.
-	binDir := t.TempDir()
-	runsLog := filepath.Join(binDir, "runs.log")
-	script := "#!/bin/sh\necho \"$*\" >> '" + runsLog + "'\necho '{\"totals\":{\"errors\":0,\"file_errors\":0},\"files\":[],\"errors\":[]}'\n"
-	require.NoError(t, os.WriteFile(filepath.Join(binDir, "php"), []byte(script), 0o755))
-	t.Setenv("PATH", binDir)
+	runsLog := filepath.Join(t.TempDir(), "runs.log")
+	fakeTool(t, "php", "echo \"$*\" >> '"+runsLog+"'\necho '{\"totals\":{\"errors\":0,\"file_errors\":0},\"files\":[],\"errors\":[]}'\n")
 
-	err := PhpStan{}.Check(t.Context(), NewCheck(), ToolConfig{
+	result := runCheckTool(t, PhpStan{}, ToolConfig{
 		RootDir:           rootDir,
 		ToolDirectory:     t.TempDir(),
 		SourceDirectories: sourceDirectories,
 	})
-	require.NoError(t, err)
+	require.Empty(t, result.Errors)
 
 	runs, err := os.ReadFile(runsLog)
 	require.NoError(t, err)

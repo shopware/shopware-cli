@@ -47,6 +47,10 @@ type Dumper struct {
 	// When set to a positive value, it takes priority over Quick mode.
 	// When not set (0 or negative) and Quick is true, the batch size is 1.
 	InsertIntoLimit int
+	// InsertIntoMaxBytes is the target maximum INSERT size in bytes, including
+	// SQL syntax and escaped values. Non-positive values use DefaultInsertIntoMaxBytes.
+	// A single larger row is emitted on its own, since rows cannot be split.
+	InsertIntoMaxBytes int
 	// Parallel controls how many tables to dump concurrently (default: 0 = disabled)
 	Parallel            int
 	mapBins             map[string][]string
@@ -60,6 +64,8 @@ const (
 	IgnoreMapPlacement = "ignore"
 	NoDataMapPlacement = "nodata"
 	defaultInsertLimit = 100
+	// DefaultInsertIntoMaxBytes limits INSERT batches to 1 MiB unless a single row exceeds it.
+	DefaultInsertIntoMaxBytes = 1024 * 1024
 )
 
 var skipDefinerRegExp = regexp.MustCompile(`(?m)DEFINER=[^ ]* `)
@@ -565,9 +571,27 @@ func (d *Dumper) dumpTableData(ctx context.Context, w io.Writer, table string) e
 	}
 
 	query := d.generateInsertStatement(columns, table)
+	maxBytes := d.InsertIntoMaxBytes
+	if maxBytes <= 0 {
+		maxBytes = DefaultInsertIntoMaxBytes
+	}
+	// Include the newline after VALUES and the trailing semicolon and newline.
+	queryBytes := len(query) + 3
+	batchBytes := queryBytes
 	var data []string
+	flush := func() error {
+		if len(data) == 0 {
+			return nil
+		}
+		if _, err := fmt.Fprintf(w, "%s\n%s;\n", query, strings.Join(data, ",\n")); err != nil {
+			return err
+		}
+		data = nil
+		batchBytes = queryBytes
+		return nil
+	}
 	for rows.Next() {
-		if dErr := rows.Scan(scanArgs...); err != nil {
+		if dErr := rows.Scan(scanArgs...); dErr != nil {
 			return dErr
 		}
 		var vals []string
@@ -575,22 +599,28 @@ func (d *Dumper) dumpTableData(ctx context.Context, w io.Writer, table string) e
 			vals = append(vals, d.getProperEscapedValue(col, table, columns[i]))
 		}
 
-		data = append(data, fmt.Sprintf("( %s )", strings.Join(vals, ", ")))
-		if len(data) >= numRows {
-			if _, err := fmt.Fprintf(w, "%s\n%s;\n", query, strings.Join(data, ",\n")); err != nil {
+		row := fmt.Sprintf("( %s )", strings.Join(vals, ", "))
+		if len(data) > 0 && batchBytes+2+len(row) > maxBytes {
+			if err := flush(); err != nil {
 				return err
 			}
-			data = make([]string, 0)
+		}
+		if len(data) > 0 {
+			batchBytes += 2 // Comma and newline between rows.
+		}
+		data = append(data, row)
+		batchBytes += len(row)
+		if len(data) >= numRows {
+			if err := flush(); err != nil {
+				return err
+			}
 		}
 	}
 
-	if len(data) > 0 {
-		if _, err := fmt.Fprintf(w, "%s\n%s;\n", query, strings.Join(data, ",\n")); err != nil {
-			return err
-		}
+	if err := rows.Err(); err != nil {
+		return err
 	}
-
-	return nil
+	return flush()
 }
 
 func (d *Dumper) getProperEscapedValue(col *sql.RawBytes, table, columnName string) string {

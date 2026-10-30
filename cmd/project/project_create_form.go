@@ -7,7 +7,6 @@ import (
 	"os"
 	"slices"
 	"strings"
-	"time"
 
 	"charm.land/huh/v2"
 	"charm.land/lipgloss/v2"
@@ -21,18 +20,12 @@ import (
 	"github.com/shopware/shopware-cli/internal/tui"
 )
 
-// dockerCheckTimeout bounds the `docker info` probe, so a wedged daemon (e.g.
-// Docker Desktop stuck while starting) reports "not running" instead of
-// hanging the wizard.
-const dockerCheckTimeout = 5 * time.Second
-
 // dockerAvailabilityForCreate reports the Docker dependencies that block a
 // Docker-based project, or nil when Docker is usable. It is a variable so
-// tests can stub the docker daemon check.
+// tests can stub the docker daemon check. The probes time out individually
+// inside CheckProjectDependencies. A single short deadline here used to
+// cancel a slow daemon probe and the Compose check together.
 var dockerAvailabilityForCreate = func(ctx context.Context) []system.MissingDependency {
-	ctx, cancel := context.WithTimeout(ctx, dockerCheckTimeout)
-	defer cancel()
-
 	// With Docker selected the check only reports Docker and its Compose plugin.
 	return system.CheckProjectDependencies(ctx, true, nil, "")
 }
@@ -51,12 +44,48 @@ func dockerUnavailableReason(missing []system.MissingDependency) string {
 	return strings.Join(reasons, " and ")
 }
 
+// recheckDockerChoice probes Docker again when the Docker option is chosen while it was unavailable, so a daemon started meanwhile unblocks the choice.
+func recheckDockerChoice(choice string, dockerMissing []system.MissingDependency, probe func() []system.MissingDependency) []system.MissingDependency {
+	if choice == tui.Yes && len(dockerMissing) > 0 {
+		return probe()
+	}
+	return dockerMissing
+}
+
+// dockerUnavailableLabel phrases the option suffix like the issue asked: "(Docker is not running, start it first)".
+func dockerUnavailableLabel(missing []system.MissingDependency) string {
+	hint := "fix both first"
+	if len(missing) == 1 {
+		hint = "install it first"
+		if missing[0].Reason == "not running" {
+			hint = "start it first"
+		}
+	}
+	return "(" + dockerUnavailableReason(missing) + ", " + hint + ")"
+}
+
+// dockerReadyCondition phrases what must be true before the Docker option can be chosen, e.g. "Docker is running".
+func dockerReadyCondition(missing []system.MissingDependency) string {
+	conditions := make([]string, 0, len(missing))
+	for _, m := range missing {
+		switch {
+		case m.Reason == "not running":
+			conditions = append(conditions, "Docker is running")
+		case m.Name == "Docker":
+			conditions = append(conditions, "Docker is installed")
+		default:
+			conditions = append(conditions, "the "+m.Name+" is installed")
+		}
+	}
+	return strings.Join(conditions, " and ")
+}
+
 // validateDockerChoice rejects the Docker option while Docker is unavailable,
 // so the form blocks right at the Docker question instead of failing after
 // the user configured the whole project.
 func validateDockerChoice(choice string, dockerMissing []system.MissingDependency) error {
 	if choice == tui.Yes && len(dockerMissing) > 0 {
-		return fmt.Errorf("%s — %s, or choose local PHP to continue without Docker", dockerUnavailableReason(dockerMissing), system.DockerSteps(dockerMissing))
+		return fmt.Errorf("choose this option again once %s, or choose local PHP to continue without Docker", dockerReadyCondition(dockerMissing))
 	}
 	return nil
 }
@@ -285,8 +314,7 @@ func runCreateForm(cmd *cobra.Command, opts *createOptions, releases []repositor
 			dockerDescription := "How do you want to run Shopware?"
 			dockerOptionLabel := "Run Shopware with Docker"
 			if len(dockerMissing) > 0 {
-				dockerDescription = fmt.Sprintf("How do you want to run Shopware? %s — %s to enable Docker, or continue with local PHP.", dockerUnavailableReason(dockerMissing), system.DockerSteps(dockerMissing))
-				dockerOptionLabel = fmt.Sprintf("Run Shopware with Docker (unavailable — %s)", dockerUnavailableReason(dockerMissing))
+				dockerOptionLabel += " " + dockerUnavailableLabel(dockerMissing)
 			}
 			formGroups = append(formGroups, huh.NewGroup(
 				huh.NewSelect[string]().
@@ -297,6 +325,9 @@ func runCreateForm(cmd *cobra.Command, opts *createOptions, releases []repositor
 						huh.NewOption("Use PHP and Composer; Shopware CLI handles the installation", tui.No),
 					).
 					Validate(func(v string) error {
+						dockerMissing = recheckDockerChoice(v, dockerMissing, func() []system.MissingDependency {
+							return dockerAvailabilityForCreate(cmd.Context())
+						})
 						return validateDockerChoice(v, dockerMissing)
 					}).
 					Value(&selectDocker),
@@ -565,6 +596,9 @@ func runCreateForm(cmd *cobra.Command, opts *createOptions, releases []repositor
 				phpDisplay += " (" + opts.phpBinary + ")"
 			}
 			fmt.Printf("  %s %s\n", labelStyle.Render("PHP:"), phpDisplay)
+		}
+		if opts.composeProjectName != "" {
+			fmt.Printf("  %s %s\n", labelStyle.Render("Compose project:"), opts.composeProjectName)
 		}
 		if opts.useDocker {
 			localDomainValue := onOff(opts.useLocalDomain)

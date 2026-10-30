@@ -1,8 +1,8 @@
 package verifier
 
 import (
-	"cmp"
 	"context"
+	"errors"
 	"fmt"
 	"os/exec"
 	"slices"
@@ -92,19 +92,28 @@ type Tool interface {
 	Name() string
 }
 
+// ToolSummary contains optional metadata returned by a tool. RunTools builds the
+// final ToolResult from this metadata and ToolExecution after deferred cleanup.
+type ToolSummary struct {
+	Note       string
+	SkipReason string
+}
+
 type CheckTool interface {
 	Tool
-	Check(ctx context.Context, check *Check, config ToolConfig) error
+	// Check returns note or skip metadata; RunTools finalizes findings and errors
+	// from the execution helper after the tool and its deferred cleanup return.
+	Check(ctx context.Context, config ToolConfig, execution *ToolExecution) ToolSummary
 }
 
 type FixTool interface {
 	Tool
-	Fix(ctx context.Context, config ToolConfig) error
+	Fix(ctx context.Context, config ToolConfig, execution *ToolExecution) ToolSummary
 }
 
 type FormatTool interface {
 	Tool
-	Format(ctx context.Context, check *Check, config ToolConfig, dryRun bool) error
+	Format(ctx context.Context, config ToolConfig, execution *ToolExecution, dryRun bool) ToolSummary
 }
 
 func canonicalToolName(name string) string {
@@ -189,11 +198,11 @@ func (tl ToolList[T]) Exclude(exclude string) (ToolList[T], error) {
 }
 
 // SelectTools applies the --only and --exclude filters and returns the
-// selected tools and their invocation statuses. kind names the tools in the
+// selected tools and results for skipped tools. kind names the tools in the
 // error returned when no tools remain, such as "formatters".
 func SelectTools[T Tool](all ToolList[T], only, exclude, kind string) (
 	ToolList[T],
-	[]validation.ToolInvocationStatus,
+	[]ToolResult,
 	error,
 ) {
 	requested, err := all.Only(only)
@@ -208,28 +217,22 @@ func SelectTools[T Tool](all ToolList[T], only, exclude, kind string) (
 		return nil, nil, fmt.Errorf("no %s selected after applying --exclude", kind)
 	}
 
-	return selected, ToolInvocationStatuses(all, requested, selected), nil
+	return selected, skippedTools(all, requested, selected), nil
 }
 
-// ToolInvocationStatuses returns a status for each available tool, sorted by
-// name. A tool is skipped if --only omitted it or --exclude removed it.
-func ToolInvocationStatuses[T Tool](all, requested, selected ToolList[T]) []validation.ToolInvocationStatus {
-	statuses := make([]validation.ToolInvocationStatus, 0, len(all))
+func skippedTools[T Tool](all, requested, selected ToolList[T]) []ToolResult {
+	results := make([]ToolResult, 0, len(all))
 	for _, tool := range all {
-		status := validation.ToolInvocationStatus{Name: tool.Name(), Status: "skipped", Reason: "not selected by --only"}
+		result := ToolResult{Name: tool.Name(), SkipReason: "not selected by --only"}
 		switch {
 		case slices.ContainsFunc(selected, func(candidate T) bool { return candidate.Name() == tool.Name() }):
-			status.Status = "invoked"
-			status.Reason = ""
+			continue
 		case slices.ContainsFunc(requested, func(candidate T) bool { return candidate.Name() == tool.Name() }):
-			status.Reason = "excluded by --exclude"
+			result.SkipReason = "excluded by --exclude"
 		}
-		statuses = append(statuses, status)
+		results = append(results, result)
 	}
-	slices.SortFunc(statuses, func(a, b validation.ToolInvocationStatus) int {
-		return cmp.Compare(a.Name, b.Name)
-	})
-	return statuses
+	return results
 }
 
 func (tl ToolList[T]) PossibleString() string {
@@ -267,6 +270,14 @@ func (tl ToolList[T]) CompleteNames(toComplete string) []string {
 func CommandContext(ctx context.Context, name string, arg ...string) *exec.Cmd {
 	logging.FromContext(ctx).Debugf("Executing command: %s %s", name, strings.Join(arg, " "))
 	return exec.CommandContext(ctx, name, arg...)
+}
+
+func expectedExit(err error, codes ...int) bool {
+	if err == nil {
+		return true
+	}
+	var exitErr *exec.ExitError
+	return errors.As(err, &exitErr) && slices.Contains(codes, exitErr.ExitCode())
 }
 
 // commandOutputOrError prefers stderr, then stdout, and falls back to the process error.

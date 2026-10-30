@@ -2,11 +2,9 @@ package extension
 
 import (
 	"fmt"
-	"os"
 	"path/filepath"
 
 	"github.com/spf13/cobra"
-	"golang.org/x/sync/errgroup"
 
 	"github.com/shopware/shopware-cli/internal/extension"
 	"github.com/shopware/shopware-cli/internal/validation"
@@ -26,19 +24,12 @@ var extensionFixCmd = &cobra.Command{
 		return err
 	},
 	RunE: func(cmd *cobra.Command, args []string) error {
+		progress := verifier.NewProgress("")
 		only, _ := cmd.Flags().GetString("only")
 		exclude, _ := cmd.Flags().GetString("exclude")
 
 		// Tool selection was validated in PreRunE.
 		tools, statuses, _ := selectExtensionFixTools(only, exclude)
-
-		allowNonGit, _ := cmd.Flags().GetBool("allow-non-git")
-
-		if !allowNonGit {
-			if stat, err := os.Stat(filepath.Join(args[0], ".git")); err != nil || !stat.IsDir() {
-				return fmt.Errorf("%s is not a git repository. Use --allow-non-git flag to run anyway", args[0])
-			}
-		}
 
 		path, err := filepath.Abs(args[0])
 		if err != nil {
@@ -50,26 +41,19 @@ var extensionFixCmd = &cobra.Command{
 			return err
 		}
 
+		finishSetup := progress.Start("preparing tools and discovering extension configuration")
 		toolCfg, err := verifier.SetupExtensionToolConfig(cmd.Context(), cmd.Root().Version, ext)
+		finishSetup(err)
 		if err != nil {
 			return err
 		}
 
 		logging.FromContext(cmd.Context()).Debugf("Running fixes for Shopware version: %s", toolCfg.MinShopwareVersion)
 
-		var gr errgroup.Group
-
-		for _, tool := range tools {
-			gr.Go(func() error {
-				return tool.Fix(cmd.Context(), *toolCfg)
-			})
-		}
-
-		runErr := gr.Wait()
-		if err := validation.PrintToolInvocationTable(os.Stdout, "Fixers", statuses); err != nil {
-			return err
-		}
-		return runErr
+		results := verifier.RunTools(cmd.Context(), tools, statuses, *toolCfg, progress, func(tool verifier.FixTool, execution *verifier.ToolExecution) verifier.ToolSummary {
+			return tool.Fix(cmd.Context(), *toolCfg, execution)
+		})
+		return validation.ReportTools(results, "summary", "Fixers")
 	},
 }
 
@@ -78,6 +62,7 @@ func init() {
 	extensionFixCmd.Flags().String("only", "", "Run only the specified fixers (comma-separated, e.g. eslint,rector)")
 	extensionFixCmd.Flags().String("exclude", "", "Exclude specified fixers from running (comma-separated, e.g. eslint,rector). When combined with --only, exclude fixers from the selected set")
 	extensionFixCmd.Flags().Bool("allow-non-git", false, "Allow fix to run outside a Git repository")
+	_ = extensionFixCmd.Flags().MarkDeprecated("allow-non-git", "a Git repository is no longer required; omit --allow-non-git")
 	_ = extensionFixCmd.RegisterFlagCompletionFunc("only", completeToolNames[verifier.FixTool])
 	_ = extensionFixCmd.RegisterFlagCompletionFunc("exclude", completeToolNames[verifier.FixTool])
 }

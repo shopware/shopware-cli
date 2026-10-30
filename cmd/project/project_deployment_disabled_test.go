@@ -11,5 +11,6 @@ import (
 func TestDeploymentCommandsDisabled(t *testing.T) {
 	for _, cmd := range projectRootCmd.Commands() {
 		assert.NotEqual(t, "deployment", cmd.Name(), "deployment commands must not be registered in normal builds")
+		assert.NotEqual(t, "deploy", cmd.Name(), "deployment commands must not be registered in normal builds")
 	}
 }

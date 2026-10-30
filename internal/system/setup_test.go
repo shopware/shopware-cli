@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 )
@@ -34,6 +35,40 @@ func TestCheckProjectDependencies(t *testing.T) {
 	t.Run("daemon down and compose plugin missing", func(t *testing.T) {
 		stubDocker(t, `exit 1`)
 		assert.Equal(t, []MissingDependency{{Name: "Docker", Reason: "not running"}, {Name: "Docker Compose plugin", Reason: "not installed"}}, CheckProjectDependencies(t.Context(), true, nil, ""))
+	})
+
+	t.Run("compose plugin is present when the daemon is down", func(t *testing.T) {
+		stubDocker(t, `if [ "$1" = version ]; then exit 1; fi; exit 0`)
+		assert.Equal(t, []MissingDependency{{Name: "Docker", Reason: "not running"}}, CheckProjectDependencies(t.Context(), true, nil, ""))
+	})
+
+	t.Run("slow daemon response is running", func(t *testing.T) {
+		// The stub's PATH contains only the fake docker, so sleep must be absolute.
+		stubDocker(t, `
+if [ "$1" = version ]; then
+  /bin/sleep 1
+  exit 0
+fi
+exit 0
+`)
+		assert.Empty(t, CheckProjectDependencies(t.Context(), true, nil, ""))
+	})
+
+	t.Run("timed out daemon probe still checks compose", func(t *testing.T) {
+		previous := dockerProbeTimeout
+		dockerProbeTimeout = 200 * time.Millisecond
+		t.Cleanup(func() { dockerProbeTimeout = previous })
+
+		stubDocker(t, `
+if [ "$1" = version ]; then
+  exec /bin/sleep 30
+fi
+exit 0
+`)
+		started := time.Now()
+		missing := CheckProjectDependencies(t.Context(), true, nil, "")
+		assert.Less(t, time.Since(started), 5*time.Second)
+		assert.Equal(t, []MissingDependency{{Name: "Docker", Reason: "not running"}}, missing)
 	})
 
 	t.Run("docker and compose plugin available", func(t *testing.T) {
