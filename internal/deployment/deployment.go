@@ -36,10 +36,11 @@ type Rollout struct {
 	Unchanged bool `json:"unchanged,omitempty"`
 }
 
-// Backend creates immutable deployments for an environment.
+// Backend owns creation and activation of immutable deployments.
 type Backend interface {
 	Type() string
 	CreateDeployment(ctx context.Context, options CreateOptions) (Deployment, error)
+	RolloutDeployment(ctx context.Context, deployment Deployment, output io.Writer) (Rollout, error)
 }
 
 type CreateOptions struct {

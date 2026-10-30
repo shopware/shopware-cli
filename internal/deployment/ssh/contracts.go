@@ -14,4 +14,15 @@ type RolloutHistory = deployment.RolloutHistory
 
 var ErrNotSupported = deployment.ErrNotSupported
 
+type Preflight = deployment.Preflight
+type PreflightAction = deployment.PreflightAction
+type PreflightOptions = deployment.PreflightOptions
+type PreflightTarget = deployment.PreflightTarget
+type PreflightProvider = deployment.PreflightProvider
+
+const PreflightRollout = deployment.PreflightRollout
+const PreflightRollback = deployment.PreflightRollback
+
+var WritePreflight = deployment.WritePreflight
+
 type Initializer = deployment.Initializer

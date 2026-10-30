@@ -134,7 +134,7 @@ exec "$DEPLOYMENT_TEST_PHP" -d memory_limit=192M "$@"
 	backend, err := New(e.root, e.configPath, e.config, &env)
 	require.NoError(t, err)
 	archive := deploymentTestArchive(t, `if (ini_get('memory_limit') !== '192M') { exit(42); }`)
-	_, err = backend.(*SSH).RolloutDeployment(t.Context(), Deployment{Reference: archive}, io.Discard)
+	_, err = backend.RolloutDeployment(t.Context(), Deployment{Reference: archive}, io.Discard)
 	require.NoError(t, err)
 	data, err := os.ReadFile(calls)
 	require.NoError(t, err)
@@ -147,7 +147,7 @@ func TestSSHRolloutPreservesConfiguredPHPArgs(t *testing.T) {
 	backend, err := New(e.root, e.configPath, e.config, e.env)
 	require.NoError(t, err)
 	archive := deploymentTestArchive(t, `if (ini_get('memory_limit') !== '192M') { exit(42); }`)
-	_, err = backend.(*SSH).RolloutDeployment(t.Context(), Deployment{Reference: archive}, io.Discard)
+	_, err = backend.RolloutDeployment(t.Context(), Deployment{Reference: archive}, io.Discard)
 	require.NoError(t, err)
 }
 
