@@ -25,12 +25,18 @@ GOTOOLCHAIN = "local"
 
 [tasks.format]
 description = "Format Go and Markdown files"
-depends = ["format-markdown"]
+depends = ["format-go", "format-markdown"]
+
+[tasks.format-go]
+description = "Format Go source files"
 run = "golangci-lint fmt ./..."
 
 [tasks.format-check]
 description = "Check Go and Markdown formatting"
-depends = ["lint-markdown"]
+depends = ["format-check-go", "lint-markdown"]
+
+[tasks.format-check-go]
+description = "Check Go formatting"
 run = "golangci-lint fmt --diff ./..."
 
 [tasks.build]
@@ -51,7 +57,10 @@ run = "go vet ./..."
 
 [tasks.lint]
 description = "Lint Go and Markdown files"
-depends = ["lint-markdown"]
+depends = ["lint-go", "lint-markdown"]
+
+[tasks.lint-go]
+description = "Lint Go source files"
 run = "golangci-lint run ./... --timeout 4m"
 
 [tasks.check]
