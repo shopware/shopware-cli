@@ -4,14 +4,14 @@ on:
   pull_request:
     paths:
       - '.github/workflows/**'
-      - '.github/actionlint.yml'
       - 'mise.toml'
+      - 'mise.lock'
   push:
     branches: [main]
     paths:
       - '.github/workflows/**'
-      - '.github/actionlint.yml'
       - 'mise.toml'
+      - 'mise.lock'
   workflow_dispatch:
 
 concurrency:
@@ -34,6 +34,10 @@ jobs:
           allowed-endpoints: >
             api.github.com:443
             github.com:443
+            mise.jdx.dev:443
+            mise-versions.jdx.dev:443
+            objects.githubusercontent.com:443
+            raw.githubusercontent.com:443
             release-assets.githubusercontent.com:443
 
       - name: Checkout
@@ -41,19 +45,10 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Install actionlint
-        env:
-          # Keep the version aligned with mise.toml.
-          ACTIONLINT_VERSION: '1.7.12'
-          ACTIONLINT_SHA256: 8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8
-        run: |
-          curl --fail --silent --show-error --location \
-            "https://github.com/rhysd/actionlint/releases/download/v${ACTIONLINT_VERSION}/actionlint_${ACTIONLINT_VERSION}_linux_amd64.tar.gz" \
-            --output "$RUNNER_TEMP/actionlint.tar.gz"
-          echo "$ACTIONLINT_SHA256  $RUNNER_TEMP/actionlint.tar.gz" | sha256sum --check
-          tar -xzf "$RUNNER_TEMP/actionlint.tar.gz" -C "$RUNNER_TEMP" actionlint
+      - name: Set up workflow tools
+        uses: jdx/mise-action@6be3c7ed4c21d4f76b208d351d95aac273ebb76d # ratchet:jdx/mise-action@v5.2.4
+        with:
+          install_args: --locked jactionlint shellcheck
 
       - name: Check workflows
-        run: |
-          shellcheck --version
-          "$RUNNER_TEMP/actionlint" -color -shellcheck=shellcheck -pyflakes=
+        run: mise run --skip-tools lint-workflows

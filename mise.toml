@@ -12,8 +12,8 @@ go = "1.27"
 # Keep this in sync with the version in .github/workflows/lint.yml.
 golangci-lint = "2.15.0"
 
-# Keep this aligned with .github/workflows/actionlint.yml.
-actionlint = "1.7.12"
+# Workflow tools are shared by local tasks and CI; checksums are in mise.lock.
+jactionlint = "2.4.0"
 shellcheck = "0.11.0"
 
 [env]
@@ -55,4 +55,4 @@ depends = ["format-check", "build", "test", "vet", "lint", "lint-workflows"]
 [tasks.lint-workflows]
 description = "Validate GitHub Actions workflows"
 # Require ShellCheck so embedded shell scripts are always validated.
-run = ["shellcheck --version", "actionlint -color -shellcheck=shellcheck -pyflakes="]
+run = ["shellcheck --version", "jactionlint --color --shellcheck=shellcheck --pyflakes="]
