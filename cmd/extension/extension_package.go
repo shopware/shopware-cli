@@ -13,6 +13,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/shopware/shopware-cli/internal/archiver"
+	"github.com/shopware/shopware-cli/internal/cliversion"
 	"github.com/shopware/shopware-cli/internal/executor"
 	"github.com/shopware/shopware-cli/internal/extension"
 	"github.com/shopware/shopware-cli/internal/validation"
@@ -212,6 +213,23 @@ var extensionPackageCmd = &cobra.Command{
 			return fmt.Errorf("before hooks pack: %w", err)
 		}
 
+		writeSBOM, _ := cmd.Flags().GetBool("sbom")
+		embedSBOM, _ := cmd.Flags().GetBool("sbom-embed")
+
+		if writeSBOM || embedSBOM {
+			sbomPaths := make([]string, 0, 2)
+			if embedSBOM {
+				sbomPaths = append(sbomPaths, filepath.Join(extDir, extension.DefaultExtensionSBOMOutput))
+			}
+			if writeSBOM {
+				sbomPaths = append(sbomPaths, strings.TrimSuffix(fileName, ".zip")+".cdx.json")
+			}
+
+			if err := extension.WriteSBOM(cmd.Context(), tempExt, extDir, extension.SBOMOptions{ToolVersion: cliversion.Version}, sbomPaths...); err != nil {
+				return fmt.Errorf("cannot generate SBOM: %w", err)
+			}
+		}
+
 		// Generate checksums.json file before creating the zip
 		if err := extension.GenerateChecksumJSON(cmd.Context(), extDir, ext); err != nil {
 			return fmt.Errorf("generate checksum.json: %w", err)
@@ -240,6 +258,8 @@ func init() {
 	extensionPackageCmd.Flags().String("output-directory", "", "Directory for the ZIP file (created if missing)")
 	extensionPackageCmd.Flags().String("git-commit", "", "Git commit hash, tag, or branch to package (default: the current tag or branch)")
 	extensionPackageCmd.Flags().String("filename", "", "Name of the ZIP file (default: <name>-<tag>.zip when tagged, otherwise <name>.zip)")
+	extensionPackageCmd.Flags().Bool("sbom", false, "Write a CycloneDX SBOM of the packaged files next to the ZIP (<zip name>.cdx.json)")
+	extensionPackageCmd.Flags().Bool("sbom-embed", false, "Add the CycloneDX SBOM as sbom.cdx.json to the root of the extension inside the ZIP")
 }
 
 func getStringOnStringError(val string, _ error) string {
