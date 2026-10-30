@@ -5,11 +5,13 @@ on:
     tags:
       - '*'
 
+concurrency:
+  group: ${{ github.workflow }}-caller
+  cancel-in-progress: false
+  queue: max
+
 permissions:
-  contents: write
-  id-token: write
-  packages: write
-  attestations: write
+  contents: read
 
 env:
   GOTOOLCHAIN: local
@@ -17,6 +19,12 @@ env:
 jobs:
   release:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: write
+      id-token: write
+      packages: write
+      attestations: write
     steps:
       - name: Harden Runner
         uses: step-security/harden-runner@dc2769abcc0fcfbadfc1df54081c1608579ef6b2 # ratchet:step-security/harden-runner@v2.22.2
@@ -27,8 +35,11 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # ratchet:actions/checkout@v7.0.1
         with:
           fetch-depth: 0
+          persist-credentials: false
 
       - name: Set up Go
+        # Keep publishing cache performance; changes to cache policy are deferred.
+        # jactionlint ignore=cache-poisoning
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # ratchet:actions/setup-go@v7.0.0
         with:
           go-version: '1.27'
@@ -38,7 +49,8 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # ratchet:actions/setup-node@v6
         with:
-          node-version: 22
+          # Bundled npm supports trusted publishing without a separate upgrade.
+          node-version: '26.13.0'
           registry-url: "https://registry.npmjs.org"
 
       - name: Install Nix
@@ -66,9 +78,6 @@ jobs:
         with:
           scope: FriendsOfShopware/nur-packages
           identity: release
-
-      - name: Update npm
-        run: sudo npm install -g npm@latest
 
       - name: Login into Docker Hub
         run: echo "${{ secrets.DOCKER_HUB_PASSWORD }}" | docker login -u ${{ secrets.DOCKER_HUB_USERNAME }} --password-stdin

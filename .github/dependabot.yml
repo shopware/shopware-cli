@@ -1,5 +1,8 @@
 version: 2
+# Retain the existing default cooldown and weekly schedule rather than requiring
+# the seven-day cooldown recommended by jactionlint.
 updates:
+  # jactionlint ignore=dependabot-cooldown
   - package-ecosystem: "gomod"
     directory: "/"
     schedule:
@@ -10,6 +13,7 @@ updates:
       all:
         patterns:
           - '*'
+  # jactionlint ignore=dependabot-cooldown
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
@@ -21,6 +25,7 @@ updates:
         patterns:
           - '*'  
 
+  # jactionlint ignore=dependabot-cooldown
   - package-ecosystem: "composer"
     directory: "/internal/verifier/php"
     schedule:
@@ -32,6 +37,7 @@ updates:
         patterns:
           - '*'
 
+  # jactionlint ignore=dependabot-cooldown
   - package-ecosystem: "npm"
     directory: "/internal/verifier/js"
     schedule:
@@ -41,4 +47,4 @@ updates:
     groups:
       all:
         patterns:
-          - '*' 
+          - '*'
