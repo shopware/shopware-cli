@@ -906,7 +906,7 @@
       "properties": {
         "host": {
           "type": "string",
-          "description": "SSH host name or IP address"
+          "description": "SSH host name or IP address for a single target. Mutually exclusive with hosts."
         },
         "user": {
           "type": "string",
@@ -918,7 +918,7 @@
         },
         "directory": {
           "type": "string",
-          "description": "Absolute path of the Shopware project root on the remote host"
+          "description": "Absolute path of the Shopware project root on the remote host. For deployments, this is the active release symlink (any name); its parent holds deployment storage and must be dedicated to this deployment. Required on the single target or inherited/overridden by each named host."
         },
         "identity_file": {
           "type": "string",
@@ -934,14 +934,83 @@
           },
           "type": "array",
           "description": "Additional arguments passed to the PHP binary for PHP and console commands on the remote host (e.g. [\"-d\", \"memory_limit=512M\"] or [\"-c\", \"/path/to/php.ini\"]). Appended after the binary."
+        },
+        "shared": {
+          "$ref": "#/$defs/EnvironmentSSHSharedConfig",
+          "description": "Persistent files and directories linked into SSH deployment releases."
+        },
+        "hosts": {
+          "additionalProperties": {
+            "$ref": "#/$defs/EnvironmentSSHHostConfig"
+          },
+          "type": "object",
+          "description": "Named SSH targets, mutually exclusive with host. Persistent shared directories must be shared across hosts; releases, the active symlink and .shopware-cli remain host-local."
+        },
+        "migration_host": {
+          "type": "string",
+          "description": "Named host running migrations and initialization. Required with multiple hosts; defaults to the only host otherwise."
+        },
+        "parallelism": {
+          "type": "integer",
+          "maximum": 32,
+          "minimum": 0,
+          "description": "Maximum concurrent host operations. Zero uses the default of 2; the maximum is 32."
+        }
+      },
+      "additionalProperties": false,
+      "type": "object"
+    },
+    "EnvironmentSSHHostConfig": {
+      "properties": {
+        "host": {
+          "type": "string"
+        },
+        "user": {
+          "type": "string"
+        },
+        "port": {
+          "type": "integer"
+        },
+        "directory": {
+          "type": "string"
+        },
+        "identity_file": {
+          "type": "string"
+        },
+        "php_binary": {
+          "type": "string"
+        },
+        "shared": {
+          "$ref": "#/$defs/EnvironmentSSHSharedConfig",
+          "description": "Replaces the entire common shared block when supplied."
         }
       },
       "additionalProperties": false,
       "type": "object",
       "required": [
-        "host",
-        "directory"
-      ]
+        "host"
+      ],
+      "description": "EnvironmentSSHHostConfig inherits unset scalar fields from the common SSH configuration."
+    },
+    "EnvironmentSSHSharedConfig": {
+      "properties": {
+        "files": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array",
+          "description": "Project-relative files to share between releases. Omit to use .env.local, install.lock, public/.htaccess and public/.user.ini. An explicit list replaces the defaults; [] disables shared files."
+        },
+        "directories": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array",
+          "description": "Project-relative directories to share between releases. Omit to use config/jwt, files, var/log, public/media, public/plugins, public/thumbnail, public/sitemap and public/theme. An explicit list replaces the defaults; [] disables shared directories."
+        }
+      },
+      "additionalProperties": false,
+      "type": "object"
     },
     "Port": {
       "oneOf": [
