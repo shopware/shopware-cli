@@ -19,7 +19,7 @@ var extensionValidateCmd = &cobra.Command{
 	Long: `Validate an extension folder or ZIP file.
 Store compliance checks that Administration and Storefront source files have matching compiled assets.
 Enable it with validation.store_compliance in the extension configuration or SHOPWARE_CLI_STORE_COMPLIANCE=1.
-A folder is validated in place; without vendor/, the composer dependencies for PHPStan are installed into var/cache/shopware-cli inside it.`,
+A folder is validated in place; without an existing vendor/, the composer dependencies for PHPStan are installed inside var/cache/shopware-cli.`,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		storeCompliance, _ := cmd.Flags().GetBool("store-compliance")

@@ -151,7 +151,6 @@ Common flags include:
 - `--exclude <tools>` — skip specific tools (comma-separated).
 - `--format <format>` — choose an output format supported by the current CLI (`--reporter` is a deprecated alias).
 - `--local-only` — limit extension discovery to plugins in `custom/*` (for the project toolset); does not add per-extension metadata validation.
-- `--no-copy` — deprecated and has no effect; validation always runs in place.
 - `--verbose` — show debug output.
 
 Use current `--help` rather than treating this list as exhaustive.
@@ -177,7 +176,6 @@ Common flags include:
 - All checkers run by default, including PHPStan, ESLint, and Stylelint. `--full` is deprecated and has no effect. To do a quick validation use `--only builtin` (`sw-cli` remains accepted as a legacy alias and emits a deprecation warning).
 - `--check-against <mode>` — `highest` (default) or `lowest`: which supported Shopware version to check against.
 - `--format <format>` — choose an output format supported by the current CLI (`--reporter` is a deprecated alias).
-- `--no-copy` — deprecated and has no effect; validation always runs in place.
 - `--verbose` — show debug output.
 
 For Store-distribution workflows, use the `shopware-cli-extension-store` skill when available.
