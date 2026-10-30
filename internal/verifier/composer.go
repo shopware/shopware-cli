@@ -70,7 +70,7 @@ func prepareComposerAutoload(ctx context.Context, config ToolConfig, execution *
 		return "", &ToolError{Err: fmt.Errorf("cannot read composer.json: %w", err)}
 	}
 
-	dependencies, err := validationComposerJSON(composerJSON)
+	dependencies, err := validationComposerJSON(composerJSON, config.RootDir)
 	if err != nil {
 		return "", &ToolError{Err: err}
 	}
@@ -166,11 +166,11 @@ func ensureValidationCacheDir(rootDir string) (string, error) {
 	return cacheDir, nil
 }
 
-// validationComposerJSON returns the composer.json for the validation cache.
-// Autoload paths are relative to the extension folder and would point nowhere
-// from the cache, so they are dropped: PHPStan discovers the extension's own
-// classes in the analysed paths.
-func validationComposerJSON(composerJSON []byte) ([]byte, error) {
+// validationComposerJSON returns the composer.json for the validation cache
+// of the extension in rootDir. Autoload paths are relative to the extension
+// folder and would point nowhere from the cache, so they are dropped: PHPStan
+// discovers the extension's own classes in the analysed paths.
+func validationComposerJSON(composerJSON []byte, rootDir string) ([]byte, error) {
 	var data map[string]any
 	if err := json.Unmarshal(composerJSON, &data); err != nil {
 		return nil, fmt.Errorf("cannot parse composer.json: %w", err)
@@ -178,6 +178,19 @@ func validationComposerJSON(composerJSON []byte) ([]byte, error) {
 
 	delete(data, "autoload")
 	delete(data, "autoload-dev")
+
+	// Path repositories are relative to composer.json as well, but local
+	// packages are still needed, so they point to the extension folder instead.
+	switch repositories := data["repositories"].(type) {
+	case []any:
+		for _, repository := range repositories {
+			resolvePathRepository(repository, rootDir)
+		}
+	case map[string]any:
+		for _, repository := range repositories {
+			resolvePathRepository(repository, rootDir)
+		}
+	}
 
 	// Suggested packages are installed as well, so code using them can be analysed.
 	if suggest, ok := data["suggest"].(map[string]any); ok && len(suggest) > 0 {
@@ -194,6 +207,18 @@ func validationComposerJSON(composerJSON []byte) ([]byte, error) {
 	}
 
 	return json.Marshal(data)
+}
+
+// resolvePathRepository makes the url of a relative path repository absolute.
+func resolvePathRepository(repository any, rootDir string) {
+	entry, ok := repository.(map[string]any)
+	if !ok || entry["type"] != "path" {
+		return
+	}
+
+	if url, ok := entry["url"].(string); ok && !path.IsAbs(url) {
+		entry["url"] = path.Join(rootDir, url)
+	}
 }
 
 func runComposerDeps(ctx context.Context, dir string, authFile string, suggets []string, checkAgainst string, execution *ToolExecution) *ToolError {

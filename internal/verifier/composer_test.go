@@ -24,7 +24,7 @@ func TestValidationComposerJSONDropsAutoload(t *testing.T) {
 		"autoload-dev": {"classmap": ["tests/"]},
 		"require": {"shopware/core": "~6.6.0"},
 		"config": {"platform": {"php": "8.2"}}
-	}`))
+	}`), t.TempDir())
 	require.NoError(t, err)
 
 	var data map[string]any
@@ -37,7 +37,7 @@ func TestValidationComposerJSONRequiresSuggestedPackages(t *testing.T) {
 	result, err := validationComposerJSON([]byte(`{
 		"require": {"shopware/core": "~6.6.0", "psr/log": "^3.0"},
 		"suggest": {"psr/log": "already required", "psr/container": "optional"}
-	}`))
+	}`), t.TempDir())
 	require.NoError(t, err)
 
 	var data struct {
@@ -50,6 +50,42 @@ func TestValidationComposerJSONRequiresSuggestedPackages(t *testing.T) {
 		"psr/log":       "^3.0",
 		"psr/container": "*",
 	}, data.Require)
+}
+
+func TestValidationComposerJSONResolvesPathRepositories(t *testing.T) {
+	rootDir := t.TempDir()
+	cases := map[string]string{
+		"list":  `[{"type": "path", "url": "packages/*"}, {"type": "path", "url": "/opt/shared"}, {"type": "composer", "url": "https://packages.example.com"}]`,
+		"named": `{"local": {"type": "path", "url": "packages/*"}, "shared": {"type": "path", "url": "/opt/shared"}, "store": {"type": "composer", "url": "https://packages.example.com"}, "packagist.org": false}`,
+	}
+
+	for name, repositories := range cases {
+		t.Run(name, func(t *testing.T) {
+			result, err := validationComposerJSON([]byte(`{"repositories": `+repositories+`}`), rootDir)
+			require.NoError(t, err)
+
+			var data struct {
+				Repositories any `json:"repositories"`
+			}
+			require.NoError(t, json.Unmarshal(result, &data))
+
+			var entries []any
+			switch repositories := data.Repositories.(type) {
+			case []any:
+				entries = repositories
+			case map[string]any:
+				entries = slices.Collect(maps.Values(repositories))
+			}
+
+			var urls []string
+			for _, entry := range entries {
+				if repository, ok := entry.(map[string]any); ok {
+					urls = append(urls, repository["url"].(string))
+				}
+			}
+			assert.ElementsMatch(t, []string{filepath.Join(rootDir, "packages/*"), "/opt/shared", "https://packages.example.com"}, urls)
+		})
+	}
 }
 
 func TestPrepareComposerAutoloadKeepsExistingVendor(t *testing.T) {
@@ -84,12 +120,11 @@ func TestPrepareComposerAutoloadUpdatesCacheOnEveryRun(t *testing.T) {
 	runsLog := filepath.Join(t.TempDir(), "runs.log")
 	fakeTool(t, "composer", "echo \"$*\" >> '"+runsLog+"'\n/bin/mkdir -p vendor\n: > vendor/autoload.php\n")
 
-	composerJSON := []byte(`{"name": "acme/plugin", "require": {"shopware/core": "~6.6.0"}}`)
-	dependencies, err := validationComposerJSON(composerJSON)
-	require.NoError(t, err)
-
 	rootDir := t.TempDir()
+	composerJSON := []byte(`{"name": "acme/plugin", "require": {"shopware/core": "~6.6.0"}}`)
 	require.NoError(t, os.WriteFile(filepath.Join(rootDir, "composer.json"), composerJSON, 0o644))
+	dependencies, err := validationComposerJSON(composerJSON, rootDir)
+	require.NoError(t, err)
 
 	for _, checkAgainst := range []string{"highest", "highest", "lowest"} {
 		autoloadFile, toolErr := prepareComposerAutoload(t.Context(), ToolConfig{RootDir: rootDir, CheckAgainst: checkAgainst}, testExecution())
