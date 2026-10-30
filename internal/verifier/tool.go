@@ -62,6 +62,8 @@ type ToolConfig struct {
 	Extensions []extension.Extension
 	// PHP version of the project the extensions are validated in; empty for a single extension
 	PHPVersion string
+	// Whether RootDir is a Shopware project rather than a single extension
+	IsProject bool
 }
 
 func (c *ToolConfig) logConfiguration(ctx context.Context) {

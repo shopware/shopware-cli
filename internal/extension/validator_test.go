@@ -366,3 +366,25 @@ func TestIconValidationReportedOncePerExtension(t *testing.T) {
 
 	assert.Equal(t, 1, countResultsWithMessage(check.Results, "The extension icon src/Resources/config/plugin.png does not exist"))
 }
+
+func TestDefaultValidateSkipsValidationCache(t *testing.T) {
+	tmpDir := t.TempDir()
+	plugin := getTestPlugin(tmpDir)
+
+	cachedPackage := filepath.Join(tmpDir, ValidationCacheDir, "composer-highest", "vendor", "acme", "package")
+	assert.NoError(t, os.MkdirAll(cachedPackage, 0o755))
+	assert.NoError(t, os.WriteFile(filepath.Join(cachedPackage, ".gitignore"), []byte("/build"), 0o644))
+	assert.NoError(t, os.WriteFile(filepath.Join(tmpDir, ".DS_Store"), []byte{}, 0o644))
+
+	check := &testCheck{}
+	runDefaultValidate(plugin, check)
+
+	var disallowed []string
+	for _, result := range check.Results {
+		if result.Identifier == "zip.disallowed_file" {
+			disallowed = append(disallowed, result.Path)
+		}
+	}
+
+	assert.ElementsMatch(t, []string{".DS_Store"}, disallowed)
+}

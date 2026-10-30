@@ -187,56 +187,7 @@ func runDefaultValidate(ext Extension, check validation.Check) {
 		})
 	}
 
-	notAllowedErrorFormat := "file %s is not allowed in the zip file"
-	extensionRoot := ext.GetPath()
-	_ = filepath.Walk(extensionRoot, func(p string, info fs.FileInfo, _ error) error {
-		base := filepath.Base(p)
-		relPath := validation.NormalizeSourcePath(p, extensionRoot)
-
-		if base == ".." {
-			check.AddResult(validation.CheckResult{
-				Path:       relPath,
-				Identifier: "zip.path_travel",
-				Message:    "Path travel detected in zip file",
-				Severity:   validation.SeverityError,
-			})
-		}
-
-		for _, file := range defaultNotAllowedPaths {
-			if strings.HasPrefix(p, file) {
-				check.AddResult(validation.CheckResult{
-					Path:       relPath,
-					Identifier: "zip.disallowed_file",
-					Message:    fmt.Sprintf(notAllowedErrorFormat, relPath),
-					Severity:   validation.SeverityError,
-				})
-			}
-		}
-
-		for _, file := range defaultNotAllowedFiles {
-			if file == base {
-				check.AddResult(validation.CheckResult{
-					Path:       relPath,
-					Identifier: "zip.disallowed_file",
-					Message:    fmt.Sprintf(notAllowedErrorFormat, relPath),
-					Severity:   validation.SeverityError,
-				})
-			}
-		}
-
-		for _, extFile := range defaultNotAllowedExtensions {
-			if strings.HasSuffix(base, extFile) {
-				check.AddResult(validation.CheckResult{
-					Path:       relPath,
-					Identifier: "zip.disallowed_file",
-					Message:    fmt.Sprintf(notAllowedErrorFormat, relPath),
-					Severity:   validation.SeverityError,
-				})
-			}
-		}
-
-		return nil
-	})
+	validateZipFiles(ext.GetPath(), check)
 
 	license, err := ext.GetLicense()
 
@@ -336,4 +287,63 @@ func runDefaultValidate(ext Extension, check validation.Check) {
 			})
 		}
 	}
+}
+
+// validateZipFiles reports files under extensionRoot that a zip must not contain.
+func validateZipFiles(extensionRoot string, check validation.Check) {
+	notAllowedErrorFormat := "file %s is not allowed in the zip file"
+	cacheDir := filepath.Join(extensionRoot, ValidationCacheDir)
+	_ = filepath.Walk(extensionRoot, func(p string, info fs.FileInfo, _ error) error {
+		// The validation cache is never packed and can hold a whole vendor/.
+		if info != nil && info.IsDir() && p == cacheDir {
+			return filepath.SkipDir
+		}
+
+		base := filepath.Base(p)
+		relPath := validation.NormalizeSourcePath(p, extensionRoot)
+
+		if base == ".." {
+			check.AddResult(validation.CheckResult{
+				Path:       relPath,
+				Identifier: "zip.path_travel",
+				Message:    "Path travel detected in zip file",
+				Severity:   validation.SeverityError,
+			})
+		}
+
+		for _, file := range defaultNotAllowedPaths {
+			if strings.HasPrefix(p, file) {
+				check.AddResult(validation.CheckResult{
+					Path:       relPath,
+					Identifier: "zip.disallowed_file",
+					Message:    fmt.Sprintf(notAllowedErrorFormat, relPath),
+					Severity:   validation.SeverityError,
+				})
+			}
+		}
+
+		for _, file := range defaultNotAllowedFiles {
+			if file == base {
+				check.AddResult(validation.CheckResult{
+					Path:       relPath,
+					Identifier: "zip.disallowed_file",
+					Message:    fmt.Sprintf(notAllowedErrorFormat, relPath),
+					Severity:   validation.SeverityError,
+				})
+			}
+		}
+
+		for _, extFile := range defaultNotAllowedExtensions {
+			if strings.HasSuffix(base, extFile) {
+				check.AddResult(validation.CheckResult{
+					Path:       relPath,
+					Identifier: "zip.disallowed_file",
+					Message:    fmt.Sprintf(notAllowedErrorFormat, relPath),
+					Severity:   validation.SeverityError,
+				})
+			}
+		}
+
+		return nil
+	})
 }

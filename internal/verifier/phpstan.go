@@ -54,69 +54,74 @@ func (p PhpStan) Check(ctx context.Context, config ToolConfig, execution *ToolEx
 	if result, applicable := preparePHPTool(config, execution); !applicable {
 		return result
 	}
-	note := ""
 	_, vendorErr := os.Stat(path.Join(config.RootDir, "vendor"))
-	if err := installComposerDeps(ctx, config.RootDir, config.CheckAgainst, execution); err != nil {
-		execution.Fail(err)
+	autoloadFile, toolErr := prepareComposerAutoload(ctx, config, execution)
+	if toolErr != nil {
+		execution.Fail(toolErr)
 		return ToolSummary{}
 	}
-	if installed := shop.DetectShopwareVersion(config.RootDir); installed != "" {
-		note = "Shopware " + installed
+	result := ToolSummary{}
+	if installed := shop.DetectShopwareVersion(path.Dir(path.Dir(autoloadFile))); installed != "" {
+		result.Note = "Shopware " + installed
 		if errors.Is(vendorErr, os.ErrNotExist) && config.CheckAgainst != "" {
-			note += " (" + config.CheckAgainst + ")"
+			result.Note += " (" + config.CheckAgainst + ")"
 		}
 	}
-	analysed := false
-	for _, directory := range config.SourceDirectories {
-		args := []string{"-dmemory_limit=2G", path.Join(config.ToolDirectory, "php", "vendor", "bin", "phpstan"), "analyse", "--no-progress", "--no-interaction", "--error-format=json", directory}
-		if !p.configExists(config.RootDir) {
-			args = append(args, "--configuration", path.Join(config.ToolDirectory, "php", "configs", "phpstan.neon"))
+	// All source directories go into one run, so PHPStan knows the classes of
+	// each of them while analysing the others.
+	args := []string{"-dmemory_limit=2G", path.Join(config.ToolDirectory, "php", "vendor", "bin", "phpstan"), "analyse", "--no-progress", "--no-interaction", "--error-format=json", "--autoload-file", autoloadFile}
+	args = append(args, config.SourceDirectories...)
+	env := append(os.Environ(), "PHP_DIR="+path.Join(config.ToolDirectory, "php"))
+	// A local phpstan.neon brings its own tmpDir.
+	if !p.configExists(config.RootDir) {
+		cacheDir, err := ensureValidationCacheDir(config.RootDir)
+		if err != nil {
+			execution.Fail(&ToolError{Err: err})
+			return result
 		}
-		if logging.IsVerbose(ctx) {
-			args = append(args, "-v")
-		}
-		cmd := CommandContext(ctx, "php", args...)
-		cmd.Env = append(os.Environ(), "PHP_DIR="+path.Join(config.ToolDirectory, "php"))
-		cmd.Dir = config.RootDir
-		subprocess := execution.Run(OperationAnalyse, cmd)
-		stdout, stderr, runErr := []byte(subprocess.Stdout), []byte(subprocess.Stderr), subprocess.Err
-		if !expectedExit(runErr, 1) {
-			execution.Fail(subprocess.ToolError(fmt.Errorf("cannot run phpstan in %s: %w", directory, runErr)))
-			continue
-		}
-		if isPhpStanNoFilesOutput(string(stdout)) || isPhpStanNoFilesOutput(string(stderr)) {
-			continue
-		}
-		analysed = true
-		output := strings.ReplaceAll(string(stdout), `"files":[]`, `"files":{}`)
-		var parsed PhpStanOutput
-		if err := json.Unmarshal([]byte(output), &parsed); err != nil {
-			execution.Fail(subprocess.ToolError(fmt.Errorf("cannot parse phpstan output: %w", err)))
-			continue
-		}
-		if parsed.Files == nil {
-			execution.Fail(subprocess.ToolError(errors.New("cannot parse phpstan output: missing file results")))
-			continue
-		}
-		for _, message := range parsed.Errors {
-			execution.Fail(subprocess.ToolError(fmt.Errorf("cannot complete phpstan analysis: %s", message)))
-		}
-		for fileName, file := range parsed.Files {
-			for _, message := range file.Messages {
-				if strings.HasSuffix(message.Identifier, "deprecated") && p.isUselessDeprecation(message.Message) {
-					continue
-				}
-				execution.AddFindings(validation.CheckResult{
-					Path: validation.NormalizeSourcePath(fileName, config.RootDir), Line: message.Line,
-					Message: message.Message, Severity: validation.SeverityError,
-					Identifier: "phpstan/" + message.Identifier, Tip: message.Tip,
-				})
-			}
-		}
+		args = append(args, "--configuration", path.Join(config.ToolDirectory, "php", "configs", "phpstan.neon"))
+		env = append(env, "SHOPWARE_CLI_PHPSTAN_TMP_DIR="+path.Join(cacheDir, "phpstan"))
 	}
-	result := ToolSummary{Note: note}
-	if !analysed {
+	if logging.IsVerbose(ctx) {
+		args = append(args, "-v")
+	}
+	cmd := CommandContext(ctx, "php", args...)
+	cmd.Env = env
+	cmd.Dir = config.RootDir
+	subprocess := execution.Run(OperationAnalyse, cmd)
+	stdout, stderr, runErr := subprocess.Stdout, subprocess.Stderr, subprocess.Err
+	if !expectedExit(runErr, 1) {
+		execution.Fail(subprocess.ToolError(fmt.Errorf("cannot run phpstan: %w", runErr)))
+		return result
+	}
+	if isPhpStanNoFilesOutput(stdout) || isPhpStanNoFilesOutput(stderr) {
 		result.SkipReason = "no files to analyse"
+		return result
+	}
+	output := strings.ReplaceAll(stdout, `"files":[]`, `"files":{}`)
+	var parsed PhpStanOutput
+	if err := json.Unmarshal([]byte(output), &parsed); err != nil {
+		execution.Fail(subprocess.ToolError(fmt.Errorf("cannot parse phpstan output: %w", err)))
+		return result
+	}
+	if parsed.Files == nil {
+		execution.Fail(subprocess.ToolError(errors.New("cannot parse phpstan output: missing file results")))
+		return result
+	}
+	for _, message := range parsed.Errors {
+		execution.Fail(subprocess.ToolError(fmt.Errorf("cannot complete phpstan analysis: %s", message)))
+	}
+	for fileName, file := range parsed.Files {
+		for _, message := range file.Messages {
+			if strings.HasSuffix(message.Identifier, "deprecated") && p.isUselessDeprecation(message.Message) {
+				continue
+			}
+			execution.AddFindings(validation.CheckResult{
+				Path: validation.NormalizeSourcePath(fileName, config.RootDir), Line: message.Line,
+				Message: message.Message, Severity: validation.SeverityError,
+				Identifier: "phpstan/" + message.Identifier, Tip: message.Tip,
+			})
+		}
 	}
 	return result
 }
