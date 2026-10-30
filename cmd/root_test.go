@@ -14,6 +14,7 @@ import (
 	"go.uber.org/zap/zaptest/observer"
 
 	"github.com/shopware/shopware-cli/cmd/project"
+	"github.com/shopware/shopware-cli/internal/system"
 	"github.com/shopware/shopware-cli/internal/validation"
 	"github.com/shopware/shopware-cli/logging"
 )
@@ -107,6 +108,11 @@ func TestExitCode(t *testing.T) {
 		{
 			name:     "proxy verification failed exits silently",
 			err:      project.ErrProxyVerificationFailed,
+			wantCode: 1,
+		},
+		{
+			name:     "missing dependencies were already explained and exit silently",
+			err:      fmt.Errorf("cannot create project: %w", &system.MissingDependenciesError{Missing: []system.MissingDependency{{Name: "Docker", Reason: "not running", ID: "docker_not_running"}}}),
 			wantCode: 1,
 		},
 	}

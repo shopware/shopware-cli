@@ -54,6 +54,7 @@ const (
 	TagIsTUI       = "is_tui"
 	TagIsWSL       = "is_wsl"
 	TagCIProvider  = "ci_provider"
+	TagMissing     = "missing"
 
 	// EventProjectCreate
 	TagVersion           = "version"

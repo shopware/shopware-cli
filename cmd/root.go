@@ -74,7 +74,9 @@ func exitCode(ctx context.Context, err error) int {
 		return 0
 	}
 
-	if !errors.Is(err, validation.ErrToolReportFailed) && !errors.Is(err, project.ErrEnvironmentDown) && !errors.Is(err, project.ErrProxyNotRegistered) && !errors.Is(err, project.ErrProxyVerificationFailed) {
+	var missing *system.MissingDependenciesError
+	printed := errors.Is(err, validation.ErrToolReportFailed) || errors.Is(err, project.ErrEnvironmentDown) || errors.Is(err, project.ErrProxyNotRegistered) || errors.Is(err, project.ErrProxyVerificationFailed) || errors.As(err, &missing)
+	if !printed {
 		logging.FromContext(ctx).Errorln(err)
 	}
 

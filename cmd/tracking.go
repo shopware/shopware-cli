@@ -49,5 +49,9 @@ func trackCommandExecution(ctx context.Context, args []string, start time.Time, 
 	if provider := system.CIProvider(os.Getenv); provider != "" {
 		tags[tracking.TagCIProvider] = provider
 	}
+	var missing *system.MissingDependenciesError
+	if result == tracking.ResultFailure && errors.As(runErr, &missing) {
+		tags[tracking.TagMissing] = strings.Join(missing.IDs(), ",")
+	}
 	trackEvent(trackCtx, tracking.EventCommand, tags)
 }

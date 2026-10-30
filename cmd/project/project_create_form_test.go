@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/shopware/shopware-cli/internal/shop"
 	"github.com/shopware/shopware-cli/internal/system"
@@ -129,7 +130,9 @@ func TestDockerUnavailableError(t *testing.T) {
 
 	t.Run("returns missing dependencies error", func(t *testing.T) {
 		t.Parallel()
-		err := dockerUnavailableError([]system.MissingDependency{{Name: "Docker", Reason: "not running"}})
-		assert.ErrorContains(t, err, "missing required dependencies")
+		err := dockerUnavailableError([]system.MissingDependency{{Name: "Docker", Reason: "not running", ID: "docker_not_running"}})
+		var missing *system.MissingDependenciesError
+		require.ErrorAs(t, err, &missing)
+		assert.Equal(t, []string{"docker_not_running"}, missing.IDs())
 	})
 }

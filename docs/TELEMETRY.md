@@ -153,8 +153,12 @@ overall CLI usage.
 | `is_tui`       | Whether the run was interactive (a terminal / TUI session)    | `true` / `false`       |
 | `is_wsl`       | Whether a Linux run happens inside the Windows Subsystem for Linux | `true` / `false`  |
 | `ci_provider`  | The CI system a run executes on; only present on CI runs. `other` means CI was detected without a known provider | `github` / `gitlab` / `bitbucket` / `other` |
+| `missing`      | Which dependencies the dependency check found missing when it stopped the command, sorted and comma-separated; only with `result=failure`. Interactive `project create` offers local PHP instead of stopping, so those runs carry no `missing` | `compose_plugin_missing,docker_not_running` |
 
 Notes:
+- `missing` uses stable identifiers: `docker_not_installed`, `docker_not_running`,
+  `compose_plugin_missing`, `php_not_installed`, `php_version` and `other`. The
+  versions found or required are never sent.
 - The command *name* is captured (e.g. `project.create`), but **not** its
   arguments, flags, paths, or any free-text input.
 - The root command alone (running `shopware-cli` with no sub-command) is not
