@@ -371,3 +371,27 @@ func TestCheckComposerResolvableNoAuditEnv(t *testing.T) {
 	assert.Equal(t, upgradeManifestName, fake.env["COMPOSER"])
 	assert.Equal(t, "1", fake.env["COMPOSER_NO_SECURITY_BLOCKING"])
 }
+
+func TestStepIDsAreStableAndUnique(t *testing.T) {
+	seen := map[string]StepID{}
+	for _, step := range RunSteps {
+		id := step.TelemetryID()
+		assert.NotEqual(t, "unknown", id, step.Label())
+		assert.NotContains(t, seen, id, "duplicate id for %s", step.Label())
+		seen[id] = step
+	}
+}
+
+func TestStepTelemetryIDsMatchTheDocs(t *testing.T) {
+	documented := map[StepID]string{
+		StepRewriteComposer:  "rewrite_composer",
+		StepComposerUpdate:   "composer_update",
+		StepRecipesInstall:   "recipes_install",
+		StepDeploymentHelper: "deployment_helper",
+		StepWriteReport:      "write_report",
+	}
+	for step, want := range documented {
+		assert.Equal(t, want, step.TelemetryID(), step.Label())
+	}
+	assert.Len(t, documented, len(RunSteps), "every visible step has a documented name")
+}

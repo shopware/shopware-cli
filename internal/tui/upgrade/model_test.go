@@ -1,6 +1,7 @@
 package upgrade
 
 import (
+	"context"
 	"errors"
 	"strings"
 	"testing"
@@ -12,6 +13,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	backend "github.com/shopware/shopware-cli/internal/shop/upgrade"
+	"github.com/shopware/shopware-cli/internal/tracking"
 	"github.com/shopware/shopware-cli/internal/tui/app"
 )
 
@@ -799,4 +801,74 @@ func TestEveryPanelFitsTheWindow(t *testing.T) {
 		lines := strings.Split(w.View(), "\n")
 		assert.Len(t, lines, 34, "panel %d fills the window height exactly", p)
 	}
+}
+
+// captureUpgradeEvents replaces the tracking seam and returns the recorded tags.
+func captureUpgradeEvents(t *testing.T) *[]map[string]string {
+	t.Helper()
+	original := trackEvent
+	t.Cleanup(func() { trackEvent = original })
+
+	events := &[]map[string]string{}
+	trackEvent = func(_ context.Context, event string, tags map[string]string) {
+		assert.Equal(t, tracking.EventProjectUpgrade, event)
+		*events = append(*events, tags)
+	}
+	return events
+}
+
+// wizardAtRun puts the wizard on the progress panel with the first step done.
+func wizardAtRun(t *testing.T) *wizard {
+	t.Helper()
+	w := wizardAtPrepare(t, []backend.ExtensionResult{okResult()}, true)
+	w.Send(key('c'))
+	w.m.panel = panelRun
+	w.m.run = runState{
+		stepStates: make(map[backend.StepID]backend.CheckState),
+		stepErrs:   make(map[backend.StepID]error),
+	}
+	w.Send(runEventMsg(backend.StepEvent{Step: backend.StepRewriteComposer, State: backend.StateOK}))
+	return w
+}
+
+func TestRunPanelFailureReportsTheFailingStep(t *testing.T) {
+	events := captureUpgradeEvents(t)
+	w := wizardAtRun(t)
+
+	w.Send(runEventMsg(backend.StepEvent{Step: backend.StepComposerUpdate, State: backend.StateFail, Err: errors.New("boom")}))
+	w.Send(runEventMsg(backend.StepEvent{Step: backend.StepFinished, State: backend.StateFail, Err: errors.New("boom")}))
+	cmd := w.Send(runClosedMsg{})
+
+	assert.Equal(t, panelDone, w.m.panel)
+	assert.False(t, w.m.done.succeeded)
+	require.NotNil(t, cmd)
+	cmd()
+
+	require.Len(t, *events, 1)
+	assert.Equal(t, tracking.ResultFailure, (*events)[0][tracking.TagResult])
+	assert.Equal(t, "composer_update", (*events)[0][tracking.TagFailedStep])
+	assert.Equal(t, "6.7.11.0", (*events)[0][tracking.TagTargetVersion])
+	assert.Equal(t, "true", (*events)[0][tracking.TagInteractive])
+}
+
+func TestRunPanelCtrlCReportsCancelled(t *testing.T) {
+	events := captureUpgradeEvents(t)
+	w := wizardAtRun(t)
+	w.Send(runEventMsg(backend.StepEvent{Step: backend.StepComposerUpdate, State: backend.StateRunning}))
+
+	// ctrl+c during the run cancels the runner instead of quitting.
+	w.Send(ctrlC())
+	assert.Equal(t, panelRun, w.m.panel)
+
+	w.Send(runEventMsg(backend.StepEvent{Step: backend.StepComposerUpdate, State: backend.StateFail, Err: context.Canceled}))
+	w.Send(runEventMsg(backend.StepEvent{Step: backend.StepFinished, State: backend.StateFail, Err: context.Canceled}))
+	cmd := w.Send(runClosedMsg{})
+
+	assert.Equal(t, panelDone, w.m.panel)
+	require.NotNil(t, cmd)
+	cmd()
+
+	require.Len(t, *events, 1)
+	assert.Equal(t, tracking.ResultCancelled, (*events)[0][tracking.TagResult])
+	assert.Equal(t, "composer_update", (*events)[0][tracking.TagFailedStep])
 }
