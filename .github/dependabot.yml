@@ -16,6 +16,10 @@ updates:
   # jactionlint ignore=dependabot-cooldown
   - package-ecosystem: "github-actions"
     directory: "/"
+    # These workflows are managed by gh aw; Dependabot updates can break them.
+    exclude-paths:
+      - ".github/workflows/agentics-*"
+      - ".github/workflows/*.lock.yml"
     schedule:
       interval: "weekly"
     commit-message:

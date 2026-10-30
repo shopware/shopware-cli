@@ -33,20 +33,28 @@ type EnvironmentConfig struct {
 }
 
 type EnvironmentSSHConfig struct {
-	// SSH host name or IP address
-	Host string `yaml:"host" jsonschema:"required"`
+	// SSH host name or IP address for a single target. Mutually exclusive with hosts.
+	Host string `yaml:"host,omitempty"`
 	// SSH user. Defaults to the user configured in ~/.ssh/config or the current user
 	User string `yaml:"user,omitempty"`
 	// SSH port. Defaults to 22
 	Port int `yaml:"port,omitempty"`
-	// Absolute path of the Shopware project root on the remote host
-	Directory string `yaml:"directory" jsonschema:"required"`
+	// Absolute path of the Shopware project root on the remote host. For deployments, this is the active release symlink (any name); its parent holds deployment storage and must be dedicated to this deployment. Required on the single target or inherited/overridden by each named host.
+	Directory string `yaml:"directory,omitempty"`
 	// Path to the SSH private key file. Defaults to the ssh agent or the default key files
 	IdentityFile string `yaml:"identity_file,omitempty"`
 	// PHP binary used for PHP and console commands on the remote host (e.g. "/usr/bin/php8.3"). Defaults to "php"
 	PHPBinary string `yaml:"php_binary,omitempty"`
 	// Additional arguments passed to the PHP binary for PHP and console commands on the remote host (e.g. ["-d", "memory_limit=512M"] or ["-c", "/path/to/php.ini"]). Appended after the binary.
 	PHPArgs []string `yaml:"php_args,omitempty"`
+	// Persistent files and directories linked into SSH deployment releases.
+	Shared *EnvironmentSSHSharedConfig `yaml:"shared,omitempty"`
+	// Named SSH targets, mutually exclusive with host. Persistent shared directories must be shared across hosts; releases, the active symlink and .shopware-cli remain host-local.
+	Hosts map[string]*EnvironmentSSHHostConfig `yaml:"hosts,omitempty"`
+	// Named host running migrations and initialization. Required with multiple hosts; defaults to the only host otherwise.
+	MigrationHost string `yaml:"migration_host,omitempty"`
+	// Maximum concurrent host operations. Zero uses the default of 2; the maximum is 32.
+	Parallelism int `yaml:"parallelism,omitempty" jsonschema:"minimum=0,maximum=32"`
 }
 
 type Config struct {
@@ -879,6 +887,18 @@ func WriteConfig(cfg *Config, dir string) error {
 }
 
 func ReadConfig(ctx context.Context, fileName string, allowFallback bool) (*Config, error) {
+	config, err := readConfig(ctx, fileName, allowFallback)
+	if err != nil {
+		return nil, err
+	}
+	if err := config.validateSSHHosts(); err != nil {
+		return nil, fmt.Errorf("cannot read project config %s: %w", fileName, err)
+	}
+	return config, nil
+}
+
+// readConfig merges partial includes and local overrides before SSH validation.
+func readConfig(ctx context.Context, fileName string, allowFallback bool) (*Config, error) {
 	config := &Config{foundConfig: false}
 
 	_, err := os.Stat(fileName)
@@ -932,7 +952,7 @@ func ReadConfig(ctx context.Context, fileName string, allowFallback bool) (*Conf
 
 	if len(config.AdditionalConfigs) > 0 {
 		for _, additionalConfigFile := range config.AdditionalConfigs {
-			additionalConfig, err := ReadConfig(ctx, additionalConfigFile, allowFallback)
+			additionalConfig, err := readConfig(ctx, additionalConfigFile, allowFallback)
 			if err != nil {
 				return nil, fmt.Errorf("cannot read included config %s: %w", additionalConfigFile, err)
 			}

@@ -656,3 +656,15 @@ func TestSymfonyCLIExecutorEnvironmentStatusNotSupported(t *testing.T) {
 	assert.False(t, running)
 	assert.ErrorIs(t, err, ErrNotSupported)
 }
+
+func TestNewSSHExecutorRequiresResolvedHost(t *testing.T) {
+	cfg := &shop.EnvironmentConfig{Type: TypeSSH, SSH: &shop.EnvironmentSSHConfig{
+		Hosts: map[string]*shop.EnvironmentSSHHostConfig{
+			"web": {Host: "web.example.com", Directory: "/srv/shop/current"},
+		},
+	}}
+
+	target, err := New("/project", cfg, &shop.Config{})
+	require.Error(t, err)
+	assert.Nil(t, target)
+}

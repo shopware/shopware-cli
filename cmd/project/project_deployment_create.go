@@ -9,6 +9,7 @@ import (
 
 	"github.com/shopware/shopware-cli/internal/cliversion"
 	"github.com/shopware/shopware-cli/internal/deployment"
+	deploymentbackend "github.com/shopware/shopware-cli/internal/deployment/backend"
 )
 
 var projectDeploymentCreateCmd = &cobra.Command{
@@ -34,7 +35,7 @@ Shopware project.`,
 		if err != nil {
 			return err
 		}
-		backend, err := deployment.ResolveBackend(cmd.Context(), root, projectConfigPath, environmentName)
+		backend, err := deploymentbackend.ResolveBackend(cmd.Context(), root, projectConfigPath, environmentName)
 		if err != nil {
 			return err
 		}

@@ -51,6 +51,9 @@ environments:
   staging:
     type: ssh
     url: https://staging.example.com
+    ssh:
+      host: staging.example.com
+      directory: /srv/shop
 `)
 
 	withProjectConfigPath(t, "")
