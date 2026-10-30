@@ -15,9 +15,7 @@ const resetIdentitySystemConfigWhere = "`configuration_key` NOT IN ('core.app.sh
 // EnableResetIdentity removes the source shop ID and retained app registration secrets.
 func (c *ConfigDump) EnableResetIdentity() {
 	c.mergeWhere("system_config", resetIdentitySystemConfigWhere)
-	if !slices.Contains(c.NoData, "deleted_apps") {
-		c.NoData = append(c.NoData, "deleted_apps")
-	}
+	c.NoData = appendMissing(c.NoData, []string{"deleted_apps"})
 }
 
 // resetIdentityExclusions removes completed and pending app registrations tied to the
