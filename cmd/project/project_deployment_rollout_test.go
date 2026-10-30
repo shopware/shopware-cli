@@ -103,7 +103,10 @@ func newLifecycleCommand(t *testing.T, args []string) (*cobra.Command, *bytes.Bu
 	rollout := &cobra.Command{Use: projectDeploymentRolloutCmd.Use, Args: projectDeploymentRolloutCmd.Args, RunE: projectDeploymentRolloutCmd.RunE}
 	rollback := &cobra.Command{Use: projectDeploymentRollbackCmd.Use, Args: projectDeploymentRollbackCmd.Args, RunE: projectDeploymentRollbackCmd.RunE}
 	logs := &cobra.Command{Use: projectDeploymentLogsCmd.Use, Args: projectDeploymentLogsCmd.Args, RunE: projectDeploymentLogsCmd.RunE}
-	deployment.AddCommand(create, initialize, rollout, rollback, logs)
+	prune := &cobra.Command{Use: projectDeploymentPruneCmd.Use, Args: projectDeploymentPruneCmd.Args, RunE: projectDeploymentPruneCmd.RunE}
+	prune.Flags().Int("keep", 5, "")
+	prune.Flags().Bool("dry-run", false, "")
+	deployment.AddCommand(create, initialize, rollout, rollback, logs, prune)
 	root.AddCommand(deployment)
 	out := new(bytes.Buffer)
 	root.SetOut(out)
@@ -113,7 +116,7 @@ func newLifecycleCommand(t *testing.T, args []string) (*cobra.Command, *bytes.Bu
 }
 
 func TestDeploymentLifecycleCommandsRegistered(t *testing.T) {
-	for _, name := range []string{"create", "init", "list", "logs", "rollout", "rollback"} {
+	for _, name := range []string{"create", "init", "list", "logs", "prune", "rollout", "rollback"} {
 		cmd, remaining, err := projectRootCmd.Find([]string{"deploy", name})
 		require.NoError(t, err)
 		assert.Empty(t, remaining)
@@ -213,6 +216,10 @@ func TestProjectDeploymentRolloutCommandValidation(t *testing.T) {
 		{[]string{"logs", "one", "two"}, "accepts 1 arg"},
 		{[]string{"logs", "archive", "-e", "missing"}, `environment "missing" not found`},
 		{[]string{"logs", "archive"}, `cannot create deployments for environment type "local"`},
+		{[]string{"prune", "extra"}, `unknown command "extra"`},
+		{[]string{"prune", "--keep", "-1"}, "--keep must not be negative"},
+		{[]string{"prune", "-e", "missing"}, `environment "missing" not found`},
+		{[]string{"prune"}, `cannot create deployments for environment type "local"`},
 	} {
 		cmd, out := newLifecycleCommand(t, tc.args)
 		require.ErrorContains(t, cmd.ExecuteContext(system.WithInteraction(t.Context(), false)), tc.want)

@@ -138,6 +138,14 @@ func TestSSHRetainedActivation(t *testing.T) {
 	for _, key := range []string{"deployment", "archive", "sha256"} {
 		assert.Equal(t, oldEvent[key], newEvent[key])
 	}
+	_, err = s.PruneDeployments(t.Context(), DeploymentPruneOptions{Keep: 0})
+	require.NoError(t, err)
+	candidates, err = s.RollbackCandidates(t.Context())
+	require.NoError(t, err)
+	require.Len(t, candidates, 1)
+	assert.Equal(t, "second", candidates[0].Deployment.Reference)
+	_, err = s.ActivateDeployment(t.Context(), Deployment{Reference: "first"}, nil)
+	require.Error(t, err, "pruned releases cannot be resurrected")
 }
 
 func TestRollbackCandidatesRecoverStableCreationDate(t *testing.T) {
@@ -294,6 +302,8 @@ func TestSSHActivationDisconnectAndLock(t *testing.T) {
 	_, err = s.ActivateDeployment(ctx, Deployment{Reference: "first"}, nil)
 	require.Error(t, err)
 	_, err = s.RollbackCandidates(ctx)
+	require.ErrorContains(t, err, "holds the lock")
+	_, err = s.PruneDeployments(ctx, DeploymentPruneOptions{Keep: 1})
 	require.ErrorContains(t, err, "holds the lock")
 	_, err = s.rolloutArchive(ctx, Deployment{Reference: "third"}, archive, nil)
 	require.Error(t, err)
