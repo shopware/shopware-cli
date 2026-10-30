@@ -56,10 +56,11 @@ func Execute(ctx context.Context) int {
 	updateHandle, updateCancel := startUpdateCheck(ctx, args)
 	defer updateCancel()
 
+	shopwareVersion := projectShopwareVersion(args)
 	start := time.Now()
 	err := rootCmd.ExecuteContext(ctx)
 
-	trackCommandExecution(ctx, args, start, err)
+	trackCommandExecution(ctx, args, start, err, shopwareVersion)
 	printUpdateHint(ctx, os.Stderr, updateHandle.Wait(ctx).Release)
 	printAIHint(ctx, os.Stderr, args)
 

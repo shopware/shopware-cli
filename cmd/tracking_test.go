@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
+	"path/filepath"
 	"runtime"
 	"strconv"
 	"testing"
@@ -35,6 +37,9 @@ func useTrackingTestRoot(t *testing.T, rootName string) *[]map[string]string {
 		Use:                "console",
 		DisableFlagParsing: true,
 		RunE:               func(*cobra.Command, []string) error { return nil },
+	}, &cobra.Command{
+		Use:  "create",
+		RunE: func(*cobra.Command, []string) error { return nil },
 	})
 	extensionCmd := &cobra.Command{Use: "extension"}
 	extensionCmd.AddCommand(&cobra.Command{
@@ -69,7 +74,7 @@ func TestTrackCommandExecution_NormalizesNameAcrossBinaryNames(t *testing.T) {
 			// Execute sets rootCmd.Use to the invoked binary name before tracking.
 			events := useTrackingTestRoot(t, commandNameFromArgs(tt.argv))
 
-			trackCommandExecution(context.Background(), mapAliasArgs(tt.argv), time.Now(), nil)
+			trackCommandExecution(context.Background(), mapAliasArgs(tt.argv), time.Now(), nil, "")
 
 			require.Len(t, *events, 1)
 			assert.Equal(t, "project.console", (*events)[0][tracking.TagCommandName])
@@ -81,7 +86,7 @@ func TestTrackCommandExecution_NormalizesNameAcrossBinaryNames(t *testing.T) {
 func TestTrackCommandExecution_ReplacesHyphensAndSpaces(t *testing.T) {
 	events := useTrackingTestRoot(t, "shopware-cli")
 
-	trackCommandExecution(context.Background(), []string{"extension", "build-me", "./plugin"}, time.Now(), nil)
+	trackCommandExecution(context.Background(), []string{"extension", "build-me", "./plugin"}, time.Now(), nil, "")
 
 	require.Len(t, *events, 1)
 	assert.Equal(t, "extension.build_me", (*events)[0][tracking.TagCommandName])
@@ -109,7 +114,7 @@ func TestTrackCommandExecution_ExtensionAddGenerator(t *testing.T) {
 		events = append(events, tags)
 	}
 
-	trackCommandExecution(context.Background(), []string{"extension", "add", "admin-module"}, time.Now(), nil)
+	trackCommandExecution(context.Background(), []string{"extension", "add", "admin-module"}, time.Now(), nil, "")
 
 	require.Len(t, events, 1)
 	assert.Equal(t, "extension.add.admin_module", events[0][tracking.TagCommandName])
@@ -143,7 +148,7 @@ func TestTrackCommandExecution_Result(t *testing.T) {
 				cancel()
 			}
 
-			trackCommandExecution(ctx, []string{"project", "console"}, time.Now(), tt.runErr)
+			trackCommandExecution(ctx, []string{"project", "console"}, time.Now(), tt.runErr, "")
 
 			require.Len(t, *events, 1)
 			assert.Equal(t, tt.want, (*events)[0][tracking.TagResult])
@@ -155,7 +160,7 @@ func TestTrackCommandExecution_Tags(t *testing.T) {
 	events := useTrackingTestRoot(t, "shopware-cli")
 	ctx := system.WithInteraction(context.Background(), true)
 
-	trackCommandExecution(ctx, []string{"project", "console"}, time.Now().Add(-2*time.Second), nil)
+	trackCommandExecution(ctx, []string{"project", "console"}, time.Now().Add(-2*time.Second), nil, "")
 
 	require.Len(t, *events, 1)
 	tags := (*events)[0]
@@ -181,7 +186,7 @@ func TestTrackCommandExecution_CIProvider(t *testing.T) {
 	t.Setenv("GITHUB_ACTIONS", "true")
 	events := useTrackingTestRoot(t, "shopware-cli")
 
-	trackCommandExecution(context.Background(), []string{"project", "console"}, time.Now(), nil)
+	trackCommandExecution(context.Background(), []string{"project", "console"}, time.Now(), nil, "")
 
 	require.Len(t, *events, 1)
 	assert.Equal(t, "github", (*events)[0][tracking.TagCIProvider])
@@ -191,7 +196,7 @@ func TestTrackCommandExecution_NoCIProviderOutsideCI(t *testing.T) {
 	clearCIProviderEnv(t)
 	events := useTrackingTestRoot(t, "shopware-cli")
 
-	trackCommandExecution(context.Background(), []string{"project", "console"}, time.Now(), nil)
+	trackCommandExecution(context.Background(), []string{"project", "console"}, time.Now(), nil, "")
 
 	require.Len(t, *events, 1)
 	assert.NotContains(t, (*events)[0], tracking.TagCIProvider)
@@ -201,7 +206,7 @@ func TestTrackCommandExecution_IsTUIFollowsInteraction(t *testing.T) {
 	events := useTrackingTestRoot(t, "shopware-cli")
 	ctx := system.WithInteraction(context.Background(), false)
 
-	trackCommandExecution(ctx, []string{"project", "console"}, time.Now(), nil)
+	trackCommandExecution(ctx, []string{"project", "console"}, time.Now(), nil, "")
 
 	require.Len(t, *events, 1)
 	assert.Equal(t, "false", (*events)[0][tracking.TagIsTUI])
@@ -223,7 +228,7 @@ func TestTrackCommandExecution_SkipsNonRunnableInvocations(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			events := useTrackingTestRoot(t, "shopware-cli")
 
-			trackCommandExecution(context.Background(), tt.args, time.Now(), nil)
+			trackCommandExecution(context.Background(), tt.args, time.Now(), nil, "")
 
 			assert.Empty(t, *events)
 		})
@@ -242,9 +247,55 @@ func TestTrackCommandExecution_TracksAfterContextCancelled(t *testing.T) {
 		originalTrack(trackCtx, event, tags)
 	}
 
-	trackCommandExecution(ctx, []string{"project", "console"}, time.Now(), ctx.Err())
+	trackCommandExecution(ctx, []string{"project", "console"}, time.Now(), ctx.Err(), "")
 
 	require.Len(t, *events, 1)
 	assert.Equal(t, tracking.ResultCancelled, (*events)[0][tracking.TagResult])
 	assert.NoError(t, trackCtxErr, "tracking must get a live context even after the command context was cancelled")
+}
+
+func writeShopwareLock(t *testing.T, version string) string {
+	t.Helper()
+	root := t.TempDir()
+	lock := `{"packages":[{"name":"shopware/core","version":"` + version + `"}],"packages-dev":[]}`
+	require.NoError(t, os.WriteFile(filepath.Join(root, "composer.lock"), []byte(lock), 0o644))
+	return root
+}
+
+func TestProjectShopwareVersion(t *testing.T) {
+	t.Setenv("PROJECT_ROOT", writeShopwareLock(t, "v6.7.11.0"))
+	useTrackingTestRoot(t, "shopware-cli")
+
+	assert.Equal(t, "6.7.11.0", projectShopwareVersion([]string{"project", "console"}))
+	assert.Empty(t, projectShopwareVersion([]string{"project", "create"}), "project create runs where there is no project yet")
+	assert.Empty(t, projectShopwareVersion([]string{"extension", "build-me"}), "not a project command")
+	assert.Empty(t, projectShopwareVersion([]string{"project"}), "not a tracked invocation")
+
+	t.Setenv("PROJECT_ROOT", t.TempDir())
+	assert.Empty(t, projectShopwareVersion([]string{"project", "console"}), "no lock file")
+
+	for lockVersion, want := range map[string]string{
+		"v6.7.0.0-rc1":    "6.7.0.0-rc1",
+		"dev-trunk":       "dev-trunk",
+		"v6.7.0.0-RC1":    "",
+		"6.6.x-dev":       "",
+		"6.7.12.x-dev":    "",
+		"dev-tmp-0c8ec10": "",
+		"dev-feature-xyz": "",
+		"6.7.11.0-dev":    "",
+	} {
+		t.Setenv("PROJECT_ROOT", writeShopwareLock(t, lockVersion))
+		assert.Equal(t, want, projectShopwareVersion([]string{"project", "console"}), "lock version %s", lockVersion)
+	}
+}
+
+func TestTrackCommandExecution_ShopwareVersionTag(t *testing.T) {
+	events := useTrackingTestRoot(t, "shopware-cli")
+
+	trackCommandExecution(context.Background(), []string{"project", "console"}, time.Now(), nil, "6.7.11.0")
+	trackCommandExecution(context.Background(), []string{"project", "console"}, time.Now(), nil, "")
+
+	require.Len(t, *events, 2)
+	assert.Equal(t, "6.7.11.0", (*events)[0][tracking.TagShopwareVersion])
+	assert.NotContains(t, (*events)[1], tracking.TagShopwareVersion)
 }
