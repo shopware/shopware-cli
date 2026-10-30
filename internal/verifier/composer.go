@@ -122,25 +122,22 @@ func ensureValidationCacheDir(rootDir string) (string, error) {
 	return cacheDir, nil
 }
 
-// validationComposerJSON keeps only what decides which packages get installed.
-// The extension's own classes need no autoloading: PHPStan discovers them in
-// the analysed paths.
+// validationComposerJSON returns the composer.json for the validation cache.
+// Autoload paths are relative to the extension folder and would point nowhere
+// from the cache, so they are dropped: PHPStan discovers the extension's own
+// classes in the analysed paths.
 func validationComposerJSON(composerJSON []byte) ([]byte, error) {
 	var data map[string]any
 	if err := json.Unmarshal(composerJSON, &data); err != nil {
 		return nil, fmt.Errorf("cannot parse composer.json: %w", err)
 	}
 
-	dependencies := map[string]any{}
-	for _, key := range []string{"require", "require-dev", "conflict", "provide", "replace", "repositories", "minimum-stability", "prefer-stable"} {
-		if value, ok := data[key]; ok {
-			dependencies[key] = value
-		}
-	}
+	delete(data, "autoload")
+	delete(data, "autoload-dev")
 
 	// Suggested packages are installed as well, so code using them can be analysed.
 	if suggest, ok := data["suggest"].(map[string]any); ok && len(suggest) > 0 {
-		require, _ := dependencies["require"].(map[string]any)
+		require, _ := data["require"].(map[string]any)
 		if require == nil {
 			require = map[string]any{}
 		}
@@ -149,11 +146,10 @@ func validationComposerJSON(composerJSON []byte) ([]byte, error) {
 				require[name] = "*"
 			}
 		}
-		dependencies["require"] = require
+		data["require"] = require
 	}
 
-	// encoding/json sorts map keys, so equal dependencies give equal bytes.
-	return json.Marshal(dependencies)
+	return json.Marshal(data)
 }
 
 func runComposerDeps(ctx context.Context, dir string, authFile string, suggets []string, checkAgainst string, execution *ToolExecution) *ToolError {
