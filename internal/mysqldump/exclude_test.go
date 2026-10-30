@@ -7,6 +7,7 @@ import (
 
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func appGraphDumper() *Dumper {
@@ -118,25 +119,41 @@ func TestExcludeCombinesDirectExclusionAndForeignKeyConditions(t *testing.T) {
 }
 
 func TestExcludeSetNullRewritesOnlyMatchingForeignKeys(t *testing.T) {
-	db, mock := getDB(t)
-	dumper := NewMySQLDumper(db)
-	dumper.schemaCache = map[string]*TableSchema{
-		"parent": {Name: "parent", Columns: notNullColumns("id", "secret")},
-		"child": {Name: "child", Columns: []ColumnSchema{{Name: "id"}, {Name: "parent_id", Nullable: true}}, ForeignKeys: []ForeignKeySchema{{
-			Name: "fk.child.parent", Columns: []string{"parent_id"}, ReferencedTable: "parent", ReferencedColumns: []string{"id"}, OnDelete: "SET NULL",
-		}}},
-	}
-	dumper.ExcludeMap = map[string]string{"parent": "secret = 1"}
-	dumper.SelectMap = map[string]map[string]string{"child": {"parent_id": "NULL"}}
-	mock.ExpectQuery("SELECT EXISTS").WillReturnRows(sqlmock.NewRows([]string{"exists"}).AddRow(false))
-	assert.NoError(t, dumper.computeExcludeFilters(t.Context()))
+	for _, configuredNull := range []bool{false, true} {
+		name, retainedValue := "keep original reference", "`parent_id`"
+		if configuredNull {
+			name, retainedValue = "configured NULL rewrite", "NULL"
+		}
+		t.Run(name, func(t *testing.T) {
+			db, mock := getDB(t)
+			t.Cleanup(func() { _ = db.Close() })
+			dumper := NewMySQLDumper(db)
+			dumper.schemaCache = map[string]*TableSchema{
+				"parent": {Name: "parent", Columns: notNullColumns("id", "secret")},
+				"child": {Name: "child", Columns: []ColumnSchema{{Name: "id"}, {Name: "parent_id", Nullable: true}}, ForeignKeys: []ForeignKeySchema{{
+					Name: "fk.child.parent", Columns: []string{"parent_id"}, ReferencedTable: "parent", ReferencedColumns: []string{"id"}, OnDelete: "SET NULL",
+				}}},
+			}
+			dumper.ExcludeMap = map[string]string{"parent": "secret = 1"}
+			if configuredNull {
+				dumper.SelectMap = map[string]map[string]string{"child": {"parent_id": "NULL"}}
+				mock.ExpectQuery("SELECT EXISTS").WillReturnRows(sqlmock.NewRows([]string{"exists"}).AddRow(false))
+			}
+			require.NoError(t, dumper.computeExcludeFilters(t.Context()))
 
-	mock.ExpectQuery("SELECT \\* FROM `child` LIMIT 1").WillReturnRows(sqlmock.NewRows([]string{"id", "parent_id"}))
-	columns, err := dumper.getColumnsForSelect(t.Context(), "child", true)
-	assert.NoError(t, err)
-	assert.Equal(t, []string{"`id`", "CASE WHEN `parent_id` IN (SELECT `id` FROM `parent` WHERE ((secret = 1) IS NOT TRUE) IS NOT TRUE) THEN NULL ELSE NULL END AS `parent_id`"}, columns)
-	assert.Equal(t, "NULL", dumper.SelectMap["child"]["parent_id"])
-	assert.NoError(t, mock.ExpectationsWereMet())
+			mock.ExpectQuery("SELECT \\* FROM `child` LIMIT 1").WillReturnRows(sqlmock.NewRows([]string{"id", "parent_id"}))
+			columns, query, err := dumper.getSelectQueryFor(t.Context(), "child")
+			require.NoError(t, err)
+			assert.Len(t, columns, 2)
+			assert.Contains(t, columns, "`id`")
+			assert.Contains(t, query, "CASE WHEN `parent_id` IN (SELECT `id` FROM `parent` WHERE")
+			assert.Contains(t, query, "THEN NULL ELSE "+retainedValue+" END AS `parent_id`")
+			if configuredNull {
+				assert.Equal(t, "NULL", dumper.SelectMap["child"]["parent_id"])
+			}
+			assert.NoError(t, mock.ExpectationsWereMet())
+		})
+	}
 }
 
 func TestExcludeFailsWhenRetainedRowsReferenceExcludedParent(t *testing.T) {

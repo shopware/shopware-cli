@@ -1331,24 +1331,35 @@ func TestStagingTableNameStaysWithinIdentifierLimit(t *testing.T) {
 }
 
 func TestDumpBuildsExclusionsFromSchemaIncludingIgnoredTables(t *testing.T) {
-	db, mock := getDB(t)
-	t.Cleanup(func() { _ = db.Close() })
-	dumper := NewMySQLDumper(db)
-	dumper.Ignore = []string{"app"}
-	called := false
-	dumper.BuildRowExclusions = func(schemas map[string]*TableSchema) map[string]string {
-		called = true
-		assert.Contains(t, schemas, "app")
-		return map[string]string{"app": "`app_secret` IS NOT NULL"}
-	}
-	mock.ExpectQuery("SHOW FULL TABLES").WillReturnRows(
-		sqlmock.NewRows([]string{"table", "type"}).AddRow("app", "BASE TABLE"))
-	mockPrefetchSchemas(mock)
-	mock.ExpectQuery("SHOW FULL TABLES").WillReturnRows(sqlmock.NewRows([]string{"table", "type"}))
-	mock.ExpectQuery("SHOW TRIGGERS").WillReturnRows(sqlmock.NewRows([]string{"trigger"}))
+	for _, withLimit := range []bool{false, true} {
+		name := "ignored table"
+		if withLimit {
+			name = "ignored table with row limit"
+		}
+		t.Run(name, func(t *testing.T) {
+			db, mock := getDB(t)
+			t.Cleanup(func() { _ = db.Close() })
+			dumper := NewMySQLDumper(db)
+			dumper.Ignore = []string{"app"}
+			if withLimit {
+				dumper.LimitMap = map[string]TableLimit{"app": {Rows: 1}}
+			}
+			called := false
+			dumper.BuildRowExclusions = func(schemas map[string]*TableSchema) map[string]string {
+				called = true
+				assert.Contains(t, schemas, "app")
+				return map[string]string{"app": "`app_secret` IS NOT NULL"}
+			}
+			mock.ExpectQuery("SHOW FULL TABLES").WillReturnRows(
+				sqlmock.NewRows([]string{"table", "type"}).AddRow("app", "BASE TABLE"))
+			mockPrefetchSchemas(mock)
+			mock.ExpectQuery("SHOW FULL TABLES").WillReturnRows(sqlmock.NewRows([]string{"table", "type"}))
+			mock.ExpectQuery("SHOW TRIGGERS").WillReturnRows(sqlmock.NewRows([]string{"trigger"}))
 
-	var output bytes.Buffer
-	assert.NoError(t, dumper.Dump(t.Context(), &output))
-	assert.True(t, called)
-	assert.NoError(t, mock.ExpectationsWereMet())
+			var output bytes.Buffer
+			assert.NoError(t, dumper.Dump(t.Context(), &output))
+			assert.True(t, called)
+			assert.NoError(t, mock.ExpectationsWereMet())
+		})
+	}
 }

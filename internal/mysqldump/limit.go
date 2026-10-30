@@ -62,7 +62,7 @@ func (d *Dumper) computeLimitFilters(ctx context.Context) error {
 		table = strings.ToLower(table)
 
 		schema, ok := schemas[table]
-		if !ok {
+		if !ok || d.filterMap[table] == IgnoreMapPlacement {
 			logging.FromContext(ctx).Warnf("Ignoring row limit for table %s: the table does not exist or is excluded from the dump", table)
 			continue
 		}
