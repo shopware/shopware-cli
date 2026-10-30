@@ -1,4 +1,8 @@
 <?php
+if (\PHP_SAPI !== 'cli') {
+    exit(1);
+}
+
 // This script is passed to PHP -r; archive bytes arrive on stdin. All human
 // output goes to stderr, leaving stdout for the activation handshake.
 function deploymentDirectory(string $directory, int $mode = 0755): void

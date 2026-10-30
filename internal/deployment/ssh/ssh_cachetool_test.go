@@ -262,7 +262,7 @@ func TestSSHCachetoolReuseAndNoop(t *testing.T) {
 	require.NoError(t, os.RemoveAll(filepath.Join(root, ".shopware-cli/artifacts")))
 	// A corrupt tool must be replaced and verified before remote-only activation.
 	testhelper.WriteFile(t, filepath.Join(root, ".shopware-cli/tools/cachetool-"+cachetoolVersion+".phar"), "corrupt")
-	input := sshRolloutInput{Action: "activate", Root: root, Reference: "rollback-event", Release: "first", Deployment: "first", Cachetool: config}
+	input := sshRolloutInput{Action: sshDeploymentActivate, Root: root, Reference: "rollback-event", Release: "first", Deployment: "first", Cachetool: config}
 	_, err = s.runSSHDeployment(t.Context(), nil, input, nil)
 	require.NoError(t, err)
 	got := cachetoolTestRecords(t, records)

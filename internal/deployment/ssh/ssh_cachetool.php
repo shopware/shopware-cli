@@ -1,4 +1,8 @@
 <?php
+if (\PHP_SAPI !== 'cli') {
+    exit(1);
+}
+
 // Functions only: this file is prepended to the remote deployment script.
 function deploymentCachetoolRegular(string $path): void
 {

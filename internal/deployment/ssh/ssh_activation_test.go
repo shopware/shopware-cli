@@ -138,7 +138,6 @@ func TestSSHRetainedActivation(t *testing.T) {
 	for _, key := range []string{"deployment", "archive", "sha256"} {
 		assert.Equal(t, oldEvent[key], newEvent[key])
 	}
-
 }
 
 func TestRollbackCandidatesRecoverStableCreationDate(t *testing.T) {
@@ -253,7 +252,7 @@ func TestSSHActivationProtocol(t *testing.T) {
 		var stdin bytes.Buffer
 		_, err := exchangeSSHDeployment(t.Context(), &stdin,
 			bufio.NewReader(strings.NewReader(action+" id\n")), nil,
-			sshRolloutInput{Reference: "id", Action: "activate"}, ci.New(io.Discard))
+			sshRolloutInput{Reference: "id", Action: sshDeploymentActivate}, ci.New(io.Discard))
 		require.ErrorContains(t, err, "unexpected archive operation")
 		assert.Empty(t, stdin.String())
 	}
@@ -261,7 +260,7 @@ func TestSSHActivationProtocol(t *testing.T) {
 	cancel()
 	var stdin bytes.Buffer
 	_, err := exchangeSSHDeployment(ctx, &stdin, bufio.NewReader(strings.NewReader("REUSE id\nREADY id\n")),
-		nil, sshRolloutInput{Reference: "id", Action: "activate"}, ci.New(io.Discard))
+		nil, sshRolloutInput{Reference: "id", Action: sshDeploymentActivate}, ci.New(io.Discard))
 	require.ErrorIs(t, err, context.Canceled)
 	assert.Empty(t, stdin.String())
 }
@@ -276,7 +275,7 @@ func TestSSHActivationDisconnectAndLock(t *testing.T) {
 	require.NoError(t, err)
 	ctx, cancel := context.WithTimeout(t.Context(), 15*time.Second)
 	defer cancel()
-	input, err := json.Marshal(sshRolloutInput{Action: "activate", Root: root, Reference: "disconnected", Release: "first"})
+	input, err := json.Marshal(sshRolloutInput{Action: sshDeploymentActivate, Root: root, Reference: "disconnected", Release: "first"})
 	require.NoError(t, err)
 	cmd := s.transport.RemotePHPCommand(ctx, "-r", strings.TrimPrefix(sshDeploymentScript, "<?php\n"), "--", string(input)).Cmd
 	stdin, err := cmd.StdinPipe()

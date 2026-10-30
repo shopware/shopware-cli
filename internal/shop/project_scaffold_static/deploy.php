@@ -2,6 +2,10 @@
 
 namespace Deployer;
 
+if (\PHP_SAPI !== 'cli') {
+    exit(1);
+}
+
 require_once 'recipe/common.php';
 require_once 'contrib/cachetool.php';
 

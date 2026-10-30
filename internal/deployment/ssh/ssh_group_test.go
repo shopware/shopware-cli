@@ -310,7 +310,7 @@ func TestSSHGroupRollbackRejectsChecksumDrift(t *testing.T) {
 	// Even a candidate discovered before the drift must be revalidated under
 	// every held lock before a single current link may change.
 	_, err = g.coordinate(t.Context(), deployment, sshRolloutInput{
-		Action: "activate", Release: "first", SHA256: candidates[0].SHA256,
+		Action: sshDeploymentActivate, Release: "first", SHA256: candidates[0].SHA256,
 	}, nil, nil)
 	require.Error(t, err)
 	for _, host := range g.hosts {

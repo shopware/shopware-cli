@@ -194,7 +194,7 @@ func (g *sshGroup) ActivateDeployment(ctx context.Context, deployment Deployment
 	for _, row := range rows {
 		if row.Deployment.Reference == deployment.Reference {
 			return g.coordinate(ctx, deployment, sshRolloutInput{
-				Action: "activate", Release: deployment.Reference, SHA256: row.SHA256,
+				Action: sshDeploymentActivate, Release: deployment.Reference, SHA256: row.SHA256,
 			}, nil, output)
 		}
 	}
@@ -237,7 +237,7 @@ func (g *sshGroup) RolloutDeployment(ctx context.Context, deployment Deployment,
 		return result, err
 	}
 	return g.coordinate(ctx, deployment, sshRolloutInput{
-		Release: release, Archive: archive, SHA256: hex.EncodeToString(hash.Sum(nil)), Size: size,
+		Action: sshDeploymentRollout, Release: release, Archive: archive, SHA256: hex.EncodeToString(hash.Sum(nil)), Size: size,
 	}, snapshot, output)
 }
 
@@ -340,7 +340,7 @@ func (s *sshDeploymentSession) stage(ctx context.Context, archive io.Reader) err
 		s.unchanged = true
 		return nil
 	}
-	if s.input.Action == "activate" && action != "REUSE" {
+	if s.input.Action == sshDeploymentActivate && action != "REUSE" {
 		return fmt.Errorf("unexpected retained activation action %s", action)
 	}
 	if action != "REUSE" {

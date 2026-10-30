@@ -1,4 +1,8 @@
 <?php
+if (\PHP_SAPI !== 'cli') {
+    exit(1);
+}
+
 // Passed to PHP -r; stdout contains only the original helper output bytes.
 $stream = null;
 $exitCode = 0;

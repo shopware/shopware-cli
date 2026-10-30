@@ -18,18 +18,6 @@ import (
 var projectDeploymentCreateCmd = &cobra.Command{
 	Use:   "create [project-directory]",
 	Short: "Create an immutable deployment",
-	Long: `Create an immutable deployment using the selected environment's backend.
-For SSH, build a temporary local copy with the archive packaging pipeline and
-retain the tar.gz under a memorable name such as focused-wise-turing in
-.shopware-cli/deployments. Creation itself does not open an SSH connection.
-Report that name as the deployment reference; a custom --output instead reports
-its absolute archive path; relative output paths use the working directory.
-Existing archives are never overwritten. With no directory, find the closest Shopware project.
-By default, this does not upload or roll out the deployment.
-Use --rollout to immediately activate the deployment just created in the selected
-environment, with confirmation in interactive sessions. If rollout fails or is
-canceled, the created archive is retained for retrying. Before rollout, print
-a preflight summary of the local paths, environment, and configured SSH targets.`,
 	Example: `  shopware-cli project deploy create -e production
   shopware-cli project deploy create ./shop -e production --output ./builds/shop.tar.gz`,
 	Args: cobra.MaximumNArgs(1),

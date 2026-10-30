@@ -1,4 +1,8 @@
 <?php
+if (\PHP_SAPI !== 'cli') {
+    exit(1);
+}
+
 // Provider-specific fallback when no CacheTool adapter is enabled.
 function deploymentRestartPHPProcesses(): void
 {

@@ -1,4 +1,8 @@
 <?php
+if (\PHP_SAPI !== 'cli') {
+    exit(1);
+}
+
 // Runtime data lives outside the sealed release. Never follow a symlink while
 // inspecting or changing permissions: shared paths belong to the application.
 function deploymentPermissionStat(string $path): array

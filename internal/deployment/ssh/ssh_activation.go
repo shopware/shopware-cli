@@ -30,7 +30,7 @@ func (s *SSH) rollbackCandidates(ctx context.Context) ([]sshCandidate, error) {
 	if err != nil {
 		return nil, err
 	}
-	payload, err := json.Marshal(sshRolloutInput{Root: root, Current: s.activeLinkName(), Action: "candidates"})
+	payload, err := json.Marshal(sshRolloutInput{Root: root, Current: s.activeLinkName(), Action: sshDeploymentCandidates})
 	if err != nil {
 		return nil, err
 	}
@@ -61,7 +61,7 @@ func (s *SSH) ActivateDeployment(ctx context.Context, deployment Deployment, out
 		return Rollout{}, err
 	}
 	input := sshRolloutInput{
-		Action: "activate", Root: root, Current: s.activeLinkName(),
+		Action: sshDeploymentActivate, Root: root, Current: s.activeLinkName(),
 		Reference: time.Now().UTC().Format("20060102T150405Z") + "-" + rand.Text(),
 		Release:   deployment.Reference, Deployment: deployment.Reference,
 		Cachetool:    cachetool,

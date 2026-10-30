@@ -1,4 +1,8 @@
 <?php
+if (\PHP_SAPI !== 'cli') {
+    exit(1);
+}
+
 // This script is passed to PHP -r and emits only JSON on stdout.
 $exitCode = 0;
 try {

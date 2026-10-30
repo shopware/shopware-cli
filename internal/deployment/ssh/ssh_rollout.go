@@ -53,24 +53,33 @@ func (w *synchronizedWriter) UnwrapWriter() io.Writer {
 	return w.output
 }
 
+// sshDeploymentAction values match the action dispatch in ssh_deployment.php.
+type sshDeploymentAction string
+
+const (
+	sshDeploymentRollout    sshDeploymentAction = ""
+	sshDeploymentActivate   sshDeploymentAction = "activate"
+	sshDeploymentCandidates sshDeploymentAction = "candidates"
+)
+
 type sshRolloutInput struct {
-	Coordinated       bool               `json:"coordinated,omitempty"`
-	Follower          bool               `json:"follower,omitempty"`
-	Action            string             `json:"action,omitempty"`
-	Root              string             `json:"root"`
-	Current           string             `json:"current,omitempty"`
-	Reference         string             `json:"reference"`
-	Release           string             `json:"release"`
-	Deployment        string             `json:"deployment"`
-	Archive           string             `json:"archive,omitempty"`
-	SHA256            string             `json:"sha256,omitempty"`
-	Size              int64              `json:"size,omitempty"`
-	PHP               string             `json:"php,omitempty"`
-	PHPArgs           []string           `json:"php_args,omitempty"`
-	SharedFiles       []string           `json:"shared_files"`
-	SharedDirectories []string           `json:"shared_directories"`
-	Cachetool         *sshCachetoolInput `json:"cachetool,omitempty"`
-	ProbePHPHost      bool               `json:"probe_php_host,omitempty"`
+	Coordinated       bool                `json:"coordinated,omitempty"`
+	Follower          bool                `json:"follower,omitempty"`
+	Action            sshDeploymentAction `json:"action,omitempty"`
+	Root              string              `json:"root"`
+	Current           string              `json:"current,omitempty"`
+	Reference         string              `json:"reference"`
+	Release           string              `json:"release"`
+	Deployment        string              `json:"deployment"`
+	Archive           string              `json:"archive,omitempty"`
+	SHA256            string              `json:"sha256,omitempty"`
+	Size              int64               `json:"size,omitempty"`
+	PHP               string              `json:"php,omitempty"`
+	PHPArgs           []string            `json:"php_args,omitempty"`
+	SharedFiles       []string            `json:"shared_files"`
+	SharedDirectories []string            `json:"shared_directories"`
+	Cachetool         *sshCachetoolInput  `json:"cachetool,omitempty"`
+	ProbePHPHost      bool                `json:"probe_php_host,omitempty"`
 }
 
 // RolloutDeployment prepares a release and atomically switches current.
@@ -131,7 +140,8 @@ func (s *SSH) rolloutArchive(ctx context.Context, deployment Deployment, archive
 		return result, err
 	}
 	input := sshRolloutInput{
-		Root: root, Current: s.activeLinkName(), Reference: time.Now().UTC().Format("20060102T150405Z") + "-" + rand.Text(),
+		Action: sshDeploymentRollout,
+		Root:   root, Current: s.activeLinkName(), Reference: time.Now().UTC().Format("20060102T150405Z") + "-" + rand.Text(),
 		Release: release, Deployment: deployment.Reference, Archive: archivePath,
 		SHA256: hex.EncodeToString(hash.Sum(nil)), Size: info.Size(),
 		SharedFiles: sharedFiles, SharedDirectories: sharedDirectories,
@@ -219,7 +229,7 @@ func (s *SSH) runSSHDeployment(ctx context.Context, archive io.Reader, input ssh
 	}
 	reader := bufio.NewReader(stdout)
 	result, protocolErr := exchangeSSHDeployment(ctx, stdin, reader, archive, input, ci.New(output))
-	if protocolErr == nil && input.Action == "activate" {
+	if protocolErr == nil && input.Action == sshDeploymentActivate {
 		protocolErr = json.NewDecoder(reader).Decode(&result)
 	}
 	// EOF aborts any activation the client did not authorize.
@@ -240,7 +250,7 @@ func exchangeSSHDeployment(ctx context.Context, stdin io.Writer, stdout *bufio.R
 	if err != nil {
 		return Rollout{}, fmt.Errorf("negotiate deployment: %w", err)
 	}
-	if input.Action == "activate" && action != "REUSE" && action != "UNCHANGED" {
+	if input.Action == sshDeploymentActivate && action != "REUSE" && action != "UNCHANGED" {
 		return Rollout{}, fmt.Errorf("unexpected archive operation %s during retained deployment activation", action)
 	}
 	if action == "UPLOAD" && archive == nil {
