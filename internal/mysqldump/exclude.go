@@ -134,6 +134,8 @@ type excludeResolver struct {
 	resolving map[string]bool
 }
 
+// markAffectedTables marks direct exclusions and every table that references them,
+// including indirect dependents.
 func (r *excludeResolver) markAffectedTables() {
 	for table := range r.directExclusions {
 		r.affected[table] = true

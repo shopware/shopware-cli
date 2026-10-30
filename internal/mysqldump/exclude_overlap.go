@@ -35,6 +35,8 @@ func (d *Dumper) validateOverlappingDeleteActions(schemas map[string]*TableSchem
 	return nil
 }
 
+// deleteActionsCanInterfere reports whether a SET NULL action on shared FK columns
+// could change the outcome of another delete action.
 func deleteActionsCanInterfere(left, right ForeignKeySchema) bool {
 	leftNull := strings.EqualFold(left.OnDelete, "SET NULL")
 	rightNull := strings.EqualFold(right.OnDelete, "SET NULL")

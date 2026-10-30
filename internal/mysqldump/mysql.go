@@ -37,12 +37,9 @@ type Dumper struct {
 	// (table -> WHERE clause). Foreign-key delete actions control how referencing
 	// rows are handled.
 	ExcludeMap map[string]string
-	// BuildRowExclusions optionally builds schema-dependent row exclusions, such as
-	// conditions using columns that are absent in older database schemas. Dump calls
-	// it once after loading all table schemas, including ignored tables, and before
-	// planning filters. It returns table names mapped to SQL conditions selecting
-	// rows to omit; these override matching ExcludeMap entries. The callback must
-	// not modify the supplied schema map or its table definitions.
+	// BuildRowExclusions builds exclusion conditions after schemas are loaded,
+	// allowing rules to account for columns missing in older schemas.
+	// Results override matching ExcludeMap entries. The callback must not modify schemas.
 	BuildRowExclusions func(map[string]*TableSchema) map[string]string
 	// excludeWhere contains the WHERE conditions computed from ExcludeMap
 	excludeWhere map[string]string

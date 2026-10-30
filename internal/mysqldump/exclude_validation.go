@@ -8,6 +8,8 @@ import (
 	"strings"
 )
 
+// validateExcludedReferences rejects ambiguous delete actions and checks affected
+// references from tables that export data.
 func (d *Dumper) validateExcludedReferences(ctx context.Context, schemas map[string]*TableSchema) error {
 	if err := d.validateOverlappingDeleteActions(schemas); err != nil {
 		return err
@@ -148,6 +150,8 @@ func (d *Dumper) foreignKeyValidationQuery(child, parent *TableSchema, fk Foreig
 	)
 }
 
+// hasConfiguredKeyRewrite reports whether a configured column rewrite replaces any
+// of the requested key columns.
 func (d *Dumper) hasConfiguredKeyRewrite(table string, columns []string) bool {
 	rewrites := d.SelectMap[strings.ToLower(table)]
 	for _, column := range columns {
@@ -158,6 +162,7 @@ func (d *Dumper) hasConfiguredKeyRewrite(table string, columns []string) bool {
 	return false
 }
 
+// hasUnsupportedKeyRewrite reports key rewrites other than SQL NULL on nullable columns.
 func (d *Dumper) hasUnsupportedKeyRewrite(schema *TableSchema, columns []string) bool {
 	rewrites := d.SelectMap[strings.ToLower(schema.Name)]
 	for _, column := range schema.Columns {
@@ -172,6 +177,8 @@ func (d *Dumper) hasUnsupportedKeyRewrite(schema *TableSchema, columns []string)
 	return false
 }
 
+// hasKeyProjection reports whether configured rewrites or planned SET NULL actions
+// can change any of the requested key columns in the dump.
 func (d *Dumper) hasKeyProjection(table string, columns []string) bool {
 	table = strings.ToLower(table)
 	if d.hasConfiguredKeyRewrite(table, columns) {
@@ -197,6 +204,8 @@ func (d *Dumper) hasRecomputedKey(schema *TableSchema, columns []string) bool {
 	})
 }
 
+// projectedKeysQuery selects keys as they will appear in the dump, using the
+// exported column expressions and final row filters.
 func (d *Dumper) projectedKeysQuery(schema *TableSchema, columns []string) string {
 	projections := make([]string, len(columns))
 	for i, column := range columns {
