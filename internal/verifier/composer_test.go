@@ -6,8 +6,8 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -97,50 +97,42 @@ func TestPrepareComposerAutoloadRequiresProjectVendor(t *testing.T) {
 	assert.NoDirExists(t, filepath.Join(rootDir, "var"))
 }
 
-func TestPrepareComposerAutoloadCache(t *testing.T) {
+func TestPrepareComposerAutoloadUpdatesCacheOnEveryRun(t *testing.T) {
+	// A fake composer records its arguments and creates the autoload file in
+	// the directory it runs in.
+	runsLog := filepath.Join(t.TempDir(), "runs.log")
+	fakeTool(t, "composer", "echo \"$*\" >> '"+runsLog+"'\n/bin/mkdir -p vendor\n: > vendor/autoload.php\n")
+
 	composerJSON := []byte(`{"name": "acme/plugin", "require": {"shopware/core": "~6.6.0"}}`)
 	dependencies, err := validationComposerJSON(composerJSON)
 	require.NoError(t, err)
 
-	cases := []struct {
-		name         string
-		cachedJSON   []byte
-		age          time.Duration
-		checkAgainst string
-		reused       bool
-	}{
-		{name: "same dependencies", cachedJSON: dependencies, checkAgainst: "highest", reused: true},
-		{name: "changed dependencies", cachedJSON: []byte(`{"require":{"shopware/core":"~6.5.0"}}`), checkAgainst: "highest"},
-		{name: "expired", cachedJSON: dependencies, age: validationVendorTTL + time.Hour, checkAgainst: "highest"},
-		{name: "other check-against", cachedJSON: dependencies, checkAgainst: "lowest"},
+	rootDir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(rootDir, "composer.json"), composerJSON, 0o644))
+
+	for _, checkAgainst := range []string{"highest", "highest", "lowest"} {
+		autoloadFile, toolErr := prepareComposerAutoload(t.Context(), ToolConfig{RootDir: rootDir, CheckAgainst: checkAgainst}, testExecution())
+		require.Nil(t, toolErr)
+
+		workDir := filepath.Join(rootDir, extension.ValidationCacheDir, "composer-"+checkAgainst)
+		assert.Equal(t, filepath.Join(workDir, "vendor", "autoload.php"), autoloadFile)
+		assert.FileExists(t, autoloadFile)
+
+		cached, err := os.ReadFile(filepath.Join(workDir, "composer.json"))
+		require.NoError(t, err)
+		assert.Equal(t, dependencies, cached)
 	}
 
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			// Without composer on PATH, anything but a cache hit fails.
-			t.Setenv("PATH", t.TempDir())
+	runs, err := os.ReadFile(runsLog)
+	require.NoError(t, err)
+	lines := strings.Split(strings.TrimSpace(string(runs)), "\n")
+	require.Len(t, lines, 3)
+	assert.NotContains(t, lines[1], "--prefer-lowest")
+	assert.Contains(t, lines[2], "--prefer-lowest")
 
-			rootDir := t.TempDir()
-			require.NoError(t, os.WriteFile(filepath.Join(rootDir, "composer.json"), composerJSON, 0o644))
-
-			workDir := filepath.Join(rootDir, extension.ValidationCacheDir, "composer-highest")
-			cachedAutoload := filepath.Join(workDir, "vendor", "autoload.php")
-			require.NoError(t, os.MkdirAll(filepath.Dir(cachedAutoload), 0o755))
-			require.NoError(t, os.WriteFile(filepath.Join(workDir, "composer.json"), tc.cachedJSON, 0o644))
-			require.NoError(t, os.WriteFile(cachedAutoload, []byte("<?php"), 0o644))
-			modified := time.Now().Add(-tc.age)
-			require.NoError(t, os.Chtimes(cachedAutoload, modified, modified))
-
-			autoloadFile, err := prepareComposerAutoload(t.Context(), ToolConfig{RootDir: rootDir, CheckAgainst: tc.checkAgainst}, testExecution())
-			if !tc.reused {
-				assert.NotNil(t, err)
-				return
-			}
-
-			require.Nil(t, err)
-			assert.Equal(t, cachedAutoload, autoloadFile)
-		})
-	}
+	entries, err := os.ReadDir(rootDir)
+	require.NoError(t, err)
+	assert.ElementsMatch(t, []string{"composer.json", "var"}, entryNames(entries))
 }
 
 func TestEnsureValidationCacheDirIgnoresItselfInGit(t *testing.T) {

@@ -166,7 +166,7 @@ shopware-cli extension validate [path] [flags]
 
 The extension path is required; use `.` for the current extension.
 
-A folder is validated in place. When it has no `vendor/`, PHPStan's composer dependencies are installed into `var/cache/shopware-cli/` inside the extension. That directory ignores itself in git, is not packed into the zip, and is reused until the dependencies change or a day has passed. An existing `vendor/` is used as it is, so `--check-against` has no effect then.
+A folder is validated in place. When it has no `vendor/`, PHPStan's composer dependencies are installed into `var/cache/shopware-cli/` inside the extension. That directory ignores itself in git, is not packed into the zip, and is kept between runs; composer updates it on every run. An existing `vendor/` is used as it is, so `--check-against` has no effect then.
 
 Normal extension validation runs the built-in checks implemented by the current CLI. Store compliance checks that Administration and Storefront source files have matching compiled assets. Validation also reports metadata and code quality findings that are not specific to Store compliance.
 
