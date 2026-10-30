@@ -11,6 +11,7 @@ jobs:
   # The job MUST be called 'copilot-setup-steps' to be recognized by GitHub Copilot Agent
   copilot-setup-steps:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
 
     # Set minimal permissions for setup steps
     # Copilot Agent receives its own token with appropriate permissions

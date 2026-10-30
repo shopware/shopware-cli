@@ -49,8 +49,7 @@ Add or update tests for bug fixes and new behavior.
 ### Using mise
 
 This repository includes a `mise.toml` file for managing the recommended Go
-and golangci-lint versions, the Node.js-based Markdown tools, and convenient
-development tasks.
+and golangci-lint versions and for providing convenient development tasks.
 
 After installing mise, set up the project tools with:
 
@@ -64,33 +63,18 @@ You can then run the complete local check suite with:
 mise run check
 ```
 
-`check` verifies formatting without rewriting files. Use `mise run format` to
-apply Markdown lint fixes and format Go and Markdown files; `mise run lint`
-checks both languages. Markdown findings that cannot be fixed automatically
-still need a manual correction.
-
 Individual tasks are also available:
 
 ```sh
-mise run format       # Fix Markdown lint findings and format Go and Markdown files
-mise run format-check # Check Go and Markdown formatting without changing files
+mise run format       # Format Go source files
+mise run format-check # Check Go formatting (gofmt and gci) without changing files
 mise run build        # Build the shopware-cli binary
 mise run test         # Run the network-isolated test suite (Linux/macOS only)
 mise run test-unit    # Run Go tests without the sandbox wrapper (works everywhere)
 mise run vet          # Run go vet
-mise run lint         # Lint Go and Markdown files
-mise run lint-markdown # Lint Markdown structure and style
-mise run format-markdown-check # Check Markdown formatting without changing files
-mise run format-markdown # Format Markdown files with Prettier
-mise run fix-markdown # Apply Markdown lint fixes and format files
+mise run lint         # Run golangci-lint
+mise run lint-workflows # Validate GitHub Actions workflows
 ```
-
-Markdown checks use markdownlint-cli2 and Prettier with the same pinned versions
-locally and in CI. Prettier preserves prose wrapping and code examples;
-markdownlint uses its Prettier compatibility preset to avoid conflicting rules.
-The gh-aw-maintained agent and router documents are excluded from both tools.
-Git-ignored build output and dependency directories are also excluded. The PR template is allowed to start
-with a section heading rather than a document title.
 
 For machine-specific settings, create `mise.local.toml`. This file is ignored
 by Git and should not contain secrets that belong in a dedicated secret
