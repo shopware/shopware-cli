@@ -9,8 +9,8 @@ name or enum value here is a breaking change to a public interface.
 - The directory has no remote source: entries are hardwired in Go
   (`integrations.go`). `ai list` / `ai info` make no network calls.
 - `ai list --installed` is not part of this catalog contract: it reports what is
-  installed on disk — skills (via skills.sh `skills list --json`) and MCP servers
-  (read from the project's `.mcp.json`) — not the directory.
+  installed on disk — skills (via skills.sh `skills list --json`) and MCP
+  servers (read from the project's `.mcp.json`) — not the directory.
 
 ## Enums (values may be ADDED later, never renamed/removed)
 
@@ -22,10 +22,10 @@ name or enum value here is a breaking change to a public interface.
 
 ## Entry fields (defined in Go)
 
-Required: name, displayName, type, provider, description, status,
-delivery (+ delivery.kind), documentation
-Conditional: delivery.repository ("owner/repo") — required when delivery.kind == git
-delivery.url, delivery.transport — required when delivery.kind == mcp
+Required: name, displayName, type, provider, description, status, delivery (+
+delivery.kind), documentation Conditional: delivery.repository ("owner/repo") —
+required when delivery.kind == git delivery.url, delivery.transport — required
+when delivery.kind == mcp
 
 `name` is lowercase, hyphenated, and unique across the directory.
 
@@ -44,9 +44,9 @@ documentation,
 delivery: { kind, repository?, url?, transport? } }
 
 `ai list --installed` reports what is installed on disk — skills (from skills.sh
-`skills list --json`) and MCP servers (from the project's `.mcp.json`) — filtered
-to the directory, and is not frozen by this contract:
-{ name, type, scope, agents: [ ... ], source }
+`skills list --json`) and MCP servers (from the project's `.mcp.json`) —
+filtered to the directory, and is not frozen by this contract: { name, type,
+scope, agents: [ ... ], source }
 
 ## Guarantees
 

@@ -155,11 +155,11 @@ In those cases write the raw string via `testhelper.WriteFile` (or plain
 `os.WriteFile` for special permissions) and, where it isn't obvious, leave a
 short comment saying why the builder doesn't apply.
 
-Config YAML (`.config/shopware-extension.yml`, `.config/shopware-project.yml`) also stays
-raw — as backtick multiline literals, not `\n`-escaped strings. Do NOT build
-these by marshaling the production config structs: their `omitempty` tags drop
-zero-valued nested structs, so an explicit `enabled: false` marshals to
-nothing and the loader's `enabled: true` defaults silently flip the fixture's
+Config YAML (`.config/shopware-extension.yml`, `.config/shopware-project.yml`)
+also stays raw — as backtick multiline literals, not `\n`-escaped strings. Do
+NOT build these by marshaling the production config structs: their `omitempty`
+tags drop zero-valued nested structs, so an explicit `enabled: false` marshals
+to nothing and the loader's `enabled: true` defaults silently flip the fixture's
 meaning (verified — a Config with zip packing disabled marshals to `{}`).
 
 ## Adding to this package

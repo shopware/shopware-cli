@@ -103,8 +103,9 @@ interactive development TUI (`shopware-cli project dev`).
 
 ### `shopware_cli.tool.subprocess` — subprocess duration and output sizes
 
-Sent after each checker, formatter, or fixer subprocess attempt, including failed
-starts and preparation commands such as Composer installation. This respects `DO_NOT_TRACK`.
+Sent after each checker, formatter, or fixer subprocess attempt, including
+failed starts and preparation commands such as Composer installation. This
+respects `DO_NOT_TRACK`.
 
 | Tag            | Meaning                                                                                                    |
 | -------------- | ---------------------------------------------------------------------------------------------------------- |
@@ -131,12 +132,12 @@ Repeated invocations across source directories share the same operation label;
 directory details remain in local verbose logs.
 
 Duration excludes output parsing and telemetry delivery. Processes terminated by
-a signal still report their duration and captured output sizes. A nonzero exit code can indicate
-findings rather than an execution failure, depending on the tool.
-Output contents, command arguments, working directories, and error messages are not included.
-These measurements help compare subprocess runtime, output sizes, and exit codes,
-identify startup failures, and decide which tools need streaming output instead of
-buffering it in memory.
+a signal still report their duration and captured output sizes. A nonzero exit
+code can indicate findings rather than an execution failure, depending on the
+tool. Output contents, command arguments, working directories, and error
+messages are not included. These measurements help compare subprocess runtime,
+output sizes, and exit codes, identify startup failures, and decide which tools
+need streaming output instead of buffering it in memory.
 
 ### `shopware_cli.command` — every command run
 
@@ -225,13 +226,13 @@ integration, whether the attempt succeeds or fails.
 | `result`      | Outcome of the install                                                                                        | `success` / `failure`                           |
 
 MCP installs are always `scope=project` and carry no `agent` (the project's
-`.mcp.json` is not agent-specific). The command's duration is already captured by
-`shopware_cli.command`, so it is not repeated here.
+`.mcp.json` is not agent-specific). The command's duration is already captured
+by `shopware_cli.command`, so it is not repeated here.
 
 ### `shopware_cli.ai.remove` — AI integration removed
 
-Sent when `shopware-cli ai remove` removes (or previews, with `--dry-run`) a known
-integration.
+Sent when `shopware-cli ai remove` removes (or previews, with `--dry-run`) a
+known integration.
 
 | Tag           | Meaning                                                                              | Example               |
 | ------------- | ------------------------------------------------------------------------------------ | --------------------- |
@@ -372,12 +373,13 @@ inside the TUI).
 
 ## Opting out
 
-Telemetry honors the cross-tool [Console Do Not Track](https://consoledonottrack.com/)
-standard. Setting the `DO_NOT_TRACK` environment variable to any value disables
-all telemetry:
+Telemetry honors the cross-tool
+[Console Do Not Track](https://consoledonottrack.com/) standard. Setting the
+`DO_NOT_TRACK` environment variable to any value disables all telemetry:
 
 ```bash
 export DO_NOT_TRACK=1
 ```
 
-When set, the `Track` function returns immediately and **no event is ever sent**.
+When set, the `Track` function returns immediately and
+**no event is ever sent**.

@@ -5,9 +5,14 @@ description: Use Shopware CLI for Shopware project, extension, and account workf
 
 # Shopware CLI
 
-Use Shopware CLI as the preferred interface for supported Shopware project, extension, and account workflows.
+Use Shopware CLI as the preferred interface for supported Shopware project,
+extension, and account workflows.
 
-When contributing to `shopware/shopware-cli`, use this skill to reason from the user's perspective: what the CLI can do, which command a user should choose, how commands should behave, and where safety boundaries belong. Use the repository's `AGENTS.md` for implementation conventions, architecture, testing, and Go-specific contributor guidance.
+When contributing to `shopware/shopware-cli`, use this skill to reason from the
+user's perspective: what the CLI can do, which command a user should choose, how
+commands should behave, and where safety boundaries belong. Use the repository's
+`AGENTS.md` for implementation conventions, architecture, testing, and
+Go-specific contributor guidance.
 
 ## Start with the current CLI
 
@@ -28,7 +33,12 @@ For a specific command:
 shopware-cli <group> <command> --help
 ```
 
-When working on unreleased functionality in a `shopware/shopware-cli` checkout, inspect or run the checked-out code instead of assuming the installed release behaves the same way. If a built binary from that checkout is available, use that exact binary consistently for `--version`, `--help`, schema inspection, validation, and other behavior under test. Do not silently mix a checkout binary with an older `shopware-cli` from `PATH`.
+When working on unreleased functionality in a `shopware/shopware-cli` checkout,
+inspect or run the checked-out code instead of assuming the installed release
+behaves the same way. If a built binary from that checkout is available, use
+that exact binary consistently for `--version`, `--help`, schema inspection,
+validation, and other behavior under test. Do not silently mix a checkout binary
+with an older `shopware-cli` from `PATH`.
 
 Do not invent commands, flags, configuration fields, or behavior from memory.
 
@@ -36,31 +46,47 @@ Do not invent commands, flags, configuration fields, or behavior from memory.
 
 The CLI has three primary user-facing areas:
 
-- `project`: create, configure, develop, inspect, build, maintain, and upgrade Shopware projects.
-- `extension`: build, validate, format, package, and maintain Shopware extensions.
+- `project`: create, configure, develop, inspect, build, maintain, and upgrade
+  Shopware projects.
+- `extension`: build, validate, format, package, and maintain Shopware
+  extensions.
 - `account`: authenticated Shopware Account and extension producer workflows.
 
-This is orientation, not a complete command catalog. Use `--help` for the current command surface.
+This is orientation, not a complete command catalog. Use `--help` for the
+current command surface.
 
 ## Plugin scaffolding
 
-`extension create` writes the foundation of a plugin (`composer.json`, `.gitignore`, a minimal plugin class, PHPUnit bootstrap). PHPUnit stays on create; there is no `extension add tests`. The bootstrap uses Shopware `TestBootstrapper` (`addActivePlugins`, `setForceInstallPlugins(true)`).
+`extension create` writes the foundation of a plugin (`composer.json`,
+`.gitignore`, a minimal plugin class, PHPUnit bootstrap). PHPUnit stays on
+create; there is no `extension add tests`. The bootstrap uses Shopware
+`TestBootstrapper` (`addActivePlugins`, `setForceInstallPlugins(true)`).
 
-`extension add <generator>` adds one example feature inside an existing plugin. Generators are individual commands, not a `plugin:create` questionnaire or Core `make:plugin:*` wrappers. Run them from the plugin directory in a Shopware project on **6.7.13.0 or newer** (declarative `custom-fields.xml`). Unsupported versions fail before any files are written.
+`extension add <generator>` adds one example feature inside an existing plugin.
+Generators are individual commands, not a `plugin:create` questionnaire or Core
+`make:plugin:*` wrappers. Run them from the plugin directory in a Shopware
+project on **6.7.13.0 or newer** (declarative `custom-fields.xml`). Unsupported
+versions fail before any files are written.
 
-Available generators: `admin-module`, `command`, `custom-fieldset`, `entity`, `event-subscriber`, `javascript-plugin`, `plugin-config`, `scheduled-task`, `store-api-route`, `storefront-controller`.
+Available generators: `admin-module`, `command`, `custom-fieldset`, `entity`,
+`event-subscriber`, `javascript-plugin`, `plugin-config`, `scheduled-task`,
+`store-api-route`, `storefront-controller`.
 
 Intentional differences from Shopware Core scaffolding:
 
 - PHP `src/Resources/config/services.php` and `routes.php` instead of XML.
 - Admin snippets as `en.json` / `de.json` instead of `en-GB` / `de-DE`.
 - Existing `main.js` is appended, not overwritten.
-- Existing plugin files are never overwritten; duplicate service/route blocks are skipped.
-- Interactive and non-interactive `extension add` share the same code path (flags/args only; no questionnaire).
+- Existing plugin files are never overwritten; duplicate service/route blocks
+  are skipped.
+- Interactive and non-interactive `extension add` share the same code path
+  (flags/args only; no questionnaire).
 
 ## Prefer Shopware CLI abstractions
 
-When Shopware CLI provides a command for a task, prefer it over manually reconstructing the workflow with Composer, `bin/console`, Docker, npm, PHP, or direct filesystem changes.
+When Shopware CLI provides a command for a task, prefer it over manually
+reconstructing the workflow with Composer, `bin/console`, Docker, npm, PHP, or
+direct filesystem changes.
 
 The CLI may already understand:
 
@@ -76,7 +102,8 @@ Use lower-level tools only when:
 1. Shopware CLI does not expose the required operation; or
 2. troubleshooting requires inspecting the underlying operation.
 
-If the task involves a Docker-backed project or deciding where a command should execute, use the `shopware-cli-docker` skill when available.
+If the task involves a Docker-backed project or deciding where a command should
+execute, use the `shopware-cli-docker` skill when available.
 
 ## Understand command risk
 
@@ -84,13 +111,16 @@ Before executing a command, understand what it can change.
 
 ### Usually low risk
 
-Inspection-oriented actions such as help, version checks, status, diagnostics, schema inspection, validation, and reading logs are normally appropriate while investigating a task.
+Inspection-oriented actions such as help, version checks, status, diagnostics,
+schema inspection, validation, and reading logs are normally appropriate while
+investigating a task.
 
 Still inspect command help when behavior is unclear.
 
 ### Local file changes
 
-Commands that create, generate, format, fix, upgrade, package, install dependencies, or rewrite configuration may change files.
+Commands that create, generate, format, fix, upgrade, package, install
+dependencies, or rewrite configuration may change files.
 
 Before running them:
 
@@ -102,13 +132,19 @@ Before running them:
 
 Do not assume every command supports `--dry-run`.
 
-When the user asks for inspection only or explicitly says not to modify files, do not temporarily rewrite project files just to probe validation behavior. Prefer help/schema/source inspection or a separate disposable fixture.
+When the user asks for inspection only or explicitly says not to modify files,
+do not temporarily rewrite project files just to probe validation behavior.
+Prefer help/schema/source inspection or a separate disposable fixture.
 
 ### Database and application-state changes
 
-Treat commands that can change the database, Shopware application state, installed extensions, caches, indexes, migrations, or configuration as higher risk.
+Treat commands that can change the database, Shopware application state,
+installed extensions, caches, indexes, migrations, or configuration as higher
+risk.
 
-`shopware-cli project console` (and the `swx` alias) is an execution bridge to Symfony Console and to custom scripts from the project `composer.json`. Its safety depends on the command or script passed to it.
+`shopware-cli project console` (and the `swx` alias) is an execution bridge to
+Symfony Console and to custom scripts from the project `composer.json`. Its
+safety depends on the command or script passed to it.
 
 Before running an unfamiliar or state-changing Symfony command:
 
@@ -116,19 +152,23 @@ Before running an unfamiliar or state-changing Symfony command:
 shopware-cli project console <command> --help
 ```
 
-Discover Composer scripts from the project `composer.json` or `shopware-cli project console list`. Do not pass `--help` to a Composer script to inspect it; that argument is forwarded to the script and can still run it.
+Discover Composer scripts from the project `composer.json` or
+`shopware-cli project console list`. Do not pass `--help` to a Composer script
+to inspect it; that argument is forwarded to the script and can still run it.
 
 Know which environment will be affected before proceeding.
 
 ### Remote changes
 
-Treat account operations that authenticate, log out, upload, push, publish, or otherwise modify remote Shopware Account state as external side effects.
+Treat account operations that authenticate, log out, upload, push, publish, or
+otherwise modify remote Shopware Account state as external side effects.
 
 Do not infer permission or user intent simply because credentials are available.
 
 ## Validation workflows
 
-Use `shopware-cli project validate` or `shopware-cli extension validate` to run validation checks against a project or extension.
+Use `shopware-cli project validate` or `shopware-cli extension validate` to run
+validation checks against a project or extension.
 
 Always inspect current flags and available checks:
 
@@ -143,20 +183,32 @@ shopware-cli extension validate --help
 shopware-cli project validate [flags]
 ```
 
-Validates the Shopware project against the checks implemented by the current CLI and configured tools. It copies the project to a temporary directory and installs its toolset first, so a first run can be slow; `--no-copy` validates in place and skips the copy.
+Validates the Shopware project against the checks implemented by the current CLI
+and configured tools. It copies the project to a temporary directory and
+installs its toolset first, so a first run can be slow; `--no-copy` validates in
+place and skips the copy.
 
 Common flags include:
 
 - `--only <tools>` — run only specific checkers (comma-separated).
 - `--exclude <tools>` — skip specific tools (comma-separated).
-- `--format <format>` — choose an output format supported by the current CLI (`--reporter` is a deprecated alias).
-- `--local-only` — limit extension discovery to plugins in `custom/*` (for the project toolset); does not add per-extension metadata validation.
-- `--no-copy` — do not copy project files to a temporary directory before validation.
+- `--format <format>` — choose an output format supported by the current CLI
+  (`--reporter` is a deprecated alias).
+- `--local-only` — limit extension discovery to plugins in `custom/*` (for the
+  project toolset); does not add per-extension metadata validation.
+- `--no-copy` — do not copy project files to a temporary directory before
+  validation.
 - `--verbose` — show debug output.
 
 Use current `--help` rather than treating this list as exhaustive.
 
-**`project validate` is not `extension validate`.** It runs the project code-quality toolset (PHPStan, ESLint, Twig linters, …) over the discovered extensions' source directories; it does not run per-extension manifest/metadata validation, so a clean run (0 problems) does not mean the custom extensions are valid. To validate a custom extension's structure and metadata, run `shopware-cli extension validate <path>` on it directly (e.g. each `custom/plugins/<Name>`).
+**`project validate` is not `extension validate`.** It runs the project
+code-quality toolset (PHPStan, ESLint, Twig linters, …) over the discovered
+extensions' source directories; it does not run per-extension manifest/metadata
+validation, so a clean run (0 problems) does not mean the custom extensions are
+valid. To validate a custom extension's structure and metadata, run
+`shopware-cli extension validate <path>` on it directly (e.g. each
+`custom/plugins/<Name>`).
 
 ### Extension validation
 
@@ -166,31 +218,48 @@ shopware-cli extension validate [path] [flags]
 
 The extension path is required; use `.` for the current extension.
 
-Normal extension validation runs the built-in checks implemented by the current CLI. Store compliance checks that Administration and Storefront source files have matching compiled assets. Validation also reports metadata and code quality findings that are not specific to Store compliance.
+Normal extension validation runs the built-in checks implemented by the current
+CLI. Store compliance checks that Administration and Storefront source files
+have matching compiled assets. Validation also reports metadata and code quality
+findings that are not specific to Store compliance.
 
 Common flags include:
 
 - `--only <tools>` — run only the named checkers (comma-separated).
 - `--exclude <tools>` — remove checkers from the selected set.
-- All checkers run by default, including PHPStan, ESLint, and Stylelint. `--full` is deprecated and has no effect. To do a quick validation use `--only builtin` (`sw-cli` remains accepted as a legacy alias and emits a deprecation warning).
-- `--check-against <mode>` — `highest` (default) or `lowest`: which supported Shopware version to check against.
-- `--format <format>` — choose an output format supported by the current CLI (`--reporter` is a deprecated alias).
+- All checkers run by default, including PHPStan, ESLint, and Stylelint.
+  `--full` is deprecated and has no effect. To do a quick validation use
+  `--only builtin` (`sw-cli` remains accepted as a legacy alias and emits a
+  deprecation warning).
+- `--check-against <mode>` — `highest` (default) or `lowest`: which supported
+  Shopware version to check against.
+- `--format <format>` — choose an output format supported by the current CLI
+  (`--reporter` is a deprecated alias).
 - `--no-copy` — do not copy extension files to a temporary directory.
 - `--verbose` — show debug output.
 
-For Store-distribution workflows, use the `shopware-cli-extension-store` skill when available.
+For Store-distribution workflows, use the `shopware-cli-extension-store` skill
+when available.
 
 Store compliance is enabled with `validation.store_compliance: true` in
 `.shopware-extension.yml`. Setting `SHOPWARE_CLI_STORE_COMPLIANCE=1` also
-enables it. It checks Administration and Storefront source and compiled asset pairs.
+enables it. It checks Administration and Storefront source and compiled asset
+pairs.
 
-Each command selects only tools that support its operation. For example, `extension validate --only prettier` is an error because Prettier formats but does not check; the error lists available checkers. The extension command summaries show `invoked` or `skipped`: these describe selection and invocation, not whether files were applicable, findings were produced, or fixes were made.
+Each command selects only tools that support its operation. For example,
+`extension validate --only prettier` is an error because Prettier formats but
+does not check; the error lists available checkers. The extension command
+summaries show `invoked` or `skipped`: these describe selection and invocation,
+not whether files were applicable, findings were produced, or fixes were made.
 
 ### Fresh results beat saved reports
 
-Saved outputs such as `validation.json`, JUnit XML, or markdown reports can become stale after files are fixed or changed.
+Saved outputs such as `validation.json`, JUnit XML, or markdown reports can
+become stale after files are fixed or changed.
 
-Before diagnosing a validation failure, rerun validation against the current working tree. If a saved report contradicts the current files or a fresh run, treat the saved report as stale.
+Before diagnosing a validation failure, rerun validation against the current
+working tree. If a saved report contradicts the current files or a fresh run,
+treat the saved report as stale.
 
 ### CI and reporters
 
@@ -203,13 +272,17 @@ shopware-cli extension validate . --format github
 shopware-cli extension validate . --format gitlab
 ```
 
-Reporters format emitted output. They do not by themselves post comments or annotations to pull requests or merge requests; CI configuration must consume the output appropriately.
+Reporters format emitted output. They do not by themselves post comments or
+annotations to pull requests or merge requests; CI configuration must consume
+the output appropriately.
 
-Use the process exit code as the validation result. A reporter can change formatting, but validation errors still make the command fail.
+Use the process exit code as the validation result. A reporter can change
+formatting, but validation errors still make the command fail.
 
 ### Domain-specific routing
 
-When validation fails in a specific area, route users to relevant skills when available:
+When validation fails in a specific area, route users to relevant skills when
+available:
 
 - **PHP test failures** → `php-testing` skill.
 - **JavaScript/Admin failures** → `admin-testing` skill.
@@ -226,22 +299,27 @@ When `validate` produces unexpected results:
    - When testing a checkout, use its built binary consistently.
 
 2. **Verify the working directory and project configuration.**
-   - Ensure `.shopware-project.yml` or `.shopware-extension.yml` is present and correct.
+   - Ensure `.shopware-project.yml` or `.shopware-extension.yml` is present and
+     correct.
    - Check `--verbose` output when useful.
 
 3. **Regenerate validation output.**
    - Do not diagnose current files from an old saved report.
 
 4. **Check installed and locked tool versions.**
-   - Full validation can depend on external tools such as PHPStan, ESLint, and Stylelint.
+   - Full validation can depend on external tools such as PHPStan, ESLint, and
+     Stylelint.
    - Verify relevant dependencies and configuration.
 
 5. **Understand tool statuses.**
-   - `skipped` means a tool was not selected or was excluded; the status note gives the reason.
-   - `invoked` means the tool was called, not that it analyzed files or succeeded. Use findings and the exit code for the validation result.
+   - `skipped` means a tool was not selected or was excluded; the status note
+     gives the reason.
+   - `invoked` means the tool was called, not that it analyzed files or
+     succeeded. Use findings and the exit code for the validation result.
 
 6. **Avoid ad hoc workarounds.**
-   - Do not bypass validation with manual lower-level commands before understanding why the CLI behaved as it did.
+   - Do not bypass validation with manual lower-level commands before
+     understanding why the CLI behaved as it did.
 
 7. **Check environment and runtime prerequisites.**
    - Some checks may require Docker, PHP, npm dependencies, or other tooling.
@@ -255,49 +333,93 @@ shopware-cli project create --help
 shopware-cli project create [name] [version] [flags]
 ```
 
-Always check current `--help` first; treat the flag list below as orientation, not the source of truth.
+Always check current `--help` first; treat the flag list below as orientation,
+not the source of truth.
 
 ### Ask the user; do not guess
 
-When this skill drives project creation, you typically run `create` non-interactively (`-n`), so the CLI's own prompts never appear and it silently applies defaults — some of which differ from the interactive ones (Elasticsearch defaults **on** non-interactively but **off** in the prompts). Do not inherit those defaults blind. Confirm the choices with the user first, then pass them as explicit flags. Frame each option by what it does for the user, not by errors it prevents or internal codes — e.g. justify skipping Elasticsearch as "simpler setup, only needed for large catalogs or advanced search", never with a 500 or index error. Walk through:
+When this skill drives project creation, you typically run `create`
+non-interactively (`-n`), so the CLI's own prompts never appear and it silently
+applies defaults — some of which differ from the interactive ones (Elasticsearch
+defaults **on** non-interactively but **off** in the prompts). Do not inherit
+those defaults blind. Confirm the choices with the user first, then pass them as
+explicit flags. Frame each option by what it does for the user, not by errors it
+prevents or internal codes — e.g. justify skipping Elasticsearch as "simpler
+setup, only needed for large catalogs or advanced search", never with a 500 or
+index error. Walk through:
 
-- **Name** (`[name]`) — the project directory. Ask for it; do not default to the current directory (it must be empty or non-existent).
+- **Name** (`[name]`) — the project directory. Ask for it; do not default to the
+  current directory (it must be empty or non-existent).
 - **Version** (`--version`) — e.g. `6.6.0.0` or `latest`.
-- **Docker** (`--docker`) — **recommended.** Runs the local setup in Docker instead of relying on a local PHP/toolchain.
-- **Local domain** (`--local-domain`) — **recommended** (requires `--docker`). Serves the shop at a stable `<name>.shopware.local` via the shared proxy instead of a port. First time on a machine it needs a one-time `shopware-cli project proxy setup` (sudo: DNS + HTTPS trust) — non-interactive `create` never runs this, so plan to run it separately.
-- **PHP version** (`--php-version`) — `8.2`–`8.5`; usually leave it to the CLI. Ask only if the user needs a specific one; it must satisfy the chosen Shopware version's PHP constraint.
-- **Elasticsearch/OpenSearch** (`--with-elasticsearch`) — recommend leaving it off unless the user needs it (large catalogs or advanced search). It is enabled by default non-interactively, so to disable it pass `--with-elasticsearch=false` (omitting the flag leaves it on under `-n`; the separate `--without-elasticsearch` flag is deprecated).
-- **AMQP** (`--with-amqp`) — ask; enable only if they need queue/messaging support.
-- **Deployment** (`--deployment`) — `none|container|deployer|platformsh|shopware-paas` (default `none`).
+- **Docker** (`--docker`) — **recommended.** Runs the local setup in Docker
+  instead of relying on a local PHP/toolchain.
+- **Local domain** (`--local-domain`) — **recommended** (requires `--docker`).
+  Serves the shop at a stable `<name>.shopware.local` via the shared proxy
+  instead of a port. First time on a machine it needs a one-time
+  `shopware-cli project proxy setup` (sudo: DNS + HTTPS trust) — non-interactive
+  `create` never runs this, so plan to run it separately.
+- **PHP version** (`--php-version`) — `8.2`–`8.5`; usually leave it to the CLI.
+  Ask only if the user needs a specific one; it must satisfy the chosen Shopware
+  version's PHP constraint.
+- **Elasticsearch/OpenSearch** (`--with-elasticsearch`) — recommend leaving it
+  off unless the user needs it (large catalogs or advanced search). It is
+  enabled by default non-interactively, so to disable it pass
+  `--with-elasticsearch=false` (omitting the flag leaves it on under `-n`; the
+  separate `--without-elasticsearch` flag is deprecated).
+- **AMQP** (`--with-amqp`) — ask; enable only if they need queue/messaging
+  support.
+- **Deployment** (`--deployment`) —
+  `none|container|deployer|platformsh|shopware-paas` (default `none`).
 - **CI/CD** (`--ci`) — `none|github|gitlab` (default `none`).
 - **Git** (`--git`) — initialize a repository.
-- **Audit** (`--no-audit`) — do not set preemptively; only use it if security advisories block the install and the user accepts the risk.
+- **Audit** (`--no-audit`) — do not set preemptively; only use it if security
+  advisories block the install and the user accepts the risk.
 
-With `--docker`, `create` runs for several minutes: it pulls the dev image and runs `composer install`, autoload generation, and post-install scripts inside the container. This is expected, not a hang. Surface progress to the user — stream the command's output, or run it in the background and report the current stage from the log — rather than blocking silently.
+With `--docker`, `create` runs for several minutes: it pulls the dev image and
+runs `composer install`, autoload generation, and post-install scripts inside
+the container. This is expected, not a hang. Surface progress to the user —
+stream the command's output, or run it in the background and report the current
+stage from the log — rather than blocking silently.
 
-**`create` scaffolds; it does not install the shop.** It writes the project, runs `composer install`, and creates `.shopware-project.yml` (plus compose file / git when requested). The database is **not** set up yet. To install afterwards:
+**`create` scaffolds; it does not install the shop.** It writes the project,
+runs `composer install`, and creates `.shopware-project.yml` (plus compose file
+/ git when requested). The database is **not** set up yet. To install
+afterwards:
 
-- `shopware-cli project dev install` — non-interactive: starts the environment, runs the install, and saves admin credentials to the project config (defaults `admin` / `shopware`, `en-GB`, `EUR`; override with `--admin-username`/`--admin-password`/`--locale`/`--currency`). Idempotent — skips when the shop is already installed.
-- `shopware-cli project dev` — the interactive TUI dashboard when you want to drive it by hand.
+- `shopware-cli project dev install` — non-interactive: starts the environment,
+  runs the install, and saves admin credentials to the project config (defaults
+  `admin` / `shopware`, `en-GB`, `EUR`; override with
+  `--admin-username`/`--admin-password`/`--locale`/`--currency`). Idempotent —
+  skips when the shop is already installed.
+- `shopware-cli project dev` — the interactive TUI dashboard when you want to
+  drive it by hand.
 
 ### Other gotchas
 
-- **Security advisories** block a non-interactive install unless `--no-audit` is set; interactive mode prompts instead.
-- The target folder must be empty; hostname collisions (a `<name>.shopware.local` already in use) surface at `proxy`/`dev` time, not at create.
+- **Security advisories** block a non-interactive install unless `--no-audit` is
+  set; interactive mode prompts instead.
+- The target folder must be empty; hostname collisions (a
+  `<name>.shopware.local` already in use) surface at `proxy`/`dev` time, not at
+  create.
 
 ## Inspect the project before deciding
 
 Relevant files can include:
 
-- `.config/shopware-project.yml` / `.shopware-project.yaml` / `.shopware-project.yml` (shop URL and Admin API credentials live under `environments`; empty `-e` targets `environments.local`)
-- `.config/shopware-extension.yml` / `.shopware-extension.yml` / `.shopware-extension.yaml`
+- `.config/shopware-project.yml` / `.shopware-project.yaml` /
+  `.shopware-project.yml` (shop URL and Admin API credentials live under
+  `environments`; empty `-e` targets `environments.local`)
+- `.config/shopware-extension.yml` / `.shopware-extension.yml` /
+  `.shopware-extension.yaml`
 - `composer.json`
 - `composer.lock`
 - `manifest.xml`
 
-Do not infer the project type, extension type, target environment, or Shopware version solely from the user's wording.
+Do not infer the project type, extension type, target environment, or Shopware
+version solely from the user's wording.
 
-Only the first found `yml` / `yaml` is used in the specified order above, prefer the first one for new projects.
+Only the first found `yml` / `yaml` is used in the specified order above, prefer
+the first one for new projects.
 
 Prefer CLI-provided configuration schemas over remembered configuration fields.
 
@@ -315,29 +437,41 @@ or:
 shopware-cli -n <command>
 ```
 
-If required values are missing, inspect `--help` and provide them explicitly rather than guessing answers to prompts.
+If required values are missing, inspect `--help` and provide them explicitly
+rather than guessing answers to prompts.
 
 Prefer machine-readable output when the command explicitly supports it.
 
 ## Credentials and sensitive data
 
-Never expose access tokens, passwords, client secrets, database credentials, or other secret values in responses, logs, examples, or committed files.
+Never expose access tokens, passwords, client secrets, database credentials, or
+other secret values in responses, logs, examples, or committed files.
 
-Prefer Shopware CLI's supported authentication and configuration mechanisms instead of manipulating credential storage directly.
+Prefer Shopware CLI's supported authentication and configuration mechanisms
+instead of manipulating credential storage directly.
 
-Database dumps and other exports may contain sensitive customer or shop data. Treat their creation, storage, and sharing accordingly.
+Database dumps and other exports may contain sensitive customer or shop data.
+Treat their creation, storage, and sharing accordingly.
 
-`project dump --anonymize` also merges the `anonymize` section from each installed extension's `.config/shopware-extension.yml`: `tables` are column rewrites (same shape as project `dump.rewrite`) and `system_config` omits rows or replaces them with a custom or faker value. Project `dump.rewrite` wins when both set the same column. If an extension config cannot be read, the dump stops: fix or report that config instead of dropping `--anonymize`.
+`project dump --anonymize` also merges the `anonymize` section from each
+installed extension's `.config/shopware-extension.yml`: `tables` are column
+rewrites (same shape as project `dump.rewrite`) and `system_config` omits rows
+or replaces them with a custom or faker value. Project `dump.rewrite` wins when
+both set the same column. If an extension config cannot be read, the dump stops:
+fix or report that config instead of dropping `--anonymize`.
 
-To fill that section from an extension's entities and `config.xml`, use the `shopware-cli-extension-anonymize` skill when available.
+To fill that section from an extension's entities and `config.xml`, use the
+`shopware-cli-extension-anonymize` skill when available.
 
 ## Generated files
 
 Distinguish source files from generated files before editing them.
 
-When Shopware CLI owns generation of an artifact, prefer regenerating it through the appropriate CLI command instead of manually editing generated output.
+When Shopware CLI owns generation of an artifact, prefer regenerating it through
+the appropriate CLI command instead of manually editing generated output.
 
-Inspect command help before regenerating anything that may overwrite existing files.
+Inspect command help before regenerating anything that may overwrite existing
+files.
 
 ## Troubleshooting
 
@@ -349,9 +483,11 @@ When a Shopware CLI command fails:
 4. Verify the working directory and relevant project or extension configuration.
 5. Retry with `--verbose` when useful.
 6. Check whether the correct project environment is selected and available.
-7. Inspect the underlying Composer, Symfony, Docker, npm, PHP, or API operation only after establishing what Shopware CLI attempted to do.
+7. Inspect the underlying Composer, Symfony, Docker, npm, PHP, or API operation
+   only after establishing what Shopware CLI attempted to do.
 
-Do not work around a failing Shopware CLI command with lower-level tooling until you understand what CLI behavior or configuration would be bypassed.
+Do not work around a failing Shopware CLI command with lower-level tooling until
+you understand what CLI behavior or configuration would be bypassed.
 
 ## Information priority
 
@@ -359,7 +495,9 @@ When behavior is unclear, use this order:
 
 1. the current CLI binary and fresh runtime output;
 2. project configuration and CLI-provided schemas;
-3. the current `shopware/shopware-cli` source and tests when implementation details are required;
+3. the current `shopware/shopware-cli` source and tests when implementation
+   details are required;
 4. official Shopware CLI documentation.
 
-Prefer version-correct facts over remembered Shopware behavior or stale generated reports.
+Prefer version-correct facts over remembered Shopware behavior or stale
+generated reports.

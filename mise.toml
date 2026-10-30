@@ -16,10 +16,8 @@ golangci-lint = "2.15.0"
 jactionlint = "2.4.0"
 shellcheck = "0.11.0"
 
-# Markdown tools are shared by local tasks and CI.
-node = "24.18.1"
-"npm:markdownlint-cli2" = "0.24.0"
-"npm:prettier" = "3.9.10"
+# Markdown tooling is shared by local tasks and CI.
+rumdl = "0.3.0"
 
 [env]
 # Match CI and prevent Go from silently downloading a different toolchain.
@@ -27,12 +25,12 @@ GOTOOLCHAIN = "local"
 
 [tasks.format]
 description = "Format Go and Markdown files"
-depends = ["fix-markdown"]
+depends = ["format-markdown"]
 run = "golangci-lint fmt ./..."
 
 [tasks.format-check]
 description = "Check Go and Markdown formatting"
-depends = ["format-markdown-check"]
+depends = ["lint-markdown"]
 run = "golangci-lint fmt --diff ./..."
 
 [tasks.build]
@@ -67,21 +65,8 @@ run = ["shellcheck --version", "jactionlint --color --shellcheck=shellcheck --py
 
 [tasks.lint-markdown]
 description = "Lint Markdown files"
-run = "markdownlint-cli2"
-
-[tasks.fix-markdown]
-description = "Fix Markdown lint findings and format Markdown files"
-# Fix first, then format; report any findings that need a manual correction.
-run = """
-markdownlint-cli2 --fix || test "$?" -eq 1
-mise run format-markdown
-markdownlint-cli2
-"""
+run = "rumdl check ."
 
 [tasks.format-markdown]
-description = "Format Markdown files"
-run = 'prettier --write --ignore-path .gitignore --ignore-path .prettierignore "**/*.{md,mdx}"'
-
-[tasks.format-markdown-check]
-description = "Check Markdown formatting"
-run = 'prettier --check --ignore-path .gitignore --ignore-path .prettierignore "**/*.{md,mdx}"'
+description = "Format Markdown files and report remaining lint findings"
+run = "rumdl check --fix ."

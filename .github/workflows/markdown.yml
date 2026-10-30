@@ -5,22 +5,20 @@ on:
     paths:
       - '**/*.md'
       - '**/*.mdx'
-      - '.markdownlint-cli2.yaml'
-      - '.prettierrc.json'
-      - '.prettierignore'
+      - '.rumdl.toml'
       - '.gitignore'
       - 'mise.toml'
+      - 'mise.lock'
       - '.github/workflows/markdown.yml'
   push:
     branches: [main]
     paths:
       - '**/*.md'
       - '**/*.mdx'
-      - '.markdownlint-cli2.yaml'
-      - '.prettierrc.json'
-      - '.prettierignore'
+      - '.rumdl.toml'
       - '.gitignore'
       - 'mise.toml'
+      - 'mise.lock'
       - '.github/workflows/markdown.yml'
   workflow_dispatch:
 
@@ -45,10 +43,11 @@ jobs:
             api.github.com:443
             github.com:443
             mise.jdx.dev:443
-            nodejs.org:443
+            mise-versions.jdx.dev:443
             objects.githubusercontent.com:443
-            registry.npmjs.org:443
+            raw.githubusercontent.com:443
             release-assets.githubusercontent.com:443
+            tuf-repo-cdn.sigstore.dev:443
 
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # ratchet:actions/checkout@v7.0.1
@@ -56,12 +55,9 @@ jobs:
           persist-credentials: false
 
       - name: Set up Markdown tools
-        uses: jdx/mise-action@5228313ee0372e111a38da051671ca30fc5a96db # ratchet:jdx/mise-action@v3
+        uses: jdx/mise-action@6be3c7ed4c21d4f76b208d351d95aac273ebb76d # ratchet:jdx/mise-action@v5.2.4
         with:
-          install_args: node npm:markdownlint-cli2 npm:prettier
+          install_args: --locked rumdl
 
-      - name: Lint Markdown
+      - name: Check Markdown
         run: mise run --skip-tools lint-markdown
-
-      - name: Check Markdown formatting
-        run: mise run --skip-tools format-markdown-check

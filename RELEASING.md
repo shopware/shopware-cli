@@ -16,9 +16,9 @@ manually.
 
    Use a prerelease suffix such as `1.2.3-rc.1` for prereleases.
 
-   The `-s` flag makes the tag "signed", similar to commits it is considered best practice.
-   For it to work you might need to refer to [GitHub's documentation on the matter](https://docs.github.com/en/authentication/managing-commit-signature-verification/associating-an-email-with-your-gpg-key).
-
+   The `-s` flag makes the tag "signed", similar to commits it is considered
+   best practice. For it to work you might need to refer to
+   [GitHub's documentation on the matter](https://docs.github.com/en/authentication/managing-commit-signature-verification/associating-an-email-with-your-gpg-key).
 3. Push only the new tag:
 
    ```sh
@@ -43,22 +43,24 @@ gh attestation verify --owner shopware oci://ghcr.io/shopware/shopware-cli:lates
 
 ## Version feed
 
-The CLI's update hint reads `https://shopware.github.io/shopware-cli/version.json`.
-The release workflow publishes that file by calling the `Publish Config Schemas`
-workflow once the GitHub release exists, so the feed and the config schemas of the
-tag go live together.
+The CLI's update hint reads
+`https://shopware.github.io/shopware-cli/version.json`. The release workflow
+publishes that file by calling the `Publish Config Schemas` workflow once the
+GitHub release exists, so the feed and the config schemas of the tag go live
+together.
 
-That call runs on the tag, so the `github-pages` environment must allow deployments
-from release tags. The rule is a repository setting, not part of any workflow file:
-Settings, Environments, `github-pages`, deployment branches and tags, tag pattern
-`[0-9]*`. As an admin, the same rule can be added with:
+That call runs on the tag, so the `github-pages` environment must allow
+deployments from release tags. The rule is a repository setting, not part of any
+workflow file: Settings, Environments, `github-pages`, deployment branches and
+tags, tag pattern `[0-9]*`. As an admin, the same rule can be added with:
 
 ```sh
 gh api -X POST repos/shopware/shopware-cli/environments/github-pages/deployment-branch-policies -f name='[0-9]*' -f type=tag
 ```
 
-If the `Publish version feed` job fails with an environment protection error, the
-rule is missing. Add it and re-run the job; the release itself is unaffected.
+If the `Publish version feed` job fails with an environment protection error,
+the rule is missing. Add it and re-run the job; the release itself is
+unaffected.
 
 ## If a release fails
 

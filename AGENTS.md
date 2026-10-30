@@ -1,6 +1,7 @@
 # AGENTS.md
 
-This file provides guidance to AI coding agents when working with code in this repository.
+This file provides guidance to AI coding agents when working with code in this
+repository.
 
 ## Development Commands
 
@@ -25,8 +26,10 @@ This file provides guidance to AI coding agents when working with code in this r
 ### Core Command Groups
 
 1. **`account/`** - Shopware Account management (login, companies, extensions)
-2. **`extension/`** - Extension development tools (build, validate, AI assistance)
-3. **`project/`** - Shopware project management (creation, configuration, deployment)
+2. **`extension/`** - Extension development tools (build, validate, AI
+   assistance)
+3. **`project/`** - Shopware project management (creation, configuration,
+   deployment)
 
 ### Key Internal Packages
 
@@ -47,13 +50,29 @@ The CLI supports three extension types:
 - **Shopware Apps**: App system extensions with `manifest.xml`
 - **Shopware Bundles**: Custom bundle implementations
 
-Extension detection is automatic based on file presence. Each type has specific build, validation, and packaging rules.
+Extension detection is automatic based on file presence. Each type has specific
+build, validation, and packaging rules.
 
 ### Configuration Files
 
 - **`.shopware-cli.yaml`** - Global CLI configuration
-- **`.config/shopware-extension.yml` / `.shopware-extension.yml` / `.shopware-extension.yaml`** - Extension-specific settings (schema: `internal/extension/config_schema.json`, embedded and exposed via `shopware-cli extension config-schema`). Only one file is loaded and the first is preferred / used for new projects, the others are legacy and still supported
-- **`.config/shopware-project.yml` / `.shopware-project.yaml` / `.shopware-project.yml`** - Project-specific settings (schema: `internal/shop/config_schema.json`, embedded and exposed via `shopware-cli project config-schema`). Shop URL and Admin API credentials belong under `environments`; empty `-e` defaults to `environments.local`. Top-level `url` / `admin_api` are deprecated. An environment's `type` is `local`, `docker`, or `ssh`; `ssh` targets point at a remote host via `ssh.host`/`ssh.user`/`ssh.directory` and run commands through a multiplexed SSH connection (database connections are tunneled automatically). Only one file is loaded and the first is preferred / used for new projects, the others are legacy and still supported
+- **`.config/shopware-extension.yml` / `.shopware-extension.yml` /
+  `.shopware-extension.yaml`** - Extension-specific settings (schema:
+  `internal/extension/config_schema.json`, embedded and exposed via
+  `shopware-cli extension config-schema`). Only one file is loaded and the first
+  is preferred / used for new projects, the others are legacy and still
+  supported
+- **`.config/shopware-project.yml` / `.shopware-project.yaml` /
+  `.shopware-project.yml`** - Project-specific settings (schema:
+  `internal/shop/config_schema.json`, embedded and exposed via
+  `shopware-cli project config-schema`). Shop URL and Admin API credentials
+  belong under `environments`; empty `-e` defaults to `environments.local`.
+  Top-level `url` / `admin_api` are deprecated. An environment's `type` is
+  `local`, `docker`, or `ssh`; `ssh` targets point at a remote host via
+  `ssh.host`/`ssh.user`/`ssh.directory` and run commands through a multiplexed
+  SSH connection (database connections are tunneled automatically). Only one
+  file is loaded and the first is preferred / used for new projects, the others
+  are legacy and still supported
 
 ## Development Patterns
 
@@ -83,13 +102,19 @@ Commands follow Cobra CLI patterns with:
 
 ### Command Conventions
 
-Follow `docs/COMMAND_CONVENTIONS.md` for every command, flag and message. The short version:
+Follow `docs/COMMAND_CONVENTIONS.md` for every command, flag and message. The
+short version:
 
-- Short texts are imperative, capitalised, no period; a parent command describes the group
-- `Use` shows required arguments bare and optional ones in brackets, no angle brackets; every leaf command declares `Args`
-- Errors are lowercase `cannot <verb> ...: %w` without Go identifiers, hints in quotes; log lines are capitalised sentences
-- Any failure exits non-zero in every output format; never log success after a failed step
-- Test the invoked `internal/` function, never the cobra layer, and test behaviour, not message wording
+- Short texts are imperative, capitalised, no period; a parent command describes
+  the group
+- `Use` shows required arguments bare and optional ones in brackets, no angle
+  brackets; every leaf command declares `Args`
+- Errors are lowercase `cannot <verb> ...: %w` without Go identifiers, hints in
+  quotes; log lines are capitalised sentences
+- Any failure exits non-zero in every output format; never log success after a
+  failed step
+- Test the invoked `internal/` function, never the cobra layer, and test
+  behaviour, not message wording
 
 ### AI Integration
 
@@ -99,7 +124,8 @@ The CLI includes AI-powered features for:
 - Code quality suggestions
 - Automated fixes for common issues
 
-LLM providers are configurable (OpenAI, Gemini, OpenRouter) with API key management.
+LLM providers are configurable (OpenAI, Gemini, OpenRouter) with API key
+management.
 
 ## Extension Development Workflow
 
@@ -136,10 +162,23 @@ shopware-cli project storefront-watch
 
 ## Code Quality Integration
 
-The verifier registers tools through the name-only `Tool` interface. `CheckTool`, `FixTool`, and `FormatTool` add capabilities; commands select the relevant capability before applying `--only` or `--exclude`. An unsupported tool name is an error, and `ToolList[T]` preserves the capability type through filtering.
+The verifier registers tools through the name-only `Tool` interface.
+`CheckTool`, `FixTool`, and `FormatTool` add capabilities; commands select the
+relevant capability before applying `--only` or `--exclude`. An unsupported tool
+name is an error, and `ToolList[T]` preserves the capability type through
+filtering.
 
-- **Checkers**: `builtin` (legacy alias: `sw-cli`), PHPStan, ESLint, Stylelint, Storefront Twig
+- **Checkers**: `builtin` (legacy alias: `sw-cli`), PHPStan, ESLint, Stylelint,
+  Storefront Twig
 - **Fixers**: Rector, ESLint, Stylelint, Symfony XML conversion
 - **Formatters**: PHP-CS-Fixer, Prettier
 
-`extension validate` runs all checkers by default. The deprecated `--full` flag remains accepted but has no effect; use `--only` or `--exclude` to select checkers. Tools report findings and failures through a `ToolExecution` helper and return a `ToolResult` with an optional note or skip reason; the shared runner (`RunTools`) filters and collects findings, and reports show completed, failed, or skipped outcomes (see `docs/adr/0003-unified-tool-results.md`). Structured report schemas stay compatible; JSON only adds fields. A completed tool can still report source errors; invocation does not guarantee that files were analyzed or changed.
+`extension validate` runs all checkers by default. The deprecated `--full` flag
+remains accepted but has no effect; use `--only` or `--exclude` to select
+checkers. Tools report findings and failures through a `ToolExecution` helper
+and return a `ToolResult` with an optional note or skip reason; the shared
+runner (`RunTools`) filters and collects findings, and reports show completed,
+failed, or skipped outcomes (see `docs/adr/2026-10-22-unified-tool-results.md`).
+Structured report schemas stay compatible; JSON only adds fields. A completed
+tool can still report source errors; invocation does not guarantee that files
+were analyzed or changed.

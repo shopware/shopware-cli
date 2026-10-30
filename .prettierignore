@@ -1,7 +1,0 @@
-# Installed and updated by gh-aw; keep upstream formatting intact.
-.github/agents/agentic-workflows.md
-.github/skills/agentic-workflows/SKILL.md
-
-# Dependencies may contain Markdown that belongs to upstream packages.
-**/node_modules/**
-**/vendor/**
