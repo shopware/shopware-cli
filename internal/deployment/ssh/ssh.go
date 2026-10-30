@@ -13,6 +13,7 @@ import (
 )
 
 type SSH struct {
+	name       string
 	initStore  initializationStore
 	transport  *executor.SSHExecutor
 	directory  string
@@ -42,7 +43,7 @@ func New(root, configPath string, cfg *shop.Config, env *shop.EnvironmentConfig)
 		}
 		backend := &SSH{
 			transport: target.(*executor.SSHExecutor), root: root, configPath: configPath,
-			config: cfg, env: &selected, directory: host.Config.Directory,
+			config: cfg, env: &selected, directory: host.Config.Directory, name: host.Name,
 		}
 		backend.initStore = sshInitializationStore{ssh: backend}
 		members = append(members, sshHost{name: host.Name, backend: backend})
