@@ -410,6 +410,8 @@ func (c *ConfigDump) EnableClean() {
 		"version_commit",
 		"version_commit_data",
 		"webhook_event_log",
+		"webhook_delivery",
+		"webhook_stream",
 	}
 	for _, table := range cleanTables {
 		if !slices.Contains(c.NoData, table) {

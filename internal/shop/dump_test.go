@@ -283,6 +283,47 @@ func TestPrepareDumpConfigMergesSystemConfigWhere(t *testing.T) {
 	assert.Equal(t, "(sales_channel_id IS NULL) AND (`configuration_key` NOT IN ('SwagExample.config.secret'))", prepared.Where["system_config"])
 }
 
+func TestPrepareDumpConfigResetIdentity(t *testing.T) {
+	prepared, err := prepareDumpConfig(nil, DumpDatabaseOptions{ResetIdentity: true})
+	require.NoError(t, err)
+	assert.Equal(t, "`configuration_key` NOT IN ('core.app.shopId', 'core.app.shopIdV2')", prepared.Where["system_config"])
+	assert.Equal(t, []string{"deleted_apps"}, prepared.NoData)
+}
+
+func TestPrepareDumpConfigResetIdentityWithClean(t *testing.T) {
+	prepared, err := prepareDumpConfig(nil, DumpDatabaseOptions{ResetIdentity: true, Clean: true})
+	require.NoError(t, err)
+	clean := &ConfigDump{}
+	clean.EnableClean()
+	assert.ElementsMatch(t, append(clean.NoData, "deleted_apps"), prepared.NoData)
+}
+
+func TestPrepareDumpConfigResetIdentityMergesSystemConfigWhere(t *testing.T) {
+	prepared, err := prepareDumpConfig(&ConfigDump{
+		Where: map[string]string{"system_config": "sales_channel_id IS NULL"},
+	}, DumpDatabaseOptions{ResetIdentity: true})
+	require.NoError(t, err)
+	assert.Equal(t, "(sales_channel_id IS NULL) AND (`configuration_key` NOT IN ('core.app.shopId', 'core.app.shopIdV2'))", prepared.Where["system_config"])
+}
+
+func TestPrepareDumpConfigResetIdentityWithAnonymize(t *testing.T) {
+	prepared, err := prepareDumpConfig(nil, DumpDatabaseOptions{
+		ResetIdentity: true,
+		Anonymize:     true,
+		SystemConfigRules: []SystemConfigRule{
+			{Key: "SwagExample.config.secret", Omit: true},
+		},
+	})
+	require.NoError(t, err)
+	assert.Equal(t, "(`configuration_key` NOT IN ('core.app.shopId', 'core.app.shopIdV2')) AND (`configuration_key` NOT IN ('SwagExample.config.secret'))", prepared.Where["system_config"])
+}
+
+func TestPrepareDumpConfigWithoutResetIdentityKeepsShopId(t *testing.T) {
+	prepared, err := prepareDumpConfig(nil, DumpDatabaseOptions{})
+	require.NoError(t, err)
+	assert.Empty(t, prepared.Where)
+}
+
 func TestApplyLimitOverridesValidation(t *testing.T) {
 	cases := []struct {
 		override    string

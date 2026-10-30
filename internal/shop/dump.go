@@ -31,6 +31,9 @@ type DumpDatabaseOptions struct {
 	// Anonymize rewrites customer related columns with faker data and merges
 	// extension-declared tables and system config keys
 	Anonymize bool
+	// ResetIdentity removes the source app identity and registrations, preserving
+	// disconnected records according to foreign key rules.
+	ResetIdentity bool
 	// ExtensionTables are column rewrites declared by installed extensions.
 	// Applied only when Anonymize is true. Project dump.rewrite values and the built-in rules win.
 	ExtensionTables map[string]map[string]string
@@ -72,17 +75,7 @@ func dumpDatabase(ctx context.Context, db *sql.DB, cfg *ConfigDump, opts DumpDat
 	}
 
 	dumper := mysqldump.NewMySQLDumper(db)
-	dumper.LockTables = !opts.SkipLockTables
-	dumper.Quick = opts.Quick
-	dumper.Parallel = opts.Parallel
-	dumper.InsertIntoLimit = opts.InsertIntoLimit
-	dumper.InsertIntoMaxBytes = opts.InsertIntoMaxBytes
-	dumper.SelectMap = cfg.Rewrite
-	dumper.WhereMap = cfg.Where
-	dumper.NoData = cfg.NoData
-	dumper.Ignore = cfg.Ignore
-
-	dumper.LimitMap = cfg.Limit
+	configureDumper(dumper, cfg, opts)
 
 	w, output, err := mysqldump.OpenOutput(opts.Output, opts.Compression)
 	if err != nil {
@@ -109,7 +102,24 @@ func dumpDatabase(ctx context.Context, db *sql.DB, cfg *ConfigDump, opts DumpDat
 	return nil
 }
 
-// prepareDumpConfig applies data exclusions, anonymization, and limits to cfg.
+// configureDumper applies the prepared dump config and options.
+func configureDumper(dumper *mysqldump.Dumper, cfg *ConfigDump, opts DumpDatabaseOptions) {
+	dumper.LockTables = !opts.SkipLockTables
+	dumper.Quick = opts.Quick
+	dumper.Parallel = opts.Parallel
+	dumper.InsertIntoLimit = opts.InsertIntoLimit
+	dumper.InsertIntoMaxBytes = opts.InsertIntoMaxBytes
+	dumper.SelectMap = cfg.Rewrite
+	dumper.WhereMap = cfg.Where
+	dumper.NoData = cfg.NoData
+	dumper.Ignore = cfg.Ignore
+	dumper.LimitMap = cfg.Limit
+	if opts.ResetIdentity {
+		dumper.BuildRowExclusions = resetIdentityExclusions
+	}
+}
+
+// prepareDumpConfig applies data exclusions, identity reset, anonymization, and limits to cfg.
 // Extension tables are merged after the built-in customer anonymization, so they
 // only fill columns that neither the project nor the built-in rules set. Extension
 // system config keys own system_config.configuration_value unless the project already rewrote it.
@@ -129,6 +139,10 @@ func prepareDumpConfig(cfg *ConfigDump, opts DumpDatabaseOptions) (*ConfigDump, 
 
 	if opts.Clean {
 		cfg.EnableClean()
+	}
+
+	if opts.ResetIdentity {
+		cfg.EnableResetIdentity()
 	}
 
 	if opts.Anonymize {

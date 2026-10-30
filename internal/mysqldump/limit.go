@@ -62,7 +62,7 @@ func (d *Dumper) computeLimitFilters(ctx context.Context) error {
 		table = strings.ToLower(table)
 
 		schema, ok := schemas[table]
-		if !ok {
+		if !ok || d.filterMap[table] == IgnoreMapPlacement {
 			logging.FromContext(ctx).Warnf("Ignoring row limit for table %s: the table does not exist or is excluded from the dump", table)
 			continue
 		}
@@ -455,9 +455,14 @@ func prefixColumns(tableRef string, columns []string) string {
 }
 
 func (r *limitResolver) nullableColumns(table string, columns []string) []string {
+	return nullableColumns(r.schemas[table], columns)
+}
+
+// nullableColumns returns the subset of columns that the schema allows to be NULL.
+func nullableColumns(schema *TableSchema, columns []string) []string {
 	var nullable []string
 	for _, column := range columns {
-		for _, col := range r.schemas[table].Columns {
+		for _, col := range schema.Columns {
 			if col.Name == column && col.Nullable {
 				nullable = append(nullable, column)
 				break
