@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path"
+	"syscall"
 	"time"
 
 	"github.com/shopware/shopware-cli/internal/extension"
@@ -91,6 +92,14 @@ func prepareComposerAutoload(ctx context.Context, config ToolConfig, execution *
 		return "", &ToolError{Err: fmt.Errorf("cannot create validation cache directory: %w", err)}
 	}
 
+	// Runs on the same extension, e.g. from parallel agents, take turns, so two
+	// composer updates never change the same vendor/ at once.
+	unlock, err := lockComposerCache(ctx, workDir+".lock")
+	if err != nil {
+		return "", &ToolError{Err: fmt.Errorf("cannot lock validation cache: %w", err)}
+	}
+	defer unlock()
+
 	if err := os.WriteFile(path.Join(workDir, "composer.json"), dependencies, 0o644); err != nil {
 		return "", &ToolError{Err: fmt.Errorf("cannot write composer.json: %w", err)}
 	}
@@ -102,6 +111,41 @@ func prepareComposerAutoload(ctx context.Context, config ToolConfig, execution *
 	}
 
 	return path.Join(workDir, "vendor", "autoload.php"), nil
+}
+
+// lockComposerCache waits until it holds an exclusive lock on lockFile and
+// returns the function that releases it. The operating system drops the lock
+// when the process ends, so a crashed run never blocks the next one.
+func lockComposerCache(ctx context.Context, lockFile string) (func(), error) {
+	file, err := os.OpenFile(lockFile, os.O_CREATE|os.O_RDWR, 0o644)
+	if err != nil {
+		return nil, err
+	}
+
+	waiting := false
+	for {
+		err := syscall.Flock(int(file.Fd()), syscall.LOCK_EX|syscall.LOCK_NB)
+		if err == nil {
+			// Closing the file releases the lock.
+			return func() { _ = file.Close() }, nil
+		}
+		if !errors.Is(err, syscall.EWOULDBLOCK) {
+			_ = file.Close()
+			return nil, err
+		}
+
+		if !waiting {
+			logging.FromContext(ctx).Infof("Waiting for another validation of this extension to finish its composer update")
+			waiting = true
+		}
+
+		select {
+		case <-ctx.Done():
+			_ = file.Close()
+			return nil, ctx.Err()
+		case <-time.After(200 * time.Millisecond):
+		}
+	}
 }
 
 // ensureValidationCacheDir creates the validation cache of rootDir. The cache

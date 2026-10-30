@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -113,6 +114,28 @@ func TestPrepareComposerAutoloadUpdatesCacheOnEveryRun(t *testing.T) {
 	entries, err := os.ReadDir(rootDir)
 	require.NoError(t, err)
 	assert.ElementsMatch(t, []string{"composer.json", "var"}, entryNames(entries))
+}
+
+func TestPrepareComposerAutoloadRunsComposerOneAtATime(t *testing.T) {
+	// A fake composer fails when another one is still running.
+	running := filepath.Join(t.TempDir(), "running")
+	fakeTool(t, "composer", "if [ -e '"+running+"' ]; then exit 1; fi\n: > '"+running+"'\n/bin/sleep 0.3\n/bin/rm '"+running+"'\n/bin/mkdir -p vendor\n: > vendor/autoload.php\n")
+
+	rootDir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(rootDir, "composer.json"), []byte(`{"require": {"shopware/core": "*"}}`), 0o644))
+
+	var group sync.WaitGroup
+	toolErrs := make([]*ToolError, 2)
+	for i := range toolErrs {
+		group.Go(func() {
+			_, toolErrs[i] = prepareComposerAutoload(t.Context(), ToolConfig{RootDir: rootDir}, testExecution())
+		})
+	}
+	group.Wait()
+
+	for _, toolErr := range toolErrs {
+		assert.Nil(t, toolErr)
+	}
 }
 
 func TestEnsureValidationCacheDirIgnoresItselfInGit(t *testing.T) {
