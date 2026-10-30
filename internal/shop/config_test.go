@@ -980,7 +980,7 @@ func TestConfigDump_EnableClean(t *testing.T) {
 		config.EnableClean()
 
 		assert.NotNil(t, config.NoData)
-		assert.Len(t, config.NoData, 17)
+		assert.Len(t, config.NoData, 19)
 
 		// Verify all tables are present
 		expectedTables := []string{
@@ -1001,6 +1001,8 @@ func TestConfigDump_EnableClean(t *testing.T) {
 			"version_commit",
 			"version_commit_data",
 			"webhook_event_log",
+			"webhook_delivery",
+			"webhook_stream",
 		}
 
 		for _, table := range expectedTables {
@@ -1025,7 +1027,7 @@ func TestConfigDump_EnableClean(t *testing.T) {
 		assert.Contains(t, config.NoData, "version")
 
 		// Total should be custom tables + clean tables
-		assert.Len(t, config.NoData, 19)
+		assert.Len(t, config.NoData, 21)
 	})
 
 	t.Run("no duplicates when pre-existing entry overlaps with defaults", func(t *testing.T) {
@@ -1052,8 +1054,8 @@ func TestConfigDump_EnableClean(t *testing.T) {
 		}
 		assert.Equal(t, 1, count, "version should appear exactly once")
 
-		// Total should be custom tables (3) + remaining clean tables (15)
-		assert.Len(t, config.NoData, 18)
+		// Total should be custom tables (3) + remaining clean tables (17)
+		assert.Len(t, config.NoData, 20)
 
 		// Pre-existing tables should be preserved in their original positions
 		assert.Equal(t, "my_custom_table", config.NoData[0])
@@ -1083,6 +1085,8 @@ func TestConfigDump_EnableClean(t *testing.T) {
 		assert.Contains(t, config.NoData, "version_commit")
 		assert.Contains(t, config.NoData, "version_commit_data")
 		assert.Contains(t, config.NoData, "webhook_event_log")
+		assert.Contains(t, config.NoData, "webhook_delivery")
+		assert.Contains(t, config.NoData, "webhook_stream")
 	})
 
 	t.Run("multiple calls are idempotent", func(t *testing.T) {
@@ -1118,7 +1122,7 @@ func TestConfigDump_EnableClean(t *testing.T) {
 		assert.Equal(t, "id > 100", config.Where["customer"])
 
 		// NoData should be populated
-		assert.Len(t, config.NoData, 17)
+		assert.Len(t, config.NoData, 19)
 	})
 
 	t.Run("preserves order of existing tables", func(t *testing.T) {

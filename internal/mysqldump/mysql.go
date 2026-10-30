@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"io"
+	"maps"
 	"os"
 	"path"
 	"regexp"
@@ -32,6 +33,21 @@ type Dumper struct {
 	LimitMap map[string]TableLimit
 	// limitWhere contains the WHERE conditions computed from LimitMap
 	limitWhere map[string]string
+	// ExcludeMap contains per-table conditions selecting rows to exclude
+	// (table -> WHERE clause). Foreign-key delete actions control how referencing
+	// rows are handled.
+	ExcludeMap map[string]string
+	// BuildRowExclusions optionally builds schema-dependent row exclusions, such as
+	// conditions using columns that are absent in older database schemas. Dump calls
+	// it once after loading all table schemas, including ignored tables, and before
+	// planning filters. It returns table names mapped to SQL conditions selecting
+	// rows to omit; these override matching ExcludeMap entries. The callback must
+	// not modify the supplied schema map or its table definitions.
+	BuildRowExclusions func(map[string]*TableSchema) map[string]string
+	// excludeWhere contains the WHERE conditions computed from ExcludeMap
+	excludeWhere map[string]string
+	// excludeSetNull contains CASE predicates that null foreign keys to excluded rows.
+	excludeSetNull map[string]map[string][]string
 	// limitResolver holds the planned row-limit filters between computeLimitFilters
 	// and the staging table setup.
 	limitResolver *limitResolver
@@ -107,8 +123,18 @@ func (d *Dumper) Dump(ctx context.Context, w io.Writer) error {
 		}
 	}
 
-	if err := d.prefetchAllSchemas(ctx, tablesToDump); err != nil {
+	schemaTables := tablesToDump
+	if len(d.ExcludeMap) > 0 || d.BuildRowExclusions != nil {
+		schemaTables = tables
+	}
+	if err := d.prefetchAllSchemas(ctx, schemaTables); err != nil {
 		return err
+	}
+	if d.BuildRowExclusions != nil {
+		if d.ExcludeMap == nil {
+			d.ExcludeMap = make(map[string]string)
+		}
+		maps.Copy(d.ExcludeMap, d.BuildRowExclusions(d.schemaCache))
 	}
 
 	if err := d.computeLimitFilters(ctx); err != nil {
@@ -121,6 +147,10 @@ func (d *Dumper) Dump(ctx context.Context, w io.Writer) error {
 	defer func() {
 		d.dropLimitStagingTables(context.WithoutCancel(ctx), d.limitStagingTables)
 	}()
+
+	if err := d.computeExcludeFilters(ctx); err != nil {
+		return err
+	}
 
 	if _, err = fmt.Fprintln(w, dump); err != nil {
 		return err
@@ -323,10 +353,10 @@ func (d *Dumper) dumpTableDataDirect(ctx context.Context, w io.Writer, table str
 	var tmp string
 	var err error
 
-	// Row-limit conditions contain subqueries on other tables (or the table
-	// itself), which MySQL rejects with ER_TABLE_NOT_LOCKED while the table
-	// is locked via FLUSH TABLES ... WITH READ LOCK.
-	lockTable := d.LockTables && !d.hasLimitFilter(table)
+	// Row-limit and row-exclusion conditions contain subqueries on other tables
+	// (or the table itself), which MySQL rejects with ER_TABLE_NOT_LOCKED while
+	// the table is locked via FLUSH TABLES ... WITH READ LOCK.
+	lockTable := d.LockTables && !d.hasLimitFilter(table) && !d.hasExcludeFilter(table)
 
 	if lockTable {
 		_, err = d.mysqlFlushTable(ctx, table)
@@ -373,6 +403,15 @@ func (d *Dumper) dumpTableDataDirect(ctx context.Context, w io.Writer, table str
 func (d *Dumper) hasLimitFilter(table string) bool {
 	_, ok := d.limitWhere[strings.ToLower(table)]
 	return ok
+}
+
+// hasExcludeFilter reports whether the queries of the table carry a row-exclusion condition.
+func (d *Dumper) hasExcludeFilter(table string) bool {
+	table = strings.ToLower(table)
+	if _, ok := d.excludeWhere[table]; ok {
+		return true
+	}
+	return len(d.excludeSetNull[table]) > 0
 }
 
 func (d *Dumper) dumpTableDataToWriter(ctx context.Context, w io.Writer, table string) error {
@@ -702,13 +741,13 @@ func (d *Dumper) getSelectQueryFor(ctx context.Context, table string) (cols []st
 	return
 }
 
-// effectiveWhere combines the user-configured WHERE clause with the condition
-// computed from the row limits for the given table.
+// effectiveWhere combines the user-configured WHERE clause with the conditions
+// computed from the row limits and row exclusions for the given table.
 func (d *Dumper) effectiveWhere(table string) string {
 	table = strings.ToLower(table)
 
-	conditions := make([]string, 0, 2)
-	for _, condition := range []string{d.WhereMap[table], d.limitWhere[table]} {
+	conditions := make([]string, 0, 3)
+	for _, condition := range []string{d.WhereMap[table], d.limitWhere[table], d.excludeWhere[table]} {
 		if condition != "" {
 			conditions = append(conditions, condition)
 		}
@@ -752,17 +791,34 @@ func (d *Dumper) getColumnsForSelect(ctx context.Context, table string, consider
 			continue
 		}
 
-		replacement, ok := d.SelectMap[strings.ToLower(table)][strings.ToLower(column)]
-		if ok && considerRewriteMap {
-			replacement = rewriteSelectExpression(replacement)
-
-			columns = append(columns, fmt.Sprintf("%s AS `%s`", replacement, column))
-		} else {
+		if !considerRewriteMap {
 			columns = append(columns, fmt.Sprintf("`%s`", column))
+			continue
 		}
+
+		expression := d.selectColumnExpression(table, column)
+		_, rewritten := d.SelectMap[strings.ToLower(table)][strings.ToLower(column)]
+		if rewritten || expression != fmt.Sprintf("`%s`", column) {
+			expression = fmt.Sprintf("%s AS `%s`", expression, column)
+		}
+		columns = append(columns, expression)
 	}
 
 	return columns, nil
+}
+
+// selectColumnExpression is shared by export and FK validation so both see the
+// same configured rewrites and exclusion-driven NULL values.
+func (d *Dumper) selectColumnExpression(table, column string) string {
+	table, key := strings.ToLower(table), strings.ToLower(column)
+	expression := fmt.Sprintf("`%s`", column)
+	if replacement, ok := d.SelectMap[table][key]; ok {
+		expression = rewriteSelectExpression(replacement)
+	}
+	for _, condition := range d.excludeSetNull[table][key] {
+		expression = fmt.Sprintf("CASE WHEN %s THEN NULL ELSE %s END", condition, expression)
+	}
+	return expression
 }
 
 // rewriteSelectExpression quotes a faker template so MySQL returns it as text.
