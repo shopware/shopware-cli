@@ -15,8 +15,7 @@ import (
 var projectDeploymentCmd = &cobra.Command{
 	Use:     "deploy",
 	Aliases: []string{"deployment"},
-	Short:   "Manage project deployment artifacts",
-	Long:    "Create immutable deployments and package projects into archives or container build files.",
+	Short:   "Manage project deployments",
 }
 
 func init() {
