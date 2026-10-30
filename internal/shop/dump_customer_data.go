@@ -40,4 +40,5 @@ func (c *ConfigDump) EnableSkipCustomerData() {
 	c.forceRewrite("promotion", "orders_per_customer_count", "NULL")
 	c.forceRewrite("promotion", "order_count", "0")
 	c.forceRewrite("promotion_individual_code", "payload", "NULL")
+	c.forceRewrite("mail_template_type", "template_data", "NULL")
 }
