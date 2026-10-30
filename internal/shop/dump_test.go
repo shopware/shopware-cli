@@ -5,9 +5,142 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"gopkg.in/yaml.v3"
 
 	"github.com/shopware/shopware-cli/internal/mysqldump"
 )
+
+func TestPrepareDumpConfigSkipCustomerData(t *testing.T) {
+	for _, fromConfig := range []bool{false, true} {
+		t.Run(map[bool]string{false: "flag", true: "config"}[fromConfig], func(t *testing.T) {
+			var cfg ConfigDump
+			require.NoError(t, yaml.Unmarshal([]byte("skip_customer_data: true\nnodata:\n  - payone_payment_card\nignore:\n  - obsolete_table\n"), &cfg))
+			assert.True(t, cfg.SkipCustomerData)
+			cfg.SkipCustomerData = fromConfig
+			opts := DumpDatabaseOptions{
+				SkipCustomerData: !fromConfig,
+				NoData:           []string{"klarna_*", "payone_payment_card"},
+			}
+			prepared, err := prepareDumpConfig(&cfg, opts)
+			require.NoError(t, err)
+			for _, table := range []string{
+				"customer", "customer_address", "customer_wishlist_product",
+				"order", "order_transaction_capture_refund_position", "order_line_item_download",
+				"document", "document_file", "newsletter_recipient", "product_review",
+				"sales_channel_tracking_customer", "sales_channel_tracking_order",
+				"version_commit_data", "webhook_event_log",
+				"payone_payment_card", "klarna_*",
+			} {
+				assert.Contains(t, prepared.NoData, table)
+			}
+			for _, table := range []string{"customer_group", "customer_group_translation", "document_type", "user", "integration", "product", "sales_channel", "promotion", "promotion_individual_code"} {
+				assert.NotContains(t, prepared.NoData, table)
+			}
+			for _, table := range []string{"cart", "customer_recovery", "dead_message", "enqueue", "messenger_messages", "import_export_log", "log_entry", "notification", "payment_token", "version", "version_commit"} {
+				assert.Contains(t, prepared.NoData, table)
+			}
+			assert.Equal(t, "NULL", prepared.Rewrite["promotion"]["orders_per_customer_count"])
+			assert.Equal(t, "0", prepared.Rewrite["promotion"]["order_count"])
+			assert.Equal(t, "NULL", prepared.Rewrite["promotion_individual_code"]["payload"])
+			assert.Equal(t, []string{"obsolete_table"}, prepared.Ignore)
+			firstNoData := append([]string(nil), prepared.NoData...)
+			prepared, err = prepareDumpConfig(prepared, opts)
+			require.NoError(t, err)
+			assert.ElementsMatch(t, firstNoData, prepared.NoData)
+		})
+	}
+}
+
+func TestPrepareDumpConfigSkipCustomerDataWithClean(t *testing.T) {
+	prepared, err := prepareDumpConfig(nil, DumpDatabaseOptions{SkipCustomerData: true, Clean: true})
+	require.NoError(t, err)
+	assert.Contains(t, prepared.NoData, "customer")
+	assert.Contains(t, prepared.NoData, "order")
+	assert.Contains(t, prepared.NoData, "elasticsearch_index_task")
+	assert.Contains(t, prepared.NoData, "messenger_messages")
+	assert.Contains(t, prepared.NoData, "import_export_log")
+}
+
+func TestPrepareDumpConfigClearsPromotionRedemptions(t *testing.T) {
+	cfg := &ConfigDump{
+		Rewrite: map[string]map[string]string{
+			"promotion": {
+				"orders_per_customer_count": "orders_per_customer_count",
+				"order_count":               "order_count",
+				"code":                      "'TEST'",
+			},
+			"promotion_individual_code": {
+				"payload": "payload",
+				"code":    "'TEST-CODE'",
+			},
+		},
+	}
+
+	prepared, err := prepareDumpConfig(cfg, DumpDatabaseOptions{SkipCustomerData: true})
+	require.NoError(t, err)
+	assert.Equal(t, map[string]string{
+		"orders_per_customer_count": "NULL",
+		"order_count":               "0",
+		"code":                      "'TEST'",
+	}, prepared.Rewrite["promotion"])
+	assert.Equal(t, map[string]string{
+		"payload": "NULL",
+		"code":    "'TEST-CODE'",
+	}, prepared.Rewrite["promotion_individual_code"])
+}
+
+func TestPrepareDumpConfigConditionalTables(t *testing.T) {
+	for _, tc := range []struct {
+		name       string
+		configured bool
+		opts       DumpDatabaseOptions
+		excluded   bool
+	}{
+		{name: "plain dump"},
+		{name: "clean dump", opts: DumpDatabaseOptions{Clean: true}},
+		{name: "anonymized dump", opts: DumpDatabaseOptions{Anonymize: true}},
+		{name: "flag", opts: DumpDatabaseOptions{SkipCustomerData: true}, excluded: true},
+		{name: "config", configured: true, excluded: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var cfg ConfigDump
+			require.NoError(t, yaml.Unmarshal([]byte(`
+nodata:
+  - always_excluded
+skip_customer_data_tables:
+  - payone_payment_card
+  - 'unzer_payment_*'
+`), &cfg))
+			cfg.SkipCustomerData = tc.configured
+			prepared, err := prepareDumpConfig(&cfg, tc.opts)
+			require.NoError(t, err)
+			assert.Contains(t, prepared.NoData, "always_excluded")
+			for _, table := range []string{"payone_payment_card", "unzer_payment_*"} {
+				if tc.excluded {
+					assert.Contains(t, prepared.NoData, table)
+				} else {
+					assert.NotContains(t, prepared.NoData, table)
+				}
+			}
+		})
+	}
+}
+
+func TestPrepareDumpConfigRejectsAnonymizeWithSkipCustomerData(t *testing.T) {
+	for _, fromConfig := range []bool{false, true} {
+		_, err := prepareDumpConfig(&ConfigDump{SkipCustomerData: fromConfig}, DumpDatabaseOptions{
+			Anonymize: true, SkipCustomerData: !fromConfig,
+		})
+		require.Error(t, err)
+	}
+}
+
+func TestPrepareDumpConfigNoDataWithoutSkipCustomerData(t *testing.T) {
+	prepared, err := prepareDumpConfig(nil, DumpDatabaseOptions{NoData: []string{"unzer_payment_*"}})
+	require.NoError(t, err)
+	assert.Equal(t, []string{"unzer_payment_*"}, prepared.NoData)
+	assert.Empty(t, prepared.Ignore)
+}
 
 func TestApplyLimitOverrides(t *testing.T) {
 	cfg := &ConfigDump{}

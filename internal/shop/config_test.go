@@ -58,6 +58,9 @@ dump:
   nodata:
     - promotion
     - newsletter_recipient
+  skip_customer_data_tables:
+    - payone_payment_card
+    - 'unzer_payment_*'
   ignore:
     - product_search_keyword
 `)
@@ -69,6 +72,9 @@ dump:
   nodata:
     - frosh_mail_archive
     - promotion
+  skip_customer_data_tables:
+    - klarna_payment_request_log
+    - payone_payment_card
   ignore:
     - product_keyword_dictionary
 `)
@@ -81,6 +87,7 @@ dump:
 
 	assert.Equal(t, []string{"frosh_mail_archive", "promotion", "newsletter_recipient"}, config.ConfigDump.NoData)
 	assert.Equal(t, []string{"product_keyword_dictionary", "product_search_keyword"}, config.ConfigDump.Ignore)
+	assert.ElementsMatch(t, []string{"klarna_payment_request_log", "payone_payment_card", "unzer_payment_*"}, config.ConfigDump.SkipCustomerDataTables)
 }
 
 func TestConfigPHPVersionRoundTrip(t *testing.T) {
