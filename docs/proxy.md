@@ -22,26 +22,27 @@ implementation (`internal/proxy/`, `cmd/project/project_proxy*.go`).
 - Everything `proxy up` changes is recorded and **restored exactly** by
   `proxy down`.
 
-| Command | What it does |
-| --- | --- |
-| `proxy setup` | One-time machine setup: OS DNS routing + CA trust. The single sudo moment. `--domain`, `--skip-trust` |
-| `proxy up` | Register the current project: start shared infra if needed, switch the shop to its hostname, start it |
-| `proxy down` | Deregister: stop the shop, restore every changed value |
-| `proxy list` / `status` | Show registered shops with their URLs / this project's state |
-| `proxy verify` | Bottom-up health check of the whole chain, with fix hints |
-| `proxy teardown` | `down` for every registered project, then stop shared infra (confirmable, `--force`) |
+| Command                 | What it does                                                                                          |
+| ----------------------- | ----------------------------------------------------------------------------------------------------- |
+| `proxy setup`           | One-time machine setup: OS DNS routing + CA trust. The single sudo moment. `--domain`, `--skip-trust` |
+| `proxy up`              | Register the current project: start shared infra if needed, switch the shop to its hostname, start it |
+| `proxy down`            | Deregister: stop the shop, restore every changed value                                                |
+| `proxy list` / `status` | Show registered shops with their URLs / this project's state                                          |
+| `proxy verify`          | Bottom-up health check of the whole chain, with fix hints                                             |
+| `proxy teardown`        | `down` for every registered project, then stop shared infra (confirmable, `--force`)                  |
 
 ## Two ways a project uses the proxy
 
 - **New projects** — pick **"Local domains: Yes"** in `project create` (or pass
-  `--local-domain`). That writes the hostname into `.config/shopware-project.yml`, and
-  `project dev` then brings the shop up through the proxy automatically — no
-  `proxy up` needed. Run `proxy setup` once per machine first (DNS + trust).
-- **Existing port-based projects** — `proxy up` opts them in on demand (switching
-  their URL to the hostname and remembering the old one), and `proxy down`
-  reverts them exactly.
+  `--local-domain`). That writes the hostname into
+  `.config/shopware-project.yml`, and `project dev` then brings the shop up
+  through the proxy automatically — no `proxy up` needed. Run `proxy setup` once
+  per machine first (DNS + trust).
+- **Existing port-based projects** — `proxy up` opts them in on demand
+  (switching their URL to the hostname and remembering the old one), and
+  `proxy down` reverts them exactly.
 
-A project created with a local domain *is* a proxy project by identity, so
+A project created with a local domain _is_ a proxy project by identity, so
 `proxy down` there has no port mode to return to — it just stops and
 deregisters the shop (a later `project dev` re-bootstraps it). The exact-restore
 behavior below applies to the opt-in (`proxy up`) case.
@@ -49,7 +50,7 @@ behavior below applies to the opt-in (`proxy up`) case.
 ## `proxy setup` is the only sudo — agents need none
 
 `proxy setup` is the single moment that needs `sudo`: it points the OS resolver
-at the DNS container *and* installs the CA into the trust stores. Both need
+at the DNS container _and_ installs the CA into the trust stores. Both need
 root, and they run together in one ceremony, so a set-up machine always serves
 **trusted HTTPS** — there is deliberately no "domains but no HTTPS" half-state
 to opt into.
@@ -72,8 +73,8 @@ stable `https://…` hostname entirely on its own.
 The standard dev environment publishes fixed host ports (`8000`, `9080`,
 `8025`, …). Fixed ports mean: second shop → port collision → stop the first
 shop or edit ports by hand. Hostnames fix this only if two other problems are
-solved: something must *resolve* the hostnames (DNS), and something must
-*route* them to the right container (reverse proxy).
+solved: something must _resolve_ the hostnames (DNS), and something must
+_route_ them to the right container (reverse proxy).
 
 ## How a request travels
 
@@ -100,7 +101,7 @@ sequenceDiagram
 
 Two deliberately separated responsibilities:
 
-- **DNS is dumb.** The DNS container answers `127.0.0.1` for *anything*
+- **DNS is dumb.** The DNS container answers `127.0.0.1` for _anything_
   under the domain (wildcard) — it knows nothing about shops. That is why a
   new shop needs zero DNS changes.
 - **Traefik is smart.** It watches the Docker socket and picks up routing
@@ -138,32 +139,33 @@ This is the **opt-in** flow (`proxy up` on a port-based project); a project born
 with a local domain skips the URL rewrites since the hostname is already its
 configured URL.
 
-A registered shop must not only be *reachable* under its hostname, it must
-*believe* in it (Shopware rejects unknown domains with a 400 page). So `up`
+A registered shop must not only be _reachable_ under its hostname, it must
+_believe_ in it (Shopware rejects unknown domains with a 400 page). So `up`
 touches five things, records the old values, and `down` restores them exactly:
 
-| Change | Where | Restored by `down` |
-| --- | --- | --- |
-| Traefik labels, no host ports, shared network, CA mount | `compose.yaml` (regenerated in proxy mode) | regenerated in fixed-port mode |
-| `APP_URL=https://<host>` | `.env.local` (one-line surgical edit) | previous value from registry |
-| Sales channel domain | database, via a parameterized `UPDATE` on the executor's DB connection | previous value (while the stack runs; otherwise a hint to restore it) |
-| `url:` keys (top-level + environment) | resolved project configuration file (recommended `.config/shopware-project.yml`; legacy paths preserved) | previous values; a previously absent key is removed again |
-| Traefik network aliases | shared Traefik container | reconciled to the remaining hostnames |
-| Registry entry | `<state dir>/registry.json` | entry removed |
+| Change                                                  | Where                                                                                                    | Restored by `down`                                                    |
+| ------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------- |
+| Traefik labels, no host ports, shared network, CA mount | `compose.yaml` (regenerated in proxy mode)                                                               | regenerated in fixed-port mode                                        |
+| `APP_URL=https://<host>`                                | `.env.local` (one-line surgical edit)                                                                    | previous value from registry                                          |
+| Sales channel domain                                    | database, via a parameterized `UPDATE` on the executor's DB connection                                   | previous value (while the stack runs; otherwise a hint to restore it) |
+| `url:` keys (top-level + environment)                   | resolved project configuration file (recommended `.config/shopware-project.yml`; legacy paths preserved) | previous values; a previously absent key is removed again             |
+| Traefik network aliases                                 | shared Traefik container                                                                                 | reconciled to the remaining hostnames                                 |
+| Registry entry                                          | `<state dir>/registry.json`                                                                              | entry removed                                                         |
 
 Why proxy mode lives **in `compose.yaml`** rather than a separate
 `compose.override.yaml`: `compose.yaml` is generated by shopware-cli and
-gitignored — it is ours to rewrite — whereas `compose.override.yaml` is left
-for the user's own customizations (`docker compose` merges it automatically).
-Proxy mode is just a variant of the generated file: `up`/`project dev`
-regenerate it with proxy routing, `down` regenerates it with fixed ports.
-Because the whole file is generated, proxy mode simply omits the host ports
-instead of clearing them with a `!reset` tag — so there is **no Docker Compose
-version requirement**. The database keeps its published loopback port in both
-modes, so host tools (and the sales-channel URL update) still reach it. PaaS
-projects (`shopware/k8s-meta` in `composer.lock`) route RustFS at `s3.<host>`
-(S3 API, used as `K8S_FILESYSTEM_PUBLIC_URL`) and `storage.<host>` (console).
-PHP still talks to `storage:9000` on the compose network. The cache stays internal.
+gitignored — it is ours to rewrite — whereas `compose.override.yaml` is left for
+the user's own customizations (`docker compose` merges it automatically). Proxy
+mode is just a variant of the generated file: `up`/`project dev` regenerate it
+with proxy routing, `down` regenerates it with fixed ports. Because the whole
+file is generated, proxy mode simply omits the host ports instead of clearing
+them with a `!reset` tag — so there is
+**no Docker Compose version requirement**. The database keeps its published
+loopback port in both modes, so host tools (and the sales-channel URL update)
+still reach it. PaaS projects (`shopware/k8s-meta` in `composer.lock`) route
+RustFS at `s3.<host>` (S3 API, used as `K8S_FILESYSTEM_PUBLIC_URL`) and
+`storage.<host>` (console). PHP still talks to `storage:9000` on the compose
+network. The cache stays internal.
 
 Why a direct database `UPDATE` for the sales channel domain instead of a
 console command: it works on **every Shopware version** (the core
@@ -201,7 +203,7 @@ Everything above is about the **browser on the host** reaching a shop. But the
 shop's containers also call the shop's **own `APP_URL`** — a shop registering
 an app and receiving the confirmation callback, the sitemap generator fetching
 its own URL, the message queue worker running a flow action that hits the API.
-Once `APP_URL` is `https://shop1.shopware.local`, those calls originate *inside*
+Once `APP_URL` is `https://shop1.shopware.local`, those calls originate _inside_
 a container and by default fail twice: the hostname does not resolve there
 (containers use Docker's own DNS, not the host's `/etc/resolver`), and even if
 it did, the container's trust store does not know the proxy CA.
@@ -247,7 +249,7 @@ check, which curls the shop over HTTPS.
 
 > **Nice side effect — cross-shop:** because all registered hostnames are
 > aliased on the one shared Traefik, a container in one shop can also reach
-> *another* registered shop by its hostname over the same TLS (e.g. one shop
+> _another_ registered shop by its hostname over the same TLS (e.g. one shop
 > acting as an app backend for another). This falls out of the design for
 > free; it is not the primary goal. A shop that is registered but not running
 > resolves to Traefik and gets a 404 (no live route) — the expected "not up"
@@ -255,24 +257,24 @@ check, which curls the shop over HTTPS.
 
 ## Design decisions and their trade-offs
 
-| Decision | Why | Trade-off |
-| --- | --- | --- |
-| Embedded local DNS instead of a public wildcard domain (`*.sslip.io`-style) | Works offline; immune to DNS-rebind protection in routers/corporate resolvers (they drop public answers pointing at `127.0.0.1`); project names never leak to a public DNS service | One-time `setup` with sudo; a corporate VPN agent that hijacks OS DNS can interfere (diagnosed by `verify`) |
-| No automatic `/etc/hosts` editing | It would be a second, confusing mechanism; the CLI should not silently edit a system file it does not own | On Linux without systemd-resolved, wildcard DNS is impossible — the CLI explains why, how to enable systemd-resolved, and offers manual hosts lines as last resort |
-| Base domain `shopware.local`, changeable via `proxy setup --domain` (persisted machine-wide) | One setting all commands read; per-command flags would let resolver, certs and registry drift apart | `.local` is technically mDNS territory (RFC 6762); macOS conflicts are rare but real — the `verify` hint suggests switching to e.g. `shopware.internal` if resolution misbehaves |
-| Traefik state dir mounted at `/shopware-cli`, not `/etc/traefik` | Traefik silently prefers a `traefik.yml` found in `/etc/traefik` over **all** CLI flags — a stray file there once disabled our config invisibly | None; the path is referenced explicitly everywhere |
-| `golang.org/x/net/dns/dnsmessage` instead of `miekg/dns` | miekg/dns v1 is in maintenance mode, v2 is unstable until ~2028; `x/net` is Go-team maintained and was already in the dependency graph | ~80 extra lines of hand-written (fully tested) UDP/wire-format code |
-| Shared infra is lazy (`up` starts it), not a system service | No launchd/systemd units to install/uninstall; nothing runs when no shop does | After a reboot, the first `proxy up` brings infra back — shops don't auto-start |
-| `teardown` deregisters **all** projects first (with confirmation / `--force`) | Stopping only the infra would strand running shops on dead hostnames and leave their URLs broken | A *stopped* shop's database is unreachable, so its sales-channel URL is not restored until it next runs (the CLI prints a reminder) |
+| Decision                                                                                     | Why                                                                                                                                                                                | Trade-off                                                                                                                                                                        |
+| -------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Embedded local DNS instead of a public wildcard domain (`*.sslip.io`-style)                  | Works offline; immune to DNS-rebind protection in routers/corporate resolvers (they drop public answers pointing at `127.0.0.1`); project names never leak to a public DNS service | One-time `setup` with sudo; a corporate VPN agent that hijacks OS DNS can interfere (diagnosed by `verify`)                                                                      |
+| No automatic `/etc/hosts` editing                                                            | It would be a second, confusing mechanism; the CLI should not silently edit a system file it does not own                                                                          | On Linux without systemd-resolved, wildcard DNS is impossible — the CLI explains why, how to enable systemd-resolved, and offers manual hosts lines as last resort               |
+| Base domain `shopware.local`, changeable via `proxy setup --domain` (persisted machine-wide) | One setting all commands read; per-command flags would let resolver, certs and registry drift apart                                                                                | `.local` is technically mDNS territory (RFC 6762); macOS conflicts are rare but real — the `verify` hint suggests switching to e.g. `shopware.internal` if resolution misbehaves |
+| Traefik state dir mounted at `/shopware-cli`, not `/etc/traefik`                             | Traefik silently prefers a `traefik.yml` found in `/etc/traefik` over **all** CLI flags — a stray file there once disabled our config invisibly                                    | None; the path is referenced explicitly everywhere                                                                                                                               |
+| `golang.org/x/net/dns/dnsmessage` instead of `miekg/dns`                                     | miekg/dns v1 is in maintenance mode, v2 is unstable until ~2028; `x/net` is Go-team maintained and was already in the dependency graph                                             | ~80 extra lines of hand-written (fully tested) UDP/wire-format code                                                                                                              |
+| Shared infra is lazy (`up` starts it), not a system service                                  | No launchd/systemd units to install/uninstall; nothing runs when no shop does                                                                                                      | After a reboot, the first `proxy up` brings infra back — shops don't auto-start                                                                                                  |
+| `teardown` deregisters **all** projects first (with confirmation / `--force`)                | Stopping only the infra would strand running shops on dead hostnames and leave their URLs broken                                                                                   | A _stopped_ shop's database is unreachable, so its sales-channel URL is not restored until it next runs (the CLI prints a reminder)                                              |
 
 ## State the CLI writes
 
-| Location | Content |
-| --- | --- |
+| Location                                                                                              | Content                                                                                                                                                                                                         |
+| ----------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `~/Library/Application Support/shopware-cli/proxy/` (macOS) / `~/.config/shopware-cli/proxy/` (Linux) | `registry.json` (registered projects + remembered previous values), `settings.json` (domain), `dns/Corefile` (CoreDNS zone config), `traefik/certs/` + `traefik/dynamic/` (server cert, watched Traefik config) |
-| mkcert CAROOT (e.g. `~/Library/Application Support/mkcert/`) | `rootCA.pem`, `rootCA-key.pem` — shared with mkcert |
-| `/etc/resolver/<domain>` or `/etc/systemd/resolved.conf.d/90-shopware-cli.conf` | OS split-DNS routing (sudo, written by `setup`, removed on domain change) |
-| Per project | `compose.yaml` (regenerated in proxy mode, incl. the read-only CA mount), `APP_URL` in `.env.local`, `url:` in `.config/shopware-project.yml` — all reverted by `down` |
+| mkcert CAROOT (e.g. `~/Library/Application Support/mkcert/`)                                          | `rootCA.pem`, `rootCA-key.pem` — shared with mkcert                                                                                                                                                             |
+| `/etc/resolver/<domain>` or `/etc/systemd/resolved.conf.d/90-shopware-cli.conf`                       | OS split-DNS routing (sudo, written by `setup`, removed on domain change)                                                                                                                                       |
+| Per project                                                                                           | `compose.yaml` (regenerated in proxy mode, incl. the read-only CA mount), `APP_URL` in `.env.local`, `url:` in `.config/shopware-project.yml` — all reverted by `down`                                          |
 
 ## When something is wrong
 
@@ -285,23 +287,24 @@ Every failure mode the messages describe is unit-tested.
 
 ## Running under WSL2
 
-shopware-cli runs inside the WSL distro, but your **browser runs on Windows** — a
-different OS with its own DNS resolver and its own certificate trust store. The
-proxy setup only configures the Linux side, so two things need manual, one-time
-attention. The CLI detects WSL and prints the exact copy-pasteable commands at the
-end of `proxy setup`, `proxy up` and `project create`; this section explains why.
+shopware-cli runs inside the WSL distro, but your **browser runs on Windows** —
+a different OS with its own DNS resolver and its own certificate trust store.
+The proxy setup only configures the Linux side, so two things need manual,
+one-time attention. The CLI detects WSL and prints the exact copy-pasteable
+commands at the end of `proxy setup`, `proxy up` and `project create`; this
+section explains why.
 
 ### 1. DNS inside WSL
 
 `proxy setup` writes the systemd-resolved drop-in as on any Linux, and
 systemd-resolved answers `*.shopware.local` correctly (check with
-`resolvectl query test.shopware.local`). But **`getent` — the path `proxy verify`
-and browsers use — does not ask resolved**: WSL keeps `/etc/resolv.conf` pointing
-at the WSL NAT gateway (`172.x`), and the default `nsswitch.conf` sends `getent`
-straight there, bypassing resolved. So `*.shopware.local` fails to resolve even
-though resolved knows it.
+`resolvectl query test.shopware.local`). But
+**`getent` — the path `proxy verify` and browsers use — does not ask resolved**:
+WSL keeps `/etc/resolv.conf` pointing at the WSL NAT gateway (`172.x`), and the
+default `nsswitch.conf` sends `getent` straight there, bypassing resolved. So
+`*.shopware.local` fails to resolve even though resolved knows it.
 
-The fix is to add resolved to `nsswitch.conf` **as a fallback** — *after* `dns`,
+The fix is to add resolved to `nsswitch.conf` **as a fallback** — _after_ `dns`,
 never before it. On WSL resolved only knows `*.shopware.local` (it has no
 internet upstream of its own), so putting it first would break internet DNS; as
 a fallback it is only consulted for names the gateway cannot resolve:
@@ -316,37 +319,43 @@ sudo sed -i -E '/^hosts:/{/\bresolve\b/!s/[[:space:]]*$/ resolve/}' /etc/nsswitc
 Verify: `getent hosts test.shopware.local` returns `127.0.0.1`, and
 `getent hosts one.one.one.one` still resolves (internet intact).
 
-> Do **not** symlink `/etc/resolv.conf` to systemd-resolved's stub on WSL: with no
-> internet upstream on the link, resolved would `NXDOMAIN` every non-`.shopware.local`
-> name and break DNS. Leaving `resolv.conf` at the `172.x` gateway and adding the
-> nsswitch fallback keeps both working.
+> Do **not** symlink `/etc/resolv.conf` to systemd-resolved's stub on WSL: with
+> no internet upstream on the link, resolved would `NXDOMAIN` every
+> non-`.shopware.local` name and break DNS. Leaving `resolv.conf` at the `172.x`
+> gateway and adding the nsswitch fallback keeps both working.
 
 ### 2. Reaching the shop from the Windows browser
 
-Windows does not use WSL's resolver or trust store, so a browser on Windows needs
-two things the CLI cannot do from inside the subsystem (it prints them via
+Windows does not use WSL's resolver or trust store, so a browser on Windows
+needs two things the CLI cannot do from inside the subsystem (it prints them via
 `WSLWindowsAccessGuidance`):
 
 - **Trust the CA.** In WSL, copy the CA out to Windows:
+
   ```bash
   cp ~/.local/share/mkcert/rootCA.pem /mnt/c/Users/Public/shopware-cli-rootCA.pem
   ```
+
   Then, in a Windows terminal opened **as Administrator**, import it:
-  ```
+
+  ```text
   certutil -addstore -f ROOT C:\Users\Public\shopware-cli-rootCA.pem
   ```
+
   `~/.local/share/mkcert/rootCA.pem` is the default CA location; if you set
-  `CAROOT`, use that directory instead (the CLI prints the exact path). `C:\Users\Public`
-  is world-accessible so the commands carry no username. Chrome and Edge use the
-  Windows store; Firefox needs its own import or
+  `CAROOT`, use that directory instead (the CLI prints the exact path).
+  `C:\Users\Public` is world-accessible so the commands carry no username.
+  Chrome and Edge use the Windows store; Firefox needs its own import or
   `security.enterprise_roots.enabled = true`. Restart the browser after.
 - **Resolve the hostnames.** Windows has no split-DNS to the DNS container, so
   add the shop's hostnames to the Windows hosts file (no wildcards, so every
   subdomain sits on one line), editing it **as Administrator**:
-  ```
+
+  ```text
   # C:\Windows\System32\drivers\etc\hosts
   127.0.0.1 shop1.shopware.local admin-watch.shop1.shopware.local storefront-watch.shop1.shopware.local adminer.shop1.shopware.local mailer.shop1.shopware.local
   ```
+
   `proxy up` prints this exact line for the current shop, including any
   `queue`/`search`/`s3`/`storage` subdomains the project uses.
 
@@ -356,8 +365,8 @@ The CA import is one-time per machine; the hosts line is per shop.
 
 - **Native Windows is not supported** — the proxy's DNS and resolver wiring are
   macOS/Linux only (the Windows stubs return a clear error, and the rest of the
-  CLI still compiles and runs there). On Windows, run it **inside WSL2**: the CLI
-  sets up the Linux side automatically, and the two manual steps above let a
+  CLI still compiles and runs there). On Windows, run it **inside WSL2**: the
+  CLI sets up the Linux side automatically, and the two manual steps above let a
   browser on Windows reach the shops.
 - Requires the Docker-based dev environment.
 - One `sudo` interaction per machine (`proxy setup`); on corporate machines
@@ -366,8 +375,8 @@ The CA import is one-time per machine; the hosts line is per shop.
   `adminer.shop1…`); their raw ports (management/UI) are not published in proxy
   mode — use `docker compose exec` for direct access. The database is the
   exception: it keeps a random published loopback port in both modes. PaaS
-  stacks route the S3 storage at `s3.<host>` / `storage.<host>` so media URLs stay
-  HTTPS on the local domain. Redis is compose-internal only.
+  stacks route the S3 storage at `s3.<host>` / `storage.<host>` so media URLs
+  stay HTTPS on the local domain. Redis is compose-internal only.
 - Only the shop's **root** hostname is aliased for in-container use — service
   subdomains (`mailer.…`) are host/browser-facing.
 - **Changing the admin-worker setting while a shop is proxied can orphan the
@@ -375,7 +384,7 @@ The CA import is one-time per machine; the hosts line is per shop.
   current config; if the dedicated worker/scheduler no longer belong there,
   `docker compose down` does not know to stop the already-running ones. It is
   an edge (no normal flow flips that mid-lifecycle); `docker compose down
-  --remove-orphans` clears it.
+--remove-orphans` clears it.
 - **Dev watchers (`admin-watch`, `storefront-watch`) are not wired end-to-end.**
   Traefik routes the subdomains and proxies websockets, but Vite's HMR client
   URL and `allowedHosts` must point at the proxy hostname — that config lives

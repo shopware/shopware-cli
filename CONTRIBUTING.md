@@ -11,16 +11,19 @@ Small fixes can go straight to a PR. Examples:
 - small documentation improvements
 - obvious bug fixes with a clear test or reproduction
 
-For anything larger, please open an issue first and describe what you want to change before starting implementation. This includes:
+For anything larger, please open an issue first and describe what you want to
+change before starting implementation. This includes:
 
 - new features, commands, or subcommands
 - changes to existing command behavior
 - changes to flags, arguments, defaults, or output format
 - larger refactors
 
-This helps us confirm the direction, avoid duplicate work, and keep the project maintainable.
+This helps us confirm the direction, avoid duplicate work, and keep the project
+maintainable.
 
-A draft PR is welcome if it helps explain the idea, but feature PRs should generally be discussed before they are reviewed or merged.
+A draft PR is welcome if it helps explain the idea, but feature PRs should
+generally be discussed before they are reviewed or merged.
 
 ## Pull requests
 
@@ -48,8 +51,8 @@ Add or update tests for bug fixes and new behavior.
 
 ### Using mise
 
-This repository includes a `mise.toml` file for managing the recommended Go
-and golangci-lint versions and for providing convenient development tasks.
+This repository includes a `mise.toml` file for managing development tools
+and providing convenient development tasks.
 
 After installing mise, set up the project tools with:
 
@@ -66,13 +69,15 @@ mise run check
 Individual tasks are also available:
 
 ```sh
-mise run format       # Format Go source files
-mise run format-check # Check Go formatting (gofmt and gci) without changing files
+mise run format       # Format Go and Markdown files
+mise run format-check # Check Go formatting and Markdown without changing files
 mise run build        # Build the shopware-cli binary
 mise run test         # Run the network-isolated test suite (Linux/macOS only)
 mise run test-unit    # Run Go tests without the sandbox wrapper (works everywhere)
 mise run vet          # Run go vet
-mise run lint         # Run golangci-lint
+mise run lint         # Lint Go and Markdown files
+mise run format-markdown # Format Markdown and report remaining lint findings
+mise run lint-markdown # Check Markdown without changing files
 mise run lint-workflows # Validate GitHub Actions workflows
 ```
 
@@ -82,9 +87,12 @@ manager.
 
 ## Reviews
 
-Maintainers may ask for changes, suggest a different direction, or decline a PR if the approach was not discussed beforehand. That is not personal; it is how we keep the project consistent and sustainable.
+Maintainers may ask for changes, suggest a different direction, or decline a PR
+if the approach was not discussed beforehand. That is not personal; it is how we
+keep the project consistent and sustainable.
 
 ## Releases
 
-Releases happen from the default `main` branch with everything included there at the time of release.
-The specific release process is explained in [RELEASING.md](RELEASING.md) and done on demand by the maintainers.
+Releases happen from the default `main` branch with everything included there at
+the time of release. The specific release process is explained in
+[RELEASING.md](RELEASING.md) and done on demand by the maintainers.
