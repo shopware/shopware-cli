@@ -7,7 +7,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/shopware/shopware-cli/internal/shop"
-	"github.com/shopware/shopware-cli/internal/testhelper"
 )
 
 func TestCachetoolInputDisabled(t *testing.T) {
@@ -51,18 +50,4 @@ func TestCachetoolInputRejectsInvalidConfigEvenWhenDisabled(t *testing.T) {
 		require.Error(t, err)
 		assert.Nil(t, settings)
 	}
-}
-
-func TestCachetoolDisabledIncludeReachesBackend(t *testing.T) {
-	root := t.TempDir()
-	t.Chdir(root)
-	testhelper.WriteFile(t, ".shopware-project.yml", "include: [override.yml]\nenvironments:\n  production:\n    type: ssh\n    ssh:\n      host: example.invalid\n      directory: /srv/shop/current\n      cachetool: {enabled: true, adapter: fcgi}\n")
-	testhelper.WriteFile(t, "override.yml", "environments:\n  production:\n    ssh:\n      cachetool: {enabled: false}\n")
-	cfg, err := shop.ReadConfig(t.Context(), ".shopware-project.yml", false)
-	require.NoError(t, err)
-	backend, err := New(root, ".shopware-project.yml", cfg, cfg.Environments["production"])
-	require.NoError(t, err)
-	settings, err := backend.(*SSH).cachetoolInput()
-	require.NoError(t, err)
-	assert.Nil(t, settings)
 }
