@@ -3,6 +3,11 @@ on:
   schedule:
     - cron: '0 2 * * *'
   workflow_dispatch:
+    inputs:
+      retry:
+        description: Set by the workflow itself when it retries a failed scheduled run
+        type: boolean
+        default: false
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
@@ -57,7 +62,7 @@ jobs:
       - name: Resolve the newest ${{ matrix.line }} release
         run: |
           set -o pipefail
-          version=$(curl -fsS https://repo.packagist.org/p2/shopware/core.json \
+          version=$(curl -fsS --retry 3 --retry-all-errors https://repo.packagist.org/p2/shopware/core.json \
             | jq -r --arg re '^v?${{ matrix.line }}\.[0-9]+\.[0-9]+$' '.packages["shopware/core"][].version | select(test($re))' \
             | sort -V | tail -n 1)
           version=${version#v}
@@ -172,7 +177,7 @@ jobs:
       - name: Resolve the newest ${{ matrix.line }} release
         run: |
           set -o pipefail
-          version=$(curl -fsS https://repo.packagist.org/p2/shopware/core.json \
+          version=$(curl -fsS --retry 3 --retry-all-errors https://repo.packagist.org/p2/shopware/core.json \
             | jq -r --arg re '^v?${{ matrix.line }}\.[0-9]+\.[0-9]+$' '.packages["shopware/core"][].version | select(test($re))' \
             | sort -V | tail -n 1)
           version=${version#v}
@@ -191,21 +196,30 @@ jobs:
         run: shopware-cli project ci . --force
 
   report:
-    name: Report failure
+    name: Retry or report failure
     needs: [docker, composer]
-    if: always() && github.event_name == 'schedule' && (needs.docker.result == 'failure' || needs.composer.result == 'failure')
+    # A failed scheduled run is retried once; only a failure of that retry reaches Slack.
+    if: always() && (needs.docker.result == 'failure' || needs.composer.result == 'failure') && (github.event_name == 'schedule' || inputs.retry == true)
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
       contents: read
-      actions: read
+      actions: write
     steps:
       - name: Harden Runner
         uses: step-security/harden-runner@46b06cea07f9e64621fdf066ba77ac6915163d43 # ratchet:step-security/harden-runner@v2.22.3
         with:
           egress-policy: audit
 
+      - name: Retry the scheduled run once
+        if: github.event_name == 'schedule'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: gh workflow run nightly-smoke.yml --ref "$GITHUB_REF_NAME" -f retry=true
+
       - name: Report the failure to Slack
+        if: github.event_name == 'workflow_dispatch'
         env:
           SLACK_CI_FAILURES_WORKFLOW_URL: ${{ secrets.SLACK_CI_FAILURES_WORKFLOW_URL }}
           GH_TOKEN: ${{ github.token }}
@@ -222,7 +236,7 @@ jobs:
           # The jobs API names the failed matrix legs, for example "Docker 6.6".
           failed_jobs=$(gh api "/repos/$GH_REPO/actions/runs/$GITHUB_RUN_ID/jobs?per_page=100" --jq '[.jobs[] | select(.conclusion == "failure" or .conclusion == "timed_out") | .name] | join(", ")' || true)
           payload=$(jq --null-input \
-            --arg summary "$GH_REPO: nightly smoke test failed on $REF_NAME" \
+            --arg summary "$GH_REPO: nightly smoke test failed on $REF_NAME after a retry" \
             --arg run_url "$RUN_URL" \
             --arg commit "${COMMIT:0:8}" \
             --arg failed_jobs "${failed_jobs:-unknown}" \
