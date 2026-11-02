@@ -14,6 +14,11 @@ import (
 //go:embed ssh_deployment_logs.php
 var sshDeploymentLogsScript string
 
+type sshDeploymentLogsInput struct {
+	Root    string `json:"root"`
+	Release string `json:"release"`
+}
+
 // WriteDeploymentLogs streams remote helper logs without a local archive.
 func (s *SSH) WriteDeploymentLogs(ctx context.Context, deployment Deployment, output io.Writer) error {
 	root, err := s.deploymentRoot()
@@ -24,10 +29,7 @@ func (s *SSH) WriteDeploymentLogs(ctx context.Context, deployment Deployment, ou
 	if err != nil {
 		return err
 	}
-	payload, err := json.Marshal(struct {
-		Root    string `json:"root"`
-		Release string `json:"release"`
-	}{Root: root, Release: release})
+	payload, err := json.Marshal(sshDeploymentLogsInput{Root: root, Release: release})
 	if err != nil {
 		return err
 	}

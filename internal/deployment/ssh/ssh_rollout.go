@@ -167,16 +167,18 @@ func sshDeploymentReleaseName(reference string) (string, error) {
 	return name, nil
 }
 
+type sshDeploymentListInput struct {
+	Root    string `json:"root"`
+	Current string `json:"current"`
+}
+
 // ListRollouts returns successful retained releases in newest-first order.
 func (s *SSH) ListRollouts(ctx context.Context) ([]Rollout, error) {
 	root, err := s.deploymentRoot()
 	if err != nil {
 		return nil, err
 	}
-	payload, err := json.Marshal(struct {
-		Root    string `json:"root"`
-		Current string `json:"current"`
-	}{Root: root, Current: s.activeLinkName()})
+	payload, err := json.Marshal(sshDeploymentListInput{Root: root, Current: s.activeLinkName()})
 	if err != nil {
 		return nil, err
 	}
