@@ -28,6 +28,9 @@ import (
 //go:embed ssh_deployment.php
 var sshDeploymentMainScript string
 
+//go:embed ssh_cachetool.php
+var sshCachetoolScript string
+
 var sshDeploymentScript = withSSHDeploymentLayout(sshCachetoolScript) + "\n" +
 	strings.TrimPrefix(sshPHPRestartScript, "<?php\n") + "\n" +
 	strings.TrimPrefix(sshPermissionsScript, "<?php\n") + "\n" +
