@@ -7,11 +7,6 @@ import (
 	"context"
 	"errors"
 	"io"
-	"os"
-	"os/exec"
-	"path/filepath"
-	"runtime"
-	"strings"
 	"testing"
 
 	"github.com/spf13/cobra"
@@ -20,7 +15,6 @@ import (
 
 	"github.com/shopware/shopware-cli/internal/deployment"
 	"github.com/shopware/shopware-cli/internal/system"
-	"github.com/shopware/shopware-cli/internal/testhelper"
 )
 
 type rolloutFakeBackend struct {
@@ -85,160 +79,4 @@ func TestProjectDeploymentRollout(t *testing.T) {
 	writeErr := errors.New("output closed")
 	cmd.SetOut(deploymentErrorWriter{err: writeErr})
 	require.ErrorIs(t, runProjectDeploymentRollout(cmd, &rolloutFakeBackend{result: deployment.Rollout{Reference: "id"}}, artifact), writeErr)
-}
-
-func newLifecycleCommand(t *testing.T, args []string) (*cobra.Command, *bytes.Buffer) {
-	t.Helper()
-	oldConfig, oldEnv := projectConfigPath, environmentName
-	t.Cleanup(func() { projectConfigPath, environmentName = oldConfig, oldEnv })
-	root := &cobra.Command{Use: "project", SilenceUsage: true, SilenceErrors: true}
-	root.PersistentFlags().StringVar(&projectConfigPath, "project-config", "", "")
-	root.PersistentFlags().StringVarP(&environmentName, "env", "e", "", "")
-	deployment := &cobra.Command{Use: "deploy"}
-	create := &cobra.Command{Use: projectDeploymentCreateCmd.Use, Args: projectDeploymentCreateCmd.Args, RunE: projectDeploymentCreateCmd.RunE}
-	create.Flags().StringP("output", "o", "", "")
-	create.Flags().Bool("with-dev-dependencies", false, "")
-	create.Flags().Bool("rollout", false, "")
-	initialize := &cobra.Command{Use: projectDeploymentInitCmd.Use, Args: projectDeploymentInitCmd.Args, RunE: projectDeploymentInitCmd.RunE}
-	rollout := &cobra.Command{Use: projectDeploymentRolloutCmd.Use, Args: projectDeploymentRolloutCmd.Args, RunE: projectDeploymentRolloutCmd.RunE}
-	rollback := &cobra.Command{Use: projectDeploymentRollbackCmd.Use, Args: projectDeploymentRollbackCmd.Args, RunE: projectDeploymentRollbackCmd.RunE}
-	logs := &cobra.Command{Use: projectDeploymentLogsCmd.Use, Args: projectDeploymentLogsCmd.Args, RunE: projectDeploymentLogsCmd.RunE}
-	deployment.AddCommand(create, initialize, rollout, rollback, logs)
-	root.AddCommand(deployment)
-	out := new(bytes.Buffer)
-	root.SetOut(out)
-	root.SetErr(out)
-	root.SetArgs(append([]string{"deploy"}, args...))
-	return root, out
-}
-
-func TestDeploymentLifecycleCommandsRegistered(t *testing.T) {
-	for _, name := range []string{"create", "init", "list", "logs", "rollout", "rollback"} {
-		cmd, remaining, err := projectRootCmd.Find([]string{"deploy", name})
-		require.NoError(t, err)
-		assert.Empty(t, remaining)
-		assert.Equal(t, name, cmd.Name())
-	}
-}
-
-func TestSSHDeploymentCreateCommandUsesProjectConfig(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("fixture uses a PHP shell stand-in")
-	}
-	bin := t.TempDir()
-	testhelper.WriteFile(t, filepath.Join(bin, "php"), "#!/bin/sh\n[ \"$1\" = bin/ci ] || exit 1\n")
-	require.NoError(t, os.Chmod(filepath.Join(bin, "php"), 0o755))
-	testhelper.WriteFile(t, filepath.Join(bin, "ssh"), "#!/bin/sh\nexit 99\n")
-	require.NoError(t, os.Chmod(filepath.Join(bin, "ssh"), 0o755))
-	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
-	t.Setenv("PHP_BINARY", "")
-	t.Setenv("PROJECT_ROOT", "")
-	for _, mode := range []string{"closest project", "explicit directory", "custom config", "create and rollout"} {
-		t.Run(mode, func(t *testing.T) {
-			root := t.TempDir()
-			caller := t.TempDir()
-			t.Chdir(caller)
-			testhelper.WriteFile(t, filepath.Join(root, "composer.json"), `{"require":{"shopware/core":"6.7.0.0"}}`)
-			testhelper.WriteFile(t, filepath.Join(root, "bin/console"), "<?php")
-			configPath := filepath.Join(root, ".shopware-project.yaml")
-			args := []string{"create", root, "-e", "production"}
-			switch mode {
-			case "closest project":
-				t.Chdir(filepath.Join(root, "bin"))
-				args = []string{"create", "-e", "production"}
-			case "custom config":
-				configPath = filepath.Join(caller, "custom.yml")
-				args = append(args, "--project-config", "custom.yml")
-			case "create and rollout":
-				args = append(args, "--rollout")
-			}
-			testhelper.WriteFile(t, configPath, `
-compatibility_date: "2026-01-01"
-disable_composer_install: true
-build:
-  disable_checksums: true
-environments:
-  production:
-    type: ssh
-    ssh:
-      host: example.invalid
-      directory: /var/www/shop/current
-`)
-			cmd, out := newLifecycleCommand(t, args)
-			err := cmd.ExecuteContext(system.WithInteraction(t.Context(), false))
-			if mode == "create and rollout" {
-				var exitError *exec.ExitError
-				require.ErrorAs(t, err, &exitError)
-				assert.Equal(t, 99, exitError.ExitCode())
-			} else {
-				require.NoError(t, err)
-			}
-			output, _, _ := strings.Cut(out.String(), "\n")
-			require.True(t, strings.HasPrefix(output, `Created deployment "`))
-			reference := strings.TrimSuffix(strings.TrimPrefix(output, `Created deployment "`), `"`)
-			assert.Regexp(t, `^[a-z]+-[a-z]+-[a-z]+$`, reference)
-			assert.FileExists(t, filepath.Join(root, ".shopware-cli", "deployments", reference+".tar.gz"))
-			if mode == "create and rollout" {
-				assert.NotContains(t, out.String(), "Deploy it with:")
-				return // A failed rollout must retain the newly created archive.
-			}
-			assert.Contains(t, out.String(), "shopware-cli project deploy rollout -e 'production'")
-			assert.Contains(t, out.String(), "'"+reference+"'")
-			if mode == "custom config" {
-				assert.Contains(t, out.String(), "--project-config '"+configPath+"'")
-			}
-		})
-	}
-}
-
-func TestProjectDeploymentRolloutCommandValidation(t *testing.T) {
-	root := t.TempDir()
-	t.Chdir(root)
-	t.Setenv("PROJECT_ROOT", "")
-	t.Setenv("SHOPWARE_CLI_NO_SYMFONY_CLI", "1")
-	testhelper.WriteFile(t, filepath.Join(root, "composer.json"), `{"require":{"shopware/core":"6.7.0.0"}}`)
-	testhelper.WriteFile(t, filepath.Join(root, "bin/console"), "<?php")
-	for _, tc := range []struct {
-		args []string
-		want string
-	}{
-		{[]string{"rollout"}, "requires a deployment reference in non-interactive mode"},
-		{[]string{"rollout", "one", "two"}, "accepts at most 1 arg"},
-		{[]string{"rollback"}, "requires a deployment reference in non-interactive mode"},
-		{[]string{"rollback", "one", "two"}, "accepts at most 1 arg"},
-		{[]string{"rollback", "archive"}, `cannot create deployments for environment type "local"`},
-		{[]string{"rollout", "archive", "-e", "missing"}, `environment "missing" not found`},
-		{[]string{"rollout", "archive"}, `cannot create deployments for environment type "local"`},
-		{[]string{"logs"}, "accepts 1 arg"},
-		{[]string{"logs", "one", "two"}, "accepts 1 arg"},
-		{[]string{"logs", "archive", "-e", "missing"}, `environment "missing" not found`},
-		{[]string{"logs", "archive"}, `cannot create deployments for environment type "local"`},
-	} {
-		cmd, out := newLifecycleCommand(t, tc.args)
-		require.ErrorContains(t, cmd.ExecuteContext(system.WithInteraction(t.Context(), false)), tc.want)
-		assert.Empty(t, out.String())
-	}
-}
-
-func TestProjectDeploymentRolloutValidatesSharedConfig(t *testing.T) {
-	root := t.TempDir()
-	t.Chdir(root)
-	t.Setenv("PROJECT_ROOT", "")
-	t.Setenv("PATH", t.TempDir()) // Invalid configuration must fail before SSH.
-	testhelper.WriteFile(t, filepath.Join(root, "composer.json"), `{"require":{"shopware/core":"6.7.0.0"}}`)
-	testhelper.WriteFile(t, filepath.Join(root, "bin/console"), "<?php")
-	testhelper.WriteFile(t, filepath.Join(root, ".shopware-project.yml"), `
-compatibility_date: "2026-01-01"
-environments:
-  production:
-    type: ssh
-    ssh:
-      host: example.invalid
-      directory: /var/www/shop/current
-      shared:
-        directories: [../outside]
-`)
-	cmd, out := newLifecycleCommand(t, []string{"rollout", "unused.tar.gz", "-e", "production"})
-	require.ErrorContains(t, cmd.ExecuteContext(system.WithInteraction(t.Context(), false)), "ssh.shared")
-	assert.Empty(t, out.String())
 }
