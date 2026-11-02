@@ -23,7 +23,6 @@ import (
 	"github.com/shopware/shopware-cli/internal/cliversion"
 	"github.com/shopware/shopware-cli/internal/system"
 	"github.com/shopware/shopware-cli/internal/tui"
-	"github.com/shopware/shopware-cli/internal/validation"
 	"github.com/shopware/shopware-cli/logging"
 )
 
@@ -66,15 +65,6 @@ func Execute(ctx context.Context) int {
 	return exitCode(ctx, err)
 }
 
-// printedErrors are already shown by the command, so exitCode does not log them again.
-var printedErrors = []error{
-	validation.ErrToolReportFailed,
-	project.ErrEnvironmentDown,
-	project.ErrProxyNotRegistered,
-	project.ErrProxyVerificationFailed,
-	system.ErrMissingDependencies,
-}
-
 // exitCode maps the command error to the process exit code. Status errors are
 // already printed by the command as a human-readable status, so they exit 1
 // without logging the error again.
@@ -83,10 +73,8 @@ func exitCode(ctx context.Context, err error) int {
 		return 0
 	}
 
-	printed := slices.ContainsFunc(printedErrors, func(target error) bool {
-		return errors.Is(err, target)
-	})
-	if !printed {
+	var silent logging.SilenceError
+	if !errors.As(err, &silent) {
 		logging.FromContext(ctx).Errorln(err)
 	}
 

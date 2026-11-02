@@ -3,7 +3,6 @@ package system
 import (
 	"cmp"
 	"context"
-	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -15,6 +14,7 @@ import (
 	"charm.land/lipgloss/v2"
 
 	"github.com/shopware/shopware-cli/internal/tui"
+	"github.com/shopware/shopware-cli/logging"
 )
 
 type MissingDependency struct {
@@ -25,7 +25,7 @@ type MissingDependency struct {
 }
 
 // ErrMissingDependencies matches every MissingDependenciesError with errors.Is.
-var ErrMissingDependencies = errors.New("missing required dependencies")
+var ErrMissingDependencies = logging.NewSilent("missing required dependencies")
 
 // MissingDependenciesError stops a command whose missing dependencies were already explained.
 type MissingDependenciesError struct {
@@ -35,6 +35,9 @@ type MissingDependenciesError struct {
 func (e *MissingDependenciesError) Error() string {
 	return ErrMissingDependencies.Error()
 }
+
+// SilenceError prevents logging the dependency explanation a second time.
+func (e *MissingDependenciesError) SilenceError() {}
 
 // Is lets errors.Is match the error against ErrMissingDependencies.
 func (e *MissingDependenciesError) Is(target error) bool {

@@ -61,6 +61,11 @@ func TestInvocationErrorPrintsUsage(t *testing.T) {
 	assert.Contains(t, out, "Usage:")
 }
 
+type reportedError struct{}
+
+func (reportedError) Error() string { return "already reported" }
+func (reportedError) SilenceError() {}
+
 func TestExitCode(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -84,6 +89,16 @@ func TestExitCode(t *testing.T) {
 			err:      fmt.Errorf("running command: %w", errors.New("something broke")),
 			wantCode: 1,
 			wantLog:  []string{"running command: something broke"},
+		},
+		{
+			name:     "custom error opts in without registration",
+			err:      reportedError{},
+			wantCode: 1,
+		},
+		{
+			name:     "wrapped custom error exits silently",
+			err:      fmt.Errorf("cannot complete command: %w", reportedError{}),
+			wantCode: 1,
 		},
 		{
 			name:     "wrapped tool report failure exits silently",
