@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"os"
-	"regexp"
 	"runtime"
 	"strconv"
 	"strings"
@@ -12,7 +11,6 @@ import (
 
 	"charm.land/huh/v2"
 
-	"github.com/shopware/shopware-cli/internal/shop"
 	"github.com/shopware/shopware-cli/internal/system"
 	"github.com/shopware/shopware-cli/internal/tracking"
 	"github.com/shopware/shopware-cli/internal/tui"
@@ -20,7 +18,7 @@ import (
 
 var trackEvent = tracking.Track
 
-func trackCommandExecution(ctx context.Context, args []string, start time.Time, runErr error, shopwareVersion string) {
+func trackCommandExecution(ctx context.Context, args []string, duration time.Duration, runErr error, shopwareVersion string) {
 	name, ok := commandEventName(args)
 	if !ok {
 		return
@@ -40,7 +38,7 @@ func trackCommandExecution(ctx context.Context, args []string, start time.Time, 
 	tags := map[string]string{
 		tracking.TagCommandName: name,
 		tracking.TagResult:      result,
-		tracking.TagDurationMS:  strconv.FormatInt(time.Since(start).Milliseconds(), 10),
+		tracking.TagDurationMS:  strconv.FormatInt(duration.Milliseconds(), 10),
 		tracking.TagOS:          runtime.GOOS,
 		tracking.TagIsTUI:       strconv.FormatBool(system.IsInteractionEnabled(ctx)),
 		tracking.TagIsWSL:       strconv.FormatBool(system.IsWSL()),
@@ -64,26 +62,4 @@ func commandEventName(args []string) (string, bool) {
 	name = strings.ReplaceAll(name, " ", ".")
 	name = strings.ReplaceAll(name, "-", "_")
 	return name, true
-}
-
-// shopwareVersionPattern accepts only versions Shopware itself publishes.
-var shopwareVersionPattern = regexp.MustCompile(`^(\d+\.\d+\.\d+\.\d+(-rc\d+)?|dev-trunk)$`)
-
-// projectShopwareVersion reads the project's Shopware version before a project command runs.
-func projectShopwareVersion(args []string) string {
-	name, ok := commandEventName(args)
-	// project create runs where there is no project yet.
-	if !ok || !strings.HasPrefix(name, "project.") || name == "project.create" {
-		return ""
-	}
-	projectRoot, err := shop.FindClosestShopwareProject(false)
-	if err != nil {
-		return ""
-	}
-	version := shop.DetectShopwareVersion(projectRoot)
-	if !shopwareVersionPattern.MatchString(version) {
-		return ""
-	}
-
-	return version
 }
