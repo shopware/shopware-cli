@@ -283,8 +283,8 @@ function deploymentCachetoolPrepare(array $input, string $root, string $release)
             if (!is_dir($webPath) || !is_writable($webPath)) {
                 throw new RuntimeException('CacheTool web_path must be an existing writable external directory');
             }
-            // CacheTool 10 leaves its endpoint behind when HTTP requests fail.
-            // Give it an isolated namespace that we can remove safely afterward.
+            // Give CacheTool an isolated namespace so we can also clean up its
+            // endpoint when the process is terminated before its own cleanup.
             $webName = 'shopware-cli-cachetool-' . bin2hex(random_bytes(16));
             $webDirectory = rtrim($webPath, '/') . '/' . $webName;
             $native['webClient'] = 'SymfonyHttpClient';

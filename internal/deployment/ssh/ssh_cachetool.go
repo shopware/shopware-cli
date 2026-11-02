@@ -8,9 +8,9 @@ import (
 
 // Pin the official release and verify its SHA256 before execution.
 const (
-	cachetoolVersion = "10.0.0"
-	cachetoolURL     = "https://github.com/gordalina/cachetool/releases/download/10.0.0/cachetool.phar"
-	cachetoolSHA256  = "cbe90e7acdde7beafe26b592a753c2b923a99d2033e073dc55e42fba2883bd1d"
+	cachetoolVersion = "12.0.0"
+	cachetoolURL     = "https://github.com/gordalina/cachetool/releases/download/12.0.0/cachetool.phar"
+	cachetoolSHA256  = "4bd3df7435a47cf1034d0d6385f4d32e1da18e08acbe3894fb10e511414dba9d"
 )
 
 //go:embed ssh_cachetool.php
