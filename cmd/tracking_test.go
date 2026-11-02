@@ -252,6 +252,42 @@ func TestTrackCommandExecution_TracksAfterContextCancelled(t *testing.T) {
 	assert.NoError(t, trackCtxErr, "tracking must get a live context even after the command context was cancelled")
 }
 
+func TestTrackCommandExecution_MissingDependencies(t *testing.T) {
+	events := useTrackingTestRoot(t, "shopware-cli")
+	runErr := fmt.Errorf("cannot create project: %w", &system.MissingDependenciesError{Missing: []system.MissingDependency{
+		{Name: "Docker", Reason: "not running", ID: "docker_not_running"},
+		{Name: "Docker Compose plugin", Reason: "not installed", ID: "compose_plugin_missing"},
+	}})
+
+	trackCommandExecution(context.Background(), []string{"project", "console"}, 0, runErr, "")
+
+	require.Len(t, *events, 1)
+	tags := (*events)[0]
+	assert.Equal(t, tracking.ResultFailure, tags[tracking.TagResult])
+	assert.Equal(t, "compose_plugin_missing,docker_not_running", tags[tracking.TagMissing])
+	assert.NotContains(t, tags, tracking.TagFailureCategory, "the category list is still open")
+}
+
+func TestTrackCommandExecution_PlainFailureHasNoMissingTag(t *testing.T) {
+	events := useTrackingTestRoot(t, "shopware-cli")
+
+	trackCommandExecution(context.Background(), []string{"project", "console"}, 0, errors.New("boom"), "")
+
+	require.Len(t, *events, 1)
+	assert.NotContains(t, (*events)[0], tracking.TagMissing)
+}
+
+func TestTrackCommandExecution_PinnedPHPNotFound(t *testing.T) {
+	events := useTrackingTestRoot(t, "shopware-cli")
+	runErr := fmt.Errorf("cannot start the development environment: %w", &system.PHPVersionNotFoundError{Pin: "8.3"})
+
+	trackCommandExecution(context.Background(), []string{"project", "console"}, 0, runErr, "")
+
+	require.Len(t, *events, 1)
+	assert.Equal(t, tracking.ResultFailure, (*events)[0][tracking.TagResult])
+	assert.Equal(t, "php_version", (*events)[0][tracking.TagMissing])
+}
+
 func TestTrackCommandExecution_ShopwareVersionTag(t *testing.T) {
 	events := useTrackingTestRoot(t, "shopware-cli")
 

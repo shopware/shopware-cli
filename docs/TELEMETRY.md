@@ -155,9 +155,15 @@ overall CLI usage.
 | `is_wsl`       | Whether a Linux run happens inside the Windows Subsystem for Linux                                                                                                                                                                                                                       | `true` / `false`                            |
 | `ci_provider`  | The CI system a run executes on; only present on CI runs. `other` means CI was detected without a known provider                                                                                                                                                                         | `github` / `gitlab` / `bitbucket` / `other` |
 | `shopware_version` | The installed Shopware version, looked up in the background near command startup from installed packages with `composer.lock` as fallback. Omitted if the lookup is not ready when the command finishes; commands that modify dependencies may affect the observed version. Accepts a release, a release candidate or `dev-trunk`; other development branches are never sent. Only on `project` commands run inside a project, not on `project create` | `6.7.11.0` |
+| `missing`      | Which dependencies the dependency check found missing when it stopped the command, sorted and comma-separated; only with `result=failure`. Interactive `project create` offers local PHP instead of stopping, so those runs carry no `missing` unless `--docker` was passed explicitly | `compose_plugin_missing,docker_not_running` |
 
 Notes:
 
+- `missing` uses stable identifiers: `docker_not_installed`,
+  `docker_not_running`, `compose_plugin_missing`, `php_not_installed`,
+  `php_version` and `other`. The versions found or required are never sent.
+- A pinned `php_version` that is not installed stops the command before the
+  dependency check and is reported as `php_version`.
 - The command _name_ is captured (e.g. `project.create`), but **not** its
   arguments, flags, paths, or any free-text input.
 - The root command alone (running `shopware-cli` with no sub-command) is not
