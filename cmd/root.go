@@ -66,6 +66,15 @@ func Execute(ctx context.Context) int {
 	return exitCode(ctx, err)
 }
 
+// printedErrors are already shown by the command, so exitCode does not log them again.
+var printedErrors = []error{
+	validation.ErrToolReportFailed,
+	project.ErrEnvironmentDown,
+	project.ErrProxyNotRegistered,
+	project.ErrProxyVerificationFailed,
+	system.ErrMissingDependencies,
+}
+
 // exitCode maps the command error to the process exit code. Status errors are
 // already printed by the command as a human-readable status, so they exit 1
 // without logging the error again.
@@ -74,8 +83,9 @@ func exitCode(ctx context.Context, err error) int {
 		return 0
 	}
 
-	var missing *system.MissingDependenciesError
-	printed := errors.Is(err, validation.ErrToolReportFailed) || errors.Is(err, project.ErrEnvironmentDown) || errors.Is(err, project.ErrProxyNotRegistered) || errors.Is(err, project.ErrProxyVerificationFailed) || errors.As(err, &missing)
+	printed := slices.ContainsFunc(printedErrors, func(target error) bool {
+		return errors.Is(err, target)
+	})
 	if !printed {
 		logging.FromContext(ctx).Errorln(err)
 	}

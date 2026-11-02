@@ -3,6 +3,7 @@ package system
 import (
 	"cmp"
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -23,13 +24,21 @@ type MissingDependency struct {
 	ID string
 }
 
+// ErrMissingDependencies matches every MissingDependenciesError with errors.Is.
+var ErrMissingDependencies = errors.New("missing required dependencies")
+
 // MissingDependenciesError stops a command whose missing dependencies were already explained.
 type MissingDependenciesError struct {
 	Missing []MissingDependency
 }
 
 func (e *MissingDependenciesError) Error() string {
-	return "missing required dependencies"
+	return ErrMissingDependencies.Error()
+}
+
+// Is lets errors.Is match the error against ErrMissingDependencies.
+func (e *MissingDependenciesError) Is(target error) bool {
+	return target == ErrMissingDependencies
 }
 
 // IDs returns the sorted, de-duplicated identifiers of the missing dependencies.
