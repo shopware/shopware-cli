@@ -1,10 +1,6 @@
 package ssh
 
-import (
-	_ "embed"
-
-	"github.com/shopware/shopware-cli/internal/shop"
-)
+import "github.com/shopware/shopware-cli/internal/shop"
 
 // Pin the official release and verify its SHA256 before execution.
 const (
@@ -12,9 +8,6 @@ const (
 	cachetoolURL     = "https://github.com/gordalina/cachetool/releases/download/12.0.0/cachetool.phar"
 	cachetoolSHA256  = "4bd3df7435a47cf1034d0d6385f4d32e1da18e08acbe3894fb10e511414dba9d"
 )
-
-//go:embed ssh_cachetool.php
-var sshCachetoolScript string
 
 type sshCachetoolInput struct {
 	shop.EnvironmentSSHCachetoolConfig
