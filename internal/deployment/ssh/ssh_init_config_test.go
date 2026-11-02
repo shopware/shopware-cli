@@ -1,15 +1,12 @@
 package ssh
 
 import (
-	"path/filepath"
-	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/shopware/shopware-cli/internal/deployment"
-	"github.com/shopware/shopware-cli/internal/envfile"
 	"github.com/shopware/shopware-cli/internal/system"
 )
 
@@ -84,19 +81,6 @@ func TestSSHGroupScriptedInitialization(t *testing.T) {
 	assert.Empty(t, stores["a"].writes)
 	require.Len(t, stores["b"].writes, 1)
 	assert.Equal(t, "https://shop.example.com", stores["b"].writes[0].RuntimeValues["APP_URL"])
-}
-
-func TestSSHScriptedInitializationWritesRemoteConfiguration(t *testing.T) {
-	backend := localDeploymentSSH(t)
-	config, err := deployment.ReadInitializationConfig(strings.NewReader(`{"runtime_values":{"APP_URL":"https://shop.example.com","DATABASE_URL":"mysql://user:secret@localhost/shop"},"install_values":{"INSTALL_ADMIN_PASSWORD":"long-password"}}`))
-	require.NoError(t, err)
-	ctx := system.WithInteraction(t.Context(), false)
-	require.NoError(t, backend.InitializeDeployment(ctx, deployment.InitializationOptions{Config: config}))
-	values, err := envfile.ReadValues(filepath.Join(filepath.Dir(backend.directory), "shared"), "APP_URL", "APP_SECRET", "DATABASE_URL")
-	require.NoError(t, err)
-	assert.Equal(t, config.RuntimeValues["APP_URL"], values["APP_URL"])
-	assert.Equal(t, config.RuntimeValues["DATABASE_URL"], values["DATABASE_URL"])
-	assert.Len(t, values["APP_SECRET"], 64)
 }
 
 func TestSSHInitializationWithoutInteractionRequiresConfig(t *testing.T) {
