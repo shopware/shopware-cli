@@ -90,7 +90,7 @@ jobs:
     steps:
       - name: Generate GitHub App token
         id: side-repo-app-token
-        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        uses: actions/create-github-app-token@v3.3.0
         with:
           client-id: ${{ vars.DOCS_BOT_APP_CLIENT_ID }}
           private-key: ${{ secrets.DOCS_BOT_APP_PRIVATE_KEY }}
@@ -104,12 +104,12 @@ jobs:
           permission-issues: write
           permission-pull-requests: write
       - name: Setup Scripts
-        uses: github/gh-aw-actions/setup@221ba4f4319de6b8e809d1a15528b3ae6a818aa5 # v1.0.1
+        uses: github/gh-aw-actions/setup@v1.0.1
         with:
           destination: ${{ runner.temp }}/gh-aw/actions
 
       - name: Check admin/maintainer permissions
-        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        uses: actions/github-script@v9.0.0
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
@@ -121,7 +121,7 @@ jobs:
             await main();
 
       - name: Apply Safe Outputs
-        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        uses: actions/github-script@v9.0.0
         env:
           GH_AW_JOB_CHECK_RUN_ID: ${{ job.check_run_id }}
           GH_AW_WORKFLOW_ID: "agentics-maintenance-shopware-docs"
@@ -153,7 +153,7 @@ jobs:
     steps:
       - name: Generate GitHub App token
         id: side-repo-app-token
-        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        uses: actions/create-github-app-token@v3.3.0
         with:
           client-id: ${{ vars.DOCS_BOT_APP_CLIENT_ID }}
           private-key: ${{ secrets.DOCS_BOT_APP_PRIVATE_KEY }}
@@ -167,17 +167,17 @@ jobs:
           permission-issues: write
           permission-pull-requests: write
       - name: Checkout repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        uses: actions/checkout@v7.0.1
         with:
           persist-credentials: false
 
       - name: Setup Scripts
-        uses: github/gh-aw-actions/setup@221ba4f4319de6b8e809d1a15528b3ae6a818aa5 # v1.0.1
+        uses: github/gh-aw-actions/setup@v1.0.1
         with:
           destination: ${{ runner.temp }}/gh-aw/actions
 
       - name: Check admin/maintainer permissions
-        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        uses: actions/github-script@v9.0.0
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
@@ -189,12 +189,12 @@ jobs:
             await main();
 
       - name: Install gh-aw
-        uses: github/gh-aw-actions/setup-cli@221ba4f4319de6b8e809d1a15528b3ae6a818aa5 # v1.0.1
+        uses: github/gh-aw-actions/setup-cli@v1.0.1
         with:
           version: v1.0.1
 
       - name: Create missing labels in target repository
-        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        uses: actions/github-script@v9.0.0
         env:
           GH_AW_CMD_PREFIX: gh aw
           GH_AW_TARGET_REPO_SLUG: "shopware/docs"
@@ -219,7 +219,7 @@ jobs:
     steps:
       - name: Generate GitHub App token
         id: side-repo-app-token
-        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        uses: actions/create-github-app-token@v3.3.0
         with:
           client-id: ${{ vars.DOCS_BOT_APP_CLIENT_ID }}
           private-key: ${{ secrets.DOCS_BOT_APP_PRIVATE_KEY }}
@@ -233,17 +233,17 @@ jobs:
           permission-issues: write
           permission-pull-requests: write
       - name: Checkout repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        uses: actions/checkout@v7.0.1
         with:
           persist-credentials: false
 
       - name: Setup Scripts
-        uses: github/gh-aw-actions/setup@221ba4f4319de6b8e809d1a15528b3ae6a818aa5 # v1.0.1
+        uses: github/gh-aw-actions/setup@v1.0.1
         with:
           destination: ${{ runner.temp }}/gh-aw/actions
 
       - name: Check admin/maintainer permissions
-        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        uses: actions/github-script@v9.0.0
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
@@ -255,13 +255,13 @@ jobs:
             await main();
 
       - name: Install gh-aw
-        uses: github/gh-aw-actions/setup-cli@221ba4f4319de6b8e809d1a15528b3ae6a818aa5 # v1.0.1
+        uses: github/gh-aw-actions/setup-cli@v1.0.1
         with:
           version: v1.0.1
 
       - name: Restore activity report logs cache
         id: activity_report_logs_cache
-        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        uses: actions/cache/restore@v6.1.0
         with:
           path: ./.cache/gh-aw/activity-report-logs
           key: ${{ runner.os }}-activity-report-logs-shopware/docs-${{ github.ref_name }}-${{ github.run_id }}
@@ -286,12 +286,12 @@ jobs:
 
       - name: Save activity report logs cache
         if: ${{ always() }}
-        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        uses: actions/cache/save@v6.1.0
         with:
           path: ./.cache/gh-aw/activity-report-logs
           key: ${{ steps.activity_report_logs_cache.outputs.cache-primary-key }}
       - name: Generate activity report issue in target repository
-        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        uses: actions/github-script@v9.0.0
         with:
           github-token: ${{ steps.side-repo-app-token.outputs.token }}
           script: |
@@ -343,17 +343,17 @@ jobs:
       issues: write
     steps:
       - name: Checkout repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        uses: actions/checkout@v7.0.1
         with:
           persist-credentials: false
 
       - name: Setup Scripts
-        uses: github/gh-aw-actions/setup@221ba4f4319de6b8e809d1a15528b3ae6a818aa5 # v1.0.1
+        uses: github/gh-aw-actions/setup@v1.0.1
         with:
           destination: ${{ runner.temp }}/gh-aw/actions
 
       - name: Check admin/maintainer permissions
-        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        uses: actions/github-script@v9.0.0
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
@@ -365,12 +365,12 @@ jobs:
             await main();
 
       - name: Install gh-aw
-        uses: github/gh-aw-actions/setup-cli@221ba4f4319de6b8e809d1a15528b3ae6a818aa5 # v1.0.1
+        uses: github/gh-aw-actions/setup-cli@v1.0.1
         with:
           version: v1.0.1
 
       - name: Validate workflows and file issue on findings
-        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        uses: actions/github-script@v9.0.0
         env:
           GH_AW_CMD_PREFIX: gh aw
         with:
