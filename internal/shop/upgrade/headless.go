@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 
@@ -34,11 +35,39 @@ type HeadlessOptions struct {
 	Out io.Writer
 }
 
+// failed_step values for stops before the upgrade runs; failing runner steps report their own name.
+const (
+	failedStepReadiness        = "readiness"
+	failedStepCatalog          = "catalog"
+	failedStepTarget           = "target"
+	failedStepSecurityAdvisory = "security_advisory"
+	failedStepComposerResolve  = "composer_resolve"
+)
+
+// headlessOutcome collects what the telemetry event needs while RunHeadless proceeds.
+type headlessOutcome struct {
+	current, target, failedStep, blockingChecks string
+	// attempted is set once the upgrade itself started.
+	attempted bool
+	// cancelled is set when the command context ended before the run did.
+	cancelled bool
+}
+
 // RunHeadless executes the upgrade pipeline without the TUI — for
 // --no-interaction runs and environments without a terminal. It walks the
 // same phases as the wizard: readiness checks, target selection, preflight,
 // and (unless DryRun) the guided execution with rollback on failure.
-func (u *ProjectUpgrader) RunHeadless(ctx context.Context, opts HeadlessOptions) error {
+func (u *ProjectUpgrader) RunHeadless(ctx context.Context, opts HeadlessOptions) (err error) {
+	var outcome headlessOutcome
+	defer func() {
+		// A dry run is a preview, not an upgrade attempt.
+		if opts.DryRun {
+			return
+		}
+		outcome.cancelled = ctx.Err() != nil
+		u.trackHeadlessOutcome(outcome, err)
+	}()
+
 	out := opts.Out
 	if out == nil {
 		out = io.Discard
@@ -57,12 +86,18 @@ func (u *ProjectUpgrader) RunHeadless(ctx context.Context, opts HeadlessOptions)
 			}
 		}
 	}
+	if readiness.CurrentVersion != nil {
+		outcome.current = readiness.CurrentVersion.String()
+	}
 	if readiness.Blocked() {
+		outcome.failedStep = failedStepReadiness
+		outcome.blockingChecks = blockingCheckIDs(readiness)
 		return errors.New("the project is not ready to upgrade; fix the failing checks above")
 	}
 
 	catalog, err := u.LoadCatalog(ctx, readiness.CurrentVersion)
 	if err != nil {
+		outcome.failedStep = failedStepCatalog
 		return fmt.Errorf("load available versions: %w", err)
 	}
 	if len(catalog.Options) == 0 {
@@ -73,8 +108,10 @@ func (u *ProjectUpgrader) RunHeadless(ctx context.Context, opts HeadlessOptions)
 
 	target, err := selectTarget(catalog, opts.Target)
 	if err != nil {
+		outcome.failedStep = failedStepTarget
 		return err
 	}
+	outcome.target = target.Version.String()
 
 	_, _ = fmt.Fprintln(out)
 	_, _ = fmt.Fprintf(out, "%s\n", tui.SectionHeadingStyle.Render(
@@ -83,6 +120,11 @@ func (u *ProjectUpgrader) RunHeadless(ctx context.Context, opts HeadlessOptions)
 	results := u.CheckExtensions(ctx, readiness.CurrentVersion, target.Version, readiness.Extensions)
 	resolve, err := u.resolveHeadless(ctx, target.Version.String())
 	if err != nil {
+		outcome.failedStep = failedStepComposerResolve
+		var blocked *securityBlockedError
+		if errors.As(err, &blocked) {
+			outcome.failedStep = failedStepSecurityAdvisory
+		}
 		return err
 	}
 	ApplyResolvedVersions(results, resolve)
@@ -99,6 +141,7 @@ func (u *ProjectUpgrader) RunHeadless(ctx context.Context, opts HeadlessOptions)
 		if path, err := u.WriteReport(report); err == nil {
 			_, _ = fmt.Fprintln(out, tui.DimText.Render("Full output: "+path))
 		}
+		outcome.failedStep = failedStepComposerResolve
 		return fmt.Errorf("composer cannot resolve the upgrade to %s", target.Version)
 	}
 
@@ -118,15 +161,14 @@ func (u *ProjectUpgrader) RunHeadless(ctx context.Context, opts HeadlessOptions)
 
 	_, _ = fmt.Fprintln(out)
 	_, _ = fmt.Fprintln(out, tui.SectionHeadingStyle.Render("Executing upgrade"))
-	runErr := u.consumeRunEvents(out, u.Run(ctx, RunOptions{
+	outcome.attempted = true
+	failedStep, runErr := u.consumeRunEvents(out, u.Run(ctx, RunOptions{
 		Target:           target.Version.String(),
 		ResolvedVersions: resolve.VersionMap(),
 		Report:           report,
 	}))
-
-	u.trackHeadlessOutcome(catalog.Current.String(), target.Version.String(), runErr)
-
 	if runErr != nil {
+		outcome.failedStep = failedStep
 		_, _ = fmt.Fprintln(out, tui.FailLine("Upgrade failed and was rolled back."))
 		_, _ = fmt.Fprintln(out, tui.DimText.Render("Log: "+u.LogPath()))
 		return runErr
@@ -191,9 +233,18 @@ func (u *ProjectUpgrader) resolveHeadless(ctx context.Context, target string) (R
 	}
 
 	if resolve.SecurityBlocked() && !u.AuditBlockDisabled() {
-		return ResolveResult{}, fmt.Errorf("dependencies of Shopware %s are affected by known security advisories; re-run with --no-audit to proceed. We strongly recommend installing the Shopware Security plugin (https://store.shopware.com/en/swag136939272659f/shopware-6-security-plugin.html) which backports security fixes to older versions", target)
+		return ResolveResult{}, &securityBlockedError{target: target}
 	}
 	return resolve, nil
+}
+
+// securityBlockedError stops an upgrade whose dependencies have known security advisories.
+type securityBlockedError struct {
+	target string
+}
+
+func (e *securityBlockedError) Error() string {
+	return fmt.Sprintf("dependencies of Shopware %s are affected by known security advisories; re-run with --no-audit to proceed. We strongly recommend installing the Shopware Security plugin (https://store.shopware.com/en/swag136939272659f/shopware-6-security-plugin.html) which backports security fixes to older versions", e.target)
 }
 
 func printExtensionResults(out io.Writer, results []ExtensionResult) {
@@ -236,12 +287,18 @@ func (u *ProjectUpgrader) headlessReportData(ctx context.Context, readiness Read
 	}
 }
 
-// consumeRunEvents streams runner progress to out and returns the final error.
-func (u *ProjectUpgrader) consumeRunEvents(out io.Writer, events <-chan StepEvent) error {
-	var runErr error
+// consumeRunEvents streams runner progress and returns the first failing step and the final error.
+func (u *ProjectUpgrader) consumeRunEvents(out io.Writer, events <-chan StepEvent) (string, error) {
+	var (
+		runErr     error
+		failedStep string
+	)
 	for ev := range events {
 		if ev.Step == StepFinished && ev.State == StateFail {
 			runErr = ev.Err
+		}
+		if ev.Step != StepFinished && ev.State == StateFail && failedStep == "" {
+			failedStep = ev.Step.TelemetryID()
 		}
 		switch {
 		case ev.Line != "":
@@ -257,7 +314,7 @@ func (u *ProjectUpgrader) consumeRunEvents(out io.Writer, events <-chan StepEven
 			_, _ = fmt.Fprintf(out, "%s %s: %v\n", tui.CheckFail, ev.Step.Label(), ev.Err)
 		}
 	}
-	return runErr
+	return failedStep, runErr
 }
 
 // PlannedChanges lists what the runner will do — shown on the review panel,
@@ -275,19 +332,37 @@ func (u *ProjectUpgrader) PlannedChanges() []string {
 	)
 }
 
-func (u *ProjectUpgrader) trackHeadlessOutcome(current, target string, runErr error) {
-	result := tracking.ResultSuccess
-	if runErr != nil {
-		result = tracking.ResultFailure
+var trackEvent = tracking.Track
+
+// trackHeadlessOutcome reports the run unless nothing was attempted and nothing failed.
+func (u *ProjectUpgrader) trackHeadlessOutcome(outcome headlessOutcome, err error) {
+	if err == nil && !outcome.attempted {
+		return
+	}
+
+	result := tracking.ResultFailure
+	switch {
+	case err == nil:
+		result = tracking.ResultSuccess
+	case outcome.cancelled:
+		result = tracking.ResultCancelled
+	}
+	tags := map[string]string{
+		tracking.TagFromVersion:   outcome.current,
+		tracking.TagTargetVersion: outcome.target,
+		tracking.TagResult:        result,
+		tracking.TagInteractive:   "false",
+	}
+	if err != nil && outcome.failedStep != "" {
+		tags[tracking.TagFailedStep] = outcome.failedStep
+	}
+	if outcome.blockingChecks != "" {
+		tags[tracking.TagBlockingChecks] = outcome.blockingChecks
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 300*time.Millisecond)
 	defer cancel()
-	tracking.Track(ctx, tracking.EventProjectUpgrade, map[string]string{
-		tracking.TagFromVersion:   current,
-		tracking.TagTargetVersion: target,
-		tracking.TagResult:        result,
-	})
+	trackEvent(ctx, tracking.EventProjectUpgrade, tags)
 }
 
 func stateGlyph(s CheckState) string {
@@ -302,4 +377,17 @@ func stateGlyph(s CheckState) string {
 		return tui.StateDot(tui.DotPending)
 	}
 	return tui.StateDot(tui.DotPending)
+}
+
+// blockingCheckIDs lists the failed blocking readiness checks, sorted and comma-separated.
+func blockingCheckIDs(r Readiness) string {
+	var ids []string
+	for _, c := range r.Checks {
+		if c.Failed() {
+			ids = append(ids, strings.ReplaceAll(c.ID, "-", "_"))
+		}
+	}
+	slices.Sort(ids)
+
+	return strings.Join(ids, ",")
 }

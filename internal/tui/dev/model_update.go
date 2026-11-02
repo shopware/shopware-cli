@@ -90,6 +90,7 @@ func (m Model) updateKeyPress(msg tea.KeyPressMsg) (app.Content, tea.Cmd) {
 			if tags, ok := m.telemetry.taskTags(tracking.ResultCancelled); ok {
 				trackEventNow(tracking.EventDevAction, tags)
 			}
+			m.shutdown()
 			return m, tea.Quit
 		}
 		return m, nil
@@ -248,14 +249,14 @@ func (m Model) executeCommand(id string) (app.Content, tea.Cmd) {
 			return m, m.overview.startAdminWatch()
 		}
 	case "admin-watch-stop":
-		if m.overview.adminWatchRunning {
+		if m.overview.adminWatchRunning || m.overview.adminWatchStarting {
 			m.overview.adminWatchRunning = false
 			return m, m.stopWatcher(watcherAdmin)
 		}
 	case "sf-watch-start":
 		return m.openSalesChannelPicker()
 	case "sf-watch-stop":
-		if m.overview.sfWatchRunning {
+		if m.overview.sfWatchRunning || m.overview.sfWatchStarting {
 			m.overview.sfWatchRunning = false
 			return m, m.stopWatcher(watcherStorefront)
 		}

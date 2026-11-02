@@ -1,12 +1,15 @@
 package dev
 
 import (
+	"errors"
+	"fmt"
 	"os"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
 
+	"github.com/shopware/shopware-cli/internal/extension"
 	"github.com/shopware/shopware-cli/internal/tracking"
 )
 
@@ -89,7 +92,7 @@ func TestMigrationWizardTagsCompleted(t *testing.T) {
 
 func TestWatcherEndTagsFireOncePerRun(t *testing.T) {
 	tel := newTelemetryState(true)
-	tel.watcherStarted(watcherAdmin)
+	tel.watcherStarted(watcherAdmin, false)
 
 	tags, ok := tel.watcherEndTags(watcherAdmin, "user_stopped")
 	assert.True(t, ok)
@@ -117,7 +120,7 @@ func TestSessionTagsSentOnce(t *testing.T) {
 	tel.markTab(tabConfig)
 	tel.markTab(tabInstance)
 	tel.countAction()
-	tel.watcherStarted(watcherStorefront)
+	tel.watcherStarted(watcherStorefront, false)
 	tel.setExitChoice("keep_running")
 
 	tags, ok := tel.sessionTags()
@@ -225,7 +228,7 @@ func TestNilTelemetryStateIsSafe(t *testing.T) {
 	tel.beginDockerStart()
 	tel.beginConfigRestart()
 	tel.beginTask("cache-clear")
-	tel.watcherStarted(watcherAdmin)
+	tel.watcherStarted(watcherAdmin, false)
 
 	_, ok := tel.sessionTags()
 	assert.False(t, ok)
@@ -280,4 +283,38 @@ func TestInstallFailureTagsFromClassifier(t *testing.T) {
 
 	assert.Equal(t, "db_connection", tags[tracking.TagFailureCategory])
 	assert.Equal(t, installStartStep, tags[tracking.TagFailedStep])
+}
+
+func TestWatcherEndTagsCarryPhaseAndProxied(t *testing.T) {
+	tel := newTelemetryState(true)
+
+	tel.watcherStarted(watcherStorefront, true)
+	tags, ok := tel.watcherEndTags(watcherStorefront, watcherEndSessionEnd)
+	assert.True(t, ok)
+	assert.Equal(t, "preparing", tags[tracking.TagPhase])
+	assert.Equal(t, "true", tags[tracking.TagProxied])
+
+	tel.watcherStarted(watcherAdmin, false)
+	tel.watcherProcessStarted(watcherAdmin)
+	tags, _ = tel.watcherEndTags(watcherAdmin, watcherEndUserStopped)
+	assert.Equal(t, "starting", tags[tracking.TagPhase])
+	assert.Equal(t, "false", tags[tracking.TagProxied])
+
+	tel.watcherStarted(watcherAdmin, false)
+	tel.watcherProcessStarted(watcherAdmin)
+	tel.watcherReady(watcherAdmin)
+	tags, _ = tel.watcherEndTags(watcherAdmin, watcherEndCrashed)
+	assert.Equal(t, "running", tags[tracking.TagPhase])
+
+	var nilTel *telemetryState
+	assert.NotPanics(t, func() {
+		tel.watcherReady("unknown")
+		nilTel.watcherProcessStarted(watcherAdmin)
+	})
+}
+
+func TestWatcherFailedStep(t *testing.T) {
+	stepErr := &extension.WatcherStepError{Step: extension.WatcherStepNPMInstall, Err: errors.New("boom")}
+	assert.Equal(t, "npm_install", watcherFailedStep(fmt.Errorf("starting admin watcher: %w", stepErr)))
+	assert.Empty(t, watcherFailedStep(errors.New("boom")))
 }
