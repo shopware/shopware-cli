@@ -295,7 +295,7 @@ func (r *limitResolver) conditionFor(table string) string {
 		condition := fmt.Sprintf("%s IN (%s)", columnTuple(fk.Columns), r.keptRowsQuery(referenced, fk.ReferencedColumns))
 
 		// Rows not referencing the parent at all are kept.
-		if nullable := r.nullableColumns(table, fk.Columns); len(nullable) != 0 {
+		if nullable := nullableColumns(r.schemas[table], fk.Columns); len(nullable) != 0 {
 			nullChecks := make([]string, 0, len(nullable))
 			for _, column := range nullable {
 				nullChecks = append(nullChecks, fmt.Sprintf("`%s` IS NULL", column))
@@ -452,10 +452,6 @@ func prefixColumns(tableRef string, columns []string) string {
 	}
 
 	return strings.Join(prefixed, ", ")
-}
-
-func (r *limitResolver) nullableColumns(table string, columns []string) []string {
-	return nullableColumns(r.schemas[table], columns)
 }
 
 // nullableColumns returns the subset of columns that the schema allows to be NULL.
