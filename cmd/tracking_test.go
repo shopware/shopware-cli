@@ -277,6 +277,17 @@ func TestTrackCommandExecution_PlainFailureHasNoMissingTag(t *testing.T) {
 	assert.NotContains(t, (*events)[0], tracking.TagMissing)
 }
 
+func TestTrackCommandExecution_PinnedPHPNotFound(t *testing.T) {
+	events := useTrackingTestRoot(t, "shopware-cli")
+	runErr := fmt.Errorf("cannot start the development environment: %w", &system.PHPVersionNotFoundError{Pin: "8.3"})
+
+	trackCommandExecution(context.Background(), []string{"project", "console"}, 0, runErr, "")
+
+	require.Len(t, *events, 1)
+	assert.Equal(t, tracking.ResultFailure, (*events)[0][tracking.TagResult])
+	assert.Equal(t, "php_version", (*events)[0][tracking.TagMissing])
+}
+
 func TestTrackCommandExecution_ShopwareVersionTag(t *testing.T) {
 	events := useTrackingTestRoot(t, "shopware-cli")
 

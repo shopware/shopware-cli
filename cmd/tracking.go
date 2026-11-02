@@ -47,8 +47,14 @@ func trackCommandExecution(ctx context.Context, args []string, duration time.Dur
 		tags[tracking.TagCIProvider] = provider
 	}
 	var missing *system.MissingDependenciesError
-	if result == tracking.ResultFailure && errors.As(runErr, &missing) {
+	var pinnedPHP *system.PHPVersionNotFoundError
+	switch {
+	case result != tracking.ResultFailure:
+	case errors.As(runErr, &missing):
 		tags[tracking.TagMissing] = strings.Join(missing.IDs(), ",")
+	case errors.As(runErr, &pinnedPHP):
+		// A pinned PHP that is not installed stops the command before the dependency check.
+		tags[tracking.TagMissing] = "php_version"
 	}
 	if shopwareVersion != "" {
 		tags[tracking.TagShopwareVersion] = shopwareVersion
