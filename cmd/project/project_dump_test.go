@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/shopware/shopware-cli/internal/executor"
 	"github.com/shopware/shopware-cli/internal/shop"
 	"github.com/shopware/shopware-cli/internal/testhelper"
 )
@@ -23,6 +24,10 @@ func newDumpFlagCommand(t *testing.T, flags map[string]string) *cobra.Command {
 	cmd.Flags().String("password", "", "")
 	cmd.Flags().Lookup("password").NoOptDefVal = passwordFlagPrompt
 	cmd.Flags().String("database", "", "")
+	cmd.Flags().String("ssl-mode", "", "")
+	cmd.Flags().String("ssl-ca", "", "")
+	cmd.Flags().String("ssl-cert", "", "")
+	cmd.Flags().String("ssl-key", "", "")
 	cmd.SetContext(t.Context())
 
 	for name, value := range flags {
@@ -142,4 +147,44 @@ func TestAssembleConnectionURIDatabaseURLInsideProject(t *testing.T) {
 	assert.Equal(t, "app", cfg.User)
 	assert.Equal(t, "secret", cfg.Passwd)
 	assert.Equal(t, "other", cfg.DBName, "flag overrides the URL database")
+}
+
+func TestAssembleConnectionURITLSFlags(t *testing.T) {
+	chdirOutsideProject(t)
+	t.Setenv("DATABASE_URL", "mysql://app:pw@db.internal:3306/shop")
+
+	cfg, err := assembleConnectionURI(newDumpFlagCommand(t, nil))
+	require.NoError(t, err)
+	assert.Nil(t, cfg.TLS, "TLS stays off without configuration")
+
+	cfg, err = assembleConnectionURI(newDumpFlagCommand(t, map[string]string{"ssl-mode": "REQUIRED"}))
+	require.NoError(t, err)
+	require.NotNil(t, cfg.TLS)
+	assert.True(t, cfg.TLS.InsecureSkipVerify)
+
+	_, err = assembleConnectionURI(newDumpFlagCommand(t, map[string]string{"ssl-mode": "sometimes"}))
+	assert.ErrorContains(t, err, "invalid TLS mode")
+
+	_, err = assembleConnectionURI(newDumpFlagCommand(t, map[string]string{"ssl-ca": filepath.Join(t.TempDir(), "missing.pem")}))
+	assert.ErrorContains(t, err, "--ssl-ca")
+}
+
+func TestApplyTLSFlagsCAImpliesVerifyCA(t *testing.T) {
+	caFile := filepath.Join(t.TempDir(), "ca.pem")
+	testhelper.WriteFile(t, caFile, "pem")
+
+	dbConn := &executor.DatabaseConnection{}
+	require.NoError(t, applyTLSFlags(newDumpFlagCommand(t, map[string]string{"ssl-ca": caFile}), dbConn))
+	assert.Equal(t, executor.TLSModeVerifyCA, dbConn.TLS.Mode)
+	assert.Equal(t, []byte("pem"), dbConn.TLS.CA)
+
+	// An already stricter mode from DATABASE_SSL_CA is kept.
+	dbConn = &executor.DatabaseConnection{TLS: executor.DatabaseTLS{Mode: executor.TLSModeVerifyIdentity}}
+	require.NoError(t, applyTLSFlags(newDumpFlagCommand(t, map[string]string{"ssl-ca": caFile}), dbConn))
+	assert.Equal(t, executor.TLSModeVerifyIdentity, dbConn.TLS.Mode)
+
+	// An explicit mode wins.
+	dbConn = &executor.DatabaseConnection{}
+	require.NoError(t, applyTLSFlags(newDumpFlagCommand(t, map[string]string{"ssl-ca": caFile, "ssl-mode": "verify-identity"}), dbConn))
+	assert.Equal(t, executor.TLSModeVerifyIdentity, dbConn.TLS.Mode)
 }

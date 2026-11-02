@@ -144,7 +144,62 @@ func assembleConnectionURI(cmd *cobra.Command) (*mysql.Config, error) {
 		}
 	}
 
-	return dbConn.MySQLConfig(), nil
+	if err := applyTLSFlags(cmd, dbConn); err != nil {
+		return nil, err
+	}
+
+	return dbConn.MySQLConfig()
+}
+
+// applyTLSFlags applies --ssl-mode, --ssl-ca, --ssl-cert and --ssl-key on top
+// of the TLS settings resolved from the environment. Like the mysql client,
+// --ssl-ca without --ssl-mode implies verify-ca and a client certificate
+// implies required.
+func applyTLSFlags(cmd *cobra.Command, dbConn *executor.DatabaseConnection) error {
+	files := []struct {
+		flag   string
+		target *[]byte
+	}{
+		{"ssl-ca", &dbConn.TLS.CA},
+		{"ssl-cert", &dbConn.TLS.Cert},
+		{"ssl-key", &dbConn.TLS.Key},
+	}
+
+	for _, f := range files {
+		path, _ := cmd.Flags().GetString(f.flag)
+		if path == "" {
+			continue
+		}
+
+		data, err := os.ReadFile(path)
+		if err != nil {
+			return fmt.Errorf("could not read --%s: %w", f.flag, err)
+		}
+		*f.target = data
+	}
+
+	if cmd.Flags().Changed("ssl-mode") {
+		modeFlag, _ := cmd.Flags().GetString("ssl-mode")
+		mode, err := executor.ParseTLSMode(modeFlag)
+		if err != nil {
+			return err
+		}
+		dbConn.TLS.Mode = mode
+
+		return nil
+	}
+
+	caPath, _ := cmd.Flags().GetString("ssl-ca")
+	certPath, _ := cmd.Flags().GetString("ssl-cert")
+
+	switch {
+	case caPath != "" && (dbConn.TLS.Mode != executor.TLSModeVerifyIdentity):
+		dbConn.TLS.Mode = executor.TLSModeVerifyCA
+	case certPath != "" && !dbConn.TLS.Enabled():
+		dbConn.TLS.Mode = executor.TLSModeRequired
+	}
+
+	return nil
 }
 
 // anonymizationFromInstalledExtensions collects anonymize rules from extensions
@@ -181,6 +236,17 @@ func init() {
 	projectDatabaseDumpCmd.Flags().StringP("password", "p", "", "MySQL or MariaDB password (omit the value to be prompted interactively)")
 	projectDatabaseDumpCmd.Flags().Lookup("password").NoOptDefVal = passwordFlagPrompt
 	projectDatabaseDumpCmd.Flags().String("port", "", "MySQL or MariaDB port")
+	projectDatabaseDumpCmd.Flags().String("ssl-mode", "", "TLS mode of the connection (disabled, preferred, required, verify-ca, verify-identity), defaults to the DATABASE_SSL_* environment variables")
+	_ = projectDatabaseDumpCmd.RegisterFlagCompletionFunc("ssl-mode", func(_ *cobra.Command, _ []string, _ string) ([]string, cobra.ShellCompDirective) {
+		modes := make([]string, 0, len(executor.TLSModes))
+		for _, mode := range executor.TLSModes {
+			modes = append(modes, string(mode))
+		}
+		return modes, cobra.ShellCompDirectiveNoFileComp
+	})
+	projectDatabaseDumpCmd.Flags().String("ssl-ca", "", "Path to the CA certificate (PEM) used to verify the server, implies --ssl-mode=verify-ca")
+	projectDatabaseDumpCmd.Flags().String("ssl-cert", "", "Path to the client certificate (PEM) for mutual TLS")
+	projectDatabaseDumpCmd.Flags().String("ssl-key", "", "Path to the client private key (PEM) for mutual TLS")
 
 	projectDatabaseDumpCmd.Flags().String("output", "dump.sql", "File or - (for stdout)")
 	projectDatabaseDumpCmd.Flags().Bool("clean", false, "Exclude data from transient tables (e.g. cart, messenger_messages, message_queue_stats, log_entry)")

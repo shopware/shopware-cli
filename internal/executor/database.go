@@ -24,6 +24,8 @@ type DatabaseConnection struct {
 	Username string
 	Password string
 	Database string
+	// TLS configures transport encryption, see DatabaseTLS.
+	TLS DatabaseTLS
 	// tunneledNet, when set, is a mysql driver network name (registered via
 	// mysql.RegisterDialContext) used instead of plain TCP. The SSH executor
 	// registers one network per connection set that dials Addr through the
@@ -36,8 +38,10 @@ func (c *DatabaseConnection) Addr() string {
 	return net.JoinHostPort(c.Host, c.Port)
 }
 
-// MySQLConfig translates the credentials into a driver configuration.
-func (c *DatabaseConnection) MySQLConfig() *mysql.Config {
+// MySQLConfig translates the credentials into a driver configuration. The TLS
+// settings live in cfg.TLS, which FormatDSN does not serialize: open the
+// connection with mysql.NewConnector and sql.OpenDB instead of a DSN.
+func (c *DatabaseConnection) MySQLConfig() (*mysql.Config, error) {
 	cfg := mysql.NewConfig()
 	if c.tunneledNet != "" {
 		cfg.Net = c.tunneledNet
@@ -54,17 +58,31 @@ func (c *DatabaseConnection) MySQLConfig() *mysql.Config {
 	// neither rejected client-side nor sent beyond what the server accepts.
 	cfg.MaxAllowedPacket = 0
 
-	return cfg
+	tlsCfg, err := c.TLS.tlsConfig(c.Host)
+	if err != nil {
+		return nil, err
+	}
+	cfg.TLS = tlsCfg
+	cfg.AllowFallbackToPlaintext = c.TLS.Mode == TLSModePreferred
+
+	return cfg, nil
 }
 
 // Open opens a single dedicated connection to the database, so session state
 // (SET, USE, ...) survives across statements. The returned cleanup closes the
 // connection and its pool.
 func (c *DatabaseConnection) Open(ctx context.Context) (*sql.Conn, func(), error) {
-	db, err := sql.Open("mysql", c.MySQLConfig().FormatDSN())
+	cfg, err := c.MySQLConfig()
 	if err != nil {
 		return nil, nil, err
 	}
+
+	connector, err := mysql.NewConnector(cfg)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	db := sql.OpenDB(connector)
 
 	connectCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
@@ -95,7 +113,8 @@ func defaultDatabaseConnection() *DatabaseConnection {
 
 // applyDatabaseURL merges a Symfony DATABASE_URL into conn. Parts missing in
 // the URL keep their current value, except the password which is cleared when
-// a user without password is given.
+// a user without password is given. A tls query parameter configures
+// transport encryption like in a go-sql-driver DSN.
 func applyDatabaseURL(conn *DatabaseConnection, databaseURL string) error {
 	parsed, err := url.Parse(databaseURL)
 	if err != nil {
@@ -130,34 +149,60 @@ func applyDatabaseURL(conn *DatabaseConnection, databaseURL string) error {
 		conn.Database = dbName
 	}
 
+	if parsed.Query().Has("tls") {
+		mode, err := tlsModeFromURLParam(parsed.Query().Get("tls"))
+		if err != nil {
+			return err
+		}
+		conn.TLS.Mode = mode
+	}
+
 	return nil
 }
 
 // databaseConnectionFromEnv resolves the connection for executors that run on
 // the host. Precedence: executor env overrides > real environment variables >
-// Symfony env files, matching how the spawned processes see DATABASE_URL.
+// Symfony env files, matching how the spawned processes see DATABASE_URL and
+// the DATABASE_SSL_* variables.
 func databaseConnectionFromEnv(projectRoot string, extraEnv map[string]string) (*DatabaseConnection, error) {
 	conn := defaultDatabaseConnection()
 
-	databaseURL := extraEnv["DATABASE_URL"]
+	keys := append([]string{"DATABASE_URL"}, databaseTLSEnvKeys...)
+	values := make(map[string]string, len(keys))
+	var missing []string
 
-	if databaseURL == "" {
-		databaseURL = os.Getenv("DATABASE_URL")
+	for _, key := range keys {
+		value := extraEnv[key]
+		if value == "" {
+			value = os.Getenv(key)
+		}
+		if value == "" {
+			missing = append(missing, key)
+		}
+		values[key] = value
 	}
 
-	if databaseURL == "" {
-		fileValue, err := envfile.ReadValue(projectRoot, "DATABASE_URL")
+	if len(missing) > 0 {
+		fileValues, err := envfile.ReadValues(projectRoot, missing...)
 		if err != nil {
 			return nil, err
 		}
-		databaseURL = fileValue
+		for _, key := range missing {
+			values[key] = fileValues[key]
+		}
 	}
 
-	if databaseURL == "" {
-		return conn, nil
+	if databaseURL := values["DATABASE_URL"]; databaseURL != "" {
+		if err := applyDatabaseURL(conn, databaseURL); err != nil {
+			return nil, err
+		}
 	}
 
-	if err := applyDatabaseURL(conn, databaseURL); err != nil {
+	readFile := func(path string) ([]byte, error) {
+		return os.ReadFile(resolveRelative(projectRoot, path))
+	}
+
+	if err := applyDatabaseTLSEnv(conn, func(key string) string { return values[key] }, readFile); err != nil {
 		return nil, err
 	}
 
