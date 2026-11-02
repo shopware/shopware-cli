@@ -22,6 +22,7 @@ import (
 	"github.com/shopware/shopware-cli/internal/ai/agent"
 	"github.com/shopware/shopware-cli/internal/cliversion"
 	"github.com/shopware/shopware-cli/internal/system"
+	"github.com/shopware/shopware-cli/internal/tracking"
 	"github.com/shopware/shopware-cli/internal/tui"
 	"github.com/shopware/shopware-cli/internal/validation"
 	"github.com/shopware/shopware-cli/logging"
@@ -56,10 +57,13 @@ func Execute(ctx context.Context) int {
 	updateHandle, updateCancel := startUpdateCheck(ctx, args)
 	defer updateCancel()
 
+	name, _ := commandEventName(args)
+	shopwareVersion := tracking.StartShopwareVersion(name)
 	start := time.Now()
 	err := rootCmd.ExecuteContext(ctx)
 
-	trackCommandExecution(ctx, args, start, err)
+	duration := time.Since(start)
+	trackCommandExecution(ctx, args, duration, err, shopwareVersion.Ready())
 	printUpdateHint(ctx, os.Stderr, updateHandle.Wait(ctx).Release)
 	printAIHint(ctx, os.Stderr, args)
 
