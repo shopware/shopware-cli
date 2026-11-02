@@ -16,16 +16,27 @@ golangci-lint = "2.15.0"
 jactionlint = "2.4.0"
 shellcheck = "0.11.0"
 
+# Markdown tooling is shared by local tasks and CI.
+rumdl = "0.3.0"
+
 [env]
 # Match CI and prevent Go from silently downloading a different toolchain.
 GOTOOLCHAIN = "local"
 
 [tasks.format]
+description = "Format Go and Markdown files"
+depends = ["format-go", "format-markdown"]
+
+[tasks.format-go]
 description = "Format Go source files"
 run = "golangci-lint fmt ./..."
 
 [tasks.format-check]
-description = "Check that Go source files are formatted"
+description = "Check Go and Markdown formatting"
+depends = ["format-check-go", "lint-markdown"]
+
+[tasks.format-check-go]
+description = "Check Go formatting"
 run = "golangci-lint fmt --diff ./..."
 
 [tasks.build]
@@ -45,7 +56,11 @@ description = "Run the Go vet checks"
 run = "go vet ./..."
 
 [tasks.lint]
-description = "Run golangci-lint"
+description = "Lint Go and Markdown files"
+depends = ["lint-go", "lint-markdown"]
+
+[tasks.lint-go]
+description = "Lint Go source files"
 run = "golangci-lint run ./... --timeout 4m"
 
 [tasks.check]
@@ -56,3 +71,11 @@ depends = ["format-check", "build", "test", "vet", "lint", "lint-workflows"]
 description = "Validate GitHub Actions workflows"
 # Require ShellCheck so embedded shell scripts are always validated.
 run = ["shellcheck --version", "jactionlint --color --shellcheck=shellcheck --pyflakes="]
+
+[tasks.lint-markdown]
+description = "Lint Markdown files"
+run = "rumdl check ."
+
+[tasks.format-markdown]
+description = "Format Markdown files and report remaining lint findings"
+run = "rumdl check --fix ."
