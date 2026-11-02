@@ -1,0 +1,234 @@
+name: Nightly Smoke Test
+on:
+  schedule:
+    - cron: '0 2 * * *'
+  workflow_dispatch:
+  # Temporary trigger to try the workflow on this branch; removed before merge.
+  push:
+    branches:
+      - feat/nightly-smoke
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+env:
+  GOTOOLCHAIN: local
+
+jobs:
+  docker:
+    name: Docker ${{ matrix.line }}
+    if: github.repository == 'shopware/shopware-cli' || github.event_name != 'schedule'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        line: ['6.6', '6.7']
+        include:
+          # 6.6 serves the admin watcher with webpack, 6.7 with Vite.
+          - line: '6.6'
+            admin_port: 8080
+          - line: '6.7'
+            admin_port: 5173
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@46b06cea07f9e64621fdf066ba77ac6915163d43 # ratchet:step-security/harden-runner@v2.22.3
+        with:
+          egress-policy: audit
+
+      - name: Checkout Repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # ratchet:actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # ratchet:actions/setup-go@v7.0.0
+        with:
+          go-version: '1.27'
+          cache: true
+          check-latest: true
+
+      - name: Compile shopware-cli
+        run: go build
+
+      - name: Move to usr/bin
+        run: mv shopware-cli /usr/local/bin/
+
+      - name: Resolve the newest ${{ matrix.line }} release
+        run: |
+          set -o pipefail
+          version=$(curl -fsS https://repo.packagist.org/p2/shopware/core.json \
+            | jq -r --arg re '^v?${{ matrix.line }}\.[0-9]+\.[0-9]+$' '.packages["shopware/core"][].version | select(test($re))' \
+            | sort -V | tail -n 1)
+          version=${version#v}
+          if [ -z "$version" ]; then
+            echo "::error::no ${{ matrix.line }} release of shopware/core found on Packagist"
+            exit 1
+          fi
+          echo "Shopware $version"
+          echo "SW_VERSION=$version" >> "$GITHUB_ENV"
+
+      # The web container runs Composer and npm, so the runner needs no PHP or Node.
+      - name: Create Docker project
+        run: shopware-cli project create --docker --no-audit shop "$SW_VERSION"
+
+      - name: Install Shopware
+        working-directory: shop
+        run: shopware-cli project dev install
+
+      - name: Development environment reports up
+        working-directory: shop
+        run: shopware-cli project dev status
+
+      - name: Shop responds over HTTP
+        working-directory: shop
+        run: |
+          for i in $(seq 1 30); do
+            code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 http://127.0.0.1:8000/admin || true)
+            echo "attempt $i: HTTP $code"
+            case "$code" in
+              200|301|302) exit 0 ;;
+            esac
+            sleep 5
+          done
+          echo "::error::shop did not respond on http://127.0.0.1:8000/admin"
+          exit 1
+
+      - name: Build Administration
+        working-directory: shop
+        run: shopware-cli project admin-build
+
+      - name: Build Storefront
+        working-directory: shop
+        run: shopware-cli project storefront-build
+
+      - name: Admin watcher answers
+        working-directory: shop
+        run: ../scripts/smoke/watch-probe.sh admin-watch "http://127.0.0.1:${{ matrix.admin_port }}/" 900 shopware-cli project admin-watch
+
+      # Without a terminal the watcher needs the sales channel, and the value must follow "=".
+      - name: Storefront watcher answers
+        working-directory: shop
+        run: |
+          set -o pipefail
+          id=$(shopware-cli project sql --format json "SELECT LOWER(HEX(id)) AS id FROM sales_channel WHERE type_id = UNHEX('8A243080F92E4C719546314B577CF82B') ORDER BY created_at LIMIT 1" | jq -r '.[0].id')
+          ../scripts/smoke/watch-probe.sh storefront-watch http://127.0.0.1:9998/ 900 shopware-cli project storefront-watch --sales-channel="$id"
+
+      - name: Show container logs
+        if: failure()
+        working-directory: shop
+        run: |
+          docker compose ps
+          docker compose logs --tail=200 web
+
+      - name: Stop the development environment
+        if: always()
+        working-directory: shop
+        run: shopware-cli project dev stop --remove-data
+
+  composer:
+    name: Composer ${{ matrix.line }}
+    if: github.repository == 'shopware/shopware-cli' || github.event_name != 'schedule'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        line: ['6.6', '6.7']
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@46b06cea07f9e64621fdf066ba77ac6915163d43 # ratchet:step-security/harden-runner@v2.22.3
+        with:
+          egress-policy: audit
+
+      - name: Checkout Repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # ratchet:actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # ratchet:actions/setup-go@v7.0.0
+        with:
+          go-version: '1.27'
+          cache: true
+          check-latest: true
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@eb7c497e18156a6bbabfef1d3a82760b9eda3962 # ratchet:shivammathur/setup-php@2.40.0
+        with:
+          php-version: '8.3'
+
+      - name: Setup Node
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # ratchet:actions/setup-node@v6
+        with:
+          node-version: '24'
+
+      - name: Compile shopware-cli
+        run: go build
+
+      - name: Move to usr/bin
+        run: mv shopware-cli /usr/local/bin/
+
+      - name: Resolve the newest ${{ matrix.line }} release
+        run: |
+          set -o pipefail
+          version=$(curl -fsS https://repo.packagist.org/p2/shopware/core.json \
+            | jq -r --arg re '^v?${{ matrix.line }}\.[0-9]+\.[0-9]+$' '.packages["shopware/core"][].version | select(test($re))' \
+            | sort -V | tail -n 1)
+          version=${version#v}
+          if [ -z "$version" ]; then
+            echo "::error::no ${{ matrix.line }} release of shopware/core found on Packagist"
+            exit 1
+          fi
+          echo "Shopware $version"
+          echo "SW_VERSION=$version" >> "$GITHUB_ENV"
+
+      - name: Create Composer project
+        run: shopware-cli project create --no-audit shop "$SW_VERSION"
+
+      - name: Build for production
+        working-directory: shop
+        run: shopware-cli project ci . --force
+
+  report:
+    name: Report failure
+    needs: [docker, composer]
+    if: always() && github.event_name == 'schedule' && (needs.docker.result == 'failure' || needs.composer.result == 'failure')
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@46b06cea07f9e64621fdf066ba77ac6915163d43 # ratchet:step-security/harden-runner@v2.22.3
+        with:
+          egress-policy: audit
+
+      - name: Report the failure to Slack
+        env:
+          SLACK_CI_FAILURES_WORKFLOW_URL: ${{ secrets.SLACK_CI_FAILURES_WORKFLOW_URL }}
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          REF_NAME: ${{ github.ref_name }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          COMMIT: ${{ github.sha }}
+        run: |
+          # Forks and repositories without the secret skip the report.
+          if [ -z "$SLACK_CI_FAILURES_WORKFLOW_URL" ]; then
+            echo "No Slack webhook is configured, skipping the report"
+            exit 0
+          fi
+          # The jobs API names the failed matrix legs, for example "Docker 6.6".
+          failed_jobs=$(gh api "/repos/$GH_REPO/actions/runs/$GITHUB_RUN_ID/jobs?per_page=100" --jq '[.jobs[] | select(.conclusion == "failure" or .conclusion == "timed_out") | .name] | join(", ")' || true)
+          payload=$(jq --null-input \
+            --arg summary "$GH_REPO: nightly smoke test failed on $REF_NAME" \
+            --arg run_url "$RUN_URL" \
+            --arg commit "${COMMIT:0:8}" \
+            --arg failed_jobs "${failed_jobs:-unknown}" \
+            '{summary: $summary, run_url: $run_url, commit: $commit, failed_jobs: $failed_jobs}')
+          curl --fail --silent --show-error --request POST --url "$SLACK_CI_FAILURES_WORKFLOW_URL" --header "Content-Type: application/json" --data "$payload"
