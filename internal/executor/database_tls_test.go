@@ -86,16 +86,17 @@ func handshake(t *testing.T, clientCfg *tls.Config, serverCert testCert) error {
 		if err != nil {
 			return
 		}
-		_ = conn.(*tls.Conn).Handshake()
+		_ = conn.(*tls.Conn).HandshakeContext(t.Context())
 		_ = conn.Close()
 	}()
 
-	conn, err := net.DialTimeout("tcp", listener.Addr().String(), 5*time.Second)
+	dialer := &net.Dialer{Timeout: 5 * time.Second}
+	conn, err := dialer.DialContext(t.Context(), "tcp", listener.Addr().String())
 	require.NoError(t, err)
 	defer func() { _ = conn.Close() }()
 	require.NoError(t, conn.SetDeadline(time.Now().Add(5*time.Second)))
 
-	return tls.Client(conn, clientCfg).Handshake()
+	return tls.Client(conn, clientCfg).HandshakeContext(t.Context())
 }
 
 func TestParseTLSMode(t *testing.T) {
@@ -236,9 +237,8 @@ func TestDatabaseTLSModes(t *testing.T) {
 }
 
 func TestDatabaseTLSConfigErrors(t *testing.T) {
-	cfg, err := DatabaseTLS{}.tlsConfig("db")
-	require.NoError(t, err)
-	assert.Nil(t, cfg)
+	_, err := DatabaseTLS{Mode: TLSModeDisabled}.tlsConfig("db")
+	assert.ErrorIs(t, err, errTLSDisabled)
 
 	_, err = DatabaseTLS{Mode: TLSModeVerifyIdentity, CA: []byte("garbage")}.tlsConfig("db")
 	assert.ErrorContains(t, err, "CA certificate")
@@ -248,7 +248,7 @@ func TestDatabaseTLSConfigErrors(t *testing.T) {
 	_, err = DatabaseTLS{Mode: TLSModeRequired, Cert: client.certPEM}.tlsConfig("db")
 	assert.ErrorContains(t, err, "together")
 
-	cfg, err = DatabaseTLS{Mode: TLSModeRequired, Cert: client.certPEM, Key: client.keyPEM}.tlsConfig("db")
+	cfg, err := DatabaseTLS{Mode: TLSModeRequired, Cert: client.certPEM, Key: client.keyPEM}.tlsConfig("db")
 	require.NoError(t, err)
 	assert.Len(t, cfg.Certificates, 1)
 }

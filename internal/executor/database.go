@@ -58,12 +58,14 @@ func (c *DatabaseConnection) MySQLConfig() (*mysql.Config, error) {
 	// neither rejected client-side nor sent beyond what the server accepts.
 	cfg.MaxAllowedPacket = 0
 
-	tlsCfg, err := c.TLS.tlsConfig(c.Host)
-	if err != nil {
-		return nil, err
+	if c.TLS.Enabled() {
+		tlsCfg, err := c.TLS.tlsConfig(c.Host)
+		if err != nil {
+			return nil, err
+		}
+		cfg.TLS = tlsCfg
+		cfg.AllowFallbackToPlaintext = c.TLS.Mode == TLSModePreferred
 	}
-	cfg.TLS = tlsCfg
-	cfg.AllowFallbackToPlaintext = c.TLS.Mode == TLSModePreferred
 
 	return cfg, nil
 }

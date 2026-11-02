@@ -65,12 +65,12 @@ func (t DatabaseTLS) Enabled() bool {
 	return t.Mode != "" && t.Mode != TLSModeDisabled
 }
 
-// tlsConfig builds the crypto/tls configuration for connecting to host.
-func (t DatabaseTLS) tlsConfig(host string) (*tls.Config, error) {
-	if !t.Enabled() {
-		return nil, nil
-	}
+// errTLSDisabled is returned by tlsConfig when no TLS handshake is wanted.
+var errTLSDisabled = errors.New("database TLS is disabled")
 
+// tlsConfig builds the crypto/tls configuration for connecting to host.
+// Callers check Enabled first.
+func (t DatabaseTLS) tlsConfig(host string) (*tls.Config, error) {
 	cfg := &tls.Config{MinVersion: tls.VersionTLS12}
 
 	serverName := t.ServerName
@@ -109,6 +109,8 @@ func (t DatabaseTLS) tlsConfig(host string) (*tls.Config, error) {
 		cfg.InsecureSkipVerify = true //nolint:gosec // the chain is verified in VerifyPeerCertificate
 		cfg.VerifyPeerCertificate = verifyChainOnly(roots)
 	case TLSModeVerifyIdentity:
+	case TLSModeDisabled:
+		return nil, errTLSDisabled
 	default:
 		return nil, fmt.Errorf("invalid TLS mode %q", t.Mode)
 	}
