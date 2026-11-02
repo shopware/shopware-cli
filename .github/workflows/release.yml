@@ -49,7 +49,6 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # ratchet:actions/setup-node@v6
         with:
-          # Bundled npm supports trusted publishing without a separate upgrade.
           node-version: '26.13.0'
           registry-url: "https://registry.npmjs.org"
 
@@ -78,6 +77,11 @@ jobs:
         with:
           scope: FriendsOfShopware/nur-packages
           identity: release
+
+      - name: Update npm
+        # Keep npm current independently of the version bundled with Node.
+        # jactionlint ignore=adhoc-packages
+        run: sudo npm install -g npm@latest
 
       - name: Login into Docker Hub
         run: echo "${{ secrets.DOCKER_HUB_PASSWORD }}" | docker login -u ${{ secrets.DOCKER_HUB_USERNAME }} --password-stdin

@@ -5,7 +5,7 @@ lockfile_version = 3
 [[tools.go]]
 version = "1.27.3"
 backend = "core:go"
-specifiers = ["1.27"]
+specifiers = ["1.27.3"]
 
 [tools.go."platforms.linux-arm64"]
 checksum = "sha256:a06e99309dbcbdca1a8ccd2282c3ee146e55930886e26b4f1193269587165f49"
