@@ -3,10 +3,6 @@ on:
   schedule:
     - cron: '0 2 * * *'
   workflow_dispatch:
-  # Temporary trigger to try the workflow on this branch; removed before merge.
-  push:
-    branches:
-      - feat/nightly-smoke
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
