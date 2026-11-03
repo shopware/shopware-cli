@@ -14,6 +14,7 @@ import (
 
 	"github.com/shopware/shopware-cli/internal/deployment"
 	"github.com/shopware/shopware-cli/internal/system"
+	"github.com/shopware/shopware-cli/internal/tui"
 )
 
 type deploymentSelectionKind string
@@ -96,7 +97,7 @@ func deploymentPickerForm(cmd *cobra.Command, candidates []deployment.Candidate,
 	}
 	return huh.NewForm(huh.NewGroup(
 		huh.NewSelect[deployment.Deployment]().Title(title).Options(options...).Value(selected),
-	)).WithInput(cmd.InOrStdin()).WithOutput(cmd.ErrOrStderr())
+	)).WithTheme(tui.ShopwareTheme()).WithInput(cmd.InOrStdin()).WithOutput(cmd.ErrOrStderr())
 }
 
 func deploymentCandidateLabel(candidate deployment.Candidate, kind deploymentSelectionKind, now time.Time) string {
