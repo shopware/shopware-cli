@@ -1,7 +1,6 @@
 package tracking
 
 import (
-	"os"
 	"regexp"
 	"strings"
 
@@ -27,7 +26,7 @@ func StartShopwareVersion(commandName string) ShopwareVersionLookup {
 }
 
 func startShopwareVersion(commandName string, lookup func() string) ShopwareVersionLookup {
-	if _, disabled := os.LookupEnv("DO_NOT_TRACK"); disabled || !strings.HasPrefix(commandName, "project.") || commandName == "project.create" {
+	if !enabled() || !strings.HasPrefix(commandName, "project.") || commandName == "project.create" {
 		return nil
 	}
 	result := make(chan string, 1)

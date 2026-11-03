@@ -17,6 +17,7 @@ import (
 
 	"github.com/shopware/shopware-cli/internal/system"
 	"github.com/shopware/shopware-cli/internal/tui"
+	"github.com/shopware/shopware-cli/internal/userconfig"
 )
 
 const (
@@ -167,8 +168,15 @@ func ShouldCheckForUpdate(version string, args []string) bool {
 		}
 	}
 
-	if os.Getenv(noUpdateNotificationEnv) == "true" {
+	// An explicit environment value takes precedence over the user config file.
+	switch os.Getenv(noUpdateNotificationEnv) {
+	case "true":
 		return false
+	case "false":
+	default:
+		if cfg, _ := userconfig.Load(); cfg.NoUpdateHint {
+			return false
+		}
 	}
 
 	if version == "dev" {

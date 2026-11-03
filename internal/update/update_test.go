@@ -176,8 +176,46 @@ func TestShouldCheckForUpdate(t *testing.T) {
 		version  string
 		args     []string
 		env      map[string]string
+		config   string
 		expected bool
 	}{
+		{
+			name:     "disabled via user config",
+			version:  "v1.0.0",
+			config:   "no_update_hint: true\n",
+			expected: false,
+		},
+		{
+			name:     "enabled when user config does not disable hints",
+			version:  "v1.0.0",
+			config:   "no_update_hint: false\n",
+			expected: true,
+		},
+		{
+			name:    "environment false overrides user config",
+			version: "v1.0.0",
+			env: map[string]string{
+				"SHOPWARE_CLI_NO_UPDATE_NOTIFICATION": "false",
+			},
+			config:   "no_update_hint: true\n",
+			expected: true,
+		},
+		{
+			name:    "environment true disables despite user config",
+			version: "v1.0.0",
+			env: map[string]string{
+				"SHOPWARE_CLI_NO_UPDATE_NOTIFICATION": "true",
+			},
+			config:   "no_update_hint: false\n",
+			expected: false,
+		},
+		{
+			name:     "flag disables despite user config",
+			version:  "v1.0.0",
+			args:     []string{"-n"},
+			config:   "no_update_hint: false\n",
+			expected: false,
+		},
 		{
 			name:    "unsupported environment value does not disable notifications",
 			version: "v1.0.0",
@@ -267,6 +305,11 @@ func TestShouldCheckForUpdate(t *testing.T) {
 			t.Setenv("SHOPWARE_CLI_NO_UPDATE_NOTIFICATION", "")
 			for k, v := range tt.env {
 				t.Setenv(k, v)
+			}
+			if tt.config != "" {
+				configPath := filepath.Join(t.TempDir(), "config.yaml")
+				require.NoError(t, os.WriteFile(configPath, []byte(tt.config), 0o600))
+				t.Setenv("SHOPWARE_CLI_CONFIG", configPath)
 			}
 
 			assert.Equal(t, tt.expected, ShouldCheckForUpdate(tt.version, tt.args))

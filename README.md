@@ -126,8 +126,33 @@ To disable update notifications for the current shell session, set:
 export SHOPWARE_CLI_NO_UPDATE_NOTIFICATION=true
 ```
 
-To make the setting **persistent**, add the export command to your shell
-profile, such as `~/.bashrc` or `~/.zshrc`.
+To make the setting **persistent**, set `no_update_hint: true` in the user
+config file (see below), or add the export command to your shell profile, such
+as `~/.bashrc` or `~/.zshrc`. Pass `--no-update-hint` (`-n`) to skip the check
+for a single command.
+
+### User config file
+
+Shopware CLI reads optional user preferences from `config.yaml` in a
+`shopware-cli` folder inside your user config directory:
+
+- Linux: `$XDG_CONFIG_HOME/shopware-cli/config.yaml` (default
+  `~/.config/shopware-cli/config.yaml`)
+- macOS: `~/Library/Application Support/shopware-cli/config.yaml`
+- Windows: `%AppData%\shopware-cli\config.yaml`
+
+Set `SHOPWARE_CLI_CONFIG` to use a different path. The CLI never creates or
+writes this file. Without it, telemetry and update hints are enabled.
+
+```yaml
+telemetry: false # disable anonymous usage telemetry
+no_update_hint: true # disable update notifications
+```
+
+Command-line flags and environment variables take precedence over the file:
+`--no-update-hint` / `-n` > `SHOPWARE_CLI_NO_UPDATE_NOTIFICATION` >
+`no_update_hint`, and `DO_NOT_TRACK` > `telemetry`. See
+[docs/TELEMETRY.md](docs/TELEMETRY.md) for what telemetry collects.
 
 ## Repository Layout
 

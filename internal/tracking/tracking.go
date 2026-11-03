@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/shopware/shopware-cli/internal/cliversion"
+	"github.com/shopware/shopware-cli/internal/userconfig"
 	"github.com/shopware/shopware-cli/logging"
 )
 
@@ -96,8 +97,19 @@ func resolveID() string {
 	return ""
 }
 
-func Track(ctx context.Context, eventName string, tags map[string]string) {
+// enabled reports whether telemetry is allowed. DO_NOT_TRACK disables it, as
+// does "telemetry: false" in the user config file.
+func enabled() bool {
 	if _, ok := os.LookupEnv("DO_NOT_TRACK"); ok {
+		return false
+	}
+
+	cfg, _ := userconfig.Load()
+	return cfg.TelemetryEnabled()
+}
+
+func Track(ctx context.Context, eventName string, tags map[string]string) {
+	if !enabled() {
 		return
 	}
 
