@@ -47,6 +47,16 @@ var integrations = Directory{
 			Delivery:      Delivery{Kind: DeliveryGit, Repository: "shopware/acceptance-test-suite"},
 		},
 		{
+			Name:          "shopware-cli-extension-anonymize",
+			DisplayName:   "Shopware Extension Anonymize",
+			Type:          TypeSkill,
+			Provider:      "shopware",
+			Description:   "Bootstrap an extension's anonymize config so project dump --anonymize clears its personal data and secrets.",
+			Status:        StatusActive,
+			Documentation: "https://developer.shopware.com/docs/products/cli/",
+			Delivery:      Delivery{Kind: DeliveryGit, Repository: "shopware/shopware-cli"},
+		},
+		{
 			Name:          "meteor",
 			DisplayName:   "Meteor MCP Server",
 			Type:          TypeMCP,

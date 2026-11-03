@@ -86,7 +86,8 @@ keeps one voice. When a rule and existing code disagree, the code gets fixed.
 - A failed step keeps the established shape:
   `Activation of %s failed with error: %v`.
 - Log a failure or return it, not both. The root command prints every returned
-  error once, apart from the sentinel errors described under exit codes.
+  error once, apart from errors implementing `logging.SilenceError` as described
+  under exit codes.
 - Never log a success line after a failed step. In a loop, `continue` after a
   failure.
 
@@ -97,8 +98,10 @@ keeps one voice. When a rule and existing code disagree, the code gets fixed.
 - Nothing succeeds silently on a wrong assumption: an explicit
   `--project-config` that does not exist is an error, not a fallback.
 - When the error was already printed as part of the output (a failed
-  verification check with its hint), return a sentinel error and add it to the
-  exemption list in `cmd/root.go`, so it is not printed twice.
+  verification check with its hint), return an error implementing
+  `logging.SilenceError` so it is not printed twice. Use `logging.NewSilent` for
+  sentinel errors, or add a `SilenceError()` marker method to a custom error
+  type. Wrapped errors are recognized with `errors.As`.
 - Without a terminal, or with `--no-interaction`, a command that would prompt
   fails fast and names the flag or environment variable that replaces the
   prompt.

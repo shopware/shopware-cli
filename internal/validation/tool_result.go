@@ -2,11 +2,12 @@ package validation
 
 import (
 	"encoding/json"
-	"errors"
+
+	"github.com/shopware/shopware-cli/logging"
 )
 
 // ErrToolReportFailed indicates a failure already described by a tool report.
-var ErrToolReportFailed = errors.New("tool report contains errors")
+var ErrToolReportFailed = logging.NewSilent("tool report contains errors")
 
 // ToolResult describes one invocation, independently of its collected findings.
 type ToolResult struct {
