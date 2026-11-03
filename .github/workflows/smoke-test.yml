@@ -18,24 +18,24 @@ jobs:
     timeout-minutes: 15
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@46b06cea07f9e64621fdf066ba77ac6915163d43 # ratchet:step-security/harden-runner@v2.22.3
+        uses: step-security/harden-runner@v2.22.3
         with:
           egress-policy: audit
 
       - name: Checkout Repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # ratchet:actions/checkout@v7.0.1
+        uses: actions/checkout@v7.0.1
         with:
           persist-credentials: false
 
       - name: Set up Go
-        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # ratchet:actions/setup-go@v7.0.0
+        uses: actions/setup-go@v7.0.0
         with:
           go-version: '1.27'
           cache: true
           check-latest: true
 
       - name: Setup PHP
-        uses: shivammathur/setup-php@eb7c497e18156a6bbabfef1d3a82760b9eda3962 # ratchet:shivammathur/setup-php@2.40.0
+        uses: shivammathur/setup-php@2.40.0
         with:
           php-version: '8.2'
 
@@ -46,7 +46,7 @@ jobs:
         run: mv shopware-cli /usr/local/bin/
 
       - name: Checkout Plugin
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # ratchet:actions/checkout@v7.0.1
+        uses: actions/checkout@v7.0.1
         with:
           persist-credentials: false
           repository: 'FriendsOfShopware/FroshTools'
@@ -83,7 +83,7 @@ jobs:
           rm -rf vendor
 
       - name: Setup the project
-        uses: shopwareLabs/build-project-action@88233d3fdb6b4b6ad7085c45210085c51b727d82 # ratchet:shopwareLabs/build-project-action@main
+        uses: shopware/build-project-action@v1.0.1
         with:
           path: shopware
 
@@ -93,17 +93,17 @@ jobs:
     timeout-minutes: 15
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@46b06cea07f9e64621fdf066ba77ac6915163d43 # ratchet:step-security/harden-runner@v2.22.3
+        uses: step-security/harden-runner@v2.22.3
         with:
           egress-policy: audit
 
       - name: Checkout Repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # ratchet:actions/checkout@v7.0.1
+        uses: actions/checkout@v7.0.1
         with:
           persist-credentials: false
 
       - name: Set up Go
-        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # ratchet:actions/setup-go@v7.0.0
+        uses: actions/setup-go@v7.0.0
         with:
           go-version: '1.27'
           cache: true
