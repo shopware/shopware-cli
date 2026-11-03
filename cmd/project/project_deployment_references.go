@@ -3,11 +3,12 @@
 package project
 
 import (
-	"github.com/shopware/shopware-cli/internal/deployment"
-	"github.com/shopware/shopware-cli/logging"
 	"strings"
 
 	"github.com/spf13/cobra"
+
+	"github.com/shopware/shopware-cli/internal/deployment"
+	"github.com/shopware/shopware-cli/logging"
 )
 
 func deploymentReferenceCompletions(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
