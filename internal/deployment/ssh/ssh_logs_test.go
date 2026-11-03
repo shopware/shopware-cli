@@ -3,8 +3,6 @@ package ssh
 import (
 	"context"
 	"encoding/json"
-	"github.com/shopware/shopware-cli/internal/testhelper"
-	"github.com/stretchr/testify/assert"
 	"io"
 	"os"
 	"os/exec"
@@ -12,9 +10,11 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/shopware/shopware-cli/internal/shop"
+	"github.com/shopware/shopware-cli/internal/testhelper"
 )
 
 func TestSSHDeploymentLogsCancellationAndValidation(t *testing.T) {
