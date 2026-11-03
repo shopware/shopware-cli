@@ -9,7 +9,6 @@ import (
 	"strings"
 
 	"charm.land/lipgloss/v2"
-	"github.com/mattn/go-isatty"
 
 	"github.com/shopware/shopware-cli/internal/deployment"
 	"github.com/shopware/shopware-cli/internal/tui"
@@ -60,19 +59,9 @@ func writeSSHInitializationNextSteps(source *SSH, targets []*SSH, environment st
 		args = append(args, "--", quote(root))
 	}
 
-	color := false
-	if file, ok := output.(*os.File); ok {
-		color = os.Getenv("NO_COLOR") == "" && (isatty.IsTerminal(file.Fd()) || isatty.IsCygwinTerminal(file.Fd()))
-	}
-	styled := func(style lipgloss.Style, text string) string {
-		if color {
-			return style.Render(text)
-		}
-		return text
-	}
-	heading := func(text string) string { return styled(tui.SectionTitleStyle, text) }
+	heading := func(text string) string { return tui.SectionTitleStyle.Render(text) }
 	var summary strings.Builder
-	fmt.Fprintln(&summary, "\n"+styled(lipgloss.NewStyle().Foreground(tui.SuccessColor).Bold(true), "✓ Deployment environment is ready"))
+	fmt.Fprintln(&summary, "\n"+lipgloss.NewStyle().Foreground(tui.SuccessColor).Bold(true).Render("✓ Deployment environment is ready"))
 	fmt.Fprintln(&summary, "\n"+heading("Runtime configuration"))
 	for _, target := range targets {
 		deploymentRoot, err := target.deploymentRoot()
@@ -81,18 +70,18 @@ func writeSSHInitializationNextSteps(source *SSH, targets []*SSH, environment st
 		}
 		fmt.Fprintf(&summary, "  %q: %q\n", target.env.SSH.Host, path.Join(deploymentRoot, "shared", ".env.local"))
 	}
-	fmt.Fprintln(&summary, styled(tui.DimStyle, "  Edit custom environment variables here. This file is shared across releases."))
+	fmt.Fprintln(&summary, tui.DimStyle.Render("  Edit custom environment variables here. This file is shared across releases."))
 	fmt.Fprintln(&summary, "\n"+heading("1. Prepare your server"))
 	fmt.Fprintln(&summary, "  Make sure the database and database user exist and are reachable.")
 	fmt.Fprintln(&summary, "  Point your web server's document root to:")
 	for _, target := range targets {
 		fmt.Fprintf(&summary, "    %q: %q\n", target.env.SSH.Host, path.Join(target.directory, "public"))
 	}
-	fmt.Fprintln(&summary, styled(tui.DimStyle, "  This directory becomes available during the first rollout."))
+	fmt.Fprintln(&summary, tui.DimStyle.Render("  This directory becomes available during the first rollout."))
 	fmt.Fprintln(&summary, "\n"+heading("2. Build and roll out your first deployment"))
 	fmt.Fprintln(&summary, "  Run locally:")
 	fmt.Fprintln(&summary)
-	fmt.Fprintln(&summary, "    "+styled(tui.BoldStyle, strings.Join(args, " ")))
+	fmt.Fprintln(&summary, "    "+tui.BoldStyle.Render(strings.Join(args, " ")))
 	fmt.Fprintln(&summary, "\n  This builds the archive and rolls it out to the selected environment.")
 	fmt.Fprintln(&summary, "\n"+heading("3. Finish setup"))
 	fmt.Fprintln(&summary, "  Configure background workers and scheduled tasks to use the active release:")
@@ -100,7 +89,7 @@ func writeSSHInitializationNextSteps(source *SSH, targets []*SSH, environment st
 		fmt.Fprintf(&summary, "    %q: %q\n", target.env.SSH.Host, target.directory)
 	}
 	fmt.Fprintln(&summary, "  Open your application URL and check the storefront and Administration.")
-	if _, err := io.WriteString(output, summary.String()); err != nil {
+	if _, err := lipgloss.Fprint(output, summary.String()); err != nil {
 		return fmt.Errorf("cannot display deployment next steps: %w", err)
 	}
 	return nil
