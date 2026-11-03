@@ -949,6 +949,10 @@
     },
     "EnvironmentSSHConfig": {
       "properties": {
+        "hooks": {
+          "$ref": "#/$defs/EnvironmentSSHDeploymentHooks",
+          "description": "Host-side commands around release activation."
+        },
         "host": {
           "type": "string",
           "description": "SSH host name or IP address for a single target. Mutually exclusive with hosts."
@@ -1008,8 +1012,31 @@
       "additionalProperties": false,
       "type": "object"
     },
+    "EnvironmentSSHDeploymentHooks": {
+      "properties": {
+        "pre": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "post": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "description": "EnvironmentSSHDeploymentHooks run on each host around release activation, including rollback."
+    },
     "EnvironmentSSHHostConfig": {
       "properties": {
+        "hooks": {
+          "$ref": "#/$defs/EnvironmentSSHDeploymentHooks",
+          "description": "Replaces the entire common hooks block when supplied."
+        },
         "cachetool": {
           "$ref": "#/$defs/EnvironmentSSHCachetoolConfig"
         },
