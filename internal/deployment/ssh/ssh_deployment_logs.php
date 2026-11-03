@@ -13,7 +13,7 @@ try {
     if (!is_string($root) || $root === '' || $root[0] !== '/' || str_contains($root, "\0")) {
         throw new RuntimeException('Invalid deployment root');
     }
-    if (!is_string($release) || preg_match('/\A[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}\z/', $release) !== 1) {
+    if (!($input['list'] ?? false) && (!is_string($release) || preg_match('/\A[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}\z/', $release) !== 1)) {
         throw new RuntimeException('Invalid release name');
     }
     $root = rtrim($root, '/') ?: '/';
@@ -22,8 +22,20 @@ try {
             throw new RuntimeException("Expected a real directory: $directory");
         }
         if (!is_dir($directory)) {
+            if ($input['list'] ?? false) { echo "[]\n"; exit(0); }
             throw new RuntimeException("No deployment helper log available for release $release (missing $directory)");
         }
+    }
+    if ($input['list'] ?? false) {
+        $references = [];
+        foreach (new FilesystemIterator("$root/.shopware-cli/logs") as $entry) {
+            if ($entry->isLink() || !$entry->isFile() || !str_ends_with($entry->getFilename(), '.log')) { continue; }
+            $name = substr($entry->getFilename(), 0, -4);
+            if (preg_match('/\A[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}\z/', $name) === 1) { $references[] = $name; }
+        }
+        sort($references, SORT_STRING);
+        echo json_encode($references, JSON_THROW_ON_ERROR) . "\n";
+        exit(0);
     }
     $file = "$root/.shopware-cli/logs/$release.log";
     if (is_link($file) || (file_exists($file) && !is_file($file))) {

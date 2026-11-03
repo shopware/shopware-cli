@@ -88,3 +88,8 @@ type RolloutHistory interface {
 type DeploymentActivator interface {
 	ActivateDeployment(ctx context.Context, deployment Deployment, output io.Writer) (Rollout, error)
 }
+
+// LogReferenceProvider lists deployments with stored helper logs.
+type LogReferenceProvider interface {
+	DeploymentLogReferences(context.Context) ([]string, error)
+}
