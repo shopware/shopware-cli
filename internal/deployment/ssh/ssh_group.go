@@ -219,6 +219,9 @@ func (g *sshGroup) RolloutDeployment(ctx context.Context, deployment Deployment,
 	if !info.Mode().IsRegular() {
 		return result, errors.New("deployment archive must be a regular file")
 	}
+	if err := g.requireInitialized(ctx); err != nil {
+		return result, err
+	}
 	// Snapshot once: concurrent uploads must use exactly the validated bytes,
 	// even if the original local archive is replaced or modified during rollout.
 	snapshot, err := os.CreateTemp("", "shopware-cohort-*.tar.gz")
