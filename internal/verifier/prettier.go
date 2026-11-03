@@ -62,10 +62,13 @@ func (p Prettier) Format(ctx context.Context, config ToolConfig, execution *Tool
 			execution.Fail(&ToolError{Err: fmt.Errorf("cannot write prettier ignore file: %w", err)})
 			return
 		}
+		// Pass the ignore file relative to cmd.Dir: Prettier matches patterns relative
+		// to the ignore file's directory and resolves its cwd to the real path, so an
+		// absolute path below a symlinked directory would never match.
 		args := []string{
 			path.Join(config.ToolDirectory, "js", "node_modules", ".bin", "prettier"),
 			"--config", path.Join(config.ToolDirectory, "js", "configs", "prettierrc.js"),
-			"--ignore-path", ignore.Name(), "--ignore-path", ".gitignore", "--ignore-path", ".prettierignore", "--no-color", ".",
+			"--ignore-path", filepath.Base(ignore.Name()), "--ignore-path", ".gitignore", "--ignore-path", ".prettierignore", "--no-color", ".",
 		}
 		operation := OperationFormat
 		if dryRun {

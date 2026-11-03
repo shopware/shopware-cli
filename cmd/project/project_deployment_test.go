@@ -13,6 +13,7 @@ func TestDeploymentCommandsRegistered(t *testing.T) {
 	assert.Contains(t, projectRootCmd.Commands(), projectDeploymentCmd)
 	assert.Contains(t, projectDeploymentCmd.Commands(), projectDeploymentPackageCmd)
 	assert.Contains(t, projectDeploymentCmd.Commands(), projectDeploymentCreateCmd)
+	assert.Contains(t, projectDeploymentCmd.Commands(), projectDeploymentInitCmd)
 	for _, name := range []string{"archive", "container"} {
 		cmd, remaining, err := projectRootCmd.Find([]string{"deployment", "package", name})
 		require.NoError(t, err)
