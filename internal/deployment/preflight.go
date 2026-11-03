@@ -8,6 +8,10 @@ import (
 	"strconv"
 	"strings"
 	"unicode"
+
+	"charm.land/lipgloss/v2"
+	"github.com/mattn/go-isatty"
+	"github.com/shopware/shopware-cli/internal/tui"
 )
 
 type PreflightAction string
@@ -68,14 +72,31 @@ func WritePreflight(ctx context.Context, backend Backend, options PreflightOptio
 	if environment == "" {
 		environment = "local"
 	}
+	color := false
+	if file, ok := output.(*os.File); ok {
+		color = os.Getenv("NO_COLOR") == "" && (isatty.IsTerminal(file.Fd()) || isatty.IsCygwinTerminal(file.Fd()))
+	}
+	styled := func(style lipgloss.Style, value string) string {
+		if color {
+			return style.Render(value)
+		}
+		return value
+	}
 	var summary strings.Builder
-	summary.WriteString("Deployment preflight\n")
+	summary.WriteString(styled(tui.SectionTitleStyle, "Deployment preflight") + "\n")
 	field := func(label, value string) {
 		// Keep paths and configuration values on one line in terminal output.
 		if strings.ContainsFunc(value, func(r rune) bool { return !unicode.IsPrint(r) }) {
 			value = strconv.Quote(value)
 		}
-		fmt.Fprintf(&summary, "  %s: %s\n", label, value)
+		valueStyle := lipgloss.NewStyle()
+		switch label {
+		case "Environment", "Deployment", "SSH target", "SSH host":
+			valueStyle = tui.SectionTitleStyle
+		case "Active path":
+			valueStyle = tui.BoldStyle
+		}
+		fmt.Fprintf(&summary, "  %s %s\n", styled(tui.DimStyle, label+":"), styled(valueStyle, value))
 	}
 	field("Action", string(options.Action))
 	field("Working directory", cwd)
