@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"os"
 	"path"
+
+	"github.com/shopware/shopware-cli/internal/shop"
 )
 
 type Rector struct{}
@@ -19,59 +21,17 @@ func (r Rector) Fix(ctx context.Context, config ToolConfig, execution *ToolExecu
 		return result
 	}
 
-	_, err := os.Stat(path.Join(config.RootDir, "vendor"))
-	if err != nil && !errors.Is(err, os.ErrNotExist) {
-		execution.Fail(&ToolError{Err: fmt.Errorf("cannot read vendor directory: %w", err)})
+	// Fix against the minimum compatible dependency set, independently of the
+	// extension's locally installed dependencies. Projects keep their vendor/.
+	config.CheckAgainst = "lowest"
+	autoloadFile, toolErr := prepareComposerAutoload(ctx, config, execution)
+	if toolErr != nil {
+		execution.Fail(toolErr)
 		return ToolSummary{}
-	}
-	vendorExists := err == nil
-
-	var backupData []byte
-	var composerLockData []byte
-
-	if !vendorExists {
-		composerJSONPath := path.Join(config.RootDir, "composer.json")
-
-		backupData, err = os.ReadFile(composerJSONPath)
-		if err != nil {
-			execution.Fail(&ToolError{Err: fmt.Errorf("cannot back up composer.json: %w", err)})
-			return ToolSummary{}
-		}
-		composerLockPath := path.Join(config.RootDir, "composer.lock")
-		composerLockData, err = os.ReadFile(composerLockPath)
-		if err != nil && !errors.Is(err, os.ErrNotExist) {
-			execution.Fail(&ToolError{Err: fmt.Errorf("cannot back up composer.lock: %w", err)})
-			return ToolSummary{}
-		}
-
-		defer func() {
-			if backupData != nil {
-				if err := os.WriteFile(path.Join(config.RootDir, "composer.json"), backupData, 0o644); err != nil {
-					execution.Fail(&ToolError{Err: fmt.Errorf("cannot restore composer.json: %w", err)})
-				}
-			}
-			if composerLockData != nil {
-				if err := os.WriteFile(composerLockPath, composerLockData, 0o644); err != nil {
-					execution.Fail(&ToolError{Err: fmt.Errorf("cannot restore composer.lock: %w", err)})
-				}
-			} else if err := os.Remove(composerLockPath); err != nil && !errors.Is(err, os.ErrNotExist) {
-				execution.Fail(&ToolError{Err: fmt.Errorf("cannot remove temporary Composer lock: %w", err)})
-			}
-		}()
-		if composerLockData != nil {
-			if err := os.Remove(composerLockPath); err != nil {
-				execution.Fail(&ToolError{Err: fmt.Errorf("cannot remove Composer lock: %w", err)})
-				return ToolSummary{}
-			}
-		}
-
-		if err := installComposerDeps(ctx, config.RootDir, "highest", execution); err != nil {
-			execution.Fail(err)
-			return ToolSummary{}
-		}
 	}
 
 	var rectorConfigFile string
+	rulesNote := "custom rules from rector.php"
 
 	if _, err := os.Stat(path.Join(config.RootDir, "rector.php")); err == nil {
 		rectorConfigFile = path.Join(config.RootDir, "rector.php")
@@ -80,18 +40,28 @@ func (r Rector) Fix(ctx context.Context, config ToolConfig, execution *ToolExecu
 			execution.Fail(&ToolError{Err: errors.New("cannot select rector configuration: invalid Shopware version")})
 			return ToolSummary{}
 		}
+		rulesNote = "bundled rules for Shopware " + config.MinShopwareVersion[0:3]
 		rectorConfigFile = path.Join(config.ToolDirectory, "php", "vendor", "frosh", "shopware-rector", "config", fmt.Sprintf("shopware-%s.0.php", config.MinShopwareVersion[0:3]))
 	}
 
+	result := ToolSummary{Note: rulesNote}
+	if installed := shop.DetectShopwareVersion(path.Dir(path.Dir(autoloadFile))); installed != "" {
+		result.Note = "Shopware " + installed
+		if !config.IsProject {
+			result.Note += " (lowest)"
+		}
+		result.Note += "; " + rulesNote
+	}
+
 	for _, sourceDirectory := range config.SourceDirectories {
-		rector := CommandContext(ctx, "php", "-dmemory_limit=2G", path.Join(config.ToolDirectory, "php", "vendor", "bin", "rector"), "process", "--config", rectorConfigFile, "--autoload-file", path.Join("vendor", "autoload.php"), sourceDirectory)
-		rector.Dir = config.RootDir
+		rector := CommandContext(ctx, "php", "-dmemory_limit=2G", path.Join(config.ToolDirectory, "php", "vendor", "bin", "rector"), "process", "--config", rectorConfigFile, "--autoload-file", autoloadFile, sourceDirectory)
+		rector.Dir = path.Dir(path.Dir(autoloadFile))
 		if subprocess := execution.Run(OperationFix, rector); subprocess.Err != nil {
 			execution.Fail(subprocess.ToolError(fmt.Errorf("cannot run rector in %s: %w", sourceDirectory, subprocess.Err)))
 		}
 	}
 
-	return ToolSummary{}
+	return result
 }
 
 func init() {

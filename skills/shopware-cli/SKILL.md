@@ -268,6 +268,22 @@ does not check; the error lists available checkers. The extension command
 summaries show `invoked` or `skipped`: these describe selection and invocation,
 not whether files were applicable, findings were produced, or fixes were made.
 
+### Extension fixes
+
+`shopware-cli extension fix path --only rector` always resolves the lowest
+compatible dependencies in `var/cache/shopware-cli/composer-lowest`, shared with
+PHPStan's lowest validation baseline. Advisory blocking is disabled for these
+historical dependencies. The extension's `vendor/`, `composer.json`, and
+`composer.lock` are preserved; no `--check-against` option is needed.
+
+Rector reports the loaded Shopware version and the selected rules. A local
+`rector.php` takes precedence; otherwise the bundled rules target the minimum
+supported Shopware minor version. Rector runs from the dependency cache, so
+custom configs should use `__DIR__` for extension-relative paths rather than
+`getcwd()`. Custom configs that explicitly load local dependencies can override
+this isolation. Project fixes use the project's existing `vendor/` and require
+`composer install` first if it is missing.
+
 ### Fresh results beat saved reports
 
 Saved outputs such as `validation.json`, JUnit XML, or markdown reports can

@@ -15,12 +15,11 @@ type ToolError = validation.ToolError
 
 // Subprocess operations identify tool attempts in telemetry.
 const (
-	OperationCheck           = "check"
-	OperationFix             = "fix"
-	OperationFormat          = "format"
-	OperationAnalyse         = "analyse"
-	OperationComposerRequire = "composer_require"
-	OperationComposerUpdate  = "composer_update"
+	OperationCheck          = "check"
+	OperationFix            = "fix"
+	OperationFormat         = "format"
+	OperationAnalyse        = "analyse"
+	OperationComposerUpdate = "composer_update"
 )
 
 type SubprocessResult struct {

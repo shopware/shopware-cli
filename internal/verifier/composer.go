@@ -30,19 +30,6 @@ func preparePHPTool(config ToolConfig, execution *ToolExecution) (ToolSummary, b
 	return ToolSummary{}, true
 }
 
-// installComposerDeps installs the dependencies into rootDir itself when vendor/ is missing.
-func installComposerDeps(ctx context.Context, rootDir string, checkAgainst string, execution *ToolExecution) *ToolError {
-	_, err := os.Stat(path.Join(rootDir, "vendor"))
-	if err == nil {
-		return nil
-	}
-	if !errors.Is(err, os.ErrNotExist) {
-		return &ToolError{Err: fmt.Errorf("cannot read vendor directory: %w", err)}
-	}
-
-	return runComposerDeps(ctx, rootDir, path.Join(rootDir, "auth.json"), getComposerSuggets(rootDir), checkAgainst, execution)
-}
-
 // prepareComposerAutoload returns the autoload file to analyse config.RootDir with.
 // A project must have an existing vendor/, which is used as it is. For an
 // extension the dependencies are always updated in its validation
@@ -57,7 +44,7 @@ func prepareComposerAutoload(ctx context.Context, config ToolConfig, execution *
 		if !errors.Is(err, os.ErrNotExist) {
 			return "", &ToolError{Err: fmt.Errorf("cannot read vendor directory: %w", err)}
 		}
-		return "", &ToolError{Err: errors.New(`cannot run phpstan without vendor/: run "composer install" first (pass --exclude phpstan to skip it)`)}
+		return "", &ToolError{Err: errors.New(`cannot use project dependencies without vendor/: run "composer install" first`)}
 	}
 
 	composerJSON, err := os.ReadFile(path.Join(config.RootDir, "composer.json"))
@@ -101,7 +88,7 @@ func prepareComposerAutoload(ctx context.Context, config ToolConfig, execution *
 
 	// composer update changes vendor/ in place, so only changed packages are
 	// written again.
-	if toolErr := runComposerDeps(ctx, workDir, path.Join(config.RootDir, "auth.json"), nil, config.CheckAgainst, execution); toolErr != nil {
+	if toolErr := runComposerDeps(ctx, workDir, path.Join(config.RootDir, "auth.json"), config.CheckAgainst, execution); toolErr != nil {
 		return "", toolErr
 	}
 
@@ -232,7 +219,7 @@ func resolvePathRepository(repository any, rootDir string) {
 	}
 }
 
-func runComposerDeps(ctx context.Context, dir string, authFile string, suggets []string, checkAgainst string, execution *ToolExecution) *ToolError {
+func runComposerDeps(ctx context.Context, dir string, authFile string, checkAgainst string, execution *ToolExecution) *ToolError {
 	composerAuth, err := shop.ReadComposerAuth(authFile)
 	if err != nil {
 		return &ToolError{Err: fmt.Errorf("cannot read Composer auth file: %w", err)}
@@ -248,22 +235,6 @@ func runComposerDeps(ctx context.Context, dir string, authFile string, suggets [
 		// Historical compatibility analysis must include releases with advisories.
 		// Keep audit reporting and other dependency policies enabled.
 		env = append(env, "COMPOSER_POLICY_ADVISORIES_BLOCK=0")
-	}
-
-	if len(suggets) > 0 {
-		additionalParams := []string{"require", "--prefer-dist", "--no-interaction", "--no-progress", "--no-plugins", "--no-scripts", "--ignore-platform-reqs"}
-		for _, suggest := range suggets {
-			additionalParams = append(additionalParams, suggest+":*")
-		}
-
-		composerInstall := CommandContext(ctx, "composer", additionalParams...)
-		composerInstall.Env = env
-		composerInstall.Dir = dir
-
-		subprocess := execution.Run(OperationComposerRequire, composerInstall)
-		if subprocess.Err != nil {
-			return subprocess.ToolError(fmt.Errorf("cannot install Composer suggestions: %w", subprocess.Err))
-		}
 	}
 
 	additionalParams := []string{"update", "--prefer-dist", "--no-interaction", "--no-progress", "--no-plugins", "--no-scripts", "--ignore-platform-reqs"}
@@ -286,27 +257,4 @@ func runComposerDeps(ctx context.Context, dir string, authFile string, suggets [
 	logging.FromContext(ctx).Debugf("Composer dependencies installed in %s", time.Since(beforeStart).String())
 
 	return nil
-}
-
-func getComposerSuggets(rootDir string) []string {
-	composerJSON, err := os.ReadFile(path.Join(rootDir, "composer.json"))
-	if err != nil {
-		return []string{}
-	}
-
-	var composerJSONData map[string]interface{}
-	if err := json.Unmarshal(composerJSON, &composerJSONData); err != nil {
-		return []string{}
-	}
-
-	if composerJSONData["suggest"] == nil {
-		return []string{}
-	}
-
-	suggests := make([]string, 0, len(composerJSONData["suggest"].(map[string]interface{})))
-	for k := range composerJSONData["suggest"].(map[string]interface{}) {
-		suggests = append(suggests, k)
-	}
-
-	return suggests
 }

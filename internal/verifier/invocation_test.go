@@ -258,7 +258,7 @@ func TestPHPCSFixerInvocation(t *testing.T) {
 	}
 }
 
-func TestRectorRestoresComposerFilesOnPreparationFailure(t *testing.T) {
+func TestRectorPreservesComposerFilesOnPreparationFailure(t *testing.T) {
 	fakeTool(t, "composer", "printf 'changed' > composer.json\nprintf 'generated' > composer.lock\nprintf 'installation failed' >&2\nexit 1\n")
 	root := t.TempDir()
 	manifest := []byte(`{"require":{"shopware/core":"*"}}`)
@@ -276,15 +276,91 @@ func TestRectorRestoresComposerFilesOnPreparationFailure(t *testing.T) {
 	assert.Equal(t, lock, actualLock)
 }
 
-func TestRectorRetainsPreparationAndCleanupFailures(t *testing.T) {
-	fakeTool(t, "composer", "/bin/mkdir composer.lock\nprintf 'installation failed' >&2\nexit 1\n")
-	root := t.TempDir()
-	require.NoError(t, os.WriteFile(filepath.Join(root, "composer.json"), []byte("{}"), 0o644))
-	require.NoError(t, os.WriteFile(filepath.Join(root, "composer.lock"), []byte("original lock"), 0o644))
-	result := runFixTool(t, Rector{}, ToolConfig{RootDir: root, SourceDirectories: []string{root}})
-	require.Len(t, result.Errors, 2)
-	assert.Equal(t, "installation failed", result.Errors[0].Stderr)
-	var pathError *os.PathError
-	require.ErrorAs(t, result.Errors[1], &pathError)
-	assert.Equal(t, filepath.Join(root, "composer.lock"), pathError.Path)
+func TestRectorDependenciesAndReporting(t *testing.T) {
+	for _, scenario := range []struct {
+		name                                     string
+		localVendor, customConfig, project, fail bool
+	}{
+		{name: "standalone extension"},
+		{name: "extension with local vendor and custom config", localVendor: true, customConfig: true},
+		{name: "project", localVendor: true, project: true},
+		{name: "rector failure", fail: true},
+	} {
+		t.Run(scenario.name, func(t *testing.T) {
+			root := t.TempDir()
+			t.Setenv("RECTOR_ROOT", root)
+			fakeTool(t, "composer", `printf '%s' "$* advisories=$COMPOSER_POLICY_ADVISORIES_BLOCK" > "$RECTOR_ROOT/composer-args"
+/bin/mkdir -p vendor/composer
+printf '{"packages":[{"name":"shopware/core","version":"6.7.0.0"}]}' > vendor/composer/installed.json
+: > vendor/autoload.php
+`)
+			composerPath := os.Getenv("PATH")
+			fakeTool(t, "php", `printf '%s\n' "$@" > "$RECTOR_ROOT/rector-args"
+printf '%s' "$PWD" > "$RECTOR_ROOT/rector-cwd"
+exit "$RECTOR_EXIT"
+`)
+			t.Setenv("PATH", os.Getenv("PATH")+string(os.PathListSeparator)+composerPath)
+			t.Setenv("RECTOR_EXIT", "0")
+			if scenario.fail {
+				t.Setenv("RECTOR_EXIT", "1")
+			}
+			manifest := []byte(`{"require":{"shopware/core":"~6.7"}}`)
+			lock := []byte("original lockfile")
+			require.NoError(t, os.WriteFile(filepath.Join(root, "composer.json"), manifest, 0o644))
+			require.NoError(t, os.WriteFile(filepath.Join(root, "composer.lock"), lock, 0o644))
+			if scenario.localVendor {
+				require.NoError(t, os.MkdirAll(filepath.Join(root, "vendor/composer"), 0o755))
+				require.NoError(t, os.WriteFile(filepath.Join(root, "vendor/autoload.php"), []byte("original autoloader"), 0o644))
+				require.NoError(t, os.WriteFile(filepath.Join(root, "vendor/composer/installed.json"), []byte(`{"packages":[{"name":"shopware/core","version":"6.7.15.1"}]}`), 0o644))
+			}
+			if scenario.customConfig {
+				require.NoError(t, os.WriteFile(filepath.Join(root, "rector.php"), []byte("<?php"), 0o644))
+			}
+			tools := t.TempDir()
+			cfg := ToolConfig{RootDir: root, ToolDirectory: tools, SourceDirectories: []string{root}, MinShopwareVersion: "6.7.0.0", CheckAgainst: "highest", IsProject: scenario.project}
+			result := runFixTool(t, Rector{}, cfg)
+			assert.Equal(t, scenario.fail, len(result.Errors) > 0)
+			workDir := filepath.Join(root, "var/cache/shopware-cli/composer-lowest")
+			note := "Shopware 6.7.0.0 (lowest); bundled rules for Shopware 6.7"
+			expectedConfig := filepath.Join(tools, "php/vendor/frosh/shopware-rector/config/shopware-6.7.0.php")
+			if scenario.project {
+				workDir = root
+				note = "Shopware 6.7.15.1; bundled rules for Shopware 6.7"
+				assert.NoFileExists(t, filepath.Join(root, "composer-args"))
+			} else {
+				composerArgs, err := os.ReadFile(filepath.Join(root, "composer-args"))
+				require.NoError(t, err)
+				assert.Contains(t, string(composerArgs), "--prefer-lowest")
+				assert.Contains(t, string(composerArgs), "advisories=0")
+			}
+			if scenario.customConfig {
+				expectedConfig = filepath.Join(root, "rector.php")
+				note = "Shopware 6.7.0.0 (lowest); custom rules from rector.php"
+			}
+			assert.Equal(t, note, result.Note)
+			args, err := os.ReadFile(filepath.Join(root, "rector-args"))
+			require.NoError(t, err)
+			assert.Contains(t, string(args), "--config\n"+expectedConfig+"\n")
+			assert.Contains(t, string(args), "--autoload-file\n"+filepath.Join(workDir, "vendor/autoload.php")+"\n")
+			workingDir, err := os.ReadFile(filepath.Join(root, "rector-cwd"))
+			require.NoError(t, err)
+			resolvedDir, err := filepath.EvalSymlinks(workDir)
+			require.NoError(t, err)
+			actualDir, err := filepath.EvalSymlinks(string(workingDir))
+			require.NoError(t, err)
+			assert.Equal(t, resolvedDir, actualDir)
+			for name, expected := range map[string][]byte{"composer.json": manifest, "composer.lock": lock} {
+				actual, err := os.ReadFile(filepath.Join(root, name))
+				require.NoError(t, err)
+				assert.Equal(t, expected, actual)
+			}
+			if scenario.localVendor {
+				autoload, err := os.ReadFile(filepath.Join(root, "vendor/autoload.php"))
+				require.NoError(t, err)
+				assert.Equal(t, "original autoloader", string(autoload))
+			} else {
+				assert.NoDirExists(t, filepath.Join(root, "vendor"))
+			}
+		})
+	}
 }

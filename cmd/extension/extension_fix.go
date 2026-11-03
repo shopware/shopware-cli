@@ -15,7 +15,11 @@ import (
 var extensionFixCmd = &cobra.Command{
 	Use:   "fix path",
 	Short: "Apply code-quality fixes to an extension",
-	Args:  cobra.ExactArgs(1),
+	Long: `Apply code-quality fixes to an extension.
+Rector resolves the lowest compatible dependencies in var/cache/shopware-cli,
+preserving the extension's vendor/, composer.json and composer.lock.
+A local rector.php takes precedence over the bundled Shopware rules.`,
+	Args: cobra.ExactArgs(1),
 	PreRunE: func(cmd *cobra.Command, args []string) error {
 		only, _ := cmd.Flags().GetString("only")
 		exclude, _ := cmd.Flags().GetString("exclude")
