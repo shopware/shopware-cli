@@ -38,6 +38,11 @@ const (
 	exitStopContainers = "stop_containers"
 	exitKeepRunning    = "keep_running"
 	exitQuit           = "quit"
+	// An open dashboard that ended without its quit paths.
+	exitTerminated  = "terminated"
+	exitInterrupted = "interrupted"
+	exitPanic       = "panic"
+	exitError       = "error"
 )
 
 // telemetryState accumulates anonymous usage data for one TUI session. It is
@@ -164,6 +169,18 @@ func (t *telemetryState) sessionTags() (map[string]string, bool) {
 		tags[tracking.TagWatchersUsed] = joinSet(t.watchersUsed)
 	}
 	return tags, true
+}
+
+// exitTags builds the session event for an open dashboard that ended without
+// its quit paths. A normal quit before the dashboard opens also ends the
+// program cleanly, so only a started session that has not ended yet is
+// reported.
+func (t *telemetryState) exitTags(result string) (map[string]string, bool) {
+	if t == nil || !t.sessionStartSent || t.sessionSent {
+		return nil, false
+	}
+	t.exitChoice = result
+	return t.sessionTags()
 }
 
 func (t *telemetryState) beginInstall() {

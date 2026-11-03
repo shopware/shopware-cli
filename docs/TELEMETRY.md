@@ -347,11 +347,8 @@ the check's level is sent, never the underlying values.
 ### `shopware_cli.project.dev.session_start` — dashboard opened
 
 Sent when the dashboard opens. The `shopware_cli.project.dev.session` event
-that ends the session carries the same `session_id`. A start without a
-matching end usually means the session did not end through the dashboard's
-own quit paths: it crashed, the process was stopped with a signal such as
-SIGTERM, or its terminal was closed. Events are sent over UDP without retries,
-so either event can also get lost.
+that ends the session carries the same `session_id`, so we can tell sessions
+that ended normally from those that crashed or were closed abruptly.
 
 | Tag          | Meaning                                                                          | Example                      |
 | ------------ | -------------------------------------------------------------------------------- | ---------------------------- |
@@ -360,10 +357,10 @@ so either event can also get lost.
 
 ### `shopware_cli.project.dev.session` — dashboard session shape
 
-Sent when the user leaves the dashboard (the overall command duration is
-already covered by `shopware_cli.command`; this event adds what happened
-inside the TUI). Quitting before the dashboard opens can send it without a
-`session_start`.
+Sent when the user leaves the dashboard, and in most cases also when it is
+stopped from outside or crashes (the overall command duration is already
+covered by `shopware_cli.command`; this event adds what happened inside the
+TUI).
 
 | Tag             | Meaning                                                                  | Example                                     |
 | --------------- | ------------------------------------------------------------------------ | ------------------------------------------- |
@@ -373,7 +370,10 @@ inside the TUI). Quitting before the dashboard opens can send it without a
 | `tabs_visited`  | Which tabs were opened (sorted, comma-separated)                         | `config,instance,overview`                  |
 | `actions`       | Number of palette actions invoked                                        | `3`                                         |
 | `watchers_used` | Which watchers were started (omitted if none)                            | `admin,storefront`                          |
-| `result`        | How the session ended: via the "stop containers?" dialog or a plain quit | `stop_containers` / `keep_running` / `quit` |
+| `result`        | How the session ended: via the "stop containers?" dialog or a plain quit | `stop_containers` / `keep_running` / `quit` / `terminated` / `interrupted` / `panic` / `error` |
+
+If the dashboard is stopped from outside, for example with `kill`, or crashes,
+`result` is `terminated`, `interrupted`, `panic` or `error` instead.
 
 ## What we explicitly do **not** collect
 

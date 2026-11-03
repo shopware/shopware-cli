@@ -1,6 +1,7 @@
 package app
 
 import (
+	"io"
 	"strings"
 	"testing"
 
@@ -85,6 +86,19 @@ func TestAppQuitKey(t *testing.T) {
 	cmd := h.Send(ctrlC())
 	require.NotNil(t, cmd)
 	assert.IsType(t, tea.QuitMsg{}, cmd())
+}
+
+func TestAppRunCallsOnExitWithTheResult(t *testing.T) {
+	var got []error
+	a := New(Options{
+		Content: ContentFunc{OnInit: func() tea.Cmd { return tea.Quit }},
+		OnExit:  func(err error) { got = append(got, err) },
+	})
+
+	_, err := a.Run(tea.WithInput(nil), tea.WithOutput(io.Discard))
+
+	require.Len(t, got, 1)
+	assert.Equal(t, err, got[0])
 }
 
 func TestAppQuitCommandOverride(t *testing.T) {

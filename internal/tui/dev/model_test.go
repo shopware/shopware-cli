@@ -982,6 +982,82 @@ func TestDashboardSessionStartAndEndShareTheID(t *testing.T) {
 	assert.Equal(t, start.tags[tracking.TagSessionID], end.tags[tracking.TagSessionID])
 }
 
+func TestExitResultNamesHowTheProgramEnded(t *testing.T) {
+	for _, tt := range []struct {
+		name   string
+		runErr error
+		want   string
+	}{
+		{name: "sigterm", runErr: nil, want: "terminated"},
+		{name: "external sigint", runErr: fmt.Errorf("%w: %w", tea.ErrProgramKilled, tea.ErrInterrupted), want: "interrupted"},
+		{name: "recovered panic", runErr: fmt.Errorf("%w: %w", tea.ErrProgramKilled, tea.ErrProgramPanic), want: "panic"},
+		{name: "lost terminal", runErr: fmt.Errorf("%w: %w", tea.ErrProgramKilled, errors.New("read /dev/stdin: input/output error")), want: "error"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, exitResult(tt.runErr))
+		})
+	}
+}
+
+func TestReportExitEndsAnOpenSessionOnce(t *testing.T) {
+	events := captureDevEvents(t)
+	m := newTestModel(t)
+	m.telemetry = newTelemetryState(false)
+
+	// SIGTERM ends the program without Update, so Run returns nil and quit paths never ran.
+	m.startDashboard()
+	m.reportExit(nil)
+	m.reportExit(nil)
+
+	require.Len(t, *events, 2)
+	end := (*events)[1]
+	assert.Equal(t, tracking.EventDevSession, end.name)
+	assert.Equal(t, "terminated", end.tags[tracking.TagResult])
+	assert.Equal(t, (*events)[0].tags[tracking.TagSessionID], end.tags[tracking.TagSessionID])
+}
+
+func TestReportExitAlsoEndsTheRunningTask(t *testing.T) {
+	events := captureDevEvents(t)
+	m := newTestModel(t)
+	m.telemetry = newTelemetryState(false)
+
+	m.startDashboard()
+	m.telemetry.beginTask("cache-clear")
+	m.reportExit(nil)
+
+	require.Len(t, *events, 3)
+	assert.Equal(t, tracking.EventDevAction, (*events)[1].name)
+	assert.Equal(t, tracking.ResultCancelled, (*events)[1].tags[tracking.TagResult])
+	assert.Equal(t, "terminated", (*events)[2].tags[tracking.TagResult])
+}
+
+func TestPanicWhileStoppingContainersSendsOneEnd(t *testing.T) {
+	events := captureDevEvents(t)
+	m := newTestModel(t)
+	m.dockerMode = true
+	m.telemetry = newTelemetryState(true)
+
+	m.startDashboard()
+	updated, _ := m.handleStopConfirmResult(prompt.ResultMsg{ID: stopConfirmID, Choice: stopConfirmStop})
+	updated.(Model).reportExit(fmt.Errorf("%w: %w", tea.ErrProgramKilled, tea.ErrProgramPanic))
+
+	require.Len(t, *events, 2)
+	assert.Equal(t, "stop_containers", (*events)[1].tags[tracking.TagResult])
+}
+
+func TestReportExitAfterANormalQuitSendsNothing(t *testing.T) {
+	events := captureDevEvents(t)
+	m := newTestModel(t)
+	m.telemetry = newTelemetryState(false)
+
+	m.startDashboard()
+	m.Update(keyRune('q'))
+	m.reportExit(nil)
+
+	require.Len(t, *events, 2)
+	assert.Equal(t, "quit", (*events)[1].tags[tracking.TagResult])
+}
+
 func TestLateDashboardStartAfterQuitSendsNoStart(t *testing.T) {
 	events := captureDevEvents(t)
 	m := newTestModel(t)
@@ -1068,6 +1144,7 @@ func TestQuitDuringTaskReportsRunningWatchers(t *testing.T) {
 	updated, _ := m.updateWatcherMsg(watcherStartedMsg{name: watcherAdmin, handle: &watcherHandle{}})
 	m = updated.(Model)
 	m.phase = phaseTask
+	m.telemetry.beginTask("cache-clear")
 
 	_, cmd := m.Update(keyRune('q'))
 
@@ -1077,6 +1154,7 @@ func TestQuitDuringTaskReportsRunningWatchers(t *testing.T) {
 	for _, e := range *events {
 		names = append(names, e.name)
 	}
+	assert.Contains(t, names, tracking.EventDevAction)
 	assert.Contains(t, names, tracking.EventDevWatcher)
 	assert.Contains(t, names, tracking.EventDevSession)
 	assert.Empty(t, m.watchers, "the watchers are stopped")
