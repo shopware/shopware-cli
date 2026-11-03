@@ -1,6 +1,7 @@
 package ssh
 
 import (
+	"context"
 	"encoding/json"
 	"os"
 	"os/exec"
@@ -8,10 +9,11 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/shopware/shopware-cli/internal/shop"
-	"github.com/shopware/shopware-cli/internal/testhelper"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/shopware/shopware-cli/internal/shop"
+	"github.com/shopware/shopware-cli/internal/testhelper"
 )
 
 func TestHostHooksAroundActivation(t *testing.T) {
@@ -22,7 +24,9 @@ func TestHostHooksAroundActivation(t *testing.T) {
 	for _, fail := range []bool{false, true} {
 		t.Run(map[bool]string{false: "success", true: "failed pre"}[fail], func(t *testing.T) {
 			root := t.TempDir()
-			t.Cleanup(func() { require.NoError(t, exec.Command("chmod", "-R", "u+rwX", root).Run()) })
+			t.Cleanup(func() {
+				require.NoError(t, exec.CommandContext(context.WithoutCancel(t.Context()), "chmod", "-R", "u+rwX", root).Run())
+			})
 			require.NoError(t, os.MkdirAll(filepath.Join(root, "releases", "release"), 0755))
 			checksum := strings.Repeat("a", 64)
 			testhelper.WriteFile(t, filepath.Join(root, ".shopware-cli", "releases", "release.json"), `{"ready":true,"sha256":"`+checksum+`"}`)
