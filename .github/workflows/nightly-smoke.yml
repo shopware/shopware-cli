@@ -1,7 +1,8 @@
 name: Nightly Smoke Test
 on:
   schedule:
-    - cron: '0 2 * * *'
+    # An odd minute avoids the start-of-hour load that delays scheduled runs.
+    - cron: '23 2 * * *'
   workflow_dispatch:
     inputs:
       retry:
@@ -236,7 +237,7 @@ jobs:
     # A failed scheduled run is retried once; only a failure of that retry reaches Slack.
     if: always() && (needs.docker.result == 'failure' || needs.composer.result == 'failure') && (github.event_name == 'schedule' || inputs.retry == true)
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 20
     permissions:
       contents: read
       actions: write
@@ -246,12 +247,15 @@ jobs:
         with:
           egress-policy: audit
 
+      # The wait lets a short outage of GitHub, a registry or Packagist pass before the second run.
       - name: Retry the scheduled run once
         if: github.event_name == 'schedule'
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
-        run: gh workflow run nightly-smoke.yml --ref "$GITHUB_REF_NAME" -f retry=true
+        run: |
+          sleep 900
+          gh workflow run nightly-smoke.yml --ref "$GITHUB_REF_NAME" -f retry=true
 
       - name: Report the failure to Slack
         if: github.event_name == 'workflow_dispatch'
