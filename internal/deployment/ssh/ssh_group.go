@@ -450,6 +450,7 @@ func (g *sshGroup) coordinate(ctx context.Context, deployment Deployment, base s
 			config = host.backend.env.SSH
 		}
 		if config != nil {
+			input.Hooks = config.Hooks
 			input.PHP = config.PHPBinary
 			input.PHPArgs = config.PHPArgs
 		}
