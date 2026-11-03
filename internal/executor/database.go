@@ -204,9 +204,7 @@ func databaseConnectionFromEnv(projectRoot string, extraEnv map[string]string) (
 		return os.ReadFile(resolveRelative(projectRoot, path))
 	}
 
-	if err := applyDatabaseTLSEnv(conn, func(key string) string { return values[key] }, readFile); err != nil {
-		return nil, err
-	}
+	applyDatabaseTLSEnv(conn, func(key string) string { return values[key] }, readFile)
 
 	return conn, nil
 }

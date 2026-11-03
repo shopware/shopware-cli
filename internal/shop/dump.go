@@ -56,7 +56,6 @@ type DumpDatabaseOptions struct {
 // DumpDatabase dumps the database described by sqlCfg to opts.Output. cfg may
 // be nil; dump options are applied to cfg in place.
 func DumpDatabase(ctx context.Context, sqlCfg *mysql.Config, cfg *ConfigDump, opts DumpDatabaseOptions) error {
-	// A connector keeps sqlCfg.TLS, which FormatDSN would drop.
 	connector, err := mysql.NewConnector(sqlCfg)
 	if err != nil {
 		return err

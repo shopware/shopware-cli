@@ -152,11 +152,13 @@ func TestDatabaseConnectionFromEnvSSLVariables(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.Equal(t, TLSModeVerifyIdentity, conn.TLS.Mode)
-	assert.Equal(t, ca.certPEM, conn.TLS.CA, "relative paths resolve from the project root")
+	assert.Empty(t, conn.TLS.CA, "env files are read lazily")
+	assert.Equal(t, "config/ca.pem", conn.TLS.envFiles.ca)
 
 	cfg, err := conn.MySQLConfig()
-	require.NoError(t, err)
+	require.NoError(t, err, "relative paths resolve from the project root")
 	require.NotNil(t, cfg.TLS)
+	assert.NotNil(t, cfg.TLS.RootCAs)
 	assert.Equal(t, "db.example.com", cfg.TLS.ServerName)
 	assert.False(t, cfg.TLS.InsecureSkipVerify)
 	assert.False(t, cfg.AllowFallbackToPlaintext)
@@ -173,7 +175,7 @@ func TestDatabaseConnectionFromEnvSSLDontVerify(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.Equal(t, TLSModeRequired, conn.TLS.Mode)
-	assert.Empty(t, conn.TLS.CA, "DATABASE_SSL_CA=true forces TLS without a CA file")
+	assert.Empty(t, conn.TLS.envFiles.ca, "DATABASE_SSL_CA=true forces TLS without a CA file")
 
 	cfg, err := conn.MySQLConfig()
 	require.NoError(t, err)
@@ -185,9 +187,43 @@ func TestDatabaseConnectionFromEnvSSLMissingFile(t *testing.T) {
 	t.Setenv("DATABASE_URL", "mysql://app:pw@db.example.com:3306/shop")
 	t.Setenv("DATABASE_SSL_CA", "/does/not/exist.pem")
 
-	_, err := databaseConnectionFromEnv(t.TempDir(), nil)
+	conn, err := databaseConnectionFromEnv(t.TempDir(), nil)
+	require.NoError(t, err, "the file is only read when the TLS config is built")
+
+	_, err = conn.MySQLConfig()
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "DATABASE_SSL_CA")
+}
+
+func TestDatabaseTLSExplicitSettingsSkipEnvFiles(t *testing.T) {
+	ca, _, _ := newTestCert(t, "Test CA", true, nil, nil)
+
+	failingRead := func(string) ([]byte, error) {
+		t.Fatal("env files must not be read")
+		return nil, nil
+	}
+
+	conn := &DatabaseConnection{Host: "db", Port: "3306"}
+	applyDatabaseTLSEnv(conn, func(key string) string {
+		if key == envDatabaseSSLCA {
+			return "/unreadable/ca.pem"
+		}
+		return ""
+	}, failingRead)
+
+	// An explicit CA replaces the environment CA.
+	withCA := *conn
+	withCA.TLS.CA = ca.certPEM
+	cfg, err := withCA.MySQLConfig()
+	require.NoError(t, err)
+	assert.NotNil(t, cfg.TLS.RootCAs)
+
+	// A disabled mode never builds a TLS config.
+	disabled := *conn
+	disabled.TLS.Mode = TLSModeDisabled
+	cfg, err = disabled.MySQLConfig()
+	require.NoError(t, err)
+	assert.Nil(t, cfg.TLS)
 }
 
 func TestDatabaseConnectionFromEnvSSLDisabledByZero(t *testing.T) {

@@ -188,3 +188,16 @@ func TestApplyTLSFlagsCAImpliesVerifyCA(t *testing.T) {
 	require.NoError(t, applyTLSFlags(newDumpFlagCommand(t, map[string]string{"ssl-ca": caFile, "ssl-mode": "verify-identity"}), dbConn))
 	assert.Equal(t, executor.TLSModeVerifyIdentity, dbConn.TLS.Mode)
 }
+
+func TestAssembleConnectionURIDisabledModeIgnoresUnreadableEnvCA(t *testing.T) {
+	chdirOutsideProject(t)
+	t.Setenv("DATABASE_URL", "mysql://app:pw@db.internal:3306/shop")
+	t.Setenv("DATABASE_SSL_CA", filepath.Join(t.TempDir(), "missing.pem"))
+
+	cfg, err := assembleConnectionURI(newDumpFlagCommand(t, map[string]string{"ssl-mode": "disabled"}))
+	require.NoError(t, err)
+	assert.Nil(t, cfg.TLS)
+
+	_, err = assembleConnectionURI(newDumpFlagCommand(t, nil))
+	assert.ErrorContains(t, err, "DATABASE_SSL_CA", "without an override the environment CA is still required")
+}

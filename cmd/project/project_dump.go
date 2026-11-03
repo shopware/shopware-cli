@@ -230,6 +230,8 @@ func resolveDumpDatabaseConnection(cmd *cobra.Command) (*executor.DatabaseConnec
 
 func init() {
 	projectRootCmd.AddCommand(projectDatabaseDumpCmd)
+
+	// Flag registrations
 	projectDatabaseDumpCmd.Flags().String("host", "", "MySQL or MariaDB hostname")
 	projectDatabaseDumpCmd.Flags().String("database", "", "MySQL or MariaDB database name")
 	projectDatabaseDumpCmd.Flags().StringP("username", "u", "", "MySQL or MariaDB username")
@@ -237,13 +239,6 @@ func init() {
 	projectDatabaseDumpCmd.Flags().Lookup("password").NoOptDefVal = passwordFlagPrompt
 	projectDatabaseDumpCmd.Flags().String("port", "", "MySQL or MariaDB port")
 	projectDatabaseDumpCmd.Flags().String("ssl-mode", "", "TLS mode of the connection (disabled, preferred, required, verify-ca, verify-identity), defaults to the DATABASE_SSL_* environment variables")
-	_ = projectDatabaseDumpCmd.RegisterFlagCompletionFunc("ssl-mode", func(_ *cobra.Command, _ []string, _ string) ([]string, cobra.ShellCompDirective) {
-		modes := make([]string, 0, len(executor.TLSModes))
-		for _, mode := range executor.TLSModes {
-			modes = append(modes, string(mode))
-		}
-		return modes, cobra.ShellCompDirectiveNoFileComp
-	})
 	projectDatabaseDumpCmd.Flags().String("ssl-ca", "", "Path to the CA certificate (PEM) used to verify the server, implies --ssl-mode=verify-ca")
 	projectDatabaseDumpCmd.Flags().String("ssl-cert", "", "Path to the client certificate (PEM) for mutual TLS")
 	projectDatabaseDumpCmd.Flags().String("ssl-key", "", "Path to the client private key (PEM) for mutual TLS")
@@ -256,10 +251,23 @@ func init() {
 	projectDatabaseDumpCmd.Flags().Bool("anonymize", false, "Anonymize personal data, extension-declared columns, and extension system config secrets")
 	projectDatabaseDumpCmd.MarkFlagsMutuallyExclusive("skip-customer-data", "anonymize")
 	projectDatabaseDumpCmd.Flags().String("compression", "", "Compress the dump (gzip, zstd)")
-	_ = projectDatabaseDumpCmd.RegisterFlagCompletionFunc("compression", cobra.FixedCompletions([]string{string(mysqldump.CompressionGzip), string(mysqldump.CompressionZstd)}, cobra.ShellCompDirectiveNoFileComp))
 	projectDatabaseDumpCmd.Flags().Bool("quick", false, "Use quick option for mysqldump")
 	projectDatabaseDumpCmd.Flags().Int("parallel", 0, "Number of tables to dump concurrently (0 = disabled)")
 	projectDatabaseDumpCmd.Flags().Int("insert-into-limit", 0, "Limit the number of rows per INSERT statement (0 = auto, takes priority over --quick when set)")
 	projectDatabaseDumpCmd.Flags().Int("insert-into-max-bytes", mysqldump.DefaultInsertIntoMaxBytes, "Target maximum INSERT size in bytes; a single larger row is written on its own")
 	projectDatabaseDumpCmd.Flags().StringArray("limit", nil, "Limit the rows of a table to the newest ones (e.g. order=100), can be given multiple times")
+
+	// Autocomplete registrations
+	_ = projectDatabaseDumpCmd.RegisterFlagCompletionFunc("ssl-mode", completeTLSModes)
+	_ = projectDatabaseDumpCmd.RegisterFlagCompletionFunc("compression", cobra.FixedCompletions([]string{string(mysqldump.CompressionGzip), string(mysqldump.CompressionZstd)}, cobra.ShellCompDirectiveNoFileComp))
+}
+
+// completeTLSModes completes the values of --ssl-mode.
+func completeTLSModes(_ *cobra.Command, _ []string, _ string) ([]string, cobra.ShellCompDirective) {
+	modes := make([]string, 0, len(executor.TLSModes))
+	for _, mode := range executor.TLSModes {
+		modes = append(modes, string(mode))
+	}
+
+	return modes, cobra.ShellCompDirectiveNoFileComp
 }

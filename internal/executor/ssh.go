@@ -330,9 +330,7 @@ func (s *SSHExecutor) DatabaseConnection(ctx context.Context) (*DatabaseConnecti
 		return []byte(out), err
 	}
 
-	if err := applyDatabaseTLSEnv(conn, func(key string) string { return values[key] }, readFile); err != nil {
-		return nil, err
-	}
+	applyDatabaseTLSEnv(conn, func(key string) string { return values[key] }, readFile)
 
 	dialTarget := conn.Addr()
 

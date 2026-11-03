@@ -58,6 +58,31 @@ type DatabaseTLS struct {
 	// Needed when the connection is made to a different address than the
 	// database host, e.g. a port published by Docker.
 	ServerName string
+
+	// envFiles holds the DATABASE_SSL_* paths. They are only read when the
+	// TLS configuration is built and the matching PEM field is still empty,
+	// so explicit settings and a disabled mode never touch them.
+	envFiles envTLSFiles
+}
+
+type envTLSFiles struct {
+	ca, cert, key string
+	readFile      func(string) ([]byte, error)
+}
+
+// pem returns data, or the content of the DATABASE_SSL_* file at path when
+// data is empty.
+func (f envTLSFiles) pem(data []byte, envName, path string) ([]byte, error) {
+	if len(data) > 0 || path == "" || f.readFile == nil {
+		return data, nil
+	}
+
+	content, err := f.readFile(path)
+	if err != nil {
+		return nil, fmt.Errorf("could not read %s %q: %w", envName, path, err)
+	}
+
+	return content, nil
 }
 
 // Enabled reports whether a TLS handshake is attempted.
@@ -71,6 +96,21 @@ var errTLSDisabled = errors.New("database TLS is disabled")
 // tlsConfig builds the crypto/tls configuration for connecting to host.
 // Callers check Enabled first.
 func (t DatabaseTLS) tlsConfig(host string) (*tls.Config, error) {
+	caPEM, err := t.envFiles.pem(t.CA, envDatabaseSSLCA, t.envFiles.ca)
+	if err != nil {
+		return nil, err
+	}
+
+	certPEM, err := t.envFiles.pem(t.Cert, envDatabaseSSLCert, t.envFiles.cert)
+	if err != nil {
+		return nil, err
+	}
+
+	keyPEM, err := t.envFiles.pem(t.Key, envDatabaseSSLKey, t.envFiles.key)
+	if err != nil {
+		return nil, err
+	}
+
 	cfg := &tls.Config{MinVersion: tls.VersionTLS12}
 
 	serverName := t.ServerName
@@ -80,20 +120,20 @@ func (t DatabaseTLS) tlsConfig(host string) (*tls.Config, error) {
 	cfg.ServerName = serverName
 
 	var roots *x509.CertPool
-	if len(t.CA) > 0 {
+	if len(caPEM) > 0 {
 		roots = x509.NewCertPool()
-		if !roots.AppendCertsFromPEM(t.CA) {
+		if !roots.AppendCertsFromPEM(caPEM) {
 			return nil, errors.New("could not parse the database TLS CA certificate: no PEM certificate found")
 		}
 		cfg.RootCAs = roots
 	}
 
-	if len(t.Cert) > 0 || len(t.Key) > 0 {
-		if len(t.Cert) == 0 || len(t.Key) == 0 {
+	if len(certPEM) > 0 || len(keyPEM) > 0 {
+		if len(certPEM) == 0 || len(keyPEM) == 0 {
 			return nil, errors.New("database TLS client certificate and key must be configured together")
 		}
 
-		pair, err := tls.X509KeyPair(t.Cert, t.Key)
+		pair, err := tls.X509KeyPair(certPEM, keyPEM)
 		if err != nil {
 			return nil, fmt.Errorf("could not load the database TLS client certificate: %w", err)
 		}
@@ -184,8 +224,9 @@ func phpTruthy(value string) bool {
 // applyDatabaseTLSEnv configures conn.TLS from Shopware's DATABASE_SSL_*
 // variables. lookup returns the value of a variable, readFile the content of a
 // path as seen by Shopware (local, inside the container or on the remote
-// host). Without any of the variables set conn is left untouched.
-func applyDatabaseTLSEnv(conn *DatabaseConnection, lookup func(string) string, readFile func(string) ([]byte, error)) error {
+// host). The files are read lazily when the TLS configuration is built. Without
+// any of the variables set conn is left untouched.
+func applyDatabaseTLSEnv(conn *DatabaseConnection, lookup func(string) string, readFile func(string) ([]byte, error)) {
 	ca := lookup(envDatabaseSSLCA)
 	cert := lookup(envDatabaseSSLCert)
 	key := lookup(envDatabaseSSLKey)
@@ -197,7 +238,7 @@ func applyDatabaseTLSEnv(conn *DatabaseConnection, lookup func(string) string, r
 		if dontVerify && conn.TLS.Enabled() && conn.TLS.Mode != TLSModePreferred {
 			conn.TLS.Mode = TLSModeRequired
 		}
-		return nil
+		return
 	}
 
 	conn.TLS.Mode = TLSModeVerifyIdentity
@@ -205,32 +246,22 @@ func applyDatabaseTLSEnv(conn *DatabaseConnection, lookup func(string) string, r
 		conn.TLS.Mode = TLSModeRequired
 	}
 
+	files := envTLSFiles{readFile: readFile}
+
 	// The docs use DATABASE_SSL_CA=true to force TLS without a CA file.
 	if phpTruthy(ca) && !strings.EqualFold(ca, "true") && ca != "1" {
-		data, err := readFile(ca)
-		if err != nil {
-			return fmt.Errorf("could not read %s %q: %w", envDatabaseSSLCA, ca, err)
-		}
-		conn.TLS.CA = data
+		files.ca = ca
 	}
 
 	if phpTruthy(cert) {
-		data, err := readFile(cert)
-		if err != nil {
-			return fmt.Errorf("could not read %s %q: %w", envDatabaseSSLCert, cert, err)
-		}
-		conn.TLS.Cert = data
+		files.cert = cert
 	}
 
 	if phpTruthy(key) {
-		data, err := readFile(key)
-		if err != nil {
-			return fmt.Errorf("could not read %s %q: %w", envDatabaseSSLKey, key, err)
-		}
-		conn.TLS.Key = data
+		files.key = key
 	}
 
-	return nil
+	conn.TLS.envFiles = files
 }
 
 // resolveRelative makes path absolute against base, as Shopware resolves

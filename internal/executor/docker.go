@@ -187,9 +187,7 @@ func (d *DockerExecutor) DatabaseConnection(ctx context.Context) (*DatabaseConne
 		return d.containerOutput(ctx, "cat", path)
 	}
 
-	if err := applyDatabaseTLSEnv(conn, func(key string) string { return values[key] }, readFile); err != nil {
-		return nil, err
-	}
+	applyDatabaseTLSEnv(conn, func(key string) string { return values[key] }, readFile)
 
 	// The host part of DATABASE_URL is only resolvable inside the compose
 	// network when it names a compose service. Swap it for the address the
