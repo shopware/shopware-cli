@@ -12,6 +12,7 @@ import (
 	"github.com/shopware/shopware-cli/internal/proxy"
 	"github.com/shopware/shopware-cli/internal/shop"
 	"github.com/shopware/shopware-cli/internal/system"
+	"github.com/shopware/shopware-cli/internal/tracking"
 	"github.com/shopware/shopware-cli/internal/tui"
 	"github.com/shopware/shopware-cli/logging"
 )
@@ -20,6 +21,9 @@ const (
 	// projectNameHelp is the help text shown under the project name input.
 	projectNameHelp = "The name of the project directory to create (leave empty to use the current directory)"
 )
+
+// errCreateCancelled stops the creation when the user declines to continue.
+var errCreateCancelled = tracking.NewCancelled("project creation cancelled")
 
 type createOptions struct {
 	projectFolder      string
