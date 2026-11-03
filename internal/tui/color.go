@@ -1,41 +1,38 @@
 package tui
 
-import (
-	"charm.land/lipgloss/v2"
-	"charm.land/lipgloss/v2/compat"
-)
+import "charm.land/lipgloss/v2"
 
-var GreenText = lipgloss.NewStyle().Foreground(compat.AdaptiveColor{
+var GreenText = lipgloss.NewStyle().Foreground(AdaptiveColor{
 	Light: lipgloss.Color("#047857"),
 	Dark:  lipgloss.Color("#04B575"),
 })
 
-var RecommendedText = lipgloss.NewStyle().Foreground(compat.AdaptiveColor{
+var RecommendedText = lipgloss.NewStyle().Foreground(AdaptiveColor{
 	Light: lipgloss.Color("#047857"),
 	Dark:  lipgloss.Color("#04B575"),
 }).Bold(true)
 
-var SecondaryText = lipgloss.NewStyle().Foreground(compat.AdaptiveColor{
+var SecondaryText = lipgloss.NewStyle().Foreground(AdaptiveColor{
 	Light: lipgloss.Color("#B8860B"),
 	Dark:  lipgloss.Color("#FFD700"),
 }).Bold(true)
 
-var RedText = lipgloss.NewStyle().Foreground(compat.AdaptiveColor{
+var RedText = lipgloss.NewStyle().Foreground(AdaptiveColor{
 	Light: lipgloss.Color("#DC2626"),
 	Dark:  lipgloss.Color("#EF4444"),
 })
 
-var YellowText = lipgloss.NewStyle().Foreground(compat.AdaptiveColor{
+var YellowText = lipgloss.NewStyle().Foreground(AdaptiveColor{
 	Light: lipgloss.Color("#B8860B"),
 	Dark:  lipgloss.Color("#FFD700"),
 })
 
-var NeutralText = lipgloss.NewStyle().Foreground(compat.AdaptiveColor{
+var NeutralText = lipgloss.NewStyle().Foreground(AdaptiveColor{
 	Light: lipgloss.Color("#1F2937"),
 	Dark:  lipgloss.Color("#FFFFFF"),
 })
 
-var BlueColor = compat.AdaptiveColor{
+var BlueColor = AdaptiveColor{
 	Light: lipgloss.Color("#0063B8"),
 	Dark:  lipgloss.Color("#189EFF"),
 }
