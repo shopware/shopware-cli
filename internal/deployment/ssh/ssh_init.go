@@ -96,26 +96,25 @@ func (s *SSH) promptDeploymentInitialization(ctx context.Context, state sshDeplo
 	adminPassword := ""
 	salesChannelURL := ""
 
-	status := "No active release was found."
-	if state.HasCurrent {
-		status = "An active release was found."
+	proceed := true
+	err := huh.NewForm(huh.NewGroup(
+		huh.NewConfirm().
+			Title("This environment is not set up for deployments yet. Continue with setup?").
+			Affirmative("Continue").
+			Negative("Cancel").
+			Value(&proceed),
+	)).WithTheme(tui.ShopwareTheme()).RunWithContext(ctx)
+	if errors.Is(err, huh.ErrUserAborted) {
+		return sshDeploymentInitConfig{}, false, nil
 	}
-	if state.HasRuntimeConfig {
-		status += " Runtime configuration already exists."
-	}
-	if state.HasInstallConfig {
-		status += " Pending first-install values already exist."
+	if err != nil || !proceed {
+		return sshDeploymentInitConfig{}, false, err
 	}
 
 	requiredValue := tui.CombineValidators(tui.ValidateRequired, tui.ValidateSingleLine)
 	applicationURL := tui.CombineValidators(requiredValue, tui.ValidateHTTPURL)
 
 	form := huh.NewForm(
-		huh.NewGroup(
-			huh.NewNote().
-				Title("Initialize SSH deployment").
-				Description(status),
-		),
 		huh.NewGroup(
 			huh.NewInput().
 				Title("Application URL").
@@ -202,8 +201,11 @@ func (s *SSH) promptDeploymentInitialization(ctx context.Context, state sshDeplo
 				Negative("Cancel").
 				Value(&confirmed),
 		),
-	)
+	).WithTheme(tui.ShopwareTheme())
 	if err := form.RunWithContext(ctx); err != nil {
+		if errors.Is(err, huh.ErrUserAborted) {
+			return sshDeploymentInitConfig{}, false, nil
+		}
 		return sshDeploymentInitConfig{}, false, err
 	}
 
