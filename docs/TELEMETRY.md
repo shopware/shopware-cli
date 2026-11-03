@@ -344,16 +344,32 @@ the check's level is sent, never the underlying values.
 | `check`  | Which check ran (`php_version`, `memory_limit`, `admin_worker`, `flow_builder_log_level`) | `admin_worker`             |
 | `result` | The check's level                                                                         | `ok` / `warn` / `critical` |
 
+### `shopware_cli.project.dev.session_start` — dashboard opened
+
+Sent when the dashboard opens. The `shopware_cli.project.dev.session` event
+that ends the session carries the same `session_id`. A start without a
+matching end usually means the session did not end through the dashboard's
+own quit paths: it crashed, the process was stopped with a signal such as
+SIGTERM, or its terminal was closed. Events are sent over UDP without retries,
+so either event can also get lost.
+
+| Tag          | Meaning                                                                          | Example                      |
+| ------------ | -------------------------------------------------------------------------------- | ---------------------------- |
+| `session_id` | Random ID created for this session only; not saved on the machine and not reused | `4STH7GMDHUDF6VGTLGHSKU7FOD` |
+| `executor`   | Environment the project runs in                                                  | `docker` / `local`           |
+
 ### `shopware_cli.project.dev.session` — dashboard session shape
 
 Sent when the user leaves the dashboard (the overall command duration is
 already covered by `shopware_cli.command`; this event adds what happened
-inside the TUI).
+inside the TUI). Quitting before the dashboard opens can send it without a
+`session_start`.
 
 | Tag             | Meaning                                                                  | Example                                     |
 | --------------- | ------------------------------------------------------------------------ | ------------------------------------------- |
+| `session_id`    | Same random ID as on `session_start`                                     | `4STH7GMDHUDF6VGTLGHSKU7FOD`                |
 | `executor`      | Environment the project runs in                                          | `docker` / `local`                          |
-| `duration_ms`   | TUI session length                                                       | `1912734`                                   |
+| `duration_ms`   | Time since the TUI launched, including container start and install       | `1912734`                                   |
 | `tabs_visited`  | Which tabs were opened (sorted, comma-separated)                         | `config,instance,overview`                  |
 | `actions`       | Number of palette actions invoked                                        | `3`                                         |
 | `watchers_used` | Which watchers were started (omitted if none)                            | `admin,storefront`                          |

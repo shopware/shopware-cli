@@ -135,6 +135,35 @@ func TestSessionTagsSentOnce(t *testing.T) {
 	assert.False(t, ok)
 }
 
+func TestSessionStartTagsSentOnce(t *testing.T) {
+	tel := newTelemetryState(true)
+
+	tags, ok := tel.sessionStartTags()
+	assert.True(t, ok)
+	assert.NotEmpty(t, tags["session_id"])
+	assert.Equal(t, "docker", tags["executor"])
+
+	_, ok = tel.sessionStartTags()
+	assert.False(t, ok)
+}
+
+func TestSessionStartNotSentAfterTheSessionEnded(t *testing.T) {
+	tel := newTelemetryState(true)
+	tel.sessionTags()
+
+	_, ok := tel.sessionStartTags()
+	assert.False(t, ok)
+}
+
+func TestSessionIDLinksStartAndEnd(t *testing.T) {
+	tel := newTelemetryState(false)
+	start, _ := tel.sessionStartTags()
+	end, _ := tel.sessionTags()
+
+	assert.Equal(t, start["session_id"], end["session_id"])
+	assert.NotEqual(t, tel.sessionID, newTelemetryState(false).sessionID)
+}
+
 func TestSessionTagsDefaults(t *testing.T) {
 	tel := newTelemetryState(false)
 	tags, ok := tel.sessionTags()
@@ -231,6 +260,8 @@ func TestNilTelemetryStateIsSafe(t *testing.T) {
 	tel.watcherStarted(watcherAdmin, false)
 
 	_, ok := tel.sessionTags()
+	assert.False(t, ok)
+	_, ok = tel.sessionStartTags()
 	assert.False(t, ok)
 	_, ok = tel.taskTags("success")
 	assert.False(t, ok)

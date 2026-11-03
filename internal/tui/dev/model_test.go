@@ -282,7 +282,9 @@ func TestUpdateKeyPress_PhaseInstallFailed_RestartRunsFullInstall(t *testing.T) 
 }
 
 func TestUpdateKeyPress_PhaseInstallFailed_CancelOpensDashboard(t *testing.T) {
+	events := captureDevEvents(t)
 	m := newTestModel(t)
+	m.telemetry = newTelemetryState(false)
 	m.phase = phaseInstallFailed
 	m.overlayLines = []string{"output from failed attempt"}
 	m.installProg = installProgress{
@@ -300,6 +302,21 @@ func TestUpdateKeyPress_PhaseInstallFailed_CancelOpensDashboard(t *testing.T) {
 	assert.Nil(t, final.installProg.failure)
 	assert.False(t, final.installProg.showLogs)
 	assert.NotNil(t, cmd)
+	assert.Equal(t, 1, sessionStarts(*events))
+}
+
+func TestUpdateInstallStepAsk_SkipOpensDashboard(t *testing.T) {
+	events := captureDevEvents(t)
+	m := newTestModel(t)
+	m.telemetry = newTelemetryState(false)
+	m.phase = phaseInstallPrompt
+	m.install.confirmYes = false
+
+	updated, cmd := m.updateInstallStepAsk(keySpecial(tea.KeyEnter))
+
+	assert.Equal(t, phaseDashboard, updated.(Model).phase)
+	assert.NotNil(t, cmd)
+	assert.Equal(t, 1, sessionStarts(*events))
 }
 
 func TestUpdateKeyPress_PhaseTask_DoneTransitionsToDashboard(t *testing.T) {
@@ -936,6 +953,46 @@ func captureDevEvents(t *testing.T) *[]devEvent {
 	}
 	trackEvent, trackEventNow = record, record
 	return events
+}
+
+// sessionStarts returns how many session_start events were recorded.
+func sessionStarts(events []devEvent) int {
+	count := 0
+	for _, event := range events {
+		if event.name == tracking.EventDevSessionStart {
+			count++
+		}
+	}
+	return count
+}
+
+func TestDashboardSessionStartAndEndShareTheID(t *testing.T) {
+	events := captureDevEvents(t)
+	m := newTestModel(t)
+	m.telemetry = newTelemetryState(false)
+
+	m.startDashboard()
+	m.Update(keyRune('q'))
+
+	require.Len(t, *events, 2)
+	start, end := (*events)[0], (*events)[1]
+	assert.Equal(t, tracking.EventDevSessionStart, start.name)
+	assert.Equal(t, tracking.EventDevSession, end.name)
+	assert.NotEmpty(t, start.tags[tracking.TagSessionID])
+	assert.Equal(t, start.tags[tracking.TagSessionID], end.tags[tracking.TagSessionID])
+}
+
+func TestLateDashboardStartAfterQuitSendsNoStart(t *testing.T) {
+	events := captureDevEvents(t)
+	m := newTestModel(t)
+	m.telemetry = newTelemetryState(false)
+
+	// The user quits while a slow install check is running; its result then opens the dashboard.
+	m.Update(keyRune('q'))
+	m.startDashboard()
+
+	require.Len(t, *events, 1)
+	assert.Equal(t, tracking.EventDevSession, (*events)[0].name)
 }
 
 func TestWatcherPrepFailureReportsTheStep(t *testing.T) {

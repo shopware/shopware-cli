@@ -2,6 +2,7 @@ package dev
 
 import (
 	"context"
+	"crypto/rand"
 	"errors"
 	"slices"
 	"strconv"
@@ -44,13 +45,15 @@ const (
 // construct Model directly without it, so every method is nil-safe.
 type telemetryState struct {
 	sessionStart time.Time
+	sessionID    string
 	executor     string
 
-	tabsVisited  map[string]struct{}
-	watchersUsed map[string]struct{}
-	actionCount  int
-	exitChoice   string
-	sessionSent  bool
+	tabsVisited      map[string]struct{}
+	watchersUsed     map[string]struct{}
+	actionCount      int
+	exitChoice       string
+	sessionSent      bool
+	sessionStartSent bool
 
 	installStart    time.Time
 	installReported bool
@@ -69,6 +72,7 @@ func newTelemetryState(dockerMode bool) *telemetryState {
 	}
 	return &telemetryState{
 		sessionStart: time.Now(),
+		sessionID:    rand.Text(),
 		executor:     executorType,
 		tabsVisited:  map[string]struct{}{"overview": {}},
 		watchersUsed: map[string]struct{}{},
@@ -122,6 +126,20 @@ func (t *telemetryState) setExitChoice(choice string) {
 	t.exitChoice = choice
 }
 
+// sessionStartTags builds the project.dev.session_start event and marks it
+// sent, so the event fires at most once per session and never after the
+// session ended, for example when a slow install check lands after quitting.
+func (t *telemetryState) sessionStartTags() (map[string]string, bool) {
+	if t == nil || t.sessionStartSent || t.sessionSent {
+		return nil, false
+	}
+	t.sessionStartSent = true
+	return map[string]string{
+		tracking.TagSessionID: t.sessionID,
+		tracking.TagExecutor:  t.executor,
+	}, true
+}
+
 // sessionTags builds the project.dev.session event and marks it sent, so the
 // event fires at most once even when several quit paths run.
 func (t *telemetryState) sessionTags() (map[string]string, bool) {
@@ -135,6 +153,7 @@ func (t *telemetryState) sessionTags() (map[string]string, bool) {
 		exit = exitQuit
 	}
 	tags := map[string]string{
+		tracking.TagSessionID:   t.sessionID,
 		tracking.TagExecutor:    t.executor,
 		tracking.TagDurationMS:  durationMS(time.Since(t.sessionStart)),
 		tracking.TagTabsVisited: joinSet(t.tabsVisited),

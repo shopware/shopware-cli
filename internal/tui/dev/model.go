@@ -309,6 +309,10 @@ func (m *Model) shutdown() {
 }
 
 func (m *Model) startDashboard() tea.Cmd {
+	// The session event carries the same session_id, so a start without an end shows a session that did not quit normally.
+	if tags, ok := m.telemetry.sessionStartTags(); ok {
+		trackEvent(tracking.EventDevSessionStart, tags)
+	}
 	return tea.Batch(
 		m.overview.Init(),
 		m.instance.StartStreaming(),

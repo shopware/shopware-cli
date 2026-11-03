@@ -22,6 +22,7 @@ const (
 
 	// The project.dev.* events are sent by the interactive dev TUI (internal/tui/dev).
 	EventDevSession         = "project.dev.session"
+	EventDevSessionStart    = "project.dev.session_start"
 	EventDevInstall         = "project.dev.install"
 	EventDevMigrationWizard = "project.dev.migration_wizard"
 	EventDevDockerStart     = "project.dev.docker_start"
@@ -107,8 +108,11 @@ const (
 	// EventDevHealth
 	TagCheck = "check"
 
+	// EventDevSession and EventDevSessionStart
+	TagSessionID = "session_id"
+	TagExecutor  = "executor"
+
 	// EventDevSession
-	TagExecutor     = "executor"
 	TagTabsVisited  = "tabs_visited"
 	TagActions      = "actions"
 	TagWatchersUsed = "watchers_used"
