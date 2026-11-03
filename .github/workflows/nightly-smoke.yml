@@ -41,17 +41,17 @@ jobs:
             store_ref: trunk
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@46b06cea07f9e64621fdf066ba77ac6915163d43 # ratchet:step-security/harden-runner@v2.22.3
+        uses: step-security/harden-runner@v2.22.3
         with:
           egress-policy: audit
 
       - name: Checkout Repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # ratchet:actions/checkout@v7.0.1
+        uses: actions/checkout@v7.0.1
         with:
           persist-credentials: false
 
       - name: Set up Go
-        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # ratchet:actions/setup-go@v7.0.0
+        uses: actions/setup-go@v7.0.0
         with:
           go-version: '1.27'
           cache: true
@@ -104,7 +104,7 @@ jobs:
           exit 1
 
       - name: Checkout SwagExtensionStore
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # ratchet:actions/checkout@v7.0.1
+        uses: actions/checkout@v7.0.1
         with:
           persist-credentials: false
           repository: shopware/SwagExtensionStore
@@ -178,29 +178,29 @@ jobs:
         line: ['6.6', '6.7']
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@46b06cea07f9e64621fdf066ba77ac6915163d43 # ratchet:step-security/harden-runner@v2.22.3
+        uses: step-security/harden-runner@v2.22.3
         with:
           egress-policy: audit
 
       - name: Checkout Repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # ratchet:actions/checkout@v7.0.1
+        uses: actions/checkout@v7.0.1
         with:
           persist-credentials: false
 
       - name: Set up Go
-        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # ratchet:actions/setup-go@v7.0.0
+        uses: actions/setup-go@v7.0.0
         with:
           go-version: '1.27'
           cache: true
           check-latest: true
 
       - name: Setup PHP
-        uses: shivammathur/setup-php@eb7c497e18156a6bbabfef1d3a82760b9eda3962 # ratchet:shivammathur/setup-php@2.40.0
+        uses: shivammathur/setup-php@2.40.0
         with:
           php-version: '8.3'
 
       - name: Setup Node
-        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # ratchet:actions/setup-node@v6
+        uses: actions/setup-node@v7.1.0
         with:
           node-version: '24'
 
@@ -243,7 +243,7 @@ jobs:
       actions: write
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@46b06cea07f9e64621fdf066ba77ac6915163d43 # ratchet:step-security/harden-runner@v2.22.3
+        uses: step-security/harden-runner@v2.22.3
         with:
           egress-policy: audit
 

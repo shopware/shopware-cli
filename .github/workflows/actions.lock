@@ -33,6 +33,12 @@ workflows:
         - 'actions/checkout@v7.0.1'
         - 'jdx/mise-action@v5.2.6'
         - 'step-security/harden-runner@v2.22.3'
+    '.github/workflows/nightly-smoke.yml':
+        - 'actions/checkout@v7.0.1'
+        - 'actions/setup-go@v7.0.0'
+        - 'actions/setup-node@v7.1.0'
+        - 'shivammathur/setup-php@2.40.0'
+        - 'step-security/harden-runner@v2.22.3'
     '.github/workflows/release.yml':
         - 'actions/attest@v4.2.2'
         - 'actions/checkout@v7.0.1'
