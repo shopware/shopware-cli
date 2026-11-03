@@ -17,6 +17,7 @@ import (
 	"github.com/shopware/shopware-cli/internal/system"
 	"github.com/shopware/shopware-cli/internal/tracking"
 	"github.com/shopware/shopware-cli/internal/tui"
+	"github.com/shopware/shopware-cli/internal/validation"
 )
 
 // useTrackingTestRoot swaps rootCmd for a minimal tree containing
@@ -275,6 +276,60 @@ func TestTrackCommandExecution_PlainFailureHasNoMissingTag(t *testing.T) {
 
 	require.Len(t, *events, 1)
 	assert.NotContains(t, (*events)[0], tracking.TagMissing)
+}
+
+func TestTrackCommandExecution_ToolReportTags(t *testing.T) {
+	tests := []struct {
+		name            string
+		cancelled       bool
+		report          *validation.ToolReportError
+		failedTools     string
+		toolsWithErrors string
+	}{
+		{
+			name:            "findings only",
+			report:          &validation.ToolReportError{ToolsWithErrors: []string{"builtin", "phpstan"}},
+			toolsWithErrors: "builtin,phpstan",
+		},
+		{
+			name:            "tool failure and findings",
+			report:          &validation.ToolReportError{FailedTools: []string{"eslint"}, ToolsWithErrors: []string{"builtin", "eslint"}},
+			failedTools:     "eslint",
+			toolsWithErrors: "builtin,eslint",
+		},
+		{
+			name:        "tool failure only",
+			report:      &validation.ToolReportError{FailedTools: []string{"phpstan"}},
+			failedTools: "phpstan",
+		},
+		{
+			name:      "cancelled run",
+			cancelled: true,
+			report:    &validation.ToolReportError{FailedTools: []string{"phpstan"}},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			events := useTrackingTestRoot(t, "shopware-cli")
+			ctx, cancel := context.WithCancel(t.Context())
+			defer cancel()
+			if tt.cancelled {
+				cancel()
+			}
+
+			trackCommandExecution(ctx, []string{"extension", "build-me"}, 0, fmt.Errorf("cannot validate: %w", tt.report), "")
+
+			require.Len(t, *events, 1)
+			tags := (*events)[0]
+			for key, want := range map[string]string{tracking.TagFailedTools: tt.failedTools, tracking.TagToolsWithErrors: tt.toolsWithErrors} {
+				if want == "" {
+					assert.NotContains(t, tags, key)
+				} else {
+					assert.Equal(t, want, tags[key])
+				}
+			}
+		})
+	}
 }
 
 func TestTrackCommandExecution_PinnedPHPNotFound(t *testing.T) {

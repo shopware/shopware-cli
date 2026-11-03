@@ -14,6 +14,7 @@ import (
 	"github.com/shopware/shopware-cli/internal/system"
 	"github.com/shopware/shopware-cli/internal/tracking"
 	"github.com/shopware/shopware-cli/internal/tui"
+	"github.com/shopware/shopware-cli/internal/validation"
 )
 
 var trackEvent = tracking.Track
@@ -48,6 +49,7 @@ func trackCommandExecution(ctx context.Context, args []string, duration time.Dur
 	}
 	var missing *system.MissingDependenciesError
 	var pinnedPHP *system.PHPVersionNotFoundError
+	var toolReport *validation.ToolReportError
 	switch {
 	case result != tracking.ResultFailure:
 	case errors.As(runErr, &missing):
@@ -55,6 +57,13 @@ func trackCommandExecution(ctx context.Context, args []string, duration time.Dur
 	case errors.As(runErr, &pinnedPHP):
 		// A pinned PHP that is not installed stops the command before the dependency check.
 		tags[tracking.TagMissing] = "php_version"
+	case errors.As(runErr, &toolReport):
+		if len(toolReport.FailedTools) > 0 {
+			tags[tracking.TagFailedTools] = strings.Join(toolReport.FailedTools, ",")
+		}
+		if len(toolReport.ToolsWithErrors) > 0 {
+			tags[tracking.TagToolsWithErrors] = strings.Join(toolReport.ToolsWithErrors, ",")
+		}
 	}
 	if shopwareVersion != "" {
 		tags[tracking.TagShopwareVersion] = shopwareVersion
