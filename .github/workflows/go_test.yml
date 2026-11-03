@@ -27,7 +27,7 @@ jobs:
       code-quality: write
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@46b06cea07f9e64621fdf066ba77ac6915163d43 # ratchet:step-security/harden-runner@v2.22.3
+        uses: step-security/harden-runner@v2.22.3
         with:
           egress-policy: block
           allowed-endpoints: >
@@ -42,12 +42,12 @@ jobs:
             sum.golang.org:443
 
       - name: Checkout Repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # ratchet:actions/checkout@v7.0.1
+        uses: actions/checkout@v7.0.1
         with:
           persist-credentials: false
 
       - name: Set up Go
-        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # ratchet:actions/setup-go@v7.0.0
+        uses: actions/setup-go@v7.0.0
         with:
           go-version: '1.27'
           check-latest: true
@@ -73,7 +73,7 @@ jobs:
           GOFLAGS: -tags=deployment
 
       - name: Upload code coverage
-        uses: codecov/codecov-action@303a32d7a59b442fa8d48b6a1cc6825c09c847a5 # ratchet:codecov/codecov-action@v7.1.1
+        uses: codecov/codecov-action@v7.1.1
         with:
           files: coverage.xml
           flags: go-test

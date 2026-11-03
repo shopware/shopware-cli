@@ -183,10 +183,10 @@ shopware-cli extension validate --help
 shopware-cli project validate [flags]
 ```
 
-Validates the Shopware project against the checks implemented by the current CLI
-and configured tools. It copies the project to a temporary directory and
-installs its toolset first, so a first run can be slow; `--no-copy` validates in
-place and skips the copy.
+Validates the Shopware project in place against the checks implemented by the
+current CLI and configured tools. It installs its toolset first, so a first run
+can be slow. PHPStan needs the project's installed `vendor/`: run
+`composer install` first, or the PHPStan check fails.
 
 Common flags include:
 
@@ -196,8 +196,6 @@ Common flags include:
   (`--reporter` is a deprecated alias).
 - `--local-only` — limit extension discovery to plugins in `custom/*` (for the
   project toolset); does not add per-extension metadata validation.
-- `--no-copy` — do not copy project files to a temporary directory before
-  validation.
 - `--verbose` — show debug output.
 
 Use current `--help` rather than treating this list as exhaustive.
@@ -218,6 +216,12 @@ shopware-cli extension validate [path] [flags]
 
 The extension path is required; use `.` for the current extension.
 
+A folder is validated in place. When it has no `vendor/`, PHPStan's composer
+dependencies are installed into `var/cache/shopware-cli/` inside the extension.
+That directory ignores itself in git, is not packed into the zip, and is kept
+between runs; composer updates it on every run. An existing `vendor/` is used as
+it is, so `--check-against` has no effect then.
+
 Normal extension validation runs the built-in checks implemented by the current
 CLI. Store compliance checks that Administration and Storefront source files
 have matching compiled assets. Validation also reports metadata and code quality
@@ -235,7 +239,6 @@ Common flags include:
   Shopware version to check against.
 - `--format <format>` — choose an output format supported by the current CLI
   (`--reporter` is a deprecated alias).
-- `--no-copy` — do not copy extension files to a temporary directory.
 - `--verbose` — show debug output.
 
 For Store-distribution workflows, use the `shopware-cli-extension-store` skill

@@ -212,6 +212,7 @@ func GetConfigFromProject(ctx context.Context, root string, onlyLocal bool) (*To
 		ValidationIgnores:     validationIgnores,
 		Extensions:            checkExtensions,
 		PHPVersion:            shopCfg.PHPVersion,
+		IsProject:             true,
 	}
 	if shopCfg.Validation != nil && shopCfg.Validation.PhpVersion != "" {
 		toolCfg.PHPVersion = shopCfg.Validation.PhpVersion

@@ -2,23 +2,19 @@ package project
 
 import (
 	"fmt"
-	"os"
 	"path/filepath"
-	"sync"
 
 	"github.com/spf13/cobra"
 
 	"github.com/shopware/shopware-cli/internal/shop"
-	"github.com/shopware/shopware-cli/internal/system"
 	"github.com/shopware/shopware-cli/internal/validation"
 	"github.com/shopware/shopware-cli/internal/verifier"
-	"github.com/shopware/shopware-cli/logging"
 )
 
 var projectValidateCmd = &cobra.Command{
 	Use:   "validate [path]",
 	Short: "Run static analysis and Shopware checks on a project",
-	Long:  "Validate the project's own code, such as extensions in custom/ and configured bundles. Packages that Composer installs into vendor/ are not validated. Runs on a temporary copy unless --no-copy is passed.",
+	Long:  "Validate the project's own code, such as extensions in custom/ and configured bundles. Packages that Composer installs into vendor/ are not validated, but PHPStan needs them, so run composer install first.",
 	Args:  cobra.MaximumNArgs(1),
 	PreRunE: func(cmd *cobra.Command, args []string) error {
 		if _, err := projectValidationFormat(cmd); err != nil {
@@ -35,14 +31,11 @@ var projectValidateCmd = &cobra.Command{
 		reportingFormat, _ := projectValidationFormat(cmd)
 		ctx := cmd.Context()
 		progress := verifier.NewProgress(reportingFormat)
-		cleanup := func() {}
-		defer func() { cleanup() }()
 		only, _ := cmd.Flags().GetString("only")
 		exclude, _ := cmd.Flags().GetString("exclude")
 
 		// Tool selection was validated in PreRunE.
 		tools, statuses, _ := selectProjectValidationTools(only, exclude)
-		noCopy, _ := cmd.Flags().GetBool("no-copy")
 		localOnly, _ := cmd.Flags().GetBool("local-only")
 
 		var err error
@@ -62,32 +55,8 @@ var projectValidateCmd = &cobra.Command{
 			return fmt.Errorf("cannot find path: %w", err)
 		}
 
-		validationPath := projectPath
-		if !noCopy {
-			tmpDir, err := os.MkdirTemp(os.TempDir(), "analyse-project-*")
-			if err != nil {
-				return fmt.Errorf("cannot create temporary directory: %w", err)
-			}
-			cleanup = sync.OnceFunc(func() {
-				finishCleanup := progress.Start("removing temporary files")
-				cleanupErr := os.RemoveAll(tmpDir)
-				finishCleanup(cleanupErr)
-				if cleanupErr != nil {
-					logging.FromContext(ctx).Errorf("Failed to remove temporary directory: %v", cleanupErr)
-				}
-			})
-
-			finishCopy := progress.Start("copying files (use \"--no-copy\" to skip)")
-			copyErr := system.CopyFiles(ctx, projectPath, tmpDir)
-			finishCopy(copyErr)
-			if copyErr != nil {
-				return copyErr
-			}
-			validationPath = tmpDir
-		}
-
 		finishConfig := progress.Start("discovering project configuration")
-		toolCfg, err := verifier.GetConfigFromProject(ctx, validationPath, localOnly)
+		toolCfg, err := verifier.GetConfigFromProject(ctx, projectPath, localOnly)
 		finishConfig(err)
 		if err != nil {
 			return err
@@ -104,7 +73,6 @@ var projectValidateCmd = &cobra.Command{
 		results := verifier.RunTools(ctx, tools, statuses, *toolCfg, progress, func(tool verifier.CheckTool, execution *verifier.ToolExecution) verifier.ToolSummary {
 			return tool.Check(ctx, *toolCfg, execution)
 		})
-		cleanup()
 		return validation.ReportTools(results, reportingFormat, "Checkers")
 	},
 }
@@ -135,5 +103,6 @@ func init() {
 	_ = projectValidateCmd.RegisterFlagCompletionFunc("exclude", completeToolNames[verifier.CheckTool])
 	projectValidateCmd.MarkFlagsMutuallyExclusive("format", "reporter")
 	_ = projectValidateCmd.PersistentFlags().MarkDeprecated("reporter", "use --format instead")
+	_ = projectValidateCmd.PersistentFlags().MarkDeprecated("no-copy", "validation always runs in place, omit --no-copy")
 	_ = projectValidateCmd.PersistentFlags().MarkHidden("reporter")
 }

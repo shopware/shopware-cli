@@ -5,16 +5,12 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
-	"sync"
-	"time"
 
 	"github.com/spf13/cobra"
 
 	"github.com/shopware/shopware-cli/internal/extension"
-	"github.com/shopware/shopware-cli/internal/system"
 	"github.com/shopware/shopware-cli/internal/validation"
 	"github.com/shopware/shopware-cli/internal/verifier"
-	"github.com/shopware/shopware-cli/logging"
 )
 
 var extensionValidateCmd = &cobra.Command{
@@ -22,7 +18,8 @@ var extensionValidateCmd = &cobra.Command{
 	Short: "Validate extension metadata, assets, and code quality",
 	Long: `Validate an extension folder or ZIP file.
 Store compliance checks that Administration and Storefront source files have matching compiled assets.
-Enable it with validation.store_compliance in the extension configuration or SHOPWARE_CLI_STORE_COMPLIANCE=1.`,
+Enable it with validation.store_compliance in the extension configuration or SHOPWARE_CLI_STORE_COMPLIANCE=1.
+A folder is validated in place; without an existing vendor/, the composer dependencies for PHPStan are installed inside var/cache/shopware-cli.`,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		storeCompliance, _ := cmd.Flags().GetBool("store-compliance")
@@ -30,13 +27,9 @@ Enable it with validation.store_compliance in the extension configuration or SHO
 		reportingFormat, _ := extensionValidationFormat(cmd)
 		ctx := cmd.Context()
 		progress := verifier.NewProgress(reportingFormat)
-		cleanup := func() {}
-		defer func() { cleanup() }()
-		logger := logging.FromContext(ctx)
 		checkAgainst, _ := cmd.Flags().GetString("check-against")
 		only, _ := cmd.Flags().GetString("only")
 		exclude, _ := cmd.Flags().GetString("exclude")
-		noCopy, _ := cmd.Flags().GetBool("no-copy")
 
 		// Tool selection was validated in PreRunE.
 		tools, statuses, _ := selectExtensionValidationTools(only, exclude)
@@ -54,36 +47,7 @@ Enable it with validation.store_compliance in the extension configuration or SHO
 		var toolCfg *verifier.ToolConfig
 
 		if stat.IsDir() {
-			validationPath := path
-			if noCopy {
-				logger.Debugf("Skipping copying extension files to temporary directory due to --no-copy flag")
-			} else if needsTools {
-				tmpDir, err := os.MkdirTemp(os.TempDir(), "analyse-extension-*")
-				if err != nil {
-					return fmt.Errorf("cannot create temporary directory: %w", err)
-				}
-				cleanup = sync.OnceFunc(func() {
-					finishCleanup := progress.Start("removing temporary files")
-					cleanupErr := os.RemoveAll(tmpDir)
-					finishCleanup(cleanupErr)
-					if cleanupErr != nil {
-						logger.Errorf("Failed to remove temporary directory: %v", cleanupErr)
-					}
-				})
-
-				beforeCopyTime := time.Now()
-				finishCopy := progress.Start("copying files (use \"--no-copy\" to skip)")
-				copyErr := system.CopyFiles(ctx, path, tmpDir)
-				finishCopy(copyErr)
-				if copyErr != nil {
-					return copyErr
-				}
-
-				logger.Debugf("Copied extension files to temporary directory in %s", time.Since(beforeCopyTime).String())
-				validationPath = tmpDir
-			}
-
-			ext, err := extension.GetExtensionByFolder(ctx, validationPath)
+			ext, err := extension.GetExtensionByFolder(ctx, path)
 			if err != nil {
 				return err
 			}
@@ -134,7 +98,6 @@ Enable it with validation.store_compliance in the extension configuration or SHO
 		results := verifier.RunTools(ctx, tools, statuses, *toolCfg, progress, func(tool verifier.CheckTool, execution *verifier.ToolExecution) verifier.ToolSummary {
 			return tool.Check(ctx, *toolCfg, execution)
 		})
-		cleanup()
 		return validation.ReportTools(results, reportingFormat, "Checkers")
 	},
 }
@@ -179,6 +142,7 @@ func init() {
 	_ = extensionValidateCmd.PersistentFlags().MarkDeprecated("full", "all validation checks now run by default; omit --full; to restore old behaviour use --only builtin")
 	_ = extensionValidateCmd.PersistentFlags().MarkDeprecated("store-compliance", "use validation.store_compliance in the extension configuration")
 	_ = extensionValidateCmd.PersistentFlags().MarkDeprecated("reporter", "use --format instead")
+	_ = extensionValidateCmd.PersistentFlags().MarkDeprecated("no-copy", "validation always runs in place, omit --no-copy")
 	_ = extensionValidateCmd.PersistentFlags().MarkHidden("reporter")
 	extensionValidateCmd.PreRunE = func(cmd *cobra.Command, args []string) error {
 		if _, err := extensionValidationFormat(cmd); err != nil {
