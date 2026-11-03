@@ -102,6 +102,10 @@ keeps one voice. When a rule and existing code disagree, the code gets fixed.
   `logging.SilenceError` so it is not printed twice. Use `logging.NewSilent` for
   sentinel errors, or add a `SilenceError()` marker method to a custom error
   type. Wrapped errors are recognized with `errors.As`.
+- When a command stops with an error because the user declined to continue at a
+  prompt, create that error with `tracking.NewCancelled`, or add a `Cancelled()`
+  marker method to a custom error type, so the usage data reports the run as
+  `cancelled`, not as a failure.
 - Without a terminal, or with `--no-interaction`, a command that would prompt
   fails fast and names the flag or environment variable that replaces the
   prompt.

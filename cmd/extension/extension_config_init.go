@@ -1,7 +1,6 @@
 package extension
 
 import (
-	"errors"
 	"path/filepath"
 
 	"charm.land/huh/v2"
@@ -9,6 +8,7 @@ import (
 
 	"github.com/shopware/shopware-cli/internal/extension"
 	"github.com/shopware/shopware-cli/internal/system"
+	"github.com/shopware/shopware-cli/internal/tracking"
 	"github.com/shopware/shopware-cli/logging"
 )
 
@@ -50,7 +50,7 @@ All other configuration keys are optional, add what you need
 				return err
 			}
 			if !overwrite {
-				return errors.New("aborted: config already exists (pass --force to overwrite)")
+				return tracking.NewCancelled("aborted: config already exists (pass --force to overwrite)")
 			}
 			force = true
 		}

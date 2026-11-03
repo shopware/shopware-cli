@@ -24,11 +24,13 @@ func trackCommandExecution(ctx context.Context, args []string, duration time.Dur
 		return
 	}
 
-	// Ctrl+C counts as cancelled, also when a child process or a prompt reported it.
+	// Ctrl+C counts as cancelled, also when a child process or a prompt reported it, and so does a declined prompt.
+	var declined tracking.Cancelled
 	result := tracking.ResultSuccess
 	switch {
 	case runErr == nil:
-	case ctx.Err() != nil || errors.Is(runErr, context.Canceled) || errors.Is(runErr, huh.ErrUserAborted) || errors.Is(runErr, tui.ErrFilterSelectCancelled):
+	case ctx.Err() != nil || errors.Is(runErr, context.Canceled) || errors.Is(runErr, huh.ErrUserAborted) || errors.Is(runErr, tui.ErrFilterSelectCancelled) ||
+		errors.As(runErr, &declined):
 		result = tracking.ResultCancelled
 	default:
 		result = tracking.ResultFailure
