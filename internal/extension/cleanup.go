@@ -8,6 +8,10 @@ import (
 	"strings"
 )
 
+// ValidationCacheDir is where validation keeps its files inside an extension,
+// so they go away together with the folder. var/ is never packed into a zip.
+const ValidationCacheDir = "var/cache/shopware-cli"
+
 var (
 	// These paths will only be removed relative to the top level of the plugin
 	defaultNotAllowedPaths = []string{

@@ -5,8 +5,8 @@
 
 [tools]
 # Keep this aligned with the Go minor version declared in go.mod.
-# Update this pin when upgrading the Go patch release.
-go = "1.27.3"
+# Run `mise upgrade go` to install the latest patch release.
+go = "1.27"
 
 # Pin the linter so local results do not change when a new release is published.
 # Keep this in sync with the version in .github/workflows/lint.yml.

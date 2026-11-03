@@ -119,6 +119,11 @@ func init() {
 	cobra.EnableTraverseRunHooks = true
 	rootCmd.PersistentPreRunE = func(cmd *cobra.Command, _ []string) error {
 		cmd.SilenceUsage = true
+		// Resolve the background before any Bubble Tea program owns stdin;
+		// a lazy query from inside a running program would race its reader.
+		if system.IsInteractionEnabled(cmd.Context()) {
+			tui.HasDarkBackground()
+		}
 		return nil
 	}
 

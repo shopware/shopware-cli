@@ -1,9 +1,3 @@
-[global]
-exclude = [
-  ".github/agents/agentic-workflows.md",
-  ".github/skills/agentic-workflows/SKILL.md",
-]
-
 [per-file-ignores]
 ".github/pull_request_template.md" = ["MD041"]
 

@@ -8,13 +8,16 @@ import (
 // output ("Project", "Next steps", "Summary", …).
 var SectionHeadingStyle = lipgloss.NewStyle().Bold(true).Underline(true)
 
-// Status glyphs for composing command output lines, e.g.
-// fmt.Printf("%s Project config: %s\n", tui.CheckOK, value).
-var (
-	CheckOK   = GreenText.Render("✓")
-	CheckWarn = SecondaryText.Render("⚠")
-	CheckFail = RedText.Render("✗")
-)
+// CheckOK renders a green check mark for prefixing command output lines.
+// The status glyphs are functions so the terminal background is detected
+// when they are rendered, not at package init.
+func CheckOK() string { return GreenText.Render("✓") }
+
+// CheckWarn renders a yellow warning sign.
+func CheckWarn() string { return SecondaryText.Render("⚠") }
+
+// CheckFail renders a red cross.
+func CheckFail() string { return RedText.Render("✗") }
 
 // SuccessLine renders a bold green "✓ message" line.
 func SuccessLine(msg string) string {

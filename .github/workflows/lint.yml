@@ -36,7 +36,7 @@ jobs:
     timeout-minutes: 10
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@46b06cea07f9e64621fdf066ba77ac6915163d43 # ratchet:step-security/harden-runner@v2.22.3
+        uses: step-security/harden-runner@v2.22.3
         with:
           egress-policy: block
           disable-sudo: true
@@ -51,19 +51,19 @@ jobs:
             sum.golang.org:443
             release-assets.githubusercontent.com:443
 
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # ratchet:actions/checkout@v7.0.1
+      - uses: actions/checkout@v7.0.1
         with:
           persist-credentials: false
 
       - name: Set up Go
-        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # ratchet:actions/setup-go@v7.0.0
+        uses: actions/setup-go@v7.0.0
         with:
           go-version: '1.27'
           check-latest: true
           cache: true
 
       - name: golangci-lint
-        uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # ratchet:golangci/golangci-lint-action@v9
+        uses: golangci/golangci-lint-action@v9.3.0
         with:
           version: v2.15.0
           args: --timeout 10m
