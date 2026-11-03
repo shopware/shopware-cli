@@ -119,6 +119,7 @@ func TestPhpStanAnalysesAllSourceDirectoriesInOneRun(t *testing.T) {
 
 	result := runCheckTool(t, PhpStan{}, ToolConfig{
 		RootDir:           rootDir,
+		IsProject:         true,
 		ToolDirectory:     t.TempDir(),
 		SourceDirectories: sourceDirectories,
 	})

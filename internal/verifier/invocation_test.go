@@ -160,11 +160,68 @@ func TestPHPStanInvocation(t *testing.T) {
 			installedDir := filepath.Join(root, "vendor", "composer")
 			require.NoError(t, os.MkdirAll(installedDir, 0o755))
 			require.NoError(t, os.WriteFile(filepath.Join(installedDir, "installed.json"), []byte(`{"packages":[{"name":"shopware/core","version":"6.7.1.0"}]}`), 0o644))
-			result := runCheckTool(t, PhpStan{}, ToolConfig{RootDir: root, SourceDirectories: []string{root}, CheckAgainst: "lowest"})
+			result := runCheckTool(t, PhpStan{}, ToolConfig{RootDir: root, SourceDirectories: []string{root}, IsProject: true})
 			assert.Equal(t, scenario.failed, len(result.Errors) > 0)
 			assert.Equal(t, scenario.skipped, result.SkipReason != "")
 			assert.Len(t, result.Findings, scenario.findings)
 			assert.Equal(t, "Shopware 6.7.1.0", result.Note)
+		})
+	}
+}
+
+func TestPHPStanExtensionBaseline(t *testing.T) {
+	for _, mode := range []string{"", "highest", "lowest"} {
+		t.Run("mode="+mode, func(t *testing.T) {
+			root := t.TempDir()
+			t.Setenv("BASELINE_ROOT", root)
+			fakeTool(t, "composer", `/bin/mkdir -p vendor/composer
+printf '{"packages":[{"name":"shopware/core","version":"6.6.0.0"}]}' > vendor/composer/installed.json
+: > vendor/autoload.php
+`)
+			composerPath := os.Getenv("PATH")
+			fakeTool(t, "php", `printf '%s\n' "$@" > "$BASELINE_ROOT/php-args"
+printf '%s' "$PWD" > "$BASELINE_ROOT/php-cwd"
+printf '{"files":{},"errors":[]}'
+`)
+			t.Setenv("PATH", os.Getenv("PATH")+string(os.PathListSeparator)+composerPath)
+			require.NoError(t, os.WriteFile(filepath.Join(root, "composer.json"), []byte(`{"require":{"shopware/core":"^6.6"}}`), 0o644))
+			localVendor := filepath.Join(root, "vendor", "composer")
+			require.NoError(t, os.MkdirAll(localVendor, 0o755))
+			require.NoError(t, os.WriteFile(filepath.Join(localVendor, "installed.json"), []byte(`{"packages":[{"name":"shopware/core","version":"6.7.1.0"}]}`), 0o644))
+			cfg := ToolConfig{RootDir: root, SourceDirectories: []string{root}, CheckAgainst: mode}
+			// A custom config must still be loaded from the extension root.
+			if mode == "lowest" {
+				require.NoError(t, os.WriteFile(filepath.Join(root, "phpstan.neon.dist"), []byte("parameters:\n    level: 5\n"), 0o644))
+			}
+			result := runCheckTool(t, PhpStan{}, cfg)
+			require.Empty(t, result.Errors)
+			effectiveMode := mode
+			if effectiveMode == "" {
+				effectiveMode = "highest"
+			}
+			assert.Equal(t, "Shopware 6.6.0.0 ("+effectiveMode+")", result.Note)
+			arguments, err := os.ReadFile(filepath.Join(root, "php-args"))
+			require.NoError(t, err)
+			assert.Contains(t, string(arguments), "--autoload-file\n"+filepath.Join(root, "var/cache/shopware-cli", "composer-"+effectiveMode, "vendor/autoload.php")+"\n")
+			workingDir, err := os.ReadFile(filepath.Join(root, "php-cwd"))
+			require.NoError(t, err)
+			// macOS shells resolve the /var symlink in their working directory.
+			expectedDir, err := filepath.EvalSymlinks(filepath.Join(root, "var/cache/shopware-cli", "composer-"+effectiveMode))
+			require.NoError(t, err)
+			assert.Equal(t, expectedDir, string(workingDir))
+			if mode == "lowest" {
+				assert.Contains(t, string(arguments), "--configuration\n"+filepath.Join(root, "phpstan.neon.dist")+"\n")
+			}
+
+			// A failed refresh must not analyse using the previous cache.
+			require.NoError(t, os.Remove(filepath.Join(root, "php-args")))
+			toolsPath := os.Getenv("PATH")
+			fakeTool(t, "composer", "exit 1\n")
+			t.Setenv("PATH", os.Getenv("PATH")+string(os.PathListSeparator)+toolsPath)
+			result = runCheckTool(t, PhpStan{}, cfg)
+			require.NotEmpty(t, result.Errors)
+			assert.Empty(t, result.Note)
+			assert.NoFileExists(t, filepath.Join(root, "php-args"))
 		})
 	}
 }
