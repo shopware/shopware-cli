@@ -5,7 +5,7 @@ version: 'v0.0.3'
 workflows:
     '.github/workflows/actionlint.yml':
         - 'actions/checkout@v7.0.1'
-        - 'jdx/mise-action@v5.2.4'
+        - 'jdx/mise-action@v5.2.6'
         - 'step-security/harden-runner@v2.22.3'
     '.github/workflows/agent-skills.yml':
         - 'actions/checkout@v7.0.1'
@@ -31,15 +31,15 @@ workflows:
         - 'step-security/harden-runner@v2.22.3'
     '.github/workflows/markdown.yml':
         - 'actions/checkout@v7.0.1'
-        - 'jdx/mise-action@v5.2.4'
-        - 'step-security/harden-runner@v2.22.2'
+        - 'jdx/mise-action@v5.2.6'
+        - 'step-security/harden-runner@v2.22.3'
     '.github/workflows/release.yml':
         - 'actions/attest@v4.2.2'
         - 'actions/checkout@v7.0.1'
         - 'actions/setup-go@v7.0.0'
         - 'actions/setup-node@v7.1.0'
         - 'anchore/sbom-action@v0.24.3'
-        - 'determinatesystems/nix-installer-action@1d87d45818068401a10cf16bdc5f00b24994a83f'
+        - 'determinatesystems/nix-installer-action@main'
         - 'docker/setup-buildx-action@v4.4.1'
         - 'goreleaser/goreleaser-action@v7.3.0'
         - 'octo-sts/action@v1.1.1'
@@ -117,9 +117,9 @@ dependencies:
         repo_id: 200299178
         uses:
             - 'actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd'
-    'determinatesystems/nix-installer-action@1d87d45818068401a10cf16bdc5f00b24994a83f':
+    'determinatesystems/nix-installer-action@main':
         ref: 'main'
-        commit: 'sha1-1d87d45818068401a10cf16bdc5f00b24994a83f'
+        commit: 'sha1-9383ce2bf08796b65508822f5982f49151badc4e'
         owner_id: 80991770
         repo_id: 588678074
     'docker/build-push-action@v7.4.0':
@@ -152,9 +152,9 @@ dependencies:
         commit: 'sha1-a4f02ab5355a589de60d917a659ce617ed19b3de'
         owner_id: 24697112
         repo_id: 209873006
-    'jdx/mise-action@v5.2.4':
-        ref: 'v5.2.4'
-        commit: 'sha1-6be3c7ed4c21d4f76b208d351d95aac273ebb76d'
+    'jdx/mise-action@v5.2.6':
+        ref: 'v5.2.6'
+        commit: 'sha1-f5be966e4a917d54244728e6a5fdcd1d93a35e6c'
         owner_id: 216188
         repo_id: 738284564
     'octo-sts/action@v1.1.1':
@@ -177,11 +177,6 @@ dependencies:
         commit: 'sha1-6f9f17788090df1f26f669e9d70d6ae9567deba6'
         owner_id: 71096353
         repo_id: 351211695
-    'step-security/harden-runner@v2.22.2':
-        ref: 'v2.22.2'
-        commit: 'sha1-dc2769abcc0fcfbadfc1df54081c1608579ef6b2'
-        owner_id: 88700172
-        repo_id: 422287306
     'step-security/harden-runner@v2.22.3':
         ref: 'v2.22.3'
         commit: 'sha1-46b06cea07f9e64621fdf066ba77ac6915163d43'

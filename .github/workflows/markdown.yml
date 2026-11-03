@@ -35,7 +35,7 @@ jobs:
     timeout-minutes: 10
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@v2.22.2
+        uses: step-security/harden-runner@v2.22.3
         with:
           egress-policy: block
           disable-sudo: true
@@ -55,7 +55,7 @@ jobs:
           persist-credentials: false
 
       - name: Set up Markdown tools
-        uses: jdx/mise-action@v5.2.4
+        uses: jdx/mise-action@v5.2.6
         with:
           install_args: --locked rumdl
 
